@@ -34,5 +34,5 @@ Vendored addons are upstream code: do not edit them in place. If a patch is unav
 
 ## Content
 
-No Babylon 5 assets, names in code, or derived data are used. The ship is an original parametric model
-"inspired by" the Starfury silhouette; see `DISCLAIMER.md`.
+No official Babylon 5 assets, or data derived from them, are used. Franchise names are used openly (fan
+project); the ship is an original parametric model based on the Starfury silhouette. See `DISCLAIMER.md`.

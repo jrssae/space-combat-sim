@@ -8,8 +8,10 @@ splats. This document is the contract between planning and implementation. Miles
 
 | Layer | Choice | Version | Licence |
 |---|---|---|---|
+| Target platform | **Linux x86_64 + Vulkan (primary)**; Windows x86_64 + Vulkan (secondary, must keep working) | - | - |
 | Engine | Godot (standard build, no .NET) | **4.7.2-stable** | MIT |
 | Renderer | Forward+ (Vulkan) | - | - |
+| Controller | Generic XInput-class gamepad through Godot/SDL3's standard `JOY_*` layout; no Xbox-only features | - | - |
 | Physics | Jolt (built in, set explicitly) | bundled | MIT |
 | Splat rendering | GDGS `addons/gdgs`, Compute backend | **v3.3.0** | MIT |
 | Language | GDScript, statically typed | - | - |
@@ -30,7 +32,8 @@ and `docs/third-party.md` together.
 | D4 | RigidBody3D + Jolt, forces/torques applied each physics tick; **no custom integrator** | Correct rigid-body dynamics (inertia tensor, angular momentum), free collision later, impulses for hits, sleeping/interp handled by the engine. Verified headless. Custom integrator reserved only if Jolt's velocity clamp becomes a problem (see §5.6). |
 | D5 | Flight logic in pure `RefCounted` classes, nodes are thin adapters | Unit-testable without a scene tree, display or controller. |
 | D6 | Flight assist ships in M1: **rotation assist** (default on) + **brake hold**; raw Newtonian when off | Starfuries are fly-by-wire in canon; untrained players cannot fly 6DOF without rotational damping; it is ~40 lines on top of the same force path, and toggling it is a core fantasy of the ship. Translational auto-hold stays out of M1. |
-| D7 | Xbox controller via Godot `InputMap` actions only; keyboard bindings are extra events on the same actions | Rebindable, testable through a fake input source, no device-specific code. |
+| D7 | Gamepad via Godot `InputMap` actions only, bound to SDL3's standard `JOY_AXIS_*`/`JOY_BUTTON_*` layout; keyboard bindings are extra events on the same actions | The tester uses a generic XInput pad, not a genuine Xbox controller: rebindable actions, a fake input source for tests, no rumble/impulse-trigger assumptions, and SDL mapping overrides for misbehaving pads. |
+| D13 | Linux/Vulkan with the GDGS **Compute** backend is the M1 acceptance platform; Windows is kept building but is not an M1 gate | That is the tester's machine; Compute is the backend with exact per-tile sorting and depth compositing. |
 | D8 | Hybrid rendering: splats for hull and sky, meshes for cockpit interior, projectiles, flashes, thruster glow, collision | Splats are static radiance; anything animated per frame, emissive-dynamic, or needing depth writes is a mesh. Each exception is justified in §7. |
 | D9 | Generated assets are **not committed**; generators are. No Git LFS in M1 | Everything binary is reproducible from `tools/` in seconds; LFS adds bandwidth quotas and fork friction. Revisit when hand-authored binaries (audio, textures) appear. |
 | D10 | GUT over gdUnit4 | Simpler headless CLI (`-gexit`, exit code 1 on failure), no xvfb caveats, GDScript-first, tracks Godot 4.7. |
@@ -53,7 +56,8 @@ src/
   ship/flight_assist.gd       RefCounted, pure: rate controller and brake
   ship/hardpoints.gd          RefCounted: loads assets/generated/ship/starfury_hardpoints.json
   ship/thruster_visuals.gd    drives emissive glow meshes from thruster levels
-  weapons/pulse_cannon.gd     fire-rate gate, alternating muzzles, spawns projectiles
+  weapons/pulse_cannon_gate.gd RefCounted, pure: fire-rate gate and muzzle alternation (unit-tested with fake time)
+  weapons/pulse_cannon.gd     node adapter: trigger state, spawns projectiles at muzzle hardpoints
   weapons/projectile.tscn|.gd kinematic projectile (inherits ship velocity), lifetime, emissive mesh
   camera/camera_rig.gd        owns CockpitCamera + ChaseCamera, toggle, smoothing
   camera/chase_camera_math.gd RefCounted, pure: chase pose from ship pose/velocity (unit-tested)
@@ -236,9 +240,13 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
 
 ## 6. Input
 
-### 6.1 Xbox controller mapping (all via `InputMap` actions in `project.godot`; `device = -1` = any pad)
+### 6.1 Gamepad mapping (all via `InputMap` actions in `project.godot`; `device = -1` = any pad)
 
-| Action | Xbox (Godot enum) | Keyboard fallback | Type | Deadzone | Curve |
+Layout names below are the Xbox-style names Godot/SDL3 use for the standard layout; any pad SDL3 recognises
+(generic XInput clones included) presents this layout. Nothing here uses Xbox-only features (no impulse triggers,
+no rumble in M1, no Guide-button logic).
+
+| Action | Pad (Godot enum) | Keyboard fallback | Type | Deadzone | Curve |
 |---|---|---|---|---|---|
 | `thrust_forward` | RT (`JOY_AXIS_TRIGGER_RIGHT`, +) | W | analog 0..1 | 0.05 | linear |
 | `thrust_reverse` | LT (`JOY_AXIS_TRIGGER_LEFT`, +) | S | analog 0..1 | 0.05 | linear |
@@ -256,9 +264,27 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
 | `debug_toggle_overlay` | D-pad Up (`JOY_BUTTON_DPAD_UP`) | F3 | edge | - | - |
 | `debug_toggle_fallback_mesh` | D-pad Down (`JOY_BUTTON_DPAD_DOWN`) | F4 | edge | - | - |
 
-Sticks are read with `Input.get_vector(neg_x, pos_x, neg_y, pos_y, 0.15)` (radial deadzone with rescaling), then
-the expo curve `sign(x)·|x|^1.5` is applied to rotation axes in `InputAdapter`. Per-action deadzone in the
-InputMap is set to 0.05 for triggers and 0.15 for stick actions so `get_action_strength` is also sane.
+Sticks are read with `Input.get_vector(neg_x, pos_x, neg_y, pos_y, Settings.stick_deadzone)` (radial deadzone
+with rescaling), then the expo curve `sign(x)·|x|^1.5` is applied to rotation axes in `InputAdapter`. Per-action
+deadzone in the InputMap is set to 0.05 for triggers and 0.15 for stick actions so `get_action_strength` is also
+sane.
+
+Generic-pad quirks handled in `InputAdapter`/`Settings` (not in gameplay code):
+
+- **Trigger range.** SDL3 normally reports triggers as 0..1 on `JOY_AXIS_TRIGGER_LEFT/RIGHT`; some generic pads or
+  driver paths report -1..1 (rest = -1) or put triggers on a button. `InputSource` therefore also exposes
+  `get_raw_axis(device, axis)`. On start-up (and on `Input.joy_connection_changed`) the adapter samples the trigger
+  rest value for ~0.5 s while no action is active and stores `trigger_rest` (0 or -1, per pad GUID, in
+  `Settings`); triggers are read as `clamp((raw - rest) / (1 - rest), 0, 1)` with `Settings.trigger_deadzone`
+  applied afterwards. Unit tests cover both rest values.
+- **Stick drift.** `Settings.stick_deadzone` default 0.15, user-adjustable up to 0.30; radial, with rescaling so
+  full deflection still reaches 1.0.
+- **Wrong layout.** If a pad's buttons or axes land on the wrong `JOY_*` enum, the fix is an SDL mapping string,
+  not code: `Settings` reads optional lines from `user://gamecontrollerdb.txt` and applies each with
+  `Input.add_joy_mapping(line, true)` before the first frame. The debug overlay shows the pad name, GUID and raw
+  axis values so a user can build that line.
+- **No haptics, no light bar, no motion.** Not referenced anywhere.
+- **Hot-plug.** Godot handles it; the adapter only re-runs trigger calibration and the overlay updates the name.
 Example serialised action (so the format is unambiguous):
 
 ```
@@ -285,8 +311,8 @@ var reset: bool         # edge
 ```
 
 `InputAdapter.sample(source: InputSource, dt: float) -> FlightCommand` is the only place that knows action names.
-Tests use `FakeInputSource` with scripted values; the real `GodotInputSource` is a 20-line wrapper. Controller
-hot-plug is handled by Godot; `Input.joy_connection_changed` only updates the overlay text.
+Tests use `FakeInputSource` with scripted values (including raw trigger axes at rest -1 and 0); the real
+`GodotInputSource` is a thin wrapper over `Input`.
 
 ## 7. Rendering pipeline
 
@@ -419,9 +445,9 @@ double-precision engine build is a last resort (needs custom Godot and GDGS shad
 | Level | Tool | Runs where | Covers |
 |---|---|---|---|
 | Python unit | `unittest` | container, CI | PLY header/field layout, counts, determinism (hash of output), frame conversion, hardpoints schema, centroid ≈ 0 |
-| GDScript unit | GUT `tests/unit` | container, CI | `FlightModel` (forces, torques, clamps, sign table in §5.2), `FlightAssist` (converges, never exceeds limits, brake asymmetry), `InputAdapter` (deadzone, expo, edges, invert-Y), `ChaseCameraMath` (frame-rate independence) |
+| GDScript unit | GUT `tests/unit` | container, CI | `FlightModel` (forces, torques, clamps, sign table in §5.2), `FlightAssist` (converges, never exceeds limits, brake asymmetry), `InputAdapter` (radial deadzone, expo, edges, invert-Y, trigger rest -1 vs 0 normalisation, SDL mapping lines parsed), `ChaseCameraMath` (frame-rate independence) |
 | Headless integration | GUT `tests/integration`, `--headless` | container, CI | ship scene instantiates; RigidBody3D reaches `F/m·t` velocity and keeps it (damping guard); assist stops a 60°/s spin within 1.5 s; projectile inherits ship velocity and despawns; `GaussianResource.point_count > 0` and AABB matches manifest for both PLYs; `SkyFollower` tracks camera; camera toggle flips `current` and cockpit visibility; `main.tscn` runs 120 frames with `--quit-after` and no script errors |
-| Human acceptance | checklist in the milestone doc | GPU + Xbox pad | splat appearance, compositing, feel, performance, controller behaviour |
+| Human acceptance | checklist in the milestone doc | Linux/Vulkan GPU + generic XInput pad | splat appearance, compositing, feel, performance, controller behaviour, trigger/deadzone calibration |
 
 Rules: every pure class gets unit tests in the same PR; every scene gets at least an instantiate-and-run test;
 anything that depends on a GPU is marked `(H)` in acceptance criteria and is never faked in CI.
