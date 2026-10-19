@@ -15,7 +15,7 @@ In:
 - Player Starfury with Newtonian 6DOF flight on a generic XInput gamepad, using the user's layout (§6.1): analog
   left/right main pods on LT/RT, left/right retros on LB/RB, strafe/heave on the left stick, pitch/yaw on the right
   stick, roll on the D-pad. Pod forces act at the pods (differential thrust yaws the ship physically). Flight
-  assist toggle (default on, with pod trim), hold-to-brake, reset.
+  assist toggle (default on: rate command, uneven triggers turn the ship at a bounded rate), hold-to-brake, reset.
 - First-person cockpit camera and third-person chase camera, toggle on Y.
 - Two forward pulse cannons with two fire modes (alternating, linked), cycled with D-pad Down; projectiles inherit
   ship velocity; muzzle flash; thruster glow per pod and RCS nozzle.
@@ -52,7 +52,7 @@ hardpoints, never hard-coded.
 | AC5a | Straight line: RT = LT = 0.5 for 2 s from rest gives speed `0.5 · 4 · pod_main_thrust / mass · 2` ±1 %, `\|w\|` < 1e-3 rad/s, and speed unchanged ±0.1 % for 3 s after release | A |
 | AC5b | Pod yaw, assist off: RT = 1 for 0.5 s from rest gives `w_y > 0` (nose left) with magnitude `Σ x_i · T / I_y · 0.5` ±2 %, pitch/roll rates < 1e-3 rad/s, rate persists ±0.5 % for 2 s; LT alone mirrors it; RB alone decelerates and gives `w_y < 0` | A |
 | AC5c | Retros: from 50 m/s forward, RB + LB for 1 s reduce speed by `4 · pod_retro_thrust / mass` ±1 %, `\|w\|` < 1e-3 rad/s | A |
-| AC5d | Assist on, RT = 1 alone, sticks centred: after 0.2 s `\|w_y\|` < 1 °/s for 2 s, heading change < 2°, forward acceleration `rcs_torque_max.y / (lever_arm · mass)` ±3 %, `FlightOutput.trim` > 0 | A |
+| AC5d | Assist on, pod steering: RT = 1 alone, sticks centred: within 1.5 s the yaw rate settles nose-left (`w_y > 0`) at `pod_yaw_gain · rate_max.y` ±5 % and stays there, pitch/roll rates < 1 °/s, `FlightOutput.trim` > 0 at steady state, and no nozzle level ever exceeds its trigger; after release the rotation stops (< 1 °/s) within 1.5 s; LT alone mirrors it; RT = 1 with LT = 0.95 (inside the 10 % deadzone) flies straight: `\|w_y\|` < 1 °/s and heading change < 2° over 2 s | A |
 | AC5e | Assist on: a 60 °/s yaw spin stops (< 1 °/s) within 1.5 s. Assist off: the same spin does not decay (±0.5 % over 2 s) | A |
 | AC5f | Brake: from body velocity (10, -5, -80) m/s with X held, in both assist modes, `\|v\|` < 0.5 m/s within 7 s and `\|w\|` < 1 °/s throughout | A |
 | AC5g | Model matches engine: for five scripted demands, the one-tick angular velocity change measured in Jolt equals `FlightOutput.torque_b / inertia · dt` within 1 %; damping guard passes | A |
@@ -64,7 +64,7 @@ hardpoints, never hard-coded.
 | AC11 | `TriggerCalibration` tests prove normalisation for rest = 0 and rest = -1; every pad binding uses only standard `JOY_AXIS_*` 0-5 / `JOY_BUTTON_*` 0-14 | A |
 | AC12 | Ship renders as splats (not the fallback mesh) in both camera modes; hull orientation and position match the fallback mesh when toggled with F4 | H |
 | AC13 | Star field and nebula visible as splats; no parallax when flying; no popping between sky and hull; cockpit frame correctly occludes hull splats | H |
-| AC14 | On the tester's generic pad, per the §5.2 table: equal triggers fly straight; with assist off RT alone yaws left and LT alone yaws right; bumpers retro per side; with assist on one trigger holds heading and the overlay shows POD TRIM; right stick pitches/yaws, D-pad rolls (taps give fine roll), left stick strafes/heaves; triggers reach full thrust and rest at zero; no stick drift; releasing the triggers does not slow the ship; brake stops drift in both modes; B and Y toggles work | H |
+| AC14 | On the tester's generic pad, per the §5.2 table: equal triggers fly straight; with assist off RT alone yaws left and LT alone yaws right; bumpers retro per side; with assist on one trigger turns the ship smoothly at ≈ 30 °/s (overlay shows POD YAW and POD TRIM), the turn stops on release, and both triggers squeezed fully fly straight; right stick pitches/yaws, D-pad rolls (taps give fine roll), left stick strafes/heaves; triggers reach full thrust and rest at zero; no stick drift; releasing the triggers does not slow the ship; brake stops drift in both modes; B and Y toggles work | H |
 | AC15 | 60 fps at 1080p on the tester's Linux/Vulkan GPU (overlay FPS), no hitching when firing | H |
 | AC16 | Thruster glow is per pod and per side: it shows differential thrust, retros and trim; RCS glow responds to strafe and rotation; projectiles and muzzle flash visible from both cameras; the two fire modes are visibly different | H |
 | AC17 | D-pad Up cycles the buoys, R3 picks the buoy nearest the nose; bracket and readout (name, range, closing speed) are correct; buoys render as splats and visibly spin; the drifting buoy shows a non-zero closing speed | H |
@@ -213,8 +213,9 @@ hardpoints, never hard-coded.
 
 ### M1-T07 Flight model and assist (pure)
 
-- Goal: `FlightModel.new(spec, layout).compute(cmd, v_b, w_b, env_accel_b, assist_on) -> FlightOutput`, exactly
-  §5.2.
+- Goal: `FlightModel.new(spec, layout).compute(cmd, v_b, w_b, env_accel_b, assist_on, dt) -> FlightOutput`,
+  exactly §5.2. `dt` drives the pod-yaw smoothing; the model owns one `FlightAssist` whose only state is the
+  smoothed pod-yaw command (`reset()` on assist toggle and ship reset).
 - Files: `src/ship/{ship_spec,thruster_layout,flight_model,flight_assist,flight_output}.gd`,
   `assets/ships/starfury_aurora.tres` (ShipSpec with §5.1 defaults, `asset_id = "starfury_aurora"`),
   `tests/fixtures/hardpoints_nominal.json` (static copy of the nominal pod geometry so unit tests do not depend on
@@ -222,11 +223,16 @@ hardpoints, never hard-coded.
 - Notes: `ThrusterLayout.from_dict(hardpoints: Dictionary, center_of_mass: Vector3)` builds the 8 pod nozzles
   (group, position, exhaust, `r = p - com`) and the cosmetic RCS list. `FlightOutput`: `nozzle_forces:
   Array[Dictionary]` (`position`, `force`, group, level), `rcs_force_b`, `rcs_torque_b`, `force_b`, `torque_b`,
-  `trim` (0..1), `main_levels`/`retro_levels` per pod after trim, `rcs_levels` (Vector3 force, Vector3 torque,
-  -1..1), `mass_flow_kg_s`. Implement `AXIS_SIGN = Vector3(1, -1, -1)` once, in `FlightModel`. Unit tests, one per
-  row of the §5.2 table (signs of `torque_b` and `force_b`, assist off and on), plus: `|tau_pods.x|, |tau_pods.z|
-  < 1e-6` for random demands; trim `lam` equals the closed form for RT alone; assist with `w = w_target` and
-  equal triggers gives zero RCS torque; assist never raises any level above the pilot's; brake levels are
+  `trim` (0..1), `pod_yaw_cmd` (-1..1, pilot terms), `main_levels`/`retro_levels` per pod after trim,
+  `rcs_levels` (Vector3 force, Vector3 torque, -1..1), `mass_flow_kg_s`. Implement `AXIS_SIGN = Vector3(1, -1,
+  -1)` once, in `FlightModel`. `ShipSpec` gains `pod_yaw_gain = 0.5`, `pod_yaw_deadzone = 0.10`,
+  `pod_yaw_smoothing_s = 0.15` (§5.1). Unit tests, one per row of the §5.2 table (signs of `torque_b` and
+  `force_b`, assist off and on), plus: `|tau_pods.x|, |tau_pods.z| < 1e-6` for random demands; pod-yaw command
+  sign (LT or RB => yaw right, RT or LB => yaw left), deadzone (difference 0.05 => 0), rescaling (difference 1.0
+  => 1.0), cap (`rot.y + pod_yaw_gain · d_s` clamped to ±1), smoothing frame-rate independent (two 1/120 s steps
+  equal one 1/60 s step within 1e-6), zero while braking, cleared by `reset()`; trim `lam` equals the closed form
+  for RT alone at steady rate (`w_b` = target); assist with `w = w_target` and equal triggers gives zero RCS
+  torque; assist never raises any level above the pilot's; assist off ignores the pod-yaw command; brake levels are
   symmetric across sides; brake with forward velocity uses retros only and never exceeds `retro_total`; brake
   with `env_accel_b = (0, 0, -1)` and zero velocity produces `+mass` N on z (feed-forward); `mass_flow =
   Σ|F| / exhaust_velocity`.
@@ -264,7 +270,8 @@ hardpoints, never hard-coded.
   `.tscn`; keep its transform identity, see §9.1). `ship.gd` API: `setup(spec: ShipSpec, world: WorldFrame)`,
   `set_flight_command(cmd)`, `set_combat_command(cmd)` (stored for T12/T13), `assist_on: bool` (signal
   `assist_toggled(bool)`), `get_flight_output() -> FlightOutput`, `reset_to(xform)`, `forward() -> Vector3`
-  (= `-basis.z`), `body_velocity()`. Each `_physics_process`: compute the `FlightOutput`, then
+  (= `-basis.z`), `body_velocity()`. Toggling assist and `reset_to` call `FlightModel.reset_assist()`. Each
+  `_physics_process(delta)`: compute the `FlightOutput` (passing `delta`), then
   `apply_force(B * F_i, B * p_i)` per pod nozzle, `apply_central_force(B * rcs_force_b)`,
   `apply_torque(B * rcs_torque_b)`, and `apply_central_force(mass * world.environment_accel(position))`.
   `SplatStatus.active_backend() -> StringName` reads GDGS's selector
@@ -369,7 +376,8 @@ hardpoints, never hard-coded.
   `_physics_process`: `pc = adapter.sample(source, dt)`; `ship.set_flight_command(pc.flight)`;
   `ship.set_combat_command(pc.combat)`; handle `pc.ui` edges (camera, reset, `pause` via `get_tree().paused`
   with ship, buoys and projectiles pausable, overlay toggle, F4 fallback mesh toggle). Overlay (`Label`s,
-  monospace): speed m/s, body velocity xyz, angular rate °/s per axis, `ASSIST ON/OFF`, `POD TRIM nn %`,
+  monospace): speed m/s, body velocity xyz, angular rate °/s per axis, `ASSIST ON/OFF`, `POD YAW ±nn °/s`
+  (`pod_yaw_cmd × rate_max.y`, assist on only), `POD TRIM nn %`,
   `CAM COCKPIT/CHASE`, weapon mode, target line (`TGT NAV BRAVO  1243 m  +12.4 m/s`), universe position (64-bit),
   `SPLATS <backend>`, FPS, GPU name (`RenderingServer.get_video_adapter_name()`), pad name + GUID and raw axes 0-5.
   Target bracket: a `Control` drawing a 24 px square at `camera.unproject_position(target)` unless

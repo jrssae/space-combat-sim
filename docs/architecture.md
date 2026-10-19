@@ -33,7 +33,7 @@ and `docs/third-party.md` together.
 | D3 | **No splat training.** Splats are produced by sampling procedurally authored surfaces (mesh-to-splat) and by writing Gaussians directly for stars/nebula | Deterministic, CPU-only, seconds to run, reproducible in CI and in the GPU-less container. Training (Brush) stays an optional polish step on a GPU machine. |
 | D4 | RigidBody3D + Jolt. Pod nozzle forces are applied **at their hardpoint positions** (`apply_force`); RCS as central force + torque; no custom integrator | Correct rigid-body dynamics (inertia, angular momentum); differential pod thrust yaws the ship through real r × F computed by the engine; free collision later. Verified headless. Custom integrator only if Jolt limits ever block us (§5.6). |
 | D5 | Flight logic in pure `RefCounted` classes, nodes are thin adapters | Unit-testable without a scene tree, display or controller. |
-| D6 | Flight assist in M1. **ON (default)**: rate-command fly-by-wire that uses pod torque when it helps, cancels it with RCS, and trims the offending pods when RCS is not enough. **OFF**: raw pods + raw RCS torque. **Brake** (hold) works in both | Flyable by default, pods fantasy intact; one closed-form rule (§5.5). |
+| D6 | Flight assist in M1. **ON (default)**: rate-command fly-by-wire; the trigger/bumper difference is a smoothed **yaw command** added to the stick's, so pod steering works in both modes; pod torque helps the turn and is trimmed when RCS cannot hold the commanded rate; no pod ever exceeds its trigger. **OFF**: raw pods + raw RCS torque (tank-steer). **Brake** (hold) works in both | User decision: pod steering is the Starfury identity in both modes; assist makes it bounded and stop-on-release; one closed-form rule (§5.5). |
 | D7 | User-chosen pad layout (§6.1): triggers = left/right main pods, bumpers = left/right retros, sticks = strafe / aim, D-pad = roll + target/weapon cycling. `InputMap` actions only, SDL3 standard layout, keyboard as extra events | Every DOF and combat function reachable without modifiers; per-side pod control is the Starfury identity; rebindable, testable, works on a generic pad. |
 | D8 | Hybrid rendering: splats for hulls, buoys and sky; meshes for cockpit interior, projectiles, flashes, thruster glow, beacons; primitives for collision | Splats are static radiance; anything animated per frame, emissive-dynamic, or needing depth writes is a mesh. Each exception is justified in §7. |
 | D9 | Generated assets are **not committed**; generators are. No Git LFS | Everything binary is reproducible from `tools/procgen` in seconds; LFS adds quotas and fork friction. |
@@ -62,13 +62,14 @@ src/
                               rebase(offset), environment_accel(local_pos) (returns ZERO in M1)
   game/main.tscn|.gd          main scene: loads scenario, wires environment, ship, camera rig, overlay
   game/scenario_loader.gd     RefCounted: free_flight.json -> spawn list (UniversePos per entry)
-  game/debug_overlay.tscn|.gd CanvasLayer: flight state, assist/camera, POD TRIM, weapon mode, target readout
+  game/debug_overlay.tscn|.gd CanvasLayer: flight state, assist/camera, POD YAW + POD TRIM, weapon mode, target readout
                               + target bracket, splat backend, FPS, GPU, pad name/GUID/raw axes, universe position
   ship/ship.tscn|.gd          RigidBody3D "PlayerShip" adapter: consumes FlightCommand + CombatCommand
   ship/ship_spec.gd           Resource: mass, inertia, pod/RCS limits, rates, gains, asset_id, exhaust velocity
   ship/thruster_layout.gd     RefCounted: pod main/retro nozzles + RCS nozzles relative to CoM, from hardpoints
   ship/flight_model.gd        RefCounted, pure: FlightCommand + state -> FlightOutput (§5.2)
-  ship/flight_assist.gd       RefCounted, pure: rate controller, pod trim, brake allocation
+  ship/flight_assist.gd       RefCounted, pure (stateful, deterministic): pod-yaw command smoothing, rate
+                              controller, pod trim, brake allocation
   ship/flight_output.gd       RefCounted: per-nozzle forces, RCS force/torque, totals, trim, levels, mass flow
   ship/hardpoints.gd          RefCounted: loads assets/generated/starfury_aurora/hardpoints.json
   ship/thruster_visuals.gd    drives emissive glow meshes from FlightOutput levels
@@ -184,6 +185,9 @@ Owned by Jolt via `RigidBody3D`: position (m), orientation (`Basis`), linear vel
 | `rcs_torque_max` | (9.4e5, 9.4e5, 1.57e6) N·m | = inertia × (1.57, 1.57, 3.14) rad/s² |
 | `rate_max` | (60, 60, 90) deg/s | assist target at full deflection |
 | `assist_gain_k` | 6.0 s⁻¹ | rate controller P gain |
+| `pod_yaw_gain` | 0.5 | assist on: full one-sided trigger = 0.5 × `rate_max.y` = 30 °/s yaw |
+| `pod_yaw_deadzone` | 0.10 | assist on: trigger differences below 10 % fly straight |
+| `pod_yaw_smoothing_s` | 0.15 s | assist on: first-order smoothing of the pod-yaw command |
 | `brake_gain_k` | 2.0 s⁻¹ | translational brake P gain |
 | `exhaust_velocity` | 30 000 m/s | only for the reaction-mass seam: `mass_flow = Σ thrust / v_e`, unlimited in M1 |
 
@@ -193,8 +197,10 @@ is ≈ 3.18 m. Derived numbers (tests always compute these from spec + hardpoint
 - One side's mains at full, assist off: yaw torque `2 × 3.18 m × 0.36 MN ≈ 2.29 MN·m`, i.e. 3.8 rad/s²
   (≈ 220 °/s², ≈ 109 °/s after 0.5 s). Deliberately violent: pod steering is the Starfury trick. Tune pod
   thrust or inertia after first flight, not the model.
-- RCS yaw authority (0.94 MN·m) cancels at most `0.94 / 3.18 ≈ 0.30 MN` of side imbalance, so with assist on
-  one trigger alone gives ≈ 6.2 m/s² straight ahead (POD TRIM ≈ 59 %).
+- With assist on, one trigger alone commands `pod_yaw_gain × rate_max.y` = 30 °/s (simulated: within 5 % after
+  0.73 s; stops < 1 °/s 0.82 s after release). Holding that rate needs ≈ zero net torque, but one side's pods make
+  2.29 MN·m and RCS (0.94 MN·m) can cancel only `0.94 / 3.18 ≈ 0.30 MN` of imbalance, so the flight computer trims
+  that side to ≈ 41 % (≈ 6.2 m/s² forward) while turning: POD TRIM ≈ 59 %.
 
 ### 5.2 From command to forces
 
@@ -204,8 +210,8 @@ right retros, LB both left retros. Nozzle positions `p_i` come from hardpoints r
 `r_i = p_i - center_of_mass`. Nozzle groups: `R_MAIN, L_MAIN, R_RETRO, L_RETRO`.
 
 ```
-# inputs: c (FlightCommand), v_b, w_b (body frame), env_accel_b (body frame, ZERO in M1), assist_on
-#         layout (ThrusterLayout), spec (ShipSpec)
+# inputs: c (FlightCommand), v_b, w_b (body frame), env_accel_b (body frame, ZERO in M1), assist_on, dt
+#         layout (ThrusterLayout), spec (ShipSpec); state: d_s (smoothed pod-yaw command, in FlightAssist)
 
 # 1. pilot demand per nozzle group (levels 0..1) and RCS translation
 level[R_MAIN]  = c.main_right      level[L_MAIN]  = c.main_left
@@ -228,7 +234,13 @@ tau_g    = Σ_{i in g} r_i × F_i                                    # per group
 
 # 4. rotation
 if assist_on:
-    w_target = c.rot * AXIS_SIGN * deg_to_rad(rate_max)
+    # 4a. pod steering: the side difference is a yaw command (pilot terms, + = yaw right). LT or RB => right.
+    d_raw = 0 if c.brake else (c.main_left - c.main_right) + (c.retro_right - c.retro_left)
+    d_dz  = sign(d_raw) * max(0, |d_raw| - pod_yaw_deadzone) / (1 - pod_yaw_deadzone)
+    d_s  += (clamp(d_dz, -1, 1) - d_s) * (1 - exp(-dt / pod_yaw_smoothing_s))   # reset on assist toggle / reset
+    rot   = Vector3(c.rot.x, clamp(c.rot.y + pod_yaw_gain * d_s, -1, 1), c.rot.z)
+    # 4b. rate controller with pod feed-forward and trim
+    w_target = rot * AXIS_SIGN * deg_to_rad(rate_max)
     tau_des  = inertia * assist_gain_k * (w_target - w_b)          # diagonal inertia, per axis
     residual = tau_des - tau_pods
     overflow = residual - clamp(residual, -rcs_torque_max, rcs_torque_max)
@@ -246,6 +258,7 @@ rcs_force, tau_rcs                        # Ship: apply_central_force(B·rcs_for
 force_b  = F_pods + rcs_force             # predicted totals, for tests and the overlay
 torque_b = tau_pods + tau_rcs
 trim     = 1 - lam                        # 0 when nothing was trimmed
+pod_yaw_cmd = pod_yaw_gain * d_s          # for the overlay (POD YAW)
 mass_flow = (Σ |F_i| + |rcs_force|) / exhaust_velocity     # reaction-mass seam, not consumed in M1
 ```
 
@@ -266,16 +279,16 @@ What the player must experience:
 
 | Input | Assist OFF (raw) | Assist ON (default) |
 |---|---|---|
-| RT + LT equal | straight acceleration, zero net torque | same |
-| RT alone | accelerate and yaw nose **left** (right pods push); the spin keeps building | straight ahead at trimmed thrust (≈ 6 m/s²), heading held, overlay shows POD TRIM |
+| RT + LT equal | straight acceleration, zero net torque | same; differences under 10 % also fly straight (RCS cancels the small imbalance) |
+| RT alone | accelerate and yaw nose **left** (right pods push); the spin keeps building | accelerate and turn nose **left** at a steady ≈ 30 °/s; at that rate the right pods are trimmed (POD TRIM); release and the turn stops |
 | LT alone | accelerate and yaw nose **right** | mirror of RT alone |
 | RB + LB | straight deceleration (retros) | same |
-| RB alone | decelerate and yaw nose **right** | decelerate at trimmed thrust, heading held |
-| Right stick right + LT | (raw torque + pod yaw) | faster turn-in: left-pod torque helps until the target rate is reached, then gets trimmed |
+| RB alone | decelerate and yaw nose **right** | decelerate and turn nose **right** at ≈ 30 °/s |
+| Right stick right + LT | (raw torque + pod yaw) | stick and pod yaw add, capped at `rate_max`; left-pod torque speeds the turn-in |
 | Right stick back / right | nose up / nose right (torque) | nose up / nose right (rate); stops when centred |
 | D-pad right | roll right | roll right (ramped) |
 | Left stick right / up | translate right / up; nose does not turn | same |
-| Release everything | velocity unchanged; spin unchanged | velocity unchanged; rotation stops |
+| Release everything (or even out the triggers) | velocity unchanged; spin unchanged | velocity unchanged; rotation stops |
 | X held | velocity → 0 with symmetric pods + RCS; rotation still raw | velocity → 0; rotation per stick |
 
 ### 5.3 Integration
@@ -298,10 +311,13 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
 
 ### 5.5 Flight assist semantics
 
-- **Assist ON** (toggle B, persisted in `Settings`, default on): the flight computer owns attitude. Stick and
-  D-pad command an angular *rate*; centred means "stop rotating". It knows the pods' torque exactly (from
-  hardpoints) and treats it as feed-forward: it lets pod torque help when it points the way the pilot is
-  turning, cancels it with RCS when it does not, and trims (only ever reduces) the offending side when RCS
+- **Assist ON** (toggle B, persisted in `Settings`, default on): the flight computer owns attitude and commands
+  angular *rates*. Pitch comes from the right stick, roll from the D-pad, and yaw from the right stick **plus the
+  pod-yaw command**: the left/right difference of the triggers (and of the bumpers), with a 10 % deadzone,
+  smoothed over 0.15 s, scaled by `pod_yaw_gain` (one full trigger = 30 °/s) and capped together with the stick at
+  `rate_max`. Sticks centred and sides even means "stop rotating". The flight computer knows the pods' torque
+  exactly (from hardpoints) and treats it as feed-forward: it lets pod torque drive the turn-in, cancels the
+  excess with RCS once the commanded rate is reached, and trims (only ever reduces) the side causing it when RCS
   authority is not enough. The pilot's trigger and bumper levels are a ceiling, never exceeded. Translation is
   untouched except by that trim and by the brake.
 - **Assist OFF**: raw Newtonian. Pods fire exactly as demanded and their r × F torque acts in full, so uneven
@@ -310,12 +326,16 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
 - **Brake** (hold X), both modes: the flight computer takes over translation. Pods fire symmetrically (no torque)
   plus RCS sway/heave, nulling velocity relative to the `World` frame (later: relative to a chosen reference such
   as the station). Triggers, bumpers and the left stick are ignored while held; rotation follows the assist mode.
-- **Why this rule.** (1) The default mode is flyable by anyone; uneven triggers cannot spin you out. (2) The pods
-  are physically real in both modes (forces at the pods, glow per pod, trim visible), and assist off gives the
-  full tank-steering fantasy. (3) It is one closed-form rule with no hidden yaw gain: deterministic and
-  unit-testable. (4) AI pilots get identical semantics. Rejected alternative: in assist on, treat the trigger
-  difference as an extra yaw-rate request. Two yaw inputs with different gains is confusing, and at the target
-  rate the pods still exceed RCS, so it would need the same trim anyway.
+- **Why this rule** (user decision: pod steering must work with assist on too). (1) Pod steering is the Starfury
+  identity in both modes; assist off is the raw tank-steer, assist on is the same gesture made controllable: a
+  bounded, predictable turn rate instead of ≈ 220 °/s² of runaway, which stops when the sides are evened out.
+  (2) The deadzone exists because generic-pad triggers rarely read exactly equal at full squeeze; the smoothing
+  removes jerk from noisy analog triggers. (3) Gain 0.5 keeps one trigger below the aim stick's authority while
+  trigger plus stick still reach full rate. (4) The "never above the trigger" rule still holds: the commanded yaw
+  points the same way as the pods' own torque, so the flight computer only ever needs to cancel or trim, never to
+  add thrust; the pilot's throttle stays a ceiling. (5) One closed-form rule plus one first-order filter:
+  deterministic, unit-testable, and identical for AI pilots, which write the same `FlightCommand`. All three
+  tunables live in `ShipSpec`.
 - Rate controller: pure P with clamp. A 60 °/s stop takes ≈ 0.9 s (simulated). Add D only if human testing shows
   oscillation.
 
@@ -631,8 +651,8 @@ The full large-world design is §14.1.
 | Level | Tool | Runs where | Covers |
 |---|---|---|---|
 | Python unit | `unittest` | container, CI | PLY header/field layout, counts, determinism (hash of output), frame conversion, hardpoints schema (pods, nozzles, CoM), centroid ≈ 0, manifest `lods`, CLI registry |
-| GDScript unit | GUT `tests/unit` | container, CI | `FlightModel` (pod forces at positions, r × F signs per §5.2 table, zero pitch/roll from pods, trim maths, brake symmetry, clamps, mass flow), `FlightAssist` (converges, never exceeds limits), `InputAdapter` (radial deadzone, expo, roll ramp, edges, invert-Y, command split), `TriggerCalibration` (rest 0 and -1), `ChaseCameraMath` (frame-rate independence), `PulseCannonGate` (modes, rates, cycling), `TargetingSystem` (next, ahead, readout), `UniversePos` (64-bit precision at 1e11 m) |
-| Headless integration | GUT `tests/integration`, `--headless` | container, CI | ship scene instantiates; damping guard; pod-differential yaw measured in Jolt matches the model; assist holds heading under one trigger; brake; projectile velocity/lifetime; all PLYs import with manifest counts; `World.rebase` keeps velocities and relative positions; scenario spawns buoys; targeting with live buoys; `SkyFollower`; camera toggle; `main.tscn` runs 180 frames without script errors |
+| GDScript unit | GUT `tests/unit` | container, CI | `FlightModel` (pod forces at positions, r × F signs per §5.2 table, zero pitch/roll from pods, trim maths, brake symmetry, clamps, mass flow), `FlightAssist` (pod-yaw sign, deadzone, frame-rate-independent smoothing, cap at `rate_max`, converges, never exceeds limits or triggers), `InputAdapter` (radial deadzone, expo, roll ramp, edges, invert-Y, command split), `TriggerCalibration` (rest 0 and -1), `ChaseCameraMath` (frame-rate independence), `PulseCannonGate` (modes, rates, cycling), `TargetingSystem` (next, ahead, readout), `UniversePos` (64-bit precision at 1e11 m) |
+| Headless integration | GUT `tests/integration`, `--headless` | container, CI | ship scene instantiates; damping guard; pod-differential yaw measured in Jolt matches the model; assist turns at the pod-yaw rate under one trigger, stops on release, and flies straight inside the deadzone; brake; projectile velocity/lifetime; all PLYs import with manifest counts; `World.rebase` keeps velocities and relative positions; scenario spawns buoys; targeting with live buoys; `SkyFollower`; camera toggle; `main.tscn` runs 180 frames without script errors |
 | Human acceptance | checklist in the milestone doc | Linux/Vulkan GPU + generic XInput pad | splat appearance, compositing, feel, performance, controller behaviour, trigger/deadzone calibration, targeting |
 
 Rules: every pure class gets unit tests in the same PR; every scene gets at least an instantiate-and-run test;
@@ -719,14 +739,22 @@ perihelion or from flybys of moving planets, and the sim does both correctly bec
 
 ### 14.3 Time acceleration
 
-- `SimClock` owns sim time (64-bit seconds since epoch) and `warp`. Levels: 1, 2, 4 (**physics warp**: Jolt keeps
-  stepping at 60 Hz sim time with more steps per frame; controls live), then 10, 100, 1000 (**on rails**: Jolt
-  bodies frozen; each ship's state propagated by the gravity integrator, a symplectic leapfrog with adaptive
-  substeps bounded by the local gravity gradient; no thrust, no collisions).
-- Warp limits: on-rails warp is refused or dropped to 1× when a hostile is within 50 km (or any AI is in a combat
-  state), when any thrust input is non-zero, inside a close-approach shell of a body (substep limiter), during
-  scripted mission sequences, and on proximity or collision-course alarms. The cap is configurable (user's
-  default ~1000×).
+- `SimClock` owns sim time (64-bit seconds since epoch) and `warp`. Two regimes, KSP-style:
+  - **Physics warp**, 2× and 4× only: Jolt keeps stepping at 60 Hz sim time with more steps per frame; controls
+    stay live and thrust is allowed. It stays low because Jolt and the flight model are tuned for 60 Hz steps.
+  - **On-rails warp**, 10×, 100×, 1 000×, 10 000× and 100 000× (cap ≈ 100 000×, configurable), only while
+    coasting: no thrust input, no hostiles nearby. Jolt bodies are frozen; every ship is propagated by the gravity
+    integrator (symplectic leapfrog, adaptive substeps bounded by the local gravity gradient). One 100 000× frame
+    is ≈ 1 670 s of sim time, which is cheap for tens of ships. No collisions. At the cap, 1 AU at 30 km/s takes
+    ≈ 50 s of real time.
+- Entry rules: on-rails warp is refused while thrusting, with a hostile within 50 km or any AI in a combat state,
+  during scripted mission sequences, and above a per-body altitude band's limit (the closer to a body, the lower the
+  highest allowed level, as in KSP).
+- **Automatic drop-back** when anything interesting happens: thrust or weapon input (straight to 1×), a hostile
+  or unknown contact entering sensor range, a comms/dialog event or mission trigger, a proximity or
+  collision-course alarm, crossing into a lower altitude band, arriving at a target or waypoint. Events are
+  predicted: each frame the propagator looks ahead several warp steps and steps the warp down early enough that
+  the event happens at 1×, so nothing (a periapsis, an encounter, a gate) is overshot at 100 000×.
 - Leaving warp: the `WorldFrame` re-centres on the player, nearby objects are re-materialised from universe state
   into Jolt bodies.
 
@@ -777,7 +805,10 @@ volumetric splats and a shader backdrop. Combat in hyperspace reuses everything.
   arrived. **Objectives** with success/fail states feed the debrief.
 - **Launch bays**: station hardpoints with a launch rail; the launch is a scripted state with a `CINEMATIC`
   camera mode (Path3D + look-at), then hand-off to the player with the bay's velocity.
-- **Dialog**: subtitles + comms panel in M-series; voice is an open question (procedural-only rule).
+- **Dialog**: subtitles + comms panel first (M4, used by the M7 tutorial). Voiced dialog comes later from an
+  offline TTS generator run on the user's machine (candidate: Piper, see `docs/third-party.md`). Voices are produced
+  by code, so they satisfy the procedural-only rule; generated audio stays out of git like every other generated
+  asset. Dialog lines are data (speaker, text, voice id), so adding voices changes no mission scripts.
 - M1 seam: the free-flight scene is already driven by `data/scenarios/free_flight.json` through `ScenarioLoader`.
 
 ### 14.7 AI, allies, towing, capital ships
@@ -810,7 +841,8 @@ volumetric splats and a shader backdrop. Combat in hyperspace reuses everything.
 - **assets**: parametric families, not one-offs: `starfury_aurora`, `starfury_thunderbolt`, `raider_fighter`,
   `raider_control_ship`, faction fighters and capitals, `babylon5_station` (~8 km, hub + rotating drum + bays +
   defense grid), `jumpgate`, planets (shader parameters + generated textures), `asteroid_field` (noise-displaced
-  bodies), `comet` (nucleus + coma/tail volumetric splats), interiors (front-end B5 interior), per-system skies.
+  bodies), `comet` (nucleus + coma/tail volumetric splats), interiors (front-end B5 interior), per-system skies,
+  and later voice lines rendered from dialog data by an offline TTS tool.
 - Every asset emits the same contract: LOD chain, fallback mesh, collision primitives, hardpoints, manifest. Large
   assets (the station) may take minutes, so CI caches outputs keyed by a hash of the generator sources and seed.
   Outputs stay out of git (D9).

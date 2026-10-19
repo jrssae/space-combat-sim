@@ -74,3 +74,12 @@ GDGS behaviours that shape our pipeline (read from the v3.3.0 source):
 | GDGS at large coordinates | Not safe in any build: the compute registry packs model matrices (`PackedFloat32Array`) and the camera view matrix as float32 separately, so world-space precision is lost far from the origin. Floating origin is required regardless | `runtime/render/compute/gaussian_scene_registry.gd`, `gaussian_renderer.gd` |
 | GDGS LOD / streaming | No LOD (upstream proposal: issue #32). Changing a node's `gaussian` calls `_sync_scene_resources()`, which re-merges and re-uploads all nodes' point data. Hidden nodes early-out in `gsplat_projection.glsl` (`if (is_visible < 0.5) return;`) but are still dispatched; the visibility flag lives in the per-node transform upload | GDGS v3.3.0 source |
 | GDScript precision | GDScript `float` is 64-bit in every build; `Vector3` is float32 in official builds. Universe coordinates in script therefore cost nothing if stored as `float`s, not `Vector3` | Godot GDScript reference (known behaviour) |
+
+## Offline TTS candidates (verified 2026-10-19, not dependencies yet)
+
+| Candidate | Licence | Notes |
+|---|---|---|
+| Piper, `rhasspy/piper` | MIT | Archived: README says "Development has moved: https://github.com/OHF-Voice/piper1-gpl" |
+| Piper, `OHF-Voice/piper1-gpl` (current) | **GPL-3.0** (`COPYING`) | "A fast and local neural text-to-speech engine that embeds espeak-ng for phonemization". GPL-3.0 matches this project. Voice models are separate downloads, each with its own `MODEL_CARD` licence ("Some voices may have restrictive licenses"); pick voices per card. `huggingface.co` (voice hosting) is **not reachable** from the container (CONNECT 403), so voice licences must be checked from a workstation |
+| Kokoro, `hexgrad/kokoro` | Apache-2.0 (code; README: "Apache-licensed weights") | 82M-parameter model; uses espeak-ng for fallback phonemes |
+| espeak-ng | GPL-3.0 | Rule-based formant synthesis; robotic, but fully code-generated with no model weights (a fit for radio chatter) |
