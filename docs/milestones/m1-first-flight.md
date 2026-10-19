@@ -300,7 +300,7 @@ hardpoints, never hard-coded.
   `static from_array(a: Array) -> UniversePos`, `plus_local(v: Vector3) -> UniversePos`,
   `offset_to(other) -> Vector3` (documented as valid only for nearby positions), `distance_to(other) -> float`.
   `WorldFrame` (Node3D, the `World` node): `origin: UniversePos`, `origin_velocity: PackedFloat64Array` (zero in
-  M1), `to_local(u) -> Vector3`, `to_universe(local: Vector3) -> UniversePos`, `spawn(node: Node3D, at:
+  M1), `universe_to_local(u) -> Vector3` (`to_local` clashes with Node3D's native method), `to_universe(local: Vector3) -> UniversePos`, `spawn(node: Node3D, at:
   UniversePos, basis := Basis.IDENTITY)` (adds the child, joins group `world_shiftable`, places it),
   `rebase(offset: Vector3)` (moves every `world_shiftable` node by `-offset` via `global_position`, calls
   `reset_physics_interpolation()`, adds `offset` to `origin`, emits `rebased(offset)`),
@@ -348,7 +348,9 @@ hardpoints, never hard-coded.
   `depth_test_min_alpha`; expose them as exports on the scene root for tuning). Environment: background colour
   black, ambient 0.02 grey, glow on (intensity 0.4, HDR threshold 1.0), tonemap filmic, no fog, no SSAO/SSR.
   `KeyStar`: `DirectionalLight3D`, energy 1.5, slightly warm, rotated to light the ship's front-left-top.
-  `SkyFollower`: in `_process`, `sky.global_position = get_viewport().get_camera_3d().global_position` (also in
+  `SkyFollower`: in `_process`, `sky.global_position = get_viewport().get_camera_3d().global_position +
+  centroid_offset` (from `sky_default/manifest.json`: GDGS re-centres every PLY on its mean, and the one-sided nebula
+  puts the sky's mean ~4.6 km off the sphere centre) (also in
   `_physics_process` to avoid a frame of lag after teleports or rebases). The environment sits outside `World`.
   `space_environment.gd` exposes `use_fallback_sky(bool)` which swaps the Environment resource and hides
   `SkySplats`.

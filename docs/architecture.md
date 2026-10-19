@@ -40,7 +40,7 @@ and `docs/third-party.md` together.
 | D10 | GUT over gdUnit4 | Simpler headless CLI (`-gexit`, exit code 1 on failure), no xvfb caveats, GDScript-first, tracks Godot 4.7. |
 | D11 | 1 unit = 1 metre, SI everywhere, Godot axes (+X right, +Y up, **-Z forward**) | Avoids conversion bugs; Godot's `Basis.z` is backward, so forward is `-basis.z`. |
 | D12 | Vendor addons into `addons/` | Offline-reproducible builds; standard Godot practice; licences travel with the code. |
-| D13 | Linux x86_64 + Vulkan is the only target; GDGS Compute is the acceptance backend | The maintainer builds this for his own Linux gaming desktop. No per-OS code is written, so Godot keeps other doors open, but nothing else is tested or promised. |
+| D13 | Linux x86_64 + Vulkan is the only target; GDGS Compute is the acceptance backend | The maintainer builds this for their own Linux gaming desktop. No per-OS code is written, so Godot keeps other doors open, but nothing else is tested or promised. |
 | D14 | Pod thrust = 8 discrete nozzle forces (4 main, 4 retro) at hardpoint positions; RCS = ideal per-axis force/torque actuator with limits | The asymmetry that matters is in the big pod nozzles; modelling every RCS jet adds allocation maths with no gameplay gain. |
 | D15 | M1 has targeting and weapon modes but nothing shootable: `TargetingSystem` over inert splat **nav buoys**; `weapon_next` cycles pulse-cannon fire modes | Smallest behaviour that makes every bound button do something verifiable; spinning buoys exercise several independently moving splat nodes before enemies need them. |
 | D16 | Stay on the official single-precision engine. Large worlds use a floating-origin, free-falling `WorldFrame` plus 64-bit universe coordinates in script | No official double builds exist; GDGS packs matrices as float32 anyway; Jolt's 500 m/s cap needs a moving frame regardless (§14.1). |
@@ -68,7 +68,7 @@ src/
   console/console_logger.gd   Logger subclass (OS.add_logger): engine errors/warnings into the log, mutex-queued
   debug/debug_flags.gd        RefCounted: session-only cheats; M1: invulnerable
   world/universe_pos.gd       RefCounted: 64-bit position (x, y, z floats) in metres, + system_id
-  world/world_frame.gd        Node3D "World": origin UniversePos + origin velocity, to_local/to_universe,
+  world/world_frame.gd        Node3D "World": origin UniversePos + origin velocity, universe_to_local/to_universe,
                               rebase(offset), environment_accel(local_pos) (returns ZERO in M1)
   game/main.tscn|.gd          main scene: loads scenario, wires environment, ship, camera rig, overlay
   game/scenario_loader.gd     RefCounted: free_flight.json -> spawn list (UniversePos per entry)
@@ -667,7 +667,9 @@ ring buffer; engine errors in red and warnings in yellow from `ConsoleLogger`.
 4. Post: glow/bloom, tonemap. Keep glow modest so star splats do not bloom into blobs.
 
 The sky node sits far away (radius 20 km) and follows the camera origin each frame (`SkyFollower`,
-`top_level = true`), so it never parallaxes and never collides with the depth of nearby meshes. Camera `near =
+`top_level = true`), so it never parallaxes and never collides with the depth of nearby meshes. Because GDGS
+re-centres every PLY on its mean and the sky's mean is not its sphere centre (the nebula is one-sided), the node
+sits at `camera + centroid_offset` from the sky manifest, which puts the sphere centre on the camera. Camera `near =
 0.05 m` (cockpit), `far = 50 000 m`; Forward+ uses reverse-Z, so this range is fine.
 
 Raster backend differences (automatic fallback on GPUs without compute): splats become sorted
@@ -792,7 +794,7 @@ are the only requirements).
 
 1 unit = 1 m, SI. Ship ≈ 10 m long; M1 play area ≈ ±20 km (float32 error ≈ 2 mm there; fine). Sky radius 20 km
 around the camera, independent of ship position. M1 already routes all world content through `World`
-(`WorldFrame`): spawns take a `UniversePos` (64-bit) and are converted with `to_local()`; `rebase(offset)` exists
+(`WorldFrame`): spawns take a `UniversePos` (64-bit) and are converted with `universe_to_local()` (not `to_local`, which would clash with Node3D's native method); `rebase(offset)` exists
 and is tested, but automatic rebasing is off (threshold 0 = disabled) because the M1 play area does not need it.
 The full large-world design is §14.1.
 
