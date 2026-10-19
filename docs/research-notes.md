@@ -63,3 +63,14 @@ GDGS behaviours that shape our pipeline (read from the v3.3.0 source):
 - `docs.godotengine.org`, `godotengine.org`, `*.readthedocs.io`, `*.github.io` are **not reachable** from the container (403/ENOTFOUND). Read docs via `raw.githubusercontent.com` (e.g. `godotengine/godot-docs`) or rely on these notes.
 - Tools present: `python3` 3.13 with `numpy` 2.5 and `Pillow` 12.3, `curl`, `wget`, `unzip`, `git`, `git-lfs`, `xvfb-run`/`Xvfb`, `libvulkan.so.1`, `libGL.so.1`, X11 client libs. No GPU, so **no splat rendering can be verified in the container**. 4 CPUs, 15 GB RAM.
 - Godot export templates (`Godot_v4.7.2-stable_export_templates.tpz`) are downloadable but not required for M1 (we run from the editor binary).
+
+## Long-term design research (verified 2026-10-19, Godot 4.7.2 source and GDGS v3.3.0 source)
+
+| Question | Finding | How |
+|---|---|---|
+| Official double-precision builds? | **None.** `…/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.double.zip` and variants return 404. A double build needs `scons precision=double` (SConstruct adds `REAL_T_IS_DOUBLE`, binaries get a `.double` suffix) for the editor *and* export templates | HEAD requests; `SConstruct` lines 192, 596, 1043 at tag `4.7.2-stable` |
+| Jolt in a double build | Supported: `modules/jolt_physics/SCsub` appends `JPH_DOUBLE_PRECISION` when `precision == "double"` | sparse clone of `godotengine/godot` at `4.7.2-stable` |
+| Jolt limits | `physics/jolt_physics_3d/limits/max_linear_velocity` default 500 m/s (range hint allows greater); `max_angular_velocity` default 2700 °/s; `max_bodies` 10240 | `modules/jolt_physics/jolt_project_settings.cpp` |
+| GDGS at large coordinates | Not safe in any build: the compute registry packs model matrices (`PackedFloat32Array`) and the camera view matrix as float32 separately, so world-space precision is lost far from the origin. Floating origin is required regardless | `runtime/render/compute/gaussian_scene_registry.gd`, `gaussian_renderer.gd` |
+| GDGS LOD / streaming | No LOD (upstream proposal: issue #32). Changing a node's `gaussian` calls `_sync_scene_resources()`, which re-merges and re-uploads all nodes' point data. Hidden nodes early-out in `gsplat_projection.glsl` (`if (is_visible < 0.5) return;`) but are still dispatched; the visibility flag lives in the per-node transform upload | GDGS v3.3.0 source |
+| GDScript precision | GDScript `float` is 64-bit in every build; `Vector3` is float32 in official builds. Universe coordinates in script therefore cost nothing if stored as `float`s, not `Vector3` | Godot GDScript reference (known behaviour) |
