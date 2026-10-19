@@ -1,0 +1,135 @@
+class_name SettingsSchema
+extends RefCounted
+## Pure description of every user setting: type, default, range or choices (architecture §6.4).
+## Parses console text and validates values; knows nothing about files or the scene tree.
+## A new setting is one entry in ENTRIES, so the console can list, check and save it automatically.
+
+const TYPE_ENUM := -1  # pseudo type for string settings restricted to `choices`
+
+const ENTRIES: Dictionary = {
+	&"invert_y": {"type": TYPE_BOOL, "default": false,
+		"doc": "Invert pitch: stick back = nose down"},
+	&"stick_deadzone": {"type": TYPE_FLOAT, "default": 0.15, "min": 0.0, "max": 0.30,
+		"doc": "Radial stick deadzone, rescaled so full deflection still reaches 1"},
+	&"trigger_deadzone": {"type": TYPE_FLOAT, "default": 0.05, "min": 0.0, "max": 0.20,
+		"doc": "Trigger deadzone applied after rest calibration"},
+	&"roll_ramp_s": {"type": TYPE_FLOAT, "default": 0.25, "min": 0.05, "max": 1.0,
+		"doc": "Seconds for D-pad roll to ramp from 0 to full"},
+	&"assist_default": {"type": TYPE_BOOL, "default": true,
+		"doc": "Flight assist state at spawn"},
+	&"camera_default": {"type": TYPE_ENUM, "default": &"chase", "choices": [&"chase", &"cockpit"],
+		"doc": "Camera mode at spawn"},
+	&"show_overlay": {"type": TYPE_BOOL, "default": true,
+		"doc": "Show the debug overlay"},
+	&"show_fps": {"type": TYPE_BOOL, "default": false,
+		"doc": "Show the console FPS counter"},
+	&"console_enabled": {"type": TYPE_BOOL, "default": true,
+		"doc": "Allow the ` key to open the debug console"},
+	&"console_pause_on_open": {"type": TYPE_BOOL, "default": false,
+		"doc": "Pause the game while the console is open"},
+}
+
+const _TRUE_WORDS: PackedStringArray = ["true", "on", "1", "yes"]
+const _FALSE_WORDS: PackedStringArray = ["false", "off", "0", "no"]
+
+
+func keys() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for key: StringName in ENTRIES.keys():
+		out.append(key)
+	out.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
+	return out
+
+
+func has_key(key: StringName) -> bool:
+	return ENTRIES.has(key)
+
+
+func get_entry(key: StringName) -> Dictionary:
+	return ENTRIES.get(key, {})
+
+
+func get_type(key: StringName) -> int:
+	return int(get_entry(key).get("type", TYPE_NIL))
+
+
+func get_default(key: StringName) -> Variant:
+	return get_entry(key).get("default")
+
+
+func get_choices(key: StringName) -> Array:
+	return get_entry(key).get("choices", [])
+
+
+## Human-readable type/range, e.g. "float 0.0..0.3" or "enum chase|cockpit".
+func describe(key: StringName) -> String:
+	var entry: Dictionary = get_entry(key)
+	if entry.is_empty():
+		return "unknown"
+	match int(entry["type"]):
+		TYPE_BOOL:
+			return "bool"
+		TYPE_FLOAT:
+			return "float %s..%s" % [entry["min"], entry["max"]]
+		TYPE_ENUM:
+			return "enum " + "|".join(PackedStringArray(entry["choices"]))
+	return type_string(int(entry["type"]))
+
+
+## Validates (and coerces where lossless, e.g. int -> float) a typed value.
+## Returns {"ok": bool, "value": Variant, "error": String}.
+func validate(key: StringName, value: Variant) -> Dictionary:
+	var entry: Dictionary = get_entry(key)
+	if entry.is_empty():
+		return _fail("unknown setting '%s'" % key)
+	match int(entry["type"]):
+		TYPE_BOOL:
+			if typeof(value) != TYPE_BOOL:
+				return _fail("%s expects a bool, got %s" % [key, type_string(typeof(value))])
+			return _ok(value)
+		TYPE_FLOAT:
+			if typeof(value) != TYPE_FLOAT and typeof(value) != TYPE_INT:
+				return _fail("%s expects a float, got %s" % [key, type_string(typeof(value))])
+			var f: float = float(value)
+			if is_nan(f) or f < float(entry["min"]) or f > float(entry["max"]):
+				return _fail("%s must be in %s..%s, got %s" % [key, entry["min"], entry["max"], f])
+			return _ok(f)
+		TYPE_ENUM:
+			if typeof(value) != TYPE_STRING and typeof(value) != TYPE_STRING_NAME:
+				return _fail("%s expects one of %s" % [key, describe(key).trim_prefix("enum ")])
+			var name := StringName(value)
+			if not (entry["choices"] as Array).has(name):
+				return _fail("%s expects one of %s, got '%s'" % [key, describe(key).trim_prefix("enum "), name])
+			return _ok(name)
+	return _fail("%s has an unsupported schema type" % key)
+
+
+## Parses console/config text into a typed value, then validates it.
+func parse(key: StringName, text: String) -> Dictionary:
+	var entry: Dictionary = get_entry(key)
+	if entry.is_empty():
+		return _fail("unknown setting '%s'" % key)
+	var t := text.strip_edges()
+	match int(entry["type"]):
+		TYPE_BOOL:
+			var lower := t.to_lower()
+			if _TRUE_WORDS.has(lower):
+				return _ok(true)
+			if _FALSE_WORDS.has(lower):
+				return _ok(false)
+			return _fail("%s expects true/false/on/off/1/0, got '%s'" % [key, t])
+		TYPE_FLOAT:
+			if not t.is_valid_float():
+				return _fail("%s expects a number, got '%s'" % [key, t])
+			return validate(key, t.to_float())
+		TYPE_ENUM:
+			return validate(key, StringName(t.to_lower()))
+	return _fail("%s has an unsupported schema type" % key)
+
+
+func _ok(value: Variant) -> Dictionary:
+	return {"ok": true, "value": value, "error": ""}
+
+
+func _fail(message: String) -> Dictionary:
+	return {"ok": false, "value": null, "error": message}
