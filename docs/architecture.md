@@ -46,6 +46,7 @@ and `docs/third-party.md` together.
 | D16 | Stay on the official single-precision engine. Large worlds use a floating-origin, free-falling `WorldFrame` plus 64-bit universe coordinates in script | No official double builds exist; GDGS packs matrices as float32 anyway; Jolt's 500 m/s cap needs a moving frame regardless (§14.1). |
 | D17 | Procedural assets only, via a reusable generator framework (`tools/procgen`): no hand modelling, no AI 3D generators | User decision. Reproducible, reviewable, licence-clean, LOD-able by construction (§14.8). |
 | D18 | Gravity (and any later field: hyperspace currents) is an explicit environmental force; project gravity stays 0 | Keeps Jolt a local rigid-body solver; M1 already has the hook (`WorldFrame.environment_accel`), returning zero. |
+| D19 | Always-on debug console on the physical ` key (§6.4): a pure command/state registry that subsystems extend by registering, whitelisted state providers (no reflection), keyboard masked while open, gamepad and sim time keep running, output mirrored to stdout, scriptable from the command line | Personal single-user project, so usefulness wins over gating; the registry keeps it testable and lets every later milestone add commands without touching the console; stdout and `--console-exec` let headless agents drive a live build. |
 
 ## 3. Project layout
 
@@ -55,14 +56,24 @@ addons/gdgs/                  vendored GDGS v3.3.0 (MIT)
 addons/gut/                   vendored GUT v9.7.1 (MIT)
 data/scenarios/free_flight.json  M1 scenario: player start + nav buoys in universe coordinates
 src/
-  autoload/settings.gd        Settings: invert_y, deadzones, roll ramp, assist/camera defaults, pad calibration
+  autoload/settings.gd        Settings: schema-driven typed values (§6.4), session vs saved, pad calibration
+  autoload/settings_schema.gd RefCounted, pure: key -> type, default, range/choices; parse + validate
   autoload/sim_clock.gd       SimClock: 64-bit sim time, warp (fixed 1.0 in M1); the only gameplay clock
+  autoload/debug_console.gd   DebugConsole: owns registry, ConsoleUI, FpsCounter, ConsoleLogger, DebugFlags (§6.4)
+  console/console_registry.gd RefCounted, pure: commands + state providers, parse/validate/execute, help
+  console/console_tokenizer.gd, console_command.gd, console_arg.gd, console_state_provider.gd, console_vars.gd,
+  console/console_history.gd, console_completer.gd, console_format.gd, console_result.gd   (all pure)
+  console/console_ui.tscn|.gd CanvasLayer 100: log + prompt, keyboard only, history, Tab completion
+  console/fps_counter.tscn|.gd CanvasLayer 99: FPS + frame ms + watched values, top-right
+  console/console_logger.gd   Logger subclass (OS.add_logger): engine errors/warnings into the log, mutex-queued
+  debug/debug_flags.gd        RefCounted: session-only cheats; M1: invulnerable
   world/universe_pos.gd       RefCounted: 64-bit position (x, y, z floats) in metres, + system_id
   world/world_frame.gd        Node3D "World": origin UniversePos + origin velocity, to_local/to_universe,
                               rebase(offset), environment_accel(local_pos) (returns ZERO in M1)
   game/main.tscn|.gd          main scene: loads scenario, wires environment, ship, camera rig, overlay
   game/scenario_loader.gd     RefCounted: free_flight.json -> spawn list (UniversePos per entry)
-  game/debug_overlay.tscn|.gd CanvasLayer: flight state, assist/camera, POD YAW + POD TRIM, weapon mode, target readout
+  game/debug_overlay.tscn|.gd CanvasLayer (visible = settings.show_overlay): flight state, assist/camera, POD YAW +
+                              POD TRIM, weapon mode, timescale (when ≠ 1), target readout
                               + target bracket, splat backend, FPS, GPU, pad name/GUID/raw axes, universe position
   ship/ship.tscn|.gd          RigidBody3D "PlayerShip" adapter: consumes FlightCommand + CombatCommand
   ship/ship_spec.gd           Resource: mass, inertia, pod/RCS limits, rates, gains, asset_id, exhaust velocity
@@ -112,7 +123,9 @@ scripts/
 docs/                         this file, milestones/, roadmap.md, research-notes.md, third-party.md
 ```
 
-Autoloads: `Settings`, `SimClock`. No global event bus; nodes communicate downward by calls and upward by signals.
+Autoloads, in this order: `Settings`, `SimClock`, `DebugConsole`. No global event bus; nodes communicate downward
+by calls and upward by signals. `DebugConsole` adds its own `ConsoleUI` and `FpsCounter` canvas layers to the root,
+so it works in every scene (the future front end included) and is not part of `main.tscn`.
 
 ### Main scene tree (`src/game/main.tscn`)
 
@@ -153,6 +166,8 @@ InputSource ─> InputAdapter ─PilotCommand─┬─flight─> Ship ─> Fligh
                                           └─ui─────> Main: camera toggle, reset, pause, debug toggles
 Ship pose / velocity ─> CameraRig ─> active Camera3D ─> SkyFollower
 Settings ─> InputAdapter, GodotInputSource, CameraRig, Ship        SimClock ─> every gameplay timer
+Every subsystem ─register commands + state providers─> DebugConsole.registry <─ ConsoleUI / --console-exec
+DebugConsole.captures_keyboard() ─> GodotInputSource (masks keyboard/mouse bindings while the console is open)
 ```
 
 Rules:
@@ -166,6 +181,8 @@ Rules:
 - Weapons and visuals read ship state through typed getters, never by reaching into sibling nodes.
 - Rendering (splat vs mesh) is invisible to gameplay code: `Ship` exposes hardpoints; which node draws the hull is
   decided by `SplatStatus`.
+- The console imports no subsystem. Subsystems register their own commands and state providers with
+  `DebugConsole.registry` in `_ready` (owner = `self`) and are dropped when they leave the tree (§6.4).
 
 ## 5. Newtonian flight model
 
@@ -347,7 +364,7 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
 - If Jolt ever becomes the obstacle, the fallback is a custom integrator driving a `Node3D`; the pure-class split
   (D5) keeps that contained.
 
-## 6. Input
+## 6. Input and the debug console
 
 ### 6.1 Gamepad mapping (user-chosen layout)
 
@@ -384,13 +401,21 @@ use for the standard layout; any pad SDL3 recognises, generic XInput clones incl
 | `toggle_camera` | Y `JOY_BUTTON_Y` (3) | V | edge | - | - |
 | `reset_ship` | Back `JOY_BUTTON_BACK` (4) | Backspace | edge | - | - |
 | `pause` | Start `JOY_BUTTON_START` (6) | Esc | edge | - | - |
-| `debug_toggle_overlay` | L3 `JOY_BUTTON_LEFT_STICK` (7) | F3 | edge | - | - |
+| `debug_toggle_overlay` | L3 `JOY_BUTTON_LEFT_STICK` (7) | F3 | edge (toggles `settings.show_overlay`) | - | - |
 | `debug_toggle_fallback_mesh` | none (debug, keyboard only) | F4 | edge | - | - |
+| *(console toggle, not an action)* | none | ` (physical `KEY_QUOTELEFT`, 96) | handled in `DebugConsole._input` | - | - |
 
 Notes:
 - Only axes 0-5 and buttons 0-14 are used. Guide (5) and SDL extras (paddles, misc, touchpad, ≥ 15) are not.
   No rumble, no impulse triggers, no light bar, no motion sensors.
 - W and S are "both sides" keys: the same key is an event on two actions.
+- The ` key belongs to the console alone: it is not an `InputMap` action and must never be bound to one (a test
+  enforces it). While the console is open, Esc closes it instead of pausing (keyboard gameplay bindings are
+  masked, §6.4).
+- `GodotInputSource` evaluates every action itself from its `InputMap` events by polling devices
+  (`Input.get_joy_axis`, `is_joy_button_pressed`, `is_physical_key_pressed`, `is_mouse_button_pressed`), never via
+  `Input.is_action_pressed`. That is what lets it mask keyboard and mouse per device class while the console is
+  open: `Input` action state would still report keys typed into the prompt.
 - R3 is clicked with the aiming thumb; `target_ahead` samples the boresight at the press, so the small stick jolt
   of a click does not matter. L3 only toggles the overlay, so an accidental click while strafing is harmless.
 - Roll ramp: while a roll action is held, `rot.z` moves toward ±1 at `1 / Settings.roll_ramp_s` per second
@@ -480,6 +505,139 @@ Tests use `FakeInputSource` with scripted values; the real `GodotInputSource` is
 - **Pulse cannon modes** (`PulseCannonGate`, pure): `ALTERNATING` (4 Hz, muzzles alternate) and `LINKED`
   (2 Hz, both muzzles together). `weapon_next` cycles and wraps; the cooldown carries over, so switching cannot
   raise the rate of fire.
+
+### 6.4 Debug console (` key)
+
+**Availability.** Always on, in every build and every scene (`settings.console_enabled`, default true). It is a
+single-user personal project, so usefulness wins over gating. With `console_enabled = false` the ` key does nothing,
+but startup scripts (`--console-exec`, autoexec) still run, so headless automation keeps working.
+
+**Opening.** The physical ` key (`KEY_QUOTELEFT`, 96; physical so it stays the same key on non-US layouts) toggles
+the console. It is handled in `DebugConsole._input` before GUI and gameplay, marked handled (so the character never
+reaches the prompt), and is never an `InputMap` action. Esc also closes it.
+
+```
+DebugConsole (autoload Node, PROCESS_MODE_ALWAYS so it works while paused)
+├─ registry: ConsoleRegistry   pure: commands, state providers, parse / validate / execute, help, completion
+├─ ConsoleUI (CanvasLayer 100) log + prompt; keyboard only; history; Tab completion
+├─ FpsCounter (CanvasLayer 99) top-right: FPS + frame time (ms) + watched values; follows settings.show_fps
+├─ ConsoleLogger (Logger)      OS.add_logger(): engine errors/warnings into the log. Called off the main
+│                              thread, so it only appends to a Mutex-guarded queue that the console drains
+└─ flags: DebugFlags           session-only cheats, never saved. M1: invulnerable
+```
+
+Pure, unit-tested pieces: `ConsoleTokenizer` (whitespace, "double quotes", `;` separates commands, `#` starts a
+comment), `ConsoleCommand` + `ConsoleArg` (typed arguments: bool, int, float, string, enum, path, vec3; optional
+with default; summary and usage strings), `ConsoleRegistry`, `ConsoleStateProvider` with the `ConsoleVars` helper,
+`ConsoleHistory` (100 entries, persisted to `user://console_history.txt`), `ConsoleCompleter`, `ConsoleFormat`,
+`ConsoleResult` (ok flag + output lines).
+
+**Registration.** Subsystems register in `_ready` with themselves as owner; the registry drops an owner's entries
+when it calls `unregister_owner(self)` in `_exit_tree`, and prunes freed owners on access. The console never
+imports a subsystem: later milestones extend it only by registering.
+
+```
+func _ready() -> void:
+    DebugConsole.registry.register_command(ConsoleCommand.new(&"assist", "Toggle or set flight assist",
+        [ConsoleArg.bool_optional(&"state")]), _cmd_assist, self)
+    DebugConsole.registry.register_provider(&"ship", ConsoleVars.new({
+        &"speed":     {"get": func() -> float: return linear_velocity.length(), "type": TYPE_FLOAT, "unit": "m/s"},
+        &"assist_on": {"get": func() -> bool: return assist_on, "set": set_assist, "type": TYPE_BOOL},
+    }), self)
+```
+
+**State, not reflection.** State is read through `provider.key` paths from whitelisted providers only.
+`get ship.queue_free` is "unknown key", never a call. Writable keys declare a setter, type and range; `set`
+validates before calling. Values are formatted consistently (vectors to 2 decimals, units appended).
+
+| Provider | Owner (task) | Keys (w = writable) |
+|---|---|---|
+| `settings` | Settings (T01/T07) | every schema key (w, typed, ranged) |
+| `debug` | DebugConsole (T07) | `invulnerable` (w) |
+| `time` | SimClock (T07) | `sim_time_s`, `warp`, `timescale` |
+| `input` | GodotInputSource (T07) | `pads` (name, GUID, trigger rest, raw axes), `keyboard_masked`, last command fields |
+| `ship` | Ship (T10) | `position`, `universe_position`, `velocity`, `speed`, `body_velocity`, `angular_rate_dps`, `assist_on` (w), `trim`, `pod_yaw`, `main_levels`, `retro_levels`, `mass_flow` |
+| `world` | WorldFrame (T09) | `origin`, `origin_velocity`, `auto_rebase_distance_m` |
+| `camera` | CameraRig (T12) | `mode` (w), `fov` |
+| `weapons` | PulseCannon (T13) | `mode` (w), `cooldown_s` |
+| `targeting` | TargetingController (T14) | `selected` (w: display name or `none`), `range_m`, `closing_mps`, `candidates` |
+| `render` | SplatStatus (T10) | `splat_backend`, `fallback` (w), `fps`, `gpu` |
+
+M1 commands:
+
+| Command | Owner | Does |
+|---|---|---|
+| `help [command]` | console | list commands, or one command's usage |
+| `clear` | console | clear the log |
+| `state [provider]` | console | list providers, or every `key = value` of one |
+| `get <path>` | console | one value, e.g. `get ship.speed` |
+| `set <path> <value>` | console | type-checked write; for `settings.*` it applies now and is session-only until `save` |
+| `toggle <path>` | console | flip a writable bool |
+| `default <path>` | console | reset a setting to its default (session) |
+| `save` / `revert` | console -> Settings | persist all settings to `user://settings.cfg` / reload them from disk |
+| `watch <path>` / `unwatch <path\|all>` | console | live values under the FPS counter (max 8, session) |
+| `fps [on\|off]` | console | shorthand for `toggle settings.show_fps` |
+| `god [on\|off]` | console | shorthand for `toggle debug.invulnerable`; session-only, never saved. M1 has no damage; M2 hull damage on the player skips while it is set |
+| `timescale <0.05..1>` | console | debug slow motion via `Engine.time_scale`, which scales physics delta and therefore `SimClock`. Capped at 1 in M1; real warp is `SimClock`'s job (M8 adds a `warp` command) |
+| `exec <file>` | console | run commands from a `res://` or `user://` file |
+| `wait <frames>` | console | delay the rest of the queue by N physics frames (scripts, headless runs) |
+| `quit [code]` | console | quit with an exit code |
+| `assist [on\|off]` | Ship | flight assist |
+| `camera [cockpit\|chase]` | CameraRig | set, or toggle with no argument |
+| `fallback [on\|off]` | SplatStatus | fallback meshes and panorama sky |
+| `respawn` | Main | ship reset (same as Back) |
+| `pause [on\|off]` | Main | tree pause (same as Start) |
+| `rebase <dx> <dy> <dz>` | WorldFrame | manual `World.rebase()`: the only way to exercise the seam at runtime in M1 |
+
+Weapon mode and target selection are reached with `set weapons.mode linked` and `set targeting.selected "NAV
+BRAVO"` rather than extra commands.
+
+**Settings.** `Settings` is schema-driven (`SettingsSchema`): every key has a type, default and range or choices.
+`Settings.get_value(key)`, `Settings.set_value(key, value) -> Error` (validated, applies immediately, marks the key
+unsaved, emits `changed(key, value)`), `reset(key)`, `save()`, `revert()`. Nothing is written to disk except by
+`save`; `state settings` marks unsaved keys with `*`. M1 schema:
+
+| Key | Type | Default | Range / choices |
+|---|---|---|---|
+| `invert_y` | bool | false | |
+| `stick_deadzone` | float | 0.15 | 0.0-0.30 |
+| `trigger_deadzone` | float | 0.05 | 0.0-0.20 |
+| `roll_ramp_s` | float | 0.25 | 0.05-1.0 |
+| `assist_default` | bool | true | |
+| `camera_default` | enum | `chase` | `chase`, `cockpit` |
+| `show_overlay` | bool | true | |
+| `show_fps` | bool | false | |
+| `console_enabled` | bool | true | |
+| `console_pause_on_open` | bool | false | |
+
+Pad calibration (`[pads]`, trigger rest per GUID) is data, not a setting: read-only through `state input`.
+
+**Input and time while open.**
+- Keyboard and mouse gameplay input are masked: `GodotInputSource` drops key and mouse bindings while
+  `DebugConsole.captures_keyboard()` (§6.1), so typing `w` never thrusts. On open and close, `InputAdapter`
+  re-seeds its edge state from the current state, so nothing fires on the transition.
+- The gamepad keeps flying. It is never used for typing, and the console's main job is watching live state
+  (`watch ship.speed`) while you fly. The console UI swallows joypad *events*, so pad buttons cannot navigate or
+  activate the prompt; gameplay polls devices and is unaffected.
+- Sim time keeps running: the ship simply coasts (Newtonian) while your hands are on the keyboard.
+  `settings.console_pause_on_open` pauses the tree while the console is open, and `pause` works either way.
+
+**FPS counter vs overlay.** The debug overlay (L3/F3, `settings.show_overlay`) is the full readout and keeps its FPS
+line. The FPS counter is a separate minimal label owned by `DebugConsole`, so it works in every scene and while
+the overlay is hidden; watched values are drawn under it.
+
+**Output and automation.**
+- Every command line and its output go to the log and to stdout (`[console] > get ship.speed`,
+  `[console] ship.speed = 42.10 m/s`); errors go to stderr (`[console] error: unknown key 'ship.sped' (did you
+  mean ship.speed?)`). Headless tests and agents grep these lines.
+- Startup scripts run one physics frame after the current scene's `_ready`, so its providers exist: first
+  `user://autoexec.cfg` (one command per line, if present), then the command-line user arguments
+  `--console-file=<path>` and `--console-exec="cmd; cmd"`. With `--console-strict`, the first error quits with exit
+  code 1. Example: `godot --headless --path . -- --console-exec="wait 60; state ship; quit"`.
+
+**UI.** Top 40 % of the screen, translucent panel, monospace, prompt `>`, Up/Down history, Tab completion (command
+names, then provider paths, setting keys and enum values; repeated Tab cycles), PageUp/PageDown scroll, 1000-line
+ring buffer; engine errors in red and warnings in yellow from `ConsoleLogger`.
 
 ## 7. Rendering pipeline
 
@@ -651,8 +809,8 @@ The full large-world design is §14.1.
 | Level | Tool | Runs where | Covers |
 |---|---|---|---|
 | Python unit | `unittest` | container, CI | PLY header/field layout, counts, determinism (hash of output), frame conversion, hardpoints schema (pods, nozzles, CoM), centroid ≈ 0, manifest `lods`, CLI registry |
-| GDScript unit | GUT `tests/unit` | container, CI | `FlightModel` (pod forces at positions, r × F signs per §5.2 table, zero pitch/roll from pods, trim maths, brake symmetry, clamps, mass flow), `FlightAssist` (pod-yaw sign, deadzone, frame-rate-independent smoothing, cap at `rate_max`, converges, never exceeds limits or triggers), `InputAdapter` (radial deadzone, expo, roll ramp, edges, invert-Y, command split), `TriggerCalibration` (rest 0 and -1), `ChaseCameraMath` (frame-rate independence), `PulseCannonGate` (modes, rates, cycling), `TargetingSystem` (next, ahead, readout), `UniversePos` (64-bit precision at 1e11 m) |
-| Headless integration | GUT `tests/integration`, `--headless` | container, CI | ship scene instantiates; damping guard; pod-differential yaw measured in Jolt matches the model; assist turns at the pod-yaw rate under one trigger, stops on release, and flies straight inside the deadzone; brake; projectile velocity/lifetime; all PLYs import with manifest counts; `World.rebase` keeps velocities and relative positions; scenario spawns buoys; targeting with live buoys; `SkyFollower`; camera toggle; `main.tscn` runs 180 frames without script errors |
+| GDScript unit | GUT `tests/unit` | container, CI | `FlightModel` (pod forces at positions, r × F signs per §5.2 table, zero pitch/roll from pods, trim maths, brake symmetry, clamps, mass flow), `FlightAssist` (pod-yaw sign, deadzone, frame-rate-independent smoothing, cap at `rate_max`, converges, never exceeds limits or triggers), `InputAdapter` (radial deadzone, expo, roll ramp, edges, invert-Y, command split), `TriggerCalibration` (rest 0 and -1), `ChaseCameraMath` (frame-rate independence), `PulseCannonGate` (modes, rates, cycling), `TargetingSystem` (next, ahead, readout), `UniversePos` (64-bit precision at 1e11 m), console (tokenizer, typed args and errors, help, history, completion, provider whitelist, owner pruning), `SettingsSchema` (types, ranges, session vs save) |
+| Headless integration | GUT `tests/integration`, `--headless` | container, CI | ship scene instantiates; damping guard; pod-differential yaw measured in Jolt matches the model; assist turns at the pod-yaw rate under one trigger, stops on release, and flies straight inside the deadzone; brake; projectile velocity/lifetime; all PLYs import with manifest counts; `World.rebase` keeps velocities and relative positions; scenario spawns buoys; targeting with live buoys; `SkyFollower`; camera toggle; console masks keyboard but not pad, and every subsystem's provider answers `state`; `main.tscn` runs 180 frames without script errors; a `--console-exec` run prints the expected `[console]` lines and exits with the requested code |
 | Human acceptance | checklist in the milestone doc | Linux/Vulkan GPU + generic XInput pad | splat appearance, compositing, feel, performance, controller behaviour, trigger/deadzone calibration, targeting |
 
 Rules: every pure class gets unit tests in the same PR; every scene gets at least an instantiate-and-run test;
@@ -664,6 +822,7 @@ Commands (also in `scripts/run_tests.sh`):
 python3 -m unittest discover -s tools/procgen/tests -t . -v
 .tools/godot/godot --headless --path . --import
 .tools/godot/godot --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests -ginclude_subdirs -gexit -gjunit_xml_file=reports/gut.xml
+.tools/godot/godot --headless --path . -- --console-strict --console-exec="wait 30; state ship; get render.splat_backend; quit"
 ```
 
 ## 13. Coding conventions
@@ -682,11 +841,15 @@ python3 -m unittest discover -s tools/procgen/tests -t . -v
   later depends on it).
 - Positions that may be far away (spawn points, waypoints, celestial bodies) are `UniversePos`, never `Vector3`.
   `Vector3` is for `World`-local positions only.
-- Tunables live in `Resource`s (`ShipSpec`) or `Settings`, not as literals in node scripts.
+- Tunables live in `Resource`s (`ShipSpec`) or `Settings`, not as literals in node scripts. A new setting is a
+  `SettingsSchema` entry (type, default, range), so the console can list, check and save it automatically.
+- Every new subsystem registers its console commands and a state provider in `_ready` (owner = `self`, unregister
+  in `_exit_tree`). Command names are `lower_snake`; keys are read-only unless writing them is useful; prefer a
+  writable key over a new command. Never expose state by reflection.
 - Comments explain *why*; the sign conventions in §5.2 are documented at the top of `flight_model.gd`.
 - Python: `ruff`-clean (default rules), type hints, `argparse` CLI, `--seed`, pure functions; no Blender
   dependency; every asset module implements the `build(ctx) -> AssetOutputs` contract.
-- Commits: imperative subject, task id prefix when applicable (`M1-T07: flight model and assist`).
+- Commits: imperative subject, task id prefix when applicable (`M1-T08: flight model and assist`).
 
 ## 14. Long-term architecture
 
@@ -853,15 +1016,16 @@ Built in M1 because each is cheap and avoids a later rewrite:
 
 | Seam | M1 task | Avoids later |
 |---|---|---|
-| `UniversePos` + `World`/`WorldFrame` parent for all world objects, `rebase()` tested, auto-rebase off | T08 | Re-parenting every scene and auditing raw `Vector3` positions when large worlds arrive |
-| `World.environment_accel()` applied by the Ship each tick (returns zero); `env_accel_b` feed-forward in the brake | T07, T09 | Retrofitting gravity and hyperspace fields into the flight path |
+| `UniversePos` + `World`/`WorldFrame` parent for all world objects, `rebase()` tested, auto-rebase off | T09 | Re-parenting every scene and auditing raw `Vector3` positions when large worlds arrive |
+| `World.environment_accel()` applied by the Ship each tick (returns zero); `env_accel_b` feed-forward in the brake | T08, T10 | Retrofitting gravity and hyperspace fields into the flight path |
 | `SimClock` autoload; rule: no wall-clock time in gameplay | T01 | Hunting timers when time warp lands |
 | Flight/Combat/Ui command split | T06 | Untangling player-only input from what AI pilots write |
-| `TargetInfo.faction` | T13 | Changing the targeting data model for IFF, allies and enemies |
-| `ShipSpec` per ship class with `asset_id`; `mass_flow` in `FlightOutput` (unlimited reaction mass) | T07, T09 | Ship-class hard-coding (Thunderbolt) and a flight-model change for finite fuel |
-| Scenario JSON for free flight, spawns in universe coordinates | T13, T14 | A second spawn path when the mission framework arrives |
+| `TargetInfo.faction` | T14 | Changing the targeting data model for IFF, allies and enemies |
+| `ShipSpec` per ship class with `asset_id`; `mass_flow` in `FlightOutput` (unlimited reaction mass) | T08, T10 | Ship-class hard-coding (Thunderbolt) and a flight-model change for finite fuel |
+| Scenario JSON for free flight, spawns in universe coordinates | T14, T15 | A second spawn path when the mission framework arrives |
 | `tools/procgen` framework layout, per-asset output dirs, manifest `lods` array | T02, T04 | Moving files and rewriting import paths for every later asset |
-| Camera mode enum | T11 | Reworking the rig for cinematic and free-look modes |
+| Camera mode enum | T12 | Reworking the rig for cinematic and free-look modes |
+| Debug console registry, whitelisted state providers, `debug.invulnerable` flag | T07 (+ each subsystem's task) | Bolting debug tooling onto every subsystem later; M2 hull damage only has to read the flag |
 
 Deliberately **not** seams in M1, because they cannot be made cheap: the moving (velocity-rebased) frame and tidal
 gravity (§14.1-14.2), on-rails warp (§14.3), the LOD/scaled-space render layers (§14.4) and the hyperspace space

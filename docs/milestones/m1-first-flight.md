@@ -23,12 +23,18 @@ In:
   overlay.
 - Long-term seams only (§14.9): `UniversePos` + `World` frame, environment-acceleration hook (zero), `SimClock`,
   command split, faction field, scenario JSON, procgen layout, reaction-mass flow (unlimited).
-- Debug overlay; headless test suite (Python + GUT) and GitHub Actions CI.
+- Debug overlay and an always-on debug console on the ` key (§6.4): help, state inspection through whitelisted
+  providers, typed settings (session or saved), FPS counter, god-mode flag (wired to damage in M2), scriptable from
+  the command line for headless runs.
+- Headless test suite (Python + GUT) and GitHub Actions CI.
 
 Out (explicitly):
 - Anything shootable: enemies, AI, damage, hit detection, shields, missiles or other secondary weapons, lead
   reticle, HUD beyond the debug overlay and target bracket.
-- Audio, music, menus, front end, settings UI (settings are a config file), save games, localisation.
+- Audio, music, menus, front end, a settings menu (settings live in a config file and are edited through the
+  console), save games, localisation.
+- Console extras: operating the console from the gamepad, a remote/network console, any scripting beyond the
+  command syntax, `timescale` above 1.
 - Splat *training* (Brush/gsplat), GDGS relighting, collision generation from splats, LOD chains.
 - True-scale world, gravity, automatic rebasing, moving frame, time warp, scaled space, planets, Babylon 5
   station, jumpgates, hyperspace, missions (all on the roadmap; M1 only adds the seams).
@@ -69,6 +75,10 @@ hardpoints, never hard-coded.
 | AC16 | Thruster glow is per pod and per side: it shows differential thrust, retros and trim; RCS glow responds to strafe and rotation; projectiles and muzzle flash visible from both cameras; the two fire modes are visibly different | H |
 | AC17 | D-pad Up cycles the buoys, R3 picks the buoy nearest the nose; bracket and readout (name, range, closing speed) are correct; buoys render as splats and visibly spin; the drifting buoy shows a non-zero closing speed | H |
 | AC18 | Overlay shows splat backend `Compute` (`Raster` only with a recorded reason); fallback meshes/panorama appear automatically if neither backend initialised | H |
+| AC19 | Console unit tests: tokenizer (quotes, `;`, `#`), typed args and their error messages, unknown command/key suggestions, `help`, history (100, persisted), Tab completion (commands, paths, setting keys, enum values), provider whitelist (`get ship.queue_free` is an unknown key), owner pruning when a registering node is freed, `god` toggles `debug.invulnerable` and it is never written by `save` | A |
+| AC20 | Console input rules: no `InputMap` action binds `KEY_QUOTELEFT`; while the console is open key/mouse-bound actions read 0 and pad-bound actions still work; opening/closing with a key held fires no edge; `settings.console_pause_on_open` pauses the tree | A |
+| AC21 | Headless automation: the `--console-exec` smoke runs in `run_tests.sh` print the expected `[console]` lines, `set settings.stick_deadzone 0.2` applies without touching `user://settings.cfg` until `save`, an invalid value exits 1 under `--console-strict`, and after T15 `state` lists every M1 provider (`settings`, `debug`, `time`, `input`, `ship`, `world`, `camera`, `weapons`, `targeting`, `render`) | A |
+| AC22 | On the tester's keyboard: ` opens and closes the console (and never types a character), typing does not move the ship, the pad keeps flying with the console open, Esc closes it, Up/Down history and Tab completion work, `fps` shows the counter, `watch ship.speed` updates live, `set` + `save` survives a restart while `set` alone does not, engine errors appear in red | H |
 
 ## Task breakdown (ordered)
 
@@ -76,8 +86,9 @@ hardpoints, never hard-coded.
 
 - Goal: a `project.godot` that imports cleanly headless with GDGS and GUT enabled.
 - Files: `scripts/setup_godot.sh`, `scripts/vendor_addons.sh`, `addons/gdgs/**`, `addons/gut/**`,
-  `project.godot`, `.editorconfig`, `src/autoload/settings.gd`, `src/autoload/sim_clock.gd`,
-  `tests/unit/test_smoke.gd`, `tests/unit/test_sim_clock.gd`, `scripts/run_tests.sh` (initial),
+  `project.godot`, `.editorconfig`, `src/autoload/settings.gd`, `src/autoload/settings_schema.gd`,
+  `src/autoload/sim_clock.gd`, `tests/unit/{test_smoke,test_settings_schema,test_sim_clock}.gd`,
+  `scripts/run_tests.sh` (initial),
   `docs/third-party.md` (update if versions differ).
 - Notes:
   - `setup_godot.sh`: `curl -L` the zip from
@@ -92,13 +103,17 @@ hardpoints, never hard-coded.
   - `project.godot`: `config/features=PackedStringArray("4.7", "Forward Plus")`, rendering method
     `forward_plus`, `physics/3d/physics_engine="Jolt Physics"`, `default_gravity=0`, `default_linear_damp=0`,
     `default_angular_damp=0`, `physics/common/physics_interpolation=true`, window 1920×1080 with `stretch`
-    off, `editor_plugins/enabled` = gdgs + gut, autoloads `Settings` and `SimClock`,
-    `debug/gdscript/warnings/untyped_declaration=2` (error). Main scene is set in T14; until then CI runs
+    off, `editor_plugins/enabled` = gdgs + gut, autoloads `Settings` and `SimClock` (`DebugConsole` follows in T07),
+    `debug/gdscript/warnings/untyped_declaration=2` (error). Main scene is set in T15; until then CI runs
     scripts, not the project.
-  - `settings.gd`: loads/saves `user://settings.cfg` with `invert_y=false`, `stick_deadzone=0.15`,
-    `trigger_deadzone=0.05`, `roll_ramp_s=0.25`, `assist_default=true`, `camera_default="chase"`, and a `[pads]`
-    section mapping pad GUID -> `trigger_rest` (filled by the input layer in T06). Applies any lines from
-    `user://gamecontrollerdb.txt` via `Input.add_joy_mapping(line, true)` in `_ready`.
+  - `settings.gd` is schema-driven from the start (architecture §6.4, M1 schema table): `SettingsSchema` holds
+    type, default and range/choices per key and parses/validates values (bool accepts `true/false/on/off/1/0`).
+    API: `get_value(key)`, `set_value(key, value) -> Error` (applies now, marks unsaved, emits `changed`),
+    `reset(key)`, `is_unsaved(key)`, `save()`, `revert()`. Only `save()` writes `user://settings.cfg`. A `[pads]`
+    section maps pad GUID -> `trigger_rest` (filled by the input layer in T06; data, not a schema key). Applies any
+    lines from `user://gamecontrollerdb.txt` via `Input.add_joy_mapping(line, true)` in `_ready`. Tests: every
+    schema key round-trips through save/revert; out-of-range and wrong-type values are rejected with a message;
+    `set_value` alone never writes the file.
   - `sim_clock.gd`: `sim_time_s: float` (64-bit) advanced in `_physics_process` by `delta * warp`; `warp` is a
     constant 1.0 in M1 (setter asserts 1.0); `now() -> float`. All later gameplay timers use it or `delta`.
   - `test_smoke.gd`: one GUT test asserting `true` so the runner path is exercised.
@@ -185,7 +200,7 @@ hardpoints, never hard-coded.
 - Notes: `load("res://assets/generated/starfury_aurora/starfury_aurora.ply")` returns the `GaussianResource` (GDGS
   registers an import plugin; after `--import` the `.import` sidecar exists). Compare `point_count` and `aabb`
   (apply Rz(180°) to the manifest AABB: negate x and y and re-sort min/max) within 0.01 m. Same for
-  `sky_default`. Iterate over whatever asset directories exist, so `nav_buoy` (T13) is covered automatically. Fail
+  `sky_default`. Iterate over whatever asset directories exist, so `nav_buoy` (T14) is covered automatically. Fail
   with a clear message if assets are missing ("run scripts/gen_assets.sh").
 - Done when: AC4 passes for the assets that exist, locally and in CI.
 - Verify: `scripts/run_tests.sh`.
@@ -197,7 +212,11 @@ hardpoints, never hard-coded.
   `src/input/{flight_command,combat_command,ui_command,pilot_command,input_source,godot_input_source,trigger_calibration,input_adapter}.gd`,
   `tests/fixtures/fake_input_source.gd`, `tests/unit/{test_input_adapter,test_trigger_calibration,test_input_map}.gd`.
 - Notes: `InputSource` API: `get_vector(nx, px, ny, py, deadzone) -> Vector2`, `get_trigger(action) -> float`,
-  `is_pressed(action) -> bool`, `pad_info() -> Array[Dictionary]` (name, guid, raw axes 0-5; overlay only).
+  `is_pressed(action) -> bool`, `pad_info() -> Array[Dictionary]` (name, guid, raw axes 0-5; overlay only),
+  `keyboard_mouse_enabled: bool` (default true; the console clears it in T07). `GodotInputSource` evaluates every
+  action from its `InputMap` events by polling devices (`Input.get_joy_axis`, `is_joy_button_pressed`,
+  `is_physical_key_pressed`, `is_mouse_button_pressed`) and never calls `Input.is_action_pressed`, so key and mouse
+  bindings can be masked per device class (§6.1). `InputAdapter.resync_edges()` re-seeds previous-tick state.
   `GodotInputSource.get_trigger` reads the action's `InputEventJoypadMotion` events from `InputMap`, the raw axis
   per connected pad, normalises with `TriggerCalibration` (rest per GUID; calibration samples 0.5 s of idle input
   at start-up and on `joy_connection_changed`), counts bound keys as 1.0, returns the max. Edge detection lives in
@@ -207,11 +226,44 @@ hardpoints, never hard-coded.
   `retro_*` -> 0.0/1.0, combat actions -> `CombatCommand`, camera/reset/pause/debug -> `UiCommand`. Nothing may
   reference rumble or other Xbox-only features. `test_input_map.gd` asserts every action exists, each has at
   least one pad event (except `debug_toggle_fallback_mesh`, keyboard only), axis indices are in 0..5 and button
-  indices in 0..14, and the specific bindings from §6.1 (e.g. `retro_right` is button 10, `target_ahead` is 8).
+  indices in 0..14, the specific bindings from §6.1 (e.g. `retro_right` is button 10, `target_ahead` is 8), and
+  that no action has a key event with physical keycode `KEY_QUOTELEFT` (the console key). Adapter tests: with
+  `keyboard_mouse_enabled = false`, key-bound values read 0 while pad-bound values still pass through; toggling the
+  mask with a key held fires no edge.
 - Done when: AC6 and AC11 pass.
 - Verify: GUT unit suite.
 
-### M1-T07 Flight model and assist (pure)
+### M1-T07 Debug console
+
+- Goal: the always-on ` console (architecture §6.4) with its core commands, ready for later tasks to register
+  their own commands and state.
+- Files: `src/autoload/debug_console.gd` (+ autoload entry after `SimClock` in `project.godot`),
+  `src/console/{console_registry,console_tokenizer,console_command,console_arg,console_state_provider,console_vars,console_history,console_completer,console_format,console_result}.gd`,
+  `src/console/console_ui.tscn|.gd`, `src/console/fps_counter.tscn|.gd`, `src/console/console_logger.gd`,
+  `src/debug/debug_flags.gd`, `tests/fixtures/console_host.tscn` (empty Node3D for headless runs),
+  `tests/unit/{test_console_tokenizer,test_console_registry,test_console_completer,test_console_history,test_debug_flags}.gd`,
+  `tests/integration/test_debug_console.gd`, `scripts/run_tests.sh` (add the console smoke run).
+- Notes: follow §6.4 exactly: availability, ` handling in `_input` (physical `KEY_QUOTELEFT`, consumed, Esc
+  closes), registry API (`register_command`, `register_provider`, `unregister_owner`, `execute(line) ->
+  Array[ConsoleResult]`, `complete(partial)`, `help(name)`), typed arguments with clear errors and "did you mean"
+  suggestions, providers via `provider.key` paths only. Core commands: `help`, `clear`, `state`, `get`, `set`,
+  `toggle`, `default`, `save`, `revert`, `watch`, `unwatch`, `fps`, `god`, `timescale` (clamped 0.05..1), `exec`,
+  `wait`, `quit`. Providers registered here: `settings` (from `SettingsSchema`), `debug` (`DebugFlags`), `time`
+  (`SimClock`, plus `Engine.time_scale`), `input` (via the main scene's `GodotInputSource` once it exists; a
+  `DebugConsole.set_input_source(source)` setter). While open: `captures_keyboard()` is true, the input source's
+  `keyboard_mouse_enabled` is false and `InputAdapter.resync_edges()` runs on open and close; joypad events are
+  swallowed by the UI only; `console_pause_on_open` pauses the tree. Output mirrored to stdout/stderr with the
+  `[console]` prefix. Startup execution of `user://autoexec.cfg`, `--console-file`, `--console-exec`,
+  `--console-strict` from `OS.get_cmdline_user_args()`, one physics frame after the current scene is ready.
+  `ConsoleLogger` registers with `OS.add_logger()` and only appends to a `Mutex`-guarded queue (its methods are
+  called off the main thread); the UI drains it each frame. `run_tests.sh` adds:
+  `godot --headless --path . res://tests/fixtures/console_host.tscn -- --console-strict --console-exec="help; set settings.stick_deadzone 0.2; get settings.stick_deadzone; god on; get debug.invulnerable; quit 0"`
+  and asserts exit code 0 and the expected `[console]` lines, plus a second run with `set settings.stick_deadzone
+  0.9` that must exit 1 under `--console-strict`.
+- Done when: AC19, AC20 and AC21 pass.
+- Verify: GUT, `scripts/run_tests.sh`.
+
+### M1-T08 Flight model and assist (pure)
 
 - Goal: `FlightModel.new(spec, layout).compute(cmd, v_b, w_b, env_accel_b, assist_on, dt) -> FlightOutput`,
   exactly §5.2. `dt` drives the pod-yaw smoothing; the model owns one `FlightAssist` whose only state is the
@@ -239,7 +291,7 @@ hardpoints, never hard-coded.
 - Done when: unit tests pass; no scene-tree access in these files.
 - Verify: GUT unit suite.
 
-### M1-T08 World frame and universe coordinates
+### M1-T09 World frame and universe coordinates
 
 - Goal: the large-world seam (§10, §14.1): every world object lives under a `World` node that can rebase.
 - Files: `src/world/universe_pos.gd`, `src/world/world_frame.gd`, `tests/unit/test_universe_pos.gd`,
@@ -256,10 +308,11 @@ hardpoints, never hard-coded.
   `auto_rebase_distance_m := 0.0` (0 = disabled; the check exists but is off in M1). Integration test: a
   RigidBody3D moving at 30 m/s plus a static node, call `rebase(Vector3(5000, 0, 0))`, await two physics frames,
   assert velocities unchanged and relative positions and universe positions within 1 mm.
+- Console: `World` registers provider `world` and command `rebase <dx> <dy> <dz>` (§6.4).
 - Done when: AC9 passes.
 - Verify: GUT.
 
-### M1-T09 Ship scene
+### M1-T10 Ship scene
 
 - Goal: a flyable `RigidBody3D` ship with splat hull, fallback mesh, collision, hardpoints, pod forces at the pods.
 - Files: `src/ship/ship.tscn`, `src/ship/ship.gd`, `src/ship/hardpoints.gd`, `src/rendering/splat_status.gd`,
@@ -268,7 +321,7 @@ hardpoints, never hard-coded.
   hardpoints CoM; `CollisionShape3D`s built in `_ready` from the JSON. `HullSplats` is a `GaussianSplatNode`
   (instantiate via `preload("res://addons/gdgs/runtime/nodes/gaussian_splat_node.gd").new()` or place it in the
   `.tscn`; keep its transform identity, see §9.1). `ship.gd` API: `setup(spec: ShipSpec, world: WorldFrame)`,
-  `set_flight_command(cmd)`, `set_combat_command(cmd)` (stored for T12/T13), `assist_on: bool` (signal
+  `set_flight_command(cmd)`, `set_combat_command(cmd)` (stored for T13/T14), `assist_on: bool` (signal
   `assist_toggled(bool)`), `get_flight_output() -> FlightOutput`, `reset_to(xform)`, `forward() -> Vector3`
   (= `-basis.z`), `body_velocity()`. Toggling assist and `reset_to` call `FlightModel.reset_assist()`. Each
   `_physics_process(delta)`: compute the `FlightOutput` (passing `delta`), then
@@ -277,11 +330,13 @@ hardpoints, never hard-coded.
   `SplatStatus.active_backend() -> StringName` reads GDGS's selector
   (`addons/gdgs/runtime/render/backend/gaussian_backend_selector.gd`); if none, `HullMeshFallback.visible = true`.
   Integration tests drive the body with `await get_tree().physics_frame` in GUT async tests.
+- Console: `Ship` registers provider `ship` and command `assist [on|off]`; `SplatStatus` registers provider
+  `render` and command `fallback [on|off]` (§6.4).
 - Done when: AC5a-AC5g pass headless; the scene instantiates with the GDGS node present and the fallback hidden.
 - Verify: GUT integration suite. Check once by hand that the damping guard fails if `default_linear_damp` is put
   back to 0.1.
 
-### M1-T10 Space environment
+### M1-T11 Space environment
 
 - Goal: black sky with star/nebula splats following the camera, compositor wired for GDGS, key light.
 - Files: `src/environment/space_environment.tscn`, `src/environment/space_environment.gd`,
@@ -302,7 +357,7 @@ hardpoints, never hard-coded.
   `ResourceLoader.exists`).
 - Verify: GUT integration suite.
 
-### M1-T11 Camera rig
+### M1-T12 Camera rig
 
 - Goal: cockpit and chase cameras with toggle and smoothing.
 - Files: `src/camera/camera_rig.gd`, `src/camera/chase_camera_math.gd`, `src/camera/camera_rig.tscn`,
@@ -312,10 +367,11 @@ hardpoints, never hard-coded.
   Transform3D, ship: Transform3D, dt: float, cfg) -> Transform3D` with half-life smoothing; unit test that two
   1/120 s steps equal one 1/60 s step within 1e-4. `ChaseCamera` joins `world_shiftable`. Toggle sets `current`
   and `ship.set_cockpit_interior_visible(mode == COCKPIT)`. Near 0.05, far 50 000, FOV 75 (cockpit) / 70 (chase).
+- Console: `CameraRig` registers provider `camera` (`mode` writable) and command `camera [cockpit|chase]`.
 - Done when: camera part of AC10 passes; math tests pass.
 - Verify: GUT.
 
-### M1-T12 Thruster visuals and weapons
+### M1-T13 Thruster visuals and weapons
 
 - Goal: visible per-pod thruster glow and pulse cannons with two fire modes.
 - Files: `src/ship/thruster_visuals.gd`, `assets/materials/{thruster_glow,projectile,muzzle_flash}.tres`,
@@ -333,10 +389,11 @@ hardpoints, never hard-coded.
   `_physics_process` (`position += velocity * dt`), `velocity = ship.linear_velocity + ship.forward() * 400`,
   lifetime 4 s, emissive capsule ~0.1×1.5 m, joins `world_shiftable`. Muzzle flash: a quad scaled up for 50 ms.
   No hit detection.
+- Console: `PulseCannon` registers provider `weapons` (`mode` writable: `alternating`, `linked`).
 - Done when: AC7 passes; glow nodes exist for every pod nozzle and RCS hardpoint.
 - Verify: GUT.
 
-### M1-T13 Nav buoys and targeting
+### M1-T14 Nav buoys and targeting
 
 - Goal: five inert, spinning splat buoys spawned from the scenario file, and a working targeting system.
 - Files: `tools/procgen/assets/nav_buoy.py` (+ registry entry, `tools/procgen/tests/test_nav_buoy.py`),
@@ -363,10 +420,11 @@ hardpoints, never hard-coded.
   spawn entries with `UniversePos`, and spawning goes through `World.spawn()`. `TargetingController` (under the
   ship) builds `TargetInfo`s from group `targetable` each physics tick, applies `target_next` / `target_ahead`
   edges, exposes `selected_readout() -> TargetReadout`, emits `target_changed`.
+- Console: `TargetingController` registers provider `targeting` (`selected` writable by display name or `none`).
 - Done when: AC8 passes; `nav_buoy` passes AC3 and AC4 (T05's test picks it up).
 - Verify: Python tests, GUT.
 
-### M1-T14 Main scene, overlay, glue, human acceptance
+### M1-T15 Main scene, overlay, glue, human acceptance
 
 - Goal: run the game; everything wired; human checklist executed.
 - Files: `src/game/main.tscn`, `src/game/main.gd`, `src/game/debug_overlay.tscn`, `src/game/debug_overlay.gd`,
@@ -375,19 +433,23 @@ hardpoints, never hard-coded.
 - Notes: tree per §3. `main.gd` `_ready`: load `free_flight.json`, spawn the player and buoys through `World`.
   `_physics_process`: `pc = adapter.sample(source, dt)`; `ship.set_flight_command(pc.flight)`;
   `ship.set_combat_command(pc.combat)`; handle `pc.ui` edges (camera, reset, `pause` via `get_tree().paused`
-  with ship, buoys and projectiles pausable, overlay toggle, F4 fallback mesh toggle). Overlay (`Label`s,
+  with ship, buoys and projectiles pausable, overlay toggle = `toggle settings.show_overlay`, F4 fallback mesh
+  toggle). Console: `main.gd` registers commands `respawn` and `pause [on|off]` and hands its `GodotInputSource`
+  to `DebugConsole.set_input_source()`; `run_tests.sh` adds a smoke run of the real main scene:
+  `godot --headless --path . -- --console-strict --console-exec="wait 30; state; state ship; get render.splat_backend; quit"`
+  asserting all ten providers are listed. Overlay (`Label`s,
   monospace): speed m/s, body velocity xyz, angular rate °/s per axis, `ASSIST ON/OFF`, `POD YAW ±nn °/s`
   (`pod_yaw_cmd × rate_max.y`, assist on only), `POD TRIM nn %`,
   `CAM COCKPIT/CHASE`, weapon mode, target line (`TGT NAV BRAVO  1243 m  +12.4 m/s`), universe position (64-bit),
-  `SPLATS <backend>`, FPS, GPU name (`RenderingServer.get_video_adapter_name()`), pad name + GUID and raw axes 0-5.
+  `TIMESCALE x` when not 1, `SPLATS <backend>`, FPS, GPU name (`RenderingServer.get_video_adapter_name()`), pad name + GUID and raw axes 0-5.
   Target bracket: a `Control` drawing a 24 px square at `camera.unproject_position(target)` unless
   `camera.is_position_behind(target)` (then show `TGT BEHIND`). Test: instantiate `main.tscn`, await 180 physics
   frames, assert no errors; through `FakeInputSource` flip the camera and press `target_next` (selects NAV ALPHA).
-- Done when: all (A) criteria pass in CI; the user runs the game with the pad and ticks AC12-AC18 (or files issues
-  with screenshots). If AC12/AC13 fail because of splats, go to T15 before polishing anything else.
+- Done when: all (A) criteria pass in CI; the user runs the game with the pad and ticks AC12-AC18 and AC22 (or files issues
+  with screenshots). If AC12/AC13 fail because of splats, go to T16 before polishing anything else.
 - Verify: CI + human session.
 
-### M1-T15 (conditional) Splat fallback activation and triage
+### M1-T16 (conditional) Splat fallback activation and triage
 
 - Trigger: an (H) splat criterion fails on the user's machine.
 - Goal: keep M1 shippable on meshes while the splat issue is isolated.
@@ -411,6 +473,6 @@ Tester:                      Date:
 OS / kernel / Mesa or driver:            GPU:
 Gamepad name + GUID (from overlay):      Trigger rest value detected:
 Splat backend shown:
-AC12 [ ]  AC13 [ ]  AC14 [ ]  AC15 [ ] (FPS: ____)  AC16 [ ]  AC17 [ ]  AC18 [ ]
+AC12 [ ]  AC13 [ ]  AC14 [ ]  AC15 [ ] (FPS: ____)  AC16 [ ]  AC17 [ ]  AC18 [ ]  AC22 [ ]
 Notes:
 ```

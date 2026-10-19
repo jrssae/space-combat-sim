@@ -43,11 +43,14 @@ site do not.
   an AI pilot).
 - World objects live under the `World` node and are spawned from `UniversePos`; gameplay time comes from `delta` or
   `SimClock`, never the wall clock. These are seams for the long-term design (`docs/architecture.md` §14).
+- New subsystems register their debug-console commands and a whitelisted state provider with `DebugConsole` in
+  `_ready` (`docs/architecture.md` §6.4); new settings are `SettingsSchema` entries. The ` key is reserved for
+  the console: never bind it to an action.
 - Keep Newtonian motion honest: zero gravity, zero damping (project *and* body, `DAMP_MODE_REPLACE`), forces
   re-applied every physics tick. The damping guard test must stay.
 - Anything that needs a GPU cannot be verified in the container; mark it `(H)` and leave it for the human
   tester instead of faking it.
-- Commit subjects start with the task id, e.g. `M1-T07: flight model and assist`. Do not push or open PRs unless
+- Commit subjects start with the task id, e.g. `M1-T08: flight model and assist`. Do not push or open PRs unless
   asked; the maintainer handles git remotes.
 
 ## Commands
@@ -61,5 +64,6 @@ python3 -m unittest discover -s tools/procgen/tests -t . -v
 python3 -m tools.procgen list
 .tools/godot/godot --headless --path . --import
 .tools/godot/godot --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests -ginclude_subdirs -gexit
-.tools/godot/godot --path . --quit-after 180 --headless        # smoke-run the main scene (after M1-T14)
+.tools/godot/godot --path . --quit-after 180 --headless        # smoke-run the main scene (after M1-T15)
+.tools/godot/godot --headless --path . -- --console-strict --console-exec="wait 30; state ship; quit"  # drive a live build
 ```

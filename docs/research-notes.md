@@ -83,3 +83,13 @@ GDGS behaviours that shape our pipeline (read from the v3.3.0 source):
 | Piper, `OHF-Voice/piper1-gpl` (current) | **GPL-3.0** (`COPYING`) | "A fast and local neural text-to-speech engine that embeds espeak-ng for phonemization". GPL-3.0 matches this project. Voice models are separate downloads, each with its own `MODEL_CARD` licence ("Some voices may have restrictive licenses"); pick voices per card. `huggingface.co` (voice hosting) is **not reachable** from the container (CONNECT 403), so voice licences must be checked from a workstation |
 | Kokoro, `hexgrad/kokoro` | Apache-2.0 (code; README: "Apache-licensed weights") | 82M-parameter model; uses espeak-ng for fallback phonemes |
 | espeak-ng | GPL-3.0 | Rule-based formant synthesis; robotic, but fully code-generated with no model weights (a fit for radio chatter) |
+
+## Debug console facts (verified 2026-10-19, Godot 4.7.2 source)
+
+| Item | Finding | Source |
+|---|---|---|
+| Console key | `Key.KEY_QUOTELEFT = 0x0060` (96), the ` key; match on `physical_keycode` so it stays the same key on non-US layouts | `core/os/keyboard.h` |
+| Engine messages into the console | `Logger` class ("Custom logger to receive messages from the internal error/warning stream") registered with `OS.add_logger()` / `OS.remove_logger()`. `_log_error` and `_log_message` "will be called from threads other than the main thread, possibly at the same time", so guard with a `Mutex` | `doc/classes/Logger.xml`, `doc/classes/OS.xml` |
+| Command-line arguments | Pass custom arguments after `--` and read them with `OS.get_cmdline_user_args()`; the engine ignores them by design | `doc/classes/OS.xml` |
+| Device polling | `Input.get_joy_axis`, `Input.is_joy_button_pressed`, `Input.is_physical_key_pressed`, `Input.is_mouse_button_pressed` exist, so actions can be evaluated per device class (needed to mask the keyboard while the console is open, because `Input` action state ignores GUI focus) | `doc/classes/Input.xml` |
+| Slow motion | `Engine.time_scale` scales the `delta` of `_process` and `_physics_process`; above 1.0 each physics tick stretches (less precise), so the console caps it at 1.0 | `doc/classes/Engine.xml` |
