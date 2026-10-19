@@ -1,0 +1,40 @@
+# Normalise line endings: Godot writes LF and diffs of .tscn/.tres get noisy otherwise.
+* text=auto eol=lf
+
+# Godot text formats
+*.gd        text eol=lf
+*.gdshader  text eol=lf
+*.glsl      text eol=lf
+*.tscn      text eol=lf
+*.tres      text eol=lf
+*.godot     text eol=lf
+*.cfg       text eol=lf
+*.import    text eol=lf
+*.uid       text eol=lf
+
+# Tooling / docs
+*.py   text eol=lf
+*.sh   text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.obj  text eol=lf
+*.mtl  text eol=lf
+
+# Binary assets (none are committed in M1; listed so a future commit is handled correctly)
+*.ply  binary
+*.sog  binary
+*.spz  binary
+*.splat binary
+*.glb  binary
+*.png  binary
+*.jpg  binary
+*.ogg  binary
+*.wav  binary
+*.ttf  binary
+
+# GitHub Linguist: vendored third-party addons are not "our" code
+addons/** linguist-vendored
+# No Git LFS in M1: all binaries are regenerated from tools/ (decision recorded in docs/architecture.md).

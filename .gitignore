@@ -1,0 +1,38 @@
+# --- Godot 4 ---
+.godot/
+/android/
+*.translation
+export_credentials.cfg
+.import/
+*.tmp
+.nomedia
+
+# Godot .NET (not used, kept so a stray C# experiment never lands in git)
+.mono/
+data_*/
+mono_crash.*.json
+
+# --- Project-specific ---
+# Local engine binary installed by scripts/setup_godot.sh
+.tools/
+# Everything under assets/generated/ is produced by tools/ (see docs/architecture.md, "Asset pipeline").
+# Regenerate with scripts/gen_assets.sh. Never commit these binaries.
+assets/generated/
+# Test reports (JUnit XML from GUT, logs from CI)
+reports/
+*.log
+
+# --- Python (tools/) ---
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
