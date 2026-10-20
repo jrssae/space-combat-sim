@@ -447,6 +447,10 @@ history.
     centre; hull bar (green above 50 %, amber above 25 %, red below; `GOD` when invulnerable) and fuel bar
     (T14 tank; shows full with an infinity mark while `fuel_unlimited`) bottom-left; weapon recharge (T14
     capacitor charge plus the fire mode) bottom-right.
+  - **Targeting display** (from the maintainer's cockpit reference, `docs/design-references.md` "Cockpit view"):
+    in cockpit view, a translucent square grid (about 8x8) with a circular reticle sits low and centred in the
+    window, in the green line theme. With a target selected it shows the target's offset from the nose as a
+    marker, which pairs with the lead reticle. In chase view it is optional (setting `hud_targeting_grid`).
   - **Radar sphere** (bottom-centre, above the speed readout): a wireframe sphere drawn in the ship's frame
     (nose up the screen, slow perspective), with a dot for every `Targetable` within sensor range (25 km),
     projected by bearing; radius ∝ range (linear to 5 km, log beyond), coloured by faction; the selected target
