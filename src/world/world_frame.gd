@@ -30,9 +30,21 @@ var focus: Node3D = null
 
 
 func _ready() -> void:
-	## TODO(M1-T07): register provider "world" (keys: origin, origin_velocity, auto_rebase_distance_m) and command
-	## "rebase <dx> <dy> <dz>" with DebugConsole here, and unregister both in _exit_tree.
-	pass
+	# Console seam (architecture §6.4): `rebase` is the only way to exercise the rebase at runtime in M1.
+	DebugConsole.registry.register_provider(&"world", ConsoleVars.new({
+		&"origin": {"get": _origin_array, "unit": "m", "doc": "Universe position of the local origin (64-bit)"},
+		&"origin_velocity": {"get": func() -> PackedFloat64Array: return origin_velocity, "unit": "m/s",
+				"doc": "Velocity of the local frame; zero in M1"},
+		&"auto_rebase_distance_m": {"get": func() -> float: return auto_rebase_distance_m, "unit": "m",
+				"doc": "Automatic rebase threshold; 0 = off (M1)"},
+	}), self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"rebase",
+			"Shift the local origin by an offset in metres (World.rebase); nothing moves in universe terms",
+			[ConsoleArg.vec3_required(&"offset", PackedStringArray(["dx", "dy", "dz"]))]), _cmd_rebase, self)
+
+
+func _exit_tree() -> void:
+	DebugConsole.registry.unregister_owner(self)
 
 
 func _physics_process(_delta: float) -> void:
@@ -77,6 +89,15 @@ func rebase(offset: Vector3) -> void:
 		node.reset_physics_interpolation()
 	origin = origin.plus_local(offset)
 	rebased.emit(offset)
+
+
+func _origin_array() -> PackedFloat64Array:
+	return PackedFloat64Array([origin.x, origin.y, origin.z])
+
+
+func _cmd_rebase(args: Dictionary) -> ConsoleResult:
+	rebase(args[&"offset"])
+	return ConsoleResult.line(ConsoleFormat.key_value("world.origin", _origin_array(), "m"))
 
 
 ## Acceleration, m/s^2, that the environment applies at a local position (gravity, hyperspace fields). Ships add

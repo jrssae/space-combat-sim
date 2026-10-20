@@ -196,3 +196,33 @@ func test_auto_rebase_recentres_focus_when_enabled() -> void:
 	assert_almost_eq(focus.global_position.length(), 0.0, TOL_M, "focus re-centred")
 	assert_almost_eq(world.origin.x, 6000.0, TOL_M)
 	assert_almost_eq(world.to_universe(focus.global_position).x, 6000.0, TOL_M, "universe position preserved")
+
+
+func test_console_provider_and_rebase_command() -> void:
+	var registry: ConsoleRegistry = DebugConsole.registry
+	assert_true(registry.has_provider(&"world"), "World registers provider 'world'")
+	assert_true(registry.has_command(&"rebase"), "World registers command 'rebase'")
+	assert_string_contains(registry.help(&"rebase")[0], "rebase <dx> <dy> <dz>")
+	var marker := Node3D.new()
+	world.spawn(marker, UniversePos.new(100.0, 0.0, 0.0))
+
+	var results: Array[ConsoleResult] = registry.execute("rebase 5000 0 -20")
+	assert_true(results[0].ok, results[0].text())
+	assert_eq(results[0].lines[0], "world.origin = [5000.00, 0.00, -20.00] m")
+	assert_almost_eq(world.origin.x, 5000.0, TOL_M)
+	assert_almost_eq(world.origin.z, -20.0, TOL_M)
+	assert_almost_eq(marker.global_position.x, 100.0 - 5000.0, TOL_M, "the console rebase is World.rebase")
+	assert_almost_eq(world.to_universe(marker.global_position).x, 100.0, TOL_M)
+
+	assert_eq(registry.format_path("world.origin"), "world.origin = [5000.00, 0.00, -20.00] m")
+	assert_eq(registry.format_path("world.origin_velocity"), "world.origin_velocity = [0.00, 0.00, 0.00] m/s")
+	assert_eq(registry.format_path("world.auto_rebase_distance_m"), "world.auto_rebase_distance_m = 0.00 m")
+	assert_false(registry.resolve("world.rebase")["ok"], "methods are not keys")
+	assert_string_contains(registry.execute("rebase 1 2")[0].error, "expects three numbers")
+
+
+func test_console_entries_leave_with_the_world() -> void:
+	assert_true(DebugConsole.registry.has_provider(&"world"))
+	world.get_parent().remove_child(world)
+	assert_false(DebugConsole.registry.has_provider(&"world"), "unregistered in _exit_tree")
+	assert_false(DebugConsole.registry.has_command(&"rebase"))

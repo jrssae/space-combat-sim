@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs every automated check that works without a GPU: Python generator tests, a headless Godot import that
-# must be free of script errors, a compile check of every project script, and the GUT suites.
+# must be free of script errors, a compile check of every project script, the GUT suites, and two debug-console
+# smoke runs that drive a live headless build through --console-exec.
 # Exits non-zero on any failure. Logs and the GUT JUnit XML land in reports/ (gitignored; CI uploads it).
 set -euo pipefail
 
@@ -61,4 +62,84 @@ run_logged "${REPORTS}/gut.log" timeout 600 "${GODOT}" --headless --path . -s ad
 if (( gut_status != 0 )); then
     echo "run_tests.sh: GUT failed with exit code ${gut_status} (see reports/gut.log)." >&2
 fi
-exit "${gut_status}"
+
+# Debug console smoke runs (architecture §6.4, AC21): a live headless build driven by --console-exec must print the
+# expected [console] lines and exit with the requested code. console_host.tscn is an empty scene, so only the
+# console's own providers (settings, debug, time) exist. `set` must not touch user://settings.cfg (only `save` does).
+CONSOLE_HOST="res://tests/fixtures/console_host.tscn"
+SETTINGS_CFG="${XDG_DATA_HOME:-${HOME}/.local/share}/godot/app_userdata/space-combat-sim/settings.cfg"
+smoke_status=0
+
+settings_fingerprint() {
+    if [[ -f "${SETTINGS_CFG}" ]]; then
+        sha256sum "${SETTINGS_CFG}" | cut -d' ' -f1
+    else
+        echo "absent"
+    fi
+}
+
+# console_run <log> <expected exit code> <user args...>: runs the host scene with the args after --.
+console_run() {
+    local log="$1" expected="$2"
+    shift 2
+    local status=0
+    timeout 120 "${GODOT}" --headless --path . "${CONSOLE_HOST}" -- "$@" > "${log}" 2>&1 || status=$?
+    cat "${log}"
+    if (( status != expected )); then
+        echo "run_tests.sh: console smoke run exited ${status}, expected ${expected} (see ${log})." >&2
+        return 1
+    fi
+    if grep -E "${SCRIPT_ERRORS}" "${log}"; then
+        echo "run_tests.sh: console smoke run reported script errors (see ${log})." >&2
+        return 1
+    fi
+}
+
+# expect_line <log> <exact line>; expect_text <log> <substring>; reject_text <log> <substring>
+expect_line() {
+    grep -qxF -- "$2" "$1" || { echo "run_tests.sh: missing line in $1: $2" >&2; return 1; }
+}
+expect_text() {
+    grep -qF -- "$2" "$1" || { echo "run_tests.sh: missing text in $1: $2" >&2; return 1; }
+}
+reject_text() {
+    if grep -qF -- "$2" "$1"; then
+        echo "run_tests.sh: unexpected text in $1: $2" >&2
+        return 1
+    fi
+}
+
+echo "== Console smoke run: strict script that succeeds"
+log="${REPORTS}/console_smoke.log"
+settings_before="$(settings_fingerprint)"
+console_run "${log}" 0 --console-strict \
+    --console-exec="help; set settings.stick_deadzone 0.2; get settings.stick_deadzone; god on; get debug.invulnerable; quit 0" \
+    || smoke_status=1
+expect_line "${log}" "[console] > help" || smoke_status=1
+expect_text "${log}" "[console]   set <path> <value>" || smoke_status=1
+expect_text "${log}" "[console]   quit [code]" || smoke_status=1
+expect_line "${log}" "[console] > set settings.stick_deadzone 0.2" || smoke_status=1
+expect_line "${log}" "[console] > get settings.stick_deadzone" || smoke_status=1
+expect_line "${log}" "[console] settings.stick_deadzone = 0.20" || smoke_status=1
+expect_line "${log}" "[console] > god on" || smoke_status=1
+expect_line "${log}" "[console] debug.invulnerable = true" || smoke_status=1
+expect_line "${log}" "[console] > quit 0" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+if [[ "$(settings_fingerprint)" != "${settings_before}" ]]; then
+    echo "run_tests.sh: 'set' changed ${SETTINGS_CFG}; only 'save' may write it." >&2
+    smoke_status=1
+fi
+
+echo "== Console smoke run: strict script with an out-of-range value must exit 1"
+log="${REPORTS}/console_strict.log"
+console_run "${log}" 1 --console-strict --console-exec="set settings.stick_deadzone 0.9; quit 0" || smoke_status=1
+expect_line "${log}" "[console] error: settings.stick_deadzone must be in 0.0..0.3, got 0.9" || smoke_status=1
+reject_text "${log}" "[console] > quit 0" || smoke_status=1
+
+if (( smoke_status != 0 )); then
+    echo "run_tests.sh: console smoke runs failed (see reports/console_*.log)." >&2
+fi
+if (( gut_status != 0 )); then
+    exit "${gut_status}"
+fi
+exit "${smoke_status}"

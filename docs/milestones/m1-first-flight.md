@@ -250,7 +250,8 @@ hardpoints, never hard-coded.
   `toggle`, `default`, `save`, `revert`, `watch`, `unwatch`, `fps`, `god`, `timescale` (clamped 0.05..1), `exec`,
   `wait`, `quit`. Providers registered here: `settings` (from `SettingsSchema`), `debug` (`DebugFlags`), `time`
   (`SimClock`, plus `Engine.time_scale`), `input` (via the main scene's `GodotInputSource` once it exists; a
-  `DebugConsole.set_input_source(source)` setter). While open: `captures_keyboard()` is true, the input source's
+  `DebugConsole.set_input_source(source, adapter)` setter; the adapter is what `resync_edges()` and the last-command
+  keys need). While open: `captures_keyboard()` is true, the input source's
   `keyboard_mouse_enabled` is false and `InputAdapter.resync_edges()` runs on open and close; joypad events are
   swallowed by the UI only; `console_pause_on_open` pauses the tree. Output mirrored to stdout/stderr with the
   `[console]` prefix. Startup execution of `user://autoexec.cfg`, `--console-file`, `--console-exec`,
@@ -435,7 +436,8 @@ hardpoints, never hard-coded.
   `ship.set_combat_command(pc.combat)`; handle `pc.ui` edges (camera, reset, `pause` via `get_tree().paused`
   with ship, buoys and projectiles pausable, overlay toggle = `toggle settings.show_overlay`, F4 fallback mesh
   toggle). Console: `main.gd` registers commands `respawn` and `pause [on|off]` and hands its `GodotInputSource`
-  to `DebugConsole.set_input_source()`; `run_tests.sh` adds a smoke run of the real main scene:
+  and `InputAdapter` to `DebugConsole.set_input_source(source, adapter)` (held weakly: `main.gd` keeps them);
+  `run_tests.sh` adds a smoke run of the real main scene:
   `godot --headless --path . -- --console-strict --console-exec="wait 30; state; state ship; get render.splat_backend; quit"`
   asserting all ten providers are listed. Overlay (`Label`s,
   monospace): speed m/s, body velocity xyz, angular rate °/s per axis, `ASSIST ON/OFF`, `POD YAW ±nn °/s`
