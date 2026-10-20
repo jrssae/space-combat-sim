@@ -4,6 +4,8 @@
 [ext_resource type="Script" path="res://addons/gdgs/runtime/nodes/gaussian_splat_node.gd" id="2_splats"]
 [ext_resource type="Script" path="res://src/targeting/targeting_controller.gd" id="3_targeting"]
 [ext_resource type="Resource" path="res://assets/ships/starfury_aurora.tres" id="4_spec"]
+[ext_resource type="Script" path="res://src/ship/hull_depth_proxy.gd" id="5_proxy"]
+[ext_resource type="Script" path="res://src/rendering/splat_pose_sync.gd" id="6_sync"]
 
 [node name="PlayerShip" type="RigidBody3D"]
 mass = 48000.0
@@ -19,8 +21,15 @@ spec = ExtResource("4_spec")
 [node name="HullSplats" type="VisualInstance3D" parent="."]
 script = ExtResource("2_splats")
 
+[node name="HullSplatSync" type="Node" parent="." node_paths=PackedStringArray("splats")]
+script = ExtResource("6_sync")
+splats = NodePath("../HullSplats")
+
 [node name="HullMeshFallback" type="MeshInstance3D" parent="."]
 visible = false
+
+[node name="HullDepthProxy" type="MeshInstance3D" parent="."]
+script = ExtResource("5_proxy")
 
 [node name="CockpitInterior" type="MeshInstance3D" parent="."]
 visible = false

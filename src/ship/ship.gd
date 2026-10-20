@@ -16,7 +16,9 @@ extends RigidBody3D
 ## `scripts/gen_assets.sh` has run. Without hardpoints the ship cannot fly and only coasts.
 ##
 ## Children: `HullSplats` (GaussianSplatNode, identity in the scene: GDGS applies its own Rz(180°) on entering the
-## tree, §9.1), `HullMeshFallback` (shown when `SplatStatus` finds no splat backend, or forced), `CockpitInterior`
+## tree, §9.1; `HullSplatSync` draws it at the interpolated pose), `HullMeshFallback` (shown when `SplatStatus` finds
+## no splat backend, or forced), `HullDepthProxy` (the fallback mesh inset by a few centimetres, opaque black, shown
+## exactly when the splats are: it writes the depth splats do not, so effects behind the hull are hidden, §7.2), `CockpitInterior`
 ## (first person only), `Thrusters` and `Guns` (attach points for M1-T13; `Guns` holds one Marker3D per muzzle),
 ## `Targeting` (`TargetingController`), `CockpitAnchor` (Marker3D at the hardpoints' `cockpit_camera`).
 ##
@@ -59,6 +61,7 @@ var _collision_nodes: Array[CollisionShape3D] = []
 
 @onready var hull_splats: GaussianSplatNode = $HullSplats
 @onready var hull_mesh_fallback: MeshInstance3D = $HullMeshFallback
+@onready var hull_depth_proxy: HullDepthProxy = $HullDepthProxy
 @onready var cockpit_interior: MeshInstance3D = $CockpitInterior
 @onready var thrusters: Node3D = $Thrusters
 @onready var guns: Node3D = $Guns
@@ -233,12 +236,14 @@ func is_cockpit_interior_visible() -> bool:
 	return _interior_visible
 
 
-## Draws the hull with the fallback mesh instead of the splats (`SplatStatus` group `splat_fallback_mesh`).
+## Draws the hull with the fallback mesh instead of the splats (`SplatStatus` group `splat_fallback_mesh`). The depth
+## proxy is only wanted while the splats are drawn: the fallback mesh writes depth itself.
 func use_fallback_mesh(enabled: bool) -> void:
 	_fallback_active = enabled
 	if not is_node_ready():
 		return
 	hull_mesh_fallback.visible = enabled
+	hull_depth_proxy.visible = not enabled
 	hull_splats.visible = not enabled
 
 
@@ -332,6 +337,7 @@ func _load_visuals() -> void:
 		push_warning("Ship: %s is missing or not imported (run scripts/gen_assets.sh, then import); no hull splats" % splat_path)
 	hull_splats.gaussian = gaussian
 	hull_mesh_fallback.mesh = _load_mesh(dir.path_join(spec.asset_id + ".obj"))
+	hull_depth_proxy.mesh = hull_mesh_fallback.mesh  # whatever is loaded, so a regenerated hull needs no changes here
 	cockpit_interior.mesh = _load_mesh(dir.path_join(COCKPIT_MESH_FILE))
 
 

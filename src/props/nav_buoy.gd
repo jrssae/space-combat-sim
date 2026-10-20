@@ -58,6 +58,7 @@ var _fallback_active: bool = false
 
 @onready var splats: GaussianSplatNode = $BuoySplats
 @onready var mesh_fallback: MeshInstance3D = $BuoyMeshFallback
+@onready var depth_proxy: HullDepthProxy = $BuoyDepthProxy
 @onready var beacon: MeshInstance3D = $Beacon
 @onready var targetable: Targetable = $Targetable
 
@@ -87,6 +88,7 @@ func _ready() -> void:
 	_load_shared_assets()
 	splats.gaussian = _shared_gaussian
 	mesh_fallback.mesh = _shared_mesh
+	depth_proxy.mesh = _shared_mesh  # hides the beacon behind the body (§7.2); splats write no depth
 	beacon.position = _shared_beacon_position
 	beacon.scale = Vector3.ONE * (_shared_beacon_radius / DEFAULT_BEACON_RADIUS)
 	use_fallback_mesh(_fallback_active)
@@ -112,6 +114,7 @@ func use_fallback_mesh(enabled: bool) -> void:
 	if not is_node_ready():
 		return
 	mesh_fallback.visible = enabled
+	depth_proxy.visible = not enabled
 	splats.visible = not enabled
 
 

@@ -87,8 +87,15 @@ The full wording is in `docs/milestones/m1-first-flight.md`. Tick each one, or n
       `PAD … axes`). No stick drift. Holding X brings you to an all stop (drift and spin) in both modes, and with a
       target selected swings the nose onto it. B and Y work.
 - [ ] **AC15 Performance.** 60 fps at 1080p (overlay FPS), no hitch when firing.
-- [ ] **AC16 Glow and guns.** Pod glow follows each side's thrust, retros and trim; RCS glow responds to strafe
-      and rotation; bolts and muzzle flash visible from both cameras; the two fire modes look different.
+- [ ] **AC16 Glow and guns.** Pod plumes come out of the nozzles along their axes and follow each side's thrust,
+      retros and trim; RCS plumes respond to strafe and rotation; bolts and muzzle flash visible from both cameras;
+      the two fire modes look different.
+- [ ] **AC16b Chase camera and hull occlusion.** The chase camera stays a fixed distance behind the ship while you
+      yaw, roll and hold both bumpers (the ship never moves in frame, the stars do); `set settings.camera_chase_smoothing_s 0.2`
+      lets the view swing softly, `0` is rigid again. In chase view the muzzle flash, bolts leaving the guns and the
+      plumes behind the hull are hidden by the hull, not drawn through it; the hull has no black patches or dark
+      outline (that would mean the depth proxy sticks out: `HullDepthProxy.inset_m`, default 0.04 m). The hull does
+      not judder against the plumes at speed.
 - [ ] **AC17 Targeting.** Tapping D-pad Up cycles buoys; holding it picks the one nearest the nose without also
       cycling (so does R3, if your pad has it); bracket and readout look right; buoys are splats and spin; NAV DELTA
       (drifting) shows a non-zero closing speed.

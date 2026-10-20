@@ -8,17 +8,33 @@ const CHASE_OFFSET: Vector3 = Vector3(0.0, 2.5, 9.0)
 const ANCHOR_LOCAL: Vector3 = Vector3(0.0, 0.7, -3.0)
 const TOL: float = 1e-3
 
+## Calls `callback` from its _process after every other node's (late priority): a look at the scene as it is drawn.
+class FrameProbe:
+	extends Node
+	var callback: Callable = Callable()
+
+	func _init() -> void:
+		process_priority = 100000
+
+	func _process(_delta: float) -> void:
+		if callback.is_valid():
+			callback.call()
+
+
 var world: Node3D
 var ship: Node3D
 var anchor: Marker3D
 var rig: CameraRig
 var interior_calls: Array[bool] = []
 var _camera_default_backup: Variant
+var _smoothing_backup: Variant
 
 
 func before_each() -> void:
 	_camera_default_backup = Settings.get_value(&"camera_default")
+	_smoothing_backup = Settings.get_value(&"camera_chase_smoothing_s")
 	Settings.set_value(&"camera_default", &"chase")
+	Settings.set_value(&"camera_chase_smoothing_s", 0.0)
 	interior_calls.clear()
 	world = Node3D.new()
 	world.name = "WorldStandIn"
@@ -36,6 +52,7 @@ func before_each() -> void:
 
 func after_each() -> void:
 	Settings.set_value(&"camera_default", _camera_default_backup)
+	Settings.set_value(&"camera_chase_smoothing_s", _smoothing_backup)
 
 
 func _make_rig(parent: Node = null) -> CameraRig:
@@ -97,7 +114,7 @@ func test_chase_camera_is_top_level_and_shiftable_the_cockpit_camera_is_not() ->
 	assert_false(rig.cockpit_camera.top_level)
 	assert_false(rig.cockpit_camera.is_in_group(WorldFrame.SHIFTABLE_GROUP), "the anchor drives it, not the rebase")
 	assert_eq(rig.chase_camera.physics_interpolation_mode, Node.PHYSICS_INTERPOLATION_MODE_OFF,
-			"smoothed in _process, so physics interpolation must not touch it")
+			"placed in _process from the ship's interpolated pose, so physics interpolation must not touch it")
 
 
 # --- mode and settings ---------------------------------------------------------------------------------------
@@ -248,40 +265,110 @@ func test_setup_snaps_the_chase_camera_behind_and_above_the_ship() -> void:
 	assert_eq(rig.chase_config.offset_local, CHASE_OFFSET, "the hardpoints' chase_anchor became the offset")
 
 
-func test_chase_camera_eases_toward_the_ship_and_converges_behind_and_above() -> void:
+func test_chase_camera_is_rigid_by_default() -> void:
 	rig = _make_wired_rig()
+	assert_eq(rig.chase_config.smoothing_s, 0.0, "the setting defaults to 0")
 	var turned := Transform3D(Basis(Vector3.UP, deg_to_rad(-60.0)) * Basis(Vector3.RIGHT, deg_to_rad(15.0)),
 			Vector3(-200.0, 30.0, -500.0))
 	ship.global_transform = turned
-	var before: Vector3 = rig.chase_camera.global_position
-
 	rig.update_chase(1.0 / 60.0)
 	var goal: Transform3D = ChaseCameraMath.target_pose(turned, rig.chase_config)
-	var after_one: float = rig.chase_camera.global_position.distance_to(goal.origin)
-	assert_lt(after_one, before.distance_to(goal.origin), "moved toward the ship")
-	assert_gt(after_one, 100.0, "but only part of the way: it is smoothed, not snapped")
-
-	for i: int in 400:
-		rig.update_chase(1.0 / 60.0)
-	assert_almost_eq(rig.chase_camera.global_position, goal.origin, _vec_tol(), "converged on the goal position")
+	assert_true(rig.chase_camera.global_transform.is_equal_approx(goal), "one update puts the camera exactly on the goal: no lag")
 	var local: Vector3 = turned.affine_inverse() * rig.chase_camera.global_position
-	assert_almost_eq(local, CHASE_OFFSET, _vec_tol(), "in the ship's frame the camera is at (0, 2.5, 9)")
+	assert_almost_eq(local, CHASE_OFFSET, _vec_tol(1e-4), "in the ship's frame the camera is at (0, 2.5, 9)")
 	assert_gt(local.z, 0.0, "behind (ship forward is -Z)")
 	assert_gt(local.y, 0.0, "above")
 	var forward: Vector3 = -rig.chase_camera.global_transform.basis.z
 	assert_gt(forward.dot(-turned.basis.z), 0.99, "looks the way the ship points")
 
 
-func test_chase_camera_is_smoothed_in_process_without_manual_steps() -> void:
+func test_chase_camera_is_locked_in_every_frame_while_the_ship_yaws_reverses_and_rolls() -> void:
+	rig = _make_wired_rig()
+	var speed: float = 60.0  # the ship stays within ~100 m of the origin, where float32 is good to 1e-5
+	for frame: int in 180:
+		var dt: float = 1.0 / 60.0
+		var yaw: float = deg_to_rad(120.0) * dt if frame < 60 else 0.0
+		var roll: float = deg_to_rad(150.0) * dt if frame >= 90 else 0.0
+		if frame >= 20:
+			speed -= 60.0 * dt  # reverse thrust: the ship slows, stops and moves backwards
+		var basis: Basis = (ship.global_basis * Basis(Vector3.UP, yaw) * Basis(Vector3.FORWARD, roll)).orthonormalized()
+		ship.global_transform = Transform3D(basis, ship.global_position - basis.z * speed * dt)
+		await get_tree().process_frame  # the rig's _process has run for this pose by the time this returns
+		var in_ship: Vector3 = ship.global_transform.affine_inverse() * rig.chase_camera.global_position
+		assert_almost_eq(in_ship, CHASE_OFFSET, _vec_tol(1e-4), "frame %d: camera at the offset in ship space" % frame)
+		assert_almost_eq((ship.global_transform.affine_inverse() * rig.chase_camera.global_transform).basis.z,
+				ChaseCameraMath.local_pose(rig.chase_config).basis.z, _vec_tol(1e-4), "frame %d: same look" % frame)
+	assert_lt(speed, 0.0, "the ship ended up reversing")
+
+
+func test_chase_camera_follows_the_interpolated_pose_of_a_real_ship_every_rendered_frame() -> void:
+	# A physics-interpolated rigid body under reverse thrust and yaw. The probe's _process has a late priority, so it
+	# runs after the rig's in every frame, i.e. at the instant the frame is drawn.
+	var frame: WorldFrame = WorldFrame.new()
+	frame.name = "World"
+	add_child_autofree(frame)
+	var flying: Ship = Ship.create(load("res://assets/ships/starfury_aurora.tres") as ShipSpec, frame)
+	frame.spawn(flying, frame.to_universe(Vector3.ZERO))
+	rig = _make_rig(frame)
+	rig.setup(flying, flying.cockpit_anchor, flying.get_chase_offset(), flying.set_cockpit_interior_visible)
+	var offset: Vector3 = flying.get_chase_offset()
+	flying.linear_velocity = -flying.global_basis.z * 150.0
+	var cmd := FlightCommand.new()
+	cmd.retro_left = 1.0
+	cmd.retro_right = 1.0
+	cmd.rot = Vector3(0.0, 0.7, 0.4)
+	var state: Dictionary = {"frames": 0, "worst": 0.0}
+	var check: Callable = func() -> void:
+		var pose: Transform3D = flying.get_global_transform_interpolated()
+		var error: float = (pose.affine_inverse() * rig.chase_camera.global_position).distance_to(offset)
+		state["worst"] = maxf(float(state["worst"]), error)
+		state["frames"] = int(state["frames"]) + 1
+	var probe := FrameProbe.new()
+	probe.callback = check
+	add_child_autofree(probe)
+	for i: int in 90:
+		flying.set_flight_command(cmd)
+		await get_tree().process_frame
+	probe.callback = Callable()
+	assert_gt(int(state["frames"]), 30, "frames were checked")
+	assert_gt(flying.linear_velocity.length(), 1.0, "the ship is moving")
+	assert_lt(float(state["worst"]), 1e-4, "worst distance from the offset in ship space over all frames")
+
+
+func test_smoothing_setting_lags_only_the_orientation() -> void:
+	rig = _make_wired_rig()
+	Settings.set_value(&"camera_chase_smoothing_s", 0.3)
+	assert_almost_eq(rig.chase_config.smoothing_s, 0.3, 1e-9, "the rig follows the setting live")
+	var turned := Transform3D(Basis(Vector3.UP, deg_to_rad(80.0)), Vector3(40.0, 0.0, -30.0))
+	ship.global_transform = turned
+	rig.update_chase(1.0 / 60.0)
+	var goal: Transform3D = ChaseCameraMath.target_pose(turned, rig.chase_config)
+	assert_almost_eq(rig.chase_camera.global_position.distance_to(turned.origin), CHASE_OFFSET.length(), 1e-3,
+			"still the same distance from the ship")
+	assert_gt(rig.chase_camera.global_position.distance_to(goal.origin), 1.0, "but the offset direction trails the turn")
+	for i: int in 600:
+		rig.update_chase(1.0 / 60.0)
+	assert_almost_eq(rig.chase_camera.global_position, goal.origin, _vec_tol(1e-3), "and catches up")
+	Settings.set_value(&"camera_chase_smoothing_s", 0.0)
+	ship.global_transform = Transform3D(Basis(Vector3.UP, deg_to_rad(-120.0)), Vector3(-9.0, 4.0, 77.0))
+	rig.update_chase(1.0 / 60.0)
+	assert_true(rig.chase_camera.global_transform.is_equal_approx(ChaseCameraMath.target_pose(ship.global_transform, rig.chase_config)),
+			"back to rigid the moment the setting is 0")
+
+
+func test_smoothing_setting_is_read_at_startup() -> void:
+	Settings.set_value(&"camera_chase_smoothing_s", 0.2)
+	rig = _make_rig()
+	assert_almost_eq(rig.chase_config.smoothing_s, 0.2, 1e-9)
+
+
+func test_chase_camera_is_placed_in_process_without_manual_steps() -> void:
 	rig = _make_wired_rig()
 	ship.global_position = Vector3(0.0, 0.0, -300.0)
-	var goal_z: float = ship.global_position.z + CHASE_OFFSET.z
-	var start_gap: float = absf(rig.chase_camera.global_position.z - goal_z)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	await get_tree().process_frame
-	var gap: float = absf(rig.chase_camera.global_position.z - goal_z)
-	assert_lt(gap, start_gap, "_process moved the chase camera toward the new goal")
+	assert_almost_eq(rig.chase_camera.global_position, Vector3(0.0, 2.5, -291.0), _vec_tol(1e-4),
+			"_process put the chase camera on the ship's pose, no easing")
 
 
 func test_chase_camera_keeps_following_while_the_cockpit_is_active() -> void:

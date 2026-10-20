@@ -37,7 +37,7 @@ M2 decisions (D20-D29) are in §15.1.
 | D5 | Flight logic in pure `RefCounted` classes, nodes are thin adapters | Unit-testable without a scene tree, display or controller. |
 | D6 | Flight assist in M1. **ON (default)**: rate-command fly-by-wire; the trigger/bumper difference is a smoothed **yaw command** added to the D-pad's, so pod steering works in both modes; pod torque helps the turn and is trimmed when RCS cannot hold the commanded rate; no pod ever exceeds its trigger. **OFF**: raw pods + raw RCS torque (tank-steer). **Brake** (hold) is an all stop (velocity and rotation) in both, and turns the nose onto the selected target | User decision: pod steering is the Starfury identity in both modes; assist makes it bounded and stop-on-release; one closed-form rule (§5.5). |
 | D7 | User-chosen pad layout (§6.1): triggers = left/right main pods, bumpers = left/right retros, left stick = strafe, right stick = pitch / roll, D-pad = yaw + target/weapon cycling (Up: tap next, hold ahead). `InputMap` actions only, SDL3 standard layout, keyboard as extra events | Every DOF and combat function reachable without modifiers or stick clicks (generic pads may lack them); per-side pod control is the Starfury identity; rebindable, testable, works on a generic pad. |
-| D8 | Hybrid rendering: splats for hulls, buoys and sky; meshes for cockpit interior, projectiles, flashes, thruster glow, beacons; primitives for collision | Splats are static radiance; anything animated per frame, emissive-dynamic, or needing depth writes is a mesh. Each exception is justified in §7. |
+| D8 | Hybrid rendering: splats for hulls, buoys and sky; meshes for cockpit interior, projectiles, flashes, thruster plumes, beacons, the hull depth proxy; primitives for collision | Splats are static radiance; anything animated per frame, emissive-dynamic, or needing depth writes is a mesh. Each exception is justified in §7. |
 | D9 | Generated assets are **not committed**; generators are. No Git LFS | Everything binary is reproducible from `tools/procgen` in seconds; LFS adds quotas and fork friction. |
 | D10 | GUT over gdUnit4 | Simpler headless CLI (`-gexit`, exit code 1 on failure), no xvfb caveats, GDScript-first, tracks Godot 4.7. |
 | D11 | 1 unit = 1 metre, SI everywhere, Godot axes (+X right, +Y up, **-Z forward**) | Avoids conversion bugs; Godot's `Basis.z` is backward, so forward is `-basis.z`. |
@@ -85,7 +85,9 @@ src/
                               controller, pod trim, brake allocation
   ship/flight_output.gd       RefCounted: per-nozzle forces, RCS force/torque, totals, trim, levels, mass flow
   ship/hardpoints.gd          RefCounted: loads assets/generated/starfury_aurora/hardpoints.json
-  ship/thruster_visuals.gd    drives emissive glow meshes from FlightOutput levels
+  ship/thruster_visuals.gd    exhaust plumes (cone + core disc along each nozzle's exhaust axis) from FlightOutput levels
+  ship/hull_depth_proxy.gd    MeshInstance3D: the fallback mesh inset along its normals, opaque black, depth only (§7.2)
+  rendering/splat_pose_sync.gd Node: draws a splat node at its parent's physics-interpolated pose (§7.2)
   weapons/pulse_cannon_gate.gd RefCounted, pure: fire modes, rate gate, muzzle selection (fake-time testable)
   weapons/pulse_cannon.gd     node adapter: trigger state, spawns projectiles at muzzle hardpoints
   weapons/projectile.tscn|.gd kinematic projectile (inherits ship velocity), lifetime, emissive mesh
@@ -96,8 +98,8 @@ src/
   targeting/targeting_controller.gd  Node under the ship: gathers targetables, applies CombatCommand edges
   props/nav_buoy.tscn|.gd     inert target marker: splat body, beacon mesh, slow spin, optional drift
   camera/camera_rig.gd        owns CockpitCamera + ChaseCamera; mode enum (COCKPIT, CHASE; later CINEMATIC)
-  camera/chase_camera_math.gd RefCounted, pure: chase pose smoothing (unit-tested)
-  camera/chase_camera_config.gd Resource: chase offset, look-ahead and the two smoothing half-lives
+  camera/chase_camera_math.gd RefCounted, pure: rigid chase pose, optional orientation lag (unit-tested)
+  camera/chase_camera_config.gd Resource: chase offset, look-ahead and the optional smoothing time constant
   input/flight_command.gd     RefCounted: per-side pod demand, strafe, rotation, brake, assist toggle, face dir
   input/combat_command.gd     RefCounted: fire (held), weapon_next / target_next / target_ahead (edges)
   input/ui_command.gd         RefCounted: camera, reset, pause, debug toggles (edges)
@@ -142,15 +144,17 @@ Main (Node3D)                              main.gd
 │   ├── PlayerShip (ship.tscn, RigidBody3D)    ship.gd
 │   │   ├── CollisionShape3D x N           from hardpoints "collision" primitives (boxes/capsules)
 │   │   ├── HullSplats (GaussianSplatNode) identity transform; gaussian = starfury_aurora.ply import
+│   │   ├── HullSplatSync (Node)           splat_pose_sync.gd: HullSplats drawn at the interpolated pose
 │   │   ├── HullMeshFallback (MeshInstance3D)  starfury_aurora.obj; visible only if splats unavailable or F4
+│   │   ├── HullDepthProxy (MeshInstance3D)    same mesh, inset 4 cm, opaque black; visible exactly when the splats are
 │   │   ├── CockpitInterior (MeshInstance3D)   cockpit_interior.obj; visible only in first person
-│   │   ├── Thrusters (Node3D)             glow mesh per pod main/retro nozzle and per RCS nozzle
+│   │   ├── Thrusters (Node3D)             exhaust plume per pod main/retro nozzle and per RCS nozzle
 │   │   ├── Guns (Node3D)                  Marker3D per muzzle + pulse_cannon.gd
 │   │   ├── Targeting (Node)               targeting_controller.gd
 │   │   └── CockpitAnchor (Marker3D)       from hardpoints "cockpit_camera"
 │   ├── CameraRig (Node3D)                 camera_rig.gd
 │   │   ├── CockpitCamera (Camera3D)       follows CockpitAnchor via RemoteTransform3D on the anchor
-│   │   └── ChaseCamera (Camera3D)         top_level; smoothed in _process; in group "world_shiftable"
+│   │   └── ChaseCamera (Camera3D)         top_level; set from the ship's interpolated pose in _process; in group "world_shiftable"
 │   ├── Targets (Node3D)                   NavBuoy instances spawned from the scenario
 │   └── Projectiles (Node3D)               container for live projectiles
 └── DebugOverlay (CanvasLayer)
@@ -671,6 +675,7 @@ unsaved, emits `changed(key, value)`), `reset(key)`, `save()`, `revert()`. Nothi
 | `target_hold_s` | float | 0.35 | 0.15-1.0 |
 | `assist_default` | bool | true | |
 | `camera_default` | enum | `chase` | `chase`, `cockpit` |
+| `camera_chase_smoothing_s` | float | 0.0 | 0.0-0.5 (0 = rigid chase camera) |
 | `show_overlay` | bool | true | |
 | `show_fps` | bool | false | |
 | `console_enabled` | bool | true | |
@@ -716,7 +721,8 @@ ring buffer; engine errors in red and warnings in yellow from `ConsoleLogger`.
 | Stars | **Splats** (in `SkySplats`, ~12k tiny Gaussians) | A Gaussian is the ideal star PSF; brightness/colour per splat; crisp at any resolution unlike a panorama texture. |
 | Nebula | **Splats** (in `SkySplats`, ~4k large soft Gaussians) | Volumetric look for free; per-tile depth sort handles overlapping translucency. |
 | Cockpit interior (frame, canopy struts, dash slab) | Mesh (`cockpit_interior.obj`) | Needs hard edges at the near plane and **depth writes** so hull splats behind the frame are rejected by the compositor's depth test; visible only in first person. |
-| Thruster glow, buoy beacons | Meshes, unshaded emissive, additive, animated per tick | Per-frame intensity animation; splats are static radiance (no per-splat opacity animation in GDGS). |
+| Thruster plumes, buoy beacons | Meshes, unshaded emissive, additive, animated per frame. A plume is a cone from the nozzle position along its `exhaust` axis (length, radius, alpha follow the level) plus a small core disc at the exit; no billboards | Per-frame intensity animation; splats are static radiance (no per-splat opacity animation in GDGS). Tied to the nozzle axis, so the plume reads as coming out of the nozzle from every camera. |
+| Hull depth proxy (ship, buoys) | Mesh (`HullDepthProxy`): the fallback mesh, opaque black, vertices inset ~4 cm along their normals | Splats write no depth (§7.2). The proxy writes it just inside the splat surface, so effects behind a hull are hidden and the splats are never covered. Shown exactly when the splats are shown. |
 | Projectiles, muzzle flash | Meshes, unshaded emissive | Tiny, fast-moving, short-lived; spawning/destroying splat nodes per shot would churn GPU buffers. |
 | Target bracket | 2D `Control` in the debug overlay | Screen-space UI. |
 | Collision | `CollisionShape3D` primitives from hardpoints JSON | Splats have no surface; GDGS's collision generator is editor-only and overkill for a handful of boxes. |
@@ -728,9 +734,23 @@ ring buffer; engine errors in red and warnings in yellow from `ConsoleLogger`.
 2. GDGS `CompositorEffect` runs at `EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT`: projects all `GaussianSplatNode`s
    (hull, buoys, sky) in one pass, radix-sorts `(tile | depth)` keys, blends front-to-back, depth-tests against
    the resolved scene depth (`depth_bias`, `depth_test_min_alpha`, `alpha_cutoff` are tunables on the effect).
-3. Godot renders transparent meshes (thruster glow, beacons, projectiles, flashes) on top. Correct for additive
-   effects even when the emitter sits inside hull splats.
+3. Godot renders transparent meshes (thruster plumes, beacons, projectiles, flashes) on top. Correct for additive
+   effects even when the emitter sits inside hull splats. **But splats write no depth**, so a transparent mesh
+   *behind* the hull would draw over it ("firing glow visible through the ship"). The **hull depth proxy** fixes
+   that: `HullDepthProxy` draws the fallback mesh in step 1 (opaque, unshaded, black, `cull_back`;
+   `assets/shaders/hull_depth_proxy.gdshader`) with every vertex moved `inset_m` (exported uniform, default 0.04 m)
+   against its normal. It writes depth just inside the splat surface: effects behind the hull fail the depth test,
+   and the splats (centred on the true surface, so nearer than the proxy) still pass step 2's depth test and
+   cover it. Ship and `NavBuoy` have one; it is visible exactly when the splats are (hidden while the fallback mesh
+   shows, `SplatStatus`) and reuses whatever fallback mesh is loaded, so a regenerated hull needs no change.
+   Back-face culling makes it invisible from inside the hull (cockpit camera).
 4. Post: glow/bloom, tonemap. Keep glow modest so star splats do not bloom into blobs.
+
+**Splat pose.** GDGS's Compute backend reads a splat node's plain `global_transform`, i.e. the pose of the last
+physics tick, while meshes, the proxy, the plumes and the chase camera use the physics-interpolated pose. At speed
+that is metres of relative judder (150 m/s: 2.5 m per tick). `SplatPoseSync` (a child of the body, for the hull and the
+buoys) therefore sets the splat node to `body.get_global_transform_interpolated() * local` every frame and turns that
+node's own physics interpolation off; the Raster backend's quads are children of the splat node and follow.
 
 The sky node sits far away (radius 20 km) and follows the camera origin each frame (`SkyFollower`,
 `top_level = true`), so it never parallaxes and never collides with the depth of nearby meshes. Because GDGS
@@ -765,16 +785,22 @@ in the editor, lights splats from scene `Light3D`s) is the later option for cons
 
 - **Cockpit**: `Camera3D` glued to `CockpitAnchor` (hardpoint) via `RemoteTransform3D`; FOV 75°. The hull splats
   of the nose and struts are visible, as in the real Starfury. Cockpit interior mesh visible.
-- **Chase**: `top_level` camera. Target pose each frame from `ChaseCameraMath`: position = `ship.origin +
-  ship.basis * Vector3(0, 2.5, 9.0)` (behind and above), looking at `ship.origin + ship.forward * 40`.
-  Smoothing: exponential approach with half-life 0.08 s for position and slerp with half-life 0.12 s for
-  rotation, computed with `exp2(-dt / half_life)` so it is frame-rate independent. The camera follows
-  *orientation*, not velocity, so sideways drift and pod tank-steering are visible; a velocity-vector marker is
-  a later HUD item.
+- **Chase**: `top_level` camera, **rigidly attached to the ship**. Every rendered frame `CameraRig._process` sets
+  its transform to the ship's *physics-interpolated* global transform (`get_global_transform_interpolated()`) times
+  one fixed ship-space pose from `ChaseCameraMath.local_pose`: position `Vector3(0, 2.5, 9.0)` (behind and above),
+  looking at the point 40 m ahead of the ship's origin along its nose, up = ship up. There is no easing and no
+  velocity input: reverse thrust, yaw and roll cannot move the camera relative to the ship (tested to 1e-4 in every
+  frame), and the camera follows *orientation*, so sideways drift and pod tank-steering are visible in the world,
+  not as camera motion. A velocity-vector marker is a later HUD item. The camera node has physics interpolation
+  off (it is already placed from the interpolated pose) and joins `world_shiftable`.
+  Optional lag: setting `camera_chase_smoothing_s` (0..0.5 s, default **0** = exactly rigid) lags only the
+  *orientation* of the camera frame behind the ship's with that time constant (first-order, frame-rate
+  independent, slerp); the position stays `ship origin + frame * offset`, so the distance to the ship never changes.
 - Modes are an enum (`COCKPIT`, `CHASE`; `CINEMATIC` and `FREE_LOOK` later). Toggle via `toggle_camera`;
   `Settings.camera_default`. `CockpitInterior.visible == (mode == COCKPIT)`.
 - Camera near/far as in §7.2. Physics interpolation on, so the chase camera's `_process` reads interpolated
-  transforms. The chase camera is in group `world_shiftable` because `top_level` nodes do not follow a parent.
+  transforms (the hull splats are drawn at the same pose, §7.2 *Splat pose*). The chase camera is in group
+  `world_shiftable` because `top_level` nodes do not follow a parent.
 
 ## 9. Asset pipeline (`tools/procgen`)
 

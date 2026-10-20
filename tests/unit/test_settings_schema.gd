@@ -17,7 +17,7 @@ func test_every_key_has_a_valid_default() -> void:
 func test_m1_schema_keys_present() -> void:
 	for key: StringName in [&"invert_y", &"stick_deadzone", &"trigger_deadzone", &"yaw_ramp_s", &"target_hold_s",
 			&"assist_default", &"camera_default", &"show_overlay", &"show_fps", &"console_enabled",
-			&"console_pause_on_open"]:
+			&"console_pause_on_open", &"camera_chase_smoothing_s"]:
 		assert_true(schema.has_key(key), "schema has %s" % key)
 
 
@@ -36,6 +36,15 @@ func test_target_hold_range() -> void:
 	assert_true(schema.parse(&"target_hold_s", "0.5")["ok"])
 	assert_false(schema.parse(&"target_hold_s", "0.05")["ok"], "too short to tell from a tap")
 	assert_false(schema.parse(&"target_hold_s", "2")["ok"])
+
+
+func test_chase_camera_smoothing_is_rigid_by_default_and_limited_to_half_a_second() -> void:
+	assert_eq(schema.get_default(&"camera_chase_smoothing_s"), 0.0, "locked to the ship unless asked otherwise")
+	assert_true(schema.parse(&"camera_chase_smoothing_s", "0")["ok"])
+	assert_true(schema.parse(&"camera_chase_smoothing_s", "0.5")["ok"])
+	assert_false(schema.parse(&"camera_chase_smoothing_s", "0.6")["ok"])
+	assert_false(schema.parse(&"camera_chase_smoothing_s", "-0.1")["ok"])
+	assert_eq(schema.describe(&"camera_chase_smoothing_s"), "float 0.0..0.5")
 
 
 func test_bool_parse_accepts_words() -> void:
