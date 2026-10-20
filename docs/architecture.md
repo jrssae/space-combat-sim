@@ -564,7 +564,7 @@ validates before calling. Values are formatted consistently (vectors to 2 decima
 | `camera` | CameraRig (T12) | `mode` (w), `fov` |
 | `weapons` | PulseCannon (T13) | `mode` (w), `cooldown_s` |
 | `targeting` | TargetingController (T14) | `selected` (w: display name or `none`), `range_m`, `closing_mps`, `candidates` |
-| `render` | SplatStatus (T10) | `splat_backend`, `fallback` (w), `fps`, `gpu` |
+| `render` | SplatStatus (T10) | `splat_backend` (`compute`, `raster`, `headless` or `none`), `fallback` (w), `fps`, `gpu` |
 
 M1 commands:
 

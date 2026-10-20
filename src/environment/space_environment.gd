@@ -41,6 +41,10 @@ var _fallback_active: bool = false
 @onready var sky_follower: SkyFollower = $SkyFollower
 
 
+func _init() -> void:
+	add_to_group(SplatStatus.SKY_GROUP)  # SplatStatus calls use_fallback_sky (no backend, console, F4)
+
+
 func _ready() -> void:
 	_default_environment = world_environment.environment
 	_load_sky()
