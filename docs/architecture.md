@@ -587,7 +587,8 @@ set it directly.
   a full store pays for 12 alternating shots (3 s) or 5 linked volleys at the full rates, after which sustained fire is
   held to 1.8 projectiles per second. The gate asks the capacitor before it commits a shot; a refused shot leaves the
   cooldown and the muzzle turn untouched. `PulseCannonGate.capacitor` is null (unlimited, as in M1) unless set;
-  `PulseCannon` sets one. M2-T02 moves the three numbers into `WeaponSpec`.
+  `PulseCannon` builds one from its `WeaponSpec` (`capacitor_capacity`, `capacitor_cost_per_shot`,
+  `capacitor_recharge_per_s`, M2-T02).
 
 ### 6.4 Debug console (` key)
 

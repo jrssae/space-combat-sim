@@ -10,7 +10,7 @@ const GROUP: StringName = &"targetable"
 
 ## What the pilot reads ("NAV ALPHA"); the console selects targets by it.
 @export var display_name: String = ""
-## IFF seam (§14.9). Everything in M1 is `neutral`.
+## IFF (§14.9, `Factions`). Buoys are `neutral`; ships carry their own.
 @export var faction: StringName = &"neutral"
 ## World-frame velocity of the marked object, m/s, for owners that move kinematically (a drifting buoy keeps it
 ## current). Ignored when the parent is a RigidBody3D: its `linear_velocity` is the truth.
@@ -19,6 +19,16 @@ var velocity: Vector3 = Vector3.ZERO
 
 func _init() -> void:
 	add_to_group(GROUP)
+
+
+## True while the target can be selected: visible in the tree and its parent processing (a parked pool ship is hidden
+## and disabled, a destroyed one the same). `TargetingController` skips inactive targetables and drops a selection that
+## turns inactive.
+func is_active() -> bool:
+	if not is_inside_tree() or not is_visible_in_tree():
+		return false
+	var parent: Node = get_parent()
+	return parent != null and parent.can_process()
 
 
 func get_target_velocity() -> Vector3:

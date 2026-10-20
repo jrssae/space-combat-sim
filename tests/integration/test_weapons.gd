@@ -63,7 +63,7 @@ func before_each() -> void:
 	cannon = PulseCannon.new()
 	cannon.name = "PulseCannon"
 	body.add_child(cannon)
-	cannon.setup(body, muzzle_nodes, projectiles_node)
+	cannon.setup(body, muzzle_nodes, projectiles_node, null, true)
 	cannon.projectile_fired.connect(_on_fired)
 	cannon.set_physics_process(false)  # tests call step() themselves, except the real-loop test
 	cmd = CombatCommand.new()
@@ -535,6 +535,101 @@ func test_setup_again_replaces_the_flashes() -> void:
 			if child is MuzzleFlash:
 				flashes += 1
 		assert_eq(flashes, 1, "one live flash under %s" % muzzle.name)
+
+
+# --- weapon spec and muzzle count (M2-T02) --------------------------------------------------------------------
+
+
+func _four_muzzle_cannon(weapon: WeaponSpec) -> PulseCannon:
+	var four: Array[Node3D] = []
+	for i: int in 4:
+		var marker := Marker3D.new()
+		marker.name = "ExtraMuzzle%d" % i
+		marker.position = Vector3(float(i) - 1.5, 0.0, -2.0)
+		body.add_child(marker)
+		four.append(marker)
+	var four_cannon := PulseCannon.new()
+	four_cannon.name = "FourCannon"
+	body.add_child(four_cannon)
+	four_cannon.set_physics_process(false)
+	four_cannon.setup(body, four, projectiles_node, weapon)
+	return four_cannon
+
+
+func test_a_four_muzzle_cannon_cycles_all_four_muzzles() -> void:
+	var weapon := WeaponSpec.new()
+	weapon.shot_interval_s = 0.2
+	var four_cannon: PulseCannon = _four_muzzle_cannon(weapon)
+	var combat := CombatCommand.new()
+	combat.fire = true
+	four_cannon.set_combat_command(combat)
+	var seen: Array[int] = []
+	four_cannon.projectile_fired.connect(func(index: int, _p: Projectile) -> void: seen.append(index))
+	for i: int in 90:
+		SimClock.advance(DT)
+		four_cannon.step(SimClock.now())
+	assert_eq(seen.slice(0, 8), [0, 1, 2, 3, 0, 1, 2, 3])
+
+
+func test_a_linked_four_muzzle_cannon_fires_all_four_every_four_intervals() -> void:
+	var weapon := WeaponSpec.new()
+	weapon.shot_interval_s = 0.2
+	var four_cannon: PulseCannon = _four_muzzle_cannon(weapon)
+	four_cannon.gate.cycle_mode()
+	var combat := CombatCommand.new()
+	combat.fire = true
+	four_cannon.set_combat_command(combat)
+	var seen: Array[int] = []
+	four_cannon.projectile_fired.connect(func(index: int, _p: Projectile) -> void: seen.append(index))
+	SimClock.advance(DT)
+	four_cannon.step(SimClock.now())
+	assert_eq(seen, [0, 1, 2, 3], "the first volley on the press")
+	assert_almost_eq(four_cannon.gate.cooldown_remaining(SimClock.now()), 0.8, 1e-6)
+
+
+func test_the_weapon_spec_sets_speed_lifetime_and_look() -> void:
+	var weapon := WeaponSpec.new()
+	weapon.muzzle_speed_mps = 250.0
+	weapon.lifetime_s = 2.0
+	weapon.bolt_length_m = 3.0
+	weapon.bolt_radius_m = 0.1
+	var fast: PulseCannon = _four_muzzle_cannon(weapon)
+	assert_eq(fast.muzzle_speed_mps, 250.0)
+	var combat := CombatCommand.new()
+	combat.fire = true
+	fast.set_combat_command(combat)
+	SimClock.advance(DT)
+	fast.step(SimClock.now())
+	var bolt: Projectile = _bolts()[0]
+	assert_eq(bolt.lifetime_s, 2.0)
+	assert_almost_eq(bolt.velocity.length(), (body.linear_velocity + -body.global_basis.z * 250.0).length(), 1e-3)
+	var mesh := bolt.get_node("Bolt").get("mesh") as CapsuleMesh
+	assert_almost_eq(mesh.radius, 0.1, 1e-6)
+	assert_almost_eq(mesh.height, 3.0, 1e-6)
+	assert_not_null(mesh.material, "falls back to the pulse bolt material")
+
+
+func test_bolts_of_one_look_share_a_mesh() -> void:
+	var a: CapsuleMesh = Projectile.bolt_mesh(1.5, 0.05)
+	var b: CapsuleMesh = Projectile.bolt_mesh(1.5, 0.05)
+	var c: CapsuleMesh = Projectile.bolt_mesh(2.0, 0.05)
+	assert_same(a, b)
+	assert_ne(a, c)
+
+
+func test_a_cannon_without_a_spec_uses_the_m1_numbers() -> void:
+	assert_eq(cannon.muzzle_speed_mps, 400.0)
+	assert_eq(cannon.gate.interval_s, 0.25)
+	assert_eq(cannon.gate.capacitor.capacity, WeaponCapacitor.DEFAULT_CAPACITY)
+
+
+func test_an_unregistered_cannon_leaves_the_console_alone() -> void:
+	var quiet := PulseCannon.new()
+	body.add_child(quiet)
+	quiet.setup(body, muzzle_nodes, projectiles_node)
+	body.remove_child(quiet)
+	quiet.free()
+	assert_true(DebugConsole.registry.has_provider(&"weapons"), "the registered cannon's provider is untouched")
 
 
 # --- console --------------------------------------------------------------------------------------------------

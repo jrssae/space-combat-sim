@@ -37,7 +37,7 @@ func before_each() -> void:
 	controller = TargetingController.new()
 	controller.name = "Targeting"
 	body.add_child(controller)
-	controller.setup(body)
+	controller.setup(body, true)
 
 
 ## A frictionless, gravity-free body with the ship's Newtonian settings (architecture §5.4).

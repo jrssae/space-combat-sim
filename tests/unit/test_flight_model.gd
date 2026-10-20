@@ -58,8 +58,11 @@ func test_ship_spec_resource_matches_the_section_5_1_defaults() -> void:
 	assert_eq(spec.exhaust_velocity, 30000.0)
 	for property: Dictionary in defaults.get_property_list():
 		var usage: int = property["usage"]
-		if (usage & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0 and property["name"] != "asset_id":
+		if (usage & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0 and property["name"] != "asset_id" and property["name"] != "weapon":
 			assert_eq(spec.get(property["name"]), defaults.get(property["name"]), "resource agrees with the code default for %s" % property["name"])
+	assert_eq(spec.hull_max, 300.0)
+	assert_eq(spec.engine_glow_color, Color(0.7, 0.9, 1.8, 1.0))
+	assert_not_null(spec.weapon, "the Starfury carries its pulse cannon spec")
 	assert_almost_eq(spec.rate_max_rad(), Vector3(deg_to_rad(60.0), deg_to_rad(60.0), deg_to_rad(90.0)), Vector3.ONE * EPS)
 	assert_almost_eq(model.main_total(), 4.0 * main_t, EPS)
 	assert_almost_eq(model.retro_total(), 4.0 * retro_t, EPS)

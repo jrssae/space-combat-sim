@@ -27,6 +27,7 @@ func before_each() -> void:
 	add_child_autofree(world)
 	spec = load(SPEC_PATH) as ShipSpec
 	ship = Ship.create(spec, world)
+	ship.console_owner = true
 	world.spawn(ship, world.to_universe(Vector3.ZERO))
 	assert_true(ship.get_layout().valid, "ship has a valid thruster layout (%s)" % GEN_ASSETS_HINT)
 

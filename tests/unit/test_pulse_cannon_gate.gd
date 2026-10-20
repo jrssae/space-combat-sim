@@ -225,3 +225,67 @@ func test_a_clock_reset_to_an_earlier_time_does_not_stick_the_cannon() -> void:
 	assert_true(gate.cooldown_remaining(0.0) <= LINKED_S)
 	assert_eq(gate.update(0.25, true).size(), 0)
 	assert_eq(gate.update(LINKED_S, true).size(), 1, "and it fires again once that interval has passed")
+
+
+# --- any number of muzzles, interval from the spec (M2-T02) --------------------------------------------------
+
+
+func test_defaults_are_the_starfury_two_muzzles_at_a_quarter_second() -> void:
+	assert_eq(gate.muzzle_count, 2)
+	assert_eq(gate.interval_s, ALT_S)
+	assert_eq(gate.linked_interval_s(), LINKED_S)
+
+
+func test_four_muzzles_alternating_cycle_zero_to_three_at_the_spec_interval() -> void:
+	gate = PulseCannonGate.new(4, 0.2)
+	var shots: Array[Dictionary] = _hold(2.0)
+	assert_eq(shots.size(), 10, "one shot per 0.2 s")
+	for i: int in shots.size():
+		assert_eq(shots[i]["muzzles"], [i % 4], "turn %d" % i)
+		if i > 0:
+			assert_almost_eq(float(shots[i]["t"]) - float(shots[i - 1]["t"]), 0.2, DT, "interval")
+
+
+func test_four_muzzles_linked_fire_all_every_interval_times_four() -> void:
+	gate = PulseCannonGate.new(4, 0.2)
+	gate.cycle_mode()
+	var shots: Array[Dictionary] = _hold(3.0)
+	assert_eq(shots.size(), 4, "a volley every 0.8 s: at 0, 0.8, 1.6 and 2.4 s")
+	for shot: Dictionary in shots:
+		assert_eq(shot["muzzles"], [0, 1, 2, 3])
+	assert_almost_eq(float(shots[1]["t"]) - float(shots[0]["t"]), 0.8, DT)
+
+
+func test_projectile_rate_is_the_same_in_both_modes_for_any_muzzle_count() -> void:
+	for count: int in [1, 2, 3, 4, 6]:
+		gate = PulseCannonGate.new(count, 0.25)
+		var alternating: int = _projectile_count(_hold(4.0))
+		gate.reset()
+		gate.cycle_mode()
+		var linked: int = _projectile_count(_hold(4.0))
+		assert_eq(alternating, 16, "%d muzzles alternating" % count)
+		# A volley is all or nothing, so the last one can overshoot the window by up to count - 1 projectiles.
+		assert_true(linked >= 16 and linked < 16 + count, "%d muzzles linked: %d projectiles" % [count, linked])
+
+
+func test_a_single_muzzle_fires_muzzle_zero_in_both_modes() -> void:
+	gate = PulseCannonGate.new(1, 0.25)
+	assert_eq(gate.update(0.0, true), [0])
+	assert_eq(gate.update(0.25, true), [0])
+	gate.cycle_mode()
+	assert_eq(gate.update(10.0, true), [0])
+
+
+func test_configure_clamps_nonsense_and_keeps_the_mode() -> void:
+	gate.cycle_mode()
+	gate.configure(0, -1.0)
+	assert_eq(gate.muzzle_count, 1)
+	assert_eq(gate.interval_s, ALT_S, "a non-positive interval falls back to the default")
+	assert_eq(gate.mode, PulseCannonGate.Mode.LINKED)
+
+
+func test_a_clock_reset_never_waits_longer_than_the_linked_interval_of_four_muzzles() -> void:
+	gate = PulseCannonGate.new(4, 0.25)
+	gate.cycle_mode()
+	gate.update(1000.0, true)
+	assert_true(gate.cooldown_remaining(0.0) <= 1.0 + 1e-9)

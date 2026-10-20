@@ -9,8 +9,15 @@ extends Node3D
 ## a World-frame vector; a velocity rebase (roadmap) must subtract the frame velocity from it, as for rigid bodies.
 ##
 ## The capsule is built along the node's -Z axis, and `launch` points -Z along the velocity.
+##
+## `configure(weapon)` (the cannon calls it before `launch`) takes the lifetime and the bolt's look from a
+## `WeaponSpec`. Capsule meshes are shared between all bolts of one look.
 
 const SCENE_PATH: String = "res://src/weapons/projectile.tscn"
+const DEFAULT_MATERIAL: Material = preload("res://assets/materials/projectile.tres")
+
+# Bolt meshes by look (length, radius, material), so a volley does not build a mesh per bolt.
+static var _meshes: Dictionary = {}
 
 ## Seconds of sim time from launch to `queue_free`.
 @export var lifetime_s: float = 4.0
@@ -19,6 +26,8 @@ const SCENE_PATH: String = "res://src/weapons/projectile.tscn"
 var velocity: Vector3 = Vector3.ZERO
 ## Sim time at which the projectile is freed.
 var expires_at_s: float = INF
+
+@onready var _bolt: MeshInstance3D = $Bolt
 
 
 func _ready() -> void:
@@ -30,6 +39,30 @@ func _physics_process(delta: float) -> void:
 		queue_free()
 		return
 	global_position += velocity * delta
+
+
+## Takes the lifetime and the bolt's look (length, radius, material) from `weapon`. Call it after the node entered the
+## tree and before `launch`.
+func configure(weapon: WeaponSpec) -> void:
+	lifetime_s = weapon.lifetime_s
+	_bolt.mesh = bolt_mesh(weapon.bolt_length_m, weapon.bolt_radius_m, weapon.bolt_material)
+
+
+## The shared capsule mesh for a bolt of this look; a null `material` is the pulse bolt material.
+static func bolt_mesh(length_m: float, radius_m: float, material: Material = null) -> CapsuleMesh:
+	var mat: Material = material if material != null else DEFAULT_MATERIAL
+	var key := "%s|%s|%d" % [length_m, radius_m, mat.get_instance_id()]
+	var cached: CapsuleMesh = _meshes.get(key) as CapsuleMesh
+	if cached != null:
+		return cached
+	var mesh := CapsuleMesh.new()
+	mesh.radius = radius_m
+	mesh.height = maxf(length_m, 2.0 * radius_m)
+	mesh.radial_segments = 8
+	mesh.rings = 2
+	mesh.material = mat
+	_meshes[key] = mesh
+	return mesh
 
 
 ## Places the projectile at the World-frame `at`, points it along `launch_velocity` and starts the lifetime clock at

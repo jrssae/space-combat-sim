@@ -8,8 +8,12 @@ extends Node
 ## it reads the body's position, `linear_velocity` and forward axis (`-global_basis.z`). Targetables under that body
 ## (the ship's own marker, later) are never candidates.
 ##
-## Console: provider `targeting` (`selected` writable by display name or `none`, `range_m`, `closing_mps`,
-## `candidates`), so `set targeting.selected "NAV BRAVO"` works without a dedicated command (§6.4).
+## Console (§6.4, §15.1 D27): only the player's controller registers (`setup(body, true)`): provider `targeting`
+## (`selected` writable by display name or `none`, `range_m`, `closing_mps`, `candidates`), so
+## `set targeting.selected "NAV BRAVO"` works without a dedicated command.
+##
+## Inactive targetables (`Targetable.is_active()`: hidden, or their owner not processing) are never candidates, and a
+## selection that turns inactive is cleared on the next refresh, emitting `target_changed`.
 
 ## The selection changed: a target id (`Targetable` instance id), or `TargetingSystem.NO_TARGET` when it cleared.
 signal target_changed(id: int)
@@ -26,7 +30,11 @@ func _init() -> void:
 	process_physics_priority = LATE_PRIORITY
 
 
-func _ready() -> void:
+func _exit_tree() -> void:
+	DebugConsole.registry.unregister_owner(self)
+
+
+func _register_console() -> void:
 	DebugConsole.registry.register_provider(&"targeting", ConsoleVars.new({
 		&"selected": {"get": _console_selected, "set": _console_set_selected, "type": TYPE_STRING,
 				"choices": _console_choices, "doc": "Selected target by display name, or none"},
@@ -37,13 +45,12 @@ func _ready() -> void:
 	}), self)
 
 
-func _exit_tree() -> void:
-	DebugConsole.registry.unregister_owner(self)
-
-
-## The body whose position, velocity and nose the targeting works from (the player ship, or an AI's ship).
-func setup(body: RigidBody3D) -> void:
+## The body whose position, velocity and nose the targeting works from (the player ship, or an AI's ship), and
+## whether this is the player's controller, which registers the `targeting` console provider.
+func setup(body: RigidBody3D, register_console: bool = false) -> void:
 	_body = body
+	if register_console:
+		_register_console()
 	refresh()
 
 
@@ -138,7 +145,7 @@ func _gather() -> void:
 	var infos: Array[TargetInfo] = []
 	for node: Node in get_tree().get_nodes_in_group(Targetable.GROUP):
 		var targetable := node as Targetable
-		if targetable == null or _body.is_ancestor_of(targetable):
+		if targetable == null or _body.is_ancestor_of(targetable) or not targetable.is_active():
 			continue
 		infos.append(targetable.to_target_info())
 	system.update(infos, _ship_position())

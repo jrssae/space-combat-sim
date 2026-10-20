@@ -11,6 +11,7 @@ const SHIP_SPEC_PATH := "res://assets/ships/starfury_aurora.tres"
 var input_source: InputSource = null
 var adapter: InputAdapter = InputAdapter.new()
 
+var combatant: Combatant = null
 var ship: Ship = null
 var thrusters: ThrusterVisuals = null
 var cannon: PulseCannon = null
@@ -57,9 +58,7 @@ func _exit_tree() -> void:
 func _physics_process(delta: float) -> void:
 	var pc: PilotCommand = adapter.sample(input_source, delta)
 	if not get_tree().paused:
-		ship.set_flight_command(pc.flight)
-		ship.set_combat_command(pc.combat)
-		cannon.set_combat_command(pc.combat)
+		combatant.apply_commands(pc.flight, pc.combat)
 	_handle_ui(pc.ui)
 
 
@@ -138,16 +137,15 @@ func _apply_input_settings() -> void:
 
 func _spawn_ship() -> void:
 	var spec := load(SHIP_SPEC_PATH) as ShipSpec
-	ship = Ship.create(spec, world)
-	world.spawn(ship, _spawn_position, _spawn_basis)
-	thrusters = ThrusterVisuals.new()
-	thrusters.name = "ThrusterVisuals"
-	ship.thrusters.add_child(thrusters)
-	thrusters.setup(ship.get_layout(), ship.get_flight_output)
-	cannon = PulseCannon.new()
-	cannon.name = "PulseCannon"
-	ship.guns.add_child(cannon)
-	cannon.setup(ship, ship.get_muzzles(), projectiles)
+	combatant = ShipAssembly.build(spec, world, projectiles, {
+		ShipAssembly.OPT_FACTION: Factions.EARTH_ALLIANCE,
+		ShipAssembly.OPT_DISPLAY_NAME: "PLAYER",
+		ShipAssembly.OPT_CONSOLE_OWNER: true,
+	})
+	world.spawn(combatant.ship, _spawn_position, _spawn_basis)
+	ship = combatant.ship
+	thrusters = combatant.thrusters
+	cannon = combatant.cannon
 
 
 func _spawn_props(props: Array) -> void:

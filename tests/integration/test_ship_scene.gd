@@ -41,6 +41,7 @@ func after_each() -> void:
 
 func _spawn_ship(p_spec: ShipSpec, at: Vector3) -> Ship:
 	var made: Ship = Ship.create(p_spec, world)
+	made.console_owner = true
 	world.spawn(made, world.to_universe(at))
 	return made
 

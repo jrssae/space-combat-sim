@@ -6,8 +6,9 @@ extends RefCounted
 ##
 ## Rules:
 ## - Only candidates within `sensor_range_m` (25 km) of the ship can be selected.
-## - `select_next`: candidates in range sorted by range (ties by id); picks the one after the current selection,
-##   wrapping to the nearest; with no selection, the nearest.
+## - `select_next`: candidates in range, hostile ones to `own_faction` first (`Factions.is_hostile`), then the rest,
+##   each group sorted by range (ties by id); picks the one after the current selection, wrapping to the first; with
+##   no selection, the first. With no hostile in range this is plain nearest-first, as in M1.
 ## - `select_ahead`: the smallest angle between the ship's forward axis and the line of sight, forward hemisphere
 ##   only (< 90 deg); ties go to the nearer. If no candidate is ahead, the selection is unchanged.
 ## - The selection clears when its target leaves the candidate list or sensor range (`update`).
@@ -25,6 +26,8 @@ const ANGLE_TIE_RAD: float = 1e-6
 const NO_TARGET: int = 0
 
 var sensor_range_m: float = SENSOR_RANGE_M
+## The faction of the ship this system serves; `select_next` puts targets hostile to it first (M2-T02).
+var own_faction: StringName = Factions.NEUTRAL
 
 var _candidates: Array[TargetInfo] = []
 var _selected_id: int = NO_TARGET
@@ -76,9 +79,22 @@ func selected() -> TargetInfo:
 	return _find(_selected_id) if has_selection() else null
 
 
+## The order `select_next` walks: hostile targets first, then the others, each nearest first (stable: the in-range
+## order is already nearest first, ties by id).
+func cycle_order(ship_pos: Vector3) -> Array[TargetInfo]:
+	var hostile: Array[TargetInfo] = []
+	var others: Array[TargetInfo] = []
+	for info: TargetInfo in in_range(ship_pos):
+		if Factions.is_hostile(own_faction, info.faction):
+			hostile.append(info)
+		else:
+			others.append(info)
+	return hostile + others
+
+
 ## `target_next`. Returns true if the selection changed.
 func select_next(ship_pos: Vector3) -> bool:
-	var ordered: Array[TargetInfo] = in_range(ship_pos)
+	var ordered: Array[TargetInfo] = cycle_order(ship_pos)
 	if ordered.is_empty():
 		return false
 	var index: int = -1
@@ -86,7 +102,7 @@ func select_next(ship_pos: Vector3) -> bool:
 		if ordered[i].id == _selected_id:
 			index = i
 			break
-	# index -1 (no selection, or it is not selectable) gives 0: the nearest. The last one wraps to the nearest.
+	# index -1 (no selection, or it is not selectable) gives 0: the first. The last one wraps to the first.
 	return _select(ordered[(index + 1) % ordered.size()].id)
 
 

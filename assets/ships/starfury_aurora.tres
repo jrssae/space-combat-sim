@@ -1,6 +1,7 @@
-[gd_resource type="Resource" script_class="ShipSpec" load_steps=2 format=3 uid="uid://bxkmn7erjsmee"]
+[gd_resource type="Resource" script_class="ShipSpec" load_steps=3 format=3 uid="uid://bxkmn7erjsmee"]
 
 [ext_resource type="Script" uid="uid://csixdcdy0fu46" path="res://src/ship/ship_spec.gd" id="1_ship_spec"]
+[ext_resource type="Resource" path="res://assets/weapons/pulse_cannon_ef.tres" id="2_weapon"]
 
 [resource]
 script = ExtResource("1_ship_spec")
@@ -19,4 +20,7 @@ pod_yaw_smoothing_s = 0.15
 brake_gain_k = 2.0
 exhaust_velocity = 30000.0
 fuel_capacity_kg = 28800.0
+hull_max = 300.0
+engine_glow_color = Color(0.7, 0.9, 1.8, 1)
+weapon = ExtResource("2_weapon")
 metadata/_custom_type_script = "uid://csixdcdy0fu46"

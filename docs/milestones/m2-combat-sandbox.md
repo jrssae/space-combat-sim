@@ -2,8 +2,8 @@
 
 > "Something to shoot." (`docs/roadmap.md`)
 
-**Status:** in progress. The maintainer asked to proceed before M1's re-test. Done: **T01** combat maths, **T11**
-control profiles, **T14** reaction mass and weapon capacitor. Next: T02, then T03. M2-T04 waits for the
+**Status:** in progress. The maintainer asked to proceed before M1's re-test. Done: **T01** combat maths, **T02**
+multi-ship readiness, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T03. M2-T04 waits for the
 maintainer's Delta-V reference file (Q1 below). See `docs/handoff.md`.
 
 Read `docs/architecture.md` first, §1-§13 and especially **§15** (the M2 design: decisions D20-D29, tick order, hit
@@ -592,6 +592,33 @@ history.
   `PulseCannon.charge_fraction()`. `ship.fuel_kg` and `weapons.charge` are writable so a tank or capacitor can be
   emptied from the console; `refuel [kg]` fills the tank. `Ship.reset_to` refuels, `PulseCannonGate.reset()` refills.
 - M1 tests changed only where a provider's key list is asserted exactly (`test_weapons.gd`, `test_ship_scene.gd`).
+
+**M2-T02 (multi-ship readiness).**
+- `ShipAssembly.build(spec, world, projectiles_parent, opts) -> Combatant` creates the `Ship`, `ThrusterVisuals`,
+  `PulseCannon` and `Targetable` as children of the not-yet-ready ship (`get_node`), because the thruster layout and the
+  muzzles only exist after `Ship._ready`. The pieces that need them (`thrusters.setup`, `cannon.setup`) are wired on the
+  ship's `ready` signal, so the caller must `World.spawn(combatant.ship, ...)` before using them. Option keys are
+  `ShipAssembly.OPT_*` constants (`faction`, `display_name`, `console_owner`, `is_player`, `force_assist`).
+- Console ownership (D27) is opt-in: `Ship.console_owner` (default false), `TargetingController.setup(body,
+  register_console := false)` and `PulseCannon.setup(..., weapon := null, register_console := false)`. Registering moved
+  out of `_ready`, so M1 tests that read `ship.*`, `targeting.*` or `weapons.*` now set the flag (`test_ship_scene`,
+  `test_reaction_mass`, `test_targeting_controller`, `test_weapons`, `test_weapon_charge`).
+- `Ship.force_assist` (AI ships): `set_assist(false)` and the toggle edge are ignored.
+- `WeaponSpec` is optional in `PulseCannon.setup` (null = defaults = the Starfury's M1 numbers), so M1 call sites are
+  unchanged. `assets/weapons/pulse_cannon_ef.tres` holds the same numbers; the Starfury's bolt colour stays the M1
+  orange material (`bolt_color` (3, 1, 0.5)), not the blue-white proposed in `docs/handoff.md` section 6, because T02
+  must reproduce M1. Say so if you want it changed.
+- `Projectile.configure(weapon)` sets the lifetime and swaps in a shared `CapsuleMesh` per (length, radius, material).
+- `PulseCannonGate(muzzle_count, interval_s)`; `MUZZLE_COUNT` is now `DEFAULT_MUZZLE_COUNT`. LINKED waits
+  `interval_s × muzzle_count`, so a volley that does not divide the test window can overshoot it by up to
+  `muzzle_count - 1` projectiles.
+- `ThrusterVisuals.glow_color` (from `ShipSpec.engine_glow_color`): the default colour keeps the shared materials, any
+  other gets one pair of material copies per ship (`material_override`).
+- `TargetingSystem.own_faction` and `cycle_order()`; `TargetingController` skips inactive `Targetable`s
+  (`Targetable.is_active()`) and clears a selection that turns inactive. The player now has a `Targetable`
+  (`earth_alliance`, "PLAYER"), excluded from its own controller by ancestry.
+- A new ship's `TargetingController` last refreshed at its own setup, so a ship built before the others sees them only
+  after the next physics tick (or `refresh()`).
 
 ## Definition of done (M2)
 

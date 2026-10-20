@@ -40,6 +40,12 @@ extends Resource
 ## kg of reaction mass the tank holds (`FuelTank`). The default is 10 minutes of both pods' mains at full
 ## (4 × 0.36 MN / 30 km/s = 48 kg/s × 600 s). Only drawn down when `settings.fuel_unlimited` is off.
 @export var fuel_capacity_kg: float = 28800.0
+## Hull points (`HullHealth`, M2-T03). 300 is about 30 hits from a Starfury pulse bolt.
+@export var hull_max: float = 300.0
+## HDR colour of the engine plumes (`ThrusterVisuals`). The default is the Starfury's blue-white.
+@export var engine_glow_color: Color = Color(0.7, 0.9, 1.8, 1.0)
+## The ship's guns; null falls back to a default `WeaponSpec` (the Starfury's M1 numbers).
+@export var weapon: WeaponSpec = null
 
 
 ## Where this ship's generated hardpoints live.

@@ -291,3 +291,71 @@ func test_select_id_and_find_by_name_respect_sensor_range() -> void:
 	assert_true(system.clear())
 	assert_false(system.clear())
 	assert_eq(system.all_candidates().size(), 2)
+
+
+# --- hostile first (M2-T02, D25) -----------------------------------------------------------------------------
+
+
+func _faction_info(id: int, position: Vector3, faction: StringName) -> TargetInfo:
+	return TargetInfo.new(id, "T%d" % id, faction, position, Vector3.ZERO)
+
+
+func test_next_cycles_hostiles_first_nearest_first_then_the_rest() -> void:
+	system.own_faction = Factions.EARTH_ALLIANCE
+	var candidates: Array[TargetInfo] = [
+		_faction_info(1, Vector3(0.0, 0.0, -500.0), Factions.NEUTRAL),
+		_faction_info(2, Vector3(0.0, 0.0, -4000.0), Factions.RAIDERS),
+		_faction_info(3, Vector3(0.0, 0.0, -2000.0), Factions.RAIDERS),
+		_faction_info(4, Vector3(0.0, 0.0, -1000.0), Factions.NEUTRAL),
+		_faction_info(5, Vector3(0.0, 0.0, -3000.0), Factions.EARTH_ALLIANCE),
+	]
+	system.update(candidates, Vector3.ZERO)
+	var visited: Array[int] = []
+	for i: int in 6:
+		system.select_next(Vector3.ZERO)
+		visited.append(system.selected_id())
+	assert_eq(visited, [3, 2, 1, 4, 5, 3], "raiders by range, then neutral and friendly by range, then it wraps")
+
+
+func test_next_is_plain_nearest_first_when_nothing_is_hostile() -> void:
+	system.own_faction = Factions.EARTH_ALLIANCE
+	var candidates: Array[TargetInfo] = _five()  # all neutral
+	system.update(candidates, Vector3.ZERO)
+	var expected: Array[int] = _ids_by_range(candidates, Vector3.ZERO)
+	var visited: Array[int] = []
+	for i: int in 5:
+		system.select_next(Vector3.ZERO)
+		visited.append(system.selected_id())
+	assert_eq(visited, expected, "the M1 order")
+
+
+func test_a_neutral_system_treats_nothing_as_hostile() -> void:
+	var candidates: Array[TargetInfo] = [
+		_faction_info(1, Vector3(0.0, 0.0, -500.0), Factions.EARTH_ALLIANCE),
+		_faction_info(2, Vector3(0.0, 0.0, -4000.0), Factions.RAIDERS),
+	]
+	system.update(candidates, Vector3.ZERO)
+	system.select_next(Vector3.ZERO)
+	assert_eq(system.selected_id(), 1, "nearest, as the default own faction is neutral")
+
+
+func test_raiders_prefer_the_alliance_ship_over_a_nearer_buoy() -> void:
+	system.own_faction = Factions.RAIDERS
+	var candidates: Array[TargetInfo] = [
+		_faction_info(1, Vector3(0.0, 0.0, -100.0), Factions.NEUTRAL),
+		_faction_info(2, Vector3(0.0, 0.0, -3000.0), Factions.EARTH_ALLIANCE),
+	]
+	system.update(candidates, Vector3.ZERO)
+	system.select_next(Vector3.ZERO)
+	assert_eq(system.selected_id(), 2)
+
+
+func test_select_ahead_ignores_faction() -> void:
+	system.own_faction = Factions.EARTH_ALLIANCE
+	var candidates: Array[TargetInfo] = [
+		_faction_info(1, Vector3(0.0, 0.0, -500.0), Factions.NEUTRAL),
+		_faction_info(2, Vector3(300.0, 0.0, -4000.0), Factions.RAIDERS),
+	]
+	system.update(candidates, Vector3.ZERO)
+	system.select_ahead(Vector3.ZERO, Vector3.FORWARD)
+	assert_eq(system.selected_id(), 1, "the target nearest the nose, hostile or not")

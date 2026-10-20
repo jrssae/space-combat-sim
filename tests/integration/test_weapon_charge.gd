@@ -52,7 +52,7 @@ func before_each() -> void:
 	cannon = PulseCannon.new()
 	cannon.name = "PulseCannon"
 	body.add_child(cannon)
-	cannon.setup(body, muzzle_nodes, projectiles_node)
+	cannon.setup(body, muzzle_nodes, projectiles_node, null, true)
 	cannon.projectile_fired.connect(func(_i: int, _p: Projectile) -> void: fired_times.append(SimClock.now()))
 	cannon.set_physics_process(false)
 	cmd = CombatCommand.new()

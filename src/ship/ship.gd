@@ -26,8 +26,10 @@ extends RigidBody3D
 ## `ShipSpec.fuel_capacity_kg`, never drawn down while `settings.fuel_unlimited` is on), and when the tank is empty the
 ## model is told to cut all thrust.
 ##
-## Rebase-safe: nothing here caches a World position between ticks. Console: provider `ship` and commands
-## `assist [on|off]` and `refuel [kg]` (§6.4).
+## Rebase-safe: nothing here caches a World position between ticks. Console (§6.4, §15.1 D27): only the player's ship
+## registers (`console_owner`, set before the ship enters the tree, `ShipAssembly` does it): provider `ship` and commands
+## `assist [on|off]` and `refuel [kg]`, and it passes the flag on to its `TargetingController`. Other ships stay out of
+## the console, because the registry replaces entries by name and would overwrite the player's.
 
 ## Assist was switched on or off (by `set_assist`, the console, or a `toggle_assist` edge).
 signal assist_toggled(on: bool)
@@ -37,6 +39,10 @@ const ASSET_ROOT: String = "res://assets/generated"
 const COCKPIT_MESH_FILE: String = "cockpit_interior.obj"
 ## Used when the hardpoints are missing (the chase camera still needs somewhere to sit); matches §8.
 const DEFAULT_CHASE_OFFSET: Vector3 = Vector3(0.0, 2.5, 9.0)
+
+## True for the ship the player flies: it registers the console providers and commands (set before the ship enters the
+## tree). Every other ship leaves the console alone.
+var console_owner: bool = false
 
 ## Ship type: mass, inertia, thrust, rates, gains and the asset id. The scene sets the Starfury; `setup` replaces it.
 @export var spec: ShipSpec
@@ -48,6 +54,14 @@ var world: WorldFrame = null
 ## Flight assist (§5.5). Starts from `Settings.assist_default`; assigning it is `set_assist`.
 var assist_on: bool:
 	get = get_assist, set = set_assist
+
+## AI ships: flight assist is always on, and nothing can switch it off (the toggle edge and `set_assist(false)` are
+## ignored). Assigning true switches it on.
+var force_assist: bool = false:
+	set(value):
+		force_assist = value
+		if value:
+			set_assist(true)
 
 var _assist_on: bool = true
 var _hardpoints: Hardpoints = Hardpoints.new()
@@ -95,11 +109,12 @@ func _init() -> void:
 
 func _ready() -> void:
 	_apply_newtonian_body()
-	targeting.setup(self)
+	targeting.setup(self, console_owner)
 	_build()
 	use_fallback_mesh(_fallback_active or SplatStatus.needs_fallback(SplatStatus.active_backend()))
 	set_cockpit_interior_visible(_interior_visible)
-	_register_console()
+	if console_owner:
+		_register_console()
 
 
 func _exit_tree() -> void:
@@ -170,7 +185,7 @@ func get_assist() -> bool:
 
 ## Switches flight assist; a change clears the assist's smoothed pod-yaw command and emits `assist_toggled`.
 func set_assist(on: bool) -> void:
-	if on == _assist_on:
+	if on == _assist_on or (force_assist and not on):
 		return
 	_assist_on = on
 	if _model != null:

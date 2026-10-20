@@ -3,12 +3,14 @@ extends RefCounted
 ## The pulse cannon's trigger logic (architecture §6.3): which muzzles fire on a given tick. Pure: time comes in as
 ## a number (`SimClock.now()` in the game, a fake clock in tests), nothing is spawned here.
 ##
-## - `ALTERNATING`: one shot every 0.25 s (4 Hz), the muzzles taking turns 0, 1, 0, 1, ...
-## - `LINKED`: both muzzles together every 0.5 s (2 Hz), `[0, 1]`.
+## - `ALTERNATING`: one shot every `interval_s` (0.25 s, 4 Hz), the muzzles taking turns 0, 1, ..., n-1, 0, ...
+## - `LINKED`: every muzzle together every `interval_s` × `muzzle_count` (0.5 s, 2 Hz, for two muzzles).
 ##
-## Both modes put out the same 4 projectiles per second. The gate keeps one number, the time the next shot is
-## allowed (`_ready_at_s`), and each shot pushes it out by 0.25 s per projectile fired. Switching mode therefore
+## Both modes put out the same number of projectiles per second. The gate keeps one number, the time the next shot is
+## allowed (`_ready_at_s`), and each shot pushes it out by `interval_s` per projectile fired. Switching mode therefore
 ## carries the remaining cooldown over and can never raise the rate of fire, however often the player cycles.
+## `muzzle_count` and `interval_s` come from the ship's muzzles and its `WeaponSpec` (M2-T02); the defaults are the
+## Starfury's.
 ## The first shot after a quiet spell comes out on the very tick the trigger is pressed.
 ##
 ## With a `capacitor` (M2-T14) every projectile also has to be paid for: a shot that cannot be paid is simply not
@@ -17,14 +19,19 @@ extends RefCounted
 
 enum Mode { ALTERNATING, LINKED }
 
-const MUZZLE_COUNT: int = 2
+const DEFAULT_MUZZLE_COUNT: int = 2
+## The default interval, and the LINKED interval it gives with the default muzzle count.
 const ALTERNATING_INTERVAL_S: float = 0.25
-const LINKED_INTERVAL_S: float = 0.5
+const LINKED_INTERVAL_S: float = ALTERNATING_INTERVAL_S * DEFAULT_MUZZLE_COUNT
 const MODE_NAMES: Array[StringName] = [&"alternating", &"linked"]
 ## Slack for the comparison with the ready time: a clock summed from 1/60 s ticks reaches 0.25 s a few ulps short.
 const TIME_EPSILON_S: float = 1e-6
 
 var mode: Mode = Mode.ALTERNATING
+## Muzzles that can fire (at least 1).
+var muzzle_count: int = DEFAULT_MUZZLE_COUNT
+## s per projectile.
+var interval_s: float = ALTERNATING_INTERVAL_S
 ## Energy store the shots are paid from; null = unlimited. `PulseCannon` gives its gate one.
 var capacitor: WeaponCapacitor = null
 
@@ -32,6 +39,23 @@ var capacitor: WeaponCapacitor = null
 var _ready_at_s: float = -INF
 # Which muzzle the next ALTERNATING shot uses. LINKED volleys leave it alone.
 var _next_alternating: int = 0
+
+
+func _init(p_muzzle_count: int = DEFAULT_MUZZLE_COUNT, p_interval_s: float = ALTERNATING_INTERVAL_S) -> void:
+	configure(p_muzzle_count, p_interval_s)
+
+
+## Sets the muzzle count (at least 1) and the interval (above zero), keeping the cooldown and mode. A muzzle turn
+## that no longer exists restarts at 0.
+func configure(p_muzzle_count: int, p_interval_s: float) -> void:
+	muzzle_count = maxi(1, p_muzzle_count)
+	interval_s = p_interval_s if p_interval_s > 0.0 else ALTERNATING_INTERVAL_S
+	_next_alternating = _next_alternating % muzzle_count
+
+
+## The wait after a LINKED volley, s.
+func linked_interval_s() -> float:
+	return interval_s * muzzle_count
 
 
 ## Next mode in the list, wrapping (ALTERNATING -> LINKED -> ALTERNATING). Does not touch the cooldown.
@@ -48,17 +72,17 @@ func update(now_s: float, trigger_held: bool) -> Array[int]:
 		capacitor.advance(now_s)  # recharges while the trigger is up, and after a clock reset
 	if not trigger_held or now_s + TIME_EPSILON_S < _ready_at_s:
 		return fired
-	var projectiles: int = MUZZLE_COUNT if mode == Mode.LINKED else 1
+	var projectiles: int = muzzle_count if mode == Mode.LINKED else 1
 	if capacitor != null and not capacitor.spend(projectiles, now_s):
 		return fired
 	if mode == Mode.LINKED:
-		for muzzle: int in MUZZLE_COUNT:
+		for muzzle: int in muzzle_count:
 			fired.append(muzzle)
-		_ready_at_s = now_s + LINKED_INTERVAL_S
+		_ready_at_s = now_s + linked_interval_s()
 	else:
 		fired.append(_next_alternating)
-		_next_alternating = (_next_alternating + 1) % MUZZLE_COUNT
-		_ready_at_s = now_s + ALTERNATING_INTERVAL_S
+		_next_alternating = (_next_alternating + 1) % muzzle_count
+		_ready_at_s = now_s + interval_s
 	return fired
 
 
@@ -89,4 +113,4 @@ static func mode_from_name(mode_text: StringName) -> Mode:
 # the cannon sticking if the clock is ever reset to an earlier time (`SimClock.reset`, a respawn). `update` stores
 # the clamped value, so the wait ends one interval after the reset instead of sliding away with the clock.
 func _clamped_ready_at(now_s: float) -> float:
-	return minf(_ready_at_s, now_s + LINKED_INTERVAL_S)
+	return minf(_ready_at_s, now_s + linked_interval_s())

@@ -24,12 +24,17 @@ extends Node3D
 ## (the instance `transparency`, 1 - level). A plume below `hide_below` is hidden. With no output (null) every plume
 ## fades out.
 ##
+## `glow_color` (the ship's `engine_glow_color`) tints the plumes: the shared materials carry the Starfury's blue-white,
+## and any other colour gets its own copies of the two materials, shared by this ship's plumes (set it before `setup`).
+##
 ## The plumes are children of the ship and keep the default physics-interpolation mode, so they ride with the
 ## interpolated hull; only their scale and alpha change per frame, which is invisible next to a 16 ms tick.
 ## How it looks is (H).
 
 const PLUME_MATERIAL: Material = preload("res://assets/materials/thruster_plume.tres")
 const CORE_MATERIAL: Material = preload("res://assets/materials/thruster_glow.tres")
+## The colour baked into the shared plume and core materials.
+const DEFAULT_GLOW_COLOR: Color = Color(0.7, 0.9, 1.8, 1.0)
 const POD_PREFIX: String = "Plume_"
 const RCS_PREFIX: String = "PlumeRcs_"
 const CONE_NAME: String = "Cone"
@@ -57,6 +62,8 @@ const MIN_RADIUS_FRACTION: float = 0.6
 @export var main_radius_m: float = 0.4
 @export var retro_radius_m: float = 0.2
 @export var rcs_radius_m: float = 0.06
+## HDR colour of the plumes; differs from the default only for ships with another engine colour.
+@export var glow_color: Color = DEFAULT_GLOW_COLOR
 ## Time constant of the level smoothing, s.
 @export var smoothing_s: float = 0.08
 ## Plumes with a smoothed level under this are hidden.
@@ -67,6 +74,8 @@ static var _core_mesh: QuadMesh = null
 
 var _layout: ThrusterLayout = null
 var _output_source: Callable = Callable()
+var _tinted_plume_material: Material = null
+var _tinted_core_material: Material = null
 var _plumes: Array[Node3D] = []
 var _cones: Array[MeshInstance3D] = []
 var _cores: Array[MeshInstance3D] = []
@@ -85,6 +94,7 @@ func setup(layout: ThrusterLayout, output_source: Callable) -> void:
 	_clear()
 	_output_source = output_source
 	_layout = layout
+	_build_tint_materials()
 	if layout == null or not layout.valid:
 		push_warning("ThrusterVisuals.setup: no usable thruster layout (%s)" % ("none" if layout == null else layout.error))
 		_layout = null
@@ -207,12 +217,14 @@ func _add_plume(plume_name: String, at: Vector3, exhaust: Vector3, length: float
 	cone_node.name = CONE_NAME
 	cone_node.mesh = cone_mesh()
 	cone_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	cone_node.material_override = _tinted_plume_material
 	plume.add_child(cone_node)
 
 	var core_node := MeshInstance3D.new()
 	core_node.name = CORE_NAME
 	core_node.mesh = core_mesh()
 	core_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	core_node.material_override = _tinted_core_material
 	core_node.position = Vector3(0.0, CORE_OFFSET_M, 0.0)
 	core_node.rotation = Vector3(-PI / 2.0, 0.0, 0.0)  # the quad faces +Z; turn it to face along the plume's +Y
 	plume.add_child(core_node)
@@ -236,6 +248,23 @@ func _apply(index: int) -> void:
 	_cones[index].transparency = 1.0 - level
 	_cores[index].scale = Vector3.ONE * (radius * CORE_DIAMETER_PER_RADIUS)
 	_cores[index].transparency = 1.0 - level
+
+
+# Own copies of the two materials in `glow_color`, or none (null overrides) for the default colour.
+func _build_tint_materials() -> void:
+	_tinted_plume_material = null
+	_tinted_core_material = null
+	if glow_color.is_equal_approx(DEFAULT_GLOW_COLOR):
+		return
+	_tinted_plume_material = _tinted(PLUME_MATERIAL)
+	_tinted_core_material = _tinted(CORE_MATERIAL)
+
+
+func _tinted(base: Material) -> Material:
+	var copy := base.duplicate() as StandardMaterial3D
+	copy.albedo_color = glow_color
+	copy.emission = glow_color
+	return copy
 
 
 func _clear() -> void:
