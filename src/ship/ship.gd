@@ -22,8 +22,12 @@ extends RigidBody3D
 ## (first person only), `Thrusters` and `Guns` (attach points for M1-T13; `Guns` holds one Marker3D per muzzle),
 ## `Targeting` (`TargetingController`), `CockpitAnchor` (Marker3D at the hardpoints' `cockpit_camera`).
 ##
-## Rebase-safe: nothing here caches a World position between ticks. Console: provider `ship` and command
-## `assist [on|off]` (§6.4).
+## Reaction mass (M2-T14): every tick the flow the model reports is drawn from a `FuelTank` (sized by
+## `ShipSpec.fuel_capacity_kg`, never drawn down while `settings.fuel_unlimited` is on), and when the tank is empty the
+## model is told to cut all thrust.
+##
+## Rebase-safe: nothing here caches a World position between ticks. Console: provider `ship` and commands
+## `assist [on|off]` and `refuel [kg]` (§6.4).
 
 ## Assist was switched on or off (by `set_assist`, the console, or a `toggle_assist` edge).
 signal assist_toggled(on: bool)
@@ -50,6 +54,7 @@ var _hardpoints: Hardpoints = Hardpoints.new()
 var _layout: ThrusterLayout = ThrusterLayout.new()
 var _model: FlightModel = null
 var _output: FlightOutput = FlightOutput.new()
+var _fuel: FuelTank = FuelTank.new()
 var _flight: FlightCommand = FlightCommand.new()
 var _flight_fresh: bool = false
 var _combat: CombatCommand = CombatCommand.new()
@@ -121,8 +126,10 @@ func _physics_process(delta: float) -> void:
 		var b: Basis = global_basis
 		var to_body: Basis = b.transposed()
 		_flight.face_dir_b = to_body * targeting.selected_offset()  # what the brake faces (§5.5); zero = no target
+		var fuel: FuelTank = get_fuel_tank()
 		_output = _model.compute(_flight, to_body * linear_velocity, to_body * angular_velocity, to_body * env_accel,
-				_assist_on, delta)
+				_assist_on, delta, not fuel.is_empty())
+		fuel.draw(_output.mass_flow_kg_s, delta)
 		for nozzle: Dictionary in _output.nozzle_forces:
 			var force: Vector3 = nozzle["force"]
 			var at: Vector3 = nozzle["position"]
@@ -171,11 +178,13 @@ func set_assist(on: bool) -> void:
 	assist_toggled.emit(on)
 
 
-## Teleports to a World-local pose at rest (respawn): velocities zeroed, assist state cleared, no interpolation smear.
+## Teleports to a World-local pose at rest (respawn): velocities zeroed, assist state cleared, tank refilled, no
+## interpolation smear.
 func reset_to(xform: Transform3D) -> void:
 	transform = xform
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
+	_fuel.refuel()
 	if _model != null:
 		_model.reset_assist()
 		_output = _idle_output()
@@ -198,6 +207,12 @@ func body_velocity() -> Vector3:
 ## Angular velocity in body axes, rad/s: +X pitches the nose up, +Y yaws it left, +Z rolls left.
 func body_angular_velocity() -> Vector3:
 	return global_basis.transposed() * angular_velocity
+
+
+## The reaction-mass tank, with `unlimited` brought in line with `settings.fuel_unlimited` as of now. Never null.
+func get_fuel_tank() -> FuelTank:
+	_fuel.unlimited = bool(Settings.get_value(&"fuel_unlimited"))
+	return _fuel
 
 
 ## What the flight model produced on the last physics tick (all zero before the first one). Never null.
@@ -274,9 +289,11 @@ func _build() -> void:
 		_layout = ThrusterLayout.new()
 		_model = null
 		_output = FlightOutput.new()
+		_fuel = FuelTank.new()
 		return
 	mass = spec.mass
 	inertia = spec.inertia
+	_fuel = FuelTank.new(spec.fuel_capacity_kg)
 	_hardpoints = Hardpoints.load_file(spec.hardpoints_path())
 	_layout = _hardpoints.thruster_layout()
 	_model = null
@@ -381,6 +398,8 @@ func _environment_accel() -> Vector3:
 func _register_console() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"assist", "Toggle or set flight assist",
 			[ConsoleArg.bool_optional(&"state")]), _cmd_assist, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"refuel", "Refill the reaction-mass tank, or add kg",
+			[ConsoleArg.float_optional(&"kg", null, 0.0)]), _cmd_refuel, self)
 	DebugConsole.registry.register_provider(&"ship", ConsoleVars.new({
 		&"position": {"get": func() -> Vector3: return position, "unit": "m", "doc": "World-local position"},
 		&"universe_position": {"get": _universe_position, "unit": "m", "doc": "Universe position (64-bit)"},
@@ -401,12 +420,36 @@ func _register_console() -> void:
 		&"retro_levels": {"get": func() -> Dictionary: return _levels_by_pod(_output.retro_levels),
 				"doc": "Retro nozzle level per pod after trim, 0..1"},
 		&"mass_flow": {"get": func() -> float: return _output.mass_flow_kg_s, "unit": "kg/s",
-				"doc": "Reaction mass flow (not consumed in M1)"},
+				"doc": "Reaction mass flow (drawn from the tank unless settings.fuel_unlimited)"},
+		&"fuel_kg": {"get": func() -> float: return get_fuel_tank().mass_kg(), "set": _set_fuel_kg,
+				"type": TYPE_FLOAT, "unit": "kg", "min": 0.0,
+				"doc": "Reaction mass in the tank (reads full while settings.fuel_unlimited)"},
+		&"fuel_fraction": {"get": func() -> float: return get_fuel_tank().fraction(),
+				"doc": "Tank level 0..1; 1 while settings.fuel_unlimited. The HUD's fuel gauge"},
 	}), self)
 
 
 func _cmd_assist(args: Dictionary) -> ConsoleResult:
 	return DebugConsole.registry.toggle("ship.assist_on", args[&"state"])
+
+
+func _cmd_refuel(args: Dictionary) -> String:
+	var amount: Variant = args.get(&"kg")
+	var tank: FuelTank = get_fuel_tank()
+	var added: float = tank.refuel(INF if amount == null else float(amount))
+	var line: String = "added %.0f kg, tank %.0f / %.0f kg" % [added, tank.mass_kg(), tank.capacity_kg]
+	if tank.unlimited:
+		line += " (settings.fuel_unlimited is on: never drawn down)"
+	return line
+
+
+# Writable `ship.fuel_kg`: "" on success, else the reason.
+func _set_fuel_kg(value: float) -> String:
+	var tank: FuelTank = get_fuel_tank()
+	if value > tank.capacity_kg:
+		return "ship.fuel_kg must be in 0..%s, got %s" % [tank.capacity_kg, value]
+	tank.set_kg(value)
+	return ""
 
 
 func _universe_position() -> Variant:

@@ -70,6 +70,8 @@ fps                        FPS counter           god                   no damage
 set settings.invert_y on   change a setting      save                  persist settings to disk
 timescale 0.25             slow motion           respawn / pause       same as Back / Start
 camera cockpit             set camera            set weapons.mode linked
+set settings.fuel_unlimited off   finite fuel    set ship.fuel_kg 0 / refuel   empty / refill the tank
+set weapons.charge 0       empty the capacitor   get ship.fuel_fraction / weapons.charge   the HUD gauges
 fallback on                force mesh fallback   set targeting.selected "NAV BRAVO"
 ```
 

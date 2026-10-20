@@ -16,8 +16,12 @@ extends Node3D
 ## `weapon_next` is a one-tick edge: it is remembered when `set_combat_command` receives it and used once, so a tick
 ## that runs without a fresh command never cycles the mode twice.
 ##
-## Console (architecture §6.4): provider `weapons` with `mode` (writable: `alternating` / `linked`) and
-## `cooldown_s`, so `set weapons.mode linked` switches modes.
+## The gate is paid from a `WeaponCapacitor` (M2-T14, defaults in that class): an empty capacitor stops the fire
+## until it has recharged enough for the next shot. Its numbers move into the `WeaponSpec` with M2-T02.
+##
+## Console (architecture §6.4): provider `weapons` with `mode` (writable: `alternating` / `linked`), `cooldown_s` and
+## `charge` (writable, 0..1: the capacitor), so `set weapons.mode linked` switches modes and `set weapons.charge 0`
+## empties the capacitor.
 
 ## A shot left a muzzle: the muzzle index and the new projectile.
 signal projectile_fired(muzzle_index: int, projectile: Projectile)
@@ -38,6 +42,10 @@ var _command: CombatCommand = null
 var _weapon_next_pending: bool = false
 
 
+func _init() -> void:
+	gate.capacitor = WeaponCapacitor.new()
+
+
 func _ready() -> void:
 	DebugConsole.registry.register_provider(&"weapons", ConsoleVars.new({
 		&"mode": {"get": func() -> StringName: return PulseCannonGate.mode_name(gate.mode),
@@ -46,6 +54,8 @@ func _ready() -> void:
 				"doc": "Pulse cannon fire mode: alternating (4 Hz, one muzzle at a time) or linked (2 Hz, both)"},
 		&"cooldown_s": {"get": func() -> float: return gate.cooldown_remaining(SimClock.now()), "unit": "s",
 				"doc": "Time until the cannon can fire again"},
+		&"charge": {"get": charge_fraction, "set": set_charge_fraction, "type": TYPE_FLOAT, "min": 0.0, "max": 1.0,
+				"doc": "Capacitor charge, 0..1: each projectile costs some, it recharges with time, empty = no fire"},
 	}), self)
 
 
@@ -76,6 +86,19 @@ func setup(body: RigidBody3D, muzzles: Array[Node3D], projectiles_parent: Node3D
 		var flash: MuzzleFlash = MuzzleFlash.create()
 		muzzle.add_child(flash)
 		_flashes.append(flash)
+
+
+## Capacitor charge now, 0..1 (1 when the gate has no capacitor). The HUD's weapon gauge reads this.
+func charge_fraction() -> float:
+	if gate.capacitor == null:
+		return 1.0
+	return gate.capacitor.fraction_at(SimClock.now())
+
+
+## Sets the capacitor charge, 0..1 (console and tests); ignored without a capacitor.
+func set_charge_fraction(fraction: float) -> void:
+	if gate.capacitor != null:
+		gate.capacitor.set_fraction(fraction, SimClock.now())
 
 
 ## This tick's combat command; call it once per physics tick, before the cannon's own physics step. The cannon keeps

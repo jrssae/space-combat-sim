@@ -15,7 +15,7 @@ const ENVIRONMENT_PATH: String = "res://src/environment/space_environment.tscn"
 const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tests.sh (it imports first)"
 const TOL: float = 1e-4
 const SHIP_KEYS: Array[StringName] = [&"position", &"universe_position", &"velocity", &"speed", &"body_velocity",
-		&"angular_rate_dps", &"assist_on", &"trim", &"pod_yaw", &"main_levels", &"retro_levels", &"mass_flow"]
+		&"angular_rate_dps", &"assist_on", &"trim", &"pod_yaw", &"main_levels", &"retro_levels", &"mass_flow", &"fuel_kg", &"fuel_fraction"]
 
 var world: WorldFrame
 var spec: ShipSpec
@@ -378,7 +378,8 @@ func test_console_ship_provider_and_assist_command() -> void:
 	assert_not_null(provider, "Ship registers provider 'ship'")
 	assert_eq(provider.keys(), SHIP_KEYS, "the §6.4 keys")
 	for key: StringName in SHIP_KEYS:
-		assert_eq(provider.is_writable(key), key == &"assist_on", "%s writable only if assist_on" % key)
+		# `fuel_kg` (M2-T14) is writable so a tank can be emptied from the console; see test_reaction_mass.gd.
+		assert_eq(provider.is_writable(key), key == &"assist_on" or key == &"fuel_kg", "%s writable only if assist_on or fuel_kg" % key)
 	assert_string_contains(registry.help(&"assist")[0], "assist [on|off]")
 
 	ship.assist_on = true

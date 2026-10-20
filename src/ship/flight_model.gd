@@ -58,11 +58,15 @@ func retro_total() -> float:
 
 ## One tick of §5.2. `v_b`, `w_b` are the body-frame linear and angular velocity; `env_accel_b` is the
 ## environment's acceleration in the body frame (gravity hook, zero in M1), used only as brake feed-forward;
-## `dt` drives the pod-yaw smoothing when assist is on.
-func compute(cmd: FlightCommand, v_b: Vector3, w_b: Vector3, env_accel_b: Vector3, assist_on: bool, dt: float) -> FlightOutput:
+## `dt` drives the pod-yaw smoothing when assist is on. `has_propellant` is false when the `FuelTank` is empty: no
+## pod nozzle and no RCS translation can fire, so the output carries zero force (`propellant_empty` is set). Attitude
+## control (RCS torque) stays, because `mass_flow` never counted it, so an empty ship can still turn but not thrust.
+func compute(cmd: FlightCommand, v_b: Vector3, w_b: Vector3, env_accel_b: Vector3, assist_on: bool, dt: float,
+		has_propellant: bool = true) -> FlightOutput:
 	var out := FlightOutput.new()
 	out.assist_on = assist_on
 	out.braking = cmd.brake
+	out.propellant_empty = not has_propellant
 
 	# 1. Pilot demand per nozzle group and RCS translation.
 	var levels: PackedFloat64Array = [cmd.main_right, cmd.main_left, cmd.retro_right, cmd.retro_left]
@@ -80,6 +84,12 @@ func compute(cmd: FlightCommand, v_b: Vector3, w_b: Vector3, env_accel_b: Vector
 		levels[ThrusterLayout.Group.R_RETRO] = retro_level
 		levels[ThrusterLayout.Group.L_RETRO] = retro_level
 		rcs_force = (spec.mass * Vector3(a_des.x, a_des.y, 0.0)).clamp(-spec.rcs_force_max, spec.rcs_force_max)
+
+	# 2b. No reaction mass: nothing that burns it can fire. Cutting the demand here, before the pod torque, means the
+	# rotation logic below sees the pods dead (no feed-forward, nothing to trim) and RCS torque supplies all of it.
+	if not has_propellant:
+		levels.fill(0.0)
+		rcs_force = Vector3.ZERO
 
 	# 3. Pod torque about the centre of mass at the demanded levels: physics, not a yaw term.
 	var group_torque_y: PackedFloat64Array = [0.0, 0.0, 0.0, 0.0]

@@ -213,7 +213,8 @@ Owned by Jolt via `RigidBody3D`: position (m), orientation (`Basis`), linear vel
 | `pod_yaw_deadzone` | 0.10 | assist on: trigger differences below 10 % fly straight |
 | `pod_yaw_smoothing_s` | 0.15 s | assist on: first-order smoothing of the pod-yaw command |
 | `brake_gain_k` | 2.0 s⁻¹ | translational brake P gain |
-| `exhaust_velocity` | 30 000 m/s | only for the reaction-mass seam: `mass_flow = Σ thrust / v_e`, unlimited in M1 |
+| `exhaust_velocity` | 30 000 m/s | the reaction-mass flow: `mass_flow = Σ thrust / v_e` |
+| `fuel_capacity_kg` | 28 800 kg | M2-T14 tank (`FuelTank`): 10 minutes of the four mains at full (48 kg/s). Only drawn down when `settings.fuel_unlimited` is off |
 
 Pod geometry comes from hardpoints: pod centres at (±3.18, ±3.18) m (4.5 m radius at 45°), so the yaw lever arm
 is ≈ 3.18 m. Derived numbers (tests always compute these from spec + hardpoints, never hard-code them):
@@ -297,8 +298,15 @@ trim     = 1 - lam                        # 0 when nothing was trimmed
 pod_yaw_cmd = pod_yaw_gain * d_s          # for the overlay (POD YAW); 0 while braking or with assist off
 rate_target_b = w_target                  # 0 with assist off unless braking
 facing, face_error_rad                    # braking with a face_dir_b; the angle off the nose
-mass_flow = (Σ |F_i| + |rcs_force|) / exhaust_velocity     # reaction-mass seam, not consumed in M1
+mass_flow = (Σ |F_i| + |rcs_force|) / exhaust_velocity     # the Ship draws it from the FuelTank (M2-T14)
 ```
+
+Reaction mass (M2-T14). `FuelTank` (pure) starts full at `fuel_capacity_kg`; the Ship calls `draw(mass_flow, dt)`
+after each `compute`. `settings.fuel_unlimited` (default true, the M1 decision) makes the tank read full and never
+draws it down. When a finite tank is empty the Ship passes `has_propellant = false` to `compute`: every pod nozzle and
+the RCS translation force are cut to zero (`FlightOutput.propellant_empty`), whatever the mode or the brake asks.
+RCS torque is not reaction-mass limited (it was never in `mass_flow`), so an empty ship can still turn but not thrust.
+The ship's `mass` stays constant as the tank empties; `reset_to` (respawn) refuels.
 
 The Ship also applies `apply_central_force(mass * World.environment_accel(position))` every tick (zero in M1).
 Gravity is an environmental force, not a flight-model concern; `env_accel_b` enters the model only as
@@ -574,6 +582,12 @@ set it directly.
 - **Pulse cannon modes** (`PulseCannonGate`, pure): `ALTERNATING` (4 Hz, muzzles alternate) and `LINKED`
   (2 Hz, both muzzles together). `weapon_next` cycles and wraps; the cooldown carries over, so switching cannot
   raise the rate of fire.
+- **Capacitor** (`WeaponCapacitor`, pure, M2-T14): each projectile costs `cost_per_shot` (a linked volley is two),
+  the store recharges at `recharge_per_s` up to `capacity`. Defaults 100 / 14 / 25 per s: empty to full in 4 s;
+  a full store pays for 12 alternating shots (3 s) or 5 linked volleys at the full rates, after which sustained fire is
+  held to 1.8 projectiles per second. The gate asks the capacitor before it commits a shot; a refused shot leaves the
+  cooldown and the muzzle turn untouched. `PulseCannonGate.capacitor` is null (unlimited, as in M1) unless set;
+  `PulseCannon` sets one. M2-T02 moves the three numbers into `WeaponSpec`.
 
 ### 6.4 Debug console (` key)
 
@@ -625,10 +639,10 @@ validates before calling. Values are formatted consistently (vectors to 2 decima
 | `debug` | DebugConsole (T07) | `invulnerable` (w) |
 | `time` | SimClock (T07) | `sim_time_s`, `warp`, `timescale` |
 | `input` | GodotInputSource (T07) | `pads` (name, GUID, trigger rest, raw axes), `keyboard_masked`, last command fields |
-| `ship` | Ship (T10) | `position`, `universe_position`, `velocity`, `speed`, `body_velocity`, `angular_rate_dps`, `assist_on` (w), `trim`, `pod_yaw`, `main_levels`, `retro_levels`, `mass_flow` |
+| `ship` | Ship (T10) | `position`, `universe_position`, `velocity`, `speed`, `body_velocity`, `angular_rate_dps`, `assist_on` (w), `trim`, `pod_yaw`, `main_levels`, `retro_levels`, `mass_flow`, `fuel_kg` (w; M2-T14), `fuel_fraction` (0..1; 1 while `fuel_unlimited`) |
 | `world` | WorldFrame (T09) | `origin`, `origin_velocity`, `auto_rebase_distance_m` |
 | `camera` | CameraRig (T12) | `mode` (w), `fov` |
-| `weapons` | PulseCannon (T13) | `mode` (w), `cooldown_s` |
+| `weapons` | PulseCannon (T13) | `mode` (w), `cooldown_s`, `charge` (w, 0..1 capacitor; M2-T14) |
 | `targeting` | TargetingController (T14) | `selected` (w: display name or `none`), `range_m`, `closing_mps`, `candidates` |
 | `render` | SplatStatus (T10) | `splat_backend` (`compute`, `raster`, `headless` or `none`), `fallback` (w), `fps`, `gpu` |
 
@@ -652,6 +666,7 @@ M1 commands:
 | `wait <frames>` | console | delay the rest of the queue by N physics frames (scripts, headless runs) |
 | `quit [code]` | console | quit with an exit code |
 | `assist [on\|off]` | Ship | flight assist |
+| `refuel [kg]` | Ship | refill the reaction-mass tank, or add `kg` (M2-T14) |
 | `camera [cockpit\|chase]` | CameraRig | set, or toggle with no argument |
 | `fallback [on\|off]` | SplatStatus | fallback meshes and panorama sky |
 | `respawn` | Main | ship reset (same as Back) |
@@ -674,6 +689,7 @@ unsaved, emits `changed(key, value)`), `reset(key)`, `save()`, `revert()`. Nothi
 | `yaw_ramp_s` (was `roll_ramp_s`) | float | 0.25 | 0.05-1.0 |
 | `target_hold_s` | float | 0.35 | 0.15-1.0 |
 | `assist_default` | bool | true | |
+| `fuel_unlimited` | bool | true | M2-T14: reaction mass is never drawn down and the fuel gauge stays full; off = finite tank |
 | `camera_default` | enum | `chase` | `chase`, `cockpit` |
 | `camera_chase_smoothing_s` | float | 0.0 | 0.0-0.5 (0 = rigid chase camera) |
 | `show_overlay` | bool | true | |

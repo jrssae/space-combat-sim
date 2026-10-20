@@ -19,6 +19,8 @@ const ENTRIES: Dictionary = {
 		"doc": "Hold D-pad Up this long to target the nearest to the nose; a shorter tap selects the next target"},
 	&"assist_default": {"type": TYPE_BOOL, "default": true,
 		"doc": "Flight assist state at spawn"},
+	&"fuel_unlimited": {"type": TYPE_BOOL, "default": true,
+		"doc": "Reaction mass is never drawn down (the fuel gauge stays full); off = a finite tank that can run dry"},
 	&"camera_default": {"type": TYPE_ENUM, "default": &"chase", "choices": [&"chase", &"cockpit"],
 		"doc": "Camera mode at spawn"},
 	&"camera_chase_smoothing_s": {"type": TYPE_FLOAT, "default": 0.0, "min": 0.0, "max": 0.5,

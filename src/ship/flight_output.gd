@@ -37,8 +37,11 @@ var retro_levels: PackedFloat64Array = []
 var rcs_force_level: Vector3 = Vector3.ZERO
 ## RCS torque level per axis, -1..1 (`rcs_torque_b / rcs_torque_max`; 0 where the maximum is 0).
 var rcs_torque_level: Vector3 = Vector3.ZERO
-## Reaction-mass seam: `(Σ |F_i| + |rcs_force_b|) / exhaust_velocity`, kg/s. Not consumed in M1.
+## Reaction-mass flow: `(Σ |F_i| + |rcs_force_b|) / exhaust_velocity`, kg/s. The Ship draws it from the `FuelTank`.
 var mass_flow_kg_s: float = 0.0
+## True when `compute` was told the tank is empty: every pod nozzle and RCS translation force was cut to zero this
+## tick (RCS torque is not reaction-mass limited, see `FlightModel.compute`).
+var propellant_empty: bool = false
 ## Echo of the mode the output was computed in, for the overlay.
 var assist_on: bool = false
 ## True when the brake took over this tick: translation and rotation (all stop, or facing `face_dir_b`).
