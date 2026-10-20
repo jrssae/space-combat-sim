@@ -395,7 +395,16 @@ hardpoints, never hard-coded.
   `_physics_process` (`position += velocity * dt`), `velocity = ship.linear_velocity + ship.forward() * 400`,
   lifetime 4 s, emissive capsule ~0.1×1.5 m, joins `world_shiftable`. Muzzle flash: a quad scaled up for 50 ms.
   No hit detection.
-- Console: `PulseCannon` registers provider `weapons` (`mode` writable: `alternating`, `linked`).
+- Wiring as built (T10 was built in parallel, so neither node references the Ship; T15 wires them):
+  `ThrusterVisuals.setup(layout: ThrusterLayout, output_source: Callable)` (node under the ship, so node-local is
+  ship-local; `output_source.call()` returns the latest `FlightOutput` or null, e.g. `ship.get_flight_output`) and
+  `PulseCannon.setup(body: RigidBody3D, muzzles: Array[Node3D], projectiles_parent: Node3D)` plus
+  `set_combat_command(cmd: CombatCommand)` once per physics tick (`weapon_next` is taken once per command; muzzle
+  indices follow the hardpoints' `muzzles`: left, right). RCS glows read the tags from `rcs_force_level` and
+  `rcs_torque_level` (body-frame signs, mapping in `ThrusterGlowLevels`). Extra files: `src/ship/thruster_glow_levels.gd`
+  (pure mapping and smoothing), `src/weapons/muzzle_flash.gd`, `tests/unit/test_thruster_glow_levels.gd`,
+  `tests/integration/test_thruster_visuals.gd`.
+- Console: `PulseCannon` registers provider `weapons` (`mode` writable: `alternating`, `linked`; read-only `cooldown_s`).
 - Done when: AC7 passes; glow nodes exist for every pod nozzle and RCS hardpoint.
 - Verify: GUT.
 

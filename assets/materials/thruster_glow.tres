@@ -1,0 +1,25 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[sub_resource type="Gradient" id="Gradient_glow"]
+offsets = PackedFloat32Array(0, 0.3, 1)
+colors = PackedColorArray(1, 1, 1, 1, 0.55, 0.55, 0.55, 0.55, 0, 0, 0, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_glow"]
+gradient = SubResource("Gradient_glow")
+width = 128
+height = 128
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[resource]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+albedo_color = Color(0.7, 0.9, 1.8, 1)
+albedo_texture = SubResource("GradientTexture2D_glow")
+emission_enabled = true
+emission = Color(0.7, 0.9, 1.8, 1)
+disable_receive_shadows = true
+billboard_mode = 1
+billboard_keep_scale = true
