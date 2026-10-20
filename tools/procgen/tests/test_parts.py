@@ -303,6 +303,274 @@ class StructureAndWeaponTests(unittest.TestCase):
         self.assertTrue(np.all(d[~bore] > -1e-9))
 
 
+def _wedge_spec(**extra) -> hull.WedgeFuselageSpec:
+    """A small Starfury-like nose: trapezoid front pane, side and roof panes, eye inside."""
+    stations = (
+        hull.WedgeStation(
+            0.0, 0.9, 0.65, 0.75, 0.78, 0.5, 0.0, rake=math.radians(15.0)
+        ),
+        hull.WedgeStation(1.4, 1.1, 0.85, 1.3, 0.15, 0.6, -0.8),
+        hull.WedgeStation(4.0, 1.2, 1.0, 1.5, 0.1, 0.7, -1.1),
+    )
+    args = {
+        "stations": stations,
+        "eye": (0.0, 0.35, 1.0),
+        "glass_facets": ("lower", "upper", "top"),
+        "mass_kg": 10.0,
+    }
+    return hull.WedgeFuselageSpec(**{**args, **extra})
+
+
+class WedgeFuselageTests(unittest.TestCase):
+    def test_station_ring_is_a_chamfered_counter_clockwise_shield(self) -> None:
+        st = hull.WedgeStation(1.0, 1.0, 0.6, 0.9, 0.2, 0.4, -1.0)
+        ring = st.ring_2d(0.05)
+        self.assertEqual(ring.shape, (len(hull.WEDGE_FACETS), 2))
+        self.assertGreater(g.polygon_area_2d(ring), 0.0)
+        self.assertTrue(
+            0.85 < float(ring[:, 0].max()) < 0.9
+        )  # the shoulder corner is cut by the chamfer
+        self.assertAlmostEqual(float(ring[:, 1].min()), -1.0)
+        self.assertAlmostEqual(float(ring[:, 1].max()), 1.0)
+        raked = hull.WedgeStation(
+            0.0, 1.0, 0.6, 0.9, 0.2, 0.4, -1.0, rake=math.radians(45.0)
+        ).lift(ring)
+        np.testing.assert_allclose(
+            raked[:, 2], ring[:, 1] + 1.0, atol=1e-12
+        )  # leans back 1 m per metre up
+        for bad in (
+            (1.0, 1.0, 0.6, 0.9, 1.2, 0.4, -1.0),
+            (1.0, 1.0, 0.6, 0.5, 0.2, 0.4, -1.0),
+        ):
+            with self.assertRaises(ValueError):
+                hull.WedgeStation(*bad)
+        with self.assertRaises(ValueError):
+            st.ring_2d(0.5)
+
+    def test_window_materials_frames_lining_and_anchors(self) -> None:
+        spec = _wedge_spec()
+        self.assertEqual(spec.glass, {"lower", "upper", "top"})
+        self.assertEqual(
+            spec.frames, {"keel_chamfer", "shoulder_chamfer", "top_chamfer"}
+        )
+        self.assertEqual(spec.lined, {"keel"})
+        part = hull.wedge_fuselage(spec, S)
+        mesh = part.mesh
+        names = {m.name for m in mesh.materials}
+        self.assertEqual(
+            names,
+            {
+                "ef_hull",
+                "ef_hull_dark",
+                "ef_canopy_glass",
+                "ef_canopy_frame",
+                "ef_interior",
+            },
+        )
+        c = mesh.face_centroids()
+        glass = mesh.face_material == mesh.material_index("ef_canopy_glass")
+        self.assertTrue(np.all(c[glass, 2] < 1.4))  # panes only in the window segment
+        self.assertGreater(float(mesh.face_areas()[glass].sum()), 2.0)
+        lo, hi = mesh.bounds()
+        np.testing.assert_allclose([lo[2], hi[2]], [0.0, 4.0], atol=1e-9)
+        np.testing.assert_allclose(part.anchor("eye").position, [0.0, 0.35, 1.0])
+        np.testing.assert_allclose(part.anchor("eye").direction, [0.0, 0.0, -1.0])
+        self.assertEqual(part.collision[0].kind, "box")
+        self.assertEqual(part.mass_kg, 10.0)
+        # Hull facets face outwards (from the axis); the lining faces inwards.
+        axis = np.column_stack([np.zeros(len(c)), np.full(len(c), 0.1), c[:, 2]])
+        side = (np.abs(mesh.face_normals()[:, 2]) < 0.9) & (
+            mesh.face_areas() > 1e-9
+        )  # collinear fan slivers have no area
+        d = np.einsum("ij,ij->i", mesh.face_normals(), c - axis)
+        lining = mesh.face_material == mesh.material_index("ef_interior")
+        self.assertTrue(np.all(d[side & ~lining] > 0.0))
+        self.assertTrue(np.all(d[side & lining] < 0.0))
+        # The faces the pilot sees up close: frames, chin and lining of the window, never glass.
+        near = hull.wedge_cockpit_faces(spec, mesh, S)
+        self.assertFalse(np.any(near & glass))
+        self.assertTrue(np.all(c[near, 2] < 1.4))
+        self.assertTrue(
+            np.any(
+                near & (mesh.face_material == mesh.material_index("ef_canopy_frame"))
+            )
+        )
+
+    def test_contains_and_validation(self) -> None:
+        spec = _wedge_spec()
+        inside = spec.contains(
+            np.array(
+                [
+                    [0.0, 0.0, 2.0],
+                    [1.0, 0.0, 2.0],
+                    [0.0, 0.0, -0.1],
+                    [0.0, 0.0, 3.99],
+                    [2.0, 0.0, 2.0],
+                ]
+            ),
+            0.02,
+        )
+        self.assertEqual(inside.tolist(), [True, True, False, False, False])
+        self.assertFalse(
+            spec.contains(np.array([[0.0, 0.85, 0.05]]))[0]
+        )  # ahead of the raked front pane
+        with self.assertRaises(ValueError):
+            _wedge_spec(eye=(0.0, 0.35, 2.0))  # behind the window segment
+        with self.assertRaises(ValueError):
+            _wedge_spec(eye=(0.0, 3.0, 1.0))  # outside the hull
+        with self.assertRaises(ValueError):
+            _wedge_spec(glass_facets=("keel_chamfer",))
+        with self.assertRaises(ValueError):
+            _wedge_spec(frame_width=0.3)  # the front pane's inset would fold over
+
+    def test_cockpit_interior_frames_the_view_and_leaves_the_centre_clear(self) -> None:
+        spec = _wedge_spec()
+        mesh = hull.wedge_cockpit_interior(spec, S, bar_width=0.09, sill_depth=0.4)
+        self.assertEqual({m.name for m in mesh.materials}, {"ef_interior"})
+        eye = np.array(spec.eye)
+        v = mesh.vertices - eye
+        ahead = -v[:, 2]
+        off_axis = np.degrees(np.arctan2(np.hypot(v[:, 0], v[:, 1]), ahead))
+        self.assertGreater(float(off_axis[ahead > 0.0].min()), 15.0)
+        self.assertLess(float(mesh.vertices[:, 2].min()), 0.1)  # reaches the front pane
+        self.assertLess(
+            float(mesh.vertices[:, 2].max()), 1.4 + 0.1
+        )  # nothing aft of the window
+        with self.assertRaises(ValueError):
+            hull.wedge_cockpit_interior(_wedge_spec(window_end=0), S)
+
+
+class StarfuryPartTests(unittest.TestCase):
+    def test_truss_strut_plate_bands_webs_and_box(self) -> None:
+        spec = structure.TrussStrutSpec(
+            length=4.0,
+            chord_root=2.0,
+            chord_tip=1.0,
+            sweep=1.5,
+            bands=((1.0, 1.5, "hazard"),),
+        )
+        part = structure.truss_strut(spec, S)
+        lo, hi = part.mesh.bounds()
+        np.testing.assert_allclose(
+            [lo[0], hi[0]], [0.0, 4.0], atol=0.5 * spec.web_thickness
+        )  # swept web ends
+        self.assertAlmostEqual(float(hi[1]), 0.5 * spec.thickness)
+        self.assertAlmostEqual(
+            float(lo[1]), -(0.5 * spec.thickness + spec.web_depth_root), places=6
+        )
+        self.assertAlmostEqual(float(lo[2]), 0.0)
+        self.assertAlmostEqual(float(hi[2]), spec.trailing_edge(4.0), places=6)
+        hazard = part.mesh.face_material == part.mesh.material_index("ef_hazard")
+        x = part.mesh.face_centroids()[hazard, 0]
+        self.assertTrue(np.all((x > 1.0) & (x < 1.5)))
+        # The webs are ladders: less area than solid webs by the cut-outs.
+        web = part.mesh.face_centroids()[:, 1] < -0.5 * spec.thickness - 0.01
+        self.assertTrue(web.any())
+        np.testing.assert_allclose(part.anchor("tip_le").position, [4.0, 0.0, 1.5])
+        box = part.collision[0]
+        self.assertEqual(box.kind, "box")
+        self.assertAlmostEqual(float(np.linalg.det(box.basis)), 1.0)
+        local = (part.mesh.vertices - box.center) @ box.basis
+        self.assertTrue(
+            np.all(np.abs(local) <= 0.5 * box.size + 1e-9)
+        )  # tight and complete
+        with self.assertRaises(ValueError):
+            structure.truss_strut(structure.TrussStrutSpec(cutouts=40), S)
+        with self.assertRaises(ValueError):
+            structure.TrussStrutSpec(web_depth_root=0.1)  # shallower than its two rails
+
+    def test_ring_pod_faces_bells_bosses_and_capsule(self) -> None:
+        spec = propulsion.RingPodSpec(bosses=(0.0, 90.0))
+        pod = propulsion.ring_pod(spec, S)
+        main, retro = pod.anchor("main"), pod.anchor("retro")
+        np.testing.assert_allclose(
+            main.position, [0.0, 0.0, spec.rear_z + spec.main_protrusion]
+        )
+        np.testing.assert_allclose(main.direction, [0.0, 0.0, 1.0])
+        np.testing.assert_allclose(
+            retro.position, [0.0, 0.0, spec.front_z - spec.retro_protrusion], atol=1e-12
+        )
+        np.testing.assert_allclose(retro.direction, [0.0, 0.0, -1.0], atol=1e-12)
+        lo, hi = pod.mesh.bounds()
+        self.assertAlmostEqual(
+            float(hi[2]), main.position[2]
+        )  # the main bell's exit is the rearmost point
+        self.assertAlmostEqual(float(lo[2]), retro.position[2])
+        np.testing.assert_allclose(
+            pod.anchor("boss_1").direction, [0.0, 1.0, 0.0], atol=1e-12
+        )
+        self.assertGreater(float(hi[1]), spec.radius + 0.5 * spec.boss_height)
+        names = {m.name for m in pod.mesh.materials}
+        self.assertTrue(
+            {
+                "ef_hull",
+                "ef_hull_dark",
+                "ef_hull_panel",
+                "ef_nozzle",
+                "ef_nozzle_throat",
+            }
+            <= names
+        )
+        cap = pod.collision[0]
+        self.assertEqual((cap.kind, cap.radius), ("capsule", spec.radius))
+        self.assertGreater(cap.height, spec.length)
+        self.assertEqual(
+            spec.contains(
+                np.array([[0.0, 0.0, 0.0], [0.0, 0.9, 0.0], [0.0, 0.0, 2.6]])
+            ).tolist(),
+            [True, False, False],
+        )
+        with self.assertRaises(ValueError):
+            propulsion.RingPodSpec(ring_inner_radius=0.7)
+
+    def test_claw_vanes_blocks_and_rcs_cones(self) -> None:
+        spec = propulsion.ClawSpec(
+            vanes=(propulsion.VaneSpec(0.0, 0.8, 1.0, ((1.0, 45.0), (1.0, 0.0))),),
+            blocks=(
+                propulsion.RcsBlockSpec(0.0, 0.9, 1.2, (0.4, 0.4, 0.6), ("px", "ny")),
+            ),
+        )
+        claw = propulsion.claw_cluster(spec, S)
+        tip = claw.anchor("vane_0")
+        s = math.sqrt(0.5)
+        np.testing.assert_allclose(
+            tip.position, [0.8 + s, 0.0, 1.0 + s + 1.0], atol=1e-12
+        )
+        np.testing.assert_allclose(tip.direction, [0.0, 0.0, 1.0], atol=1e-12)
+        px, ny = claw.anchor("rcs_px"), claw.anchor("rcs_ny")
+        np.testing.assert_allclose(px.direction, [1.0, 0.0, 0.0], atol=1e-12)
+        np.testing.assert_allclose(ny.direction, [0.0, -1.0, 0.0], atol=1e-12)
+        self.assertAlmostEqual(
+            float(px.position[0]), 0.9 + 0.2 - 0.01 + spec.rcs.length
+        )
+        with self.assertRaises(KeyError):
+            claw.anchor("rcs_py")
+        box = claw.collision[0]
+        self.assertAlmostEqual(float(np.linalg.det(box.basis)), 1.0)
+        np.testing.assert_allclose(
+            box.center, 0.5 * (spec.vanes[0].path()[0] + tip.position), atol=1e-12
+        )
+
+    def test_gun_mount_points_both_barrels_forward(self) -> None:
+        spec = weapons.GunMountSpec(barrel_mount_z=-0.6)
+        part = weapons.gun_mount(spec, S)
+        left, right = part.anchor("muzzle_left"), part.anchor("muzzle_right")
+        np.testing.assert_allclose(
+            left.position, [-spec.barrel_x, spec.barrel_y, -0.6 - spec.barrel.length]
+        )
+        np.testing.assert_allclose(
+            right.position, [spec.barrel_x, spec.barrel_y, -0.6 - spec.barrel.length]
+        )
+        np.testing.assert_allclose(left.direction, [0.0, 0.0, -1.0])
+        self.assertLess(
+            float(right.position[2]), -0.5 * spec.length
+        )  # out of the housing's front
+        self.assertEqual(part.collision[0].kind, "box")
+        self.assertIn("ef_barrel", {m.name for m in part.mesh.materials})
+        with self.assertRaises(ValueError):
+            weapons.GunMountSpec(barrel_mount_z=1.0)
+
+
 class StyleTests(unittest.TestCase):
     def test_earthforce_has_every_role_and_a_warm_stripe(self) -> None:
         for role in REQUIRED_ROLES:

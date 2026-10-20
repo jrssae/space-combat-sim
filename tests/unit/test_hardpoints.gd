@@ -42,26 +42,26 @@ func _collision_variant(index: int, edit: Dictionary, erase: String = "") -> Har
 func test_fixture_loads() -> void:
 	assert_true(hp.valid, hp.error)
 	assert_eq(hp.error, "")
-	assert_almost_eq(hp.center_of_mass, Vector3(0.0, 0.0, 0.06728), _tol())
+	assert_almost_eq(hp.center_of_mass, Vector3(0.0, 0.0, -0.08943), _tol())
 	assert_eq(hp.raw, fixture, "the parsed document is kept for ThrusterLayout and visuals")
 
 
 func test_cockpit_camera_looks_forward_with_up_up() -> void:
-	assert_almost_eq(hp.cockpit_camera.origin, Vector3(0.0, 0.95889, -3.21172), _tol())
+	assert_almost_eq(hp.cockpit_camera.origin, Vector3(0.0, 0.39893, -3.36254), _tol())
 	assert_almost_eq(-hp.cockpit_camera.basis.z, Vector3(0.0, 0.0, -1.0), _tol(), "-Z along forward")
 	assert_almost_eq(hp.cockpit_camera.basis.y, Vector3(0.0, 1.0, 0.0), _tol(), "+Y along up")
 	assert_true(hp.cockpit_camera.basis.is_equal_approx(Basis.IDENTITY), "the nominal eye looks straight ahead")
 
 
 func test_chase_anchor() -> void:
-	assert_almost_eq(hp.chase_anchor, Vector3(0.0, 2.5, 9.0), _tol())
+	assert_almost_eq(hp.chase_anchor, Vector3(0.0, 4.0, 17.0), _tol())
 
 
 func test_muzzles_in_file_order() -> void:
 	assert_eq(hp.muzzles.size(), 2)
 	assert_eq(hp.muzzle_names(), PackedStringArray(["left", "right"]))
-	assert_almost_eq(hp.muzzles[0]["position"] as Vector3, Vector3(-0.6, -0.74349, -6.47572), _tol())
-	assert_almost_eq(hp.muzzles[1]["position"] as Vector3, Vector3(0.6, -0.74349, -6.47572), _tol())
+	assert_almost_eq(hp.muzzles[0]["position"] as Vector3, Vector3(-0.45, -0.75107, -5.01254), _tol())
+	assert_almost_eq(hp.muzzles[1]["position"] as Vector3, Vector3(0.45, -0.75107, -5.01254), _tol())
 	for muzzle: Dictionary in hp.muzzles:
 		var xform: Transform3D = muzzle["transform"]
 		assert_eq(xform.origin, muzzle["position"] as Vector3, "%s: origin at the tip" % muzzle["name"])
@@ -69,42 +69,44 @@ func test_muzzles_in_file_order() -> void:
 
 
 func test_collision_primitives() -> void:
-	assert_eq(hp.collision.size(), 9)
+	assert_eq(hp.collision.size(), 14)
 	var names: PackedStringArray = []
 	for entry: Dictionary in hp.collision:
 		names.append(entry["name"])
-	assert_eq(names, PackedStringArray(["fuselage", "pod_ur", "pod_lr", "pod_ul", "pod_ll",
-			"strut_ur", "strut_lr", "strut_ul", "strut_ll"]))
+	assert_eq(names, PackedStringArray(["fuselage", "gun_mount", "pod_ur", "pod_lr", "pod_ul", "pod_ll",
+			"strut_ur", "strut_lr", "strut_ul", "strut_ll", "claw_ur", "claw_lr", "claw_ul", "claw_ll"]))
 	var fuselage: Dictionary = hp.collision[0]
 	assert_eq(fuselage["type"], Hardpoints.TYPE_BOX)
 	assert_true(fuselage["shape"] is BoxShape3D)
-	assert_almost_eq((fuselage["shape"] as BoxShape3D).size, Vector3(1.6, 1.4, 7.5), _tol())
-	assert_almost_eq((fuselage["transform"] as Transform3D).origin, Vector3(0.0, 0.01526, -1.82572), _tol())
+	assert_almost_eq((fuselage["shape"] as BoxShape3D).size, Vector3(3.06765, 2.47, 5.2), _tol())
+	assert_almost_eq((fuselage["transform"] as Transform3D).origin, Vector3(0.0, 0.13393, -1.76254), _tol())
 	assert_true((fuselage["transform"] as Transform3D).basis.is_equal_approx(Basis.IDENTITY))
 
 
 func test_capsules_lie_along_their_named_axis() -> void:
-	var pod: Dictionary = hp.collision[1]
+	var pod: Dictionary = hp.collision[2]
+	assert_eq(pod["name"], "pod_ur")
 	assert_eq(pod["type"], Hardpoints.TYPE_CAPSULE)
 	var capsule := pod["shape"] as CapsuleShape3D
 	assert_not_null(capsule)
-	assert_almost_eq(capsule.radius, 0.55, EPS)
-	assert_almost_eq(capsule.height, 3.2, EPS, "total length, caps included")
+	assert_almost_eq(capsule.radius, 0.82, EPS)
+	assert_almost_eq(capsule.height, 5.93346, EPS, "total length, caps included")
 	var xform: Transform3D = pod["transform"]
 	assert_almost_eq(xform.basis.y, Vector3(0.0, 0.0, 1.0), _tol(), "Godot's capsule axis (local Y) along Z")
-	assert_almost_eq(xform.origin, Vector3(3.18198, 3.18198, 1.12428), _tol())
+	assert_almost_eq(xform.origin, Vector3(5.5, 2.2, 0.63746), _tol())
 	# pod_lr has a basis turned 180 deg about Z: its axis is still Z.
-	var lower: Transform3D = (hp.collision[2] as Dictionary)["transform"]
+	var lower: Transform3D = (hp.collision[3] as Dictionary)["transform"]
 	assert_almost_eq(lower.basis.y, Vector3(0.0, 0.0, 1.0), _tol())
 	assert_almost_eq(lower.basis.x, Vector3(-1.0, 0.0, 0.0), _tol())
 
 
 func test_strut_bases_are_rotations_from_rounded_columns() -> void:
-	var strut: Dictionary = hp.collision[5]
+	var strut: Dictionary = hp.collision[6]
 	assert_eq(strut["name"], "strut_ur")
 	var basis: Basis = (strut["transform"] as Transform3D).basis
-	assert_almost_eq(basis.x, Vector3(0.70711, 0.70711, 0.0), _tol(1e-4), "column x")
-	assert_almost_eq(basis.y, Vector3(-0.70711, 0.70711, 0.0), _tol(1e-4), "column y")
+	# Along the swept mid-chord line (out, up the 18 deg dihedral and aft), normal to the plate.
+	assert_almost_eq(basis.x, Vector3(0.86968, 0.28398, 0.40375), _tol(1e-4), "column x")
+	assert_almost_eq(basis.y, Vector3(-0.3104, 0.95061, 0.0), _tol(1e-4), "column y")
 	assert_almost_eq(basis.determinant(), 1.0, 1e-6, "re-orthonormalised (5-decimal input)")
 	assert_almost_eq(basis.x.length(), 1.0, 1e-6)
 
@@ -196,10 +198,11 @@ func test_bad_collision_primitives_are_rejected() -> void:
 	assert_string_contains(_collision_variant(0, {"type": "sphere"}).error, "expected box or capsule")
 	assert_string_contains(_collision_variant(0, {"size": [1, 0, 1]}).error, "positive size")
 	assert_string_contains(_collision_variant(0, {}, "position").error, "needs position")
-	assert_string_contains(_collision_variant(1, {}, "axis").error, "axis x, y or z")
-	assert_string_contains(_collision_variant(1, {"axis": "w"}).error, "axis x, y or z")
-	assert_string_contains(_collision_variant(1, {"height": 1.0}).error, "height >= 2 * radius")
-	assert_string_contains(_collision_variant(1, {"radius": 0}).error, "radius > 0")
+	# Entry 2 is the first capsule (pod_ur), after the fuselage and gun-mount boxes.
+	assert_string_contains(_collision_variant(2, {}, "axis").error, "axis x, y or z")
+	assert_string_contains(_collision_variant(2, {"axis": "w"}).error, "axis x, y or z")
+	assert_string_contains(_collision_variant(2, {"height": 1.0}).error, "height >= 2 * radius")
+	assert_string_contains(_collision_variant(2, {"radius": 0}).error, "radius > 0")
 	var mirrored: Dictionary = {"basis": {"x": [-1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}}
 	assert_string_contains(_collision_variant(0, mirrored).error, "columns of a rotation")  # a reflection
 	var flat: Dictionary = {"basis": {"x": [1, 0, 0], "y": [1, 0, 0], "z": [0, 0, 1]}}

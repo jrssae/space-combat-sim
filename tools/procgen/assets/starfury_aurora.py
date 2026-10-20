@@ -1,25 +1,31 @@
-"""``starfury_aurora``: the player's Starfury-inspired fighter (docs/architecture.md section 9.1).
+"""``starfury_aurora``: the player's SA-23E-style Starfury (docs/architecture.md section 9.1).
 
 Composition only: this module places parts from ``parts/`` with the ``earthforce`` style and
 derives every output from the placed parts, so the splats (``.ply``), the fallback mesh
 (``.obj``), the cockpit interior mesh and ``hardpoints.json`` agree by construction.
 
-Layout (authored Godot frame, metres, before re-centring; -Z is forward):
+Layout (authored Godot frame, metres, before re-centring; -Z is forward, the nose at z = 0,
+the X of struts centred on x = y = 0). Silhouette and proportions follow the written reference
+in ``docs/design-references.md``:
 
-* fuselage 7.5 m, nose at z = -3.9, flat dark tail at z = +3.6; superellipse sections
-* canopy dome on the forward top, 2.2 m long, eye point 0.3 m above its base, over a dark
-  cockpit well
-* dorsal spine block behind the canopy, ventral gun fairing under the nose
-* two gun barrels under the nose at x = +-0.6, muzzles 0.9 m ahead of the nose tip
-* four struts at +-45 deg in the X/Y plane, swept back, from the rear fuselage to the pods
-* four engine pods (3.2 m x 1.1 m) centred at (+-3.18, +-3.18, 2.8): main bell aft, retro bell
-  forward, four cosmetic RCS cones each
+* wedge fuselage 5.2 m long: arrowhead from above (1.8 m nose -> 3.1 m), wedge from the side
+  (1.1 m deep at the nose -> 2.5 m), heater-shield section from the front
+* faceted cockpit window at the nose: a raked front pane, roof and side panes, frame bars only
+  along the facet edges; the pilot's eye 1 m behind the front pane
+* ventral gun pod under the chin, twin barrels at x = +-0.45
+* four trussed struts from the fuselage flanks to the pods, 18 deg above/below horizontal,
+  leading edge swept 57 deg from the centre line, hazard stripes, ladder webs with cut-outs
+* four ring-faced pods (5 m x 1.64 m) centred at (+-5.5, +-2.2, 5.0): retro bell in the front
+  ring, main bell at the rear
+* a claw behind each pod: two outboard prongs and one inboard vane splaying aft, rooted in
+  thruster blocks that carry the four RCS cones per pod
 
 Frames: see ``docs/assets-starfury.md``. The sample set is made *exactly* mirror-symmetric
-(samples on the x > 0 side are mirrored, the pod/strut cross is mirrored four ways), the
-fuselage group is shifted so the splat centroid's y is exactly 0, and the z centroid is
-subtracted, so the splat centroid is (0, 0, 0): GDGS's import centring is a no-op and the
-hardpoints frame equals the rendered frame.
+(centre-line parts are symmetrised in x, the pod/strut/claw cross is sampled once and mirrored
+four ways), the body group is shifted so the splat centroid's y is exactly 0, and the z
+centroid is subtracted, so the splat centroid is (0, 0, 0): GDGS's import centring is a no-op
+and the hardpoints frame equals the rendered frame. Samples buried inside another part (strut
+roots in the fuselage, strut tips and claw roots in the pods, the gun pod's top) are dropped.
 """
 
 from __future__ import annotations
@@ -48,79 +54,146 @@ from ..core.sampling import (
 )
 from ..parts import Anchor, Part, mass_centroid, total_mass
 from ..parts.hull import (
-    CanopySpec,
-    FuselageSection,
-    FuselageSpec,
-    canopy,
-    cockpit_interior,
-    cockpit_tub,
-    fuselage,
+    WedgeFuselageSpec,
+    WedgeStation,
+    wedge_cockpit_faces,
+    wedge_cockpit_interior,
+    wedge_fuselage,
 )
-from ..parts.propulsion import PodSpec, engine_pod, pilot_tags
-from ..parts.structure import BlockSpec, StrutSpec, block, strut
-from ..parts.weapons import BarrelSpec, gun_barrel
+from ..parts.propulsion import (
+    ClawSpec,
+    RcsBlockSpec,
+    RingPodSpec,
+    VaneSpec,
+    claw_cluster,
+    pilot_tags,
+    ring_pod,
+)
+from ..parts.structure import TrussStrutSpec, truss_strut
+from ..parts.weapons import GunMountSpec, gun_mount
 from ..styles import Style
 from ..styles.earthforce import EARTHFORCE
 
 ASSET_ID = "starfury_aurora"
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2
 PLY_NAME = "starfury_aurora.ply"
 OBJ_NAME = "starfury_aurora.obj"
 COCKPIT_NAME = "cockpit_interior.obj"
 HARDPOINTS_NAME = "hardpoints.json"
 
-DEFAULT_SPACING_M = 0.035
+DEFAULT_SPACING_M = 0.04
+COCKPIT_SPACING_FACTOR = (
+    0.55  # the window segment's frames, chin and lining, seen from 0.6-1 m
+)
 SPLAT_BUDGET = (100_000, 250_000)  # AC3, at the default spacing
-CHASE_ANCHOR = (0.0, 2.5, 9.0)  # docs/architecture.md section 8
+CHASE_ANCHOR = (
+    0.0,
+    4.0,
+    17.0,
+)  # behind and above the centroid; frames the 15 m claw span at 70 deg FOV
 JSON_DIGITS = 5
+BURIED_MARGIN_M = 0.01  # samples deeper than this inside another part are dropped
+POD_NAMES = {"": "ur", "y": "lr", "x": "ul", "xy": "ll"}  # mirror key -> pod name
+POD_SIDES = (("ur", "right"), ("lr", "right"), ("ul", "left"), ("ll", "left"))
 
 
 # --- the parametric description --------------------------------------------------------------
-# Module-level part specs (frozen dataclasses) so StarfurySpec can use them as plain defaults.
-STARFURY_FUSELAGE = FuselageSpec(
-    sections=(
-        FuselageSection(-3.90, 0.00, 0.00),
-        FuselageSection(-3.75, 0.50, 0.42),
-        FuselageSection(-3.30, 0.95, 0.80),
-        FuselageSection(-2.70, 1.30, 1.10),
-        FuselageSection(-1.90, 1.55, 1.32),
-        FuselageSection(-0.80, 1.60, 1.40),
-        FuselageSection(0.60, 1.60, 1.40),
-        FuselageSection(1.80, 1.50, 1.30),
-        FuselageSection(2.90, 1.30, 1.10),
-        FuselageSection(3.60, 1.10, 0.95),
+STARFURY_FUSELAGE = WedgeFuselageSpec(
+    stations=(
+        # Front pane, seen from the eye (0, 0.35, 1.0): a trapezoid raked 15 deg, its sill 20 deg
+        # below the line of sight (corners +-26 deg), its top 38 deg above (corners +-42 deg).
+        WedgeStation(
+            0.00, 0.933, 0.672, 0.76, 0.80, 0.49, -0.015, rake=math.radians(15.0)
+        ),
+        # Rear edge of the panes; its shoulder lies on the plane through the eye and the front
+        # pane's shoulder (30 deg up), so the frame over the side panes continues the top bar.
+        WedgeStation(1.35, 1.12, 0.88, 1.32, 0.15, 0.64, -0.80),
+        WedgeStation(2.60, 1.28, 1.00, 1.45, 0.08, 0.70, -1.05),
+        WedgeStation(4.40, 1.32, 1.08, 1.55, 0.10, 0.75, -1.15),
+        WedgeStation(5.20, 1.20, 1.00, 1.45, 0.10, 0.70, -1.05),
     ),
-    mass_kg=15_800.0,
+    chamfer=0.045,
+    window_end=1,
+    frame_width=0.07,
+    eye=(0.0, 0.35, 1.0),
+    glass_facets=("lower", "upper", "top"),  # side panes, roof-side panes, roof
+    mass_kg=16_000.0,
 )
-STARFURY_CANOPY = CanopySpec(length=2.2, width=0.9, height=0.55, mass_kg=400.0)
-STARFURY_SPINE = BlockSpec(2.6, (0.7, 0.32), (0.5, 0.26), mass_kg=300.0)
-STARFURY_FAIRING = BlockSpec(2.4, (1.1, 0.3), (1.5, 0.4), mass_kg=500.0)
-STARFURY_BARREL = BarrelSpec(length=1.9, mass_kg=700.0)
-STARFURY_POD = PodSpec(mass_kg=6_000.0)
-STARFURY_STRUT = StrutSpec(length=3.35, sweep=0.6, mass_kg=1_400.0)
+# The heavy dark frame of the reference view, from inside: 9 cm bars (about 5 deg), a 45 cm sill.
+COCKPIT_BARS = {"bar_width": 0.09, "bar_depth": 0.06, "sill_depth": 0.45}
+STARFURY_GUN_MOUNT = GunMountSpec(barrel_mount_z=-0.6, mass_kg=2_000.0)
+STARFURY_POD = RingPodSpec(
+    bosses=(0.0, 90.0), boss_radius=0.2, boss_height=0.12, mass_kg=5_000.0
+)
+HAZARD = tuple(
+    (1.6 + 0.35 * k, 1.95 + 0.35 * k, "hazard" if k % 2 == 0 else "hazard_dark")
+    for k in range(5)
+)
+STARFURY_STRUT = TrussStrutSpec(
+    length=5.155,
+    chord_root=3.5,
+    chord_tip=1.65,
+    sweep=3.2,
+    web_depth_root=0.5,
+    web_depth_tip=0.34,
+    rail=0.09,
+    rung=0.12,
+    cutouts=7,
+    cutout_span=(0.2, 0.84),
+    bands=HAZARD,
+    mass_kg=1_500.0,
+)
+STARFURY_CLAW = ClawSpec(
+    vanes=(
+        VaneSpec(35.0, 0.85, 1.4, ((1.7, 42.0), (1.9, 14.0)), offset=0.2),
+        VaneSpec(35.0, 0.85, 1.4, ((1.7, 42.0), (1.9, 14.0)), offset=-0.2),
+        VaneSpec(
+            215.0,
+            0.82,
+            1.7,
+            ((1.0, 38.0), (1.1, 12.0)),
+            chord=(0.28, 0.12),
+            thickness=(0.2, 0.08),
+        ),
+    ),
+    blocks=(
+        RcsBlockSpec(35.0, 0.84, 1.55, (0.46, 0.46, 0.8), ("px", "py")),
+        RcsBlockSpec(215.0, 0.82, 1.75, (0.42, 0.42, 0.65), ("nx", "ny")),
+    ),
+    mass_kg=1_000.0,
+)
 
 
 @dataclass(frozen=True)
 class StarfurySpec:
-    fuselage: FuselageSpec = STARFURY_FUSELAGE
-    canopy: CanopySpec = STARFURY_CANOPY
-    canopy_z: float = -1.8
-    canopy_sink_into_hull: float = 0.02
-    spine: BlockSpec = STARFURY_SPINE
-    spine_z: float = 2.0
-    fairing: BlockSpec = STARFURY_FAIRING
-    fairing_z: float = -2.2
-    barrel: BarrelSpec = STARFURY_BARREL
-    barrel_x: float = 0.6
-    barrel_mount_z: float = -2.9
-    barrel_drop: float = 0.2  # muzzle axis above the fairing's bottom face
-    pod: PodSpec = STARFURY_POD
-    pod_radius_m: float = 4.5  # distance of a pod axis from the ship axis
-    pod_angle_deg: float = 45.0
-    pod_z: float = 2.8
-    strut: StrutSpec = STARFURY_STRUT
-    strut_root_radius: float = 0.65
-    strut_root_z: float = 2.2
+    fuselage: WedgeFuselageSpec = STARFURY_FUSELAGE
+    gun_mount: GunMountSpec = STARFURY_GUN_MOUNT
+    gun_mount_center: tuple[float, float, float] = (
+        0.0,
+        -0.72,
+        1.7,
+    )  # housing front at z = 0.6, under the chin
+    pod: RingPodSpec = STARFURY_POD
+    pod_center: tuple[float, float, float] = (
+        5.5,
+        2.2,
+        5.0,
+    )  # upper right; mirrored to the others
+    strut: TrussStrutSpec = STARFURY_STRUT
+    strut_root: tuple[float, float, float] = (
+        0.6,
+        0.6,
+        1.2,
+    )  # root leading edge, inside the fuselage
+    claw: ClawSpec = STARFURY_CLAW
+
+    def strut_rotation(self) -> np.ndarray:
+        """Rotation about Z that lays the strut's span from its root towards the pod centre."""
+        dx, dy = (
+            self.pod_center[0] - self.strut_root[0],
+            self.pod_center[1] - self.strut_root[1],
+        )
+        return rotation_z(math.atan2(dy, dx))
 
 
 DEFAULT_SPEC = StarfurySpec()
@@ -132,109 +205,151 @@ class Placed:
 
     part: Part
     samples: SurfaceSamples | None
-    hull: bool = True  # part of the fallback mesh and the splats
+    hull: bool = True  # part of the fallback mesh, the mass and the collision shapes
+    spacing: float = 0.0  # sample spacing of ``samples`` (m)
 
     def translated(self, offset: np.ndarray) -> Placed:
         return Placed(
             self.part.translated(offset),
             None if self.samples is None else self.samples.translated(offset),
             self.hull,
+            self.spacing,
         )
 
 
-def _mirrors(base: Placed, axes: str, names: dict[str, str]) -> list[Placed]:
-    """The base placement plus its mirror images: ``names`` maps a mirror key (``""``, ``"x"``,
-    ``"y"``, ``"xy"``) to the part name; samples are mirrored with the mesh, so the set is
-    exactly symmetric."""
+def _mirrors(base: Placed, prefix: str) -> list[Placed]:
+    """The upper-right placement plus its mirror images ``<prefix>_ur/lr/ul/ll``; samples are
+    mirrored with the mesh, so the set is exactly symmetric."""
     out = []
-    for key, name in names.items():
+    for key, pod in POD_NAMES.items():
         part, samples = base.part, base.samples
         for axis in key:
             part = part.mirrored(axis)
             samples = None if samples is None else samples.mirrored(axis)
-        out.append(Placed(part.renamed(name, group=base.part.group), samples, base.hull))
-    del axes
+        out.append(
+            Placed(
+                part.renamed(f"{prefix}_{pod}", group=base.part.group),
+                samples,
+                base.hull,
+                base.spacing,
+            )
+        )
     return out
 
 
-def build_parts(spec: StarfurySpec, style: Style, ctx: BuildContext, spacing: float) -> list[Placed]:
-    """Place every part in the authored frame and sample it (symmetric by construction)."""
+def _unburied(samples: SurfaceSamples, *inside: np.ndarray) -> SurfaceSamples:
+    """Drop the samples flagged by any of the ``inside`` masks."""
+    buried = np.zeros(len(samples), dtype=bool)
+    for mask in inside:
+        buried |= mask
+    return samples.subset(~buried)
 
-    def sample(part: Part, stream: str) -> SurfaceSamples:
-        return sample_mesh(part.mesh, spacing, ctx.rng("splats", stream))
 
-    placed: list[Placed] = []
+def build_parts(
+    spec: StarfurySpec,
+    style: Style,
+    ctx: BuildContext,
+    spacing: float,
+    cockpit_spacing: float,
+) -> list[Placed]:
+    """Place every part in the authored frame and sample it (symmetric by construction). The
+    body group is already shifted so its sample centroid's y is zero (the cross is symmetric).
+    The faces the pilot sees up close (``wedge_cockpit_faces``) are a separate ``cockpit``
+    placement sampled at ``cockpit_spacing``; its mesh stays part of the fuselage's."""
 
-    # Centre-line parts: sampled, then made exactly x-symmetric.
-    fus = fuselage(spec.fuselage, style).renamed("fuselage", group="body")
-    placed.append(Placed(fus, sample(fus, "fuselage").symmetrized("x")))
+    def sample(mesh: Mesh, stream: str, step: float = spacing) -> SurfaceSamples:
+        return sample_mesh(mesh, step, ctx.rng("splats", stream))
 
-    y_base = spec.fuselage.top_y(spec.canopy_z) - spec.canopy_sink_into_hull
-    can = canopy(spec.canopy, style).translated([0.0, y_base, spec.canopy_z]).renamed("canopy", group="body")
-    placed.append(Placed(can, sample(can, "canopy").symmetrized("x")))
-    tub = cockpit_tub(spec.canopy, style).translated([0.0, y_base, spec.canopy_z]).renamed("cockpit_tub", group="body")
-    placed.append(Placed(tub, sample(tub, "cockpit_tub").symmetrized("x")))
-    interior = Part("cockpit_interior", cockpit_interior(spec.canopy, style), group="body").translated(
-        [0.0, y_base, spec.canopy_z]
+    # Body: centre-line parts, sampled and made exactly x-symmetric.
+    fus = wedge_fuselage(spec.fuselage, style).renamed("fuselage", group="body")
+    near = wedge_cockpit_faces(spec.fuselage, fus.mesh, style)
+    fus_samples = sample(fus.mesh.face_subset(~near), "fuselage").symmetrized("x")
+    cockpit = Part("cockpit", fus.mesh.face_subset(near), group="body")
+    cockpit_samples = sample(cockpit.mesh, "cockpit", cockpit_spacing).symmetrized("x")
+    gun = (
+        gun_mount(spec.gun_mount, style)
+        .translated(spec.gun_mount_center)
+        .renamed("gun_mount", group="body")
     )
-    placed.append(Placed(interior, None, hull=False))
-
-    spine_top = spec.fuselage.top_y(spec.spine_z)
-    spine_h = max(spec.spine.size_front[1], spec.spine.size_back[1])
-    spn = block(spec.spine, style, "spine").translated([0.0, spine_top - 0.08 + 0.5 * spine_h, spec.spine_z])
-    spn = spn.renamed("spine", group="body")
-    placed.append(Placed(spn, sample(spn, "spine").symmetrized("x")))
-
-    fairing_bottom = spec.fuselage.bottom_y(spec.fairing_z)
-    fairing_h = max(spec.fairing.size_front[1], spec.fairing.size_back[1])
-    fair = block(spec.fairing, style, "fairing").translated(
-        [0.0, fairing_bottom + 0.06 - 0.5 * fairing_h, spec.fairing_z]
+    gun_samples = sample(gun.mesh, "gun_mount")
+    gun_samples = _unburied(
+        gun_samples, spec.fuselage.contains(gun_samples.positions, BURIED_MARGIN_M)
+    ).symmetrized("x")
+    interior = Part(
+        "cockpit_interior",
+        wedge_cockpit_interior(spec.fuselage, style, **COCKPIT_BARS),
+        group="body",
     )
-    fair = fair.renamed("fairing", group="body")
-    placed.append(Placed(fair, sample(fair, "fairing").symmetrized("x")))
-
-    # Right-side parts, mirrored to the left.
-    barrel_y = fair.mesh.bounds()[0][1] + spec.barrel_drop
-    bar = gun_barrel(spec.barrel, style).translated([spec.barrel_x, barrel_y, spec.barrel_mount_z])
-    bar = bar.renamed("barrel_r", group="body")
-    placed += _mirrors(Placed(bar, sample(bar, "barrel")), "x", {"": "barrel_r", "x": "barrel_l"})
-
-    # Upper-right quadrant parts, mirrored four ways (names: ur, lr, ul, ll).
-    ang = math.radians(spec.pod_angle_deg)
-    radial = np.array([math.cos(ang), math.sin(ang), 0.0])
-    pod_pos = radial * spec.pod_radius_m + np.array([0.0, 0.0, spec.pod_z])
-    pod = engine_pod(spec.pod, style).translated(pod_pos).renamed("pod_ur", group="cross")
-    placed += _mirrors(
-        Placed(pod, sample(pod, "pod")), "xy", {"": "pod_ur", "y": "pod_lr", "x": "pod_ul", "xy": "pod_ll"}
+    body = [
+        Placed(fus, fus_samples, spacing=spacing),
+        Placed(cockpit, cockpit_samples, hull=False, spacing=cockpit_spacing),
+        Placed(gun, gun_samples, spacing=spacing),
+        Placed(interior, None, hull=False),
+    ]
+    body_samples = [p.samples for p in body if p.samples is not None]
+    y_shift = -sum(float(s.positions[:, 1].sum()) for s in body_samples) / sum(
+        len(s) for s in body_samples
     )
-    root = radial * spec.strut_root_radius + np.array([0.0, 0.0, spec.strut_root_z])
-    st = strut(spec.strut, style).transformed(rotation_z(ang), root).renamed("strut_ur", group="cross")
-    placed += _mirrors(
-        Placed(st, sample(st, "strut")), "xy", {"": "strut_ur", "y": "strut_lr", "x": "strut_ul", "xy": "strut_ll"}
+    body = [p.translated(np.array([0.0, y_shift, 0.0])) for p in body]
+
+    # Cross: the upper-right pod, strut and claw, minus what is buried in the (shifted)
+    # fuselage or the pod, then mirrored four ways. The fuselage is not symmetric in y, so a
+    # strut sample is only dropped when it is inside the fuselage *and* its y mirror image.
+    def in_fuselage(points: np.ndarray) -> np.ndarray:
+        local = points - np.array([0.0, y_shift, 0.0])
+        flipped = local * np.array([1.0, -1.0, 1.0])
+        return spec.fuselage.contains(local, BURIED_MARGIN_M) & spec.fuselage.contains(
+            flipped, BURIED_MARGIN_M
+        )
+
+    pod_c = np.asarray(spec.pod_center, dtype=float)
+
+    def in_pod(points: np.ndarray) -> np.ndarray:
+        return spec.pod.contains(points - pod_c, BURIED_MARGIN_M)
+
+    pod = ring_pod(spec.pod, style).translated(pod_c).renamed("pod_ur", group="cross")
+    strut = (
+        truss_strut(spec.strut, style)
+        .transformed(spec.strut_rotation(), spec.strut_root)
+        .renamed("strut_ur", group="cross")
     )
-    return placed
+    claw = (
+        claw_cluster(spec.claw, style)
+        .translated(pod_c)
+        .renamed("claw_ur", group="cross")
+    )
+    s_pod = sample(pod.mesh, "pod")
+    # The bells' outer walls and the bosses' bases are inside the shell; the bells' inner walls
+    # (facing the axis) are what shows through the exits and stay.
+    radial = s_pod.positions[:, :2] - pod_c[:2]
+    facing_out = np.einsum(
+        "ij,ij->i", s_pod.normals[:, :2], radial
+    ) > 0.2 * np.linalg.norm(radial, axis=1)
+    s_pod = _unburied(s_pod, in_pod(s_pod.positions) & facing_out)
+    s_strut = sample(strut.mesh, "strut")
+    s_strut = _unburied(
+        s_strut, in_fuselage(s_strut.positions), in_pod(s_strut.positions)
+    )
+    s_claw = sample(claw.mesh, "claw")
+    s_claw = _unburied(s_claw, in_pod(s_claw.positions))
+    cross = (
+        _mirrors(Placed(pod, s_pod, spacing=spacing), "pod")
+        + _mirrors(Placed(strut, s_strut, spacing=spacing), "strut")
+        + _mirrors(Placed(claw, s_claw, spacing=spacing), "claw")
+    )
+    return body + cross
 
 
 # --- centring ---------------------------------------------------------------------------------
-def balance_and_centre(placed: list[Placed]) -> tuple[list[Placed], np.ndarray]:
-    """Shift the ``body`` group so the splat centroid's y is exactly zero, then subtract the z
-    centroid from everything. Returns the placements and the total offset (Godot frame) that
-    was subtracted from the authored positions (``manifest.centroid_offset``)."""
-    body = [p for p in placed if p.samples is not None and p.part.group == "body"]
-    cross = [p for p in placed if p.samples is not None and p.part.group != "body"]
-    n_body = sum(len(p.samples) for p in body)
-    n_cross = sum(len(p.samples) for p in cross)
-    y_body = sum(float(p.samples.positions[:, 1].sum()) for p in body) / n_body
-    y_cross = sum(float(p.samples.positions[:, 1].sum()) for p in cross) / max(n_cross, 1)
-    # The cross is mirrored in y, so its mean y is zero (to round-off); the body carries it all.
-    shift = -(y_body + y_cross * n_cross / n_body)
-    placed = [p.translated(np.array([0.0, shift, 0.0])) if p.part.group == "body" else p for p in placed]
-
-    total = sum(len(p.samples) for p in placed if p.samples is not None)
-    z_mean = sum(float(p.samples.positions[:, 2].sum()) for p in placed if p.samples is not None) / total
+def centre(placed: list[Placed]) -> tuple[list[Placed], np.ndarray]:
+    """Subtract the splat centroid's z from everything (x and y are already zero by symmetry
+    and the body shift). Returns the placements and the offset (Godot frame) that was
+    subtracted from the authored positions (``manifest.centroid_offset``)."""
+    sampled = [p.samples for p in placed if p.samples is not None]
+    total = sum(len(s) for s in sampled)
+    z_mean = sum(float(s.positions[:, 2].sum()) for s in sampled) / total
     offset = np.array([0.0, 0.0, z_mean])
-    placed = [p.translated(-offset) for p in placed]
-    return placed, offset
+    return [p.translated(-offset) for p in placed], offset
 
 
 # --- colour -----------------------------------------------------------------------------------
@@ -246,13 +361,22 @@ def _phase(name: str, style: Style) -> tuple[float, float, float]:
 
 def colour_samples(placed: Placed, style: Style, rig: StudioRig) -> np.ndarray:
     s = placed.samples
-    albedo = style.shade_panels(s.albedo(), s.positions, s.normals, s.material_flag("paneled") > 0.5, _phase(placed.part.name, style))
+    albedo = style.shade_panels(
+        s.albedo(),
+        s.positions,
+        s.normals,
+        s.material_flag("paneled") > 0.5,
+        _phase(placed.part.name, style),
+    )
     return rig.shade(s.normals, albedo, s.material_flag("metallic"))
 
 
 # --- hardpoints -------------------------------------------------------------------------------
 def _r(v: Any) -> list[float]:
-    return [round(float(x), JSON_DIGITS) + 0.0 for x in np.asarray(v, dtype=float).reshape(-1)]
+    return [
+        round(float(x), JSON_DIGITS) + 0.0
+        for x in np.asarray(v, dtype=float).reshape(-1)
+    ]
 
 
 def _anchor_json(a: Anchor, direction_key: str | None = None) -> dict[str, Any]:
@@ -260,6 +384,11 @@ def _anchor_json(a: Anchor, direction_key: str | None = None) -> dict[str, Any]:
     if direction_key and a.direction is not None:
         out[direction_key] = _r(a.direction)
     return out
+
+
+def _axis_label(direction: np.ndarray) -> str:
+    axis = int(np.argmax(np.abs(direction)))
+    return ("p" if direction[axis] > 0 else "n") + "xyz"[axis]
 
 
 def hardpoints(placed: list[Placed], spec: StarfurySpec) -> dict[str, Any]:
@@ -270,33 +399,42 @@ def hardpoints(placed: list[Placed], spec: StarfurySpec) -> dict[str, Any]:
     lo, hi = hull_mesh.bounds()
 
     com = mass_centroid(hull_parts)
-    com = np.array([0.0, 0.0, com[2]])  # trimmed to the thrust axis by design (ballast), see docs
+    com = np.array(
+        [0.0, 0.0, com[2]]
+    )  # trimmed to the thrust axis by design (ballast), see docs
     mass = total_mass(hull_parts)
     inertia = np.zeros(3)
     for part in hull_parts:
         d = part.area_centroid() - com
-        inertia += part.mass_kg * np.array([d[1] ** 2 + d[2] ** 2, d[0] ** 2 + d[2] ** 2, d[0] ** 2 + d[1] ** 2])
+        inertia += part.mass_kg * np.array(
+            [d[1] ** 2 + d[2] ** 2, d[0] ** 2 + d[2] ** 2, d[0] ** 2 + d[1] ** 2]
+        )
 
     pods = []
     rcs = []
-    for name, side in (("ur", "right"), ("lr", "right"), ("ul", "left"), ("ll", "left")):
+    for name, side in POD_SIDES:
         pod = by_name[f"pod_{name}"]
         pods.append(
             {
                 "name": name,
                 "side": side,
                 "center": _r(pod.anchor("center").position),
-                "main": {**_anchor_json(pod.anchor("main"), "exhaust"), "radius": spec.pod.main.exit_r},
-                "retro": {**_anchor_json(pod.anchor("retro"), "exhaust"), "radius": spec.pod.retro.exit_r},
+                "main": {
+                    **_anchor_json(pod.anchor("main"), "exhaust"),
+                    "radius": spec.pod.main.exit_r,
+                },
+                "retro": {
+                    **_anchor_json(pod.anchor("retro"), "exhaust"),
+                    "radius": spec.pod.retro.exit_r,
+                },
             }
         )
+        claw = by_name[f"claw_{name}"]
         for key in ("rcs_px", "rcs_nx", "rcs_py", "rcs_ny"):
-            a = pod.anchor(key)
-            axis = int(np.argmax(np.abs(a.direction)))
-            label = ("px" if a.direction[axis] > 0 else "nx") if axis == 0 else ("py" if a.direction[axis] > 0 else "ny")
+            a = claw.anchor(key)
             rcs.append(
                 {
-                    "name": f"{name}_{label}",
+                    "name": f"{name}_{_axis_label(a.direction)}",
                     "pod": name,
                     "position": _r(a.position),
                     "exhaust": _r(a.direction),
@@ -304,11 +442,12 @@ def hardpoints(placed: list[Placed], spec: StarfurySpec) -> dict[str, Any]:
                 }
             )
 
+    gun = by_name["gun_mount"]
     muzzles = [
-        {"name": n, **_anchor_json(by_name[p].anchor("muzzle"), "direction")}
-        for n, p in (("left", "barrel_l"), ("right", "barrel_r"))
+        {"name": n, **_anchor_json(gun.anchor(f"muzzle_{n}"), "direction")}
+        for n in ("left", "right")
     ]
-    eye = by_name["canopy"].anchor("eye")
+    eye = by_name["fuselage"].anchor("eye")
     collision = []
     for part in hull_parts:
         for shape in part.collision:
@@ -325,7 +464,11 @@ def hardpoints(placed: list[Placed], spec: StarfurySpec) -> dict[str, Any]:
         "mass_kg": round(mass, 1),
         "inertia_estimate_kg_m2": _r(inertia),
         "center_of_mass": _r(com),
-        "cockpit_camera": {"position": _r(eye.position), "forward": _r(eye.direction), "up": [0.0, 1.0, 0.0]},
+        "cockpit_camera": {
+            "position": _r(eye.position),
+            "forward": _r(eye.direction),
+            "up": [0.0, 1.0, 0.0],
+        },
         "chase_anchor": {"position": list(CHASE_ANCHOR)},
         "muzzles": muzzles,
         "pods": pods,
@@ -338,26 +481,37 @@ def hardpoints(placed: list[Placed], spec: StarfurySpec) -> dict[str, Any]:
 def build(ctx: BuildContext) -> AssetOutputs:
     """Generate the ship into ``ctx.out_dir``.
 
-    Options: ``spacing`` (m, default 0.06; the CLI's ``--spacing``), ``overlap`` (sigma /
-    spacing, default 1.4), ``thickness`` (normal sigma / spacing, default 0.03).
+    Options: ``spacing`` (m, default 0.04; the CLI's ``--spacing``), ``cockpit_spacing`` (m,
+    default half the spacing: the window segment's frames, chin and lining), ``overlap``
+    (sigma / spacing, default 1.4), ``thickness`` (normal sigma / spacing, default 0.03).
     """
     spacing = float(ctx.option("spacing", DEFAULT_SPACING_M))
+    cockpit_spacing = float(
+        ctx.option("cockpit_spacing", COCKPIT_SPACING_FACTOR * spacing)
+    )
     overlap = float(ctx.option("overlap", DEFAULT_OVERLAP))
     thickness = float(ctx.option("thickness", DEFAULT_THICKNESS))
-    if spacing <= 0.0 or overlap <= 0.0 or thickness <= 0.0:
-        raise ValueError("spacing, overlap and thickness must be positive")
+    if min(spacing, cockpit_spacing, overlap, thickness) <= 0.0:
+        raise ValueError(
+            "spacing, cockpit_spacing, overlap and thickness must be positive"
+        )
     spec, style, rig = DEFAULT_SPEC, EARTHFORCE, STUDIO_DEFAULT
 
     out_dir = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    placed, offset = balance_and_centre(build_parts(spec, style, ctx, spacing))
+    placed, offset = centre(build_parts(spec, style, ctx, spacing, cockpit_spacing))
     sampled = [p for p in placed if p.samples is not None]
-    samples = SurfaceSamples.concatenate([p.samples for p in sampled])
-    rgb = np.concatenate([colour_samples(p, style, rig) for p in sampled])
-    authored = to_splats(samples, rgb, spacing, overlap, thickness)
+    authored = SplatData.concatenate(
+        [
+            to_splats(
+                p.samples, colour_samples(p, style, rig), p.spacing, overlap, thickness
+            )
+            for p in sampled
+        ]
+    )
 
-    # Splats are already centred (balance_and_centre); the manifest AABB is theirs, Godot frame.
+    # Splats are already centred; the manifest AABB is theirs, Godot frame.
     xyz32 = authored.xyz.astype(np.float32)
     aabb_min, aabb_max = xyz32.min(axis=0), xyz32.max(axis=0)
     written = SplatData(
@@ -368,13 +522,18 @@ def build(ctx: BuildContext) -> AssetOutputs:
         rot=frames.godot_to_3dgs_quats(authored.rot),
         normals=frames.flip_xy(authored.normals),
     )
-    comments = (f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}", "frame: 3dgs (Rz180 of godot)")
+    comments = (
+        f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}",
+        "frame: 3dgs (Rz180 of godot)",
+    )
     files: list[Path] = [write_ply(out_dir / PLY_NAME, written, comments)]
 
     hull_mesh = Mesh.concatenate(p.part.mesh for p in placed if p.hull)
     files += write_obj(out_dir / OBJ_NAME, hull_mesh, ASSET_ID, comments[:1])
     interior = next(p.part.mesh for p in placed if p.part.name == "cockpit_interior")
-    files += write_obj(out_dir / COCKPIT_NAME, interior, "cockpit_interior", comments[:1])
+    files += write_obj(
+        out_dir / COCKPIT_NAME, interior, "cockpit_interior", comments[:1]
+    )
 
     hp = hardpoints(placed, spec)
     hp_path = out_dir / HARDPOINTS_NAME
@@ -383,8 +542,13 @@ def build(ctx: BuildContext) -> AssetOutputs:
 
     total = len(authored)
     warnings: list[str] = []
-    if abs(spacing - DEFAULT_SPACING_M) < 1e-12 and not SPLAT_BUDGET[0] <= total <= SPLAT_BUDGET[1]:
-        warnings.append(f"{total} splats is outside the AC3 budget {SPLAT_BUDGET} at the default spacing")
+    if (
+        abs(spacing - DEFAULT_SPACING_M) < 1e-12
+        and not SPLAT_BUDGET[0] <= total <= SPLAT_BUDGET[1]
+    ):
+        warnings.append(
+            f"{total} splats is outside the AC3 budget {SPLAT_BUDGET} at the default spacing"
+        )
     manifest = build_manifest(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,
@@ -393,11 +557,24 @@ def build(ctx: BuildContext) -> AssetOutputs:
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,
-        files={"fallback_mesh": OBJ_NAME, "cockpit_mesh": COCKPIT_NAME, "hardpoints": HARDPOINTS_NAME},
+        files={
+            "fallback_mesh": OBJ_NAME,
+            "cockpit_mesh": COCKPIT_NAME,
+            "hardpoints": HARDPOINTS_NAME,
+        },
         extra={
             "counts": {p.part.name: len(p.samples) for p in sampled},
-            "sampling": {"spacing_m": spacing, "overlap": overlap, "thickness": thickness},
-            "dimensions_m": {"length": hp["length_m"], "span": hp["span_m"], "height": hp["height_m"]},
+            "sampling": {
+                "spacing_m": spacing,
+                "cockpit_spacing_m": cockpit_spacing,
+                "overlap": overlap,
+                "thickness": thickness,
+            },
+            "dimensions_m": {
+                "length": hp["length_m"],
+                "span": hp["span_m"],
+                "height": hp["height_m"],
+            },
         },
     )
     files.append(write_manifest(out_dir, manifest))

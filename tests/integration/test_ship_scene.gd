@@ -125,7 +125,7 @@ func test_collision_shapes_come_from_the_hardpoints() -> void:
 	var entries: Array = hardpoints["collision"]
 	var nodes: Array[CollisionShape3D] = _collision_nodes(ship)
 	assert_eq(nodes.size(), entries.size(), "one CollisionShape3D per primitive")
-	assert_eq(entries.size(), 9, "fuselage, four pods, four struts")
+	assert_eq(entries.size(), 14, "fuselage, gun mount, four pods, four struts, four claws")
 	for entry: Dictionary in entries:
 		var label: String = entry["name"]
 		var node := ship.get_node_or_null(NodePath(("Collision_" + label).to_pascal_case())) as CollisionShape3D
