@@ -62,14 +62,17 @@ A raised central fuselage hump with a dark canopy at its front. Two side-by-side
 the hump, with large round exhausts. Angular panel detailing and vent grilles on the wing. Four short spike guns
 pointing forward from the wing roots and nacelles. A thin wing, cut square at the tips. Grey, worn.
 
-## Raider carrier (M2/M11)
+Open questions before the M2 generator (proportions, scale, side view, gun positions, colours) are Q1 in
+`docs/milestones/m2-combat-sandbox.md`; record the maintainer's answers here.
+
+## Raider carrier (M11)
 
 A blocky "battlewagon": a long rectangular box hull, dark green-grey with plating. **Two large concentric
 rings** encircle the middle and aft of the box. Many cone- or spike-shaped launch pods (yellow-gold triangular
 fins) stand around the rings, which gives it a spiky wheel look. Spindly antennae at the corners.
 This is the first of two raider capital types.
 
-## Raider Battle Wagon (second raider carrier type, M2/M11)
+## Raider Battle Wagon (second raider carrier type, M11)
 
 A heavier raider carrier built around one huge ring, weathered grey-brown with heavy plating.
 
