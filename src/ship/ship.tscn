@@ -1,0 +1,35 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/ship/ship.gd" id="1_ship"]
+[ext_resource type="Script" path="res://addons/gdgs/runtime/nodes/gaussian_splat_node.gd" id="2_splats"]
+[ext_resource type="Script" path="res://src/targeting/targeting_controller.gd" id="3_targeting"]
+[ext_resource type="Resource" path="res://assets/ships/starfury_aurora.tres" id="4_spec"]
+
+[node name="PlayerShip" type="RigidBody3D"]
+mass = 48000.0
+center_of_mass_mode = 1
+inertia = Vector3(600000, 600000, 500000)
+gravity_scale = 0.0
+can_sleep = false
+linear_damp_mode = 1
+angular_damp_mode = 1
+script = ExtResource("1_ship")
+spec = ExtResource("4_spec")
+
+[node name="HullSplats" type="VisualInstance3D" parent="."]
+script = ExtResource("2_splats")
+
+[node name="HullMeshFallback" type="MeshInstance3D" parent="."]
+visible = false
+
+[node name="CockpitInterior" type="MeshInstance3D" parent="."]
+visible = false
+
+[node name="Thrusters" type="Node3D" parent="."]
+
+[node name="Guns" type="Node3D" parent="."]
+
+[node name="Targeting" type="Node" parent="."]
+script = ExtResource("3_targeting")
+
+[node name="CockpitAnchor" type="Marker3D" parent="."]

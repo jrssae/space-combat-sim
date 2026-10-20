@@ -333,6 +333,16 @@ hardpoints, never hard-coded.
   Integration tests drive the body with `await get_tree().physics_frame` in GUT async tests.
 - Console: `Ship` registers provider `ship` and command `assist [on|off]`; `SplatStatus` registers provider
   `render` and command `fallback [on|off]` (§6.4).
+  Decisions (T10): `active_backend()` returns `compute`, `raster`, `headless` (no display server: GDGS skips
+  selection, nothing draws, the splat path stays on) or `none` (a display but no backend: the only case that turns
+  the fallback on by itself). `SplatStatus` is a node Main adds outside `World`; meshes opt in through group
+  `splat_fallback_mesh` (`use_fallback_mesh`: Ship, NavBuoy) and the sky through `splat_fallback_sky`
+  (`use_fallback_sky`: SpaceEnvironment); `fallback on|off` and F4 (`toggle_fallback()`) reach them, including
+  nodes spawned later. Commands are held until replaced; edges (`toggle_assist`, `target_next`, ...) act only in
+  the first physics tick after `set_*_command`, so a stale command never repeats them, and `get_combat_command()`
+  gives weapons this tick's command. `Ship.create(spec, world)` then `world.spawn(ship, ...)`; the scene's default
+  spec is `starfury_aurora.tres`, set in the `.tscn` (a `preload` default in the script made headless test runs
+  leak objects at exit). `assist_on` starts from `Settings.assist_default`; toggles are not written back.
 - Done when: AC5a-AC5g pass headless; the scene instantiates with the GDGS node present and the fallback hidden.
 - Verify: GUT integration suite. Check once by hand that the damping guard fails if `default_linear_damp` is put
   back to 0.1.

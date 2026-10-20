@@ -79,6 +79,7 @@ static func beacon_lit(t: float, phase_s: float = 0.0) -> bool:
 
 func _init() -> void:
 	add_to_group(WorldFrame.SHIFTABLE_GROUP)
+	add_to_group(SplatStatus.MESH_GROUP)  # SplatStatus calls use_fallback_mesh (no backend, console, F4)
 
 
 func _ready() -> void:
