@@ -7,6 +7,13 @@ extends RefCounted
 ##
 ## Pilot terms here: a positive pod-yaw command means yaw right, like `FlightCommand.rot.y`. The conversion to
 ## body axes (`AXIS_SIGN`) happens in `FlightModel`, not here.
+##
+## It also holds the brake's attitude controller (§5.5), used in both assist modes: `face_rate_target` turns a
+## body-frame direction into a body-frame rate target for the same P rate controller. That outer loop is stateless.
+
+## Share of the RCS angular acceleration the face-target controller plans to decelerate with; the rest covers the
+## rate loop's lag and nulling any rate across the turn axis at the same time.
+const FACE_DECEL_FRACTION: float = 0.5
 
 var spec: ShipSpec
 ## `d_s`: the first-order-smoothed, deadzoned pod-yaw command, -1..1, pilot terms (+ = yaw right).
@@ -68,6 +75,59 @@ func rotation_demand(cmd: FlightCommand) -> Vector3:
 ## between pod feed-forward, RCS and trim.
 func rate_torque(w_target_b: Vector3, w_b: Vector3) -> Vector3:
 	return spec.inertia * (spec.assist_gain_k * (w_target_b - w_b))
+
+
+## Gain of the face-target loop on the nose error, s⁻¹. With the P rate loop (gain `k = assist_gain_k`) inside it
+## the small-angle error obeys `θ'' + k θ' + k K θ = 0`, critically damped at `K = k / 4` (double pole at `-k / 2`).
+func face_gain() -> float:
+	return spec.assist_gain_k / 4.0
+
+
+## Angular acceleration RCS can give about any axis in the body XY plane, rad/s²: the weaker of pitch and yaw
+## (`rcs_torque_max / inertia`), a bound that holds whatever the mix of the two.
+func turn_accel_max() -> float:
+	var pitch: float = spec.rcs_torque_max.x / spec.inertia.x if spec.inertia.x > 0.0 else 0.0
+	var yaw: float = spec.rcs_torque_max.y / spec.inertia.y if spec.inertia.y > 0.0 else 0.0
+	return maxf(0.0, minf(pitch, yaw))
+
+
+## The brake's rate target, body frame, rad/s: zero (all stop) for a zero `dir_b`, else the rate that swings the
+## nose (-Z) onto `dir_b` along the shortest arc. Its size is `min(face_gain · θ, sqrt(2 · a · θ))` with
+## `a = FACE_DECEL_FRACTION · turn_accel_max()`, so the turn can always be stopped within RCS authority, then the
+## whole vector is scaled down to fit `rate_max` per axis (the nose still swings straight at the target). The roll
+## target is always zero: facing a point has no roll requirement.
+func face_rate_target(dir_b: Vector3) -> Vector3:
+	var error: Vector3 = face_error_vector(dir_b)
+	var angle: float = error.length()
+	if angle == 0.0:
+		return Vector3.ZERO
+	var decel: float = FACE_DECEL_FRACTION * turn_accel_max()
+	var rate: float = minf(face_gain() * angle, sqrt(2.0 * decel * angle))
+	var w: Vector3 = error / angle * rate
+	var cap: Vector3 = spec.rate_max_rad()
+	var scale: float = 1.0
+	if absf(w.x) > cap.x:
+		scale = minf(scale, cap.x / absf(w.x))
+	if absf(w.y) > cap.y:
+		scale = minf(scale, cap.y / absf(w.y))
+	return w * scale
+
+
+## The rotation vector, body frame, rad, that turns the nose (-Z) onto `dir_b` by the shortest arc: about
+## `FORWARD × d = (d.y, -d.x, 0)`, so pitch and yaw only, never roll; its length is the angle off the nose. Zero for a
+## zero direction or one dead ahead; dead astern it pitches up (+X) through the target.
+static func face_error_vector(dir_b: Vector3) -> Vector3:
+	if dir_b.is_zero_approx():
+		return Vector3.ZERO
+	var d: Vector3 = dir_b.normalized()
+	var axis := Vector3(d.y, -d.x, 0.0)
+	var sine: float = axis.length()
+	var angle: float = atan2(sine, -d.z)
+	if angle == 0.0:
+		return Vector3.ZERO
+	if sine < 1e-9:
+		return Vector3(angle, 0.0, 0.0)
+	return axis * (angle / sine)
 
 
 ## Yaw trim factor `lam` (0..1) for the groups that cause an RCS overflow. `overflow_y` is the part of the yaw

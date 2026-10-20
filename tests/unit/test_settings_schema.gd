@@ -15,10 +15,27 @@ func test_every_key_has_a_valid_default() -> void:
 
 
 func test_m1_schema_keys_present() -> void:
-	for key: StringName in [&"invert_y", &"stick_deadzone", &"trigger_deadzone", &"roll_ramp_s",
+	for key: StringName in [&"invert_y", &"stick_deadzone", &"trigger_deadzone", &"yaw_ramp_s", &"target_hold_s",
 			&"assist_default", &"camera_default", &"show_overlay", &"show_fps", &"console_enabled",
 			&"console_pause_on_open"]:
 		assert_true(schema.has_key(key), "schema has %s" % key)
+
+
+func test_renamed_keys_point_at_current_keys() -> void:
+	assert_false(schema.has_key(&"roll_ramp_s"), "the D-pad ramp is yaw now")
+	assert_eq(SettingsSchema.RENAMED[&"roll_ramp_s"], &"yaw_ramp_s")
+	for old: StringName in SettingsSchema.RENAMED.keys():
+		assert_false(schema.has_key(old), "%s is no longer a key" % old)
+		assert_true(schema.has_key(SettingsSchema.RENAMED[old]), "%s maps to a current key" % old)
+	assert_eq(schema.old_names(&"yaw_ramp_s"), [&"roll_ramp_s"] as Array[StringName])
+	assert_eq(schema.old_names(&"invert_y"), [] as Array[StringName])
+
+
+func test_target_hold_range() -> void:
+	assert_almost_eq(float(schema.get_default(&"target_hold_s")), 0.35, 1e-9)
+	assert_true(schema.parse(&"target_hold_s", "0.5")["ok"])
+	assert_false(schema.parse(&"target_hold_s", "0.05")["ok"], "too short to tell from a tap")
+	assert_false(schema.parse(&"target_hold_s", "2")["ok"])
 
 
 func test_bool_parse_accepts_words() -> void:
@@ -42,7 +59,7 @@ func test_float_range_enforced() -> void:
 
 
 func test_int_is_coerced_to_float() -> void:
-	var result: Dictionary = schema.validate(&"roll_ramp_s", 1)
+	var result: Dictionary = schema.validate(&"yaw_ramp_s", 1)
 	assert_true(result["ok"])
 	assert_eq(typeof(result["value"]), TYPE_FLOAT)
 

@@ -108,12 +108,13 @@ func revert() -> Error:
 		err = cfg.load(config_path)
 		if err == OK:
 			for key: StringName in schema.keys():
-				if cfg.has_section_key(_SECTION, String(key)):
-					var result: Dictionary = schema.validate(key, _from_config(key, cfg.get_value(_SECTION, String(key))))
+				var file_key: String = _file_key(cfg, key)
+				if not file_key.is_empty():
+					var result: Dictionary = schema.validate(key, _from_config(key, cfg.get_value(_SECTION, file_key)))
 					if result["ok"]:
 						loaded[key] = result["value"]
 					else:
-						push_warning("Settings: ignoring %s in %s: %s" % [key, config_path, result["error"]])
+						push_warning("Settings: ignoring %s in %s: %s" % [file_key, config_path, result["error"]])
 			if cfg.has_section(_PADS_SECTION):
 				for guid: String in cfg.get_section_keys(_PADS_SECTION):
 					pads[guid] = float(cfg.get_value(_PADS_SECTION, guid))
@@ -151,6 +152,17 @@ func _store(key: StringName, value: Variant, mark_unsaved: bool) -> void:
 		_unsaved[key] = true
 	if previous != value:
 		changed.emit(key, value)
+
+
+# The name `key` is stored under in a loaded file: its current name, else a former one (SettingsSchema.RENAMED),
+# else "" when the file has neither.
+func _file_key(cfg: ConfigFile, key: StringName) -> String:
+	if cfg.has_section_key(_SECTION, String(key)):
+		return String(key)
+	for old: StringName in schema.old_names(key):
+		if cfg.has_section_key(_SECTION, String(old)):
+			return String(old)
+	return ""
 
 
 # Enums are stored as plain strings so the file stays readable and hand-editable.

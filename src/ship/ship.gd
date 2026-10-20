@@ -117,6 +117,7 @@ func _physics_process(delta: float) -> void:
 	if _model != null:
 		var b: Basis = global_basis
 		var to_body: Basis = b.transposed()
+		_flight.face_dir_b = to_body * targeting.selected_offset()  # what the brake faces (§5.5); zero = no target
 		_output = _model.compute(_flight, to_body * linear_velocity, to_body * angular_velocity, to_body * env_accel,
 				_assist_on, delta)
 		for nozzle: Dictionary in _output.nozzle_forces:
@@ -134,7 +135,8 @@ func _physics_process(delta: float) -> void:
 # --- commands ----------------------------------------------------------------------------------------------------
 
 
-## This tick's flight demand (pilot terms). Held until replaced; `toggle_assist` acts once.
+## This tick's flight demand (pilot terms). Held until replaced; `toggle_assist` acts once. The ship overwrites its
+## `face_dir_b` every tick with the line of sight to its selected target.
 func set_flight_command(cmd: FlightCommand) -> void:
 	_flight = cmd if cmd != null else FlightCommand.new()
 	_flight_fresh = true

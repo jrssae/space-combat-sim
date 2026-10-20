@@ -33,8 +33,8 @@ and `docs/third-party.md` together.
 | D3 | **No splat training.** Splats are produced by sampling procedurally authored surfaces (mesh-to-splat) and by writing Gaussians directly for stars/nebula | Deterministic, CPU-only, seconds to run, reproducible in CI and in the GPU-less container. Training (Brush) stays an optional polish step on a GPU machine. |
 | D4 | RigidBody3D + Jolt. Pod nozzle forces are applied **at their hardpoint positions** (`apply_force`); RCS as central force + torque; no custom integrator | Correct rigid-body dynamics (inertia, angular momentum); differential pod thrust yaws the ship through real r × F computed by the engine; free collision later. Verified headless. Custom integrator only if Jolt limits ever block us (§5.6). |
 | D5 | Flight logic in pure `RefCounted` classes, nodes are thin adapters | Unit-testable without a scene tree, display or controller. |
-| D6 | Flight assist in M1. **ON (default)**: rate-command fly-by-wire; the trigger/bumper difference is a smoothed **yaw command** added to the stick's, so pod steering works in both modes; pod torque helps the turn and is trimmed when RCS cannot hold the commanded rate; no pod ever exceeds its trigger. **OFF**: raw pods + raw RCS torque (tank-steer). **Brake** (hold) works in both | User decision: pod steering is the Starfury identity in both modes; assist makes it bounded and stop-on-release; one closed-form rule (§5.5). |
-| D7 | User-chosen pad layout (§6.1): triggers = left/right main pods, bumpers = left/right retros, sticks = strafe / aim, D-pad = roll + target/weapon cycling. `InputMap` actions only, SDL3 standard layout, keyboard as extra events | Every DOF and combat function reachable without modifiers; per-side pod control is the Starfury identity; rebindable, testable, works on a generic pad. |
+| D6 | Flight assist in M1. **ON (default)**: rate-command fly-by-wire; the trigger/bumper difference is a smoothed **yaw command** added to the D-pad's, so pod steering works in both modes; pod torque helps the turn and is trimmed when RCS cannot hold the commanded rate; no pod ever exceeds its trigger. **OFF**: raw pods + raw RCS torque (tank-steer). **Brake** (hold) is an all stop (velocity and rotation) in both, and turns the nose onto the selected target | User decision: pod steering is the Starfury identity in both modes; assist makes it bounded and stop-on-release; one closed-form rule (§5.5). |
+| D7 | User-chosen pad layout (§6.1): triggers = left/right main pods, bumpers = left/right retros, left stick = strafe, right stick = pitch / roll, D-pad = yaw + target/weapon cycling (Up: tap next, hold ahead). `InputMap` actions only, SDL3 standard layout, keyboard as extra events | Every DOF and combat function reachable without modifiers or stick clicks (generic pads may lack them); per-side pod control is the Starfury identity; rebindable, testable, works on a generic pad. |
 | D8 | Hybrid rendering: splats for hulls, buoys and sky; meshes for cockpit interior, projectiles, flashes, thruster glow, beacons; primitives for collision | Splats are static radiance; anything animated per frame, emissive-dynamic, or needing depth writes is a mesh. Each exception is justified in §7. |
 | D9 | Generated assets are **not committed**; generators are. No Git LFS | Everything binary is reproducible from `tools/procgen` in seconds; LFS adds quotas and fork friction. |
 | D10 | GUT over gdUnit4 | Simpler headless CLI (`-gexit`, exit code 1 on failure), no xvfb caveats, GDScript-first, tracks Godot 4.7. |
@@ -96,7 +96,7 @@ src/
   camera/camera_rig.gd        owns CockpitCamera + ChaseCamera; mode enum (COCKPIT, CHASE; later CINEMATIC)
   camera/chase_camera_math.gd RefCounted, pure: chase pose smoothing (unit-tested)
   camera/chase_camera_config.gd Resource: chase offset, look-ahead and the two smoothing half-lives
-  input/flight_command.gd     RefCounted: per-side pod demand, strafe, rotation, brake, assist toggle
+  input/flight_command.gd     RefCounted: per-side pod demand, strafe, rotation, brake, assist toggle, face dir
   input/combat_command.gd     RefCounted: fire (held), weapon_next / target_next / target_ahead (edges)
   input/ui_command.gd         RefCounted: camera, reset, pause, debug toggles (edges)
   input/pilot_command.gd      RefCounted: {flight, combat, ui}; what InputAdapter.sample() returns
@@ -236,12 +236,12 @@ level[R_MAIN]  = c.main_right      level[L_MAIN]  = c.main_left
 level[R_RETRO] = c.retro_right     level[L_RETRO] = c.retro_left
 rcs_force      = Vector3(c.strafe.x * rcs_force_max.x, c.strafe.y * rcs_force_max.y, 0)
 
-# 2. brake (hold X) overrides all translational demand, assist on or off
+# 2. brake (hold X) overrides all translational demand, assist on or off (its rotation half is 4c)
 if c.brake:
     a_des = -brake_gain_k * v_b - env_accel_b                     # env term: gravity hook (zero in M1)
     f_z   = clamp(mass * a_des.z, -main_total, retro_total)       # totals = 4 x per-pod thrust; -Z is forward
     level[R_MAIN]  = level[L_MAIN]  = max(0, -f_z) / main_total   # symmetric sides => zero pod torque
-    level[R_RETRO] = level[L_RETRO] = max(0,  f_z) / retro_total  # (4b may still trim one side under a stick demand)
+    level[R_RETRO] = level[L_RETRO] = max(0,  f_z) / retro_total
     rcs_force = clamp(mass * Vector3(a_des.x, a_des.y, 0), -rcs_force_max, rcs_force_max)
 
 # 3. pod forces and their torque about the CoM: physics, not a yaw term
@@ -256,6 +256,11 @@ if assist_on:
     d_raw = 0 if c.brake else (c.main_left - c.main_right) + (c.retro_right - c.retro_left)
     d_dz  = sign(d_raw) * max(0, |d_raw| - pod_yaw_deadzone) / (1 - pod_yaw_deadzone)
     d_s  += (clamp(d_dz, -1, 1) - d_s) * (1 - exp(-dt / pod_yaw_smoothing_s))   # reset on assist toggle / reset
+if c.brake:
+    # 4c. brake = all stop, assist on or off: sticks and D-pad ignored, d_s decays unused, nothing is trimmed
+    w_target = face_rate(c.face_dir_b)                              # ZERO when face_dir_b is zero (no target)
+    tau_rcs  = clamp(inertia * assist_gain_k * (w_target - w_b) - tau_pods, -rcs_torque_max, rcs_torque_max)
+elif assist_on:
     rot   = Vector3(c.rot.x, clamp(c.rot.y + pod_yaw_gain * d_s, -1, 1), c.rot.z)
     # 4b. rate controller with pod feed-forward and trim
     w_target = rot * AXIS_SIGN * deg_to_rad(rate_max)
@@ -270,13 +275,22 @@ if assist_on:
 else:
     tau_rcs = c.rot * AXIS_SIGN * rcs_torque_max                    # raw: stick / D-pad command torque
 
+# face_rate(d): the brake's attitude controller, a stateless outer loop around the 4b rate loop (FlightAssist)
+#   e     = (d.y, -d.x, 0) / sin(θ) * θ   for d = normalize(d), θ = angle(-Z, d)    # FORWARD × d: pitch + yaw only
+#                                         # e = (θ, 0, 0) dead astern (pitch up through it); zero dead ahead
+#   K     = assist_gain_k / 4             # critical damping of the cascade θ'' + k θ' + k K θ = 0
+#   a     = 0.5 * min(rcs_torque_max.x / inertia.x, rcs_torque_max.y / inertia.y)   # planned deceleration
+#   w     = e / θ * min(K θ, sqrt(2 a θ)), then scaled as a whole to fit rate_max per axis;  w.z = 0
+
 # 5. outputs (body frame)
 nozzle_forces = [(p_i, F_i)]              # Ship: apply_force(B·F_i, B·p_i) for each
 rcs_force, tau_rcs                        # Ship: apply_central_force(B·rcs_force), apply_torque(B·tau_rcs)
 force_b  = F_pods + rcs_force             # predicted totals, for tests and the overlay
 torque_b = tau_pods + tau_rcs
 trim     = 1 - lam                        # 0 when nothing was trimmed
-pod_yaw_cmd = pod_yaw_gain * d_s          # for the overlay (POD YAW)
+pod_yaw_cmd = pod_yaw_gain * d_s          # for the overlay (POD YAW); 0 while braking or with assist off
+rate_target_b = w_target                  # 0 with assist off unless braking
+facing, face_error_rad                    # braking with a face_dir_b; the angle off the nose
 mass_flow = (Σ |F_i| + |rcs_force|) / exhaust_velocity     # reaction-mass seam, not consumed in M1
 ```
 
@@ -291,7 +305,7 @@ demand. If a future layout breaks that symmetry, generalise the trim per axis.
 Sign conventions. `c.rot` is in **pilot terms**: `x` pitch up, `y` yaw right, `z` roll right (clockwise as seen
 by the pilot). With Godot's right-handed axes and -Z forward, +X rotation pitches the nose up, +Y yaws it left,
 +Z rolls left, so `AXIS_SIGN = Vector3(+1, -1, -1)`. `FlightModel` is the only place that applies it; pin it with
-one unit test per axis.
+one unit test per axis. `c.face_dir_b` is not in pilot terms but already a body-frame direction, so no sign map.
 
 What the player must experience:
 
@@ -302,12 +316,13 @@ What the player must experience:
 | LT alone | accelerate and yaw nose **right** | mirror of RT alone |
 | RB + LB | straight deceleration (retros) | same |
 | RB alone | decelerate and yaw nose **right** | decelerate and turn nose **right** at ≈ 30 °/s |
-| Right stick right + LT | (raw torque + pod yaw) | stick and pod yaw add, capped at `rate_max`; left-pod torque speeds the turn-in |
-| Right stick back / right | nose up / nose right (torque) | nose up / nose right (rate); stops when centred |
-| D-pad right | roll right | roll right (ramped) |
+| D-pad right + LT | (raw torque + pod yaw) | D-pad and pod yaw add, capped at `rate_max`; left-pod torque speeds the turn-in |
+| Right stick back / right | nose up / roll right (torque) | nose up / roll right (rate); stops when centred |
+| D-pad right | yaw right (torque, ramped) | yaw right (rate, ramped) |
 | Left stick right / up | translate right / up; nose does not turn | same |
 | Release everything (or even out the triggers) | velocity unchanged; spin unchanged | velocity unchanged; rotation stops |
-| X held | velocity → 0 with symmetric pods + RCS; rotation still raw | velocity → 0; rotation per stick |
+| X held | all stop: velocity → 0 with symmetric pods + RCS, rotation → 0; sticks, D-pad, triggers ignored | same |
+| X held, target selected | velocity → 0 while the nose swings onto the target and holds there (no roll) | same |
 
 ### 5.3 Integration
 
@@ -330,10 +345,10 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
 ### 5.5 Flight assist semantics
 
 - **Assist ON** (toggle B, persisted in `Settings`, default on): the flight computer owns attitude and commands
-  angular *rates*. Pitch comes from the right stick, roll from the D-pad, and yaw from the right stick **plus the
-  pod-yaw command**: the left/right difference of the triggers (and of the bumpers), with a 10 % deadzone,
-  smoothed over 0.15 s, scaled by `pod_yaw_gain` (one full trigger = 30 °/s) and capped together with the stick at
-  `rate_max`. Sticks centred and sides even means "stop rotating". The flight computer knows the pods' torque
+  angular *rates*. Pitch and roll come from the right stick, and yaw from the D-pad (ramped) **plus the pod-yaw
+  command**: the left/right difference of the triggers (and of the bumpers), with a 10 % deadzone, smoothed over
+  0.15 s, scaled by `pod_yaw_gain` (one full trigger = 30 °/s) and capped together with the D-pad at `rate_max`.
+  Stick and D-pad centred and sides even means "stop rotating". The flight computer knows the pods' torque
   exactly (from hardpoints) and treats it as feed-forward: it lets pod torque drive the turn-in, cancels the
   excess with RCS once the commanded rate is reached, and trims (only ever reduces) the side causing it when RCS
   authority is not enough. The pilot's trigger and bumper levels are a ceiling, never exceeded. Translation is
@@ -341,17 +356,36 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
 - **Assist OFF**: raw Newtonian. Pods fire exactly as demanded and their r × F torque acts in full, so uneven
   triggers tank-steer the ship. Stick and D-pad command raw RCS torque. Nothing damps rotation. This is the
   flip-and-burn mode.
-- **Brake** (hold X), both modes: the flight computer takes over translation. Pods fire symmetrically (no torque)
-  plus RCS sway/heave, nulling velocity relative to the `World` frame (later: relative to a chosen reference such
-  as the station). Triggers, bumpers and the left stick are ignored while held; rotation follows the assist mode.
-  With assist on, a stick demand beyond RCS authority still goes through the yaw trim, which may cut the retro or
-  main side fighting it until the rate is reached; the brake's symmetric level stays the ceiling.
+- **Brake** (hold X), both modes: **all stop**. The flight computer takes over translation and rotation.
+  Translation: pods fire symmetrically (no torque) plus RCS sway/heave, nulling velocity relative to the `World`
+  frame (later: relative to a chosen reference such as the station). Rotation: the rate target is zero and the P
+  rate controller (gain `assist_gain_k`, RCS only, pods symmetric so nothing to trim) nulls any spin, with assist
+  off too. Triggers, bumpers, both sticks and the D-pad are ignored while held. Measured in Jolt (both modes): a
+  60 °/s tumble plus 50 m/s of drift is below 0.5 °/s after 0.87 s and below 0.5 m/s after 4.3 s (RCS sway/heave
+  at 10 m/s² is the slow part); AC5f.
+- **Brake with a target selected**: rotation tracks `face_rate(face_dir_b)` (§5.2) instead of zero, so the nose
+  swings onto the target along the shortest arc and stays there; facing a point has no roll requirement, so the
+  roll target is zero and any roll rate is nulled. `FlightCommand.face_dir_b` is the body-frame line of sight,
+  which the Ship writes every tick from its `TargetingController` (zero without a selection); an AI pilot gets the
+  same behaviour by selecting a target. The controller is a stateless outer loop on the angle off the nose around
+  the rate loop: `|w| = min(K θ, sqrt(2 a θ))`. `K = assist_gain_k / 4` makes the small-angle cascade
+  `θ'' + k θ' + k K θ = 0` critically damped (double pole at `-k / 2` = -3 s⁻¹: no overshoot, no hunting on the
+  target). The `sqrt(2 a θ)` branch, with `a` half the RCS pitch/yaw angular acceleration, guarantees the turn can
+  be stopped within RCS authority with margin for the rate loop's lag and cross-axis nulling (for the Starfury it
+  never binds: `rate_max` does first). The vector is scaled as a whole to fit `rate_max`, so the nose still swings
+  straight at the target. Measured in Jolt (both modes): 90° off the nose to within 2° in 2.6 s, no overshoot,
+  0.002° after 5.5 s; in the pure model 150° off takes 3.2 s.
+- **Why the brake owns rotation** (maintainer's M1 play test: "expected behavior is to get to an all stop with the
+  brake on", and to "center the nose on the target when a target is selected"). X is the panic button: one input
+  that leaves the ship motionless whatever it was doing, in either mode, instead of a brake that stops drift but
+  leaves a tumble running with assist off. Facing the selected target is the natural next step (stop, then point
+  the guns) and costs nothing when no target is selected.
 - **Why this rule** (user decision: pod steering must work with assist on too). (1) Pod steering is the Starfury
   identity in both modes; assist off is the raw tank-steer, assist on is the same gesture made controllable: a
   bounded, predictable turn rate instead of ≈ 220 °/s² of runaway, which stops when the sides are evened out.
   (2) The deadzone exists because generic-pad triggers rarely read exactly equal at full squeeze; the smoothing
-  removes jerk from noisy analog triggers. (3) Gain 0.5 keeps one trigger below the aim stick's authority while
-  trigger plus stick still reach full rate. (4) The "never above the trigger" rule still holds: the commanded yaw
+  removes jerk from noisy analog triggers. (3) Gain 0.5 keeps one trigger below the D-pad yaw's authority while
+  trigger plus D-pad still reach full rate. (4) The "never above the trigger" rule still holds: the commanded yaw
   points the same way as the pods' own torque, so the flight computer only ever needs to cancel or trim, never to
   add thrust; the pilot's throttle stays a ceiling. (5) One closed-form rule plus one first-order filter:
   deterministic, unit-testable, and identical for AI pilots, which write the same `FlightCommand`. All three
@@ -374,12 +408,18 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
 ```
 RT  right main pods (analog)      LT  left main pods (analog)
 RB  right retros (hold)           LB  left retros (hold)
-R-stick  pitch / yaw (aim)        L-stick  strafe L/R + up/down
-D-pad L/R  roll                   D-pad Up  next target      D-pad Down  next weapon
-A  fire       B  flight assist    X  brake (hold)            Y  camera 1st/3rd
-R3  target ahead                  L3  debug overlay
+R-stick  pitch / roll (aim)       L-stick  strafe L/R + up/down
+D-pad L/R  yaw (ramped)           D-pad Down  next weapon
+D-pad Up  tap: next target        hold (0.35 s): target nearest the nose
+A  fire       B  flight assist    X  brake (hold): all stop; faces the target if one is selected
+Y  camera 1st/3rd
+R3  target ahead (if the pad has it)    L3  debug overlay (if the pad has it; F3 too)
 Back  reset                       Start  pause
 ```
+
+Revised after the M1 play test on the maintainer's generic pad: yaw and roll swapped places (right stick X was
+yaw, the D-pad was roll), and because that pad has no stick clicks, `target_ahead` moved onto a D-pad Up hold
+(R3 still works where it exists). Saved, selectable control profiles are on the roadmap.
 
 All via `InputMap` actions in `project.godot`; `device = -1` (any pad). Names are the Xbox-style names Godot/SDL3
 use for the standard layout; any pad SDL3 recognises, generic XInput clones included, presents it.
@@ -391,11 +431,11 @@ use for the standard layout; any pad SDL3 recognises, generic XInput clones incl
 | `retro_right` | RB `JOY_BUTTON_RIGHT_SHOULDER` (10) | D, S | hold | - | - |
 | `retro_left` | LB `JOY_BUTTON_LEFT_SHOULDER` (9) | A, S | hold | - | - |
 | `pitch_down` / `pitch_up` | Right stick Y `JOY_AXIS_RIGHT_Y` (axis 3, -/+): stick back = nose up; `Settings.invert_y` flips | I / K | analog pair | radial 0.15 | expo 1.5 |
-| `yaw_left` / `yaw_right` | Right stick X `JOY_AXIS_RIGHT_X` (axis 2, -/+) | J / L | analog pair | radial 0.15 | expo 1.5 |
+| `roll_left` / `roll_right` | Right stick X `JOY_AXIS_RIGHT_X` (axis 2, -/+): stick right = roll right | U / O | analog pair | radial 0.15 (one deadzone with pitch) | expo 1.5 |
 | `strafe_left` / `strafe_right` | Left stick X `JOY_AXIS_LEFT_X` (axis 0, -/+) | Left / Right arrows | analog pair | radial 0.15 | linear |
 | `strafe_down` / `strafe_up` | Left stick Y `JOY_AXIS_LEFT_Y` (axis 1, +/-) | Down / Up arrows | analog pair | radial 0.15 | linear |
-| `roll_left` / `roll_right` | D-pad `JOY_BUTTON_DPAD_LEFT` / `DPAD_RIGHT` (13 / 14) | U / O | hold, ramped | - | 0→1 in 0.25 s |
-| `target_next` | D-pad `JOY_BUTTON_DPAD_UP` (11) | T | edge | - | - |
+| `yaw_left` / `yaw_right` | D-pad `JOY_BUTTON_DPAD_LEFT` / `DPAD_RIGHT` (13 / 14) | J / L | hold, ramped | - | 0→1 in 0.25 s |
+| `target_next` | D-pad `JOY_BUTTON_DPAD_UP` (11) | T | tap or hold: a tap gives `target_next` on release; a hold of 0.35 s gives `target_ahead` once | - | - |
 | `weapon_next` | D-pad `JOY_BUTTON_DPAD_DOWN` (12) | F | edge | - | - |
 | `target_ahead` | R3 `JOY_BUTTON_RIGHT_STICK` (8) | G | edge | - | - |
 | `fire` | A `JOY_BUTTON_A` (0) | Space, left mouse | hold | - | - |
@@ -419,13 +459,23 @@ Notes:
   (`Input.get_joy_axis`, `is_joy_button_pressed`, `is_physical_key_pressed`, `is_mouse_button_pressed`), never via
   `Input.is_action_pressed`. That is what lets it mask keyboard and mouse per device class while the console is
   open: `Input` action state would still report keys typed into the prompt.
-- R3 is clicked with the aiming thumb; `target_ahead` samples the boresight at the press, so the small stick jolt
-  of a click does not matter. L3 only toggles the overlay, so an accidental click while strafing is harmless.
-- Roll ramp: while a roll action is held, `rot.z` moves toward ±1 at `1 / Settings.roll_ramp_s` per second
+- Tap or hold on D-pad Up (in `InputAdapter`, so it works for T too): a press released before
+  `Settings.target_hold_s` (default 0.35 s, counted in physics ticks) gives `target_next` on the release tick; a
+  press still held when it crosses the threshold gives `target_ahead` once, on that tick, and its release gives
+  nothing, so a hold never also cycles. A tap therefore acts on release, which costs nothing when cycling targets.
+  A console open/close (`resync_edges`) or `reset()` drops a press in progress. Many generic pads have no stick
+  clicks (the maintainer's has neither R3 nor L3), so nothing needed to fly sits on them: R3 keeps `target_ahead`
+  where it exists, and L3's overlay toggle is also F3.
+- `target_ahead` samples the boresight when it fires, so the small stick jolt of an R3 click does not matter.
+- Yaw ramp: while a yaw action is held, `rot.y` moves toward ±1 at `1 / Settings.yaw_ramp_s` per second
   (default 0.25 s to full); release snaps to 0; reversing direction restarts from 0. Taps give fine corrections
-  from a digital D-pad.
+  from a digital D-pad. Analog yaw stays available through pod steering (the triggers, §5.5). The setting was
+  `roll_ramp_s` before the swap; `Settings` reads that key from an old file (`SettingsSchema.RENAMED`) and the next
+  `save` writes the new name.
 - Sticks: `Input.get_vector(neg_x, pos_x, neg_y, pos_y, Settings.stick_deadzone)` (radial deadzone with
-  rescaling), then `sign(x)·|x|^1.5` on pitch/yaw in `InputAdapter`.
+  rescaling), then `sign(x)·|x|^1.5` on pitch and roll in `InputAdapter`. The right stick is one vector (x roll,
+  y pitch), so pitch and roll share the radial deadzone. The keyboard's U/O give full roll at once (no ramp, like
+  any stick key); J/L ramp like the D-pad.
 
 Generic-pad quirks, handled in the input layer (never in gameplay code):
 
@@ -464,14 +514,17 @@ var retro_left: float   # 0..1  LB (0 or 1 from a button; float keeps AI/HOTAS a
 var retro_right: float  # 0..1  RB
 var strafe: Vector2     # x sway right, y heave up, -1..1 (radial)
 var rot: Vector3        # pilot terms: x pitch up, y yaw right, z roll right; -1..1
-var brake: bool         # held
+var brake: bool         # held: all stop, and face face_dir_b if set (§5.5)
 var toggle_assist: bool # edge, true for one tick
+var face_dir_b: Vector3 # body frame (+X right, +Y up, -Z forward), any length, zero = none: what the brake
+                        # turns the nose onto. Not a pilot input: the Ship writes it every tick from its
+                        # TargetingController (line of sight to the selected target).
 
 class_name CombatCommand extends RefCounted   # weapons + targeting; written by the player or an AI
 var fire: bool          # held
 var weapon_next: bool   # edge
-var target_next: bool   # edge
-var target_ahead: bool  # edge
+var target_next: bool   # edge (D-pad Up tap, on release)
+var target_ahead: bool  # edge (R3 press, or D-pad Up held for target_hold_s)
 
 class_name UiCommand extends RefCounted       # player-only
 var toggle_camera: bool # edges, all of them
@@ -490,6 +543,12 @@ var ui: UiCommand
 Tests use `FakeInputSource` with scripted values; the real `GodotInputSource` is a thin wrapper over `Input` and
 `InputMap`.
 
+Why `face_dir_b` lives in `FlightCommand` (and is body-frame): the pure `FlightModel` sees only the command and
+body-frame state, so the direction must arrive in the body frame, and the Ship is the one that knows its basis and
+owns the `TargetingController`. Putting it in the command rather than a `compute` argument keeps one input type
+for every pilot: an AI pilot selects a target and brakes exactly like the player, and pure tests or other hosts can
+set it directly.
+
 ### 6.3 Combat functions behind the buttons (M1)
 
 - **TargetingSystem** (pure). Candidates are `Array[TargetInfo]` (`id`, `display_name`, `faction`, `position`,
@@ -501,7 +560,8 @@ Tests use `FakeInputSource` with scripted values; the real `GodotInputSource` is
   - `readout(ship_pos, ship_vel) -> TargetReadout`: `range_m`, `closing_mps = -(v_t - v_s)·(p_t - p_s) / range`
     (positive = closing), `angle_off_deg`. The selection clears when the target leaves the list or sensor range.
 - **TargetingController** (node under the ship) gathers group `targetable` each physics tick, feeds the system,
-  applies `CombatCommand` edges, emits `target_changed(id)`.
+  applies `CombatCommand` edges, emits `target_changed(id)`. `selected_offset()` is the live World-frame line of
+  sight to the selection (zero without one); the Ship turns it into `FlightCommand.face_dir_b` every tick.
 - **NavBuoy**: inert marker with a splat body (one shared `GaussianResource`, GDGS instancing), a blinking beacon
   mesh, a 10 °/s spin about its long axis, optional constant drift. No collision; cannot be shot. Five are spawned
   from `data/scenarios/free_flight.json` at 0.5-5 km; faction `neutral`.
@@ -605,7 +665,8 @@ unsaved, emits `changed(key, value)`), `reset(key)`, `save()`, `revert()`. Nothi
 | `invert_y` | bool | false | |
 | `stick_deadzone` | float | 0.15 | 0.0-0.30 |
 | `trigger_deadzone` | float | 0.05 | 0.0-0.20 |
-| `roll_ramp_s` | float | 0.25 | 0.05-1.0 |
+| `yaw_ramp_s` (was `roll_ramp_s`) | float | 0.25 | 0.05-1.0 |
+| `target_hold_s` | float | 0.35 | 0.15-1.0 |
 | `assist_default` | bool | true | |
 | `camera_default` | enum | `chase` | `chase`, `cockpit` |
 | `show_overlay` | bool | true | |

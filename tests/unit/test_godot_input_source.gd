@@ -63,12 +63,16 @@ func test_keyboard_masked_pad_passes_through() -> void:
 
 
 func test_stick_vector_and_buttons() -> void:
-	_axis(JOY_AXIS_RIGHT_X, 1.0)
-	var v: Vector2 = source.get_vector(&"yaw_left", &"yaw_right", &"pitch_down", &"pitch_up", 0.15)
+	_axis(JOY_AXIS_RIGHT_X, 1.0)  # right stick X is roll (§6.1)
+	var v: Vector2 = source.get_vector(&"roll_left", &"roll_right", &"pitch_down", &"pitch_up", 0.15)
 	assert_almost_eq(v.x, 1.0, 1e-5)
+	assert_false(source.is_pressed(&"yaw_right"), "the stick no longer yaws")
 	_axis(JOY_AXIS_RIGHT_X, 0.1)
-	v = source.get_vector(&"yaw_left", &"yaw_right", &"pitch_down", &"pitch_up", 0.15)
+	v = source.get_vector(&"roll_left", &"roll_right", &"pitch_down", &"pitch_up", 0.15)
 	assert_eq(v, Vector2.ZERO, "drift inside the radial deadzone")
+	_button(JOY_BUTTON_DPAD_RIGHT, true)
+	assert_true(source.is_pressed(&"yaw_right"), "D-pad right is yaw")
+	assert_false(source.is_pressed(&"roll_right"))
 	_button(JOY_BUTTON_RIGHT_SHOULDER, true)
 	assert_true(source.is_pressed(&"retro_right"))
 	assert_false(source.is_pressed(&"retro_left"))
