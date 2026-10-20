@@ -39,3 +39,4 @@ Thumbs.db
 
 # --- Claude Code agent worktrees (local only) ---
 .claude/worktrees/
+references/
