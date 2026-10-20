@@ -30,6 +30,14 @@ wide across the pods and 8 m tall. The X is wider than tall: struts sit about 30
   thrusters. They splay aft and outward like pincers and are a signature silhouette element in every view
   (front view: they stick out diagonally past the pods).
 - **Guns.** Twin pulse-cannon barrels in a mount under the front of the fuselage.
+- **Cockpit view (maintainer reference, a frame from the show).** The pilot looks out through a wide forward
+  window set in a heavy, dark, faceted frame. A horizontal bar runs across the top. Angled struts run from the
+  upper corners inward and down, so the main pane is a broad trapezoid, with narrower side panes visible at the left
+  and right edges. A dark sill or console runs below the window. Lower centre, a translucent **targeting display**
+  floats in front of the view: a square grid (about 8x8 cells) with a circular reticle and a diagonal marker,
+  reddish-orange in the show. The rest of the view is open space; the frame never crosses the centre.
+  Implications: `cockpit_interior` is the frame, struts and sill only. The targeting display is a HUD element
+  (M2-T08), drawn in the green line theme per the maintainer's HUD answer.
 - **Colours.** Light grey hull with darker panel lines and greebles; hazard stripes on the struts; dark metal
   pods with lighter bands.
 
