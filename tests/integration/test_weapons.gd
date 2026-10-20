@@ -149,7 +149,7 @@ func _hold_fire_for(seconds: float) -> void:
 
 
 func test_materials_are_unshaded_additive_and_emissive() -> void:
-	for material_name: String in ["thruster_glow", "projectile", "muzzle_flash"]:
+	for material_name: String in ["thruster_glow", "thruster_plume", "projectile", "muzzle_flash"]:
 		var material := load(MATERIAL_DIR + material_name + ".tres") as StandardMaterial3D
 		assert_not_null(material, "%s.tres loads as a StandardMaterial3D" % material_name)
 		if material == null:
@@ -160,12 +160,20 @@ func test_materials_are_unshaded_additive_and_emissive() -> void:
 		assert_true(material.emission_enabled, "%s emissive" % material_name)
 
 
-func test_glow_and_flash_materials_billboard_and_keep_scale() -> void:
-	for material_name: String in ["thruster_glow", "muzzle_flash"]:
+func test_flash_material_billboards_and_keeps_scale() -> void:
+	var material := load(MATERIAL_DIR + "muzzle_flash.tres") as StandardMaterial3D
+	assert_eq(material.billboard_mode, BaseMaterial3D.BILLBOARD_ENABLED)
+	assert_true(material.billboard_keep_scale, "keeps the node scale so the flash can grow")
+	assert_not_null(material.albedo_texture, "has its soft round falloff")
+
+
+func test_thruster_materials_are_tied_to_the_nozzle_axis_not_the_camera() -> void:
+	for material_name: String in ["thruster_glow", "thruster_plume"]:
 		var material := load(MATERIAL_DIR + material_name + ".tres") as StandardMaterial3D
-		assert_eq(material.billboard_mode, BaseMaterial3D.BILLBOARD_ENABLED, material_name)
-		assert_true(material.billboard_keep_scale, "%s keeps the node scale so the glow can grow" % material_name)
-		assert_not_null(material.albedo_texture, "%s has its soft round falloff" % material_name)
+		assert_eq(material.billboard_mode, BaseMaterial3D.BILLBOARD_DISABLED, "%s does not billboard" % material_name)
+		assert_eq(material.cull_mode, BaseMaterial3D.CULL_DISABLED, "%s shows both sides of the plume" % material_name)
+	assert_not_null((load(MATERIAL_DIR + "thruster_glow.tres") as StandardMaterial3D).albedo_texture, "the core disc has its soft falloff")
+	assert_true((load(MATERIAL_DIR + "thruster_plume.tres") as StandardMaterial3D).vertex_color_use_as_albedo, "plume fades by vertex alpha")
 
 
 # --- spawning (AC7) -------------------------------------------------------------------------------------------

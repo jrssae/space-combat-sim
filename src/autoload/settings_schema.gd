@@ -19,6 +19,8 @@ const ENTRIES: Dictionary = {
 		"doc": "Flight assist state at spawn"},
 	&"camera_default": {"type": TYPE_ENUM, "default": &"chase", "choices": [&"chase", &"cockpit"],
 		"doc": "Camera mode at spawn"},
+	&"camera_chase_smoothing_s": {"type": TYPE_FLOAT, "default": 0.0, "min": 0.0, "max": 0.5,
+		"doc": "Chase camera orientation lag, s; 0 = rigid mount locked to the ship"},
 	&"show_overlay": {"type": TYPE_BOOL, "default": true,
 		"doc": "Show the debug overlay"},
 	&"show_fps": {"type": TYPE_BOOL, "default": false,

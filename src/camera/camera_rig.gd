@@ -3,8 +3,10 @@ extends Node3D
 ## Owns the two cameras and the mode between them (architecture §3, §8).
 ##
 ## - `CockpitCamera` is glued to the ship's `CockpitAnchor` by a `RemoteTransform3D` that `setup` adds under it.
-## - `ChaseCamera` is `top_level` (it does not follow this node), eased toward its goal pose in `_process` by
-##   `ChaseCameraMath`, and in group `world_shiftable` so `WorldFrame.rebase` moves it together with the ship.
+## - `ChaseCamera` is `top_level` (it does not follow this node) and physics interpolation is off for it: every rendered
+##   frame `_process` puts it on the ship's interpolated pose times the fixed chase pose (`ChaseCameraMath`), so it is
+##   rigidly locked to the ship with no lag. Setting `camera_chase_smoothing_s` > 0 lags its orientation only. It is in
+##   group `world_shiftable` so `WorldFrame.rebase` moves it together with the ship.
 ##
 ## The rig does not know the ship's class: `setup` takes the pieces it needs (a body to follow, an anchor, an offset,
 ## a visibility callback), which keeps it testable with plain nodes. Rebase-safe: the only pose kept between frames is
@@ -20,7 +22,8 @@ signal mode_changed(new_mode: Mode)
 const MODE_CHOICES: Array[StringName] = [&"cockpit", &"chase"]
 const _REMOTE_NAME: StringName = &"CockpitCameraRemote"
 
-## Chase pose tunables. `setup` replaces `offset_local` with the ship's chase anchor.
+## Chase pose tunables. `setup` replaces `offset_local` with the ship's chase anchor; `smoothing_s` follows the
+## `camera_chase_smoothing_s` setting.
 var chase_config: ChaseCameraConfig = ChaseCameraConfig.new()
 
 ## Active camera mode. Assigning it is the same as `set_mode`.
@@ -39,6 +42,8 @@ var _set_interior_visible: Callable = Callable()
 func _ready() -> void:
 	_mode = mode_from_name(StringName(str(Settings.get_value(&"camera_default"))))
 	_apply_mode()
+	_apply_smoothing_setting()
+	Settings.changed.connect(_on_setting_changed)
 	DebugConsole.registry.register_provider(&"camera", ConsoleVars.new({
 		&"mode": {"get": func() -> StringName: return mode_name(_mode),
 				"set": func(value: Variant) -> void: set_mode(mode_from_name(StringName(str(value)))),
@@ -53,6 +58,8 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+	if Settings.changed.is_connected(_on_setting_changed):
+		Settings.changed.disconnect(_on_setting_changed)
 	if _remote != null and is_instance_valid(_remote) and not _remote.is_queued_for_deletion():
 		_remote.queue_free()
 	_remote = null
@@ -117,18 +124,18 @@ func active_camera() -> Camera3D:
 	return cockpit_camera if _mode == Mode.COCKPIT else chase_camera
 
 
-## One smoothing step of the chase camera toward its goal behind the ship. `_process` calls it every frame; public so
-## tests (and a paused-time tool) can step it with a chosen `delta`. Does nothing before `setup`.
+## Puts the chase camera on the ship's pose for this frame. `_process` calls it every frame; public so tests (and a
+## paused-time tool) can step it with a chosen `delta`, which only matters with smoothing on. Does nothing before `setup`.
 func update_chase(delta: float) -> void:
 	if not _has_target():
 		return
-	# The interpolated pose is what the renderer shows for the ship (physics interpolation is on), so the camera
-	# eases toward the same ship the player sees rather than toward the last physics tick.
+	# The interpolated pose is what the renderer shows for the ship (physics interpolation is on), so the camera is
+	# locked to the ship the player sees, not to its last physics tick.
 	chase_camera.global_transform = ChaseCameraMath.step(chase_camera.global_transform,
 			_target.get_global_transform_interpolated(), delta, chase_config)
 
 
-## Puts the chase camera exactly on its goal pose with no easing. For after the ship is teleported (respawn).
+## Puts the chase camera exactly on its goal pose with no smoothing. For after the ship is teleported (respawn).
 func snap_chase() -> void:
 	if not _has_target():
 		return
@@ -160,6 +167,15 @@ func _apply_mode() -> void:
 func _notify_interior() -> void:
 	if _set_interior_visible.is_valid():
 		_set_interior_visible.call(_mode == Mode.COCKPIT)
+
+
+func _apply_smoothing_setting() -> void:
+	chase_config.smoothing_s = float(Settings.get_value(&"camera_chase_smoothing_s"))
+
+
+func _on_setting_changed(key: StringName, _value: Variant) -> void:
+	if key == &"camera_chase_smoothing_s":
+		_apply_smoothing_setting()
 
 
 func _cmd_camera(args: Dictionary) -> ConsoleResult:
