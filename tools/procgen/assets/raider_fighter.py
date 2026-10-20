@@ -70,6 +70,17 @@ CHUNK_ORDER = ("wing_l", "wing_r", "hump", "nacelle_l", "nacelle_r")
 MUZZLE_ORDER = ("root_l", "root_r", "nacelle_l", "nacelle_r")  # left and right take turns in ALTERNATING fire
 
 
+# The default studio rig leaves surfaces that face away from the key light (a fighter seen from behind or below, which is
+# how raiders are mostly seen) at about 0.3 x albedo, near black in an unlit scene. A raised ambient keeps every side
+# readable while the hull facing up still reads brightest.
+RAIDER_RIG = StudioRig(
+    sky=(0.46, 0.47, 0.50),
+    ground=(0.24, 0.24, 0.26),
+    lights=STUDIO_DEFAULT.lights,
+    exposure=1.1,
+)
+
+
 @dataclass(frozen=True)
 class RaiderSpec:
     wing: WingSpec = WingSpec(sweep_deg=56.0, root_chord=5.6, mass_kg=4_400.0)
@@ -373,7 +384,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
     thickness = float(ctx.option("thickness", DEFAULT_THICKNESS))
     if min(spacing, overlap, thickness) <= 0.0:
         raise ValueError("spacing, overlap and thickness must be positive")
-    spec, style, rig = DEFAULT_SPEC, RAIDER, STUDIO_DEFAULT
+    spec, style, rig = DEFAULT_SPEC, RAIDER, RAIDER_RIG
 
     out_dir = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)

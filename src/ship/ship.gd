@@ -370,7 +370,7 @@ func _load_visuals() -> void:
 	hull_splats.gaussian = gaussian
 	hull_mesh_fallback.mesh = _load_mesh(dir.path_join(spec.asset_id + ".obj"))
 	hull_depth_proxy.mesh = hull_mesh_fallback.mesh  # whatever is loaded, so a regenerated hull needs no changes here
-	cockpit_interior.mesh = _load_mesh(dir.path_join(COCKPIT_MESH_FILE))
+	cockpit_interior.mesh = _load_mesh(dir.path_join(COCKPIT_MESH_FILE)) if spec.has_cockpit_interior else null
 
 
 static func _load_mesh(path: String) -> Mesh:

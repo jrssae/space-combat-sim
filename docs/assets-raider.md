@@ -76,10 +76,16 @@ The routine is generic (`ChunkSource(name, splats, mesh)`), so M3 can chunk the 
 
 ## Style `raider`
 
-Hull #77706A, darker panels #3A3632, dark recesses and vents #24211F, faded ochre `stripe` #8A6A2C (an accent band, no
-insignia), dark metal nozzles, a near-black **opaque** canopy. Panel grid 0.5 m, line width 3.5 cm, per-panel tint
+Hull #A89F96, darker panels #544E48, dark recesses and vents #37312D, faded ochre `stripe` #B88A3A (an accent band, no
+insignia), dark metal nozzles, a near-black **opaque** canopy. These are brighter than the milestone's "about #77706A":
+the first capture on the real GPU (RX 6950 XT, Compute backend) showed that albedo as a nearly black silhouette,
+because the baked studio lighting scales albedo by about 0.35 and the engine adds no light of its own. Panel grid 0.5 m, line width 3.5 cm, per-panel tint
 jitter 0.12 (the Earthforce hull's is 0.05), so the plating reads patched and weathered. Left and right wings
 get different panel phases on purpose (positions are symmetric, colours are not).
+
+The baked light rig is the studio rig with a higher ambient (`RAIDER_RIG`: sky 0.46, ground 0.24, exposure 1.1 instead
+of 0.30 / 0.10 / 1.0): in an unlit scene a surface facing away from the rig's key light would otherwise sit at 0.3 x
+albedo, and raiders are mostly seen from behind or below.
 
 ## Determinism and options
 

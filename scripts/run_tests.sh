@@ -176,7 +176,7 @@ if grep -E "${SCRIPT_ERRORS}" "${log}"; then
     echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: camera, combat, controls, debug, hull, input, render, settings, ship, targeting, time, weapons, world" \
+expect_line "${log}" "[console] providers: camera, combat, controls, debug, hull, input, raiders, render, settings, ship, targeting, time, weapons, world" \
     || smoke_status=1
 expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
 expect_line "${log}" "[console] render.splat_backend = headless" || smoke_status=1

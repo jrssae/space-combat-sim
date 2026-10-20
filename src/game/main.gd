@@ -6,6 +6,11 @@ extends Node3D
 
 const SCENARIO_PATH := "res://data/scenarios/free_flight.json"
 const SHIP_SPEC_PATH := "res://assets/ships/starfury_aurora.tres"
+const DEFAULT_RAIDER_POOL: int = 6
+
+## Raiders built (parked) at load for the console's `spawn` and, later, the waves. 0 builds none. Set before the node
+## enters the tree.
+var raider_pool_size: int = DEFAULT_RAIDER_POOL
 
 ## Set before the node enters the tree to drive Main from a script (tests use FakeInputSource).
 var input_source: InputSource = null
@@ -25,6 +30,7 @@ var _spawn_basis: Basis = Basis.IDENTITY
 @onready var camera_rig: CameraRig = $World/CameraRig
 @onready var targets: Node3D = $World/Targets
 @onready var projectiles: Node3D = $World/Projectiles
+@onready var ships: ShipPool = $World/Ships
 @onready var splat_status: SplatStatus = $SplatStatus
 @onready var overlay: DebugOverlay = $DebugOverlay
 
@@ -41,6 +47,11 @@ func _ready() -> void:
 		_spawn_position = player["position"]
 		_spawn_basis = player["basis"]
 	_spawn_ship()
+	ships.world = world
+	ships.projectiles = projectiles
+	ships.player = ship
+	if raider_pool_size > 0:
+		ships.prepare(ShipPool.DEFAULT_TYPE, raider_pool_size)
 	if bool(scenario.get("ok", false)):
 		_spawn_props(scenario["props"])
 	camera_rig.setup(ship, ship.cockpit_anchor, ship.get_chase_offset(), ship.set_cockpit_interior_visible)

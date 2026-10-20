@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="WeaponSpec" load_steps=3 format=3]
+
+[ext_resource type="Script" uid="uid://bsfm2yga6u8tr" path="res://src/weapons/weapon_spec.gd" id="1_weapon_spec"]
+[ext_resource type="Material" path="res://assets/materials/raider_bolt.tres" id="2_bolt"]
+
+[resource]
+script = ExtResource("1_weapon_spec")
+muzzle_speed_mps = 350.0
+shot_interval_s = 0.4
+damage = 6.0
+lifetime_s = 4.0
+hit_radius_m = 0.25
+bolt_material = ExtResource("2_bolt")
+bolt_length_m = 1.5
+bolt_radius_m = 0.05
+bolt_color = Color(3, 0.55, 0.2, 1)
+capacitor_capacity = 100.0
+capacitor_cost_per_shot = 8.0
+capacitor_recharge_per_s = 25.0

@@ -110,7 +110,7 @@ class RaiderFighterTests(unittest.TestCase):
         self.assertGreater(float(np.median(self.splats.alpha)), 0.5)
         lum = self.splats.rgb.mean(axis=1)
         self.assertLess(float(lum.min()), 0.02, "the near-black canopy and nozzle throats")
-        self.assertGreater(float(np.percentile(lum, 90)), 0.08, "worn grey hull plating")
+        self.assertGreater(float(np.percentile(lum, 90)), 0.25, "worn grey hull plating, bright enough to read against the sky")
 
     # --- chunks ----------------------------------------------------------------------------------------------
     def test_chunks_partition_the_hull_splats_exactly(self) -> None:
@@ -295,9 +295,9 @@ class RaiderStyleTests(unittest.TestCase):
         from tools.procgen.styles.raider import RAIDER
 
         r, g, b = (float(c) * 255 for c in linear_to_srgb(np.array(RAIDER.material("hull").albedo)))
-        self.assertAlmostEqual(r, 0x77, delta=2)
-        self.assertAlmostEqual(g, 0x70, delta=2)
-        self.assertAlmostEqual(b, 0x6A, delta=2)
+        self.assertAlmostEqual(r, 0xA8, delta=2)
+        self.assertAlmostEqual(g, 0x9F, delta=2)
+        self.assertAlmostEqual(b, 0x96, delta=2)
         self.assertGreater(r, b, "warm: brown-grey, not blue-grey")
 
 

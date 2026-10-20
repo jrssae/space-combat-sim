@@ -48,6 +48,11 @@ extends Resource
 @export var weapon: WeaponSpec = null
 
 
+## Whether the asset has a first-person `cockpit_interior.obj` (the Starfury does; AI ships such as the raider do not,
+## so the ship does not look for it or warn about it).
+@export var has_cockpit_interior: bool = true
+
+
 ## Where this ship's generated hardpoints live.
 func hardpoints_path() -> String:
 	return "res://assets/generated/%s/hardpoints.json" % asset_id

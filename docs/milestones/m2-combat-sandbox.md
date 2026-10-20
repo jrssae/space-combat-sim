@@ -3,7 +3,7 @@
 > "Something to shoot." (`docs/roadmap.md`)
 
 **Status:** in progress. The maintainer asked to proceed before M1's re-test. Done: **T01** combat maths, **T02**
-multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T05 (raider ship and pool), T08 (HUD), T12 (sound). See `docs/handoff.md`.
+multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T05** raider ship and pool, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T06 (destruction), T07 (AI), T08 (HUD), T12 (sound). See `docs/handoff.md`.
 
 Read `docs/architecture.md` first, §1-§13 and especially **§15** (the M2 design: decisions D20-D29, tick order, hit
 detection, pools, brains, HUD, console additions). Task notes reference its sections (§). Tasks are ordered; each
@@ -647,6 +647,27 @@ history.
   `NacelleSpec`/`nacelle` in `parts/propulsion.py`, `styles/raider.py`, `core/chunks.py`.
 - Not done here: the Godot import half of AC4 and the P1 screenshots (T05). The look is `(H)`; a Python orthographic
   preview matched the sheet's silhouette from top, side and front, which is as far as the container can check.
+
+**M2-T05 (raider ship and pool).**
+- `ShipPool` is the `World/Ships` node (a `Node3D` with the script), built by `Main` with `raider_pool_size` (default 6;
+  set it to 0 before the node enters the tree to skip the pool). Until T09 gives the scenarios their own pool size, the
+  free-flight scene carries six parked raiders: about 160k hidden splats on top of the Starfury, sky and buoys. They only
+  cost an early-out per splat (D22). `(H)`: confirm 60 fps.
+- `acquire(display_name, at, basis, velocity, brain, type)` and `release(combatant)`; a parked ship is hidden,
+  `PROCESS_MODE_DISABLED` (its body leaves the physics space), its `Targetable` and `Damageable` are inactive. An empty
+  pool returns null with one warning. `ShipPool.next_name()` gives the lowest free `RAIDER <n>`.
+- `ShipSpec.has_cockpit_interior` (default true; the raider sets it false) stops `Ship` from warning about the missing
+  `cockpit_interior.obj`.
+- Raider tunables as in the notes above, plus `fuel_capacity_kg` 10 000 (10 minutes of both nacelles at full) and
+  capacitor 100 / 8 / 25 (sustained fire at 2.5 shots per second is affordable). The raider's bolt colour is
+  (3, 0.55, 0.2) orange-red (`assets/materials/raider_bolt.tres`).
+- AC5 numbers: both mains for 2 s give exactly the formula speed (25.0 m/s); assist stops a 45 deg/s spin in 0.88 s; brake
+  stops a 40 m/s drift in 5.8 s in both assist modes. The pods' pitch and roll torque axes are below 1e-6.
+- Not done here: the "three-wave headless run" of AC6 (T09). `tests/fixtures/hardpoints_raider_nominal.json` is a static
+  copy of the generated hardpoints (`test_raider_layout.gd`); regenerate it if the generator's pod layout changes.
+- P1 screenshots: captured on the real GPU (`reports/m2/`, untracked) with the console recipe, but without `idle` (no AI
+  brains yet). First capture showed the raider almost black, so the `raider` style and light rig were brightened (see
+  `docs/assets-raider.md`). The splats look soft at 15-30 m (0.09 m spacing); they are meant for 100 m and up.
 
 ## Definition of done (M2)
 

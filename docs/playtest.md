@@ -73,6 +73,8 @@ camera cockpit             set camera            set weapons.mode linked
 set settings.fuel_unlimited off   finite fuel    set ship.fuel_kg 0 / refuel   empty / refill the tank
 set weapons.charge 0       empty the capacitor   get ship.fuel_fraction / weapons.charge   the HUD gauges
 fallback on                force mesh fallback   set targeting.selected "NAV BRAVO"
+spawn raider 40 35 20      a raider 40 m ahead, nose to you, yaw 35 / pitch 20 (despawn all removes)
+damage 50 / heal           hit or restore your hull (god on blocks the damage)
 ```
 
 ### Control profiles

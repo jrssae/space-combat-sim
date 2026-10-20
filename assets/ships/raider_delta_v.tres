@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="ShipSpec" load_steps=3 format=3]
+
+[ext_resource type="Script" uid="uid://csixdcdy0fu46" path="res://src/ship/ship_spec.gd" id="1_ship_spec"]
+[ext_resource type="Resource" path="res://assets/weapons/raider_plasma.tres" id="2_weapon"]
+
+[resource]
+script = ExtResource("1_ship_spec")
+asset_id = "raider_fighter"
+mass = 20000.0
+inertia = Vector3(140000, 560000, 430000)
+pod_main_thrust = 250000.0
+pod_retro_thrust = 75000.0
+rcs_force_max = Vector3(160000, 160000, 0)
+rcs_torque_max = Vector3(219800, 672000, 1075000)
+rate_max = Vector3(60, 45, 90)
+assist_gain_k = 6.0
+pod_yaw_gain = 0.5
+pod_yaw_deadzone = 0.1
+pod_yaw_smoothing_s = 0.15
+brake_gain_k = 2.0
+exhaust_velocity = 30000.0
+fuel_capacity_kg = 10000.0
+hull_max = 60.0
+has_cockpit_interior = false
+engine_glow_color = Color(1, 0.85, 0.55, 1)
+weapon = ExtResource("2_weapon")
