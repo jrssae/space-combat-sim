@@ -1,0 +1,49 @@
+class_name ShipSpec
+extends Resource
+## Tunable parameters of one ship type (architecture §5.1). Pure data: the flight model, the ship node and the
+## tests all read the same resource, so expected values in tests are derived from it, never hard-coded.
+##
+## Mass and inertia are design values, not the generator's `mass_kg` / `inertia_estimate_kg_m2` from
+## `hardpoints.json`: the estimate is point masses at part centroids (a lower bound, documented as informational
+## in docs/assets-starfury.md), while the rates, RCS torque (= inertia × angular acceleration) and the trim numbers
+## in §5.1 are all pinned to the inertia here. Geometry (nozzle positions, centre of mass) does come from the
+## hardpoints, through `ThrusterLayout`.
+
+## Folder name under assets/generated/ that holds this ship's splats, meshes and hardpoints.json.
+@export var asset_id: String = ""
+## kg.
+@export var mass: float = 48000.0
+## Body-frame diagonal inertia, kg·m²: x pitch, y yaw, z roll.
+@export var inertia: Vector3 = Vector3(6.0e5, 6.0e5, 5.0e5)
+## N per pod main nozzle (exhaust +Z, thrust forward).
+@export var pod_main_thrust: float = 3.6e5
+## N per pod retro nozzle (exhaust -Z, thrust aft).
+@export var pod_retro_thrust: float = 1.8e5
+## N, body frame: x sway, y heave, z 0 (fore/aft is the pods' job).
+@export var rcs_force_max: Vector3 = Vector3(4.8e5, 4.8e5, 0.0)
+## N·m, body frame: x pitch, y yaw, z roll.
+@export var rcs_torque_max: Vector3 = Vector3(9.4e5, 9.4e5, 1.57e6)
+## deg/s, pilot axes (pitch, yaw, roll): the assist's rate target at full deflection.
+@export var rate_max: Vector3 = Vector3(60.0, 60.0, 90.0)
+## s⁻¹, rate controller P gain.
+@export var assist_gain_k: float = 6.0
+## Assist on: one full one-sided trigger commands `pod_yaw_gain × rate_max.y` of yaw.
+@export var pod_yaw_gain: float = 0.5
+## Assist on: trigger (and bumper) side differences below this fly straight.
+@export var pod_yaw_deadzone: float = 0.10
+## s, first-order smoothing time constant of the pod-yaw command.
+@export var pod_yaw_smoothing_s: float = 0.15
+## s⁻¹, translational brake P gain.
+@export var brake_gain_k: float = 2.0
+## m/s, for the reaction-mass seam only: `mass_flow = Σ thrust / exhaust_velocity` (unlimited in M1).
+@export var exhaust_velocity: float = 30000.0
+
+
+## Where this ship's generated hardpoints live.
+func hardpoints_path() -> String:
+	return "res://assets/generated/%s/hardpoints.json" % asset_id
+
+
+## `rate_max` in rad/s.
+func rate_max_rad() -> Vector3:
+	return Vector3(deg_to_rad(rate_max.x), deg_to_rad(rate_max.y), deg_to_rad(rate_max.z))

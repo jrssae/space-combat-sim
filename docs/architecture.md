@@ -241,7 +241,7 @@ if c.brake:
     a_des = -brake_gain_k * v_b - env_accel_b                     # env term: gravity hook (zero in M1)
     f_z   = clamp(mass * a_des.z, -main_total, retro_total)       # totals = 4 x per-pod thrust; -Z is forward
     level[R_MAIN]  = level[L_MAIN]  = max(0, -f_z) / main_total   # symmetric sides => zero pod torque
-    level[R_RETRO] = level[L_RETRO] = max(0,  f_z) / retro_total
+    level[R_RETRO] = level[L_RETRO] = max(0,  f_z) / retro_total  # (4b may still trim one side under a stick demand)
     rcs_force = clamp(mass * Vector3(a_des.x, a_des.y, 0), -rcs_force_max, rcs_force_max)
 
 # 3. pod forces and their torque about the CoM: physics, not a yaw term
@@ -262,9 +262,9 @@ if assist_on:
     tau_des  = inertia * assist_gain_k * (w_target - w_b)          # diagonal inertia, per axis
     residual = tau_des - tau_pods
     overflow = residual - clamp(residual, -rcs_torque_max, rcs_torque_max)
-    if overflow.y != 0:            # pods yaw harder than RCS can counter: trim the groups causing it
-        cause = groups g with sign(tau_g.y) == -sign(overflow.y)
-        lam   = max(0, 1 - |overflow.y| / Σ_{g in cause} |tau_g.y|)
+    if overflow.y != 0:            # more yaw is needed than RCS has: trim the groups fighting it (never raise any)
+        cause = groups g with sign(tau_g.y) == -sign(overflow.y)   # empty when the stick alone asks too much
+        lam   = 1 if cause is empty else max(0, 1 - |overflow.y| / Σ_{g in cause} |tau_g.y|)
         level[g] *= lam for g in cause;  recompute F_pods, tau_pods;  residual = tau_des - tau_pods
     tau_rcs = clamp(residual, -rcs_torque_max, rcs_torque_max)
 else:
@@ -344,6 +344,8 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
 - **Brake** (hold X), both modes: the flight computer takes over translation. Pods fire symmetrically (no torque)
   plus RCS sway/heave, nulling velocity relative to the `World` frame (later: relative to a chosen reference such
   as the station). Triggers, bumpers and the left stick are ignored while held; rotation follows the assist mode.
+  With assist on, a stick demand beyond RCS authority still goes through the yaw trim, which may cut the retro or
+  main side fighting it until the rate is reached; the brake's symmetric level stays the ceiling.
 - **Why this rule** (user decision: pod steering must work with assist on too). (1) Pod steering is the Starfury
   identity in both modes; assist off is the raw tank-steer, assist on is the same gesture made controllable: a
   bounded, predictable turn rate instead of ≈ 220 °/s² of runaway, which stops when the sides are evened out.

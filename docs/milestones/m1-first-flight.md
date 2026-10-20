@@ -277,7 +277,7 @@ hardpoints, never hard-coded.
   (group, position, exhaust, `r = p - com`) and the cosmetic RCS list. `FlightOutput`: `nozzle_forces:
   Array[Dictionary]` (`position`, `force`, group, level), `rcs_force_b`, `rcs_torque_b`, `force_b`, `torque_b`,
   `trim` (0..1), `pod_yaw_cmd` (-1..1, pilot terms), `main_levels`/`retro_levels` per pod after trim,
-  `rcs_levels` (Vector3 force, Vector3 torque, -1..1), `mass_flow_kg_s`. Implement `AXIS_SIGN = Vector3(1, -1,
+  `rcs_force_level`/`rcs_torque_level` (Vector3, -1..1), `mass_flow_kg_s`. Implement `AXIS_SIGN = Vector3(1, -1,
   -1)` once, in `FlightModel`. `ShipSpec` gains `pod_yaw_gain = 0.5`, `pod_yaw_deadzone = 0.10`,
   `pod_yaw_smoothing_s = 0.15` (§5.1). Unit tests, one per row of the §5.2 table (signs of `torque_b` and
   `force_b`, assist off and on), plus: `|tau_pods.x|, |tau_pods.z| < 1e-6` for random demands; pod-yaw command
