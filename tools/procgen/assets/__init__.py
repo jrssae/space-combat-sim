@@ -9,8 +9,9 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from ..core.context import AssetOutputs, BuildContext
-from . import sky_default
+from . import sky_default, starfury_aurora
 
 ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
     "sky_default": sky_default.build,
+    "starfury_aurora": starfury_aurora.build,
 }

@@ -1,12 +1,18 @@
-"""Command line: ``python3 -m tools.procgen list | build <asset_id>... | build all``."""
+"""Command line: ``python3 -m tools.procgen list | build <asset_id>... | build all``.
+
+``--spacing`` and ``--option key=value`` land in ``BuildContext.options``; assets read what
+they understand (``starfury_aurora``: ``spacing``, ``overlap``, ``thickness``) and ignore the rest.
+"""
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 from .assets import ASSETS
 from .core.context import DEFAULT_OUT_ROOT, DEFAULT_SEED, AssetOutputs, BuildContext
@@ -27,6 +33,28 @@ def _seed(text: str) -> int:
     if value < 0:
         raise argparse.ArgumentTypeError(f"invalid seed {text!r}: must be >= 0")
     return value
+
+
+def _spacing(text: str) -> float:
+    try:
+        value = float(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid spacing {text!r}: expected a number") from exc
+    if not value > 0.0:
+        raise argparse.ArgumentTypeError(f"invalid spacing {text!r}: must be > 0")
+    return value
+
+
+def _option(text: str) -> tuple[str, Any]:
+    """``key=value`` with the value parsed as JSON when possible (so ``overlap=1.2`` is a number)."""
+    key, sep, raw = text.partition("=")
+    if not sep or not key:
+        raise argparse.ArgumentTypeError(f"invalid option {text!r}: expected key=value")
+    try:
+        value: Any = json.loads(raw)
+    except json.JSONDecodeError:
+        value = raw
+    return key, value
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -57,6 +85,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_OUT_ROOT,
         help="output root (default: <repo>/assets/generated)",
     )
+    build.add_argument(
+        "--spacing",
+        type=_spacing,
+        default=None,
+        metavar="M",
+        help="splat spacing in metres for surface-sampled assets (starfury_aurora default 0.06)",
+    )
+    build.add_argument(
+        "--option",
+        type=_option,
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="extra BuildContext option (JSON value), e.g. --option overlap=1.2; repeatable",
+    )
     return parser
 
 
@@ -71,10 +114,10 @@ def _resolve_ids(requested: Sequence[str]) -> list[str]:
     return list(dict.fromkeys(requested))
 
 
-def _build_one(asset_id: str, seed: int, out_root: Path) -> AssetOutputs:
+def _build_one(asset_id: str, seed: int, out_root: Path, options: dict[str, Any] | None = None) -> AssetOutputs:
     out_dir = out_root / asset_id
     out_dir.mkdir(parents=True, exist_ok=True)
-    outputs = ASSETS[asset_id](BuildContext(out_dir=out_dir, seed=seed))
+    outputs = ASSETS[asset_id](BuildContext(out_dir=out_dir, seed=seed, options=dict(options or {})))
     manifest_path = out_dir / MANIFEST_NAME
     if not manifest_path.is_file():
         raise RuntimeError(f"{asset_id}: build() did not write {MANIFEST_NAME}")
@@ -112,11 +155,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return EXIT_USAGE
 
+    options: dict[str, Any] = dict(args.option)
+    if args.spacing is not None:
+        options["spacing"] = args.spacing
+
     failed = 0
     for asset_id in asset_ids:
         started = time.perf_counter()
         try:
-            outputs = _build_one(asset_id, args.seed, args.out)
+            outputs = _build_one(asset_id, args.seed, args.out, options)
         except Exception as exc:  # noqa: BLE001 - report which asset failed, keep building the rest
             print(
                 f"error: {asset_id} failed: {type(exc).__name__}: {exc}",

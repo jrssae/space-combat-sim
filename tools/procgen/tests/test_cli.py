@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 from tools.procgen.__main__ import main
-from tools.procgen.assets import ASSETS, sky_default
+from tools.procgen.assets import ASSETS, sky_default, starfury_aurora
 from tools.procgen.core.context import REPO_ROOT, AssetOutputs, BuildContext
 from tools.procgen.core.manifest import build_manifest, lod_entry, write_manifest
 
@@ -55,8 +55,10 @@ def make_fake(
 class RegistryTests(unittest.TestCase):
     def test_registry_maps_ids_to_callables(self) -> None:
         self.assertIn("sky_default", ASSETS)
+        self.assertIn("starfury_aurora", ASSETS)
         self.assertTrue(all(callable(build) for build in ASSETS.values()))
         self.assertIs(ASSETS["sky_default"], sky_default.build)
+        self.assertIs(ASSETS["starfury_aurora"], starfury_aurora.build)
 
 
 class ListTests(unittest.TestCase):
@@ -124,6 +126,37 @@ class BuildTests(unittest.TestCase):
         with mock.patch.dict(ASSETS, self.fakes(), clear=True):
             run("build", "alpha", "--seed", "7", "--out", str(self.out))
         self.assertEqual(self.calls[0][1], 7)
+
+    def test_spacing_and_options_land_in_the_build_context(self) -> None:
+        seen: list[dict] = []
+
+        def spy(ctx: BuildContext) -> AssetOutputs:
+            seen.append(dict(ctx.options))
+            return make_fake([], "spy")(ctx)
+
+        with mock.patch.dict(ASSETS, {"spy": spy}, clear=True):
+            code, _, _ = run(
+                "build", "spy", "--out", str(self.out), "--spacing", "0.05",
+                "--option", "overlap=1.2", "--option", "label=fine", "--option", "flags=[1,2]",
+            )  # fmt: skip
+            self.assertEqual(code, 0)
+            run("build", "spy", "--out", str(self.out))
+        self.assertEqual(seen[0], {"spacing": 0.05, "overlap": 1.2, "label": "fine", "flags": [1, 2]})
+        self.assertEqual(seen[1], {})
+
+    def test_bad_spacing_and_options_are_argparse_errors(self) -> None:
+        for argv in (
+            ["build", "alpha", "--spacing", "0"],
+            ["build", "alpha", "--spacing", "x"],
+            ["build", "alpha", "--option", "novalue"],
+        ):
+            with (
+                self.subTest(argv),
+                contextlib.redirect_stderr(io.StringIO()),
+                self.assertRaises(SystemExit) as raised,
+            ):
+                main(argv)
+            self.assertEqual(raised.exception.code, 2)
 
     def test_named_assets_build_in_the_order_given_and_once(self) -> None:
         with mock.patch.dict(ASSETS, self.fakes(), clear=True):
