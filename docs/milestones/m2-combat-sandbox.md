@@ -173,7 +173,8 @@ history.
 | M2-T09 | Combat sandbox scenario and waves | T05, T06, T07 | Sonnet |
 | M2-T10 | Integration, smoke runs, capture set, play-test guide | T01-T09 | Opus |
 | M2-T11 | Control profiles | M1 input fix only; any time, in parallel | Sonnet |
-| M2-T12 | Generated sound (may slip to M3) | T03, T06 | Sonnet |
+| M2-T12 | Generated sound (required: audible space, Q5) | T03, T06 | Sonnet |
+| M2-T14 | Reaction mass and weapon capacitor | M1 fixes; any time, before T08's gauges are final | Sonnet |
 | M2-T13 | (conditional) Raider look pass | AC15 rejected | Opus (Fable if available) |
 
 ### M2-T01 Combat maths (pure)
