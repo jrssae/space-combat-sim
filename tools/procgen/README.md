@@ -13,11 +13,15 @@ scripts/gen_assets.sh                           # python3 -m tools.procgen build
 python3 -m tools.procgen list                   # registered asset ids, one per line, sorted
 python3 -m tools.procgen build sky_default      # one or more ids
 python3 -m tools.procgen build all --seed 7 --out /tmp/assets
+python3 -m tools.procgen build starfury_aurora --spacing 0.05 --option overlap=1.2
 python3 -m unittest discover -s tools/procgen/tests -t . -v
 ```
 
 - `--seed N` (default 42, must be >= 0): the same seed always produces byte-identical files.
 - `--out DIR` (default `<repo>/assets/generated`): output root; each asset writes into `DIR/<asset_id>/`.
+- `--spacing M`: splat spacing in metres for surface-sampled assets (`starfury_aurora` default 0.035).
+- `--option KEY=VALUE` (repeatable, JSON values): any other `BuildContext.options` entry, e.g. `overlap=1.2`.
+  Assets ignore options they do not know.
 - `build all` builds every registered asset in sorted order. If `all` appears among other ids it wins.
 - Exit codes: 0 ok, 1 an asset failed to build (the others still build), 2 usage error (unknown id, bad seed).
 - Warnings (for example the skipped panorama) are printed to stderr as `warning: ...`.
@@ -30,9 +34,18 @@ core/ply.py        3DGS PLY writer + reader (SplatData, write_ply, read_ply)
 core/frames.py     Godot <-> 3DGS (Rz 180) conversion, quaternion helpers
 core/color.py      blackbody star colours, sRGB transfer
 core/manifest.py   manifest.json builder/validator/writer
+core/geometry.py   Mesh + Material, primitives (box, tapered box, lathe, loft, superellipse, ellipsoid cap)
+core/sampling.py   mesh -> surface samples (area-weighted, stratified, R2 low-discrepancy) -> flat splats
+core/lighting.py   baked studio rig (hemisphere ambient + directional lights) for unlit splats
+core/obj.py        OBJ/MTL writer and a small reader for tests
+parts/             reusable parametric parts: hull (fuselage, canopy, cockpit interior/tub),
+                   propulsion (nozzle, RCS cone, engine pod, pilot_tags), structure (strut, block,
+                   panel, mast), weapons (gun barrel). Spec dataclass + Style in, Part out
+                   (mesh, named anchors, collision primitives, mass)
+styles/            design languages: Style (material roles + panel-shading parameters); earthforce.py
 assets/__init__.py registry: ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]]
 assets/<id>.py     one module per asset, exposing build(ctx)
-tests/             unittest: core, CLI, and every asset
+tests/             unittest: core, parts, CLI, and every asset
 ```
 
 ## Conventions every generator follows
@@ -61,6 +74,24 @@ tests/             unittest: core, CLI, and every asset
 3. Add `tests/test_my_asset.py`: splat count range, PLY fields parse back, centroid near zero, manifest `lods[0]`,
    and same seed gives the same SHA-256 (see `test_sky_default.py` for a template).
 4. Run the tests and `scripts/gen_assets.sh`. Third-party dependencies need an entry in `docs/third-party.md`.
+
+## `starfury_aurora`
+
+The player's Starfury-inspired fighter, composed from `parts/` with the `earthforce` style. Outputs
+`starfury_aurora.ply` (about 137k flat, oriented splats at 0.035 m spacing), `starfury_aurora.obj/.mtl`
+(fallback mesh), `cockpit_interior.obj/.mtl`, `hardpoints.json` and `manifest.json`. The full description,
+the hardpoints schema and the splat-quality reasoning are in `docs/assets-starfury.md`.
+
+Things the Godot side must know:
+
+- All outputs share one frame: the centred Godot body frame (splat centroid = origin, within float32).
+  `manifest.centroid_offset` only documents how far the authoring frame was shifted; nothing needs it.
+- Splats are written in `manifest.counts` order, so every part is a contiguous slice of the PLY (useful
+  for debugging and future per-part effects).
+- `hardpoints.json` is the contract for the flight model, cameras, weapons and collision (schema in the docs
+  page); `center_of_mass` is on the thrust axis by design.
+- The canopy panes are tinted glass (per-splat alpha ~0.03, 70 % transmission through the sheet); the
+  frame hoops and the dark cockpit well behind them are opaque. `(H)`: judge the look in both cameras.
 
 ## `sky_default`
 
