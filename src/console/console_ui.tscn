@@ -1,0 +1,61 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://src/console/console_ui.gd" id="1_script"]
+
+[sub_resource type="SystemFont" id="SystemFont_mono"]
+font_names = PackedStringArray("monospace", "DejaVu Sans Mono", "Liberation Mono")
+
+[sub_resource type="Theme" id="Theme_console"]
+default_font = SubResource("SystemFont_mono")
+default_font_size = 15
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+content_margin_left = 10.0
+content_margin_top = 8.0
+content_margin_right = 10.0
+content_margin_bottom = 8.0
+bg_color = Color(0.02, 0.03, 0.06, 0.86)
+border_width_bottom = 2
+border_color = Color(0.3, 0.5, 0.8, 0.9)
+
+[node name="ConsoleUI" type="CanvasLayer"]
+layer = 100
+visible = false
+script = ExtResource("1_script")
+
+[node name="Panel" type="PanelContainer" parent="."]
+anchors_preset = -1
+anchor_right = 1.0
+anchor_bottom = 0.4
+grow_horizontal = 2
+theme = SubResource("Theme_console")
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="VBox" type="VBoxContainer" parent="Panel"]
+layout_mode = 2
+
+[node name="Log" type="RichTextLabel" parent="Panel/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 0
+bbcode_enabled = true
+scroll_following = true
+selection_enabled = true
+
+[node name="PromptRow" type="HBoxContainer" parent="Panel/VBox"]
+layout_mode = 2
+
+[node name="PromptLabel" type="Label" parent="Panel/VBox/PromptRow"]
+layout_mode = 2
+text = ">"
+
+[node name="Prompt" type="LineEdit" parent="Panel/VBox/PromptRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+keep_editing_on_text_submit = true
+context_menu_enabled = false
+emoji_menu_enabled = false
+caret_blink = true
+flat = true
