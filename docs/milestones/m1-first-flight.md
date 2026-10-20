@@ -365,11 +365,14 @@ hardpoints, never hard-coded.
 - Goal: cockpit and chase cameras with toggle and smoothing.
 - Files: `src/camera/camera_rig.gd`, `src/camera/chase_camera_math.gd`, `src/camera/camera_rig.tscn`,
   `tests/unit/test_chase_camera_math.gd`, `tests/integration/test_camera_rig.gd`.
-- Notes: §8. `enum Mode { COCKPIT, CHASE }` (more later); `CameraRig.setup(ship: Ship)`; adds a
-  `RemoteTransform3D` under the ship's `CockpitAnchor` pointing at `CockpitCamera`. `ChaseCameraMath.step(current:
+- Notes: §8. `enum Mode { COCKPIT, CHASE }` (more later); `CameraRig.setup(target: Node3D, cockpit_anchor: Node3D,
+  chase_offset_local: Vector3, set_interior_visible: Callable)` (no `Ship` dependency; T15 passes the ship, its
+  `CockpitAnchor`, the hardpoints' `chase_anchor` and `set_cockpit_interior_visible`); adds a
+  `RemoteTransform3D` under the anchor pointing at `CockpitCamera`. `ChaseCameraMath.step(current:
   Transform3D, ship: Transform3D, dt: float, cfg) -> Transform3D` with half-life smoothing; unit test that two
   1/120 s steps equal one 1/60 s step within 1e-4. `ChaseCamera` joins `world_shiftable`. Toggle sets `current`
-  and `ship.set_cockpit_interior_visible(mode == COCKPIT)`. Near 0.05, far 50 000, FOV 75 (cockpit) / 70 (chase).
+  and calls `set_interior_visible(mode == COCKPIT)` (also once in `setup`). Near 0.05, far 50 000, FOV 75 (cockpit) /
+  70 (chase). `cfg` is a `ChaseCameraConfig` Resource (`src/camera/chase_camera_config.gd`).
 - Console: `CameraRig` registers provider `camera` (`mode` writable) and command `camera [cockpit|chase]`.
 - Done when: camera part of AC10 passes; math tests pass.
 - Verify: GUT.
