@@ -119,6 +119,102 @@ class PrimitiveTests(unittest.TestCase):
             g.ellipsoid_cap((1.0, 0.5, 2.0), 0.6, HULL)
 
 
+class PlanarHelperTests(unittest.TestCase):
+    def test_polygon_area_and_inset(self) -> None:
+        square = np.array([[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0]])
+        self.assertAlmostEqual(g.polygon_area_2d(square), 4.0)
+        self.assertAlmostEqual(g.polygon_area_2d(square[::-1]), -4.0)
+        np.testing.assert_allclose(
+            g.inset_convex_polygon(square, 0.5),
+            [[0.5, 0.5], [1.5, 0.5], [1.5, 1.5], [0.5, 1.5]],
+        )
+        with self.assertRaises(ValueError):
+            g.inset_convex_polygon(square[::-1], 0.1)
+
+    def test_prism_with_a_hole_is_closed_and_faces_outwards(self) -> None:
+        # A 3 x 1 plate with a 1 x 0.5 hole, tiled by three pieces around the hole.
+        outer = np.array([[0.0, 0.0], [3.0, 0.0], [3.0, 1.0], [0.0, 1.0]])
+        hole = np.array([[1.0, 0.25], [2.0, 0.25], [2.0, 0.75], [1.0, 0.75]])
+        pieces = [
+            (np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]), HULL),
+            (np.array([[2.0, 0.0], [3.0, 0.0], [3.0, 1.0], [2.0, 1.0]]), HULL),
+            (np.array([[1.0, 0.0], [2.0, 0.0], [2.0, 0.25], [1.0, 0.25]]), DARK),
+            (np.array([[1.0, 0.75], [2.0, 0.75], [2.0, 1.0], [1.0, 1.0]]), DARK),
+        ]
+        mesh = g.prism(
+            pieces, [(outer[::-1], DARK), (hole, DARK)], 0.1
+        )  # orientation is fixed inside
+        faces_area = 2 * (3.0 - 0.5)
+        walls = 0.1 * (8.0 + 3.0)
+        self.assertAlmostEqual(mesh.area(), faces_area + walls)
+        n, c = mesh.face_normals(), mesh.face_centroids()
+        top, bottom = c[:, 2] > 0.04, c[:, 2] < -0.04
+        np.testing.assert_allclose(
+            n[top], np.tile([0, 0, 1.0], (int(top.sum()), 1)), atol=1e-12
+        )
+        np.testing.assert_allclose(
+            n[bottom], np.tile([0, 0, -1.0], (int(bottom.sum()), 1)), atol=1e-12
+        )
+        side = ~(top | bottom)
+        in_hole = (
+            (c[side, 0] > 0.99)
+            & (c[side, 0] < 2.01)
+            & (c[side, 1] > 0.24)
+            & (c[side, 1] < 0.76)
+        )
+        to_hole_centre = np.array([1.5, 0.5]) - c[side, :2]
+        facing = np.einsum("ij,ij->i", n[side, :2], to_hole_centre)
+        self.assertTrue(np.all(facing[in_hole] > 0.0))  # hole walls face into the hole
+        self.assertTrue(
+            np.all(facing[~in_hole] < 0.0)
+        )  # outline walls face away from it
+
+    def test_sweep_rect_bends_with_mitred_corners(self) -> None:
+        path = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 2.0]])
+        mesh = g.sweep_rect(
+            path,
+            [0.0, 1.0, 0.0],
+            [0.2, 0.2, 0.1],
+            [0.1, 0.1, 0.1],
+            HULL,
+            end_material=DARK,
+        )
+        lo, hi = mesh.bounds()
+        np.testing.assert_allclose(
+            [lo[1], hi[1]], [-0.1, 0.1], atol=1e-12
+        )  # width along the axis
+        self.assertAlmostEqual(
+            float(hi[2]), 2.0 + 0.05 / math.sqrt(2.0), places=9
+        )  # tip cap
+        self.assertEqual({m.name for m in mesh.materials}, {"hull", "dark"})
+        # Side normals point away from the path, caps along it.
+        n, c = mesh.face_normals(), mesh.face_centroids()
+        first_leg = (mesh.face_material == 0) & (c[:, 2] < 0.9) & (c[:, 0] < 0.05)
+        radial = c[first_leg] * np.array([1.0, 1.0, 0.0])
+        self.assertTrue(np.all(np.einsum("ij,ij->i", n[first_leg], radial) > 0.0))
+        caps = mesh.face_material == 1
+        self.assertTrue(
+            np.all(np.isclose(n[caps][:2], [0.0, 0.0, -1.0]))
+        )  # start cap faces back along the path
+        np.testing.assert_allclose(
+            n[caps][2:], np.tile([1.0, 0.0, 1.0], (2, 1)) / math.sqrt(2.0), atol=1e-12
+        )
+        with self.assertRaises(ValueError):
+            g.sweep_rect(
+                path, [1.0, 0.0, 0.0], [0.1] * 3, [0.1] * 3, HULL
+            )  # axis not perpendicular
+
+    def test_face_subset_keeps_vertices_and_materials(self) -> None:
+        mesh = g.tapered_box(
+            1.0, (1.0, 1.0), (1.0, 1.0), HULL, materials_by_face={"top": DARK}
+        )
+        top = mesh.face_material == mesh.material_index("dark")
+        part = mesh.face_subset(top)
+        self.assertEqual((part.face_count, part.vertex_count), (2, mesh.vertex_count))
+        self.assertAlmostEqual(part.area(), 1.0)
+        self.assertEqual(part.materials, mesh.materials)
+
+
 class MeshOperationTests(unittest.TestCase):
     def test_transform_translate_mirror_keep_normals_outward(self) -> None:
         mesh = g.box((1.0, 1.0, 1.0), HULL)

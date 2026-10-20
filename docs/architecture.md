@@ -783,14 +783,17 @@ in the editor, lights splats from scene `Light3D`s) is the later option for cons
 
 ## 8. Camera
 
-- **Cockpit**: `Camera3D` glued to `CockpitAnchor` (hardpoint) via `RemoteTransform3D`; FOV 75°. The hull splats
-  of the nose and struts are visible, as in the real Starfury. Cockpit interior mesh visible.
+- **Cockpit**: `Camera3D` glued to `CockpitAnchor` (hardpoint) via `RemoteTransform3D`; FOV 75°. The pilot looks
+  out through the nose window as in the maintainer's reference (`docs/design-references.md`, "Cockpit view"): a
+  broad trapezoid pane, a bar across the top, struts down its sides, side panes at the edges, the sill below; the
+  frame never crosses the centre. Cockpit interior mesh visible.
 - **Chase**: `top_level` camera, **rigidly attached to the ship**. Every rendered frame `CameraRig._process` sets
   its transform to the ship's *physics-interpolated* global transform (`get_global_transform_interpolated()`) times
-  one fixed ship-space pose from `ChaseCameraMath.local_pose`: position `Vector3(0, 2.5, 9.0)` (behind and above),
-  looking at the point 40 m ahead of the ship's origin along its nose, up = ship up. There is no easing and no
-  velocity input: reverse thrust, yaw and roll cannot move the camera relative to the ship (tested to 1e-4 in every
-  frame), and the camera follows *orientation*, so sideways drift and pod tank-steering are visible in the world,
+  one fixed ship-space pose from `ChaseCameraMath.local_pose`: position = the hardpoints' `chase_anchor` (behind and
+  above; the Starfury's `(0, 4, 17)` frames its 15 m claw span, `Vector3(0, 2.5, 9.0)` is the fallback without
+  hardpoints), looking at the point 40 m ahead of the ship's origin along its nose, up = ship up. There is no easing
+  and no velocity input: reverse thrust, yaw and roll cannot move the camera relative to the ship (tested to float32
+  round-off, 1.1e-5 of the offset's length, in every frame), and the camera follows *orientation*, so sideways drift and pod tank-steering are visible in the world,
   not as camera motion. A velocity-vector marker is a later HUD item. The camera node has physics interpolation
   off (it is already placed from the interpolated pose) and joins `world_shiftable`.
   Optional lag: setting `camera_chase_smoothing_s` (0..0.5 s, default **0** = exactly rigid) lags only the
@@ -839,15 +842,19 @@ M1 emits LOD 0 only; the `lods` array is the seam for the LOD chain (§14.4). AA
 
 ### 9.1 `starfury_aurora`
 
-1. Parametric description in the Godot frame, metres, built from `parts/` with the `earthforce` style: central
-   fuselage (tapered box + cockpit canopy), four struts in an X, four engine pods (cylinders with rear main
-   nozzle, forward retro nozzle and small RCS nozzles), two underslung gun barrels.
+1. Parametric description in the Godot frame, metres, built from `parts/` with the `earthforce` style, following
+   the SA-23E silhouette in `docs/design-references.md`: a faceted wedge fuselage (arrowhead from above) with the
+   cockpit window in its nose, four trussed, swept struts in a wide X (18° off horizontal), four ring-faced pods
+   (rear main nozzle, forward retro nozzle), a claw of splayed vanes behind each pod carrying the RCS nozzles, and a
+   ventral twin-gun mount. Details and numbers: `docs/assets-starfury.md`.
 2. Outputs:
    - `starfury_aurora.obj` + `.mtl` (fallback mesh; also a future multi-view render source).
-   - `starfury_aurora.ply`: area-weighted stratified surface sampling at spacing `s` (default 0.06 m -> ~150k
-     points); per point: normal, tangent frame -> quaternion; scales `(k·s, k·s, 0.03·s)` with `k = 1.4`;
-     colour = albedo × baked local lighting; opacity 0.98 (stored as logit); SH degree 0 only (`f_dc_*`).
-   - `cockpit_interior.obj`: frame ring, canopy struts, dash slab; interior-facing normals.
+   - `starfury_aurora.ply`: area-weighted stratified surface sampling at spacing `s` (default 0.04 m -> ~230k
+     points; the faces the pilot sees up close at 0.55 `s`); per point: normal, tangent frame -> quaternion;
+     scales `(k·s, k·s, 0.03·s)` with `k = 1.4`; colour = albedo × baked local lighting; opacity 0.98 (stored as
+     logit; the window glass is a 70 % transmittance sheet); SH degree 0 only (`f_dc_*`).
+   - `cockpit_interior.obj`: the window frame seen from inside (bars) and the sill, nothing across the forward
+     view; interior-facing normals.
    - `hardpoints.json`: `center_of_mass`, `cockpit_camera`, `chase_anchor`, `muzzles[]`, `pods[]` (side, main and
      retro nozzle position + exhaust direction), `rcs[]` (cosmetic nozzle positions with effect tags for glow),
      `collision[]` (boxes/capsules). Schema in the M1 task T04.

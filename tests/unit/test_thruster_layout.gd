@@ -15,7 +15,7 @@ func before_each() -> void:
 func test_fixture_loads() -> void:
 	assert_true(layout.valid, layout.error)
 	assert_eq(layout.error, "")
-	assert_almost_eq(layout.center_of_mass, Vector3(0.0, 0.0, 0.06728), Vector3.ONE * EPS)
+	assert_almost_eq(layout.center_of_mass, Vector3(0.0, 0.0, -0.08943), Vector3.ONE * EPS)
 
 
 func test_four_pods_two_per_side_in_file_order() -> void:
@@ -39,10 +39,10 @@ func test_eight_nozzles_mains_first_then_retros() -> void:
 
 
 func test_nozzle_positions_and_exhausts_match_the_hardpoints() -> void:
-	# ur main at (+3.182, +3.182, 3.174) exhausting +Z; ll retro at (-3.182, -3.182, -0.696) exhausting -Z.
-	assert_almost_eq(layout.nozzle_positions[0], Vector3(3.18198, 3.18198, 3.17428), Vector3.ONE * EPS)
+	# ur main at (+5.5, +2.2, 3.257) exhausting +Z; ll retro at (-5.5, -2.2, -1.913) exhausting -Z.
+	assert_almost_eq(layout.nozzle_positions[0], Vector3(5.5, 2.2, 3.25746), Vector3.ONE * EPS)
 	assert_eq(layout.nozzle_exhausts[0], Vector3(0.0, 0.0, 1.0))
-	assert_almost_eq(layout.nozzle_positions[7], Vector3(-3.18198, -3.18198, -0.69572), Vector3.ONE * EPS)
+	assert_almost_eq(layout.nozzle_positions[7], Vector3(-5.5, -2.2, -1.91254), Vector3.ONE * EPS)
 	assert_eq(layout.nozzle_exhausts[7], Vector3(0.0, 0.0, -1.0))
 	for i: int in layout.nozzle_count():
 		assert_almost_eq(layout.nozzle_exhausts[i].length(), 1.0, EPS, "exhaust %d is a unit vector" % i)
@@ -56,7 +56,7 @@ func test_arms_are_positions_minus_centre_of_mass() -> void:
 	for i: int in layout.nozzle_count():
 		var expected: Vector3 = layout.nozzle_positions[i] - layout.center_of_mass
 		assert_eq(layout.nozzle_arms[i], expected, layout.nozzle_names[i])
-	assert_almost_eq(layout.nozzle_arms[0].z, 3.17428 - 0.06728, EPS)
+	assert_almost_eq(layout.nozzle_arms[0].z, 3.25746 - -0.08943, EPS)
 
 
 func test_from_dict_takes_the_centre_of_mass_it_is_given() -> void:
@@ -85,7 +85,7 @@ func test_group_torque_axes_are_pure_yaw_with_the_documented_signs() -> void:
 	var lever: float = 0.0
 	for i: int in layout.nozzles_in_group(ThrusterLayout.Group.R_MAIN):
 		lever += layout.nozzle_arms[i].x
-	assert_almost_eq(lever, 2.0 * 3.18198, EPS, "yaw lever arm of the right mains")
+	assert_almost_eq(lever, 2.0 * 5.5, EPS, "yaw lever arm of the right mains")
 	assert_almost_eq(layout.torque_axis(ThrusterLayout.Group.R_MAIN), Vector3(0.0, lever, 0.0), Vector3.ONE * EPS)
 	assert_almost_eq(layout.torque_axis(ThrusterLayout.Group.L_MAIN), Vector3(0.0, -lever, 0.0), Vector3.ONE * EPS)
 	assert_almost_eq(layout.torque_axis(ThrusterLayout.Group.R_RETRO), Vector3(0.0, -lever, 0.0), Vector3.ONE * EPS)
@@ -122,7 +122,7 @@ func test_cosmetic_rcs_nozzles_are_read_with_tags() -> void:
 	var first: Dictionary = layout.rcs_nozzles[0]
 	assert_eq(first["name"], "ur_px")
 	assert_eq(first["pod"], "ur")
-	assert_almost_eq(first["position"] as Vector3, Vector3(3.80198, 3.18198, 0.86828), Vector3.ONE * EPS)
+	assert_almost_eq(first["position"] as Vector3, Vector3(6.50809, 2.6818, 2.18746), Vector3.ONE * EPS)
 	assert_eq(first["exhaust"], Vector3(1.0, 0.0, 0.0))
 	assert_eq(first["tags"], PackedStringArray(["sway_left", "yaw_right", "roll_left"]))
 

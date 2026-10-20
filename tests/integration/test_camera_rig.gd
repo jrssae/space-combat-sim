@@ -332,7 +332,9 @@ func test_chase_camera_follows_the_interpolated_pose_of_a_real_ship_every_render
 	probe.callback = Callable()
 	assert_gt(int(state["frames"]), 30, "frames were checked")
 	assert_gt(flying.linear_velocity.length(), 1.0, "the ship is moving")
-	assert_lt(float(state["worst"]), 1e-4, "worst distance from the offset in ship space over all frames")
+	# float32 round-off of `pose * offset` and back grows with the lever arm: 1e-4 m at the 9.3 m offset this bound was
+	# set for, i.e. 1.1e-5 of the offset's length.
+	assert_lt(float(state["worst"]), 1.1e-5 * offset.length(), "worst distance from the offset in ship space over all frames")
 
 
 func test_smoothing_setting_lags_only_the_orientation() -> void:

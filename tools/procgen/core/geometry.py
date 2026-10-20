@@ -211,6 +211,16 @@ class Mesh:
         """Reverse every face so normals point the other way (interior surfaces)."""
         return Mesh(self.vertices.copy(), self.faces[:, ::-1].copy(), self.face_material.copy(), self.materials)
 
+    def face_subset(self, mask: np.ndarray) -> Mesh:
+        """The faces selected by ``mask`` (vertices and materials kept as they are)."""
+        mask = np.asarray(mask, dtype=bool).reshape(self.face_count)
+        return Mesh(
+            self.vertices.copy(),
+            self.faces[mask].copy(),
+            self.face_material[mask].copy(),
+            self.materials,
+        )
+
     def with_material(self, material: Material) -> Mesh:
         return Mesh(self.vertices.copy(), self.faces.copy(), np.zeros(self.face_count, dtype=np.int64), (material,))
 
@@ -495,6 +505,173 @@ def ellipsoid_cap(
     return mesh
 
 
+def polygon_area_2d(points: np.ndarray) -> float:
+    """Signed area of a closed 2D polygon (positive when counter-clockwise)."""
+    p = np.asarray(points, dtype=float).reshape(-1, 2)
+    x, y = p[:, 0], p[:, 1]
+    return 0.5 * float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))
+
+
+def inset_convex_polygon(points: np.ndarray, distance: float) -> np.ndarray:
+    """Move every edge of a convex counter-clockwise 2D polygon ``distance`` inwards (mitred
+    corners). Used for frame bands around a pane."""
+    p = np.asarray(points, dtype=float).reshape(-1, 2)
+    if polygon_area_2d(p) <= 0.0:
+        raise ValueError("inset_convex_polygon needs a counter-clockwise polygon")
+    edges = np.roll(p, -1, axis=0) - p
+    normals = np.stack(
+        [-edges[:, 1], edges[:, 0]], axis=1
+    )  # left of each edge = inside
+    normals /= np.linalg.norm(normals, axis=1, keepdims=True)
+    out = np.empty_like(p)
+    for i in range(len(p)):
+        n0, n1 = normals[i - 1], normals[i]  # the edges meeting at vertex i
+        a = np.array([n0, n1])
+        b = np.array([n0 @ p[i] + distance, n1 @ p[i] + distance])
+        out[i] = (
+            np.linalg.solve(a, b)
+            if abs(np.linalg.det(a)) > 1e-9
+            else p[i] + distance * n1
+        )
+    return out
+
+
+def prism(
+    polygons: Sequence[tuple[np.ndarray, Material]],
+    loops: Sequence[tuple[np.ndarray, Material]],
+    thickness: float,
+) -> Mesh:
+    """A flat solid of ``thickness`` along local Z (from ``-t/2`` to ``+t/2``) built from 2D
+    pieces in the local X/Y plane.
+
+    ``polygons`` are convex 2D polygons (any orientation) that tile the face, each with its
+    material; they make the +Z and -Z faces (flat, hard edges). ``loops`` are the closed 2D
+    boundaries that get side walls, each with its material: the first is the outer outline, any
+    further loops are holes. Orientation is fixed here (outline counter-clockwise, holes
+    clockwise), so every wall faces away from the material. T-junctions between face polygons
+    are fine (the faces are only sampled, never welded)."""
+    half = 0.5 * thickness
+    table: list[Material] = []
+
+    def mat_index(m: Material) -> int:
+        if m not in table:
+            table.append(m)
+        return table.index(m)
+
+    verts: list[np.ndarray] = []
+    faces: list[np.ndarray] = []
+    mats: list[int] = []
+
+    def add_poly(points3: np.ndarray, material: Material) -> None:
+        start = sum(len(v) for v in verts)
+        verts.append(points3)
+        n = len(points3)
+        for k in range(1, n - 1):
+            faces.append(np.array([start, start + k, start + k + 1]))
+            mats.append(mat_index(material))
+
+    for poly, material in polygons:
+        p = np.asarray(poly, dtype=float).reshape(-1, 2)
+        if polygon_area_2d(p) < 0.0:
+            p = p[::-1]
+        add_poly(
+            np.column_stack([p, np.full(len(p), half)]), material
+        )  # +Z face, CCW from +Z
+        q = p[::-1]
+        add_poly(np.column_stack([q, np.full(len(q), -half)]), material)  # -Z face
+    for k, (loop, material) in enumerate(loops):
+        p = np.asarray(loop, dtype=float).reshape(-1, 2)
+        ccw = polygon_area_2d(p) > 0.0
+        if (k == 0) != ccw:  # outer loop CCW, holes CW
+            p = p[::-1]
+        nxt = np.roll(p, -1, axis=0)
+        for a, b in zip(p, nxt, strict=True):
+            quad = np.array(
+                [
+                    [a[0], a[1], -half],
+                    [b[0], b[1], -half],
+                    [b[0], b[1], half],
+                    [a[0], a[1], half],
+                ]
+            )
+            add_poly(quad, material)
+    if not faces:
+        return Mesh.empty()
+    return Mesh(np.concatenate(verts), np.array(faces), np.array(mats), tuple(table))
+
+
+def sweep_rect(
+    path: np.ndarray,
+    width_axis: Sequence[float],
+    widths: Sequence[float],
+    thicknesses: Sequence[float],
+    material: Material,
+    end_material: Material | None = None,
+) -> Mesh:
+    """A bar of rectangular section along a polyline: ``widths[i]`` across ``width_axis`` (a fixed
+    direction perpendicular to the whole path, e.g. the normal of the plane a bent vane lies in)
+    and ``thicknesses[i]`` across ``tangent x width_axis``. Corners are mitred so a bend keeps the
+    section's thickness. Four flat sides plus two end caps (hard edges); a zero width or
+    thickness at an end makes a chisel or pointed tip."""
+    p = np.asarray(path, dtype=float).reshape(-1, 3)
+    n = len(p)
+    if n < 2:
+        raise ValueError("sweep_rect needs at least two path points")
+    w_axis = unit(np.asarray(width_axis, dtype=float))
+    seg = unit(np.diff(p, axis=0))
+    if np.any(np.abs(seg @ w_axis) > 1e-6):
+        raise ValueError("width_axis must be perpendicular to the path")
+    tangents = np.empty_like(p)
+    tangents[0], tangents[-1] = seg[0], seg[-1]
+    for i in range(1, n - 1):
+        tangents[i] = unit(seg[i - 1] + seg[i])
+    widths = np.asarray(widths, dtype=float).reshape(n)
+    thick = np.asarray(thicknesses, dtype=float).reshape(n)
+    rails = []
+    for i in range(n):
+        t_axis = np.cross(tangents[i], w_axis)
+        mitre = 1.0
+        if 0 < i < n - 1:
+            mitre = 1.0 / max(float(seg[i] @ tangents[i]), 0.2)
+        hw, ht = 0.5 * widths[i], 0.5 * thick[i] * mitre
+        rails.append(
+            [
+                p[i] + hw * w_axis + ht * t_axis,
+                p[i] - hw * w_axis + ht * t_axis,
+                p[i] - hw * w_axis - ht * t_axis,
+                p[i] + hw * w_axis - ht * t_axis,
+            ]
+        )
+    rails_arr = np.array(
+        rails
+    )  # (n, 4, 3): corners CCW seen looking back along the path
+    end_material = end_material or material
+    table = [material] if end_material == material else [material, end_material]
+    verts: list[np.ndarray] = []
+    faces: list[list[int]] = []
+    mats: list[int] = []
+    for side in range(4):
+        a, b = side, (side + 1) % 4
+        start = sum(len(v) for v in verts)
+        strip = np.concatenate(
+            [rails_arr[:, a], rails_arr[:, b]]
+        )  # 0..n-1 rail a, n..2n-1 rail b
+        verts.append(strip)
+        for i in range(n - 1):
+            faces.append([start + i, start + n + i, start + n + i + 1])
+            faces.append([start + i, start + n + i + 1, start + i + 1])
+            mats.extend([0, 0])
+    for end, flip in ((0, True), (n - 1, False)):
+        start = sum(len(v) for v in verts)
+        verts.append(rails_arr[end])
+        tri = [[start, start + 1, start + 2], [start, start + 2, start + 3]]
+        faces.extend([t[::-1] for t in tri] if flip else tri)
+        mats.extend([len(table) - 1] * 2)
+    # (width_axis, t_axis, tangent) is right-handed, so the corners run counter-clockwise seen
+    # from ahead along the path: side quads and the end caps above already face outwards.
+    return Mesh(np.concatenate(verts), np.array(faces), np.array(mats), tuple(table))
+
+
 def assign_material_by_predicate(mesh: Mesh, material: Material, mask: np.ndarray) -> Mesh:
     """Return a copy where faces selected by ``mask`` (per face) use ``material``."""
     table = list(mesh.materials)
@@ -527,14 +704,18 @@ __all__ = [
     "basis_from_z",
     "box",
     "ellipsoid_cap",
+    "inset_convex_polygon",
     "lathe",
     "loft",
     "mirror_matrix",
+    "polygon_area_2d",
+    "prism",
     "rotation_x",
     "rotation_y",
     "rotation_z",
     "stats",
     "superellipse_ring",
+    "sweep_rect",
     "tangent_basis",
     "tapered_box",
     "unit",

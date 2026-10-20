@@ -358,7 +358,10 @@ func test_alternating_shots_leave_from_their_own_muzzles() -> void:
 	assert_eq(bolts.size(), 2)
 	for i: int in 2:
 		assert_almost_eq(bolts[i].global_position, muzzle_nodes[i].global_position, _vec_tol(1e-4), "shot %d at muzzle %d" % [i, i])
-	assert_gt(bolts[0].global_position.distance_to(bolts[1].global_position), 1.0, "the muzzles are apart")
+	var apart: float = muzzle_nodes[0].global_position.distance_to(muzzle_nodes[1].global_position)
+	assert_gt(apart, 0.5, "the fixture's muzzles are apart")
+	assert_almost_eq(bolts[0].global_position.distance_to(bolts[1].global_position), apart, 1e-4,
+			"the shots are as far apart as the muzzles")
 
 
 func test_linked_fires_two_hertz_from_both_muzzles_together() -> void:

@@ -39,8 +39,11 @@ core/sampling.py   mesh -> surface samples (area-weighted, stratified, R2 low-di
 core/lighting.py   baked studio rig (hemisphere ambient + directional lights) for unlit splats
 core/obj.py        OBJ/MTL writer and a small reader for tests
 parts/             reusable parametric parts: hull (fuselage, canopy, cockpit interior/tub,
-                   upright cylinder hull with painted bands), propulsion (nozzle, RCS cone, engine
-                   pod, pilot_tags), structure (strut, block, panel, mast), weapons (gun barrel).
+                   upright cylinder hull with painted bands, faceted wedge fuselage with a framed
+                   cockpit window and its first-person frame mesh), propulsion (nozzle, RCS cone,
+                   engine pod, ring-faced pod, claw vane cluster with RCS blocks, pilot_tags),
+                   structure (strut, trussed strut with ladder webs and painted bands, block,
+                   panel, mast), weapons (gun barrel, twin gun mount).
                    Spec dataclass + Style in, Part out (mesh, named anchors, collision primitives,
                    mass)
 styles/            design languages: Style (material roles + panel-shading parameters); earthforce.py
@@ -95,8 +98,9 @@ Things the Godot side must know:
 
 ## `starfury_aurora`
 
-The player's Starfury-inspired fighter, composed from `parts/` with the `earthforce` style. Outputs
-`starfury_aurora.ply` (about 137k flat, oriented splats at 0.035 m spacing), `starfury_aurora.obj/.mtl`
+The player's SA-23E-style Starfury, composed from `parts/` with the `earthforce` style. Outputs
+`starfury_aurora.ply` (about 230k flat, oriented splats at 0.04 m spacing, 0.022 m for the cockpit window's
+frames and sill), `starfury_aurora.obj/.mtl`
 (fallback mesh), `cockpit_interior.obj/.mtl`, `hardpoints.json` and `manifest.json`. The full description,
 the hardpoints schema and the splat-quality reasoning are in `docs/assets-starfury.md`.
 
@@ -108,8 +112,9 @@ Things the Godot side must know:
   for debugging and future per-part effects).
 - `hardpoints.json` is the contract for the flight model, cameras, weapons and collision (schema in the docs
   page); `center_of_mass` is on the thrust axis by design.
-- The canopy panes are tinted glass (per-splat alpha ~0.03, 70 % transmission through the sheet); the
-  frame hoops and the dark cockpit well behind them are opaque. `(H)`: judge the look in both cameras.
+- The window panes are green-tinted glass (per-splat alpha ~0.03, 70 % transmission through the sheet);
+  the frames and the dark lining and bulkhead behind them are opaque. In the OBJ the panes are the
+  `ef_canopy_glass` faces. `(H)`: judge the look in both cameras.
 
 ## `sky_default`
 

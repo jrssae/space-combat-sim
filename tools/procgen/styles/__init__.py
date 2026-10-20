@@ -17,7 +17,10 @@ from ..core.geometry import Material
 REQUIRED_ROLES: tuple[str, ...] = (
     "hull",
     "hull_dark",
+    "hull_panel",
     "stripe",
+    "hazard",
+    "hazard_dark",
     "canopy_glass",
     "canopy_frame",
     "nozzle",

@@ -13,13 +13,16 @@ from itertools import pairwise
 import numpy as np
 
 from ..core.geometry import (
+    Material,
     Mesh,
     _fan_faces,
     _quad_faces,
     box,
+    inset_convex_polygon,
     lathe,
     loft,
     superellipse_ring,
+    sweep_rect,
     unit,
 )
 from ..styles import Style
@@ -441,3 +444,513 @@ def cylinder_hull(spec: CylinderHullSpec, style: Style) -> Part:
         ],
         mass_kg=spec.mass_kg,
     )
+
+
+# --- wedge fuselage with a faceted cockpit window (Starfury-style) ---------------------------
+# Facet kinds around a wedge station ring, starting at the keel centre and running counter-
+# clockwise seen from behind (+Z): right half up to the top centre, then the left half down.
+WEDGE_FACETS: tuple[str, ...] = (
+    "keel", "keel_chamfer", "lower", "shoulder_chamfer", "upper", "top_chamfer", "top",
+    "top", "top_chamfer", "upper", "shoulder_chamfer", "lower", "keel_chamfer", "keel",
+)  # fmt: skip
+# The two facets each chamfer runs between.
+CHAMFER_NEIGHBOURS: dict[str, tuple[str, str]] = {
+    "keel_chamfer": ("keel", "lower"),
+    "shoulder_chamfer": ("lower", "upper"),
+    "top_chamfer": ("upper", "top"),
+}
+
+
+@dataclass(frozen=True)
+class WedgeStation:
+    """One cross-section of a wedge fuselage, symmetric about x = 0: a heater-shield outline
+    with a flat top, upper sides slanting out to the shoulder (the widest point) and lower sides
+    slanting in to a narrower flat keel. The fuselage spec chamfers every corner.
+
+    ``rake`` (radians) leans the station back: a point ``h`` above the keel sits at
+    ``z + h * tan(rake)``. The first station of a fuselage with a window is the front pane, so a
+    raked first station gives a pane that faces forward and up."""
+
+    z: float
+    top: float
+    top_half_width: float
+    shoulder_half_width: float
+    shoulder_y: float
+    keel_half_width: float
+    keel: float
+    rake: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not self.keel < self.shoulder_y < self.top:
+            raise ValueError("wedge station needs keel < shoulder_y < top")
+        if min(self.top_half_width, self.keel_half_width) <= 0.0:
+            raise ValueError("wedge station half-widths must be positive")
+        if self.shoulder_half_width <= max(self.top_half_width, self.keel_half_width):
+            raise ValueError("the shoulder must be the widest point of a wedge station")
+
+    def corners(self) -> np.ndarray:
+        """Right-half outline without chamfers: keel centre, keel corner, shoulder, top corner, top centre."""
+        return np.array(
+            [
+                [0.0, self.keel],
+                [self.keel_half_width, self.keel],
+                [self.shoulder_half_width, self.shoulder_y],
+                [self.top_half_width, self.top],
+                [0.0, self.top],
+            ]
+        )
+
+    def ring_2d(self, chamfer: float) -> np.ndarray:
+        """The full chamfered outline ``(14, 2)``, counter-clockwise seen from +Z; facet ``j`` runs
+        from point ``j`` to point ``j + 1`` and has kind ``WEDGE_FACETS[j]``."""
+        c = self.corners()
+        half = [c[0]]
+        for k in (1, 2, 3):
+            prev_edge, next_edge = c[k - 1] - c[k], c[k + 1] - c[k]
+            limit = 0.45 * min(
+                float(np.linalg.norm(prev_edge)), float(np.linalg.norm(next_edge))
+            )
+            if chamfer >= limit:
+                raise ValueError(
+                    f"chamfer {chamfer} is too wide for this station (max {limit:.3f})"
+                )
+            half.append(c[k] + chamfer * prev_edge / np.linalg.norm(prev_edge))
+            half.append(c[k] + chamfer * next_edge / np.linalg.norm(next_edge))
+        half.append(c[4])
+        right = np.array(half)  # K0, K1a, K1b, Sa, Sb, Ta, Tb, T0
+        left = right[1:7][::-1] * np.array([-1.0, 1.0])
+        return np.concatenate([right, left])
+
+    def lift(self, xy: np.ndarray) -> np.ndarray:
+        """2D outline points of this station to 3D (applies the rake)."""
+        xy = np.asarray(xy, dtype=float).reshape(-1, 2)
+        z = self.z + (xy[:, 1] - self.keel) * math.tan(self.rake)
+        return np.column_stack([xy, z])
+
+    @staticmethod
+    def lerp(a: WedgeStation, b: WedgeStation, t: float) -> WedgeStation:
+        names = (
+            "z",
+            "top",
+            "top_half_width",
+            "shoulder_half_width",
+            "shoulder_y",
+            "keel_half_width",
+            "keel",
+            "rake",
+        )
+        return WedgeStation(
+            *((1.0 - t) * getattr(a, n) + t * getattr(b, n) for n in names)
+        )
+
+
+@dataclass(frozen=True)
+class WedgeFuselageSpec:
+    """A faceted fuselage lofted through ``stations`` (nose first): an arrowhead from above when
+    the stations widen aft, a wedge from the side when they deepen aft.
+
+    With ``window_end > 0`` the segment from station 0 to station ``window_end`` is the cockpit:
+    the first station's face is the front pane, the segment's ``glass_facets`` are side and roof
+    panes, every chamfer next to a pane is a frame bar, and a ``frame_width`` band frames the
+    front pane and the rear edge of the panes. The pilot's ``eye`` must lie inside that segment.
+    A dark lining just inside the segment's other facets (the sill) and a bulkhead at the rear
+    station make the cockpit read as an interior through the glass.
+
+    A front pane that is wider at the top than at the keel (shoulder just under the top), with
+    ``lower`` side panes, gives the Starfury view: a broad trapezoid ahead, framed by struts that
+    run from the upper corners inwards and down, side panes beyond them, a bar across the top
+    and the sill below."""
+
+    stations: tuple[WedgeStation, ...]
+    chamfer: float = 0.05
+    window_end: int = 1
+    frame_width: float = 0.07
+    lining_inset: float = 0.03
+    eye: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    glass_facets: tuple[str, ...] = ("upper", "top")
+    mass_kg: float = 16_000.0
+
+    def __post_init__(self) -> None:
+        zs = [s.z for s in self.stations]
+        if len(zs) < 2 or any(b <= a for a, b in pairwise(zs)):
+            raise ValueError("wedge stations must increase in z")
+        if not 0 <= self.window_end < len(self.stations):
+            raise ValueError("window_end must index a station")
+        if not set(self.glass_facets) <= {"keel", "lower", "upper", "top"}:
+            raise ValueError(
+                "glass_facets must be keel, lower, upper or top (chamfers are frames)"
+            )
+        for s in self.stations:
+            s.ring_2d(self.chamfer)  # validates the chamfer
+        if self.window_end:
+            ex, _, ez = self.eye
+            if (
+                ex != 0.0
+                or not self.stations[0].z < ez < self.stations[self.window_end].z
+            ):
+                raise ValueError(
+                    "the eye must be on the centre line inside the window segment"
+                )
+            if not self.contains(np.array([self.eye]), margin=0.05)[0]:
+                raise ValueError("the eye must be inside the fuselage")
+            outer, inner = _window_cap_rings(self)
+            e_out = np.roll(outer[:, :2], -1, axis=0) - outer[:, :2]
+            e_in = np.roll(inner[:, :2], -1, axis=0) - inner[:, :2]
+            if np.any(
+                np.einsum("ij,ij->i", e_out, e_in) <= 0.0
+            ):  # an inset edge flipped over
+                raise ValueError(
+                    "frame_width is too wide for the front pane's chamfers"
+                )
+
+    @property
+    def glass(self) -> frozenset[str]:
+        """Facet kinds that are panes in the window segment."""
+        return frozenset(self.glass_facets)
+
+    @property
+    def frames(self) -> frozenset[str]:
+        """Chamfer kinds that are frame bars in the window segment: those next to a pane."""
+        return frozenset(
+            c
+            for c, (a, b) in CHAMFER_NEIGHBOURS.items()
+            if a in self.glass or b in self.glass
+        )
+
+    @property
+    def lined(self) -> frozenset[str]:
+        """Facet kinds of the window segment that are neither pane nor frame: the lined sill."""
+        return frozenset(WEDGE_FACETS) - self.glass - self.frames
+
+    @property
+    def nose_z(self) -> float:
+        return self.stations[0].z
+
+    @property
+    def tail_z(self) -> float:
+        return self.stations[-1].z
+
+    def station_at(self, z: float) -> WedgeStation:
+        """The interpolated station at ``z`` (clamped to the ends)."""
+        zs = [s.z for s in self.stations]
+        z = float(np.clip(z, zs[0], zs[-1]))
+        i = min(int(np.searchsorted(zs, z, side="right")) - 1, len(zs) - 2)
+        a, b = self.stations[i], self.stations[i + 1]
+        return WedgeStation.lerp(a, b, (z - a.z) / (b.z - a.z))
+
+    def contains(self, points: np.ndarray, margin: float = 0.0) -> np.ndarray:
+        """True for points at least ``margin`` inside the hull, chamfers included (the loft is
+        treated as linear between stations, exact to millimetres)."""
+        p = np.asarray(points, dtype=float).reshape(-1, 3)
+        first = self.stations[0]
+        zs = [s.z for s in self.stations]
+
+        def param(name: str) -> np.ndarray:
+            return np.interp(p[:, 2], zs, [getattr(s, name) for s in self.stations])
+
+        keel, top = param("keel"), param("top")
+        zeros = np.zeros(len(p))
+        corners = np.stack(
+            [
+                np.stack([zeros, keel], axis=1),
+                np.stack([param("keel_half_width"), keel], axis=1),
+                np.stack([param("shoulder_half_width"), param("shoulder_y")], axis=1),
+                np.stack([param("top_half_width"), top], axis=1),
+                np.stack([zeros, top], axis=1),
+            ],
+            axis=1,
+        )  # (N, 5, 2)
+        half = [corners[:, 0]]
+        for k in (1, 2, 3):
+            for other in (k - 1, k + 1):
+                half.append(
+                    corners[:, k]
+                    + self.chamfer * unit(corners[:, other] - corners[:, k])
+                )
+        half.append(corners[:, 4])
+        right = np.stack(half, axis=1)  # (N, 8, 2)
+        ring = np.concatenate(
+            [right, right[:, 1:7][:, ::-1] * np.array([-1.0, 1.0])], axis=1
+        )  # (N, 14, 2)
+        edges = np.roll(ring, -1, axis=1) - ring
+        rel = p[:, None, :2] - ring
+        cross = (
+            edges[..., 0] * rel[..., 1] - edges[..., 1] * rel[..., 0]
+        ) / np.linalg.norm(edges, axis=2)
+        inside = np.all(
+            cross > margin, axis=1
+        )  # left of every edge (counter-clockwise ring)
+        inside &= (p[:, 2] >= self.nose_z) & (p[:, 2] <= self.tail_z - margin)
+        inside &= (
+            p[:, 2] >= first.z + (p[:, 1] - first.keel) * math.tan(first.rake) + margin
+        )
+        return inside
+
+
+def _wedge_rings(spec: WedgeFuselageSpec) -> tuple[list[WedgeStation], list[str]]:
+    """Stations with the window's rear frame band inserted, and per segment its role:
+    ``window``, ``window_frame`` (the rear band) or ``hull``."""
+    stations = list(spec.stations)
+    roles = ["hull"] * (len(stations) - 1)
+    if spec.window_end:
+        end, prev = spec.stations[spec.window_end], spec.stations[spec.window_end - 1]
+        z_band = end.z - spec.frame_width
+        if z_band <= prev.z:
+            raise ValueError("the window's last segment is shorter than the frame band")
+        stations.insert(
+            spec.window_end,
+            WedgeStation.lerp(prev, end, (z_band - prev.z) / (end.z - prev.z)),
+        )
+        roles = (
+            ["window"] * spec.window_end
+            + ["window_frame"]
+            + ["hull"] * (len(spec.stations) - 1 - spec.window_end)
+        )
+    return stations, roles
+
+
+def _window_cap_rings(spec: WedgeFuselageSpec) -> tuple[np.ndarray, np.ndarray]:
+    """Outer and inner (inset by ``frame_width`` in the pane's plane) rings of the front pane, 3D."""
+    first = spec.stations[0]
+    ring2d = first.ring_2d(spec.chamfer)
+    cos_r = math.cos(first.rake)
+    uv = np.column_stack(
+        [ring2d[:, 0], (ring2d[:, 1] - first.keel) / cos_r]
+    )  # in-plane coordinates
+    inner = inset_convex_polygon(uv, spec.frame_width)
+    inner_xy = np.column_stack([inner[:, 0], first.keel + inner[:, 1] * cos_r])
+    return first.lift(ring2d), first.lift(inner_xy)
+
+
+class _FlatMeshBuilder:
+    """Collects flat (unshared-vertex) polygons, one material each."""
+
+    def __init__(self) -> None:
+        self.verts: list[np.ndarray] = []
+        self.faces: list[list[int]] = []
+        self.mats: list[int] = []
+        self.table: list[Material] = []
+
+    def _material(self, material: Material) -> int:
+        if material not in self.table:
+            self.table.append(material)
+        return self.table.index(material)
+
+    def poly(self, points: np.ndarray, material: Material, facing: np.ndarray) -> None:
+        """Fan-triangulate a convex polygon, wound to face along ``facing``."""
+        pts = np.asarray(points, dtype=float).reshape(-1, 3)
+        normal = sum(
+            np.cross(pts[k] - pts[0], pts[k + 1] - pts[0])
+            for k in range(1, len(pts) - 1)
+        )
+        if float(normal @ np.asarray(facing, dtype=float)) < 0.0:
+            pts = pts[::-1]
+        start = sum(len(v) for v in self.verts)
+        self.verts.append(pts)
+        m = self._material(material)
+        for k in range(1, len(pts) - 1):
+            self.faces.append([start, start + k, start + k + 1])
+            self.mats.append(m)
+
+    def quad(
+        self,
+        a0: np.ndarray,
+        a1: np.ndarray,
+        b1: np.ndarray,
+        b0: np.ndarray,
+        material: Material,
+    ) -> None:
+        """Quad between the edge ``a0 -> a1`` of a front ring and ``b0 -> b1`` of the next ring, wound
+        like ``loft`` (outwards for counter-clockwise rings ordered front to back)."""
+        start = sum(len(v) for v in self.verts)
+        self.verts.append(np.array([a0, a1, b1, b0]))
+        m = self._material(material)
+        self.faces += [[start, start + 2, start + 3], [start, start + 1, start + 2]]
+        self.mats += [m, m]
+
+    def mesh(self) -> Mesh:
+        if not self.faces:
+            return Mesh.empty()
+        return Mesh(
+            np.concatenate(self.verts),
+            np.array(self.faces),
+            np.array(self.mats),
+            tuple(self.table),
+        )
+
+
+def _lined_rings(spec: WedgeFuselageSpec, inset: float) -> list[np.ndarray]:
+    """The window segment's station rings shrunk by ``inset`` (cockpit lining), 3D."""
+    return [
+        s.lift(inset_convex_polygon(s.ring_2d(spec.chamfer), inset))
+        for s in spec.stations[: spec.window_end + 1]
+    ]
+
+
+def wedge_fuselage(spec: WedgeFuselageSpec, style: Style) -> Part:
+    """Faceted fuselage (see :class:`WedgeFuselageSpec`), flat facets with hard edges: window
+    panes ``canopy_glass``, frames ``canopy_frame``, hull ``hull``, tail cap ``hull_dark``,
+    cockpit lining and bulkhead ``interior``. Anchors: ``nose`` (front face centre, forward),
+    ``tail``, ``center`` and, with a window, ``eye`` (looking along -Z). One box collision
+    primitive: the hull's bounds."""
+    hull, dark = style.material("hull"), style.material("hull_dark")
+    glass, frame, interior = (
+        style.material("canopy_glass"),
+        style.material("canopy_frame"),
+        style.material("interior"),
+    )
+    stations, roles = _wedge_rings(spec)
+    rings = [s.lift(s.ring_2d(spec.chamfer)) for s in stations]
+    n = len(WEDGE_FACETS)
+    b = _FlatMeshBuilder()
+    for seg, role in enumerate(roles):
+        front, back = rings[seg], rings[seg + 1]
+        for j, kind in enumerate(WEDGE_FACETS):
+            if role == "window" and kind in spec.glass:
+                material = glass
+            elif role != "hull" and kind in spec.glass | spec.frames:
+                material = frame
+            else:
+                material = hull
+            b.quad(front[j], front[(j + 1) % n], back[(j + 1) % n], back[j], material)
+    forward = np.array([0.0, 0.0, -1.0])
+    if spec.window_end:  # framed front pane
+        outer, inner = _window_cap_rings(spec)
+        for j in range(n):
+            b.poly(
+                np.array([outer[j], outer[(j + 1) % n], inner[(j + 1) % n], inner[j]]),
+                frame,
+                forward,
+            )
+        b.poly(inner, glass, forward)
+    else:
+        b.poly(rings[0], hull, forward)
+    b.poly(rings[-1], dark, -forward)
+    hull_mesh = b.mesh()
+    lo, hi = hull_mesh.bounds()
+
+    if (
+        spec.window_end
+    ):  # cockpit lining (facing inwards) and bulkhead (facing the pilot)
+        lined = _lined_rings(spec, spec.lining_inset)
+        for seg in range(spec.window_end):
+            for j, kind in enumerate(WEDGE_FACETS):
+                if kind in spec.lined:
+                    a0, a1 = lined[seg][j], lined[seg][(j + 1) % n]
+                    b0, b1 = lined[seg + 1][j], lined[seg + 1][(j + 1) % n]
+                    b.quad(
+                        a1, a0, b0, b1, interior
+                    )  # mirrored winding: normals point inwards
+        wall = lined[-1].copy()
+        wall[:, 2] -= 2.0 * spec.lining_inset
+        b.poly(wall, interior, forward)
+    mesh = b.mesh()
+
+    first, last = spec.stations[0], spec.stations[-1]
+    center = 0.5 * (lo + hi)
+    anchors = {
+        "nose": Anchor(
+            first.lift(np.array([[0.0, 0.5 * (first.keel + first.top)]]))[0],
+            [0.0, 0.0, -1.0],
+        ),
+        "tail": Anchor([0.0, 0.5 * (last.keel + last.top), last.z], [0.0, 0.0, 1.0]),
+        "center": Anchor(center),
+    }
+    if spec.window_end:
+        anchors["eye"] = Anchor(spec.eye, [0.0, 0.0, -1.0])
+    return Part(
+        "fuselage",
+        mesh,
+        anchors=anchors,
+        collision=[Collision("box", center, size=hi - lo, name="fuselage")],
+        mass_kg=spec.mass_kg,
+    )
+
+
+def wedge_cockpit_faces(
+    spec: WedgeFuselageSpec, mesh: Mesh, style: Style
+) -> np.ndarray:
+    """Per-face mask of what the pilot sees up close: every non-glass face of the window
+    segment (frames, chin, lining), but not the bulkhead behind the eye. Assets sample these
+    finer, because a splat's soft edge (2.5 sigma) that close to the eye spans degrees."""
+    if not spec.window_end:
+        return np.zeros(mesh.face_count, dtype=bool)
+    glass = mesh.face_material == mesh.material_index(
+        style.material("canopy_glass").name
+    )
+    z_end = spec.stations[spec.window_end].z
+    return (mesh.face_centroids()[:, 2] < z_end - 3.0 * spec.lining_inset) & ~glass
+
+
+def wedge_cockpit_interior(
+    spec: WedgeFuselageSpec,
+    style: Style,
+    bar_width: float | None = None,
+    bar_depth: float = 0.05,
+    gap: float = 0.03,
+    sill_depth: float = 0.4,
+) -> Mesh:
+    """First-person cockpit mesh for a wedge fuselage window (not splatted): the window frame
+    seen from inside and the sill, nothing else. Dark bars run just inside every frame: around
+    the front pane (the bar across the top, the struts down its sides, the sill edge) and along
+    each frame chamfer to the window's rear; a sill strip lines the non-glass facets
+    ``sill_depth`` back from the front pane. Nothing crosses a pane, so the forward view stays
+    clear. Bars are ``bar_width`` wide (default ``frame_width + 2 cm``; wider reads as a heavier
+    frame) and sit ``gap`` behind the frame, hiding its splats from the eye; the sill sits 1 cm
+    inside the splatted lining."""
+    if not spec.window_end:
+        raise ValueError("this fuselage has no window")
+    interior = style.material("interior")
+    width = spec.frame_width + 0.02 if bar_width is None else bar_width
+    meshes: list[Mesh] = []
+
+    def bar(p: np.ndarray, q: np.ndarray, outward: np.ndarray, extend: float) -> None:
+        along = unit(q - p)
+        w_axis = unit(np.cross(outward, along))
+        inward = -np.cross(
+            along, w_axis
+        )  # unit, perpendicular to the bar, towards the cockpit
+        if float(inward @ outward) > 0.0:
+            inward = -inward
+        ends = np.array([p - extend * along, q + extend * along]) + inward * (
+            gap + 0.5 * bar_depth
+        )
+        meshes.append(
+            sweep_rect(ends, w_axis, [width, width], [bar_depth, bar_depth], interior)
+        )
+
+    first = spec.stations[0]
+    outer, inner = _window_cap_rings(spec)
+    mid = 0.5 * (outer + inner)
+    pane_out = np.array([0.0, math.sin(first.rake), -math.cos(first.rake)])
+    for j in range(len(mid)):
+        bar(mid[j], mid[(j + 1) % len(mid)], pane_out, 0.5 * width)
+    stations, roles = _wedge_rings(spec)
+    rings = [s.lift(s.ring_2d(spec.chamfer)) for s in stations]
+    rear = roles.index("window_frame") + 1  # the window's rear station
+    n = len(WEDGE_FACETS)
+    for j, kind in enumerate(WEDGE_FACETS):
+        if kind in spec.frames:
+            p = 0.5 * (rings[0][j] + rings[0][(j + 1) % n])
+            q = 0.5 * (rings[rear][j] + rings[rear][(j + 1) % n])
+            outward = np.cross(
+                rings[0][(j + 1) % n] - rings[0][j], rings[1][j] - rings[0][j]
+            )
+            if float(outward @ np.array([p[0], 0.0, 0.0])) < 0.0 and abs(p[0]) > 1e-9:
+                outward = -outward
+            bar(p, q, unit(outward), 0.0)
+    # Sill: the lining of the non-glass facets from the front pane back by ``sill_depth``.
+    s0, s1 = spec.stations[0], spec.stations[1]
+    back = WedgeStation.lerp(s0, s1, min(sill_depth / (s1.z - s0.z), 1.0))
+    inset = spec.lining_inset + 0.01
+    front_ring, back_ring = (
+        s.lift(inset_convex_polygon(s.ring_2d(spec.chamfer), inset)) for s in (s0, back)
+    )
+    sill = _FlatMeshBuilder()
+    for j, kind in enumerate(WEDGE_FACETS):
+        if kind in spec.lined:
+            a0, a1 = front_ring[j], front_ring[(j + 1) % n]
+            b0, b1 = back_ring[j], back_ring[(j + 1) % n]
+            sill.quad(a1, a0, b0, b1, interior)  # mirrored winding: faces the cockpit
+    meshes.append(sill.mesh())
+    return Mesh.concatenate(meshes)
