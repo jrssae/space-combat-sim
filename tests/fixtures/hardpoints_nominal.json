@@ -1,0 +1,793 @@
+{
+  "asset_id": "starfury_aurora",
+  "generator_version": 1,
+  "frame": "godot",
+  "units": "m",
+  "length_m": 9.65,
+  "span_m": 7.604,
+  "height_m": 7.604,
+  "mass_kg": 48000.0,
+  "inertia_estimate_kg_m2": [
+    406143.1432,
+    405087.03518,
+    516539.94703
+  ],
+  "center_of_mass": [
+    0.0,
+    0.0,
+    0.06728
+  ],
+  "cockpit_camera": {
+    "position": [
+      0.0,
+      0.95889,
+      -3.21172
+    ],
+    "forward": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "up": [
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  "chase_anchor": {
+    "position": [
+      0.0,
+      2.5,
+      9.0
+    ]
+  },
+  "muzzles": [
+    {
+      "name": "left",
+      "position": [
+        -0.6,
+        -0.74349,
+        -6.47572
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ]
+    },
+    {
+      "name": "right",
+      "position": [
+        0.6,
+        -0.74349,
+        -6.47572
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ]
+    }
+  ],
+  "pods": [
+    {
+      "name": "ur",
+      "side": "right",
+      "center": [
+        3.18198,
+        3.18198,
+        1.12428
+      ],
+      "main": {
+        "position": [
+          3.18198,
+          3.18198,
+          3.17428
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "radius": 0.5
+      },
+      "retro": {
+        "position": [
+          3.18198,
+          3.18198,
+          -0.69572
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "radius": 0.25
+      }
+    },
+    {
+      "name": "lr",
+      "side": "right",
+      "center": [
+        3.18198,
+        -3.18198,
+        1.12428
+      ],
+      "main": {
+        "position": [
+          3.18198,
+          -3.18198,
+          3.17428
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "radius": 0.5
+      },
+      "retro": {
+        "position": [
+          3.18198,
+          -3.18198,
+          -0.69572
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "radius": 0.25
+      }
+    },
+    {
+      "name": "ul",
+      "side": "left",
+      "center": [
+        -3.18198,
+        3.18198,
+        1.12428
+      ],
+      "main": {
+        "position": [
+          -3.18198,
+          3.18198,
+          3.17428
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "radius": 0.5
+      },
+      "retro": {
+        "position": [
+          -3.18198,
+          3.18198,
+          -0.69572
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "radius": 0.25
+      }
+    },
+    {
+      "name": "ll",
+      "side": "left",
+      "center": [
+        -3.18198,
+        -3.18198,
+        1.12428
+      ],
+      "main": {
+        "position": [
+          -3.18198,
+          -3.18198,
+          3.17428
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "radius": 0.5
+      },
+      "retro": {
+        "position": [
+          -3.18198,
+          -3.18198,
+          -0.69572
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "radius": 0.25
+      }
+    }
+  ],
+  "rcs": [
+    {
+      "name": "ur_px",
+      "pod": "ur",
+      "position": [
+        3.80198,
+        3.18198,
+        0.86828
+      ],
+      "exhaust": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_left",
+        "yaw_right",
+        "roll_left"
+      ]
+    },
+    {
+      "name": "ur_nx",
+      "pod": "ur",
+      "position": [
+        2.56198,
+        3.18198,
+        0.86828
+      ],
+      "exhaust": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_right",
+        "yaw_left",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "ur_py",
+      "pod": "ur",
+      "position": [
+        3.18198,
+        3.80198,
+        0.86828
+      ],
+      "exhaust": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_down",
+        "pitch_up",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "ur_ny",
+      "pod": "ur",
+      "position": [
+        3.18198,
+        2.56198,
+        0.86828
+      ],
+      "exhaust": [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_up",
+        "pitch_down",
+        "roll_left"
+      ]
+    },
+    {
+      "name": "lr_px",
+      "pod": "lr",
+      "position": [
+        3.80198,
+        -3.18198,
+        0.86828
+      ],
+      "exhaust": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_left",
+        "yaw_right",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "lr_nx",
+      "pod": "lr",
+      "position": [
+        2.56198,
+        -3.18198,
+        0.86828
+      ],
+      "exhaust": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_right",
+        "yaw_left",
+        "roll_left"
+      ]
+    },
+    {
+      "name": "lr_ny",
+      "pod": "lr",
+      "position": [
+        3.18198,
+        -3.80198,
+        0.86828
+      ],
+      "exhaust": [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_up",
+        "pitch_down",
+        "roll_left"
+      ]
+    },
+    {
+      "name": "lr_py",
+      "pod": "lr",
+      "position": [
+        3.18198,
+        -2.56198,
+        0.86828
+      ],
+      "exhaust": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_down",
+        "pitch_up",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "ul_nx",
+      "pod": "ul",
+      "position": [
+        -3.80198,
+        3.18198,
+        0.86828
+      ],
+      "exhaust": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_right",
+        "yaw_left",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "ul_px",
+      "pod": "ul",
+      "position": [
+        -2.56198,
+        3.18198,
+        0.86828
+      ],
+      "exhaust": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_left",
+        "yaw_right",
+        "roll_left"
+      ]
+    },
+    {
+      "name": "ul_py",
+      "pod": "ul",
+      "position": [
+        -3.18198,
+        3.80198,
+        0.86828
+      ],
+      "exhaust": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_down",
+        "pitch_up",
+        "roll_left"
+      ]
+    },
+    {
+      "name": "ul_ny",
+      "pod": "ul",
+      "position": [
+        -3.18198,
+        2.56198,
+        0.86828
+      ],
+      "exhaust": [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_up",
+        "pitch_down",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "ll_nx",
+      "pod": "ll",
+      "position": [
+        -3.80198,
+        -3.18198,
+        0.86828
+      ],
+      "exhaust": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_right",
+        "yaw_left",
+        "roll_left"
+      ]
+    },
+    {
+      "name": "ll_px",
+      "pod": "ll",
+      "position": [
+        -2.56198,
+        -3.18198,
+        0.86828
+      ],
+      "exhaust": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_left",
+        "yaw_right",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "ll_ny",
+      "pod": "ll",
+      "position": [
+        -3.18198,
+        -3.80198,
+        0.86828
+      ],
+      "exhaust": [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_up",
+        "pitch_down",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "ll_py",
+      "pod": "ll",
+      "position": [
+        -3.18198,
+        -2.56198,
+        0.86828
+      ],
+      "exhaust": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_down",
+        "pitch_up",
+        "roll_left"
+      ]
+    }
+  ],
+  "collision": [
+    {
+      "name": "fuselage",
+      "type": "box",
+      "position": [
+        0.0,
+        0.01526,
+        -1.82572
+      ],
+      "size": [
+        1.6,
+        1.4,
+        7.5
+      ],
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "pod_ur",
+      "type": "capsule",
+      "position": [
+        3.18198,
+        3.18198,
+        1.12428
+      ],
+      "radius": 0.55,
+      "height": 3.2,
+      "axis": "z",
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "pod_lr",
+      "type": "capsule",
+      "position": [
+        3.18198,
+        -3.18198,
+        1.12428
+      ],
+      "radius": 0.55,
+      "height": 3.2,
+      "axis": "z",
+      "basis": {
+        "x": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "pod_ul",
+      "type": "capsule",
+      "position": [
+        -3.18198,
+        3.18198,
+        1.12428
+      ],
+      "radius": 0.55,
+      "height": 3.2,
+      "axis": "z",
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "pod_ll",
+      "type": "capsule",
+      "position": [
+        -3.18198,
+        -3.18198,
+        1.12428
+      ],
+      "radius": 0.55,
+      "height": 3.2,
+      "axis": "z",
+      "basis": {
+        "x": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "strut_ur",
+      "type": "box",
+      "position": [
+        1.64402,
+        1.64402,
+        0.82428
+      ],
+      "size": [
+        3.35,
+        0.16,
+        1.3
+      ],
+      "basis": {
+        "x": [
+          0.70711,
+          0.70711,
+          0.0
+        ],
+        "y": [
+          -0.70711,
+          0.70711,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "strut_lr",
+      "type": "box",
+      "position": [
+        1.64402,
+        -1.64402,
+        0.82428
+      ],
+      "size": [
+        3.35,
+        0.16,
+        1.3
+      ],
+      "basis": {
+        "x": [
+          -0.70711,
+          0.70711,
+          0.0
+        ],
+        "y": [
+          -0.70711,
+          -0.70711,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "strut_ul",
+      "type": "box",
+      "position": [
+        -1.64402,
+        1.64402,
+        0.82428
+      ],
+      "size": [
+        3.35,
+        0.16,
+        1.3
+      ],
+      "basis": {
+        "x": [
+          0.70711,
+          -0.70711,
+          0.0
+        ],
+        "y": [
+          0.70711,
+          0.70711,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "strut_ll",
+      "type": "box",
+      "position": [
+        -1.64402,
+        -1.64402,
+        0.82428
+      ],
+      "size": [
+        3.35,
+        0.16,
+        1.3
+      ],
+      "basis": {
+        "x": [
+          -0.70711,
+          -0.70711,
+          0.0
+        ],
+        "y": [
+          0.70711,
+          -0.70711,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    }
+  ]
+}
