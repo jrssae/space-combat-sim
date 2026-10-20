@@ -1,7 +1,7 @@
 extends GutTest
 ## The Ship flying in Jolt, headless (architecture §5, AC5a-AC5g): straight-line thrust, pod differential yaw with
-## assist off, retros, assist-on pod steering with trim and deadzone, spin stop, brake, one-tick model-vs-engine
-## agreement, the damping guard (§5.4) and rebase safety (§14.1).
+## assist off, retros, assist-on pod steering with trim and deadzone, spin stop, brake (all stop, and facing the
+## selected target), one-tick model-vs-engine agreement, the damping guard (§5.4) and rebase safety (§14.1).
 ##
 ## Expected values come from the ShipSpec and the hardpoints (through the ship's ThrusterLayout), never literals.
 ##
@@ -344,6 +344,115 @@ func test_ac5f_brake_nulls_velocity_in_both_assist_modes() -> void:
 		assert_lt(max_w[k], ONE_DEG, "%s: |w| < 1 deg/s throughout" % mode)
 
 
+## A bare marker the targeting computer can select: a Node3D with a Targetable, spawned through World.
+func _spawn_marker(display_name: String, at: Vector3) -> Node3D:
+	var marker := Node3D.new()
+	marker.name = display_name.to_pascal_case().validate_node_name()
+	var targetable := Targetable.new()
+	targetable.display_name = display_name
+	marker.add_child(targetable)
+	world.spawn(marker, world.to_universe(at))
+	return marker
+
+
+func test_ac5f_brake_stops_a_tumble_and_drift_in_both_modes() -> void:
+	# All stop: a 60 deg/s tumble plus 50 m/s of drift, with the stick and D-pad deflected (ignored while braking).
+	const LIMIT_S: float = 6.0  # measured: rate 0.87 s, speed 4.3 s (RCS sway/heave is the slow part)
+	var other: Ship = _spawn_ship(Vector3(3000.0, 0.0, 0.0))
+	ship.assist_on = true
+	other.assist_on = false
+	var ships: Array[Ship] = [ship, other]
+	var w_body: Vector3 = Vector3(0.5, 0.7, -0.5).normalized() * deg_to_rad(60.0)
+	var v_world: Vector3 = Vector3(30.0, -20.0, -34.6).normalized() * 50.0
+	await _align()
+	for s: Ship in ships:
+		s.angular_velocity = s.global_basis * w_body
+		s.linear_velocity = v_world
+		s.set_flight_command(_cmd(0.0, 0.0, 0.0, 0.0, Vector3(1.0, -1.0, 1.0), true))
+	var rate_stop: Array[int] = [-1, -1]
+	var speed_stop: Array[int] = [-1, -1]
+	var both_stop: Array[int] = [-1, -1]
+	for i: int in _ticks(LIMIT_S):
+		await _step(1)
+		for k: int in ships.size():
+			var w_ok: bool = ships[k].angular_velocity.length() < 0.5 * ONE_DEG
+			var v_ok: bool = ships[k].linear_velocity.length() < 0.5
+			if rate_stop[k] < 0 and w_ok:
+				rate_stop[k] = i + 1
+			if speed_stop[k] < 0 and v_ok:
+				speed_stop[k] = i + 1
+			if both_stop[k] < 0 and w_ok and v_ok:
+				both_stop[k] = i + 1
+	for k: int in ships.size():
+		var mode: String = "assist on" if ships[k].assist_on else "assist off"
+		var w_end: float = rad_to_deg(ships[k].angular_velocity.length())
+		var v_end: float = ships[k].linear_velocity.length()
+		gut.p("AC5f all stop %s: |w| < 0.5 deg/s after %.2f s, |v| < 0.5 m/s after %.2f s; at %.0f s |w| %.4f deg/s, |v| %.4f m/s"
+				% [mode, float(rate_stop[k]) * _dt(), float(speed_stop[k]) * _dt(), LIMIT_S, w_end, v_end])
+		assert_gt(both_stop[k], 0, "%s: speed < 0.5 m/s and rate < 0.5 deg/s within %.0f s" % [mode, LIMIT_S])
+		assert_lt(v_end, 0.5, "%s: still stopped at %.0f s" % [mode, LIMIT_S])
+		assert_lt(w_end, 0.5, "%s: still not rotating at %.0f s" % [mode, LIMIT_S])
+		assert_true(ships[k].get_flight_output().braking, mode)
+		assert_false(ships[k].get_flight_output().facing, "%s: no target selected" % mode)
+
+
+func test_ac5f_brake_with_a_target_turns_the_nose_onto_it_and_holds() -> void:
+	# Target 90 deg off the nose: right for the assist-on ship, straight up for the assist-off one.
+	const ALIGN_LIMIT_S: float = 3.5  # measured: 2.6 s
+	const HOLD_S: float = 2.0
+	var other: Ship = _spawn_ship(Vector3(0.0, 0.0, 6000.0))
+	ship.assist_on = true
+	other.assist_on = false
+	var ships: Array[Ship] = [ship, other]
+	var names: Array[String] = ["FACE RIGHT", "FACE UP"]
+	var markers: Array[Node3D] = [_spawn_marker(names[0], Vector3(1000.0, 0.0, 0.0)),
+			_spawn_marker(names[1], Vector3(0.0, 1000.0, 6000.0))]
+	await _align()
+	for k: int in ships.size():
+		assert_true(ships[k].targeting.select_by_name(names[k]), "%s selected" % names[k])
+		assert_almost_eq(rad_to_deg(ships[k].forward().angle_to(markers[k].global_position - ships[k].global_position)),
+				90.0, 1e-3, "starts 90 deg off the nose")
+		ships[k].set_flight_command(_cmd(0.0, 0.0, 0.0, 0.0, Vector3.ZERO, true))
+	var aligned_at: Array[int] = [-1, -1]
+	var worst_after: Array[float] = [0.0, 0.0]
+	var max_roll: Array[float] = [0.0, 0.0]
+	var closest: Array[float] = [INF, INF]
+	var rebound: Array[float] = [0.0, 0.0]  # once within 2 deg, how far the error grew back from its minimum: overshoot
+	for i: int in _ticks(ALIGN_LIMIT_S + HOLD_S):
+		await _step(1)
+		for k: int in ships.size():
+			var los: Vector3 = markers[k].global_position - ships[k].global_position
+			var error: float = rad_to_deg(ships[k].forward().angle_to(los))
+			max_roll[k] = maxf(max_roll[k], absf(ships[k].body_angular_velocity().z))
+			if aligned_at[k] < 0 and error < 2.0:
+				aligned_at[k] = i + 1
+			if aligned_at[k] >= 0:
+				worst_after[k] = maxf(worst_after[k], error)
+				closest[k] = minf(closest[k], error)
+				rebound[k] = maxf(rebound[k], error - closest[k])
+	for k: int in ships.size():
+		var mode: String = "assist on" if ships[k].assist_on else "assist off"
+		var los: Vector3 = markers[k].global_position - ships[k].global_position
+		var final_error: float = rad_to_deg(ships[k].forward().angle_to(los))
+		var out: FlightOutput = ships[k].get_flight_output()
+		gut.p("AC5f face %s: nose within 2 deg after %.2f s, overshoot %.4f deg, at %.1f s %.4f deg and %.4f deg/s; max roll rate %s deg/s"
+				% [mode, float(aligned_at[k]) * _dt(), rebound[k], ALIGN_LIMIT_S + HOLD_S, final_error,
+				rad_to_deg(ships[k].angular_velocity.length()), _sci(rad_to_deg(max_roll[k]))])
+		assert_gt(aligned_at[k], 0, "%s: nose reached the target" % mode)
+		assert_lte(float(aligned_at[k]) * _dt(), ALIGN_LIMIT_S, "%s: nose within 2 deg within %.0f s" % [mode, ALIGN_LIMIT_S])
+		assert_lt(worst_after[k], 2.0, "%s: and it holds within 2 deg" % mode)
+		assert_lt(rebound[k], 0.05, "%s: critically damped, no overshoot" % mode)
+		assert_lt(final_error, 0.1, "%s: settled on the target" % mode)
+		assert_lt(ships[k].angular_velocity.length(), 0.1 * ONE_DEG, "%s: and stopped there" % mode)
+		assert_lt(max_roll[k], 0.1 * ONE_DEG, "%s: a pure pitch or yaw turn, no roll" % mode)
+		assert_true(out.facing, mode)
+		assert_almost_eq(rad_to_deg(out.face_error_rad), final_error, 0.05, "%s: the output reports the error" % mode)
+	# Release the brake: the pilot has the ship back and facing stops.
+	ship.set_flight_command(_cmd())
+	await _step(1)
+	assert_false(ship.get_flight_output().facing, "no brake, no facing")
+
+
 # --- AC5g: model matches engine ----------------------------------------------------------------------------------
 
 
@@ -355,7 +464,8 @@ func test_ac5g_one_tick_angular_velocity_change_matches_the_model() -> void:
 		{"name": "LT 0.6 + RB, assist off", "assist": false, "cmd": _cmd(0.6, 0.0, 0.0, 1.0)},
 		{"name": "raw stick pitch/yaw/roll, assist off", "assist": false, "cmd": _cmd(0.0, 0.0, 0.0, 0.0, Vector3(0.5, -0.8, 0.3))},
 		{"name": "RT + pitch, assist on", "assist": true, "cmd": _cmd(0.0, 1.0, 0.0, 0.0, Vector3(0.4, 0.0, 0.0))},
-		{"name": "brake + full yaw stick, assist on", "assist": true, "v_body": Vector3(10.0, -5.0, -80.0),
+		{"name": "brake + yaw spin + full stick (ignored), assist on", "assist": true,
+				"v_body": Vector3(10.0, -5.0, -80.0), "w_body": Vector3(0.0, 0.5, 0.0),
 				"cmd": _cmd(0.0, 0.0, 0.0, 0.0, Vector3(0.0, 1.0, -0.5), true)},
 	]
 	for demand: Dictionary in demands:
@@ -365,6 +475,7 @@ func test_ac5g_one_tick_angular_velocity_change_matches_the_model() -> void:
 		await _align()
 		var b: Basis = ship.global_basis
 		ship.linear_velocity = b * (demand.get("v_body", Vector3.ZERO) as Vector3)
+		ship.angular_velocity = b * (demand.get("w_body", Vector3.ZERO) as Vector3)  # one principal axis: no gyro term
 		var w0: Vector3 = ship.angular_velocity
 		var v0: Vector3 = ship.linear_velocity
 		ship.set_flight_command(demand["cmd"])

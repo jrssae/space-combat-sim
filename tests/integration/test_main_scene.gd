@@ -51,6 +51,18 @@ func test_target_next_selects_the_nearest_buoy() -> void:
 	assert_almost_eq(float(snap["target_range_m"]), 500.0, 5.0)
 
 
+func test_holding_dpad_up_targets_the_buoy_nearest_the_nose() -> void:
+	await _tap(InputAdapter.TARGET_NEXT)
+	await _tap(InputAdapter.TARGET_NEXT)
+	assert_eq(main.ship.targeting.selected_name(), "NAV BRAVO", "two taps: the second nearest")
+	source.hold(InputAdapter.TARGET_NEXT)
+	await _ticks(ceili(main.adapter.target_hold_s * Engine.physics_ticks_per_second) + 5)
+	assert_eq(main.ship.targeting.selected_name(), "NAV ALPHA", "the hold picks the buoy on the nose, not the next one")
+	source.release(InputAdapter.TARGET_NEXT)
+	await _ticks(3)
+	assert_eq(main.ship.targeting.selected_name(), "NAV ALPHA", "and its release does not cycle")
+
+
 func test_triggers_fly_the_ship() -> void:
 	source.hold(InputAdapter.MAIN_LEFT, 1.0)
 	source.hold(InputAdapter.MAIN_RIGHT, 1.0)

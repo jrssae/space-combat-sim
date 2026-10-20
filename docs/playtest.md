@@ -32,22 +32,34 @@ second.
 ## Controls
 
 ```
-RT / LT       right / left main pods (analog)        RB / LB   right / left retros
-Right stick   pitch / yaw (stick back = nose up)     Left stick  strafe left/right, up/down
-D-pad L/R     roll (tap for fine corrections)        A  fire     X  brake (hold)
-B             flight assist on/off                    Y  cockpit / chase camera
-D-pad Up      next target   D-pad Down  fire mode    R3 target nearest the nose
-Back          respawn       Start       pause        L3 debug overlay
+RT / LT       right / left main pods (analog)        RB / LB     right / left retros
+Right stick   pitch / roll (stick back = nose up,    Left stick  strafe left/right, up/down
+              stick right = roll right)
+D-pad L/R     yaw (tap for fine corrections)         D-pad Down  fire mode
+D-pad Up      tap: next target                       hold (about 0.35 s): target nearest the nose
+X             brake (hold): all stop; with a target selected the nose also swings onto it
+A             fire                                   B  flight assist on/off      Y  cockpit / chase camera
+Back          respawn                                Start  pause
+R3            target nearest the nose (if the pad has stick clicks)    L3  debug overlay (if the pad has it)
 ```
 
-Keyboard fallback: W both mains, E/Q right/left main, S both retros, D/A right/left retro, I/K pitch, J/L yaw,
-arrows strafe, U/O roll, Space fire, X brake, Z assist, V camera, T/F/G target/fire mode/target ahead,
-Backspace respawn, Esc pause, F3 overlay, F4 fallback meshes. The ` key opens the debug console.
+Changed after the first play test: yaw and roll swapped (the right stick used to yaw and the D-pad to roll), and
+target-ahead moved to a D-pad Up hold because the pad had no stick clicks. R3 and L3 still work on pads that have
+them; F3 toggles the overlay from the keyboard. Tune the hold with `set settings.target_hold_s 0.5` and the D-pad
+yaw ramp with `set settings.yaw_ramp_s 0.4` (then `save` to keep them).
+
+Keyboard fallback: W both mains, E/Q right/left main, S both retros, D/A right/left retro, I/K pitch, J/L yaw
+(ramped like the D-pad), arrows strafe, U/O roll, Space fire, X brake, Z assist, V camera, T target (tap next, hold
+ahead), F fire mode, G target ahead, Backspace respawn, Esc pause, F3 overlay, F4 fallback meshes. The ` key opens
+the debug console.
 
 Flight notes:
 - Newtonian: letting go of the triggers does not slow you down. Use the retros or hold X to brake.
+- X is an all stop in both assist modes: it kills drift and any spin, and ignores the sticks, D-pad and triggers
+  while held. With a target selected it also turns the nose onto the target (about 2.6 s from 90° off) and holds it
+  there; release X to fly again.
 - Assist on (default): uneven triggers turn the ship smoothly (overlay `POD YAW`). Assist off: raw physics,
-  so uneven pods tank-steer and spins persist.
+  so uneven pods tank-steer and spins persist (until you hold X).
 
 ## Debug console cheat sheet
 
@@ -70,14 +82,16 @@ The full wording is in `docs/milestones/m1-first-flight.md`. Tick each one, or n
 - [ ] **AC13 Sky.** Stars and nebula visible; no parallax while flying; no popping between the sky and the hull;
       in the cockpit the frame hides the hull behind it.
 - [ ] **AC14 Controls.** Equal triggers fly straight. With assist off, RT alone yaws left and LT alone yaws right.
-      Bumpers retro per side. With assist on, one trigger turns at about 30 °/s and stops on release. Triggers
-      reach full and rest at zero (overlay `PAD … axes`). No stick drift. Brake stops you in both modes. B and Y
-      work.
+      Bumpers retro per side. With assist on, one trigger turns at about 30 °/s and stops on release. Right stick
+      pitches and rolls; D-pad left/right yaws (taps give fine yaw). Triggers reach full and rest at zero (overlay
+      `PAD … axes`). No stick drift. Holding X brings you to an all stop (drift and spin) in both modes, and with a
+      target selected swings the nose onto it. B and Y work.
 - [ ] **AC15 Performance.** 60 fps at 1080p (overlay FPS), no hitch when firing.
 - [ ] **AC16 Glow and guns.** Pod glow follows each side's thrust, retros and trim; RCS glow responds to strafe
       and rotation; bolts and muzzle flash visible from both cameras; the two fire modes look different.
-- [ ] **AC17 Targeting.** D-pad Up cycles buoys, R3 picks the one nearest the nose; bracket and readout look
-      right; buoys are splats and spin; NAV DELTA (drifting) shows a non-zero closing speed.
+- [ ] **AC17 Targeting.** Tapping D-pad Up cycles buoys; holding it picks the one nearest the nose without also
+      cycling (so does R3, if your pad has it); bracket and readout look right; buoys are splats and spin; NAV DELTA
+      (drifting) shows a non-zero closing speed.
 - [ ] **AC18 Backend.** Overlay shows `SPLATS COMPUTE`. If it says `RASTER` or `NONE`, note your GPU and driver.
 - [ ] **AC22 Console.** ` opens and closes it without typing a character. Typing never moves the ship, and the pad
       still flies while it's open. Esc closes it. History and Tab work. `fps` and `watch ship.speed` work.

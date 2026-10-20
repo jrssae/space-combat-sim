@@ -13,8 +13,10 @@ const ENTRIES: Dictionary = {
 		"doc": "Radial stick deadzone, rescaled so full deflection still reaches 1"},
 	&"trigger_deadzone": {"type": TYPE_FLOAT, "default": 0.05, "min": 0.0, "max": 0.20,
 		"doc": "Trigger deadzone applied after rest calibration"},
-	&"roll_ramp_s": {"type": TYPE_FLOAT, "default": 0.25, "min": 0.05, "max": 1.0,
-		"doc": "Seconds for D-pad roll to ramp from 0 to full"},
+	&"yaw_ramp_s": {"type": TYPE_FLOAT, "default": 0.25, "min": 0.05, "max": 1.0,
+		"doc": "Seconds for D-pad yaw to ramp from 0 to full"},
+	&"target_hold_s": {"type": TYPE_FLOAT, "default": 0.35, "min": 0.15, "max": 1.0,
+		"doc": "Hold D-pad Up this long to target the nearest to the nose; a shorter tap selects the next target"},
 	&"assist_default": {"type": TYPE_BOOL, "default": true,
 		"doc": "Flight assist state at spawn"},
 	&"camera_default": {"type": TYPE_ENUM, "default": &"chase", "choices": [&"chase", &"cockpit"],
@@ -27,6 +29,12 @@ const ENTRIES: Dictionary = {
 		"doc": "Allow the ` key to open the debug console"},
 	&"console_pause_on_open": {"type": TYPE_BOOL, "default": false,
 		"doc": "Pause the game while the console is open"},
+}
+
+## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current
+## one is absent, and the next `save` writes only the current name.
+const RENAMED: Dictionary = {
+	&"roll_ramp_s": &"yaw_ramp_s",  # the D-pad ramp moved from roll to yaw when the two were swapped
 }
 
 const _TRUE_WORDS: PackedStringArray = ["true", "on", "1", "yes"]
@@ -43,6 +51,15 @@ func keys() -> Array[StringName]:
 
 func has_key(key: StringName) -> bool:
 	return ENTRIES.has(key)
+
+
+## Former names of `key` (see `RENAMED`).
+func old_names(key: StringName) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for old: StringName in RENAMED.keys():
+		if RENAMED[old] == key:
+			out.append(old)
+	return out
 
 
 func get_entry(key: StringName) -> Dictionary:

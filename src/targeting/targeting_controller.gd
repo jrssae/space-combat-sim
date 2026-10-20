@@ -83,6 +83,18 @@ func selected_readout() -> TargetReadout:
 			_ship_forward())
 
 
+## Line of sight from the ship to the selected target, World frame, m; zero when nothing is selected. Read live from
+## the target node, so it is current even in a tick where this node has not refreshed yet (the ship's brake uses it
+## to face the target, §5.5).
+func selected_offset() -> Vector3:
+	if not _has_body() or not system.has_selection():
+		return Vector3.ZERO
+	var target := instance_from_id(system.selected_id()) as Targetable
+	if target == null or not target.is_inside_tree():
+		return Vector3.ZERO
+	return target.global_position - _ship_position()
+
+
 ## `TargetingSystem.NO_TARGET` (0) when nothing is selected.
 func selected_id() -> int:
 	return system.selected_id()

@@ -16,14 +16,16 @@ In:
 - `tools/procgen` framework with three generated assets: `starfury_aurora` (splats + fallback meshes +
   hardpoints), `nav_buoy`, `sky_default` (stars + nebula splats + panorama fallback).
 - Player Starfury with Newtonian 6DOF flight on a generic XInput gamepad, using the user's layout (§6.1): analog
-  left/right main pods on LT/RT, left/right retros on LB/RB, strafe/heave on the left stick, pitch/yaw on the right
-  stick, roll on the D-pad. Pod forces act at the pods (differential thrust yaws the ship physically). Flight
-  assist toggle (default on: rate command, uneven triggers turn the ship at a bounded rate), hold-to-brake, reset.
+  left/right main pods on LT/RT, left/right retros on LB/RB, strafe/heave on the left stick, pitch/roll on the
+  right stick, yaw on the D-pad (swapped after the play test; it was pitch/yaw on the stick, roll on the D-pad).
+  Pod forces act at the pods (differential thrust yaws the ship physically). Flight assist toggle (default on:
+  rate command, uneven triggers turn the ship at a bounded rate), hold-to-brake (all stop; faces the selected
+  target), reset.
 - First-person cockpit camera and third-person chase camera, toggle on Y.
 - Two forward pulse cannons with two fire modes (alternating, linked), cycled with D-pad Down; projectiles inherit
   ship velocity; muzzle flash; thruster glow per pod and RCS nozzle.
-- Targeting of five inert nav buoys: next target (D-pad Up), target ahead (R3), readout and bracket in the debug
-  overlay.
+- Targeting of five inert nav buoys: next target (tap D-pad Up), target ahead (hold D-pad Up, or R3 where the pad
+  has one), readout and bracket in the debug overlay.
 - Long-term seams only (§14.9): `UniversePos` + `World` frame, environment-acceleration hook (zero), `SimClock`,
   command split, faction field, scenario JSON, procgen layout, reaction-mass flow (unlimited).
 - Debug overlay and an always-on debug console on the ` key (§6.4): help, state inspection through whitelisted
@@ -63,9 +65,9 @@ hardpoints, never hard-coded.
 | AC5c | Retros: from 50 m/s forward, RB + LB for 1 s reduce speed by `4 · pod_retro_thrust / mass` ±1 %, `\|w\|` < 1e-3 rad/s | A |
 | AC5d | Assist on, pod steering: RT = 1 alone, sticks centred: within 1.5 s the yaw rate settles nose-left (`w_y > 0`) at `pod_yaw_gain · rate_max.y` ±5 % and stays there, pitch/roll rates < 1 °/s, `FlightOutput.trim` > 0 at steady state, and no nozzle level ever exceeds its trigger; after release the rotation stops (< 1 °/s) within 1.5 s; LT alone mirrors it; RT = 1 with LT = 0.95 (inside the 10 % deadzone) flies straight: `\|w_y\|` < 1 °/s and heading change < 2° over 2 s | A |
 | AC5e | Assist on: a 60 °/s yaw spin stops (< 1 °/s) within 1.5 s. Assist off: the same spin does not decay (±0.5 % over 2 s) | A |
-| AC5f | Brake: from body velocity (10, -5, -80) m/s with X held, in both assist modes, `\|v\|` < 0.5 m/s within 7 s and `\|w\|` < 1 °/s throughout | A |
+| AC5f | Brake = all stop, in both assist modes with X held: from body velocity (10, -5, -80) m/s, `\|v\|` < 0.5 m/s within 7 s and `\|w\|` < 1 °/s throughout; from a 60 °/s tumble plus 50 m/s of drift with the stick and D-pad deflected (ignored), `\|v\|` < 0.5 m/s and `\|w\|` < 0.5 °/s within 6 s; with a target selected 90° off the nose, the nose is within 2° of it within 3.5 s and stays within 2° (no overshoot, no roll) while X is held | A |
 | AC5g | Model matches engine: for five scripted demands, the one-tick angular velocity change measured in Jolt equals `FlightOutput.torque_b / inertia · dt` within 1 %; damping guard passes | A |
-| AC6 | Input unit tests: radial deadzones, expo, invert-Y, roll ramp, edge detection, per-side trigger/bumper mapping into `FlightCommand`, combat/ui edges into their commands; every §6.1 action exists in `project.godot` with the listed bindings | A |
+| AC6 | Input unit tests: radial deadzones, expo, invert-Y, yaw ramp, D-pad Up tap (next target on release) versus hold (target ahead once at `target_hold_s`, never both), edge detection, per-side trigger/bumper mapping into `FlightCommand`, combat/ui edges into their commands; every §6.1 action exists in `project.godot` with the listed bindings | A |
 | AC7 | Weapons: projectile spawns at a muzzle hardpoint with velocity = ship velocity + 400 m/s forward and frees itself after 4 s; `ALTERNATING` fires 4 Hz alternating muzzles; `LINKED` fires 2 Hz both muzzles; `weapon_next` cycles and wraps and never raises the rate of fire | A |
 | AC8 | Targeting: `target_next` cycles by range and wraps; `target_ahead` picks the smallest boresight angle in the forward hemisphere and leaves the selection unchanged if none; readout range ±1e-3 m and closing speed (+10 m/s when approaching a static buoy at 10 m/s); selection clears beyond sensor range; the five scenario buoys appear as candidates with faction `neutral` | A |
 | AC9 | World frame: `UniversePos` round-trips at 1.5e11 m with < 1 mm error; `World.rebase(Vector3(5000, 0, 0))` mid-flight keeps every body's velocity, all relative positions within 1 mm, and the ship's universe position within 1 mm | A |
@@ -73,10 +75,10 @@ hardpoints, never hard-coded.
 | AC11 | `TriggerCalibration` tests prove normalisation for rest = 0 and rest = -1; every pad binding uses only standard `JOY_AXIS_*` 0-5 / `JOY_BUTTON_*` 0-14 | A |
 | AC12 | Ship renders as splats (not the fallback mesh) in both camera modes; hull orientation and position match the fallback mesh when toggled with F4 | H |
 | AC13 | Star field and nebula visible as splats; no parallax when flying; no popping between sky and hull; cockpit frame correctly occludes hull splats | H |
-| AC14 | On the tester's generic pad, per the §5.2 table: equal triggers fly straight; with assist off RT alone yaws left and LT alone yaws right; bumpers retro per side; with assist on one trigger turns the ship smoothly at ≈ 30 °/s (overlay shows POD YAW and POD TRIM), the turn stops on release, and both triggers squeezed fully fly straight; right stick pitches/yaws, D-pad rolls (taps give fine roll), left stick strafes/heaves; triggers reach full thrust and rest at zero; no stick drift; releasing the triggers does not slow the ship; brake stops drift in both modes; B and Y toggles work | H |
+| AC14 | On the tester's generic pad, per the §5.2 table: equal triggers fly straight; with assist off RT alone yaws left and LT alone yaws right; bumpers retro per side; with assist on one trigger turns the ship smoothly at ≈ 30 °/s (overlay shows POD YAW and POD TRIM), the turn stops on release, and both triggers squeezed fully fly straight; right stick pitches/rolls, D-pad yaws (taps give fine yaw), left stick strafes/heaves; triggers reach full thrust and rest at zero; no stick drift; releasing the triggers does not slow the ship; holding X brings the ship to an all stop (drift and rotation) in both modes and, with a target selected, swings the nose onto it; B and Y toggles work | H |
 | AC15 | 60 fps at 1080p on the tester's Linux/Vulkan GPU (overlay FPS), no hitching when firing | H |
 | AC16 | Thruster glow is per pod and per side: it shows differential thrust, retros and trim; RCS glow responds to strafe and rotation; projectiles and muzzle flash visible from both cameras; the two fire modes are visibly different | H |
-| AC17 | D-pad Up cycles the buoys, R3 picks the buoy nearest the nose; bracket and readout (name, range, closing speed) are correct; buoys render as splats and visibly spin; the drifting buoy shows a non-zero closing speed | H |
+| AC17 | Tapping D-pad Up cycles the buoys, holding it (about 0.35 s) picks the buoy nearest the nose without also cycling (R3 does the same on pads that have it); bracket and readout (name, range, closing speed) are correct; buoys render as splats and visibly spin; the drifting buoy shows a non-zero closing speed | H |
 | AC18 | Overlay shows splat backend `Compute` (`Raster` only with a recorded reason); fallback meshes/panorama appear automatically if neither backend initialised | H |
 | AC19 | Console unit tests: tokenizer (quotes, `;`, `#`), typed args and their error messages, unknown command/key suggestions, `help`, history (100, persisted), Tab completion (commands, paths, setting keys, enum values), provider whitelist (`get ship.queue_free` is an unknown key), owner pruning when a registering node is freed, `god` toggles `debug.invulnerable` and it is never written by `save` | A |
 | AC20 | Console input rules: no `InputMap` action binds `KEY_QUOTELEFT`; while the console is open key/mouse-bound actions read 0 and pad-bound actions still work; opening/closing with a key held fires no edge; `settings.console_pause_on_open` pauses the tree | A |
@@ -223,11 +225,11 @@ hardpoints, never hard-coded.
   `GodotInputSource.get_trigger` reads the action's `InputEventJoypadMotion` events from `InputMap`, the raw axis
   per connected pad, normalises with `TriggerCalibration` (rest per GUID; calibration samples 0.5 s of idle input
   at start-up and on `joy_connection_changed`), counts bound keys as 1.0, returns the max. Edge detection lives in
-  `InputAdapter` (previous-tick booleans) so it is testable. Expo `signf(x) * pow(absf(x), 1.5)` on pitch/yaw
-  only; invert-Y from `Settings`; roll ramp per §6.1 (`rot.z` toward ±1 at `1 / roll_ramp_s` per second, snap
-  to 0 on release, restart from 0 on reversal). Mapping: `main_right`/`main_left` -> `FlightCommand.main_*`,
-  `retro_*` -> 0.0/1.0, combat actions -> `CombatCommand`, camera/reset/pause/debug -> `UiCommand`. Nothing may
-  reference rumble or other Xbox-only features. `test_input_map.gd` asserts every action exists, each has at
+  `InputAdapter` (previous-tick booleans) so it is testable. Expo `signf(x) * pow(absf(x), 1.5)` on pitch/roll
+  only; invert-Y from `Settings`; D-pad ramp per §6.1 (since the play-test swap it is yaw: `rot.y` toward ±1 at
+  `1 / yaw_ramp_s` per second, snap to 0 on release, restart from 0 on reversal; D-pad Up is tap-or-hold).
+  Mapping: `main_right`/`main_left` -> `FlightCommand.main_*`, `retro_*` -> 0.0/1.0, combat actions ->
+  `CombatCommand`, camera/reset/pause/debug -> `UiCommand`. Nothing may reference rumble or other Xbox-only features. `test_input_map.gd` asserts every action exists, each has at
   least one pad event (except `debug_toggle_fallback_mesh`, keyboard only), axis indices are in 0..5 and button
   indices in 0..14, the specific bindings from §6.1 (e.g. `retro_right` is button 10, `target_ahead` is 8), and
   that no action has a key event with physical keycode `KEY_QUOTELEFT` (the console key). Adapter tests: with

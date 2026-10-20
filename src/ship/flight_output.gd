@@ -25,7 +25,7 @@ var trim: float = 0.0
 ## -1..1, pilot terms (+ = yaw right): `pod_yaw_gain × d_s`, the smoothed pod-steering yaw command (0 when assist
 ## is off).
 var pod_yaw_cmd: float = 0.0
-## Rate target handed to the rate controller, rad/s, body frame; zero when assist is off.
+## Rate target handed to the rate controller, rad/s, body frame; zero when assist is off and not braking.
 var rate_target_b: Vector3 = Vector3.ZERO
 ## Levels per nozzle group after trim, indexed by `ThrusterLayout.Group`.
 var group_levels: PackedFloat64Array = [0.0, 0.0, 0.0, 0.0]
@@ -41,5 +41,9 @@ var rcs_torque_level: Vector3 = Vector3.ZERO
 var mass_flow_kg_s: float = 0.0
 ## Echo of the mode the output was computed in, for the overlay.
 var assist_on: bool = false
-## True when the brake overrode translation this tick.
+## True when the brake took over this tick: translation and rotation (all stop, or facing `face_dir_b`).
 var braking: bool = false
+## True while braking with a `FlightCommand.face_dir_b`: the rate target turns the nose onto that direction.
+var facing: bool = false
+## Angle between the nose and `face_dir_b` this tick, rad; 0 when not `facing`.
+var face_error_rad: float = 0.0

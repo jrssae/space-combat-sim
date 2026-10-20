@@ -1,7 +1,7 @@
 extends GutTest
 ## FlightAssist: the pod-yaw command (sign, deadzone, rescaling, cap, smoothing, brake, reset), the P rate
-## controller and the yaw trim factor (architecture §5.2 step 4, §5.5). Expected values come from the ShipSpec
-## defaults, never literals.
+## controller, the yaw trim factor and the brake's face-target attitude controller (architecture §5.2 step 4, §5.5).
+## Expected values come from the ShipSpec defaults, never literals.
 
 const EPS: float = 1e-6
 const DT_60: float = 1.0 / 60.0
@@ -148,6 +148,91 @@ func test_is_trim_cause() -> void:
 	assert_false(FlightAssist.is_trim_cause(1.0e6, 1.0e5))
 	assert_false(FlightAssist.is_trim_cause(0.0, 1.0e5))
 	assert_false(FlightAssist.is_trim_cause(1.0e6, 0.0))
+
+
+# --- brake attitude controller (face target) ----------------------------------------------------------------------
+
+
+func test_face_error_vector_axes_and_signs() -> void:
+	assert_eq(FlightAssist.face_error_vector(Vector3.ZERO), Vector3.ZERO, "no direction, no error")
+	assert_eq(FlightAssist.face_error_vector(Vector3(0.0, 0.0, -5.0)), Vector3.ZERO, "dead ahead")
+	assert_almost_eq(FlightAssist.face_error_vector(Vector3(3.0, 0.0, 0.0)), Vector3(0.0, -PI / 2.0, 0.0), Vector3.ONE * EPS,
+			"target right: yaw right is -y")
+	assert_almost_eq(FlightAssist.face_error_vector(Vector3(-1.0, 0.0, -1.0)), Vector3(0.0, PI / 4.0, 0.0), Vector3.ONE * EPS,
+			"45 deg left: +y")
+	assert_almost_eq(FlightAssist.face_error_vector(Vector3(0.0, 2.0, 0.0)), Vector3(PI / 2.0, 0.0, 0.0), Vector3.ONE * EPS,
+			"target above: pitch up is +x")
+	assert_almost_eq(FlightAssist.face_error_vector(Vector3(0.0, 0.0, 4.0)), Vector3(PI, 0.0, 0.0), Vector3.ONE * EPS,
+			"dead astern: pitch up through it")
+
+
+func test_face_error_vector_never_rolls_and_its_length_is_the_angle() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 0xface
+	for trial: int in 50:
+		var d := Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * rng.randf_range(0.1, 5000.0)
+		var e: Vector3 = FlightAssist.face_error_vector(d)
+		assert_eq(e.z, 0.0, "no roll, trial %d" % trial)
+		assert_almost_eq(e.length(), Vector3.FORWARD.angle_to(d), 1e-5, "length = angle off the nose, trial %d" % trial)
+		# Turning the nose by e lands it on d.
+		if e.length() > 1e-6:
+			var nose: Vector3 = Basis(e.normalized(), e.length()) * Vector3.FORWARD
+			assert_almost_eq(nose.angle_to(d), 0.0, 1e-4, "the rotation lands on the target, trial %d" % trial)
+
+
+func test_face_gain_is_critical_damping_for_the_rate_loop() -> void:
+	assert_almost_eq(assist.face_gain(), spec.assist_gain_k / 4.0, EPS, "K = k / 4: double pole at -k / 2")
+	assert_almost_eq(assist.turn_accel_max(), minf(spec.rcs_torque_max.x / spec.inertia.x, spec.rcs_torque_max.y / spec.inertia.y), EPS)
+
+
+func test_face_rate_target_small_errors_are_linear_and_large_ones_capped() -> void:
+	assert_eq(assist.face_rate_target(Vector3.ZERO), Vector3.ZERO, "no target: all stop")
+	assert_eq(assist.face_rate_target(Vector3.FORWARD), Vector3.ZERO, "on target: stop")
+	# 5 deg right: the linear, critically damped law.
+	var small := Vector3(sin(deg_to_rad(5.0)), 0.0, -cos(deg_to_rad(5.0)))
+	assert_almost_eq(assist.face_rate_target(small), Vector3(0.0, -assist.face_gain() * deg_to_rad(5.0), 0.0), Vector3.ONE * EPS)
+	# 90 deg right: capped at rate_max yaw.
+	assert_almost_eq(assist.face_rate_target(Vector3.RIGHT), Vector3(0.0, -spec.rate_max_rad().y, 0.0), Vector3.ONE * EPS)
+	# Diagonal: the whole vector is scaled, so it still points straight at the target and never exceeds rate_max.
+	var diagonal := Vector3(1.0, 1.0, 0.0)
+	var w: Vector3 = assist.face_rate_target(diagonal)
+	var axis: Vector3 = FlightAssist.face_error_vector(diagonal).normalized()
+	assert_almost_eq(w.normalized(), axis, Vector3.ONE * EPS, "direction preserved")
+	assert_lte(absf(w.x), spec.rate_max_rad().x + EPS)
+	assert_lte(absf(w.y), spec.rate_max_rad().y + EPS)
+	assert_eq(w.z, 0.0, "never a roll target")
+
+
+func test_face_rate_target_can_always_stop_in_time() -> void:
+	# A slow turner: the sqrt(2 a θ) profile takes over from the linear law so RCS can still stop the turn.
+	spec.rcs_torque_max = Vector3(1.0e5, 1.0e5, 1.0e5)
+	var decel: float = FlightAssist.FACE_DECEL_FRACTION * assist.turn_accel_max()
+	for deg: float in [1.0, 10.0, 30.0, 60.0, 120.0]:
+		var theta: float = deg_to_rad(deg)
+		var rate: float = assist.face_rate_target(Vector3(sin(theta), 0.0, -cos(theta))).length()
+		assert_lte(rate, sqrt(2.0 * decel * theta) + EPS, "%d deg: stoppable within RCS" % deg)
+		assert_lte(rate, assist.face_gain() * theta + EPS, "%d deg: never above the linear law" % deg)
+
+
+func test_face_loop_simulation_has_no_overshoot() -> void:
+	# One axis, the cascade as FlightModel runs it: outer face_rate_target, inner P rate loop clamped to RCS.
+	var theta: float = deg_to_rad(30.0)  # target 30 deg right, nose turning toward it
+	var w: float = 0.0  # rate toward the target, rad/s
+	var min_theta: float = theta
+	var aligned_at: float = -1.0
+	for tick: int in 300:
+		var target := Vector3(sin(theta), 0.0, -cos(theta))
+		var w_cmd: float = -assist.face_rate_target(target).y  # toward the target
+		var accel: float = clampf(spec.assist_gain_k * (w_cmd - w), -spec.rcs_torque_max.y / spec.inertia.y,
+				spec.rcs_torque_max.y / spec.inertia.y)
+		w += accel * DT_60
+		theta -= w * DT_60
+		min_theta = minf(min_theta, theta)
+		if aligned_at < 0.0 and theta < deg_to_rad(2.0):
+			aligned_at = float(tick + 1) * DT_60
+	assert_gt(min_theta, -deg_to_rad(0.05), "critically damped: no meaningful overshoot (min %.4f deg)" % rad_to_deg(min_theta))
+	assert_between(aligned_at, 0.0, 2.0, "30 deg closes to 2 deg within 2 s")
+	assert_lt(absf(theta), deg_to_rad(0.01), "settled after 5 s")
 
 
 func _cmd(main_left: float = 0.0, main_right: float = 0.0, retro_left: float = 0.0, retro_right: float = 0.0) -> FlightCommand:

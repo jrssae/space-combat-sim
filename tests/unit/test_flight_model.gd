@@ -200,7 +200,7 @@ func test_rb_alone_decelerates_and_yaws_nose_right() -> void:
 	_assert_levels_within_pilot(on, cmd)
 
 
-func test_right_stick_right_plus_lt_adds_and_caps_at_rate_max() -> void:
+func test_dpad_right_plus_lt_adds_and_caps_at_rate_max() -> void:
 	var cmd: FlightCommand = _triggers(1.0, 0.0)
 	cmd.rot = Vector3(0.0, 1.0, 0.0)
 	var off: FlightOutput = _run(cmd, false)
@@ -215,7 +215,7 @@ func test_right_stick_right_plus_lt_adds_and_caps_at_rate_max() -> void:
 	_assert_levels_within_pilot(on, cmd)
 
 
-func test_right_stick_back_pitches_up_and_right_yaws_right() -> void:
+func test_right_stick_back_pitches_up_and_dpad_right_yaws_right() -> void:
 	for assist_on: bool in [false, true]:
 		var up: FlightOutput = _run(_rot(1.0, 0.0, 0.0), assist_on)
 		assert_almost_eq(up.torque_b, Vector3(spec.rcs_torque_max.x, 0.0, 0.0), Vector3.ONE * SUM_TOL, "nose up " + _mode(assist_on))
@@ -231,7 +231,7 @@ func test_right_stick_back_pitches_up_and_right_yaws_right() -> void:
 	assert_almost_eq(half.torque_b, Vector3.ZERO, Vector3.ONE * SUM_TOL, "half deflection = half rate")
 
 
-func test_dpad_right_rolls_right() -> void:
+func test_right_stick_right_rolls_right() -> void:
 	for assist_on: bool in [false, true]:
 		var out: FlightOutput = _run(_rot(0.0, 0.0, 1.0), assist_on)
 		assert_almost_eq(out.torque_b, Vector3(0.0, 0.0, -spec.rcs_torque_max.z), Vector3.ONE * SUM_TOL, "roll right = -z " + _mode(assist_on))
@@ -273,14 +273,18 @@ func test_release_everything_keeps_velocity_and_only_assist_stops_the_spin() -> 
 	assert_almost_eq(spin.torque_b, Vector3(0.0, -spec.rcs_torque_max.y, 0.0), Vector3.ONE * SUM_TOL)
 
 
-func test_x_held_brakes_with_symmetric_pods_and_rotation_per_mode() -> void:
+func test_x_held_brakes_to_an_all_stop_in_both_modes() -> void:
 	var v := Vector3(10.0, -5.0, -80.0)
+	var w := Vector3(0.3, 1.0, -0.2)
 	var cmd: FlightCommand = _cmd()
 	cmd.brake = true
 	var a_des: Vector3 = -spec.brake_gain_k * v
 	var expected_rcs: Vector3 = (spec.mass * Vector3(a_des.x, a_des.y, 0.0)).clamp(-spec.rcs_force_max, spec.rcs_force_max)
+	var expected_torque: Vector3 = (-(spec.inertia * (spec.assist_gain_k * w))).clamp(-spec.rcs_torque_max, spec.rcs_torque_max)
+	var stick: FlightCommand = _rot(1.0, -1.0, 0.5)
+	stick.brake = true
 	for assist_on: bool in [false, true]:
-		var out: FlightOutput = model.compute(cmd, v, Vector3(0.0, 0.2, 0.0), Vector3.ZERO, assist_on, DT)
+		var out: FlightOutput = model.compute(cmd, v, w, Vector3.ZERO, assist_on, DT)
 		assert_true(out.braking, _mode(assist_on))
 		assert_eq(out.main_levels[0], out.main_levels[2], "mains symmetric across sides " + _mode(assist_on))
 		assert_eq(out.retro_levels[0], out.retro_levels[2], "retros symmetric across sides " + _mode(assist_on))
@@ -292,27 +296,56 @@ func test_x_held_brakes_with_symmetric_pods_and_rotation_per_mode() -> void:
 		assert_gt(out.force_b.z, 0.0, "retros against forward velocity " + _mode(assist_on))
 		assert_eq(out.group_levels[ThrusterLayout.Group.R_MAIN], 0.0, "mains cold while moving forward " + _mode(assist_on))
 		assert_eq(out.pod_yaw_cmd, 0.0, "no pod yaw while braking " + _mode(assist_on))
-	var off: FlightOutput = model.compute(cmd, v, Vector3(0.0, 0.2, 0.0), Vector3.ZERO, false, DT)
-	assert_eq(off.torque_b, Vector3.ZERO, "assist off: the spin is left alone")
-	var on: FlightOutput = model.compute(cmd, v, Vector3(0.0, 0.2, 0.0), Vector3.ZERO, true, DT)
-	assert_lt(on.torque_b.y, 0.0, "assist on: the spin is nulled")
-	# Stick while braking: raw torque with assist off; a rate with assist on. At rest the full stick asks for
-	# more yaw than RCS has, so the trim cuts the retro side fighting it (never raising any level); once the
-	# rate is reached the sides are symmetric again.
-	cmd.rot = Vector3(0.0, 1.0, 0.0)
-	var raw: FlightOutput = model.compute(cmd, v, Vector3.ZERO, Vector3.ZERO, false, DT)
-	assert_almost_eq(raw.torque_b, Vector3(0.0, -spec.rcs_torque_max.y, 0.0), Vector3.ONE * SUM_TOL, "rotation still raw")
-	assert_eq(raw.retro_levels[0], raw.retro_levels[2], "assist off never trims")
-	var turn_in: FlightOutput = model.compute(cmd, v, Vector3.ZERO, Vector3.ZERO, true, DT)
-	assert_almost_eq(turn_in.rate_target_b, Vector3(0.0, -spec.rate_max_rad().y, 0.0), Vector3.ONE * EPS, "rotation per stick as a rate")
-	assert_almost_eq(turn_in.torque_b.y, rb_torque * turn_in.retro_levels[0] - spec.rcs_torque_max.y, SUM_TOL, "right retros plus RCS yaw the nose right")
-	assert_eq(turn_in.retro_levels[0], raw.retro_levels[0], "the right retros keep the brake's level")
-	assert_lt(turn_in.retro_levels[2], raw.retro_levels[2], "the left retros are trimmed")
-	assert_gt(turn_in.trim, 0.0)
-	var at_rate: FlightOutput = model.compute(cmd, v, turn_in.rate_target_b, Vector3.ZERO, true, DT)
-	assert_eq(at_rate.retro_levels[0], at_rate.retro_levels[2], "symmetric again at the commanded rate")
-	assert_eq(at_rate.torque_b, Vector3.ZERO)
-	assert_eq(at_rate.trim, 0.0)
+		# Rotation: all stop as well, in both modes.
+		assert_eq(out.rate_target_b, Vector3.ZERO, "rate target zero " + _mode(assist_on))
+		assert_almost_eq(out.torque_b, expected_torque, Vector3.ONE * SUM_TOL, "the spin is nulled within RCS authority " + _mode(assist_on))
+		assert_eq(out.trim, 0.0, _mode(assist_on))
+		assert_false(out.facing, "no target, no facing " + _mode(assist_on))
+		# Sticks and D-pad are ignored while braking: same torque, same symmetric levels, nothing trimmed.
+		var with_stick: FlightOutput = model.compute(stick, v, w, Vector3.ZERO, assist_on, DT)
+		assert_eq(with_stick.torque_b, out.torque_b, "rotation demand ignored " + _mode(assist_on))
+		assert_eq(with_stick.group_levels, out.group_levels, "no trim " + _mode(assist_on))
+		assert_eq(with_stick.rate_target_b, Vector3.ZERO, _mode(assist_on))
+		var still: FlightOutput = model.compute(stick, v, Vector3.ZERO, Vector3.ZERO, assist_on, DT)
+		assert_eq(still.rcs_torque_b, Vector3.ZERO, "not rotating: RCS torque stays quiet " + _mode(assist_on))
+	# AC5e-style: a 60 deg/s spin under the brake gets everything RCS has, assist off too.
+	var spin: FlightOutput = model.compute(cmd, Vector3.ZERO, Vector3(0.0, 60.0 * DEG_PER_S, 0.0), Vector3.ZERO, false, DT)
+	assert_almost_eq(spin.torque_b, Vector3(0.0, -spec.rcs_torque_max.y, 0.0), Vector3.ONE * SUM_TOL)
+
+
+func test_brake_with_a_target_turns_the_nose_onto_it_without_roll() -> void:
+	var cmd: FlightCommand = _cmd()
+	cmd.brake = true
+	for assist_on: bool in [false, true]:
+		cmd.face_dir_b = Vector3(800.0, 0.0, 0.0)  # 90 deg right of the nose
+		var right: FlightOutput = _run(cmd, assist_on)
+		assert_true(right.facing, _mode(assist_on))
+		assert_almost_eq(right.face_error_rad, PI / 2.0, EPS, _mode(assist_on))
+		assert_almost_eq(right.rate_target_b, model.assist.face_rate_target(cmd.face_dir_b), Vector3.ONE * EPS, _mode(assist_on))
+		assert_almost_eq(right.rate_target_b, Vector3(0.0, -spec.rate_max_rad().y, 0.0), Vector3.ONE * EPS, "yaw right (-y) at rate_max " + _mode(assist_on))
+		assert_almost_eq(right.torque_b, Vector3(0.0, -spec.rcs_torque_max.y, 0.0), Vector3.ONE * SUM_TOL, "full RCS yaw right from rest " + _mode(assist_on))
+		assert_eq(right.force_b, Vector3.ZERO, "at rest the brake has nothing to null " + _mode(assist_on))
+		cmd.face_dir_b = Vector3(0.0, 30.0, -30.0)  # 45 deg above the nose
+		var up: FlightOutput = _run(cmd, assist_on)
+		assert_gt(up.rate_target_b.x, 0.0, "pitch up (+x) " + _mode(assist_on))
+		assert_almost_eq(up.rate_target_b.y, 0.0, EPS, _mode(assist_on))
+		assert_gt(up.torque_b.x, 0.0, _mode(assist_on))
+		# Facing has no roll requirement: the roll target is zero, so a roll rate is nulled on the way.
+		var rolling: FlightOutput = model.compute(cmd, Vector3.ZERO, Vector3(0.0, 0.0, 0.5), Vector3.ZERO, assist_on, DT)
+		assert_eq(rolling.rate_target_b.z, 0.0, _mode(assist_on))
+		assert_lt(rolling.torque_b.z, 0.0, "roll rate nulled " + _mode(assist_on))
+		cmd.face_dir_b = Vector3(0.0, 0.0, -1.0)
+		var on_target: FlightOutput = _run(cmd, assist_on)
+		assert_eq(on_target.torque_b, Vector3.ZERO, "on target and still: quiet " + _mode(assist_on))
+		assert_eq(on_target.face_error_rad, 0.0, _mode(assist_on))
+	# Without the brake the direction is ignored: the pilot flies.
+	var free: FlightCommand = _cmd()
+	free.face_dir_b = Vector3(1.0, 0.0, 0.0)
+	for assist_on: bool in [false, true]:
+		var out: FlightOutput = _run(free, assist_on)
+		assert_false(out.facing, _mode(assist_on))
+		assert_eq(out.rate_target_b, Vector3.ZERO, _mode(assist_on))
+		assert_eq(out.torque_b, Vector3.ZERO, _mode(assist_on))
 
 
 # --- Extras listed in M1-T08 ---------------------------------------------------------------------------------------
@@ -514,6 +547,44 @@ func test_spin_stops_with_assist_and_persists_without() -> void:
 	assert_almost_eq(building["w"] as float, rt_torque / spec.inertia.y * 0.5, 0.02 * absf(building["w"] as float), "AC5b: Σ x_i · T / I_y · 0.5 s")
 
 
+func test_brake_simulation_stops_a_tumble_in_both_modes() -> void:
+	var w0: Vector3 = Vector3(0.6, -0.5, 0.62).normalized() * 60.0 * DEG_PER_S  # 60 deg/s about an oblique axis
+	var cmd: FlightCommand = _rot(1.0, 1.0, -1.0)  # full stick and D-pad, ignored
+	cmd.brake = true
+	for assist_on: bool in [false, true]:
+		model.reset_assist()
+		var r: Dictionary = _simulate_attitude(cmd, Vector3.ZERO, w0, assist_on, 2.0)
+		assert_lt((r["w"] as Vector3).length(), 0.5 * DEG_PER_S, "tumble < 0.5 deg/s within 2 s " + _mode(assist_on))
+		assert_gt(r["stopped_at"] as float, 0.0, _mode(assist_on))
+		gut.p("brake sim %s: tumble < 0.5 deg/s after %.2f s" % [_mode(assist_on), r["stopped_at"]])
+
+
+func test_brake_simulation_faces_a_target_critically_damped() -> void:
+	var cmd: FlightCommand = _cmd()
+	cmd.brake = true
+	# World directions to face from an identity start, plus a start spin: right, high and behind, low left.
+	var cases: Array[Dictionary] = [
+		{"name": "90 deg right", "dir": Vector3(1.0, 0.0, 0.0), "w0": Vector3.ZERO, "within": 3.5},
+		{"name": "150 deg off, up and behind", "dir": Vector3(0.3, 0.4, 0.866), "w0": Vector3.ZERO, "within": 5.0},
+		{"name": "low left, spinning away and rolling", "dir": Vector3(-0.5, -0.3, -0.81), "w0": Vector3(0.0, -0.6, 0.4), "within": 4.0},
+	]
+	for assist_on: bool in [false, true]:
+		for c: Dictionary in cases:
+			model.reset_assist()
+			var r: Dictionary = _simulate_attitude(cmd, c["dir"], c["w0"], assist_on, 7.0)
+			var label: String = "%s %s" % [c["name"], _mode(assist_on)]
+			gut.p("face sim %s: within 2 deg after %.2f s, overshoot %.4f deg, final %.4f deg, |w| %.4f deg/s"
+					% [label, r["aligned_at"], rad_to_deg(r["rebound"]), rad_to_deg(r["error"]),
+					(r["w"] as Vector3).length() / DEG_PER_S])
+			assert_gt(r["aligned_at"] as float, 0.0, label)
+			assert_lt(r["aligned_at"] as float, c["within"] as float, "nose within 2 deg in time: " + label)
+			assert_lt(r["worst_after"] as float, 2.0 * DEG_PER_S, "and it stays within 2 deg: " + label)
+			assert_lt(r["rebound"] as float, 0.05 * DEG_PER_S, "critically damped, no overshoot: " + label)
+			assert_lt(r["error"] as float, 0.05 * DEG_PER_S, "settles on the target: " + label)
+			assert_lt((r["w"] as Vector3).length(), 0.05 * DEG_PER_S, "and stops there: " + label)
+			assert_lt(absf((r["w"] as Vector3).z), 0.05 * DEG_PER_S, "no roll left over: " + label)
+
+
 # --- helpers ---------------------------------------------------------------------------------------------------------
 
 
@@ -594,6 +665,41 @@ func _simulate_yaw(cmd: FlightCommand, seconds: float, w_y: float, assist_on: bo
 		w += last.torque_b / spec.inertia * DT
 		heading += w.y * DT
 	return {"w": w.y, "heading": heading, "last": last, "violations": violations}
+
+
+## Semi-implicit Euler on all three axes with attitude: `w += torque_b / inertia * dt`, then the body turns by
+## `w * dt` (body frame, so `B = B * R`). `face_world` (World frame, zero = none) is converted to the body frame each
+## tick, as the Ship does. Returns the final body rate `w`, the final nose error (rad), when the nose first came within
+## 2 deg (`aligned_at`, s, -1 if never), from then on the worst error (`worst_after`) and how far the error ever grew
+## back from its smallest value (`rebound`, rad: overshoot), and when |w| first fell below 0.5 deg/s (`stopped_at`).
+func _simulate_attitude(cmd: FlightCommand, face_world: Vector3, w0: Vector3, assist_on: bool, seconds: float) -> Dictionary:
+	var b := Basis.IDENTITY
+	var w: Vector3 = w0
+	var aligned_at: float = -1.0
+	var stopped_at: float = -1.0
+	var worst_after: float = 0.0
+	var error: float = 0.0
+	var closest: float = INF
+	var rebound: float = 0.0
+	for tick: int in int(round(seconds / DT)):
+		cmd.face_dir_b = b.transposed() * face_world
+		var out: FlightOutput = model.compute(cmd, Vector3.ZERO, w, Vector3.ZERO, assist_on, DT)
+		w += out.torque_b / spec.inertia * DT
+		if not w.is_zero_approx():
+			b = (b * Basis(w.normalized(), w.length() * DT)).orthonormalized()
+		var t: float = float(tick + 1) * DT
+		if not face_world.is_zero_approx():
+			error = (-b.z).angle_to(face_world)
+			if aligned_at < 0.0 and error < 2.0 * DEG_PER_S:
+				aligned_at = t
+			if aligned_at >= 0.0:
+				worst_after = maxf(worst_after, error)
+				closest = minf(closest, error)
+				rebound = maxf(rebound, error - closest)
+		if stopped_at < 0.0 and w.length() < 0.5 * DEG_PER_S:
+			stopped_at = t
+	return {"w": w, "error": error, "aligned_at": aligned_at, "worst_after": worst_after, "stopped_at": stopped_at,
+			"rebound": rebound}
 
 
 func _assert_levels_almost(got: PackedFloat64Array, expected: Array[float], tolerance: float, text: String) -> void:

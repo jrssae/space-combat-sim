@@ -32,6 +32,17 @@ allies. Milestones M2-M7 build toward it; everything else follows it. Each miles
 
 Finite reaction mass can be switched on in any milestone after M8: `FlightOutput.mass_flow_kg_s` already exists.
 
+## Required: alternate control profiles
+
+Maintainer requirement from the M1 play test: "a future version must support alternate controls from a saved set".
+The player picks a control profile (the default layout of architecture §6.1, alternates such as the pre-swap stick-yaw / D-pad-roll
+layout, and their own edits), and the choice and any custom profile are saved and survive restarts. Planned as
+M2-T11 (saved, console-driven profiles); the M4 controls menu adds remapping on top, and the M7 tutorial teaches
+whichever profile is active. Seams already in M1: every
+binding is an `InputMap` action, `InputAdapter` is the only place that knows action names, and per-action shaping
+(ramps, tap-or-hold, deadzones) lives in `InputAdapter`/`Settings`, so a profile is a saved set of `InputMap`
+events plus those settings, applied before the first frame. The tutorial checks read actions, never devices.
+
 ## Later, and not planned
 
 - **Later** (nice to have): keyboard + mouse flight, HOTAS, VR cockpit (the GDGS Raster backend supports multiview),

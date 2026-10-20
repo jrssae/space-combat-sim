@@ -15,6 +15,8 @@ extends RefCounted
 ##   reverse. The pod-yaw command of the assist (LT or RB => yaw right, RT or LB => yaw left) points the same
 ##   way as that torque, so the flight computer only ever cancels or trims pod thrust, never adds to it.
 ## - `FlightCommand.strafe` is (sway right, heave up) = body (+X, +Y). Brake and RCS forces are central.
+## - `FlightCommand.face_dir_b` is already a body-frame direction (no `AXIS_SIGN`): while braking, the attitude
+##   controller turns the nose (-Z) onto it about an axis in the body XY plane, so with no roll.
 
 ## Pilot axes (pitch up, yaw right, roll right) to body axes (+X, +Y, +Z) for rotations.
 const AXIS_SIGN: Vector3 = Vector3(1.0, -1.0, -1.0)
@@ -66,8 +68,8 @@ func compute(cmd: FlightCommand, v_b: Vector3, w_b: Vector3, env_accel_b: Vector
 	var levels: PackedFloat64Array = [cmd.main_right, cmd.main_left, cmd.retro_right, cmd.retro_left]
 	var rcs_force := Vector3(cmd.strafe.x * spec.rcs_force_max.x, cmd.strafe.y * spec.rcs_force_max.y, 0.0)
 
-	# 2. Brake overrides all translational demand, assist on or off: symmetric sides, so zero pod torque (the
-	# assist's yaw trim in 4b may still cut one side for the moment a stick demand exceeds RCS authority).
+	# 2. Brake overrides all translational demand, assist on or off: symmetric sides, so zero pod torque. (Its
+	# rotation half is 4c.)
 	if cmd.brake:
 		var a_des: Vector3 = -spec.brake_gain_k * v_b - env_accel_b
 		var f_z: float = clampf(spec.mass * a_des.z, -_main_total, _retro_total)
@@ -87,8 +89,19 @@ func compute(cmd: FlightCommand, v_b: Vector3, w_b: Vector3, env_accel_b: Vector
 	var tau_rcs: Vector3
 	var lam: float = 1.0
 	if assist_on:
-		# 4a. Pod steering: the side difference becomes a yaw-rate command (pilot terms), smoothed and capped.
+		# 4a. Pod steering: the side difference becomes a yaw-rate command (pilot terms), smoothed and capped. While
+		# braking the difference reads zero, so the command decays and is not applied.
 		assist.update_pod_yaw(cmd, dt)
+	if cmd.brake:
+		# 4c. Brake = all stop, assist on or off: the flight computer owns rotation too. The sticks are ignored and the
+		# rate target is zero, or with `face_dir_b` set the attitude controller's rate that swings the nose onto it.
+		# The pods are symmetric (step 2), so RCS supplies the whole rate-controller torque; nothing is trimmed.
+		var w_face: Vector3 = assist.face_rate_target(cmd.face_dir_b)
+		tau_rcs = (assist.rate_torque(w_face, w_b) - tau_pods).clamp(-spec.rcs_torque_max, spec.rcs_torque_max)
+		out.rate_target_b = w_face
+		out.facing = not cmd.face_dir_b.is_zero_approx()
+		out.face_error_rad = FlightAssist.face_error_vector(cmd.face_dir_b).length()
+	elif assist_on:
 		var rot: Vector3 = assist.rotation_demand(cmd)
 		var w_target: Vector3 = rot * AXIS_SIGN * spec.rate_max_rad()
 		# 4b. Rate controller with the pods' torque as feed-forward; RCS supplies the residual, and when more yaw
