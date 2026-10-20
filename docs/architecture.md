@@ -1288,7 +1288,8 @@ an `Explosion` at its position with its velocity (scaled by `bounding_radius`), 
 90 °/s, an RNG seeded from the ship id and the tick (reproducible). The raider goes straight back to the pool;
 debris lives 8 s, shrinks to zero over 0.5 s and hides. Assets without `chunks[]` (the Starfury in M2) get the
 explosion plus generic generated shards. Player: same effects, controls ignored, respawn at the scenario start
-after 3 s of sim time with a full hull, and `WaveDirector.on_player_respawned()` restarts the current wave.
+after 3 s of sim time with a full hull, and `WaveDirector.on_player_respawned()` keeps the wave going (surviving
+raiders re-target the player; maintainer decision).
 `kill` (console) bypasses god mode.
 
 ### 15.8 Pilot brains (the M3 seam)

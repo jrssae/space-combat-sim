@@ -77,13 +77,14 @@ geometry, layout and compositing, not Compute artifacts, frame rate or feel.
 | AC8 | God mode: with `god on` raider hits on the player emit `hit_taken` and an impact flash, but `hull.hp` does not change and the player cannot die; `god off` restores damage; raiders always take damage; `kill player` works regardless | A | |
 | AC9 | AI: brains write only `FlightCommand` + `CombatCommand` through `Combatant.apply_commands` (the player's path) and the ship applies them in the same tick; a patrol raider visits three waypoints in order within 90 s, never above cruise + 20 %; an attack raider starting 2 km from a stationary drone fires within 20 s, lands ≥ 1 hit within 30 s and never closes under 100 m; an idle raider coasts at constant velocity; two runs with the same seed match within 1e-3 m after 30 s | A | |
 | AC10 | HUD: `HudLayout` projection matches `Camera3D.unproject_position` within 0.5 px for 20 points in both camera modes; the velocity marker switches to retrograde when prograde is behind; the lead reticle sits at the projection of the `InterceptMath` lead point and hides without a solution; the target box hides and the edge arrow shows when the target is off-screen or behind; hull bar and `GOD` tag follow the provider values; the main scene runs with the HUD without errors | A | P2 |
+| AC10b | HUD extras (maintainer Q4): `RadarModel` puts contacts at the right bearing on the sphere (front/back/up/down/left/right cases), scales range linearly to 5 km and logarithmically beyond, drops contacts past 25 km and colours by faction (hostile red, friendly blue, neutral/unknown yellow); bottom-edge gauges show speed, hull, fuel (full with ∞ while `fuel_unlimited`) and weapon charge from their providers; `FuelTank` and the capacitor pass their unit tests | A | |
 | AC11 | Sandbox: `combat_sandbox.json` validates (and broken variants return path-qualified errors); `WavePlan` with a fake clock runs countdown → active → cleared → next, loops from wave 3 and grows by one attacker per loop up to the pool size; a headless run driven by `wave start`, `kill all` and `wait` advances through three waves with the expected `waves.kills`; `scenario free_flight` reloads into free flight with no raiders and the startup script keeps running | A | |
 | AC12 | Console: `state` lists the M1 providers plus `combat`, `hud`, `hull`, `raiders`, `waves` (+ `controls`, `audio` when T11/T12 land); every command in §15.13 works under `--console-strict` and rejects bad arguments with exit code 1; `show_hud`, `scenario` (and `control_profile`, `sfx_volume`) are schema entries that `set`/`save` handle | A | |
 | AC13 | Control profiles: InputMap → profile → config text → profile → InputMap round-trips exactly; invalid profiles (missing action, non-standard index, `KEY_QUOTELEFT`) are rejected and leave the map unchanged; `controls use` changes what `GodotInputSource` reads without phantom edges; `default` cannot be overwritten; `bind` is session-only until `controls save` | A | |
 | AC14 | Sound (T12, may slip to M3): `sfx_combat` WAVs are 48 kHz mono 16-bit, peaks ≤ -1 dBFS, deterministic; Godot imports them; `AudioDirector` plays fire, hit and explosion sounds headless without errors and never exceeds its 16-voice pool | A | |
 | AC15 | The raider reads as the Delta-V of the maintainer's references from front, side, top and three-quarter views; it renders as splats in both cameras; F4 shows the fallback mesh in the same place | H | P1 |
 | AC16 | Impact flashes sit on the hull they hit; explosions and debris read well, are hidden behind hulls in front of them (depth proxy) and show the raider breaking into its parts; no hitch when waves spawn or ships die (overlay FPS steady) | H | P3 (compositing only) |
-| AC17 | HUD is readable at 1080p in both cameras: boresight, velocity marker, target box with hull bar and faction colour, edge arrow, lead reticle (holding it on the reticle and firing scores hits on a crossing raider), own hull bar, status line | H | P2 (layout only) |
+| AC17 | HUD is readable at 1080p in both cameras (green line theme; radar sphere and bottom-edge speed/hull/fuel/weapon-charge gauges legible): boresight, velocity marker, target box with hull bar and faction colour, edge arrow, lead reticle (holding it on the reticle and firing scores hits on a crossing raider), own hull bar, status line | H | P2 (layout only) |
 | AC18 | Waves 1-3 with the pad: target practice raiders drift, patrol raiders react when approached or shot, strike raiders make attack runs and sometimes hit; both fire modes kill raiders in a sensible time; death and respawn work; `god` works | H | P4 (scene only) |
 | AC19 | 60 fps at 1080p on the tester's GPU (Compute) with six raiders, bolts, an explosion and debris on screen | H | |
 | AC20 | A custom control profile saved with `controls save`, switched with `controls use`, survives a restart (`save`) | H | |
@@ -111,6 +112,22 @@ because some commands contain double quotes.
   state raiders`
 
 ## Questions for the maintainer
+
+**Answers so far (maintainer, 2026-10-20):**
+- **Q4 HUD:** design our own **green line HUD**. The target box and lead reticle are drawn over the target in
+  faction colours: **hostile red, friendly blue, neutral/unknown yellow**. Tracked objects within sensor range
+  show as **points in a 3D radar sphere**, so ships stay trackable after they leave line of sight. **Speed,
+  damage/hull, fuel and weapon recharge** are always visible along the bottom edges. The maintainer will share a
+  reference for the first-person cockpit *interior* (not the HUD).
+- **Q5 Sound:** audible space, as in the show. Generated SFX are required in M2 (T12 no longer slips).
+- **Q6 Death:** respawn at the start after 3 s with a full hull, and **the wave keeps going**: surviving raiders
+  stay and keep fighting. Tunables as proposed (6 / 50 hits).
+- **Q8 Raid entry:** in the M7 tutorial the raiders come **through the jumpgate**. Both carriers stay in M11.
+- **Q2, Q3, Q7, Q9:** proceed on the proposed defaults until the maintainer says otherwise.
+- **Fuel** (follow-up to Q4): the M1 decision "unlimited fuel for now" stands. M2 adds a reaction-mass tank so the
+  fuel gauge is real, behind `settings.fuel_unlimited` (default true; the gauge then stays full) (M2-T14).
+- **Weapon recharge** (follow-up to Q4): pulse cannons get a capacitor (energy drained per shot, recharging over
+  time) so the recharge gauge means something (M2-T14).
 
 The plan proceeds on the proposed defaults unless you say otherwise; Q1 blocks T04.
 
@@ -169,7 +186,8 @@ history.
   - `Factions`: `EARTH_ALLIANCE = &"earth_alliance"`, `RAIDERS = &"raiders"`, `NEUTRAL = &"neutral"`;
     `enum Relation { FRIENDLY, NEUTRAL, HOSTILE }`; `relation(a, b)`: same faction → FRIENDLY; either neutral or
     unknown → NEUTRAL; earth_alliance vs raiders → HOSTILE. `is_hostile(a, b)`. `hud_color(relation) -> Color`:
-    hostile (1.0, 0.35, 0.25), neutral (0.55, 1.0, 0.6) (the M1 bracket green), friendly (0.45, 0.7, 1.0).
+    hostile (1.0, 0.35, 0.25), neutral/unknown **yellow** (1.0, 0.85, 0.25), friendly (0.45, 0.7, 1.0)
+    (maintainer answer Q4). The HUD's own line work stays green (0.55, 1.0, 0.6).
   - `HullHealth`: `max_hp`, `hp`, `apply(amount) -> float` (applied; negative or NaN amounts apply 0), `destroyed`,
     `destroyed_now` (true only after the `apply` that crossed zero), `restore()`, `fraction()`.
   - `SweepMath` (static; every function returns the entry fraction t in [0, 1], 0 when the start is inside, -1 for
@@ -408,7 +426,9 @@ history.
 
 ### M2-T08 HUD
 
-- Goal: velocity vector, lead reticle, target box with hull, own hull: the minimal combat HUD.
+- Goal: the green line combat HUD per the maintainer's answer to Q4: target box and lead reticle over the target
+  in faction colours (hostile red, friendly blue, neutral/unknown yellow); a 3D radar sphere of every tracked
+  contact in sensor range; speed, hull/damage, fuel and weapon recharge along the bottom edges.
 - Agent: **Sonnet**. UI drawn from a pure, fully specified layout model.
 - Files: `src/hud/{hud.tscn,hud.gd,hud_layout.gd,hud_frame.gd}`, `src/targeting/{targetable,target_info,
   target_readout,targeting_controller}.gd` (`hull_fraction`), `src/game/{main,debug_overlay}.gd` (the overlay hides
@@ -421,12 +441,20 @@ history.
   - Glyphs: boresight cross; prograde circle with wings, retrograde circle with a cross; target box as corner
     brackets (at least 24 px or the projected bounding radius) with name, range, closing speed and a hull bar (none
     when `hull_fraction` is -1); edge arrow on the screen border pointing at an off-screen target; lead diamond;
-    own hull bar bottom-left (green above 50 %, amber above 25 %, red below) with `GOD` when invulnerable; status
-    line top-centre (empty until T09 feeds it).
+    status line top-centre (empty until T09 feeds it).
+  - **Bottom-edge gauges** (always visible, green line style): speed (m/s, plus a velocity-vs-nose cue) bottom
+    centre; hull bar (green above 50 %, amber above 25 %, red below; `GOD` when invulnerable) and fuel bar
+    (T14 tank; shows full with an infinity mark while `fuel_unlimited`) bottom-left; weapon recharge (T14
+    capacitor charge plus the fire mode) bottom-right.
+  - **Radar sphere** (bottom-centre, above the speed readout): a wireframe sphere drawn in the ship's frame
+    (nose up the screen, slow perspective), with a dot for every `Targetable` within sensor range (25 km),
+    projected by bearing; radius ∝ range (linear to 5 km, log beyond), coloured by faction; the selected target
+    ringed; a stalk to the equatorial plane gives above/below. Pure `RadarModel` (unit-tested: bearing → sphere
+    point, range scaling, ordering) feeding a thin node.
   - The lead uses the mean muzzle position and the player's `WeaponSpec` speed and lifetime.
   - `Targetable.get_hull_fraction()` returns -1 without a sibling `Damageable`.
   - Console provider `hud`; setting `show_hud`.
-- Done when: AC10 passes; P2 screenshots attached.
+- Done when: AC10 and AC10b pass; P2 screenshots attached.
 - Verify: GUT; capture P2.
 
 ### M2-T09 Combat sandbox scenario and waves
@@ -445,7 +473,8 @@ history.
     range references.
   - `WaveDirector` (`Combat`, priority 300): owns the `WavePlan`, `ShipPool` and `BrainFactory`; spawns through
     `acquire` (anchor offset → `UniversePos`); counts kills (the `HitInfo` shooter is the player) and losses;
-    `on_player_respawned()` releases the wave's raiders and restarts it after its delay; gives the HUD its status
+    `on_player_respawned()` keeps the wave going: surviving raiders stay and keep fighting (maintainer answer Q6); it
+    only re-targets brains onto the respawned player; gives the HUD its status
     line. Console: `wave`, `spawn` (moved here from T05), provider `waves`.
   - `scenario` setting and command: set the session setting, then `get_tree().reload_current_scene()`. The console
     autoload keeps its queue, so a startup script continues after the reload; test that.
@@ -497,7 +526,8 @@ history.
 
 ### M2-T12 Generated sound (may slip to M3)
 
-- Goal: procedural sound for guns, hits, explosions, engines and warnings.
+- Goal: procedural sound for guns, hits, explosions, engines and warnings. **Required in M2**: the maintainer
+  chose audible space, as in the show (Q5).
 - Agent: **Sonnet**. NumPy synthesis and a player pool; the feel is judged by the maintainer.
 - Files: `tools/procgen/core/audio.py` (WAV writer on the stdlib `wave` module, envelopes, oscillators, filtered
   noise), `tools/procgen/assets/sfx_combat.py` (+ registry), `tools/procgen/core/manifest.py` (`kind`: `splat`, the
@@ -511,10 +541,25 @@ history.
   ≤ -1 dBFS, seeded. `AudioDirector`: 16 pooled `AudioStreamPlayer3D`s (oldest voice stolen), an engine hum per ship
   within 1.5 km whose pitch and volume follow `FlightOutput` levels, 2D players for warnings; hooks on
   `PulseCannon.projectile_fired`, `HitResolver.hit_resolved`, `Damageable.destroyed` and the hull threshold.
-  `sfx_volume` sets the SFX bus gain. Headless uses the Dummy driver and plays silently. Wait for Q5 before tuning
-  the character of the sounds.
+  `sfx_volume` sets the SFX bus gain. Headless uses the Dummy driver and plays silently. Audible space (Q5): sounds play
+  positionally outside the ship, as in the show.
 - Done when: AC14 passes. If T12 has not landed when T10 is done, close M2 without it and move it to M3 in the
   roadmap.
+
+### M2-T14 Reaction mass and weapon capacitor
+
+- Goal: real values for the HUD's fuel and weapon-recharge gauges (maintainer answer Q4) without changing the
+  "unlimited fuel for now" decision.
+- Agent: **Sonnet**. Two small pure models plus provider keys.
+- Files: `src/ship/{ship_spec,ship}.gd` (`fuel_capacity_kg`, tank state), `src/ship/fuel_tank.gd` (pure: integrate
+  `FlightOutput.mass_flow_kg_s`, clamp, empty → `FlightModel` gets a zero-thrust flag), `src/weapons/{weapon_spec,
+  pulse_cannon,pulse_cannon_gate}.gd` (capacitor: capacity, cost per shot, recharge rate; an empty capacitor blocks
+  the gate), `src/autoload/settings_schema.gd` (`fuel_unlimited`, default true), tests for both models.
+- Notes: with `fuel_unlimited` the tank is never drawn down (the gauge stays full). Console keys `ship.fuel_kg`,
+  `ship.fuel_fraction`, `weapons.charge`; `refuel` command. Defaults: tank sized for ~10 minutes of full both-pod
+  thrust; capacitor good for ~3 s of alternating fire, recharges in ~4 s, so sustained fire is limited but the
+  M1 fire rates hold for short bursts (AC0).
+- Done when: unit tests pass; the HUD gauges read them (T08 can land first and show placeholders).
 
 ### M2-T13 (conditional) Raider look pass
 
