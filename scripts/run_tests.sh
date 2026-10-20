@@ -176,12 +176,28 @@ if grep -E "${SCRIPT_ERRORS}" "${log}"; then
     echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: camera, controls, debug, input, render, settings, ship, targeting, time, weapons, world" \
+expect_line "${log}" "[console] providers: camera, combat, controls, debug, hull, input, render, settings, ship, targeting, time, weapons, world" \
     || smoke_status=1
 expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
 expect_line "${log}" "[console] render.splat_backend = headless" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 reject_text "${log}" "ERROR:" || smoke_status=1
+
+echo "== Console smoke run: god mode and damage on the real main scene"
+# M2-T03 / AC8: with god on the player's hull does not change; with god off it does.
+log="${REPORTS}/console_damage.log"
+damage_status=0
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec="wait 30; god on; damage 50 player; get hull.hp; god off; damage 50 player; get hull.hp; quit" \
+    > "${log}" 2>&1 || damage_status=$?
+cat "${log}"
+if (( damage_status != 0 )); then
+    echo "run_tests.sh: damage smoke run exited ${damage_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] hull.hp = 300.00" || smoke_status=1
+expect_line "${log}" "[console] hull.hp = 250.00" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
 
 if (( smoke_status != 0 )); then
     echo "run_tests.sh: console smoke runs failed (see reports/console_*.log)." >&2

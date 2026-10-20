@@ -3,7 +3,7 @@
 > "Something to shoot." (`docs/roadmap.md`)
 
 **Status:** in progress. The maintainer asked to proceed before M1's re-test. Done: **T01** combat maths, **T02**
-multi-ship readiness, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T03. M2-T04 waits for the
+multi-ship readiness, **T03** hit detection and damage, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T05 (after T04), T07, T08. M2-T04 waits for the
 maintainer's Delta-V reference file (Q1 below). See `docs/handoff.md`.
 
 Read `docs/architecture.md` first, §1-§13 and especially **§15** (the M2 design: decisions D20-D29, tick order, hit
@@ -619,6 +619,23 @@ history.
   (`earth_alliance`, "PLAYER"), excluded from its own controller by ancestry.
 - A new ship's `TargetingController` last refreshed at its own setup, so a ship built before the others sees them only
   after the next physics tick (or `refresh()`).
+
+**M2-T03 (hit detection and damage).**
+- `Projectile` gains `shooter_id`, `faction`, `damage`, `hit_radius_m`, `color`, `last_step` and `spend()`/`is_spent()`, and
+  joins group `projectiles`. `Projectile.configure(weapon)` fills damage, radius and colour from the `WeaponSpec`;
+  `PulseCannon.setup(..., register_console, faction)` stamps the shooter (the ship body's instance id) and the faction.
+- `Damageable` (group `damageable`, child of the ship) is built by `ShipAssembly`; `Damageable.setup` runs on the ship's
+  `ready` signal with `Hardpoints.collision`, `ShipSpec.hull_max`, the faction, `respects_god_mode` (= `is_player`) and
+  the console flag. It is inactive when destroyed, hidden, outside the tree or when its ship cannot process.
+- `HitResolver` follows §15.5 literally (priority 200, nothing cached across ticks, the earliest hit over all targets
+  wins). The flash is placed at the body-frame point `a + t (b - a)`, so it rides on the hit ship. `target_id` and
+  `shooter_id` in `HitInfo` are the ships' (body) instance ids.
+- Measured cost, headless debug build: 64 bolts × 8 targets resolve in about 0.6 ms per tick (bound: 2 ms).
+- A destroyed hull is only signalled and printed (`HitResolver: PLAYER destroyed`); `DestructionDirector` is T06.
+- `tests/integration/test_hit_resolver.gd` steps bolts, resolver and drones by hand in tick order instead of waiting for
+  physics frames: deterministic, fast, and independent of Jolt. The drone fixture is `tests/fixtures/target_drone.*`.
+- Main scene: a pausable `Combat` node holds the `HitResolver`; the console now also lists the `combat` and `hull`
+  providers and the `damage` and `heal` commands.
 
 ## Definition of done (M2)
 

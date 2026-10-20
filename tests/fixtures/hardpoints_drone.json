@@ -1,0 +1,582 @@
+{
+  "asset_id": "target_drone",
+  "generator_version": 2,
+  "frame": "godot",
+  "units": "m",
+  "length_m": 10.167,
+  "span_m": 15.371,
+  "height_m": 7.678,
+  "mass_kg": 48000.0,
+  "inertia_estimate_kg_m2": [
+    239226.87033,
+    906380.8875,
+    940975.60008
+  ],
+  "center_of_mass": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "cockpit_camera": {
+    "position": [
+      0.0,
+      0.39893,
+      -3.36254
+    ],
+    "forward": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "up": [
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  "chase_anchor": {
+    "position": [
+      0.0,
+      4.0,
+      17.0
+    ]
+  },
+  "muzzles": [
+    {
+      "name": "left",
+      "position": [
+        -0.45,
+        -0.75107,
+        -5.01254
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ]
+    },
+    {
+      "name": "right",
+      "position": [
+        0.45,
+        -0.75107,
+        -5.01254
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ]
+    }
+  ],
+  "pods": [
+    {
+      "name": "ur",
+      "side": "right",
+      "center": [
+        5.5,
+        2.2,
+        0.63746
+      ],
+      "main": {
+        "position": [
+          5.5,
+          2.2,
+          3.25746
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "radius": 0.55
+      },
+      "retro": {
+        "position": [
+          5.5,
+          2.2,
+          -1.91254
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "radius": 0.28
+      }
+    },
+    {
+      "name": "lr",
+      "side": "right",
+      "center": [
+        5.5,
+        -2.2,
+        0.63746
+      ],
+      "main": {
+        "position": [
+          5.5,
+          -2.2,
+          3.25746
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "radius": 0.55
+      },
+      "retro": {
+        "position": [
+          5.5,
+          -2.2,
+          -1.91254
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "radius": 0.28
+      }
+    },
+    {
+      "name": "ul",
+      "side": "left",
+      "center": [
+        -5.5,
+        2.2,
+        0.63746
+      ],
+      "main": {
+        "position": [
+          -5.5,
+          2.2,
+          3.25746
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "radius": 0.55
+      },
+      "retro": {
+        "position": [
+          -5.5,
+          2.2,
+          -1.91254
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "radius": 0.28
+      }
+    },
+    {
+      "name": "ll",
+      "side": "left",
+      "center": [
+        -5.5,
+        -2.2,
+        0.63746
+      ],
+      "main": {
+        "position": [
+          -5.5,
+          -2.2,
+          3.25746
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "radius": 0.55
+      },
+      "retro": {
+        "position": [
+          -5.5,
+          -2.2,
+          -1.91254
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "radius": 0.28
+      }
+    }
+  ],
+  "rcs": [
+    {
+      "name": "ur_px",
+      "pod": "ur",
+      "position": [
+        6.50809,
+        2.6818,
+        2.18746
+      ],
+      "exhaust": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_left",
+        "yaw_right",
+        "roll_left"
+      ]
+    },
+    {
+      "name": "ur_nx",
+      "pod": "ur",
+      "position": [
+        4.5283,
+        1.72967,
+        2.38746
+      ],
+      "exhaust": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_right",
+        "yaw_left",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "ur_py",
+      "pod": "ur",
+      "position": [
+        6.18809,
+        3.0018,
+        2.18746
+      ],
+      "exhaust": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_down",
+        "pitch_up",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "ur_ny",
+      "pod": "ur",
+      "position": [
+        4.8283,
+        1.42967,
+        2.38746
+      ],
+      "exhaust": [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_up",
+        "pitch_down",
+        "roll_left"
+      ]
+    },
+    {
+      "name": "lr_px",
+      "pod": "lr",
+      "position": [
+        6.50809,
+        -2.6818,
+        2.18746
+      ],
+      "exhaust": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_left",
+        "yaw_right",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "lr_nx",
+      "pod": "lr",
+      "position": [
+        4.5283,
+        -1.72967,
+        2.38746
+      ],
+      "exhaust": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_right",
+        "yaw_left",
+        "roll_left"
+      ]
+    },
+    {
+      "name": "lr_ny",
+      "pod": "lr",
+      "position": [
+        6.18809,
+        -3.0018,
+        2.18746
+      ],
+      "exhaust": [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_up",
+        "pitch_down",
+        "roll_left"
+      ]
+    },
+    {
+      "name": "lr_py",
+      "pod": "lr",
+      "position": [
+        4.8283,
+        -1.42967,
+        2.38746
+      ],
+      "exhaust": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_down",
+        "pitch_up",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "ul_nx",
+      "pod": "ul",
+      "position": [
+        -6.50809,
+        2.6818,
+        2.18746
+      ],
+      "exhaust": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_right",
+        "yaw_left",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "ul_px",
+      "pod": "ul",
+      "position": [
+        -4.5283,
+        1.72967,
+        2.38746
+      ],
+      "exhaust": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_left",
+        "yaw_right",
+        "roll_left"
+      ]
+    },
+    {
+      "name": "ul_py",
+      "pod": "ul",
+      "position": [
+        -6.18809,
+        3.0018,
+        2.18746
+      ],
+      "exhaust": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_down",
+        "pitch_up",
+        "roll_left"
+      ]
+    },
+    {
+      "name": "ul_ny",
+      "pod": "ul",
+      "position": [
+        -4.8283,
+        1.42967,
+        2.38746
+      ],
+      "exhaust": [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_up",
+        "pitch_down",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "ll_nx",
+      "pod": "ll",
+      "position": [
+        -6.50809,
+        -2.6818,
+        2.18746
+      ],
+      "exhaust": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_right",
+        "yaw_left",
+        "roll_left"
+      ]
+    },
+    {
+      "name": "ll_px",
+      "pod": "ll",
+      "position": [
+        -4.5283,
+        -1.72967,
+        2.38746
+      ],
+      "exhaust": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_left",
+        "yaw_right",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "ll_ny",
+      "pod": "ll",
+      "position": [
+        -6.18809,
+        -3.0018,
+        2.18746
+      ],
+      "exhaust": [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_up",
+        "pitch_down",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "ll_py",
+      "pod": "ll",
+      "position": [
+        -4.8283,
+        -1.42967,
+        2.38746
+      ],
+      "exhaust": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_down",
+        "pitch_up",
+        "roll_left"
+      ]
+    }
+  ],
+  "collision": [
+    {
+      "name": "hull",
+      "type": "capsule",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "radius": 1.0,
+      "height": 6.0,
+      "axis": "z",
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "wing",
+      "type": "box",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "size": [
+        4.0,
+        0.4,
+        2.0
+      ],
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    }
+  ]
+}

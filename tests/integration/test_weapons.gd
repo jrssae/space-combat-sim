@@ -632,6 +632,41 @@ func test_an_unregistered_cannon_leaves_the_console_alone() -> void:
 	assert_true(DebugConsole.registry.has_provider(&"weapons"), "the registered cannon's provider is untouched")
 
 
+# --- what a bolt carries for hit detection (M2-T03) -----------------------------------------------------------
+
+
+func test_a_bolt_knows_its_shooter_faction_damage_and_radius() -> void:
+	cannon.setup(body, muzzle_nodes, projectiles_node, null, false, Factions.RAIDERS)
+	cmd.fire = true
+	_tick()
+	var bolt: Projectile = _bolts()[0]
+	assert_eq(bolt.shooter_id, body.get_instance_id())
+	assert_eq(bolt.faction, Factions.RAIDERS)
+	assert_eq(bolt.damage, WeaponSpec.new().damage)
+	assert_eq(bolt.hit_radius_m, WeaponSpec.new().hit_radius_m)
+	assert_true(bolt.is_in_group(Projectile.GROUP))
+
+
+func test_last_step_is_zero_until_the_first_tick_then_velocity_times_delta() -> void:
+	cmd.fire = true
+	_tick()
+	var bolt: Projectile = _bolts()[0]
+	assert_eq(bolt.last_step, Vector3.ZERO, "no tick yet")
+	bolt._physics_process(DT)
+	assert_almost_eq(bolt.last_step, bolt.velocity * DT, _vec_tol(1e-4))
+
+
+func test_spend_retires_a_bolt_once() -> void:
+	cmd.fire = true
+	_tick()
+	var bolt: Projectile = _bolts()[0]
+	assert_false(bolt.is_spent())
+	bolt.spend()
+	bolt.spend()
+	assert_true(bolt.is_spent())
+	assert_true(bolt.is_queued_for_deletion())
+
+
 # --- console --------------------------------------------------------------------------------------------------
 
 

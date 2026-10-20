@@ -39,6 +39,8 @@ const MODE_CHOICES: Array[StringName] = [&"alternating", &"linked"]
 var gate: PulseCannonGate = PulseCannonGate.new()
 
 var weapon: WeaponSpec = WeaponSpec.new()
+## Faction of the bolts (the ship's); a bolt hits only ships hostile to it.
+var faction: StringName = Factions.NEUTRAL
 
 var _body: RigidBody3D = null
 var _muzzles: Array[Node3D] = []
@@ -75,13 +77,14 @@ func _physics_process(_delta: float) -> void:
 
 ## Called by `ShipAssembly` with the ship body (position, velocity and nose come from it), the muzzle markers in
 ## muzzle-index order (the hardpoints' `muzzles`; at least one), the node projectiles are added to, the weapon type
-## (null = the Starfury's M1 numbers) and whether this cannon is the player's, so it registers the `weapons` console
-## provider. Adds a `MuzzleFlash` under each muzzle. Calling it again replaces the previous wiring, and refills the
+## (null = the Starfury's M1 numbers), whether this cannon is the player's, so it registers the `weapons` console
+## provider, and the faction its bolts carry (M2-T03: bolts know their shooter and faction for hit detection). Adds a `MuzzleFlash` under each muzzle. Calling it again replaces the previous wiring, and refills the
 ## capacitor to the new spec.
 func setup(body: RigidBody3D, muzzles: Array[Node3D], projectiles_parent: Node3D, weapon_spec: WeaponSpec = null,
-		register_console: bool = false) -> void:
+		register_console: bool = false, p_faction: StringName = Factions.NEUTRAL) -> void:
 	assert(body != null and projectiles_parent != null, "PulseCannon.setup: body and projectiles_parent are required")
 	assert(not muzzles.is_empty(), "PulseCannon.setup: at least one muzzle is required")
+	faction = p_faction
 	weapon = weapon_spec if weapon_spec != null else WeaponSpec.new()
 	muzzle_speed_mps = weapon.muzzle_speed_mps
 	gate.configure(muzzles.size(), weapon.shot_interval_s)
@@ -153,6 +156,8 @@ func _spawn(muzzle_index: int, launch_velocity: Vector3, now_s: float) -> void:
 	var projectile: Projectile = PROJECTILE_SCENE.instantiate() as Projectile
 	_projectiles_parent.add_child(projectile)
 	projectile.configure(weapon)
+	projectile.shooter_id = _body.get_instance_id()
+	projectile.faction = faction
 	projectile.launch(muzzle.global_position, launch_velocity, now_s)
 	_flashes[muzzle_index].trigger()
 	projectile_fired.emit(muzzle_index, projectile)

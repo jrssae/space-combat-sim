@@ -2,7 +2,8 @@ class_name ShipAssembly
 extends RefCounted
 ## Builds a fighting ship from a `ShipSpec` (architecture §15.2): the one path for the player and for AI ships. It
 ## creates the `Ship`, its `ThrusterVisuals` (tinted by `engine_glow_color`), `PulseCannon` (from the spec's
-## `WeaponSpec`) and a `Targetable`, and returns them as a `Combatant`. The caller then spawns `combatant.ship`
+## `WeaponSpec`), a `Damageable` (hull from `ShipSpec.hull_max`, god mode honoured for the player only) and a
+## `Targetable`, and returns them as a `Combatant`. The caller then spawns `combatant.ship`
 ## through `World.spawn`; the components that need the ship's hardpoints are wired on the ship's `ready` signal.
 ##
 ##     var c: Combatant = ShipAssembly.build(spec, world, world.projectiles, {&"faction": Factions.RAIDERS,
@@ -48,6 +49,11 @@ static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D,
 	ship.get_node("Guns").add_child(cannon)
 	combatant.cannon = cannon
 
+	var damageable := Damageable.new()
+	damageable.name = "Damageable"
+	ship.add_child(damageable)
+	combatant.damageable = damageable
+
 	var targetable := Targetable.new()
 	targetable.name = "Targetable"
 	targetable.display_name = combatant.display_name
@@ -63,8 +69,10 @@ static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D,
 static func _wire(combatant: Combatant, projectiles_parent: Node3D, console_owner: bool) -> void:
 	var ship: Ship = combatant.ship
 	combatant.thrusters.setup(ship.get_layout(), ship.get_flight_output)
+	combatant.damageable.setup(ship.get_hardpoints().collision, ship.spec.hull_max, combatant.faction,
+			combatant.is_player, console_owner)
 	var muzzles: Array[Node3D] = ship.get_muzzles()
 	if muzzles.is_empty():
 		push_warning("ShipAssembly: %s has no muzzles; its cannon cannot fire" % ship.spec.asset_id)
 		return
-	combatant.cannon.setup(ship, muzzles, projectiles_parent, ship.spec.weapon, console_owner)
+	combatant.cannon.setup(ship, muzzles, projectiles_parent, ship.spec.weapon, console_owner, combatant.faction)
