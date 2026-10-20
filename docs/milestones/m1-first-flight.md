@@ -423,6 +423,8 @@ hardpoints, never hard-coded.
   spawn entries with `UniversePos`, and spawning goes through `World.spawn()`. `TargetingController` (under the
   ship) builds `TargetInfo`s from group `targetable` each physics tick, applies `target_next` / `target_ahead`
   edges, exposes `selected_readout() -> TargetReadout`, emits `target_changed`.
+  Deviation (T14 landed before T10): the controller does not know `Ship`. T10/T15 call `setup(body: RigidBody3D)`
+  (it reads position, `linear_velocity`, forward `-global_basis.z`) and `apply(cmd: CombatCommand)` each tick.
 - Console: `TargetingController` registers provider `targeting` (`selected` writable by display name or `none`).
 - Done when: AC8 passes; `nav_buoy` passes AC3 and AC4 (T05's test picks it up).
 - Verify: Python tests, GUT.

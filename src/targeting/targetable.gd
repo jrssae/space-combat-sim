@@ -1,0 +1,33 @@
+class_name Targetable
+extends Node3D
+## Marks its parent as something the targeting system can select (architecture §6.3). A component, not a base
+## class: add one as a child of a buoy, a ship or a station, at the point the bracket should sit on. It joins group
+## `targetable`, which `TargetingController` reads every physics tick.
+##
+## Do not add it to `world_shiftable`: it moves with its parent, which is the shiftable node.
+
+const GROUP: StringName = &"targetable"
+
+## What the pilot reads ("NAV ALPHA"); the console selects targets by it.
+@export var display_name: String = ""
+## IFF seam (§14.9). Everything in M1 is `neutral`.
+@export var faction: StringName = &"neutral"
+## World-frame velocity of the marked object, m/s, for owners that move kinematically (a drifting buoy keeps it
+## current). Ignored when the parent is a RigidBody3D: its `linear_velocity` is the truth.
+var velocity: Vector3 = Vector3.ZERO
+
+
+func _init() -> void:
+	add_to_group(GROUP)
+
+
+func get_target_velocity() -> Vector3:
+	var body := get_parent() as RigidBody3D
+	if body != null:
+		return body.linear_velocity
+	return velocity
+
+
+## A snapshot for `TargetingSystem`: this tick's position and velocity, never kept across ticks.
+func to_target_info() -> TargetInfo:
+	return TargetInfo.new(get_instance_id(), display_name, faction, global_position, get_target_velocity())

@@ -7,10 +7,11 @@ extends RefCounted
 const DECIMALS: int = 2
 
 
-## Formats a value for display, with an optional unit ("42.10 m/s").
+## Formats a value for display, with an optional unit ("42.10 m/s"). A missing value is just "none", without the unit
+## (`targeting.range_m = none` when nothing is selected).
 static func value(v: Variant, unit: String = "") -> String:
 	var text: String = _value(v)
-	return text if unit.is_empty() else "%s %s" % [text, unit]
+	return text if unit.is_empty() or typeof(v) == TYPE_NIL else "%s %s" % [text, unit]
 
 
 ## "path = value unit", with " *" when the value is modified (unsaved settings).
