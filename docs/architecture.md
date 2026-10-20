@@ -3,7 +3,7 @@
 Design for `space-combat-sim`: a Newtonian 3D space-fighter sim in Godot 4, rendered primarily with 3D Gaussian
 splats. This document is the contract between planning and implementation. Milestone scope and tasks live in
 `docs/milestones/`; verified facts (versions, URLs, container quirks) live in `docs/research-notes.md`. §1-§13
-describe what M1 builds; §14 is the long-term design that M1 must not block.
+describe what M1 builds and §15 what M2 adds; §14 is the long-term design that neither may block.
 
 ## 1. Tech stack (pinned)
 
@@ -25,6 +25,8 @@ Version bumps are deliberate PRs that update this table, `scripts/setup_godot.sh
 and `docs/third-party.md` together.
 
 ## 2. Key decisions
+
+M2 decisions (D20-D29) are in §15.1.
 
 | # | Decision | Rationale (short) |
 |---|---|---|
@@ -1035,3 +1037,278 @@ Built in M1 because each is cheap and avoids a later rewrite:
 Deliberately **not** seams in M1, because they cannot be made cheap: the moving (velocity-rebased) frame and tidal
 gravity (§14.1-14.2), on-rails warp (§14.3), the LOD/scaled-space render layers (§14.4) and the hyperspace space
 (§14.5). Each is its own roadmap milestone.
+
+## 15. Combat sandbox (M2)
+
+What M2 adds to §1-§13 (tasks in `docs/milestones/m2-combat-sandbox.md`). Every M1 rule still holds; this section
+only lists what is new. Task ids below are M2 tasks.
+
+### 15.1 Decisions
+
+| # | Decision | Rationale (short) |
+|---|---|---|
+| D20 | Raiders are ordinary `Ship`s (RigidBody3D, `FlightModel`, assist always on, same limits) driven by a `PilotBrain` that writes `FlightCommand` + `CombatCommand`. No kinematic path followers | It is the M3 seam (§14.7): AI obeys the player's physics, and targeting, hits, HUD and destruction have one code path |
+| D21 | Projectile hits: one `HitResolver` sweeps each bolt's last tick against each hostile target **in that target's frame** (relative motion): segment vs. bounding sphere, then vs. the target's hardpoints `collision` primitives inflated by the bolt's hit radius. Pure script maths, not Jolt queries | Exact for straight-line relative motion at any closing speed (1 400 m/s is 23 m per tick against hulls about 1 m thick); independent of when Jolt moves the target; rebase-safe, because a bolt stores its last displacement rather than a position; unit-testable; bounded cost (64 bolts × 8 targets of broadphase is well under 1 ms) |
+| D22 | No `GaussianSplatNode` enters or leaves the tree during play. Splat-bearing entities (raiders, debris chunks) are pooled at scenario load and switched by visibility | GDGS v3.3.0 re-merges every node's splat data on each register and unregister (`gaussian_scene_registry.gd`: a GDScript loop over every splat in the scene, then new GPU buffers), so a spawn would hitch. A visibility change only re-packs instance transforms |
+| D23 | Damage model: hull points only. No shields (Starfuries and Delta-Vs have none), no subsystems, no collision damage. Bolt damage comes from `WeaponSpec`, hull from `ShipSpec`. `debug.invulnerable` zeroes damage on `Damageable`s with `respects_god_mode` (the player) | Smallest model that gives kills and deaths. Subsystems are M11, ram damage M3 |
+| D24 | Destruction = a code-generated explosion (shader, particles, light: meshes, never splats) + break-up into the asset's generated `chunks` (pooled chunk splats, chunk meshes once the pool is used up). Debris drifts and spins kinematically, no collisions | Reuses the hull's own look, causes no registry churn, stays procedural |
+| D25 | Factions: `earth_alliance`, `raiders`, `neutral`, with a fixed rule in `Factions` (M3 turns it into data). Bolts hit only hostiles and never their shooter. `target_next` cycles hostiles first (nearest first), then the rest | Enough IFF for one enemy faction. Hostile-first cycling needs no new button, and the maintainer's pad has none free |
+| D26 | The HUD is its own CanvasLayer drawn from a pure `HudLayout` that projects with the camera's matrices (tested against `Camera3D.unproject_position`) | Layout is unit-testable; the debug overlay stays a debug tool |
+| D27 | Only the player's components register console providers (`ship`, `targeting`, `weapons`, `hull`) and `assist`. Other ships appear in aggregate providers (`raiders`) | The registry replaces entries by name, so per-ship registration would overwrite the player's entries and drop them when that ship is freed |
+| D28 | Control profiles: named binding sets in `user://controls/<name>.cfg`, applied to `InputMap` at run time; `default` is the `project.godot` map and cannot be overwritten | `GodotInputSource` already reads `InputMap` events on every poll, so switching needs no input-layer change |
+| D29 | Sound (T12, may slip to M3): `tools/procgen` synthesises WAVs with NumPy (asset kind `audio`); `AudioDirector` plays them through a pooled set of `AudioStreamPlayer3D`s. Space is audible, as in the show | Procedural-only rule; no new dependency (`wave` is in the standard library) |
+
+### 15.2 Layout additions
+
+```
+src/combat/factions.gd            RefCounted, pure: faction ids, relation rule, HUD colours
+src/combat/hull_health.gd         RefCounted, pure: hull points; destroyed reported exactly once
+src/combat/sweep_math.gd          RefCounted, pure statics: segment vs. sphere / box / capsule -> entry fraction
+src/combat/hit_shape.gd           RefCounted: one hit volume (box | capsule, body-frame transform) from Hardpoints.collision
+src/combat/hit_info.gd            RefCounted: one resolved hit (target, shooter, faction, damage, point, normal, rel. speed)
+src/combat/intercept_math.gd      RefCounted, pure: lead solution for bolts that inherit the shooter's velocity (HUD, AI)
+src/combat/damageable.gd          Node component, group "damageable": HullHealth + HitShapes, signals
+src/combat/hit_resolver.gd        Node: per-tick swept hits, damage, impact flashes; console `combat`, `damage`, `heal`
+src/combat/impact_flash.gd        short additive flash + sparks, child of the hit ship at the hit point
+src/combat/explosion.tscn|.gd     generated explosion (fireball shader, flash light, sparks); drifts, self-frees
+src/combat/explosion_fireball.gdshader
+src/combat/debris_chunk.tscn|.gd  one chunk: GaussianSplatNode + chunk mesh fallback
+src/combat/debris_pool.gd         Node: pooled chunk splat sets, mesh-only chunks and generic shards; drift, spin, shrink-out
+src/combat/destruction_director.gd  Node: Damageable.destroyed -> explosion, debris, park the raider / respawn the player
+src/weapons/weapon_spec.gd        Resource: muzzle speed, shot interval, damage, lifetime, hit radius, bolt look
+src/ai/pilot_brain.gd             RefCounted base: think(Perception, dt) -> PilotCommand; M3's AiPilot extends it
+src/ai/perception.gd              RefCounted: one tick's snapshot for a brain
+src/ai/pilot_steering.gd          RefCounted, pure: face a direction, seek a velocity -> FlightCommand fields
+src/ai/{idle,patrol,attack,aggro}_brain.gd, src/ai/brain_factory.gd   M2 behaviours; scenario dict -> brain
+src/ai/ai_pilot_driver.gd         Node under an AI ship (physics priority -10): Perception -> brain -> Combatant
+src/game/combatant.gd             RefCounted handle: ship, cannon, thrusters, targetable, damageable, driver; apply_commands
+src/game/ship_assembly.gd         RefCounted statics: builds a player or AI Combatant from a ShipSpec
+src/game/ship_catalog.gd          RefCounted: scenario ship type -> ShipSpec path
+src/game/ship_pool.gd             Node: pooled Combatants (D22); acquire at a UniversePos, release
+src/game/wave_plan.gd             RefCounted, pure: wave state machine
+src/game/wave_director.gd         Node: runs the WavePlan, spawns from the pool, counts kills; console `wave`, `spawn`
+src/hud/hud.tscn|.gd              CanvasLayer 40 (below the overlay's 50): draws a HudFrame
+src/hud/hud_layout.gd, hud_frame.gd   RefCounted, pure: projection and every HUD element's screen state
+src/input/control_profile.gd      RefCounted, pure: bindings <-> InputMap <-> config text, validation
+src/audio/audio_director.gd       Node: pooled 3D players, engine hum, volume (T12)
+assets/ships/raider_delta_v.tres, assets/weapons/{pulse_cannon_ef,raider_plasma}.tres
+data/scenarios/combat_sandbox.json
+tools/procgen/assets/raider_fighter.py, styles/raider.py, parts/wing.py, core/chunks.py   (T04)
+tools/procgen/assets/sfx_combat.py, core/audio.py                                        (T12)
+```
+
+Main scene additions (pausable, like `World`):
+
+```
+Main
+├── World
+│   ├── PlayerShip (+ ThrusterVisuals, PulseCannon, Targetable, Damageable)   built by ShipAssembly
+│   ├── Ships (ShipPool)          pooled raiders, each with an AiPilotDriver
+│   ├── Effects                   explosions (impact flashes ride on the hit ship)
+│   └── Debris (DebrisPool)
+├── Combat (Node, PROCESS_MODE_PAUSABLE)
+│   ├── HitResolver   ├── DestructionDirector   └── WaveDirector
+├── AudioDirector (T12)
+└── Hud (CanvasLayer 40)
+```
+
+### 15.3 Tick order and data flow
+
+One physics tick, in order (`process_physics_priority`, then tree order):
+
+1. `AiPilotDriver`s (-10): build a `Perception`, call the brain, `Combatant.apply_commands(flight, combat)`.
+   Commands are levels and rates, never positions, so a later rebase in the same tick cannot stale them.
+2. `DebugConsole` statements (autoload, so first among the priority-0 nodes; a `rebase` here moves everything
+   together).
+3. `Main` (0): player `PilotCommand` -> `Combatant.apply_commands` (the same call).
+4. Ships (0): flight model and forces; their `PulseCannon`s spawn bolts (`last_step = 0`).
+5. Projectiles (0): move, record `last_step = velocity * delta`, expire.
+6. `TargetingController`s (100): refresh candidates (inactive targetables skipped).
+7. `HitResolver` (200): sweep, damage, impact flashes. `destroyed` -> `DestructionDirector`, which hides and
+   disables the ship in the same tick, so nothing targets or hits it afterwards.
+8. `WaveDirector` (300): count the dead, spawn from the pool.
+9. Jolt steps the bodies.
+
+```
+PilotBrain <-Perception- AiPilotDriver --+          InputAdapter (player) --+
+                                         +--> Combatant.apply_commands <----+
+                                               |- Ship (FlightModel) -> Jolt
+                                               |- PulseCannon (WeaponSpec) -> Projectile (shooter, faction, damage, last_step)
+                                               '- TargetingController (hostile first)
+Projectiles + active Damageables -> HitResolver (SweepMath) -> Damageable.apply_hit -> hit_taken / damaged / destroyed
+destroyed -> DestructionDirector -> Explosion, DebrisPool, ShipPool.release | player respawn -> WaveDirector
+player ship + selected target + active camera -> HudLayout (InterceptMath) -> Hud
+```
+
+### 15.4 Hull and damage
+
+- `HullHealth`: `max_hp`, `hp`; `apply(amount) -> float` (applied, clamped at 0); `destroyed` becomes true once,
+  and the call that crossed zero reports it; later hits apply nothing. `restore()` refills.
+- `Damageable` (child of a ship, like `Targetable`): `faction`, `hull`, `shapes: Array[HitShape]` from the owner's
+  `Hardpoints.collision`, `bounding_radius` from the shapes, `respects_god_mode`. `apply_hit(info: HitInfo)` always
+  emits `hit_taken(info)` (effects, HUD flash), then applies damage unless god mode applies, emitting
+  `damaged(info, applied)` when applied > 0 and `destroyed(info)` once. `is_active()` = visible in tree and
+  processing.
+- Starting values (tune in (H)): Starfury hull 300, pulse bolt 10; Delta-V hull 60, raider bolt 6. A raider dies
+  to 6 hits, the player to 50.
+
+### 15.5 Hit detection
+
+Per projectile P (this tick it moved from `p1 - step` to `p1`; `step = P.last_step`) and per active `Damageable` D
+that is hostile to P's faction and not P's shooter. D's body has not been stepped yet, so it is at its
+start-of-tick pose `(t0, B)` with velocity `v_t`:
+
+```
+a = B^T ((p1 - step) - t0)                 # bolt relative to the target at the start of the tick, body frame
+b = B^T (p1 - (t0 + v_t * dt))             # ... and at the end of the tick
+if SweepMath.segment_sphere(a, b, Vector3.ZERO, D.bounding_radius + r_hit) < 0: skip
+t = min over D.shapes of shape.sweep(a, b, r_hit)          # box: slab test on half extents + r_hit
+                                                            # capsule (local +Y axis): exact cylinder + end spheres
+hit point (World-local) = t0 + v_t * dt * t + B * (a + t * (b - a))
+```
+
+- The target's rotation during the tick is ignored (90 °/s is 1.5° per tick; ≤ 0.2 m at the wing tip).
+- The box inflation is conservative at edges and corners (a rounded box would be exact); the bolt's
+  `hit_radius_m` (0.25 m, generous next to the 0.05 m visual) dominates anyway.
+- The earliest hit over all targets wins; the bolt is spent; an `ImpactFlash` is added to the hit ship at the
+  local hit point; `hit_resolved(info)` is emitted for HUD and sound.
+- A rebase between ticks changes nothing: positions shift together and `step` is a displacement.
+
+### 15.6 Pools (D22)
+
+- `ShipPool.prepare(type, count)` builds `count` Combatants with `ShipAssembly` at scenario load and spawns them
+  through `World.spawn` at a parking position, then parks them: `visible = false`,
+  `process_mode = PROCESS_MODE_DISABLED` (`CollisionObject3D.disable_mode` REMOVE takes the body out of the space).
+  `acquire(name, at: UniversePos, basis, velocity, brain)` enables the ship first, then sets the pose from
+  `World.universe_to_local(at)`, the velocities and a full hull, and calls `reset_physics_interpolation()`.
+  `release` parks it again. The M2 raider pool holds 6.
+- `DebrisPool` holds 2 chunk splat sets per chunked asset type (one break-up's worth each); a third simultaneous
+  break-up gets mesh chunks. Hidden splat nodes still cost an early-out per splat in projection and sort-buffer
+  memory, so pools stay small.
+- GDGS applies its Rz(180°) correction when a splat node enters the tree with an identity basis. Keep splat nodes
+  as identity children of a moving parent and never reset their own transform; reparenting would also unregister
+  and re-register them.
+- Splat budget (registered, M2): Starfury ≈ 140k, sky 16k, buoys 38k, 6 raiders ≈ 150k, 2 debris sets ≈ 50k:
+  about 400k (§7.4, §11).
+
+### 15.7 Destruction
+
+`DestructionDirector` listens to every `Damageable.destroyed`. Raider: hide and disable it in the same tick, spawn
+an `Explosion` at its position with its velocity (scaled by `bounding_radius`), and `DebrisPool.burst` its chunks
+(from hardpoints `chunks[]`) at its pose: velocity = ship velocity + `w × r` + 4-15 m/s outward, spin up to
+90 °/s, an RNG seeded from the ship id and the tick (reproducible). The raider goes straight back to the pool;
+debris lives 8 s, shrinks to zero over 0.5 s and hides. Assets without `chunks[]` (the Starfury in M2) get the
+explosion plus generic generated shards. Player: same effects, controls ignored, respawn at the scenario start
+after 3 s of sim time with a full hull, and `WaveDirector.on_player_respawned()` restarts the current wave.
+`kill` (console) bypasses god mode.
+
+### 15.8 Pilot brains (the M3 seam)
+
+- `PilotBrain.think(p: Perception, dt) -> PilotCommand` (flight + combat; `ui` unused), `describe() ->
+  Dictionary` (behaviour, state; console), `reset()`. Deterministic: randomness only from a seed set by the
+  spawner.
+- `Perception` (built fresh every tick, so it is rebase-safe): sim time, own pose, velocity, angular velocity, hull
+  fraction, `ShipSpec`, weapon muzzle speed and lifetime, `frame_origin: UniversePos` (brains keep waypoints as
+  `UniversePos` and convert them every tick), the selected target as `TargetInfo` and whether it is hostile.
+- `PilotSteering` (pure): `face(dir)` -> `rot` (a P loop on the body-frame angle error that commands rates through
+  the assist, gain well below `assist_gain_k`, signs via `FlightModel.AXIS_SIGN`); `seek(v_des)` -> mains when
+  aligned with the velocity error, retros when it points aft, RCS strafe for the lateral rest.
+- M2 brains: `IdleBrain` (coast, or hold with the brake), `PatrolBrain` (waypoint loop at a cruise speed, slowing
+  for arrival), `AttackBrain` (approach -> aim at the `InterceptMath` lead -> fire inside a cone and range -> break
+  off -> extend -> re-attack), `AggroBrain` (patrol until a hostile comes within range or it takes damage, then
+  attack). `BrainFactory` builds them from scenario `behaviour` dicts.
+- `AiPilotDriver` keeps its ship's `TargetingController` on the nearest hostile (`select_next`, hostile first).
+  M3 adds `AiPilot extends PilotBrain` (utility selection, evade, formation, wingmen) behind the same interface.
+
+### 15.9 HUD
+
+`HudLayout.compute(input) -> HudFrame` is pure: it takes the camera transform, `Camera3D.get_camera_projection()`
+and viewport size, the player's pose, velocity, mean muzzle position, `WeaponSpec`, hull and god flag, and the
+selected target (position, velocity, faction, name, range, closing speed, hull fraction or -1, bounding radius).
+Elements: boresight (nose axis at 1 km), velocity marker (prograde, or retrograde when prograde is behind) with
+speed, target box (at least 24 px, faction colour) with name, range, closing speed and hull bar, an edge arrow when
+the target is off-screen or behind, lead reticle (`InterceptMath`, hidden without a solution or beyond bolt
+range), own hull bar with a `GOD` tag, and one status line (wave, raiders left, kills). `Hud` only draws it.
+`settings.show_hud` toggles it; while it shows, the debug overlay hides its own bracket.
+
+### 15.10 Scenarios and waves
+
+`ScenarioLoader` gains optional `pools` (`{"raider_fighter": 6}`), `waves[]` and `loop`. A spawn is `{type, name,
+anchor: "player" | "origin", offset, velocity, behaviour}`; positions and waypoints are offsets from the anchor's
+universe position at wave start (summed as `UniversePos`, never through float32). `ShipCatalog` maps `type` to a
+`ShipSpec`. `WavePlan` (pure, fake-clock tested): `COUNTDOWN(delay) -> ACTIVE -> CLEARED -> next`, then loop from
+`loop.from_wave`, one more attacker per loop up to the pool size. `settings.scenario` (`combat_sandbox` by
+default, or `free_flight`) picks the file; `Main.scenario_path` overrides it for tests.
+
+### 15.11 `raider_fighter` and chunks
+
+The same output contract as §9, at about 25k splats (15k-40k budget; raiders are mostly seen at range). In
+`hardpoints.json`: two pods (one per side, each with a main and a small retro nozzle, centre of mass trimmed onto
+the thrust line so pod thrust makes no pitch torque), four `muzzles`, `collision` primitives that also serve as hit
+volumes (they must cover the splats), `cockpit_camera` and `chase_anchor` (the `Hardpoints` parser requires them),
+the hull depth proxy as `starfury_aurora` emits it since the M1 fix, and `chunks[]`:
+`{name, ply, obj, offset, splats}`. `core/chunks.py` partitions the hull splats by part group (wing_l, wing_r, hump,
+nacelle_l, nacelle_r); each chunk PLY is re-centred on its own centroid (GDGS centres every PLY) and flipped like the
+hull; `offset` is that centroid in the body frame. The chunks together hold exactly the hull's splats. Style
+`raider`: worn grey-brown plating, high panel tint jitter, dark canopy, yellow-white engine glow (a `ShipSpec`
+tint, not splats).
+
+### 15.12 Control profiles
+
+`ControlProfile` (pure): `{action: [event descriptors], deadzone}` <-> `InputMap` <-> ConfigFile text. A
+descriptor is `pad:button:<0-14>`, `pad:axis:<0-5><+|->`, `key:<physical key name>` or `mouse:<button>`. Validation
+uses the M1 input rules: every `InputAdapter.ACTIONS` entry present, a pad event on every action except
+keyboard-only debug ones, standard indices only, never `KEY_QUOTELEFT`. `default` is a snapshot of the
+`project.godot` map taken before any profile is applied. `settings.control_profile` (new schema type `string`)
+selects the profile at start-up and on change; an invalid profile warns and falls back to `default`. Bindings
+changed with `bind`/`unbind` are session-only until `controls save <name>`. A rebinding menu comes with the M4
+front end.
+
+### 15.13 Console and settings (additions to §6.4)
+
+| Provider | Owner (task) | Keys (w = writable) |
+|---|---|---|
+| `combat` | HitResolver (T03) | `projectiles`, `hits`, `last_hit`, `pairs_tested`, `resolve_us` (profiling only; the one wall-clock read) |
+| `hull` | player Damageable (T03) | `hp`, `max_hp`, `fraction`, `invulnerable` (mirror of `debug.invulnerable`), `destroyed` |
+| `raiders` | ShipPool (T05, T07) | `pool_size`, `free`, `alive`, `list` (name, behaviour/state, hull %, range), `selected_brain` |
+| `waves` | WaveDirector (T09) | `scenario`, `index`, `name`, `state`, `next_in_s`, `alive`, `kills`, `losses` |
+| `hud` | Hud (T08) | `visible`, `lead_tof_s`, `lead_on_screen`, `prograde_on_screen`, `target_box` |
+| `controls` | ControlProfiles (T11) | `profile`, `profiles`, `unsaved` |
+| `audio` | AudioDirector (T12) | `sounds`, `voices_active`, `volume` |
+
+| Command | Owner | Does |
+|---|---|---|
+| `damage <amount> [player\|target]` / `heal [player\|target\|all]` | HitResolver | a hit with no shooter (god mode applies) / restore hull |
+| `spawn raider [idle\|patrol\|attack\|aggro] [distance_m] [yaw_deg] [pitch_deg]` | WaveDirector | take a raider from the pool ahead of the player, named `RAIDER <n>`, nose toward the player turned by yaw/pitch (screenshot turntables) |
+| `despawn [target\|all]` | ShipPool | return raiders to the pool without effects (screenshots, tests) |
+| `kill [target\|all\|player]` | DestructionDirector | destroy now, bypassing god mode |
+| `wave [start\|next\|stop\|restart] [index]` | WaveDirector | drive the wave plan |
+| `scenario [free_flight\|combat_sandbox]` | Main | set the session setting and reload the scene |
+| `controls [list\|use\|save\|show] [name\|action]`, `bind <action> <descriptor>`, `unbind ...` | ControlProfiles | profiles |
+| `sfx <name>` | AudioDirector | play a sound at the player |
+
+New settings: `show_hud` (bool, true), `scenario` (enum `combat_sandbox`|`free_flight`, `combat_sandbox`),
+`control_profile` (string `[a-z0-9_]{1,32}`, `default`), `sfx_volume` (float 0.0-1.0, 0.8).
+
+### 15.14 Testing additions
+
+Unit: `SweepMath` (analytic cases plus a brute-force sampling cross-check), `InterceptMath` (checked by
+simulating the bolt and the target), `HullHealth`, `Factions`, `HudLayout`, `PilotSteering`, `WavePlan`,
+`ControlProfile`, N-muzzle `PulseCannonGate`, hostile-first `TargetingSystem`. Integration (headless): hits at
+closing speeds up to 1 400 m/s, near misses, no self-hit, rebase mid-flight, god mode, destruction in the same
+tick, pooling (the number of `GaussianSplatNode`s in the tree never changes during a run), brains in Jolt (patrol
+reaches its waypoints, attack hits a drone), a three-wave run, the console smoke runs. Python: `raider_fighter`
+(budget, contract, chunk partition, collision coverage) and `sfx_combat`. (H) with pre-checks through
+`scripts/capture.sh` (llvmpipe, Raster backend): asset silhouette, HUD layout, effect compositing.
+
+### 15.15 Seams M2 leaves for later
+
+| Seam | Task | Avoids later |
+|---|---|---|
+| `PilotBrain` / `Perception` / `PilotSteering` / `AiPilotDriver`; brains write only commands | T07 | M3 rewriting how AI ships are driven |
+| `InterceptMath` shared by HUD and AI | T01 | Two lead solutions that disagree |
+| `Factions` as the one relation query | T01 | Hunting faction string compares when M3/M11 add factions |
+| `Combatant` + `ShipAssembly` build player and AI ships the same way | T02 | Special-casing allies, wingmen, the Thunderbolt |
+| Hardpoints `chunks[]` via `core/chunks.py` | T04 | Per-asset debris code for every later ship |
+| Pools filled at scenario load | T05 | Spawn hitches when missions spawn ships (M4) |
+| `ControlProfile` | T11 | HOTAS / keyboard+mouse / menu remapping starting from scratch |
