@@ -95,6 +95,7 @@ src/
   props/nav_buoy.tscn|.gd     inert target marker: splat body, beacon mesh, slow spin, optional drift
   camera/camera_rig.gd        owns CockpitCamera + ChaseCamera; mode enum (COCKPIT, CHASE; later CINEMATIC)
   camera/chase_camera_math.gd RefCounted, pure: chase pose smoothing (unit-tested)
+  camera/chase_camera_config.gd Resource: chase offset, look-ahead and the two smoothing half-lives
   input/flight_command.gd     RefCounted: per-side pod demand, strafe, rotation, brake, assist toggle
   input/combat_command.gd     RefCounted: fire (held), weapon_next / target_next / target_ahead (edges)
   input/ui_command.gd         RefCounted: camera, reset, pause, debug toggles (edges)
