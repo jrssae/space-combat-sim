@@ -26,6 +26,7 @@ const REQUIRED_ROLES: Dictionary = {
 	"sky_default": [],
 	"starfury_aurora": ["fallback_mesh", "cockpit_mesh", "hardpoints"],
 	"nav_buoy": ["hardpoints"],
+	"raider_fighter": ["fallback_mesh", "hardpoints"],
 }
 
 var _readers: Array[ManifestReader] = []
@@ -78,9 +79,15 @@ func test_every_listed_file_exists_and_every_ply_is_a_lod() -> void:
 			assert_true(FileAccess.file_exists(reader.lod_path(lod)), "%s lod %s is missing: %s" % [reader.asset_id, lod["file"], GEN_ASSETS_HINT])
 		for role: String in reader.files:
 			assert_true(FileAccess.file_exists(reader.file_path(role)), "%s files.%s (%s) is missing: %s" % [reader.asset_id, role, reader.files[role], GEN_ASSETS_HINT])
+		# Break-up chunks (hardpoints `chunks[]`, M2-T04) are the other PLYs an asset may have.
+		var chunk_files: PackedStringArray = PackedStringArray()
+		for entry: Dictionary in _chunk_entries(reader):
+			chunk_files.append(String(entry["ply"]))
+			for key: String in ["ply", "obj"]:
+				assert_true(FileAccess.file_exists("%s/%s" % [reader.directory, entry[key]]), "%s chunk %s %s is missing: %s" % [reader.asset_id, entry["name"], key, GEN_ASSETS_HINT])
 		for file_name: String in DirAccess.get_files_at(reader.directory):
 			if file_name.ends_with(".ply"):
-				assert_true(lod_files.has(file_name), "%s/%s is a PLY that no manifest lod lists" % [reader.asset_id, file_name])
+				assert_true(lod_files.has(file_name) or chunk_files.has(file_name), "%s/%s is a PLY that no manifest lod or hardpoints chunk lists" % [reader.asset_id, file_name])
 
 
 # --- splats ------------------------------------------------------------------------------------------------------
@@ -96,6 +103,33 @@ func test_plys_import_with_the_manifest_splat_count() -> void:
 			assert_eq(gaussian.point_count, lod["splats"], "%s: point_count vs manifest splats" % label)
 			assert_eq(gaussian.xyz.size(), gaussian.point_count, "%s: one position per splat" % label)
 			assert_eq(gaussian.point_data_float.size(), gaussian.point_count * 60, "%s: 60 floats per splat" % label)
+
+
+func test_chunk_plys_import_with_their_counts_and_partition_the_hull() -> void:
+	var assets_with_chunks: int = 0
+	for reader: ManifestReader in _valid_readers():
+		var entries: Array[Dictionary] = _chunk_entries(reader)
+		if entries.is_empty():
+			continue
+		assets_with_chunks += 1
+		var total: int = 0
+		var hull_box: AABB = reader.aabb.grow(AABB_TOLERANCE_M)
+		for entry: Dictionary in entries:
+			var label: String = "%s chunk %s" % [reader.asset_id, entry["name"]]
+			var gaussian: GaussianResource = _gaussian("%s/%s" % [reader.directory, entry["ply"]])
+			if gaussian == null:
+				continue
+			assert_eq(gaussian.point_count, int(entry["splats"]), "%s: point_count vs hardpoints splats" % label)
+			total += gaussian.point_count
+			# Re-centred on its own centroid: the imported box sits around the origin ...
+			assert_true(gaussian.aabb.grow(0.5).has_point(Vector3.ZERO), "%s: the imported box %s contains its own origin" % [label, gaussian.aabb])
+			# ... and placed at `offset` (x and y re-negated: the import keeps the 3DGS frame) it lies inside the hull's box.
+			var offset := Vector3(float(entry["offset"][0]), float(entry["offset"][1]), float(entry["offset"][2]))
+			var godot_box: AABB = ManifestReader.godot_to_imported_aabb(gaussian.aabb)
+			godot_box.position += offset
+			assert_true(hull_box.encloses(godot_box), "%s: box %s at offset %s lies inside the hull's %s" % [label, godot_box, offset, reader.aabb])
+		assert_eq(total, int(reader.lods[0]["splats"]), "%s: the chunks hold exactly the hull's splats" % reader.asset_id)
+	assert_gt(assets_with_chunks, 0, "an asset with chunks exists (raider_fighter): %s" % GEN_ASSETS_HINT)
 
 
 func test_ply_aabb_is_the_manifest_aabb_rotated_180_about_z() -> void:
@@ -194,6 +228,21 @@ func test_hardpoints_parse_and_share_the_splat_frame() -> void:
 
 
 # --- helpers -----------------------------------------------------------------------------------------------------
+
+
+## `chunks[]` of the asset's hardpoints.json (empty when it has none).
+func _chunk_entries(reader: ManifestReader) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var path: String = reader.file_path("hardpoints")
+	if path.is_empty() or not FileAccess.file_exists(path):
+		return out
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not (data is Dictionary):
+		return out
+	for entry: Variant in (data as Dictionary).get("chunks", []) as Array:
+		if entry is Dictionary:
+			out.append(entry as Dictionary)
+	return out
 
 
 func _reader_for(asset_id: String) -> ManifestReader:

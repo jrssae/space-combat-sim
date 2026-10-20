@@ -70,8 +70,13 @@ A raised central fuselage hump with a dark canopy at its front. Two side-by-side
 the hump, with large round exhausts. Angular panel detailing and vent grilles on the wing. Four short spike guns
 pointing forward from the wing roots and nacelles. A thin wing, cut square at the tips. Grey, worn.
 
-Open questions before the M2 generator (proportions, scale, side view, gun positions, colours) are Q1 in
-`docs/milestones/m2-combat-sandbox.md`; record the maintainer's answers here.
+The maintainer's reference sheet (a three-view orthographic plus perspective renders, "Babylon 5 Raider Fighter", and
+the raider-base mood shot; kept in the maintainer's untracked `references/`) fixes the proportions the generator
+follows: span about 2.4-2.7 times the length, leading edge about 54-56° from the centre line, a low wide centre body
+(hump and two drums) whose engine exits sit nearly flush with the wing's trailing edge, thin square-cut tips, four
+spikes hanging from the nacelle sides and wing roots. `docs/assets-raider.md` lists the numbers used (7.2 m × 17 m,
+56°) and where they differ from the earlier written defaults (9 m × 17 m, 60°). Open: scale (is 17 m across right?)
+and colour (worn grey-brown is used, per the mood shot); the maintainer can overrule both in `RaiderSpec`.
 
 ## Raider carrier (M11)
 

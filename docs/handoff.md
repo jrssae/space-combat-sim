@@ -10,9 +10,9 @@ locally. Everything below is on the `m1-first-flight` branch on GitHub. It is **
 | M1 First Flight (T01-T15) | Built. Every automated (A) criterion passes in CI |
 | M1 play-test fixes (your feedback) | All merged (list in section 3); **waiting on your re-test** |
 | M2 Combat Sandbox plan | `docs/milestones/m2-combat-sandbox.md`: 14 tasks, acceptance criteria, your answers recorded |
-| M2 tasks done | **T01** combat maths, **T02** multi-ship readiness, **T03** hit detection and damage, **T14** fuel tank + weapon capacitor, **T11** control profiles (see section 5) |
-| M2 tasks left | T04 (blocked on the Delta-V reference), T05-T10, T12, T13 (conditional) |
-| Tests | 189 Python + 954 GUT, all passing; CI runs on every push |
+| M2 tasks done | **T01** combat maths, **T02** multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T14** fuel tank + weapon capacitor, **T11** control profiles (see section 5) |
+| M2 tasks left | T05-T10, T12, T13 (conditional) |
+| Tests | 233 Python + 954 GUT, all passing; CI runs on every push |
 
 ## 2. Get it running locally
 

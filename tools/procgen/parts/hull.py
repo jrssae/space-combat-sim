@@ -954,3 +954,86 @@ def wedge_cockpit_interior(
             sill.quad(a1, a0, b0, b1, interior)  # mirrored winding: faces the cockpit
     meshes.append(sill.mesh())
     return Mesh.concatenate(meshes)
+
+
+# --- hump (the raider's raised central fuselage) -----------------------------------------------
+@dataclass(frozen=True)
+class HumpStation:
+    z: float
+    width: float
+    height: float
+
+
+@dataclass(frozen=True)
+class HumpSpec:
+    """A lofted body of superellipse sections whose underside lies on ``y = bottom_y`` (so the part below the
+    wing's top surface is buried in the wing). Stations run front (smallest z) to back."""
+
+    stations: tuple[HumpStation, ...]
+    bottom_y: float = 0.0
+    exponent: float = 3.0
+    points: int = 28
+    mass_kg: float = 3_500.0
+
+    def section(self, z: float) -> tuple[float, float]:
+        """Width and height at ``z`` (linear between stations)."""
+        zs = [s.z for s in self.stations]
+        return (
+            float(np.interp(z, zs, [s.width for s in self.stations])),
+            float(np.interp(z, zs, [s.height for s in self.stations])),
+        )
+
+    def contains(self, points: np.ndarray, margin: float = 0.0) -> np.ndarray:
+        """Points inside the hump by roughly ``margin`` (a normalised-radius test)."""
+        p = np.asarray(points, dtype=float).reshape(-1, 3)
+        zs = np.array([s.z for s in self.stations])
+        w = np.interp(p[:, 2], zs, [s.width for s in self.stations])
+        h = np.interp(p[:, 2], zs, [s.height for s in self.stations])
+        inside_z = (p[:, 2] > zs[0]) & (p[:, 2] < zs[-1])
+        a, b = 0.5 * w, 0.5 * h
+        n = self.exponent
+        r = (np.abs(p[:, 0] / np.maximum(a, 1e-9)) ** n + np.abs((p[:, 1] - self.bottom_y - b) / np.maximum(b, 1e-9)) ** n) ** (1.0 / n)
+        slack = margin / np.maximum(np.minimum(a, b), 1e-9)
+        return inside_z & (r < 1.0 - slack)
+
+
+def hump(spec: HumpSpec, style: Style) -> Part:
+    """The hump as one lofted solid with flat end caps (the rear cap is hidden by the nacelles)."""
+    material = style.material("hull")
+    rings = []
+    for s in spec.stations:
+        xy = superellipse_ring(s.width, s.height, spec.points, spec.exponent)
+        rings.append(np.column_stack([xy[:, 0], xy[:, 1] + spec.bottom_y + 0.5 * s.height, np.full(len(xy), s.z)]))
+    mesh = loft(rings, material, cap_start=True, cap_end=True)
+    first, last = spec.stations[0], spec.stations[-1]
+    centre_y = spec.bottom_y + 0.5 * max(s.height for s in spec.stations)
+    length = last.z - first.z
+    width = max(s.width for s in spec.stations)
+    height = max(s.height for s in spec.stations)
+    collision = [
+        Collision("box", (0.0, spec.bottom_y + 0.5 * height, 0.5 * (first.z + last.z)), size=(width, height, length))
+    ]
+    return Part("hump", mesh, {"centre": Anchor((0.0, centre_y, 0.5 * (first.z + last.z)))}, collision, spec.mass_kg, group="hump")
+
+
+def canopy_panel(
+    spec: HumpSpec, style: Style, z_front: float, z_back: float, front_width: float, back_width: float, lift: float = 0.05
+) -> Mesh:
+    """A flat dark opaque canopy panel lying on the hump's top, from ``z_front`` to ``z_back``, ``lift`` metres
+    above the hump's top line at its front, following the slope. Frame bars are not modelled: the surrounding
+    plating's panel lines frame it."""
+    glass = style.material("canopy_glass")
+    front_h, back_h = (spec.bottom_y + spec.section(z)[1] for z in (z_front, z_back))
+    slope = (back_h - front_h) / (z_back - z_front)
+    length = z_back - z_front
+    thickness = 0.12
+    sloped = tapered_wedge(length, (front_width, thickness), (back_width, thickness), glass, slope)
+    return sloped.translated((0.0, front_h + 0.5 * (back_h - front_h) + lift - 0.5 * thickness + 0.04, 0.5 * (z_front + z_back)))
+
+
+def tapered_wedge(length: float, size_a: tuple[float, float], size_b: tuple[float, float], material: Material, slope: float) -> Mesh:
+    """A box along Z (front section ``size_a`` at -length/2, back ``size_b`` at +length/2) whose centre line
+    climbs ``slope`` metres per metre towards the back."""
+    from ..core.geometry import tapered_box  # local: keeps the import list above untouched
+
+    return tapered_box(length, size_a, size_b, material, offset_b=(0.0, slope * length)).translated((0.0, -0.5 * slope * length, 0.0))

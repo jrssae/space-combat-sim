@@ -564,3 +564,63 @@ def pilot_tags(
         elif torque[axis] < -lever_min:
             tags.append(neg)
     return tags
+
+
+# --- nacelle (the raider's side-by-side engine drums) ---------------------------------------------
+@dataclass(frozen=True)
+class NacelleSpec:
+    """A cylindrical drum along Z (front at z = 0, nozzle exit at z = ``length`` + the nozzle), a dark intake port
+    in its rounded nose (the retro nozzle), a raised collar ring and a bell nozzle at the back (the main)."""
+
+    body_length: float = 5.7
+    radius: float = 0.55
+    nose_length: float = 0.9
+    intake_radius: float = 0.15
+    retro_radius: float = 0.12
+    collar_radius: float = 0.62
+    collar_z: tuple[float, float] = (-1.1, -0.6)  # from the end of the body, (start, end)
+    nozzle: NozzleSpec = NozzleSpec(throat_r=0.34, exit_r=0.45, length=0.7, wall=0.04)
+    segments: int = 36
+    mass_kg: float = 2_500.0
+
+    @property
+    def total_length(self) -> float:
+        return self.body_length + self.nozzle.length
+
+    def radius_at(self, z: float) -> float:
+        """Body radius at ``z`` along the drum (the nose rounds up to ``radius``)."""
+        if z < self.nose_length:
+            t = max(z, 0.0) / self.nose_length
+            return self.intake_radius + (self.radius - self.intake_radius) * math.sin(0.5 * math.pi * t)
+        return self.radius
+
+
+def nacelle(spec: NacelleSpec, style: Style) -> Part:
+    """The drum plus its nozzle in one part; anchors ``main`` (exit plane, exhaust +Z) and ``retro`` (nose, exhaust -Z)."""
+    hull, dark = style.material("hull"), style.material("hull_dark")
+    port = style.material("nozzle_throat")
+    nose_steps = 5
+    profile: list[tuple[float, float]] = [(0.0, 0.0), (0.0, spec.intake_radius)]
+    materials = [port]
+    for k in range(1, nose_steps + 1):
+        z = spec.nose_length * k / nose_steps
+        profile.append((z, spec.radius_at(z)))
+        materials.append(hull)
+    end = spec.body_length
+    c0, c1 = end + spec.collar_z[0], end + spec.collar_z[1]
+    profile += [(c0, spec.radius), (c0, spec.collar_radius), (c1, spec.collar_radius), (c1, spec.radius), (end, spec.radius)]
+    materials += [hull, dark, dark, hull, hull]
+    profile += [(end, spec.nozzle.throat_r + spec.nozzle.wall), (end, 0.0)]
+    materials += [dark, dark]
+    crease = set(range(1, len(profile) - 1)) - set(range(2, nose_steps + 1))
+    body = lathe(profile, spec.segments, materials, creases=crease)
+    nozzle_part = nozzle(spec.nozzle, style).translated((0.0, 0.0, end))
+    mesh = Mesh.concatenate([body, nozzle_part.mesh])
+    anchors = {
+        "main": Anchor((0.0, 0.0, end + spec.nozzle.length), (0.0, 0.0, 1.0)),
+        "retro": Anchor((0.0, 0.0, 0.0), (0.0, 0.0, -1.0)),
+        "axis_centre": Anchor((0.0, 0.0, 0.5 * spec.total_length)),
+    }
+    cap_height = spec.total_length
+    collision = [Collision("capsule", (0.0, 0.0, 0.5 * spec.total_length), radius=spec.collar_radius, height=cap_height)]
+    return Part("nacelle", mesh, anchors, collision, spec.mass_kg, group="nacelle")

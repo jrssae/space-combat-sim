@@ -3,8 +3,7 @@
 > "Something to shoot." (`docs/roadmap.md`)
 
 **Status:** in progress. The maintainer asked to proceed before M1's re-test. Done: **T01** combat maths, **T02**
-multi-ship readiness, **T03** hit detection and damage, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T05 (after T04), T07, T08. M2-T04 waits for the
-maintainer's Delta-V reference file (Q1 below). See `docs/handoff.md`.
+multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T05 (raider ship and pool), T08 (HUD), T12 (sound). See `docs/handoff.md`.
 
 Read `docs/architecture.md` first, §1-§13 and especially **§15** (the M2 design: decisions D20-D29, tick order, hit
 detection, pools, brains, HUD, console additions). Task notes reference its sections (§). Tasks are ordered; each
@@ -636,6 +635,18 @@ history.
   physics frames: deterministic, fast, and independent of Jolt. The drone fixture is `tests/fixtures/target_drone.*`.
 - Main scene: a pausable `Combat` node holds the `HitResolver`; the console now also lists the `combat` and `hull`
   providers and the `damage` and `heal` commands.
+
+**M2-T04 (`raider_fighter` generator).**
+- The reference sheet arrived (the maintainer's untracked `references/`), so the proportions follow it, not the written
+  defaults: 7.2 m × 17 m, leading edge 56°, drums Ø 1.4 at x = ±1.15 with the nozzle plane 0.6 m behind the wing's tip
+  trailing edge. Details and the reasoning are in `docs/assets-raider.md`; every number is a spec field.
+- Default spacing is 0.09 m (26 488 splats), not the 0.07 m of the notes above (44 652 splats, over the budget).
+- Collision: five stepped boxes per wing half, one hump box, one capsule per drum (capsule radius = the collar's, so the
+  hit volume is slightly generous around the 0.70 m drum). `Hardpoints` names are unique (`wing_r_step_0` ...).
+- Added: `parts/wing.py` (`WingSpec`, `delta_wing`, `vent_grille`), `HumpSpec`/`hump`/`canopy_panel` in `parts/hull.py`,
+  `NacelleSpec`/`nacelle` in `parts/propulsion.py`, `styles/raider.py`, `core/chunks.py`.
+- Not done here: the Godot import half of AC4 and the P1 screenshots (T05). The look is `(H)`; a Python orthographic
+  preview matched the sheet's silhouette from top, side and front, which is as far as the container can check.
 
 ## Definition of done (M2)
 

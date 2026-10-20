@@ -43,10 +43,13 @@ parts/             reusable parametric parts: hull (fuselage, canopy, cockpit in
                    cockpit window and its first-person frame mesh), propulsion (nozzle, RCS cone,
                    engine pod, ring-faced pod, claw vane cluster with RCS blocks, pilot_tags),
                    structure (strut, trussed strut with ladder webs and painted bands, block,
-                   panel, mast), weapons (gun barrel, twin gun mount).
+                   panel, mast), weapons (gun barrel, twin gun mount), wing (delta wing,
+                   vent grille); hull also has the raider's hump and canopy panel, propulsion
+                   its nacelle drum.
                    Spec dataclass + Style in, Part out (mesh, named anchors, collision primitives,
                    mass)
-styles/            design languages: Style (material roles + panel-shading parameters); earthforce.py
+core/chunks.py     break-up chunks: splats and mesh partitioned by part group, re-centred per chunk
+styles/            design languages: Style (material roles + panel-shading parameters); earthforce.py, raider.py
 assets/__init__.py registry: ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]]
 assets/<id>.py     one module per asset, exposing build(ctx)
 tests/             unittest: core, parts, CLI, and every asset
@@ -115,6 +118,22 @@ Things the Godot side must know:
 - The window panes are green-tinted glass (per-splat alpha ~0.03, 70 % transmission through the sheet);
   the frames and the dark lining and bulkhead behind them are opaque. In the OBJ the panes are the
   `ef_canopy_glass` faces. `(H)`: judge the look in both cameras.
+
+## `raider_fighter`
+
+The raiders' Delta-V flying wing (docs/assets-raider.md): a 17 m delta with a raised hump, two engine drums and four
+spike guns, `raider` style. Outputs `raider_fighter.ply` (about 26k splats at 0.09 m spacing; AC4 budget 15k-40k),
+`raider_fighter.obj/.mtl` (fallback mesh), `hardpoints.json`, `manifest.json` and five break-up chunks
+(`raider_fighter_chunk_<wing_l|wing_r|hump|nacelle_l|nacelle_r>.ply/.obj/.mtl`).
+
+Things the Godot side must know:
+
+- Splats are written group by group (`manifest.counts` order: `wing_l`, `wing_r`, `hump`, `nacelle_l`, `nacelle_r`);
+  the hull PLY is the chunks' splats concatenated.
+- `hardpoints.json` has two pods (`l`, `r`), four muzzles (`root_l`, `root_r`, `nacelle_l`, `nacelle_r`), collision
+  primitives that are also the hit volumes, and `chunks[]` `{name, ply, obj, offset, splats}`. A chunk's PLY and OBJ
+  are re-centred on its own centroid; `offset` is that centroid in the body frame.
+- The centre of mass is trimmed onto the nacelle axis (y = the pods' nozzle y).
 
 ## `sky_default`
 
