@@ -4,7 +4,9 @@
 > nebula visible."
 
 **Status:** M1-T01 to M1-T15 are implemented on branch `m1-first-flight`, and every (A) criterion passes in CI.
-Waiting on the human (H) checks in `docs/playtest.md`. M1-T16 runs only if a splat check fails.
+The maintainer's first play-test (2026-10-20) found issues. All the fixes are merged (`docs/handoff.md` section 3), and
+M1 is **waiting on the maintainer's re-test** of the (H) checks in `docs/playtest.md`. M1-T16 runs only if a splat check
+still fails.
 
 Read `docs/architecture.md` first; task notes below reference its sections (§). Tasks are ordered; each is one
 PR-sized unit for an implementation agent. Do them in order unless a task says otherwise.

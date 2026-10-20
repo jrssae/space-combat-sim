@@ -2,8 +2,9 @@
 
 > "Something to shoot." (`docs/roadmap.md`)
 
-**Status:** planned, not started. It starts when M1 is accepted (every (H) box in `m1-first-flight.md` ticked)
-and the M1 play-test fixes are merged. M2-T04 also waits for the maintainer's Delta-V references (Q1 below).
+**Status:** in progress. The maintainer asked to proceed before M1's re-test. Done: **T01** combat maths, **T11**
+control profiles, **T14** reaction mass and weapon capacitor. Next: T02, then T03. M2-T04 waits for the
+maintainer's Delta-V reference file (Q1 below). See `docs/handoff.md`.
 
 Read `docs/architecture.md` first, §1-§13 and especially **§15** (the M2 design: decisions D20-D29, tick order, hit
 detection, pools, brains, HUD, console additions). Task notes reference its sections (§). Tasks are ordered; each
