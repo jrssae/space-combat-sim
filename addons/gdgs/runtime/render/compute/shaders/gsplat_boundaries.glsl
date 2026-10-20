@@ -20,7 +20,8 @@ layout (std430, set = 0, binding = 2) restrict writeonly buffer BoundsBuffer {
 
 void main() {
     const uint id = gl_GlobalInvocationID.x;
-    const uint count = sort_buffer_size;
+    // [space-combat-sim patch] the projection pass can over-count; only the first half of sort_buffer holds sorted keys.
+    const uint count = min(sort_buffer_size, uint(sort_buffer.length()) / 2u);
     if (id >= count) return;
 
     const uint tile_id = sort_buffer[id] >> 16;

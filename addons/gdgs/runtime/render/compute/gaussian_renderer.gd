@@ -4,7 +4,8 @@ class_name GaussianRenderer
 
 const RenderingDeviceContext := preload("res://addons/gdgs/runtime/render/compute/gaussian_rendering_device_context.gd")
 const RADIX := 256
-const MAX_SORT_ELEMENTS_PER_SPLAT := 10
+# [space-combat-sim patch] 10 -> 32: close-up hulls and large nebula splats touch far more than 10 tiles each.
+const MAX_SORT_ELEMENTS_PER_SPLAT := 32
 
 func render_for_compositor(
 	state_cache: GaussianGpuStateCache,
@@ -87,7 +88,7 @@ func _rasterize_state(state, point_count: int, light_count: int) -> void:
 			radix_shift_pass,
 			point_count * MAX_SORT_ELEMENTS_PER_SPLAT * (radix_shift_pass % 2),
 			point_count * MAX_SORT_ELEMENTS_PER_SPLAT * (1 - (radix_shift_pass % 2)),
-			0
+			point_count * MAX_SORT_ELEMENTS_PER_SPLAT  # [space-combat-sim patch] capacity: sort passes clamp element_count to it
 		])
 		state.pipelines["radix_sort_upsweep"].call(state.context, compute_list, sort_push_constant, [], state.descriptors["grid_dimensions"].rid, 0)
 		state.pipelines["radix_sort_spine"].call(state.context, compute_list, sort_push_constant)

@@ -29,7 +29,7 @@ layout (push_constant) uniform PushConstant {
     int pass;
     float _pad0;
     float _pad1;
-    float _pad2;
+    uint capacity; // [space-combat-sim patch]
 };
 
 shared uint reduction;
@@ -41,7 +41,7 @@ void main() {
     uint index = subgroup_index * gl_SubgroupSize + thread_index;
     uint radix = gl_WorkGroupID.x;
 
-    uint element_count = element_count;
+    uint element_count = min(element_count, capacity); // [space-combat-sim patch]
     uint partition_count = (element_count + PARTITION_SIZE - 1) / PARTITION_SIZE;
 
     if (index == 0) reduction = 0;

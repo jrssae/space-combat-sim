@@ -29,7 +29,7 @@ layout (push_constant) uniform PushConstant {
     int pass;
     uint in_offset;
     float _pad0;
-    float _pad1;
+    uint capacity; // [space-combat-sim patch]
 };
 
 shared uint local_histogram[RADIX];
@@ -39,7 +39,7 @@ void main() {
     uint subgroup_index = gl_SubgroupID;         // 0..31
     uint index = subgroup_index * gl_SubgroupSize + thread_index;
 
-    uint element_count = element_count;
+    uint element_count = min(element_count, capacity); // [space-combat-sim patch] never read past the buffer
     uint partition_index = gl_WorkGroupID.x;
     uint partition_start = partition_index * PARTITION_SIZE;
 

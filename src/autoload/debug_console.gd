@@ -466,6 +466,8 @@ func _register_core_commands() -> void:
 				[ConsoleArg.string_required(&"file")]), _cmd_exec],
 		[ConsoleCommand.new(&"wait", "Delay the rest of the queue by N physics frames",
 				[ConsoleArg.int_required(&"frames", 0, 1000000)]), _cmd_wait],
+		[ConsoleCommand.new(&"screenshot", "Save the last rendered frame as a PNG (default user://screenshots/)",
+				[ConsoleArg.string_optional(&"path")]), _cmd_screenshot],
 		[ConsoleCommand.new(&"quit", "Quit with an exit code (default 0)",
 				[ConsoleArg.int_optional(&"code", 0, 0, 255)]), _cmd_quit],
 	]
@@ -595,6 +597,25 @@ func _cmd_wait(args: Dictionary) -> ConsoleResult:
 	var result := ConsoleResult.success()
 	result.wait_frames = int(args[&"frames"])
 	return result
+
+
+# Bug reports and software-Vulkan checks in CI-like containers both want a picture of what the renderer drew.
+# The timestamp only names the file; it never feeds gameplay.
+func _cmd_screenshot(args: Dictionary) -> ConsoleResult:
+	if DisplayServer.get_name() == "headless":
+		return ConsoleResult.failure("screenshot needs a rendering display (this run is --headless)")
+	var path: String = "" if args[&"path"] == null else String(args[&"path"])
+	if path.is_empty():
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://screenshots"))
+		path = "user://screenshots/shot_%s.png" % Time.get_datetime_string_from_system().replace(":", "-")
+	var image: Image = get_viewport().get_texture().get_image()
+	if image == null or image.is_empty():
+		return ConsoleResult.failure("no rendered frame to capture yet")
+	var err: Error = image.save_png(path)
+	if err != OK:
+		return ConsoleResult.failure("could not write %s (%s)" % [path, error_string(err)])
+	return ConsoleResult.success(PackedStringArray(["saved %s (%dx%d)" % [ProjectSettings.globalize_path(path), image.get_width(),
+			image.get_height()]]))
 
 
 func _cmd_quit(args: Dictionary) -> ConsoleResult:

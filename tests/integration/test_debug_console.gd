@@ -557,3 +557,11 @@ func _delete_scratch_files() -> void:
 	for path: String in SCRATCH_FILES:
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func test_screenshot_refuses_politely_when_headless() -> void:
+	var results: Array[ConsoleResult] = DebugConsole.registry.execute("screenshot user://never.png")
+	assert_eq(results.size(), 1)
+	assert_false(results[0].ok)
+	assert_string_contains(results[0].error, "headless")
+	assert_false(FileAccess.file_exists("user://never.png"))

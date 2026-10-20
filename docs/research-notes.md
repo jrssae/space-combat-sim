@@ -93,3 +93,13 @@ GDGS behaviours that shape our pipeline (read from the v3.3.0 source):
 | Command-line arguments | Pass custom arguments after `--` and read them with `OS.get_cmdline_user_args()`; the engine ignores them by design | `doc/classes/OS.xml` |
 | Device polling | `Input.get_joy_axis`, `Input.is_joy_button_pressed`, `Input.is_physical_key_pressed`, `Input.is_mouse_button_pressed` exist, so actions can be evaluated per device class (needed to mask the keyboard while the console is open, because `Input` action state ignores GUI focus) | `doc/classes/Input.xml` |
 | Slow motion | `Engine.time_scale` scales the `delta` of `_process` and `_physics_process`; above 1.0 each physics tick stretches (less precise), so the console caps it at 1.0 | `doc/classes/Engine.xml` |
+
+## Software rendering in the container (verified 2026-10-20)
+
+- `apt-get install mesa-vulkan-drivers xvfb` works through the proxy and provides llvmpipe (Vulkan 1.4, CPU).
+  `glslang-tools` gives `glslangValidator` for offline GLSL checks (strip Godot's `#[compute]` first line).
+- `scripts/capture.sh "<console commands>"` runs the real game under `xvfb-run` with `--rendering-driver vulkan`;
+  the console's `screenshot <path>` command saves frames. About 1 FPS at 1280x720.
+- llvmpipe runs compute with 8-wide subgroups. GDGS's radix sort needs 32+, so the Compute backend declines
+  (local patch) and GDGS renders through its Raster backend: good for geometry, layout, cockpit framing and
+  compositing; Compute-only artifacts still need the human tester's GPU.

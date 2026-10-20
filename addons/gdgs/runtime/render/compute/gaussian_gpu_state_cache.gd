@@ -13,7 +13,8 @@ const MAX_RENDER_STATES := 4
 const FLOATS_PER_SPLAT := 60
 const FLOATS_PER_CULLED_SPLAT := 16
 const BYTES_PER_FLOAT := 4
-const MAX_SORT_ELEMENTS_PER_SPLAT := 10
+# [space-combat-sim patch] 10 -> 32, must match gaussian_renderer.gd.
+const MAX_SORT_ELEMENTS_PER_SPLAT := 32
 # Relighting. Must match gsplat_projection.glsl and gaussian_light_rig.gd.
 const LIGHTING_BYTES_PER_SPLAT := 4
 const RELIGHT_FLOATS_PER_INSTANCE := 8

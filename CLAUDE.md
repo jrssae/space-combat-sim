@@ -18,6 +18,8 @@ official or ripped franchise assets (models, textures, audio, footage, logos). A
 - `docs/milestones/m1-first-flight.md`: current milestone, acceptance criteria and the **ordered task list**.
 - `docs/roadmap.md`: what comes after, so you do not paint us into a corner.
 - `docs/playtest.md`: how the maintainer runs the game and the human (H) acceptance checklist.
+- `docs/design-references.md`: written descriptions of the reference designs (Starfury, station, raiders, bots).
+  Reference images are not in the repo; if you need more detail, **ask the maintainer for references**.
 - `docs/research-notes.md`: verified versions, URLs, container quirks (what is reachable, what is not).
 - `docs/third-party.md`: every dependency and its licence; update it in the same PR as the dependency.
 
@@ -51,6 +53,9 @@ site do not.
   re-applied every physics tick. The damping guard test must stay.
 - Anything that needs a GPU cannot be verified in the container; mark it `(H)` and leave it for the human
   tester instead of faking it.
+- To look at frames without a GPU: install llvmpipe (`apt-get install mesa-vulkan-drivers xvfb`) and run
+  `scripts/capture.sh "wait 60; screenshot /tmp/x.png"`. GDGS falls back to Raster there, so Compute-only
+  artifacts still need the human tester (`docs/research-notes.md`).
 - Commit subjects start with the task id, e.g. `M1-T08: flight model and assist`. Do not push or open PRs unless
   asked; the maintainer handles git remotes.
 

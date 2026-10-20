@@ -35,7 +35,7 @@ layout (push_constant) uniform PushConstant {
     int pass;
     uint in_offset;
     uint out_offset;
-    float _pad;
+    uint capacity; // [space-combat-sim patch]
 };
 
 const uint SHMEM_SIZE = PARTITION_SIZE;
@@ -49,7 +49,7 @@ void main() {
 
     uint partition_index = gl_WorkGroupID.x;
     uint partition_start = partition_index * PARTITION_SIZE;
-    uint element_count = element_count;
+    uint element_count = min(element_count, capacity); // [space-combat-sim patch] never write past the buffer
 
     if (partition_start >= element_count) return;
 

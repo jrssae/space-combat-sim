@@ -26,9 +26,62 @@ func initialize(_tree: SceneTree) -> Dictionary:
 	# already routes Auto to this backend only where compute can run, but keep a
 	# guard so an explicit "Compute" on a GL Compatibility project fails cleanly
 	# and falls back rather than spamming render-thread errors.
-	if RenderingServer.get_rendering_device() == null:
+	var rd := RenderingServer.get_rendering_device()
+	if rd == null:
 		return {"ok": false, "reason": "no RenderingDevice (compute unavailable on this renderer)"}
+	# [space-combat-sim patch] The radix sort sizes its shared memory for at least 32-wide subgroups (16 subgroups
+	# per 512-thread workgroup). Narrower subgroups (llvmpipe: 8, many Intel GPUs: 8-16) index past those arrays and
+	# corrupt memory, so decline and let the selector fall back to Raster.
+	var subgroup := _probe_subgroup_size()
+	if subgroup > 0 and subgroup < 32:
+		return {"ok": false, "reason": "subgroup size %d < 32 (radix sort needs 32+)" % subgroup}
 	return {"ok": true}
+
+
+# [space-combat-sim patch] Godot exposes no subgroup-size limit to scripts, so measure it: dispatch one 512-wide
+# workgroup (the radix sort's shape) on a throwaway local device and read back gl_SubgroupSize. Returns -1 when the
+# probe cannot run, in which case the caller keeps the old behaviour.
+static func _probe_subgroup_size() -> int:
+	var rd := RenderingServer.create_local_rendering_device()
+	if rd == null:
+		return -1
+	var source := RDShaderSource.new()
+	source.source_compute = """#version 450
+#extension GL_KHR_shader_subgroup_basic : require
+layout(local_size_x = 512) in;
+layout(set = 0, binding = 0, std430) restrict writeonly buffer Out { uint sizes[]; };
+void main() { sizes[gl_LocalInvocationIndex] = gl_SubgroupSize; }
+"""
+	var spirv := rd.shader_compile_spirv_from_source(source)
+	if spirv == null or not spirv.compile_error_compute.is_empty():
+		rd.free()
+		return -1
+	var shader := rd.shader_create_from_spirv(spirv)
+	var buffer := rd.storage_buffer_create(512 * 4)
+	var uniform := RDUniform.new()
+	uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
+	uniform.binding = 0
+	uniform.add_id(buffer)
+	var uniform_set := rd.uniform_set_create([uniform], shader, 0)
+	var pipeline := rd.compute_pipeline_create(shader)
+	var list := rd.compute_list_begin()
+	rd.compute_list_bind_compute_pipeline(list, pipeline)
+	rd.compute_list_bind_uniform_set(list, uniform_set, 0)
+	rd.compute_list_dispatch(list, 1, 1, 1)
+	rd.compute_list_end()
+	rd.submit()
+	rd.sync()
+	var sizes := rd.buffer_get_data(buffer).to_int32_array()
+	var smallest := -1
+	for size in sizes:
+		if size > 0 and (smallest < 0 or size < smallest):
+			smallest = size
+	rd.free_rid(pipeline)
+	rd.free_rid(uniform_set)
+	rd.free_rid(buffer)
+	rd.free_rid(shader)
+	rd.free()
+	return smallest
 
 func attach_node(node: Node) -> void:
 	if node == null or not is_instance_valid(node):

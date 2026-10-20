@@ -358,8 +358,12 @@ void main() {
 	float view_depth = max(0.0, clip_pos.w);
 	float depth01 = view_depth / (1.0 + view_depth);
 	uint depth = uint(depth01 * 65535.0) & 0xFFFF;
+	// [space-combat-sim patch] the sort buffers are double-buffered (2x capacity); keys past capacity used to be written out
+	// of bounds (heap corruption on CPU Vulkan, tile garbage on GPUs). Drop the overflow instead.
+	const uint sort_capacity = uint(sort_keys.length()) / 2u;
 	for (uint y = rect_bounds.y; y < rect_bounds.w; ++y)
 	for (uint x = rect_bounds.x; x < rect_bounds.z; ++x) {
+		if (sort_buffer_offset >= sort_capacity) break;
 		uint tile_id = y*grid_size.x + x;
 		uint key = (tile_id << 16) | depth;
 		sort_keys[sort_buffer_offset] = key;
