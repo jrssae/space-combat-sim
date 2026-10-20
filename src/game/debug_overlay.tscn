@@ -1,0 +1,34 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://src/game/debug_overlay.gd" id="1_overlay"]
+[ext_resource type="Script" path="res://src/game/target_bracket.gd" id="2_bracket"]
+
+[sub_resource type="SystemFont" id="SystemFont_mono"]
+font_names = PackedStringArray("DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", "Monospace")
+
+[sub_resource type="LabelSettings" id="LabelSettings_overlay"]
+font = SubResource("SystemFont_mono")
+font_size = 15
+font_color = Color(0.75, 1, 0.8, 1)
+outline_size = 3
+outline_color = Color(0, 0, 0, 0.85)
+
+[node name="DebugOverlay" type="CanvasLayer"]
+layer = 50
+script = ExtResource("1_overlay")
+
+[node name="Readout" type="Label" parent="."]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 900.0
+offset_bottom = 400.0
+mouse_filter = 2
+label_settings = SubResource("LabelSettings_overlay")
+
+[node name="Bracket" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("2_bracket")
