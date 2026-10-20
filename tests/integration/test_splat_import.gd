@@ -25,6 +25,7 @@ const FRAME_SLACK_M: float = 0.05
 const REQUIRED_ROLES: Dictionary = {
 	"sky_default": [],
 	"starfury_aurora": ["fallback_mesh", "cockpit_mesh", "hardpoints"],
+	"nav_buoy": ["hardpoints"],
 }
 
 var _readers: Array[ManifestReader] = []
