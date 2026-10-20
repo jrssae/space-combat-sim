@@ -1201,7 +1201,9 @@ src/game/wave_director.gd         Node: runs the WavePlan, spawns from the pool,
 src/hud/hud.tscn|.gd              CanvasLayer 40 (below the overlay's 50): draws a HudFrame
 src/hud/hud_layout.gd, hud_frame.gd   RefCounted, pure: projection and every HUD element's screen state
 src/input/control_profile.gd      RefCounted, pure: bindings <-> InputMap <-> config text, validation
-src/input/control_profile_store.gd RefCounted: built-in and user profiles; list, load, save, apply
+src/input/control_profile_store.gd RefCounted: built-in and user profiles; list, load, save, delete
+src/autoload/control_profiles.gd  Node (autoload): applies the selected profile at start-up; console `controls`, `bind`, `unbind`
+data/controls/m1_classic.cfg      built-in profile: the original M1 stick-yaw / D-pad-roll layout
 src/audio/audio_director.gd       Node: pooled 3D players, engine hum, volume (T12)
 assets/ships/raider_delta_v.tres, assets/weapons/{pulse_cannon_ef,raider_plasma}.tres
 data/scenarios/combat_sandbox.json
@@ -1377,6 +1379,18 @@ selects the profile at start-up and on change; an invalid profile warns and fall
 changed with `bind`/`unbind` are session-only until `controls save <name>`. A rebinding menu comes with the M4
 front end.
 
+As built (M2-T11): the `ControlProfiles` autoload applies the selection in `_ready`, before the main scene, and
+follows `Settings.changed`. `Settings.validators` (key -> Callable) lets it refuse `set settings.control_profile x`
+for a name that is not a valid profile; loading from disk does not consult it, so a stale saved name only warns and
+falls back. Profiles are ConfigFile text: `[profile]` (`format`, `description`), `[bindings]` (one descriptor list
+per action, in event order) and `[deadzones]` (one number per action, the InputMap deadzone); `data/controls/*.cfg`
+are the built-ins (`m1_classic`), `user://controls/*.cfg` the user's. `bind` adds a descriptor and `unbind` removes one;
+each builds the edited copy, validates it and applies it all at once, so an action can only lose its last pad
+binding by binding another first. Applying replaces every game action's events and deadzone in the InputMap, then
+`DebugConsole.resync_input_edges()` re-seeds the adapter so a button that now means something else cannot fire an
+edge. Per-action shaping beyond the deadzone (ramps, expo, tap-or-hold) stays in `InputAdapter`/`Settings`, so a
+profile moves bindings, not feel: `m1_classic` makes the stick yaw through the D-pad's ramp.
+
 ### 15.13 Console and settings (additions to §6.4)
 
 | Provider | Owner (task) | Keys (w = writable) |
@@ -1397,7 +1411,7 @@ front end.
 | `kill [target\|all\|player]` | DestructionDirector | destroy now, bypassing god mode |
 | `wave [start\|next\|stop\|restart] [index]` | WaveDirector | drive the wave plan |
 | `scenario [free_flight\|combat_sandbox]` | Main | set the session setting and reload the scene |
-| `controls [list\|use\|save\|show] [name\|action]`, `bind <action> <descriptor>`, `unbind ...` | ControlProfiles | profiles |
+| `controls [list\|use\|save\|show\|delete] [name\|action]`, `bind <action> <descriptor>`, `unbind <action> <descriptor>` | ControlProfiles | profiles |
 | `sfx <name>` | AudioDirector | play a sound at the player |
 
 New settings: `show_hud` (bool, true), `scenario` (enum `combat_sandbox`|`free_flight`, `combat_sandbox`),

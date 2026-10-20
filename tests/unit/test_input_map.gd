@@ -32,6 +32,12 @@ const PAD_BINDINGS: Dictionary = {
 const KEYBOARD_ONLY: Array[StringName] = [&"debug_toggle_fallback_mesh"]
 
 
+func before_all() -> void:
+	# These tests pin project.godot's map. A saved control profile (settings.control_profile) may have replaced it
+	# at start-up, so put the default snapshot back first (ControlProfile tests cover the profiles themselves).
+	ControlProfiles.store.default_profile().apply_to_input_map()
+
+
 func test_every_action_exists() -> void:
 	for action: StringName in InputAdapter.ACTIONS:
 		assert_true(InputMap.has_action(action), "InputMap has %s" % action)

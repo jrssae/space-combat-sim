@@ -149,3 +149,42 @@ func _non_default_value(key: StringName) -> Variant:
 func _delete_config() -> void:
 	if FileAccess.file_exists(CONFIG_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(CONFIG_PATH))
+
+
+func test_a_validator_can_refuse_a_write_and_explain() -> void:
+	var seen: Array = []
+	settings.validators[&"control_profile"] = func(value: Variant) -> String:
+		seen.append(value)
+		return "" if value == "mine" else "no control profile '%s'" % value
+	assert_eq(settings.set_value(&"control_profile", "ghost"), ERR_INVALID_PARAMETER)
+	assert_eq(settings.get_last_error(), "no control profile 'ghost'")
+	assert_eq(settings.get_value(&"control_profile"), "default", "unchanged")
+	assert_false(settings.is_unsaved(&"control_profile"))
+	assert_eq(settings.set_value(&"control_profile", "mine"), OK)
+	assert_eq(settings.get_value(&"control_profile"), "mine")
+	assert_eq(settings.get_last_error(), "")
+	assert_eq(seen, ["ghost", "mine"])
+	assert_eq(settings.set_value(&"control_profile", "Bad Name"), ERR_INVALID_PARAMETER, "the schema is checked first")
+	assert_eq(seen.size(), 2, "so the validator never sees a value the schema refused")
+
+
+func test_validators_do_not_block_reset_or_loading_a_stale_value() -> void:
+	settings.set_value(&"control_profile", "gone")
+	assert_eq(settings.save(), OK)
+	settings.validators[&"control_profile"] = func(_value: Variant) -> String: return "never"
+	assert_eq(settings.revert(), OK)
+	assert_eq(settings.get_value(&"control_profile"), "gone", "a stale saved name still loads (start-up falls back)")
+	assert_eq(settings.reset(&"control_profile"), OK)
+	assert_eq(settings.get_value(&"control_profile"), "default")
+	assert_eq(settings.set_value(&"invert_y", true), OK, "other keys are not affected")
+
+
+func test_the_profile_name_is_saved_as_text_and_comes_back() -> void:
+	settings.set_value(&"control_profile", "mine")
+	assert_eq(settings.save(), OK)
+	var cfg := ConfigFile.new()
+	assert_eq(cfg.load(CONFIG_PATH), OK)
+	assert_eq(cfg.get_value("settings", "control_profile"), "mine")
+	settings.set_value(&"control_profile", "other")
+	settings.revert()
+	assert_eq(settings.get_value(&"control_profile"), "mine")

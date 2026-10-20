@@ -75,6 +75,36 @@ set weapons.charge 0       empty the capacitor   get ship.fuel_fraction / weapon
 fallback on                force mesh fallback   set targeting.selected "NAV BRAVO"
 ```
 
+### Control profiles
+
+Alternate layouts live in saved profiles you switch from the console (a controls menu comes with M4). Two are
+built in and read-only: `default` (the layout above) and `m1_classic` (the original M1 pad layout: right stick X
+yaws, D-pad Left/Right rolls; everything else is as in `default`).
+
+```
+controls list                 the profiles; * marks the one in use
+controls use m1_classic       switch now (session only); `save` then keeps the choice for the next start
+bind fire pad:button:7        add a binding to an action (L3 fires); unbind fire pad:button:0 removes one
+controls show fire            the action's bindings; `controls show` lists every action
+controls save mine            write your current bindings to user://controls/mine.cfg and select it
+controls use default          back to the default layout (drops unsaved bind/unbind changes)
+controls delete mine          remove a saved profile (not the one in use)
+```
+
+Bindings are `pad:button:<0-14>`, `pad:axis:<0-5>+` or `-` (`pad:axis:2+` is right stick X to the right; the
+triggers only have `+`), `key:<name>` (`key:K`, `key:Space`, `key:F3`: a physical key, no modifiers) or
+`mouse:<1|2|3>`. `bind` adds a binding. To move a pad button, bind the new one first and then `unbind` the old one,
+because every action keeps at least one pad binding. Anything that breaks the rules (a missing action, a pad
+button above 14 or the Guide button, the ` console key) is refused with the reason and changes nothing. `bind` and
+`unbind` last until you quit unless you `controls save <name>`. Profiles are plain text (one list of bindings per
+action), so `user://controls/<name>.cfg` can also be edited by hand; a broken file is reported by `controls use`,
+and a start-up with a broken or missing selected profile falls back to `default` with a warning.
+
+To keep a custom layout across restarts: `controls save mine`, then `save` (the console's, which persists
+`settings.control_profile`). `m1_classic` changes only the bindings: the stick yaws through the same ramp as the
+D-pad (full rate once past the deadzone) and the D-pad rolls at full rate, not proportionally as in the very first
+M1 build.
+
 ## Acceptance checklist (the (H) criteria)
 
 The full wording is in `docs/milestones/m1-first-flight.md`. Tick each one, or note what you saw.

@@ -136,6 +136,30 @@ console_run "${log}" 1 --console-strict --console-exec="set settings.stick_deadz
 expect_line "${log}" "[console] error: settings.stick_deadzone must be in 0.0..0.3, got 0.9" || smoke_status=1
 reject_text "${log}" "[console] > quit 0" || smoke_status=1
 
+echo "== Console smoke run: control profiles"
+# M2-T11 / AC13: bind is session-only, `controls save` writes user://controls/<name>.cfg, `controls use default`
+# drops the unsaved bind, and only `save` may touch settings.cfg. The scratch profile is deleted at the end.
+log="${REPORTS}/console_controls.log"
+settings_before="$(settings_fingerprint)"
+console_run "${log}" 0 --console-strict \
+    --console-exec="controls save smoke_test; bind fire key:K; controls show fire; controls use default; controls show fire; controls use m1_classic; controls show yaw_left; controls use default; controls delete smoke_test; quit 0" \
+    || smoke_status=1
+expect_line "${log}" "[console] fire: pad:button:0 key:Space mouse:1 key:K (deadzone 0.50)" || smoke_status=1
+expect_line "${log}" "[console] fire: pad:button:0 key:Space mouse:1 (deadzone 0.50)" || smoke_status=1
+expect_line "${log}" "[console] yaw_left: pad:axis:2- key:J (deadzone 0.15)" || smoke_status=1
+expect_line "${log}" "[console] deleted control profile 'smoke_test'" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+if [[ "$(settings_fingerprint)" != "${settings_before}" ]]; then
+    echo "run_tests.sh: control profile commands changed ${SETTINGS_CFG}; only 'save' may write it." >&2
+    smoke_status=1
+fi
+
+echo "== Console smoke run: binding the console key must exit 1"
+log="${REPORTS}/console_controls_strict.log"
+console_run "${log}" 1 --console-strict --console-exec="bind fire key:QuoteLeft; quit 0" || smoke_status=1
+expect_text "${log}" "[console] error: bind fire: key:QuoteLeft is the console key" || smoke_status=1
+reject_text "${log}" "[console] > quit 0" || smoke_status=1
+
 echo "== Console smoke run: the real main scene"
 # M1-T15 / AC10: the game itself (project main scene) must boot headless, register every subsystem's provider and
 # answer through the console without engine errors.
@@ -152,7 +176,7 @@ if grep -E "${SCRIPT_ERRORS}" "${log}"; then
     echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: camera, debug, input, render, settings, ship, targeting, time, weapons, world" \
+expect_line "${log}" "[console] providers: camera, controls, debug, input, render, settings, ship, targeting, time, weapons, world" \
     || smoke_status=1
 expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
 expect_line "${log}" "[console] render.splat_backend = headless" || smoke_status=1
