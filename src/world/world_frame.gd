@@ -67,13 +67,21 @@ func to_universe(local: Vector3) -> UniversePos:
 	return origin.plus_local(local)
 
 
-## Adds `node` as a child at universe position `at` with orientation `basis`, and makes it shiftable. The transform
-## is set before the node enters the tree so a physics body is created where it belongs rather than teleported.
-func spawn(node: Node3D, at: UniversePos, basis: Basis = Basis.IDENTITY) -> void:
+## Adds `node` at universe position `at` with orientation `basis`, and makes it shiftable. The transform is set
+## before the node enters the tree so a physics body is created where it belongs rather than teleported. `parent`
+## (default: World itself) may be any container below World, e.g. Main's `Targets`; it must already be in the tree.
+func spawn(node: Node3D, at: UniversePos, basis: Basis = Basis.IDENTITY, parent: Node3D = null) -> void:
 	assert(node.get_parent() == null, "spawn: %s already has a parent" % node.name)
-	node.transform = Transform3D(basis, universe_to_local(at))
+	var world_local := Transform3D(basis, universe_to_local(at))
+	if parent == null or parent == self:
+		node.transform = world_local
+		parent = self
+	else:
+		assert(is_ancestor_of(parent), "spawn: parent %s is not inside World" % parent.name)
+		var parent_in_world: Transform3D = global_transform.affine_inverse() * parent.global_transform
+		node.transform = parent_in_world.affine_inverse() * world_local
 	node.add_to_group(SHIFTABLE_GROUP)
-	add_child(node)
+	parent.add_child(node)
 	node.reset_physics_interpolation()
 
 

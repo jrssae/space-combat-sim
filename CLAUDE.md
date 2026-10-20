@@ -17,6 +17,7 @@ official or ripped franchise assets (models, textures, audio, footage, logos). A
   tests, conventions). Read it before writing code.
 - `docs/milestones/m1-first-flight.md`: current milestone, acceptance criteria and the **ordered task list**.
 - `docs/roadmap.md`: what comes after, so you do not paint us into a corner.
+- `docs/playtest.md`: how the maintainer runs the game and the human (H) acceptance checklist.
 - `docs/research-notes.md`: verified versions, URLs, container quirks (what is reachable, what is not).
 - `docs/third-party.md`: every dependency and its licence; update it in the same PR as the dependency.
 

@@ -226,3 +226,17 @@ func test_console_entries_leave_with_the_world() -> void:
 	world.get_parent().remove_child(world)
 	assert_false(DebugConsole.registry.has_provider(&"world"), "unregistered in _exit_tree")
 	assert_false(DebugConsole.registry.has_command(&"rebase"))
+
+
+func test_spawn_into_a_container_below_world() -> void:
+	var container := Node3D.new()
+	container.position = Vector3(10.0, -5.0, 2.0)  # a container need not sit at World's origin
+	world.add_child(container)
+	world.rebase(Vector3(1000.0, 0.0, 0.0))
+	var node := Node3D.new()
+	var at := UniversePos.new(1500.0, 20.0, -300.0)
+	world.spawn(node, at, Basis.IDENTITY, container)
+	assert_eq(node.get_parent(), container)
+	assert_true(node.is_in_group(WorldFrame.SHIFTABLE_GROUP))
+	var u: UniversePos = world.to_universe(world.global_transform.affine_inverse() * node.global_position)
+	assert_almost_eq(u.distance_to(at), 0.0, 1e-3, "lands at its universe position despite the container offset")

@@ -3,6 +3,9 @@
 > "A working 3D space combat ship (based on the Starfury design) in a starry background with a little bit of a
 > nebula visible."
 
+**Status:** M1-T01 to M1-T15 are implemented on branch `m1-first-flight`, and every (A) criterion passes in CI.
+Waiting on the human (H) checks in `docs/playtest.md`. M1-T16 runs only if a splat check fails.
+
 Read `docs/architecture.md` first; task notes below reference its sections (§). Tasks are ordered; each is one
 PR-sized unit for an implementation agent. Do them in order unless a task says otherwise.
 

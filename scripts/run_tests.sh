@@ -136,6 +136,29 @@ console_run "${log}" 1 --console-strict --console-exec="set settings.stick_deadz
 expect_line "${log}" "[console] error: settings.stick_deadzone must be in 0.0..0.3, got 0.9" || smoke_status=1
 reject_text "${log}" "[console] > quit 0" || smoke_status=1
 
+echo "== Console smoke run: the real main scene"
+# M1-T15 / AC10: the game itself (project main scene) must boot headless, register every subsystem's provider and
+# answer through the console without engine errors.
+log="${REPORTS}/console_main.log"
+main_status=0
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec="wait 30; state; state ship; get render.splat_backend; quit" > "${log}" 2>&1 || main_status=$?
+cat "${log}"
+if (( main_status != 0 )); then
+    echo "run_tests.sh: main scene smoke run exited ${main_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+if grep -E "${SCRIPT_ERRORS}" "${log}"; then
+    echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] providers: camera, debug, input, render, settings, ship, targeting, time, weapons, world" \
+    || smoke_status=1
+expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
+expect_line "${log}" "[console] render.splat_backend = headless" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
+
 if (( smoke_status != 0 )); then
     echo "run_tests.sh: console smoke runs failed (see reports/console_*.log)." >&2
 fi
