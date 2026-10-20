@@ -12,7 +12,7 @@ locally. Everything below is on the `m1-first-flight` branch on GitHub. It is **
 | M2 Combat Sandbox plan | `docs/milestones/m2-combat-sandbox.md`: 14 tasks, acceptance criteria, your answers recorded |
 | M2 tasks done | **T01** combat maths, **T14** fuel tank + weapon capacitor, **T11** control profiles (see section 5) |
 | M2 tasks left | T02, T03, T04 (blocked on the Delta-V reference), T05-T10, T12, T13 (conditional) |
-| Tests | 189 Python + 800 GUT, all passing; CI runs on every push |
+| Tests | 189 Python + 879 GUT, all passing; CI runs on every push |
 
 ## 2. Get it running locally
 
@@ -85,8 +85,22 @@ GPU-less cloud containers.
 
 ## 5. Control profiles (M2-T11)
 
-Console-driven until the M4 controls menu exists: `controls list`, `controls use m1_classic`, `controls use default`,
-`controls save <name>`. A saved choice survives restarts. Details are in `docs/playtest.md` ("Control profiles").
+Console-driven until the M4 controls menu exists. Open the console with the ` key:
+
+| Command | Does |
+|---|---|
+| `controls list` | show the profiles |
+| `controls use m1_classic` | your original layout: right stick X = yaw, D-pad L/R = roll (this session only) |
+| `controls use default` | back to the current layout |
+| `controls show` / `controls show fire` | list every binding, or one action's |
+| `bind fire pad:button:7` / `unbind fire pad:button:0` | add or remove a binding. Bind the new one first: every action must keep a pad binding |
+| `controls save mine` | write `user://controls/mine.cfg` and select it |
+| `save` | make the selection survive a restart |
+| `controls delete mine` | remove a saved profile (`default` and `m1_classic` are protected) |
+
+`bind` and `unbind` last only until you quit unless you `controls save`. Caveat: `m1_classic` swaps the bindings
+only. The stick yaw goes through the D-pad's ramp and the D-pad rolls at full rate, so it isn't proportional as in
+the very first M1 build.
 
 ## 6. Open questions for you
 
