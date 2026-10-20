@@ -38,10 +38,11 @@ core/geometry.py   Mesh + Material, primitives (box, tapered box, lathe, loft, s
 core/sampling.py   mesh -> surface samples (area-weighted, stratified, R2 low-discrepancy) -> flat splats
 core/lighting.py   baked studio rig (hemisphere ambient + directional lights) for unlit splats
 core/obj.py        OBJ/MTL writer and a small reader for tests
-parts/             reusable parametric parts: hull (fuselage, canopy, cockpit interior/tub),
-                   propulsion (nozzle, RCS cone, engine pod, pilot_tags), structure (strut, block,
-                   panel, mast), weapons (gun barrel). Spec dataclass + Style in, Part out
-                   (mesh, named anchors, collision primitives, mass)
+parts/             reusable parametric parts: hull (fuselage, canopy, cockpit interior/tub,
+                   upright cylinder hull with painted bands), propulsion (nozzle, RCS cone, engine
+                   pod, pilot_tags), structure (strut, block, panel, mast), weapons (gun barrel).
+                   Spec dataclass + Style in, Part out (mesh, named anchors, collision primitives,
+                   mass)
 styles/            design languages: Style (material roles + panel-shading parameters); earthforce.py
 assets/__init__.py registry: ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]]
 assets/<id>.py     one module per asset, exposing build(ctx)
@@ -74,6 +75,23 @@ tests/             unittest: core, parts, CLI, and every asset
 3. Add `tests/test_my_asset.py`: splat count range, PLY fields parse back, centroid near zero, manifest `lods[0]`,
    and same seed gives the same SHA-256 (see `test_sky_default.py` for a template).
 4. Run the tests and `scripts/gen_assets.sh`. Third-party dependencies need an entry in `docs/third-party.md`.
+
+## `nav_buoy`
+
+The inert navigation buoy the M1 targeting cycles through (architecture section 9.3): an upright cylinder hull
+(2.4 m barrel, 0.8 m across, two orange hazard stripes), two dark panel wings standing in the X/Y plane, an antenna
+mast on top and a stub below, about 4.4 m tall, `earthforce` style. Outputs `nav_buoy.ply` (about 7.6k splats at
+0.04 m spacing; AC3 budget 5k-15k), `nav_buoy.obj/.mtl` (fallback mesh), `hardpoints.json` and `manifest.json`.
+Options: `spacing`, `overlap`, `thickness`, as for the ship.
+
+Things the Godot side must know:
+
+- One frame for everything: the splat centroid is the origin and lies on the long axis (every part is sampled
+  exactly mirror-symmetric in x and z), so the buoy spins about its node's +Y without wobbling. `hardpoints.json`
+  has `spin_axis` `[0, 1, 0]`.
+- `hardpoints.json` `beacon` is `{"position", "radius"}`: the mast tip, where the game puts its emissive beacon mesh
+  (the splats never contain the lamp; it blinks). `collision` holds one capsule for later; M1 buoys have none.
+- Splats are written in manifest `counts` order: `hull`, `wing_r`, `wing_l`, `mast`, `stub`.
 
 ## `starfury_aurora`
 

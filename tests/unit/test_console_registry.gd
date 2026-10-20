@@ -379,6 +379,7 @@ func test_format_values() -> void:
 	assert_eq(ConsoleFormat.value(7), "7")
 	assert_eq(ConsoleFormat.value(-0.0), "0.00")
 	assert_eq(ConsoleFormat.value(null), "none")
+	assert_eq(ConsoleFormat.value(null, "m"), "none", "no unit after a missing value")
 	assert_eq(ConsoleFormat.value(&"chase"), "chase")
 	assert_eq(ConsoleFormat.value(PackedFloat64Array([1.5e11, 0.0, 2.0]), "m"), "[150000000000.00, 0.00, 2.00] m")
 	assert_eq(ConsoleFormat.value({"name": "Pad", "rest": -1.0}), "{name: Pad, rest: -1.00}")

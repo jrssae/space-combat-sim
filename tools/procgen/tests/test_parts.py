@@ -170,6 +170,36 @@ class HullPartTests(unittest.TestCase):
         self.assertLess(float(thi[0]), 0.5 * spec.width)
         self.assertEqual(outward(tub.mesh, [0, -0.15, 0]), 1.0)
 
+    def test_cylinder_hull_stands_on_y_with_bands_anchors_and_capsule(self) -> None:
+        spec = hull.CylinderHullSpec(
+            barrel_height=2.0, radius=0.5, cap_height=0.25, end_radius=0.2, bands=((0.1, 0.2, "stripe"),), mass_kg=10.0
+        )
+        part = hull.cylinder_hull(spec, S)
+        lo, hi = part.mesh.bounds()
+        np.testing.assert_allclose([lo[1], hi[1]], [-1.25, 1.25], atol=1e-12)
+        np.testing.assert_allclose([lo[0], hi[0], lo[2], hi[2]], [-0.5, 0.5, -0.5, 0.5], atol=1e-12)
+        self.assertEqual(spec.total_height, 2.5)
+        self.assertEqual(outward(part.mesh, [0, 0, 0]), 1.0)
+        np.testing.assert_allclose(part.anchor("top").position, [0, 1.25, 0])
+        np.testing.assert_allclose(part.anchor("top").direction, [0, 1, 0])
+        np.testing.assert_allclose(part.anchor("bottom").direction, [0, -1, 0])
+        np.testing.assert_allclose(part.anchor("side_right").position, [0.5, 0, 0])
+        # The stripe is exactly the band: barrel faces between 10 % and 20 % of the height.
+        stripe = part.mesh.face_material == part.mesh.material_index("ef_stripe")
+        y = part.mesh.face_centroids()[stripe, 1]
+        self.assertTrue(np.all((y > -1.0 + 0.2) & (y < -1.0 + 0.4)))
+        self.assertEqual({m.name for m in part.mesh.materials}, {"ef_hull", "ef_hull_dark", "ef_stripe"})
+        self.assertEqual(spec.role_at(0.15), "stripe")
+        self.assertEqual(spec.role_at(0.5), "hull")
+        cap = part.collision[0]
+        self.assertEqual((cap.kind, cap.radius, cap.height), ("capsule", 0.5, 2.5))
+        np.testing.assert_allclose(cap.basis[:, 2], [0, 1, 0], atol=1e-12)
+        self.assertAlmostEqual(float(np.linalg.det(cap.basis)), 1.0)
+        self.assertEqual(part.mass_kg, 10.0)
+        for bad in ({"radius": 0.0}, {"end_radius": 0.6}, {"bands": ((0.5, 0.4, "stripe"),)}):
+            with self.subTest(bad), self.assertRaises(ValueError):
+                hull.CylinderHullSpec(**bad)
+
 
 class PropulsionTests(unittest.TestCase):
     def test_nozzle_bell(self) -> None:

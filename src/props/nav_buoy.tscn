@@ -1,0 +1,35 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://src/props/nav_buoy.gd" id="1_buoy"]
+[ext_resource type="Script" path="res://addons/gdgs/runtime/nodes/gaussian_splat_node.gd" id="2_splats"]
+[ext_resource type="Script" path="res://src/targeting/targetable.gd" id="3_target"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_beacon"]
+blend_mode = 1
+shading_mode = 0
+albedo_color = Color(2.5, 1.6, 0.6, 1)
+disable_receive_shadows = true
+
+[sub_resource type="SphereMesh" id="SphereMesh_beacon"]
+material = SubResource("StandardMaterial3D_beacon")
+radius = 0.1
+height = 0.2
+radial_segments = 16
+rings = 8
+
+[node name="NavBuoy" type="Node3D"]
+script = ExtResource("1_buoy")
+
+[node name="BuoySplats" type="VisualInstance3D" parent="."]
+script = ExtResource("2_splats")
+
+[node name="BuoyMeshFallback" type="MeshInstance3D" parent="."]
+visible = false
+
+[node name="Beacon" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.46, 0)
+cast_shadow = 0
+mesh = SubResource("SphereMesh_beacon")
+
+[node name="Targetable" type="Node3D" parent="."]
+script = ExtResource("3_target")

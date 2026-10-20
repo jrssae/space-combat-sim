@@ -362,3 +362,82 @@ def cockpit_tub(spec: CanopySpec, style: Style, depth: float = 0.35, lip: float 
         mesh,
         anchors={"floor": Anchor([0.0, lip, 0.0], [0.0, 1.0, 0.0])},
     )
+
+
+# --- upright cylinder hull (buoys; later beacons, cargo pods) --------------------------------
+@dataclass(frozen=True)
+class CylinderHullSpec:
+    """An upright drum along local +Y, centred on the origin: a straight barrel of ``barrel_height``
+    with a conical shoulder of ``cap_height`` at each end, narrowing to a flat end plate of
+    ``end_radius`` (where masts mount). ``bands`` paint fractions of the barrel (0 = bottom,
+    1 = top) with a style role, e.g. ``((0.1, 0.18, "stripe"),)`` for a hazard stripe; the rest of
+    the barrel is ``body_role`` and the shoulders and plates are ``cap_role``."""
+
+    barrel_height: float = 2.4
+    radius: float = 0.4
+    cap_height: float = 0.3
+    end_radius: float = 0.16
+    segments: int = 36
+    bands: tuple[tuple[float, float, str], ...] = ()
+    body_role: str = "hull"
+    cap_role: str = "hull_dark"
+    mass_kg: float = 0.0
+
+    def __post_init__(self) -> None:
+        if min(self.barrel_height, self.radius, self.cap_height, self.end_radius) <= 0.0:
+            raise ValueError("cylinder hull dimensions must be positive")
+        if self.end_radius >= self.radius:
+            raise ValueError("the end plate must be narrower than the barrel")
+        for lo, hi, _ in self.bands:
+            if not 0.0 <= lo < hi <= 1.0:
+                raise ValueError(f"band ({lo}, {hi}) must satisfy 0 <= lo < hi <= 1")
+
+    @property
+    def total_height(self) -> float:
+        return self.barrel_height + 2.0 * self.cap_height
+
+    def role_at(self, fraction: float) -> str:
+        """Material role of the barrel at a height fraction (the first band containing it wins)."""
+        for lo, hi, role in self.bands:
+            if lo <= fraction <= hi:
+                return role
+        return self.body_role
+
+
+def cylinder_hull(spec: CylinderHullSpec, style: Style) -> Part:
+    """Upright drum (see :class:`CylinderHullSpec`). Anchors: ``top``/``bottom`` (end plate
+    centres, pointing out along +-Y), ``center``, ``side_right``/``side_left`` (barrel surface at
+    mid height, pointing out along +-X). One capsule collision primitive along Y."""
+    half_total = 0.5 * spec.total_height
+    half_barrel = 0.5 * spec.barrel_height
+    # A barrel station at every band edge, so each band is an exact ring of faces.
+    fractions = {0.0, 1.0}
+    for lo, hi, _ in spec.bands:
+        fractions.update((lo, hi))
+    barrel = sorted(fractions)
+    profile = [(-half_total, 0.0), (-half_total, spec.end_radius)]
+    profile += [(-half_barrel + f * spec.barrel_height, spec.radius) for f in barrel]
+    profile += [(half_total, spec.end_radius), (half_total, 0.0)]
+    cap = style.material(spec.cap_role)
+    materials = [cap, cap]  # bottom plate, bottom shoulder
+    materials += [style.material(spec.role_at(0.5 * (a + b))) for a, b in pairwise(barrel)]
+    materials += [cap, cap]  # top shoulder, top plate
+    n = len(profile)
+    creases = {1, 2, n - 3, n - 2}  # hard edges at the plates and the shoulders
+    # Built along Z (bottom at -Z), then stood up: _Z_TO_Y takes +Z to +Y.
+    mesh = lathe(profile, spec.segments, materials, creases=creases).transformed(_Z_TO_Y)
+    return Part(
+        "cylinder_hull",
+        mesh,
+        anchors={
+            "top": Anchor([0.0, half_total, 0.0], [0.0, 1.0, 0.0]),
+            "bottom": Anchor([0.0, -half_total, 0.0], [0.0, -1.0, 0.0]),
+            "center": Anchor([0.0, 0.0, 0.0]),
+            "side_right": Anchor([spec.radius, 0.0, 0.0], [1.0, 0.0, 0.0]),
+            "side_left": Anchor([-spec.radius, 0.0, 0.0], [-1.0, 0.0, 0.0]),
+        },
+        collision=[
+            Collision("capsule", [0.0, 0.0, 0.0], _Z_TO_Y, radius=spec.radius, height=spec.total_height, name="hull")
+        ],
+        mass_kg=spec.mass_kg,
+    )
