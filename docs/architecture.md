@@ -1080,6 +1080,7 @@ src/ai/pilot_brain.gd             RefCounted base: think(Perception, dt) -> Pilo
 src/ai/perception.gd              RefCounted: one tick's snapshot for a brain
 src/ai/pilot_steering.gd          RefCounted, pure: face a direction, seek a velocity -> FlightCommand fields
 src/ai/{idle,patrol,attack,aggro}_brain.gd, src/ai/brain_factory.gd   M2 behaviours; scenario dict -> brain
+src/ai/raider_tactics.gd          Resource: attack thresholds (ranges, cone, speeds, timings); assets/ai/raider_tactics.tres
 src/ai/ai_pilot_driver.gd         Node under an AI ship (physics priority -10): Perception -> brain -> Combatant
 src/game/combatant.gd             RefCounted handle: ship, cannon, thrusters, targetable, damageable, driver; apply_commands
 src/game/ship_assembly.gd         RefCounted statics: builds a player or AI Combatant from a ShipSpec
@@ -1090,6 +1091,7 @@ src/game/wave_director.gd         Node: runs the WavePlan, spawns from the pool,
 src/hud/hud.tscn|.gd              CanvasLayer 40 (below the overlay's 50): draws a HudFrame
 src/hud/hud_layout.gd, hud_frame.gd   RefCounted, pure: projection and every HUD element's screen state
 src/input/control_profile.gd      RefCounted, pure: bindings <-> InputMap <-> config text, validation
+src/input/control_profile_store.gd RefCounted: built-in and user profiles; list, load, save, apply
 src/audio/audio_director.gd       Node: pooled 3D players, engine hum, volume (T12)
 assets/ships/raider_delta_v.tres, assets/weapons/{pulse_cannon_ef,raider_plasma}.tres
 data/scenarios/combat_sandbox.json
