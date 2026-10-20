@@ -30,7 +30,7 @@ func is_shown() -> bool:
 	return _shown
 
 
-func get_screen_position() -> Vector2:
+func get_bracket_position() -> Vector2:
 	return _screen_pos
 
 
