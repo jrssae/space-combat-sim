@@ -67,7 +67,30 @@ pointing forward from the wing roots and nacelles. A thin wing, cut square at th
 A blocky "battlewagon": a long rectangular box hull, dark green-grey with plating. **Two large concentric
 rings** encircle the middle and aft of the box. Many cone- or spike-shaped launch pods (yellow-gold triangular
 fins) stand around the rings, which gives it a spiky wheel look. Spindly antennae at the corners.
-*The maintainer mentioned a second carrier type; that reference has not arrived yet, so ask before designing it.*
+This is the first of two raider capital types.
+
+## Raider Battle Wagon (second raider carrier type, M2/M11)
+
+A heavier raider carrier built around one huge ring, weathered grey-brown with heavy plating.
+
+- **Core hull.** A long body of octagonal cross-section running fore-aft, tapering at the bow into a faceted
+  cone. The cone ends in a small circular "eye" frame (an open ring) with two or three long, thin antenna spikes
+  pointing forward.
+- **Main ring.** One very thick ring encircles the hull just aft of mid-length: deep, with buttresses and panel
+  bays around its rim, and its diameter about 1.3x the hull's length is wide. Seen end-on, the ring frames
+  everything. Inside it, a cross-braced lattice (X-braces) connects the ring to the hull.
+- **Launch tubes.** Four big tubes of hexagonal or octagonal section run fore-aft through the ring: one above,
+  one below and one on each side of the core. Ribbed, with open fronts. Fighters (Delta-Vs) launch from these.
+- **Stern.** A flat aft face with an engine block of **eight yellow-glowing nozzles** in two rows of four,
+  between the upper and lower tubes.
+- **Scale.** Several Delta-V lengths across the ring. A Delta-V beside it in the reference is tiny (roughly
+  1/15 of the ring diameter).
+
+## Raider base scene (mood reference)
+
+A raider base station orbiting a Mars-like orange planet with a thin blue atmosphere limb. Delta-V fighters in
+the foreground show **two bright yellow-white engine glows** at the rear of the central hump, worn brown-grey
+plating and visible panel detail. Useful for raider colours, engine-glow colour and a planet backdrop.
 
 ## Maintenance bot (M6 ambience, tutorial set dressing)
 
