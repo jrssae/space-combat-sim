@@ -16,6 +16,11 @@ var joy_mappings_path: String = DEFAULT_JOY_MAPPINGS_PATH
 
 var schema := SettingsSchema.new()
 
+## Extra checks a subsystem adds on top of the schema for writes through `set_value`: key -> Callable(value) -> String,
+## empty when the value is fine, otherwise why not (ControlProfiles checks that `control_profile` names a valid
+## profile). Not consulted when loading from disk or on `reset`, so a stale saved value never blocks start-up.
+var validators: Dictionary = {}
+
 var _values: Dictionary = {}
 var _unsaved: Dictionary = {}
 var _pad_trigger_rest: Dictionary = {}
@@ -41,6 +46,12 @@ func set_value(key: StringName, value: Variant) -> Error:
 	if not result["ok"]:
 		_last_error = result["error"]
 		return ERR_INVALID_PARAMETER
+	var check: Callable = validators.get(key, Callable())
+	if check.is_valid():
+		var problem: String = String(check.call(result["value"]))
+		if not problem.is_empty():
+			_last_error = problem
+			return ERR_INVALID_PARAMETER
 	_last_error = ""
 	_store(key, result["value"], true)
 	return OK

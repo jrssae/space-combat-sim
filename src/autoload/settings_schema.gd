@@ -7,6 +7,8 @@ extends RefCounted
 const TYPE_ENUM := -1  # pseudo type for string settings restricted to `choices`
 
 const ENTRIES: Dictionary = {
+	&"control_profile": {"type": TYPE_STRING, "default": "default", "pattern": "^[a-z0-9_]{1,32}$",
+		"doc": "Control profile applied at start-up and on change (console: controls list)"},
 	&"invert_y": {"type": TYPE_BOOL, "default": false,
 		"doc": "Invert pitch: stick back = nose down"},
 	&"stick_deadzone": {"type": TYPE_FLOAT, "default": 0.15, "min": 0.0, "max": 0.30,
@@ -92,6 +94,8 @@ func describe(key: StringName) -> String:
 			return "float %s..%s" % [entry["min"], entry["max"]]
 		TYPE_ENUM:
 			return "enum " + "|".join(PackedStringArray(entry["choices"]))
+		TYPE_STRING:
+			return "string " + String(entry["pattern"])
 	return type_string(int(entry["type"]))
 
 
@@ -120,6 +124,14 @@ func validate(key: StringName, value: Variant) -> Dictionary:
 			if not (entry["choices"] as Array).has(name):
 				return _fail("%s expects one of %s, got '%s'" % [key, describe(key).trim_prefix("enum "), name])
 			return _ok(name)
+		TYPE_STRING:
+			if typeof(value) != TYPE_STRING and typeof(value) != TYPE_STRING_NAME:
+				return _fail("%s expects text, got %s" % [key, type_string(typeof(value))])
+			var text := String(value)
+			var pattern := RegEx.create_from_string(String(entry["pattern"]))
+			if pattern.search(text) == null:
+				return _fail("%s must match %s, got '%s'" % [key, entry["pattern"], text])
+			return _ok(text)
 	return _fail("%s has an unsupported schema type" % key)
 
 
@@ -143,6 +155,8 @@ func parse(key: StringName, text: String) -> Dictionary:
 			return validate(key, t.to_float())
 		TYPE_ENUM:
 			return validate(key, StringName(t.to_lower()))
+		TYPE_STRING:
+			return validate(key, t)
 	return _fail("%s has an unsupported schema type" % key)
 
 

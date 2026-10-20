@@ -91,3 +91,22 @@ func test_unknown_key() -> void:
 	assert_false(schema.validate(&"warp_drive", true)["ok"])
 	assert_false(schema.has_key(&"warp_drive"))
 	assert_eq(schema.describe(&"warp_drive"), "unknown")
+
+
+func test_control_profile_is_a_string_with_a_pattern() -> void:
+	assert_true(schema.has_key(&"control_profile"))
+	assert_eq(schema.get_type(&"control_profile"), TYPE_STRING)
+	assert_eq(schema.get_default(&"control_profile"), "default")
+	assert_eq(schema.describe(&"control_profile"), "string ^[a-z0-9_]{1,32}$")
+	for good: String in ["default", "m1_classic", "mine2", "a"]:
+		var result: Dictionary = schema.parse(&"control_profile", good)
+		assert_true(result["ok"], good)
+		assert_eq(result["value"], good)
+	for bad: String in ["", "Mine", "two words", "x".repeat(33), "../evil", "a-b"]:
+		var result: Dictionary = schema.parse(&"control_profile", bad)
+		assert_false(result["ok"], "'%s'" % bad)
+		assert_string_contains(result["error"], "control_profile must match ^[a-z0-9_]{1,32}$")
+	assert_true(schema.validate(&"control_profile", &"mine")["ok"], "a StringName is text too")
+	assert_eq(schema.validate(&"control_profile", &"mine")["value"], "mine", "and is stored as a String")
+	assert_false(schema.validate(&"control_profile", 3)["ok"])
+	assert_string_contains(schema.validate(&"control_profile", 3)["error"], "expects text")

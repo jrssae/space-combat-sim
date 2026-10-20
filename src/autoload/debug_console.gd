@@ -201,6 +201,15 @@ func set_input_source(source: InputSource, adapter: InputAdapter = null) -> void
 	registry.register_provider(&"input", _input_vars(adapter != null), source)
 
 
+## Re-seeds the input adapter's edge state from what is held now. Call it after the bindings changed under the
+## adapter (a control profile was applied), so a button that now means something else cannot fire an edge.
+func resync_input_edges() -> void:
+	var source: InputSource = _input_source()
+	var adapter: InputAdapter = _input_adapter()
+	if source != null and adapter != null:
+		adapter.resync_edges(source)
+
+
 # --- Running commands --------------------------------------------------------------------------------------------
 
 
@@ -689,6 +698,8 @@ static func settings_vars(source: SettingsScript) -> ConsoleVars:
 			SettingsSchema.TYPE_ENUM:
 				spec["type"] = TYPE_STRING_NAME
 				spec["choices"] = entry["choices"]
+			TYPE_STRING:
+				spec["type"] = TYPE_STRING
 		entries[key] = spec
 	return ConsoleVars.new(entries)
 

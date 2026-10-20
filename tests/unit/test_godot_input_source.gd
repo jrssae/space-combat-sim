@@ -19,6 +19,11 @@ class OnePadSource:
 var source: OnePadSource
 
 
+func before_all() -> void:
+	# The default layout (a saved control profile may have replaced it at start-up).
+	ControlProfiles.store.default_profile().apply_to_input_map()
+
+
 func before_each() -> void:
 	source = OnePadSource.new()
 	source.trigger_deadzone = 0.05
