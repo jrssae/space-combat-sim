@@ -18,4 +18,5 @@ pod_yaw_deadzone = 0.1
 pod_yaw_smoothing_s = 0.15
 brake_gain_k = 2.0
 exhaust_velocity = 30000.0
+fuel_capacity_kg = 28800.0
 metadata/_custom_type_script = "uid://csixdcdy0fu46"

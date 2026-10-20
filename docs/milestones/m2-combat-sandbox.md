@@ -573,6 +573,21 @@ history.
 
 (Implementation agents record deviations from §15 and this file here, per task.)
 
+**M2-T14 (reaction mass and weapon capacitor).**
+- `WeaponSpec` does not exist yet (it arrives with T02), so the capacitor numbers live in `WeaponCapacitor`
+  (`DEFAULT_CAPACITY` 100, `DEFAULT_COST_PER_SHOT` 14, `DEFAULT_RECHARGE_PER_S` 25) and `PulseCannon` builds one in
+  `_init`. T02 should move them into `WeaponSpec` as `capacitor_capacity`, `capacitor_cost_per_shot` and
+  `capacitor_recharge_per_s`. The capacitor lives on `PulseCannonGate.capacitor` (null = unlimited), so the M1 gate
+  tests are untouched.
+- Empty tank: `FlightModel.compute(..., has_propellant := true)`. False cuts every pod nozzle and the RCS translation
+  force (and so the brake's thrust); RCS torque stays, because the M1 `mass_flow` never counted it. The ship keeps its
+  constant `spec.mass` as the tank drains. The tick that spends the last grams still flies at full thrust.
+- Gauges for T08: `ship.fuel_fraction` (0..1, 1 while `settings.fuel_unlimited`, so the HUD shows the infinity mark
+  from the setting itself), `ship.fuel_kg`, `weapons.charge` (0..1). In code: `Ship.get_fuel_tank()` and
+  `PulseCannon.charge_fraction()`. `ship.fuel_kg` and `weapons.charge` are writable so a tank or capacitor can be
+  emptied from the console; `refuel [kg]` fills the tank. `Ship.reset_to` refuels, `PulseCannonGate.reset()` refills.
+- M1 tests changed only where a provider's key list is asserted exactly (`test_weapons.gd`, `test_ship_scene.gd`).
+
 ## Definition of done (M2)
 
 - T01-T11 merged, CI green, `docs/third-party.md` current, no generated binaries committed.

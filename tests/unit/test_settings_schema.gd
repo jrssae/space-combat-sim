@@ -21,6 +21,15 @@ func test_m1_schema_keys_present() -> void:
 		assert_true(schema.has_key(key), "schema has %s" % key)
 
 
+func test_fuel_unlimited_is_a_bool_that_defaults_to_true() -> void:
+	assert_true(schema.has_key(&"fuel_unlimited"))
+	assert_eq(schema.get_type(&"fuel_unlimited"), TYPE_BOOL)
+	assert_true(schema.get_default(&"fuel_unlimited"), "the M1 decision: unlimited fuel for now")
+	assert_eq(schema.parse(&"fuel_unlimited", "off")["value"], false)
+	assert_eq(schema.parse(&"fuel_unlimited", "on")["value"], true)
+	assert_false(schema.parse(&"fuel_unlimited", "maybe")["ok"])
+
+
 func test_renamed_keys_point_at_current_keys() -> void:
 	assert_false(schema.has_key(&"roll_ramp_s"), "the D-pad ramp is yaw now")
 	assert_eq(SettingsSchema.RENAMED[&"roll_ramp_s"], &"yaw_ramp_s")

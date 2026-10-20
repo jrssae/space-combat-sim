@@ -35,8 +35,11 @@ extends Resource
 @export var pod_yaw_smoothing_s: float = 0.15
 ## s⁻¹, translational brake P gain.
 @export var brake_gain_k: float = 2.0
-## m/s, for the reaction-mass seam only: `mass_flow = Σ thrust / exhaust_velocity` (unlimited in M1).
+## m/s, the reaction-mass flow: `mass_flow = Σ thrust / exhaust_velocity` (`FlightOutput.mass_flow_kg_s`).
 @export var exhaust_velocity: float = 30000.0
+## kg of reaction mass the tank holds (`FuelTank`). The default is 10 minutes of both pods' mains at full
+## (4 × 0.36 MN / 30 km/s = 48 kg/s × 600 s). Only drawn down when `settings.fuel_unlimited` is off.
+@export var fuel_capacity_kg: float = 28800.0
 
 
 ## Where this ship's generated hardpoints live.

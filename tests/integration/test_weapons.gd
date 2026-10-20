@@ -546,7 +546,7 @@ func _console(line: String) -> ConsoleResult:
 func test_console_provider_is_registered_with_a_writable_mode() -> void:
 	var provider: ConsoleStateProvider = DebugConsole.registry.get_provider(&"weapons")
 	assert_not_null(provider, "weapons provider")
-	assert_eq(Array(provider.keys()), [&"mode", &"cooldown_s"])
+	assert_eq(Array(provider.keys()), [&"mode", &"cooldown_s", &"charge"])  # `charge`: M2-T14, see test_weapon_charge.gd
 	assert_true(provider.is_writable(&"mode"))
 	assert_false(provider.is_writable(&"cooldown_s"))
 

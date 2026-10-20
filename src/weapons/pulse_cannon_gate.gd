@@ -10,6 +10,10 @@ extends RefCounted
 ## allowed (`_ready_at_s`), and each shot pushes it out by 0.25 s per projectile fired. Switching mode therefore
 ## carries the remaining cooldown over and can never raise the rate of fire, however often the player cycles.
 ## The first shot after a quiet spell comes out on the very tick the trigger is pressed.
+##
+## With a `capacitor` (M2-T14) every projectile also has to be paid for: a shot that cannot be paid is simply not
+## fired, and the cooldown and the muzzle turn stay as they were, so the shot comes out on the first tick the
+## capacitor can cover it. Without one (`null`, the default here) fire is unlimited, as in M1.
 
 enum Mode { ALTERNATING, LINKED }
 
@@ -21,6 +25,8 @@ const MODE_NAMES: Array[StringName] = [&"alternating", &"linked"]
 const TIME_EPSILON_S: float = 1e-6
 
 var mode: Mode = Mode.ALTERNATING
+## Energy store the shots are paid from; null = unlimited. `PulseCannon` gives its gate one.
+var capacitor: WeaponCapacitor = null
 
 # Sim time at which the next shot is allowed; -INF means never fired.
 var _ready_at_s: float = -INF
@@ -38,7 +44,12 @@ func cycle_mode() -> void:
 func update(now_s: float, trigger_held: bool) -> Array[int]:
 	var fired: Array[int] = []
 	_ready_at_s = _clamped_ready_at(now_s)
+	if capacitor != null:
+		capacitor.advance(now_s)  # recharges while the trigger is up, and after a clock reset
 	if not trigger_held or now_s + TIME_EPSILON_S < _ready_at_s:
+		return fired
+	var projectiles: int = MUZZLE_COUNT if mode == Mode.LINKED else 1
+	if capacitor != null and not capacitor.spend(projectiles, now_s):
 		return fired
 	if mode == Mode.LINKED:
 		for muzzle: int in MUZZLE_COUNT:
@@ -56,10 +67,12 @@ func cooldown_remaining(now_s: float) -> float:
 	return maxf(0.0, _clamped_ready_at(now_s) - now_s)
 
 
-## Forget the cooldown and the muzzle turn (respawn).
+## Forget the cooldown and the muzzle turn, and refill the capacitor (respawn).
 func reset() -> void:
 	_ready_at_s = -INF
 	_next_alternating = 0
+	if capacitor != null:
+		capacitor.refill()
 
 
 static func mode_name(m: Mode) -> StringName:
