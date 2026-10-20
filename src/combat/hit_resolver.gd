@@ -113,7 +113,8 @@ func _earliest_hit(bolt: Projectile, targets: Array[Dictionary], _delta: float) 
 	var start: Vector3 = p1 - bolt.last_step
 	for target: Dictionary in targets:
 		var damageable: Damageable = target["damageable"]
-		if int(target["body_id"]) == bolt.shooter_id or not Factions.is_hostile(bolt.faction, damageable.faction):
+		# A hull destroyed earlier in this very tick (by another bolt) cannot be hit again.
+		if damageable.hull.destroyed or int(target["body_id"]) == bolt.shooter_id or not Factions.is_hostile(bolt.faction, damageable.faction):
 			continue
 		pairs_tested += 1
 		var to_body: Basis = target["to_body"]
@@ -150,10 +151,14 @@ func _land(bolt: Projectile, best: Dictionary, delta: float) -> void:
 			relative.length() / maxf(delta, 1e-6))
 	bolt.spend()
 	_apply(damageable, info)
-	var flash := ImpactFlash.create(bolt.color, hash([bolt.shooter_id, info.target_id, Engine.get_physics_frames()]))
-	flash.position = local_point
-	(target["body"] as Node3D).add_child(flash)
-	flash.reset_physics_interpolation()
+	# A hull that was destroyed by this hit is already hidden (the explosion replaces the flash), and a flash on a parked
+	# ship would sit there unprocessed until it is reused.
+	var body: Node3D = target["body"]
+	if body.is_visible_in_tree():
+		var flash := ImpactFlash.create(bolt.color, hash([bolt.shooter_id, info.target_id, Engine.get_physics_frames()]))
+		flash.position = local_point
+		body.add_child(flash)
+		flash.reset_physics_interpolation()
 	hit_resolved.emit(info)
 
 

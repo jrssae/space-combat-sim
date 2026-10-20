@@ -95,6 +95,21 @@ func apply_hit(info: HitInfo) -> void:
 		destroyed.emit(info)
 
 
+## Destroys the hull outright, bypassing god mode (console `kill`): the remaining hull points are applied as one hit with
+## no shooter, so `hit_taken`, `damaged` and `destroyed` fire as for any other hit. Returns false if it was already dead.
+func kill() -> bool:
+	if hull.destroyed:
+		return false
+	var b: Node3D = body()
+	var info := HitInfo.new(b.get_instance_id() if b != null else 0, 0, &"", hull.hp, b.global_position if b != null else Vector3.ZERO)
+	hit_taken.emit(info)
+	info.applied = hull.apply(hull.hp)
+	damaged.emit(info, info.applied)
+	if hull.destroyed_now:
+		destroyed.emit(info)
+	return true
+
+
 func _register_console() -> void:
 	DebugConsole.registry.register_provider(&"hull", ConsoleVars.new({
 		&"hp": {"get": func() -> float: return hull.hp, "type": TYPE_FLOAT, "doc": "Hull points left"},

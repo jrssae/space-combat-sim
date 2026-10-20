@@ -8,6 +8,11 @@ const SCENARIO_PATH := "res://data/scenarios/free_flight.json"
 const SHIP_SPEC_PATH := "res://assets/ships/starfury_aurora.tres"
 const DEFAULT_RAIDER_POOL: int = 6
 
+## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
+signal player_died
+## The player is back at the scenario start with a full hull (after `DestructionDirector.RESPAWN_DELAY_S`, or `respawn`).
+signal player_respawned
+
 ## Raiders built (parked) at load for the console's `spawn` and, later, the waves. 0 builds none. Set before the node
 ## enters the tree.
 var raider_pool_size: int = DEFAULT_RAIDER_POOL
@@ -16,6 +21,8 @@ var raider_pool_size: int = DEFAULT_RAIDER_POOL
 var input_source: InputSource = null
 var adapter: InputAdapter = InputAdapter.new()
 
+## False from the player's death until the respawn; input is ignored meanwhile.
+var player_alive: bool = true
 var combatant: Combatant = null
 var ship: Ship = null
 var thrusters: ThrusterVisuals = null
@@ -31,6 +38,9 @@ var _spawn_basis: Basis = Basis.IDENTITY
 @onready var targets: Node3D = $World/Targets
 @onready var projectiles: Node3D = $World/Projectiles
 @onready var ships: ShipPool = $World/Ships
+@onready var effects: Node3D = $World/Effects
+@onready var debris: DebrisPool = $World/Debris
+@onready var director: DestructionDirector = $Combat/DestructionDirector
 @onready var splat_status: SplatStatus = $SplatStatus
 @onready var overlay: DebugOverlay = $DebugOverlay
 
@@ -52,6 +62,10 @@ func _ready() -> void:
 	ships.player = ship
 	if raider_pool_size > 0:
 		ships.prepare(ShipPool.DEFAULT_TYPE, raider_pool_size)
+		debris.prepare(ShipPool.DEFAULT_TYPE)
+	director.setup(world, ships, debris, effects, combatant)
+	director.player_destroyed.connect(_on_player_destroyed)
+	director.respawn_due.connect(respawn)
 	if bool(scenario.get("ok", false)):
 		_spawn_props(scenario["props"])
 	camera_rig.setup(ship, ship.cockpit_anchor, ship.get_chase_offset(), ship.set_cockpit_interior_visible)
@@ -68,7 +82,7 @@ func _exit_tree() -> void:
 
 func _physics_process(delta: float) -> void:
 	var pc: PilotCommand = adapter.sample(input_source, delta)
-	if not get_tree().paused:
+	if not get_tree().paused and player_alive:
 		combatant.apply_commands(pc.flight, pc.combat)
 	_handle_ui(pc.ui)
 
@@ -114,11 +128,26 @@ func snapshot() -> Dictionary:
 	return s
 
 
-## Back to the scenario start, at rest (Back / Backspace / `respawn`).
+## Back to the scenario start, at rest, with a full hull (Back / Backspace / `respawn`, and the respawn after a death).
 func respawn() -> void:
+	ship.process_mode = Node.PROCESS_MODE_INHERIT
+	ship.visible = true
 	ship.reset_to(Transform3D(_spawn_basis, world.universe_to_local(_spawn_position)))
+	combatant.damageable.hull.restore()
+	combatant.cannon.gate.reset()
+	ship.set_flight_command(FlightCommand.new())
+	ship.set_combat_command(CombatCommand.new())
 	adapter.reset()
 	camera_rig.snap_chase()
+	var was_dead: bool = not player_alive
+	player_alive = true
+	if was_dead:
+		player_respawned.emit()
+
+
+func _on_player_destroyed(_info: HitInfo) -> void:
+	player_alive = false
+	player_died.emit()
 
 
 func set_paused(paused: bool) -> void:

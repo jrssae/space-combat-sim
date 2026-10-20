@@ -3,7 +3,7 @@
 > "Something to shoot." (`docs/roadmap.md`)
 
 **Status:** in progress. The maintainer asked to proceed before M1's re-test. Done: **T01** combat maths, **T02**
-multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T05** raider ship and pool, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T06 (destruction), T07 (AI), T08 (HUD), T12 (sound). See `docs/handoff.md`.
+multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T05** raider ship and pool, **T06** destruction, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T07 (AI), T08 (HUD), T12 (sound). See `docs/handoff.md`.
 
 Read `docs/architecture.md` first, §1-§13 and especially **§15** (the M2 design: decisions D20-D29, tick order, hit
 detection, pools, brains, HUD, console additions). Task notes reference its sections (§). Tasks are ordered; each
@@ -668,6 +668,28 @@ history.
 - P1 screenshots: captured on the real GPU (`reports/m2/`, untracked) with the console recipe, but without `idle` (no AI
   brains yet). First capture showed the raider almost black, so the `raider` style and light rig were brightened (see
   `docs/assets-raider.md`). The splats look soft at 15-30 m (0.09 m spacing); they are meant for 100 m and up.
+
+**M2-T06 (destruction).**
+- Built in code: `Explosion` (light, billboard flash, fireball shader, 80 sparks, 20 embers; `explosion.tscn` is a bare
+  script scene that builds itself on `_ready`), `DebrisChunk` and `DebrisPool` (no `debris_chunk.tscn`: `DebrisChunk.create`
+  builds the node and its splat and mesh children), `DestructionDirector`. The shader is
+  `src/combat/explosion_fireball.gdshader`.
+- `Hardpoints.chunks` parses the optional `chunks[]`. `Damageable.kill()` destroys the hull outright (bypassing god
+  mode) and is what the console `kill [target|all|player]` calls.
+- Same-tick rule: `DestructionDirector._on_destroyed` runs inside `Damageable.destroyed`, so the raider is released
+  (hidden, `PROCESS_MODE_DISABLED`) before the resolver's next bolt; `HitResolver._earliest_hit` also skips a hull that was
+  destroyed earlier in the same tick. A destroyed ship gets no `ImpactFlash` (the explosion replaces it, and a flash on a
+  parked ship would sit unprocessed).
+- Player: `Main.player_alive`, signals `player_died` and `player_respawned`; `Main.respawn()` now also restores the hull,
+  re-enables and shows the ship, and resets the cannon. The director emits `respawn_due` after 3 s of sim time. The wave
+  restart on respawn is T09's (`WaveDirector.on_player_respawned`).
+- Debris chunks are `PHYSICS_INTERPOLATION` Node3Ds moved in `_physics_process`; their splats ride a `SplatPoseSync`.
+  The orientation is kept as an orthonormal basis apart from the scale (spinning accumulated float error otherwise).
+- Console: provider `debris` (`sets`, `free_sets`, `active_chunks`, `mesh_chunks`), command `kill`.
+- `run_tests.sh` smoke-runs the kill and respawn on the real main scene, and its provider list now has `debris`.
+- P3 captured on the real GPU (`reports/m2/p3_*.png`, untracked): the flash, a fireball and the debris all show. The look is
+  `(H)` (AC16). The fireball is an orange noisy ball at 50-70 m; its patchiness comes from the noise in the shader
+  (`noise_scale`, the `cloud` smoothstep) if the maintainer wants it wilder.
 
 ## Definition of done (M2)
 

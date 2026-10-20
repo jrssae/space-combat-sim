@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://src/game/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://src/environment/space_environment.tscn" id="2_env"]
@@ -8,6 +8,8 @@
 [ext_resource type="PackedScene" path="res://src/game/debug_overlay.tscn" id="6_overlay"]
 [ext_resource type="Script" path="res://src/combat/hit_resolver.gd" id="7_resolver"]
 [ext_resource type="Script" path="res://src/game/ship_pool.gd" id="8_pool"]
+[ext_resource type="Script" path="res://src/combat/debris_pool.gd" id="9_debris"]
+[ext_resource type="Script" path="res://src/combat/destruction_director.gd" id="10_director"]
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_main")
@@ -26,11 +28,19 @@ script = ExtResource("3_world")
 [node name="Ships" type="Node3D" parent="World"]
 script = ExtResource("8_pool")
 
+[node name="Effects" type="Node3D" parent="World"]
+
+[node name="Debris" type="Node3D" parent="World"]
+script = ExtResource("9_debris")
+
 [node name="Combat" type="Node" parent="."]
 process_mode = 1
 
 [node name="HitResolver" type="Node" parent="Combat"]
 script = ExtResource("7_resolver")
+
+[node name="DestructionDirector" type="Node" parent="Combat"]
+script = ExtResource("10_director")
 
 [node name="SplatStatus" type="Node" parent="."]
 script = ExtResource("5_splat")

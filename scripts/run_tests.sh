@@ -176,7 +176,7 @@ if grep -E "${SCRIPT_ERRORS}" "${log}"; then
     echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: camera, combat, controls, debug, hull, input, raiders, render, settings, ship, targeting, time, weapons, world" \
+expect_line "${log}" "[console] providers: camera, combat, controls, debris, debug, hull, input, raiders, render, settings, ship, targeting, time, weapons, world" \
     || smoke_status=1
 expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
 expect_line "${log}" "[console] render.splat_backend = headless" || smoke_status=1
@@ -199,8 +199,27 @@ expect_line "${log}" "[console] hull.hp = 300.00" || smoke_status=1
 expect_line "${log}" "[console] hull.hp = 250.00" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 
+echo "== Console smoke run: a raider is shot down and the player dies and respawns on the real main scene"
+# M2-T06 / AC7: kill a selected raider (explosion, debris set, pool), then the player (respawn after 3 s of sim time).
+log="${REPORTS}/console_destruction.log"
+kill_status=0
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; spawn raider 60 0 0; wait 5; set targeting.selected "RAIDER 1"; kill target; wait 5; get raiders.alive; get debris.free_sets; kill player; wait 3; get hull.destroyed; wait 200; get hull.destroyed; quit' \
+    > "${log}" 2>&1 || kill_status=$?
+cat "${log}"
+if (( kill_status != 0 )); then
+    echo "run_tests.sh: destruction smoke run exited ${kill_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] raiders.alive = 0" || smoke_status=1
+expect_line "${log}" "[console] debris.free_sets = 1" || smoke_status=1
+expect_line "${log}" "[console] hull.destroyed = true" || smoke_status=1
+expect_line "${log}" "[console] hull.destroyed = false" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
+
 if (( smoke_status != 0 )); then
-    echo "run_tests.sh: console smoke runs failed (see reports/console_*.log)." >&2
+    echo "run_tests.sh: console smoke runs failed (see reports/console_*.log)."  >&2
 fi
 if (( gut_status != 0 )); then
     exit "${gut_status}"

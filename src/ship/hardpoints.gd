@@ -33,6 +33,9 @@ var muzzles: Array[Dictionary] = []
 ## BoxShape3D or CapsuleShape3D) and `transform` (Transform3D: the primitive's `basis` and `position`; for a capsule
 ## also the turn that lays Godot's capsule axis, local Y, along the named `axis`).
 var collision: Array[Dictionary] = []
+## Break-up chunks (optional; M2-T04), one entry per group in file order: `name` (String), `ply` and `obj` (file names in the
+## asset directory), `offset` (Vector3: the chunk's centroid in the body frame) and `splats` (int).
+var chunks: Array[Dictionary] = []
 
 
 static func load_file(path: String) -> Hardpoints:
@@ -133,6 +136,33 @@ func _parse(data: Dictionary) -> String:
 		var problem: String = _parse_collision(value)
 		if not problem.is_empty():
 			return problem
+
+	var chunk_list: Variant = data.get("chunks", [])
+	if not (chunk_list is Array):
+		return "hardpoints chunks must be an array"
+	for value: Variant in chunk_list as Array:
+		var problem: String = _parse_chunk(value)
+		if not problem.is_empty():
+			return problem
+	return ""
+
+
+func _parse_chunk(value: Variant) -> String:
+	var index: int = chunks.size()
+	if not (value is Dictionary):
+		return "chunk %d is not an object" % index
+	var entry: Dictionary = value
+	if not (entry.get("name") is String) or not (entry.get("ply") is String) or not (entry.get("obj") is String):
+		return "chunk %d needs string name, ply and obj" % index
+	if not _is_vec3(entry.get("offset")):
+		return "chunk %d needs offset [x, y, z]" % index
+	chunks.append({
+		"name": String(entry["name"]),
+		"ply": String(entry["ply"]),
+		"obj": String(entry["obj"]),
+		"offset": _to_vec3(entry["offset"]),
+		"splats": int(_number_or(entry.get("splats"), 0.0)),
+	})
 	return ""
 
 
