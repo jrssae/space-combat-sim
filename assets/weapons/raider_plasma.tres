@@ -14,6 +14,7 @@ bolt_material = ExtResource("2_bolt")
 bolt_length_m = 1.5
 bolt_radius_m = 0.05
 bolt_color = Color(3, 0.55, 0.2, 1)
+convergence_range_m = 700.0
 capacitor_capacity = 100.0
 capacitor_cost_per_shot = 8.0
 capacitor_recharge_per_s = 25.0

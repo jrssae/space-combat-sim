@@ -13,7 +13,8 @@ extends Node3D
 ## look and the capacitor come from the `WeaponSpec` (the Starfury's M1 numbers when none is given).
 ##
 ## A projectile leaves the muzzle's global position with `body.linear_velocity + forward * muzzle_speed_mps`, where
-## forward is the body's -Z, so the shooter's own velocity is inherited. Projectiles go under `projectiles_parent`
+## forward is the body's -Z, so the shooter's own velocity is inherited. With a `convergence_range_m` in the weapon spec
+## each muzzle instead aims at the point that far ahead of the body along its nose. Projectiles go under `projectiles_parent`
 ## (`World/Projectiles`), never under the ship, so they stop following the ship the moment they leave it.
 ##
 ## `weapon_next` is a one-tick edge: it is remembered when `set_combat_command` receives it and used once, so a tick
@@ -140,9 +141,12 @@ func step(now_s: float) -> void:
 	if muzzle_indices.is_empty():
 		return
 	var forward: Vector3 = -_body.global_basis.z
-	var launch_velocity: Vector3 = _body.linear_velocity + forward * muzzle_speed_mps
+	var converge_at: Vector3 = _body.global_position + forward * weapon.convergence_range_m
 	for index: int in muzzle_indices:
-		_spawn(index, launch_velocity, now_s)
+		var direction: Vector3 = forward
+		if weapon.convergence_range_m > 0.0:
+			direction = (converge_at - _muzzles[index].global_position).normalized()
+		_spawn(index, _body.linear_velocity + direction * muzzle_speed_mps, now_s)
 
 
 func _is_wired() -> bool:

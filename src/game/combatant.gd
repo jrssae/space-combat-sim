@@ -12,8 +12,8 @@ var cannon: PulseCannon = null
 var thrusters: ThrusterVisuals = null
 var targetable: Targetable = null
 var damageable: Damageable = null
-## The AI's `AiPilotDriver` (M2-T07); null until it exists.
-var driver: Node = null
+## The AI's `AiPilotDriver` (M2-T07); null for the player.
+var driver: AiPilotDriver = null
 
 var faction: StringName = Factions.NEUTRAL
 var display_name: String = ""

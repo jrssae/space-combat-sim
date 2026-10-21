@@ -240,3 +240,54 @@ func test_next_name_reuses_the_lowest_free_number() -> void:
 	assert_eq([a.display_name, b.display_name], ["RAIDER 1", "RAIDER 2"])
 	pool.release(a)
 	assert_eq(pool.next_name(), "RAIDER 1")
+
+
+# --- behaviours through the console (M2-T07) -----------------------------------------------------------------------
+
+
+func test_spawn_with_a_behaviour_gives_the_raider_that_brain() -> void:
+	for behaviour: String in ["idle", "patrol", "attack", "aggro"]:
+		pool.release(pool.alive()[0]) if not pool.alive().is_empty() else null
+		assert_true(_console("spawn raider %s 400" % behaviour).ok, behaviour)
+		var raider: Combatant = pool.alive()[0]
+		assert_not_null(raider.driver.brain, behaviour)
+		assert_eq(raider.driver.brain.describe()["behaviour"], behaviour)
+
+
+func test_spawn_without_a_behaviour_is_an_idle_raider_as_before() -> void:
+	assert_true(_console("spawn raider 80 10 5").ok)
+	var raider: Combatant = pool.alive()[0]
+	assert_true(raider.driver.brain is IdleBrain)
+	assert_almost_eq(raider.ship.global_position.length(), 80.0, 1e-3)
+
+
+func test_spawn_rejects_nonsense() -> void:
+	assert_false(_console("spawn raider banana").ok)
+	assert_false(_console("spawn raider attack 100 0 0 7").ok)
+	assert_false(_console("spawn raider attack soon").ok)
+	assert_eq(pool.alive().size(), 0)
+
+
+func test_selected_brain_describes_the_selected_raiders_state() -> void:
+	_console("spawn raider attack 900")
+	var registry: ConsoleRegistry = DebugConsole.registry
+	assert_eq(registry.format_path("raiders.selected_brain"), "raiders.selected_brain = none", "nothing selected")
+	assert_true(_console("set targeting.selected \"RAIDER 1\"").ok)
+	assert_string_contains(registry.format_path("raiders.selected_brain"), "behaviour: attack")
+	assert_string_contains(registry.format_path("raiders.selected_brain"), "state: approach")
+
+
+func test_a_released_raider_loses_its_brain() -> void:
+	_console("spawn raider attack 400")
+	var raider: Combatant = pool.alive()[0]
+	pool.release(raider)
+	assert_null(raider.driver.brain)
+
+
+func test_patrol_spawn_waypoints_are_around_the_spawn_point() -> void:
+	_console("spawn raider patrol 500")
+	var brain := pool.alive()[0].driver.brain as PatrolBrain
+	assert_eq(brain.waypoints.size(), 3)
+	var spawn_at: Vector3 = pool.alive()[0].ship.global_position
+	for waypoint: UniversePos in brain.waypoints:
+		assert_lt(world.universe_to_local(waypoint).distance_to(spawn_at), 1000.0)

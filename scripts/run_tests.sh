@@ -218,6 +218,24 @@ expect_line "${log}" "[console] hull.destroyed = false" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 reject_text "${log}" "ERROR:" || smoke_status=1
 
+echo "== Console smoke run: an attacking raider on the real main scene"
+# M2-T07 / AC9: an attack raider 2 km out flies its gun run (the brain's state is readable) and lands hits on the player.
+log="${REPORTS}/console_attack.log"
+attack_status=0
+timeout 240 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; god on; spawn raider attack 2000; set targeting.selected "RAIDER 1"; wait 1200; get raiders.selected_brain; get combat.hits; quit' \
+    > "${log}" 2>&1 || attack_status=$?
+cat "${log}"
+if (( attack_status != 0 )); then
+    echo "run_tests.sh: attack smoke run exited ${attack_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_text "${log}" "behaviour: attack" || smoke_status=1
+expect_text "${log}" "[console] combat.hits = " || smoke_status=1
+reject_text "${log}" "[console] combat.hits = 0" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
+
 if (( smoke_status != 0 )); then
     echo "run_tests.sh: console smoke runs failed (see reports/console_*.log)."  >&2
 fi

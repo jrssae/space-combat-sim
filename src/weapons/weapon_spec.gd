@@ -23,6 +23,10 @@ extends Resource
 @export var bolt_radius_m: float = 0.05
 ## Tint of the bolt's impact flash and sparks (and, later, of its sound). HDR, like the bolt material.
 @export var bolt_color: Color = Color(3.0, 1.0, 0.5, 1.0)
+## m: where the muzzles' lines cross, measured ahead of the ship along its nose. 0 = the guns fire parallel (the Starfury).
+## A raider's guns are spread over a 6 m width, so parallel bolts would miss a small target aimed at its centre: with a
+## convergence range each muzzle aims at the point that far ahead, and the bolts hit the aim point at that range.
+@export var convergence_range_m: float = 0.0
 ## Energy units the capacitor holds when full (`WeaponCapacitor`).
 @export var capacitor_capacity: float = 100.0
 ## Energy units one bolt costs.

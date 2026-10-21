@@ -16,12 +16,15 @@ extends RefCounted
 ## - `console_owner` (bool, default false): the player's ship; it registers the console providers (D27).
 ## - `is_player` (bool, default `console_owner`).
 ## - `force_assist` (bool, default false): AI ships fly with flight assist always on.
+## - `ai` (bool, default false): adds an `AiPilotDriver` (priority -10) that flies the ship with whatever `PilotBrain` it
+##   is given (`combatant.driver.brain`); with no brain it does nothing.
 
 const OPT_FACTION: StringName = &"faction"
 const OPT_DISPLAY_NAME: StringName = &"display_name"
 const OPT_CONSOLE_OWNER: StringName = &"console_owner"
 const OPT_IS_PLAYER: StringName = &"is_player"
 const OPT_FORCE_ASSIST: StringName = &"force_assist"
+const OPT_AI: StringName = &"ai"
 
 
 static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D, opts: Dictionary = {}) -> Combatant:
@@ -48,6 +51,14 @@ static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D,
 	cannon.name = "PulseCannon"
 	ship.get_node("Guns").add_child(cannon)
 	combatant.cannon = cannon
+
+	if bool(opts.get(OPT_AI, false)):
+		var driver := AiPilotDriver.new()
+		driver.name = "AiPilotDriver"
+		driver.combatant = combatant
+		driver.world = world
+		ship.add_child(driver)
+		combatant.driver = driver
 
 	var damageable := Damageable.new()
 	damageable.name = "Damageable"

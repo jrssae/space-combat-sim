@@ -3,7 +3,7 @@
 > "Something to shoot." (`docs/roadmap.md`)
 
 **Status:** in progress. The maintainer asked to proceed before M1's re-test. Done: **T01** combat maths, **T02**
-multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T05** raider ship and pool, **T06** destruction, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T07 (AI), T08 (HUD), T12 (sound). See `docs/handoff.md`.
+multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T05** raider ship and pool, **T06** destruction, **T07** AI seam and simple brains, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T08 (HUD), T09 (waves), T12 (sound). See `docs/handoff.md`.
 
 Read `docs/architecture.md` first, §1-§13 and especially **§15** (the M2 design: decisions D20-D29, tick order, hit
 detection, pools, brains, HUD, console additions). Task notes reference its sections (§). Tasks are ordered; each
@@ -690,6 +690,29 @@ history.
 - P3 captured on the real GPU (`reports/m2/p3_*.png`, untracked): the flash, a fireball and the debris all show. The look is
   `(H)` (AC16). The fireball is an orange noisy ball at 50-70 m; its patchiness comes from the noise in the shader
   (`noise_scale`, the `cloud` smoothstep) if the maintainer wants it wilder.
+
+**M2-T07 (AI seam and simple brains).**
+- The interface is `PilotBrain.think(Perception, dt) -> PilotCommand`; `AiPilotDriver` (priority -10, child of the ship, added
+  by `ShipAssembly` with `ai: true`) builds the perception, keeps the targeting on the nearest hostile
+  (`TargetingController.select_nearest_hostile`, which also clears the selection when only neutrals are around) and calls
+  `Combatant.apply_commands`. `ShipCapability` (accelerations and turn rates from the spec and the layout) is in the
+  perception so brains do not read the ship.
+- `PilotSteering` follows the notes: `face` with `K_FACE` 2.5 and the roll never commanded, `seek` with the 12 and 150 degree
+  cones and a 1 s horizon. The assist's own rate gain is 6, so the cascade settled without tuning (stable in every test run).
+- **Gun convergence (new, not in the notes).** The raider's four guns are spread over 6 m and fire parallel, so aiming the
+  nose at a stationary drone missed it entirely (0 hits in 30 s with the notes' 2.5 degree cone). `WeaponSpec.convergence_range_m`
+  (0 = parallel, the Starfury) makes each muzzle aim at the point that far ahead; the raider's plasma uses 700 m.
+  `PulseCannon` computes the direction per muzzle; M1's parallel behaviour is the default.
+- **Miss-distance gate (new).** `RaiderTactics.fire_miss_m` (3 m) caps the fire cone at `atan(3 / range)`: 2.5 degrees is 50 m
+  at 1 200 m, far more than the hull. The cone is `min(fire_cone_deg, that)`.
+- AC9 numbers (headless, speed-up 6): the attack raider fires at 13.5 s, first hit at 15.5 s, closest approach 391 m (> 100),
+  58 hits in 30 s; the patrol visits its three waypoints in 32.8 s at a top speed of 65 m/s (cruise 80); two attack runs
+  with the same seed end 0.0 m apart. The determinism test records the pose every tick: with `Engine.time_scale` above 1
+  several ticks run per rendered frame, so a loop that waits for frames stops on a different tick each run.
+- Console: `spawn raider [idle|patrol|attack|aggro] [distance_m] [yaw_deg] [pitch_deg]` (the behaviour word is optional;
+  patrol and aggro fly a triangle of 800 m legs around the spawn point), `raiders.selected_brain`. `spawn` refreshes the
+  player's target list so the raider is selectable by name in the next statement. `run_tests.sh` smoke-runs the attack.
+- Not done: `ScenarioLoader` reporting `BrainFactory` errors (T09 reads the behaviours from `combat_sandbox.json`).
 
 ## Definition of done (M2)
 

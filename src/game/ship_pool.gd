@@ -10,9 +10,10 @@ extends Node3D
 ## (it has an identity transform, so a ship's local position is its World position). Set `world`, `projectiles` and
 ## (for the console's `spawn`) `player` before `prepare`.
 ##
-## Console (§15.13, D27): provider `raiders` (`pool_size`, `free`, `alive`, `list`) and commands `despawn [target|all]`
-## and a temporary `spawn raider [distance_m] [yaw_deg] [pitch_deg]` (idle raiders; M2-T07 adds behaviours and M2-T09
-## moves the command to the `WaveDirector`). Raiders are named `RAIDER <n>`, the next free number.
+## Console (§15.13, D27): provider `raiders` (`pool_size`, `free`, `alive`, `list`, `selected_brain`) and commands
+## `despawn [target|all]` and `spawn raider [idle|patrol|attack|aggro] [distance_m] [yaw_deg] [pitch_deg]` (M2-T09 moves
+## the command to the `WaveDirector`). Raiders are named `RAIDER <n>`, the next free number. A pooled ship has an
+## `AiPilotDriver`; `acquire` gives it the brain and `release` takes it away.
 
 const DEFAULT_TYPE: StringName = &"raider_fighter"
 const NAME_PREFIX: String = "RAIDER"
@@ -38,11 +39,11 @@ func _ready() -> void:
 		&"free": {"get": func() -> int: return _free.size(), "doc": "Raiders parked and ready"},
 		&"alive": {"get": func() -> int: return _in_use.size(), "doc": "Raiders in the world"},
 		&"list": {"get": _console_list, "doc": "Raiders in the world: name, hull %, range from the player"},
+		&"selected_brain": {"get": _console_selected_brain, "doc": "The player's selected raider's behaviour and state"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"spawn",
 			"Take a raider from the pool ahead of the player, nose toward the player, turned by yaw then pitch",
-			[ConsoleArg.enum_required(&"type", SPAWN_CHOICES), ConsoleArg.float_optional(&"distance_m", 30.0, 1.0, 20000.0),
-			ConsoleArg.float_optional(&"yaw_deg", 0.0, -360.0, 360.0), ConsoleArg.float_optional(&"pitch_deg", 0.0, -360.0, 360.0)]),
+			[ConsoleArg.enum_required(&"type", SPAWN_CHOICES), ConsoleArg.string_rest(&"options").make_optional("")]),
 			_cmd_spawn, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"despawn",
 			"Return the selected raider, or every raider, to the pool without effects",
@@ -65,6 +66,7 @@ func prepare(type: StringName, count: int) -> int:
 			ShipAssembly.OPT_FACTION: Factions.RAIDERS,
 			ShipAssembly.OPT_DISPLAY_NAME: "",
 			ShipAssembly.OPT_FORCE_ASSIST: true,
+			ShipAssembly.OPT_AI: true,
 		})
 		world.spawn(combatant.ship, _park_position(), Basis.IDENTITY, self)
 		_park(combatant)
@@ -79,7 +81,7 @@ func prepare(type: StringName, count: int) -> int:
 ## full hull, fuel and charge. `brain` is kept for the AI (M2-T07). Returns null, with one warning, when the pool is
 ## empty. The ship is enabled first, then placed, then its physics interpolation is reset (no smear from the park).
 func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTITY, velocity: Vector3 = Vector3.ZERO,
-		brain: Object = null, type: StringName = DEFAULT_TYPE) -> Combatant:
+		brain: PilotBrain = null, type: StringName = DEFAULT_TYPE) -> Combatant:
 	var combatant: Combatant = _take(type)
 	if combatant == null:
 		push_warning("ShipPool: no free %s (pool of %d, all in use)" % [type, _count_of(type)])
@@ -96,7 +98,7 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	combatant.damageable.hull.restore()
 	combatant.display_name = display_name
 	combatant.targetable.display_name = display_name
-	combatant.set_meta(&"brain", brain)
+	_set_brain(combatant, brain)
 	_in_use.append(combatant)
 	return combatant
 
@@ -156,7 +158,12 @@ func _park(combatant: Combatant) -> void:
 	ship.linear_velocity = Vector3.ZERO
 	ship.angular_velocity = Vector3.ZERO
 	combatant.targetable.display_name = ""
-	combatant.set_meta(&"brain", null)
+	_set_brain(combatant, null)
+
+
+func _set_brain(combatant: Combatant, brain: PilotBrain) -> void:
+	if combatant.driver != null:
+		combatant.driver.brain = brain
 
 
 func _take(type: StringName) -> Combatant:
@@ -191,17 +198,58 @@ func _console_list() -> PackedStringArray:
 func _cmd_spawn(args: Dictionary) -> ConsoleResult:
 	if player == null or not is_instance_valid(player) or world == null:
 		return ConsoleResult.failure("no player ship to place the raider relative to")
+	# `[behaviour] [distance_m] [yaw_deg] [pitch_deg]`: the behaviour word is optional (idle), the numbers too (30 0 0).
+	var words: PackedStringArray = String(args[&"options"]).split(" ", false)
+	var behaviour: StringName = &"idle"
+	if not words.is_empty() and BrainFactory.BEHAVIOURS.has(StringName(words[0])):
+		behaviour = StringName(words[0])
+		words.remove_at(0)
+	var numbers: Array[float] = [30.0, 0.0, 0.0]
+	if words.size() > 3:
+		return ConsoleResult.failure("spawn raider [idle|patrol|attack|aggro] [distance_m] [yaw_deg] [pitch_deg]")
+	for i: int in words.size():
+		if not words[i].is_valid_float():
+			return ConsoleResult.failure("'%s' is not a number (spawn raider [behaviour] [distance_m] [yaw_deg] [pitch_deg])" % words[i])
+		numbers[i] = words[i].to_float()
+	var distance: float = clampf(numbers[0], 1.0, 20000.0)
 	var forward: Vector3 = -player.global_basis.z
 	var up: Vector3 = Vector3.UP if absf(forward.dot(Vector3.UP)) < 0.99 else Vector3.RIGHT
 	# The nose points back at the player; yaw turns it about its own up axis, then pitch about its own right axis.
 	var facing: Basis = Basis.looking_at(-forward, up)
-	var basis: Basis = facing * Basis(Vector3.UP, deg_to_rad(float(args[&"yaw_deg"]))) * Basis(Vector3.RIGHT, deg_to_rad(float(args[&"pitch_deg"])))
-	var local: Vector3 = player.global_position + forward * float(args[&"distance_m"])
+	var basis: Basis = facing * Basis(Vector3.UP, deg_to_rad(numbers[1])) * Basis(Vector3.RIGHT, deg_to_rad(numbers[2]))
+	var local: Vector3 = player.global_position + forward * distance
+	var at: UniversePos = world.to_universe(local)
 	var raider_name: String = next_name()
-	var combatant: Combatant = acquire(raider_name, world.to_universe(local), basis, player.linear_velocity)
+	var made: Dictionary = BrainFactory.from_behaviour(_console_behaviour(behaviour, basis), at, hash([raider_name, 0]))
+	if not bool(made["ok"]):
+		return ConsoleResult.failure(String(made["error"]))
+	var combatant: Combatant = acquire(raider_name, at, basis, player.linear_velocity, made["brain"] as PilotBrain)
 	if combatant == null:
 		return ConsoleResult.failure("the raider pool is empty (%d of %d in use)" % [_in_use.size(), _all.size()])
-	return ConsoleResult.line("%s at %.0f m" % [raider_name, float(args[&"distance_m"])])
+	player.targeting.refresh()  # selectable by name in the very next console statement
+	return ConsoleResult.line("%s (%s) at %.0f m" % [raider_name, behaviour, distance])
+
+
+# The scenario-style behaviour dictionary for a console spawn: patrol and aggro fly a triangle of 800 m legs around the
+# spawn point in the raider's own frame.
+func _console_behaviour(behaviour: StringName, basis: Basis) -> Dictionary:
+	var spec: Dictionary = {"type": String(behaviour)}
+	if behaviour == &"patrol" or behaviour == &"aggro":
+		var legs: Array = []
+		for v: Vector3 in [Vector3(0.0, 0.0, -800.0), Vector3(700.0, 0.0, -300.0), Vector3(-700.0, 0.0, -300.0)]:
+			var w: Vector3 = basis * v
+			legs.append([w.x, w.y, w.z])
+		spec["waypoints"] = legs
+	return spec
+
+
+func _console_selected_brain() -> Variant:
+	if player == null or not is_instance_valid(player) or not player.targeting.system.has_selection():
+		return null
+	var combatant: Combatant = find_by_target_id(player.targeting.selected_id())
+	if combatant == null or combatant.driver == null or combatant.driver.brain == null:
+		return null
+	return combatant.driver.brain.describe()
 
 
 func _cmd_despawn(args: Dictionary) -> ConsoleResult:

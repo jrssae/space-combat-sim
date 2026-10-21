@@ -120,6 +120,23 @@ func candidates() -> Array[TargetInfo]:
 	return system.in_range(_ship_position())
 
 
+## Selects the nearest in-range target hostile to this ship's faction (the AI's choice); clears the selection when there
+## is none. Returns whether a hostile is selected.
+func select_nearest_hostile() -> bool:
+	if not _has_body():
+		return false
+	var before: int = system.selected_id()
+	_gather()
+	var order: Array[TargetInfo] = system.cycle_order(_ship_position())
+	var found: bool = not order.is_empty() and Factions.is_hostile(system.own_faction, order[0].faction)
+	if found:
+		system.select_id(order[0].id, _ship_position())
+	else:
+		system.clear()
+	_emit_if_changed(before)
+	return found
+
+
 ## Selects the in-range target with this display name (case-insensitive). Returns false if there is none.
 func select_by_name(display_name: String) -> bool:
 	if not _has_body():
