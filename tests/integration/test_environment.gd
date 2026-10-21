@@ -292,10 +292,11 @@ func test_fallback_sky_swaps_the_environment_and_hides_the_splats() -> void:
 	assert_not_null(panorama, "panorama texture loaded")
 	assert_eq(panorama.resource_path, PANORAMA_PATH)
 	assert_not_null(env.get_gaussian_effect(), "the compositor stays: hull and buoys are still splats")
-	# The panorama environment must not change the lighting or post settings of the default one.
+	# The panorama environment keeps the tone mapping, glow and ambient source of the default one (and adds ambient fill, below).
 	assert_eq(fallback.tonemap_mode, default_env.tonemap_mode)
 	assert_eq(fallback.ambient_light_source, default_env.ambient_light_source)
-	assert_eq(fallback.ambient_light_color, default_env.ambient_light_color)
+	# Only the ambient level differs: the mesh hull has no baked light, so it needs a fill the splat hull does not.
+	assert_gte(fallback.ambient_light_color.r, default_env.ambient_light_color.r, "the fallback is not darker")
 	assert_eq(fallback.glow_enabled, default_env.glow_enabled)
 	assert_almost_eq(fallback.glow_intensity, default_env.glow_intensity, 0.0001)
 	assert_almost_eq(fallback.glow_hdr_threshold, default_env.glow_hdr_threshold, 0.0001)

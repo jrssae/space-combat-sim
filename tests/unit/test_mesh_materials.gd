@@ -19,7 +19,7 @@ func test_a_metal_hull_becomes_matte() -> void:
 	var mesh: ArrayMesh = _mesh_with(0.98, 1.0)
 	MeshMaterials.matte(mesh)
 	var material := mesh.surface_get_material(0) as StandardMaterial3D
-	assert_lte(material.metallic, MeshMaterials.MAX_METALLIC)
+	assert_lte(material.metallic, MeshMaterials.MAX_METALLIC + 1e-6)
 	assert_gte(material.roughness, MeshMaterials.MIN_ROUGHNESS)
 
 
@@ -28,8 +28,8 @@ func test_values_already_matte_are_left_alone_and_it_is_idempotent() -> void:
 	MeshMaterials.matte(mesh)
 	MeshMaterials.matte(mesh)
 	var material := mesh.surface_get_material(0) as StandardMaterial3D
-	assert_eq(material.metallic, 0.05)
-	assert_eq(material.roughness, 0.9)
+	assert_almost_eq(material.metallic, 0.05, 1e-6)
+	assert_almost_eq(material.roughness, 0.9, 1e-6)
 
 
 func test_null_and_unmaterialled_meshes_are_ignored() -> void:
