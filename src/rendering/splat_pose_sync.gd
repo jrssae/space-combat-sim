@@ -34,6 +34,11 @@ func _process(_delta: float) -> void:
 	sync()
 
 
+## The splat node's pose relative to the body (its scene pose, GDGS's Rz(180) correction included).
+func local_pose() -> Transform3D:
+	return _local
+
+
 ## Puts the splat node on the body's interpolated pose now. `_process` calls it each frame; public so tests can too.
 func sync() -> void:
 	if _body == null or splats == null or not is_instance_valid(splats) or not splats.is_inside_tree():

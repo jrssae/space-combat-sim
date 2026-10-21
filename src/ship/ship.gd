@@ -119,6 +119,8 @@ func _ready() -> void:
 	targeting.setup(self, console_owner)
 	_build()
 	_build_cabin_light()
+	Settings.changed.connect(_on_hull_setting_changed)
+	_apply_hull_sync_setting()
 	use_fallback_mesh(_fallback_active or SplatStatus.needs_fallback(SplatStatus.active_backend()))
 	set_cockpit_interior_visible(_interior_visible)
 	if console_owner:
@@ -127,6 +129,8 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+	if Settings.changed.is_connected(_on_hull_setting_changed):
+		Settings.changed.disconnect(_on_hull_setting_changed)
 
 
 ## Gives the ship its type and its world. Call it before `World.spawn` (the usual order, or use `create`); called
@@ -303,7 +307,7 @@ func _apply_hull_visuals() -> void:
 	var mesh_mode: bool = _fallback_active or _interior_visible
 	hull_mesh_fallback.visible = mesh_mode
 	_apply_canopy_glass()
-	hull_depth_proxy.visible = _interior_visible or not _fallback_active
+	hull_depth_proxy.visible = (_interior_visible or not _fallback_active) and bool(Settings.get_value(&"hull_depth_proxy"))
 	hull_splats.visible = not mesh_mode
 
 
@@ -407,6 +411,25 @@ func _load_visuals() -> void:
 	_make_double_sided(hull_mesh_fallback.mesh)
 	_make_double_sided(cockpit_interior.mesh)
 	_lift_shadows(cockpit_interior.mesh)
+
+
+func _on_hull_setting_changed(key: StringName, _value: Variant) -> void:
+	if key == &"hull_depth_proxy":
+		_apply_hull_visuals()
+	elif key == &"hull_splat_sync":
+		_apply_hull_sync_setting()
+
+
+# Debug switch: with the sync off the splat node is a plain interpolated child of the body again.
+func _apply_hull_sync_setting() -> void:
+	var sync := get_node_or_null(^"HullSplatSync") as Node
+	var on: bool = bool(Settings.get_value(&"hull_splat_sync"))
+	if sync != null:
+		sync.set_process(on)
+	hull_splats.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF if on else Node.PHYSICS_INTERPOLATION_MODE_INHERIT
+	if not on and sync is SplatPoseSync:
+		hull_splats.transform = (sync as SplatPoseSync).local_pose()  # back to the body-relative pose
+		hull_splats.reset_physics_interpolation()
 
 
 # A soft lamp just behind and above the pilot's eyes. Its range stops short of the wings, so it lights only the cockpit frame.

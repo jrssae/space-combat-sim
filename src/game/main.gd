@@ -27,6 +27,8 @@ var adapter: InputAdapter = InputAdapter.new()
 
 ## One line for the HUD's top centre (wave, raiders left, kills); the wave director sets it (M2-T09).
 var status_line: String = ""
+## Debug: both main pods are held at this level (0..1) on top of the pilot's input (console `throttle`), for captures and tests.
+var debug_throttle: float = 0.0
 ## False from the player's death until the respawn; input is ignored meanwhile.
 var player_alive: bool = true
 var combatant: Combatant = null
@@ -111,6 +113,9 @@ func _update_render_scale() -> void:
 
 func _physics_process(delta: float) -> void:
 	var pc: PilotCommand = adapter.sample(input_source, delta)
+	if debug_throttle > 0.0:
+		pc.flight.main_left = maxf(pc.flight.main_left, debug_throttle)
+		pc.flight.main_right = maxf(pc.flight.main_right, debug_throttle)
 	if pc.flight.autotrack and not _target_for_autotrack():
 		adapter.autotrack_on = false
 		pc.flight.autotrack = false
@@ -288,6 +293,7 @@ func _apply_input_settings() -> void:
 	adapter.yaw_ramp_s = float(Settings.get_value(&"yaw_ramp_s"))
 	adapter.target_hold_s = float(Settings.get_value(&"target_hold_s"))
 	adapter.mouse_full_rate_px_s = float(Settings.get_value(&"mouse_full_rate_px_s"))
+	Engine.physics_jitter_fix = float(Settings.get_value(&"physics_jitter_fix"))
 	var godot_source := input_source as GodotInputSource
 	if godot_source != null:
 		godot_source.trigger_deadzone = float(Settings.get_value(&"trigger_deadzone"))
@@ -362,11 +368,18 @@ func _register_console() -> void:
 			[] as Array[ConsoleArg]), _cmd_respawn, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"window", "Resize the game window (width and height in pixels), or `window max` / `window normal` to maximize or restore it",
 			[ConsoleArg.string_required(&"width_or_mode"), ConsoleArg.int_optional(&"height", null, 200, 4320)]), _cmd_window, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"throttle", "Hold both main pods at this level, 0..1 (debug; on top of the pilot's input)",
+			[ConsoleArg.float_required(&"level", 0.0, 1.0)]), _cmd_throttle, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"pause", "Pause or resume the game (toggles with no argument)",
 			[ConsoleArg.bool_optional(&"state")] as Array[ConsoleArg]), _cmd_pause, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"scenario",
 			"Load a scenario (combat_sandbox or free_flight): sets settings.scenario for this session and reloads the scene",
 			[ConsoleArg.enum_optional(&"name", SCENARIO_CHOICES, null)] as Array[ConsoleArg]), _cmd_scenario, self)
+
+
+func _cmd_throttle(args: Dictionary) -> String:
+	debug_throttle = float(args[&"level"])
+	return "main pods held at %.2f" % debug_throttle
 
 
 func _cmd_window(args: Dictionary) -> ConsoleResult:
@@ -410,5 +423,5 @@ func _cmd_pause(args: Dictionary) -> String:
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
-	if key in [&"stick_deadzone", &"invert_y", &"yaw_ramp_s", &"target_hold_s", &"trigger_deadzone", &"mouse_full_rate_px_s"]:
+	if key in [&"stick_deadzone", &"invert_y", &"yaw_ramp_s", &"target_hold_s", &"trigger_deadzone", &"mouse_full_rate_px_s", &"physics_jitter_fix"]:
 		_apply_input_settings()
