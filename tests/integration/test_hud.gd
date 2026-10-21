@@ -14,6 +14,7 @@ func before_each() -> void:
 	source = FakeInputSource.new()
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.input_source = source
+	main.waves_auto_start = false
 	add_child_autofree(main)
 	await _ticks(2)
 

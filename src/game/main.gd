@@ -4,18 +4,22 @@ extends Node3D
 ## World, wires camera, weapons, thruster glow and overlay, and turns one PilotCommand per physics tick into ship
 ## commands and UI actions. Main runs while paused (so Start can unpause); World and everything in it pause.
 
-const SCENARIO_PATH := "res://data/scenarios/free_flight.json"
+const SCENARIO_DIR := "res://data/scenarios/"
 const SHIP_SPEC_PATH := "res://assets/ships/starfury_aurora.tres"
-const DEFAULT_RAIDER_POOL: int = 6
+const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
 signal player_died
 ## The player is back at the scenario start with a full hull (after `DestructionDirector.RESPAWN_DELAY_S`, or `respawn`).
 signal player_respawned
 
-## Raiders built (parked) at load for the console's `spawn` and, later, the waves. 0 builds none. Set before the node
-## enters the tree.
-var raider_pool_size: int = DEFAULT_RAIDER_POOL
+## Raiders built (parked) at load for the waves and the console's `spawn`. -1 = what the scenario's `pools` says (the
+## sandbox 6, free flight none); 0 or more overrides it. Set before the node enters the tree.
+var raider_pool_size: int = -1
+## Overrides `settings.scenario` with a scenario file (tests). Empty = the setting.
+var scenario_path: String = ""
+## The sandbox starts wave 1's countdown at load. Tests that drive the waves themselves turn this off.
+var waves_auto_start: bool = true
 
 ## Set before the node enters the tree to drive Main from a script (tests use FakeInputSource).
 var input_source: InputSource = null
@@ -43,6 +47,7 @@ var _spawn_basis: Basis = Basis.IDENTITY
 @onready var effects: Node3D = $World/Effects
 @onready var debris: DebrisPool = $World/Debris
 @onready var director: DestructionDirector = $Combat/DestructionDirector
+@onready var waves: WaveDirector = $Combat/WaveDirector
 @onready var hud: Hud = $Hud
 @onready var splat_status: SplatStatus = $SplatStatus
 @onready var overlay: DebugOverlay = $DebugOverlay
@@ -52,7 +57,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	world.process_mode = Node.PROCESS_MODE_PAUSABLE
 	_setup_input()
-	var scenario: Dictionary = ScenarioLoader.load(SCENARIO_PATH)
+	var scenario: Dictionary = ScenarioLoader.load(resolved_scenario_path())
 	if not bool(scenario.get("ok", false)):
 		push_warning("Main: %s; spawning at the origin with no props" % scenario.get("error", "no scenario"))
 	else:
@@ -63,13 +68,19 @@ func _ready() -> void:
 	ships.world = world
 	ships.projectiles = projectiles
 	ships.player = ship
-	if raider_pool_size > 0:
-		ships.prepare(ShipPool.DEFAULT_TYPE, raider_pool_size)
+	var pool_count: int = raider_pool_size
+	if pool_count < 0:
+		pool_count = int((scenario.get("pools", {}) as Dictionary).get(ShipPool.DEFAULT_TYPE, 0))
+	if pool_count > 0:
+		ships.prepare(ShipPool.DEFAULT_TYPE, pool_count)
 		debris.prepare(ShipPool.DEFAULT_TYPE)
 	hud.input_provider = _build_hud_input
 	director.setup(world, ships, debris, effects, combatant)
 	director.player_destroyed.connect(_on_player_destroyed)
 	director.respawn_due.connect(respawn)
+	waves.status_sink = func(line: String) -> void: status_line = line
+	waves.setup(world, ships, combatant, scenario if pool_count > 0 else {}, director, waves_auto_start)
+	player_respawned.connect(waves.on_player_respawned)
 	if bool(scenario.get("ok", false)):
 		_spawn_props(scenario["props"])
 	camera_rig.setup(ship, ship.cockpit_anchor, ship.get_chase_offset(), ship.set_cockpit_interior_visible)
@@ -130,6 +141,13 @@ func snapshot() -> Dictionary:
 	s["gpu"] = RenderingServer.get_video_adapter_name()
 	s["pads"] = input_source.pad_info()
 	return s
+
+
+## The scenario file in use: `scenario_path`, else the one `settings.scenario` names.
+func resolved_scenario_path() -> String:
+	if not scenario_path.is_empty():
+		return scenario_path
+	return SCENARIO_DIR + String(Settings.get_value(&"scenario")) + ".json"
 
 
 ## Back to the scenario start, at rest, with a full hull (Back / Backspace / `respawn`, and the respawn after a death).
@@ -265,11 +283,26 @@ func _register_console() -> void:
 			[] as Array[ConsoleArg]), _cmd_respawn, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"pause", "Pause or resume the game (toggles with no argument)",
 			[ConsoleArg.bool_optional(&"state")] as Array[ConsoleArg]), _cmd_pause, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"scenario",
+			"Load a scenario (combat_sandbox or free_flight): sets settings.scenario for this session and reloads the scene",
+			[ConsoleArg.enum_optional(&"name", SCENARIO_CHOICES, null)] as Array[ConsoleArg]), _cmd_scenario, self)
 
 
 func _cmd_respawn(_args: Dictionary) -> String:
 	respawn()
 	return "ship reset to the scenario start"
+
+
+func _cmd_scenario(args: Dictionary) -> ConsoleResult:
+	var wanted: Variant = args.get(&"name")
+	if wanted == null:
+		return ConsoleResult.line("scenario = %s" % Settings.get_value(&"scenario"))
+	Settings.set_value(&"scenario", StringName(wanted))
+	if get_tree().current_scene == null:
+		return ConsoleResult.line("settings.scenario = %s (no current scene to reload)" % wanted)
+	# The console autoload keeps its statement queue across the reload, so a startup script carries on in the new scene.
+	get_tree().reload_current_scene.call_deferred()
+	return ConsoleResult.line("loading %s" % wanted)
 
 
 func _cmd_pause(args: Dictionary) -> String:

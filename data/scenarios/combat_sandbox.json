@@ -1,0 +1,37 @@
+{"scenario_id": "combat_sandbox", "system_id": "local",
+ "player": {"position": [0, 0, 0], "forward": [0, 0, -1]},
+ "props": [
+   {"type": "nav_buoy", "name": "NAV ALPHA",   "position": [0, 0, -500]},
+   {"type": "nav_buoy", "name": "NAV BRAVO",   "position": [300, 50, -1200]},
+   {"type": "nav_buoy", "name": "NAV CHARLIE", "position": [-800, -200, -2000]},
+   {"type": "nav_buoy", "name": "NAV DELTA",   "position": [1500, 400, 800], "velocity": [0, 0, -3]},
+   {"type": "nav_buoy", "name": "NAV ECHO",    "position": [-200, 900, -4800]}],
+ "pools": {"raider_fighter": 6},
+ "loop": {"from_wave": 3, "add_per_loop": 1},
+ "waves": [
+   {"name": "TARGET PRACTICE", "delay_s": 5, "spawns": [
+     {"type": "raider_fighter", "anchor": "player", "offset": [-700, 60, -1300], "velocity": [14, 0, 0],
+      "behaviour": {"type": "idle"}},
+     {"type": "raider_fighter", "anchor": "player", "offset": [600, -40, -1700], "velocity": [-9, 0, 0],
+      "behaviour": {"type": "idle"}},
+     {"type": "raider_fighter", "anchor": "player", "offset": [-100, 150, -2000], "velocity": [6, 0, 0],
+      "behaviour": {"type": "idle"}}]},
+   {"name": "PATROL", "delay_s": 8, "spawns": [
+     {"type": "raider_fighter", "anchor": "player", "offset": [1500, 100, -2000], "velocity": [0, 0, 0],
+      "behaviour": {"type": "aggro", "cruise_mps": 80, "aggro_range_m": 1500,
+                    "waypoints": [[1500, 100, -2000], [800, 0, -2800], [1700, -100, -2800]]}},
+     {"type": "raider_fighter", "anchor": "player", "offset": [-1800, 0, -2500], "velocity": [0, 0, 0],
+      "behaviour": {"type": "aggro", "cruise_mps": 80, "aggro_range_m": 1500,
+                    "waypoints": [[-1800, 0, -2500], [-1000, 80, -3000], [-2000, -80, -3200]]}},
+     {"type": "raider_fighter", "anchor": "player", "offset": [0, 300, -3000], "velocity": [0, 0, 0],
+      "behaviour": {"type": "aggro", "cruise_mps": 80, "aggro_range_m": 1500,
+                    "waypoints": [[0, 300, -3000], [600, 200, -2400], [-600, 200, -2400]]}}]},
+   {"name": "STRIKE", "delay_s": 8, "spawns": [
+     {"type": "raider_fighter", "anchor": "player", "offset": [-500, 100, -4000], "at_s": 0,
+      "behaviour": {"type": "attack"}},
+     {"type": "raider_fighter", "anchor": "player", "offset": [500, -100, -4000], "at_s": 2,
+      "behaviour": {"type": "attack"}},
+     {"type": "raider_fighter", "anchor": "player", "offset": [0, 200, -4200], "at_s": 4,
+      "behaviour": {"type": "attack"}},
+     {"type": "raider_fighter", "anchor": "player", "offset": [200, -200, -4100], "at_s": 6,
+      "behaviour": {"type": "attack"}}]}]}

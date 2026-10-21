@@ -176,7 +176,7 @@ if grep -E "${SCRIPT_ERRORS}" "${log}"; then
     echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: camera, combat, controls, debris, debug, hud, hull, input, raiders, render, settings, ship, targeting, time, weapons, world" \
+expect_line "${log}" "[console] providers: camera, combat, controls, debris, debug, hud, hull, input, raiders, render, settings, ship, targeting, time, waves, weapons, world" \
     || smoke_status=1
 expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
 expect_line "${log}" "[console] render.splat_backend = headless" || smoke_status=1
@@ -233,6 +233,26 @@ fi
 expect_text "${log}" "behaviour: attack" || smoke_status=1
 expect_text "${log}" "[console] combat.hits = " || smoke_status=1
 reject_text "${log}" "[console] combat.hits = 0" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
+
+echo "== Console smoke run: waves, and the scenario command reloads the scene with the startup script still running"
+# M2-T09 / AC11: wave start + kill all advance the waves; `scenario free_flight` reloads into free flight (no raiders, no waves)
+# and the statements after it still run in the new scene.
+log="${REPORTS}/console_waves.log"
+waves_status=0
+timeout 240 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; wave start 1; wait 480; get waves.state; kill all; wait 30; get waves.kills; scenario free_flight; wait 30; get raiders.pool_size; get waves.state; quit' \
+    > "${log}" 2>&1 || waves_status=$?
+cat "${log}"
+if (( waves_status != 0 )); then
+    echo "run_tests.sh: waves smoke run exited ${waves_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] waves.state = active" || smoke_status=1
+expect_line "${log}" "[console] waves.kills = 3" || smoke_status=1
+expect_line "${log}" "[console] raiders.pool_size = 0" || smoke_status=1
+expect_line "${log}" "[console] waves.state = idle" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 reject_text "${log}" "ERROR:" || smoke_status=1
 

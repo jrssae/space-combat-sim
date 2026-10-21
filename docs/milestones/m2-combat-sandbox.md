@@ -3,7 +3,7 @@
 > "Something to shoot." (`docs/roadmap.md`)
 
 **Status:** in progress. The maintainer asked to proceed before M1's re-test. Done: **T01** combat maths, **T02**
-multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T05** raider ship and pool, **T06** destruction, **T07** AI seam and simple brains, **T08** HUD, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T09 (waves), T10 (integration), T12 (sound). See `docs/handoff.md`.
+multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T05** raider ship and pool, **T06** destruction, **T07** AI seam and simple brains, **T08** HUD, **T09** waves, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T10 (integration and the capture set), T12 (sound). See `docs/handoff.md`.
 
 Read `docs/architecture.md` first, §1-§13 and especially **§15** (the M2 design: decisions D20-D29, tick order, hit
 detection, pools, brains, HUD, console additions). Task notes reference its sections (§). Tasks are ordered; each
@@ -732,6 +732,31 @@ history.
   tick (a pixel or two at speed). `(H)` if it looks like jitter.
 - P2 captured on the real GPU (`reports/m2/p2_*.png`, untracked): box, lead diamond, hull bar, radar, gauges and the cockpit
   grid draw as laid out. The cockpit grid first overlapped the radar; it now sits at 62 % of the height.
+
+**M2-T09 (combat sandbox scenario and waves).**
+- `ScenarioLoader` returns `pools`, `waves` and `loop` (all empty for free flight); errors carry the JSON path
+  (`waves[1].spawns[0]: behaviour.waypoints[1] must be [x, y, z]`), a behaviour is validated by building it once through
+  `BrainFactory`, and a wave cannot spawn more of a type than the pool holds. `data/scenarios/combat_sandbox.json` has the three
+  waves of the notes (the offsets are mine: target practice 1.3-2 km out drifting at 6-14 m/s, patrol raiders 2-3 km out on
+  three-waypoint loops, strike raiders at 4 km two seconds apart), the five buoys, a pool of 6 and `loop.from_wave` 3.
+- `WavePlan` is pure and fake-clock tested: countdown -> active -> cleared (3 s) -> next; wave N+1 after the last scripted wave
+  loops over the waves from `loop.from_wave`; the n-th pass adds `n x add_per_loop` attackers (copies of the last spawn, 2 s
+  apart, 150 m sideways each), capped at the pool size. A wave clears one tick after its last spawn is issued (so the new ships
+  are counted as alive first).
+- `WaveDirector` (priority 300) spawns through `ShipPool.acquire` with the brain from `BrainFactory`. The anchor (the player's
+  or the origin's `UniversePos`) is taken when the wave activates and used for both the offsets and the patrol waypoints. A raider
+  faces along its drift, or toward the player when it starts at rest.
+- Kills count **every** raider destroyed (the console's `kill` has no shooter, so counting only the player's shots would leave
+  `waves.kills` at 0 in AC11's run); `losses` counts the player's deaths. The wave goes on across a death (Q6, and §15.7's
+  "current wave restarted" was the older wording): `on_player_respawned()` makes the surviving pilots re-target at once.
+- `scenario [free_flight|combat_sandbox]` sets `settings.scenario` (session only) and reloads the scene; the console autoload
+  keeps its queue, so the statements after it run in the new scene (`run_tests.sh` smoke-runs that). `Main.scenario_path`
+  overrides the setting, `Main.waves_auto_start` (default true) lets tests drive the waves, `Main.raider_pool_size` (default -1 =
+  the scenario's pool) overrides the pool.
+- **The default scenario is now the sandbox**, so the game starts with wave 1's countdown (5 s). Free flight (the M1 scene) is
+  `scenario free_flight`, `settings.scenario free_flight` or `--console-exec="scenario free_flight"`; it has no pool, no raiders
+  and no waves. `test_main_scene.gd` pins the free-flight file.
+- `spawn` stays in `ShipPool` (the notes say it moves to the director; the behaviour is the same and the pool owns what it needs).
 
 ## Definition of done (M2)
 

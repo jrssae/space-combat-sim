@@ -29,6 +29,8 @@ const ENTRIES: Dictionary = {
 		"doc": "Chase camera orientation lag, s; 0 = rigid mount locked to the ship"},
 	&"show_overlay": {"type": TYPE_BOOL, "default": true,
 		"doc": "Show the debug overlay"},
+	&"scenario": {"type": TYPE_ENUM, "default": &"combat_sandbox", "choices": [&"combat_sandbox", &"free_flight"],
+		"doc": "The scenario the game loads: the wave sandbox, or free flight with the nav buoys"},
 	&"show_hud": {"type": TYPE_BOOL, "default": true,
 		"doc": "Show the combat HUD (target box, lead reticle, radar, gauges)"},
 	&"hud_targeting_grid": {"type": TYPE_BOOL, "default": false,

@@ -21,6 +21,9 @@ Re-run `scripts/gen_assets.sh` after pulling changes to `tools/procgen`.
 
 ## Run
 
+The game opens in the **combat sandbox**: wave 1's countdown starts at once (TARGET PRACTICE, then PATROL, then STRIKE and the loop).
+For the old free-flight scene with only the nav buoys use `scenario free_flight` in the console (or `set settings.scenario free_flight`, then `save`).
+
 ```
 .tools/godot/godot --path .             # play
 .tools/godot/godot --path . -e          # open the editor instead

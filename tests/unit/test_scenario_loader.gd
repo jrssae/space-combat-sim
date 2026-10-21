@@ -157,3 +157,108 @@ func test_prop_errors_name_the_entry() -> void:
 	bad_velocity["velocity"] = [0, "fast", 0]
 	_assert_fails(_minimal([bad_velocity]), "props[0]: velocity")
 	_assert_fails(_minimal([_buoy("NAV ALPHA"), _buoy("nav alpha")]), "props[1]: duplicate name")
+
+
+# --- the combat sandbox, pools, waves and loop (M2-T09) ------------------------------------------------------------
+
+
+func _sandbox_with(extra: Dictionary) -> Dictionary:
+	var data: Dictionary = _minimal()
+	data["pools"] = {"raider_fighter": 4}
+	data.merge(extra, true)
+	return data
+
+
+func _wave_data(spawn: Dictionary = {}) -> Dictionary:
+	var base: Dictionary = {"type": "raider_fighter", "anchor": "player", "offset": [0, 0, -1000], "behaviour": {"type": "idle"}}
+	base.merge(spawn, true)
+	return {"name": "WAVE", "delay_s": 3, "spawns": [base]}
+
+
+func test_the_combat_sandbox_file_validates() -> void:
+	var result: Dictionary = ScenarioLoader.load(ScenarioLoader.SANDBOX_PATH)
+	assert_true(result["ok"], result["error"])
+	assert_eq(result["scenario_id"], &"combat_sandbox")
+	assert_eq((result["props"] as Array).size(), 5, "the buoys stay as scenery")
+	assert_eq(result["pools"], {&"raider_fighter": 6})
+	assert_eq(result["loop"], {"from_wave": 3, "add_per_loop": 1})
+	var waves: Array[Dictionary] = result["waves"]
+	assert_eq(waves.size(), 3)
+	assert_eq([waves[0]["name"], waves[1]["name"], waves[2]["name"]], ["TARGET PRACTICE", "PATROL", "STRIKE"])
+	assert_eq([waves[0]["delay_s"], waves[1]["delay_s"], waves[2]["delay_s"]], [5.0, 8.0, 8.0])
+	assert_eq([(waves[0]["spawns"] as Array).size(), (waves[1]["spawns"] as Array).size(), (waves[2]["spawns"] as Array).size()], [3, 3, 4])
+	var strike_times: Array[float] = []
+	for spawn: Dictionary in waves[2]["spawns"]:
+		strike_times.append(spawn["at_s"])
+		assert_eq(spawn["behaviour"]["type"], "attack")
+	assert_eq(strike_times, [0.0, 2.0, 4.0, 6.0], "two seconds apart")
+	for spawn: Dictionary in waves[0]["spawns"]:
+		assert_eq(spawn["behaviour"]["type"], "idle")
+		assert_gt((spawn["velocity"] as Vector3).length(), 4.9)
+		assert_lt((spawn["velocity"] as Vector3).length(), 20.1, "drifting at 5-20 m/s")
+		assert_true(absf((spawn["offset"] as Vector3).z) >= 1200.0 and absf((spawn["offset"] as Vector3).z) <= 2000.0, "1.2-2 km ahead")
+	for spawn: Dictionary in waves[1]["spawns"]:
+		assert_eq(spawn["behaviour"]["type"], "aggro")
+		assert_eq(spawn["behaviour"]["cruise_mps"], 80.0)
+		assert_eq(spawn["behaviour"]["aggro_range_m"], 1500.0)
+		assert_eq((spawn["behaviour"]["waypoints"] as Array).size(), 3)
+
+
+func test_a_scenario_without_waves_has_empty_pools_waves_and_no_loop() -> void:
+	var result: Dictionary = ScenarioLoader.load(ScenarioLoader.FREE_FLIGHT_PATH)
+	assert_true(result["ok"])
+	assert_eq((result["pools"] as Dictionary).size(), 0)
+	assert_eq((result["waves"] as Array).size(), 0)
+	assert_eq(result["loop"]["from_wave"], 0)
+
+
+func test_spawn_fields_are_typed() -> void:
+	var data: Dictionary = _sandbox_with({"waves": [_wave_data({"velocity": [1, 2, 3], "at_s": 2.5, "anchor": "origin", "name": "BANDIT"})]})
+	var result: Dictionary = ScenarioLoader.from_data(data, "case")
+	assert_true(result["ok"], result["error"])
+	var spawn: Dictionary = (result["waves"] as Array)[0]["spawns"][0]
+	assert_eq(spawn["type"], &"raider_fighter")
+	assert_eq(spawn["anchor"], &"origin")
+	assert_eq(spawn["offset"], Vector3(0.0, 0.0, -1000.0))
+	assert_eq(spawn["velocity"], Vector3(1.0, 2.0, 3.0))
+	assert_eq(spawn["at_s"], 2.5)
+	assert_eq(spawn["name"], "BANDIT")
+
+
+func test_wave_errors_name_the_json_path() -> void:
+	var cases: Array[Array] = [
+		[_sandbox_with({"pools": []}), "pools must be an object"],
+		[_sandbox_with({"pools": {"battleship": 2}}), "pools.battleship: unknown ship type"],
+		[_sandbox_with({"pools": {"raider_fighter": -1}}), "pools.raider_fighter must be a whole number"],
+		[_sandbox_with({"pools": {"raider_fighter": 2.5}}), "pools.raider_fighter must be a whole number"],
+		[_sandbox_with({"loop": {"from_wave": -2}}), "loop.from_wave"],
+		[_sandbox_with({"loop": {"add_per_loop": "x"}}), "loop.add_per_loop"],
+		[_sandbox_with({"waves": "no"}), "waves must be an array"],
+		[_sandbox_with({"waves": [5]}), "waves[0] must be an object"],
+		[_sandbox_with({"waves": [{"delay_s": 1, "spawns": [{}]}]}), "waves[0]: name must be a non-empty string"],
+		[_sandbox_with({"waves": [{"name": "W", "delay_s": -1, "spawns": [{}]}]}), "waves[0]: delay_s"],
+		[_sandbox_with({"waves": [{"name": "W", "spawns": []}]}), "waves[0]: spawns must be a non-empty array"],
+		[_sandbox_with({"waves": [_wave_data({"type": "dreadnought"})]}), "waves[0].spawns[0]: type must be one of"],
+		[_sandbox_with({"waves": [_wave_data({"anchor": "moon"})]}), "waves[0].spawns[0]: anchor must be one of"],
+		[_sandbox_with({"waves": [_wave_data({"offset": [1, 2]})]}), "waves[0].spawns[0]: offset must be [x, y, z]"],
+		[_sandbox_with({"waves": [_wave_data({"velocity": "fast"})]}), "waves[0].spawns[0]: velocity must be [x, y, z]"],
+		[_sandbox_with({"waves": [_wave_data({"at_s": -1})]}), "waves[0].spawns[0]: at_s"],
+		[_sandbox_with({"waves": [_wave_data({"behaviour": {"type": "dance"}})]}), "waves[0].spawns[0]: behaviour.type must be one of"],
+		[_sandbox_with({"waves": [_wave_data({"behaviour": {"type": "patrol", "waypoints": [[0, 0, 0]]}})]}), "waves[0].spawns[0]: behaviour.waypoints"],
+		[_sandbox_with({"waves": [_wave_data(), _wave_data()], "loop": {"from_wave": 5}}), "loop.from_wave 5 is beyond the 2 waves"],
+	]
+	for case: Array in cases:
+		var result: Dictionary = ScenarioLoader.from_data(case[0], "case")
+		assert_false(result["ok"], "should be rejected: %s" % case[1])
+		assert_string_contains(String(result["error"]), String(case[1]))
+		assert_eq((result["waves"] as Array).size(), 0, "a failed load returns no waves")
+
+
+func test_a_wave_cannot_spawn_more_than_its_pool_holds() -> void:
+	var spawns: Array = []
+	for i: int in 5:
+		spawns.append(_wave_data()["spawns"][0])
+	var data: Dictionary = _sandbox_with({"waves": [{"name": "TOO MANY", "delay_s": 1, "spawns": spawns}]})
+	var result: Dictionary = ScenarioLoader.from_data(data, "case")
+	assert_false(result["ok"])
+	assert_string_contains(result["error"], "waves[0]: 5 spawns of raider_fighter but pools.raider_fighter holds 4")
