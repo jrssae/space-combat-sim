@@ -856,3 +856,11 @@ maintainer's eyes or ears on the real GPU.
 | Green tint through the cockpit glass | The hull mesh's translucent green canopy glass is now cleared while the cockpit view is shown |
 | Prograde / retrograde markers "do not move with the ship" | They show the direction of travel, which is fixed in space while the ship turns; they are now labelled PRO / RETRO |
 | Ship jumps slightly at full thrust (screencast) | Not found: the hull in the recorded frames holds still. Needs a timestamp or a description of what moves (see the reply). One suspect left: with auto-track on and full throttle the flight computer trims the pods (POD TRIM up to 68 %), which changes the thrust from frame to frame |
+
+### Fifth feedback round
+
+| Feedback | Done |
+|---|---|
+| Drift arrow: tell forward from backward | The shaft shades from a dim blue-green tail to a bright amber tip with an amber head, and FWD / AFT / SIDE is written under the sphere (AFT in red-orange) |
+| Shading still odd with splats on | The Starfury's baked light had near-black shadow sides (studio rig ambient 0.30 / 0.10, halved again for metal): `STARFURY_RIG` lifts it to 0.46 / 0.24 like the raider's. `(H)` |
+| Jump at full thrust, with or without auto-track | Not reproduced. A per-tick test of 10 s of full mains finds no kick at all (velocity change 0.5000 m/s every tick, 0.00000 m/s sideways, no attitude change: `test_thrust_smoothness`). A frame-by-frame capture at 1 700 m/s on the RX 6950 XT keeps the hull within 0.3 px, both at the origin and 300 km away (so it is not float precision). The screencast shows a ~1 % lateral flick of the hull about once a second at 30 fps; cause unknown |

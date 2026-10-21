@@ -251,11 +251,23 @@ class HudCanvas extends Control:
 		var tip: Vector2 = RadarModel.to_screen(tip_point, c, r)
 		var foot: Vector2 = RadarModel.to_screen(Vector3(tip_point.x, tip_point.y, 0.0), c, r)
 		draw_line(foot, tip, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.45), w * 0.5)
-		draw_line(c, tip, LINE_COLOR, w * 2.0)
+		# The shaft shades from a dim blue-green tail at your ship to a bright amber tip, so the head end is obvious at a glance.
+		var tail_color := Color(0.25, 0.55, 0.7, 0.5)
+		var tip_color := Color(1.0, 0.85, 0.3, 1.0)
+		var segments: int = 8
+		for i: int in segments:
+			var t0: float = float(i) / float(segments)
+			var t1: float = float(i + 1) / float(segments)
+			draw_line(c.lerp(tip, t0), c.lerp(tip, t1), tail_color.lerp(tip_color, (t0 + t1) * 0.5), w * (1.2 + 1.6 * t1))
 		var along: Vector2 = (tip - c).normalized() if tip.distance_to(c) > 0.5 else Vector2.UP
 		var side := Vector2(-along.y, along.x)
 		var head: float = 10.0 * s
-		draw_colored_polygon(PackedVector2Array([tip, tip - along * head + side * head * 0.45, tip - along * head - side * head * 0.45]), LINE_COLOR)
+		draw_colored_polygon(PackedVector2Array([tip, tip - along * head + side * head * 0.45, tip - along * head - side * head * 0.45]), tip_color)
+		# And in words under the sphere: ahead, astern or across.
+		var ahead: float = f.drift_dir.y
+		var caption: String = "FWD" if ahead > 0.35 else ("AFT" if ahead < -0.35 else "SIDE")
+		var caption_color: Color = tip_color if ahead > 0.35 else (Color(1.0, 0.5, 0.35) if ahead < -0.35 else LINE_COLOR)
+		_text(caption, c + Vector2(0.0, r + 14.0 * s), 12.0 * s, caption_color, HORIZONTAL_ALIGNMENT_CENTER)
 		# Where you have come from: a small open circle on the far side.
 		var back: Vector2 = RadarModel.to_screen(-tip_point * 0.8, c, r)
 		draw_arc(back, 3.0 * s, 0.0, TAU, 12, dim, w * 0.75)

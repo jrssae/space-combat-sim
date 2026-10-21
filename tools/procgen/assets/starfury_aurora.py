@@ -42,6 +42,15 @@ from ..core import frames
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Mesh, rotation_z
 from ..core.lighting import STUDIO_DEFAULT, StudioRig
+
+# The baked light of the hull. The studio default left the shadow sides (undersides of the struts, the fuselage's flanks) nearly black
+# against the black sky, and the play test kept finding "weird shading" there; the ambient is lifted, as the raider's was.
+STARFURY_RIG = StudioRig(
+    sky=(0.46, 0.47, 0.50),
+    ground=(0.24, 0.24, 0.26),
+    lights=STUDIO_DEFAULT.lights,
+    exposure=1.05,
+)
 from ..core.manifest import build_manifest, lod_entry, write_manifest
 from ..core.obj import write_obj
 from ..core.ply import SplatData, write_ply
@@ -495,7 +504,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
         raise ValueError(
             "spacing, cockpit_spacing, overlap and thickness must be positive"
         )
-    spec, style, rig = DEFAULT_SPEC, EARTHFORCE, STUDIO_DEFAULT
+    spec, style, rig = DEFAULT_SPEC, EARTHFORCE, STARFURY_RIG
 
     out_dir = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
