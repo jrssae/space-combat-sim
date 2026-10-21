@@ -58,6 +58,8 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	world.process_mode = Node.PROCESS_MODE_PAUSABLE
 	_setup_input()
+	get_tree().root.size_changed.connect(_update_render_scale)
+	_update_render_scale()
 	var scenario: Dictionary = ScenarioLoader.load(resolved_scenario_path())
 	if not bool(scenario.get("ok", false)):
 		push_warning("Main: %s; spawning at the origin with no props" % scenario.get("error", "no scenario"))
@@ -95,6 +97,16 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+	if get_tree() != null and get_tree().root.size_changed.is_connected(_update_render_scale):
+		get_tree().root.size_changed.disconnect(_update_render_scale)
+
+
+# The splat renderer cannot draw more than 65 535 tiles of 16 x 16 px; a very large window is rendered at a lower 3D scale (RenderScale).
+func _update_render_scale() -> void:
+	var root: Window = get_tree().root
+	var scale: float = RenderScale.scale_for(root.size.x, root.size.y)
+	if not is_equal_approx(root.scaling_3d_scale, scale):
+		root.scaling_3d_scale = scale
 
 
 func _physics_process(delta: float) -> void:
@@ -347,11 +359,30 @@ func _update_bracket() -> void:
 func _register_console() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"respawn", "Reset the ship to the scenario start",
 			[] as Array[ConsoleArg]), _cmd_respawn, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"window", "Resize the game window (width and height in pixels), or `window max` / `window normal` to maximize or restore it",
+			[ConsoleArg.string_required(&"width_or_mode"), ConsoleArg.int_optional(&"height", null, 200, 4320)]), _cmd_window, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"pause", "Pause or resume the game (toggles with no argument)",
 			[ConsoleArg.bool_optional(&"state")] as Array[ConsoleArg]), _cmd_pause, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"scenario",
 			"Load a scenario (combat_sandbox or free_flight): sets settings.scenario for this session and reloads the scene",
 			[ConsoleArg.enum_optional(&"name", SCENARIO_CHOICES, null)] as Array[ConsoleArg]), _cmd_scenario, self)
+
+
+func _cmd_window(args: Dictionary) -> ConsoleResult:
+	if DisplayServer.get_name() == "headless":
+		return ConsoleResult.failure("window needs a display (this run is --headless)")
+	var first: String = String(args[&"width_or_mode"])
+	if first == "max":
+		get_window().mode = Window.MODE_MAXIMIZED
+		return ConsoleResult.line("window maximized")
+	if first == "normal":
+		get_window().mode = Window.MODE_WINDOWED
+		return ConsoleResult.line("window restored")
+	if not first.is_valid_int() or args[&"height"] == null:
+		return ConsoleResult.failure("window expects <width> <height>, max or normal")
+	var size := Vector2i(int(first), int(args[&"height"]))
+	get_window().size = size
+	return ConsoleResult.line("window %dx%d" % [size.x, size.y])
 
 
 func _cmd_respawn(_args: Dictionary) -> String:

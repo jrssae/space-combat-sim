@@ -209,3 +209,19 @@ func test_with_assist_on_turning_with_the_sticks_does_not_change_the_velocity() 
 	await _ticks(180)
 	assert_lt(main.ship.angular_velocity.length(), 0.05, "the spin was damped by torque")
 	assert_lt(main.ship.linear_velocity.distance_to(before), 0.01, "still not a metre per second different")
+
+
+func test_the_canopy_glass_is_cleared_in_the_cockpit_and_back_outside() -> void:
+	var mesh: Mesh = main.ship.hull_mesh_fallback.mesh
+	assert_not_null(mesh)
+	var glass: int = -1
+	for i: int in mesh.get_surface_count():
+		if String(mesh.surface_get_material(i).resource_name).contains("glass"):
+			glass = i
+	assert_gte(glass, 0, "the hull mesh has a glass surface")
+	main.camera_rig.mode = CameraRig.Mode.COCKPIT
+	await _ticks(2)
+	assert_not_null(main.ship.hull_mesh_fallback.get_surface_override_material(glass), "cockpit: the glass draws nothing")
+	main.camera_rig.mode = CameraRig.Mode.CHASE
+	await _ticks(2)
+	assert_null(main.ship.hull_mesh_fallback.get_surface_override_material(glass), "chase: the real glass again")

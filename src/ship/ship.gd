@@ -302,6 +302,7 @@ func _apply_hull_visuals() -> void:
 		return
 	var mesh_mode: bool = _fallback_active or _interior_visible
 	hull_mesh_fallback.visible = mesh_mode
+	_apply_canopy_glass()
 	hull_depth_proxy.visible = _interior_visible or not _fallback_active
 	hull_splats.visible = not mesh_mode
 
@@ -425,6 +426,32 @@ func _build_cabin_light() -> void:
 func _place_cabin_light() -> void:
 	if _cabin_light != null:
 		_cabin_light.position = cockpit_anchor.position + Vector3(0.0, 0.45, 0.5)
+
+
+# The canopy glass is a green translucent surface of the hull mesh. Seen from inside it tints the whole view green, so the pilot's
+# window is clear: from the cockpit the glass surface gets an override that draws nothing (from outside it is the real glass).
+func _apply_canopy_glass() -> void:
+	var mesh: Mesh = hull_mesh_fallback.mesh
+	if mesh == null:
+		return
+	for i: int in mesh.get_surface_count():
+		var material: Material = mesh.surface_get_material(i)
+		if material == null or not String(material.resource_name).contains("glass"):
+			continue
+		hull_mesh_fallback.set_surface_override_material(i, _clear_glass() if _interior_visible else null)
+
+
+static var _clear_material: StandardMaterial3D = null
+
+
+static func _clear_glass() -> StandardMaterial3D:
+	if _clear_material == null:
+		_clear_material = StandardMaterial3D.new()
+		_clear_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_clear_material.albedo_color = Color(0.0, 0.0, 0.0, 0.0)
+		_clear_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_clear_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return _clear_material
 
 
 # The cockpit bars are mirrored copies, whose faces wind the other way and vanish from inside with back-face culling on;

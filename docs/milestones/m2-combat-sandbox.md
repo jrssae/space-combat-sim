@@ -847,3 +847,12 @@ maintainer's eyes or ears on the real GPU.
 |---|---|
 | Toggling splats on/off (F4) moves the nebula | The fallback panorama was authored with its centre on -Z, but Godot's panorama sky puts the image centre on +Z, so the nebula showed up half a turn away. Confirmed on the RX 6950 XT by rolling the image half a turn (it then matched the splat sky); the generator now writes it in Godot's convention (`sky_default` generator version 2) and its nebula is 0.4x as bright, since it was about twice as bright as the splat sky |
 | Weird shading (black upper surfaces, mesh mode) | The OBJ importer makes the generated materials metallic 0.93-0.98, so every face the sun misses reflects the black sky and renders black. `MeshMaterials.matte` caps metallic at 0.15 and floors roughness at 0.65 on the hull, cockpit, buoy and debris meshes; the fallback environment's ambient light is 0.25 |
+
+### Fourth feedback round
+
+| Feedback | Done |
+|---|---|
+| Maximized window: the bottom fifth is not rendered | GDGS sorts splats by a 32-bit key whose top 16 bits are the 16 px tile index, so a frame above 65 535 tiles wraps it. A maximized 6144 x 3318 window is 80 000 tiles, and the cut sat at exactly 65 536 / 384 = 80 % of the height. `RenderScale` lowers the 3D scale of a window that large (0.9 here; HUD and text stay sharp). Reproduced with the new `window max` console command and confirmed fixed on the RX 6950 XT |
+| Green tint through the cockpit glass | The hull mesh's translucent green canopy glass is now cleared while the cockpit view is shown |
+| Prograde / retrograde markers "do not move with the ship" | They show the direction of travel, which is fixed in space while the ship turns; they are now labelled PRO / RETRO |
+| Ship jumps slightly at full thrust (screencast) | Not found: the hull in the recorded frames holds still. Needs a timestamp or a description of what moves (see the reply). One suspect left: with auto-track on and full throttle the flight computer trims the pods (POD TRIM up to 68 %), which changes the thrust from frame to frame |

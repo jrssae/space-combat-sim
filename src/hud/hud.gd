@@ -142,6 +142,8 @@ class HudCanvas extends Control:
 			var v: Vector2 = f.velocity_pos
 			var r: float = 11.0 * s
 			draw_arc(v, r, 0.0, TAU, 28, LINE_COLOR, w)
+			# Named, so it is clear these show the direction of travel (a fixed direction in space), not a position on the ship.
+			_text("RETRO" if f.retrograde else "PRO", v + Vector2(r + 4.0 * s, -r - 2.0 * s), 11.0 * s, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.8))
 			if f.retrograde:
 				draw_line(v + Vector2(-r, -r) * 0.7, v + Vector2(r, r) * 0.7, LINE_COLOR, w)
 				draw_line(v + Vector2(-r, r) * 0.7, v + Vector2(r, -r) * 0.7, LINE_COLOR, w)

@@ -67,7 +67,7 @@ H             fire mode                               N or Print  screenshot (sa
 Backspace     respawn                                 Esc         pause (also frees the mouse)       F3  debug overlay   F4  fallback meshes
 ```
 
-The ` key opens the debug console; it frees the mouse while open. Mouse feel: `set settings.mouse_full_rate_px_s 1200`
+The ` key opens the debug console; it frees the mouse while open. `window max` / `window normal` / `window 1800 900` resize the window from the console. Mouse feel: `set settings.mouse_full_rate_px_s 1200`
 (the mouse speed that commands the full turn rate; lower = more sensitive) and `set settings.mouse_look_deg_per_px 0.12`
 (free look). Sizes: `set settings.debug_text_size 22` (overlay text) and `set settings.chase_bolt_scale 3` (how much larger bolts
 are drawn in the chase view) and `set settings.hud_chase_opacity 0.7` (how solid the HUD is in the chase view, where the radar
