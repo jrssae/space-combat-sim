@@ -10,7 +10,7 @@ extends GutTest
 
 const FIXTURE: String = "res://tests/fixtures/hardpoints_nominal.json"
 const DT: float = 1.0 / 60.0
-const SPEED_MPS: float = 400.0
+const SPEED_MPS: float = 1000.0
 const LIFETIME_S: float = 4.0
 const MATERIAL_DIR: String = "res://assets/materials/"
 
@@ -29,6 +29,7 @@ var _clock_was_processing: bool = true
 
 
 func before_each() -> void:
+	Projectile.visual_scale = 1.0  # the chase camera draws bolts larger; these tests measure the true size
 	_saved_clock_s = SimClock.now()
 	_clock_was_processing = SimClock.is_physics_processing()
 	SimClock.set_physics_process(false)  # tests advance the clock by hand
@@ -204,7 +205,7 @@ func test_projectile_velocity_is_body_velocity_plus_400_forward() -> void:
 	var bolt: Projectile = _bolts()[0]
 	var forward: Vector3 = -body.global_basis.z
 	assert_almost_eq(bolt.velocity, body.linear_velocity + forward * SPEED_MPS, _vec_tol(1e-3))
-	assert_almost_eq((bolt.velocity - body.linear_velocity).length(), SPEED_MPS, 1e-3, "400 m/s relative to the shooter")
+	assert_almost_eq((bolt.velocity - body.linear_velocity).length(), SPEED_MPS, 1e-3, "1000 m/s relative to the shooter")
 	assert_almost_eq(bolt.velocity.dot(forward), body.linear_velocity.dot(forward) + SPEED_MPS, 1e-3)
 	assert_ne(body.linear_velocity, Vector3.ZERO, "the stand-in really is moving")
 
@@ -618,7 +619,7 @@ func test_bolts_of_one_look_share_a_mesh() -> void:
 
 
 func test_a_cannon_without_a_spec_uses_the_m1_numbers() -> void:
-	assert_eq(cannon.muzzle_speed_mps, 400.0)
+	assert_eq(cannon.muzzle_speed_mps, 1000.0)
 	assert_eq(cannon.gate.interval_s, 0.25)
 	assert_eq(cannon.gate.capacitor.capacity, WeaponCapacitor.DEFAULT_CAPACITY)
 

@@ -28,6 +28,16 @@ func is_pressed(_action: StringName) -> bool:
 	return false
 
 
+## Mouse travel in pixels since the last call (x right, y down), then cleared. Zero while the keyboard and mouse are masked.
+func take_mouse_delta() -> Vector2:
+	return Vector2.ZERO
+
+
+## Mouse wheel notches since the last call, then cleared: positive = rolled toward the user (down), negative = away (up).
+func take_wheel_steps() -> int:
+	return 0
+
+
 ## Connected pads for the overlay/console: name, guid, raw axes 0-5, trigger_rest.
 func pad_info() -> Array[Dictionary]:
 	return []

@@ -89,7 +89,7 @@ func _ready() -> void:
 	world.focus = ship
 	# The chase camera is world_shiftable; the cockpit camera follows a RemoteTransform3D, so drop its interpolation
 	# history on a rebase too, or it would smear the jump across one frame.
-	world.rebased.connect(func(_offset: Vector3) -> void: camera_rig.cockpit_camera.reset_physics_interpolation())
+	world.rebased.connect(func(_offset: Vector3) -> void: camera_rig.cockpit_pivot.reset_physics_interpolation())
 	_register_console()
 
 
@@ -101,10 +101,29 @@ func _physics_process(delta: float) -> void:
 	var pc: PilotCommand = adapter.sample(input_source, delta)
 	if not get_tree().paused and player_alive:
 		combatant.apply_commands(pc.flight, pc.combat)
+	if not get_tree().paused:
+		camera_rig.set_look(delta, pc.ui.look_active, pc.ui.look_stick, pc.ui.look_mouse_px)
 	_handle_ui(pc.ui)
 
 
+# The mouse flies the ship and works the targets (architecture §6.1): its motion and wheel go to the input source, which
+# hands them to the adapter once per physics tick.
+func _input(event: InputEvent) -> void:
+	var source := input_source as GodotInputSource
+	if source == null:
+		return
+	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		source.add_mouse_motion((event as InputEventMouseMotion).relative)
+	elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+		var button: int = (event as InputEventMouseButton).button_index
+		if button == MOUSE_BUTTON_WHEEL_DOWN:
+			source.add_wheel(1)
+		elif button == MOUSE_BUTTON_WHEEL_UP:
+			source.add_wheel(-1)
+
+
 func _process(_delta: float) -> void:
+	_update_mouse_capture()
 	if overlay.visible:
 		overlay.show_snapshot(snapshot())
 	_update_bracket()
@@ -238,6 +257,7 @@ func _apply_input_settings() -> void:
 	adapter.invert_y = bool(Settings.get_value(&"invert_y"))
 	adapter.yaw_ramp_s = float(Settings.get_value(&"yaw_ramp_s"))
 	adapter.target_hold_s = float(Settings.get_value(&"target_hold_s"))
+	adapter.mouse_full_rate_px_s = float(Settings.get_value(&"mouse_full_rate_px_s"))
 	var godot_source := input_source as GodotInputSource
 	if godot_source != null:
 		godot_source.trigger_deadzone = float(Settings.get_value(&"trigger_deadzone"))
@@ -277,6 +297,20 @@ func _handle_ui(ui: UiCommand) -> void:
 		Settings.set_value(&"show_overlay", not bool(Settings.get_value(&"show_overlay")))
 	if ui.toggle_fallback_mesh:
 		splat_status.toggle_fallback()
+	if ui.screenshot:
+		var result: ConsoleResult = DebugConsole.registry.execute_tokens(PackedStringArray(["screenshot"]))
+		print("[screenshot] ", result.lines[0] if result.ok and not result.lines.is_empty() else result.error)
+
+
+# The mouse is captured (hidden, unbounded) while flying with a mouse-capable source; the console, the pause and a window
+# that lost focus give it back.
+func _update_mouse_capture() -> void:
+	if not (input_source is GodotInputSource) or DisplayServer.get_name() == "headless":
+		return
+	var flying: bool = not get_tree().paused and not DebugConsole.is_open() and get_window().has_focus()
+	var wanted: Input.MouseMode = Input.MOUSE_MODE_CAPTURED if flying else Input.MOUSE_MODE_VISIBLE
+	if Input.mouse_mode != wanted:
+		Input.mouse_mode = wanted
 
 
 func _update_bracket() -> void:
@@ -322,5 +356,5 @@ func _cmd_pause(args: Dictionary) -> String:
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
-	if key in [&"stick_deadzone", &"invert_y", &"yaw_ramp_s", &"target_hold_s", &"trigger_deadzone"]:
+	if key in [&"stick_deadzone", &"invert_y", &"yaw_ramp_s", &"target_hold_s", &"trigger_deadzone", &"mouse_full_rate_px_s"]:
 		_apply_input_settings()

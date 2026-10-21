@@ -9,6 +9,9 @@ extends InputSource
 signal trigger_rest_changed(guid: String, rest: float)
 
 var trigger_deadzone: float = 0.05
+
+var _mouse_delta: Vector2 = Vector2.ZERO
+var _wheel_steps: int = 0
 var calibration: TriggerCalibration = TriggerCalibration.new()
 
 
@@ -48,6 +51,29 @@ func get_trigger(action: StringName) -> float:
 		elif _event_active(event, action):
 			best = maxf(best, _event_strength(event))
 	return best
+
+
+## Fed from `_input` by Main: relative mouse motion and wheel notches, summed until the next physics tick reads them.
+func add_mouse_motion(relative: Vector2) -> void:
+	if keyboard_mouse_enabled:
+		_mouse_delta += relative
+
+
+func add_wheel(steps: int) -> void:
+	if keyboard_mouse_enabled:
+		_wheel_steps += steps
+
+
+func take_mouse_delta() -> Vector2:
+	var out: Vector2 = _mouse_delta
+	_mouse_delta = Vector2.ZERO
+	return out if keyboard_mouse_enabled else Vector2.ZERO
+
+
+func take_wheel_steps() -> int:
+	var out: int = _wheel_steps
+	_wheel_steps = 0
+	return out if keyboard_mouse_enabled else 0
 
 
 func is_pressed(action: StringName) -> bool:

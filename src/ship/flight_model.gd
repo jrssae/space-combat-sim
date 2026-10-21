@@ -95,7 +95,9 @@ func compute(cmd: FlightCommand, v_b: Vector3, w_b: Vector3, env_accel_b: Vector
 	var group_torque_y: PackedFloat64Array = [0.0, 0.0, 0.0, 0.0]
 	var tau_pods: Vector3 = _pod_torque(levels, group_torque_y)
 
-	# 4. Rotation.
+	# 4. Rotation. Auto-track: the pilot holds the nose on the lead point of the selected target; only the attitude
+	# controller changes, the velocity is left alone.
+	var tracking: bool = cmd.autotrack and not cmd.brake and not cmd.track_dir_b.is_zero_approx()
 	var tau_rcs: Vector3
 	var lam: float = 1.0
 	if assist_on:
@@ -111,9 +113,17 @@ func compute(cmd: FlightCommand, v_b: Vector3, w_b: Vector3, env_accel_b: Vector
 		out.rate_target_b = w_face
 		out.facing = not cmd.face_dir_b.is_zero_approx()
 		out.face_error_rad = FlightAssist.face_error_vector(cmd.face_dir_b).length()
-	elif assist_on:
-		var rot: Vector3 = assist.rotation_demand(cmd)
-		var w_target: Vector3 = rot * AXIS_SIGN * spec.rate_max_rad()
+	elif assist_on or tracking:
+		var w_target: Vector3
+		if tracking:
+			# Pitch and yaw go to the nose-onto-lead controller; roll stays with the pilot.
+			w_target = assist.face_rate_target(cmd.track_dir_b)
+			w_target.z = cmd.rot.z * AXIS_SIGN.z * spec.rate_max_rad().z
+			out.facing = true
+			out.face_error_rad = FlightAssist.face_error_vector(cmd.track_dir_b).length()
+		else:
+			var rot: Vector3 = assist.rotation_demand(cmd)
+			w_target = rot * AXIS_SIGN * spec.rate_max_rad()
 		# 4b. Rate controller with the pods' torque as feed-forward; RCS supplies the residual, and when more yaw
 		# is needed than RCS has, the groups fighting it are trimmed (only ever reduced, never raised). With no
 		# group fighting (stick alone, or the pods already helping) the controller simply saturates.
@@ -130,7 +140,8 @@ func compute(cmd: FlightCommand, v_b: Vector3, w_b: Vector3, env_accel_b: Vector
 				residual = tau_des - tau_pods
 		tau_rcs = residual.clamp(-spec.rcs_torque_max, spec.rcs_torque_max)
 		out.rate_target_b = w_target
-		out.pod_yaw_cmd = assist.pod_yaw_command()
+		out.tracking = tracking
+		out.pod_yaw_cmd = assist.pod_yaw_command() if assist_on else 0.0
 	else:
 		# Raw: stick and D-pad command RCS torque directly; pod torque acts in full and nothing damps rotation.
 		tau_rcs = cmd.rot * AXIS_SIGN * spec.rcs_torque_max

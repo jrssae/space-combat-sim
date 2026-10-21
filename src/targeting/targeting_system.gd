@@ -9,6 +9,7 @@ extends RefCounted
 ## - `select_next`: candidates in range, hostile ones to `own_faction` first (`Factions.is_hostile`), then the rest,
 ##   each group sorted by range (ties by id); picks the one after the current selection, wrapping to the first; with
 ##   no selection, the first. With no hostile in range this is plain nearest-first, as in M1.
+## - `select_prev`: the same order walked backwards.
 ## - `select_ahead`: the smallest angle between the ship's forward axis and the line of sight, forward hemisphere
 ##   only (< 90 deg); ties go to the nearer. If no candidate is ahead, the selection is unchanged.
 ## - The selection clears when its target leaves the candidate list or sensor range (`update`).
@@ -104,6 +105,21 @@ func select_next(ship_pos: Vector3) -> bool:
 			break
 	# index -1 (no selection, or it is not selectable) gives 0: the first. The last one wraps to the first.
 	return _select(ordered[(index + 1) % ordered.size()].id)
+
+
+## `target_prev`: the same walk backwards (the mouse wheel). With no selection it picks the last one. Returns true if the
+## selection changed.
+func select_prev(ship_pos: Vector3) -> bool:
+	var ordered: Array[TargetInfo] = cycle_order(ship_pos)
+	if ordered.is_empty():
+		return false
+	var index: int = 0
+	for i: int in ordered.size():
+		if ordered[i].id == _selected_id:
+			index = i
+			break
+	# Not selected (index stays 0) wraps to the last; otherwise one step back, the first wraps to the last.
+	return _select(ordered[(index - 1 + ordered.size()) % ordered.size()].id)
 
 
 ## `target_ahead`. Returns true if the selection changed; with nothing in the forward hemisphere it does not.

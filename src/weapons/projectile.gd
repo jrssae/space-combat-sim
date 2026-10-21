@@ -24,6 +24,10 @@ const DEFAULT_MATERIAL: Material = preload("res://assets/materials/projectile.tr
 # Bolt meshes by look (length, radius, material), so a volley does not build a mesh per bolt.
 static var _meshes: Dictionary = {}
 
+## How much larger the bolt is drawn than it is (the chase camera sees it from further away than the cockpit does). The
+## camera rig sets it on a mode change; it never touches hit detection.
+static var visual_scale: float = 1.0
+
 ## Seconds of sim time from launch to `queue_free`.
 @export var lifetime_s: float = 4.0
 
@@ -39,7 +43,7 @@ var faction: StringName = Factions.NEUTRAL
 var damage: float = 0.0
 var hit_radius_m: float = 0.25
 ## Impact flash tint.
-var color: Color = Color(3.0, 1.0, 0.5, 1.0)
+var color: Color = Color(0.9, 1.5, 3.0, 1.0)
 ## World-frame displacement of the latest physics tick (velocity × delta); zero until the first tick. A displacement,
 ## not a position, so a `World.rebase()` cannot stale it.
 var last_step: Vector3 = Vector3.ZERO
@@ -52,6 +56,7 @@ var _spent: bool = false
 func _ready() -> void:
 	add_to_group(WorldFrame.SHIFTABLE_GROUP)
 	add_to_group(GROUP)
+	set_visual_scale(visual_scale)
 
 
 func _physics_process(delta: float) -> void:
@@ -60,6 +65,12 @@ func _physics_process(delta: float) -> void:
 		return
 	last_step = velocity * delta
 	global_position += last_step
+
+
+## Draws the bolt `factor` times its size (all axes); the hit radius stays as it is.
+func set_visual_scale(factor: float) -> void:
+	if _bolt != null:
+		_bolt.scale = Vector3.ONE * maxf(factor, 0.01)
 
 
 ## Takes the lifetime and the bolt's look (length, radius, material) from `weapon`. Call it after the node entered the

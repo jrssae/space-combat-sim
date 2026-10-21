@@ -35,7 +35,7 @@ const PROJECTILE_SCENE: PackedScene = preload("res://src/weapons/projectile.tscn
 const MODE_CHOICES: Array[StringName] = [&"alternating", &"linked"]
 
 ## Muzzle speed relative to the shooter, m/s.
-@export var muzzle_speed_mps: float = 400.0
+@export var muzzle_speed_mps: float = 1000.0
 
 var gate: PulseCannonGate = PulseCannonGate.new()
 

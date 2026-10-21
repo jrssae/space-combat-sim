@@ -217,7 +217,7 @@ func test_setup_adds_a_remote_transform_under_the_anchor_pointing_at_the_cockpit
 	assert_not_null(remote, "RemoteTransform3D under CockpitAnchor")
 	if remote == null:
 		return
-	assert_eq(remote.get_node_or_null(remote.remote_path), rig.cockpit_camera, "remote_path resolves to the camera")
+	assert_eq(remote.get_node_or_null(remote.remote_path), rig.cockpit_pivot, "remote_path resolves to the pivot the camera hangs under")
 	assert_true(remote.use_global_coordinates)
 	assert_false(remote.update_scale, "only the pose is pushed")
 	assert_almost_eq(rig.cockpit_camera.global_position, anchor.global_position, _vec_tol(), "placed at setup")

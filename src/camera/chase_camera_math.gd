@@ -30,9 +30,10 @@ static func local_pose(cfg: ChaseCameraConfig) -> Transform3D:
 	return Transform3D(Basis.looking_at(direction, Vector3.UP), cfg.offset_local)
 
 
-## The rigid pose for a ship at `ship` (its scale is ignored): `ship * local_pose`.
-static func target_pose(ship: Transform3D, cfg: ChaseCameraConfig) -> Transform3D:
-	return Transform3D(ship.basis.orthonormalized(), ship.origin) * local_pose(cfg)
+## The rigid pose for a ship at `ship` (its scale is ignored): `ship * local_pose`. `look` swings the whole camera round the
+## ship's origin (free look in the chase view: the camera pans around the ship without the ship turning).
+static func target_pose(ship: Transform3D, cfg: ChaseCameraConfig, look: Basis = Basis.IDENTITY) -> Transform3D:
+	return Transform3D(ship.basis.orthonormalized(), ship.origin) * Transform3D(look, Vector3.ZERO) * local_pose(cfg)
 
 
 ## Fraction of the remaining error that closes in `dt` seconds for a first-order lag with time constant
@@ -48,10 +49,11 @@ static func blend(dt: float, time_constant_s: float) -> float:
 ## One step: the pose for a ship at `ship`, given the pose `current` the camera has now. Rigid (`target_pose`, `current`
 ## and `dt` ignored) when `cfg.smoothing_s` is 0; otherwise the camera frame (`current` with the fixed local rotation
 ## taken out) slerps toward the ship's orientation while the position stays glued to the ship.
-static func step(current: Transform3D, ship: Transform3D, dt: float, cfg: ChaseCameraConfig) -> Transform3D:
+static func step(current: Transform3D, ship: Transform3D, dt: float, cfg: ChaseCameraConfig,
+		look: Basis = Basis.IDENTITY) -> Transform3D:
 	if cfg.smoothing_s <= 0.0:
-		return target_pose(ship, cfg)
-	var local: Transform3D = local_pose(cfg)
+		return target_pose(ship, cfg, look)
+	var local: Transform3D = Transform3D(look, Vector3.ZERO) * local_pose(cfg)
 	var frame_now: Quaternion = (current.basis.orthonormalized() * local.basis.inverse()).get_rotation_quaternion()
 	var frame_goal: Quaternion = ship.basis.orthonormalized().get_rotation_quaternion()
 	var frame := Transform3D(Basis(frame_now.slerp(frame_goal, blend(dt, cfg.smoothing_s))), ship.origin)

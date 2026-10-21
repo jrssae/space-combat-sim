@@ -6,7 +6,7 @@ extends Resource
 ## are the Starfury's M1 numbers.
 
 ## m/s, relative to the shooter: a bolt inherits the shooter's velocity and adds this along the nose.
-@export var muzzle_speed_mps: float = 400.0
+@export var muzzle_speed_mps: float = 1000.0
 ## s per bolt. ALTERNATING fires one bolt every interval; LINKED fires every muzzle together every interval × muzzles,
 ## so both modes put out the same number of bolts per second.
 @export var shot_interval_s: float = 0.25
@@ -22,7 +22,7 @@ extends Resource
 @export var bolt_length_m: float = 1.5
 @export var bolt_radius_m: float = 0.05
 ## Tint of the bolt's impact flash and sparks (and, later, of its sound). HDR, like the bolt material.
-@export var bolt_color: Color = Color(3.0, 1.0, 0.5, 1.0)
+@export var bolt_color: Color = Color(0.9, 1.5, 3.0, 1.0)
 ## m: where the muzzles' lines cross, measured ahead of the ship along its nose. 0 = the guns fire parallel (the Starfury).
 ## A raider's guns are spread over a 6 m width, so parallel bolts would miss a small target aimed at its centre: with a
 ## convergence range each muzzle aims at the point that far ahead, and the bolts hit the aim point at that range.

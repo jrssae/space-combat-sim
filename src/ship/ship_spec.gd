@@ -40,6 +40,11 @@ extends Resource
 ## kg of reaction mass the tank holds (`FuelTank`). The default is 10 minutes of both pods' mains at full
 ## (4 × 0.36 MN / 30 km/s = 48 kg/s × 600 s). Only drawn down when `settings.fuel_unlimited` is off.
 @export var fuel_capacity_kg: float = 28800.0
+## m/s: the hard ceiling. Inertia grows with speed (`SpeedGovernor`), so thrust fades to zero as the ship nears it.
+@export var speed_limit_mps: float = 9999.0
+## m/s: flight assist's "maximum safe speed". With assist on, thrust that would push the ship faster than this is
+## cancelled; with assist off the ship can go on up to `speed_limit_mps`.
+@export var assist_speed_max_mps: float = 5000.0
 ## Hull points (`HullHealth`, M2-T03). 300 is about 30 hits from a Starfury pulse bolt.
 @export var hull_max: float = 300.0
 ## HDR colour of the engine plumes (`ThrusterVisuals`). The default is the Starfury's blue-white.

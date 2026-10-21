@@ -19,17 +19,19 @@ const PAD_BINDINGS: Dictionary = {
 	&"yaw_right": ["button", JOY_BUTTON_DPAD_RIGHT, 0],
 	&"target_next": ["button", JOY_BUTTON_DPAD_UP, 0],
 	&"weapon_next": ["button", JOY_BUTTON_DPAD_DOWN, 0],
-	&"target_ahead": ["button", JOY_BUTTON_RIGHT_STICK, 0],
 	&"fire": ["button", JOY_BUTTON_A, 0],
 	&"toggle_flight_assist": ["button", JOY_BUTTON_B, 0],
-	&"brake": ["button", JOY_BUTTON_X, 0],
+	&"brake": ["button", JOY_BUTTON_RIGHT_STICK, 0],
+	&"autotrack": ["button", JOY_BUTTON_X, 0],
+	&"camera_look": ["button", JOY_BUTTON_LEFT_STICK, 0],
 	&"toggle_camera": ["button", JOY_BUTTON_Y, 0],
 	&"reset_ship": ["button", JOY_BUTTON_BACK, 0],
 	&"pause": ["button", JOY_BUTTON_START, 0],
-	&"debug_toggle_overlay": ["button", JOY_BUTTON_LEFT_STICK, 0],
 }
 
-const KEYBOARD_ONLY: Array[StringName] = [&"debug_toggle_fallback_mesh"]
+const KEYBOARD_ONLY: Array[StringName] = [
+	&"debug_toggle_fallback_mesh", &"debug_toggle_overlay", &"target_ahead", &"target_prev", &"screenshot",
+]
 
 
 func before_all() -> void:
@@ -99,8 +101,10 @@ func test_console_key_is_never_bound() -> void:
 
 
 func test_both_sides_keys() -> void:
-	assert_true(_has_key(&"main_right", KEY_W) and _has_key(&"main_left", KEY_W), "W = both mains")
-	assert_true(_has_key(&"retro_right", KEY_S) and _has_key(&"retro_left", KEY_S), "S = both retros")
+	assert_true(_has_key(&"main_right", KEY_E) and _has_key(&"main_left", KEY_E), "E = both mains")
+	assert_true(_has_key(&"retro_right", KEY_D) and _has_key(&"retro_left", KEY_D), "D = both retros")
+	assert_true(_has_key(&"main_left", KEY_Q) and _has_key(&"main_right", KEY_R), "Q / R = left / right main")
+	assert_true(_has_key(&"retro_left", KEY_A) and _has_key(&"retro_right", KEY_F), "A / F = left / right retro")
 
 
 func test_trigger_deadzone() -> void:
@@ -118,7 +122,7 @@ func test_right_stick_rolls_and_dpad_yaws() -> void:
 		for event: InputEvent in InputMap.action_get_events(action):
 			assert_false(event is InputEventJoypadMotion, "%s: no stick axis" % action)
 	assert_true(_has_key(&"yaw_left", KEY_J) and _has_key(&"yaw_right", KEY_L), "J/L stay yaw")
-	assert_true(_has_key(&"roll_left", KEY_U) and _has_key(&"roll_right", KEY_O), "U/O stay roll")
+	assert_true(_has_key(&"roll_left", KEY_Z) and _has_key(&"roll_right", KEY_X), "Z/X roll (left hand)")
 
 
 func test_target_ahead_has_r3_and_dpad_up_carries_the_hold() -> void:

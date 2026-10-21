@@ -65,15 +65,17 @@ func refresh() -> void:
 	_emit_if_changed(before)
 
 
-## Applies this tick's combat command: `target_next` cycles by range, `target_ahead` picks the target nearest the
+## Applies this tick's combat command: `target_next` / `target_prev` cycle by range, `target_ahead` picks the target nearest the
 ## nose. Both act on candidates gathered now, so it does not matter whether the caller runs before this node.
 func apply(cmd: CombatCommand) -> void:
-	if cmd == null or not (cmd.target_next or cmd.target_ahead) or not _has_body():
+	if cmd == null or not (cmd.target_next or cmd.target_prev or cmd.target_ahead) or not _has_body():
 		return
 	var before: int = system.selected_id()
 	_gather()
 	if cmd.target_next:
 		system.select_next(_ship_position())
+	if cmd.target_prev:
+		system.select_prev(_ship_position())
 	if cmd.target_ahead:
 		system.select_ahead(_ship_position(), _ship_forward())
 	_emit_if_changed(before)

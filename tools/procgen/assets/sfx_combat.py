@@ -1,13 +1,16 @@
 """``sfx_combat``: the combat sounds (docs/architecture.md section 15.1 D29, M2-T12), synthesised with NumPy.
 
-Seven mono 16-bit 48 kHz WAVs, each peaking at -1.5 dBFS, all from seeded generators (the same seed gives byte-identical files):
+Eight mono 16-bit 48 kHz WAVs, each peaking at -1.5 dBFS, all from seeded generators (the same seed gives byte-identical files):
 
 * ``pulse_fire`` (0.18 s): the Starfury's pulse cannon: a falling sine sweep with a fast decay, a noise click and a low thump.
 * ``raider_fire`` (0.22 s): the raiders' plasma gun: lower and buzzier (a detuned sawtooth pair, band-passed noise).
 * ``hit_hull`` (0.35 s): a bolt on a hull: a clank of inharmonic partials with a fast decay and a short click.
 * ``explosion`` (1.8 s): a boom (a falling sine), noise swept down through a low-pass, and a crackle of sparse impulses.
-* ``engine_loop`` (2.0 s, **seamless**): a rumble of harmonics of 55 Hz and band-limited periodic noise; every component repeats
-  exactly within the 2 s, and the manifest gives the loop points (0 to the last sample).
+* ``engine_loop`` (2.0 s, **seamless**): a low rumble, harmonics of 36 Hz (nothing above 180 Hz) and band-limited periodic noise
+  below 260 Hz; every component repeats exactly within the 2 s, and the manifest gives the loop points (0 to the last sample).
+  The game plays it at a pitch of 0.8 to 1.25 and ramps its level up and down with the thrust.
+* ``thruster_loop`` (2.0 s, **seamless**): the attitude thrusters' hiss-rumble, periodic noise between 90 and 900 Hz, softer and
+  brighter than the engine; the game ramps it with the RCS demand.
 * ``warning_beep`` (0.3 s): two short 880 Hz beeps (hull below 25 %).
 * ``target_blip`` (0.08 s): a short 1.2 kHz blip (a target selected).
 
@@ -27,9 +30,9 @@ from ..core.context import AssetOutputs, BuildContext
 from ..core.manifest import build_audio_manifest, sound_entry, write_manifest
 
 ASSET_ID = "sfx_combat"
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2
 PEAK_DBFS = -1.5
-ENGINE_BASE_HZ = 55.0
+ENGINE_BASE_HZ = 36.0
 ENGINE_SECONDS = 2.0
 PARTIALS = (1.0, 2.76, 5.40, 8.93, 13.34)  # inharmonic partials of a struck plate
 
@@ -84,13 +87,19 @@ def engine_loop(rng: np.random.Generator) -> np.ndarray:
     n = int(round(ENGINE_SECONDS * audio.SAMPLE_RATE))
     t = audio.time_axis(ENGINE_SECONDS)
     out = np.zeros(n)
-    for harmonic, gain in ((1, 1.0), (2, 0.7), (3, 0.5), (4, 0.3), (6, 0.18), (9, 0.1)):
+    for harmonic, gain in ((1, 1.0), (2, 0.8), (3, 0.5), (4, 0.3), (5, 0.15)):
         # Every frequency is a whole number of cycles in the loop, so the end meets the start.
         out += gain * np.sin(2.0 * np.pi * ENGINE_BASE_HZ * harmonic * t + rng.uniform(0.0, 6.28))
-    out += 0.12 * np.sin(2.0 * np.pi * 0.5 * ENGINE_BASE_HZ * t)  # sub-harmonic, 27.5 Hz: 55 cycles in 2 s
-    low_bin, high_bin = int(40.0 * ENGINE_SECONDS), int(1400.0 * ENGINE_SECONDS)
-    out += 0.45 * audio.periodic_noise(rng, n, low_bin, high_bin)
+    out += 0.3 * np.sin(2.0 * np.pi * 0.5 * ENGINE_BASE_HZ * t)  # sub-harmonic, 18 Hz: 36 cycles in 2 s
+    low_bin, high_bin = int(25.0 * ENGINE_SECONDS), int(260.0 * ENGINE_SECONDS)
+    out += 0.5 * audio.periodic_noise(rng, n, low_bin, high_bin)
     return out
+
+
+def thruster_loop(rng: np.random.Generator) -> np.ndarray:
+    n = int(round(ENGINE_SECONDS * audio.SAMPLE_RATE))
+    low_bin, high_bin = int(90.0 * ENGINE_SECONDS), int(900.0 * ENGINE_SECONDS)
+    return audio.periodic_noise(rng, n, low_bin, high_bin)
 
 
 def warning_beep(_rng: np.random.Generator) -> np.ndarray:
@@ -112,10 +121,11 @@ SOUNDS: dict[str, Callable[[np.random.Generator], np.ndarray]] = {
     "hit_hull": hit_hull,
     "explosion": explosion,
     "engine_loop": engine_loop,
+    "thruster_loop": thruster_loop,
     "warning_beep": warning_beep,
     "target_blip": target_blip,
 }
-LOOPS = {"engine_loop"}
+LOOPS = {"engine_loop", "thruster_loop"}
 
 
 def build(ctx: BuildContext) -> AssetOutputs:

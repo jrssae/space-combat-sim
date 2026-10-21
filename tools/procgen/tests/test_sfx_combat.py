@@ -1,4 +1,4 @@
-"""``sfx_combat`` (AC14): seven sounds, 48 kHz mono 16-bit, peaks at most -1 dBFS, seeded, the engine loop seamless."""
+"""``sfx_combat`` (AC14): eight sounds, 48 kHz mono 16-bit, peaks at most -1 dBFS, seeded, the engine loop seamless."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from tools.procgen.core.context import BuildContext
 
 EXPECTED = {
     "pulse_fire": 0.18, "raider_fire": 0.22, "hit_hull": 0.35, "explosion": 1.8,
-    "engine_loop": 2.0, "warning_beep": 0.3, "target_blip": 0.08,
+    "engine_loop": 2.0, "thruster_loop": 2.0, "warning_beep": 0.3, "target_blip": 0.08,
 }  # fmt: skip
 
 
@@ -40,11 +40,11 @@ class SfxCombatTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls._tmp.cleanup()
 
-    def test_all_seven_wavs_and_the_manifest_are_written(self) -> None:
+    def test_all_eight_wavs_and_the_manifest_are_written(self) -> None:
         names = {p.name for p in self.dir_a.iterdir()}
         self.assertEqual(names, {f"{n}.wav" for n in EXPECTED} | {"manifest.json"})
         self.assertEqual({p.name for p in self.out_a.files}, names)
-        self.assertEqual(self.out_a.summary, "7 sounds")
+        self.assertEqual(self.out_a.summary, "8 sounds")
 
     def test_the_manifest_is_an_audio_manifest(self) -> None:
         m = self.manifest
@@ -79,7 +79,7 @@ class SfxCombatTests(unittest.TestCase):
 
     def test_one_shots_start_and_end_quietly_so_they_do_not_click(self) -> None:
         for name in EXPECTED:
-            if name == "engine_loop":
+            if name in ("engine_loop", "thruster_loop"):
                 continue
             samples, _ = audio.read_wav(self.dir_a / f"{name}.wav")
             self.assertLess(abs(float(samples[-1])), 0.02, f"{name}: ends at silence")
@@ -88,12 +88,13 @@ class SfxCombatTests(unittest.TestCase):
     def test_the_engine_loop_is_seamless_and_its_points_are_the_whole_file(self) -> None:
         entry = self.manifest["sounds"]["engine_loop"]
         self.assertEqual((entry["loop_begin"], entry["loop_end"]), (0, entry["samples"]))
-        samples, _ = audio.read_wav(self.dir_a / "engine_loop.wav")
-        step = float(np.max(np.abs(np.diff(samples))))
-        seam = abs(float(samples[0] - samples[-1]))
-        self.assertLessEqual(seam, 1.2 * step, "the jump from the last sample to the first is an ordinary step")
+        for name in ("engine_loop", "thruster_loop"):
+            samples, _ = audio.read_wav(self.dir_a / f"{name}.wav")
+            step = float(np.max(np.abs(np.diff(samples))))
+            seam = abs(float(samples[0] - samples[-1]))
+            self.assertLessEqual(seam, 1.2 * step, f"{name}: the jump from the last sample to the first is an ordinary step")
         for name in EXPECTED:
-            if name != "engine_loop":
+            if name not in ("engine_loop", "thruster_loop"):
                 self.assertNotIn("loop_begin", self.manifest["sounds"][name])
 
     def test_the_engine_loop_is_periodic_in_its_synthesis(self) -> None:
@@ -115,6 +116,8 @@ class SfxCombatTests(unittest.TestCase):
 
         self.assertGreater(spectral_centroid("pulse_fire"), spectral_centroid("raider_fire"), "the raider's gun is lower")
         self.assertLess(spectral_centroid("explosion"), spectral_centroid("hit_hull"), "an explosion is a low rumble, a clank is bright")
+        self.assertLess(spectral_centroid("engine_loop"), 150.0, "the engine is a low rumble")
+        self.assertLess(spectral_centroid("engine_loop"), spectral_centroid("thruster_loop"), "the thrusters are brighter than the engine")
         beep, rate = audio.read_wav(self.dir_a / "warning_beep.wav")
         peak_freq = np.fft.rfftfreq(len(beep), 1.0 / rate)[int(np.argmax(np.abs(np.fft.rfft(beep))))]
         self.assertAlmostEqual(float(peak_freq), 880.0, delta=15.0)

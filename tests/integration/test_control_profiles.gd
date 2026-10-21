@@ -355,7 +355,7 @@ func test_unbind_then_bind_moves_a_pad_button() -> void:
 	assert_false(source.is_pressed(&"fire"), "A no longer fires")
 	_button(JOY_BUTTON_LEFT_STICK, true)
 	assert_true(source.is_pressed(&"fire"), "L3 does")
-	assert_true(source.is_pressed(&"debug_toggle_overlay"), "(and still toggles the overlay)")
+	assert_true(source.is_pressed(&"camera_look"), "(and still holds the free look)")
 
 
 func test_binding_something_twice_says_so() -> void:

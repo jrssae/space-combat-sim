@@ -141,17 +141,26 @@ func _physics_process(delta: float) -> void:
 		var b: Basis = global_basis
 		var to_body: Basis = b.transposed()
 		_flight.face_dir_b = to_body * targeting.selected_offset()  # what the brake faces (§5.5); zero = no target
+		_flight.track_dir_b = to_body * _lead_offset() if _flight.autotrack else Vector3.ZERO
 		var fuel: FuelTank = get_fuel_tank()
 		_output = _model.compute(_flight, to_body * linear_velocity, to_body * angular_velocity, to_body * env_accel,
 				_assist_on, delta, not fuel.is_empty())
 		fuel.draw(_output.mass_flow_kg_s, delta)
+		# Inertia grows with speed: the same thrust gives less acceleration the faster the ship goes (SpeedGovernor).
+		var gain: float = SpeedGovernor.thrust_gain(linear_velocity.length(), spec.speed_limit_mps)
 		for nozzle: Dictionary in _output.nozzle_forces:
 			var force: Vector3 = nozzle["force"]
 			var at: Vector3 = nozzle["position"]
-			apply_force(b * force, b * at)  # offset from the body origin, world orientation
-		apply_central_force(b * _output.rcs_force_b)
+			apply_force(b * force * gain, b * at)  # offset from the body origin, world orientation
+		apply_central_force(b * _output.rcs_force_b * gain)
 		apply_torque(b * _output.rcs_torque_b)
+		if _assist_on:
+			var net: Vector3 = b * (_output.pod_force_b + _output.rcs_force_b) * gain
+			apply_central_force(SpeedGovernor.assist_cap_correction(net, linear_velocity, spec.assist_speed_max_mps))
 	apply_central_force(mass * env_accel)
+	# Hard ceiling: nothing takes the ship past the speed limit.
+	if spec != null and spec.speed_limit_mps > 0.0 and linear_velocity.length() > spec.speed_limit_mps:
+		linear_velocity = SpeedGovernor.clamp_velocity(linear_velocity, spec.speed_limit_mps)
 
 	if combat_fresh:
 		targeting.apply(_combat)
@@ -399,6 +408,24 @@ func _take_combat_edges() -> bool:
 		held.fire = _combat.fire
 		_combat = held
 	return fresh
+
+
+# World-frame offset from the ship to the lead point of the selected target (the same solution as the HUD's lead reticle:
+# where a bolt fired now meets it), or to the target itself when there is no intercept in range. Zero without a target.
+func _lead_offset() -> Vector3:
+	var readout: TargetReadout = targeting.selected_readout()
+	if readout == null or spec == null:
+		return Vector3.ZERO
+	var weapon: WeaponSpec = spec.weapon if spec.weapon != null else WeaponSpec.new()
+	var muzzle_centre: Vector3 = global_position
+	if not _muzzles.is_empty():
+		muzzle_centre = Vector3.ZERO
+		for muzzle: Node3D in _muzzles:
+			muzzle_centre += muzzle.global_position
+		muzzle_centre /= float(_muzzles.size())
+	var lead: Dictionary = InterceptMath.solve(muzzle_centre, linear_velocity, readout.position, readout.velocity,
+			weapon.muzzle_speed_mps, weapon.lifetime_s)
+	return (lead["lead_point"] as Vector3) - global_position
 
 
 func _environment_accel() -> Vector3:

@@ -165,6 +165,8 @@ func test_every_edge_maps_to_its_field() -> void:
 		InputAdapter.PAUSE: func(c: PilotCommand) -> bool: return c.ui.pause,
 		InputAdapter.TOGGLE_OVERLAY: func(c: PilotCommand) -> bool: return c.ui.toggle_overlay,
 		InputAdapter.TOGGLE_FALLBACK: func(c: PilotCommand) -> bool: return c.ui.toggle_fallback_mesh,
+		InputAdapter.TARGET_PREV: func(c: PilotCommand) -> bool: return c.combat.target_prev,
+		InputAdapter.SCREENSHOT: func(c: PilotCommand) -> bool: return c.ui.screenshot,
 	}
 	assert_eq(fields.size(), InputAdapter.EDGE_ACTIONS.size(), "every edge action is covered")
 	for action: StringName in fields.keys():
@@ -233,7 +235,7 @@ func test_hold_threshold_is_tunable() -> void:
 	assert_eq(r["next"], [] as Array[int])
 
 
-func test_r3_still_targets_ahead_on_the_press() -> void:
+func test_the_target_ahead_key_targets_ahead_on_the_press() -> void:
 	source.hold(InputAdapter.TARGET_AHEAD)
 	var cmd: PilotCommand = adapter.sample(source, DT)
 	assert_true(cmd.combat.target_ahead)
@@ -300,3 +302,88 @@ func test_last_command_is_kept() -> void:
 	var cmd: PilotCommand = adapter.sample(source, DT)
 	assert_eq(adapter.last, cmd)
 	assert_almost_eq(float(cmd.flight.to_dict()["main_right"]), 0.4, 1e-9)
+
+
+# --- Auto-track, camera look, mouse, wheel (post-M2 controls) -----------------------------------------------------
+
+
+func test_autotrack_is_a_held_flag_and_brake_is_separate() -> void:
+	source.hold(InputAdapter.AUTOTRACK)
+	var cmd: PilotCommand = adapter.sample(source, DT)
+	assert_true(cmd.flight.autotrack)
+	assert_false(cmd.flight.brake, "X no longer brakes")
+	source.release(InputAdapter.AUTOTRACK)
+	source.hold(InputAdapter.BRAKE)
+	cmd = adapter.sample(source, DT)
+	assert_true(cmd.flight.brake)
+	assert_false(cmd.flight.autotrack)
+
+
+func test_the_mouse_speed_is_the_turn_rate_and_stopping_the_mouse_stops_the_turn() -> void:
+	adapter.mouse_full_rate_px_s = 1200.0
+	# 20 px in a 1/60 s tick is 1200 px/s: a full-rate command once the smoothing has caught up.
+	var yaw: float = 0.0
+	for i: int in 30:
+		source.push_mouse(Vector2(20.0, 0.0))
+		yaw = adapter.sample(source, DT).flight.rot.y
+	assert_almost_eq(yaw, 1.0, 0.01, "mouse right = yaw right at full rate")
+	var cmd: PilotCommand
+	for i: int in 30:
+		cmd = adapter.sample(source, DT)
+	assert_eq(cmd.flight.rot.y, 0.0, "a still mouse is no turn")
+
+
+func test_the_mouse_pulled_back_pitches_up_and_invert_flips_it() -> void:
+	adapter.mouse_full_rate_px_s = 1200.0
+	var pitch: float = 0.0
+	for i: int in 30:
+		source.push_mouse(Vector2(0.0, 10.0))  # toward the user (screen down)
+		pitch = adapter.sample(source, DT).flight.rot.x
+	assert_gt(pitch, 0.4, "pulled back = nose up")
+	adapter.reset()
+	adapter.invert_y = true
+	for i: int in 30:
+		source.push_mouse(Vector2(0.0, 10.0))
+		pitch = adapter.sample(source, DT).flight.rot.x
+	assert_lt(pitch, -0.4, "inverted")
+
+
+func test_camera_look_gives_the_stick_and_mouse_to_the_camera() -> void:
+	adapter.stick_deadzone = 0.0
+	source.hold(InputAdapter.CAMERA_LOOK)
+	source.hold(InputAdapter.ROLL_RIGHT, 1.0)
+	source.hold(InputAdapter.PITCH_UP, 1.0)  # stick pulled back
+	source.push_mouse(Vector2(30.0, -10.0))
+	var cmd: PilotCommand = adapter.sample(source, DT)
+	assert_true(cmd.ui.look_active)
+	assert_eq(cmd.flight.rot.x, 0.0, "no pitch while looking")
+	assert_eq(cmd.flight.rot.z, 0.0, "no roll while looking")
+	assert_gt(cmd.ui.look_stick.x, 0.6, "stick right = look right (a full diagonal is 0.707 each)")
+	assert_lt(cmd.ui.look_stick.y, -0.6, "stick pulled back = look down, as on a camera stick")
+	assert_eq(cmd.ui.look_mouse_px, Vector2(30.0, 10.0), "the mouse up is look up")
+	source.release_all()
+	cmd = adapter.sample(source, DT)
+	assert_false(cmd.ui.look_active)
+	assert_eq(cmd.ui.look_stick, Vector2.ZERO)
+
+
+func test_the_mouse_does_not_turn_the_ship_while_looking() -> void:
+	source.hold(InputAdapter.CAMERA_LOOK)
+	var cmd: PilotCommand
+	for i: int in 10:
+		source.push_mouse(Vector2(50.0, 50.0))
+		cmd = adapter.sample(source, DT)
+	assert_eq(cmd.flight.rot, Vector3.ZERO)
+
+
+func test_the_wheel_cycles_targets() -> void:
+	source.push_wheel(1)
+	var cmd: PilotCommand = adapter.sample(source, DT)
+	assert_true(cmd.combat.target_next, "wheel toward the user = next")
+	assert_false(cmd.combat.target_prev)
+	source.push_wheel(-1)
+	cmd = adapter.sample(source, DT)
+	assert_true(cmd.combat.target_prev, "wheel away = previous")
+	assert_false(cmd.combat.target_next)
+	cmd = adapter.sample(source, DT)
+	assert_false(cmd.combat.target_prev, "one notch, one step")

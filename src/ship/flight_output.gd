@@ -50,3 +50,6 @@ var braking: bool = false
 var facing: bool = false
 ## Angle between the nose and `face_dir_b` this tick, rad; 0 when not `facing`.
 var face_error_rad: float = 0.0
+## True while auto-track held the nose on the lead point of the selected target this tick (pitch and yaw were the flight
+## computer's; `face_error_rad` is the angle still to go).
+var tracking: bool = false

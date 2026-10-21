@@ -4,6 +4,8 @@ extends InputSource
 ## keyboard_mouse_enabled = false masks them, like GodotInputSource does for the console.
 
 var polled_dt: float = 0.0
+var _mouse: Vector2 = Vector2.ZERO
+var _wheel: int = 0
 var _strengths: Dictionary = {}  # action -> 0..1
 var _from_keyboard: Dictionary = {}  # action -> true when the value comes from a key
 
@@ -14,6 +16,27 @@ func hold(action: StringName, strength: float = 1.0, from_keyboard: bool = false
 		_from_keyboard[action] = true
 	else:
 		_from_keyboard.erase(action)
+
+
+## Mouse travel (pixels, x right, y down) and wheel notches for the next sample; each is read once.
+func push_mouse(relative: Vector2) -> void:
+	_mouse += relative
+
+
+func push_wheel(steps: int) -> void:
+	_wheel += steps
+
+
+func take_mouse_delta() -> Vector2:
+	var out: Vector2 = _mouse
+	_mouse = Vector2.ZERO
+	return out
+
+
+func take_wheel_steps() -> int:
+	var out: int = _wheel
+	_wheel = 0
+	return out
 
 
 func release(action: StringName) -> void:

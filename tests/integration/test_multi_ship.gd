@@ -82,7 +82,7 @@ func test_components_are_wired_when_the_ship_enters_the_tree() -> void:
 
 
 func test_the_starfury_defaults_reproduce_m1() -> void:
-	assert_eq(spec.weapon.muzzle_speed_mps, 400.0)
+	assert_eq(spec.weapon.muzzle_speed_mps, 1000.0)
 	assert_eq(near_raider.cannon.gate.muzzle_count, 2)
 	assert_eq(near_raider.cannon.gate.interval_s, PulseCannonGate.ALTERNATING_INTERVAL_S)
 	assert_eq(near_raider.cannon.gate.linked_interval_s(), PulseCannonGate.LINKED_INTERVAL_S)

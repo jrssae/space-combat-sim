@@ -7,7 +7,7 @@ const PULSE_CANNON_PATH: String = "res://assets/weapons/pulse_cannon_ef.tres"
 
 func test_defaults_are_the_m1_numbers() -> void:
 	var spec := WeaponSpec.new()
-	assert_eq(spec.muzzle_speed_mps, 400.0)
+	assert_eq(spec.muzzle_speed_mps, 1000.0)
 	assert_eq(spec.shot_interval_s, PulseCannonGate.ALTERNATING_INTERVAL_S)
 	assert_eq(spec.damage, 10.0)
 	assert_eq(spec.lifetime_s, 4.0)

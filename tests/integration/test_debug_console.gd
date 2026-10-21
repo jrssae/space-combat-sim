@@ -151,7 +151,7 @@ func test_god_toggles_invulnerable_and_save_never_writes_it() -> void:
 	assert_true(FileAccess.file_exists(CONFIG_PATH))
 	var text: String = FileAccess.get_file_as_string(CONFIG_PATH)
 	assert_false(text.contains("invulnerable"), "save writes settings only, never debug flags")
-	assert_false(text.contains("debug"))
+	assert_false(text.contains("[debug]") or text.contains("debug.") or text.contains("god"), "no debug section either")
 	var fresh: DebugConsoleScript = _make_console()
 	assert_false(fresh.flags.invulnerable, "a new session starts mortal")
 
@@ -448,24 +448,24 @@ func test_opening_and_closing_with_a_key_held_fires_no_edge() -> void:
 	var source := OnePadSource.new()
 	var adapter := InputAdapter.new()
 	DebugConsole.set_input_source(source, adapter)
-	_key(KEY_V, true)  # toggle_camera
+	_key(KEY_TAB, true)  # toggle_camera
 	assert_true(adapter.sample(source, 1.0 / 60.0).ui.toggle_camera, "a fresh press is an edge")
 	assert_false(adapter.sample(source, 1.0 / 60.0).ui.toggle_camera, "held is not")
 
 	_key(KEY_QUOTELEFT, true, 96)
-	assert_false(adapter.sample(source, 1.0 / 60.0).ui.toggle_camera, "opening with V held")
-	_key(KEY_T, true)  # target_next, pressed while typing
+	assert_false(adapter.sample(source, 1.0 / 60.0).ui.toggle_camera, "opening with Tab held")
+	_key(KEY_U, true)  # target_next (U), pressed while typing
 	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_next, "typing never fires")
 	_key(KEY_QUOTELEFT, true, 96)
 	var after_close: PilotCommand = adapter.sample(source, 1.0 / 60.0)
-	assert_false(after_close.ui.toggle_camera, "closing with V still held fires no edge")
-	assert_false(after_close.combat.target_next, "closing with T still held fires no edge")
+	assert_false(after_close.ui.toggle_camera, "closing with Tab still held fires no edge")
+	assert_false(after_close.combat.target_next, "closing with U still held fires no edge")
 
-	_key(KEY_T, false)
-	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_next, "nor does releasing it: T is tap-on-release")
-	_key(KEY_T, true)
+	_key(KEY_U, false)
+	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_next, "nor does releasing it: U is tap-on-release")
+	_key(KEY_U, true)
 	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_next, "a tap acts on release")
-	_key(KEY_T, false)
+	_key(KEY_U, false)
 	assert_true(adapter.sample(source, 1.0 / 60.0).combat.target_next, "a real tap after closing still works")
 
 

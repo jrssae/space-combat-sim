@@ -16,17 +16,26 @@ extends Node3D
 ## Console: provider `audio` (`sounds`, `voices_active`, `volume`) and `sfx <name>` (play at the player).
 
 const SOUND_DIR: String = "res://assets/generated/sfx_combat"
-const SOUND_NAMES: Array[StringName] = [&"pulse_fire", &"raider_fire", &"hit_hull", &"explosion", &"engine_loop", &"warning_beep", &"target_blip"]
+const SOUND_NAMES: Array[StringName] = [&"pulse_fire", &"raider_fire", &"hit_hull", &"explosion", &"engine_loop", &"thruster_loop", &"warning_beep", &"target_blip"]
 const BUS: StringName = &"SFX"
 const VOICES: int = 16
 const UI_VOICES: int = 4
 const ENGINE_RANGE_M: float = 1500.0
 const WARNING_HULL: float = 0.25
 const WARNING_INTERVAL_S: float = 1.5
-## Engine hum: gain (dB) and pitch at idle and at full thrust.
+## Engine hum: gain (dB) and pitch at idle and at full thrust. The pitch stays low: a rumble, not a whine.
 const HUM_DB: Vector2 = Vector2(-30.0, -9.0)
-const HUM_PITCH: Vector2 = Vector2(0.8, 1.5)
+const HUM_PITCH: Vector2 = Vector2(0.8, 1.25)
 const HUM_IDLE_LEVEL: float = 0.12
+## The engines spool: the heard level moves toward the thrust level at these rates (per second), so the rumble builds when
+## the throttle opens and dies away when it closes. 1 / rate = seconds for a full swing.
+const HUM_RISE_PER_S: float = 1.2
+const HUM_FALL_PER_S: float = 0.8
+## Attitude thrusters: gain (dB) at silence and at full demand, pitch range, and their quicker spool.
+const THRUSTER_DB: Vector2 = Vector2(-60.0, -16.0)
+const THRUSTER_PITCH: Vector2 = Vector2(0.9, 1.2)
+const THRUSTER_RISE_PER_S: float = 4.0
+const THRUSTER_FALL_PER_S: float = 2.5
 
 ## The ship whose position the console's `sfx` and the distance checks refer to (the player's).
 var player: Combatant = null
@@ -78,7 +87,7 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
-	_update_engines()
+	_update_engines(delta)
 	_update_warning(delta)
 
 
@@ -165,13 +174,14 @@ func _load_sounds() -> void:
 		var stream := load(path) as AudioStreamWAV
 		if stream != null:
 			_streams[sound_name] = stream
-	# The engine hum loops over the whole file (the manifest's loop points are 0 to the last sample).
-	if _streams.has(&"engine_loop"):
-		var loop: AudioStreamWAV = (_streams[&"engine_loop"] as AudioStreamWAV).duplicate() as AudioStreamWAV
-		loop.loop_mode = AudioStreamWAV.LOOP_FORWARD
-		loop.loop_begin = 0
-		loop.loop_end = int(loop.get_length() * float(loop.mix_rate))
-		_streams[&"engine_loop"] = loop
+	# The engine hum and the thruster loop run over the whole file (the manifest's loop points are 0 to the last sample).
+	for loop_name: StringName in [&"engine_loop", &"thruster_loop"]:
+		if _streams.has(loop_name):
+			var loop: AudioStreamWAV = (_streams[loop_name] as AudioStreamWAV).duplicate() as AudioStreamWAV
+			loop.loop_mode = AudioStreamWAV.LOOP_FORWARD
+			loop.loop_begin = 0
+			loop.loop_end = int(loop.get_length() * float(loop.mix_rate))
+			_streams[loop_name] = loop
 
 
 # --- volume ----------------------------------------------------------------------------------------------------------
@@ -232,7 +242,18 @@ func watch_ship(combatant: Combatant) -> void:
 	hum.max_distance = ENGINE_RANGE_M
 	hum.volume_db = HUM_DB.x
 	combatant.ship.add_child(hum)
-	_engines.append({"combatant": combatant, "player": hum})
+	var thrusters: AudioStreamPlayer3D = null
+	if _streams.has(&"thruster_loop"):
+		thrusters = AudioStreamPlayer3D.new()
+		thrusters.name = "ThrusterHiss"
+		thrusters.stream = _streams[&"thruster_loop"]
+		thrusters.bus = BUS
+		thrusters.unit_size = 20.0
+		thrusters.max_distance = ENGINE_RANGE_M
+		thrusters.volume_db = THRUSTER_DB.x
+		combatant.ship.add_child(thrusters)
+	_engines.append({"combatant": combatant, "player": hum, "thrusters": thrusters,
+			"level": HUM_IDLE_LEVEL, "thruster_level": 0.0})
 
 
 func engine_count() -> int:
@@ -249,24 +270,56 @@ func _listener_position() -> Vector3:
 	return player.ship.global_position if player != null and is_instance_valid(player.ship) else Vector3.ZERO
 
 
-func _update_engines() -> void:
+func _update_engines(delta: float) -> void:
 	var listener: Vector3 = _listener_position()
 	for entry: Dictionary in _engines:
 		var combatant: Combatant = entry["combatant"]
 		var hum: AudioStreamPlayer3D = entry["player"]
+		var thrusters: AudioStreamPlayer3D = entry["thrusters"]
 		if not is_instance_valid(combatant.ship) or not is_instance_valid(hum):
 			continue
 		var ship: Ship = combatant.ship
 		var live: bool = ship.is_visible_in_tree() and ship.can_process() and ship.global_position.distance_to(listener) <= ENGINE_RANGE_M
 		if not live:
+			# A ship out of play starts from a cold engine when it comes back.
+			entry["level"] = HUM_IDLE_LEVEL
+			entry["thruster_level"] = 0.0
 			if hum.playing:
 				hum.stop()
+			if thrusters != null and is_instance_valid(thrusters) and thrusters.playing:
+				thrusters.stop()
 			continue
-		var level: float = engine_level(ship.get_flight_output())
+		var output: FlightOutput = ship.get_flight_output()
+		var level: float = ramp(float(entry["level"]), engine_level(output), delta, HUM_RISE_PER_S, HUM_FALL_PER_S)
+		entry["level"] = level
 		hum.volume_db = lerpf(HUM_DB.x, HUM_DB.y, level)
 		hum.pitch_scale = lerpf(HUM_PITCH.x, HUM_PITCH.y, level)
 		if not hum.playing:
 			hum.play()
+		if thrusters != null and is_instance_valid(thrusters):
+			var heard: float = ramp(float(entry["thruster_level"]), thruster_level(output), delta, THRUSTER_RISE_PER_S, THRUSTER_FALL_PER_S)
+			entry["thruster_level"] = heard
+			thrusters.volume_db = lerpf(THRUSTER_DB.x, THRUSTER_DB.y, heard)
+			thrusters.pitch_scale = lerpf(THRUSTER_PITCH.x, THRUSTER_PITCH.y, heard)
+			if heard > 0.001 and not thrusters.playing:
+				thrusters.play()
+			elif heard <= 0.001 and thrusters.playing:
+				thrusters.stop()
+
+
+## `current` moved toward `target` by at most `rise_per_s` (going up) or `fall_per_s` (going down) times `delta`.
+static func ramp(current: float, target: float, delta: float, rise_per_s: float, fall_per_s: float) -> float:
+	var rate: float = rise_per_s if target > current else fall_per_s
+	return move_toward(current, target, rate * maxf(delta, 0.0))
+
+
+## 0..1 demand on the attitude thrusters (RCS force or torque, whichever is larger); 0 for no output.
+static func thruster_level(output: FlightOutput) -> float:
+	if output == null:
+		return 0.0
+	var force: float = maxf(absf(output.rcs_force_level.x), absf(output.rcs_force_level.y))
+	var torque: float = maxf(absf(output.rcs_torque_level.x), maxf(absf(output.rcs_torque_level.y), absf(output.rcs_torque_level.z)))
+	return clampf(maxf(force, torque), 0.0, 1.0)
 
 
 ## 0..1 thrust level of a flight output: the strongest of the mean main level, the mean retro level and the RCS, over an idle floor.

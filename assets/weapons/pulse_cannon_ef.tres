@@ -5,7 +5,7 @@
 
 [resource]
 script = ExtResource("1_weapon_spec")
-muzzle_speed_mps = 400.0
+muzzle_speed_mps = 1000.0
 shot_interval_s = 0.25
 damage = 10.0
 lifetime_s = 4.0
@@ -13,7 +13,7 @@ hit_radius_m = 0.25
 bolt_material = ExtResource("2_bolt")
 bolt_length_m = 1.5
 bolt_radius_m = 0.05
-bolt_color = Color(3, 1, 0.5, 1)
+bolt_color = Color(0.9, 1.5, 3, 1)
 capacitor_capacity = 100.0
 capacitor_cost_per_shot = 14.0
 capacitor_recharge_per_s = 25.0

@@ -131,6 +131,22 @@ func test_every_ship_has_an_engine_hum_that_follows_thrust() -> void:
 	assert_eq(AudioDirector.engine_level(null), AudioDirector.HUM_IDLE_LEVEL)
 
 
+func test_ramp_moves_at_the_rise_and_fall_rates() -> void:
+	assert_almost_eq(AudioDirector.ramp(0.0, 1.0, 0.25, 1.2, 0.8), 0.3, 1e-9, "rising at 1.2 per second")
+	assert_almost_eq(AudioDirector.ramp(1.0, 0.0, 0.25, 1.2, 0.8), 0.8, 1e-9, "falling at 0.8 per second")
+	assert_eq(AudioDirector.ramp(0.5, 0.52, 1.0, 1.2, 0.8), 0.52, "never overshoots the target")
+	assert_eq(AudioDirector.ramp(0.5, 1.0, -1.0, 1.2, 0.8), 0.5, "a negative step does nothing")
+
+
+func test_thruster_level_is_the_strongest_rcs_demand() -> void:
+	assert_eq(AudioDirector.thruster_level(null), 0.0)
+	var out := FlightOutput.new()
+	assert_eq(AudioDirector.thruster_level(out), 0.0)
+	out.rcs_force_level = Vector3(-0.4, 0.2, 0.0)
+	out.rcs_torque_level = Vector3(0.1, 0.0, -0.7)
+	assert_almost_eq(AudioDirector.thruster_level(out), 0.7, 1e-6)
+
+
 func test_the_players_hum_plays_and_parked_raiders_are_silent() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame

@@ -17,7 +17,7 @@ var own_position: Vector3 = Vector3.ZERO
 var own_basis: Basis = Basis.IDENTITY
 var own_velocity: Vector3 = Vector3.ZERO
 var muzzle_position: Vector3 = Vector3.ZERO
-var weapon_speed_mps: float = 400.0
+var weapon_speed_mps: float = 1000.0
 var weapon_lifetime_s: float = 4.0
 var faction: StringName = Factions.EARTH_ALLIANCE
 

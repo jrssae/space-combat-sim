@@ -5,7 +5,7 @@ extends GutTest
 ## stepped by hand where a tick matters.
 
 const DT: float = 1.0 / 60.0
-const BOLT_SPEED: float = 400.0
+const BOLT_SPEED: float = 1000.0
 
 var main: Main
 var source: FakeInputSource
