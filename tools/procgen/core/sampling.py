@@ -34,8 +34,8 @@ from .ply import SplatData
 _R2_G = 1.32471795724474602596
 _R2_ALPHA = np.array([1.0 / _R2_G, 1.0 / _R2_G**2])
 
-DEFAULT_OVERLAP = 1.4  # in-plane sigma / spacing (architecture section 9.1: k = 1.4)
-DEFAULT_THICKNESS = 0.03  # sigma along the normal / spacing
+DEFAULT_OVERLAP = 1.0  # in-plane sigma / spacing (architecture section 9.1; 1.4 until the post-M2 play test found it soft and fat)
+DEFAULT_THICKNESS = 0.08  # sigma along the normal / spacing (thin discs seen edge-on shimmer; 0.03 until the post-M2 play test)
 DEFAULT_OPAQUE_ALPHA = 0.98
 
 

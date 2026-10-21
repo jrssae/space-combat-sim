@@ -12,7 +12,8 @@ locally. Everything below is on the `m1-first-flight` branch on GitHub. It is **
 | M2 Combat Sandbox plan | `docs/milestones/m2-combat-sandbox.md`: 14 tasks, acceptance criteria, your answers recorded |
 | M2 tasks done | **T01** combat maths, **T02** multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T05** raider ship and pool, **T06** destruction, **T07** AI, **T08** HUD, **T09** waves, **T12** sound, **T14** fuel tank + weapon capacitor, **T11** control profiles (see section 5) |
 | M2 tasks left | T10 (integration, capture set, play-test guide), T13 (only if you reject the raider look), T12, T13 (conditional) |
-| Tests | 265 Python + 1188 GUT, all passing; CI runs on every push |
+| M2 play-test round (2026-10-21) | **M2 AC15-AC19 passed.** The feedback round is done in commits `M2.1-*` (controls, speeds, HUD, sound, splats): table in `docs/milestones/m2-combat-sandbox.md`, "Post-M2 play-test round". **Waiting on your re-test** (GPU-only items: flicker and sharpness, engine sound, silhouettes) |
+| Tests | 265 Python + about 1 230 GUT, all passing; CI runs on every push |
 
 ## 2. Get it running locally
 

@@ -169,7 +169,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
     """Generate the buoy into ``ctx.out_dir``.
 
     Options: ``spacing`` (m, default 0.04; the CLI's ``--spacing``), ``overlap`` (sigma /
-    spacing, default 1.4), ``thickness`` (normal sigma / spacing, default 0.03).
+    spacing, default 1.0), ``thickness`` (normal sigma / spacing, default 0.08).
     """
     spacing = float(ctx.option("spacing", DEFAULT_SPACING_M))
     overlap = float(ctx.option("overlap", DEFAULT_OVERLAP))

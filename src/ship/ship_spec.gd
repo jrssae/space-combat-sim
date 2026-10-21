@@ -49,6 +49,8 @@ extends Resource
 @export var hull_max: float = 300.0
 ## HDR colour of the engine plumes (`ThrusterVisuals`). The default is the Starfury's blue-white.
 @export var engine_glow_color: Color = Color(0.7, 0.9, 1.8, 1.0)
+## Which main components the HUD's damage silhouette shows (`DamageZones.layout_from_name`): `x_fighter` or `delta`.
+@export var damage_layout: StringName = &"x_fighter"
 ## The ship's guns; null falls back to a default `WeaponSpec` (the Starfury's M1 numbers).
 @export var weapon: WeaponSpec = null
 

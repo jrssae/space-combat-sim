@@ -16,6 +16,18 @@ var velocity_visible: bool = false
 var velocity_pos: Vector2 = Vector2.ZERO
 var retrograde: bool = false
 var speed_mps: float = 0.0
+## Where the ship is going relative to where its nose points, degrees: horizontal (+ = to the right of the nose) and
+## vertical (+ = above the nose). 0 / 0 is flying straight ahead, 180 horizontal is flying backward. `velocity_angles_valid`
+## is false below `HudLayout.MIN_SPEED_FOR_MARKER_MPS`, where the direction means nothing.
+var velocity_h_deg: float = 0.0
+var velocity_v_deg: float = 0.0
+var velocity_angles_valid: bool = false
+## The reference point: distance to it, and the rate at which that distance closes (+ = approaching), m/s.
+var reference_valid: bool = false
+var reference_range_m: float = 0.0
+var reference_closing_mps: float = 0.0
+## Auto-track is holding the nose on the lead point.
+var tracking: bool = false
 
 ## The selected target: present, the box around it (only when it is on screen), its colour by relation and the readout.
 var target_present: bool = false
@@ -42,6 +54,14 @@ var hull_color: Color = Factions.HUD_LINE_COLOR
 var god: bool = false
 var fuel_fraction: float = 1.0
 var fuel_unlimited: bool = true
+## Damage silhouettes: the player's (over the hull gauge) and the selected target's (beside the radar). A layout of NONE means
+## nothing to draw.
+var own_layout: DamageZones.Layout = DamageZones.Layout.NONE
+var own_zones: PackedFloat32Array = PackedFloat32Array()
+var own_silhouette_rect: Rect2 = Rect2()
+var target_layout: DamageZones.Layout = DamageZones.Layout.NONE
+var target_zones: PackedFloat32Array = PackedFloat32Array()
+var target_silhouette_rect: Rect2 = Rect2()
 var charge_fraction: float = 1.0
 var fire_mode: String = ""
 var speed_pos: Vector2 = Vector2.ZERO

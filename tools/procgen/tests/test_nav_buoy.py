@@ -15,6 +15,7 @@ from tools.procgen.assets import nav_buoy as buoy
 from tools.procgen.core import frames
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
+from tools.procgen.core.sampling import DEFAULT_OVERLAP, DEFAULT_THICKNESS
 from tools.procgen.core.obj import read_obj
 from tools.procgen.core.ply import PROPERTY_NAMES, read_ply
 
@@ -110,8 +111,8 @@ class NavBuoyTests(unittest.TestCase):
     def test_splats_are_flat_oriented_opaque_discs(self) -> None:
         s = self.splats
         spacing = buoy.DEFAULT_SPACING_M
-        np.testing.assert_allclose(s.scale[:, :2], 1.4 * spacing, rtol=1e-4)
-        np.testing.assert_allclose(s.scale[:, 2], 0.03 * spacing, rtol=1e-3)
+        np.testing.assert_allclose(s.scale[:, :2], DEFAULT_OVERLAP * spacing, rtol=1e-4)
+        np.testing.assert_allclose(s.scale[:, 2], DEFAULT_THICKNESS * spacing, rtol=1e-3)
         rot = frames.quat_to_matrix(s.rot)
         normals = s.normals / np.linalg.norm(s.normals, axis=1, keepdims=True)
         self.assertGreater(float(np.abs(np.einsum("ij,ij->i", rot[:, :, 2], normals)).min()), 0.999)
@@ -221,7 +222,7 @@ class NavBuoyOptionTests(unittest.TestCase):
         self.assertAlmostEqual(fine.splat_count / coarse.splat_count, (0.08 / 0.05) ** 2, delta=0.15)
         self.assertEqual(coarse.warnings, ())  # the budget only applies at the default spacing
         splats = read_ply(self.dir / "c" / buoy.PLY_NAME).to_splats()
-        np.testing.assert_allclose(splats.scale[:, 0], 1.4 * 0.08, rtol=1e-4)
+        np.testing.assert_allclose(splats.scale[:, 0], DEFAULT_OVERLAP * 0.08, rtol=1e-4)
 
     def test_overlap_and_thickness_options(self) -> None:
         out = buoy.build(BuildContext(self.dir / "o", seed=1, options={"overlap": 1.0, "thickness": 0.1}))

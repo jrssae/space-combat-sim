@@ -20,6 +20,9 @@ var velocity: Vector3 = Vector3.ZERO
 ## Target hull 0..1, or -1 without a hull; and the radius of a sphere holding it (metres, 0 = unknown).
 var hull_fraction: float = -1.0
 var bounding_radius: float = 0.0
+## Damage by main component, as in `TargetInfo`.
+var damage_layout: DamageZones.Layout = DamageZones.Layout.NONE
+var damage_zones: PackedFloat32Array = PackedFloat32Array()
 
 
 func _to_string() -> String:

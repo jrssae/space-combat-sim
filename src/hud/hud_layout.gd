@@ -44,6 +44,17 @@ static func on_screen(input: HudInput, pos: Vector2) -> bool:
 	return pos.x >= 0.0 and pos.y >= 0.0 and pos.x <= input.viewport_size.x and pos.y <= input.viewport_size.y
 
 
+## Colour of a damage zone: the HUD's own green when untouched, then yellow, orange and red as it is wrecked (severity 0..1).
+static func damage_color(severity: float) -> Color:
+	if severity <= 0.0:
+		return Factions.HUD_LINE_COLOR
+	if severity < 0.34:
+		return Color(1.0, 0.9, 0.2)
+	if severity < 0.67:
+		return Color(1.0, 0.55, 0.15)
+	return RED
+
+
 static func hull_color(fraction: float) -> Color:
 	if fraction > 0.5:
 		return Factions.HUD_LINE_COLOR
@@ -60,6 +71,8 @@ static func _markers(input: HudInput, f: HudFrame) -> void:
 	f.boresight_pos = nose["pos"]
 	f.boresight_visible = bool(nose["in_front"]) and on_screen(input, f.boresight_pos)
 	f.speed_mps = input.own_velocity.length()
+	f.tracking = input.tracking
+	_velocity_readout(input, f)
 	if f.speed_mps < MIN_SPEED_FOR_MARKER_MPS:
 		return
 	var heading: Vector3 = input.own_velocity / f.speed_mps
@@ -73,6 +86,34 @@ static func _markers(input: HudInput, f: HudFrame) -> void:
 	f.retrograde = true
 	f.velocity_pos = retro["pos"]
 	f.velocity_visible = bool(retro["in_front"]) and on_screen(input, f.velocity_pos)
+
+
+# The speed with its direction against the nose, and the reference point's range and closing speed.
+static func _velocity_readout(input: HudInput, f: HudFrame) -> void:
+	if f.speed_mps >= MIN_SPEED_FOR_MARKER_MPS:
+		var angles: Vector2 = velocity_angles_deg(input.own_basis, input.own_velocity)
+		f.velocity_h_deg = angles.x
+		f.velocity_v_deg = angles.y
+		f.velocity_angles_valid = true
+	if input.has_reference:
+		var offset: Vector3 = input.reference_position - input.own_position
+		f.reference_range_m = offset.length()
+		f.reference_valid = true
+		if f.reference_range_m > 1e-3:
+			# Positive when the ship is closing on the reference: the ship's velocity relative to it, along the line to it.
+			f.reference_closing_mps = (input.own_velocity - input.reference_velocity).dot(offset / f.reference_range_m)
+
+
+## Direction of `velocity` against the nose of a ship with orientation `basis` (-Z forward): `x` is the horizontal angle,
+## positive to the right of the nose, in -180..180 (180 = flying backward); `y` the vertical angle, positive above the nose,
+## in -90..90. A velocity of zero gives (0, 0).
+static func velocity_angles_deg(basis: Basis, velocity: Vector3) -> Vector2:
+	var v: Vector3 = basis.transposed() * velocity
+	if v.length_squared() < 1e-12:
+		return Vector2.ZERO
+	var horizontal: float = rad_to_deg(atan2(v.x, -v.z))
+	var vertical: float = rad_to_deg(atan2(v.y, Vector2(v.x, v.z).length()))
+	return Vector2(horizontal, vertical)
 
 
 # --- target box, edge arrow, lead ------------------------------------------------------------------------------------
@@ -140,6 +181,8 @@ static func _gauges(input: HudInput, f: HudFrame) -> void:
 	f.god = input.god
 	f.fuel_fraction = clampf(input.fuel_fraction, 0.0, 1.0)
 	f.fuel_unlimited = input.fuel_unlimited
+	f.own_layout = input.damage_layout
+	f.own_zones = input.damage_zones
 	f.charge_fraction = clampf(input.charge_fraction, 0.0, 1.0)
 	f.fire_mode = input.fire_mode
 	var w: float = input.viewport_size.x
@@ -151,6 +194,8 @@ static func _gauges(input: HudInput, f: HudFrame) -> void:
 	f.hull_rect = Rect2(Vector2(margin, h - 90.0 * s), bar)
 	f.fuel_rect = Rect2(Vector2(margin, h - 56.0 * s), bar)
 	f.charge_rect = Rect2(Vector2(w - margin - bar.x, h - 56.0 * s), bar)
+	var outline := Vector2(150.0, 112.0) * s
+	f.own_silhouette_rect = Rect2(Vector2(margin, h - 98.0 * s - outline.y - 22.0 * s), outline)
 
 
 # --- targeting grid --------------------------------------------------------------------------------------------------
@@ -183,5 +228,10 @@ static func _grid(input: HudInput, f: HudFrame) -> void:
 
 static func _radar(input: HudInput, f: HudFrame) -> void:
 	f.radar_radius_px = 78.0 * f.scale
-	f.radar_centre = Vector2(input.viewport_size.x * 0.5, input.viewport_size.y - 150.0 * f.scale)
+	f.radar_centre = Vector2(input.viewport_size.x * 0.5, input.viewport_size.y - 176.0 * f.scale)
+	if input.target != null and input.target.damage_layout != DamageZones.Layout.NONE:
+		f.target_layout = input.target.damage_layout
+		f.target_zones = input.target.damage_zones
+		var outline := Vector2(150.0, 112.0) * f.scale
+		f.target_silhouette_rect = Rect2(f.radar_centre + Vector2(f.radar_radius_px + 28.0 * f.scale, -outline.y * 0.5), outline)
 	f.radar_dots = RadarModel.dots(input.contacts, input.selected_id, input.own_position, input.own_basis, input.faction)

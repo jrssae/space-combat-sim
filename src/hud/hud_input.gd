@@ -16,6 +16,13 @@ var show_grid: bool = false
 var own_position: Vector3 = Vector3.ZERO
 var own_basis: Basis = Basis.IDENTITY
 var own_velocity: Vector3 = Vector3.ZERO
+## The reference point the velocity is also read against (the launch point for now; later a station bay or a jump gate),
+## World frame, and its own velocity.
+var reference_position: Vector3 = Vector3.ZERO
+var reference_velocity: Vector3 = Vector3.ZERO
+var has_reference: bool = false
+## Auto-track is holding the nose on the lead point.
+var tracking: bool = false
 var muzzle_position: Vector3 = Vector3.ZERO
 var weapon_speed_mps: float = 1000.0
 var weapon_lifetime_s: float = 4.0
@@ -23,6 +30,9 @@ var faction: StringName = Factions.EARTH_ALLIANCE
 
 ## Gauges, 0..1 (fuel is 1 and `fuel_unlimited` true while the tank is never drawn down).
 var hull_fraction: float = 1.0
+## Damage by main component of the player's ship (the silhouette over the hull gauge), 0..1 per zone of `damage_layout`.
+var damage_layout: DamageZones.Layout = DamageZones.Layout.NONE
+var damage_zones: PackedFloat32Array = PackedFloat32Array()
 var god: bool = false
 var fuel_fraction: float = 1.0
 var fuel_unlimited: bool = true

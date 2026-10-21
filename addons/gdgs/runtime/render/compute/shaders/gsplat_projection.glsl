@@ -317,7 +317,10 @@ void main() {
 	// We bias the radius (w/ base=2.5x standard deviation) such that low opacity splats cover 
 	// fewer screen tiles. This has the effect of making the image *slightly* brighter while
 	// minimizing perceptible tile artifacts.
-	float radius = pow(splat_opacity, 0.2) * 2.5*sqrt(max(eigenvalues.x, eigenvalues.y));
+	// [space-combat-sim patch] the bias below cuts a splat of opacity 0.02 off at 1.15 sigma, where the Gaussian still has half its
+	// strength, and the cut follows the 16 px tile grid: the faint nebula splats showed as blocky, tile-aligned edges. The factor
+	// now stays at 0.9 or above (a cut at 2.25 sigma, under 8 % of the splat's own opacity); the cost is more tiles per faint splat.
+	float radius = max(pow(splat_opacity, 0.2), 0.9) * 2.5*sqrt(max(eigenvalues.x, eigenvalues.y));
 	uvec4 rect_bounds = get_rect(image_pos, radius, grid_size);
 	uint num_tiles_touched = (rect_bounds.z - rect_bounds.x)*(rect_bounds.w - rect_bounds.y);
 
@@ -356,7 +359,10 @@ void main() {
 	// Use clip-space w as a monotonic distance proxy so ordering stays front-to-back
 	// even when the renderer uses reverse-z projection.
 	float view_depth = max(0.0, clip_pos.w);
-	float depth01 = view_depth / (1.0 + view_depth);
+	// [space-combat-sim patch] view_depth / (1 + view_depth) squeezes everything beyond a few hundred metres into the same
+	// few 16-bit buckets (a 6 km step at the 20 km sky), so overlapping splats there tie and the radix sort puts them in a
+	// different order every frame: flicker. A log scale keeps a constant relative step (0.018 %: 2 mm at 10 m, 4 m at 20 km).
+	float depth01 = clamp(log2(1.0 + view_depth) / 17.0, 0.0, 1.0);
 	uint depth = uint(depth01 * 65535.0) & 0xFFFF;
 	// [space-combat-sim patch] the sort buffers are double-buffered (2x capacity); keys past capacity used to be written out
 	// of bounds (heap corruption on CPU Vulkan, tile garbage on GPUs). Drop the overflow instead.

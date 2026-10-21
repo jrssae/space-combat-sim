@@ -52,5 +52,10 @@ func get_target_velocity() -> Vector3:
 
 ## A snapshot for `TargetingSystem`: this tick's position and velocity, never kept across ticks.
 func to_target_info() -> TargetInfo:
-	return TargetInfo.new(get_instance_id(), display_name, faction, global_position, get_target_velocity(),
+	var info := TargetInfo.new(get_instance_id(), display_name, faction, global_position, get_target_velocity(),
 			get_hull_fraction(), get_bounding_radius())
+	var damageable: Damageable = Damageable.of(get_parent())
+	if damageable != null:
+		info.damage_layout = damageable.zones.layout
+		info.damage_zones = damageable.zone_severities()
+	return info

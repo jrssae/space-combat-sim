@@ -176,7 +176,7 @@ func respawn() -> void:
 	ship.process_mode = Node.PROCESS_MODE_INHERIT
 	ship.visible = true
 	ship.reset_to(Transform3D(_spawn_basis, world.universe_to_local(_spawn_position)))
-	combatant.damageable.hull.restore()
+	combatant.damageable.restore()
 	combatant.cannon.gate.reset()
 	ship.set_flight_command(FlightCommand.new())
 	ship.set_combat_command(CombatCommand.new())
@@ -210,6 +210,9 @@ func _build_hud_input() -> HudInput:
 	input.own_position = ship.global_position
 	input.own_basis = ship.global_basis
 	input.own_velocity = ship.linear_velocity
+	input.has_reference = true
+	input.reference_position = world.universe_to_local(_spawn_position)  # the launch point, for now
+	input.tracking = ship.get_flight_output().tracking
 	var muzzles: Array[Node3D] = ship.get_muzzles()
 	var mean := Vector3.ZERO
 	for muzzle: Node3D in muzzles:
@@ -219,6 +222,8 @@ func _build_hud_input() -> HudInput:
 	input.weapon_lifetime_s = cannon.weapon.lifetime_s
 	input.faction = combatant.faction
 	input.hull_fraction = combatant.damageable.hull.fraction()
+	input.damage_layout = combatant.damageable.zones.layout
+	input.damage_zones = combatant.damageable.zone_severities()
 	input.god = DebugConsole.flags.invulnerable
 	var tank: FuelTank = ship.get_fuel_tank()
 	input.fuel_fraction = tank.fraction()

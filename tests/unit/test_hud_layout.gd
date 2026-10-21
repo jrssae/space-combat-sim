@@ -339,3 +339,97 @@ func test_the_layout_carries_the_radar_dots() -> void:
 	assert_eq(f.radar_dots.size(), 1)
 	assert_true(f.radar_dots[0].selected)
 	assert_gt(f.radar_radius_px, 0.0)
+
+
+# --- Velocity direction against the nose, the reference point, damage colours (post-M2 HUD) -------------------------
+
+
+func test_velocity_angles_are_zero_when_flying_straight_ahead() -> void:
+	var angles: Vector2 = HudLayout.velocity_angles_deg(Basis.IDENTITY, Vector3(0.0, 0.0, -300.0))
+	assert_almost_eq(angles.x, 0.0, 1e-6)
+	assert_almost_eq(angles.y, 0.0, 1e-6)
+
+
+func test_velocity_angles_horizontal_is_right_of_the_nose_and_vertical_is_above_it() -> void:
+	var right: Vector2 = HudLayout.velocity_angles_deg(Basis.IDENTITY, Vector3(100.0, 0.0, -100.0))
+	assert_almost_eq(right.x, 45.0, 1e-6, "moving right of the nose")
+	assert_almost_eq(right.y, 0.0, 1e-6)
+	var up: Vector2 = HudLayout.velocity_angles_deg(Basis.IDENTITY, Vector3(0.0, 100.0, -100.0))
+	assert_almost_eq(up.y, 45.0, 1e-6, "moving above the nose")
+	assert_almost_eq(up.x, 0.0, 1e-6)
+	var down_left: Vector2 = HudLayout.velocity_angles_deg(Basis.IDENTITY, Vector3(-100.0, -100.0, -100.0))
+	assert_lt(down_left.x, 0.0)
+	assert_lt(down_left.y, 0.0)
+
+
+func test_velocity_angles_follow_the_ships_orientation() -> void:
+	# The ship yaws 30 degrees to the left but keeps moving along -Z: the travel direction is 30 degrees to its right.
+	var yawed := Basis(Vector3.UP, deg_to_rad(30.0))
+	var angles: Vector2 = HudLayout.velocity_angles_deg(yawed, Vector3(0.0, 0.0, -100.0))
+	assert_almost_eq(angles.x, 30.0, 1e-4)
+
+
+func test_flying_backward_is_180_horizontal() -> void:
+	var angles: Vector2 = HudLayout.velocity_angles_deg(Basis.IDENTITY, Vector3(0.0, 0.0, 100.0))
+	assert_almost_eq(absf(angles.x), 180.0, 1e-6)
+	assert_almost_eq(angles.y, 0.0, 1e-6)
+	assert_eq(HudLayout.velocity_angles_deg(Basis.IDENTITY, Vector3.ZERO), Vector2.ZERO)
+
+
+func test_the_frame_carries_the_angles_only_above_the_marker_speed() -> void:
+	var input := HudInput.new()
+	input.own_velocity = Vector3(10.0, 0.0, -10.0)
+	var frame: HudFrame = HudLayout.compute(input)
+	assert_true(frame.velocity_angles_valid)
+	assert_almost_eq(frame.velocity_h_deg, 45.0, 1e-4)
+	input.own_velocity = Vector3(0.1, 0.0, 0.0)
+	assert_false(HudLayout.compute(input).velocity_angles_valid, "too slow for a direction to mean anything")
+
+
+func test_reference_range_and_closing_speed() -> void:
+	var input := HudInput.new()
+	input.has_reference = true
+	input.reference_position = Vector3(0.0, 0.0, -1000.0)
+	input.own_velocity = Vector3(0.0, 0.0, -250.0)
+	var frame: HudFrame = HudLayout.compute(input)
+	assert_true(frame.reference_valid)
+	assert_almost_eq(frame.reference_range_m, 1000.0, 1e-6)
+	assert_almost_eq(frame.reference_closing_mps, 250.0, 1e-6, "approaching it")
+	input.own_velocity = Vector3(0.0, 0.0, 250.0)
+	assert_almost_eq(HudLayout.compute(input).reference_closing_mps, -250.0, 1e-6, "moving away")
+	input.own_velocity = Vector3(400.0, 0.0, 0.0)
+	assert_almost_eq(HudLayout.compute(input).reference_closing_mps, 0.0, 1e-6, "sideways neither closes nor opens")
+	input.has_reference = false
+	assert_false(HudLayout.compute(input).reference_valid)
+
+
+func test_damage_colours_run_from_green_through_yellow_and_orange_to_red() -> void:
+	assert_eq(HudLayout.damage_color(0.0), Factions.HUD_LINE_COLOR)
+	var yellow: Color = HudLayout.damage_color(0.2)
+	var orange: Color = HudLayout.damage_color(0.5)
+	var red: Color = HudLayout.damage_color(0.9)
+	assert_eq(red, HudLayout.RED)
+	assert_gt(yellow.g, orange.g, "yellow is greener than orange")
+	assert_gt(orange.g, red.g, "orange is greener than red")
+	assert_ne(yellow, orange)
+
+
+func test_the_silhouettes_come_from_the_input() -> void:
+	var input := HudInput.new()
+	input.damage_layout = DamageZones.Layout.X_FIGHTER
+	input.damage_zones = PackedFloat32Array([0.0, 0.5, 0.0, 0.0, 1.0])
+	var frame: HudFrame = HudLayout.compute(input)
+	assert_eq(frame.own_layout, DamageZones.Layout.X_FIGHTER)
+	assert_eq(frame.own_zones, input.damage_zones)
+	assert_gt(frame.own_silhouette_rect.size.x, 0.0)
+	assert_eq(frame.target_layout, DamageZones.Layout.NONE, "no target, no target silhouette")
+	var target := TargetReadout.new()
+	target.damage_layout = DamageZones.Layout.DELTA
+	target.damage_zones = PackedFloat32Array([0.0, 1.0, 0.0])
+	input.target = target
+	frame = HudLayout.compute(input)
+	assert_eq(frame.target_layout, DamageZones.Layout.DELTA)
+	assert_gt(frame.target_silhouette_rect.position.x, frame.radar_centre.x, "beside the radar")
+	var buoy := TargetReadout.new()
+	input.target = buoy
+	assert_eq(HudLayout.compute(input).target_layout, DamageZones.Layout.NONE, "a buoy has no zones")

@@ -483,7 +483,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
 
     Options: ``spacing`` (m, default 0.04; the CLI's ``--spacing``), ``cockpit_spacing`` (m,
     default half the spacing: the window segment's frames, chin and lining), ``overlap``
-    (sigma / spacing, default 1.4), ``thickness`` (normal sigma / spacing, default 0.03).
+    (sigma / spacing, default 1.0), ``thickness`` (normal sigma / spacing, default 0.08).
     """
     spacing = float(ctx.option("spacing", DEFAULT_SPACING_M))
     cockpit_spacing = float(

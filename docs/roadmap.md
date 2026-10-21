@@ -30,6 +30,21 @@ allies. Milestones M2-M7 build toward it; everything else follows it. Each miles
 | M13 Mission types | variety | rescue with towing (tether force), escort, asteroid fields, comets, random encounters in free flight | tether design (§14.7), procgen asteroid/comet assets, mission framework |
 | M14 Voiced dialog | the instructor speaks | offline TTS generator (`tools/procgen` asset kind `voice`): renders every dialog line from mission data on the user's machine with one voice per speaker plus a radio filter; output cached and gitignored. Candidate engine: Piper (`OHF-Voice/piper1-gpl`, GPL-3.0); only voice models whose licence permits it. Being produced by code, voices satisfy the procedural-only rule. Can be pulled forward any time after M7 | dialog lines as data (speaker, text, voice id) from M4; subtitles stay as the fallback |
 
+## Required: gravity
+
+Maintainer requirement (M2 play test): gravitational pull must be in the plan. It is, in three places: **M5** adds restricted
+n-body gravity with Kepler-rail bodies (the Epsilon star, Epsilon III and its moons) through `World.environment_accel`, which
+`Ship` already applies as `mass * env_accel` and the brake already feeds forward; **M8** adds honest gravity assists and Oberth
+burns for the time-warp work; **M10** gives hyperspace its own incline field through the same hook. What M5 must cover:
+
+- Ships, bolts and debris all feel it (bolts and debris as test particles, so a bolt fired near a planet curves).
+- The hard 9 999 m/s speed clamp in `Ship` is for thrust. A body falling toward a star can legitimately go faster, so M5 drops
+  the clamp and keeps only the thrust fade (`SpeedGovernor.thrust_gain`), or raises the limit with the scale of the system.
+- Low orbit around an Earth-sized body is about 7.8 km/s, inside the 5 000 / 9 999 m/s ceilings, so a ship can hold an orbit
+  with assist on only below 5 000 m/s of thrust-added speed; orbital speed is not "thrust-added", so M5 decides how assist's safe
+  speed is measured (relative to the dominant body) before orbits are flown.
+- The HUD's reference point (now the launch point) becomes the dominant body, bay or jump gate of the mission.
+
 Finite reaction mass can be switched on in any milestone after M8: `FlightOutput.mass_flow_kg_s` already exists.
 
 ## Required: alternate control profiles

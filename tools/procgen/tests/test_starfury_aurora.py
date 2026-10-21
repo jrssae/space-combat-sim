@@ -14,6 +14,7 @@ from tools.procgen.assets import starfury_aurora as ship
 from tools.procgen.core import frames
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
+from tools.procgen.core.sampling import DEFAULT_OVERLAP, DEFAULT_THICKNESS
 from tools.procgen.core.obj import read_obj
 from tools.procgen.core.ply import PROPERTY_NAMES, read_ply
 
@@ -199,9 +200,9 @@ class StarfuryAuroraTests(unittest.TestCase):
         a, b = self.slices["cockpit"]
         spacing = np.full(len(s.scale), ship.DEFAULT_SPACING_M)
         spacing[a:b] = self.manifest["sampling"]["cockpit_spacing_m"]
-        np.testing.assert_allclose(s.scale[:, 0], 1.4 * spacing, rtol=1e-4)
-        np.testing.assert_allclose(s.scale[:, 1], 1.4 * spacing, rtol=1e-4)
-        np.testing.assert_allclose(s.scale[:, 2], 0.03 * spacing, rtol=1e-3)
+        np.testing.assert_allclose(s.scale[:, 0], DEFAULT_OVERLAP * spacing, rtol=1e-4)
+        np.testing.assert_allclose(s.scale[:, 1], DEFAULT_OVERLAP * spacing, rtol=1e-4)
+        np.testing.assert_allclose(s.scale[:, 2], DEFAULT_THICKNESS * spacing, rtol=1e-3)
         rot = frames.quat_to_matrix(s.rot)
         normals = s.normals / np.linalg.norm(s.normals, axis=1, keepdims=True)
         agreement = np.abs(np.einsum("ij,ij->i", rot[:, :, 2], normals))
@@ -212,7 +213,7 @@ class StarfuryAuroraTests(unittest.TestCase):
         alpha = self.splats.alpha
         glass = alpha < 0.5
         self.assertTrue(np.all(alpha[~glass] > 0.979))
-        self.assertTrue(np.all(alpha[glass] < 0.05))
+        self.assertTrue(np.all(alpha[glass] < 0.07))  # 1 - 0.7^(1 / (2 pi k^2)) is 0.056 at k = 1
         self.assertTrue(0.002 < glass.mean() < 0.03, glass.mean())
         rgb = self.splats.rgb[glass]
         self.assertTrue(
@@ -670,10 +671,10 @@ class StarfuryOptionTests(unittest.TestCase):
         splats = read_ply(self.dir / "c" / ship.PLY_NAME).to_splats()
         a, b = slices(coarse.manifest)["cockpit"]
         np.testing.assert_allclose(
-            np.delete(splats.scale[:, 0], np.s_[a:b]), 0.14, rtol=1e-4
+            np.delete(splats.scale[:, 0], np.s_[a:b]), DEFAULT_OVERLAP * 0.1, rtol=1e-4
         )
         np.testing.assert_allclose(
-            splats.scale[a:b, 0], 1.4 * ship.COCKPIT_SPACING_FACTOR * 0.1, rtol=1e-4
+            splats.scale[a:b, 0], DEFAULT_OVERLAP * ship.COCKPIT_SPACING_FACTOR * 0.1, rtol=1e-4
         )
 
     def test_overlap_thickness_and_cockpit_spacing_options(self) -> None:

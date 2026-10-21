@@ -409,9 +409,15 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
 
 ### 5.6 Limits and later work
 
-- Jolt clamps body speed: `physics/jolt_physics_3d/limits/max_linear_velocity` (default 500 m/s, adjustable) and
-  `max_angular_velocity` (default 2700 °/s). M1 speeds stay under 200 m/s. Orbital speeds (km/s) are handled by
-  the moving `WorldFrame` (§14.1), not by raising the limit.
+- Jolt clamps body speed: `physics/jolt_physics_3d/limits/max_linear_velocity` (default 500 m/s) and
+  `max_angular_velocity` (default 2700 °/s). M1 speeds stayed under 200 m/s; after the M2 play test the project sets the
+  linear limit to 10 000 m/s, just above the ship's own ceiling (next bullet).
+- Speed ceilings (post-M2, `SpeedGovernor`, `ShipSpec.speed_limit_mps` = 9 999 and `assist_speed_max_mps` = 5 000): relativity
+  does not exist, but inertia grows with speed, so the thrust that reaches the hull is scaled by `sqrt(1 - (v / v_max)²)`
+  (effective mass `m / sqrt(1 - (v / v_max)²)`): full at rest, 87 % at 5 000 m/s, 0 at 9 999 m/s. Flight assist is a "maximum
+  safe speed": with assist on, thrust that would push the speed past 5 000 m/s is cancelled along the velocity (sideways thrust
+  stays, so the ship can still turn its velocity; coasting faster is left alone). `Ship` applies both to the force each
+  tick (never to torque) and clamps the speed at the limit as a last resort. Bolts leave at 1 000 m/s relative to the ship.
 - If Jolt ever becomes the obstacle, the fallback is a custom integrator driving a `Node3D`; the pure-class split
   (D5) keeps that contained.
 
@@ -425,11 +431,23 @@ RB  right retros (hold)           LB  left retros (hold)
 R-stick  pitch / roll (aim)       L-stick  strafe L/R + up/down
 D-pad L/R  yaw (ramped)           D-pad Down  next weapon
 D-pad Up  tap: next target        hold (0.35 s): target nearest the nose
-A  fire       B  flight assist    X  brake (hold): all stop; faces the target if one is selected
+A  fire       B  flight assist    X  auto-track (hold): the nose follows the lead point of the selected target
 Y  camera 1st/3rd
-R3  target ahead (if the pad has it)    L3  debug overlay (if the pad has it; F3 too)
+R3  brake (hold): all stop; faces the target if one is selected
+L3  free look (hold): the right stick turns the camera, not the ship; release returns it to the nose
 Back  reset                       Start  pause
 ```
+
+Revised after the M2 play test: X is the auto-track (`FlightCommand.autotrack`: pitch and yaw go to the attitude controller
+that swings the nose onto `track_dir_b`, the lead point of the selected target; thrust and drift are untouched), R3 is the
+brake, L3 is free look (`CameraLook`: cockpit head turn up to 135° / 80°, chase orbit around the ship; the right stick is an
+absolute direction, the mouse turns the view by its travel; released, the view eases back to centre). The debug overlay is F3
+only. The keyboard is split by hand: the left hand has the engines (Q/E/R mains, A/D/F retros), roll (Z/X), brake (Ctrl), the
+camera (Tab) and auto-track (Shift); the right hand has pitch and yaw (I/K, J/L), strafe (arrows), assist (Y), targets (U next,
+O previous, P nearest the nose), fire mode (H) and screenshot (N, Print). The mouse flies (its speed, smoothed over a few ticks,
+is the pitch and yaw rate command; `settings.mouse_full_rate_px_s`), mouse 1 fires, mouse 2 is the tap-or-hold target button,
+the wheel steps through the targets, the middle button is free look. The mouse is captured while flying and freed by the console,
+the pause or a lost window focus.
 
 Revised after the M1 play test on the maintainer's generic pad: yaw and roll swapped places (right stick X was
 yaw, the D-pad was roll), and because that pad has no stick clicks, `target_ahead` moved onto a D-pad Up hold
@@ -440,32 +458,37 @@ use for the standard layout; any pad SDL3 recognises, generic XInput clones incl
 
 | Action | Pad (Godot enum, index) | Keyboard | Type | Deadzone | Curve |
 |---|---|---|---|---|---|
-| `main_right` | RT `JOY_AXIS_TRIGGER_RIGHT` (axis 5, +) | E, W | analog 0..1 via `get_trigger` | 0.05 | linear |
-| `main_left` | LT `JOY_AXIS_TRIGGER_LEFT` (axis 4, +) | Q, W | analog 0..1 via `get_trigger` | 0.05 | linear |
-| `retro_right` | RB `JOY_BUTTON_RIGHT_SHOULDER` (10) | D, S | hold | - | - |
-| `retro_left` | LB `JOY_BUTTON_LEFT_SHOULDER` (9) | A, S | hold | - | - |
-| `pitch_down` / `pitch_up` | Right stick Y `JOY_AXIS_RIGHT_Y` (axis 3, -/+): stick back = nose up; `Settings.invert_y` flips | I / K | analog pair | radial 0.15 | expo 1.5 |
-| `roll_left` / `roll_right` | Right stick X `JOY_AXIS_RIGHT_X` (axis 2, -/+): stick right = roll right | U / O | analog pair | radial 0.15 (one deadzone with pitch) | expo 1.5 |
+| `main_right` | RT `JOY_AXIS_TRIGGER_RIGHT` (axis 5, +) | R, E | analog 0..1 via `get_trigger` | 0.05 | linear |
+| `main_left` | LT `JOY_AXIS_TRIGGER_LEFT` (axis 4, +) | Q, E | analog 0..1 via `get_trigger` | 0.05 | linear |
+| `retro_right` | RB `JOY_BUTTON_RIGHT_SHOULDER` (10) | F, D | hold | - | - |
+| `retro_left` | LB `JOY_BUTTON_LEFT_SHOULDER` (9) | A, D | hold | - | - |
+| `pitch_down` / `pitch_up` | Right stick Y `JOY_AXIS_RIGHT_Y` (axis 3, -/+): stick back = nose up; `Settings.invert_y` flips | I / K (and the mouse's Y) | analog pair | radial 0.15 | expo 1.5 |
+| `roll_left` / `roll_right` | Right stick X `JOY_AXIS_RIGHT_X` (axis 2, -/+): stick right = roll right | Z / X | analog pair | radial 0.15 (one deadzone with pitch) | expo 1.5 |
 | `strafe_left` / `strafe_right` | Left stick X `JOY_AXIS_LEFT_X` (axis 0, -/+) | Left / Right arrows | analog pair | radial 0.15 | linear |
 | `strafe_down` / `strafe_up` | Left stick Y `JOY_AXIS_LEFT_Y` (axis 1, +/-) | Down / Up arrows | analog pair | radial 0.15 | linear |
-| `yaw_left` / `yaw_right` | D-pad `JOY_BUTTON_DPAD_LEFT` / `DPAD_RIGHT` (13 / 14) | J / L | hold, ramped | - | 0→1 in 0.25 s |
-| `target_next` | D-pad `JOY_BUTTON_DPAD_UP` (11) | T | tap or hold: a tap gives `target_next` on release; a hold of 0.35 s gives `target_ahead` once | - | - |
-| `weapon_next` | D-pad `JOY_BUTTON_DPAD_DOWN` (12) | F | edge | - | - |
-| `target_ahead` | R3 `JOY_BUTTON_RIGHT_STICK` (8) | G | edge | - | - |
-| `fire` | A `JOY_BUTTON_A` (0) | Space, left mouse | hold | - | - |
-| `toggle_flight_assist` | B `JOY_BUTTON_B` (1) | Z | edge | - | - |
-| `brake` | X `JOY_BUTTON_X` (2) | X | hold | - | - |
-| `toggle_camera` | Y `JOY_BUTTON_Y` (3) | V | edge | - | - |
+| `yaw_left` / `yaw_right` | D-pad `JOY_BUTTON_DPAD_LEFT` / `DPAD_RIGHT` (13 / 14) | J / L (and the mouse's X) | hold, ramped | - | 0→1 in 0.25 s |
+| `target_next` | D-pad `JOY_BUTTON_DPAD_UP` (11) | U, mouse 2 | tap or hold: a tap gives `target_next` on release; a hold of 0.35 s gives `target_ahead` once | - | - |
+| `target_prev` | none (keyboard; the wheel steps both ways) | O | edge | - | - |
+| `weapon_next` | D-pad `JOY_BUTTON_DPAD_DOWN` (12) | H | edge | - | - |
+| `target_ahead` | none (the D-pad Up hold) | P | edge | - | - |
+| `fire` | A `JOY_BUTTON_A` (0) | Space, mouse 1 | hold | - | - |
+| `toggle_flight_assist` | B `JOY_BUTTON_B` (1) | Y | edge | - | - |
+| `brake` | R3 `JOY_BUTTON_RIGHT_STICK` (8) | Ctrl | hold | - | - |
+| `autotrack` | X `JOY_BUTTON_X` (2) | Shift | hold | - | - |
+| `camera_look` | L3 `JOY_BUTTON_LEFT_STICK` (7) | mouse 3 (middle) | hold | - | - |
+| `toggle_camera` | Y `JOY_BUTTON_Y` (3) | Tab | edge | - | - |
 | `reset_ship` | Back `JOY_BUTTON_BACK` (4) | Backspace | edge | - | - |
 | `pause` | Start `JOY_BUTTON_START` (6) | Esc | edge | - | - |
-| `debug_toggle_overlay` | L3 `JOY_BUTTON_LEFT_STICK` (7) | F3 | edge (toggles `settings.show_overlay`) | - | - |
+| `debug_toggle_overlay` | none | F3 | edge (toggles `settings.show_overlay`) | - | - |
+| `screenshot` | none | N, Print | edge (saves `user://screenshots/shot_<time>.png`) | - | - |
 | `debug_toggle_fallback_mesh` | none (debug, keyboard only) | F4 | edge | - | - |
 | *(console toggle, not an action)* | none | ` (physical `KEY_QUOTELEFT`, 96) | handled in `DebugConsole._input` | - | - |
 
 Notes:
 - Only axes 0-5 and buttons 0-14 are used. Guide (5) and SDL extras (paddles, misc, touchpad, ≥ 15) are not.
   No rumble, no impulse triggers, no light bar, no motion sensors.
-- W and S are "both sides" keys: the same key is an event on two actions.
+- E and D are "both sides" keys: the same key is an event on two actions. The mouse wheel is not an action (it cannot be held):
+  `Main._input` feeds wheel notches and mouse motion to `GodotInputSource`, which hands them to `InputAdapter` once per tick.
 - The ` key belongs to the console alone: it is not an `InputMap` action and must never be bound to one (a test
   enforces it). While the console is open, Esc closes it instead of pausing (keyboard gameplay bindings are
   masked, §6.4).

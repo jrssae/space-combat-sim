@@ -193,6 +193,8 @@ static func compute_readout(target: TargetInfo, ship_pos: Vector3, ship_vel: Vec
 	out.velocity = target.velocity
 	out.hull_fraction = target.hull_fraction
 	out.bounding_radius = target.bounding_radius
+	out.damage_layout = target.damage_layout
+	out.damage_zones = target.damage_zones
 	var d: PackedFloat64Array = _offset64(ship_pos, target.position)
 	var r: float = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2])
 	out.range_m = r

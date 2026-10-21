@@ -6,8 +6,10 @@ extends CanvasLayer
 ##
 ## Elements: boresight cross, prograde circle with wings or retrograde circle with a cross, target box (corner brackets) with
 ## name, range, closing speed and a hull bar, an edge arrow for an off-screen target, the lead diamond, a status line top
-## centre; bottom edge: speed (centre), hull and fuel bars (left), weapon charge and fire mode (right), the radar sphere above
-## the speed readout; in the cockpit view (or by `settings.hud_targeting_grid`) a translucent grid with a reticle low and
+## centre; bottom edge: speed (centre) with the direction of travel against the nose (horizontal then vertical degrees) and the
+## range and closing speed to the reference point, hull bar (left) with the ship's damage silhouette above it, a fuel bar
+## (only when the tank is finite), weapon charge and fire mode (right), the radar sphere above the speed readout and the target's
+## damage silhouette beside it; in the cockpit view (or by `settings.hud_targeting_grid`) a translucent grid with a reticle low and
 ## centred, and the target's offset from the nose on it.
 
 const LINE_COLOR: Color = Factions.HUD_LINE_COLOR
@@ -90,6 +92,10 @@ class HudCanvas extends Control:
 		_draw_grid(f, s, w)
 		_draw_gauges(f, s, w)
 		_draw_radar(f, s, w)
+		_draw_silhouette(f.own_layout, f.own_zones, f.own_silhouette_rect, "YOU", w)
+		_draw_silhouette(f.target_layout, f.target_zones, f.target_silhouette_rect, f.target_name, w)
+		if f.tracking:
+			_text("AUTO-TRACK", Vector2(f.viewport_size.x * 0.5, 62.0 * s), 16.0 * s, HudLayout.AMBER, HORIZONTAL_ALIGNMENT_CENTER)
 		if not f.status_line.is_empty():
 			_text(f.status_line, Vector2(f.viewport_size.x * 0.5, 36.0 * s), 18.0 * s, LINE_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
 
@@ -169,6 +175,16 @@ class HudCanvas extends Control:
 			var r: float = 9.0 * s
 			draw_polyline(PackedVector2Array([l + Vector2(0.0, -r), l + Vector2(r, 0.0), l + Vector2(0.0, r), l + Vector2(-r, 0.0), l + Vector2(0.0, -r)]), color, w)
 
+	## "H +12.5  V -3.0" (degrees off the nose, horizontal then vertical), or dashes when the ship is not moving.
+	static func angles_text(f: HudFrame) -> String:
+		if not f.velocity_angles_valid:
+			return "H ---    V ---"
+		return "H %+.1f°   V %+.1f°" % [f.velocity_h_deg, f.velocity_v_deg]
+
+	## "REF 3.2 km  +450 m/s": distance to the reference point and the speed at which it is closing (+) or opening (-).
+	static func reference_text(f: HudFrame) -> String:
+		return "REF %s  %+.0f m/s" % [_range_text(f.reference_range_m), f.reference_closing_mps]
+
 	static func _range_text(range_m: float) -> String:
 		return "%.2f km" % (range_m / 1000.0) if range_m >= 1000.0 else "%.0f m" % range_m
 
@@ -194,13 +210,37 @@ class HudCanvas extends Control:
 	# --- gauges -------------------------------------------------------------------------------------------------------
 
 	func _draw_gauges(f: HudFrame, s: float, w: float) -> void:
-		_text("%.0f m/s" % f.speed_mps, f.speed_pos, 22.0 * s, LINE_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
+		_text("%.0f m/s" % f.speed_mps, f.speed_pos + Vector2(0.0, -22.0 * s), 22.0 * s, LINE_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
+		_text(angles_text(f), f.speed_pos + Vector2(0.0, 0.0), 16.0 * s, LINE_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
+		if f.reference_valid:
+			_text(reference_text(f), f.speed_pos + Vector2(0.0, 20.0 * s), 14.0 * s, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.75), HORIZONTAL_ALIGNMENT_CENTER)
 		_bar(f.hull_rect, f.hull_fraction, f.hull_color, w)
 		_text("HULL" + ("  GOD" if f.god else ""), f.hull_rect.position + Vector2(0.0, -6.0 * s), 14.0 * s, f.hull_color)
-		_bar(f.fuel_rect, f.fuel_fraction, LINE_COLOR, w)
-		_text("FUEL  ∞" if f.fuel_unlimited else "FUEL", f.fuel_rect.position + Vector2(0.0, -6.0 * s), 14.0 * s, LINE_COLOR)
+		if not f.fuel_unlimited:
+			_bar(f.fuel_rect, f.fuel_fraction, LINE_COLOR, w)
+			_text("FUEL", f.fuel_rect.position + Vector2(0.0, -6.0 * s), 14.0 * s, LINE_COLOR)
 		_bar(f.charge_rect, f.charge_fraction, LINE_COLOR, w)
 		_text("CHARGE  %s" % f.fire_mode.to_upper(), f.charge_rect.position + Vector2(0.0, -6.0 * s), 14.0 * s, LINE_COLOR)
+
+	# --- damage silhouettes -----------------------------------------------------------------------------------------
+
+	# The outline of a ship's main components in `rect`, each filled by how badly it is hurt (green untouched, then yellow,
+	# orange, red), with `caption` above.
+	func _draw_silhouette(layout: DamageZones.Layout, zones: PackedFloat32Array, rect: Rect2, caption: String, w: float) -> void:
+		if layout == DamageZones.Layout.NONE or rect.size.x <= 0.0:
+			return
+		for entry: Dictionary in Silhouette.polygons(layout):
+			var zone: int = entry["zone"]
+			var severity: float = float(zones[zone]) if zone < zones.size() else 0.0
+			var color: Color = HudLayout.damage_color(severity)
+			var points := PackedVector2Array()
+			for p: Vector2 in entry["points"]:
+				points.append(rect.get_center() + p * rect.size)
+			draw_colored_polygon(points, Color(color.r, color.g, color.b, 0.16 if severity <= 0.0 else 0.6))
+			var closed := points.duplicate()
+			closed.append(points[0])
+			draw_polyline(closed, color, w * 0.75)
+		_text(caption, rect.position + Vector2(0.0, -4.0), 13.0 * (rect.size.y / 112.0), LINE_COLOR)
 
 	# --- radar sphere -----------------------------------------------------------------------------------------------
 

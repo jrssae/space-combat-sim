@@ -167,8 +167,6 @@ func _apply(damageable: Damageable, info: HitInfo) -> void:
 	damageable.apply_hit(info)
 	last_hit = "%s -> %s, %.1f of %.1f applied" % [_name_of(info.shooter_id), _name_of(info.target_id), info.applied,
 			info.damage]
-	if damageable.hull.destroyed_now:
-		print("HitResolver: %s destroyed" % _name_of(info.target_id))  # T06 (DestructionDirector) acts on `destroyed`
 
 
 func _name_of(body_id: int) -> String:
@@ -240,5 +238,5 @@ func _cmd_heal(args: Dictionary) -> ConsoleResult:
 	if healed.is_empty():
 		return ConsoleResult.failure("no %s hull to heal" % who)
 	for damageable: Damageable in healed:
-		damageable.hull.restore()
+		damageable.restore()
 	return ConsoleResult.line("restored %d hull(s)" % healed.size())

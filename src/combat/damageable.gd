@@ -24,6 +24,8 @@ const GROUP: StringName = &"damageable"
 
 var faction: StringName = Factions.NEUTRAL
 var hull: HullHealth = HullHealth.new()
+## Where the damage landed, by main component (the HUD's silhouettes).
+var zones: DamageZones = DamageZones.new()
 var shapes: Array[HitShape] = []
 ## Radius of a sphere around the body origin that holds every shape (broad phase).
 var bounding_radius: float = 0.0
@@ -52,10 +54,11 @@ static func of(owner: Node) -> Damageable:
 ## Builds the hull and the hit volumes. `collision` is `Hardpoints.collision`; entries that are not a box or a
 ## capsule are skipped. Calling it again replaces everything and restores the hull.
 func setup(collision: Array[Dictionary], hull_max: float, p_faction: StringName, p_respects_god_mode: bool = false,
-		register_console: bool = false) -> void:
+		register_console: bool = false, damage_layout: StringName = &"") -> void:
 	faction = p_faction
 	respects_god_mode = p_respects_god_mode
 	hull = HullHealth.new(hull_max)
+	zones = DamageZones.new(DamageZones.layout_from_name(damage_layout))
 	shapes.clear()
 	bounding_radius = 0.0
 	for entry: Dictionary in collision:
@@ -90,9 +93,23 @@ func apply_hit(info: HitInfo) -> void:
 		applied = hull.apply(info.damage)
 	info.applied = applied
 	if applied > 0.0:
+		var b: Node3D = body()
+		if b != null and b.is_inside_tree():
+			zones.record(b.global_transform.affine_inverse() * info.point, applied)
 		damaged.emit(info, applied)
 	if hull.destroyed_now:
 		destroyed.emit(info)
+
+
+## A full, intact hull again (respawn, pool re-use, console `heal`): the hull points and the damage zones.
+func restore() -> void:
+	hull.restore()
+	zones.reset()
+
+
+## 0..1 damage per zone of the silhouette (empty when the ship has no layout): see `DamageZones`.
+func zone_severities() -> PackedFloat32Array:
+	return zones.severities(hull.max_hp)
 
 
 ## Destroys the hull outright, bypassing god mode (console `kill`): the remaining hull points are applied as one hit with

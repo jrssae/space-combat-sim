@@ -5,6 +5,7 @@
 
 [resource]
 script = ExtResource("1_ship_spec")
+damage_layout = &"delta"
 asset_id = "raider_fighter"
 mass = 20000.0
 inertia = Vector3(140000, 560000, 430000)

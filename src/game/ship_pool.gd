@@ -95,7 +95,7 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	ship.set_combat_command(CombatCommand.new())
 	ship.targeting.clear_selection()
 	combatant.cannon.gate.reset()
-	combatant.damageable.hull.restore()
+	combatant.damageable.restore()
 	combatant.display_name = display_name
 	combatant.targetable.display_name = display_name
 	_set_brain(combatant, brain)

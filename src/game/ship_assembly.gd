@@ -81,7 +81,7 @@ static func _wire(combatant: Combatant, projectiles_parent: Node3D, console_owne
 	var ship: Ship = combatant.ship
 	combatant.thrusters.setup(ship.get_layout(), ship.get_flight_output)
 	combatant.damageable.setup(ship.get_hardpoints().collision, ship.spec.hull_max, combatant.faction,
-			combatant.is_player, console_owner)
+			combatant.is_player, console_owner, ship.spec.damage_layout)
 	var muzzles: Array[Node3D] = ship.get_muzzles()
 	if muzzles.is_empty():
 		push_warning("ShipAssembly: %s has no muzzles; its cannon cannot fire" % ship.spec.asset_id)

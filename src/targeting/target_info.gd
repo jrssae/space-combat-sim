@@ -18,6 +18,9 @@ var velocity: Vector3 = Vector3.ZERO
 var hull_fraction: float = -1.0
 ## Radius of a sphere around the target that holds it (its `Damageable`'s), metres; 0 when unknown. Sizes the HUD's target box.
 var bounding_radius: float = 0.0
+## Damage by main component, 0..1 per zone of `damage_layout` (empty without zones): the HUD's target silhouette.
+var damage_layout: DamageZones.Layout = DamageZones.Layout.NONE
+var damage_zones: PackedFloat32Array = PackedFloat32Array()
 
 
 func _init(p_id: int = 0, p_display_name: String = "", p_faction: StringName = &"neutral",

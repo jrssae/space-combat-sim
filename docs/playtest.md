@@ -40,29 +40,53 @@ Right stick   pitch / roll (stick back = nose up,    Left stick  strafe left/rig
               stick right = roll right)
 D-pad L/R     yaw (tap for fine corrections)         D-pad Down  fire mode
 D-pad Up      tap: next target                       hold (about 0.35 s): target nearest the nose
-X             brake (hold): all stop; with a target selected the nose also swings onto it
+X (hold)      auto-track: the nose swings onto the lead reticle of the selected target and stays there;
+              your speed and direction are untouched, so you can keep thrusting and strafing while you aim
+R3            brake (hold): all stop; with a target selected the nose also swings onto it
+L3 (hold)     free look: the right stick looks around instead of flying (cockpit: your head turns; chase: the camera
+              pans around the ship). Let go and the view returns to the nose. The ship ignores the stick meanwhile.
 A             fire                                   B  flight assist on/off      Y  cockpit / chase camera
 Back          respawn                                Start  pause
-R3            target nearest the nose (if the pad has stick clicks)    L3  debug overlay (if the pad has it)
 ```
 
-Changed after the first play test: yaw and roll swapped (the right stick used to yaw and the D-pad to roll), and
-target-ahead moved to a D-pad Up hold because the pad had no stick clicks. R3 and L3 still work on pads that have
-them; F3 toggles the overlay from the keyboard. Tune the hold with `set settings.target_hold_s 0.5` and the D-pad
-yaw ramp with `set settings.yaw_ramp_s 0.4` (then `save` to keep them).
+Keyboard and mouse (left hand flies the engines, right hand aims):
 
-Keyboard fallback: W both mains, E/Q right/left main, S both retros, D/A right/left retro, I/K pitch, J/L yaw
-(ramped like the D-pad), arrows strafe, U/O roll, Space fire, X brake, Z assist, V camera, T target (tap next, hold
-ahead), F fire mode, G target ahead, Backspace respawn, Esc pause, F3 overlay, F4 fallback meshes. The ` key opens
-the debug console.
+```
+Q / E / R     left main / both mains / right main     A / D / F   left retro / both retros / right retro
+Z / X         roll left / right                       Ctrl        brake (hold)           Shift  auto-track (hold)
+Tab           cockpit / chase camera                  Space       fire
+Mouse         pitch and yaw: how fast you move it is how fast you turn (stop the mouse and the turn stops)
+Mouse 1       fire                                    Mouse 2     tap: next target, hold: target nearest the nose
+Wheel         previous / next target                  Middle button (hold)  free look, as L3
+I / K         pitch                                   J / L       yaw (ramped like the D-pad)
+Arrows        strafe left/right, up/down              Y           flight assist on/off
+U / O         next / previous target                  P           target nearest the nose
+H             fire mode                               N or Print  screenshot (saved to user://screenshots/, path printed)
+Backspace     respawn                                 Esc         pause (also frees the mouse)       F3  debug overlay   F4  fallback meshes
+```
+
+The ` key opens the debug console; it frees the mouse while open. Mouse feel: `set settings.mouse_full_rate_px_s 1200`
+(the mouse speed that commands the full turn rate; lower = more sensitive) and `set settings.mouse_look_deg_per_px 0.12`
+(free look). Sizes: `set settings.debug_text_size 22` (overlay text) and `set settings.chase_bolt_scale 3` (how much larger bolts
+are drawn in the chase view). Add `save` to keep a setting.
+
+Changed after the first play test: yaw and roll swapped (the right stick used to yaw and the D-pad to roll), and
+target-ahead moved to a D-pad Up hold because the pad had no stick clicks. Changed after the M2 play test: X is auto-track and
+R3 is the brake; L3 is free look (the debug overlay is F3 only); the keyboard moved to the layout above and the mouse flies.
+Tune the hold with `set settings.target_hold_s 0.5` and the D-pad yaw ramp with `set settings.yaw_ramp_s 0.4`.
 
 Flight notes:
-- Newtonian: letting go of the triggers does not slow you down. Use the retros or hold X to brake.
-- X is an all stop in both assist modes: it kills drift and any spin, and ignores the sticks, D-pad and triggers
+- Newtonian: letting go of the triggers does not slow you down. Use the retros or hold R3 (Ctrl) to brake.
+- R3 (Ctrl) is an all stop in both assist modes: it kills drift and any spin, and ignores the sticks, D-pad and triggers
   while held. With a target selected it also turns the nose onto the target (about 2.6 s from 90° off) and holds it
-  there; release X to fly again.
+  there; release it to fly again.
+- X (Shift) auto-tracks: only the nose is taken over (pitch and yaw; roll stays yours), the thrust and the drift are not.
+- Speed: thrust fades as you go faster (the ship gets heavier, like relativity without the rest), so 9 999 m/s is the most you
+  can reach and the last thousand take a long time. With assist on the flight computer stops adding speed at 5 000 m/s,
+  the "maximum safe speed"; switch assist off (B) to go beyond it. Bolts leave at 1 000 m/s relative to your ship, so fired
+  forward at 5 000 m/s they fly at 6 000 m/s, fired backward at 4 000 m/s.
 - Assist on (default): uneven triggers turn the ship smoothly (overlay `POD YAW`). Assist off: raw physics,
-  so uneven pods tank-steer and spins persist (until you hold X).
+  so uneven pods tank-steer and spins persist (until you hold R3).
 
 ## Debug console cheat sheet
 
@@ -123,7 +147,7 @@ The full wording is in `docs/milestones/m1-first-flight.md`. Tick each one, or n
 - [ ] **AC14 Controls.** Equal triggers fly straight. With assist off, RT alone yaws left and LT alone yaws right.
       Bumpers retro per side. With assist on, one trigger turns at about 30 °/s and stops on release. Right stick
       pitches and rolls; D-pad left/right yaws (taps give fine yaw). Triggers reach full and rest at zero (overlay
-      `PAD … axes`). No stick drift. Holding X brings you to an all stop (drift and spin) in both modes, and with a
+      `PAD … axes`). No stick drift. Holding R3 brings you to an all stop (drift and spin) in both modes, and with a
       target selected swings the nose onto it. B and Y work.
 - [ ] **AC15 Performance.** 60 fps at 1080p (overlay FPS), no hitch when firing.
 - [ ] **AC16 Glow and guns.** Pod plumes come out of the nozzles along their axes and follow each side's thrust,
@@ -179,10 +203,15 @@ corner brackets     the selected target: red hostile, blue friendly, yellow neut
 arrow on the edge   the selected target is off screen or behind you
 diamond             the lead point: put it on the target and fire. It hides when the bolt cannot reach (too far, or the
                     target outruns it)
-bottom left         HULL bar (green, amber under 50 %, red under 25 %; GOD when `god` is on) and FUEL bar (full with an
-                    infinity mark while fuel is unlimited)
+bottom left         HULL bar (green, amber under 50 %, red under 25 %; GOD when `god` is on) and a FUEL bar (only when the
+                    tank is finite: `set settings.fuel_unlimited off`). Above it, your ship's outline (front view: cabin and the
+                    four arms): a part turns yellow, orange, then red as it takes damage
+beside the radar    the target's outline in the same colours (Raiders: the two wings and the centre), while a ship is selected
 bottom right        CHARGE: the weapon capacitor and the fire mode
-bottom centre       speed, with the radar sphere above it: the nose is up the screen, a dot per contact within 25 km (linear
+bottom centre       three lines: speed (m/s); H and V, the horizontal and vertical angle of your direction of travel against
+                    your nose in degrees (H + is to the right, V + is up; 0 / 0 = flying straight ahead, H 180 = backward);
+                    REF, the distance to the launch point and how fast you are closing on it (+) or opening (-). The radar
+                    sphere sits above them: the nose is up the screen, a dot per contact within 25 km (linear
                     to 5 km, logarithmic beyond), coloured by faction, the selected one ringed; the stalk shows above or below
 cockpit grid        in the cockpit (or `set settings.hud_targeting_grid on`): an 8 x 8 grid with a circle; the square marker
                     is the target's offset from the nose (+-30 degrees)
