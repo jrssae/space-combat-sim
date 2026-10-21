@@ -45,6 +45,24 @@ static func load_file(path: String) -> Hardpoints:
 	return from_json_text(file.get_as_text())
 
 
+## The collision primitives of a hardpoints file that has nothing else a ship needs (a prop such as the nav buoy has no pods,
+## muzzles or centre of mass): the same `collision` entries a full `Hardpoints` gives, or an empty array when the file or
+## its `collision` list is unusable.
+static func load_collision_only(path: String) -> Array[Dictionary]:
+	var hp := Hardpoints.new()
+	var out: Array[Dictionary] = []
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return out
+	var data: Variant = JSON.parse_string(file.get_as_text())
+	if not (data is Dictionary) or not ((data as Dictionary).get("collision") is Array):
+		return out
+	for value: Variant in (data as Dictionary)["collision"] as Array:
+		if not hp._parse_collision(value).is_empty():
+			return [] as Array[Dictionary]
+	return hp.collision
+
+
 static func from_json_text(text: String) -> Hardpoints:
 	var json := JSON.new()
 	if json.parse(text) != OK:

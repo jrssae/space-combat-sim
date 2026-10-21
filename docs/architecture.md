@@ -1481,3 +1481,16 @@ Details per task are in the as-built notes of `docs/milestones/m2-combat-sandbox
 | Hardpoints `chunks[]` via `core/chunks.py` | T04 | Per-asset debris code for every later ship |
 | Pools filled at scenario load | T05 | Spawn hitches when missions spawn ships (M4) |
 | `ControlProfile` | T11 | HOTAS / keyboard+mouse / menu remapping starting from scratch |
+
+
+### 15.16 Post-M2 additions
+
+- **Destructible nav buoys.** `NavBuoy` carries a `Damageable` built from its `hardpoints.json` collision list (`Hardpoints.load_collision_only`, a
+  prop has no pods or muzzles) with 60 hull points, neutral to every faction but `hit_by_anyone` (`Damageable.can_be_hit_by`: a bolt of its own
+  faction still passes). `DestructionDirector.watch_buoy` blows it up (explosion, generic shards, explosion sound) and `NavBuoy.set_destroyed`
+  hides and disables it without freeing it (D22); `Main.respawn` restores every buoy.
+- **Newtonian invariant.** Every ship, the player's and the AI's, goes through the one `FlightModel`, which only produces nozzle forces and torques.
+  Turning (sticks, assist, auto-track, brake-facing) is torque only, so the velocity changes only when pod or RCS nozzles fire (the brake is nozzles
+  firing). The only writes to `linear_velocity` in `src/` are pool spawn / release, `reset_to` (respawn) and the 9 999 m/s ceiling clamp.
+  Tests: `test_flight_model::test_turning_alone_never_produces_a_net_force`, `test_speed_and_autotrack` (a 180 degree auto-track turn at 250 m/s
+  leaves the velocity unchanged to 0.01 m/s).

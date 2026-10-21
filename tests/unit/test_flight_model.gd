@@ -591,6 +591,36 @@ func test_brake_simulation_faces_a_target_critically_damped() -> void:
 # --- helpers ---------------------------------------------------------------------------------------------------------
 
 
+# --- Newtonian invariant: turning never pushes the ship ------------------------------------------------------------------
+
+
+# With no throttle, no retro and no strafe demanded, every way of turning (sticks, D-pad, assist, auto-track onto a target,
+# facing a target) produces torque only: the translational force is exactly zero, so the velocity cannot change. Only the
+# nozzles firing (or the brake, which is nozzles firing) can change it.
+func test_turning_alone_never_produces_a_net_force() -> void:
+	var turns: Array[FlightCommand] = []
+	var sticks := _cmd()
+	sticks.rot = Vector3(1.0, -1.0, 0.7)
+	turns.append(sticks)
+	var tracking := _cmd()
+	tracking.autotrack = true
+	tracking.track_dir_b = Vector3(0.6, -0.3, 0.7)  # a target behind and to one side: the longest turn
+	tracking.track_rate_b = Vector3(0.1, -0.2, 0.0)
+	turns.append(tracking)
+	var tracking_and_sticks := _cmd()
+	tracking_and_sticks.autotrack = true
+	tracking_and_sticks.track_dir_b = Vector3(-0.2, 0.9, 0.4)
+	tracking_and_sticks.rot = Vector3(0.0, 0.0, 1.0)
+	turns.append(tracking_and_sticks)
+	var velocity_b := Vector3(40.0, -10.0, -900.0)  # a ship in fast motion: nothing in the model may react to it
+	for assist_on: bool in [true, false]:
+		for cmd: FlightCommand in turns:
+			var out: FlightOutput = model.compute(cmd, velocity_b, Vector3.ZERO, Vector3.ZERO, assist_on, DT)
+			assert_almost_eq(out.pod_force_b.length(), 0.0, SUM_TOL, "no pod thrust (assist %s)" % assist_on)
+			assert_eq(out.rcs_force_b, Vector3.ZERO, "no RCS translation (assist %s)" % assist_on)
+			assert_almost_eq(out.force_b.length(), 0.0, SUM_TOL, "so no net force (assist %s)" % assist_on)
+
+
 func _cmd() -> FlightCommand:
 	return FlightCommand.new()
 

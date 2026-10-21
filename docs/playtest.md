@@ -78,6 +78,9 @@ target-ahead moved to a D-pad Up hold because the pad had no stick clicks. Chang
 R3 is the brake; L3 is free look (the debug overlay is F3 only); the keyboard moved to the layout above and the mouse flies.
 Tune the hold with `set settings.target_hold_s 0.5` and the D-pad yaw ramp with `set settings.yaw_ramp_s 0.4`.
 
+Nav buoys can be shot: six hits (60 hull) and one blows up with an explosion and shards. A destroyed buoy is gone until you
+respawn (Back / Backspace, or dying), which restores them all. Any ship's bolts hurt them.
+
 Flight notes:
 - Newtonian: letting go of the triggers does not slow you down. Use the retros or hold R3 (Ctrl) to brake.
 - R3 (Ctrl) is an all stop in both assist modes: it kills drift and any spin, and ignores the sticks, D-pad and triggers

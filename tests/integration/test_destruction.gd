@@ -104,7 +104,8 @@ func test_no_later_bolt_hits_a_destroyed_raider() -> void:
 	var position: Vector3 = raider.ship.global_position
 	_bolt_at(raider)
 	_step_bolts_and_resolve()
-	var hits: int = resolver.hits_total
+	var hits_on_raider: Array[int] = [0]
+	raider.damageable.hit_taken.connect(func(_info: HitInfo) -> void: hits_on_raider[0] += 1)
 	var late := (load(Projectile.SCENE_PATH) as PackedScene).instantiate() as Projectile
 	main.projectiles.add_child(late)
 	late.configure(main.ship.spec.weapon)
@@ -114,7 +115,7 @@ func test_no_later_bolt_hits_a_destroyed_raider() -> void:
 	late.set_physics_process(false)
 	for i: int in 20:
 		_step_bolts_and_resolve()
-	assert_eq(resolver.hits_total, hits, "nothing else was hit")
+	assert_eq(hits_on_raider[0], 0, "the destroyed raider was not hit again")
 
 
 func test_the_players_selection_clears_within_one_tick() -> void:

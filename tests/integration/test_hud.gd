@@ -131,11 +131,11 @@ func test_a_selected_raider_gets_a_box_a_lead_and_a_hull_bar() -> void:
 	assert_gt(f.radar_dots.size(), 0)
 
 
-func test_a_selected_buoy_has_no_hull_bar() -> void:
+func test_a_selected_buoy_has_a_full_hull_bar_and_neutral_colour() -> void:
 	main.ship.targeting.refresh()
 	main.ship.targeting.select_by_name("NAV ALPHA")
 	var f: HudFrame = HudLayout.compute(main._build_hud_input())
-	assert_eq(f.target_hull, -1.0)
+	assert_eq(f.target_hull, 1.0)
 	assert_eq(f.target_color, Factions.NEUTRAL_COLOR)
 
 
@@ -205,8 +205,8 @@ func test_targetable_reports_hull_and_bounding_radius_or_the_absence_of_them() -
 			if child is Targetable:
 				buoy = child as Targetable
 	assert_not_null(buoy)
-	assert_eq(buoy.get_hull_fraction(), -1.0, "a buoy has no hull")
-	assert_eq(buoy.get_bounding_radius(), 0.0)
+	assert_eq(buoy.get_hull_fraction(), 1.0, "a buoy has a hull since it became destructible")
+	assert_gt(buoy.get_bounding_radius(), 1.0)
 	var readout: TargetReadout = main.ship.targeting.selected_readout()
 	assert_almost_eq(readout.hull_fraction, 0.5, 1e-6)
 	assert_eq(readout.velocity, raider.ship.linear_velocity)

@@ -218,6 +218,7 @@ func connect_combat(resolver: HitResolver, destruction: DestructionDirector, p_p
 		resolver.hit_resolved.connect(func(info: HitInfo) -> void: play(&"hit_hull", info.point, -4.0, randf_range(0.92, 1.08)))
 	if destruction != null:
 		destruction.raider_destroyed.connect(func(c: Combatant, _info: HitInfo) -> void: play(&"explosion", c.ship.global_position, 3.0))
+		destruction.buoy_destroyed.connect(func(buoy: NavBuoy, _info: HitInfo) -> void: play(&"explosion", buoy.global_position, 0.0, 1.15))
 		destruction.player_destroyed.connect(func(_info: HitInfo) -> void: play(&"explosion", player.ship.global_position, 3.0))
 	if player != null:
 		player.ship.targeting.target_changed.connect(func(id: int) -> void:

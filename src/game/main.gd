@@ -187,6 +187,8 @@ func respawn() -> void:
 	ship.visible = true
 	ship.reset_to(Transform3D(_spawn_basis, world.universe_to_local(_spawn_position)))
 	combatant.damageable.restore()
+	for buoy: NavBuoy in buoys:
+		buoy.restore()
 	combatant.cannon.gate.reset()
 	ship.set_flight_command(FlightCommand.new())
 	ship.set_combat_command(CombatCommand.new())
@@ -299,6 +301,7 @@ func _spawn_props(props: Array) -> void:
 		var buoy: NavBuoy = NavBuoy.create(String(entry["name"]), entry["velocity"])
 		world.spawn(buoy, entry["position"], Basis.IDENTITY, targets)
 		buoys.append(buoy)
+		director.watch_buoy(buoy)
 
 
 func _handle_ui(ui: UiCommand) -> void:

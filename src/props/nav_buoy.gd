@@ -1,8 +1,10 @@
 class_name NavBuoy
 extends Node3D
-## An inert navigation buoy, the M1 target marker (architecture §6.3, §7.1, §9.3): a splat body, a blinking beacon
-## mesh on the mast, a 10 deg/s spin about its long axis (+Y), an optional constant drift, and a `Targetable`. No
-## collision; nothing can hit it.
+## A navigation buoy, the M1 target marker (architecture §6.3, §7.1, §9.3): a splat body, a blinking beacon
+## mesh on the mast, a 10 deg/s spin about its long axis (+Y), an optional constant drift, a `Targetable` and (post-M2) a
+## `Damageable`: any bolt hurts it (`hit_by_anyone`, it is neutral to everyone), and at zero hull the `DestructionDirector`
+## blows it up and calls `set_destroyed(true)`: hidden and not processing, so nothing targets or hits it, but never freed (no
+## splat node leaves the tree during play, D22). `restore()` brings it back with a full hull (the player's respawn does that).
 ##
 ## Spawn it through `World` from a scenario entry: `world.spawn(NavBuoy.create(name, velocity), position)`. It joins
 ## `world_shiftable` itself as well, so a rebase moves it whichever way it was added.
@@ -28,6 +30,12 @@ const BLINK_DUTY: float = 0.25
 ## Where the beacon goes when `hardpoints.json` is missing (the generator's value at seed 42, to the centimetre).
 const DEFAULT_BEACON_POSITION: Vector3 = Vector3(0.0, 2.46, 0.0)
 const DEFAULT_BEACON_RADIUS: float = 0.1
+
+## Hull points of a buoy: six pulse-cannon hits.
+const HULL_MAX: float = 60.0
+
+## The buoy's hull (nodes are added in `_ready`).
+var damageable: Damageable = null
 
 ## Shown in the target readout and used by the console (`set targeting.selected "NAV ALPHA"`).
 @export var display_name: String = "NAV BUOY":
@@ -94,6 +102,7 @@ func _ready() -> void:
 	use_fallback_mesh(_fallback_active)
 	_sync_targetable()
 	_update_beacon()
+	_build_hull()
 
 
 func _physics_process(delta: float) -> void:
@@ -106,6 +115,32 @@ func _physics_process(delta: float) -> void:
 
 func _process(_delta: float) -> void:
 	_update_beacon()
+
+
+## True from the destroying hit until `restore`.
+func is_destroyed() -> bool:
+	return damageable != null and damageable.hull.destroyed
+
+
+## Takes the buoy out of play (or back in): hidden and not processing, never freed. The `DestructionDirector` calls it.
+func set_destroyed(gone: bool) -> void:
+	visible = not gone
+	process_mode = Node.PROCESS_MODE_DISABLED if gone else Node.PROCESS_MODE_INHERIT
+
+
+## A full hull again, back in play (the player's respawn).
+func restore() -> void:
+	if damageable != null:
+		damageable.restore()
+	set_destroyed(false)
+
+
+func _build_hull() -> void:
+	damageable = Damageable.new()
+	damageable.name = "Damageable"
+	add_child(damageable)
+	damageable.setup(Hardpoints.load_collision_only(HARDPOINTS_PATH), HULL_MAX, Factions.NEUTRAL)
+	damageable.hit_by_anyone = true
 
 
 ## Shows the fallback mesh instead of the splats (splats unavailable, or the F4 comparison toggle).

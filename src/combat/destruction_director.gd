@@ -14,6 +14,8 @@ extends Node
 
 ## A raider was destroyed (it is already back in the pool).
 signal raider_destroyed(combatant: Combatant, info: HitInfo)
+## A nav buoy was destroyed (it is already hidden and out of play).
+signal buoy_destroyed(buoy: NavBuoy, info: HitInfo)
 ## The player's hull reached zero.
 signal player_destroyed(info: HitInfo)
 ## `RESPAWN_DELAY_S` of sim time passed since the player died.
@@ -69,6 +71,13 @@ func watch(combatant: Combatant) -> void:
 	combatant.damageable.destroyed.connect(_on_destroyed.bind(combatant))
 
 
+## Reacts to this buoy's `destroyed` from now on: an explosion and shards at its position, then it leaves play (hidden, not freed).
+func watch_buoy(buoy: NavBuoy) -> void:
+	if buoy == null or buoy.damageable == null:
+		return
+	buoy.damageable.destroyed.connect(_on_buoy_destroyed.bind(buoy))
+
+
 ## True while a respawn of the player is pending.
 func respawn_pending() -> bool:
 	return _respawn_at_s < INF
@@ -93,6 +102,27 @@ func _on_destroyed(info: HitInfo, combatant: Combatant) -> void:
 		player_destroyed.emit(info)
 	else:
 		raider_destroyed.emit(combatant, info)
+
+
+func _on_buoy_destroyed(info: HitInfo, buoy: NavBuoy) -> void:
+	var xform: Transform3D = buoy.global_transform
+	var radius: float = maxf(buoy.damageable.bounding_radius, 1.5)
+	var velocity: Vector3 = buoy.velocity
+	var spin: Vector3 = xform.basis.y.normalized() * deg_to_rad(buoy.spin_dps)
+	buoy.set_destroyed(true)
+	# Building the explosion and the shards is the costly part: done right after the hit resolver's tick, not inside it.
+	_spawn_buoy_effects.call_deferred(xform, radius, velocity, spin, buoy.get_instance_id())
+	buoy_destroyed.emit(buoy, info)
+
+
+func _spawn_buoy_effects(xform: Transform3D, radius: float, velocity: Vector3, spin: Vector3, buoy_id: int) -> void:
+	if effects != null and is_instance_valid(effects):
+		var explosion: Explosion = Explosion.create(radius, velocity)
+		explosion.position = xform.origin
+		effects.add_child(explosion)
+		explosion.reset_physics_interpolation()
+	if debris != null and is_instance_valid(debris):
+		debris.burst(&"nav_buoy", [] as Array[Dictionary], xform, velocity, spin, hash([buoy_id, Engine.get_physics_frames()]))
 
 
 func _spawn_effects(ship: Ship, xform: Transform3D, velocity: Vector3, spin: Vector3, radius: float, hardpoints: Hardpoints) -> void:

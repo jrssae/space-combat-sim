@@ -29,6 +29,9 @@ var zones: DamageZones = DamageZones.new()
 var shapes: Array[HitShape] = []
 ## Radius of a sphere around the body origin that holds every shape (broad phase).
 var bounding_radius: float = 0.0
+## True for something that any bolt hurts whatever its faction (a nav buoy: neutral to everyone, yet shootable). Bolts of its
+## own faction still pass through.
+var hit_by_anyone: bool = false
 ## True for the player's hull: `debug.invulnerable` stops its damage.
 var respects_god_mode: bool = false
 
@@ -70,6 +73,13 @@ func setup(collision: Array[Dictionary], hull_max: float, p_faction: StringName,
 	DebugConsole.registry.unregister_owner(self)
 	if register_console:
 		_register_console()
+
+
+## Whether a bolt of `bolt_faction` can hurt this hull.
+func can_be_hit_by(bolt_faction: StringName) -> bool:
+	if Factions.is_hostile(bolt_faction, faction):
+		return true
+	return hit_by_anyone and bolt_faction != faction
 
 
 ## The ship this hull belongs to (the parent), or null.

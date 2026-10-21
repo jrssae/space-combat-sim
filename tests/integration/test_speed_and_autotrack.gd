@@ -152,3 +152,38 @@ func _nose_error_deg() -> float:
 	var readout: TargetReadout = main.ship.targeting.selected_readout()
 	var to_target: Vector3 = (readout.position - main.ship.global_position).normalized()
 	return rad_to_deg(main.ship.forward().angle_to(to_target))
+
+
+func test_turning_the_ship_around_never_changes_its_velocity() -> void:
+	# Newtonian: the velocity is a vector in space. Auto-track swings the nose through 180 degrees onto a target behind, and
+	# the velocity does not move at all, because no nozzle fires; it only changes when the engines or the brake do.
+	DebugConsole.registry.execute("spawn raider idle 1200 0 0")
+	await _ticks(4)
+	assert_true(main.ship.targeting.select_by_name("RAIDER 1"))
+	main.ship.global_basis = Basis(Vector3.UP, PI)  # the raider is now dead astern
+	main.ship.linear_velocity = Vector3(5.0, -3.0, 250.0)  # and the ship is moving
+	var before: Vector3 = main.ship.linear_velocity
+	await _ticks(2)
+	source.hold(InputAdapter.AUTOTRACK)
+	await _ticks(2)
+	source.release(InputAdapter.AUTOTRACK)
+	assert_gt(_nose_error_deg(), 150.0, "starting facing away from the target")
+	var worst: float = 0.0
+	for i: int in 420:
+		await _ticks(1)
+		worst = maxf(worst, main.ship.linear_velocity.distance_to(before))
+	assert_lt(_nose_error_deg(), 2.0, "the nose came all the way round")
+	assert_lt(worst, 0.01, "and the velocity never moved (worst change %.5f m/s)" % worst)
+	assert_gt(main.ship.linear_velocity.length(), 200.0, "the ship is still travelling the same way")
+
+
+func test_with_assist_off_turning_with_the_sticks_does_not_change_the_velocity_either() -> void:
+	main.ship.set_assist(false)
+	main.ship.linear_velocity = Vector3(0.0, 0.0, -400.0)
+	var before: Vector3 = main.ship.linear_velocity
+	source.hold(InputAdapter.ROLL_RIGHT, 1.0)
+	source.hold(InputAdapter.PITCH_UP, 0.8)
+	source.hold(InputAdapter.YAW_LEFT)
+	await _ticks(180)
+	assert_gt(main.ship.angular_velocity.length(), 0.1, "it is spinning")
+	assert_lt(main.ship.linear_velocity.distance_to(before), 0.01, "but not going anywhere new")

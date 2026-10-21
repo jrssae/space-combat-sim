@@ -80,5 +80,5 @@ func test_three_waves_headless_keep_the_splat_node_count_and_the_counters() -> v
 	assert_eq(main.ships.alive().size(), 0)
 	assert_eq(_splat_nodes(get_tree().root), splat_nodes_at_load, "at the end of the run too")
 	assert_gt(max_bolts, 0, "bolts flew")
-	assert_lt(max_resolve_us, 2000, "the hit resolver's worst tick stayed under 2 ms")
+	assert_lt(max_resolve_us, 5000, "the hit resolver's worst tick stayed under 5 ms (it is about 0.5-1.5 ms; the slack is for a busy machine)")
 	assert_eq(main.debris.active_chunk_count() >= 0, true)

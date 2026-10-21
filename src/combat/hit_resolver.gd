@@ -114,7 +114,7 @@ func _earliest_hit(bolt: Projectile, targets: Array[Dictionary], _delta: float) 
 	for target: Dictionary in targets:
 		var damageable: Damageable = target["damageable"]
 		# A hull destroyed earlier in this very tick (by another bolt) cannot be hit again.
-		if damageable.hull.destroyed or int(target["body_id"]) == bolt.shooter_id or not Factions.is_hostile(bolt.faction, damageable.faction):
+		if damageable.hull.destroyed or int(target["body_id"]) == bolt.shooter_id or not damageable.can_be_hit_by(bolt.faction):
 			continue
 		pairs_tested += 1
 		var to_body: Basis = target["to_body"]
