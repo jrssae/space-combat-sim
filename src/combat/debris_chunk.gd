@@ -48,6 +48,7 @@ static func create(entry: Dictionary, asset_dir: String, with_splats: bool) -> D
 	var obj_path: String = asset_dir.path_join(String(entry.get("obj", "")))
 	if ResourceLoader.exists(obj_path):
 		chunk.mesh_instance.mesh = load(obj_path) as Mesh
+		MeshMaterials.matte(chunk.mesh_instance.mesh)
 	else:
 		push_warning("DebrisChunk: %s is missing or not imported (run scripts/gen_assets.sh, then import)" % obj_path)
 	chunk.add_child(chunk.mesh_instance)

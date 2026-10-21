@@ -840,3 +840,10 @@ maintainer's eyes or ears on the real GPU.
 | Too much HUD in the way in the chase view | Radar, target outline and speed readout moved to the bottom-right corner in the chase view, HUD drawn at `settings.hud_chase_opacity` (0.7) there |
 | Need to get the mouse back | Hold Alt: cursor shown, ship ignores it, clicks do not fire; Alt + drag moves the window |
 | First-person stair-stepping and flicker with the nebula | The hull's splats are seen from a few tens of cm in the cockpit, where they turn into serrated slivers at grazing angles (seen in the screencast and reproduced on the RX 6950 XT). In the cockpit the hull is now the mesh (splats off), the cockpit frame is double-sided with a faint emission so the left strut is no longer black on black. A sort-buffer capacity of 128 per splat changed nothing, so it was not the overflow |
+
+### Third feedback round
+
+| Feedback | Done |
+|---|---|
+| Toggling splats on/off (F4) moves the nebula | The fallback panorama was authored with its centre on -Z, but Godot's panorama sky puts the image centre on +Z, so the nebula showed up half a turn away. Confirmed on the RX 6950 XT by rolling the image half a turn (it then matched the splat sky); the generator now writes it in Godot's convention (`sky_default` generator version 2) and its nebula is 0.4x as bright, since it was about twice as bright as the splat sky |
+| Weird shading (black upper surfaces, mesh mode) | The OBJ importer makes the generated materials metallic 0.93-0.98, so every face the sun misses reflects the black sky and renders black. `MeshMaterials.matte` caps metallic at 0.15 and floors roughness at 0.65 on the hull, cockpit, buoy and debris meshes; the fallback environment's ambient light is 0.25 |

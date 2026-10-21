@@ -16,8 +16,9 @@ one-sided, the centroid is kilometres from the origin: ``manifest.centroid_offse
 and the sky node must sit at ``camera_position + centroid_offset`` to place the star sphere exactly
 around the camera.
 
-The optional ``sky_default_panorama.png`` (equirectangular, centre = -Z, the Godot
-``PanoramaSkyMaterial`` convention) is a CPU render of the same catalogue for the mesh fallback
+The optional ``sky_default_panorama.png`` (equirectangular, the Godot ``PanoramaSkyMaterial`` convention: the
+centre of the image looks toward +Z, so -Z is at the left and right edges, and +u turns toward -X; checked on a GPU
+by rolling the image by half a turn, which put the nebula where the splat sky has it) is a CPU render of the same catalogue for the mesh fallback
 path. It needs Pillow and is skipped with a warning without it.
 """
 
@@ -36,7 +37,7 @@ from ..core.manifest import build_manifest, lod_entry, write_manifest
 from ..core.ply import SplatData, write_ply
 
 ASSET_ID = "sky_default"
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2
 PLY_NAME = "sky_default.ply"
 PANORAMA_NAME = "sky_default_panorama.png"
 
@@ -294,6 +295,9 @@ def generate_nebula(rng: np.random.Generator, count: int, radius: float) -> Spla
 
 
 # --- panorama --------------------------------------------------------------------------------
+# The panorama's tone curve is not the splat renderer's: at gain 1 its nebula came out about twice as bright as the splat sky on
+# the same view (2026-10-21 play test), so toggling the splats swapped a dim nebula for a glaring one.
+PANORAMA_NEBULA_GAIN = 0.4
 def _load_pillow() -> Any | None:
     try:
         from PIL import Image
@@ -303,22 +307,22 @@ def _load_pillow() -> Any | None:
 
 
 def _direction_grid(width: int, height: int) -> np.ndarray:
-    """Unit direction of every pixel centre of an equirectangular image (centre = -Z, +u = +X)."""
+    """Unit direction of every pixel centre of an equirectangular image (centre = +Z, +u = -X: Godot's panorama sky)."""
     lon = ((np.arange(width) + 0.5) / width - 0.5) * 2.0 * math.pi
     lat = (0.5 - (np.arange(height) + 0.5) / height) * math.pi
     cos_lat = np.cos(lat)[:, None]
     return np.stack(
         [
-            np.sin(lon)[None, :] * cos_lat,
+            -np.sin(lon)[None, :] * cos_lat,
             np.broadcast_to(np.sin(lat)[:, None], (height, width)),
-            -np.cos(lon)[None, :] * cos_lat,
+            np.cos(lon)[None, :] * cos_lat,
         ],
         axis=-1,
     ).astype(np.float32)
 
 
 def _lonlat(directions: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    lon = np.arctan2(directions[..., 0], -directions[..., 2])
+    lon = np.arctan2(-directions[..., 0], directions[..., 2])
     lat = np.arcsin(np.clip(directions[..., 1], -1.0, 1.0))
     return lon, lat
 
@@ -441,7 +445,7 @@ def render_panorama(
     image = np.empty((height, width, 3), dtype=np.uint8)
     for channel in range(3):
         starlight = _render_stars(stars, width, height, channel)
-        layer = _resize_bilinear(neb_colour[..., channel], height, width)
+        layer = _resize_bilinear(neb_colour[..., channel], height, width) * PANORAMA_NEBULA_GAIN
         # Half the stars sit behind the gas (they are spread through its depth), half in front.
         linear = layer + starlight * (1.0 - 0.5 * cover)
         display = 1.0 - np.exp(-1.5 * linear)

@@ -95,6 +95,7 @@ func _ready() -> void:
 	_base_basis = basis
 	_load_shared_assets()
 	splats.gaussian = _shared_gaussian
+	MeshMaterials.matte(_shared_mesh)
 	mesh_fallback.mesh = _shared_mesh
 	depth_proxy.mesh = _shared_mesh  # hides the beacon behind the body (§7.2); splats write no depth
 	beacon.position = _shared_beacon_position

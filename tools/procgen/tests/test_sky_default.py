@@ -236,8 +236,8 @@ class SkyDefaultTests(unittest.TestCase):
             y = int((0.5 - lat_deg / 180.0) * 2048)
             return float(pixels[y - 100 : y + 100, x - 100 : x + 100].mean())
 
-        # Equirectangular, centre = -Z, +X to the right: the nebula sits at lon +35, lat +12.
-        self.assertGreater(patch(35.0, 12.0), 3.0 * patch(-145.0, -12.0))
+        # Godot's panorama convention: centre = +Z, so the nebula (35 degrees right of -Z, 12 up) sits at lon -145, lat +12.
+        self.assertGreater(patch(-145.0, 12.0), 3.0 * patch(35.0, -12.0))
 
     @unittest.skipIf(Image is None, "Pillow not installed")
     def test_nebula_pixels_are_coloured_and_stars_are_visible(self) -> None:
@@ -367,7 +367,8 @@ class SkyHelperTests(unittest.TestCase):
         nebula = sky_default.generate_nebula(rng_n, 200, R)
         image = sky_default.render_panorama(stars, nebula, 256, 128)
         self.assertEqual((image.shape, image.dtype), ((128, 256, 3), np.uint8))
-        x, y = int((35 / 360 + 0.5) * 256), int((0.5 - 12 / 180) * 128)
+        # 35 degrees right of -Z: with the image centre on +Z that is longitude -145 degrees (Godot's panorama convention)
+        x, y = int((-145 / 360 + 0.5) * 256), int((0.5 - 12 / 180) * 128)
         near = image[y - 8 : y + 8, x - 8 : x + 8].astype(float).mean()
         far = (
             image[128 - y - 8 : 128 - y + 8, (x + 128) % 256 - 8 : (x + 128) % 256 + 8]

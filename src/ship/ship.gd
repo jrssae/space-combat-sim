@@ -401,6 +401,8 @@ func _load_visuals() -> void:
 	hull_mesh_fallback.mesh = _load_mesh(dir.path_join(spec.asset_id + ".obj"))
 	hull_depth_proxy.mesh = hull_mesh_fallback.mesh  # whatever is loaded, so a regenerated hull needs no changes here
 	cockpit_interior.mesh = _load_mesh(dir.path_join(COCKPIT_MESH_FILE)) if spec.has_cockpit_interior else null
+	MeshMaterials.matte(hull_mesh_fallback.mesh)
+	MeshMaterials.matte(cockpit_interior.mesh)
 	_make_double_sided(hull_mesh_fallback.mesh)
 	_make_double_sided(cockpit_interior.mesh)
 	_lift_shadows(cockpit_interior.mesh)
