@@ -21,6 +21,8 @@ var raider_pool_size: int = DEFAULT_RAIDER_POOL
 var input_source: InputSource = null
 var adapter: InputAdapter = InputAdapter.new()
 
+## One line for the HUD's top centre (wave, raiders left, kills); the wave director sets it (M2-T09).
+var status_line: String = ""
 ## False from the player's death until the respawn; input is ignored meanwhile.
 var player_alive: bool = true
 var combatant: Combatant = null
@@ -41,6 +43,7 @@ var _spawn_basis: Basis = Basis.IDENTITY
 @onready var effects: Node3D = $World/Effects
 @onready var debris: DebrisPool = $World/Debris
 @onready var director: DestructionDirector = $Combat/DestructionDirector
+@onready var hud: Hud = $Hud
 @onready var splat_status: SplatStatus = $SplatStatus
 @onready var overlay: DebugOverlay = $DebugOverlay
 
@@ -63,6 +66,7 @@ func _ready() -> void:
 	if raider_pool_size > 0:
 		ships.prepare(ShipPool.DEFAULT_TYPE, raider_pool_size)
 		debris.prepare(ShipPool.DEFAULT_TYPE)
+	hud.input_provider = _build_hud_input
 	director.setup(world, ships, debris, effects, combatant)
 	director.player_destroyed.connect(_on_player_destroyed)
 	director.respawn_due.connect(respawn)
@@ -145,6 +149,42 @@ func respawn() -> void:
 		player_respawned.emit()
 
 
+## This frame's `HudInput`, read from the live nodes (the HUD never caches anything).
+func _build_hud_input() -> HudInput:
+	var camera: Camera3D = camera_rig.active_camera()
+	var input := HudInput.new()
+	if camera == null or ship == null:
+		return input
+	input.camera_transform = camera.global_transform
+	input.projection = camera.get_camera_projection()
+	input.viewport_size = get_viewport().get_visible_rect().size
+	input.cockpit = camera_rig.mode == CameraRig.Mode.COCKPIT
+	input.show_grid = bool(Settings.get_value(&"hud_targeting_grid"))
+	input.own_position = ship.global_position
+	input.own_basis = ship.global_basis
+	input.own_velocity = ship.linear_velocity
+	var muzzles: Array[Node3D] = ship.get_muzzles()
+	var mean := Vector3.ZERO
+	for muzzle: Node3D in muzzles:
+		mean += muzzle.global_position
+	input.muzzle_position = mean / float(muzzles.size()) if not muzzles.is_empty() else ship.global_position
+	input.weapon_speed_mps = cannon.weapon.muzzle_speed_mps
+	input.weapon_lifetime_s = cannon.weapon.lifetime_s
+	input.faction = combatant.faction
+	input.hull_fraction = combatant.damageable.hull.fraction()
+	input.god = DebugConsole.flags.invulnerable
+	var tank: FuelTank = ship.get_fuel_tank()
+	input.fuel_fraction = tank.fraction()
+	input.fuel_unlimited = tank.unlimited
+	input.charge_fraction = cannon.charge_fraction()
+	input.fire_mode = String(PulseCannonGate.mode_name(cannon.gate.mode))
+	input.target = ship.targeting.selected_readout()
+	input.contacts = ship.targeting.candidates()
+	input.selected_id = ship.targeting.selected_id()
+	input.status_line = status_line
+	return input
+
+
 func _on_player_destroyed(_info: HitInfo) -> void:
 	player_alive = false
 	player_died.emit()
@@ -214,7 +254,7 @@ func _handle_ui(ui: UiCommand) -> void:
 func _update_bracket() -> void:
 	var readout: TargetReadout = ship.targeting.selected_readout() if ship != null else null
 	var cam: Camera3D = camera_rig.active_camera()
-	if readout == null or cam == null or cam.is_position_behind(readout.position):
+	if hud.visible or readout == null or cam == null or cam.is_position_behind(readout.position):  # the HUD has its own box
 		overlay.hide_bracket()
 		return
 	overlay.show_bracket(cam.unproject_position(readout.position))

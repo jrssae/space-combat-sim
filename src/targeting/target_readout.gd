@@ -15,6 +15,11 @@ var range_m: float = 0.0
 var closing_mps: float = 0.0
 ## Angle between the ship's forward axis and the line of sight, degrees (0 = dead ahead, 180 = dead astern).
 var angle_off_deg: float = 0.0
+## Target velocity, World frame (the HUD's lead reticle).
+var velocity: Vector3 = Vector3.ZERO
+## Target hull 0..1, or -1 without a hull; and the radius of a sphere holding it (metres, 0 = unknown).
+var hull_fraction: float = -1.0
+var bounding_radius: float = 0.0
 
 
 func _to_string() -> String:

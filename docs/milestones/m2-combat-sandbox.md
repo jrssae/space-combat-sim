@@ -3,7 +3,7 @@
 > "Something to shoot." (`docs/roadmap.md`)
 
 **Status:** in progress. The maintainer asked to proceed before M1's re-test. Done: **T01** combat maths, **T02**
-multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T05** raider ship and pool, **T06** destruction, **T07** AI seam and simple brains, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T08 (HUD), T09 (waves), T12 (sound). See `docs/handoff.md`.
+multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T05** raider ship and pool, **T06** destruction, **T07** AI seam and simple brains, **T08** HUD, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T09 (waves), T10 (integration), T12 (sound). See `docs/handoff.md`.
 
 Read `docs/architecture.md` first, §1-§13 and especially **§15** (the M2 design: decisions D20-D29, tick order, hit
 detection, pools, brains, HUD, console additions). Task notes reference its sections (§). Tasks are ordered; each
@@ -713,6 +713,25 @@ history.
   patrol and aggro fly a triangle of 800 m legs around the spawn point), `raiders.selected_brain`. `spawn` refreshes the
   player's target list so the raider is selectable by name in the next statement. `run_tests.sh` smoke-runs the attack.
 - Not done: `ScenarioLoader` reporting `BrainFactory` errors (T09 reads the behaviours from `combat_sandbox.json`).
+
+**M2-T08 (HUD).**
+- Pure: `HudLayout.compute(HudInput) -> HudFrame` and `RadarModel` (`src/hud/`). `Hud` (CanvasLayer 40 with a `HudCanvas`
+  control that draws the last frame) only draws. `Main._build_hud_input()` fills the input each rendered frame from the live
+  nodes; `Main.status_line` is the top-centre line (T09 sets it). Font: the overlay's monospace `SystemFont`.
+- Projection is `projection * view * point` with `clip.w <= 0` = behind, y down; it matches `Camera3D.unproject_position`
+  within 0.5 px for 20 points in both cameras (`test_hud.gd`).
+- Radar space: X right, Y forward (nose up the screen), Z ship-up toward the viewer; the sphere is drawn tilted 0.35 rad with a
+  slow perspective so above and below read apart, plus a stalk to the equatorial plane. Radius is linear to 5 km (0.6 of the
+  sphere) and logarithmic to 25 km (1.0).
+- The targeting grid (cockpit, or `settings.hud_targeting_grid`) is 8 x 8 over a +-30 degree field with a circular reticle;
+  the target marker clamps to the edge outside it and is hidden when the target is behind the beam.
+- `Targetable.get_hull_fraction()` (-1 without a `Damageable`) and `get_bounding_radius()`; `TargetInfo` and `TargetReadout`
+  carry `hull_fraction`, `bounding_radius` (and the readout the target's velocity). The debug overlay hides its bracket while
+  the HUD shows. New settings: `show_hud` (default true), `hud_targeting_grid` (default false). Console provider `hud`.
+- Own pose comes from the physics transform, not the interpolated one, so a marker can lead the interpolated camera by up to a
+  tick (a pixel or two at speed). `(H)` if it looks like jitter.
+- P2 captured on the real GPU (`reports/m2/p2_*.png`, untracked): box, lead diamond, hull bar, radar, gauges and the cockpit
+  grid draw as laid out. The cockpit grid first overlapped the radar; it now sits at 62 % of the height.
 
 ## Definition of done (M2)
 

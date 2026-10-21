@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://src/game/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://src/environment/space_environment.tscn" id="2_env"]
@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://src/game/ship_pool.gd" id="8_pool"]
 [ext_resource type="Script" path="res://src/combat/debris_pool.gd" id="9_debris"]
 [ext_resource type="Script" path="res://src/combat/destruction_director.gd" id="10_director"]
+[ext_resource type="Script" path="res://src/hud/hud.gd" id="11_hud"]
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_main")
@@ -44,5 +45,9 @@ script = ExtResource("10_director")
 
 [node name="SplatStatus" type="Node" parent="."]
 script = ExtResource("5_splat")
+
+[node name="Hud" type="CanvasLayer" parent="."]
+layer = 40
+script = ExtResource("11_hud")
 
 [node name="DebugOverlay" parent="." instance=ExtResource("6_overlay")]

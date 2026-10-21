@@ -31,6 +31,18 @@ func is_active() -> bool:
 	return parent != null and parent.can_process()
 
 
+## Hull 0..1 of the owner (its `Damageable` sibling), or -1 when it has none (a buoy).
+func get_hull_fraction() -> float:
+	var damageable: Damageable = Damageable.of(get_parent())
+	return damageable.hull.fraction() if damageable != null else -1.0
+
+
+## Radius of a sphere around the owner that holds it (its `Damageable`'s bounding radius), 0 when it has none.
+func get_bounding_radius() -> float:
+	var damageable: Damageable = Damageable.of(get_parent())
+	return damageable.bounding_radius if damageable != null else 0.0
+
+
 func get_target_velocity() -> Vector3:
 	var body := get_parent() as RigidBody3D
 	if body != null:
@@ -40,4 +52,5 @@ func get_target_velocity() -> Vector3:
 
 ## A snapshot for `TargetingSystem`: this tick's position and velocity, never kept across ticks.
 func to_target_info() -> TargetInfo:
-	return TargetInfo.new(get_instance_id(), display_name, faction, global_position, get_target_velocity())
+	return TargetInfo.new(get_instance_id(), display_name, faction, global_position, get_target_velocity(),
+			get_hull_fraction(), get_bounding_radius())
