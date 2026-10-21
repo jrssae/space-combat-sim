@@ -21,6 +21,8 @@ var own_velocity: Vector3 = Vector3.ZERO
 var reference_position: Vector3 = Vector3.ZERO
 var reference_velocity: Vector3 = Vector3.ZERO
 var has_reference: bool = false
+## Draw the in-world prograde / retrograde marker (`settings.hud_velocity_marker`; the drift sphere is always drawn).
+var show_velocity_marker: bool = true
 ## Auto-track is holding the nose on the lead point.
 var tracking: bool = false
 var muzzle_position: Vector3 = Vector3.ZERO

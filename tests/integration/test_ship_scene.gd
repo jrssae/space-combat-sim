@@ -380,7 +380,8 @@ func test_console_ship_provider_and_assist_command() -> void:
 	assert_eq(provider.keys(), SHIP_KEYS, "the §6.4 keys")
 	for key: StringName in SHIP_KEYS:
 		# `fuel_kg` (M2-T14) is writable so a tank can be emptied from the console; see test_reaction_mass.gd.
-		assert_eq(provider.is_writable(key), key == &"assist_on" or key == &"fuel_kg", "%s writable only if assist_on or fuel_kg" % key)
+		# `velocity` is a debug shove (captures, HUD checks); nothing in the game writes it through the console.
+		assert_eq(provider.is_writable(key), key == &"assist_on" or key == &"fuel_kg" or key == &"velocity", "%s writable only if assist_on, fuel_kg or velocity" % key)
 	assert_string_contains(registry.help(&"assist")[0], "assist [on|off]")
 
 	ship.assist_on = true

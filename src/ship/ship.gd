@@ -559,7 +559,9 @@ func _register_console() -> void:
 	DebugConsole.registry.register_provider(&"ship", ConsoleVars.new({
 		&"position": {"get": func() -> Vector3: return position, "unit": "m", "doc": "World-local position"},
 		&"universe_position": {"get": _universe_position, "unit": "m", "doc": "Universe position (64-bit)"},
-		&"velocity": {"get": func() -> Vector3: return linear_velocity, "unit": "m/s", "doc": "World-frame velocity"},
+		&"velocity": {"get": func() -> Vector3: return linear_velocity,
+				"set": func(value: Variant) -> void: linear_velocity = value as Vector3,
+				"type": TYPE_VECTOR3, "unit": "m/s", "doc": "World-frame velocity (settable: a debug shove, the only console write to it)"},
 		&"speed": {"get": func() -> float: return linear_velocity.length(), "type": TYPE_FLOAT, "unit": "m/s",
 				"doc": "Speed relative to the World frame"},
 		&"body_velocity": {"get": body_velocity, "unit": "m/s",

@@ -49,6 +49,8 @@ const ENTRIES: Dictionary = {
 		"doc": "How opaque the HUD is in the chase view (the cockpit view always draws it fully)"},
 	&"cockpit_light_energy": {"type": TYPE_FLOAT, "default": 1.6, "min": 0.0, "max": 8.0,
 		"doc": "Brightness of the cabin lamp that lights the cockpit frame in the first-person view (applies on the next spawn)"},
+	&"hud_velocity_marker": {"type": TYPE_BOOL, "default": false,
+		"doc": "Also draw the prograde / retrograde marker in the world (it is only on screen when you fly near your nose); the drift sphere is always drawn"},
 	&"show_fps": {"type": TYPE_BOOL, "default": false,
 		"doc": "Show the console FPS counter"},
 	&"console_enabled": {"type": TYPE_BOOL, "default": true,

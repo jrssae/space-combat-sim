@@ -4,7 +4,7 @@ extends CanvasLayer
 ## every frame. Layer 40, below the debug overlay (50). This node only draws: `Main` sets `input_provider`, a Callable
 ## returning this frame's `HudInput`; `settings.show_hud` shows or hides it. Console provider `hud`.
 ##
-## Elements: boresight cross, prograde circle with wings or retrograde circle with a cross, target box (corner brackets) with
+## Elements: boresight cross, (optionally, `settings.hud_velocity_marker`) a prograde circle with wings or retrograde circle with a cross, the drift sphere by the speed readout, target box (corner brackets) with
 ## name, range, closing speed and a hull bar, an edge arrow for an off-screen target, the lead diamond, a status line top
 ## centre; bottom edge: speed (centre) with the direction of travel against the nose (horizontal then vertical degrees) and the
 ## range and closing speed to the reference point, hull bar (left) with the ship's damage silhouette above it, a fuel bar
@@ -94,6 +94,7 @@ class HudCanvas extends Control:
 		_draw_grid(f, s, w)
 		_draw_gauges(f, s, w)
 		_draw_radar(f, s, w)
+		_draw_drift_sphere(f, s, w)
 		_draw_silhouette(f.own_layout, f.own_zones, f.own_silhouette_rect, "YOU", w)
 		_draw_silhouette(f.target_layout, f.target_zones, f.target_silhouette_rect, f.target_name, w)
 		if f.tracking:
@@ -226,6 +227,38 @@ class HudCanvas extends Control:
 			_text("FUEL", f.fuel_rect.position + Vector2(0.0, -6.0 * s), 14.0 * s, LINE_COLOR)
 		_bar(f.charge_rect, f.charge_fraction, LINE_COLOR, w)
 		_text("CHARGE  %s" % f.fire_mode.to_upper(), f.charge_rect.position + Vector2(0.0, -6.0 * s), 14.0 * s, LINE_COLOR)
+
+	# --- drift sphere -------------------------------------------------------------------------------------------------
+
+	# A small sphere in the ship's frame (nose up the screen, as the radar's) with your ship at the centre and an arrow along the
+	# direction you are travelling: along the nose when you fly straight, off to the side when you drift, pointing at you (a short
+	# stalk to the equator tells above from below) when you back up. Always drawn; a dot at the centre while you are at rest.
+	func _draw_drift_sphere(f: HudFrame, s: float, w: float) -> void:
+		var c: Vector2 = f.drift_centre
+		var r: float = f.drift_radius_px
+		if r <= 0.0:
+			return
+		var dim := Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.55)
+		draw_circle(c, r, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.06))
+		draw_arc(c, r, 0.0, TAU, 40, dim, w)
+		_ring(c, r, dim, w * 0.9, 0)
+		_ring(c, r, dim, w * 0.9, 1)
+		draw_polyline(PackedVector2Array([c + Vector2(0.0, -6.0 * s), c + Vector2(4.0 * s, 5.0 * s), c + Vector2(-4.0 * s, 5.0 * s), c + Vector2(0.0, -6.0 * s)]), LINE_COLOR, w * 0.75)
+		_text("DRIFT", c + Vector2(-r, -r - 4.0 * s), 12.0 * s, LINE_COLOR)
+		if f.drift_dir == Vector3.ZERO:
+			return
+		var tip_point: Vector3 = f.drift_dir * 0.92
+		var tip: Vector2 = RadarModel.to_screen(tip_point, c, r)
+		var foot: Vector2 = RadarModel.to_screen(Vector3(tip_point.x, tip_point.y, 0.0), c, r)
+		draw_line(foot, tip, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.45), w * 0.5)
+		draw_line(c, tip, LINE_COLOR, w * 2.0)
+		var along: Vector2 = (tip - c).normalized() if tip.distance_to(c) > 0.5 else Vector2.UP
+		var side := Vector2(-along.y, along.x)
+		var head: float = 10.0 * s
+		draw_colored_polygon(PackedVector2Array([tip, tip - along * head + side * head * 0.45, tip - along * head - side * head * 0.45]), LINE_COLOR)
+		# Where you have come from: a small open circle on the far side.
+		var back: Vector2 = RadarModel.to_screen(-tip_point * 0.8, c, r)
+		draw_arc(back, 3.0 * s, 0.0, TAU, 12, dim, w * 0.75)
 
 	# --- damage silhouettes -----------------------------------------------------------------------------------------
 

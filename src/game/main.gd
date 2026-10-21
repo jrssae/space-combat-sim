@@ -234,6 +234,7 @@ func _build_hud_input() -> HudInput:
 	input.own_position = ship.global_position
 	input.own_basis = ship.global_basis
 	input.own_velocity = ship.linear_velocity
+	input.show_velocity_marker = bool(Settings.get_value(&"hud_velocity_marker"))
 	input.has_reference = true
 	input.reference_position = world.universe_to_local(_spawn_position)  # the launch point, for now
 	input.tracking = ship.get_flight_output().tracking

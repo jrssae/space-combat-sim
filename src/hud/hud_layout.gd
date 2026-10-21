@@ -74,7 +74,7 @@ static func _markers(input: HudInput, f: HudFrame) -> void:
 	f.speed_mps = input.own_velocity.length()
 	f.tracking = input.tracking
 	_velocity_readout(input, f)
-	if f.speed_mps < MIN_SPEED_FOR_MARKER_MPS:
+	if f.speed_mps < MIN_SPEED_FOR_MARKER_MPS or not input.show_velocity_marker:
 		return
 	var heading: Vector3 = input.own_velocity / f.speed_mps
 	var prograde: Dictionary = project(input, input.own_position + heading * BORESIGHT_RANGE_M)
@@ -92,6 +92,7 @@ static func _markers(input: HudInput, f: HudFrame) -> void:
 # The speed with its direction against the nose, and the reference point's range and closing speed.
 static func _velocity_readout(input: HudInput, f: HudFrame) -> void:
 	if f.speed_mps >= MIN_SPEED_FOR_MARKER_MPS:
+		f.drift_dir = RadarModel.radar_direction(input.own_basis.transposed() * input.own_velocity)
 		var angles: Vector2 = velocity_angles_deg(input.own_basis, input.own_velocity)
 		f.velocity_h_deg = angles.x
 		f.velocity_v_deg = angles.y
@@ -245,4 +246,10 @@ static func _radar(input: HudInput, f: HudFrame) -> void:
 			f.target_silhouette_rect = Rect2(f.radar_centre + Vector2(f.radar_radius_px + 28.0 * f.scale, -outline.y * 0.5), outline)
 		else:
 			f.target_silhouette_rect = Rect2(f.radar_centre + Vector2(-f.radar_radius_px - 28.0 * f.scale - outline.x, -outline.y * 0.5), outline)
+	f.drift_radius_px = 58.0 * f.scale
+	# Beside the speed readout: to its left, on the same lines (the readout is right-aligned in the chase view, centred in the cockpit).
+	if input.cockpit:
+		f.drift_centre = f.speed_pos + Vector2(-120.0 * f.scale - f.drift_radius_px, -30.0 * f.scale)
+	else:
+		f.drift_centre = f.speed_pos + Vector2(-215.0 * f.scale - f.drift_radius_px, 0.0)
 	f.radar_dots = RadarModel.dots(input.contacts, input.selected_id, input.own_position, input.own_basis, input.faction)

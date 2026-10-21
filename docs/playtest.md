@@ -214,6 +214,10 @@ bottom left         HULL bar (green, amber under 50 %, red under 25 %; GOD when 
                     four arms): a part turns yellow, orange, then red as it takes damage
 beside the radar    the target's outline in the same colours (Raiders: the two wings and the centre), while a ship is selected
 bottom right        CHARGE: the weapon capacitor and the fire mode
+drift sphere        a small sphere left of the speed readout, always drawn: your ship at its centre, nose up the screen, and an arrow
+                    along your direction of travel (straight up the sphere = flying where you point; sideways = drifting; down =
+                    backing up; a short stalk to the equator tells above from below; the small circle is where you came from).
+                    `set settings.hud_velocity_marker on` also draws the old in-world prograde / retrograde marker
 bottom centre       three lines: speed (m/s); H and V, the horizontal and vertical angle of your direction of travel against
                     your nose in degrees (H + is to the right, V + is up; 0 / 0 = flying straight ahead, H 180 = backward);
                     REF, the distance to the launch point and how fast you are closing on it (+) or opening (-). The radar

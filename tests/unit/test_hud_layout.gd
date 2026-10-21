@@ -459,3 +459,51 @@ func test_the_silhouettes_come_from_the_input() -> void:
 	var buoy := TargetReadout.new()
 	input.target = buoy
 	assert_eq(HudLayout.compute(input).target_layout, DamageZones.Layout.NONE, "a buoy has no zones")
+
+
+# --- Drift sphere and the optional world marker ----------------------------------------------------------------------
+
+
+func test_the_drift_sphere_points_along_the_travel_direction_in_the_ship_frame() -> void:
+	var input: HudInput = _hud_input()
+	input.own_velocity = Vector3(0.0, 0.0, -300.0)
+	assert_almost_eq(HudLayout.compute(input).drift_dir.y, 1.0, 1e-6, "straight ahead: up the sphere (radar Y = forward)")
+	input.own_velocity = Vector3(300.0, 0.0, 0.0)
+	var right: Vector3 = HudLayout.compute(input).drift_dir
+	assert_almost_eq(right.x, 1.0, 1e-6, "drifting right: to the right")
+	input.own_velocity = Vector3(0.0, 0.0, 300.0)
+	assert_almost_eq(HudLayout.compute(input).drift_dir.y, -1.0, 1e-6, "backing up: down the sphere, toward the pilot")
+	input.own_velocity = Vector3(0.0, 300.0, 0.0)
+	assert_almost_eq(HudLayout.compute(input).drift_dir.z, 1.0, 1e-6, "drifting up: out of the screen")
+
+
+func test_the_drift_sphere_follows_the_ships_orientation_not_the_world() -> void:
+	var input: HudInput = _hud_input()
+	input.own_velocity = Vector3(0.0, 0.0, -300.0)
+	input.own_basis = Basis(Vector3.UP, deg_to_rad(90.0))  # the nose now points to -X: the ship is flying sideways, to its right
+	var d: Vector3 = HudLayout.compute(input).drift_dir
+	assert_almost_eq(d.x, 1.0, 1e-6)
+
+
+func test_at_rest_the_sphere_is_drawn_without_an_arrow_and_always_has_a_place() -> void:
+	var input: HudInput = _hud_input()
+	input.own_velocity = Vector3.ZERO
+	var f: HudFrame = HudLayout.compute(input)
+	assert_eq(f.drift_dir, Vector3.ZERO)
+	assert_gt(f.drift_radius_px, 0.0)
+	for cockpit: bool in [true, false]:
+		input.cockpit = cockpit
+		var g: HudFrame = HudLayout.compute(input)
+		assert_true(Rect2(Vector2.ZERO, VIEW).encloses(Rect2(g.drift_centre - Vector2.ONE * g.drift_radius_px, Vector2.ONE * 2.0 * g.drift_radius_px)),
+				"the sphere is on screen (cockpit %s)" % cockpit)
+		assert_lt(g.drift_centre.distance_to(g.radar_centre), 1000.0)
+		assert_gt(g.drift_centre.distance_to(g.radar_centre), g.radar_radius_px + g.drift_radius_px, "and clear of the radar (cockpit %s)" % cockpit)
+
+
+func test_the_world_marker_can_be_switched_off() -> void:
+	var input: HudInput = _hud_input()
+	input.own_velocity = Vector3(0.0, 0.0, -300.0)
+	assert_true(HudLayout.compute(input).velocity_visible)
+	input.show_velocity_marker = false
+	assert_false(HudLayout.compute(input).velocity_visible)
+	assert_gt(HudLayout.compute(input).drift_dir.length(), 0.5, "the sphere is unaffected")

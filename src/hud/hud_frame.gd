@@ -26,6 +26,11 @@ var speed_mps: float = 0.0
 var velocity_h_deg: float = 0.0
 var velocity_v_deg: float = 0.0
 var velocity_angles_valid: bool = false
+## The drift sphere (bottom right, by the speed readout): a ship-frame sphere with an arrow along the direction of travel, always
+## drawn. `drift_dir` is the unit direction in radar space (X right, Y forward, Z up; zero when the ship is not moving).
+var drift_centre: Vector2 = Vector2.ZERO
+var drift_radius_px: float = 0.0
+var drift_dir: Vector3 = Vector3.ZERO
 ## The reference point: distance to it, and the rate at which that distance closes (+ = approaching), m/s.
 var reference_valid: bool = false
 var reference_range_m: float = 0.0
