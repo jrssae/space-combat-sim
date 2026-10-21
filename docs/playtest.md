@@ -71,7 +71,7 @@ The ` key opens the debug console; it frees the mouse while open. Mouse feel: `s
 (the mouse speed that commands the full turn rate; lower = more sensitive) and `set settings.mouse_look_deg_per_px 0.12`
 (free look). Sizes: `set settings.debug_text_size 22` (overlay text) and `set settings.chase_bolt_scale 3` (how much larger bolts
 are drawn in the chase view) and `set settings.hud_chase_opacity 0.7` (how solid the HUD is in the chase view, where the radar
-and speed readout also sit in the bottom-right corner instead of the middle). Add `save` to keep a setting.
+and speed readout also sit in the bottom-right corner instead of the middle) and `set settings.cockpit_light_energy 1.6` (the cabin lamp that lights the cockpit frame; takes effect on the next spawn). Add `save` to keep a setting.
 
 Changed after the first play test: yaw and roll swapped (the right stick used to yaw and the D-pad to roll), and
 target-ahead moved to a D-pad Up hold because the pad had no stick clicks. Changed after the M2 play test: X is auto-track and

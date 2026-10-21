@@ -69,6 +69,8 @@ var _layout: ThrusterLayout = ThrusterLayout.new()
 ## Share of the gap to this tick's measured turn rate of the lead direction that the smoothed rate closes each tick.
 const TRACK_RATE_SMOOTHING: float = 0.35
 
+## The cabin lamp: a short-range light that comes on with the cockpit view and lights the frame (the hull's splats take no light).
+var _cabin_light: OmniLight3D = null
 var _track_prev_dir: Vector3 = Vector3.ZERO
 var _track_rate_w: Vector3 = Vector3.ZERO
 var _model: FlightModel = null
@@ -116,6 +118,7 @@ func _ready() -> void:
 	_apply_newtonian_body()
 	targeting.setup(self, console_owner)
 	_build()
+	_build_cabin_light()
 	use_fallback_mesh(_fallback_active or SplatStatus.needs_fallback(SplatStatus.active_backend()))
 	set_cockpit_interior_visible(_interior_visible)
 	if console_owner:
@@ -275,6 +278,8 @@ func set_cockpit_interior_visible(shown: bool) -> void:
 	if is_node_ready():
 		cockpit_interior.visible = shown
 		_apply_hull_visuals()
+		if _cabin_light != null:
+			_cabin_light.visible = shown
 
 
 func is_cockpit_interior_visible() -> bool:
@@ -346,6 +351,7 @@ func _build() -> void:
 		center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 		center_of_mass = _hardpoints.center_of_mass
 		cockpit_anchor.transform = _hardpoints.cockpit_camera
+		_place_cabin_light()
 		_build_collision()
 		_build_muzzles()
 	_load_visuals()
@@ -398,6 +404,25 @@ func _load_visuals() -> void:
 	_make_double_sided(hull_mesh_fallback.mesh)
 	_make_double_sided(cockpit_interior.mesh)
 	_lift_shadows(cockpit_interior.mesh)
+
+
+# A soft lamp just behind and above the pilot's eyes. Its range stops short of the wings, so it lights only the cockpit frame.
+func _build_cabin_light() -> void:
+	_cabin_light = OmniLight3D.new()
+	_cabin_light.name = "CabinLight"
+	_cabin_light.omni_range = 4.5
+	_cabin_light.omni_attenuation = 0.8
+	_cabin_light.light_energy = float(Settings.get_value(&"cockpit_light_energy"))
+	_cabin_light.light_color = Color(0.85, 0.92, 1.0)
+	_cabin_light.shadow_enabled = false
+	_cabin_light.visible = _interior_visible
+	add_child(_cabin_light)
+	_place_cabin_light()
+
+
+func _place_cabin_light() -> void:
+	if _cabin_light != null:
+		_cabin_light.position = cockpit_anchor.position + Vector3(0.0, 0.45, 0.5)
 
 
 # The cockpit bars are mirrored copies, whose faces wind the other way and vanish from inside with back-face culling on;

@@ -47,6 +47,8 @@ const ENTRIES: Dictionary = {
 		"doc": "Show the targeting grid in the chase view too (it is always shown in the cockpit view)"},
 	&"hud_chase_opacity": {"type": TYPE_FLOAT, "default": 0.7, "min": 0.1, "max": 1.0,
 		"doc": "How opaque the HUD is in the chase view (the cockpit view always draws it fully)"},
+	&"cockpit_light_energy": {"type": TYPE_FLOAT, "default": 1.6, "min": 0.0, "max": 8.0,
+		"doc": "Brightness of the cabin lamp that lights the cockpit frame in the first-person view (applies on the next spawn)"},
 	&"show_fps": {"type": TYPE_BOOL, "default": false,
 		"doc": "Show the console FPS counter"},
 	&"console_enabled": {"type": TYPE_BOOL, "default": true,
