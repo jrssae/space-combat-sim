@@ -27,6 +27,7 @@ const REQUIRED_ROLES: Dictionary = {
 	"starfury_aurora": ["fallback_mesh", "cockpit_mesh", "hardpoints"],
 	"nav_buoy": ["hardpoints"],
 	"raider_fighter": ["fallback_mesh", "hardpoints"],
+	"sfx_combat": [],
 }
 
 var _readers: Array[ManifestReader] = []
@@ -256,9 +257,31 @@ func _reader_for(asset_id: String) -> ManifestReader:
 func _valid_readers() -> Array[ManifestReader]:
 	var valid: Array[ManifestReader] = []
 	for reader: ManifestReader in _readers:
-		if reader.is_valid():
+		if reader.is_valid() and reader.kind == "splat":  # sound sets have their own test below
 			valid.append(reader)
 	return valid
+
+
+func test_audio_assets_import_as_wav_streams_with_the_manifest_length() -> void:
+	var seen: int = 0
+	for reader: ManifestReader in _readers:
+		if not reader.is_valid() or reader.kind != "audio":
+			continue
+		seen += 1
+		assert_eq(reader.lods.size(), 0, "no lods in an audio manifest")
+		for sound_name: String in reader.sounds:
+			var entry: Dictionary = reader.sounds[sound_name]
+			var path: String = "%s/%s" % [reader.directory, entry["file"]]
+			assert_true(FileAccess.file_exists(path), "%s exists: %s" % [path, GEN_ASSETS_HINT])
+			if not _is_imported(path):
+				continue
+			var stream := load(path) as AudioStreamWAV
+			assert_not_null(stream, "%s loads as an AudioStreamWAV" % path)
+			if stream == null:
+				continue
+			assert_eq(stream.mix_rate, int(entry["sample_rate"]), "%s: sample rate" % sound_name)
+			assert_almost_eq(stream.get_length(), float(entry["duration_s"]), 0.002, "%s: length" % sound_name)
+	assert_gt(seen, 0, "an audio asset exists (sfx_combat): %s" % GEN_ASSETS_HINT)
 
 
 ## An imported resource exists at `path`; fails the test with the remedy when it does not.

@@ -46,6 +46,7 @@ var _spawn_basis: Basis = Basis.IDENTITY
 @onready var ships: ShipPool = $World/Ships
 @onready var effects: Node3D = $World/Effects
 @onready var debris: DebrisPool = $World/Debris
+@onready var audio: AudioDirector = $World/Audio
 @onready var director: DestructionDirector = $Combat/DestructionDirector
 @onready var waves: WaveDirector = $Combat/WaveDirector
 @onready var hud: Hud = $Hud
@@ -78,6 +79,7 @@ func _ready() -> void:
 	director.setup(world, ships, debris, effects, combatant)
 	director.player_destroyed.connect(_on_player_destroyed)
 	director.respawn_due.connect(respawn)
+	_wire_audio()
 	waves.status_sink = func(line: String) -> void: status_line = line
 	waves.setup(world, ships, combatant, scenario if pool_count > 0 else {}, director, waves_auto_start)
 	player_respawned.connect(waves.on_player_respawned)
@@ -165,6 +167,14 @@ func respawn() -> void:
 	player_alive = true
 	if was_dead:
 		player_respawned.emit()
+
+
+# Gun sounds and engine hums for every ship, and the combat events (hits, explosions, warnings).
+func _wire_audio() -> void:
+	audio.connect_combat($Combat/HitResolver as HitResolver, director, combatant)
+	audio.watch_ship(combatant)
+	for pooled: Combatant in ships.all_ships():
+		audio.watch_ship(pooled)
 
 
 ## This frame's `HudInput`, read from the live nodes (the HUD never caches anything).

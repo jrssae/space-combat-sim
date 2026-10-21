@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 MANIFEST_NAME = "manifest.json"
+KIND_SPLAT = "splat"  # the default: a splat asset (``lods``, ``aabb_*``, ``centroid_offset``)
+KIND_AUDIO = "audio"  # a sound set: ``sounds`` and no ``lods``
 FRAME = "godot"
 UNITS = "m"
 
@@ -19,6 +21,48 @@ def lod_entry(level: int, file: str, splats: int, spacing_m: float) -> dict[str,
         "splats": int(splats),
         "spacing_m": float(spacing_m),
     }
+
+
+def sound_entry(
+    file: str, samples: int, sample_rate: int, peak_dbfs: float, loop: tuple[int, int] | None = None
+) -> dict[str, Any]:
+    """One sound of an audio manifest: its WAV, length, rate, peak level and, for a loop, the loop points in samples."""
+    entry: dict[str, Any] = {
+        "file": file,
+        "samples": int(samples),
+        "sample_rate": int(sample_rate),
+        "duration_s": round(int(samples) / int(sample_rate), 6),
+        "peak_dbfs": round(float(peak_dbfs), 3),
+    }
+    if loop is not None:
+        entry["loop_begin"], entry["loop_end"] = int(loop[0]), int(loop[1])
+    return entry
+
+
+def build_audio_manifest(
+    asset_id: str,
+    generator_version: int,
+    seed: int,
+    sounds: Mapping[str, Mapping[str, Any]],
+    extra: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Assemble and validate the manifest of a sound set (``kind`` ``audio``): ``sounds`` maps names to `sound_entry`s."""
+    manifest: dict[str, Any] = {
+        "asset_id": asset_id,
+        "generator_version": int(generator_version),
+        "seed": int(seed),
+        "kind": KIND_AUDIO,
+        "frame": FRAME,
+        "units": UNITS,
+        "sounds": {name: dict(entry) for name, entry in sounds.items()},
+        "files": {name: str(entry["file"]) for name, entry in sounds.items()},
+    }
+    for key, value in (extra or {}).items():
+        if key in manifest:
+            raise ValueError(f"extra manifest key {key!r} collides with a reserved key")
+        manifest[key] = value
+    validate_manifest(manifest)
+    return manifest
 
 
 def _vec3(value: Sequence[float], digits: int = 4) -> list[float]:
@@ -90,6 +134,13 @@ def validate_manifest(manifest: Mapping[str, Any]) -> None:
     if manifest.get("units") != UNITS:
         raise ValueError(f"manifest 'units' must be {UNITS!r}")
 
+    kind = manifest.get("kind", KIND_SPLAT)
+    if kind not in (KIND_SPLAT, KIND_AUDIO):
+        raise ValueError(f"manifest 'kind' must be {KIND_SPLAT!r} or {KIND_AUDIO!r}, got {kind!r}")
+    if kind == KIND_AUDIO:
+        _validate_sounds(manifest)
+        return
+
     lods = manifest.get("lods")
     if not isinstance(lods, list) or not lods:
         raise ValueError("manifest 'lods' must be a non-empty list (lods[0] is LOD 0)")
@@ -119,6 +170,33 @@ def validate_manifest(manifest: Mapping[str, Any]) -> None:
     if not isinstance(files, dict) or not all(
         isinstance(k, str) and isinstance(v, str) for k, v in files.items()
     ):
+        raise ValueError("manifest 'files' must map names to file names")
+
+
+def _validate_sounds(manifest: Mapping[str, Any]) -> None:
+    """An audio manifest has ``sounds`` and no ``lods``; every sound names a file and has positive length and rate."""
+    if "lods" in manifest:
+        raise ValueError("an audio manifest must not have 'lods'")
+    sounds = manifest.get("sounds")
+    if not isinstance(sounds, dict) or not sounds:
+        raise ValueError("an audio manifest needs a non-empty 'sounds' object")
+    for name, entry in sounds.items():
+        if not isinstance(entry, dict):
+            raise ValueError(f"manifest sounds[{name!r}] must be an object")  # noqa: TRY004
+        if not isinstance(entry.get("file"), str) or not entry["file"].endswith(".wav"):
+            raise ValueError(f"manifest sounds[{name!r}].file must be a .wav file name")
+        for key in ("samples", "sample_rate"):
+            value = entry.get(key)
+            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                raise ValueError(f"manifest sounds[{name!r}].{key} must be a positive integer")
+        if not _is_number(entry.get("peak_dbfs")):
+            raise ValueError(f"manifest sounds[{name!r}].peak_dbfs must be a number")
+        if ("loop_begin" in entry) != ("loop_end" in entry):
+            raise ValueError(f"manifest sounds[{name!r}] needs both loop_begin and loop_end or neither")
+        if "loop_begin" in entry and not 0 <= entry["loop_begin"] < entry["loop_end"] <= entry["samples"]:
+            raise ValueError(f"manifest sounds[{name!r}] loop points must satisfy 0 <= begin < end <= samples")
+    files = manifest.get("files")
+    if not isinstance(files, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in files.items()):
         raise ValueError("manifest 'files' must map names to file names")
 
 

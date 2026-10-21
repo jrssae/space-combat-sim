@@ -135,6 +135,13 @@ Things the Godot side must know:
   are re-centred on its own centroid; `offset` is that centroid in the body frame.
 - The centre of mass is trimmed onto the nacelle axis (y = the pods' nozzle y).
 
+## `sfx_combat`
+
+The combat sounds (docs/milestones M2-T12): seven mono 16-bit 48 kHz WAVs (`pulse_fire`, `raider_fire`, `hit_hull`, `explosion`,
+`engine_loop`, `warning_beep`, `target_blip`) synthesised with NumPy, peaks at -1.5 dBFS, byte-identical per seed. Its manifest has
+`kind` `audio`, a `sounds` object (file, samples, sample rate, duration, peak, and `loop_begin` / `loop_end` for the engine loop,
+which is seamless by construction) and no `lods`. Option: `peak_dbfs` (default -1.5, at most -1).
+
 ## `sky_default`
 
 12 000 star splats on a 20 km sphere (Milky Way band, magnitude distribution, blackbody colours) plus 4 000

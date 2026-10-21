@@ -117,6 +117,11 @@ func alive() -> Array[Combatant]:
 	return _in_use.duplicate()
 
 
+## Every pooled ship, parked or not.
+func all_ships() -> Array[Combatant]:
+	return _all.duplicate()
+
+
 func pool_size() -> int:
 	return _all.size()
 

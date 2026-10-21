@@ -3,7 +3,7 @@
 > "Something to shoot." (`docs/roadmap.md`)
 
 **Status:** in progress. The maintainer asked to proceed before M1's re-test. Done: **T01** combat maths, **T02**
-multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T05** raider ship and pool, **T06** destruction, **T07** AI seam and simple brains, **T08** HUD, **T09** waves, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T10 (integration and the capture set), T12 (sound). See `docs/handoff.md`.
+multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T05** raider ship and pool, **T06** destruction, **T07** AI seam and simple brains, **T08** HUD, **T09** waves, **T12** sound, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T10 (integration and the capture set). See `docs/handoff.md`.
 
 Read `docs/architecture.md` first, §1-§13 and especially **§15** (the M2 design: decisions D20-D29, tick order, hit
 detection, pools, brains, HUD, console additions). Task notes reference its sections (§). Tasks are ordered; each
@@ -757,6 +757,23 @@ history.
   `scenario free_flight`, `settings.scenario free_flight` or `--console-exec="scenario free_flight"`; it has no pool, no raiders
   and no waves. `test_main_scene.gd` pins the free-flight file.
 - `spawn` stays in `ShipPool` (the notes say it moves to the director; the behaviour is the same and the pool owns what it needs).
+
+**M2-T12 (generated sound).**
+- `tools/procgen/core/audio.py` (stdlib `wave` writer, envelopes, oscillators, FFT filters, periodic noise) and
+  `assets/sfx_combat.py`: `pulse_fire`, `raider_fire`, `hit_hull`, `explosion`, `engine_loop` (seamless: every component is a
+  whole number of cycles in the 2 s, loop points 0 to the last sample in the manifest), `warning_beep`, `target_blip`.
+  48 kHz mono 16-bit, peaks -1.5 dBFS, seeded and byte-identical. `manifest.py` gained `kind` (`splat` default, or `audio` with
+  `sounds` and no `lods`); `AssetOutputs.summary` lets the CLI report either; the GDScript `ManifestReader` and
+  `test_splat_import.gd` handle the audio kind (and check the WAV imports with its length).
+- `AudioDirector` (`World/Audio`, a `Node3D` because its voices are 3D players that must follow a rebase): 16 pooled
+  `AudioStreamPlayer3D`s with oldest-voice stealing, four 2D players for the warning and the target blip, an `EngineHum` child
+  on every ship (player and pool) that plays within 1.5 km of the camera and follows the flight output's thrust levels.
+  Hooks: each cannon's `projectile_fired`, `HitResolver.hit_resolved`, `raider_destroyed` / `player_destroyed`, the player's
+  hull under 25 % (repeating every 1.5 s) and `target_changed`. `settings.sfx_volume` (default 0.8) is the gain of the `SFX`
+  bus (`default_bus_layout.tres`; the director adds the bus if the layout is missing). Provider `audio`, command `sfx <name>`.
+- The engine loop's loop mode is set on a duplicate of the imported stream in the director (the generated WAV has no import
+  options file to carry it). The headless Dummy driver plays silently; the voice-cap and hook tests run through it.
+- `(H)`: how the sounds feel (AC21). They are first-pass synthesis: tune the constants at the top of `sfx_combat.py`.
 
 ## Definition of done (M2)
 

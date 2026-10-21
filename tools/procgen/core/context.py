@@ -74,3 +74,10 @@ class AssetOutputs:
     @property
     def splat_count(self) -> int:
         return int(self.manifest["lods"][0]["splats"])
+
+    @property
+    def summary(self) -> str:
+        """What the CLI reports: the splat count of a splat asset, the sound count of an audio asset."""
+        if self.manifest.get("kind") == "audio":
+            return f"{len(self.manifest['sounds'])} sounds"
+        return f"{self.splat_count} splats"

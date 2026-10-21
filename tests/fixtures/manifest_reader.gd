@@ -28,6 +28,10 @@ var aabb: AABB = AABB()
 var centroid_offset: Vector3 = Vector3.ZERO
 ## Role (`fallback_mesh`, `cockpit_mesh`, `hardpoints`, `panorama`, ...) -> file name relative to `directory`.
 var files: Dictionary[String, String] = {}
+## `kind`: `splat` (the default) or `audio` (a sound set: `sounds`, no `lods`, no bounds).
+var kind: String = "splat"
+## For an audio asset, sound name -> its manifest entry (`file`, `samples`, `sample_rate`, `duration_s`, `peak_dbfs`, maybe loop points).
+var sounds: Dictionary = {}
 ## Why the manifest is unusable. Empty when valid.
 var errors: PackedStringArray = PackedStringArray()
 
@@ -101,6 +105,14 @@ func _parse(text: String) -> void:
 		errors.append("frame is %s, expected %s" % [data.get("frame"), GODOT_FRAME])
 	if data.get("units") != METRES:
 		errors.append("units is %s, expected %s" % [data.get("units"), METRES])
+	kind = String(data.get("kind", "splat"))
+	if kind == "audio":
+		_parse_sounds()
+		_parse_files()
+		return
+	if kind != "splat":
+		errors.append("kind is %s, expected splat or audio" % kind)
+		return
 	_parse_lods()
 	var box_min: Variant = _vec3("aabb_min")
 	var box_max: Variant = _vec3("aabb_max")
@@ -115,6 +127,21 @@ func _parse(text: String) -> void:
 	if offset is Vector3:
 		centroid_offset = offset
 	_parse_files()
+
+
+func _parse_sounds() -> void:
+	if data.has("lods"):
+		errors.append("an audio manifest must not have lods")
+	var raw: Variant = data.get("sounds")
+	if not (raw is Dictionary) or (raw as Dictionary).is_empty():
+		errors.append("sounds is missing or empty")
+		return
+	for sound_name: Variant in raw as Dictionary:
+		var entry: Variant = (raw as Dictionary)[sound_name]
+		if not (entry is Dictionary) or not ((entry as Dictionary).get("file") is String) or _whole_number((entry as Dictionary).get("samples")) == null:
+			errors.append("sounds entry %s needs a file and an integer samples" % sound_name)
+			continue
+		sounds[String(sound_name)] = entry
 
 
 func _parse_lods() -> void:

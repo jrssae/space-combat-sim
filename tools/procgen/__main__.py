@@ -173,7 +173,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             continue
         elapsed = time.perf_counter() - started
         print(
-            f"built {asset_id}: {outputs.splat_count} splats, {len(outputs.files)} files "
+            f"built {asset_id}: {outputs.summary}, {len(outputs.files)} files "
             f"-> {_display(outputs.out_dir)} ({elapsed:.1f}s)"
         )
         for warning in outputs.warnings:
