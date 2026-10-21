@@ -3,7 +3,7 @@
 > "Something to shoot." (`docs/roadmap.md`)
 
 **Status:** in progress. The maintainer asked to proceed before M1's re-test. Done: **T01** combat maths, **T02**
-multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T05** raider ship and pool, **T06** destruction, **T07** AI seam and simple brains, **T08** HUD, **T09** waves, **T12** sound, **T11** control profiles, **T14** reaction mass and weapon capacitor. Next: T10 (integration and the capture set). See `docs/handoff.md`.
+multi-ship readiness, **T03** hit detection and damage, **T04** raider generator, **T05** raider ship and pool, **T06** destruction, **T07** AI seam and simple brains, **T08** HUD, **T09** waves, **T10** integration, **T12** sound, **T11** control profiles, **T14** reaction mass and weapon capacitor. All (A) work is done; the maintainer runs the (H) checklist in `docs/playtest.md`. T13 only if AC15 is rejected. See `docs/handoff.md`.
 
 Read `docs/architecture.md` first, §1-§13 and especially **§15** (the M2 design: decisions D20-D29, tick order, hit
 detection, pools, brains, HUD, console additions). Task notes reference its sections (§). Tasks are ordered; each
@@ -774,6 +774,20 @@ history.
 - The engine loop's loop mode is set on a duplicate of the imported stream in the director (the generated WAV has no import
   options file to carry it). The headless Dummy driver plays silently; the voice-cap and hook tests run through it.
 - `(H)`: how the sounds feel (AC21). They are first-pass synthesis: tune the constants at the top of `sfx_combat.py`.
+
+**M2-T10 (integration, smoke runs, capture set, play-test guide).**
+- `run_tests.sh` smoke-runs: the main scene (providers `audio, camera, combat, controls, debris, debug, hud, hull, input, raiders,
+  render, settings, ship, targeting, time, waves, weapons, world`), god mode and damage, kill and respawn, the combat smoke
+  (`spawn raider idle 400`, `kill target`, `raiders.alive = 0`, `waves.kills = 1`), an attacking raider, and waves with the
+  `scenario` reload. All reject `ERROR:` in the log.
+- `tests/integration/test_m2_run.gd` plays the three waves headless on the real main scene (the trigger held, `kill all`): raiders
+  per wave 3 / 3 / 4, 10 kills, the splat-node count equal at load, after every wave and at the end (AC6), and the hit resolver's
+  worst tick **582 us** with up to 11 bolts in a tick (bound 2 ms). The AC3 case (64 bolts x 8 targets) measured 0.6 ms per tick.
+- `scripts/capture_m2.sh` runs P1-P4 into `reports/m2/` (llvmpipe through `capture.sh`, or `CAPTURE_REAL_GPU=1` on a desktop).
+  P1-P3 were captured on the real GPU (RX 6950 XT, Compute) during T05, T06 and T08; P4 is in the script.
+- `docs/playtest.md` has the M2 section: waves, HUD legend, console additions and the AC15-AC21 checklist.
+- Mismatches reconciled across tasks: the sandbox became the default scenario (T09) so the M1 integration tests pin free flight;
+  tests that drive `Main` themselves set `waves_auto_start = false`; `Main.raider_pool_size` stayed as a test override.
 
 ## Definition of done (M2)
 

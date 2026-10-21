@@ -218,6 +218,22 @@ expect_line "${log}" "[console] hull.destroyed = false" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 reject_text "${log}" "ERROR:" || smoke_status=1
 
+echo "== Console smoke run: a raider is shot down (the combat smoke of M2-T10)"
+log="${REPORTS}/console_combat.log"
+combat_status=0
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; god on; spawn raider idle 400; wait 5; set targeting.selected "RAIDER 1"; kill target; wait 120; get raiders.alive; get waves.kills; quit' \
+    > "${log}" 2>&1 || combat_status=$?
+cat "${log}"
+if (( combat_status != 0 )); then
+    echo "run_tests.sh: combat smoke run exited ${combat_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] raiders.alive = 0" || smoke_status=1
+expect_line "${log}" "[console] waves.kills = 1" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
+
 echo "== Console smoke run: an attacking raider on the real main scene"
 # M2-T07 / AC9: an attack raider 2 km out flies its gun run (the brain's state is readable) and lands hits on the player.
 log="${REPORTS}/console_attack.log"

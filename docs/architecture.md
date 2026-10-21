@@ -1429,6 +1429,22 @@ reaches its waypoints, attack hits a drone), a three-wave run, the console smoke
 (budget, contract, chunk partition, collision coverage) and `sfx_combat`. (H) with pre-checks through
 `scripts/capture.sh` (llvmpipe, Raster backend): asset silhouette, HUD layout, effect compositing.
 
+### 15.14b As built (M2 deviations from §15.1-§15.13)
+
+Details per task are in the as-built notes of `docs/milestones/m2-combat-sandbox.md`. The ones that change the design above:
+
+- `ShipAssembly` wires hardpoint-dependent components on the ship's `ready` signal; console ownership is opt-in
+  (`Ship.console_owner`, `register_console` flags).
+- Guns can converge: `WeaponSpec.convergence_range_m` (0 = parallel). The raider's plasma converges at 700 m; the AI's fire gate is also
+  capped by a miss distance (`RaiderTactics.fire_miss_m`).
+- Kills count every raider destroyed (the console's `kill` has no shooter). The wave carries on across the player's death.
+- The sandbox is the default scenario; free flight has no pool, waves or activity. `Main.scenario_path`, `waves_auto_start` and
+  `raider_pool_size` are test overrides.
+- `ShipPool` keeps the `spawn` command; `AudioDirector` is `World/Audio` (a `Node3D`); the debris pool and the explosion are built in
+  code (no `.tscn` for the chunk); the `scenario` command reloads the scene and the console queue survives it.
+- `HudLayout` is pure and agrees with `Camera3D.unproject_position`; the radar sphere is tilted (`RadarModel.TILT_RAD`).
+- Sound: manifest `kind` `audio`; engine hum is a child of each ship.
+
 ### 15.15 Seams M2 leaves for later
 
 | Seam | Task | Avoids later |

@@ -146,3 +146,78 @@ The full wording is in `docs/milestones/m1-first-flight.md`. Tick each one, or n
 Record your GPU, driver and FPS in the acceptance record at the end of the milestone doc. If a splat check
 (AC12/AC13) fails, that triggers M1-T16 (fallback triage) before anything else. A screenshot plus the overlay text
 is the most useful bug report.
+
+# Play-testing M2 (Combat Sandbox)
+
+M2 adds a wave sandbox on top of free flight: raiders (the Delta-V flying wing) that idle, patrol and attack, hit detection and
+hull damage, explosions and debris, a combat HUD, sound and a respawn. Setup is the M1 setup above (`scripts/gen_assets.sh`
+now also writes the raider, its chunks and the sounds). Run `.tools/godot/godot --path .`: the game opens in the sandbox and
+wave 1's countdown starts at once. `scenario free_flight` (console) is the old M1 scene.
+
+`scripts/capture_m2.sh` (or `CAPTURE_REAL_GPU=1 scripts/capture_m2.sh 1920x1080` on your desktop) writes the P1-P4 screenshots to
+`reports/m2/`; attach them when you report back.
+
+## The waves
+
+1. **TARGET PRACTICE** (5 s delay): three raiders drifting 1.3-2 km out; they do not shoot.
+2. **PATROL** (8 s): three raiders on triangular patrol loops 2-3 km out; they attack when you come within 1.5 km or shoot them.
+3. **STRIKE** (8 s): four raiders arrive from 4 km, two seconds apart, and make gun runs. Then it loops: each pass adds one more
+   attacker, up to six.
+
+Each wave clears when every raider is gone; a short pause, then the next countdown. If you die, you respawn at the start after
+3 s with a full hull; the wave carries on and the raiders left come for you again. The status line (top centre) shows wave,
+state, raiders alive and kills.
+
+## HUD legend (green line style; sizes scale with the window height)
+
+```
++ (cross)           where your nose points (1 km ahead)
+circle with wings   where you are going (prograde); circle with an X = where you are coming from (retrograde, shown when
+                    prograde is behind the camera)
+corner brackets     the selected target: red hostile, blue friendly, yellow neutral; name, range, closing speed (m/s,
+                    + closing), and a hull bar (none on buoys)
+arrow on the edge   the selected target is off screen or behind you
+diamond             the lead point: put it on the target and fire. It hides when the bolt cannot reach (too far, or the
+                    target outruns it)
+bottom left         HULL bar (green, amber under 50 %, red under 25 %; GOD when `god` is on) and FUEL bar (full with an
+                    infinity mark while fuel is unlimited)
+bottom right        CHARGE: the weapon capacitor and the fire mode
+bottom centre       speed, with the radar sphere above it: the nose is up the screen, a dot per contact within 25 km (linear
+                    to 5 km, logarithmic beyond), coloured by faction, the selected one ringed; the stalk shows above or below
+cockpit grid        in the cockpit (or `set settings.hud_targeting_grid on`): an 8 x 8 grid with a circle; the square marker
+                    is the target's offset from the nose (+-30 degrees)
+```
+
+`set settings.show_hud off` hides it all. The debug overlay (F3) hides its own target bracket while the HUD shows.
+
+## Console additions (M2)
+
+```
+spawn raider [idle|patrol|attack|aggro] [distance_m] [yaw_deg] [pitch_deg]    a raider ahead of you, nose to you
+despawn [target|all]       return raiders to the pool       kill [target|all|player]   destroy now (bypasses god)
+damage <n> [player|target] hit with no shooter              heal [player|target|all]   restore hulls
+wave start [1-3] | next | stop | restart     drive the waves          state waves     index, name, state, alive, kills, losses
+scenario [combat_sandbox|free_flight]        reload into a scenario (the startup script carries on)
+controls ... / bind / unbind                 control profiles (above)
+sfx <name>                 play a sound at you              set audio.volume 0.5    SFX gain (settings.sfx_volume)
+state combat / hull / raiders / debris / hud / audio       the new providers
+```
+
+## Acceptance checklist (M2 (H) criteria, the full wording is in `docs/milestones/m2-combat-sandbox.md`)
+
+- [ ] **AC15 Raider look.** Reads as the Delta-V of your references from front, side, top and three-quarter views; splats in both
+      cameras; F4 shows the fallback mesh in the same place. (Proportions follow the sheet: 7.2 m x 17 m; see
+      `docs/assets-raider.md`. If it is wrong, say what, and T13 is the look pass.)
+- [ ] **AC16 Effects.** Impact flashes sit on the hull they hit; explosions and debris read well, hide behind hulls in front of
+      them and show the raider breaking into its parts; no hitch when waves spawn or ships die.
+- [ ] **AC17 HUD.** Readable at 1080p in both cameras: everything in the legend above. Holding the lead diamond on a crossing raider
+      and firing scores hits.
+- [ ] **AC18 Waves.** Target practice raiders drift, patrol raiders react when approached or shot, strike raiders make attack
+      runs and sometimes hit; both fire modes kill raiders in a sensible time (a raider has 60 hull, a bolt does 10);
+      death and respawn work; `god` works.
+- [ ] **AC19 Performance.** 60 fps at 1080p (Compute) with six raiders, bolts, an explosion and debris on screen.
+- [ ] **AC20 Control profile.** `controls save mine`, `controls use mine`, `save`, restart: it is still selected.
+- [ ] **AC21 Sound.** Weapons, hits, explosions and engines are positional, readable and not fatiguing; `set audio.volume` works.
+- [ ] **Splat backend** shows `SPLATS COMPUTE` in the overlay (note GPU and driver if not).
+
+Acceptance record: copy the block at the end of `docs/milestones/m2-combat-sandbox.md`, fill it in and send it back.
