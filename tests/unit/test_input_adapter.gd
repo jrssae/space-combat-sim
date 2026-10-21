@@ -167,6 +167,7 @@ func test_every_edge_maps_to_its_field() -> void:
 		InputAdapter.TOGGLE_FALLBACK: func(c: PilotCommand) -> bool: return c.ui.toggle_fallback_mesh,
 		InputAdapter.TARGET_PREV: func(c: PilotCommand) -> bool: return c.combat.target_prev,
 		InputAdapter.SCREENSHOT: func(c: PilotCommand) -> bool: return c.ui.screenshot,
+		InputAdapter.AUTOTRACK: func(c: PilotCommand) -> bool: return c.flight.autotrack,
 	}
 	assert_eq(fields.size(), InputAdapter.EDGE_ACTIONS.size(), "every edge action is covered")
 	for action: StringName in fields.keys():
@@ -307,16 +308,29 @@ func test_last_command_is_kept() -> void:
 # --- Auto-track, camera look, mouse, wheel (post-M2 controls) -----------------------------------------------------
 
 
-func test_autotrack_is_a_held_flag_and_brake_is_separate() -> void:
+func test_autotrack_is_a_toggle_and_brake_is_separate() -> void:
 	source.hold(InputAdapter.AUTOTRACK)
 	var cmd: PilotCommand = adapter.sample(source, DT)
-	assert_true(cmd.flight.autotrack)
+	assert_true(cmd.flight.autotrack, "first press: on")
 	assert_false(cmd.flight.brake, "X no longer brakes")
+	assert_true(adapter.sample(source, DT).flight.autotrack, "holding it does not toggle again")
+	source.release(InputAdapter.AUTOTRACK)
+	assert_true(adapter.sample(source, DT).flight.autotrack, "letting go leaves it on")
+	source.hold(InputAdapter.AUTOTRACK)
+	assert_false(adapter.sample(source, DT).flight.autotrack, "second press: off")
 	source.release(InputAdapter.AUTOTRACK)
 	source.hold(InputAdapter.BRAKE)
 	cmd = adapter.sample(source, DT)
 	assert_true(cmd.flight.brake)
 	assert_false(cmd.flight.autotrack)
+
+
+func test_reset_switches_autotrack_off() -> void:
+	source.hold(InputAdapter.AUTOTRACK)
+	adapter.sample(source, DT)
+	assert_true(adapter.autotrack_on)
+	adapter.reset()
+	assert_false(adapter.autotrack_on)
 
 
 func test_the_mouse_speed_is_the_turn_rate_and_stopping_the_mouse_stops_the_turn() -> void:

@@ -66,6 +66,11 @@ var force_assist: bool = false:
 var _assist_on: bool = true
 var _hardpoints: Hardpoints = Hardpoints.new()
 var _layout: ThrusterLayout = ThrusterLayout.new()
+## Share of the gap to this tick's measured turn rate of the lead direction that the smoothed rate closes each tick.
+const TRACK_RATE_SMOOTHING: float = 0.35
+
+var _track_prev_dir: Vector3 = Vector3.ZERO
+var _track_rate_w: Vector3 = Vector3.ZERO
 var _model: FlightModel = null
 var _output: FlightOutput = FlightOutput.new()
 var _fuel: FuelTank = FuelTank.new()
@@ -141,7 +146,7 @@ func _physics_process(delta: float) -> void:
 		var b: Basis = global_basis
 		var to_body: Basis = b.transposed()
 		_flight.face_dir_b = to_body * targeting.selected_offset()  # what the brake faces (§5.5); zero = no target
-		_flight.track_dir_b = to_body * _lead_offset() if _flight.autotrack else Vector3.ZERO
+		_update_tracking(delta, to_body)
 		var fuel: FuelTank = get_fuel_tank()
 		_output = _model.compute(_flight, to_body * linear_velocity, to_body * angular_velocity, to_body * env_accel,
 				_assist_on, delta, not fuel.is_empty())
@@ -269,6 +274,7 @@ func set_cockpit_interior_visible(shown: bool) -> void:
 	_interior_visible = shown
 	if is_node_ready():
 		cockpit_interior.visible = shown
+		_apply_hull_visuals()
 
 
 func is_cockpit_interior_visible() -> bool:
@@ -279,11 +285,20 @@ func is_cockpit_interior_visible() -> bool:
 ## proxy is only wanted while the splats are drawn: the fallback mesh writes depth itself.
 func use_fallback_mesh(enabled: bool) -> void:
 	_fallback_active = enabled
+	_apply_hull_visuals()
+
+
+# Splats or mesh for the hull. The mesh is drawn when the fallback is on, and also while the cockpit interior is shown: from
+# inside, the hull's splats are seen from a few tens of centimetres, where each one is a huge flat disc that turns into a
+# serrated, flickering sliver at a grazing angle (the 2026-10-21 play test). The mesh has none of that. The depth proxy stays on
+# in the cockpit, so effects behind the hull stay hidden.
+func _apply_hull_visuals() -> void:
 	if not is_node_ready():
 		return
-	hull_mesh_fallback.visible = enabled
-	hull_depth_proxy.visible = not enabled
-	hull_splats.visible = not enabled
+	var mesh_mode: bool = _fallback_active or _interior_visible
+	hull_mesh_fallback.visible = mesh_mode
+	hull_depth_proxy.visible = _interior_visible or not _fallback_active
+	hull_splats.visible = not mesh_mode
 
 
 func is_fallback_mesh_active() -> bool:
@@ -380,6 +395,32 @@ func _load_visuals() -> void:
 	hull_mesh_fallback.mesh = _load_mesh(dir.path_join(spec.asset_id + ".obj"))
 	hull_depth_proxy.mesh = hull_mesh_fallback.mesh  # whatever is loaded, so a regenerated hull needs no changes here
 	cockpit_interior.mesh = _load_mesh(dir.path_join(COCKPIT_MESH_FILE)) if spec.has_cockpit_interior else null
+	_make_double_sided(hull_mesh_fallback.mesh)
+	_make_double_sided(cockpit_interior.mesh)
+	_lift_shadows(cockpit_interior.mesh)
+
+
+# The cockpit bars are mirrored copies, whose faces wind the other way and vanish from inside with back-face culling on;
+# the hull mesh is seen from inside the cockpit too. Both draw both sides.
+static func _make_double_sided(mesh: Mesh) -> void:
+	if mesh == null:
+		return
+	for i: int in mesh.get_surface_count():
+		var material := mesh.surface_get_material(i) as BaseMaterial3D
+		if material != null and material.cull_mode != BaseMaterial3D.CULL_DISABLED:
+			material.cull_mode = BaseMaterial3D.CULL_DISABLED
+
+
+# The cockpit frame on the side away from the sun would be pure black against the black sky (and read as a hole): a faint
+# emission keeps both struts visible.
+static func _lift_shadows(mesh: Mesh) -> void:
+	if mesh == null:
+		return
+	for i: int in mesh.get_surface_count():
+		var material := mesh.surface_get_material(i) as BaseMaterial3D
+		if material != null:
+			material.emission_enabled = true
+			material.emission = Color(0.045, 0.047, 0.055)
 
 
 static func _load_mesh(path: String) -> Mesh:
@@ -408,6 +449,25 @@ func _take_combat_edges() -> bool:
 		held.fire = _combat.fire
 		_combat = held
 	return fresh
+
+
+# Fills `track_dir_b` (the lead point of the selected target) and `track_rate_b` (how fast that direction is turning, from the
+# change since the last tick, lightly smoothed) while auto-track is on.
+func _update_tracking(delta: float, to_body: Basis) -> void:
+	var offset: Vector3 = _lead_offset() if _flight.autotrack else Vector3.ZERO
+	if offset.is_zero_approx() or delta <= 0.0:
+		_flight.track_dir_b = Vector3.ZERO
+		_flight.track_rate_b = Vector3.ZERO
+		_track_prev_dir = Vector3.ZERO
+		_track_rate_w = Vector3.ZERO
+		return
+	var dir: Vector3 = offset.normalized()
+	if not _track_prev_dir.is_zero_approx():
+		# Small-angle rotation vector between the two directions, per second.
+		_track_rate_w = _track_rate_w.lerp(_track_prev_dir.cross(dir) / delta, TRACK_RATE_SMOOTHING)
+	_track_prev_dir = dir
+	_flight.track_dir_b = to_body * offset
+	_flight.track_rate_b = to_body * _track_rate_w
 
 
 # World-frame offset from the ship to the lead point of the selected target (the same solution as the HUD's lead reticle:

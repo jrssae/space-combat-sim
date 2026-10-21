@@ -117,7 +117,7 @@ func compute(cmd: FlightCommand, v_b: Vector3, w_b: Vector3, env_accel_b: Vector
 		var w_target: Vector3
 		if tracking:
 			# Pitch and yaw go to the nose-onto-lead controller; roll stays with the pilot.
-			w_target = assist.face_rate_target(cmd.track_dir_b)
+			w_target = assist.track_rate_target(cmd.track_dir_b, cmd.track_rate_b)
 			w_target.z = cmd.rot.z * AXIS_SIGN.z * spec.rate_max_rad().z
 			out.facing = true
 			out.face_error_rad = FlightAssist.face_error_vector(cmd.track_dir_b).length()

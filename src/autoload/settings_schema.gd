@@ -45,6 +45,8 @@ const ENTRIES: Dictionary = {
 		"doc": "Show the combat HUD (target box, lead reticle, radar, gauges)"},
 	&"hud_targeting_grid": {"type": TYPE_BOOL, "default": false,
 		"doc": "Show the targeting grid in the chase view too (it is always shown in the cockpit view)"},
+	&"hud_chase_opacity": {"type": TYPE_FLOAT, "default": 0.7, "min": 0.1, "max": 1.0,
+		"doc": "How opaque the HUD is in the chase view (the cockpit view always draws it fully)"},
 	&"show_fps": {"type": TYPE_BOOL, "default": false,
 		"doc": "Show the console FPS counter"},
 	&"console_enabled": {"type": TYPE_BOOL, "default": true,

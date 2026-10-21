@@ -19,6 +19,7 @@ const RED: Color = Color(1.0, 0.3, 0.25)
 static func compute(input: HudInput) -> HudFrame:
 	var f := HudFrame.new()
 	f.viewport_size = input.viewport_size
+	f.cockpit = input.cockpit
 	f.scale = maxf(input.viewport_size.y / 1080.0, 0.25)  # a floor, so a degenerate viewport cannot ask for a zero-size font
 	_markers(input, f)
 	_target(input, f)
@@ -191,6 +192,10 @@ static func _gauges(input: HudInput, f: HudFrame) -> void:
 	var bar := Vector2(260.0, 14.0) * s
 	var margin: float = 48.0 * s
 	f.speed_pos = Vector2(w * 0.5, h - 40.0 * s)
+	f.speed_align_right = not input.cockpit
+	if not input.cockpit:
+		# Chase view: the ship fills the middle, so the readout sits above the radar in the bottom-right corner.
+		f.speed_pos = Vector2(w - margin, h - 56.0 * s - 30.0 * s - 2.0 * 78.0 * s - 28.0 * s)
 	f.hull_rect = Rect2(Vector2(margin, h - 90.0 * s), bar)
 	f.fuel_rect = Rect2(Vector2(margin, h - 56.0 * s), bar)
 	f.charge_rect = Rect2(Vector2(w - margin - bar.x, h - 56.0 * s), bar)
@@ -229,9 +234,15 @@ static func _grid(input: HudInput, f: HudFrame) -> void:
 static func _radar(input: HudInput, f: HudFrame) -> void:
 	f.radar_radius_px = 78.0 * f.scale
 	f.radar_centre = Vector2(input.viewport_size.x * 0.5, input.viewport_size.y - 176.0 * f.scale)
+	if not input.cockpit:
+		# Chase view: bottom-right corner, over the charge bar.
+		f.radar_centre = Vector2(input.viewport_size.x - 48.0 * f.scale - 130.0 * f.scale, input.viewport_size.y - 56.0 * f.scale - 30.0 * f.scale - f.radar_radius_px)
 	if input.target != null and input.target.damage_layout != DamageZones.Layout.NONE:
 		f.target_layout = input.target.damage_layout
 		f.target_zones = input.target.damage_zones
 		var outline := Vector2(150.0, 112.0) * f.scale
-		f.target_silhouette_rect = Rect2(f.radar_centre + Vector2(f.radar_radius_px + 28.0 * f.scale, -outline.y * 0.5), outline)
+		if input.cockpit:
+			f.target_silhouette_rect = Rect2(f.radar_centre + Vector2(f.radar_radius_px + 28.0 * f.scale, -outline.y * 0.5), outline)
+		else:
+			f.target_silhouette_rect = Rect2(f.radar_centre + Vector2(-f.radar_radius_px - 28.0 * f.scale - outline.x, -outline.y * 0.5), outline)
 	f.radar_dots = RadarModel.dots(input.contacts, input.selected_id, input.own_position, input.own_basis, input.faction)

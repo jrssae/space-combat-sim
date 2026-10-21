@@ -113,6 +113,19 @@ func face_rate_target(dir_b: Vector3) -> Vector3:
 	return w * scale
 
 
+## The auto-track's rate target: the `face_rate_target` correction toward `dir_b` plus the rate at which `dir_b` itself is turning
+## (`dir_rate_b`, rad/s, only its pitch and yaw parts), each axis kept inside `rate_max`. A target crossing at a steady rate is then
+## followed with no standing error instead of trailing it by `rate / face_gain`.
+func track_rate_target(dir_b: Vector3, dir_rate_b: Vector3) -> Vector3:
+	var w: Vector3 = face_rate_target(dir_b)
+	w.x += dir_rate_b.x
+	w.y += dir_rate_b.y
+	var cap: Vector3 = spec.rate_max_rad()
+	w.x = clampf(w.x, -cap.x, cap.x)
+	w.y = clampf(w.y, -cap.y, cap.y)
+	return w
+
+
 ## The rotation vector, body frame, rad, that turns the nose (-Z) onto `dir_b` by the shortest arc: about
 ## `FORWARD × d = (d.y, -d.x, 0)`, so pitch and yaw only, never roll; its length is the angle off the nose. Zero for a
 ## zero direction or one dead ahead; dead astern it pitches up (+X) through the target.

@@ -126,3 +126,16 @@ func _release_everything() -> void:
 	for key: Key in [KEY_E, KEY_W, KEY_Q]:
 		_key(key, false)
 	Input.flush_buffered_events()
+
+
+func test_a_free_mouse_reads_as_idle() -> void:
+	var source := GodotInputSource.new()
+	source.add_mouse_motion(Vector2(10.0, 5.0))
+	source.add_wheel(2)
+	assert_eq(source.take_mouse_delta(), Vector2(10.0, 5.0), "captured: motion arrives")
+	assert_eq(source.take_wheel_steps(), 2)
+	source.mouse_free = true
+	source.add_mouse_motion(Vector2(10.0, 5.0))
+	source.add_wheel(2)
+	assert_eq(source.take_mouse_delta(), Vector2.ZERO, "the desktop has the mouse: no turn")
+	assert_eq(source.take_wheel_steps(), 0, "and no target cycling")

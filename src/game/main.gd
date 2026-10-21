@@ -99,11 +99,21 @@ func _exit_tree() -> void:
 
 func _physics_process(delta: float) -> void:
 	var pc: PilotCommand = adapter.sample(input_source, delta)
+	if pc.flight.autotrack and not _target_for_autotrack():
+		adapter.autotrack_on = false
+		pc.flight.autotrack = false
 	if not get_tree().paused and player_alive:
 		combatant.apply_commands(pc.flight, pc.combat)
 	if not get_tree().paused:
 		camera_rig.set_look(delta, pc.ui.look_active, pc.ui.look_stick, pc.ui.look_mouse_px)
 	_handle_ui(pc.ui)
+
+
+# Auto-track needs a target: with none selected the nearest hostile is taken; with none in range it switches itself off.
+func _target_for_autotrack() -> bool:
+	if ship == null or not player_alive:
+		return false
+	return ship.targeting.system.has_selection() or ship.targeting.select_nearest_hostile()
 
 
 # The mouse flies the ship and works the targets (architecture §6.1): its motion and wheel go to the input source, which
@@ -307,15 +317,19 @@ func _handle_ui(ui: UiCommand) -> void:
 		print("[screenshot] ", result.lines[0] if result.ok and not result.lines.is_empty() else result.error)
 
 
-# The mouse is captured (hidden, unbounded) while flying with a mouse-capable source; the console, the pause and a window
-# that lost focus give it back.
+# The mouse is captured (hidden, unbounded) while flying with a mouse-capable source; holding Alt, the console, the pause and a
+# window that lost focus give it back to the desktop (Alt + drag then moves the window in most window managers). While it is
+# the desktop's, the source reads it as idle.
 func _update_mouse_capture() -> void:
-	if not (input_source is GodotInputSource) or DisplayServer.get_name() == "headless":
+	var godot_source := input_source as GodotInputSource
+	if godot_source == null or DisplayServer.get_name() == "headless":
 		return
-	var flying: bool = not get_tree().paused and not DebugConsole.is_open() and get_window().has_focus()
+	var flying: bool = not get_tree().paused and not DebugConsole.is_open() and get_window().has_focus() \
+			and not Input.is_physical_key_pressed(KEY_ALT)
 	var wanted: Input.MouseMode = Input.MOUSE_MODE_CAPTURED if flying else Input.MOUSE_MODE_VISIBLE
 	if Input.mouse_mode != wanted:
 		Input.mouse_mode = wanted
+	godot_source.mouse_free = not flying
 
 
 func _update_bracket() -> void:

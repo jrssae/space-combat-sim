@@ -438,16 +438,18 @@ L3  free look (hold): the right stick turns the camera, not the ship; release re
 Back  reset                       Start  pause
 ```
 
-Revised after the M2 play test: X is the auto-track (`FlightCommand.autotrack`: pitch and yaw go to the attitude controller
-that swings the nose onto `track_dir_b`, the lead point of the selected target; thrust and drift are untouched), R3 is the
+Revised after the M2 play test: X toggles the auto-track (`FlightCommand.autotrack`: pitch and yaw go to the attitude controller
+that swings the nose onto `track_dir_b`, the lead point of the selected target, plus `track_rate_b`, the rate at which that
+direction is turning, fed forward so a crossing target is followed without the standing lag of a position-only controller; thrust
+and drift are untouched; with no target it takes the nearest hostile, and `Main` switches it off when none is left), R3 is the
 brake, L3 is free look (`CameraLook`: cockpit head turn up to 135° / 80°, chase orbit around the ship; the right stick is an
 absolute direction, the mouse turns the view by its travel; released, the view eases back to centre). The debug overlay is F3
 only. The keyboard is split by hand: the left hand has the engines (Q/E/R mains, A/D/F retros), roll (Z/X), brake (Ctrl), the
 camera (Tab) and auto-track (Shift); the right hand has pitch and yaw (I/K, J/L), strafe (arrows), assist (Y), targets (U next,
 O previous, P nearest the nose), fire mode (H) and screenshot (N, Print). The mouse flies (its speed, smoothed over a few ticks,
 is the pitch and yaw rate command; `settings.mouse_full_rate_px_s`), mouse 1 fires, mouse 2 is the tap-or-hold target button,
-the wheel steps through the targets, the middle button is free look. The mouse is captured while flying and freed by the console,
-the pause or a lost window focus.
+the wheel steps through the targets, the middle button is free look. The mouse is captured while flying and freed by holding Alt, the console,
+the pause or a lost window focus (`GodotInputSource.mouse_free` then reads it as idle).
 
 Revised after the M1 play test on the maintainer's generic pad: yaw and roll swapped places (right stick X was
 yaw, the D-pad was roll), and because that pad has no stick clicks, `target_ahead` moved onto a D-pad Up hold
@@ -474,7 +476,7 @@ use for the standard layout; any pad SDL3 recognises, generic XInput clones incl
 | `fire` | A `JOY_BUTTON_A` (0) | Space, mouse 1 | hold | - | - |
 | `toggle_flight_assist` | B `JOY_BUTTON_B` (1) | Y | edge | - | - |
 | `brake` | R3 `JOY_BUTTON_RIGHT_STICK` (8) | Ctrl | hold | - | - |
-| `autotrack` | X `JOY_BUTTON_X` (2) | Shift | hold | - | - |
+| `autotrack` | X `JOY_BUTTON_X` (2) | Shift | edge (toggles auto-track; `InputAdapter.autotrack_on`) | - | - |
 | `camera_look` | L3 `JOY_BUTTON_LEFT_STICK` (7) | mouse 3 (middle) | hold | - | - |
 | `toggle_camera` | Y `JOY_BUTTON_Y` (3) | Tab | edge | - | - |
 | `reset_ship` | Back `JOY_BUTTON_BACK` (4) | Backspace | edge | - | - |

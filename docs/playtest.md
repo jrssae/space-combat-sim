@@ -40,8 +40,9 @@ Right stick   pitch / roll (stick back = nose up,    Left stick  strafe left/rig
               stick right = roll right)
 D-pad L/R     yaw (tap for fine corrections)         D-pad Down  fire mode
 D-pad Up      tap: next target                       hold (about 0.35 s): target nearest the nose
-X (hold)      auto-track: the nose swings onto the lead reticle of the selected target and stays there;
-              your speed and direction are untouched, so you can keep thrusting and strafing while you aim
+X (toggle)    auto-track on/off: the nose swings onto the lead reticle of the selected target and follows it as it moves
+              (with none selected it takes the nearest hostile; it switches itself off when none is left); your speed and
+              direction are untouched, so you can keep thrusting and strafing while you aim. AUTO-TRACK shows on the HUD
 R3            brake (hold): all stop; with a target selected the nose also swings onto it
 L3 (hold)     free look: the right stick looks around instead of flying (cockpit: your head turns; chase: the camera
               pans around the ship). Let go and the view returns to the nose. The ship ignores the stick meanwhile.
@@ -53,9 +54,10 @@ Keyboard and mouse (left hand flies the engines, right hand aims):
 
 ```
 Q / E / R     left main / both mains / right main     A / D / F   left retro / both retros / right retro
-Z / X         roll left / right                       Ctrl        brake (hold)           Shift  auto-track (hold)
+Z / X         roll left / right                       Ctrl        brake (hold)           Shift  auto-track (toggle)
 Tab           cockpit / chase camera                  Space       fire
 Mouse         pitch and yaw: how fast you move it is how fast you turn (stop the mouse and the turn stops)
+Alt (hold)    frees the mouse: the cursor appears, the ship ignores it and clicks do not fire; Alt + drag moves the window
 Mouse 1       fire                                    Mouse 2     tap: next target, hold: target nearest the nose
 Wheel         previous / next target                  Middle button (hold)  free look, as L3
 I / K         pitch                                   J / L       yaw (ramped like the D-pad)
@@ -68,7 +70,8 @@ Backspace     respawn                                 Esc         pause (also fr
 The ` key opens the debug console; it frees the mouse while open. Mouse feel: `set settings.mouse_full_rate_px_s 1200`
 (the mouse speed that commands the full turn rate; lower = more sensitive) and `set settings.mouse_look_deg_per_px 0.12`
 (free look). Sizes: `set settings.debug_text_size 22` (overlay text) and `set settings.chase_bolt_scale 3` (how much larger bolts
-are drawn in the chase view). Add `save` to keep a setting.
+are drawn in the chase view) and `set settings.hud_chase_opacity 0.7` (how solid the HUD is in the chase view, where the radar
+and speed readout also sit in the bottom-right corner instead of the middle). Add `save` to keep a setting.
 
 Changed after the first play test: yaw and roll swapped (the right stick used to yaw and the D-pad to roll), and
 target-ahead moved to a D-pad Up hold because the pad had no stick clicks. Changed after the M2 play test: X is auto-track and

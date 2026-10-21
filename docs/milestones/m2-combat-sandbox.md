@@ -831,3 +831,12 @@ maintainer's eyes or ears on the real GPU.
 | 15 | Screenshot key | `N` or `Print`: saves to `user://screenshots/` and prints the path |
 | 16 | No fuel gauge when fuel is unlimited | hidden |
 | 17 | M2 AC15-AC19 pass | recorded above |
+
+### Second feedback round (same day)
+
+| Feedback | Done |
+|---|---|
+| Auto-track followed the ship, not the lead; make it a toggle | The controller only chased the lead point's position, so it trailed a crossing target by (rate / gain), about 2 degrees at 200 m/s across 1.5 km, which is the lead. The rate of the lead direction is now fed forward (`FlightCommand.track_rate_b`, `FlightAssist.track_rate_target`); the integration test fails with 2.2 degrees without it. X / Shift now toggle |
+| Too much HUD in the way in the chase view | Radar, target outline and speed readout moved to the bottom-right corner in the chase view, HUD drawn at `settings.hud_chase_opacity` (0.7) there |
+| Need to get the mouse back | Hold Alt: cursor shown, ship ignores it, clicks do not fire; Alt + drag moves the window |
+| First-person stair-stepping and flicker with the nebula | The hull's splats are seen from a few tens of cm in the cockpit, where they turn into serrated slivers at grazing angles (seen in the screencast and reproduced on the RX 6950 XT). In the cockpit the hull is now the mesh (splats off), the cockpit frame is double-sided with a faint emission so the left strut is no longer black on black. A sort-buffer capacity of 128 per splat changed nothing, so it was not the overflow |

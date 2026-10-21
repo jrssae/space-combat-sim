@@ -242,3 +242,24 @@ func _cmd(main_left: float = 0.0, main_right: float = 0.0, retro_left: float = 0
 	cmd.retro_left = retro_left
 	cmd.retro_right = retro_right
 	return cmd
+
+
+func test_track_rate_target_adds_the_direction_rate_to_the_correction() -> void:
+	var dir := Vector3(0.0, 0.0, -1.0)  # dead ahead: no correction needed
+	var rate := Vector3(0.02, -0.03, 0.5)
+	var w: Vector3 = assist.track_rate_target(dir, rate)
+	assert_almost_eq(w.x, 0.02, 1e-9, "pitch follows the direction's pitch rate")
+	assert_almost_eq(w.y, -0.03, 1e-9, "yaw follows its yaw rate")
+	assert_eq(w.z, 0.0, "roll is not part of tracking")
+
+
+func test_track_rate_target_keeps_each_axis_inside_the_rate_limit() -> void:
+	var cap: Vector3 = spec.rate_max_rad()
+	var w: Vector3 = assist.track_rate_target(Vector3(0.0, 0.0, -1.0), Vector3(10.0, -10.0, 0.0))
+	assert_almost_eq(w.x, cap.x, 1e-9)
+	assert_almost_eq(w.y, -cap.y, 1e-9)
+
+
+func test_track_rate_target_without_a_rate_is_the_face_rate() -> void:
+	var dir := Vector3(0.3, 0.2, -1.0)
+	assert_eq(assist.track_rate_target(dir, Vector3.ZERO), assist.face_rate_target(dir))

@@ -56,6 +56,8 @@ func _process(_delta: float) -> void:
 	if input == null or input.viewport_size.x < 1.0 or input.viewport_size.y < 1.0:
 		return
 	frame = HudLayout.compute(input)
+	# The chase view is busier (the whole ship is on screen): the HUD is drawn fainter there.
+	_canvas.modulate.a = 1.0 if frame.cockpit else float(Settings.get_value(&"hud_chase_opacity"))
 	_canvas.queue_redraw()
 
 
@@ -210,10 +212,11 @@ class HudCanvas extends Control:
 	# --- gauges -------------------------------------------------------------------------------------------------------
 
 	func _draw_gauges(f: HudFrame, s: float, w: float) -> void:
-		_text("%.0f m/s" % f.speed_mps, f.speed_pos + Vector2(0.0, -22.0 * s), 22.0 * s, LINE_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
-		_text(angles_text(f), f.speed_pos + Vector2(0.0, 0.0), 16.0 * s, LINE_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
+		var align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_RIGHT if f.speed_align_right else HORIZONTAL_ALIGNMENT_CENTER
+		_text("%.0f m/s" % f.speed_mps, f.speed_pos + Vector2(0.0, -22.0 * s), 22.0 * s, LINE_COLOR, align)
+		_text(angles_text(f), f.speed_pos + Vector2(0.0, 0.0), 16.0 * s, LINE_COLOR, align)
 		if f.reference_valid:
-			_text(reference_text(f), f.speed_pos + Vector2(0.0, 20.0 * s), 14.0 * s, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.75), HORIZONTAL_ALIGNMENT_CENTER)
+			_text(reference_text(f), f.speed_pos + Vector2(0.0, 20.0 * s), 14.0 * s, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.75), align)
 		_bar(f.hull_rect, f.hull_fraction, f.hull_color, w)
 		_text("HULL" + ("  GOD" if f.god else ""), f.hull_rect.position + Vector2(0.0, -6.0 * s), 14.0 * s, f.hull_color)
 		if not f.fuel_unlimited:

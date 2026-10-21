@@ -88,21 +88,57 @@ func test_autotrack_swings_the_nose_onto_the_target_and_keeps_the_velocity() -> 
 	var velocity_before: Vector3 = main.ship.linear_velocity
 	var angle_before: float = _nose_error_deg()
 	assert_gt(angle_before, 20.0, "starts well off the target")
-	source.hold(InputAdapter.AUTOTRACK)
-	await _ticks(360)
+	source.hold(InputAdapter.AUTOTRACK)  # one press switches it on
+	await _ticks(2)
+	source.release(InputAdapter.AUTOTRACK)
+	await _ticks(358)
 	assert_lt(_nose_error_deg(), 2.0, "the nose is on the lead point")
 	assert_lt(main.ship.linear_velocity.distance_to(velocity_before), 1.0, "the velocity was not touched")
-	assert_true(main.ship.get_flight_output().tracking)
+	assert_true(main.ship.get_flight_output().tracking, "and it stays on after the button is let go")
+	source.hold(InputAdapter.AUTOTRACK)  # the next press switches it off
+	await _ticks(2)
 	source.release(InputAdapter.AUTOTRACK)
 	await _ticks(2)
-	assert_false(main.ship.get_flight_output().tracking, "let go, the pilot has the stick again")
+	assert_false(main.ship.get_flight_output().tracking, "off: the pilot has the stick again")
 
 
-func test_autotrack_with_no_target_does_nothing() -> void:
+func test_autotrack_with_no_target_in_range_switches_itself_off() -> void:
 	main.ship.targeting.clear_selection()
 	source.hold(InputAdapter.AUTOTRACK)
 	await _ticks(30)
 	assert_false(main.ship.get_flight_output().tracking)
+	assert_false(main.adapter.autotrack_on, "no hostile to take, so it is off again")
+
+
+func test_autotrack_with_no_selection_takes_the_nearest_hostile() -> void:
+	DebugConsole.registry.execute("spawn raider idle 1200 0 0")
+	await _ticks(4)
+	main.ship.targeting.clear_selection()
+	source.hold(InputAdapter.AUTOTRACK)
+	await _ticks(10)
+	assert_true(main.ship.targeting.system.has_selection(), "a target was picked")
+	assert_true(main.adapter.autotrack_on)
+
+
+func test_autotrack_puts_the_nose_on_the_lead_of_a_crossing_target() -> void:
+	# A raider crossing at 200 m/s, 1500 m ahead: its lead point sweeps at ~7 degrees per second. A controller that only chases
+	# the position trails by that rate over its gain (about 5 degrees); with the rate fed forward the nose sits on the lead.
+	DebugConsole.registry.execute("spawn raider idle 1500 0 0")
+	await _ticks(4)
+	var raider: Combatant = main.ships.alive()[0]
+	raider.ship.linear_velocity = main.ship.global_basis.x * 200.0
+	assert_true(main.ship.targeting.select_by_name("RAIDER 1"))
+	source.hold(InputAdapter.AUTOTRACK)
+	await _ticks(2)
+	source.release(InputAdapter.AUTOTRACK)
+	await _ticks(480)
+	var readout: TargetReadout = main.ship.targeting.selected_readout()
+	var weapon: WeaponSpec = main.ship.spec.weapon
+	var lead: Dictionary = InterceptMath.solve(main.ship.global_position, main.ship.linear_velocity, readout.position,
+			readout.velocity, weapon.muzzle_speed_mps, weapon.lifetime_s)
+	assert_true(lead["ok"], "there is a lead solution")
+	var off_deg: float = rad_to_deg(main.ship.forward().angle_to(lead["aim_dir"]))
+	assert_lt(off_deg, 0.7, "the nose is on the aim line (%.2f deg off)" % off_deg)
 
 
 func test_brake_still_stops_the_ship_on_its_own_button() -> void:

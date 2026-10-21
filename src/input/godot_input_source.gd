@@ -10,6 +10,10 @@ signal trigger_rest_changed(guid: String, rest: float)
 
 var trigger_deadzone: float = 0.05
 
+## True while the mouse belongs to the desktop (Alt held, the console or pause open, the window not focused): its buttons, motion
+## and wheel read as idle, so a click on the title bar does not fire and moving the window does not turn the ship.
+var mouse_free: bool = false
+
 var _mouse_delta: Vector2 = Vector2.ZERO
 var _wheel_steps: int = 0
 var calibration: TriggerCalibration = TriggerCalibration.new()
@@ -55,25 +59,25 @@ func get_trigger(action: StringName) -> float:
 
 ## Fed from `_input` by Main: relative mouse motion and wheel notches, summed until the next physics tick reads them.
 func add_mouse_motion(relative: Vector2) -> void:
-	if keyboard_mouse_enabled:
+	if keyboard_mouse_enabled and not mouse_free:
 		_mouse_delta += relative
 
 
 func add_wheel(steps: int) -> void:
-	if keyboard_mouse_enabled:
+	if keyboard_mouse_enabled and not mouse_free:
 		_wheel_steps += steps
 
 
 func take_mouse_delta() -> Vector2:
 	var out: Vector2 = _mouse_delta
 	_mouse_delta = Vector2.ZERO
-	return out if keyboard_mouse_enabled else Vector2.ZERO
+	return out if keyboard_mouse_enabled and not mouse_free else Vector2.ZERO
 
 
 func take_wheel_steps() -> int:
 	var out: int = _wheel_steps
 	_wheel_steps = 0
-	return out if keyboard_mouse_enabled else 0
+	return out if keyboard_mouse_enabled and not mouse_free else 0
 
 
 func is_pressed(action: StringName) -> bool:
@@ -145,7 +149,7 @@ func _event_strength(event: InputEvent) -> float:
 				else Input.is_key_pressed(key.keycode)
 		return 1.0 if pressed else 0.0
 	if event is InputEventMouseButton:
-		if not keyboard_mouse_enabled:
+		if not keyboard_mouse_enabled or mouse_free:
 			return 0.0
 		return 1.0 if Input.is_mouse_button_pressed((event as InputEventMouseButton).button_index) else 0.0
 	if event is InputEventJoypadButton:

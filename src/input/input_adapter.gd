@@ -50,7 +50,7 @@ const ACTIONS: Array[StringName] = [
 ## the tap-or-hold button (see `target_hold_s`).
 const EDGE_ACTIONS: Array[StringName] = [
 	TOGGLE_ASSIST, WEAPON_NEXT, TARGET_AHEAD, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY, TOGGLE_FALLBACK,
-	TARGET_PREV, SCREENSHOT,
+	TARGET_PREV, SCREENSHOT, AUTOTRACK,
 ]
 
 const AIM_EXPO := 1.5
@@ -76,6 +76,9 @@ var mouse_full_rate_px_s: float = MOUSE_FULL_RATE_PX_S
 
 ## The command produced by the most recent sample (console `input` provider, overlay).
 var last: PilotCommand = PilotCommand.new()
+
+## Auto-track is switched on (toggled by the `autotrack` action). Main clears it when the target is gone.
+var autotrack_on: bool = false
 
 var _prev_pressed: Dictionary = {}
 var _yaw: float = 0.0
@@ -117,10 +120,13 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	var mouse_pitch: float = -mouse_turn.y if invert_y else mouse_turn.y
 	flight.rot = Vector3(clampf(pitch + mouse_pitch, -1.0, 1.0), clampf(_step_yaw(source, dt) + mouse_turn.x, -1.0, 1.0), roll)
 	flight.brake = source.is_pressed(BRAKE)
-	flight.autotrack = source.is_pressed(AUTOTRACK)
 
 	var edges: Dictionary = _sample_edges(source)
 	flight.toggle_assist = edges[TOGGLE_ASSIST]
+	# Auto-track is a toggle: one press switches it on, the next switches it off.
+	if edges[AUTOTRACK]:
+		autotrack_on = not autotrack_on
+	flight.autotrack = autotrack_on
 
 	cmd.combat.fire = source.is_pressed(FIRE)
 	cmd.combat.weapon_next = edges[WEAPON_NEXT]
@@ -161,6 +167,7 @@ func reset() -> void:
 	_prev_pressed.clear()
 	_yaw = 0.0
 	_mouse_rate = Vector2.ZERO
+	autotrack_on = false
 	_disarm_select()
 
 

@@ -262,7 +262,9 @@ func test_gauge_values_are_clamped() -> void:
 
 
 func test_the_gauges_sit_on_the_bottom_edge() -> void:
-	var f: HudFrame = HudLayout.compute(_hud_input())
+	var cockpit_input: HudInput = _hud_input()
+	cockpit_input.cockpit = true
+	var f: HudFrame = HudLayout.compute(cockpit_input)
 	assert_gt(f.speed_pos.y, VIEW.y - 100.0)
 	assert_almost_eq(f.speed_pos.x, VIEW.x * 0.5, 1e-6, "speed: bottom centre")
 	assert_lt(f.hull_rect.position.x, VIEW.x * 0.25, "hull and fuel: bottom left")
@@ -270,6 +272,26 @@ func test_the_gauges_sit_on_the_bottom_edge() -> void:
 	assert_gt(f.charge_rect.position.x, VIEW.x * 0.75, "weapon charge: bottom right")
 	assert_lt(f.radar_centre.y, f.speed_pos.y, "the radar is above the speed readout")
 	assert_almost_eq(f.radar_centre.x, VIEW.x * 0.5, 1e-6)
+	assert_false(f.speed_align_right)
+
+
+func test_the_chase_view_moves_the_middle_clutter_into_the_corners() -> void:
+	var input: HudInput = _hud_input()
+	input.cockpit = false
+	var f: HudFrame = HudLayout.compute(input)
+	assert_gt(f.radar_centre.x, VIEW.x * 0.75, "radar: bottom right")
+	assert_gt(f.speed_pos.x, VIEW.x * 0.75, "speed: bottom right")
+	assert_true(f.speed_align_right)
+	assert_lt(f.speed_pos.y + 24.0, f.radar_centre.y - f.radar_radius_px, "the readout sits above the radar, not on it")
+	assert_lt(f.radar_centre.y + f.radar_radius_px, f.charge_rect.position.y, "and the radar clears the charge bar")
+	# Nothing of the cockpit's bottom-centre cluster is left in the middle third of the screen.
+	var middle_lo: float = VIEW.x / 3.0
+	var middle_hi: float = VIEW.x * 2.0 / 3.0
+	for x: float in [f.radar_centre.x - f.radar_radius_px, f.speed_pos.x - 200.0, f.own_silhouette_rect.end.x]:
+		assert_false(x > middle_lo and x < middle_hi, "x = %.0f is not in the middle third" % x)
+	assert_false(f.cockpit)
+	input.cockpit = true
+	assert_true(HudLayout.compute(input).cockpit)
 
 
 func test_the_status_line_passes_through() -> void:
@@ -416,6 +438,7 @@ func test_damage_colours_run_from_green_through_yellow_and_orange_to_red() -> vo
 
 func test_the_silhouettes_come_from_the_input() -> void:
 	var input := HudInput.new()
+	input.cockpit = true
 	input.damage_layout = DamageZones.Layout.X_FIGHTER
 	input.damage_zones = PackedFloat32Array([0.0, 0.5, 0.0, 0.0, 1.0])
 	var frame: HudFrame = HudLayout.compute(input)
@@ -429,7 +452,10 @@ func test_the_silhouettes_come_from_the_input() -> void:
 	input.target = target
 	frame = HudLayout.compute(input)
 	assert_eq(frame.target_layout, DamageZones.Layout.DELTA)
-	assert_gt(frame.target_silhouette_rect.position.x, frame.radar_centre.x, "beside the radar")
+	assert_gt(frame.target_silhouette_rect.position.x, frame.radar_centre.x, "beside the radar (cockpit: to its right)")
+	input.cockpit = false
+	frame = HudLayout.compute(input)
+	assert_lt(frame.target_silhouette_rect.end.x, frame.radar_centre.x, "chase: to its left, clear of the corner")
 	var buoy := TargetReadout.new()
 	input.target = buoy
 	assert_eq(HudLayout.compute(input).target_layout, DamageZones.Layout.NONE, "a buoy has no zones")

@@ -6,6 +6,10 @@ extends RefCounted
 
 ## viewport height / 1080: sizes and line widths scale with it.
 var scale: float = 1.0
+## The cockpit view is showing. In the chase view the ship fills the middle of the screen, so the gauges, the radar and the speed
+## readout move out to the corners (`speed_align_right` is true there) and the whole HUD is drawn fainter (`Hud`).
+var cockpit: bool = false
+var speed_align_right: bool = false
 var viewport_size: Vector2 = Vector2(1920.0, 1080.0)
 
 ## Boresight (the nose axis at 1 km).
