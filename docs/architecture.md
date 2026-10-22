@@ -1494,3 +1494,65 @@ Details per task are in the as-built notes of `docs/milestones/m2-combat-sandbox
   firing). The only writes to `linear_velocity` in `src/` are pool spawn / release, `reset_to` (respawn) and the 9 999 m/s ceiling clamp.
   Tests: `test_flight_model::test_turning_alone_never_produces_a_net_force`, `test_speed_and_autotrack` (a 180 degree auto-track turn at 250 m/s
   leaves the velocity unchanged to 0.01 m/s).
+
+## 16. AI pilots and wingmen (M3)
+
+What M3 adds to §1-§15 (tasks in `docs/milestones/m3-ai-pilots-and-wingmen.md`). Every earlier rule still holds; task ids
+below are M3 tasks.
+
+### 16.1 Decisions
+
+| # | Decision | Rationale (short) |
+|---|---|---|
+| D30 | Factions come from `data/factions.json` (ids, names, symmetric relation pairs, a default). `Factions.relation` / `is_hostile` keep their signatures; the table is loaded lazily and can be swapped for tests and the console | M2's fixed rule was the seam (D25); callers do not change, and M11's factions are data |
+| D31 | Friendly fire is `settings.friendly_fire` (default off, maintainer Q2). AI ships always check their fire lane for friends before firing | The forgiving default suits wingmen crossing the player's line; the check keeps AI behaviour right with the setting on |
+| D32 | Ram damage from the ship's own velocity change: `hull_max × clamp((Δv - safe) / (lethal - safe))²`. Jolt contacts give Δv at ordinary speeds; a target-relative swept test (as D21) catches tunnelling speeds (fatal for both) and props without bodies (momentum split) | Physical (the lighter ship suffers more), tunable per `ShipSpec`, and nothing passes through anything at 1 000 m/s |
+| D33 | Collision avoidance is a filter in `AiPilotDriver` on every brain's desired velocity (closest-approach maths against `Perception.contacts`), not a behaviour | Every AI ship, M2 brains included, avoids collisions whatever it is doing |
+| D34 | `AiPilot extends PilotBrain`: scored behaviours (attack, evade, formation, follow path, guard, retreat, idle) × `AiProfile` weights, with stickiness, a minimum dwell and an emergency margin. Orders and wings gate scores through `AiContext` | Utility selection (§14.7) without a behaviour tree; profiles give allies, raiders and the instructor different characters from one brain |
+| D35 | `starfury_aurora` gains a generated LOD1 (about 25 % of the splats, coarser spacing) and `chunks[]` from LOD1. Allies (`ShipSpec.splat_lod` 1) and all Starfury debris use LOD1; the player keeps LOD0 | Four Starfuries at LOD0 would add about 700k splats; allies are seen at range. A fixed LOD per class, not M5's `LodSwitcher` |
+| D36 | Wings: the player leads `ALPHA` (finger-four). Orders (attack my target, form on me, engage at will, cover me) arrive as `UiCommand` edges from keys 1-4 (keyboard-only actions) or the console, and go to brains through `WingDirector`, never through `Input` | Maintainer Q1; the pad has no free button and the M4 comms panel will add a pad route on the same `WingDirector` API |
+| D37 | The instructor is an `AiPilot` with the `instructor` profile, a `Route` (paced to the player) and demo `Manoeuvre`s, invulnerable via its scenario spawn | The M7 tour and control checks reuse it unchanged; manoeuvres are closed loops on measured state, so the tutorial can compare the player against the same goals |
+| D38 | Keyboard layout B: every flight key is under the left hand (pods by position on Q/W/E and A/S/D), the mouse flies pitch and yaw, no keyboard pitch/yaw | Maintainer Q9: the right hand is on the mouse |
+
+### 16.2 Layout additions
+
+```
+data/factions.json                       faction ids, names, relation pairs, default (T02)
+src/combat/faction_table.gd              RefCounted, pure: parsed factions.json; relation lookup (T02)
+src/combat/ram_math.gd, ram_resolver.gd  pure severity maths; Node: contacts + swept rams -> Damageable (T04)
+src/ai/contact.gd, contact_scan.gd       per-tick contact list shared by every driver (T05)
+src/ai/avoidance_math.gd, fire_lane.gd   pure: closest-approach dodge; friendly-in-lane check (T05)
+src/ai/ai_pilot.gd, ai_context.gd, ai_behaviour.gd, ai_profile.gd        utility brain (T06)
+src/ai/behaviour_{attack,evade,retreat,idle,formation,guard,follow_path}.gd  (T06, T07, T09, T10)
+src/ai/wing.gd, formation.gd             wing state and slot offsets (T07)
+src/ai/route.gd, manoeuvre.gd, manoeuvres.gd   instructor route and demo moves (T09)
+src/game/wing_director.gd                Node (Combat, priority 290): wings, orders, acknowledgements, replenish (T07, T08)
+assets/ai/{ally_starfury,raider,instructor}.tres, starfury_tactics.tres
+assets/ships/starfury_ally.tres
+data/scenarios/{instructor_route,dogfight}.json
+```
+
+### 16.3 Tick order (changes to §15.3)
+
+1. `AiPilotDriver`s (-10): `ContactScan` (first driver of the tick builds it), `Perception`, brain, avoidance filter,
+   `Combatant.apply_commands`.
+2. Console, `Main` (0), ships, projectiles as before. `Main` passes order edges from `UiCommand` to the `WingDirector`.
+3. `TargetingController`s (100), `HitResolver` (200), `RamResolver` (210): contacts reported by Jolt since its last run
+   and swept rams; destruction in the same tick (§15.7).
+4. `WingDirector` (290): orders, acknowledgements, leader changes; `WaveDirector` (300): waves, then `replenish`.
+5. Jolt steps the bodies (and reports the contacts the `RamResolver` reads next tick).
+
+### 16.4 Console and settings (additions to §6.4 and §15.13)
+
+| Provider | Owner (task) | Keys |
+|---|---|---|
+| `factions` | Factions (T02) | `ids`, `relations`, `friendly_fire` |
+| `ram` | RamResolver (T04) | `events`, `last`, `resolve_us` |
+| `ai` | AI drivers (T06) | `ships`, `by_behaviour`, `think_us` |
+| `wing` | WingDirector (T07) | `name`, `order`, `formation`, `members`, `last_ack` |
+| `route` | instructor (T09) | `index`, `count`, `lag_m`, `state`, `demo` |
+
+Commands: `relation <a> <b> [friendly|neutral|hostile]` / `relation reset`; `wing order <attack|form|engage|cover>`;
+`wing formation <finger_four|wedge|line_abreast>`; `spawn ally [idle|ai] [distance_m] [yaw_deg] [pitch_deg]`; `ai <name>`;
+`scenario [free_flight|combat_sandbox|instructor_route|dogfight]`. Settings: `friendly_fire` (bool, false), `ram_damage`
+(bool, true).
