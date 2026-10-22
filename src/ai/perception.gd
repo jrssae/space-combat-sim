@@ -26,6 +26,16 @@ var frame_origin: UniversePos = UniversePos.new()
 var target: TargetInfo = null
 ## Whether `target` is hostile to this ship.
 var target_hostile: bool = false
+## Everything active within `ContactScan.SENSOR_RANGE_M` (5 km) but this ship: ships, drones, props, as of this tick,
+## with their relation to this ship (§16 D33). Shared with other ships of the faction: read, never write.
+var contacts: Array[Contact] = []
+## Hostile bolts whose closest approach comes within `ContactScan.INCOMING_MISS_M` (15 m) in the next
+## `ContactScan.INCOMING_HORIZON_S` (2 s).
+var incoming_fire: int = 0
+## Sim time of the latest hit this hull took (a bolt or anything else `Damageable.hit_taken` reports), -INF when none yet.
+var last_hit_s: float = -INF
+## `settings.friendly_fire` this tick: bolts then hurt every hull but the shooter's (`FireLane`).
+var friendly_fire: bool = false
 
 
 ## Forward unit vector (the nose, -Z).

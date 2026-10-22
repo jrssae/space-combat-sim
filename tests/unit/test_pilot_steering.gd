@@ -121,6 +121,14 @@ func test_seek_works_in_the_ships_frame() -> void:
 	assert_almost_eq(float(r["main"]), 0.5, TOL)
 
 
+func test_a_shorter_seek_horizon_pushes_harder() -> void:
+	# 2 m/s sideways: a gentle push over the default 1 s, four times that over 0.25 s (the urgent dodge, M3-T05).
+	var gentle: Dictionary = PilotSteering.seek(Vector3.ZERO, Vector3(2.0, 0.0, 0.0), Basis.IDENTITY, _cap())
+	var hard: Dictionary = PilotSteering.seek(Vector3.ZERO, Vector3(2.0, 0.0, 0.0), Basis.IDENTITY, _cap(), 0.25)
+	assert_almost_eq((gentle["strafe"] as Vector2).x, 2.0 / (_cap().a_rcs.x * PilotSteering.HORIZON_S), TOL)
+	assert_almost_eq((hard["strafe"] as Vector2).x, 4.0 * (gentle["strafe"] as Vector2).x, TOL)
+
+
 func test_apply_seek_drives_both_nacelles_equally() -> void:
 	var flight := FlightCommand.new()
 	PilotSteering.apply_seek(flight, {"main": 0.6, "retro": 0.0, "strafe": Vector2(0.1, -0.2)})
