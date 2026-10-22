@@ -50,22 +50,28 @@ A             fire                                   B  flight assist on/off    
 Back          respawn                                Start  pause
 ```
 
-Keyboard and mouse (left hand flies the engines, right hand aims):
+Keyboard and mouse (layout B: the left hand flies, the right hand stays on the mouse, which flies pitch and yaw):
 
 ```
-Q / E / R     left main / both mains / right main     A / D / F   left retro / both retros / right retro
-Z / X         roll left / right                       Ctrl        brake (hold)           Shift  auto-track (toggle)
-Tab           cockpit / chase camera                  Space       fire
+Q / W / E     left main / both mains / right main     A / S / D   left retro / both retros / right retro
+R / F         strafe up / down                        Z / C       strafe left / right
+Caps Lock / G roll left / right                       X           brake (hold)           Shift  auto-track (toggle)
+Space         fire                                    V           fire mode              T      flight assist on/off
+B             tap: next target, hold: target nearest the nose (as D-pad Up)              Tab    cockpit / chase camera
 Mouse         pitch and yaw: how fast you move it is how fast you turn (stop the mouse and the turn stops)
 Alt (hold)    frees the mouse: the cursor appears, the ship ignores it and clicks do not fire; Alt + drag moves the window
 Mouse 1       fire                                    Mouse 2     tap: next target, hold: target nearest the nose
 Wheel         previous / next target                  Middle button (hold)  free look, as L3
-I / K         pitch                                   J / L       yaw (ramped like the D-pad)
-Arrows        strafe left/right, up/down              Y           flight assist on/off
-U / O         next / previous target                  P           target nearest the nose
-H             fire mode                               N or Print  screenshot (saved to user://screenshots/, path printed)
+Mouse 4       auto-track (toggle)                     Mouse 5     fire mode (the side buttons, if your mouse has them)
+N or Print    screenshot (saved to user://screenshots/, path printed)
 Backspace     respawn                                 Esc         pause (also frees the mouse)       F3  debug overlay   F4  fallback meshes
 ```
+
+No flight key sits right of G and B: pitch and yaw are the mouse (or the pad), and previous target and "nearest the nose"
+have no keys of their own (the wheel and a B or Mouse 2 hold do both). Ctrl and the number row are free (keys 1-4 arrive with
+the wing orders). Caps Lock is read as a held key (down = roll left); if your desktop turns it into a toggle, tell the
+maintainer (the fallback is Ctrl). Your own saved control profiles keep the keys they had: `controls use default` in the console
+loads layout B.
 
 The ` key opens the debug console; it frees the mouse while open. Hunting the splat-hull "jump" under thrust (only the splat hull shows it; the
 mesh hull does not): `throttle 1` holds both main pods, then flip these while it happens and note which one stops it:
@@ -79,20 +85,21 @@ and speed readout also sit in the bottom-right corner instead of the middle) and
 Changed after the first play test: yaw and roll swapped (the right stick used to yaw and the D-pad to roll), and
 target-ahead moved to a D-pad Up hold because the pad had no stick clicks. Changed after the M2 play test: X is auto-track and
 R3 is the brake; L3 is free look (the debug overlay is F3 only); the keyboard moved to the layout above and the mouse flies.
-Tune the hold with `set settings.target_hold_s 0.5` and the D-pad yaw ramp with `set settings.yaw_ramp_s 0.4`.
+Changed in M3: keyboard layout B, every flight key under the left hand (the M2.1 layout had pitch, yaw, strafe and targets on
+the right side, under the hand that holds the mouse). Tune the hold with `set settings.target_hold_s 0.5` and the D-pad yaw ramp with `set settings.yaw_ramp_s 0.4`.
 
 Nav buoys can be shot: six hits (60 hull) and one blows up with an explosion and shards. A destroyed buoy is gone until you
 respawn (Back / Backspace, or dying), which restores them all. Any ship's bolts hurt them.
 
 Flight notes:
-- Newtonian: letting go of the triggers does not slow you down. Use the retros or hold R3 (Ctrl) to brake.
-- R3 (Ctrl) is an all stop in both assist modes: it kills drift and any spin, and ignores the sticks, D-pad and triggers
+- Newtonian: letting go of the triggers does not slow you down. Use the retros or hold R3 (keyboard X) to brake.
+- R3 (keyboard X) is an all stop in both assist modes: it kills drift and any spin, and ignores the sticks, D-pad and triggers
   while held. With a target selected it also turns the nose onto the target (about 2.6 s from 90° off) and holds it
   there; release it to fly again.
-- X (Shift) auto-tracks: only the nose is taken over (pitch and yaw; roll stays yours), the thrust and the drift are not.
+- Pad X (keyboard Shift) auto-tracks: only the nose is taken over (pitch and yaw; roll stays yours), the thrust and the drift are not.
 - Speed: thrust fades as you go faster (the ship gets heavier, like relativity without the rest), so 9 999 m/s is the most you
   can reach and the last thousand take a long time. With assist on the flight computer stops adding speed at 5 000 m/s,
-  the "maximum safe speed"; switch assist off (B) to go beyond it. Bolts leave at 1 000 m/s relative to your ship, so fired
+  the "maximum safe speed"; switch assist off (pad B, keyboard T) to go beyond it. Bolts leave at 1 000 m/s relative to your ship, so fired
   forward at 5 000 m/s they fly at 6 000 m/s, fired backward at 4 000 m/s.
 - Assist on (default): uneven triggers turn the ship smoothly (overlay `POD YAW`). Assist off: raw physics,
   so uneven pods tank-steer and spins persist (until you hold R3).

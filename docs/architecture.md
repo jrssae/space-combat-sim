@@ -444,12 +444,22 @@ direction is turning, fed forward so a crossing target is followed without the s
 and drift are untouched; with no target it takes the nearest hostile, and `Main` switches it off when none is left), R3 is the
 brake, L3 is free look (`CameraLook`: cockpit head turn up to 135° / 80°, chase orbit around the ship; the right stick is an
 absolute direction, the mouse turns the view by its travel; released, the view eases back to centre). The debug overlay is F3
-only. The keyboard is split by hand: the left hand has the engines (Q/E/R mains, A/D/F retros), roll (Z/X), brake (Ctrl), the
-camera (Tab) and auto-track (Shift); the right hand has pitch and yaw (I/K, J/L), strafe (arrows), assist (Y), targets (U next,
-O previous, P nearest the nose), fire mode (H) and screenshot (N, Print). The mouse flies (its speed, smoothed over a few ticks,
-is the pitch and yaw rate command; `settings.mouse_full_rate_px_s`), mouse 1 fires, mouse 2 is the tap-or-hold target button,
-the wheel steps through the targets, the middle button is free look. The mouse is captured while flying and freed by holding Alt, the console,
-the pause or a lost window focus (`GodotInputSource.mouse_free` then reads it as idle).
+only. The mouse flies (its speed, smoothed over a few ticks, is the pitch and yaw rate command; `settings.mouse_full_rate_px_s`),
+mouse 1 fires, mouse 2 is the tap-or-hold target button, the wheel steps through the targets, the middle button is free look.
+The mouse is captured while flying and freed by holding Alt, the console, the pause or a lost window focus
+(`GodotInputSource.mouse_free` then reads it as idle).
+
+Keyboard layout B (M3-T01, maintainer answer Q9). The M2.1 keyboard put pitch, yaw, strafe and targets on the right side, under
+the hand that holds the mouse. Layout B puts every flight key under the left hand and none right of the G / B column; physical
+keys, US positions. Pods are by position: Q / E drive the left / right main pod and W both, A / D the left / right retro and S
+both. R / F strafe up / down, Z / C strafe left / right, Caps Lock / G roll left / right, X brake (hold), Shift auto-track
+(toggle), Space fire, V fire mode, T flight assist, B the tap-or-hold target button (as D-pad Up and mouse 2), Tab camera. The
+housekeeping keys stay where they were (Esc, Backspace, N and Print, F3, F4). There are no keys for pitch, yaw, `target_prev`
+or `target_ahead`: the mouse flies, the wheel steps targets both ways, and a hold of B or mouse 2 is target-ahead. Mouse 4 / 5
+(the side buttons, `mouse:8` / `mouse:9`) are auto-track and fire mode. Ctrl, Alt (frees the mouse), the number row (keys 1-4
+are the wing orders of M3-T07) and ` (console) are not bound to flight. Caps Lock is read as a held key by polling
+`Input.is_physical_key_pressed(KEY_CAPSLOCK)` like any other; a desktop that delivers it as a toggle would need Ctrl instead.
+Saved user profiles in `user://controls/` keep the keys they were saved with; `controls use default` loads layout B.
 
 Revised after the M1 play test on the maintainer's generic pad: yaw and roll swapped places (right stick X was
 yaw, the D-pad was roll), and because that pad has no stick clicks, `target_ahead` moved onto a D-pad Up hold
@@ -460,23 +470,23 @@ use for the standard layout; any pad SDL3 recognises, generic XInput clones incl
 
 | Action | Pad (Godot enum, index) | Keyboard | Type | Deadzone | Curve |
 |---|---|---|---|---|---|
-| `main_right` | RT `JOY_AXIS_TRIGGER_RIGHT` (axis 5, +) | R, E | analog 0..1 via `get_trigger` | 0.05 | linear |
-| `main_left` | LT `JOY_AXIS_TRIGGER_LEFT` (axis 4, +) | Q, E | analog 0..1 via `get_trigger` | 0.05 | linear |
-| `retro_right` | RB `JOY_BUTTON_RIGHT_SHOULDER` (10) | F, D | hold | - | - |
-| `retro_left` | LB `JOY_BUTTON_LEFT_SHOULDER` (9) | A, D | hold | - | - |
-| `pitch_down` / `pitch_up` | Right stick Y `JOY_AXIS_RIGHT_Y` (axis 3, -/+): stick back = nose up; `Settings.invert_y` flips | I / K (and the mouse's Y) | analog pair | radial 0.15 | expo 1.5 |
-| `roll_left` / `roll_right` | Right stick X `JOY_AXIS_RIGHT_X` (axis 2, -/+): stick right = roll right | Z / X | analog pair | radial 0.15 (one deadzone with pitch) | expo 1.5 |
-| `strafe_left` / `strafe_right` | Left stick X `JOY_AXIS_LEFT_X` (axis 0, -/+) | Left / Right arrows | analog pair | radial 0.15 | linear |
-| `strafe_down` / `strafe_up` | Left stick Y `JOY_AXIS_LEFT_Y` (axis 1, +/-) | Down / Up arrows | analog pair | radial 0.15 | linear |
-| `yaw_left` / `yaw_right` | D-pad `JOY_BUTTON_DPAD_LEFT` / `DPAD_RIGHT` (13 / 14) | J / L (and the mouse's X) | hold, ramped | - | 0→1 in 0.25 s |
-| `target_next` | D-pad `JOY_BUTTON_DPAD_UP` (11) | U, mouse 2 | tap or hold: a tap gives `target_next` on release; a hold of 0.35 s gives `target_ahead` once | - | - |
-| `target_prev` | none (keyboard; the wheel steps both ways) | O | edge | - | - |
-| `weapon_next` | D-pad `JOY_BUTTON_DPAD_DOWN` (12) | H | edge | - | - |
-| `target_ahead` | none (the D-pad Up hold) | P | edge | - | - |
+| `main_right` | RT `JOY_AXIS_TRIGGER_RIGHT` (axis 5, +) | E, W | analog 0..1 via `get_trigger` | 0.05 | linear |
+| `main_left` | LT `JOY_AXIS_TRIGGER_LEFT` (axis 4, +) | Q, W | analog 0..1 via `get_trigger` | 0.05 | linear |
+| `retro_right` | RB `JOY_BUTTON_RIGHT_SHOULDER` (10) | D, S | hold | - | - |
+| `retro_left` | LB `JOY_BUTTON_LEFT_SHOULDER` (9) | A, S | hold | - | - |
+| `pitch_down` / `pitch_up` | Right stick Y `JOY_AXIS_RIGHT_Y` (axis 3, -/+): stick back = nose up; `Settings.invert_y` flips | none (the mouse's Y) | analog pair | radial 0.15 | expo 1.5 |
+| `roll_left` / `roll_right` | Right stick X `JOY_AXIS_RIGHT_X` (axis 2, -/+): stick right = roll right | Caps Lock / G | analog pair | radial 0.15 (one deadzone with pitch) | expo 1.5 |
+| `strafe_left` / `strafe_right` | Left stick X `JOY_AXIS_LEFT_X` (axis 0, -/+) | Z / C | analog pair | radial 0.15 | linear |
+| `strafe_down` / `strafe_up` | Left stick Y `JOY_AXIS_LEFT_Y` (axis 1, +/-) | F / R | analog pair | radial 0.15 | linear |
+| `yaw_left` / `yaw_right` | D-pad `JOY_BUTTON_DPAD_LEFT` / `DPAD_RIGHT` (13 / 14) | none (the mouse's X) | hold, ramped | - | 0→1 in 0.25 s |
+| `target_next` | D-pad `JOY_BUTTON_DPAD_UP` (11) | B, mouse 2 | tap or hold: a tap gives `target_next` on release; a hold of 0.35 s gives `target_ahead` once | - | - |
+| `target_prev` | none (the wheel steps both ways) | none | edge | - | - |
+| `weapon_next` | D-pad `JOY_BUTTON_DPAD_DOWN` (12) | V, mouse 5 | edge | - | - |
+| `target_ahead` | none (the D-pad Up hold) | none (the B / mouse 2 hold) | edge | - | - |
 | `fire` | A `JOY_BUTTON_A` (0) | Space, mouse 1 | hold | - | - |
-| `toggle_flight_assist` | B `JOY_BUTTON_B` (1) | Y | edge | - | - |
-| `brake` | R3 `JOY_BUTTON_RIGHT_STICK` (8) | Ctrl | hold | - | - |
-| `autotrack` | X `JOY_BUTTON_X` (2) | Shift | edge (toggles auto-track; `InputAdapter.autotrack_on`) | - | - |
+| `toggle_flight_assist` | B `JOY_BUTTON_B` (1) | T | edge | - | - |
+| `brake` | R3 `JOY_BUTTON_RIGHT_STICK` (8) | X | hold | - | - |
+| `autotrack` | X `JOY_BUTTON_X` (2) | Shift, mouse 4 | edge (toggles auto-track; `InputAdapter.autotrack_on`) | - | - |
 | `camera_look` | L3 `JOY_BUTTON_LEFT_STICK` (7) | mouse 3 (middle) | hold | - | - |
 | `toggle_camera` | Y `JOY_BUTTON_Y` (3) | Tab | edge | - | - |
 | `reset_ship` | Back `JOY_BUTTON_BACK` (4) | Backspace | edge | - | - |
@@ -489,7 +499,7 @@ use for the standard layout; any pad SDL3 recognises, generic XInput clones incl
 Notes:
 - Only axes 0-5 and buttons 0-14 are used. Guide (5) and SDL extras (paddles, misc, touchpad, ≥ 15) are not.
   No rumble, no impulse triggers, no light bar, no motion sensors.
-- E and D are "both sides" keys: the same key is an event on two actions. The mouse wheel is not an action (it cannot be held):
+- W and S are "both sides" keys: the same key is an event on two actions (W the two main pods, S the two retros). The mouse wheel is not an action (it cannot be held):
   `Main._input` feeds wheel notches and mouse motion to `GodotInputSource`, which hands them to `InputAdapter` once per tick.
 - The ` key belongs to the console alone: it is not an `InputMap` action and must never be bound to one (a test
   enforces it). While the console is open, Esc closes it instead of pausing (keyboard gameplay bindings are

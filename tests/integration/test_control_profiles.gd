@@ -301,7 +301,7 @@ func test_bind_is_session_only_until_controls_save() -> void:
 	var result: ConsoleResult = _run("bind fire key:k")
 	assert_true(result.ok, result.text())
 	assert_string_contains(result.text(), "fire: pad:button:0 key:Space mouse:1 key:K (deadzone 0.50)")
-	assert_string_contains(result.text(), "note: key:K is also bound to pitch_up")
+	assert_false(result.text().contains("is also bound"), "K is free in layout B: no note")
 	assert_string_contains(result.text(), "session only")
 	assert_true(registry.read("controls.unsaved")["value"])
 	_key(KEY_K, true)
@@ -358,6 +358,13 @@ func test_unbind_then_bind_moves_a_pad_button() -> void:
 	assert_true(source.is_pressed(&"camera_look"), "(and still holds the free look)")
 
 
+func test_binding_a_key_another_action_uses_says_so() -> void:
+	var result: ConsoleResult = _run("bind fire key:b")
+	assert_true(result.ok, result.text())
+	assert_string_contains(result.text(), "note: key:B is also bound to target_next")
+	assert_true(_run("controls use default").ok, "discard the session bind")
+
+
 func test_binding_something_twice_says_so() -> void:
 	var result: ConsoleResult = _run("bind fire KEY:space")
 	assert_true(result.ok)
@@ -403,11 +410,11 @@ func test_setting_the_setting_applies_the_profile() -> void:
 	var result: ConsoleResult = _run("set settings.control_profile m1_classic")
 	assert_true(result.ok, result.text())
 	assert_eq(node.active_name, "m1_classic")
-	assert_eq(_descriptors(&"yaw_left"), PackedStringArray(["pad:axis:2-", "key:J"]))
+	assert_eq(_descriptors(&"yaw_left"), PackedStringArray(["pad:axis:2-"]))
 	assert_eq(resyncs, 1)
 	assert_true(_run("default settings.control_profile").ok)
 	assert_eq(node.active_name, "default")
-	assert_eq(_descriptors(&"yaw_left"), PackedStringArray(["pad:button:13", "key:J"]))
+	assert_eq(_descriptors(&"yaw_left"), PackedStringArray(["pad:button:13"]))
 	settings.set_value(&"control_profile", "m1_classic")
 	settings.revert()  # nothing was saved: back to the default selection
 	assert_eq(node.active_name, "default", "revert re-applies the saved selection")
@@ -438,7 +445,7 @@ func test_the_built_in_default_snapshot_is_taken_before_the_selection_applies() 
 	assert_eq(node.active_name, "m1_classic")
 	assert_true(node.store.default_profile().same_bindings(default_profile), "default is still the project map")
 	assert_true(_run("controls use default").ok)
-	assert_eq(_descriptors(&"yaw_left"), PackedStringArray(["pad:button:13", "key:J"]))
+	assert_eq(_descriptors(&"yaw_left"), PackedStringArray(["pad:button:13"]))
 
 
 func test_a_missing_profile_falls_back_to_the_default_controls() -> void:
@@ -481,7 +488,7 @@ func test_a_saved_profile_and_selection_survive_a_restart() -> void:
 	assert_eq(settings.get_value(&"control_profile"), "mine", "the selection was saved")
 	assert_eq(node.active_name, "mine")
 	assert_eq(_snapshot(), expected, "the map is exactly what was saved, applied before anything else ran")
-	assert_eq(_descriptors(&"yaw_left"), PackedStringArray(["key:J", "pad:axis:2-"]))
+	assert_eq(_descriptors(&"yaw_left"), PackedStringArray(["pad:axis:2-"]))
 	assert_true(_descriptors(&"fire").has("key:K"))
 	assert_eq(registry.read("controls.profile")["value"], "mine")
 	assert_false(registry.read("controls.unsaved")["value"])

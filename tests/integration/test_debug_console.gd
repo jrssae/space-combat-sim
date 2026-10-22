@@ -454,18 +454,18 @@ func test_opening_and_closing_with_a_key_held_fires_no_edge() -> void:
 
 	_key(KEY_QUOTELEFT, true, 96)
 	assert_false(adapter.sample(source, 1.0 / 60.0).ui.toggle_camera, "opening with Tab held")
-	_key(KEY_U, true)  # target_next (U), pressed while typing
+	_key(KEY_B, true)  # target_next (B), pressed while typing
 	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_next, "typing never fires")
 	_key(KEY_QUOTELEFT, true, 96)
 	var after_close: PilotCommand = adapter.sample(source, 1.0 / 60.0)
 	assert_false(after_close.ui.toggle_camera, "closing with Tab still held fires no edge")
-	assert_false(after_close.combat.target_next, "closing with U still held fires no edge")
+	assert_false(after_close.combat.target_next, "closing with B still held fires no edge")
 
-	_key(KEY_U, false)
-	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_next, "nor does releasing it: U is tap-on-release")
-	_key(KEY_U, true)
+	_key(KEY_B, false)
+	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_next, "nor does releasing it: B is tap-on-release")
+	_key(KEY_B, true)
 	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_next, "a tap acts on release")
-	_key(KEY_U, false)
+	_key(KEY_B, false)
 	assert_true(adapter.sample(source, 1.0 / 60.0).combat.target_next, "a real tap after closing still works")
 
 
@@ -541,7 +541,7 @@ func _pad_axis(axis: JoyAxis, value: float) -> void:
 
 
 func _release_inputs() -> void:
-	for key: Key in [KEY_E, KEY_V, KEY_T, KEY_QUOTELEFT, KEY_ESCAPE, KEY_TAB, KEY_ENTER, KEY_UP, KEY_DOWN]:
+	for key: Key in [KEY_E, KEY_V, KEY_T, KEY_B, KEY_QUOTELEFT, KEY_ESCAPE, KEY_TAB, KEY_ENTER, KEY_UP, KEY_DOWN]:
 		if Input.is_physical_key_pressed(key):
 			_key(key, false)
 	for button: JoyButton in [JOY_BUTTON_A, JOY_BUTTON_X]:

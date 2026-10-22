@@ -247,7 +247,8 @@ func descriptors_for(action: StringName) -> PackedStringArray:
 
 ## `fire: pad:button:0 key:Space mouse:1 (deadzone 0.50)`
 func describe_action(action: StringName) -> String:
-	var text: String = "%s: %s" % [action, " ".join(descriptors_for(action)) if bindings.has(action) else "(unbound)"]
+	var shown: String = " ".join(descriptors_for(action)) if bindings.has(action) else ""
+	var text: String = "%s: %s" % [action, shown if not shown.is_empty() else "(unbound)"]
 	if deadzones.has(action):
 		text += " (deadzone %.2f)" % float(deadzones[action])
 	return text

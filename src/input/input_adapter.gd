@@ -4,9 +4,15 @@ extends RefCounted
 ## action names. Pure: no Input, no scene tree, so every curve, ramp and edge rule is unit-tested.
 ##
 ## Layout (§6.1): the right stick is pitch (Y) and roll (X), analog with a radial deadzone and expo; the D-pad
-## Left/Right is yaw, digital with a ramp; D-pad Up is tap = next target, hold = target nearest the nose. The mouse is
-## pitch (Y) and yaw (X): its speed, smoothed over a few ticks, is the rate command. Holding `camera_look` (L3, the middle
-## mouse button) sends the right stick and the mouse to the camera instead (`UiCommand.look_*`); the ship ignores them.
+## Left/Right is yaw, digital with a ramp; D-pad Up (on the keyboard B, and Mouse 2) is tap = next target, hold = target
+## nearest the nose. The mouse is pitch (Y) and yaw (X): its speed, smoothed over a few ticks, is the rate command. Holding
+## `camera_look` (L3, the middle mouse button) sends the right stick and the mouse to the camera instead
+## (`UiCommand.look_*`); the ship ignores them.
+##
+## The keyboard (layout B) is all under the left hand because the right hand flies the mouse: this class sees only action
+## names, so which key drives which action is project.godot's and the control profile's business. Two keys drive a pair
+## of actions at once (W = both main pods, S = both retro pods), which needs nothing here: each pod reads its own action.
+## The mouse side buttons are bound like any other (Mouse 4 `autotrack`, Mouse 5 `weapon_next`).
 
 const MAIN_RIGHT := &"main_right"
 const MAIN_LEFT := &"main_left"
@@ -67,7 +73,7 @@ var stick_deadzone: float = 0.15
 var invert_y: bool = false
 ## Seconds for a held D-pad yaw to ramp from 0 to full (`Settings.yaw_ramp_s`).
 var yaw_ramp_s: float = 0.25
-## `target_next` (D-pad Up, T) is a tap-or-hold button: released sooner than this it gives `target_next` on the
+## `target_next` (D-pad Up, B, Mouse 2) is a tap-or-hold button: released sooner than this it gives `target_next` on the
 ## release; held this long it gives `target_ahead` once, as the threshold is crossed, and its release then gives
 ## nothing, so a hold never also cycles (`Settings.target_hold_s`).
 var target_hold_s: float = TARGET_HOLD_S
