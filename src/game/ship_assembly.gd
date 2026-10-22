@@ -2,7 +2,8 @@ class_name ShipAssembly
 extends RefCounted
 ## Builds a fighting ship from a `ShipSpec` (architecture §15.2): the one path for the player and for AI ships. It
 ## creates the `Ship`, its `ThrusterVisuals` (tinted by `engine_glow_color`), `PulseCannon` (from the spec's
-## `WeaponSpec`), a `Damageable` (hull from `ShipSpec.hull_max`, god mode honoured for the player only) and a
+## `WeaponSpec`), a `Damageable` (hull from `ShipSpec.hull_max`, ram limits from `ram_safe_dv_mps` / `ram_lethal_dv_mps`,
+## god mode honoured for the player only) and a
 ## `Targetable`, and returns them as a `Combatant`. The caller then spawns `combatant.ship`
 ## through `World.spawn`; the components that need the ship's hardpoints are wired on the ship's `ready` signal.
 ##
@@ -82,6 +83,8 @@ static func _wire(combatant: Combatant, projectiles_parent: Node3D, console_owne
 	combatant.thrusters.setup(ship.get_layout(), ship.get_flight_output)
 	combatant.damageable.setup(ship.get_hardpoints().collision, ship.spec.hull_max, combatant.faction,
 			combatant.is_player, console_owner, ship.spec.damage_layout)
+	combatant.damageable.ram_safe_dv_mps = ship.spec.ram_safe_dv_mps
+	combatant.damageable.ram_lethal_dv_mps = ship.spec.ram_lethal_dv_mps
 	var muzzles: Array[Node3D] = ship.get_muzzles()
 	if muzzles.is_empty():
 		push_warning("ShipAssembly: %s has no muzzles; its cannon cannot fire" % ship.spec.asset_id)

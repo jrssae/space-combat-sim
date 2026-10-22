@@ -452,6 +452,45 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
 - `scripts/run_tests.sh`: the main-scene providers line gains `factions` (T12 keeps it), plus two small smoke runs: `relation`
   print / set / reset with `data/factions.json` unchanged, and an unknown faction exiting 1 under `--console-strict`.
 
+**M3-T04 (ram damage).**
+- `RamResolver` is `Combat/RamResolver` in `main.tscn`, priority 210. It needs no wiring: it reads every active `Damageable` from
+  the group each tick. `main.gd` is unchanged. Signal `ram_resolved(info)` mirrors `hit_resolved`; nothing plays a sound or a
+  flash for a ram yet.
+- Contacts come from the direct body state (`PhysicsServer3D.body_get_direct_state`: collider ids, points, normals). `Ship` sets
+  `contact_monitor` and `max_contacts_reported = 8` in `_apply_newtonian_body`.
+- One tick of contact is not enough. A Starfury nose into a raider gave a speculative contact one tick before the bounce, and
+  Jolt spread the bounce over two steps. So a new contact opens a window of `CONTACT_WINDOW_TICKS` (3) ticks, counting the tick
+  it is first reported, and the ram lands once with the largest Δv seen. A lethal Δv lands at once. Otherwise the damage
+  arrives up to 2 ticks (33 ms) after the first contact report.
+- Thrust is subtracted exactly, not as a bound. `Ship.applied_force()` is the World-frame sum of the forces the ship applied on
+  its last tick (nozzles, RCS, the assist's speed cap, the environment). `RamMath.contact_dv(v_now, v_before, own_dv)` takes
+  what those forces added over the window.
+- The ram values live on `Damageable` (`core_radius`, `ram_safe_dv_mps`, `ram_lethal_dv_mps`, `ram_mass_kg`, `ram_mass()`), so
+  the resolver treats ships and buoys alike. `ShipAssembly._wire` copies them from the `ShipSpec` (a file the brief did not
+  list). `NavBuoy` has `MASS_KG` 2000 and `RAM_LETHAL_DV_MPS` 15.
+- `core_radius` is the largest sphere inside any one shape (a box's smallest half extent, a capsule's radius): Starfury 1.235 m
+  (fuselage), raider 0.78 m (nacelles), buoy 0.4 m. A sphere centred on the body origin would be 0.26 m for the raider, whose
+  centre of mass sits low in the hump, and would make almost every raider bump a tunnelling ram.
+- Tunnelling uses the relative speed `|v_a - v_b|`, not the radial closing speed, because a glancing pass tunnels too. With
+  `TUNNEL_FRACTION` 0.5 the threshold is 37 m/s for two Starfuries and 23.4 m/s for any pair with a raider.
+- Tuning concern for (H): the "tunnelling destroys both" rule makes a cliff for a Starfury against a raider. At 23 m/s relative
+  the Starfury's own Δv is 6.8 m/s (about 2 % of its hull); at 24 m/s both die. Two Starfuries have no cliff, because at 37 m/s
+  each Δv is already over the lethal 18. If the play test finds raider rams too deadly, raise `TUNNEL_FRACTION` or use the
+  momentum split at tunnelling speeds too (still fatal at real tunnelling speeds: 120 m/s gives the Starfury 35 m/s).
+- The swept test runs both ways (each origin against the other's volumes grown by its own core) and takes the earlier touch.
+  Jolt owns a pair while it reports a contact, so no swept test then. Props never ram props. Ships fly through buoys: the buoy
+  has no body and nothing writes the ship's velocity (§15.16), so only the damage happens.
+- Measured in Jolt: a 30 m/s head-on between Starfuries changes each velocity by 14.9 m/s, and each loses 58 % of its hull. A
+  4 m/s head-on changes each by 2 m/s and does nothing. A 40 m/s ram destroys a buoy and leaves the Starfury untouched.
+- `HitInfo.cause` (`CAUSE_BOLT` default, `CAUSE_RAM`, `CAUSE_CONSOLE`) is an 8th optional constructor argument. The console's
+  `damage` and `Damageable.kill()` are `console`. `HitResolver.name_of(id)` is now a public static; `RamResolver` uses it for
+  `ram.last`.
+- `settings.ram_damage` off clears everything the resolver keeps, so turning it back on never rams a contact that began while it
+  was off. Ships still bounce.
+- For T05/T06: the main-scene test disables the raider's `AiPilotDriver` so avoidance cannot dodge the ram. Ram kills reach
+  `waves.kills` through `DestructionDirector.raider_destroyed`, unchanged.
+- `scripts/run_tests.sh`: the main-scene providers line gains `ram`.
+
 ## Definition of done (M3)
 
 - T01-T12 merged into `m3`, `scripts/run_tests.sh` green, `docs/third-party.md` current, no generated binaries committed.

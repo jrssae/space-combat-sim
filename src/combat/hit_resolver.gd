@@ -172,11 +172,12 @@ func _land(bolt: Projectile, best: Dictionary, delta: float) -> void:
 func _apply(damageable: Damageable, info: HitInfo) -> void:
 	hits_total += 1
 	damageable.apply_hit(info)
-	last_hit = "%s -> %s, %.1f of %.1f applied" % [_name_of(info.shooter_id), _name_of(info.target_id), info.applied,
+	last_hit = "%s -> %s, %.1f of %.1f applied" % [name_of(info.shooter_id), name_of(info.target_id), info.applied,
 			info.damage]
 
 
-func _name_of(body_id: int) -> String:
+## The display name of the body with this instance id (its `Targetable`'s, else the node name), or "nobody".
+static func name_of(body_id: int) -> String:
 	if body_id == 0 or not is_instance_id_valid(body_id):
 		return "nobody"
 	var body := instance_from_id(body_id) as Node
@@ -219,7 +220,8 @@ func _cmd_damage(args: Dictionary) -> ConsoleResult:
 	if damageable == null:
 		return ConsoleResult.failure("no %s hull to damage" % who)
 	var body: Node3D = damageable.body()
-	var info := HitInfo.new(body.get_instance_id(), 0, &"", float(args[&"amount"]), body.global_position)
+	var info := HitInfo.new(body.get_instance_id(), 0, &"", float(args[&"amount"]), body.global_position, Vector3.ZERO, 0.0,
+			HitInfo.CAUSE_CONSOLE)
 	_apply(damageable, info)
 	hit_resolved.emit(info)
 	return ConsoleResult.line("%s: %.1f applied of %.1f, hull %.1f / %.1f%s" % [who, info.applied, info.damage,

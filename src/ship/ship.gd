@@ -26,6 +26,10 @@ extends RigidBody3D
 ## `ShipSpec.fuel_capacity_kg`, never drawn down while `settings.fuel_unlimited` is on), and when the tank is empty the
 ## model is told to cut all thrust.
 ##
+## Contacts (M3-T04): Jolt reports up to `CONTACTS_REPORTED` contact points (`contact_monitor` on), and the ship keeps the
+## World-frame sum of the forces it applied on its last tick (`applied_force`), so the `RamResolver` can tell the velocity
+## change a collision caused from what the ship's own thrust did.
+##
 ## Rebase-safe: nothing here caches a World position between ticks. Console (§6.4, §15.1 D27): only the player's ship
 ## registers (`console_owner`, set before the ship enters the tree, `ShipAssembly` does it): provider `ship` and commands
 ## `assist [on|off]` and `refuel [kg]`, and it passes the flag on to its `TargetingController`. Other ships stay out of
@@ -39,6 +43,8 @@ const ASSET_ROOT: String = "res://assets/generated"
 const COCKPIT_MESH_FILE: String = "cockpit_interior.obj"
 ## Used when the hardpoints are missing (the chase camera still needs somewhere to sit); matches §8.
 const DEFAULT_CHASE_OFFSET: Vector3 = Vector3(0.0, 2.5, 9.0)
+## Contact points Jolt reports per tick: a few, enough for two or three bodies touching at once (`RamResolver`).
+const CONTACTS_REPORTED: int = 8
 
 ## True for the ship the player flies: it registers the console providers and commands (set before the ship enters the
 ## tree). Every other ship leaves the console alone.
@@ -84,6 +90,7 @@ var _fallback_active: bool = false
 var _interior_visible: bool = false
 var _muzzles: Array[Node3D] = []
 var _collision_nodes: Array[CollisionShape3D] = []
+var _applied_force: Vector3 = Vector3.ZERO
 
 @onready var hull_splats: GaussianSplatNode = $HullSplats
 @onready var hull_mesh_fallback: MeshInstance3D = $HullMeshFallback
@@ -149,6 +156,7 @@ func _physics_process(delta: float) -> void:
 	var combat_fresh: bool = _take_combat_edges()
 
 	var env_accel: Vector3 = _environment_accel()
+	_applied_force = mass * env_accel
 	if _model != null:
 		var b: Basis = global_basis
 		var to_body: Basis = b.transposed()
@@ -161,14 +169,19 @@ func _physics_process(delta: float) -> void:
 		# Inertia grows with speed: the same thrust gives less acceleration the faster the ship goes (SpeedGovernor).
 		var gain: float = SpeedGovernor.thrust_gain(linear_velocity.length(), spec.speed_limit_mps)
 		for nozzle: Dictionary in _output.nozzle_forces:
-			var force: Vector3 = nozzle["force"]
+			var force: Vector3 = b * (nozzle["force"] as Vector3) * gain
 			var at: Vector3 = nozzle["position"]
-			apply_force(b * force * gain, b * at)  # offset from the body origin, world orientation
-		apply_central_force(b * _output.rcs_force_b * gain)
+			apply_force(force, b * at)  # offset from the body origin, world orientation
+			_applied_force += force
+		var rcs_force: Vector3 = b * _output.rcs_force_b * gain
+		apply_central_force(rcs_force)
+		_applied_force += rcs_force
 		apply_torque(b * _output.rcs_torque_b)
 		if _assist_on:
 			var net: Vector3 = b * (_output.pod_force_b + _output.rcs_force_b) * gain
-			apply_central_force(SpeedGovernor.assist_cap_correction(net, linear_velocity, spec.assist_speed_max_mps))
+			var cap: Vector3 = SpeedGovernor.assist_cap_correction(net, linear_velocity, spec.assist_speed_max_mps)
+			apply_central_force(cap)
+			_applied_force += cap
 	apply_central_force(mass * env_accel)
 	# Hard ceiling: nothing takes the ship past the speed limit.
 	if spec != null and spec.speed_limit_mps > 0.0 and linear_velocity.length() > spec.speed_limit_mps:
@@ -243,6 +256,13 @@ func body_velocity() -> Vector3:
 ## Angular velocity in body axes, rad/s: +X pitches the nose up, +Y yaws it left, +Z rolls left.
 func body_angular_velocity() -> Vector3:
 	return global_basis.transposed() * angular_velocity
+
+
+## World-frame sum of the forces the ship applied on its last physics tick (nozzles, RCS, the assist's speed cap and the
+## environment), N. Jolt adds `applied_force() / mass * delta` to the velocity in the coming step; anything beyond that
+## came from a contact.
+func applied_force() -> Vector3:
+	return _applied_force
 
 
 ## The reaction-mass tank, with `unlimited` brought in line with `settings.fuel_unlimited` as of now. Never null.
@@ -320,6 +340,7 @@ func is_fallback_mesh_active() -> bool:
 
 # §5.4: no gravity, no damping on the body *and* REPLACE so the project defaults are not combined in, never asleep
 # (a coasting ship must keep coasting), no CCD. Set here as well as in the scene so an edited scene cannot break it.
+# Contacts are reported for the ram damage (M3-T04).
 func _apply_newtonian_body() -> void:
 	gravity_scale = 0.0
 	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
@@ -328,6 +349,8 @@ func _apply_newtonian_body() -> void:
 	angular_damp = 0.0
 	can_sleep = false
 	continuous_cd = false
+	contact_monitor = true
+	max_contacts_reported = CONTACTS_REPORTED
 
 
 func _build() -> void:
