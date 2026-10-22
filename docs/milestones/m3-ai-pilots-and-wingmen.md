@@ -225,7 +225,9 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
   - `HitInfo.cause`: `bolt` (default), `ram`, `console`. `Damageable.core_radius` (largest sphere inside its shapes,
     about 1 m for a fighter) next to `bounding_radius`.
   - Severity is the ship's own velocity change: damage = `hull_max × clamp((Δv - safe) / (lethal - safe), 0, 1)²`.
-    Starting values (tune in (H)): safe 5 m/s for every ship; lethal 30 m/s for the Starfury, 25 m/s for the raider.
+    Starting values (tune in (H)): safe 5 m/s for every ship; lethal 18 m/s for the Starfury, 15 m/s for the raider.
+    Δv is per ship, not the closing speed: a head-on between equal masses at 30 m/s closing with Jolt's default zero
+    restitution gives each ship about 15 m/s, which these values turn into about 60 % of a Starfury's hull (AC4).
   - **Ship-ship at ordinary speeds**: Jolt resolves the bounce. Enable `contact_monitor` with a few reported contacts on
     ships; `RamResolver` keeps every active ship's velocity from its previous run and, for a pair whose contact began
     since then, takes Δv = |v_now - v_prev| minus what the ship's own thrust could have added in that time.
