@@ -140,7 +140,7 @@ controls delete mine          remove a saved profile (not the one in use)
 
 Bindings are `pad:button:<0-14>`, `pad:axis:<0-5>+` or `-` (`pad:axis:2+` is right stick X to the right; the
 triggers only have `+`), `key:<name>` (`key:K`, `key:Space`, `key:F3`: a physical key, no modifiers) or
-`mouse:<1|2|3>`. `bind` adds a binding. To move a pad button, bind the new one first and then `unbind` the old one,
+`mouse:<1|2|3|8|9>`. `bind` adds a binding. To move a pad button, bind the new one first and then `unbind` the old one,
 because every action keeps at least one pad binding. Anything that breaks the rules (a missing action, a pad
 button above 14 or the Guide button, the ` console key) is refused with the reason and changes nothing. `bind` and
 `unbind` last until you quit unless you `controls save <name>`. Profiles are plain text (one list of bindings per

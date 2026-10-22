@@ -508,7 +508,7 @@ Notes:
   (`Input.get_joy_axis`, `is_joy_button_pressed`, `is_physical_key_pressed`, `is_mouse_button_pressed`), never via
   `Input.is_action_pressed`. That is what lets it mask keyboard and mouse per device class while the console is
   open: `Input` action state would still report keys typed into the prompt.
-- Tap or hold on D-pad Up (in `InputAdapter`, so it works for T too): a press released before
+- Tap or hold on D-pad Up (in `InputAdapter`, so it works for B and Mouse 2 too): a press released before
   `Settings.target_hold_s` (default 0.35 s, counted in physics ticks) gives `target_next` on the release tick; a
   press still held when it crosses the threshold gives `target_ahead` once, on that tick, and its release gives
   nothing, so a hold never also cycles. A tap therefore acts on release, which costs nothing when cycling targets.
@@ -523,8 +523,8 @@ Notes:
   `save` writes the new name.
 - Sticks: `Input.get_vector(neg_x, pos_x, neg_y, pos_y, Settings.stick_deadzone)` (radial deadzone with
   rescaling), then `sign(x)·|x|^1.5` on pitch and roll in `InputAdapter`. The right stick is one vector (x roll,
-  y pitch), so pitch and roll share the radial deadzone. The keyboard's U/O give full roll at once (no ramp, like
-  any stick key); J/L ramp like the D-pad.
+  y pitch), so pitch and roll share the radial deadzone. The keyboard's Caps Lock/G give full roll at once (no
+  ramp, like any stick key); yaw and pitch have no keys (the mouse flies them, §16 D38).
 
 Generic-pad quirks, handled in the input layer (never in gameplay code):
 
