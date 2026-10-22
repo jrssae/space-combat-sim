@@ -1,0 +1,11 @@
+{
+  "factions": [
+    {"id": "earth_alliance", "name": "Earth Alliance"},
+    {"id": "raiders", "name": "Raiders"},
+    {"id": "neutral", "name": "Neutral"}
+  ],
+  "relations": [
+    {"a": "earth_alliance", "b": "raiders", "relation": "hostile"}
+  ],
+  "default": "neutral"
+}

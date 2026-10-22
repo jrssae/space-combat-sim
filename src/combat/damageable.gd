@@ -75,8 +75,11 @@ func setup(collision: Array[Dictionary], hull_max: float, p_faction: StringName,
 		_register_console()
 
 
-## Whether a bolt of `bolt_faction` can hurt this hull.
-func can_be_hit_by(bolt_faction: StringName) -> bool:
+## Whether a bolt of `bolt_faction` can hurt this hull. With `friendly_fire` (`settings.friendly_fire`, D31) any bolt can:
+## allies, neutrals and buoys included. Not the shooter's own hull: the resolver skips that by instance id before asking.
+func can_be_hit_by(bolt_faction: StringName, friendly_fire: bool = false) -> bool:
+	if friendly_fire:
+		return true
 	if Factions.is_hostile(bolt_faction, faction):
 		return true
 	return hit_by_anyone and bolt_faction != faction

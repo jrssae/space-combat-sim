@@ -176,7 +176,7 @@ if grep -E "${SCRIPT_ERRORS}" "${log}"; then
     echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: audio, camera, combat, controls, debris, debug, hud, hull, input, raiders, render, settings, ship, targeting, time, waves, weapons, world" \
+expect_line "${log}" "[console] providers: audio, camera, combat, controls, debris, debug, factions, hud, hull, input, raiders, render, settings, ship, targeting, time, waves, weapons, world" \
     || smoke_status=1
 expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
 expect_line "${log}" "[console] render.splat_backend = headless" || smoke_status=1
@@ -271,6 +271,46 @@ expect_line "${log}" "[console] raiders.pool_size = 0" || smoke_status=1
 expect_line "${log}" "[console] waves.state = idle" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 reject_text "${log}" "ERROR:" || smoke_status=1
+
+echo "== Console smoke run: faction relations and friendly fire on the real main scene"
+# M3-T02 / AC2, AC3: `relation` prints and sets a pair for the session (it never writes data/factions.json), `reset`
+# reloads the file, an unknown faction is an error under --console-strict, and settings.friendly_fire is the switch.
+log="${REPORTS}/console_factions.log"
+factions_status=0
+factions_file_before="$(sha256sum data/factions.json | cut -d' ' -f1)"
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec="wait 30; relation earth_alliance raiders; relation earth_alliance raiders neutral; get factions.relations; relation reset; get factions.relations; get factions.friendly_fire; set settings.friendly_fire on; get factions.friendly_fire; quit" \
+    > "${log}" 2>&1 || factions_status=$?
+cat "${log}"
+if (( factions_status != 0 )); then
+    echo "run_tests.sh: factions smoke run exited ${factions_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] earth_alliance vs raiders: hostile" || smoke_status=1
+expect_line "${log}" "[console] earth_alliance vs raiders: hostile -> neutral (this session)" || smoke_status=1
+expect_line "${log}" "[console] factions.relations = [earth_alliance raiders neutral]" || smoke_status=1
+expect_line "${log}" "[console] factions.relations = [earth_alliance raiders hostile]" || smoke_status=1
+expect_line "${log}" "[console] factions.friendly_fire = false" || smoke_status=1
+expect_line "${log}" "[console] factions.friendly_fire = true" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
+if [[ "$(sha256sum data/factions.json | cut -d' ' -f1)" != "${factions_file_before}" ]]; then
+    echo "run_tests.sh: the relation command changed data/factions.json; session changes must stay in memory." >&2
+    smoke_status=1
+fi
+
+echo "== Console smoke run: an unknown faction must exit 1"
+log="${REPORTS}/console_factions_strict.log"
+strict_status=0
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec="wait 30; relation pirates raiders; quit 0" > "${log}" 2>&1 || strict_status=$?
+cat "${log}"
+if (( strict_status != 1 )); then
+    echo "run_tests.sh: unknown faction smoke run exited ${strict_status}, expected 1 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_text "${log}" "[console] error: unknown faction 'pirates'" || smoke_status=1
+reject_text "${log}" "[console] > quit 0" || smoke_status=1
 
 if (( smoke_status != 0 )); then
     echo "run_tests.sh: console smoke runs failed (see reports/console_*.log)."  >&2

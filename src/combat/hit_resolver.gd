@@ -2,7 +2,8 @@ class_name HitResolver
 extends Node
 ## Swept hit detection for bolts (architecture §15.3, §15.5, D21). Once per physics tick, after every bolt has moved
 ## (`process_physics_priority` 200), it sweeps the segment each bolt just flew against every active `Damageable` that is
-## hostile to the bolt and is not its shooter. Pure script maths (`SweepMath` through `HitShape`), no Jolt queries, so it
+## hostile to the bolt and is not its shooter; with `settings.friendly_fire` (D31, read at the start of each tick) every
+## active hull but the shooter's can be hit. Pure script maths (`SweepMath` through `HitShape`), no Jolt queries, so it
 ## is exact at any closing speed and does not depend on when Jolt moves the target.
 ##
 ## Per bolt and target, in the target's body frame (the target's body has not been stepped yet this tick, so it is still at
@@ -19,7 +20,8 @@ extends Node
 ##
 ## Console: provider `combat` (`projectiles`, `hits`, `last_hit`, `pairs_tested`, `resolve_us`) and commands
 ## `damage <amount> [player|target]` and `heal [player|target|all]`. `resolve_us` is a profiling readout from the wall
-## clock, not gameplay time.
+## clock, not gameplay time. It also registers the faction entries (`FactionConsole`: provider `factions`, command
+## `relation`), because `Factions` is static and has no node of its own.
 
 ## A bolt hit a ship; `info.applied` is set by then.
 signal hit_resolved(info: HitInfo)
@@ -34,6 +36,8 @@ var pairs_tested: int = 0
 var hits_total: int = 0
 var last_hit: String = "none"
 var resolve_us: int = 0
+## `settings.friendly_fire` as of the last tick.
+var friendly_fire: bool = false
 
 
 func _init() -> void:
@@ -55,6 +59,8 @@ func _ready() -> void:
 			_cmd_damage, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"heal", "Restore the player's, the target's or every hull",
 			[ConsoleArg.enum_optional(&"who", HEAL_CHOICES, &"player")]), _cmd_heal, self)
+	DebugConsole.registry.register_provider(&"factions", FactionConsole.provider(), self)
+	DebugConsole.registry.register_command(FactionConsole.command(), FactionConsole.run, self)
 
 
 func _exit_tree() -> void:
@@ -70,6 +76,7 @@ func resolve(delta: float) -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
 	projectiles_last_tick = 0
 	pairs_tested = 0
+	friendly_fire = bool(Settings.get_value(&"friendly_fire"))
 	var targets: Array[Dictionary] = _gather_targets(delta)
 	for node: Node in get_tree().get_nodes_in_group(Projectile.GROUP):
 		var bolt := node as Projectile
@@ -114,7 +121,7 @@ func _earliest_hit(bolt: Projectile, targets: Array[Dictionary], _delta: float) 
 	for target: Dictionary in targets:
 		var damageable: Damageable = target["damageable"]
 		# A hull destroyed earlier in this very tick (by another bolt) cannot be hit again.
-		if damageable.hull.destroyed or int(target["body_id"]) == bolt.shooter_id or not damageable.can_be_hit_by(bolt.faction):
+		if damageable.hull.destroyed or int(target["body_id"]) == bolt.shooter_id or not damageable.can_be_hit_by(bolt.faction, friendly_fire):
 			continue
 		pairs_tested += 1
 		var to_body: Basis = target["to_body"]

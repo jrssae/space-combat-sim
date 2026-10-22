@@ -416,6 +416,42 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
 
 (Implementation agents record deviations from §16 and this file here, per task.)
 
+**M3-T02 (factions as data, friendly fire).**
+- `data/factions.json` holds `earth_alliance`, `raiders`, `neutral`, the one hostile pair and `"default": "neutral"`; with
+  it, every M2 relation is unchanged (`test_faction_table::test_the_shipped_file_is_the_built_in_m2_rule` compares the file,
+  `FactionTable.builtin()` and the M2 rule coded out in the test, over known and unknown ids).
+- `FactionTable.from_dict(d) -> {ok, error, table}` (`table` is null on failure; `parse(text, source)` and `load_file(path)`
+  prefix `source: ` to the error). Validation beyond the brief: ids match `^[a-z0-9_]{1,32}$`; `factions` is a non-empty
+  array; `relations` and `default` are required (no silent defaults in a data file); a relation's `a`/`b` must be listed
+  ids, must differ (the same id is always FRIENDLY), and a pair may appear once in either order (symmetric). First problem
+  in file order wins. `Factions.load_table(path)` installs a valid file and leaves the active table untouched otherwise.
+- `default` applies only to two different listed factions that `relations` does not list. An id the file does not list is
+  NEUTRAL to everything but itself, whatever `default` says (M2 rule 2). So `earth_alliance` vs `neutral` is the file's
+  default, which is `neutral` in the shipped file (M2: NEUTRAL).
+- `Factions` keeps `relation`, `is_hostile`, `is_known`, `hud_color` and its constants. New: `table()`, `use_table(t)`,
+  `load_table(path)`, `reset()`, `TABLE_PATH`. The active table is a GDScript `static var`, i.e. process-wide:
+  `reset()` drops it (and with it every session `relation` change) and the next query reloads the file. Tests that swap or
+  edit the table call `Factions.reset()` in `after_each`. A file that does not validate when first needed warns once and
+  `FactionTable.builtin()` stays active.
+- `FactionTable` and `Factions` reference each other (`Factions.Relation` is the one relation enum); GDScript compiles the
+  cycle without trouble. `relation()` allocates nothing (nested dictionary lookups), so the resolver's per-bolt-per-ship
+  query stays cheap.
+- Console: `src/combat/faction_console.gd` (`FactionConsole`, not in the brief's file list) builds the `factions` provider and
+  the `relation` command and holds the handler, so it is testable without a node. `HitResolver` registers both in `_ready`
+  (owner = itself, dropped in `_exit_tree`). `relation <a> <b>` prints, `relation <a> <b> friendly|neutral|hostile` sets for
+  the session, `relation reset` reloads the file; only listed factions, never the same one twice, never writes the JSON.
+  Provider keys `ids` and `relations` (`"earth_alliance raiders hostile"` per listed pair, so it pastes back into
+  `relation`) and `friendly_fire`, a read-only mirror: change it with `set`/`toggle settings.friendly_fire`.
+- Friendly fire: `Damageable.can_be_hit_by(bolt_faction, friendly_fire := false)` returns true for any bolt when on, which
+  also lifts the buoy rule "a bolt of its own faction passes through". The shooter's own hull is excluded by the resolver by
+  instance id, as before, so a bolt with `shooter_id` 0 (console or test bolts) can hit anything when on. `HitResolver`
+  reads `settings.friendly_fire` at the start of each `resolve` into its public `friendly_fire`. God mode is untouched.
+  `settings.friendly_fire` (bool, default false) is a `SettingsSchema` entry.
+- For T05: the fire-lane check is not built here. With the setting on, a friend in the lane is a hull the bolt can hit
+  (`Factions.relation(...) != HOSTILE` for anything that is not the shooter); the check runs in both settings (D31).
+- `scripts/run_tests.sh`: the main-scene providers line gains `factions` (T12 keeps it), plus two small smoke runs: `relation`
+  print / set / reset with `data/factions.json` unchanged, and an unknown faction exiting 1 under `--console-strict`.
+
 ## Definition of done (M3)
 
 - T01-T12 merged into `m3`, `scripts/run_tests.sh` green, `docs/third-party.md` current, no generated binaries committed.
