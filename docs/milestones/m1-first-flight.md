@@ -3,6 +3,11 @@
 > "A working 3D space combat ship (based on the Starfury design) in a starry background with a little bit of a
 > nebula visible."
 
+**Status:** M1-T01 to M1-T15 are implemented on branch `m1-first-flight`, and every (A) criterion passes in CI.
+The maintainer's first play-test (2026-10-20) found issues. All the fixes are merged (`docs/handoff.md` section 3), and
+M1 is **waiting on the maintainer's re-test** of the (H) checks in `docs/playtest.md`. M1-T16 runs only if a splat check
+still fails.
+
 Read `docs/architecture.md` first; task notes below reference its sections (§). Tasks are ordered; each is one
 PR-sized unit for an implementation agent. Do them in order unless a task says otherwise.
 
@@ -13,14 +18,16 @@ In:
 - `tools/procgen` framework with three generated assets: `starfury_aurora` (splats + fallback meshes +
   hardpoints), `nav_buoy`, `sky_default` (stars + nebula splats + panorama fallback).
 - Player Starfury with Newtonian 6DOF flight on a generic XInput gamepad, using the user's layout (§6.1): analog
-  left/right main pods on LT/RT, left/right retros on LB/RB, strafe/heave on the left stick, pitch/yaw on the right
-  stick, roll on the D-pad. Pod forces act at the pods (differential thrust yaws the ship physically). Flight
-  assist toggle (default on: rate command, uneven triggers turn the ship at a bounded rate), hold-to-brake, reset.
+  left/right main pods on LT/RT, left/right retros on LB/RB, strafe/heave on the left stick, pitch/roll on the
+  right stick, yaw on the D-pad (swapped after the play test; it was pitch/yaw on the stick, roll on the D-pad).
+  Pod forces act at the pods (differential thrust yaws the ship physically). Flight assist toggle (default on:
+  rate command, uneven triggers turn the ship at a bounded rate), hold-to-brake (all stop; faces the selected
+  target), reset.
 - First-person cockpit camera and third-person chase camera, toggle on Y.
 - Two forward pulse cannons with two fire modes (alternating, linked), cycled with D-pad Down; projectiles inherit
   ship velocity; muzzle flash; thruster glow per pod and RCS nozzle.
-- Targeting of five inert nav buoys: next target (D-pad Up), target ahead (R3), readout and bracket in the debug
-  overlay.
+- Targeting of five inert nav buoys: next target (tap D-pad Up), target ahead (hold D-pad Up, or R3 where the pad
+  has one), readout and bracket in the debug overlay.
 - Long-term seams only (§14.9): `UniversePos` + `World` frame, environment-acceleration hook (zero), `SimClock`,
   command split, faction field, scenario JSON, procgen layout, reaction-mass flow (unlimited).
 - Debug overlay and an always-on debug console on the ` key (§6.4): help, state inspection through whitelisted
@@ -60,9 +67,9 @@ hardpoints, never hard-coded.
 | AC5c | Retros: from 50 m/s forward, RB + LB for 1 s reduce speed by `4 · pod_retro_thrust / mass` ±1 %, `\|w\|` < 1e-3 rad/s | A |
 | AC5d | Assist on, pod steering: RT = 1 alone, sticks centred: within 1.5 s the yaw rate settles nose-left (`w_y > 0`) at `pod_yaw_gain · rate_max.y` ±5 % and stays there, pitch/roll rates < 1 °/s, `FlightOutput.trim` > 0 at steady state, and no nozzle level ever exceeds its trigger; after release the rotation stops (< 1 °/s) within 1.5 s; LT alone mirrors it; RT = 1 with LT = 0.95 (inside the 10 % deadzone) flies straight: `\|w_y\|` < 1 °/s and heading change < 2° over 2 s | A |
 | AC5e | Assist on: a 60 °/s yaw spin stops (< 1 °/s) within 1.5 s. Assist off: the same spin does not decay (±0.5 % over 2 s) | A |
-| AC5f | Brake: from body velocity (10, -5, -80) m/s with X held, in both assist modes, `\|v\|` < 0.5 m/s within 7 s and `\|w\|` < 1 °/s throughout | A |
+| AC5f | Brake = all stop, in both assist modes with X held: from body velocity (10, -5, -80) m/s, `\|v\|` < 0.5 m/s within 7 s and `\|w\|` < 1 °/s throughout; from a 60 °/s tumble plus 50 m/s of drift with the stick and D-pad deflected (ignored), `\|v\|` < 0.5 m/s and `\|w\|` < 0.5 °/s within 6 s; with a target selected 90° off the nose, the nose is within 2° of it within 3.5 s and stays within 2° (no overshoot, no roll) while X is held | A |
 | AC5g | Model matches engine: for five scripted demands, the one-tick angular velocity change measured in Jolt equals `FlightOutput.torque_b / inertia · dt` within 1 %; damping guard passes | A |
-| AC6 | Input unit tests: radial deadzones, expo, invert-Y, roll ramp, edge detection, per-side trigger/bumper mapping into `FlightCommand`, combat/ui edges into their commands; every §6.1 action exists in `project.godot` with the listed bindings | A |
+| AC6 | Input unit tests: radial deadzones, expo, invert-Y, yaw ramp, D-pad Up tap (next target on release) versus hold (target ahead once at `target_hold_s`, never both), edge detection, per-side trigger/bumper mapping into `FlightCommand`, combat/ui edges into their commands; every §6.1 action exists in `project.godot` with the listed bindings | A |
 | AC7 | Weapons: projectile spawns at a muzzle hardpoint with velocity = ship velocity + 400 m/s forward and frees itself after 4 s; `ALTERNATING` fires 4 Hz alternating muzzles; `LINKED` fires 2 Hz both muzzles; `weapon_next` cycles and wraps and never raises the rate of fire | A |
 | AC8 | Targeting: `target_next` cycles by range and wraps; `target_ahead` picks the smallest boresight angle in the forward hemisphere and leaves the selection unchanged if none; readout range ±1e-3 m and closing speed (+10 m/s when approaching a static buoy at 10 m/s); selection clears beyond sensor range; the five scenario buoys appear as candidates with faction `neutral` | A |
 | AC9 | World frame: `UniversePos` round-trips at 1.5e11 m with < 1 mm error; `World.rebase(Vector3(5000, 0, 0))` mid-flight keeps every body's velocity, all relative positions within 1 mm, and the ship's universe position within 1 mm | A |
@@ -70,10 +77,10 @@ hardpoints, never hard-coded.
 | AC11 | `TriggerCalibration` tests prove normalisation for rest = 0 and rest = -1; every pad binding uses only standard `JOY_AXIS_*` 0-5 / `JOY_BUTTON_*` 0-14 | A |
 | AC12 | Ship renders as splats (not the fallback mesh) in both camera modes; hull orientation and position match the fallback mesh when toggled with F4 | H |
 | AC13 | Star field and nebula visible as splats; no parallax when flying; no popping between sky and hull; cockpit frame correctly occludes hull splats | H |
-| AC14 | On the tester's generic pad, per the §5.2 table: equal triggers fly straight; with assist off RT alone yaws left and LT alone yaws right; bumpers retro per side; with assist on one trigger turns the ship smoothly at ≈ 30 °/s (overlay shows POD YAW and POD TRIM), the turn stops on release, and both triggers squeezed fully fly straight; right stick pitches/yaws, D-pad rolls (taps give fine roll), left stick strafes/heaves; triggers reach full thrust and rest at zero; no stick drift; releasing the triggers does not slow the ship; brake stops drift in both modes; B and Y toggles work | H |
+| AC14 | On the tester's generic pad, per the §5.2 table: equal triggers fly straight; with assist off RT alone yaws left and LT alone yaws right; bumpers retro per side; with assist on one trigger turns the ship smoothly at ≈ 30 °/s (overlay shows POD YAW and POD TRIM), the turn stops on release, and both triggers squeezed fully fly straight; right stick pitches/rolls, D-pad yaws (taps give fine yaw), left stick strafes/heaves; triggers reach full thrust and rest at zero; no stick drift; releasing the triggers does not slow the ship; holding X brings the ship to an all stop (drift and rotation) in both modes and, with a target selected, swings the nose onto it; B and Y toggles work | H |
 | AC15 | 60 fps at 1080p on the tester's Linux/Vulkan GPU (overlay FPS), no hitching when firing | H |
 | AC16 | Thruster glow is per pod and per side: it shows differential thrust, retros and trim; RCS glow responds to strafe and rotation; projectiles and muzzle flash visible from both cameras; the two fire modes are visibly different | H |
-| AC17 | D-pad Up cycles the buoys, R3 picks the buoy nearest the nose; bracket and readout (name, range, closing speed) are correct; buoys render as splats and visibly spin; the drifting buoy shows a non-zero closing speed | H |
+| AC17 | Tapping D-pad Up cycles the buoys, holding it (about 0.35 s) picks the buoy nearest the nose without also cycling (R3 does the same on pads that have it); bracket and readout (name, range, closing speed) are correct; buoys render as splats and visibly spin; the drifting buoy shows a non-zero closing speed | H |
 | AC18 | Overlay shows splat backend `Compute` (`Raster` only with a recorded reason); fallback meshes/panorama appear automatically if neither backend initialised | H |
 | AC19 | Console unit tests: tokenizer (quotes, `;`, `#`), typed args and their error messages, unknown command/key suggestions, `help`, history (100, persisted), Tab completion (commands, paths, setting keys, enum values), provider whitelist (`get ship.queue_free` is an unknown key), owner pruning when a registering node is freed, `god` toggles `debug.invulnerable` and it is never written by `save` | A |
 | AC20 | Console input rules: no `InputMap` action binds `KEY_QUOTELEFT`; while the console is open key/mouse-bound actions read 0 and pad-bound actions still work; opening/closing with a key held fires no edge; `settings.console_pause_on_open` pauses the tree | A |
@@ -220,11 +227,11 @@ hardpoints, never hard-coded.
   `GodotInputSource.get_trigger` reads the action's `InputEventJoypadMotion` events from `InputMap`, the raw axis
   per connected pad, normalises with `TriggerCalibration` (rest per GUID; calibration samples 0.5 s of idle input
   at start-up and on `joy_connection_changed`), counts bound keys as 1.0, returns the max. Edge detection lives in
-  `InputAdapter` (previous-tick booleans) so it is testable. Expo `signf(x) * pow(absf(x), 1.5)` on pitch/yaw
-  only; invert-Y from `Settings`; roll ramp per §6.1 (`rot.z` toward ±1 at `1 / roll_ramp_s` per second, snap
-  to 0 on release, restart from 0 on reversal). Mapping: `main_right`/`main_left` -> `FlightCommand.main_*`,
-  `retro_*` -> 0.0/1.0, combat actions -> `CombatCommand`, camera/reset/pause/debug -> `UiCommand`. Nothing may
-  reference rumble or other Xbox-only features. `test_input_map.gd` asserts every action exists, each has at
+  `InputAdapter` (previous-tick booleans) so it is testable. Expo `signf(x) * pow(absf(x), 1.5)` on pitch/roll
+  only; invert-Y from `Settings`; D-pad ramp per §6.1 (since the play-test swap it is yaw: `rot.y` toward ±1 at
+  `1 / yaw_ramp_s` per second, snap to 0 on release, restart from 0 on reversal; D-pad Up is tap-or-hold).
+  Mapping: `main_right`/`main_left` -> `FlightCommand.main_*`, `retro_*` -> 0.0/1.0, combat actions ->
+  `CombatCommand`, camera/reset/pause/debug -> `UiCommand`. Nothing may reference rumble or other Xbox-only features. `test_input_map.gd` asserts every action exists, each has at
   least one pad event (except `debug_toggle_fallback_mesh`, keyboard only), axis indices are in 0..5 and button
   indices in 0..14, the specific bindings from §6.1 (e.g. `retro_right` is button 10, `target_ahead` is 8), and
   that no action has a key event with physical keycode `KEY_QUOTELEFT` (the console key). Adapter tests: with
@@ -250,7 +257,8 @@ hardpoints, never hard-coded.
   `toggle`, `default`, `save`, `revert`, `watch`, `unwatch`, `fps`, `god`, `timescale` (clamped 0.05..1), `exec`,
   `wait`, `quit`. Providers registered here: `settings` (from `SettingsSchema`), `debug` (`DebugFlags`), `time`
   (`SimClock`, plus `Engine.time_scale`), `input` (via the main scene's `GodotInputSource` once it exists; a
-  `DebugConsole.set_input_source(source)` setter). While open: `captures_keyboard()` is true, the input source's
+  `DebugConsole.set_input_source(source, adapter)` setter; the adapter is what `resync_edges()` and the last-command
+  keys need). While open: `captures_keyboard()` is true, the input source's
   `keyboard_mouse_enabled` is false and `InputAdapter.resync_edges()` runs on open and close; joypad events are
   swallowed by the UI only; `console_pause_on_open` pauses the tree. Output mirrored to stdout/stderr with the
   `[console]` prefix. Startup execution of `user://autoexec.cfg`, `--console-file`, `--console-exec`,
@@ -276,7 +284,7 @@ hardpoints, never hard-coded.
   (group, position, exhaust, `r = p - com`) and the cosmetic RCS list. `FlightOutput`: `nozzle_forces:
   Array[Dictionary]` (`position`, `force`, group, level), `rcs_force_b`, `rcs_torque_b`, `force_b`, `torque_b`,
   `trim` (0..1), `pod_yaw_cmd` (-1..1, pilot terms), `main_levels`/`retro_levels` per pod after trim,
-  `rcs_levels` (Vector3 force, Vector3 torque, -1..1), `mass_flow_kg_s`. Implement `AXIS_SIGN = Vector3(1, -1,
+  `rcs_force_level`/`rcs_torque_level` (Vector3, -1..1), `mass_flow_kg_s`. Implement `AXIS_SIGN = Vector3(1, -1,
   -1)` once, in `FlightModel`. `ShipSpec` gains `pod_yaw_gain = 0.5`, `pod_yaw_deadzone = 0.10`,
   `pod_yaw_smoothing_s = 0.15` (§5.1). Unit tests, one per row of the §5.2 table (signs of `torque_b` and
   `force_b`, assist off and on), plus: `|tau_pods.x|, |tau_pods.z| < 1e-6` for random demands; pod-yaw command
@@ -300,7 +308,7 @@ hardpoints, never hard-coded.
   `static from_array(a: Array) -> UniversePos`, `plus_local(v: Vector3) -> UniversePos`,
   `offset_to(other) -> Vector3` (documented as valid only for nearby positions), `distance_to(other) -> float`.
   `WorldFrame` (Node3D, the `World` node): `origin: UniversePos`, `origin_velocity: PackedFloat64Array` (zero in
-  M1), `to_local(u) -> Vector3`, `to_universe(local: Vector3) -> UniversePos`, `spawn(node: Node3D, at:
+  M1), `universe_to_local(u) -> Vector3` (`to_local` clashes with Node3D's native method), `to_universe(local: Vector3) -> UniversePos`, `spawn(node: Node3D, at:
   UniversePos, basis := Basis.IDENTITY)` (adds the child, joins group `world_shiftable`, places it),
   `rebase(offset: Vector3)` (moves every `world_shiftable` node by `-offset` via `global_position`, calls
   `reset_physics_interpolation()`, adds `offset` to `origin`, emits `rebased(offset)`),
@@ -332,6 +340,16 @@ hardpoints, never hard-coded.
   Integration tests drive the body with `await get_tree().physics_frame` in GUT async tests.
 - Console: `Ship` registers provider `ship` and command `assist [on|off]`; `SplatStatus` registers provider
   `render` and command `fallback [on|off]` (§6.4).
+  Decisions (T10): `active_backend()` returns `compute`, `raster`, `headless` (no display server: GDGS skips
+  selection, nothing draws, the splat path stays on) or `none` (a display but no backend: the only case that turns
+  the fallback on by itself). `SplatStatus` is a node Main adds outside `World`; meshes opt in through group
+  `splat_fallback_mesh` (`use_fallback_mesh`: Ship, NavBuoy) and the sky through `splat_fallback_sky`
+  (`use_fallback_sky`: SpaceEnvironment); `fallback on|off` and F4 (`toggle_fallback()`) reach them, including
+  nodes spawned later. Commands are held until replaced; edges (`toggle_assist`, `target_next`, ...) act only in
+  the first physics tick after `set_*_command`, so a stale command never repeats them, and `get_combat_command()`
+  gives weapons this tick's command. `Ship.create(spec, world)` then `world.spawn(ship, ...)`; the scene's default
+  spec is `starfury_aurora.tres`, set in the `.tscn` (a `preload` default in the script made headless test runs
+  leak objects at exit). `assist_on` starts from `Settings.assist_default`; toggles are not written back.
 - Done when: AC5a-AC5g pass headless; the scene instantiates with the GDGS node present and the fallback hidden.
 - Verify: GUT integration suite. Check once by hand that the damping guard fails if `default_linear_damp` is put
   back to 0.1.
@@ -348,7 +366,9 @@ hardpoints, never hard-coded.
   `depth_test_min_alpha`; expose them as exports on the scene root for tuning). Environment: background colour
   black, ambient 0.02 grey, glow on (intensity 0.4, HDR threshold 1.0), tonemap filmic, no fog, no SSAO/SSR.
   `KeyStar`: `DirectionalLight3D`, energy 1.5, slightly warm, rotated to light the ship's front-left-top.
-  `SkyFollower`: in `_process`, `sky.global_position = get_viewport().get_camera_3d().global_position` (also in
+  `SkyFollower`: in `_process`, `sky.global_position = get_viewport().get_camera_3d().global_position +
+  centroid_offset` (from `sky_default/manifest.json`: GDGS re-centres every PLY on its mean, and the one-sided nebula
+  puts the sky's mean ~4.6 km off the sphere centre) (also in
   `_physics_process` to avoid a frame of lag after teleports or rebases). The environment sits outside `World`.
   `space_environment.gd` exposes `use_fallback_sky(bool)` which swaps the Environment resource and hides
   `SkySplats`.
@@ -362,11 +382,14 @@ hardpoints, never hard-coded.
 - Goal: cockpit and chase cameras with toggle and smoothing.
 - Files: `src/camera/camera_rig.gd`, `src/camera/chase_camera_math.gd`, `src/camera/camera_rig.tscn`,
   `tests/unit/test_chase_camera_math.gd`, `tests/integration/test_camera_rig.gd`.
-- Notes: §8. `enum Mode { COCKPIT, CHASE }` (more later); `CameraRig.setup(ship: Ship)`; adds a
-  `RemoteTransform3D` under the ship's `CockpitAnchor` pointing at `CockpitCamera`. `ChaseCameraMath.step(current:
+- Notes: §8. `enum Mode { COCKPIT, CHASE }` (more later); `CameraRig.setup(target: Node3D, cockpit_anchor: Node3D,
+  chase_offset_local: Vector3, set_interior_visible: Callable)` (no `Ship` dependency; T15 passes the ship, its
+  `CockpitAnchor`, the hardpoints' `chase_anchor` and `set_cockpit_interior_visible`); adds a
+  `RemoteTransform3D` under the anchor pointing at `CockpitCamera`. `ChaseCameraMath.step(current:
   Transform3D, ship: Transform3D, dt: float, cfg) -> Transform3D` with half-life smoothing; unit test that two
   1/120 s steps equal one 1/60 s step within 1e-4. `ChaseCamera` joins `world_shiftable`. Toggle sets `current`
-  and `ship.set_cockpit_interior_visible(mode == COCKPIT)`. Near 0.05, far 50 000, FOV 75 (cockpit) / 70 (chase).
+  and calls `set_interior_visible(mode == COCKPIT)` (also once in `setup`). Near 0.05, far 50 000, FOV 75 (cockpit) /
+  70 (chase). `cfg` is a `ChaseCameraConfig` Resource (`src/camera/chase_camera_config.gd`).
 - Console: `CameraRig` registers provider `camera` (`mode` writable) and command `camera [cockpit|chase]`.
 - Done when: camera part of AC10 passes; math tests pass.
 - Verify: GUT.
@@ -389,7 +412,16 @@ hardpoints, never hard-coded.
   `_physics_process` (`position += velocity * dt`), `velocity = ship.linear_velocity + ship.forward() * 400`,
   lifetime 4 s, emissive capsule ~0.1×1.5 m, joins `world_shiftable`. Muzzle flash: a quad scaled up for 50 ms.
   No hit detection.
-- Console: `PulseCannon` registers provider `weapons` (`mode` writable: `alternating`, `linked`).
+- Wiring as built (T10 was built in parallel, so neither node references the Ship; T15 wires them):
+  `ThrusterVisuals.setup(layout: ThrusterLayout, output_source: Callable)` (node under the ship, so node-local is
+  ship-local; `output_source.call()` returns the latest `FlightOutput` or null, e.g. `ship.get_flight_output`) and
+  `PulseCannon.setup(body: RigidBody3D, muzzles: Array[Node3D], projectiles_parent: Node3D)` plus
+  `set_combat_command(cmd: CombatCommand)` once per physics tick (`weapon_next` is taken once per command; muzzle
+  indices follow the hardpoints' `muzzles`: left, right). RCS glows read the tags from `rcs_force_level` and
+  `rcs_torque_level` (body-frame signs, mapping in `ThrusterGlowLevels`). Extra files: `src/ship/thruster_glow_levels.gd`
+  (pure mapping and smoothing), `src/weapons/muzzle_flash.gd`, `tests/unit/test_thruster_glow_levels.gd`,
+  `tests/integration/test_thruster_visuals.gd`.
+- Console: `PulseCannon` registers provider `weapons` (`mode` writable: `alternating`, `linked`; read-only `cooldown_s`).
 - Done when: AC7 passes; glow nodes exist for every pod nozzle and RCS hardpoint.
 - Verify: GUT.
 
@@ -420,6 +452,8 @@ hardpoints, never hard-coded.
   spawn entries with `UniversePos`, and spawning goes through `World.spawn()`. `TargetingController` (under the
   ship) builds `TargetInfo`s from group `targetable` each physics tick, applies `target_next` / `target_ahead`
   edges, exposes `selected_readout() -> TargetReadout`, emits `target_changed`.
+  Deviation (T14 landed before T10): the controller does not know `Ship`. T10/T15 call `setup(body: RigidBody3D)`
+  (it reads position, `linear_velocity`, forward `-global_basis.z`) and `apply(cmd: CombatCommand)` each tick.
 - Console: `TargetingController` registers provider `targeting` (`selected` writable by display name or `none`).
 - Done when: AC8 passes; `nav_buoy` passes AC3 and AC4 (T05's test picks it up).
 - Verify: Python tests, GUT.
@@ -435,7 +469,8 @@ hardpoints, never hard-coded.
   `ship.set_combat_command(pc.combat)`; handle `pc.ui` edges (camera, reset, `pause` via `get_tree().paused`
   with ship, buoys and projectiles pausable, overlay toggle = `toggle settings.show_overlay`, F4 fallback mesh
   toggle). Console: `main.gd` registers commands `respawn` and `pause [on|off]` and hands its `GodotInputSource`
-  to `DebugConsole.set_input_source()`; `run_tests.sh` adds a smoke run of the real main scene:
+  and `InputAdapter` to `DebugConsole.set_input_source(source, adapter)` (held weakly: `main.gd` keeps them);
+  `run_tests.sh` adds a smoke run of the real main scene:
   `godot --headless --path . -- --console-strict --console-exec="wait 30; state; state ship; get render.splat_backend; quit"`
   asserting all ten providers are listed. Overlay (`Label`s,
   monospace): speed m/s, body velocity xyz, angular rate °/s per axis, `ASSIST ON/OFF`, `POD YAW ±nn °/s`

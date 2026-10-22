@@ -1,0 +1,34 @@
+[gd_scene format=3 uid="uid://7fswn6ii6eqm"]
+
+[ext_resource type="Script" path="res://src/environment/space_environment.gd" id="1_env"]
+[ext_resource type="Environment" path="res://assets/environment/environment_default.tres" id="2_default"]
+[ext_resource type="Script" path="res://addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd" id="3_effect"]
+[ext_resource type="Script" path="res://addons/gdgs/runtime/nodes/gaussian_splat_node.gd" id="4_splats"]
+[ext_resource type="Script" path="res://src/environment/sky_follower.gd" id="5_follower"]
+
+[sub_resource type="CompositorEffect" id="CompositorEffect_gdgs"]
+script = ExtResource("3_effect")
+
+[sub_resource type="Compositor" id="Compositor_main"]
+compositor_effects = Array[CompositorEffect]([SubResource("CompositorEffect_gdgs")])
+
+[node name="SpaceEnvironment" type="Node3D"]
+script = ExtResource("1_env")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = ExtResource("2_default")
+compositor = SubResource("Compositor_main")
+
+[node name="KeyStar" type="DirectionalLight3D" parent="."]
+transform = Transform3D(-0.851658, 0.339815, -0.399004, 0, 0.761316, 0.648381, 0.524097, 0.552199, -0.648381, 0, 0, 0)
+light_color = Color(1, 0.94, 0.84, 1)
+light_energy = 1.5
+
+[node name="SkySplats" type="VisualInstance3D" parent="."]
+top_level = true
+physics_interpolation_mode = 2
+script = ExtResource("4_splats")
+
+[node name="SkyFollower" type="Node" parent="." node_paths=PackedStringArray("sky")]
+script = ExtResource("5_follower")
+sky = NodePath("../SkySplats")

@@ -1,0 +1,19 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/weapons/projectile.gd" id="1_proj"]
+[ext_resource type="Material" path="res://assets/materials/projectile.tres" id="2_mat"]
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_bolt"]
+material = ExtResource("2_mat")
+radius = 0.05
+height = 1.5
+radial_segments = 8
+rings = 2
+
+[node name="Projectile" type="Node3D"]
+script = ExtResource("1_proj")
+
+[node name="Bolt" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0)
+cast_shadow = 0
+mesh = SubResource("CapsuleMesh_bolt")

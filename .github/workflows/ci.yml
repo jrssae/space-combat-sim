@@ -1,0 +1,61 @@
+name: CI
+
+# Python generator tests, asset generation, headless Godot import, compile check and GUT, all without a GPU.
+# Anything that needs a GPU is verified by a human, never here (docs/architecture.md, section 12).
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: python -m pip install numpy pillow
+
+      # The pinned version lives in scripts/setup_godot.sh only; the cache key follows it.
+      - name: Read pinned Godot version
+        id: godot
+        run: |
+          version="$(sed -n 's/^GODOT_VERSION="\(.*\)"$/\1/p' scripts/setup_godot.sh)"
+          if [[ -z "${version}" ]]; then
+            echo "Could not read GODOT_VERSION from scripts/setup_godot.sh" >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Cache Godot
+        uses: actions/cache@v4
+        with:
+          path: .tools
+          key: godot-${{ runner.os }}-${{ steps.godot.outputs.version }}
+
+      - name: Install Godot
+        run: scripts/setup_godot.sh
+
+      - name: Generate assets
+        run: scripts/gen_assets.sh
+
+      - name: Run tests
+        run: scripts/run_tests.sh
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: reports/
+          if-no-files-found: ignore

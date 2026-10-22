@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="RaiderTactics" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ai/raider_tactics.gd" id="1_tactics"]
+
+[resource]
+script = ExtResource("1_tactics")
+closing_far_mps = 120.0
+closing_near_mps = 60.0
+near_range_m = 1500.0
+face_lead_delta_v_mps = 40.0
+fire_range_m = 1200.0
+fire_cone_deg = 2.5
+fire_miss_m = 3.0
+break_range_m = 300.0
+max_time_on_target_s = 8.0
+break_speed_mps = 120.0
+break_duration_s = 2.5
+extend_min_s = 4.0
+extend_range_m = 1400.0

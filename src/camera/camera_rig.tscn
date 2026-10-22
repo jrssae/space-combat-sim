@@ -1,0 +1,21 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/camera/camera_rig.gd" id="1_rig"]
+
+[node name="CameraRig" type="Node3D"]
+script = ExtResource("1_rig")
+
+[node name="CockpitPivot" type="Node3D" parent="."]
+
+[node name="CockpitCamera" type="Camera3D" parent="CockpitPivot"]
+physics_interpolation_mode = 2
+fov = 75.0
+near = 0.05
+far = 50000.0
+
+[node name="ChaseCamera" type="Camera3D" parent="." groups=["world_shiftable"]]
+top_level = true
+physics_interpolation_mode = 2
+fov = 70.0
+near = 0.05
+far = 50000.0

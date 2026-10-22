@@ -10,7 +10,8 @@ dependency, add a row here in the same PR and keep its licence file next to the 
 | GDGS (Godot Gaussian Splatting plugin) | v3.3.0 | `addons/gdgs/` (+ `addons/gdgs/LICENSE`) | MIT | https://github.com/ReconWorldLab/godot-gaussian-splatting |
 | GUT (Godot Unit Test) | v9.7.1 | `addons/gut/` (+ `addons/gut/LICENSE.md`) | MIT | https://github.com/bitwes/Gut |
 
-Vendored addons are upstream code: do not edit them in place. If a patch is unavoidable, put it in
+Vendored addons are upstream code: do not edit them in place. GDGS carries two documented local fixes (sort-buffer
+overflow, narrow-subgroup fallback): see `addons/gdgs/PATCHES.md`. If a patch is unavoidable, put it in
 `addons/<name>/PATCHES.md`, keep it minimal, and upstream it.
 
 ## Used but not vendored

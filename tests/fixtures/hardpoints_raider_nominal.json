@@ -1,0 +1,744 @@
+{
+  "asset_id": "raider_fighter",
+  "generator_version": 1,
+  "frame": "godot",
+  "units": "m",
+  "length_m": 7.2,
+  "span_m": 17.0,
+  "height_m": 2.007,
+  "mass_kg": 20000.0,
+  "inertia_estimate_kg_m2": [
+    15598.70277,
+    119300.37415,
+    114064.15634
+  ],
+  "center_of_mass": [
+    0.0,
+    0.44367,
+    -0.15448
+  ],
+  "cockpit_camera": {
+    "position": [
+      0.0,
+      0.69367,
+      -2.7827
+    ],
+    "forward": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "up": [
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  "chase_anchor": {
+    "position": [
+      0.0,
+      3.24367,
+      9.7173
+    ]
+  },
+  "muzzles": [
+    {
+      "name": "root_l",
+      "position": [
+        -3.0,
+        -0.67633,
+        -2.8827
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ]
+    },
+    {
+      "name": "root_r",
+      "position": [
+        3.0,
+        -0.67633,
+        -2.8827
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ]
+    },
+    {
+      "name": "nacelle_l",
+      "position": [
+        -2.07,
+        0.44367,
+        -2.5827
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ]
+    },
+    {
+      "name": "nacelle_r",
+      "position": [
+        2.07,
+        0.44367,
+        -2.5827
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ]
+    }
+  ],
+  "pods": [
+    {
+      "name": "l",
+      "side": "left",
+      "center": [
+        -1.15,
+        0.44367,
+        0.3173
+      ],
+      "main": {
+        "position": [
+          -1.15,
+          0.44367,
+          2.9173
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "radius": 0.55
+      },
+      "retro": {
+        "position": [
+          -1.15,
+          0.44367,
+          -2.2827
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "radius": 0.15
+      }
+    },
+    {
+      "name": "r",
+      "side": "right",
+      "center": [
+        1.15,
+        0.44367,
+        0.3173
+      ],
+      "main": {
+        "position": [
+          1.15,
+          0.44367,
+          2.9173
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "radius": 0.55
+      },
+      "retro": {
+        "position": [
+          1.15,
+          0.44367,
+          -2.2827
+        ],
+        "exhaust": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "radius": 0.15
+      }
+    }
+  ],
+  "rcs": [
+    {
+      "name": "r_tip_u",
+      "pod": "r",
+      "position": [
+        8.4,
+        -0.25633,
+        1.90062
+      ],
+      "exhaust": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_down",
+        "pitch_up",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "r_tip_d",
+      "pod": "r",
+      "position": [
+        8.4,
+        -0.25633,
+        1.90062
+      ],
+      "exhaust": [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_up",
+        "pitch_down",
+        "roll_left"
+      ]
+    },
+    {
+      "name": "r_edge_x",
+      "pod": "r",
+      "position": [
+        3.4,
+        -0.25633,
+        -1.58937
+      ],
+      "exhaust": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_left",
+        "yaw_left",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "l_tip_u",
+      "pod": "l",
+      "position": [
+        -8.4,
+        -0.25633,
+        1.90062
+      ],
+      "exhaust": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_down",
+        "pitch_up",
+        "roll_left"
+      ]
+    },
+    {
+      "name": "l_tip_d",
+      "pod": "l",
+      "position": [
+        -8.4,
+        -0.25633,
+        1.90062
+      ],
+      "exhaust": [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "tags": [
+        "heave_up",
+        "pitch_down",
+        "roll_right"
+      ]
+    },
+    {
+      "name": "l_edge_x",
+      "pod": "l",
+      "position": [
+        -3.4,
+        -0.25633,
+        -1.58937
+      ],
+      "exhaust": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "tags": [
+        "sway_right",
+        "yaw_right",
+        "roll_left"
+      ]
+    }
+  ],
+  "collision": [
+    {
+      "name": "wing_r_step_0",
+      "type": "box",
+      "position": [
+        0.85,
+        -0.25633,
+        -1.37937
+      ],
+      "size": [
+        1.7,
+        0.35,
+        5.80666
+      ],
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "wing_r_step_1",
+      "type": "box",
+      "position": [
+        2.55,
+        -0.25633,
+        -0.7027
+      ],
+      "size": [
+        1.7,
+        0.3,
+        4.86666
+      ],
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "wing_r_step_2",
+      "type": "box",
+      "position": [
+        4.25,
+        -0.25633,
+        -0.02604
+      ],
+      "size": [
+        1.7,
+        0.25,
+        3.92666
+      ],
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "wing_r_step_3",
+      "type": "box",
+      "position": [
+        5.95,
+        -0.25633,
+        0.65063
+      ],
+      "size": [
+        1.7,
+        0.2,
+        2.98666
+      ],
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "wing_r_step_4",
+      "type": "box",
+      "position": [
+        7.65,
+        -0.25633,
+        1.32729
+      ],
+      "size": [
+        1.7,
+        0.15,
+        2.04666
+      ],
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "wing_l_step_0",
+      "type": "box",
+      "position": [
+        -0.85,
+        -0.25633,
+        -1.37937
+      ],
+      "size": [
+        1.7,
+        0.35,
+        5.80666
+      ],
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "wing_l_step_1",
+      "type": "box",
+      "position": [
+        -2.55,
+        -0.25633,
+        -0.7027
+      ],
+      "size": [
+        1.7,
+        0.3,
+        4.86666
+      ],
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "wing_l_step_2",
+      "type": "box",
+      "position": [
+        -4.25,
+        -0.25633,
+        -0.02604
+      ],
+      "size": [
+        1.7,
+        0.25,
+        3.92666
+      ],
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "wing_l_step_3",
+      "type": "box",
+      "position": [
+        -5.95,
+        -0.25633,
+        0.65063
+      ],
+      "size": [
+        1.7,
+        0.2,
+        2.98666
+      ],
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "wing_l_step_4",
+      "type": "box",
+      "position": [
+        -7.65,
+        -0.25633,
+        1.32729
+      ],
+      "size": [
+        1.7,
+        0.15,
+        2.04666
+      ],
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "hump",
+      "type": "box",
+      "position": [
+        0.0,
+        0.36867,
+        -1.3327
+      ],
+      "size": [
+        1.7,
+        1.25,
+        4.9
+      ],
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "nacelle_r",
+      "type": "capsule",
+      "position": [
+        1.15,
+        0.44367,
+        0.3173
+      ],
+      "radius": 0.78,
+      "height": 5.2,
+      "axis": "z",
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "nacelle_l",
+      "type": "capsule",
+      "position": [
+        -1.15,
+        0.44367,
+        0.3173
+      ],
+      "radius": 0.78,
+      "height": 5.2,
+      "axis": "z",
+      "basis": {
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "name": "wing_l",
+      "ply": "raider_fighter_chunk_wing_l.ply",
+      "obj": "raider_fighter_chunk_wing_l.obj",
+      "offset": [
+        -3.78091,
+        -0.24805,
+        -0.15523
+      ],
+      "splats": 9286
+    },
+    {
+      "name": "wing_r",
+      "ply": "raider_fighter_chunk_wing_r.ply",
+      "obj": "raider_fighter_chunk_wing_r.obj",
+      "offset": [
+        3.78091,
+        -0.24805,
+        -0.15523
+      ],
+      "splats": 9286
+    },
+    {
+      "name": "hump",
+      "ply": "raider_fighter_chunk_hump.ply",
+      "obj": "raider_fighter_chunk_hump.obj",
+      "offset": [
+        0.0,
+        0.68764,
+        -1.03371
+      ],
+      "splats": 2066
+    },
+    {
+      "name": "nacelle_l",
+      "ply": "raider_fighter_chunk_nacelle_l.ply",
+      "obj": "raider_fighter_chunk_nacelle_l.obj",
+      "offset": [
+        -1.29421,
+        0.54462,
+        0.85788
+      ],
+      "splats": 2925
+    },
+    {
+      "name": "nacelle_r",
+      "ply": "raider_fighter_chunk_nacelle_r.ply",
+      "obj": "raider_fighter_chunk_nacelle_r.obj",
+      "offset": [
+        1.29421,
+        0.54462,
+        0.85788
+      ],
+      "splats": 2925
+    }
+  ]
+}

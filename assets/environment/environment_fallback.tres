@@ -1,0 +1,23 @@
+[gd_resource type="Environment" format=3 uid="uid://dodvep87370r2"]
+
+[ext_resource type="Texture2D" path="res://assets/generated/sky_default/sky_default_panorama.png" id="1_panorama"]
+
+[sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_sky"]
+panorama = ExtResource("1_panorama")
+
+[sub_resource type="Sky" id="Sky_panorama"]
+sky_material = SubResource("PanoramaSkyMaterial_sky")
+
+[resource]
+background_mode = 2
+sky = SubResource("Sky_panorama")
+ambient_light_source = 2
+ambient_light_color = Color(0.25, 0.26, 0.3, 1)
+ambient_light_energy = 1.0
+tonemap_mode = 2
+ssr_enabled = false
+ssao_enabled = false
+glow_enabled = true
+glow_intensity = 0.4
+glow_hdr_threshold = 1.0
+fog_enabled = false
