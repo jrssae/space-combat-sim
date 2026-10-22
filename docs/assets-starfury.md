@@ -16,8 +16,10 @@ nose, framed from inside like the maintainer's cockpit-view reference.
 | `starfury_aurora.ply` | 230 230 Gaussian splats, 3DGS binary PLY (SH degree 0), written in GDGS orientation (Rz 180 of the Godot frame) |
 | `starfury_aurora.obj` + `.mtl` | fallback mesh, Godot frame, faces grouped by material (the glass is `ef_canopy_glass`) |
 | `cockpit_interior.obj` + `.mtl` | the window frame seen from inside (bars) and the sill; first person only |
-| `hardpoints.json` | the contract for the flight model, cameras, weapons, RCS glow and collision (schema below) |
-| `manifest.json` | asset contract (`docs/architecture.md` section 9): `lods[0]`, AABB, `centroid_offset`, `files`, `counts`, `sampling`, `dimensions_m` |
+| `starfury_aurora_lod1.ply` | LOD1 (M3-T03): 57 538 splats (25.0 % of LOD0) at 0.08 m spacing, for allies and debris; see "LOD1 and break-up chunks" |
+| `starfury_aurora_chunk_<cabin\|arm_ur\|arm_lr\|arm_ul\|arm_ll>.ply/.obj/.mtl` | the break-up chunks, cut from LOD1 |
+| `hardpoints.json` | the contract for the flight model, cameras, weapons, RCS glow, collision and chunks (schema below) |
+| `manifest.json` | asset contract (`docs/architecture.md` section 9): `lods[0]` and `lods[1]`, AABB, `centroid_offset`, `files`, `counts`, `sampling`, `dimensions_m`, `chunks`, `chunk_lod` |
 
 ## Frames
 
@@ -113,7 +115,9 @@ Schema (all vectors `[x, y, z]`, numbers rounded to 5 decimals), unchanged from 
                {"name": "gun_mount", "type": "box", "...": "..."},
                {"name": "pod_ur", "type": "capsule", "position": [...], "radius": 0.82, "height": 5.933, "axis": "z", "basis": {"...": "..."}},
                {"name": "strut_ur", "type": "box", "position": [...], "size": [6.674, 0.68, 3.202], "basis": {"x": [0.86968, 0.28398, 0.40375], "...": "..."}},
-               {"name": "claw_ur", "type": "box", "...": "..."}, "... 14 entries"]}
+               {"name": "claw_ur", "type": "box", "...": "..."}, "... 14 entries"],
+ "chunks": [{"name": "cabin", "ply": "starfury_aurora_chunk_cabin.ply", "obj": "starfury_aurora_chunk_cabin.obj",
+             "offset": [0, 0, -2.022], "splats": 11294}, "... arm_ur, arm_lr, arm_ul, arm_ll (M3-T03)"]}
 ```
 
 - `exhaust` is the exhaust direction; thrust acts opposite. `radius` is the bell exit radius (plume size). The main
@@ -166,12 +170,50 @@ below are what keeps the surface continuous; `core/sampling.py` has the details.
   outside they read as green-tinted glass over the dark lining and bulkhead; the frames are opaque. GDGS shrinks a
   splat's footprint by `alpha^0.2`, so the glass is cheap to sort.
 
+## LOD1 and break-up chunks (M3-T03)
+
+Allies use a lighter Starfury and every Starfury break-up uses chunks (`docs/architecture.md` §16 D35). Both come
+from one extra sampling pass; LOD0's files do not change (the PLY, both OBJs and both MTLs are byte-identical to the
+pre-M3 build, checked against recorded counts, header and splat records in `test_starfury_aurora.py`).
+
+- **Resampling.** `build_parts` runs a second time with every spacing times `LOD1_SPACING_FACTOR` = 2.0 (hull
+  0.08 m, cockpit faces 0.044 m) and every RNG stream suffixed `lod1` (`ctx.rng("splats", <part>, "lod1")`), so
+  LOD0's streams are never touched. Splat scales grow with the spacing (`to_splats`: in-plane sigma 0.08 m, normal
+  sigma 6.4 mm), so the sheet closes the way LOD0's does. Same parts, burial rules, materials, glass and baked light.
+- **Count.** 57 538 splats, 25.0 % of LOD0's 230 230 (AC6 range 20-30 %, checked by a build warning and the tests).
+  Manifest `lods[1]`: `{"level": 1, "file": "starfury_aurora_lod1.ply", "splats": 57538, "spacing_m": 0.08}`.
+- **Frame.** LOD1 is balanced and centred like LOD0 (its own body y shift and z mean), so its splat centroid is the
+  origin and GDGS's import centring is a no-op for it too. Its frame differs from LOD0's (the hardpoints frame) by
+  the difference of the two shifts: 3.2 mm in z, plus 1.1 mm in y for the cabin parts, at seed 42. Its AABB is
+  LOD0's within 1.3 cm (AC6 allows 0.3 m). Exact x symmetry, and y symmetry of the arms, hold as for LOD0.
+- **Coverage.** Composite opacity at 12 000 independent probe points on the visible hull (resampled from `probe`
+  streams; glass left out): LOD0 mean 0.995 with 0.10 % of points under 0.5, LOD1 mean 0.985 with 0.38 % under 0.5,
+  median 0.9995. On the fuselage, struts and pods LOD1 stays above 0.98 on average. What thins out are features
+  smaller than an 8 cm splat: the claws' RCS blocks and cones (1.5 % of claw points under 0.5), the pod ring edges,
+  the 7 cm window frame bands. A uniform factor of 2 therefore leaves no holes in the hull sheet.
+- **Chunks** (`core/chunks.py`, as for the raider). LOD1 is written chunk by chunk, so the chunks partition it
+  exactly: `cabin` (fuselage, cockpit faces, gun mount; 11 294 splats) and `arm_ur`, `arm_lr`, `arm_ul`, `arm_ll`
+  (each a pod, its strut and its claw; 11 561 splats each), in that order. The arm suffixes are the pod names;
+  `DamageZones`' X-fighter zones are the cabin and the four arms but carry no string names, so these names stand.
+  `hardpoints.json` gains `chunks[]` `{name, ply, obj, offset, splats}` as its last key; each chunk PLY and OBJ is
+  re-centred on its own splat centroid, and `offset` is that centroid in the body frame (LOD1's frame). The chunk OBJ
+  is the same part meshes' fallback mesh (the cockpit interior is not in any chunk): the five OBJs back at their
+  offsets are the hull OBJ, vertex for vertex in count, within 1 cm in bounds. The manifest gains `chunks` (the
+  names) and `chunk_lod` 1 (the LOD the chunks partition; absent means 0, as for the raider).
+- **Unchanged.** `generator_version` stays 2 (it is in the LOD0 PLY header), and so do the cockpit interior, the
+  hull depth proxy (the LOD0 fallback mesh) and every LOD0 hardpoint.
+
+Until M3-T08 prepares Starfury chunk sets in `DebrisPool`, the player's death already uses these chunks, as
+mesh-only debris (the DestructionDirector bursts any `chunks[]` it finds; `test_destruction.gd` expects that).
+
 ## Determinism and options
 
-Everything comes from `ctx.rng("splats", <part>)` streams (one per part) and pure geometry; two builds with the same
-seed are byte-identical (checked by SHA-256 in `test_starfury_aurora.py`). Options (`BuildContext.options`, CLI
-`--spacing` / `--option`): `spacing` (m, 0.04), `cockpit_spacing` (m, 0.55 x spacing), `overlap` (k, 1.4),
-`thickness` (normal sigma / s, 0.03). The AC3 budget warning only fires at the default spacing.
+Everything comes from `ctx.rng("splats", <part>)` streams (one per part; LOD1's are suffixed `lod1`) and pure
+geometry; two builds with the same seed are byte-identical (checked by SHA-256 in `test_starfury_aurora.py`). Options
+(`BuildContext.options`, CLI `--spacing` / `--option`): `spacing` (m, 0.04), `cockpit_spacing` (m, 0.55 x spacing),
+`overlap` (k, 1.0 since the post-M2 play test), `thickness` (normal sigma / s, 0.08), `lod1_factor` (LOD1 spacing /
+LOD0 spacing, 2.0; LOD0 is byte-identical whatever its value). The AC3 budget warning only fires at the default
+spacing, the AC6 LOD1 share warning only at the default spacing and factor.
 
 ## Tests
 
@@ -181,7 +223,11 @@ capsule, claw anchors, gun mount) and `test_starfury_aurora.py`: files, budget, 
 cross), per-part splat scales, green glass only in the window, hazard stripes only on the struts, hardpoint schema
 and dimensions, pod symmetry, nozzle exits on the axes and rearmost/foremost, RCS cones on their claws with the
 milestone tags, collision primitives wrapping their parts, nothing buried in the pods, the clear cockpit view
-(splats and mesh), guns hidden by the chin, OBJ validity and bounds, SHA-256 determinism, option behaviour.
+(splats and mesh), guns hidden by the chin, OBJ validity and bounds, SHA-256 determinism, option behaviour; since
+M3-T03 also LOD0 unchanged (counts, header, splat records; `lod1_factor` never moves LOD0), the LOD1 entry, share,
+bounds, scales and symmetry, LOD1's frame and probe-point coverage against LOD0's, the chunk partition, the cabin
+and arms layout, and the chunk OBJs. The Godot half (LOD1 and chunk PLYs import with the manifest and hardpoints
+counts, LOD1's imported box is LOD0's within 0.3 m) is in `tests/integration/test_splat_import.gd`.
 
 ## Known limits / for the human tester `(H)`
 
@@ -190,3 +236,6 @@ milestone tags, collision primitives wrapping their parts, nothing buried in the
 - No ambient occlusion in the bake: the strut roots and claw blocks can look flat.
 - The strut plates are straight (the reference's slight bend is not modelled); the inboard claw vane is a single
   blade.
+- LOD1 (AC18): judge allies at combat range and in formation. At 0.08 m spacing the 4 cm panel lines are sampled
+  sparsely and can read speckled up close, edges blur about twice as far as LOD0's, and the small claw details thin
+  out (see "Coverage" above).

@@ -12,11 +12,22 @@ extends GutTest
 ##   - sky_default is the asymmetric witness (manifest x -22228.8..17759.8 imports as -17759.8..22228.8);
 ##     starfury_aurora is x/y symmetric, so only the sky would catch a missing flip.
 ## Fallback OBJs and hardpoints.json stay in the Godot frame (no flip). Nothing here needs a GPU.
+##
+## Lower LODs (M3-T03: `starfury_aurora_lod1.ply`) are centred on their own centroid and keep LOD0's box within
+## `LOD_AABB_TOLERANCE_M`. Break-up chunks partition the LOD named by the manifest's `chunk_lod` (0 when absent: the
+## raider's chunks are its LOD0, the Starfury's its LOD1).
 
 const GENERATED_DIR: String = "res://assets/generated"
 const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tests.sh (it imports first)"
 ## AC4: the imported AABB matches the manifest within 1 cm.
 const AABB_TOLERANCE_M: float = 0.01
+## M3 AC6: a lower LOD's imported AABB matches LOD0's (the manifest's) within 0.3 m.
+const LOD_AABB_TOLERANCE_M: float = 0.3
+## M3 AC6: the Starfury's LOD1 and the chunks made from it.
+const STARFURY_ID: String = "starfury_aurora"
+const STARFURY_LOD1_FILE: String = "starfury_aurora_lod1.ply"
+const STARFURY_LOD1_SHARE: Vector2 = Vector2(0.2, 0.3)
+const STARFURY_CHUNKS: PackedStringArray = ["cabin", "arm_ur", "arm_lr", "arm_ul", "arm_ll"]
 ## A mesh or hardpoint is in the splat frame when its bounds sit within this of the splat bounds (or twice the splat
 ## spacing, if larger): surface samples are not placed exactly on the extremes.
 const FRAME_SLACK_M: float = 0.05
@@ -113,8 +124,16 @@ func test_chunk_plys_import_with_their_counts_and_partition_the_hull() -> void:
 		if entries.is_empty():
 			continue
 		assets_with_chunks += 1
+		var lod: Dictionary = _lod(reader, _chunk_lod(reader))
+		assert_false(lod.is_empty(), "%s: chunk_lod %d is one of its lods" % [reader.asset_id, _chunk_lod(reader)])
+		if lod.is_empty():
+			continue
+		var hull: GaussianResource = _gaussian(reader.lod_path(lod))
+		if hull == null:
+			continue
 		var total: int = 0
-		var hull_box: AABB = reader.aabb.grow(AABB_TOLERANCE_M)
+		# The box of the LOD the chunks were cut from, back in the Godot frame (for LOD0 that is the manifest box).
+		var hull_box: AABB = ManifestReader.godot_to_imported_aabb(hull.aabb).grow(AABB_TOLERANCE_M)
 		for entry: Dictionary in entries:
 			var label: String = "%s chunk %s" % [reader.asset_id, entry["name"]]
 			var gaussian: GaussianResource = _gaussian("%s/%s" % [reader.directory, entry["ply"]])
@@ -128,9 +147,44 @@ func test_chunk_plys_import_with_their_counts_and_partition_the_hull() -> void:
 			var offset := Vector3(float(entry["offset"][0]), float(entry["offset"][1]), float(entry["offset"][2]))
 			var godot_box: AABB = ManifestReader.godot_to_imported_aabb(gaussian.aabb)
 			godot_box.position += offset
-			assert_true(hull_box.encloses(godot_box), "%s: box %s at offset %s lies inside the hull's %s" % [label, godot_box, offset, reader.aabb])
-		assert_eq(total, int(reader.lods[0]["splats"]), "%s: the chunks hold exactly the hull's splats" % reader.asset_id)
-	assert_gt(assets_with_chunks, 0, "an asset with chunks exists (raider_fighter): %s" % GEN_ASSETS_HINT)
+			assert_true(hull_box.encloses(godot_box), "%s: box %s at offset %s lies inside the hull's %s" % [label, godot_box, offset, hull_box])
+		assert_eq(total, int(lod["splats"]), "%s: the chunks hold exactly the splats of lod %d" % [reader.asset_id, lod["level"]])
+	assert_gt(assets_with_chunks, 1, "assets with chunks exist (raider_fighter, starfury_aurora): %s" % GEN_ASSETS_HINT)
+
+
+func test_lower_lods_keep_the_lod0_box() -> void:
+	for reader: ManifestReader in _valid_readers():
+		for lod: Dictionary in reader.lods.slice(1):
+			var gaussian: GaussianResource = _gaussian(reader.lod_path(lod))
+			if gaussian == null:
+				continue
+			var label: String = "%s lod %d" % [reader.asset_id, lod["level"]]
+			assert_lt(int(lod["splats"]), int(reader.lods[0]["splats"]), "%s: lighter than lod 0" % label)
+			assert_gt(float(lod["spacing_m"]), float(reader.lods[0]["spacing_m"]), "%s: coarser than lod 0" % label)
+			_assert_aabb_near(gaussian.aabb, reader.imported_aabb(), LOD_AABB_TOLERANCE_M, "%s: imported AABB vs the lod 0 manifest box" % label)
+
+
+## M3 AC6, the Godot half: the Starfury has a LOD1 with 20-30 % of LOD0's splats, and its five chunks come from it.
+func test_starfury_lod1_and_its_chunks() -> void:
+	var reader: ManifestReader = _reader_for(STARFURY_ID)
+	if reader == null or not reader.is_valid():
+		return  # reported by the tests above
+	assert_gt(reader.lods.size(), 1, "%s has a lod 1: %s" % [STARFURY_ID, GEN_ASSETS_HINT])
+	if reader.lods.size() < 2:
+		return
+	var lod1: Dictionary = reader.lods[1]
+	assert_eq(lod1["level"], 1)
+	assert_eq(lod1["file"], STARFURY_LOD1_FILE)
+	var share: float = float(lod1["splats"]) / float(reader.lods[0]["splats"])
+	assert_between(share, STARFURY_LOD1_SHARE.x, STARFURY_LOD1_SHARE.y, "LOD1 share of LOD0's splats")
+	assert_eq(_chunk_lod(reader), 1, "the Starfury's chunks are cut from LOD1")
+	var names: PackedStringArray = PackedStringArray()
+	var total: int = 0
+	for entry: Dictionary in _chunk_entries(reader):
+		names.append(String(entry["name"]))
+		total += int(entry["splats"])
+	assert_eq(names, STARFURY_CHUNKS, "the cabin and the four arms, in file order")
+	assert_eq(total, int(lod1["splats"]), "the chunks partition LOD1")
 
 
 func test_ply_aabb_is_the_manifest_aabb_rotated_180_about_z() -> void:
@@ -244,6 +298,19 @@ func _chunk_entries(reader: ManifestReader) -> Array[Dictionary]:
 		if entry is Dictionary:
 			out.append(entry as Dictionary)
 	return out
+
+
+## The LOD whose splats the chunks partition: the manifest's `chunk_lod`, 0 when it has none.
+func _chunk_lod(reader: ManifestReader) -> int:
+	return int(reader.data.get("chunk_lod", 0))
+
+
+## The `lods` entry of `level`, or an empty Dictionary.
+func _lod(reader: ManifestReader, level: int) -> Dictionary:
+	for lod: Dictionary in reader.lods:
+		if int(lod["level"]) == level:
+			return lod
+	return {}
 
 
 func _reader_for(asset_id: String) -> ManifestReader:

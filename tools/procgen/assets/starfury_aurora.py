@@ -26,6 +26,12 @@ four ways), the body group is shifted so the splat centroid's y is exactly 0, an
 centroid is subtracted, so the splat centroid is (0, 0, 0): GDGS's import centring is a no-op
 and the hardpoints frame equals the rendered frame. Samples buried inside another part (strut
 roots in the fuselage, strut tips and claw roots in the pods, the gun pod's top) are dropped.
+
+LOD1 (``starfury_aurora_lod1.ply``, architecture section 16 D35) is the same build resampled at
+``LOD1_SPACING_FACTOR`` times every spacing from RNG streams suffixed ``lod1`` (so LOD0 never
+changes), balanced and centred the same way; its splats are written chunk by chunk (``cabin``
+and the four ``arm_<pod>``), and each chunk is also written as a break-up chunk
+(``core/chunks.py``), so the chunks partition LOD1 exactly.
 """
 
 from __future__ import annotations
@@ -39,6 +45,7 @@ from typing import Any
 import numpy as np
 
 from ..core import frames
+from ..core.chunks import ChunkSource, write_chunks
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Mesh, rotation_z
 from ..core.lighting import STUDIO_DEFAULT, StudioRig
@@ -104,6 +111,19 @@ JSON_DIGITS = 5
 BURIED_MARGIN_M = 0.01  # samples deeper than this inside another part are dropped
 POD_NAMES = {"": "ur", "y": "lr", "x": "ul", "xy": "ll"}  # mirror key -> pod name
 POD_SIDES = (("ur", "right"), ("lr", "right"), ("ul", "left"), ("ll", "left"))
+
+# LOD1 (allies and all Starfury debris, architecture section 16 D35): every spacing (the cockpit
+# faces' too) times this factor; the splat scales grow with the spacing, so the sheet closes as
+# LOD0's does. 2.0 lands at about 25 % of LOD0's splats.
+LOD1_PLY_NAME = "starfury_aurora_lod1.ply"
+LOD1_SPACING_FACTOR = 2.0
+LOD1_STREAM = "lod1"  # suffix of every LOD1 RNG stream: ctx.rng("splats", <part>, "lod1")
+LOD1_SHARE = (0.20, 0.30)  # AC6: LOD1 splats / LOD0 splats, at the default spacing and factor
+CHUNK_LOD = 1  # the chunks partition this LOD's splats
+# Break-up chunks, in LOD1 file order: the cabin (fuselage, cockpit faces, gun mount) and one arm
+# (pod, strut, claw) per corner, named after the pods (DamageZones' X-fighter cabin and arms).
+CHUNK_ORDER = ("cabin",) + tuple(f"arm_{pod}" for pod, _ in POD_SIDES)
+ARM_PARTS = ("pod", "strut", "claw")
 
 
 # --- the parametric description --------------------------------------------------------------
@@ -260,14 +280,17 @@ def build_parts(
     ctx: BuildContext,
     spacing: float,
     cockpit_spacing: float,
+    stream_suffix: tuple[str, ...] = (),
 ) -> list[Placed]:
     """Place every part in the authored frame and sample it (symmetric by construction). The
     body group is already shifted so its sample centroid's y is zero (the cross is symmetric).
     The faces the pilot sees up close (``wedge_cockpit_faces``) are a separate ``cockpit``
-    placement sampled at ``cockpit_spacing``; its mesh stays part of the fuselage's."""
+    placement sampled at ``cockpit_spacing``; its mesh stays part of the fuselage's.
+    ``stream_suffix`` is appended to every RNG stream (``("lod1",)`` for LOD1), so another LOD's
+    samples never disturb LOD0's."""
 
     def sample(mesh: Mesh, stream: str, step: float = spacing) -> SurfaceSamples:
-        return sample_mesh(mesh, step, ctx.rng("splats", stream))
+        return sample_mesh(mesh, step, ctx.rng("splats", stream, *stream_suffix))
 
     # Body: centre-line parts, sampled and made exactly x-symmetric.
     fus = wedge_fuselage(spec.fuselage, style).renamed("fuselage", group="body")
@@ -361,6 +384,15 @@ def centre(placed: list[Placed]) -> tuple[list[Placed], np.ndarray]:
     return [p.translated(-offset) for p in placed], offset
 
 
+def chunk_of(part_name: str) -> str:
+    """The break-up chunk a part belongs to: a corner's pod, strut and claw are ``arm_<pod>``,
+    everything else (fuselage, cockpit faces, gun mount, cockpit interior) is the ``cabin``."""
+    kind, _, pod = part_name.rpartition("_")
+    if kind in ARM_PARTS and pod in POD_NAMES.values():
+        return f"arm_{pod}"
+    return "cabin"
+
+
 # --- colour -----------------------------------------------------------------------------------
 def _phase(name: str, style: Style) -> tuple[float, float, float]:
     base = name.split("_")[0]
@@ -400,8 +432,11 @@ def _axis_label(direction: np.ndarray) -> str:
     return ("p" if direction[axis] > 0 else "n") + "xyz"[axis]
 
 
-def hardpoints(placed: list[Placed], spec: StarfurySpec) -> dict[str, Any]:
-    """The hardpoints document (centred Godot frame) from the placed parts."""
+def hardpoints(
+    placed: list[Placed], spec: StarfurySpec, chunks: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """The hardpoints document (centred Godot frame) from the placed LOD0 parts; ``chunks`` are
+    the ``write_chunks`` entries (from LOD1)."""
     by_name = {p.part.name: p.part for p in placed}
     hull_parts = [p.part for p in placed if p.hull]
     hull_mesh = Mesh.concatenate(p.mesh for p in hull_parts)
@@ -483,16 +518,61 @@ def hardpoints(placed: list[Placed], spec: StarfurySpec) -> dict[str, Any]:
         "pods": pods,
         "rcs": rcs,
         "collision": collision,
+        "chunks": chunks,
     }
 
 
 # --- build ------------------------------------------------------------------------------------
+def part_splats(
+    placed: list[Placed], style: Style, rig: StudioRig, overlap: float, thickness: float
+) -> SplatData:
+    """The splats of every sampled placement, in order (body frame, Godot axes)."""
+    return SplatData.concatenate(
+        [
+            to_splats(
+                p.samples, colour_samples(p, style, rig), p.spacing, overlap, thickness
+            )
+            for p in placed
+            if p.samples is not None
+        ]
+    )
+
+
+def _to_3dgs(splats: SplatData) -> SplatData:
+    """Rz(180 deg) of the Godot frame: what the PLY stores, so the splat node stays at identity."""
+    return SplatData(
+        xyz=frames.godot_to_3dgs_positions(splats.xyz),
+        rgb=splats.rgb,
+        alpha=splats.alpha,
+        scale=splats.scale,
+        rot=frames.godot_to_3dgs_quats(splats.rot),
+        normals=frames.flip_xy(splats.normals),
+    )
+
+
+def build_chunks(
+    placed: list[Placed], style: Style, rig: StudioRig, overlap: float, thickness: float
+) -> list[ChunkSource]:
+    """One ``ChunkSource`` per ``CHUNK_ORDER`` entry: its parts' splats (placement order) and
+    their fallback mesh. The cockpit faces' mesh is already in the fuselage's, and the cockpit
+    interior is neither splatted nor hull, so neither adds to a chunk mesh."""
+    sources = []
+    for name in CHUNK_ORDER:
+        members = [p for p in placed if chunk_of(p.part.name) == name]
+        mesh = Mesh.concatenate(p.part.mesh for p in members if p.hull)
+        sources.append(
+            ChunkSource(name, part_splats(members, style, rig, overlap, thickness), mesh)
+        )
+    return sources
+
+
 def build(ctx: BuildContext) -> AssetOutputs:
     """Generate the ship into ``ctx.out_dir``.
 
     Options: ``spacing`` (m, default 0.04; the CLI's ``--spacing``), ``cockpit_spacing`` (m,
-    default half the spacing: the window segment's frames, chin and lining), ``overlap``
-    (sigma / spacing, default 1.0), ``thickness`` (normal sigma / spacing, default 0.08).
+    default 0.55 x the spacing: the window segment's frames, chin and lining), ``overlap``
+    (sigma / spacing, default 1.0), ``thickness`` (normal sigma / spacing, default 0.08),
+    ``lod1_factor`` (LOD1 spacing / LOD0 spacing, default 2.0).
     """
     spacing = float(ctx.option("spacing", DEFAULT_SPACING_M))
     cockpit_spacing = float(
@@ -500,42 +580,29 @@ def build(ctx: BuildContext) -> AssetOutputs:
     )
     overlap = float(ctx.option("overlap", DEFAULT_OVERLAP))
     thickness = float(ctx.option("thickness", DEFAULT_THICKNESS))
-    if min(spacing, cockpit_spacing, overlap, thickness) <= 0.0:
+    lod1_factor = float(ctx.option("lod1_factor", LOD1_SPACING_FACTOR))
+    if min(spacing, cockpit_spacing, overlap, thickness, lod1_factor) <= 0.0:
         raise ValueError(
-            "spacing, cockpit_spacing, overlap and thickness must be positive"
+            "spacing, cockpit_spacing, overlap, thickness and lod1_factor must be positive"
         )
     spec, style, rig = DEFAULT_SPEC, EARTHFORCE, STARFURY_RIG
 
     out_dir = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # LOD0: the full-detail hull, part by part (manifest ``counts`` order).
     placed, offset = centre(build_parts(spec, style, ctx, spacing, cockpit_spacing))
     sampled = [p for p in placed if p.samples is not None]
-    authored = SplatData.concatenate(
-        [
-            to_splats(
-                p.samples, colour_samples(p, style, rig), p.spacing, overlap, thickness
-            )
-            for p in sampled
-        ]
-    )
+    authored = part_splats(placed, style, rig, overlap, thickness)
 
     # Splats are already centred; the manifest AABB is theirs, Godot frame.
     xyz32 = authored.xyz.astype(np.float32)
     aabb_min, aabb_max = xyz32.min(axis=0), xyz32.max(axis=0)
-    written = SplatData(
-        xyz=frames.godot_to_3dgs_positions(authored.xyz),
-        rgb=authored.rgb,
-        alpha=authored.alpha,
-        scale=authored.scale,
-        rot=frames.godot_to_3dgs_quats(authored.rot),
-        normals=frames.flip_xy(authored.normals),
-    )
     comments = (
         f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}",
         "frame: 3dgs (Rz180 of godot)",
     )
-    files: list[Path] = [write_ply(out_dir / PLY_NAME, written, comments)]
+    files: list[Path] = [write_ply(out_dir / PLY_NAME, _to_3dgs(authored), comments)]
 
     hull_mesh = Mesh.concatenate(p.part.mesh for p in placed if p.hull)
     files += write_obj(out_dir / OBJ_NAME, hull_mesh, ASSET_ID, comments[:1])
@@ -544,25 +611,56 @@ def build(ctx: BuildContext) -> AssetOutputs:
         out_dir / COCKPIT_NAME, interior, "cockpit_interior", comments[:1]
     )
 
-    hp = hardpoints(placed, spec)
+    # LOD1: the same parts resampled coarser from their own streams, balanced and centred
+    # like LOD0 (its splat centroid is the origin too), written chunk by chunk.
+    lod1_spacing = lod1_factor * spacing
+    lod1_placed, _ = centre(
+        build_parts(
+            spec,
+            style,
+            ctx,
+            lod1_spacing,
+            lod1_factor * cockpit_spacing,
+            (LOD1_STREAM,),
+        )
+    )
+    chunk_sources = build_chunks(lod1_placed, style, rig, overlap, thickness)
+    lod1 = SplatData.concatenate([c.splats for c in chunk_sources])
+    lod1_comments = comments + (f"lod {CHUNK_LOD}",)
+    files.append(write_ply(out_dir / LOD1_PLY_NAME, _to_3dgs(lod1), lod1_comments))
+    chunk_files, chunk_entries = write_chunks(
+        out_dir, ASSET_ID, chunk_sources, lod1_comments
+    )
+    files += chunk_files
+
+    hp = hardpoints(placed, spec, chunk_entries)
     hp_path = out_dir / HARDPOINTS_NAME
     hp_path.write_text(json.dumps(hp, indent=2) + "\n", encoding="utf-8", newline="\n")
     files.append(hp_path)
 
     total = len(authored)
     warnings: list[str] = []
-    if (
-        abs(spacing - DEFAULT_SPACING_M) < 1e-12
-        and not SPLAT_BUDGET[0] <= total <= SPLAT_BUDGET[1]
-    ):
-        warnings.append(
-            f"{total} splats is outside the AC3 budget {SPLAT_BUDGET} at the default spacing"
-        )
+    if abs(spacing - DEFAULT_SPACING_M) < 1e-12:
+        if not SPLAT_BUDGET[0] <= total <= SPLAT_BUDGET[1]:
+            warnings.append(
+                f"{total} splats is outside the AC3 budget {SPLAT_BUDGET} at the default spacing"
+            )
+        share = len(lod1) / total
+        if (
+            abs(lod1_factor - LOD1_SPACING_FACTOR) < 1e-12
+            and not LOD1_SHARE[0] <= share <= LOD1_SHARE[1]
+        ):
+            warnings.append(
+                f"LOD1 has {share:.1%} of LOD0's splats, outside the AC6 share {LOD1_SHARE}"
+            )
     manifest = build_manifest(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,
         seed=ctx.seed,
-        lods=[lod_entry(0, PLY_NAME, total, spacing)],
+        lods=[
+            lod_entry(0, PLY_NAME, total, spacing),
+            lod_entry(CHUNK_LOD, LOD1_PLY_NAME, len(lod1), lod1_spacing),
+        ],
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,
@@ -584,6 +682,8 @@ def build(ctx: BuildContext) -> AssetOutputs:
                 "span": hp["span_m"],
                 "height": hp["height_m"],
             },
+            "chunks": [c["name"] for c in chunk_entries],
+            "chunk_lod": CHUNK_LOD,
         },
     )
     files.append(write_manifest(out_dir, manifest))

@@ -416,6 +416,28 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
 
 (Implementation agents record deviations from §16 and this file here, per task.)
 
+**M3-T03 (Starfury chunks and LOD1).**
+
+- LOD1 spacing factor 2.0 for every spacing (hull 0.08 m, cockpit faces 0.044 m): 57 538 splats, 25.0 % of LOD0's
+  230 230. RNG streams are `ctx.rng("splats", <part>, "lod1")` (an extra stream component). Option `lod1_factor`
+  (default 2.0) added for tuning; LOD0 is byte-identical whatever its value (tested).
+- LOD1 is balanced and centred on its own samples, so its centroid is the origin (GDGS centring is a no-op); its frame
+  differs from LOD0's by 3.2 mm in z (and 1.1 mm in y for the cabin) at seed 42. Its AABB is LOD0's within 1.3 cm.
+- Coverage (probe points, composite opacity): LOD1 mean 0.985 against LOD0's 0.995, 0.38 % of points under 0.5
+  against 0.10 %; the hull sheet has no holes, small claw and ring details thin out. Recorded in
+  `docs/assets-starfury.md`, tested in `test_starfury_aurora.py`.
+- Chunk names are the brief's (`cabin`, `arm_ur`, `arm_lr`, `arm_ul`, `arm_ll`): `DamageZones` has index constants
+  (`CABIN`, `UPPER_RIGHT`, ...) and no string names, so there was nothing to follow. The cockpit interior is in no
+  chunk.
+- The manifest gains `chunks` (names, as the raider's) and `chunk_lod` (1) beyond `lods[1]`; `test_splat_import.gd`
+  reads `chunk_lod` (default 0) to know which LOD the chunks partition. `hardpoints.json` gains `chunks[]` as its last
+  key. `generator_version` stays 2: it is in the LOD0 PLY header, which must not change.
+- LOD0 is checked by recorded per-part counts, the exact PLY header and three splat records, not by a pinned SHA-256
+  (a NumPy build could change bits without changing the design); the pre/post SHA-256 comparison is in the task report.
+- Behaviour change ahead of T08: `DestructionDirector` bursts any `chunks[]` it finds, so the player now dies into the
+  five Starfury chunks as mesh-only debris (no Starfury splat sets until T08) instead of 12 generic shards.
+  `test_destruction.gd` was updated to expect that.
+
 ## Definition of done (M3)
 
 - T01-T12 merged into `m3`, `scripts/run_tests.sh` green, `docs/third-party.md` current, no generated binaries committed.
