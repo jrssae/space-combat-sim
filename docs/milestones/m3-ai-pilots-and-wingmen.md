@@ -20,7 +20,7 @@ M3 builds on M2 as built, including the M2.1 play-test rounds. Read the code, no
   (faction stamped at build, names `RAIDER <n>`). `Ship` speed limits come from `SpeedGovernor` (9 999 m/s hard
   limit, 5 000 m/s assist safe speed); Starfury bolts are 1 000 m/s relative to the ship.
 - **Destruction**: `DestructionDirector` releases pool ships in the same tick; `DebrisPool` holds two chunk sets per
-  chunked asset; the Starfury has no `chunks[]` yet (the player dies into generic shards).
+  chunked asset; the Starfury had no `chunks[]` before M3-T03 (the player died into generic shards).
 - **Input**: auto-track (`FlightCommand.autotrack`), R3 brake, L3 free look, the mouse flies pitch and yaw, Alt frees
   the mouse. The keyboard layout changes in T01.
 - **Newtonian invariant** (§15.16): every ship goes through the one `FlightModel`; turning is torque only. AI never
@@ -83,7 +83,7 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 
 | # | Criterion | Who | Pre-check |
 |---|---|---|---|
-| AC0 | Every M1 and M2 (A) test still passes, except tests that assert the old keyboard keys, which T01 updates. With `factions.json` at its defaults, every M2 faction, hit and target-order result is unchanged | A | |
+| AC0 | Every M1 and M2 (A) test still passes, except tests that assert the old keyboard keys, which T01 updates, and the player break-up in `test_destruction.gd`, which T03 moves from shards to the Starfury chunks. With `factions.json` at its defaults, every M2 faction, hit and target-order result is unchanged | A | |
 | AC1 | Keyboard layout B: `project.godot` and `m1_classic` hold exactly the T01 table; no flight action has a key right of the G/B column (Backspace, N, Print, F3/F4 and Esc are the only keys outside the left block); every action keeps a pad binding (wing orders are keyboard-only and allow-listed); `B` is tap = next target, hold = nearest the nose; `W` and `S` drive both pods; a profile round trip is exact | A | |
 | AC2 | Factions: `data/factions.json` validates (broken variants give path-qualified errors and leave the table unchanged); same faction is FRIENDLY, an unlisted pair is the file's default, listed pairs are symmetric; `relation` on the console changes a pair for the session and HUD colours follow | A | |
 | AC3 | Friendly fire: with `settings.friendly_fire` off, nothing changes from M2 (AC3 of M2 still holds); on, a bolt hits any active hull except its shooter's (allies, the player, buoys); god mode still protects the player; an AI never fires while a friendly sits in its fire lane (both settings) | A | |
@@ -328,8 +328,10 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
 - Agent: **Sonnet**. Generalising existing pool, catalog and destruction code along spelled-out lines.
 - Files: `assets/ships/starfury_ally.tres`, `src/ship/{ship_spec,ship}.gd` (`splat_lod`), `src/game/{ship_catalog,ship_pool,
   ship_assembly,scenario_loader,wave_director,wing_director}.gd`, `src/combat/{destruction_director,debris_pool}.gd`,
-  `tests/integration/{test_ally_pool,test_starfury_breakup}.gd`.
+  `tests/integration/{test_ally_pool,test_starfury_breakup,test_destruction}.gd`.
 - Notes:
+  - `test_destruction.gd` pins T03's interim player break-up (5 mesh-only chunks, no Starfury sets prepared); update it
+    once the pool prepares the Starfury chunk sets.
   - `ShipSpec.splat_lod` (0 = LOD0): `Ship` loads `manifest.lods[splat_lod]`. `starfury_ally` = the Starfury's numbers,
     `splat_lod` 1, no cockpit interior.
   - `ShipCatalog` gains a default faction per type (`starfury_ally` earth_alliance, `raider_fighter` raiders); `ShipPool`
@@ -482,6 +484,28 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
   (`Factions.relation(...) != HOSTILE` for anything that is not the shooter); the check runs in both settings (D31).
 - `scripts/run_tests.sh`: the main-scene providers line gains `factions` (T12 keeps it), plus two small smoke runs: `relation`
   print / set / reset with `data/factions.json` unchanged, and an unknown faction exiting 1 under `--console-strict`.
+
+**M3-T03 (Starfury chunks and LOD1).**
+
+- LOD1 spacing factor 2.0 for every spacing (hull 0.08 m, cockpit faces 0.044 m): 57 538 splats, 25.0 % of LOD0's
+  230 230. RNG streams are `ctx.rng("splats", <part>, "lod1")` (an extra stream component). Option `lod1_factor`
+  (default 2.0) added for tuning; LOD0 is byte-identical whatever its value (tested).
+- LOD1 is balanced and centred on its own samples, so its centroid is the origin (GDGS centring is a no-op); its frame
+  differs from LOD0's by 3.2 mm in z (and 1.1 mm in y for the cabin) at seed 42. Its AABB is LOD0's within 1.3 cm.
+- Coverage (probe points, composite opacity): LOD1 mean 0.985 against LOD0's 0.995, 0.38 % of points under 0.5
+  against 0.10 %; the hull sheet has no holes, small claw and ring details thin out. Recorded in
+  `docs/assets-starfury.md`, tested in `test_starfury_aurora.py`.
+- Chunk names are the brief's (`cabin`, `arm_ur`, `arm_lr`, `arm_ul`, `arm_ll`): `DamageZones` has index constants
+  (`CABIN`, `UPPER_RIGHT`, ...) and no string names, so there was nothing to follow. The cockpit interior is in no
+  chunk.
+- The manifest gains `chunks` (names, as the raider's) and `chunk_lod` (1) beyond `lods[1]`; `test_splat_import.gd`
+  reads `chunk_lod` (default 0) to know which LOD the chunks partition. `hardpoints.json` gains `chunks[]` as its last
+  key. `generator_version` stays 2: it is in the LOD0 PLY header, which must not change.
+- LOD0 is checked by recorded per-part counts, the exact PLY header and three splat records, not by a pinned SHA-256
+  (a NumPy build could change bits without changing the design); the pre/post SHA-256 comparison is in the task report.
+- Behaviour change ahead of T08: `DestructionDirector` bursts any `chunks[]` it finds, so the player now dies into the
+  five Starfury chunks as mesh-only debris (no Starfury splat sets until T08) instead of 12 generic shards.
+  `test_destruction.gd` was updated to expect that.
 
 ## Definition of done (M3)
 

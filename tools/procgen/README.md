@@ -104,15 +104,20 @@ Things the Godot side must know:
 The player's SA-23E-style Starfury, composed from `parts/` with the `earthforce` style. Outputs
 `starfury_aurora.ply` (about 230k flat, oriented splats at 0.04 m spacing, 0.022 m for the cockpit window's
 frames and sill), `starfury_aurora.obj/.mtl`
-(fallback mesh), `cockpit_interior.obj/.mtl`, `hardpoints.json` and `manifest.json`. The full description,
-the hardpoints schema and the splat-quality reasoning are in `docs/assets-starfury.md`.
+(fallback mesh), `cockpit_interior.obj/.mtl`, `hardpoints.json` and `manifest.json`; since M3-T03 also
+`starfury_aurora_lod1.ply` (manifest `lods[1]`: about 57k splats at 0.08 m, 25 % of LOD0, for allies and debris) and
+five break-up chunks cut from LOD1 (`starfury_aurora_chunk_<cabin|arm_ur|arm_lr|arm_ul|arm_ll>.ply/.obj/.mtl`). The
+full description, the hardpoints schema and the splat-quality reasoning are in `docs/assets-starfury.md`.
 
 Things the Godot side must know:
 
 - All outputs share one frame: the centred Godot body frame (splat centroid = origin, within float32).
   `manifest.centroid_offset` only documents how far the authoring frame was shifted; nothing needs it.
 - Splats are written in `manifest.counts` order, so every part is a contiguous slice of the PLY (useful
-  for debugging and future per-part effects).
+  for debugging and future per-part effects). The LOD1 PLY is written chunk by chunk instead (`hardpoints.chunks`
+  order), so it is the chunks' splats concatenated; manifest `chunk_lod` (1) names the LOD the chunks partition.
+- LOD1 is centred on its own centroid like LOD0; its frame is LOD0's within a few millimetres, so it shares the
+  hardpoints, the fallback mesh and the depth proxy.
 - `hardpoints.json` is the contract for the flight model, cameras, weapons and collision (schema in the docs
   page); `center_of_mass` is on the thrust axis by design.
 - The window panes are green-tinted glass (per-splat alpha ~0.03, 70 % transmission through the sheet);

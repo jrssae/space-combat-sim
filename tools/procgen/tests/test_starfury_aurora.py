@@ -1,4 +1,5 @@
-"""``starfury_aurora``: files, counts, frames, hardpoints schema and symmetry, the cockpit view, OBJ validity, determinism."""
+"""``starfury_aurora``: files, counts, frames, hardpoints schema and symmetry, the cockpit view, OBJ validity, determinism;
+LOD1 and the break-up chunks (AC6): share, bounds, frame, coverage, chunk partition, LOD0 unchanged."""
 
 from __future__ import annotations
 
@@ -16,7 +17,8 @@ from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.sampling import DEFAULT_OVERLAP, DEFAULT_THICKNESS
 from tools.procgen.core.obj import read_obj
-from tools.procgen.core.ply import PROPERTY_NAMES, read_ply
+from tools.procgen.core.ply import PROPERTY_NAMES, SplatData, ply_header, read_ply
+from tools.procgen.styles.earthforce import EARTHFORCE
 
 PILOT_TERMS = {
     "sway_left", "sway_right", "heave_up", "heave_down", "pitch_up", "pitch_down",
@@ -31,6 +33,30 @@ SPEC = ship.DEFAULT_SPEC
 # across the top is at about 33 deg and the sill edge at -20 deg.
 CLEAR_AZIMUTH_DEG = 20.0
 CLEAR_ELEVATION_DEG = (-12.0, 28.0)
+CHUNK_NAMES = ("cabin", "arm_ur", "arm_lr", "arm_ul", "arm_ll")
+LOD1_AABB_TOLERANCE_M = 0.3  # AC6: LOD1's bounds are LOD0's within this
+# The LOD0 contract (M3-T03): the default build as it was before LOD1 existed. Per-part counts, the PLY header and three
+# full splat records of the seed 42 build (float32 values read back from the PLY), so a change to LOD0 shows up without
+# pinning a SHA-256 that could differ between NumPy builds; the same-run SHA-256 checks are in the tests below.
+LOD0_COUNTS = {
+    "fuselage": 30502, "cockpit": 8288, "gun_mount": 6428,
+    "pod_ur": 20218, "pod_lr": 20218, "pod_ul": 20218, "pod_ll": 20218,
+    "strut_ur": 20019, "strut_lr": 20019, "strut_ul": 20019, "strut_ll": 20019,
+    "claw_ur": 6016, "claw_lr": 6016, "claw_ul": 6016, "claw_ll": 6016,
+}  # fmt: skip
+LOD0_RECORDS = {
+    0: [-0.7256394624710083, 0.19037888944149017, -3.584702253341675, -0.7922653555870056, 0.43238458037376404,
+        -0.43053361773490906, -1.7478806972503662, -1.6506136655807495, -1.716326355934143, -2.840289831161499,
+        -3.2188758850097656, -3.2188758850097656, -5.744604587554932, 0.19055941700935364, -0.8381075859069824,
+        0.1133245974779129, 0.49841779470443726],
+    115115: [4.863860130310059, 2.7156155109405518, 0.8874614238739014, -0.7738640308380127, 0.6330647468566895,
+             0.019067013636231422, -1.1131696701049805, -1.1096320152282715, -1.0252090692520142, 3.891820192337036,
+             -3.2188758850097656, -3.2188758850097656, -5.744604587554932, 0.2347002923488617, -0.6577234864234924,
+             0.24055424332618713, 0.674128532409668],
+    230229: [4.827029705047607, 1.429667353630066, 2.381768226623535, -0.0, -1.0, 0.0, -1.6691603660583496,
+             -1.6700348854064941, -1.6697529554367065, 3.891820192337036, -3.2188758850097656, -3.2188758850097656,
+             -5.744604587554932, 0.5, 0.5, -0.5, 0.5],
+}  # fmt: skip
 
 
 def sha256(path: Path) -> str:
@@ -88,6 +114,8 @@ class StarfuryAuroraTests(unittest.TestCase):
         )
         cls.obj = read_obj(cls.dir_a / ship.OBJ_NAME)
         cls.slices = slices(cls.manifest)
+        cls.lod1 = read_ply(cls.dir_a / ship.LOD1_PLY_NAME).to_splats()
+        cls.lod1_xyz = frames.flip_xy(cls.lod1.xyz)
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -97,20 +125,37 @@ class StarfuryAuroraTests(unittest.TestCase):
         a, b = self.slices[name]
         return self.godot_xyz[a:b]
 
+    def chunk_xyz(self) -> dict[str, np.ndarray]:
+        """LOD1 is written chunk by chunk (``hardpoints.chunks`` order): each chunk's slice, body frame."""
+        out, start = {}, 0
+        for entry in self.hp["chunks"]:
+            out[entry["name"]] = self.lod1_xyz[start : start + entry["splats"]]
+            start += entry["splats"]
+        return out
+
     # --- files and manifest -----------------------------------------------------------------
     def test_all_ship_files_are_written_and_listed(self) -> None:
         names = sorted(p.name for p in self.dir_a.iterdir())
+        chunk_files = [
+            f"starfury_aurora_chunk_{c}.{ext}"
+            for c in CHUNK_NAMES
+            for ext in ("mtl", "obj", "ply")
+        ]
         self.assertEqual(
             names,
-            [
-                "cockpit_interior.mtl",
-                "cockpit_interior.obj",
-                "hardpoints.json",
-                "manifest.json",
-                "starfury_aurora.mtl",
-                "starfury_aurora.obj",
-                "starfury_aurora.ply",
-            ],
+            sorted(
+                [
+                    "cockpit_interior.mtl",
+                    "cockpit_interior.obj",
+                    "hardpoints.json",
+                    "manifest.json",
+                    "starfury_aurora.mtl",
+                    "starfury_aurora.obj",
+                    "starfury_aurora.ply",
+                    "starfury_aurora_lod1.ply",
+                ]
+                + chunk_files
+            ),
         )
         self.assertEqual(sorted(p.name for p in self.out_a.files), names)
         self.assertEqual(self.out_a.warnings, ())
@@ -125,7 +170,7 @@ class StarfuryAuroraTests(unittest.TestCase):
 
     def test_manifest_lods_zero_and_budget(self) -> None:
         lod0 = self.manifest["lods"][0]
-        self.assertEqual(len(self.manifest["lods"]), 1)
+        self.assertEqual(len(self.manifest["lods"]), 2)  # LOD1 is checked below
         self.assertEqual((lod0["level"], lod0["file"]), (0, "starfury_aurora.ply"))
         self.assertEqual(lod0["spacing_m"], ship.DEFAULT_SPACING_M)
         self.assertTrue(
@@ -601,6 +646,189 @@ class StarfuryAuroraTests(unittest.TestCase):
         )
         self.assertGreater(float(off_axis[ahead > 0.0].min()), 15.0)
 
+    # --- LOD1 and chunks (AC6) --------------------------------------------------------------
+    def test_lod0_is_the_build_from_before_lod1(self) -> None:
+        self.assertEqual(self.manifest["counts"], LOD0_COUNTS)
+        header = ply_header(
+            sum(LOD0_COUNTS.values()),
+            ("starfury_aurora generator v2 seed 42", "frame: 3dgs (Rz180 of godot)"),
+        )
+        self.assertEqual(
+            (self.dir_a / ship.PLY_NAME).read_bytes()[: len(header)], header
+        )
+        for index, record in LOD0_RECORDS.items():
+            row = [float(self.ply.column(name)[index]) for name in PROPERTY_NAMES]
+            np.testing.assert_allclose(
+                row, record, rtol=1e-6, atol=1e-7, err_msg=str(index)
+            )
+
+    def test_lod1_entry_share_and_bounds(self) -> None:
+        lod0, lod1 = self.manifest["lods"]
+        self.assertEqual(
+            (lod1["level"], lod1["file"], lod1["splats"]),
+            (1, ship.LOD1_PLY_NAME, len(self.lod1)),
+        )
+        self.assertAlmostEqual(
+            lod1["spacing_m"], ship.LOD1_SPACING_FACTOR * ship.DEFAULT_SPACING_M
+        )
+        share = lod1["splats"] / lod0["splats"]
+        self.assertTrue(0.2 <= share <= 0.3, share)  # AC6
+        # Centred on its own centroid like LOD0, so GDGS's import centring is a no-op ...
+        self.assertLess(float(np.abs(self.lod1_xyz.mean(axis=0)).max()), 1e-4)
+        # ... with LOD0's box: AC6 allows 0.3 m, it is within a few centimetres.
+        for tolerance in (LOD1_AABB_TOLERANCE_M, 0.05):
+            np.testing.assert_allclose(
+                self.lod1_xyz.min(axis=0), self.manifest["aabb_min"], atol=tolerance
+            )
+            np.testing.assert_allclose(
+                self.lod1_xyz.max(axis=0), self.manifest["aabb_max"], atol=tolerance
+            )
+
+    def test_lod1_splats_are_lod0_splats_at_the_lod1_spacing(self) -> None:
+        s = self.lod1
+        factor = ship.LOD1_SPACING_FACTOR
+        hull = factor * ship.DEFAULT_SPACING_M
+        cockpit = factor * self.manifest["sampling"]["cockpit_spacing_m"]
+        # Two sizes: the hull at the LOD1 spacing, the cockpit faces at theirs (scaled alike).
+        small = np.isclose(s.scale[:, 0], DEFAULT_OVERLAP * cockpit, rtol=1e-4)
+        np.testing.assert_allclose(
+            s.scale[~small, 0], DEFAULT_OVERLAP * hull, rtol=1e-4
+        )
+        np.testing.assert_allclose(s.scale[:, 1], s.scale[:, 0], rtol=1e-4)
+        np.testing.assert_allclose(
+            s.scale[:, 2],
+            DEFAULT_THICKNESS / DEFAULT_OVERLAP * s.scale[:, 0],
+            rtol=1e-3,
+        )
+        cockpit_share = self.manifest["counts"]["cockpit"] / self.ply.count
+        self.assertAlmostEqual(float(small.mean()), cockpit_share, delta=0.01)
+        # The same materials and light: green glass in the window, the same mean colour.
+        glass = s.alpha < 0.5
+        self.assertTrue(0.002 < glass.mean() < 0.03, glass.mean())
+        self.assertTrue(np.all(s.rgb[glass, 1] > s.rgb[glass, 0]))
+        self.assertTrue(np.all(s.alpha[~glass] > 0.979))
+        np.testing.assert_allclose(
+            s.rgb.mean(axis=0), self.splats.rgb.mean(axis=0), rtol=0.03
+        )
+
+    def test_lod1_is_exactly_mirror_symmetric_in_x_and_the_arms_in_y(self) -> None:
+        view = "f4,f4,f4"
+
+        def symmetric(xyz: np.ndarray, axis: int) -> bool:
+            xyz = xyz.astype(np.float32)
+            flipped = xyz.copy()
+            flipped[:, axis] *= -1
+            return bool(
+                np.array_equal(
+                    np.sort(xyz.view(view), axis=0), np.sort(flipped.view(view), axis=0)
+                )
+            )
+
+        self.assertTrue(symmetric(self.lod1_xyz, 0))
+        cabin = self.hp["chunks"][0]["splats"]
+        self.assertTrue(symmetric(self.lod1_xyz[cabin:], 1))
+
+    def test_chunks_partition_lod1_exactly(self) -> None:
+        chunks = self.hp["chunks"]
+        self.assertEqual([c["name"] for c in chunks], list(CHUNK_NAMES))
+        self.assertEqual(self.manifest["chunks"], list(CHUNK_NAMES))
+        self.assertEqual(self.manifest["chunk_lod"], 1)
+        start = 0
+        for entry in chunks:
+            n = entry["splats"]
+            name = entry["name"]
+            self.assertEqual(
+                (entry["ply"], entry["obj"]),
+                (
+                    f"starfury_aurora_chunk_{name}.ply",
+                    f"starfury_aurora_chunk_{name}.obj",
+                ),
+            )
+            chunk = read_ply(self.dir_a / entry["ply"]).to_splats()
+            self.assertEqual(len(chunk), n)
+            body = frames.flip_xy(chunk.xyz) + np.array(entry["offset"])
+            np.testing.assert_allclose(
+                body, self.lod1_xyz[start : start + n], atol=1e-5
+            )
+            np.testing.assert_allclose(
+                chunk.rgb, self.lod1.rgb[start : start + n], atol=1e-4
+            )
+            np.testing.assert_allclose(
+                chunk.alpha, self.lod1.alpha[start : start + n], atol=1e-6
+            )
+            np.testing.assert_allclose(
+                chunk.xyz.mean(axis=0), [0.0, 0.0, 0.0], atol=1e-4
+            )
+            start += n
+        self.assertEqual(start, len(self.lod1))
+        self.assertEqual(start, self.manifest["lods"][1]["splats"])
+
+    def test_chunks_are_the_cabin_and_four_arms(self) -> None:
+        chunks = {c["name"]: c for c in self.hp["chunks"]}
+        parts = self.chunk_xyz()
+        cabin = chunks["cabin"]["offset"]
+        self.assertEqual(cabin[:2], [0.0, 0.0])  # on the thrust axis by symmetry and the body shift
+        self.assertLess(cabin[2], -1.0)  # the fuselage is ahead of the X
+        # The cabin is the fuselage and the gun pod, inside DamageZones' cabin band (|x| <= 2 m).
+        self.assertLess(float(np.abs(parts["cabin"][:, 0]).max()), 2.0)
+        pods = {p["name"]: np.array(p["center"]) for p in self.hp["pods"]}
+        for pod in POD_NAMES:
+            arm, sign = parts[f"arm_{pod}"], np.sign(pods[pod][:2])
+            # Every splat of an arm is on its pod's side of both centre planes, from the
+            # fuselage's flank to the claw tips ...
+            self.assertTrue(np.all(arm[:, :2] * sign > 0.0), pod)
+            self.assertLess(float(np.abs(arm[:, 0]).min()), 1.7, pod)
+            self.assertGreater(
+                float(np.abs(arm[:, 0]).max()), abs(pods[pod][0]) + 1.5, pod
+            )
+            # ... and its centroid lies between the cabin and the pod.
+            offset = np.array(chunks[f"arm_{pod}"]["offset"])
+            self.assertTrue(np.all(offset[:2] * sign > 0.0), pod)
+            self.assertTrue(np.all(np.abs(offset[:2]) < np.abs(pods[pod][:2])), pod)
+        self.assertEqual(len({chunks[f"arm_{pod}"]["splats"] for pod in POD_NAMES}), 1)
+        ur = chunks["arm_ur"]["offset"]
+        for pod, axes in (("lr", "y"), ("ul", "x"), ("ll", "xy")):
+            np.testing.assert_allclose(
+                chunks[f"arm_{pod}"]["offset"], mirrored(ur, axes), atol=SYM_TOL
+            )
+
+    def test_chunk_objs_are_the_fallback_mesh_split_by_chunk(self) -> None:
+        vertices = []
+        for entry in self.hp["chunks"]:
+            obj = read_obj(self.dir_a / entry["obj"])
+            self.assertGreater(len(obj.faces), 0, entry["name"])
+            self.assertTrue(np.all(np.isfinite(obj.vertices)))
+            self.assertLess(int(obj.faces.max()), len(obj.vertices))
+            self.assertEqual(obj.mtllib, entry["obj"].replace(".obj", ".mtl"))
+            chunk = frames.flip_xy(read_ply(self.dir_a / entry["ply"]).to_splats().xyz)
+            lo, hi = obj.vertices.min(axis=0), obj.vertices.max(axis=0)
+            self.assertTrue(
+                np.all(chunk.min(axis=0) >= lo - 0.2)
+                and np.all(chunk.max(axis=0) <= hi + 0.2),
+                entry["name"],
+            )
+            vertices.append(obj.vertices + np.array(entry["offset"]))
+        # Back at their offsets they are the hull's fallback mesh (in LOD1's frame, which is
+        # LOD0's within millimetres): the same vertex count and bounds.
+        body = np.concatenate(vertices)
+        self.assertEqual(len(body), len(self.obj.vertices))
+        np.testing.assert_allclose(
+            body.min(axis=0), self.obj.vertices.min(axis=0), atol=0.01
+        )
+        np.testing.assert_allclose(
+            body.max(axis=0), self.obj.vertices.max(axis=0), atol=0.01
+        )
+        cabin = read_obj(self.dir_a / "starfury_aurora_chunk_cabin.obj")
+        self.assertIn("ef_canopy_glass", cabin.materials)
+        arm = read_obj(self.dir_a / "starfury_aurora_chunk_arm_ur.obj")
+        self.assertIn("ef_hazard", arm.materials)
+        self.assertNotIn("ef_canopy_glass", arm.materials)
+
+    def test_hardpoints_and_manifest_only_gain_the_new_keys_at_the_end(self) -> None:
+        self.assertEqual(list(self.hp)[-1], "chunks")
+        self.assertEqual(list(self.manifest)[-2:], ["chunks", "chunk_lod"])
+        self.assertEqual(self.out_a.warnings, ())  # the LOD1 share is inside AC6
+
     # --- determinism ------------------------------------------------------------------------
     def test_same_seed_gives_byte_identical_output(self) -> None:
         for path in self.dir_a.iterdir():
@@ -711,9 +939,117 @@ class StarfuryOptionTests(unittest.TestCase):
             {"overlap": 0.0},
             {"thickness": -0.1},
             {"cockpit_spacing": 0.0},
+            {"lod1_factor": 0.0},
         ):
             with self.subTest(bad), self.assertRaises(ValueError):
                 ship.build(BuildContext(self.dir / "bad", seed=1, options=bad))
+
+    def test_lod1_factor_option_moves_lod1_and_never_lod0(self) -> None:
+        a = ship.build(BuildContext(self.dir / "a", seed=3, options={"spacing": 0.1}))
+        b = ship.build(
+            BuildContext(
+                self.dir / "b", seed=3, options={"spacing": 0.1, "lod1_factor": 3.0}
+            )
+        )
+        for name in (ship.PLY_NAME, ship.OBJ_NAME, "starfury_aurora.mtl", ship.COCKPIT_NAME):
+            self.assertEqual(sha256(self.dir / "a" / name), sha256(self.dir / "b" / name), name)
+        self.assertAlmostEqual(a.manifest["lods"][1]["spacing_m"], 0.2)
+        self.assertAlmostEqual(b.manifest["lods"][1]["spacing_m"], 0.3)
+        ratio = a.manifest["lods"][1]["splats"] / b.manifest["lods"][1]["splats"]
+        self.assertAlmostEqual(ratio, (3.0 / 2.0) ** 2, delta=0.15)
+        self.assertEqual(a.warnings + b.warnings, ())  # the share only applies at the defaults
+        lod1 = read_ply(self.dir / "b" / ship.LOD1_PLY_NAME).to_splats()
+        self.assertAlmostEqual(float(lod1.scale[:, 0].max()), DEFAULT_OVERLAP * 0.3, places=5)
+
+
+def composite_opacity(points: np.ndarray, splats: SplatData) -> np.ndarray:
+    """Opacity of the opaque splats of ``splats`` stacked at each point (same frame): one minus the product of
+    ``1 - alpha * gaussian`` over every splat within three in-plane sigmas. Glass is left out."""
+    keep = splats.alpha > 0.5
+    xyz, alpha, scale = splats.xyz[keep], splats.alpha[keep], splats.scale[keep]
+    axes = frames.quat_to_matrix(splats.rot[keep])  # columns: the splat's local axes
+    cell = 3.0 * float(scale[:, 0].max())
+    keys = np.floor(xyz / cell).astype(np.int64)
+    grid: dict[tuple[int, ...], list[int]] = {}
+    for i, key in enumerate(map(tuple, keys)):
+        grid.setdefault(key, []).append(i)
+    cells = {k: np.array(v) for k, v in grid.items()}
+    around = [(a, b, c) for a in (-1, 0, 1) for b in (-1, 0, 1) for c in (-1, 0, 1)]
+    out = np.zeros(len(points))
+    for i, (point, key) in enumerate(zip(points, np.floor(points / cell).astype(np.int64), strict=True)):
+        near = [cells.get((key[0] + a, key[1] + b, key[2] + c)) for a, b, c in around]
+        near = [n for n in near if n is not None]
+        if not near:
+            continue
+        idx = np.concatenate(near)
+        local = np.einsum("nij,ni->nj", axes[idx], point - xyz[idx])
+        weight = np.exp(-0.5 * ((local / scale[idx]) ** 2).sum(axis=1))
+        out[i] = 1.0 - float(np.prod(1.0 - alpha[idx] * weight))
+    return out
+
+
+class StarfuryLod1FrameAndCoverageTests(unittest.TestCase):
+    """LOD1 against LOD0, part by part from the module (no files): its frame is LOD0's within millimetres, and its
+    sheet closes like LOD0's at independent probe points (the visible hull resampled from ``probe`` streams)."""
+
+    PROBES = 12_000
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        ctx = BuildContext(Path(tempfile.gettempdir()), seed=42)
+        s0 = ship.DEFAULT_SPACING_M
+        c0 = ship.COCKPIT_SPACING_FACTOR * s0
+        f = ship.LOD1_SPACING_FACTOR
+
+        def placed(spacing: float, cockpit: float, suffix: tuple[str, ...]):
+            return ship.centre(ship.build_parts(SPEC, EARTHFORCE, ctx, spacing, cockpit, suffix))
+
+        (cls.lod0, cls.offset0) = placed(s0, c0, ())
+        (cls.lod1, cls.offset1) = placed(f * s0, f * c0, (ship.LOD1_STREAM,))
+        probe, _ = placed(s0, c0, ("probe",))
+        points, names = [], []
+        for p in probe:
+            if p.samples is not None:
+                opaque = p.samples.transmittance() == 0.0
+                points.append(p.samples.positions[opaque])
+                names += [p.part.name] * int(opaque.sum())
+        pick = np.random.default_rng(1).choice(sum(len(x) for x in points), cls.PROBES, replace=False)
+        cls.points = np.concatenate(points)[pick]
+        cls.names = np.array(names)[pick]
+        rig = ship.STARFURY_RIG
+
+        def splats(parts):
+            return ship.part_splats(parts, EARTHFORCE, rig, DEFAULT_OVERLAP, DEFAULT_THICKNESS)
+
+        cls.opacity0 = composite_opacity(cls.points, splats(cls.lod0))
+        cls.opacity1 = composite_opacity(cls.points, splats(cls.lod1))
+
+    def test_lod1_frame_is_lod0_frame_within_millimetres(self) -> None:
+        self.assertEqual(list(self.offset1[:2]), [0.0, 0.0])
+        self.assertLess(abs(float(self.offset1[2] - self.offset0[2])), 0.005)
+        a = {p.part.name: p.part for p in self.lod0}
+        b = {p.part.name: p.part for p in self.lod1}
+        for part, anchor in (("fuselage", "eye"), ("gun_mount", "muzzle_left"), ("pod_ur", "center"), ("claw_ll", "rcs_px")):
+            delta = b[part].anchor(anchor).position - a[part].anchor(anchor).position
+            self.assertLess(float(np.abs(delta).max()), 0.005, (part, anchor, delta))
+        self.assertEqual(a["pod_ur"].anchor("center").position[0], b["pod_ur"].anchor("center").position[0])
+
+    def test_lod1_closes_the_sheet_like_lod0(self) -> None:
+        o0, o1 = self.opacity0, self.opacity1
+        summary = (
+            f"LOD0 mean {o0.mean():.4f}, {(o0 < 0.5).mean():.2%} under 0.5; "
+            f"LOD1 mean {o1.mean():.4f}, {(o1 < 0.5).mean():.2%} under 0.5"
+        )
+        self.assertGreater(float(o0.mean()), 0.99, summary)
+        self.assertGreater(float(o1.mean()), 0.98, summary)
+        self.assertLess(float((o1 < 0.5).mean()), 0.01, summary)
+        self.assertGreater(float(np.median(o1)), 0.999, summary)
+        # The big surfaces are as closed as LOD0's; what thins out are features smaller than a
+        # LOD1 splat (RCS blocks and cones on the claws, ring edges, frame bands).
+        for prefix in ("fuselage", "strut", "pod"):
+            sel = np.char.startswith(self.names, prefix)
+            self.assertGreater(float(o1[sel].mean()), 0.98, (prefix, summary))
+            self.assertLess(float((o1[sel] < 0.5).mean()), 0.005, (prefix, summary))
 
 
 if __name__ == "__main__":
