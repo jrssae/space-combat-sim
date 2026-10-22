@@ -33,6 +33,60 @@ const KEYBOARD_ONLY: Array[StringName] = [
 	&"debug_toggle_fallback_mesh", &"debug_toggle_overlay", &"target_ahead", &"target_prev", &"screenshot",
 ]
 
+# Keyboard layout B (architecture §6.1, M3-T01): every flight key under the left hand, because the right hand flies the
+# mouse. action -> physical keys in event order (an action not listed has none). The mouse flies pitch and yaw, so those
+# have no keys; target_prev is the wheel and target_ahead the hold of B / Mouse 2, so neither has a key. Ctrl, Alt, the
+# number row and ` are unbound (Alt frees the mouse, ` is the console).
+const KEYS_B: Dictionary = {
+	&"main_left": [KEY_Q, KEY_W],
+	&"main_right": [KEY_E, KEY_W],
+	&"retro_left": [KEY_A, KEY_S],
+	&"retro_right": [KEY_D, KEY_S],
+	&"strafe_up": [KEY_R],
+	&"strafe_down": [KEY_F],
+	&"strafe_left": [KEY_Z],
+	&"strafe_right": [KEY_C],
+	&"roll_left": [KEY_CAPSLOCK],
+	&"roll_right": [KEY_G],
+	&"brake": [KEY_X],
+	&"autotrack": [KEY_SHIFT],
+	&"fire": [KEY_SPACE],
+	&"weapon_next": [KEY_V],
+	&"target_next": [KEY_B],
+	&"toggle_flight_assist": [KEY_T],
+	&"toggle_camera": [KEY_TAB],
+	&"pause": [KEY_ESCAPE],
+	&"reset_ship": [KEY_BACKSPACE],
+	&"screenshot": [KEY_N, KEY_PRINT],
+	&"debug_toggle_overlay": [KEY_F3],
+	&"debug_toggle_fallback_mesh": [KEY_F4],
+}
+
+# action -> mouse buttons in event order (an action not listed has none).
+const MOUSE_B: Dictionary = {
+	&"fire": [MOUSE_BUTTON_LEFT],
+	&"target_next": [MOUSE_BUTTON_RIGHT],
+	&"camera_look": [MOUSE_BUTTON_MIDDLE],
+	&"autotrack": [MOUSE_BUTTON_XBUTTON1],
+	&"weapon_next": [MOUSE_BUTTON_XBUTTON2],
+}
+
+# The left block of a US keyboard: the Q-T, A-G and Z-B columns, Shift, Caps Lock, Tab and Space.
+const LEFT_BLOCK: Array[Key] = [
+	KEY_Q, KEY_W, KEY_E, KEY_R, KEY_T, KEY_A, KEY_S, KEY_D, KEY_F, KEY_G, KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B,
+	KEY_SHIFT, KEY_CAPSLOCK, KEY_TAB, KEY_SPACE,
+]
+
+# The only keys outside the left block, each for one housekeeping action.
+const OUTSIDE_THE_BLOCK: Dictionary = {
+	KEY_ESCAPE: [&"pause"],
+	KEY_BACKSPACE: [&"reset_ship"],
+	KEY_N: [&"screenshot"],
+	KEY_PRINT: [&"screenshot"],
+	KEY_F3: [&"debug_toggle_overlay"],
+	KEY_F4: [&"debug_toggle_fallback_mesh"],
+}
+
 
 func before_all() -> void:
 	# These tests pin project.godot's map. A saved control profile (settings.control_profile) may have replaced it
@@ -78,13 +132,51 @@ func test_only_standard_sdl_indices_and_any_device() -> void:
 			assert_gt(pad_events, 0, "%s has a pad binding" % action)
 
 
-func test_every_action_is_reachable_from_the_keyboard() -> void:
+func test_every_action_is_reachable_from_somewhere() -> void:
+	# Layout B leaves the mouse wheel (target_prev) and a held B / Mouse 2 (target_ahead) to cover two actions that have no
+	# event of their own; pitch and yaw keep their pad bindings and the mouse's motion.
+	var eventless: Array[StringName] = [&"target_ahead", &"target_prev"]
 	for action: StringName in InputAdapter.ACTIONS:
-		var keys: int = 0
+		var count: int = InputMap.action_get_events(action).size()
+		if eventless.has(action):
+			assert_eq(count, 0, "%s: no key, no pad button (the wheel and the B hold reach it)" % action)
+		else:
+			assert_gt(count, 0, "%s has a binding" % action)
+
+
+func test_keyboard_layout_b_is_exactly_the_table() -> void:
+	for action: StringName in InputAdapter.ACTIONS:
+		var keys: Array = []
+		var buttons: Array = []
 		for event: InputEvent in InputMap.action_get_events(action):
-			if event is InputEventKey or event is InputEventMouseButton:
-				keys += 1
-		assert_gt(keys, 0, "%s has a keyboard fallback" % action)
+			if event is InputEventKey:
+				var key := event as InputEventKey
+				assert_eq(key.keycode, KEY_NONE, "%s: a physical key, not a logical one" % action)
+				assert_false(key.shift_pressed or key.ctrl_pressed or key.alt_pressed or key.meta_pressed,
+						"%s: no modifier flags" % action)
+				keys.append(key.physical_keycode)
+			elif event is InputEventMouseButton:
+				buttons.append((event as InputEventMouseButton).button_index)
+		assert_eq(keys, KEYS_B.get(action, []), "%s: keys" % action)
+		assert_eq(buttons, MOUSE_B.get(action, []), "%s: mouse buttons" % action)
+
+
+func test_no_flight_key_is_right_of_the_g_b_column() -> void:
+	for action: StringName in InputAdapter.ACTIONS:
+		for event: InputEvent in InputMap.action_get_events(action):
+			if not event is InputEventKey:
+				continue
+			var key: Key = (event as InputEventKey).physical_keycode
+			if LEFT_BLOCK.has(key):
+				continue
+			var owners: Array = OUTSIDE_THE_BLOCK.get(key, [])
+			assert_true(owners.has(action), "%s: %s is outside the left block" % [action, OS.get_keycode_string(key)])
+
+
+func test_pitch_and_yaw_have_no_keys_because_the_mouse_flies() -> void:
+	for action: StringName in [&"pitch_down", &"pitch_up", &"yaw_left", &"yaw_right"]:
+		for event: InputEvent in InputMap.action_get_events(action):
+			assert_false(event is InputEventKey or event is InputEventMouseButton, "%s: pad only" % action)
 
 
 func test_console_key_is_never_bound() -> void:
@@ -101,10 +193,13 @@ func test_console_key_is_never_bound() -> void:
 
 
 func test_both_sides_keys() -> void:
-	assert_true(_has_key(&"main_right", KEY_E) and _has_key(&"main_left", KEY_E), "E = both mains")
-	assert_true(_has_key(&"retro_right", KEY_D) and _has_key(&"retro_left", KEY_D), "D = both retros")
-	assert_true(_has_key(&"main_left", KEY_Q) and _has_key(&"main_right", KEY_R), "Q / R = left / right main")
-	assert_true(_has_key(&"retro_left", KEY_A) and _has_key(&"retro_right", KEY_F), "A / F = left / right retro")
+	# Pods by position: the left key of a row drives the left pod, the right key the right pod, the middle key both.
+	assert_true(_has_key(&"main_right", KEY_W) and _has_key(&"main_left", KEY_W), "W = both mains")
+	assert_true(_has_key(&"retro_right", KEY_S) and _has_key(&"retro_left", KEY_S), "S = both retros")
+	assert_true(_has_key(&"main_left", KEY_Q) and _has_key(&"main_right", KEY_E), "Q / E = left / right main")
+	assert_true(_has_key(&"retro_left", KEY_A) and _has_key(&"retro_right", KEY_D), "A / D = left / right retro")
+	assert_false(_has_key(&"main_right", KEY_Q) or _has_key(&"main_left", KEY_E), "Q and E each drive one pod")
+	assert_false(_has_key(&"retro_right", KEY_A) or _has_key(&"retro_left", KEY_D), "A and D each drive one pod")
 
 
 func test_trigger_deadzone() -> void:
@@ -121,8 +216,7 @@ func test_right_stick_rolls_and_dpad_yaws() -> void:
 		assert_true(_has_pad_button(action), "%s: a D-pad button" % action)
 		for event: InputEvent in InputMap.action_get_events(action):
 			assert_false(event is InputEventJoypadMotion, "%s: no stick axis" % action)
-	assert_true(_has_key(&"yaw_left", KEY_J) and _has_key(&"yaw_right", KEY_L), "J/L stay yaw")
-	assert_true(_has_key(&"roll_left", KEY_Z) and _has_key(&"roll_right", KEY_X), "Z/X roll (left hand)")
+	assert_true(_has_key(&"roll_left", KEY_CAPSLOCK) and _has_key(&"roll_right", KEY_G), "Caps Lock / G roll (left hand)")
 
 
 func test_target_ahead_has_r3_and_dpad_up_carries_the_hold() -> void:
@@ -134,7 +228,9 @@ func test_target_ahead_has_r3_and_dpad_up_carries_the_hold() -> void:
 				dpad_up.append(action)
 	assert_eq(dpad_up, [&"target_next"] as Array[StringName], "D-pad Up is the tap-or-hold target button alone")
 	assert_false(InputAdapter.EDGE_ACTIONS.has(&"target_next"), "it is not a press edge: tap fires on release")
-	assert_true(InputAdapter.EDGE_ACTIONS.has(&"target_ahead"), "R3 / G stay a press edge")
+	assert_true(InputAdapter.EDGE_ACTIONS.has(&"target_ahead"), "an event bound to target_ahead stays a press edge")
+	assert_true(_has_key(&"target_next", KEY_B), "B carries the same tap-or-hold as D-pad Up")
+	assert_true(_has_mouse(&"target_next", MOUSE_BUTTON_RIGHT), "and so does Mouse 2")
 
 
 func _has_pad_button(action: StringName) -> bool:
@@ -147,5 +243,12 @@ func _has_pad_button(action: StringName) -> bool:
 func _has_key(action: StringName, key: Key) -> bool:
 	for event: InputEvent in InputMap.action_get_events(action):
 		if event is InputEventKey and (event as InputEventKey).physical_keycode == key:
+			return true
+	return false
+
+
+func _has_mouse(action: StringName, button: MouseButton) -> bool:
+	for event: InputEvent in InputMap.action_get_events(action):
+		if event is InputEventMouseButton and (event as InputEventMouseButton).button_index == button:
 			return true
 	return false

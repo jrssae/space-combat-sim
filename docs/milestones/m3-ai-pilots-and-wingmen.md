@@ -416,6 +416,37 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
 
 (Implementation agents record deviations from §16 and this file here, per task.)
 
+**M3-T01 (keyboard layout B).**
+- Bindings are exactly the T01 table, in `project.godot` and in `data/controls/m1_classic.cfg` (only its keyboard and mouse
+  descriptors changed; its pad swap is as before). Event order per action is pad, keys, mouse: the specific key first, then
+  the both-pods key (`main_left` = `[LT, Q, W]`, `main_right` = `[RT, E, W]`, `retro_left` = `[LB, A, S]`, `retro_right` =
+  `[RB, D, S]`).
+- Mouse 2 stays on `target_next` (tap = next, hold = nearest the nose), because the T01 note counts it among the ways to reach
+  `target_prev` / `target_ahead`. Mouse 4 (`mouse:8`) is `autotrack`, Mouse 5 (`mouse:9`) is `weapon_next`; the descriptor grammar
+  already accepted 8 and 9, and `GodotInputSource` polls any button, so no code changed. `InputAdapter` has only comments edited.
+- `pitch_*` and `yaw_*` keep only their pad bindings. `target_prev` and `target_ahead` had no pad binding and now have no event
+  at all (empty `events` in `project.godot`, `[]` in the profile text). They stay in `ControlProfile.KEYBOARD_ONLY`, so
+  validation passes and a player can still `bind target_prev key:<name>`; a profile round trip keeps the empty lists. The wheel
+  is `target_prev`, a B or Mouse 2 hold is `target_ahead`. `ControlProfile.describe_action` prints `(unbound)` for an action with
+  an empty list (it used to print nothing after the colon), so `controls show target_prev` stays readable.
+- B inherits the D-pad Up tap-or-hold with no adapter change (`TARGET_NEXT` is the tap-or-hold action;
+  `test_godot_input_source` drives real B events through `GodotInputSource` and `InputAdapter`: tap gives `target_next` on the
+  release, a hold gives one `target_ahead` and no `target_next`).
+- Caps Lock: the headless test sends `InputEventKey` press and release for `KEY_CAPSLOCK` and checks `roll_left` follows them.
+  That proves the input source reads it as a held key; it cannot prove how X11 or Wayland deliver the real key (some desktops or
+  keyboard settings toggle it), so the real-keyboard check is the maintainer's (H) AC14. Fallback if it toggles: Ctrl for
+  `roll_left` (a data change in the same two files).
+- AC1 as tests: `test_input_map` pins the exact keys and mouse buttons per action (`KEYS_B`, `MOUSE_B`), and
+  `test_no_flight_key_is_right_of_the_g_b_column` lists the allowed keyboard keys (the Q-T, A-G, Z-B block plus Shift, Caps Lock,
+  Tab, Space) and the six keys outside it (Esc, Backspace, N, Print, F3, F4, each for one housekeeping action). The old
+  "every action has a keyboard fallback" test became "every action has an event, except `target_prev` / `target_ahead`".
+  Keys 1-4 are not in the allowed block yet; T07 adds them with the wing-order actions (and extends `KEYS_B`).
+- Saved profiles in `user://controls/` keep their old keys; `controls use default` gets layout B. Tests that named old keys
+  (`test_control_profile`, `test_control_profiles`, `test_debug_console`, `test_input_adapter` comments) were updated; the
+  "also bound to" note test now uses B (K is free). The control-profile console smoke run in `scripts/run_tests.sh` expected
+  `yaw_left ... key:J`; it now expects the layout B lines for `yaw_left` and `roll_left` (m1_classic) and `main_left` and
+  `roll_left` (default).
+
 **M3-T02 (factions as data, friendly fire).**
 - `data/factions.json` holds `earth_alliance`, `raiders`, `neutral`, the one hostile pair and `"default": "neutral"`; with
   it, every M2 relation is unchanged (`test_faction_table::test_the_shipped_file_is_the_built_in_m2_rule` compares the file,

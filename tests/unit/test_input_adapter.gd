@@ -244,13 +244,13 @@ func test_the_target_ahead_key_targets_ahead_on_the_press() -> void:
 
 
 func test_console_transition_drops_a_press_in_progress() -> void:
-	source.hold(InputAdapter.TARGET_NEXT, 1.0, true)  # T held on the keyboard
+	source.hold(InputAdapter.TARGET_NEXT, 1.0, true)  # B held on the keyboard
 	adapter.sample(source, DT)
-	source.keyboard_mouse_enabled = false  # console opens: T now reads released
+	source.keyboard_mouse_enabled = false  # console opens: B now reads released
 	adapter.resync_edges(source)
 	var cmd: PilotCommand = adapter.sample(source, DT)
 	assert_false(cmd.combat.target_next, "no phantom tap from the mask")
-	source.keyboard_mouse_enabled = true  # console closes with T still down
+	source.keyboard_mouse_enabled = true  # console closes with B still down
 	adapter.resync_edges(source)
 	var fired: bool = false
 	for i: int in 60:
@@ -279,7 +279,7 @@ func test_held_actions() -> void:
 
 
 func test_keyboard_mask_drops_keys_but_not_pad() -> void:
-	source.hold(InputAdapter.MAIN_RIGHT, 1.0, true)  # W on the keyboard
+	source.hold(InputAdapter.MAIN_RIGHT, 1.0, true)  # E on the keyboard
 	source.hold(InputAdapter.MAIN_LEFT, 0.6)  # LT on the pad
 	source.keyboard_mouse_enabled = false
 	var flight: FlightCommand = adapter.sample(source, DT).flight
@@ -288,12 +288,12 @@ func test_keyboard_mask_drops_keys_but_not_pad() -> void:
 
 
 func test_mask_toggle_with_key_held_fires_no_edge() -> void:
-	source.hold(InputAdapter.TOGGLE_CAMERA, 1.0, true)  # V held
+	source.hold(InputAdapter.TOGGLE_CAMERA, 1.0, true)  # Tab held
 	adapter.sample(source, DT)  # edge consumed
 	source.keyboard_mouse_enabled = false  # console opens
 	adapter.resync_edges(source)
 	assert_false(adapter.sample(source, DT).ui.toggle_camera)
-	source.keyboard_mouse_enabled = true  # console closes, V still down
+	source.keyboard_mouse_enabled = true  # console closes, Tab still down
 	adapter.resync_edges(source)
 	assert_false(adapter.sample(source, DT).ui.toggle_camera, "no phantom edge on unmask")
 

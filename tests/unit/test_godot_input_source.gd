@@ -55,6 +55,64 @@ func test_trigger_rest_minus_one_is_detected() -> void:
 	assert_almost_eq(source.get_trigger(&"main_left"), 1.0, 1e-5)
 
 
+func test_pods_by_position() -> void:
+	# Layout B: Q / E are the left / right main, A / D the left / right retro, W and S the pair.
+	var cases: Array[Array] = [
+		[KEY_Q, 1.0, 0.0, false, false], [KEY_E, 0.0, 1.0, false, false], [KEY_W, 1.0, 1.0, false, false],
+		[KEY_A, 0.0, 0.0, true, false], [KEY_D, 0.0, 0.0, false, true], [KEY_S, 0.0, 0.0, true, true],
+	]
+	for c: Array in cases:
+		var key: Key = c[0]
+		var label: String = OS.get_keycode_string(key)
+		_key(key, true)
+		assert_eq(source.get_trigger(&"main_left"), c[1], "%s: main_left" % label)
+		assert_eq(source.get_trigger(&"main_right"), c[2], "%s: main_right" % label)
+		assert_eq(source.is_pressed(&"retro_left"), c[3], "%s: retro_left" % label)
+		assert_eq(source.is_pressed(&"retro_right"), c[4], "%s: retro_right" % label)
+		_key(key, false)
+
+
+func test_caps_lock_rolls_left_while_it_is_down() -> void:
+	# Layout B rolls left on Caps Lock. The platform layer must deliver a press and a release for it (not a toggle);
+	# this pins that the input source then reads it as held and released. The real keyboard on X11 and Wayland is the
+	# maintainer's check (M3 AC14).
+	var roll := func() -> Vector2:
+		return source.get_vector(&"roll_left", &"roll_right", &"pitch_down", &"pitch_up", 0.15)
+	_key(KEY_CAPSLOCK, true)
+	assert_true(source.is_pressed(&"roll_left"), "down")
+	assert_almost_eq((roll.call() as Vector2).x, -1.0, 1e-5, "rolls left")
+	_key(KEY_CAPSLOCK, false)
+	assert_false(source.is_pressed(&"roll_left"), "up")
+	assert_eq(roll.call(), Vector2.ZERO, "and stops")
+	_key(KEY_G, true)
+	assert_almost_eq((roll.call() as Vector2).x, 1.0, 1e-5, "G rolls right")
+
+
+func test_b_is_tap_for_next_target_and_hold_for_the_one_nearest_the_nose() -> void:
+	var adapter := InputAdapter.new()
+	var dt: float = 1.0 / 60.0
+	_key(KEY_B, true)
+	assert_false(adapter.sample(source, dt).combat.target_next, "a tap acts on release")
+	_key(KEY_B, false)
+	var tap: CombatCommand = adapter.sample(source, dt).combat
+	assert_true(tap.target_next, "tap: next target")
+	assert_false(tap.target_ahead)
+
+	_key(KEY_B, true)
+	var next_ticks: int = 0
+	var ahead_ticks: int = 0
+	for i: int in 40:  # 0.67 s, well past the 0.35 s hold threshold
+		var combat: CombatCommand = adapter.sample(source, dt).combat
+		next_ticks += 1 if combat.target_next else 0
+		ahead_ticks += 1 if combat.target_ahead else 0
+	_key(KEY_B, false)
+	var released: CombatCommand = adapter.sample(source, dt).combat
+	next_ticks += 1 if released.target_next else 0
+	ahead_ticks += 1 if released.target_ahead else 0
+	assert_eq(ahead_ticks, 1, "hold: nearest the nose, once")
+	assert_eq(next_ticks, 0, "and the release after a hold does not also cycle")
+
+
 func test_keyboard_masked_pad_passes_through() -> void:
 	_key(KEY_E, true)
 	assert_eq(source.get_trigger(&"main_right"), 1.0, "E = right mains")
@@ -123,7 +181,7 @@ func _release_everything() -> void:
 		_axis(axis as JoyAxis, 0.0)
 	for button: int in 15:
 		_button(button as JoyButton, false)
-	for key: Key in [KEY_E, KEY_W, KEY_Q]:
+	for key: Key in [KEY_E, KEY_W, KEY_Q, KEY_S, KEY_A, KEY_D, KEY_B, KEY_G, KEY_CAPSLOCK]:
 		_key(key, false)
 	Input.flush_buffered_events()
 

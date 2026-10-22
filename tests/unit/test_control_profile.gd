@@ -131,7 +131,12 @@ func test_the_project_map_is_a_valid_profile() -> void:
 	assert_eq(profile.validate(), PackedStringArray(), "project.godot follows the profile rules")
 	assert_eq(profile.bindings.size(), InputAdapter.ACTIONS.size())
 	assert_eq(profile.descriptors_for(&"fire"), PackedStringArray(["pad:button:0", "key:Space", "mouse:1"]))
-	assert_eq(profile.descriptors_for(&"main_right"), PackedStringArray(["pad:axis:5+", "key:R", "key:E"]))
+	assert_eq(profile.descriptors_for(&"main_right"), PackedStringArray(["pad:axis:5+", "key:E", "key:W"]))
+	assert_eq(profile.descriptors_for(&"roll_left"), PackedStringArray(["pad:axis:2-", "key:CapsLock"]))
+	assert_eq(profile.descriptors_for(&"target_next"), PackedStringArray(["pad:button:11", "key:B", "mouse:2"]))
+	assert_eq(profile.descriptors_for(&"autotrack"), PackedStringArray(["pad:button:2", "key:Shift", "mouse:8"]))
+	assert_eq(profile.descriptors_for(&"weapon_next"), PackedStringArray(["pad:button:12", "key:V", "mouse:9"]))
+	assert_eq(profile.descriptors_for(&"target_prev"), PackedStringArray(), "the wheel covers it: no event")
 	assert_almost_eq(float(profile.deadzones[&"main_right"]), 0.05, 1e-6)
 	assert_almost_eq(float(profile.deadzones[&"yaw_left"]), 0.5, 1e-6)
 
@@ -374,7 +379,8 @@ func test_unbind_cannot_remove_the_last_pad_binding() -> void:
 
 func test_describe_action() -> void:
 	assert_eq(_default.describe_action(&"fire"), "fire: pad:button:0 key:Space mouse:1 (deadzone 0.50)")
-	assert_eq(_default.describe_action(&"main_left"), "main_left: pad:axis:4+ key:Q key:E (deadzone 0.05)")
+	assert_eq(_default.describe_action(&"main_left"), "main_left: pad:axis:4+ key:Q key:W (deadzone 0.05)")
+	assert_eq(_default.describe_action(&"target_prev"), "target_prev: (unbound) (deadzone 0.50)", "no event: the wheel steps back")
 
 
 func test_same_bindings_ignores_names() -> void:
@@ -400,16 +406,28 @@ func test_m1_classic_is_the_default_with_yaw_and_roll_swapped_between_stick_and_
 			continue
 		assert_eq(classic.descriptors_for(action), _default.descriptors_for(action), "%s is unchanged" % action)
 		assert_almost_eq(float(classic.deadzones[action]), float(_default.deadzones[action]), 1e-6, "%s deadzone" % action)
-	assert_eq(classic.descriptors_for(&"yaw_left"), PackedStringArray(["pad:axis:2-", "key:J"]), "right stick X yaws")
-	assert_eq(classic.descriptors_for(&"yaw_right"), PackedStringArray(["pad:axis:2+", "key:L"]))
-	assert_eq(classic.descriptors_for(&"roll_left"), PackedStringArray(["pad:button:13", "key:Z"]), "D-pad rolls")
-	assert_eq(classic.descriptors_for(&"roll_right"), PackedStringArray(["pad:button:14", "key:X"]))
+	assert_eq(classic.descriptors_for(&"yaw_left"), PackedStringArray(["pad:axis:2-"]), "right stick X yaws")
+	assert_eq(classic.descriptors_for(&"yaw_right"), PackedStringArray(["pad:axis:2+"]))
+	assert_eq(classic.descriptors_for(&"roll_left"), PackedStringArray(["pad:button:13", "key:CapsLock"]), "D-pad rolls")
+	assert_eq(classic.descriptors_for(&"roll_right"), PackedStringArray(["pad:button:14", "key:G"]))
+	# Layout B belongs to the keyboard and the mouse, not to the pad swap: every non-pad binding is the default's.
+	for action: StringName in InputAdapter.ACTIONS:
+		assert_eq(_non_pad(classic, action), _non_pad(_default, action), "%s: same keyboard and mouse bindings" % action)
 	# The deadzones travel with the bindings: a stick-bound action wants the stick's, a button-bound one 0.5.
 	assert_almost_eq(float(classic.deadzones[&"yaw_left"]), 0.15, 1e-6)
 	assert_almost_eq(float(classic.deadzones[&"roll_left"]), 0.5, 1e-6)
 
 
 # --- Helpers --------------------------------------------------------------------------------------------------
+
+
+# The descriptors of an action that are not pad inputs (keys and mouse buttons), in order.
+func _non_pad(profile: ControlProfile, action: StringName) -> PackedStringArray:
+	var out := PackedStringArray()
+	for descriptor: String in profile.descriptors_for(action):
+		if not descriptor.begins_with("pad:"):
+			out.append(descriptor)
+	return out
 
 
 # action -> {"deadzone", "events": [[class, fields...], ...]}: every field the profile can express, exactly.

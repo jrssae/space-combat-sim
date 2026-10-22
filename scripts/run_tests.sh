@@ -142,11 +142,15 @@ echo "== Console smoke run: control profiles"
 log="${REPORTS}/console_controls.log"
 settings_before="$(settings_fingerprint)"
 console_run "${log}" 0 --console-strict \
-    --console-exec="controls save smoke_test; bind fire key:K; controls show fire; controls use default; controls show fire; controls use m1_classic; controls show yaw_left; controls use default; controls delete smoke_test; quit 0" \
+    --console-exec="controls save smoke_test; bind fire key:K; controls show fire; controls use default; controls show fire; controls use m1_classic; controls show yaw_left; controls show roll_left; controls use default; controls show main_left; controls show roll_left; controls delete smoke_test; quit 0" \
     || smoke_status=1
 expect_line "${log}" "[console] fire: pad:button:0 key:Space mouse:1 key:K (deadzone 0.50)" || smoke_status=1
 expect_line "${log}" "[console] fire: pad:button:0 key:Space mouse:1 (deadzone 0.50)" || smoke_status=1
-expect_line "${log}" "[console] yaw_left: pad:axis:2- key:J (deadzone 0.15)" || smoke_status=1
+# Layout B (M3-T01): m1_classic swaps only the pad (stick yaws, D-pad rolls); the keys are the default's.
+expect_line "${log}" "[console] yaw_left: pad:axis:2- (deadzone 0.15)" || smoke_status=1
+expect_line "${log}" "[console] roll_left: pad:button:13 key:CapsLock (deadzone 0.50)" || smoke_status=1
+expect_line "${log}" "[console] main_left: pad:axis:4+ key:Q key:W (deadzone 0.05)" || smoke_status=1
+expect_line "${log}" "[console] roll_left: pad:axis:2- key:CapsLock (deadzone 0.15)" || smoke_status=1
 expect_line "${log}" "[console] deleted control profile 'smoke_test'" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 if [[ "$(settings_fingerprint)" != "${settings_before}" ]]; then
