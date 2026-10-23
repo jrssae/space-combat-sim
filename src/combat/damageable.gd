@@ -29,9 +29,12 @@ var zones: DamageZones = DamageZones.new()
 var shapes: Array[HitShape] = []
 ## Radius of a sphere around the body origin that holds every shape (broad phase).
 var bounding_radius: float = 0.0
-## Radius of the largest sphere inside one of the shapes (`RamMath.core_radius`, about 1 m for a fighter): what a ram at
-## tunnelling speed treats as this body's solid core (§16 D32).
+## Radius of the largest sphere inside one of the shapes, wherever it sits (`RamMath.core_radius`, about 1 m for a fighter):
+## how thick the solid core is, for the tunnelling threshold (§16 D32).
 var core_radius: float = 0.0
+## Radius of the largest sphere centred on the body origin inside one of the shapes (`RamMath.origin_core_radius`): the core a
+## swept ram moves. It stays inside the hull (Starfury 0.84 m, raider 0.26 m), so a near miss is no ram.
+var origin_core_radius: float = 0.0
 ## Ram damage (§16 D32): a velocity change of the owner's own body up to this is harmless...
 var ram_safe_dv_mps: float = 5.0
 ## ... and one of this or more takes the whole hull (quadratic in between, `RamMath.severity`). Ships take both from their
@@ -81,6 +84,7 @@ func setup(collision: Array[Dictionary], hull_max: float, p_faction: StringName,
 		shapes.append(shape)
 		bounding_radius = maxf(bounding_radius, shape.extent_radius())
 	core_radius = RamMath.core_radius(shapes)
+	origin_core_radius = RamMath.origin_core_radius(shapes)
 	DebugConsole.registry.unregister_owner(self)
 	if register_console:
 		_register_console()

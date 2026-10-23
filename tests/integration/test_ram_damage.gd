@@ -1,14 +1,18 @@
 extends GutTest
 ## Ram damage in Jolt (M3-T04, AC4, architecture §16 D32): two Starfuries meeting at 4 m/s closing take no damage; at 30 m/s
 ## each loses at least half its hull, once per contact; at 600 m/s (10 m per tick) both are destroyed and neither passes through
-## the other unhurt, over 50 seeded offsets where one core crosses the other's hull; a ship ramming a buoy at 40 m/s destroys it
-## and is not hurt itself; with `god on` the player takes nothing and still bounces; `HitInfo.cause` is `ram`; the setting
-## `ram_damage` switches it off. The inner class runs the real main scene: the resolver's place in the tick, and ram kills count.
+## the other unhurt, over 50 seeded offsets where one ship's origin passes through the other's hull; a ship ramming a buoy at
+## 40 m/s destroys it and is not hurt itself; with `god on` the player takes nothing and still bounces; `HitInfo.cause` is
+## `ram`; the setting `ram_damage` switches it off. Above the tunnelling threshold, a pass 0.3 m clear of a hull is no ram, and
+## a pair that survives a swept ram takes it once, not again when Jolt bounces them. The inner class runs the real main scene:
+## the resolver's place in the tick, and ram kills count.
 ##
 ## The ships fly in real physics ticks (Jolt, the real `RamResolver` at priority 210). ALPHA 1 is the player (god mode applies to
 ## it), at the origin with its nose along -z; ALPHA 2 faces it from -z.
 
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
+const RAIDER_SPEC_PATH: String = "res://assets/ships/raider_delta_v.tres"
+const DRONE_SCENE: String = "res://tests/fixtures/target_drone.tscn"
 const FACING_ALPHA := Basis(Vector3.UP, PI)
 ## Origin to origin at the start of a slow head-on: the gun mounts touch at about 10 m.
 const SLOW_GAP_M: float = 12.0
@@ -156,16 +160,15 @@ func test_with_ram_damage_off_the_ships_bounce_and_take_nothing() -> void:
 # --- tunnelling speeds: the swept test ----------------------------------------------------------------------------
 
 
-## Whether ALPHA 2, flown along z at lateral `offset`, puts one ship's core through the other's hull: some z puts its origin
-## inside the other's hit volumes grown by its core radius. ALPHA 1's origin sits at (x, -y) in ALPHA 2's frame (it is turned
-## half a circle about +y), so both directions are tried. `HitShape.contains`, not the sweep under test.
-func _cores_cross(offset: Vector2) -> bool:
-	var damageable: Damageable = alpha.damageable
+## Whether ALPHA 2, flown along z at lateral `offset`, passes one ship's origin through the other's actual hull: some z puts it
+## inside the other's hit volumes, not grown by anything. ALPHA 1's origin sits at (x, -y) in ALPHA 2's frame (it is turned half
+## a circle about +y), so both directions are tried. Only `HitShape.contains`: no core radius, nothing the sweep under test uses.
+func _origin_crosses_hull(offset: Vector2) -> bool:
 	for lateral: Vector2 in [offset, Vector2(offset.x, -offset.y)]:
 		for i: int in 301:
 			var p := Vector3(lateral.x, lateral.y, -15.0 + 0.1 * float(i))
-			for shape: HitShape in damageable.shapes:
-				if shape.contains(p, damageable.core_radius):
+			for shape: HitShape in alpha.damageable.shapes:
+				if shape.contains(p):
 					return true
 	return false
 
@@ -178,7 +181,7 @@ func test_a_six_hundred_mps_head_on_destroys_both_for_fifty_seeded_offsets() -> 
 	var rejected: int = 0
 	while tried < TRIALS:
 		var offset := Vector2(rng.randf_range(-9.0, 9.0), rng.randf_range(-5.0, 5.0))
-		if not _cores_cross(offset):
+		if not _origin_crosses_hull(offset):
 			rejected += 1
 			continue
 		tried += 1
@@ -196,6 +199,68 @@ func test_a_six_hundred_mps_head_on_destroys_both_for_fifty_seeded_offsets() -> 
 	assert_eq(survivors, [] as Array[String], "both destroyed at every offset (%d tried, %d outside the overlap)" % [tried, rejected])
 	assert_gt(rejected, 0, "the sampled square reaches past the overlap, so its edges are exercised")
 	assert_eq(infos[infos.size() - 1].cause, HitInfo.CAUSE_RAM)
+
+
+func _raider(at: Vector3) -> Combatant:
+	var combatant: Combatant = ShipAssembly.build(load(RAIDER_SPEC_PATH) as ShipSpec, world, projectiles, {
+		ShipAssembly.OPT_FACTION: Factions.RAIDERS,
+	})
+	world.spawn(combatant.ship, world.to_universe(at))
+	return combatant
+
+
+## The test drone (a 1 m capsule along its z, a thin 4 m wing) at `at` with orientation `basis`, flying at `velocity`. It has
+## no Jolt shapes, so only the swept test can find it.
+func _drone(at: Vector3, basis: Basis, velocity: Vector3) -> TargetDrone:
+	var drone := (load(DRONE_SCENE) as PackedScene).instantiate() as TargetDrone
+	drone.velocity = velocity
+	world.spawn(drone, world.to_universe(at), basis)
+	return drone
+
+
+## Flies `drone` past for `ticks` and returns whether anything was rammed.
+func _fly_past(ticks: int) -> int:
+	for i: int in ticks:
+		await _ticks(1)
+	return infos.size()
+
+
+func test_a_pass_under_a_raiders_belly_with_a_hand_of_clearance_is_no_ram() -> void:
+	# The raider's origin sits 0.26 m above its hump's floor and 0.43 m above its lowest wing: a sphere round it as thick as
+	# its nacelles (0.78 m) would stick 0.35 m out of the belly. The drone's top passes 0.3 m under the lowest point.
+	var raider: Combatant = _raider(Vector3(300.0, 0.0, 0.0))
+	await _ticks(2)
+	_drone(Vector3(285.0, -0.431 - 0.3 - 1.0, 0.0), Basis.IDENTITY, Vector3(40.0, 0.0, 0.0))
+	assert_true(RamMath.is_tunnelling(40.0, 1.0 / 60.0, raider.damageable.core_radius, 1.0), "the swept test's speed")
+	assert_eq(await _fly_past(50), 0, "0.3 m clear is a near miss")
+	assert_eq(raider.damageable.hull.fraction(), 1.0)
+
+
+func test_a_pass_behind_a_starfurys_tail_with_a_hand_of_clearance_is_no_ram() -> void:
+	# The fuselage's aft face is 0.84 m behind the Starfury's origin, its fuselage 1.24 m thick: a sphere that thick round the
+	# origin would stick 0.4 m out aft. The drone, its capsule upright, passes 0.3 m behind the aft face.
+	_drone(Vector3(0.0, -15.0, 0.83746 + 0.3 + 1.0), Basis(Vector3.RIGHT, -PI / 2.0), Vector3(0.0, 40.0, 0.0))
+	assert_true(RamMath.is_tunnelling(40.0, 1.0 / 60.0, alpha.damageable.core_radius, 1.0), "the swept test's speed")
+	assert_eq(await _fly_past(50), 0, "0.3 m clear is a near miss")
+	assert_eq(alpha.damageable.hull.fraction(), 1.0)
+
+
+func test_a_pair_that_survives_a_swept_ram_takes_it_once() -> void:
+	# Two raiders, one dropping belly first onto the other at 29 m/s: past the tunnelling threshold, so the sweep finds it; each
+	# changes velocity by 14.5 m/s (the momentum split), under the raider's lethal 15. Jolt then bounces them for real.
+	var lower: Combatant = _raider(Vector3(300.0, 0.0, 0.0))
+	var upper: Combatant = _raider(Vector3(300.0, 3.0, 0.0))
+	await _ticks(2)
+	lower.ship.linear_velocity = Vector3(0.0, 14.5, 0.0)
+	upper.ship.linear_velocity = Vector3(0.0, -14.5, 0.0)
+	await _ticks(40)
+	assert_lt((upper.ship.linear_velocity - lower.ship.linear_velocity).length(), 5.0, "Jolt stopped them against each other")
+	assert_eq(infos.size(), 2, "one ram each: the bounce after the swept ram is the same collision")
+	assert_string_contains(rams.last_ram, "tunnelling", false)
+	var expected: float = RamMath.damage(14.5, 5.0, 15.0, 60.0)
+	for combatant: Combatant in [lower, upper]:
+		assert_false(combatant.damageable.hull.destroyed)
+		assert_almost_eq(combatant.damageable.hull.hp, 60.0 - expected, 0.01, "%s took one ram" % combatant.ship.name)
 
 
 # --- props without a body: the momentum split ---------------------------------------------------------------------
@@ -270,6 +335,10 @@ class TestInTheMainScene extends GutTest:
 		assert_eq(rams.process_physics_priority, RamResolver.LATE_PRIORITY)
 		assert_gt(rams.process_physics_priority, hits.process_physics_priority)
 		assert_lt(rams.process_physics_priority, waves.process_physics_priority)
+		# The contact maths reads Ship.applied_force as this tick's: every ship must apply its forces before the resolver runs.
+		assert_lt(main.ship.process_physics_priority, rams.process_physics_priority, "the player's ship")
+		for combatant: Combatant in main.ships.all_ships():
+			assert_lt(combatant.ship.process_physics_priority, rams.process_physics_priority, "a pooled ship")
 
 	func test_a_raider_destroyed_by_a_ram_counts_as_a_kill() -> void:
 		var rams := main.get_node(^"Combat/RamResolver") as RamResolver

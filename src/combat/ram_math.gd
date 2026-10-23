@@ -6,10 +6,11 @@ extends RefCounted
 ##
 ##     damage = hull_max × clamp((Δv - safe) / (lethal - safe), 0, 1)²
 ##
-## Δv comes from Jolt at ordinary speeds (`contact_dv`: the velocity change a contact caused) and from the momentum
-## split of a perfectly inelastic hit when the other body is a prop without a physics body (`split_dv`). At tunnelling speeds
-## (`is_tunnelling`) Jolt cannot be trusted to see the hit, and `sweep` finds it: the other body's origin, moving relative to
-## this body over one tick, against this body's hit volumes grown by the other's core radius.
+## Δv comes from Jolt at ordinary speeds (`contact_dv`: the velocity change a contact caused). When `sweep` finds the hit
+## instead, Δv is the momentum split of a perfectly inelastic hit (`split_dv`): at tunnelling speeds (`is_tunnelling`), where
+## Jolt cannot be trusted to see it, and whenever the other body is a prop without a physics body. The sweep moves the other
+## body's origin, relative to this body over one tick, against this body's hit volumes grown by the other's origin core
+## (`origin_core_radius`, a sphere round its origin that stays inside its hull).
 
 ## One tick of relative motion beyond this share of the smaller core radius is a tunnelling speed (§16 D32).
 const TUNNEL_FRACTION: float = 0.5
@@ -66,13 +67,31 @@ static func sweep(shapes: Array[HitShape], bounding_radius: float, a: Vector3, b
 	return best if best < INF else -1.0
 
 
-## Radius of the largest sphere that fits inside one of `shapes`: a box's smallest half extent, a capsule's radius. What a
-## ram treats as the body's solid core (`Damageable.core_radius`); 0 without shapes.
+## Radius of the largest sphere that fits inside one of `shapes`, wherever it sits: a box's smallest half extent, a capsule's
+## radius. How thick the body's solid core is, for the tunnelling threshold (`Damageable.core_radius`); 0 without shapes.
 static func core_radius(shapes: Array[HitShape]) -> float:
 	var best: float = 0.0
 	for shape: HitShape in shapes:
 		var inner: float = shape.radius
 		if shape.kind == HitShape.Kind.BOX:
 			inner = minf(shape.half_extents.x, minf(shape.half_extents.y, shape.half_extents.z))
+		best = maxf(best, inner)
+	return best
+
+
+## Radius of the largest sphere centred on the body origin that fits inside one of `shapes`: the distance from the origin to
+## the nearest face of a shape that holds it (a box's nearest face, a capsule's wall), 0 when no shape holds the origin. The
+## core a swept ram moves (`Damageable.origin_core_radius`): it never sticks out of the hull, so a near miss is no ram.
+static func origin_core_radius(shapes: Array[HitShape]) -> float:
+	var best: float = 0.0
+	for shape: HitShape in shapes:
+		var p: Vector3 = shape.transform.affine_inverse() * Vector3.ZERO
+		var inner: float = 0.0
+		if shape.kind == HitShape.Kind.BOX:
+			var h: Vector3 = shape.half_extents
+			inner = minf(h.x - absf(p.x), minf(h.y - absf(p.y), h.z - absf(p.z)))
+		else:
+			var axial: float = p.y - clampf(p.y, -shape.half_segment, shape.half_segment)
+			inner = shape.radius - sqrt(p.x * p.x + p.z * p.z + axial * axial)
 		best = maxf(best, inner)
 	return best

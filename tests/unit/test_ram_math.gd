@@ -151,3 +151,19 @@ func test_core_radius_is_the_largest_sphere_inside_one_shape() -> void:
 	assert_eq(RamMath.core_radius([] as Array[HitShape]), 0.0)
 	var pods: Array[HitShape] = [HitShape.make_capsule(Transform3D.IDENTITY, 0.78, 5.2, "nacelle")] as Array[HitShape]
 	assert_almost_eq(RamMath.core_radius(pods), 0.78, EPS, "a capsule's radius")
+
+
+func test_the_origin_core_is_the_largest_sphere_round_the_origin_inside_one_shape() -> void:
+	# The Starfury's fuselage box sits 1.76 m forward of the origin and 0.13 m up: its aft face is 0.837 m behind the origin.
+	var fuselage := HitShape.make_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.13393, -1.76254)), Vector3(3.06765, 2.47, 5.2))
+	var pod := HitShape.make_capsule(Transform3D(Basis.IDENTITY, Vector3(5.5, 2.2, 0.6)), 0.82, 5.9)
+	assert_almost_eq(RamMath.origin_core_radius([fuselage, pod] as Array[HitShape]), 0.83746, 1e-4, "the aft face is nearest")
+	assert_lt(RamMath.origin_core_radius([fuselage] as Array[HitShape]), RamMath.core_radius([fuselage] as Array[HitShape]),
+			"smaller than the shape's own inscribed sphere, which is not centred on the origin")
+	assert_eq(RamMath.origin_core_radius([pod] as Array[HitShape]), 0.0, "the origin outside every shape: no core")
+	# A capsule round the origin, its axis offset by 0.1 m: the radius less the offset.
+	var hull := HitShape.make_capsule(Transform3D(Basis.IDENTITY, Vector3(0.1, 0.0, 0.0)), 1.0, 6.0)
+	assert_almost_eq(RamMath.origin_core_radius([hull] as Array[HitShape]), 0.9, EPS)
+	# A turned box: the distance is measured in the box's own frame.
+	var turned := HitShape.make_box(Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3(0.5, 0.0, 0.0)), Vector3(4.0, 2.0, 2.0))
+	assert_almost_eq(RamMath.origin_core_radius([turned] as Array[HitShape]), 0.5, EPS, "the turned box's 1 m half depth, less 0.5 m")

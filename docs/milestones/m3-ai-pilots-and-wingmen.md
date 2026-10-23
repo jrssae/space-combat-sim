@@ -233,8 +233,10 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
     since then, takes Δv = |v_now - v_prev| minus what the ship's own thrust could have added in that time.
   - **Tunnelling speeds and buoys** (closing speed × dt over half the smaller `core_radius`, or no physics body): a
     target-relative swept test like `HitResolver`'s, the other body's origin against this body's shapes inflated by the
-    other's `core_radius`. A hit at tunnelling speed destroys both (damage = `hull_max`, cause `ram`); a buoy ram uses
-    the momentum split `Δv_self = v_rel × m_other / (m_self + m_other)` (buoy mass from its spec, about 2 t).
+    other's `core_radius`. Every swept hit, at tunnelling speed or against a buoy, uses the momentum split
+    `Δv_self = v_rel × m_other / (m_self + m_other)` through the normal damage curve (buoy mass from its spec, about 2 t), so
+    a tunnelling hit is fatal once each ship's split Δv reaches its lethal value (600 m/s closing: 300 m/s each, both
+    destroyed). Controller ruling (2026-10-22, M3-T04 review), replacing "a hit at tunnelling speed destroys both".
   - One ram per pair per contact (no damage every tick of a resting contact). God mode protects the player; the bounce
     still happens. `HitInfo.shooter_id` is the other ship, so a raider that rams the player is not credited as a kill by
     the player, but `waves.kills` still counts every raider death (M2 rule).
@@ -455,41 +457,59 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
 **M3-T04 (ram damage).**
 - `RamResolver` is `Combat/RamResolver` in `main.tscn`, priority 210. It needs no wiring: it reads every active `Damageable` from
   the group each tick. `main.gd` is unchanged. Signal `ram_resolved(info)` mirrors `hit_resolved`; nothing plays a sound or a
-  flash for a ram yet.
+  flash for a ram yet. Every `Ship` must run its `_physics_process` before 210, because the resolver reads
+  `Ship.applied_force()` as this tick's (the main-scene test checks the player's and the pool's priorities).
+- The node only reads the scene and sweeps. `RamTracker` (`src/combat/ram_tracker.gd`, pure, typed inner classes `Sample`,
+  `Touch`, `ContactRam`) keeps everything between ticks: the previous tick's velocities and contacts, the contact windows and
+  the one-ram-per-collision rules. `tests/unit/test_ram_tracker.gd` covers it without Jolt.
 - Contacts come from the direct body state (`PhysicsServer3D.body_get_direct_state`: collider ids, points, normals). `Ship` sets
   `contact_monitor` and `max_contacts_reported = 8` in `_apply_newtonian_body`.
 - One tick of contact is not enough. A Starfury nose into a raider gave a speculative contact one tick before the bounce, and
   Jolt spread the bounce over two steps. So a new contact opens a window of `CONTACT_WINDOW_TICKS` (3) ticks, counting the tick
-  it is first reported, and the ram lands once with the largest Δv seen. A lethal Δv lands at once. Otherwise the damage
-  arrives up to 2 ticks (33 ms) after the first contact report.
+  it is first reported, and the ram lands once with the largest Δv seen. A lethal Δv lands at once; otherwise the damage
+  arrives up to 2 ticks (33 ms) after the first contact report. Windows are per pair (hull, other), so a second body hitting
+  during a window gets its own ram and shooter. Two bodies hitting the same hull within 3 ticks each see its total Δv.
 - Thrust is subtracted exactly, not as a bound. `Ship.applied_force()` is the World-frame sum of the forces the ship applied on
   its last tick (nozzles, RCS, the assist's speed cap, the environment). `RamMath.contact_dv(v_now, v_before, own_dv)` takes
   what those forces added over the window.
-- The ram values live on `Damageable` (`core_radius`, `ram_safe_dv_mps`, `ram_lethal_dv_mps`, `ram_mass_kg`, `ram_mass()`), so
-  the resolver treats ships and buoys alike. `ShipAssembly._wire` copies them from the `ShipSpec` (a file the brief did not
-  list). `NavBuoy` has `MASS_KG` 2000 and `RAM_LETHAL_DV_MPS` 15.
-- `core_radius` is the largest sphere inside any one shape (a box's smallest half extent, a capsule's radius): Starfury 1.235 m
-  (fuselage), raider 0.78 m (nacelles), buoy 0.4 m. A sphere centred on the body origin would be 0.26 m for the raider, whose
-  centre of mass sits low in the hump, and would make almost every raider bump a tunnelling ram.
+- Swept hits use the momentum split for both sides, through the normal curve (controller ruling of 2026-10-22, also written
+  into the T04 notes above). There is no "destroys both" rule any more, and with it no cliff at the tunnelling threshold. At
+  600 m/s closing each Starfury's split Δv is 300 m/s, so both die. Two raiders at 29 m/s get 14.5 m/s each (under their
+  lethal 15) and survive with 6 of 60 points.
+- Two radii. `core_radius` is the largest sphere inside any one shape (Starfury 1.235 m, raider 0.78 m, buoy 0.4 m) and only
+  sets the tunnelling threshold. `origin_core_radius` is the largest sphere centred on the body origin inside one shape
+  (Starfury 0.837 m to the fuselage's aft face, raider 0.256 m to the hump's floor, buoy about 0.4 m) and is what the sweep grows the
+  other body's volumes by. The first, centred on the origin, stuck 0.40 m out of the Starfury's tail and 0.35 m out of the
+  raider's belly, so a pass 0.3 m clear was rammed. The near-miss tests check both cases.
 - Tunnelling uses the relative speed `|v_a - v_b|`, not the radial closing speed, because a glancing pass tunnels too. With
-  `TUNNEL_FRACTION` 0.5 the threshold is 37 m/s for two Starfuries and 23.4 m/s for any pair with a raider.
-- Tuning concern for (H): the "tunnelling destroys both" rule makes a cliff for a Starfury against a raider. At 23 m/s relative
-  the Starfury's own Δv is 6.8 m/s (about 2 % of its hull); at 24 m/s both die. Two Starfuries have no cliff, because at 37 m/s
-  each Δv is already over the lethal 18. If the play test finds raider rams too deadly, raise `TUNNEL_FRACTION` or use the
-  momentum split at tunnelling speeds too (still fatal at real tunnelling speeds: 120 m/s gives the Starfury 35 m/s).
-- The swept test runs both ways (each origin against the other's volumes grown by its own core) and takes the earlier touch.
-  Jolt owns a pair while it reports a contact, so no swept test then. Props never ram props. Ships fly through buoys: the buoy
-  has no body and nothing writes the ship's velocity (§15.16), so only the damage happens.
+  `TUNNEL_FRACTION` 0.5 the threshold is 37 m/s for two Starfuries and 23.4 m/s for any pair with a raider. Below it Jolt's
+  contacts decide.
+- At tunnelling speed the sweep runs even while Jolt reports a contact for the pair, because that is when Jolt cannot be
+  trusted (at 10 m a tick two hulls can already overlap deeply when Jolt first sees them, and its push-out need not stop them). `RamTracker` keeps it to one
+  ram per pair per collision: a swept ram cancels the pair's open contact windows, and for `SWEPT_GRACE_TICKS`
+  (`CONTACT_WINDOW_TICKS` + 1) ticks after it the pair opens no contact window and takes no other swept ram. The sweep
+  predicts the hit for the coming step, and Jolt reports the same collision as a contact a tick or two later. A pair Jolt holds
+  in contact below tunnelling speed stays "met" (`keep_touching`), so it is not rammed again when it separates. A contact ram
+  does not block a later swept ram: if Jolt's bounce fails and the cores cross, that is a second, real hit.
+- The swept test runs both ways (each origin against the other's volumes grown by its own origin core) and takes the earlier
+  touch. Props never ram props. Ships fly through buoys: the buoy has no body and nothing writes the ship's velocity (§15.16),
+  so only the damage happens.
+- The ram values live on `Damageable` (`core_radius`, `origin_core_radius`, `ram_safe_dv_mps`, `ram_lethal_dv_mps`,
+  `ram_mass_kg`, `ram_mass()`), so the resolver treats ships and buoys alike. `ShipAssembly._wire` copies the limits from the
+  `ShipSpec` (a file the brief did not list). `NavBuoy` has `MASS_KG` 2000 and `RAM_LETHAL_DV_MPS` 15.
 - Measured in Jolt: a 30 m/s head-on between Starfuries changes each velocity by 14.9 m/s, and each loses 58 % of its hull. A
-  4 m/s head-on changes each by 2 m/s and does nothing. A 40 m/s ram destroys a buoy and leaves the Starfury untouched.
+  4 m/s head-on changes each by 2 m/s and does nothing. A 40 m/s ram destroys a buoy and leaves the Starfury untouched. After a
+  swept ram between two raiders at 29 m/s, Jolt's own bounce changed each by 14.6 m/s, close to the split's 14.5.
+- `ram.last` is labelled before any damage lands, so a raider sent back to the pool by the first side still has its name.
 - `HitInfo.cause` (`CAUSE_BOLT` default, `CAUSE_RAM`, `CAUSE_CONSOLE`) is an 8th optional constructor argument. The console's
   `damage` and `Damageable.kill()` are `console`. `HitResolver.name_of(id)` is now a public static; `RamResolver` uses it for
   `ram.last`.
-- `settings.ram_damage` off clears everything the resolver keeps, so turning it back on never rams a contact that began while it
-  was off. Ships still bounce.
+- `settings.ram_damage` off resets the tracker, so turning it back on never rams a contact that began while it was off. Ships
+  still bounce.
 - For T05/T06: the main-scene test disables the raider's `AiPilotDriver` so avoidance cannot dodge the ram. Ram kills reach
   `waves.kills` through `DestructionDirector.raider_destroyed`, unchanged.
-- `scripts/run_tests.sh`: the main-scene providers line gains `ram`.
+- `scripts/run_tests.sh`: the main-scene providers line gains `ram`. `docs/architecture.md` D32 now says the swept test uses the
+  momentum split for both sides instead of "fatal for both".
 
 ## Definition of done (M3)
 
