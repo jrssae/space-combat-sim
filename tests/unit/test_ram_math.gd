@@ -1,6 +1,6 @@
 extends GutTest
-## RamMath (M3-T04, architecture §16 D32): severity from a ship's own velocity change, the momentum split for a body-less
-## prop, the velocity change a contact caused, the tunnelling-speed rule, the swept core test and the core radius.
+## RamMath (M3-T04, architecture §16 D32): severity from a ship's own velocity change, the momentum split for swept hits, the
+## velocity change a contact caused, the tunnelling-speed rule and the core radius. The swept test itself is ConvexSweep's.
 
 const EPS: float = 1e-6
 const DT: float = 1.0 / 60.0
@@ -94,50 +94,6 @@ func test_tunnelling_speed_is_one_tick_of_relative_motion_over_half_the_smaller_
 	assert_true(RamMath.is_tunnelling(1.0, DT, 0.0, 1.0), "a body with no core always needs the swept test")
 
 
-# --- the swept core test -------------------------------------------------------------------------------------------
-
-
-func _box_hull() -> Array[HitShape]:
-	# A 4 x 2 x 6 m box centred on the body origin.
-	return [HitShape.make_box(Transform3D.IDENTITY, Vector3(4.0, 2.0, 6.0), "fuselage")] as Array[HitShape]
-
-
-func test_a_core_that_crosses_the_hull_in_one_tick_is_found_at_its_entry() -> void:
-	var shapes: Array[HitShape] = _box_hull()
-	var radius: float = sqrt(2.0 * 2.0 + 1.0 + 3.0 * 3.0)
-	# 10 m of relative motion through the box (z from -3 to +3), core 1 m: entry at z = -4, a quarter of the way.
-	var t: float = RamMath.sweep(shapes, radius, Vector3(0.5, 0.2, -6.5), Vector3(0.5, 0.2, 3.5), 1.0)
-	assert_almost_eq(t, 0.25, EPS)
-
-
-func test_a_core_that_passes_beside_the_hull_is_no_ram() -> void:
-	var shapes: Array[HitShape] = _box_hull()
-	var radius: float = sqrt(2.0 * 2.0 + 1.0 + 3.0 * 3.0)
-	assert_eq(RamMath.sweep(shapes, radius, Vector3(3.2, 0.0, -6.5), Vector3(3.2, 0.0, 3.5), 1.0), -1.0, "1.2 m clear of the core")
-	assert_almost_eq(RamMath.sweep(shapes, radius, Vector3(2.9, 0.0, -6.5), Vector3(2.9, 0.0, 3.5), 1.0), 0.25, EPS,
-			"but the core's radius counts")
-
-
-func test_a_core_already_inside_is_found_at_once() -> void:
-	assert_eq(RamMath.sweep(_box_hull(), 4.0, Vector3(0.0, 0.0, 1.0), Vector3(0.0, 0.0, 1.5), 0.5), 0.0)
-
-
-func test_the_earliest_entry_over_every_shape_wins() -> void:
-	var shapes: Array[HitShape] = [
-		HitShape.make_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, 4.0)), Vector3(2.0, 2.0, 2.0), "aft"),
-		HitShape.make_capsule(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, -4.0)), 1.0, 2.0, "nose"),
-	] as Array[HitShape]
-	var t: float = RamMath.sweep(shapes, 6.0, Vector3(0.0, 0.0, -10.0), Vector3(0.0, 0.0, 10.0), 0.0)
-	assert_almost_eq(t, 0.25, EPS, "the nose sphere (z -5) comes before the aft box (z 3)")
-
-
-func test_the_bounding_sphere_is_the_broad_phase() -> void:
-	# The bounding radius is the caller's promise (Damageable.bounding_radius): a path farther out than it plus the core is
-	# never tested against the shapes. Here the promise is broken on purpose, so the box beyond it is not found.
-	assert_almost_eq(RamMath.sweep(_box_hull(), 4.0, Vector3(2.5, 0.0, -10.0), Vector3(2.5, 0.0, 10.0), 1.0), 0.3, EPS)
-	assert_eq(RamMath.sweep(_box_hull(), 1.0, Vector3(2.5, 0.0, -10.0), Vector3(2.5, 0.0, 10.0), 1.0), -1.0)
-
-
 # --- core radius ---------------------------------------------------------------------------------------------------
 
 
@@ -151,19 +107,3 @@ func test_core_radius_is_the_largest_sphere_inside_one_shape() -> void:
 	assert_eq(RamMath.core_radius([] as Array[HitShape]), 0.0)
 	var pods: Array[HitShape] = [HitShape.make_capsule(Transform3D.IDENTITY, 0.78, 5.2, "nacelle")] as Array[HitShape]
 	assert_almost_eq(RamMath.core_radius(pods), 0.78, EPS, "a capsule's radius")
-
-
-func test_the_origin_core_is_the_largest_sphere_round_the_origin_inside_one_shape() -> void:
-	# The Starfury's fuselage box sits 1.76 m forward of the origin and 0.13 m up: its aft face is 0.837 m behind the origin.
-	var fuselage := HitShape.make_box(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.13393, -1.76254)), Vector3(3.06765, 2.47, 5.2))
-	var pod := HitShape.make_capsule(Transform3D(Basis.IDENTITY, Vector3(5.5, 2.2, 0.6)), 0.82, 5.9)
-	assert_almost_eq(RamMath.origin_core_radius([fuselage, pod] as Array[HitShape]), 0.83746, 1e-4, "the aft face is nearest")
-	assert_lt(RamMath.origin_core_radius([fuselage] as Array[HitShape]), RamMath.core_radius([fuselage] as Array[HitShape]),
-			"smaller than the shape's own inscribed sphere, which is not centred on the origin")
-	assert_eq(RamMath.origin_core_radius([pod] as Array[HitShape]), 0.0, "the origin outside every shape: no core")
-	# A capsule round the origin, its axis offset by 0.1 m: the radius less the offset.
-	var hull := HitShape.make_capsule(Transform3D(Basis.IDENTITY, Vector3(0.1, 0.0, 0.0)), 1.0, 6.0)
-	assert_almost_eq(RamMath.origin_core_radius([hull] as Array[HitShape]), 0.9, EPS)
-	# A turned box: the distance is measured in the box's own frame.
-	var turned := HitShape.make_box(Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3(0.5, 0.0, 0.0)), Vector3(4.0, 2.0, 2.0))
-	assert_almost_eq(RamMath.origin_core_radius([turned] as Array[HitShape]), 0.5, EPS, "the turned box's 1 m half depth, less 0.5 m")

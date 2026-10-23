@@ -1,7 +1,7 @@
 extends GutTest
 ## Ram damage in Jolt (M3-T04, AC4, architecture §16 D32): two Starfuries meeting at 4 m/s closing take no damage; at 30 m/s
 ## each loses at least half its hull, once per contact; at 600 m/s (10 m per tick) both are destroyed and neither passes through
-## the other unhurt, over 50 seeded offsets where one ship's origin passes through the other's hull; a ship ramming a buoy at
+## the other unhurt, over 50 seeded offsets where the hulls overlap by at least 0.3 m on the pass; a ship ramming a buoy at
 ## 40 m/s destroys it and is not hurt itself; with `god on` the player takes nothing and still bounces; `HitInfo.cause` is
 ## `ram`; the setting `ram_damage` switches it off. Above the tunnelling threshold, a pass 0.3 m clear of a hull is no ram, and
 ## a pair that survives a swept ram takes it once, not again when Jolt bounces them. The inner class runs the real main scene:
@@ -18,6 +18,11 @@ const FACING_ALPHA := Basis(Vector3.UP, PI)
 const SLOW_GAP_M: float = 12.0
 const SEED: int = 20261022
 const TRIALS: int = 50
+## AC4's "inside the hull overlap" (controller ruling): a point of one hull at least this deep inside the other. Written out
+## here rather than read from RamMath.RAM_DEPTH_M, so the oracle shares nothing with the code under test.
+const OVERLAP_M: float = 0.3
+const SAMPLE_M: float = 0.1
+const DZ_STEP_M: float = 0.25
 
 var world: WorldFrame
 var projectiles: Node3D
@@ -160,16 +165,74 @@ func test_with_ram_damage_off_the_ships_bounce_and_take_nothing() -> void:
 # --- tunnelling speeds: the swept test ----------------------------------------------------------------------------
 
 
-## Whether ALPHA 2, flown along z at lateral `offset`, passes one ship's origin through the other's actual hull: some z puts it
-## inside the other's hit volumes, not grown by anything. ALPHA 1's origin sits at (x, -y) in ALPHA 2's frame (it is turned half
-## a circle about +y), so both directions are tried. Only `HitShape.contains`: no core radius, nothing the sweep under test uses.
-func _origin_crosses_hull(offset: Vector2) -> bool:
-	for lateral: Vector2 in [offset, Vector2(offset.x, -offset.y)]:
-		for i: int in 301:
-			var p := Vector3(lateral.x, lateral.y, -15.0 + 0.1 * float(i))
-			for shape: HitShape in alpha.damageable.shapes:
-				if shape.contains(p):
+## Whether ALPHA 2, flown along z at lateral `offset`, puts a point of either hull at least OVERLAP_M inside the other somewhere
+## along the pass: "inside the hull overlap" as the controller ruled for AC4. Real geometry only, nothing the sweep under test
+## uses. Points on a SAMPLE_M grid inside a volume of one ship are tested with `HitShape.contains` against a volume of the other
+## shrunk by OVERLAP_M, at every DZ_STEP_M of the pass and both ways round. A sampled point can only be really inside, so an
+## offset this accepts truly overlaps; a thin overlap the grid misses only makes the oracle stricter.
+func _hulls_overlap(offset: Vector2) -> bool:
+	var shapes: Array[HitShape] = alpha.damageable.shapes  # both ships are Starfuries
+	var abreast := Transform3D(FACING_ALPHA, Vector3(offset.x, offset.y, 0.0))  # ALPHA 2 in ALPHA 1's frame, origins level
+	for mine: HitShape in shapes:
+		for theirs: HitShape in shapes:
+			var mine_at: Vector3 = mine.transform.origin
+			var theirs_at: Vector3 = abreast * theirs.transform.origin
+			var reach: float = _reach(mine) + _reach(theirs) - OVERLAP_M
+			var lateral: float = Vector2(mine_at.x - theirs_at.x, mine_at.y - theirs_at.y).length()
+			if lateral > reach:
+				continue  # never near each other on this pass
+			var half_range: float = sqrt(reach * reach - lateral * lateral)
+			var dz: float = mine_at.z - theirs_at.z - half_range
+			while dz <= mine_at.z - theirs_at.z + half_range:
+				var bravo_pose := Transform3D(FACING_ALPHA, Vector3(offset.x, offset.y, dz))
+				if (_deep_point(mine, Transform3D.IDENTITY, theirs, bravo_pose)
+						or _deep_point(theirs, bravo_pose, mine, Transform3D.IDENTITY)):
 					return true
+				dz += DZ_STEP_M
+	return false
+
+
+## Radius of a sphere round a volume's centre that holds it.
+static func _reach(shape: HitShape) -> float:
+	return shape.half_extents.length() if shape.kind == HitShape.Kind.BOX else shape.half_segment + shape.radius
+
+
+## Whether a grid point inside `a` (its body placed by `a_pose`) is at least OVERLAP_M inside `b` (its body placed by `b_pose`).
+## The grid covers `a`'s own box, cut down to where `b` (shrunk) can be.
+static func _deep_point(a: HitShape, a_pose: Transform3D, b: HitShape, b_pose: Transform3D) -> bool:
+	var a_local: Transform3D = a_pose * a.transform  # a's own frame -> the shared frame
+	var to_a: Transform3D = a_local.affine_inverse()
+	var to_b_body: Transform3D = b_pose.affine_inverse()
+	var a_half: Vector3 = a.half_extents if a.kind == HitShape.Kind.BOX else Vector3(a.radius, a.half_segment + a.radius, a.radius)
+	var b_half: Vector3 = b.half_extents if b.kind == HitShape.Kind.BOX else Vector3(b.radius, b.half_segment + b.radius, b.radius)
+	b_half -= Vector3.ONE * OVERLAP_M
+	if b_half.x < 0.0 or b_half.y < 0.0 or b_half.z < 0.0:
+		return false  # too thin to hold a point that deep
+	var b_frame: Transform3D = b_pose * b.transform
+	var low := Vector3.INF
+	var high := -Vector3.INF
+	for corner: int in 8:
+		var c := Vector3(b_half.x * (1.0 if corner & 1 else -1.0), b_half.y * (1.0 if corner & 2 else -1.0),
+				b_half.z * (1.0 if corner & 4 else -1.0))
+		var in_a: Vector3 = to_a * (b_frame * c)
+		low = low.min(in_a)
+		high = high.max(in_a)
+	low = low.max(-a_half)
+	high = high.min(a_half)
+	if low.x > high.x or low.y > high.y or low.z > high.z:
+		return false
+	var x: float = low.x
+	while x <= high.x:
+		var y: float = low.y
+		while y <= high.y:
+			var z: float = low.z
+			while z <= high.z:
+				var shared: Vector3 = a_local * Vector3(x, y, z)
+				if a.contains(a.transform * Vector3(x, y, z)) and b.contains(to_b_body * shared, -OVERLAP_M):
+					return true
+				z += SAMPLE_M
+			y += SAMPLE_M
+		x += SAMPLE_M
 	return false
 
 
@@ -180,13 +243,15 @@ func test_a_six_hundred_mps_head_on_destroys_both_for_fifty_seeded_offsets() -> 
 	var tried: int = 0
 	var rejected: int = 0
 	while tried < TRIALS:
-		var offset := Vector2(rng.randf_range(-9.0, 9.0), rng.randf_range(-5.0, 5.0))
-		if not _origin_crosses_hull(offset):
+		var offset := Vector2(rng.randf_range(-15.0, 15.0), rng.randf_range(-8.0, 8.0))
+		if not _hulls_overlap(offset):
 			rejected += 1
 			continue
 		tried += 1
 		alpha.damageable.restore()
 		bravo.damageable.restore()
+		# A new encounter: the last trial's swept ram, a few ticks ago, must not count as this one (its grace ticks).
+		rams.tracker.reset()
 		# 600 m/s closing is 10 m per tick; the start gap's phase moves where in a tick the hulls meet.
 		_head_on(600.0, 40.0 + rng.randf_range(0.0, 10.0), offset)
 		for i: int in 12:

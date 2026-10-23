@@ -13,12 +13,13 @@ extends Node
 ##   do not explain, so thrust is never a ram. The lighter body changes more and suffers more.
 ## - **Swept** (two rigid bodies whose relative motion in one tick is more than half the smaller `core_radius`, where Jolt's
 ##   discrete step could miss the hit or push one through the other; or a prop without a physics body, a nav buoy, at any
-##   speed): a target-relative swept test like the `HitResolver`'s moves each body's origin, relative to the other over the
-##   coming step, against the other's hit volumes grown by its own `origin_core_radius`, a sphere round its origin that stays
-##   inside its hull. Each side's Δv is the momentum split of a perfectly inelastic hit, `|v_rel| × m_other / (m_self +
-##   m_other)`, through the same curve: at 600 m/s closing two Starfuries change by 300 m/s each and both are destroyed. The
-##   sweep runs at tunnelling speed even while Jolt reports a contact (that is when Jolt cannot be trusted); `RamTracker` keeps
-##   it to one ram per pair per collision.
+##   speed): shape by shape, `ConvexSweep` sweeps each of one body's hit volumes, relative to the other body over the coming
+##   step, against each of the other's. Two ships ram when a point of either is at least `RamMath.RAM_DEPTH_M` (0.3 m) deep
+##   inside the other: a pass 0.3 m clear is never a ram, and shallower clips are Jolt's. A prop rams at any touch, since
+##   nothing else would notice it. Each side's Δv is the momentum split of a perfectly inelastic hit, `|v_rel| × m_other /
+##   (m_self + m_other)`, through the same curve: at 600 m/s closing two Starfuries change by 300 m/s each and both are
+##   destroyed. The sweep runs at tunnelling speed even while Jolt reports a contact (that is when Jolt cannot be trusted);
+##   `RamTracker` keeps it to one ram per pair per collision.
 ##
 ## God mode protects the player's hull (`Damageable.apply_hit`); the bounce is Jolt's and still happens. `HitInfo.shooter_id` is
 ## the other body and `faction` its faction: relations and friendly fire do not matter, a collision hurts whoever it hits.
@@ -176,28 +177,48 @@ func _resolve_swept(hulls: Array[Dictionary], delta: float) -> void:
 			if both_rigid and not RamMath.is_tunnelling(relative_speed, delta, first_hull.core_radius, second_hull.core_radius):
 				tracker.keep_touching(first["id"], second["id"])  # Jolt's speed: its contacts decide
 				continue
-			var hit: Dictionary = _sweep_into(first, second)
-			var reverse: Dictionary = _sweep_into(second, first)
-			if hit.is_empty() or (not reverse.is_empty() and float(reverse["t"]) < float(hit["t"])):
-				hit = reverse
+			# A ship's Jolt contacts handle shallow clips; a prop has no body, so any touch is a ram.
+			var hit: Dictionary = _sweep_pair(first, second, both_rigid)
 			if not hit.is_empty() and tracker.swept_meeting(first["id"], second["id"]):
 				_ram_swept(first, second, hit["point"], KIND_TUNNEL if both_rigid else KIND_PROP)
 
 
-# `other`'s origin, moving relative to `hull` over this tick, against `hull`'s volumes grown by `other`'s origin core:
-# {t, point (World-local, `other`'s origin at the touch)}, or empty.
-func _sweep_into(hull: Dictionary, other: Dictionary) -> Dictionary:
-	var to_body: Basis = hull["to_body"]
-	var start: Vector3 = hull["start"]
-	var end: Vector3 = hull["end"]
-	var a: Vector3 = to_body * ((other["start"] as Vector3) - start)
-	var b: Vector3 = to_body * ((other["end"] as Vector3) - end)
-	var damageable: Damageable = hull["damageable"]
-	var t: float = RamMath.sweep(damageable.shapes, damageable.bounding_radius, a, b,
-			(other["damageable"] as Damageable).origin_core_radius)
-	if t < 0.0:
-		return {}
-	return {"t": t, "point": start + (end - start) * t + (hull["basis"] as Basis) * (a + t * (b - a))}
+# Shape by shape, whether some point of one body comes at least `RamMath.RAM_DEPTH_M` deep inside the other over this tick,
+# either way round (`deep`), or touches it at all (not `deep`: a prop). `ConvexSweep` is exact for boxes and capsules at any
+# speed. Worked in `second`'s frame at the tick's start, `first` moving relative to it in a straight line. Each step is
+# cheaper than the next and filters for it: the bodies' bounding spheres, a volume's swept box against the other body's box
+# and then against each of its volumes' boxes, the whole volumes, then the shrunk ones. The first pair of volumes that rams
+# decides. {point}: World-local, between those two volumes when their bounding spheres met (best effort, for the damage
+# zones); empty for no ram.
+func _sweep_pair(first: Dictionary, second: Dictionary, deep: bool) -> Dictionary:
+	var to_second: Basis = second["to_body"]
+	var second_start: Vector3 = second["start"]
+	var second_move: Vector3 = (second["end"] as Vector3) - second_start
+	var start: Vector3 = to_second * ((first["start"] as Vector3) - second_start)
+	var move: Vector3 = to_second * ((first["end"] as Vector3) - (first["start"] as Vector3) - second_move)
+	var mine: Damageable = first["damageable"]
+	var theirs: Damageable = second["damageable"]
+	if SweepMath.segment_sphere(start, start + move, Vector3.ZERO, mine.bounding_radius + theirs.bounding_radius) < 0.0:
+		return {}  # the bodies never come near each other this tick
+	var pose := Transform3D(to_second * (first["basis"] as Basis), start)
+	for i: int in mine.ram_volumes.size():
+		var a: ConvexSweep.Convex = mine.ram_volumes[i].placed(pose)
+		var swept: AABB = a.swept_bounds(move)
+		if not swept.intersects(theirs.ram_bounds):
+			continue
+		var a_core: ConvexSweep.Convex = null
+		for j: int in theirs.ram_volumes.size():
+			var b: ConvexSweep.Convex = theirs.ram_volumes[j]
+			if not swept.intersects(b.bounds) or not ConvexSweep.overlaps(a, move, b):
+				continue
+			if deep:
+				if a_core == null:
+					a_core = mine.ram_cores[i].placed(pose)
+				if not (ConvexSweep.overlaps(a, move, theirs.ram_cores[j]) or ConvexSweep.overlaps(a_core, move, b)):
+					continue  # they touch, but not that deep: Jolt's
+			var t: float = maxf(ConvexSweep.spheres_meet(a, move, b), 0.0)
+			return {"point": second_start + second_move * t + (second["basis"] as Basis) * ((a.centre + move * t + b.centre) * 0.5)}
+	return {}
 
 
 # Both sides of a swept hit, each by its own share of the momentum split.

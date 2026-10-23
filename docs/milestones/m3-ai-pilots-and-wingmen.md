@@ -232,11 +232,15 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
     ships; `RamResolver` keeps every active ship's velocity from its previous run and, for a pair whose contact began
     since then, takes Δv = |v_now - v_prev| minus what the ship's own thrust could have added in that time.
   - **Tunnelling speeds and buoys** (closing speed × dt over half the smaller `core_radius`, or no physics body): a
-    target-relative swept test like `HitResolver`'s, the other body's origin against this body's shapes inflated by the
-    other's `core_radius`. Every swept hit, at tunnelling speed or against a buoy, uses the momentum split
+    target-relative swept test, each of one body's hit volumes against each of the other's over the tick (as built: exact for
+    boxes and capsules, see the as-built note). Every swept hit, at tunnelling speed or against a buoy, uses the momentum split
     `Δv_self = v_rel × m_other / (m_self + m_other)` through the normal damage curve (buoy mass from its spec, about 2 t), so
     a tunnelling hit is fatal once each ship's split Δv reaches its lethal value (600 m/s closing: 300 m/s each, both
     destroyed). Controller ruling (2026-10-22, M3-T04 review), replacing "a hit at tunnelling speed destroys both".
+  - AC4's "seeded offsets inside the hull overlap" means offsets at which the two hulls' collision shapes, as built from the
+    hardpoints, interpenetrate by at least 0.3 m somewhere along the pass. Every such offset at 600 m/s must ram both (both
+    destroyed); a pass with 0.3 m or more clearance must not ram; shallower overlaps (thin claw tips) may be left to Jolt.
+    Controller ruling (2026-10-23, M3-T04 re-review).
   - One ram per pair per contact (no damage every tick of a resting contact). God mode protects the player; the bounce
     still happens. `HitInfo.shooter_id` is the other ship, so a raider that rams the player is not credited as a kill by
     the player, but `waves.kills` still counts every raider death (M2 rule).
@@ -476,11 +480,29 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
   into the T04 notes above). There is no "destroys both" rule any more, and with it no cliff at the tunnelling threshold. At
   600 m/s closing each Starfury's split Δv is 300 m/s, so both die. Two raiders at 29 m/s get 14.5 m/s each (under their
   lethal 15) and survive with 6 of 60 points.
-- Two radii. `core_radius` is the largest sphere inside any one shape (Starfury 1.235 m, raider 0.78 m, buoy 0.4 m) and only
-  sets the tunnelling threshold. `origin_core_radius` is the largest sphere centred on the body origin inside one shape
-  (Starfury 0.837 m to the fuselage's aft face, raider 0.256 m to the hump's floor, buoy about 0.4 m) and is what the sweep grows the
-  other body's volumes by. The first, centred on the origin, stuck 0.40 m out of the Starfury's tail and 0.35 m out of the
-  raider's belly, so a pass 0.3 m clear was rammed. The near-miss tests check both cases.
+- The swept test is shape by shape (`src/combat/convex_sweep.gd`, `ConvexSweep`: GJK on the Minkowski difference of a hit volume
+  swept along the tick's relative move and another volume, support functions for boxes and capsules, exact at any speed).
+  Two ships ram when a point of either comes at least `RamMath.RAM_DEPTH_M` (0.3 m) deep inside a volume of the other, tested
+  both ways by shrinking one side's volume by 0.3 m. A prop rams at any touch (no Jolt body would notice it otherwise).
+  Filters in order: the bodies' bounding spheres, a volume's swept box against the other body's box and each of its volumes'
+  boxes, the whole volumes, then the shrunk ones; the first pair of volumes that rams decides. `Damageable` caches its volumes
+  (`ram_volumes`, `ram_cores`, `ram_bounds`) when it builds its shapes. The touch point is where the two volumes' bounding
+  spheres met (best effort, for the damage zones).
+- Why not the review's chain of inscribed spheres: a sphere swept against a box grown by its radius on each axis is square
+  at the box's edges, so a 1.235 m fuselage sphere would ram a box edge it passes 0.5 m clear of; and one chain down the middle
+  of a flat strut misses deep overlaps at its wide edges. The exact sweep has neither problem and passed seeded cross-checks
+  against a separating-axis test (box pairs) and exact point distances (capsules) at 241 instants of each move.
+- `core_radius` (largest sphere inside any one shape: Starfury 1.235 m, raider 0.78 m, buoy 0.4 m) only sets the tunnelling
+  threshold. Round 1's origin-centred core is gone.
+- Band probe (AC4 setup, 600 m/s, 15 seeded offsets per band of the origin's distance from the other hull, a tracker reset
+  between trials): round 1 had both destroyed at 15/15, 9/15 and 6/15 for 0-0.84 m, 0.84-1.235 m and beyond; now 15/15 in
+  every band. The AC4 test draws its 50 offsets from a ±15 × ±8 m square with a geometry oracle (grid points inside one
+  hull's volumes tested with `HitShape.contains` against the other's shrunk by 0.3 m, every 0.25 m of the pass, both ways);
+  it accepted 50 and rejected 22. Each trial resets the tracker, since the last trial's swept ram a few ticks earlier would
+  otherwise still be inside its grace ticks.
+- Cost (`ram.resolve_us`, headless, another Godot run in parallel): two pairs of Starfuries passing at 600 m/s closing peak at
+  0.17-1.2 ms on their worst tick; over the band probe the median tick is 0.1 ms, p95 0.5 ms, the worst 1.5 ms. Round 1's
+  origin sweep: p95 0.44 ms, worst 0.93 ms.
 - Tunnelling uses the relative speed `|v_a - v_b|`, not the radial closing speed, because a glancing pass tunnels too. With
   `TUNNEL_FRACTION` 0.5 the threshold is 37 m/s for two Starfuries and 23.4 m/s for any pair with a raider. Below it Jolt's
   contacts decide.
@@ -491,11 +513,10 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
   predicts the hit for the coming step, and Jolt reports the same collision as a contact a tick or two later. A pair Jolt holds
   in contact below tunnelling speed stays "met" (`keep_touching`), so it is not rammed again when it separates. A contact ram
   does not block a later swept ram: if Jolt's bounce fails and the cores cross, that is a second, real hit.
-- The swept test runs both ways (each origin against the other's volumes grown by its own origin core) and takes the earlier
-  touch. Props never ram props. Ships fly through buoys: the buoy has no body and nothing writes the ship's velocity (§15.16),
-  so only the damage happens.
-- The ram values live on `Damageable` (`core_radius`, `origin_core_radius`, `ram_safe_dv_mps`, `ram_lethal_dv_mps`,
-  `ram_mass_kg`, `ram_mass()`), so the resolver treats ships and buoys alike. `ShipAssembly._wire` copies the limits from the
+- Props never ram props. Ships fly through buoys: the buoy has no body and nothing writes the ship's velocity (§15.16), so only
+  the damage happens.
+- The ram values live on `Damageable` (`core_radius`, `ram_volumes`, `ram_cores`, `ram_bounds`, `ram_safe_dv_mps`,
+  `ram_lethal_dv_mps`, `ram_mass_kg`, `ram_mass()`), so the resolver treats ships and buoys alike. `ShipAssembly._wire` copies the limits from the
   `ShipSpec` (a file the brief did not list). `NavBuoy` has `MASS_KG` 2000 and `RAM_LETHAL_DV_MPS` 15.
 - Measured in Jolt: a 30 m/s head-on between Starfuries changes each velocity by 14.9 m/s, and each loses 58 % of its hull. A
   4 m/s head-on changes each by 2 m/s and does nothing. A 40 m/s ram destroys a buoy and leaves the Starfury untouched. After a
@@ -509,7 +530,8 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
 - For T05/T06: the main-scene test disables the raider's `AiPilotDriver` so avoidance cannot dodge the ram. Ram kills reach
   `waves.kills` through `DestructionDirector.raider_destroyed`, unchanged.
 - `scripts/run_tests.sh`: the main-scene providers line gains `ram`. `docs/architecture.md` D32 now says the swept test uses the
-  momentum split for both sides instead of "fatal for both".
+  momentum split for both sides and what it guarantees (an overlap of 0.3 m or more always rams; a shallower clip between two
+  ships is Jolt's).
 
 ## Definition of done (M3)
 
