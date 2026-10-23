@@ -3,8 +3,9 @@ extends RefCounted
 ## The AI's "don't shoot through friends" check (architecture §16 D31). Pure. The lane is the straight bolt path from the
 ## shooter along `aim_dir`, short of the target (`0 < along < range_m`); a contact closes it when its centre is within its
 ## bounding radius plus `CLEARANCE_M` of that line and it is a friendly, or, with friendly fire on (a bolt then hurts any
-## hull but the shooter's), any ship that is not hostile. The target itself never closes the lane, nor do hostiles (hitting
-## one is fine) or props (buoys: every bolt hits them whatever the setting, so the setting changes nothing about them).
+## hull but the shooter's), any ship that is not hostile. A friendly prop (a buoy or station of the shooter's faction)
+## closes it like a friendly ship. The target itself never closes the lane, nor do hostiles (hitting one is fine) or
+## other props (buoys: every bolt hits them whatever the setting, so the setting changes nothing about them).
 ## `AttackBrain` asks before it holds the trigger; the check runs in both settings.
 
 ## Clearance around a contact's bounding sphere, m: the muzzles sit a few metres off the ship's centre line.
