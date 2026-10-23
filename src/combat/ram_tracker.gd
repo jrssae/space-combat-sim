@@ -161,6 +161,8 @@ func swept_meeting(a: int, b: int) -> bool:
 
 ## Phase 2, for a rigid pair the resolver does not sweep this tick: a pair that met stays met while Jolt holds it in contact.
 func keep_touching(a: int, b: int) -> void:
+	if _touching.is_empty():
+		return
 	var key: String = pair_key(a, b)
 	if _in_contact.has(key) and _touching.has(key):
 		_touching_now[key] = true
