@@ -507,6 +507,61 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
   five Starfury chunks as mesh-only debris (no Starfury splat sets until T08) instead of 12 generic shards.
   `test_destruction.gd` was updated to expect that.
 
+**M3-T05 (contacts, avoidance, fire lane).**
+- `Contact` has the brief's fields. `id` is the `Targetable`'s instance id (the same as `TargetInfo.id` and a
+  `TargetingController` selection, so `target_id` and `p.target.id` compare directly); a hull without a `Targetable` (test
+  drones) uses its body's id. `target_id` is -1 when nothing is selected or the body has no targeting computer.
+  `relation` is to the perceiving ship. The scan makes one stamped copy per faction and shares it between every ship of that
+  faction: brains read contacts, never write them.
+- `ContactScan.shared(tree)` is a static cache keyed by `Engine.get_physics_frames()` (the first driver of a tick builds it).
+  It is also rebuilt within a frame when a body it saw has been freed (GUT tears worlds down mid-frame); `invalidate()`
+  drops it; `from_tree(tree)` is an uncached scan. A body counts while its `Targetable` or its `Damageable` is active (parked
+  pool ships never do). A body added mid-frame appears from the next frame, and a test that calls `driver.step()` several times
+  in one physics frame sees the first call's contacts (targets are still read fresh, as in M2).
+- `Perception` gains `contacts`, `incoming_fire` (an **int**, the count of hostile bolts passing within 15 m in 2 s; not
+  a list, so T06's evade finds the shooter among the contacts), `last_hit_s` (from `Damageable.hit_taken`, so T04's ram hits
+  count too; -INF until the first hit, reset when a brain is set) and, beyond the brief, `friendly_fire` (the setting this
+  tick: `FireLane` needs it and brains must not read `Settings`).
+- **Desired-velocity protocol** (how the driver filters "every brain's output"): `PilotBrain.desired_velocity` and
+  `has_desired_velocity`, set by the new helper `seek_velocity(flight, p, v_des)` (seek + record), which `PatrolBrain` and
+  `AttackBrain` now use. The driver clears the flag before each `think`; a brain that delegates clears its inner brain's flag
+  and copies both fields back (`AggroBrain`). **T06's `AiPilot` must forward its behaviour's desired velocity the same way.**
+  A brain that coasts leaves the flag false and the current velocity is its wish; a held brake (all stop) is never filtered.
+- `AiPilotDriver`: after `think`, `AvoidanceMath.filter` on the wish; when it changes it, the thrust (mains, retros, strafe) is
+  sought again toward the filtered velocity, harder when `urgent` (`PilotSteering.seek` gained an optional `horizon_s`;
+  the driver uses 0.25 s instead of 1 s). The turn command and the combat command stay the brain's. With nothing
+  threatening, the brain's command reaches the ship untouched. The tie-break seed is `hash(display_name)` (deterministic per
+  ship, no spawner change). Public `avoiding` / `avoiding_urgent` (this tick) for tests and T06's `ai` provider; no console
+  provider here.
+- `AvoidanceMath` predicts with the **wish**, not the current velocity: the dodge then shrinks as the ship's position moves
+  off the line, not as its velocity swings, which keeps the loop from chattering against the seek. Horizon = time to stop the
+  larger of the wished and current relative speed on the retros, at least 4 s; a threat is a closest approach under the
+  radii + 15 m with `0 < t* < horizon`. The dodge is perpendicular to the relative velocity, sized exactly (a quadratic) so
+  the filtered straight line clears radii + 15 + 1 m, capped at the relative speed; several threats add. Relative speeds under
+  3 m/s (formation) are not predicted: inside the margin they push apart at `(reach - d) / 2 s` plus any closing speed.
+  Ties (offset under 0.1 m): "right of the relative velocity, world up", turned by a seeded angle within ±40°; the base is odd
+  in the relative velocity, so two ships meeting dead-on dodge apart for any pair of seeds (unit-tested over 625 pairs).
+  `urgent` = closest approach sooner than a 90° turn + 1 s, or inside the margin and closing faster than 3 m/s.
+- `FireLane.clear(own_pos, aim_dir, range_m, contacts, target_id := 0, friendly_fire := false)`: two arguments beyond the
+  brief (the target must be excluded, and the rule depends on the setting). Closed by a friendly, or with friendly fire on by
+  any **non-hostile** ship (the brief's "any non-target ship", read with T02's note: a hostile in the way is fair game),
+  within its radius + 5 m of the line, `0 < along < range`. Props never close it: buoys are hit by any bolt whatever the
+  setting. `AttackBrain` asks with the nose direction (where the bolts go) and the range to the target.
+- Jolt numbers (60 Hz, `test_ai_avoidance`, all runs in one world 6 km apart): head-on 20/20 closest 32.7-35.8 m against
+  radii 17.7-20.2 m; buoy at 100 m/s 25.4-27.2 m against 10.3-11.6 m; every encounter engages once with at most one strafe
+  reversal. The same at the 0.1 s step (`time_scale` 6). With the filter disabled all 20 head-on runs collide (3-8 m) and every
+  buoy run goes through the buoy.
+- M2 AC9 after the change (`test_ai_attack`, the attack raider now avoids the drone it attacks): first fire 12.9 s (M2: 13.5),
+  first hit 15.5 s (same), closest approach 394 m (391), 65 hits; same-seed runs still match to 0.0 m. Patrol, idle and
+  driver tests unchanged.
+- Cost (headless, 13 AI ships within 2 km, M2 attack brains, 39 bolts in flight; a temporary probe, not committed): the
+  drivers take about 1.0 ms per tick, of which about 0.64 ms is the M2 path (perception, retarget, brain) and about 0.32 ms
+  this task (scan about 90 us per tick, `contacts_for` about 110 us and `incoming_fire` about 65 us and the filter about 55 us for
+  all 13). Hostility of bolts is resolved once per faction per scan. AC13's 1.5 ms leaves T06 roughly 0.5 ms; the
+  incoming-fire count grows with the bolts in flight.
+- For T07: two Starfuries have a reach of about 2 x 10.1 + 15 = 35 m, so slots closer than that are pushed apart all the
+  time; AC9's "never closer than 15 m" fits slot spacings of 40 m or more.
+
 ## Definition of done (M3)
 
 - T01-T12 merged into `m3`, `scripts/run_tests.sh` green, `docs/third-party.md` current, no generated binaries committed.

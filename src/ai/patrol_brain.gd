@@ -34,7 +34,7 @@ func think(p: Perception, _dt: float) -> PilotCommand:
 	var speed: float = minf(cruise_mps, 0.8 * sqrt(2.0 * p.capability.a_retro * distance))
 	var v_des: Vector3 = dir * speed
 	cmd.flight.rot = PilotSteering.face(p.basis, dir, p.capability.rate_max_rad)
-	PilotSteering.apply_seek(cmd.flight, PilotSteering.seek(p.velocity, v_des, p.basis, p.capability))
+	seek_velocity(cmd.flight, p, v_des)
 	return cmd
 
 

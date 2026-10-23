@@ -9,8 +9,8 @@ extends RefCounted
 ##   `FlightModel.AXIS_SIGN` and the rate limits. Roll is never commanded. With the direction dead astern the nose pitches up.
 ## - **seek**: the velocity error `v_des - v` is met with the mains when it is within `MAINS_CONE_DEG` of the nose, the
 ##   retros when it is within `180 - RETRO_CONE_DEG` of the tail, and the RCS for its sideways part. Each level is the error
-##   divided by what the thrusters give in `HORIZON_S`, clamped to 0..1, so a small error gets a gentle push; under
-##   `COAST_BELOW_MPS` nothing is commanded.
+##   divided by what the thrusters give in `HORIZON_S` (or the `horizon_s` given: the driver's urgent dodge seeks harder),
+##   clamped to 0..1, so a small error gets a gentle push; under `COAST_BELOW_MPS` nothing is commanded.
 
 ## s^-1. The face loop's gain; the assist's own rate gain (`ShipSpec.assist_gain_k`) is 6, so the cascade is stable.
 const K_FACE: float = 2.5
@@ -50,7 +50,8 @@ static func face(basis: Basis, direction_world: Vector3, rate_max_rad: Vector3, 
 
 
 ## The thrust levels that move the velocity from `velocity` toward `v_des`: `{"main": 0..1, "retro": 0..1, "strafe": Vector2}`.
-static func seek(velocity: Vector3, v_des: Vector3, basis: Basis, capability: ShipCapability) -> Dictionary:
+static func seek(velocity: Vector3, v_des: Vector3, basis: Basis, capability: ShipCapability,
+		horizon_s: float = HORIZON_S) -> Dictionary:
 	var out: Dictionary = {"main": 0.0, "retro": 0.0, "strafe": Vector2.ZERO}
 	var dv: Vector3 = v_des - velocity
 	var dv_len: float = dv.length()
@@ -59,11 +60,11 @@ static func seek(velocity: Vector3, v_des: Vector3, basis: Basis, capability: Sh
 	var dv_b: Vector3 = basis.transposed() * dv
 	var angle_deg: float = rad_to_deg(atan2(Vector3(dv_b.x, dv_b.y, 0.0).length(), -dv_b.z))
 	if angle_deg < MAINS_CONE_DEG:
-		out["main"] = clampf(-dv_b.z / (capability.a_main * HORIZON_S), 0.0, 1.0)
+		out["main"] = clampf(-dv_b.z / (capability.a_main * horizon_s), 0.0, 1.0)
 	elif angle_deg > RETRO_CONE_DEG:
-		out["retro"] = clampf(dv_b.z / (capability.a_retro * HORIZON_S), 0.0, 1.0)
-	out["strafe"] = Vector2(clampf(dv_b.x / (capability.a_rcs.x * HORIZON_S), -1.0, 1.0),
-			clampf(dv_b.y / (capability.a_rcs.y * HORIZON_S), -1.0, 1.0))
+		out["retro"] = clampf(dv_b.z / (capability.a_retro * horizon_s), 0.0, 1.0)
+	out["strafe"] = Vector2(clampf(dv_b.x / (capability.a_rcs.x * horizon_s), -1.0, 1.0),
+			clampf(dv_b.y / (capability.a_rcs.y * horizon_s), -1.0, 1.0))
 	return out
 
 

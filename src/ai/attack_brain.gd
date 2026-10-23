@@ -4,7 +4,8 @@ extends PilotBrain
 ##
 ## - **APPROACH**: fly at a closing speed (`closing_far_mps` beyond `near_range_m`, `closing_near_mps` inside) matched to the
 ##   target's velocity; face the velocity error until it is small, then the `InterceptMath` lead. **FIRE** while approaching:
-##   the trigger is held when the nose is within `fire_cone_deg` of the lead and the range is under `fire_range_m`.
+##   the trigger is held when the nose is within `fire_cone_deg` of the lead, the range is under `fire_range_m` and the
+##   `FireLane` is clear (no friendly, or with friendly fire on no other non-hostile ship, between the nose and the target).
 ## - **BREAK**: under `break_range_m`, or after `max_time_on_target_s` inside the fire range: fly across the line of sight
 ##   (a seeded side) at `break_speed_mps` for `break_duration_s`. No fire.
 ## - **EXTEND**: fly away from the target for at least `extend_min_s` and until beyond `extend_range_m`, then APPROACH again.
@@ -76,7 +77,8 @@ func think(p: Perception, dt: float) -> PilotCommand:
 				face_dir = lead_dir if dv.length() < tactics.face_lead_delta_v_mps else dv.normalized()
 				lead_error_deg = rad_to_deg(PilotSteering.angle_to(p.basis, lead_dir))
 				var cone_deg: float = minf(tactics.fire_cone_deg, rad_to_deg(atan(tactics.fire_miss_m / range_m)))
-				firing = range_m < tactics.fire_range_m and lead_error_deg < cone_deg
+				firing = range_m < tactics.fire_range_m and lead_error_deg < cone_deg \
+						and FireLane.clear(p.position, p.forward(), range_m, p.contacts, p.target.id, p.friendly_fire)
 		State.BREAK:
 			if state_time_s >= tactics.break_duration_s:
 				_enter(State.EXTEND)
@@ -90,7 +92,7 @@ func think(p: Perception, dt: float) -> PilotCommand:
 				v_des = p.target.velocity - los_dir * tactics.closing_far_mps
 				face_dir = (v_des - p.velocity).normalized() if (v_des - p.velocity).length() > 1.0 else p.forward()
 	cmd.flight.rot = PilotSteering.face(p.basis, face_dir, p.capability.rate_max_rad)
-	PilotSteering.apply_seek(cmd.flight, PilotSteering.seek(p.velocity, v_des, p.basis, p.capability))
+	seek_velocity(cmd.flight, p, v_des)
 	cmd.combat.fire = firing
 	return cmd
 

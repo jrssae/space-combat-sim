@@ -21,7 +21,12 @@ func think(p: Perception, dt: float) -> PilotCommand:
 			aggroed = true
 		elif p.target != null and p.target_hostile and p.target.position.distance_to(p.position) <= aggro_range_m:
 			aggroed = true
-	return attack.think(p, dt) if aggroed else patrol.think(p, dt)
+	var inner: PilotBrain = attack if aggroed else patrol
+	inner.has_desired_velocity = false
+	var cmd: PilotCommand = inner.think(p, dt)
+	desired_velocity = inner.desired_velocity
+	has_desired_velocity = inner.has_desired_velocity
+	return cmd
 
 
 func describe() -> Dictionary:
