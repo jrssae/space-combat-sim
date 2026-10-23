@@ -25,6 +25,8 @@ const ENTRIES: Dictionary = {
 		"doc": "Reaction mass is never drawn down (the fuel gauge stays full); off = a finite tank that can run dry"},
 	&"friendly_fire": {"type": TYPE_BOOL, "default": false,
 		"doc": "Bolts hurt any ship but their shooter, allies and the player included; off = only hostile ships (and buoys) take hits"},
+	&"ram_damage": {"type": TYPE_BOOL, "default": true,
+		"doc": "Collisions hurt by the velocity change they cause (rams); off = ships still bounce but take no damage"},
 	&"camera_default": {"type": TYPE_ENUM, "default": &"chase", "choices": [&"chase", &"cockpit"],
 		"doc": "Camera mode at spawn"},
 	&"camera_chase_smoothing_s": {"type": TYPE_FLOAT, "default": 0.0, "min": 0.0, "max": 0.5,

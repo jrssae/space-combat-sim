@@ -47,6 +47,11 @@ extends Resource
 @export var assist_speed_max_mps: float = 5000.0
 ## Hull points (`HullHealth`, M2-T03). 300 is about 30 hits from a Starfury pulse bolt.
 @export var hull_max: float = 300.0
+## m/s: ram damage (§16 D32, `RamMath`). A change of the ship's own velocity up to this in a collision is harmless...
+@export var ram_safe_dv_mps: float = 5.0
+## m/s: ... and one of this or more takes the whole hull, quadratic in between. A 30 m/s head-on between two Starfuries is
+## about 15 m/s each, about 60 % of the hull at the Starfury's 18.
+@export var ram_lethal_dv_mps: float = 18.0
 ## HDR colour of the engine plumes (`ThrusterVisuals`). The default is the Starfury's blue-white.
 @export var engine_glow_color: Color = Color(0.7, 0.9, 1.8, 1.0)
 ## Which main components the HUD's damage silhouette shows (`DamageZones.layout_from_name`): `x_fighter` or `delta`.

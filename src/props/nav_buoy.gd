@@ -2,7 +2,8 @@ class_name NavBuoy
 extends Node3D
 ## A navigation buoy, the M1 target marker (architecture §6.3, §7.1, §9.3): a splat body, a blinking beacon
 ## mesh on the mast, a 10 deg/s spin about its long axis (+Y), an optional constant drift, a `Targetable` and (post-M2) a
-## `Damageable`: any bolt hurts it (`hit_by_anyone`, it is neutral to everyone), and at zero hull the `DestructionDirector`
+## `Damageable`: any bolt hurts it (`hit_by_anyone`, it is neutral to everyone), so does a ram (M3-T04: it has no physics
+## body, so ships pass through it and the `RamResolver` splits the momentum by `MASS_KG`), and at zero hull the `DestructionDirector`
 ## blows it up and calls `set_destroyed(true)`: hidden and not processing, so nothing targets or hits it, but never freed (no
 ## splat node leaves the tree during play, D22). `restore()` brings it back with a full hull (the player's respawn does that).
 ##
@@ -33,6 +34,11 @@ const DEFAULT_BEACON_RADIUS: float = 0.1
 
 ## Hull points of a buoy: six pulse-cannon hits.
 const HULL_MAX: float = 60.0
+## kg, for the ram maths (§16 D32): the buoy has no physics body, so a ram uses the momentum split with this mass (the
+## generator's estimate is 1.94 t). A Starfury at 40 m/s changes a buoy's velocity by 38.4 m/s and its own by 1.6 m/s.
+const MASS_KG: float = 2000.0
+## m/s: a ram that changes the buoy's velocity by this much or more destroys it (the safe value is every hull's 5 m/s).
+const RAM_LETHAL_DV_MPS: float = 15.0
 
 ## The buoy's hull (nodes are added in `_ready`).
 var damageable: Damageable = null
@@ -142,6 +148,8 @@ func _build_hull() -> void:
 	add_child(damageable)
 	damageable.setup(Hardpoints.load_collision_only(HARDPOINTS_PATH), HULL_MAX, Factions.NEUTRAL)
 	damageable.hit_by_anyone = true
+	damageable.ram_mass_kg = MASS_KG
+	damageable.ram_lethal_dv_mps = RAM_LETHAL_DV_MPS
 
 
 ## Shows the fallback mesh instead of the splats (splats unavailable, or the F4 comparison toggle).

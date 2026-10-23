@@ -3,7 +3,7 @@ extends Node
 ## The hull of one ship (architecture §15.4): a component under the ship, like `Targetable`. It holds the pure
 ## `HullHealth` and the ship's hit volumes (`HitShape`s built from the hardpoints' `collision` list, the same primitives
 ## Jolt collides with). `HitResolver` finds it through group `damageable`, sweeps bolts against `shapes` and hands the
-## result to `apply_hit`.
+## result to `apply_hit`; `RamResolver` does the same for rams (§16 D32), with `core_radius` and the `ram_*` values.
 ##
 ## `apply_hit` always emits `hit_taken` (effects, HUD flash), then removes hull points unless god mode protects this ship
 ## (`respects_god_mode`, the player's, reading `DebugConsole.flags.invulnerable` at hit time), emits `damaged` when points
@@ -27,8 +27,24 @@ var hull: HullHealth = HullHealth.new()
 ## Where the damage landed, by main component (the HUD's silhouettes).
 var zones: DamageZones = DamageZones.new()
 var shapes: Array[HitShape] = []
+## The shapes as `ConvexSweep` volumes in the body frame, whole and shrunk to their points at least `RamMath.RAM_DEPTH_M` deep
+## (the ram resolver's swept test; built with the shapes).
+var ram_volumes: Array[ConvexSweep.Convex] = []
+var ram_cores: Array[ConvexSweep.Convex] = []
+## The axis-aligned box in the body frame that holds every shape.
+var ram_bounds: AABB = AABB()
 ## Radius of a sphere around the body origin that holds every shape (broad phase).
 var bounding_radius: float = 0.0
+## Radius of the largest sphere inside one of the shapes, wherever it sits (`RamMath.core_radius`, about 1 m for a fighter):
+## how thick the solid core is, for the tunnelling threshold (§16 D32).
+var core_radius: float = 0.0
+## Ram damage (§16 D32): a velocity change of the owner's own body up to this is harmless...
+var ram_safe_dv_mps: float = 5.0
+## ... and one of this or more takes the whole hull (quadratic in between, `RamMath.severity`). Ships take both from their
+## `ShipSpec`; these defaults are the Starfury's.
+var ram_lethal_dv_mps: float = 18.0
+## Mass for the ram maths when the owner is not a rigid body (a nav buoy); a rigid body's own `mass` is used otherwise.
+var ram_mass_kg: float = 0.0
 ## True for something that any bolt hurts whatever its faction (a nav buoy: neutral to everyone, yet shootable). Bolts of its
 ## own faction still pass through.
 var hit_by_anyone: bool = false
@@ -63,13 +79,20 @@ func setup(collision: Array[Dictionary], hull_max: float, p_faction: StringName,
 	hull = HullHealth.new(hull_max)
 	zones = DamageZones.new(DamageZones.layout_from_name(damage_layout))
 	shapes.clear()
+	ram_volumes.clear()
+	ram_cores.clear()
+	ram_bounds = AABB()
 	bounding_radius = 0.0
 	for entry: Dictionary in collision:
 		var shape: HitShape = HitShape.from_collision(entry)
 		if shape == null:
 			continue
 		shapes.append(shape)
+		ram_volumes.append(ConvexSweep.Convex.of(shape, Transform3D.IDENTITY))
+		ram_cores.append(ConvexSweep.Convex.of(shape, Transform3D.IDENTITY, RamMath.RAM_DEPTH_M))
+		ram_bounds = ram_volumes[-1].bounds if ram_volumes.size() == 1 else ram_bounds.merge(ram_volumes[-1].bounds)
 		bounding_radius = maxf(bounding_radius, shape.extent_radius())
+	core_radius = RamMath.core_radius(shapes)
 	DebugConsole.registry.unregister_owner(self)
 	if register_console:
 		_register_console()
@@ -88,6 +111,12 @@ func can_be_hit_by(bolt_faction: StringName, friendly_fire: bool = false) -> boo
 ## The ship this hull belongs to (the parent), or null.
 func body() -> Node3D:
 	return get_parent() as Node3D
+
+
+## Mass for the ram maths: the owner's rigid body mass, or `ram_mass_kg` for a prop without a body.
+func ram_mass() -> float:
+	var rigid := get_parent() as RigidBody3D
+	return rigid.mass if rigid != null else ram_mass_kg
 
 
 ## Can a bolt hit it now? In the tree, visible, its ship processing (a parked or hidden pool ship is not) and not yet
@@ -131,7 +160,8 @@ func kill() -> bool:
 	if hull.destroyed:
 		return false
 	var b: Node3D = body()
-	var info := HitInfo.new(b.get_instance_id() if b != null else 0, 0, &"", hull.hp, b.global_position if b != null else Vector3.ZERO)
+	var info := HitInfo.new(b.get_instance_id() if b != null else 0, 0, &"", hull.hp, b.global_position if b != null else Vector3.ZERO,
+			Vector3.ZERO, 0.0, HitInfo.CAUSE_CONSOLE)
 	hit_taken.emit(info)
 	info.applied = hull.apply(hull.hp)
 	damaged.emit(info, info.applied)
