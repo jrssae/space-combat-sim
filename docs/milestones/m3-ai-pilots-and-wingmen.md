@@ -70,6 +70,7 @@ Record later answers here (rules) or in `docs/design-references.md` (designs), s
 | Q8 | Wingman deaths? | **Replaced at the next wave**: a downed wingman explodes (Starfury chunks) and a replacement launches when the next wave starts |
 | Q9 | Keyboard (right hand on the mouse; M2.1 put flight keys on the right side, which was wrong) | **Layout B, pods by position**, no keyboard pitch/yaw (the mouse flies). Table in M3-T01 |
 | Q10 | AC13's AI budget (2026-10-24: after T06's trims the 13-ship path measures 1.7-2.1 ms on the development desktop with M2 brains alone) | **Relative + record**: `AiPilot` may add at most 0.5 ms per tick over the M2 AI path in the same fight (paired test); the absolute number is recorded, and T12 records it again on `dogfight` |
+| Q11 | (2026-10-24, raised by the maintainer) How should AI ships react to being shot? | **Evade when hit**: every AI ship, ally or raider, that takes a bolt hit starts evasive manoeuvres at once, even mid-attack, then returns to its fight (M3-T10, AC9 hit reaction). The instructor (evade weight 0, invulnerable) is exempt |
 
 Calls made by the planner (say if you want them changed): callsigns `ALPHA 1` (player) to `ALPHA 4`, the instructor
 `INSTRUCTOR`; the default order is **cover me** (hold formation, engage hostiles that come within 2 km of the player);
@@ -93,7 +94,7 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | AC6 | Starfury asset: `python3 -m tools.procgen build starfury_aurora` also writes LOD1 (`lods[1]`, 20-30 % of LOD0's splats, same AABB within 0.3 m) and `chunks[]` `cabin`, `arm_ur`, `arm_lr`, `arm_ul`, `arm_ll` that partition the LOD1 splats exactly; LOD0 output is byte-identical to before; deterministic; after `--import` the LOD1 and chunk PLYs load with manifest counts | A | |
 | AC7 | Allied ships: a `starfury_ally` from the pool flies the Starfury `ShipSpec` numbers (M1 AC5 formulas) with LOD1 splats; the splat-node count never changes across acquire / release / destroy / replenish cycles (D22); a destroyed ally explodes into Starfury chunks and returns to the pool; the player's death also uses Starfury chunks | A | P5 |
 | AC8 | `AiPilot` selection (unit, scripted `AiContext`s): the highest weighted score wins; the current behaviour keeps a stickiness bonus and a minimum dwell unless a challenger beats it by the emergency margin; orders gate behaviours (FORM ON ME never attacks; ATTACK MY TARGET attacks only the leader's target); `describe()` names the behaviour and its state; same seed = same choices | A | |
-| AC9 | Behaviours in Jolt: **formation** members hold within 25 m of their slots in straight flight and within 80 m through a 90° leader turn at 100 m/s, never closer than 15 m to anyone; **evade** cuts an M2 attack raider's hits on the evader by at least half against the same seeded run without evade; **guard** engages a hostile that enters the guard radius and returns within 300 m of its post once it is gone; **retreat** below 25 % hull opens the range | A | |
+| AC9 | Behaviours in Jolt: **formation** members hold within 25 m of their slots in straight flight and within 80 m through a 90° leader turn at 100 m/s, never closer than 15 m to anyone; **evade** cuts an M2 attack raider's hits on the evader by at least half against the same seeded run without evade; **guard** engages a hostile that enters the guard radius and returns within 300 m of its post once it is gone; **retreat** below 25 % hull opens the range; **hit reaction** (Q11): an AI ship (ally or raider, any order) hit by a bolt starts evading within 0.25 s, even mid-attack inside its minimum dwell, and flies at least one full jink before it may attack again; repeated hits keep it evading | A | |
 | AC10 | Instructor: on `instructor_route` the instructor visits every waypoint in order; with the player parked it stops within 1 600 m and resumes when the player closes to 800 m; each demo completes its measurable goal (roll 360 ± 10°, flip-and-burn ends with velocity reversed or below 2 m/s, strafe box returns within 30 m of its start with every leg over 40 m, pod turn yaws the right way by over 30°, all stop ends below 0.5 m/s and 1 °/s); the HUD's waypoint marker projects to the route point | A | P6 |
 | AC11 | Wing orders: keys 1-4 (through `UiCommand`, never `Input`) and `wing order <attack\|form\|engage\|cover>` change every member's order and post one acknowledgement line; ATTACK MY TARGET with no hostile selected is refused with a message; the roster lists callsigns, hull and current behaviour; downed wingmen are replaced when the next wave starts, entering 1 500 m behind the player | A | P7 |
 | AC12 | Scenarios: `combat_sandbox`, `instructor_route` and `dogfight` validate (and broken `wings` / `route` entries give path-qualified errors); a headless sandbox run with wingmen clears three waves; a headless `dogfight` (four allies, six raiders, player `god on` and idle) ends with one side destroyed within 6 sim minutes in 5/5 seeds and is reproducible per seed within 1e-3 m after 60 s | A | P8 |
@@ -385,8 +386,15 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
 - Agent: **Opus**. Tuning and balancing many AI ships at once.
 - Files: `src/ai/behaviour_guard.gd`, `assets/ai/raider.tres` (profile, wedge groups), `src/game/{scenario_loader,wave_director,
   wing_director}.gd` (`wings` for raiders too), `data/scenarios/{combat_sandbox,dogfight}.json`, `tests/integration/{test_ai_guard,
-  test_dogfight,test_m3_sandbox}.gd`.
+  test_dogfight,test_m3_sandbox}.gd`; for the hit reaction (Q11) `src/ai/{behaviour_evade,ai_pilot}.gd`, `assets/ai/*.tres`,
+  `tests/unit/test_ai_pilot_selection.gd`, `tests/integration/test_ai_evade.gd`.
 - Notes:
+  - Hit reaction (maintainer Q11): today a hit scores evade only `HIT_SCORE` 0.5 x the profile weight (0.4-0.45), below a
+    running attack (0.3-0.8 plus stickiness), so a hit ship rarely evades. Make a fresh bolt hit an interrupt: evade takes
+    over on that tick or the next, regardless of stickiness and the minimum dwell, flies at least one full jink, and is
+    renewed by further hits; then normal selection resumes. A retreating ship that is hit jinks too, then keeps retreating.
+    Profiles with evade weight 0 (the instructor) never react. Keep `score` cheap (AC13 paired budget). Raiders and allies
+    both; record in the as-built notes how often hit ships now evade in `dogfight` and what it does to the kill rate.
   - Guard behaviour: hold a post (a ship's slot or a `UniversePos`) within `guard_radius_m` (1 500), attack hostiles inside
     it or attacking the guarded ship, return to the post after.
   - Scenario schema: `wings[]` `{name, faction, leader: "player" | <spawn name>, formation, order, members: [{type, name,
@@ -397,7 +405,7 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
     to 9. Kills, losses and the status line as in M2.
   - `dogfight.json`: four allies (wing ALPHA, ENGAGE AT WILL, leader ALPHA 2) and six raiders (RED, BLUE) 4 km apart; the
     player starts 3 km off to the side. For headless tuning and AC12.
-- Done when: AC12 and the guard part of AC9 pass; P8 attached.
+- Done when: AC12 and the guard and hit-reaction parts of AC9 pass; P8 attached.
 
 ### M3-T11 HUD: wing roster, acknowledgements, waypoint marker
 
