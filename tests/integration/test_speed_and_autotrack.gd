@@ -125,7 +125,7 @@ func test_autotrack_puts_the_nose_on_the_lead_of_a_crossing_target() -> void:
 	# the position trails by that rate over its gain (about 5 degrees); with the rate fed forward the nose sits on the lead.
 	DebugConsole.registry.execute("spawn raider idle 1500 0 0")
 	await _ticks(4)
-	var raider: Combatant = main.ships.alive()[0]
+	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
 	raider.ship.linear_velocity = main.ship.global_basis.x * 200.0
 	assert_true(main.ship.targeting.select_by_name("RAIDER 1"))
 	source.hold(InputAdapter.AUTOTRACK)

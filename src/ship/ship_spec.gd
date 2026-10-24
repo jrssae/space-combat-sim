@@ -9,6 +9,9 @@ extends Resource
 ## in §5.1 are all pinned to the inertia here. Geometry (nozzle positions, centre of mass) does come from the
 ## hardpoints, through `ThrusterLayout`.
 
+## Where `tools/procgen` writes every asset (one folder per `asset_id`): the one definition `Ship`, `SplatLod` and `DebrisPool` share.
+const ASSET_ROOT: String = "res://assets/generated"
+
 ## Folder name under assets/generated/ that holds this ship's splats, meshes and hardpoints.json.
 @export var asset_id: String = ""
 ## kg.
@@ -71,7 +74,7 @@ extends Resource
 
 ## Where this ship's generated hardpoints live.
 func hardpoints_path() -> String:
-	return "res://assets/generated/%s/hardpoints.json" % asset_id
+	return "%s/%s/hardpoints.json" % [ASSET_ROOT, asset_id]
 
 
 ## `rate_max` in rad/s.

@@ -190,6 +190,25 @@ func test_an_ally_is_a_friend_to_the_players_targeting() -> void:
 	assert_false(player.ship.targeting.select_nearest_hostile(), "the nearest hostile does not pick a wingman")
 
 
+func test_a_missing_manifest_warns_once_for_the_lod_and_draws_no_splats() -> void:
+	var ghost_spec: ShipSpec = ShipCatalog.spec_for(ALLY).duplicate() as ShipSpec
+	ghost_spec.asset_id = "no_such_ship"
+	var ghost: Ship = Ship.create(ghost_spec, world)
+	world.spawn(ghost, world.to_universe(Vector3(0.0, 300.0, 0.0)))
+	assert_null(ghost.hull_splats.gaussian)
+	# The hardpoints, the manifest and the hull mesh are each missing: three problems, three messages, none about the LOD twice.
+	assert_push_warning_count(3)
+
+
+func test_a_lod_the_manifest_does_not_list_warns_once_and_draws_lod0() -> void:
+	var odd_spec: ShipSpec = ShipCatalog.spec_for(ALLY).duplicate() as ShipSpec
+	odd_spec.splat_lod = 5
+	var odd: Ship = Ship.create(odd_spec, world)
+	world.spawn(odd, world.to_universe(Vector3(0.0, 300.0, 0.0)))
+	assert_eq(odd.hull_splats.gaussian.point_count, player.ship.hull_splats.gaussian.point_count, "LOD0 instead")
+	assert_push_warning_count(1)
+
+
 # --- flying: the M1 AC5 straight-line formula ----------------------------------------------------------------------
 
 

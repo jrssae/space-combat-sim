@@ -4,15 +4,18 @@ extends RefCounted
 ## commands name ships by type (`raider_fighter`); this is the one place that knows which resource flies it and whose side it
 ## is on. `starfury_ally` is the wingman: the Starfury's numbers with the LOD1 splats and no cockpit (§16 D35). Pure.
 
+## The type the player flies (`Main` builds it, and every Starfury breaks up into its asset's chunks).
+const PLAYER_TYPE: StringName = &"starfury_aurora"
+
 const PATHS: Dictionary[StringName, String] = {
-	&"starfury_aurora": "res://assets/ships/starfury_aurora.tres",
+	PLAYER_TYPE: "res://assets/ships/starfury_aurora.tres",
 	&"starfury_ally": "res://assets/ships/starfury_ally.tres",
 	&"raider_fighter": "res://assets/ships/raider_delta_v.tres",
 }
 
 ## The faction a ship of each type is built for (`ShipPool.prepare`); the player's own type is listed for completeness.
 const FACTIONS: Dictionary[StringName, StringName] = {
-	&"starfury_aurora": Factions.EARTH_ALLIANCE,
+	PLAYER_TYPE: Factions.EARTH_ALLIANCE,
 	&"starfury_ally": Factions.EARTH_ALLIANCE,
 	&"raider_fighter": Factions.RAIDERS,
 }

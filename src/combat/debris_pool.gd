@@ -18,7 +18,7 @@ const SETS_PER_TYPE: int = 2
 const OUTWARD_SPEED_MPS: Vector2 = Vector2(4.0, 15.0)
 const MAX_SPIN_DEG_S: float = 90.0
 const SHARD_COUNT: int = 12
-const ASSET_ROOT: String = "res://assets/generated"
+const ASSET_ROOT: String = ShipSpec.ASSET_ROOT
 
 # asset id -> Array of sets; a set is an Array[DebrisChunk] in `chunks[]` order.
 var _sets: Dictionary = {}

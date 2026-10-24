@@ -44,7 +44,7 @@ func _ticks(n: int) -> void:
 ## A raider `distance` metres ahead of the player, at rest relative to it.
 func _spawn_raider(distance: float = 200.0) -> Combatant:
 	assert_true(DebugConsole.registry.execute("spawn raider %s" % distance)[0].ok)
-	var raider: Combatant = main.ships.alive()[main.ships.alive().size() - 1]
+	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[main.ships.alive(ShipPool.DEFAULT_TYPE).size() - 1]
 	return raider
 
 
@@ -97,7 +97,7 @@ func test_a_raider_at_zero_hull_is_destroyed_once_and_leaves_play_in_the_same_ti
 	assert_false(raider.damageable.is_active())
 	assert_eq(destroyed_log, [raider])
 	assert_eq(main.ships.free_count(), main.ships.pool_size(), "back in the pool")
-	assert_eq(main.ships.alive().size(), 0)
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 0)
 
 
 func test_no_later_bolt_hits_a_destroyed_raider() -> void:
@@ -173,7 +173,7 @@ func test_a_chunk_set_leaves_the_pool_and_flies_with_the_ship_then_returns() -> 
 func test_with_both_sets_busy_a_third_break_up_uses_mesh_chunks() -> void:
 	for i: int in 3:
 		_spawn_raider(100.0 + 60.0 * float(i))
-	for combatant: Combatant in main.ships.alive():
+	for combatant: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
 		combatant.damageable.kill()
 	assert_eq(main.debris.free_set_count(RAIDER_ASSET), 0)
 	assert_eq(main.debris.mesh_chunks_in_flight(), 5, "the third raider's chunks are mesh only")
@@ -187,9 +187,9 @@ func test_kill_all_and_kill_target_work_through_the_console_and_kill_target_need
 	main.ship.targeting.refresh()
 	assert_true(DebugConsole.registry.execute("set targeting.selected \"RAIDER 1\"")[0].ok)
 	assert_true(DebugConsole.registry.execute("kill target")[0].ok)
-	assert_eq(main.ships.alive().size(), 1)
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 1)
 	assert_true(DebugConsole.registry.execute("kill all")[0].ok)
-	assert_eq(main.ships.alive().size(), 0)
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 0)
 	assert_eq(destroyed_log.size(), 2)
 
 

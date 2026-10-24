@@ -84,7 +84,7 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 
 | # | Criterion | Who | Pre-check |
 |---|---|---|---|
-| AC0 | Every M1 and M2 (A) test still passes, except tests that assert the old keyboard keys, which T01 updates, and the player break-up in `test_destruction.gd`, which T03 moves from shards to the Starfury chunks. With `factions.json` at its defaults, every M2 faction, hit and target-order result is unchanged | A | |
+| AC0 | Every M1 and M2 (A) test still passes, except tests that assert the old keyboard keys, which T01 updates, and the player break-up in `test_destruction.gd`, which T03 moves from shards to the Starfury chunks, and tests that count the sandbox's pooled ships or engine hums, which change because Q7 puts wingmen in the sandbox (T08 pools them, T10 launches them). With `factions.json` at its defaults, every M2 faction, hit and target-order result is unchanged | A | |
 | AC1 | Keyboard layout B: `project.godot` and `m1_classic` hold exactly the T01 table; no flight action has a key right of the G/B column (Backspace, N, Print, F3/F4 and Esc are the only keys outside the left block); every action keeps a pad binding (wing orders are keyboard-only and allow-listed); `B` is tap = next target, hold = nearest the nose; `W` and `S` drive both pods; a profile round trip is exact | A | |
 | AC2 | Factions: `data/factions.json` validates (broken variants give path-qualified errors and leave the table unchanged); same faction is FRIENDLY, an unlisted pair is the file's default, listed pairs are symmetric; `relation` on the console changes a pair for the session and HUD colours follow | A | |
 | AC3 | Friendly fire: with `settings.friendly_fire` off, nothing changes from M2 (AC3 of M2 still holds); on, a bolt hits any active hull except its shooter's (allies, the player, buoys); god mode still protects the player; an AI never fires while a friendly sits in its fire lane (both settings) | A | |
@@ -781,9 +781,10 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
 **M3-T08 (allied ships: pool, LOD1, destruction; replenish pending T07).**
 - **Spec and LOD.** `assets/ships/starfury_ally.tres` is `starfury_aurora.tres` with `splat_lod = 1` and `has_cockpit_interior = false`
   (same `asset_id`, so the hardpoints, hull mesh and chunks are the Starfury's; `test_ship_catalog` compares every stored `ShipSpec`
-  field). `ShipSpec.splat_lod` (0 = the full PLY): `Ship._load_visuals` asks `SplatLod.ply_path(asset_id, level)`
-  (`src/ship/splat_lod.gd`, pure; level 0 is `<asset_id>.ply` without reading the manifest, a higher level is looked up in
-  `manifest.json` `lods` by `level`, "" when absent). A level the manifest lacks warns and draws LOD0. The ally draws
+  field). `ShipSpec.splat_lod` (0 = the full PLY): `Ship._load_visuals` asks `SplatLod.resolve(asset_id, level)`
+  (`src/ship/splat_lod.gd`, pure, returns `{path, level, warning}`; level 0 is `<asset_id>.ply` without reading the manifest, a higher
+  level is looked up in `manifest.json` `lods` by `level`). A level the manifest does not list warns once and draws LOD0; a manifest that
+  is missing or unreadable warns once ("... manifest.json is missing") and draws no splats, with no second "ply missing" message. The ally draws
   `starfury_aurora_lod1.ply` (57 538 splats against the player's 230 230).
 - **`ShipCatalog`** gains `starfury_ally` and `FACTIONS` / `faction_for(type)` (`starfury_aurora` and `starfury_ally`
   `earth_alliance`, `raider_fighter` `raiders`; `neutral` for an unlisted type).
@@ -795,17 +796,17 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
   or `ai` (profile `ally_starfury`; a raider's `ai` uses `raider`), is named `ALPHA <n>` from 2 and placed like a raider (ahead of the
   player, nose toward it). `despawn all` and `despawn target` return any pooled ship (P5 needs the ally to go).
 - **Scenario and `Main`.** `combat_sandbox` pools `{"raider_fighter": 6, "starfury_ally": 4}` (three wingmen and a spare for `spawn ally`;
-  T10 owns the final numbers); `ScenarioLoader` needed no change beyond its doc (any catalog type may be pooled). `Main.ally_pool_size`
+  **T10 owns the final pool numbers**: it launches the wingmen and sizes both pools); `ScenarioLoader` needed no change beyond its doc (any catalog type may be pooled). `Main.ally_pool_size`
   (-1 = the scenario) next to `raider_pool_size`, and `Main` prepares the pools by type. `DebrisPool.prepare(type)` is now idempotent per
   asset (the player's `starfury_aurora` and the allies' `starfury_ally` share one asset): `Main` always prepares the two `starfury_aurora`
   chunk sets, in every scenario, and the raider's only when raiders are pooled. `DebrisPool.set_count` / `free_set_count` take an optional
   asset id.
 - **Destruction.** `DestructionDirector.ship_destroyed(combatant, info)` fires for every pooled ship; `raider_destroyed` still fires after
-  it when the ship was hostile to the player (`Factions.relation` of the player's faction), so kills count raiders only and an ally's death
-  is no kill. `AudioDirector` moved to `ship_destroyed` (an ally explodes with a sound). An ally is released in the same tick and breaks up
+  it when the ship is a raider by pool type (`ShipPool.DEFAULT_TYPE`, not the faction relation, so a console `relation` change cannot turn
+  kills into losses), so kills count raiders only and an ally's death is no kill. `AudioDirector` moved to `ship_destroyed` (an ally explodes with a sound). An ally is released in the same tick and breaks up
   into the Starfury chunk set, like the player (`burst` is keyed by `spec.asset_id`, which is `starfury_aurora` for both). `kill all` still
-  means every raider (every pooled ship that is not an ally); `kill allies` is new (an error when none is in play); `kill target` takes
-  any pooled ship.
+  means every raider (pool type `DEFAULT_TYPE`); `kill allies` takes pool type `ALLY_TYPE` (an error when none is in play); `kill target`
+  takes any pooled ship.
 - **Waves.** `WaveDirector` counts and clears `ShipPool.DEFAULT_TYPE` ships only (`waves.alive`, the wave-cleared test, `_clear_field`, the
   status line, `on_player_respawned`), so allies in the pool are neither raiders nor removed by `wave start|stop|next|restart`.
 - **Tests.** New: `test_splat_lod`, `test_ship_catalog`, `test_ally_pool` (the pool, LOD1 hull and no cockpit, the Starfury formula for a
@@ -819,10 +820,16 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
   and two smoke runs (`spawn ally` / kill / `kill allies` / the player's death, and `spawn ally attack` exiting 1). A smoke run that
   quits while an explosion sound still plays makes Godot report the WAV as "still in use" (an `ERROR:` line): the new run waits 300 ticks
   before it quits.
-- **Splat budget (sandbox).** Registered splats are about 841 000 (M2: about 496 000): player 230 230, four allies 230 152, six raiders
-  158 928, raider debris 52 976, Starfury debris 115 076 (two LOD1 sets), sky 16 000, five buoys 38 000. The parked Starfury sets are
-  the new cost on the GPU side (a hidden splat still costs an early-out in projection and sort memory); one set would be enough to fall
-  back to if AC19 shows a problem. Recorded for the (H) frame-rate check.
+- **Splat budget (sandbox).** Registered splats are 841 362 (M2: 496 134), +345 228: player 230 230, four allies 230 152, six raiders
+  158 928, raider debris 52 976, Starfury debris 115 076 (two LOD1 sets), sky 16 000, five buoys 38 000. Of the increase, the four parked
+  LOD1 allies are about 230k (two thirds) and the two Starfury chunk sets about 115k (one third). A hidden splat node still costs an
+  early-out per splat in projection and sort-buffer memory, so parked ships and parked debris both count. Levers if AC19 shows a problem:
+  fewer allies in the pool (each is 57 538; T10 decides the pool size, three wingmen are the minimum for the wing), one Starfury chunk
+  set instead of two (57 538, a second simultaneous Starfury break-up then gets mesh chunks), or a coarser ally LOD. Recorded for the
+  (H) frame-rate check.
+- **Shared constants.** `ShipSpec.ASSET_ROOT` is the one definition of `res://assets/generated` (`Ship`, `SplatLod`, `DebrisPool` and
+  `ShipSpec.hardpoints_path()` use it) and `ShipCatalog.PLAYER_TYPE` the one for the player's type (`Main` builds its ship from the catalog
+  and prepares its debris with it). Fix round 1 also made the M2 tests that mean raiders ask for `alive(ShipPool.DEFAULT_TYPE)`.
 - **Replenish: pending T07.** `WingDirector.replenish()` (on `WaveDirector.wave_started`, an ally for each empty slot 1 500 m behind
   the player at the player's velocity, on the wing's order) needs T07's `WingDirector` and is not built. Everything it needs exists:
   `pool.acquire(name, at, basis, velocity, brain, ShipPool.ALLY_TYPE)`, `pool.next_name("ALPHA", 2)`, `DestructionDirector.ship_destroyed`.

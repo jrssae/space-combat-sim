@@ -36,7 +36,7 @@ func _frames(n: int) -> void:
 
 func _spawn_and_select(distance: float = 600.0) -> Combatant:
 	assert_true(DebugConsole.registry.execute("spawn raider %s" % distance)[0].ok)
-	var raider: Combatant = main.ships.alive()[0]
+	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
 	main.ship.targeting.refresh()
 	assert_true(main.ship.targeting.select_by_name(raider.display_name))
 	return raider

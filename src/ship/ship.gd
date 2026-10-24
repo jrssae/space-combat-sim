@@ -39,7 +39,7 @@ extends RigidBody3D
 signal assist_toggled(on: bool)
 
 const SCENE_PATH: String = "res://src/ship/ship.tscn"
-const ASSET_ROOT: String = "res://assets/generated"
+const ASSET_ROOT: String = ShipSpec.ASSET_ROOT
 const COCKPIT_MESH_FILE: String = "cockpit_interior.obj"
 ## Used when the hardpoints are missing (the chase camera still needs somewhere to sit); matches §8.
 const DEFAULT_CHASE_OFFSET: Vector3 = Vector3(0.0, 2.5, 9.0)
@@ -419,14 +419,14 @@ func _build_muzzles() -> void:
 
 func _load_visuals() -> void:
 	var dir: String = asset_dir(spec)
-	var splat_path: String = SplatLod.ply_path(spec.asset_id, spec.splat_lod)
-	if splat_path.is_empty():
-		push_warning("Ship: %s lists no splat LOD %d in its manifest; drawing LOD0" % [spec.asset_id, spec.splat_lod])
-		splat_path = SplatLod.ply_path(spec.asset_id, 0)
+	var lod: Dictionary = SplatLod.resolve(spec.asset_id, spec.splat_lod)
+	var splat_path: String = lod["path"]
+	if not String(lod["warning"]).is_empty():
+		push_warning("Ship: %s" % lod["warning"])  # one message per problem: a manifest that cannot be read draws nothing, below
 	var gaussian: GaussianResource = null
-	if ResourceLoader.exists(splat_path):
+	if not splat_path.is_empty() and ResourceLoader.exists(splat_path):
 		gaussian = load(splat_path) as GaussianResource
-	if gaussian == null:
+	if gaussian == null and not splat_path.is_empty():
 		push_warning("Ship: %s is missing or not imported (run scripts/gen_assets.sh, then import); no hull splats" % splat_path)
 	hull_splats.gaussian = gaussian
 	hull_mesh_fallback.mesh = _load_mesh(dir.path_join(spec.asset_id + ".obj"))

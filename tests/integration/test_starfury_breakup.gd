@@ -31,6 +31,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	Factions.reset()
 	DebugConsole.flags.invulnerable = false
 	get_tree().paused = false
 
@@ -235,9 +236,28 @@ func test_kill_target_works_on_an_ally_and_kill_allies_destroys_every_ally_but_n
 
 func test_a_raiders_death_also_reports_ship_destroyed() -> void:
 	assert_true(_exec("spawn raider idle 150").ok)
-	var raider: Combatant = main.ships.alive()[0]
+	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
 	assert_true(raider.damageable.kill())
 	assert_eq(shipped, [raider])
+
+
+func test_a_relation_change_does_not_change_which_ships_are_raiders_and_which_are_allies() -> void:
+	assert_true(_exec("relation earth_alliance raiders friendly").ok)
+	var kills_before: int = main.waves.kills
+	var raider_deaths: Array[Combatant] = []
+	main.director.raider_destroyed.connect(func(c: Combatant, _info: HitInfo) -> void: raider_deaths.append(c))
+	var ally: Combatant = _spawn_ally(100.0)
+	assert_true(_exec("spawn raider idle 200").ok)
+	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
+	var result: ConsoleResult = _exec("kill allies")
+	assert_true(result.ok)
+	assert_string_contains(result.lines[0], "1 allied", "kill allies takes the ally type")
+	assert_eq(shipped, [ally])
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE), [raider], "and leaves a raider the player now counts as a friend")
+	assert_eq(raider_deaths.size(), 0, "an ally's death is no kill")
+	assert_true(raider.damageable.kill())
+	assert_eq(raider_deaths, [raider], "a raider's death is a kill whatever the relation")
+	assert_eq(main.waves.kills, kills_before + 1)
 
 
 # --- the sets are shared -----------------------------------------------------------------------------------------

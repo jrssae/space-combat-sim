@@ -11,15 +11,16 @@ extends Node
 ##   emitted (Main ignores input while the player is dead); after `RESPAWN_DELAY_S` of sim time `respawn_due` is emitted and Main
 ##   puts the ship back at the scenario start with a full hull.
 ##
-## Signals: `ship_destroyed` for every pooled ship; `raider_destroyed` as well when it was hostile to the player (a kill, which
-## is what the waves count). An ally's death is a `ship_destroyed` only.
+## Signals: `ship_destroyed` for every pooled ship; `raider_destroyed` as well when it is a raider (a kill, which is what the
+## waves count). An ally's death is a `ship_destroyed` only. Which is which is the pool type (`ShipPool.DEFAULT_TYPE` raiders,
+## `ShipPool.ALLY_TYPE` allies), never the faction relation, so a `relation` change on the console cannot turn kills into losses.
 ##
-## Console: `kill [target|all|allies|player]` destroys now, bypassing god mode: the selected pooled ship, every raider (every
-## pooled ship that is not an ally), every ally, or the player.
+## Console: `kill [target|all|allies|player]` destroys now, bypassing god mode: the selected pooled ship, every raider, every
+## ally, or the player.
 
 ## A pooled ship was destroyed (it is already back in the pool): a raider or an allied Starfury.
 signal ship_destroyed(combatant: Combatant, info: HitInfo)
-## A pooled ship hostile to the player was destroyed (a raider; it is already back in the pool). Follows `ship_destroyed`.
+## A raider was destroyed (it is already back in the pool). Follows `ship_destroyed`.
 signal raider_destroyed(combatant: Combatant, info: HitInfo)
 ## A nav buoy was destroyed (it is already hidden and out of play).
 signal buoy_destroyed(buoy: NavBuoy, info: HitInfo)
@@ -109,22 +110,8 @@ func _on_destroyed(info: HitInfo, combatant: Combatant) -> void:
 		player_destroyed.emit(info)
 	else:
 		ship_destroyed.emit(combatant, info)
-		if _is_hostile_to_player(combatant):
+		if pool.type_of(combatant) == ShipPool.DEFAULT_TYPE:
 			raider_destroyed.emit(combatant, info)
-
-
-# The player's side of `combatant`: a kill if hostile, an ally if friendly.
-func _relation_to_player(combatant: Combatant) -> Factions.Relation:
-	var own: StringName = player.faction if player != null else Factions.EARTH_ALLIANCE
-	return Factions.relation(own, combatant.faction)
-
-
-func _is_hostile_to_player(combatant: Combatant) -> bool:
-	return _relation_to_player(combatant) == Factions.Relation.HOSTILE
-
-
-func _is_ally_of_player(combatant: Combatant) -> bool:
-	return _relation_to_player(combatant) == Factions.Relation.FRIENDLY
 
 
 func _on_buoy_destroyed(info: HitInfo, buoy: NavBuoy) -> void:
@@ -171,15 +158,13 @@ func _cmd_kill(args: Dictionary) -> ConsoleResult:
 			return ConsoleResult.line("the player's ship destroyed")
 		&"all":
 			var killed: int = 0
-			for combatant: Combatant in pool.alive():
-				if not _is_ally_of_player(combatant):
-					killed += 1 if combatant.damageable.kill() else 0
+			for combatant: Combatant in pool.alive(ShipPool.DEFAULT_TYPE):
+				killed += 1 if combatant.damageable.kill() else 0
 			return ConsoleResult.line("destroyed %d raider(s)" % killed)
 		&"allies":
 			var lost: int = 0
-			for combatant: Combatant in pool.alive():
-				if _is_ally_of_player(combatant):
-					lost += 1 if combatant.damageable.kill() else 0
+			for combatant: Combatant in pool.alive(ShipPool.ALLY_TYPE):
+				lost += 1 if combatant.damageable.kill() else 0
 			if lost == 0:
 				return ConsoleResult.failure("no allied ships in play")
 			return ConsoleResult.line("destroyed %d allied ship(s)" % lost)

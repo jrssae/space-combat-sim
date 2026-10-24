@@ -37,21 +37,38 @@ func test_file_for_survives_a_malformed_manifest() -> void:
 
 
 func test_level_zero_is_the_assets_own_file_and_reads_no_manifest() -> void:
-	assert_eq(SplatLod.ply_path("nothing_here", 0, "res://no/such/root"), "res://no/such/root/nothing_here/nothing_here.ply")
-	assert_eq(SplatLod.ply_path("nothing_here", -2, "res://no/such/root"), "res://no/such/root/nothing_here/nothing_here.ply")
+	var lod: Dictionary = SplatLod.resolve("nothing_here", 0, "res://no/such/root")
+	assert_eq(lod, {"path": "res://no/such/root/nothing_here/nothing_here.ply", "level": 0, "warning": ""})
+	assert_eq(SplatLod.resolve("nothing_here", -2, "res://no/such/root"), lod)
 
 
-func test_a_higher_level_without_a_manifest_is_empty() -> void:
-	assert_eq(SplatLod.ply_path("nothing_here", 1, "res://no/such/root"), "")
+func test_a_higher_level_with_no_manifest_gives_no_path_and_one_warning_that_says_so() -> void:
+	var lod: Dictionary = SplatLod.resolve("nothing_here", 1, "res://no/such/root")
+	assert_eq(lod["path"], "", "nothing to load, so the caller has nothing more to complain about")
+	assert_eq(lod["level"], -1)
+	assert_string_contains(lod["warning"], "res://no/such/root/nothing_here/manifest.json is missing")
+	assert_string_contains(lod["warning"], "run scripts/gen_assets.sh")
 
 
 func test_the_starfurys_lod1_is_listed_by_its_manifest() -> void:
-	var path: String = SplatLod.ply_path("starfury_aurora", 1)
-	assert_eq(path, "res://assets/generated/starfury_aurora/starfury_aurora_lod1.ply", GEN_ASSETS_HINT)
-	assert_true(FileAccess.file_exists(path), GEN_ASSETS_HINT)
-	assert_eq(SplatLod.ply_path("starfury_aurora", 0), "res://assets/generated/starfury_aurora/starfury_aurora.ply")
+	var lod: Dictionary = SplatLod.resolve("starfury_aurora", 1)
+	assert_eq(lod["path"], "res://assets/generated/starfury_aurora/starfury_aurora_lod1.ply", GEN_ASSETS_HINT)
+	assert_eq(lod["level"], 1)
+	assert_eq(lod["warning"], "")
+	assert_true(FileAccess.file_exists(lod["path"]), GEN_ASSETS_HINT)
+	assert_eq(SplatLod.resolve("starfury_aurora", 0)["path"], "res://assets/generated/starfury_aurora/starfury_aurora.ply")
 
 
-func test_an_asset_without_that_lod_is_empty() -> void:
-	assert_eq(SplatLod.ply_path("raider_fighter", 1), "", "the raider has LOD0 only")
-	assert_eq(SplatLod.ply_path("starfury_aurora", 7), "")
+func test_a_level_the_manifest_lacks_falls_back_to_lod0_with_a_warning() -> void:
+	for pair: Array in [["raider_fighter", 1], ["starfury_aurora", 7]]:
+		var lod: Dictionary = SplatLod.resolve(pair[0], pair[1])
+		assert_eq(lod["path"], "res://assets/generated/%s/%s.ply" % [pair[0], pair[0]], "%s LOD %d: LOD0 instead" % pair)
+		assert_eq(lod["level"], 0)
+		assert_string_contains(lod["warning"], "lists no LOD %d" % pair[1])
+
+
+func test_the_asset_root_is_the_ship_specs() -> void:
+	assert_eq(SplatLod.ASSET_ROOT, ShipSpec.ASSET_ROOT)
+	assert_eq(Ship.ASSET_ROOT, ShipSpec.ASSET_ROOT)
+	assert_eq(DebrisPool.ASSET_ROOT, ShipSpec.ASSET_ROOT)
+	assert_eq(ShipCatalog.spec_for(ShipCatalog.PLAYER_TYPE).hardpoints_path(), "res://assets/generated/starfury_aurora/hardpoints.json")

@@ -410,7 +410,7 @@ class TestInTheMainScene extends GutTest:
 		var infos: Array[HitInfo] = []
 		rams.ram_resolved.connect(func(info: HitInfo) -> void: infos.append(info))
 		assert_true(DebugConsole.registry.execute("spawn raider 40")[0].ok)
-		var raider: Combatant = main.ships.alive()[0]
+		var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
 		raider.driver.process_mode = Node.PROCESS_MODE_DISABLED  # a sitting duck: no brain steers it out of the way
 		raider.damageable.hull.apply(raider.damageable.hull.max_hp - 10.0)
 		main.ship.linear_velocity = main.ship.forward() * 20.0  # Jolt's speed: a contact, not a swept ram
@@ -419,7 +419,7 @@ class TestInTheMainScene extends GutTest:
 			if main.waves.kills > 0:
 				break
 		assert_eq(main.waves.kills, 1, "a ram kill counts")
-		assert_eq(main.ships.alive().size(), 0, "the raider is back in the pool")
+		assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 0, "the raider is back in the pool")
 		var on_raider: HitInfo = null
 		for info: HitInfo in infos:
 			if info.target_id == raider.ship.get_instance_id():

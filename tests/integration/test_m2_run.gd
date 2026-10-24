@@ -53,7 +53,7 @@ func test_three_waves_headless_keep_the_splat_node_count_and_the_counters() -> v
 			await get_tree().physics_frame
 			max_resolve_us = maxi(max_resolve_us, resolver.resolve_us)
 		t0 = SimClock.now()
-		while main.ships.alive().size() < main.waves.plan.spawn_total() and SimClock.now() - t0 < 30.0:
+		while main.ships.alive(ShipPool.DEFAULT_TYPE).size() < main.waves.plan.spawn_total() and SimClock.now() - t0 < 30.0:
 			await get_tree().physics_frame
 			max_resolve_us = maxi(max_resolve_us, resolver.resolve_us)
 			max_bolts = maxi(max_bolts, resolver.projectiles_last_tick)
@@ -61,7 +61,7 @@ func test_three_waves_headless_keep_the_splat_node_count_and_the_counters() -> v
 			await get_tree().physics_frame
 			max_resolve_us = maxi(max_resolve_us, resolver.resolve_us)
 			max_bolts = maxi(max_bolts, resolver.projectiles_last_tick)
-		var alive: int = main.ships.alive().size()
+		var alive: int = main.ships.alive(ShipPool.DEFAULT_TYPE).size()
 		killed += alive
 		played.append(alive)
 		assert_true(DebugConsole.registry.execute("kill all")[0].ok)
@@ -77,7 +77,7 @@ func test_three_waves_headless_keep_the_splat_node_count_and_the_counters() -> v
 	assert_eq(main.waves.kills, 10)
 	assert_eq(main.waves.losses, 0)
 	assert_eq(main.waves.plan.wave_number, 4, "and it moved on to the first looped wave")
-	assert_eq(main.ships.alive().size(), 0)
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 0)
 	assert_eq(_splat_nodes(get_tree().root), splat_nodes_at_load, "at the end of the run too")
 	assert_gt(max_bolts, 0, "bolts flew")
 	assert_lt(max_resolve_us, 5000, "the hit resolver's worst tick stayed under 5 ms (it is about 0.5-1.5 ms; the slack is for a busy machine)")

@@ -5,9 +5,6 @@ extends Node3D
 ## commands and UI actions. Main runs while paused (so Start can unpause); World and everything in it pause.
 
 const SCENARIO_DIR := "res://data/scenarios/"
-const SHIP_SPEC_PATH := "res://assets/ships/starfury_aurora.tres"
-## The player's `ShipCatalog` type, whose asset's chunks every Starfury breaks up into.
-const PLAYER_TYPE: StringName = &"starfury_aurora"
 const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
@@ -86,7 +83,7 @@ func _ready() -> void:
 	if ally_count > 0:
 		ships.prepare(ShipPool.ALLY_TYPE, ally_count)
 	# The Starfury's break-up chunks serve the allies and the player (the player can die in any scenario).
-	debris.prepare(PLAYER_TYPE)
+	debris.prepare(ShipCatalog.PLAYER_TYPE)
 	hud.input_provider = _build_hud_input
 	director.setup(world, ships, debris, effects, combatant)
 	director.player_destroyed.connect(_on_player_destroyed)
@@ -315,7 +312,7 @@ func _apply_input_settings() -> void:
 
 
 func _spawn_ship() -> void:
-	var spec := load(SHIP_SPEC_PATH) as ShipSpec
+	var spec: ShipSpec = ShipCatalog.spec_for(ShipCatalog.PLAYER_TYPE)
 	combatant = ShipAssembly.build(spec, world, projectiles, {
 		ShipAssembly.OPT_FACTION: Factions.EARTH_ALLIANCE,
 		ShipAssembly.OPT_DISPLAY_NAME: "PLAYER",

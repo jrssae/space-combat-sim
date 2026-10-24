@@ -69,8 +69,8 @@ func test_wave_start_runs_the_countdown_then_spawns_the_waves_raiders() -> void:
 	await _wait_for_state(&"active")
 	await _ticks(3)
 	Engine.time_scale = 1.0
-	assert_eq(main.ships.alive().size(), 3, "TARGET PRACTICE: three raiders")
-	for combatant: Combatant in main.ships.alive():
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 3, "TARGET PRACTICE: three raiders")
+	for combatant: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
 		assert_true(combatant.driver.brain is IdleBrain)
 		assert_gt(combatant.ship.linear_velocity.length(), 4.0, "drifting")
 		assert_lt(combatant.ship.linear_velocity.length(), 21.0)
@@ -87,7 +87,7 @@ func test_spawns_are_offsets_from_the_players_position_at_wave_start() -> void:
 	await _wait_for_state(&"active")
 	await _ticks(2)
 	Engine.time_scale = 1.0
-	var first: Combatant = main.ships.alive()[0]
+	var first: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
 	var expected := Vector3(-700.0, 60.0, -1300.0)
 	var at: UniversePos = main.world.to_universe(first.ship.global_position)
 	var drifted: Vector3 = first.ship.linear_velocity * 2.0 * DT * 4.0
@@ -99,7 +99,7 @@ func test_kill_all_clears_a_wave_and_the_next_one_comes() -> void:
 	Engine.time_scale = 4.0
 	await _wait_for_state(&"active")
 	await _ticks(3)
-	assert_eq(main.ships.alive().size(), 3)
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 3)
 	assert_true(_exec("kill all").ok)
 	assert_eq(main.waves.kills, 3, "every raider destroyed counts")
 	await _wait_for_state(&"cleared")
@@ -119,10 +119,10 @@ func test_three_waves_advance_with_the_expected_kills() -> void:
 		await _wait_for_state(&"active", 90.0)
 		# Strike spawns over 6 s: wait for them all, then kill everything.
 		var t0: float = SimClock.now()
-		while main.ships.alive().size() < main.waves.plan.spawn_total() and SimClock.now() - t0 < 30.0:
+		while main.ships.alive(ShipPool.DEFAULT_TYPE).size() < main.waves.plan.spawn_total() and SimClock.now() - t0 < 30.0:
 			await _ticks(1)
 		await _ticks(2)
-		expected_kills += main.ships.alive().size()
+		expected_kills += main.ships.alive(ShipPool.DEFAULT_TYPE).size()
 		assert_true(_exec("kill all").ok)
 		await _wait_for_state(&"cleared", 20.0)
 		assert_eq(main.waves.plan.wave_number, wave + 1)
@@ -177,20 +177,20 @@ func test_the_wave_goes_on_across_the_players_death() -> void:
 	Engine.time_scale = 5.0
 	await _wait_for_state(&"active")
 	await _ticks(3)
-	assert_eq(main.ships.alive().size(), 3)
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 3)
 	DebugConsole.flags.invulnerable = false
 	assert_true(_exec("kill player").ok)
 	assert_eq(main.waves.losses, 1)
-	assert_eq(main.ships.alive().size(), 3, "the raiders stay")
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 3, "the raiders stay")
 	assert_eq(main.waves.plan.state, WavePlan.State.ACTIVE, "and the wave is still on")
 	var t0: float = SimClock.now()
 	while not main.player_alive and SimClock.now() - t0 < 10.0:
 		await _ticks(1)
 	Engine.time_scale = 1.0
 	assert_true(main.player_alive)
-	assert_eq(main.ships.alive().size(), 3)
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 3)
 	assert_eq(main.waves.plan.wave_number, 2, "the same wave")
-	for combatant: Combatant in main.ships.alive():
+	for combatant: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
 		assert_eq(combatant.driver._retarget_in_s, 0.0, "pilots look for the respawned player at once")
 
 
