@@ -69,6 +69,7 @@ Record later answers here (rules) or in `docs/design-references.md` (designs), s
 | Q7 | Sandbox? | **Wingmen in `combat_sandbox`**, raider waves grow to match; plus `instructor_route` and `dogfight` scenarios |
 | Q8 | Wingman deaths? | **Replaced at the next wave**: a downed wingman explodes (Starfury chunks) and a replacement launches when the next wave starts |
 | Q9 | Keyboard (right hand on the mouse; M2.1 put flight keys on the right side, which was wrong) | **Layout B, pods by position**, no keyboard pitch/yaw (the mouse flies). Table in M3-T01 |
+| Q10 | AC13's AI budget (2026-10-24: after T06's trims the 13-ship path measures 1.7-2.1 ms on the development desktop with M2 brains alone) | **Relative + record**: `AiPilot` may add at most 0.5 ms per tick over the M2 AI path in the same fight (paired test); the absolute number is recorded, and T12 records it again on `dogfight` |
 
 Calls made by the planner (say if you want them changed): callsigns `ALPHA 1` (player) to `ALPHA 4`, the instructor
 `INSTRUCTOR`; the default order is **cover me** (hold formation, engage hostiles that come within 2 km of the player);
@@ -96,7 +97,7 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | AC10 | Instructor: on `instructor_route` the instructor visits every waypoint in order; with the player parked it stops within 1 600 m and resumes when the player closes to 800 m; each demo completes its measurable goal (roll 360 ± 10°, flip-and-burn ends with velocity reversed or below 2 m/s, strafe box returns within 30 m of its start with every leg over 40 m, pod turn yaws the right way by over 30°, all stop ends below 0.5 m/s and 1 °/s); the HUD's waypoint marker projects to the route point | A | P6 |
 | AC11 | Wing orders: keys 1-4 (through `UiCommand`, never `Input`) and `wing order <attack\|form\|engage\|cover>` change every member's order and post one acknowledgement line; ATTACK MY TARGET with no hostile selected is refused with a message; the roster lists callsigns, hull and current behaviour; downed wingmen are replaced when the next wave starts, entering 1 500 m behind the player | A | P7 |
 | AC12 | Scenarios: `combat_sandbox`, `instructor_route` and `dogfight` validate (and broken `wings` / `route` entries give path-qualified errors); a headless sandbox run with wingmen clears three waves; a headless `dogfight` (four allies, six raiders, player `god on` and idle) ends with one side destroyed within 6 sim minutes in 5/5 seeds and is reproducible per seed within 1e-3 m after 60 s | A | P8 |
-| AC13 | Console and perf: `state` lists the M2 providers plus `factions`, `ram`, `wing`, `ai` (and `route` on `instructor_route`); every new command works under `--console-strict` and rejects bad arguments; new settings are schema entries; AI think time for 13 ships stays under 1.5 ms per tick headless (record the number); the hit and ram resolvers stay under 2 ms per tick in the dogfight run | A | |
+| AC13 | Console and perf: `state` lists the M2 providers plus `factions`, `ram`, `wing`, `ai` (and `route` on `instructor_route`); every new command works under `--console-strict` and rejects bad arguments; new settings are schema entries; AI think time for 13 ships: `AiPilot` adds at most 0.5 ms per tick over the M2 AI path in the same headless fight (paired, Q10), with the absolute number recorded; the hit and ram resolvers stay under 2 ms per tick in the dogfight run | A | |
 | AC14 | Keyboard layout B feels right with the right hand on the mouse; Caps Lock rolls (press and release both register) | H | |
 | AC15 | Wingmen fly a believable finger-four on the player, break to engage, rejoin, follow orders 1-4, and are useful in a fight; raiders fly in groups, evade when chased, and still make attack runs | H | P7, P8 |
 | AC16 | Rams: bumps feel harmless, hard hits hurt, head-ons kill; nothing tunnels visibly | H | |
@@ -656,12 +657,14 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
   range reaches 4 612 m at 149 m/s straight away; the same pilot at full hull attacks (closest 176 m, 5 hits).
 - **M2 unchanged**: `test_ai_attack` after the `AttackBrain` refactor: first fire 12.9 s, first hit 15.5 s, closest 394 m,
   65 hits, same-seed runs 0.0 m apart (as T05 recorded).
-- **AC13, AI half: not met on the development desktop; the whole driver path, M2 brains included, is over 1.5 ms**
+- **AC13, AI half: met as rebaselined (Q10).** The whole driver path, M2 brains included, is over the original 1.5 ms
+  on the development desktop
   (`test_ai_think_time`; 13 AI ships, four Starfuries on `ally_starfury` and nine raiders on `raider`, one fight, 60 Hz).
   Measured in fix round 1 with no other Godot running (one desktop program used about half a core throughout), paired: the
   same ships fly 12 alternating 60-tick blocks on `AiPilot` and on M2 `AttackBrain`s in one process, after a 4 s warm-up.
   - Quiet medians over three runs of the final test: AiPilot 1 847 / 2 367 / 2 213 us, M2 brains 1 708 / 2 078 / 2 001 us;
-    paired difference (the median over the six block pairs of AiPilot's block median minus the next M2 block's) +250 / +177 /
+    paired difference (as measured then: the median over the six block pairs of AiPilot's block median minus the next M2
+    block's) +250 / +177 /
     +117 us (the difference of the two medians: +139 / +289 / +212 us; +362 us inside a full `run_tests.sh`). The frame's
     speed swings about 2x over seconds whatever flies the ships: in the fast stretches both brains measure about 0.9-1.1 ms
     (AiPilot 1 117 / 1 131 us, M2 984 / 885 us in one run), in the slow ones about 2.0-2.5 ms. Hence short, many blocks and
@@ -675,7 +678,10 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
     0.14-0.21 ms; applying the commands 0.06-0.07 ms.
   - The test asserts the paired difference only: within 0.5 ms (T05's share for `AiPilot`), printing both medians and every
     block's. No absolute assertion, since the quiet median does not meet 1.5 ms;
-    the replay test of round 0 was dropped. AC13's absolute budget goes to the maintainer for a rebaseline.
+    the replay test of round 0 was dropped. The maintainer rebaselined AC13 to this paired share (Q10, 2026-10-24).
+  - After review the controller made the statistic bracketed: AiPilot flies one block more (13 blocks), every M2 block
+    sits between two AiPilot blocks, and the statistic is the median over the six M2 blocks of the mean of the two AiPilot
+    block medians either side minus the M2 block median, so a steady drift of the frame cost cannot hide AiPilot's cost.
   - Trimmed: `Perception.target` skipped for `AiPilot` (`reads_target()`); no target re-pick for a brain that chooses
     (`TARGET_NONE`, retarget 76 -> 14 us); `TargetingController.select_id` without a gather when the id is a candidate; a
     behaviour weighted 0 not scored; selection on packed arrays; the attack's engage-at-will fast path; shared per-hostile

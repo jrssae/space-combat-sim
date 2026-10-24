@@ -6,9 +6,10 @@ extends GutTest
 ## Paired: the same 13 ships fly alternating blocks on `AiPilot` and on M2's `AttackBrain` in one process, so both brains see
 ## the same fight and the same machine; `AiPilot`'s median tick must stay within `PILOT_SHARE_US` of the M2 brains' (T05 left
 ## `AiPilot` about 0.5 ms of AC13's 1.5 ms). On the development desktop the speed of the whole frame swings by up to 2x over
-## seconds whatever flies the ships, so the blocks are short and many, and the statistic is the median over the block
-## pairs (an AiPilot block and the M2 block right after it) of the difference of their medians: a pair that straddles one
-## of those swings is off by about a millisecond either way, and the median of six pairs is not moved by one or two. The first
+## seconds whatever flies the ships, so the blocks are short and many. Every M2 block sits between two AiPilot blocks, and
+## the statistic is the median over the M2 blocks of (the mean of the two AiPilot block medians either side) minus (the M2
+## block median): the bracketing cancels a steady drift of the frame cost, a block that straddles one of those swings is off
+## by about a millisecond either way, and the median of six is not moved by one or two. The first
 ## seconds after 13 ships spawn are slow whatever flies them, so the fight warms up for `WARM_UP_TICKS`, and each block
 ## settles for `SETTLE_TICKS` after the brains change.
 ##
@@ -21,7 +22,7 @@ const PILOT_SHARE_US: float = 500.0
 const WARM_UP_TICKS: int = 240
 const SETTLE_TICKS: int = 15
 const BLOCK_TICKS: int = 60
-## Blocks per brain, alternating AiPilot, M2, AiPilot, M2, ...
+## M2 blocks; AiPilot flies one more, so the order is AiPilot, M2, AiPilot, ..., M2, AiPilot.
 const BLOCKS: int = 6
 
 var world: WorldFrame
@@ -98,9 +99,9 @@ func test_ai_pilots_cost_at_most_half_a_millisecond_more_than_m2_brains_in_the_s
 	var ai_samples := PackedInt64Array()
 	var m2_samples := PackedInt64Array()
 	var block_medians: Array[String] = []
-	var pair_differences := PackedFloat64Array()
-	var last_pilot_median: float = 0.0
-	for block: int in 2 * BLOCKS + 1:  # block 0 is the warm-up, on AiPilot
+	var pilot_block_medians := PackedFloat64Array()
+	var m2_block_medians := PackedFloat64Array()
+	for block: int in 2 * BLOCKS + 2:  # block 0 is the warm-up, on AiPilot
 		var on_pilots: bool = block % 2 == 1 or block == 0
 		var brains: Array[PilotBrain] = pilots if on_pilots else m2
 		for i: int in ships.size():
@@ -115,16 +116,16 @@ func test_ai_pilots_cost_at_most_half_a_millisecond_more_than_m2_brains_in_the_s
 		(ai_samples if on_pilots else m2_samples).append_array(samples)
 		var block_median: float = _median(samples)
 		block_medians.append("%s %.0f" % ["AiPilot" if on_pilots else "M2", block_median])
-		if on_pilots:
-			last_pilot_median = block_median
-		else:
-			pair_differences.append(last_pilot_median - block_median)
+		(pilot_block_medians if on_pilots else m2_block_medians).append(block_median)
+	var pair_differences := PackedFloat64Array()
+	for i: int in BLOCKS:
+		pair_differences.append((pilot_block_medians[i] + pilot_block_medians[i + 1]) / 2.0 - m2_block_medians[i])
 	var ai_median: float = _median(ai_samples)
 	var m2_median: float = _median(m2_samples)
 	var sorted_differences: Array = Array(pair_differences)
 	sorted_differences.sort()
 	var paired: float = (float(sorted_differences[BLOCKS / 2 - 1]) + float(sorted_differences[BLOCKS / 2])) / 2.0
-	gut.p("AI think time, 13 ships in one fight, %d alternating blocks of %d ticks: AiPilot median %.0f us (mean %.0f), M2 AttackBrain median %.0f us (mean %.0f); paired difference (median over the block pairs) %+.0f us, difference of the medians %+.0f us; block medians %s; %d bolts in flight" % [
-			2 * BLOCKS, BLOCK_TICKS, ai_median, _mean(ai_samples), m2_median, _mean(m2_samples), paired,
+	gut.p("AI think time, 13 ships in one fight, %d alternating blocks of %d ticks: AiPilot median %.0f us (mean %.0f), M2 AttackBrain median %.0f us (mean %.0f); paired difference (median over the M2 blocks, bracketed) %+.0f us, difference of the medians %+.0f us; block medians %s; %d bolts in flight" % [
+			2 * BLOCKS + 1, BLOCK_TICKS, ai_median, _mean(ai_samples), m2_median, _mean(m2_samples), paired,
 			ai_median - m2_median, ", ".join(block_medians), get_tree().get_nodes_in_group(Projectile.GROUP).size()])
 	assert_lte(paired, PILOT_SHARE_US, "AiPilot within its 0.5 ms share over the M2 brains")
