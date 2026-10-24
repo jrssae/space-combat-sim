@@ -1,18 +1,25 @@
 class_name DestructionDirector
 extends Node
-## What happens when a ship's hull reaches zero (architecture §15.7). It listens to every watched `Damageable.destroyed`:
+## What happens when a ship's hull reaches zero (architecture §15.7, §16 D35). It listens to every watched `Damageable.destroyed`:
 ##
-## - a **raider**: its pose and velocity are read, then it is released to the `ShipPool` in the same tick (hidden, not
-##   processing, `Targetable` and `Damageable` inactive, so nothing targets or hits it afterwards); an `Explosion` (radius =
-##   its bounding radius) appears under `effects` at its position, drifting with its velocity, and `DebrisPool.burst`
-##   breaks it into its chunks (generic shards for an asset without any);
-## - the **player**: the same effects, then the ship is hidden and disabled and `player_destroyed` is emitted (Main ignores
-##   input while the player is dead); after `RESPAWN_DELAY_S` of sim time `respawn_due` is emitted and Main puts the ship
-##   back at the scenario start with a full hull.
+## - a **pooled ship**, raider or ally alike: its pose and velocity are read, then it is released to the `ShipPool` in the same
+##   tick (hidden, not processing, `Targetable` and `Damageable` inactive, so nothing targets or hits it afterwards); an
+##   `Explosion` (radius = its bounding radius) appears under `effects` at its position, drifting with its velocity, and
+##   `DebrisPool.burst` breaks it into its asset's chunks (the raider's wings and hump; the Starfury's cabin and four arms for an
+##   ally; generic shards for an asset without any);
+## - the **player**: the same effects (the Starfury's chunks), then the ship is hidden and disabled and `player_destroyed` is
+##   emitted (Main ignores input while the player is dead); after `RESPAWN_DELAY_S` of sim time `respawn_due` is emitted and Main
+##   puts the ship back at the scenario start with a full hull.
 ##
-## Console: `kill [target|all|player]` destroys now, bypassing god mode.
+## Signals: `ship_destroyed` for every pooled ship; `raider_destroyed` as well when it was hostile to the player (a kill, which
+## is what the waves count). An ally's death is a `ship_destroyed` only.
+##
+## Console: `kill [target|all|allies|player]` destroys now, bypassing god mode: the selected pooled ship, every raider (every
+## pooled ship that is not an ally), every ally, or the player.
 
-## A raider was destroyed (it is already back in the pool).
+## A pooled ship was destroyed (it is already back in the pool): a raider or an allied Starfury.
+signal ship_destroyed(combatant: Combatant, info: HitInfo)
+## A pooled ship hostile to the player was destroyed (a raider; it is already back in the pool). Follows `ship_destroyed`.
 signal raider_destroyed(combatant: Combatant, info: HitInfo)
 ## A nav buoy was destroyed (it is already hidden and out of play).
 signal buoy_destroyed(buoy: NavBuoy, info: HitInfo)
@@ -22,7 +29,7 @@ signal player_destroyed(info: HitInfo)
 signal respawn_due
 
 const RESPAWN_DELAY_S: float = 3.0
-const KILL_CHOICES: Array[StringName] = [&"target", &"all", &"player"]
+const KILL_CHOICES: Array[StringName] = [&"target", &"all", &"allies", &"player"]
 
 var world: WorldFrame = null
 var pool: ShipPool = null
@@ -37,7 +44,7 @@ var _respawn_at_s: float = INF
 
 func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"kill",
-			"Destroy the selected target, every raider or the player now (bypasses god mode)",
+			"Destroy the selected target, every raider, every allied ship or the player now (bypasses god mode)",
 			[ConsoleArg.enum_optional(&"who", KILL_CHOICES, &"target")]), _cmd_kill, self)
 
 
@@ -58,7 +65,7 @@ func setup(p_world: WorldFrame, p_pool: ShipPool, p_debris: DebrisPool, p_effect
 	debris = p_debris
 	effects = p_effects
 	player = p_player
-	for combatant: Combatant in pool._all:
+	for combatant: Combatant in pool.all_ships():
 		watch(combatant)
 	watch(player)
 
@@ -101,7 +108,23 @@ func _on_destroyed(info: HitInfo, combatant: Combatant) -> void:
 	if combatant == player:
 		player_destroyed.emit(info)
 	else:
-		raider_destroyed.emit(combatant, info)
+		ship_destroyed.emit(combatant, info)
+		if _is_hostile_to_player(combatant):
+			raider_destroyed.emit(combatant, info)
+
+
+# The player's side of `combatant`: a kill if hostile, an ally if friendly.
+func _relation_to_player(combatant: Combatant) -> Factions.Relation:
+	var own: StringName = player.faction if player != null else Factions.EARTH_ALLIANCE
+	return Factions.relation(own, combatant.faction)
+
+
+func _is_hostile_to_player(combatant: Combatant) -> bool:
+	return _relation_to_player(combatant) == Factions.Relation.HOSTILE
+
+
+func _is_ally_of_player(combatant: Combatant) -> bool:
+	return _relation_to_player(combatant) == Factions.Relation.FRIENDLY
 
 
 func _on_buoy_destroyed(info: HitInfo, buoy: NavBuoy) -> void:
@@ -149,13 +172,22 @@ func _cmd_kill(args: Dictionary) -> ConsoleResult:
 		&"all":
 			var killed: int = 0
 			for combatant: Combatant in pool.alive():
-				killed += 1 if combatant.damageable.kill() else 0
+				if not _is_ally_of_player(combatant):
+					killed += 1 if combatant.damageable.kill() else 0
 			return ConsoleResult.line("destroyed %d raider(s)" % killed)
+		&"allies":
+			var lost: int = 0
+			for combatant: Combatant in pool.alive():
+				if _is_ally_of_player(combatant):
+					lost += 1 if combatant.damageable.kill() else 0
+			if lost == 0:
+				return ConsoleResult.failure("no allied ships in play")
+			return ConsoleResult.line("destroyed %d allied ship(s)" % lost)
 	var ship: Ship = player.ship if player != null else null
 	if ship == null or not ship.targeting.system.has_selection():
 		return ConsoleResult.failure("no target selected")
 	var target: Combatant = pool.find_by_target_id(ship.targeting.selected_id())
 	if target == null:
-		return ConsoleResult.failure("the selected target is not a raider")
+		return ConsoleResult.failure("the selected target is not a pooled ship")
 	var target_name: String = target.display_name
 	return ConsoleResult.line("%s destroyed" % target_name) if target.damageable.kill() else ConsoleResult.failure("%s is already destroyed" % target_name)

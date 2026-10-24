@@ -11,8 +11,8 @@ extends RigidBody3D
 ## so a command that is not refreshed never repeats them.
 ##
 ## Built from data in `_ready` (or again on a later `setup`): mass and inertia from the `ShipSpec`; centre of mass,
-## collision primitives, gun muzzles and the cockpit eye point from the ship's `hardpoints.json`; the hull splats and
-## meshes from `assets/generated/<asset_id>/`, loaded guarded so the scene loads (with warnings) before
+## collision primitives, gun muzzles and the cockpit eye point from the ship's `hardpoints.json`; the hull splats (at the spec's
+## `splat_lod`, §16 D35) and meshes from `assets/generated/<asset_id>/`, loaded guarded so the scene loads (with warnings) before
 ## `scripts/gen_assets.sh` has run. Without hardpoints the ship cannot fly and only coasts.
 ##
 ## Children: `HullSplats` (GaussianSplatNode, identity in the scene: GDGS applies its own Rz(180°) on entering the
@@ -419,7 +419,10 @@ func _build_muzzles() -> void:
 
 func _load_visuals() -> void:
 	var dir: String = asset_dir(spec)
-	var splat_path: String = dir.path_join(spec.asset_id + ".ply")
+	var splat_path: String = SplatLod.ply_path(spec.asset_id, spec.splat_lod)
+	if splat_path.is_empty():
+		push_warning("Ship: %s lists no splat LOD %d in its manifest; drawing LOD0" % [spec.asset_id, spec.splat_lod])
+		splat_path = SplatLod.ply_path(spec.asset_id, 0)
 	var gaussian: GaussianResource = null
 	if ResourceLoader.exists(splat_path):
 		gaussian = load(splat_path) as GaussianResource

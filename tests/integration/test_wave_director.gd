@@ -46,7 +46,7 @@ func _wait_for_state(state: StringName, limit_s: float = 60.0) -> void:
 
 func test_the_sandbox_is_the_default_scenario_and_waits_for_wave_start() -> void:
 	assert_eq(main.waves.scenario_id, &"combat_sandbox")
-	assert_eq(main.ships.pool_size(), 6)
+	assert_eq(main.ships.pool_size(ShipPool.DEFAULT_TYPE), 6)
 	assert_eq(main.waves.plan.state, WavePlan.State.IDLE, "auto start is off for tests")
 	assert_eq(main.buoys.size(), 5, "the buoys stay as scenery")
 	assert_eq(DebugConsole.registry.format_path("waves.scenario"), "waves.scenario = combat_sandbox")

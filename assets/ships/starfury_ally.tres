@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="ShipSpec" load_steps=3 format=3]
+
+[ext_resource type="Script" uid="uid://csixdcdy0fu46" path="res://src/ship/ship_spec.gd" id="1_ship_spec"]
+[ext_resource type="Resource" path="res://assets/weapons/pulse_cannon_ef.tres" id="2_weapon"]
+
+[resource]
+script = ExtResource("1_ship_spec")
+asset_id = "starfury_aurora"
+splat_lod = 1
+mass = 48000.0
+inertia = Vector3(600000, 600000, 500000)
+pod_main_thrust = 360000.0
+pod_retro_thrust = 180000.0
+rcs_force_max = Vector3(480000, 480000, 0)
+rcs_torque_max = Vector3(940000, 940000, 1.57e+06)
+rate_max = Vector3(60, 60, 90)
+assist_gain_k = 6.0
+pod_yaw_gain = 0.5
+pod_yaw_deadzone = 0.1
+pod_yaw_smoothing_s = 0.15
+brake_gain_k = 2.0
+exhaust_velocity = 30000.0
+fuel_capacity_kg = 28800.0
+hull_max = 300.0
+ram_safe_dv_mps = 5.0
+ram_lethal_dv_mps = 18.0
+has_cockpit_interior = false
+engine_glow_color = Color(0.7, 0.9, 1.8, 1)
+weapon = ExtResource("2_weapon")

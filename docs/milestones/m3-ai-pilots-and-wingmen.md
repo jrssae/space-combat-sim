@@ -778,6 +778,58 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
     `AttackBrain` returns dictionaries from `InterceptMath.solve` and `PilotSteering.seek` every tick; the M2 path's own cost
     (about 1.7-2.2 ms here with M2 brains) is already over the budget on this desktop.
 
+**M3-T08 (allied ships: pool, LOD1, destruction; replenish pending T07).**
+- **Spec and LOD.** `assets/ships/starfury_ally.tres` is `starfury_aurora.tres` with `splat_lod = 1` and `has_cockpit_interior = false`
+  (same `asset_id`, so the hardpoints, hull mesh and chunks are the Starfury's; `test_ship_catalog` compares every stored `ShipSpec`
+  field). `ShipSpec.splat_lod` (0 = the full PLY): `Ship._load_visuals` asks `SplatLod.ply_path(asset_id, level)`
+  (`src/ship/splat_lod.gd`, pure; level 0 is `<asset_id>.ply` without reading the manifest, a higher level is looked up in
+  `manifest.json` `lods` by `level`, "" when absent). A level the manifest lacks warns and draws LOD0. The ally draws
+  `starfury_aurora_lod1.ply` (57 538 splats against the player's 230 230).
+- **`ShipCatalog`** gains `starfury_ally` and `FACTIONS` / `faction_for(type)` (`starfury_aurora` and `starfury_ally`
+  `earth_alliance`, `raider_fighter` `raiders`; `neutral` for an unlisted type).
+- **`ShipPool`.** `prepare(type, count)` builds with the catalog faction; `acquire(name, at, basis, velocity, brain, type)` is unchanged
+  (the caller names the ship); `next_name(prefix = "RAIDER", first = 1)` (allies: `next_name("ALPHA", 2)`, the player is ALPHA 1).
+  `alive()`, `pool_size()` and `free_count()` take an optional `type` (no type = every pooled ship); `type_of(combatant)` is new.
+  `ALLY_TYPE` is `starfury_ally`. Providers `raiders` and `allies` (`pool_size`, `free`, `alive`, `list`, `selected_brain`, each about its
+  own type; there is no `wing.members` yet). `spawn <raider|ally> [behaviour] [distance_m] [yaw_deg] [pitch_deg]`: an ally takes only `idle`
+  or `ai` (profile `ally_starfury`; a raider's `ai` uses `raider`), is named `ALPHA <n>` from 2 and placed like a raider (ahead of the
+  player, nose toward it). `despawn all` and `despawn target` return any pooled ship (P5 needs the ally to go).
+- **Scenario and `Main`.** `combat_sandbox` pools `{"raider_fighter": 6, "starfury_ally": 4}` (three wingmen and a spare for `spawn ally`;
+  T10 owns the final numbers); `ScenarioLoader` needed no change beyond its doc (any catalog type may be pooled). `Main.ally_pool_size`
+  (-1 = the scenario) next to `raider_pool_size`, and `Main` prepares the pools by type. `DebrisPool.prepare(type)` is now idempotent per
+  asset (the player's `starfury_aurora` and the allies' `starfury_ally` share one asset): `Main` always prepares the two `starfury_aurora`
+  chunk sets, in every scenario, and the raider's only when raiders are pooled. `DebrisPool.set_count` / `free_set_count` take an optional
+  asset id.
+- **Destruction.** `DestructionDirector.ship_destroyed(combatant, info)` fires for every pooled ship; `raider_destroyed` still fires after
+  it when the ship was hostile to the player (`Factions.relation` of the player's faction), so kills count raiders only and an ally's death
+  is no kill. `AudioDirector` moved to `ship_destroyed` (an ally explodes with a sound). An ally is released in the same tick and breaks up
+  into the Starfury chunk set, like the player (`burst` is keyed by `spec.asset_id`, which is `starfury_aurora` for both). `kill all` still
+  means every raider (every pooled ship that is not an ally); `kill allies` is new (an error when none is in play); `kill target` takes
+  any pooled ship.
+- **Waves.** `WaveDirector` counts and clears `ShipPool.DEFAULT_TYPE` ships only (`waves.alive`, the wave-cleared test, `_clear_field`, the
+  status line, `on_player_respawned`), so allies in the pool are neither raiders nor removed by `wave start|stop|next|restart`.
+- **Tests.** New: `test_splat_lod`, `test_ship_catalog`, `test_ally_pool` (the pool, LOD1 hull and no cockpit, the Starfury formula for a
+  straight burn with assist on - 30.0000 m/s after 2 s against 30.0000 expected, naming, per-type counts, 12 acquire / release cycles with
+  an unchanged splat-node count, the console, and an inner class on the sandbox for the waves) and `test_starfury_breakup` (the player's and
+  an ally's break-up are five pooled splat chunks that hold exactly the LOD1 hull's splats, ally back in the pool, two sets shared and a
+  third break-up mesh-only, the splat-node count over launch / destroy / respawn rounds). Changed to follow the new facts:
+  `test_destruction` (the player's break-up is now splat chunks, raider set counts per asset), `test_audio_director` (11 engine hums:
+  the player and 10 pooled ships), `test_wave_director` (`pool_size(type)`), `test_scenario_loader` (the sandbox's pools).
+  `scripts/run_tests.sh`: the providers line gains `allies`, `debris.free_sets` after a raider kill is 3 (two raider and two Starfury sets),
+  and two smoke runs (`spawn ally` / kill / `kill allies` / the player's death, and `spawn ally attack` exiting 1). A smoke run that
+  quits while an explosion sound still plays makes Godot report the WAV as "still in use" (an `ERROR:` line): the new run waits 300 ticks
+  before it quits.
+- **Splat budget (sandbox).** Registered splats are about 841 000 (M2: about 496 000): player 230 230, four allies 230 152, six raiders
+  158 928, raider debris 52 976, Starfury debris 115 076 (two LOD1 sets), sky 16 000, five buoys 38 000. The parked Starfury sets are
+  the new cost on the GPU side (a hidden splat still costs an early-out in projection and sort memory); one set would be enough to fall
+  back to if AC19 shows a problem. Recorded for the (H) frame-rate check.
+- **Replenish: pending T07.** `WingDirector.replenish()` (on `WaveDirector.wave_started`, an ally for each empty slot 1 500 m behind
+  the player at the player's velocity, on the wing's order) needs T07's `WingDirector` and is not built. Everything it needs exists:
+  `pool.acquire(name, at, basis, velocity, brain, ShipPool.ALLY_TYPE)`, `pool.next_name("ALPHA", 2)`, `DestructionDirector.ship_destroyed`.
+- **P5 is (H).** The capture needs a display and a GPU. Its console commands were run headless without the `screenshot` lines (spawn,
+  `despawn all`, spawn with yaw and pitch, `set targeting.selected "ALPHA 2"`, `timescale 0.1`, `kill target`: five Starfury chunks flying,
+  none mesh-only).
+
 ## Definition of done (M3)
 
 - T01-T12 merged into `m3`, `scripts/run_tests.sh` green, `docs/third-party.md` current, no generated binaries committed.

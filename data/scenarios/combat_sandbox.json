@@ -6,7 +6,7 @@
    {"type": "nav_buoy", "name": "NAV CHARLIE", "position": [-800, -200, -2000]},
    {"type": "nav_buoy", "name": "NAV DELTA",   "position": [1500, 400, 800], "velocity": [0, 0, -3]},
    {"type": "nav_buoy", "name": "NAV ECHO",    "position": [-200, 900, -4800]}],
- "pools": {"raider_fighter": 6},
+ "pools": {"raider_fighter": 6, "starfury_ally": 4},
  "loop": {"from_wave": 3, "add_per_loop": 1},
  "waves": [
    {"name": "TARGET PRACTICE", "delay_s": 5, "spawns": [

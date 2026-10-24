@@ -3,7 +3,8 @@ extends Node
 ## Runs the combat sandbox's waves (architecture §15.10, M2-T09): owns the pure `WavePlan`, spawns raiders from the `ShipPool`
 ## with a `BrainFactory` brain at the position the scenario gives (an offset from the player's or the origin's universe position
 ## at the moment the wave activates, summed as `UniversePos`), counts kills and losses, and feeds the HUD's status line. Free
-## flight has no waves: the director then never starts and does nothing.
+## flight has no waves: the director then never starts and does nothing. The waves are about the raiders: allied ships in the pool
+## (M3-T08) are not counted as raiders, not cleared when a wave starts or stops, and a destroyed ally is no kill.
 ##
 ## `process_physics_priority` 300: after the hit resolver (200), so a raider destroyed this tick is already out of `alive`.
 ## Kills: every raider destroyed counts (only the player or the console can destroy one in M2). Losses: the player's deaths.
@@ -45,7 +46,7 @@ func _ready() -> void:
 		&"name": {"get": func() -> String: return plan.current_name(), "doc": "Name of the current wave"},
 		&"state": {"get": func() -> String: return String(plan.state_name()), "doc": "idle, countdown, active or cleared"},
 		&"next_in_s": {"get": func() -> float: return plan.countdown_remaining(), "unit": "s", "doc": "Seconds until the wave starts"},
-		&"alive": {"get": func() -> int: return pool.alive().size() if pool != null else 0, "doc": "Raiders alive"},
+		&"alive": {"get": func() -> int: return _raiders_alive().size(), "doc": "Raiders alive"},
 		&"kills": {"get": func() -> int: return kills, "doc": "Raiders destroyed this session"},
 		&"losses": {"get": func() -> int: return losses, "doc": "Times the player was destroyed"},
 	}), self)
@@ -95,7 +96,7 @@ func stop() -> void:
 func on_player_respawned() -> void:
 	if pool == null:
 		return
-	for combatant: Combatant in pool.alive():
+	for combatant: Combatant in _raiders_alive():
 		if combatant.driver != null:
 			combatant.driver._retarget_in_s = 0.0
 
@@ -103,7 +104,7 @@ func on_player_respawned() -> void:
 func _physics_process(delta: float) -> void:
 	if not plan.is_running() or pool == null:
 		return
-	var requests: Array[Dictionary] = plan.update(delta, pool.alive().size())
+	var requests: Array[Dictionary] = plan.update(delta, _raiders_alive().size())
 	for request: Dictionary in requests:
 		_spawn(request)
 	_after_change()
@@ -148,13 +149,18 @@ var _anchor_wave: int = -1
 func _clear_field() -> void:
 	if pool == null:
 		return
-	for combatant: Combatant in pool.alive():
+	for combatant: Combatant in _raiders_alive():
 		pool.release(combatant)
 	_anchor_wave = -1
 	_anchor_player = null
 
 
 # --- events and status ------------------------------------------------------------------------------------------------
+
+
+# The raiders in play: what a wave has to clear. Allied ships share the pool and are none of its business.
+func _raiders_alive() -> Array[Combatant]:
+	return pool.alive(ShipPool.DEFAULT_TYPE) if pool != null else ([] as Array[Combatant])
 
 
 func _on_raider_destroyed(_combatant: Combatant, _info: HitInfo) -> void:
@@ -192,7 +198,7 @@ func status_line() -> String:
 			return "%s   IN %d" % [head, ceili(plan.countdown_remaining())]
 		WavePlan.State.CLEARED:
 			return "%s   CLEARED   KILLS %d" % [head, kills]
-	return "%s   RAIDERS %d   KILLS %d" % [head, pool.alive().size() if pool != null else 0, kills]
+	return "%s   RAIDERS %d   KILLS %d" % [head, _raiders_alive().size(), kills]
 
 
 # --- console ---------------------------------------------------------------------------------------------------------

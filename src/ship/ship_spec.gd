@@ -63,6 +63,10 @@ extends Resource
 ## Whether the asset has a first-person `cockpit_interior.obj` (the Starfury does; AI ships such as the raider do not,
 ## so the ship does not look for it or warn about it).
 @export var has_cockpit_interior: bool = true
+## Which level of detail of the asset's splats the hull draws: 0 is the full `<asset_id>.ply`, a higher level is the one the
+## asset's `manifest.json` lists under `lods` (`SplatLod`). Allied Starfuries draw LOD1, about a quarter of the splats (§16 D35).
+## The collision, hardpoints, fallback mesh and break-up chunks are the asset's, whatever the level.
+@export_range(0, 8) var splat_lod: int = 0
 
 
 ## Where this ship's generated hardpoints live.

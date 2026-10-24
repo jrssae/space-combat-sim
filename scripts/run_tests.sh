@@ -180,7 +180,7 @@ if grep -E "${SCRIPT_ERRORS}" "${log}"; then
     echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: ai, audio, camera, combat, controls, debris, debug, factions, hud, hull, input, raiders, ram, render, settings, ship, targeting, time, waves, weapons, world" \
+expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, hud, hull, input, raiders, ram, render, settings, ship, targeting, time, waves, weapons, world" \
     || smoke_status=1
 expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
 expect_line "${log}" "[console] render.splat_backend = headless" || smoke_status=1
@@ -216,7 +216,7 @@ if (( kill_status != 0 )); then
     smoke_status=1
 fi
 expect_line "${log}" "[console] raiders.alive = 0" || smoke_status=1
-expect_line "${log}" "[console] debris.free_sets = 1" || smoke_status=1
+expect_line "${log}" "[console] debris.free_sets = 3" || smoke_status=1  # two raider sets and two Starfury sets, one flying
 expect_line "${log}" "[console] hull.destroyed = true" || smoke_status=1
 expect_line "${log}" "[console] hull.destroyed = false" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
@@ -275,6 +275,48 @@ expect_line "${log}" "[console] raiders.pool_size = 0" || smoke_status=1
 expect_line "${log}" "[console] waves.state = idle" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 reject_text "${log}" "ERROR:" || smoke_status=1
+
+echo "== Console smoke run: an allied Starfury is spawned, shot down into Starfury chunks and replaced on the real main scene"
+# M3-T08 / AC7: `spawn ally` takes an ALPHA ship from the ally pool, a destroyed ally is no kill and takes one of the Starfury's two
+# chunk sets (the player's death takes the other), and `kill allies` leaves none. It waits before it quits: leaving while an
+# explosion sound plays makes the engine report the sound's resource as still in use.
+log="${REPORTS}/console_allies.log"
+allies_status=0
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; wave stop; spawn ally idle 60 0 0; wait 5; get allies.alive; get allies.pool_size; set targeting.selected "ALPHA 2"; kill target; wait 5; get allies.alive; get allies.free; get waves.kills; get debris.free_sets; spawn ally ai 800; wait 60; ai ALPHA 2; kill allies; get allies.alive; kill player; get debris.free_sets; wait 300; quit' \
+    > "${log}" 2>&1 || allies_status=$?
+cat "${log}"
+if (( allies_status != 0 )); then
+    echo "run_tests.sh: allies smoke run exited ${allies_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] ALPHA 2 (idle) at 60 m" || smoke_status=1
+expect_line "${log}" "[console] allies.alive = 1" || smoke_status=1
+expect_line "${log}" "[console] allies.pool_size = 4" || smoke_status=1
+expect_line "${log}" "[console] ALPHA 2 destroyed" || smoke_status=1
+expect_line "${log}" "[console] allies.alive = 0" || smoke_status=1
+expect_line "${log}" "[console] allies.free = 4" || smoke_status=1
+expect_line "${log}" "[console] waves.kills = 0" || smoke_status=1
+expect_line "${log}" "[console] debris.free_sets = 3" || smoke_status=1
+expect_line "${log}" "[console] ALPHA 2 (ai) at 800 m" || smoke_status=1
+expect_text "${log}" "[console] ALPHA 2: " || smoke_status=1
+expect_line "${log}" "[console] destroyed 1 allied ship(s)" || smoke_status=1
+expect_line "${log}" "[console] debris.free_sets = 2" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
+
+echo "== Console smoke run: spawn ally with a raider behaviour must exit 1"
+log="${REPORTS}/console_allies_strict.log"
+allies_strict_status=0
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; spawn ally attack 500; quit 0' > "${log}" 2>&1 || allies_strict_status=$?
+cat "${log}"
+if (( allies_strict_status != 1 )); then
+    echo "run_tests.sh: bad ally behaviour smoke run exited ${allies_strict_status}, expected 1 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_text "${log}" "[console] error: an ally takes idle or ai, not attack" || smoke_status=1
+reject_text "${log}" "[console] > quit 0" || smoke_status=1
 
 echo "== Console smoke run: faction relations and friendly fire on the real main scene"
 # M3-T02 / AC2, AC3: `relation` prints and sets a pair for the session (it never writes data/factions.json), `reset`

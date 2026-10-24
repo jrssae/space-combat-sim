@@ -120,7 +120,8 @@ func test_the_hull_warning_repeats_below_a_quarter_and_stops_above() -> void:
 
 
 func test_every_ship_has_an_engine_hum_that_follows_thrust() -> void:
-	assert_eq(main.audio.engine_count(), 7, "the player and six pooled raiders")
+	assert_eq(main.ships.pool_size(), 10, "six raiders and four allied Starfuries (M3-T08)")
+	assert_eq(main.audio.engine_count(), 1 + main.ships.pool_size(), "the player and every pooled ship")
 	var idle: float = AudioDirector.engine_level(FlightOutput.new())
 	assert_almost_eq(idle, AudioDirector.HUM_IDLE_LEVEL, 1e-9, "no thrust: the idle floor")
 	var out := FlightOutput.new()

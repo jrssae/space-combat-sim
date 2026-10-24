@@ -1,7 +1,8 @@
 class_name DebrisPool
 extends Node3D
 ## Debris of broken-up ships (architecture §15.6, §15.7, D22). Splat-bearing chunks are built once, at scenario load
-## (`prepare`): `SETS_PER_TYPE` complete sets (one `DebrisChunk` per chunk of the asset) per chunked asset type, parked.
+## (`prepare`): `SETS_PER_TYPE` complete sets (one `DebrisChunk` per chunk of the asset) per chunked asset, parked. The raider's
+## sets serve raiders; the Starfury's (cut from its LOD1 hull, §16 D35) serve the allies and the player.
 ## `burst` takes a free set and flies it; with every set busy it makes mesh-only chunks instead (a mesh is cheap to create
 ## and free, a splat node is not). Assets without chunks get generic dark shards. So the number of `GaussianSplatNode`s in
 ## the tree never changes while playing.
@@ -39,17 +40,21 @@ func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
 
 
-## Builds the sets for a ship type (`ShipCatalog`): `SETS_PER_TYPE` sets of its generated chunks, parked. Returns the
-## number of sets built (0 for an asset without chunks).
+## Builds the sets for a ship type (`ShipCatalog`): `SETS_PER_TYPE` sets of its asset's generated chunks, parked. Types that
+## share an asset share its sets (the player's `starfury_aurora` and the allies' `starfury_ally`, §16 D35), so a second call for
+## the same asset builds nothing. Returns the number of sets the asset has (0 for an asset without chunks).
 func prepare(type: StringName) -> int:
 	var spec: ShipSpec = ShipCatalog.spec_for(type)
 	if spec == null:
 		return 0
+	var asset_id := StringName(spec.asset_id)
+	if _sets.has(asset_id):
+		return set_count(asset_id)
 	var hardpoints: Hardpoints = Hardpoints.load_file(spec.hardpoints_path())
 	if not hardpoints.valid:
 		push_warning("DebrisPool: %s; no debris for %s" % [hardpoints.error, type])
 		return 0
-	return prepare_chunks(StringName(spec.asset_id), hardpoints.chunks)
+	return prepare_chunks(asset_id, hardpoints.chunks)
 
 
 ## As `prepare`, from chunk entries directly (tests).
@@ -99,17 +104,23 @@ func burst(asset_id: StringName, chunks: Array[Dictionary], xform: Transform3D, 
 	return launched
 
 
-func set_count() -> int:
+## Chunk sets built: every asset's, or only `asset_id`'s.
+func set_count(asset_id: StringName = &"") -> int:
+	if asset_id != &"":
+		return (_sets.get(asset_id, []) as Array).size()
 	var n: int = 0
 	for sets: Array in _sets.values():
 		n += sets.size()
 	return n
 
 
-func free_set_count() -> int:
+## Chunk sets parked and ready: every asset's, or only `asset_id`'s.
+func free_set_count(asset_id: StringName = &"") -> int:
 	var n: int = 0
-	for asset_id: StringName in _sets:
-		for set: Array in _sets[asset_id]:
+	for key: StringName in _sets:
+		if asset_id != &"" and key != asset_id:
+			continue
+		for set: Array in _sets[key]:
 			n += 1 if _set_is_free(set) else 0
 	return n
 

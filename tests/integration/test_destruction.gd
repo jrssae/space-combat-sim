@@ -6,6 +6,8 @@ extends GutTest
 
 const DT: float = 1.0 / 60.0
 const BOLT_SPEED: float = 1000.0
+const RAIDER_ASSET: StringName = &"raider_fighter"
+const STARFURY_ASSET: StringName = &"starfury_aurora"
 
 var main: Main
 var source: FakeInputSource
@@ -150,9 +152,10 @@ func test_a_chunk_set_leaves_the_pool_and_flies_with_the_ship_then_returns() -> 
 	var raider: Combatant = _spawn_raider()
 	var ship_velocity := Vector3(0.0, 0.0, -50.0)
 	raider.ship.linear_velocity = ship_velocity
-	assert_eq(main.debris.free_set_count(), 2)
+	assert_eq(main.debris.free_set_count(RAIDER_ASSET), 2)
 	raider.damageable.kill()
-	assert_eq(main.debris.free_set_count(), 1, "a set left the pool")
+	assert_eq(main.debris.free_set_count(RAIDER_ASSET), 1, "a set left the pool")
+	assert_eq(main.debris.free_set_count(STARFURY_ASSET), 2, "the Starfury's sets are for allies and the player")
 	assert_eq(main.debris.active_chunk_count(), 5)
 	var active: Array[DebrisChunk] = []
 	for child: Node in main.debris.get_children():
@@ -164,7 +167,7 @@ func test_a_chunk_set_leaves_the_pool_and_flies_with_the_ship_then_returns() -> 
 	for i: int in roundi((DebrisChunk.LIFETIME_S + DebrisChunk.SHRINK_S + 0.2) * 60.0):
 		for chunk: DebrisChunk in active:
 			chunk.advance(DT)
-	assert_eq(main.debris.free_set_count(), 2, "and the set is back")
+	assert_eq(main.debris.free_set_count(RAIDER_ASSET), 2, "and the set is back")
 
 
 func test_with_both_sets_busy_a_third_break_up_uses_mesh_chunks() -> void:
@@ -172,7 +175,7 @@ func test_with_both_sets_busy_a_third_break_up_uses_mesh_chunks() -> void:
 		_spawn_raider(100.0 + 60.0 * float(i))
 	for combatant: Combatant in main.ships.alive():
 		combatant.damageable.kill()
-	assert_eq(main.debris.free_set_count(), 0)
+	assert_eq(main.debris.free_set_count(RAIDER_ASSET), 0)
 	assert_eq(main.debris.mesh_chunks_in_flight(), 5, "the third raider's chunks are mesh only")
 	assert_eq(destroyed_log.size(), 3)
 
@@ -217,11 +220,12 @@ func test_the_players_death_hides_the_ship_ignores_input_and_respawns_after_thre
 	assert_eq(main.ship.process_mode, Node.PROCESS_MODE_DISABLED)
 	assert_eq(_effects().size(), 1, "an explosion at the ship")
 	assert_almost_eq(_effects()[0].global_position, death_position, Vector3.ONE * 1.0)
-	# The Starfury's chunks (M3-T03: cabin and four arms); no Starfury splat sets are prepared yet (M3-T08), so mesh only.
+	# The Starfury's chunks (M3-T03: cabin and four arms), flown as the pooled Starfury splat set (M3-T08).
 	var starfury_chunks: int = Hardpoints.load_file(main.ship.spec.hardpoints_path()).chunks.size()
 	assert_eq(starfury_chunks, 5, "the Starfury has its cabin and four arms")
 	assert_eq(main.debris.active_chunk_count(), starfury_chunks, "the player breaks into the Starfury's chunks")
-	assert_eq(main.debris.mesh_chunks_in_flight(), starfury_chunks, "mesh-only chunks until Starfury sets are prepared")
+	assert_eq(main.debris.mesh_chunks_in_flight(), 0, "pooled splat chunks, not mesh-only ones")
+	assert_eq(main.debris.free_set_count(STARFURY_ASSET), 1, "one of the two Starfury sets is flying")
 	# Input is ignored while dead.
 	source.hold(InputAdapter.FIRE)
 	var bolts_before: int = main.projectiles.get_child_count()
