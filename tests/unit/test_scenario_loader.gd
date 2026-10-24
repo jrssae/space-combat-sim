@@ -180,7 +180,7 @@ func test_the_combat_sandbox_file_validates() -> void:
 	assert_true(result["ok"], result["error"])
 	assert_eq(result["scenario_id"], &"combat_sandbox")
 	assert_eq((result["props"] as Array).size(), 5, "the buoys stay as scenery")
-	assert_eq(result["pools"], {&"raider_fighter": 6})
+	assert_eq(result["pools"], {&"raider_fighter": 6, &"starfury_ally": 4}, "six raiders and four allied Starfuries (M3-T08)")
 	assert_eq(result["loop"], {"from_wave": 3, "add_per_loop": 1})
 	var waves: Array[Dictionary] = result["waves"]
 	assert_eq(waves.size(), 3)
@@ -202,6 +202,16 @@ func test_the_combat_sandbox_file_validates() -> void:
 		assert_eq(spawn["behaviour"]["cruise_mps"], 80.0)
 		assert_eq(spawn["behaviour"]["aggro_range_m"], 1500.0)
 		assert_eq((spawn["behaviour"]["waypoints"] as Array).size(), 3)
+
+
+func test_pools_take_the_allied_starfury_beside_the_raider() -> void:
+	var result: Dictionary = ScenarioLoader.from_data(_sandbox_with({"pools": {"raider_fighter": 4, "starfury_ally": 3}}))
+	assert_true(result["ok"], result["error"])
+	assert_eq(result["pools"], {&"raider_fighter": 4, &"starfury_ally": 3})
+	var allies_only: Dictionary = ScenarioLoader.from_data(_sandbox_with({"pools": {"starfury_ally": 2}}))
+	assert_true(allies_only["ok"], allies_only["error"])
+	var bad: Dictionary = ScenarioLoader.from_data(_sandbox_with({"pools": {"starfury_ally": -1}}))
+	assert_string_contains(bad["error"], "pools.starfury_ally must be a whole number")
 
 
 func test_a_scenario_without_waves_has_empty_pools_waves_and_no_loop() -> void:

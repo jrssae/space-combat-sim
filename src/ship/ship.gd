@@ -11,8 +11,8 @@ extends RigidBody3D
 ## so a command that is not refreshed never repeats them.
 ##
 ## Built from data in `_ready` (or again on a later `setup`): mass and inertia from the `ShipSpec`; centre of mass,
-## collision primitives, gun muzzles and the cockpit eye point from the ship's `hardpoints.json`; the hull splats and
-## meshes from `assets/generated/<asset_id>/`, loaded guarded so the scene loads (with warnings) before
+## collision primitives, gun muzzles and the cockpit eye point from the ship's `hardpoints.json`; the hull splats (at the spec's
+## `splat_lod`, §16 D35) and meshes from `assets/generated/<asset_id>/`, loaded guarded so the scene loads (with warnings) before
 ## `scripts/gen_assets.sh` has run. Without hardpoints the ship cannot fly and only coasts.
 ##
 ## Children: `HullSplats` (GaussianSplatNode, identity in the scene: GDGS applies its own Rz(180°) on entering the
@@ -39,7 +39,7 @@ extends RigidBody3D
 signal assist_toggled(on: bool)
 
 const SCENE_PATH: String = "res://src/ship/ship.tscn"
-const ASSET_ROOT: String = "res://assets/generated"
+const ASSET_ROOT: String = ShipSpec.ASSET_ROOT
 const COCKPIT_MESH_FILE: String = "cockpit_interior.obj"
 ## Used when the hardpoints are missing (the chase camera still needs somewhere to sit); matches §8.
 const DEFAULT_CHASE_OFFSET: Vector3 = Vector3(0.0, 2.5, 9.0)
@@ -419,11 +419,14 @@ func _build_muzzles() -> void:
 
 func _load_visuals() -> void:
 	var dir: String = asset_dir(spec)
-	var splat_path: String = dir.path_join(spec.asset_id + ".ply")
+	var lod: Dictionary = SplatLod.resolve(spec.asset_id, spec.splat_lod)
+	var splat_path: String = lod["path"]
+	if not String(lod["warning"]).is_empty():
+		push_warning("Ship: %s" % lod["warning"])  # one message per problem: a manifest that cannot be read draws nothing, below
 	var gaussian: GaussianResource = null
-	if ResourceLoader.exists(splat_path):
+	if not splat_path.is_empty() and ResourceLoader.exists(splat_path):
 		gaussian = load(splat_path) as GaussianResource
-	if gaussian == null:
+	if gaussian == null and not splat_path.is_empty():
 		push_warning("Ship: %s is missing or not imported (run scripts/gen_assets.sh, then import); no hull splats" % splat_path)
 	hull_splats.gaussian = gaussian
 	hull_mesh_fallback.mesh = _load_mesh(dir.path_join(spec.asset_id + ".obj"))

@@ -5,7 +5,6 @@ extends Node3D
 ## commands and UI actions. Main runs while paused (so Start can unpause); World and everything in it pause.
 
 const SCENARIO_DIR := "res://data/scenarios/"
-const SHIP_SPEC_PATH := "res://assets/ships/starfury_aurora.tres"
 const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
@@ -16,6 +15,9 @@ signal player_respawned
 ## Raiders built (parked) at load for the waves and the console's `spawn`. -1 = what the scenario's `pools` says (the
 ## sandbox 6, free flight none); 0 or more overrides it. Set before the node enters the tree.
 var raider_pool_size: int = -1
+## Allied Starfuries built (parked) at load for the wings and the console's `spawn ally` (M3-T08): -1 = the scenario's `pools`
+## (the sandbox 4, free flight none); 0 or more overrides it. Set before the node enters the tree.
+var ally_pool_size: int = -1
 ## Overrides `settings.scenario` with a scenario file (tests). Empty = the setting.
 var scenario_path: String = ""
 ## The sandbox starts wave 1's countdown at load. Tests that drive the waves themselves turn this off.
@@ -73,12 +75,15 @@ func _ready() -> void:
 	ships.world = world
 	ships.projectiles = projectiles
 	ships.player = ship
-	var pool_count: int = raider_pool_size
-	if pool_count < 0:
-		pool_count = int((scenario.get("pools", {}) as Dictionary).get(ShipPool.DEFAULT_TYPE, 0))
+	var pool_count: int = _pool_count(scenario, ShipPool.DEFAULT_TYPE, raider_pool_size)
 	if pool_count > 0:
 		ships.prepare(ShipPool.DEFAULT_TYPE, pool_count)
 		debris.prepare(ShipPool.DEFAULT_TYPE)
+	var ally_count: int = _pool_count(scenario, ShipPool.ALLY_TYPE, ally_pool_size)
+	if ally_count > 0:
+		ships.prepare(ShipPool.ALLY_TYPE, ally_count)
+	# The Starfury's break-up chunks serve the allies and the player (the player can die in any scenario).
+	debris.prepare(ShipCatalog.PLAYER_TYPE)
 	hud.input_provider = _build_hud_input
 	director.setup(world, ships, debris, effects, combatant)
 	director.player_destroyed.connect(_on_player_destroyed)
@@ -191,6 +196,13 @@ func snapshot() -> Dictionary:
 	return s
 
 
+# How many ships of `type` to build: the override when it is 0 or more, else the scenario's `pools` entry (0 when it has none).
+func _pool_count(scenario: Dictionary, type: StringName, override_count: int) -> int:
+	if override_count >= 0:
+		return override_count
+	return int((scenario.get("pools", {}) as Dictionary).get(type, 0))
+
+
 ## The scenario file in use: `scenario_path`, else the one `settings.scenario` names.
 func resolved_scenario_path() -> String:
 	if not scenario_path.is_empty():
@@ -300,7 +312,7 @@ func _apply_input_settings() -> void:
 
 
 func _spawn_ship() -> void:
-	var spec := load(SHIP_SPEC_PATH) as ShipSpec
+	var spec: ShipSpec = ShipCatalog.spec_for(ShipCatalog.PLAYER_TYPE)
 	combatant = ShipAssembly.build(spec, world, projectiles, {
 		ShipAssembly.OPT_FACTION: Factions.EARTH_ALLIANCE,
 		ShipAssembly.OPT_DISPLAY_NAME: "PLAYER",

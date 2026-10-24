@@ -12,7 +12,8 @@ extends RefCounted
 ##      "player": {"position": UniversePos, "forward": Vector3, "basis": Basis},
 ##      "props": Array[Dictionary],                 # each {"type": StringName, "name": String,
 ##                                                  #       "position": UniversePos, "velocity": Vector3}
-##      "pools": Dictionary,                        # ship type (StringName) -> how many to build (int); may be empty
+##      "pools": Dictionary,                        # ship type (StringName) -> how many to build (int); may be empty.
+##                                                  # `Main` builds `raider_fighter` and `starfury_ally` (M3-T08) from it
 ##      "waves": Array[Dictionary],                 # each {"name", "delay_s", "spawns": Array[{type, name, anchor, offset,
 ##                                                  #       velocity, at_s, behaviour}]} (M2-T09); may be empty
 ##      "loop": Dictionary}                         # {"from_wave": int (0 = none), "add_per_loop": int}
@@ -123,7 +124,8 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	return result
 
 
-## `pools`: `{"raider_fighter": 6}` -> `{&"raider_fighter": 6}`, or an error string.
+## `pools`: `{"raider_fighter": 6, "starfury_ally": 4}` -> `{&"raider_fighter": 6, &"starfury_ally": 4}`, or an error string. Any
+## `ShipCatalog` type may be named; the counts are whole numbers, 0 or more.
 static func _pools(raw: Variant, source: String) -> Variant:
 	if not (raw is Dictionary):
 		return "%s: pools must be an object" % source

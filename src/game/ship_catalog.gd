@@ -1,11 +1,23 @@
 class_name ShipCatalog
 extends RefCounted
-## Scenario ship type -> `ShipSpec` (architecture §15.2). Scenarios and console commands name ships by type
-## (`raider_fighter`); this is the one place that knows which resource flies it. Pure.
+## Scenario ship type -> `ShipSpec` (architecture §15.2) and the faction each type flies for by default. Scenarios and console
+## commands name ships by type (`raider_fighter`); this is the one place that knows which resource flies it and whose side it
+## is on. `starfury_ally` is the wingman: the Starfury's numbers with the LOD1 splats and no cockpit (§16 D35). Pure.
+
+## The type the player flies (`Main` builds it, and every Starfury breaks up into its asset's chunks).
+const PLAYER_TYPE: StringName = &"starfury_aurora"
 
 const PATHS: Dictionary[StringName, String] = {
-	&"starfury_aurora": "res://assets/ships/starfury_aurora.tres",
+	PLAYER_TYPE: "res://assets/ships/starfury_aurora.tres",
+	&"starfury_ally": "res://assets/ships/starfury_ally.tres",
 	&"raider_fighter": "res://assets/ships/raider_delta_v.tres",
+}
+
+## The faction a ship of each type is built for (`ShipPool.prepare`); the player's own type is listed for completeness.
+const FACTIONS: Dictionary[StringName, StringName] = {
+	PLAYER_TYPE: Factions.EARTH_ALLIANCE,
+	&"starfury_ally": Factions.EARTH_ALLIANCE,
+	&"raider_fighter": Factions.RAIDERS,
 }
 
 
@@ -17,6 +29,11 @@ static func types() -> Array[StringName]:
 	var out: Array[StringName] = []
 	out.assign(PATHS.keys())
 	return out
+
+
+## The faction ships of `type` fly for by default; `neutral` for a type the catalog does not list.
+static func faction_for(type: StringName) -> StringName:
+	return FACTIONS.get(type, Factions.NEUTRAL)
 
 
 ## The spec resource for `type`, or null (with a warning) for an unknown type.

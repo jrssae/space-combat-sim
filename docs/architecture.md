@@ -1538,7 +1538,8 @@ src/ai/wing.gd, formation.gd             wing state and slot offsets (T07)
 src/ai/route.gd, manoeuvre.gd, manoeuvres.gd   instructor route and demo moves (T09)
 src/game/wing_director.gd                Node (Combat, priority 290): wings, orders, acknowledgements, replenish (T07, T08)
 assets/ai/{ally_starfury,raider,instructor}.tres, starfury_tactics.tres
-assets/ships/starfury_ally.tres
+assets/ships/starfury_ally.tres          the Starfury's numbers, splat_lod 1, no cockpit (T08)
+src/ship/splat_lod.gd                    RefCounted, pure: which PLY an asset draws at a splat LOD, from its manifest (T08)
 data/scenarios/{instructor_route,dogfight}.json
 ```
 
@@ -1559,10 +1560,11 @@ data/scenarios/{instructor_route,dogfight}.json
 | `factions` | Factions (T02) | `ids`, `relations`, `friendly_fire` |
 | `ram` | RamResolver (T04) | `events`, `last`, `resolve_us` |
 | `ai` | AI drivers (T06) | `ships`, `by_behaviour`, `think_us` |
+| `allies` | ShipPool (T08) | `pool_size`, `free`, `alive`, `list`, `selected_brain` |
 | `wing` | WingDirector (T07) | `name`, `order`, `formation`, `members`, `last_ack` |
 | `route` | instructor (T09) | `index`, `count`, `lag_m`, `state`, `demo` |
 
 Commands: `relation <a> <b> [friendly|neutral|hostile]` / `relation reset`; `wing order <attack|form|engage|cover>`;
-`wing formation <finger_four|wedge|line_abreast>`; `spawn ally [idle|ai] [distance_m] [yaw_deg] [pitch_deg]`; `ai <name>`;
+`wing formation <finger_four|wedge|line_abreast>`; `spawn ally [idle|ai] [distance_m] [yaw_deg] [pitch_deg]`; `kill allies`; `ai <name>`;
 `scenario [free_flight|combat_sandbox|instructor_route|dogfight]`. Settings: `friendly_fire` (bool, false), `ram_damage`
 (bool, true).

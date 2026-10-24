@@ -6,9 +6,10 @@ extends Node3D
 ##
 ## Hooks (`connect_combat`, `watch_ship`): a ship's `PulseCannon.projectile_fired` (`pulse_fire` for the Starfury's side,
 ## `raider_fire` for the others), `HitResolver.hit_resolved` (`hit_hull` at the hit point), the destruction director's
-## `raider_destroyed` / `player_destroyed` (`explosion`), the player's hull below 25 % (`warning_beep`, repeating) and a new
-## selection (`target_blip`). Each ship gets a looping `engine_loop` child (so it follows the ship and a rebase) that plays while
-## the ship is in play and within `ENGINE_RANGE_M` of the listener; its pitch and volume follow the flight output's thrust levels.
+## `ship_destroyed` (raiders and allies) / `player_destroyed` (`explosion`), the player's hull below 25 % (`warning_beep`,
+## repeating) and a new selection (`target_blip`). Each ship gets a looping `engine_loop` child (so it follows the ship and a
+## rebase) that plays while the ship is in play and within `ENGINE_RANGE_M` of the listener; its pitch and volume follow the
+## flight output's thrust levels.
 ##
 ## `settings.sfx_volume` (0..1) is the gain of the `SFX` bus (`default_bus_layout.tres`; created at run time if it is missing).
 ## The Dummy audio driver of a headless run plays silently, and nothing here errors without sound files.
@@ -217,7 +218,7 @@ func connect_combat(resolver: HitResolver, destruction: DestructionDirector, p_p
 	if resolver != null:
 		resolver.hit_resolved.connect(func(info: HitInfo) -> void: play(&"hit_hull", info.point, -4.0, randf_range(0.92, 1.08)))
 	if destruction != null:
-		destruction.raider_destroyed.connect(func(c: Combatant, _info: HitInfo) -> void: play(&"explosion", c.ship.global_position, 3.0))
+		destruction.ship_destroyed.connect(func(c: Combatant, _info: HitInfo) -> void: play(&"explosion", c.ship.global_position, 3.0))
 		destruction.buoy_destroyed.connect(func(buoy: NavBuoy, _info: HitInfo) -> void: play(&"explosion", buoy.global_position, 0.0, 1.15))
 		destruction.player_destroyed.connect(func(_info: HitInfo) -> void: play(&"explosion", player.ship.global_position, 3.0))
 	if player != null:
