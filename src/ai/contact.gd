@@ -28,22 +28,5 @@ var hull_fraction: float = -1.0
 var target_id: int = -1
 
 
-## A copy seen from a ship that regards it as `p_relation`.
-func with_relation(p_relation: Factions.Relation) -> Contact:
-	var c := Contact.new()
-	c.id = id
-	c.name = name
-	c.faction = faction
-	c.relation = p_relation
-	c.position = position
-	c.velocity = velocity
-	c.forward = forward
-	c.bounding_radius = bounding_radius
-	c.is_ship = is_ship
-	c.hull_fraction = hull_fraction
-	c.target_id = target_id
-	return c
-
-
 func _to_string() -> String:
 	return "Contact(%d %s %s at %s)" % [id, name, faction, position]

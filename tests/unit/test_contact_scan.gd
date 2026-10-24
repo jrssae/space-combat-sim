@@ -163,6 +163,21 @@ func test_ships_of_one_faction_share_contact_objects() -> void:
 	assert_same(enemy_a, enemy_b, "one object per faction, not one per ship")
 
 
+func test_in_a_fight_a_ship_sees_every_body_but_itself_in_the_same_order_as_the_loop() -> void:
+	far_enemy.ship.global_position = Vector3(0.0, 0.0, -1500.0)  # every body within 5 km of every other: the copy path
+	var scan: ContactScan = ContactScan.from_tree(get_tree())
+	var seen: Array[Contact] = scan.contacts_for(own.ship.get_instance_id(), own.ship.global_position, own.faction)
+	# A body id the scan does not know takes the range loop; without the ship itself that is what the loop gives the ship.
+	var looped: Array[Contact] = []
+	for c: Contact in scan.contacts_for(-1, own.ship.global_position, own.faction):
+		if c.name != "RAIDER 1":
+			looped.append(c)
+	assert_eq(seen.size(), 5, "the wingman, both enemies, the buoy and the drone")
+	assert_eq(seen.size(), looped.size(), "the same contacts as the loop")
+	for i: int in mini(seen.size(), looped.size()):
+		assert_same(seen[i], looped[i], "the same contact object, in the same place (%d)" % i)
+
+
 func test_incoming_fire_counts_hostile_bolts_passing_within_15_m_in_2_s() -> void:
 	_bolt(Vector3(0.0, 0.0, -500.0), Vector3(0.0, 0.0, 400.0), Factions.EARTH_ALLIANCE)  # dead on, 1.25 s out: counts
 	_bolt(Vector3(5.0, 8.0, -300.0), Vector3(0.0, 0.0, 400.0), Factions.EARTH_ALLIANCE)  # 9.4 m off, 0.75 s: counts

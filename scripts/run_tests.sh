@@ -56,7 +56,7 @@ fi
 
 echo "== GUT"
 gut_status=0
-run_logged "${REPORTS}/gut.log" timeout 600 "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd \
+run_logged "${REPORTS}/gut.log" timeout 1200 "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd \
     -gdir=res://tests -ginclude_subdirs -gexit -gjunit_xml_file=reports/gut.xml \
     || gut_status=$?
 if (( gut_status != 0 )); then
@@ -180,7 +180,7 @@ if grep -E "${SCRIPT_ERRORS}" "${log}"; then
     echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: audio, camera, combat, controls, debris, debug, factions, hud, hull, input, raiders, ram, render, settings, ship, targeting, time, waves, weapons, world" \
+expect_line "${log}" "[console] providers: ai, audio, camera, combat, controls, debris, debug, factions, hud, hull, input, raiders, ram, render, settings, ship, targeting, time, waves, weapons, world" \
     || smoke_status=1
 expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
 expect_line "${log}" "[console] render.splat_backend = headless" || smoke_status=1
@@ -314,6 +314,41 @@ if (( strict_status != 1 )); then
     smoke_status=1
 fi
 expect_text "${log}" "[console] error: unknown faction 'pirates'" || smoke_status=1
+reject_text "${log}" "[console] > quit 0" || smoke_status=1
+
+echo "== Console smoke run: an AiPilot raider and the ai provider and command on the real main scene"
+# M3-T06 / AC13: `spawn raider ai` flies the raider profile; `ai.ships`, `ai.by_behaviour`, `ai.think_us` and `ai <name>`
+# (the pilot's behaviour, state and every behaviour's score) answer under --console-strict.
+log="${REPORTS}/console_ai.log"
+ai_status=0
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; wave stop; god on; spawn raider ai 1500; wait 120; get ai.ships; get ai.by_behaviour; get ai.think_us; ai RAIDER 1; quit' \
+    > "${log}" 2>&1 || ai_status=$?
+cat "${log}"
+if (( ai_status != 0 )); then
+    echo "run_tests.sh: ai smoke run exited ${ai_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] RAIDER 1 (ai) at 1500 m" || smoke_status=1
+expect_text "${log}" "[console] ai.ships = [RAIDER 1 attack (" || smoke_status=1
+expect_line "${log}" "[console] ai.by_behaviour = {attack: 1}" || smoke_status=1
+expect_text "${log}" "[console] ai.think_us = " || smoke_status=1
+expect_text "${log}" "[console] RAIDER 1: attack (" || smoke_status=1
+expect_text "${log}" "[console]   scores: retreat 0.00, evade " || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
+
+echo "== Console smoke run: ai with an unknown ship must exit 1"
+log="${REPORTS}/console_ai_strict.log"
+ai_strict_status=0
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; ai NOBODY; quit 0' > "${log}" 2>&1 || ai_strict_status=$?
+cat "${log}"
+if (( ai_strict_status != 1 )); then
+    echo "run_tests.sh: unknown ai ship smoke run exited ${ai_strict_status}, expected 1 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_text "${log}" "[console] error: no AI ship named 'NOBODY'" || smoke_status=1
 reject_text "${log}" "[console] > quit 0" || smoke_status=1
 
 if (( smoke_status != 0 )); then
