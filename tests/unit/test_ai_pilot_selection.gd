@@ -33,6 +33,18 @@ class Scripted extends AiBehaviour:
 		return {"state": "scripted"}
 
 
+## Counts how often it was asked for a score.
+class CountingScore extends AiBehaviour:
+	var asked: int = 0
+
+	func _init(p_id: StringName) -> void:
+		id = p_id
+
+	func score(_ctx: AiContext) -> float:
+		asked += 1
+		return 0.1
+
+
 func before_each() -> void:
 	profile = _profile({&"attack": 1.0, &"evade": 1.0, &"retreat": 1.0, &"idle": 1.0})
 
@@ -471,5 +483,59 @@ func test_reset_starts_over() -> void:
 	_tick(pilot, _p([raider]), 0.5)
 	pilot.reset()
 	assert_null(pilot.current)
-	assert_eq(pilot.wanted_target_id, 0)
+	assert_eq(pilot.wanted_target_id, PilotBrain.TARGET_NONE)
 	assert_eq(pilot.describe()["behaviour"], "none")
+
+
+func test_when_nothing_scores_it_falls_back_to_idle_never_to_a_zero_score() -> void:
+	var a := Scripted.new(&"attack", 0.0)
+	var b := Scripted.new(&"evade", 0.0)
+	var idle := Scripted.new(&"idle", 0.0)
+	var pilot := _scripted_pilot([a, b, idle])
+	_tick(pilot, _p())
+	assert_eq(pilot.current, idle, "the first pick with nothing scoring is idle, not the first in the tie order")
+	b.value = 0.6
+	_tick(pilot, _p())
+	assert_eq(pilot.current, b)
+	b.value = 0.0
+	_tick(pilot, _p())
+	assert_eq(pilot.current, idle, "evade has nothing to do: idle, not attack at 0")
+	assert_eq(a.entered, 0, "a behaviour at 0 never got control")
+	var without_idle := _scripted_pilot([Scripted.new(&"attack", 0.0)])
+	_tick(without_idle, _p())
+	assert_null(without_idle.current, "no idle: nobody flies")
+	assert_eq(without_idle.wanted_target_id, PilotBrain.TARGET_NONE)
+
+
+func test_a_behaviour_weighted_zero_is_not_scored() -> void:
+	var a := Scripted.new(&"attack", 0.9)
+	var b := Scripted.new(&"evade", 0.5)
+	profile.weights[&"attack"] = 0.0
+	var pilot := _scripted_pilot([a, b])
+	var counting := CountingScore.new(&"retreat")
+	pilot.add_behaviour(counting)
+	profile.weights[&"retreat"] = 0.0  # read when added: this one is still weighted 1
+	_tick(pilot, _p(), 0.5)
+	assert_eq(pilot.current, b)
+	assert_eq(pilot.raw_score_of(&"attack"), 0.0, "weighted 0: not asked")
+	assert_gt(counting.asked, 0, "the weight is read when the behaviour is added")
+	var zero := CountingScore.new(&"retreat")
+	var other := _scripted_pilot([Scripted.new(&"evade", 0.5), zero])
+	_tick(other, _p(), 0.5)
+	assert_eq(zero.asked, 0, "a behaviour weighted 0 never has score() called")
+
+
+func test_only_the_attack_advertises_a_target() -> void:
+	var raider := _contact(20, "RAIDER 1", Factions.Relation.HOSTILE, Vector3(0.0, 0.0, -1500.0), Vector3.BACK)
+	var pilot := AiPilot.new(profile, 3)
+	assert_eq(pilot.wanted_target_id, PilotBrain.TARGET_NONE, "before the first tick")
+	_tick(pilot, _p([raider]))
+	assert_eq(pilot.wanted_target_id, 20, "attacking it")
+	_tick(pilot, _p([raider], 0.1), 1.2)
+	assert_eq(pilot.current.id, &"retreat")
+	assert_eq(pilot.wanted_target_id, PilotBrain.TARGET_NONE, "retreating: no target, not the driver's nearest hostile")
+	var tail := _contact(21, "RAIDER 2", Factions.Relation.HOSTILE, Vector3(0.0, 0.0, 600.0), Vector3.FORWARD)
+	var evading := AiPilot.new(profile, 3)
+	_tick(evading, _p([tail]))
+	assert_eq(evading.current.id, &"evade")
+	assert_eq(evading.wanted_target_id, PilotBrain.TARGET_NONE, "evading: no target")

@@ -63,12 +63,15 @@ func score(ctx: AiContext) -> float:
 	_reason = &""
 	var best: float = 0.0
 	var forward: Vector3 = p.forward()
-	for c: Contact in ctx.hostiles:
-		var off: Vector3 = p.position - c.position  # from the hostile to us
-		var d2: float = off.length_squared()
-		if d2 > RANGE_M * RANGE_M or d2 < 1e-6 or forward.dot(off) <= 0.0:
-			continue  # too far, or not behind us (behind: we are ahead of it along our own nose)
-		var d: float = sqrt(d2)
+	var hostiles: Array[Contact] = ctx.hostiles
+	for i: int in hostiles.size():
+		var d: float = ctx.hostile_ranges[i]
+		if d > RANGE_M or d < 1e-3:
+			continue
+		var off: Vector3 = -ctx.hostile_offsets[i]  # from the hostile to us
+		if forward.dot(off) <= 0.0:
+			continue  # not behind us (behind: we are ahead of it along our own nose)
+		var c: Contact = hostiles[i]
 		if c.forward.dot(off / d) < _cos_cone:
 			continue
 		var s: float = TAIL_SCORE_MIN + (1.0 - TAIL_SCORE_MIN) * (1.0 - d / RANGE_M)
@@ -124,19 +127,26 @@ func describe() -> Dictionary:
 			"jink_left_s": snappedf(jink_left_s, 0.1)}
 
 
-# The hostile whose nose points closest at us: who is shooting (incoming fire and hits name no shooter).
+# Who is shooting (incoming fire and hits name no shooter): the nearest hostile whose nose is within `NOSE_CONE_DEG` of us,
+# else the one whose nose points closest at us.
 func _likely_shooter(ctx: AiContext) -> Contact:
-	var best: Contact = null
-	var best_dot: float = -INF
+	var aiming: Contact = null
+	var aiming_d2: float = INF
+	var closest: Contact = null
+	var closest_dot: float = -INF
 	for c: Contact in ctx.hostiles:
 		var off: Vector3 = ctx.perception.position - c.position
-		if off.length_squared() < 1e-6:
+		var d2: float = off.length_squared()
+		if d2 < 1e-6:
 			continue
-		var dot: float = c.forward.dot(off.normalized())
-		if dot > best_dot:
-			best_dot = dot
-			best = c
-	return best
+		var dot: float = c.forward.dot(off / sqrt(d2))
+		if dot >= _cos_cone and d2 < aiming_d2:
+			aiming_d2 = d2
+			aiming = c
+		if dot > closest_dot:
+			closest_dot = dot
+			closest = c
+	return aiming if aiming != null else closest
 
 
 # The first jink breaks to a seeded side; the next ones reverse, turned by a seeded angle about the line of fire.

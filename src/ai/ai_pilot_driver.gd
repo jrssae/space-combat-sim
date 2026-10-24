@@ -13,13 +13,14 @@ extends Node
 ## When nothing threatens, the brain's command reaches the ship untouched. A held brake (all stop) is never filtered.
 ## The tie-break seed is `hash(display_name)`, so a ship dodges the same way in every run.
 ##
-## Targeting: a brain that names a target (`PilotBrain.wanted_target_id`, `AiPilot`'s attack target) gets it selected after
-## its `think`, and the nearest-hostile rule leaves that selection alone while it lasts; a brain with no preference (0, every
-## M2 brain) keeps the M2 rule.
+## Targeting (`PilotBrain.wanted_target_id`): a brain that leaves it at `TARGET_NEAREST_HOSTILE` (every M2 brain) gets the
+## M2 rule, the nearest hostile, refreshed every `RETARGET_S`. Otherwise the driver follows the brain after its `think`: the
+## named target is selected (`AiPilot`'s attack target), `TARGET_NONE` clears the selection, and the nearest-hostile rule
+## stays out of it.
 ##
-## Console (§16.4, M3-T06): provider `ai` (`ships`, `by_behaviour`, `think_us`) and command `ai <name>`, registered while any
-## driver is in the tree (owner: the newest; handed to another when it leaves). `think_us` is the wall-clock time every
-## driver's `step` took in the last complete physics tick: a profiling readout (AC13), never gameplay time.
+## Console (§16.4, M3-T06): `AiConsole`'s provider `ai` and command `ai <name>`, registered while any driver is in the tree
+## (owner: the newest; handed to another when it leaves). `think_us()` is the wall-clock time every driver's `step` took in
+## the last complete physics tick: a profiling readout (AC13), never gameplay time.
 
 ## Seconds between looking for a nearer hostile (a selection that is gone is replaced at once).
 const RETARGET_S: float = 0.5
@@ -59,14 +60,14 @@ func _init() -> void:
 
 func _enter_tree() -> void:
 	_live.append(self)
-	_register_console(self)
+	AiConsole.register(DebugConsole.registry, self)
 
 
 func _exit_tree() -> void:
 	_live.erase(self)
 	DebugConsole.registry.unregister_owner(self)
 	if not _live.is_empty():
-		_register_console(_live.back())
+		AiConsole.register(DebugConsole.registry, _live.back())
 
 
 func _ready() -> void:
@@ -116,7 +117,8 @@ func perceive() -> Perception:
 	var weapon: WeaponSpec = combatant.cannon.weapon
 	p.muzzle_speed_mps = weapon.muzzle_speed_mps
 	p.weapon_lifetime_s = weapon.lifetime_s
-	p.frame_origin = world.to_universe(Vector3.ZERO) if world != null else UniversePos.new()
+	if world != null:
+		p.frame_origin = world.origin  # a rebase assigns a new origin, so this one stays the tick's
 	var targeting: TargetingController = ship.targeting
 	if (brain == null or brain.reads_target()) and targeting.system.has_selection() \
 			and is_instance_id_valid(targeting.selected_id()):
@@ -156,23 +158,29 @@ func _on_hit_taken(_info: HitInfo) -> void:
 	last_hit_s = SimClock.now()
 
 
+# M2's rule, for a brain that leaves the choice to the driver: the nearest hostile, refreshed every `RETARGET_S`.
 func _retarget(delta: float) -> void:
+	if brain.wanted_target_id != PilotBrain.TARGET_NEAREST_HOSTILE:
+		return  # the brain chooses (`_follow_brain_target`)
 	var targeting: TargetingController = combatant.ship.targeting
-	var wanted: int = brain.wanted_target_id
-	if wanted != 0 and targeting.selected_id() == wanted and _selection_is_live(targeting):
-		return  # the brain's own choice stands
 	_retarget_in_s -= delta
 	if _retarget_in_s <= 0.0 or not _selection_is_live(targeting):
 		_retarget_in_s = RETARGET_S
 		targeting.select_nearest_hostile()
 
 
-# Selects the brain's wanted target when it names one the targeting computer does not have selected. One it cannot select
-# (a hull with no `Targetable`) is not tried again until the brain wants another.
+# The selection a brain that chooses wants: its target (one it cannot select, a hull with no `Targetable`, is not tried again
+# until it wants another), or none.
 func _follow_brain_target() -> void:
 	var wanted: int = brain.wanted_target_id
+	if wanted == PilotBrain.TARGET_NEAREST_HOSTILE:
+		return
 	var targeting: TargetingController = combatant.ship.targeting
-	if wanted == 0 or wanted == _unselectable_id or targeting.selected_id() == wanted:
+	if wanted == PilotBrain.TARGET_NONE:
+		if targeting.system.has_selection():
+			targeting.clear_selection()
+		return
+	if wanted == _unselectable_id or targeting.selected_id() == wanted:
 		return
 	_unselectable_id = 0 if targeting.select_id(wanted) else wanted
 
@@ -194,78 +202,12 @@ func _selection_is_live(targeting: TargetingController) -> bool:
 	return targetable != null and targetable.is_active()
 
 
-# --- console -----------------------------------------------------------------------------------------------------
-
-
-static func _register_console(owner: AiPilotDriver) -> void:
-	DebugConsole.registry.register_provider(&"ai", ConsoleVars.new({
-		&"ships": {"get": _console_ships, "doc": "AI ships in play: name, behaviour (state)"},
-		&"by_behaviour": {"get": _console_by_behaviour, "doc": "How many AI ships run each behaviour"},
-		&"think_us": {"get": think_us, "unit": "us",
-				"doc": "Wall-clock time of every AI driver in the last physics tick (profiling only)"},
-	}), owner)
-	DebugConsole.registry.register_command(ConsoleCommand.new(&"ai",
-			"Show an AI ship's behaviour, its state and every behaviour's last score",
-			[ConsoleArg.string_rest(&"name").with_suggestions(_console_names)]), _cmd_ai, owner)
-
-
-# The drivers flying a ship in play (a brain set, the ship processing), in tree order.
-static func _flying() -> Array[AiPilotDriver]:
+## The drivers flying a ship in play (a brain set, the ship processing), in the order they entered the tree: the console's
+## view (`AiConsole`).
+static func flying() -> Array[AiPilotDriver]:
 	var out: Array[AiPilotDriver] = []
 	for driver: AiPilotDriver in _live:
 		if driver.brain != null and driver.combatant != null and is_instance_valid(driver.combatant.ship) \
 				and driver.combatant.ship.can_process():
 			out.append(driver)
-	return out
-
-
-static func _console_ships() -> PackedStringArray:
-	var out := PackedStringArray()
-	for driver: AiPilotDriver in _flying():
-		var d: Dictionary = driver.brain.describe()
-		out.append("%s %s (%s)" % [driver.combatant.display_name, d.get("behaviour", "none"), d.get("state", "none")])
-	return out
-
-
-static func _console_by_behaviour() -> Dictionary:
-	var out: Dictionary = {}
-	for driver: AiPilotDriver in _flying():
-		var behaviour: String = str(driver.brain.describe().get("behaviour", "none"))
-		out[behaviour] = int(out.get(behaviour, 0)) + 1
-	return out
-
-
-static func _console_names() -> PackedStringArray:
-	var out := PackedStringArray()
-	for driver: AiPilotDriver in _flying():
-		out.append(driver.combatant.display_name)
-	return out
-
-
-static func _cmd_ai(args: Dictionary) -> ConsoleResult:
-	var wanted: String = String(args[&"name"]).strip_edges()
-	for driver: AiPilotDriver in _flying():
-		if driver.combatant.display_name.to_lower() == wanted.to_lower():
-			return ConsoleResult.success(describe_lines(driver.combatant.display_name, driver.brain.describe()))
-	var names: PackedStringArray = _console_names()
-	return ConsoleResult.failure("no AI ship named '%s' (AI ships: %s)%s" % [wanted,
-			", ".join(names) if not names.is_empty() else "none", ConsoleFormat.did_you_mean(wanted, names)])
-
-
-## The `ai <name>` lines for a brain's `describe()`: `NAME: behaviour (state)`, then its other fields, then the scores.
-static func describe_lines(ship_name: String, d: Dictionary) -> PackedStringArray:
-	var out := PackedStringArray()
-	out.append("%s: %s (%s)" % [ship_name, d.get("behaviour", "none"), d.get("state", "none")])
-	var fields := PackedStringArray()
-	for key: Variant in d:
-		if key != "behaviour" and key != "state" and key != "scores":
-			fields.append("%s %s" % [key, ConsoleFormat.value(d[key])])
-	if not fields.is_empty():
-		out.append("  " + ", ".join(fields))
-	if d.has("scores"):
-		var scores: Dictionary = d["scores"]
-		var parts := PackedStringArray()
-		for id: Variant in scores:
-			parts.append("%s %.2f%s" % [id, float(scores[id]), " *" if str(id) == str(d.get("behaviour", "")) else ""])
-		out.append("  scores: " + ", ".join(parts))
 	return out

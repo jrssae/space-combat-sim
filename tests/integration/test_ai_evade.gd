@@ -3,35 +3,22 @@ extends GutTest
 ## behind a Starfury flown by an `AiPilot` that cannot fight back (attack weight 0) and does not retreat. The same seeded
 ## setup is flown twice: with evade weight 0 the Starfury only holds position; with evade weight 1 it jinks. Evading must cut
 ## the raider's hits on it at least in half. The real ships in Jolt, the real drivers (avoidance included) and the real
-## `HitResolver`; sim time sped up with `Engine.time_scale` (0.1 s steps; the same holds at 60 Hz, see the M3-T06 notes).
+## `HitResolver`; sim time sped up with `Engine.time_scale` (1/30 s steps; the same holds at 60 Hz, see the M3-T06 notes).
 ##
 ## Both setups fly at once in one world, 10 km apart (beyond the 5 km sensor range and any bolt's reach, so neither sees the
 ## other), at mirrored positions so both get the same float precision. That halves the wall-clock time of the test.
 
 const STARFURY_SPEC: String = "res://assets/ships/starfury_aurora.tres"
 const RAIDER_SPEC: String = "res://assets/ships/raider_delta_v.tres"
-## `Engine.time_scale` scales the physics step: 6 makes each 60 Hz tick 0.1 s of sim time.
-const SPEED_UP: float = 6.0
-## Sim seconds: about three of the raider's gun runs.
-const RUN_S: float = 120.0
+## `Engine.time_scale` scales the physics step: 2 makes each 60 Hz tick 1/30 s of sim time, near the game's step.
+const SPEED_UP: float = 2.0
+## Sim seconds: about two of the raider's gun runs.
+const RUN_S: float = 80.0
 const RAIDER_SEED: int = 4242
 const PILOT_SEED: int = 99
 const APART_M: float = 10000.0
 
 var _scale_backup: float = 1.0
-
-
-## Calls `on_tick` at the end of every physics tick, so a run lasts exactly `RUN_S` of sim time.
-class Ticker extends Node:
-	var ticks: int = 0
-	var on_tick: Callable = Callable()
-
-	func _init() -> void:
-		process_physics_priority = 500
-
-	func _physics_process(_delta: float) -> void:
-		ticks += 1
-		on_tick.call()
 
 
 func before_each() -> void:
@@ -104,7 +91,7 @@ func test_evading_cuts_an_attack_raiders_hits_at_least_in_half() -> void:
 	add_child_autofree(resolver)
 	var still: Dictionary = _setup(world, projectiles, resolver, Vector3(-APART_M / 2.0, 0.0, 0.0), 0.0, "A")
 	var evading: Dictionary = _setup(world, projectiles, resolver, Vector3(APART_M / 2.0, 0.0, 0.0), 1.0, "B")
-	var ticker := Ticker.new()
+	var ticker := PhysicsTicker.new()
 	ticker.on_tick = func() -> void:
 		_count(still)
 		_count(evading)
@@ -118,7 +105,7 @@ func test_evading_cuts_an_attack_raiders_hits_at_least_in_half() -> void:
 			still["hits"], still["raider_fire_ticks"], evading["hits"], evading["evade_ticks"], evading["max_jinks"],
 			evading["raider_fire_ticks"]])
 	assert_eq(still["evade_ticks"], 0, "evade weight 0: it never evades")
-	assert_gt(int(still["hits"]), 20, "the raider lands a fair number of hits on a ship that holds still")
+	assert_gt(int(still["hits"]), 15, "the raider lands a fair number of hits on a ship that holds still")
 	assert_gt(int(evading["evade_ticks"]), 0, "it evaded")
-	assert_gt(int(evading["max_jinks"]), 1, "with reversals")
+	assert_gt(int(evading["max_jinks"]), 0, "it jinked (the reversals are test_ai_pilot_selection's)")
 	assert_lte(int(evading["hits"]) * 2, int(still["hits"]), "evading at least halves the hits")

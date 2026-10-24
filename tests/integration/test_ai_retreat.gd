@@ -15,18 +15,6 @@ const APART_M: float = 10000.0
 var _scale_backup: float = 1.0
 
 
-class Ticker extends Node:
-	var ticks: int = 0
-	var on_tick: Callable = Callable()
-
-	func _init() -> void:
-		process_physics_priority = 500
-
-	func _physics_process(_delta: float) -> void:
-		ticks += 1
-		on_tick.call()
-
-
 func before_each() -> void:
 	_scale_backup = Engine.time_scale
 	ContactScan.invalidate()
@@ -87,7 +75,7 @@ func test_below_a_quarter_hull_it_opens_the_range_and_at_full_hull_it_closes_it(
 	resolver.hit_resolved.connect(func(info: HitInfo) -> void:
 		if info.target_id == raider_b_id:
 			hits_on_b[0] += 1)
-	var ticker := Ticker.new()
+	var ticker := PhysicsTicker.new()
 	ticker.on_tick = func() -> void:
 		_record(hurt)
 		_record(whole)

@@ -75,6 +75,7 @@ func test_validate_names_the_bad_field() -> void:
 		[func(p: AiProfile) -> void: p.cruise_mps = 0.0, "cruise_mps"],
 		[func(p: AiProfile) -> void: p.aim_error_deg = -1.0, "aim_error_deg"],
 		[func(p: AiProfile) -> void: p.tactics = null, "tactics"],
+		[func(p: AiProfile) -> void: p.weights[&"idle"] = 0.0, "weights.idle must be above 0"],
 	]
 	assert_eq(_valid_profile().validate(), "")
 	for case: Array in cases:

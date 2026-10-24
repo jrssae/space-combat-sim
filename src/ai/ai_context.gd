@@ -35,11 +35,13 @@ var leader_target_id: int = 0
 var engage_radius_m: float = DEFAULT_ENGAGE_RADIUS_M
 
 ## Derived each tick by `refresh`: the leader among the friendly contacts (null when not in sight), the hostile ships in
-## sensor range, and the ids of this ship and of every friendly contact (the targets that count as "a friend" being
-## attacked).
+## sensor range with, by the same index, the offset from this ship to each (World frame) and its length, and the ids of
+## this ship and of every friendly contact (the targets that count as "a friend" being attacked).
 var leader: Contact = null
 var hostiles: Array[Contact] = []
-var friendly_ids: Dictionary = {}  # Contact.id -> true
+var hostile_offsets: PackedVector3Array = PackedVector3Array()
+var hostile_ranges: PackedFloat64Array = PackedFloat64Array()
+var friendly_ids: PackedInt64Array = PackedInt64Array()
 
 
 ## The `Order` for a word of `ORDER_WORDS`, or -1.
@@ -56,16 +58,22 @@ func refresh(p: Perception) -> void:
 	perception = p
 	leader = null
 	hostiles.clear()
+	hostile_offsets.clear()
+	hostile_ranges.clear()
 	friendly_ids.clear()
 	if p.self_id != 0:
-		friendly_ids[p.self_id] = true
+		friendly_ids.append(p.self_id)
+	var own_position: Vector3 = p.position
 	for c: Contact in p.contacts:
 		var relation: Factions.Relation = c.relation
 		if relation == Factions.Relation.HOSTILE:
 			if c.is_ship:
 				hostiles.append(c)
+				var offset: Vector3 = c.position - own_position
+				hostile_offsets.append(offset)
+				hostile_ranges.append(offset.length())
 		elif relation == Factions.Relation.FRIENDLY:
-			friendly_ids[c.id] = true
+			friendly_ids.append(c.id)
 			if c.id == leader_id:
 				leader = c
 

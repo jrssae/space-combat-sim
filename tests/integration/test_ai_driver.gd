@@ -258,6 +258,20 @@ func test_the_brains_wanted_target_is_selected_and_kept() -> void:
 	assert_eq(raider.ship.targeting.selected_name(), "WINGMAN", "no preference: back to the nearest hostile")
 
 
+func test_a_brain_that_wants_no_target_has_none_and_the_nearest_hostile_rule_stays_out() -> void:
+	var brain := WantsBrain.new()
+	raider.driver.brain = brain
+	raider.driver.step(DT)
+	assert_eq(raider.ship.targeting.selected_name(), "PLAYER", "TARGET_NEAREST_HOSTILE (0): the M2 rule")
+	brain.want = PilotBrain.TARGET_NONE
+	raider.driver.step(DT)
+	assert_false(raider.ship.targeting.system.has_selection(), "cleared after the think")
+	for i: int in 90:  # past the 0.5 s nearest-hostile refresh
+		raider.driver.step(DT)
+	assert_false(raider.ship.targeting.system.has_selection(), "and the nearest-hostile rule does not pick one again")
+	assert_null(brain.seen.back().target)
+
+
 func test_an_ai_pilot_attacks_the_hostile_through_the_driver() -> void:
 	raider.driver.brain = BrainFactory.from_behaviour({"type": "ai", "profile": "raider"}, UniversePos.new(), 5)["brain"]
 	ContactScan.invalidate()

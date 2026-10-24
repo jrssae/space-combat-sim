@@ -64,14 +64,15 @@ func score(ctx: AiContext) -> float:
 	_target = null
 	var best: float = -INF
 	var at_will: bool = ctx.order == AiContext.Order.ENGAGE_AT_WILL  # every hostile ship: skip the per-contact check
-	var own_position: Vector3 = p.position
 	var own_velocity: Vector3 = p.velocity
-	var friendly_ids: Dictionary = ctx.friendly_ids
-	for c: Contact in ctx.hostiles:
+	var friendly_ids: PackedInt64Array = ctx.friendly_ids
+	var hostiles: Array[Contact] = ctx.hostiles
+	for i: int in hostiles.size():
+		var c: Contact = hostiles[i]
 		if not at_will and not ctx.may_attack(c):
 			continue
-		var los: Vector3 = c.position - own_position
-		var d: float = los.length()
+		var los: Vector3 = ctx.hostile_offsets[i]
+		var d: float = ctx.hostile_ranges[i]
 		var value: float = W_NEAR * clampf(1.0 - d * INV_SENSOR_RANGE, 0.0, 1.0)
 		if d > 1e-3:
 			value += W_CLOSING * clampf((own_velocity - c.velocity).dot(los) / (d * CLOSING_FULL_MPS), 0.0, 1.0)
@@ -91,8 +92,7 @@ func score(ctx: AiContext) -> float:
 
 
 func enter() -> void:
-	brain.restart()
-	_engaged_id = 0
+	_engaged_id = 0  # the first think restarts the run on whatever target it has
 
 
 func think(ctx: AiContext, dt: float) -> PilotCommand:
@@ -112,7 +112,7 @@ func think(ctx: AiContext, dt: float) -> PilotCommand:
 
 
 func target_id() -> int:
-	return _target.id if _target != null else 0
+	return _target.id if _target != null else PilotBrain.TARGET_NONE
 
 
 ## The aim offset (radians, right and up) at `t_s` of this behaviour's time: each axis within `aim_error_rad`.

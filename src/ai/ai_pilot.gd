@@ -4,18 +4,20 @@ extends PilotBrain
 ## pilot's `AiProfile`; the winner flies the ship. Behind the same `PilotBrain` interface as M2's brains, so the
 ## `AiPilotDriver`, its avoidance filter and the pool do not change.
 ##
-## Selection, each tick: every behaviour's `score(ctx)` (clamped to 0..1) times `profile.weight(id)`. The best weighted
-## score wins; ties go to the behaviour earlier in `TIE_ORDER`. A challenger replaces the behaviour in control only when
-## its weighted score beats the current one's by more than `profile.stickiness`, or, within `profile.min_dwell_s` of the
-## last switch, by more than `profile.emergency_margin`. A current behaviour that scores 0 has nothing to do (its target
-## is gone) and hands over at once. The behaviour that takes over gets `enter()`. No randomness and no clock in the
+## Selection, each tick: every behaviour's `score(ctx)` (clamped to 0..1) times `profile.weight(id)` (a behaviour weighted
+## 0 is not scored). The best weighted score above 0 wins; ties go to the behaviour earlier in `TIE_ORDER`. A challenger
+## replaces the behaviour in control only when its weighted score beats the current one's by more than
+## `profile.stickiness`, or, within `profile.min_dwell_s` of the last switch, by more than `profile.emergency_margin`. A
+## current behaviour that scores 0 has nothing to do (its target is gone) and hands over at once. When nothing scores above
+## 0 the pilot falls back to idle (`AiProfile.validate` requires idle a weight above 0); it never hands control to a
+## behaviour that scored 0. The behaviour that takes over gets `enter()`. No randomness and no clock in the
 ## selection itself: the same scores give the same choices; the behaviours' own randomness comes from seeds derived from
 ## the pilot's seed.
 ##
 ## The context (`context`) carries the orders and the wing (`AiContext`); the pilot refreshes its perception every tick.
-## `wanted_target_id` follows the behaviour in control (the attack's target), so the ship's targeting computer, and with it
-## what other ships see as this ship's target, shows what it is really attacking. With `profile.fires` false the trigger is
-## never pulled.
+## `wanted_target_id` follows the behaviour in control: the attack's target, `TARGET_NONE` for anything else, so the ship's
+## targeting computer, and with it what other ships see as this ship's target, shows what it is really attacking. With
+## `profile.fires` false the trigger is never pulled.
 ##
 ## Later tasks add behaviours with `add_behaviour` (formation T07, follow path T09, guard T10) and their fields to
 ## `AiContext`; the selection does not change.
@@ -38,12 +40,14 @@ var _weights: PackedFloat64Array = PackedFloat64Array()
 var _raw: PackedFloat64Array = PackedFloat64Array()
 var _weighted: PackedFloat64Array = PackedFloat64Array()
 var _current_index: int = -1
+var _idle_index: int = -1
 
 
 ## `p_behaviours` empty: the standard set (retreat, evade, attack, idle) built from the profile, seeded from `p_seed`.
 func _init(p_profile: AiProfile = null, p_seed: int = 0, p_behaviours: Array[AiBehaviour] = []) -> void:
 	profile = p_profile if p_profile != null else AiProfile.new()
 	context.profile = profile
+	wanted_target_id = TARGET_NONE
 	var list: Array[AiBehaviour] = p_behaviours
 	if list.is_empty():
 		list = [BehaviourRetreat.new(profile), BehaviourEvade.new(hash([p_seed, "evade"])),
@@ -65,6 +69,7 @@ func add_behaviour(b: AiBehaviour) -> void:
 	_raw.insert(at, 0.0)
 	_weighted.insert(at, 0.0)
 	_current_index = behaviours.find(current)
+	_idle_index = _index_of(&"idle")
 
 
 ## The behaviour with this id, or null.
@@ -91,6 +96,7 @@ func think(p: Perception, dt: float) -> PilotCommand:
 	context.refresh(p)
 	select(dt)
 	if current == null:
+		wanted_target_id = TARGET_NONE
 		return PilotCommand.new()
 	current.has_desired_velocity = false
 	var cmd: PilotCommand = current.think(context, dt)
@@ -112,23 +118,29 @@ func reads_target() -> bool:
 func select(dt: float) -> AiBehaviour:
 	dwell_s += dt
 	var best: int = -1
-	var best_score: float = -INF
+	var best_score: float = 0.0
 	for i: int in behaviours.size():
-		var raw: float = clampf(behaviours[i].score(context), 0.0, 1.0)
-		var weighted: float = raw * _weights[i]
+		var weight: float = _weights[i]
+		var raw: float = clampf(behaviours[i].score(context), 0.0, 1.0) if weight > 0.0 else 0.0
+		var weighted: float = raw * weight
 		_raw[i] = raw
 		_weighted[i] = weighted
 		if weighted > best_score:
 			best_score = weighted
 			best = i
-	if best < 0 or best == _current_index:
+	if best < 0:
+		# Nothing scores: idle, the fallback (no idle: the current behaviour keeps flying, or none does).
+		if _idle_index >= 0 and _idle_index != _current_index:
+			_switch(_idle_index)
+		return current
+	if best == _current_index:
 		return current
 	if _current_index < 0:
 		_switch(best)
 		return current
 	var current_score: float = _weighted[_current_index]
 	var lead_needed: float = profile.emergency_margin if dwell_s < profile.min_dwell_s else profile.stickiness
-	if (current_score <= 0.0 and best_score > 0.0) or best_score > current_score + lead_needed:
+	if current_score <= 0.0 or best_score > current_score + lead_needed:
 		_switch(best)
 	return current
 
@@ -156,7 +168,7 @@ func reset() -> void:
 	_current_index = -1
 	_raw.fill(0.0)
 	_weighted.fill(0.0)
-	wanted_target_id = 0
+	wanted_target_id = TARGET_NONE
 	for b: AiBehaviour in behaviours:
 		b.reset()
 

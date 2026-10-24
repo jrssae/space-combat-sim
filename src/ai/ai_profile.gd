@@ -55,6 +55,8 @@ func validate() -> String:
 		var w: float = weights[id]
 		if not (w >= 0.0 and w <= 1.0):
 			return "weights.%s must be 0..1, got %s" % [id, w]
+	if weight(&"idle") <= 0.0:
+		return "weights.idle must be above 0: idle is the pilot's fallback when nothing else scores"
 	if stickiness < 0.0:
 		return "stickiness must be 0 or more, got %s" % stickiness
 	if emergency_margin < 0.0:

@@ -6,14 +6,14 @@ extends RefCounted
 ##
 ## Contract:
 ## - `id`: the behaviour's name, also its key in `AiProfile.weights` and its place in `AiPilot.TIE_ORDER`.
-## - `score(ctx)`: 0..1, every tick, for every behaviour, before any `think`. A score of 0 means "cannot run now" (no target,
-##   nothing to retreat from): the pilot then takes control away at once, dwell or not. Scoring may cache what `think`
-##   needs this tick (the chosen target).
+## - `score(ctx)`: 0..1, every tick, for every behaviour the profile weighs above 0 (one weighted 0 is not asked), before any
+##   `think`. A score of 0 means "cannot run now" (no target, nothing to retreat from): the pilot then takes control away
+##   at once, dwell or not. Scoring may cache what `think` needs this tick (the chosen target).
 ## - `enter()`: control was just handed over (start the manoeuvre afresh).
 ## - `think(ctx, dt)`: only for the behaviour in control; returns a fresh `PilotCommand`. A behaviour that steers toward a
 ##   velocity uses `seek_velocity`, so the driver's avoidance filter sees the wish (the `PilotBrain` protocol, M3-T05).
-## - `target_id()`: the `Contact.id` the ship's targeting computer should select while this behaviour flies, 0 for no
-##   preference (the driver keeps the nearest hostile).
+## - `target_id()`: the `Contact.id` the ship's targeting computer should select while this behaviour flies, or
+##   `PilotBrain.TARGET_NONE` (the default: a behaviour that does not attack shows no target).
 ## - `describe()`: at least `state`, for the console.
 ## - `reset()`: back to the starting state, seeds included (a ship acquired again).
 ## Randomness only from a seeded generator; time only from `dt` and the perception.
@@ -37,7 +37,7 @@ func think(_ctx: AiContext, _dt: float) -> PilotCommand:
 
 
 func target_id() -> int:
-	return 0
+	return PilotBrain.TARGET_NONE
 
 
 func describe() -> Dictionary:
