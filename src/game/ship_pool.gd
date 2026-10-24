@@ -11,7 +11,7 @@ extends Node3D
 ## (for the console's `spawn`) `player` before `prepare`.
 ##
 ## Console (§15.13, D27): provider `raiders` (`pool_size`, `free`, `alive`, `list`, `selected_brain`) and commands
-## `despawn [target|all]` and `spawn raider [idle|patrol|attack|aggro] [distance_m] [yaw_deg] [pitch_deg]` (M2-T09 moves
+## `despawn [target|all]` and `spawn raider [idle|patrol|attack|aggro|ai] [distance_m] [yaw_deg] [pitch_deg]` (M2-T09 moves
 ## the command to the `WaveDirector`). Raiders are named `RAIDER <n>`, the next free number. A pooled ship has an
 ## `AiPilotDriver`; `acquire` gives it the brain and `release` takes it away.
 
@@ -211,7 +211,7 @@ func _cmd_spawn(args: Dictionary) -> ConsoleResult:
 		words.remove_at(0)
 	var numbers: Array[float] = [30.0, 0.0, 0.0]
 	if words.size() > 3:
-		return ConsoleResult.failure("spawn raider [idle|patrol|attack|aggro] [distance_m] [yaw_deg] [pitch_deg]")
+		return ConsoleResult.failure("spawn raider [idle|patrol|attack|aggro|ai] [distance_m] [yaw_deg] [pitch_deg]")
 	for i: int in words.size():
 		if not words[i].is_valid_float():
 			return ConsoleResult.failure("'%s' is not a number (spawn raider [behaviour] [distance_m] [yaw_deg] [pitch_deg])" % words[i])
@@ -236,9 +236,11 @@ func _cmd_spawn(args: Dictionary) -> ConsoleResult:
 
 
 # The scenario-style behaviour dictionary for a console spawn: patrol and aggro fly a triangle of 800 m legs around the
-# spawn point in the raider's own frame.
+# spawn point in the raider's own frame; `ai` is an `AiPilot` with the raider profile.
 func _console_behaviour(behaviour: StringName, basis: Basis) -> Dictionary:
 	var spec: Dictionary = {"type": String(behaviour)}
+	if behaviour == &"ai":
+		spec["profile"] = "raider"
 	if behaviour == &"patrol" or behaviour == &"aggro":
 		var legs: Array = []
 		for v: Vector3 in [Vector3(0.0, 0.0, -800.0), Vector3(700.0, 0.0, -300.0), Vector3(-700.0, 0.0, -300.0)]:

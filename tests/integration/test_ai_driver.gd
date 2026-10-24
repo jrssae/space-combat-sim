@@ -201,3 +201,107 @@ func test_an_idle_raider_with_hold_comes_to_rest() -> void:
 	for i: int in 600:
 		await get_tree().physics_frame
 	assert_lt(raider.ship.linear_velocity.length(), 0.6, "the brake stopped it")
+
+
+# --- M3-T06: the perception wiring AiPilot relies on, the brain's target, the `ai` console ---------------------------
+
+
+func test_the_perception_carries_the_friendly_fire_setting() -> void:
+	var before: bool = bool(Settings.get_value(&"friendly_fire"))
+	Settings.set_value(&"friendly_fire", false)
+	assert_false(raider.driver.perceive().friendly_fire)
+	Settings.set_value(&"friendly_fire", true)
+	assert_true(raider.driver.perceive().friendly_fire, "read every tick from settings.friendly_fire")
+	Settings.set_value(&"friendly_fire", before)
+
+
+func test_the_perception_carries_the_last_hit_and_its_own_target_id() -> void:
+	raider.driver.brain = IdleBrain.new()
+	assert_eq(raider.driver.perceive().last_hit_s, -INF, "no hit yet")
+	assert_eq(raider.driver.perceive().self_id, raider.targetable.get_instance_id())
+	raider.damageable.apply_hit(HitInfo.new(raider.ship.get_instance_id(), player.ship.get_instance_id(),
+			Factions.EARTH_ALLIANCE, 1.0, raider.ship.global_position))
+	assert_eq(raider.driver.perceive().last_hit_s, SimClock.now(), "from Damageable.hit_taken")
+	raider.driver.brain = IdleBrain.new()
+	assert_eq(raider.driver.perceive().last_hit_s, -INF, "a new brain starts with no hit")
+
+
+## A brain that wants a given target selected.
+class WantsBrain extends PilotBrain:
+	var want: int = 0
+	var seen: Array[Perception] = []
+
+	func think(p: Perception, _dt: float) -> PilotCommand:
+		seen.append(p)
+		wanted_target_id = want
+		return PilotCommand.new()
+
+
+func test_the_brains_wanted_target_is_selected_and_kept() -> void:
+	var near: Combatant = ShipAssembly.build(load("res://assets/ships/starfury_aurora.tres") as ShipSpec, world, projectiles, {
+		ShipAssembly.OPT_FACTION: Factions.EARTH_ALLIANCE,
+		ShipAssembly.OPT_DISPLAY_NAME: "WINGMAN",
+	})
+	world.spawn(near.ship, world.to_universe(Vector3(0.0, 0.0, -300.0)))
+	var brain := WantsBrain.new()
+	brain.want = player.targetable.get_instance_id()  # the farther one
+	raider.driver.brain = brain
+	raider.driver.step(DT)
+	assert_eq(raider.ship.targeting.selected_name(), "PLAYER", "selected after the brain's think")
+	for i: int in 90:  # past the 0.5 s nearest-hostile refresh
+		raider.driver.step(DT)
+	assert_eq(raider.ship.targeting.selected_name(), "PLAYER", "the nearest-hostile rule leaves it alone")
+	assert_eq(brain.seen.back().target.id, brain.want, "and the brain perceives it as its target")
+	brain.want = 0
+	for i: int in 40:
+		raider.driver.step(DT)
+	assert_eq(raider.ship.targeting.selected_name(), "WINGMAN", "no preference: back to the nearest hostile")
+
+
+func test_an_ai_pilot_attacks_the_hostile_through_the_driver() -> void:
+	raider.driver.brain = BrainFactory.from_behaviour({"type": "ai", "profile": "raider"}, UniversePos.new(), 5)["brain"]
+	ContactScan.invalidate()
+	raider.driver.step(DT)
+	var pilot: AiPilot = raider.driver.brain
+	assert_eq(pilot.current.id, &"attack")
+	assert_eq(raider.ship.targeting.selected_name(), "PLAYER")
+	assert_true(pilot.has_desired_velocity, "the attack's wish reaches the avoidance filter")
+
+
+func test_the_ai_console_lists_ships_and_describes_one() -> void:
+	raider.driver.brain = BrainFactory.from_behaviour({"type": "ai", "profile": "raider"}, UniversePos.new(), 5)["brain"]
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var registry: ConsoleRegistry = DebugConsole.registry
+	assert_true(registry.has_provider(&"ai"))
+	assert_true(registry.has_command(&"ai"))
+	assert_eq(registry.format_path("ai.ships"), "ai.ships = [RAIDER 1 attack (approach)]")
+	assert_eq(registry.format_path("ai.by_behaviour"), "ai.by_behaviour = {attack: 1}")
+	assert_gt(int(registry.read("ai.think_us")["value"]), 0, "the drivers' wall-clock time last tick")
+	var results: Array[ConsoleResult] = registry.execute("ai raider 1")
+	assert_true(results[0].ok, results[0].text())
+	var text: String = results[0].text()
+	assert_string_starts_with(text, "RAIDER 1: attack (approach)")
+	assert_string_contains(text, "target PLAYER")
+	assert_string_contains(text, "scores: retreat 0.00, evade 0.00, attack ")
+	assert_string_contains(text, " *, idle 0.05")
+	var unknown: ConsoleResult = registry.execute("ai RAIDER 9")[0]
+	assert_false(unknown.ok)
+	assert_string_contains(unknown.error, "no AI ship named 'RAIDER 9' (AI ships: RAIDER 1)")
+	assert_false(registry.execute("ai")[0].ok, "a name is required")
+
+
+func test_the_ai_console_goes_with_the_last_driver() -> void:
+	assert_true(DebugConsole.registry.has_provider(&"ai"))
+	var other: Combatant = ShipAssembly.build(load(SPEC_PATH) as ShipSpec, world, projectiles, {
+		ShipAssembly.OPT_FACTION: Factions.RAIDERS,
+		ShipAssembly.OPT_DISPLAY_NAME: "RAIDER 2",
+		ShipAssembly.OPT_AI: true,
+	})
+	world.spawn(other.ship, world.to_universe(Vector3(500.0, 0.0, 0.0)))
+	other.ship.get_parent().remove_child(other.ship)  # the newest driver (the owner) leaves first
+	assert_true(DebugConsole.registry.has_provider(&"ai"), "handed to the driver still in the tree")
+	other.ship.free()
+	raider.ship.get_parent().remove_child(raider.ship)
+	assert_false(DebugConsole.registry.has_provider(&"ai"), "gone with the last one")
+	raider.ship.free()

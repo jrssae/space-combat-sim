@@ -152,6 +152,17 @@ func select_by_name(display_name: String) -> bool:
 	return target != null
 
 
+## Selects the in-range target with this id (a `Targetable` instance id: an AI brain's choice). Returns whether it is selected.
+func select_id(target_id: int) -> bool:
+	if not _has_body():
+		return false
+	var before: int = system.selected_id()
+	_gather()
+	system.select_id(target_id, _ship_position())
+	_emit_if_changed(before)
+	return system.selected_id() == target_id
+
+
 func clear_selection() -> void:
 	var before: int = system.selected_id()
 	system.clear()

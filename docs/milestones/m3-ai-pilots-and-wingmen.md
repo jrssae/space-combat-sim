@@ -562,6 +562,112 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
 - For T07: two Starfuries have a reach of about 2 x 10.1 + 15 = 35 m, so slots closer than that are pushed apart all the
   time; AC9's "never closer than 15 m" fits slot spacings of 40 m or more.
 
+**M3-T06 (AiPilot core).**
+- **The interface later tasks build on.**
+  - `AiBehaviour` (RefCounted): `id` (also its `AiProfile.weights` key and its `AiPilot.TIE_ORDER` place), `score(ctx) -> float`
+    (0..1, every behaviour every tick before any `think`; it may cache what `think` needs, e.g. the chosen target),
+    `enter()` (control was handed over), `think(ctx, dt) -> PilotCommand` (the behaviour in control only), `target_id()`
+    (the `Contact.id` the ship's targeting computer should select, 0 for none), `describe()` (at least `state`), `reset()`, and
+    `seek_velocity(flight, p, v_des)`, which records `desired_velocity` / `has_desired_velocity` as `PilotBrain` does (T05's
+    protocol; `AiPilot` forwards them to the driver). A score of 0 means "cannot run now".
+  - `AiContext` (one per pilot, kept across ticks): `perception` and `profile`; wing fields set from outside the brain and kept
+    until changed: `order` (`Order.ENGAGE_AT_WILL` default, `ATTACK_MY_TARGET`, `FORM_ON_ME`, `COVER_ME`; words `engage`,
+    `attack`, `form`, `cover` in `ORDER_WORDS`), `leader_id` (the leader's `Targetable` id), `leader_target_id`,
+    `engage_radius_m` (2 000); derived each tick by `refresh(p)`: `leader` (its `Contact`, null when not in sight), `hostiles`
+    (hostile ships), `friendly_ids` (this ship and every friendly contact). `may_attack(contact)` is the one order gate:
+    FORM_ON_ME nothing, ATTACK_MY_TARGET only `leader_target_id`, COVER_ME hostiles within `engage_radius_m` of the leader or
+    whose `target_id` is the leader (a covering ship that cannot see its leader engages at will), ENGAGE_AT_WILL any hostile
+    ship. T07 sets `pilot.context.order` / `leader_id` / `leader_target_id` and adds its slot fields here; T09 the route, T10
+    the guard post.
+  - `AiPilot(profile, seed, behaviours := [])`: empty means the standard four (retreat, evade, attack, idle) built from the
+    profile with seeds derived from `seed`. `add_behaviour(b)` slots a behaviour in by `TIE_ORDER` (`retreat, evade, attack,
+    guard, formation, follow_path, idle`; unknown ids after these) and reads its weight then. `behaviour(id)`, `score_of(id)`,
+    `raw_score_of(id)`, `current`, `dwell_s`, `switches`, `context`.
+  - `PilotBrain` gained `wanted_target_id` (the driver selects it after `think`, and its nearest-hostile rule leaves that
+    selection alone while it lasts; 0 keeps the M2 rule) and `reads_target()` (`AiPilot` says no, and the driver skips
+    `Perception.target`). `Perception` gained `self_id` (the ship's own `Targetable` id, for "attacking me").
+    `TargetingController.select_id(id)` is new.
+- **Selection as built.** Weighted score = clamped score x the profile's weight (a weight the profile does not name is 1).
+  The best weighted score wins, ties to the earlier `TIE_ORDER` entry. A challenger takes over when it beats the current
+  behaviour's weighted score by more than `stickiness`, or, within `min_dwell_s` of the last switch, by more than
+  `emergency_margin` (both margins are measured from the current's weighted score; strict `>`). Beyond the brief: a current
+  behaviour whose weighted score is 0 hands over at once (its target died; dwell protects a behaviour that has something to
+  do, not one that has nothing). Weights are read when a behaviour is added, scores live in packed arrays (AC13).
+- **Behaviours.** Scores are placed so a tail threat and a retreat outrank an attack, and an attack under fire keeps going
+  (tuning in (H)/T10):
+  - attack 0.3 + 0.5 x the best target's value (0.3..0.8). Value = 0.4 x nearness (1 - range / 5 km) + 0.2 x closing speed /
+    200 m/s + 0.3 when its `target_id` is this ship or a friend + 0.1 x missing hull, + 0.1 for the current target (no
+    flicker). A new target restarts the `AttackBrain` run (`restart()`: APPROACH, timers cleared, seeded break sides go on).
+    `AttackBrain.think` now calls `engage(p, target_id, position, velocity, dt)` (the attack passes its contact's values) and
+    applies `aim_offset_rad` to the lead (zero for M2 brains, skipped entirely). Aim wander: per axis
+    `aim_error x (0.6 sin(2 pi f1 t + phi1) + 0.4 sin(2 pi f2 t + phi2))`, f1 0.05-0.15 Hz, f2 0.15-0.35 Hz, seeded, in the
+    behaviour's own time (so two runs at different sim times match).
+  - evade: a hostile ship within 1.2 km behind (our nose points away from it) with its nose within 15 degrees of us scores
+    0.75 at 1.2 km to 1.0 point blank; `incoming_fire` 0.6; a hit in the last 2 s 0.5. The threat is the tail hostile, else the
+    hostile whose nose points closest at us. Jinks seek the velocity the ship had when the evasion began plus 100 m/s across
+    the line of fire (more than a 2-4 s jink reaches, so the thrust never stops), the nose turned toward the velocity change;
+    the first side is a seeded angle round the line of fire, each reversal is the opposite side turned by up to +-45 degrees.
+  - retreat: hull under `retreat_below` with a hostile ship in sight scores 0.85 at the threshold to 1.0 at zero hull; it flies
+    `cruise_mps + 50` (World frame, not relative to the hostiles: a faster chaser still closes, and two ships never escalate
+    each other's speed) away from the hostiles, each pulling with 1 / distance, nose along. Never fires.
+  - idle 0.05: brake (`idle_hold`) or coast. Note: the brake faces the ship's selected target (M1 §5.5), so a holding AI turns
+    its nose to the nearest hostile; a raider then reaches its rear hemisphere only after it passes.
+- **Profiles** (`assets/ai/`; selection numbers 0.15 / 1.0 s / 0.4 in all three): `ally_starfury` weights attack 1, evade 0.9,
+  retreat 1, idle 1; `retreat_below` 0.25; cruise 100 m/s; aim error 0.1 degrees; `starfury_tactics`; holds when idle.
+  `raider` evade 0.8, the rest 1; `retreat_below` 0 (fights to the death; T10 may give some groups 0.25); cruise 80; aim 0.2;
+  the M2 `raider_tactics`; coasts when idle. `instructor` attack, evade and retreat weights 0, `retreat_below` 0, `fires`
+  false (the pilot clears the trigger whatever the behaviour), cruise 60, holds. `AiProfile.validate()` checks ranges;
+  `AiProfile.load_named(name)` and `PATHS` list the three.
+- **`starfury_tactics.tres`**: closing 150 / 80 m/s, near range 2 000 m, fire range 1 800 m (bolt reach 4 000 m), cone 2.5
+  degrees capped by a 4 m miss, break under 500 m (at 300 m an attacking Starfury, with its 15 m/s^2 retros, passed 42 m
+  from its target; at 500 m 176 m), break 150 m/s for 2.5 s, extend at least 3 s and beyond 1 600 m. Aim 0.25 degrees landed
+  1 hit in 30 s on an idle raider at 500-800 m, 0.1 degrees 5, 0 degrees 7: raiders are small.
+- **BrainFactory** `{"type": "ai", "profile": ..., "orders": ...}`: `profile` is required (no silent default in a data file;
+  `test_every_behaviour_name_builds` now passes one), `orders` defaults to `engage`; errors name `behaviour.profile` /
+  `behaviour.orders`. `spawn raider ai [distance] [yaw] [pitch]` builds one on the raider profile (`ShipPool`).
+- **Console.** Provider `ai` (`ships`: `NAME behaviour (state)` per AI ship in play; `by_behaviour`: counts; `think_us`) and
+  `ai <name>` (case-insensitive; prints `NAME: behaviour (state)`, the behaviour's other fields, then `scores: retreat 0.00,
+  evade 0.00, attack 0.52 *, idle 0.05` with `*` on the one in control; M2 brains print their `describe()`). Both are
+  registered by every `AiPilotDriver` entering the tree (owner: the newest; handed to another live driver when the owner
+  leaves, gone with the last). `think_us` sums the wall-clock time of every driver's `step` in the last complete physics tick
+  (profiling only). `scripts/run_tests.sh`: the main-scene providers line gains `ai`; two smoke runs (`spawn raider ai` + the
+  provider and command, and `ai NOBODY` exiting 1 under `--console-strict`).
+- **Time steps in the Jolt tests.** `Engine.time_scale` scales the physics step: at `SPEED_UP` 6 every 60 Hz tick is 0.1 s of
+  sim time. The M2 tests (`test_ai_attack`, `test_ai_patrol`) count `RUN_S x 60` ticks, so their "30 s" are 180 s of sim time
+  at 0.1 s steps. `test_ai_evade` and `test_ai_retreat` count `RUN_S x 60 / SPEED_UP` ticks (their `RUN_S` is sim time), and
+  fly both halves of their comparison at once in one world, 10 km apart at mirrored positions.
+- **Evade (AC9)**: an M2 attack raider (seed 4242) from 2 km behind a Starfury that cannot fight back (attack weight 0):
+  120 s at 0.1 s steps, 37 hits while it holds position against 2 while it evades (the raider was on the trigger 146 ticks
+  against 25). At the real 60 Hz step (a one-off run, 90 s): 23 against 1.
+- **Retreat (AC9)**: an `ally_starfury` pilot at 20 % hull with an idle raider 800 m ahead retreats for the whole 30 s and the
+  range reaches 4 612 m at 149 m/s straight away; the same pilot at full hull attacks (closest 176 m, 5 hits).
+- **M2 unchanged**: `test_ai_attack` after the `AttackBrain` refactor: first fire 12.9 s, first hit 15.5 s, closest 394 m,
+  65 hits, same-seed runs 0.0 m apart (as T05 recorded).
+- **AC13, AI half** (`test_ai_think_time`; 13 AI ships, four Starfuries on `ally_starfury` and nine raiders on `raider`, one
+  fight, 60 Hz, measured after a 4 s warm-up, 300 ticks). **Not reliably under 1.5 ms on the development desktop**, and not
+  because of `AiPilot`:
+  - In the fight, the median tick of every driver's `step` ranged from about 1.2 to 2.8 ms over some fifteen runs of the
+    same build (i5-13600KF hybrid cores, desktop programs and at times another agent's Godot running): best run (raider
+    hulls for all 13) AiPilot mean 1 249 us / median 1 219 us / p95 1 793 us; a typical run 2 300-2 600 us mean. The same
+    fight on M2 `AttackBrain`s,
+    measured right after in the same process, swings the same way (1 050-2 600 us median). Pinning the process to P-cores or
+    E-cores, removing or hiding the hull splats, or raider hulls for the allies did not take the swing out.
+  - The brains alone, replayed on 120 recorded ticks of the fight's perceptions in a tight loop (stable to a few us from run to
+    run): `AiPilot` 271-277 us per tick for all 13, M2 `AttackBrain` 106 us. So `AiPilot` adds about 0.17 ms per tick to the
+    M2 path, a third of the 0.5 ms T05 left it. The same M2 brains cost 450-510 us per tick inside the live fight: GDScript
+    that runs once per ship per tick among the rest of the frame is about four times slower than in a warm loop, which is
+    where the fight's number comes from (perception about 1.2 ms, brains 0.5-1.2 ms, avoidance 0.2 ms, retarget and the rest
+    0.2 ms in a slow run).
+  - The test asserts the fight's median under 2 x 1.5 ms (slack for the swing, as the resolver timing tests keep) and the
+    replayed `AiPilot` within M2's brain time + 0.5 ms; both print their numbers. T12 measures AC13 again on `dogfight`.
+  - Trimmed to get here: `Perception.target` is skipped for `AiPilot` (`reads_target()`; about 0.3 ms per tick for 13 ships in
+    a slow run: `Targetable.to_target_info` builds damage zones), selection on packed arrays, the attack's engage-at-will fast
+    path, no `TargetInfo` per tick. Next candidates, all T05/M2 code: the scan and `contacts_for` (`_stamped_for`), the
+    per-ship perception basics (`Perception.new` allocates a `ShipCapability` and a `UniversePos` by default, then
+    `world.to_universe` another), and `incoming_fire`, which grows with the bolts in flight (70-90 in this fight).
+  - The first seconds after 13 ships spawn measured about twice as slow whatever flew them (two runs with the order of the
+    two brains swapped), hence the warm-up.
+
 ## Definition of done (M3)
 
 - T01-T12 merged into `m3`, `scripts/run_tests.sh` green, `docs/third-party.md` current, no generated binaries committed.

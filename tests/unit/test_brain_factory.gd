@@ -74,5 +74,41 @@ func test_errors_name_the_offending_key() -> void:
 
 func test_every_behaviour_name_builds() -> void:
 	for behaviour: StringName in BrainFactory.BEHAVIOURS:
-		var data: Dictionary = {"type": String(behaviour), "waypoints": [[0, 0, -1], [0, 0, -2]]}
+		var data: Dictionary = {"type": String(behaviour), "waypoints": [[0, 0, -1], [0, 0, -2]], "profile": "raider"}
 		assert_true(_make(data)["ok"], String(behaviour))
+
+
+func test_ai_builds_a_pilot_with_the_named_profile_and_orders() -> void:
+	var made: Dictionary = _make({"type": "ai", "profile": "ally_starfury"})
+	assert_true(made["ok"], made["error"])
+	var pilot: AiPilot = made["brain"]
+	assert_eq(pilot.profile, AiProfile.load_named(&"ally_starfury"))
+	assert_eq(pilot.context.order, AiContext.Order.ENGAGE_AT_WILL, "the default order")
+	var covering: AiPilot = _make({"type": "ai", "profile": "raider", "orders": "cover"})["brain"]
+	assert_eq(covering.context.order, AiContext.Order.COVER_ME)
+	assert_eq(covering.profile, AiProfile.load_named(&"raider"))
+	assert_true((covering.behaviour(&"attack") as BehaviourAttack).brain.tactics == covering.profile.tactics,
+			"the attack flies the profile's tactics")
+
+
+func test_ai_with_the_same_seed_makes_the_same_aim() -> void:
+	var a: BehaviourAttack = (_make({"type": "ai", "profile": "raider"})["brain"] as AiPilot).behaviour(&"attack")
+	var b: BehaviourAttack = (_make({"type": "ai", "profile": "raider"})["brain"] as AiPilot).behaviour(&"attack")
+	var c: BehaviourAttack = (BrainFactory.from_behaviour({"type": "ai", "profile": "raider"}, anchor, 8)["brain"] as AiPilot).behaviour(&"attack")
+	assert_eq(a.aim_offset_at(4.2), b.aim_offset_at(4.2))
+	assert_ne(a.aim_offset_at(4.2), c.aim_offset_at(4.2))
+
+
+func test_ai_errors_name_the_offending_key() -> void:
+	var cases: Array[Array] = [
+		[{"type": "ai"}, "behaviour.profile must be one of ally_starfury, raider, instructor, got null"],
+		[{"type": "ai", "profile": "pirate"}, "behaviour.profile must be one of"],
+		[{"type": "ai", "profile": 3}, "behaviour.profile must be one of"],
+		[{"type": "ai", "profile": "raider", "orders": "dance"}, "behaviour.orders must be one of engage, attack, form, cover, got \"dance\""],
+		[{"type": "ai", "profile": "raider", "orders": 1}, "behaviour.orders must be one of"],
+	]
+	for case: Array in cases:
+		var made: Dictionary = _make(case[0])
+		assert_false(made["ok"], "case %s should fail" % str(case[0]))
+		assert_string_contains(String(made["error"]), String(case[1]))
+		assert_null(made["brain"])

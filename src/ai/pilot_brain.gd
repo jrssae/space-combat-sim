@@ -16,6 +16,9 @@ extends RefCounted
 ## World frame, m/s: the velocity this tick's thrust steers toward. Valid while `has_desired_velocity`.
 var desired_velocity: Vector3 = Vector3.ZERO
 var has_desired_velocity: bool = false
+## The `Targetable` id (`Contact.id`) the brain wants its ship's targeting computer to select, 0 for no preference: the
+## driver then keeps the nearest hostile selected (M2). `AiPilot` sets it to its attack's target (M3-T06).
+var wanted_target_id: int = 0
 
 
 ## One tick. `dt` is the physics step. Returns a command the caller owns (a fresh one each call).
@@ -31,6 +34,12 @@ func describe() -> Dictionary:
 ## Back to the starting state (a ship acquired again).
 func reset() -> void:
 	pass
+
+
+## Whether the brain reads `Perception.target`. A brain that chooses its targets from the contacts (`AiPilot`) says no,
+## and the driver saves the `TargetInfo` (AC13's budget): `target` is then null and `target_hostile` false.
+func reads_target() -> bool:
+	return true
 
 
 ## Writes the thrust that moves the velocity toward `v_des` (`PilotSteering.seek`) into `flight` and records `v_des` as

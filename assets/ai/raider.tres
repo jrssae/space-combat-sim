@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="AiProfile" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/ai/ai_profile.gd" id="1_profile"]
+[ext_resource type="Resource" path="res://assets/ai/raider_tactics.tres" id="2_tactics"]
+
+[resource]
+script = ExtResource("1_profile")
+weights = Dictionary[StringName, float]({
+&"attack": 1.0,
+&"evade": 0.8,
+&"idle": 1.0,
+&"retreat": 1.0
+})
+stickiness = 0.15
+emergency_margin = 0.4
+min_dwell_s = 1.0
+retreat_below = 0.0
+cruise_mps = 80.0
+aim_error_deg = 0.2
+tactics = ExtResource("2_tactics")
+fires = true
+idle_hold = false
