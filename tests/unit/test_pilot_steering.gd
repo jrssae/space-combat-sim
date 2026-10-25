@@ -73,6 +73,38 @@ func test_angle_to_is_the_angle_between_nose_and_direction() -> void:
 	assert_almost_eq(PilotSteering.angle_to(Basis.IDENTITY, Vector3.BACK), PI, 1e-6)
 
 
+# --- align_roll (M3-T07) -------------------------------------------------------------------------------------------
+
+
+func test_align_roll_rolls_toward_an_up_that_leans_right_or_left() -> void:
+	var angle: float = deg_to_rad(10.0)
+	var right: float = PilotSteering.align_roll(Basis.IDENTITY, Vector3(sin(angle), cos(angle), 0.0), RATES)
+	assert_almost_eq(right, PilotSteering.K_FACE * angle / RATES.z, 1e-6, "roll right = K * angle / rate_max_z")
+	var left: float = PilotSteering.align_roll(Basis.IDENTITY, Vector3(-sin(angle), cos(angle), 0.0), RATES)
+	assert_almost_eq(left, -right, 1e-6)
+	assert_eq(PilotSteering.align_roll(Basis.IDENTITY, Vector3.UP, RATES), 0.0, "already level with it")
+
+
+func test_align_roll_ignores_the_part_of_the_up_along_the_nose_and_saturates() -> void:
+	# An up tilted toward the nose needs a pitch, not a roll.
+	assert_almost_eq(PilotSteering.align_roll(Basis.IDENTITY, Vector3(0.0, 1.0, -0.5).normalized(), RATES), 0.0, 1e-6)
+	assert_almost_eq(absf(PilotSteering.align_roll(Basis.IDENTITY, Vector3.DOWN, RATES)), 1.0, 1e-6,
+			"upside down: full roll (either way)")
+	assert_eq(PilotSteering.align_roll(Basis.IDENTITY, Vector3.FORWARD, RATES), 0.0, "an up along the nose: nothing")
+	assert_eq(PilotSteering.align_roll(Basis.IDENTITY, Vector3.ZERO, RATES), 0.0)
+
+
+func test_align_roll_works_in_the_ships_frame_and_its_sign_rolls_the_right_way() -> void:
+	var rolled := Basis(Vector3.BACK, deg_to_rad(30.0))  # rolled 30 degrees left (about the tail axis, +Z)
+	assert_true((rolled * Vector3.UP).x < 0.0, "the ship's top leans left")
+	var cmd: float = PilotSteering.align_roll(rolled, Vector3.UP, RATES)
+	assert_almost_eq(cmd, PilotSteering.K_FACE * deg_to_rad(30.0) / RATES.z, 1e-6, "rolls right to level")
+	# The pilot's roll right turns the body about +Z at rot.z * AXIS_SIGN.z * rate: that turns the top toward the right.
+	var w_b: float = cmd * FlightModel.AXIS_SIGN.z * RATES.z
+	var after: Basis = rolled * Basis(Vector3.BACK, w_b * 0.01)
+	assert_gt((after * Vector3.UP).x, (rolled * Vector3.UP).x, "a step of that rate levels it")
+
+
 # --- seek ----------------------------------------------------------------------------------------------------------
 
 
@@ -127,6 +159,24 @@ func test_a_shorter_seek_horizon_pushes_harder() -> void:
 	var hard: Dictionary = PilotSteering.seek(Vector3.ZERO, Vector3(2.0, 0.0, 0.0), Basis.IDENTITY, _cap(), 0.25)
 	assert_almost_eq((gentle["strafe"] as Vector2).x, 2.0 / (_cap().a_rcs.x * PilotSteering.HORIZON_S), TOL)
 	assert_almost_eq((hard["strafe"] as Vector2).x, 4.0 * (gentle["strafe"] as Vector2).x, TOL)
+
+
+func test_seek_all_axes_works_every_axis_at_once_with_the_nose_held() -> void:
+	# Formation keeping (M3-T07): 45 degrees off the nose, where `seek` waits for a turn, the mains and the RCS work together.
+	var r: Dictionary = PilotSteering.seek_all_axes(Vector3.ZERO, Vector3(10.0, 0.0, -10.0), Basis.IDENTITY, _cap())
+	assert_almost_eq(float(r["main"]), 10.0 / 20.0, TOL, "the forward part on the mains")
+	assert_eq(r["retro"], 0.0)
+	assert_almost_eq((r["strafe"] as Vector2).x, 10.0 / 10.0, TOL, "the sideways part on the RCS")
+	var aft: Dictionary = PilotSteering.seek_all_axes(Vector3.ZERO, Vector3(0.0, -3.0, 4.0), Basis.IDENTITY, _cap())
+	assert_eq(aft["main"], 0.0)
+	assert_almost_eq(float(aft["retro"]), 4.0 / 8.0, TOL, "the aft part on the retros")
+	assert_almost_eq((aft["strafe"] as Vector2).y, -3.0 / 6.0, TOL)
+	var turned := Basis(Vector3.UP, deg_to_rad(90.0))  # nose along world -X
+	var t: Dictionary = PilotSteering.seek_all_axes(Vector3.ZERO, Vector3(-4.0, 0.0, 0.0), turned, _cap())
+	assert_almost_eq(float(t["main"]), 4.0 / 20.0, TOL, "in the ship's frame")
+	var still: Dictionary = PilotSteering.seek_all_axes(Vector3(10.0, 0.0, 0.0), Vector3(10.5, 0.0, 0.0), Basis.IDENTITY,
+			_cap())
+	assert_eq([still["main"], still["retro"], still["strafe"]], [0.0, 0.0, Vector2.ZERO], "a small error coasts")
 
 
 func test_apply_seek_drives_both_nacelles_equally() -> void:

@@ -16,8 +16,9 @@ var relation: Factions.Relation = Factions.Relation.NEUTRAL
 ## World frame, m and m/s. Bodies without physics (a buoy) report their kinematic drift, zero for a static prop.
 var position: Vector3 = Vector3.ZERO
 var velocity: Vector3 = Vector3.ZERO
-## Its nose (-Z of the body), unit.
+## Its nose (-Z of the body) and its top (+Y), unit. A formation flies in its leader's frame (M3-T07).
 var forward: Vector3 = Vector3.FORWARD
+var up: Vector3 = Vector3.UP
 ## A sphere around `position` that holds the whole body (its `Damageable`'s), m; 0 when it has no hull.
 var bounding_radius: float = 0.0
 ## True for a rigid body that flies (a ship or a drone), false for a prop (a buoy).

@@ -778,6 +778,91 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
     `AttackBrain` returns dictionaries from `InterceptMath.solve` and `PilotSteering.seek` every tick; the M2 path's own cost
     (about 1.7-2.2 ms here with M2 brains) is already over the budget on this desktop.
 
+**M3-T07 (wings, formation and orders).**
+- **The API later tasks build on.**
+  - `Formation` (pure): `Shape` (`FINGER_FOUR` default, `WEDGE`, `LINE_ABREAST`), `NAMES`, `shape_from_name`, `spacing_m`
+    (40), `offset(slot)` in the leader's body frame (x right, y up, +z behind), `slot_point(position, forward, up, offset)`.
+    Slot 0 is the leader. In units of the spacing: finger-four #2 (-1, 0, 1), #3 (1, 0, 1), #4 (2, 0, 2), further slots
+    carry the echelon on to the right; wedge is a V (#4 left of #2); line abreast is the finger-four with z = 0, so every
+    pilot keeps its side when the shape changes. Closest two slots: 56.6 m (finger-four, wedge), 40 m (line abreast).
+  - `Wing` (pure; members are `Combatant` handles it never reads): `name`, `leader`, `formation`, `order` (COVER ME),
+    `engage_radius_m` (2 000), `size` (3); `add_member(c, slot := -1) -> slot or -1`, `remove_member`, `slot_of`,
+    `member_at`, `members()` (slot order), `empty_slots()`, `is_full()`, `callsign(slot)` (`ALPHA 2` for slot 1, for T08's
+    replacements), `slot_offset`, `effective_order(leader_alive)`, `speaker()`, `ack_for(order, target_name)`,
+    `refusal_no_hostile()`.
+  - `WingDirector` (`Combat/WingDirector`, priority 290): `setup(world)`, `create_wing(name, leader)`, `player_wing()`,
+    `add_member(wing, combatant, slot := -1)` (the ship must be in play and fly an `AiPilot`; the pilot gets a
+    `BehaviourFormation` if it has none, and is briefed at once), `remove_member`, `give_order(order, wing := player's)
+    -> {ok, line}`, `set_formation`, `ack_text()` (the HUD line for 3 s of sim time), `last_ack`, signal
+    `acknowledged(line)`, `roster()` (rows `callsign`, `slot`, `hull`, `behaviour`, `state`: the data for T11's roster),
+    `leader_alive`, `leader_hostile_target`, `refresh(wing)` (every tick). A member that is down (`Damageable.is_active`
+    false: destroyed or parked) or no longer flies an `AiPilot` leaves its slot on the next refresh, so a downed wingman
+    is an empty slot: T08's replenish fills `empty_slots()`, T11 can show an empty slot as DOWN under `callsign(slot)`.
+  - `AiContext` gains `has_slot`, `slot_offset`, `leader_link_position` (a `UniversePos`, null with no live leader) and
+    `leader_link_velocity`, all set by the director every tick, and `has_attackable()` and `may_retreat()`.
+  - `Main` creates wing ALPHA for the player in every scenario (empty until T08 or T10 add members; T10 configures it from
+    the scenario's `wings`) and passes the key edges on (`_give_wing_orders`).
+- **Beyond the brief's files.** `src/ai/contact.gd` and `contact_scan.gd`: `Contact.up` (the body's +Y), so the slot point
+  and the roll use the leader's attitude as of this tick (one more packed array in the scan). `src/ai/behaviour_retreat.gd`:
+  no retreat under FORM ON ME ("formation only, evade still allowed"; `AiContext.may_retreat`). `data/controls/m1_classic.cfg`:
+  the four wing actions (a profile must bind every action). `tests/unit/test_input_adapter.gd` and `test_input_map.gd`
+  (keys 1-4 in `KEYS_B` and the left block, the four actions keyboard-only).
+- **Formation behaviour as built.** The brief's `p_L + B_L * offset + v_L * 0.5 s` read literally parks the member 0.5 s
+  ahead of its slot (50 m at 100 m/s), so the error looks ahead for both ships: `e = (S - p) + 0.5 s * (v_L - v)`, a damping
+  term with no offset (with the seek's 1 s horizon a second-order loop, damping ratio about 0.95). `v_des = v_L +
+  clamp(0.4 * e)`, closure 60 m/s within 1.5 km of the slot, cruise + 100 m/s beyond. Within 150 m: the leader's nose, roll
+  to its top (`PilotSteering.align_roll`), and the new `PilotSteering.seek_all_axes` (mains or retros on the part of the
+  error along the nose and the RCS on the rest, at once). `seek` fires the mains only within 12 degrees of the nose (the
+  retros within 30 of the tail) and expects the nose to turn toward the error, which a formation member's never does: with
+  `seek`, the 4 degrees/s turn below gave 33 / 78.5 / 64 m and a 10.6 m clearance. Beyond 150 m the nose turns toward the velocity
+  change when it is over 30 m/s and not a slow-down along the way (else it faces the desired velocity and the retros brake;
+  no flip for an overshoot), with `seek`. When the driver's avoidance changes a member's wish it seeks again with `seek`
+  (T05's driver, unchanged).
+- **Scores.** 0.25 while the orders allow no attack on anything in sight (`has_attackable`), 0.1 while they do. Idle
+  is 0.05 and the stickiness 0.15, so formation must score over 0.2 to take over from idle; an attack scores at least
+  0.3 and must beat the current behaviour by 0.15, so formation stands by at 0.1 whenever there is something it may attack
+  (any hostile at will; near or after the leader under COVER ME; the leader's target, in sight, under ATTACK MY TARGET).
+  0 without a slot, or without a leader in sight or on the link.
+- **Leader beyond sensor range** (beyond the brief): the director's link (the leader's universe position and velocity) lets
+  a member that chased a raider out past 5 km fly back at the far closure; the slot offset counts again once the leader's
+  contact is back. Without it the member would idle where the fight ended. While the leader is dead the link is cleared,
+  the members fly ENGAGE AT WILL, and the wing's order comes back on the respawn.
+- **Orders.** `UiCommand.wing_attack` / `wing_form` / `wing_engage` / `wing_cover` (four edges, so the input layer does not
+  know `AiContext.Order`); keys 1-4 in `project.godot`, keyboard-only. Every order (repeated ones too) posts exactly one
+  line from the member in the lowest slot: `ALPHA 2: COPY, ATTACKING RAIDER 1` / `FORMING UP` / `ENGAGING AT WILL` /
+  `COVERING YOU`; ATTACK MY TARGET with nothing hostile selected (nothing, a buoy, a friend, or the leader dead):
+  `ALPHA 2: UNABLE, NO HOSTILE SELECTED`, the order unchanged. A wing with no members stores the order and says
+  `ALPHA: NO WINGMEN`. Console: `wing` (summary), `wing order [attack|form|engage|cover]` (words in key order; a refusal
+  is a console failure, so `--console-strict` exits 1), `wing formation [finger_four|wedge|line_abreast]` (no
+  acknowledgement); provider `wing` (`name`, `order`, `formation`, `members` as `ALPHA 2 100% formation (in slot)`,
+  `last_ack`). `scripts/run_tests.sh`: the providers line gains `wing`, plus two smoke runs (order and formation; a bad word
+  exits 1).
+- **Saved control profiles.** A profile saved before T07 has no wing actions; M2's rule (a missing action makes a profile
+  invalid) rejects it at start-up with a warning and the default map applies. Re-save it from `controls use default`.
+- **Jolt numbers** (`test_ai_formation`: three `ally_starfury` members join from 200 m behind and 60 m out, 15 s straight,
+  then a 90 degree turn at 100 m/s with the heading swung at a steady rate, the leader flown like the player's ship;
+  1/30 s steps, the 60 Hz step gave the same to 0.1 m): every member within 25 m after 5.9-6.2 s; straight flight
+  max 2.4-2.5 m (the seek's 1 m/s coast band over k = 0.4); max slot error from the turn's start to 10 s after it, #2 / #3 /
+  #4, and the least clearance between bounding spheres:
+
+  | Turn | Max error (m) | Clearance (m) |
+  |---|---|---|
+  | 4 degrees/s left (22.5 s) | 11 / 13 / 18 | 25.4 |
+  | 5 degrees/s left (18 s), in the test | 14 / 16 / 22 | 23.3 |
+  | 6 degrees/s left (15 s) | 22 / 70 / 67 | 19.5 |
+  | 6 degrees/s right (15 s), in the test | 70 / 22 / 23 | 19.5 |
+  | 9 degrees/s left (10 s) | 27 / 106 / 116 | 20.3 |
+  | 15 degrees/s left (6 s) | 44 / 188 / 212 | 17.4 |
+
+  The cliff is the RCS: at 100 m/s a Starfury turns its velocity with its nose on the flight path at up to about
+  5.7 degrees/s (10 m/s^2 sideways). At 6 degrees/s the leader needs 10.5 m/s^2, and a member on the outside, its nose on the
+  leader's, needs more than its RCS gives: it drifts out at 8-13 m/s while the turn lasts and is back within 3 m about 10 s
+  after it ends. Faster turns slide the nose off the flight path, and since the slots are in the leader's body frame they
+  swing round it (90 degrees moves #4's slot by 160 m). So AC9's 80 m holds for the turns a Starfury flies with its nose on
+  its flight path and a little beyond; the test flies 5 degrees/s left and 6 degrees/s right. Members were only ever in
+  `formation`; avoidance acted on 116 and 170 member-ticks of the two runs (the join and the turn), never in the straight
+  legs (asserted).
+
 ## Definition of done (M3)
 
 - T01-T12 merged into `m3`, `scripts/run_tests.sh` green, `docs/third-party.md` current, no generated binaries committed.

@@ -22,10 +22,12 @@ const DEFAULT_NAME: String = "default"
 ## Profile names double as file names (`user://controls/<name>.cfg`) and as `settings.control_profile` values.
 const NAME_PATTERN: String = "^[a-z0-9_]{1,32}$"
 ## Actions that need no pad binding: no pad button is free for them, or the pad reaches the function another way (target_ahead
-## is the D-pad Up hold, target_prev the mouse wheel's twin).
+## is the D-pad Up hold, target_prev the mouse wheel's twin). The wing orders are keys 1-4 and the console until M4's comms
+## panel gives the pad a route (architecture §16 D36).
 const KEYBOARD_ONLY: Array[StringName] = [
 	InputAdapter.TOGGLE_FALLBACK, InputAdapter.TOGGLE_OVERLAY, InputAdapter.TARGET_AHEAD, InputAdapter.TARGET_PREV,
-	InputAdapter.SCREENSHOT,
+	InputAdapter.SCREENSHOT, InputAdapter.WING_ATTACK, InputAdapter.WING_FORM, InputAdapter.WING_ENGAGE,
+	InputAdapter.WING_COVER,
 ]
 const MAX_PAD_BUTTON: int = 14  # D-pad Right; 15 and up are SDL extras (paddles, touchpad, misc)
 const GUIDE_BUTTON: int = 5

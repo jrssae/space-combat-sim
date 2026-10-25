@@ -12,7 +12,8 @@ extends RefCounted
 ## The keyboard (layout B) is all under the left hand because the right hand flies the mouse: this class sees only action
 ## names, so which key drives which action is project.godot's and the control profile's business. Two keys drive a pair
 ## of actions at once (W = both main pods, S = both retro pods), which needs nothing here: each pod reads its own action.
-## The mouse side buttons are bound like any other (Mouse 4 `autotrack`, Mouse 5 `weapon_next`).
+## The mouse side buttons are bound like any other (Mouse 4 `autotrack`, Mouse 5 `weapon_next`). Keys 1-4 are the wing orders
+## (attack my target, form on me, engage at will, cover me; M3-T07), press edges in `UiCommand` for `Main` to pass on.
 
 const MAIN_RIGHT := &"main_right"
 const MAIN_LEFT := &"main_left"
@@ -43,20 +44,24 @@ const TARGET_PREV := &"target_prev"
 const AUTOTRACK := &"autotrack"
 const CAMERA_LOOK := &"camera_look"
 const SCREENSHOT := &"screenshot"
+const WING_ATTACK := &"wing_attack"
+const WING_FORM := &"wing_form"
+const WING_ENGAGE := &"wing_engage"
+const WING_COVER := &"wing_cover"
 
 ## Every action the game reads; project.godot must declare each one (tests/unit/test_input_map.gd).
 const ACTIONS: Array[StringName] = [
 	MAIN_RIGHT, MAIN_LEFT, RETRO_RIGHT, RETRO_LEFT, PITCH_DOWN, PITCH_UP, YAW_LEFT, YAW_RIGHT,
 	STRAFE_LEFT, STRAFE_RIGHT, STRAFE_DOWN, STRAFE_UP, ROLL_LEFT, ROLL_RIGHT, TARGET_NEXT, WEAPON_NEXT,
 	TARGET_AHEAD, FIRE, TOGGLE_ASSIST, BRAKE, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY, TOGGLE_FALLBACK,
-	TARGET_PREV, AUTOTRACK, CAMERA_LOOK, SCREENSHOT,
+	TARGET_PREV, AUTOTRACK, CAMERA_LOOK, SCREENSHOT, WING_ATTACK, WING_FORM, WING_ENGAGE, WING_COVER,
 ]
 
 ## Actions reported as one-tick edges on press rather than held state. `TARGET_NEXT` is not one of them: it is
 ## the tap-or-hold button (see `target_hold_s`).
 const EDGE_ACTIONS: Array[StringName] = [
 	TOGGLE_ASSIST, WEAPON_NEXT, TARGET_AHEAD, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY, TOGGLE_FALLBACK,
-	TARGET_PREV, SCREENSHOT, AUTOTRACK,
+	TARGET_PREV, SCREENSHOT, AUTOTRACK, WING_ATTACK, WING_FORM, WING_ENGAGE, WING_COVER,
 ]
 
 const AIM_EXPO := 1.5
@@ -148,6 +153,10 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	cmd.ui.toggle_overlay = edges[TOGGLE_OVERLAY]
 	cmd.ui.toggle_fallback_mesh = edges[TOGGLE_FALLBACK]
 	cmd.ui.screenshot = edges[SCREENSHOT]
+	cmd.ui.wing_attack = edges[WING_ATTACK]
+	cmd.ui.wing_form = edges[WING_FORM]
+	cmd.ui.wing_engage = edges[WING_ENGAGE]
+	cmd.ui.wing_cover = edges[WING_COVER]
 	cmd.ui.look_active = looking
 	if looking:
 		var look_y: float = -aim.y if not invert_y else aim.y

@@ -33,6 +33,7 @@ var _factions: Array[StringName] = []
 var _positions: PackedVector3Array = PackedVector3Array()
 var _velocities: PackedVector3Array = PackedVector3Array()
 var _forwards: PackedVector3Array = PackedVector3Array()
+var _ups: PackedVector3Array = PackedVector3Array()
 var _radii: PackedFloat64Array = PackedFloat64Array()
 var _is_ship: PackedByteArray = PackedByteArray()
 var _hulls: PackedFloat64Array = PackedFloat64Array()
@@ -155,7 +156,9 @@ func _add(body: Node3D, targetable: Targetable, damageable: Damageable) -> void:
 		_velocities.append(targetable.velocity)
 	else:
 		_velocities.append(Vector3.ZERO)
-	_forwards.append(-body.global_basis.z.normalized())
+	var basis: Basis = body.global_basis
+	_forwards.append(-basis.z.normalized())
+	_ups.append(basis.y.normalized())
 	_radii.append(damageable.bounding_radius if damageable != null else 0.0)
 	_is_ship.append(1 if rigid != null else 0)
 	_hulls.append(damageable.hull.fraction() if damageable != null else -1.0)
@@ -184,6 +187,7 @@ func _stamped_for(faction: StringName) -> Array[Contact]:
 		c.position = _positions[i]
 		c.velocity = _velocities[i]
 		c.forward = _forwards[i]
+		c.up = _ups[i]
 		c.bounding_radius = _radii[i]
 		c.is_ship = _is_ship[i] == 1
 		c.hull_fraction = _hulls[i]

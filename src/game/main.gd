@@ -51,6 +51,7 @@ var _spawn_basis: Basis = Basis.IDENTITY
 @onready var audio: AudioDirector = $World/Audio
 @onready var director: DestructionDirector = $Combat/DestructionDirector
 @onready var waves: WaveDirector = $Combat/WaveDirector
+@onready var wings: WingDirector = $Combat/WingDirector
 @onready var hud: Hud = $Hud
 @onready var splat_status: SplatStatus = $SplatStatus
 @onready var overlay: DebugOverlay = $DebugOverlay
@@ -70,6 +71,10 @@ func _ready() -> void:
 		_spawn_position = player["position"]
 		_spawn_basis = player["basis"]
 	_spawn_ship()
+	# The player leads wing ALPHA (architecture §16 D36). Its members join later: allies from the pool (M3-T08) or a
+	# scenario's `wings` (M3-T10).
+	wings.setup(world)
+	wings.create_wing(Wing.DEFAULT_NAME, combatant)
 	ships.world = world
 	ships.projectiles = projectiles
 	ships.player = ship
@@ -337,6 +342,19 @@ func _handle_ui(ui: UiCommand) -> void:
 	if ui.screenshot:
 		var result: ConsoleResult = DebugConsole.registry.execute_tokens(PackedStringArray(["screenshot"]))
 		print("[screenshot] ", result.lines[0] if result.ok and not result.lines.is_empty() else result.error)
+	_give_wing_orders(ui)
+
+
+# Keys 1-4 (UiCommand edges, never `Input`): orders for the player's wing (architecture §16.3).
+func _give_wing_orders(ui: UiCommand) -> void:
+	if ui.wing_attack:
+		wings.give_order(AiContext.Order.ATTACK_MY_TARGET)
+	if ui.wing_form:
+		wings.give_order(AiContext.Order.FORM_ON_ME)
+	if ui.wing_engage:
+		wings.give_order(AiContext.Order.ENGAGE_AT_WILL)
+	if ui.wing_cover:
+		wings.give_order(AiContext.Order.COVER_ME)
 
 
 # The mouse is captured (hidden, unbounded) while flying with a mouse-capable source; holding Alt, the console, the pause and a
