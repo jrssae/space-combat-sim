@@ -71,6 +71,7 @@ Record later answers here (rules) or in `docs/design-references.md` (designs), s
 | Q9 | Keyboard (right hand on the mouse; M2.1 put flight keys on the right side, which was wrong) | **Layout B, pods by position**, no keyboard pitch/yaw (the mouse flies). Table in M3-T01 |
 | Q10 | AC13's AI budget (2026-10-24: after T06's trims the 13-ship path measures 1.7-2.1 ms on the development desktop with M2 brains alone) | **Relative + record**: `AiPilot` may add at most 0.5 ms per tick over the M2 AI path in the same fight (paired test); the absolute number is recorded, and T12 records it again on `dogfight` |
 | Q11 | (2026-10-24, raised by the maintainer) How should AI ships react to being shot? | **Evade when hit**: every AI ship, ally or raider, that takes a bolt hit starts evasive manoeuvres at once, even mid-attack, then returns to its fight (M3-T10, AC9 hit reaction). The instructor (evade weight 0, invulnerable) is exempt |
+| Q12 | (2026-10-24, raised by the maintainer) Can AI ships differ in skill and temperament (civilian vs raider vs military)? | **Per-ship skill rank and aggressiveness**, named ranks: skill `rookie` / `regular` / `veteran` / `ace`, aggressiveness `passive` / `cautious` / `balanced` / `aggressive` / `reckless` (0-1 inside; a number is accepted too), set per spawn with profile defaults. At `reckless`, a badly damaged ship whose allies are mostly or all dead has a chance to ram an enemy; **any AI ship** may, allies included, when set to reckless. **Civilians: a profile only** in M3 (never attacks, evades and flees), usable on any hull; civilian ships and traffic come later (M3-T13) |
 
 Calls made by the planner (say if you want them changed): callsigns `ALPHA 1` (player) to `ALPHA 4`, the instructor
 `INSTRUCTOR`; the default order is **cover me** (hold formation, engage hostiles that come within 2 km of the player);
@@ -94,7 +95,7 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | AC6 | Starfury asset: `python3 -m tools.procgen build starfury_aurora` also writes LOD1 (`lods[1]`, 20-30 % of LOD0's splats, same AABB within 0.3 m) and `chunks[]` `cabin`, `arm_ur`, `arm_lr`, `arm_ul`, `arm_ll` that partition the LOD1 splats exactly; LOD0 output is byte-identical to before; deterministic; after `--import` the LOD1 and chunk PLYs load with manifest counts | A | |
 | AC7 | Allied ships: a `starfury_ally` from the pool flies the Starfury `ShipSpec` numbers (M1 AC5 formulas) with LOD1 splats; the splat-node count never changes across acquire / release / destroy / replenish cycles (D22); a destroyed ally explodes into Starfury chunks and returns to the pool; the player's death also uses Starfury chunks | A | P5 |
 | AC8 | `AiPilot` selection (unit, scripted `AiContext`s): the highest weighted score wins; the current behaviour keeps a stickiness bonus and a minimum dwell unless a challenger beats it by the emergency margin; orders gate behaviours (FORM ON ME never attacks; ATTACK MY TARGET attacks only the leader's target); `describe()` names the behaviour and its state; same seed = same choices | A | |
-| AC9 | Behaviours in Jolt: **formation** members hold within 25 m of their slots in straight flight and within 80 m through a 90° leader turn at 100 m/s, never closer than 15 m to anyone; **evade** cuts an M2 attack raider's hits on the evader by at least half against the same seeded run without evade; **guard** engages a hostile that enters the guard radius and returns within 300 m of its post once it is gone; **retreat** below 25 % hull opens the range; **hit reaction** (Q11): an AI ship (ally or raider, any order) hit by a bolt starts evading within 0.25 s, even mid-attack inside its minimum dwell, and flies at least one full jink before it may attack again; repeated hits keep it evading | A | |
+| AC9 | Behaviours in Jolt: **formation** members hold within 25 m of their slots in straight flight and within 80 m through a 90° leader turn at 100 m/s, never closer than 15 m to anyone; **evade** cuts an M2 attack raider's hits on the evader by at least half against the same seeded run without evade; **guard** engages a hostile that enters the guard radius and returns within 300 m of its post once it is gone; **retreat** below 25 % hull opens the range; **hit reaction** (Q11): an AI ship (ally or raider, any order) hit by a bolt starts evading within 0.25 s (skill `regular` or better; a `rookie` within 0.6 s, T13), even mid-attack inside its minimum dwell, and flies at least one full jink before it may attack again; repeated hits keep it evading | A | |
 | AC10 | Instructor: on `instructor_route` the instructor visits every waypoint in order; with the player parked it stops within 1 600 m and resumes when the player closes to 800 m; each demo completes its measurable goal (roll 360 ± 10°, flip-and-burn ends with velocity reversed or below 2 m/s, strafe box returns within 30 m of its start with every leg over 40 m, pod turn yaws the right way by over 30°, all stop ends below 0.5 m/s and 1 °/s); the HUD's waypoint marker projects to the route point | A | P6 |
 | AC11 | Wing orders: keys 1-4 (through `UiCommand`, never `Input`) and `wing order <attack\|form\|engage\|cover>` change every member's order and post one acknowledgement line; ATTACK MY TARGET with no hostile selected is refused with a message; the roster lists callsigns, hull and current behaviour; downed wingmen are replaced when the next wave starts, entering 1 500 m behind the player | A | P7 |
 | AC12 | Scenarios: `combat_sandbox`, `instructor_route` and `dogfight` validate (and broken `wings` / `route` entries give path-qualified errors); a headless sandbox run with wingmen clears three waves; a headless `dogfight` (four allies, six raiders, player `god on` and idle) ends with one side destroyed within 6 sim minutes in 5/5 seeds and is reproducible per seed within 1e-3 m after 60 s | A | P8 |
@@ -105,6 +106,7 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | AC17 | Instructor: the route is easy to follow, the waypoint marker reads, every demo is clearly visible from behind | H | P6 |
 | AC18 | Allied Starfuries (LOD1) look right at combat ranges; a Starfury break-up shows its cabin and four arms tumbling apart | H | P5 |
 | AC19 | 60 fps at 1080p on the tester's GPU with four Starfuries, nine raiders, bolts, explosions and debris on screen | H | |
+| AC20 | Skill and aggressiveness (Q12): every AI spawn (scenario, wave, console) takes `skill` and `aggression` by name or 0-1, defaulting from its profile, and `ai <name> skill|aggression <value>` changes them live. Unit tests show skill scaling aim error, reaction delay and fire discipline, and aggression scaling the attack / evade / retreat weights, the retreat threshold and the engage range, each monotonically. A `civilian` profile never fires and evades and flees hostiles. In Jolt, on the same seeded runs: an `ace` raider lands more hits on a drone than a `rookie`; a `cautious` ship retreats at a higher hull than an `aggressive` one. **Last-ditch ram**: only at `reckless`, below 25 % hull with at most a quarter of its allies left, a seeded chance commits a ship to `ram`: avoidance stops dodging that target and it flies a collision course; in Jolt a committed rammer hits its target in at least 8 of 10 seeded runs, and no ship below `reckless` ever rams. `ai <name>` shows skill, aggression and the behaviour | A | |
 
 ## Capture pre-checks
 
@@ -135,7 +137,8 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | M3-T09 | Instructor: follow path, pacing, demo manoeuvres, route scenario | T06, T08 | Opus |
 | M3-T10 | Guard, raider AI upgrade, sandbox and dogfight scenarios | T07, T08 | Opus |
 | M3-T11 | HUD: wing roster, acknowledgements, waypoint marker | T07, T09 | Sonnet |
-| M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11 | Opus |
+| M3-T13 | Skill ranks, aggressiveness, civilian profile, last-ditch ram (runs before T12) | T06, T10 | Opus |
+| M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13 | Opus |
 
 Parallel lanes: T01, T02 and T03 touch disjoint files and can run together; T04 and T05 can run together after T02.
 Two agents at a time is steadier than four (`docs/handoff.md`).
@@ -419,6 +422,43 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
   off-screen. Allies already show blue in the radar and target box (`Factions.hud_color`). Chase-view layout and opacity
   as in M2.1.
 - Done when: the HUD parts of AC10 and AC11 pass; P6 and P7 show them.
+
+### M3-T13 Skill ranks, aggressiveness, civilian profile, last-ditch ram
+
+Added 2026-10-24 for maintainer Q12; numbered last to keep the earlier ids, run before T12.
+
+- Goal: AI ships differ by skill and temperament per ship, so civilian, raider and military AI feel different, and a
+  reckless ship that is losing may try to ram.
+- Agent: **Opus**. Cross-cutting tuning of every behaviour plus one new behaviour with a physics test.
+- Files: `src/ai/{ai_temperament,behaviour_ram}.gd` (new), `src/ai/{ai_profile,ai_pilot,ai_context,ai_console,
+  ai_pilot_driver,behaviour_attack,behaviour_evade,behaviour_retreat,brain_factory}.gd`, `assets/ai/civilian.tres` (new)
+  and the other profiles (defaults), `src/game/{scenario_loader,ship_pool}.gd` (spawn fields, `spawn ... skill= aggression=`),
+  `tests/unit/{test_ai_temperament,test_behaviour_ram}.gd`, `tests/integration/{test_ai_skill,test_ai_ram}.gd`.
+- Notes:
+  - `AiTemperament` (pure): parses ranks or numbers (skill `rookie` 0.2, `regular` 0.45, `veteran` 0.7, `ace` 0.95;
+    aggression `passive` 0.0, `cautious` 0.25, `balanced` 0.5, `aggressive` 0.75, `reckless` 1.0), and maps them onto
+    the profile's numbers. A profile's own tuned values are what `regular` + `balanced` give, so today's tests keep their
+    numbers at the defaults.
+  - Skill: aim error (ace about 0.4x the profile's, rookie about 2.5x), reaction delay to a new threat or hit (ace 0.1 s,
+    regular 0.25 s, rookie 0.6 s), fire discipline (the miss-distance gate tighter with skill: fewer wasted bolts), and evade
+    quality (shorter, less regular jinks with skill).
+  - Aggression: attack weight up and evade / retreat weights down with aggression; retreat threshold (cautious about 2x the
+    profile's, aggressive half, reckless never retreats); engage range and break-off distance (closer with aggression);
+    `passive` never starts an attack (it may fire back at a ship that hit it in the last 10 s unless the profile never
+    fires).
+  - Defaults: `ally_starfury` (the military profile) `veteran` / `balanced`; `raider` `regular` / `aggressive`;
+    `instructor` `ace` / `passive` (never rams, never fires); new `civilian` `rookie` / `passive` (attack weight 0, fires
+    false, retreat whenever a hostile is within 3 km, evade on). Scenario and wave spawns and `spawn` may override per ship;
+    `dogfight` gets one `reckless` raider group so the ram shows up.
+  - Last-ditch ram (`BehaviourRam`): eligible only at aggression 1.0, own hull under 25 %, and friendly ships within sensor
+    range at most a quarter of the most it has seen this engagement (none counts). While eligible, a seeded roll every 5 s
+    (35 % each) commits it. A committed rammer picks its attack target or the nearest hostile ship (never a prop), flies a
+    lead-collision course at full mains, and tells `AiPilotDriver` to leave that one contact out of avoidance (every other
+    contact is still avoided). It stays committed until the target dies, then normal selection resumes. T04's
+    `RamResolver` does the damage. Keep `score` cheap (AC13 paired budget).
+  - Console: `ai <name>` gains `skill`, `aggression`; `ai <name> skill <rank|0-1>` and `ai <name> aggression <level|0-1>`
+    set them; the `ai` provider's `by_behaviour` counts `ram`.
+- Done when: AC20 passes and the hit-reaction latency by skill in AC9 holds.
 
 ### M3-T12 Integration, smoke runs, capture set, play-test guide
 
