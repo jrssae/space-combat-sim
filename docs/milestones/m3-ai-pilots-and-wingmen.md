@@ -874,19 +874,18 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
   | 5 degrees/s left and right (18 s) | 2.4-2.8 / 2.4-2.8 / 3.2-4.0 | 2 degrees | 30.0 |
   | 6 degrees/s left and right (15 s), in the test | 16-18 / 16-18 / 34-35.5 | 23 degrees | 30.0 |
   | 8 degrees/s left and right (11.2 s) | 37 / 37-41 / 73-74 | 52 degrees | 23.3 |
-  | 10 degrees/s left and right (9 s) | 54-57 / 54-57 / 107-115 | 61 degrees | 19.6 |
+  | 10 degrees/s left and right (9 s), in the test | 54-57 / 54-57 / 107-115 | 61 degrees | 19.6 |
   | 15 degrees/s left and right (6 s) | 78-109 / 78-109 / 156-249 | 93 degrees (the leader reaches 118 m/s) | 13.4 |
 
-  **Open (awaits the maintainer): AC9's 80 m at 10 degrees/s.** A Starfury turning at 10 degrees/s at 100 m/s needs
-  17.5 m/s^2 sideways, so its nose runs about 55-61 degrees ahead of its flight path, and the slots, being in its body frame,
-  swing round it by that much when the lead builds up and when it collapses at the end of the turn (about 1.2 s). A member
-  that holds its place relative to the flight path is then 2 r sin(lead / 2) from its body-frame slot: 57 m for #2 and #3
-  (r 56.6 m), 113-115 m for #4 (r 113 m). The measured peaks match those chords; in the steady part of the turn every member
-  is within 10-24 m of the rotated slot. Easing the leader out of the turn over 3 s did not help (#4 101-124 m: the lead
-  still collapses in under a second once the RCS can carry the turn). So the 10 degrees/s case is not in the test; options
-  for the ruling: the bound for turns up to about 8 degrees/s, slots in the leader's flight-path frame instead of its body
-  frame, or a looser bound for #4. Snap turns (the nose swung at 60 degrees/s) cannot be tracked with body-frame slots
-  either way (note for AC15).
+  **10 degrees/s, asserted per Q14** (fix round 1b): #2 and #3 within 80 m, the far slot #4 within 120 m, clearance at
+  least 15 m, both directions; the 6 degrees/s turns keep 80 m for every slot. Why #4 needs more: a Starfury turning at
+  10 degrees/s at 100 m/s needs 17.5 m/s^2 sideways, so its nose runs about 55-61 degrees ahead of its flight path, and the
+  slots, being in its body frame, swing round it by that much when the lead builds up and when it collapses at the end of
+  the turn (about 1.2 s). A member that holds its place relative to the flight path is then 2 r sin(lead / 2) from its
+  body-frame slot: 57 m for #2 and #3 (r 56.6 m), 113-115 m for #4 (r 113 m). The measured peaks match those chords; in
+  the steady part of the turn every member is within 10-24 m of the rotated slot. Easing the leader out of the turn over
+  3 s did not help (#4 101-124 m: the lead still collapses in under a second once the RCS can carry the turn). Snap turns
+  (the nose swung at 60 degrees/s) cannot be tracked with body-frame slots (note for AC15).
 - **AC13 with a wing** (fix round 1): `test_ai_think_time`'s four Starfuries fly as wing ALPHA (ALPHA 1 leads, ALPHA 2-4 on
   COVER ME through a real `WingDirector`, rejoining at every switch back from the M2 blocks), so the formation's score and
   the order gate are in the paired cost: +101 us run alone (budget 500 us), with M3-T09 running Godot in parallel.

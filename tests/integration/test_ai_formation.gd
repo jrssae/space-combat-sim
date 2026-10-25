@@ -7,13 +7,14 @@ extends GutTest
 ## (the centripetal part plus closing any gap), by as much as the RCS needs the mains to carry, mains burning. The RCS alone
 ## (10 m/s^2 sideways) turns a Starfury at up to about 5.7 degrees/s at 100 m/s; with the mains, up to about 18.
 ##
-## Two formations fly at once in one world, 10 km apart (beyond sensor range), one per entry of `TURNS`: a left and a right
-## turn at 6 degrees/s (90 degrees in 15 s), so either side of the finger-four flies the outside of a turn.
+## Four formations fly at once in one world, 10 km apart (beyond sensor range), one per entry of `TURNS`: a left and a
+## right turn at 6 degrees/s (90 degrees in 15 s) and at 10 (in 9 s), so either side of the finger-four flies the outside.
 ##
 ## The slots are in the leader's body frame, so they swing round the leader as its nose moves onto and off its lead over
-## the flight path (23 degrees at 6 degrees/s, 52 at 8, 61 at 10). A member that holds its place relative to the flight path
-## is then 2 r sin(lead / 2) from its slot: at 10 degrees/s 57 m for #2 and #3 and 115 m for #4, measured 107-115 m for #4.
-## That case awaits the maintainer (M3-T07 fix round 1) and is not in this test until the ruling.
+## the flight path (23 degrees at 6 degrees/s, 61 at 10). A member that holds its place relative to the flight path is then
+## 2 r sin(lead / 2) from its slot: at 10 degrees/s 57 m for #2 and #3 and about 115 m for #4 (113 m out). Hence AC9's
+## bounds (maintainer Q14): every member within `TURN_TOL_M`, the far slot #4 within `FAR_SLOT_TOL_M` at 10 degrees/s; at
+## 6 degrees/s #4 is held to `TURN_TOL_M` too.
 ##
 ## The members start 200 m behind their slots and 60 m out to the side, at the leader's velocity, and join. Measured from
 ## the true slot (the leader's position plus its attitude times the slot offset, no lead): within `STRAIGHT_TOL_M` through
@@ -26,14 +27,17 @@ const SPEED_UP: float = 2.0
 const SPEED_MPS: float = 100.0
 const JOIN_S: float = 15.0
 const STRAIGHT_S: float = 15.0
-## [degrees/s, +1 left or -1 right] per formation.
-const TURNS: Array = [[6.0, 1.0], [6.0, -1.0]]
 ## How far ahead of its flight path the leader may put its nose.
 const LEADER_LEAN_MAX_DEG: float = 80.0
 const AFTER_TURN_S: float = 10.0
 const STRAIGHT_TOL_M: float = 25.0
 const TURN_TOL_M: float = 80.0
+## The far slot (#4, slot 3) through a 10 degrees/s turn (maintainer Q14).
+const FAR_SLOT_TOL_M: float = 120.0
 const MIN_CLEARANCE_M: float = 15.0
+## [degrees/s, +1 left or -1 right, the bound for the far slot #4] per formation.
+const TURNS: Array = [[6.0, 1.0, TURN_TOL_M], [6.0, -1.0, TURN_TOL_M], [10.0, 1.0, FAR_SLOT_TOL_M],
+		[10.0, -1.0, FAR_SLOT_TOL_M]]
 const APART_M: float = 10000.0
 
 var _scale_backup: float = 1.0
@@ -122,7 +126,7 @@ func _setup(world: WorldFrame, projectiles: Node3D, director: WingDirector, orig
 		members.append(member)
 	var ships: Array[Combatant] = [leader]
 	ships.append_array(members)
-	return {"tag": tag, "leader": leader, "pilot": pilot, "wing": wing, "members": members, "ships": ships,
+	return {"tag": tag, "far_tol_m": TURN_TOL_M, "leader": leader, "pilot": pilot, "wing": wing, "members": members, "ships": ships,
 			"straight_max": [0.0, 0.0, 0.0], "turn_max": [0.0, 0.0, 0.0], "joined_s": [INF, INF, INF],
 			"min_clearance": INF, "min_centres": INF, "behaviours": {}, "avoiding_ticks": 0, "avoiding_straight": 0,
 			"max_speed": 0.0, "min_speed": INF, "max_nose_lead_deg": 0.0}
@@ -185,7 +189,8 @@ func _check(run: Dictionary) -> void:
 		var callsign: String = members[i].display_name
 		assert_lt(float(run["joined_s"][i]), JOIN_S, "%s joined before the straight leg" % callsign)
 		assert_lt(float(run["straight_max"][i]), STRAIGHT_TOL_M, "%s within 25 m of its slot in straight flight" % callsign)
-		assert_lt(float(run["turn_max"][i]), TURN_TOL_M, "%s within 80 m of its slot through the turn" % callsign)
+		var tolerance: float = float(run["far_tol_m"]) if i == 2 else TURN_TOL_M
+		assert_lte(float(run["turn_max"][i]), tolerance, "%s within %.0f m of its slot through the turn" % [callsign, tolerance])
 	assert_gte(float(run["min_clearance"]), MIN_CLEARANCE_M, "%s: never closer than 15 m to anyone" % tag)
 
 
@@ -205,6 +210,7 @@ func test_a_finger_four_holds_its_slots_straight_and_through_a_90_degree_turn() 
 		var turn: Array = TURNS[i]
 		var run: Dictionary = _setup(world, projectiles, director, Vector3(APART_M * i, 0.0, 0.0), float(turn[0]),
 				float(turn[1]), String.chr(65 + i))
+		run["far_tol_m"] = float(turn[2])
 		runs.append(run)
 		run_s = maxf(run_s, (run["pilot"] as LeaderPilot).turn_ends_s() + AFTER_TURN_S)
 	var ticker := PhysicsTicker.new()
