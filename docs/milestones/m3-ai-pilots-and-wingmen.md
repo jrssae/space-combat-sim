@@ -72,6 +72,7 @@ Record later answers here (rules) or in `docs/design-references.md` (designs), s
 | Q10 | AC13's AI budget (2026-10-24: after T06's trims the 13-ship path measures 1.7-2.1 ms on the development desktop with M2 brains alone) | **Relative + record**: `AiPilot` may add at most 0.5 ms per tick over the M2 AI path in the same fight (paired test); the absolute number is recorded, and T12 records it again on `dogfight` |
 | Q11 | (2026-10-24, raised by the maintainer) How should AI ships react to being shot? | **Evade when hit**: every AI ship, ally or raider, that takes a bolt hit starts evasive manoeuvres at once, even mid-attack, then returns to its fight (M3-T10, AC9 hit reaction). The instructor (evade weight 0, invulnerable) is exempt |
 | Q12 | (2026-10-24, raised by the maintainer) Can AI ships differ in skill and temperament (civilian vs raider vs military)? | **Per-ship skill rank and aggressiveness**, named ranks: skill `rookie` / `regular` / `veteran` / `ace`, aggressiveness `passive` / `cautious` / `balanced` / `aggressive` / `reckless` (0-1 inside; a number is accepted too), set per spawn with profile defaults. At `reckless`, a badly damaged ship whose allies are mostly or all dead has a chance to ram an enemy; **any AI ship** may, allies included, when set to reckless. **Civilians: a profile only** in M3 (never attacks, evades and flees), usable on any hull; civilian ships and traffic come later (M3-T13) |
+| Q13 | (2026-10-25, reported by the maintainer) The ship model jumps while thrusting more than about 900 km from the reference point, almost constantly in splat mode and slightly in mesh mode | **Bug, fixed by turning on the planned position rebase** (§14.1, 5 km) in play from M3-T14. Cause: `Main` leaves `World.auto_rebase_distance_m` at 0 (M1 assumed a 20 km play area), so the local origin stays at the launch point while Jolt allows 10 km/s; at 900 km a float32 position steps in 6.25 cm, and GDGS packs the model and view matrices as float32 separately, so every splat quantises on its own. The velocity rebase stays in M5 |
 
 Calls made by the planner (say if you want them changed): callsigns `ALPHA 1` (player) to `ALPHA 4`, the instructor
 `INSTRUCTOR`; the default order is **cover me** (hold formation, engage hostiles that come within 2 km of the player);
@@ -107,6 +108,8 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | AC18 | Allied Starfuries (LOD1) look right at combat ranges; a Starfury break-up shows its cabin and four arms tumbling apart | H | P5 |
 | AC19 | 60 fps at 1080p on the tester's GPU with four Starfuries, nine raiders, bolts, explosions and debris on screen | H | |
 | AC20 | Skill and aggressiveness (Q12): every AI spawn (scenario, wave, console) takes `skill` and `aggression` by name or 0-1, defaulting from its profile, and `ai <name> skill|aggression <value>` changes them live. Unit tests show skill scaling aim error, reaction delay and fire discipline, and aggression scaling the attack / evade / retreat weights, the retreat threshold and the engage range, each monotonically. A `civilian` profile never fires and evades and flees hostiles. In Jolt, on the same seeded runs: an `ace` raider lands more hits on a drone than a `rookie`; a `cautious` ship retreats at a higher hull than an `aggressive` one. **Last-ditch ram**: only at `reckless`, below 25 % hull with at most a quarter of its allies left, a seeded chance commits a ship to `ram`: avoidance stops dodging that target and it flies a collision course; in Jolt a committed rammer hits its target in at least 8 of 10 seeded runs, and no ship below `reckless` ever rams. `ai <name>` shows skill, aggression and the behaviour | A | |
+| AC21 | Position rebase in play (Q13): `main.tscn` runs with `World.auto_rebase_distance_m` 5 000 m (a bare `WorldFrame` keeps 0); after `rebase -900000 0 0` the player ship is back within 5 km of the local origin on the next physics tick, with every ship's, prop's and bolt's `UniversePos` and velocity unchanged (1 mm, 1 mm/s); under constant thrust after that, the ship's tick-to-tick change of step, taken in universe coordinates, stays under 2 mm (about 5 cm without the rebase). In a headless sandbox fight with wingmen and the threshold forced down so the world rebases at least every 2 s, the waves still clear, bolts still hit, no hit lands along a jump, no ship's universe position jumps more than its own motion plus 1 m across a rebase tick, the chase camera's offset from the ship stays continuous, and the HUD's reference range follows the universe distance. One rebase of the full sandbox costs under 0.5 ms (record the number) | A | |
+| AC22 | Far from the launch point (after `rebase -900000 0 0`, or a long flight), the ship shows no jumping while thrusting in any direction, in splat and mesh mode; flying at full speed through rebases shows no hitch | H | |
 
 ## Capture pre-checks
 
@@ -138,7 +141,8 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | M3-T10 | Guard, raider AI upgrade, sandbox and dogfight scenarios | T07, T08 | Opus |
 | M3-T11 | HUD: wing roster, acknowledgements, waypoint marker | T07, T09 | Sonnet |
 | M3-T13 | Skill ranks, aggressiveness, civilian profile, last-ditch ram (runs before T12) | T06, T10 | Opus |
-| M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13 | Opus |
+| M3-T14 | Position rebase in play (far-from-origin jitter, Q13) | - | Opus |
+| M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13, T14 | Opus |
 
 Parallel lanes: T01, T02 and T03 touch disjoint files and can run together; T04 and T05 can run together after T02.
 Two agents at a time is steadier than four (`docs/handoff.md`).
@@ -459,6 +463,41 @@ Added 2026-10-24 for maintainer Q12; numbered last to keep the earlier ids, run 
   - Console: `ai <name>` gains `skill`, `aggression`; `ai <name> skill <rank|0-1>` and `ai <name> aggression <level|0-1>`
     set them; the `ai` provider's `by_behaviour` counts `ram`.
 - Done when: AC20 passes and the hit-reaction latency by skill in AC9 holds.
+
+### M3-T14 Position rebase in play
+
+Added 2026-10-25 for the maintainer's bug report (Q13); independent of the AI tasks, so it can run at once. Run before
+T12.
+
+- Goal: the ship never shows float32 jitter however far it flies, because the world keeps its origin near the player,
+  as §14.1 designs.
+- Agent: **Opus**. Small change, wide audit: every system has to survive a rebase at any tick in a live fight.
+- Files: `src/game/main.gd` (or `main.tscn`: `World.auto_rebase_distance_m` 5 000), `src/world/world_frame.gd` (docs,
+  a `rebases` count and the last rebase's cost on the `world` provider), any system the audit finds caching a
+  World-local position between ticks, `tests/integration/{test_world_frame,test_rebase_in_play}.gd` (the second new),
+  `scripts/run_tests.sh` (a smoke line: `rebase -900000 0 0; wait 1; state world`), `docs/architecture.md` (§14.1,
+  §15.3 tick order, §6.4 `world` and `rebase` rows, the seams table's "auto-rebase off"), `docs/roadmap.md` (M5:
+  position rebase is already on), `docs/playtest.md` (AC22 check).
+- Notes:
+  - Reproduce first: in today's build `rebase -900000 0 0` puts everything 900 km from the local origin without moving
+    anything in universe terms, which is the maintainer's case. Measured in script (float32 `Vector3`, 60 Hz, constant
+    thrust): the tick-to-tick change of step is 0.46 mm at 5 km, 7.3 mm at 100 km, 5.4 cm at 900 km.
+  - Keep `WorldFrame`'s default at 0 (bare-World tests mean it); `Main` turns it on. The velocity rebase stays M5.
+  - The rebase runs in `World._physics_process` (priority 0, before its children). Write down where that falls in
+    §15.3: after the AI drivers (-10) and `Main`, before ships and bolts, so commands built before it stay valid
+    (levels and rates) and everything after it sees the new frame.
+  - Audit everything that keeps a position between ticks: `ShipPool` and `DebrisPool` parking, impact and muzzle
+    effects, `AudioDirector` voices, the HUD reference point (`UniversePos`, recomputed each frame), `WaveDirector`
+    spawn points, props, `ContactScan`, `AiPilot` behaviours, T07 formation slots, T09 routes and T10 guard points (they
+    must store `UniversePos` or rebuild from live nodes each tick), `CameraRig` (chase camera shiftable, cockpit pivot
+    reset), `SplatPoseSync`, explosions, debris, bolts, `RamTracker`, `HitResolver`, `TargetingController`,
+    `SkyFollower`. List what you checked in the report.
+  - Physics interpolation: the rebase resets every shifted node's interpolation, so the frame after a rebase shows the
+    current tick without interpolation. Check that everything snaps together (no node left interpolating across 5 km)
+    and leave the felt hitch to AC22 (H).
+  - Tests that the AI tasks in flight (T07, T09, T10, T13) can reuse: a helper that runs a fight with the threshold
+    forced low, so their own rebase checks are one line.
+- Done when: AC21 passes; AC22 is in the play-test checklist.
 
 ### M3-T12 Integration, smoke runs, capture set, play-test guide
 
