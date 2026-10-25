@@ -799,25 +799,43 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
     false: destroyed or parked) or no longer flies an `AiPilot` leaves its slot on the next refresh, so a downed wingman
     is an empty slot: T08's replenish fills `empty_slots()`, T11 can show an empty slot as DOWN under `callsign(slot)`.
   - `AiContext` gains `has_slot`, `slot_offset`, `leader_link_position` (a `UniversePos`, null with no live leader) and
-    `leader_link_velocity`, all set by the director every tick, and `has_attackable()` and `may_retreat()`.
+    `leader_link_velocity`, all set by the director every tick, and `has_attackable()`, `may_retreat()` and `clear_wing()`
+    (back to a ship without a wing; `remove_member` uses it).
+  - The desired-velocity protocol (T05) gains `desired_all_axes` on `PilotBrain` and `AiBehaviour`, set by
+    `seek_velocity(flight, p, v_des, all_axes := false)` and forwarded by `AiPilot`, `AggroBrain` and `BehaviourAttack` like
+    the other two fields; `PilotSteering.seek` has the matching `all_axes` flag (the mains or retros take the part of the
+    error along the nose whatever the angle, for a ship whose nose is held elsewhere). The driver's avoidance re-seek uses
+    it, so a formation member that dodges keeps braking and accelerating along its nose.
   - `Main` creates wing ALPHA for the player in every scenario (empty until T08 or T10 add members; T10 configures it from
     the scenario's `wings`) and passes the key edges on (`_give_wing_orders`).
 - **Beyond the brief's files.** `src/ai/contact.gd` and `contact_scan.gd`: `Contact.up` (the body's +Y), so the slot point
   and the roll use the leader's attitude as of this tick (one more packed array in the scan). `src/ai/behaviour_retreat.gd`:
   no retreat under FORM ON ME ("formation only, evade still allowed"; `AiContext.may_retreat`). `data/controls/m1_classic.cfg`:
-  the four wing actions (a profile must bind every action). `tests/unit/test_input_adapter.gd` and `test_input_map.gd`
-  (keys 1-4 in `KEYS_B` and the left block, the four actions keyboard-only).
+  the four wing actions (a built-in profile must bind every action). `tests/unit/test_input_adapter.gd` and
+  `test_input_map.gd` (keys 1-4 in `KEYS_B` and the left block, the four actions keyboard-only). Fix round 1:
+  `src/ai/{pilot_brain,ai_behaviour,ai_pilot,aggro_brain,behaviour_attack,ai_pilot_driver}.gd` (`desired_all_axes`),
+  `src/input/{control_profile,control_profile_store}.gd` and `src/autoload/control_profiles.gd` (saved profiles gain new
+  actions), `docs/architecture.md` §15.12, `tests/integration/{test_ai_driver,test_ai_think_time,test_control_profiles}.gd`,
+  `tests/unit/test_control_profile_store.gd`.
 - **Formation behaviour as built.** The brief's `p_L + B_L * offset + v_L * 0.5 s` read literally parks the member 0.5 s
   ahead of its slot (50 m at 100 m/s), so the error looks ahead for both ships: `e = (S - p) + 0.5 s * (v_L - v)`, a damping
   term with no offset (with the seek's 1 s horizon a second-order loop, damping ratio about 0.95). `v_des = v_L +
   clamp(0.4 * e)`, closure 60 m/s within 1.5 km of the slot, cruise + 100 m/s beyond. Within 150 m: the leader's nose, roll
-  to its top (`PilotSteering.align_roll`), and the new `PilotSteering.seek_all_axes` (mains or retros on the part of the
-  error along the nose and the RCS on the rest, at once). `seek` fires the mains only within 12 degrees of the nose (the
-  retros within 30 of the tail) and expects the nose to turn toward the error, which a formation member's never does: with
-  `seek`, the 4 degrees/s turn below gave 33 / 78.5 / 64 m and a 10.6 m clearance. Beyond 150 m the nose turns toward the velocity
-  change when it is over 30 m/s and not a slow-down along the way (else it faces the desired velocity and the retros brake;
-  no flip for an overshoot), with `seek`. When the driver's avoidance changes a member's wish it seeks again with `seek`
-  (T05's driver, unchanged).
+  to its top (`PilotSteering.align_roll`), and `seek` with `all_axes` (mains or retros on the part of the error along the
+  nose and the RCS on the rest, at once). `seek`'s cones fire the mains only within 12 degrees of the nose (the retros within
+  30 of the tail) and expect the nose to turn toward the error, which a formation member's never does: with them, a
+  4 degrees/s turn gave 33 / 78.5 / 64 m and a 10.6 m clearance. Beyond 150 m the nose turns toward the velocity change when
+  it is over 30 m/s and not a slow-down along the way (else it faces the desired velocity and the retros brake; no flip for
+  an overshoot), with the cones.
+- **Fix round 1: lean and feed-forward.** (1) When the sideways part of the acceleration the wish asks for (`(v_des - v) /
+  1 s`) is more than the RCS gives (10 m/s^2), the nose leans off the leader's toward it by the least angle that lets the
+  mains or retros carry the rest, at most 40 degrees (`PilotSteering.lean_toward`); in steady flight it is the leader's.
+  (2) The slot's own motion is fed forward: the leader's acceleration (its contact velocity against the last tick's) gives
+  its flight path's turn rate `w = v x a / |v|^2`; the slot moves at `v_L + w x arm` and accelerates at `a_L + w x (w x arm)`,
+  so `v_des = v_slot + clamp(0.4 e) + a_slot * 1 s` (the error `e` uses `v_slot` too). Without (2) a member lags about
+  2.5 s x the slot's acceleration. Feeding forward the nose's spin instead (a `Contact.angular_velocity`, tried and dropped)
+  made members chase the leader's nose swinging onto its lead, overspeed to 155 m/s, and drift out for the rest of the
+  turn (#4 112 m at 10 degrees/s).
 - **Scores.** 0.25 while the orders allow no attack on anything in sight (`has_attackable`), 0.1 while they do. Idle
   is 0.05 and the stickiness 0.15, so formation must score over 0.2 to take over from idle; an attack scores at least
   0.3 and must beat the current behaviour by 0.15, so formation stands by at 0.1 whenever there is something it may attack
@@ -837,31 +855,41 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
   acknowledgement); provider `wing` (`name`, `order`, `formation`, `members` as `ALPHA 2 100% formation (in slot)`,
   `last_ack`). `scripts/run_tests.sh`: the providers line gains `wing`, plus two smoke runs (order and formation; a bad word
   exits 1).
-- **Saved control profiles.** A profile saved before T07 has no wing actions; M2's rule (a missing action makes a profile
-  invalid) rejects it at start-up with a warning and the default map applies. Re-save it from `controls use default`.
-- **Jolt numbers** (`test_ai_formation`: three `ally_starfury` members join from 200 m behind and 60 m out, 15 s straight,
-  then a 90 degree turn at 100 m/s with the heading swung at a steady rate, the leader flown like the player's ship;
-  1/30 s steps, the 60 Hz step gave the same to 0.1 m): every member within 25 m after 5.9-6.2 s; straight flight
-  max 2.4-2.5 m (the seek's 1 m/s coast band over k = 0.4); max slot error from the turn's start to 10 s after it, #2 / #3 /
-  #4, and the least clearance between bounding spheres:
+- **Saved control profiles** (fix round 1, controller ruling): a user profile that never mentions an action (saved before it
+  existed, like the wing orders) takes the default profile's bindings and deadzone for it at load, with a notice
+  (`ControlProfiles: control profile 'x' was saved before wing_attack, ... existed: they use the default bindings (controls
+  save x keeps them)`, also shown by `controls use`); malformed entries, or an action in one section only, stay invalid.
+  Built-in profiles are not filled. Architecture §15.12 says so.
+- **Jolt numbers** (`test_ai_formation`, as of fix round 1: three `ally_starfury` members join from 200 m behind and 60 m
+  out, 15 s straight, then a 90 degree turn at 100 m/s and 10 s straight; 1/30 s steps). The leader is flown like a player
+  turns: its flight path swings at a steady rate and its nose goes ahead of it toward the acceleration needed (the
+  centripetal part plus closing any gap), by as much as the RCS needs the mains to carry (`lean_toward` from the flight
+  path, up to 80 degrees), mains burning. Every member is within 25 m after 5.9-6.2 s; straight flight max 2.4-2.5 m (the
+  seek's 1 m/s coast band over k = 0.4); avoidance never acts in the straight legs (asserted). Max slot error (body frame)
+  from the turn's start to 10 s after it, #2 / #3 / #4, the leader's largest nose lead over its flight path, and the least
+  clearance between bounding spheres:
 
-  | Turn | Max error (m) | Clearance (m) |
-  |---|---|---|
-  | 4 degrees/s left (22.5 s) | 11 / 13 / 18 | 25.4 |
-  | 5 degrees/s left (18 s), in the test | 14 / 16 / 22 | 23.3 |
-  | 6 degrees/s left (15 s) | 22 / 70 / 67 | 19.5 |
-  | 6 degrees/s right (15 s), in the test | 70 / 22 / 23 | 19.5 |
-  | 9 degrees/s left (10 s) | 27 / 106 / 116 | 20.3 |
-  | 15 degrees/s left (6 s) | 44 / 188 / 212 | 17.4 |
+  | Turn | Max error (m) | Nose lead | Clearance (m) |
+  |---|---|---|---|
+  | 5 degrees/s left and right (18 s) | 2.4-2.8 / 2.4-2.8 / 3.2-4.0 | 2 degrees | 30.0 |
+  | 6 degrees/s left and right (15 s), in the test | 16-18 / 16-18 / 34-35.5 | 23 degrees | 30.0 |
+  | 8 degrees/s left and right (11.2 s) | 37 / 37-41 / 73-74 | 52 degrees | 23.3 |
+  | 10 degrees/s left and right (9 s) | 54-57 / 54-57 / 107-115 | 61 degrees | 19.6 |
+  | 15 degrees/s left and right (6 s) | 78-109 / 78-109 / 156-249 | 93 degrees (the leader reaches 118 m/s) | 13.4 |
 
-  The cliff is the RCS: at 100 m/s a Starfury turns its velocity with its nose on the flight path at up to about
-  5.7 degrees/s (10 m/s^2 sideways). At 6 degrees/s the leader needs 10.5 m/s^2, and a member on the outside, its nose on the
-  leader's, needs more than its RCS gives: it drifts out at 8-13 m/s while the turn lasts and is back within 3 m about 10 s
-  after it ends. Faster turns slide the nose off the flight path, and since the slots are in the leader's body frame they
-  swing round it (90 degrees moves #4's slot by 160 m). So AC9's 80 m holds for the turns a Starfury flies with its nose on
-  its flight path and a little beyond; the test flies 5 degrees/s left and 6 degrees/s right. Members were only ever in
-  `formation`; avoidance acted on 116 and 170 member-ticks of the two runs (the join and the turn), never in the straight
-  legs (asserted).
+  **Open (awaits the maintainer): AC9's 80 m at 10 degrees/s.** A Starfury turning at 10 degrees/s at 100 m/s needs
+  17.5 m/s^2 sideways, so its nose runs about 55-61 degrees ahead of its flight path, and the slots, being in its body frame,
+  swing round it by that much when the lead builds up and when it collapses at the end of the turn (about 1.2 s). A member
+  that holds its place relative to the flight path is then 2 r sin(lead / 2) from its body-frame slot: 57 m for #2 and #3
+  (r 56.6 m), 113-115 m for #4 (r 113 m). The measured peaks match those chords; in the steady part of the turn every member
+  is within 10-24 m of the rotated slot. Easing the leader out of the turn over 3 s did not help (#4 101-124 m: the lead
+  still collapses in under a second once the RCS can carry the turn). So the 10 degrees/s case is not in the test; options
+  for the ruling: the bound for turns up to about 8 degrees/s, slots in the leader's flight-path frame instead of its body
+  frame, or a looser bound for #4. Snap turns (the nose swung at 60 degrees/s) cannot be tracked with body-frame slots
+  either way (note for AC15).
+- **AC13 with a wing** (fix round 1): `test_ai_think_time`'s four Starfuries fly as wing ALPHA (ALPHA 1 leads, ALPHA 2-4 on
+  COVER ME through a real `WingDirector`, rejoining at every switch back from the M2 blocks), so the formation's score and
+  the order gate are in the paired cost: +101 us run alone (budget 500 us), with M3-T09 running Godot in parallel.
 
 ## Definition of done (M3)
 

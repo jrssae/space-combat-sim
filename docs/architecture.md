@@ -1427,6 +1427,13 @@ binding by binding another first. Applying replaces every game action's events a
 edge. Per-action shaping beyond the deadzone (ramps, expo, tap-or-hold) stays in `InputAdapter`/`Settings`, so a
 profile moves bindings, not feel: `m1_classic` makes the stick yaw through the D-pad's ramp.
 
+Saved profiles and new actions (M3-T07): a user profile that does not mention an action at all (neither in `[bindings]`
+nor in `[deadzones]`: the action was added to the game after the profile was saved, like the wing orders on keys 1-4)
+takes the `default` profile's bindings and deadzone for it when it loads (`ControlProfile.from_config_text`'s
+`fill_from`, `ControlProfileStore.load_profile`), and applying it posts a notice naming them (printed, and shown by
+`controls use`); `controls save <name>` writes them into the file. An action the file mentions in one section only, or
+with bad entries, still makes the profile invalid. The built-in data profiles are not filled: they must be complete.
+
 ### 15.13 Console and settings (additions to §6.4)
 
 | Provider | Owner (task) | Keys (w = writable) |

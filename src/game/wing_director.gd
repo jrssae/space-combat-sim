@@ -101,16 +101,8 @@ func remove_member(wing: Wing, member: Combatant) -> void:
 	if wing == null or not wing.remove_member(member):
 		return
 	var pilot: AiPilot = _pilot_of(member)
-	if pilot == null:
-		return
-	var ctx: AiContext = pilot.context
-	ctx.order = AiContext.Order.ENGAGE_AT_WILL
-	ctx.leader_id = 0
-	ctx.leader_target_id = 0
-	ctx.has_slot = false
-	ctx.slot_offset = Vector3.ZERO
-	ctx.leader_link_position = null
-	ctx.leader_link_velocity = Vector3.ZERO
+	if pilot != null:
+		pilot.context.clear_wing()
 
 
 ## Gives `wing` (default: the player's) a new order and posts its one acknowledgement line. Returns `{"ok", "line"}`;

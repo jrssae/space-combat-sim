@@ -26,6 +26,7 @@ func think(p: Perception, dt: float) -> PilotCommand:
 	var cmd: PilotCommand = inner.think(p, dt)
 	desired_velocity = inner.desired_velocity
 	has_desired_velocity = inner.has_desired_velocity
+	desired_all_axes = inner.desired_all_axes
 	return cmd
 
 

@@ -189,6 +189,41 @@ func test_in_its_slot_it_matches_the_leaders_velocity_and_faces_its_nose() -> vo
 	assert_eq(b.describe()["state"], "in slot")
 
 
+func test_when_the_rcs_cannot_keep_up_the_nose_leans_toward_the_acceleration() -> void:
+	var b := BehaviourFormation.new(_profile())
+	var v_l := Vector3(0.0, 0.0, -100.0)
+	var leader := _contact(30, Factions.Relation.FRIENDLY, Vector3.ZERO, v_l)
+	# In the slot but sliding left at 20 m/s: the wish asks for 24 m/s^2 to the right, more than the 10 the RCS gives.
+	var ctx: AiContext = _ctx(Formation.new().offset(1), v_l + Vector3(-20.0, 0.0, 0.0), [leader])
+	var cmd: PilotCommand = b.think(ctx, DT)
+	assert_gt(cmd.flight.rot.y, 0.0, "yaws right, toward the acceleration")
+	assert_true(b.desired_all_axes, "and its mains work at the angle")
+	assert_gt((cmd.flight.strafe as Vector2).x, 0.0)
+
+
+func test_a_turning_leader_feeds_its_flight_paths_swing_forward() -> void:
+	var b := BehaviourFormation.new(_profile())
+	var slot: Vector3 = Formation.new().offset(1)
+	var v_l := Vector3(0.0, 0.0, -100.0)
+	var first: AiContext = _ctx(slot, v_l, [_contact(30, Factions.Relation.FRIENDLY, Vector3.ZERO, v_l)])
+	b.think(first, DT)
+	assert_almost_eq(b.desired_velocity.x, 0.0, 1e-4, "one look at the leader: no turn known yet")
+	# A tick later the leader's velocity has turned left at 10 degrees/s (17.5 m/s^2 toward -X).
+	var rate: float = deg_to_rad(10.0)
+	var v_turned: Vector3 = v_l.rotated(Vector3.UP, rate * DT)
+	var leader := _contact(30, Factions.Relation.FRIENDLY, v_turned * DT, v_turned)
+	var second: AiContext = _ctx(slot + v_l * DT, v_l, [leader])
+	second.perception.now_s = DT
+	b.think(second, DT)
+	# The leader's 17.5 m/s^2 over the 1 s horizon, less the slot's swing to the right (w x arm: a slot behind a leader
+	# turning left moves right, about 7 m/s here), plus the small error terms.
+	assert_lt(b.desired_velocity.x, -5.0, "the wish leans into the turn: %s" % b.desired_velocity)
+	b.enter()
+	second.perception.now_s = 2.0 * DT
+	b.think(second, DT)
+	assert_gt(b.desired_velocity.x, -1.0, "control handed over afresh: the estimate starts again")
+
+
 func test_the_error_closes_at_k_with_a_lead_on_both_ships() -> void:
 	var b := BehaviourFormation.new(_profile())
 	var v_l := Vector3(0.0, 0.0, -100.0)

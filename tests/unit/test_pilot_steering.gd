@@ -161,22 +161,50 @@ func test_a_shorter_seek_horizon_pushes_harder() -> void:
 	assert_almost_eq((hard["strafe"] as Vector2).x, 4.0 * (gentle["strafe"] as Vector2).x, TOL)
 
 
-func test_seek_all_axes_works_every_axis_at_once_with_the_nose_held() -> void:
+func test_seek_with_all_axes_works_every_axis_at_once_for_a_held_nose() -> void:
 	# Formation keeping (M3-T07): 45 degrees off the nose, where `seek` waits for a turn, the mains and the RCS work together.
-	var r: Dictionary = PilotSteering.seek_all_axes(Vector3.ZERO, Vector3(10.0, 0.0, -10.0), Basis.IDENTITY, _cap())
+	var h: float = PilotSteering.HORIZON_S
+	var r: Dictionary = PilotSteering.seek(Vector3.ZERO, Vector3(10.0, 0.0, -10.0), Basis.IDENTITY, _cap(), h, true)
 	assert_almost_eq(float(r["main"]), 10.0 / 20.0, TOL, "the forward part on the mains")
 	assert_eq(r["retro"], 0.0)
 	assert_almost_eq((r["strafe"] as Vector2).x, 10.0 / 10.0, TOL, "the sideways part on the RCS")
-	var aft: Dictionary = PilotSteering.seek_all_axes(Vector3.ZERO, Vector3(0.0, -3.0, 4.0), Basis.IDENTITY, _cap())
+	var cones: Dictionary = PilotSteering.seek(Vector3.ZERO, Vector3(10.0, 0.0, -10.0), Basis.IDENTITY, _cap())
+	assert_eq(cones["main"], 0.0, "without all_axes the mains wait for the nose")
+	var aft: Dictionary = PilotSteering.seek(Vector3.ZERO, Vector3(0.0, -3.0, 4.0), Basis.IDENTITY, _cap(), h, true)
 	assert_eq(aft["main"], 0.0)
 	assert_almost_eq(float(aft["retro"]), 4.0 / 8.0, TOL, "the aft part on the retros")
 	assert_almost_eq((aft["strafe"] as Vector2).y, -3.0 / 6.0, TOL)
 	var turned := Basis(Vector3.UP, deg_to_rad(90.0))  # nose along world -X
-	var t: Dictionary = PilotSteering.seek_all_axes(Vector3.ZERO, Vector3(-4.0, 0.0, 0.0), turned, _cap())
+	var t: Dictionary = PilotSteering.seek(Vector3.ZERO, Vector3(-4.0, 0.0, 0.0), turned, _cap(), h, true)
 	assert_almost_eq(float(t["main"]), 4.0 / 20.0, TOL, "in the ship's frame")
-	var still: Dictionary = PilotSteering.seek_all_axes(Vector3(10.0, 0.0, 0.0), Vector3(10.5, 0.0, 0.0), Basis.IDENTITY,
-			_cap())
+	var still: Dictionary = PilotSteering.seek(Vector3(10.0, 0.0, 0.0), Vector3(10.5, 0.0, 0.0), Basis.IDENTITY, _cap(),
+			h, true)
 	assert_eq([still["main"], still["retro"], still["strafe"]], [0.0, 0.0, Vector2.ZERO], "a small error coasts")
+
+
+func test_lean_toward_keeps_the_nose_while_the_rcs_can_give_the_sideways_part() -> void:
+	var lean_max: float = deg_to_rad(40.0)
+	assert_eq(PilotSteering.lean_toward(Vector3.FORWARD, Vector3(8.0, 0.0, -5.0), 10.0, lean_max), Vector3.FORWARD,
+			"8 m/s^2 sideways is within the RCS")
+	assert_eq(PilotSteering.lean_toward(Vector3.FORWARD, Vector3.ZERO, 10.0, lean_max), Vector3.FORWARD)
+
+
+func test_lean_toward_leans_by_the_least_angle_that_leaves_the_rcs_its_share() -> void:
+	var a := Vector3(15.0, 0.0, 0.0)  # 15 m/s^2 to the right, none along the nose
+	var nose: Vector3 = PilotSteering.lean_toward(Vector3.FORWARD, a, 10.0, deg_to_rad(80.0))
+	var lean: float = Vector3.FORWARD.angle_to(nose)
+	assert_almost_eq(lean, acos(10.0 / 15.0), 1e-5, "cos(lean) = 10 / 15")
+	assert_gt(nose.x, 0.0, "toward the acceleration")
+	var square: Vector3 = a - nose * a.dot(nose)
+	assert_almost_eq(square.length(), 10.0, 1e-4, "the RCS is left exactly what it gives")
+	assert_gt(a.dot(nose), 0.0, "the mains give the rest")
+	var aft := Vector3(15.0, 0.0, 6.0)  # right and braking: lean away, so the retros push right
+	var braking: Vector3 = PilotSteering.lean_toward(Vector3.FORWARD, aft, 10.0, deg_to_rad(80.0))
+	assert_lt(braking.x, 0.0, "the nose leans left, the tail right")
+	assert_almost_eq((aft - braking * aft.dot(braking)).length(), 10.0, 1e-4)
+	assert_lt(aft.dot(braking), 0.0, "the retros give the rest")
+	var capped: Vector3 = PilotSteering.lean_toward(Vector3.FORWARD, Vector3(60.0, 0.0, 0.0), 10.0, deg_to_rad(40.0))
+	assert_almost_eq(Vector3.FORWARD.angle_to(capped), deg_to_rad(40.0), 1e-5, "never more than the cap")
 
 
 func test_apply_seek_drives_both_nacelles_equally() -> void:

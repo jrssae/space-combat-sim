@@ -96,15 +96,17 @@ func path_for(profile_name: String) -> String:
 	return _path_in(user_dir, profile_name)
 
 
-## Loads and validates a profile. Returns {"ok", "profile", "errors", "path"}; `errors` explains a failure (also an
-## unknown name, with the names that exist), and `profile` is set whenever the file parsed.
+## Loads and validates a profile. Returns {"ok", "profile", "errors", "path", "filled"}; `errors` explains a failure (also an
+## unknown name, with the names that exist), and `profile` is set whenever the file parsed. A user profile saved before an
+## action existed gets the default profile's bindings for it (`filled` lists them; `ControlProfile.from_config_text`):
+## saved layouts keep working when the game gains actions. The built-in data profiles must be complete.
 func load_profile(profile_name: String) -> Dictionary:
 	if not ControlProfile.is_valid_name(profile_name):
 		return _load_failed("'%s' is not a profile name (lowercase letters, digits and _, 1-32 characters)" % profile_name)
 	if profile_name == ControlProfile.DEFAULT_NAME:
 		if _default == null:
 			return _load_failed("the default profile has not been captured yet")
-		return {"ok": true, "profile": default_profile(), "errors": PackedStringArray(), "path": ""}
+		return {"ok": true, "profile": default_profile(), "errors": PackedStringArray(), "path": "", "filled": PackedStringArray()}
 	if not exists(profile_name):
 		return _load_failed("no control profile '%s'%s; available: %s" % [profile_name,
 				ConsoleFormat.did_you_mean(profile_name, names()), ", ".join(names())])
@@ -112,7 +114,8 @@ func load_profile(profile_name: String) -> Dictionary:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		return _load_failed("could not read %s (%s)" % [path, error_string(FileAccess.get_open_error())])
-	var parsed: Dictionary = ControlProfile.from_config_text(file.get_as_text(), profile_name)
+	var fill_from: ControlProfile = _default if not is_builtin(profile_name) else null
+	var parsed: Dictionary = ControlProfile.from_config_text(file.get_as_text(), profile_name, fill_from)
 	parsed["path"] = path
 	return parsed
 
@@ -168,4 +171,4 @@ static func _names_in(dir: String) -> PackedStringArray:
 
 
 static func _load_failed(message: String) -> Dictionary:
-	return {"ok": false, "profile": null, "errors": PackedStringArray([message]), "path": ""}
+	return {"ok": false, "profile": null, "errors": PackedStringArray([message]), "path": "", "filled": PackedStringArray()}

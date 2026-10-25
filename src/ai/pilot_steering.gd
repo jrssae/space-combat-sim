@@ -12,9 +12,9 @@ extends RefCounted
 ## - **seek**: the velocity error `v_des - v` is met with the mains when it is within `MAINS_CONE_DEG` of the nose, the
 ##   retros when it is within `180 - RETRO_CONE_DEG` of the tail, and the RCS for its sideways part. Each level is the error
 ##   divided by what the thrusters give in `HORIZON_S` (or the `horizon_s` given: the driver's urgent dodge seeks harder),
-##   clamped to 0..1, so a small error gets a gentle push; under `COAST_BELOW_MPS` nothing is commanded.
-## - **seek_all_axes**: the same with the nose held (formation keeping): mains or retros for the part along the nose and the
-##   RCS for the rest, all at once (M3-T07).
+##   clamped to 0..1, so a small error gets a gentle push; under `COAST_BELOW_MPS` nothing is commanded. The cones suit a
+##   ship that turns its nose toward the error. One whose nose is held elsewhere (formation keeping, M3-T07) seeks with
+##   `all_axes`: the mains or the retros take the part along the nose and the RCS the rest, all at once, whatever the angle.
 
 ## s^-1. The face loop's gain; the assist's own rate gain (`ShipSpec.assist_gain_k`) is 6, so the cascade is stable.
 const K_FACE: float = 2.5
@@ -70,39 +70,42 @@ static func align_roll(basis: Basis, up_world: Vector3, rate_max_rad: Vector3, g
 
 
 ## The thrust levels that move the velocity from `velocity` toward `v_des`: `{"main": 0..1, "retro": 0..1, "strafe": Vector2}`.
+## `all_axes`: the mains or retros on the part along the nose whatever the angle (a ship whose nose is held elsewhere).
 static func seek(velocity: Vector3, v_des: Vector3, basis: Basis, capability: ShipCapability,
-		horizon_s: float = HORIZON_S) -> Dictionary:
+		horizon_s: float = HORIZON_S, all_axes: bool = false) -> Dictionary:
 	var out: Dictionary = {"main": 0.0, "retro": 0.0, "strafe": Vector2.ZERO}
 	var dv: Vector3 = v_des - velocity
 	var dv_len: float = dv.length()
 	if dv_len < COAST_BELOW_MPS:
 		return out
 	var dv_b: Vector3 = basis.transposed() * dv
-	var angle_deg: float = rad_to_deg(atan2(Vector3(dv_b.x, dv_b.y, 0.0).length(), -dv_b.z))
-	if angle_deg < MAINS_CONE_DEG:
+	var angle_deg: float = 0.0 if all_axes else rad_to_deg(atan2(Vector3(dv_b.x, dv_b.y, 0.0).length(), -dv_b.z))
+	if all_axes or angle_deg < MAINS_CONE_DEG:
 		out["main"] = clampf(-dv_b.z / (capability.a_main * horizon_s), 0.0, 1.0)
-	elif angle_deg > RETRO_CONE_DEG:
+	if all_axes or angle_deg > RETRO_CONE_DEG:
 		out["retro"] = clampf(dv_b.z / (capability.a_retro * horizon_s), 0.0, 1.0)
 	out["strafe"] = Vector2(clampf(dv_b.x / (capability.a_rcs.x * horizon_s), -1.0, 1.0),
 			clampf(dv_b.y / (capability.a_rcs.y * horizon_s), -1.0, 1.0))
 	return out
 
 
-## `seek` for a ship whose nose is held elsewhere (formation keeping, M3-T07): every axis at once, whatever the angle, the
-## part of the velocity error along the nose on the mains or the retros and the rest on the RCS. Same levels and result as
-## `seek`; under `COAST_BELOW_MPS` nothing is commanded.
-static func seek_all_axes(velocity: Vector3, v_des: Vector3, basis: Basis, capability: ShipCapability,
-		horizon_s: float = HORIZON_S) -> Dictionary:
-	var out: Dictionary = {"main": 0.0, "retro": 0.0, "strafe": Vector2.ZERO}
-	var dv: Vector3 = v_des - velocity
-	if dv.length() < COAST_BELOW_MPS:
-		return out
-	var dv_b: Vector3 = basis.transposed() * dv
-	out["main"] = clampf(-dv_b.z / (capability.a_main * horizon_s), 0.0, 1.0)
-	out["retro"] = clampf(dv_b.z / (capability.a_retro * horizon_s), 0.0, 1.0)
-	out["strafe"] = Vector2(clampf(dv_b.x / (capability.a_rcs.x * horizon_s), -1.0, 1.0),
-			clampf(dv_b.y / (capability.a_rcs.y * horizon_s), -1.0, 1.0))
-	return out
+## The nose direction nearest `base` (unit) from which the RCS (at most `a_side` m/s^2 square to the nose) and the mains or
+## retros (along it) together give the acceleration `accel` (World frame). `base` itself while the part of `accel` square to
+## it is within `a_side`; else `base` leant toward that part (away from it when `accel` points aft of `base`, so the retros
+## push the right way) by the least angle that brings the square part down to `a_side`, at most `max_lean_rad`. A ship that
+## flies with another's attitude leans this way when the RCS alone cannot keep up (formation keeping, M3-T07).
+static func lean_toward(base: Vector3, accel: Vector3, a_side: float, max_lean_rad: float) -> Vector3:
+	var along: float = accel.dot(base)
+	var side: Vector3 = accel - base * along
+	var side_len: float = side.length()
+	if side_len <= a_side or side_len < 1e-9:
+		return base
+	# Leaning by t, the part square to the nose is side_len cos t - |along| sin t = A cos(t + phi).
+	var amplitude: float = sqrt(side_len * side_len + along * along)
+	var lean: float = acos(clampf(a_side / amplitude, 0.0, 1.0)) - atan2(absf(along), side_len)
+	lean = clampf(lean, 0.0, max_lean_rad)
+	var toward: Vector3 = side / side_len if along >= 0.0 else -side / side_len
+	return (base * cos(lean) + toward * sin(lean)).normalized()
 
 
 ## Writes a `seek` result into `flight` (both mains and both retros together: no differential yaw from the pods).

@@ -108,6 +108,7 @@ func think(ctx: AiContext, dt: float) -> PilotCommand:
 	var cmd: PilotCommand = brain.engage(ctx.perception, _target.id, _target.position, _target.velocity, dt)
 	desired_velocity = brain.desired_velocity
 	has_desired_velocity = brain.has_desired_velocity
+	desired_all_axes = brain.desired_all_axes
 	return cmd
 
 

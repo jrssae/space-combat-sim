@@ -102,6 +102,7 @@ func think(p: Perception, dt: float) -> PilotCommand:
 	var cmd: PilotCommand = current.think(context, dt)
 	desired_velocity = current.desired_velocity
 	has_desired_velocity = current.has_desired_velocity
+	desired_all_axes = current.desired_all_axes
 	wanted_target_id = current.target_id()
 	if not profile.fires:
 		cmd.combat.fire = false

@@ -88,6 +88,18 @@ func refresh(p: Perception) -> void:
 				leader = c
 
 
+## Back to a ship without a wing: engage at will, no leader, no slot, no link (the wing fields only).
+func clear_wing() -> void:
+	order = Order.ENGAGE_AT_WILL
+	leader_id = 0
+	leader_target_id = 0
+	engage_radius_m = DEFAULT_ENGAGE_RADIUS_M
+	has_slot = false
+	slot_offset = Vector3.ZERO
+	leader_link_position = null
+	leader_link_velocity = Vector3.ZERO
+
+
 ## Whether the orders let this pilot attack `c` (a hostile ship).
 func may_attack(c: Contact) -> bool:
 	if c == null or not c.is_ship or c.relation != Factions.Relation.HOSTILE:

@@ -17,10 +17,13 @@ extends AiBehaviour
 ##
 ## Attitude: within `ALIGN_RANGE_M` of the slot the nose follows the leader's nose and the roll its top
 ## (`PilotSteering.align_roll`), so the mains push the way the leader's do, and the thrust works every axis at once
-## (`PilotSteering.seek_all_axes`): `seek` would wait for the nose to turn toward the error, and here it never does (in a
-## turn the error stays mostly sideways and the slot runs away along the nose). Farther out the nose turns toward the
-## velocity change it needs when that is over `FACE_DV_MPS` and not a slow-down along the way (the mains give twice the
-## retros), otherwise it faces its desired velocity and the retros brake, and the thrust is `seek`'s.
+## (`seek_velocity` with `all_axes`): `seek`'s cones would wait for the nose to turn toward the error, and here it never does
+## (in a turn the error stays mostly sideways and the slot runs away along the nose). When the sideways part of the
+## acceleration the wish asks for is more than the RCS gives, the nose leans off the leader's toward it, by the least angle
+## that lets the mains or retros carry the rest, at most `MAX_LEAN_DEG` (`PilotSteering.lean_toward`); in steady flight it
+## is the leader's. Farther out the nose turns toward the velocity change it needs when that is over `FACE_DV_MPS` and not a
+## slow-down along the way (the mains give twice the retros), otherwise it faces its desired velocity and the retros brake,
+## and the thrust is `seek`'s.
 ##
 ## Out of sight (beyond sensor range) it flies to the leader's position on the wing's link (`AiContext.leader_link_position`)
 ## at the far closure, the slot offset ignored until the contact is back.
@@ -39,6 +42,8 @@ const ALIGN_RANGE_M: float = 150.0
 ## `describe` calls a ship this close to its slot "in slot".
 const IN_SLOT_M: float = 25.0
 const FACE_DV_MPS: float = 30.0
+## The most the nose leans off the leader's toward the acceleration it needs (`PilotSteering.lean_toward`).
+const MAX_LEAN_DEG: float = 40.0
 
 ## The closure cap beyond `FAR_RANGE_M`: the profile's cruise + `FAR_EXTRA_MPS`.
 var far_closure_mps: float = 200.0
@@ -46,8 +51,13 @@ var far_closure_mps: float = 200.0
 var slot_error_m: float = -1.0
 
 var _on_link: bool = false
+# The leader's velocity at the last `think` (and when, and whose), to estimate its acceleration on the next one.
+var _last_leader_id: int = 0
+var _last_leader_velocity: Vector3 = Vector3.ZERO
+var _last_s: float = -INF
 # A velocity change pointing within the retros' cone of the way the ship wants to go is a slow-down: the retros do it.
 var _cos_slow_down: float = cos(deg_to_rad(180.0 - PilotSteering.RETRO_CONE_DEG))
+var _max_lean_rad: float = deg_to_rad(MAX_LEAN_DEG)
 
 
 func _init(profile: AiProfile) -> void:
@@ -58,6 +68,12 @@ func _init(profile: AiProfile) -> void:
 func reset() -> void:
 	slot_error_m = -1.0
 	_on_link = false
+	_last_leader_id = 0
+	_last_s = -INF
+
+
+func enter() -> void:
+	_last_s = -INF  # the leader's acceleration needs two consecutive ticks
 
 
 func score(ctx: AiContext) -> float:
@@ -66,37 +82,53 @@ func score(ctx: AiContext) -> float:
 	return STAND_BY_SCORE if ctx.has_attackable() else SCORE
 
 
-func think(ctx: AiContext, _dt: float) -> PilotCommand:
+func think(ctx: AiContext, dt: float) -> PilotCommand:
 	var p: Perception = ctx.perception
 	var cmd := PilotCommand.new()
 	var leader: Contact = ctx.leader
 	var slot: Vector3
-	var leader_velocity: Vector3
+	var slot_velocity: Vector3
+	var slot_accel := Vector3.ZERO
 	_on_link = false
 	if leader != null:
 		slot = Formation.slot_point(leader.position, leader.forward, leader.up, ctx.slot_offset)
-		leader_velocity = leader.velocity
+		slot_velocity = leader.velocity
+		# In a turn the slot swings round with the leader's flight path: the leader's acceleration (from its velocity a
+		# tick ago) gives the path's turn rate w = v x a / |v|^2, and the slot moves at v + w x arm and accelerates at
+		# a + w x (w x arm). Not the nose's spin: a nose swinging onto or off a lead over the flight path is a transient,
+		# and chasing it overspeeds the member for the rest of the turn.
+		var since: float = p.now_s - _last_s
+		var speed_sq: float = leader.velocity.length_squared()
+		if leader.id == _last_leader_id and dt > 0.0 and absf(since - dt) < 0.5 * dt and speed_sq > 1.0:
+			var leader_accel: Vector3 = (leader.velocity - _last_leader_velocity) / since
+			var path_rate: Vector3 = leader.velocity.cross(leader_accel) / speed_sq
+			var arm: Vector3 = slot - leader.position
+			slot_velocity += path_rate.cross(arm)
+			slot_accel = leader_accel + path_rate.cross(path_rate.cross(arm))
+		_last_leader_id = leader.id
+		_last_leader_velocity = leader.velocity
+		_last_s = p.now_s
 	elif ctx.leader_link_position != null:
 		_on_link = true
 		slot = p.to_local(ctx.leader_link_position)
-		leader_velocity = ctx.leader_link_velocity
+		slot_velocity = ctx.leader_link_velocity
 	else:
 		return cmd  # nobody to fly with (it scored 0, so this is not reached in play)
 	var to_slot: Vector3 = slot - p.position
 	slot_error_m = to_slot.length()
-	var error: Vector3 = to_slot + (leader_velocity - p.velocity) * LEAD_S
+	var error: Vector3 = to_slot + (slot_velocity - p.velocity) * LEAD_S
 	var cap: float = NEAR_CLOSURE_MPS if slot_error_m <= FAR_RANGE_M else far_closure_mps
-	var v_des: Vector3 = leader_velocity + (error * K_PER_S).limit_length(cap)
+	var v_des: Vector3 = slot_velocity + (error * K_PER_S).limit_length(cap) + slot_accel * PilotSteering.HORIZON_S
 	var rate: Vector3 = p.capability.rate_max_rad
 	if leader != null and slot_error_m <= ALIGN_RANGE_M:
-		var rot: Vector3 = PilotSteering.face(p.basis, leader.forward, rate)
+		# The leader's nose, leant toward the acceleration the wish asks for when the RCS alone cannot give its sideways part.
+		var a_need: Vector3 = (v_des - p.velocity) / PilotSteering.HORIZON_S
+		var nose: Vector3 = PilotSteering.lean_toward(leader.forward, a_need, minf(p.capability.a_rcs.x, p.capability.a_rcs.y),
+				_max_lean_rad)
+		var rot: Vector3 = PilotSteering.face(p.basis, nose, rate)
 		rot.z = PilotSteering.align_roll(p.basis, leader.up, rate)
 		cmd.flight.rot = rot
-		# The nose is the leader's, so it cannot turn toward the error: every axis works at once (`seek_velocity`'s
-		# bookkeeping, with the all-axes seek).
-		desired_velocity = v_des
-		has_desired_velocity = true
-		PilotSteering.apply_seek(cmd.flight, PilotSteering.seek_all_axes(p.velocity, v_des, p.basis, p.capability))
+		seek_velocity(cmd.flight, p, v_des, true)  # the nose is the leader's: every axis works at once
 	else:
 		cmd.flight.rot = PilotSteering.face(p.basis, _heading(p.velocity, v_des, leader), rate)
 		seek_velocity(cmd.flight, p, v_des)

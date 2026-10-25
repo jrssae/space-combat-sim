@@ -11,7 +11,8 @@ extends RefCounted
 ##   at once, dwell or not. Scoring may cache what `think` needs this tick (the chosen target).
 ## - `enter()`: control was just handed over (start the manoeuvre afresh).
 ## - `think(ctx, dt)`: only for the behaviour in control; returns a fresh `PilotCommand`. A behaviour that steers toward a
-##   velocity uses `seek_velocity`, so the driver's avoidance filter sees the wish (the `PilotBrain` protocol, M3-T05).
+##   velocity uses `seek_velocity`, so the driver's avoidance filter sees the wish and how its thrust was allocated (the
+##   `PilotBrain` protocol, M3-T05; `all_axes` for a held nose, M3-T07).
 ## - `target_id()`: the `Contact.id` the ship's targeting computer should select while this behaviour flies, or
 ##   `PilotBrain.TARGET_NONE` (the default: a behaviour that does not attack shows no target).
 ## - `describe()`: at least `state`, for the console.
@@ -22,6 +23,8 @@ var id: StringName = &""
 ## The velocity this tick's `think` sought (`seek_velocity`), valid while `has_desired_velocity`.
 var desired_velocity: Vector3 = Vector3.ZERO
 var has_desired_velocity: bool = false
+## The wish was sought with `all_axes` (`PilotBrain.desired_all_axes`).
+var desired_all_axes: bool = false
 
 
 func score(_ctx: AiContext) -> float:
@@ -48,8 +51,10 @@ func reset() -> void:
 	pass
 
 
-## Writes the thrust toward `v_des` into `flight` and records it as this tick's desired velocity.
-func seek_velocity(flight: FlightCommand, p: Perception, v_des: Vector3) -> void:
+## Writes the thrust toward `v_des` into `flight` (`all_axes` for a held nose) and records the wish for this tick.
+func seek_velocity(flight: FlightCommand, p: Perception, v_des: Vector3, all_axes: bool = false) -> void:
 	desired_velocity = v_des
 	has_desired_velocity = true
-	PilotSteering.apply_seek(flight, PilotSteering.seek(p.velocity, v_des, p.basis, p.capability))
+	desired_all_axes = all_axes
+	PilotSteering.apply_seek(flight, PilotSteering.seek(p.velocity, v_des, p.basis, p.capability,
+			PilotSteering.HORIZON_S, all_axes))

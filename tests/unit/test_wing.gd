@@ -145,6 +145,25 @@ func test_form_on_me_allows_no_retreat_but_still_an_evasion() -> void:
 	assert_gt(BehaviourEvade.new(1).score(form), 0.0, "evade is still allowed")
 
 
+func test_clear_wing_gives_the_pilot_back_its_own_orders() -> void:
+	var ctx: AiContext = _ctx(AiContext.Order.FORM_ON_ME, 1.0, [])
+	ctx.leader_id = 30
+	ctx.leader_target_id = 20
+	ctx.engage_radius_m = 500.0
+	ctx.has_slot = true
+	ctx.slot_offset = Vector3(-40.0, 0.0, 40.0)
+	ctx.leader_link_position = UniversePos.new()
+	ctx.leader_link_velocity = Vector3.ONE
+	ctx.clear_wing()
+	assert_eq(ctx.order, AiContext.Order.ENGAGE_AT_WILL)
+	assert_eq([ctx.leader_id, ctx.leader_target_id], [0, 0])
+	assert_eq(ctx.engage_radius_m, AiContext.DEFAULT_ENGAGE_RADIUS_M)
+	assert_false(ctx.has_slot)
+	assert_eq(ctx.slot_offset, Vector3.ZERO)
+	assert_null(ctx.leader_link_position)
+	assert_eq(ctx.leader_link_velocity, Vector3.ZERO)
+
+
 func test_has_attackable_follows_the_order_gate() -> void:
 	var raider: Contact = _raider()
 	assert_true(_ctx(AiContext.Order.ENGAGE_AT_WILL, 1.0, [raider]).has_attackable())
