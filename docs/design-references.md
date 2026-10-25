@@ -139,8 +139,8 @@ The effects sit 6-10 dB under the dialogue and the score.
 Four bursts at 1:29.54, 1:30.29, 1:31.16 and 1:32.04, each of three shots. A shot is a short click, then a cluster of
 steady, bright, metallic tones held flat for about 100 ms until the next shot cuts in. The pitch does not move and there
 is no low thump. The shots are near-identical: the main tone is 4.79 kHz in every one, to within 0.15 %. Confidence is
-high that this is gunfire. Whose gun it is cannot be told from the sound; watching 1:29.5-1:32.5 would settle it. No
-other shot sound occurs in the window, so the second gun type, and how the two differ, is not measured.
+high that this is gunfire. The maintainer watched 1:29.5-1:32.0: it is the **Starfury's** gun (2026-10-25). No other
+shot sound occurs in the window, so the raider gun, and how the two differ, is not measured.
 
 | | Reference | `pulse_fire` today | `raider_fire` today |
 |---|---|---|---|
@@ -200,8 +200,9 @@ a 296 Hz inharmonic clank) and `explosion` (1.8 s, centroid 131 Hz) get no refer
   the energy up about three octaves (4-7 kHz instead of 0.5-1.3 kHz), dropping the falling sweep and the thump, and
   replacing the exponential decay with hold-and-cut. Choose our own base frequency and ratio near these values rather
   than reusing 2.06 and 0.67 kHz. A soft echo 60 ms after the burst is optional.
-- **Second gun.** The window gives no measured contrast. Starfury and raider guns should still differ in pitch and
-  timbre. How is a design call, for example keeping the raider gun lower and buzzier, as it is now.
+- **Raider gun.** No reference will be measured: the maintainer chose to invent it (2026-10-25). It should still sit
+  with the Starfury gun as a pair, built the same way (click, flat hold, inharmonic cluster, hold-and-cut) but clearly
+  another weapon, for example lower and buzzier as it is now, with a different burst rhythm.
 - **Engines become per-thruster bursts.** The maintainer chose this model. Each main pod and each RCS jet sounds while
   it fires, from a voice placed where it sits on the ship, replacing the two global loops. Burst parameters suggested by
   the measurements:
@@ -214,4 +215,5 @@ a 296 Hz inharmonic clank) and `explosion` (1.8 s, centroid 131 Hz) get no refer
     the release.
   - Today's `engine_loop` (nothing above about 260 Hz) and `thruster_loop` (90-900 Hz) sit 3-6 octaves below anything
     measured in the reference.
-- **Hits and explosions.** Keep the current sounds until a reference with audible impacts has been measured.
+- **Hits and explosions.** No reference will be measured: the maintainer chose to invent them (2026-10-25), in keeping
+  with the gun and engine sounds above (bright, metallic, short), while `explosion` keeps a low body for weight.
