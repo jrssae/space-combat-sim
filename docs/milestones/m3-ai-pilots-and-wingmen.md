@@ -981,7 +981,7 @@ T12.
   up to 30 m/s of the leader's speed, so a leader thrusting from near rest does not fling the far slot (428 m/s of wish
   before, for a 5 m/s leader pulling 20 m/s^2; `test_formation`). The AC9 runs are unchanged.
 
-**M3-T08 (allied ships: pool, LOD1, destruction; replenish pending T07).**
+**M3-T08 (allied ships: pool, LOD1, destruction, replenish).**
 - **Spec and LOD.** `assets/ships/starfury_ally.tres` is `starfury_aurora.tres` with `splat_lod = 1` and `has_cockpit_interior = false`
   (same `asset_id`, so the hardpoints, hull mesh and chunks are the Starfury's; `test_ship_catalog` compares every stored `ShipSpec`
   field). `ShipSpec.splat_lod` (0 = the full PLY): `Ship._load_visuals` asks `SplatLod.resolve(asset_id, level)`
@@ -1033,9 +1033,44 @@ T12.
 - **Shared constants.** `ShipSpec.ASSET_ROOT` is the one definition of `res://assets/generated` (`Ship`, `SplatLod`, `DebrisPool` and
   `ShipSpec.hardpoints_path()` use it) and `ShipCatalog.PLAYER_TYPE` the one for the player's type (`Main` builds its ship from the catalog
   and prepares its debris with it). Fix round 1 also made the M2 tests that mean raiders ask for `alive(ShipPool.DEFAULT_TYPE)`.
-- **Replenish: pending T07.** `WingDirector.replenish()` (on `WaveDirector.wave_started`, an ally for each empty slot 1 500 m behind
-  the player at the player's velocity, on the wing's order) needs T07's `WingDirector` and is not built. Everything it needs exists:
-  `pool.acquire(name, at, basis, velocity, brain, ShipPool.ALLY_TYPE)`, `pool.next_name("ALPHA", 2)`, `DestructionDirector.ship_destroyed`.
+- **Replenish (phase 2, after T07).** `WingDirector.replenish(wing := null) -> Array[Combatant]` (the player's wing by default; the
+  ships launched, lowest slot first) gives each empty slot an ally from `ShipPool.ALLY_TYPE`. `Main` passes the pool in
+  (`wings.setup(world, ships)`, `WingDirector.pool`) and connects `WaveDirector.wave_started` to `WingDirector.on_wave_started`, which
+  calls it. Per replacement: `pool.acquire(wing.callsign(slot), at, basis, velocity, brain, ALLY_TYPE)` (so ALPHA 2 for slot 1, no longer
+  `next_name`: the deferred T07 minor 3), then `add_member(wing, ally, slot)`; the brain is `ai` / `ally_starfury` born with the wing's
+  current order (`add_member`'s refresh confirms it, and gives it the formation behaviour, its slot and the leader link). Positions go
+  through `UniversePos` (`world.to_universe(leader)` then `plus_local`), taken and used inside the one call, so nothing is cached across
+  ticks for M3-T14's rebase.
+  - **Behind = along the player's nose axis** (the body frame's +Z, the way `Formation` counts "behind"), `REPLENISH_DISTANCE_M` = 1 500 m
+    exactly. The velocity can be zero (a player at rest has no behind) or point anywhere (braking, drifting), so it is no reference.
+    The replacements do not stack on one point: each enters in its slot's lane (the formation's x and y offset: -40, +40, +80 m for
+    #2-#4 in a finger-four, so at least 40 m apart), which adds at most 2.1 m to the 1 500 m range. They take the player's heading and
+    velocity.
+  - **Slots, tick order.** `replenish` calls `refresh(wing)` itself rather than relying on the per-tick one, so a wingman shot down
+    in the very tick the wave starts is an empty slot whoever calls it. In the normal order the hit resolvers (200) and the director's
+    own refresh (290) have already dropped it before the `WaveDirector` (300) emits `wave_started`; the explicit refresh covers the
+    other callers (the console's `wing replenish`, which refreshes before it looks at the slots, tests, a signal fired outside the
+    physics order). The test kills a wingman and starts the wave with no tick in between.
+  - **Decisions.** Pool short: it launches what the pool has, lowest slots first, with one `push_warning` per call
+    ("replenish launched 1 of 3 wingmen ..."; `ShipPool.acquire` is never asked for a ship that is not there, so its own warning does not
+    repeat per slot); a scenario that pools no allies (free flight, tests with `ally_pool_size` 0) is silent. No wing, no pool, the leader
+    down (`leader_alive` false: the player is dead) or the tree paused: it launches nothing; the next wave start tries again. A callsign
+    already on a ship in play (a console `spawn ally` takes ALPHA 2 on the next free number) is not given twice: that slot's ship is named
+    with the next free number after the wing's own (`next_name(wing.name, wing.size + 2)`: ALPHA 5), so the other slots keep their
+    callsigns and every name in play is unique; the stray ship stays out of the wing. A wing with no members at the wave start is filled
+    like one with downed members: until T10 launches the sandbox's wingmen at load, the first wave start brings all three (the
+    sandbox test in `test_ally_pool` now expects that). The wing's other members are never touched; a full wing launches nothing.
+  - **Console.** `wing replenish` (the `what` choices gain `replenish`): `ALPHA: launched ALPHA 2, ALPHA 3, ALPHA 4 (1500 m astern)`,
+    `ALPHA: no empty slot` (success), or a failure naming why nothing launched (leader down, paused, `no free allied ship: 3 of 3 in the
+    pool are in use`). `scripts/run_tests.sh` has a smoke run: replenish, `wing order engage` (acknowledged by ALPHA 2), `kill allies`,
+    replenish again, then "no empty slot".
+  - **Tests** (`test_wing_replenish`, 12): one and two downed wingmen replaced in their slots by callsign, 1 500 m behind along the
+    nose (the player turned 40 degrees and drifting along another line), in the slot's lane, at the player's velocity and heading, on
+    FORM ON ME / ENGAGE AT WILL with the formation behaviour, a slot, the leader id; an empty wing filled with no two ships closer than
+    39 m; a full wing untouched; a pool of two fills two slots with one warning and serves the next call when a ship comes back; no
+    ally pool: silent; dead leader and no wing: nothing; a taken callsign; AC7: the splat-node count unchanged over five kill / replenish
+    cycles; a real `wave start 1` in the sandbox replenishes through `Main`'s wiring, 1 500 m astern as the wave begins; the console.
+    `test_ally_pool`'s sandbox test now expects the three wingmen next to the console ally.
 - **P5 is (H).** The capture needs a display and a GPU. Its console commands were run headless without the `screenshot` lines (spawn,
   `despawn all`, spawn with yaw and pitch, `set targeting.selected "ALPHA 2"`, `timescale 0.1`, `kill target`: five Starfury chunks flying,
   none mesh-only).
