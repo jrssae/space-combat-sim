@@ -145,8 +145,9 @@ func rebase(offset: Vector3) -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
 	var shift: Vector3 = -offset
 	for member: Node in get_tree().get_nodes_in_group(SHIFTABLE_GROUP):
-		if is_ancestor_of(member):
-			(member as Node3D).global_translate(shift)
+		var node := member as Node3D
+		if node != null and is_ancestor_of(node):
+			node.global_translate(shift)
 	origin = origin.plus_local(offset)
 	rebases += 1
 	rebased.emit(offset)
@@ -166,7 +167,8 @@ func _settle() -> void:
 	_settle_pending = false
 	for member: Node in get_tree().get_nodes_in_group(SHIFTABLE_GROUP):
 		var node := member as Node3D
-		if not node.is_visible_in_tree() or not node.is_physics_interpolated_and_enabled() or not is_ancestor_of(node):
+		if node == null or not node.is_visible_in_tree() or not node.is_physics_interpolated_and_enabled() \
+				or not is_ancestor_of(node):
 			continue
 		var voice := node as AudioStreamPlayer3D
 		if voice == null or voice.playing:

@@ -11,7 +11,9 @@ extends RefCounted
 ## (0: leave the player to the caller), runs for `sim_s` seconds of sim time or until `until` returns true, puts the threshold
 ## back, and asserts on `test`. With `rebase_every_s` > 0 it also forces a rebase of `FORCED_REBASE_M` (in a direction that
 ## turns each time) at the start of a tick whenever that long has passed without one, so a scene whose player sits still
-## (a route or guard test: `cruise_mps` 0) still rebases. It asserts:
+## (a route or guard test: `cruise_mps` 0) still rebases. Pass `threshold_m` above `FORCED_REBASE_M` with it: below that,
+## the automatic rebase re-centres on the player later in the same tick and only the nodes ticking in between see the shift.
+## It asserts:
 ## - the world rebased at least every `MAX_GAP_S` (2 s) of sim time, from the start to the end;
 ## - no ship, prop or bolt moved in universe terms across a tick by more than its own motion plus `JUMP_SLACK_M` (1 m);
 ## - no hit landed along a jump: each bolt hit lies on the path its bolt flew that tick and on its target's hull, each ram on
