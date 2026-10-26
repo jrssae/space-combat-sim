@@ -80,7 +80,7 @@ Record later answers here (rules) or in `docs/design-references.md` (designs), s
 | Q18 | (2026-10-26, play-test request) Kill count | **Three numbers**: player kills (the player landed the killing hit), player assists (the player fired at least one shot while that ship was the player's selected target, and someone else killed it), and total enemy kills by anyone (M3-T16) |
 | Q19 | (2026-10-26, play-test request) Attack style | **Slashing pass and chase** for some skill / aggression levels: fire through the pass, then burn to slow down and turn to chase, flying for the most time with the guns on the target (M3-T18) |
 | Q20 | (2026-10-26, play-test request) Starfury thrust | **Reverse equals forward**; side thrust at least 50 % of today's forward thrust, or today's side thrust if larger. Four pods give 1.44 MN forward, so: retros 0.36 MN per pod (1.44 MN, 30 m/s²), sway and heave 0.72 MN each (15 m/s², up from 0.48 MN) (M3-T15) |
-| Q21 | (2026-10-26, play-test request) Contacts beyond the radar's 25 km | **Broadcast signals**: nav buoys and allies broadcast, so they show beyond the 25 km sensor range: allies to 100 km, buoys to 1 000 km (M3-T17). Later the station and jumpgates broadcast to 1 000 km (M5, M6), and in hyperspace the destination jumpgate's range is unlimited (M10) |
+| Q21 | (2026-10-26, play-test request) Contacts beyond the radar's 25 km | **Broadcast signals**: nav buoys and allies broadcast, so they show beyond the 25 km sensor range: allies to 100 km, buoys to 1 000 km (M3-T17). Later the station and jumpgates broadcast to 1 000 km (M5, M6), and in hyperspace the destination jumpgate's range is unlimited (M10). **The AI receives every broadcast at the same ranges** (maintainer, 2026-10-26): e.g. a raider sent to attack a nav buoy or the station sees it from as far as the player's radar does |
 
 Calls made by the planner (say if you want them changed): callsigns `ALPHA 1` (player) to `ALPHA 4`, the instructor
 `INSTRUCTOR`; the default order is **cover me** (hold formation, engage hostiles that come within 2 km of the player);
@@ -120,7 +120,7 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | AC22 | Far from the launch point (after `rebase -900000 0 0`, or a long flight), the ship shows no jumping while thrusting in any direction, in splat and mesh mode; flying at full speed through rebases shows no hitch | H | |
 | AC23 | Play-test tweaks (Q15, Q17, Q20): pad B (`JOY_BUTTON_B`) is `target_next` with the tap-or-hold rule D-pad Up had, D-pad Up (`JOY_BUTTON_DPAD_UP`) is `toggle_flight_assist`, in `project.godot` and every saved profile that had the old pair, and a profile round trip is exact; `pulse_fire`, `raider_fire` and `hit_hull` have their spectral centroid within 5 % of a quarter of the old one and the same length, deterministic per seed; both Starfury specs have `pod_retro_thrust == pod_main_thrust` and sway and heave forces of 0.72 MN, and the M1 AC5 physics tests (numbers from the spec) pass with them | A | |
 | AC24 | Kill credit (Q18): a raider killed by the player's bolt (or rammed by the player) adds a player kill; one the player fired at while it was selected but an ally killed adds an assist, never both; total kills counts every enemy ship destroyed by anyone; the HUD status line shows all three, the `waves` provider has `player_kills` and `player_assists`; drones and buoys count as now | A | |
-| AC25 | Broadcasts (Q21): a buoy at 900 km and an ally at 90 km show on the radar and can be selected (range in the target box), an ally at 110 km and a non-broadcasting raider at 30 km do not; beyond the radar's 25 km scale a broadcast contact sits on the rim in its true direction; `broadcast_range_m = INF` works at 1e9 m; ranges come from universe distances and survive a rebase | A | |
+| AC25 | Broadcasts (Q21): a buoy at 900 km and an ally at 90 km show on the radar and can be selected (range in the target box), an ally at 110 km and a non-broadcasting raider at 30 km do not; beyond the radar's 25 km scale a broadcast contact sits on the rim in its true direction; `broadcast_range_m = INF` works at 1e9 m; ranges come from universe distances and survive a rebase. The AI gets the same broadcasts at the same ranges (any faction): a raider's perception lists the 900 km buoy and the 90 km ally, not the 110 km ally; a raider given that buoy as its objective (`ai <name> objective <target>`) flies toward it from 200 km and closes inside 2 km; avoidance and the fire lane still use only the near (5 km) contacts; AC13's paired budget still holds | A | |
 | AC26 | Slashing pass (Q19): pilots at the levels T18 lists fly a pass, firing within 1 s of closest approach, then burn and turn to chase; on the same seeded runs against a straight-flying drone their time with the target inside the fire gate over 60 s is at least 25 % more than the standard attack's; other levels attack as before; AC13's paired budget still holds | A | |
 | AC27 | The tweaks feel right: B selects targets and D-pad Up toggles assist; gun and impact sounds sit two octaves lower; reverse and side thrust feel strong; the kill / assist numbers read at a glance; buoys and wingmen far out show on the radar rim; some AI ships make slashing passes and turn to chase | H | |
 
@@ -157,7 +157,7 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | M3-T14 | Position rebase in play (far-from-origin jitter, Q13) | - | Opus |
 | M3-T15 | Play-test tweaks: pad swap, gun sounds, Starfury thrust (Q15, Q17, Q20) | - | Sonnet |
 | M3-T16 | Kill credit: player kills, assists, total (Q18) | T08 | Sonnet |
-| M3-T17 | Broadcast contacts on the radar (Q21) | T08 | Sonnet |
+| M3-T17 | Broadcast contacts for the radar and the AI (Q21) | T08, T10 | Opus |
 | M3-T18 | Slashing pass and chase (Q19) | T13 | Opus |
 | M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13-T18 | Opus |
 
@@ -563,23 +563,33 @@ Added 2026-10-26 for Q18; run before T12.
     `KILLS 7   YOURS 3   ASSISTS 2`. Counts last the session, across respawns, like `kills` today.
 - Done when: AC24 passes; the status line shows in P7.
 
-### M3-T17 Broadcast contacts on the radar
+### M3-T17 Broadcast contacts for the radar and the AI
 
-Added 2026-10-26 for Q21; run before T12.
+Added 2026-10-26 for Q21 (the AI half the same day); after T10 (raiders on `AiPilot`); run before T12.
 
-- Goal: the player can find the buoys and the wing from far away, as with a beacon's broadcast.
-- Agent: **Sonnet**. A per-contact range on the targeting side plus a radar rim marker.
+- Goal: the player and the AI can find the buoys and the wing from far away, as with a beacon's broadcast, so that later
+  missions can send a raider at a buoy or the station from beyond sensor range.
+- Agent: **Opus**. A per-contact range on the targeting side, a radar rim marker, and a far-contact list in the AI's
+  perception that must not cost AC13's paired budget.
 - Files: `src/targeting/{targetable,targeting_system,target_info}.gd` (`broadcast_range_m`, 0 = none), `src/hud/radar_model.gd`
-  (rim marker), `src/props/nav_buoy.gd`, `src/game/ship_pool.gd` (allies), `tests/unit/{test_radar_model,test_targeting_system}.gd`,
-  `tests/integration/test_broadcast.gd`, `docs/architecture.md` (targeting and radar sections).
+  (rim marker), `src/props/nav_buoy.gd`, `src/game/ship_pool.gd` (allies), `src/ai/{perception,ai_pilot,ai_context,ai_console,
+  behaviour_attack}.gd` (broadcast contacts, the objective), `tests/unit/{test_radar_model,test_targeting_system}.gd`,
+  `tests/integration/{test_broadcast,test_ai_objective}.gd`, `docs/architecture.md` (targeting, radar, §16 perception).
 - Notes:
   - A contact is listed when it is within the 25 km sensor range or within its own `broadcast_range_m`: allies 100 km,
     nav buoys 1 000 km. `INF` must work (hyperspace destination gates, M10). Measure range from universe positions (or
     World-local, which T14's rebase keeps exact enough), never cached across ticks.
   - Radar, planner call: inside 25 km nothing changes; beyond, a broadcast contact sits on the rim in its true direction as
-    a hollow dot. Selecting it puts its range in the target box as today. The AI's `ContactScan` (5 km) is unchanged.
-  - Later broadcasters (the station, jumpgates, 1 000 km) are recorded in `docs/roadmap.md` (M5, M6, M10).
-- Done when: AC25 passes; the radar rim shows in a capture with a buoy moved past 25 km.
+    a hollow dot. Selecting it puts its range in the target box as today.
+  - **AI (maintainer, 2026-10-26)**: every AI ship receives the same broadcasts at the same ranges, whatever its faction.
+    `ContactScan` (5 km) stays the near scan for avoidance, the fire lane and threat picking; broadcasts arrive as a
+    separate, short `Perception` list (one registry of broadcasters, kept in step with the pool, not a second physics or
+    distance sweep over every body). Behaviours do not chase far contacts on their own: a pilot **objective** (one target
+    by name, `ai <name> objective <target|none>` and a spawn field) makes attack fly toward it from any broadcast range and
+    attack it once near. That is the seam M4's mission scripts use ("raiders attack the buoy / the station").
+  - Later broadcasters (the station, jumpgates, 1 000 km) are recorded in `docs/roadmap.md` (M5, M6, M10); they register
+    with the same list, so the AI sees them too.
+- Done when: AC25 passes (radar and AI halves); the radar rim shows in a capture with a buoy moved past 25 km.
 
 ### M3-T18 Slashing pass and chase
 
