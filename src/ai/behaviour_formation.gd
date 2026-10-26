@@ -44,6 +44,10 @@ const IN_SLOT_M: float = 25.0
 const FACE_DV_MPS: float = 30.0
 ## The most the nose leans off the leader's toward the acceleration it needs (`PilotSteering.lean_toward`).
 const MAX_LEAN_DEG: float = 40.0
+## The flight path's turn rate fed forward is at most this (20 degrees/s), and fades in up to `FEED_FORWARD_FULL_MPS` of
+## the leader's speed: at low speed v x a / |v|^2 is the leader's thrust, not a turn, and would fling the far slots.
+const MAX_PATH_RATE_RAD_S: float = 0.35
+const FEED_FORWARD_FULL_MPS: float = 30.0
 
 ## The closure cap beyond `FAR_RANGE_M`: the profile's cruise + `FAR_EXTRA_MPS`.
 var far_closure_mps: float = 200.0
@@ -101,7 +105,8 @@ func think(ctx: AiContext, dt: float) -> PilotCommand:
 		var speed_sq: float = leader.velocity.length_squared()
 		if leader.id == _last_leader_id and dt > 0.0 and absf(since - dt) < 0.5 * dt and speed_sq > 1.0:
 			var leader_accel: Vector3 = (leader.velocity - _last_leader_velocity) / since
-			var path_rate: Vector3 = leader.velocity.cross(leader_accel) / speed_sq
+			var path_rate: Vector3 = (leader.velocity.cross(leader_accel) / speed_sq).limit_length(MAX_PATH_RATE_RAD_S)
+			path_rate *= minf(1.0, sqrt(speed_sq) / FEED_FORWARD_FULL_MPS)
 			var arm: Vector3 = slot - leader.position
 			slot_velocity += path_rate.cross(arm)
 			slot_accel = leader_accel + path_rate.cross(path_rate.cross(arm))

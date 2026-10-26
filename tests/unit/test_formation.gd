@@ -224,6 +224,25 @@ func test_a_turning_leader_feeds_its_flight_paths_swing_forward() -> void:
 	assert_gt(b.desired_velocity.x, -1.0, "control handed over afresh: the estimate starts again")
 
 
+func test_a_slow_leaders_thrust_does_not_fling_the_far_slot() -> void:
+	# A leader at 5 m/s pulling 20 m/s^2 at 30 degrees off its path: v x a / |v|^2 reads as a 2 rad/s turn, and on the
+	# far slot's 113 m arm that would add some 230 m/s (and 450 m/s^2) to a wish for a slot that hardly moved.
+	var b := BehaviourFormation.new(_profile())
+	var slot: Vector3 = Formation.new().offset(3)
+	var v_l := Vector3(0.0, 0.0, -5.0)
+	var first: AiContext = _ctx(slot, v_l, [_contact(30, Factions.Relation.FRIENDLY, Vector3.ZERO, v_l)])
+	first.slot_offset = slot
+	b.think(first, DT)
+	var accel := Vector3(0.5, 0.0, -0.866) * 20.0
+	var v_next: Vector3 = v_l + accel * DT
+	var second: AiContext = _ctx(slot + v_l * DT, v_l, [_contact(30, Factions.Relation.FRIENDLY, v_next * DT, v_next)])
+	second.slot_offset = slot
+	second.perception.now_s = DT
+	b.think(second, DT)
+	# The leader's own 20 m/s^2 over the 1 s horizon, plus a few m/s of swing at most.
+	assert_lt((b.desired_velocity - v_l).length(), 30.0, "the wish stays near the leader's: %s" % b.desired_velocity)
+
+
 func test_the_error_closes_at_k_with_a_lead_on_both_ships() -> void:
 	var b := BehaviourFormation.new(_profile())
 	var v_l := Vector3(0.0, 0.0, -100.0)
