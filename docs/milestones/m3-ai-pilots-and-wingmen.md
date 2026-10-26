@@ -74,6 +74,13 @@ Record later answers here (rules) or in `docs/design-references.md` (designs), s
 | Q12 | (2026-10-24, raised by the maintainer) Can AI ships differ in skill and temperament (civilian vs raider vs military)? | **Per-ship skill rank and aggressiveness**, named ranks: skill `rookie` / `regular` / `veteran` / `ace`, aggressiveness `passive` / `cautious` / `balanced` / `aggressive` / `reckless` (0-1 inside; a number is accepted too), set per spawn with profile defaults. At `reckless`, a badly damaged ship whose allies are mostly or all dead has a chance to ram an enemy; **any AI ship** may, allies included, when set to reckless. **Civilians: a profile only** in M3 (never attacks, evades and flees), usable on any hull; civilian ships and traffic come later (M3-T13) |
 | Q13 | (2026-10-25, reported by the maintainer) The ship model jumps while thrusting more than about 900 km from the reference point, almost constantly in splat mode and slightly in mesh mode | **Bug, fixed by turning on the planned position rebase** (§14.1, 5 km) in play from M3-T14. Cause: `Main` leaves `World.auto_rebase_distance_m` at 0 (M1 assumed a 20 km play area), so the local origin stays at the launch point while Jolt allows 10 km/s; at 900 km a float32 position steps in 6.25 cm, and GDGS packs the model and view matrices as float32 separately, so every splat quantises on its own. The velocity rebase stays in M5 |
 | Q14 | (2026-10-25) AC9's 90° turn: at 10°/s the leader's nose leads its flight path by about 60°, and slots fixed to the nose swing round with it; T07 measured #2 / #3 within 57 m and #4 at 107-115 m | **Looser bound for #4**: slots stay fixed to the leader's nose; #2 and #3 within 80 m, the far slot #4 within 120 m, at 10°/s. Harder turns are left to the AC15 feel test |
+| Q15 | (2026-10-26, play-test request) Pad: assist and target cycling | **Swap them**: B is target cycling (tap next, hold nearest the nose), D-pad Up toggles flight assist (M3-T15) |
+| Q16 | (2026-10-26, play-test request) What does pressing 1-4 show? | **The order in words**: the acknowledgement line names the command issued, e.g. `ALPHA 1: FORM ON ME` (M3-T11) |
+| Q17 | (2026-10-26, play-test request) Gun and impact sounds | **Two octaves lower** (every frequency ÷ 4, lengths unchanged): the Starfury and raider gun sounds and the bolt hitting a hull (M3-T15). M4's new gun sounds keep that register |
+| Q18 | (2026-10-26, play-test request) Kill count | **Three numbers**: player kills (the player landed the killing hit), player assists (the player fired at least one shot while that ship was the player's selected target, and someone else killed it), and total enemy kills by anyone (M3-T16) |
+| Q19 | (2026-10-26, play-test request) Attack style | **Slashing pass and chase** for some skill / aggression levels: fire through the pass, then burn to slow down and turn to chase, flying for the most time with the guns on the target (M3-T18) |
+| Q20 | (2026-10-26, play-test request) Starfury thrust | **Reverse equals forward**; side thrust at least 50 % of today's forward thrust, or today's side thrust if larger. Four pods give 1.44 MN forward, so: retros 0.36 MN per pod (1.44 MN, 30 m/s²), sway and heave 0.72 MN each (15 m/s², up from 0.48 MN) (M3-T15) |
+| Q21 | (2026-10-26, play-test request) Contacts beyond the radar's 25 km | **Broadcast signals**: nav buoys and allies broadcast, so they show beyond the 25 km sensor range: allies to 100 km, buoys to 1 000 km (M3-T17). Later the station and jumpgates broadcast to 1 000 km (M5, M6), and in hyperspace the destination jumpgate's range is unlimited (M10) |
 
 Calls made by the planner (say if you want them changed): callsigns `ALPHA 1` (player) to `ALPHA 4`, the instructor
 `INSTRUCTOR`; the default order is **cover me** (hold formation, engage hostiles that come within 2 km of the player);
@@ -99,7 +106,7 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | AC8 | `AiPilot` selection (unit, scripted `AiContext`s): the highest weighted score wins; the current behaviour keeps a stickiness bonus and a minimum dwell unless a challenger beats it by the emergency margin; orders gate behaviours (FORM ON ME never attacks; ATTACK MY TARGET attacks only the leader's target); `describe()` names the behaviour and its state; same seed = same choices | A | |
 | AC9 | Behaviours in Jolt: **formation** members hold within 25 m of their slots in straight flight and within 80 m through a 90° leader turn at 100 m/s and 10°/s, flown like a player on the mains (the far slot, #4, within 120 m; Q14), never closer than 15 m to anyone; **evade** cuts an M2 attack raider's hits on the evader by at least half against the same seeded run without evade; **guard** engages a hostile that enters the guard radius and returns within 300 m of its post once it is gone; **retreat** below 25 % hull opens the range; **hit reaction** (Q11): an AI ship (ally or raider, any order) hit by a bolt starts evading within 0.25 s (skill `regular` or better; a `rookie` within 0.6 s, T13), even mid-attack inside its minimum dwell, and flies at least one full jink before it may attack again; repeated hits keep it evading | A | |
 | AC10 | Instructor: on `instructor_route` the instructor visits every waypoint in order; with the player parked it stops within 1 600 m and resumes when the player closes to 800 m; each demo completes its measurable goal (roll 360 ± 10°, flip-and-burn ends with velocity reversed or below 2 m/s, strafe box returns within 30 m of its start with every leg over 40 m, pod turn yaws the right way by over 30°, all stop ends below 0.5 m/s and 1 °/s); the HUD's waypoint marker projects to the route point | A | P6 |
-| AC11 | Wing orders: keys 1-4 (through `UiCommand`, never `Input`) and `wing order <attack\|form\|engage\|cover>` change every member's order and post one acknowledgement line; ATTACK MY TARGET with no hostile selected is refused with a message; the roster lists callsigns, hull and current behaviour; downed wingmen are replaced when the next wave starts, entering 1 500 m behind the player | A | P7 |
+| AC11 | Wing orders: keys 1-4 (through `UiCommand`, never `Input`) and `wing order <attack\|form\|engage\|cover>` change every member's order and post one acknowledgement line naming the order (Q16); ATTACK MY TARGET with no hostile selected is refused with a message; the roster lists callsigns, hull and current behaviour; downed wingmen are replaced when the next wave starts, entering 1 500 m behind the player | A | P7 |
 | AC12 | Scenarios: `combat_sandbox`, `instructor_route` and `dogfight` validate (and broken `wings` / `route` entries give path-qualified errors); a headless sandbox run with wingmen clears three waves; a headless `dogfight` (four allies, six raiders, player `god on` and idle) ends with one side destroyed within 6 sim minutes in 5/5 seeds and is reproducible per seed within 1e-3 m after 60 s | A | P8 |
 | AC13 | Console and perf: `state` lists the M2 providers plus `factions`, `ram`, `wing`, `ai` (and `route` on `instructor_route`); every new command works under `--console-strict` and rejects bad arguments; new settings are schema entries; AI think time for 13 ships: `AiPilot` adds at most 0.5 ms per tick over the M2 AI path in the same headless fight (paired, Q10), with the absolute number recorded; the hit and ram resolvers stay under 2 ms per tick in the dogfight run | A | |
 | AC14 | Keyboard layout B feels right with the right hand on the mouse; Caps Lock rolls (press and release both register) | H | |
@@ -111,6 +118,11 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | AC20 | Skill and aggressiveness (Q12): every AI spawn (scenario, wave, console) takes `skill` and `aggression` by name or 0-1, defaulting from its profile, and `ai <name> skill|aggression <value>` changes them live. Unit tests show skill scaling aim error, reaction delay and fire discipline, and aggression scaling the attack / evade / retreat weights, the retreat threshold and the engage range, each monotonically. A `civilian` profile never fires and evades and flees hostiles. In Jolt, on the same seeded runs: an `ace` raider lands more hits on a drone than a `rookie`; a `cautious` ship retreats at a higher hull than an `aggressive` one. **Last-ditch ram**: only at `reckless`, below 25 % hull with at most a quarter of its allies left, a seeded chance commits a ship to `ram`: avoidance stops dodging that target and it flies a collision course; in Jolt a committed rammer hits its target in at least 8 of 10 seeded runs, and no ship below `reckless` ever rams. `ai <name>` shows skill, aggression and the behaviour | A | |
 | AC21 | Position rebase in play (Q13): `main.tscn` runs with `World.auto_rebase_distance_m` 5 000 m (a bare `WorldFrame` keeps 0); after `rebase -900000 0 0` the player ship is back within 5 km of the local origin on the next physics tick, with every ship's, prop's and bolt's `UniversePos` and velocity unchanged (1 mm, 1 mm/s); under constant thrust after that, the ship's tick-to-tick change of step, taken in universe coordinates, stays under 2 mm (about 5 cm without the rebase). In a headless sandbox fight with wingmen and the threshold forced down so the world rebases at least every 2 s, the waves still clear, bolts still hit, no hit lands along a jump, no ship's universe position jumps more than its own motion plus 1 m across a rebase tick, the chase camera's offset from the ship stays continuous, and the HUD's reference range follows the universe distance. One rebase of the full sandbox costs under 0.5 ms (record the number) | A | |
 | AC22 | Far from the launch point (after `rebase -900000 0 0`, or a long flight), the ship shows no jumping while thrusting in any direction, in splat and mesh mode; flying at full speed through rebases shows no hitch | H | |
+| AC23 | Play-test tweaks (Q15, Q17, Q20): pad B (`JOY_BUTTON_B`) is `target_next` with the tap-or-hold rule D-pad Up had, D-pad Up (`JOY_BUTTON_DPAD_UP`) is `toggle_flight_assist`, in `project.godot` and every saved profile that had the old pair, and a profile round trip is exact; `pulse_fire`, `raider_fire` and `hit_hull` have their spectral centroid within 5 % of a quarter of the old one and the same length, deterministic per seed; both Starfury specs have `pod_retro_thrust == pod_main_thrust` and sway and heave forces of 0.72 MN, and the M1 AC5 physics tests (numbers from the spec) pass with them | A | |
+| AC24 | Kill credit (Q18): a raider killed by the player's bolt (or rammed by the player) adds a player kill; one the player fired at while it was selected but an ally killed adds an assist, never both; total kills counts every enemy ship destroyed by anyone; the HUD status line shows all three, the `waves` provider has `player_kills` and `player_assists`; drones and buoys count as now | A | |
+| AC25 | Broadcasts (Q21): a buoy at 900 km and an ally at 90 km show on the radar and can be selected (range in the target box), an ally at 110 km and a non-broadcasting raider at 30 km do not; beyond the radar's 25 km scale a broadcast contact sits on the rim in its true direction; `broadcast_range_m = INF` works at 1e9 m; ranges come from universe distances and survive a rebase | A | |
+| AC26 | Slashing pass (Q19): pilots at the levels T18 lists fly a pass, firing within 1 s of closest approach, then burn and turn to chase; on the same seeded runs against a straight-flying drone their time with the target inside the fire gate over 60 s is at least 25 % more than the standard attack's; other levels attack as before; AC13's paired budget still holds | A | |
+| AC27 | The tweaks feel right: B selects targets and D-pad Up toggles assist; gun and impact sounds sit two octaves lower; reverse and side thrust feel strong; the kill / assist numbers read at a glance; buoys and wingmen far out show on the radar rim; some AI ships make slashing passes and turn to chase | H | |
 
 ## Capture pre-checks
 
@@ -143,7 +155,11 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | M3-T11 | HUD: wing roster, acknowledgements, waypoint marker | T07, T09 | Sonnet |
 | M3-T13 | Skill ranks, aggressiveness, civilian profile, last-ditch ram (runs before T12) | T06, T10 | Opus |
 | M3-T14 | Position rebase in play (far-from-origin jitter, Q13) | - | Opus |
-| M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13, T14 | Opus |
+| M3-T15 | Play-test tweaks: pad swap, gun sounds, Starfury thrust (Q15, Q17, Q20) | - | Sonnet |
+| M3-T16 | Kill credit: player kills, assists, total (Q18) | T08 | Sonnet |
+| M3-T17 | Broadcast contacts on the radar (Q21) | T08 | Sonnet |
+| M3-T18 | Slashing pass and chase (Q19) | T13 | Opus |
+| M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13-T18 | Opus |
 
 Parallel lanes: T01, T02 and T03 touch disjoint files and can run together; T04 and T05 can run together after T02.
 Two agents at a time is steadier than four (`docs/handoff.md`).
@@ -423,7 +439,8 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
   `tests/integration/test_hud.gd`.
 - Notes: green line theme. **Roster** top-left: one row per wing member (callsign, a hull bar in the faction colour,
   the behaviour or order in short form: `FORM`, `ATK RAIDER 3`, `EVADE`, `DOWN`). **Acknowledgement** line under the status
-  line for 3 s. **Waypoint marker**: a diamond with `NAV n` and range at the projected route point, an edge arrow when
+  line for 3 s, naming the order issued in words (Q16, 2026-10-26: the maintainer pressed 1-4 and saw nothing), e.g.
+  `ALPHA 1: FORM ON ME`, `ALPHA 1: ATTACK MY TARGET (RAIDER 3)`, and the refusal text when ATTACK MY TARGET has no target. **Waypoint marker**: a diamond with `NAV n` and range at the projected route point, an edge arrow when
   off-screen. Allies already show blue in the radar and target box (`Factions.hud_color`). Chase-view layout and opacity
   as in M2.1.
 - Done when: the HUD parts of AC10 and AC11 pass; P6 and P7 show them.
@@ -500,13 +517,97 @@ T12.
     forced low, so their own rebase checks are one line.
 - Done when: AC21 passes; AC22 is in the play-test checklist.
 
+### M3-T15 Play-test tweaks: pad swap, gun sounds, Starfury thrust
+
+Added 2026-10-26 for the maintainer's play-test requests Q15, Q17 and Q20. Independent of the AI tasks; run before T12.
+
+- Goal: three small changes the maintainer asked for after flying the M3 build.
+- Agent: **Sonnet**. Three mechanical changes, each with a test.
+- Files: `project.godot` (`[input]`), `data/controls/m1_classic.cfg` (check it), `src/input/input_adapter.gd` (wherever the
+  tap-or-hold rule names D-pad Up), `tools/procgen/assets/sfx_combat.py` and `tools/procgen/tests/test_sfx_combat.py`,
+  `assets/ships/{starfury_aurora,starfury_ally}.tres`, `src/ship/ship_spec.gd` (defaults and docs),
+  `tests/unit/test_input_adapter.gd` and the input-map tests, `docs/architecture.md` (§6.1 pad table and D7, the §5 spec
+  table), `docs/playtest.md` (pad layout, the AC17 targeting line).
+- Notes:
+  - **Pad swap (Q15)**: B (`JOY_BUTTON_B`, 1) becomes `target_next` with the tap-or-hold rule (tap = next target on release,
+    hold 0.35 s = `target_ahead` once); D-pad Up (`JOY_BUTTON_DPAD_UP`, 11) becomes `toggle_flight_assist` (edge). Keyboard
+    and mouse bindings do not change. `m1_classic` keeps its own pad layout: apply the swap there only if it binds the
+    same pair, and say which in the report. AC1's table still holds for the keyboard.
+  - **Gun and impact sounds (Q17)**: two octaves lower = every frequency in `pulse_fire`, `raider_fire` and `hit_hull` ÷ 4
+    (sweeps, partials, noise bands), lengths and envelopes unchanged; do not resample (that would stretch them 4x). Bump
+    the generator's version so caches rebuild. Leave the engine, thruster, explosion and UI sounds. (H) by ear in AC27.
+  - **Thrust (Q20)**: forward stays 0.36 MN per pod (1.44 MN, 30 m/s²); `pod_retro_thrust` 0.18 to 0.36 MN per pod
+    (reverse = forward); `rcs_force_max` (0.48, 0.48, 0) to (0.72, 0.72, 0) MN (50 % of forward, which beats today's side
+    thrust), sway and heave both. Starfury specs only (player, ally, instructor); the raider's spec is unchanged. The
+    brake's all stop and the AI (`ShipCapability` reads the spec) get stronger with it: expect tests that hard-coded a
+    stopping distance or time to move, and fix them to read the spec, never new constants. Watch T07's formation
+    (AC9) and T09's demos (flip-and-burn), which ran on the old numbers.
+- Done when: AC23 passes and AC27's first three checks are in the play-test checklist.
+
+### M3-T16 Kill credit: player kills, assists, total
+
+Added 2026-10-26 for Q18; run before T12.
+
+- Goal: the HUD tells the player what they did, not only what the wing did.
+- Agent: **Sonnet**. Bookkeeping on hits the code already attributes (`HitInfo.shooter_id`).
+- Files: `src/game/wave_director.gd` (counts, status line, `waves` provider), `src/combat/kill_credit.gd` (new, pure:
+  who gets what for one death), the player's fire path (to note "fired while this ship was selected"),
+  `tests/unit/test_kill_credit.gd`, `tests/integration/test_kill_credit_in_play.gd`, `docs/architecture.md` §6.4 (`waves`).
+- Notes:
+  - **Player kill**: the killing `HitInfo.shooter_id` is the player ship. For a ram, check what `RamResolver` puts in
+    `shooter_id`; the player's own ram counts as a player kill.
+  - **Assist**: the ship died, the kill is not the player's, and the player fired at least one shot while that ship was
+    their selected target (fired, not hit: the request's words; record it per ship id until the ship dies or is released
+    to the pool, so a reused pool ship starts clean).
+  - **Total**: today's `kills` (enemy ships destroyed by anyone, rams included). Status line, planner call:
+    `KILLS 7   YOURS 3   ASSISTS 2`. Counts last the session, across respawns, like `kills` today.
+- Done when: AC24 passes; the status line shows in P7.
+
+### M3-T17 Broadcast contacts on the radar
+
+Added 2026-10-26 for Q21; run before T12.
+
+- Goal: the player can find the buoys and the wing from far away, as with a beacon's broadcast.
+- Agent: **Sonnet**. A per-contact range on the targeting side plus a radar rim marker.
+- Files: `src/targeting/{targetable,targeting_system,target_info}.gd` (`broadcast_range_m`, 0 = none), `src/hud/radar_model.gd`
+  (rim marker), `src/props/nav_buoy.gd`, `src/game/ship_pool.gd` (allies), `tests/unit/{test_radar_model,test_targeting_system}.gd`,
+  `tests/integration/test_broadcast.gd`, `docs/architecture.md` (targeting and radar sections).
+- Notes:
+  - A contact is listed when it is within the 25 km sensor range or within its own `broadcast_range_m`: allies 100 km,
+    nav buoys 1 000 km. `INF` must work (hyperspace destination gates, M10). Measure range from universe positions (or
+    World-local, which T14's rebase keeps exact enough), never cached across ticks.
+  - Radar, planner call: inside 25 km nothing changes; beyond, a broadcast contact sits on the rim in its true direction as
+    a hollow dot. Selecting it puts its range in the target box as today. The AI's `ContactScan` (5 km) is unchanged.
+  - Later broadcasters (the station, jumpgates, 1 000 km) are recorded in `docs/roadmap.md` (M5, M6, M10).
+- Done when: AC25 passes; the radar rim shows in a capture with a buoy moved past 25 km.
+
+### M3-T18 Slashing pass and chase
+
+Added 2026-10-26 for Q19; after T13 (it is keyed to skill and aggression); run before T12.
+
+- Goal: better pilots fight like Starfuries: a firing pass through the target, then a burn to kill the overshoot and a
+  turn to chase, keeping the guns on the target as long as possible.
+- Agent: **Opus**. A new attack mode with a physics test and the AC13 budget to keep.
+- Files: `src/ai/behaviour_attack.gd` (or a new `src/ai/attack_slash.gd` it delegates to), `src/ai/ai_temperament.gd`
+  (which levels use it), `tests/unit/test_attack_slash.gd`, `tests/integration/test_ai_slash.gd`.
+- Notes:
+  - The pass: close at speed on a lead course, firing through closest approach (the fire gate decides, as now), keeping
+    avoidance on so it passes clear of the target.
+  - After the pass: flip or pod-turn onto the target and burn to cancel the overshoot, then chase at a small closing
+    speed, holding the target inside the fire gate. Retros now equal the mains (T15), so this works on both.
+  - Planner call (say if you want it changed): skill `veteran` or `ace` with aggression `balanced` or higher use the
+    slashing pass; everyone else attacks as today. A profile may turn it off (instructor, civilian).
+  - Measure "time on target" (ticks with the target inside the fire gate) and use it for AC26 against the standard
+    attack on the same seeds.
+- Done when: AC26 passes; the paired AC13 test still passes; the dogfight scenario shows it.
+
 ### M3-T12 Integration, smoke runs, capture set, play-test guide
 
 - Goal: M3 complete in one build, every (A) criterion green, the maintainer handed a checklist and screenshots.
 - Agent: **Opus**. Cross-task glue.
 - Files: `scripts/run_tests.sh` (providers line, new smoke runs: wing order, dogfight, instructor route), `scripts/capture_m3.sh`,
   `tests/integration/test_m3_run.gd`, `docs/playtest.md` (M3 section: keyboard, orders, instructor, new console commands,
-  AC14-AC19 checklist), this file (status, as-built notes), `docs/architecture.md` §16 (as built), `docs/roadmap.md`.
+  AC14-AC19, AC22 and AC27 checklist), this file (status, as-built notes), `docs/architecture.md` §16 (as built), `docs/roadmap.md`.
 - Done when: every (A) criterion passes; the capture set is attached; the maintainer runs the (H) checklist.
 
 ## As-built notes
