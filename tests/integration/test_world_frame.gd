@@ -169,6 +169,19 @@ func test_frame_velocity_starts_at_zero() -> void:
 	assert_eq(world.origin.system_id, &"local")
 
 
+func test_rebases_are_counted_and_the_last_one_timed() -> void:
+	assert_eq(world.rebases, 0)
+	assert_eq(world.last_rebase_us, 0, "nothing measured before the first rebase")
+	for i: int in 20:
+		var marker := Node3D.new()
+		world.spawn(marker, UniversePos.new(10.0 * i, 0.0, 0.0))
+	world.rebase(Vector3(5000.0, 0.0, 0.0))
+	world.rebase(Vector3(-5000.0, 0.0, 0.0))
+	assert_eq(world.rebases, 2)
+	assert_gt(world.last_rebase_us, 0, "the cost of the last one, in microseconds (wall clock, profiling only)")
+	assert_lt(world.last_rebase_us, 100000)
+
+
 func test_auto_rebase_is_off_by_default() -> void:
 	assert_eq(world.auto_rebase_distance_m, 0.0)
 	var focus := Node3D.new()
@@ -217,6 +230,9 @@ func test_console_provider_and_rebase_command() -> void:
 	assert_eq(registry.format_path("world.origin"), "world.origin = [5000.00, 0.00, -20.00] m")
 	assert_eq(registry.format_path("world.origin_velocity"), "world.origin_velocity = [0.00, 0.00, 0.00] m/s")
 	assert_eq(registry.format_path("world.auto_rebase_distance_m"), "world.auto_rebase_distance_m = 0.00 m")
+	assert_eq(registry.format_path("world.rebases"), "world.rebases = 1")
+	assert_string_contains(registry.format_path("world.rebase_us"), "world.rebase_us = ")
+	assert_string_ends_with(registry.format_path("world.rebase_us"), " us")
 	assert_false(registry.resolve("world.rebase")["ok"], "methods are not keys")
 	assert_string_contains(registry.execute("rebase 1 2")[0].error, "expects three numbers")
 

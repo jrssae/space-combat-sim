@@ -94,6 +94,30 @@ func test_spawns_are_offsets_from_the_players_position_at_wave_start() -> void:
 	assert_lt(at.distance_to(anchor.plus_local(expected)), drifted.length() + 5.0, "the first raider's offset from the anchor")
 
 
+func test_an_origin_spawn_is_an_offset_from_the_scenario_origin_whatever_the_rebases() -> void:
+	# M3-T14: the World's local origin follows the player now, so "origin" must mean the scenario's (universe) origin.
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ScenarioLoader.SANDBOX_PATH))
+	data["waves"] = [{"name": "FROM THE ORIGIN", "delay_s": 0.1, "spawns": [
+		{"type": "raider_fighter", "anchor": "origin", "offset": [300, 20, -800], "behaviour": {"type": "idle", "hold": true}}]}]
+	data.erase("loop")
+	var scenario: Dictionary = ScenarioLoader.from_data(data, "test")
+	assert_true(bool(scenario["ok"]), str(scenario["error"]))
+	main.waves.setup(main.world, main.ships, main.combatant, scenario, null, false)
+	main.ship.reset_to(Transform3D(Basis.IDENTITY, Vector3(4000.0, 0.0, -1000.0)))
+	assert_true(_exec("rebase 4000 0 -1000").ok, "the local origin is on the player, 4 km from the scenario origin")
+	await _ticks(1)
+	assert_almost_eq(main.world.origin.distance_to(UniversePos.new(4000.0, 0.0, -1000.0)), 0.0, 1e-3)
+	main.waves.start(0)
+	await _wait_for_state(&"active", 5.0)
+	await _ticks(1)
+	var raiders: Array[Combatant] = main.ships.alive(ShipPool.DEFAULT_TYPE)
+	assert_eq(raiders.size(), 1)
+	if raiders.is_empty():
+		return
+	var at: UniversePos = main.world.to_universe(raiders[0].ship.global_position)
+	assert_almost_eq(at.distance_to(UniversePos.new(300.0, 20.0, -800.0)), 0.0, 1.0, "at its offset from the scenario origin: %s" % at)
+
+
 func test_kill_all_clears_a_wave_and_the_next_one_comes() -> void:
 	assert_true(_exec("wave start 1").ok)
 	Engine.time_scale = 4.0

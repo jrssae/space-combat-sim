@@ -132,6 +132,7 @@ func play(sound_name: StringName, at: Vector3, volume_db: float = 0.0, pitch: fl
 	_voice_serial[index] = _serial
 	voice.stream = _streams[sound_name]
 	voice.global_position = at
+	voice.reset_physics_interpolation()  # heard here at once, not blended from its last sound (or a rebase) over a tick
 	voice.volume_db = volume_db
 	voice.pitch_scale = pitch
 	voice.play()

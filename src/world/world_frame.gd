@@ -11,6 +11,20 @@ extends Node3D
 ##
 ## Group `world_shiftable` is for objects that are direct children of this node, or `top_level` nodes (which do not
 ## follow their parent). Never put a node in it whose parent is also in it: it would be shifted twice.
+##
+## The automatic position rebase (§14.1) keeps `focus` (the player) within `auto_rebase_distance_m` of the local origin, so
+## float32 positions stay fine-grained however far the player flies (maintainer Q13: at 900 km a float32 coordinate steps in
+## 6.25 cm). A bare `WorldFrame` keeps it off (0); the main scene sets 5 000 m (M3-T14). It runs in this node's
+## `_physics_process` at priority 0: after the AI drivers (-10), the console and `Main`, before every node below `World` (ships,
+## bolts, props, effects) and the late systems (targeting 100, hits 200, rams 210, wings 290, waves 300). Commands built before
+## it are levels and rates, so they stay valid; everything after it sees the new frame. Systems that keep a place between ticks
+## keep a `UniversePos` (or rebuild it from the live nodes each tick); the few that must keep a World-local point listen to
+## `rebased` and shift it (`RamResolver`).
+##
+## Physics interpolation: every shifted node's interpolation is reset, so the frame after a rebase draws the bodies at their
+## current tick with no blend (a hitch of at most one tick, the same for every body; nodes that move themselves later in the
+## tick, such as bolts, blend from their shifted place). Nothing is left blending across the jump. The velocity rebase (§14.1)
+## is roadmap M5: `origin_velocity` stays zero.
 
 signal rebased(offset: Vector3)
 
@@ -22,24 +36,31 @@ var origin: UniversePos = UniversePos.new()
 ## (§14.1) is a roadmap milestone, but the field exists so nothing has to be retrofitted.
 var origin_velocity: PackedFloat64Array = PackedFloat64Array([0.0, 0.0, 0.0])
 ## Automatic position rebase: when `focus` is farther than this many metres from the local origin, rebase onto it.
-## 0 disables it. M1 leaves it disabled because the play area (about 20 km) does not need it.
+## 0 disables it (the default, which bare-World tests rely on); `main.tscn` sets 5 000 m.
 @export var auto_rebase_distance_m: float = 0.0
 ## The object the auto-rebase keeps near the origin (the player ship once it exists). Only read when
 ## `auto_rebase_distance_m > 0`.
 var focus: Node3D = null
+## Rebases so far (automatic and `rebase` alike), and the wall-clock cost of the last one in microseconds (a profiling
+## readout, never gameplay time; 0 before the first).
+var rebases: int = 0
+var last_rebase_us: int = 0
 
 
 func _ready() -> void:
-	# Console seam (architecture §6.4): `rebase` is the only way to exercise the rebase at runtime in M1.
+	# Console seam (architecture §6.4): `rebase` shifts the origin by hand; `rebases` and `rebase_us` watch the automatic one.
 	DebugConsole.registry.register_provider(&"world", ConsoleVars.new({
 		&"origin": {"get": _origin_array, "unit": "m", "doc": "Universe position of the local origin (64-bit)"},
 		&"origin_velocity": {"get": func() -> PackedFloat64Array: return origin_velocity, "unit": "m/s",
 				"doc": "Velocity of the local frame; zero in M1"},
 		&"auto_rebase_distance_m": {"get": func() -> float: return auto_rebase_distance_m, "unit": "m",
-				"doc": "Automatic rebase threshold; 0 = off (M1)"},
+				"doc": "Automatic rebase threshold; 0 = off (a bare World), 5 000 in the main scene"},
+		&"rebases": {"get": func() -> int: return rebases, "doc": "Rebases so far, automatic and console"},
+		&"rebase_us": {"get": func() -> int: return last_rebase_us, "unit": "us",
+				"doc": "Cost of the last rebase (profiling only, wall clock)"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"rebase",
-			"Shift the local origin by an offset in metres (World.rebase); nothing moves in universe terms",
+			"Shift the local origin by an offset in metres (World.rebase); nothing moves in universe terms. With the automatic rebase on, the next one brings the player back",
 			[ConsoleArg.vec3_required(&"offset", PackedStringArray(["dx", "dy", "dz"]))]), _cmd_rebase, self)
 
 
@@ -87,8 +108,10 @@ func spawn(node: Node3D, at: UniversePos, basis: Basis = Basis.IDENTITY, parent:
 
 ## Re-centres the local space: every shiftable node moves by `-offset` and `origin` moves by `+offset`, so no
 ## object's universe position changes. Velocities are untouched (the frame does not move, only its origin label).
-## `reset_physics_interpolation()` stops the renderer smearing the jump over the next physics tick.
+## `reset_physics_interpolation()` stops the renderer smearing the jump over the next physics tick. `rebased` is emitted
+## last, with everything already shifted.
 func rebase(offset: Vector3) -> void:
+	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
 	for member: Node in get_tree().get_nodes_in_group(SHIFTABLE_GROUP):
 		var node := member as Node3D
 		if node == null or not is_ancestor_of(node):
@@ -96,7 +119,9 @@ func rebase(offset: Vector3) -> void:
 		node.global_position -= offset
 		node.reset_physics_interpolation()
 	origin = origin.plus_local(offset)
+	rebases += 1
 	rebased.emit(offset)
+	last_rebase_us = Time.get_ticks_usec() - started_us
 
 
 func _origin_array() -> PackedFloat64Array:

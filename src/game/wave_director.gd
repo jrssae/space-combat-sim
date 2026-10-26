@@ -1,8 +1,9 @@
 class_name WaveDirector
 extends Node
 ## Runs the combat sandbox's waves (architecture §15.10, M2-T09): owns the pure `WavePlan`, spawns raiders from the `ShipPool`
-## with a `BrainFactory` brain at the position the scenario gives (an offset from the player's or the origin's universe position
-## at the moment the wave activates, summed as `UniversePos`), counts kills and losses, and feeds the HUD's status line. Free
+## with a `BrainFactory` brain at the position the scenario gives (an offset from the player's universe position at the moment
+## the wave activates, or from the scenario's origin, universe (0, 0, 0), summed as `UniversePos`; never from the World's local
+## origin, which the rebase keeps near the player, M3-T14), counts kills and losses, and feeds the HUD's status line. Free
 ## flight has no waves: the director then never starts and does nothing. The waves are about the raiders: allied ships in the pool
 ## (M3-T08) are not counted as raiders, not cleared when a wave starts or stops, and a destroyed ally is no kill.
 ##
@@ -138,7 +139,7 @@ func _anchor_for(request: Dictionary) -> UniversePos:
 	var number: int = int(request["wave_number"])
 	if _anchor_wave != number or _anchor_player == null:
 		_anchor_wave = number
-		_anchor_origin = world.to_universe(Vector3.ZERO)
+		_anchor_origin = UniversePos.new(0.0, 0.0, 0.0, world.origin.system_id)  # the scenario's origin, where its props are
 		_anchor_player = world.to_universe(player.ship.global_position) if player != null and is_instance_valid(player.ship) else _anchor_origin
 	return _anchor_player if StringName(request["anchor"]) == &"player" else _anchor_origin
 

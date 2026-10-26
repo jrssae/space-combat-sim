@@ -25,7 +25,10 @@ extends Node
 ## the other body and `faction` its faction: relations and friendly fire do not matter, a collision hurts whoever it hits.
 ## `settings.ram_damage` (read every tick) switches it off; ships still bounce.
 ##
-## Rebase-safe: only velocities and instance ids are kept between ticks, never positions.
+## Rebase-safe (M3-T14): between ticks only velocities, instance ids and the open contact windows' points are kept, and `world`'s
+## `rebased` moves those points with the hulls. Jolt reports contacts where its last step left the bodies, so a rebase made since
+## that step (the automatic one runs at priority 0, the console's too, both before this node) is taken off the points read this
+## tick. `Main` sets `world`; a resolver without one (tests with no rebase) reads the points as Jolt gives them.
 ##
 ## Console: provider `ram` (`events`, `last`, `resolve_us`). `resolve_us` is a profiling readout from the wall clock, not
 ## gameplay time.
@@ -46,6 +49,12 @@ var resolve_us: int = 0
 var enabled: bool = true
 ## Contacts, windows and one ram per pair per collision, between ticks.
 var tracker: RamTracker = RamTracker.new()
+## The World whose rebases the contact points follow (see the class notes).
+var world: WorldFrame = null:
+	set = set_world
+
+# The rebases since Jolt's last step: this tick's contact points are still in the frame before them.
+var _shift_since_step := Vector3.ZERO
 
 
 func _init() -> void:
@@ -70,6 +79,19 @@ func _physics_process(delta: float) -> void:
 	resolve(delta)
 
 
+func set_world(value: WorldFrame) -> void:
+	if world != null and world.rebased.is_connected(_on_rebased):
+		world.rebased.disconnect(_on_rebased)
+	world = value
+	if world != null:
+		world.rebased.connect(_on_rebased)
+
+
+func _on_rebased(offset: Vector3) -> void:
+	_shift_since_step += offset
+	tracker.shift(offset)
+
+
 ## One tick of ram detection with time step `delta`. `_physics_process` calls it every tick: contacts are compared with the
 ## previous call, so a test that steps it by hand must call it every tick too.
 func resolve(delta: float) -> void:
@@ -82,6 +104,7 @@ func resolve(delta: float) -> void:
 		tracker.end_tick()
 	else:
 		tracker.reset()  # a contact that began while off is never rammed when it is switched back on
+	_shift_since_step = Vector3.ZERO  # Jolt steps after this tick's scripts: its next contacts are in the frame of now
 	resolve_us = Time.get_ticks_usec() - started_us
 
 
@@ -136,7 +159,7 @@ func _resolve_contacts(hulls: Array[Dictionary], delta: float) -> void:
 			var damageable: Damageable = hull["damageable"]
 			var sample := RamTracker.Sample.new(hull["id"], hull["velocity"], hull["accel"], damageable.ram_safe_dv_mps,
 					damageable.ram_lethal_dv_mps)
-			_read_contacts(hull["body"] as RigidBody3D, sample)
+			_read_contacts(hull["body"] as RigidBody3D, sample, _shift_since_step)
 			samples.append(sample)
 	var pending: Array[Array] = []
 	for ram: RamTracker.ContactRam in tracker.contacts(samples, delta):
@@ -149,13 +172,14 @@ func _resolve_contacts(hulls: Array[Dictionary], delta: float) -> void:
 
 
 # Every body Jolt reported touching `rigid` in its last step, with the first contact point and `rigid`'s surface normal there
-# (Jolt's normal points from the other body into this one).
-static func _read_contacts(rigid: RigidBody3D, sample: RamTracker.Sample) -> void:
+# (Jolt's normal points from the other body into this one). `shift` is what the World was rebased by since that step.
+static func _read_contacts(rigid: RigidBody3D, sample: RamTracker.Sample, shift: Vector3) -> void:
 	var state: PhysicsDirectBodyState3D = PhysicsServer3D.body_get_direct_state(rigid.get_rid())
 	if state == null:
 		return
 	for i: int in state.get_contact_count():
-		sample.touch(state.get_contact_collider_id(i), state.get_contact_local_position(i), -state.get_contact_local_normal(i))
+		sample.touch(state.get_contact_collider_id(i), state.get_contact_local_position(i) - shift,
+				-state.get_contact_local_normal(i))
 
 
 # --- swept: tunnelling speeds and props -------------------------------------------------------------------------
