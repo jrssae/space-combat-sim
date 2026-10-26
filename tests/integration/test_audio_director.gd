@@ -46,6 +46,24 @@ func test_play_uses_a_voice_and_unknown_sounds_are_ignored() -> void:
 	assert_null(main.audio.play(&"no_such_sound", Vector3.ZERO))
 
 
+func test_a_reused_voice_is_heard_at_its_new_sound_at_once() -> void:
+	# Physics interpolation is on: a voice moved to a new sound in a tick would be blended from where its last sound was (and,
+	# since M3-T14, from where a rebase left it) for the frames until the next tick.
+	await get_tree().physics_frame
+	var voice: AudioStreamPlayer3D = main.audio.play(&"pulse_fire", Vector3(0.0, 0.0, -50.0))
+	await get_tree().process_frame
+	await get_tree().physics_frame  # inside a tick, as shots and hits are
+	var again: AudioStreamPlayer3D = null
+	for i: int in AudioDirector.VOICES:
+		again = main.audio.play(&"pulse_fire", Vector3(400.0, 0.0, 0.0))
+		if again == voice:
+			break
+	assert_eq(again, voice, "the same voice, stolen for the new sound")
+	await get_tree().process_frame
+	assert_almost_eq(voice.get_global_transform_interpolated().origin, Vector3(400.0, 0.0, 0.0), Vector3.ONE * 1e-3,
+			"heard where the new sound is, not on the way from the old one")
+
+
 func test_the_voice_pool_never_exceeds_sixteen_and_steals_the_oldest() -> void:
 	var voices: Array[AudioStreamPlayer3D] = []
 	for i: int in 40:

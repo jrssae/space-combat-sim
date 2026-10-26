@@ -1,7 +1,7 @@
 extends GutTest
 ## Explosion (M2-T06, architecture §15.7): the code-made effect of a destroyed ship. It has the light, the billboard flash,
-## the fireball, sparks and embers; each one follows its timeline; it drifts with the velocity it was given, moves with a
-## rebase, and frees itself after 3 s.
+## the fireball, sparks and embers; each one follows its timeline; it drifts with the velocity it was given (the sparks stay
+## where it blew up), moves with a rebase, sparks included, and frees itself after 3 s.
 
 const RADIUS: float = 6.0
 
@@ -21,7 +21,10 @@ func test_it_has_every_component() -> void:
 	assert_eq(explosion.embers.amount, Explosion.EMBER_COUNT)
 	for particles: GPUParticles3D in [explosion.sparks, explosion.embers]:
 		assert_true(particles.one_shot, "one shot")
-		assert_false(particles.local_coords, "world space: the sparks leave the drifting ball behind")
+		# M2 kept them in global space so they leave the drifting ball behind; M3-T14 keeps that look with a node that stays
+		# where the ship blew up and moves only with a rebase (test_the_sparks_stay_where_it_blew_and_move_with_a_rebase).
+		assert_true(particles.top_level, "the sparks leave the drifting ball behind")
+		assert_true(particles.is_in_group(WorldFrame.SHIFTABLE_GROUP), "and a rebase moves them")
 		assert_eq(particles.explosiveness, 1.0)
 	assert_almost_eq(explosion.sparks.lifetime, 1.2, 1e-6)
 	assert_eq(explosion.embers.lifetime, 3.0)
@@ -93,6 +96,27 @@ func test_it_drifts_with_the_ships_velocity() -> void:
 
 func test_it_joins_world_shiftable_so_a_rebase_moves_it() -> void:
 	assert_true(explosion.is_in_group(WorldFrame.SHIFTABLE_GROUP))
+
+
+func test_the_sparks_stay_where_it_blew_and_move_with_a_rebase() -> void:
+	# M2: the sparks and embers leave the drifting ball behind. M3-T14: a rebase still moves them with the rest of the world,
+	# which particles kept in global space would not do (they would be left 5 km away).
+	var world := WorldFrame.new()
+	add_child_autofree(world)
+	var blast := Explosion.create(RADIUS, Vector3(10.0, 0.0, -20.0))
+	blast.position = Vector3(100.0, 0.0, 0.0)
+	world.add_child(blast)
+	blast._physics_process(0.5)
+	assert_almost_eq(blast.global_position, Vector3(105.0, 0.0, -10.0), Vector3.ONE * 1e-4, "the ball drifts")
+	for particles: GPUParticles3D in [blast.sparks, blast.embers]:
+		assert_almost_eq(particles.global_position, Vector3(100.0, 0.0, 0.0), Vector3.ONE * 1e-4,
+				"%s: left behind where it blew" % particles.name)
+		assert_true(particles.local_coords, "%s: its particles live in its frame, so they go where it goes" % particles.name)
+	world.rebase(Vector3(5000.0, 0.0, 0.0))
+	assert_almost_eq(blast.global_position, Vector3(-4895.0, 0.0, -10.0), Vector3.ONE * 1e-3)
+	for particles: GPUParticles3D in [blast.sparks, blast.embers]:
+		assert_almost_eq(particles.global_position, Vector3(-4900.0, 0.0, 0.0), Vector3.ONE * 1e-3,
+				"%s: moved by the rebase" % particles.name)
 
 
 func test_the_scene_builds_itself_when_instanced() -> void:

@@ -140,7 +140,7 @@ Main (Node3D)                              main.gd
 │   ├── WorldEnvironment                   Environment (black sky, no fog, tonemap filmic, glow on) + Compositor[gdgs effect]
 │   ├── KeyStar (DirectionalLight3D)       lights meshes only; splats are pre-lit
 │   └── SkySplats (GaussianSplatNode)      top_level = true; sky_follower.gd keeps origin == active camera origin
-├── World (Node3D, world_frame.gd)         every world object lives under here (group "world_shiftable")
+├── World (Node3D, world_frame.gd)         every world object lives under here (group "world_shiftable"); rebases at 5 km (M3-T14)
 │   ├── PlayerShip (ship.tscn, RigidBody3D)    ship.gd
 │   │   ├── CollisionShape3D x N           from hardpoints "collision" primitives (boxes/capsules)
 │   │   ├── HullSplats (GaussianSplatNode) identity transform; gaussian = starfury_aurora.ply import
@@ -184,7 +184,9 @@ Rules:
 - The ship never reads `Input`. It consumes a `FlightCommand` and a `CombatCommand` handed to it by `main.gd`
   each physics tick. An AI pilot (§14.7) produces the same two commands; `UiCommand` is player-only.
 - World objects are spawned through `World` (`WorldFrame`) from universe coordinates and must tolerate
-  `World.rebase()` at any tick (no cached world positions across ticks).
+  `World.rebase()` at any tick (no cached world positions across ticks). Since M3-T14 the main scene rebases whenever the
+  player is 5 km from the local origin: keep places as `UniversePos` or rebuild them from the live nodes every tick; a
+  World-local point that must outlive a tick follows `World.rebased` (§14.1).
 - Weapons and visuals read ship state through typed getters, never by reaching into sibling nodes.
 - Rendering (splat vs mesh) is invisible to gameplay code: `Ship` exposes hardpoints; which node draws the hull is
   decided by `SplatStatus`.
@@ -676,7 +678,7 @@ validates before calling. Values are formatted consistently (vectors to 2 decima
 | `time` | SimClock (T07) | `sim_time_s`, `warp`, `timescale` |
 | `input` | GodotInputSource (T07) | `pads` (name, GUID, trigger rest, raw axes), `keyboard_masked`, last command fields |
 | `ship` | Ship (T10) | `position`, `universe_position`, `velocity`, `speed`, `body_velocity`, `angular_rate_dps`, `assist_on` (w), `trim`, `pod_yaw`, `main_levels`, `retro_levels`, `mass_flow`, `fuel_kg` (w; M2-T14), `fuel_fraction` (0..1; 1 while `fuel_unlimited`) |
-| `world` | WorldFrame (T09) | `origin`, `origin_velocity`, `auto_rebase_distance_m` |
+| `world` | WorldFrame (T09) | `origin`, `origin_velocity`, `auto_rebase_distance_m` (5 000 in the main scene), `rebases` (count, automatic and console), `rebase_us` (the last one's wall-clock cost, shift, handlers and end-of-tick reset; M3-T14) |
 | `camera` | CameraRig (T12) | `mode` (w), `fov` |
 | `weapons` | PulseCannon (T13) | `mode` (w), `cooldown_s`, `charge` (w, 0..1 capacitor; M2-T14) |
 | `targeting` | TargetingController (T14) | `selected` (w: display name or `none`), `range_m`, `closing_mps`, `candidates` |
@@ -707,7 +709,7 @@ M1 commands:
 | `fallback [on\|off]` | SplatStatus | fallback meshes and panorama sky |
 | `respawn` | Main | ship reset (same as Back) |
 | `pause [on\|off]` | Main | tree pause (same as Start) |
-| `rebase <dx> <dy> <dz>` | WorldFrame | manual `World.rebase()`: the only way to exercise the seam at runtime in M1 |
+| `rebase <dx> <dy> <dz>` | WorldFrame | manual `World.rebase()`. Since M3-T14 the main scene's automatic rebase brings the player back to the origin in the same tick, so `rebase -900000 0 0` ends with `world.origin` on the player and `world.rebases` up by two |
 
 Weapon mode and target selection are reached with `set weapons.mode linked` and `set targeting.selected "NAV
 BRAVO"` rather than extra commands.
@@ -946,7 +948,9 @@ are the only requirements).
 1 unit = 1 m, SI. Ship ≈ 10 m long; M1 play area ≈ ±20 km (float32 error ≈ 2 mm there; fine). Sky radius 20 km
 around the camera, independent of ship position. M1 already routes all world content through `World`
 (`WorldFrame`): spawns take a `UniversePos` (64-bit) and are converted with `universe_to_local()` (not `to_local`, which would clash with Node3D's native method); `rebase(offset)` exists
-and is tested, but automatic rebasing is off (threshold 0 = disabled) because the M1 play area does not need it.
+and is tested. Automatic rebasing was off in M1 (threshold 0 = disabled, still the default of a bare `WorldFrame`) because
+the M1 play area does not need it; since M3-T14 the main scene rebases at 5 km (maintainer Q13: far from the launch point,
+float32 positions made the ship jump visibly).
 The full large-world design is §14.1.
 
 ## 11. Performance targets (M1)
@@ -1030,10 +1034,42 @@ Verified for Godot 4.7.2 (details in `docs/research-notes.md`):
   velocity (64-bit) and propagates them as a **free-falling test particle**, so local physics only feels tidal
   gravity (a ship near the orbiting station is effectively weightless, which is physically right).
 - **Position rebase** when the focus object is > 5 km from the local origin: every `world_shiftable` node moves
-  by `-offset` (`global_position`, then `reset_physics_interpolation()`); `origin += offset`.
-- **Velocity rebase** when the focus speed relative to the frame exceeds 200 m/s: subtract `v` from every body's
-  `linear_velocity` and projectile velocity; `origin_velocity += v`. Keeps Jolt well under its cap and keeps
-  float32 velocities small.
+  by `-offset` (`global_translate`); `origin += offset`; interpolation is reset at the end of that tick (below). **On in play since M3-T14**
+  (maintainer Q13: at 900 km a float32 coordinate steps in 6.25 cm, and the ship's splats jumped while thrusting):
+  `main.tscn` sets `World.auto_rebase_distance_m` to 5 000 with the player as `focus`; a bare `WorldFrame` keeps 0.
+  - Where in the tick: `World._physics_process` (priority 0; §15.3), after the AI drivers (-10), the console and `Main`,
+    whose commands are levels and rates and stay valid, and before every node below `World` (ships, bolts, props, effects)
+    and the late systems, which all see the new frame. Jolt's contacts of the last step are still in the old frame
+    (`RamResolver` takes the rebase off them).
+  - Rules: places that outlive a tick are `UniversePos` (wave anchors, waypoints, the wing's leader link, the HUD's
+    reference point, the respawn point) or are rebuilt from the live nodes each tick (contacts, perceptions, targets,
+    hit sweeps, slots). The two things a rebase cannot reach by itself listen to `World.rebased`: the cockpit pivot's
+    interpolation (`Main`; it follows the ship through a `RemoteTransform3D`) and the points of open ram contact windows
+    (`RamTracker.shift`). Parked pool ships and debris are shifted
+    with the rest (harmless: they are placed again from a `UniversePos` when taken out). Particles stay in their node's
+    frame (`local_coords`), never in global space, or a rebase would leave them behind (the explosion's sparks).
+  - Physics interpolation: **the world stalls together for the rebase tick.** A rebase inside a tick leaves interpolation
+    alone; `World`'s internal `RebaseSettler` (physics priority 1 000 000, last in the tick, §15.3) then resets every visible,
+    interpolated shiftable node, after everything has moved. The frames until the next tick draw every body, bolt, piece of
+    debris, effect and both cameras at their tick pose, unblended: nothing blends across the jump, view-relative motion is
+    kept (a bolt beside the ship stays beside it), and the HUD, which projects tick positions, matches what is drawn. The
+    cost is at most one tick of held motion per rebase (one repeated frame; AC22 (H)). Hidden (parked) nodes and silent
+    voices are skipped (`acquire`, `launch`, `play` reset them when they come back); a rebase outside a tick (the console
+    between frames) resets at once. Measured at 5 000 m/s through a 5 km rebase (`test_rebase_in_play`, per rendered frame):
+    resetting at the rebase itself (the first M3-T14 build) drew the bodies held while bolts and debris blended on, so a
+    bolt's offset from the ship jumped 83 m off its motion in the frames of the rebase tick; not resetting at all draws
+    everything sweeping by the offset over that tick (view-relative motion exact), but the HUD's markers through the chase
+    camera were then 3.4 km off what is drawn (and the sky in the cockpit view, and anything spawned in that tick, would be
+    too), so that was rejected. Now: 0.001 m and 0.000 m.
+  - Cost: one rebase of the full sandbox (the player and 10 pooled ships, 20 parked debris chunks, 16 sound voices, 5 buoys
+    and the chase camera: 53 nodes, plus bolts and effects in flight) costs about 0.28-0.30 ms idle (the median of a fight's
+    rebases, from run to run; min about 0.12 ms, wall-clock spikes to about 0.6 ms), the shift, the `rebased` handlers and
+    the end-of-tick reset together; the ships dominate it (a Starfury is 108 nodes, which the shift and the reset both walk).
+    `world.rebases` and `world.rebase_us` watch it. Tests: `tests/integration/test_rebase_in_play.gd` and the `RebaseFight`
+    fixture (`tests/fixtures/rebase_fight.gd`), which runs any live scene with the threshold forced low.
+- **Velocity rebase** (roadmap M5, still off) when the focus speed relative to the frame exceeds 200 m/s: subtract `v`
+  from every body's `linear_velocity` and projectile velocity; `origin_velocity += v`. Keeps Jolt well under its cap and
+  keeps float32 velocities small.
 - Local space radius ~10 km. Anything farther (planets, sun, distant ships and stations) is not in Jolt: it is
   propagated in universe coordinates and rendered in scaled space (§14.4). B5's ~8 km length fits: at ±8 km
   float32 resolution is ~1 mm.
@@ -1169,7 +1205,7 @@ Built in M1 because each is cheap and avoids a later rewrite:
 
 | Seam | M1 task | Avoids later |
 |---|---|---|
-| `UniversePos` + `World`/`WorldFrame` parent for all world objects, `rebase()` tested, auto-rebase off | T09 | Re-parenting every scene and auditing raw `Vector3` positions when large worlds arrive |
+| `UniversePos` + `World`/`WorldFrame` parent for all world objects, `rebase()` tested, auto-rebase off (on in play since M3-T14, §14.1) | T09 | Re-parenting every scene and auditing raw `Vector3` positions when large worlds arrive |
 | `World.environment_accel()` applied by the Ship each tick (returns zero); `env_accel_b` feed-forward in the brake | T08, T10 | Retrofitting gravity and hyperspace fields into the flight path |
 | `SimClock` autoload; rule: no wall-clock time in gameplay | T01 | Hunting timers when time warp lands |
 | Flight/Combat/Ui command split | T06 | Untangling player-only input from what AI pilots write |
@@ -1271,12 +1307,17 @@ One physics tick, in order (`process_physics_priority`, then tree order):
 2. `DebugConsole` statements (autoload, so first among the priority-0 nodes; a `rebase` here moves everything
    together).
 3. `Main` (0): player `PilotCommand` -> `Combatant.apply_commands` (the same call).
+3b. `World` (0, `Main`'s child, so after it and before every node below it; M3-T14): the automatic position rebase when
+   the player is more than 5 km from the local origin (§14.1). Commands built before it are levels and rates and stay
+   valid; everything after it in the tick works in the new frame.
 4. Ships (0): flight model and forces; their `PulseCannon`s spawn bolts (`last_step = 0`).
 5. Projectiles (0): move, record `last_step = velocity * delta`, expire.
 6. `TargetingController`s (100): refresh candidates (inactive targetables skipped).
 7. `HitResolver` (200): sweep, damage, impact flashes. `destroyed` -> `DestructionDirector`, which hides and
    disables the ship in the same tick, so nothing targets or hits it afterwards.
 8. `WaveDirector` (300): count the dead, spawn from the pool.
+8b. `World`'s `RebaseSettler` (1 000 000, last; M3-T14): in a tick with a rebase, resets the interpolation of every visible
+   shiftable node, so that tick is drawn held, all together (§14.1).
 9. Jolt steps the bodies.
 
 ```
@@ -1386,7 +1427,9 @@ range), own hull bar with a `GOD` tag, and one status line (wave, raiders left, 
 
 `ScenarioLoader` gains optional `pools` (`{"raider_fighter": 6}`), `waves[]` and `loop`. A spawn is `{type, name,
 anchor: "player" | "origin", offset, velocity, behaviour}`; positions and waypoints are offsets from the anchor's
-universe position at wave start (summed as `UniversePos`, never through float32). `ShipCatalog` maps `type` to a
+universe position at wave start (summed as `UniversePos`, never through float32). `origin` is the scenario's origin,
+universe (0, 0, 0), where its props are placed, not the World's local origin, which the rebase keeps near the player
+(M3-T14). `ShipCatalog` maps `type` to a
 `ShipSpec`. `WavePlan` (pure, fake-clock tested): `COUNTDOWN(delay) -> ACTIVE -> CLEARED -> next`, then loop from
 `loop.from_wave`, one more attacker per loop up to the pool size. `settings.scenario` (`combat_sandbox` by
 default, or `free_flight`) picks the file; `Main.scenario_path` overrides it for tests.
@@ -1554,7 +1597,8 @@ data/scenarios/{instructor_route,dogfight}.json
 
 1. `AiPilotDriver`s (-10): `ContactScan` (first driver of the tick builds it), `Perception`, brain, avoidance filter,
    `Combatant.apply_commands`.
-2. Console, `Main` (0), ships, projectiles as before. `Main` passes order edges from `UiCommand` to the `WingDirector`.
+2. Console, `Main` (0), the World's automatic rebase (0, M3-T14), ships, projectiles as before. `Main` passes order edges
+   from `UiCommand` to the `WingDirector`.
 3. `TargetingController`s (100), `HitResolver` (200), `RamResolver` (210): contacts reported by Jolt since its last run
    and swept rams; destruction in the same tick (§15.7).
 4. `WingDirector` (290): orders, acknowledgements, leader changes; `WaveDirector` (300): waves; on `wave_started` it calls

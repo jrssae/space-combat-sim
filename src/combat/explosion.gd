@@ -11,6 +11,10 @@ extends Node3D
 ##
 ## It drifts with `velocity` (it was the ship's), joins `world_shiftable` so a rebase moves it, and frees itself after
 ## 3 s. Animation is `_process` (visuals), so a paused game freezes it; `advance` is public for tests.
+##
+## The sparks and embers stay where the ship blew up while the ball drifts on (M2). Their nodes are `top_level` (they do not
+## follow the drifting node), placed where it appears, in `world_shiftable` themselves, and keep their particles in their own
+## frame (`local_coords`), so a rebase moves the particles too (M3-T14): particles in global space would be left behind.
 
 const LIFETIME_S: float = 3.0
 const LIGHT_S: float = 0.25
@@ -56,8 +60,9 @@ func _init() -> void:
 func _ready() -> void:
 	if light == null:
 		_build()  # instanced from the scene instead of `create`
-	sparks.restart()
-	embers.restart()
+	for particles: GPUParticles3D in [sparks, embers]:
+		particles.global_transform = Transform3D(Basis.IDENTITY, global_position)  # top_level: where it blew up
+		particles.restart()
 	advance(0.0)
 
 
@@ -147,7 +152,9 @@ func _particles(node_name: String, count: int, lifetime_s: Vector2, speed: Vecto
 	p.lifetime = lifetime_s.y
 	p.one_shot = true
 	p.explosiveness = 1.0
-	p.local_coords = false
+	p.top_level = true
+	p.local_coords = true
+	p.add_to_group(WorldFrame.SHIFTABLE_GROUP)
 	p.emitting = false
 	p.fixed_fps = 0
 	p.visibility_aabb = AABB(Vector3(-300.0, -300.0, -300.0), Vector3(600.0, 600.0, 600.0))

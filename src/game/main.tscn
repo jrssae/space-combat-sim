@@ -23,6 +23,7 @@ script = ExtResource("1_main")
 
 [node name="World" type="Node3D" parent="."]
 script = ExtResource("3_world")
+auto_rebase_distance_m = 5000.0
 
 [node name="CameraRig" parent="World" instance=ExtResource("4_rig")]
 

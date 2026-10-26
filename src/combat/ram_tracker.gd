@@ -9,6 +9,9 @@ extends RefCounted
 ##    For each rigid pair it does not sweep (below tunnelling speed): `keep_touching(a, b)`.
 ## 3. `end_tick()`.
 ##
+## Rebase (M3-T14): a window keeps the World-local point of its contact until it closes, so the resolver calls `shift` when the
+## World rebases.
+##
 ## Contact windows. When a body reports a contact with a body it did not touch on the last tick, a window opens for that pair
 ## (hull, other). For `CONTACT_WINDOW_TICKS` ticks, counting the first, it tracks the largest change of the hull's velocity
 ## from before the contact that the hull's own forces do not explain (`RamMath.contact_dv`). Jolt may report a speculative
@@ -175,6 +178,13 @@ func end_tick() -> void:
 	for key: String in _swept_at.keys():
 		if _tick - _swept_at[key] >= SWEPT_GRACE_TICKS:
 			_swept_at.erase(key)
+
+
+## The World was rebased by `offset` (M3-T14): the open windows' World-local points move by `-offset`, as the hulls did.
+## Velocities, normals and ids do not depend on the origin.
+func shift(offset: Vector3) -> void:
+	for key: String in _windows:
+		_windows[key].ram.point -= offset
 
 
 ## Forgets everything (ram damage switched off): no velocity, contact, window or grace carries over.

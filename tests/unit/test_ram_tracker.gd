@@ -57,6 +57,25 @@ func test_a_bounce_lands_one_ram_per_ship_when_the_window_closes() -> void:
 		assert_eq(ram.normal, Vector3(0.0, 0.0, -1.0))
 
 
+func test_a_rebase_while_a_window_is_open_shifts_its_point_with_the_world() -> void:
+	# M3-T14: the point is World-local, read when the window opens and used when it closes two ticks later.
+	_tick([_sample(A, Vector3(0.0, 0.0, -15.0)), _sample(B, Vector3(0.0, 0.0, 15.0))])
+	_tick([_sample(A, Vector3.ZERO, [B]), _sample(B, Vector3.ZERO, [A])])
+	tracker.shift(Vector3(5000.0, 0.0, -300.0))
+	_tick([_sample(A, Vector3.ZERO, [B]), _sample(B, Vector3.ZERO, [A])])
+	tracker.shift(Vector3(0.0, 100.0, 0.0))
+	var rams: Array[RamTracker.ContactRam] = _tick([_sample(A, Vector3.ZERO, [B]), _sample(B, Vector3.ZERO, [A])])
+	assert_eq(rams.size(), 2)
+	for ram: RamTracker.ContactRam in rams:
+		assert_eq(ram.point, Vector3(-5000.0, -100.0, 295.0), "moved by minus both offsets, like the hulls")
+		assert_eq(ram.normal, Vector3(0.0, 0.0, -1.0), "a direction: unchanged")
+
+
+func test_a_shift_with_no_window_open_changes_nothing() -> void:
+	tracker.shift(Vector3(5000.0, 0.0, 0.0))
+	assert_eq(_head_on(4).size(), 2)
+
+
 func test_a_resting_contact_rams_only_once() -> void:
 	assert_eq(_head_on(60).size(), 2)
 

@@ -270,3 +270,20 @@ state combat / hull / raiders / debris / hud / audio       the new providers
 - [ ] **Splat backend** shows `SPLATS COMPUTE` in the overlay (note GPU and driver if not).
 
 Acceptance record: copy the block at the end of `docs/milestones/m2-combat-sandbox.md`, fill it in and send it back.
+
+# Play-testing M3 (AI Pilots and Wingmen)
+
+The full M3 guide (keyboard, orders, instructor, AC14-AC19) comes with M3-T12. This check can be run now.
+
+Far from the launch point (maintainer Q13): the World now keeps its origin within 5 km of you (`world.auto_rebase_distance_m`),
+re-centring as you fly ("a rebase"), so float32 positions stay fine however far you go. `watch world.rebases` counts the rebases
+and `get world.rebase_us` gives the last one's cost. `rebase -900000 0 0`, the console line that showed the jumping before, is
+now undone in the same tick (you will see `world.rebases` go up by two and `world.origin` back on you); to be truly far away, fly:
+a few minutes of both mains with assist on (up to its 5 000 m/s) cover 900 km, and the HUD's `REF` range shows how far you are.
+
+- [ ] **AC22 Far from the launch point.** After `rebase -900000 0 0`, and again after a long flight (`REF` several hundred km),
+      thrust in every direction (both mains, retros, strafe, while pitching and yawing): the ship shows no jumping, in splat mode
+      and in mesh mode (F4). Then fly at full speed through rebases (one every 5 km: every second at 5 000 m/s) in both cameras:
+      no hitch at each one (the picture holds still for one tick at a rebase, everything together: at most one repeated
+      frame; watch a buoy, a ship or your own bolts passing), and an explosion or debris flying when it happens stays where
+      it is and looks as in M2 (AC16).

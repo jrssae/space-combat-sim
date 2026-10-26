@@ -187,6 +187,27 @@ expect_line "${log}" "[console] render.splat_backend = headless" || smoke_status
 reject_text "${log}" "[console] error:" || smoke_status=1
 reject_text "${log}" "ERROR:" || smoke_status=1
 
+echo "== Console smoke run: a rebase 900 km out comes straight back on the real main scene"
+# M3-T14 / AC21 (maintainer Q13): `rebase -900000 0 0` puts everything 900 km from the local origin; the automatic rebase
+# (5 km in main.tscn) brings the player back in the same tick, so the origin lands on the player, still at the launch point.
+log="${REPORTS}/console_rebase.log"
+rebase_status=0
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec="wait 30; rebase -900000 0 0; wait 1; state world; get ship.position; quit" > "${log}" 2>&1 || rebase_status=$?
+cat "${log}"
+if (( rebase_status != 0 )); then
+    echo "run_tests.sh: rebase smoke run exited ${rebase_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] world.origin = [-900000.00, 0.00, 0.00] m" || smoke_status=1
+expect_line "${log}" "[console] world.origin = [0.00, 0.00, 0.00] m" || smoke_status=1
+expect_line "${log}" "[console] world.auto_rebase_distance_m = 5000.00 m" || smoke_status=1
+expect_line "${log}" "[console] world.rebases = 2" || smoke_status=1
+expect_text "${log}" "[console] world.rebase_us = " || smoke_status=1
+expect_line "${log}" "[console] ship.position = (0.00, 0.00, 0.00) m" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
+
 echo "== Console smoke run: god mode and damage on the real main scene"
 # M2-T03 / AC8: with god on the player's hull does not change; with god off it does.
 log="${REPORTS}/console_damage.log"

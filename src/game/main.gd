@@ -51,6 +51,7 @@ var _spawn_basis: Basis = Basis.IDENTITY
 @onready var effects: Node3D = $World/Effects
 @onready var debris: DebrisPool = $World/Debris
 @onready var audio: AudioDirector = $World/Audio
+@onready var rams: RamResolver = $Combat/RamResolver
 @onready var director: DestructionDirector = $Combat/DestructionDirector
 @onready var waves: WaveDirector = $Combat/WaveDirector
 @onready var wings: WingDirector = $Combat/WingDirector
@@ -102,10 +103,13 @@ func _ready() -> void:
 	if bool(scenario.get("ok", false)):
 		_spawn_props(scenario["props"])
 	camera_rig.setup(ship, ship.cockpit_anchor, ship.get_chase_offset(), ship.set_cockpit_interior_visible)
+	# The World keeps its origin within `auto_rebase_distance_m` (5 km, main.tscn) of the player (M3-T14, §14.1).
 	world.focus = ship
 	# The chase camera is world_shiftable; the cockpit camera follows a RemoteTransform3D, so drop its interpolation
 	# history on a rebase too, or it would smear the jump across one frame.
 	world.rebased.connect(func(_offset: Vector3) -> void: camera_rig.cockpit_pivot.reset_physics_interpolation())
+	# Ram contact points outlive a tick; they move with the rebase.
+	rams.world = world
 	_register_console()
 
 
@@ -244,6 +248,11 @@ func _wire_audio() -> void:
 		audio.watch_ship(pooled)
 
 
+## The HUD's reference point (its `REF` range and closing speed): the launch point, for now. Universe coordinates.
+func reference_point() -> UniversePos:
+	return _spawn_position
+
+
 ## This frame's `HudInput`, read from the live nodes (the HUD never caches anything).
 func _build_hud_input() -> HudInput:
 	var camera: Camera3D = camera_rig.active_camera()
@@ -260,7 +269,7 @@ func _build_hud_input() -> HudInput:
 	input.own_velocity = ship.linear_velocity
 	input.show_velocity_marker = bool(Settings.get_value(&"hud_velocity_marker"))
 	input.has_reference = true
-	input.reference_position = world.universe_to_local(_spawn_position)  # the launch point, for now
+	input.reference_position = world.universe_to_local(reference_point())  # with this frame's origin: it follows every rebase
 	input.tracking = ship.get_flight_output().tracking
 	var muzzles: Array[Node3D] = ship.get_muzzles()
 	var mean := Vector3.ZERO

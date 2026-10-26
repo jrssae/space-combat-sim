@@ -128,6 +128,43 @@ func test_rebase_resets_physics_interpolation() -> void:
 	assert_almost_eq(drawn, marker.global_position, _vec_tol(), "drawn where it is, not interpolated from 5 km away")
 
 
+## Moves `node` by `step` every physics tick, late in the tick (as bolts and debris move after the rebase).
+class Mover extends Node:
+	var node: Node3D = null
+	var step := Vector3.ZERO
+
+	func _init() -> void:
+		process_physics_priority = 500
+
+	func _physics_process(_delta: float) -> void:
+		node.position += step
+
+
+func test_a_rebase_inside_a_tick_draws_the_world_at_its_tick_pose_until_the_next() -> void:
+	# The world stalls together for the rebase tick (§14.1): the interpolation reset waits for the end of the tick, so a node
+	# that moves later in it is drawn at its tick pose, neither blended from its shifted place nor sliding across the offset.
+	var marker := Node3D.new()
+	world.spawn(marker, UniversePos.new(10.0, 0.0, 0.0))
+	var mover := Mover.new()
+	mover.node = marker
+	mover.step = Vector3(0.0, 0.0, -50.0)
+	add_child_autofree(mover)
+	await get_tree().physics_frame
+	await get_tree().process_frame
+	await get_tree().physics_frame  # the start of a tick, inside it, as the automatic rebase
+	assert_true(Engine.is_in_physics_frame())
+	world.rebase(Vector3(5000.0, 0.0, 0.0))
+	await get_tree().process_frame
+	var fraction: float = Engine.get_physics_interpolation_fraction()
+	var drawn: Vector3 = marker.get_global_transform_interpolated().origin
+	assert_almost_eq(drawn, marker.global_position, _vec_tol(),
+			"drawn at its tick pose at fraction %.2f, %.1f m from it" % [fraction, drawn.distance_to(marker.global_position)])
+	await get_tree().physics_frame
+	await get_tree().process_frame
+	assert_lt(marker.get_global_transform_interpolated().origin.distance_to(marker.global_position), 50.01,
+			"and blends its own motion again from the next tick")
+
+
 func test_spawn_places_node_and_registers_it() -> void:
 	world.origin = UniversePos.new(ONE_AU_M, 0.0, 0.0)
 	var node := Node3D.new()
@@ -167,6 +204,19 @@ func test_frame_velocity_starts_at_zero() -> void:
 	for i: int in 3:
 		assert_eq(world.origin_velocity[i], 0.0)
 	assert_eq(world.origin.system_id, &"local")
+
+
+func test_rebases_are_counted_and_the_last_one_timed() -> void:
+	assert_eq(world.rebases, 0)
+	assert_eq(world.last_rebase_us, 0, "nothing measured before the first rebase")
+	for i: int in 20:
+		var marker := Node3D.new()
+		world.spawn(marker, UniversePos.new(10.0 * i, 0.0, 0.0))
+	world.rebase(Vector3(5000.0, 0.0, 0.0))
+	world.rebase(Vector3(-5000.0, 0.0, 0.0))
+	assert_eq(world.rebases, 2)
+	assert_gt(world.last_rebase_us, 0, "the cost of the last one, in microseconds (wall clock, profiling only)")
+	assert_lt(world.last_rebase_us, 100000)
 
 
 func test_auto_rebase_is_off_by_default() -> void:
@@ -217,6 +267,9 @@ func test_console_provider_and_rebase_command() -> void:
 	assert_eq(registry.format_path("world.origin"), "world.origin = [5000.00, 0.00, -20.00] m")
 	assert_eq(registry.format_path("world.origin_velocity"), "world.origin_velocity = [0.00, 0.00, 0.00] m/s")
 	assert_eq(registry.format_path("world.auto_rebase_distance_m"), "world.auto_rebase_distance_m = 0.00 m")
+	assert_eq(registry.format_path("world.rebases"), "world.rebases = 1")
+	assert_string_contains(registry.format_path("world.rebase_us"), "world.rebase_us = ")
+	assert_string_ends_with(registry.format_path("world.rebase_us"), " us")
 	assert_false(registry.resolve("world.rebase")["ok"], "methods are not keys")
 	assert_string_contains(registry.execute("rebase 1 2")[0].error, "expects three numbers")
 

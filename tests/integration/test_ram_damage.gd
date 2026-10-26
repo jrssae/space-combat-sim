@@ -45,6 +45,7 @@ func before_each() -> void:
 	world.add_child(projectiles)
 	rams = RamResolver.new()
 	rams.name = "RamResolver"
+	rams.world = world
 	add_child_autofree(rams)
 	var spec := load(SPEC_PATH) as ShipSpec
 	alpha = _starfury(spec, "ALPHA 1", true, Vector3.ZERO)
@@ -133,6 +134,37 @@ func test_a_thirty_mps_head_on_costs_each_ship_at_least_half_its_hull_once() -> 
 	assert_eq(infos.size(), 2, "still one ram per ship")
 	assert_eq(alpha.damageable.hull.hp, hp_after)
 	assert_eq(rams.events, 2)
+
+
+## Rebases the world by `offset` every physics tick. It runs after the ships (priority 0, later in tree order; the automatic
+## rebase runs before them) and before the resolver (210), so every tick's contacts are read after a rebase, as in play.
+class Rebaser extends Node:
+	var world: WorldFrame = null
+	var offset := Vector3.ZERO
+
+	func _physics_process(_delta: float) -> void:
+		world.rebase(offset)
+
+
+func test_a_contact_ram_lands_on_the_hull_when_the_world_rebases_every_tick() -> void:
+	# A contact ram is measured over a window of ticks from the point Jolt reported in its last step; the world moving under it
+	# (M3-T14) must not leave the point behind. Rebasing every tick covers a rebase in the tick the contact is first read and in
+	# the ticks its window stays open.
+	var rebaser := Rebaser.new()
+	rebaser.world = world
+	rebaser.offset = Vector3(1000.0, -200.0, 300.0)
+	add_child_autofree(rebaser)
+	var placed: Array[float] = []
+	rams.ram_resolved.connect(func(info: HitInfo) -> void:
+		var hull := instance_from_id(info.target_id) as Ship
+		placed.append(info.point.distance_to(hull.global_position) - Damageable.of(hull).bounding_radius))
+	_head_on(30.0)
+	await _ticks(15)
+	assert_eq(infos.size(), 2, "one ram per ship, as without the rebases")
+	assert_eq(placed.size(), 2)
+	for beyond: float in placed:
+		assert_lt(beyond, 0.0, "the ram point lies on the hull it hurt (%.1f m outside its bounding sphere)" % beyond)
+	rebaser.queue_free()
 
 
 func test_god_mode_spares_the_player_and_the_bounce_still_happens() -> void:
@@ -404,6 +436,10 @@ class TestInTheMainScene extends GutTest:
 		assert_lt(main.ship.process_physics_priority, rams.process_physics_priority, "the player's ship")
 		for combatant: Combatant in main.ships.all_ships():
 			assert_lt(combatant.ship.process_physics_priority, rams.process_physics_priority, "a pooled ship")
+
+	func test_the_ram_resolver_follows_the_worlds_rebases() -> void:
+		var rams := main.get_node(^"Combat/RamResolver") as RamResolver
+		assert_eq(rams.world, main.world, "its contact points move with the rebase (M3-T14)")
 
 	func test_a_raider_destroyed_by_a_ram_counts_as_a_kill() -> void:
 		var rams := main.get_node(^"Combat/RamResolver") as RamResolver

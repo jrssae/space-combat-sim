@@ -1075,6 +1075,91 @@ T12.
   `despawn all`, spawn with yaw and pitch, `set targeting.selected "ALPHA 2"`, `timescale 0.1`, `kill target`: five Starfury chunks flying,
   none mesh-only).
 
+**M3-T14 (position rebase in play, Q13).**
+- **On.** `main.tscn` sets `World.auto_rebase_distance_m` to 5 000 m (`world.focus` is the player); a bare `WorldFrame` keeps 0.
+  The rebase runs in `World._physics_process` at priority 0, after the AI drivers (-10), the console and `Main`, before every
+  node below `World` and the late systems (architecture §14.1, §15.3 step 3b). `WorldFrame` counts `rebases` and times the last
+  one (`last_rebase_us`); the `world` provider shows both (`rebases`, `rebase_us`). The velocity rebase stays M5.
+- **Reproduced first.** In the build before T14, after `rebase -900000 0 0` and under full main thrust with the nose off every
+  axis, the change of step in universe coordinates (`(u[k] - u[k-1]) - (u[k-1] - u[k-2])`, 64-bit) spread up to 57.1 mm round its
+  mean (rms 17.5 mm; a dt^2 is 8.3 mm). With the rebase on: 0.005 mm (rms 0.002). A nose along -Z showed nothing: only the
+  coordinate that is 900 km long quantises, so the test thrusts diagonally.
+- **The audit** (everything that keeps a position between ticks). Fixed:
+  - `RamResolver` / `RamTracker`: an open contact window kept its World-local point for up to three ticks, and Jolt's contacts
+    are in the frame of its last step, so a rebase in between put the ram's point (and its damage zone) kilometres off (3.2 km
+    in the test). `RamResolver.world` (set by `Main`) follows `rebased`: the points read this tick lose the rebases since the
+    step, and `RamTracker.shift` moves the open windows.
+  - `WaveDirector`: the `origin` anchor was `world.to_universe(Vector3.ZERO)`, the World's local origin, which now follows the
+    player. It is the scenario's origin, universe (0, 0, 0), where the props are (no shipped scenario uses it).
+  - `Explosion`: sparks and embers were `GPUParticles3D` in global space, which a rebase cannot move (they would be left 5 km
+    away). Their nodes are now `top_level`, placed where the ship blew up, in `world_shiftable`, with `local_coords`: the M2 look
+    (they stay behind while the ball drifts) is kept, and a rebase moves them. `test_explosion`'s M2 assertion
+    `assert_false(local_coords)` became the same intent through the new mechanism (`top_level`, shiftable).
+  - `AudioDirector.play`: a voice moved to a new sound inside a tick blended from its last sound (and from where a rebase left it)
+    until the next tick; it resets its interpolation now.
+  - Safe as they were: `ShipPool` and `DebrisPool` parking (shifted with the rest; placed again from a `UniversePos` when taken
+    out), impact flashes and muzzle flashes (children of the ship), engine hums (children of the ship), the HUD reference point
+    (`UniversePos`, converted every frame; `Main.reference_point()` is new, for tests), `WaveDirector`'s player anchor, props,
+    `ContactScan` and `Perception` (built at -10 every tick, before the rebase), `AiPilot` behaviours (contacts re-picked every
+    tick in `score`), `AiContext.leader_link_position` and the formation slot (`UniversePos` / rebuilt from the leader's contact),
+    replenish (positions taken and used in one call), `PatrolBrain` waypoints (`UniversePos`), `CameraRig` (chase camera
+    shiftable; cockpit pivot reset by `Main` on `rebased`), `SplatPoseSync` (only a fixed offset), debris chunks and bolts
+    (shiftable, store velocities and a step), `HitResolver` (nothing kept between ticks), `TargetingController` (candidates
+    rebuilt at 100; `apply` and `select_nearest_hostile` gather first), `SkyFollower` (camera-relative, outside World, after
+    the rebase). T09 routes and T10 guard points must keep `UniversePos` (or rebuild from live nodes) and can prove it with
+    `RebaseFight`.
+- **AC21 numbers.** After `rebase -900000 0 0` the automatic rebase in the same tick puts the player on the origin and moves the
+  13 ships, buoys and bolts by at most 0.021 mm in universe terms, velocities by 0 (the console's own shift to 900 km rounds
+  them by up to 21 mm: float32 at 900 km, the bug itself). Sandbox fight with the wing on ENGAGE AT WILL, the threshold at 40 m
+  and the player cruising at 60 m/s (`SPEED_UP` 4): waves 1 and 2 cleared in about 70 s of sim time, 96 rebases (longest gap
+  0.78 s), 42 bolt hits (4 in rebase ticks), 6 kills; universe jumps within each body's motion, chase camera 0.0000 m, HUD range
+  0.0000 m, every node drawn at its tick pose in the frames after the rebases. The 1 mm clause is measured from the state right
+  after the console's own 900 km shift (its float32 rounding of about 21 mm there is unavoidable; accepted at review). Cost of one
+  rebase of the full sandbox: see fix round 1 below (the first build measured a median of 0.22-0.45 ms with spikes to 1.1 ms).
+- **Interpolation (fix round 1).** The first build reset every shifted node at the rebase. The bodies were then drawn held at their
+  tick-start pose for one tick while bolts, debris and the explosion ball, moved later in the tick, blended on, so at 5 000 m/s a
+  bolt beside the ship jumped 83 m off its motion in the view once a second. Now the world stalls together: `rebase` leaves the
+  interpolation alone and `World`'s internal `RebaseSettler` (physics priority 1 000 000, last in the tick) resets every visible,
+  interpolated shiftable node at the end of a tick with a rebase, so that tick is drawn held, everything together (at most one
+  repeated frame; AC22 stays (H)); outside a tick `rebase` resets at once. The alternative, no reset at all, draws everything
+  sweeping by the offset over the tick, smooth in the view, but measured the HUD's markers through the chase camera 3.4 km off
+  what is drawn (the sky in the cockpit and anything spawned in that tick would be off too), so it was not taken. Measured per
+  rendered frame (`test_through_a_rebase_at_full_speed_...`): bolt off its motion relative to the ship 83.3 m before, 0.001 m now;
+  HUD versus drawn NAV ALPHA 0.000 m; chase camera and cockpit pivot locked to the drawn ship (0.0007 m, 0.0005 m). Mutation
+  checks of the first build: without any reset the fight fixture fails 3 052 times; with the chase camera out of `world_shiftable`
+  it fails at every rebase (43-44 m).
+- **Cost (fix round 1).** Hidden (parked) nodes and silent voices are no longer reset (they are re-placed and reset when they come
+  back); parked ships and debris stay in `world_shiftable` and are still shifted (`test_ship_pool`, `test_debris_pool`). One
+  rebase of the full sandbox (shift, `rebased` handlers and end-of-tick reset), over a fight's 96 rebases, idle: median
+  0.28-0.30 ms from run to run, min about 0.12 ms, max 0.5-0.6 ms (the first build on the same machine: median 0.39-0.45 ms, max
+  0.9-1.2 ms). The ships dominate (a Starfury is 108 nodes, walked by the shift and by the reset): about 17 us to reset and 7-10
+  us to shift each. The median stays asserted under 0.5 ms. The 900 km test prints its rebase cost without its own snapshot
+  handler.
+- **Accepted at review, no change.** `test_explosion`'s M2 assertion change (`local_coords`; the new test checks the behaviour
+  directly): M2 AC16's explosion look needs an (H) glance, listed under AC0 at merge. The 1 mm clause after the console's own shift
+  (above).
+- **`RebaseFight`** (`tests/fixtures/rebase_fight.gd`), for T09, T10, T13: `await RebaseFight.run(test, main, sim_s, until :=
+  Callable(), threshold_m := 40.0, cruise_mps := 60.0, rebase_every_s := 0.0) -> RebaseFight`. It forces the threshold down, gives
+  the player `cruise_mps` along its nose when slower (0: the caller moves the player), with `rebase_every_s` > 0 forces a 1 km
+  rebase at the start of a tick whenever that much sim time passed without one (a player who sits still), runs until `sim_s` of
+  sim time or `until`, restores the threshold and asserts: a rebase at least every 2 s; no ship, prop or bolt jumps more than its
+  motion plus 1 m in a tick; every bolt hit on its bolt's path and its target's hull, every ram on its hull; after every rebase
+  tick the structure (each object under World shiftable or below a shiftable node, every `top_level` node below World shiftable
+  itself, no particles in global space: the sparks bug, caught by a mutation run); the chase camera moved with the ship at each rebase
+  (1 mm) and kept its offset from the drawn ship every frame (1 cm); the HUD's reference range equals the universe distance;
+  every visible interpolated node of World drawn at its tick pose (1 cm) in the frame after a rebase. It returns the counts
+  (`rebases`, `forced_rebases`, `rebase_ticks`, `hits`, `hits_in_rebase_ticks`, `rams`, `kills`, `rebase_us`) and `summary()` for
+  the caller's own asserts.
+- **Tests.** New `tests/integration/test_rebase_in_play.gd` (8: the 5 km setting, 900 km out and back, the thrust jitter with and
+  without the rebase, a change-of-step window across an automatic 5 km rebase under thrust (0.46 mm, the 5 km float32 step), the
+  low-threshold sandbox fight, 4 000 m/s through 5 km rebases with an explosion and debris in flight, the view at 5 000 m/s through
+  a rebase, a still player rebasing on the fixture's timer), `test_world_frame` (an in-tick rebase draws the world at its tick
+  pose until the next tick),
+  `test_world_frame` (count and cost, provider keys), `test_ram_tracker` (shift), `test_ram_damage` (a contact ram with the world
+  rebasing every tick; `Main` wires the resolver), `test_wave_director` (origin anchor after a rebase), `test_explosion` (sparks
+  stay and move with a rebase), `test_audio_director` (a reused voice is heard at its new place at once).
+  `scripts/run_tests.sh`: `rebase -900000 0 0; wait 1; state world; get ship.position` on the real main scene.
+
 ## Definition of done (M3)
 
 - T01-T12 merged into `m3`, `scripts/run_tests.sh` green, `docs/third-party.md` current, no generated binaries committed.
