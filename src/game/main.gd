@@ -75,7 +75,7 @@ func _ready() -> void:
 	_spawn_ship()
 	# The player leads wing ALPHA (architecture §16 D36). Its members join later: allies from the pool (M3-T08) or a
 	# scenario's `wings` (M3-T10).
-	wings.setup(world)
+	wings.setup(world, ships)
 	wings.create_wing(Wing.DEFAULT_NAME, combatant)
 	ships.world = world
 	ships.projectiles = projectiles
@@ -97,6 +97,8 @@ func _ready() -> void:
 	waves.status_sink = func(line: String) -> void: status_line = line
 	waves.setup(world, ships, combatant, scenario if pool_count > 0 else {}, director, waves_auto_start)
 	player_respawned.connect(waves.on_player_respawned)
+	# Downed wingmen are replaced when the next wave starts (maintainer Q8, AC11).
+	waves.wave_started.connect(wings.on_wave_started)
 	if bool(scenario.get("ok", false)):
 		_spawn_props(scenario["props"])
 	camera_rig.setup(ship, ship.cockpit_anchor, ship.get_chase_offset(), ship.set_cockpit_interior_visible)

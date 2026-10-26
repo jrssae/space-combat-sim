@@ -1557,7 +1557,8 @@ data/scenarios/{instructor_route,dogfight}.json
 2. Console, `Main` (0), ships, projectiles as before. `Main` passes order edges from `UiCommand` to the `WingDirector`.
 3. `TargetingController`s (100), `HitResolver` (200), `RamResolver` (210): contacts reported by Jolt since its last run
    and swept rams; destruction in the same tick (§15.7).
-4. `WingDirector` (290): orders, acknowledgements, leader changes; `WaveDirector` (300): waves, then `replenish`.
+4. `WingDirector` (290): orders, acknowledgements, leader changes; `WaveDirector` (300): waves; on `wave_started` it calls
+   `WingDirector.replenish()` (allies for the player wing's empty slots, 1 500 m behind the player, T08).
 5. Jolt steps the bodies (and reports the contacts the `RamResolver` reads next tick).
 
 ### 16.4 Console and settings (additions to §6.4 and §15.13)
@@ -1572,6 +1573,6 @@ data/scenarios/{instructor_route,dogfight}.json
 | `route` | instructor (T09) | `index`, `count`, `lag_m`, `state`, `demo` |
 
 Commands: `relation <a> <b> [friendly|neutral|hostile]` / `relation reset`; `wing order <attack|form|engage|cover>`;
-`wing formation <finger_four|wedge|line_abreast>`; `spawn ally [idle|ai] [distance_m] [yaw_deg] [pitch_deg]`; `kill allies`; `ai <name>`;
+`wing formation <finger_four|wedge|line_abreast>`; `wing replenish`; `spawn ally [idle|ai] [distance_m] [yaw_deg] [pitch_deg]`; `kill allies`; `ai <name>`;
 `scenario [free_flight|combat_sandbox|instructor_route|dogfight]`. Settings: `friendly_fire` (bool, false), `ram_damage`
 (bool, true).

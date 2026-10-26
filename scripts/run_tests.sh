@@ -240,10 +240,12 @@ reject_text "${log}" "ERROR:" || smoke_status=1
 
 echo "== Console smoke run: an attacking raider on the real main scene"
 # M2-T07 / AC9: an attack raider 2 km out flies its gun run (the brain's state is readable) and lands hits on the player.
+# `wave stop` first: a wave that starts during the 20 s wait would launch the wingmen (M3-T08 replenish), whose guns and kills
+# can leave a sound playing at the quit, which Godot reports as a resource still in use.
 log="${REPORTS}/console_attack.log"
 attack_status=0
 timeout 240 "${GODOT}" --headless --path . -- --console-strict \
-    --console-exec='wait 30; god on; spawn raider attack 2000; set targeting.selected "RAIDER 1"; wait 1200; get raiders.selected_brain; get combat.hits; quit' \
+    --console-exec='wait 30; wave stop; god on; spawn raider attack 2000; set targeting.selected "RAIDER 1"; wait 1200; get raiders.selected_brain; get combat.hits; quit' \
     > "${log}" 2>&1 || attack_status=$?
 cat "${log}"
 if (( attack_status != 0 )); then
@@ -427,6 +429,30 @@ if (( wing_strict_status != 1 )); then
 fi
 expect_text "${log}" "[console] error: wing order expects one of attack|form|engage|cover, got 'dance'" || smoke_status=1
 reject_text "${log}" "[console] > quit 0" || smoke_status=1
+
+echo "== Console smoke run: wing replenish launches the wingmen on the real main scene"
+# M3-T08 / AC11: `wing replenish` gives the empty wing its three wingmen (ALPHA 2-4, 1 500 m astern) on the wing's order; after
+# `kill allies` it launches them again, and with a full wing it says so. Waits before it quits (the explosions' sounds).
+log="${REPORTS}/console_wing_replenish.log"
+replenish_status=0
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; wave stop; wing replenish; get allies.alive; wing order engage; kill allies; wing replenish; get allies.alive; wing replenish; wait 300; quit' \
+    > "${log}" 2>&1 || replenish_status=$?
+cat "${log}"
+if (( replenish_status != 0 )); then
+    echo "run_tests.sh: wing replenish smoke run exited ${replenish_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+launched_lines="$(grep -cxF -- "[console] ALPHA: launched ALPHA 2, ALPHA 3, ALPHA 4 (1500 m astern)" "${log}" || true)"
+if (( launched_lines != 2 )); then
+    echo "run_tests.sh: expected the wing to be launched twice, saw ${launched_lines} launch lines (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] allies.alive = 3" || smoke_status=1
+expect_line "${log}" "[console] ALPHA 2: COPY, ENGAGING AT WILL" || smoke_status=1
+expect_line "${log}" "[console] ALPHA: no empty slot" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
 
 if (( smoke_status != 0 )); then
     echo "run_tests.sh: console smoke runs failed (see reports/console_*.log)."  >&2
