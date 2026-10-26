@@ -284,4 +284,6 @@ a few minutes of both mains with assist on (up to its 5 000 m/s) cover 900 km, a
 - [ ] **AC22 Far from the launch point.** After `rebase -900000 0 0`, and again after a long flight (`REF` several hundred km),
       thrust in every direction (both mains, retros, strafe, while pitching and yawing): the ship shows no jumping, in splat mode
       and in mesh mode (F4). Then fly at full speed through rebases (one every 5 km: every second at 5 000 m/s) in both cameras:
-      no hitch at each one, and an explosion or debris flying when it happens stays where it is.
+      no hitch at each one (the picture holds still for one tick at a rebase, everything together: at most one repeated
+      frame; watch a buoy, a ship or your own bolts passing), and an explosion or debris flying when it happens stays where
+      it is and looks as in M2 (AC16).

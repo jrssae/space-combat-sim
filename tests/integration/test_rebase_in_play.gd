@@ -126,9 +126,12 @@ func test_rebase_900_km_out_comes_back_on_the_next_tick_with_every_universe_posi
 	await _ticks(30)
 	source.release(InputAdapter.FIRE)
 	var at_rebase: Array[Dictionary] = []
+	var snapshot_us: PackedInt64Array = PackedInt64Array([0])  # this handler's own time, which the rebase cost counts
 	main.world.rebased.connect(func(_offset: Vector3) -> void:
 		# Inside the rebase, before anything in its tick has moved.
-		at_rebase.append({"snapshot": _snapshot(), "player_local": main.ship.global_position}))
+		var started_us: int = Time.get_ticks_usec()
+		at_rebase.append({"snapshot": _snapshot(), "player_local": main.ship.global_position})
+		snapshot_us[0] = Time.get_ticks_usec() - started_us)
 	var rebases_before: int = main.world.rebases
 	await get_tree().physics_frame  # the start of a tick: Jolt's last step is in, nothing of this tick has run
 	var before_command: Dictionary = _snapshot()
@@ -147,9 +150,9 @@ func test_rebase_900_km_out_comes_back_on_the_next_tick_with_every_universe_posi
 	var bolts: int = 0
 	for id: int in after_command:
 		bolts += 1 if after_command[id]["name"] == "bolt" else 0
-	gut.p("rebase -900000 0 0: %d ships, props and bolts (%d bolts); the automatic rebase back moved them by at most %.6f mm and %.6f mm/s; the console's own shift to 900 km rounded them by up to %.1f mm (float32 at 900 km); rebase cost %d us" % [
+	gut.p("rebase -900000 0 0: %d ships, props and bolts (%d bolts); the automatic rebase back moved them by at most %.6f mm and %.6f mm/s; the console's own shift to 900 km rounded them by up to %.1f mm (float32 at 900 km); rebase cost %d us (without this test's snapshot in its handler)" % [
 			change["count"], bolts, float(change["du"]) * 1000.0, float(change["dv"]) * 1000.0, float(rounding["du"]) * 1000.0,
-			main.world.last_rebase_us])
+			main.world.last_rebase_us - snapshot_us[0]])
 	assert_gt(bolts, 0, "bolts in flight")
 	assert_eq(int(change["count"]), after_command.size(), "the same things before and after")
 	assert_gt(int(change["count"]), 10, "the player, three wingmen, two raiders, five buoys and the bolts")
@@ -205,6 +208,102 @@ func test_flying_at_full_speed_through_5_km_rebases_leaves_nothing_behind() -> v
 	assert_eq(main.world.auto_rebase_distance_m, 5000.0, "the fixture put the threshold back")
 
 
+## Every rendered frame, after the cameras and the HUD: the player, one of its bolts and NAV ALPHA as drawn (interpolated) in the
+## chase camera's frame, and NAV ALPHA where the HUD puts it (its tick position through the HUD's camera).
+class ViewSampler extends Node:
+	var main: Main = null
+	var bolt: Projectile = null
+	var buoy: NavBuoy = null
+	var rows: Array[Dictionary] = []
+
+	func _init() -> void:
+		process_priority = 3000
+
+	func _process(_delta: float) -> void:
+		if bolt == null or not is_instance_valid(bolt) or bolt.is_queued_for_deletion():
+			return
+		var view: Transform3D = main.camera_rig.chase_camera.global_transform.affine_inverse()
+		var hud_view: Transform3D = (main.hud.input_provider.call() as HudInput).camera_transform.affine_inverse()
+		var ship_drawn: Vector3 = main.ship.get_global_transform_interpolated().origin
+		rows.append({"tick": Engine.get_physics_frames(), "f": Engine.get_physics_interpolation_fraction(),
+				"ship_u": main.world.to_universe(ship_drawn), "speed": main.ship.linear_velocity.length(),
+				"v_rel": view.basis * (bolt.velocity - main.ship.linear_velocity), "ship": view * ship_drawn,
+				"bolt": view * bolt.get_global_transform_interpolated().origin,
+				"buoy": view * buoy.get_global_transform_interpolated().origin, "buoy_hud": hud_view * buoy.global_position,
+				"pivot": view * main.camera_rig.cockpit_pivot.get_global_transform_interpolated().origin})
+
+
+func test_through_a_rebase_at_full_speed_the_view_keeps_the_ship_its_bolts_and_the_hud_together() -> void:
+	# AC22 at 5 000 m/s, nose up (clear of the buoys): a 5 km rebase every second. Every rendered frame, the rebase ticks
+	# included: the chase camera stays on the drawn ship (1 cm); a bolt flying ahead keeps its motion relative to the ship (its
+	# offset from the ship in the view changes by its relative velocity times the time the ship was drawn to advance, to 1 m);
+	# and the HUD's camera sees NAV ALPHA where it is drawn (1 m).
+	await _launch()
+	var speed: float = 5000.0
+	main.ship.reset_to(Transform3D(Basis(Vector3.RIGHT, PI / 2.0), main.ship.position))
+	main.ship.linear_velocity = main.ship.forward() * speed
+	main.camera_rig.snap_chase()
+	source.hold(InputAdapter.FIRE)
+	await _ticks(3)
+	source.release(InputAdapter.FIRE)
+	var sampler := ViewSampler.new()
+	sampler.main = main
+	sampler.buoy = main.buoys[0]
+	for node: Node in get_tree().get_nodes_in_group(Projectile.GROUP):
+		sampler.bolt = node as Projectile  # the newest one
+	assert_not_null(sampler.bolt, "a bolt flies alongside")
+	var rebase_ticks: Array[int] = []
+	var on_rebased := func(_offset: Vector3) -> void: rebase_ticks.append(Engine.get_physics_frames())
+	main.world.rebased.connect(on_rebased)
+	add_child_autofree(sampler)
+	await _ticks(90)
+	sampler.bolt = null
+	main.world.rebased.disconnect(on_rebased)
+	assert_gte(rebase_ticks.size(), 1, "the run crossed a 5 km rebase")
+	var worst_rel: float = 0.0
+	var worst_rel_rebase: float = 0.0
+	var worst_camera: float = 0.0
+	var worst_cockpit: float = 0.0
+	var worst_hud: float = 0.0
+	var worst_hud_rebase: float = 0.0
+	var frames_in_rebase_ticks: int = 0
+	var lines: PackedStringArray = []
+	for k: int in range(1, sampler.rows.size()):
+		var a: Dictionary = sampler.rows[k - 1]
+		var b: Dictionary = sampler.rows[k]
+		var drawn_s: float = (a["ship_u"] as UniversePos).distance_to(b["ship_u"] as UniversePos) / float(b["speed"])
+		var rel_change: Vector3 = ((b["bolt"] as Vector3) - (b["ship"] as Vector3)) - ((a["bolt"] as Vector3) - (a["ship"] as Vector3))
+		var expected: Vector3 = ((a["v_rel"] as Vector3) + (b["v_rel"] as Vector3)) * 0.5 * drawn_s
+		var rel_error: float = rel_change.distance_to(expected)
+		var hud_error: float = (b["buoy_hud"] as Vector3).distance_to(b["buoy"] as Vector3)
+		var camera: float = (b["ship"] as Vector3).distance_to(a["ship"] as Vector3)
+		worst_rel = maxf(worst_rel, rel_error)
+		worst_hud = maxf(worst_hud, hud_error)
+		worst_camera = maxf(worst_camera, camera)
+		worst_cockpit = maxf(worst_cockpit, ((b["pivot"] as Vector3) - (b["ship"] as Vector3)).distance_to(
+				(a["pivot"] as Vector3) - (a["ship"] as Vector3)))
+		var in_rebase_tick: bool = rebase_ticks.has(int(b["tick"]))
+		if in_rebase_tick:
+			frames_in_rebase_ticks += 1
+			worst_rel_rebase = maxf(worst_rel_rebase, rel_error)
+			worst_hud_rebase = maxf(worst_hud_rebase, hud_error)
+		if (in_rebase_tick or rebase_ticks.has(int(a["tick"]))) and lines.size() < 16:
+			lines.append("tick %d f %.2f%s: ship drawn on %.1f m, bolt offset changed %.2f m (expected %.2f m, off by %.2f m), HUD off %.2f m" % [
+					b["tick"], b["f"], " (rebase tick)" if in_rebase_tick else "", drawn_s * float(b["speed"]), rel_change.length(),
+					expected.length(), rel_error, hud_error])
+	gut.p("%d frames, %d rebases (ticks %s), %d frames drawn after a rebase tick; bolt off its relative motion: worst %.3f m (%.3f m after a rebase tick); HUD vs drawn NAV ALPHA: worst %.3f m (%.3f m); chase camera drift %.4f m; cockpit pivot drift from the drawn ship %.4f m" % [
+			sampler.rows.size(), rebase_ticks.size(), str(rebase_ticks), frames_in_rebase_ticks, worst_rel, worst_rel_rebase, worst_hud,
+			worst_hud_rebase, worst_camera, worst_cockpit])
+	for line: String in lines:
+		gut.p("  " + line)
+	assert_gt(sampler.rows.size(), 60, "frames were sampled")
+	assert_gt(frames_in_rebase_ticks, 0, "frames were drawn between a rebase tick and the next")
+	assert_lt(worst_camera, 0.01, "the chase camera stays locked to the drawn ship")
+	assert_lt(worst_cockpit, 0.01, "so does the cockpit camera's pivot")
+	assert_lt(worst_rel, 1.0, "the bolt keeps its motion relative to the ship through the rebase")
+	assert_lt(worst_hud, 1.0, "the HUD projects NAV ALPHA where it is drawn")
+
+
 func test_the_main_scene_rebases_at_5_km() -> void:
 	await _launch()
 	assert_eq(main.world.auto_rebase_distance_m, 5000.0, "main.tscn turns the rebase on at 5 km")
@@ -238,3 +337,40 @@ func test_thrusting_900_km_out_has_no_float32_jitter() -> void:
 			float(with_rebase["rms_m"]) * 1000.0, float(with_rebase["mean_m"]) * 1000.0])
 	assert_gt(float(without["max_m"]), 0.02, "the float32 jitter the maintainer saw (about 5 cm)")
 	assert_lt(float(with_rebase["max_m"]), 0.002, "under 2 mm with the rebase")
+
+
+func test_thrusting_through_an_automatic_5_km_rebase_keeps_the_step_smooth() -> void:
+	# One change-of-step window that spans the main scene's own rebase: nose and velocity along +x, 4 800 m out along it, under
+	# full main thrust, so the ship crosses 5 km inside the window. A rebase that moved anything in universe terms would show as
+	# a jump in the step.
+	await _launch()
+	main.ship.reset_to(Transform3D(Basis.looking_at(Vector3.RIGHT), main.ship.global_position))
+	await get_tree().physics_frame
+	assert_true(_exec("rebase -4800 0 0").ok, "everything 4 800 m out along +x")
+	main.ship.linear_velocity = Vector3.RIGHT * 300.0
+	main.debug_throttle = 1.0
+	await _ticks(SETTLE_TICKS)
+	var rebases_before: int = main.world.rebases
+	assert_lt(main.ship.global_position.length(), 5000.0, "not across yet")
+	var change: Dictionary = change_of_step(await _thrust_track(MEASURE_TICKS))
+	main.debug_throttle = 0.0
+	gut.p("change of step under full main thrust across the 5 km rebase: max %.4f mm (rms %.4f); a dt^2 = %.2f mm" % [
+			float(change["max_m"]) * 1000.0, float(change["rms_m"]) * 1000.0, float(change["mean_m"]) * 1000.0])
+	assert_eq(main.world.rebases, rebases_before + 1, "the window spans one automatic rebase")
+	assert_lt(main.ship.global_position.length(), 5000.0)
+	assert_lt(float(change["max_m"]), 0.002, "under 2 mm across it")
+
+
+func test_a_still_player_rebases_on_the_fixture_timer() -> void:
+	# For scenes whose player sits still (T09's routes, T10's guard posts): `rebase_every_s` forces the rebases.
+	await _launch(ScenarioLoader.SANDBOX_PATH)
+	assert_true(_exec("wave stop").ok)
+	assert_true(_exec("spawn raider idle 600").ok, "something else in the world")
+	main.ship.linear_velocity = Vector3.ZERO
+	Engine.time_scale = SPEED_UP
+	var fight: RebaseFight = await RebaseFight.run(self, main, 4.0, Callable(), 40.0, 0.0, 0.5)
+	Engine.time_scale = 1.0
+	gut.p("a still player, a rebase forced every 0.5 s: " + fight.summary())
+	assert_gte(fight.forced_rebases, 6, "forced every 0.5 s of sim time")
+	assert_lt(fight.max_gap_s, 0.6)
+	assert_lt(main.ship.linear_velocity.length(), 1e-3, "the player sat still")

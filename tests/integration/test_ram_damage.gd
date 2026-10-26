@@ -136,7 +136,8 @@ func test_a_thirty_mps_head_on_costs_each_ship_at_least_half_its_hull_once() -> 
 	assert_eq(rams.events, 2)
 
 
-## Rebases the world by `offset` every physics tick, before the ships and the resolver run (as the automatic rebase does).
+## Rebases the world by `offset` every physics tick. It runs after the ships (priority 0, later in tree order; the automatic
+## rebase runs before them) and before the resolver (210), so every tick's contacts are read after a rebase, as in play.
 class Rebaser extends Node:
 	var world: WorldFrame = null
 	var offset := Vector3.ZERO

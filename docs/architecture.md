@@ -678,7 +678,7 @@ validates before calling. Values are formatted consistently (vectors to 2 decima
 | `time` | SimClock (T07) | `sim_time_s`, `warp`, `timescale` |
 | `input` | GodotInputSource (T07) | `pads` (name, GUID, trigger rest, raw axes), `keyboard_masked`, last command fields |
 | `ship` | Ship (T10) | `position`, `universe_position`, `velocity`, `speed`, `body_velocity`, `angular_rate_dps`, `assist_on` (w), `trim`, `pod_yaw`, `main_levels`, `retro_levels`, `mass_flow`, `fuel_kg` (w; M2-T14), `fuel_fraction` (0..1; 1 while `fuel_unlimited`) |
-| `world` | WorldFrame (T09) | `origin`, `origin_velocity`, `auto_rebase_distance_m` (5 000 in the main scene), `rebases` (count, automatic and console), `rebase_us` (the last one's wall-clock cost; M3-T14) |
+| `world` | WorldFrame (T09) | `origin`, `origin_velocity`, `auto_rebase_distance_m` (5 000 in the main scene), `rebases` (count, automatic and console), `rebase_us` (the last one's wall-clock cost, shift, handlers and end-of-tick reset; M3-T14) |
 | `camera` | CameraRig (T12) | `mode` (w), `fov` |
 | `weapons` | PulseCannon (T13) | `mode` (w), `cooldown_s`, `charge` (w, 0..1 capacitor; M2-T14) |
 | `targeting` | TargetingController (T14) | `selected` (w: display name or `none`), `range_m`, `closing_mps`, `candidates` |
@@ -1034,7 +1034,7 @@ Verified for Godot 4.7.2 (details in `docs/research-notes.md`):
   velocity (64-bit) and propagates them as a **free-falling test particle**, so local physics only feels tidal
   gravity (a ship near the orbiting station is effectively weightless, which is physically right).
 - **Position rebase** when the focus object is > 5 km from the local origin: every `world_shiftable` node moves
-  by `-offset` (`global_position`, then `reset_physics_interpolation()`); `origin += offset`. **On in play since M3-T14**
+  by `-offset` (`global_translate`); `origin += offset`; interpolation is reset at the end of that tick (below). **On in play since M3-T14**
   (maintainer Q13: at 900 km a float32 coordinate steps in 6.25 cm, and the ship's splats jumped while thrusting):
   `main.tscn` sets `World.auto_rebase_distance_m` to 5 000 with the player as `focus`; a bare `WorldFrame` keeps 0.
   - Where in the tick: `World._physics_process` (priority 0; §15.3), after the AI drivers (-10), the console and `Main`,
@@ -1048,13 +1048,25 @@ Verified for Godot 4.7.2 (details in `docs/research-notes.md`):
     (`RamTracker.shift`). Parked pool ships and debris are shifted
     with the rest (harmless: they are placed again from a `UniversePos` when taken out). Particles stay in their node's
     frame (`local_coords`), never in global space, or a rebase would leave them behind (the explosion's sparks).
-  - Physics interpolation: every shifted node is reset, so the frame after a rebase draws the bodies at their current tick
-    with no blend (at most one tick of hitch, the same for every body); nodes that move themselves later in the tick
-    (bolts, debris) blend from their shifted place. Nothing blends across the jump; the felt hitch is AC22 (H).
+  - Physics interpolation: **the world stalls together for the rebase tick.** A rebase inside a tick leaves interpolation
+    alone; `World`'s internal `RebaseSettler` (physics priority 1 000 000, last in the tick, §15.3) then resets every visible,
+    interpolated shiftable node, after everything has moved. The frames until the next tick draw every body, bolt, piece of
+    debris, effect and both cameras at their tick pose, unblended: nothing blends across the jump, view-relative motion is
+    kept (a bolt beside the ship stays beside it), and the HUD, which projects tick positions, matches what is drawn. The
+    cost is at most one tick of held motion per rebase (one repeated frame; AC22 (H)). Hidden (parked) nodes and silent
+    voices are skipped (`acquire`, `launch`, `play` reset them when they come back); a rebase outside a tick (the console
+    between frames) resets at once. Measured at 5 000 m/s through a 5 km rebase (`test_rebase_in_play`, per rendered frame):
+    resetting at the rebase itself (the first M3-T14 build) drew the bodies held while bolts and debris blended on, so a
+    bolt's offset from the ship jumped 83 m off its motion in the frames of the rebase tick; not resetting at all draws
+    everything sweeping by the offset over that tick (view-relative motion exact), but the HUD's markers through the chase
+    camera were then 3.4 km off what is drawn (and the sky in the cockpit view, and anything spawned in that tick, would be
+    too), so that was rejected. Now: 0.001 m and 0.000 m.
   - Cost: one rebase of the full sandbox (the player and 10 pooled ships, 20 parked debris chunks, 16 sound voices, 5 buoys
-    and the chase camera: 53 nodes, plus bolts and effects in flight) costs 0.2-0.45 ms (the median of a fight's rebases, from run to
-    run; wall-clock spikes to about 0.9 ms). `world.rebases` and `world.rebase_us` watch it. Tests: `tests/integration/test_rebase_in_play.gd` and the
-    `RebaseFight` fixture (`tests/fixtures/rebase_fight.gd`), which runs any live scene with the threshold forced low.
+    and the chase camera: 53 nodes, plus bolts and effects in flight) costs about 0.28-0.30 ms idle (the median of a fight's
+    rebases, from run to run; min about 0.12 ms, wall-clock spikes to about 0.6 ms), the shift, the `rebased` handlers and
+    the end-of-tick reset together; the ships dominate it (a Starfury is 108 nodes, which the shift and the reset both walk).
+    `world.rebases` and `world.rebase_us` watch it. Tests: `tests/integration/test_rebase_in_play.gd` and the `RebaseFight`
+    fixture (`tests/fixtures/rebase_fight.gd`), which runs any live scene with the threshold forced low.
 - **Velocity rebase** (roadmap M5, still off) when the focus speed relative to the frame exceeds 200 m/s: subtract `v`
   from every body's `linear_velocity` and projectile velocity; `origin_velocity += v`. Keeps Jolt well under its cap and
   keeps float32 velocities small.
@@ -1304,6 +1316,8 @@ One physics tick, in order (`process_physics_priority`, then tree order):
 7. `HitResolver` (200): sweep, damage, impact flashes. `destroyed` -> `DestructionDirector`, which hides and
    disables the ship in the same tick, so nothing targets or hits it afterwards.
 8. `WaveDirector` (300): count the dead, spawn from the pool.
+8b. `World`'s `RebaseSettler` (1 000 000, last; M3-T14): in a tick with a rebase, resets the interpolation of every visible
+   shiftable node, so that tick is drawn held, all together (§14.1).
 9. Jolt steps the bodies.
 
 ```
