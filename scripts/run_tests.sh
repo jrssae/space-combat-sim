@@ -180,7 +180,7 @@ if grep -E "${SCRIPT_ERRORS}" "${log}"; then
     echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, hud, hull, input, raiders, ram, render, settings, ship, targeting, time, waves, weapons, world" \
+expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, hud, hull, input, raiders, ram, render, settings, ship, targeting, time, waves, weapons, wing, world" \
     || smoke_status=1
 expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
 expect_line "${log}" "[console] render.splat_backend = headless" || smoke_status=1
@@ -391,6 +391,41 @@ if (( ai_strict_status != 1 )); then
     smoke_status=1
 fi
 expect_text "${log}" "[console] error: no AI ship named 'NOBODY'" || smoke_status=1
+reject_text "${log}" "[console] > quit 0" || smoke_status=1
+
+echo "== Console smoke run: the wing provider and command on the real main scene"
+# M3-T07 / AC11, AC13: the player leads wing ALPHA; `wing order form` is acknowledged with one line (no wingmen yet: the
+# ally pool and the scenario wings come with T08 and T10) and `wing formation wedge` changes the shape, under --console-strict.
+log="${REPORTS}/console_wing.log"
+wing_status=0
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; wing order form; wing formation wedge; get wing.order; get wing.formation; get wing.last_ack; wing; quit' \
+    > "${log}" 2>&1 || wing_status=$?
+cat "${log}"
+if (( wing_status != 0 )); then
+    echo "run_tests.sh: wing smoke run exited ${wing_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] ALPHA: NO WINGMEN" || smoke_status=1
+expect_line "${log}" "[console] ALPHA formation: finger_four -> wedge" || smoke_status=1
+expect_line "${log}" "[console] wing.order = form" || smoke_status=1
+expect_line "${log}" "[console] wing.formation = wedge" || smoke_status=1
+expect_line "${log}" "[console] wing.last_ack = ALPHA: NO WINGMEN" || smoke_status=1
+expect_line "${log}" "[console] ALPHA: order form, formation wedge, members none" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
+
+echo "== Console smoke run: a bad wing order must exit 1"
+log="${REPORTS}/console_wing_strict.log"
+wing_strict_status=0
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; wing order dance; quit 0' > "${log}" 2>&1 || wing_strict_status=$?
+cat "${log}"
+if (( wing_strict_status != 1 )); then
+    echo "run_tests.sh: bad wing order smoke run exited ${wing_strict_status}, expected 1 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_text "${log}" "[console] error: wing order expects one of attack|form|engage|cover, got 'dance'" || smoke_status=1
 reject_text "${log}" "[console] > quit 0" || smoke_status=1
 
 if (( smoke_status != 0 )); then

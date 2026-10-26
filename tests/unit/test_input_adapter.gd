@@ -137,6 +137,21 @@ func test_dpad_yaw_never_rolls() -> void:
 	assert_eq(rot.x, 0.0)
 
 
+func test_wing_orders_are_one_tick_edges_in_the_ui_command() -> void:
+	# Keys 1-4 (M3-T07): orders reach the WingDirector as UiCommand edges, never through Input.
+	source.hold(InputAdapter.WING_FORM, 1.0, true)
+	var first: PilotCommand = adapter.sample(source, DT)
+	assert_true(first.ui.wing_form)
+	assert_false(first.ui.wing_attack or first.ui.wing_engage or first.ui.wing_cover)
+	assert_true(first.ui.to_dict()["wing_form"])
+	assert_false(adapter.sample(source, DT).ui.wing_form, "held is not a second order")
+	source.keyboard_mouse_enabled = false
+	source.release_all()
+	adapter.sample(source, DT)
+	source.hold(InputAdapter.WING_COVER, 1.0, true)
+	assert_false(adapter.sample(source, DT).ui.wing_cover, "the console has the keyboard")
+
+
 func test_edges_fire_for_one_tick() -> void:
 	source.hold(InputAdapter.TOGGLE_ASSIST)
 	source.hold(InputAdapter.TOGGLE_CAMERA)
@@ -168,6 +183,10 @@ func test_every_edge_maps_to_its_field() -> void:
 		InputAdapter.TARGET_PREV: func(c: PilotCommand) -> bool: return c.combat.target_prev,
 		InputAdapter.SCREENSHOT: func(c: PilotCommand) -> bool: return c.ui.screenshot,
 		InputAdapter.AUTOTRACK: func(c: PilotCommand) -> bool: return c.flight.autotrack,
+		InputAdapter.WING_ATTACK: func(c: PilotCommand) -> bool: return c.ui.wing_attack,
+		InputAdapter.WING_FORM: func(c: PilotCommand) -> bool: return c.ui.wing_form,
+		InputAdapter.WING_ENGAGE: func(c: PilotCommand) -> bool: return c.ui.wing_engage,
+		InputAdapter.WING_COVER: func(c: PilotCommand) -> bool: return c.ui.wing_cover,
 	}
 	assert_eq(fields.size(), InputAdapter.EDGE_ACTIONS.size(), "every edge action is covered")
 	for action: StringName in fields.keys():

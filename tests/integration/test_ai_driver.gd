@@ -25,6 +25,17 @@ class ScriptedBrain extends PilotBrain:
 		return cmd
 
 
+## Seeks the velocity it already has (nothing to do), allocating the thrust for a held nose (`all_axes`) or by the cones.
+class HeldNoseBrain extends PilotBrain:
+	var all_axes: bool = true
+	var last: PilotCommand = null
+
+	func think(p: Perception, _dt: float) -> PilotCommand:
+		last = PilotCommand.new()
+		seek_velocity(last.flight, p, p.velocity, all_axes)
+		return last
+
+
 func before_each() -> void:
 	world = WorldFrame.new()
 	world.name = "World"
@@ -51,6 +62,28 @@ func _buoy(label: String, at: Vector3) -> NavBuoy:
 	var buoy: NavBuoy = NavBuoy.create(label)
 	world.spawn(buoy, world.to_universe(at))
 	return buoy
+
+
+func test_the_avoidance_re_seek_allocates_the_thrust_as_the_brain_did() -> void:
+	# A buoy close off the nose to the left: the filtered wish points aft and right, 45 degrees off the tail, where the
+	# cones fire no retros (they wait for a turn). A brain holding its nose (formation keeping, M3-T07) must still brake.
+	_buoy("NAV CLOSE", Vector3(-6.0, 0.0, -6.0))
+	var brain := HeldNoseBrain.new()
+	raider.driver.brain = brain
+	ContactScan.invalidate()
+	raider.driver.step(DT)
+	assert_true(raider.driver.avoiding, "the buoy is inside the margin")
+	assert_true(brain.desired_all_axes)
+	assert_gt(brain.last.flight.retro_left, 0.0, "a held nose brakes on its retros")
+	assert_eq(brain.last.flight.retro_left, brain.last.flight.retro_right)
+	assert_gt(brain.last.flight.strafe.x, 0.0, "and sways right")
+	brain.all_axes = false
+	ContactScan.invalidate()
+	raider.driver.step(DT)
+	assert_true(raider.driver.avoiding)
+	assert_eq(brain.last.flight.retro_left, 0.0, "with the cones the aft part waits for a turn")
+	assert_gt(brain.last.flight.strafe.x, 0.0)
+	ContactScan.invalidate()
 
 
 func test_ai_ships_have_a_driver_that_runs_before_the_ship() -> void:

@@ -32,6 +32,8 @@ var resync_input: Callable = Callable()
 
 ## The profile the InputMap was last loaded from or saved as (`default` until one is used).
 var active_name: String = ControlProfile.DEFAULT_NAME
+## The notice of the last profile applied that lacked actions the game has now (filled from the default), "" for none.
+var last_notice: String = ""
 
 var _base: ControlProfile = null  # what `active_name` holds on disk (or in the project), to detect unsaved binds
 
@@ -144,6 +146,12 @@ func _activate(profile_name: String) -> PackedStringArray:
 		return errors
 	active_name = profile_name
 	_base = profile
+	var filled: PackedStringArray = loaded.get("filled", PackedStringArray())
+	last_notice = ""
+	if not filled.is_empty():
+		last_notice = "control profile '%s' was saved before %s existed: they use the default bindings (controls save %s keeps them)" % [
+				profile_name, ", ".join(filled), profile_name]
+		print("ControlProfiles: ", last_notice)
 	_notify_applied()
 	return errors
 
@@ -309,6 +317,8 @@ func _use(profile_name: String) -> ConsoleResult:
 	if outcome["discarded"]:
 		lines.append("discarded unsaved bind/unbind changes")
 	lines.append("control profile: %s" % profile_name)
+	if not last_notice.is_empty():
+		lines.append(last_notice)
 	lines.append_array(_keep_hint())
 	return ConsoleResult.success(lines)
 

@@ -4,8 +4,8 @@ extends AiBehaviour
 ## away from the hostiles at `cruise_mps + EXTRA_MPS` (World frame, so a chaser that is faster still catches up: a retreat
 ## opens the range, it is not an escape). The way out is away from every hostile in sight, the nearer ones counting more
 ## (each pulls with 1 / distance). Never fires. Scores 0 with `retreat_below` 0 (the instructor, raiders that fight to the
-## death), above the threshold, or with no hostile in sight; below it, from `SCORE_MIN` at the threshold to 1 at zero hull,
-## so it outranks an attack.
+## death), above the threshold, with no hostile in sight, or under FORM ON ME (`AiContext.may_retreat`, M3-T07); below it,
+## from `SCORE_MIN` at the threshold to 1 at zero hull, so it outranks an attack.
 
 const EXTRA_MPS: float = 50.0
 const SCORE_MIN: float = 0.85
@@ -25,7 +25,7 @@ func _init(profile: AiProfile) -> void:
 
 func score(ctx: AiContext) -> float:
 	var hull: float = ctx.perception.hull_fraction
-	if retreat_below <= 0.0 or hull >= retreat_below or ctx.hostiles.is_empty():
+	if retreat_below <= 0.0 or hull >= retreat_below or ctx.hostiles.is_empty() or not ctx.may_retreat():
 		return 0.0
 	return SCORE_MIN + (1.0 - SCORE_MIN) * (1.0 - hull / retreat_below)
 

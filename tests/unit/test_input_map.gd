@@ -31,12 +31,13 @@ const PAD_BINDINGS: Dictionary = {
 
 const KEYBOARD_ONLY: Array[StringName] = [
 	&"debug_toggle_fallback_mesh", &"debug_toggle_overlay", &"target_ahead", &"target_prev", &"screenshot",
+	&"wing_attack", &"wing_form", &"wing_engage", &"wing_cover",
 ]
 
 # Keyboard layout B (architecture §6.1, M3-T01): every flight key under the left hand, because the right hand flies the
 # mouse. action -> physical keys in event order (an action not listed has none). The mouse flies pitch and yaw, so those
-# have no keys; target_prev is the wheel and target_ahead the hold of B / Mouse 2, so neither has a key. Ctrl, Alt, the
-# number row and ` are unbound (Alt frees the mouse, ` is the console).
+# have no keys; target_prev is the wheel and target_ahead the hold of B / Mouse 2, so neither has a key. Keys 1-4 give the
+# wing orders (M3-T07). Ctrl, Alt, the rest of the number row and ` are unbound (Alt frees the mouse, ` is the console).
 const KEYS_B: Dictionary = {
 	&"main_left": [KEY_Q, KEY_W],
 	&"main_right": [KEY_E, KEY_W],
@@ -60,6 +61,10 @@ const KEYS_B: Dictionary = {
 	&"screenshot": [KEY_N, KEY_PRINT],
 	&"debug_toggle_overlay": [KEY_F3],
 	&"debug_toggle_fallback_mesh": [KEY_F4],
+	&"wing_attack": [KEY_1],
+	&"wing_form": [KEY_2],
+	&"wing_engage": [KEY_3],
+	&"wing_cover": [KEY_4],
 }
 
 # action -> mouse buttons in event order (an action not listed has none).
@@ -71,8 +76,10 @@ const MOUSE_B: Dictionary = {
 	&"weapon_next": [MOUSE_BUTTON_XBUTTON2],
 }
 
-# The left block of a US keyboard: the Q-T, A-G and Z-B columns, Shift, Caps Lock, Tab and Space.
+# The left block of a US keyboard: the 1-4, Q-T, A-G and Z-B columns, Shift, Caps Lock, Tab and Space. The number keys are
+# the wing orders (M3-T07).
 const LEFT_BLOCK: Array[Key] = [
+	KEY_1, KEY_2, KEY_3, KEY_4,
 	KEY_Q, KEY_W, KEY_E, KEY_R, KEY_T, KEY_A, KEY_S, KEY_D, KEY_F, KEY_G, KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B,
 	KEY_SHIFT, KEY_CAPSLOCK, KEY_TAB, KEY_SPACE,
 ]

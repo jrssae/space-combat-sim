@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://src/game/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://src/environment/space_environment.tscn" id="2_env"]
@@ -14,6 +14,7 @@
 [ext_resource type="Script" path="res://src/game/wave_director.gd" id="12_waves"]
 [ext_resource type="Script" path="res://src/audio/audio_director.gd" id="13_audio"]
 [ext_resource type="Script" path="res://src/combat/ram_resolver.gd" id="14_rams"]
+[ext_resource type="Script" path="res://src/game/wing_director.gd" id="15_wings"]
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_main")
@@ -51,6 +52,9 @@ script = ExtResource("14_rams")
 
 [node name="DestructionDirector" type="Node" parent="Combat"]
 script = ExtResource("10_director")
+
+[node name="WingDirector" type="Node" parent="Combat"]
+script = ExtResource("15_wings")
 
 [node name="WaveDirector" type="Node" parent="Combat"]
 script = ExtResource("12_waves")

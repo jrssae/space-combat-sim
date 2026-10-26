@@ -9,7 +9,9 @@ extends Node
 ##
 ## Avoidance: the wish is the brain's `desired_velocity` when it sought one this tick, else the current velocity (a coasting
 ## brain). When the filter changes it, the thrust (mains, retros, strafe) is sought again toward the filtered velocity, with
-## `URGENT_SEEK_HORIZON_S` when the filter says urgent; the brain's turn command and combat command are left as they are.
+## `URGENT_SEEK_HORIZON_S` when the filter says urgent and allocated as the brain allocated its own (`desired_all_axes`: a
+## held nose keeps its mains and retros working at any angle, M3-T07); the brain's turn and combat commands are left as
+## they are.
 ## When nothing threatens, the brain's command reaches the ship untouched. A held brake (all stop) is never filtered.
 ## The tie-break seed is `hash(display_name)`, so a ship dodges the same way in every run.
 ##
@@ -151,7 +153,8 @@ func _avoid(p: Perception, flight: FlightCommand) -> void:
 	avoiding = true
 	avoiding_urgent = bool(result["urgent"])
 	var horizon: float = URGENT_SEEK_HORIZON_S if avoiding_urgent else PilotSteering.HORIZON_S
-	PilotSteering.apply_seek(flight, PilotSteering.seek(p.velocity, filtered, p.basis, p.capability, horizon))
+	var all_axes: bool = brain.has_desired_velocity and brain.desired_all_axes
+	PilotSteering.apply_seek(flight, PilotSteering.seek(p.velocity, filtered, p.basis, p.capability, horizon, all_axes))
 
 
 func _on_hit_taken(_info: HitInfo) -> void:

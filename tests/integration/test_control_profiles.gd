@@ -236,6 +236,22 @@ func test_an_invalid_profile_file_is_refused_and_the_map_is_unchanged() -> void:
 	assert_string_contains(_run("controls list").text(), "INVALID")
 
 
+func test_a_profile_saved_before_new_actions_existed_is_used_with_a_notice() -> void:
+	var old: ControlProfile = default_profile.duplicate_profile()
+	for action: StringName in [InputAdapter.WING_ATTACK, InputAdapter.WING_FORM, InputAdapter.WING_ENGAGE,
+			InputAdapter.WING_COVER]:
+		old.bindings.erase(action)
+		old.deadzones.erase(action)
+	_write_user_profile("old", old)
+	var result: ConsoleResult = _run("controls use old")
+	assert_true(result.ok, result.error)
+	assert_string_contains(result.text(),
+			"control profile 'old' was saved before wing_attack, wing_form, wing_engage, wing_cover existed")
+	assert_eq(node.active_name, "old")
+	assert_false(node.is_unsaved(), "the filled bindings are the profile's until it is saved")
+	assert_eq(ControlProfile.from_input_map().descriptors_for(InputAdapter.WING_FORM), PackedStringArray(["key:2"]))
+
+
 func test_set_setting_to_an_unknown_profile_is_refused() -> void:
 	var before: String = _snapshot()
 	var refused: String = _setting_write("ghost")

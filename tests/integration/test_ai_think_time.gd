@@ -13,6 +13,10 @@ extends GutTest
 ## seconds after 13 ships spawn are slow whatever flies them, so the fight warms up for `WARM_UP_TICKS`, and each block
 ## settles for `SETTLE_TICKS` after the brains change.
 ##
+## On `AiPilot`, the Starfuries fly as a wing (M3-T07): ALPHA 1 leads, ALPHA 2-4 are its members on COVER ME through a real
+## `WingDirector`, so the formation behaviour's score and the order gate are in the cost (the director drops members flying
+## M2 brains, so they rejoin at every switch back).
+##
 ## There is no absolute assertion: the quiet median of the whole path is about 2 ms for both brains on that desktop, over
 ## AC13's 1.5 ms (recorded in the M3-T06 as-built notes, with the cost by component, for the maintainer to rebaseline).
 
@@ -94,6 +98,10 @@ func test_ai_pilots_cost_at_most_half_a_millisecond_more_than_m2_brains_in_the_s
 		var profile: String = "ally_starfury" if ships[i].faction == Factions.EARTH_ALLIANCE else "raider"
 		pilots.append(BrainFactory.from_behaviour({"type": "ai", "profile": profile}, UniversePos.new(), i)["brain"])
 		m2.append(AttackBrain.new(load(BrainFactory.DEFAULT_TACTICS_PATH) as RaiderTactics, i))
+	var director := WingDirector.new()
+	director.setup(world)
+	add_child_autofree(director)
+	var wing: Wing = director.create_wing(Wing.DEFAULT_NAME, ships[0])
 	var sampler := Sampler.new()
 	add_child_autofree(sampler)
 	var ai_samples := PackedInt64Array()
@@ -106,6 +114,10 @@ func test_ai_pilots_cost_at_most_half_a_millisecond_more_than_m2_brains_in_the_s
 		var brains: Array[PilotBrain] = pilots if on_pilots else m2
 		for i: int in ships.size():
 			ships[i].driver.brain = brains[i]
+		if on_pilots:
+			for slot: int in range(1, 4):
+				if wing.slot_of(ships[slot]) < 0:
+					assert_eq(director.add_member(wing, ships[slot], slot), slot, "%s rejoins" % ships[slot].display_name)
 		var skip: int = WARM_UP_TICKS if block == 0 else SETTLE_TICKS
 		var start: int = sampler.samples.size() + skip
 		while sampler.samples.size() < start + (BLOCK_TICKS if block > 0 else 0):
@@ -128,4 +140,9 @@ func test_ai_pilots_cost_at_most_half_a_millisecond_more_than_m2_brains_in_the_s
 	gut.p("AI think time, 13 ships in one fight, %d alternating blocks of %d ticks: AiPilot median %.0f us (mean %.0f), M2 AttackBrain median %.0f us (mean %.0f); paired difference (median over the M2 blocks, bracketed) %+.0f us, difference of the medians %+.0f us; block medians %s; %d bolts in flight" % [
 			2 * BLOCKS + 1, BLOCK_TICKS, ai_median, _mean(ai_samples), m2_median, _mean(m2_samples), paired,
 			ai_median - m2_median, ", ".join(block_medians), get_tree().get_nodes_in_group(Projectile.GROUP).size()])
+	for slot: int in range(1, 4):
+		var member := pilots[slot] as AiPilot
+		assert_not_null(member.behaviour(&"formation"), "%s flies in the wing" % ships[slot].display_name)
+		assert_true(member.context.has_slot)
+		assert_eq(member.context.order, AiContext.Order.COVER_ME)
 	assert_lte(paired, PILOT_SHARE_US, "AiPilot within its 0.5 ms share over the M2 brains")

@@ -22,10 +22,12 @@ const DEFAULT_NAME: String = "default"
 ## Profile names double as file names (`user://controls/<name>.cfg`) and as `settings.control_profile` values.
 const NAME_PATTERN: String = "^[a-z0-9_]{1,32}$"
 ## Actions that need no pad binding: no pad button is free for them, or the pad reaches the function another way (target_ahead
-## is the D-pad Up hold, target_prev the mouse wheel's twin).
+## is the D-pad Up hold, target_prev the mouse wheel's twin). The wing orders are keys 1-4 and the console until M4's comms
+## panel gives the pad a route (architecture §16 D36).
 const KEYBOARD_ONLY: Array[StringName] = [
 	InputAdapter.TOGGLE_FALLBACK, InputAdapter.TOGGLE_OVERLAY, InputAdapter.TARGET_AHEAD, InputAdapter.TARGET_PREV,
-	InputAdapter.SCREENSHOT,
+	InputAdapter.SCREENSHOT, InputAdapter.WING_ATTACK, InputAdapter.WING_FORM, InputAdapter.WING_ENGAGE,
+	InputAdapter.WING_COVER,
 ]
 const MAX_PAD_BUTTON: int = 14  # D-pad Right; 15 and up are SDL extras (paddles, touchpad, misc)
 const GUIDE_BUTTON: int = 5
@@ -356,18 +358,21 @@ func to_config_text() -> String:
 	return to_config().encode_to_text()
 
 
-## Reads profile text. Returns {"ok", "profile", "errors"}; `profile` is set whenever the text parsed, even if it
-## then failed validation (so a caller can show what is in it). Syntax errors also print an engine error.
-static func from_config_text(text: String, p_name: String = "") -> Dictionary:
+## Reads profile text. Returns {"ok", "profile", "errors", "filled"}; `profile` is set whenever the text parsed, even if it
+## then failed validation (so a caller can show what is in it). Syntax errors also print an engine error. With
+## `fill_from`, an action the text does not mention at all (neither a binding nor a deadzone: one added to the game after
+## the profile was saved) takes `fill_from`'s bindings and deadzone, listed in `filled`; an action mentioned in one section
+## only, or with bad entries, stays invalid.
+static func from_config_text(text: String, p_name: String = "", fill_from: ControlProfile = null) -> Dictionary:
 	var cfg := ConfigFile.new()
 	var err: Error = cfg.parse(text)
 	if err != OK:
-		return {"ok": false, "profile": null,
+		return {"ok": false, "profile": null, "filled": PackedStringArray(),
 				"errors": PackedStringArray(["not valid config text (%s)" % error_string(err)])}
-	return from_config(cfg, p_name)
+	return from_config(cfg, p_name, fill_from)
 
 
-static func from_config(cfg: ConfigFile, p_name: String = "") -> Dictionary:
+static func from_config(cfg: ConfigFile, p_name: String = "", fill_from: ControlProfile = null) -> Dictionary:
 	var profile := ControlProfile.new()
 	profile.name = p_name
 	var errors := PackedStringArray()
@@ -404,8 +409,16 @@ static func from_config(cfg: ConfigFile, p_name: String = "") -> Dictionary:
 	if cfg.has_section(SECTION_DEADZONES):
 		for key: String in cfg.get_section_keys(SECTION_DEADZONES):
 			profile.deadzones[StringName(key)] = cfg.get_value(SECTION_DEADZONES, key)
+	var filled := PackedStringArray()
+	if fill_from != null:
+		for action: StringName in InputAdapter.ACTIONS:
+			if profile.bindings.has(action) or profile.deadzones.has(action) or not fill_from.bindings.has(action):
+				continue
+			profile.bindings[action] = (fill_from.bindings[action] as Array).duplicate()
+			profile.deadzones[action] = fill_from.deadzones.get(action, 0.5)
+			filled.append(String(action))
 	errors.append_array(profile.validate())
-	return {"ok": errors.is_empty(), "profile": profile, "errors": errors}
+	return {"ok": errors.is_empty(), "profile": profile, "errors": errors, "filled": filled}
 
 
 # --- Private -----------------------------------------------------------------------------------------------------

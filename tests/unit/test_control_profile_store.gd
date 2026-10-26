@@ -155,14 +155,44 @@ func test_a_broken_file_loads_with_its_errors_and_is_flagged_in_the_listing() ->
 	_write_user_file("broken", "[profile]\nformat=1\n[bindings]\nfire=[\"pad:button:15\"]\n[deadzones]\nfire=0.5\n")
 	var loaded: Dictionary = store.load_profile("broken")
 	assert_false(loaded["ok"])
-	assert_gt(loaded["errors"].size(), 1, "the bad index and every missing action")
+	for error: String in loaded["errors"]:
+		assert_string_starts_with(error, "bindings.fire", "only fire is wrong: the actions the file never mentions take the default's (M3-T07)")
 	assert_string_contains("\n".join(loaded["errors"]), "bindings.fire[0]: pad button 15 is outside the standard layout")
+	assert_eq((loaded["filled"] as PackedStringArray).size(), InputAdapter.ACTIONS.size() - 1)
 	assert_not_null(loaded["profile"], "the parsed part is still available")
 	var rows: Array[Dictionary] = store.entries()
 	var broken_rows: Array = rows.filter(func(row: Dictionary) -> bool: return row["name"] == "broken")
 	assert_eq(broken_rows.size(), 1)
 	assert_false(broken_rows[0]["valid"])
 	assert_true(rows.filter(func(row: Dictionary) -> bool: return row["name"] == "default")[0]["valid"])
+
+
+func test_a_profile_saved_before_the_wing_orders_keeps_its_bindings_and_gains_keys_1_to_4() -> void:
+	var old: ControlProfile = default_profile.duplicate_profile()
+	old.name = "pre_t07"
+	old.bindings[&"fire"] = (old.bindings[&"fire"] as Array) + ["key:K"]
+	var wing_actions: Array[StringName] = [InputAdapter.WING_ATTACK, InputAdapter.WING_FORM, InputAdapter.WING_ENGAGE,
+			InputAdapter.WING_COVER]
+	for action: StringName in wing_actions:
+		old.bindings.erase(action)
+		old.deadzones.erase(action)
+	_write_user_file("pre_t07", old.to_config_text())
+	var loaded: Dictionary = store.load_profile("pre_t07")
+	assert_true(loaded["ok"], "\n".join(loaded["errors"]))
+	assert_eq(loaded["filled"], PackedStringArray(["wing_attack", "wing_form", "wing_engage", "wing_cover"]))
+	var profile: ControlProfile = loaded["profile"]
+	assert_eq(profile.descriptors_for(&"fire"), PackedStringArray(["pad:button:0", "key:Space", "mouse:1", "key:K"]),
+			"its own bindings are kept")
+	assert_eq(profile.descriptors_for(InputAdapter.WING_ATTACK), PackedStringArray(["key:1"]))
+	assert_eq(profile.descriptors_for(InputAdapter.WING_COVER), PackedStringArray(["key:4"]))
+	assert_eq(float(profile.deadzones[InputAdapter.WING_FORM]), float(default_profile.deadzones[InputAdapter.WING_FORM]))
+	# Only actions the file never mentions are filled: one with a deadzone but no bindings is still broken.
+	var half: ControlProfile = old.duplicate_profile()
+	half.deadzones[InputAdapter.WING_ATTACK] = 0.5
+	_write_user_file("half", half.to_config_text())
+	var broken: Dictionary = store.load_profile("half")
+	assert_false(broken["ok"])
+	assert_string_contains("\n".join(broken["errors"]), "bindings.wing_attack: missing")
 
 
 func test_entries_describe_every_profile() -> void:
