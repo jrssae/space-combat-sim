@@ -6,7 +6,7 @@ extends RefCounted
 ## One context per pilot, kept across ticks: `AiPilot.think` calls `refresh(p)` with the tick's perception; the wing fields
 ## (`order`, `leader_id`, `leader_target_id`, `engage_radius_m`) are set from outside the brain (M3-T07's `WingDirector`;
 ## `BrainFactory`'s `orders`) and stay until changed. Later tasks add their own fields here the same way: the formation slot
-## (T07), the guard post (T10), the route (T09).
+## (T07), the guard post (T10); the route (`route`, T09).
 ##
 ## Orders gate what may be attacked (`may_attack`), so a behaviour that attacks asks the context instead of reading the
 ## order itself:
@@ -33,6 +33,8 @@ var leader_id: int = 0
 ## The target the leader has selected (a `Contact.id`), 0 for none.
 var leader_target_id: int = 0
 var engage_radius_m: float = DEFAULT_ENGAGE_RADIUS_M
+## The route this pilot leads (M3-T09, the instructor; `BehaviourFollowPath.attach` sets it), or null.
+var route: Route = null
 
 ## Derived each tick by `refresh`: the leader among the friendly contacts (null when not in sight), the hostile ships in
 ## sensor range with, by the same index, the offset from this ship to each (World frame) and its length, and the ids of

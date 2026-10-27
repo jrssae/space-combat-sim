@@ -91,6 +91,7 @@ class HudCanvas extends Control:
 		var w: float = maxf(1.0, 2.0 * s)  # 2 px lines at 1080p
 		_draw_markers(f, s, w)
 		_draw_target(f, s, w)
+		_draw_waypoint(f, s, w)
 		_draw_grid(f, s, w)
 		_draw_gauges(f, s, w)
 		_draw_radar(f, s, w)
@@ -179,6 +180,25 @@ class HudCanvas extends Control:
 			var l: Vector2 = f.lead_pos
 			var r: float = 9.0 * s
 			draw_polyline(PackedVector2Array([l + Vector2(0.0, -r), l + Vector2(r, 0.0), l + Vector2(0.0, r), l + Vector2(-r, 0.0), l + Vector2(0.0, -r)]), color, w)
+
+	# The route's next waypoint (M3-T09): a plain diamond with `NAV n` and the range, or an edge arrow. T11 draws the final look.
+	func _draw_waypoint(f: HudFrame, s: float, w: float) -> void:
+		if not f.waypoint_present:
+			return
+		var label: String = "%s  %s" % [f.waypoint_label, _range_text(f.waypoint_range_m)]
+		if f.waypoint_on_screen:
+			var c: Vector2 = f.waypoint_pos
+			var r: float = 12.0 * s
+			draw_polyline(PackedVector2Array([c + Vector2(0.0, -r), c + Vector2(r, 0.0), c + Vector2(0.0, r), c + Vector2(-r, 0.0),
+					c + Vector2(0.0, -r)]), LINE_COLOR, w)
+			_text(label, c + Vector2(0.0, r + 16.0 * s), 14.0 * s, LINE_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
+		elif f.waypoint_edge_visible:
+			var p: Vector2 = f.waypoint_edge_pos
+			var a: float = f.waypoint_edge_angle
+			var size: float = 14.0 * s
+			draw_polyline(PackedVector2Array([p + Vector2.from_angle(a + 2.5) * size * 0.8, p + Vector2.from_angle(a) * size,
+					p + Vector2.from_angle(a - 2.5) * size * 0.8]), LINE_COLOR, w)
+			_text(label, p + Vector2(0.0, 26.0 * s), 13.0 * s, LINE_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
 
 	## "H +12.5  V -3.0" (degrees off the nose, horizontal then vertical), or dashes when the ship is not moving.
 	static func angles_text(f: HudFrame) -> String:

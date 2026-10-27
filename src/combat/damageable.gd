@@ -6,7 +6,8 @@ extends Node
 ## result to `apply_hit`; `RamResolver` does the same for rams (§16 D32), with `core_radius` and the `ram_*` values.
 ##
 ## `apply_hit` always emits `hit_taken` (effects, HUD flash), then removes hull points unless god mode protects this ship
-## (`respects_god_mode`, the player's, reading `DebugConsole.flags.invulnerable` at hit time), emits `damaged` when points
+## (`respects_god_mode`, the player's, reading `DebugConsole.flags.invulnerable` at hit time) or the hull is `invulnerable`
+## (any ship, set by its scenario spawn: the instructor), emits `damaged` when points
 ## were removed and `destroyed` once, on the hit that took the hull to zero. What destruction does is M2-T06; here it
 ## is only a signal.
 ##
@@ -50,6 +51,10 @@ var ram_mass_kg: float = 0.0
 var hit_by_anyone: bool = false
 ## True for the player's hull: `debug.invulnerable` stops its damage.
 var respects_god_mode: bool = false
+## True for a hull nothing damages, god-mode style but for any ship (M3-T09: the instructor, from its scenario spawn's
+## `invulnerable`). Hits still arrive (`hit_taken`); only the console's `kill` gets through, as it does through god mode.
+## The pool clears it on every acquire.
+var invulnerable: bool = false
 
 
 func _init() -> void:
@@ -131,7 +136,7 @@ func is_active() -> bool:
 func apply_hit(info: HitInfo) -> void:
 	hit_taken.emit(info)
 	var applied: float = 0.0
-	if not (respects_god_mode and DebugConsole.flags.invulnerable):
+	if not invulnerable and not (respects_god_mode and DebugConsole.flags.invulnerable):
 		applied = hull.apply(info.damage)
 	info.applied = applied
 	if applied > 0.0:

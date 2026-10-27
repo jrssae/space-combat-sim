@@ -393,6 +393,29 @@ fi
 expect_text "${log}" "[console] error: no AI ship named 'NOBODY'" || smoke_status=1
 reject_text "${log}" "[console] > quit 0" || smoke_status=1
 
+echo "== Console smoke run: the instructor leads the route on the real main scene"
+# M3-T09 / AC10, AC13: `scenario instructor_route` brings in the instructor; `state` lists `route` beside the other providers,
+# and the instructor leads the first leg (`route.*`, `ai INSTRUCTOR`) under --console-strict.
+log="${REPORTS}/console_route.log"
+route_status=0
+timeout 240 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; scenario instructor_route; wait 300; state; state route; ai INSTRUCTOR; quit' \
+    > "${log}" 2>&1 || route_status=$?
+cat "${log}"
+if (( route_status != 0 )); then
+    echo "run_tests.sh: instructor route smoke run exited ${route_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, hud, hull, input, raiders, ram, render, route, settings, ship, targeting, time, waves, weapons, world" \
+    || smoke_status=1
+expect_line "${log}" "[console] route.index = 1" || smoke_status=1
+expect_line "${log}" "[console] route.count = 6" || smoke_status=1
+expect_line "${log}" "[console] route.state = lead" || smoke_status=1
+expect_line "${log}" "[console] route.demo = none" || smoke_status=1
+expect_text "${log}" "[console] INSTRUCTOR: follow_path (lead)" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
+
 if (( smoke_status != 0 )); then
     echo "run_tests.sh: console smoke runs failed (see reports/console_*.log)."  >&2
 fi

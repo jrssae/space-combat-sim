@@ -93,3 +93,14 @@ var radar_radius_px: float = 0.0
 var radar_dots: Array[RadarModel.Dot] = []
 
 var status_line: String = ""
+
+## The route waypoint marker (M3-T09; T11 draws the final look): present, its label and range, on screen at `waypoint_pos`,
+## else an edge arrow at `waypoint_edge_pos` pointing `waypoint_edge_angle` (radians, screen frame), as the target's.
+var waypoint_present: bool = false
+var waypoint_on_screen: bool = false
+var waypoint_pos: Vector2 = Vector2.ZERO
+var waypoint_label: String = ""
+var waypoint_range_m: float = 0.0
+var waypoint_edge_visible: bool = false
+var waypoint_edge_pos: Vector2 = Vector2.ZERO
+var waypoint_edge_angle: float = 0.0

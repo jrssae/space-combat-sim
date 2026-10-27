@@ -1,0 +1,22 @@
+{"scenario_id": "instructor_route", "system_id": "local",
+ "player": {"position": [0, 0, 0], "forward": [0, 0, -1]},
+ "props": [
+   {"type": "nav_buoy", "name": "NAV ALPHA",   "position": [0, 0, -500]},
+   {"type": "nav_buoy", "name": "NAV BRAVO",   "position": [300, 50, -1200]},
+   {"type": "nav_buoy", "name": "NAV CHARLIE", "position": [-800, -200, -2000]},
+   {"type": "nav_buoy", "name": "NAV DELTA",   "position": [1500, 400, 800], "velocity": [0, 0, -3]},
+   {"type": "nav_buoy", "name": "NAV ECHO",    "position": [-200, 900, -4800]}],
+ "pools": {"starfury_ally": 1},
+ "routes": [
+   {"name": "TRAINING", "cruise_mps": 60, "pace": "player", "loop": false,
+    "waypoints": [
+      {"position": [-150, 30, -650]},
+      {"position": [120, 90, -1200], "demo": "roll"},
+      {"position": [40, 290, -2100], "demo": "strafe_box"},
+      {"position": [-350, 750, -4500], "demo": "pod_turn"},
+      {"position": [600, 600, -4000], "demo": "flip_and_burn", "hold_s": 2},
+      {"position": [300, 200, -2600], "demo": "all_stop", "hold_s": 3}]}],
+ "spawns": [
+   {"type": "starfury_ally", "name": "INSTRUCTOR", "anchor": "player", "offset": [0, 0, -200],
+    "invulnerable": true, "route": "TRAINING",
+    "behaviour": {"type": "ai", "profile": "instructor"}}]}

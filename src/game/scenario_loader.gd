@@ -16,7 +16,11 @@ extends RefCounted
 ##                                                  # `Main` builds `raider_fighter` and `starfury_ally` (M3-T08) from it
 ##      "waves": Array[Dictionary],                 # each {"name", "delay_s", "spawns": Array[{type, name, anchor, offset,
 ##                                                  #       velocity, at_s, behaviour}]} (M2-T09); may be empty
-##      "loop": Dictionary}                         # {"from_wave": int (0 = none), "add_per_loop": int}
+##      "loop": Dictionary,                         # {"from_wave": int (0 = none), "add_per_loop": int}
+##      "routes": Array[Route],                     # `routes[]` (M3-T09): {name, cruise_mps (60), pace ("player" | "none"),
+##                                                  #       loop (false), waypoints: [{position, demo, hold_s}]}; may be empty
+##      "spawns": Array[Dictionary]}                # ships placed at load (M3-T09): a wave spawn's fields plus
+##                                                  #       "invulnerable" (bool, false) and "route" (a route's name, "" none)
 ## Errors are returned, not pushed: the caller decides how loud a broken scenario is.
 
 const FREE_FLIGHT_PATH: String = "res://data/scenarios/free_flight.json"
@@ -104,7 +108,14 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	var loop: Variant = _loop(root.get("loop", {}), source)
 	if loop is String:
 		return _failure(loop as String)
-	var waves: Variant = _waves(root.get("waves", []), pools as Dictionary, system, source)
+	var routes: Variant = _routes(root.get("routes", []), system, source)
+	if routes is String:
+		return _failure(routes as String)
+	var spawns: Variant = _load_spawns(root.get("spawns", []), routes as Array[Route], pools as Dictionary, system, source)
+	if spawns is String:
+		return _failure(spawns as String)
+	var at_load: Dictionary = _type_counts(spawns as Array[Dictionary])
+	var waves: Variant = _waves(root.get("waves", []), pools as Dictionary, system, source, at_load)
 	if waves is String:
 		return _failure(waves as String)
 	var wave_list: Array[Dictionary] = waves
@@ -121,6 +132,8 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	result["pools"] = pools
 	result["waves"] = wave_list
 	result["loop"] = loop
+	result["routes"] = routes
+	result["spawns"] = spawns
 	return result
 
 
@@ -155,8 +168,112 @@ static func _loop(raw: Variant, source: String) -> Variant:
 	return {"from_wave": int(from_wave), "add_per_loop": int(add)}
 
 
-## `waves[]`, or an error string.
-static func _waves(raw: Variant, pools: Dictionary, system: StringName, source: String) -> Variant:
+## `routes[]` as `Route`s (universe waypoints, no pace ship yet: the spawner sets `pace_id`), or an error string.
+static func _routes(raw: Variant, system: StringName, source: String) -> Variant:
+	if not (raw is Array):
+		return "%s: routes must be an array" % source
+	var out: Array[Route] = []
+	for r: int in (raw as Array).size():
+		var where: String = "%s: routes[%d]" % [source, r]
+		var entry: Variant = (raw as Array)[r]
+		if not (entry is Dictionary):
+			return "%s must be an object" % where
+		var data: Dictionary = entry
+		var route_name: Variant = data.get("name")
+		if not (route_name is String) or (route_name as String).strip_edges().is_empty():
+			return "%s.name must be a non-empty string" % where
+		for other: Route in out:
+			if other.name == route_name:
+				return "%s.name: duplicate route '%s'" % [where, route_name]
+		var cruise: Variant = data.get("cruise_mps", Route.DEFAULT_CRUISE_MPS)
+		if not _is_number(cruise) or float(cruise) <= 0.0:
+			return "%s.cruise_mps must be a number above 0" % where
+		var pace: Variant = data.get("pace", String(Route.PACE_PLAYER))
+		if not (pace is String) or not Route.PACE_WORDS.has(StringName(pace as String)):
+			return "%s.pace must be one of %s, got %s" % [where, ", ".join(PackedStringArray(Route.PACE_WORDS)), JSON.stringify(pace)]
+		var loop: Variant = data.get("loop", false)
+		if typeof(loop) != TYPE_BOOL:
+			return "%s.loop must be true or false" % where
+		var points: Variant = data.get("waypoints")
+		if not (points is Array) or (points as Array).is_empty():
+			return "%s.waypoints must be a non-empty array" % where
+		var route := Route.new()
+		route.name = route_name as String
+		route.cruise_mps = float(cruise)
+		route.pace = StringName(pace as String)
+		route.loop = loop as bool
+		for i: int in (points as Array).size():
+			var at: String = "%s.waypoints[%d]" % [where, i]
+			var point: Variant = (points as Array)[i]
+			if not (point is Dictionary):
+				return "%s must be an object" % at
+			var position: Variant = _universe_pos((point as Dictionary).get("position"), system)
+			if position == null:
+				return "%s.position must be [x, y, z] (numbers)" % at
+			var demo: Variant = (point as Dictionary).get("demo", "")
+			if not (demo is String) or (not (demo as String).is_empty() and not Manoeuvres.NAMES.has(StringName(demo as String))):
+				return "%s.demo must be one of %s, got %s" % [at, ", ".join(PackedStringArray(Manoeuvres.NAMES)), JSON.stringify(demo)]
+			var hold: Variant = (point as Dictionary).get("hold_s", 0.0)
+			if not _is_number(hold) or float(hold) < 0.0:
+				return "%s.hold_s must be a number, 0 or more" % at
+			route.add(position as UniversePos, StringName(demo as String), float(hold))
+		out.append(route)
+	return out
+
+
+## `spawns[]`, the ships placed when the scenario loads (a wave spawn's fields, plus `invulnerable` and `route`), or an error
+## string. Together they must fit the pools.
+static func _load_spawns(raw: Variant, routes: Array[Route], pools: Dictionary, system: StringName, source: String) -> Variant:
+	if not (raw is Array):
+		return "%s: spawns must be an array" % source
+	var out: Array[Dictionary] = []
+	var route_names := PackedStringArray()
+	for route: Route in routes:
+		route_names.append(route.name)
+	for i: int in (raw as Array).size():
+		var where: String = "%s: spawns[%d]" % [source, i]
+		var spawn: Variant = _spawn((raw as Array)[i], where, system)
+		if spawn is String:
+			return spawn
+		var entry: Dictionary = (raw as Array)[i]
+		var invulnerable: Variant = entry.get("invulnerable", false)
+		if typeof(invulnerable) != TYPE_BOOL:
+			return "%s.invulnerable must be true or false" % where
+		var route: Variant = entry.get("route", "")
+		if route == null:
+			route = ""
+		if not (route is String):
+			return "%s.route must be the name of a route" % where
+		if not (route as String).is_empty():
+			if not route_names.has(route as String):
+				return "%s.route '%s' is not a route of this scenario (%s)" % [where, route,
+						", ".join(route_names) if not route_names.is_empty() else "none"]
+			if str(((spawn as Dictionary)["behaviour"] as Dictionary).get("type", "")) != "ai":
+				return "%s.route needs an \"ai\" behaviour (an AiPilot leads it)" % where
+		(spawn as Dictionary)["invulnerable"] = invulnerable as bool
+		(spawn as Dictionary)["route"] = route as String
+		out.append(spawn as Dictionary)
+	var counts: Dictionary = _type_counts(out)
+	for type: StringName in counts:
+		if int(counts[type]) > int(pools.get(type, 0)):
+			return "%s: spawns: %d ships of %s but pools.%s holds %d" % [source, counts[type], type, type, int(pools.get(type, 0))]
+	return out
+
+
+## Ship type -> how many of `spawns` take one.
+static func _type_counts(spawns: Array[Dictionary]) -> Dictionary:
+	var out: Dictionary = {}
+	for spawn: Dictionary in spawns:
+		out[spawn["type"]] = int(out.get(spawn["type"], 0)) + 1
+	return out
+
+
+static func _is_number(value: Variant) -> bool:
+	return typeof(value) == TYPE_FLOAT or typeof(value) == TYPE_INT
+
+
+## `waves[]`, or an error string. `at_load` (type -> count) is what the ships placed at load already hold of each pool.
+static func _waves(raw: Variant, pools: Dictionary, system: StringName, source: String, at_load: Dictionary = {}) -> Variant:
 	if not (raw is Array):
 		return "%s: waves must be an array" % source
 	var out: Array[Dictionary] = []
@@ -180,12 +297,13 @@ static func _waves(raw: Variant, pools: Dictionary, system: StringName, source: 
 			if spawn is String:
 				return spawn
 			spawns.append(spawn as Dictionary)
-		var type_counts: Dictionary = {}
-		for spawn: Dictionary in spawns:
-			type_counts[spawn["type"]] = int(type_counts.get(spawn["type"], 0)) + 1
+		var type_counts: Dictionary = _type_counts(spawns)
 		for type: StringName in type_counts:
-			if int(type_counts[type]) > int(pools.get(type, 0)):
-				return "%s: %d spawns of %s but pools.%s holds %d" % [where, type_counts[type], type, type, int(pools.get(type, 0))]
+			var held: int = int(at_load.get(type, 0))
+			if int(type_counts[type]) + held > int(pools.get(type, 0)):
+				var also: String = " and %d ship%s at load" % [held, "" if held == 1 else "s"] if held > 0 else ""
+				return "%s: %d spawns of %s%s but pools.%s holds %d" % [where, type_counts[type], type, also, type,
+						int(pools.get(type, 0))]
 		out.append({"name": wave_name as String, "delay_s": float(delay), "spawns": spawns})
 	return out
 
@@ -260,7 +378,7 @@ static func _empty() -> Dictionary:
 	return {"ok": false, "error": "", "scenario_id": &"", "system_id": &"local",
 			"player": {"position": UniversePos.new(), "forward": Vector3.FORWARD, "basis": Basis.IDENTITY},
 			"props": [] as Array[Dictionary], "pools": {}, "waves": [] as Array[Dictionary],
-			"loop": {"from_wave": 0, "add_per_loop": 1}}
+			"loop": {"from_wave": 0, "add_per_loop": 1}, "routes": [] as Array[Route], "spawns": [] as Array[Dictionary]}
 
 
 static func _failure(message: String) -> Dictionary:

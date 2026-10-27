@@ -106,6 +106,7 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	ship.targeting.clear_selection()
 	combatant.cannon.gate.reset()
 	combatant.damageable.restore()
+	combatant.damageable.invulnerable = false  # a scenario's `invulnerable` is per spawn (M3-T09); the caller sets it again
 	combatant.display_name = display_name
 	combatant.targetable.display_name = display_name
 	_set_brain(combatant, brain)

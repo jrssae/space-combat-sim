@@ -8,6 +8,7 @@ script = ExtResource("1_profile")
 weights = Dictionary[StringName, float]({
 &"attack": 0.0,
 &"evade": 0.0,
+&"follow_path": 1.0,
 &"idle": 1.0,
 &"retreat": 0.0
 })
