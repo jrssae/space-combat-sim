@@ -185,6 +185,42 @@ func test_no_target_no_box_no_lead() -> void:
 	assert_false(f.edge_arrow_visible)
 
 
+# --- route waypoint (M3-T09) -------------------------------------------------------------------------------------------
+
+
+func test_the_waypoint_marker_sits_on_the_projected_route_point() -> void:
+	var input: HudInput = _hud_input()
+	assert_false(HudLayout.compute(input).waypoint_present, "no route, no marker")
+	input.has_waypoint = true
+	input.waypoint_position = Vector3(120.0, -40.0, -900.0)
+	input.waypoint_label = "NAV 2"
+	input.own_position = Vector3(0.0, 0.0, -10.0)
+	var f: HudFrame = HudLayout.compute(input)
+	assert_true(f.waypoint_present)
+	assert_true(f.waypoint_on_screen)
+	assert_almost_eq(f.waypoint_pos, HudLayout.project(input, input.waypoint_position)["pos"] as Vector2, Vector2.ONE * TOL)
+	assert_eq(f.waypoint_label, "NAV 2")
+	assert_almost_eq(f.waypoint_range_m, input.own_position.distance_to(input.waypoint_position), 1e-3, "range from the ship")
+	assert_false(f.waypoint_edge_visible)
+	assert_false(f.edge_arrow_visible, "the target's arrow is its own")
+
+
+func test_a_waypoint_off_screen_or_behind_gets_an_edge_arrow() -> void:
+	var input: HudInput = _hud_input()
+	input.has_waypoint = true
+	input.waypoint_label = "NAV 3"
+	input.waypoint_position = Vector3(3000.0, 0.0, -100.0)  # far right
+	var right: HudFrame = HudLayout.compute(input)
+	assert_false(right.waypoint_on_screen)
+	assert_true(right.waypoint_edge_visible)
+	assert_gt(right.waypoint_edge_pos.x, VIEW.x - 100.0, "on the right border")
+	assert_almost_eq(right.waypoint_edge_angle, 0.0, 1e-3, "pointing right")
+	input.waypoint_position = Vector3(0.0, 0.0, 800.0)  # dead astern
+	var behind: HudFrame = HudLayout.compute(input)
+	assert_true(behind.waypoint_edge_visible)
+	assert_false(behind.target_present, "no target meanwhile")
+
+
 func test_the_lead_reticle_sits_on_the_projected_intercept_point() -> void:
 	var input: HudInput = _hud_input()
 	input.muzzle_position = Vector3(0.0, -1.0, -3.0)

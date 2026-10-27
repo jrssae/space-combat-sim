@@ -1271,6 +1271,69 @@ Added 2026-10-26 for Q19; after T13 (it is keyed to skill and aggression); run b
   stay and move with a rebase), `test_audio_director` (a reused voice is heard at its new place at once).
   `scripts/run_tests.sh`: `rebase -900000 0 0; wait 1; state world; get ship.position` on the real main scene.
 
+**M3-T09 (instructor: follow path, pacing, demo manoeuvres, route scenario).** Merged into `m3` as unreviewed work in progress
+(maintainer, 2026-10-27); the review, its fixes and a `RebaseFight` check of the route (T14) are still to do.
+- **Built.** `Route` (`src/ai/route.gd`, pure: `Waypoint`s as `UniversePos` with `demo` and `hold_s`, `cruise_mps` 60, `pace`
+  `player|none` and the spawner-set `pace_id`, `loop`, the pacing constants and `pace_speed` / `should_wait` / `lag_to`).
+  `Manoeuvre` (base: `step(p, dt)` until `done`, `result()`, `needs_speed()`, `TIMEOUT_S` 45 as a safety net, the desired-velocity
+  protocol) and `Manoeuvres` (the five as inner classes, `create(name)`, `NAMES`, `display_name`). `BehaviourFollowPath`
+  (`follow_path`, score 0.5; states `lead`, `wait`, `run_up`, `demo`, `hold`, `done`) reads `AiContext.route` (new field);
+  `BehaviourFollowPath.attach(pilot, route)` sets it and adds the behaviour once. `assets/ai/instructor.tres` weighs `follow_path` 1.
+  `ShipCapability.alpha_max_rad` (RCS torque / inertia per axis, for the roll's stop). `Damageable.invulnerable` (no damage from
+  bolts or rams, `hit_taken` still fires; the console's `kill` gets through, as through god mode; `ShipPool.acquire` clears it).
+- **Scenario schema.** `routes[]` (`{name, cruise_mps, pace, loop, waypoints: [{position, demo, hold_s}]}`, absolute universe
+  positions) and top-level `spawns[]`: ships placed at load, a wave spawn's fields plus `invulnerable` (bool) and `route` (a
+  route's name; needs an `ai` behaviour). Path-qualified errors for both (`routes[0].waypoints[2].demo must be one of ...`,
+  `spawns[0].route 'X' is not a route of this scenario (TRAINING)`); load spawns and each wave share the pools (`waves[0]: 4 spawns of
+  raider_fighter and 1 ship at load but pools.raider_fighter holds 4`). `Main` places the spawns from the pool after the props (name,
+  anchor + offset, the player's start attitude, the brain, the flag, the route with `pace_id` = the player's `Targetable` id) and
+  **places them again on every respawn** (the lesson starts over; the instructor would otherwise wait for a player that respawned out of
+  sensor range). `instructor_route.json`: the five buoys, no waves, pool `{"starfury_ally": 1}` (the instructor is a pooled LOD1
+  Starfury), route TRAINING of six waypoints (NAV 1 none, NAV 2 roll, NAV 3 strafe_box, NAV 4 pod_turn, NAV 5 flip_and_burn hold 2 s,
+  NAV 6 all_stop hold 3 s), each at least 140 m from a buoy; the box's NAV 3 lies on the line toward NAV 4, so the 1.2 km the box
+  travels at cruise is not wasted. `settings.scenario` and `Main.SCENARIO_CHOICES` gain `instructor_route`.
+- **Pacing as built.** The lag is the distance to the pace contact (INF when it is not in sight: destroyed, parked or beyond 5 km;
+  0 with `pace: none`). `lead` flies `cruise * clamp((1500 - lag) / 900, 0, 1)` toward the waypoint; beyond 1 600 m `wait` brakes with the
+  player selected, so the brake turns the nose onto it (§5.5 brake-to-face), until the lag is under 800 m. Beyond the brief: **a demo
+  also waits for the player within 800 m** (same `wait` state), so the move is shown to someone close enough to see it; a demo that
+  takes speed away (flip and burn, all stop) is shown from at least 90 % of cruise, with a **run-up** toward the next waypoint first;
+  pacing never interrupts a move that has started; a move that loses control to another behaviour starts again on return. In Jolt
+  (`test_instructor_route`, 0.1 s steps): with the player parked the instructor stopped at NAV 2, 1 097 m out, facing the player
+  within 0.1 degrees, still waited with the player at 1 000 m and started the roll when the player was put 700 m away; left 2 km behind
+  on the next leg it braked, stopped 2 012 m out facing the player within 0.6 degrees, waited at 1 000 m and led on from 700 m.
+- **Demo goals in Jolt** (`test_manoeuvres_jolt`, one `starfury_ally` each, assist forced on, from 60 m/s, 60 Hz; measured from the
+  body, not from the moves' reports):
+  - roll: 4.73 s; the up axis turned 360.7 degrees at the end and 361.4 settled; peak 90.0 degrees/s (the roll rate limit); then
+    `min(K_FACE * left, sqrt(2 * 0.5 * alpha * left))` to stop on the circle.
+  - flip and burn: flip 3.43 s, burn 2.0 s on both mains at full; ends at 1.92 m/s along the starting direction (under 2 m/s; the burn
+    is a seek to rest, so it does not reverse).
+  - strafe box: 19.7 s; legs 50.44 / 50.45 / 50.45 / 50.45 m; back within 0.45 m of the start moving at the starting velocity; nose held
+    to 0.00 degrees. **Deviation**: the brief's "legs of 1.5 s each" cannot give AC10's 40 m legs with the Starfury's 10 m/s^2 RCS (a 1.5
+    s push covers 11 m), so each leg is a seek to the next corner of a 50 m square that moves with the starting velocity, opening
+    with a full-strafe push of about 1.4 s (1.37 s in the unit model) up to 15 m/s and braking onto the corner; a leg ends within 2 m,
+    under 1 m/s relative.
+  - pod turn: 1.32 s on the left main alone; 30.3 degrees right at the end, 38.9 settled. With the assist on, the pod difference is
+    a 30 degrees/s yaw-rate command and the assist trims the left main (at most 0.43 of full) because its torque is more than the
+    RCS can cancel.
+  - all stop: 4.85 s; 0.498 m/s and 0.000 degrees/s.
+  - On the route at 0.1 s steps with the player kept 300 m behind (`test_instructor_route`): every waypoint in order, the route done in
+    197 s of sim time; roll 360.42, box legs 50.24 m and closure 0.24 m, pod turn 30.84, flip and burn from 59.0 to 1.25 m/s, all
+    stop 0.448 m/s and 0 degrees/s; none timed out.
+- **HUD.** `HudInput.has_waypoint` / `waypoint_position` (World, converted from the `UniversePos` every frame) / `waypoint_label`
+  (`NAV 3`); `HudFrame.waypoint_*` (on screen at the projected point, else an edge arrow; `HudLayout._edge_arrow` now returns its point
+  and angle, shared with the target's arrow) and a plain green diamond with label and range in `Hud` (T11 draws the final look).
+  Status line: `FOLLOW INSTRUCTOR — NAV 3/6 — NEXT: STRAFE BOX` while leading, `CLOSE UP ON INSTRUCTOR — ...` while waiting,
+  `WATCH INSTRUCTOR — NAV 3/6 — STRAFE BOX` during a run-up or demo, `FOLLOW INSTRUCTOR — ROUTE COMPLETE` at the end; it replaces the
+  waves' line while a ship leads a route (`Main.route_active()`: the instructor in play and still flown by that pilot). The main-scene
+  test checks the marker against `Camera3D.unproject_position` within 0.5 px.
+- **Console.** Provider `route` (`index` 1-based like the HUD, `count`, `lag_m` (-1 out of sight), `state` (`none` when the
+  instructor is not flying the route), `demo`), registered by `Main` only on a scenario with a route ship, so the sandbox's providers
+  line is unchanged. `ai INSTRUCTOR` shows `follow_path (lead)` with `nav`, `lag_m`, `demo` (and the move's `step` during a demo). New
+  smoke run in `scripts/run_tests.sh`: `scenario instructor_route` lists `route` in `state` and leads the first leg.
+- **Not touched.** AC13's fight: `follow_path` exists only on a pilot given a route, so the ally and raider profiles score nothing new.
+  `docs/playtest.md` still lists `scenario [combat_sandbox|free_flight]` (T12 writes the M3 section). P6 is (H): its console
+  commands run headless without the `screenshot` lines (`scenario instructor_route`, waits, `camera cockpit`, `state route`).
+
 ## Definition of done (M3)
 
 - T01-T12 merged into `m3`, `scripts/run_tests.sh` green, `docs/third-party.md` current, no generated binaries committed.

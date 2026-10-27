@@ -46,5 +46,10 @@ var target: TargetReadout = null
 ## Every targetable in sensor range as of this tick, and which one is selected (0 = none).
 var contacts: Array[TargetInfo] = []
 var selected_id: int = 0
-## One line at the top centre (wave, raiders left, kills); empty until the wave director feeds it.
+## One line at the top centre (wave, raiders left, kills; on a route the instructor's `FOLLOW INSTRUCTOR — NAV 2/6 — NEXT: ROLL`);
+## empty until something feeds it.
 var status_line: String = ""
+## The route waypoint to mark (M3-T09: the instructor's next waypoint), World frame, and its label (`NAV 2`).
+var has_waypoint: bool = false
+var waypoint_position: Vector3 = Vector3.ZERO
+var waypoint_label: String = ""

@@ -9,6 +9,9 @@ var a_retro: float = 5.0
 var a_rcs: Vector2 = Vector2(5.0, 5.0)
 ## rad/s, body axes (x pitch, y yaw, z roll): the assist's rate target at full deflection.
 var rate_max_rad: Vector3 = Vector3(1.0, 1.0, 1.0)
+## rad/s^2, body axes: the angular acceleration the RCS gives at full torque (`rcs_torque_max / inertia`), for moves that must
+## stop a turn at an angle (the demo roll, M3-T09).
+var alpha_max_rad: Vector3 = Vector3(1.0, 1.0, 1.0)
 
 
 static func from_spec(spec: ShipSpec, layout: ThrusterLayout) -> ShipCapability:
@@ -20,4 +23,7 @@ static func from_spec(spec: ShipSpec, layout: ThrusterLayout) -> ShipCapability:
 	cap.a_retro = maxf(float(retros) * spec.pod_retro_thrust / mass, 0.01)
 	cap.a_rcs = Vector2(maxf(spec.rcs_force_max.x / mass, 0.01), maxf(spec.rcs_force_max.y / mass, 0.01))
 	cap.rate_max_rad = spec.rate_max_rad()
+	var inertia: Vector3 = spec.inertia
+	cap.alpha_max_rad = Vector3(spec.rcs_torque_max.x / maxf(inertia.x, 1.0), spec.rcs_torque_max.y / maxf(inertia.y, 1.0),
+			spec.rcs_torque_max.z / maxf(inertia.z, 1.0))
 	return cap

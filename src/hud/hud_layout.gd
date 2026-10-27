@@ -26,6 +26,7 @@ static func compute(input: HudInput) -> HudFrame:
 	_gauges(input, f)
 	_grid(input, f)
 	_radar(input, f)
+	_waypoint(input, f)
 	f.status_line = input.status_line
 	return f
 
@@ -136,7 +137,10 @@ static func _target(input: HudInput, f: HudFrame) -> void:
 		f.target_on_screen = true
 		f.target_box = _box_around(input, f, t, shown["pos"])
 	else:
-		_edge_arrow(input, f, t.position)
+		var edge: Dictionary = _edge_arrow(input, f, t.position)
+		f.edge_arrow_pos = edge["pos"]
+		f.edge_arrow_angle = edge["angle"]
+		f.edge_arrow_visible = true
 	# The lead: where the bolt meets the target, from the mean muzzle position, hidden when there is no solution in range.
 	var lead: Dictionary = InterceptMath.solve(input.muzzle_position, input.own_velocity, t.position, t.velocity,
 			input.weapon_speed_mps, input.weapon_lifetime_s)
@@ -159,8 +163,8 @@ static func _box_around(input: HudInput, f: HudFrame, t: TargetReadout, centre: 
 	return Rect2(centre - Vector2(half, half), Vector2(half, half) * 2.0)
 
 
-# On the screen border, pointing the way to a target that is off screen or behind the camera.
-static func _edge_arrow(input: HudInput, f: HudFrame, point: Vector3) -> void:
+# On the screen border, pointing the way to a point that is off screen or behind the camera: `{"pos": Vector2, "angle": float}`.
+static func _edge_arrow(input: HudInput, f: HudFrame, point: Vector3) -> Dictionary:
 	var p_view: Vector3 = input.camera_transform.affine_inverse() * point
 	var dir := Vector2(p_view.x, -p_view.y)  # screen frame: x right, y down; the side the target is on
 	if dir.length() < 1e-4:
@@ -169,9 +173,28 @@ static func _edge_arrow(input: HudInput, f: HudFrame, point: Vector3) -> void:
 	var half: Vector2 = input.viewport_size * 0.5 - Vector2.ONE * EDGE_MARGIN_PX * f.scale
 	# Scale `dir` out from the centre until it meets the inset border.
 	var k: float = minf(half.x / maxf(absf(dir.x), 1e-6), half.y / maxf(absf(dir.y), 1e-6))
-	f.edge_arrow_pos = input.viewport_size * 0.5 + dir * k
-	f.edge_arrow_angle = dir.angle()
-	f.edge_arrow_visible = true
+	return {"pos": input.viewport_size * 0.5 + dir * k, "angle": dir.angle()}
+
+
+# --- route waypoint (M3-T09) -------------------------------------------------------------------------------------------
+
+
+# The route's next waypoint: a marker where it projects, or an edge arrow, with its label and range.
+static func _waypoint(input: HudInput, f: HudFrame) -> void:
+	if not input.has_waypoint:
+		return
+	f.waypoint_present = true
+	f.waypoint_label = input.waypoint_label
+	f.waypoint_range_m = input.own_position.distance_to(input.waypoint_position)
+	var shown: Dictionary = project(input, input.waypoint_position)
+	if bool(shown["in_front"]) and on_screen(input, shown["pos"]):
+		f.waypoint_on_screen = true
+		f.waypoint_pos = shown["pos"]
+		return
+	var edge: Dictionary = _edge_arrow(input, f, input.waypoint_position)
+	f.waypoint_edge_visible = true
+	f.waypoint_edge_pos = edge["pos"]
+	f.waypoint_edge_angle = edge["angle"]
 
 
 # --- bottom-edge gauges --------------------------------------------------------------------------------------------

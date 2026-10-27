@@ -3,9 +3,13 @@ extends Node3D
 ## Main scene (architecture §3, M1-T15): loads the free-flight scenario, spawns the player and the nav buoys through
 ## World, wires camera, weapons, thruster glow and overlay, and turns one PilotCommand per physics tick into ship
 ## commands and UI actions. Main runs while paused (so Start can unpause); World and everything in it pause.
+##
+## Ships the scenario places at load (`spawns`, M3-T09) come from the pool with their brain and `invulnerable` flag; one that
+## leads a `route` (the instructor) gets it paced to the player, and then the HUD marks its next waypoint, the status line
+## follows the route and the console has provider `route`. They are placed again on every respawn (the lesson restarts).
 
 const SCENARIO_DIR := "res://data/scenarios/"
-const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight"]
+const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
 signal player_died
@@ -38,9 +42,19 @@ var ship: Ship = null
 var thrusters: ThrusterVisuals = null
 var cannon: PulseCannon = null
 var buoys: Array[NavBuoy] = []
+## The ships the scenario places at load (`spawns`, M3-T09), from the pool; placed again on every respawn.
+var scenario_ships: Array[Combatant] = []
+## The ship leading a route (the instructor) and its follow-path behaviour; null when the scenario has none.
+var instructor: Combatant = null
+var instructor_path: BehaviourFollowPath = null
 
 var _spawn_position: UniversePos = UniversePos.new()
 var _spawn_basis: Basis = Basis.IDENTITY
+var _system_id: StringName = &"local"
+var _scenario_spawns: Array[Dictionary] = []
+var _scenario_routes: Array[Route] = []
+# By the index of `scenario_ships`: the brain each was given (a ship flown by another brain has been reused since).
+var _scenario_brains: Array[PilotBrain] = []
 
 @onready var world: WorldFrame = $World
 @onready var space_environment: SpaceEnvironment = $SpaceEnvironment
@@ -73,6 +87,9 @@ func _ready() -> void:
 		var player: Dictionary = scenario["player"]
 		_spawn_position = player["position"]
 		_spawn_basis = player["basis"]
+		_system_id = scenario["system_id"]
+		_scenario_spawns = scenario["spawns"]
+		_scenario_routes = scenario["routes"]
 	_spawn_ship()
 	# The player leads wing ALPHA (architecture §16 D36). Its members join later: allies from the pool (M3-T08) or a
 	# scenario's `wings` (M3-T10).
@@ -102,6 +119,7 @@ func _ready() -> void:
 	waves.wave_started.connect(wings.on_wave_started)
 	if bool(scenario.get("ok", false)):
 		_spawn_props(scenario["props"])
+	_spawn_scenario_ships()
 	camera_rig.setup(ship, ship.cockpit_anchor, ship.get_chase_offset(), ship.set_cockpit_interior_visible)
 	# The World keeps its origin within `auto_rebase_distance_m` (5 km, main.tscn) of the player (M3-T14, §14.1).
 	world.focus = ship
@@ -229,6 +247,7 @@ func respawn() -> void:
 	combatant.damageable.restore()
 	for buoy: NavBuoy in buoys:
 		buoy.restore()
+	_spawn_scenario_ships()  # the lesson starts over with the player
 	combatant.cannon.gate.reset()
 	ship.set_flight_command(FlightCommand.new())
 	ship.set_combat_command(CombatCommand.new())
@@ -292,7 +311,74 @@ func _build_hud_input() -> HudInput:
 	input.contacts = ship.targeting.candidates()
 	input.selected_id = ship.targeting.selected_id()
 	input.status_line = status_line
+	if route_active():
+		input.status_line = instructor_path.status_line(instructor.display_name)
+		var waypoint: UniversePos = instructor_path.waypoint_position()
+		if waypoint != null:
+			input.has_waypoint = true
+			input.waypoint_position = world.universe_to_local(waypoint)  # this frame's World frame (rebase-proof)
+			input.waypoint_label = instructor_path.waypoint_label()
 	return input
+
+
+## Whether a ship is leading a route right now: the instructor is in play and still flown by the pilot with that route (a pooled
+## ship released and acquired again for something else is not).
+func route_active() -> bool:
+	if instructor_path == null or instructor == null or not instructor.damageable.is_active() or instructor.driver == null:
+		return false
+	var pilot := instructor.driver.brain as AiPilot
+	return pilot != null and pilot.behaviour(&"follow_path") == instructor_path
+
+
+# --- ships at load (M3-T09) ------------------------------------------------------------------------------------------
+
+
+# Places the scenario's `spawns` from the pool (again, after releasing the ones still out, on a respawn): each at its anchor plus
+# offset, the player's start attitude, with its brain, its `invulnerable` flag and, for one with a `route`, the route paced to
+# the player.
+func _spawn_scenario_ships() -> void:
+	for i: int in scenario_ships.size():
+		var placed: Combatant = scenario_ships[i]
+		if placed.driver != null and placed.driver.brain == _scenario_brains[i]:  # not a pool ship since reused for another
+			ships.release(placed)
+	scenario_ships.clear()
+	_scenario_brains.clear()
+	instructor = null
+	instructor_path = null
+	for entry: Dictionary in _scenario_spawns:
+		var type: StringName = entry["type"]
+		var anchor: UniversePos = _spawn_position if StringName(entry["anchor"]) == &"player" \
+				else UniversePos.new(0.0, 0.0, 0.0, _system_id)
+		var ship_name: String = String(entry["name"])
+		if ship_name.is_empty():
+			ship_name = ships.next_name(ShipPool.ALLY_NAME_PREFIX, ShipPool.ALLY_FIRST_NUMBER) if type == ShipPool.ALLY_TYPE \
+					else ships.next_name()
+		var made: Dictionary = BrainFactory.from_behaviour(entry["behaviour"], anchor, hash([ship_name, 0]))
+		if not bool(made["ok"]):
+			push_warning("Main: spawn %s: %s" % [ship_name, made["error"]])
+			continue
+		var brain: PilotBrain = made["brain"]
+		var path: BehaviourFollowPath = null
+		var route: Route = _route_named(String(entry["route"]))
+		if route != null and brain is AiPilot:
+			route.pace_id = combatant.targetable.get_instance_id() if route.pace == Route.PACE_PLAYER else 0
+			path = BehaviourFollowPath.attach(brain as AiPilot, route)
+		var placed: Combatant = ships.acquire(ship_name, anchor.plus_local(entry["offset"]), _spawn_basis, entry["velocity"], brain, type)
+		if placed == null:
+			continue
+		placed.damageable.invulnerable = bool(entry["invulnerable"])
+		scenario_ships.append(placed)
+		_scenario_brains.append(brain)
+		if path != null and instructor == null:
+			instructor = placed
+			instructor_path = path
+
+
+func _route_named(route_name: String) -> Route:
+	for route: Route in _scenario_routes:
+		if route.name == route_name:
+			return route
+	return null
 
 
 func _on_player_destroyed(_info: HitInfo) -> void:
@@ -414,8 +500,31 @@ func _register_console() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"pause", "Pause or resume the game (toggles with no argument)",
 			[ConsoleArg.bool_optional(&"state")] as Array[ConsoleArg]), _cmd_pause, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"scenario",
-			"Load a scenario (combat_sandbox or free_flight): sets settings.scenario for this session and reloads the scene",
+			"Load a scenario (%s): sets settings.scenario for this session and reloads the scene" % ", ".join(PackedStringArray(SCENARIO_CHOICES)),
 			[ConsoleArg.enum_optional(&"name", SCENARIO_CHOICES, null)] as Array[ConsoleArg]), _cmd_scenario, self)
+	if instructor_path != null:
+		_register_route_provider()
+
+
+# Provider `route` (§16.4), on a scenario with a ship leading a route: the instructor's progress, read live.
+func _register_route_provider() -> void:
+	DebugConsole.registry.register_provider(&"route", ConsoleVars.new({
+		&"index": {"get": func() -> int: return instructor_path.nav_number() if instructor_path != null else 0,
+				"doc": "The waypoint the instructor leads to (1-based, the HUD's NAV n)"},
+		&"count": {"get": func() -> int: return instructor_path.waypoint_count() if instructor_path != null else 0,
+				"doc": "Waypoints on the route"},
+		&"lag_m": {"get": func() -> float: return instructor_path.lag_m if instructor_path != null and instructor_path.lag_m < INF else -1.0,
+				"unit": "m", "doc": "Distance from the instructor to the player (-1 when out of sight)"},
+		&"state": {"get": func() -> String: return instructor_path.state_name() if route_active() else "none",
+				"doc": "lead, wait (for the player), run_up, demo, hold, done; none when the instructor is not in play"},
+		&"demo": {"get": func() -> String: return _route_demo(),
+				"doc": "The demo at the waypoint flown to (none, roll, flip_and_burn, strafe_box, pod_turn, all_stop)"},
+	}), self)
+
+
+func _route_demo() -> String:
+	var demo: String = instructor_path.demo_name() if instructor_path != null else ""
+	return demo if not demo.is_empty() else "none"
 
 
 func _cmd_throttle(args: Dictionary) -> String:
