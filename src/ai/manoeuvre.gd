@@ -2,7 +2,7 @@ class_name Manoeuvre
 extends RefCounted
 ## One demo move (architecture §16 D37, M3-T09): a state machine that flies the ship through the real flight model and
 ## decides from the ship's measured state, not from timers alone, when its goal is met. The instructor's follow-path
-## behaviour runs one at a waypoint; the M7 tutorial can hold the player's flying against the same goals. The five moves
+## behaviour runs one at a waypoint; the M8 tutorial can hold the player's flying against the same goals. The five moves
 ## are in `Manoeuvres`.
 ##
 ## Contract:

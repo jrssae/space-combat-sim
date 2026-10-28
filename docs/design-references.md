@@ -44,7 +44,7 @@ wide across the pods and 8 m tall. The X is wider than tall: struts sit about 30
 The M1 generator produced a long cylindrical fuselage with cylindrical pods. The maintainer judged that
 closer to a Thunderbolt than a Starfury. The rework must hit the silhouette above.
 
-## Babylon 5 station (M6)
+## Babylon 5 station (M7)
 
 About 8 km long, arranged along one axis. From aft to fore:
 
@@ -78,14 +78,14 @@ spikes hanging from the nacelle sides and wing roots. `docs/assets-raider.md` li
 56°) and where they differ from the earlier written defaults (9 m × 17 m, 60°). Open: scale (is 17 m across right?)
 and colour (worn grey-brown is used, per the mood shot); the maintainer can overrule both in `RaiderSpec`.
 
-## Raider carrier (M11)
+## Raider carrier (M12)
 
 A blocky "battlewagon": a long rectangular box hull, dark green-grey with plating. **Two large concentric
 rings** encircle the middle and aft of the box. Many cone- or spike-shaped launch pods (yellow-gold triangular
 fins) stand around the rings, which gives it a spiky wheel look. Spindly antennae at the corners.
 This is the first of two raider capital types.
 
-## Raider Battle Wagon (second raider carrier type, M11)
+## Raider Battle Wagon (second raider carrier type, M12)
 
 A heavier raider carrier built around one huge ring, weathered grey-brown with heavy plating.
 
@@ -108,13 +108,13 @@ A raider base station orbiting a Mars-like orange planet with a thin blue atmosp
 the foreground show **two bright yellow-white engine glows** at the rear of the central hump, worn brown-grey
 plating and visible panel detail. Useful for raider colours, engine-glow colour and a planet backdrop.
 
-## Maintenance bot (M6 ambience, tutorial set dressing)
+## Maintenance bot (M7 ambience, tutorial set dressing)
 
 A small craft a few metres across. Two large curved shell halves (blue-purple, with yellow-orange bands and a
 painted number) sit side by side like a split egg or clam, joined by a grey central truss body. Two jointed
 manipulator arms hang below with claw grippers. A sensor head with a green lens sits under the front centre.
 
-## Combat sounds (reference for the M4 sound pass)
+## Combat sounds (reference for the M5 sound pass)
 
 The source is the YouTube clip "Starfury Dogfight with Raider Forces | Babylon 5"
 (https://www.youtube.com/watch?v=b3uTt3MGqPg), 1:12 to 1:53 only. It was measured locally from a mono 48 kHz downmix and

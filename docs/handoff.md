@@ -86,7 +86,7 @@ GPU-less cloud containers.
 
 ## 5. Control profiles (M2-T11)
 
-Console-driven until the M4 controls menu exists. Open the console with the ` key:
+Console-driven until the M5 controls menu exists. Open the console with the ` key:
 
 | Command | Does |
 |---|---|

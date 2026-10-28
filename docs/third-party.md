@@ -32,8 +32,8 @@ overflow, narrow-subgroup fallback): see `addons/gdgs/PATCHES.md`. If a patch is
 | Brush (splat trainer) | Apache-2.0 | Needs a GPU; optional M2+ polish path |
 | OpenSplat | AGPL-3.0 | CPU path too slow for CI; AGPL is fine for an external tool but adds nothing over sampling |
 | gdUnit4 | MIT | Fine framework; GUT chosen for its simpler headless CLI |
-| Piper TTS (`OHF-Voice/piper1-gpl`; the original `rhasspy/piper` was MIT and is archived) | GPL-3.0 (voice models: per-voice `MODEL_CARD` licence) | Candidate for voiced dialog (roadmap M14), run offline on the user's machine; adopt only voices whose licence permits it |
-| Kokoro TTS | Apache-2.0 (code and weights) | Alternative TTS candidate for M14 |
+| Piper TTS (`OHF-Voice/piper1-gpl`; the original `rhasspy/piper` was MIT and is archived) | GPL-3.0 (voice models: per-voice `MODEL_CARD` licence) | Candidate for voiced dialog (roadmap M15), run offline on the user's machine; adopt only voices whose licence permits it |
+| Kokoro TTS | Apache-2.0 (code and weights) | Alternative TTS candidate for M15 |
 | espeak-ng | GPL-3.0 | Phonemizer used by Piper/Kokoro; also usable alone for synthetic radio voices |
 
 ## Content

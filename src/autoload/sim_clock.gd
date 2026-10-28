@@ -2,7 +2,7 @@ extends Node
 ## SimClock autoload: the only gameplay clock (architecture §13, §14.3).
 ## 64-bit simulation time advanced by the physics delta (which already includes `Engine.time_scale`) times
 ## `warp`. Gameplay timers read `now()` or their own `delta`, never wall-clock time, so time warp can come later
-## without hunting timers. `warp` is fixed at 1.0 in M1; M8 replaces the setter with real warp.
+## without hunting timers. `warp` is fixed at 1.0 in M1; M9 replaces the setter with real warp.
 
 signal warp_changed(warp: float)
 

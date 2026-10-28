@@ -30,7 +30,7 @@ extends Node3D
 ## drawn and tick positions (the HUD's markers through the chase camera, the sky in the cockpit, nodes spawned in that tick) is
 ## kilometres off for that tick. Hidden (parked) nodes and silent voices are skipped: they are re-placed and reset when they
 ## come back. A rebase outside a tick (the console between frames) resets at once. The velocity rebase (§14.1) is roadmap
-## M5: `origin_velocity` stays zero.
+## M6: `origin_velocity` stays zero.
 
 signal rebased(offset: Vector3)
 

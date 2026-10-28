@@ -124,7 +124,7 @@ damage 50 / heal           hit or restore your hull (god on blocks the damage)
 
 ### Control profiles
 
-Alternate layouts live in saved profiles you switch from the console (a controls menu comes with M4). Two are
+Alternate layouts live in saved profiles you switch from the console (a controls menu comes with M5). Two are
 built in and read-only: `default` (the layout above) and `m1_classic` (the original M1 pad layout: right stick X
 yaws, D-pad Left/Right rolls; everything else is as in `default`).
 

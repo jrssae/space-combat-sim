@@ -30,7 +30,8 @@ official or ripped franchise assets (models, textures, audio, footage, logos). A
 4. Open `docs/milestones/m1-first-flight.md`, find the first task whose "Done when" is not met, and do that one
    task as one PR-sized change. If none of the scripts exist yet, you are on **M1-T01**. Once M1 is accepted
    (its status line says so), work from `docs/milestones/m2-combat-sandbox.md` the same way. M3 (AI pilots and
-   wingmen) is planned in `docs/milestones/m3-ai-pilots-and-wingmen.md` and built on the `m3` branch.
+   wingmen) is planned in `docs/milestones/m3-ai-pilots-and-wingmen.md` and built on the `m3` branch. M4 (performance and scale) is
+   planned in `docs/milestones/m4-performance-and-scale.md` and follows M3 on an `m4` branch.
 
 Until T01 lands, download/clone details are in `docs/research-notes.md` ("Container findings"): GitHub release
 assets and `git clone` work through the proxy; `archive/refs/tags/*.zip`, `api.github.com` and the Godot docs

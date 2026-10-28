@@ -46,13 +46,13 @@ In:
 - HUD: wing roster, order acknowledgements, a route waypoint marker. Console commands and providers for all of it.
 
 Out (explicitly):
-- Dialog, subtitles, the comms panel, mission scripts, objectives (M4). Order acknowledgements are one HUD text line.
-- A pad comms menu (M4, with the comms panel). Orders are keyboard and console only in M3.
-- Tutorial checks that the player copied a demo (M7). The instructor only shows the moves.
-- Capital ships, turrets, subsystems, towing (M11 / M13). The station and jumpgate (M5 / M6).
-- New factions beyond `earth_alliance`, `raiders` and `neutral` (the data format allows them; M11 adds them).
+- Dialog, subtitles, the comms panel, mission scripts, objectives (M5). Order acknowledgements are one HUD text line.
+- A pad comms menu (M5, with the comms panel). Orders are keyboard and console only in M3.
+- Tutorial checks that the player copied a demo (M8). The instructor only shows the moves.
+- Capital ships, turrets, subsystems, towing (M12 / M14). The station and jumpgate (M6 / M7).
+- New factions beyond `earth_alliance`, `raiders` and `neutral` (the data format allows them; M12 adds them).
 - Physical collision for buoys (they stay `Node3D` props; rams against them are detected, not bounced).
-- Splat LOD switching by distance (M5's `LodSwitcher`); M3 only picks a fixed LOD per ship class.
+- Splat LOD switching by distance (M6's `LodSwitcher`); M3 only picks a fixed LOD per ship class.
 
 ## Maintainer answers (2026-10-21)
 
@@ -60,7 +60,7 @@ Record later answers here (rules) or in `docs/design-references.md` (designs), s
 
 | # | Question | Answer |
 |---|---|---|
-| Q1 | How does the player order wingmen (the pad has no free buttons)? | **Autonomous + keys**: wingmen form on the player and engage hostiles by themselves; orders on keys 1-4 and console commands. A pad comms menu waits for M4 |
+| Q1 | How does the player order wingmen (the pad has no free buttons)? | **Autonomous + keys**: wingmen form on the player and engage hostiles by themselves; orders on keys 1-4 and console commands. A pad comms menu waits for M5 |
 | Q2 | Friendly fire? | **A setting, default off** (`settings.friendly_fire`). The AI's fire-lane check is built either way |
 | Q3 | Ram damage? | **Speed-scaled**: bumps under about 5 m/s harmless, about 30 m/s wrecks a Starfury, tunnelling speeds always fatal for both. `god` protects the player. Applies to buoys too |
 | Q4 | Allies at once? | **Three wingmen** (finger-four with the player). Allies use a lighter splat Starfury (LOD1) |
@@ -72,15 +72,15 @@ Record later answers here (rules) or in `docs/design-references.md` (designs), s
 | Q10 | AC13's AI budget (2026-10-24: after T06's trims the 13-ship path measures 1.7-2.1 ms on the development desktop with M2 brains alone) | **Relative + record**: `AiPilot` may add at most 0.5 ms per tick over the M2 AI path in the same fight (paired test); the absolute number is recorded, and T12 records it again on `dogfight` |
 | Q11 | (2026-10-24, raised by the maintainer) How should AI ships react to being shot? | **Evade when hit**: every AI ship, ally or raider, that takes a bolt hit starts evasive manoeuvres at once, even mid-attack, then returns to its fight (M3-T10, AC9 hit reaction). The instructor (evade weight 0, invulnerable) is exempt |
 | Q12 | (2026-10-24, raised by the maintainer) Can AI ships differ in skill and temperament (civilian vs raider vs military)? | **Per-ship skill rank and aggressiveness**, named ranks: skill `rookie` / `regular` / `veteran` / `ace`, aggressiveness `passive` / `cautious` / `balanced` / `aggressive` / `reckless` (0-1 inside; a number is accepted too), set per spawn with profile defaults. At `reckless`, a badly damaged ship whose allies are mostly or all dead has a chance to ram an enemy; **any AI ship** may, allies included, when set to reckless. **Civilians: a profile only** in M3 (never attacks, evades and flees), usable on any hull; civilian ships and traffic come later (M3-T13) |
-| Q13 | (2026-10-25, reported by the maintainer) The ship model jumps while thrusting more than about 900 km from the reference point, almost constantly in splat mode and slightly in mesh mode | **Bug, fixed by turning on the planned position rebase** (§14.1, 5 km) in play from M3-T14. Cause: `Main` leaves `World.auto_rebase_distance_m` at 0 (M1 assumed a 20 km play area), so the local origin stays at the launch point while Jolt allows 10 km/s; at 900 km a float32 position steps in 6.25 cm, and GDGS packs the model and view matrices as float32 separately, so every splat quantises on its own. The velocity rebase stays in M5 |
+| Q13 | (2026-10-25, reported by the maintainer) The ship model jumps while thrusting more than about 900 km from the reference point, almost constantly in splat mode and slightly in mesh mode | **Bug, fixed by turning on the planned position rebase** (§14.1, 5 km) in play from M3-T14. Cause: `Main` leaves `World.auto_rebase_distance_m` at 0 (M1 assumed a 20 km play area), so the local origin stays at the launch point while Jolt allows 10 km/s; at 900 km a float32 position steps in 6.25 cm, and GDGS packs the model and view matrices as float32 separately, so every splat quantises on its own. The velocity rebase stays in M6 |
 | Q14 | (2026-10-25) AC9's 90° turn: at 10°/s the leader's nose leads its flight path by about 60°, and slots fixed to the nose swing round with it; T07 measured #2 / #3 within 57 m and #4 at 107-115 m | **Looser bound for #4**: slots stay fixed to the leader's nose; #2 and #3 within 80 m, the far slot #4 within 120 m, at 10°/s. Harder turns are left to the AC15 feel test |
 | Q15 | (2026-10-26, play-test request) Pad: assist and target cycling | **Swap them**: B is target cycling (tap next, hold nearest the nose), D-pad Up toggles flight assist (M3-T15) |
 | Q16 | (2026-10-26, play-test request) What does pressing 1-4 show? | **The order in words**: the acknowledgement line names the command issued, e.g. `ALPHA 1: FORM ON ME` (M3-T11) |
-| Q17 | (2026-10-26, play-test request) Gun and impact sounds | **Two octaves lower** (every frequency ÷ 4, lengths unchanged): the Starfury and raider gun sounds and the bolt hitting a hull (M3-T15). M4's new gun sounds keep that register |
+| Q17 | (2026-10-26, play-test request) Gun and impact sounds | **Two octaves lower** (every frequency ÷ 4, lengths unchanged): the Starfury and raider gun sounds and the bolt hitting a hull (M3-T15). M5's new gun sounds keep that register |
 | Q18 | (2026-10-26, play-test request) Kill count | **Three numbers**: player kills (the player landed the killing hit), player assists (the player fired at least one shot while that ship was the player's selected target, and someone else killed it), and total enemy kills by anyone (M3-T16) |
 | Q19 | (2026-10-26, play-test request) Attack style | **Slashing pass and chase** for some skill / aggression levels: fire through the pass, then burn to slow down and turn to chase, flying for the most time with the guns on the target (M3-T18) |
 | Q20 | (2026-10-26, play-test request) Starfury thrust | **Reverse equals forward**; side thrust at least 50 % of today's forward thrust, or today's side thrust if larger. Four pods give 1.44 MN forward, so: retros 0.36 MN per pod (1.44 MN, 30 m/s²), sway and heave 0.72 MN each (15 m/s², up from 0.48 MN) (M3-T15) |
-| Q21 | (2026-10-26, play-test request) Contacts beyond the radar's 25 km | **Broadcast signals**: nav buoys and allies broadcast, so they show beyond the 25 km sensor range: allies to 100 km, buoys to 1 000 km (M3-T17). Later the station and jumpgates broadcast to 1 000 km (M5, M6), and in hyperspace the destination jumpgate's range is unlimited (M10). **The AI receives every broadcast at the same ranges** (maintainer, 2026-10-26): e.g. a raider sent to attack a nav buoy or the station sees it from as far as the player's radar does |
+| Q21 | (2026-10-26, play-test request) Contacts beyond the radar's 25 km | **Broadcast signals**: nav buoys and allies broadcast, so they show beyond the 25 km sensor range: allies to 100 km, buoys to 1 000 km (M3-T17). Later the station and jumpgates broadcast to 1 000 km (M6, M7), and in hyperspace the destination jumpgate's range is unlimited (M11). **The AI receives every broadcast at the same ranges** (maintainer, 2026-10-26): e.g. a raider sent to attack a nav buoy or the station sees it from as far as the player's radar does |
 
 Calls made by the planner (say if you want them changed): callsigns `ALPHA 1` (player) to `ALPHA 4`, the instructor
 `INSTRUCTOR`; the default order is **cover me** (hold formation, engage hostiles that come within 2 km of the player);
@@ -380,7 +380,7 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
 
 ### M3-T09 Instructor: follow path, pacing, demo manoeuvres, route scenario
 
-- Goal: an instructor who leads a route and shows the moves the M7 tutorial will check (maintainer Q5).
+- Goal: an instructor who leads a route and shows the moves the M8 tutorial will check (maintainer Q5).
 - Agent: **Opus**. Paced leading and closed-loop manoeuvres through the real flight model.
 - Files: `src/ai/{behaviour_follow_path,route,manoeuvre,manoeuvres}.gd`, `data/scenarios/instructor_route.json`,
   `src/game/{scenario_loader,main}.gd` (routes, `invulnerable` spawns), `src/hud/{hud_input,hud_layout}.gd` (waypoint marker
@@ -494,13 +494,13 @@ T12.
   a `rebases` count and the last rebase's cost on the `world` provider), any system the audit finds caching a
   World-local position between ticks, `tests/integration/{test_world_frame,test_rebase_in_play}.gd` (the second new),
   `scripts/run_tests.sh` (a smoke line: `rebase -900000 0 0; wait 1; state world`), `docs/architecture.md` (§14.1,
-  §15.3 tick order, §6.4 `world` and `rebase` rows, the seams table's "auto-rebase off"), `docs/roadmap.md` (M5:
+  §15.3 tick order, §6.4 `world` and `rebase` rows, the seams table's "auto-rebase off"), `docs/roadmap.md` (M6:
   position rebase is already on), `docs/playtest.md` (AC22 check).
 - Notes:
   - Reproduce first: in today's build `rebase -900000 0 0` puts everything 900 km from the local origin without moving
     anything in universe terms, which is the maintainer's case. Measured in script (float32 `Vector3`, 60 Hz, constant
     thrust): the tick-to-tick change of step is 0.46 mm at 5 km, 7.3 mm at 100 km, 5.4 cm at 900 km.
-  - Keep `WorldFrame`'s default at 0 (bare-World tests mean it); `Main` turns it on. The velocity rebase stays M5.
+  - Keep `WorldFrame`'s default at 0 (bare-World tests mean it); `Main` turns it on. The velocity rebase stays M6.
   - The rebase runs in `World._physics_process` (priority 0, before its children). Write down where that falls in
     §15.3: after the AI drivers (-10) and `Main`, before ships and bolts, so commands built before it stay valid
     (levels and rates) and everything after it sees the new frame.
@@ -577,7 +577,7 @@ Added 2026-10-26 for Q21 (the AI half the same day); after T10 (raiders on `AiPi
   `tests/integration/{test_broadcast,test_ai_objective}.gd`, `docs/architecture.md` (targeting, radar, §16 perception).
 - Notes:
   - A contact is listed when it is within the 25 km sensor range or within its own `broadcast_range_m`: allies 100 km,
-    nav buoys 1 000 km. `INF` must work (hyperspace destination gates, M10). Measure range from universe positions (or
+    nav buoys 1 000 km. `INF` must work (hyperspace destination gates, M11). Measure range from universe positions (or
     World-local, which T14's rebase keeps exact enough), never cached across ticks.
   - Radar, planner call: inside 25 km nothing changes; beyond, a broadcast contact sits on the rim in its true direction as
     a hollow dot. Selecting it puts its range in the target box as today.
@@ -586,8 +586,8 @@ Added 2026-10-26 for Q21 (the AI half the same day); after T10 (raiders on `AiPi
     separate, short `Perception` list (one registry of broadcasters, kept in step with the pool, not a second physics or
     distance sweep over every body). Behaviours do not chase far contacts on their own: a pilot **objective** (one target
     by name, `ai <name> objective <target|none>` and a spawn field) makes attack fly toward it from any broadcast range and
-    attack it once near. That is the seam M4's mission scripts use ("raiders attack the buoy / the station").
-  - Later broadcasters (the station, jumpgates, 1 000 km) are recorded in `docs/roadmap.md` (M5, M6, M10); they register
+    attack it once near. That is the seam M5's mission scripts use ("raiders attack the buoy / the station").
+  - Later broadcasters (the station, jumpgates, 1 000 km) are recorded in `docs/roadmap.md` (M6, M7, M11); they register
     with the same list, so the AI sees them too.
 - Done when: AC25 passes (radar and AI halves); the radar rim shows in a capture with a buoy moved past 25 km.
 
@@ -1190,7 +1190,7 @@ Added 2026-10-26 for Q19; after T13 (it is keyed to skill and aggression); run b
 - **On.** `main.tscn` sets `World.auto_rebase_distance_m` to 5 000 m (`world.focus` is the player); a bare `WorldFrame` keeps 0.
   The rebase runs in `World._physics_process` at priority 0, after the AI drivers (-10), the console and `Main`, before every
   node below `World` and the late systems (architecture §14.1, §15.3 step 3b). `WorldFrame` counts `rebases` and times the last
-  one (`last_rebase_us`); the `world` provider shows both (`rebases`, `rebase_us`). The velocity rebase stays M5.
+  one (`last_rebase_us`); the `world` provider shows both (`rebases`, `rebase_us`). The velocity rebase stays M6.
 - **Reproduced first.** In the build before T14, after `rebase -900000 0 0` and under full main thrust with the nose off every
   axis, the change of step in universe coordinates (`(u[k] - u[k-1]) - (u[k-1] - u[k-2])`, 64-bit) spread up to 57.1 mm round its
   mean (rms 17.5 mm; a dt^2 is 8.3 mm). With the rebase on: 0.005 mm (rms 0.002). A nose along -Z showed nothing: only the

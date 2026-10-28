@@ -699,7 +699,7 @@ M1 commands:
 | `watch <path>` / `unwatch <path\|all>` | console | live values under the FPS counter (max 8, session) |
 | `fps [on\|off]` | console | shorthand for `toggle settings.show_fps` |
 | `god [on\|off]` | console | shorthand for `toggle debug.invulnerable`; session-only, never saved. M1 has no damage; M2 hull damage on the player skips while it is set |
-| `timescale <0.05..1>` | console | debug slow motion via `Engine.time_scale`, which scales physics delta and therefore `SimClock`. Capped at 1 in M1; real warp is `SimClock`'s job (M8 adds a `warp` command) |
+| `timescale <0.05..1>` | console | debug slow motion via `Engine.time_scale`, which scales physics delta and therefore `SimClock`. Capped at 1 in M1; real warp is `SimClock`'s job (M9 adds a `warp` command) |
 | `exec <file>` | console | run commands from a `res://` or `user://` file |
 | `wait <frames>` | console | delay the rest of the queue by N physics frames (scripts, headless runs) |
 | `quit [code]` | console | quit with an exit code |
@@ -960,6 +960,8 @@ The full large-world design is §14.1.
 - Physics 60 Hz fixed; `_physics_process` for the ship < 0.2 ms.
 - Input-to-thrust latency: one physics tick after the input event.
 - Startup to flyable < 5 s after import (first import of the PLYs may take longer; that is a one-time cost).
+- Many ships (M4): the tick budget for 100-500 ships (median ≤ 8 ms, p99 ≤ 12 ms headless at 60 Hz) and how it is
+  measured are in `docs/milestones/m4-performance-and-scale.md`.
 
 ## 12. Testing strategy
 
@@ -1067,7 +1069,7 @@ Verified for Godot 4.7.2 (details in `docs/research-notes.md`):
     the end-of-tick reset together; the ships dominate it (a Starfury is 108 nodes, which the shift and the reset both walk).
     `world.rebases` and `world.rebase_us` watch it. Tests: `tests/integration/test_rebase_in_play.gd` and the `RebaseFight`
     fixture (`tests/fixtures/rebase_fight.gd`), which runs any live scene with the threshold forced low.
-- **Velocity rebase** (roadmap M5, still off) when the focus speed relative to the frame exceeds 200 m/s: subtract `v`
+- **Velocity rebase** (roadmap M6, still off) when the focus speed relative to the frame exceeds 200 m/s: subtract `v`
   from every body's `linear_velocity` and projectile velocity; `origin_velocity += v`. Keeps Jolt well under its cap and
   keeps float32 velocities small.
 - Local space radius ~10 km. Anything farther (planets, sun, distant ships and stations) is not in Jolt: it is
@@ -1157,7 +1159,7 @@ volumetric splats and a shader backdrop. Combat in hyperspace reuses everything.
   arrived. **Objectives** with success/fail states feed the debrief.
 - **Launch bays**: station hardpoints with a launch rail; the launch is a scripted state with a `CINEMATIC`
   camera mode (Path3D + look-at), then hand-off to the player with the bay's velocity.
-- **Dialog**: subtitles + comms panel first (M4, used by the M7 tutorial). Voiced dialog comes later from an
+- **Dialog**: subtitles + comms panel first (M5, used by the M8 tutorial). Voiced dialog comes later from an
   offline TTS generator run on the user's machine (candidate: Piper, see `docs/third-party.md`). Voices are produced
   by code, so they satisfy the procedural-only rule; generated audio stays out of git like every other generated
   asset. Dialog lines are data (speaker, text, voice id), so adding voices changes no mission scripts.
@@ -1232,7 +1234,7 @@ only lists what is new. Task ids below are M2 tasks.
 | D20 | Raiders are ordinary `Ship`s (RigidBody3D, `FlightModel`, assist always on, same limits) driven by a `PilotBrain` that writes `FlightCommand` + `CombatCommand`. No kinematic path followers | It is the M3 seam (§14.7): AI obeys the player's physics, and targeting, hits, HUD and destruction have one code path |
 | D21 | Projectile hits: one `HitResolver` sweeps each bolt's last tick against each hostile target **in that target's frame** (relative motion): segment vs. bounding sphere, then vs. the target's hardpoints `collision` primitives inflated by the bolt's hit radius. Pure script maths, not Jolt queries | Exact for straight-line relative motion at any closing speed (1 400 m/s is 23 m per tick against hulls about 1 m thick); independent of when Jolt moves the target; rebase-safe, because a bolt stores its last displacement rather than a position; unit-testable; bounded cost (64 bolts × 8 targets of broadphase is well under 1 ms) |
 | D22 | No `GaussianSplatNode` enters or leaves the tree during play. Splat-bearing entities (raiders, debris chunks) are pooled at scenario load and switched by visibility | GDGS v3.3.0 re-merges every node's splat data on each register and unregister (`gaussian_scene_registry.gd`: a GDScript loop over every splat in the scene, then new GPU buffers), so a spawn would hitch. A visibility change only re-packs instance transforms |
-| D23 | Damage model: hull points only. No shields (Starfuries and Delta-Vs have none), no subsystems, no collision damage. Bolt damage comes from `WeaponSpec`, hull from `ShipSpec`. `debug.invulnerable` zeroes damage on `Damageable`s with `respects_god_mode` (the player) | Smallest model that gives kills and deaths. Subsystems are M11, ram damage M3 |
+| D23 | Damage model: hull points only. No shields (Starfuries and Delta-Vs have none), no subsystems, no collision damage. Bolt damage comes from `WeaponSpec`, hull from `ShipSpec`. `debug.invulnerable` zeroes damage on `Damageable`s with `respects_god_mode` (the player) | Smallest model that gives kills and deaths. Subsystems are M12, ram damage M3 |
 | D24 | Destruction = a code-generated explosion (shader, particles, light: meshes, never splats) + break-up into the asset's generated `chunks` (pooled chunk splats, chunk meshes once the pool is used up). Debris drifts and spins kinematically, no collisions | Reuses the hull's own look, causes no registry churn, stays procedural |
 | D25 | Factions: `earth_alliance`, `raiders`, `neutral`, with a fixed rule in `Factions` (M3 turns it into data). Bolts hit only hostiles and never their shooter. `target_next` cycles hostiles first (nearest first), then the rest | Enough IFF for one enemy faction. Hostile-first cycling needs no new button, and the maintainer's pad has none free |
 | D26 | The HUD is its own CanvasLayer drawn from a pure `HudLayout` that projects with the camera's matrices (tested against `Camera3D.unproject_position`) | Layout is unit-testable; the debug overlay stays a debug tool |
@@ -1455,7 +1457,7 @@ uses the M1 input rules: every `InputAdapter.ACTIONS` entry present, a pad event
 keyboard-only debug ones, standard indices only, never `KEY_QUOTELEFT`. `default` is a snapshot of the
 `project.godot` map taken before any profile is applied. `settings.control_profile` (new schema type `string`)
 selects the profile at start-up and on change; an invalid profile warns and falls back to `default`. Bindings
-changed with `bind`/`unbind` are session-only until `controls save <name>`. A rebinding menu comes with the M4
+changed with `bind`/`unbind` are session-only until `controls save <name>`. A rebinding menu comes with the M5
 front end.
 
 As built (M2-T11): the `ControlProfiles` autoload applies the selection in `_ready`, before the main scene, and
@@ -1536,10 +1538,10 @@ Details per task are in the as-built notes of `docs/milestones/m2-combat-sandbox
 |---|---|---|
 | `PilotBrain` / `Perception` / `PilotSteering` / `AiPilotDriver`; brains write only commands | T07 | M3 rewriting how AI ships are driven |
 | `InterceptMath` shared by HUD and AI | T01 | Two lead solutions that disagree |
-| `Factions` as the one relation query | T01 | Hunting faction string compares when M3/M11 add factions |
+| `Factions` as the one relation query | T01 | Hunting faction string compares when M3/M12 add factions |
 | `Combatant` + `ShipAssembly` build player and AI ships the same way | T02 | Special-casing allies, wingmen, the Thunderbolt |
 | Hardpoints `chunks[]` via `core/chunks.py` | T04 | Per-asset debris code for every later ship |
-| Pools filled at scenario load | T05 | Spawn hitches when missions spawn ships (M4) |
+| Pools filled at scenario load | T05 | Spawn hitches when missions spawn ships (M5) |
 | `ControlProfile` | T11 | HOTAS / keyboard+mouse / menu remapping starting from scratch |
 
 
@@ -1564,14 +1566,14 @@ below are M3 tasks.
 
 | # | Decision | Rationale (short) |
 |---|---|---|
-| D30 | Factions come from `data/factions.json` (ids, names, symmetric relation pairs, a default). `Factions.relation` / `is_hostile` keep their signatures; the table is loaded lazily and can be swapped for tests and the console | M2's fixed rule was the seam (D25); callers do not change, and M11's factions are data |
+| D30 | Factions come from `data/factions.json` (ids, names, symmetric relation pairs, a default). `Factions.relation` / `is_hostile` keep their signatures; the table is loaded lazily and can be swapped for tests and the console | M2's fixed rule was the seam (D25); callers do not change, and M12's factions are data |
 | D31 | Friendly fire is `settings.friendly_fire` (default off, maintainer Q2). AI ships always check their fire lane for friends before firing | The forgiving default suits wingmen crossing the player's line; the check keeps AI behaviour right with the setting on |
 | D32 | Ram damage from the ship's own velocity change: `hull_max × clamp((Δv - safe) / (lethal - safe))²` (Δv per ship; a 30 m/s head-on between equals is about 15 m/s each). Jolt contacts give Δv at ordinary speeds; at tunnelling speeds and for props without bodies, a swept test of each hit volume against each of the other's (exact for boxes and capsules) finds the hit, with the momentum split for both sides (fatal once that Δv reaches lethal) | Physical (the lighter ship suffers more), tunable per `ShipSpec`. At tunnelling speed (and always for props), hit volumes that overlap by 0.3 m or more always ram and a pass 0.3 m clear never does; below it, and for a shallower clip between two ships, Jolt's contacts decide |
 | D33 | Collision avoidance is a filter in `AiPilotDriver` on every brain's desired velocity (closest-approach maths against `Perception.contacts`), not a behaviour | Every AI ship, M2 brains included, avoids collisions whatever it is doing |
 | D34 | `AiPilot extends PilotBrain`: scored behaviours (attack, evade, formation, follow path, guard, retreat, idle) × `AiProfile` weights, with stickiness, a minimum dwell and an emergency margin. Orders and wings gate scores through `AiContext` | Utility selection (§14.7) without a behaviour tree; profiles give allies, raiders and the instructor different characters from one brain |
-| D35 | `starfury_aurora` gains a generated LOD1 (about 25 % of the splats, coarser spacing) and `chunks[]` from LOD1. Allies (`ShipSpec.splat_lod` 1) and all Starfury debris use LOD1; the player keeps LOD0 | Four Starfuries at LOD0 would add about 700k splats; allies are seen at range. A fixed LOD per class, not M5's `LodSwitcher` |
-| D36 | Wings: the player leads `ALPHA` (finger-four). Orders (attack my target, form on me, engage at will, cover me) arrive as `UiCommand` edges from keys 1-4 (keyboard-only actions) or the console, and go to brains through `WingDirector`, never through `Input` | Maintainer Q1; the pad has no free button and the M4 comms panel will add a pad route on the same `WingDirector` API |
-| D37 | The instructor is an `AiPilot` with the `instructor` profile, a `Route` (paced to the player) and demo `Manoeuvre`s, invulnerable via its scenario spawn | The M7 tour and control checks reuse it unchanged; manoeuvres are closed loops on measured state, so the tutorial can compare the player against the same goals |
+| D35 | `starfury_aurora` gains a generated LOD1 (about 25 % of the splats, coarser spacing) and `chunks[]` from LOD1. Allies (`ShipSpec.splat_lod` 1) and all Starfury debris use LOD1; the player keeps LOD0 | Four Starfuries at LOD0 would add about 700k splats; allies are seen at range. A fixed LOD per class, not M6's `LodSwitcher` |
+| D36 | Wings: the player leads `ALPHA` (finger-four). Orders (attack my target, form on me, engage at will, cover me) arrive as `UiCommand` edges from keys 1-4 (keyboard-only actions) or the console, and go to brains through `WingDirector`, never through `Input` | Maintainer Q1; the pad has no free button and the M5 comms panel will add a pad route on the same `WingDirector` API |
+| D37 | The instructor is an `AiPilot` with the `instructor` profile, a `Route` (paced to the player) and demo `Manoeuvre`s, invulnerable via its scenario spawn | The M8 tour and control checks reuse it unchanged; manoeuvres are closed loops on measured state, so the tutorial can compare the player against the same goals |
 | D38 | Keyboard layout B: every flight key is under the left hand (pods by position on Q/W/E and A/S/D), the mouse flies pitch and yaw, no keyboard pitch/yaw | Maintainer Q9: the right hand is on the mouse |
 
 ### 16.2 Layout additions
