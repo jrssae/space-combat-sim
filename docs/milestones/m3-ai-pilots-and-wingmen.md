@@ -4,6 +4,7 @@
 
 **Status:** planned 2026-10-21 on branch `m3`. The maintainer answered the planning questions the same day (below). M2's
 (A) work is done; its AC20 (saved control profile) and AC21 (sound) still wait for a re-test and do not block M3.
+Extended 2026-10-28 at the maintainer's request with splat LOD and a visual pass (Q22, Q23; T19-T25).
 
 Read `docs/architecture.md` first, §1-§15 and especially **§16** (the M3 design: decisions D30-D38, layout, tick
 order). Task notes reference its sections (§). Tasks are ordered; each is one PR-sized unit for an implementation agent
@@ -44,6 +45,11 @@ In:
   flip-and-burn, strafe box, pod turn, all stop) for the player to copy.
 - Scenarios: wingmen in `combat_sandbox` with bigger raider waves; new `instructor_route` and `dogfight`.
 - HUD: wing roster, order acknowledgements, a route waypoint marker. Console commands and providers for all of it.
+- **Splat LOD by screen size** (Q22): LOD2 and LOD3 for every ship asset, a `LodSwitcher` that shows one LOD per ship by
+  visibility, and a resident splat budget in GDGS so hidden LODs cost no sort memory (T19, T20).
+- **Visual pass** (Q23): GDGS relighting with procgen-written per-splat normals and flat hull colours, a picker for GDGS's
+  8 lights; nozzle, muzzle-flash and explosion lights; `GPUParticles3D` sparks and debris; a denser LOD for the player's
+  ship; lens flare and motion blur after the maintainer signs off the dependencies (T21-T25).
 
 Out (explicitly):
 - Dialog, subtitles, the comms panel, mission scripts, objectives (M5). Order acknowledgements are one HUD text line.
@@ -52,7 +58,8 @@ Out (explicitly):
 - Capital ships, turrets, subsystems, towing (M12 / M14). The station and jumpgate (M6 / M7).
 - New factions beyond `earth_alliance`, `raiders` and `neutral` (the data format allows them; M12 adds them).
 - Physical collision for buoys (they stay `Node3D` props; rams against them are detected, not bounced).
-- Splat LOD switching by distance (M6's `LodSwitcher`); M3 only picks a fixed LOD per ship class.
+- LOD chains for the station, jumpgate and planets (M6, M7). M3 builds the `LodSwitcher` and the splat budget for ships
+  (T19, T20); later assets join them.
 
 ## Maintainer answers (2026-10-21)
 
@@ -81,6 +88,8 @@ Record later answers here (rules) or in `docs/design-references.md` (designs), s
 | Q19 | (2026-10-26, play-test request) Attack style | **Slashing pass and chase** for some skill / aggression levels: fire through the pass, then burn to slow down and turn to chase, flying for the most time with the guns on the target (M3-T18) |
 | Q20 | (2026-10-26, play-test request) Starfury thrust | **Reverse equals forward**; side thrust at least 50 % of today's forward thrust, or today's side thrust if larger. Four pods give 1.44 MN forward, so: retros 0.36 MN per pod (1.44 MN, 30 m/s²), sway and heave 0.72 MN each (15 m/s², up from 0.48 MN) (M3-T15) |
 | Q21 | (2026-10-26, play-test request) Contacts beyond the radar's 25 km | **Broadcast signals**: nav buoys and allies broadcast, so they show beyond the 25 km sensor range: allies to 100 km, buoys to 1 000 km (M3-T17). Later the station and jumpgates broadcast to 1 000 km (M6, M7), and in hyperspace the destination jumpgate's range is unlimited (M11). **The AI receives every broadcast at the same ranges** (maintainer, 2026-10-26): e.g. a raider sent to attack a nav buoy or the station sees it from as far as the player's radar does |
+| Q22 | (2026-10-28, maintainer request) Fewer splats on distant ships, more up close? | **Yes, in M3** (pulled forward from M6): LOD2 and LOD3 for the ship assets, a `LodSwitcher` that picks one LOD per ship by its size on screen and switches by visibility (never by swapping the resource, which rebuilds every GDGS buffer), and a resident splat budget patched into GDGS so hidden LODs cost no sort memory (T19, T20) |
+| Q23 | (2026-10-28, maintainer request) Close the visual gap to Unreal without leaving Godot | **A visual pass, in this order**: GDGS relighting with procgen-written per-splat normals, flat hull colours and a picker for GDGS's 8 lights (T21); thrust-driven nozzle lights, muzzle-flash and explosion lights through the picker (T22); `GPUParticles3D` sparks and debris (T23); a denser LOD for the player's ship only (T24); lens flare and motion blur last, each a new dependency or new effect the maintainer signs off first (T25) |
 
 Calls made by the planner (say if you want them changed): callsigns `ALPHA 1` (player) to `ALPHA 4`, the instructor
 `INSTRUCTOR`; the default order is **cover me** (hold formation, engage hostiles that come within 2 km of the player);
@@ -123,6 +132,14 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | AC25 | Broadcasts (Q21): a buoy at 900 km and an ally at 90 km show on the radar and can be selected (range in the target box), an ally at 110 km and a non-broadcasting raider at 30 km do not; beyond the radar's 25 km scale a broadcast contact sits on the rim in its true direction; `broadcast_range_m = INF` works at 1e9 m; ranges come from universe distances and survive a rebase. The AI gets the same broadcasts at the same ranges (any faction): a raider's perception lists the 900 km buoy and the 90 km ally, not the 110 km ally; a raider given that buoy as its objective (`ai <name> objective <target>`) flies toward it from 200 km and closes inside 2 km; avoidance and the fire lane still use only the near (5 km) contacts; AC13's paired budget still holds | A | |
 | AC26 | Slashing pass (Q19): pilots at the levels T18 lists fly a pass, firing within 1 s of closest approach, then burn and turn to chase; on the same seeded runs against a straight-flying drone their time with the target inside the fire gate over 60 s is at least 25 % more than the standard attack's; other levels attack as before; AC13's paired budget still holds | A | |
 | AC27 | The tweaks feel right: B selects targets and D-pad Up toggles assist; gun and impact sounds sit two octaves lower; reverse and side thrust feel strong; the kill / assist numbers read at a glance; buoys and wingmen far out show on the radar rim; some AI ships make slashing passes and turn to chase | H | |
+| AC28 | Splat LOD (Q22): `python3 -m tools.procgen build all` writes LOD2 and LOD3 for `starfury_aurora` and `raider_fighter` (`lods[2]` about 6 % and `lods[3]` about 1.5 % of LOD0's splats, each within the share range T19 records; same AABB within 0.3 m; deterministic; existing LOD files unchanged unless T21 has changed them). `LodSwitcherMath` (pure) picks a level from the ship's projected diameter in pixels with hysteresis: a slow range sweep through every threshold switches each boundary exactly once each way, and a ship held on a threshold never flaps. In play a ship's level changes only by visibility: across a 0.2-20 km sweep with 13 ships the splat-node count never changes and GDGS records no resource rebuild. `lod` provider and `lod <ship\|all> <n\|auto>` command; AC13's paired budget still holds | A | P10 |
+| AC29 | Resident splat budget (Q22): GDGS patch 5 is recorded in `addons/gdgs/PATCHES.md`; the pure sizing helper sizes the projection, sort and culled buffers from `settings.splat_budget` (visible splats), not from every resident splat; with 100 LOD-chained ships resident the sizes it returns stay within the budget's bytes; the `LodSwitcher` steps the farthest visible ships down a level until the visible sum fits, and logs once when it cannot. The Raster backend and headless runs are unaffected | A | |
+| AC30 | Relighting (Q23): procgen writes a 4-byte lighting record per splat (octahedral normal, AO, confidence; GDGS `GaussianLightingResource` format 1) for every ship and buoy LOD, chunk and the hero level; on a test shape each normal is within 5° of the analytic surface normal; hull colours carry no baked shading (two splats of the same paint with opposite normals have the same colour); ships, chunks and buoys load with `relight_enabled`, the sky does not. `LightPicker` (pure) keeps the key star and the 7 highest-scoring emitters, stable under small changes (no swap within the hysteresis margin). The scene holds no `Light3D` except the picker's 8 slots. `relight [on\|off]`, the `lights` provider (picked emitters, candidates, cost per frame) | A | P9 |
+| AC31 | Ship lights (Q23): every main pod has a nozzle emitter whose energy follows its `FlightOutput` level (0 at idle, full at full thrust, the plume's colour); every shot adds a muzzle-flash emitter for 60 ms; an explosion's emitter keeps today's curve (0 to 8 to 0 over 0.25 s, range 4 x radius); all go through `LightPicker`, never straight to a `Light3D`. In a headless sandbox fight with wingmen at most 8 lights are ever active, the player's own nozzles stay picked while they fire, and AC13's paired budget still holds | A | P9 |
+| AC32 | Particles (Q23): bolt hull hits, rams, explosions and debris chunks emit `GPUParticles3D` effects from fixed pools (the particle node count never changes across a 120 s sandbox fight); every process material has zero gravity and zero damping, and every effect inherits its source's velocity; a burst live across a forced rebase is shifted with the world (its emitter's World-local offset follows the `rebased` offset); `settings.particle_density` (0-1) scales the amounts | A | P9 |
+| AC33 | Hero LOD (Q23): `starfury_aurora` writes a `hero` level at half LOD0's spacing (about 4x LOD0's splats, within the budget T24 records), deterministic, LOD0-LOD3 unchanged by it; only the player's ship uses it (`ShipSpec.splat_hero`), in the chase and cockpit cameras, dropping to LOD0 and below by screen size like any ship; the player's hero ship plus AC19's fight stays inside `settings.splat_budget` | A | P9 |
+| AC34 | Lens flare and motion blur (Q23), after the maintainer signs off the T25 choice: `settings.lens_flare` (default on) and `settings.motion_blur` (default off) toggle the compositor effects live and from the console; any vendored add-on is pinned, listed in `docs/third-party.md` with its licence, and untouched under `addons/`; headless runs and the smoke runs are unchanged | A | |
+| AC35 | The visual pass reads right on the tester's GPU: no visible LOD pop at combat ranges; plumes light the pods, muzzle flashes light the nose, explosions light nearby hulls, the key star gives each hull a lit and a dark side as it rolls; sparks on hits and debris; the player's hull is visibly sharper close up; the flare follows the star and hides behind hulls; motion blur (when on) smears the stars on fast turns, not the HUD. AC19's 60 fps still holds with all of it; frame time and VRAM recorded for AC19's fight and for 100 ships (`spawn` loop), before and after T19-T20 | H | P9, P10 |
 
 ## Capture pre-checks
 
@@ -137,6 +154,11 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 - **P7 wing** (AC11, AC15; T07, T11): `god on; wave stop; wait 600; screenshot reports/m3/p7_formation_chase.png; wing order engage;
   wave start 3; wait 900; screenshot reports/m3/p7_engage.png; state wing`
 - **P8 dogfight** (AC12, AC15; T10): `scenario dogfight; god on; wait 1800; screenshot reports/m3/p8_dogfight.png; state ai`
+- **P9 visual pass** (AC30-AC33, AC35; T21-T24): `god on; spawn ally idle 40 30 10; wait 20; screenshot reports/m3/p9_relit.png;
+  wave start 1; wait 600; screenshot reports/m3/p9_fight.png; state lights; camera cockpit; wait 30; screenshot reports/m3/p9_cockpit.png`.
+  GDGS relights on the Raster backend too, so llvmpipe shows the lighting; particles and Compute-only artefacts stay (H).
+- **P10 LOD** (AC28, AC35; T19, T20): `god on; spawn raider idle 150 0 0; spawn raider idle 600 10 0; spawn raider idle 2000 20 0;
+  spawn raider idle 6000 30 0; wait 30; screenshot reports/m3/p10_lod.png; state lod`
 
 ## Task breakdown (ordered)
 
@@ -159,7 +181,14 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | M3-T16 | Kill credit: player kills, assists, total (Q18) | T08 | Sonnet |
 | M3-T17 | Broadcast contacts for the radar and the AI (Q21) | T08, T10 | Opus |
 | M3-T18 | Slashing pass and chase (Q19) | T13 | Opus |
-| M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13-T18 | Opus |
+| M3-T19 | Splat LOD chain and `LodSwitcher` (Q22) | T08 | Opus |
+| M3-T20 | Resident splat budget: GDGS patch 5 (Q22) | T19 | Opus |
+| M3-T21 | Splat relighting: procgen normals, flat colours, `LightPicker` (Q23) | T19 | Opus |
+| M3-T22 | Ship lights: nozzles, muzzle flashes, explosions (Q23) | T21 | Sonnet |
+| M3-T23 | `GPUParticles3D` sparks and debris (Q23) | T14 | Sonnet |
+| M3-T24 | Hero LOD for the player's ship (Q23) | T20, T21 | Sonnet |
+| M3-T25 | Lens flare and motion blur, after sign-off (Q23) | T21 | Sonnet |
+| M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13-T25 | Opus |
 
 Parallel lanes: T01, T02 and T03 touch disjoint files and can run together; T04 and T05 can run together after T02.
 Two agents at a time is steadier than four (`docs/handoff.md`).
@@ -611,13 +640,192 @@ Added 2026-10-26 for Q19; after T13 (it is keyed to skill and aggression); run b
     attack on the same seeds.
 - Done when: AC26 passes; the paired AC13 test still passes; the dogfight scenario shows it.
 
+### M3-T19 Splat LOD chain and `LodSwitcher`
+
+Added 2026-10-28 for Q22 (pulled forward from M6); after T08 (the ally pool and LOD1); run before T12.
+
+- Goal: a ship far away draws a few thousand splats instead of tens of thousands. A Starfury 2 km away is about 10 px
+  wide at 1080p (70° FOV) but draws all of LOD1's ~37k splats today. Every visible splat adds at least one sort key, and a
+  small ship's splats all land in one or two 16 px tiles, which one workgroup then blends one after another.
+- Agent: **Opus**. A generator extension plus a switching rule that must not trigger GDGS's full buffer rebuild.
+- Files: `tools/procgen/assets/{starfury_aurora,raider_fighter}.py` and their tests, `src/rendering/lod_switcher.gd` (node),
+  `src/rendering/lod_switcher_math.gd` (new, pure), `src/ship/ship.gd` / `src/game/ship_assembly.gd` (one splat node per
+  LOD), `src/autoload/settings_schema.gd`, `tests/unit/test_lod_switcher_math.gd`, `tests/integration/test_lod_in_play.gd`,
+  `docs/architecture.md` (§7 rendering, §16 D22 node count), `docs/assets-starfury.md`.
+- Notes:
+  - **Procgen**: LOD2 = every spacing × 4, LOD3 = × 8, the way LOD1 uses × 2 (`LOD1_SPACING_FACTOR`), with RNG streams
+    suffixed `lod2` / `lod3` and scales growing with the spacing. Starfury and raider; the buoys keep LOD0 (5 small props).
+    Record each share range in the generator, as `LOD1_SHARE` does.
+  - **Switch by visibility, never by resource.** Setting a node's `gaussian` marks the resource dirty and GDGS rebuilds
+    every GPU buffer and re-uploads every splat in the scene; visibility rides in the instance transform
+    (`model_matrix[0][3]`) and costs one transform upload. So each ship carries one `GaussianSplatNode` per LOD it can
+    use (resources are shared, so splat data is stored once), exactly one visible. The node count is fixed when the
+    pool is built (D22 holds). Count GDGS rebuilds (a counter on the render manager's rebuild path, read by the test) to
+    prove none happen.
+  - **Rule (planner call)**: projected diameter in pixels from the ship's bounding radius, camera FOV and viewport height.
+    LOD0 ≥ 200 px, LOD1 ≥ 60 px, LOD2 ≥ 16 px, else LOD3; step up only 25 % past a threshold (hysteresis). Chains:
+    player and raiders LOD0-LOD3, allies LOD1-LOD3 (as today at the near end). Evaluate in `_process`, change visibility
+    only when the level changes. Debris chunks keep LOD1 (short-lived).
+  - GDGS cannot cross-fade (no per-splat opacity), so a switch pops; at these sizes the pop is under a pixel or two.
+    AC35 judges it.
+  - `settings.splat_lod_bias` (-1 to +1 levels, default 0) for the tester. `lod` provider: per-ship level, visible splat
+    total.
+- Done when: AC28 passes; P10 shows the four raiders at four levels.
+
+### M3-T20 Resident splat budget: GDGS patch 5
+
+Added 2026-10-28 for Q22; after T19.
+
+- Goal: hidden LODs and off-screen ships cost no sort memory, so 100-500 ships fit in VRAM.
+- Agent: **Opus**. A patch to vendored GPU code that the container cannot run (llvmpipe falls back to Raster).
+- Files: `addons/gdgs/runtime/render/compute/{gaussian_renderer,gaussian_gpu_state_cache,gaussian_scene_registry}.gd`
+  and `shaders/gsplat_projection.glsl` (each changed line marked `[space-combat-sim patch]`), `addons/gdgs/PATCHES.md`
+  (patch 5), a pure sizing helper the tests can call, `src/rendering/lod_switcher.gd` (budget step-down),
+  `src/autoload/settings_schema.gd`, `tests/unit/test_splat_budget.gd`.
+- Notes:
+  - Today GDGS sizes its buffers by every resident instanced splat, hidden ones included: 32 sort slots × 8 B, 64 B of
+    projected data and 8 B of instance id, about 330 B each. LOD1 allies at 100 ships are about 1.2 GB; at 500, about
+    6 GB. Carrying the LOD chain makes it about 1.35x LOD0 per ship.
+  - Patch: (1) a small per-frame table of visible instances (start, count, resource base), with a prefix sum; the
+    projection pass runs over visible splats only and finds its instance by binary search, which replaces the per-splat
+    instance-id buffer; (2) the culled and sort buffers sized from `settings.splat_budget` (visible splats, planner call
+    2 000 000), not from the resident total; patch 1's clamps stay as the overflow guard.
+  - The `LodSwitcher` keeps the visible total under the budget: when over, it steps the farthest visible ships down one
+    level until it fits, and logs once if even LOD3 everywhere does not fit.
+  - The Raster backend is not touched. Upstream candidate, like patches 1 and 2.
+  - Compute-only: AC35 records frame time and VRAM before and after on the tester's GPU.
+- Done when: AC29 passes; patch 5 is in `PATCHES.md` with how to revert it; AC35's VRAM numbers are asked for.
+
+### M3-T21 Splat relighting: procgen normals, flat colours, `LightPicker`
+
+Added 2026-10-28 for Q23; after T19 (it writes records for every LOD). The biggest visual gain, with no new dependency.
+
+- Goal: ship hulls are lit by the scene: the key star gives each hull a lit and a dark side, and later (T22) plumes,
+  flashes and explosions light nearby hulls.
+- Agent: **Opus**. It changes every ship asset's colours and the lighting contract (§7: "splats are pre-lit").
+- Files: `tools/procgen/core/` (normal records, writer), `tools/procgen/assets/{starfury_aurora,raider_fighter,nav_buoy}.py`
+  and tests, `src/rendering/splat_lighting_loader.gd` (new: wraps the bytes in a `GaussianLightingResource`, no per-splat
+  loop), `src/rendering/light_picker.gd` (new, pure), `src/rendering/splat_light_rig.gd` (new node: the 8 slots),
+  `src/environment/space_environment.tscn|.gd` (the key star becomes slot 0), `src/ship/ship.gd` (the cabin light becomes
+  an emitter), `src/autoload/settings_schema.gd`, `tests/unit/{test_light_picker,test_splat_lighting_loader}.gd`,
+  `tests/integration/test_relight.gd`, `tools/procgen/tests/` (normals, flat colours), `docs/architecture.md` (D8, §7.1,
+  §7.2), `docs/research-notes.md` (relighting now used).
+- Notes:
+  - **GDGS already relights** (v3.3.0, vendored): per splat, in the projection stage, from up to `MAX_LIGHTS = 8`
+    directional, omni and spot lights, with Godot's own falloff; the Raster backend matches it. It needs a
+    `GaussianLightingResource` per splat file: 4 bytes per splat (octahedral normal ×2, AO, confidence). GDGS bakes that
+    in the editor from a voxel proxy; procgen already knows every splat's exact surface normal, so it writes the bytes
+    itself (`<asset>_lod<n>.light`, manifest field per LOD and chunk) and skips the bake. AO: a cheap per-part cavity term
+    or 1.0 (agent's call, say which). Confidence 255 on the surface.
+  - **Flat colours**: remove any baked light or shade term from hull colours (keep paint, panel lines, weathering).
+    Emissive parts (windows, lenses) must not darken: read `relight_factor()` in the shader and pick how (low confidence,
+    or a separate unlit node); say which. Bump generator versions. LOD0 bytes change here, so AC6's "LOD0 byte-identical"
+    applies to T03's run, not after T21.
+  - **Shadows**: splats do not receive shadows; `relight_cast_shadows` off in M3 (nothing mesh-like to receive them).
+  - **Why a picker**: GDGS's rig walks the whole scene for `Light3D` nodes every 30 frames, ranks by energy × range at
+    that moment, and drops all past 8. A 60 ms muzzle flash would be missed and a far explosion could push out the
+    player's nozzles. So the scene holds exactly 8 `Light3D` nodes (the key star, 7 omni slots), created once and never
+    freed; `LightPicker` chooses which emitters fill the 7 slots each frame and the rig copies the slot's position,
+    colour, energy and range (it re-reads cached lights every frame, so a moved slot shows at once). Unused slots sit at
+    energy 0 (the rig skips them). Meshes are lit by the same 8, so meshes and splats agree.
+  - **Score (planner call)**: priority class (player's own > explosion > muzzle flash > nozzle > cabin) × energy × range
+    ÷ distance to the camera², with a 20 % bonus for the incumbent so slots do not flicker. The cabin light counts only in
+    the cockpit camera.
+  - The rig's walk stops after 20 000 nodes (`MAX_VISITED_NODES`): put the rig node before `World` in the tree so its
+    slots are found when M4 has 500 ships.
+  - The sky stays unlit (`relight_enabled` off: stars are emitters). Debris chunks and buoys are lit.
+  - `settings.splat_relight` (default on) and `relight [on|off]`; the knobs (`relight_ambient`, `relight_unlit_level`,
+    `relight_light_gain`) as settings so the tester can tune them live.
+- Done when: AC30 passes; P9 shows a lit and a dark side on the ally.
+
+### M3-T22 Ship lights: nozzles, muzzle flashes, explosions
+
+Added 2026-10-28 for Q23; after T21.
+
+- Goal: plumes light the pods and struts, a shot lights the nose, an explosion lights nearby hulls.
+- Agent: **Sonnet**. Emitters feeding T21's picker; no rendering work.
+- Files: `src/rendering/light_emitter.gd` (new, RefCounted record), `src/ship/thruster_visuals.gd` (nozzle emitters),
+  the gun's fire path (muzzle flash), `src/combat/explosion.gd` (its `OmniLight3D` becomes an emitter),
+  `tests/unit/test_light_emitters.gd`, `tests/integration/test_ship_lights.gd`.
+- Notes:
+  - One emitter per main pod nozzle, 1.5 m out along the exhaust axis (so it falls on the pod and strut, not inside the
+    splat shell), energy from the pod's `FlightOutput` level, the plume material's colour, range about 15 m (tune by
+    eye). RCS jets and bolts get no lights (too many; planner call).
+  - Muzzle flash: 60 ms at the muzzle hardpoint, per shot. Explosion: today's curve and range, through the picker.
+  - All ships, raiders included; the picker decides which reach the 7 slots.
+  - Visuals in `_process`; the physics tick only publishes levels. Record the picker's per-frame cost in `lights`.
+- Done when: AC31 passes; P9's fight frame shows lit pods.
+
+### M3-T23 `GPUParticles3D` sparks and debris
+
+Added 2026-10-28 for Q23; after T14 (particles must follow the rebase).
+
+- Goal: hits, rams and explosions throw sparks and glowing fragments; debris chunks spark and vent for a few seconds.
+  Splats cannot do this (static radiance, no per-splat animation), so it stays in Godot's particles (D8).
+- Agent: **Sonnet**. Built-in nodes in a fixed pool.
+- Files: `src/combat/fx_pool.gd` (new: fixed `GPUParticles3D` pools per effect), `src/combat/fx_specs.gd` (new, pure:
+  amounts, lifetimes, speeds per effect), `src/combat/{hit_resolver,ram_resolver,explosion,debris_pool}.gd` (emit
+  calls), `assets/fx/*.tres` (process materials, hand-made and tiny), `src/autoload/settings_schema.gd`,
+  `tests/unit/test_fx_specs.gd`, `tests/integration/test_fx_pool.gd`.
+- Notes:
+  - Effects: hull hit (spark streaks reflected about the hit normal), ram (sparks along the contact), explosion (glowing
+    fragments, a short expanding gas shell), debris (sparks and venting for 2-4 s).
+  - **Newtonian**: process materials have zero gravity and zero damping; every burst inherits its source's velocity. The
+    damping guard test is extended to them.
+  - Pools: one-shot emitters restarted from a fixed pool, never instanced per hit (as `DebrisPool`).
+  - **Rebase**: emitters live under `World`; a burst in global coordinates would jump on a rebase. Use local coordinates
+    under an anchor the `rebased` handler shifts (or shift the emitters' transforms; say which).
+  - Unshaded, emissive, additive; the hull depth proxies hide them behind hulls as they hide plumes.
+  - Headless has no particle simulation: (A) tests the pools, specs and wiring; the look is AC35.
+- Done when: AC32 passes; P9's fight frame shows sparks.
+
+### M3-T24 Hero LOD for the player's ship
+
+Added 2026-10-28 for Q23; after T20 (the budget) and T21 (lighting records for the new level).
+
+- Goal: the player's own Starfury is sharper close up (panel lines, edges, canopy frames) without making every ship
+  heavier.
+- Agent: **Sonnet**. A generator variant and one spec flag on T19's chain.
+- Files: `tools/procgen/assets/starfury_aurora.py` and tests, `src/ship/ship_spec.gd`, `assets/ships/starfury_aurora.tres`,
+  `src/rendering/lod_switcher.gd`, `tests/integration/test_hero_lod.gd`, `docs/assets-starfury.md`.
+- Notes:
+  - `hero` level at every spacing × 0.5 (about 0.02 m, about 4x LOD0, so about 600k splats; record the budget), the cockpit
+    faces' factor applied too. A separate manifest entry (`hero`), so LOD0-LOD3 are unchanged.
+  - `ShipSpec.splat_hero` true for the player's Starfury only: its chain is hero, LOD0-LOD3, by screen size (hero
+    ≥ 400 px). The instructor and allies never use it.
+  - The visible splats count against T20's budget; check AC19's fight plus the hero stays inside it. Record the import
+    time of the hero PLY.
+- Done when: AC33 passes; P9's cockpit frame is sharper than before (AC35 judges it).
+
+### M3-T25 Lens flare and motion blur, after sign-off
+
+Added 2026-10-28 for Q23; last of the visual pass; after T21. **Gate**: the first step is a short report to the maintainer;
+no code until the maintainer picks.
+
+- Goal: a lens flare from the star, and motion blur on fast turns as an option.
+- Agent: **Sonnet**. Compositor effects; the choice is the maintainer's.
+- Files: `addons/<flare>/` (if vendored, untouched), or `src/rendering/{lens_flare,motion_blur}_effect.gd` and shaders,
+  `src/environment/space_environment.tscn` (Compositor), `src/autoload/settings_schema.gd`, `docs/third-party.md`,
+  `tests/integration/test_post_effects.gd`.
+- Notes:
+  - Options found 2026-10-28 (check again before the report): **lens flare**: ARez2's "Compositor Lens Effects / Lens flare"
+    (MIT, Godot 4.4+, a `CompositorEffect` with lens flares and god rays; https://github.com/ARez2/compositor-effect-lens-effects),
+    or in-house. **Motion blur**: no maintained Godot 4.7 compositor add-on found (Bauxitedev's port was last updated in
+    2022 and is a camera scene, not a compositor effect), so the planner's call is an in-house `CompositorEffect` over the
+    motion vectors Forward+ already writes.
+  - Splats write no depth or motion vectors; the hull depth proxies do. Check the flare's occlusion test and the blur both
+    read them, so the flare hides behind hulls and hulls blur as solid shapes.
+  - Order after GDGS's effect (`PRE_TRANSPARENT`); the HUD and console are canvas layers and are never blurred.
+  - `settings.lens_flare` (default on), `settings.motion_blur` (default off) and `motion_blur_strength`.
+- Done when: the maintainer has picked; AC34 passes; AC35's flare and blur lines are in the play-test checklist.
+
 ### M3-T12 Integration, smoke runs, capture set, play-test guide
 
 - Goal: M3 complete in one build, every (A) criterion green, the maintainer handed a checklist and screenshots.
 - Agent: **Opus**. Cross-task glue.
 - Files: `scripts/run_tests.sh` (providers line, new smoke runs: wing order, dogfight, instructor route), `scripts/capture_m3.sh`,
   `tests/integration/test_m3_run.gd`, `docs/playtest.md` (M3 section: keyboard, orders, instructor, new console commands,
-  AC14-AC19, AC22 and AC27 checklist), this file (status, as-built notes), `docs/architecture.md` §16 (as built), `docs/roadmap.md`.
+  AC14-AC19, AC22, AC27 and AC35 checklist), this file (status, as-built notes), `docs/architecture.md` §16 (as built), `docs/roadmap.md`.
 - Done when: every (A) criterion passes; the capture set is attached; the maintainer runs the (H) checklist.
 
 ## As-built notes
@@ -1336,9 +1544,9 @@ Added 2026-10-26 for Q19; after T13 (it is keyed to skill and aggression); run b
 
 ## Definition of done (M3)
 
-- T01-T12 merged into `m3`, `scripts/run_tests.sh` green, `docs/third-party.md` current, no generated binaries committed.
+- T01-T25 merged into `m3`, `scripts/run_tests.sh` green, `docs/third-party.md` current, no generated binaries committed.
 - Every (A) criterion passes.
-- AC14-AC19 ticked by the maintainer, with GPU, driver and FPS recorded below. Then `m3` merges into `main`.
+- AC14-AC19 and AC35 ticked by the maintainer, with GPU, driver, FPS and VRAM recorded below. Then `m3` merges into `main`.
 
 Human acceptance record (fill in):
 
@@ -1346,6 +1554,7 @@ Human acceptance record (fill in):
 Tester:                                  Date:
 OS / kernel / Mesa or driver:            GPU:
 Splat backend shown:                     FPS with 4 Starfuries + 9 raiders + effects:
-AC14 [ ]  AC15 [ ]  AC16 [ ]  AC17 [ ]  AC18 [ ]  AC19 [ ]
+AC14 [ ]  AC15 [ ]  AC16 [ ]  AC17 [ ]  AC18 [ ]  AC19 [ ]  AC35 [ ]
+VRAM / frame time, AC19 fight and 100 ships, before and after T19-T20:
 Notes:
 ```

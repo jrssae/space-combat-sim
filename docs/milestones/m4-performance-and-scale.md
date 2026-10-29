@@ -15,8 +15,8 @@ far. Tasks are ordered; each is one PR-sized unit and names a recommended agent 
 Find how many ships can fly at once while the game still performs well, then raise that number: **at least 100 ships (the
 minimum), up to 500 (the target)**. The work is test-driven and aimed at the **ship AI and location tracking**: the contact scan
 and perception, the AI's behaviours and avoidance, targeting and the radar, `UniversePos` conversions and the position rebase.
-Rendering, splat budgets and LOD are not in scope (they are M6's `LodSwitcher` and resident splat budget); their cost is only
-recorded.
+Rendering, splat budgets and LOD are not in scope (they are M3-T19's `LodSwitcher` and M3-T20's resident splat budget); their
+cost is only recorded.
 
 ## Maintainer answers (2026-10-28)
 
