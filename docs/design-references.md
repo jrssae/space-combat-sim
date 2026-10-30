@@ -41,6 +41,25 @@ wide across the pods and 8 m tall. The X is wider than tall: struts sit about 30
 - **Colours.** Light grey hull with darker panel lines and greebles; hazard stripes on the struts; dark metal
   pods with lighter bands.
 
+- **Reference model (2026-10-30).** The maintainer added a fan-made 3D-print model of the Starfury (an STL in the
+  untracked `references/`, never committed). Read off orthographic renders of it, scaled to our 14.5-15 m claw span:
+  - **Overall**: span about 1.56 times the length, height about 0.76 times the length.
+  - **Pods**: about 5.6 m long, set at (±5.5, ±2.5) from the front, with their fronts about 2.3 m behind the nose.
+    Each is slim (radius about 0.65 m) behind a narrower ring-faced intake. Each swells into a rounded knuckle
+    where the strut joins, about 1 m ahead of the pod's middle. A round sensor dome sits on the knuckle's outboard
+    side and a stub on its top. Ribbed collar bands sit fore and aft, and the rear housing is long and ribbed.
+  - **Struts**: from the front they rise about 20-25° from the horizontal. From above they are broad swept plates,
+    about 4 m in chord at the root and 2.3 m at the pod, with the leading edge about 60° from the centre line. The
+    open truss cut-outs run along them.
+  - **Claws**: long, flat blades, about 3.5 m from root to tip, almost level with the pod's outboard side. Their
+    roots merge into one plate that forks into two prongs (a pincer from the side, a fork sticking out sideways
+    from the front). They splay only about 15-20° from the pod axis. A shorter blade (about 2.4 m) sits inboard
+    and below.
+  - **Fuselage**: an arrowhead from above. Behind the cockpit, seen from the front, it is a shield about 2 m wide,
+    with a flat top and a narrow pointed keel. The guns hang under the sides of the nose.
+
+  `starfury_aurora` generator v3 (M3-T26) follows these numbers (`docs/assets-starfury.md`).
+
 The M1 generator produced a long cylindrical fuselage with cylindrical pods. The maintainer judged that
 closer to a Thunderbolt than a Starfury. The rework must hit the silhouette above.
 

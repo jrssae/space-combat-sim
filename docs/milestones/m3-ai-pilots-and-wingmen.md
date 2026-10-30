@@ -90,6 +90,7 @@ Record later answers here (rules) or in `docs/design-references.md` (designs), s
 | Q21 | (2026-10-26, play-test request) Contacts beyond the radar's 25 km | **Broadcast signals**: nav buoys and allies broadcast, so they show beyond the 25 km sensor range: allies to 100 km, buoys to 1 000 km (M3-T17). Later the station and jumpgates broadcast to 1 000 km (M6, M7), and in hyperspace the destination jumpgate's range is unlimited (M11). **The AI receives every broadcast at the same ranges** (maintainer, 2026-10-26): e.g. a raider sent to attack a nav buoy or the station sees it from as far as the player's radar does |
 | Q22 | (2026-10-28, maintainer request) Fewer splats on distant ships, more up close? | **Yes, in M3** (pulled forward from M6): LOD2 and LOD3 for the ship assets, a `LodSwitcher` that picks one LOD per ship by its size on screen and switches by visibility (never by swapping the resource, which rebuilds every GDGS buffer), and a resident splat budget patched into GDGS so hidden LODs cost no sort memory (T19, T20) |
 | Q23 | (2026-10-28, maintainer request) Close the visual gap to Unreal without leaving Godot | **A visual pass, in this order**: GDGS relighting with procgen-written per-splat normals, flat hull colours and a picker for GDGS's 8 lights (T21); thrust-driven nozzle lights, muzzle-flash and explosion lights through the picker (T22); `GPUParticles3D` sparks and debris (T23); a denser LOD for the player's ship only (T24); lens flare and motion blur last, each a new dependency or new effect the maintainer signs off first (T25) |
+| Q24 | (2026-10-30, maintainer request) Match the Starfury to the reference 3D model, and draw the HUD's own-ship damage display as a low-poly wireframe | **Done first, before the other open tasks** (M3-T26): `starfury_aurora` generator v3 reshapes the pods, claws, struts and the fuselage behind the cockpit after the model's proportions (written down in `docs/design-references.md`; the model itself stays untracked); the Starfury damage silhouette becomes a low-poly wireframe seen from behind and above, each part coloured by its damage zone |
 
 Calls made by the planner (say if you want them changed): callsigns `ALPHA 1` (player) to `ALPHA 4`, the instructor
 `INSTRUCTOR`; the default order is **cover me** (hold formation, engage hostiles that come within 2 km of the player);
@@ -188,7 +189,8 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | M3-T23 | `GPUParticles3D` sparks and debris (Q23) | T14 | Sonnet |
 | M3-T24 | Hero LOD for the player's ship (Q23) | T20, T21 | Sonnet |
 | M3-T25 | Lens flare and motion blur, after sign-off (Q23) | T21 | Sonnet |
-| M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13-T25 | Opus |
+| M3-T26 | Starfury after the reference model, wireframe damage display (Q24) | - | Opus |
+| M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13-T26 | Opus |
 
 Parallel lanes: T01, T02 and T03 touch disjoint files and can run together; T04 and T05 can run together after T02.
 Two agents at a time is steadier than four (`docs/handoff.md`).
@@ -860,6 +862,33 @@ no code until the maintainer picks.
   - Order after GDGS's effect (`PRE_TRANSPARENT`); the HUD and console are canvas layers and are never blurred.
   - `settings.lens_flare` (default on), `settings.motion_blur` (default off) and `motion_blur_strength`.
 - Done when: the maintainer has picked; AC34 passes; AC35's flare and blur lines are in the play-test checklist.
+
+### M3-T26 Starfury after the reference model, wireframe damage display
+
+Added 2026-10-30 for the maintainer's request Q24, done before the other open tasks.
+
+- Goal: the in-game Starfury reads like the maintainer's reference model, and the HUD's Starfury damage display is a
+  low-poly wireframe of it.
+- Agent: **Opus** (done by the controller). A parametric reshape checked against orthographic renders of the reference,
+  plus a pure HUD data change.
+- Files: `tools/procgen/assets/starfury_aurora.py` (generator v3: pod, claw, strut, rear fuselage stations, pod
+  centre), `tools/procgen/parts/propulsion.py` (`RingPodSpec` knuckle and `collision_radius`),
+  `tools/procgen/tests/test_starfury_aurora.py` (LOD0 contract re-pinned, claw box and pod capsule checks),
+  `src/hud/silhouette.gd` (`wireframe`), `src/hud/hud.gd`, `tests/unit/test_silhouette.gd`,
+  `docs/design-references.md`, `docs/assets-starfury.md`.
+- Notes:
+  - Reference read-off (the model scaled to our claw span): pods 5.6 m long at (±5.5, ±2.5) with a knuckle, sensor
+    dome and dorsal stub where the strut joins; struts 3.8 to 2.25 m in chord, about 21° from horizontal; claws are
+    long flat blades almost level with the pod's outboard side, splaying 13-22°; the fuselage behind the cockpit is a
+    2.2 m shield with a pointed keel. The cockpit segment (window, eye, tested view), gun mount and masses are
+    unchanged, so the cockpit-view tests hold as they were.
+  - LOD0 is 246 602 splats (AC3 budget 100k-250k), LOD1 24.9 % of it (AC6). Pod lever arms change (y 2.2 to 2.5, the
+    nozzles' z); thrust and RCS torques read the hardpoints, so nothing else needs new constants.
+  - Wireframe: a fixed low-poly model in the ship frame (fuselage rings, guns, and per arm hexagonal pod rings, the
+    strut's edges and the claw blades), projected from behind and above (yaw -0.25 rad, pitch 0.5 rad) so the
+    ship's right stays right and its top up, fitted undistorted into the silhouette rect. Each zone's lines take
+    its damage colour, and a damaged zone draws heavier. The raider keeps its outline polygons.
+- Done when: the procgen and GUT suites pass, and the maintainer accepts the look in game (H).
 
 ### M3-T12 Integration, smoke runs, capture set, play-test guide
 
