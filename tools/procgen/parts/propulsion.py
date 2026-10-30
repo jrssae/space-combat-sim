@@ -188,7 +188,9 @@ class RingPodSpec:
     ``radius``; the body; a short taper; a ribbed rear housing (``rear_radius``) ending in a flat
     face around the main bell. The bells protrude slightly so their exits (the hardpoints) are
     clearly visible. ``bosses`` are cosmetic round ports on the body, given as roll angles
-    (degrees from +X towards +Y) at ``boss_z``."""
+    (degrees from +X towards +Y) at ``boss_z``. A ``knuckle_radius`` above ``radius`` swells the
+    body into a rounded knuckle ``knuckle_length`` long centred on ``knuckle_z`` (where the strut
+    meets the pod); it must lie inside the plain body section."""
 
     length: float = 5.0
     radius: float = 0.82
@@ -210,6 +212,9 @@ class RingPodSpec:
     boss_z: float = -0.4
     boss_radius: float = 0.26
     boss_height: float = 0.16
+    knuckle_radius: float = 0.0
+    knuckle_z: float = 0.0
+    knuckle_length: float = 0.0
     segments: int = 48
     mass_kg: float = 5_000.0
 
@@ -234,6 +239,31 @@ class RingPodSpec:
         )
         if body <= 0.0:
             raise ValueError("pod sections are longer than the pod")
+        if self.knuckle_radius > self.radius:
+            zb = self.front_z + self.front_length + self.shoulder_length
+            zt = self.rear_z - self.rear_length - self.taper_length
+            half = 0.5 * self.knuckle_length
+            if not zb <= self.knuckle_z - half < self.knuckle_z + half <= zt:
+                raise ValueError("the knuckle must lie inside the pod's plain body section")
+
+    def body_points(self) -> list[tuple[float, float]]:
+        """``(z, r)`` of the knuckle swelling (empty without one): a half-sine bump on ``radius``."""
+        if self.knuckle_radius <= self.radius:
+            return []
+        z0 = self.knuckle_z - 0.5 * self.knuckle_length
+        return [
+            (
+                z0 + self.knuckle_length * k / 10,
+                self.radius
+                + (self.knuckle_radius - self.radius) * math.sin(math.pi * k / 10) ** 0.6,
+            )
+            for k in range(11)
+        ]
+
+    def radius_at(self, z: float) -> float:
+        """The outer radius at ``z`` (pod frame)."""
+        zs, rs = self.outer_profile()
+        return float(np.interp(z, zs, rs))
 
     @property
     def front_z(self) -> float:
@@ -244,11 +274,16 @@ class RingPodSpec:
         return 0.5 * self.length
 
     @property
+    def collision_radius(self) -> float:
+        """Radius of the collision capsule: the body's, or the knuckle's where it swells wider."""
+        return max(self.radius, self.knuckle_radius)
+
+    @property
     def capsule_height(self) -> float:
-        """Total length of a ``radius`` capsule that still wraps the flat end faces: its
-        hemispherical caps reach ``radius - sqrt(radius^2 - r_end^2)`` past each face."""
-        r_end = max(self.front_radius, self.rear_radius)
-        return self.length + 2.0 * (self.radius - math.sqrt(self.radius**2 - r_end**2))
+        """Total length of a ``collision_radius`` capsule that still wraps the flat end faces:
+        its hemispherical caps reach ``r - sqrt(r^2 - r_end^2)`` past each face."""
+        r, r_end = self.collision_radius, max(self.front_radius, self.rear_radius)
+        return self.length + 2.0 * (r - math.sqrt(r**2 - r_end**2))
 
     def outer_profile(self) -> tuple[np.ndarray, np.ndarray]:
         """``(z, r)`` of the outer surface from the front face to the rear face (for queries)."""
@@ -261,11 +296,15 @@ class RingPodSpec:
         shoulder_r = self.front_radius + (self.radius - self.front_radius) * np.sin(
             0.5 * math.pi * t
         )
-        z = np.concatenate([[z0, zf], shoulder_z[1:], [zt, zr, z1]])
+        bump = self.body_points()
+        z = np.concatenate(
+            [[z0, zf], shoulder_z[1:], [p[0] for p in bump], [zt, zr, z1]]
+        )
         r = np.concatenate(
             [
                 [self.front_radius, self.front_radius],
                 shoulder_r[1:],
+                [p[1] for p in bump],
                 [self.radius, self.rear_radius, self.rear_radius],
             ]
         )
@@ -317,6 +356,9 @@ def _pod_shell(spec: RingPodSpec, style: Style) -> Mesh:
             0.5 * math.pi * t
         )
         pts.append((zf + spec.shoulder_length * t, r, hull))
+    for k, (z, r) in enumerate(spec.body_points()):
+        # The knuckle's flanks are hull; a dark band rides its crown.
+        pts.append((z, r, dark if 4 <= k <= 6 else hull))
     pts.append((zt, spec.radius, hull))
     pts.append((zr, spec.rear_radius, hull))
     pts += _ribbed(zr, z1, spec.rear_radius, spec.ribs_rear, panel, dark)
@@ -354,7 +396,9 @@ def _boss(spec: RingPodSpec, style: Style, roll_deg: float) -> tuple[Mesh, Ancho
     )
     a = math.radians(roll_deg)
     radial = np.array([math.cos(a), math.sin(a), 0.0])
-    base = radial * (spec.radius - 0.06) + np.array([0.0, 0.0, spec.boss_z])
+    base = radial * (spec.radius_at(spec.boss_z) - 0.06) + np.array(
+        [0.0, 0.0, spec.boss_z]
+    )
     return mesh.transformed(basis_from_z(radial, [0.0, 0.0, 1.0]), base), Anchor(
         base + radial * h, radial
     )
@@ -387,7 +431,7 @@ def ring_pod(spec: RingPodSpec, style: Style) -> Part:
         Collision(
             "capsule",
             [0.0, 0.0, 0.0],
-            radius=spec.radius,
+            radius=spec.collision_radius,
             height=spec.capsule_height,
             name="pod",
         )

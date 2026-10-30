@@ -294,11 +294,20 @@ class HudCanvas extends Control:
 
 	# --- damage silhouettes -----------------------------------------------------------------------------------------
 
-	# The outline of a ship's main components in `rect`, each filled by how badly it is hurt (green untouched, then yellow,
-	# orange, red), with `caption` above.
+	# A ship's main components in `rect`, coloured by how badly each is hurt (green untouched, then yellow, orange, red), with
+	# `caption` above: a wireframe whose damaged parts draw heavier, or outlines filled by their damage.
 	func _draw_silhouette(layout: DamageZones.Layout, zones: PackedFloat32Array, rect: Rect2, caption: String, w: float) -> void:
-		if layout == DamageZones.Layout.NONE or rect.size.x <= 0.0:
+		if layout == DamageZones.Layout.NONE or rect.size.x <= 0.0 or rect.size.y <= 0.0:
 			return
+		for entry: Dictionary in Silhouette.wireframe(layout, rect.size.x / rect.size.y):
+			var zone: int = entry["zone"]
+			var severity: float = float(zones[zone]) if zone < zones.size() else 0.0
+			var color: Color = HudLayout.damage_color(severity)
+			var segments := PackedVector2Array()
+			for p: Vector2 in entry["segments"]:
+				segments.append(rect.get_center() + p * rect.size)
+			draw_multiline(segments, Color(color.r, color.g, color.b, 0.8 if severity <= 0.0 else 1.0),
+					w * (0.6 if severity <= 0.0 else 1.1))
 		for entry: Dictionary in Silhouette.polygons(layout):
 			var zone: int = entry["zone"]
 			var severity: float = float(zones[zone]) if zone < zones.size() else 0.0

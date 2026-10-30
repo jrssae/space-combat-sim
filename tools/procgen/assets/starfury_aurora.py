@@ -91,7 +91,7 @@ from ..styles import Style
 from ..styles.earthforce import EARTHFORCE
 
 ASSET_ID = "starfury_aurora"
-GENERATOR_VERSION = 2
+GENERATOR_VERSION = 3
 PLY_NAME = "starfury_aurora.ply"
 OBJ_NAME = "starfury_aurora.obj"
 COCKPIT_NAME = "cockpit_interior.obj"
@@ -137,9 +137,11 @@ STARFURY_FUSELAGE = WedgeFuselageSpec(
         # Rear edge of the panes; its shoulder lies on the plane through the eye and the front
         # pane's shoulder (30 deg up), so the frame over the side panes continues the top bar.
         WedgeStation(1.35, 1.12, 0.88, 1.32, 0.15, 0.64, -0.80),
-        WedgeStation(2.60, 1.28, 1.00, 1.45, 0.08, 0.70, -1.05),
-        WedgeStation(4.40, 1.32, 1.08, 1.55, 0.10, 0.75, -1.15),
-        WedgeStation(5.20, 1.20, 1.00, 1.45, 0.10, 0.70, -1.05),
+        # Behind the cockpit the body narrows to the reference's shield: about 2.2 m across the
+        # shoulders, a flat top 1.1 m up and a narrow keel 1.2 m down.
+        WedgeStation(2.60, 1.16, 0.84, 1.16, 0.20, 0.42, -1.08),
+        WedgeStation(4.40, 1.14, 0.78, 1.10, 0.25, 0.32, -1.20),
+        WedgeStation(5.20, 1.04, 0.70, 1.00, 0.25, 0.28, -1.10),
     ),
     chamfer=0.045,
     window_end=1,
@@ -152,17 +154,38 @@ STARFURY_FUSELAGE = WedgeFuselageSpec(
 COCKPIT_BARS = {"bar_width": 0.09, "bar_depth": 0.06, "sill_depth": 0.45}
 STARFURY_GUN_MOUNT = GunMountSpec(barrel_mount_z=-0.6, mass_kg=2_000.0)
 STARFURY_POD = RingPodSpec(
-    bosses=(0.0, 90.0), boss_radius=0.2, boss_height=0.12, mass_kg=5_000.0
+    # 5.6 m long and slimmer than before: a narrow ring-faced intake that swells through a long
+    # shoulder, a knuckle where the strut joins (an outboard sensor dome and a dorsal stub on it),
+    # and a long ribbed rear housing round the main bell.
+    length=5.6,
+    radius=0.68,
+    front_radius=0.5,
+    front_length=0.35,
+    shoulder_length=0.8,
+    taper_length=0.35,
+    rear_radius=0.62,
+    rear_length=1.5,
+    ring_inner_radius=0.4,
+    ribs_front=1,
+    ribs_rear=2,
+    knuckle_radius=0.86,
+    knuckle_z=-0.9,
+    knuckle_length=1.3,
+    bosses=(0.0, 90.0),
+    boss_z=-0.9,
+    boss_radius=0.3,
+    boss_height=0.28,
+    mass_kg=5_000.0,
 )
 HAZARD = tuple(
     (1.6 + 0.35 * k, 1.95 + 0.35 * k, "hazard" if k % 2 == 0 else "hazard_dark")
     for k in range(5)
 )
 STARFURY_STRUT = TrussStrutSpec(
-    length=5.155,
-    chord_root=3.5,
-    chord_tip=1.65,
-    sweep=3.2,
+    length=5.256,
+    chord_root=3.8,
+    chord_tip=2.25,
+    sweep=2.75,
     web_depth_root=0.5,
     web_depth_tip=0.34,
     rail=0.09,
@@ -172,22 +195,41 @@ STARFURY_STRUT = TrussStrutSpec(
     bands=HAZARD,
     mass_kg=1_500.0,
 )
+# Two long blades nearly level with the pod's outboard side, 3.5 m to the tips: their wide roots
+# overlap into one plate that splits into two prongs (a pincer from the side, a fork from the
+# front), and a shorter blade inboard and below.
 STARFURY_CLAW = ClawSpec(
     vanes=(
-        VaneSpec(35.0, 0.85, 1.4, ((1.7, 42.0), (1.9, 14.0)), offset=0.2),
-        VaneSpec(35.0, 0.85, 1.4, ((1.7, 42.0), (1.9, 14.0)), offset=-0.2),
         VaneSpec(
-            215.0,
-            0.82,
-            1.7,
-            ((1.0, 38.0), (1.1, 12.0)),
-            chord=(0.28, 0.12),
-            thickness=(0.2, 0.08),
+            12.0,
+            0.75,
+            1.2,
+            ((1.2, 22.0), (2.3, 13.0)),
+            chord=(0.42, 0.06),
+            thickness=(0.16, 0.06),
+            offset=0.2,
+        ),
+        VaneSpec(
+            12.0,
+            0.75,
+            1.2,
+            ((1.2, 22.0), (2.3, 13.0)),
+            chord=(0.42, 0.06),
+            thickness=(0.16, 0.06),
+            offset=-0.2,
+        ),
+        VaneSpec(
+            205.0,
+            0.7,
+            1.3,
+            ((0.8, 30.0), (1.6, 16.0)),
+            chord=(0.28, 0.1),
+            thickness=(0.42, 0.1),
         ),
     ),
     blocks=(
-        RcsBlockSpec(35.0, 0.84, 1.55, (0.46, 0.46, 0.8), ("px", "py")),
-        RcsBlockSpec(215.0, 0.82, 1.75, (0.42, 0.42, 0.65), ("nx", "ny")),
+        RcsBlockSpec(12.0, 0.82, 1.4, (0.44, 0.44, 0.75), ("px", "py")),
+        RcsBlockSpec(205.0, 0.78, 1.6, (0.4, 0.4, 0.6), ("nx", "ny")),
     ),
     mass_kg=1_000.0,
 )
@@ -205,8 +247,8 @@ class StarfurySpec:
     pod: RingPodSpec = STARFURY_POD
     pod_center: tuple[float, float, float] = (
         5.5,
-        2.2,
-        5.0,
+        2.5,
+        5.15,
     )  # upper right; mirrored to the others
     strut: TrussStrutSpec = STARFURY_STRUT
     strut_root: tuple[float, float, float] = (

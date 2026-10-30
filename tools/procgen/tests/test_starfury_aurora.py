@@ -35,25 +35,26 @@ CLEAR_AZIMUTH_DEG = 20.0
 CLEAR_ELEVATION_DEG = (-12.0, 28.0)
 CHUNK_NAMES = ("cabin", "arm_ur", "arm_lr", "arm_ul", "arm_ll")
 LOD1_AABB_TOLERANCE_M = 0.3  # AC6: LOD1's bounds are LOD0's within this
-# The LOD0 contract (M3-T03): the default build as it was before LOD1 existed. Per-part counts, the PLY header and three
+# The LOD0 contract (M3-T03; re-pinned for generator v3, the reshape after the reference model, M3-T26): the default
+# build LOD1 is resampled from. Per-part counts, the PLY header and three
 # full splat records of the seed 42 build (float32 values read back from the PLY), so a change to LOD0 shows up without
 # pinning a SHA-256 that could differ between NumPy builds; the same-run SHA-256 checks are in the tests below.
 LOD0_COUNTS = {
-    "fuselage": 30502, "cockpit": 8288, "gun_mount": 6428,
-    "pod_ur": 20218, "pod_lr": 20218, "pod_ul": 20218, "pod_ll": 20218,
-    "strut_ur": 20019, "strut_lr": 20019, "strut_ul": 20019, "strut_ll": 20019,
-    "claw_ur": 6016, "claw_lr": 6016, "claw_ul": 6016, "claw_ll": 6016,
+    "fuselage": 26062, "cockpit": 8288, "gun_mount": 6764,
+    "pod_ur": 20367, "pod_lr": 20367, "pod_ul": 20367, "pod_ll": 20367,
+    "strut_ur": 24604, "strut_lr": 24604, "strut_ul": 24604, "strut_ll": 24604,
+    "claw_ur": 6401, "claw_lr": 6401, "claw_ul": 6401, "claw_ll": 6401,
 }  # fmt: skip
 LOD0_RECORDS = {
-    0: [-0.7256394624710083, 0.19037888944149017, -3.584702253341675, -0.7922653555870056, 0.43238458037376404,
+    0: [-0.7256394624710083, 0.1481023132801056, -3.6149401664733887, -0.7922653555870056, 0.43238458037376404,
         -0.43053361773490906, -1.7478806972503662, -1.6506136655807495, -1.716326355934143, -2.840289831161499,
         -3.2188758850097656, -3.2188758850097656, -5.744604587554932, 0.19055941700935364, -0.8381075859069824,
         0.1133245974779129, 0.49841779470443726],
-    115115: [4.863860130310059, 2.7156155109405518, 0.8874614238739014, -0.7738640308380127, 0.6330647468566895,
-             0.019067013636231422, -1.1131696701049805, -1.1096320152282715, -1.0252090692520142, 3.891820192337036,
-             -3.2188758850097656, -3.2188758850097656, -5.744604587554932, 0.2347002923488617, -0.6577234864234924,
-             0.24055424332618713, 0.674128532409668],
-    230229: [4.827029705047607, 1.429667353630066, 2.381768226623535, -0.0, -1.0, 0.0, -1.6691603660583496,
+    123301: [-1.8344980478286743, -1.175212025642395, 0.803264319896698, 0.36152786016464233, -0.9323613047599792, 0.0,
+             0.4828406274318695, 0.48645704984664917, 0.653494656085968, 3.891820192337036, -3.2188758850097656,
+             -3.2188758850097656, -5.744604587554932, 0.3995222747325897, 0.5834226012229919, -0.3995222747325897,
+             0.5834226012229919],
+    246601: [4.79181432723999, 1.8803577423095703, 2.351530075073242, -0.0, -1.0, 0.0, -1.6691603660583496,
              -1.6700348854064941, -1.6697529554367065, 3.891820192337036, -3.2188758850097656, -3.2188758850097656,
              -5.744604587554932, 0.5, 0.5, -0.5, 0.5],
 }  # fmt: skip
@@ -510,7 +511,7 @@ class StarfuryAuroraTests(unittest.TestCase):
             cap = shapes[f"pod_{name}"]
             self.assertEqual(
                 (cap["type"], cap["radius"], cap["axis"]),
-                ("capsule", SPEC.pod.radius, "z"),
+                ("capsule", SPEC.pod.collision_radius, "z"),
             )
             self.assertAlmostEqual(cap["height"], SPEC.pod.capsule_height, places=5)
             self.assertGreater(
@@ -523,19 +524,19 @@ class StarfuryAuroraTests(unittest.TestCase):
             self.assertAlmostEqual(float(np.linalg.det(basis)), 1.0, places=3)
             if c["type"] == "box":
                 self.assertTrue(all(v > 0.0 for v in c["size"]), c["name"])
-        for name in (
-            "strut_ur",
-            "claw_ur",
-        ):  # rotated boxes along the swept strut / the splayed vanes
-            x_col = shapes[name]["basis"]["x"]
-            self.assertTrue(all(abs(v) > 0.2 for v in x_col), (name, x_col))
+        # Rotated boxes: along the swept strut (out, up and aft), and along the claw's outboard
+        # prongs, which lie nearly level with the pod (out and aft).
+        x_col = shapes["strut_ur"]["basis"]["x"]
+        self.assertTrue(all(abs(v) > 0.2 for v in x_col), x_col)
+        x_col = shapes["claw_ur"]["basis"]["x"]
+        self.assertTrue(abs(x_col[0]) > 0.2 and abs(x_col[2]) > 0.2, x_col)
         # Every primitive wraps its part: the splats of that part lie inside (5 cm slack). The claw
         # box wraps the outboard prong pair, about half the claw; the inboard vane and the thruster
-        # blocks hug the pod.
+        # blocks hug the pod. The pod's sensor dome and dorsal stub stand out of its capsule.
         for name, minimum in (
             ("fuselage", 0.999),
             ("gun_mount", 0.999),
-            ("pod_ur", 0.97),
+            ("pod_ur", 0.94),
             ("strut_ur", 0.99),
             ("claw_ur", 0.45),
         ):
@@ -651,7 +652,7 @@ class StarfuryAuroraTests(unittest.TestCase):
         self.assertEqual(self.manifest["counts"], LOD0_COUNTS)
         header = ply_header(
             sum(LOD0_COUNTS.values()),
-            ("starfury_aurora generator v2 seed 42", "frame: 3dgs (Rz180 of godot)"),
+            ("starfury_aurora generator v3 seed 42", "frame: 3dgs (Rz180 of godot)"),
         )
         self.assertEqual(
             (self.dir_a / ship.PLY_NAME).read_bytes()[: len(header)], header

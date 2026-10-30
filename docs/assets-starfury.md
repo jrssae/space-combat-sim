@@ -13,10 +13,10 @@ nose, framed from inside like the maintainer's cockpit-view reference.
 
 | File | What it is |
 |---|---|
-| `starfury_aurora.ply` | 230 230 Gaussian splats, 3DGS binary PLY (SH degree 0), written in GDGS orientation (Rz 180 of the Godot frame) |
+| `starfury_aurora.ply` | 246 602 Gaussian splats, 3DGS binary PLY (SH degree 0), written in GDGS orientation (Rz 180 of the Godot frame) |
 | `starfury_aurora.obj` + `.mtl` | fallback mesh, Godot frame, faces grouped by material (the glass is `ef_canopy_glass`) |
 | `cockpit_interior.obj` + `.mtl` | the window frame seen from inside (bars) and the sill; first person only |
-| `starfury_aurora_lod1.ply` | LOD1 (M3-T03): 57 538 splats (25.0 % of LOD0) at 0.08 m spacing, for allies and debris; see "LOD1 and break-up chunks" |
+| `starfury_aurora_lod1.ply` | LOD1 (M3-T03): 61 514 splats (24.9 % of LOD0) at 0.08 m spacing, for allies and debris; see "LOD1 and break-up chunks" |
 | `starfury_aurora_chunk_<cabin\|arm_ur\|arm_lr\|arm_ul\|arm_ll>.ply/.obj/.mtl` | the break-up chunks, cut from LOD1 |
 | `hardpoints.json` | the contract for the flight model, cameras, weapons, RCS glow, collision and chunks (schema below) |
 | `manifest.json` | asset contract (`docs/architecture.md` section 9): `lods[0]` and `lods[1]`, AABB, `centroid_offset`, `files`, `counts`, `sampling`, `dimensions_m`, `chunks`, `chunk_lod` |
@@ -29,7 +29,7 @@ nose, framed from inside like the maintainer's cockpit-view reference.
    mirror them; the pod/strut/claw cross is sampled once and mirrored four ways), then the body group (fuselage,
    cockpit, gun mount) is shifted in y (8 cm at seed 42) so the splat centroid's y is exactly 0. The pods are
    symmetric about both x = 0 and y = 0 in the final frame, and the thrust axis passes through the origin.
-3. **Centred**: the sample mean z (4.36 m at seed 42, `manifest.centroid_offset`) is subtracted from everything
+3. **Centred**: the sample mean z (4.39 m at seed 42, `manifest.centroid_offset`) is subtracted from everything
    (splats, meshes, hardpoints), so the written splat centroid is (0, 0, 0) to float32 precision and GDGS's
    unconditional import centring is a no-op. The origin moves by millimetres between seeds; all pod x/y values and
    all z *differences* are seed-independent.
@@ -40,17 +40,18 @@ nose, framed from inside like the maintainer's cockpit-view reference.
 
 | Part (`parts/` function) | Spec | Placement | Mass |
 |---|---|---|---|
-| fuselage (`hull.wedge_fuselage`) | 5.2 m, five heater-shield stations (flat top, widest at the shoulder, narrow keel, chamfered corners): front pane 1.52 m wide x 0.95 m, raked 15 deg; 2.64 x 1.92 m at the pane's rear edge; 3.10 x 2.47 m at the widest | nose z = 0, tail z = 5.2 | 16 000 kg |
+| fuselage (`hull.wedge_fuselage`) | 5.2 m, five heater-shield stations (flat top, widest at the shoulder, narrow keel, chamfered corners): front pane 1.52 m wide x 0.95 m, raked 15 deg; 2.64 x 1.92 m at the pane's rear edge; behind the cockpit it narrows to the reference's shield, 2.2-2.3 m across the shoulders with a 0.6-0.8 m keel 1.1-1.2 m down (generator v3) | nose z = 0, tail z = 5.2 | 16 000 kg |
 | cockpit window (part of the fuselage) | front pane = the first station's face, a trapezoid wider at the top; side, roof-side and roof panes on the first segment's `lower`/`upper`/`top` facets; 7 cm frame bands; dark lining on the keel facets and a bulkhead at z = 1.29 | z = 0 .. 1.35 | (in the fuselage) |
 | cockpit interior (`hull.wedge_cockpit_interior`) | 9 cm x 6 cm bars 3 cm inside every frame, a 45 cm sill strip (mesh only, not splatted) | with the window | 0 |
 | gun mount (`weapons.gun_mount`) | 2.2 m tapered housing (1.3 x 0.55 -> 1.6 x 0.6 m, dropping 0.5 m aft), two 1.75 m barrels at x = +-0.45 | housing centre (0, -0.72, 1.7), muzzles z = -0.75 | 2 000 kg |
-| struts x4 (`structure.truss_strut`) | 5.155 m span, plate 0.18 m thick, chord 3.5 -> 1.65 m, leading edge swept 3.2 m aft (57 deg from the centre line in plan), two ladder webs 0.5 -> 0.34 m deep with seven 0.3 m cut-outs, five 0.35 m hazard bands (yellow/black/yellow/black/yellow) | root leading edge (+-0.6, +-0.6, 1.2), inside the fuselage, rotated 18.1 deg about Z towards the pod | 1 500 kg each |
-| pods x4 (`propulsion.ring_pod`) | 5.0 m x 1.64 m: ribbed intake housing (r 0.64) with a light ring frame round a recessed dark face, shoulder, body (r 0.82), taper, ribbed rear housing (r 0.74); main bell (throat 0.36, exit 0.55, 0.75 m, 12 cm proud), retro bell (0.16 / 0.28, 0.35 m, 5 cm proud); two round ports (outboard, up/down) | centres (+-5.5, +-2.2, 5.0) | 5 000 kg each |
-| claws x4 (`propulsion.claw_cluster`) | two outboard prongs (0.4 m apart) splaying 42 then 14 deg from the pod axis, 1.7 + 1.9 m, and one inboard vane (38 / 12 deg, 1.0 + 1.1 m), rooted in two thruster blocks that carry the four RCS cones | outboard at 35 deg roll, inboard at 215 deg (ur pod; mirrored) | 1 000 kg each |
+| struts x4 (`structure.truss_strut`) | 5.256 m span, plate 0.18 m thick, chord 3.8 -> 2.25 m, leading edge swept 2.75 m aft (about 61 deg from the centre line in plan), two ladder webs 0.5 -> 0.34 m deep with seven 0.3 m cut-outs, five 0.35 m hazard bands (yellow/black/yellow/black/yellow) | root leading edge (+-0.6, +-0.6, 1.2), inside the fuselage, rotated 21.2 deg about Z towards the pod | 1 500 kg each |
+| pods x4 (`propulsion.ring_pod`) | 5.6 m long: a narrow ribbed intake (r 0.5) with a light ring frame round a recessed dark face, a long shoulder to the body (r 0.68), a knuckle swelling to r 0.86 where the strut joins (1.3 m long, dark crown band), taper, long ribbed rear housing (r 0.62); main bell (throat 0.36, exit 0.55, 0.75 m, 12 cm proud), retro bell (0.16 / 0.28, 0.35 m, 5 cm proud); a sensor dome outboard and a stub on top of the knuckle (r 0.3, 0.28 m proud); collision capsule r 0.86 | centres (+-5.5, +-2.5, 5.15) | 5 000 kg each |
+| claws x4 (`propulsion.claw_cluster`) | two long outboard blades (0.4 m apart, 0.42 m wide at the root so the roots merge into one plate, then two prongs) splaying 22 then 13 deg from the pod axis, 1.2 + 2.3 m, and one inboard blade (30 / 16 deg, 0.8 + 1.6 m), rooted in two thruster blocks that carry the four RCS cones | outboard at 12 deg roll (nearly level), inboard at 205 deg (ur pod; mirrored) | 1 000 kg each |
 
-Overall: 10.17 m long (muzzles to claw tips; 8.3 m to the main nozzle exits), 15.37 m across the claws (12.6 m
-across the pods' outer surfaces), 7.68 m tall; the X is 2.5 times wider than tall at the pod centres (18 deg
-struts). 48 000 kg (part masses sum to `ShipSpec.mass`; `mass_kg` is informational, `ShipSpec` stays the
+Overall: 10.36 m long (muzzles to claw tips; 8.7 m to the main nozzle exits), 14.51 m across the claws (12.7 m
+across the knuckles), 7.28 m tall; the X is 2.2 times wider than tall at the pod centres (21 deg struts).
+Generator v3 (M3-T26) reshaped the pods, claws, struts and the fuselage behind the cockpit after the maintainer's
+reference model (`docs/design-references.md`); the cockpit segment, gun mount and masses did not change. 48 000 kg (part masses sum to `ShipSpec.mass`; `mass_kg` is informational, `ShipSpec` stays the
 authority).
 
 Parts are parametric: a spec dataclass plus a `Style` in, a `Part` (tessellated `Mesh`, named `Anchor`s with
@@ -87,22 +88,22 @@ Key values at seed 42 (pod x/y exact, z moves by millimetres with the seed):
 | `cockpit_camera` | (0, 0.399, -3.363), forward (0, 0, -1), up (0, 1, 0) | behind the front pane (see above) |
 | `chase_anchor` | (0, 4.0, 17.0) | scaled with the ship: frames the 15 m claw span in the 70 deg chase camera |
 | `muzzles[left,right]` | (-+0.45, -0.751, -5.013), direction (0, 0, -1) | barrel tips, 0.75 m ahead of the nose |
-| `pods[ur,lr,ul,ll].center` | (+-5.5, +-2.2, 0.637) | order ur, lr, ul, ll; `side` right/right/left/left |
-| `pods[*].main` | (+-5.5, +-2.2, 3.257), exhaust (0, 0, 1), radius 0.55 | centre of the bell's exit plane: the rearmost point of the pod, on the nozzle axis |
-| `pods[*].retro` | (+-5.5, +-2.2, -1.913), exhaust (0, 0, -1), radius 0.28 | centre of the retro bell's exit, the foremost point of the pod |
+| `pods[ur,lr,ul,ll].center` | (+-5.5, +-2.5, 0.757) | order ur, lr, ul, ll; `side` right/right/left/left |
+| `pods[*].main` | (+-5.5, +-2.5, 3.677), exhaust (0, 0, 1), radius 0.55 | centre of the bell's exit plane: the rearmost point of the pod, on the nozzle axis |
+| `pods[*].retro` | (+-5.5, +-2.5, -2.093), exhaust (0, 0, -1), radius 0.28 | centre of the retro bell's exit, the foremost point of the pod |
 | `rcs[16]` | on the claws' thruster blocks, e.g. `ur_px` (6.508, 2.682, 2.187) | cosmetic; `tags` in pilot terms |
 | `inertia_estimate_kg_m2` | (2.39e5, 9.06e5, 9.41e5) | point masses at part centroids about the CoM: a lower bound for `ShipSpec.inertia` |
 
-Lever arms for the flight model (`docs/architecture.md` section 5.1): pod x = 5.5 m (yaw), y = 2.2 m, main nozzles
-3.347 m behind the CoM, retros 1.823 m ahead of it.
+Lever arms for the flight model (`docs/architecture.md` section 5.1): pod x = 5.5 m (yaw), y = 2.5 m, main nozzles
+3.822 m behind the CoM, retros 1.948 m ahead of it.
 
 Schema (all vectors `[x, y, z]`, numbers rounded to 5 decimals), unchanged from M1:
 
 ```json
-{"asset_id": "starfury_aurora", "generator_version": 2, "frame": "godot", "units": "m",
- "length_m": 10.167, "span_m": 15.371, "height_m": 7.678, "mass_kg": 48000.0,
+{"asset_id": "starfury_aurora", "generator_version": 3, "frame": "godot", "units": "m",
+ "length_m": 10.36, "span_m": 14.512, "height_m": 7.28, "mass_kg": 48000.0,
  "inertia_estimate_kg_m2": [ix, iy, iz],
- "center_of_mass": [0, 0, -0.089],
+ "center_of_mass": [0, 0, -0.145],
  "cockpit_camera": {"position": [...], "forward": [0, 0, -1], "up": [0, 1, 0]},
  "chase_anchor": {"position": [0, 4.0, 17.0]},
  "muzzles": [{"name": "left", "position": [...], "direction": [0, 0, -1]}, {"name": "right", "...": "..."}],
@@ -173,15 +174,16 @@ below are what keeps the surface continuous; `core/sampling.py` has the details.
 ## LOD1 and break-up chunks (M3-T03)
 
 Allies use a lighter Starfury and every Starfury break-up uses chunks (`docs/architecture.md` §16 D35). Both come
-from one extra sampling pass; LOD0's files do not change (the PLY, both OBJs and both MTLs are byte-identical to the
-pre-M3 build; `test_starfury_aurora.py` pins the PLY's counts, header and sample splat records).
+from one extra sampling pass; LOD0's files do not change (when T03 landed, the PLY, both OBJs and both MTLs were
+byte-identical to the pre-M3 build; `test_starfury_aurora.py` pins the PLY's counts, header and sample splat records,
+re-pinned for generator v3).
 
 - **Resampling.** `build_parts` runs a second time with every spacing times `LOD1_SPACING_FACTOR` = 2.0 (hull
   0.08 m, cockpit faces 0.044 m) and every RNG stream suffixed `lod1` (`ctx.rng("splats", <part>, "lod1")`), so
   LOD0's streams are never touched. Splat scales grow with the spacing (`to_splats`: in-plane sigma 0.08 m, normal
   sigma 6.4 mm), so the sheet closes the way LOD0's does. Same parts, burial rules, materials, glass and baked light.
-- **Count.** 57 538 splats, 25.0 % of LOD0's 230 230 (AC6 range 20-30 %, checked by a build warning and the tests).
-  Manifest `lods[1]`: `{"level": 1, "file": "starfury_aurora_lod1.ply", "splats": 57538, "spacing_m": 0.08}`.
+- **Count.** 61 514 splats, 24.9 % of LOD0's 246 602 (AC6 range 20-30 %, checked by a build warning and the tests).
+  Manifest `lods[1]`: `{"level": 1, "file": "starfury_aurora_lod1.ply", "splats": 61514, "spacing_m": 0.08}`.
 - **Frame.** LOD1 is balanced and centred like LOD0 (its own body y shift and z mean), so its splat centroid is the
   origin and GDGS's import centring is a no-op for it too. Its frame differs from LOD0's (the hardpoints frame) by
   the difference of the two shifts: 3.2 mm in z, plus 1.1 mm in y for the cabin parts, at seed 42. Its AABB is
