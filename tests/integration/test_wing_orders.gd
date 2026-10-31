@@ -159,6 +159,13 @@ func test_the_roster_lists_callsigns_hull_and_behaviour() -> void:
 	assert_eq(rows[1]["callsign"], "ALPHA 3")
 	assert_almost_eq(float(rows[1]["hull"]), 0.5, 1e-6)
 	assert_eq(rows[1]["slot"], 2)
+	# The HUD gets the same rows, through Main (M3-T11).
+	var input: HudInput = main._build_hud_input()
+	assert_eq(input.roster.size(), 3)
+	assert_eq(input.roster[1]["callsign"], "ALPHA 3")
+	assert_almost_eq(float(input.roster[1]["hull"]), 0.5, 1e-6)
+	main.wings.give_order(AiContext.Order.FORM_ON_ME)
+	assert_eq(main._build_hud_input().ack_line, "ALPHA 2: COPY, FORMING UP", "the acknowledgement reaches the HUD")
 
 
 func test_while_the_player_is_dead_the_wing_engages_at_will_and_resumes_on_respawn() -> void:
@@ -185,6 +192,13 @@ func test_a_downed_member_leaves_its_slot_and_the_next_one_answers() -> void:
 	assert_eq(result["line"], "ALPHA 3: COPY, FORMING UP")
 	assert_eq(main.wings.add_member(wing, allies[0]), -1, "a ship out of play cannot join")
 	assert_eq(wing.empty_slots(), PackedInt32Array([1]))
+	# The HUD roster keeps the slot, as DOWN, until a replacement takes it (M3-T11).
+	var rows: Array[Dictionary] = main.wings.hud_roster()
+	assert_eq(rows.size(), 3)
+	assert_eq(rows[0]["callsign"], "ALPHA 2")
+	assert_true(bool(rows[0]["down"]))
+	assert_false(bool(rows[1]["down"]))
+	assert_eq(rows[1]["behaviour"], "formation")
 
 
 func test_the_hud_line_lasts_three_seconds_of_sim_time() -> void:

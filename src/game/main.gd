@@ -311,6 +311,9 @@ func _build_hud_input() -> HudInput:
 	input.contacts = ship.targeting.candidates()
 	input.selected_id = ship.targeting.selected_id()
 	input.status_line = status_line
+	input.roster = wings.hud_roster()
+	input.roster_color = Factions.FRIENDLY_COLOR
+	input.ack_line = wings.ack_text()
 	if route_active():
 		input.status_line = instructor_path.status_line(instructor.display_name)
 		var waypoint: UniversePos = instructor_path.waypoint_position()

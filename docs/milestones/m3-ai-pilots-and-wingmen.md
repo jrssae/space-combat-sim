@@ -475,6 +475,14 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
   off-screen. Allies already show blue in the radar and target box (`Factions.hud_color`). Chase-view layout and opacity
   as in M2.1.
 - Done when: the HUD parts of AC10 and AC11 pass; P6 and P7 show them.
+- Done (2026-10-31): `WingDirector.hud_roster` gives one row per slot (`callsign`, `hull`, `behaviour`, `target`, `down`);
+  `Wing.mark_lost` keeps a shot-down wingman's slot on the roster as `DOWN` (in red, empty bar) until a replacement
+  takes it, and slots never flown are left out. `HudLayout._wing` stacks the rows top left (a 64 px hull bar in the
+  wing's colour, then `ALPHA 3  ATK RAIDER 3`; `roster_tag` maps behaviour ids to `FORM`, `ATK <target>`, `EVADE`,
+  `RETREAT`, `NAV`, `IDLE`) and puts `WingDirector.ack_text()` centred under the status line and AUTO-TRACK's line, in
+  both views. `Main._build_hud_input` fills both. The waypoint marker landed with T09 and keeps its look. Tests:
+  `test_hud_layout.gd` (tags, rows, ack line), `test_wing.gd` (lost slots), `test_wing_orders.gd` (the rows and the
+  line reach the HUD input; a downed slot reads DOWN). P6 and P7 are captures (H), taken in T12.
 
 ### M3-T13 Skill ranks, aggressiveness, civilian profile, last-ditch ram
 

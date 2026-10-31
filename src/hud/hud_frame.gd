@@ -93,6 +93,11 @@ var radar_radius_px: float = 0.0
 var radar_dots: Array[RadarModel.Dot] = []
 
 var status_line: String = ""
+## The wing roster (M3-T11), top left: one `RosterRow` per slot.
+var roster_rows: Array[HudLayout.RosterRow] = []
+## The order acknowledgement under the status line, centred at `ack_pos` ("" for none).
+var ack_line: String = ""
+var ack_pos: Vector2 = Vector2.ZERO
 
 ## The route waypoint marker (M3-T09; T11 draws the final look): present, its label and range, on screen at `waypoint_pos`,
 ## else an edge arrow at `waypoint_edge_pos` pointing `waypoint_edge_angle` (radians, screen frame), as the target's.

@@ -49,6 +49,11 @@ var selected_id: int = 0
 ## One line at the top centre (wave, raiders left, kills; on a route the instructor's `FOLLOW INSTRUCTOR — NAV 2/6 — NEXT: ROLL`);
 ## empty until something feeds it.
 var status_line: String = ""
+## The player's wing (M3-T11): one row per slot, `WingDirector.hud_roster` (`callsign`, `hull`, `behaviour`, `target`,
+## `down`), in the wing's faction colour; and the latest order acknowledgement while it is shown ("" otherwise).
+var roster: Array[Dictionary] = []
+var roster_color: Color = Factions.FRIENDLY_COLOR
+var ack_line: String = ""
 ## The route waypoint to mark (M3-T09: the instructor's next waypoint), World frame, and its label (`NAV 2`).
 var has_waypoint: bool = false
 var waypoint_position: Vector3 = Vector3.ZERO

@@ -241,6 +241,28 @@ func roster(wing: Wing = null) -> Array[Dictionary]:
 	return out
 
 
+## The HUD roster of `wing` (default: the player's), one row per slot in slot order (M3-T11): `callsign`, `hull` (0..1),
+## `behaviour` and `target` (its pilot's, "" when none) and `down`. A slot whose member was shot down reads `down` with
+## its slot's callsign until a replacement takes it; a slot never flown is left out.
+func hud_roster(wing: Wing = null) -> Array[Dictionary]:
+	if wing == null:
+		wing = player_wing()
+	var out: Array[Dictionary] = []
+	if wing == null:
+		return out
+	for slot: int in range(1, wing.size + 1):
+		var member: Combatant = wing.member_at(slot)
+		if member == null:
+			if wing.is_lost(slot):
+				out.append({"callsign": wing.callsign(slot), "hull": 0.0, "behaviour": "", "target": "", "down": true})
+			continue
+		var d: Dictionary = member.driver.brain.describe() if _pilot_of(member) != null else {}
+		out.append({"callsign": member.display_name,
+				"hull": member.damageable.hull.fraction() if member.damageable != null else 0.0,
+				"behaviour": str(d.get("behaviour", "none")), "target": str(d.get("target", "")), "down": false})
+	return out
+
+
 func _physics_process(delta: float) -> void:
 	_ack_age_s += delta
 	for wing: Wing in wings:
@@ -251,7 +273,9 @@ func _physics_process(delta: float) -> void:
 func refresh(wing: Wing) -> void:
 	for member: Combatant in wing.members():
 		if _pilot_of(member) == null or member.damageable == null or not member.damageable.is_active():
+			var slot: int = wing.slot_of(member)
 			remove_member(wing, member)
+			wing.mark_lost(slot)  # shot down: the slot reads DOWN on the HUD until a replacement takes it
 	var alive: bool = leader_alive(wing)
 	var order: AiContext.Order = wing.effective_order(alive)
 	var leader_id: int = 0

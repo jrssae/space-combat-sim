@@ -27,6 +27,8 @@ var size: int = DEFAULT_SIZE
 
 # By slot - 1; null for an empty slot.
 var _by_slot: Array[Combatant] = []
+# By slot - 1: the slot's member went down and nobody has taken the slot since (the HUD roster's DOWN).
+var _lost: Array[bool] = []
 
 
 func _init(p_name: String = DEFAULT_NAME, p_leader: Combatant = null, p_size: int = DEFAULT_SIZE) -> void:
@@ -34,6 +36,8 @@ func _init(p_name: String = DEFAULT_NAME, p_leader: Combatant = null, p_size: in
 	leader = p_leader
 	size = maxi(p_size, 0)
 	_by_slot.resize(size)
+	_lost.resize(size)
+	_lost.fill(false)
 
 
 ## Puts `member` in `slot` (1..size), or in the first empty slot for -1. Returns the slot, or -1 when the slot is taken or
@@ -49,6 +53,7 @@ func add_member(member: Combatant, slot: int = -1) -> int:
 	if slot < 1 or slot > size or _by_slot[slot - 1] != null:
 		return -1
 	_by_slot[slot - 1] = member
+	_lost[slot - 1] = false
 	return slot
 
 
@@ -59,6 +64,18 @@ func remove_member(member: Combatant) -> bool:
 		return false
 	_by_slot[slot - 1] = null
 	return true
+
+
+## Marks an empty `slot` lost: its member went down. `add_member` clears the mark. Ignored for a slot out of range or
+## flown.
+func mark_lost(slot: int) -> void:
+	if slot >= 1 and slot <= size and _by_slot[slot - 1] == null:
+		_lost[slot - 1] = true
+
+
+## Whether `slot`'s member went down and the slot is still empty.
+func is_lost(slot: int) -> bool:
+	return slot >= 1 and slot <= size and _lost[slot - 1]
 
 
 ## `member`'s slot (1..size), or -1.

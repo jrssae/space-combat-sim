@@ -173,3 +173,18 @@ func test_has_attackable_follows_the_order_gate() -> void:
 	assert_false(ordered.has_attackable(), "the leader has no target")
 	ordered.leader_target_id = 20
 	assert_true(ordered.has_attackable())
+
+
+func test_a_downed_members_slot_stays_lost_until_someone_takes_it() -> void:
+	var wing := Wing.new(Wing.DEFAULT_NAME, _member("PLAYER"))
+	var two := _member("ALPHA 2")
+	assert_eq(wing.add_member(two), 1)
+	wing.mark_lost(1)
+	assert_false(wing.is_lost(1), "a flown slot is not lost")
+	wing.remove_member(two)
+	wing.mark_lost(1)
+	assert_true(wing.is_lost(1), "shot down: the slot reads DOWN")
+	assert_false(wing.is_lost(2), "a slot never flown is not lost")
+	assert_false(wing.is_lost(0) or wing.is_lost(4), "out of range")
+	assert_eq(wing.add_member(_member("ALPHA 2")), 1)
+	assert_false(wing.is_lost(1), "a replacement clears it")

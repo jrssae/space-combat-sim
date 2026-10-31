@@ -14,6 +14,27 @@ const EDGE_MARGIN_PX: float = 48.0
 const GRID_SPAN_DEG: float = 30.0
 const AMBER: Color = Color(1.0, 0.8, 0.2)
 const RED: Color = Color(1.0, 0.3, 0.25)
+## The wing roster, top left (at 1080 px; scaled): its first row's top-left corner, the row pitch and the hull bar.
+const ROSTER_ORIGIN: Vector2 = Vector2(48.0, 48.0)
+const ROSTER_ROW_PX: float = 24.0
+const ROSTER_BAR: Vector2 = Vector2(64.0, 8.0)
+## The acknowledgement line's baseline below the status line's (under AUTO-TRACK's, 26 px below it).
+const ACK_BELOW_STATUS_PX: float = 50.0
+const STATUS_Y_PX: float = 36.0
+## A roster row's short form of what a wingman is doing, by behaviour id.
+const ROSTER_TAGS: Dictionary = {"formation": "FORM", "attack": "ATK", "evade": "EVADE", "retreat": "RETREAT",
+		"follow_path": "NAV", "idle": "IDLE", "none": "-"}
+
+
+## One wingman's line in the roster: the hull bar (outline `bar_rect`, filled to `hull`, in `color`), and the callsign and tag
+## (`text`, baseline left at `text_pos`); `down` rows have an empty bar and read DOWN.
+class RosterRow extends RefCounted:
+	var text: String = ""
+	var text_pos: Vector2 = Vector2.ZERO
+	var bar_rect: Rect2 = Rect2()
+	var hull: float = 0.0
+	var color: Color = Factions.FRIENDLY_COLOR
+	var down: bool = false
 
 
 static func compute(input: HudInput) -> HudFrame:
@@ -27,6 +48,7 @@ static func compute(input: HudInput) -> HudFrame:
 	_grid(input, f)
 	_radar(input, f)
 	_waypoint(input, f)
+	_wing(input, f)
 	f.status_line = input.status_line
 	return f
 
@@ -276,3 +298,36 @@ static func _radar(input: HudInput, f: HudFrame) -> void:
 	else:
 		f.drift_centre = f.speed_pos + Vector2(-215.0 * f.scale - f.drift_radius_px, 0.0)
 	f.radar_dots = RadarModel.dots(input.contacts, input.selected_id, input.own_position, input.own_basis, input.faction)
+
+
+# --- wing roster and acknowledgements (M3-T11) -----------------------------------------------------------------------
+
+
+## The roster's short form of a wingman's activity: `FORM`, `ATK RAIDER 3` (the target when known), `EVADE`, `DOWN`...
+## An unknown behaviour reads as its id in capitals.
+static func roster_tag(behaviour: String, target: String = "", down: bool = false) -> String:
+	if down:
+		return "DOWN"
+	var tag: String = ROSTER_TAGS.get(behaviour, behaviour.to_upper())
+	if behaviour == "attack" and not target.is_empty():
+		tag += " " + target
+	return tag
+
+
+static func _wing(input: HudInput, f: HudFrame) -> void:
+	var s: float = f.scale
+	var origin: Vector2 = ROSTER_ORIGIN * s
+	for i: int in input.roster.size():
+		var entry: Dictionary = input.roster[i]
+		var row := RosterRow.new()
+		var top: float = origin.y + ROSTER_ROW_PX * s * float(i)
+		row.down = bool(entry.get("down", false))
+		row.hull = 0.0 if row.down else clampf(float(entry.get("hull", 0.0)), 0.0, 1.0)
+		row.color = RED if row.down else input.roster_color
+		row.bar_rect = Rect2(Vector2(origin.x, top + 6.0 * s), ROSTER_BAR * s)
+		row.text = "%s  %s" % [str(entry.get("callsign", "")),
+				roster_tag(str(entry.get("behaviour", "")), str(entry.get("target", "")), row.down)]
+		row.text_pos = Vector2(origin.x + (ROSTER_BAR.x + 10.0) * s, top + 16.0 * s)
+		f.roster_rows.append(row)
+	f.ack_line = input.ack_line
+	f.ack_pos = Vector2(input.viewport_size.x * 0.5, (STATUS_Y_PX + ACK_BELOW_STATUS_PX) * s)

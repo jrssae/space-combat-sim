@@ -102,6 +102,15 @@ class HudCanvas extends Control:
 			_text("AUTO-TRACK", Vector2(f.viewport_size.x * 0.5, 62.0 * s), 16.0 * s, HudLayout.AMBER, HORIZONTAL_ALIGNMENT_CENTER)
 		if not f.status_line.is_empty():
 			_text(f.status_line, Vector2(f.viewport_size.x * 0.5, 36.0 * s), 18.0 * s, LINE_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
+		if not f.ack_line.is_empty():
+			_text(f.ack_line, f.ack_pos, 16.0 * s, LINE_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
+		_draw_roster(f, s, w)
+
+	# The wing roster (M3-T11): per wingman a hull bar in the wing's colour, the callsign and what it is doing.
+	func _draw_roster(f: HudFrame, s: float, w: float) -> void:
+		for row: HudLayout.RosterRow in f.roster_rows:
+			_bar(row.bar_rect, row.hull, row.color, w)
+			_text(row.text, row.text_pos, 15.0 * s, row.color if row.down else LINE_COLOR)
 
 	# --- helpers --------------------------------------------------------------------------------------------------
 
