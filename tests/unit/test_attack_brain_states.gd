@@ -252,3 +252,15 @@ func test_aggro_patrols_until_a_hostile_is_close_or_the_hull_is_hurt() -> void:
 	assert_true(aggro.aggroed, "hurt")
 	aggro.think(_p(5000.0), DT)
 	assert_true(aggro.aggroed, "and it stays angry")
+
+
+func test_the_lead_is_solved_from_the_muzzles() -> void:
+	# Guns 1.4 m under the centre (the Starfury's chin): to put the bolts through a target dead ahead the nose pitches up
+	# by the angle that offset subtends at the range.
+	brain.think(_p(400.0), DT)
+	assert_almost_eq(brain.lead_error_deg, 0.0, 1e-4, "from the centre: dead ahead")
+	var p := _p(400.0)
+	p.muzzle_offset = Vector3(0.0, -1.4, 0.0)
+	brain = AttackBrain.new(tactics, 99)
+	brain.think(p, DT)
+	assert_almost_eq(brain.lead_error_deg, rad_to_deg(atan(1.4 / 400.0)), 1e-3, "from the muzzles: a little up")

@@ -47,7 +47,7 @@ import numpy as np
 from ..core import frames
 from ..core.chunks import ChunkSource, write_chunks
 from ..core.context import AssetOutputs, BuildContext
-from ..core.geometry import Mesh, rotation_z
+from ..core.geometry import Mesh
 from ..core.lighting import STUDIO_DEFAULT, StudioRig
 
 # The baked light of the hull. The studio default left the shadow sides (undersides of the struts, the fuselage's flanks) nearly black
@@ -76,30 +76,38 @@ from ..parts.hull import (
     wedge_cockpit_interior,
     wedge_fuselage,
 )
-from ..parts.propulsion import (
-    ClawSpec,
-    RcsBlockSpec,
-    RingPodSpec,
-    VaneSpec,
-    claw_cluster,
-    pilot_tags,
-    ring_pod,
+from ..parts.propulsion import pilot_tags
+from ..parts.starfury import (
+    BladeSpec,
+    FittingsSpec,
+    FuryClawSpec,
+    FuryGunSpec,
+    FuryPodSpec,
+    FuryStrutSpec,
+    KnuckleSpec,
+    PlateStation,
+    ThrusterBlockSpec,
+    fury_claw,
+    fury_fittings,
+    fury_guns,
+    fury_pod,
+    fury_strut,
 )
-from ..parts.structure import TrussStrutSpec, truss_strut
-from ..parts.weapons import GunMountSpec, gun_mount
 from ..styles import Style
 from ..styles.earthforce import EARTHFORCE
 
 ASSET_ID = "starfury_aurora"
-GENERATOR_VERSION = 3
+GENERATOR_VERSION = 4
 PLY_NAME = "starfury_aurora.ply"
 OBJ_NAME = "starfury_aurora.obj"
 COCKPIT_NAME = "cockpit_interior.obj"
 HARDPOINTS_NAME = "hardpoints.json"
 
-DEFAULT_SPACING_M = 0.04
+# The hull after the reference model has about a third more surface than the earlier one; 4.7 cm keeps it inside the
+# AC3 budget. The cockpit faces stay at 2.2 cm (the frames' softness was tuned in play tests).
+DEFAULT_SPACING_M = 0.047
 COCKPIT_SPACING_FACTOR = (
-    0.55  # the window segment's frames, chin and lining, seen from 0.6-1 m
+    0.47  # the window segment's frames, chin and lining, seen from 0.6-1 m: 2.2 cm
 )
 SPLAT_BUDGET = (100_000, 250_000)  # AC3, at the default spacing
 CHASE_ANCHOR = (
@@ -109,6 +117,7 @@ CHASE_ANCHOR = (
 )  # behind and above the centroid; frames the 15 m claw span at 70 deg FOV
 JSON_DIGITS = 5
 BURIED_MARGIN_M = 0.01  # samples deeper than this inside another part are dropped
+FACING_REACH_M = 0.05  # samples facing into another part closer than this are dropped too
 POD_NAMES = {"": "ur", "y": "lr", "x": "ul", "xy": "ll"}  # mirror key -> pod name
 POD_SIDES = (("ur", "right"), ("lr", "right"), ("ul", "left"), ("ll", "left"))
 
@@ -127,144 +136,174 @@ ARM_PARTS = ("pod", "strut", "claw")
 
 
 # --- the parametric description --------------------------------------------------------------
+# Authored frame: the reference model's, metres (its bounding box centred on the origin, the nose at z = -4.93, the pods'
+# axes at x = +-5.53, y = +-2.295). Stations and outlines are measured off its silhouettes and sections.
 STARFURY_FUSELAGE = WedgeFuselageSpec(
     stations=(
-        # Front pane, seen from the eye (0, 0.35, 1.0): a trapezoid raked 15 deg, its sill 20 deg
-        # below the line of sight (corners +-26 deg), its top 38 deg above (corners +-42 deg).
-        WedgeStation(
-            0.00, 0.933, 0.672, 0.76, 0.80, 0.49, -0.015, rake=math.radians(15.0)
-        ),
-        # Rear edge of the panes; its shoulder lies on the plane through the eye and the front
-        # pane's shoulder (30 deg up), so the frame over the side panes continues the top bar.
-        WedgeStation(1.35, 1.12, 0.88, 1.32, 0.15, 0.64, -0.80),
-        # Behind the cockpit the body narrows to the reference's shield: about 2.2 m across the
-        # shoulders, a flat top 1.1 m up and a narrow keel 1.2 m down.
-        WedgeStation(2.60, 1.16, 0.84, 1.16, 0.20, 0.42, -1.08),
-        WedgeStation(4.40, 1.14, 0.78, 1.10, 0.25, 0.32, -1.20),
-        WedgeStation(5.20, 1.04, 0.70, 1.00, 0.25, 0.28, -1.10),
+        # The canopy: a hexagonal beak whose tip is a small front pane, flaring back over 1 m to the full section. Every
+        # facet of this segment is glazed; the chamfers between them are the frame bars that converge on the tip, below
+        # and to the sides of the pilot's line of sight.
+        WedgeStation(-4.93, 0.15, 0.15, 0.33, 0.0, 0.12, -0.22),
+        WedgeStation(-4.62, 0.40, 0.26, 0.50, 0.0, 0.18, -0.62),
+        WedgeStation(-4.30, 0.66, 0.36, 0.63, 0.0, 0.25, -0.98),
+        WedgeStation(-3.95, 0.92, 0.45, 0.76, 0.0, 0.32, -1.18),
+        # The body between the strut roots: flat top under the deck, shoulders at mid height, a narrow keel; it ends in
+        # the dark rear panel. The glazing runs back to -3.5 (behind the deck's lip, the port blocks and the
+        # teardrops), so the cockpit's rear bulkhead is behind the pilot.
+        WedgeStation(-3.50, 0.98, 0.55, 0.90, -0.04, 0.45, -1.25),
+        WedgeStation(-2.00, 1.00, 0.56, 0.95, -0.08, 0.55, -1.30),
+        WedgeStation(-0.85, 0.98, 0.50, 0.90, -0.10, 0.50, -1.25),
     ),
     chamfer=0.045,
-    window_end=1,
-    frame_width=0.07,
-    eye=(0.0, 0.35, 1.0),
-    glass_facets=("lower", "upper", "top"),  # side panes, roof-side panes, roof
+    window_end=4,
+    frame_width=0.06,
+    eye=(0.0, 0.70, -3.85),
+    glass_facets=("keel", "lower", "upper", "top"),
     mass_kg=16_000.0,
 )
 # The heavy dark frame of the reference view, from inside: 9 cm bars (about 5 deg), a 45 cm sill.
 COCKPIT_BARS = {"bar_width": 0.09, "bar_depth": 0.06, "sill_depth": 0.45}
-STARFURY_GUN_MOUNT = GunMountSpec(barrel_mount_z=-0.6, mass_kg=2_000.0)
-STARFURY_POD = RingPodSpec(
-    # 5.6 m long and slimmer than before: a narrow ring-faced intake that swells through a long
-    # shoulder, a knuckle where the strut joins (an outboard sensor dome and a dorsal stub on it),
-    # and a long ribbed rear housing round the main bell.
-    length=5.6,
-    radius=0.68,
-    front_radius=0.5,
-    front_length=0.35,
-    shoulder_length=0.8,
-    taper_length=0.35,
-    rear_radius=0.62,
-    rear_length=1.5,
-    ring_inner_radius=0.4,
-    ribs_front=1,
-    ribs_rear=2,
-    knuckle_radius=0.86,
-    knuckle_z=-0.9,
-    knuckle_length=1.3,
-    bosses=(0.0, 90.0),
-    boss_z=-0.9,
-    boss_radius=0.3,
-    boss_height=0.28,
+STARFURY_GUNS = FuryGunSpec()
+STARFURY_FITTINGS = FittingsSpec()
+STARFURY_POD = FuryPodSpec(
+    # Pod frame (pod centre at z = 0.25 of the authored frame). A narrow ring-faced intake widening to a groove, the
+    # long body swelling to 0.93 m at the rear groove, then the rear housing tapering to the main bell's face.
+    profile=(
+        (-2.82, 0.41), (-2.78, 0.47), (-2.72, 0.495), (-1.97, 0.615), (-1.93, 0.6), (-1.88, 0.545),
+        (-1.83, 0.545), (-1.78, 0.6), (-1.73, 0.645), (-1.65, 0.655), (-0.5, 0.77), (0.5, 0.85),
+        (1.17, 0.928), (1.21, 0.915), (1.26, 0.86), (1.33, 0.81), (1.39, 0.84), (1.45, 0.883),
+        (2.1, 0.76), (2.7, 0.633), (2.75, 0.618), (2.8, 0.565),
+    ),
+    grooves=(-1.855, 1.31),
+    clamps=((-2.05, -1.6, 0.13), (1.1, 1.5, 0.11)),
+    rails=(1.5, 2.6),
+    knuckles=(
+        # The dorsal dome (ventral on the lower pods) and the outboard sensor bulb: the same flared column with a cap.
+        KnuckleSpec(90.0, -1.0, ((0.5, 0.55), (0.7, 0.45), (0.85, 0.39), (1.0, 0.35), (1.1, 0.32), (1.15, 0.3),
+                                 (1.16, 0.28), (1.4, 0.28), (1.44, 0.24)), stretch=1.3, round_from=0.95),
+        KnuckleSpec(0.0, -1.0, ((0.5, 0.55), (0.7, 0.45), (0.85, 0.39), (1.0, 0.35), (1.1, 0.33), (1.15, 0.33),
+                                (1.16, 0.3), (1.42, 0.3), (1.46, 0.26)), stretch=1.3, round_from=0.95),
+    ),
     mass_kg=5_000.0,
-)
-HAZARD = tuple(
-    (1.6 + 0.35 * k, 1.95 + 0.35 * k, "hazard" if k % 2 == 0 else "hazard_dark")
-    for k in range(5)
-)
-STARFURY_STRUT = TrussStrutSpec(
-    length=5.256,
-    chord_root=3.8,
-    chord_tip=2.25,
-    sweep=2.75,
-    web_depth_root=0.5,
-    web_depth_tip=0.34,
-    rail=0.09,
-    rung=0.12,
-    cutouts=7,
-    cutout_span=(0.2, 0.84),
+)  # fmt: skip
+# Hazard stripes on the deck just behind its leading edge, between the hull and the pod.
+HAZARD = tuple((2.3 + 0.3 * k, 2.6 + 0.3 * k, "hazard" if k % 2 == 0 else "hazard_dark") for k in range(6))
+STARFURY_STRUT = FuryStrutSpec(
+    # (x, centre y, thickness, leading edge z, trailing edge z). The deck spans the fuselage's top from the centre line
+    # (a notch over the canopy, cheeks either side of it, a tooth in its trailing edge at x = 2-2.8) and climbs out to
+    # the pod's flank.
+    deck=tuple(PlateStation(*s) for s in (
+        (0.0, 1.2, 0.41, -4.02, 0.22), (0.4, 1.17, 0.42, -4.03, 0.21), (0.55, 1.15, 0.44, -4.25, 0.2),
+        (0.95, 1.14, 0.42, -4.27, 0.17), (1.1, 1.14, 0.42, -4.15, 0.05), (1.25, 1.15, 0.42, -3.94, 0.03),
+        (1.4, 1.16, 0.44, -3.69, 0.03), (1.55, 1.17, 0.46, -3.45, 0.01), (1.7, 1.2, 0.46, -3.21, 0.01),
+        (1.85, 1.25, 0.44, -2.99, 0.03),
+        (1.97, 1.3, 0.44, -2.88, 0.62), (2.5, 1.52, 0.41, -2.53, 0.9), (2.72, 1.62, 0.4, -2.4, 0.9),
+        (2.82, 1.66, 0.4, -2.33, 0.55), (3.25, 1.85, 0.38, -2.03, 0.74), (3.75, 2.07, 0.35, -1.71, 0.98),
+        (4.25, 2.27, 0.34, -1.45, 1.2), (4.95, 2.5, 0.32, -1.25, 1.45),
+    )),
+    # The brace climbs from the fuselage's shoulder and runs under the deck from x = 3, a slot between them.
+    brace=tuple(PlateStation(*s) for s in (
+        (0.75, 0.05, 0.55, -2.95, -0.6), (1.0, 0.0, 0.6, -2.9, -0.55), (1.5, 0.17, 0.66, -2.75, -0.46),
+        (1.75, 0.445, 0.57, -2.6, -0.3), (2.0, 0.645, 0.47, -2.4, -0.17), (2.5, 0.91, 0.44, -2.12, 0.13),
+        (3.25, 1.285, 0.43, -1.7, 0.57), (3.75, 1.54, 0.42, -1.42, 0.86), (4.25, 1.68, 0.46, -1.3, 1.05),
+        (4.95, 1.72, 0.5, -1.2, 1.3),
+    )),
     bands=HAZARD,
     mass_kg=1_500.0,
-)
-# Two long blades nearly level with the pod's outboard side, 3.5 m to the tips: their wide roots
-# overlap into one plate that splits into two prongs (a pincer from the side, a fork from the
-# front), and a shorter blade inboard and below.
-STARFURY_CLAW = ClawSpec(
-    vanes=(
-        VaneSpec(
-            12.0,
-            0.75,
-            1.2,
-            ((1.2, 22.0), (2.3, 13.0)),
-            chord=(0.42, 0.06),
-            thickness=(0.16, 0.06),
-            offset=0.2,
-        ),
-        VaneSpec(
-            12.0,
-            0.75,
-            1.2,
-            ((1.2, 22.0), (2.3, 13.0)),
-            chord=(0.42, 0.06),
-            thickness=(0.16, 0.06),
-            offset=-0.2,
-        ),
-        VaneSpec(
-            205.0,
-            0.7,
-            1.3,
-            ((0.8, 30.0), (1.6, 16.0)),
-            chord=(0.28, 0.1),
-            thickness=(0.42, 0.1),
-        ),
+)  # fmt: skip
+# The lower arms are not quite the upper ones mirrored: their deck runs under the keel, and their brace stays close under
+# it, rooted in the fuselage's lower flank instead of diving to the shoulder. Authored mirrored up (as the upper right
+# arm); the asset mirrors it down.
+STARFURY_LOWER_STRUT = FuryStrutSpec(
+    deck=tuple(PlateStation(*s) for s in (
+        (0.0, 1.22, 0.45, -4.3, -0.05), (0.5, 1.22, 0.45, -4.2, -0.08), (1.0, 1.2, 0.45, -3.4, -0.15),
+        (1.3, 1.2, 0.45, -3.23, -0.14), (1.75, 1.285, 0.45, -3.01, -0.06), (1.85, 1.31, 0.45, -2.95, -0.05),
+        (1.97, 1.375, 0.45, -2.86, 0.6), (2.5, 1.56, 0.44, -2.56, 0.85), (2.72, 1.64, 0.42, -2.45, 0.85),
+        (2.82, 1.68, 0.42, -2.38, 0.5), (3.25, 1.85, 0.42, -2.1, 0.67), (3.75, 2.04, 0.4, -1.79, 0.92),
+        (4.25, 2.27, 0.34, -1.48, 1.2), (4.95, 2.5, 0.32, -1.28, 1.45),
+    )),
+    brace=tuple(PlateStation(*s) for s in (
+        (0.6, 0.86, 0.3, -2.8, -0.35), (1.25, 0.86, 0.3, -2.8, -0.35), (1.75, 0.86, 0.28, -2.78, -0.34),
+        (2.0, 0.905, 0.31, -2.58, -0.25), (2.5, 1.1, 0.32, -2.32, 0.02), (3.25, 1.4, 0.32, -1.92, 0.39),
+        (3.75, 1.6, 0.32, -1.66, 0.64), (4.25, 1.67, 0.46, -1.45, 1.0), (4.95, 1.72, 0.5, -1.3, 1.3),
+    )),
+    bands=HAZARD,
+    mass_kg=1_500.0,
+)  # fmt: skip
+STARFURY_CLAW = FuryClawSpec(
+    blades=(
+        # The outboard pincer (pod frame, (x, y) from the pod axis): a plate bent along its length, over the pod's
+        # outboard flank, that splits at z = 3 into an upper prong (its top band) and a lower one (its side).
+        BladeSpec((
+            (1.35, ((0.95, 0.92), (1.25, 0.75), (1.4, 0.45), (1.42, -0.24))),
+            (1.65, ((1.0, 1.1), (1.3, 0.9), (1.45, 0.55), (1.47, -0.3))),
+            (1.95, ((1.05, 1.11), (1.38, 0.92), (1.53, 0.58), (1.55, -0.12))),
+            (2.25, ((1.1, 1.15), (1.45, 0.95), (1.6, 0.6), (1.62, 0.04))),
+            (2.55, ((1.14, 1.18), (1.55, 0.95), (1.7, 0.6), (1.7, 0.07))),
+            (2.85, ((1.19, 1.22), (1.62, 0.95), (1.77, 0.6), (1.77, 0.1))),
+            (3.0, ((1.21, 1.25), (1.64, 0.94), (1.79, 0.6), (1.79, 0.1))),
+        )),
+        BladeSpec((
+            (2.95, ((1.2, 1.24), (1.64, 0.94))),
+            (3.15, ((1.23, 1.27), (1.65, 0.93))),
+            (3.45, ((1.4, 1.24), (1.73, 0.97))),
+            (3.75, ((1.56, 1.21), (1.8, 1.02))),
+            (4.05, ((1.72, 1.19), (1.88, 1.06))),
+            (4.35, ((1.85, 1.16), (1.95, 1.1))),
+            (4.65, ((1.88, 1.14), (1.93, 1.11))),
+        ), thickness=0.09),
+        BladeSpec((
+            (2.95, ((1.79, 0.6), (1.79, 0.1))),
+            (3.15, ((1.8, 0.56), (1.8, 0.09))),
+            (3.45, ((1.88, 0.6), (1.88, 0.22))),
+            (3.75, ((1.97, 0.64), (1.97, 0.36))),
+            (4.05, ((2.05, 0.67), (2.05, 0.49))),
+            (4.35, ((2.12, 0.7), (2.12, 0.6))),
+            (4.65, ((2.12, 0.69), (2.12, 0.63))),
+        ), thickness=0.09),
+        # The inboard blade, under the strut: shorter, splitting at z = 2.8.
+        BladeSpec((
+            (1.3, ((-1.0, 0.0), (-0.98, -0.3), (-0.85, -0.55), (-0.7, -0.7))),
+            (1.6, ((-1.18, -0.04), (-1.13, -0.35), (-0.98, -0.6), (-0.8, -0.76))),
+            (2.0, ((-1.29, -0.1), (-1.24, -0.4), (-1.08, -0.65), (-0.92, -0.79))),
+            (2.4, ((-1.41, -0.1), (-1.36, -0.42), (-1.18, -0.7), (-0.98, -0.88))),
+            (2.85, ((-1.51, -0.27), (-1.47, -0.5), (-1.33, -0.72), (-1.2, -0.85))),
+        )),
+        BladeSpec((
+            (2.8, ((-1.51, -0.27), (-1.47, -0.5))),
+            (3.0, ((-1.56, -0.36), (-1.55, -0.5))),
+            (3.2, ((-1.6, -0.44), (-1.59, -0.52))),
+            (3.45, ((-1.62, -0.47), (-1.61, -0.52))),
+        ), thickness=0.08),
+        BladeSpec((
+            (2.8, ((-1.33, -0.72), (-1.2, -0.85))),
+            (3.0, ((-1.44, -0.73), (-1.32, -0.83))),
+            (3.2, ((-1.49, -0.76), (-1.43, -0.81))),
+            (3.45, ((-1.5, -0.77), (-1.47, -0.8))),
+        ), thickness=0.08),
     ),
     blocks=(
-        RcsBlockSpec(12.0, 0.82, 1.4, (0.44, 0.44, 0.75), ("px", "py")),
-        RcsBlockSpec(205.0, 0.78, 1.6, (0.4, 0.4, 0.6), ("nx", "ny")),
+        # Bracket blocks at the rear clamp ring, each with one RCS cone clear of the blades.
+        ThrusterBlockSpec((1.15, -0.55, 1.4), (0.3, 0.3, 0.36), ("px",)),
+        ThrusterBlockSpec((0.8, 1.0, 1.4), (0.3, 0.3, 0.36), ("py",)),
+        ThrusterBlockSpec((-1.2, 0.2, 1.4), (0.3, 0.3, 0.36), ("nx",)),
+        ThrusterBlockSpec((-0.55, -0.95, 1.4), (0.3, 0.3, 0.36), ("ny",)),
     ),
+    collision_blades=3,
     mass_kg=1_000.0,
-)
+)  # fmt: skip
 
 
 @dataclass(frozen=True)
 class StarfurySpec:
     fuselage: WedgeFuselageSpec = STARFURY_FUSELAGE
-    gun_mount: GunMountSpec = STARFURY_GUN_MOUNT
-    gun_mount_center: tuple[float, float, float] = (
-        0.0,
-        -0.72,
-        1.7,
-    )  # housing front at z = 0.6, under the chin
-    pod: RingPodSpec = STARFURY_POD
-    pod_center: tuple[float, float, float] = (
-        5.5,
-        2.5,
-        5.15,
-    )  # upper right; mirrored to the others
-    strut: TrussStrutSpec = STARFURY_STRUT
-    strut_root: tuple[float, float, float] = (
-        0.6,
-        0.6,
-        1.2,
-    )  # root leading edge, inside the fuselage
-    claw: ClawSpec = STARFURY_CLAW
-
-    def strut_rotation(self) -> np.ndarray:
-        """Rotation about Z that lays the strut's span from its root towards the pod centre."""
-        dx, dy = (
-            self.pod_center[0] - self.strut_root[0],
-            self.pod_center[1] - self.strut_root[1],
-        )
-        return rotation_z(math.atan2(dy, dx))
+    gun_mount: FuryGunSpec = STARFURY_GUNS
+    fittings: FittingsSpec = STARFURY_FITTINGS
+    pod: FuryPodSpec = STARFURY_POD
+    pod_center: tuple[float, float, float] = (5.53, 2.295, 0.25)  # upper right; mirrored to the others
+    strut: FuryStrutSpec = STARFURY_STRUT
+    lower_strut: FuryStrutSpec = STARFURY_LOWER_STRUT
+    claw: FuryClawSpec = STARFURY_CLAW
 
 
 DEFAULT_SPEC = StarfurySpec()
@@ -288,12 +327,14 @@ class Placed:
         )
 
 
-def _mirrors(base: Placed, prefix: str) -> list[Placed]:
+def _mirrors(base: Placed, prefix: str, lower: Placed | None = None) -> list[Placed]:
     """The upper-right placement plus its mirror images ``<prefix>_ur/lr/ul/ll``; samples are
-    mirrored with the mesh, so the set is exactly symmetric."""
+    mirrored with the mesh, so the set is exactly symmetric. With ``lower`` (authored as an
+    upper-right arm), the lower corners are mirrored from it instead."""
     out = []
     for key, pod in POD_NAMES.items():
-        part, samples = base.part, base.samples
+        src = lower if lower is not None and "y" in key else base
+        part, samples = src.part, src.samples
         for axis in key:
             part = part.mirrored(axis)
             samples = None if samples is None else samples.mirrored(axis)
@@ -306,6 +347,12 @@ def _mirrors(base: Placed, prefix: str) -> list[Placed]:
             )
         )
     return out
+
+
+def _facing_into(samples: SurfaceSamples, contains, reach: float = FACING_REACH_M) -> np.ndarray:
+    """Samples whose outward normal runs into a solid (``contains``) within ``reach``: faces
+    pressed against another part (a plate lying on the fuselage, a root against a pod)."""
+    return contains(samples.positions + reach * samples.normals)
 
 
 def _unburied(samples: SurfaceSamples, *inside: np.ndarray) -> SurfaceSamples:
@@ -340,14 +387,18 @@ def build_parts(
     fus_samples = sample(fus.mesh.face_subset(~near), "fuselage").symmetrized("x")
     cockpit = Part("cockpit", fus.mesh.face_subset(near), group="body")
     cockpit_samples = sample(cockpit.mesh, "cockpit", cockpit_spacing).symmetrized("x")
-    gun = (
-        gun_mount(spec.gun_mount, style)
-        .translated(spec.gun_mount_center)
-        .renamed("gun_mount", group="body")
-    )
+    gun = fury_guns(spec.gun_mount, style).renamed("gun_mount", group="body")
     gun_samples = sample(gun.mesh, "gun_mount")
+    def in_hull(points: np.ndarray) -> np.ndarray:
+        return spec.fuselage.contains(points, BURIED_MARGIN_M)
+
     gun_samples = _unburied(
-        gun_samples, spec.fuselage.contains(gun_samples.positions, BURIED_MARGIN_M)
+        gun_samples, in_hull(gun_samples.positions), _facing_into(gun_samples, in_hull)
+    ).symmetrized("x")
+    fittings = fury_fittings(spec.fittings, style).renamed("fittings", group="body")
+    fit_samples = sample(fittings.mesh, "fittings")
+    fit_samples = _unburied(
+        fit_samples, in_hull(fit_samples.positions), _facing_into(fit_samples, in_hull)
     ).symmetrized("x")
     interior = Part(
         "cockpit_interior",
@@ -358,21 +409,16 @@ def build_parts(
         Placed(fus, fus_samples, spacing=spacing),
         Placed(cockpit, cockpit_samples, hull=False, spacing=cockpit_spacing),
         Placed(gun, gun_samples, spacing=spacing),
+        Placed(fittings, fit_samples, spacing=spacing),
         Placed(interior, None, hull=False),
     ]
-    body_samples = [p.samples for p in body if p.samples is not None]
-    y_shift = -sum(float(s.positions[:, 1].sum()) for s in body_samples) / sum(
-        len(s) for s in body_samples
-    )
-    body = [p.translated(np.array([0.0, y_shift, 0.0])) for p in body]
 
-    # Cross: the upper-right pod, strut and claw, minus what is buried in the (shifted)
-    # fuselage or the pod, then mirrored four ways. The fuselage is not symmetric in y, so a
-    # strut sample is only dropped when it is inside the fuselage *and* its y mirror image.
+    # Cross: the upper-right pod, strut and claw, minus what is buried in the fuselage or the
+    # pod, then mirrored four ways. The fuselage is not symmetric in y, so a strut sample is only
+    # dropped when it is inside the fuselage *and* its y mirror image.
     def in_fuselage(points: np.ndarray) -> np.ndarray:
-        local = points - np.array([0.0, y_shift, 0.0])
-        flipped = local * np.array([1.0, -1.0, 1.0])
-        return spec.fuselage.contains(local, BURIED_MARGIN_M) & spec.fuselage.contains(
+        flipped = points * np.array([1.0, -1.0, 1.0])
+        return spec.fuselage.contains(points, BURIED_MARGIN_M) & spec.fuselage.contains(
             flipped, BURIED_MARGIN_M
         )
 
@@ -381,34 +427,33 @@ def build_parts(
     def in_pod(points: np.ndarray) -> np.ndarray:
         return spec.pod.contains(points - pod_c, BURIED_MARGIN_M)
 
-    pod = ring_pod(spec.pod, style).translated(pod_c).renamed("pod_ur", group="cross")
-    strut = (
-        truss_strut(spec.strut, style)
-        .transformed(spec.strut_rotation(), spec.strut_root)
-        .renamed("strut_ur", group="cross")
-    )
-    claw = (
-        claw_cluster(spec.claw, style)
-        .translated(pod_c)
-        .renamed("claw_ur", group="cross")
-    )
+    pod = fury_pod(spec.pod, style).translated(pod_c).renamed("pod_ur", group="cross")
+    strut = fury_strut(spec.strut, style).renamed("strut_ur", group="cross")
+    lower = fury_strut(spec.lower_strut, style).renamed("strut_lr", group="cross")
+    claw = fury_claw(spec.claw, style).translated(pod_c).renamed("claw_ur", group="cross")
     s_pod = sample(pod.mesh, "pod")
-    # The bells' outer walls and the bosses' bases are inside the shell; the bells' inner walls
-    # (facing the axis) are what shows through the exits and stay.
+    # The bells' outer walls and the knuckle cones' bases are inside the shell; the bells' inner
+    # walls (facing the axis, near it) are what shows through the exits and stay.
     radial = s_pod.positions[:, :2] - pod_c[:2]
-    facing_out = np.einsum(
-        "ij,ij->i", s_pod.normals[:, :2], radial
-    ) > 0.2 * np.linalg.norm(radial, axis=1)
-    s_pod = _unburied(s_pod, in_pod(s_pod.positions) & facing_out)
+    r = np.linalg.norm(radial, axis=1)
+    facing_out = np.einsum("ij,ij->i", s_pod.normals[:, :2], radial) > 0.2 * r
+    off_axis = r > spec.pod.main.exit_r + spec.pod.main.wall + 0.02
+    s_pod = _unburied(s_pod, in_pod(s_pod.positions) & (facing_out | off_axis))
     s_strut = sample(strut.mesh, "strut")
     s_strut = _unburied(
-        s_strut, in_fuselage(s_strut.positions), in_pod(s_strut.positions)
+        s_strut, in_fuselage(s_strut.positions), in_pod(s_strut.positions),
+        _facing_into(s_strut, in_fuselage), _facing_into(s_strut, in_pod),
+    )
+    s_lower = sample(lower.mesh, "strut_lower")
+    s_lower = _unburied(
+        s_lower, in_fuselage(s_lower.positions), in_pod(s_lower.positions),
+        _facing_into(s_lower, in_fuselage), _facing_into(s_lower, in_pod),
     )
     s_claw = sample(claw.mesh, "claw")
-    s_claw = _unburied(s_claw, in_pod(s_claw.positions))
+    s_claw = _unburied(s_claw, in_pod(s_claw.positions), _facing_into(s_claw, in_pod))
     cross = (
         _mirrors(Placed(pod, s_pod, spacing=spacing), "pod")
-        + _mirrors(Placed(strut, s_strut, spacing=spacing), "strut")
+        + _mirrors(Placed(strut, s_strut, spacing=spacing), "strut", lower=Placed(lower, s_lower, spacing=spacing))
         + _mirrors(Placed(claw, s_claw, spacing=spacing), "claw")
     )
     return body + cross
@@ -416,13 +461,16 @@ def build_parts(
 
 # --- centring ---------------------------------------------------------------------------------
 def centre(placed: list[Placed]) -> tuple[list[Placed], np.ndarray]:
-    """Subtract the splat centroid's z from everything (x and y are already zero by symmetry
-    and the body shift). Returns the placements and the offset (Godot frame) that was
-    subtracted from the authored positions (``manifest.centroid_offset``)."""
+    """Subtract the splat centroid's y and z from everything (x is zero by symmetry). Returns
+    the placements and the offset (Godot frame) that was subtracted from the authored positions
+    (``manifest.centroid_offset``). The fuselage hangs low between the arms (chin guns, keel), so
+    the centroid sits a little below the arms' centre: the cross is symmetric about its own
+    centre line, ``thrust_axis_y``, not about y = 0."""
     sampled = [p.samples for p in placed if p.samples is not None]
     total = sum(len(s) for s in sampled)
+    y_mean = sum(float(s.positions[:, 1].sum()) for s in sampled) / total
     z_mean = sum(float(s.positions[:, 2].sum()) for s in sampled) / total
-    offset = np.array([0.0, 0.0, z_mean])
+    offset = np.array([0.0, y_mean, z_mean])
     return [p.translated(-offset) for p in placed], offset
 
 
@@ -485,9 +533,9 @@ def hardpoints(
     lo, hi = hull_mesh.bounds()
 
     com = mass_centroid(hull_parts)
-    com = np.array(
-        [0.0, 0.0, com[2]]
-    )  # trimmed to the thrust axis by design (ballast), see docs
+    # Trimmed onto the thrust axis by design (ballast), see docs: the pods' centre line.
+    axis_y = float(np.mean([by_name[f"pod_{n}"].anchor("center").position[1] for n, _ in POD_SIDES]))
+    com = np.array([0.0, axis_y, com[2]])
     mass = total_mass(hull_parts)
     inertia = np.zeros(3)
     for part in hull_parts:

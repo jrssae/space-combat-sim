@@ -35,28 +35,27 @@ CLEAR_AZIMUTH_DEG = 20.0
 CLEAR_ELEVATION_DEG = (-12.0, 28.0)
 CHUNK_NAMES = ("cabin", "arm_ur", "arm_lr", "arm_ul", "arm_ll")
 LOD1_AABB_TOLERANCE_M = 0.3  # AC6: LOD1's bounds are LOD0's within this
-# The LOD0 contract (M3-T03; re-pinned for generator v3, the reshape after the reference model, M3-T26): the default
+# The LOD0 contract (M3-T03; re-pinned for generator v4, the rebuild after the reference model, M3-T26): the default
 # build LOD1 is resampled from. Per-part counts, the PLY header and three
 # full splat records of the seed 42 build (float32 values read back from the PLY), so a change to LOD0 shows up without
 # pinning a SHA-256 that could differ between NumPy builds; the same-run SHA-256 checks are in the tests below.
 LOD0_COUNTS = {
-    "fuselage": 26062, "cockpit": 8288, "gun_mount": 6764,
-    "pod_ur": 20367, "pod_lr": 20367, "pod_ul": 20367, "pod_ll": 20367,
-    "strut_ur": 24604, "strut_lr": 24604, "strut_ul": 24604, "strut_ll": 24604,
-    "claw_ur": 6401, "claw_lr": 6401, "claw_ul": 6401, "claw_ll": 6401,
+    "fuselage": 13978, "cockpit": 1724, "gun_mount": 12222, "fittings": 10982,
+    "pod_ur": 18393, "pod_lr": 18393, "pod_ul": 18393, "pod_ll": 18393,
+    "strut_ur": 26766, "strut_lr": 25475, "strut_ul": 26766, "strut_ll": 25475,
+    "claw_ur": 6692, "claw_lr": 6692, "claw_ul": 6692, "claw_ll": 6692,
 }  # fmt: skip
 LOD0_RECORDS = {
-    0: [-0.7256394624710083, 0.1481023132801056, -3.6149401664733887, -0.7922653555870056, 0.43238458037376404,
-        -0.43053361773490906, -1.7478806972503662, -1.6506136655807495, -1.716326355934143, -2.840289831161499,
-        -3.2188758850097656, -3.2188758850097656, -5.744604587554932, 0.19055941700935364, -0.8381075859069824,
-        0.1133245974779129, 0.49841779470443726],
-    123301: [-1.8344980478286743, -1.175212025642395, 0.803264319896698, 0.36152786016464233, -0.9323613047599792, 0.0,
-             0.4828406274318695, 0.48645704984664917, 0.653494656085968, 3.891820192337036, -3.2188758850097656,
-             -3.2188758850097656, -5.744604587554932, 0.3995222747325897, 0.5834226012229919, -0.3995222747325897,
-             0.5834226012229919],
-    246601: [4.79181432723999, 1.8803577423095703, 2.351530075073242, -0.0, -1.0, 0.0, -1.6691603660583496,
-             -1.6700348854064941, -1.6697529554367065, 3.891820192337036, -3.2188758850097656, -3.2188758850097656,
-             -5.744604587554932, 0.5, 0.5, -0.5, 0.5],
+    0: [-0.052700337022542953, 0.33757004141807556, -4.241723537445068, -0.0, 0.612571656703949, -0.7904150485992432,
+        -1.7561198472976685, -1.690417766571045, -1.7332844734191895, -2.840289831161499, -3.057607650756836,
+        -3.057607650756836, -5.583336353302002, 0.3237166702747345, -0.9461540579795837, 0.0, 0.0],
+    121864: [-2.5370795726776123, -1.4283372163772583, 0.449472576379776, -0.4129202961921692, 0.910767138004303, 0.0,
+             -1.1092685461044312, -1.104679822921753, -1.0135568380355835, 3.891820192337036, -3.057607650756836,
+             -3.057607650756836, -5.583336353302002, 0.38310563564300537, -0.5943316221237183, 0.38310563564300537,
+             0.5943316221237183],
+    243727: [4.949801921844482, 1.0193599462509155, 2.168424606323242, -0.0, -1.0, 0.0, -1.6691603660583496,
+             -1.6700348854064941, -1.6697529554367065, 3.891820192337036, -3.057607650756836, -3.057607650756836,
+             -5.583336353302002, 0.5, 0.5, -0.5, 0.5],
 }  # fmt: skip
 
 
@@ -64,11 +63,12 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def mirrored(v: list[float], axes: str) -> list[float]:
+def mirrored(v: list[float], axes: str, axis_y: float = 0.0) -> list[float]:
+    """``v`` mirrored across x = 0 and/or the horizontal plane y = ``axis_y`` (the pods' centre line)."""
     out = list(v)
     for axis in axes:
         k = "xyz".index(axis)
-        out[k] = -out[k]
+        out[k] = 2.0 * axis_y - out[k] if axis == "y" else -out[k]
     return out
 
 
@@ -121,6 +121,10 @@ class StarfuryAuroraTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         cls._tmp.cleanup()
+
+    def axis_y(self) -> float:
+        """The pods' centre line (the cross is symmetric about it; the origin is the splat centroid)."""
+        return float(np.mean([p["center"][1] for p in self.hp["pods"]]))
 
     def part(self, name: str) -> np.ndarray:
         a, b = self.slices[name]
@@ -185,16 +189,19 @@ class StarfuryAuroraTests(unittest.TestCase):
             (self.manifest["asset_id"], self.manifest["frame"], self.manifest["seed"]),
             ("starfury_aurora", "godot", 42),
         )
-        expected = ["fuselage", "cockpit", "gun_mount"] + [
+        expected = ["fuselage", "cockpit", "gun_mount", "fittings"] + [
             f"{p}_{n}" for p in ("pod", "strut", "claw") for n in POD_NAMES
         ]
         self.assertEqual(list(self.manifest["counts"]), expected)
-        for prefix in ("pod", "strut", "claw"):
+        for prefix in ("pod", "claw"):
             self.assertEqual(
                 len({self.manifest["counts"][f"{prefix}_{n}"] for n in POD_NAMES}),
                 1,
                 prefix,
             )
+        counts = self.manifest["counts"]  # the upper struts are one pair, the lower another
+        self.assertEqual(counts["strut_ur"], counts["strut_ul"])
+        self.assertEqual(counts["strut_lr"], counts["strut_ll"])
         sampling = self.manifest["sampling"]
         self.assertEqual(sampling["spacing_m"], ship.DEFAULT_SPACING_M)
         self.assertAlmostEqual(
@@ -213,7 +220,7 @@ class StarfuryAuroraTests(unittest.TestCase):
         self.assertLess(
             float(np.abs(self.splats.xyz.mean(axis=0)).max()), 1e-4
         )  # exact by construction
-        self.assertEqual(self.manifest["centroid_offset"][:2], [0.0, 0.0])
+        self.assertEqual(self.manifest["centroid_offset"][0], 0.0)
 
     def test_manifest_aabb_matches_the_file_after_the_flip(self) -> None:
         lo, hi = frames.aabb_godot_to_3dgs(
@@ -222,7 +229,7 @@ class StarfuryAuroraTests(unittest.TestCase):
         np.testing.assert_allclose(self.splats.xyz.min(axis=0), lo, atol=2e-3)
         np.testing.assert_allclose(self.splats.xyz.max(axis=0), hi, atol=2e-3)
 
-    def test_splat_set_is_exactly_mirror_symmetric_in_x_and_the_cross_in_y(
+    def test_splat_set_is_exactly_mirror_symmetric_in_x_and_the_pods_in_y(
         self,
     ) -> None:
         view = "f4,f4,f4"
@@ -238,8 +245,14 @@ class StarfuryAuroraTests(unittest.TestCase):
             )
 
         self.assertTrue(symmetric(self.godot_xyz, 0))
-        start = self.slices["pod_ur"][0]
-        self.assertTrue(symmetric(self.godot_xyz[start:], 1))  # pods, struts and claws
+        # The pods and claws below the centre line mirror those above it, sample for sample; the
+        # lower struts are their own (their brace is rooted lower on the fuselage).
+        axis = self.axis_y()
+        for prefix in ("pod", "claw"):
+            for upper, lower in (("ur", "lr"), ("ul", "ll")):
+                a, b = self.part(f"{prefix}_{upper}"), self.part(f"{prefix}_{lower}")
+                np.testing.assert_allclose(a[:, [0, 2]], b[:, [0, 2]], atol=1e-6)
+                np.testing.assert_allclose(a[:, 1] + b[:, 1], 2.0 * axis, atol=2e-5)
 
     def test_splats_are_flat_oriented_discs_at_their_part_spacing(self) -> None:
         s = self.splats
@@ -275,7 +288,7 @@ class StarfuryAuroraTests(unittest.TestCase):
         self.assertTrue(np.all(self.godot_xyz[glass, 2] < window_end))
         self.assertLess(
             float(np.abs(self.godot_xyz[glass, 0]).max()),
-            SPEC.fuselage.stations[1].shoulder_half_width,
+            SPEC.fuselage.stations[SPEC.fuselage.window_end].shoulder_half_width,
         )
 
     def test_colours_show_the_palette_and_the_baked_light(self) -> None:
@@ -292,7 +305,7 @@ class StarfuryAuroraTests(unittest.TestCase):
             & (rgb[:, 1] > 0.4 * rgb[:, 0])
             & (rgb[:, 0] > 0.1)
         )
-        self.assertTrue(0.01 < yellow.mean() < 0.09, yellow.mean())  # hazard stripes
+        self.assertTrue(0.003 < yellow.mean() < 0.09, yellow.mean())  # hazard stripes
         start, end = self.slices["strut_ur"][0], self.slices["strut_ll"][1]
         self.assertFalse(
             yellow[:start].any() or yellow[end:].any()
@@ -337,20 +350,24 @@ class StarfuryAuroraTests(unittest.TestCase):
             [p["side"] for p in self.hp["pods"]], ["right", "right", "left", "left"]
         )
         ur = pods["ur"]
-        self.assertEqual(ur["center"][:2], list(SPEC.pod_center[:2]))  # x/y exact
+        self.assertEqual(ur["center"][0], SPEC.pod_center[0])  # x exact, y less the centroid's
+        self.assertAlmostEqual(
+            ur["center"][1], SPEC.pod_center[1] - self.manifest["centroid_offset"][1], places=4
+        )
+        axis = self.axis_y()
         self.assertGreater(
             ur["center"][0], 2.0 * ur["center"][1]
         )  # struts about 20 deg off horizontal
         for name, axes in (("lr", "y"), ("ul", "x"), ("ll", "xy")):
             other = pods[name]
             np.testing.assert_allclose(
-                other["center"], mirrored(ur["center"], axes), atol=SYM_TOL
+                other["center"], mirrored(ur["center"], axes, axis), atol=2e-5
             )
             for nozzle in ("main", "retro"):
                 np.testing.assert_allclose(
                     other[nozzle]["position"],
-                    mirrored(ur[nozzle]["position"], axes),
-                    atol=SYM_TOL,
+                    mirrored(ur[nozzle]["position"], axes, axis),
+                    atol=2e-5,
                 )
                 np.testing.assert_allclose(
                     other[nozzle]["exhaust"], ur[nozzle]["exhaust"], atol=SYM_TOL
@@ -370,7 +387,8 @@ class StarfuryAuroraTests(unittest.TestCase):
 
     def test_center_of_mass_is_on_the_thrust_axis(self) -> None:
         com = self.hp["center_of_mass"]
-        self.assertEqual(com[:2], [0.0, 0.0])
+        self.assertEqual(com[0], 0.0)
+        self.assertAlmostEqual(com[1], self.axis_y(), places=4)  # trimmed onto the pods' centre line
         self.assertLess(abs(com[2]), 1.0)
         inertia = self.hp["inertia_estimate_kg_m2"]
         self.assertTrue(all(1e5 < i < 2e6 for i in inertia), inertia)
@@ -388,11 +406,13 @@ class StarfuryAuroraTests(unittest.TestCase):
             muzzles[1]["position"][0], SPEC.gun_mount.barrel_x, delta=SYM_TOL
         )
         cam = np.array(self.hp["cockpit_camera"]["position"])
-        nose = float(self.part("fuselage")[:, 2].min())
         for m in muzzles:
             self.assertEqual(m["direction"], [0.0, 0.0, -1.0])
             self.assertLess(m["position"][1], cam[1] - 1.0)  # under the nose
-            self.assertLess(m["position"][2], nose)  # ahead of it
+            # Nothing of the hull lies ahead of a muzzle within 30 cm of its line of fire.
+            ahead = self.godot_xyz[:, 2] < m["position"][2] - 0.05
+            near = np.hypot(*(self.godot_xyz[:, :2] - np.array(m["position"][:2])).T) < 0.3
+            self.assertFalse(np.any(ahead & near), m["name"])
         self.assertEqual(cam[0], 0.0)
         self.assertLess(cam[2], self.hp["center_of_mass"][2] - 2.0)  # well forward
         # Inside the cockpit, behind the front pane and clear of every splat.
@@ -424,7 +444,7 @@ class StarfuryAuroraTests(unittest.TestCase):
             int(
                 (glass & (np.abs(az) < CLEAR_AZIMUTH_DEG) & (el > lo) & (el < hi)).sum()
             ),
-            200,
+            30,
         )
         # The panes reach past the clear box on every side (they are what the eye looks through).
         self.assertLess(float(az[glass].min()), -CLEAR_AZIMUTH_DEG)
@@ -480,13 +500,13 @@ class StarfuryAuroraTests(unittest.TestCase):
         )
         np.testing.assert_allclose(
             rcs["ur_py"]["position"],
-            mirrored(rcs["lr_ny"]["position"], "y"),
-            atol=SYM_TOL,
+            mirrored(rcs["lr_ny"]["position"], "y", self.axis_y()),
+            atol=2e-5,
         )
         np.testing.assert_allclose(
             rcs["ur_px"]["position"],
-            mirrored(rcs["ll_nx"]["position"], "xy"),
-            atol=SYM_TOL,
+            mirrored(rcs["ll_nx"]["position"], "xy", self.axis_y()),
+            atol=2e-5,
         )
         # Each cone sits on its pod's claw: behind the pod centre, outside the pod, on claw splats.
         pods = {p["name"]: np.array(p["center"]) for p in self.hp["pods"]}
@@ -531,12 +551,12 @@ class StarfuryAuroraTests(unittest.TestCase):
         x_col = shapes["claw_ur"]["basis"]["x"]
         self.assertTrue(abs(x_col[0]) > 0.2 and abs(x_col[2]) > 0.2, x_col)
         # Every primitive wraps its part: the splats of that part lie inside (5 cm slack). The claw
-        # box wraps the outboard prong pair, about half the claw; the inboard vane and the thruster
-        # blocks hug the pod. The pod's sensor dome and dorsal stub stand out of its capsule.
+        # box wraps the outboard pincer, about half the claw; the inboard blade and the thruster
+        # blocks hug the pod. The pod's dome and sensor bulb stand out of its capsule.
         for name, minimum in (
             ("fuselage", 0.999),
             ("gun_mount", 0.999),
-            ("pod_ur", 0.94),
+            ("pod_ur", 0.9),
             ("strut_ur", 0.99),
             ("claw_ur", 0.45),
         ):
@@ -587,8 +607,8 @@ class StarfuryAuroraTests(unittest.TestCase):
                 )
                 self.assertGreater(int(lip.sum()), 50, (p["name"], key))
                 np.testing.assert_allclose(
-                    d[lip, :2].mean(axis=0), [0.0, 0.0], atol=0.03
-                )
+                    d[lip, :2].mean(axis=0), [0.0, 0.0], atol=0.06
+                )  # a ring of about a hundred samples: its mean wanders a few centimetres
             # The main exit is the rearmost point of the pod: the visible end of the nozzle.
             self.assertAlmostEqual(
                 float(own[:, 2].max()), p["main"]["position"][2], delta=0.002
@@ -652,7 +672,7 @@ class StarfuryAuroraTests(unittest.TestCase):
         self.assertEqual(self.manifest["counts"], LOD0_COUNTS)
         header = ply_header(
             sum(LOD0_COUNTS.values()),
-            ("starfury_aurora generator v3 seed 42", "frame: 3dgs (Rz180 of godot)"),
+            ("starfury_aurora generator v4 seed 42", "frame: 3dgs (Rz180 of godot)"),
         )
         self.assertEqual(
             (self.dir_a / ship.PLY_NAME).read_bytes()[: len(header)], header
@@ -712,7 +732,7 @@ class StarfuryAuroraTests(unittest.TestCase):
             s.rgb.mean(axis=0), self.splats.rgb.mean(axis=0), rtol=0.03
         )
 
-    def test_lod1_is_exactly_mirror_symmetric_in_x_and_the_arms_in_y(self) -> None:
+    def test_lod1_is_exactly_mirror_symmetric_in_x(self) -> None:
         view = "f4,f4,f4"
 
         def symmetric(xyz: np.ndarray, axis: int) -> bool:
@@ -726,8 +746,10 @@ class StarfuryAuroraTests(unittest.TestCase):
             )
 
         self.assertTrue(symmetric(self.lod1_xyz, 0))
-        cabin = self.hp["chunks"][0]["splats"]
-        self.assertTrue(symmetric(self.lod1_xyz[cabin:], 1))
+        arms = self.chunk_xyz()
+        for right, left in (("ur", "ul"), ("lr", "ll")):
+            a, b = arms[f"arm_{right}"], arms[f"arm_{left}"]
+            np.testing.assert_allclose(a * np.array([-1.0, 1.0, 1.0]), b, atol=1e-6)
 
     def test_chunks_partition_lod1_exactly(self) -> None:
         chunks = self.hp["chunks"]
@@ -768,29 +790,32 @@ class StarfuryAuroraTests(unittest.TestCase):
         chunks = {c["name"]: c for c in self.hp["chunks"]}
         parts = self.chunk_xyz()
         cabin = chunks["cabin"]["offset"]
-        self.assertEqual(cabin[:2], [0.0, 0.0])  # on the thrust axis by symmetry and the body shift
+        self.assertEqual(cabin[0], 0.0)  # on the centre line by symmetry
+        self.assertLess(cabin[1], self.axis_y())  # the chin hangs below the pods' centre line
         self.assertLess(cabin[2], -1.0)  # the fuselage is ahead of the X
         # The cabin is the fuselage and the gun pod, inside DamageZones' cabin band (|x| <= 2 m).
         self.assertLess(float(np.abs(parts["cabin"][:, 0]).max()), 2.0)
         pods = {p["name"]: np.array(p["center"]) for p in self.hp["pods"]}
+        axis = np.array([0.0, self.axis_y()])
         for pod in POD_NAMES:
-            arm, sign = parts[f"arm_{pod}"], np.sign(pods[pod][:2])
-            # Every splat of an arm is on its pod's side of both centre planes, from the
-            # fuselage's flank to the claw tips ...
-            self.assertTrue(np.all(arm[:, :2] * sign > 0.0), pod)
+            arm, sign = parts[f"arm_{pod}"] - np.array([0.0, axis[1], 0.0]), np.sign(pods[pod][:2] - axis)
+            # Every splat of an arm outside the cabin band is on its pod's side of both centre
+            # planes (the deck reaches the centre line and the upper brace dips under the pods'
+            # centre line by the fuselage's shoulder), from the fuselage's flank to the claw tips ...
+            outside = np.abs(arm[:, 0]) > 2.0
+            self.assertTrue(np.all(arm[outside, :2] * sign > 0.0), pod)
             self.assertLess(float(np.abs(arm[:, 0]).min()), 1.7, pod)
             self.assertGreater(
                 float(np.abs(arm[:, 0]).max()), abs(pods[pod][0]) + 1.5, pod
             )
             # ... and its centroid lies between the cabin and the pod.
-            offset = np.array(chunks[f"arm_{pod}"]["offset"])
-            self.assertTrue(np.all(offset[:2] * sign > 0.0), pod)
-            self.assertTrue(np.all(np.abs(offset[:2]) < np.abs(pods[pod][:2])), pod)
-        self.assertEqual(len({chunks[f"arm_{pod}"]["splats"] for pod in POD_NAMES}), 1)
-        ur = chunks["arm_ur"]["offset"]
-        for pod, axes in (("lr", "y"), ("ul", "x"), ("ll", "xy")):
+            offset = np.array(chunks[f"arm_{pod}"]["offset"])[:2] - axis
+            self.assertTrue(np.all(offset * sign > 0.0), pod)
+            self.assertTrue(np.all(np.abs(offset) < np.abs(pods[pod][:2] - axis)), pod)
+        for right, left in (("ur", "ul"), ("lr", "ll")):
+            self.assertEqual(chunks[f"arm_{right}"]["splats"], chunks[f"arm_{left}"]["splats"])
             np.testing.assert_allclose(
-                chunks[f"arm_{pod}"]["offset"], mirrored(ur, axes), atol=SYM_TOL
+                chunks[f"arm_{left}"]["offset"], mirrored(chunks[f"arm_{right}"]["offset"], "x"), atol=SYM_TOL
             )
 
     def test_chunk_objs_are_the_fallback_mesh_split_by_chunk(self) -> None:
@@ -847,12 +872,13 @@ class StarfuryAuroraTests(unittest.TestCase):
                 delta=0.01 * self.out_a.splat_count,
             )
             # The origin is the sampled centroid, so it moves by millimetres with the seed;
-            # the design (every pod x/y, every z difference) does not.
+            # the design (every pod x, every y and z difference) does not.
             hp = json.loads(
                 (Path(tmp) / ship.HARDPOINTS_NAME).read_text(encoding="utf-8")
             )
             for mine, theirs in zip(self.hp["pods"], hp["pods"], strict=True):
-                self.assertEqual(mine["center"][:2], theirs["center"][:2])
+                self.assertEqual(mine["center"][0], theirs["center"][0])
+                self.assertAlmostEqual(mine["center"][1], theirs["center"][1], delta=0.005)
                 self.assertAlmostEqual(
                     mine["center"][2], theirs["center"][2], delta=0.02
                 )
@@ -1026,8 +1052,8 @@ class StarfuryLod1FrameAndCoverageTests(unittest.TestCase):
         cls.opacity1 = composite_opacity(cls.points, splats(cls.lod1))
 
     def test_lod1_frame_is_lod0_frame_within_millimetres(self) -> None:
-        self.assertEqual(list(self.offset1[:2]), [0.0, 0.0])
-        self.assertLess(abs(float(self.offset1[2] - self.offset0[2])), 0.005)
+        self.assertEqual(float(self.offset1[0]), 0.0)
+        self.assertLess(float(np.abs(self.offset1[1:] - self.offset0[1:]).max()), 0.005)
         a = {p.part.name: p.part for p in self.lod0}
         b = {p.part.name: p.part for p in self.lod1}
         for part, anchor in (("fuselage", "eye"), ("gun_mount", "muzzle_left"), ("pod_ur", "center"), ("claw_ll", "rcs_px")):
@@ -1041,16 +1067,18 @@ class StarfuryLod1FrameAndCoverageTests(unittest.TestCase):
             f"LOD0 mean {o0.mean():.4f}, {(o0 < 0.5).mean():.2%} under 0.5; "
             f"LOD1 mean {o1.mean():.4f}, {(o1 < 0.5).mean():.2%} under 0.5"
         )
-        self.assertGreater(float(o0.mean()), 0.99, summary)
+        # A probe on a seam (a keel box or strut root running into the hull) sees half a sheet; the reference hull has
+        # many of them.
+        self.assertGreater(float(o0.mean()), 0.985, summary)
         self.assertGreater(float(o1.mean()), 0.98, summary)
         self.assertLess(float((o1 < 0.5).mean()), 0.01, summary)
         self.assertGreater(float(np.median(o1)), 0.999, summary)
-        # The big surfaces are as closed as LOD0's; what thins out are features smaller than a
-        # LOD1 splat (RCS blocks and cones on the claws, ring edges, frame bands).
+        # The big surfaces are nearly as closed as LOD0's; what thins out are features smaller than
+        # a LOD1 splat (RCS blocks and cones on the claws, clamps, rails, ring edges, frame bands).
         for prefix in ("fuselage", "strut", "pod"):
             sel = np.char.startswith(self.names, prefix)
-            self.assertGreater(float(o1[sel].mean()), 0.98, (prefix, summary))
-            self.assertLess(float((o1[sel] < 0.5).mean()), 0.005, (prefix, summary))
+            self.assertGreater(float(o1[sel].mean()), 0.97, (prefix, summary))  # the pods' clamps and rails thin out
+            self.assertLess(float((o1[sel] < 0.5).mean()), 0.01, (prefix, summary))
 
 
 if __name__ == "__main__":

@@ -42,23 +42,31 @@ wide across the pods and 8 m tall. The X is wider than tall: struts sit about 30
   pods with lighter bands.
 
 - **Reference model (2026-10-30).** The maintainer added a fan-made 3D-print model of the Starfury (an STL in the
-  untracked `references/`, never committed). Read off orthographic renders of it, scaled to our 14.5-15 m claw span:
-  - **Overall**: span about 1.56 times the length, height about 0.76 times the length.
-  - **Pods**: about 5.6 m long, set at (±5.5, ±2.5) from the front, with their fronts about 2.3 m behind the nose.
-    Each is slim (radius about 0.65 m) behind a narrower ring-faced intake. Each swells into a rounded knuckle
-    where the strut joins, about 1 m ahead of the pod's middle. A round sensor dome sits on the knuckle's outboard
-    side and a stub on its top. Ribbed collar bands sit fore and aft, and the rear housing is long and ribbed.
-  - **Struts**: from the front they rise about 20-25° from the horizontal. From above they are broad swept plates,
-    about 4 m in chord at the root and 2.3 m at the pod, with the leading edge about 60° from the centre line. The
-    open truss cut-outs run along them.
-  - **Claws**: long, flat blades, about 3.5 m from root to tip, almost level with the pod's outboard side. Their
-    roots merge into one plate that forks into two prongs (a pincer from the side, a fork sticking out sideways
-    from the front). They splay only about 15-20° from the pod axis. A shorter blade (about 2.4 m) sits inboard
-    and below.
-  - **Fuselage**: an arrowhead from above. Behind the cockpit, seen from the front, it is a shield about 2 m wide,
-    with a flat top and a narrow pointed keel. The guns hang under the sides of the nose.
+  untracked `references/`, never committed). Its geometry is not copied: we read orthographic renders and
+  cross-sections of it, scaled to a 15.4 m claw span, and rebuilt the hull from those measurements.
+  - **Overall**: 9.85 m long, 15.4 m across the claws, 7.5 m tall.
+  - **Nose**: a hexagonal beak. Its blunt tip is a small hexagon at mid height; flat facets flare back over about
+    1 m to the full section (about 1.5 m wide, 2.1 m deep). The deck overhangs it from above, with cheeks either
+    side reaching further forward.
+  - **Body**: slung between two decks. The upper deck runs across the top from one upper arm to the other, the lower
+    deck the same underneath. Under the chin: a keel box along the centre line, and on each side a long gun fairing
+    ending in a block with a heavy barrel over a lighter one. On each flank: a block with two forward ports under the
+    deck, a pointed teardrop fairing lower down, and a wedge fairing between the upper flank and the deck. The rear
+    is a hexagonal panel.
+  - **Arms**: each is two plates. The deck plate climbs from the body out to the pod. A brace plate starts at the
+    body (at the shoulder for the upper arms, low on the flank for the lower ones) and closes in under the deck
+    plate. From about 3 m out they run as one thick beam, with a slot and ladder bays along both edges. Seen from
+    the front they rise about 23 degrees. The leading edge is swept about 33 degrees beyond a steeper inboard
+    section; the trailing edge has a tooth.
+  - **Pods**: 5.6 m lathes on axes at (±5.53, ±2.3). Front to back: a narrow ring face, a groove, a long body
+    widening to a 0.93 m radius, a second groove, then a rear housing tapering to the main nozzle's face. Ahead of
+    the middle, a dome stands up (down on the lower pods) and a sensor bulb out, both 1.44 m from the axis. Two rings
+    of clamps.
+  - **Claws**: behind each pod, a plate bent along its length over the pod's outboard flank. It splits about 3 m
+    behind the pod centre into an upper and a lower prong, which reach a further 1.7 m. A smaller bent blade sits
+    under the arm on the inboard side.
 
-  `starfury_aurora` generator v3 (M3-T26) follows these numbers (`docs/assets-starfury.md`).
+  `starfury_aurora` generator v4 (M3-T26) is built from these measurements (`docs/assets-starfury.md`).
 
 The M1 generator produced a long cylindrical fuselage with cylindrical pods. The maintainer judged that
 closer to a Thunderbolt than a Starfury. The rework must hit the silhouette above.

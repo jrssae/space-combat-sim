@@ -3,7 +3,7 @@ extends RefCounted
 ## Drawings of the main components for the HUD's damage indicators (pure data), each part tagged with its damage zone
 ## (`DamageZones`), in the unit square -0.5..0.5 (x right, y down, as on the screen), to be scaled into a rect.
 ## The X fighter (Starfury) is a low-poly wireframe seen from behind and above (`wireframe`): the fuselage, and per arm the
-## strut, the pod and the claw. The delta (raider) is outline polygons seen from above (`polygons`): the central hump and the
+## strut's deck, the pod with its dome and sensor bulb, and the claw. The delta (raider) is outline polygons seen from above (`polygons`): the central hump and the
 ## two wings, nose up.
 
 ## The wireframe's view: the ship turned by this yaw about +Y, then this pitch about +X (radians), so the camera sits behind
@@ -14,24 +14,36 @@ const WIRE_PITCH: float = 0.5
 const WIRE_FILL: float = 0.94
 
 # The Starfury's low-poly model, ship frame (+X right, +Y up, -Z forward), metres, after the hull that
-# tools/procgen/assets/starfury_aurora.py builds (centred frame). Fuselage rings: [z, top, top half-width,
-# shoulder half-width, shoulder y, keel half-width, keel], nose first.
+# tools/procgen/assets/starfury_aurora.py builds (its authored frame). Fuselage rings: [z, top, top half-width,
+# shoulder half-width, shoulder y, keel half-width, keel], nose first: the canopy's tip, its full section, the body.
 const _FUSELAGE_RINGS: Array = [
-	[-4.36, 0.93, 0.67, 0.76, 0.80, 0.49, -0.02],
-	[-3.01, 1.12, 0.88, 1.32, 0.15, 0.64, -0.80],
-	[0.04, 1.14, 0.78, 1.10, 0.25, 0.32, -1.20],
-	[0.84, 1.04, 0.70, 1.00, 0.25, 0.28, -1.10],
+	[-4.93, 0.15, 0.15, 0.33, 0.0, 0.12, -0.22],
+	[-4.3, 0.66, 0.36, 0.63, 0.0, 0.25, -0.98],
+	[-3.5, 0.98, 0.55, 0.9, -0.04, 0.45, -1.25],
+	[-0.85, 0.98, 0.5, 0.9, -0.1, 0.5, -1.25],
 ]
 ## Gun barrels: x, y, from z, to z (mirrored in x).
-const _GUN: Array = [0.45, -0.75, -2.6, -5.0]
+const _GUN: Array = [0.72, -1.38, -3.6, -4.65]
 ## Upper-right pod centre (mirrored to the other corners) and its hexagonal rings: [z from the centre, radius], front first.
-const _POD_CENTRE := Vector3(5.5, 2.5, 0.79)
-const _POD_RINGS: Array = [[-2.8, 0.5], [-0.9, 0.86], [1.3, 0.62], [2.8, 0.55]]
-## Upper-right strut: root leading / trailing edge (inside the fuselage) and tip leading / trailing edge (at the pod).
-const _STRUT: Array = [Vector3(0.6, 0.6, -3.16), Vector3(0.6, 0.6, 0.64), Vector3(4.93, 2.28, -0.41), Vector3(4.93, 2.28, 1.84)]
-## Upper-right claw blades, pod frame: [roll (degrees from +X towards +Y), sideways offset, root radius, root z, tip radius,
-## tip z]: the outboard pair, then the inboard blade.
-const _CLAW: Array = [[12.0, 0.2, 0.75, 1.2, 1.72, 4.55], [12.0, -0.2, 0.75, 1.2, 1.72, 4.55], [205.0, 0.0, 0.7, 1.3, 1.54, 3.54]]
+const _POD_CENTRE := Vector3(5.53, 2.295, 0.25)
+const _POD_RINGS: Array = [[-2.82, 0.41], [-1.97, 0.615], [1.17, 0.93], [2.8, 0.565]]
+## Upper-right strut deck, outline from the cheek beside the canopy along the leading edge to the pod, back along its
+## trailing edge.
+const _DECK: Array = [
+	Vector3(0.55, 1.15, -4.25), Vector3(1.85, 1.25, -2.99), Vector3(4.85, 2.47, -1.27), Vector3(4.85, 2.47, 1.42),
+	Vector3(0.6, 1.15, 0.2),
+]
+## Upper-right claw, pod frame: polylines of the outboard pincer (upper prong, lower prong, the split) and the inboard
+## blade's two prongs.
+const _CLAW: Array = [
+	[Vector3(1.0, 1.1, 1.65), Vector3(1.21, 1.25, 3.0), Vector3(1.9, 1.12, 4.65)],
+	[Vector3(1.47, -0.3, 1.65), Vector3(1.79, 0.1, 3.0), Vector3(2.12, 0.66, 4.65)],
+	[Vector3(1.21, 1.25, 3.0), Vector3(1.79, 0.6, 3.0)],
+	[Vector3(-1.18, -0.04, 1.6), Vector3(-1.51, -0.27, 2.85), Vector3(-1.62, -0.5, 3.45)],
+	[Vector3(-0.8, -0.76, 1.6), Vector3(-1.2, -0.85, 2.85), Vector3(-1.48, -0.79, 3.45)],
+]
+## The pod's dorsal dome and outboard sensor bulb, pod frame: base to tip.
+const _KNUCKLE: Array = [[Vector3(0.0, 0.75, -1.0), Vector3(0.0, 1.44, -1.0)], [Vector3(0.75, 0.0, -1.0), Vector3(1.46, 0.0, -1.0)]]
 
 
 ## `[{zone: int, segments: PackedVector2Array}, ...]`: line pairs (a0, b0, a1, b1, ...) for `draw_multiline`, in the unit
@@ -110,7 +122,7 @@ static func _fuselage_edges(edges: Array) -> void:
 		edges.append([DamageZones.CABIN, Vector3(sx * _GUN[0], _GUN[1], _GUN[2]), Vector3(sx * _GUN[0], _GUN[1], _GUN[3])])
 
 
-# One arm (strut, pod, claw), mirrored from the upper right by `sx` / `sy` (-1 or +1).
+# One arm (strut deck, pod, claw), mirrored from the upper right by `sx` / `sy` (-1 or +1).
 static func _arm_edges(edges: Array, zone: int, sx: float, sy: float) -> void:
 	var m := Vector3(sx, sy, 1.0)
 	var centre: Vector3 = _POD_CENTRE * m
@@ -122,19 +134,12 @@ static func _arm_edges(edges: Array, zone: int, sx: float, sy: float) -> void:
 			ring.append(centre + Vector3(r[1] * cos(a), r[1] * sin(a), r[0]))
 		rings.append(ring)
 	_rings_and_rails(edges, zone, rings)
-	var s: Array = []
-	for p: Vector3 in _STRUT:
-		s.append(p * m)
-	edges.append([zone, s[0], s[2]])  # leading edge
-	edges.append([zone, s[1], s[3]])  # trailing edge
-	edges.append([zone, s[2], s[3]])  # tip
-	for c: Array in _CLAW:
-		var roll: float = deg_to_rad(c[0])
-		var radial := Vector3(cos(roll), sin(roll), 0.0)
-		var side := Vector3(-sin(roll), cos(roll), 0.0)
-		var root: Vector3 = _POD_CENTRE + radial * c[2] + side * c[1] + Vector3(0.0, 0.0, c[3])
-		var tip: Vector3 = _POD_CENTRE + radial * c[4] + side * c[1] + Vector3(0.0, 0.0, c[5])
-		edges.append([zone, root * m, tip * m])
+	for i: int in range(_DECK.size() - 1):
+		edges.append([zone, (_DECK[i] as Vector3) * m, (_DECK[i + 1] as Vector3) * m])
+	var lines: Array = _CLAW + _KNUCKLE
+	for line: Array in lines:
+		for i: int in range(line.size() - 1):
+			edges.append([zone, centre + (line[i] as Vector3) * m, centre + (line[i + 1] as Vector3) * m])
 
 
 # Closed rings plus the rails joining matching corners of consecutive rings.

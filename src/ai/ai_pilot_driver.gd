@@ -52,6 +52,9 @@ var avoiding_urgent: bool = false
 var last_hit_s: float = -INF
 
 var _capability: ShipCapability = null
+## The mean of the ship's muzzles, ship-local (computed once: the muzzles never move on the hull).
+var _muzzle_local: Vector3 = Vector3.ZERO
+var _muzzle_known: bool = false
 var _retarget_in_s: float = 0.0
 var _unselectable_id: int = 0
 
@@ -116,6 +119,14 @@ func perceive() -> Perception:
 	if _capability == null:
 		_capability = ShipCapability.from_spec(ship.spec, ship.get_layout())
 	p.capability = _capability
+	if not _muzzle_known:
+		_muzzle_known = true
+		var mean := Vector3.ZERO
+		var muzzles: Array[Node3D] = ship.get_muzzles()
+		for muzzle: Node3D in muzzles:
+			mean += ship.to_local(muzzle.global_position)
+		_muzzle_local = mean / float(muzzles.size()) if not muzzles.is_empty() else Vector3.ZERO
+	p.muzzle_offset = ship.global_basis * _muzzle_local
 	var weapon: WeaponSpec = combatant.cannon.weapon
 	p.muzzle_speed_mps = weapon.muzzle_speed_mps
 	p.weapon_lifetime_s = weapon.lifetime_s

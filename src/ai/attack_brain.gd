@@ -73,7 +73,9 @@ func engage(p: Perception, target_id: int, target_position: Vector3, target_velo
 	_last_range_m = range_m
 	var los_dir: Vector3 = los / range_m
 	state_time_s += dt
-	var lead: Dictionary = InterceptMath.solve(p.position, p.velocity, target_position, target_velocity, p.muzzle_speed_mps, p.weapon_lifetime_s)
+	# The lead from the muzzles, where the bolts start: the nose then points their parallel paths through the intercept.
+	var lead: Dictionary = InterceptMath.solve(p.position + p.muzzle_offset, p.velocity, target_position, target_velocity,
+			p.muzzle_speed_mps, p.weapon_lifetime_s)
 	var lead_dir: Vector3 = (lead["aim_dir"] as Vector3) if bool(lead["ok"]) else los_dir
 	if aim_offset_rad != Vector2.ZERO:
 		lead_dir = _offset(lead_dir)

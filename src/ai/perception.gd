@@ -26,6 +26,9 @@ var hull_fraction: float = 1.0
 var faction: StringName = Factions.NEUTRAL
 ## What this ship can do: accelerations and turn rates (`ShipCapability`).
 var capability: ShipCapability = _default_capability
+## Where the bolts leave the ship: the mean muzzle position less `position`, World axes (zero: from the centre). The
+## Starfury's guns hang 1.4 m under its centre, enough to miss a raider when the lead is solved from the centre.
+var muzzle_offset: Vector3 = Vector3.ZERO
 ## The weapon's muzzle speed (m/s, relative to the shooter) and a bolt's lifetime (s).
 var muzzle_speed_mps: float = 400.0
 var weapon_lifetime_s: float = 4.0

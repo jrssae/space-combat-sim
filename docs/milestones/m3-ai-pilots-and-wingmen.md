@@ -888,6 +888,20 @@ Added 2026-10-30 for the maintainer's request Q24, done before the other open ta
     strut's edges and the claw blades), projected from behind and above (yaw -0.25 rad, pitch 0.5 rad) so the
     ship's right stays right and its top up, fitted undistorted into the silhouette rect. Each zone's lines take
     its damage colour, and a damaged zone draws heavier. The raider keeps its outline polygons.
+- Second pass (2026-10-31, generator v4): the maintainer found v3 still far from the reference ("only minor
+  simplifications allowed"), so the hull was rebuilt from the model's measured cross-sections:
+  - New builders in `tools/procgen/parts/starfury.py` (`section_loft`, `fury_pod`, `fury_claw`, `fury_strut`,
+    `fury_guns`, `fury_fittings`; tests in `tools/procgen/tests/test_starfury_parts.py`). The authored frame is the
+    reference's. A hexagonal glazed beak; a body between two decks with chin guns and keel box, flank port blocks,
+    teardrops and wedge fairings; arms of a deck and a brace merging into a slotted beam (the lower arms' brace is
+    rooted lower, so upper and lower struts are two variants); lathed pods with dome and sensor bulb; bent pincer
+    claws. Orthographic silhouette IoU against the reference: 0.95 top, 0.94 side, 0.87 front. 9.83 x 15.39 x 7.47 m.
+  - The whole ship is centred on its splat centroid (the body-only y shift would have lifted the fuselage 0.68 m);
+    the pods' centre line sits at y = +0.096 and the CoM is trimmed onto it. Hull spacing 0.047 m (243 728 splats,
+    AC3), cockpit faces still 0.022 m. The eye moves into the beak (0, 0.7, -3.85 authored); the tested clear view
+    holds. The guns now hang 1.4 m under the centre, so `AttackBrain` solves its lead from the mean muzzle position
+    (`Perception.muzzle_offset`), as the HUD's lead marker already did.
+  - The HUD wireframe follows the new hull (canopy rings, deck outline, pod rings with dome and bulb, pincers).
 - Done when: the procgen and GUT suites pass, and the maintainer accepts the look in game (H).
 
 ### M3-T12 Integration, smoke runs, capture set, play-test guide
