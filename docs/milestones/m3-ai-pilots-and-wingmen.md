@@ -1106,7 +1106,17 @@ Added 2026-10-30 for the maintainer's request Q24, done before the other open ta
 - Files: `scripts/run_tests.sh` (providers line, new smoke runs: wing order, dogfight, instructor route), `scripts/capture_m3.sh`,
   `tests/integration/test_m3_run.gd`, `docs/playtest.md` (M3 section: keyboard, orders, instructor, new console commands,
   AC14-AC19, AC22, AC27 and AC35 checklist), this file (status, as-built notes), `docs/architecture.md` §16 (as built), `docs/roadmap.md`.
-- Done when: every (A) criterion passes; the capture set is attached; the maintainer runs the (H) checklist.
+- Comment cleanup (maintainer, 2026-11-01): bring the code comments written for M3 in line with `CLAUDE.md`'s rule (a
+  comment says what a method is for, not how it works; complex logic says its purpose; short, human readable, no
+  over-explaining). Comments only, no behaviour change, as its own commit. At least the files written or grown in T09-T18:
+  `src/ai/{ai_context,ai_pilot,ai_pilot_driver,ai_temperament,ai_console,ai_profile,attack_brain,attack_slash,brain_factory,
+  behaviour_attack,behaviour_evade,behaviour_guard,behaviour_rally,behaviour_ram,behaviour_retreat,behaviour_follow_path,
+  contact_scan,perception,pilot_steering,route,raider_tactics}.gd`, `src/game/{main,ship_pool,wave_director,wave_plan,
+  wing_director,scenario_loader}.gd`, `src/combat/{kill_credit,hit_resolver}.gd`, `src/targeting/{targetable,target_info,
+  targeting_system}.gd`, `src/hud/radar_model.gd`, `src/props/nav_buoy.gd`, `src/audio/audio_director.gd`,
+  `src/autoload/debug_console.gd`, and the M3 test files' header comments. The full suite must stay green.
+- Done when: every (A) criterion passes; the capture set is attached; the maintainer runs the (H) checklist; the comment
+  cleanup is committed.
 
 ## As-built notes
 
@@ -1480,7 +1490,7 @@ Added 2026-10-30 for the maintainer's request Q24, done before the other open ta
   - `WingDirector` (`Combat/WingDirector`, priority 290): `setup(world)`, `create_wing(name, leader)`, `player_wing()`,
     `add_member(wing, combatant, slot := -1)` (the ship must be in play and fly an `AiPilot`; the pilot gets a
     `BehaviourFormation` if it has none, and is briefed at once), `remove_member`, `give_order(order, wing := player's)
-    -> {ok, line}`, `set_formation`, `ack_text()` (the HUD line for 3 s of sim time), `last_ack`, signal
+    -> {ok, line}`, `set_formation`, `ack_text()` (the HUD line for 3 s of sim time; 3.5 s since 2026-11-01), `last_ack`, signal
     `acknowledged(line)`, `roster()` (rows `callsign`, `slot`, `hull`, `behaviour`, `state`: the data for T11's roster),
     `leader_alive`, `leader_hostile_target`, `refresh(wing)` (every tick). A member that is down (`Damageable.is_active`
     false: destroyed or parked) or no longer flies an `AiPilot` leaves its slot on the next refresh, so a downed wingman
@@ -1579,6 +1589,17 @@ Added 2026-10-30 for the maintainer's request Q24, done before the other open ta
 - **Slow leaders** (fix round 1c): the path's turn rate v x a / |v|^2 fed forward is capped at 20 degrees/s and fades in
   up to 30 m/s of the leader's speed, so a leader thrusting from near rest does not fling the far slot (428 m/s of wish
   before, for a 5 m/s leader pulling 20 m/s^2; `test_formation`). The AC9 runs are unchanged.
+
+- **Play-test review (maintainer, 2026-11-01: "cover me seems to be the same as attack at will").** It was: COVER ME took any
+  hostile whose selected target was the leader, at any range, and every wave raider selects the player (since T10 they also
+  take it as their objective), so every raider qualified and nothing held a wingman near the player; a leader out of sight
+  also meant engage at will. Now `AiContext.may_attack` under COVER ME follows the maintainer's answer (hold formation, engage
+  hostiles that come within 2 km of the player): only hostiles within `engage_radius_m` (2 000 m) of the leader, only while
+  the wingman itself is within `COVER_LEASH_M` (3 000 m) of the leader, and nothing while the leader is alive but out of
+  sight (the formation flies back on the wing's link); a ship with no leader at all still engages at will. A hostile attacking
+  the leader still scores higher among those (`W_ATTACKING_FRIEND`). ENGAGE AT WILL is unchanged: anything in sensor range,
+  no leash. The order acknowledgement stays on the HUD 3.5 s (`WingDirector.ACK_HOLD_S`, was 3 s). Tests:
+  `test_ai_pilot_selection` (the radius, a far hostile that has the leader selected, the leash, the unseen leader).
 
 **M3-T08 (allied ships: pool, LOD1, destruction, replenish).**
 - **Spec and LOD.** `assets/ships/starfury_ally.tres` is `starfury_aurora.tres` with `splat_lod = 1` and `has_cockpit_interior = false`

@@ -62,8 +62,8 @@ been planned were taken for done.
 - New subsystems register their debug-console commands and a whitelisted state provider with `DebugConsole` in
   `_ready` (`docs/architecture.md` §6.4); new settings are `SettingsSchema` entries. The ` key is reserved for
   the console: never bind it to an action.
-- Keep Newtonian motion honest: zero gravity, zero damping (project *and* body, `DAMP_MODE_REPLACE`), forces
-  re-applied every physics tick. The damping guard test must stay.
+- Keep Newtonian motion honest: zero damping (project *and* body, `DAMP_MODE_REPLACE`), forces
+  re-applied every physics tick. The damping guard test must stay. Gravity effects only matter when in a reasonable proximity to a planet, moon, or star; 0 gravitational effects from anything smaller than a moon.
 - Anything that needs a GPU cannot be verified in the container; mark it `(H)` and leave it for the human
   tester instead of faking it.
 - To look at frames without a GPU: install llvmpipe (`apt-get install mesa-vulkan-drivers xvfb`) and run
@@ -72,6 +72,8 @@ been planned were taken for done.
 - Commit subjects start with the task id, e.g. `M1-T08: flight model and assist`. Do not push or open PRs unless
   asked; the maintainer handles git remotes.
 - Confirm each milestone is complete by asking the user, but once confirmed, merge to main.
+- Comments in the code must explain the goal of the method, not the functionality of the code. complex logic must explain what it's purpose is, not what it is actually doing. Comments must be human readable and short; do not over explain. Summarize. 
+- Each task mentioned to the user must use a short, one sentance explanation in parenthesis such as this example: "After that I'll start T19 (Splat LOD chain and LodSwitcher) properly." This is so the user can more easily understand what the task is.
 
 ## Commands
 

@@ -21,14 +21,16 @@ extends RefCounted
 ## - ENGAGE_AT_WILL (the default, and a ship without a wing): any hostile ship.
 ## - ATTACK_MY_TARGET: only the leader's selected target (`leader_target_id`); nothing while it has none.
 ## - FORM_ON_ME: nothing, and no retreat either (`may_retreat`): formation only, though an evasion is still allowed.
-## - COVER_ME: hostiles within `engage_radius_m` of the leader, or whose selected target is the leader. A ship that cannot
-##   see its leader (none, or beyond sensor range) engages at will.
+## - COVER_ME: stay with the leader and defend it: hostiles within `engage_radius_m` of it, while within `COVER_LEASH_M`
+##   of it. A ship with no leader at all engages at will.
 
 enum Order { ENGAGE_AT_WILL, ATTACK_MY_TARGET, FORM_ON_ME, COVER_ME }
 
 ## Order words (scenario `orders`, the console's `wing order`), by `Order` value.
 const ORDER_WORDS: Array[StringName] = [&"engage", &"attack", &"form", &"cover"]
 const DEFAULT_ENGAGE_RADIUS_M: float = 2000.0
+## Under COVER ME a ship farther than this from its leader breaks off and rejoins (the engage radius plus 1 km of room).
+const COVER_LEASH_M: float = 3000.0
 
 var profile: AiProfile = null
 ## This tick's perception (the pilot's own; read, never write).
@@ -187,9 +189,10 @@ func may_attack(c: Contact) -> bool:
 			return leader_target_id != 0 and c.id == leader_target_id
 		Order.COVER_ME:
 			if leader == null:
-				return true
-			return c.target_id == leader_id \
-					or c.position.distance_squared_to(leader.position) <= engage_radius_m * engage_radius_m
+				return leader_link_position == null  # leader out of sight: rejoin before fighting
+			if perception.position.distance_squared_to(leader.position) > COVER_LEASH_M * COVER_LEASH_M:
+				return false
+			return c.position.distance_squared_to(leader.position) <= engage_radius_m * engage_radius_m
 	return true
 
 

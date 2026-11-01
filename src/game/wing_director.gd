@@ -40,7 +40,7 @@ extends Node
 ## A new acknowledgement (or refusal) line.
 signal acknowledged(line: String)
 
-const ACK_HOLD_S: float = 3.0
+const ACK_HOLD_S: float = 3.5
 const PRIORITY: int = 290
 const WHAT_CHOICES: Array[StringName] = [&"order", &"formation", &"replenish"]
 ## Replacements enter this far behind the leader.

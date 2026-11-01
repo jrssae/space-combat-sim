@@ -274,7 +274,7 @@ func test_attack_my_target_attacks_only_the_leaders_target() -> void:
 	assert_eq(pilot.score_of(&"attack"), 0.0, "no leader's target: no attack")
 
 
-func test_cover_me_attacks_only_near_the_leader_or_at_whoever_attacks_it() -> void:
+func test_cover_me_attacks_only_near_the_leader_and_stays_on_its_leash() -> void:
 	var leader := _contact(30, "ALPHA 1", Factions.Relation.FRIENDLY, Vector3(0.0, 0.0, 100.0))
 	var far := _contact(20, "RAIDER 1", Factions.Relation.HOSTILE, Vector3(0.0, 0.0, -3000.0))
 	var pilot := AiPilot.new(profile, 3)
@@ -282,13 +282,26 @@ func test_cover_me_attacks_only_near_the_leader_or_at_whoever_attacks_it() -> vo
 	pilot.context.leader_id = 30
 	_tick(pilot, _p([leader, far]))
 	assert_eq(pilot.score_of(&"attack"), 0.0, "3 km from the leader, attacking nobody")
+	# One with the leader selected, 3.5 km out: not yet a threat to cover against (every wave raider selects the player).
 	var attacker := _contact(22, "RAIDER 3", Factions.Relation.HOSTILE, Vector3(0.0, 0.0, -3500.0), Vector3.BACK,
 			Vector3.ZERO, 30)
 	_tick(pilot, _p([leader, far, attacker]))
-	assert_eq(pilot.wanted_target_id, 22, "the one attacking the leader")
+	assert_eq(pilot.score_of(&"attack"), 0.0, "far out, even though it has the leader selected")
 	var close := _contact(23, "RAIDER 4", Factions.Relation.HOSTILE, Vector3(500.0, 0.0, 600.0))
 	assert_true(pilot.context.may_attack(close), "within engage_radius_m of the leader")
 	assert_false(pilot.context.may_attack(far))
+	# The leash: a wingman 3.5 km from its leader breaks off, whatever is near the leader.
+	var strayed := _p([_contact(30, "ALPHA 1", Factions.Relation.FRIENDLY, Vector3(0.0, 0.0, 3500.0)),
+			_contact(24, "RAIDER 5", Factions.Relation.HOSTILE, Vector3(0.0, 0.0, 3000.0))])
+	pilot.context.refresh(strayed)
+	assert_false(pilot.context.has_attackable(), "too far from the leader: rejoin first")
+	# The leader out of sight but alive (the wing's link): rejoin, do not hunt.
+	pilot.context.leader_link_position = UniversePos.new(0.0, 0.0, 20000.0)
+	pilot.context.refresh(_p([far]))
+	assert_false(pilot.context.may_attack(far), "leader out of sight: no hunting")
+	pilot.context.leader_link_position = null
+	pilot.context.refresh(_p([far]))
+	assert_true(pilot.context.may_attack(far), "no leader at all: at will")
 
 
 func test_engage_at_will_is_the_default_order() -> void:

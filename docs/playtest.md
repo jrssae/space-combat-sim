@@ -74,6 +74,11 @@ the wing orders). Caps Lock is read as a held key (down = roll left); if your de
 maintainer (the fallback is Ctrl). Your own saved control profiles keep the keys they had: `controls use default` in the console
 loads layout B.
 
+Wing orders (keys 1-4, or `wing order <attack|form|engage|cover>`): **1** attack my target (your selected hostile only),
+**2** form on me (formation only, no attacks), **3** engage at will (anything they see, no leash), **4** cover me, the default:
+they hold formation and engage only hostiles within 2 km of you, and a wingman more than 3 km from you breaks off and rejoins.
+The acknowledgement line stays on screen 3.5 s.
+
 The ` key opens the debug console; it frees the mouse while open. Hunting the splat-hull "jump" under thrust (only the splat hull shows it; the
 mesh hull does not): `throttle 1` holds both main pods, then flip these while it happens and note which one stops it:
 `set settings.hull_splat_sync off` (engine interpolates the splat node), `set settings.hull_depth_proxy off` (no black depth proxy),
