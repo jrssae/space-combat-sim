@@ -90,14 +90,16 @@ are M5's mission work).
 
 ## Task breakdown (ordered)
 
-| Task | Title | Depends on | Agent | Why |
-|---|---|---|---|---|
-| T01 | Benchmark harness, budget and baseline | M3 | Opus | Measurement design on a noisy machine; touches the tick order |
-| T02 | Cycle 1 | T01 | Opus | Profiling and a ranked judgement call |
-| T03 | Cycle 2 | T02 | Opus | Same |
-| T04 | Cycle 3 | T03 | Opus | Same |
-| T05 | Cycle 4 | T04 | Opus | Same |
-| T06 | Report to the maintainer | T05 | controller | A summary and a question, no code |
+Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `not needed` (a conditional task whose trigger never arose). Update the column with each task's commit.
+
+| Task | Title | Depends on | Agent | Why | Status |
+|---|---|---|---|---|---|
+| T01 | Benchmark harness, budget and baseline | M3 | Opus | Measurement design on a noisy machine; touches the tick order | not started |
+| T02 | Cycle 1 | T01 | Opus | Profiling and a ranked judgement call | not started |
+| T03 | Cycle 2 | T02 | Opus | Same | not started |
+| T04 | Cycle 3 | T03 | Opus | Same | not started |
+| T05 | Cycle 4 | T04 | Opus | Same | not started |
+| T06 | Report to the maintainer | T05 | controller | A summary and a question, no code | not started |
 
 ### M4-T01 Benchmark harness, budget and baseline
 

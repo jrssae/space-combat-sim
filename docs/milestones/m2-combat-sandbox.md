@@ -160,22 +160,24 @@ history.
 
 ## Task breakdown (ordered)
 
-| Task | Title | Depends on | Agent |
-|---|---|---|---|
-| M2-T01 | Combat maths (pure) | M1 accepted | Sonnet |
-| M2-T02 | Multi-ship readiness | T01 | Sonnet |
-| M2-T03 | Hit detection and damage | T01, T02 | Opus |
-| M2-T04 | `raider_fighter` generator | Q1 answered; Python only, parallel with T01-T03 | Opus (Fable if available) |
-| M2-T05 | Raider ship and pool | T02, T03, T04 | Sonnet |
-| M2-T06 | Destruction | T03, T05 | Sonnet |
-| M2-T07 | AI seam and simple brains | T01, T02, T05 | Opus |
-| M2-T08 | HUD | T01, T02, T03 | Sonnet |
-| M2-T09 | Combat sandbox scenario and waves | T05, T06, T07 | Sonnet |
-| M2-T10 | Integration, smoke runs, capture set, play-test guide | T01-T09 | Opus |
-| M2-T11 | Control profiles | M1 input fix only; any time, in parallel | Sonnet |
-| M2-T12 | Generated sound (required: audible space, Q5) | T03, T06 | Sonnet |
-| M2-T14 | Reaction mass and weapon capacitor | M1 fixes; any time, before T08's gauges are final | Sonnet |
-| M2-T13 | (conditional) Raider look pass | AC15 rejected | Opus (Fable if available) |
+Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `not needed` (a conditional task whose trigger never arose). Update the column with each task's commit.
+
+| Task | Title | Depends on | Agent | Status |
+|---|---|---|---|---|
+| M2-T01 | Combat maths (pure) | M1 accepted | Sonnet | done |
+| M2-T02 | Multi-ship readiness | T01 | Sonnet | done |
+| M2-T03 | Hit detection and damage | T01, T02 | Opus | done |
+| M2-T04 | `raider_fighter` generator | Q1 answered; Python only, parallel with T01-T03 | Opus (Fable if available) | done |
+| M2-T05 | Raider ship and pool | T02, T03, T04 | Sonnet | done |
+| M2-T06 | Destruction | T03, T05 | Sonnet | done |
+| M2-T07 | AI seam and simple brains | T01, T02, T05 | Opus | done |
+| M2-T08 | HUD | T01, T02, T03 | Sonnet | done |
+| M2-T09 | Combat sandbox scenario and waves | T05, T06, T07 | Sonnet | done |
+| M2-T10 | Integration, smoke runs, capture set, play-test guide | T01-T09 | Opus | done |
+| M2-T11 | Control profiles | M1 input fix only; any time, in parallel | Sonnet | done |
+| M2-T12 | Generated sound (required: audible space, Q5) | T03, T06 | Sonnet | done |
+| M2-T14 | Reaction mass and weapon capacitor | M1 fixes; any time, before T08's gauges are final | Sonnet | done |
+| M2-T13 | (conditional) Raider look pass | AC15 rejected | Opus (Fable if available) | not needed |
 
 ### M2-T01 Combat maths (pure)
 

@@ -3,7 +3,8 @@
 The next target after M1 is the **tutorial mission vertical slice**: launch from Babylon 5, an instructor teaches
 the controls and gives an exterior tour, then raiders come through the jumpgate and you defend the station with
 allies. Milestones M2-M8 build toward it; everything else follows it. Each milestone gets its own
-`docs/milestones/` file when it starts; order and scope will change. Long-term design: `docs/architecture.md` §14.
+`docs/milestones/` file when it starts, with a Status column in its task table (`CLAUDE.md`, "Milestone documents");
+order and scope will change. Long-term design: `docs/architecture.md` §14.
 
 ## Path to the tutorial slice
 

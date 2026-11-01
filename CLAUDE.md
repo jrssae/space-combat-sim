@@ -27,13 +27,25 @@ official or ripped franchise assets (models, textures, audio, footage, logos). A
 1. `scripts/setup_godot.sh` (installs Godot 4.7.2 into `.tools/godot/`, verified by SHA-256).
 2. `scripts/gen_assets.sh` (runs `python3 -m tools.procgen build all` into `assets/generated/`; needs `numpy`).
 3. `scripts/run_tests.sh` (Python tests, `godot --headless --import`, GUT headless; must exit 0).
-4. Open the latest milestone entry in `docs/milestones/`, find the first task whose "Done when" is not met, and do that one
-   task as one PR-sized change. If none of the scripts exist yet, you are on **M1-T01**. Once M1 is accepted
+4. Open the latest milestone entry in `docs/milestones/`, find the first task in its task table whose Status is not
+   `done` (or `not needed`) and whose "Done when" is not met, and do that one task as one PR-sized change. If none of the scripts exist yet, you are on **M1-T01**. Once M1 is accepted
    (its status line says so), 
    
 Until T01 lands, download/clone details are in `docs/research-notes.md` ("Container findings"): GitHub release
 assets and `git clone` work through the proxy; `archive/refs/tags/*.zip`, `api.github.com` and the Godot docs
 site do not.
+
+## Milestone documents
+
+Every milestone file in `docs/milestones/` has an ordered task table (`## Task breakdown (ordered)`) with a **Status**
+column: `done` (merged into the milestone branch, its "Done" notes written), `in progress`, `not started`, or `not
+needed` (a conditional task whose trigger never arose). A new milestone file starts with every task `not started`.
+Update the row in the same commit as the task's work, and when you pick the next task, trust the code and the git log
+over the column (planning commits, `M3-T10: plan: ...`, are not the work) and fix the column if they disagree.
+
+Why: before the column existed, status was only implied by "Done" bullets, as-built notes and commit subjects, so
+neither the maintainer nor an agent could see at a glance which tasks were finished, and two M3 tasks that had only
+been planned were taken for done.
 
 ## Rules of the road
 
