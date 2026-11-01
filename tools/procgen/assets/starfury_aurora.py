@@ -44,20 +44,10 @@ from typing import Any
 
 import numpy as np
 
-from ..core import frames
+from ..core import frames, lighting
 from ..core.chunks import ChunkSource, write_chunks
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Mesh
-from ..core.lighting import STUDIO_DEFAULT, StudioRig
-
-# The baked light of the hull. The studio default left the shadow sides (undersides of the struts, the fuselage's flanks) nearly black
-# against the black sky, and the play test kept finding "weird shading" there; the ambient is lifted, as the raider's was.
-STARFURY_RIG = StudioRig(
-    sky=(0.46, 0.47, 0.50),
-    ground=(0.24, 0.24, 0.26),
-    lights=STUDIO_DEFAULT.lights,
-    exposure=1.05,
-)
 from ..core.manifest import build_manifest, lod_entry, write_manifest
 from ..core.obj import write_obj
 from ..core.ply import SplatData, write_ply
@@ -97,7 +87,7 @@ from ..styles import Style
 from ..styles.earthforce import EARTHFORCE
 
 ASSET_ID = "starfury_aurora"
-GENERATOR_VERSION = 4
+GENERATOR_VERSION = 5  # 5: flat paint and lighting records (M3-T21)
 PLY_NAME = "starfury_aurora.ply"
 OBJ_NAME = "starfury_aurora.obj"
 COCKPIT_NAME = "cockpit_interior.obj"
@@ -495,16 +485,16 @@ def _phase(name: str, style: Style) -> tuple[float, float, float]:
     return tuple(((h * k) % 97) / 97.0 * style.panel_size_m for k in (7, 11, 13))
 
 
-def colour_samples(placed: Placed, style: Style, rig: StudioRig) -> np.ndarray:
+def colour_samples(placed: Placed, style: Style) -> np.ndarray:
+    """Paint only (paint, panel lines): the scene's lights do the shading in the game."""
     s = placed.samples
-    albedo = style.shade_panels(
+    return style.shade_panels(
         s.albedo(),
         s.positions,
         s.normals,
         s.material_flag("paneled") > 0.5,
         _phase(placed.part.name, style),
     )
-    return rig.shade(s.normals, albedo, s.material_flag("metallic"))
 
 
 # --- hardpoints -------------------------------------------------------------------------------
@@ -619,18 +609,33 @@ def hardpoints(
 
 # --- build ------------------------------------------------------------------------------------
 def part_splats(
-    placed: list[Placed], style: Style, rig: StudioRig, overlap: float, thickness: float
+    placed: list[Placed], style: Style, overlap: float, thickness: float
 ) -> SplatData:
     """The splats of every sampled placement, in order (body frame, Godot axes)."""
     return SplatData.concatenate(
         [
             to_splats(
-                p.samples, colour_samples(p, style, rig), p.spacing, overlap, thickness
+                p.samples, colour_samples(p, style), p.spacing, overlap, thickness
             )
             for p in placed
             if p.samples is not None
         ]
     )
+
+
+def _write_level(
+    out_dir: Path, level: int, ply_name: str, splats: SplatData, comments: tuple[str, ...]
+) -> list[Path]:
+    """One level's PLY and its lighting records (body frame in, the file's frame out)."""
+    written = _to_3dgs(splats)
+    return [
+        write_ply(out_dir / ply_name, written, comments),
+        lighting.write_lighting(out_dir / lighting.lod_file_name(ASSET_ID, level), written),
+    ]
+
+
+def _lod(level: int, file: str, splats: int, spacing: float) -> dict[str, Any]:
+    return lod_entry(level, file, splats, spacing, lighting.lod_file_name(ASSET_ID, level))
 
 
 def _to_3dgs(splats: SplatData) -> SplatData:
@@ -646,7 +651,7 @@ def _to_3dgs(splats: SplatData) -> SplatData:
 
 
 def build_chunks(
-    placed: list[Placed], style: Style, rig: StudioRig, overlap: float, thickness: float
+    placed: list[Placed], style: Style, overlap: float, thickness: float
 ) -> list[ChunkSource]:
     """One ``ChunkSource`` per ``CHUNK_ORDER`` entry: its parts' splats (placement order) and
     their fallback mesh. The cockpit faces' mesh is already in the fuselage's, and the cockpit
@@ -656,7 +661,7 @@ def build_chunks(
         members = [p for p in placed if chunk_of(p.part.name) == name]
         mesh = Mesh.concatenate(p.part.mesh for p in members if p.hull)
         sources.append(
-            ChunkSource(name, part_splats(members, style, rig, overlap, thickness), mesh)
+            ChunkSource(name, part_splats(members, style, overlap, thickness), mesh)
         )
     return sources
 
@@ -680,7 +685,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
         raise ValueError(
             "spacing, cockpit_spacing, overlap, thickness and lod1_factor must be positive"
         )
-    spec, style, rig = DEFAULT_SPEC, EARTHFORCE, STARFURY_RIG
+    spec, style = DEFAULT_SPEC, EARTHFORCE
 
     out_dir = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -688,7 +693,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
     # LOD0: the full-detail hull, part by part (manifest ``counts`` order).
     placed, offset = centre(build_parts(spec, style, ctx, spacing, cockpit_spacing))
     sampled = [p for p in placed if p.samples is not None]
-    authored = part_splats(placed, style, rig, overlap, thickness)
+    authored = part_splats(placed, style, overlap, thickness)
 
     # Splats are already centred; the manifest AABB is theirs, Godot frame.
     xyz32 = authored.xyz.astype(np.float32)
@@ -697,7 +702,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
         f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}",
         "frame: 3dgs (Rz180 of godot)",
     )
-    files: list[Path] = [write_ply(out_dir / PLY_NAME, _to_3dgs(authored), comments)]
+    files: list[Path] = _write_level(out_dir, 0, PLY_NAME, authored, comments)
 
     hull_mesh = Mesh.concatenate(p.part.mesh for p in placed if p.hull)
     files += write_obj(out_dir / OBJ_NAME, hull_mesh, ASSET_ID, comments[:1])
@@ -719,10 +724,10 @@ def build(ctx: BuildContext) -> AssetOutputs:
             (LOD1_STREAM,),
         )
     )
-    chunk_sources = build_chunks(lod1_placed, style, rig, overlap, thickness)
+    chunk_sources = build_chunks(lod1_placed, style, overlap, thickness)
     lod1 = SplatData.concatenate([c.splats for c in chunk_sources])
     lod1_comments = comments + (f"lod {CHUNK_LOD}",)
-    files.append(write_ply(out_dir / LOD1_PLY_NAME, _to_3dgs(lod1), lod1_comments))
+    files += _write_level(out_dir, CHUNK_LOD, LOD1_PLY_NAME, lod1, lod1_comments)
     chunk_files, chunk_entries = write_chunks(
         out_dir, ASSET_ID, chunk_sources, lod1_comments
     )
@@ -734,9 +739,9 @@ def build(ctx: BuildContext) -> AssetOutputs:
         lod_placed, _ = centre(
             build_parts(spec, style, ctx, factor * spacing, factor * cockpit_spacing, (stream,))
         )
-        lod_splats = part_splats(lod_placed, style, rig, overlap, thickness)
+        lod_splats = part_splats(lod_placed, style, overlap, thickness)
         far[level] = len(lod_splats)
-        files.append(write_ply(out_dir / name, _to_3dgs(lod_splats), comments + (f"lod {level}",)))
+        files += _write_level(out_dir, level, name, lod_splats, comments + (f"lod {level}",))
 
     hp = hardpoints(placed, spec, chunk_entries)
     hp_path = out_dir / HARDPOINTS_NAME
@@ -767,10 +772,10 @@ def build(ctx: BuildContext) -> AssetOutputs:
         generator_version=GENERATOR_VERSION,
         seed=ctx.seed,
         lods=[
-            lod_entry(0, PLY_NAME, total, spacing),
-            lod_entry(CHUNK_LOD, LOD1_PLY_NAME, len(lod1), lod1_spacing),
+            _lod(0, PLY_NAME, total, spacing),
+            _lod(CHUNK_LOD, LOD1_PLY_NAME, len(lod1), lod1_spacing),
         ]
-        + [lod_entry(level, FAR_LODS[level][0], far[level], FAR_LODS[level][1] * spacing) for level in FAR_LODS],
+        + [_lod(level, FAR_LODS[level][0], far[level], FAR_LODS[level][1] * spacing) for level in FAR_LODS],
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,

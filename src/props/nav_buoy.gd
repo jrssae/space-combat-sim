@@ -23,6 +23,7 @@ const ASSET_DIR: String = "res://assets/generated/nav_buoy"
 const GAUSSIAN_PATH: String = ASSET_DIR + "/nav_buoy.ply"
 const MESH_PATH: String = ASSET_DIR + "/nav_buoy.obj"
 const HARDPOINTS_PATH: String = ASSET_DIR + "/hardpoints.json"
+const ASSET_ID: String = "nav_buoy"
 
 const SPIN_DPS: float = 10.0
 const BLINK_HZ: float = 1.0
@@ -62,6 +63,7 @@ var damageable: Damageable = null
 
 static var _shared_loaded: bool = false
 static var _shared_gaussian: GaussianResource = null
+static var _shared_lighting_path: String = ""
 static var _shared_mesh: Mesh = null
 static var _shared_beacon_position: Vector3 = DEFAULT_BEACON_POSITION
 static var _shared_beacon_radius: float = DEFAULT_BEACON_RADIUS
@@ -99,10 +101,17 @@ func _init() -> void:
 	add_to_group(SplatStatus.MESH_GROUP)  # SplatStatus calls use_fallback_mesh (no backend, console, F4)
 
 
+# The splats and their lighting records go on before the node enters the tree: assigned later, each makes GDGS re-merge every splat in
+# the scene, once per buoy.
+func _enter_tree() -> void:
+	_load_shared_assets()
+	var body := get_node(^"BuoySplats") as GaussianSplatNode
+	body.gaussian = _shared_gaussian
+	SplatLightingLoader.attach(body, _shared_lighting_path)
+
+
 func _ready() -> void:
 	_base_basis = basis
-	_load_shared_assets()
-	splats.gaussian = _shared_gaussian
 	MeshMaterials.matte(_shared_mesh)
 	mesh_fallback.mesh = _shared_mesh
 	depth_proxy.mesh = _shared_mesh  # hides the beacon behind the body (§7.2); splats write no depth
@@ -190,6 +199,7 @@ static func _load_shared_assets() -> void:
 		_shared_gaussian = load(GAUSSIAN_PATH) as GaussianResource
 	if _shared_gaussian == null:
 		push_warning("NavBuoy: %s is missing or not imported (run scripts/gen_assets.sh, then import); no buoy splats" % GAUSSIAN_PATH)
+	_shared_lighting_path = SplatLod.lighting_path(ASSET_ID, 0)
 	if ResourceLoader.exists(MESH_PATH):
 		_shared_mesh = load(MESH_PATH) as Mesh
 	var file := FileAccess.open(HARDPOINTS_PATH, FileAccess.READ)

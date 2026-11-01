@@ -9,7 +9,8 @@ committed.
 |---|---|
 | `raider_fighter.ply` | 26 488 Gaussian splats (budget 15k-40k), 3DGS binary PLY, GDGS orientation (Rz 180 of the Godot frame), the five chunks' splats concatenated in `manifest.counts` order |
 | `raider_fighter.obj` + `.mtl` | fallback mesh, Godot frame; the game also uses it as the hull depth proxy (as for the Starfury, manifest `files.fallback_mesh`) |
-| `raider_fighter_chunk_<name>.ply/.obj/.mtl` | the break-up chunks (below) |
+| `raider_fighter_chunk_<name>.ply/.light/.obj/.mtl` | the break-up chunks (below) |
+| `raider_fighter_lod<0-3>.light` | lighting records (M3-T21): 4 bytes per splat of that level's PLY, same order and frame |
 | `hardpoints.json` | the contract for the flight model, weapons, collision / hit volumes, cameras, chunks (schema as `assets-starfury.md`, plus `chunks[]`) |
 | `manifest.json` | `lods[0]`, AABB, `centroid_offset`, `files`, `counts` (per chunk), `chunks`, `sampling`, `dimensions_m` |
 
@@ -49,7 +50,7 @@ pylons join the group they hang from.
 
 ## Chunks (`core/chunks.py`)
 
-`hardpoints.json` `chunks[]`: `{name, ply, obj, offset, splats}` per group. Each chunk PLY and OBJ is re-centred on
+`hardpoints.json` `chunks[]`: `{name, ply, lighting, obj, offset, splats}` per group. Each chunk PLY and OBJ is re-centred on
 the chunk's own splat centroid (GDGS centres every PLY on its mean position anyway) and the PLY is flipped like the
 hull's, so a debris node at identity shows the chunk upright; `offset` is that centroid in the body frame. A chunk
 placed at `ship transform * offset` sits exactly where its splats were: the chunks together are the hull's splats,
@@ -78,14 +79,13 @@ The routine is generic (`ChunkSource(name, splats, mesh)`), so M3 can chunk the 
 
 Hull #A89F96, darker panels #544E48, dark recesses and vents #37312D, faded ochre `stripe` #B88A3A (an accent band, no
 insignia), dark metal nozzles, a near-black **opaque** canopy. These are brighter than the milestone's "about #77706A":
-the first capture on the real GPU (RX 6950 XT, Compute backend) showed that albedo as a nearly black silhouette,
-because the baked studio lighting scales albedo by about 0.35 and the engine adds no light of its own. Panel grid 0.5 m, line width 3.5 cm, per-panel tint
+the first capture on the real GPU (RX 6950 XT, Compute backend) showed that albedo as a nearly black silhouette, and raiders
+are mostly seen on their dark side. Panel grid 0.5 m, line width 3.5 cm, per-panel tint
 jitter 0.12 (the Earthforce hull's is 0.05), so the plating reads patched and weathered. Left and right wings
 get different panel phases on purpose (positions are symmetric, colours are not).
 
-The baked light rig is the studio rig with a higher ambient (`RAIDER_RIG`: sky 0.46, ground 0.24, exposure 1.1 instead
-of 0.30 / 0.10 / 1.0): in an unlit scene a surface facing away from the rig's key light would otherwise sit at 0.3 x
-albedo, and raiders are mostly seen from behind or below.
+The colours are this flat paint with no light or shade term (generator v2, M3-T21). The game lights the hull from the scene
+(`docs/architecture.md` section 7.3), from a `.light` file of per-splat records beside each level's and chunk's PLY.
 
 ## Determinism and options
 

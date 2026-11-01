@@ -63,6 +63,8 @@ static func create(entry: Dictionary, asset_dir: String, with_splats: bool) -> D
 		var ply_path: String = asset_dir.path_join(String(entry.get("ply", "")))
 		if ResourceLoader.exists(ply_path):
 			chunk.splats.gaussian = load(ply_path) as GaussianResource
+			var records: String = String(entry.get("lighting", ""))
+			SplatLightingLoader.attach(chunk.splats, asset_dir.path_join(records) if not records.is_empty() else "")
 		else:
 			push_warning("DebrisChunk: %s is missing or not imported (run scripts/gen_assets.sh, then import)" % ply_path)
 	chunk._park_state()

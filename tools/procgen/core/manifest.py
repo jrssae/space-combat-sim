@@ -14,13 +14,17 @@ FRAME = "godot"
 UNITS = "m"
 
 
-def lod_entry(level: int, file: str, splats: int, spacing_m: float) -> dict[str, Any]:
-    return {
+def lod_entry(level: int, file: str, splats: int, spacing_m: float, lighting: str | None = None) -> dict[str, Any]:
+    """One level of detail. ``lighting`` names its ``.light`` records when the level is lit in the game (the sky is not)."""
+    entry: dict[str, Any] = {
         "level": int(level),
         "file": file,
         "splats": int(splats),
         "spacing_m": float(spacing_m),
     }
+    if lighting is not None:
+        entry["lighting"] = lighting
+    return entry
 
 
 def sound_entry(
@@ -160,6 +164,8 @@ def validate_manifest(manifest: Mapping[str, Any]) -> None:
             raise ValueError(
                 f"manifest lods[{index}].spacing_m must be a positive number"
             )
+        if "lighting" in entry and not (isinstance(entry["lighting"], str) and entry["lighting"].endswith(".light")):
+            raise ValueError(f"manifest lods[{index}].lighting must be a .light file name")
 
     for key in ("aabb_min", "aabb_max", "centroid_offset"):
         _check_vec3(manifest, key)

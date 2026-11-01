@@ -5,6 +5,7 @@
 [ext_resource type="Script" path="res://addons/gdgs_scs/runtime/compositor/gaussian_compositor_effect.gd" id="3_effect"]
 [ext_resource type="Script" path="res://addons/gdgs_scs/runtime/nodes/gaussian_splat_node.gd" id="4_splats"]
 [ext_resource type="Script" path="res://src/environment/sky_follower.gd" id="5_follower"]
+[ext_resource type="Script" path="res://src/rendering/splat_light_rig.gd" id="6_rig"]
 
 [sub_resource type="CompositorEffect" id="CompositorEffect_gdgs"]
 script = ExtResource("3_effect")
@@ -19,7 +20,10 @@ script = ExtResource("1_env")
 environment = ExtResource("2_default")
 compositor = SubResource("Compositor_main")
 
-[node name="KeyStar" type="DirectionalLight3D" parent="."]
+[node name="SplatLightRig" type="Node3D" parent="."]
+script = ExtResource("6_rig")
+
+[node name="KeyStar" type="DirectionalLight3D" parent="SplatLightRig"]
 transform = Transform3D(-0.851658, 0.339815, -0.399004, 0, 0.761316, 0.648381, 0.524097, 0.552199, -0.648381, 0, 0, 0)
 light_color = Color(1, 0.94, 0.84, 1)
 light_energy = 1.5

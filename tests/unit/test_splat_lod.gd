@@ -80,3 +80,27 @@ func test_the_asset_root_is_the_ship_specs() -> void:
 	assert_eq(Ship.ASSET_ROOT, ShipSpec.ASSET_ROOT)
 	assert_eq(DebrisPool.ASSET_ROOT, ShipSpec.ASSET_ROOT)
 	assert_eq(ShipCatalog.spec_for(ShipCatalog.PLAYER_TYPE).hardpoints_path(), "res://assets/generated/starfury_aurora/hardpoints.json")
+
+
+# --- lighting records (M3-T21) -----------------------------------------------------------------------------------
+
+
+func test_the_manifest_names_each_levels_lighting_records() -> void:
+	var manifest: Dictionary = {"lods": [
+		{"level": 0.0, "file": "x.ply", "lighting": "x_lod0.light"},
+		{"level": 1.0, "file": "x_lod1.ply", "lighting": "x_lod1.light"},
+		{"level": 2.0, "file": "x_lod2.ply"},
+	]}
+	assert_eq(SplatLod.lighting_for(manifest, 0), "x_lod0.light")
+	assert_eq(SplatLod.lighting_for(manifest, 1), "x_lod1.light")
+	assert_eq(SplatLod.lighting_for(manifest, 2), "", "a level without records")
+	assert_eq(SplatLod.lighting_for(manifest, 3), "", "a level the manifest does not list")
+	assert_eq(SplatLod.lighting_for({}, 0), "")
+
+
+func test_the_lighting_path_of_a_generated_asset() -> void:
+	assert_eq(SplatLod.lighting_path("starfury_aurora", 0), "res://assets/generated/starfury_aurora/starfury_aurora_lod0.light")
+	assert_eq(SplatLod.lighting_path("raider_fighter", 3), "res://assets/generated/raider_fighter/raider_fighter_lod3.light")
+	assert_eq(SplatLod.lighting_path("nav_buoy", 0), "res://assets/generated/nav_buoy/nav_buoy_lod0.light")
+	assert_eq(SplatLod.lighting_path("sky_default", 0), "", "the sky is not lit")
+	assert_eq(SplatLod.lighting_path("no_such_asset", 0), "")

@@ -36,7 +36,7 @@ core/color.py      blackbody star colours, sRGB transfer
 core/manifest.py   manifest.json builder/validator/writer
 core/geometry.py   Mesh + Material, primitives (box, tapered box, lathe, loft, superellipse, ellipsoid cap)
 core/sampling.py   mesh -> surface samples (area-weighted, stratified, R2 low-discrepancy) -> flat splats
-core/lighting.py   baked studio rig (hemisphere ambient + directional lights) for unlit splats
+core/lighting.py   per-splat lighting records for GDGS relighting (octahedral normal, AO, confidence; one `.light` per PLY)
 core/obj.py        OBJ/MTL writer and a small reader for tests
 parts/             reusable parametric parts: hull (fuselage, canopy, cockpit interior/tub,
                    upright cylinder hull with painted bands, faceted wedge fuselage with a framed
@@ -106,7 +106,9 @@ The player's SA-23E-style Starfury, composed from `parts/` with the `earthforce`
 frames and sill), `starfury_aurora.obj/.mtl`
 (fallback mesh), `cockpit_interior.obj/.mtl`, `hardpoints.json` and `manifest.json`; since M3-T03 also
 `starfury_aurora_lod1.ply` (manifest `lods[1]`: about 57k splats at 0.08 m, 25 % of LOD0, for allies and debris) and
-five break-up chunks cut from LOD1 (`starfury_aurora_chunk_<cabin|arm_ur|arm_lr|arm_ul|arm_ll>.ply/.obj/.mtl`). The
+five break-up chunks cut from LOD1 (`starfury_aurora_chunk_<cabin|arm_ur|arm_lr|arm_ul|arm_ll>.ply/.light/.obj/.mtl`). Since
+M3-T21 its colours, the raider's and the buoy's are flat paint, and each level and chunk has a `.light` file of per-splat lighting
+records in its PLY's order and frame (manifest `lods[].lighting`, hardpoints `chunks[].lighting`). The
 full description, the hardpoints schema and the splat-quality reasoning are in `docs/assets-starfury.md`.
 
 Things the Godot side must know:

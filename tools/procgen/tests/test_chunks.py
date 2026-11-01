@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tools.procgen.core import frames
+from tools.procgen.core import frames, lighting
 from tools.procgen.core.chunks import ChunkSource, chunk_file_names, write_chunks
 from tools.procgen.core.geometry import Material, box
 from tools.procgen.core.obj import read_obj
@@ -64,6 +64,17 @@ class ChunkTests(unittest.TestCase):
             # The 1 m box sat at the splat cloud's neighbourhood; after centring it is near the origin.
             self.assertLess(float(np.linalg.norm(0.5 * (lo + hi))), 1.0)
             self.assertAlmostEqual(float(hi[0] - lo[0]), 1.0, places=5)
+
+    def test_chunk_records_go_with_the_chunk_ply(self) -> None:
+        for entry, source in zip(self.entries, self.sources, strict=True):
+            self.assertEqual(entry["lighting"], lighting.chunk_file_name("thing", entry["name"]))
+            records = lighting.read_lighting(self.dir / entry["lighting"])
+            self.assertEqual(len(records), entry["splats"])
+            # In the PLY's frame, like its positions: Rz(180) of the body frame.
+            expected = frames.flip_xy(source.splats.normals)
+            expected /= np.linalg.norm(expected, axis=1, keepdims=True)
+            np.testing.assert_allclose(lighting.decode_normals(records), expected, atol=0.02)
+        self.assertTrue(all((self.dir / e["lighting"]) in self.files for e in self.entries))
 
     def test_an_empty_chunk_is_an_error(self) -> None:
         empty = SplatData(np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0), np.zeros((0, 3)), np.zeros((0, 4)), np.zeros((0, 3)))
