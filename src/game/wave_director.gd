@@ -8,7 +8,9 @@ extends Node
 ## (M3-T08) are not counted as raiders, not cleared when a wave starts or stops, and a destroyed ally is no kill.
 ##
 ## `process_physics_priority` 300: after the hit resolver (200), so a raider destroyed this tick is already out of `alive`.
-## Kills: every raider destroyed counts (only the player or the console can destroy one in M2). Losses: the player's deaths.
+## Kills: every raider destroyed counts, by anyone (rams included). Of those, `credit` (`KillCredit`, M3-T16, Q18) counts the
+## player's own kills and assists: it hears every shot of the player's cannon with the player's selection at that moment, and
+## forgets a pool ship's mark when the pool hands that ship out again. Losses: the player's deaths. All counts last the session.
 ## The wave goes on across the player's death (maintainer answer Q6): the raiders left keep fighting, and
 ## `on_player_respawned()` only makes their pilots pick the respawned player up at once.
 ##
@@ -27,6 +29,8 @@ var scenario_id: StringName = &""
 var plan: WavePlan = WavePlan.new()
 var kills: int = 0
 var losses: int = 0
+## The player's kills and assists (`player_kills`, `player_assists`).
+var credit: KillCredit = KillCredit.new()
 ## Called with the HUD status line whenever it changes (`Main` sets `status_line`).
 var status_sink: Callable = Callable()
 
@@ -48,7 +52,9 @@ func _ready() -> void:
 		&"state": {"get": func() -> String: return String(plan.state_name()), "doc": "idle, countdown, active or cleared"},
 		&"next_in_s": {"get": func() -> float: return plan.countdown_remaining(), "unit": "s", "doc": "Seconds until the wave starts"},
 		&"alive": {"get": func() -> int: return _raiders_alive().size(), "doc": "Raiders alive"},
-		&"kills": {"get": func() -> int: return kills, "doc": "Raiders destroyed this session"},
+		&"kills": {"get": func() -> int: return kills, "doc": "Raiders destroyed this session, by anyone"},
+		&"player_kills": {"get": func() -> int: return credit.player_kills, "doc": "Raiders the player destroyed (the killing bolt or ram)"},
+		&"player_assists": {"get": func() -> int: return credit.player_assists, "doc": "Raiders someone else destroyed after the player fired at them while they were selected"},
 		&"losses": {"get": func() -> int: return losses, "doc": "Times the player was destroyed"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"wave",
@@ -75,6 +81,12 @@ func setup(p_world: WorldFrame, p_pool: ShipPool, p_player: Combatant, scenario:
 	if destruction != null:
 		destruction.raider_destroyed.connect(_on_raider_destroyed)
 		destruction.player_destroyed.connect(_on_player_destroyed)
+	if player != null:
+		credit.player_id = player.ship.get_instance_id()
+		if not player.cannon.projectile_fired.is_connected(_on_player_fired):
+			player.cannon.projectile_fired.connect(_on_player_fired)
+	if pool != null and not pool.acquired.is_connected(_on_pool_acquired):
+		pool.acquired.connect(_on_pool_acquired)
 	if auto_start and not waves.is_empty() and pool_size > 0:
 		start(0)
 
@@ -164,10 +176,20 @@ func _raiders_alive() -> Array[Combatant]:
 	return pool.alive(ShipPool.DEFAULT_TYPE) if pool != null else ([] as Array[Combatant])
 
 
-func _on_raider_destroyed(_combatant: Combatant, _info: HitInfo) -> void:
+func _on_raider_destroyed(combatant: Combatant, info: HitInfo) -> void:
 	kills += 1
+	credit.credit(combatant.targetable.get_instance_id(), info.shooter_id if info != null else 0)
 	kills_changed.emit(kills)
 	_after_change()
+
+
+# A pool ship back in play is somebody new: the player's shots at its last life earn nothing now.
+func _on_pool_acquired(combatant: Combatant) -> void:
+	credit.forget(combatant.targetable.get_instance_id())
+
+
+func _on_player_fired(_muzzle_index: int, _projectile: Projectile) -> void:
+	credit.note_shot(player.ship.targeting.selected_id())
 
 
 func _on_player_destroyed(_info: HitInfo) -> void:
@@ -198,8 +220,13 @@ func status_line() -> String:
 		WavePlan.State.COUNTDOWN:
 			return "%s   IN %d" % [head, ceili(plan.countdown_remaining())]
 		WavePlan.State.CLEARED:
-			return "%s   CLEARED   KILLS %d" % [head, kills]
-	return "%s   RAIDERS %d   KILLS %d" % [head, _raiders_alive().size(), kills]
+			return "%s   CLEARED   %s" % [head, _tally()]
+	return "%s   RAIDERS %d   %s" % [head, _raiders_alive().size(), _tally()]
+
+
+# Every raider destroyed, then the player's share: `KILLS 7   YOURS 3   ASSISTS 2`.
+func _tally() -> String:
+	return "KILLS %d   YOURS %d   ASSISTS %d" % [kills, credit.player_kills, credit.player_assists]
 
 
 # --- console ---------------------------------------------------------------------------------------------------------

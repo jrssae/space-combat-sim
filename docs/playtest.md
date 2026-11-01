@@ -215,7 +215,8 @@ wave 1's countdown starts at once. `scenario free_flight` (console) is the old M
 
 Each wave clears when every raider is gone; a short pause, then the next countdown. If you die, you respawn at the start after
 3 s with a full hull; the wave carries on and the raiders left come for you again. The status line (top centre) shows wave,
-state, raiders alive and kills.
+state, raiders alive and three counts: `KILLS` (every raider destroyed, by anyone), `YOURS` (your bolt or ram made the kill)
+and `ASSISTS` (you fired at it while it was your selected target, and someone else killed it).
 
 ## HUD legend (green line style; sizes scale with the window height)
 
@@ -254,7 +255,7 @@ cockpit grid        in the cockpit (or `set settings.hud_targeting_grid on`): an
 spawn raider [idle|patrol|attack|aggro] [distance_m] [yaw_deg] [pitch_deg]    a raider ahead of you, nose to you
 despawn [target|all]       return raiders to the pool       kill [target|all|player]   destroy now (bypasses god)
 damage <n> [player|target] hit with no shooter              heal [player|target|all]   restore hulls
-wave start [1-3] | next | stop | restart     drive the waves          state waves     index, name, state, alive, kills, losses
+wave start [1-3] | next | stop | restart     drive the waves          state waves     index, name, state, alive, kills, player_kills, player_assists, losses
 scenario [combat_sandbox|free_flight]        reload into a scenario (the startup script carries on)
 controls ... / bind / unbind                 control profiles (above)
 sfx <name>                 play a sound at you              set audio.volume 0.5    SFX gain (settings.sfx_volume)

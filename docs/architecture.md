@@ -1442,6 +1442,13 @@ universe (0, 0, 0), where its props are placed, not the World's local origin, wh
 `loop.from_wave`, one more attacker per loop up to the pool size. `settings.scenario` (`combat_sandbox` by
 default, or `free_flight`) picks the file; `Main.scenario_path` overrides it for tests.
 
+Kill credit (M3-T16, Q18): `WaveDirector.kills` counts every raider destroyed, by anyone (rams included). `KillCredit` (pure)
+splits out the player's share. A raider whose killing `HitInfo.shooter_id` is the player's ship (a bolt, or a ram: `RamResolver`
+puts the other body there) is a player kill. One the player fired at least one shot at while it was the selected target
+(the cannon's `projectile_fired`, with `TargetingController.selected_id()` at that moment), and someone else killed, is an
+assist, never both. The mark is kept per `Targetable` id until that raider dies or `ShipPool.acquired` hands its ship out
+again. The counts last the session, across respawns. Status line: `WAVE 2  PATROL   RAIDERS 2   KILLS 7   YOURS 3   ASSISTS 2`.
+
 ### 15.11 `raider_fighter` and chunks
 
 The same output contract as §9, at about 25k splats (15k-40k budget; raiders are mostly seen at range). In
@@ -1493,7 +1500,7 @@ with bad entries, still makes the profile invalid. The built-in data profiles ar
 | `combat` | HitResolver (T03) | `projectiles`, `hits`, `last_hit`, `pairs_tested`, `resolve_us` (profiling only; the one wall-clock read) |
 | `hull` | player Damageable (T03) | `hp`, `max_hp`, `fraction`, `invulnerable` (mirror of `debug.invulnerable`), `destroyed` |
 | `raiders` | ShipPool (T05, T07) | `pool_size`, `free`, `alive`, `list` (name, behaviour/state, hull %, range), `selected_brain` |
-| `waves` | WaveDirector (T09) | `scenario`, `index`, `name`, `state`, `next_in_s`, `alive`, `kills`, `losses` |
+| `waves` | WaveDirector (T09, M3-T16) | `scenario`, `index`, `name`, `state`, `next_in_s`, `alive`, `kills`, `player_kills`, `player_assists`, `losses` |
 | `hud` | Hud (T08) | `visible`, `lead_tof_s`, `lead_on_screen`, `prograde_on_screen`, `target_box` |
 | `controls` | ControlProfiles (T11) | `profile`, `profiles`, `unsaved` |
 | `audio` | AudioDirector (T12) | `sounds`, `voices_active`, `volume` |

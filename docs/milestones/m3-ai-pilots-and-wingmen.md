@@ -661,6 +661,14 @@ Added 2026-10-26 for Q18; run before T12.
   - **Total**: today's `kills` (enemy ships destroyed by anyone, rams included). Status line, planner call:
     `KILLS 7   YOURS 3   ASSISTS 2`. Counts last the session, across respawns, like `kills` today.
 - Done when: AC24 passes; the status line shows in P7.
+- Done (2026-10-31): `KillCredit` (`src/combat/kill_credit.gd`, pure) holds `player_kills`, `player_assists` and the
+  per-target marks; `WaveDirector.credit` feeds it from the player cannon's `projectile_fired` (with the selection at that
+  moment) and `raider_destroyed` (the killing `shooter_id`), and `ShipPool.acquired` (new signal, end of `acquire`) clears a
+  reused ship's mark. Marks are cleared on acquire, not on release, because `DestructionDirector` releases a raider before it
+  emits `raider_destroyed`. A console `kill` (shooter 0) of a marked raider is an assist. Status line:
+  `... RAIDERS 2   KILLS 7   YOURS 3   ASSISTS 2` (and `CLEARED   KILLS ...`); `waves` provider gains `player_kills` and
+  `player_assists`. Tests: `test_kill_credit` (7), `test_kill_credit_in_play` (6: a real bolt kill, an ally kill after the
+  player fired, a shot at another selection, the player's ram, the status line through a wave, a reused pool ship).
 
 ### M3-T17 Broadcast contacts for the radar and the AI
 

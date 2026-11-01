@@ -18,6 +18,9 @@ extends Node3D
 ## [pitch_deg]` (an ally takes only `idle` or `ai`). Raiders are named `RAIDER <n>`, allies `ALPHA <n>` from 2 (the player is
 ## ALPHA 1), the next free number. A pooled ship has an `AiPilotDriver`; `acquire` gives it the brain and `release` takes it away.
 
+## A pooled ship is back in play (end of `acquire`): it is somebody new, so per-ship records about it start over (M3-T16).
+signal acquired(combatant: Combatant)
+
 const DEFAULT_TYPE: StringName = &"raider_fighter"
 const ALLY_TYPE: StringName = &"starfury_ally"
 const NAME_PREFIX: String = "RAIDER"
@@ -111,6 +114,7 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	combatant.targetable.display_name = display_name
 	_set_brain(combatant, brain)
 	_in_use.append(combatant)
+	acquired.emit(combatant)
 	return combatant
 
 
