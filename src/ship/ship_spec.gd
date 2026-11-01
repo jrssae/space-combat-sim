@@ -20,10 +20,11 @@ const ASSET_ROOT: String = "res://assets/generated"
 @export var inertia: Vector3 = Vector3(6.0e5, 6.0e5, 5.0e5)
 ## N per pod main nozzle (exhaust +Z, thrust forward).
 @export var pod_main_thrust: float = 3.6e5
-## N per pod retro nozzle (exhaust -Z, thrust aft).
-@export var pod_retro_thrust: float = 1.8e5
-## N, body frame: x sway, y heave, z 0 (fore/aft is the pods' job).
-@export var rcs_force_max: Vector3 = Vector3(4.8e5, 4.8e5, 0.0)
+## N per pod retro nozzle (exhaust -Z, thrust aft). The Starfury reverses as hard as it goes forward (M3-T15, Q20).
+@export var pod_retro_thrust: float = 3.6e5
+## N, body frame: x sway, y heave, z 0 (fore/aft is the pods' job). The Starfury's is half its forward thrust on both axes
+## (M3-T15, Q20).
+@export var rcs_force_max: Vector3 = Vector3(7.2e5, 7.2e5, 0.0)
 ## N·m, body frame: x pitch, y yaw, z roll.
 @export var rcs_torque_max: Vector3 = Vector3(9.4e5, 9.4e5, 1.57e6)
 ## deg/s, pilot axes (pitch, yaw, roll): the assist's rate target at full deflection.

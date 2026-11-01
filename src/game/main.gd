@@ -407,7 +407,6 @@ func _setup_input() -> void:
 func _apply_input_settings() -> void:
 	adapter.stick_deadzone = float(Settings.get_value(&"stick_deadzone"))
 	adapter.invert_y = bool(Settings.get_value(&"invert_y"))
-	adapter.yaw_ramp_s = float(Settings.get_value(&"yaw_ramp_s"))
 	adapter.target_hold_s = float(Settings.get_value(&"target_hold_s"))
 	adapter.mouse_full_rate_px_s = float(Settings.get_value(&"mouse_full_rate_px_s"))
 	Engine.physics_jitter_fix = float(Settings.get_value(&"physics_jitter_fix"))
@@ -576,5 +575,5 @@ func _cmd_pause(args: Dictionary) -> String:
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
-	if key in [&"stick_deadzone", &"invert_y", &"yaw_ramp_s", &"target_hold_s", &"trigger_deadzone", &"mouse_full_rate_px_s", &"physics_jitter_fix"]:
+	if key in [&"stick_deadzone", &"invert_y", &"target_hold_s", &"trigger_deadzone", &"mouse_full_rate_px_s", &"physics_jitter_fix"]:
 		_apply_input_settings()

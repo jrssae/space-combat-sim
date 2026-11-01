@@ -9,7 +9,7 @@ extends RefCounted
 const DEFAULT_BUILTIN_DIR: String = "res://data/controls"
 const DEFAULT_USER_DIR: String = "user://controls"
 const EXTENSION: String = "cfg"
-const DEFAULT_DESCRIPTION: String = "The project.godot map (architecture 6.1): right stick pitch and roll, D-pad yaw"
+const DEFAULT_DESCRIPTION: String = "The project.godot map (architecture 6.1): right stick pitch, yaw and diagonal roll; B targets, D-pad Up assist"
 
 var builtin_dir: String = DEFAULT_BUILTIN_DIR
 var user_dir: String = DEFAULT_USER_DIR

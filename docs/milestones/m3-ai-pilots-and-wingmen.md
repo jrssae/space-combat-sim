@@ -624,6 +624,24 @@ stick pitches, yaws and rolls, a long B press selects the previous target, free 
     stopping distance or time to move, and fix them to read the spec, never new constants. Watch T07's formation
     (AC9) and T09's demos (flip-and-burn), which ran on the old numbers.
 - Done when: AC23 passes and AC27's first three checks are in the play-test checklist.
+- Done (2026-10-31):
+  - Pad: `InputAdapter.split_stick` (pure, `STICK_SECTOR_HALF_DEG` 22.5) splits the right stick (`yaw_*` on X, `pitch_*`
+    on Y) into pitch, yaw or roll; the roll keys add to its roll. `target_cycle` (pad B) runs its own tap-or-hold timer
+    (tap next, hold previous once). D-pad Up is `toggle_flight_assist`, D-pad Left/Right are unbound and `_step_yaw` is
+    gone. `yaw_ramp_s` is removed from the schema: `Settings.revert` reads only schema keys, so an old file's line is
+    ignored and dropped on the next save (the `roll_ramp_s` rename entry went with it). Profiles: roll, keyboard
+    `target_next` and `target_cycle` need no pad binding; a saved profile whose pad bindings are exactly the pre-T15
+    default (`ControlProfile.PAD_LAYOUT_BEFORE_T15`) gets the current default's pad bindings and keeps its keys and
+    mouse (the stick actions take the stick deadzone); one with its own pad bindings is left alone with a warning.
+    `m1_classic` keeps its pad layout and gains `target_cycle=[]`: its stick now yaws in proportion (no ramp) and rolls
+    on the diagonals, its D-pad still rolls at full rate.
+  - Free look: `CameraLook` turns the view at `stick × STICK_LOOK_RATE_DEG_S` (180°/s) within the mode's limits; a
+    centred stick holds it, and only releasing L3 eases it back (`RETURN_RATE_PER_S`).
+  - Sounds: `sfx_combat` generator v3, `GUN_PITCH` 0.25 on every frequency of `pulse_fire`, `raider_fire` and
+    `hit_hull` (lengths and envelopes unchanged).
+  - Thrust: Starfury and ally specs (and the `ShipSpec` defaults) `pod_retro_thrust` 0.36 MN, `rcs_force_max`
+    (0.72, 0.72, 0) MN; the raider is unchanged.
+  - AC27's checks (1) pad and free look, (2) sounds, (3) thrust are in `docs/playtest.md`.
 
 ### M3-T16 Kill credit: player kills, assists, total
 

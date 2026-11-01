@@ -73,11 +73,11 @@ func test_revert_drops_unsaved_changes() -> void:
 
 
 func test_reset_restores_default_for_session() -> void:
-	settings.set_value(&"yaw_ramp_s", 0.5)
+	settings.set_value(&"target_hold_s", 0.5)
 	settings.save()
-	assert_eq(settings.reset(&"yaw_ramp_s"), OK)
-	assert_almost_eq(float(settings.get_value(&"yaw_ramp_s")), 0.25, 1e-9)
-	assert_true(settings.is_unsaved(&"yaw_ramp_s"))
+	assert_eq(settings.reset(&"target_hold_s"), OK)
+	assert_almost_eq(float(settings.get_value(&"target_hold_s")), 0.35, 1e-9)
+	assert_true(settings.is_unsaved(&"target_hold_s"))
 
 
 func test_set_from_text() -> void:
@@ -86,27 +86,18 @@ func test_set_from_text() -> void:
 	assert_eq(settings.set_from_text(&"stick_deadzone", "0.9"), ERR_INVALID_PARAMETER)
 
 
-func test_renamed_key_in_an_old_file_is_migrated() -> void:
+func test_a_removed_key_in_an_old_file_is_ignored_and_dropped_on_save() -> void:
 	var cfg := ConfigFile.new()
-	cfg.set_value("settings", "roll_ramp_s", 0.5)  # saved before the yaw/roll swap
+	cfg.set_value("settings", "yaw_ramp_s", 0.5)  # the D-pad ramp, gone with M3-T15
+	cfg.set_value("settings", "invert_y", true)
 	cfg.save(CONFIG_PATH)
-	settings.revert()
-	assert_almost_eq(float(settings.get_value(&"yaw_ramp_s")), 0.5, 1e-9, "the old value carries over")
+	assert_eq(settings.revert(), OK)
+	assert_eq(settings.get_value(&"invert_y"), true, "the rest of the file still loads")
 	assert_false(settings.has_unsaved())
 	assert_eq(settings.save(), OK)
 	var saved := ConfigFile.new()
 	assert_eq(saved.load(CONFIG_PATH), OK)
-	assert_false(saved.has_section_key("settings", "roll_ramp_s"), "save writes only the current name")
-	assert_almost_eq(float(saved.get_value("settings", "yaw_ramp_s")), 0.5, 1e-9)
-
-
-func test_current_key_wins_over_a_renamed_one() -> void:
-	var cfg := ConfigFile.new()
-	cfg.set_value("settings", "roll_ramp_s", 0.5)
-	cfg.set_value("settings", "yaw_ramp_s", 0.75)
-	cfg.save(CONFIG_PATH)
-	settings.revert()
-	assert_almost_eq(float(settings.get_value(&"yaw_ramp_s")), 0.75, 1e-9)
+	assert_false(saved.has_section_key("settings", "yaw_ramp_s"), "save writes only schema keys")
 
 
 func test_invalid_file_values_fall_back_to_defaults() -> void:

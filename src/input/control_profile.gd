@@ -21,14 +21,30 @@ const FORMAT_VERSION: int = 1
 const DEFAULT_NAME: String = "default"
 ## Profile names double as file names (`user://controls/<name>.cfg`) and as `settings.control_profile` values.
 const NAME_PATTERN: String = "^[a-z0-9_]{1,32}$"
-## Actions that need no pad binding: no pad button is free for them, or the pad reaches the function another way (target_ahead
-## is the D-pad Up hold, target_prev the mouse wheel's twin). The wing orders are keys 1-4 and the console until M5's comms
-## panel gives the pad a route (architecture §16 D36).
+## Actions that need no pad binding: no pad button is free for them, or the pad reaches the function another way. The roll
+## keys add to the right stick's diagonal roll; target_next, target_prev and target_ahead are the keyboard's and the
+## mouse's (the pad cycles with B, `target_cycle`, which a layout that targets with another button, such as m1_classic's
+## D-pad Up on target_next, can leave unbound). The wing orders are keys 1-4 and the console until M5's comms panel gives
+## the pad a route (architecture §16 D36).
 const KEYBOARD_ONLY: Array[StringName] = [
 	InputAdapter.TOGGLE_FALLBACK, InputAdapter.TOGGLE_OVERLAY, InputAdapter.TARGET_AHEAD, InputAdapter.TARGET_PREV,
 	InputAdapter.SCREENSHOT, InputAdapter.WING_ATTACK, InputAdapter.WING_FORM, InputAdapter.WING_ENGAGE,
-	InputAdapter.WING_COVER,
+	InputAdapter.WING_COVER, InputAdapter.ROLL_LEFT, InputAdapter.ROLL_RIGHT, InputAdapter.TARGET_NEXT,
+	InputAdapter.TARGET_CYCLE,
 ]
+## The default pad layout before M3-T15 (action -> pad descriptors; actions without one are left out). A saved profile with
+## exactly these pad bindings and no `target_cycle` gets the current default's pad bindings (`from_config`): its keys and
+## mouse buttons stay.
+const PAD_LAYOUT_BEFORE_T15: Dictionary = {
+	&"main_right": ["pad:axis:5+"], &"main_left": ["pad:axis:4+"], &"retro_right": ["pad:button:10"],
+	&"retro_left": ["pad:button:9"], &"pitch_down": ["pad:axis:3-"], &"pitch_up": ["pad:axis:3+"],
+	&"yaw_left": ["pad:button:13"], &"yaw_right": ["pad:button:14"], &"strafe_left": ["pad:axis:0-"],
+	&"strafe_right": ["pad:axis:0+"], &"strafe_down": ["pad:axis:1+"], &"strafe_up": ["pad:axis:1-"],
+	&"roll_left": ["pad:axis:2-"], &"roll_right": ["pad:axis:2+"], &"target_next": ["pad:button:11"],
+	&"weapon_next": ["pad:button:12"], &"fire": ["pad:button:0"], &"toggle_flight_assist": ["pad:button:1"],
+	&"brake": ["pad:button:8"], &"autotrack": ["pad:button:2"], &"camera_look": ["pad:button:7"],
+	&"toggle_camera": ["pad:button:3"], &"reset_ship": ["pad:button:4"], &"pause": ["pad:button:6"],
+}
 const MAX_PAD_BUTTON: int = 14  # D-pad Right; 15 and up are SDL extras (paddles, touchpad, misc)
 const GUIDE_BUTTON: int = 5
 const MAX_PAD_AXIS: int = 5  # right trigger
@@ -410,6 +426,13 @@ static func from_config(cfg: ConfigFile, p_name: String = "", fill_from: Control
 		for key: String in cfg.get_section_keys(SECTION_DEADZONES):
 			profile.deadzones[StringName(key)] = cfg.get_value(SECTION_DEADZONES, key)
 	var filled := PackedStringArray()
+	var pad_migrated: bool = false
+	if fill_from != null and not profile.bindings.has(InputAdapter.TARGET_CYCLE):
+		if profile.has_pad_layout(PAD_LAYOUT_BEFORE_T15):
+			profile.take_pad_layout(fill_from)
+			pad_migrated = true
+		else:
+			push_warning("Controls: profile '%s' has its own pad bindings; the M3-T15 pad layout (stick yaw and diagonal roll, B for targets, D-pad Up for assist) leaves them as they are" % p_name)
 	if fill_from != null:
 		for action: StringName in InputAdapter.ACTIONS:
 			if profile.bindings.has(action) or profile.deadzones.has(action) or not fill_from.bindings.has(action):
@@ -418,7 +441,44 @@ static func from_config(cfg: ConfigFile, p_name: String = "", fill_from: Control
 			profile.deadzones[action] = fill_from.deadzones.get(action, 0.5)
 			filled.append(String(action))
 	errors.append_array(profile.validate())
-	return {"ok": errors.is_empty(), "profile": profile, "errors": errors, "filled": filled}
+	return {"ok": errors.is_empty(), "profile": profile, "errors": errors, "filled": filled, "pad_migrated": pad_migrated}
+
+
+## Whether this profile's pad bindings are exactly `layout`'s (action -> pad descriptors; an action missing from `layout`
+## has none).
+func has_pad_layout(layout: Dictionary) -> bool:
+	for action: StringName in InputAdapter.ACTIONS:
+		var pads: Array = []
+		for descriptor: Variant in bindings.get(action, []):
+			if String(descriptor).begins_with("pad:"):
+				pads.append(String(descriptor))
+		var wanted: Array = layout.get(action, [])
+		if pads != wanted:
+			return false
+	return true
+
+
+## Replaces every pad binding with `source`'s, keeping this profile's keys and mouse buttons (pad events first, as the
+## default lists them). Where the pad binding changes, the action takes `source`'s deadzone (a stick needs a smaller one
+## than a button).
+func take_pad_layout(source: ControlProfile) -> void:
+	for action: StringName in InputAdapter.ACTIONS:
+		if not source.bindings.has(action) or not bindings.has(action):
+			continue
+		var pads: Array = []
+		for descriptor: Variant in source.bindings[action]:
+			if String(descriptor).begins_with("pad:"):
+				pads.append(String(descriptor))
+		var kept: Array = []
+		var old_pads: Array = []
+		for descriptor: Variant in bindings[action]:
+			if String(descriptor).begins_with("pad:"):
+				old_pads.append(String(descriptor))
+			else:
+				kept.append(descriptor)
+		if old_pads != pads:
+			deadzones[action] = source.deadzones.get(action, deadzones.get(action, 0.5))
+		bindings[action] = pads + kept
 
 
 # --- Private -----------------------------------------------------------------------------------------------------

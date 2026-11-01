@@ -150,7 +150,7 @@ expect_line "${log}" "[console] fire: pad:button:0 key:Space mouse:1 (deadzone 0
 expect_line "${log}" "[console] yaw_left: pad:axis:2- (deadzone 0.15)" || smoke_status=1
 expect_line "${log}" "[console] roll_left: pad:button:13 key:CapsLock (deadzone 0.50)" || smoke_status=1
 expect_line "${log}" "[console] main_left: pad:axis:4+ key:Q key:W (deadzone 0.05)" || smoke_status=1
-expect_line "${log}" "[console] roll_left: pad:axis:2- key:CapsLock (deadzone 0.15)" || smoke_status=1
+expect_line "${log}" "[console] roll_left: key:CapsLock (deadzone 0.15)" || smoke_status=1
 expect_line "${log}" "[console] deleted control profile 'smoke_test'" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 if [[ "$(settings_fingerprint)" != "${settings_before}" ]]; then

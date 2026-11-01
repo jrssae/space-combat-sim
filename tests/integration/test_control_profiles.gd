@@ -110,23 +110,19 @@ func test_list_marks_the_profile_in_use() -> void:
 func test_use_changes_what_godot_input_source_reads() -> void:
 	_axis(JOY_AXIS_RIGHT_X, 1.0)
 	_button(JOY_BUTTON_DPAD_RIGHT, true)
-	var v: Vector2 = source.get_vector(&"roll_left", &"roll_right", &"pitch_down", &"pitch_up", 0.15)
-	assert_almost_eq(v.x, 1.0, 1e-5, "default: the stick X is roll")
-	assert_true(source.is_pressed(&"yaw_right"), "default: the D-pad is yaw")
+	var v: Vector2 = source.get_vector(&"yaw_left", &"yaw_right", &"pitch_down", &"pitch_up", 0.15)
+	assert_almost_eq(v.x, 1.0, 1e-5, "default: the stick X is yaw")
+	assert_false(source.is_pressed(&"roll_right"), "default: the D-pad Right is free")
 
 	var result: ConsoleResult = _run("controls use m1_classic")
 	assert_true(result.ok, result.text())
 	assert_eq(registry.read("controls.profile")["value"], "m1_classic")
-	v = source.get_vector(&"roll_left", &"roll_right", &"pitch_down", &"pitch_up", 0.15)
-	assert_almost_eq(v.x, 1.0, 1e-5, "m1_classic: the D-pad is roll (a button reads 1)")
-	assert_true(source.is_pressed(&"yaw_right"), "m1_classic: the stick X is yaw")
+	assert_true(source.is_pressed(&"yaw_right"), "m1_classic: the stick X is yaw too")
 	assert_true(source.is_pressed(&"roll_right"), "m1_classic: the D-pad Right is roll")
 
 	_button(JOY_BUTTON_DPAD_RIGHT, false)
 	assert_false(source.is_pressed(&"roll_right"))
 	assert_true(source.is_pressed(&"yaw_right"), "the stick is still held")
-	v = source.get_vector(&"roll_left", &"roll_right", &"pitch_down", &"pitch_up", 0.15)
-	assert_eq(v, Vector2.ZERO, "and no longer rolls")
 
 	_axis(JOY_AXIS_RIGHT_X, 0.1)
 	assert_false(source.is_pressed(&"yaw_right"), "inside the yaw deadzone the profile brought (0.15)")
@@ -134,38 +130,38 @@ func test_use_changes_what_godot_input_source_reads() -> void:
 	assert_almost_eq(InputMap.action_get_deadzone(&"roll_right"), 0.5, 1e-6)
 
 	assert_true(_run("controls use default").ok)
-	_axis(JOY_AXIS_RIGHT_X, 1.0)
-	assert_false(source.is_pressed(&"yaw_right"), "back to the default: the stick does not yaw")
+	_button(JOY_BUTTON_DPAD_RIGHT, true)
+	assert_false(source.is_pressed(&"roll_right"), "back to the default: the D-pad does not roll")
 
 
 func test_use_produces_no_phantom_edges() -> void:
 	var without_resync := InputAdapter.new()
-	_button(JOY_BUTTON_B, true)  # held across the switch
-	assert_true(adapter.sample(source, DT).flight.toggle_assist, "B is flight assist: its own edge")
+	_button(JOY_BUTTON_DPAD_UP, true)  # held across the switch
+	assert_true(adapter.sample(source, DT).flight.toggle_assist, "D-pad Up is flight assist: its own edge")
 	assert_true(without_resync.sample(source, DT).flight.toggle_assist)
 	assert_false(adapter.sample(source, DT).flight.toggle_assist, "once")
 
 	resyncs = 0
-	var result: ConsoleResult = _run("bind toggle_camera pad:button:1")
+	var result: ConsoleResult = _run("bind toggle_camera pad:button:11")
 	assert_true(result.ok, result.text())
 	assert_eq(resyncs, 1, "the input adapter was told")
-	assert_true(source.is_pressed(&"toggle_camera"), "B now means camera as well")
+	assert_true(source.is_pressed(&"toggle_camera"), "D-pad Up now means camera as well")
 	var after: PilotCommand = adapter.sample(source, DT)
 	assert_false(after.ui.toggle_camera, "no phantom camera toggle from a button that was already down")
 	assert_false(after.flight.toggle_assist)
 	assert_true(without_resync.sample(source, DT).ui.toggle_camera, "(without the resync the edge would have fired)")
 
-	_button(JOY_BUTTON_B, false)
+	_button(JOY_BUTTON_DPAD_UP, false)
 	adapter.sample(source, DT)
-	_button(JOY_BUTTON_B, true)
+	_button(JOY_BUTTON_DPAD_UP, true)
 	assert_true(adapter.sample(source, DT).ui.toggle_camera, "a real press still toggles")
 
 
 func test_a_tap_or_hold_in_progress_is_dropped_by_a_switch() -> void:
-	_button(JOY_BUTTON_DPAD_UP, true)
+	_button(JOY_BUTTON_B, true)  # pad B: target_cycle under the default
 	assert_false(adapter.sample(source, DT).combat.target_next)
 	assert_true(_run("controls use m1_classic").ok)
-	_button(JOY_BUTTON_DPAD_UP, false)
+	_button(JOY_BUTTON_B, false)
 	assert_false(adapter.sample(source, DT).combat.target_next, "the press began under the old profile")
 
 
@@ -426,11 +422,11 @@ func test_setting_the_setting_applies_the_profile() -> void:
 	var result: ConsoleResult = _run("set settings.control_profile m1_classic")
 	assert_true(result.ok, result.text())
 	assert_eq(node.active_name, "m1_classic")
-	assert_eq(_descriptors(&"yaw_left"), PackedStringArray(["pad:axis:2-"]))
+	assert_eq(_descriptors(&"roll_left"), PackedStringArray(["pad:button:13", "key:CapsLock"]))
 	assert_eq(resyncs, 1)
 	assert_true(_run("default settings.control_profile").ok)
 	assert_eq(node.active_name, "default")
-	assert_eq(_descriptors(&"yaw_left"), PackedStringArray(["pad:button:13"]))
+	assert_eq(_descriptors(&"roll_left"), PackedStringArray(["key:CapsLock"]))
 	settings.set_value(&"control_profile", "m1_classic")
 	settings.revert()  # nothing was saved: back to the default selection
 	assert_eq(node.active_name, "default", "revert re-applies the saved selection")
@@ -461,7 +457,7 @@ func test_the_built_in_default_snapshot_is_taken_before_the_selection_applies() 
 	assert_eq(node.active_name, "m1_classic")
 	assert_true(node.store.default_profile().same_bindings(default_profile), "default is still the project map")
 	assert_true(_run("controls use default").ok)
-	assert_eq(_descriptors(&"yaw_left"), PackedStringArray(["pad:button:13"]))
+	assert_eq(_descriptors(&"roll_left"), PackedStringArray(["key:CapsLock"]))
 
 
 func test_a_missing_profile_falls_back_to_the_default_controls() -> void:

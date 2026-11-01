@@ -36,17 +36,18 @@ second.
 
 ```
 RT / LT       right / left main pods (analog)        RB / LB     right / left retros
-Right stick   pitch / roll (stick back = nose up,    Left stick  strafe left/right, up/down
-              stick right = roll right)
-D-pad L/R     yaw (tap for fine corrections)         D-pad Down  fire mode
-D-pad Up      tap: next target                       hold (about 0.35 s): target nearest the nose
+Right stick   up/down: pitch (stick back = nose up)   Left stick  strafe left/right, up/down
+              left/right: yaw;  the four diagonals: roll toward the side you lean (up-right or down-right = roll right)
+D-pad Up      flight assist on/off                   D-pad Down  fire mode               D-pad Left/Right  free
+B             tap: next target                       hold (about 0.35 s): previous target (as the mouse wheel)
 X (toggle)    auto-track on/off: the nose swings onto the lead reticle of the selected target and follows it as it moves
               (with none selected it takes the nearest hostile; it switches itself off when none is left); your speed and
               direction are untouched, so you can keep thrusting and strafing while you aim. AUTO-TRACK shows on the HUD
 R3            brake (hold): all stop; with a target selected the nose also swings onto it
-L3 (hold)     free look: the right stick looks around instead of flying (cockpit: your head turns; chase: the camera
-              pans around the ship). Let go and the view returns to the nose. The ship ignores the stick meanwhile.
-A             fire                                   B  flight assist on/off      Y  cockpit / chase camera
+L3 (hold)     free look: the right stick turns the view instead of flying (cockpit: your head turns; chase: the camera
+              pans around the ship), faster the further you push it; centre the stick and the view stays where it is.
+              Let go of L3 and the view returns to the nose. The ship ignores the stick meanwhile.
+A             fire                                   Y  cockpit / chase camera
 Back          respawn                                Start  pause
 ```
 
@@ -57,7 +58,7 @@ Q / W / E     left main / both mains / right main     A / S / D   left retro / b
 R / F         strafe up / down                        Z / C       strafe left / right
 Caps Lock / G roll left / right                       X           brake (hold)           Shift  auto-track (toggle)
 Space         fire                                    V           fire mode              T      flight assist on/off
-B             tap: next target, hold: target nearest the nose (as D-pad Up)              Tab    cockpit / chase camera
+B             tap: next target, hold: target nearest the nose (as Mouse 2)              Tab    cockpit / chase camera
 Mouse         pitch and yaw: how fast you move it is how fast you turn (stop the mouse and the turn stops)
 Alt (hold)    frees the mouse: the cursor appears, the ship ignores it and clicks do not fire; Alt + drag moves the window
 Mouse 1       fire                                    Mouse 2     tap: next target, hold: target nearest the nose
@@ -86,14 +87,18 @@ Changed after the first play test: yaw and roll swapped (the right stick used to
 target-ahead moved to a D-pad Up hold because the pad had no stick clicks. Changed after the M2 play test: X is auto-track and
 R3 is the brake; L3 is free look (the debug overlay is F3 only); the keyboard moved to the layout above and the mouse flies.
 Changed in M3: keyboard layout B, every flight key under the left hand (the M2.1 layout had pitch, yaw, strafe and targets on
-the right side, under the hand that holds the mouse). Tune the hold with `set settings.target_hold_s 0.5` and the D-pad yaw ramp with `set settings.yaw_ramp_s 0.4`.
+the right side, under the hand that holds the mouse). Changed after the M3 play test: the right stick flies all three axes (pitch
+up/down, yaw left/right, roll on the diagonals), B selects targets (hold for the previous one), D-pad Up is flight assist and
+D-pad Left/Right are free; free look holds its view until L3 is released. A control profile you saved with the old default pad
+layout is moved onto the new one when it loads (your keys and mouse buttons stay; the console says so; `controls save <name>`
+keeps it). Tune the hold with `set settings.target_hold_s 0.5`.
 
 Nav buoys can be shot: six hits (60 hull) and one blows up with an explosion and shards. A destroyed buoy is gone until you
 respawn (Back / Backspace, or dying), which restores them all. Any ship's bolts hurt them.
 
 Flight notes:
 - Newtonian: letting go of the triggers does not slow you down. Use the retros or hold R3 (keyboard X) to brake.
-- R3 (keyboard X) is an all stop in both assist modes: it kills drift and any spin, and ignores the sticks, D-pad and triggers
+- R3 (keyboard X) is an all stop in both assist modes: it kills drift and any spin, and ignores the sticks and triggers
   while held. With a target selected it also turns the nose onto the target (about 2.6 s from 90° off) and holds it
   there; release it to fly again.
 - Pad X (keyboard Shift) auto-tracks: only the nose is taken over (pitch and yaw; roll stays yours), the thrust and the drift are not.
@@ -126,7 +131,7 @@ damage 50 / heal           hit or restore your hull (god on blocks the damage)
 
 Alternate layouts live in saved profiles you switch from the console (a controls menu comes with M5). Two are
 built in and read-only: `default` (the layout above) and `m1_classic` (the original M1 pad layout: right stick X
-yaws, D-pad Left/Right rolls; everything else is as in `default`).
+yaws, D-pad Left/Right rolls, D-pad Up targets, B toggles assist; keyboard and mouse as in `default`).
 
 ```
 controls list                 the profiles; * marks the one in use
@@ -148,9 +153,8 @@ action), so `user://controls/<name>.cfg` can also be edited by hand; a broken fi
 and a start-up with a broken or missing selected profile falls back to `default` with a warning.
 
 To keep a custom layout across restarts: `controls save mine`, then `save` (the console's, which persists
-`settings.control_profile`). `m1_classic` changes only the bindings: the stick yaws through the same ramp as the
-D-pad (full rate once past the deadzone) and the D-pad rolls at full rate, not proportionally as in the very first
-M1 build.
+`settings.control_profile`). `m1_classic` changes only the bindings: its stick yaws in proportion and rolls on its
+diagonals, as the default's does, and its D-pad rolls at full rate on top.
 
 ## Acceptance checklist (the (H) criteria)
 
@@ -162,9 +166,9 @@ The full wording is in `docs/milestones/m1-first-flight.md`. Tick each one, or n
       in the cockpit the frame hides the hull behind it.
 - [ ] **AC14 Controls.** Equal triggers fly straight. With assist off, RT alone yaws left and LT alone yaws right.
       Bumpers retro per side. With assist on, one trigger turns at about 30 °/s and stops on release. Right stick
-      pitches and rolls; D-pad left/right yaws (taps give fine yaw). Triggers reach full and rest at zero (overlay
+      pitches (up/down), yaws (left/right) and rolls (diagonals). Triggers reach full and rest at zero (overlay
       `PAD … axes`). No stick drift. Holding R3 brings you to an all stop (drift and spin) in both modes, and with a
-      target selected swings the nose onto it. B and Y work.
+      target selected swings the nose onto it. D-pad Up (assist) and Y work.
 - [ ] **AC15 Performance.** 60 fps at 1080p (overlay FPS), no hitch when firing.
 - [ ] **AC16 Glow and guns.** Pod plumes come out of the nozzles along their axes and follow each side's thrust,
       retros and trim; RCS plumes respond to strafe and rotation; bolts and muzzle flash visible from both cameras;
@@ -175,9 +179,14 @@ The full wording is in `docs/milestones/m1-first-flight.md`. Tick each one, or n
       plumes behind the hull are hidden by the hull, not drawn through it; the hull has no black patches or dark
       outline (that would mean the depth proxy sticks out: `HullDepthProxy.inset_m`, default 0.04 m). The hull does
       not judder against the plumes at speed.
-- [ ] **AC17 Targeting.** Tapping D-pad Up cycles buoys; holding it picks the one nearest the nose without also
-      cycling (so does R3, if your pad has it); bracket and readout look right; buoys are splats and spin; NAV DELTA
+- [ ] **AC17 Targeting.** Tapping B cycles buoys; holding it steps back one, once, without also cycling forward;
+      holding keyboard B or Mouse 2 picks the one nearest the nose; bracket and readout look right; buoys are splats and spin; NAV DELTA
       (drifting) shows a non-zero closing speed.
+- [ ] **AC27 Play-test tweaks (M3-T15).** (1) Pad: B taps to the next target and a long press steps back one; D-pad
+      Up toggles assist; D-pad Left/Right do nothing; the right stick pitches straight up/down, yaws straight left/right
+      and rolls on the diagonals, and L3 free look stays where you left it until you let go of L3. (2) Gun and impact
+      sounds sit two octaves lower than before (by ear). (3) Reverse (both bumpers) is as strong as forward, and
+      strafing feels strong (half the forward thrust, sway and heave).
 - [ ] **AC18 Backend.** Overlay shows `SPLATS COMPUTE`. If it says `RASTER` or `NONE`, note your GPU and driver.
 - [ ] **AC22 Console.** ` opens and closes it without typing a character. Typing never moves the ship, and the pad
       still flies while it's open. Esc closes it. History and Tab work. `fps` and `watch ship.speed` work.

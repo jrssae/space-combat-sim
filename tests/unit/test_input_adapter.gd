@@ -53,11 +53,11 @@ func test_strafe_radial_deadzone_and_signs() -> void:
 
 func test_aim_expo_and_pilot_signs() -> void:
 	adapter.stick_deadzone = 0.0
-	source.hold(InputAdapter.ROLL_RIGHT, 0.5)  # right stick right
-	assert_almost_eq(adapter.sample(source, DT).flight.rot.z, pow(0.5, 1.5), 1e-6, "expo 1.5 on roll, stick right = roll right")
+	source.hold(InputAdapter.YAW_RIGHT, 0.5)  # right stick right
+	assert_almost_eq(adapter.sample(source, DT).flight.rot.y, pow(0.5, 1.5), 1e-6, "expo 1.5 on yaw, stick right = yaw right")
 	source.release_all()
-	source.hold(InputAdapter.ROLL_LEFT, 1.0)
-	assert_almost_eq(adapter.sample(source, DT).flight.rot.z, -1.0, 1e-6, "stick left = roll left")
+	source.hold(InputAdapter.YAW_LEFT, 1.0)
+	assert_almost_eq(adapter.sample(source, DT).flight.rot.y, -1.0, 1e-6, "stick left = yaw left")
 	source.release_all()
 	source.hold(InputAdapter.PITCH_UP, 1.0)  # stick back
 	assert_almost_eq(adapter.sample(source, DT).flight.rot.x, 1.0, 1e-6, "stick back = nose up")
@@ -78,63 +78,70 @@ func test_invert_y() -> void:
 	assert_almost_eq(adapter.sample(source, DT).flight.rot.x, -1.0, 1e-6)
 
 
-func test_right_stick_x_is_analog_roll_not_ramped_and_never_yaw() -> void:
-	adapter.stick_deadzone = 0.0
-	source.hold(InputAdapter.ROLL_RIGHT, 1.0)
-	var rot: Vector3 = adapter.sample(source, DT).flight.rot
-	assert_almost_eq(rot.z, 1.0, 1e-6, "full roll on the first tick: a stick, no ramp")
-	assert_eq(rot.y, 0.0, "the right stick no longer yaws")
-	assert_eq(rot.x, 0.0)
+# The stick at `deg` clockwise from straight up, full deflection: (pitch, yaw, roll).
+func _split_at(deg: float, length: float = 1.0) -> Vector3:
+	var r: float = deg_to_rad(deg)
+	return InputAdapter.split_stick(Vector2(sin(r), cos(r)) * length)
 
 
-func test_right_stick_shares_one_radial_deadzone_between_pitch_and_roll() -> void:
+func test_the_stick_splits_into_pitch_yaw_and_roll_by_direction() -> void:
+	assert_almost_eq(_split_at(0.0), Vector3(1.0, 0.0, 0.0), Vector3.ONE * 1e-6, "straight up: pitch up")
+	assert_almost_eq(_split_at(22.0), Vector3(1.0, 0.0, 0.0), Vector3.ONE * 1e-6, "inside the pitch sector")
+	assert_almost_eq(_split_at(23.0), Vector3(0.0, 0.0, 1.0), Vector3.ONE * 1e-6, "up-right diagonal: roll right")
+	assert_almost_eq(_split_at(45.0), Vector3(0.0, 0.0, 1.0), Vector3.ONE * 1e-6)
+	assert_almost_eq(_split_at(67.0), Vector3(0.0, 0.0, 1.0), Vector3.ONE * 1e-6)
+	assert_almost_eq(_split_at(68.0), Vector3(0.0, 1.0, 0.0), Vector3.ONE * 1e-6, "inside the yaw sector")
+	assert_almost_eq(_split_at(90.0), Vector3(0.0, 1.0, 0.0), Vector3.ONE * 1e-6, "straight right: yaw right")
+	assert_almost_eq(_split_at(135.0), Vector3(0.0, 0.0, 1.0), Vector3.ONE * 1e-6, "down-right rolls right too")
+	assert_almost_eq(_split_at(180.0), Vector3(-1.0, 0.0, 0.0), Vector3.ONE * 1e-6, "straight down: pitch down")
+	assert_almost_eq(_split_at(225.0), Vector3(0.0, 0.0, -1.0), Vector3.ONE * 1e-6, "down-left rolls left")
+	assert_almost_eq(_split_at(270.0), Vector3(0.0, -1.0, 0.0), Vector3.ONE * 1e-6, "straight left: yaw left")
+	assert_almost_eq(_split_at(315.0), Vector3(0.0, 0.0, -1.0), Vector3.ONE * 1e-6, "up-left rolls left")
+	assert_almost_eq(_split_at(45.0, 0.5).z, pow(0.5, 1.5), 1e-6, "one axis, at the deflection after expo")
+	assert_eq(InputAdapter.split_stick(Vector2.ZERO), Vector3.ZERO)
+	assert_eq(InputAdapter.STICK_SECTOR_HALF_DEG, 22.5)
+
+
+func test_the_right_stick_drives_one_axis_at_a_time_inside_its_radial_deadzone() -> void:
 	adapter.stick_deadzone = 0.15
-	source.hold(InputAdapter.ROLL_RIGHT, 0.1)
+	source.hold(InputAdapter.YAW_RIGHT, 0.1)
 	source.hold(InputAdapter.PITCH_UP, 0.1)
 	assert_eq(adapter.sample(source, DT).flight.rot, Vector3.ZERO, "|(0.1, 0.1)| = 0.14 is inside the radial deadzone")
-	source.hold(InputAdapter.ROLL_RIGHT, 0.575)
+	source.hold(InputAdapter.YAW_RIGHT, 0.575)
 	source.release(InputAdapter.PITCH_UP)
-	assert_almost_eq(adapter.sample(source, DT).flight.rot.z, pow(0.5, 1.5), 1e-6, "rescaled (to 0.5), then expo")
-	source.hold(InputAdapter.ROLL_LEFT, 1.0)
-	source.release(InputAdapter.ROLL_RIGHT)
+	var rot: Vector3 = adapter.sample(source, DT).flight.rot
+	assert_almost_eq(rot.y, pow(0.5, 1.5), 1e-6, "rescaled (to 0.5), then expo")
+	assert_eq(rot.x, 0.0)
+	assert_eq(rot.z, 0.0)
+	source.hold(InputAdapter.YAW_LEFT, 1.0)
+	source.release(InputAdapter.YAW_RIGHT)
 	source.hold(InputAdapter.PITCH_DOWN, 1.0)
 	var diag: Vector3 = adapter.sample(source, DT).flight.rot
-	var each: float = pow(sqrt(0.5), 1.5)
-	assert_almost_eq(diag.z, -each, 1e-6, "full diagonal: unit length before expo")
-	assert_almost_eq(diag.x, -each, 1e-6)
+	assert_almost_eq(diag.z, -1.0, 1e-6, "a full down-left diagonal rolls left at full rate")
+	assert_eq(diag.x, 0.0, "and neither pitches")
+	assert_eq(diag.y, 0.0, "nor yaws")
 
 
-func test_dpad_yaw_ramp_release_and_reversal() -> void:
-	adapter.yaw_ramp_s = 0.25
-	source.hold(InputAdapter.YAW_RIGHT)
-	var yaw: float = 0.0
-	for i: int in 3:
-		yaw = adapter.sample(source, 0.125 / 3.0).flight.rot.y
-	assert_almost_eq(yaw, 0.5, 1e-6, "half way after half the ramp time")
-	for i: int in 30:
-		yaw = adapter.sample(source, DT).flight.rot.y
-	assert_almost_eq(yaw, 1.0, 1e-9, "saturates at full")
+func test_the_roll_keys_add_to_the_sticks_roll() -> void:
+	adapter.stick_deadzone = 0.0
+	source.hold(InputAdapter.ROLL_LEFT)  # Caps Lock
+	assert_eq(adapter.sample(source, DT).flight.rot, Vector3(0.0, 0.0, -1.0), "full roll from the first tick")
 	source.release_all()
-	assert_eq(adapter.sample(source, DT).flight.rot.y, 0.0, "release snaps to zero")
-	source.hold(InputAdapter.YAW_RIGHT)
-	adapter.sample(source, 0.1)
-	source.release_all()
-	source.hold(InputAdapter.YAW_LEFT)
-	yaw = adapter.sample(source, 0.05).flight.rot.y
-	assert_almost_eq(yaw, -0.2, 1e-6, "reversal restarts from zero")
-	source.hold(InputAdapter.YAW_RIGHT)
-	assert_eq(adapter.sample(source, DT).flight.rot.y, 0.0, "both held cancels")
+	source.hold(InputAdapter.ROLL_RIGHT)  # G
+	source.hold(InputAdapter.YAW_RIGHT, 0.5)
+	source.hold(InputAdapter.PITCH_UP, 0.5)  # up-right diagonal: roll right too
+	assert_eq(adapter.sample(source, DT).flight.rot.z, 1.0, "clamped at full")
+	source.release(InputAdapter.ROLL_RIGHT)
+	source.hold(InputAdapter.ROLL_LEFT)
+	assert_almost_eq(adapter.sample(source, DT).flight.rot.z, pow(sqrt(0.5), 1.5) - 1.0, 1e-6, "the key against the stick")
 
 
-func test_dpad_yaw_never_rolls() -> void:
-	adapter.yaw_ramp_s = 0.05
-	source.hold(InputAdapter.YAW_LEFT)
-	var rot: Vector3 = Vector3.ZERO
-	for i: int in 10:
-		rot = adapter.sample(source, DT).flight.rot
-	assert_almost_eq(rot.y, -1.0, 1e-9, "D-pad left = yaw left, ramped to full")
-	assert_eq(rot.z, 0.0, "the D-pad no longer rolls")
-	assert_eq(rot.x, 0.0)
+func test_invert_y_flips_only_the_sticks_pitch() -> void:
+	adapter.invert_y = true
+	adapter.stick_deadzone = 0.0
+	source.hold(InputAdapter.YAW_RIGHT, 1.0)
+	source.hold(InputAdapter.PITCH_UP, 1.0)  # up-right diagonal
+	assert_almost_eq(adapter.sample(source, DT).flight.rot.z, 1.0, 1e-6, "the diagonal still rolls right")
 
 
 func test_wing_orders_are_one_tick_edges_in_the_ui_command() -> void:
@@ -384,13 +391,14 @@ func test_the_mouse_pulled_back_pitches_up_and_invert_flips_it() -> void:
 func test_camera_look_gives_the_stick_and_mouse_to_the_camera() -> void:
 	adapter.stick_deadzone = 0.0
 	source.hold(InputAdapter.CAMERA_LOOK)
-	source.hold(InputAdapter.ROLL_RIGHT, 1.0)
+	source.hold(InputAdapter.YAW_RIGHT, 1.0)
 	source.hold(InputAdapter.PITCH_UP, 1.0)  # stick pulled back
 	source.push_mouse(Vector2(30.0, -10.0))
 	var cmd: PilotCommand = adapter.sample(source, DT)
 	assert_true(cmd.ui.look_active)
 	assert_eq(cmd.flight.rot.x, 0.0, "no pitch while looking")
 	assert_eq(cmd.flight.rot.z, 0.0, "no roll while looking")
+	assert_eq(cmd.flight.rot.y, 0.0, "no yaw while looking")
 	assert_gt(cmd.ui.look_stick.x, 0.6, "stick right = look right (a full diagonal is 0.707 each)")
 	assert_lt(cmd.ui.look_stick.y, -0.6, "stick pulled back = look down, as on a camera stick")
 	assert_eq(cmd.ui.look_mouse_px, Vector2(30.0, 10.0), "the mouse up is look up")
@@ -420,3 +428,57 @@ func test_the_wheel_cycles_targets() -> void:
 	assert_false(cmd.combat.target_next)
 	cmd = adapter.sample(source, DT)
 	assert_false(cmd.combat.target_prev, "one notch, one step")
+
+
+# --- pad B: tap next, hold previous (M3-T15) --------------------------------------------------------------------------
+
+
+func _press_cycle_for(ticks: int) -> Dictionary:
+	var seen: Dictionary = {"next": 0, "prev": 0, "ahead": 0}
+	for i: int in ticks + 3:
+		if i == 0:
+			source.hold(InputAdapter.TARGET_CYCLE)
+		elif i == ticks:
+			source.release(InputAdapter.TARGET_CYCLE)
+		var combat: CombatCommand = adapter.sample(source, DT).combat
+		seen["next"] += int(combat.target_next)
+		seen["prev"] += int(combat.target_prev)
+		seen["ahead"] += int(combat.target_ahead)
+	return seen
+
+
+func test_pad_b_tapped_selects_the_next_target_on_release() -> void:
+	assert_eq(_press_cycle_for(5), {"next": 1, "prev": 0, "ahead": 0})
+
+
+func test_pad_b_held_selects_the_previous_target_once_and_never_repeats() -> void:
+	assert_eq(_press_cycle_for(int(InputAdapter.TARGET_HOLD_S / DT) + 120), {"next": 0, "prev": 1, "ahead": 0},
+			"a long press steps back one target, as the mouse wheel")
+
+
+func test_the_two_tap_or_hold_buttons_run_on_separate_timers() -> void:
+	source.hold(InputAdapter.TARGET_NEXT, 1.0, true)  # keyboard B
+	for i: int in 15:
+		adapter.sample(source, DT)
+	source.hold(InputAdapter.TARGET_CYCLE)  # pad B, pressed later
+	var ahead: int = 0
+	var prev: int = 0
+	for i: int in 15:
+		var combat: CombatCommand = adapter.sample(source, DT).combat
+		ahead += int(combat.target_ahead)
+		prev += int(combat.target_prev)
+	assert_eq(ahead, 1, "keyboard B reached its hold")
+	assert_eq(prev, 0, "pad B has not yet")
+
+
+func test_reset_and_focus_changes_drop_a_pad_b_press() -> void:
+	source.hold(InputAdapter.TARGET_CYCLE)
+	adapter.sample(source, DT)
+	adapter.reset()
+	source.release(InputAdapter.TARGET_CYCLE)
+	assert_false(adapter.sample(source, DT).combat.target_next, "reset: no tap on the release")
+	source.hold(InputAdapter.TARGET_CYCLE)
+	adapter.sample(source, DT)
+	adapter.resync_edges(source)
+	for i: int in 60:
+		assert_false(adapter.sample(source, DT).combat.target_prev, "resync: the press in progress never fires")

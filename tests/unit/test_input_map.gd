@@ -9,18 +9,16 @@ const PAD_BINDINGS: Dictionary = {
 	&"retro_left": ["button", JOY_BUTTON_LEFT_SHOULDER, 0],
 	&"pitch_down": ["axis", JOY_AXIS_RIGHT_Y, -1],
 	&"pitch_up": ["axis", JOY_AXIS_RIGHT_Y, 1],
-	&"roll_left": ["axis", JOY_AXIS_RIGHT_X, -1],
-	&"roll_right": ["axis", JOY_AXIS_RIGHT_X, 1],
 	&"strafe_left": ["axis", JOY_AXIS_LEFT_X, -1],
 	&"strafe_right": ["axis", JOY_AXIS_LEFT_X, 1],
 	&"strafe_down": ["axis", JOY_AXIS_LEFT_Y, 1],
 	&"strafe_up": ["axis", JOY_AXIS_LEFT_Y, -1],
-	&"yaw_left": ["button", JOY_BUTTON_DPAD_LEFT, 0],
-	&"yaw_right": ["button", JOY_BUTTON_DPAD_RIGHT, 0],
-	&"target_next": ["button", JOY_BUTTON_DPAD_UP, 0],
+	&"yaw_left": ["axis", JOY_AXIS_RIGHT_X, -1],
+	&"yaw_right": ["axis", JOY_AXIS_RIGHT_X, 1],
+	&"target_cycle": ["button", JOY_BUTTON_B, 0],
 	&"weapon_next": ["button", JOY_BUTTON_DPAD_DOWN, 0],
 	&"fire": ["button", JOY_BUTTON_A, 0],
-	&"toggle_flight_assist": ["button", JOY_BUTTON_B, 0],
+	&"toggle_flight_assist": ["button", JOY_BUTTON_DPAD_UP, 0],
 	&"brake": ["button", JOY_BUTTON_RIGHT_STICK, 0],
 	&"autotrack": ["button", JOY_BUTTON_X, 0],
 	&"camera_look": ["button", JOY_BUTTON_LEFT_STICK, 0],
@@ -29,9 +27,11 @@ const PAD_BINDINGS: Dictionary = {
 	&"pause": ["button", JOY_BUTTON_START, 0],
 }
 
+# The pad reaches roll through the right stick's diagonals (the roll actions are the keys), and targets with B
+# (target_cycle) instead of target_next (M3-T15).
 const KEYBOARD_ONLY: Array[StringName] = [
 	&"debug_toggle_fallback_mesh", &"debug_toggle_overlay", &"target_ahead", &"target_prev", &"screenshot",
-	&"wing_attack", &"wing_form", &"wing_engage", &"wing_cover",
+	&"wing_attack", &"wing_form", &"wing_engage", &"wing_cover", &"roll_left", &"roll_right", &"target_next",
 ]
 
 # Keyboard layout B (architecture §6.1, M3-T01): every flight key under the left hand, because the right hand flies the
@@ -214,30 +214,39 @@ func test_trigger_deadzone() -> void:
 	assert_almost_eq(InputMap.action_get_deadzone(&"strafe_left"), 0.15, 1e-6)
 
 
-func test_right_stick_rolls_and_dpad_yaws() -> void:
-	# The maintainer's swap: right stick X is roll (analog, like pitch), D-pad Left/Right is yaw (digital).
-	for action: StringName in [&"roll_left", &"roll_right", &"pitch_down", &"pitch_up"]:
+func test_the_right_stick_pitches_and_yaws_and_the_dpad_sides_are_free() -> void:
+	# M3-T15: the right stick is pitch (Y) and yaw (X), read as one vector (InputAdapter.split_stick rolls on its
+	# diagonals); the roll actions are the keys alone; D-pad Left / Right are unbound.
+	for action: StringName in [&"yaw_left", &"yaw_right", &"pitch_down", &"pitch_up"]:
 		assert_almost_eq(InputMap.action_get_deadzone(action), 0.15, 1e-6, "%s: stick deadzone" % action)
-		assert_false(_has_pad_button(action), "%s: no D-pad button" % action)
-	for action: StringName in [&"yaw_left", &"yaw_right"]:
-		assert_true(_has_pad_button(action), "%s: a D-pad button" % action)
+		assert_false(_has_pad_button(action), "%s: no pad button" % action)
+	for action: StringName in [&"roll_left", &"roll_right"]:
+		assert_false(_has_pad_button(action), "%s: no pad button" % action)
 		for event: InputEvent in InputMap.action_get_events(action):
 			assert_false(event is InputEventJoypadMotion, "%s: no stick axis" % action)
 	assert_true(_has_key(&"roll_left", KEY_CAPSLOCK) and _has_key(&"roll_right", KEY_G), "Caps Lock / G roll (left hand)")
+	assert_eq(_actions_on_button(JOY_BUTTON_DPAD_LEFT), [] as Array[StringName], "D-pad Left is free")
+	assert_eq(_actions_on_button(JOY_BUTTON_DPAD_RIGHT), [] as Array[StringName], "D-pad Right is free")
 
 
-func test_target_ahead_has_r3_and_dpad_up_carries_the_hold() -> void:
-	# Pads without stick clicks reach target_ahead by holding D-pad Up (InputAdapter); R3 still works where it exists.
-	var dpad_up: Array[StringName] = []
+func test_pad_b_cycles_targets_and_dpad_up_toggles_assist() -> void:
+	assert_eq(_actions_on_button(JOY_BUTTON_B), [&"target_cycle"] as Array[StringName], "B: tap next, hold previous")
+	assert_eq(_actions_on_button(JOY_BUTTON_DPAD_UP), [&"toggle_flight_assist"] as Array[StringName])
+	assert_false(InputAdapter.EDGE_ACTIONS.has(&"target_cycle"), "a tap-or-hold button: the tap fires on release")
+	assert_false(InputAdapter.EDGE_ACTIONS.has(&"target_next"), "and so is target_next")
+	assert_true(InputAdapter.EDGE_ACTIONS.has(&"target_ahead"), "an event bound to target_ahead stays a press edge")
+	assert_true(_has_key(&"target_next", KEY_B), "keyboard B: tap next, hold nearest the nose")
+	assert_true(_has_mouse(&"target_next", MOUSE_BUTTON_RIGHT), "and so does Mouse 2")
+	assert_false(_has_pad_button(&"target_next"), "the pad targets with target_cycle")
+
+
+func _actions_on_button(button: JoyButton) -> Array[StringName]:
+	var out: Array[StringName] = []
 	for action: StringName in InputAdapter.ACTIONS:
 		for event: InputEvent in InputMap.action_get_events(action):
-			if event is InputEventJoypadButton and (event as InputEventJoypadButton).button_index == JOY_BUTTON_DPAD_UP:
-				dpad_up.append(action)
-	assert_eq(dpad_up, [&"target_next"] as Array[StringName], "D-pad Up is the tap-or-hold target button alone")
-	assert_false(InputAdapter.EDGE_ACTIONS.has(&"target_next"), "it is not a press edge: tap fires on release")
-	assert_true(InputAdapter.EDGE_ACTIONS.has(&"target_ahead"), "an event bound to target_ahead stays a press edge")
-	assert_true(_has_key(&"target_next", KEY_B), "B carries the same tap-or-hold as D-pad Up")
-	assert_true(_has_mouse(&"target_next", MOUSE_BUTTON_RIGHT), "and so does Mouse 2")
+			if event is InputEventJoypadButton and (event as InputEventJoypadButton).button_index == button:
+				out.append(action)
+	return out
 
 
 func _has_pad_button(action: StringName) -> bool:

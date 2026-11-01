@@ -143,7 +143,7 @@ func compute(cmd: FlightCommand, v_b: Vector3, w_b: Vector3, env_accel_b: Vector
 		out.tracking = tracking
 		out.pod_yaw_cmd = assist.pod_yaw_command() if assist_on else 0.0
 	else:
-		# Raw: stick and D-pad command RCS torque directly; pod torque acts in full and nothing damps rotation.
+		# Raw: the stick commands RCS torque directly; pod torque acts in full and nothing damps rotation.
 		tau_rcs = cmd.rot * AXIS_SIGN * spec.rcs_torque_max
 
 	# 5. Outputs, body frame.

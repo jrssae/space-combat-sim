@@ -35,8 +35,8 @@ M2 decisions (D20-D29) are in §15.1.
 | D3 | **No splat training.** Splats are produced by sampling procedurally authored surfaces (mesh-to-splat) and by writing Gaussians directly for stars/nebula | Deterministic, CPU-only, seconds to run, reproducible in CI and in the GPU-less container. Training (Brush) stays an optional polish step on a GPU machine. |
 | D4 | RigidBody3D + Jolt. Pod nozzle forces are applied **at their hardpoint positions** (`apply_force`); RCS as central force + torque; no custom integrator | Correct rigid-body dynamics (inertia, angular momentum); differential pod thrust yaws the ship through real r × F computed by the engine; free collision later. Verified headless. Custom integrator only if Jolt limits ever block us (§5.6). |
 | D5 | Flight logic in pure `RefCounted` classes, nodes are thin adapters | Unit-testable without a scene tree, display or controller. |
-| D6 | Flight assist in M1. **ON (default)**: rate-command fly-by-wire; the trigger/bumper difference is a smoothed **yaw command** added to the D-pad's, so pod steering works in both modes; pod torque helps the turn and is trimmed when RCS cannot hold the commanded rate; no pod ever exceeds its trigger. **OFF**: raw pods + raw RCS torque (tank-steer). **Brake** (hold) is an all stop (velocity and rotation) in both, and turns the nose onto the selected target | User decision: pod steering is the Starfury identity in both modes; assist makes it bounded and stop-on-release; one closed-form rule (§5.5). |
-| D7 | User-chosen pad layout (§6.1): triggers = left/right main pods, bumpers = left/right retros, left stick = strafe, right stick = pitch / roll, D-pad = yaw + target/weapon cycling (Up: tap next, hold ahead). `InputMap` actions only, SDL3 standard layout, keyboard as extra events | Every DOF and combat function reachable without modifiers or stick clicks (generic pads may lack them); per-side pod control is the Starfury identity; rebindable, testable, works on a generic pad. |
+| D6 | Flight assist in M1. **ON (default)**: rate-command fly-by-wire; the trigger/bumper difference is a smoothed **yaw command** added to the right stick's (the D-pad's before M3-T15), so pod steering works in both modes; pod torque helps the turn and is trimmed when RCS cannot hold the commanded rate; no pod ever exceeds its trigger. **OFF**: raw pods + raw RCS torque (tank-steer). **Brake** (hold) is an all stop (velocity and rotation) in both, and turns the nose onto the selected target | User decision: pod steering is the Starfury identity in both modes; assist makes it bounded and stop-on-release; one closed-form rule (§5.5). |
+| D7 | User-chosen pad layout (§6.1): triggers = left/right main pods, bumpers = left/right retros, left stick = strafe, right stick = pitch / yaw by direction, roll on its diagonals; B = target cycling (tap next, hold previous); D-pad Up = flight assist, Down = weapon; D-pad Left / Right free (M3-T15). `InputMap` actions only, SDL3 standard layout, keyboard as extra events | Every DOF and combat function reachable without modifiers or stick clicks (generic pads may lack them); per-side pod control is the Starfury identity; rebindable, testable, works on a generic pad. |
 | D8 | Hybrid rendering: splats for hulls, buoys and sky; meshes for cockpit interior, projectiles, flashes, thruster plumes, beacons, the hull depth proxy; primitives for collision | Splats are static radiance; anything animated per frame, emissive-dynamic, or needing depth writes is a mesh. Each exception is justified in §7. |
 | D9 | Generated assets are **not committed**; generators are. No Git LFS | Everything binary is reproducible from `tools/procgen` in seconds; LFS adds quotas and fork friction. |
 | D10 | GUT over gdUnit4 | Simpler headless CLI (`-gexit`, exit code 1 on failure), no xvfb caveats, GDScript-first, tracks Godot 4.7. |
@@ -206,8 +206,8 @@ Owned by Jolt via `RigidBody3D`: position (m), orientation (`Basis`), linear vel
 | `inertia` (body, diagonal) | (6.0e5, 6.0e5, 5.0e5) kg·m² | x pitch, y yaw, z roll; four heavy pods at 4.5 m radius dominate |
 | `center_of_mass` | hardpoints `center_of_mass` | `center_of_mass_mode = CUSTOM` |
 | `pod_main_thrust` | 0.36 MN per pod | 4 pods = 1.44 MN = 30 m/s² (~3 g) with both triggers |
-| `pod_retro_thrust` | 0.18 MN per pod | 4 pods = 0.72 MN = 15 m/s² with both bumpers |
-| `rcs_force_max` | (0.48 MN, 0.48 MN, 0) | sway / heave, 10 m/s²; no axial RCS: fore/aft is the pods' job |
+| `pod_retro_thrust` | 0.36 MN per pod | 4 pods = 1.44 MN = 30 m/s² with both bumpers: reverse = forward (M3-T15, Q20; was 0.18) |
+| `rcs_force_max` | (0.72 MN, 0.72 MN, 0) | sway / heave, 15 m/s², half the forward thrust (M3-T15, Q20; was 0.48); no axial RCS: fore/aft is the pods' job |
 | `rcs_torque_max` | (9.4e5, 9.4e5, 1.57e6) N·m | = inertia × (1.57, 1.57, 3.14) rad/s² |
 | `rate_max` | (60, 60, 90) deg/s | assist target at full deflection |
 | `assist_gain_k` | 6.0 s⁻¹ | rate controller P gain |
@@ -332,12 +332,11 @@ What the player must experience:
 | LT alone | accelerate and yaw nose **right** | mirror of RT alone |
 | RB + LB | straight deceleration (retros) | same |
 | RB alone | decelerate and yaw nose **right** | decelerate and turn nose **right** at ≈ 30 °/s |
-| D-pad right + LT | (raw torque + pod yaw) | D-pad and pod yaw add, capped at `rate_max`; left-pod torque speeds the turn-in |
-| Right stick back / right | nose up / roll right (torque) | nose up / roll right (rate); stops when centred |
-| D-pad right | yaw right (torque, ramped) | yaw right (rate, ramped) |
+| Right stick right + LT | (raw torque + pod yaw) | stick yaw and pod yaw add, capped at `rate_max`; left-pod torque speeds the turn-in |
+| Right stick back / right / up-right diagonal | nose up / yaw right / roll right (torque) | nose up / yaw right / roll right (rate); stops when centred |
 | Left stick right / up | translate right / up; nose does not turn | same |
 | Release everything (or even out the triggers) | velocity unchanged; spin unchanged | velocity unchanged; rotation stops |
-| X held | all stop: velocity → 0 with symmetric pods + RCS, rotation → 0; sticks, D-pad, triggers ignored | same |
+| X held | all stop: velocity → 0 with symmetric pods + RCS, rotation → 0; sticks, triggers ignored | same |
 | X held, target selected | velocity → 0 while the nose swings onto the target and holds there (no roll) | same |
 
 ### 5.3 Integration
@@ -361,22 +360,22 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
 ### 5.5 Flight assist semantics
 
 - **Assist ON** (toggle B, persisted in `Settings`, default on): the flight computer owns attitude and commands
-  angular *rates*. Pitch and roll come from the right stick, and yaw from the D-pad (ramped) **plus the pod-yaw
+  angular *rates*. Pitch, yaw and roll come from the right stick (one axis by direction, §6.1) **plus the pod-yaw
   command**: the left/right difference of the triggers (and of the bumpers), with a 10 % deadzone, smoothed over
-  0.15 s, scaled by `pod_yaw_gain` (one full trigger = 30 °/s) and capped together with the D-pad at `rate_max`.
-  Stick and D-pad centred and sides even means "stop rotating". The flight computer knows the pods' torque
+  0.15 s, scaled by `pod_yaw_gain` (one full trigger = 30 °/s) and capped together with the stick's yaw at `rate_max`.
+  Stick centred and sides even means "stop rotating". The flight computer knows the pods' torque
   exactly (from hardpoints) and treats it as feed-forward: it lets pod torque drive the turn-in, cancels the
   excess with RCS once the commanded rate is reached, and trims (only ever reduces) the side causing it when RCS
   authority is not enough. The pilot's trigger and bumper levels are a ceiling, never exceeded. Translation is
   untouched except by that trim and by the brake.
 - **Assist OFF**: raw Newtonian. Pods fire exactly as demanded and their r × F torque acts in full, so uneven
-  triggers tank-steer the ship. Stick and D-pad command raw RCS torque. Nothing damps rotation. This is the
+  triggers tank-steer the ship. The stick commands raw RCS torque. Nothing damps rotation. This is the
   flip-and-burn mode.
 - **Brake** (hold X), both modes: **all stop**. The flight computer takes over translation and rotation.
   Translation: pods fire symmetrically (no torque) plus RCS sway/heave, nulling velocity relative to the `World`
   frame (later: relative to a chosen reference such as the station). Rotation: the rate target is zero and the P
   rate controller (gain `assist_gain_k`, RCS only, pods symmetric so nothing to trim) nulls any spin, with assist
-  off too. Triggers, bumpers, both sticks and the D-pad are ignored while held. Measured in Jolt (both modes): a
+  off too. Triggers, bumpers and both sticks are ignored while held. Measured in Jolt (both modes): a
   60 °/s tumble plus 50 m/s of drift is below 0.5 °/s after 0.87 s and below 0.5 m/s after 4.3 s (RCS sway/heave
   at 10 m/s² is the slow part); AC5f.
 - **Brake with a target selected**: rotation tracks `face_rate(face_dir_b)` (§5.2) instead of zero, so the nose
@@ -400,8 +399,8 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
   identity in both modes; assist off is the raw tank-steer, assist on is the same gesture made controllable: a
   bounded, predictable turn rate instead of ≈ 220 °/s² of runaway, which stops when the sides are evened out.
   (2) The deadzone exists because generic-pad triggers rarely read exactly equal at full squeeze; the smoothing
-  removes jerk from noisy analog triggers. (3) Gain 0.5 keeps one trigger below the D-pad yaw's authority while
-  trigger plus D-pad still reach full rate. (4) The "never above the trigger" rule still holds: the commanded yaw
+  removes jerk from noisy analog triggers. (3) Gain 0.5 keeps one trigger below the stick yaw's authority while
+  trigger plus stick still reach full rate. (4) The "never above the trigger" rule still holds: the commanded yaw
   points the same way as the pods' own torque, so the flight computer only ever needs to cancel or trim, never to
   add thrust; the pilot's throttle stays a ceiling. (5) One closed-form rule plus one first-order filter:
   deterministic, unit-testable, and identical for AI pilots, which write the same `FlightCommand`. All three
@@ -430,13 +429,13 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
 ```
 RT  right main pods (analog)      LT  left main pods (analog)
 RB  right retros (hold)           LB  left retros (hold)
-R-stick  pitch / roll (aim)       L-stick  strafe L/R + up/down
-D-pad L/R  yaw (ramped)           D-pad Down  next weapon
-D-pad Up  tap: next target        hold (0.35 s): target nearest the nose
-A  fire       B  flight assist    X  auto-track (hold): the nose follows the lead point of the selected target
+R-stick  up/down pitch, left/right yaw, diagonals roll       L-stick  strafe L/R + up/down
+D-pad Up  flight assist           D-pad Down  next weapon           D-pad L/R  free
+A  fire       B  tap: next target, hold (0.35 s): previous target
+X  auto-track (toggle): the nose follows the lead point of the selected target
 Y  camera 1st/3rd
 R3  brake (hold): all stop; faces the target if one is selected
-L3  free look (hold): the right stick turns the camera, not the ship; release returns it to the nose
+L3  free look (hold): the right stick turns the camera, not the ship; the view stays where it is left until L3 is released
 Back  reset                       Start  pause
 ```
 
@@ -444,8 +443,9 @@ Revised after the M2 play test: X toggles the auto-track (`FlightCommand.autotra
 that swings the nose onto `track_dir_b`, the lead point of the selected target, plus `track_rate_b`, the rate at which that
 direction is turning, fed forward so a crossing target is followed without the standing lag of a position-only controller; thrust
 and drift are untouched; with no target it takes the nearest hostile, and `Main` switches it off when none is left), R3 is the
-brake, L3 is free look (`CameraLook`: cockpit head turn up to 135° / 80°, chase orbit around the ship; the right stick is an
-absolute direction, the mouse turns the view by its travel; released, the view eases back to centre). The debug overlay is F3
+brake, L3 is free look (`CameraLook`: cockpit head turn up to 135° / 80°, chase orbit around the ship; the right stick turns the
+view at up to 180°/s and a centred stick holds it (M3-T15; it was an absolute direction), the mouse turns it by its travel; only
+releasing the button eases the view back to centre). The debug overlay is F3
 only. The mouse flies (its speed, smoothed over a few ticks, is the pitch and yaw rate command; `settings.mouse_full_rate_px_s`),
 mouse 1 fires, mouse 2 is the tap-or-hold target button, the wheel steps through the targets, the middle button is free look.
 The mouse is captured while flying and freed by holding Alt, the console, the pause or a lost window focus
@@ -455,7 +455,7 @@ Keyboard layout B (M3-T01, maintainer answer Q9). The M2.1 keyboard put pitch, y
 the hand that holds the mouse. Layout B puts every flight key under the left hand and none right of the G / B column; physical
 keys, US positions. Pods are by position: Q / E drive the left / right main pod and W both, A / D the left / right retro and S
 both. R / F strafe up / down, Z / C strafe left / right, Caps Lock / G roll left / right, X brake (hold), Shift auto-track
-(toggle), Space fire, V fire mode, T flight assist, B the tap-or-hold target button (as D-pad Up and mouse 2), Tab camera. The
+(toggle), Space fire, V fire mode, T flight assist, B the tap-or-hold target button (as mouse 2: tap next, hold nearest the nose), Tab camera. The
 housekeeping keys stay where they were (Esc, Backspace, N and Print, F3, F4). There are no keys for pitch, yaw, `target_prev`
 or `target_ahead`: the mouse flies, the wheel steps targets both ways, and a hold of B or mouse 2 is target-ahead. Mouse 4 / 5
 (the side buttons, `mouse:8` / `mouse:9`) are auto-track and fire mode. Ctrl, Alt (frees the mouse), the number row (keys 1-4
@@ -465,7 +465,12 @@ Saved user profiles in `user://controls/` keep the keys they were saved with; `c
 
 Revised after the M1 play test on the maintainer's generic pad: yaw and roll swapped places (right stick X was
 yaw, the D-pad was roll), and because that pad has no stick clicks, `target_ahead` moved onto a D-pad Up hold
-(R3 still works where it exists). Saved, selectable control profiles are on the roadmap.
+(R3 still works where it exists). Revised again after the M3 play test (M3-T15, Q15): the right stick flies all three
+axes by direction (pitch on up/down, yaw on left/right, roll on the diagonals), B cycles targets (tap next, hold
+previous, as the mouse wheel), D-pad Up toggles assist and D-pad Left / Right are left free; the pad has no
+`target_ahead` (keyboard B, a Mouse 2 hold or the console give it). A saved profile with the old default pad layout
+is moved onto the new one when it loads (its keys and mouse kept; `ControlProfile.PAD_LAYOUT_BEFORE_T15`); one with
+its own pad bindings is left alone, with a warning.
 
 All via `InputMap` actions in `project.godot`; `device = -1` (any pad). Names are the Xbox-style names Godot/SDL3
 use for the standard layout; any pad SDL3 recognises, generic XInput clones included, presents it.
@@ -476,17 +481,18 @@ use for the standard layout; any pad SDL3 recognises, generic XInput clones incl
 | `main_left` | LT `JOY_AXIS_TRIGGER_LEFT` (axis 4, +) | Q, W | analog 0..1 via `get_trigger` | 0.05 | linear |
 | `retro_right` | RB `JOY_BUTTON_RIGHT_SHOULDER` (10) | D, S | hold | - | - |
 | `retro_left` | LB `JOY_BUTTON_LEFT_SHOULDER` (9) | A, S | hold | - | - |
-| `pitch_down` / `pitch_up` | Right stick Y `JOY_AXIS_RIGHT_Y` (axis 3, -/+): stick back = nose up; `Settings.invert_y` flips | none (the mouse's Y) | analog pair | radial 0.15 | expo 1.5 |
-| `roll_left` / `roll_right` | Right stick X `JOY_AXIS_RIGHT_X` (axis 2, -/+): stick right = roll right | Caps Lock / G | analog pair | radial 0.15 (one deadzone with pitch) | expo 1.5 |
+| `pitch_down` / `pitch_up` | Right stick Y `JOY_AXIS_RIGHT_Y` (axis 3, -/+): stick back = nose up; `Settings.invert_y` flips | none (the mouse's Y) | analog pair, split by direction (below) | radial 0.15 | expo 1.5 |
+| `yaw_left` / `yaw_right` | Right stick X `JOY_AXIS_RIGHT_X` (axis 2, -/+): stick right = yaw right; the diagonals roll | none (the mouse's X) | analog pair with pitch, split by direction | radial 0.15 (one deadzone with pitch) | expo 1.5 |
+| `roll_left` / `roll_right` | none (the right stick's diagonals) | Caps Lock / G | hold, full roll, added to the stick's | - | - |
 | `strafe_left` / `strafe_right` | Left stick X `JOY_AXIS_LEFT_X` (axis 0, -/+) | Z / C | analog pair | radial 0.15 | linear |
 | `strafe_down` / `strafe_up` | Left stick Y `JOY_AXIS_LEFT_Y` (axis 1, +/-) | F / R | analog pair | radial 0.15 | linear |
-| `yaw_left` / `yaw_right` | D-pad `JOY_BUTTON_DPAD_LEFT` / `DPAD_RIGHT` (13 / 14) | none (the mouse's X) | hold, ramped | - | 0→1 in 0.25 s |
-| `target_next` | D-pad `JOY_BUTTON_DPAD_UP` (11) | B, mouse 2 | tap or hold: a tap gives `target_next` on release; a hold of 0.35 s gives `target_ahead` once | - | - |
+| `target_cycle` | B `JOY_BUTTON_B` (1) | none | tap or hold: a tap gives `target_next` on release; a hold of 0.35 s gives `target_prev` once | - | - |
+| `target_next` | none (pad B, `target_cycle`) | B, mouse 2 | tap or hold: a tap gives `target_next` on release; a hold of 0.35 s gives `target_ahead` once | - | - |
 | `target_prev` | none (the wheel steps both ways) | none | edge | - | - |
 | `weapon_next` | D-pad `JOY_BUTTON_DPAD_DOWN` (12) | V, mouse 5 | edge | - | - |
-| `target_ahead` | none (the D-pad Up hold) | none (the B / mouse 2 hold) | edge | - | - |
+| `target_ahead` | none | none (the B / mouse 2 hold) | edge | - | - |
 | `fire` | A `JOY_BUTTON_A` (0) | Space, mouse 1 | hold | - | - |
-| `toggle_flight_assist` | B `JOY_BUTTON_B` (1) | T | edge | - | - |
+| `toggle_flight_assist` | D-pad `JOY_BUTTON_DPAD_UP` (11) | T | edge | - | - |
 | `brake` | R3 `JOY_BUTTON_RIGHT_STICK` (8) | X | hold | - | - |
 | `autotrack` | X `JOY_BUTTON_X` (2) | Shift, mouse 4 | edge (toggles auto-track; `InputAdapter.autotrack_on`) | - | - |
 | `camera_look` | L3 `JOY_BUTTON_LEFT_STICK` (7) | mouse 3 (middle) | hold | - | - |
@@ -510,23 +516,24 @@ Notes:
   (`Input.get_joy_axis`, `is_joy_button_pressed`, `is_physical_key_pressed`, `is_mouse_button_pressed`), never via
   `Input.is_action_pressed`. That is what lets it mask keyboard and mouse per device class while the console is
   open: `Input` action state would still report keys typed into the prompt.
-- Tap or hold on D-pad Up (in `InputAdapter`, so it works for B and Mouse 2 too): a press released before
-  `Settings.target_hold_s` (default 0.35 s, counted in physics ticks) gives `target_next` on the release tick; a
-  press still held when it crosses the threshold gives `target_ahead` once, on that tick, and its release gives
-  nothing, so a hold never also cycles. A tap therefore acts on release, which costs nothing when cycling targets.
-  A console open/close (`resync_edges`) or `reset()` drops a press in progress. Many generic pads have no stick
-  clicks (the maintainer's has neither R3 nor L3), so nothing needed to fly sits on them: R3 keeps `target_ahead`
-  where it exists, and L3's overlay toggle is also F3.
+- Tap or hold (in `InputAdapter`): two buttons, on separate timers. Pad B (`target_cycle`) and keyboard B / Mouse 2
+  (`target_next`): a press released before `Settings.target_hold_s` (default 0.35 s, counted in physics ticks) gives
+  `target_next` on the release tick; a press still held when it crosses the threshold gives its hold action once, on
+  that tick (`target_prev` for pad B, `target_ahead` for keyboard B and Mouse 2), and its release gives nothing, so a
+  hold never also cycles and never repeats. A tap therefore acts on release, which costs nothing when cycling targets.
+  A console open/close (`resync_edges`) or `reset()` drops a press in progress on either. Many generic pads have no
+  stick clicks (the maintainer's has neither R3 nor L3), so nothing needed to fly sits on them: R3 is the brake (also
+  X on the keyboard) and the overlay toggle is F3.
 - `target_ahead` samples the boresight when it fires, so the small stick jolt of an R3 click does not matter.
-- Yaw ramp: while a yaw action is held, `rot.y` moves toward ±1 at `1 / Settings.yaw_ramp_s` per second
-  (default 0.25 s to full); release snaps to 0; reversing direction restarts from 0. Taps give fine corrections
-  from a digital D-pad. Analog yaw stays available through pod steering (the triggers, §5.5). The setting was
-  `roll_ramp_s` before the swap; `Settings` reads that key from an old file (`SettingsSchema.RENAMED`) and the next
-  `save` writes the new name.
+- The right stick by direction (`InputAdapter.split_stick`, M3-T15): within `STICK_SECTOR_HALF_DEG` (22.5°) of straight
+  up or down it pitches, within it of straight left or right it yaws, and on the four diagonals between it rolls toward
+  the side the stick leans (up-right and down-right roll right). One axis at a time, at the stick's deflection after
+  deadzone and expo. The D-pad yaw ramp (`yaw_ramp_s`) went with it; `Settings` reads only schema keys, so an old
+  file's line is ignored and dropped on the next `save`.
 - Sticks: `Input.get_vector(neg_x, pos_x, neg_y, pos_y, Settings.stick_deadzone)` (radial deadzone with
-  rescaling), then `sign(x)·|x|^1.5` on pitch and roll in `InputAdapter`. The right stick is one vector (x roll,
-  y pitch), so pitch and roll share the radial deadzone. The keyboard's Caps Lock/G give full roll at once (no
-  ramp, like any stick key); yaw and pitch have no keys (the mouse flies them, §16 D38).
+  rescaling), then `sign(r)·|r|^1.5` on the right stick's length in `InputAdapter`. The right stick is one vector (x yaw,
+  y pitch, split as above), so its three axes share the radial deadzone. The keyboard's Caps Lock/G give full roll at
+  once (no ramp), added to the stick's roll and clamped; yaw and pitch have no keys (the mouse flies them, §16 D38).
 
 Generic-pad quirks, handled in the input layer (never in gameplay code):
 
@@ -574,8 +581,8 @@ var face_dir_b: Vector3 # body frame (+X right, +Y up, -Z forward), any length, 
 class_name CombatCommand extends RefCounted   # weapons + targeting; written by the player or an AI
 var fire: bool          # held
 var weapon_next: bool   # edge
-var target_next: bool   # edge (D-pad Up tap, on release)
-var target_ahead: bool  # edge (R3 press, or D-pad Up held for target_hold_s)
+var target_next: bool   # edge (a pad B, keyboard B or Mouse 2 tap, on release)
+var target_ahead: bool  # edge (keyboard B or Mouse 2 held for target_hold_s)
 
 class_name UiCommand extends RefCounted       # player-only
 var toggle_camera: bool # edges, all of them
@@ -724,7 +731,6 @@ unsaved, emits `changed(key, value)`), `reset(key)`, `save()`, `revert()`. Nothi
 | `invert_y` | bool | false | |
 | `stick_deadzone` | float | 0.15 | 0.0-0.30 |
 | `trigger_deadzone` | float | 0.05 | 0.0-0.20 |
-| `yaw_ramp_s` (was `roll_ramp_s`) | float | 0.25 | 0.05-1.0 |
 | `target_hold_s` | float | 0.35 | 0.15-1.0 |
 | `assist_default` | bool | true | |
 | `fuel_unlimited` | bool | true | M2-T14: reaction mass is never drawn down and the fuel gauge stays full; off = finite tank |
@@ -1277,7 +1283,7 @@ src/hud/hud_layout.gd, hud_frame.gd   RefCounted, pure: projection and every HUD
 src/input/control_profile.gd      RefCounted, pure: bindings <-> InputMap <-> config text, validation
 src/input/control_profile_store.gd RefCounted: built-in and user profiles; list, load, save, delete
 src/autoload/control_profiles.gd  Node (autoload): applies the selected profile at start-up; console `controls`, `bind`, `unbind`
-data/controls/m1_classic.cfg      built-in profile: the original M1 stick-yaw / D-pad-roll layout
+data/controls/m1_classic.cfg      built-in profile: the original M1 pad layout (stick yaw, D-pad roll, D-pad Up targets, B assist)
 src/audio/audio_director.gd       Node: pooled 3D players, engine hum, volume (T12)
 assets/ships/raider_delta_v.tres, assets/weapons/{pulse_cannon_ef,raider_plasma}.tres
 data/scenarios/combat_sandbox.json
@@ -1470,7 +1476,8 @@ each builds the edited copy, validates it and applies it all at once, so an acti
 binding by binding another first. Applying replaces every game action's events and deadzone in the InputMap, then
 `DebugConsole.resync_input_edges()` re-seeds the adapter so a button that now means something else cannot fire an
 edge. Per-action shaping beyond the deadzone (ramps, expo, tap-or-hold) stays in `InputAdapter`/`Settings`, so a
-profile moves bindings, not feel: `m1_classic` makes the stick yaw through the D-pad's ramp.
+profile moves bindings, not feel: under `m1_classic` the stick yaws in proportion and rolls on its diagonals (M3-T15), and
+its D-pad rolls at full rate on top.
 
 Saved profiles and new actions (M3-T07): a user profile that does not mention an action at all (neither in `[bindings]`
 nor in `[deadzones]`: the action was added to the game after the profile was saved, like the wing orders on keys 1-4)

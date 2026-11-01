@@ -181,9 +181,8 @@ func test_with_assist_off_turning_with_the_sticks_does_not_change_the_velocity_e
 	main.ship.set_assist(false)
 	main.ship.linear_velocity = Vector3(0.0, 0.0, -400.0)
 	var before: Vector3 = main.ship.linear_velocity
-	source.hold(InputAdapter.ROLL_RIGHT, 1.0)
-	source.hold(InputAdapter.PITCH_UP, 0.8)
-	source.hold(InputAdapter.YAW_LEFT)
+	source.hold(InputAdapter.ROLL_RIGHT, 1.0)  # G
+	source.hold(InputAdapter.PITCH_UP, 0.8)  # the stick straight back: pitch (its diagonals roll, M3-T15)
 	await _ticks(180)
 	assert_gt(main.ship.angular_velocity.length(), 0.1, "it is spinning")
 	assert_lt(main.ship.linear_velocity.distance_to(before), 0.01, "but not going anywhere new")
@@ -193,9 +192,8 @@ func test_with_assist_on_turning_with_the_sticks_does_not_change_the_velocity() 
 	assert_true(main.ship.assist_on, "assist is on by default")
 	main.ship.linear_velocity = Vector3(10.0, -4.0, -400.0)
 	var before: Vector3 = main.ship.linear_velocity
-	source.hold(InputAdapter.ROLL_RIGHT, 1.0)
-	source.hold(InputAdapter.PITCH_UP, 0.8)
-	source.hold(InputAdapter.YAW_LEFT)
+	source.hold(InputAdapter.ROLL_RIGHT, 1.0)  # G
+	source.hold(InputAdapter.PITCH_UP, 0.8)  # the stick straight back: pitch (its diagonals roll, M3-T15)
 	var worst: float = 0.0
 	var peak_rate: float = 0.0
 	for i: int in 240:
