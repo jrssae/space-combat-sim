@@ -30,6 +30,8 @@ var splats: GaussianSplatNode = null
 var mesh_instance: MeshInstance3D = null
 
 var _age_s: float = 0.0
+var _vent: FxPool = null
+var _vent_handle: int = 0
 var _orientation: Basis = Basis.IDENTITY  # orthonormal, kept apart from the scale so spinning cannot drift the size
 var _active: bool = false
 var _fallback: bool = false
@@ -105,6 +107,10 @@ func _ready() -> void:
 	_apply_visibility()
 
 
+func _exit_tree() -> void:
+	_stop_vent()
+
+
 func _physics_process(delta: float) -> void:
 	advance(delta)
 
@@ -135,6 +141,22 @@ func launch(xform: Transform3D, p_velocity: Vector3, p_angular_velocity: Vector3
 	reset_physics_interpolation()
 
 
+## Sparks and venting from `pool` for `duration_s`, following the chunk (same velocity, same start). Ends with the chunk.
+func vent(pool: FxPool, duration_s: float) -> void:
+	_stop_vent()
+	_vent = pool
+	_vent_handle = pool.burst(FxSpecs.DEBRIS, global_position, Vector3.UP, velocity, duration_s)
+
+
+## True while an emitter is venting for this chunk, and its handle in the pool (tests).
+func has_vent() -> bool:
+	return _vent != null and _vent.is_live(_vent_handle)
+
+
+func vent_handle() -> int:
+	return _vent_handle
+
+
 ## Moves the chunk `delta` seconds: drift, spin, and the shrink-out at the end of its life. Public for tests.
 func advance(delta: float) -> void:
 	if not _active:
@@ -159,16 +181,26 @@ func age_s() -> float:
 
 func park() -> void:
 	_active = false
+	_stop_vent()
 	_park_state()
 
 
 func _finish() -> void:
 	_active = false
+	_stop_vent()
 	parked.emit(self)
 	if one_shot:
 		queue_free()
 	else:
 		_park_state()
+
+
+# A chunk that is gone leaves no emitter venting where it was.
+func _stop_vent() -> void:
+	if _vent != null and is_instance_valid(_vent):
+		_vent.stop(_vent_handle)
+	_vent = null
+	_vent_handle = 0
 
 
 func _park_state() -> void:

@@ -20,6 +20,9 @@ const MAX_SPIN_DEG_S: float = 90.0
 const SHARD_COUNT: int = 12
 const ASSET_ROOT: String = ShipSpec.ASSET_ROOT
 
+## Where chunks get their sparks and venting (`Main` sets it); none without it.
+var fx: FxPool = null
+
 # asset id -> Array of sets; a set is an Array[DebrisChunk] in `chunks[]` order.
 var _sets: Dictionary = {}
 # asset id -> the chunk entries (Hardpoints.chunks) the sets were built from.
@@ -169,3 +172,6 @@ func _fly(chunk: DebrisChunk, body_offset: Vector3, xform: Transform3D, velocity
 	axis = axis.normalized() if axis.length_squared() > 1e-9 else Vector3.UP
 	var w: Vector3 = axis * deg_to_rad(rng.randf_range(0.0, MAX_SPIN_DEG_S))
 	chunk.launch(Transform3D(xform.basis, xform.origin + r_world), v, w)
+	var vent_s: float = FxSpecs.debris_duration_s(rng.randf())  # drawn with or without a pool, so the break-up is the same
+	if fx != null:
+		chunk.vent(fx, vent_s)

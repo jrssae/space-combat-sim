@@ -68,6 +68,7 @@ var _scenario_brains: Array[PilotBrain] = []
 @onready var ships: ShipPool = $World/Ships
 @onready var effects: Node3D = $World/Effects
 @onready var debris: DebrisPool = $World/Debris
+@onready var fx: FxPool = $World/Fx
 @onready var audio: AudioDirector = $World/Audio
 @onready var rams: RamResolver = $Combat/RamResolver
 @onready var director: DestructionDirector = $Combat/DestructionDirector
@@ -116,6 +117,11 @@ func _ready() -> void:
 	debris.prepare(ShipCatalog.PLAYER_TYPE)
 	hud.input_provider = _build_hud_input
 	director.setup(world, ships, debris, effects, combatant)
+	# Hits, rams, explosions and debris throw their sparks from one fixed pool (M3-T23).
+	($Combat/HitResolver as HitResolver).fx = fx
+	rams.fx = fx
+	director.fx = fx
+	debris.fx = fx
 	director.player_destroyed.connect(_on_player_destroyed)
 	director.respawn_due.connect(respawn)
 	_wire_audio()

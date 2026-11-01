@@ -1,0 +1,13 @@
+[gd_resource type="BoxMesh" format=3]
+
+[sub_resource type="StandardMaterial3D" id="Material_streak"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(3, 2, 1, 1)
+disable_receive_shadows = true
+
+[resource]
+material = SubResource("Material_streak")
+size = Vector3(0.03, 0.9, 0.03)

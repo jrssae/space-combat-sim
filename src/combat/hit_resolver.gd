@@ -38,6 +38,8 @@ var last_hit: String = "none"
 var resolve_us: int = 0
 ## `settings.friendly_fire` as of the last tick.
 var friendly_fire: bool = false
+## Throws the sparks of a hull hit (`Main` sets it); none without it.
+var fx: FxPool = null
 
 
 func _init() -> void:
@@ -175,7 +177,14 @@ func _land(bolt: Projectile, best: Dictionary, delta: float) -> void:
 		flash.position = local_point
 		body.add_child(flash)
 		flash.reset_physics_interpolation()
+	if fx != null:
+		_throw_sparks(info, (target["t0"] as Vector3) + move * t, move / maxf(delta, 1e-6))
 	hit_resolved.emit(info)
+
+
+# Sparks fly off the hull back along the bolt, mirrored about the surface (taken as radial from the hull's centre).
+func _throw_sparks(info: HitInfo, hull_centre: Vector3, hull_velocity: Vector3) -> void:
+	fx.burst(FxSpecs.HIT, info.point, FxSpecs.hit_direction(-info.normal, info.point - hull_centre), hull_velocity)
 
 
 func _apply(damageable: Damageable, info: HitInfo) -> void:

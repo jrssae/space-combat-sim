@@ -35,6 +35,8 @@ const KILL_CHOICES: Array[StringName] = [&"target", &"all", &"allies", &"player"
 var world: WorldFrame = null
 var pool: ShipPool = null
 var debris: DebrisPool = null
+## Where explosions get their sparks (`Main` sets it).
+var fx: FxPool = null
 ## Where explosions are added (`World/Effects`).
 var effects: Node3D = null
 var player: Combatant = null
@@ -128,6 +130,7 @@ func _on_buoy_destroyed(info: HitInfo, buoy: NavBuoy) -> void:
 func _spawn_buoy_effects(xform: Transform3D, radius: float, velocity: Vector3, spin: Vector3, buoy_id: int) -> void:
 	if effects != null and is_instance_valid(effects):
 		var explosion: Explosion = Explosion.create(radius, velocity)
+		explosion.fx = fx
 		explosion.position = xform.origin
 		effects.add_child(explosion)
 		explosion.reset_physics_interpolation()
@@ -138,6 +141,7 @@ func _spawn_buoy_effects(xform: Transform3D, radius: float, velocity: Vector3, s
 func _spawn_effects(ship: Ship, xform: Transform3D, velocity: Vector3, spin: Vector3, radius: float, hardpoints: Hardpoints) -> void:
 	if effects != null and is_instance_valid(effects):
 		var explosion: Explosion = Explosion.create(radius, velocity)
+		explosion.fx = fx
 		explosion.position = xform.origin
 		effects.add_child(explosion)
 		explosion.reset_physics_interpolation()

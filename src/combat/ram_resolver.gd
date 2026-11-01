@@ -47,6 +47,8 @@ var last_ram: String = "none"
 var resolve_us: int = 0
 ## `settings.ram_damage` as of the last tick.
 var enabled: bool = true
+## Throws the sparks of a ram (`Main` sets it); none without it.
+var fx: FxPool = null
 ## Contacts, windows and one ram per pair per collision, between ticks.
 var tracker: RamTracker = RamTracker.new()
 ## The World whose rebases the contact points follow (see the class notes).
@@ -279,6 +281,8 @@ func _apply_all(pending: Array[Array]) -> void:
 		var info: HitInfo = ram[1]
 		events += 1
 		damageable.apply_hit(info)
+		if fx != null:
+			fx.burst(FxSpecs.RAM, info.point, info.normal, _body_velocity(damageable.body()))
 		last_ram = "%s, %.1f of %.1f applied" % [ram[2], info.applied, info.damage]
 		ram_resolved.emit(info)
 
@@ -286,3 +290,8 @@ func _apply_all(pending: Array[Array]) -> void:
 static func _prop_velocity(body: Node3D) -> Vector3:
 	var buoy := body as NavBuoy
 	return buoy.velocity if buoy != null else Vector3.ZERO
+
+
+static func _body_velocity(body: Node3D) -> Vector3:
+	var rigid := body as RigidBody3D
+	return rigid.linear_velocity if rigid != null else _prop_velocity(body)

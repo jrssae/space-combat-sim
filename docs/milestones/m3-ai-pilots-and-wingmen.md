@@ -191,7 +191,7 @@ Status: `done` (merged into `m3`, its "Done" notes below), `in progress`, `not s
 | M3-T20 | Resident splat budget: GDGS patch 5 (Q22) | T19 | Opus | in progress |
 | M3-T21 | Splat relighting: procgen normals, flat colours, `LightPicker` (Q23) | T19 | Opus | in progress |
 | M3-T22 | Ship lights: nozzles, muzzle flashes, explosions (Q23) | T21 | Sonnet | not started |
-| M3-T23 | `GPUParticles3D` sparks and debris (Q23) | T14 | Sonnet | in progress |
+| M3-T23 | `GPUParticles3D` sparks and debris (Q23) | T14 | Sonnet | done |
 | M3-T24 | Hero LOD for the player's ship (Q23) | T20, T21 | Sonnet | not started |
 | M3-T25 | Lens flare and motion blur, after sign-off (Q23) | T21 | Sonnet | not started |
 | M3-T26 | Starfury after the reference model, wireframe damage display (Q24) | - | Opus | done (second pass 2026-10-31) |
@@ -1048,6 +1048,31 @@ Added 2026-10-28 for Q23; after T14 (particles must follow the rebase).
   - Headless has no particle simulation: (A) tests the pools, specs and wiring; the look is AC35.
 - Done when: AC32 passes; P9's fight frame, taken on the GPU (particles render there, not on llvmpipe), shows sparks; the
   look is AC35's.
+- Done (2026-11-01):
+  - `FxPool` (`World/Fx`, `src/combat/fx_pool.gd`) holds 40 fixed one-shot `GPUParticles3D` emitters: `hit` 12, `ram` 6,
+    `explosion_sparks` 4, `explosion_fragments` 4, `explosion_gas` 4, `debris` 10 (the numbers are `FxSpecs`, pure; the process
+    materials and draw meshes are seven small `assets/fx/*.tres`). `HitResolver`, `RamResolver`, `DestructionDirector` (for
+    `Explosion`) and `DebrisPool` get the pool from `Main` and call `burst` in the physics tick; the pool starts the emitter in
+    `_process`.
+  - **Explosion**: its own per-explosion `GPUParticles3D` sparks and embers are gone (they were instanced per explosion, which AC32's
+    constant node count forbids). The same guarantee moved to the pool: a test checks an explosion's bursts start where it blew up
+    and move with a rebase. They now inherit the ship's velocity and have no damping (the old sparks had 0.8-1.6), and they come
+    from a fixed 1 m sphere instead of 0.25 x radius (one shared material per effect). The light, flash and fireball are untouched.
+  - **Rebase**: the emitters are `top_level`, `local_coords` and in `world_shiftable`, so `WorldFrame.rebase` shifts their
+    transforms (no anchor node). A burst is placed when asked for and started later, so a rebase in between shifts it too.
+  - **Pool full**: the oldest busy emitter is restarted (counted in `fx.reused`); the pool never grows. Hits do not allocate and
+    look nothing up in the tree; the state is in packed arrays and the density is cached from `Settings.changed`.
+  - **Debris vents** last 2-4 s (seeded) and end with the chunk or sooner: `DebrisChunk` stops its vent on `park`, on finishing and
+    on leaving the tree (one small edit to `debris_chunk.gd`, outside the task's file list). A vent stopped early frees its emitter
+    once its last particles die (under 1 s).
+  - **Hit direction** is the bolt mirrored about the surface, taken as radial from the hull's centre (the resolver has no surface
+    normal). `settings.particle_density` (0-1, default 1) scales `amount_ratio`; at 0 nothing is claimed and `_process` stays off.
+    Console: provider `fx`, command `fxburst <effect>`.
+  - Damping guard test extended to the new process materials (`test_ship_physics.gd`, and `test_fx_specs.gd`).
+  - Measured on the maintainer's GPU (RX 6950 XT, RADV, `splat_backend = compute`, 960x540): a staged frame of all six effects shows
+    sparks, fragments and gas; a 22 s sandbox fight (`wave start 1`, `god on`) threw 56 bursts at density 1 and 0 at density 0
+    with 24 hits and 4 kills in both (the 120 s node-count check is the headless test); `render.fps` read 58-60 in both runs (vsync-capped at 60, so the cost is below what this
+    reads). The fight frames did not catch a close hit (the fight is far from the camera): sparks near a hull are for AC35 (H).
 
 ### M3-T24 Hero LOD for the player's ship
 

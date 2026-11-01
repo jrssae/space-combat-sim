@@ -1059,7 +1059,7 @@ Verified for Godot 4.7.2 (details in `docs/research-notes.md`):
     interpolation (`Main`; it follows the ship through a `RemoteTransform3D`) and the points of open ram contact windows
     (`RamTracker.shift`). Parked pool ships and debris are shifted
     with the rest (harmless: they are placed again from a `UniversePos` when taken out). Particles stay in their node's
-    frame (`local_coords`), never in global space, or a rebase would leave them behind (the explosion's sparks).
+    frame (`local_coords`), never in global space, or a rebase would leave them behind (the explosion's sparks; since M3-T23 the `FxPool`'s emitters, which are `top_level` and `world_shiftable`).
   - Physics interpolation: **the world stalls together for the rebase tick.** A rebase inside a tick leaves interpolation
     alone; `World`'s internal `RebaseSettler` (physics priority 1 000 000, last in the tick, §15.3) then resets every visible,
     interpolated shiftable node, after everything has moved. The frames until the next tick draw every body, bolt, piece of
@@ -1264,7 +1264,7 @@ src/combat/intercept_math.gd      RefCounted, pure: lead solution for bolts that
 src/combat/damageable.gd          Node component, group "damageable": HullHealth + HitShapes, signals
 src/combat/hit_resolver.gd        Node: per-tick swept hits, damage, impact flashes; console `combat`, `damage`, `heal`
 src/combat/impact_flash.gd        short additive flash + sparks, child of the hit ship at the hit point
-src/combat/explosion.tscn|.gd     generated explosion (fireball shader, flash light, sparks); drifts, self-frees
+src/combat/explosion.tscn|.gd     generated explosion (fireball shader, flash light; its sparks come from the FxPool since M3-T23); drifts, self-frees
 src/combat/explosion_fireball.gdshader
 src/combat/debris_chunk.tscn|.gd  one chunk: GaussianSplatNode + chunk mesh fallback
 src/combat/debris_pool.gd         Node: pooled chunk splat sets, mesh-only chunks and generic shards; drift, spin, shrink-out
@@ -1618,6 +1618,8 @@ src/ai/behaviour_{guard,rally}.gd        guard post, rally on an engaged wingmat
 src/ai/ai_temperament.gd, behaviour_ram.gd   skill and aggression; last-ditch ram (T13)
 src/ai/attack_slash.gd                   the slashing pass and chase (T18)
 src/rendering/lod_switcher{,_math}.gd    splat level of detail by size on screen (T19)
+src/combat/fx_specs.gd, fx_pool.gd       pure effect numbers; fixed GPUParticles3D pools, one per effect (T23)
+assets/fx/*.tres                         the effects' process materials and draw meshes (T23)
 assets/ai/civilian.tres                  never attacks, flees within 3 km (T13)
 src/ai/route.gd, manoeuvre.gd, manoeuvres.gd   instructor route and demo moves (T09)
 src/game/wing_director.gd                Node (Combat, priority 290): wings, orders, acknowledgements, replenish (T07, T08)
@@ -1657,3 +1659,31 @@ Commands: `relation <a> <b> [friendly|neutral|hostile]` / `relation reset`; `win
 `spawn raider|ally ai ... skill=<...> aggression=<...>` (M3-T13);
 `scenario [free_flight|combat_sandbox|instructor_route|dogfight]`. Settings: `friendly_fire` (bool, false), `ram_damage`
 (bool, true).
+
+### 16.5 Particles (M3-T23)
+
+Hull hits, rams, explosions and debris throw sparks and glowing fragments from `GPUParticles3D` (D8: splats cannot animate).
+`FxPool` (`World/Fx`) holds a fixed set of one-shot emitters per effect (`FxSpecs`: `hit` 12, `ram` 6, `explosion_sparks` 4,
+`explosion_fragments` 4, `explosion_gas` 4, `debris` 10), built once in `_ready` and restarted for each burst, so the particle node
+count never changes. `HitResolver`, `RamResolver`, `Explosion` (through `DestructionDirector`) and `DebrisPool` hold a reference
+(`fx`, set by `Main`) and call `FxPool.burst(effect, position, direction, velocity, duration)` in the physics tick.
+
+- **Newtonian.** The process materials (`assets/fx/fx_*.tres`) have zero gravity and zero damping (the damping guard test checks
+  them). A burst inherits its source's velocity by flying its emitter at that velocity; the particles live in the emitter's frame
+  (`local_coords`), so they go where it goes. The explosion's old 0.8-1.6 damping on its sparks is gone with that.
+- **Rebase.** Every emitter is `top_level` and in `world_shiftable`, so `WorldFrame.rebase` shifts its transform (the emitters'
+  transforms are shifted, there is no anchor node). A burst asked for in the tick is placed at once and only started in
+  `_process`, so a rebase between the two shifts it as well.
+- **Hot path.** `burst` allocates nothing and does no tree lookup: parallel packed arrays hold the state, the setting is cached from
+  `Settings.changed`, and the return value is an int handle (slot plus generation) for `stop`. With every emitter of an effect busy
+  the oldest is restarted (a fresh hit matters more than a fading one); effects never grow the pool.
+- **Density.** `settings.particle_density` (0-1) sets `amount_ratio`; at 0 `burst` returns 0 before it claims anything and the pool's
+  `_process` stays off (it is on only while an emitter is busy).
+- **Aim.** A hull hit's sparks leave along the bolt mirrored about the hull's surface (taken as radial from the hull's centre); a ram's
+  along the contact normal in a wide cone; explosions in every direction.
+- **Vents.** Each debris chunk vents for 2-4 s (`FxSpecs.debris_duration_s`, from the break-up's seed); `DebrisChunk` stops its vent
+  when it parks, finishes or leaves the tree, so no emitter is left venting where a chunk was.
+- Meshes are additive, unshaded, transparent, so the hull depth proxies hide them behind hulls like the plumes.
+
+Console: provider `fx` (`emitters`, `busy`, `bursts`, `reused`, `density`); command `fxburst [hit|ram|explosion_sparks|
+explosion_fragments|explosion_gas|debris]` throws one burst 40 m in front of the camera. Setting: `particle_density` (float 0-1, 1).
