@@ -23,6 +23,28 @@ static func file_for(manifest: Dictionary, level: int) -> String:
 	return ""
 
 
+## The lighting records file `manifest` lists for `level`, or "" when it lists none.
+static func lighting_for(manifest: Dictionary, level: int) -> String:
+	var lods: Variant = manifest.get("lods")
+	if not (lods is Array):
+		return ""
+	for entry: Variant in lods as Array:
+		if entry is Dictionary and int((entry as Dictionary).get("level", -1)) == level and (entry as Dictionary).get("lighting") is String:
+			return (entry as Dictionary)["lighting"]
+	return ""
+
+
+## The lighting records of `asset_id` at `level`, or "" when its manifest is missing or lists none (the sky).
+static func lighting_path(asset_id: String, level: int, asset_root: String = ASSET_ROOT) -> String:
+	var dir: String = asset_root.path_join(asset_id)
+	var file := FileAccess.open(dir.path_join("manifest.json"), FileAccess.READ)
+	if file == null:
+		return ""
+	var data: Variant = JSON.parse_string(file.get_as_text())
+	var file_name: String = lighting_for(data as Dictionary, level) if data is Dictionary else ""
+	return dir.path_join(file_name) if not file_name.is_empty() else ""
+
+
 ## The PLY to draw for `asset_id` at `level`, as `{"path": String, "level": int, "warning": String}`.
 ## - Level 0 (or below): `<asset_id>.ply`, level 0, no warning, and the manifest is not read.
 ## - A higher level the manifest lists: that file, that level, no warning.

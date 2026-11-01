@@ -180,7 +180,7 @@ if grep -E "${SCRIPT_ERRORS}" "${log}"; then
     echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lod, raiders, ram, render, settings, ship, targeting, time, waves, weapons, wing, world" \
+expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lights, lod, raiders, ram, render, settings, ship, targeting, time, waves, weapons, wing, world" \
     || smoke_status=1
 expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
 expect_line "${log}" "[console] render.splat_backend = headless" || smoke_status=1
@@ -511,7 +511,7 @@ if (( route_status != 0 )); then
     echo "run_tests.sh: instructor route smoke run exited ${route_status}, expected 0 (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lod, raiders, ram, render, route, settings, ship, targeting, time, waves, weapons, wing, world" \
+expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lights, lod, raiders, ram, render, route, settings, ship, targeting, time, waves, weapons, wing, world" \
     || smoke_status=1
 expect_line "${log}" "[console] route.index = 1" || smoke_status=1
 expect_line "${log}" "[console] route.count = 6" || smoke_status=1

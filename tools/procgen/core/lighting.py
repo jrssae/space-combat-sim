@@ -1,87 +1,105 @@
-"""Baked "studio" lighting for unlit splats (docs/architecture.md section 7.3).
+"""Per-splat lighting records for GDGS relighting (docs/architecture.md section 7.3).
 
-Splats carry static radiance, so the generator bakes a light rig in **asset-local** space into
-the DC colour: a hemisphere ambient (sky above, darker ground below) plus a few directional
-lights with wrap-around diffuse. Shading therefore rotates with the object, which is what we
-want for a studio look; a real sun comes later with GDGS relighting.
+Ships and buoys are lit in the game by the scene's lights, so their PLY colours are plain paint and the surface they
+need comes from here: GDGS's ``GaussianLightingResource`` format 1, 4 bytes per splat in PLY order::
 
-No view-dependent terms (specular, Fresnel): a highlight baked for one camera is wrong for
-every other, and SH degree 0 cannot represent it anyway.
+    octahedral normal x, octahedral normal y, ambient occlusion, confidence
+
+GDGS bakes these in its editor from a voxel proxy; a generator already knows every sample's surface normal, so it
+writes them itself. A ``.light`` file is those bytes and nothing else. The normals are read from the splats as they
+are written, so they are in the PLY's frame, which is the frame the GDGS shader rotates them out of.
+
+The encoding must stay byte-identical to ``addons/gdgs_scs/runtime/resources/gaussian_lighting_resource.gd``.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
-from .geometry import unit
+from .ply import SplatData
+
+BYTES_PER_SPLAT = 4
+SUFFIX = ".light"
 
 
-@dataclass(frozen=True)
-class Light:
-    """A directional light; ``direction`` points *towards* the light (Godot frame, asset-local)."""
-
-    direction: tuple[float, float, float]
-    color: tuple[float, float, float] = (1.0, 1.0, 1.0)
-    intensity: float = 1.0
-    wrap: float = 0.0  # 0 = Lambert, 0.5 = soft wrap-around (area-light feel)
-
-    def shade(self, normals: np.ndarray) -> np.ndarray:
-        """Diffuse factor per normal, ``(N, 3)`` (colour times intensity times wrapped cosine)."""
-        l_dir = unit(np.asarray(self.direction, dtype=float))
-        cos = np.asarray(normals, dtype=float) @ l_dir
-        wrapped = np.clip((cos + self.wrap) / (1.0 + self.wrap), 0.0, 1.0)
-        return wrapped[:, None] * (np.asarray(self.color, dtype=float) * self.intensity)[None, :]
+def lod_file_name(asset_id: str, level: int) -> str:
+    return f"{asset_id}_lod{level}{SUFFIX}"
 
 
-@dataclass(frozen=True)
-class StudioRig:
-    """Hemisphere ambient plus directional lights; ``exposure`` scales the result."""
-
-    sky: tuple[float, float, float]
-    ground: tuple[float, float, float]
-    lights: tuple[Light, ...]
-    exposure: float = 1.0
-
-    def ambient(self, normals: np.ndarray) -> np.ndarray:
-        up = 0.5 + 0.5 * np.clip(np.asarray(normals, dtype=float)[:, 1], -1.0, 1.0)
-        sky, ground = np.asarray(self.sky, dtype=float), np.asarray(self.ground, dtype=float)
-        return ground[None, :] + (sky - ground)[None, :] * up[:, None]
-
-    def irradiance(self, normals: np.ndarray) -> np.ndarray:
-        """Total light arriving per unit albedo, ``(N, 3)``, before exposure."""
-        total = self.ambient(normals)
-        for light in self.lights:
-            total = total + light.shade(normals)
-        return total
-
-    def shade(self, normals: np.ndarray, albedo: np.ndarray, metallic: np.ndarray | None = None) -> np.ndarray:
-        """Linear RGB radiance for each sample: ``albedo * (ambient + sum of lights) * exposure``.
-
-        ``metallic`` (0..1 per sample) damps the ambient term, so bare metal keeps its contrast.
-        """
-        normals = unit(np.asarray(normals, dtype=float))
-        albedo = np.asarray(albedo, dtype=float).reshape(len(normals), 3)
-        ambient = self.ambient(normals)
-        if metallic is not None:
-            ambient = ambient * (1.0 - 0.5 * np.asarray(metallic, dtype=float))[:, None]
-        direct = np.zeros_like(ambient)
-        for light in self.lights:
-            direct += light.shade(normals)
-        return np.maximum(albedo * (ambient + direct) * self.exposure, 0.0)
+def chunk_file_name(asset_id: str, name: str) -> str:
+    return f"{asset_id}_chunk_{name}{SUFFIX}"
 
 
-# Key from upper front right, soft fill from lower left rear, cool rim from above and behind:
-# a hull facing up reads ~0.95 x albedo, the belly ~0.3 x albedo, nothing is pitch black, and
-# the tints are mild (shadow sides stay near-neutral so the grey hull reads grey).
-STUDIO_DEFAULT = StudioRig(
-    sky=(0.30, 0.31, 0.34),
-    ground=(0.10, 0.10, 0.11),
-    lights=(
-        Light(direction=(0.45, 0.75, -0.5), color=(1.0, 0.97, 0.93), intensity=0.72, wrap=0.15),
-        Light(direction=(-0.7, -0.25, 0.3), color=(0.88, 0.92, 1.0), intensity=0.22, wrap=0.3),
-        Light(direction=(0.1, 0.55, 0.83), color=(0.9, 0.93, 1.0), intensity=0.18, wrap=0.0),
-    ),
-    exposure=1.0,
-)
+def _non_zero_sign(value: np.ndarray) -> np.ndarray:
+    # A plain sign is 0 at 0, which would collapse a fold of the octahedron.
+    return np.where(value < 0.0, -1.0, 1.0)
+
+
+def oct_encode(normals: np.ndarray) -> np.ndarray:
+    """Octahedral projection of ``(N, 3)`` directions onto ``[-1, 1]^2``; zero vectors give ``(0, 0)``."""
+    n = np.asarray(normals, dtype=np.float64).reshape(-1, 3)
+    l1 = np.abs(n).sum(axis=1, keepdims=True)
+    p = np.divide(n[:, :2], l1, out=np.zeros((len(n), 2)), where=l1 > 0.0)
+    folded = (1.0 - np.abs(p[:, ::-1])) * _non_zero_sign(p)
+    return np.where(n[:, 2:3] < 0.0, folded, p)
+
+
+def oct_decode(encoded: np.ndarray) -> np.ndarray:
+    """The unit directions of octahedral coordinates ``(N, 2)``."""
+    e = np.asarray(encoded, dtype=np.float64).reshape(-1, 2)
+    z = 1.0 - np.abs(e).sum(axis=1)
+    folded = (1.0 - np.abs(e[:, ::-1])) * _non_zero_sign(e)
+    xy = np.where(z[:, None] < 0.0, folded, e)
+    v = np.column_stack([xy, z])
+    return v / np.linalg.norm(v, axis=1, keepdims=True)
+
+
+def _round_half_up(value: np.ndarray) -> np.ndarray:
+    # Godot's roundf; numpy's own round sends halves to the even neighbour and would differ by one.
+    return np.floor(value + 0.5)
+
+
+def encode_signed_byte(value: np.ndarray) -> np.ndarray:
+    """``[-1, 1]`` to a byte."""
+    unit_range = np.clip(np.asarray(value, dtype=np.float64), -1.0, 1.0) * 0.5 + 0.5
+    return np.clip(_round_half_up(unit_range * 255.0), 0, 255).astype(np.uint8)
+
+
+def encode_unit_byte(value: np.ndarray) -> np.ndarray:
+    """``[0, 1]`` to a byte."""
+    return np.clip(_round_half_up(np.clip(np.asarray(value, dtype=np.float64), 0.0, 1.0) * 255.0), 0, 255).astype(np.uint8)
+
+
+def lighting_records(normals: np.ndarray) -> np.ndarray:
+    """The ``(N, 4)`` byte records of a surface. AO is 1.0 everywhere: the ambient term is small and panel lines and dark
+    recesses are already in the paint. A splat with no normal gets confidence 0, which GDGS lights with ambient only."""
+    n = np.asarray(normals, dtype=np.float64).reshape(-1, 3)
+    has_normal = np.linalg.norm(n, axis=1) > 0.0
+    records = np.empty((len(n), BYTES_PER_SPLAT), dtype=np.uint8)
+    records[:, :2] = encode_signed_byte(oct_encode(n))
+    records[:, 2] = encode_unit_byte(np.ones(len(n)))
+    records[:, 3] = encode_unit_byte(has_normal.astype(np.float64))
+    return records
+
+
+def decode_normals(records: np.ndarray) -> np.ndarray:
+    """The unit normals of ``(N, 4)`` records, as the GDGS shader decodes them."""
+    return oct_decode(np.asarray(records, dtype=np.float64)[:, :2] / 255.0 * 2.0 - 1.0)
+
+
+def write_lighting(path: Path, splats: SplatData) -> Path:
+    """Write the records of ``splats``, which must be the data of the PLY they go with (same order, same frame)."""
+    normals = splats.normals if splats.normals is not None else np.zeros((len(splats), 3))
+    path = Path(path)
+    path.write_bytes(lighting_records(normals).tobytes())
+    return path
+
+
+def read_lighting(path: Path) -> np.ndarray:
+    """The ``(N, 4)`` records of a ``.light`` file, raising ``ValueError`` if it is not a whole number of them."""
+    raw = Path(path).read_bytes()
+    if len(raw) % BYTES_PER_SPLAT != 0:
+        raise ValueError(f"{path}: {len(raw)} bytes is not a whole number of {BYTES_PER_SPLAT}-byte records")
+    return np.frombuffer(raw, dtype=np.uint8).reshape(-1, BYTES_PER_SPLAT)

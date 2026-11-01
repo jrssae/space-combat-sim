@@ -12,8 +12,8 @@ extends RigidBody3D
 ##
 ## Built from data in `_ready` (or again on a later `setup`): mass and inertia from the `ShipSpec`; centre of mass,
 ## collision primitives, gun muzzles and the cockpit eye point from the ship's `hardpoints.json`; the hull splats (at the spec's
-## `splat_lod`, §16 D35) and meshes from `assets/generated/<asset_id>/`, loaded guarded so the scene loads (with warnings) before
-## `scripts/gen_assets.sh` has run. Without hardpoints the ship cannot fly and only coasts.
+## `splat_lod`, §16 D35), their lighting records (§7.3) and meshes from `assets/generated/<asset_id>/`, loaded guarded so the scene
+## loads (with warnings) before `scripts/gen_assets.sh` has run. Without hardpoints the ship cannot fly and only coasts.
 ##
 ## Children: `HullSplats` (GaussianSplatNode, identity in the scene: GDGS applies its own Rz(180°) on entering the
 ## tree, §9.1; `HullSplatSync` draws it at the interpolated pose), `HullMeshFallback` (shown when `SplatStatus` finds
@@ -75,8 +75,8 @@ var _layout: ThrusterLayout = ThrusterLayout.new()
 ## Share of the gap to this tick's measured turn rate of the lead direction that the smoothed rate closes each tick.
 const TRACK_RATE_SMOOTHING: float = 0.35
 
-## The cabin lamp: a short-range light that comes on with the cockpit view and lights the frame (the hull's splats take no light).
-var _cabin_light: OmniLight3D = null
+## The cabin lamp: a short-range emitter that competes for a light slot while the cockpit view is on, and lights the frame.
+var _cabin_emitter: LightEmitter = null
 var _track_prev_dir: Vector3 = Vector3.ZERO
 var _track_rate_w: Vector3 = Vector3.ZERO
 var _model: FlightModel = null
@@ -93,6 +93,9 @@ var _interior_visible: bool = false
 var _lod_nodes: Array[GaussianSplatNode] = []
 var _lod_levels: PackedInt32Array = PackedInt32Array()
 var _lod_level: int = 0
+# The hull's finest level as `SplatLod.resolve` gave it, and the spec it was resolved for.
+var _hull_lod: Dictionary = {}
+var _hull_lod_spec: ShipSpec = null
 var _muzzles: Array[Node3D] = []
 var _collision_nodes: Array[CollisionShape3D] = []
 var _applied_force: Vector3 = Vector3.ZERO
@@ -126,11 +129,17 @@ func _init() -> void:
 	_assist_on = bool(Settings.get_value(&"assist_default"))
 
 
+# The child's splats and lighting records go on here, before it enters the tree: assigned later, each makes GDGS re-merge every
+# splat in the scene, once per ship.
+func _enter_tree() -> void:
+	_assign_hull_splats(get_node_or_null(^"HullSplats") as GaussianSplatNode)
+
+
 func _ready() -> void:
 	_apply_newtonian_body()
 	targeting.setup(self, console_owner)
 	_build()
-	_build_cabin_light()
+	_build_cabin_emitter()
 	if get_node_or_null(^"LodSwitcher") == null:
 		var switcher := LodSwitcher.new()
 		switcher.name = "LodSwitcher"
@@ -145,6 +154,9 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+	var rig: SplatLightRig = SplatLightRig.of(self)
+	if rig != null and _cabin_emitter != null:
+		rig.remove_emitter(_cabin_emitter)
 	if Settings.changed.is_connected(_on_hull_setting_changed):
 		Settings.changed.disconnect(_on_hull_setting_changed)
 
@@ -311,8 +323,7 @@ func set_cockpit_interior_visible(shown: bool) -> void:
 	if is_node_ready():
 		cockpit_interior.visible = shown
 		_apply_hull_visuals()
-		if _cabin_light != null:
-			_cabin_light.visible = shown
+		_apply_cabin_emitter()
 
 
 func is_cockpit_interior_visible() -> bool:
@@ -435,7 +446,7 @@ func _build() -> void:
 		center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 		center_of_mass = _hardpoints.center_of_mass
 		cockpit_anchor.transform = _hardpoints.cockpit_camera
-		_place_cabin_light()
+		_place_cabin_emitter()
 		_build_collision()
 		_build_muzzles()
 	_load_visuals()
@@ -475,17 +486,8 @@ func _build_muzzles() -> void:
 
 func _load_visuals() -> void:
 	var dir: String = asset_dir(spec)
-	var lod: Dictionary = SplatLod.resolve(spec.asset_id, spec.splat_lod)
-	var splat_path: String = lod["path"]
-	if not String(lod["warning"]).is_empty():
-		push_warning("Ship: %s" % lod["warning"])  # one message per problem: a manifest that cannot be read draws nothing, below
-	var gaussian: GaussianResource = null
-	if not splat_path.is_empty() and ResourceLoader.exists(splat_path):
-		gaussian = load(splat_path) as GaussianResource
-	if gaussian == null and not splat_path.is_empty():
-		push_warning("Ship: %s is missing or not imported (run scripts/gen_assets.sh, then import); no hull splats" % splat_path)
-	hull_splats.gaussian = gaussian
-	_load_far_levels(lod)
+	_assign_hull_splats(hull_splats)
+	_load_far_levels(_hull_lod)
 	hull_mesh_fallback.mesh = _load_mesh(dir.path_join(spec.asset_id + ".obj"))
 	hull_depth_proxy.mesh = hull_mesh_fallback.mesh  # whatever is loaded, so a regenerated hull needs no changes here
 	cockpit_interior.mesh = _load_mesh(dir.path_join(COCKPIT_MESH_FILE)) if spec.has_cockpit_interior else null
@@ -496,8 +498,26 @@ func _load_visuals() -> void:
 	_lift_shadows(cockpit_interior.mesh)
 
 
+# The spec's finest level and its lighting records on `node`, once per spec.
+func _assign_hull_splats(node: GaussianSplatNode) -> void:
+	if node == null or spec == null or _hull_lod_spec == spec:
+		return
+	_hull_lod_spec = spec
+	_hull_lod = SplatLod.resolve(spec.asset_id, spec.splat_lod)
+	var splat_path: String = _hull_lod["path"]
+	if not String(_hull_lod["warning"]).is_empty():
+		push_warning("Ship: %s" % _hull_lod["warning"])  # one message per problem: a manifest that cannot be read draws nothing, below
+	var gaussian: GaussianResource = null
+	if not splat_path.is_empty() and ResourceLoader.exists(splat_path):
+		gaussian = load(splat_path) as GaussianResource
+	if gaussian == null and not splat_path.is_empty():
+		push_warning("Ship: %s is missing or not imported (run scripts/gen_assets.sh, then import); no hull splats" % splat_path)
+	node.gaussian = gaussian
+	SplatLightingLoader.attach(node, SplatLod.lighting_path(spec.asset_id, int(_hull_lod["level"])) if gaussian != null else "")
+
+
 # One splat node per coarser level the asset has (M3-T19), built once: the switcher shows one at a time, so GDGS never
-# rebuilds its buffers while the ship flies.
+# rebuilds its buffers while the ship flies. A new node gets its splats and lighting records before it enters the tree.
 func _load_far_levels(base: Dictionary) -> void:
 	_lod_nodes = [hull_splats]
 	_lod_levels = PackedInt32Array([maxi(int(base["level"]), 0)])
@@ -507,18 +527,21 @@ func _load_far_levels(base: Dictionary) -> void:
 			continue
 		var node_name: String = "HullSplatsLod%d" % level
 		var node := get_node_or_null(NodePath(node_name)) as GaussianSplatNode
+		var resource := load(String(lod["path"])) as GaussianResource
 		if node == null:
 			node = GaussianSplatNode.new()
 			node.name = node_name
 			node.transform = hull_splats.transform
 			node.visible = false
+			node.gaussian = resource
+			SplatLightingLoader.attach(node, SplatLod.lighting_path(spec.asset_id, level))
 			add_child(node)
 			var sync := get_node_or_null(^"HullSplatSync") as SplatPoseSync
 			if sync != null:
 				sync.add_splats(node)
-		var resource := load(String(lod["path"])) as GaussianResource
-		if node.gaussian != resource:
+		elif node.gaussian != resource:
 			node.gaussian = resource
+			SplatLightingLoader.attach(node, SplatLod.lighting_path(spec.asset_id, level))
 		_lod_nodes.append(node)
 		_lod_levels.append(level)
 	_lod_level = _lod_levels[0]
@@ -545,22 +568,28 @@ func _apply_hull_sync_setting() -> void:
 
 
 # A soft lamp just behind and above the pilot's eyes. Its range stops short of the wings, so it lights only the cockpit frame.
-func _build_cabin_light() -> void:
-	_cabin_light = OmniLight3D.new()
-	_cabin_light.name = "CabinLight"
-	_cabin_light.omni_range = 4.5
-	_cabin_light.omni_attenuation = 0.8
-	_cabin_light.light_energy = float(Settings.get_value(&"cockpit_light_energy"))
-	_cabin_light.light_color = Color(0.85, 0.92, 1.0)
-	_cabin_light.shadow_enabled = false
-	_cabin_light.visible = _interior_visible
-	add_child(_cabin_light)
-	_place_cabin_light()
+func _build_cabin_emitter() -> void:
+	_cabin_emitter = LightEmitter.new("cabin", LightEmitter.PRIORITY_CABIN, Color(0.85, 0.92, 1.0),
+			float(Settings.get_value(&"cockpit_light_energy")), 4.5, 0.8)
+	_cabin_emitter.anchor = self
+	_place_cabin_emitter()
+	_apply_cabin_emitter()
 
 
-func _place_cabin_light() -> void:
-	if _cabin_light != null:
-		_cabin_light.position = cockpit_anchor.position + Vector3(0.0, 0.45, 0.5)
+func _place_cabin_emitter() -> void:
+	if _cabin_emitter != null:
+		_cabin_emitter.offset = cockpit_anchor.position + Vector3(0.0, 0.45, 0.5)
+
+
+# The cabin lamp competes for a slot only in the cockpit camera; no other ship's interior is ever shown, so the pool adds no candidates.
+func _apply_cabin_emitter() -> void:
+	var rig: SplatLightRig = SplatLightRig.of(self)
+	if rig == null or _cabin_emitter == null:
+		return
+	if _interior_visible:
+		rig.add_emitter(_cabin_emitter)
+	else:
+		rig.remove_emitter(_cabin_emitter)
 
 
 # The canopy glass is a green translucent surface of the hull mesh. Seen from inside it tints the whole view green, so the pilot's

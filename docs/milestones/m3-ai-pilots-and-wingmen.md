@@ -190,7 +190,7 @@ Status: `done` (merged into `m3`, its "Done" notes below), `in progress`, `not s
 | M3-T18 | Slashing pass and chase (Q19) | T13 | Opus | done (2026-11-01) |
 | M3-T19 | Splat LOD chain and `LodSwitcher` (Q22) | T08 | Opus | done (2026-11-01) |
 | M3-T20 | Resident splat budget: GDGS patch 5 (Q22) | T19 | Opus | in progress |
-| M3-T21 | Splat relighting: procgen normals, flat colours, `LightPicker` (Q23) | T19 | Opus | in progress |
+| M3-T21 | Splat relighting: procgen normals, flat colours, `LightPicker` (Q23) | T19 | Opus | done (2026-11-01) |
 | M3-T22 | Ship lights: nozzles, muzzle flashes, explosions (Q23) | T21 | Sonnet | not started |
 | M3-T23 | `GPUParticles3D` sparks and debris (Q23) | T14 | Sonnet | done |
 | M3-T24 | Hero LOD for the player's ship (Q23) | T20, T21 | Sonnet | not started |
@@ -1006,6 +1006,39 @@ Added 2026-10-28 for Q23; after T19 (it writes records for every LOD). The bigge
     `relight_light_gain`) as settings so the tester can tune them live.
 - Done when: AC30 passes; P9, taken by the agent on the GPU (Compute), shows a lit and a dark side on the ally; the look
   is the maintainer's (AC35).
+- Done (2026-11-01):
+  - Procgen: `core/lighting.py` is now the record writer (the baked studio rig is gone): 4 bytes per splat in PLY order, byte-identical
+    to GDGS's codec, one `.light` per level (`<asset>_lod<n>.light`, manifest `lods[].lighting`) and chunk
+    (`<asset>_chunk_<name>.light`, hardpoints `chunks[].lighting`, because a chunk's other fields live there). Starfury, raider and buoy
+    write flat paint: generator versions 5, 2 and 2. Between v4 and v5 of the Starfury's LOD0 only the colour columns moved, so
+    positions, scales and counts are as before. The sky writes no records. T24's hero level calls the same writer.
+  - AO is 1.0 everywhere: the ambient term is small and recesses are already dark paint. Confidence is 255 on the surface, and 0 for a
+    splat with no normal.
+  - Emissive parts: no ship or buoy has one (the glass is a dark tinted sheet, beacons and plumes are meshes), so nothing was needed.
+    Low confidence would not have done: `relight_factor()` still gives such a splat `unlit + gain * ambient * AO`, 0.30 by default.
+    A later emissive part takes a node with `relight_enabled` off, as the sky has, or a mesh.
+  - Godot: `SplatLightRig` (`SpaceEnvironment/SplatLightRig`, before `World`) owns the `KeyStar`, moved under it as slot 0, and 7 omni
+    slots; `LightPicker` (pure) ranks by class x energy x range / distance^2 (classes 16, 8, 4, 2, 1; closer than 1 m counts as 1 m; an
+    incumbent counts 20 % more; an emitter keeps its slot while picked). `LightEmitter` is the record, kept small for T22: set
+    `energy` and either `position` or `anchor` and `offset`, then `rig.add_emitter`. The cabin lamp is one, in the rig only while the
+    cockpit interior is shown. `SplatLightingLoader` wraps the bytes (no per-splat loop, one resource per file), and hands them over
+    before a node enters the tree: `Ship._enter_tree` and `NavBuoy._enter_tree` now also assign the `gaussian` there, which saves GDGS
+    a re-merge per node, and new LOD nodes get both before `add_child`. `DebrisChunk.create` does it at its load path, so
+    `debris_pool.gd` needed no change.
+  - Settings and console: `splat_relight`, `relight_ambient` 0.3, `relight_unlit_level` 0.12, `relight_light_gain` 0.6 (live), `relight
+    [on|off]`, provider `lights` (`picked`, `candidates`, `active`, `cost_us`). The defaults give about 1.2 on a hull facing the star and
+    0.30 on its dark side; the baked rig gave about 1.2 and 0.36.
+  - Tests: Python `test_lighting` (byte layout, normals within 5 degrees on a sphere and a box, the file), `test_relit_assets` (every level
+    and chunk against its PLY, flat paint, versions); `test_light_picker` (14), `test_splat_lighting_loader` (9),
+    `test_relight` (24: the 8 lights, who is lit, records before the tree, records against the covariance GDGS imported, the console).
+  - GPU (RX 6950 XT, Compute, 1080p, vsync off, AC19's 13 ships in view, 275 790 visible splats, three blocks of 180 frames each way in
+    one run, both locks held): GPU frame time 2.61 ms with relighting on and 2.84 ms off, so the cost is below the run's noise of
+    about 0.3 ms; with all 8 lights shining 2.76 ms. `lights.cost_us` is 6 us with no candidates and 28 us with 7. P9 at the Compute
+    backend shows the ally's sunward tops lit and its faces toward the camera on the dark side, at the player's chase view; turned to face
+    away from the star, the camera sees the bright side and the claws falling off into shade; a test omni emitter beside the ally
+    tints that ally only. Grey blotches on the struts are in the flat frame too: they are the panel grid in the paint, not the records.
+  - Until T22: `explosion.gd` keeps its own `OmniLight3D` (ruling), so a live explosion makes 9 lights. GDGS warns once and copes, since
+    it skips the unused slots; only with all 8 slots in use could it drop a light. Its header comment still says splats are unlit.
 
 ### M3-T22 Ship lights: nozzles, muzzle flashes, explosions
 

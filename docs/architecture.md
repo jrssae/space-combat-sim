@@ -37,7 +37,7 @@ M2 decisions (D20-D29) are in §15.1.
 | D5 | Flight logic in pure `RefCounted` classes, nodes are thin adapters | Unit-testable without a scene tree, display or controller. |
 | D6 | Flight assist in M1. **ON (default)**: rate-command fly-by-wire; the trigger/bumper difference is a smoothed **yaw command** added to the right stick's (the D-pad's before M3-T15), so pod steering works in both modes; pod torque helps the turn and is trimmed when RCS cannot hold the commanded rate; no pod ever exceeds its trigger. **OFF**: raw pods + raw RCS torque (tank-steer). **Brake** (hold) is an all stop (velocity and rotation) in both, and turns the nose onto the selected target | User decision: pod steering is the Starfury identity in both modes; assist makes it bounded and stop-on-release; one closed-form rule (§5.5). |
 | D7 | User-chosen pad layout (§6.1): triggers = left/right main pods, bumpers = left/right retros, left stick = strafe, right stick = pitch / yaw by direction, roll on its diagonals; B = target cycling (tap next, hold previous); D-pad Up = flight assist, Down = weapon; D-pad Left / Right free (M3-T15). `InputMap` actions only, SDL3 standard layout, keyboard as extra events | Every DOF and combat function reachable without modifiers or stick clicks (generic pads may lack them); per-side pod control is the Starfury identity; rebindable, testable, works on a generic pad. |
-| D8 | Hybrid rendering: splats for hulls, buoys and sky; meshes for cockpit interior, projectiles, flashes, thruster plumes, beacons, the hull depth proxy; primitives for collision | Splats are static radiance; anything animated per frame, emissive-dynamic, or needing depth writes is a mesh. Each exception is justified in §7. |
+| D8 | Hybrid rendering: splats for hulls, buoys and sky; meshes for cockpit interior, projectiles, flashes, thruster plumes, beacons, the hull depth proxy; primitives for collision | Splats hold static paint, lit per splat from the scene's lights (§7.3, M3-T21); anything animated per frame, emissive-dynamic, or needing depth writes is a mesh. Each exception is justified in §7. |
 | D9 | Generated assets are **not committed**; generators are. No Git LFS | Everything binary is reproducible from `tools/procgen` in seconds; LFS adds quotas and fork friction. |
 | D10 | GUT over gdUnit4 | Simpler headless CLI (`-gexit`, exit code 1 on failure), no xvfb caveats, GDScript-first, tracks Godot 4.7. |
 | D11 | 1 unit = 1 metre, SI everywhere, Godot axes (+X right, +Y up, **-Z forward**) | Avoids conversion bugs; Godot's `Basis.z` is backward, so forward is `-basis.z`. |
@@ -88,6 +88,10 @@ src/
   ship/thruster_visuals.gd    exhaust plumes (cone + core disc along each nozzle's exhaust axis) from FlightOutput levels
   ship/hull_depth_proxy.gd    MeshInstance3D: the fallback mesh inset along its normals, opaque black, depth only (§7.2)
   rendering/splat_pose_sync.gd Node: draws a splat node at its parent's physics-interpolated pose (§7.2)
+  rendering/splat_light_rig.gd Node: the scene's 8 lights, the key star and 7 omni slots filled from emitters (§7.3)
+  rendering/light_picker.gd   RefCounted, pure: which emitters fill the 7 slots each frame (§7.3)
+  rendering/light_emitter.gd  RefCounted: something that gives off light, as the picker sees it (§7.3)
+  rendering/splat_lighting_loader.gd RefCounted: a generator's `.light` bytes as a GDGS lighting resource, on a splat node (§7.3)
   weapons/pulse_cannon_gate.gd RefCounted, pure: fire modes, rate gate, muzzle selection (fake-time testable)
   weapons/pulse_cannon.gd     node adapter: trigger state, spawns projectiles at muzzle hardpoints
   weapons/projectile.tscn|.gd kinematic projectile (inherits ship velocity), lifetime, emissive mesh
@@ -138,7 +142,9 @@ so it works in every scene (the future front end included) and is not part of `m
 Main (Node3D)                              main.gd
 ├── SpaceEnvironment (space_environment.tscn)   outside World: camera-relative, never rebased
 │   ├── WorldEnvironment                   Environment (black sky, no fog, tonemap filmic, glow on) + Compositor[gdgs effect]
-│   ├── KeyStar (DirectionalLight3D)       lights meshes only; splats are pre-lit
+│   ├── SplatLightRig (Node3D)             the scene's only lights, before World so GDGS's walk finds them (§7.3)
+│   │   ├── KeyStar (DirectionalLight3D)   slot 0: lights meshes and splats
+│   │   └── Slot1..Slot7 (OmniLight3D)     filled from emitters by LightPicker each frame; energy 0 when unused
 │   └── SkySplats (GaussianSplatNode)      top_level = true; sky_follower.gd keeps origin == active camera origin
 ├── World (Node3D, world_frame.gd)         every world object lives under here (group "world_shiftable"); rebases at 5 km (M3-T14)
 │   ├── PlayerShip (ship.tscn, RigidBody3D)    ship.gd
@@ -694,6 +700,7 @@ validates before calling. Values are formatted consistently (vectors to 2 decima
 | `weapons` | PulseCannon (T13) | `mode` (w), `cooldown_s`, `charge` (w, 0..1 capacitor; M2-T14) |
 | `targeting` | TargetingController (T14) | `selected` (w: display name or `none`), `range_m`, `closing_mps`, `candidates` |
 | `render` | SplatStatus (T10) | `splat_backend` (`compute`, `raster`, `headless` or `none`), `fallback` (w), `fps`, `gpu` |
+| `lights` | SplatLightRig (M3-T21) | `picked`, `candidates`, `active`, `cost_us` (§7.3) |
 
 M1 commands:
 
@@ -718,6 +725,7 @@ M1 commands:
 | `refuel [kg]` | Ship | refill the reaction-mass tank, or add `kg` (M2-T14) |
 | `camera [cockpit\|chase]` | CameraRig | set, or toggle with no argument |
 | `fallback [on\|off]` | SplatStatus | fallback meshes and panorama sky |
+| `relight [on\|off]` | SplatLightRig (M3-T21) | shorthand for `toggle settings.splat_relight`: hulls, chunks and buoys lit by the scene or drawn in flat paint (§7.3) |
 | `respawn` | Main | ship reset (same as Back) |
 | `pause [on\|off]` | Main | tree pause (same as Start) |
 | `rebase <dx> <dy> <dz>` | WorldFrame | manual `World.rebase()`. Since M3-T14 the main scene's automatic rebase brings the player back to the origin in the same tick, so `rebase -900000 0 0` ends with `world.origin` on the player and `world.rebases` up by two |
@@ -780,12 +788,12 @@ ring buffer; engine errors in red and warnings in yellow from `ConsoleLogger`.
 
 | Element | Representation | Why |
 |---|---|---|
-| Ship hull (fuselage, struts, pods, canopy exterior) | **Splats** (`HullSplats`, ~150k Gaussians) | The point of the project; GDGS re-uploads a node's transform on change, so a moving, rotating body works. |
-| Nav buoy bodies | **Splats** (~8k each, one shared resource, 5 instances, spinning) | Exercises several independently moving splat nodes before enemies need them. |
-| Stars | **Splats** (in `SkySplats`, ~12k tiny Gaussians) | A Gaussian is the ideal star PSF; brightness/colour per splat; crisp at any resolution unlike a panorama texture. |
-| Nebula | **Splats** (in `SkySplats`, ~4k large soft Gaussians) | Volumetric look for free; per-tile depth sort handles overlapping translucency. |
+| Ship hull (fuselage, struts, pods, canopy exterior) | **Splats** (`HullSplats`, ~150k Gaussians), lit by the scene (§7.3) | The point of the project; GDGS re-uploads a node's transform on change, so a moving, rotating body works. |
+| Nav buoy bodies, debris chunks | **Splats** (~8k each, one shared resource, 5 instances, spinning; chunks cut from LOD1), lit by the scene (§7.3) | Exercises several independently moving splat nodes before enemies need them. |
+| Stars | **Splats** (in `SkySplats`, ~12k tiny Gaussians), never lit: they are emitters | A Gaussian is the ideal star PSF; brightness/colour per splat; crisp at any resolution unlike a panorama texture. |
+| Nebula | **Splats** (in `SkySplats`, ~4k large soft Gaussians), never lit | Volumetric look for free; per-tile depth sort handles overlapping translucency. |
 | Cockpit interior (frame, canopy struts, dash slab) | Mesh (`cockpit_interior.obj`) | Needs hard edges at the near plane and **depth writes** so hull splats behind the frame are rejected by the compositor's depth test; visible only in first person. |
-| Thruster plumes, buoy beacons | Meshes, unshaded emissive, additive, animated per frame. A plume is a cone from the nozzle position along its `exhaust` axis (length, radius, alpha follow the level) plus a small core disc at the exit; no billboards | Per-frame intensity animation; splats are static radiance (no per-splat opacity animation in GDGS). Tied to the nozzle axis, so the plume reads as coming out of the nozzle from every camera. |
+| Thruster plumes, buoy beacons | Meshes, unshaded emissive, additive, animated per frame. A plume is a cone from the nozzle position along its `exhaust` axis (length, radius, alpha follow the level) plus a small core disc at the exit; no billboards | Per-frame intensity animation (no per-splat opacity animation in GDGS). Tied to the nozzle axis, so the plume reads as coming out of the nozzle from every camera. Anything that glows is one of these, not a splat: a lit splat cannot stay brighter than its surroundings (§7.3). |
 | Hull depth proxy (ship, buoys) | Mesh (`HullDepthProxy`): the fallback mesh, opaque black, vertices inset ~4 cm along their normals | Splats write no depth (§7.2). The proxy writes it just inside the splat surface, so effects behind a hull are hidden and the splats are never covered. Shown exactly when the splats are shown. |
 | Projectiles, muzzle flash | Meshes, unshaded emissive | Tiny, fast-moving, short-lived; spawning/destroying splat nodes per shot would churn GPU buffers. |
 | Target bracket | 2D `Control` in the debug overlay | Screen-space UI. |
@@ -796,7 +804,8 @@ ring buffer; engine errors in red and warnings in yellow from `ConsoleLogger`.
 
 1. Godot renders opaque meshes (cockpit interior, fallback meshes if visible) -> colour + depth.
 2. GDGS `CompositorEffect` runs at `EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT`: projects all `GaussianSplatNode`s
-   (hull, buoys, sky) in one pass, radix-sorts `(tile | depth)` keys, blends front-to-back, depth-tests against
+   (hull, buoys, sky) in one pass, lighting each splat of a relit node there (§7.3), radix-sorts `(tile | depth)` keys,
+   blends front-to-back, depth-tests against
    the resolved scene depth (`depth_bias`, `depth_test_min_alpha`, `alpha_cutoff` are tunables on the effect).
 3. Godot renders transparent meshes (thruster plumes, beacons, projectiles, flashes) on top. Correct for additive
    effects even when the emitter sits inside hull splats. **But splats write no depth**, so a transparent mesh
@@ -828,11 +837,53 @@ Raster backend differences (automatic fallback on GPUs without compute): splats 
 
 ### 7.3 Lighting
 
-Splats are unlit: the generators bake a "studio" light rig **in asset-local space** (hemisphere ambient + two
-directional lights) into the DC colour, so shading rotates with the object. Meshes are lit by `KeyStar`
-(`DirectionalLight3D`) plus a dark ambient. To avoid a visible mismatch, M1 mesh materials are either unshaded
-emissive (glow, beacons, projectiles) or dim neutral (cockpit interior). GDGS relighting (bakes a lighting proxy
-in the editor, lights splats from scene `Light3D`s) is the later option for consistent lighting from a real sun.
+Hulls, buoys and debris are lit by the scene (M3-T21, Q23), so each has a lit and a dark side that changes as it rolls. The
+sky is not lit: stars and nebula are emitters, and `SkySplats` never has `relight_enabled`.
+
+**Paint and records.** The generators write flat paint into the PLY colours (paint, panel lines, weathering; no light or
+shade term), and beside each PLY the surface it needs: a `.light` file, 4 bytes per splat in PLY order (octahedral normal x 2,
+AO, confidence), which is GDGS's `GaussianLightingResource` format 1 with nothing around it (`tools/procgen/core/lighting.py`,
+§9). GDGS would bake these in its editor from a voxel proxy; a generator already knows each sample's exact normal. AO is 1.0
+everywhere: the ambient term is small and recesses are already dark paint, so a cavity term would not earn its code. Confidence
+is 255 on the surface. `SplatLightingLoader` wraps the bytes without a per-splat loop, one shared resource per file, and hands
+them to a node **before it enters the tree** (assigned later, GDGS re-merges every splat in the scene, once per node). Every
+node of a `GaussianResource` carries its records, because GDGS uses the first node's when they disagree. `relight_cast_shadows`
+is off: splats do not receive shadows and nothing mesh-like needs theirs.
+
+**What GDGS does with them.** Once per splat, in the projection pass, both backends multiply the PLY colour (before the
+composite's sRGB to linear step, so in the same space the old baked rig multiplied it) by
+
+```
+factor = relight_unlit_level + relight_light_gain * (relight_ambient * AO + sum(light colour * energy * attenuation * max(N.L, 0)) * confidence)
+```
+
+Defaults, as settings the tester can change live: `relight_unlit_level` 0.12, `relight_ambient` 0.3, `relight_light_gain` 0.6.
+With the key star's energy 1.5 that gives about 1.2 on a hull facing the star, what the baked rig gave a hull facing its key, and
+0.30 on the dark side (the baked rig's was 0.36), which stays legible against the black sky. `splat_relight` (`relight [on|off]`)
+switches every lit node at once; off draws the flat paint, for comparison.
+
+**Nothing on a hull glows.** The formula cannot keep a splat at its own colour: a splat with confidence 0 still gets
+`unlit + gain * ambient * AO`, 0.30 by default. So low confidence would not do for an emissive part; it needs a node with
+`relight_enabled` off, as the sky has, or a mesh, as the beacons and plumes are. No ship or buoy has such a part today: the
+window glass is a dark tinted sheet and lights like any surface.
+
+**The 8 lights.** GDGS's own rig walks the scene for `Light3D` nodes every 30 frames, ranks them by energy x range at that moment
+and drops all past 8: a 60 ms muzzle flash would be missed, and a far explosion could push out the player's nozzles. So the
+scene holds exactly 8, created once and never freed: `SplatLightRig` owns the `KeyStar` (slot 0) and 7 `OmniLight3D` slots. Things
+that give off light are `LightEmitter` records, entered with `add_emitter`; each frame `LightPicker` (pure) keeps the 7 highest by
+
+```
+score = priority class * energy * range / distance to the camera^2    (closer than 1 m counts as 1 m; an incumbent counts 20 % more)
+```
+
+with classes player's own 16 > explosion 8 > muzzle flash 4 > nozzle 2 > cabin 1, and the rig copies position, colour, energy,
+range and attenuation into the slots. GDGS re-reads the lights it has found every frame, so a moved slot shows at once, and it
+skips a slot at energy 0. An emitter keeps its slot while it is picked. Meshes are lit by the same 8, so meshes and splats agree.
+GDGS's walk stops after 20 000 nodes, so the rig sits before `World` in the tree. The cabin lamp is an emitter in the rig only
+while the cockpit interior is shown. The explosion's own `OmniLight3D` is the one exception until T22 makes it an emitter: while an
+explosion lives the scene has 9 lights, which GDGS warns about once and handles, because the unused slots are skipped.
+
+Console: `state lights` (`picked`, `candidates`, `active`, `cost_us`).
 
 ### 7.4 Risks and fallback plan
 
@@ -881,7 +932,7 @@ tools/procgen/
   __init__.py
   __main__.py      CLI: python3 -m tools.procgen list | build <asset_id>... | build all  [--seed N] [--out DIR]
   core/            ply.py (3DGS PLY writer + reader), frames.py (Godot <-> 3DGS), geometry.py (tessellation),
-                   sampling.py (surface -> splats), lighting.py (baked studio rig), color.py (blackbody, palettes),
+                   sampling.py (surface -> splats), lighting.py (per-splat lighting records), color.py (blackbody, palettes),
                    obj.py (OBJ/MTL writer), manifest.py, context.py (BuildContext: seed, out_dir, options)
   parts/           reusable parametric parts. M1: hull.py (box, tapered box, canopy), propulsion.py (pod, nozzle),
                    structure.py (strut, mast, panel), weapons.py (gun barrel)
@@ -896,13 +947,16 @@ Output contract: each asset writes to `assets/generated/<asset_id>/` (gitignored
 
 ```json
 {"asset_id": "starfury_aurora", "generator_version": 1, "seed": 42, "frame": "godot", "units": "m",
- "lods": [{"level": 0, "file": "starfury_aurora.ply", "splats": 152340, "spacing_m": 0.06}],
+ "lods": [{"level": 0, "file": "starfury_aurora.ply", "splats": 152340, "spacing_m": 0.06,
+           "lighting": "starfury_aurora_lod0.light"}],
  "aabb_min": [-5.1, -3.9, -5.3], "aabb_max": [5.1, 3.9, 4.8], "centroid_offset": [0.0, 0.1, 0.6],
  "files": {"fallback_mesh": "starfury_aurora.obj", "cockpit_mesh": "cockpit_interior.obj",
            "hardpoints": "hardpoints.json"}}
 ```
 
-M1 emits LOD 0 only; the `lods` array is the seam for the LOD chain (§14.4). AABBs are in the Godot frame.
+M1 emits LOD 0 only; the `lods` array is the seam for the LOD chain (§14.4). AABBs are in the Godot frame. `lighting` names the
+level's lighting records (§7.3, M3-T21), in that PLY's order and frame; a chunk names its own in its `hardpoints.json` `chunks[]`
+entry. The sky lists none.
 
 ### 9.1 `starfury_aurora`
 
@@ -915,7 +969,7 @@ M1 emits LOD 0 only; the `lods` array is the seam for the LOD chain (§14.4). AA
    - `starfury_aurora.obj` + `.mtl` (fallback mesh; also a future multi-view render source).
    - `starfury_aurora.ply`: area-weighted stratified surface sampling at spacing `s` (default 0.04 m -> ~230k
      points; the faces the pilot sees up close at 0.55 `s`); per point: normal, tangent frame -> quaternion;
-     scales `(k·s, k·s, 0.03·s)` with `k = 1.4`; colour = albedo × baked local lighting; opacity 0.98 (stored as
+     scales `(k·s, k·s, 0.03·s)` with `k = 1.4`; colour = flat paint (§7.3); opacity 0.98 (stored as
      logit; the window glass is a 70 % transmittance sheet); SH degree 0 only (`f_dc_*`).
    - `cockpit_interior.obj`: the window frame seen from inside (bars) and the sill, nothing across the forward
      view; interior-facing normals.
@@ -1620,6 +1674,7 @@ src/ai/attack_slash.gd                   the slashing pass and chase (T18)
 src/rendering/lod_switcher{,_math}.gd    splat level of detail by size on screen (T19)
 src/combat/fx_specs.gd, fx_pool.gd       pure effect numbers; fixed GPUParticles3D pools, one per effect (T23)
 assets/fx/*.tres                         the effects' process materials and draw meshes (T23)
+src/rendering/{splat_light_rig,light_picker,light_emitter,splat_lighting_loader}.gd   the 8 lights and who fills them (T21)
 assets/ai/civilian.tres                  never attacks, flees within 3 km (T13)
 src/ai/route.gd, manoeuvre.gd, manoeuvres.gd   instructor route and demo moves (T09)
 src/game/wing_director.gd                Node (Combat, priority 290): wings, orders, acknowledgements, replenish (T07, T08)

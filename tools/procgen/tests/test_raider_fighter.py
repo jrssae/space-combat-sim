@@ -63,8 +63,9 @@ class RaiderFighterTests(unittest.TestCase):
     def test_all_files_are_written_and_listed(self) -> None:
         expected = {raider.PLY_NAME, raider.OBJ_NAME, "raider_fighter.mtl", raider.HARDPOINTS_NAME, "manifest.json"}
         expected |= {entry[0] for entry in raider.FAR_LODS.values()}
+        expected |= {lod["lighting"] for lod in self.manifest["lods"]}
         for entry in self.hp["chunks"]:
-            expected |= {entry["ply"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
+            expected |= {entry["ply"], entry["lighting"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
         self.assertEqual({p.name for p in self.dir_a.iterdir()}, expected)
         self.assertEqual({p.name for p in self.out_a.files}, expected)
 

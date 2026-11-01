@@ -20,7 +20,8 @@ outboard sensor bulb, and a bent pincer and a smaller blade behind every pod. It
 | `cockpit_interior.obj` + `.mtl` | the window frame seen from inside (bars) and the sill; first person only |
 | `starfury_aurora_lod1.ply` | LOD1 (M3-T03): 60 956 splats (25.0 % of LOD0) at 0.094 m spacing, for allies and debris; see "LOD1 and break-up chunks" |
 | `starfury_aurora_lod2.ply`, `starfury_aurora_lod3.ply` | LOD2 and LOD3 (M3-T19): 15 210 and 3 718 splats (6.2 % and 1.5 % of LOD0) at 4x and 8x LOD0's spacing, for distant ships (the `LodSwitcher` shows one level at a time) |
-| `starfury_aurora_chunk_<cabin\|arm_ur\|arm_lr\|arm_ul\|arm_ll>.ply/.obj/.mtl` | the break-up chunks, cut from LOD1 |
+| `starfury_aurora_chunk_<cabin\|arm_ur\|arm_lr\|arm_ul\|arm_ll>.ply/.light/.obj/.mtl` | the break-up chunks, cut from LOD1 |
+| `starfury_aurora_lod<0-3>.light` | lighting records (M3-T21): 4 bytes per splat of that level's PLY, same order and frame; see "Paint and lighting records" |
 | `hardpoints.json` | the contract for the flight model, cameras, weapons, RCS glow, collision and chunks (schema below) |
 | `manifest.json` | asset contract (`docs/architecture.md` section 9): `lods[0]` and `lods[1]`, AABB, `centroid_offset`, `files`, `counts`, `sampling`, `dimensions_m`, `chunks`, `chunk_lod` |
 
@@ -105,7 +106,7 @@ thrust axis, main nozzles 3.807 m behind the CoM, retros 1.813 m ahead of it.
 Schema (all vectors `[x, y, z]`, numbers rounded to 5 decimals), unchanged from M1:
 
 ```json
-{"asset_id": "starfury_aurora", "generator_version": 4, "frame": "godot", "units": "m",
+{"asset_id": "starfury_aurora", "generator_version": 5, "frame": "godot", "units": "m",
  "length_m": 9.83, "span_m": 15.39, "height_m": 7.47, "mass_kg": 48000.0,
  "inertia_estimate_kg_m2": [ix, iy, iz],
  "center_of_mass": [0, 0.096, -0.234],
@@ -122,7 +123,7 @@ Schema (all vectors `[x, y, z]`, numbers rounded to 5 decimals), unchanged from 
                {"name": "pod_ur", "type": "capsule", "position": [...], "radius": 0.928, "height": 6.004, "axis": "z", "basis": {"...": "..."}},
                {"name": "strut_ur", "type": "box", "position": [...], "size": [6.727, 2.121, 4.492], "basis": {"x": [0.83337, 0.40875, 0.37204], "...": "..."}},
                {"name": "claw_ur", "type": "box", "...": "..."}, "... 14 entries"],
- "chunks": [{"name": "cabin", "ply": "starfury_aurora_chunk_cabin.ply", "obj": "starfury_aurora_chunk_cabin.obj",
+ "chunks": [{"name": "cabin", "ply": "starfury_aurora_chunk_cabin.ply", "lighting": "starfury_aurora_chunk_cabin.light", "obj": "starfury_aurora_chunk_cabin.obj",
              "offset": [0, -0.404, -2.155], "splats": 9692}, "... arm_ur, arm_lr, arm_ul, arm_ll (M3-T03)"]}
 ```
 
@@ -165,9 +166,10 @@ below are what keeps the surface continuous; `core/sampling.py` has the details.
   are sampled at 0.47 s = 0.022 m as before: a splat's soft edge (2.5 sigma) spans about 5 degrees there instead of
   10, which keeps the frames thin and the centre clear. `--spacing` and `--option cockpit_spacing=...` override
   both; the manifest records them.
-- **Baked studio light** (`core/lighting.py`): hemisphere ambient plus a warm key from upper front right, a cool
-  fill from lower left rear and a rim from above and behind; no view-dependent terms. Lighting rotates with the
-  ship; a real sun needs GDGS relighting later (section 7.3).
+- **Paint and lighting records** (`core/lighting.py`, generator v5, M3-T21): the PLY colours are flat paint with no light or shade
+  term, so two splats of one paint with opposite normals have one colour. Each level and chunk has a `.light` file beside its
+  PLY: octahedral normal x 2, AO, confidence per splat, GDGS's `GaussianLightingResource` format 1. AO is 1.0 and confidence 255
+  everywhere. The game lights the hull from the scene (`docs/architecture.md` section 7.3); the ship has no emissive parts.
 - **Surface detail** (`styles/`): paneled materials get a world-aligned 0.6 m panel grid with 4 cm panel lines and a
   +-5 % per-panel tint; the hazard bands, the ribbed pod housings (`hull_panel` / `hull_dark`) and the dark tail are
   materials on the geometry, so they also appear in the OBJ.
@@ -186,7 +188,7 @@ re-pinned for generator v3 and v4).
 - **Resampling.** `build_parts` runs a second time with every spacing times `LOD1_SPACING_FACTOR` = 2.0 (hull
   0.094 m, cockpit faces 0.044 m) and every RNG stream suffixed `lod1` (`ctx.rng("splats", <part>, "lod1")`), so
   LOD0's streams are never touched. Splat scales grow with the spacing (`to_splats`: in-plane sigma 0.094 m, normal
-  sigma 7.5 mm), so the sheet closes the way LOD0's does. Same parts, burial rules, materials, glass and baked light.
+  sigma 7.5 mm), so the sheet closes the way LOD0's does. Same parts, burial rules, materials and glass.
 - **Count.** 60 956 splats, 25.0 % of LOD0's 243 728 (AC6 range 20-30 %, checked by a build warning and the tests).
   Manifest `lods[1]`: `{"level": 1, "file": "starfury_aurora_lod1.ply", "splats": 60956, "spacing_m": 0.094}`.
 - **Frame.** LOD1 is centred like LOD0 (its own y and z mean), so its splat centroid is the origin and GDGS's

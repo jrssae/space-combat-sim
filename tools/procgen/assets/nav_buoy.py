@@ -29,10 +29,9 @@ from typing import Any
 
 import numpy as np
 
-from ..core import frames
+from ..core import frames, lighting
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Mesh, rotation_x
-from ..core.lighting import STUDIO_DEFAULT, StudioRig
 from ..core.manifest import build_manifest, lod_entry, write_manifest
 from ..core.obj import write_obj
 from ..core.ply import SplatData, write_ply
@@ -50,7 +49,7 @@ from ..styles import Style
 from ..styles.earthforce import EARTHFORCE
 
 ASSET_ID = "nav_buoy"
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2  # 2: flat paint and lighting records (M3-T21)
 PLY_NAME = "nav_buoy.ply"
 OBJ_NAME = "nav_buoy.obj"
 HARDPOINTS_NAME = "hardpoints.json"
@@ -134,10 +133,10 @@ def _phase(name: str, style: Style) -> tuple[float, float, float]:
     return tuple(((h * k) % 97) / 97.0 * style.panel_size_m for k in (7, 11, 13))
 
 
-def colour_samples(part: Part, samples: SurfaceSamples, style: Style, rig: StudioRig) -> np.ndarray:
+def colour_samples(part: Part, samples: SurfaceSamples, style: Style) -> np.ndarray:
+    """Paint only (paint, panel lines): the scene's lights do the shading in the game."""
     paneled = samples.material_flag("paneled") > 0.5
-    albedo = style.shade_panels(samples.albedo(), samples.positions, samples.normals, paneled, _phase(part.name, style))
-    return rig.shade(samples.normals, albedo, samples.material_flag("metallic"))
+    return style.shade_panels(samples.albedo(), samples.positions, samples.normals, paneled, _phase(part.name, style))
 
 
 def _r(v: Any) -> list[float]:
@@ -176,14 +175,14 @@ def build(ctx: BuildContext) -> AssetOutputs:
     thickness = float(ctx.option("thickness", DEFAULT_THICKNESS))
     if spacing <= 0.0 or overlap <= 0.0 or thickness <= 0.0:
         raise ValueError("spacing, overlap and thickness must be positive")
-    spec, style, rig = DEFAULT_SPEC, EARTHFORCE, STUDIO_DEFAULT
+    spec, style = DEFAULT_SPEC, EARTHFORCE
 
     out_dir = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
     placed, offset = centre(build_parts(spec, style, ctx, spacing))
     samples = SurfaceSamples.concatenate([s for _, s in placed])
-    rgb = np.concatenate([colour_samples(p, s, style, rig) for p, s in placed])
+    rgb = np.concatenate([colour_samples(p, s, style) for p, s in placed])
     authored = to_splats(samples, rgb, spacing, overlap, thickness)
 
     xyz32 = authored.xyz.astype(np.float32)
@@ -197,7 +196,8 @@ def build(ctx: BuildContext) -> AssetOutputs:
         normals=frames.flip_xy(authored.normals),
     )
     comments = (f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}", "frame: 3dgs (Rz180 of godot)")
-    files: list[Path] = [write_ply(out_dir / PLY_NAME, written, comments)]
+    light_name = lighting.lod_file_name(ASSET_ID, 0)
+    files: list[Path] = [write_ply(out_dir / PLY_NAME, written, comments), lighting.write_lighting(out_dir / light_name, written)]
     files += write_obj(out_dir / OBJ_NAME, Mesh.concatenate(p.mesh for p, _ in placed), ASSET_ID, comments[:1])
 
     hp = hardpoints(placed, spec)
@@ -213,7 +213,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,
         seed=ctx.seed,
-        lods=[lod_entry(0, PLY_NAME, total, spacing)],
+        lods=[lod_entry(0, PLY_NAME, total, spacing, light_name)],
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,

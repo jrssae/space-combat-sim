@@ -35,7 +35,8 @@ CLEAR_AZIMUTH_DEG = 20.0
 CLEAR_ELEVATION_DEG = (-12.0, 28.0)
 CHUNK_NAMES = ("cabin", "arm_ur", "arm_lr", "arm_ul", "arm_ll")
 LOD1_AABB_TOLERANCE_M = 0.3  # AC6: LOD1's bounds are LOD0's within this
-# The LOD0 contract (M3-T03; re-pinned for generator v4, the rebuild after the reference model, M3-T26): the default
+# The LOD0 contract (M3-T03; re-pinned for generator v4, the rebuild after the reference model, M3-T26, and for v5, M3-T21:
+# flat paint, so only the colour columns moved): the default
 # build LOD1 is resampled from. Per-part counts, the PLY header and three
 # full splat records of the seed 42 build (float32 values read back from the PLY), so a change to LOD0 shows up without
 # pinning a SHA-256 that could differ between NumPy builds; the same-run SHA-256 checks are in the tests below.
@@ -47,14 +48,14 @@ LOD0_COUNTS = {
 }  # fmt: skip
 LOD0_RECORDS = {
     0: [-0.052700337022542953, 0.33757004141807556, -4.241723537445068, -0.0, 0.612571656703949, -0.7904150485992432,
-        -1.7561198472976685, -1.690417766571045, -1.7332844734191895, -2.840289831161499, -3.057607650756836,
+        -1.729914903640747, -1.5597593784332275, -1.676741361618042, -2.840289831161499, -3.057607650756836,
         -3.057607650756836, -5.583336353302002, 0.3237166702747345, -0.9461540579795837, 0.0, 0.0],
     121864: [-2.5370795726776123, -1.4283372163772583, 0.449472576379776, -0.4129202961921692, 0.910767138004303, 0.0,
-             -1.1092685461044312, -1.104679822921753, -1.0135568380355835, 3.891820192337036, -3.057607650756836,
+             0.45862656831741333, 0.45862656831741333, 0.5701805949211121, 3.891820192337036, -3.057607650756836,
              -3.057607650756836, -5.583336353302002, 0.38310563564300537, -0.5943316221237183, 0.38310563564300537,
              0.5943316221237183],
-    243727: [4.949801921844482, 1.0193599462509155, 2.168424606323242, -0.0, -1.0, 0.0, -1.6691603660583496,
-             -1.6700348854064941, -1.6697529554367065, 3.891820192337036, -3.057607650756836, -3.057607650756836,
+    243727: [4.949801921844482, 1.0193599462509155, 2.168424606323242, -0.0, -1.0, 0.0, -1.6661065816879272,
+             -1.6661065816879272, -1.6661065816879272, 3.891820192337036, -3.057607650756836, -3.057607650756836,
              -5.583336353302002, 0.5, 0.5, -0.5, 0.5],
 }  # fmt: skip
 
@@ -144,7 +145,7 @@ class StarfuryAuroraTests(unittest.TestCase):
         chunk_files = [
             f"starfury_aurora_chunk_{c}.{ext}"
             for c in CHUNK_NAMES
-            for ext in ("mtl", "obj", "ply")
+            for ext in ("light", "mtl", "obj", "ply")
         ]
         self.assertEqual(
             names,
@@ -160,6 +161,10 @@ class StarfuryAuroraTests(unittest.TestCase):
                     "starfury_aurora_lod1.ply",
                     "starfury_aurora_lod2.ply",
                     "starfury_aurora_lod3.ply",
+                    "starfury_aurora_lod0.light",
+                    "starfury_aurora_lod1.light",
+                    "starfury_aurora_lod2.light",
+                    "starfury_aurora_lod3.light",
                 ]
                 + chunk_files
             ),
@@ -293,15 +298,10 @@ class StarfuryAuroraTests(unittest.TestCase):
             SPEC.fuselage.stations[SPEC.fuselage.window_end].shoulder_half_width,
         )
 
-    def test_colours_show_the_palette_and_the_baked_light(self) -> None:
+    def test_colours_show_the_palette(self) -> None:
         rgb, xyz = self.splats.rgb, self.godot_xyz
         self.assertTrue(np.all(rgb >= 0.0))
         self.assertLess(float(rgb.max()), 1.0)
-        normals = frames.flip_xy(self.splats.normals)
-        up, down = normals[:, 1] > 0.8, normals[:, 1] < -0.8
-        self.assertGreater(
-            float(rgb[up].mean()), 1.8 * float(rgb[down].mean())
-        )  # key light from above
         yellow = (
             (rgb[:, 2] < 0.2 * rgb[:, 0])
             & (rgb[:, 1] > 0.4 * rgb[:, 0])
@@ -320,7 +320,7 @@ class StarfuryAuroraTests(unittest.TestCase):
         grey = (chroma < 0.15) & (rgb.max(axis=1) > 0.12)
         self.assertGreater(
             float(grey.mean()), 0.3
-        )  # most of the lit hull is neutral grey
+        )  # most of the hull is neutral grey
 
     # --- hardpoints -------------------------------------------------------------------------
     def test_hardpoints_schema(self) -> None:
@@ -674,7 +674,7 @@ class StarfuryAuroraTests(unittest.TestCase):
         self.assertEqual(self.manifest["counts"], LOD0_COUNTS)
         header = ply_header(
             sum(LOD0_COUNTS.values()),
-            ("starfury_aurora generator v4 seed 42", "frame: 3dgs (Rz180 of godot)"),
+            (f"starfury_aurora generator v{ship.GENERATOR_VERSION} seed 42", "frame: 3dgs (Rz180 of godot)"),
         )
         self.assertEqual(
             (self.dir_a / ship.PLY_NAME).read_bytes()[: len(header)], header
@@ -1062,10 +1062,9 @@ class StarfuryLod1FrameAndCoverageTests(unittest.TestCase):
         pick = np.random.default_rng(1).choice(sum(len(x) for x in points), cls.PROBES, replace=False)
         cls.points = np.concatenate(points)[pick]
         cls.names = np.array(names)[pick]
-        rig = ship.STARFURY_RIG
 
         def splats(parts):
-            return ship.part_splats(parts, EARTHFORCE, rig, DEFAULT_OVERLAP, DEFAULT_THICKNESS)
+            return ship.part_splats(parts, EARTHFORCE, DEFAULT_OVERLAP, DEFAULT_THICKNESS)
 
         cls.opacity0 = composite_opacity(cls.points, splats(cls.lod0))
         cls.opacity1 = composite_opacity(cls.points, splats(cls.lod1))

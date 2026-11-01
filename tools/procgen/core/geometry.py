@@ -27,8 +27,8 @@ class Material:
 
     ``transmittance`` is the fraction of light that should pass through the whole surface
     (0 = opaque hull, 0.7 = tinted glass); the sampler turns it into per-splat alpha.
-    ``paneled`` surfaces get the style's panel-line shading. ``metallic`` darkens the ambient
-    term a little so bare metal reads differently from paint.
+    ``paneled`` surfaces get the style's panel lines. ``metallic`` only reaches the fallback mesh's
+    material: splats are lit in the game by the scene's lights, and have no specular.
     """
 
     name: str

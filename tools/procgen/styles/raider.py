@@ -3,9 +3,9 @@ with darker recessed panels, vent grilles and nozzle metal, faded ochre accent b
 canopy. No insignia, no logos.
 
 Albedos are linear RGB; the sRGB look is hull #A89F96, panels #544E48, ochre #B88A3A. The milestone's "about #77706A"
-rendered nearly black on the real GPU in the first capture: the splats carry baked, unlit radiance (the studio rig
-multiplies the albedo by about 0.35 on average), so a mid-grey albedo comes out far darker than the Starfury's light
-grey hull. The brighter hull keeps the worn grey-brown hue and reads against the dark sky at fighting range. The panel
+rendered nearly black on the real GPU in the first capture, far darker than the Starfury's light grey hull: a raider is
+mostly seen from behind or below, on its dark side. The brighter hull keeps the worn grey-brown hue and reads against the
+dark sky at fighting range. The panel
 grid is a little finer and the per-panel tint jitter much stronger than on the Earthforce ships, so the plating reads
 as patched and weathered rather than freshly painted.
 """

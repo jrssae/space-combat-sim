@@ -65,7 +65,7 @@ class NavBuoyTests(unittest.TestCase):
 
     def test_all_files_are_written_and_listed(self) -> None:
         names = sorted(p.name for p in self.dir_a.iterdir())
-        self.assertEqual(names, ["hardpoints.json", "manifest.json", "nav_buoy.mtl", "nav_buoy.obj", "nav_buoy.ply"])
+        self.assertEqual(names, ["hardpoints.json", "manifest.json", "nav_buoy.mtl", "nav_buoy.obj", "nav_buoy.ply", "nav_buoy_lod0.light"])
         self.assertEqual(sorted(p.name for p in self.out_a.files), names)
         self.assertEqual(self.out_a.warnings, ())
         self.assertEqual(self.manifest["files"], {"fallback_mesh": "nav_buoy.obj", "hardpoints": "hardpoints.json"})
