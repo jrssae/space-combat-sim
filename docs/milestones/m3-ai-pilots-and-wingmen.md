@@ -1620,7 +1620,11 @@ Added 2026-10-30 for the maintainer's request Q24, done before the other open ta
   `scripts/run_tests.sh`: `rebase -900000 0 0; wait 1; state world; get ship.position` on the real main scene.
 
 **M3-T09 (instructor: follow path, pacing, demo manoeuvres, route scenario).** Merged into `m3` as unreviewed work in progress
-(maintainer, 2026-10-27); the review, its fixes and a `RebaseFight` check of the route (T14) are still to do.
+(maintainer, 2026-10-27). Closed 2026-10-31: reviewed (`BehaviourFollowPath`'s phases, pacing hysteresis, the demo restart on
+re-entry and the desired-velocity hand-off; no defects found) and checked with T14's `RebaseFight`
+(`test_the_route_survives_rebases_with_the_player_parked`: a 1 km rebase forced every 0.5 s of sim time, 66 rebases over 224
+ticks at 0.1 s steps; NAV 1 reached 142 m from its universe position, the instructor stopped at NAV 2 1 083 m from the parked
+player, waiting to show the roll as without rebases; every fixture check held). P6 stays (H).
 - **Built.** `Route` (`src/ai/route.gd`, pure: `Waypoint`s as `UniversePos` with `demo` and `hold_s`, `cruise_mps` 60, `pace`
   `player|none` and the spawner-set `pace_id`, `loop`, the pacing constants and `pace_speed` / `should_wait` / `lag_to`).
   `Manoeuvre` (base: `step(p, dt)` until `done`, `result()`, `needs_speed()`, `TIMEOUT_S` 45 as a safety net, the desired-velocity

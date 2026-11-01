@@ -220,3 +220,28 @@ func _check_waypoint_marker(route: Route) -> void:
 	else:
 		assert_true(f.waypoint_edge_visible, "off screen: the edge arrow")
 	gut.p("HUD: %s at %s (on screen %s), %s" % [f.waypoint_label, f.waypoint_pos, f.waypoint_on_screen, input.status_line])
+
+
+func test_the_route_survives_rebases_with_the_player_parked() -> void:
+	# T14's fixture (M3-T09 review item): the waypoints are `UniversePos`, so the instructor reaches them and stops for a parked
+	# player just as without rebases while the World re-centres every 0.5 s of sim time under it.
+	var path: BehaviourFollowPath = _path()
+	var route: Route = (main.instructor.driver.brain as AiPilot).context.route
+	var arrivals: Array[float] = []
+	var last_index: Array[int] = [path.index]
+	var watch := func() -> bool:
+		if path.index != last_index[0]:
+			var reached: Route.Waypoint = route.waypoint(last_index[0])
+			arrivals.append(main.world.to_universe(_instructor_ship().global_position).distance_to(reached.position))
+			last_index[0] = path.index
+		return path.state_name() == "wait" and _instructor_ship().linear_velocity.length() < 1.0
+	var fight: RebaseFight = await RebaseFight.run(self, main, 120.0, watch, 40.0, 0.0, 0.5)
+	gut.p("route under rebases: %s; arrivals %s m; stopped at NAV %d, %.0f m from the player" % [fight.summary(), str(arrivals),
+			path.nav_number(), _lag()])
+	assert_eq(path.state_name(), "wait", "it stopped for the parked player")
+	assert_gte(fight.rebases, 20, "and the World rebased all the way")
+	assert_gt(arrivals.size(), 0, "it reached a waypoint on the way")
+	for d: float in arrivals:
+		assert_lt(d, Route.ARRIVAL_M + 5.0, "each arrival within the route's 150 m, in universe terms")
+	assert_lt(_lag(), Route.WAIT_BEYOND_M, "stopped within 1 600 m")
+	assert_eq(path.demo_name(), "roll", "waiting to show the roll, as without rebases")
