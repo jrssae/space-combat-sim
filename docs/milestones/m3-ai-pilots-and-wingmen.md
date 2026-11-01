@@ -1108,6 +1108,8 @@ Added 2026-10-28 for Q23; after T14 (particles must follow the rebase).
     with 24 hits and 4 kills in both (the 120 s node-count check is the headless test); `render.fps` read 58-60 in both runs (vsync-capped at 60, so the cost is below what this
     reads). The fight frames did not catch a close hit (the fight is far from the camera): sparks near a hull are for AC35 (H).
 
+  - Close-hit evidence, added at review (1080p, vsync off, with T21's relighting merged): a raider at 70 m under the wing's fire shows spark streaks and an explosion with fragments, and the hull proxies hide the fireball behind the player's ship. Four raiders firing on the player at about 200 m, 56 bursts, ran at 157-232 fps with `particle_density` 1 and 157-217 fps with 0, so the particles' cost is below the noise. The sparks are small on screen at these ranges; how they read is AC35's.
+
 ### M3-T24 Hero LOD for the player's ship
 
 Added 2026-10-28 for Q23; after T20 (the budget) and T21 (lighting records for the new level).
