@@ -62,10 +62,28 @@ class RaiderFighterTests(unittest.TestCase):
     # --- files, manifest, budget --------------------------------------------------------------------
     def test_all_files_are_written_and_listed(self) -> None:
         expected = {raider.PLY_NAME, raider.OBJ_NAME, "raider_fighter.mtl", raider.HARDPOINTS_NAME, "manifest.json"}
+        expected |= {entry[0] for entry in raider.FAR_LODS.values()}
         for entry in self.hp["chunks"]:
             expected |= {entry["ply"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
         self.assertEqual({p.name for p in self.dir_a.iterdir()}, expected)
         self.assertEqual({p.name for p in self.out_a.files}, expected)
+
+    def test_lods_one_to_three_share_bounds_and_determinism(self) -> None:
+        # M3-T19 (AC28): coarser levels for the LOD switcher, with LOD0's box, centred, deterministic.
+        lod0 = self.manifest["lods"][0]
+        self.assertEqual([e["level"] for e in self.manifest["lods"]], [0, 1, 2, 3])
+        for level, (name, factor, _stream, bounds) in raider.FAR_LODS.items():
+            entry = self.manifest["lods"][level]
+            self.assertEqual(entry["file"], name)
+            self.assertAlmostEqual(entry["spacing_m"], factor * raider.DEFAULT_SPACING_M)
+            share = entry["splats"] / lod0["splats"]
+            self.assertTrue(bounds[0] <= share <= bounds[1], (level, share))
+            xyz = frames.flip_xy(read_ply(self.dir_a / name).to_splats().xyz)
+            self.assertLess(float(np.abs(xyz.mean(axis=0)).max()), 1e-3, "centred like LOD0")
+            np.testing.assert_allclose(xyz.min(axis=0), self.manifest["aabb_min"], atol=0.3)
+            np.testing.assert_allclose(xyz.max(axis=0), self.manifest["aabb_max"], atol=0.3)
+            self.assertEqual((self.dir_a / name).read_bytes(), (self.dir_b / name).read_bytes(), "deterministic")
+        self.assertEqual(self.out_a.warnings, (), "every share inside its range")
 
     def test_manifest_lods_zero_and_the_budget(self) -> None:
         lod = self.manifest["lods"][0]

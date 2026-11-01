@@ -62,6 +62,12 @@ HARDPOINTS_NAME = "hardpoints.json"
 
 DEFAULT_SPACING_M = 0.09
 SPLAT_BUDGET = (15_000, 40_000)  # AC4, at the default spacing
+# M3-T19: the coarser levels for the LOD switcher, at 2x, 4x and 8x the spacing.
+FAR_LODS = {
+    1: ("raider_fighter_lod1.ply", 2.0, "lod1", (0.20, 0.30)),  # level: file, spacing factor, stream, share of LOD0
+    2: ("raider_fighter_lod2.ply", 4.0, "lod2", (0.04, 0.09)),
+    3: ("raider_fighter_lod3.ply", 8.0, "lod3", (0.01, 0.025)),
+}
 CHASE_ANCHOR = (0.0, 3.5, 14.0)  # authored frame: behind and above, frames the 17 m span at 70 degrees
 EYE = (0.0, 0.95, 1.5)  # the pilot's eye under the canopy panel (authored frame); looks down -Z
 JSON_DIGITS = 5
@@ -178,11 +184,14 @@ def _plate(width: float, length: float, height: float, role: str, style: Style) 
     return box((width, height, length), style.material(role), center=(0.0, 0.5 * height, 0.0))
 
 
-def build_parts(spec: RaiderSpec, style: Style, ctx: BuildContext, spacing: float) -> list[Placed]:
-    """Every part in the authored frame, sampled, mirrored to the left side where it has one."""
+def build_parts(
+    spec: RaiderSpec, style: Style, ctx: BuildContext, spacing: float, stream_suffix: tuple[str, ...] = ()
+) -> list[Placed]:
+    """Every part in the authored frame, sampled, mirrored to the left side where it has one. ``stream_suffix``
+    keeps another LOD's random draws apart from LOD0's."""
 
     def sample(mesh: Mesh, stream: str) -> SurfaceSamples:
-        return sample_mesh(mesh, spacing, ctx.rng("splats", stream))
+        return sample_mesh(mesh, spacing, ctx.rng("splats", stream, *stream_suffix))
 
     wing_spec, hump_spec = spec.wing, spec.hump
     nac_origin = np.array([spec.nacelle_x, spec.nacelle_y, spec.nacelle_z])
@@ -422,6 +431,21 @@ def build(ctx: BuildContext) -> AssetOutputs:
     chunk_files, chunk_entries = write_chunks(out_dir, ASSET_ID, chunk_sources, comments)
     files += chunk_files
 
+    # LOD1-LOD3: whole-ship files for distant ships, resampled from their own streams.
+    far: dict[int, int] = {}
+    for level, (name, factor, stream, _share) in FAR_LODS.items():
+        lod_placed, _ = centre(build_parts(spec, style, ctx, factor * spacing, (stream,)))
+        lod = SplatData.concatenate(
+            [to_splats(p.samples, colour_samples(p, style, rig), p.spacing, overlap, thickness)
+             for p in lod_placed if p.samples is not None]
+        )
+        far[level] = len(lod)
+        lod_written = SplatData(
+            xyz=frames.godot_to_3dgs_positions(lod.xyz), rgb=lod.rgb, alpha=lod.alpha, scale=lod.scale,
+            rot=frames.godot_to_3dgs_quats(lod.rot), normals=frames.flip_xy(lod.normals),
+        )
+        files.append(write_ply(out_dir / name, lod_written, comments + (f"lod {level}",)))
+
     hp = hardpoints(placed, spec, chunk_entries, offset)
     hp_path = out_dir / HARDPOINTS_NAME
     hp_path.write_text(json.dumps(hp, indent=2) + "\n", encoding="utf-8", newline="\n")
@@ -431,11 +455,16 @@ def build(ctx: BuildContext) -> AssetOutputs:
     warnings: list[str] = []
     if abs(spacing - DEFAULT_SPACING_M) < 1e-12 and not SPLAT_BUDGET[0] <= total <= SPLAT_BUDGET[1]:
         warnings.append(f"{total} splats is outside the AC4 budget {SPLAT_BUDGET} at the default spacing")
+    if abs(spacing - DEFAULT_SPACING_M) < 1e-12:
+        for level, (_name, _factor, _stream, bounds) in FAR_LODS.items():
+            if not bounds[0] <= far[level] / total <= bounds[1]:
+                warnings.append(f"LOD{level} has {far[level] / total:.1%} of LOD0's splats, outside {bounds}")
     manifest = build_manifest(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,
         seed=ctx.seed,
-        lods=[lod_entry(0, PLY_NAME, total, spacing)],
+        lods=[lod_entry(0, PLY_NAME, total, spacing)]
+        + [lod_entry(level, FAR_LODS[level][0], far[level], FAR_LODS[level][1] * spacing) for level in FAR_LODS],
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,

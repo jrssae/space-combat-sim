@@ -158,6 +158,8 @@ class StarfuryAuroraTests(unittest.TestCase):
                     "starfury_aurora.obj",
                     "starfury_aurora.ply",
                     "starfury_aurora_lod1.ply",
+                    "starfury_aurora_lod2.ply",
+                    "starfury_aurora_lod3.ply",
                 ]
                 + chunk_files
             ),
@@ -175,7 +177,7 @@ class StarfuryAuroraTests(unittest.TestCase):
 
     def test_manifest_lods_zero_and_budget(self) -> None:
         lod0 = self.manifest["lods"][0]
-        self.assertEqual(len(self.manifest["lods"]), 2)  # LOD1 is checked below
+        self.assertEqual(len(self.manifest["lods"]), 4)  # LOD1-LOD3 are checked below
         self.assertEqual((lod0["level"], lod0["file"]), (0, "starfury_aurora.ply"))
         self.assertEqual(lod0["spacing_m"], ship.DEFAULT_SPACING_M)
         self.assertTrue(
@@ -683,8 +685,25 @@ class StarfuryAuroraTests(unittest.TestCase):
                 row, record, rtol=1e-6, atol=1e-7, err_msg=str(index)
             )
 
+    def test_far_lods_share_bounds_and_determinism(self) -> None:
+        # M3-T19 (AC28): LOD2 and LOD3 hold about 6 % and 1.5 % of LOD0, with LOD0's box, centred, deterministic.
+        lod0 = self.manifest["lods"][0]
+        for level, (name, factor, _stream, bounds) in ship.FAR_LODS.items():
+            entry = self.manifest["lods"][level]
+            self.assertEqual((entry["level"], entry["file"]), (level, name))
+            self.assertAlmostEqual(entry["spacing_m"], factor * ship.DEFAULT_SPACING_M)
+            share = entry["splats"] / lod0["splats"]
+            self.assertTrue(bounds[0] <= share <= bounds[1], (level, share))
+            xyz = frames.flip_xy(read_ply(self.dir_a / name).to_splats().xyz)
+            self.assertEqual(len(xyz), entry["splats"])
+            self.assertLess(float(np.abs(xyz.mean(axis=0)).max()), 1e-3, "centred like LOD0")
+            box_lo, box_hi = xyz.min(axis=0), xyz.max(axis=0)
+            np.testing.assert_allclose(box_lo, self.manifest["aabb_min"], atol=LOD1_AABB_TOLERANCE_M)
+            np.testing.assert_allclose(box_hi, self.manifest["aabb_max"], atol=LOD1_AABB_TOLERANCE_M)
+            self.assertEqual((self.dir_a / name).read_bytes(), (self.dir_b / name).read_bytes(), "deterministic")
+
     def test_lod1_entry_share_and_bounds(self) -> None:
-        lod0, lod1 = self.manifest["lods"]
+        lod0, lod1 = self.manifest["lods"][:2]
         self.assertEqual(
             (lod1["level"], lod1["file"], lod1["splats"]),
             (1, ship.LOD1_PLY_NAME, len(self.lod1)),

@@ -88,6 +88,11 @@ var _combat: CombatCommand = CombatCommand.new()
 var _combat_fresh: bool = false
 var _fallback_active: bool = false
 var _interior_visible: bool = false
+# Levels of detail (M3-T19): the splat node per level, the levels in order (the first is `spec.splat_lod`, `HullSplats`), and
+# the one drawn.
+var _lod_nodes: Array[GaussianSplatNode] = []
+var _lod_levels: PackedInt32Array = PackedInt32Array()
+var _lod_level: int = 0
 var _muzzles: Array[Node3D] = []
 var _collision_nodes: Array[CollisionShape3D] = []
 var _applied_force: Vector3 = Vector3.ZERO
@@ -126,6 +131,10 @@ func _ready() -> void:
 	targeting.setup(self, console_owner)
 	_build()
 	_build_cabin_light()
+	if get_node_or_null(^"LodSwitcher") == null:
+		var switcher := LodSwitcher.new()
+		switcher.name = "LodSwitcher"
+		add_child(switcher)
 	Settings.changed.connect(_on_hull_setting_changed)
 	_apply_hull_sync_setting()
 	use_fallback_mesh(_fallback_active or SplatStatus.needs_fallback(SplatStatus.active_backend()))
@@ -328,11 +337,58 @@ func _apply_hull_visuals() -> void:
 	hull_mesh_fallback.visible = mesh_mode
 	_apply_canopy_glass()
 	hull_depth_proxy.visible = (_interior_visible or not _fallback_active) and bool(Settings.get_value(&"hull_depth_proxy"))
-	hull_splats.visible = not mesh_mode
+	for i: int in _lod_nodes.size():
+		_lod_nodes[i].visible = not mesh_mode and _lod_levels[i] == _lod_level
+	var sync := get_node_or_null(^"HullSplatSync") as SplatPoseSync
+	if sync != null:
+		sync.sync()  # a level just shown is placed at once
 
 
 func is_fallback_mesh_active() -> bool:
 	return _fallback_active
+
+
+## The splat levels this ship can draw, finest first (M3-T19).
+func lod_levels() -> PackedInt32Array:
+	return _lod_levels
+
+
+func lod_level() -> int:
+	return _lod_level
+
+
+## Draws `level` (one of `lod_levels()`, the nearest one otherwise), by visibility only.
+func set_lod_level(level: int) -> void:
+	if _lod_levels.is_empty():
+		return
+	var pick: int = _lod_levels[0]
+	for l: int in _lod_levels:
+		if l <= level:
+			pick = l
+	if pick == _lod_level:
+		return
+	_lod_level = pick
+	_apply_hull_visuals()
+
+
+## Splats in the level drawn now (0 while the mesh is drawn instead).
+func visible_splat_count() -> int:
+	for i: int in _lod_nodes.size():
+		if _lod_nodes[i].visible and _lod_nodes[i].gaussian != null:
+			return _lod_nodes[i].gaussian.point_count
+	return 0
+
+
+## The radius of a sphere that holds the hull, m (its hit volumes' bound, 10 m before the hull is built).
+func bounding_radius() -> float:
+	var damageable: Damageable = Damageable.of(self)
+	return damageable.bounding_radius if damageable != null and damageable.bounding_radius > 0.0 else 10.0
+
+
+## The name other ships read on this one's targeting marker.
+func display_name() -> String:
+	var marker := get_node_or_null(^"Targetable") as Targetable
+	return marker.display_name if marker != null else String(name)
 
 
 # --- build -------------------------------------------------------------------------------------------------------
@@ -429,6 +485,7 @@ func _load_visuals() -> void:
 	if gaussian == null and not splat_path.is_empty():
 		push_warning("Ship: %s is missing or not imported (run scripts/gen_assets.sh, then import); no hull splats" % splat_path)
 	hull_splats.gaussian = gaussian
+	_load_far_levels(lod)
 	hull_mesh_fallback.mesh = _load_mesh(dir.path_join(spec.asset_id + ".obj"))
 	hull_depth_proxy.mesh = hull_mesh_fallback.mesh  # whatever is loaded, so a regenerated hull needs no changes here
 	cockpit_interior.mesh = _load_mesh(dir.path_join(COCKPIT_MESH_FILE)) if spec.has_cockpit_interior else null
@@ -437,6 +494,35 @@ func _load_visuals() -> void:
 	_make_double_sided(hull_mesh_fallback.mesh)
 	_make_double_sided(cockpit_interior.mesh)
 	_lift_shadows(cockpit_interior.mesh)
+
+
+# One splat node per coarser level the asset has (M3-T19), built once: the switcher shows one at a time, so GDGS never
+# rebuilds its buffers while the ship flies.
+func _load_far_levels(base: Dictionary) -> void:
+	_lod_nodes = [hull_splats]
+	_lod_levels = PackedInt32Array([maxi(int(base["level"]), 0)])
+	for level: int in range(_lod_levels[0] + 1, LodSwitcherMath.COARSEST + 1):
+		var lod: Dictionary = SplatLod.resolve(spec.asset_id, level)
+		if int(lod["level"]) != level or not ResourceLoader.exists(String(lod["path"])):
+			continue
+		var node_name: String = "HullSplatsLod%d" % level
+		var node := get_node_or_null(NodePath(node_name)) as GaussianSplatNode
+		if node == null:
+			node = GaussianSplatNode.new()
+			node.name = node_name
+			node.transform = hull_splats.transform
+			node.visible = false
+			add_child(node)
+			var sync := get_node_or_null(^"HullSplatSync") as SplatPoseSync
+			if sync != null:
+				sync.add_splats(node)
+		var resource := load(String(lod["path"])) as GaussianResource
+		if node.gaussian != resource:
+			node.gaussian = resource
+		_lod_nodes.append(node)
+		_lod_levels.append(level)
+	_lod_level = _lod_levels[0]
+	_apply_hull_visuals()
 
 
 func _on_hull_setting_changed(key: StringName, _value: Variant) -> void:

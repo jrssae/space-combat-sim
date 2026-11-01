@@ -19,6 +19,7 @@ outboard sensor bulb, and a bent pincer and a smaller blade behind every pod. It
 | `starfury_aurora.obj` + `.mtl` | fallback mesh, Godot frame, faces grouped by material (the glass is `ef_canopy_glass`) |
 | `cockpit_interior.obj` + `.mtl` | the window frame seen from inside (bars) and the sill; first person only |
 | `starfury_aurora_lod1.ply` | LOD1 (M3-T03): 60 956 splats (25.0 % of LOD0) at 0.094 m spacing, for allies and debris; see "LOD1 and break-up chunks" |
+| `starfury_aurora_lod2.ply`, `starfury_aurora_lod3.ply` | LOD2 and LOD3 (M3-T19): 15 210 and 3 718 splats (6.2 % and 1.5 % of LOD0) at 4x and 8x LOD0's spacing, for distant ships (the `LodSwitcher` shows one level at a time) |
 | `starfury_aurora_chunk_<cabin\|arm_ur\|arm_lr\|arm_ul\|arm_ll>.ply/.obj/.mtl` | the break-up chunks, cut from LOD1 |
 | `hardpoints.json` | the contract for the flight model, cameras, weapons, RCS glow, collision and chunks (schema below) |
 | `manifest.json` | asset contract (`docs/architecture.md` section 9): `lods[0]` and `lods[1]`, AABB, `centroid_offset`, `files`, `counts`, `sampling`, `dimensions_m`, `chunks`, `chunk_lod` |

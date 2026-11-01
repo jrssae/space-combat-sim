@@ -128,6 +128,11 @@ LOD1_PLY_NAME = "starfury_aurora_lod1.ply"
 LOD1_SPACING_FACTOR = 2.0
 LOD1_STREAM = "lod1"  # suffix of every LOD1 RNG stream: ctx.rng("splats", <part>, "lod1")
 LOD1_SHARE = (0.20, 0.30)  # AC6: LOD1 splats / LOD0 splats, at the default spacing and factor
+# M3-T19: the far levels for the LOD switcher, sampled like LOD1 at 4x and 8x LOD0's spacing.
+FAR_LODS = {
+    2: ("starfury_aurora_lod2.ply", 4.0, "lod2", (0.04, 0.09)),  # level: file, spacing factor, stream, share of LOD0
+    3: ("starfury_aurora_lod3.ply", 8.0, "lod3", (0.01, 0.025)),
+}
 CHUNK_LOD = 1  # the chunks partition this LOD's splats
 # Break-up chunks, in LOD1 file order: the cabin (fuselage, cockpit faces, gun mount) and one arm
 # (pod, strut, claw) per corner, named after the pods (DamageZones' X-fighter cabin and arms).
@@ -723,6 +728,16 @@ def build(ctx: BuildContext) -> AssetOutputs:
     )
     files += chunk_files
 
+    # LOD2 and LOD3: whole-ship files for distant ships, resampled from their own streams.
+    far: dict[int, int] = {}
+    for level, (name, factor, stream, _share) in FAR_LODS.items():
+        lod_placed, _ = centre(
+            build_parts(spec, style, ctx, factor * spacing, factor * cockpit_spacing, (stream,))
+        )
+        lod_splats = part_splats(lod_placed, style, rig, overlap, thickness)
+        far[level] = len(lod_splats)
+        files.append(write_ply(out_dir / name, _to_3dgs(lod_splats), comments + (f"lod {level}",)))
+
     hp = hardpoints(placed, spec, chunk_entries)
     hp_path = out_dir / HARDPOINTS_NAME
     hp_path.write_text(json.dumps(hp, indent=2) + "\n", encoding="utf-8", newline="\n")
@@ -743,6 +758,10 @@ def build(ctx: BuildContext) -> AssetOutputs:
             warnings.append(
                 f"LOD1 has {share:.1%} of LOD0's splats, outside the AC6 share {LOD1_SHARE}"
             )
+        for level, (_name, _factor, _stream, bounds) in FAR_LODS.items():
+            far_share = far[level] / total
+            if not bounds[0] <= far_share <= bounds[1]:
+                warnings.append(f"LOD{level} has {far_share:.1%} of LOD0's splats, outside {bounds}")
     manifest = build_manifest(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,
@@ -750,7 +769,8 @@ def build(ctx: BuildContext) -> AssetOutputs:
         lods=[
             lod_entry(0, PLY_NAME, total, spacing),
             lod_entry(CHUNK_LOD, LOD1_PLY_NAME, len(lod1), lod1_spacing),
-        ],
+        ]
+        + [lod_entry(level, FAR_LODS[level][0], far[level], FAR_LODS[level][1] * spacing) for level in FAR_LODS],
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,

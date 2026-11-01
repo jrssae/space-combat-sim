@@ -43,7 +43,8 @@ the real main scene (`Main`) with the player flying, so the main thread's whole 
   `max_physics_steps_per_frame` ticks per frame, so a tick slower than 16.7 ms spirals).
 - **Max N** for a layout is the largest ship count in the sweep where all three hold on **two runs of three**. The headline
   number is the lower of `furball` and `spread` (below); `transit` is recorded.
-- **(H) once per report:** the windowed build at the headline max N, FPS and GPU recorded on the tester's machine. Not a gate.
+- **Once per report, on the GPU:** the windowed build at the headline max N, FPS, frame time, VRAM and GPU recorded by the
+  agent on the maintainer's machine (`CLAUDE.md`, GPU work). Not a gate.
 
 The development desktop swings by up to 2x over seconds whatever runs on it (`test_ai_think_time`'s notes), so every number is a
 median of runs on the same seeds, and the pass-or-fail tests in the suite count work (contacts touched, nodes walked, pairs
@@ -75,7 +76,7 @@ are M5's mission work).
   `docs/third-party.md` is a question for the report, not a cycle's pick.
 - Console and settings as everywhere (§6.4): the `perf` provider and `bench` command register with `DebugConsole`; new settings
   are `SettingsSchema` entries.
-- Anything that needs a GPU is (H).
+- GPU checks run on the maintainer's machine (`CLAUDE.md`); only judgements of how it looks or feels are (H).
 
 ## Acceptance criteria
 
@@ -86,7 +87,7 @@ are M5's mission work).
 | AC3 | Four cycles, each recorded below: the numbers before, three candidates ranked by confidence with the evidence for each, the first built **test first** (the failing test committed before the change), the numbers after, the gain against the prediction | A | |
 | AC4 | No regressions: `scripts/run_tests.sh` green after each cycle; AC13's paired budget holds; every behaviour change listed | A | |
 | AC5 | Goal: the headline max N is at least 100, and toward 500. Not reached after cycle 4: the report says so and asks for guidance (T06) | A | |
-| AC6 | Render check at the headline max N on the tester's GPU: FPS, GPU and driver recorded | H | |
+| AC6 | Render check at the headline max N on the maintainer's GPU: FPS, frame time, VRAM, GPU and driver recorded (by the agent, 2026-11-01) | A | |
 
 ## Task breakdown (ordered)
 
@@ -158,5 +159,5 @@ run more cycles toward 500 or to close M4.
 ## Definition of done (M4)
 
 - The maintainer has the T06 report and has answered it: more cycles, or M4 closed with the number reached.
-- `scripts/run_tests.sh` green, AC1-AC5 recorded, AC6 ticked by the maintainer with GPU, driver and FPS. Then `m4` merges into
+- `scripts/run_tests.sh` green, AC1-AC6 recorded (AC6 on the maintainer's GPU). Then `m4` merges into
   `main`.

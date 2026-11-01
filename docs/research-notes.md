@@ -54,6 +54,17 @@ GDGS behaviours that shape our pipeline (read from the v3.3.0 source):
 | **GUT** `bitwes/Gut` | **v9.7.1** (branch `godot_4_7`, targets Godot 4.7.x) | MIT | `godot --headless -s addons/gut/gut_cmdln.gd -gdir=res://tests -ginclude_subdirs -gexit -gjunit_xml_file=reports/gut.xml`; exits 1 on failure. Options verified in `addons/gut/cli/gut_cli.gd` |
 | gdUnit4 `godot-gdunit-labs/gdUnit4` | v6.2.2 (2026-10-07) | MIT | `gdUnit4-action@v1`; has had headless input-handling caveats (historically needed xvfb) |
 
+## The maintainer's machine (local sessions, 2026-11-01)
+
+- Bazzite (Fedora Atomic), Wayland, AMD Radeon RX 6950 XT on RADV (Mesa); Vulkan 1.4. `/dev/dri/renderD128` is open to the
+  session, so Claude Code running there reaches the GPU directly, no extra permissions needed.
+- Verified: `.tools/godot/godot --path . --resolution 960x540 -- --console-exec="wait 180; state render; screenshot /tmp/x.png;
+  quit"` draws on the GPU (`Vulkan 1.4.354 - Forward+ - Using Device #0: AMD Radeon RX 6950 XT (RADV NAVI21)`), GDGS picks its
+  **Compute** backend, 59 fps in the sandbox at 960x540. The window opens on the desktop for the length of the run.
+- VRAM in use: `/sys/class/drm/card1/device/mem_info_vram_used` (bytes); total in `mem_info_vram_total`.
+- Headless runs (`--headless`) still have no GDGS backend and a 64 x 64 px viewport; tests that need screen sizes set the
+  root window size themselves.
+
 ## Container findings (implementation sessions)
 
 - `github.com/<org>/<repo>/releases/download/...` **works** through the proxy (Godot 4.7.2 zip and export templates both 200).

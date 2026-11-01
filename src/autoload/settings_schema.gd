@@ -27,6 +27,8 @@ const ENTRIES: Dictionary = {
 		"doc": "Collisions hurt by the velocity change they cause (rams); off = ships still bounce but take no damage"},
 	&"camera_default": {"type": TYPE_ENUM, "default": &"chase", "choices": [&"chase", &"cockpit"],
 		"doc": "Camera mode at spawn"},
+	&"splat_lod_bias": {"type": TYPE_FLOAT, "default": 0.0, "min": -1.0, "max": 1.0,
+		"doc": "Shift every ship's splat level of detail by whole levels: + coarser, - finer (M3-T19)"},
 	&"camera_chase_smoothing_s": {"type": TYPE_FLOAT, "default": 0.0, "min": 0.0, "max": 0.5,
 		"doc": "Chase camera orientation lag, s; 0 = rigid mount locked to the ship"},
 	&"chase_bolt_scale": {"type": TYPE_FLOAT, "default": 3.0, "min": 1.0, "max": 10.0,

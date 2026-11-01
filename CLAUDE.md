@@ -64,11 +64,13 @@ been planned were taken for done.
   the console: never bind it to an action.
 - Keep Newtonian motion honest: zero damping (project *and* body, `DAMP_MODE_REPLACE`), forces
   re-applied every physics tick. The damping guard test must stay. Gravity effects only matter when in a reasonable proximity to a planet, moon, or star; 0 gravitational effects from anything smaller than a moon.
-- Anything that needs a GPU cannot be verified in the container; mark it `(H)` and leave it for the human
-  tester instead of faking it.
-- To look at frames without a GPU: install llvmpipe (`apt-get install mesa-vulkan-drivers xvfb`) and run
-  `scripts/capture.sh "wait 60; screenshot /tmp/x.png"`. GDGS falls back to Raster there, so Compute-only
-  artifacts still need the human tester (`docs/research-notes.md`).
+- GPU work: the maintainer's machine (AMD Radeon RX 6950 XT, RADV, Wayland) runs the game on the GPU with GDGS's
+  Compute backend, so an agent working there verifies GPU behaviour itself: run the real renderer
+  (`.tools/godot/godot --path . --resolution 960x540 -- --console-exec="...; screenshot /tmp/x.png; quit"`; it opens a
+  window for a few seconds), read `state render` (`splat_backend = compute`, fps), and VRAM from
+  `/sys/class/drm/card1/device/mem_info_vram_used`. Judging how something looks (visual appearance, feel) stays with the
+  human tester as `(H)`. In a container without a GPU, mark GPU checks `(H)` instead of faking them; llvmpipe
+  (`scripts/capture.sh`) only shows GDGS's Raster backend (`docs/research-notes.md`).
 - Commit subjects start with the task id, e.g. `M1-T08: flight model and assist`. Do not push or open PRs unless
   asked; the maintainer handles git remotes.
 - Confirm each milestone is complete by asking the user, but once confirmed, merge to main.

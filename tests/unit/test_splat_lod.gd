@@ -59,8 +59,16 @@ func test_the_starfurys_lod1_is_listed_by_its_manifest() -> void:
 	assert_eq(SplatLod.resolve("starfury_aurora", 0)["path"], "res://assets/generated/starfury_aurora/starfury_aurora.ply")
 
 
+func test_both_ships_list_lods_one_to_three() -> void:
+	for asset: String in ["starfury_aurora", "raider_fighter"]:
+		for level: int in [1, 2, 3]:
+			var lod: Dictionary = SplatLod.resolve(asset, level)
+			assert_eq(lod["level"], level, "%s LOD %d" % [asset, level])
+			assert_true(FileAccess.file_exists(lod["path"]), GEN_ASSETS_HINT)
+
+
 func test_a_level_the_manifest_lacks_falls_back_to_lod0_with_a_warning() -> void:
-	for pair: Array in [["raider_fighter", 1], ["starfury_aurora", 7]]:
+	for pair: Array in [["raider_fighter", 4], ["starfury_aurora", 7]]:  # both list LOD0-LOD3 (M3-T19)
 		var lod: Dictionary = SplatLod.resolve(pair[0], pair[1])
 		assert_eq(lod["path"], "res://assets/generated/%s/%s.ply" % [pair[0], pair[0]], "%s LOD %d: LOD0 instead" % pair)
 		assert_eq(lod["level"], 0)

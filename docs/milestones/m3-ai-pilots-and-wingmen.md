@@ -99,8 +99,9 @@ order on respawn; ally LOD1 is about 25 % of the Starfury's splats.
 
 ## Acceptance criteria
 
-`(A)` = an agent verifies headlessly. `(H)` = the maintainer's Linux desktop with a Vulkan GPU (GDGS Compute), the pad,
-keyboard and mouse. Expected values in (A) tests come from specs, profiles and hardpoints, never hard-coded.
+`(A)` = an agent verifies it, headless or (since 2026-11-01) on the maintainer's machine with the GPU (GDGS Compute: frame
+time, VRAM, screenshots; `CLAUDE.md`). `(H)` = the maintainer judges it: how it looks or feels, with the pad, keyboard and
+mouse. Expected values in (A) tests come from specs, profiles and hardpoints, never hard-coded.
 **Pre-check** names a capture set (below) attached to the PR before the maintainer looks.
 
 | # | Criterion | Who | Pre-check |
@@ -124,7 +125,7 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | AC16 | Rams: bumps feel harmless, hard hits hurt, head-ons kill; nothing tunnels visibly | H | |
 | AC17 | Instructor: the route is easy to follow, the waypoint marker reads, every demo is clearly visible from behind | H | P6 |
 | AC18 | Allied Starfuries (LOD1) look right at combat ranges; a Starfury break-up shows its cabin and four arms tumbling apart | H | P5 |
-| AC19 | 60 fps at 1080p on the tester's GPU with four Starfuries, nine raiders, bolts, explosions and debris on screen | H | |
+| AC19 | 60 fps at 1080p on the tester's GPU with four Starfuries, nine raiders, bolts, explosions and debris on screen (measured by the agent on the maintainer's GPU since 2026-11-01: `state render` fps, frame time) | A | |
 | AC20 | Skill and aggressiveness (Q12): every AI spawn (scenario, wave, console) takes `skill` and `aggression` by name or 0-1, defaulting from its profile, and `ai <name> skill|aggression <value>` changes them live. Unit tests show skill scaling aim error, reaction delay and fire discipline, and aggression scaling the attack / evade / retreat weights, the retreat threshold and the engage range, each monotonically. A `civilian` profile never fires and evades and flees hostiles. In Jolt, on the same seeded runs: an `ace` raider lands more hits on a drone than a `rookie`; a `cautious` ship retreats at a higher hull than an `aggressive` one. **Last-ditch ram**: only at `reckless`, below 25 % hull with at most a quarter of its allies left, a seeded chance commits a ship to `ram`: avoidance stops dodging that target and it flies a collision course; in Jolt a committed rammer hits its target in at least 8 of 10 seeded runs, and no ship below `reckless` ever rams. `ai <name>` shows skill, aggression and the behaviour | A | |
 | AC21 | Position rebase in play (Q13): `main.tscn` runs with `World.auto_rebase_distance_m` 5 000 m (a bare `WorldFrame` keeps 0); after `rebase -900000 0 0` the player ship is back within 5 km of the local origin on the next physics tick, with every ship's, prop's and bolt's `UniversePos` and velocity unchanged (1 mm, 1 mm/s); under constant thrust after that, the ship's tick-to-tick change of step, taken in universe coordinates, stays under 2 mm (about 5 cm without the rebase). In a headless sandbox fight with wingmen and the threshold forced down so the world rebases at least every 2 s, the waves still clear, bolts still hit, no hit lands along a jump, no ship's universe position jumps more than its own motion plus 1 m across a rebase tick, the chase camera's offset from the ship stays continuous, and the HUD's reference range follows the universe distance. One rebase of the full sandbox costs under 0.5 ms (record the number) | A | |
 | AC22 | Far from the launch point (after `rebase -900000 0 0`, or a long flight), the ship shows no jumping while thrusting in any direction, in splat and mesh mode; flying at full speed through rebases shows no hitch | H | |
@@ -140,10 +141,11 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 | AC32 | Particles (Q23): bolt hull hits, rams, explosions and debris chunks emit `GPUParticles3D` effects from fixed pools (the particle node count never changes across a 120 s sandbox fight); every process material has zero gravity and zero damping, and every effect inherits its source's velocity; a burst live across a forced rebase is shifted with the world (its emitter's World-local offset follows the `rebased` offset); `settings.particle_density` (0-1) scales the amounts | A | P9 |
 | AC33 | Hero LOD (Q23): `starfury_aurora` writes a `hero` level at half LOD0's spacing (about 4x LOD0's splats, within the budget T24 records), deterministic, LOD0-LOD3 unchanged by it; only the player's ship uses it (`ShipSpec.splat_hero`), in the chase and cockpit cameras, dropping to LOD0 and below by screen size like any ship; the player's hero ship plus AC19's fight stays inside `settings.splat_budget` | A | P9 |
 | AC34 | Lens flare and motion blur (Q23), after the maintainer signs off the T25 choice: `settings.lens_flare` (default on) and `settings.motion_blur` (default off) toggle the compositor effects live and from the console; any vendored add-on is pinned, listed in `docs/third-party.md` with its licence, and untouched under `addons/`; headless runs and the smoke runs are unchanged | A | |
-| AC35 | The visual pass reads right on the tester's GPU: no visible LOD pop at combat ranges; plumes light the pods, muzzle flashes light the nose, explosions light nearby hulls, the key star gives each hull a lit and a dark side as it rolls; sparks on hits and debris; the player's hull is visibly sharper close up; the flare follows the star and hides behind hulls; motion blur (when on) smears the stars on fast turns, not the HUD. AC19's 60 fps still holds with all of it; frame time and VRAM recorded for AC19's fight and for 100 ships (`spawn` loop), before and after T19-T20 | H | P9, P10 |
+| AC35 | The visual pass reads right on the tester's GPU: no visible LOD pop at combat ranges; plumes light the pods, muzzle flashes light the nose, explosions light nearby hulls, the key star gives each hull a lit and a dark side as it rolls; sparks on hits and debris; the player's hull is visibly sharper close up; the flare follows the star and hides behind hulls; motion blur (when on) smears the stars on fast turns, not the HUD. AC19's 60 fps still holds with all of it; frame time and VRAM recorded by the agent on the GPU for AC19's fight and for 100 ships (`spawn` loop), before and after T19-T20 | H | P9, P10 |
 
 ## Capture pre-checks
 
+On the maintainer's machine the agent takes these on the GPU itself (GDGS Compute; `CLAUDE.md`), else
 `scripts/capture.sh "<commands>"` (llvmpipe, GDGS Raster) or `CAPTURE_REAL_GPU=1` on a desktop. T12 bundles them as
 `scripts/capture_m3.sh` writing to `reports/m3/` (gitignored). Wrap the command string in single quotes.
 
@@ -157,7 +159,7 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 - **P8 dogfight** (AC12, AC15; T10): `scenario dogfight; god on; wait 1800; screenshot reports/m3/p8_dogfight.png; state ai`
 - **P9 visual pass** (AC30-AC33, AC35; T21-T24): `god on; spawn ally idle 40 30 10; wait 20; screenshot reports/m3/p9_relit.png;
   wave start 1; wait 600; screenshot reports/m3/p9_fight.png; state lights; camera cockpit; wait 30; screenshot reports/m3/p9_cockpit.png`.
-  GDGS relights on the Raster backend too, so llvmpipe shows the lighting; particles and Compute-only artefacts stay (H).
+  Taken on the GPU (Compute), so particles and Compute-only artefacts are captured too; whether they look right is (H).
 - **P10 LOD** (AC28, AC35; T19, T20): `god on; spawn raider idle 150 0 0; spawn raider idle 600 10 0; spawn raider idle 2000 20 0;
   spawn raider idle 6000 30 0; wait 30; screenshot reports/m3/p10_lod.png; state lod`
 
@@ -184,7 +186,7 @@ Status: `done` (merged into `m3`, its "Done" notes below), `in progress`, `not s
 | M3-T16 | Kill credit: player kills, assists, total (Q18) | T08 | Sonnet | done (2026-10-31) |
 | M3-T17 | Broadcast contacts for the radar and the AI (Q21) | T08, T10 | Opus | done (2026-10-31) |
 | M3-T18 | Slashing pass and chase (Q19) | T13 | Opus | done (2026-11-01) |
-| M3-T19 | Splat LOD chain and `LodSwitcher` (Q22) | T08 | Opus | not started |
+| M3-T19 | Splat LOD chain and `LodSwitcher` (Q22) | T08 | Opus | done (2026-11-01) |
 | M3-T20 | Resident splat budget: GDGS patch 5 (Q22) | T19 | Opus | not started |
 | M3-T21 | Splat relighting: procgen normals, flat colours, `LightPicker` (Q23) | T19 | Opus | not started |
 | M3-T22 | Ship lights: nozzles, muzzle flashes, explosions (Q23) | T21 | Sonnet | not started |
@@ -910,13 +912,36 @@ Added 2026-10-28 for Q22 (pulled forward from M6); after T08 (the ally pool and 
   - `settings.splat_lod_bias` (-1 to +1 levels, default 0) for the tester. `lod` provider: per-ship level, visible splat
     total.
 - Done when: AC28 passes; P10 shows the four raiders at four levels.
+- Done (2026-11-01):
+  - Procgen: `starfury_aurora` and `raider_fighter` write LOD2 (4x the spacing) and LOD3 (8x) from their own `lod2` / `lod3`
+    streams (`FAR_LODS`, with each share range); the raider also gains a LOD1 (2x, `lod1`), since a manifest's levels must
+    run without a gap. Shares at the defaults: Starfury LOD2 6.2 %, LOD3 1.5 %; raider LOD1 24.9 %, LOD2 6.1 %, LOD3 1.7 %.
+    Same box within 0.3 m, centred, deterministic; generator versions unchanged, so LOD0 and LOD1 are byte for byte as before.
+  - Godot: `Ship._load_far_levels` adds one hidden `GaussianSplatNode` (`HullSplatsLod<n>`) per coarser level the manifest
+    lists, once, and `SplatPoseSync.add_splats` drives them; `Ship.set_lod_level` shows one level by visibility. Chains: the
+    player and raiders LOD0-LOD3, allies LOD1-LOD3 (`ShipSpec.splat_lod` is the finest); debris keeps LOD1.
+    `LodSwitcherMath` (pure: projected diameter, the 200 / 60 / 16 px thresholds, 25 % to step finer, whole-level bias) and a
+    `LodSwitcher` child per ship (`_process`, the viewport's camera); `settings.splat_lod_bias` (-1..1); provider `lod`
+    (`levels`, `visible_splats`) and `lod <ship|all> <0-3|auto>`.
+  - Deviation: the brief's "count GDGS rebuilds on the render manager's rebuild path" would mean editing `addons/`
+    (`CLAUDE.md` forbids it) and counts nothing headless (no GDGS backend runs there). Instead `test_lod_in_play` proves
+    the cause cannot happen: across the sweep no splat node's `gaussian` changes (only a resource change marks GDGS's
+    resources dirty; visibility rides in the instance transform) and the node count is fixed.
+  - Tests: `test_lod_switcher_math` (6: size, levels, a slow sweep switches each boundary once each way, a ship on a threshold
+    never flaps, the 25 %, the bias), `test_lod_in_play` (4, at a 1080p root window: headless windows are 64 px: one node per
+    level and one shown; 13 ships swept 40 m to 20 km and back, a raider 0-1-2-3-2-1-0, an ally 1-2-3-2-1, no node or resource
+    change; the console; the bias), the generators' tests (shares, box, centring, determinism), `test_splat_lod`.
+  - Splats resident per ship grow (the hidden levels are registered with GDGS): a Starfury ally LOD1-3 about 80k, a raider
+    LOD0-3 about 35k. T20's resident budget is what keeps the hidden ones from costing sort memory.
 
 ### M3-T20 Resident splat budget: GDGS patch 5
 
 Added 2026-10-28 for Q22; after T19.
 
 - Goal: hidden LODs and off-screen ships cost no sort memory, so 100-500 ships fit in VRAM.
-- Agent: **Opus**. A patch to vendored GPU code that the container cannot run (llvmpipe falls back to Raster).
+- Agent: **Opus**. A change to GDGS's Compute renderer, made in the project's fork (`addons/gdgs_scs/`, maintainer
+  2026-11-01: fork rather than patch the vendored copy) and verified on the maintainer's GPU (Compute backend): frames match
+  before and after, frame time and VRAM recorded at 13 and 100 ships.
 - Files: `addons/gdgs/runtime/render/compute/{gaussian_renderer,gaussian_gpu_state_cache,gaussian_scene_registry}.gd`
   and `shaders/gsplat_projection.glsl` (each changed line marked `[space-combat-sim patch]`), `addons/gdgs/PATCHES.md`
   (patch 5), a pure sizing helper the tests can call, `src/rendering/lod_switcher.gd` (budget step-down),
@@ -932,8 +957,10 @@ Added 2026-10-28 for Q22; after T19.
   - The `LodSwitcher` keeps the visible total under the budget: when over, it steps the farthest visible ships down one
     level until it fits, and logs once if even LOD3 everywhere does not fit.
   - The Raster backend is not touched. Upstream candidate, like patches 1 and 2.
-  - Compute-only: AC35 records frame time and VRAM before and after on the tester's GPU.
-- Done when: AC29 passes; patch 5 is in `PATCHES.md` with how to revert it; AC35's VRAM numbers are asked for.
+  - The agent measures frame time and VRAM before and after on the maintainer's GPU (`mem_info_vram_used`, 13 and 100 ships)
+    and records them for AC35; whether the frames look unchanged is (H).
+- Done when: AC29 passes; the change is in the fork's `PATCHES.md` (patch 5) with how to revert it; the before / after frame
+  time and VRAM numbers are recorded.
 
 ### M3-T21 Splat relighting: procgen normals, flat colours, `LightPicker`
 
@@ -975,7 +1002,8 @@ Added 2026-10-28 for Q23; after T19 (it writes records for every LOD). The bigge
   - The sky stays unlit (`relight_enabled` off: stars are emitters). Debris chunks and buoys are lit.
   - `settings.splat_relight` (default on) and `relight [on|off]`; the knobs (`relight_ambient`, `relight_unlit_level`,
     `relight_light_gain`) as settings so the tester can tune them live.
-- Done when: AC30 passes; P9 shows a lit and a dark side on the ally.
+- Done when: AC30 passes; P9, taken by the agent on the GPU (Compute), shows a lit and a dark side on the ally; the look
+  is the maintainer's (AC35).
 
 ### M3-T22 Ship lights: nozzles, muzzle flashes, explosions
 
@@ -993,7 +1021,8 @@ Added 2026-10-28 for Q23; after T21.
   - Muzzle flash: 60 ms at the muzzle hardpoint, per shot. Explosion: today's curve and range, through the picker.
   - All ships, raiders included; the picker decides which reach the 7 slots.
   - Visuals in `_process`; the physics tick only publishes levels. Record the picker's per-frame cost in `lights`.
-- Done when: AC31 passes; P9's fight frame shows lit pods.
+- Done when: AC31 passes; P9's fight frame, taken on the GPU, shows lit pods; at most 8 lights and the frame time are
+  checked there too (the look is AC35's).
 
 ### M3-T23 `GPUParticles3D` sparks and debris
 
@@ -1016,7 +1045,8 @@ Added 2026-10-28 for Q23; after T14 (particles must follow the rebase).
     under an anchor the `rebased` handler shifts (or shift the emitters' transforms; say which).
   - Unshaded, emissive, additive; the hull depth proxies hide them behind hulls as they hide plumes.
   - Headless has no particle simulation: (A) tests the pools, specs and wiring; the look is AC35.
-- Done when: AC32 passes; P9's fight frame shows sparks.
+- Done when: AC32 passes; P9's fight frame, taken on the GPU (particles render there, not on llvmpipe), shows sparks; the
+  look is AC35's.
 
 ### M3-T24 Hero LOD for the player's ship
 
@@ -1034,7 +1064,8 @@ Added 2026-10-28 for Q23; after T20 (the budget) and T21 (lighting records for t
     ≥ 400 px). The instructor and allies never use it.
   - The visible splats count against T20's budget; check AC19's fight plus the hero stays inside it. Record the import
     time of the hero PLY.
-- Done when: AC33 passes; P9's cockpit frame is sharper than before (AC35 judges it).
+- Done when: AC33 passes; P9's cockpit frame, taken on the GPU before and after, with the frame time and VRAM of both;
+  whether it reads sharper is AC35's.
 
 ### M3-T25 Lens flare and motion blur, after sign-off
 
@@ -1115,8 +1146,8 @@ Added 2026-10-30 for the maintainer's request Q24, done before the other open ta
   wing_director,scenario_loader}.gd`, `src/combat/{kill_credit,hit_resolver}.gd`, `src/targeting/{targetable,target_info,
   targeting_system}.gd`, `src/hud/radar_model.gd`, `src/props/nav_buoy.gd`, `src/audio/audio_director.gd`,
   `src/autoload/debug_console.gd`, and the M3 test files' header comments. The full suite must stay green.
-- Done when: every (A) criterion passes; the capture set is attached; the maintainer runs the (H) checklist; the comment
-  cleanup is committed.
+- Done when: every (A) criterion passes (the GPU ones measured on the maintainer's machine); the capture set is taken on
+  the GPU and attached; the maintainer runs the (H) checklist (appearance and feel); the comment cleanup is committed.
 
 ## As-built notes
 
