@@ -1595,7 +1595,8 @@ below are M3 tasks.
 | D36 | Wings: the player leads `ALPHA` (finger-four). Orders (attack my target, form on me, engage at will, cover me) arrive as `UiCommand` edges from keys 1-4 (keyboard-only actions) or the console, and go to brains through `WingDirector`, never through `Input` | Maintainer Q1; the pad has no free button and the M5 comms panel will add a pad route on the same `WingDirector` API |
 | D37 | The instructor is an `AiPilot` with the `instructor` profile, a `Route` (paced to the player) and demo `Manoeuvre`s, invulnerable via its scenario spawn | The M8 tour and control checks reuse it unchanged; manoeuvres are closed loops on measured state, so the tutorial can compare the player against the same goals |
 | D38 | Keyboard layout B: every flight key is under the left hand (pods by position on Q/W/E and A/S/D), the mouse flies pitch and yaw, no keyboard pitch/yaw | Maintainer Q9: the right hand is on the mouse |
-| D39 | Broadcasts (M3-T17, Q21): `Targetable.broadcast_range_m` lets a contact be heard beyond the sensors. Targeting and the radar use it directly; the AI hears the same broadcasts at the same ranges (any faction) as a separate `Perception.broadcasts` list from `ContactScan.shared_broadcasts`, a scan of `Targetable.broadcasters()` alone. `ContactScan` (5 km) stays the near list for avoidance, the fire lane and threats. Behaviours do not chase far contacts on their own: a pilot **objective** (`AiContext.objective_name`, `ai <name> objective <target|none>`, a spawn's `objective`) makes the attack transit to it and attack it once inside 5 km | Missions (M5) send raiders at a buoy or the station from beyond sensor range; one registry, no second sweep over every body, so AC13's budget holds |
+| D39 | Broadcasts (M3-T17, Q21): `Targetable.broadcast_range_m` lets a contact be heard beyond the sensors. Targeting and the radar use it directly; the AI hears the same broadcasts at the same ranges (any faction) as a separate `Perception.broadcasts` list from `ContactScan.shared_broadcasts`, a scan of `Targetable.broadcasters()` alone. `ContactScan` (5 km) stays the near list for avoidance, the fire lane and threats. Behaviours do not chase far contacts on their own: a pilot **objective** (`AiContext.objective_name`, `ai <name> objective <target|none>`, a spawn's `objective`) makes the attack transit to it and attack it once inside 5 km, as a fallback while no hostile in sight may be attacked (M3-T10); the player broadcasts like an ally (100 km) and wave raiders take the player as their objective | Missions (M5) send raiders at a buoy or the station from beyond sensor range; one registry, no second sweep over every body, so AC13's budget holds |
+| D40 | Hit reaction, guard, wings in scenarios (M3-T10, Q11): a fresh bolt hit hands control to evade at once for one full jink (`AiPilot.select`, `BehaviourEvade.locked`). A guard post gates the attack through `AiContext.may_attack` (hostiles inside the radius or after the guarded ship) and `BehaviourGuard` keeps station. Scenarios declare `wings[]` and spawns name a `wing`; an AI-led wing hands the lead to its next member; its ships rally on an engaged wingmate (`BehaviourRally`). `AttackBrain` caps the speed it seeks (`RaiderTactics.max_speed_mps`: break and extend at it, approach at the higher of it and the target's speed, plus the closure) | Ships under fire behave like pilots; raider groups and wings come from data; AI-versus-AI fights stay at fighting speed and together while a chaser still outruns any target |
 
 ### 16.2 Layout additions
 
@@ -1608,12 +1609,13 @@ src/ai/avoidance_math.gd, fire_lane.gd   pure: closest-approach dodge; friendly-
 src/ai/ai_pilot.gd, ai_context.gd, ai_behaviour.gd, ai_profile.gd        utility brain (T06)
 src/ai/behaviour_{attack,evade,retreat,idle,formation,guard,follow_path}.gd  (T06, T07, T09, T10)
 src/ai/wing.gd, formation.gd             wing state and slot offsets (T07)
+src/ai/behaviour_{guard,rally}.gd        guard post, rally on an engaged wingmate (T10)
 src/ai/route.gd, manoeuvre.gd, manoeuvres.gd   instructor route and demo moves (T09)
 src/game/wing_director.gd                Node (Combat, priority 290): wings, orders, acknowledgements, replenish (T07, T08)
 assets/ai/{ally_starfury,raider,instructor}.tres, starfury_tactics.tres
 assets/ships/starfury_ally.tres          the Starfury's numbers, splat_lod 1, no cockpit (T08)
 src/ship/splat_lod.gd                    RefCounted, pure: which PLY an asset draws at a splat LOD, from its manifest (T08)
-data/scenarios/{instructor_route,dogfight}.json
+data/scenarios/{instructor_route,dogfight}.json   (dogfight: wings ALPHA, RED, BLUE; T10)
 ```
 
 ### 16.3 Tick order (changes to §15.3)

@@ -12,6 +12,10 @@ extends RefCounted
 ## spawn's `objective` or (M5) a mission script. `refresh` finds it among the near contacts, then the broadcasts; the attack
 ## flies to it from any broadcast range and attacks it once near, whatever its faction (a raider sent at a buoy).
 ##
+## A guard post (M3-T10, `BehaviourGuard`): a fixed `guard_post` or the ship `guard_name` (its slot `guard_offset`, body frame)
+## and `guard_radius_m`. While the post is known this tick (`guarding`), `may_attack` also requires the hostile to be inside
+## the radius of it (`guard_point`) or to have the guarded ship selected, whatever the order.
+##
 ## Orders gate what may be attacked (`may_attack`), so a behaviour that attacks asks the context instead of reading the
 ## order itself:
 ## - ENGAGE_AT_WILL (the default, and a ship without a wing): any hostile ship.
@@ -42,6 +46,8 @@ var engage_radius_m: float = DEFAULT_ENGAGE_RADIUS_M
 var has_slot: bool = false
 ## m, x right, y up, +z behind.
 var slot_offset: Vector3 = Vector3.ZERO
+## The `Targetable` ids of this ship's wingmates, leader included, itself not (M3-T10, `BehaviourRally`); empty outside a wing.
+var wing_ids: PackedInt64Array = PackedInt64Array()
 ## The wing's link to its leader (M3-T07): where the leader is (null when it has no live leader) and how fast it moves
 ## (World frame), as of the `WingDirector`'s last tick. The formation flies on it when the leader is beyond sensor range;
 ## in sight, the leader's contact (this tick, with its attitude) is used instead.
@@ -51,6 +57,11 @@ var leader_link_velocity: Vector3 = Vector3.ZERO
 var route: Route = null
 ## The objective's display name ("NAV ALPHA", compared case-insensitively), "" for none (M3-T17).
 var objective_name: String = ""
+## The guard post (M3-T10): a fixed point, or a ship by display name with an offset in its body frame, and the radius.
+var guard_post: UniversePos = null
+var guard_name: String = ""
+var guard_offset: Vector3 = Vector3.ZERO
+var guard_radius_m: float = 1500.0
 
 ## Derived each tick by `refresh`: the leader among the friendly contacts (null when not in sight), the hostile ships in
 ## sensor range with, by the same index, the offset from this ship to each (World frame) and its length, and the ids of
@@ -63,6 +74,12 @@ var friendly_ids: PackedInt64Array = PackedInt64Array()
 ## The objective's contact this tick (near first, then broadcast), null while it is not seen or heard; and its range, m.
 var objective: Contact = null
 var objective_range_m: float = INF
+## The guard post this tick: whether there is one, where (World) and how fast it moves, and the guarded ship's contact (null
+## for a fixed post).
+var guarding: bool = false
+var guard_point: Vector3 = Vector3.ZERO
+var guard_velocity: Vector3 = Vector3.ZERO
+var guarded: Contact = null
 
 
 ## The `Order` for a word of `ORDER_WORDS`, or -1.
@@ -97,6 +114,7 @@ func refresh(p: Perception) -> void:
 			friendly_ids.append(c.id)
 			if c.id == leader_id:
 				leader = c
+	_refresh_guard(p)
 	objective = null
 	objective_range_m = INF
 	if not objective_name.is_empty():
@@ -105,6 +123,30 @@ func refresh(p: Perception) -> void:
 			objective = _named(p.broadcasts, objective_name)
 		if objective != null:
 			objective_range_m = objective.position.distance_to(own_position)
+
+
+func _refresh_guard(p: Perception) -> void:
+	guarded = null
+	guarding = false
+	if not guard_name.is_empty():
+		guarded = _named(p.contacts, guard_name)
+		if guarded == null:
+			return  # out of sight: no post this tick
+		var right: Vector3 = guarded.forward.cross(guarded.up)
+		guard_point = guarded.position + right * guard_offset.x + guarded.up * guard_offset.y - guarded.forward * guard_offset.z
+		guard_velocity = guarded.velocity
+		guarding = true
+	elif guard_post != null:
+		guard_point = p.to_local(guard_post)
+		guard_velocity = Vector3.ZERO
+		guarding = true
+
+
+## Whether `c` is inside the guard zone: within the radius of the post, or with the guarded ship selected.
+func in_guard_zone(c: Contact) -> bool:
+	if guarded != null and c.target_id == guarded.id:
+		return true
+	return c.position.distance_squared_to(guard_point) <= guard_radius_m * guard_radius_m
 
 
 static func _named(contacts: Array[Contact], wanted: String) -> Contact:
@@ -124,11 +166,14 @@ func clear_wing() -> void:
 	slot_offset = Vector3.ZERO
 	leader_link_position = null
 	leader_link_velocity = Vector3.ZERO
+	wing_ids.clear()
 
 
 ## Whether the orders let this pilot attack `c` (a hostile ship).
 func may_attack(c: Contact) -> bool:
 	if c == null or not c.is_ship or c.relation != Factions.Relation.HOSTILE:
+		return false
+	if guarding and not in_guard_zone(c):
 		return false
 	match order:
 		Order.FORM_ON_ME:
@@ -149,7 +194,8 @@ func has_attackable() -> bool:
 		Order.FORM_ON_ME:
 			return false
 		Order.ENGAGE_AT_WILL:
-			return not hostiles.is_empty()
+			if not guarding:
+				return not hostiles.is_empty()
 	for c: Contact in hostiles:
 		if may_attack(c):
 			return true

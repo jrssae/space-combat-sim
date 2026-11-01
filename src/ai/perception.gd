@@ -53,6 +53,9 @@ var broadcasts: Array[Contact] = _no_broadcasts
 var incoming_fire: int = 0
 ## Sim time of the latest hit this hull took (a bolt or anything else `Damageable.hit_taken` reports), -INF when none yet.
 var last_hit_s: float = -INF
+## Sim time of the latest bolt hit on this hull (`HitInfo.CAUSE_BOLT`; rams and the console are not), -INF when none: the
+## hit reaction's trigger (M3-T10, Q11).
+var last_bolt_hit_s: float = -INF
 ## `settings.friendly_fire` this tick: bolts then hurt every hull but the shooter's (`FireLane`).
 var friendly_fire: bool = false
 

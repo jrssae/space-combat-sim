@@ -15,6 +15,7 @@ func before_each() -> void:
 	main.waves_auto_start = false
 	add_child_autofree(main)
 	await _ticks(2)
+	DebugConsole.registry.execute("despawn all")  # the sandbox's wingmen (M3-T10) would shoot the targets these tests track
 
 
 func after_each() -> void:

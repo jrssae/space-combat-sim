@@ -8,7 +8,7 @@ const SETTLE_TICKS: int = 20
 const MEASURE_TICKS: int = 60
 ## The low-threshold sandbox fight: sim time is `SPEED_UP` x wall time (each physics step is SPEED_UP / 60 s).
 const SPEED_UP: float = 4.0
-const FIGHT_S: float = 240.0
+const FIGHT_S: float = 480.0
 const FIGHT_WAVES: int = 2
 
 var main: Main
@@ -170,7 +170,7 @@ func test_rebase_900_km_out_comes_back_on_the_next_tick_with_every_universe_posi
 func test_a_sandbox_fight_with_wingmen_rebasing_every_second_clears_its_waves() -> void:
 	await _launch(ScenarioLoader.SANDBOX_PATH)
 	assert_true(_exec("wing order engage").ok, "the wingmen hunt the raiders")
-	assert_true(_exec("wave start 1").ok, "the wingmen launch when it starts")
+	assert_true(_exec("wave start 1").ok)
 	source.hold(InputAdapter.FIRE)
 	Engine.time_scale = SPEED_UP
 	var fight: RebaseFight = await RebaseFight.run(self, main, FIGHT_S,
@@ -182,7 +182,8 @@ func test_a_sandbox_fight_with_wingmen_rebasing_every_second_clears_its_waves() 
 	assert_gt(fight.kills, 0, "raiders shot down")
 	assert_gt(fight.hits, 10, "bolts still hit")
 	assert_gt(fight.hits_in_rebase_ticks, 0, "some of them in the very tick of a rebase")
-	assert_eq(main.wings.player_wing().members().size(), 3, "the wing flew the whole fight")
+	# Raiders on the AI (M3-T10) fight back: a wingman may go down (the next wave start replaces it).
+	assert_gt(main.wings.player_wing().members().size(), 0, "the wing flew the whole fight")
 	# AC21: one rebase of the full sandbox (pools, wing, raiders, bolts, debris, voices) under 0.5 ms. Wall clock, so the median
 	# over the fight is asserted and the spread recorded.
 	assert_lt(fight.median_rebase_us(), 500, "a rebase of the full sandbox costs %d us (median; min %d, max %d)" % [

@@ -138,7 +138,7 @@ func test_the_hull_warning_repeats_below_a_quarter_and_stops_above() -> void:
 
 
 func test_every_ship_has_an_engine_hum_that_follows_thrust() -> void:
-	assert_eq(main.ships.pool_size(), 10, "six raiders and four allied Starfuries (M3-T08)")
+	assert_eq(main.ships.pool_size(), 13, "nine raiders and four allied Starfuries (M3-T10)")
 	assert_eq(main.audio.engine_count(), 1 + main.ships.pool_size(), "the player and every pooled ship")
 	var idle: float = AudioDirector.engine_level(FlightOutput.new())
 	assert_almost_eq(idle, AudioDirector.HUM_IDLE_LEVEL, 1e-9, "no thrust: the idle floor")
@@ -174,7 +174,8 @@ func test_the_players_hum_plays_and_parked_raiders_are_silent() -> void:
 	assert_true(hum.playing, "the player's own engine")
 	assert_true((hum.stream as AudioStreamWAV).loop_mode == AudioStreamWAV.LOOP_FORWARD, "it loops")
 	for pooled: Combatant in main.ships.all_ships():
-		assert_false((pooled.ship.get_node("EngineHum") as AudioStreamPlayer3D).playing, "parked")
+		if not main.ships.alive().has(pooled):  # the sandbox's wingmen fly from the start (M3-T10)
+			assert_false((pooled.ship.get_node("EngineHum") as AudioStreamPlayer3D).playing, "parked")
 	var hum_off_pitch: float = hum.pitch_scale
 	source.hold(InputAdapter.MAIN_LEFT)
 	source.hold(InputAdapter.MAIN_RIGHT)

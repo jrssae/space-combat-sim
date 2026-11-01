@@ -42,14 +42,16 @@ var brain: PilotBrain = null:
 	set(value):
 		brain = value
 		last_hit_s = -INF
+		last_bolt_hit_s = -INF
 		_unselectable_id = 0
 		if value != null:
 			value.reset()
 ## Whether the avoidance filter changed this tick's command (the ship is dodging something), and whether it was urgent.
 var avoiding: bool = false
 var avoiding_urgent: bool = false
-## Sim time of this hull's latest hit (`Damageable.hit_taken`), -INF since the brain was set.
+## Sim time of this hull's latest hit (`Damageable.hit_taken`), and of its latest bolt hit, -INF since the brain was set.
 var last_hit_s: float = -INF
+var last_bolt_hit_s: float = -INF
 
 var _capability: ShipCapability = null
 ## The mean of the ship's muzzles, ship-local (computed once: the muzzles never move on the hull).
@@ -145,6 +147,7 @@ func perceive() -> Perception:
 	p.incoming_fire = scan.incoming_fire(own_id, p.position, p.velocity, p.faction)
 	p.broadcasts = ContactScan.shared_broadcasts().broadcasts_for(own_id, p.position, p.faction)
 	p.last_hit_s = last_hit_s
+	p.last_bolt_hit_s = last_bolt_hit_s
 	p.friendly_fire = bool(Settings.get_value(&"friendly_fire"))
 	return p
 
@@ -169,8 +172,10 @@ func _avoid(p: Perception, flight: FlightCommand) -> void:
 	PilotSteering.apply_seek(flight, PilotSteering.seek(p.velocity, filtered, p.basis, p.capability, horizon, all_axes))
 
 
-func _on_hit_taken(_info: HitInfo) -> void:
+func _on_hit_taken(info: HitInfo) -> void:
 	last_hit_s = SimClock.now()
+	if info != null and info.cause == HitInfo.CAUSE_BOLT:
+		last_bolt_hit_s = last_hit_s
 
 
 # M2's rule, for a brain that leaves the choice to the driver: the nearest hostile, refreshed every `RETARGET_S`.

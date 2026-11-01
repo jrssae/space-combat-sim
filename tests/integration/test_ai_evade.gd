@@ -109,3 +109,80 @@ func test_evading_cuts_an_attack_raiders_hits_at_least_in_half() -> void:
 	assert_gt(int(evading["evade_ticks"]), 0, "it evaded")
 	assert_gt(int(evading["max_jinks"]), 0, "it jinked (the reversals are test_ai_pilot_selection's)")
 	assert_lte(int(evading["hits"]) * 2, int(still["hits"]), "evading at least halves the hits")
+
+
+# --- hit reaction (M3-T10, Q11) ------------------------------------------------------------------------------------
+
+
+## A ship on an `ai` profile from `BrainFactory`, at `at`, nose toward `face`, with a hull that outlives the test.
+func _ai_ship(world: WorldFrame, projectiles: Node3D, spec_path: String, faction: StringName, profile_name: String,
+		ship_name: String, at: Vector3, face: Vector3) -> Combatant:
+	var c: Combatant = ShipAssembly.build(load(spec_path) as ShipSpec, world, projectiles, {
+		ShipAssembly.OPT_FACTION: faction,
+		ShipAssembly.OPT_DISPLAY_NAME: ship_name,
+		ShipAssembly.OPT_FORCE_ASSIST: true,
+		ShipAssembly.OPT_AI: true,
+	})
+	world.spawn(c.ship, world.to_universe(at), ScenarioLoader.basis_facing(face - at))
+	c.damageable.hull = HullHealth.new(1.0e6)
+	var made: Dictionary = BrainFactory.from_behaviour({"type": "ai", "profile": profile_name}, world.to_universe(at), hash(ship_name))
+	c.driver.brain = made["brain"] as PilotBrain
+	return c
+
+
+## A bolt from `shooter` that hits `target` within a tick or two: launched 30 m off its side, straight at it.
+func _bolt_at(projectiles: Node3D, shooter: Combatant, target: Combatant) -> void:
+	var bolt := (load(Projectile.SCENE_PATH) as PackedScene).instantiate() as Projectile
+	projectiles.add_child(bolt)
+	bolt.configure(shooter.cannon.weapon)
+	bolt.shooter_id = shooter.ship.get_instance_id()
+	bolt.faction = shooter.faction
+	var side: Vector3 = target.ship.global_basis.x
+	bolt.launch(target.ship.global_position + side * 30.0, target.ship.linear_velocity - side * 1000.0, SimClock.now())
+
+
+func test_a_hit_ship_evades_within_a_quarter_second_mid_attack_and_jinks_in_full() -> void:
+	var world := WorldFrame.new()
+	world.name = "World"
+	add_child_autofree(world)
+	var projectiles := Node3D.new()
+	projectiles.name = "Projectiles"
+	world.add_child(projectiles)
+	var resolver := HitResolver.new()
+	add_child_autofree(resolver)
+	var ally: Combatant = _ai_ship(world, projectiles, STARFURY_SPEC, Factions.EARTH_ALLIANCE, "ally_starfury", "ALPHA 2",
+			Vector3.ZERO, Vector3(0.0, 0.0, -900.0))
+	var raider: Combatant = _ai_ship(world, projectiles, RAIDER_SPEC, Factions.RAIDERS, "raider", "RAIDER 1",
+			Vector3(0.0, 0.0, -900.0), Vector3.ZERO)
+	var hit_at: Dictionary = {}
+	resolver.hit_resolved.connect(func(info: HitInfo) -> void:
+		if not hit_at.has(info.target_id):
+			hit_at[info.target_id] = SimClock.now())
+	for i: int in 30:  # half a second: both attack, still inside the minimum dwell
+		await get_tree().physics_frame
+	for victim: Combatant in [ally, raider]:
+		var pilot := victim.driver.brain as AiPilot
+		var shooter: Combatant = raider if victim == ally else ally
+		assert_eq(pilot.current.id, &"attack", "%s is attacking" % victim.display_name)
+		hit_at.erase(victim.ship.get_instance_id())
+		_bolt_at(projectiles, shooter, victim)
+		var t0: float = SimClock.now()
+		while not hit_at.has(victim.ship.get_instance_id()) and SimClock.now() - t0 < 1.0:
+			await get_tree().physics_frame
+		assert_true(hit_at.has(victim.ship.get_instance_id()), "the bolt hit %s" % victim.display_name)
+		var hit_s: float = hit_at.get(victim.ship.get_instance_id(), INF)
+		while pilot.current.id != &"evade" and SimClock.now() - hit_s < 1.0:
+			await get_tree().physics_frame
+		var reaction_s: float = SimClock.now() - hit_s
+		gut.p("%s: evading %.3f s after the hit" % [victim.display_name, reaction_s])
+		assert_eq(pilot.current.id, &"evade")
+		assert_lte(reaction_s, 0.25, "within 0.25 s (AC9)")
+		var evade := pilot.current as BehaviourEvade
+		# A second hit mid-jink keeps it evading through the next full jink.
+		await get_tree().physics_frame
+		_bolt_at(projectiles, shooter, victim)
+		var first_jinks: int = evade.jinks
+		while evade.jinks < first_jinks + 2 and pilot.current == evade and SimClock.now() - hit_s < 15.0:
+			await get_tree().physics_frame
+		assert_eq(pilot.current, evade, "%s held the evasion through this jink and the next" % victim.display_name)
+		assert_gte(evade.jinks, first_jinks + 2)

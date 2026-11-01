@@ -15,6 +15,11 @@ extends AiBehaviour
 ## to `REVERSAL_SPREAD_DEG` about the line of fire), and so on. Each jink seeks the velocity the ship had when the evasion
 ## began plus `JINK_SPEED_MPS` across the line of fire: more than a jink can reach, so the thrust stays on for the whole jink
 ## (a steady acceleration is what spoils a shooter's lead), and the speed stays bounded however long it lasts.
+##
+## Hit reaction (M3-T10, maintainer Q11): `AiPilot` hands control to this behaviour on a fresh bolt hit whatever the scores,
+## the stickiness and the minimum dwell, and calls `on_hit`. It then keeps control while `locked()`: until at least one full
+## jink after the latest hit has been flown (the jink running when a hit lands is finished, then one more), so repeated hits
+## keep it evading; after that normal selection resumes (a retreating ship goes back to its retreat).
 
 const RANGE_M: float = 1200.0
 const NOSE_CONE_DEG: float = 15.0
@@ -39,6 +44,8 @@ var _threat: Contact = null
 var _reason: StringName = &""
 var _base_velocity: Vector3 = Vector3.ZERO
 var _fresh: bool = true
+## The hit reaction holds control until `jinks` reaches this (0: no hold).
+var _lock_until_jinks: int = 0
 
 
 func _init(p_seed: int = 0) -> void:
@@ -55,6 +62,7 @@ func reset() -> void:
 	_threat = null
 	_reason = &""
 	_fresh = true
+	_lock_until_jinks = 0
 
 
 func score(ctx: AiContext) -> float:
@@ -92,6 +100,19 @@ func score(ctx: AiContext) -> float:
 
 func enter() -> void:
 	_fresh = true
+	_lock_until_jinks = 0
+
+
+## A bolt hit this ship (call after `enter` when it takes over): hold control for one full jink from here.
+func on_hit() -> void:
+	# Entering afresh, the first jink starts on the next think (jinks 1): held until it ends. Mid-evasion: the running jink,
+	# then one more full one.
+	_lock_until_jinks = 2 if _fresh else jinks + 2
+
+
+## Whether the hit reaction still holds control.
+func locked() -> bool:
+	return jinks < _lock_until_jinks
 
 
 func think(ctx: AiContext, dt: float) -> PilotCommand:

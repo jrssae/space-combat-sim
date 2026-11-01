@@ -27,6 +27,13 @@ extends Node
 ## when it falls short, none when the scenario pools no allies. A callsign already carried by a ship in play (a console `spawn
 ## ally`) is not given twice: that slot takes the next free number after the wing's own.
 ##
+## Scenario wings (M3-T10): `declare` takes a scenario's `wings[]` entries (leader word, order, formation); `join` puts a
+## ship placed from a spawn naming a wing into it: the wing is created on first use (as declared, or a group engaging at
+## will in a finger-four), the declared leader or, without one, the first ship to join leads, and the others take slots.
+## The player-led wing is the player's (Main creates it). A wing led by an AI ship whose leader is down hands the lead to
+## its member in the lowest slot (`refresh`), so a raider group keeps flying as a group; the player's wing waits for the
+## player instead.
+##
 ## Console (§16.4), for the player's wing (`player_wing`): provider `wing` (`name`, `order`, `formation`, `members`,
 ## `last_ack`) and `wing [order|formation|replenish] [value]`.
 
@@ -51,6 +58,8 @@ var wings: Array[Wing] = []
 var last_ack: String = ""
 
 var _ack_age_s: float = INF
+# Scenario declarations by lower-case wing name: {name, faction, leader, formation, order} (ScenarioLoader `wings[]`).
+var _declared: Dictionary = {}
 # Replacements launched so far: part of each one's brain seed, so a run repeats.
 var _launched: int = 0
 
@@ -89,6 +98,70 @@ func create_wing(wing_name: String, leader: Combatant) -> Wing:
 	return wing
 
 
+## Records a scenario's `wings[]` declarations (replacing earlier ones). A declared wing led by the player gets its order
+## and formation on the player's wing at once.
+func declare(declarations: Array[Dictionary]) -> void:
+	_declared.clear()
+	for d: Dictionary in declarations:
+		_declared[String(d["name"]).to_lower()] = d
+		var wing: Wing = wing_named(String(d["name"]))
+		if wing != null and String(d["leader"]) == "player":
+			wing.order = int(d["order"]) as AiContext.Order
+			wing.formation.shape = int(d["formation"]) as Formation.Shape
+
+
+## The wing called `wing_name` (case-insensitive), or null.
+func wing_named(wing_name: String) -> Wing:
+	for wing: Wing in wings:
+		if wing.name.to_lower() == wing_name.to_lower():
+			return wing
+	return null
+
+
+## Puts `ship`, just placed in play from a spawn naming `wing_name`, into that wing (see the class notes). Returns the wing,
+## or null when the ship cannot join (no `AiPilot`, the wing full).
+func join(wing_name: String, ship: Combatant) -> Wing:
+	if wing_name.is_empty() or _pilot_of(ship) == null:
+		return null
+	var d: Dictionary = _declared.get(wing_name.to_lower(), {})
+	var wing: Wing = wing_named(wing_name)
+	if wing == null:
+		wing = create_wing(String(d.get("name", wing_name)), null)
+		wing.order = int(d.get("order", AiContext.Order.ENGAGE_AT_WILL)) as AiContext.Order
+		wing.formation.shape = int(d.get("formation", Formation.Shape.FINGER_FOUR)) as Formation.Shape
+	var named_leader: String = String(d.get("leader", ""))
+	if wing.leader != null and wing.leader.is_player:
+		return wing if add_member(wing, ship) > 0 else null
+	if not leader_alive(wing) and (named_leader.is_empty() or named_leader.to_lower() == ship.display_name.to_lower()
+			or wing.members().is_empty()):
+		_lead(wing, ship)
+		return wing
+	if named_leader.to_lower() == ship.display_name.to_lower():
+		_lead(wing, ship)
+		return wing
+	return wing if add_member(wing, ship) > 0 else null
+
+
+# `ship` leads `wing` from now on: out of its slot if it had one, flying on its own orders; the old leader (alive) takes a slot.
+func _lead(wing: Wing, ship: Combatant) -> void:
+	var old: Combatant = wing.leader
+	if wing.slot_of(ship) > 0:
+		remove_member(wing, ship)
+	var pilot: AiPilot = _pilot_of(ship)
+	if pilot != null:
+		pilot.context.clear_wing()
+		_give_rally(pilot)
+	wing.leader = ship
+	if old != null and old != ship and not old.is_player and old.damageable != null and old.damageable.is_active():
+		add_member(wing, old)
+
+
+# A wing's AI ships rally on an engaged wingmate when they have nothing to attack (`BehaviourRally`).
+static func _give_rally(pilot: AiPilot) -> void:
+	if pilot.behaviour(&"rally") == null:
+		pilot.add_behaviour(BehaviourRally.new(pilot.profile))
+
+
 ## The wing the player leads, else the first wing, else null.
 func player_wing() -> Wing:
 	for wing: Wing in wings:
@@ -109,6 +182,7 @@ func add_member(wing: Wing, member: Combatant, slot: int = -1) -> int:
 		return -1
 	if pilot.behaviour(&"formation") == null:
 		pilot.add_behaviour(BehaviourFormation.new(pilot.profile))
+	_give_rally(pilot)
 	refresh(wing)
 	return at
 
@@ -277,6 +351,9 @@ func refresh(wing: Wing) -> void:
 			remove_member(wing, member)
 			wing.mark_lost(slot)  # shot down: the slot reads DOWN on the HUD until a replacement takes it
 	var alive: bool = leader_alive(wing)
+	if not alive and (wing.leader == null or not wing.leader.is_player) and not wing.members().is_empty():
+		_lead(wing, wing.members()[0])  # the AI leader is down: the lowest slot leads on
+		alive = true
 	var order: AiContext.Order = wing.effective_order(alive)
 	var leader_id: int = 0
 	var target_id: int = 0
@@ -290,8 +367,18 @@ func refresh(wing: Wing) -> void:
 		if world != null:
 			link = world.to_universe(ship.global_position)
 		link_velocity = ship.linear_velocity
+	var ids := PackedInt64Array()
+	if wing.leader != null and wing.leader.targetable != null and alive:
+		ids.append(wing.leader.targetable.get_instance_id())
+	for member: Combatant in wing.members():
+		if member.targetable != null:
+			ids.append(member.targetable.get_instance_id())
+	var leader_pilot: AiPilot = _pilot_of(wing.leader) if alive else null
+	if leader_pilot != null:
+		_set_wing_ids(leader_pilot.context, ids, wing.leader)
 	for member: Combatant in wing.members():
 		var ctx: AiContext = _pilot_of(member).context
+		_set_wing_ids(ctx, ids, member)
 		ctx.order = order
 		ctx.leader_id = leader_id
 		ctx.leader_target_id = target_id
@@ -300,6 +387,15 @@ func refresh(wing: Wing) -> void:
 		ctx.slot_offset = wing.slot_offset(wing.slot_of(member))
 		ctx.leader_link_position = link
 		ctx.leader_link_velocity = link_velocity
+
+
+# `ids` without `self_ship`'s own.
+static func _set_wing_ids(ctx: AiContext, ids: PackedInt64Array, self_ship: Combatant) -> void:
+	ctx.wing_ids.clear()
+	var own: int = self_ship.targetable.get_instance_id() if self_ship.targetable != null else 0
+	for id: int in ids:
+		if id != own:
+			ctx.wing_ids.append(id)
 
 
 func _post(line: String) -> void:

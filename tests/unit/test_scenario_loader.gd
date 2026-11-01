@@ -180,28 +180,32 @@ func test_the_combat_sandbox_file_validates() -> void:
 	assert_true(result["ok"], result["error"])
 	assert_eq(result["scenario_id"], &"combat_sandbox")
 	assert_eq((result["props"] as Array).size(), 5, "the buoys stay as scenery")
-	assert_eq(result["pools"], {&"raider_fighter": 6, &"starfury_ally": 4}, "six raiders and four allied Starfuries (M3-T08)")
+	assert_eq(result["pools"], {&"raider_fighter": 9, &"starfury_ally": 4}, "nine raiders and four allied Starfuries (M3-T10)")
 	assert_eq(result["loop"], {"from_wave": 3, "add_per_loop": 1})
 	var waves: Array[Dictionary] = result["waves"]
 	assert_eq(waves.size(), 3)
 	assert_eq([waves[0]["name"], waves[1]["name"], waves[2]["name"]], ["TARGET PRACTICE", "PATROL", "STRIKE"])
 	assert_eq([waves[0]["delay_s"], waves[1]["delay_s"], waves[2]["delay_s"]], [5.0, 8.0, 8.0])
-	assert_eq([(waves[0]["spawns"] as Array).size(), (waves[1]["spawns"] as Array).size(), (waves[2]["spawns"] as Array).size()], [3, 3, 4])
+	assert_eq([(waves[0]["spawns"] as Array).size(), (waves[1]["spawns"] as Array).size(), (waves[2]["spawns"] as Array).size()], [4, 5, 6])
 	var strike_times: Array[float] = []
 	for spawn: Dictionary in waves[2]["spawns"]:
 		strike_times.append(spawn["at_s"])
-		assert_eq(spawn["behaviour"]["type"], "attack")
-	assert_eq(strike_times, [0.0, 2.0, 4.0, 6.0], "two seconds apart")
+		assert_eq(spawn["behaviour"]["type"], "ai", "STRIKE flies the AI")
+	assert_eq(strike_times, [0.0, 0.0, 0.0, 4.0, 4.0, 4.0], "two groups of three, the second 4 s later")
 	for spawn: Dictionary in waves[0]["spawns"]:
 		assert_eq(spawn["behaviour"]["type"], "idle")
 		assert_gt((spawn["velocity"] as Vector3).length(), 4.9)
 		assert_lt((spawn["velocity"] as Vector3).length(), 20.1, "drifting at 5-20 m/s")
 		assert_true(absf((spawn["offset"] as Vector3).z) >= 1200.0 and absf((spawn["offset"] as Vector3).z) <= 2000.0, "1.2-2 km ahead")
+	var leaders: int = 0
 	for spawn: Dictionary in waves[1]["spawns"]:
-		assert_eq(spawn["behaviour"]["type"], "aggro")
-		assert_eq(spawn["behaviour"]["cruise_mps"], 80.0)
-		assert_eq(spawn["behaviour"]["aggro_range_m"], 1500.0)
-		assert_eq((spawn["behaviour"]["waypoints"] as Array).size(), 3)
+		assert_eq(spawn["behaviour"]["type"], "ai", "PATROL flies the AI")
+		if (spawn["behaviour"] as Dictionary).has("patrol"):
+			leaders += 1
+			assert_eq(spawn["behaviour"]["patrol"]["cruise_mps"], 80.0)
+			assert_eq((spawn["behaviour"]["patrol"]["waypoints"] as Array).size(), 3)
+	assert_eq(leaders, 2, "each group's first ship flies the patrol route, the others follow it")
+	assert_eq((result["spawns"] as Array).size(), 3, "wing ALPHA's three wingmen at load")
 
 
 func test_pools_take_the_allied_starfury_beside_the_raider() -> void:
@@ -378,7 +382,7 @@ func test_ships_at_load_take_the_spawn_fields_plus_invulnerable_and_route() -> v
 	assert_true(spawns[0]["invulnerable"])
 	assert_eq(spawns[1]["route"], "", "no route")
 	assert_false(spawns[1]["invulnerable"])
-	var plain: Dictionary = ScenarioLoader.load(ScenarioLoader.SANDBOX_PATH)
+	var plain: Dictionary = ScenarioLoader.load(ScenarioLoader.FREE_FLIGHT_PATH)
 	assert_eq((plain["spawns"] as Array).size(), 0, "a scenario without ships at load")
 	assert_eq((plain["routes"] as Array).size(), 0)
 
@@ -422,3 +426,76 @@ func test_ships_at_load_and_a_wave_share_the_pool() -> void:
 	var result: Dictionary = ScenarioLoader.from_data(data, "case")
 	assert_false(result["ok"])
 	assert_string_contains(result["error"], "waves[0]: 4 spawns of raider_fighter and 1 ship at load but pools.raider_fighter holds 4")
+
+
+# --- wings (M3-T10) ------------------------------------------------------------------------------------------------
+
+
+func _ai_member(ship_name: String, type: String = "raider_fighter") -> Dictionary:
+	return {"type": type, "name": ship_name, "offset": [0, 0, -1000],
+			"behaviour": {"type": "ai", "profile": "raider" if type == "raider_fighter" else "ally_starfury"}}
+
+
+func _wing_data(wings: Array, pools: Dictionary = {"raider_fighter": 6, "starfury_ally": 4}) -> Dictionary:
+	var data: Dictionary = _minimal()
+	data["pools"] = pools
+	data["wings"] = wings
+	return data
+
+
+func test_the_dogfight_file_validates_with_its_three_wings() -> void:
+	var result: Dictionary = ScenarioLoader.load("res://data/scenarios/dogfight.json")
+	assert_true(result["ok"], str(result["error"]))
+	var wings: Array[Dictionary] = result["wings"]
+	assert_eq(wings.size(), 3)
+	assert_eq(wings[0]["name"], "ALPHA")
+	assert_eq(wings[0]["leader"], "ALPHA 2")
+	assert_eq(wings[0]["order"], AiContext.Order.ENGAGE_AT_WILL)
+	assert_eq(wings[1]["formation"], Formation.Shape.WEDGE)
+	assert_eq((result["spawns"] as Array).size(), 10, "every member is placed at load")
+	for spawn: Dictionary in result["spawns"]:
+		assert_false(String(spawn["wing"]).is_empty(), "%s flies in a wing" % spawn["name"])
+
+
+func test_the_sandbox_declares_the_players_wing_and_wave_groups() -> void:
+	var result: Dictionary = ScenarioLoader.load(ScenarioLoader.SANDBOX_PATH)
+	assert_true(result["ok"], str(result["error"]))
+	var wings: Array[Dictionary] = result["wings"]
+	assert_eq(wings[0]["leader"], "player")
+	assert_eq(wings[0]["order"], AiContext.Order.COVER_ME)
+	var patrol: Array = (result["waves"] as Array)[1]["spawns"]
+	var groups: Dictionary = {}
+	for spawn: Dictionary in patrol:
+		groups[spawn["wing"]] = int(groups.get(spawn["wing"], 0)) + 1
+	assert_eq(groups, {"RED": 3, "BLUE": 2})
+
+
+func test_wing_errors_name_the_json_path() -> void:
+	_assert_fails(_wing_data([{"members": []}]), "case: wings[0].name must be a non-empty string")
+	_assert_fails(_wing_data([{"name": "RED"}, {"name": "red"}]), "case: wings[1].name 'red' is declared twice")
+	_assert_fails(_wing_data([{"name": "RED", "faction": "klingons"}]), "case: wings[0].faction must be a known faction")
+	_assert_fails(_wing_data([{"name": "RED", "formation": "diamond"}]), "case: wings[0].formation must be one of finger_four")
+	_assert_fails(_wing_data([{"name": "RED", "order": "charge"}]), "case: wings[0].order must be one of engage")
+	_assert_fails(_wing_data([{"name": "RED", "leader": "RAIDER 9", "members": [_ai_member("RAIDER 1")]}]),
+			"case: wings[0].leader 'RAIDER 9' is not a spawn of this scenario")
+	_assert_fails(_wing_data([{"name": "RED", "members": [{"type": "raider_fighter", "behaviour": {"type": "idle"}}]}]),
+			"case: wings[0].members[0].wing needs an \"ai\" behaviour")
+	_assert_fails(_wing_data([{"name": "RED", "faction": "raiders", "members": [_ai_member("ALPHA 2", "starfury_ally")]}]),
+			"case: wings[0].members[0]: a starfury_ally flies for earth_alliance, not the wing's faction raiders")
+	_assert_fails(_wing_data([{"name": "RED", "members": [_ai_member("RAIDER 1")]}], {"raider_fighter": 0}),
+			"case: spawns and wings: 1 ships of raider_fighter at load but pools.raider_fighter holds 0")
+	var wave: Dictionary = _minimal()
+	wave["pools"] = {"raider_fighter": 2}
+	wave["waves"] = [{"name": "W", "spawns": [{"type": "raider_fighter", "wing": "RED", "behaviour": {"type": "attack"}}]}]
+	_assert_fails(wave, "case: waves[0].spawns[0].wing needs an \"ai\" behaviour")
+
+
+func test_a_wave_spawn_names_its_wing() -> void:
+	var data: Dictionary = _minimal()
+	data["pools"] = {"raider_fighter": 2}
+	data["waves"] = [{"name": "W", "spawns": [{"type": "raider_fighter", "wing": " RED ",
+			"behaviour": {"type": "ai", "profile": "raider"}}]}]
+	var result: Dictionary = ScenarioLoader.from_data(data, "case")
+	assert_true(result["ok"], str(result["error"]))
+	assert_eq((result["waves"] as Array)[0]["spawns"][0]["wing"], "RED", "trimmed")
+	assert_eq(result["wings"], [] as Array[Dictionary], "an undeclared group needs no declaration")

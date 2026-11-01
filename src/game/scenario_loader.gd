@@ -19,8 +19,14 @@ extends RefCounted
 ##      "loop": Dictionary,                         # {"from_wave": int (0 = none), "add_per_loop": int}
 ##      "routes": Array[Route],                     # `routes[]` (M3-T09): {name, cruise_mps (60), pace ("player" | "none"),
 ##                                                  #       loop (false), waypoints: [{position, demo, hold_s}]}; may be empty
-##      "spawns": Array[Dictionary]}                # ships placed at load (M3-T09): a wave spawn's fields plus
-##                                                  #       "invulnerable" (bool, false) and "route" (a route's name, "" none)
+##      "spawns": Array[Dictionary],                # ships placed at load (M3-T09): a wave spawn's fields plus
+##                                                  #       "invulnerable" (bool, false) and "route" (a route's name, "" none);
+##                                                  #       the members of `wings[]` come last, in their order
+##      "wings": Array[Dictionary]}                 # `wings[]` (M3-T10): {name, faction (StringName, &"" for any), leader
+##                                                  #       ("player", a spawn's name, or "" for its first ship), formation
+##                                                  #       (Formation.Shape), order (AiContext.Order)}; may be empty
+## Every spawn (wave or load) carries "wing" (a wing's name, "" for none; it needs an "ai" behaviour). A wing named by a spawn
+## but not declared in `wings[]` is a group led by its first ship, engaging at will, in a finger-four.
 ## Errors are returned, not pushed: the caller decides how loud a broken scenario is.
 
 const FREE_FLIGHT_PATH: String = "res://data/scenarios/free_flight.json"
@@ -114,7 +120,14 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	var spawns: Variant = _load_spawns(root.get("spawns", []), routes as Array[Route], pools as Dictionary, system, source)
 	if spawns is String:
 		return _failure(spawns as String)
+	var wings: Variant = _wings(root.get("wings", []), spawns as Array[Dictionary], system, source)
+	if wings is String:
+		return _failure(wings as String)
 	var at_load: Dictionary = _type_counts(spawns as Array[Dictionary])
+	for type: StringName in at_load:
+		if int(at_load[type]) > int((pools as Dictionary).get(type, 0)):
+			return _failure("%s: spawns and wings: %d ships of %s at load but pools.%s holds %d" % [source, at_load[type], type,
+					type, int((pools as Dictionary).get(type, 0))])
 	var waves: Variant = _waves(root.get("waves", []), pools as Dictionary, system, source, at_load)
 	if waves is String:
 		return _failure(waves as String)
@@ -134,7 +147,76 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	result["loop"] = loop
 	result["routes"] = routes
 	result["spawns"] = spawns
+	result["wings"] = wings
 	return result
+
+
+## `wings[]` (M3-T10): each wing's declaration, its members appended to `spawns` (placed at load with their wing), or an error
+## string. `leader` is "player", the name of a spawn (one of `spawns` or of its own members), or absent (its first ship leads);
+## `faction`, when given, must be every member's; `formation` a `Formation.NAMES` word (finger_four); `order` an
+## `AiContext.ORDER_WORDS` word (cover for a player-led wing, else engage).
+static func _wings(raw: Variant, spawns: Array[Dictionary], system: StringName, source: String) -> Variant:
+	if not (raw is Array):
+		return "%s: wings must be an array" % source
+	var out: Array[Dictionary] = []
+	var seen: Dictionary = {}
+	for w: int in (raw as Array).size():
+		var where: String = "%s: wings[%d]" % [source, w]
+		var entry: Variant = (raw as Array)[w]
+		if not (entry is Dictionary):
+			return "%s must be an object" % where
+		var wing: Dictionary = entry
+		var wing_name: Variant = wing.get("name")
+		if not (wing_name is String) or (wing_name as String).strip_edges().is_empty():
+			return "%s.name must be a non-empty string" % where
+		var key: String = (wing_name as String).strip_edges().to_lower()
+		if seen.has(key):
+			return "%s.name '%s' is declared twice" % [where, wing_name]
+		seen[key] = true
+		var faction: Variant = wing.get("faction", "")
+		if not (faction is String) or (not (faction as String).is_empty() and not Factions.is_known(StringName(faction as String))):
+			return "%s.faction must be a known faction, got %s" % [where, JSON.stringify(faction)]
+		var shape: Variant = wing.get("formation", String(Formation.NAMES[Formation.Shape.FINGER_FOUR]))
+		var shape_value: int = Formation.shape_from_name(shape as String) if shape is String else -1
+		if shape_value < 0:
+			return "%s.formation must be one of %s, got %s" % [where, ", ".join(PackedStringArray(Formation.NAMES)), JSON.stringify(shape)]
+		var leader: Variant = wing.get("leader", "")
+		if not (leader is String):
+			return "%s.leader must be \"player\" or a spawn's name" % where
+		var default_order: AiContext.Order = AiContext.Order.COVER_ME if leader == "player" else AiContext.Order.ENGAGE_AT_WILL
+		var order_word: Variant = wing.get("order", String(AiContext.order_word(default_order)))
+		var order: int = AiContext.order_from_word(order_word as String) if order_word is String else -1
+		if order < 0:
+			return "%s.order must be one of %s, got %s" % [where, ", ".join(PackedStringArray(AiContext.ORDER_WORDS)), JSON.stringify(order_word)]
+		var members_raw: Variant = wing.get("members", [])
+		if not (members_raw is Array):
+			return "%s.members must be an array" % where
+		var names := PackedStringArray()
+		for spawn: Dictionary in spawns:
+			names.append(String(spawn["name"]).to_lower())
+		for i: int in (members_raw as Array).size():
+			var at: String = "%s.members[%d]" % [where, i]
+			var member_raw: Variant = (members_raw as Array)[i]
+			if member_raw is Dictionary and not (member_raw as Dictionary).has("wing"):
+				member_raw = (member_raw as Dictionary).duplicate()
+				member_raw["wing"] = wing_name
+			var member: Variant = _spawn(member_raw, at, system)
+			if member is String:
+				return member
+			if String((member as Dictionary)["wing"]).to_lower() != key:
+				return "%s.wing must be its wing's name (%s) or left out" % [at, wing_name]
+			var m: Dictionary = member
+			m["invulnerable"] = false
+			m["route"] = ""
+			if not (faction as String).is_empty() and ShipCatalog.faction_for(m["type"]) != StringName(faction as String):
+				return "%s: a %s flies for %s, not the wing's faction %s" % [at, m["type"], ShipCatalog.faction_for(m["type"]), faction]
+			spawns.append(m)
+			names.append(String(m["name"]).to_lower())
+		if leader != "player" and not (leader as String).is_empty() and not names.has((leader as String).to_lower()):
+			return "%s.leader '%s' is not a spawn of this scenario (\"player\", or the name of a spawn or member)" % [where, leader]
+		out.append({"name": (wing_name as String).strip_edges(), "faction": StringName(faction as String),
+				"leader": leader as String, "formation": shape_value, "order": order})
+	return out
 
 
 ## `pools`: `{"raider_fighter": 6, "starfury_ally": 4}` -> `{&"raider_fighter": 6, &"starfury_ally": 4}`, or an error string. Any
@@ -332,8 +414,14 @@ static func _spawn(raw: Variant, where: String, system: StringName) -> Variant:
 	var made: Dictionary = BrainFactory.from_behaviour(behaviour, UniversePos.new(0.0, 0.0, 0.0, system), 0)
 	if not bool(made["ok"]):
 		return "%s: %s" % [where, String(made["error"])]
+	var wing: Variant = entry.get("wing", "")
+	if not (wing is String):
+		return "%s.wing must be a wing's name" % where
+	if not (wing as String).strip_edges().is_empty() and not (made["brain"] is AiPilot):
+		return "%s.wing needs an \"ai\" behaviour (a wing's members fly an AiPilot)" % where
 	return {"type": StringName(type as String), "name": str(entry.get("name", "")), "anchor": StringName(anchor as String),
-			"offset": offset as Vector3, "velocity": velocity as Vector3, "at_s": float(at_s), "behaviour": behaviour}
+			"offset": offset as Vector3, "velocity": velocity as Vector3, "at_s": float(at_s), "behaviour": behaviour,
+			"wing": (wing as String).strip_edges()}
 
 
 ## An orientation whose forward axis (-Z) points along `forward`, up as close to +Y as possible.
@@ -378,7 +466,8 @@ static func _empty() -> Dictionary:
 	return {"ok": false, "error": "", "scenario_id": &"", "system_id": &"local",
 			"player": {"position": UniversePos.new(), "forward": Vector3.FORWARD, "basis": Basis.IDENTITY},
 			"props": [] as Array[Dictionary], "pools": {}, "waves": [] as Array[Dictionary],
-			"loop": {"from_wave": 0, "add_per_loop": 1}, "routes": [] as Array[Route], "spawns": [] as Array[Dictionary]}
+			"loop": {"from_wave": 0, "add_per_loop": 1}, "routes": [] as Array[Route], "spawns": [] as Array[Dictionary],
+			"wings": [] as Array[Dictionary]}
 
 
 static func _failure(message: String) -> Dictionary:

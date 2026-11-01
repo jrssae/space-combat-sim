@@ -290,7 +290,11 @@ class Watch extends Node:
 			return
 		var damageable: Damageable = Damageable.of(body)
 		var radius: float = damageable.bounding_radius if damageable != null else 0.0
-		var beyond: float = info.point.distance_to(body.global_position) - radius - RebaseFight._speed_of(body) * _dt - JUMP_SLACK_M
+		# A hull the hit destroyed is parked at once and reads 0 m/s: its speed as of the start of this tick bounds its motion.
+		var speed: float = RebaseFight._speed_of(body)
+		if _previous.has(body.get_instance_id()):
+			speed = maxf(speed, float((_previous[body.get_instance_id()] as Array)[1]))
+		var beyond: float = info.point.distance_to(body.global_position) - radius - speed * _dt - JUMP_SLACK_M
 		if beyond > 0.0:
 			fight._fail("a %s on %s landed %.1f m outside its hull" % [what, body.name, beyond])
 

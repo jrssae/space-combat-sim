@@ -539,3 +539,94 @@ func test_only_the_attack_advertises_a_target() -> void:
 	_tick(evading, _p([tail]))
 	assert_eq(evading.current.id, &"evade")
 	assert_eq(evading.wanted_target_id, PilotBrain.TARGET_NONE, "evading: no target")
+
+
+# --- hit reaction (M3-T10, Q11) ------------------------------------------------------------------------------------
+
+
+# A pilot attacking a raider 800 m ahead, just past its first tick (inside the minimum dwell).
+func _attacking() -> Array:
+	var raider := _contact(20, "RAIDER 1", Factions.Relation.HOSTILE, Vector3(0.0, 0.0, -800.0), Vector3.BACK)
+	var pilot := AiPilot.new(profile, 5)
+	var p := _p([raider])
+	_tick(pilot, p, 0.1)
+	return [pilot, p]
+
+
+func _advance(pilot: AiPilot, p: Perception, seconds: float) -> void:
+	for i: int in maxi(1, roundi(seconds / DT)):
+		p.now_s += DT
+		pilot.think(p, DT)
+
+
+func test_a_bolt_hit_hands_control_to_evade_at_once_even_inside_the_dwell() -> void:
+	var setup: Array = _attacking()
+	var pilot: AiPilot = setup[0]
+	var p: Perception = setup[1]
+	assert_eq(pilot.current.id, &"attack")
+	assert_lt(pilot.dwell_s, profile.min_dwell_s, "inside the dwell")
+	p.last_bolt_hit_s = p.now_s
+	p.last_hit_s = p.now_s
+	pilot.think(p, DT)
+	assert_eq(pilot.current.id, &"evade", "the same tick")
+	var evade := pilot.current as BehaviourEvade
+	assert_true(evade.locked())
+	assert_eq(evade.jinks, 1)
+	# It holds through the whole first jink, though the hit's score fades after 2 s; then the attack resumes.
+	var first_jink_s: float = evade.jink_left_s
+	_advance(pilot, p, first_jink_s - 2.0 * DT)
+	assert_eq(pilot.current.id, &"evade", "the first jink is flown in full")
+	_advance(pilot, p, 4.0 * DT)
+	assert_false(evade.locked(), "one full jink done")
+	_advance(pilot, p, 0.5)
+	assert_eq(pilot.current.id, &"attack", "then normal selection: back to the attack")
+
+
+func test_further_hits_keep_it_evading() -> void:
+	var setup: Array = _attacking()
+	var pilot: AiPilot = setup[0]
+	var p: Perception = setup[1]
+	p.last_bolt_hit_s = p.now_s
+	pilot.think(p, DT)
+	var evade := pilot.current as BehaviourEvade
+	_advance(pilot, p, 1.0)
+	p.last_bolt_hit_s = p.now_s  # hit again mid-jink: this jink, then one more
+	pilot.think(p, DT)
+	assert_eq(evade.jinks, 1)
+	_advance(pilot, p, evade.jink_left_s + DT)
+	assert_eq(evade.jinks, 2)
+	assert_true(evade.locked(), "still held through the next full jink")
+	assert_eq(pilot.current.id, &"evade")
+
+
+func test_a_ram_or_console_hit_is_no_interrupt() -> void:
+	var setup: Array = _attacking()
+	var pilot: AiPilot = setup[0]
+	var p: Perception = setup[1]
+	p.last_hit_s = p.now_s  # a ram: last_hit_s only
+	pilot.think(p, DT)
+	assert_eq(pilot.current.id, &"attack", "no bolt, no interrupt (the hit score alone does not outrank the attack in the dwell)")
+
+
+func test_a_pilot_that_weighs_evade_zero_never_reacts() -> void:
+	profile = _profile({&"attack": 1.0, &"evade": 0.0, &"retreat": 1.0, &"idle": 1.0})
+	var setup: Array = _attacking()
+	var pilot: AiPilot = setup[0]
+	var p: Perception = setup[1]
+	p.last_bolt_hit_s = p.now_s
+	pilot.think(p, DT)
+	assert_eq(pilot.current.id, &"attack")
+
+
+func test_a_retreating_ship_that_is_hit_jinks_then_retreats_again() -> void:
+	var raider := _contact(20, "RAIDER 1", Factions.Relation.HOSTILE, Vector3(0.0, 0.0, -800.0), Vector3.BACK)
+	var pilot := AiPilot.new(profile, 5)
+	var p := _p([raider], 0.1)
+	_tick(pilot, p, 0.1)
+	assert_eq(pilot.current.id, &"retreat")
+	p.last_bolt_hit_s = p.now_s
+	pilot.think(p, DT)
+	assert_eq(pilot.current.id, &"evade", "it jinks")
+	var evade := pilot.current as BehaviourEvade
+	_advance(pilot, p, evade.jink_left_s + 0.5)
+	assert_eq(pilot.current.id, &"retreat", "then keeps retreating")

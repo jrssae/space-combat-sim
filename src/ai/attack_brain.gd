@@ -81,6 +81,7 @@ func engage(p: Perception, target_id: int, target_position: Vector3, target_velo
 		lead_dir = _offset(lead_dir)
 	var v_des := Vector3.ZERO
 	var face_dir: Vector3 = lead_dir
+	var cap: float = tactics.max_speed_mps
 	match state:
 		State.APPROACH:
 			if range_m < tactics.fire_range_m:
@@ -90,6 +91,7 @@ func engage(p: Perception, target_id: int, target_position: Vector3, target_velo
 			else:
 				var closing: float = tactics.closing_far_mps if range_m > tactics.near_range_m else tactics.closing_near_mps
 				v_des = target_velocity + los_dir * closing
+				cap = maxf(cap, target_velocity.length()) + closing  # never slower than the target, plus the closure
 				var dv: Vector3 = v_des - p.velocity
 				face_dir = lead_dir if dv.length() < tactics.face_lead_delta_v_mps else dv.normalized()
 				lead_error_deg = rad_to_deg(PilotSteering.angle_to(p.basis, lead_dir))
@@ -108,6 +110,8 @@ func engage(p: Perception, target_id: int, target_position: Vector3, target_velo
 			else:
 				v_des = target_velocity - los_dir * tactics.closing_far_mps
 				face_dir = (v_des - p.velocity).normalized() if (v_des - p.velocity).length() > 1.0 else p.forward()
+	if tactics.max_speed_mps > 0.0 and v_des.length() > cap:
+		v_des = v_des.normalized() * cap
 	cmd.flight.rot = PilotSteering.face(p.basis, face_dir, p.capability.rate_max_rad)
 	seek_velocity(cmd.flight, p, v_des)
 	cmd.combat.fire = firing

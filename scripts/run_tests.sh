@@ -261,12 +261,12 @@ reject_text "${log}" "ERROR:" || smoke_status=1
 
 echo "== Console smoke run: an attacking raider on the real main scene"
 # M2-T07 / AC9: an attack raider 2 km out flies its gun run (the brain's state is readable) and lands hits on the player.
-# `wave stop` first: a wave that starts during the 20 s wait would launch the wingmen (M3-T08 replenish), whose guns and kills
-# can leave a sound playing at the quit, which Godot reports as a resource still in use.
+# `wave stop` first, and `despawn all` parks the sandbox's wingmen (M3-T10): their guns would take the raider (and its brain)
+# out of the test.
 log="${REPORTS}/console_attack.log"
 attack_status=0
 timeout 240 "${GODOT}" --headless --path . -- --console-strict \
-    --console-exec='wait 30; wave stop; god on; spawn raider attack 2000; set targeting.selected "RAIDER 1"; wait 1200; get raiders.selected_brain; get combat.hits; quit' \
+    --console-exec='wait 30; wave stop; god on; despawn all; spawn raider attack 2000; set targeting.selected "RAIDER 1"; wait 1200; get raiders.selected_brain; get combat.hits; quit' \
     > "${log}" 2>&1 || attack_status=$?
 cat "${log}"
 if (( attack_status != 0 )); then
@@ -293,7 +293,7 @@ if (( waves_status != 0 )); then
     smoke_status=1
 fi
 expect_line "${log}" "[console] waves.state = active" || smoke_status=1
-expect_line "${log}" "[console] waves.kills = 3" || smoke_status=1
+expect_line "${log}" "[console] waves.kills = 4" || smoke_status=1
 expect_line "${log}" "[console] raiders.pool_size = 0" || smoke_status=1
 expect_line "${log}" "[console] waves.state = idle" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
@@ -301,12 +301,12 @@ reject_text "${log}" "ERROR:" || smoke_status=1
 
 echo "== Console smoke run: an allied Starfury is spawned, shot down into Starfury chunks and replaced on the real main scene"
 # M3-T08 / AC7: `spawn ally` takes an ALPHA ship from the ally pool, a destroyed ally is no kill and takes one of the Starfury's two
-# chunk sets (the player's death takes the other), and `kill allies` leaves none. It waits before it quits: leaving while an
-# explosion sound plays makes the engine report the sound's resource as still in use.
+# chunk sets (the player's death takes the other), and `kill allies` leaves none. `despawn all` first parks the sandbox's
+# wingmen (M3-T10), so the console's ally is ALPHA 2. It waits before it quits (the explosions' sounds).
 log="${REPORTS}/console_allies.log"
 allies_status=0
 timeout 180 "${GODOT}" --headless --path . -- --console-strict \
-    --console-exec='wait 30; wave stop; spawn ally idle 60 0 0; wait 5; get allies.alive; get allies.pool_size; set targeting.selected "ALPHA 2"; kill target; wait 5; get allies.alive; get allies.free; get waves.kills; get debris.free_sets; spawn ally ai 800; wait 60; ai ALPHA 2; kill allies; get allies.alive; kill player; get debris.free_sets; wait 300; quit' \
+    --console-exec='wait 30; wave stop; despawn all; spawn ally idle 60 0 0; wait 5; get allies.alive; get allies.pool_size; set targeting.selected "ALPHA 2"; kill target; wait 5; get allies.alive; get allies.free; get waves.kills; get debris.free_sets; spawn ally ai 800; wait 60; ai ALPHA 2; kill allies; get allies.alive; kill player; get debris.free_sets; wait 300; quit' \
     > "${log}" 2>&1 || allies_status=$?
 cat "${log}"
 if (( allies_status != 0 )); then
@@ -388,7 +388,7 @@ echo "== Console smoke run: an AiPilot raider and the ai provider and command on
 log="${REPORTS}/console_ai.log"
 ai_status=0
 timeout 180 "${GODOT}" --headless --path . -- --console-strict \
-    --console-exec='wait 30; wave stop; god on; spawn raider ai 1500; wait 120; get ai.ships; get ai.by_behaviour; get ai.think_us; ai RAIDER 1; ai RAIDER 1 objective nav alpha; wait 10; ai RAIDER 1; ai RAIDER 1 objective none; quit' \
+    --console-exec='wait 30; wave stop; god on; despawn all; spawn raider ai 1500; wait 120; get ai.ships; get ai.by_behaviour; get ai.think_us; ai RAIDER 1; ai RAIDER 1 objective nav alpha; wait 10; ai RAIDER 1; ai RAIDER 1 objective none; quit' \
     > "${log}" 2>&1 || ai_status=$?
 cat "${log}"
 if (( ai_status != 0 )); then
@@ -421,8 +421,8 @@ expect_text "${log}" "[console] error: no AI ship named 'NOBODY'" || smoke_statu
 reject_text "${log}" "[console] > quit 0" || smoke_status=1
 
 echo "== Console smoke run: the wing provider and command on the real main scene"
-# M3-T07 / AC11, AC13: the player leads wing ALPHA; `wing order form` is acknowledged with one line (no wingmen yet: the
-# ally pool and the scenario wings come with T08 and T10) and `wing formation wedge` changes the shape, under --console-strict.
+# M3-T07 / AC11, AC13: the player leads wing ALPHA, whose three wingmen the sandbox places at load (M3-T10); `wing order form`
+# is acknowledged with one line by the first of them and `wing formation wedge` changes the shape, under --console-strict.
 log="${REPORTS}/console_wing.log"
 wing_status=0
 timeout 180 "${GODOT}" --headless --path . -- --console-strict \
@@ -433,12 +433,12 @@ if (( wing_status != 0 )); then
     echo "run_tests.sh: wing smoke run exited ${wing_status}, expected 0 (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] ALPHA: NO WINGMEN" || smoke_status=1
+expect_line "${log}" "[console] ALPHA 2: COPY, FORMING UP" || smoke_status=1
 expect_line "${log}" "[console] ALPHA formation: finger_four -> wedge" || smoke_status=1
 expect_line "${log}" "[console] wing.order = form" || smoke_status=1
 expect_line "${log}" "[console] wing.formation = wedge" || smoke_status=1
-expect_line "${log}" "[console] wing.last_ack = ALPHA: NO WINGMEN" || smoke_status=1
-expect_line "${log}" "[console] ALPHA: order form, formation wedge, members none" || smoke_status=1
+expect_line "${log}" "[console] wing.last_ack = ALPHA 2: COPY, FORMING UP" || smoke_status=1
+expect_line "${log}" "[console] ALPHA: order form, formation wedge, members ALPHA 2, ALPHA 3, ALPHA 4" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 reject_text "${log}" "ERROR:" || smoke_status=1
 
@@ -457,11 +457,12 @@ reject_text "${log}" "[console] > quit 0" || smoke_status=1
 
 echo "== Console smoke run: wing replenish launches the wingmen on the real main scene"
 # M3-T08 / AC11: `wing replenish` gives the empty wing its three wingmen (ALPHA 2-4, 1 500 m astern) on the wing's order; after
-# `kill allies` it launches them again, and with a full wing it says so. Waits before it quits (the explosions' sounds).
+# `kill allies` it launches them again, and with a full wing it says so. The sandbox's own wingmen (M3-T10) are parked first
+# (`despawn all`). Waits before it quits (the explosions' sounds).
 log="${REPORTS}/console_wing_replenish.log"
 replenish_status=0
 timeout 180 "${GODOT}" --headless --path . -- --console-strict \
-    --console-exec='wait 30; wave stop; wing replenish; get allies.alive; wing order engage; kill allies; wing replenish; get allies.alive; wing replenish; wait 300; quit' \
+    --console-exec='wait 30; wave stop; despawn all; wait 2; wing replenish; get allies.alive; wing order engage; kill allies; wing replenish; get allies.alive; wing replenish; wait 300; quit' \
     > "${log}" 2>&1 || replenish_status=$?
 cat "${log}"
 if (( replenish_status != 0 )); then
@@ -476,6 +477,24 @@ fi
 expect_line "${log}" "[console] allies.alive = 3" || smoke_status=1
 expect_line "${log}" "[console] ALPHA 2: COPY, ENGAGING AT WILL" || smoke_status=1
 expect_line "${log}" "[console] ALPHA: no empty slot" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
+
+echo "== Console smoke run: the dogfight scenario loads its three wings on the real main scene"
+# M3-T10 / AC12: `scenario dogfight` places wing ALPHA (four allies led by ALPHA 2, engage at will) and raider groups RED and BLUE.
+log="${REPORTS}/console_dogfight.log"
+dogfight_status=0
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; scenario dogfight; wait 120; get allies.alive; get raiders.alive; wing; quit' \
+    > "${log}" 2>&1 || dogfight_status=$?
+cat "${log}"
+if (( dogfight_status != 0 )); then
+    echo "run_tests.sh: dogfight smoke run exited ${dogfight_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] allies.alive = 4" || smoke_status=1
+expect_line "${log}" "[console] raiders.alive = 6" || smoke_status=1
+expect_line "${log}" "[console] ALPHA: order engage, formation finger_four, members ALPHA 3, ALPHA 4, ALPHA 5" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 reject_text "${log}" "ERROR:" || smoke_status=1
 

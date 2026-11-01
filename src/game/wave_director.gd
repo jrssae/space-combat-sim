@@ -24,6 +24,8 @@ const COMMANDS: Array[StringName] = [&"start", &"next", &"stop", &"restart"]
 
 var world: WorldFrame = null
 var pool: ShipPool = null
+## Spawns that name a wing join it here (M3-T10: raider groups); null: they fly alone.
+var wings: WingDirector = null
 var player: Combatant = null
 var scenario_id: StringName = &""
 var plan: WavePlan = WavePlan.new()
@@ -143,7 +145,13 @@ func _spawn(request: Dictionary) -> void:
 	# The nose along its drift, or toward the player for a raider that starts at rest.
 	var heading: Vector3 = velocity if velocity.length() > 1.0 else (player_local - at_local)
 	var basis: Basis = ScenarioLoader.basis_facing(heading if heading.length() > 1e-3 else Vector3.FORWARD)
-	pool.acquire(raider_name, at, basis, velocity, made["brain"] as PilotBrain, StringName(request["type"]))
+	var brain: PilotBrain = made["brain"]
+	if brain is AiPilot and player != null and (brain as AiPilot).context.objective_name.is_empty():
+		# The wave is about the player (Q6): a raider that loses everything else from sight comes back for it (M3-T10).
+		(brain as AiPilot).context.objective_name = player.display_name
+	var placed: Combatant = pool.acquire(raider_name, at, basis, velocity, brain, StringName(request["type"]))
+	if placed != null and wings != null and not String(request.get("wing", "")).is_empty():
+		wings.join(String(request["wing"]), placed)
 
 
 # The anchor's universe position when the wave activated, kept for the rest of the wave (offsets and waypoints are relative to it).

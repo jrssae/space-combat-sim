@@ -461,6 +461,61 @@ Two agents at a time is steadier than four (`docs/handoff.md`).
   - `dogfight.json`: four allies (wing ALPHA, ENGAGE AT WILL, leader ALPHA 2) and six raiders (RED, BLUE) 4 km apart; the
     player starts 3 km off to the side. For headless tuning and AC12.
 - Done when: AC12 and the guard and hit-reaction parts of AC9 pass; P8 attached.
+- Done (2026-11-01):
+  - Hit reaction: `Perception.last_bolt_hit_s` (the driver records bolt hits only; rams and the console are no interrupt). In
+    `AiPilot.select` a bolt hit later than the last one reacted to hands control to evade at once (scores, stickiness and dwell
+    ignored) and calls `BehaviourEvade.on_hit()`; evade keeps control while `locked()`: entering, until its first jink ends;
+    hit again mid-jink, through that jink and one more. Evade weight 0 never reacts (the instructor). In Jolt
+    (`test_ai_evade`, 60 Hz) an attacking ally and an attacking raider each evade 0.017 s (one tick) after the hit, and a second
+    hit holds the evasion through the next full jink. Unit tests: interrupt inside the dwell, full jink, renewal, ram no
+    interrupt, evade weight 0, a hit retreating ship jinks then retreats again.
+  - Guard (`BehaviourGuard`, attached only to pilots given a post): `AiContext.guard_post` (a `UniversePos`) or `guard_name` +
+    `guard_offset` (a ship's slot, body frame, +z behind) and `guard_radius_m` (1 500). The context gates the attack:
+    `may_attack` allows only hostiles inside the radius of the post or with the guarded ship selected; the guard flies back and
+    keeps station (score 0.25, 0.1 while something may be attacked). BrainFactory `"guard": {"post": [x, y, z]} |
+    {"ship": name, "offset": [x, y, z]}, "radius_m"`. `test_ai_guard`: a raider seen at 3.2 km is left alone, engaged inside
+    1.5 km, and with it gone the guard is back 48 m from its post, through T14's `RebaseFight` with a rebase forced every 0.5 s
+    (168 rebases); a guard on a ship's slot engages a raider 2.5 km out (outside its 1 km radius) attacking that ship.
+  - Patrols on the AI: BrainFactory `"patrol": {"waypoints": [...], "cruise_mps"}` builds a looping, unpaced `Route` with
+    `yield_to_attack` (follow path scores 0.1 while an attack is allowed) and attaches `BehaviourFollowPath`.
+  - Wings in scenarios: `ScenarioLoader` `wings[]` `{name, faction, leader ("player" | a spawn's name | absent: the first ship),
+    formation, order (cover for a player-led wing, else engage), members[]}`; members are placed at load (appended to `spawns`,
+    counted against the pools); any spawn (load or wave) may name a `wing` (it needs an `ai` behaviour). Path-qualified errors
+    (`wings[0].leader 'RAIDER 9' is not a spawn of this scenario`, `wings[0].members[0]: a starfury_ally flies for earth_alliance,
+    not the wing's faction raiders`, ...). `WingDirector.declare` / `join` / `wing_named`: a wing is created on first use, the
+    declared leader or the first ship leads; an AI-led wing whose leader is down hands the lead to its lowest slot (`refresh`).
+    `Main` places scenario members into their wings and does not create the player's ALPHA when the scenario's ALPHA is led by
+    an AI ship (the dogfight); `WaveDirector.wings` joins wave raiders to their groups. `Main.scenario_seed` is mixed into the
+    brain seed of every ship placed at load.
+  - Beyond the brief, found while tuning the dogfight (planner calls, say if you want them changed):
+    - Speed caps (`RaiderTactics.max_speed_mps` 150): two ships attacking each other each seek the other's velocity plus a
+      closing speed, which fed on itself to 300-550 m/s with almost no time in gun range. BREAK and EXTEND now seek at most 150
+      m/s; APPROACH at most the higher of 150 m/s and the target's own speed, plus its closing speed, so a chaser always gains
+      (`test_dogfight`: a raider closes from 3 km to under 1 km on a player running at 800 m/s in 20 s, at 874 m/s).
+    - Fire discipline: `fire_miss_m` 4 -> 6 m (Starfury tactics) and 3 -> 5 m (raider tactics).
+    - `BehaviourRally` (score 0.2, given to the AI ships of a wing): with nothing it may attack in sight, fly to the nearest
+      engaged wingmate (`AiContext.wing_ids`, kept by `WingDirector`), seen near or heard through its broadcast. Without it duels
+      drifted 20-50 km apart and the ships out of the fight idled.
+    - The player broadcasts like an allied Starfury (100 km), and every AI raider a wave brings gets the player as its
+      objective; the objective is now a fallback (M3-T17 amended): the attack takes hostiles in sight first and the objective
+      only when it has none, so a wave raider that lost everything from sight comes back instead of coasting off.
+  - Scenarios: `combat_sandbox` wing ALPHA (ALPHA 2-4 on the player, COVER ME) at load, pools raider 9 / ally 4, waves TARGET
+    PRACTICE 4 idle, PATROL 5 on the AI (RED 3 led on a patrol route, BLUE 2 likewise), STRIKE 6 on the AI (RED 3, BLUE 3 4 s
+    later), loop +1 up to 9. `dogfight.json`: wing ALPHA (ALPHA 2 leads ALPHA 3-5, engage at will) 2 km south of the origin,
+    RED and BLUE (three raiders each, wedges) 2 km north, the player 3 km east; no waves. `settings.scenario` and `scenario`
+    take `dogfight`.
+  - AC12: `test_dogfight`: seeds 1-5 end with the raiders destroyed in 162, 342, 256, 195 and 253 s (4 allies left every time:
+    the Starfuries are much the stronger side; seed 2 is the closest to the 6 minutes); seed 3 twice is identical after 60 s
+    (0.000000 m over 9 ships; the test starts each run at sim time 0 with the sped-up step settled, since the cooldowns compare
+    absolute sim times). `test_m3_sandbox`: with the player `god on` and idle the wingmen clear the three waves in 530-706 s (15
+    kills; PATROL flies RED 3 and BLUE 2). `test_scenario_loader`: the sandbox, the dogfight and the wing errors.
+  - Tests touched by the sandbox's wingmen and nine raiders: `test_wave_director`, `test_ally_pool`, `test_audio_director`,
+    `test_destruction`, `test_hud`, `test_kill_credit_in_play`, `test_m2_run`, `test_rebase_in_play` (the fight gets 480 s and a
+    wingman may go down), `test_speed_and_autotrack` (`despawn all` first), `test_wing_replenish` (`kill allies` first),
+    `test_attack_brain_states` (the miss gate derived from the tactics), and the console smoke runs (`despawn all` where the
+    wingmen would take the test's raider; a new `scenario dogfight` run). `RebaseFight`: a hull destroyed by the hit it checks is
+    parked at once and reads 0 m/s, so its start-of-tick speed bounds the hit point now.
+  - P8 is (H).
 
 ### M3-T11 HUD: wing roster, acknowledgements, waypoint marker
 
@@ -711,7 +766,8 @@ Added 2026-10-26 for Q21 (the AI half the same day); after T10 (raiders on `AiPi
     when none). `contacts` are unchanged, so avoidance, the fire lane and threat picking still see only 5 km.
   - Objective: `AiContext.objective_name` (console `ai <name> objective <target|none>`, which refuses a name no targetable
     has; spawn behaviour field `objective`); `refresh` finds it among the near contacts, then the broadcasts. Planner call:
-    `BehaviourAttack` takes the objective as its target over any hostile (not under FORM_ON_ME), score 0.8. Beyond 5 km it
+    `BehaviourAttack` takes the objective as its target over any hostile (not under FORM_ON_ME), score 0.8 (amended in T10: only
+    while no hostile in sight may be attacked, so the objective is a fallback). Beyond 5 km it
     transits (`state transit`, no fire): target velocity plus a closing speed it can shed by 5 km at half its main-pod
     acceleration, clamped to `closing_far_mps`..`TRANSIT_MAX_MPS` (1 000 m/s); inside 5 km the gun run takes over.
     `test_ai_objective`: a raider 200 km from a buoy closes to 1 995 m in 275 s of sim time, top speed 999 m/s, attacking it

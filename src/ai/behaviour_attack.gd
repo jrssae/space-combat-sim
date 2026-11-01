@@ -9,9 +9,11 @@ extends AiBehaviour
 ## `W_DAMAGED` x its missing hull; the current target gets `KEEP_BONUS` so the choice does not flicker. A new target
 ## restarts the run (APPROACH).
 ##
-## Objective (M3-T17, planner call): while the pilot has an objective it can see or hear (`AiContext.objective`), that is the
-## target, whatever its faction and whoever else is near (the orders still stand aside under FORM_ON_ME), scored as the best
-## value (`OBJECTIVE_VALUE`). Beyond the near scan (5 km) the run does not start: the ship transits, flying at the target's
+## Objective (M3-T17; a fallback since M3-T10): while the pilot has an objective it can see or hear (`AiContext.objective`)
+## and no hostile ship in sight it may attack, the objective is the target, whatever its faction (the orders still stand
+## aside under FORM_ON_ME), scored as the best value (`OBJECTIVE_VALUE`). A hostile in sight is fought first, so a raider
+## sent at a buoy fights the defenders it meets on the way. Beyond the near scan (5 km) the run does not start: the ship
+## transits, flying at the target's
 ## velocity plus a closing speed that it can still shed by 5 km (`TRANSIT_BRAKE_FRACTION` of its main-pod acceleration, a
 ## flip included) between the tactics' `closing_far_mps` and `TRANSIT_MAX_MPS`, without firing. Inside 5 km the gun run takes
 ## over as for any target.
@@ -75,11 +77,9 @@ func score(ctx: AiContext) -> float:
 	var p: Perception = ctx.perception
 	var keep_id: int = _target.id if _target != null else _engaged_id
 	_target = null
-	if ctx.objective != null and ctx.order != AiContext.Order.FORM_ON_ME:
-		_target = ctx.objective
-		return clampf(SCORE_BASE + SCORE_SPAN * OBJECTIVE_VALUE, 0.0, 1.0)
 	var best: float = -INF
-	var at_will: bool = ctx.order == AiContext.Order.ENGAGE_AT_WILL  # every hostile ship: skip the per-contact check
+	# Engage at will with no guard post: every hostile ship, so skip the per-contact check.
+	var at_will: bool = ctx.order == AiContext.Order.ENGAGE_AT_WILL and not ctx.guarding
 	var own_velocity: Vector3 = p.velocity
 	var friendly_ids: PackedInt64Array = ctx.friendly_ids
 	var hostiles: Array[Contact] = ctx.hostiles
@@ -103,6 +103,9 @@ func score(ctx: AiContext) -> float:
 			best = value
 			_target = c
 	if _target == null:
+		if ctx.objective != null and ctx.order != AiContext.Order.FORM_ON_ME:
+			_target = ctx.objective
+			return clampf(SCORE_BASE + SCORE_SPAN * OBJECTIVE_VALUE, 0.0, 1.0)
 		return 0.0
 	return clampf(SCORE_BASE + SCORE_SPAN * best, 0.0, 1.0)
 

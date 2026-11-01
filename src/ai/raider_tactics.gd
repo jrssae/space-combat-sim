@@ -24,3 +24,8 @@ extends Resource
 ## EXTEND: at least this long (s) and until beyond this range (m), then APPROACH again.
 @export var extend_min_s: float = 4.0
 @export var extend_range_m: float = 1400.0
+## BREAK and EXTEND seek at most this speed (m/s, World frame; 0 = no cap). APPROACH seeks at most this or the target's own
+## speed, whichever is higher, plus its closing speed: a chaser always gains on what it chases, a player running flat out
+## included, while an AI it chases only runs at this cap. Two ships attacking each other each seek the other's velocity plus a
+## closing speed, which feeds on itself; the caps keep a dogfight at fighting speed (M3-T10).
+@export var max_speed_mps: float = 150.0

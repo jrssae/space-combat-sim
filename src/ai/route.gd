@@ -11,7 +11,9 @@ extends RefCounted
 ## - Pacing: the lag is the distance to the pace ship. Full cruise under `FULL_PACE_M`, linear to zero at `STOP_PACE_M`;
 ##   beyond `WAIT_BEYOND_M` the leader brakes, faces the pace ship and waits until it is within `RESUME_WITHIN_M`.
 ##   A waypoint counts as reached within `ARRIVAL_M`.
-## Scenario files describe routes as `routes[]` (`ScenarioLoader`).
+## - `yield_to_attack` (M3-T10, an AI patrol): the route stands aside while the orders allow an attack on something in sight,
+##   and is taken up again from the waypoint it was flying to.
+## Scenario files describe routes as `routes[]` (`ScenarioLoader`); an `ai` behaviour's `patrol` builds one (`BrainFactory`).
 
 const DEFAULT_CRUISE_MPS: float = 60.0
 const FULL_PACE_M: float = 600.0
@@ -41,6 +43,7 @@ var pace: StringName = PACE_PLAYER
 ## The pace ship's `Contact.id`, 0 for none (no pacing).
 var pace_id: int = 0
 var loop: bool = false
+var yield_to_attack: bool = false
 
 
 ## Appends a waypoint.

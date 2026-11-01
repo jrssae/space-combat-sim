@@ -22,6 +22,7 @@ func before_each() -> void:
 	main.waves_auto_start = false
 	add_child_autofree(main)
 	await _ticks(2)
+	_exec("despawn all")  # the sandbox's wingmen (M3-T10) would shoot these tests' raiders
 	_shots = 0
 	main.cannon.projectile_fired.connect(func(_i: int, _p: Projectile) -> void: _shots += 1)
 
@@ -124,14 +125,14 @@ func test_the_status_line_shows_total_kills_the_players_and_assists() -> void:
 	await _ticks(3)
 	Engine.time_scale = 1.0
 	var raiders: Array[Combatant] = main.ships.alive(ShipPool.DEFAULT_TYPE)
-	assert_eq(raiders.size(), 3, "TARGET PRACTICE")
-	assert_string_contains(main.status_line, "RAIDERS 3   KILLS 0   YOURS 0   ASSISTS 0")
+	assert_eq(raiders.size(), 4, "TARGET PRACTICE")
+	assert_string_contains(main.status_line, "RAIDERS 4   KILLS 0   YOURS 0   ASSISTS 0")
 	_fatal_hit(raiders[0], main.ship.get_instance_id())
 	await _ticks(1)
-	assert_string_contains(main.status_line, "RAIDERS 2   KILLS 1   YOURS 1   ASSISTS 0")
+	assert_string_contains(main.status_line, "RAIDERS 3   KILLS 1   YOURS 1   ASSISTS 0")
 	assert_true(_exec("kill all").ok)
 	await _ticks(2)
-	assert_string_contains(main.status_line, "CLEARED   KILLS 3   YOURS 1   ASSISTS 0")
+	assert_string_contains(main.status_line, "CLEARED   KILLS 4   YOURS 1   ASSISTS 0")
 
 
 func test_a_pool_ship_handed_out_again_starts_clean() -> void:

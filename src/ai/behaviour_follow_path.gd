@@ -17,6 +17,8 @@ extends AiBehaviour
 ## Pacing never interrupts a move that has started. Losing control to another behaviour restarts a running move on return.
 
 const SCORE: float = 0.5
+## A patrol (`Route.yield_to_attack`) while the orders allow an attack on something in sight: any attack (0.3 or more) wins.
+const STAND_BY_SCORE: float = 0.1
 ## A speed-taking demo starts from at least this share of the route's cruise.
 const RUN_UP_FRACTION: float = 0.9
 
@@ -59,6 +61,8 @@ func score(ctx: AiContext) -> float:
 	_route = ctx.route
 	if _route == null or _route.count() == 0 or phase == Phase.DONE:
 		return 0.0
+	if _route.yield_to_attack and ctx.has_attackable():
+		return STAND_BY_SCORE
 	return SCORE
 
 

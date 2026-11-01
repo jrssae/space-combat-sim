@@ -46,7 +46,7 @@ func _wait_for_state(state: StringName, limit_s: float = 60.0) -> void:
 
 func test_the_sandbox_is_the_default_scenario_and_waits_for_wave_start() -> void:
 	assert_eq(main.waves.scenario_id, &"combat_sandbox")
-	assert_eq(main.ships.pool_size(ShipPool.DEFAULT_TYPE), 6)
+	assert_eq(main.ships.pool_size(ShipPool.DEFAULT_TYPE), 9, "nine raiders (M3-T10)")
 	assert_eq(main.waves.plan.state, WavePlan.State.IDLE, "auto start is off for tests")
 	assert_eq(main.buoys.size(), 5, "the buoys stay as scenery")
 	assert_eq(DebugConsole.registry.format_path("waves.scenario"), "waves.scenario = combat_sandbox")
@@ -69,7 +69,7 @@ func test_wave_start_runs_the_countdown_then_spawns_the_waves_raiders() -> void:
 	await _wait_for_state(&"active")
 	await _ticks(3)
 	Engine.time_scale = 1.0
-	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 3, "TARGET PRACTICE: three raiders")
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 4, "TARGET PRACTICE: four raiders")
 	for combatant: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
 		assert_true(combatant.driver.brain is IdleBrain)
 		assert_gt(combatant.ship.linear_velocity.length(), 4.0, "drifting")
@@ -123,9 +123,9 @@ func test_kill_all_clears_a_wave_and_the_next_one_comes() -> void:
 	Engine.time_scale = 4.0
 	await _wait_for_state(&"active")
 	await _ticks(3)
-	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 3)
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 4)
 	assert_true(_exec("kill all").ok)
-	assert_eq(main.waves.kills, 3, "every raider destroyed counts")
+	assert_eq(main.waves.kills, 4, "every raider destroyed counts")
 	await _wait_for_state(&"cleared")
 	assert_eq(main.waves.plan.state, WavePlan.State.CLEARED)
 	assert_string_contains(main.status_line, "CLEARED")
@@ -153,11 +153,11 @@ func test_three_waves_advance_with_the_expected_kills() -> void:
 		assert_eq(main.waves.plan.state, WavePlan.State.CLEARED, "wave %d cleared" % (wave + 1))
 	Engine.time_scale = 1.0
 	assert_eq(main.waves.kills, expected_kills)
-	assert_eq(expected_kills, 3 + 3 + 4)
-	assert_eq(DebugConsole.registry.format_path("waves.kills"), "waves.kills = 10")
+	assert_eq(expected_kills, 4 + 5 + 6)
+	assert_eq(DebugConsole.registry.format_path("waves.kills"), "waves.kills = 15")
 	await _wait_for_state(&"countdown", 20.0)
 	assert_eq(main.waves.plan.wave_number, 4, "and it loops: wave 4 is the strike again with one more")
-	assert_eq(main.waves.plan.spawn_total(), 5)
+	assert_eq(main.waves.plan.spawn_total(), 7)
 
 
 func test_the_status_line_follows_the_state() -> void:
@@ -168,7 +168,7 @@ func test_the_status_line_follows_the_state() -> void:
 	await _wait_for_state(&"active")
 	await _ticks(3)
 	Engine.time_scale = 1.0
-	assert_string_contains(main.status_line, "RAIDERS 3")
+	assert_string_contains(main.status_line, "RAIDERS 5")
 	assert_string_contains(main.status_line, "KILLS 0")
 	_exec("wave stop")
 	assert_eq(main.status_line, "")
@@ -201,18 +201,18 @@ func test_the_wave_goes_on_across_the_players_death() -> void:
 	Engine.time_scale = 5.0
 	await _wait_for_state(&"active")
 	await _ticks(3)
-	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 3)
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 5)
 	DebugConsole.flags.invulnerable = false
 	assert_true(_exec("kill player").ok)
 	assert_eq(main.waves.losses, 1)
-	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 3, "the raiders stay")
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 5, "the raiders stay")
 	assert_eq(main.waves.plan.state, WavePlan.State.ACTIVE, "and the wave is still on")
 	var t0: float = SimClock.now()
 	while not main.player_alive and SimClock.now() - t0 < 10.0:
 		await _ticks(1)
 	Engine.time_scale = 1.0
 	assert_true(main.player_alive)
-	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 3)
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 5)
 	assert_eq(main.waves.plan.wave_number, 2, "the same wave")
 	for combatant: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
 		assert_eq(combatant.driver._retarget_in_s, 0.0, "pilots look for the respawned player at once")

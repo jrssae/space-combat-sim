@@ -61,9 +61,10 @@ func test_three_waves_headless_keep_the_splat_node_count_and_the_counters() -> v
 			await get_tree().physics_frame
 			max_resolve_us = maxi(max_resolve_us, resolver.resolve_us)
 			max_bolts = maxi(max_bolts, resolver.projectiles_last_tick)
-		var alive: int = main.ships.alive(ShipPool.DEFAULT_TYPE).size()
-		killed += alive
-		played.append(alive)
+		# Every raider of the wave came; the wingmen (M3-T10) and the player's bolts may have shot some down since.
+		var spawned: int = main.waves.plan.spawn_total()
+		killed += spawned
+		played.append(spawned)
 		assert_true(DebugConsole.registry.execute("kill all")[0].ok)
 		assert_eq(_splat_nodes(get_tree().root), splat_nodes_at_load, "wave %d: splat nodes unchanged" % (wave + 1))
 		t0 = SimClock.now()
@@ -72,9 +73,9 @@ func test_three_waves_headless_keep_the_splat_node_count_and_the_counters() -> v
 	source.release(InputAdapter.FIRE)
 	Engine.time_scale = 1.0
 	gut.p("M2 run: raiders per wave %s, %d kills, max bolts in a tick %d, worst combat.resolve_us %d" % [str(played), main.waves.kills, max_bolts, max_resolve_us])
-	assert_eq(played, [3, 3, 4], "the three scripted waves")
+	assert_eq(played, [4, 5, 6], "the three scripted waves")
 	assert_eq(main.waves.kills, killed, "every raider the run saw was a kill")
-	assert_eq(main.waves.kills, 10)
+	assert_eq(main.waves.kills, 15)
 	assert_eq(main.waves.losses, 0)
 	assert_eq(main.waves.plan.wave_number, 4, "and it moved on to the first looped wave")
 	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 0)

@@ -9,7 +9,7 @@ extends Node3D
 ## follows the route and the console has provider `route`. They are placed again on every respawn (the lesson restarts).
 
 const SCENARIO_DIR := "res://data/scenarios/"
-const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route"]
+const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
 signal player_died
@@ -26,6 +26,9 @@ var ally_pool_size: int = -1
 var scenario_path: String = ""
 ## The sandbox starts wave 1's countdown at load. Tests that drive the waves themselves turn this off.
 var waves_auto_start: bool = true
+## Mixed into the brain seed of every ship the scenario places at load (M3-T10): the same seed flies the same fight, another
+## seed another one (the dogfight's AC12 runs). Set before the node enters the tree.
+var scenario_seed: int = 0
 
 ## Set before the node enters the tree to drive Main from a script (tests use FakeInputSource).
 var input_source: InputSource = null
@@ -53,6 +56,7 @@ var _spawn_basis: Basis = Basis.IDENTITY
 var _system_id: StringName = &"local"
 var _scenario_spawns: Array[Dictionary] = []
 var _scenario_routes: Array[Route] = []
+var _scenario_wings: Array[Dictionary] = []
 # By the index of `scenario_ships`: the brain each was given (a ship flown by another brain has been reused since).
 var _scenario_brains: Array[PilotBrain] = []
 
@@ -90,11 +94,14 @@ func _ready() -> void:
 		_system_id = scenario["system_id"]
 		_scenario_spawns = scenario["spawns"]
 		_scenario_routes = scenario["routes"]
+		_scenario_wings = scenario["wings"]
 	_spawn_ship()
 	# The player leads wing ALPHA (architecture §16 D36). Its members join later: allies from the pool (M3-T08) or a
 	# scenario's `wings` (M3-T10).
 	wings.setup(world, ships)
-	wings.create_wing(Wing.DEFAULT_NAME, combatant)
+	if not _ai_leads_player_wing():
+		wings.create_wing(Wing.DEFAULT_NAME, combatant)
+	wings.declare(_scenario_wings)
 	ships.world = world
 	ships.projectiles = projectiles
 	ships.player = ship
@@ -113,6 +120,7 @@ func _ready() -> void:
 	director.respawn_due.connect(respawn)
 	_wire_audio()
 	waves.status_sink = func(line: String) -> void: status_line = line
+	waves.wings = wings
 	waves.setup(world, ships, combatant, scenario if pool_count > 0 else {}, director, waves_auto_start)
 	player_respawned.connect(waves.on_player_respawned)
 	# Downed wingmen are replaced when the next wave starts (maintainer Q8, AC11).
@@ -356,7 +364,7 @@ func _spawn_scenario_ships() -> void:
 		if ship_name.is_empty():
 			ship_name = ships.next_name(ShipPool.ALLY_NAME_PREFIX, ShipPool.ALLY_FIRST_NUMBER) if type == ShipPool.ALLY_TYPE \
 					else ships.next_name()
-		var made: Dictionary = BrainFactory.from_behaviour(entry["behaviour"], anchor, hash([ship_name, 0]))
+		var made: Dictionary = BrainFactory.from_behaviour(entry["behaviour"], anchor, hash([ship_name, scenario_seed]))
 		if not bool(made["ok"]):
 			push_warning("Main: spawn %s: %s" % [ship_name, made["error"]])
 			continue
@@ -371,10 +379,21 @@ func _spawn_scenario_ships() -> void:
 			continue
 		placed.damageable.invulnerable = bool(entry["invulnerable"])
 		scenario_ships.append(placed)
+		if not String(entry.get("wing", "")).is_empty():
+			wings.join(String(entry["wing"]), placed)
 		_scenario_brains.append(brain)
 		if path != null and instructor == null:
 			instructor = placed
 			instructor_path = path
+
+
+# A scenario wing with the player's wing name led by an AI ship (the dogfight's ALPHA, led by ALPHA 2): then the player leads
+# no wing of its own.
+func _ai_leads_player_wing() -> bool:
+	for d: Dictionary in _scenario_wings:
+		if String(d["name"]).to_lower() == Wing.DEFAULT_NAME.to_lower() and String(d["leader"]) != "player":
+			return true
+	return false
 
 
 func _route_named(route_name: String) -> Route:
@@ -423,6 +442,8 @@ func _spawn_ship() -> void:
 		ShipAssembly.OPT_CONSOLE_OWNER: true,
 	})
 	world.spawn(combatant.ship, _spawn_position, _spawn_basis)
+	# The player is part of the wing the allies broadcast for (M3-T10): heard like an allied Starfury, to 100 km.
+	combatant.targetable.broadcast_range_m = ShipPool.ALLY_BROADCAST_RANGE_M
 	ship = combatant.ship
 	thrusters = combatant.thrusters
 	cannon = combatant.cannon

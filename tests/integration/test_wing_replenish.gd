@@ -280,7 +280,10 @@ func test_a_real_wave_start_replenishes_through_the_main_scene_wiring() -> void:
 	await _launch(-1, "")
 	DebugConsole.flags.invulnerable = true
 	assert_eq(main.waves.scenario_id, &"combat_sandbox")
-	assert_eq(wing.members().size(), 0, "the wing starts empty until T10 launches wingmen")
+	assert_eq(wing.members().size(), 3, "the sandbox places the three wingmen at load (M3-T10)")
+	assert_true(_exec("kill allies").ok, "shoot them down: the slots are empty for the wave start to fill")
+	await _ticks(2)
+	assert_eq(wing.members().size(), 0)
 	var before: int = _splat_nodes()
 	var seen: Array[Dictionary] = []
 	main.waves.wave_started.connect(func(_number: int, _name: String) -> void:
@@ -301,7 +304,7 @@ func test_a_real_wave_start_replenishes_through_the_main_scene_wiring() -> void:
 		assert_eq(seen[i]["name"], wing.callsign(i + 1))
 		assert_almost_eq((seen[i]["rel"] as Vector3).z, BEHIND_M, 1.0, "slot %d: 1 500 m astern as the wave begins" % (i + 1))
 	assert_true(wing.is_full())
-	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 3, "the wave's raiders are not the wingmen")
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 4, "the wave's raiders are not the wingmen")
 	assert_eq(_splat_nodes(), before)
 
 

@@ -17,6 +17,7 @@ func before_each() -> void:
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.input_source = source
 	main.waves_auto_start = false
+	main.ally_pool_size = 8  # the sandbox's three wingmen (M3-T10) and room for this test's allies
 	add_child_autofree(main)
 	await _ticks(2)
 

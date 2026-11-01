@@ -347,8 +347,8 @@ class TestAlliesInTheSandbox:
 
 	func test_the_sandbox_builds_an_ally_pool_beside_the_raiders() -> void:
 		assert_gt(main.ships.pool_size(ShipPool.ALLY_TYPE), 0, "the sandbox scenario pools allies")
-		assert_eq(main.ships.pool_size(ShipPool.DEFAULT_TYPE), 6)
-		assert_eq(main.ships.pool_size(), main.ships.pool_size(ShipPool.ALLY_TYPE) + 6)
+		assert_eq(main.ships.pool_size(ShipPool.DEFAULT_TYPE), 9)
+		assert_eq(main.ships.pool_size(), main.ships.pool_size(ShipPool.ALLY_TYPE) + 9)
 
 	# The ally this test spawned (the newest one in play).
 	func _spawned_ally() -> Combatant:
@@ -368,16 +368,16 @@ class TestAlliesInTheSandbox:
 		while main.waves.plan.state != WavePlan.State.ACTIVE and SimClock.now() - t0 < 60.0:
 			await _ticks(1)
 		await _ticks(3)
-		# The wave start also replenishes the player's empty wing (M3-T08 phase 2): its three wingmen come out of the pool next to
-		# the console ally, who stays in play and out of the wing.
-		var wingmen: int = main.wings.player_wing().members().size()
-		assert_eq(wingmen, 3, "starting a wave launches the wing's wingmen")
-		assert_eq(main.ships.alive(ShipPool.ALLY_TYPE).size(), allies_before + 1 + wingmen, "starting a wave leaves the ally in play")
+		# The sandbox's wingmen are in play from the start (M3-T10), so the wave start has no slot to fill: the console ally stays in
+		# play and out of the wing.
+		assert_eq(main.wings.player_wing().members().size(), 3, "the wing's three wingmen")
+		assert_false(main.wings.player_wing().members().has(ally))
+		assert_eq(main.ships.alive(ShipPool.ALLY_TYPE).size(), allies_before + 1, "starting a wave leaves the ally in play")
 		assert_true(main.ships.alive(ShipPool.ALLY_TYPE).has(ally), "the console ally is still there")
-		assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 3, "TARGET PRACTICE: three raiders")
-		assert_string_contains(main.status_line, "RAIDERS 3")
+		assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 4, "TARGET PRACTICE: four raiders")
+		assert_string_contains(main.status_line, "RAIDERS 4")
 		_exec("wave stop")
-		assert_eq(main.ships.alive(ShipPool.ALLY_TYPE).size(), allies_before + 1 + wingmen, "stopping the waves leaves the allies in play")
+		assert_eq(main.ships.alive(ShipPool.ALLY_TYPE).size(), allies_before + 1, "stopping the waves leaves the allies in play")
 		assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 0)
 
 	func test_a_destroyed_ally_is_no_kill() -> void:

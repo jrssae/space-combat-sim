@@ -15,14 +15,20 @@ extends PilotBrain
 ## the pilot's seed.
 ##
 ## The context (`context`) carries the orders and the wing (`AiContext`); the pilot refreshes its perception every tick.
+## Hit reaction (M3-T10, Q11): a fresh bolt hit (`Perception.last_bolt_hit_s` later than the last one reacted to) hands control
+## to the evade behaviour at once, whatever the scores, the stickiness and the minimum dwell, and the evasion keeps control
+## while `BehaviourEvade.locked()` (one full jink after the latest hit). A pilot without evade, or weighting it 0 (the
+## instructor), never reacts.
+##
 ## `wanted_target_id` follows the behaviour in control: the attack's target, `TARGET_NONE` for anything else, so the ship's
 ## targeting computer, and with it what other ships see as this ship's target, shows what it is really attacking. With
 ## `profile.fires` false the trigger is never pulled.
 ##
-## Later tasks add behaviours with `add_behaviour` (formation T07, follow path T09, guard T10) and their fields to
+## Later tasks add behaviours with `add_behaviour` (formation T07, follow path T09, guard T10: `BehaviourGuard.attach`) and their fields to
 ## `AiContext`; the selection does not change.
 
-const TIE_ORDER: Array[StringName] = [&"retreat", &"evade", &"attack", &"guard", &"formation", &"follow_path", &"idle"]
+const TIE_ORDER: Array[StringName] = [&"retreat", &"evade", &"attack", &"guard", &"formation", &"rally", &"follow_path",
+		&"idle"]
 
 var profile: AiProfile = null
 var context: AiContext = AiContext.new()
@@ -41,6 +47,9 @@ var _raw: PackedFloat64Array = PackedFloat64Array()
 var _weighted: PackedFloat64Array = PackedFloat64Array()
 var _current_index: int = -1
 var _idle_index: int = -1
+var _evade_index: int = -1
+## The latest bolt hit reacted to (sim time), so each hit interrupts once.
+var _reacted_hit_s: float = -INF
 
 
 ## `p_behaviours` empty: the standard set (retreat, evade, attack, idle) built from the profile, seeded from `p_seed`.
@@ -70,6 +79,7 @@ func add_behaviour(b: AiBehaviour) -> void:
 	_weighted.insert(at, 0.0)
 	_current_index = behaviours.find(current)
 	_idle_index = _index_of(&"idle")
+	_evade_index = _index_of(&"evade")
 
 
 ## The behaviour with this id, or null.
@@ -129,6 +139,18 @@ func select(dt: float) -> AiBehaviour:
 		if weighted > best_score:
 			best_score = weighted
 			best = i
+	if _evade_index >= 0 and _weights[_evade_index] > 0.0:
+		var evade := behaviours[_evade_index] as BehaviourEvade
+		var hit_s: float = context.perception.last_bolt_hit_s
+		if hit_s > _reacted_hit_s:
+			_reacted_hit_s = hit_s
+			if _current_index != _evade_index:
+				_switch(_evade_index)
+			if evade != null:
+				evade.on_hit()
+			return current
+		if _current_index == _evade_index and evade != null and evade.locked():
+			return current
 	if best < 0:
 		# Nothing scores: idle, the fallback (no idle: the current behaviour keeps flying, or none does).
 		if _idle_index >= 0 and _idle_index != _current_index:
@@ -169,6 +191,7 @@ func reset() -> void:
 	dwell_s = 0.0
 	switches = 0
 	_current_index = -1
+	_reacted_hit_s = -INF
 	_raw.fill(0.0)
 	_weighted.fill(0.0)
 	wanted_target_id = TARGET_NONE

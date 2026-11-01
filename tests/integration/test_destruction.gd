@@ -96,7 +96,7 @@ func test_a_raider_at_zero_hull_is_destroyed_once_and_leaves_play_in_the_same_ti
 	assert_false(raider.targetable.is_active())
 	assert_false(raider.damageable.is_active())
 	assert_eq(destroyed_log, [raider])
-	assert_eq(main.ships.free_count(), main.ships.pool_size(), "back in the pool")
+	assert_eq(main.ships.free_count(), main.ships.pool_size() - main.ships.alive().size(), "back in the pool")
 	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 0)
 
 
