@@ -332,7 +332,7 @@ func test_attach_gives_the_instructor_its_route_once() -> void:
 	assert_eq(pilot.context.route, route)
 	assert_eq(pilot.behaviour(&"follow_path"), b)
 	assert_eq(BehaviourFollowPath.attach(pilot, route), b, "a second attach reuses it")
-	assert_eq(pilot.behaviours.size(), 5)
+	assert_eq(pilot.behaviours.size(), 6, "the standard five (ram, M3-T13) and follow_path")
 	assert_eq(AiProfile.load_named(&"instructor").weight(&"follow_path"), 1.0, "the instructor profile weighs it")
 	var cmd: PilotCommand = pilot.think(_p(Vector3.ZERO), DT)
 	assert_eq(pilot.current.id, &"follow_path", "it leads rather than idles")

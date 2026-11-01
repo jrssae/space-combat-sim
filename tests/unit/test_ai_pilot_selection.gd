@@ -104,6 +104,7 @@ func _scripted_pilot(behaviours: Array[AiBehaviour]) -> AiPilot:
 func _tick(pilot: AiPilot, p: Perception, seconds: float = DT) -> PilotCommand:
 	var cmd: PilotCommand = null
 	for i: int in maxi(1, roundi(seconds / DT)):
+		p.now_s += DT  # sim time runs: a new threat counts after the pilot's reaction time (M3-T13)
 		cmd = pilot.think(p, DT)
 	return cmd
 
@@ -220,7 +221,7 @@ func test_a_default_pilot_has_retreat_evade_attack_and_idle() -> void:
 	var ids: Array[StringName] = []
 	for b: AiBehaviour in pilot.behaviours:
 		ids.append(b.id)
-	assert_eq(ids, [&"retreat", &"evade", &"attack", &"idle"] as Array[StringName])
+	assert_eq(ids, [&"ram", &"retreat", &"evade", &"attack", &"idle"] as Array[StringName])
 	_tick(pilot, _p())
 	assert_eq(pilot.current.id, &"idle", "nothing around: the 0.05 fallback")
 	assert_almost_eq(pilot.score_of(&"idle"), BehaviourIdle.SCORE, 1e-6)
@@ -244,7 +245,7 @@ func test_describe_names_the_behaviour_its_state_and_every_score() -> void:
 	assert_eq(d["state"], "approach")
 	assert_eq(d["target"], "RAIDER 1")
 	var scores: Dictionary = d["scores"]
-	assert_eq(scores.keys(), ["retreat", "evade", "attack", "idle"])
+	assert_eq(scores.keys(), ["ram", "retreat", "evade", "attack", "idle"])
 	assert_gt(float(scores["attack"]), float(scores["idle"]))
 
 
@@ -386,8 +387,9 @@ func test_an_evading_pilot_jinks_across_the_line_of_fire_and_reverses() -> void:
 	var tail := _contact(20, "RAIDER 1", Factions.Relation.HOSTILE, Vector3(0.0, 0.0, 600.0), Vector3.FORWARD)
 	var pilot := AiPilot.new(profile, 9)
 	var p := _p([tail])
-	_tick(pilot, p)
-	assert_eq(pilot.current.id, &"evade", "a tail threat outranks attacking it")
+	# The threat counts after the reaction time; the attack that took the first ticks then keeps its dwell.
+	_tick(pilot, p, pilot.temperament.reaction_s() + profile.min_dwell_s + 2.0 * DT)
+	assert_eq(pilot.current.id, &"evade", "a tail threat outranks attacking it, once the pilot has reacted")
 	var evade := pilot.current as BehaviourEvade
 	var first: Vector3 = evade.side
 	assert_almost_eq(first.dot(Vector3.BACK), 0.0, 1e-4, "across the line of fire (the threat is straight behind)")
@@ -536,7 +538,7 @@ func test_only_the_attack_advertises_a_target() -> void:
 	assert_eq(pilot.wanted_target_id, PilotBrain.TARGET_NONE, "retreating: no target, not the driver's nearest hostile")
 	var tail := _contact(21, "RAIDER 2", Factions.Relation.HOSTILE, Vector3(0.0, 0.0, 600.0), Vector3.FORWARD)
 	var evading := AiPilot.new(profile, 3)
-	_tick(evading, _p([tail]))
+	_tick(evading, _p([tail]), evading.temperament.reaction_s() + profile.min_dwell_s + 2.0 * DT)
 	assert_eq(evading.current.id, &"evade")
 	assert_eq(evading.wanted_target_id, PilotBrain.TARGET_NONE, "evading: no target")
 
@@ -559,16 +561,20 @@ func _advance(pilot: AiPilot, p: Perception, seconds: float) -> void:
 		pilot.think(p, DT)
 
 
-func test_a_bolt_hit_hands_control_to_evade_at_once_even_inside_the_dwell() -> void:
+func test_a_bolt_hit_hands_control_to_evade_after_the_reaction_time_even_inside_the_dwell() -> void:
 	var setup: Array = _attacking()
 	var pilot: AiPilot = setup[0]
 	var p: Perception = setup[1]
 	assert_eq(pilot.current.id, &"attack")
-	assert_lt(pilot.dwell_s, profile.min_dwell_s, "inside the dwell")
 	p.last_bolt_hit_s = p.now_s
 	p.last_hit_s = p.now_s
-	pilot.think(p, DT)
-	assert_eq(pilot.current.id, &"evade", "the same tick")
+	var reaction: float = pilot.temperament.reaction_s()
+	assert_almost_eq(reaction, 0.25, 1e-9, "a regular pilot: 0.25 s")
+	_advance(pilot, p, reaction - 2.0 * DT)
+	assert_eq(pilot.current.id, &"attack", "not yet")
+	assert_lt(pilot.dwell_s, profile.min_dwell_s, "still inside the dwell")
+	_advance(pilot, p, 2.0 * DT)
+	assert_eq(pilot.current.id, &"evade", "at the reaction time")
 	var evade := pilot.current as BehaviourEvade
 	assert_true(evade.locked())
 	assert_eq(evade.jinks, 1)
@@ -587,7 +593,7 @@ func test_further_hits_keep_it_evading() -> void:
 	var pilot: AiPilot = setup[0]
 	var p: Perception = setup[1]
 	p.last_bolt_hit_s = p.now_s
-	pilot.think(p, DT)
+	_advance(pilot, p, pilot.temperament.reaction_s() + DT)
 	var evade := pilot.current as BehaviourEvade
 	_advance(pilot, p, 1.0)
 	p.last_bolt_hit_s = p.now_s  # hit again mid-jink: this jink, then one more
@@ -625,7 +631,7 @@ func test_a_retreating_ship_that_is_hit_jinks_then_retreats_again() -> void:
 	_tick(pilot, p, 0.1)
 	assert_eq(pilot.current.id, &"retreat")
 	p.last_bolt_hit_s = p.now_s
-	pilot.think(p, DT)
+	_advance(pilot, p, pilot.temperament.reaction_s() + DT)
 	assert_eq(pilot.current.id, &"evade", "it jinks")
 	var evade := pilot.current as BehaviourEvade
 	_advance(pilot, p, evade.jink_left_s + 0.5)

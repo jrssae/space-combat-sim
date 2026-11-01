@@ -86,7 +86,7 @@ func test_the_scenario_spawns_an_invulnerable_instructor_ahead_of_the_player() -
 	assert_true(main.instructor.damageable.invulnerable)
 	var pilot := main.instructor.driver.brain as AiPilot
 	assert_not_null(pilot)
-	assert_eq(pilot.profile, AiProfile.load_named(&"instructor"))
+	assert_eq(pilot.base_profile, AiProfile.load_named(&"instructor"))
 	assert_eq(pilot.context.route.pace_id, main.combatant.targetable.get_instance_id(), "paced to the player")
 	assert_almost_eq(_lag(), 200.0, 1.0, "200 m ahead of the player")
 	assert_lt((_instructor_ship().global_position - main.ship.global_position).normalized().dot(main.ship.forward()) - 1.0, 1e-3,

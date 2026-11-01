@@ -15,8 +15,12 @@ extends PilotBrain
 ## the pilot's seed.
 ##
 ## The context (`context`) carries the orders and the wing (`AiContext`); the pilot refreshes its perception every tick.
+## Temperament (M3-T13, Q12): the pilot flies `profile`, its `base_profile` scaled by `temperament` (skill and aggression,
+## `AiTemperament.apply`); `set_temperament` changes them live and retunes every behaviour.
+##
 ## Hit reaction (M3-T10, Q11): a fresh bolt hit (`Perception.last_bolt_hit_s` later than the last one reacted to) hands control
-## to the evade behaviour at once, whatever the scores, the stickiness and the minimum dwell, and the evasion keeps control
+## to the evade behaviour after the pilot's reaction time (`AiTemperament.reaction_s`: an ace 0.1 s, a regular 0.25 s, a
+## rookie 0.6 s), whatever the scores, the stickiness and the minimum dwell, and the evasion keeps control
 ## while `BehaviourEvade.locked()` (one full jink after the latest hit). A pilot without evade, or weighting it 0 (the
 ## instructor), never reacts.
 ##
@@ -27,10 +31,13 @@ extends PilotBrain
 ## Later tasks add behaviours with `add_behaviour` (formation T07, follow path T09, guard T10: `BehaviourGuard.attach`) and their fields to
 ## `AiContext`; the selection does not change.
 
-const TIE_ORDER: Array[StringName] = [&"retreat", &"evade", &"attack", &"guard", &"formation", &"rally", &"follow_path",
+const TIE_ORDER: Array[StringName] = [&"ram", &"retreat", &"evade", &"attack", &"guard", &"formation", &"rally", &"follow_path",
 		&"idle"]
 
+## The numbers it flies (the base profile scaled by the temperament), the profile it was given, and its skill and aggression.
 var profile: AiProfile = null
+var base_profile: AiProfile = null
+var temperament: AiTemperament = null
 var context: AiContext = AiContext.new()
 ## In `TIE_ORDER` (ids it does not list go after the listed ones, in the order added).
 var behaviours: Array[AiBehaviour] = []
@@ -52,14 +59,18 @@ var _evade_index: int = -1
 var _reacted_hit_s: float = -INF
 
 
-## `p_behaviours` empty: the standard set (retreat, evade, attack, idle) built from the profile, seeded from `p_seed`.
-func _init(p_profile: AiProfile = null, p_seed: int = 0, p_behaviours: Array[AiBehaviour] = []) -> void:
-	profile = p_profile if p_profile != null else AiProfile.new()
+## `p_behaviours` empty: the standard set (ram, retreat, evade, attack, idle) built from the profile, seeded from `p_seed`.
+## `p_temperament` null: the profile's own skill and aggression.
+func _init(p_profile: AiProfile = null, p_seed: int = 0, p_behaviours: Array[AiBehaviour] = [],
+		p_temperament: AiTemperament = null) -> void:
+	base_profile = p_profile if p_profile != null else AiProfile.new()
+	temperament = p_temperament if p_temperament != null else AiTemperament.new(base_profile.skill, base_profile.aggression)
+	profile = temperament.apply(base_profile)
 	context.profile = profile
 	wanted_target_id = TARGET_NONE
 	var list: Array[AiBehaviour] = p_behaviours
 	if list.is_empty():
-		list = [BehaviourRetreat.new(profile), BehaviourEvade.new(hash([p_seed, "evade"])),
+		list = [BehaviourRam.new(hash([p_seed, "ram"])), BehaviourRetreat.new(profile), BehaviourEvade.new(hash([p_seed, "evade"])),
 				BehaviourAttack.new(profile, hash([p_seed, "attack"])), BehaviourIdle.new(profile.idle_hold)]
 	for b: AiBehaviour in list:
 		add_behaviour(b)
@@ -74,12 +85,23 @@ func add_behaviour(b: AiBehaviour) -> void:
 			at = i
 			break
 	behaviours.insert(at, b)
+	b.retune(profile, temperament)
 	_weights.insert(at, profile.weight(b.id))
 	_raw.insert(at, 0.0)
 	_weighted.insert(at, 0.0)
 	_current_index = behaviours.find(current)
 	_idle_index = _index_of(&"idle")
 	_evade_index = _index_of(&"evade")
+
+
+## New skill and aggression: the effective profile is rebuilt from the base one, every behaviour retuned and reweighted.
+func set_temperament(t: AiTemperament) -> void:
+	temperament = t
+	profile = t.apply(base_profile)
+	context.profile = profile
+	for i: int in behaviours.size():
+		behaviours[i].retune(profile, t)
+		_weights[i] = profile.weight(behaviours[i].id)
 
 
 ## The behaviour with this id, or null.
@@ -114,6 +136,9 @@ func think(p: Perception, dt: float) -> PilotCommand:
 	has_desired_velocity = current.has_desired_velocity
 	desired_all_axes = current.desired_all_axes
 	wanted_target_id = current.target_id()
+	context.current_target_id = maxi(wanted_target_id, 0)
+	var ram := current as BehaviourRam
+	avoid_exempt_id = ram.target_id_value if ram != null and ram.committed else 0
 	if not profile.fires:
 		cmd.combat.fire = false
 	return cmd
@@ -142,7 +167,9 @@ func select(dt: float) -> AiBehaviour:
 	if _evade_index >= 0 and _weights[_evade_index] > 0.0:
 		var evade := behaviours[_evade_index] as BehaviourEvade
 		var hit_s: float = context.perception.last_bolt_hit_s
-		if hit_s > _reacted_hit_s:
+		var committed: bool = current != null and current.id == &"ram" and (current as BehaviourRam).committed
+		if hit_s > _reacted_hit_s and not committed \
+				and context.perception.now_s + dt - hit_s >= temperament.reaction_s() - 1e-6:  # by the end of this tick
 			_reacted_hit_s = hit_s
 			if _current_index != _evade_index:
 				_switch(_evade_index)
@@ -183,6 +210,8 @@ func describe() -> Dictionary:
 	for i: int in behaviours.size():
 		by_id[String(behaviours[i].id)] = snappedf(_weighted[i], 0.01)
 	out["scores"] = by_id
+	out["skill"] = "%s %.2f" % [AiTemperament.skill_name(temperament.skill), temperament.skill]
+	out["aggression"] = "%s %.2f" % [AiTemperament.aggression_name(temperament.aggression), temperament.aggression]
 	return out
 
 
@@ -192,6 +221,7 @@ func reset() -> void:
 	switches = 0
 	_current_index = -1
 	_reacted_hit_s = -INF
+	avoid_exempt_id = 0
 	_raw.fill(0.0)
 	_weighted.fill(0.0)
 	wanted_target_id = TARGET_NONE

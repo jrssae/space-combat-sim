@@ -1445,7 +1445,9 @@ universe position at wave start (summed as `UniversePos`, never through float32)
 universe (0, 0, 0), where its props are placed, not the World's local origin, which the rebase keeps near the player
 (M3-T14). `ShipCatalog` maps `type` to a
 `ShipSpec`. `WavePlan` (pure, fake-clock tested): `COUNTDOWN(delay) -> ACTIVE -> CLEARED -> next`, then loop from
-`loop.from_wave`, one more attacker per loop up to the pool size. `settings.scenario` (`combat_sandbox` by
+`loop.from_wave`, one more attacker per loop up to the pool size. A wave may set `skill` and `aggression` ranges for its AI
+raiders and `loop.skill_step` raises the skill range per pass up to an ace (M3-T13); each raider's values are rolled inside
+them, seeded by its name and the wave number. `settings.scenario` (`combat_sandbox` by
 default, or `free_flight`) picks the file; `Main.scenario_path` overrides it for tests.
 
 Kill credit (M3-T16, Q18): `WaveDirector.kills` counts every raider destroyed, by anyone (rams included). `KillCredit` (pure)
@@ -1597,6 +1599,7 @@ below are M3 tasks.
 | D38 | Keyboard layout B: every flight key is under the left hand (pods by position on Q/W/E and A/S/D), the mouse flies pitch and yaw, no keyboard pitch/yaw | Maintainer Q9: the right hand is on the mouse |
 | D39 | Broadcasts (M3-T17, Q21): `Targetable.broadcast_range_m` lets a contact be heard beyond the sensors. Targeting and the radar use it directly; the AI hears the same broadcasts at the same ranges (any faction) as a separate `Perception.broadcasts` list from `ContactScan.shared_broadcasts`, a scan of `Targetable.broadcasters()` alone. `ContactScan` (5 km) stays the near list for avoidance, the fire lane and threats. Behaviours do not chase far contacts on their own: a pilot **objective** (`AiContext.objective_name`, `ai <name> objective <target|none>`, a spawn's `objective`) makes the attack transit to it and attack it once inside 5 km, as a fallback while no hostile in sight may be attacked (M3-T10); the player broadcasts like an ally (100 km) and wave raiders take the player as their objective | Missions (M5) send raiders at a buoy or the station from beyond sensor range; one registry, no second sweep over every body, so AC13's budget holds |
 | D40 | Hit reaction, guard, wings in scenarios (M3-T10, Q11): a fresh bolt hit hands control to evade at once for one full jink (`AiPilot.select`, `BehaviourEvade.locked`). A guard post gates the attack through `AiContext.may_attack` (hostiles inside the radius or after the guarded ship) and `BehaviourGuard` keeps station. Scenarios declare `wings[]` and spawns name a `wing`; an AI-led wing hands the lead to its next member; its ships rally on an engaged wingmate (`BehaviourRally`). `AttackBrain` caps the speed it seeks (`RaiderTactics.max_speed_mps`: break and extend at it, approach at the higher of it and the target's speed, plus the closure) | Ships under fire behave like pilots; raider groups and wings come from data; AI-versus-AI fights stay at fighting speed and together while a chaser still outruns any target |
+| D41 | Skill and aggressiveness (M3-T13, Q12): `AiTemperament` scales a copy of the pilot's `AiProfile` (weights, retreat threshold, aim error, miss gate, engage and break-off ranges) and sets the reaction time, jink quality, passivity and the reckless ram; `regular` + `balanced` leave a profile as tuned. `BehaviourRam` commits a reckless, badly hurt, mostly alone ship to a collision course with avoidance off for its target only | Civilian, raider and military AI feel different from one brain and one set of behaviours; numbers stay data |
 
 ### 16.2 Layout additions
 
@@ -1610,6 +1613,8 @@ src/ai/ai_pilot.gd, ai_context.gd, ai_behaviour.gd, ai_profile.gd        utility
 src/ai/behaviour_{attack,evade,retreat,idle,formation,guard,follow_path}.gd  (T06, T07, T09, T10)
 src/ai/wing.gd, formation.gd             wing state and slot offsets (T07)
 src/ai/behaviour_{guard,rally}.gd        guard post, rally on an engaged wingmate (T10)
+src/ai/ai_temperament.gd, behaviour_ram.gd   skill and aggression; last-ditch ram (T13)
+assets/ai/civilian.tres                  never attacks, flees within 3 km (T13)
 src/ai/route.gd, manoeuvre.gd, manoeuvres.gd   instructor route and demo moves (T09)
 src/game/wing_director.gd                Node (Combat, priority 290): wings, orders, acknowledgements, replenish (T07, T08)
 assets/ai/{ally_starfury,raider,instructor}.tres, starfury_tactics.tres
@@ -1644,5 +1649,7 @@ data/scenarios/{instructor_route,dogfight}.json   (dogfight: wings ALPHA, RED, B
 Commands: `relation <a> <b> [friendly|neutral|hostile]` / `relation reset`; `wing order <attack|form|engage|cover>`;
 `wing formation <finger_four|wedge|line_abreast>`; `wing replenish`; `spawn ally [idle|ai] [distance_m] [yaw_deg] [pitch_deg]`; `kill allies`; `ai <name>`;
 `ai <name> objective <target|none>` (M3-T17: an `AiPilot` flies to the named target from any broadcast range and attacks it);
+`ai <name> skill <rookie|regular|veteran|ace|0-1>`, `ai <name> aggression <passive|cautious|balanced|aggressive|reckless|0-1>`,
+`spawn raider|ally ai ... skill=<...> aggression=<...>` (M3-T13);
 `scenario [free_flight|combat_sandbox|instructor_route|dogfight]`. Settings: `friendly_fire` (bool, false), `ram_damage`
 (bool, true).

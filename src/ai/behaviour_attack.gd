@@ -18,6 +18,9 @@ extends AiBehaviour
 ## flip included) between the tactics' `closing_far_mps` and `TRANSIT_MAX_MPS`, without firing. Inside 5 km the gun run takes
 ## over as for any target.
 ##
+## Temperament (M3-T13): the aim error and the gun run's tactics come from the effective profile (`retune`); a passive pilot
+## (`AiTemperament.never_starts`) attacks only the ship that hit it in the last `AiTemperament.PROVOKED_S`, and no objective.
+##
 ## Score: 0 without an allowed target, else `SCORE_BASE + SCORE_SPAN` x the best target's value (0.3..0.8), so a tail threat
 ## (evade) or a retreat outranks it.
 ##
@@ -47,6 +50,7 @@ var _target: Contact = null
 var _engaged_id: int = 0
 var _time_s: float = 0.0
 var _transit: bool = false
+var _passive: bool = false
 ## Per axis (x right, y up): two frequencies (Hz) and two phases (rad).
 var _wander: PackedFloat64Array = PackedFloat64Array()
 
@@ -57,6 +61,12 @@ func _init(profile: AiProfile, p_seed: int = 0) -> void:
 	brain = AttackBrain.new(profile.tactics, hash([p_seed, "attack brain"]))
 	aim_error_rad = deg_to_rad(profile.aim_error_deg)
 	reset()
+
+
+func retune(profile: AiProfile, temperament: AiTemperament) -> void:
+	brain.tactics = profile.tactics
+	aim_error_rad = deg_to_rad(profile.aim_error_deg)
+	_passive = temperament.never_starts()
 
 
 func reset() -> void:
@@ -83,8 +93,15 @@ func score(ctx: AiContext) -> float:
 	var own_velocity: Vector3 = p.velocity
 	var friendly_ids: PackedInt64Array = ctx.friendly_ids
 	var hostiles: Array[Contact] = ctx.hostiles
+	var provoker: int = 0
+	if _passive:
+		at_will = false
+		if p.last_attacker_id != 0 and p.now_s - p.last_hit_s <= AiTemperament.PROVOKED_S:
+			provoker = p.last_attacker_id
 	for i: int in hostiles.size():
 		var c: Contact = hostiles[i]
+		if _passive and c.id != provoker:
+			continue  # passive: only fire back
 		if not at_will and not ctx.may_attack(c):
 			continue
 		var los: Vector3 = ctx.hostile_offsets[i]
@@ -103,7 +120,7 @@ func score(ctx: AiContext) -> float:
 			best = value
 			_target = c
 	if _target == null:
-		if ctx.objective != null and ctx.order != AiContext.Order.FORM_ON_ME:
+		if ctx.objective != null and ctx.order != AiContext.Order.FORM_ON_ME and not _passive:
 			_target = ctx.objective
 			return clampf(SCORE_BASE + SCORE_SPAN * OBJECTIVE_VALUE, 0.0, 1.0)
 		return 0.0

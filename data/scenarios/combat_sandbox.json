@@ -18,7 +18,7 @@
        "behaviour": {"type": "ai", "profile": "ally_starfury"}}]},
    {"name": "RED", "faction": "raiders", "formation": "wedge"},
    {"name": "BLUE", "faction": "raiders", "formation": "wedge"}],
- "loop": {"from_wave": 3, "add_per_loop": 1},
+ "loop": {"from_wave": 3, "add_per_loop": 1, "skill_step": 0.1},
  "waves": [
    {"name": "TARGET PRACTICE", "delay_s": 5, "spawns": [
      {"type": "raider_fighter", "anchor": "player", "offset": [-700, 60, -1300], "velocity": [14, 0, 0],
@@ -29,7 +29,7 @@
       "behaviour": {"type": "idle"}},
      {"type": "raider_fighter", "anchor": "player", "offset": [900, 200, -1500], "velocity": [-4, 0, 3],
       "behaviour": {"type": "idle"}}]},
-   {"name": "PATROL", "delay_s": 8, "spawns": [
+   {"name": "PATROL", "delay_s": 8, "skill": [0.2, 0.35], "aggression": [0.25, 1.0], "spawns": [
      {"type": "raider_fighter", "anchor": "player", "offset": [1500, 100, -2500], "wing": "RED",
       "behaviour": {"type": "ai", "profile": "raider",
                     "patrol": {"cruise_mps": 80, "waypoints": [[1500, 100, -2500], [800, 0, -3300], [1700, -100, -3300]]}}},
@@ -42,7 +42,7 @@
                     "patrol": {"cruise_mps": 80, "waypoints": [[-1800, 0, -3000], [-1000, 80, -3500], [-2000, -80, -3700]]}}},
      {"type": "raider_fighter", "anchor": "player", "offset": [-1760, 0, -2960], "wing": "BLUE",
       "behaviour": {"type": "ai", "profile": "raider"}}]},
-   {"name": "STRIKE", "delay_s": 8, "spawns": [
+   {"name": "STRIKE", "delay_s": 8, "skill": [0.3, 0.5], "aggression": [0.25, 1.0], "spawns": [
      {"type": "raider_fighter", "anchor": "player", "offset": [-500, 100, -4000], "at_s": 0, "wing": "RED",
       "behaviour": {"type": "ai", "profile": "raider"}},
      {"type": "raider_fighter", "anchor": "player", "offset": [-560, 100, -4040], "at_s": 0, "wing": "RED",

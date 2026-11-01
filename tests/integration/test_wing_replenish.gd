@@ -120,7 +120,7 @@ func test_a_downed_wingman_is_replaced_by_its_callsign_when_the_next_wave_starts
 	assert_eq(main.ships.alive(ALLY).size(), 3)
 	var pilot := fresh.driver.brain as AiPilot
 	assert_not_null(pilot, "an AI pilot")
-	assert_eq(pilot.profile.resource_path, AiProfile.PATHS[&"ally_starfury"])
+	assert_eq(pilot.base_profile.resource_path, AiProfile.PATHS[&"ally_starfury"])
 	assert_eq(pilot.context.order, AiContext.Order.FORM_ON_ME, "flying the wing's current order, not the default")
 	assert_not_null(pilot.behaviour(&"formation"), "with the formation behaviour")
 	assert_true(pilot.context.has_slot)

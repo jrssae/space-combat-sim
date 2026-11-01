@@ -163,34 +163,36 @@ keyboard and mouse. Expected values in (A) tests come from specs, profiles and h
 
 ## Task breakdown (ordered)
 
-| Task | Title | Depends on | Agent |
-|---|---|---|---|
-| M3-T01 | Keyboard layout B | - | Sonnet |
-| M3-T02 | Factions as data, friendly fire | - | Sonnet |
-| M3-T03 | Starfury chunks and LOD1 | - (Python only) | Opus |
-| M3-T04 | Ram damage | T02 | Opus |
-| M3-T05 | Contacts, avoidance and fire lane | T02 | Opus |
-| M3-T06 | `AiPilot` core: utility selection, attack, evade, retreat | T05 | Opus |
-| M3-T07 | Wings, formation and orders | T01, T06 | Opus |
-| M3-T08 | Allied ships: pool, LOD1, destruction, replenish | T03, T06 | Sonnet |
-| M3-T09 | Instructor: follow path, pacing, demo manoeuvres, route scenario | T06, T08 | Opus |
-| M3-T10 | Guard, raider AI upgrade, sandbox and dogfight scenarios | T07, T08 | Opus |
-| M3-T11 | HUD: wing roster, acknowledgements, waypoint marker | T07, T09 | Sonnet |
-| M3-T13 | Skill ranks, aggressiveness, civilian profile, last-ditch ram (runs before T12) | T06, T10 | Opus |
-| M3-T14 | Position rebase in play (far-from-origin jitter, Q13) | - | Opus |
-| M3-T15 | Play-test tweaks: pad layout, gun sounds, Starfury thrust (Q15, Q17, Q20) | - | Sonnet |
-| M3-T16 | Kill credit: player kills, assists, total (Q18) | T08 | Sonnet |
-| M3-T17 | Broadcast contacts for the radar and the AI (Q21) | T08, T10 | Opus |
-| M3-T18 | Slashing pass and chase (Q19) | T13 | Opus |
-| M3-T19 | Splat LOD chain and `LodSwitcher` (Q22) | T08 | Opus |
-| M3-T20 | Resident splat budget: GDGS patch 5 (Q22) | T19 | Opus |
-| M3-T21 | Splat relighting: procgen normals, flat colours, `LightPicker` (Q23) | T19 | Opus |
-| M3-T22 | Ship lights: nozzles, muzzle flashes, explosions (Q23) | T21 | Sonnet |
-| M3-T23 | `GPUParticles3D` sparks and debris (Q23) | T14 | Sonnet |
-| M3-T24 | Hero LOD for the player's ship (Q23) | T20, T21 | Sonnet |
-| M3-T25 | Lens flare and motion blur, after sign-off (Q23) | T21 | Sonnet |
-| M3-T26 | Starfury after the reference model, wireframe damage display (Q24) | - | Opus |
-| M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13-T26 | Opus |
+Status: `done` (merged into `m3`, its "Done" notes below), `in progress`, `not started`, `not needed` (a conditional task whose trigger never arose). Update the column with each task's commit.
+
+| Task | Title | Depends on | Agent | Status |
+|---|---|---|---|---|
+| M3-T01 | Keyboard layout B | - | Sonnet | done |
+| M3-T02 | Factions as data, friendly fire | - | Sonnet | done |
+| M3-T03 | Starfury chunks and LOD1 | - (Python only) | Opus | done |
+| M3-T04 | Ram damage | T02 | Opus | done |
+| M3-T05 | Contacts, avoidance and fire lane | T02 | Opus | done |
+| M3-T06 | `AiPilot` core: utility selection, attack, evade, retreat | T05 | Opus | done |
+| M3-T07 | Wings, formation and orders | T01, T06 | Opus | done |
+| M3-T08 | Allied ships: pool, LOD1, destruction, replenish | T03, T06 | Sonnet | done |
+| M3-T09 | Instructor: follow path, pacing, demo manoeuvres, route scenario | T06, T08 | Opus | done (closed 2026-10-31) |
+| M3-T10 | Guard, raider AI upgrade, sandbox and dogfight scenarios | T07, T08 | Opus | done (2026-11-01) |
+| M3-T11 | HUD: wing roster, acknowledgements, waypoint marker | T07, T09 | Sonnet | done (2026-10-31) |
+| M3-T13 | Skill ranks, aggressiveness, civilian profile, last-ditch ram (runs before T12) | T06, T10 | Opus | in progress: done but AC12 balance with the maintainer |
+| M3-T14 | Position rebase in play (far-from-origin jitter, Q13) | - | Opus | done |
+| M3-T15 | Play-test tweaks: pad layout, gun sounds, Starfury thrust (Q15, Q17, Q20) | - | Sonnet | done (2026-10-31) |
+| M3-T16 | Kill credit: player kills, assists, total (Q18) | T08 | Sonnet | done (2026-10-31) |
+| M3-T17 | Broadcast contacts for the radar and the AI (Q21) | T08, T10 | Opus | done (2026-10-31) |
+| M3-T18 | Slashing pass and chase (Q19) | T13 | Opus | in progress |
+| M3-T19 | Splat LOD chain and `LodSwitcher` (Q22) | T08 | Opus | not started |
+| M3-T20 | Resident splat budget: GDGS patch 5 (Q22) | T19 | Opus | not started |
+| M3-T21 | Splat relighting: procgen normals, flat colours, `LightPicker` (Q23) | T19 | Opus | not started |
+| M3-T22 | Ship lights: nozzles, muzzle flashes, explosions (Q23) | T21 | Sonnet | not started |
+| M3-T23 | `GPUParticles3D` sparks and debris (Q23) | T14 | Sonnet | not started |
+| M3-T24 | Hero LOD for the player's ship (Q23) | T20, T21 | Sonnet | not started |
+| M3-T25 | Lens flare and motion blur, after sign-off (Q23) | T21 | Sonnet | not started |
+| M3-T26 | Starfury after the reference model, wireframe damage display (Q24) | - | Opus | done (second pass 2026-10-31) |
+| M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13-T26 | Opus | not started |
 
 Parallel lanes: T01, T02 and T03 touch disjoint files and can run together; T04 and T05 can run together after T02.
 Two agents at a time is steadier than four (`docs/handoff.md`).
@@ -575,6 +577,54 @@ Added 2026-10-24 for maintainer Q12; numbered last to keep the earlier ids, run 
   - Console: `ai <name>` gains `skill`, `aggression`; `ai <name> skill <rank|0-1>` and `ai <name> aggression <level|0-1>`
     set them; the `ai` provider's `by_behaviour` counts `ram`.
 - Done when: AC20 passes and the hit-reaction latency by skill in AC9 holds.
+- Done (2026-11-01), AC12's balance left to the maintainer:
+  - `AiTemperament` (pure): ranks or 0-1 numbers, piecewise-linear factors that are 1 at `regular` / `balanced`: skill scales the
+    aim error (rookie 2.5x .. ace 0.4x), the reaction time (0.6 / 0.25 / 0.17 / 0.1 s), the miss gate (1.6x .. 0.6x), jink
+    length (1.3x .. 0.7x) and reversal spread (20 .. 80 degrees); aggression scales the attack (up), evade and retreat (down)
+    weights, the retreat threshold (passive 2.5x, cautious 2x, aggressive 0.5x, reckless never) and the attack's
+    `near_range_m` / `break_range_m` (1.2x passive .. 0.8x reckless; first tried 1.4x .. 0.6x, made milder while tuning).
+    `apply(base)` returns a copy of the profile (tactics copied too); the shared resources are never changed.
+  - `AiProfile.skill`, `aggression`, `retreat_within_m`; defaults `ally_starfury` veteran / balanced, `raider` regular /
+    aggressive, `instructor` ace / passive, new `civilian` (`assets/ai/civilian.tres`) rookie / passive, attack 0, fires false,
+    retreat within 3 km, evade on. `AiPilot.base_profile` / `profile` (effective) / `temperament`, `set_temperament` (live:
+    every behaviour's `retune(profile, temperament)` and the weights), `describe()` gains `skill` and `aggression`.
+  - Reaction: the hit interrupt waits for the reaction time by the end of the tick the pilot is in (the driver runs before
+    `SimClock` advances); a tail threat or incoming fire counts for evade once it has lasted it. Measured (60 Hz): veteran ally
+    0.183 s, regular raider 0.250 s, rookie 0.600 s.
+  - Passive: attacks only the ship that hit it in the last 10 s (`Perception.last_attacker_id`, from the hit's shooter) and no
+    objective.
+  - `BehaviourRam` (in every `AiPilot`'s standard set, first in `TIE_ORDER`; one comparison below reckless): eligible at
+    aggression 1, hull under 25 % and at most a quarter of the most friendly ships seen still in sight; a seeded 35 % roll every
+    5 s; commits to the attack's target (`AiContext.current_target_id`) or the nearest hostile ship; collision course (the
+    target's velocity plus 200 m/s along the line of sight, all axes); `PilotBrain.avoid_exempt_id` makes the driver leave that
+    contact out of the avoidance; the hit reaction does not interrupt it; it lets go when the target is gone.
+  - Spawns: `BrainFactory` `skill` / `aggression` (scenario, wave and wing spawns validate them); `spawn ... skill=<rank|0-1>
+    aggression=<level|0-1>` (an `ai` spawn only); console `ai <name> skill <...>` / `ai <name> aggression <...>`; the `ai`
+    provider's `by_behaviour` counts `ram`. `dogfight.json`: BLUE is reckless.
+  - Tests: `test_ai_temperament` (5: parsing, the neutral point, every factor monotonic, the profiles' defaults),
+    `test_behaviour_ram` (5), `test_ai_skill` (Jolt: an ace raider 37 hits on a drone in 90 s, a rookie 20 on the same seed; a
+    cautious Starfury retreats at 48 % hull, an aggressive one fights on to 2 %; a rookie evades 0.600 s after a hit; a civilian
+    flees a raider within 3 km, evades when hit and never fires; spawn and console fields), `test_ai_ram` (a committed rammer hits
+    a straight-flying drone in 10 of 10 seeded runs; in the dogfight only BLUE's reckless raiders ever ram).
+    `test_ai_pilot_selection` (sim time now runs in `_tick`; the reaction delays) and `test_ai_evade` (0.25 s inclusive) adjusted.
+  - Not met here: an AI-flown target dodges a ram (every AI driver, an idle one too, avoids collisions; the rams in the dogfight
+    rarely connect); the AC20 test flies at a drone without a brain, as the criterion says.
+  - AC12 after T13 (raiders aggressive, BLUE reckless, Starfuries veteran): the dogfight no longer ends within 6 minutes in 5/5
+    seeds (2 of 5 in the last run; the allies hit 3.8 % of their shots, the raiders 12 %; no ally is lost). Tried: Starfury
+    `fire_miss_m` 7.5 (a veteran's 6 m, kept), fire range 1.2 km (worse, reverted), the milder press table (kept). The maintainer
+    tunes it in play (2026-11-01); `test_dogfight`'s five-seed test records the runs and is pending until it passes again.
+    `test_m3_sandbox` clears its three waves in 326 s.
+  - Wave difficulty ramp (maintainer, 2026-11-01): a scripted wave may set `skill` and `aggression` ranges (`[low, high]`,
+    names or 0-1) and `loop.skill_step` raises a looped wave's skill range per pass, capped at an ace (`WavePlan.skill_range` /
+    `aggression_range`); `WaveDirector` rolls each AI raider's values inside them, seeded by its name and the wave number
+    (a spawn's own `skill` / `aggression` wins). `combat_sandbox`: PATROL skill 0.2-0.35 (the easiest), STRIKE 0.3-0.5 (easy
+    the first time), +0.1 per loop (wave 4 0.4-0.6, ..., every raider an ace from wave 10); aggression 0.25-1.0 (cautious to
+    reckless) for every raider of every AI wave. TARGET PRACTICE stays idle M2 drifters. Tests: `test_wave_plan` (the ranges
+    climb to ace, aggression as scripted), `test_wave_director` (raiders of waves 2, 3 and 6 roll inside their wave's range,
+    their aggressions differ); `test_m3_sandbox` clears the three waves in 567 s.
+  - Housekeeping found on the way: the console's `quit` stops every audio player and drops its stream, then quits a frame
+    later (a wingman's gun sound playing at the quit left "1 resources still in use at exit" in the smoke runs; T17's
+    `AudioDirector` exit stop alone did not cover it); `scripts/run_tests.sh` gives GUT 1 800 s (the suite outgrew 1 200 s).
 
 ### M3-T14 Position rebase in play
 

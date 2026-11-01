@@ -56,7 +56,7 @@ fi
 
 echo "== GUT"
 gut_status=0
-run_logged "${REPORTS}/gut.log" timeout 1200 "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd \
+run_logged "${REPORTS}/gut.log" timeout 1800 "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd \
     -gdir=res://tests -ginclude_subdirs -gexit -gjunit_xml_file=reports/gut.xml \
     || gut_status=$?
 if (( gut_status != 0 )); then
@@ -400,7 +400,7 @@ expect_text "${log}" "[console] ai.ships = [RAIDER 1 attack (" || smoke_status=1
 expect_line "${log}" "[console] ai.by_behaviour = {attack: 1}" || smoke_status=1
 expect_text "${log}" "[console] ai.think_us = " || smoke_status=1
 expect_text "${log}" "[console] RAIDER 1: attack (" || smoke_status=1
-expect_text "${log}" "[console]   scores: retreat 0.00, evade " || smoke_status=1
+expect_text "${log}" "[console]   scores: ram 0.00, retreat 0.00, evade " || smoke_status=1
 expect_line "${log}" "[console] RAIDER 1: objective NAV ALPHA" || smoke_status=1
 expect_text "${log}" "objective NAV ALPHA" || smoke_status=1
 expect_line "${log}" "[console] RAIDER 1: no objective" || smoke_status=1

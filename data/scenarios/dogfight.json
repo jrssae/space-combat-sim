@@ -23,8 +23,8 @@
    {"name": "BLUE", "faction": "raiders", "formation": "wedge",
     "members": [
       {"type": "raider_fighter", "name": "RAIDER 4", "anchor": "origin", "offset": [400, -50, -2000],
-       "behaviour": {"type": "ai", "profile": "raider"}},
+       "behaviour": {"type": "ai", "profile": "raider", "aggression": "reckless"}},
       {"type": "raider_fighter", "name": "RAIDER 5", "anchor": "origin", "offset": [340, -50, -2040],
-       "behaviour": {"type": "ai", "profile": "raider"}},
+       "behaviour": {"type": "ai", "profile": "raider", "aggression": "reckless"}},
       {"type": "raider_fighter", "name": "RAIDER 6", "anchor": "origin", "offset": [460, -50, -2040],
-       "behaviour": {"type": "ai", "profile": "raider"}}]}]}
+       "behaviour": {"type": "ai", "profile": "raider", "aggression": "reckless"}}]}]}

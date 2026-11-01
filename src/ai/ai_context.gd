@@ -55,6 +55,8 @@ var leader_link_position: UniversePos = null
 var leader_link_velocity: Vector3 = Vector3.ZERO
 ## The route this pilot leads (M3-T09, the instructor; `BehaviourFollowPath.attach` sets it), or null.
 var route: Route = null
+## The target the pilot's behaviour in control wanted selected last tick (`AiPilot.wanted_target_id`), for a rammer's pick.
+var current_target_id: int = 0
 ## The objective's display name ("NAV ALPHA", compared case-insensitively), "" for none (M3-T17).
 var objective_name: String = ""
 ## The guard post (M3-T10): a fixed point, or a ship by display name with an offset in its body frame, and the radius.

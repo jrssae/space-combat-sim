@@ -264,10 +264,10 @@ func test_spawn_ally_ai_flies_the_ally_profile() -> void:
 	assert_true(_console("spawn ally ai 900").ok)
 	var ally: Combatant = pool.alive(ALLY)[0]
 	assert_true(ally.driver.brain is AiPilot)
-	assert_eq((ally.driver.brain as AiPilot).profile.resource_path, AiProfile.PATHS[&"ally_starfury"])
+	assert_eq((ally.driver.brain as AiPilot).base_profile.resource_path, AiProfile.PATHS[&"ally_starfury"])
 	pool.release(ally)
 	assert_true(_console("spawn raider ai 900").ok)
-	assert_eq((pool.alive(RAIDER)[0].driver.brain as AiPilot).profile.resource_path, AiProfile.PATHS[&"raider"], "raiders keep theirs")
+	assert_eq((pool.alive(RAIDER)[0].driver.brain as AiPilot).base_profile.resource_path, AiProfile.PATHS[&"raider"], "raiders keep theirs")
 
 
 func test_spawn_ally_rejects_nonsense_and_other_behaviours() -> void:

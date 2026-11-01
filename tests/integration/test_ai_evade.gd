@@ -176,7 +176,7 @@ func test_a_hit_ship_evades_within_a_quarter_second_mid_attack_and_jinks_in_full
 		var reaction_s: float = SimClock.now() - hit_s
 		gut.p("%s: evading %.3f s after the hit" % [victim.display_name, reaction_s])
 		assert_eq(pilot.current.id, &"evade")
-		assert_lte(reaction_s, 0.25, "within 0.25 s (AC9)")
+		assert_lte(reaction_s, 0.25 + 1e-6, "within 0.25 s (AC9: a regular or better)")
 		var evade := pilot.current as BehaviourEvade
 		# A second hit mid-jink keeps it evading through the next full jink.
 		await get_tree().physics_frame

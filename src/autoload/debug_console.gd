@@ -380,7 +380,25 @@ func _quit(code: int) -> void:
 	if quit_handler.is_valid():
 		quit_handler.call(code)
 	elif is_inside_tree():
+		# A sound still playing at the quit keeps its stream alive in the audio server past the scene ("resources still in
+		# use at exit"): stop every player and drop its stream, then quit a frame later, once the server has let go.
+		_silence(get_tree().root)
+		await get_tree().process_frame
 		get_tree().quit(code)
+
+
+static func _silence(node: Node) -> void:
+	if node is AudioStreamPlayer:
+		(node as AudioStreamPlayer).stop()
+		(node as AudioStreamPlayer).stream = null
+	elif node is AudioStreamPlayer3D:
+		(node as AudioStreamPlayer3D).stop()
+		(node as AudioStreamPlayer3D).stream = null
+	elif node is AudioStreamPlayer2D:
+		(node as AudioStreamPlayer2D).stop()
+		(node as AudioStreamPlayer2D).stream = null
+	for child: Node in node.get_children():
+		_silence(child)
 
 
 func _output(text: String, kind: ConsoleUI.LineKind) -> void:

@@ -246,3 +246,34 @@ func test_scenario_path_overrides_the_setting() -> void:
 	assert_eq(main.resolved_scenario_path(), "res://data/scenarios/combat_sandbox.json")
 	main.scenario_path = "res://data/scenarios/free_flight.json"
 	assert_eq(main.resolved_scenario_path(), "res://data/scenarios/free_flight.json")
+
+
+func test_wave_raiders_roll_their_skill_and_aggression_inside_the_waves_ranges() -> void:
+	# M3-T13: PATROL's raiders are the easiest, STRIKE's first round easy, each loop's floor higher; aggression varies per raider.
+	var seen: Dictionary = {}
+	for number: int in [2, 3, 6]:
+		_exec("wave start %d" % mini(number, 3))
+		while main.waves.plan.wave_number < number:
+			main.waves.plan.skip()
+		Engine.time_scale = 5.0
+		await _wait_for_state(&"active")
+		await _ticks(40)
+		Engine.time_scale = 1.0
+		var skill: Vector2 = main.waves.plan.skill_range(number)
+		var aggressions := PackedFloat64Array()
+		for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
+			var pilot := c.driver.brain as AiPilot
+			assert_not_null(pilot, "%s flies the AI" % c.display_name)
+			if pilot == null:
+				continue
+			assert_between(pilot.temperament.skill, skill.x, skill.y, "wave %d: %s's skill" % [number, c.display_name])
+			assert_between(pilot.temperament.aggression, 0.25, 1.0)
+			aggressions.append(pilot.temperament.aggression)
+		seen[number] = aggressions
+		_exec("wave stop")
+	assert_lt(main.waves.plan.skill_range(2).y, main.waves.plan.skill_range(3).y, "the patrol is easier than the first strike")
+	assert_gt(main.waves.plan.skill_range(6).x, main.waves.plan.skill_range(3).x, "a later strike starts higher")
+	for number: Variant in seen:
+		var a: PackedFloat64Array = seen[number]
+		assert_gt(a.size(), 1)
+		assert_ne(a[0], a[1], "wave %d: aggression varies from raider to raider" % number)

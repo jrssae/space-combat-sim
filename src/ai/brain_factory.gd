@@ -8,10 +8,11 @@ extends RefCounted
 ##     {"type": "attack"}
 ##     {"type": "aggro", "waypoints": [...], "cruise_mps": 80, "aggro_range_m": 1500}
 ##     {"type": "ai", "profile": "ally_starfury" | "raider" | "instructor", "orders": "engage" | "attack" | "form" | "cover",
+##      "skill": "rookie" | "regular" | "veteran" | "ace" | 0-1, "aggression": "passive" | ... | "reckless" | 0-1,
 ##      "objective": "NAV ALPHA", "guard": {"post": [x, y, z]} | {"ship": "ALPHA 2", "offset": [x, y, z]}, + "radius_m": 1500}
 ##
 ## `ai` (M3-T06) is an `AiPilot` with the named `AiProfile` (required) and its orders (`AiContext.ORDER_WORDS`, default
-## `engage`) and an optional objective, a target's display name (M3-T17: it flies to it from any broadcast range); its
+## `engage`), its skill and aggression (M3-T13, `AiTemperament`; default the profile's) and an optional objective, a target's display name (M3-T17: it flies to it from any broadcast range); its
 ## behaviours are seeded from the seed. `guard` (M3-T10) gives it a post: a point relative to the anchor, or a ship by name and
 ## a slot in its body frame (x right, y up, +z behind), with `radius_m` (1 500 by default, above 0). `patrol` (M3-T10),
 ## `{"waypoints": [[x, y, z], ...], "cruise_mps": 80}` relative to the anchor, flies them in a loop (`BehaviourFollowPath` on a
@@ -69,7 +70,15 @@ static func _ai(spec: Dictionary, seed_value: int, anchor: UniversePos) -> Dicti
 	var objective: Variant = spec.get("objective", "")
 	if not (objective is String):
 		return _fail("behaviour.objective must be a target's name, got %s" % JSON.stringify(objective))
-	var pilot := AiPilot.new(profile, seed_value)
+	var skill: float = AiTemperament.parse_skill(spec.get("skill", profile.skill))
+	if skill < 0.0:
+		return _fail("behaviour.skill must be one of %s or a number 0-1, got %s" % [", ".join(PackedStringArray(AiTemperament.SKILL_RANKS.keys())),
+				JSON.stringify(spec.get("skill"))])
+	var aggression: float = AiTemperament.parse_aggression(spec.get("aggression", profile.aggression))
+	if aggression < 0.0:
+		return _fail("behaviour.aggression must be one of %s or a number 0-1, got %s" % [", ".join(PackedStringArray(AiTemperament.AGGRESSION_LEVELS.keys())),
+				JSON.stringify(spec.get("aggression"))])
+	var pilot := AiPilot.new(profile, seed_value, [] as Array[AiBehaviour], AiTemperament.new(skill, aggression))
 	pilot.context.order = order as AiContext.Order
 	pilot.context.objective_name = (objective as String).strip_edges()
 	if spec.has("patrol"):

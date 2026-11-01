@@ -215,7 +215,8 @@ wave 1's countdown starts at once. `scenario free_flight` (console) is the old M
 
 Each wave clears when every raider is gone; a short pause, then the next countdown. If you die, you respawn at the start after
 3 s with a full hull; the wave carries on and the raiders left come for you again. The status line (top centre) shows wave,
-state, raiders alive and three counts: `KILLS` (every raider destroyed, by anyone), `YOURS` (your bolt or ram made the kill)
+state, raiders alive and three counts (the AI waves get harder: PATROL's raiders are rookies, the first STRIKE's are easy,
+and every pass round the loop raises the floor until all are aces; aggression varies from raider to raider): `KILLS` (every raider destroyed, by anyone), `YOURS` (your bolt or ram made the kill)
 and `ASSISTS` (you fired at it while it was your selected target, and someone else killed it).
 
 ## HUD legend (green line style; sizes scale with the window height)

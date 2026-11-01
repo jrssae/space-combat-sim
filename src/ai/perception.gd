@@ -56,6 +56,9 @@ var last_hit_s: float = -INF
 ## Sim time of the latest bolt hit on this hull (`HitInfo.CAUSE_BOLT`; rams and the console are not), -INF when none: the
 ## hit reaction's trigger (M3-T10, Q11).
 var last_bolt_hit_s: float = -INF
+## The `Targetable` id of the ship behind the latest hit with a shooter (a bolt or a ram), 0 when none (M3-T13: a passive
+## pilot fires back at it).
+var last_attacker_id: int = 0
 ## `settings.friendly_fire` this tick: bolts then hurt every hull but the shooter's (`FireLane`).
 var friendly_fire: bool = false
 

@@ -13,6 +13,7 @@ const PATHS: Dictionary[StringName, String] = {
 	&"ally_starfury": "res://assets/ai/ally_starfury.tres",
 	&"raider": "res://assets/ai/raider.tres",
 	&"instructor": "res://assets/ai/instructor.tres",
+	&"civilian": "res://assets/ai/civilian.tres",
 }
 const STARFURY_TACTICS_PATH: String = "res://assets/ai/starfury_tactics.tres"
 
@@ -26,6 +27,12 @@ const STARFURY_TACTICS_PATH: String = "res://assets/ai/starfury_tactics.tres"
 @export var min_dwell_s: float = 1.0
 ## Retreat below this hull fraction (0 = fights to the death).
 @export var retreat_below: float = 0.25
+## Also retreat whenever a hostile ship is within this many metres, whatever the hull (0 = never; the civilian's 3 km, M3-T13).
+@export var retreat_within_m: float = 0.0
+## The pilot's default skill and aggressiveness, 0..1 (`AiTemperament`; a spawn may override them). The values above are
+## tuned for `regular` (0.45) and `balanced` (0.5), where the temperament changes nothing.
+@export var skill: float = AiTemperament.REGULAR
+@export var aggression: float = AiTemperament.BALANCED
 ## m/s: the pilot's travelling speed (retreat flies at this plus `BehaviourRetreat.EXTRA_MPS`).
 @export var cruise_mps: float = 100.0
 ## Degrees: the amplitude of the seeded, slowly wandering offset on the attack's lead (0 = a perfect shot).
@@ -65,6 +72,12 @@ func validate() -> String:
 		return "min_dwell_s must be 0 or more, got %s" % min_dwell_s
 	if not (retreat_below >= 0.0 and retreat_below <= 1.0):
 		return "retreat_below must be 0..1, got %s" % retreat_below
+	if retreat_within_m < 0.0:
+		return "retreat_within_m must be 0 or more, got %s" % retreat_within_m
+	if not (skill >= 0.0 and skill <= 1.0):
+		return "skill must be 0..1, got %s" % skill
+	if not (aggression >= 0.0 and aggression <= 1.0):
+		return "aggression must be 0..1, got %s" % aggression
 	if cruise_mps <= 0.0:
 		return "cruise_mps must be above 0, got %s" % cruise_mps
 	if aim_error_deg < 0.0:

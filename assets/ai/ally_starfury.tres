@@ -20,3 +20,5 @@ aim_error_deg = 0.1
 tactics = ExtResource("2_tactics")
 fires = true
 idle_hold = true
+skill = 0.7
+aggression = 0.5

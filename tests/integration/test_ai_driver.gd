@@ -330,7 +330,7 @@ func test_the_ai_console_lists_ships_and_describes_one() -> void:
 	var text: String = results[0].text()
 	assert_string_starts_with(text, "RAIDER 1: attack (approach)")
 	assert_string_contains(text, "target PLAYER")
-	assert_string_contains(text, "scores: retreat 0.00, evade 0.00, attack ")
+	assert_string_contains(text, "scores: ram 0.00, retreat 0.00, evade 0.00, attack ")
 	assert_string_contains(text, " *, idle 0.05")
 	var unknown: ConsoleResult = registry.execute("ai RAIDER 9")[0]
 	assert_false(unknown.ok)

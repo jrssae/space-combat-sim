@@ -82,11 +82,11 @@ func test_ai_builds_a_pilot_with_the_named_profile_and_orders() -> void:
 	var made: Dictionary = _make({"type": "ai", "profile": "ally_starfury"})
 	assert_true(made["ok"], made["error"])
 	var pilot: AiPilot = made["brain"]
-	assert_eq(pilot.profile, AiProfile.load_named(&"ally_starfury"))
+	assert_eq(pilot.base_profile, AiProfile.load_named(&"ally_starfury"))
 	assert_eq(pilot.context.order, AiContext.Order.ENGAGE_AT_WILL, "the default order")
 	var covering: AiPilot = _make({"type": "ai", "profile": "raider", "orders": "cover"})["brain"]
 	assert_eq(covering.context.order, AiContext.Order.COVER_ME)
-	assert_eq(covering.profile, AiProfile.load_named(&"raider"))
+	assert_eq(covering.base_profile, AiProfile.load_named(&"raider"))
 	assert_true((covering.behaviour(&"attack") as BehaviourAttack).brain.tactics == covering.profile.tactics,
 			"the attack flies the profile's tactics")
 
@@ -101,7 +101,7 @@ func test_ai_with_the_same_seed_makes_the_same_aim() -> void:
 
 func test_ai_errors_name_the_offending_key() -> void:
 	var cases: Array[Array] = [
-		[{"type": "ai"}, "behaviour.profile must be one of ally_starfury, raider, instructor, got null"],
+		[{"type": "ai"}, "behaviour.profile must be one of ally_starfury, raider, instructor, civilian, got null"],
 		[{"type": "ai", "profile": "pirate"}, "behaviour.profile must be one of"],
 		[{"type": "ai", "profile": 3}, "behaviour.profile must be one of"],
 		[{"type": "ai", "profile": "raider", "orders": "dance"}, "behaviour.orders must be one of engage, attack, form, cover, got \"dance\""],

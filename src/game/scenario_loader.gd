@@ -15,8 +15,9 @@ extends RefCounted
 ##      "pools": Dictionary,                        # ship type (StringName) -> how many to build (int); may be empty.
 ##                                                  # `Main` builds `raider_fighter` and `starfury_ally` (M3-T08) from it
 ##      "waves": Array[Dictionary],                 # each {"name", "delay_s", "spawns": Array[{type, name, anchor, offset,
-##                                                  #       velocity, at_s, behaviour}]} (M2-T09); may be empty
-##      "loop": Dictionary,                         # {"from_wave": int (0 = none), "add_per_loop": int}
+##                                                  #       velocity, at_s, behaviour}]} (M2-T09); may be empty; and
+##                                                  #       "skill", "aggression": Vector2 ranges (M3-T13; (-1, -1) none)
+##      "loop": Dictionary,                         # {"from_wave": int (0 = none), "add_per_loop": int, "skill_step": float}
 ##      "routes": Array[Route],                     # `routes[]` (M3-T09): {name, cruise_mps (60), pace ("player" | "none"),
 ##                                                  #       loop (false), waypoints: [{position, demo, hold_s}]}; may be empty
 ##      "spawns": Array[Dictionary],                # ships placed at load (M3-T09): a wave spawn's fields plus
@@ -247,7 +248,26 @@ static func _loop(raw: Variant, source: String) -> Variant:
 	var add: Variant = loop.get("add_per_loop", 1)
 	if typeof(add) != TYPE_FLOAT and typeof(add) != TYPE_INT or float(add) != floorf(float(add)) or int(add) < 0:
 		return "%s: loop.add_per_loop must be a whole number, 0 or more" % source
-	return {"from_wave": int(from_wave), "add_per_loop": int(add)}
+	var step: Variant = loop.get("skill_step", 0.0)
+	if not _is_number(step) or float(step) < 0.0 or float(step) > 1.0:
+		return "%s: loop.skill_step must be a number 0-1" % source
+	return {"from_wave": int(from_wave), "add_per_loop": int(add), "skill_step": float(step)}
+
+
+## A wave's `skill` or `aggression` range (M3-T13): `[low, high]`, each a rank or level name or a number 0-1, low first; absent:
+## Vector2(-1, -1). Returns the range or an error string.
+static func _temper_range(wave: Dictionary, key: String, where: String) -> Variant:
+	if not wave.has(key):
+		return Vector2(-1.0, -1.0)
+	var raw: Variant = wave[key]
+	if not (raw is Array) or (raw as Array).size() != 2:
+		return "%s.%s must be [low, high]" % [where, key]
+	var parse := AiTemperament.parse_skill if key == "skill" else AiTemperament.parse_aggression
+	var lo: float = float(parse.call((raw as Array)[0]))
+	var hi: float = float(parse.call((raw as Array)[1]))
+	if lo < 0.0 or hi < 0.0 or lo > hi:
+		return "%s.%s must be [low, high], names or numbers 0-1 with low <= high, got %s" % [where, key, JSON.stringify(raw)]
+	return Vector2(lo, hi)
 
 
 ## `routes[]` as `Route`s (universe waypoints, no pace ship yet: the spawner sets `pace_id`), or an error string.
@@ -386,7 +406,14 @@ static func _waves(raw: Variant, pools: Dictionary, system: StringName, source: 
 				var also: String = " and %d ship%s at load" % [held, "" if held == 1 else "s"] if held > 0 else ""
 				return "%s: %d spawns of %s%s but pools.%s holds %d" % [where, type_counts[type], type, also, type,
 						int(pools.get(type, 0))]
-		out.append({"name": wave_name as String, "delay_s": float(delay), "spawns": spawns})
+		var skill: Variant = _temper_range(wave as Dictionary, "skill", where)
+		if skill is String:
+			return skill
+		var aggression: Variant = _temper_range(wave as Dictionary, "aggression", where)
+		if aggression is String:
+			return aggression
+		out.append({"name": wave_name as String, "delay_s": float(delay), "spawns": spawns, "skill": skill as Vector2,
+				"aggression": aggression as Vector2})
 	return out
 
 

@@ -16,6 +16,10 @@ extends AiBehaviour
 ## began plus `JINK_SPEED_MPS` across the line of fire: more than a jink can reach, so the thrust stays on for the whole jink
 ## (a steady acceleration is what spoils a shooter's lead), and the speed stays bounded however long it lasts.
 ##
+## Temperament (M3-T13, `retune`): jinks last `JINK_MIN_S`..`JINK_MAX_S` times the skill's `jink_factor` and reversals turn by
+## up to its `reversal_spread_deg` (an ace's jinks are shorter and less regular); a tail threat or incoming fire counts once it
+## has lasted the pilot's `reaction_s` (a new threat is noticed, not foreseen).
+##
 ## Hit reaction (M3-T10, maintainer Q11): `AiPilot` hands control to this behaviour on a fresh bolt hit whatever the scores,
 ## the stickiness and the minimum dwell, and calls `on_hit`. It then keeps control while `locked()`: until at least one full
 ## jink after the latest hit has been flown (the jink running when a hit lands is finished, then one more), so repeated hits
@@ -46,6 +50,11 @@ var _base_velocity: Vector3 = Vector3.ZERO
 var _fresh: bool = true
 ## The hit reaction holds control until `jinks` reaches this (0: no hold).
 var _lock_until_jinks: int = 0
+var _jink_scale: float = 1.0
+var _spread_deg: float = REVERSAL_SPREAD_DEG
+var _reaction_s: float = 0.0
+# Since when the current threat (a tail or incoming fire) has been there, -INF while there is none.
+var _threat_since_s: float = -INF
 
 
 func _init(p_seed: int = 0) -> void:
@@ -63,6 +72,13 @@ func reset() -> void:
 	_reason = &""
 	_fresh = true
 	_lock_until_jinks = 0
+	_threat_since_s = -INF
+
+
+func retune(_profile: AiProfile, temperament: AiTemperament) -> void:
+	_jink_scale = temperament.jink_factor()
+	_spread_deg = temperament.reversal_spread_deg()
+	_reaction_s = temperament.reaction_s()
 
 
 func score(ctx: AiContext) -> float:
@@ -90,6 +106,16 @@ func score(ctx: AiContext) -> float:
 	if best < INCOMING_SCORE and p.incoming_fire > 0:
 		best = INCOMING_SCORE
 		_reason = &"fire"
+	# A threat (tail or fire) counts once it has lasted the reaction time.
+	if best > 0.0:
+		if _threat_since_s == -INF:
+			_threat_since_s = p.now_s
+		if p.now_s - _threat_since_s < _reaction_s - 1e-6:
+			best = 0.0
+			_threat = null
+			_reason = &""
+	else:
+		_threat_since_s = -INF
 	if best < HIT_SCORE and ctx.seconds_since_hit() < HIT_MEMORY_S:
 		best = HIT_SCORE
 		_reason = &"hit"
@@ -176,8 +202,8 @@ func _new_jink(line_of_fire: Vector3) -> void:
 		side = _perpendicular(line_of_fire).rotated(line_of_fire, _rng.randf_range(0.0, TAU))
 	else:
 		side = (-_across(line_of_fire)).rotated(line_of_fire,
-				deg_to_rad(_rng.randf_range(-REVERSAL_SPREAD_DEG, REVERSAL_SPREAD_DEG)))
-	jink_left_s = _rng.randf_range(JINK_MIN_S, JINK_MAX_S)
+				deg_to_rad(_rng.randf_range(-_spread_deg, _spread_deg)))
+	jink_left_s = _rng.randf_range(JINK_MIN_S, JINK_MAX_S) * _jink_scale
 	jinks += 1
 
 

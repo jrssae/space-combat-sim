@@ -80,6 +80,7 @@ func setup(p_world: WorldFrame, p_pool: ShipPool, p_player: Combatant, scenario:
 	var loop: Dictionary = scenario.get("loop", {"from_wave": 0, "add_per_loop": 1})
 	var pool_size: int = int((scenario.get("pools", {}) as Dictionary).get(ShipPool.DEFAULT_TYPE, 0))
 	plan = WavePlan.new(waves, int(loop["from_wave"]), int(loop["add_per_loop"]), pool_size)
+	plan.skill_step = float(loop.get("skill_step", 0.0))
 	if destruction != null:
 		destruction.raider_destroyed.connect(_on_raider_destroyed)
 		destruction.player_destroyed.connect(_on_player_destroyed)
@@ -136,7 +137,7 @@ func _spawn(request: Dictionary) -> void:
 	var number: int = int(request["wave_number"])
 	var raider_name: String = pool.next_name()
 	var seed_value: int = hash([raider_name, number])
-	var made: Dictionary = BrainFactory.from_behaviour(request["behaviour"], anchor, seed_value)
+	var made: Dictionary = BrainFactory.from_behaviour(_tempered(request["behaviour"], raider_name, number), anchor, seed_value)
 	if not bool(made["ok"]):
 		push_warning("WaveDirector: %s" % made["error"])
 		return
@@ -152,6 +153,23 @@ func _spawn(request: Dictionary) -> void:
 	var placed: Combatant = pool.acquire(raider_name, at, basis, velocity, brain, StringName(request["type"]))
 	if placed != null and wings != null and not String(request.get("wing", "")).is_empty():
 		wings.join(String(request["wing"]), placed)
+
+
+# An AI spawn's behaviour with its skill and aggression rolled inside the wave's ranges (M3-T13), seeded by the raider and the
+# wave, unless the spawn sets them itself. Anything else comes back unchanged.
+func _tempered(behaviour: Variant, raider_name: String, number: int) -> Variant:
+	if not (behaviour is Dictionary) or str((behaviour as Dictionary).get("type", "")) != "ai":
+		return behaviour
+	var out: Dictionary = (behaviour as Dictionary).duplicate(true)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([raider_name, number, "temperament"])
+	var skill: Vector2 = plan.skill_range(number)
+	if skill.x >= 0.0 and not out.has("skill"):
+		out["skill"] = rng.randf_range(skill.x, skill.y)
+	var aggression: Vector2 = plan.aggression_range(number)
+	if aggression.x >= 0.0 and not out.has("aggression"):
+		out["aggression"] = rng.randf_range(aggression.x, aggression.y)
+	return out
 
 
 # The anchor's universe position when the wave activated, kept for the rest of the wave (offsets and waypoints are relative to it).

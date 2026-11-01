@@ -17,6 +17,8 @@ extends RefCounted
 ##   `PilotBrain.TARGET_NONE` (the default: a behaviour that does not attack shows no target).
 ## - `describe()`: at least `state`, for the console.
 ## - `reset()`: back to the starting state, seeds included (a ship acquired again).
+## - `retune(profile, temperament)`: the pilot's skill or aggression changed (M3-T13): take the numbers that depend on them
+##   from the effective profile and the temperament. Also called once when the behaviour is added.
 ## Randomness only from a seeded generator; time only from `dt` and the perception.
 
 var id: StringName = &""
@@ -48,6 +50,10 @@ func describe() -> Dictionary:
 
 
 func reset() -> void:
+	pass
+
+
+func retune(_profile: AiProfile, _temperament: AiTemperament) -> void:
 	pass
 
 

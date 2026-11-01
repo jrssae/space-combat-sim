@@ -10,7 +10,7 @@ func _weapon(ship_path: String) -> WeaponSpec:
 
 
 func test_every_shipped_profile_loads_and_validates() -> void:
-	assert_eq(AiProfile.PATHS.keys(), [&"ally_starfury", &"raider", &"instructor"])
+	assert_eq(AiProfile.PATHS.keys(), [&"ally_starfury", &"raider", &"instructor", &"civilian"])
 	for profile_name: StringName in AiProfile.PATHS:
 		var profile: AiProfile = AiProfile.load_named(profile_name)
 		assert_not_null(profile, String(profile_name))

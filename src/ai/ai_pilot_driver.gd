@@ -43,6 +43,7 @@ var brain: PilotBrain = null:
 		brain = value
 		last_hit_s = -INF
 		last_bolt_hit_s = -INF
+		last_attacker_id = 0
 		_unselectable_id = 0
 		if value != null:
 			value.reset()
@@ -52,6 +53,8 @@ var avoiding_urgent: bool = false
 ## Sim time of this hull's latest hit (`Damageable.hit_taken`), and of its latest bolt hit, -INF since the brain was set.
 var last_hit_s: float = -INF
 var last_bolt_hit_s: float = -INF
+## The `Targetable` id of whoever hit this hull last (0: nobody, or the console).
+var last_attacker_id: int = 0
 
 var _capability: ShipCapability = null
 ## The mean of the ship's muzzles, ship-local (computed once: the muzzles never move on the hull).
@@ -148,6 +151,7 @@ func perceive() -> Perception:
 	p.broadcasts = ContactScan.shared_broadcasts().broadcasts_for(own_id, p.position, p.faction)
 	p.last_hit_s = last_hit_s
 	p.last_bolt_hit_s = last_bolt_hit_s
+	p.last_attacker_id = last_attacker_id
 	p.friendly_fire = bool(Settings.get_value(&"friendly_fire"))
 	return p
 
@@ -160,7 +164,13 @@ func _avoid(p: Perception, flight: FlightCommand) -> void:
 		return
 	var wish: Vector3 = brain.desired_velocity if brain.has_desired_velocity else p.velocity
 	var radius: float = combatant.damageable.bounding_radius if combatant.damageable != null else 0.0
-	var result: Dictionary = AvoidanceMath.filter(p.position, p.velocity, radius, p.contacts, wish, p.capability,
+	var contacts: Array[Contact] = p.contacts
+	if brain.avoid_exempt_id != 0:  # a committed rammer flies into its target (M3-T13); everything else is still avoided
+		contacts = []
+		for c: Contact in p.contacts:
+			if c.id != brain.avoid_exempt_id:
+				contacts.append(c)
+	var result: Dictionary = AvoidanceMath.filter(p.position, p.velocity, radius, contacts, wish, p.capability,
 			hash(combatant.display_name))
 	var filtered: Vector3 = result["v_des"]
 	if filtered == wish:
@@ -176,6 +186,11 @@ func _on_hit_taken(info: HitInfo) -> void:
 	last_hit_s = SimClock.now()
 	if info != null and info.cause == HitInfo.CAUSE_BOLT:
 		last_bolt_hit_s = last_hit_s
+	if info != null and info.shooter_id != 0 and is_instance_id_valid(info.shooter_id):
+		var shooter := instance_from_id(info.shooter_id) as Node
+		var marker := shooter.get_node_or_null(^"Targetable") as Targetable if shooter != null else null
+		if marker != null:
+			last_attacker_id = marker.get_instance_id()
 
 
 # M2's rule, for a brain that leaves the choice to the driver: the nearest hostile, refreshed every `RETARGET_S`.

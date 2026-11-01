@@ -226,3 +226,27 @@ func test_state_names() -> void:
 	assert_eq(plan.state_name(), &"idle")
 	plan.start()
 	assert_eq(plan.state_name(), &"countdown")
+
+
+# --- temperament ranges (M3-T13) -----------------------------------------------------------------------------------
+
+
+func test_skill_ranges_climb_each_loop_until_every_raider_is_an_ace() -> void:
+	var plan := _plan()
+	plan.waves[1]["skill"] = Vector2(0.2, 0.35)
+	plan.waves[2]["skill"] = Vector2(0.3, 0.5)
+	plan.waves[2]["aggression"] = Vector2(0.25, 1.0)
+	plan.skill_step = 0.1
+	assert_eq(plan.skill_range(1), Vector2(-1.0, -1.0), "a wave without a range")
+	assert_eq(plan.skill_range(2), Vector2(0.2, 0.35), "the patrol: the easiest")
+	assert_eq(plan.skill_range(3), Vector2(0.3, 0.5), "the first strike: easy")
+	var floors: Array[float] = []
+	for number: int in range(3, 12):
+		var r: Vector2 = plan.skill_range(number)
+		floors.append(r.x)
+		assert_lte(r.y, 0.95 + 1e-9, "never past an ace")
+		assert_eq(plan.aggression_range(number), Vector2(0.25, 1.0), "aggression as scripted, every round")
+	for i: int in range(1, floors.size()):
+		assert_true(floors[i] >= floors[i - 1], "the floor climbs: %s" % str(floors))
+	assert_almost_eq(plan.skill_range(4).x, 0.4, 1e-6, "one loop: +0.1 (Vector2 is float32)")
+	assert_eq(plan.skill_range(10), Vector2(0.95, 0.95), "seven loops on: every raider an ace")
