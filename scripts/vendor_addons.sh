@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Vendors the pinned third-party Godot addons into addons/. Run once per version bump and commit the
 # result together with docs/third-party.md. Only the addon directories (and their licences) are copied.
+# GDGS is not listed: addons/gdgs_scs/ is the project's own fork (docs/third-party.md).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -10,7 +11,6 @@ trap 'rm -rf "${TMP}"' EXIT
 # name | git url | tag | addon dir inside the repo | licence files to keep (relative to the repo root)
 ADDONS=(
     "gut|https://github.com/bitwes/Gut|v9.7.1|addons/gut|LICENSE.md"
-    "gdgs|https://github.com/ReconWorldLab/godot-gaussian-splatting|v3.3.0|addons/gdgs|LICENSE"
 )
 
 for entry in "${ADDONS[@]}"; do

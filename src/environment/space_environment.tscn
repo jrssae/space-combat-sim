@@ -2,8 +2,8 @@
 
 [ext_resource type="Script" path="res://src/environment/space_environment.gd" id="1_env"]
 [ext_resource type="Environment" path="res://assets/environment/environment_default.tres" id="2_default"]
-[ext_resource type="Script" path="res://addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd" id="3_effect"]
-[ext_resource type="Script" path="res://addons/gdgs/runtime/nodes/gaussian_splat_node.gd" id="4_splats"]
+[ext_resource type="Script" path="res://addons/gdgs_scs/runtime/compositor/gaussian_compositor_effect.gd" id="3_effect"]
+[ext_resource type="Script" path="res://addons/gdgs_scs/runtime/nodes/gaussian_splat_node.gd" id="4_splats"]
 [ext_resource type="Script" path="res://src/environment/sky_follower.gd" id="5_follower"]
 
 [sub_resource type="CompositorEffect" id="CompositorEffect_gdgs"]

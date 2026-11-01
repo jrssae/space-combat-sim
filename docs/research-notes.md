@@ -28,6 +28,8 @@ bumping versions. "Container" means the Claude cloud Linux container used for im
 | `4321ba/GodotGaussianSplattingNodes` | thesis WIP built on GDGS layout | - | Not production |
 | `klausi3D/godotGS` | engine fork, alpha | - | Requires a custom engine build |
 
+Since 2026-11-01 the project runs its own fork of GDGS, `addons/gdgs_scs/` (`docs/third-party.md`).
+
 GDGS behaviours that shape our pipeline (read from the v3.3.0 source):
 
 - `GaussianSplatNode._enter_tree()` applies a one-time **180 deg rotation about Z** when the node's basis is identity (`get_model_orientation_correction()`), to turn COLMAP-style Y-down data into Y-up. Our generators therefore write PLY data pre-rotated by Rz(180 deg) (negate x and y) so the node can stay at identity.

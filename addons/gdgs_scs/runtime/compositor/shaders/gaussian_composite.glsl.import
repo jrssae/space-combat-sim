@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://ca3daah33fgxa"
+path="res://.godot/imported/gaussian_composite.glsl-f8289eec673cbd7d021e734934596efd.res"
+
+[deps]
+
+source_file="res://addons/gdgs_scs/runtime/compositor/shaders/gaussian_composite.glsl"
+dest_files=["res://.godot/imported/gaussian_composite.glsl-f8289eec673cbd7d021e734934596efd.res"]
+
+[params]
+

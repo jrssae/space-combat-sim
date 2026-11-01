@@ -7,12 +7,21 @@ dependency, add a row here in the same PR and keep its licence file next to the 
 
 | Component | Version | Location | Licence | Upstream |
 |---|---|---|---|---|
-| GDGS (Godot Gaussian Splatting plugin) | v3.3.0 | `addons/gdgs/` (+ `addons/gdgs/LICENSE`) | MIT | https://github.com/ReconWorldLab/godot-gaussian-splatting |
 | GUT (Godot Unit Test) | v9.7.1 | `addons/gut/` (+ `addons/gut/LICENSE.md`) | MIT | https://github.com/bitwes/Gut |
 
-Vendored addons are upstream code: do not edit them in place. GDGS carries two documented local fixes (sort-buffer
-overflow, narrow-subgroup fallback): see `addons/gdgs/PATCHES.md`. If a patch is unavoidable, put it in
+Vendored addons are upstream code: do not edit them in place. If a patch is unavoidable, put it in
 `addons/<name>/PATCHES.md`, keep it minimal, and upstream it.
+
+## Forked in this repository (`addons/`)
+
+| Component | Forked from | Location | Licence | Upstream |
+|---|---|---|---|---|
+| GDGS (Godot Gaussian Splatting plugin) | v3.3.0, commit `7099651` | `addons/gdgs_scs/` (+ `addons/gdgs_scs/LICENSE`) | MIT, unchanged (copyright ReconWorldLab) | https://github.com/ReconWorldLab/godot-gaussian-splatting |
+
+The project owns this fork (maintainer, 2026-11-01) because the game needs renderer changes upstream may never take. Edit
+it where the game needs it. `addons/gdgs_scs/PATCHES.md` lists every change and how to revert it; the general fixes are
+still upstream candidates. The fork keeps upstream's licence, so the rest of the project stays GPL-3.0 and this directory
+stays MIT.
 
 ## Used but not vendored
 

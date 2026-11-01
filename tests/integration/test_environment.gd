@@ -5,7 +5,7 @@ extends GutTest
 
 const SCENE_PATH: String = "res://src/environment/space_environment.tscn"
 const ENVIRONMENT_DEFAULT_PATH: String = "res://assets/environment/environment_default.tres"
-const GDGS_EFFECT_SCRIPT_PATH: String = "res://addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd"
+const GDGS_EFFECT_SCRIPT_PATH: String = "res://addons/gdgs_scs/runtime/compositor/gaussian_compositor_effect.gd"
 const MANIFEST_PATH: String = "res://assets/generated/sky_default/manifest.json"
 const PANORAMA_PATH: String = "res://assets/generated/sky_default/sky_default_panorama.png"
 const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tests.sh (it imports first)"

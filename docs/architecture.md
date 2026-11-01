@@ -14,7 +14,7 @@ describe what M1 builds and §15 what M2 adds; §14 is the long-term design that
 | Renderer | Forward+ (Vulkan) | - | - |
 | Controller | Generic XInput-class gamepad through Godot/SDL3's standard `JOY_*` layout; no Xbox-only features | - | - |
 | Physics | Jolt (built in, set explicitly) | bundled | MIT |
-| Splat rendering | GDGS `addons/gdgs`, Compute backend | **v3.3.0** | MIT |
+| Splat rendering | GDGS, the project's fork `addons/gdgs_scs`, Compute backend | forked from **v3.3.0** | MIT |
 | World coordinates | Floating-origin `WorldFrame` + 64-bit script-side `UniversePos` (§14.1) | - | - |
 | Language | GDScript, statically typed | - | - |
 | Tests (engine) | GUT `addons/gut` | **v9.7.1** | MIT |
@@ -41,7 +41,7 @@ M2 decisions (D20-D29) are in §15.1.
 | D9 | Generated assets are **not committed**; generators are. No Git LFS | Everything binary is reproducible from `tools/procgen` in seconds; LFS adds quotas and fork friction. |
 | D10 | GUT over gdUnit4 | Simpler headless CLI (`-gexit`, exit code 1 on failure), no xvfb caveats, GDScript-first, tracks Godot 4.7. |
 | D11 | 1 unit = 1 metre, SI everywhere, Godot axes (+X right, +Y up, **-Z forward**) | Avoids conversion bugs; Godot's `Basis.z` is backward, so forward is `-basis.z`. |
-| D12 | Vendor addons into `addons/` | Offline-reproducible builds; standard Godot practice; licences travel with the code. |
+| D12 | Vendor addons into `addons/`; GDGS is a fork the project owns (`addons/gdgs_scs/`, 2026-11-01) | Offline-reproducible builds; standard Godot practice; licences travel with the code. The fork lets the renderer change with the game (T20's splat budget). |
 | D13 | Linux x86_64 + Vulkan is the only target; GDGS Compute is the acceptance backend | The maintainer builds this for their own Linux gaming desktop. No per-OS code is written, so Godot keeps other doors open, but nothing else is tested or promised. |
 | D14 | Pod thrust = 8 discrete nozzle forces (4 main, 4 retro) at hardpoint positions; RCS = ideal per-axis force/torque actuator with limits | The asymmetry that matters is in the big pod nozzles; modelling every RCS jet adds allocation maths with no gameplay gain. |
 | D15 | M1 has targeting and weapon modes but nothing shootable: `TargetingSystem` over inert splat **nav buoys**; `weapon_next` cycles pulse-cannon fire modes | Smallest behaviour that makes every bound button do something verifiable; spinning buoys exercise several independently moving splat nodes before enemies need them. |
@@ -54,7 +54,7 @@ M2 decisions (D20-D29) are in §15.1.
 
 ```
 project.godot                 Forward+, Jolt, zero default damping, physics interpolation on, InputMap actions
-addons/gdgs/                  vendored GDGS v3.3.0 (MIT)
+addons/gdgs_scs/              the project's fork of GDGS v3.3.0 (MIT; changes in its PATCHES.md)
 addons/gut/                   vendored GUT v9.7.1 (MIT)
 data/scenarios/free_flight.json  M1 scenario: player start + nav buoys in universe coordinates
 src/

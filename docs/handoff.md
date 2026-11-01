@@ -35,7 +35,7 @@ scripts/run_tests.sh              # optional: the full automated suite (~3 min)
 
 | Your finding | Fix |
 |---|---|
-| Checkerboarding (AC12/13) | Two bugs in the vendored splat renderer, patched and documented in `addons/gdgs/PATCHES.md`: (1) a sort-buffer overflow when splats get large on screen (the tile budget was 10 per splat, now 32, with every pass bounds-checked); (2) memory corruption on GPUs with subgroups narrower than 32, which now fall back to Raster. **Not verifiable without your GPU.** Check whether it is gone. |
+| Checkerboarding (AC12/13) | Two bugs in the vendored splat renderer, patched and documented in `addons/gdgs_scs/PATCHES.md`: (1) a sort-buffer overflow when splats get large on screen (the tile budget was 10 per splat, now 32, with every pass bounds-checked); (2) memory corruption on GPUs with subgroups narrower than 32, which now fall back to Raster. **Not verifiable without your GPU.** Check whether it is gone. |
 | Starfury looks like a Thunderbolt | Regenerated from your references: wedge fuselage, swept trussed struts with hazard stripes, ring-faced pods, claws, guns under the nose. About 10 m long, 15 m wide, 230k splats. |
 | Blocks in first-person view | The cockpit now matches your reference frame: trapezoid main pane, corner struts, side panes, sill. The centre of the view is clear (tested). |
 | Swap D-pad L/R with right stick L/R | Right stick = pitch + **roll**; D-pad L/R = **yaw** (ramped). The old layout is a built-in profile, `m1_classic` (section 5). |

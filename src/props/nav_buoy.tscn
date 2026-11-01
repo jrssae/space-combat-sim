@@ -1,7 +1,7 @@
 [gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://src/props/nav_buoy.gd" id="1_buoy"]
-[ext_resource type="Script" path="res://addons/gdgs/runtime/nodes/gaussian_splat_node.gd" id="2_splats"]
+[ext_resource type="Script" path="res://addons/gdgs_scs/runtime/nodes/gaussian_splat_node.gd" id="2_splats"]
 [ext_resource type="Script" path="res://src/targeting/targetable.gd" id="3_target"]
 [ext_resource type="Script" path="res://src/ship/hull_depth_proxy.gd" id="4_proxy"]
 [ext_resource type="Script" path="res://src/rendering/splat_pose_sync.gd" id="5_sync"]

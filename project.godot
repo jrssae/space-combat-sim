@@ -33,7 +33,7 @@ window/size/viewport_height=1080
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/gdgs/plugin.cfg", "res://addons/gut/plugin.cfg")
+enabled=PackedStringArray("res://addons/gdgs_scs/plugin.cfg", "res://addons/gut/plugin.cfg")
 
 [gdgs]
 

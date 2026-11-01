@@ -24,7 +24,7 @@ extends Node
 ## The fallback state changed (forced or not); `active` is `is_fallback_active()`.
 signal fallback_changed(active: bool)
 
-const SELECTOR := preload("res://addons/gdgs/runtime/render/backend/gaussian_backend_selector.gd")
+const SELECTOR := preload("res://addons/gdgs_scs/runtime/render/backend/gaussian_backend_selector.gd")
 
 const BACKEND_COMPUTE: StringName = &"compute"
 const BACKEND_RASTER: StringName = &"raster"

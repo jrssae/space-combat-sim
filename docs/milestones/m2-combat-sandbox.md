@@ -20,7 +20,7 @@ The M1 play-test fixes land before M2 and change code that M2 builds on. Read th
   attitude control was built before writing `PilotSteering` (T07); reuse it if it fits.
 - **Rendering**: rigid chase camera, plumes along the nozzle axes (`ThrusterVisuals`), a hull depth proxy (an inset
   opaque mesh, so transparent effects behind the hull are hidden), a reworked Starfury silhouette, GDGS sort-overflow
-  and narrow-subgroup patches (`addons/gdgs/PATCHES.md`).
+  and narrow-subgroup patches (`addons/gdgs_scs/PATCHES.md`).
 - **Tooling**: the console `screenshot` command and `scripts/capture.sh` (llvmpipe; GDGS falls back to Raster).
 
 Where those fixes renamed something §15 mentions, follow the code and record the difference in the task's "As
@@ -820,7 +820,7 @@ maintainer's eyes or ears on the real GPU.
 | 1 | X = auto-track onto the lead reticle (velocity untouched); R3 = all stop; L3 held + right stick = camera look (returns to centre on release); in the chase view L3 pans the camera around the ship | `FlightCommand.autotrack` / `track_dir_b`, `FlightModel` tracking branch, `CameraLook`, `CameraRig.set_look`, `ChaseCameraMath` look basis. Tests: `test_speed_and_autotrack`, `test_camera_look`, `test_input_adapter` |
 | 2 | Keyboard remap: left hand mains, retros, roll, brake, camera, auto-track; right hand the rest; mouse pitch/yaw, mouse 2 target, wheel cycles targets, middle button free look | `project.godot` input map, `InputAdapter` mouse/wheel, `GodotInputSource.add_mouse_motion`, mouse capture in `Main`; layout in `docs/playtest.md` |
 | 3 | Console noise | `OpArrayLength is not supported yet.` is Godot's SPIR-V translation of an unsized-array `length()` in a GDGS compute shader: harmless, upstream. `PlayerShip destroyed` was a leftover debug print, removed. The "ObjectDB instances leaked at exit" warning is a still-playing audio stream at shutdown (2-3 instances, also in a headless run); not fixed, cosmetic |
-| 4 | Tearing / flicker in the nebula and ship, blur: smaller splats | Splat sigma 1.4 to 1.0 x spacing, thickness 0.03 to 0.08 (`core/sampling.py`); GDGS depth sort key was a 16-bit `d/(1+d)` that ties everything past a few hundred metres (6 km steps at the sky), now logarithmic (`addons/gdgs/PATCHES.md` 3). `(H)` |
+| 4 | Tearing / flicker in the nebula and ship, blur: smaller splats | Splat sigma 1.4 to 1.0 x spacing, thickness 0.03 to 0.08 (`core/sampling.py`); GDGS depth sort key was a 16-bit `d/(1+d)` that ties everything past a few hundred metres (6 km steps at the sky), now logarithmic (`addons/gdgs_scs/PATCHES.md` 3). `(H)` |
 | 5 | Max speed 0.1 c replaced by: hard limit 9 999 m/s, assist's safe speed 5 000 m/s, thrust fading with speed | `SpeedGovernor`, `ShipSpec.speed_limit_mps` / `assist_speed_max_mps`, Jolt limit 10 000. Bolts 1 000 m/s relative to the ship |
 | 6 | Velocity readout with direction | Speed, then H / V angles of the travel direction against the nose, then range and closing speed to the reference point (the launch point for now; later the bay or the jump gate): `HudLayout.velocity_angles_deg`, `HudInput.reference_*` |
 | 7 | Gravity in the plan | It is: M6 (restricted n-body gravity with Kepler-rail bodies), M9 (gravity assists, Oberth), M11 (hyperspace incline). `docs/roadmap.md` now has a "Gravity" section spelling out what it must do to ships, bolts and debris, and what to revisit (the hard speed clamp) |
