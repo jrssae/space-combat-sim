@@ -53,6 +53,17 @@ static func face(basis: Basis, direction_world: Vector3, rate_max_rad: Vector3, 
 	return Vector3(clampf(rot.x, -1.0, 1.0), clampf(rot.y, -1.0, 1.0), 0.0)
 
 
+## `face` with the direction's own turn fed forward (M3-T18): `omega_world` is how fast `direction_world` turns (rad/s, World
+## frame; its part about the nose is ignored, roll is never commanded), added to the P loop's rate, so a turning direction (the
+## lead in a slashing pass) is tracked instead of trailed by `rate / gain`.
+static func face_tracking(basis: Basis, direction_world: Vector3, omega_world: Vector3, rate_max_rad: Vector3,
+		gain: float = K_FACE) -> Vector3:
+	var rot: Vector3 = face(basis, direction_world, rate_max_rad, gain)
+	var w_ff: Vector3 = basis.transposed() * omega_world
+	var ff: Vector3 = Vector3(w_ff.x, w_ff.y, 0.0) * FlightModel.AXIS_SIGN / rate_max_rad
+	return Vector3(clampf(rot.x + ff.x, -1.0, 1.0), clampf(rot.y + ff.y, -1.0, 1.0), 0.0)
+
+
 ## Pilot roll (`rot.z`, + = roll right, -1..1) that turns the ship's top toward `up_world` about the nose: a P loop on the
 ## roll angle alone, with the same gain as `face`. Only the part of `up_world` square to the nose counts (the rest is a
 ## pitch); 0 when that part vanishes (an up along the nose) or the ship is already level with it.

@@ -229,3 +229,17 @@ func test_capability_comes_from_the_spec_and_the_layout() -> void:
 	assert_almost_eq(cap.a_retro, 2.0 * spec.pod_retro_thrust / spec.mass, 1e-6)
 	assert_almost_eq(cap.a_rcs.x, spec.rcs_force_max.x / spec.mass, 1e-6)
 	assert_eq(cap.rate_max_rad, spec.rate_max_rad())
+
+
+func test_face_tracking_feeds_the_directions_turn_forward() -> void:
+	# On target already: `face` commands nothing; with the direction turning at 0.5 rad/s about World up (yaw left), the
+	# tracking command is that rate, in pilot terms.
+	var rate := Vector3(1.0, 1.0, 1.5)
+	var on: Vector3 = PilotSteering.face(Basis.IDENTITY, Vector3.FORWARD, rate)
+	assert_eq(on, Vector3.ZERO)
+	var tracking: Vector3 = PilotSteering.face_tracking(Basis.IDENTITY, Vector3.FORWARD, Vector3(0.0, 0.5, 0.0), rate)
+	var expected: Vector3 = Vector3(0.0, 0.5, 0.0) * FlightModel.AXIS_SIGN / rate
+	assert_almost_eq(tracking.y, expected.y, 1e-6, "the turn fed forward")
+	assert_eq(tracking.z, 0.0, "never a roll")
+	var spun: Vector3 = PilotSteering.face_tracking(Basis.IDENTITY, Vector3.FORWARD, Vector3(0.0, 0.0, 3.0), rate)
+	assert_eq(spun, Vector3.ZERO, "a turn about the nose is ignored")

@@ -49,7 +49,7 @@ func _ready() -> void:
 		&"projectiles": {"get": func() -> int: return projectiles_last_tick, "doc": "Bolts swept on the last tick"},
 		&"hits": {"get": func() -> int: return hits_total, "doc": "Hits resolved this session"},
 		&"last_hit": {"get": func() -> String: return last_hit, "doc": "The last hit: shooter -> target, damage"},
-		&"pairs_tested": {"get": func() -> int: return pairs_tested, "doc": "Bolt and ship pairs swept on the last tick"},
+		&"pairs_tested": {"get": func() -> int: return pairs_tested, "doc": "Bolt and ship pairs swept on the last tick (past the distance cull)"},
 		&"resolve_us": {"get": func() -> int: return resolve_us, "unit": "us",
 				"doc": "Cost of the last tick's resolve (profiling only, wall clock)"},
 	}), self)
@@ -109,6 +109,8 @@ func _gather_targets(delta: float) -> Array[Dictionary]:
 			"basis": basis,
 			"to_body": basis.transposed(),
 			"move": velocity * delta,
+			"mid": body.global_position + velocity * (0.5 * delta),
+			"reach": damageable.bounding_radius + velocity.length() * delta * 0.5,
 		})
 	return out
 
@@ -118,7 +120,14 @@ func _earliest_hit(bolt: Projectile, targets: Array[Dictionary], _delta: float) 
 	var best_t: float = INF
 	var p1: Vector3 = bolt.global_position
 	var start: Vector3 = p1 - bolt.last_step
+	# The bolt's step and each hull's motion this tick both fit in a sphere round their midpoints: a pair whose spheres do not
+	# touch cannot hit (M3-T18: slashing pilots keep many more bolts in flight; this skips most pairs before any other work).
+	var bolt_mid: Vector3 = start + bolt.last_step * 0.5
+	var bolt_reach: float = bolt.last_step.length() * 0.5 + bolt.hit_radius_m
 	for target: Dictionary in targets:
+		var reach: float = bolt_reach + float(target["reach"])
+		if bolt_mid.distance_squared_to(target["mid"]) > reach * reach:
+			continue
 		var damageable: Damageable = target["damageable"]
 		# A hull destroyed earlier in this very tick (by another bolt) cannot be hit again.
 		if damageable.hull.destroyed or int(target["body_id"]) == bolt.shooter_id or not damageable.can_be_hit_by(bolt.faction, friendly_fire):

@@ -275,7 +275,9 @@ func test_64_bolts_against_8_targets_resolve_well_under_two_milliseconds() -> vo
 		_tick()
 		total_us += resolver.resolve_us
 	assert_eq(resolver.projectiles_last_tick, 64)
-	assert_eq(resolver.pairs_tested, 64 * 8, "every bolt against every hostile ship")
+	# M3-T18: a bolt is swept only against the hulls within reach of its step and their motion (the distance cull); these
+	# bolts fly 50 m wide of the nearest drone, so no pair gets that far (before the cull all 512 were swept every tick).
+	assert_eq(resolver.pairs_tested, 0, "every pair culled: no bolt comes within reach of a hull")
 	var mean_us: float = float(total_us) / float(ticks)
 	gut.p("64 bolts x 8 targets: %.0f us per tick (mean of %d)" % [mean_us, ticks])
 	assert_true(mean_us < 2000.0, "mean %.0f us" % mean_us)

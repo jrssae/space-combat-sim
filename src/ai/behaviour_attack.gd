@@ -21,6 +21,12 @@ extends AiBehaviour
 ## Temperament (M3-T13): the aim error and the gun run's tactics come from the effective profile (`retune`); a passive pilot
 ## (`AiTemperament.never_starts`) attacks only the ship that hit it in the last `AiTemperament.PROVOKED_S`, and no objective.
 ##
+## Slashing pass (M3-T18): each attack run is, by a seeded roll, either a slashing pass (`AttackSlash`: a firing pass, a turn
+## and burn, a chase) with the temperament's `slash_chance` or `AttackBrain`'s standard gun run; a profile with `slashing` off
+## never slashes. A run ends, and the next is rolled, when the standard run extends and comes round to approach again or the
+## slashing chase loses the target and passes again; a new target starts a new run too. Each pass is flown at the close 100 m
+## offset with the temperament's `close_pass_chance`. The target choice, the aim error and the objective are the same.
+##
 ## Score: 0 without an allowed target, else `SCORE_BASE + SCORE_SPAN` x the best target's value (0.3..0.8), so a tail threat
 ## (evade) or a retreat outranks it.
 ##
@@ -51,6 +57,16 @@ var _engaged_id: int = 0
 var _time_s: float = 0.0
 var _transit: bool = false
 var _passive: bool = false
+## The slashing pass; whether the current run is one; and the share of runs that are (`AiTemperament.slash_chance`, 0 when
+## the profile has slashing off; a test may set it), and of passes flown close.
+var slash: AttackSlash = AttackSlash.new()
+var uses_slash: bool = false
+var slash_chance: float = 0.0
+var close_pass_chance: float = 0.0
+
+var _run_rng := RandomNumberGenerator.new()
+var _last_brain_state: AttackBrain.State = AttackBrain.State.APPROACH
+var _last_slash_state: AttackSlash.State = AttackSlash.State.PASS
 ## Per axis (x right, y up): two frequencies (Hz) and two phases (rad).
 var _wander: PackedFloat64Array = PackedFloat64Array()
 
@@ -67,10 +83,17 @@ func retune(profile: AiProfile, temperament: AiTemperament) -> void:
 	brain.tactics = profile.tactics
 	aim_error_rad = deg_to_rad(profile.aim_error_deg)
 	_passive = temperament.never_starts()
+	slash.tactics = profile.tactics
+	slash_chance = temperament.slash_chance() if profile.slashing else 0.0
+	close_pass_chance = temperament.close_pass_chance()
+	_roll_run()
 
 
 func reset() -> void:
 	brain.reset()
+	slash.reset()
+	_run_rng.seed = hash([_seed, "runs"])
+	_roll_run()
 	_target = null
 	_engaged_id = 0
 	_time_s = 0.0
@@ -140,14 +163,33 @@ func think(ctx: AiContext, dt: float) -> PilotCommand:
 		return _transit_to(ctx.perception, ctx.objective_range_m)
 	if _target.id != _engaged_id:
 		_engaged_id = _target.id
+		_roll_run()
+		slash.restart()
 		brain.restart()
+	elif uses_slash and slash.state == AttackSlash.State.PASS and _last_slash_state != AttackSlash.State.PASS:
+		_roll_run()  # the chase lost it: a new run
+		if not uses_slash:
+			brain.restart()
+	elif not uses_slash and brain.state == AttackBrain.State.APPROACH and _last_brain_state == AttackBrain.State.EXTEND:
+		_roll_run()  # round to approach again: a new run
+		if uses_slash:
+			slash.restart()
+	_last_slash_state = slash.state
+	_last_brain_state = brain.state
+	var run: PilotBrain = slash if uses_slash else brain
 	_time_s += dt
-	brain.aim_offset_rad = aim_offset_at(_time_s)
-	brain.has_desired_velocity = false
-	var cmd: PilotCommand = brain.engage(ctx.perception, _target.id, _target.position, _target.velocity, dt)
-	desired_velocity = brain.desired_velocity
-	has_desired_velocity = brain.has_desired_velocity
-	desired_all_axes = brain.desired_all_axes
+	var aim: Vector2 = aim_offset_at(_time_s)
+	brain.aim_offset_rad = aim
+	slash.aim_offset_rad = aim
+	run.has_desired_velocity = false
+	var cmd: PilotCommand
+	if uses_slash:
+		cmd = slash.engage(ctx.perception, _target.id, _target.position, _target.velocity, dt)
+	else:
+		cmd = brain.engage(ctx.perception, _target.id, _target.position, _target.velocity, dt)
+	desired_velocity = run.desired_velocity
+	has_desired_velocity = run.has_desired_velocity
+	desired_all_axes = run.desired_all_axes
 	return cmd
 
 
@@ -172,6 +214,12 @@ func _transit_to(p: Perception, range_m: float) -> PilotCommand:
 	return cmd
 
 
+# The next run: a slashing pass with `slash_chance`, its pass close with `close_pass_chance`; else a standard gun run.
+func _roll_run() -> void:
+	uses_slash = slash_chance > 0.0 and _run_rng.randf() < slash_chance
+	slash.pass_offset_m = AttackSlash.CLOSE_PASS_OFFSET_M if _run_rng.randf() < close_pass_chance else AttackSlash.PASS_OFFSET_M
+
+
 ## The aim offset (radians, right and up) at `t_s` of this behaviour's time: each axis within `aim_error_rad`.
 func aim_offset_at(t_s: float) -> Vector2:
 	if aim_error_rad <= 0.0:
@@ -189,5 +237,6 @@ func describe() -> Dictionary:
 		return {"state": "no target"}
 	if _transit:
 		return {"state": "transit", "target": _target.name, "firing": false}
-	var inner: Dictionary = brain.describe()
-	return {"state": inner["state"], "target": _target.name, "range_m": inner["range_m"], "firing": brain.firing}
+	var inner: Dictionary = slash.describe() if uses_slash else brain.describe()
+	return {"state": inner["state"], "target": _target.name, "range_m": inner["range_m"],
+			"firing": slash.firing if uses_slash else brain.firing}

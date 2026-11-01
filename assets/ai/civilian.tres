@@ -23,3 +23,4 @@ fires = false
 idle_hold = false
 skill = 0.2
 aggression = 0.0
+slashing = false

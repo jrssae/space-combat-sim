@@ -70,6 +70,10 @@ func test_the_scenario_places_both_sides_in_their_wings() -> void:
 		assert_eq(wing.members().size(), 2, "%s: a leader and two" % group)
 		assert_eq(wing.formation.shape, Formation.Shape.WEDGE)
 	assert_eq(main.wings.player_wing(), alpha, "the player leads no wing here: the orders keys go to ALPHA")
+	for c: Combatant in main.ships.alive():
+		var attack := (c.driver.brain as AiPilot).behaviour(&"attack") as BehaviourAttack
+		assert_gt(attack.slash_chance, 0.0, "%s flies slashing passes (M3-T18)" % c.display_name)
+		assert_lt(attack.slash_chance, 1.0, "%s, no rookie, not every run" % c.display_name)
 	await _close(main)
 
 

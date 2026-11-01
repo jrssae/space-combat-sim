@@ -322,13 +322,15 @@ func test_the_ai_console_lists_ships_and_describes_one() -> void:
 	var registry: ConsoleRegistry = DebugConsole.registry
 	assert_true(registry.has_provider(&"ai"))
 	assert_true(registry.has_command(&"ai"))
-	assert_eq(registry.format_path("ai.ships"), "ai.ships = [RAIDER 1 attack (approach)]")
+	# The run is rolled (M3-T18): a standard approach or a slashing pass.
+	var ships: String = registry.format_path("ai.ships")
+	assert_true(ships == "ai.ships = [RAIDER 1 attack (approach)]" or ships == "ai.ships = [RAIDER 1 attack (pass)]", ships)
 	assert_eq(registry.format_path("ai.by_behaviour"), "ai.by_behaviour = {attack: 1}")
 	assert_gt(int(registry.read("ai.think_us")["value"]), 0, "the drivers' wall-clock time last tick")
 	var results: Array[ConsoleResult] = registry.execute("ai raider 1")
 	assert_true(results[0].ok, results[0].text())
 	var text: String = results[0].text()
-	assert_string_starts_with(text, "RAIDER 1: attack (approach)")
+	assert_true(text.begins_with("RAIDER 1: attack (approach)") or text.begins_with("RAIDER 1: attack (pass)"), text)
 	assert_string_contains(text, "target PLAYER")
 	assert_string_contains(text, "scores: ram 0.00, retreat 0.00, evade 0.00, attack ")
 	assert_string_contains(text, " *, idle 0.05")

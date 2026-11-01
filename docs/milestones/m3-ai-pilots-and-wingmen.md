@@ -178,12 +178,12 @@ Status: `done` (merged into `m3`, its "Done" notes below), `in progress`, `not s
 | M3-T09 | Instructor: follow path, pacing, demo manoeuvres, route scenario | T06, T08 | Opus | done (closed 2026-10-31) |
 | M3-T10 | Guard, raider AI upgrade, sandbox and dogfight scenarios | T07, T08 | Opus | done (2026-11-01) |
 | M3-T11 | HUD: wing roster, acknowledgements, waypoint marker | T07, T09 | Sonnet | done (2026-10-31) |
-| M3-T13 | Skill ranks, aggressiveness, civilian profile, last-ditch ram (runs before T12) | T06, T10 | Opus | in progress: done but AC12 balance with the maintainer |
+| M3-T13 | Skill ranks, aggressiveness, civilian profile, last-ditch ram (runs before T12) | T06, T10 | Opus | done (2026-11-01; AC12's balance with the maintainer) |
 | M3-T14 | Position rebase in play (far-from-origin jitter, Q13) | - | Opus | done |
 | M3-T15 | Play-test tweaks: pad layout, gun sounds, Starfury thrust (Q15, Q17, Q20) | - | Sonnet | done (2026-10-31) |
 | M3-T16 | Kill credit: player kills, assists, total (Q18) | T08 | Sonnet | done (2026-10-31) |
 | M3-T17 | Broadcast contacts for the radar and the AI (Q21) | T08, T10 | Opus | done (2026-10-31) |
-| M3-T18 | Slashing pass and chase (Q19) | T13 | Opus | in progress |
+| M3-T18 | Slashing pass and chase (Q19) | T13 | Opus | done (2026-11-01) |
 | M3-T19 | Splat LOD chain and `LodSwitcher` (Q22) | T08 | Opus | not started |
 | M3-T20 | Resident splat budget: GDGS patch 5 (Q22) | T19 | Opus | not started |
 | M3-T21 | Splat relighting: procgen normals, flat colours, `LightPicker` (Q23) | T19 | Opus | not started |
@@ -844,6 +844,40 @@ Added 2026-10-26 for Q19; after T13 (it is keyed to skill and aggression); run b
   - Measure "time on target" (ticks with the target inside the fire gate) and use it for AC26 against the standard
     attack on the same seeds.
 - Done when: AC26 passes; the paired AC13 test still passes; the dogfight scenario shows it.
+- Done (2026-11-01):
+  - `AttackSlash` (`src/ai/attack_slash.gd`, a `PilotBrain` like `AttackBrain`): PASS closes at the target's velocity plus
+    `closing_far_mps` on a course that goes by `PASS_OFFSET_M` (200 m) to the side the ship is already moving to, facing the
+    lead and firing under `AttackBrain`'s gate; once the range opens after closest approach, TURN faces the target and burns
+    back (target velocity plus 60 m/s toward it, all axes); when the nose is on the lead and closing, CHASE settles the range
+    at 500 m (closing at most 60 m/s, opening 30 m/s), and beyond 1.5 x the fire range it passes again. The speed caps are
+    `AttackBrain`'s. `time_on_target_s` counts the time inside the fire gate.
+  - Beyond the brief: a pass straight through the target swings the line of sight faster than any nose turns (the first
+    try passed 37 m by and lost the gate 2.6 s before closest approach), hence the offset; and a P loop alone trails a turning
+    lead by rate / gain, so `PilotSteering.face_tracking` adds the lead's own angular velocity to `face`'s rate. With both the
+    nose stays within 1.2 degrees of the lead through a 172 m pass at 160 m/s.
+  - Who (maintainer, 2026-11-01, replacing the planner call of veterans and aces only): every pilot slashes; each attack run
+    is a seeded roll (`BehaviourAttack._roll_run`, on a new target, when the standard run comes round from extend to approach,
+    and when the chase loses the target): a slashing pass with `AiTemperament.slash_chance` (a rookie always 1.0, with its
+    rookie aim and miss gate; regular 0.8, veteran 0.65, ace 0.5), else the standard run. `AiProfile.slashing` false (the
+    instructor, the civilian) never slashes. The most aggressive pilots of any skill fly some passes at 100 m
+    (`CLOSE_PASS_OFFSET_M`) instead of 200 m: `close_pass_chance` 0 up to balanced, 0.25 aggressive, 1 reckless.
+  - Awareness (maintainer, 2026-11-01): evade scores a tail threat or incoming fire from a ship that is not its attack target
+    (`AiContext.attack_target_id`) times `AiTemperament.awareness` (rookie 0.4, regular 0.75, veteran 1.0, ace 1.2, clamped):
+    a rookie on a pass fixates on its target, an ace breaks off sooner when someone else has it under fire. A bolt hit still
+    interrupts as before (AC9).
+  - AC26 (`test_ai_slash`): against a drone flying straight at 60 m/s, from 2 km behind it, the same veteran pilot on the same
+    seed has it in its fire gate 54.9 s of 60 with the slashing pass and 14.6 s with the standard run (3.8x; the bar is 1.25x),
+    and fires through its first closest approach (172 m at 16.9 s). The temperament gate and the profile opt-out are tested
+    there too (the AC26 pilots are pinned to all slashing runs or none, `BehaviourAttack.slash_chance`); `test_attack_slash` (6)
+    the states, both offsets and time on target; `test_pilot_steering` the feed-forward; `test_ai_temperament` the chances and
+    awareness; `test_ai_pilot_selection` awareness against a tail threat (its other tests pin `slashing` off).
+    `test_ai_think_time` (AC13): +145 us paired. `test_dogfight`: every ship flies slashing passes on some runs, none on all.
+  - Knock-on effects (2026-11-01): slashing pilots keep their guns on target much longer, so far more bolts fly: the hit
+    resolver's worst tick in `test_m2_run` rose to 8 ms (38 bolts), so `HitResolver` now culls a bolt-hull pair by the spheres
+    round the bolt's step and the hull's motion before any other work (4.1 ms; `test_hit_resolver`'s cost case now culls all
+    its pairs). The worst single tick is a kill (the destruction's effects run inside the resolve) and doubles under the full
+    suite's load (8.3 ms), so `test_m2_run` asserts the 99th percentile (0.8 ms) and records the worst. And in the sandbox the PATROL rookies, slashing every run, shoot the three wingmen down, so the idle player's
+    wave never clears: `test_m3_sandbox` joins the dogfight as AC12 balance for the maintainer (recorded, pending).
 
 ### M3-T19 Splat LOD chain and `LodSwitcher`
 

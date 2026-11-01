@@ -56,6 +56,7 @@ func _profile(weights: Dictionary) -> AiProfile:
 	pr.tactics = load(BrainFactory.DEFAULT_TACTICS_PATH) as RaiderTactics
 	pr.retreat_below = 0.25
 	pr.cruise_mps = 100.0
+	pr.slashing = false  # these tests read the standard gun run's states (the slashing pass has its own, M3-T18)
 	return pr
 
 
@@ -636,3 +637,34 @@ func test_a_retreating_ship_that_is_hit_jinks_then_retreats_again() -> void:
 	var evade := pilot.current as BehaviourEvade
 	_advance(pilot, p, evade.jink_left_s + 0.5)
 	assert_eq(pilot.current.id, &"retreat", "then keeps retreating")
+
+
+func test_awareness_scales_evasion_for_threats_other_than_the_attack_target() -> void:
+	# Two raiders: one it is attacking ahead, one on its tail. A rookie barely notices the tail; an ace breaks off for it.
+	var target := _contact(20, "RAIDER 1", Factions.Relation.HOSTILE, Vector3(0.0, 0.0, -800.0), Vector3.BACK)
+	var tail := _contact(21, "RAIDER 2", Factions.Relation.HOSTILE, Vector3(0.0, 0.0, 900.0), Vector3.FORWARD)
+	var scores: Dictionary = {}
+	for s: float in [0.2, 0.95]:
+		var evade := BehaviourEvade.new(1)
+		evade.retune(profile, AiTemperament.new(s, 0.5))
+		var ctx := AiContext.new()
+		ctx.profile = profile
+		ctx.attack_target_id = 20
+		var p := _p([target, tail])
+		for i: int in 60:  # past the reaction time
+			p.now_s += DT
+			ctx.refresh(p)
+			scores[s] = evade.score(ctx)
+	assert_lt(float(scores[0.2]), float(scores[0.95]), "the rookie's tail threat counts less (%s)" % str(scores))
+	var own := BehaviourEvade.new(1)
+	own.retune(profile, AiTemperament.new(0.2, 0.5))
+	var ctx2 := AiContext.new()
+	ctx2.profile = profile
+	ctx2.attack_target_id = 21  # the tail ship is its own target: no discount
+	var p2 := _p([target, tail])
+	var full: float = 0.0
+	for i: int in 60:
+		p2.now_s += DT
+		ctx2.refresh(p2)
+		full = own.score(ctx2)
+	assert_gt(full, float(scores[0.2]), "its own target's threat is never discounted")

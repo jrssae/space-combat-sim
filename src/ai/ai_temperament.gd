@@ -18,6 +18,13 @@ extends RefCounted
 ##   0.5x, reckless never);
 ## - engage and break-off: the attack's `near_range_m` and `break_range_m` times `press_factor` (passive 1.4x down to reckless
 ##   0.6x: closer with aggression);
+## - the slashing pass (M3-T18, maintainer 2026-11-01): every pilot may fly `AttackSlash` (unless the profile turns it off,
+##   `AiProfile.slashing`); `slash_chance` is the share of attack runs that are slashing passes: a rookie always (1.0, with its
+##   rookie aim), falling with skill (regular 0.8, veteran 0.65, ace 0.5), the rest standard gun runs; `close_pass_chance` is the
+##   share of passes flown at `AttackSlash.CLOSE_PASS_OFFSET_M` (100 m) instead of 200 m: 0 up to `balanced`, 0.25 at
+##   `aggressive`, 1 at `reckless`, whatever the skill;
+## - awareness (M3-T18): `awareness` scales evade's score for a threat that is not the ship it is attacking (a tail threat,
+##   incoming fire): a rookie notices them less (0.4), an ace more (1.2: it breaks off sooner);
 ## - `passive` never starts an attack (`never_starts`); it fires back at a ship that hit it in the last `PROVOKED_S`, unless the
 ##   profile never fires. `reckless` alone may ram (`may_ram`, `BehaviourRam`).
 
@@ -39,6 +46,8 @@ const _ATTACK_W: Array = [[0.0, 0.6], [0.25, 0.85], [0.5, 1.0], [0.75, 1.15], [1
 const _EVADE_W: Array = [[0.0, 1.3], [0.25, 1.15], [0.5, 1.0], [0.75, 0.8], [1.0, 0.5]]
 const _RETREAT_W: Array = [[0.0, 1.3], [0.25, 1.15], [0.5, 1.0], [0.75, 0.8], [1.0, 0.0]]
 const _RETREAT_AT: Array = [[0.0, 2.5], [0.25, 2.0], [0.5, 1.0], [0.75, 0.5], [1.0, 0.0]]
+const _SLASH: Array = [[0.2, 1.0], [0.45, 0.8], [0.7, 0.65], [0.95, 0.5]]
+const _AWARE: Array = [[0.2, 0.4], [0.45, 0.75], [0.7, 1.0], [0.95, 1.2]]
 const _PRESS: Array = [[0.0, 1.2], [0.25, 1.1], [0.5, 1.0], [0.75, 0.9], [1.0, 0.8]]
 
 var skill: float = REGULAR
@@ -115,6 +124,22 @@ func never_starts() -> bool:
 
 func may_ram() -> bool:
 	return aggression >= 1.0
+
+
+## The share of attack runs flown as slashing passes (M3-T18): 1 for a rookie, falling with skill to 0.5 for an ace.
+func slash_chance() -> float:
+	return _lerp_table(_SLASH, skill)
+
+
+## The share of slashing passes flown at 100 m instead of 200 m: 0 up to balanced, rising to 1 at reckless.
+func close_pass_chance() -> float:
+	var t: float = clampf((aggression - BALANCED) / (1.0 - BALANCED), 0.0, 1.0)
+	return t * t
+
+
+## How much a threat other than the attack's own target counts for evade (rookie 0.4 .. ace 1.2).
+func awareness() -> float:
+	return _lerp_table(_AWARE, skill)
 
 
 ## The profile this temperament flies: a copy of `base` (its tactics copied too) with the weights, the retreat threshold, the

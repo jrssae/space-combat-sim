@@ -55,6 +55,9 @@ var leader_link_position: UniversePos = null
 var leader_link_velocity: Vector3 = Vector3.ZERO
 ## The route this pilot leads (M3-T09, the instructor; `BehaviourFollowPath.attach` sets it), or null.
 var route: Route = null
+## The last target the attack behaviour flew at (kept while other behaviours fly, 0 before the first): evade's awareness tells
+## its own target's fire from everyone else's (M3-T18).
+var attack_target_id: int = 0
 ## The target the pilot's behaviour in control wanted selected last tick (`AiPilot.wanted_target_id`), for a rammer's pick.
 var current_target_id: int = 0
 ## The objective's display name ("NAV ALPHA", compared case-insensitively), "" for none (M3-T17).

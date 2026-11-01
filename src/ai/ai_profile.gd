@@ -41,6 +41,8 @@ const STARFURY_TACTICS_PATH: String = "res://assets/ai/starfury_tactics.tres"
 @export var tactics: RaiderTactics = null
 ## False: the trigger is never pulled, whatever the behaviour (the instructor).
 @export var fires: bool = true
+## False: never the slashing pass (M3-T18), whatever the temperament (the instructor, the civilian).
+@export var slashing: bool = true
 ## Idle: true holds position with the brake, false coasts.
 @export var idle_hold: bool = false
 

@@ -16,6 +16,10 @@ extends AiBehaviour
 ## began plus `JINK_SPEED_MPS` across the line of fire: more than a jink can reach, so the thrust stays on for the whole jink
 ## (a steady acceleration is what spoils a shooter's lead), and the speed stays bounded however long it lasts.
 ##
+## Awareness (M3-T18): a threat that is not the ship this pilot is attacking (`AiContext.attack_target_id`) scores the
+## temperament's `awareness` times as much (a rookie 0.4, an ace 1.2, the score clamped to 1): a rookie on a pass fixates on its
+## target, an ace breaks off sooner when someone else has it under fire. A hit still interrupts as before.
+##
 ## Temperament (M3-T13, `retune`): jinks last `JINK_MIN_S`..`JINK_MAX_S` times the skill's `jink_factor` and reversals turn by
 ## up to its `reversal_spread_deg` (an ace's jinks are shorter and less regular); a tail threat or incoming fire counts once it
 ## has lasted the pilot's `reaction_s` (a new threat is noticed, not foreseen).
@@ -53,6 +57,7 @@ var _lock_until_jinks: int = 0
 var _jink_scale: float = 1.0
 var _spread_deg: float = REVERSAL_SPREAD_DEG
 var _reaction_s: float = 0.0
+var _awareness: float = 1.0
 # Since when the current threat (a tail or incoming fire) has been there, -INF while there is none.
 var _threat_since_s: float = -INF
 
@@ -79,6 +84,7 @@ func retune(_profile: AiProfile, temperament: AiTemperament) -> void:
 	_jink_scale = temperament.jink_factor()
 	_spread_deg = temperament.reversal_spread_deg()
 	_reaction_s = temperament.reaction_s()
+	_awareness = temperament.awareness()
 
 
 func score(ctx: AiContext) -> float:
@@ -121,6 +127,9 @@ func score(ctx: AiContext) -> float:
 		_reason = &"hit"
 	if best > 0.0 and _threat == null:
 		_threat = _likely_shooter(ctx)
+	# Awareness: a tail threat or fire from someone other than its own target counts by the skill (a hit is the interrupt's).
+	if best > 0.0 and _reason != &"hit" and _threat != null and _threat.id != ctx.attack_target_id:
+		best = clampf(best * _awareness, 0.0, 1.0)
 	return best
 
 

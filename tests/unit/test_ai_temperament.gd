@@ -125,3 +125,22 @@ func test_profiles_carry_their_default_temperaments() -> void:
 	assert_false(civilian.fires)
 	assert_eq(civilian.retreat_within_m, 3000.0)
 	assert_gt(civilian.weight(&"evade"), 0.0)
+
+
+func test_slashing_runs_awareness_and_close_passes_follow_the_dials() -> void:
+	var chance: Array[float] = []
+	var aware: Array[float] = []
+	for s: float in SKILLS:
+		chance.append(AiTemperament.new(s, 0.5).slash_chance())
+		aware.append(AiTemperament.new(s, 0.5).awareness())
+	_monotonic(chance, false, "slash chance (a rookie always, higher skill not every time)")
+	_monotonic(aware, true, "awareness of other ships")
+	assert_eq(AiTemperament.new(0.2).slash_chance(), 1.0)
+	assert_almost_eq(AiTemperament.new(0.95).slash_chance(), 0.5, 1e-9)
+	var close: Array[float] = []
+	for a: float in AGGRESSIONS:
+		close.append(AiTemperament.new(0.45, a).close_pass_chance())
+	_monotonic(close, true, "close-pass chance")
+	assert_eq(AiTemperament.new(0.45, 0.5).close_pass_chance(), 0.0, "balanced: never")
+	assert_almost_eq(AiTemperament.new(0.45, 0.75).close_pass_chance(), 0.25, 1e-9)
+	assert_eq(AiTemperament.new(0.2, 1.0).close_pass_chance(), 1.0, "reckless of any skill: always")

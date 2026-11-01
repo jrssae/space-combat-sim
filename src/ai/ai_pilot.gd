@@ -137,6 +137,8 @@ func think(p: Perception, dt: float) -> PilotCommand:
 	desired_all_axes = current.desired_all_axes
 	wanted_target_id = current.target_id()
 	context.current_target_id = maxi(wanted_target_id, 0)
+	if current.id == &"attack" and wanted_target_id > 0:
+		context.attack_target_id = wanted_target_id
 	var ram := current as BehaviourRam
 	avoid_exempt_id = ram.target_id_value if ram != null and ram.committed else 0
 	if not profile.fires:
