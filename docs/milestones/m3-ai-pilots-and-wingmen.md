@@ -1050,8 +1050,8 @@ Added 2026-10-28 for Q23; after T14 (particles must follow the rebase).
 - Done when: AC32 passes; P9's fight frame, taken on the GPU (particles render there, not on llvmpipe), shows sparks; the
   look is AC35's.
 - Done (2026-11-01):
-  - `FxPool` (`World/Fx`, `src/combat/fx_pool.gd`) holds 40 fixed one-shot `GPUParticles3D` emitters: `hit` 12, `ram` 6,
-    `explosion_sparks` 4, `explosion_fragments` 4, `explosion_gas` 4, `debris` 10 (the numbers are `FxSpecs`, pure; the process
+  - `FxPool` (`World/Fx`, `src/combat/fx_pool.gd`) holds 46 fixed one-shot `GPUParticles3D` emitters: `hit` 12, `ram` 6,
+    `explosion_sparks` 4, `explosion_fragments` 4, `explosion_gas` 4, `debris` 16 (the numbers are `FxSpecs`, pure; the process
     materials and draw meshes are seven small `assets/fx/*.tres`). `HitResolver`, `RamResolver`, `DestructionDirector` (for
     `Explosion`) and `DebrisPool` get the pool from `Main` and call `burst` in the physics tick; the pool starts the emitter in
     `_process`.

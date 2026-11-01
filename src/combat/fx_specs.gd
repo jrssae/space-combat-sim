@@ -33,7 +33,7 @@ const _SPECS: Array[Dictionary] = [
 			"continuous": false, "material": "res://assets/fx/fx_explosion_fragments.tres", "mesh": _FRAGMENT_MESH},
 	{"name": "explosion_gas", "emitters": 4, "amount": 10, "lifetime_s": 0.7, "speed_mps": Vector2(8.0, 18.0), "spread_deg": 180.0,
 			"continuous": false, "material": "res://assets/fx/fx_explosion_gas.tres", "mesh": _GAS_MESH},
-	{"name": "debris", "emitters": 10, "amount": 36, "lifetime_s": 0.8, "speed_mps": Vector2(1.0, 6.0), "spread_deg": 180.0,
+	{"name": "debris", "emitters": 16, "amount": 36, "lifetime_s": 0.8, "speed_mps": Vector2(1.0, 6.0), "spread_deg": 180.0,
 			"continuous": true, "material": "res://assets/fx/fx_debris.tres", "mesh": _STREAK_MESH},
 ]
 

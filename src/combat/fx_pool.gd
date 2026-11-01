@@ -102,7 +102,7 @@ func build() -> void:
 			add_child(_nodes[-1])
 
 
-## Starts a burst of `effect` at World-local `position`, its cone pointing along `direction`, flying on at `velocity` (the
+## Starts a burst of `effect` at global `position`, its cone pointing along `direction`, flying on at `velocity` (the
 ## source's, m/s). `duration_s` is how long a vent keeps emitting. Returns a handle for `stop`, or 0 when nothing was thrown
 ## (density 0).
 func burst(effect: int, position: Vector3, direction: Vector3, velocity: Vector3, duration_s: float = 0.0) -> int:
@@ -127,8 +127,8 @@ func burst(effect: int, position: Vector3, direction: Vector3, velocity: Vector3
 ## Ends a vent early: no new particles, and the emitter is free once the ones in flight die. A handle from a burst that has since
 ## finished, or whose emitter another burst took, does nothing.
 func stop(handle: int) -> void:
-	var slot: int = (handle & HANDLE_SLOT_MASK) - 1
-	if slot < 0 or slot >= _nodes.size() or ((handle >> 16) & HANDLE_SLOT_MASK) != (_generation[slot] & HANDLE_SLOT_MASK):
+	var slot: int = _slot_of(handle)
+	if slot < 0:
 		return
 	if _state[slot] == _PENDING:
 		_release(slot)
@@ -182,17 +182,16 @@ func busy_count(effect: int = -1) -> int:
 
 ## The velocity the emitter behind `handle` flies at, or ZERO for a stale handle.
 func velocity_of(handle: int) -> Vector3:
-	var slot: int = (handle & HANDLE_SLOT_MASK) - 1
-	if slot < 0 or slot >= _nodes.size() or ((handle >> 16) & HANDLE_SLOT_MASK) != (_generation[slot] & HANDLE_SLOT_MASK):
+	var slot: int = _slot_of(handle)
+	if slot < 0:
 		return Vector3.ZERO
 	return _velocity[slot]
 
 
 ## True while the emitter behind `handle` is still taken by that burst.
 func is_live(handle: int) -> bool:
-	var slot: int = (handle & HANDLE_SLOT_MASK) - 1
-	return slot >= 0 and slot < _nodes.size() and ((handle >> 16) & HANDLE_SLOT_MASK) == (_generation[slot] & HANDLE_SLOT_MASK) \
-			and _state[slot] != _IDLE
+	var slot: int = _slot_of(handle)
+	return slot >= 0 and _state[slot] != _IDLE
 
 
 ## The emitter behind `handle`, or null for a stale one.
@@ -222,6 +221,14 @@ func _process(delta: float) -> void:
 			_release(slot)
 	if _busy_count == 0:
 		set_process(false)
+
+
+# The emitter slot `handle` names, or -1 when its burst has been replaced.
+func _slot_of(handle: int) -> int:
+	var slot: int = (handle & HANDLE_SLOT_MASK) - 1
+	if slot < 0 or slot >= _nodes.size() or ((handle >> 16) & HANDLE_SLOT_MASK) != (_generation[slot] & HANDLE_SLOT_MASK):
+		return -1
+	return slot
 
 
 # A free emitter of `effect`, else the oldest busy one. Its old handle goes stale.

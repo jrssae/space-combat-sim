@@ -13,6 +13,11 @@ func test_every_effect_has_a_complete_spec() -> void:
 		assert_lte((spec["speed_mps"] as Vector2).x, (spec["speed_mps"] as Vector2).y, "speed range is ordered")
 
 
+# One buoy's shards must not take vents from each other or from a ship breaking up beside it.
+func test_the_debris_pool_covers_a_whole_break_up() -> void:
+	assert_gte(int(FxSpecs.spec(FxSpecs.DEBRIS)["emitters"]), DebrisPool.SHARD_COUNT)
+
+
 func test_names_are_unique() -> void:
 	var seen: Dictionary = {}
 	for effect: int in FxSpecs.COUNT:
