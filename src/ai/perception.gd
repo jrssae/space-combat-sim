@@ -11,6 +11,7 @@ extends RefCounted
 
 static var _default_capability: ShipCapability = ShipCapability.new()
 static var _default_origin: UniversePos = UniversePos.new()
+static var _no_broadcasts: Array[Contact] = []
 
 ## Sim time, s.
 var now_s: float = 0.0
@@ -42,6 +43,11 @@ var target_hostile: bool = false
 ## Everything active within `ContactScan.SENSOR_RANGE_M` (5 km) but this ship: ships, drones, props, as of this tick,
 ## with their relation to this ship (§16 D33). Shared with other ships of the faction: read, never write.
 var contacts: Array[Contact] = []
+## The broadcasts this ship hears (M3-T17, Q21): contacts beyond the 5 km of `contacts` and within each one's own broadcast
+## range (buoys 1 000 km, allies 100 km), as of this tick, stamped with their relation to this ship
+## (`ContactScan.broadcasts_for`). Avoidance and the fire lane never read it; behaviours do not chase it on their own, only a
+## pilot objective (`AiContext.objective_name`). Shared: read, never write.
+var broadcasts: Array[Contact] = _no_broadcasts
 ## Hostile bolts whose closest approach comes within `ContactScan.INCOMING_MISS_M` (15 m) in the next
 ## `ContactScan.INCOMING_HORIZON_S` (2 s).
 var incoming_fire: int = 0

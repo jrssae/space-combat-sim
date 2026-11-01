@@ -85,6 +85,13 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+	# A voice still sounding at quit would keep its stream alive past the scene ("resources still in use at exit").
+	for voice: AudioStreamPlayer3D in _voices:
+		voice.stop()
+		voice.stream = null
+	for ui: AudioStreamPlayer in _ui_voices:
+		ui.stop()
+		ui.stream = null
 
 
 func _process(delta: float) -> void:

@@ -12,6 +12,11 @@ extends RefCounted
 ## that faction (read-only). When every two bodies are within sensor range of each other (a fight), a ship's list is that
 ## faction list without itself, copied in one go. `incoming_fire` counts the hostile bolts about to pass close by.
 ##
+## Broadcasts (M3-T17, Q21): `shared_broadcasts` is a second, short scan of the frame built from `Targetable.broadcasters()`
+## alone (the buoys and the allies; never a sweep over every body), and `broadcasts_for` gives one ship those beyond the near
+## `SENSOR_RANGE_M` and within each broadcaster's own `broadcast_range_m`, stamped and shared per faction like the contacts.
+## Every faction hears the same broadcasts at the same ranges.
+##
 ## Within a frame the cache is rebuilt when a body it saw has been freed (a test that tears its world down mid-frame); a
 ## body added later in the same frame appears from the next one. Tests that need a fresh scan call `invalidate()`.
 
@@ -21,6 +26,9 @@ const INCOMING_MISS_M: float = 15.0
 const INCOMING_HORIZON_S: float = 2.0
 
 static var _shared: ContactScan = null
+static var _shared_broadcasts: ContactScan = null
+## Returned for a frame with no broadcaster, so a ship that hears nothing allocates nothing. Read, never write.
+static var _no_contacts: Array[Contact] = []
 
 ## The physics frame this scan is of (-1 for one built by hand).
 var physics_frame: int = -1
@@ -45,6 +53,7 @@ var _bolt_velocities: PackedVector3Array = PackedVector3Array()
 var _bolt_factions: Array[StringName] = []
 var _bolt_shooters: PackedInt64Array = PackedInt64Array()
 var _hostile_bolts: Dictionary = {}  # faction StringName -> PackedInt32Array of the bolts hostile to it
+var _reach: PackedFloat64Array = PackedFloat64Array()  # per body, its broadcast range (a broadcast scan only)
 
 
 ## The scan of the current physics frame, built on the first call of the frame.
@@ -56,9 +65,33 @@ static func shared(tree: SceneTree) -> ContactScan:
 	return _shared
 
 
-## Drops the shared scan; the next `shared` call builds a new one.
+## Drops the shared scans; the next `shared` (and `shared_broadcasts`) call builds a new one.
 static func invalidate() -> void:
 	_shared = null
+	_shared_broadcasts = null
+
+
+## The broadcasters of the current physics frame, built on the first call of the frame from `Targetable.broadcasters()`.
+static func shared_broadcasts() -> ContactScan:
+	var frame: int = Engine.get_physics_frames()
+	if _shared_broadcasts == null or _shared_broadcasts.physics_frame != frame or not _shared_broadcasts._bodies_alive():
+		_shared_broadcasts = from_broadcasters(Targetable.broadcasters())
+		_shared_broadcasts.physics_frame = frame
+	return _shared_broadcasts
+
+
+## A scan of the active targetables in `list` only (no cache), each with its broadcast range.
+static func from_broadcasters(list: Array[Targetable]) -> ContactScan:
+	var scan := ContactScan.new()
+	for targetable: Targetable in list:
+		if not targetable.is_active():
+			continue
+		var body := targetable.get_parent() as Node3D
+		if body == null:
+			continue
+		scan._add(body, targetable, Damageable.of(body))
+		scan._reach.append(targetable.broadcast_range_m)
+	return scan
 
 
 ## A scan of the tree as it is now (no cache).
@@ -116,6 +149,24 @@ func contacts_for(own_body_id: int, own_position: Vector3, own_faction: StringNa
 	var out: Array[Contact] = []
 	for i: int in stamped.size():
 		if _body_ids[i] != own_body_id and _positions[i].distance_squared_to(own_position) <= range_sq:
+			out.append(stamped[i])
+	return out
+
+
+## The broadcasts a ship of `own_faction` at `own_position` hears (a scan from `from_broadcasters`): farther than `near_m` (the
+## near contacts hold those) and within each broadcaster's own range, never its own body.
+func broadcasts_for(own_body_id: int, own_position: Vector3, own_faction: StringName,
+		near_m: float = SENSOR_RANGE_M) -> Array[Contact]:
+	if _body_ids.is_empty():
+		return _no_contacts
+	var stamped: Array[Contact] = _stamped_for(own_faction)
+	var near_sq: float = near_m * near_m
+	var out: Array[Contact] = []
+	for i: int in stamped.size():
+		if _body_ids[i] == own_body_id:
+			continue
+		var d_sq: float = _positions[i].distance_squared_to(own_position)
+		if d_sq > near_sq and d_sq <= _reach[i] * _reach[i]:
 			out.append(stamped[i])
 	return out
 

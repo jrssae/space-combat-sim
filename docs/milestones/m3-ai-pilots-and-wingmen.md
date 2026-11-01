@@ -697,6 +697,27 @@ Added 2026-10-26 for Q21 (the AI half the same day); after T10 (raiders on `AiPi
   - Later broadcasters (the station, jumpgates, 1 000 km) are recorded in `docs/roadmap.md` (M6, M7, M11); they register
     with the same list, so the AI sees them too.
 - Done when: AC25 passes (radar and AI halves); the radar rim shows in a capture with a buoy moved past 25 km.
+- Done (2026-10-31):
+  - Targeting: `Targetable.broadcast_range_m` (0 none, `INF` everywhere) is carried on `TargetInfo`; `TargetingSystem.reach_m`
+    is the larger of the sensor range and it, for `in_range`, cycling, selection and dropping a selection. `NavBuoy`
+    broadcasts to `BROADCAST_RANGE_M` (1 000 km), pooled allies to `ShipPool.ALLY_BROADCAST_RANGE_M` (100 km); raiders and
+    the player do not. Ranges are 64-bit differences of this tick's World-local positions, which the rebase keeps equal to
+    universe distances to float32 rounding (`test_broadcast`: 900 km within 1 m after three rebases, 1e9 m within 200 m).
+  - Radar: `RadarModel.dot_for(..., broadcast_range_m)`; beyond 25 km a broadcaster within its range is a `Dot.rim` dot at
+    radius 1 in its true bearing, drawn as a hollow ring by `Hud`.
+  - AI: `Targetable.broadcasters()` is the registry (targetables enter it while in the tree with a range above 0);
+    `ContactScan.shared_broadcasts()` scans only that list once per physics frame and `broadcasts_for` gives a ship the
+    broadcasters beyond 5 km and within their own range, stamped per faction (`Perception.broadcasts`; an empty shared array
+    when none). `contacts` are unchanged, so avoidance, the fire lane and threat picking still see only 5 km.
+  - Objective: `AiContext.objective_name` (console `ai <name> objective <target|none>`, which refuses a name no targetable
+    has; spawn behaviour field `objective`); `refresh` finds it among the near contacts, then the broadcasts. Planner call:
+    `BehaviourAttack` takes the objective as its target over any hostile (not under FORM_ON_ME), score 0.8. Beyond 5 km it
+    transits (`state transit`, no fire): target velocity plus a closing speed it can shed by 5 km at half its main-pod
+    acceleration, clamped to `closing_far_mps`..`TRANSIT_MAX_MPS` (1 000 m/s); inside 5 km the gun run takes over.
+    `test_ai_objective`: a raider 200 km from a buoy closes to 1 995 m in 275 s of sim time, top speed 999 m/s, attacking it
+    with it selected. `ai <name>` prints `objective` while one is set.
+  - Tests: `test_targeting_system` (+2), `test_radar_model` (+2), `test_broadcast` (6), `test_ai_objective` (4); the `ai` smoke
+    run sets and clears an objective. The radar rim capture is left to T12's capture set.
 
 ### M3-T18 Slashing pass and chase
 

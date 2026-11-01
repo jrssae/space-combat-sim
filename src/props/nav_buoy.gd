@@ -32,6 +32,8 @@ const BLINK_DUTY: float = 0.25
 const DEFAULT_BEACON_POSITION: Vector3 = Vector3(0.0, 2.46, 0.0)
 const DEFAULT_BEACON_RADIUS: float = 0.1
 
+## Every buoy broadcasts its position this far (M3-T17, Q21): 1 000 km.
+const BROADCAST_RANGE_M: float = 1.0e6
 ## Hull points of a buoy: six pulse-cannon hits.
 const HULL_MAX: float = 60.0
 ## kg, for the ram maths (§16 D32): the buoy has no physics body, so a ram uses the momentum split with this mass (the
@@ -176,6 +178,7 @@ func _sync_targetable() -> void:
 		return
 	marker.display_name = display_name
 	marker.velocity = velocity
+	marker.broadcast_range_m = BROADCAST_RANGE_M
 
 
 ## Loads the splats, the fallback mesh and the beacon hardpoint once for every buoy. Missing files only warn.

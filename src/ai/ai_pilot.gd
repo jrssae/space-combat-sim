@@ -147,7 +147,7 @@ func select(dt: float) -> AiBehaviour:
 
 
 ## `behaviour`, `state` (the current behaviour's), `for_s` (seconds in control), `scores` (weighted, by id in tie order),
-## and the current behaviour's other fields (attack: `target`, `range_m`, `firing`).
+## `objective` (when it has one, M3-T17), and the current behaviour's other fields (attack: `target`, `range_m`, `firing`).
 func describe() -> Dictionary:
 	var out: Dictionary = {"behaviour": String(current.id) if current != null else "none", "state": "none",
 			"for_s": snappedf(dwell_s, 0.1) if current != null else 0.0}
@@ -155,6 +155,8 @@ func describe() -> Dictionary:
 		var inner: Dictionary = current.describe()
 		for key: Variant in inner:
 			out[key] = inner[key]
+	if not context.objective_name.is_empty():
+		out["objective"] = context.objective_name
 	var by_id: Dictionary = {}
 	for i: int in behaviours.size():
 		by_id[String(behaviours[i].id)] = snappedf(_weighted[i], 0.01)

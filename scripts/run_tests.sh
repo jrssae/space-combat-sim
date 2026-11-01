@@ -383,11 +383,12 @@ reject_text "${log}" "[console] > quit 0" || smoke_status=1
 
 echo "== Console smoke run: an AiPilot raider and the ai provider and command on the real main scene"
 # M3-T06 / AC13: `spawn raider ai` flies the raider profile; `ai.ships`, `ai.by_behaviour`, `ai.think_us` and `ai <name>`
-# (the pilot's behaviour, state and every behaviour's score) answer under --console-strict.
+# (the pilot's behaviour, state and every behaviour's score) answer under --console-strict. M3-T17: `ai <name> objective
+# <target|none>` sets and clears the pilot's objective; the buoys broadcast, so NAV ALPHA is a candidate.
 log="${REPORTS}/console_ai.log"
 ai_status=0
 timeout 180 "${GODOT}" --headless --path . -- --console-strict \
-    --console-exec='wait 30; wave stop; god on; spawn raider ai 1500; wait 120; get ai.ships; get ai.by_behaviour; get ai.think_us; ai RAIDER 1; quit' \
+    --console-exec='wait 30; wave stop; god on; spawn raider ai 1500; wait 120; get ai.ships; get ai.by_behaviour; get ai.think_us; ai RAIDER 1; ai RAIDER 1 objective nav alpha; wait 10; ai RAIDER 1; ai RAIDER 1 objective none; quit' \
     > "${log}" 2>&1 || ai_status=$?
 cat "${log}"
 if (( ai_status != 0 )); then
@@ -400,6 +401,9 @@ expect_line "${log}" "[console] ai.by_behaviour = {attack: 1}" || smoke_status=1
 expect_text "${log}" "[console] ai.think_us = " || smoke_status=1
 expect_text "${log}" "[console] RAIDER 1: attack (" || smoke_status=1
 expect_text "${log}" "[console]   scores: retreat 0.00, evade " || smoke_status=1
+expect_line "${log}" "[console] RAIDER 1: objective NAV ALPHA" || smoke_status=1
+expect_text "${log}" "objective NAV ALPHA" || smoke_status=1
+expect_line "${log}" "[console] RAIDER 1: no objective" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 reject_text "${log}" "ERROR:" || smoke_status=1
 

@@ -21,6 +21,8 @@ var bounding_radius: float = 0.0
 ## Damage by main component, 0..1 per zone of `damage_layout` (empty without zones): the HUD's target silhouette.
 var damage_layout: DamageZones.Layout = DamageZones.Layout.NONE
 var damage_zones: PackedFloat32Array = PackedFloat32Array()
+## The target's broadcast range (`Targetable.broadcast_range_m`, M3-T17), m: 0 for none, `INF` for everywhere.
+var broadcast_range_m: float = 0.0
 
 
 func _init(p_id: int = 0, p_display_name: String = "", p_faction: StringName = &"neutral",

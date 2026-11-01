@@ -35,6 +35,8 @@ const ALLY_SPAWN_BEHAVIOURS: Array[StringName] = [&"idle", &"ai"]
 ## The `AiProfile` an `ai` console spawn flies, by spawn word.
 const SPAWN_PROFILES: Dictionary[StringName, String] = {&"raider": "raider", &"ally": "ally_starfury"}
 const DESPAWN_CHOICES: Array[StringName] = [&"target", &"all"]
+## Allied ships broadcast their position this far (M3-T17, Q21): 100 km. Raiders do not broadcast.
+const ALLY_BROADCAST_RANGE_M: float = 1.0e5
 ## Where parked ships wait: far below the play area (universe metres).
 const PARK_Y_M: float = -1.0e6
 
@@ -81,6 +83,8 @@ func prepare(type: StringName, count: int) -> int:
 			ShipAssembly.OPT_AI: true,
 		})
 		world.spawn(combatant.ship, _park_position(), Basis.IDENTITY, self)
+		if type == ALLY_TYPE:
+			combatant.targetable.broadcast_range_m = ALLY_BROADCAST_RANGE_M
 		_park(combatant)
 		_all.append(combatant)
 		_free.append(combatant)

@@ -242,7 +242,9 @@ bottom centre       three lines: speed (m/s); H and V, the horizontal and vertic
                     your nose in degrees (H + is to the right, V + is up; 0 / 0 = flying straight ahead, H 180 = backward);
                     REF, the distance to the launch point and how fast you are closing on it (+) or opening (-). The radar
                     sphere sits above them: the nose is up the screen, a dot per contact within 25 km (linear
-                    to 5 km, logarithmic beyond), coloured by faction, the selected one ringed; the stalk shows above or below
+                    to 5 km, logarithmic beyond), coloured by faction, the selected one ringed; the stalk shows above or below.
+                    A hollow dot on the rim is a broadcast beyond 25 km, in its true direction: nav buoys are heard to
+                    1 000 km and allied Starfuries to 100 km, and you can cycle to and select them (range in the target box)
 cockpit grid        in the cockpit (or `set settings.hud_targeting_grid on`): an 8 x 8 grid with a circle; the square marker
                     is the target's offset from the nose (+-30 degrees)
 ```

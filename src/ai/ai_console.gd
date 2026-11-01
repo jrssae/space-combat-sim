@@ -3,6 +3,8 @@ extends RefCounted
 ## The console side of the AI drivers (architecture §16.4, M3-T06): provider `ai` (`ships`, `by_behaviour`, `think_us`)
 ## and the command `ai <name>`, which prints that ship's brain `describe()`: `NAME: behaviour (state)`, the behaviour's
 ## other fields, then every behaviour's score with `*` on the one in control (M2 brains print their `describe()`).
+## `ai <name> objective <target|none>` (M3-T17) sets or clears an `AiPilot`'s objective, a target by display name that must
+## exist (in play or parked).
 ## The drivers are many nodes and come and go with the pool, so each `AiPilotDriver` entering the tree registers these with
 ## itself as owner and hands them to another live driver when it leaves (`register`); the entries read
 ## `AiPilotDriver.flying()` every time, so they always show the ships in play.
@@ -24,7 +26,8 @@ static func provider() -> ConsoleVars:
 
 
 static func command() -> ConsoleCommand:
-	return ConsoleCommand.new(&"ai", "Show an AI ship's behaviour, its state and every behaviour's last score",
+	return ConsoleCommand.new(&"ai", "Show an AI ship's behaviour, its state and every behaviour's last score; "
+			+ "ai <name> objective <target|none> sends it at a target from any broadcast range",
 			[ConsoleArg.string_rest(&"name").with_suggestions(names)])
 
 
@@ -51,15 +54,50 @@ static func names() -> PackedStringArray:
 	return out
 
 
-## Handler of `ai <name>` (case-insensitive).
+## Handler of `ai <name>` and `ai <name> objective <target|none>` (names case-insensitive).
 static func run(args: Dictionary) -> ConsoleResult:
 	var wanted: String = String(args[&"name"]).strip_edges()
+	var objective: String = ""
+	var has_objective: bool = false
+	var at: int = (wanted + " ").to_lower().find(OBJECTIVE_WORD)
+	if at >= 0:
+		has_objective = true
+		objective = wanted.substr(at + OBJECTIVE_WORD.length()).strip_edges()
+		wanted = wanted.substr(0, at).strip_edges()
 	for driver: AiPilotDriver in AiPilotDriver.flying():
 		if driver.combatant.display_name.to_lower() == wanted.to_lower():
+			if has_objective:
+				return _set_objective(driver, objective)
 			return ConsoleResult.success(describe_lines(driver.combatant.display_name, driver.brain.describe()))
 	var known: PackedStringArray = names()
 	return ConsoleResult.failure("no AI ship named '%s' (AI ships: %s)%s" % [wanted,
 			", ".join(known) if not known.is_empty() else "none", ConsoleFormat.did_you_mean(wanted, known)])
+
+
+const OBJECTIVE_WORD: String = " objective "
+const OBJECTIVE_NONE: String = "none"
+
+
+static func _set_objective(driver: AiPilotDriver, target_name: String) -> ConsoleResult:
+	var pilot := driver.brain as AiPilot
+	var ship_name: String = driver.combatant.display_name
+	if pilot == null:
+		return ConsoleResult.failure("%s flies an M2 brain, which takes no objective" % ship_name)
+	if target_name.is_empty():
+		return ConsoleResult.failure("usage: ai <name> objective <target|none>")
+	if target_name.to_lower() == OBJECTIVE_NONE:
+		pilot.context.objective_name = ""
+		return ConsoleResult.line("%s: no objective" % ship_name)
+	var known := PackedStringArray()
+	for node: Node in driver.get_tree().get_nodes_in_group(Targetable.GROUP):
+		var targetable := node as Targetable
+		if targetable == null or targetable.display_name.is_empty() or targetable.get_parent() == driver.combatant.ship:
+			continue
+		if targetable.display_name.to_lower() == target_name.to_lower():
+			pilot.context.objective_name = targetable.display_name
+			return ConsoleResult.line("%s: objective %s" % [ship_name, targetable.display_name])
+		known.append(targetable.display_name)
+	return ConsoleResult.failure("no target named '%s'%s" % [target_name, ConsoleFormat.did_you_mean(target_name, known)])
 
 
 ## The `ai <name>` lines for a brain's `describe()`: `NAME: behaviour (state)`, then its other fields, then the scores.

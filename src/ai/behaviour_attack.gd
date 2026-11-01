@@ -9,6 +9,13 @@ extends AiBehaviour
 ## `W_DAMAGED` x its missing hull; the current target gets `KEEP_BONUS` so the choice does not flicker. A new target
 ## restarts the run (APPROACH).
 ##
+## Objective (M3-T17, planner call): while the pilot has an objective it can see or hear (`AiContext.objective`), that is the
+## target, whatever its faction and whoever else is near (the orders still stand aside under FORM_ON_ME), scored as the best
+## value (`OBJECTIVE_VALUE`). Beyond the near scan (5 km) the run does not start: the ship transits, flying at the target's
+## velocity plus a closing speed that it can still shed by 5 km (`TRANSIT_BRAKE_FRACTION` of its main-pod acceleration, a
+## flip included) between the tactics' `closing_far_mps` and `TRANSIT_MAX_MPS`, without firing. Inside 5 km the gun run takes
+## over as for any target.
+##
 ## Score: 0 without an allowed target, else `SCORE_BASE + SCORE_SPAN` x the best target's value (0.3..0.8), so a tail threat
 ## (evade) or a retreat outranks it.
 ##
@@ -24,6 +31,10 @@ const CLOSING_FULL_MPS: float = 200.0
 const SCORE_BASE: float = 0.3
 const SCORE_SPAN: float = 0.5
 const INV_SENSOR_RANGE: float = 1.0 / ContactScan.SENSOR_RANGE_M
+const OBJECTIVE_VALUE: float = 1.0
+## The transit to a far objective: the top closing speed, m/s, and the share of the main-pod acceleration it plans to brake with.
+const TRANSIT_MAX_MPS: float = 1000.0
+const TRANSIT_BRAKE_FRACTION: float = 0.5
 
 var brain: AttackBrain = null
 ## Radians: the aim wander's amplitude per axis.
@@ -33,6 +44,7 @@ var _seed: int = 0
 var _target: Contact = null
 var _engaged_id: int = 0
 var _time_s: float = 0.0
+var _transit: bool = false
 ## Per axis (x right, y up): two frequencies (Hz) and two phases (rad).
 var _wander: PackedFloat64Array = PackedFloat64Array()
 
@@ -50,6 +62,7 @@ func reset() -> void:
 	_target = null
 	_engaged_id = 0
 	_time_s = 0.0
+	_transit = false
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([_seed, "aim"])
 	_wander = PackedFloat64Array()
@@ -62,6 +75,9 @@ func score(ctx: AiContext) -> float:
 	var p: Perception = ctx.perception
 	var keep_id: int = _target.id if _target != null else _engaged_id
 	_target = null
+	if ctx.objective != null and ctx.order != AiContext.Order.FORM_ON_ME:
+		_target = ctx.objective
+		return clampf(SCORE_BASE + SCORE_SPAN * OBJECTIVE_VALUE, 0.0, 1.0)
 	var best: float = -INF
 	var at_will: bool = ctx.order == AiContext.Order.ENGAGE_AT_WILL  # every hostile ship: skip the per-contact check
 	var own_velocity: Vector3 = p.velocity
@@ -96,9 +112,12 @@ func enter() -> void:
 
 
 func think(ctx: AiContext, dt: float) -> PilotCommand:
+	_transit = false
 	if _target == null:
 		brain.firing = false
 		return PilotCommand.new()  # nothing allowed to attack: hold course
+	if _target == ctx.objective and ctx.objective_range_m > ContactScan.SENSOR_RANGE_M:
+		return _transit_to(ctx.perception, ctx.objective_range_m)
 	if _target.id != _engaged_id:
 		_engaged_id = _target.id
 		brain.restart()
@@ -116,6 +135,23 @@ func target_id() -> int:
 	return _target.id if _target != null else PilotBrain.TARGET_NONE
 
 
+# Toward a far objective: closing as fast as the ship can still stop by the near scan's edge, no fire. The run starts afresh
+# inside 5 km.
+func _transit_to(p: Perception, range_m: float) -> PilotCommand:
+	_transit = true
+	_engaged_id = 0
+	brain.firing = false
+	var cmd := PilotCommand.new()
+	var los_dir: Vector3 = (_target.position - p.position) / range_m
+	var brake: float = TRANSIT_BRAKE_FRACTION * p.capability.a_main
+	var arrive: float = sqrt(2.0 * brake * maxf(range_m - ContactScan.SENSOR_RANGE_M, 0.0))
+	var v_des: Vector3 = _target.velocity + los_dir * clampf(arrive, brain.tactics.closing_far_mps, TRANSIT_MAX_MPS)
+	var dv: Vector3 = v_des - p.velocity
+	cmd.flight.rot = PilotSteering.face(p.basis, dv.normalized() if dv.length() > 1.0 else los_dir, p.capability.rate_max_rad)
+	seek_velocity(cmd.flight, p, v_des)
+	return cmd
+
+
 ## The aim offset (radians, right and up) at `t_s` of this behaviour's time: each axis within `aim_error_rad`.
 func aim_offset_at(t_s: float) -> Vector2:
 	if aim_error_rad <= 0.0:
@@ -131,5 +167,7 @@ func aim_offset_at(t_s: float) -> Vector2:
 func describe() -> Dictionary:
 	if _target == null:
 		return {"state": "no target"}
+	if _transit:
+		return {"state": "transit", "target": _target.name, "firing": false}
 	var inner: Dictionary = brain.describe()
 	return {"state": inner["state"], "target": _target.name, "range_m": inner["range_m"], "firing": brain.firing}

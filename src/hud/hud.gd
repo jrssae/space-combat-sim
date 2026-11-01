@@ -348,7 +348,10 @@ class HudCanvas extends Control:
 			var at: Vector2 = RadarModel.to_screen(dot.point, c, r)
 			var foot: Vector2 = RadarModel.to_screen(dot.foot, c, r)
 			draw_line(foot, at, Color(dot.color.r, dot.color.g, dot.color.b, 0.5), w * 0.5)
-			draw_circle(at, (4.5 if dot.selected else 3.0) * s, dot.color)
+			if dot.rim:  # a broadcast beyond the sensors: hollow, on the rim (M3-T17)
+				draw_arc(at, (4.5 if dot.selected else 3.0) * s, 0.0, TAU, 12, dot.color, w * 0.6)
+			else:
+				draw_circle(at, (4.5 if dot.selected else 3.0) * s, dot.color)
 			if dot.selected:
 				draw_arc(at, 8.0 * s, 0.0, TAU, 20, dot.color, w * 0.75)
 

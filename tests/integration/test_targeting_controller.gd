@@ -201,7 +201,11 @@ func test_selection_clears_beyond_sensor_range() -> void:
 	controller.apply(_next())
 	var alpha: NavBuoy = buoys["NAV ALPHA"]
 	watch_signals(controller)
+	# Buoys broadcast (M3-T17): past the sensors a buoy stays within reach up to its own broadcast range.
 	alpha.global_position = Vector3(0.0, 0.0, -(TargetingSystem.SENSOR_RANGE_M + 100.0))
+	await get_tree().physics_frame
+	assert_eq(controller.selected_id(), _id_of("NAV ALPHA"), "beyond the sensors, inside its broadcast: kept")
+	alpha.targetable.broadcast_range_m = 0.0  # a silent target goes at the sensor range
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	assert_eq(controller.selected_id(), TargetingSystem.NO_TARGET)

@@ -7,10 +7,12 @@ extends RefCounted
 ##     {"type": "patrol", "waypoints": [[x, y, z], ...], "cruise_mps": 80}
 ##     {"type": "attack"}
 ##     {"type": "aggro", "waypoints": [...], "cruise_mps": 80, "aggro_range_m": 1500}
-##     {"type": "ai", "profile": "ally_starfury" | "raider" | "instructor", "orders": "engage" | "attack" | "form" | "cover"}
+##     {"type": "ai", "profile": "ally_starfury" | "raider" | "instructor", "orders": "engage" | "attack" | "form" | "cover",
+##      "objective": "NAV ALPHA"}
 ##
 ## `ai` (M3-T06) is an `AiPilot` with the named `AiProfile` (required) and its orders (`AiContext.ORDER_WORDS`, default
-## `engage`); its behaviours are seeded from the seed.
+## `engage`) and an optional objective, a target's display name (M3-T17: it flies to it from any broadcast range); its
+## behaviours are seeded from the seed.
 ##
 ## Returns `{"ok": bool, "error": String, "brain": PilotBrain}`; the error names the offending key
 ## (`behaviour.waypoints[1]: ...`) so a scenario loader can report it with its own prefix.
@@ -61,8 +63,12 @@ static func _ai(spec: Dictionary, seed_value: int) -> Dictionary:
 	var problem: String = profile.validate() if profile != null else "does not load"
 	if not problem.is_empty():
 		return _fail("behaviour.profile '%s': %s" % [profile_name, problem])
+	var objective: Variant = spec.get("objective", "")
+	if not (objective is String):
+		return _fail("behaviour.objective must be a target's name, got %s" % JSON.stringify(objective))
 	var pilot := AiPilot.new(profile, seed_value)
 	pilot.context.order = order as AiContext.Order
+	pilot.context.objective_name = (objective as String).strip_edges()
 	return _ok(pilot)
 
 

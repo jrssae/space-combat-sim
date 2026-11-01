@@ -4,7 +4,7 @@ extends Node
 ## so the ship uses this tick's command (the ship runs at priority 0). Each tick it keeps the ship's `TargetingController` on
 ## the nearest hostile, builds a fresh `Perception` (current positions and velocities, read from the nodes, not from last
 ## tick's candidate list; contacts and incoming fire from this tick's shared `ContactScan`), asks the brain, runs the
-## brain's desired velocity through `AvoidanceMath` (D33), and hands the result to `Combatant.apply_commands`: the very call
+## brain's desired velocity through `AvoidanceMath` (D33; broadcasts beyond 5 km come as `Perception.broadcasts`, M3-T17), and hands the result to `Combatant.apply_commands`: the very call
 ## the player's input goes through. With no brain it does nothing and the ship keeps the commands it has.
 ##
 ## Avoidance: the wish is the brain's `desired_velocity` when it sought one this tick, else the current velocity (a coasting
@@ -143,6 +143,7 @@ func perceive() -> Perception:
 	var own_id: int = ship.get_instance_id()
 	p.contacts = scan.contacts_for(own_id, p.position, p.faction)
 	p.incoming_fire = scan.incoming_fire(own_id, p.position, p.velocity, p.faction)
+	p.broadcasts = ContactScan.shared_broadcasts().broadcasts_for(own_id, p.position, p.faction)
 	p.last_hit_s = last_hit_s
 	p.friendly_fire = bool(Settings.get_value(&"friendly_fire"))
 	return p

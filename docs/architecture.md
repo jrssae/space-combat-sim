@@ -610,7 +610,11 @@ set it directly.
 ### 6.3 Combat functions behind the buttons (M1)
 
 - **TargetingSystem** (pure). Candidates are `Array[TargetInfo]` (`id`, `display_name`, `faction`, `position`,
-  `velocity`), sensor range 25 km.
+  `velocity`, `broadcast_range_m`), sensor range 25 km. Broadcasts (M3-T17, Q21): a candidate is within reach inside the
+  sensor range or inside its own `Targetable.broadcast_range_m` (0 = none; nav buoys 1 000 km, allied ships 100 km, `INF`
+  for M11's hyperspace gates), so it can be cycled to, selected and read out from there. Ranges are taken from this tick's
+  World-local positions in 64-bit; the rebase keeps the World origin near the player, so they equal the universe distances
+  to float32 rounding at that range (6 cm at 900 km, 64 m at 1e9 m).
   - `select_next(ship_pos)`: candidates in range sorted by range; picks the one after the current, wrapping to
     the nearest; with no selection, the nearest.
   - `select_ahead(ship_pos, forward)`: smallest angle between `forward` and the direction to the target, forward
@@ -1429,6 +1433,8 @@ Elements: boresight (nose axis at 1 km), velocity marker (prograde, or retrograd
 speed, target box (at least 24 px, faction colour) with name, range, closing speed and hull bar, an edge arrow when
 the target is off-screen or behind, lead reticle (`InterceptMath`, hidden without a solution or beyond bolt
 range), own hull bar with a `GOD` tag, and one status line (wave, raiders left, kills). `Hud` only draws it.
+Radar (`RadarModel`): inside 25 km as before; a broadcast contact beyond it (M3-T17) sits on the rim in its true direction
+as a hollow dot (`Dot.rim`).
 `settings.show_hud` toggles it; while it shows, the debug overlay hides its own bracket.
 
 ### 15.10 Scenarios and waves
@@ -1589,6 +1595,7 @@ below are M3 tasks.
 | D36 | Wings: the player leads `ALPHA` (finger-four). Orders (attack my target, form on me, engage at will, cover me) arrive as `UiCommand` edges from keys 1-4 (keyboard-only actions) or the console, and go to brains through `WingDirector`, never through `Input` | Maintainer Q1; the pad has no free button and the M5 comms panel will add a pad route on the same `WingDirector` API |
 | D37 | The instructor is an `AiPilot` with the `instructor` profile, a `Route` (paced to the player) and demo `Manoeuvre`s, invulnerable via its scenario spawn | The M8 tour and control checks reuse it unchanged; manoeuvres are closed loops on measured state, so the tutorial can compare the player against the same goals |
 | D38 | Keyboard layout B: every flight key is under the left hand (pods by position on Q/W/E and A/S/D), the mouse flies pitch and yaw, no keyboard pitch/yaw | Maintainer Q9: the right hand is on the mouse |
+| D39 | Broadcasts (M3-T17, Q21): `Targetable.broadcast_range_m` lets a contact be heard beyond the sensors. Targeting and the radar use it directly; the AI hears the same broadcasts at the same ranges (any faction) as a separate `Perception.broadcasts` list from `ContactScan.shared_broadcasts`, a scan of `Targetable.broadcasters()` alone. `ContactScan` (5 km) stays the near list for avoidance, the fire lane and threats. Behaviours do not chase far contacts on their own: a pilot **objective** (`AiContext.objective_name`, `ai <name> objective <target|none>`, a spawn's `objective`) makes the attack transit to it and attack it once inside 5 km | Missions (M5) send raiders at a buoy or the station from beyond sensor range; one registry, no second sweep over every body, so AC13's budget holds |
 
 ### 16.2 Layout additions
 
@@ -1634,5 +1641,6 @@ data/scenarios/{instructor_route,dogfight}.json
 
 Commands: `relation <a> <b> [friendly|neutral|hostile]` / `relation reset`; `wing order <attack|form|engage|cover>`;
 `wing formation <finger_four|wedge|line_abreast>`; `wing replenish`; `spawn ally [idle|ai] [distance_m] [yaw_deg] [pitch_deg]`; `kill allies`; `ai <name>`;
+`ai <name> objective <target|none>` (M3-T17: an `AiPilot` flies to the named target from any broadcast range and attacks it);
 `scenario [free_flight|combat_sandbox|instructor_route|dogfight]`. Settings: `friendly_fire` (bool, false), `ram_damage`
 (bool, true).

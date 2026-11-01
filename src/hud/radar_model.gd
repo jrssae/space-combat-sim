@@ -8,8 +8,9 @@ extends RefCounted
 ## dead astern (0, -r, 0), above (0, 0, r), below (0, 0, -r), to the right (r, 0, 0), to the left (-r, 0, 0).
 ##
 ## Radius `r` grows linearly to `LINEAR_RANGE_M` (5 km) where it reaches `LINEAR_RADIUS` (0.6), then logarithmically to
-## 1.0 at `MAX_RANGE_M` (25 km, the sensor range); contacts beyond that are dropped. Each dot has a stalk down (or up) to the
-## equatorial plane (Z = 0), which tells above from below at a glance.
+## 1.0 at `MAX_RANGE_M` (25 km, the sensor range); contacts beyond that are dropped, except a broadcast contact (M3-T17) within
+## its own broadcast range: it sits on the rim (radius 1) in its true direction, drawn hollow (`Dot.rim`). Each dot has a
+## stalk down (or up) to the equatorial plane (Z = 0), which tells above from below at a glance.
 
 const MAX_RANGE_M: float = 25000.0
 const LINEAR_RANGE_M: float = 5000.0
@@ -29,6 +30,8 @@ class Dot extends RefCounted:
 	var selected: bool = false
 	## True when the contact is above the ship's plane (the stalk runs down to the foot).
 	var above: bool = true
+	## True for a broadcast contact beyond `MAX_RANGE_M`: on the rim, drawn as a hollow dot.
+	var rim: bool = false
 
 
 ## Sphere radius (0..1) for a range; 0 at 0 m, `LINEAR_RADIUS` at 5 km, 1 at 25 km, more than that is clamped to 1.
@@ -48,12 +51,13 @@ static func radar_direction(body_offset: Vector3) -> Vector3:
 
 
 ## The dot for a contact at World-frame `position`, seen from a ship at `own_position` with orientation `own_basis`; null
-## beyond `MAX_RANGE_M`. `faction` and `selected` are carried onto the dot; `viewer_faction` colours it by relation.
+## beyond `MAX_RANGE_M` unless within `broadcast_range_m` (then on the rim). `faction` and `selected` are carried onto the
+## dot; `viewer_faction` colours it by relation.
 static func dot_for(id: int, position: Vector3, faction: StringName, selected: bool, own_position: Vector3,
-		own_basis: Basis, viewer_faction: StringName) -> Dot:
+		own_basis: Basis, viewer_faction: StringName, broadcast_range_m: float = 0.0) -> Dot:
 	var offset: Vector3 = position - own_position
-	var range_m: float = offset.length()
-	if range_m > MAX_RANGE_M:
+	var range_m: float = TargetingSystem.range_between(own_position, position)
+	if range_m > MAX_RANGE_M and range_m > broadcast_range_m:
 		return null
 	var dot := Dot.new()
 	dot.id = id
@@ -61,19 +65,21 @@ static func dot_for(id: int, position: Vector3, faction: StringName, selected: b
 	dot.faction = faction
 	dot.color = Factions.hud_color(Factions.relation(viewer_faction, faction))
 	dot.selected = selected
+	dot.rim = range_m > MAX_RANGE_M
 	dot.point = radar_direction(own_basis.transposed() * offset) * radius_for_range(range_m)
 	dot.foot = Vector3(dot.point.x, dot.point.y, 0.0)
 	dot.above = dot.point.z >= 0.0
 	return dot
 
 
-## Every contact in `infos` (`TargetInfo`s) within sensor range, farthest first and the selected one last, so a drawing pass
+## Every contact in `infos` (`TargetInfo`s) within sensor range or its broadcast range, farthest first and the selected one last, so a drawing pass
 ## in this order leaves the near ones and the selection on top.
 static func dots(infos: Array[TargetInfo], selected_id: int, own_position: Vector3, own_basis: Basis,
 		viewer_faction: StringName) -> Array[Dot]:
 	var out: Array[Dot] = []
 	for info: TargetInfo in infos:
-		var dot: Dot = dot_for(info.id, info.position, info.faction, info.id == selected_id, own_position, own_basis, viewer_faction)
+		var dot: Dot = dot_for(info.id, info.position, info.faction, info.id == selected_id, own_position, own_basis, viewer_faction,
+				info.broadcast_range_m)
 		if dot != null:
 			out.append(dot)
 	out.sort_custom(func(a: Dot, b: Dot) -> bool:

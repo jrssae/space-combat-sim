@@ -8,6 +8,10 @@ extends RefCounted
 ## brain (M3-T07's `WingDirector`; `BrainFactory`'s `orders`) and stay until changed. Later tasks add their own fields here
 ## the same way: the guard post (T10); the route (`route`, T09).
 ##
+## The objective (M3-T17, Q21): one target by display name (`objective_name`), set by `ai <name> objective <target|none>`, a
+## spawn's `objective` or (M5) a mission script. `refresh` finds it among the near contacts, then the broadcasts; the attack
+## flies to it from any broadcast range and attacks it once near, whatever its faction (a raider sent at a buoy).
+##
 ## Orders gate what may be attacked (`may_attack`), so a behaviour that attacks asks the context instead of reading the
 ## order itself:
 ## - ENGAGE_AT_WILL (the default, and a ship without a wing): any hostile ship.
@@ -45,6 +49,8 @@ var leader_link_position: UniversePos = null
 var leader_link_velocity: Vector3 = Vector3.ZERO
 ## The route this pilot leads (M3-T09, the instructor; `BehaviourFollowPath.attach` sets it), or null.
 var route: Route = null
+## The objective's display name ("NAV ALPHA", compared case-insensitively), "" for none (M3-T17).
+var objective_name: String = ""
 
 ## Derived each tick by `refresh`: the leader among the friendly contacts (null when not in sight), the hostile ships in
 ## sensor range with, by the same index, the offset from this ship to each (World frame) and its length, and the ids of
@@ -54,6 +60,9 @@ var hostiles: Array[Contact] = []
 var hostile_offsets: PackedVector3Array = PackedVector3Array()
 var hostile_ranges: PackedFloat64Array = PackedFloat64Array()
 var friendly_ids: PackedInt64Array = PackedInt64Array()
+## The objective's contact this tick (near first, then broadcast), null while it is not seen or heard; and its range, m.
+var objective: Contact = null
+var objective_range_m: float = INF
 
 
 ## The `Order` for a word of `ORDER_WORDS`, or -1.
@@ -88,6 +97,21 @@ func refresh(p: Perception) -> void:
 			friendly_ids.append(c.id)
 			if c.id == leader_id:
 				leader = c
+	objective = null
+	objective_range_m = INF
+	if not objective_name.is_empty():
+		objective = _named(p.contacts, objective_name)
+		if objective == null:
+			objective = _named(p.broadcasts, objective_name)
+		if objective != null:
+			objective_range_m = objective.position.distance_to(own_position)
+
+
+static func _named(contacts: Array[Contact], wanted: String) -> Contact:
+	for c: Contact in contacts:
+		if c.name.length() == wanted.length() and c.name.nocasecmp_to(wanted) == 0:
+			return c
+	return null
 
 
 ## Back to a ship without a wing: engage at will, no leader, no slot, no link (the wing fields only).
