@@ -92,6 +92,7 @@ Record later answers here (rules) or in `docs/design-references.md` (designs), s
 | Q23 | (2026-10-28, maintainer request) Close the visual gap to Unreal without leaving Godot | **A visual pass, in this order**: GDGS relighting with procgen-written per-splat normals, flat hull colours and a picker for GDGS's 8 lights (T21); thrust-driven nozzle lights, muzzle-flash and explosion lights through the picker (T22); `GPUParticles3D` sparks and debris (T23); a denser LOD for the player's ship only (T24); lens flare and motion blur last, each a new dependency or new effect the maintainer signs off first (T25) |
 | Q24 | (2026-10-30, maintainer request) Match the Starfury to the reference 3D model, and draw the HUD's own-ship damage display as a low-poly wireframe | **Done first, before the other open tasks** (M3-T26): `starfury_aurora` generator v3 reshapes the pods, claws, struts and the fuselage behind the cockpit after the model's proportions (written down in `docs/design-references.md`; the model itself stays untracked); the Starfury damage silhouette becomes a low-poly wireframe seen from behind and above, each part coloured by its damage zone |
 | Q25 | (2026-11-01, raised by T20) T20 changes GDGS's renderer and shader, which `CLAUDE.md` forbids for vendored code. Record it as patch 5? | **Fork instead**: the project owns a fork of GDGS, in this repo at `addons/gdgs_scs/`, under the same MIT licence, and every renderer change goes there (T20 and later). It replaces `addons/gdgs_scs/` |
+| Q26 | (2026-11-01, M3-T25's gate) Lens flare and motion blur: which? | **Flare: ARez's "Compositor Lens Effects / Lens flare"** (MIT, pinned at commit `0ce0612`, vendored unedited in `addons/lens_effects/`), falling back to an in-house effect if it does not work on Godot 4.7. **Motion blur: in-house** `CompositorEffect` over the velocity texture, default off; no maintained add-on exists for 4.7 |
 
 Calls made by the planner (say if you want them changed): callsigns `ALPHA 1` (player) to `ALPHA 4`, the instructor
 `INSTRUCTOR`; the default order is **cover me** (hold formation, engage hostiles that come within 2 km of the player);
@@ -1074,6 +1075,7 @@ Added 2026-10-28 for Q23; last of the visual pass; after T21. **Gate**: the firs
 no code until the maintainer picks.
 
 - Goal: a lens flare from the star, and motion blur on fast turns as an option.
+- The maintainer has picked (Q26, 2026-11-01), so the gate is passed. The add-on reads the depth buffer (`lens_flares.glsl`), which the hull depth proxies write, and takes its sun from a `DirectionalLight3D`.
 - Agent: **Sonnet**. Compositor effects; the choice is the maintainer's.
 - Files: `addons/<flare>/` (if vendored, untouched), or `src/rendering/{lens_flare,motion_blur}_effect.gd` and shaders,
   `src/environment/space_environment.tscn` (Compositor), `src/autoload/settings_schema.gd`, `docs/third-party.md`,
