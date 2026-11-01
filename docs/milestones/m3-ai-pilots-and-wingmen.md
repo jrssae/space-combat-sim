@@ -191,10 +191,10 @@ Status: `done` (merged into `m3`, its "Done" notes below), `in progress`, `not s
 | M3-T19 | Splat LOD chain and `LodSwitcher` (Q22) | T08 | Opus | done (2026-11-01) |
 | M3-T20 | Resident splat budget: GDGS patch 5 (Q22) | T19 | Opus | in progress |
 | M3-T21 | Splat relighting: procgen normals, flat colours, `LightPicker` (Q23) | T19 | Opus | done (2026-11-01) |
-| M3-T22 | Ship lights: nozzles, muzzle flashes, explosions (Q23) | T21 | Sonnet | not started |
+| M3-T22 | Ship lights: nozzles, muzzle flashes, explosions (Q23) | T21 | Sonnet | in progress |
 | M3-T23 | `GPUParticles3D` sparks and debris (Q23) | T14 | Sonnet | done |
 | M3-T24 | Hero LOD for the player's ship (Q23) | T20, T21 | Sonnet | not started |
-| M3-T25 | Lens flare and motion blur, after sign-off (Q23) | T21 | Sonnet | not started |
+| M3-T25 | Lens flare and motion blur, after sign-off (Q23) | T21 | Sonnet | in progress |
 | M3-T26 | Starfury after the reference model, wireframe damage display (Q24) | - | Opus | done (second pass 2026-10-31) |
 | M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13-T26 | Opus | not started |
 
