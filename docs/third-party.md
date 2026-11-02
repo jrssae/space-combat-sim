@@ -37,6 +37,7 @@ everyone is welcome to it.
 | Component | Version | Licence | Role |
 |---|---|---|---|
 | Godot Engine | 4.7.2-stable | MIT | Engine (installed locally by `scripts/setup_godot.sh`, never committed) |
+| Godot export templates (Linux x86_64 release and debug only) | 4.7.2-stable | MIT | Release-build measurements only (installed locally by the opt-in `scripts/setup_export_templates.sh`, SHA-512 checked, never committed or shipped) |
 | Jolt Physics | bundled in Godot 4.7 | MIT | 3D physics backend |
 | SDL3 | bundled in Godot 4.7 | Zlib | Gamepad input backend |
 | Python | 3.11+ | PSF-2.0 | Asset generators in `tools/` |
