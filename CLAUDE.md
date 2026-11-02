@@ -52,8 +52,9 @@ been planned were taken for done.
 - Do not create your own branches unless explicitely instructed. branches are expected to tie directly to a milestone, with all tasks kept in that milestone branch.
 - Do not commit `assets/generated/`, `.tools/`, `.godot/`, `references/` or `reports/` (already in `.gitignore`).
 - Do not edit `README.md`, `LICENSE`, `DISCLAIMER.md` (owned by the maintainer) or files under `addons/gut/` and `addons/lens_effects/`
-  (vendored upstream code; see `docs/third-party.md`). `addons/gdgs_scs/` is the project's own fork of GDGS: edit it where
-  the game needs it, keep its MIT `LICENSE`, and record each change in its `PATCHES.md`.
+  (vendored upstream code; see `docs/third-party.md`). `addons/gdgs_scs/` is the project's own fork of GDGS (GitHub:
+  `jrssae/godot-gaussian-splatting`, branch `space-combat-sim`): edit it here where the game needs it, keep its MIT `LICENSE`, record each change in
+  its `PATCHES.md`, and when a change is pushed run `scripts/sync_gdgs_fork.sh "<subject>"` so the fork matches.
 - Statically typed GDScript, one class per file, pure logic in `RefCounted` classes with GUT unit tests in the
   same PR; nodes are thin adapters. Physics in `_physics_process`, visuals in `_process`.
 - Gameplay never reads `Input`; ships consume `FlightCommand` + `CombatCommand` from `InputAdapter` (or, later,

@@ -1,7 +1,8 @@
 # Changes in this fork of GDGS
 
-`addons/gdgs_scs/` is the project's own fork of GDGS, forked on 2026-11-01 from upstream tag v3.3.0
-(commit 70996511607a886dac9fdd5fc59a0445308eb3db, https://github.com/ReconWorldLab/godot-gaussian-splatting).
+`addons/gdgs_scs/` is the project's own fork of GDGS, forked on 2026-11-01 from upstream tag v3.3.0 (commit d9de8db,
+https://github.com/ReconWorldLab/godot-gaussian-splatting). The fork is https://github.com/jrssae/godot-gaussian-splatting, branch
+`space-combat-sim`; `scripts/sync_gdgs_fork.sh` in the game's repo keeps it the same as this directory.
 It stays under upstream's MIT licence (`LICENSE`, unchanged, copyright ReconWorldLab). Edit it freely, and record every
 change below with how to revert it. Each changed line carries a `[space-combat-sim patch]` comment, so a later rebase
 onto a newer upstream can find them. Patches 1-4 were made while the addon was still vendored as `addons/gdgs/`.

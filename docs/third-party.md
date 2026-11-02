@@ -19,16 +19,18 @@ resolve the shader's `#include "godot/scene_data_inc.glsl"` and caches an empty 
 Vendored addons are upstream code: do not edit them in place. If a patch is unavoidable, put it in
 `addons/<name>/PATCHES.md`, keep it minimal, and upstream it.
 
-## Forked in this repository (`addons/`)
+## Our fork (`addons/`)
 
 | Component | Forked from | Location | Licence | Upstream |
 |---|---|---|---|---|
-| GDGS (Godot Gaussian Splatting plugin) | v3.3.0, commit `7099651` | `addons/gdgs_scs/` (+ `addons/gdgs_scs/LICENSE`) | MIT, unchanged (copyright ReconWorldLab) | https://github.com/ReconWorldLab/godot-gaussian-splatting |
+| GDGS (Godot Gaussian Splatting plugin), by ReconWorldLab | v3.3.0, commit `d9de8db` | `addons/gdgs_scs/` (+ `addons/gdgs_scs/LICENSE`); fork: https://github.com/jrssae/godot-gaussian-splatting, branch `space-combat-sim` | MIT, unchanged (copyright ReconWorldLab) | https://github.com/ReconWorldLab/godot-gaussian-splatting |
 
-The project owns this fork (maintainer, 2026-11-01) because the game needs renderer changes upstream may never take. Edit
-it where the game needs it. `addons/gdgs_scs/PATCHES.md` lists every change and how to revert it; the general fixes are
-still upstream candidates. The fork keeps upstream's licence, so the rest of the project stays GPL-3.0 and this directory
-stays MIT.
+The project owns this fork (maintainer, 2026-11-01) because the game needs renderer changes upstream may never take. Edit it in
+this repo, where the game needs it, then run `scripts/sync_gdgs_fork.sh "<subject>"`, which commits the same tree to the fork, pushes
+it and updates the pin in `scripts/vendor_addons.sh`. `addons/gdgs_scs/PATCHES.md` lists every change and how to revert it; the general fixes
+are still upstream candidates. The fork keeps upstream's licence, so the rest of the project stays GPL-3.0 and this directory
+stays MIT. The fork's description says it is vibe coded for this project and not intended or optimized for anyone else's use, though
+everyone is welcome to it.
 
 ## Used but not vendored
 

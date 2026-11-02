@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Vendors the pinned third-party Godot addons into addons/. Run once per version bump and commit the
 # result together with docs/third-party.md. Only the addon directories (and their licences) are copied.
-# GDGS is not listed: addons/gdgs_scs/ is the project's own fork (docs/third-party.md).
+# Usage: scripts/vendor_addons.sh [name ...]; with no name, all of them. gdgs_scs is the project's own fork of GDGS, whose pin
+# scripts/sync_gdgs_fork.sh keeps current (docs/third-party.md).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -13,10 +14,14 @@ trap 'rm -rf "${TMP}"' EXIT
 ADDONS=(
     "gut|https://github.com/bitwes/Gut|v9.7.1|addons/gut|LICENSE.md"
     "lens_effects|https://github.com/ARez2/compositor-effect-lens-effects|0ce061271f672f05fbb9aed08a61e019a875c1ad|addons/lens_effects|LICENSE"
+    "gdgs_scs|https://github.com/jrssae/godot-gaussian-splatting|1e0d2fb3b2ca08bbe31411183ffdfad166f1a858|addons/gdgs_scs|LICENSE"
 )
 
 for entry in "${ADDONS[@]}"; do
     IFS='|' read -r name url tag addon_dir licences <<< "${entry}"
+    if (( $# > 0 )) && [[ " $* " != *" ${name} "* ]]; then
+        continue
+    fi
     echo "== ${name} ${tag}"
     if [[ "${tag}" =~ ^[0-9a-f]{40}$ ]]; then
         git init -q "${TMP}/${name}"
