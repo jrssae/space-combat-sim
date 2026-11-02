@@ -88,8 +88,8 @@ var _combat: CombatCommand = CombatCommand.new()
 var _combat_fresh: bool = false
 var _fallback_active: bool = false
 var _interior_visible: bool = false
-# Levels of detail (M3-T19): the splat node per level, the levels in order (the first is `spec.splat_lod`, `HullSplats`), and
-# the one drawn.
+# Levels of detail (M3-T19): the splat node per level, the levels in order (`HullSplats` is `spec.splat_lod`; the player's hero
+# level, -1, comes before it, M3-T24), and the one drawn.
 var _lod_nodes: Array[GaussianSplatNode] = []
 var _lod_levels: PackedInt32Array = PackedInt32Array()
 var _lod_level: int = 0
@@ -534,27 +534,47 @@ func _load_far_levels(base: Dictionary) -> void:
 		var path: String = SplatLod.file_path_in(manifest, spec.asset_id, level)
 		if path.is_empty() or not ResourceLoader.exists(path):
 			continue
-		var node_name: String = "HullSplatsLod%d" % level
-		var node := get_node_or_null(NodePath(node_name)) as GaussianSplatNode
-		var resource := load(path) as GaussianResource
-		if node == null:
-			node = GaussianSplatNode.new()
-			node.name = node_name
-			node.transform = hull_splats.transform
-			node.visible = false
-			node.gaussian = resource
-			SplatLightingLoader.attach(node, SplatLod.lighting_path_in(manifest, spec.asset_id, level))
-			add_child(node)
-			var sync := get_node_or_null(^"HullSplatSync") as SplatPoseSync
-			if sync != null:
-				sync.add_splats(node)
-		elif node.gaussian != resource:
-			node.gaussian = resource
-			SplatLightingLoader.attach(node, SplatLod.lighting_path_in(manifest, spec.asset_id, level))
-		_lod_nodes.append(node)
+		var lighting: String = SplatLod.lighting_path_in(manifest, spec.asset_id, level)
+		_lod_nodes.append(_level_node("HullSplatsLod%d" % level, path, lighting))
 		_lod_levels.append(level)
 	_lod_level = _lod_levels[0]
+	_add_hero_level()  # drawn once the switcher asks for it, never as the first frame's guess
 	_apply_hull_visuals()
+
+
+# The finest level of all, in front of the chain, for a ship whose spec asks for it and while `settings.splat_hero` is on
+# (read here, once, when the ship is built: its node and splats are fixed from then on, like the other levels).
+func _add_hero_level() -> void:
+	if not spec.splat_hero or not bool(Settings.get_value(&"splat_hero")):
+		return
+	var hero: Dictionary = SplatLod.hero_paths(spec.asset_id)
+	var path: String = hero["path"]
+	if path.is_empty() or not ResourceLoader.exists(path):
+		push_warning("Ship: %s has no imported hero level (run scripts/gen_assets.sh, then import); drawing LOD0 at the closest" % spec.asset_id)
+		return
+	_lod_nodes.push_front(_level_node("HullSplatsHero", path, hero["lighting"]))
+	_lod_levels.insert(0, LodSwitcherMath.HERO)
+
+
+# The hidden splat node of one level: built once, kept in step with the hull, and given a new resource only if it changed.
+func _level_node(node_name: String, path: String, lighting: String) -> GaussianSplatNode:
+	var node := get_node_or_null(NodePath(node_name)) as GaussianSplatNode
+	var resource := load(path) as GaussianResource
+	if node == null:
+		node = GaussianSplatNode.new()
+		node.name = node_name
+		node.transform = hull_splats.transform
+		node.visible = false
+		node.gaussian = resource
+		SplatLightingLoader.attach(node, lighting)
+		add_child(node)
+		var sync := get_node_or_null(^"HullSplatSync") as SplatPoseSync
+		if sync != null:
+			sync.add_splats(node)
+	elif node.gaussian != resource:
+		node.gaussian = resource
+		SplatLightingLoader.attach(node, lighting)
+	return node
 
 
 func _on_hull_setting_changed(key: StringName, _value: Variant) -> void:

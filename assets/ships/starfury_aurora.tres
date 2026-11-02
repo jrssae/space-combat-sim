@@ -24,5 +24,6 @@ hull_max = 300.0
 ram_safe_dv_mps = 5.0
 ram_lethal_dv_mps = 18.0
 engine_glow_color = Color(0.7, 0.9, 1.8, 1)
+splat_hero = true
 weapon = ExtResource("2_weapon")
 metadata/_custom_type_script = "uid://csixdcdy0fu46"

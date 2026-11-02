@@ -79,7 +79,7 @@ func _place(fleet: Array[Combatant], distance_m: float) -> void:
 func test_every_ship_carries_one_node_per_level_and_shows_one() -> void:
 	var fleet: Array[Combatant] = _fleet()
 	await get_tree().process_frame
-	assert_eq(main.ship.lod_levels(), PackedInt32Array([0, 1, 2, 3]), "the player: LOD0-LOD3")
+	assert_eq(main.ship.lod_levels(), PackedInt32Array([-1, 0, 1, 2, 3]), "the player: hero, LOD0-LOD3 (M3-T24)")
 	assert_eq(fleet[0].ship.lod_levels(), PackedInt32Array([0, 1, 2, 3]), "a raider: LOD0-LOD3")
 	assert_eq(fleet[9].ship.lod_levels(), PackedInt32Array([1, 2, 3]), "an ally: LOD1-LOD3")
 	for c: Combatant in fleet:

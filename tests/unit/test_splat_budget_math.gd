@@ -83,3 +83,32 @@ func test_the_same_input_always_gives_the_same_plan() -> void:
 
 func test_ties_in_distance_break_by_order() -> void:
 	assert_eq(SplatBudgetMath.plan([_ship(0, 500.0), _ship(0, 500.0)], 0, 1250)["extra"], PackedInt32Array([1, 0]))
+
+
+# --- a hero chain (M3-T24): level -1 in front of LOD0 ----------------------------------------------------------------
+
+
+const HERO_CHAIN: PackedInt32Array = [-1, 0, 1, 2, 3]
+const HERO_SPLATS: PackedInt32Array = [4000, 1000, 250, 60, 15]
+
+
+func _hero(wanted: int, distance: float) -> Dictionary:
+	return {"wanted": wanted, "levels": HERO_CHAIN, "splats": HERO_SPLATS, "distance": distance, "forced": false}
+
+
+func test_the_chain_index_finds_the_hero() -> void:
+	assert_eq(SplatBudgetMath.chain_index(HERO_CHAIN, -1), 0)
+	assert_eq(SplatBudgetMath.chain_index(HERO_CHAIN, 0), 1)
+	assert_eq(SplatBudgetMath.chain_index(CHAIN, -1), 0, "a chain without it starts at its LOD0")
+
+
+func test_a_hero_steps_down_to_lod0_like_any_level() -> void:
+	var plan: Dictionary = SplatBudgetMath.plan([_hero(-1, 30.0)], 0, 1500)
+	assert_eq(plan["extra"], PackedInt32Array([1]))
+	assert_eq(plan["total"], 1000)
+
+
+func test_the_nearest_ship_is_the_last_to_give_way_so_the_farther_ones_go_before_the_hero() -> void:
+	var plan: Dictionary = SplatBudgetMath.plan([_hero(-1, 30.0), _ship(0, 400.0), _ship(0, 900.0)], 0, 4800)
+	assert_eq(plan["extra"], PackedInt32Array([0, 1, 1]), "the two others give a level; the hero is untouched")
+	assert_true(plan["fits"])

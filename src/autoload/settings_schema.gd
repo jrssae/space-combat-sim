@@ -39,6 +39,8 @@ const ENTRIES: Dictionary = {
 		"doc": "How much of its paint a relit hull shows with no light at all (live)"},
 	&"relight_light_gain": {"type": TYPE_FLOAT, "default": 0.6, "min": 0.0, "max": 4.0,
 		"doc": "How strongly light brightens a relit hull: the key star and every other light (live)"},
+	&"splat_hero": {"type": TYPE_BOOL, "default": true,
+		"doc": "The player's Starfury also loads its hero splat level, about 975k splats, for when it fills the screen (M3-T24); read when the ship is built, so it applies from the next run or spawn"},
 	&"splat_budget": {"type": TYPE_INT, "default": 2000000, "min": 100000, "max": 6000000,
 		"doc": "Splats the renderer can draw at once (M3-T20): 584 bytes of video memory each, however many are on screen; over it, the farthest ships draw a coarser level"},
 	&"lens_flare": {"type": TYPE_BOOL, "default": true,
