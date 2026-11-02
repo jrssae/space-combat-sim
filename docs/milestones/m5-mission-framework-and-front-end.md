@@ -17,7 +17,7 @@ recommended agent model.
 Turn the sandbox into a game you start from a menu. The player boots into a front end, picks free flight (with or without
 encounters) or a mission, and plays it. A mission is a scenario plus a script that talks to the player through subtitles,
 sets objectives, cuts to a cinematic camera, sends raiders at things and ends in a debrief. Settings and controls get real
-menus. Free flight gets traffic: raiders, allied patrols and seven new civilian ships built from the maintainer's
+menus. Free flight gets traffic: raiders, allied patrols and eight new civilian ships built from the maintainer's
 references and online images. The sound pass replaces the engine loops with per-thruster bursts and gives both guns and the bolt impacts new
 voices. M8's tutorial is written on top of all this, so the framework matters more than the one demo mission.
 
@@ -40,6 +40,7 @@ voices. M8's tutorial is written on top of all this, so the framework matters mo
 | Q13 | (maintainer, with Q12) Are civilians unarmed? | **No: civilian ships carry defensive weapons.** They still run, and fire defensively. Details in Q14 |
 | Q14 | What weapons, when do they fire, how strong? | **Small turrets**: 2-4 light turrets per hull by size, each with its own firing arc, lead-aimed, about 1.5 km range, built as a turret system M12's capital ships can reuse. **Only at attackers**: a turret fires at a ship that has shot at its own ship, or at another civilian or ally close by; a raider flying past is left alone. **Deterrent only**: they hurt raiders and may finish a damaged one, but a raid of two or more raiders still wins unless the player or a patrol helps |
 | Q15 | (maintainer, after reading the menu list) Settings layout | **Options on the left; the bottom left is reserved for a controller image with what each button does; the right side has a place for mission objectives.** It applies to the in-flight pause menu and the settings and controls screens, opened from pause or from the front end |
+| Q16 | (after T11 measured the references) Built from the Saturn 4's parts, the Saturn 8 is only about 168 m and the tanker about 161 m: how do they reach 200 m? | **The Saturns are modular.** The Saturn 4's **100 m is the length of its cargo section**, not of the whole ship. The Saturn 8's **200 m is two Saturn 4 cargo sections** (or two tank sections for the tanker). A **Saturn 4 with tanks** also exists, half a Saturn 8 tanker. **The Saturn 3 uses the same lead ship** (control section) as the 4 and the 8. Ids (planner's call): `saturn_4_tanker` (new) and `saturn_8_tanker` (was `saturn_fuel_tanker`) |
 
 ## Scope
 
@@ -55,7 +56,7 @@ In:
   mode with locked controls, and a debrief.
 - **Comms menu on D-pad Right** with the four wing orders.
 - **One mission**: Buoy defence with a cinematic intro.
-- **Civilian ships**: seven hulls in four generators (the Saturn family with four variants, the Skylark, the Narn
+- **Civilian ships**: eight hulls in four generators (the Saturn family with five variants, the Skylark, the Narn
   transport, the Centauri Brezebel), measured from the references and rebuilt in `tools/procgen`, coloured after online
   images of each ship; factions `civilian`, `narn` and `centauri`.
 - **Free-flight encounters**: raider raids, allied patrols and civilian traffic, seeded, spawned from pools beyond sensor
@@ -244,17 +245,19 @@ Out (explicitly):
 
 ### D59 Civilian ships
 
-- Four generators, seven hulls, the same output contract as §9 and §15.11: hull PLYs for LOD0-3 with lighting records,
+- Four generators, eight hulls, the same output contract as §9 and §15.11: hull PLYs for LOD0-3 with lighting records,
   fallback mesh and depth proxy, `hardpoints.json` with pods and nozzles (main and RCS), collision primitives that cover
   the splats, `cockpit_camera` and `chase_anchor` (the parser needs them), running lights, and `chunks[]` from
   `core/chunks.py`. **Defensive turrets (Q13, Q14, D61):** `hardpoints.json` gains `turrets[]` (2-4 per hull by size,
   placed where they cover the hull's quarters), and each style has one generated turret model; civilians still run
   from raiders (the `civilian` profile) while their turrets fire in their own defence.
-  - `saturn_family` with variants `saturn_3_freighter`, `saturn_4_transport`, `saturn_8_transport` and
-    `saturn_fuel_tanker`. The four share the control section (command sphere), the truss spine, the engine section and
-    the cargo-arm parts. The Saturn 4 transport (about 100 m, Q8) fixes the size of the shared parts; the Saturn 8 and the
-    tanker reach about 200 m by their longer spines; the Saturn 3 carries three of the same transport pods in a group behind
-    the same control section, so its length follows from the parts.
+  - `saturn_family` with variants `saturn_3_freighter`, `saturn_4_transport`, `saturn_4_tanker`, `saturn_8_transport` and
+    `saturn_8_tanker` (Q16). The family is modular: one **lead ship** (the control section with the command sphere, its
+    truss and the engine section, the same size on every variant) plus cargo. A **Saturn 4 cargo section** (four
+    transport pods on their arms, or the tank group) is **100 m long**. The Saturn 4 transport and the Saturn 4 tanker
+    carry one such section; the Saturn 8 transport and the Saturn 8 tanker carry two of the same sections, **200 m** of
+    cargo; the Saturn 3 freighter carries three of the same transport pods in a group behind the same lead ship. Each
+    ship's overall length is the lead ship plus its cargo, so it follows from the parts.
   - `skylark_transport` (about 60 m): a central body with two engine nacelles on short pylons and a rear module.
   - `narn_transport` (about 70 m): a crescent bow, a boxy cargo hull and engines on the flanks, in a new `narn` style.
   - `centauri_brezebel` (about 60 m): the Centauri Brezebel transport (`references/Centauri_Brezebel_Transport.stl`, an
@@ -263,13 +266,13 @@ Out (explicitly):
   orthographic views and cross-sections of the untracked STL files, measures them, writes a description of each ship into
   `docs/design-references.md`, and builds the hull in code from those measurements. No STL geometry, vertex data, image or
   texture goes into the generators or into git. Renders and downloaded images go to `reports/refs/<ship>/` (gitignored).
-- **Colours from online images (Q11).** For each of the seven ships the agent finds images online (screen captures, fan
+- **Colours from online images (Q11).** For each of the eight ships the agent finds images online (screen captures, fan
   wiki pages), reads the colour scheme off them (base plating, panel and trim colours, markings, window and engine glow),
   and writes it into the ship's description as colour values and where they go. The generators paint from that written
   scheme through the styles `ea_civilian`, `narn` and `centauri`; per-hull trim lives in the variant data. The images
   themselves are references only, like the STLs.
 - Splat budgets scale with size and LOD; ships this large are mostly seen at range, so LOD2 and LOD3 carry most of the
-  time on screen. The task sets each budget so that all seven in view stay within `splat_budget` and records VRAM.
+  time on screen. The task sets each budget so that all eight in view stay within `splat_budget` and records VRAM.
 - Flight: each hull flies through the one `FlightModel` (§15.16), heavy and slow (`ShipSpec` mass, thrust and inertia per
   hull; turning is torque only). Civilians break up into their chunks when destroyed, with the usual explosion.
 
@@ -324,9 +327,9 @@ Out (explicitly):
 | AC8 | `CINEMATIC`: shots from data relative to actors or the origin, unit-tested interpolation; a rebase during a shot moves nothing on screen (test); HUD hidden, letterbox, the player's commands zeroed while the ship keeps its physics; A or Start skips | A | |
 | AC9 | Debrief: result and reason, objectives, time, kills and assists, wing losses, shots and hits; retry restarts the same scenario and seed; menu returns to the front end | A | |
 | AC10 | Buoy defence: starts from the menu with its cinematic intro, runs to success and to failure (buoy destroyed; player destroyed) in headless tests driven by console commands, and ends in the debrief | A | |
-| AC11 | Civilian references: each of the seven ships described in `docs/design-references.md` with the lengths from Q8 and Q11, from orthographic views and cross-sections of its STL; every ship's colour scheme written from online images (Q11) with the sources listed; nothing from the STL files or the images is in git | A | |
-| AC12 | Civilian generators: seven hulls from four generators meet the output contract (LOD0-3 PLYs and lighting records, fallback mesh, hardpoints with pods, RCS, collision, cockpit camera, chase anchor, running lights, chunks); Python tests for budgets, frames, symmetry where the design has it, chunk partition, collision coverage and determinism; every PLY imports in Godot with the manifest's count | A | |
-| AC13 | Civilian ships in the game: each flies through `FlightModel` with zero damping (the damping guard covers it), turns by torque only, flees raiders on the `civilian` profile, takes hull damage, breaks into its chunks, shows running lights and switches LOD; raiders attack them through faction data; on the maintainer's GPU all seven in view at once run with `splat_backend = compute`, FPS and VRAM recorded by the agent | A | |
+| AC11 | Civilian references: each of the eight ships described (the Saturn 4 tanker from the Saturn parts, Q16) in `docs/design-references.md` with the lengths from Q8, Q11 and Q16, from orthographic views and cross-sections of its STL; every ship's colour scheme written from online images (Q11) with the sources listed; nothing from the STL files or the images is in git | A | |
+| AC12 | Civilian generators: eight hulls from four generators meet the output contract (LOD0-3 PLYs and lighting records, fallback mesh, hardpoints with pods, RCS, collision, cockpit camera, chase anchor, running lights, chunks); Python tests for budgets, frames, symmetry where the design has it, chunk partition, collision coverage and determinism; every PLY imports in Godot with the manifest's count | A | |
+| AC13 | Civilian ships in the game: each flies through `FlightModel` with zero damping (the damping guard covers it), turns by torque only, flees raiders on the `civilian` profile, takes hull damage, breaks into its chunks, shows running lights and switches LOD; raiders attack them through faction data; on the maintainer's GPU all eight in view at once run with `splat_backend = compute`, FPS and VRAM recorded by the agent | A | |
 | AC14 | Encounters: `EncounterPlan` is deterministic per seed (test); raids, patrols and traffic spawn 6-12 km out from pools and are released past 30 km; raiders sent at a civilian attack it and allies engage them; `encounter_max_ships` holds; encounters off leaves free flight empty; `encounters` provider and an `encounter <kind>` command to force one | A | |
 | AC15 | Sounds: generator tests pin the new guns' shape (length, flat hold, constant pitch, energy band after the 0.25 register, inharmonic partials), the impact's length and band, and the engine bursts' band (no energy to speak of below 300 Hz); voices sit at the nozzles; the voice cap holds and the per-frame update is linear in voices (work count); the old loops are gone | A | |
 | AC16 | Cost: M5 adds nothing measurable to AC13 of M3 (the paired 13-ship AI budget still passes, `test_ai_think_time`); the mission runner with 20 triggers and the encounter director stay inside their work counts | A | |
@@ -376,7 +379,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T09 | B | Debrief | T05, T02 | Sonnet | Model and screen | not started |
 | T10 | B | Mission: Buoy defence with a cinematic intro | T06, T07, T08, T09 | Opus | Pacing, writing and the first real use of the API | not started |
 | T11 | C | Civilian references: measurements and descriptions | - | Opus | Reading shapes off renders; sizes from Q8 | not started |
-| T12 | C | `saturn_family` generator (four variants) | T11 | Opus | Large shared part library | not started |
+| T12 | C | `saturn_family` generator (five variants, Q16) | T11 | Opus | Large shared part library | not started |
 | T13 | C | `skylark_transport` generator | T11 | Opus | Geometry | not started |
 | T14 | C | `narn_transport` generator and the `narn` style | T11 | Opus | Geometry and a new style | not started |
 | T15 | C | `centauri_brezebel` generator and the `centauri` style | T11 | Opus | Geometry and a new style | not started |
@@ -509,11 +512,11 @@ whose trigger never arose). Update the column with each task's commit.
   `EA_Saturn_Fuel_tanker.stl`, `Narn_Transport.stl`, `EA_Skylark_transport.stl`, `Centauri_Brezebel_Transport.stl` (ASCII;
   the others are binary). `EA_cargo_pod.stl` may help with the Saturn transport pods.
 - **Notes:** the STLs are at 3D-print scale and each file has its own scale, so every measurement is relative and scaled to
-  the ship's length (Q8, Q11): Saturn 4 transport about 100 m; Saturn 8 transport and fuel tanker about 200 m; Saturn 3
-  from the shared parts (three of the Saturn 4's transport pods behind the same control section); Narn transport about
-  70 m; Skylark about 60 m; Brezebel about 60 m. Check that the Saturn 4's part sizes put the Saturn 8 near 200 m; if the
-  two disagree, the stated lengths win and the difference goes into the description. The longest axis of a file is not
-  always its length (the Narn transport's is its span); read the nose and the engines from the views.
+  the ship's length (Q8, Q11, Q16): the Saturns are modular, one lead ship (control section) the same size on every
+  variant plus cargo; a Saturn 4 cargo section (pods or tanks) is 100 m, a Saturn 8 carries two of them (200 m of cargo),
+  the Saturn 4 tanker is half a Saturn 8 tanker, and the Saturn 3 carries three of the same pods behind the same lead
+  ship; Narn transport about 70 m; Skylark about 60 m; Brezebel about 60 m. The longest axis of a file is not always its
+  length; read the nose and the engines from the views.
 - **Colours (Q11):** for each ship, find online images (search the ship's name; fan wiki pages and screen captures), save
   them under `reports/refs/<ship>/web/` (each download in its own new directory, never opened by an interpreter), list the
   source URLs in the description, and write the scheme as colours and where they go. Pick values that read like the
@@ -525,7 +528,7 @@ whose trigger never arose). Update the column with each task's commit.
 
 ### M5-T12 `saturn_family` generator
 
-- **Goal:** AC12 for the four Saturn hulls.
+- **Goal:** AC12 for the five Saturn hulls (Q16).
 - **Files:** `tools/procgen/assets/saturn_family.py`, shared parts in `tools/procgen/parts/` (command sphere, truss spine,
   engine section, cargo module, tank), `tools/procgen/styles/ea_civilian.py`, `tools/procgen/tests/test_saturn_family.py`.
 - **Turrets (D61):** each variant's `hardpoints.json` carries `turrets[]` (2-4 by size) and the `ea_civilian` style a
@@ -533,7 +536,7 @@ whose trigger never arose). Update the column with each task's commit.
   same for their hulls and styles.
 - **Notes:** one generator, a variant per asset id, so `python3 -m tools.procgen build saturn_4_transport` builds one hull.
   The variant data holds the length (Q8) and the module layout.
-- **Done when:** AC12 for the four variants; `tests/integration/test_splat_import.gd` covers them.
+- **Done when:** AC12 for the five variants; `tests/integration/test_splat_import.gd` covers them.
 
 ### M5-T13 `skylark_transport` generator
 
@@ -570,9 +573,9 @@ whose trigger never arose). Update the column with each task's commit.
 ### M5-T16 Civilian ships in the game
 
 - **Goal:** AC13 (D58 factions, D59).
-- **Files:** `data/factions.json` (`civilian`, `narn`, `centauri`, the relations), `src/game/ship_catalog.gd` (seven types),
+- **Files:** `data/factions.json` (`civilian`, `narn`, `centauri`, the relations), `src/game/ship_catalog.gd` (eight types),
   `assets/specs/` or wherever `ShipSpec` resources live (one per hull: mass, thrust, inertia, limits), the pools and
-  `LodSwitcher` entries, running lights, `DestructionDirector` chunk sets, `data/scenarios/civilian_showcase.json` (all seven
+  `LodSwitcher` entries, running lights, `DestructionDirector` chunk sets, `data/scenarios/civilian_showcase.json` (all eight
   parked in view, for the GPU check and the maintainer), `tests/integration/test_civilian_ships.gd`.
 - **Notes:** check that `PilotSteering` and avoidance cope with a 200 m hull that turns slowly (radius from the collision
   shapes); if a fix is needed in the AI, keep it outside M4's files or list it. GPU check per `CLAUDE.md`: windowed run of
