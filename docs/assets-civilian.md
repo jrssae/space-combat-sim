@@ -33,8 +33,8 @@ Big ships are mostly seen far away. With `LodSwitcherMath`'s thresholds (LOD0 fr
 from 60 px, LOD2 from 16 px, at 1080p and 75 degrees vertical), a 258.5 m Saturn 8 is LOD0 inside 910 m, LOD1 to 3.0 km
 and LOD2 to 11.4 km; a 158.5 m Saturn 4 switches at 560 m, 1.9 km and 7.0 km; the 119.5 m Saturn 3 at 420 m, 1.4 km
 and 5.3 km; a 60 m hull at 210 m, 700 m and 2.6 km. Raiders jump in 6 to 12 km out; patrols and civilians spawn 26 to
-30 km out, past the player's 25 km radar, on routes that pass 2 to 10 km from the player (Q12, T17). LOD2 and LOD3
-carry most of the screen time.
+30 km out, past the player's 25 km radar (Q12). Patrols fly a route through the area; civilian traffic flies a straight
+route that passes 2 to 10 km from the player (T17). LOD2 and LOD3 carry most of the screen time.
 
 The budget rule: all eight at LOD0 at once, plus the player's hero level, the sky and five nav buoys, stays inside
 `settings.splat_budget` (2 000 000). Eight LOD0s make 810 000; with the hero (975 058), the sky (16 000) and five buoys
@@ -47,9 +47,9 @@ all eight).
 | `saturn_4_tanker` | 158.5 m | about 18 400 m² | 70 000 (55 000 to 85 000) | 0.51 m | 17 500 | 4 400 | 1 100 |
 | `saturn_8_transport` | 258.5 m | about 65 000 m² | 210 000 (170 000 to 250 000) | 0.56 m | 52 500 | 13 100 | 3 300 |
 | `saturn_8_tanker` | 258.5 m | about 36 900 m² | 120 000 (95 000 to 145 000) | 0.55 m | 30 000 | 7 500 | 1 900 |
-| `saturn_3_freighter` | 119.5 m | about 19 700 m² | 75 000 (60 000 to 90 000) | 0.51 m | 18 800 | 4 700 | 1 200 |
+| `saturn_3_freighter` | 119.5 m | about 19 700 m² | 75 000 (60 000 to 90 000) | 0.51 m | 18 750 | 4 700 | 1 200 |
 | `skylark_transport` | 60 m | 6 400 m² | 60 000 (48 000 to 72 000) | 0.33 m | 15 000 | 3 800 | 900 |
-| `narn_transport` | 70 m | 9 200 m² | 75 000 (60 000 to 90 000) | 0.35 m | 18 800 | 4 700 | 1 200 |
+| `narn_transport` | 70 m | 9 200 m² | 75 000 (60 000 to 90 000) | 0.35 m | 18 750 | 4 700 | 1 200 |
 | `centauri_brezebel` | 60 m | 8 000 m² | 70 000 (55 000 to 85 000) | 0.34 m | 17 500 | 4 400 | 1 100 |
 | All eight | | | 810 000 | | 202 500 | 50 700 | 12 700 |
 

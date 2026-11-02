@@ -177,7 +177,7 @@ forward, so +Z is aft) with the origin at the nose, the raider's authored frame.
 
 ### Saturn family: Earth Alliance freighters
 
-The four Saturn models are one family built from the same parts. On screen this is the Earth Alliance freighter the
+The four Saturn STL models are one family built from the same parts. On screen this is the Earth Alliance freighter the
 fan wiki calls the "Achilles" type: a disc-shaped bridge, a truss, a banded cylinder and cargo pods. The wiki notes
 that these ships were assembled from a few reconfigurable parts, and that the tubular sections were first built for
 the tanker in "Midnight on the Firing Line". "Saturn" is the fan models' name, not one from the show.
@@ -354,15 +354,17 @@ long, 50.5 m wide, 30.8 m tall. In the model each junction module has two recess
 - Pods: three, turned 90 degrees against the transports'. Their long axis runs across the ship and the kite section
   points fore and aft, short side forward; the hexagonal end frames face port and starboard. One pod sits on top on
   the centre line and two below, side by side; the top pod rests over the inner halves of the lower two.
-- The model's pods are smaller than the shared pod: at the family scale each is 37.9 m across over its end frames,
-  15.0 m tall and 30.4 m deep, against the shared pod's 43.0 m across, 17.3 m tall and 31.1 m deep (turned). The model
-  is 77.1 m across and its stack 31.3 m tall; with the shared pods the Saturn 3 is 93.1 m across and 35.9 m tall.
+- The model's pods are smaller than the shared pod. Measured over their end frames at the family scale, each is
+  34.6 m across, 15.8 m tall and 31.1 m deep (the body alone 32.6 x 15.0 x 30.4 m; the frames stand about 1 m proud
+  of each end). The shared pod, turned, is 43.0 x 17.3 x 31.1 m, 24 % wider and 10 % taller. Over the frames the
+  model is 77.1 m across and its stack 32.1 m tall; with the shared pods the Saturn 3 is 93.1 m across and 35.9 m
+  tall.
 - Each pod sits on a mounting block (6.3 x 4.4 x 13.4 m, with vent grilles) on its front face, the lower ones on a
   cross-beam behind the drum frame and the top one on a strut from the drum frame's top drum.
 - Q16 gives the Saturn 3 the same lead ship, engine section included, so the generator adds what the model lacks: the
   forward truss runs on along the axis through the stack to the engine section behind it. To make room the stack rides
-  5.1 m higher on the axis than in the model and the lower pods stand 7.0 m apart (6.0 m in the model): the truss passes
-  between them and under the top pod.
+  about 4.7 m higher on the axis than in the model (the lower pods' tops, over the frames) and the lower pods stand
+  7.0 m apart (4.2 m between their end frames in the model): the truss passes between them and under the top pod.
 
 | Part | z | Place |
 |---|---|---|
