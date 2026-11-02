@@ -66,9 +66,9 @@ from ..parts.hull import (
     WedgeFuselageSpec,
     WedgeStation,
     wedge_cockpit_faces,
-    wedge_cockpit_interior,
     wedge_fuselage,
 )
+from ..parts.cockpit import CockpitSpec, cockpit_interior, cockpit_screens
 from ..parts.propulsion import pilot_tags
 from ..parts.starfury import (
     BladeSpec,
@@ -176,8 +176,8 @@ STARFURY_FUSELAGE = WedgeFuselageSpec(
     glass_facets=("keel", "lower", "upper", "top"),
     mass_kg=16_000.0,
 )
-# The heavy dark frame of the reference view, from inside: 9 cm bars (about 5 deg), a 45 cm sill.
-COCKPIT_BARS = {"bar_width": 0.09, "bar_depth": 0.06, "sill_depth": 0.45}
+# The first-person interior and its screens (M3-T29); the hull's own window stays as it was for the view from outside.
+STARFURY_COCKPIT = CockpitSpec()
 STARFURY_GUNS = FuryGunSpec()
 STARFURY_FITTINGS = FittingsSpec()
 STARFURY_POD = FuryPodSpec(
@@ -417,7 +417,7 @@ def build_parts(
     ).symmetrized("x")
     interior = Part(
         "cockpit_interior",
-        wedge_cockpit_interior(spec.fuselage, style, **COCKPIT_BARS),
+        cockpit_interior(STARFURY_COCKPIT, spec.fuselage.eye, style),
         group="body",
     )
     body = [
@@ -584,6 +584,16 @@ def nav_lights(placed: list[Placed], by_name: dict[str, Any], eye: np.ndarray) -
     }
 
 
+def _screens_json(eye: np.ndarray) -> dict[str, Any]:
+    """The console's screens (M3-T29), in the hardpoints' rounding, so the game builds them where the mesh expects them."""
+    out = {}
+    for name, screen in cockpit_screens(STARFURY_COCKPIT, eye).items():
+        out[name] = {
+            key: _r(screen[key]) for key in ("center", "size", "normal", "up")
+        } | {"corner": round(float(screen["corner"]), JSON_DIGITS)}
+    return out
+
+
 def hardpoints(
     placed: list[Placed], spec: StarfurySpec, chunks: list[dict[str, Any]]
 ) -> dict[str, Any]:
@@ -672,6 +682,7 @@ def hardpoints(
         "rcs": rcs,
         "collision": collision,
         "nav_lights": nav_lights(placed, by_name, eye.position),
+        "screens": _screens_json(eye.position),
         "chunks": [{**c, "joint": joints[c["name"]]} for c in chunks],
     }
 

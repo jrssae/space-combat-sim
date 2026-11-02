@@ -82,6 +82,8 @@ func _ready() -> void:
 				"doc": "Times GDGS rebuilt its GPU buffers (a change of level must not)"},
 		&"gdgs_splat_uploads": {"get": func() -> int: return int(GaussianRenderManager.get_stats().get("splat_uploads", 0)),
 				"doc": "Times GDGS uploaded the splat data (a change of level must not)"},
+		&"gdgs_render_states": {"get": func() -> int: return int(GaussianRenderManager.get_stats().get("render_states", 0)),
+				"doc": "Window sizes holding sort buffers: 1 in play, and the cockpit's screens must not add one"},
 		&"splat_visible": {"get": func() -> int: return int(GaussianRenderManager.get_stats().get("visible", 0)),
 				"doc": "Splats the last frame drew, hidden and off-screen ones left out"},
 		&"splat_clipped": {"get": func() -> bool: return bool(GaussianRenderManager.get_stats().get("clipped", false)),

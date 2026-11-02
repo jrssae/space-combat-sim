@@ -45,6 +45,7 @@ static func get_stats() -> Dictionary:
 		"visible_flagged": manager._scene_registry.get_visible_flag_total(),
 		"resident": manager._scene_registry.get_point_count(),
 		"merges": manager._scene_registry.get_merge_count(),
+		"render_states": manager._gpu_state_cache.render_state_count(),
 	}
 
 func _enter_tree() -> void:

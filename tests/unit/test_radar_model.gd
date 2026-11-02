@@ -134,3 +134,12 @@ func test_dots_carry_each_contacts_broadcast_range() -> void:
 	assert_eq(dots.size(), 1)
 	assert_eq(dots[0].id, 9)
 	assert_true(dots[0].rim)
+
+
+func test_a_dot_carries_its_relation_to_the_viewer() -> void:
+	var hostile: RadarModel.Dot = RadarModel.dot_for(1, Vector3(0.0, 0.0, -100.0), Factions.RAIDERS, false, Vector3.ZERO, Basis.IDENTITY, Factions.EARTH_ALLIANCE)
+	var friendly: RadarModel.Dot = RadarModel.dot_for(2, Vector3(0.0, 0.0, -100.0), Factions.EARTH_ALLIANCE, false, Vector3.ZERO, Basis.IDENTITY, Factions.EARTH_ALLIANCE)
+	var nav: RadarModel.Dot = RadarModel.dot_for(3, Vector3(0.0, 0.0, -100.0), Factions.NEUTRAL, false, Vector3.ZERO, Basis.IDENTITY, Factions.EARTH_ALLIANCE)
+	assert_eq(hostile.relation, Factions.Relation.HOSTILE)
+	assert_eq(friendly.relation, Factions.Relation.FRIENDLY)
+	assert_eq(nav.relation, Factions.Relation.NEUTRAL)

@@ -224,3 +224,19 @@ func test_the_canopy_glass_is_cleared_in_the_cockpit_and_back_outside() -> void:
 	main.camera_rig.mode = CameraRig.Mode.CHASE
 	await _ticks(2)
 	assert_null(main.ship.hull_mesh_fallback.get_surface_override_material(glass), "chase: the real glass again")
+
+
+func test_the_hulls_window_frames_are_cleared_in_the_cockpit_too() -> void:
+	# They would cross the interior's side panes (M3-T29).
+	var mesh: Mesh = main.ship.hull_mesh_fallback.mesh
+	var frame: int = -1
+	for i: int in mesh.get_surface_count():
+		if String(mesh.surface_get_material(i).resource_name).contains("canopy_frame"):
+			frame = i
+	assert_gte(frame, 0, "the hull mesh has a window frame surface")
+	main.camera_rig.mode = CameraRig.Mode.COCKPIT
+	await _ticks(2)
+	assert_not_null(main.ship.hull_mesh_fallback.get_surface_override_material(frame))
+	main.camera_rig.mode = CameraRig.Mode.CHASE
+	await _ticks(2)
+	assert_null(main.ship.hull_mesh_fallback.get_surface_override_material(frame))

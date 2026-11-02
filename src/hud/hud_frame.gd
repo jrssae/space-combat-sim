@@ -1,16 +1,18 @@
 class_name HudFrame
-extends RefCounted
+extends HudSurface
 ## One frame of the combat HUD as screen-space data (architecture §15.9): what `HudLayout.compute` returns and `Hud` draws.
 ## Positions are pixels with y down (as Godot's `Camera3D.unproject_position`); an element that is `visible` is on screen
-## and in front of the camera.
+## and in front of the camera. As a `HudSurface` it is also the layout of the 2D layer; `screens` holds the console's (M3-T29), which
+## draw from this same data.
 
-## viewport height / 1080: sizes and line widths scale with it.
-var scale: float = 1.0
 ## The cockpit view is showing. In the chase view the ship fills the middle of the screen, so the gauges, the radar and the speed
 ## readout move out to the corners (`speed_align_right` is true there) and the whole HUD is drawn fainter (`Hud`).
 var cockpit: bool = false
-var speed_align_right: bool = false
 var viewport_size: Vector2 = Vector2(1920.0, 1080.0)
+## The console's screens by id (`octagon`, `left`, `right`, each a `HudSurface`), when the cockpit view has them; empty otherwise.
+var screens: Dictionary = {}
+## The console's indicator lamps by id, on or off: real states, `HudLayout.LAMP_COLORS` gives their colours.
+var lamps: Dictionary = {}
 
 ## Boresight (the nose axis at 1 km).
 var boresight_visible: bool = false
@@ -26,10 +28,7 @@ var speed_mps: float = 0.0
 var velocity_h_deg: float = 0.0
 var velocity_v_deg: float = 0.0
 var velocity_angles_valid: bool = false
-## The drift sphere (bottom right, by the speed readout): a ship-frame sphere with an arrow along the direction of travel, always
-## drawn. `drift_dir` is the unit direction in radar space (X right, Y forward, Z up; zero when the ship is not moving).
-var drift_centre: Vector2 = Vector2.ZERO
-var drift_radius_px: float = 0.0
+## The drift sphere's arrow: the unit direction of travel in radar space (X right, Y forward, Z up; zero when the ship is not moving).
 var drift_dir: Vector3 = Vector3.ZERO
 ## The reference point: distance to it, and the rate at which that distance closes (+ = approaching), m/s.
 var reference_valid: bool = false
@@ -43,6 +42,7 @@ var target_present: bool = false
 var target_on_screen: bool = false
 var target_box: Rect2 = Rect2()
 var target_color: Color = Factions.NEUTRAL_COLOR
+var target_relation: Factions.Relation = Factions.Relation.NEUTRAL
 var target_name: String = ""
 var target_range_m: float = 0.0
 var target_closing_mps: float = 0.0
@@ -67,41 +67,20 @@ var fuel_unlimited: bool = true
 ## nothing to draw.
 var own_layout: DamageZones.Layout = DamageZones.Layout.NONE
 var own_zones: PackedFloat32Array = PackedFloat32Array()
-var own_silhouette_rect: Rect2 = Rect2()
 var target_layout: DamageZones.Layout = DamageZones.Layout.NONE
 var target_zones: PackedFloat32Array = PackedFloat32Array()
-var target_silhouette_rect: Rect2 = Rect2()
 var charge_fraction: float = 1.0
 var fire_mode: String = ""
-var speed_pos: Vector2 = Vector2.ZERO
-var hull_rect: Rect2 = Rect2()
-var fuel_rect: Rect2 = Rect2()
-var charge_rect: Rect2 = Rect2()
-## The running-lights indicator (M3-T27): its text and its left end, above the charge bar's caption; `running_lights_dark` when off.
+## The running-lights indicator (M3-T27): its text; `running_lights_dark` when off.
 var running_lights_text: String = ""
-var running_lights_pos: Vector2 = Vector2.ZERO
 var running_lights_dark: bool = false
 
-## The targeting grid (cockpit view, or by setting): a square low and centred, a circular reticle, and the target's offset
-## from the nose as a marker (clamped to the grid; `grid_marker_inside` is false when the target is beyond its edge).
-var grid_visible: bool = false
-var grid_rect: Rect2 = Rect2()
-var grid_cells: int = 8
-var grid_marker_visible: bool = false
-var grid_marker: Vector2 = Vector2.ZERO
-var grid_marker_inside: bool = false
-
-## The radar sphere: its centre and radius in pixels, and the dots (far to near, the selected one last).
-var radar_centre: Vector2 = Vector2.ZERO
-var radar_radius_px: float = 0.0
+## The radar's dots (far to near, the selected one last).
 var radar_dots: Array[RadarModel.Dot] = []
 
 var status_line: String = ""
-## The wing roster (M3-T11), top left: one `RosterRow` per slot.
-var roster_rows: Array[HudLayout.RosterRow] = []
-## The order acknowledgement under the status line, centred at `ack_pos` ("" for none).
+## The order acknowledgement under the status line ("" for none).
 var ack_line: String = ""
-var ack_pos: Vector2 = Vector2.ZERO
 
 ## The route waypoint marker (M3-T09; T11 draws the final look): present, its label and range, on screen at `waypoint_pos`,
 ## else an edge arrow at `waypoint_edge_pos` pointing `waypoint_edge_angle` (radians, screen frame), as the target's.

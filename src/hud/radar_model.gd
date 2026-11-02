@@ -27,6 +27,8 @@ class Dot extends RefCounted:
 	var range_m: float = 0.0
 	var faction: StringName = Factions.NEUTRAL
 	var color: Color = Factions.NEUTRAL_COLOR
+	## The contact's relation to the viewer: it picks the console's icon shape and colour.
+	var relation: Factions.Relation = Factions.Relation.NEUTRAL
 	var selected: bool = false
 	## True when the contact is above the ship's plane (the stalk runs down to the foot).
 	var above: bool = true
@@ -63,7 +65,8 @@ static func dot_for(id: int, position: Vector3, faction: StringName, selected: b
 	dot.id = id
 	dot.range_m = range_m
 	dot.faction = faction
-	dot.color = Factions.hud_color(Factions.relation(viewer_faction, faction))
+	dot.relation = Factions.relation(viewer_faction, faction)
+	dot.color = Factions.hud_color(dot.relation)
 	dot.selected = selected
 	dot.rim = range_m > MAX_RANGE_M
 	dot.point = radar_direction(own_basis.transposed() * offset) * radius_for_range(range_m)

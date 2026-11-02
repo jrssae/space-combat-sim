@@ -12,8 +12,22 @@ const MIN_SPEED_FOR_MARKER_MPS: float = 1.0
 const MIN_BOX_PX: float = 24.0
 const EDGE_MARGIN_PX: float = 48.0
 const GRID_SPAN_DEG: float = 30.0
+const LINE_COLOR: Color = Factions.HUD_LINE_COLOR
 const AMBER: Color = Color(1.0, 0.8, 0.2)
 const RED: Color = Color(1.0, 0.3, 0.25)
+## The octagon's grid (M3-T29): red, with the rings and own ship in the line colour.
+const OCTAGON_GRID_COLOR: Color = Color(0.95, 0.12, 0.10)
+const OCTAGON_GRID_ALPHA: float = 0.8
+## Its nav points; allies are the line colour and hostiles amber (`octagon_icon_color`).
+const OCTAGON_NAV_COLOR: Color = Color(0.35, 0.9, 1.0)
+## The console's indicator lamps, by id: lit in this colour, dark otherwise.
+const LAMP_COLORS: Dictionary = {&"assist": Color(0.92, 0.95, 1.0), &"guns": Color(1.0, 0.16, 0.12), &"lights": Color(0.92, 0.95, 1.0),
+		&"track": Color(1.0, 0.16, 0.12)}
+## The screens' heights in layout units; a screen's scale is its pixel height over this, so what it shows fits at any resolution.
+const OCTAGON_UNITS: float = 300.0
+const SIDE_SCREEN_UNITS: float = 250.0
+## The right screen's charge bar: its share of the screen's width.
+const CHARGE_BAR_WIDTH_SHARE: float = 40.0 / 640.0
 ## The wing roster, top left (at 1080 px; scaled): its first row's top-left corner, the row pitch and the hull bar.
 const ROSTER_ORIGIN: Vector2 = Vector2(48.0, 48.0)
 const ROSTER_ROW_PX: float = 24.0
@@ -40,6 +54,7 @@ class RosterRow extends RefCounted:
 static func compute(input: HudInput) -> HudFrame:
 	var f := HudFrame.new()
 	f.viewport_size = input.viewport_size
+	f.size = input.viewport_size
 	f.cockpit = input.cockpit
 	f.scale = maxf(input.viewport_size.y / 1080.0, 0.25)  # a floor, so a degenerate viewport cannot ask for a zero-size font
 	_markers(input, f)
@@ -50,7 +65,18 @@ static func compute(input: HudInput) -> HudFrame:
 	_waypoint(input, f)
 	_wing(input, f)
 	f.status_line = input.status_line
+	f.items = HudSurface.ALL_ITEMS.duplicate()
+	if not f.grid_visible:
+		f.items.erase(HudSurface.GRID)
+	f.lamps = {&"assist": input.assist, &"guns": input.guns_ready, &"lights": input.running_lights, &"track": input.tracking}
+	if on_screens(input):
+		_split_onto_screens(input, f)
 	return f
+
+
+## Whether the instruments are on the console's screens: the cockpit view, in a ship that has them.
+static func on_screens(input: HudInput) -> bool:
+	return input.cockpit and not input.screen_sizes.is_empty()
 
 
 ## Pixel position of a World-frame point and whether it is in front of the camera: `{"in_front": bool, "pos": Vector2}`.
@@ -77,6 +103,16 @@ static func damage_color(severity: float) -> Color:
 	if severity < 0.67:
 		return Color(1.0, 0.55, 0.15)
 	return RED
+
+
+## A contact's colour on the octagon: allies green, hostiles amber, anything else (nav points) cyan.
+static func octagon_icon_color(relation: Factions.Relation) -> Color:
+	match relation:
+		Factions.Relation.FRIENDLY:
+			return LINE_COLOR
+		Factions.Relation.HOSTILE:
+			return AMBER
+	return OCTAGON_NAV_COLOR
 
 
 static func hull_color(fraction: float) -> Color:
@@ -153,7 +189,8 @@ static func _target(input: HudInput, f: HudFrame) -> void:
 	f.target_range_m = t.range_m
 	f.target_closing_mps = t.closing_mps
 	f.target_hull = t.hull_fraction
-	f.target_color = Factions.hud_color(Factions.relation(input.faction, t.faction))
+	f.target_relation = Factions.relation(input.faction, t.faction)
+	f.target_color = Factions.hud_color(f.target_relation)
 	var shown: Dictionary = project(input, t.position)
 	if bool(shown["in_front"]) and on_screen(input, shown["pos"]):
 		f.target_on_screen = true
@@ -257,10 +294,19 @@ static func _gauges(input: HudInput, f: HudFrame) -> void:
 
 static func _grid(input: HudInput, f: HudFrame) -> void:
 	f.grid_visible = input.cockpit or input.show_grid
+	if on_screens(input):
+		f.grid_visible = false  # its place is the octagon
 	if not f.grid_visible:
 		return
 	var side: float = 260.0 * f.scale
-	f.grid_rect = Rect2(Vector2(input.viewport_size.x * 0.5 - side * 0.5, input.viewport_size.y * 0.62 - side * 0.5), Vector2(side, side))
+	_fill_grid(input, f, Rect2(Vector2(input.viewport_size.x * 0.5 - side * 0.5, input.viewport_size.y * 0.62 - side * 0.5), Vector2(side, side)))
+
+
+# The grid on `surface`, in `rect`, with the marker for the selected target.
+static func _fill_grid(input: HudInput, surface: HudSurface, rect: Rect2) -> void:
+	surface.grid_visible = true
+	surface.grid_rect = rect
+	var side: float = minf(rect.size.x, rect.size.y)
 	var t: TargetReadout = input.target
 	if t == null:
 		return
@@ -270,11 +316,11 @@ static func _grid(input: HudInput, f: HudFrame) -> void:
 		return  # behind the beam: no marker (the edge arrow covers it)
 	var az: float = rad_to_deg(atan2(rel.x, -rel.z))
 	var el: float = rad_to_deg(atan2(rel.y, -rel.z))
-	f.grid_marker_inside = absf(az) <= GRID_SPAN_DEG and absf(el) <= GRID_SPAN_DEG
+	surface.grid_marker_inside = absf(az) <= GRID_SPAN_DEG and absf(el) <= GRID_SPAN_DEG
 	var nx: float = clampf(az / GRID_SPAN_DEG, -1.0, 1.0)
 	var ny: float = clampf(el / GRID_SPAN_DEG, -1.0, 1.0)
-	f.grid_marker = f.grid_rect.get_center() + Vector2(nx, -ny) * side * 0.5
-	f.grid_marker_visible = true
+	surface.grid_marker = rect.get_center() + Vector2(nx, -ny) * side * 0.5
+	surface.grid_marker_visible = true
 
 
 # --- radar -------------------------------------------------------------------------------------------------------------
@@ -320,10 +366,22 @@ static func roster_tag(behaviour: String, target: String = "", down: bool = fals
 static func _wing(input: HudInput, f: HudFrame) -> void:
 	var s: float = f.scale
 	var origin: Vector2 = ROSTER_ORIGIN * s
+	# Clear of the debug overlay's text at the top left, while it shows.
+	if input.overlay_bottom_px > 0.0:
+		origin.y = maxf(origin.y, input.overlay_bottom_px + 8.0 * s)
+	f.roster_rows = _roster_rows(input, origin, s)
+	f.ack_line = input.ack_line
+	f.ack_pos = Vector2(input.viewport_size.x * 0.5, (STATUS_Y_PX + ACK_BELOW_STATUS_PX) * s)
+	f.status_pos = Vector2(input.viewport_size.x * 0.5, STATUS_Y_PX * s)
+	f.tracking_pos = Vector2(input.viewport_size.x * 0.5, 62.0 * s)
+
+
+static func _roster_rows(input: HudInput, origin: Vector2, s: float, pitch: float = ROSTER_ROW_PX) -> Array[RosterRow]:
+	var rows: Array[RosterRow] = []
 	for i: int in input.roster.size():
 		var entry: Dictionary = input.roster[i]
 		var row := RosterRow.new()
-		var top: float = origin.y + ROSTER_ROW_PX * s * float(i)
+		var top: float = origin.y + pitch * s * float(i)
 		row.down = bool(entry.get("down", false))
 		row.hull = 0.0 if row.down else clampf(float(entry.get("hull", 0.0)), 0.0, 1.0)
 		row.color = RED if row.down else input.roster_color
@@ -331,6 +389,91 @@ static func _wing(input: HudInput, f: HudFrame) -> void:
 		row.text = "%s  %s" % [str(entry.get("callsign", "")),
 				roster_tag(str(entry.get("behaviour", "")), str(entry.get("target", "")), row.down)]
 		row.text_pos = Vector2(origin.x + (ROSTER_BAR.x + 10.0) * s, top + 16.0 * s)
-		f.roster_rows.append(row)
-	f.ack_line = input.ack_line
-	f.ack_pos = Vector2(input.viewport_size.x * 0.5, (STATUS_Y_PX + ACK_BELOW_STATUS_PX) * s)
+		rows.append(row)
+	return rows
+
+
+# --- the console's screens (M3-T29) ---------------------------------------------------------------------------------------
+
+
+# The cockpit view with screens: the window keeps only what must line up with the world; everything else goes to the console.
+static func _split_onto_screens(input: HudInput, f: HudFrame) -> void:
+	f.items = [HudSurface.BORESIGHT, HudSurface.VELOCITY, HudSurface.TARGET_MARKS, HudSurface.WAYPOINT]
+	f.roster_rows = []
+	f.screens = {}
+	for id: StringName in input.screen_sizes:
+		var size: Vector2 = input.screen_sizes[id]
+		match id:
+			&"octagon":
+				f.screens[id] = _octagon_screen(input, size)
+			&"left":
+				f.screens[id] = _left_screen(size)
+			&"right":
+				f.screens[id] = _right_screen(input, size)
+
+
+static func _screen(size: Vector2, units: float) -> HudSurface:
+	var surface := HudSurface.new()
+	surface.size = size
+	surface.scale = size.y / units
+	return surface
+
+
+# Radar and tactical grid: a red grid filling the display, the sphere over it, and AUTO-TRACK across the top when it is on.
+static func _octagon_screen(input: HudInput, size: Vector2) -> HudSurface:
+	var surface: HudSurface = _screen(size, OCTAGON_UNITS)
+	surface.items = [HudSurface.GRID, HudSurface.RADAR, HudSurface.TRACKING]
+	surface.grid_color = OCTAGON_GRID_COLOR
+	surface.grid_line_alpha = OCTAGON_GRID_ALPHA
+	surface.grid_marker_diagonal = true
+	_fill_grid(input, surface, Rect2(Vector2.ZERO, size))
+	surface.radar_centre = size * 0.5
+	surface.radar_radius_px = 0.40 * size.y
+	surface.radar_icons = true
+	surface.tracking_pos = Vector2(size.x * 0.5, 30.0 * surface.scale)
+	return surface
+
+
+# Own ship: damage wireframe and drift sphere above, the speed large with its angles and reference under them, and at the bottom the hull as
+# a thick full-width bar: in the cockpit view this screen is its only place, so it reads first.
+static func _left_screen(size: Vector2) -> HudSurface:
+	var surface: HudSurface = _screen(size, SIDE_SCREEN_UNITS)
+	var s: float = surface.scale
+	var width: float = size.x / s  # in layout units
+	surface.items = [HudSurface.SPEED, HudSurface.HULL_BAR, HudSurface.FUEL_BAR, HudSurface.RUNNING_LIGHTS, HudSurface.DRIFT, HudSurface.OWN_SILHOUETTE]
+	surface.own_silhouette_rect = Rect2(Vector2(8.0, 18.0) * s, Vector2(minf(130.0, width * 0.38), 90.0) * s)
+	surface.drift_radius_px = 42.0 * s
+	surface.drift_centre = Vector2(width - 8.0 - 42.0, 20.0 + 42.0) * s
+	surface.speed_pos = Vector2(width * 0.5, 158.0) * s
+	surface.speed_size = 30.0
+	surface.running_lights_pos = Vector2(8.0, 126.0) * s  # above the speed block: the REF line can run wide
+	surface.fuel_rect = Rect2(Vector2(width - 8.0 - 74.0, 122.0) * s, Vector2(74.0, 5.0) * s)
+	surface.hull_rect = Rect2(Vector2(8.0, 212.0) * s, Vector2(width - 16.0, 30.0) * s)
+	surface.bar_caption_size = 17.0
+	surface.bar_percent = true
+	return surface
+
+
+# The selected target across the full width, a divider, then the small charge bar at the right edge with the wing and the lines to its left.
+static func _right_screen(input: HudInput, size: Vector2) -> HudSurface:
+	var surface: HudSurface = _screen(size, SIDE_SCREEN_UNITS)
+	var s: float = surface.scale
+	var width: float = size.x / s
+	surface.items = [HudSurface.TARGET_PANEL, HudSurface.TARGET_SILHOUETTE, HudSurface.CHARGE_BAR, HudSurface.STATUS, HudSurface.ACK, HudSurface.ROSTER]
+	surface.target_panel_pos = Vector2(8.0, 24.0) * s
+	surface.target_bar_rect = Rect2(Vector2(8.0, 58.0) * s, Vector2(width * 0.52, 12.0) * s)
+	surface.target_silhouette_rect = Rect2(Vector2(width - 8.0 - 108.0, 6.0) * s, Vector2(108.0, 78.0) * s)
+	surface.divider_y = 90.0 * s
+	var bar_width: float = width * CHARGE_BAR_WIDTH_SHARE
+	surface.charge_vertical = true
+	surface.charge_caption_pos = Vector2(width - 6.0, 106.0) * s
+	surface.charge_rect = Rect2(Vector2(width - 6.0 - bar_width, 126.0) * s, Vector2(bar_width, 250.0 - 126.0 - 6.0) * s)
+	var text_width: float = width - 8.0 - 6.0 - bar_width - 8.0
+	surface.roster_caption_pos = Vector2(8.0, 106.0) * s
+	surface.roster_text_size = 14.0
+	surface.roster_rows = _roster_rows(input, Vector2(8.0, 110.0) * s, s, 20.0)
+	surface.lines_centred = false
+	surface.lines_width = text_width * s
+	surface.ack_pos = Vector2(8.0, 204.0) * s
+	surface.status_pos = Vector2(8.0, 222.0) * s
+	return surface

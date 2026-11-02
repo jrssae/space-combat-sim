@@ -11,6 +11,11 @@ var viewport_size: Vector2 = Vector2(1920.0, 1080.0)
 var cockpit: bool = false
 ## The targeting grid is shown in the chase view too (`settings.hud_targeting_grid`).
 var show_grid: bool = false
+## The console's screens by id, each one's size in pixels (M3-T29). Empty when the ship has none: the cockpit view then keeps the whole HUD
+## on the window.
+var screen_sizes: Dictionary = {}
+## Where the debug overlay's text ends on screen, pixels, while it is showing (0 otherwise): the wing roster moves below it.
+var overlay_bottom_px: float = 0.0
 
 ## The player ship, World frame: pose, velocity, the mean muzzle position and the weapon's bolt speed and lifetime.
 var own_position: Vector3 = Vector3.ZERO
@@ -27,6 +32,9 @@ var show_velocity_marker: bool = true
 var tracking: bool = false
 ## The player's running lights are on (M3-T27).
 var running_lights: bool = true
+## Flight assist is on, and the guns have the charge for a shot: lamps in the console's row (M3-T29).
+var assist: bool = true
+var guns_ready: bool = true
 var muzzle_position: Vector3 = Vector3.ZERO
 var weapon_speed_mps: float = 1000.0
 var weapon_lifetime_s: float = 4.0

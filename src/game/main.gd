@@ -114,6 +114,7 @@ func _ready() -> void:
 	# The Starfury's break-up chunks serve the allies and the player (the player can die in any scenario).
 	debris.prepare(ShipCatalog.PLAYER_TYPE)
 	hud.input_provider = _build_hud_input
+	hud.screens = ship.cockpit_screens
 	director.setup(world, ships, debris, effects, combatant)
 	# Hits, rams, explosions and debris throw their sparks from one fixed pool (M3-T23).
 	($Combat/HitResolver as HitResolver).fx = fx
@@ -306,6 +307,10 @@ func _build_hud_input() -> HudInput:
 	input.reference_position = world.universe_to_local(reference_point())  # with this frame's origin: it follows every rebase
 	input.tracking = ship.get_flight_output().tracking
 	input.running_lights = ship.running_lights
+	input.assist = ship.assist_on
+	input.guns_ready = cannon.gate.capacitor == null or cannon.gate.capacitor.can_afford(1, SimClock.now())
+	input.screen_sizes = hud.screens.sizes() if hud.screens != null else {}
+	input.overlay_bottom_px = overlay.text_bottom_px() if overlay.visible else 0.0
 	var muzzles: Array[Node3D] = ship.get_muzzles()
 	var mean := Vector3.ZERO
 	for muzzle: Node3D in muzzles:
