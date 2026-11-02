@@ -206,7 +206,7 @@ Status: `done` (merged into `m3`, its "Done" notes below), `in progress`, `not s
 | M3-T24 | Hero LOD for the player's ship (Q23) | T20, T21 | Sonnet | in progress |
 | M3-T25 | Lens flare and motion blur, after sign-off (Q23) | T21 | Sonnet | in progress |
 | M3-T26 | Starfury after the reference model, wireframe damage display (Q24) | - | Opus | done (second pass 2026-10-31) |
-| M3-T27 | Running lights, own lights in the fork, cockpit glow, buoy fade (Q27) | T20, T22 | Opus | not started |
+| M3-T27 | Running lights, own lights in the fork, cockpit glow, buoy fade (Q27) | T20, T22 | Opus | in progress |
 | M3-T28 | Starfury last-hit break-up (Q28) | T22, T23 | Sonnet | in progress |
 | M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13-T28 | Opus | in progress |
 
