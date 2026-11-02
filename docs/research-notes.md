@@ -117,3 +117,18 @@ GDGS behaviours that shape our pipeline (read from the v3.3.0 source):
 - llvmpipe runs compute with 8-wide subgroups. GDGS's radix sort needs 32+, so the Compute backend declines
   (local patch) and GDGS renders through its Raster backend: good for geometry, layout, cockpit framing and
   compositing; Compute-only artifacts still need the human tester's GPU.
+
+## Shaders that use Godot's built-in includes (verified 2026-11-01, Godot 4.7.2, M3-T25)
+
+- A compute `.glsl` that does `#include "godot/scene_data_inc.glsl"` (the scene data UBO, as the lens flare add-on's and our motion
+  blur's do) imports to an empty `RDShaderFile` under `godot --headless --path . --import`: the `godot/...` includes are only
+  registered once a real renderer is up (`base_error` = "#include failed for file 'godot/scene_data_inc.glsl'", no versions). A
+  non-headless `--import` compiles it. The import cache is not rebuilt unless the source changes, so a headless import leaves the
+  broken one in `.godot/imported/`. We compile such shaders when the game starts instead (`RuntimeShader`); compiling at run time finds the includes.
+- Forward+ velocity buffer (`needs_motion_vectors`): a render-thread RG16F texture, `prev_uv - current_uv` per pixel (uv units), written
+  by meshes (the hull depth proxies); it stays zero for the sky and for splats. Disabled compositor effects do not request it
+  (`compositor_get_compositor_effects(..., true)` returns enabled ones only).
+- The colour buffer lacks `TEXTURE_USAGE_CAN_COPY_FROM_BIT`, so `texture_copy` out of it fails; an effect that needs the frame as it was
+  samples it and writes to its own scratch image.
+- `RenderSceneBuffersRD.create_texture` takes 10 arguments in 4.7 (a trailing `discardable`).
+- A `CompositorEffect` script cannot call its own methods from `NOTIFICATION_PREDELETE` ("null instance"); free RIDs inline.

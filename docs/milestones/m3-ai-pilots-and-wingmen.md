@@ -96,6 +96,7 @@ Record later answers here (rules) or in `docs/design-references.md` (designs), s
 | Q27 | (2026-11-01, maintainer request) Running lights | **Every ship shows port red, starboard green and a top white light, unless it is trying to be sneaky.** The top white light also lights the top of the Starfury's cockpit section, so its designs and colours read (they come in a later milestone). Every ship has a soft red cockpit light, inside in the cockpit view and faintly in the canopy from outside up close. A raider on patrol is dark and its lights come on when it attacks; raiders in attack waves are lit from the start. The player can switch their own lights off (a key, D-pad Left, a HUD indicator, the console) and the wingmen follow. Visual only: radar and AI detection do not change. Navigation buoys keep a steady light and add a slow fade in and out (M3-T27) |
 | Q28 | (2026-11-01, maintainer request) How a Starfury dies | **The part hit last breaks off first**: the killing hit picks the cockpit or one of the four arms, the explosion starts at that part's detachment point, and that part flies off first. The rest stays joined for a moment, then comes apart one piece at a time over about 1 s with smaller blasts at each joint, ending in the same five pieces (M3-T28) |
 | Q29 | (2026-11-01, maintainer request) The Starfury's interior view looks odd; rebuild it after a new reference and make the horizontal display's screens carry the HUD | **Rebuild it (M3-T29)**: V struts, side panes, sills, red light, per the written description in `docs/design-references.md`. In the cockpit view the instruments move to screens in the console: an octagon (radar and tactical grid), a left screen (own damage, hull, charge, speed, drift) and a right screen (target, wing roster). The window keeps the crosshair, lead marker, target brackets, waypoint marker, and hull and charge bars. The floating targeting grid leaves the cockpit view, its place taken by the octagon. The chase view keeps today's 2D HUD |
+| Q30 | (2026-11-01, maintainer request) What colour is the lens flare? | **The star's**: this system is Epsilon Eridani, an orange dwarf at 5084 K. Only that is needed in M3. The Narn system has a red star, so a system's star is data (`data/star_systems.json`, by `system_id`): a new system is one entry |
 
 Calls made by the planner (say if you want them changed): callsigns `ALPHA 1` (player) to `ALPHA 4`, the instructor
 `INSTRUCTOR`; the default order is **cover me** (hold formation, engage hostiles that come within 2 km of the player);
@@ -211,7 +212,7 @@ Status: `done` (merged into `m3`, its "Done" notes below), `in progress`, `not s
 | M3-T22 | Ship lights: nozzles, muzzle flashes, explosions (Q23) | T21 | Sonnet | done |
 | M3-T23 | `GPUParticles3D` sparks and debris (Q23) | T14 | Sonnet | done |
 | M3-T24 | Hero LOD for the player's ship (Q23) | T20, T21 | Sonnet | in progress |
-| M3-T25 | Lens flare and motion blur, after sign-off (Q23) | T21 | Sonnet | in progress |
+| M3-T25 | Lens flare and motion blur, after sign-off (Q23) | T21 | Sonnet | done (2026-11-01) |
 | M3-T26 | Starfury after the reference model, wireframe damage display (Q24) | - | Opus | done (second pass 2026-10-31) |
 | M3-T27 | Running lights, own lights in the fork, cockpit glow, buoy fade (Q27) | T20, T22 | Opus | in progress |
 | M3-T28 | Starfury last-hit break-up (Q28) | T22, T23 | Sonnet | done (2026-11-01) |
@@ -1259,6 +1260,46 @@ no code until the maintainer picks.
   - Order after GDGS's effect (`PRE_TRANSPARENT`); the HUD and console are canvas layers and are never blurred.
   - `settings.lens_flare` (default on), `settings.motion_blur` (default off) and `motion_blur_strength`.
 - Done when: the maintainer has picked; AC34 passes; AC35's flare and blur lines are in the play-test checklist.
+
+**Done notes (2026-11-01).**
+
+- **Flare: ARez's add-on works on Godot 4.7.2**, so there is no in-house fallback. Vendored at commit `0ce0612` (`scripts/vendor_addons.sh`
+  now pins by full commit when a repo has no tags), `addons/lens_effects/` is unedited with its `LICENSE`; `docs/third-party.md` and
+  `CLAUDE.md`'s rule name it. We use only its `LensFlareEffect` and shader (not `plugin.gd`, not enabled; not `world_environment.gd`,
+  whose job `PostEffects` does through `LensFlareAim`, from `KeyStar`).
+- **One thing the add-on cannot do alone:** its shader `#include`s `godot/scene_data_inc.glsl`, which `--headless --import` cannot
+  resolve (it caches an empty shader, and the import never retries), so the flare would fail on any machine whose first import was the
+  one in `scripts/run_tests.sh`. `SceneLensFlareEffect` (`src/rendering/lens_flare_effect.gd`, a 5-line subclass of the add-on's class)
+  compiles the shader at start-up through `RuntimeShader`; the motion blur does the same. Checked with the headless-imported (broken)
+  cache in place: both effects run. Details in `docs/research-notes.md`.
+- **Occlusion, on the GPU (RX 6950 XT, 960x540):** with the player's hull between camera and star the flare and ghosts vanish, and the god rays
+  turn into the hull's shadow; with `set settings.hull_depth_proxy false` the same frame shows the whole flare through the hull (frames
+  `occl_p11_on` and `occl_p11_noproxy`, kept in `/tmp`, not committed). The star is placed by `PostEffects` and follows the ship as it
+  turns. A node with no depth proxy (debris chunks) does not hide it; buoys and ships have proxies. Not fixed (out of scope).
+- **Motion blur is in-house** (`MotionBlurEffect`, `motion_blur.glsl`, `motion_blur_copy.glsl`): over the velocity texture for hull pixels, and
+  **derived from the camera's turn since last frame (previous and current view and projection) for pixels at depth 0**, because the velocity
+  buffer is zero for the sky and for splats. Built both. On a 1.5 rad/s turn the stars streak and the hull stays sharp (checked on the GPU,
+  screenshots `blur_off` / `blur_on_5` / `blur_on_rest`); at rest the frame is untouched. The colour buffer cannot be copied out of
+  (no `CAN_COPY_FROM`), hence two passes through a scratch image. HUD and console are canvas layers: not blurred (structural; the HUD
+  was off in the blur shots, so confirm it by eye with AC35).
+- **Rebase:** `PostEffects.watch_world(world)` (called from `Main`) listens to `World.rebased`; `MotionBlurGate` blanks the next 2 frames
+  (strength 0). Unit-tested; not seen on the GPU (the harness does not rebase).
+- **Order and settings:** Compositor is GDGS (`PRE_TRANSPARENT`), blur, flare (both `POST_TRANSPARENT`), so the flare is never smeared.
+  `settings.lens_flare` (default on), `settings.motion_blur` (default off), `settings.motion_blur_strength` (0-1, 0.5); `flare` and `blur`
+  console commands, provider `post`. Disabled effects ask the renderer for nothing. `test_compositor_holds_exactly_the_gdgs_effect` became
+  `test_compositor_holds_the_gdgs_effect_first_then_blur_and_flare`. `run_tests.sh`'s two `providers:` smoke lines gained `post`.
+- **GPU numbers, 1080p, vsync off, free flight (static scene), 12 samples each, one process:** nothing 2.12 ms (473 fps); flare 2.50 ms
+  (+0.39); blur on, at rest 2.24 ms (+0.13); both 2.57 ms. In a wave fight the frame rate swings 68-149 fps with the fight, so flare
+  and blur are not visible in it. Blur during a 1.5 rad/s turn (3 fresh runs, first 700 frames of each): spinning alone 3.4-3.7 ms; strength 0.5
+  adds 0.1-0.3 ms; strength 1.0 adds 0.15-1.0 ms. Frame times drifted up 2x over a long process with nothing toggled (another
+  agent's GPU work at the same time), so only the early samples count. VRAM not recorded: the blur's scratch image is one RGBA16F frame (16 MB
+  at 1080p) while the blur is on.
+- `docs/playtest.md` has no AC35 section yet (T12 writes it): **T12 should add** "the flare follows the star and hides behind hulls; motion
+  blur (`blur on`) smears the stars on fast turns, not the HUD".
+- (H): how the flare and the blur look and feel (AC35). `Effect_*` and the sun colour on the effect are the add-on's defaults; tune
+  them in `space_environment.tscn` if the flare is too strong or too yellow.
+
+- Star colour (Q30, 2026-11-01): `StarColor` gives a star's colour from its temperature, agreeing with the sky generator's blackbody to 0.03, and `SpaceEnvironment.set_star` gives the flare and the key star's light that one colour. The add-on's shader pushes its lens ghosts toward blue and tints its always-on glow twice, so tinting alone measured g/r 0.66, b/r 0.73 against the star's 0.80, 0.65, which reads pink. `SceneLensFlareEffect` patches those two lines in memory at start-up (`COLOUR_PATCHES`; a test fails if a re-vendor moves them); the files stay as vendored. Measured on the GPU over the flare's own light, by brightness: g/r 0.78-0.80, b/r 0.62-0.65. The overexposed core goes whiter. The same run at 3000 K measures g/r 0.37-0.47, b/r 0.00-0.13, so a red star works. The key star's light moves from (1, 0.94, 0.84) to the star's colour, a small change on the hulls.
 
 ### M3-T26 Starfury after the reference model, wireframe damage display
 

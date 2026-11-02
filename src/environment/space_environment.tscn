@@ -6,12 +6,22 @@
 [ext_resource type="Script" path="res://addons/gdgs_scs/runtime/nodes/gaussian_splat_node.gd" id="4_splats"]
 [ext_resource type="Script" path="res://src/environment/sky_follower.gd" id="5_follower"]
 [ext_resource type="Script" path="res://src/rendering/splat_light_rig.gd" id="6_rig"]
+[ext_resource type="Script" path="res://src/rendering/lens_flare_effect.gd" id="7_flare"]
+[ext_resource type="Script" path="res://src/rendering/motion_blur_effect.gd" id="8_blur"]
+[ext_resource type="Script" path="res://src/rendering/post_effects.gd" id="9_post"]
 
 [sub_resource type="CompositorEffect" id="CompositorEffect_gdgs"]
 script = ExtResource("3_effect")
 
+[sub_resource type="CompositorEffect" id="CompositorEffect_blur"]
+script = ExtResource("8_blur")
+
+[sub_resource type="CompositorEffect" id="CompositorEffect_flare"]
+effect_callback_type = 4
+script = ExtResource("7_flare")
+
 [sub_resource type="Compositor" id="Compositor_main"]
-compositor_effects = Array[CompositorEffect]([SubResource("CompositorEffect_gdgs")])
+compositor_effects = Array[CompositorEffect]([SubResource("CompositorEffect_gdgs"), SubResource("CompositorEffect_blur"), SubResource("CompositorEffect_flare")])
 
 [node name="SpaceEnvironment" type="Node3D"]
 script = ExtResource("1_env")
@@ -36,3 +46,8 @@ script = ExtResource("4_splats")
 [node name="SkyFollower" type="Node" parent="." node_paths=PackedStringArray("sky")]
 script = ExtResource("5_follower")
 sky = NodePath("../SkySplats")
+
+[node name="PostEffects" type="Node" parent="." node_paths=PackedStringArray("world_environment", "sun")]
+script = ExtResource("9_post")
+world_environment = NodePath("../WorldEnvironment")
+sun = NodePath("../SplatLightRig/KeyStar")

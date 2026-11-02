@@ -8,6 +8,13 @@ dependency, add a row here in the same PR and keep its licence file next to the 
 | Component | Version | Location | Licence | Upstream |
 |---|---|---|---|---|
 | GUT (Godot Unit Test) | v9.7.1 | `addons/gut/` (+ `addons/gut/LICENSE.md`) | MIT | https://github.com/bitwes/Gut |
+| Compositor Lens Effects (lens flare and god rays) | commit `0ce061271f672f05fbb9aed08a61e019a875c1ad` (2026-07-05; the repo has no tags) | `addons/lens_effects/` (+ `addons/lens_effects/LICENSE`) | MIT (copyright 2025 ARez) | https://github.com/ARez2/compositor-effect-lens-effects |
+
+`scripts/vendor_addons.sh` pins an add-on by tag, or by full commit when the repo has no tags (the lens effects). The `.uid` and `.import` files next to vendored code are written by the engine, not upstream, so run `--import` after re-vendoring. The add-on's files are unedited; `SceneLensFlareEffect` patches two lines of its shader in memory, so the flare takes the star's colour (Q30). The lens
+effects add-on is used as vendored: only its `LensFlareEffect` class and shader are used (not its `plugin.gd`, which is not
+enabled, nor `world_environment.gd`, whose job `src/rendering/post_effects.gd` does). `src/rendering/lens_flare_effect.gd` is a
+thin subclass of ours that compiles the add-on's shader when the game starts: a headless import has no renderer, so it cannot
+resolve the shader's `#include "godot/scene_data_inc.glsl"` and caches an empty shader (see `docs/research-notes.md`).
 
 Vendored addons are upstream code: do not edit them in place. If a patch is unavoidable, put it in
 `addons/<name>/PATCHES.md`, keep it minimal, and upstream it.

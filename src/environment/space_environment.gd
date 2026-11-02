@@ -1,9 +1,9 @@
 class_name SpaceEnvironment
 extends Node3D
-## The sky and the light, outside `World` (architecture §3, §7): a black WorldEnvironment with the GDGS compositor
-## effect, the `SplatLightRig` (the warm `KeyStar` and the 7 omni slots: the scene's only lights), and `SkySplats` (stars and
-## nebula as Gaussian splats, never lit: they are emitters) pinned to the camera by `SkyFollower`. Camera-relative, so it is
-## never rebased and holds nothing a gameplay system needs.
+## The sky and the light, outside `World` (architecture §3, §7): a black WorldEnvironment with the GDGS compositor effect, then
+## the motion blur and the lens flare (`PostEffects` drives both), the `SplatLightRig` (the warm `KeyStar` and the 7 omni slots:
+## the scene's only lights), and `SkySplats` (stars and nebula as Gaussian splats, never lit: they are emitters) pinned to the
+## camera by `SkyFollower`. Camera-relative, so it is never rebased and holds nothing a gameplay system needs.
 ##
 ## It loads without any generated asset: the sky splats and the manifest are loaded here, guarded, so the scene (and
 ## the headless tests) work before `scripts/gen_assets.sh` has run, with a warning instead of a load error.
@@ -41,6 +41,7 @@ var _fallback_active: bool = false
 @onready var key_star: DirectionalLight3D = $SplatLightRig/KeyStar
 @onready var sky_splats: GaussianSplatNode = $SkySplats
 @onready var sky_follower: SkyFollower = $SkyFollower
+@onready var post_effects: PostEffects = $PostEffects
 
 
 func _init() -> void:
@@ -51,6 +52,19 @@ func _ready() -> void:
 	_default_environment = world_environment.environment
 	_load_sky()
 	_apply_compositor_tuning()
+	use_star_of(&"local")
+
+
+## Shows the star of `system_id`, from `data/star_systems.json`.
+func use_star_of(system_id: StringName) -> void:
+	set_star(StarCatalog.temperature_k(system_id))
+
+
+## Gives the key star's light and the lens flare one colour: the star's, from its temperature (Q30).
+func set_star(temperature_k: float) -> void:
+	var color: Color = StarColor.linear_from_kelvin(temperature_k)
+	key_star.light_color = color.linear_to_srgb()
+	post_effects.set_star_color(color)
 
 
 ## Switches between the splat sky (false) and the generated panorama (true). The fallback hides `SkySplats` and swaps
