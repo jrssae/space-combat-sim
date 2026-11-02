@@ -3,23 +3,31 @@ extends Node3D
 ## Main scene (architecture §3, M1-T15): loads the free-flight scenario, spawns the player and the nav buoys through
 ## World, wires camera, weapons, thruster glow and overlay, and turns one PilotCommand per physics tick into ship
 ## commands and UI actions. Main runs while paused (so Start can unpause); World and everything in it pause.
+##
+## Ships the scenario places at load (`spawns`, M3-T09) come from the pool. One that leads a `route` (the instructor) is paced
+## to the player, and the HUD, status line and console `route` provider follow it. A respawn places the route leaders again, so
+## the lesson restarts; wing ships and fighting ships stay in play (maintainer Q8: a downed wingman is replaced at the next wave).
 
 const SCENARIO_DIR := "res://data/scenarios/"
-const SHIP_SPEC_PATH := "res://assets/ships/starfury_aurora.tres"
-const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight"]
+const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
 signal player_died
 ## The player is back at the scenario start with a full hull (after `DestructionDirector.RESPAWN_DELAY_S`, or `respawn`).
 signal player_respawned
 
-## Raiders built (parked) at load for the waves and the console's `spawn`. -1 = what the scenario's `pools` says (the
-## sandbox 6, free flight none); 0 or more overrides it. Set before the node enters the tree.
+## Raiders built (parked) at load for the waves and the console's `spawn`. -1 = the scenario's `pools`; 0 or more overrides
+## it. Set before the node enters the tree.
 var raider_pool_size: int = -1
+## Allied Starfuries built (parked) at load (M3-T08), same rule as `raider_pool_size`.
+var ally_pool_size: int = -1
 ## Overrides `settings.scenario` with a scenario file (tests). Empty = the setting.
 var scenario_path: String = ""
 ## The sandbox starts wave 1's countdown at load. Tests that drive the waves themselves turn this off.
 var waves_auto_start: bool = true
+## Mixed into the brain seed of every ship the scenario places (M3-T10): the same seed flies the same fight (the dogfight's
+## AC12 runs). Set before the node enters the tree.
+var scenario_seed: int = 0
 
 ## Set before the node enters the tree to drive Main from a script (tests use FakeInputSource).
 var input_source: InputSource = null
@@ -36,9 +44,21 @@ var ship: Ship = null
 var thrusters: ThrusterVisuals = null
 var cannon: PulseCannon = null
 var buoys: Array[NavBuoy] = []
+## The ships the scenario places at load (`spawns`, M3-T09), from the pool; the route leaders are placed again on a respawn.
+var scenario_ships: Array[Combatant] = []
+## The ship leading a route (the instructor) and its follow-path behaviour; null when the scenario has none.
+var instructor: Combatant = null
+var instructor_path: BehaviourFollowPath = null
 
 var _spawn_position: UniversePos = UniversePos.new()
 var _spawn_basis: Basis = Basis.IDENTITY
+var _system_id: StringName = &"local"
+var _scenario_spawns: Array[Dictionary] = []
+var _scenario_routes: Array[Route] = []
+var _scenario_wings: Array[Dictionary] = []
+# By `scenario_ships` index: the brain each was given, to tell when the pool has reused the ship, and the spawn it came from.
+var _scenario_brains: Array[PilotBrain] = []
+var _scenario_entries: Array[Dictionary] = []
 
 @onready var world: WorldFrame = $World
 @onready var space_environment: SpaceEnvironment = $SpaceEnvironment
@@ -48,9 +68,12 @@ var _spawn_basis: Basis = Basis.IDENTITY
 @onready var ships: ShipPool = $World/Ships
 @onready var effects: Node3D = $World/Effects
 @onready var debris: DebrisPool = $World/Debris
+@onready var fx: FxPool = $World/Fx
 @onready var audio: AudioDirector = $World/Audio
+@onready var rams: RamResolver = $Combat/RamResolver
 @onready var director: DestructionDirector = $Combat/DestructionDirector
 @onready var waves: WaveDirector = $Combat/WaveDirector
+@onready var wings: WingDirector = $Combat/WingDirector
 @onready var hud: Hud = $Hud
 @onready var splat_status: SplatStatus = $SplatStatus
 @onready var overlay: DebugOverlay = $DebugOverlay
@@ -69,31 +92,58 @@ func _ready() -> void:
 		var player: Dictionary = scenario["player"]
 		_spawn_position = player["position"]
 		_spawn_basis = player["basis"]
+		_system_id = scenario["system_id"]
+		_scenario_spawns = scenario["spawns"]
+		_scenario_routes = scenario["routes"]
+		_scenario_wings = scenario["wings"]
 	_spawn_ship()
+	# The player leads wing ALPHA (architecture §16 D36). Members join later (M3-T08, M3-T10).
+	wings.setup(world, ships)
+	if not _ai_leads_player_wing():
+		wings.create_wing(Wing.DEFAULT_NAME, combatant)
+	wings.declare(_scenario_wings)
 	ships.world = world
 	ships.projectiles = projectiles
 	ships.player = ship
-	var pool_count: int = raider_pool_size
-	if pool_count < 0:
-		pool_count = int((scenario.get("pools", {}) as Dictionary).get(ShipPool.DEFAULT_TYPE, 0))
+	var pool_count: int = _pool_count(scenario, ShipPool.DEFAULT_TYPE, raider_pool_size)
 	if pool_count > 0:
 		ships.prepare(ShipPool.DEFAULT_TYPE, pool_count)
 		debris.prepare(ShipPool.DEFAULT_TYPE)
+	var ally_count: int = _pool_count(scenario, ShipPool.ALLY_TYPE, ally_pool_size)
+	if ally_count > 0:
+		ships.prepare(ShipPool.ALLY_TYPE, ally_count)
+	# The Starfury's break-up chunks serve the allies and the player (the player can die in any scenario).
+	debris.prepare(ShipCatalog.PLAYER_TYPE)
 	hud.input_provider = _build_hud_input
+	hud.screens = ship.cockpit_screens
 	director.setup(world, ships, debris, effects, combatant)
+	# Hits, rams, explosions and debris throw their sparks from one fixed pool (M3-T23).
+	($Combat/HitResolver as HitResolver).fx = fx
+	rams.fx = fx
+	director.fx = fx
+	debris.fx = fx
 	director.player_destroyed.connect(_on_player_destroyed)
 	director.respawn_due.connect(respawn)
 	_wire_audio()
 	waves.status_sink = func(line: String) -> void: status_line = line
+	waves.wings = wings
 	waves.setup(world, ships, combatant, scenario if pool_count > 0 else {}, director, waves_auto_start)
 	player_respawned.connect(waves.on_player_respawned)
+	# Downed wingmen are replaced when the next wave starts (maintainer Q8, AC11).
+	waves.wave_started.connect(wings.on_wave_started)
 	if bool(scenario.get("ok", false)):
 		_spawn_props(scenario["props"])
+	_spawn_scenario_ships()
 	camera_rig.setup(ship, ship.cockpit_anchor, ship.get_chase_offset(), ship.set_cockpit_interior_visible)
+	# The World keeps its origin within `auto_rebase_distance_m` (5 km, main.tscn) of the player (M3-T14, §14.1).
 	world.focus = ship
-	# The chase camera is world_shiftable; the cockpit camera follows a RemoteTransform3D, so drop its interpolation
-	# history on a rebase too, or it would smear the jump across one frame.
+	# The cockpit camera follows a RemoteTransform3D, so reset its interpolation on a rebase or the jump smears.
 	world.rebased.connect(func(_offset: Vector3) -> void: camera_rig.cockpit_pivot.reset_physics_interpolation())
+	# Ram contact points outlive a tick; they move with the rebase.
+	rams.world = world
+	# The motion blur skips the frames around a rebase (M3-T25).
+	space_environment.post_effects.watch_world(world)
+	space_environment.use_star_of(_system_id)
 	_register_console()
 
 
@@ -191,6 +241,13 @@ func snapshot() -> Dictionary:
 	return s
 
 
+# How many ships of `type` to build: the override when it is 0 or more, else the scenario's `pools` entry (0 when it has none).
+func _pool_count(scenario: Dictionary, type: StringName, override_count: int) -> int:
+	if override_count >= 0:
+		return override_count
+	return int((scenario.get("pools", {}) as Dictionary).get(type, 0))
+
+
 ## The scenario file in use: `scenario_path`, else the one `settings.scenario` names.
 func resolved_scenario_path() -> String:
 	if not scenario_path.is_empty():
@@ -204,9 +261,14 @@ func respawn() -> void:
 	ship.visible = true
 	ship.reset_to(Transform3D(_spawn_basis, world.universe_to_local(_spawn_position)))
 	combatant.damageable.restore()
+	ship.running_lights = true  # lit at spawn; the wing follows
 	for buoy: NavBuoy in buoys:
 		buoy.restore()
+	director.cancel_respawn()  # Back while dead: the death's own respawn must not follow
+	_restart_lessons()
 	combatant.cannon.gate.reset()
+	combatant.cannon.reset_flashes()
+	thrusters.reset()  # the dead ship's last burn does not fade out at the start
 	ship.set_flight_command(FlightCommand.new())
 	ship.set_combat_command(CombatCommand.new())
 	adapter.reset()
@@ -225,6 +287,11 @@ func _wire_audio() -> void:
 		audio.watch_ship(pooled)
 
 
+## The HUD's reference point (its `REF` range and closing speed): the launch point, for now. Universe coordinates.
+func reference_point() -> UniversePos:
+	return _spawn_position
+
+
 ## This frame's `HudInput`, read from the live nodes (the HUD never caches anything).
 func _build_hud_input() -> HudInput:
 	var camera: Camera3D = camera_rig.active_camera()
@@ -241,8 +308,13 @@ func _build_hud_input() -> HudInput:
 	input.own_velocity = ship.linear_velocity
 	input.show_velocity_marker = bool(Settings.get_value(&"hud_velocity_marker"))
 	input.has_reference = true
-	input.reference_position = world.universe_to_local(_spawn_position)  # the launch point, for now
+	input.reference_position = world.universe_to_local(reference_point())  # with this frame's origin: it follows every rebase
 	input.tracking = ship.get_flight_output().tracking
+	input.running_lights = ship.running_lights
+	input.assist = ship.assist_on
+	input.guns_ready = cannon.gate.capacitor == null or cannon.gate.capacitor.can_afford(1, SimClock.now())
+	input.screen_sizes = hud.screens.sizes() if hud.screens != null else {}
+	input.overlay_bottom_px = overlay.text_bottom_px() if overlay.visible else 0.0
 	var muzzles: Array[Node3D] = ship.get_muzzles()
 	var mean := Vector3.ZERO
 	for muzzle: Node3D in muzzles:
@@ -264,7 +336,103 @@ func _build_hud_input() -> HudInput:
 	input.contacts = ship.targeting.candidates()
 	input.selected_id = ship.targeting.selected_id()
 	input.status_line = status_line
+	input.roster = wings.hud_roster()
+	input.roster_color = Factions.FRIENDLY_COLOR
+	input.ack_line = wings.ack_text()
+	if route_active():
+		input.status_line = instructor_path.status_line(instructor.display_name)
+		var waypoint: UniversePos = instructor_path.waypoint_position()
+		if waypoint != null:
+			input.has_waypoint = true
+			input.waypoint_position = world.universe_to_local(waypoint)  # this frame's World frame (rebase-proof)
+			input.waypoint_label = instructor_path.waypoint_label()
 	return input
+
+
+## Whether a ship is leading a route right now (a pooled ship reused for something else is not).
+func route_active() -> bool:
+	if instructor_path == null or instructor == null or not instructor.damageable.is_active() or instructor.driver == null:
+		return false
+	var pilot := instructor.driver.brain as AiPilot
+	return pilot != null and pilot.behaviour(&"follow_path") == instructor_path
+
+
+# --- ships at load (M3-T09) ------------------------------------------------------------------------------------------
+
+
+# Places the scenario's `spawns` from the pool, at load.
+func _spawn_scenario_ships() -> void:
+	for entry: Dictionary in _scenario_spawns:
+		_place_spawn(entry)
+
+
+# A respawn restarts the lessons: the ships leading a route are placed again. Wing ships and fighting ships stay in play.
+func _restart_lessons() -> void:
+	var restarted: Array[Dictionary] = []
+	for i: int in range(scenario_ships.size() - 1, -1, -1):
+		if String(_scenario_entries[i]["route"]).is_empty():
+			continue
+		var placed: Combatant = scenario_ships[i]
+		if placed.driver != null and placed.driver.brain == _scenario_brains[i]:  # not reused by the pool
+			ships.release(placed)
+		restarted.push_front(_scenario_entries[i])
+		scenario_ships.remove_at(i)
+		_scenario_brains.remove_at(i)
+		_scenario_entries.remove_at(i)
+	if restarted.is_empty():
+		return
+	instructor = null
+	instructor_path = null
+	for entry: Dictionary in restarted:
+		_place_spawn(entry)
+
+
+# Takes one spawn's ship from the pool and gives it its brain, route and wing.
+func _place_spawn(entry: Dictionary) -> void:
+	var type: StringName = entry["type"]
+	var anchor: UniversePos = _spawn_position if StringName(entry["anchor"]) == &"player" \
+			else UniversePos.new(0.0, 0.0, 0.0, _system_id)
+	var ship_name: String = String(entry["name"])
+	if ship_name.is_empty():
+		ship_name = ships.next_name(ShipPool.ALLY_NAME_PREFIX, ShipPool.ALLY_FIRST_NUMBER) if type == ShipPool.ALLY_TYPE \
+				else ships.next_name()
+	var made: Dictionary = BrainFactory.from_behaviour(entry["behaviour"], anchor, hash([ship_name, scenario_seed]))
+	if not bool(made["ok"]):
+		push_warning("Main: spawn %s: %s" % [ship_name, made["error"]])
+		return
+	var brain: PilotBrain = made["brain"]
+	var path: BehaviourFollowPath = null
+	var route: Route = _route_named(String(entry["route"]))
+	if route != null and brain is AiPilot:
+		route.pace_id = combatant.targetable.get_instance_id() if route.pace == Route.PACE_PLAYER else 0
+		path = BehaviourFollowPath.attach(brain as AiPilot, route)
+	var placed: Combatant = ships.acquire(ship_name, anchor.plus_local(entry["offset"]), _spawn_basis, entry["velocity"], brain, type)
+	if placed == null:
+		return
+	placed.damageable.invulnerable = bool(entry["invulnerable"])
+	scenario_ships.append(placed)
+	_scenario_brains.append(brain)
+	_scenario_entries.append(entry)
+	if not String(entry.get("wing", "")).is_empty():
+		wings.join(String(entry["wing"]), placed)  # says so itself when the wing cannot take it
+	if path != null and instructor == null:
+		instructor = placed
+		instructor_path = path
+
+
+# Whether an AI ship leads the player's wing (the dogfight's ALPHA), so the player leads none of its own.
+func _ai_leads_player_wing() -> bool:
+	for d: Dictionary in _scenario_wings:
+		if String(d["name"]).to_lower() == Wing.DEFAULT_NAME.to_lower() and String(d["leader"]) != "player":
+			return true
+	return false
+
+
+func _route_named(route_name: String) -> Route:
+	for route: Route in _scenario_routes:
+		if route.name == route_name:
+			return route
+	return null
 
 
 func _on_player_destroyed(_info: HitInfo) -> void:
@@ -290,7 +458,6 @@ func _setup_input() -> void:
 func _apply_input_settings() -> void:
 	adapter.stick_deadzone = float(Settings.get_value(&"stick_deadzone"))
 	adapter.invert_y = bool(Settings.get_value(&"invert_y"))
-	adapter.yaw_ramp_s = float(Settings.get_value(&"yaw_ramp_s"))
 	adapter.target_hold_s = float(Settings.get_value(&"target_hold_s"))
 	adapter.mouse_full_rate_px_s = float(Settings.get_value(&"mouse_full_rate_px_s"))
 	Engine.physics_jitter_fix = float(Settings.get_value(&"physics_jitter_fix"))
@@ -300,13 +467,15 @@ func _apply_input_settings() -> void:
 
 
 func _spawn_ship() -> void:
-	var spec := load(SHIP_SPEC_PATH) as ShipSpec
+	var spec: ShipSpec = ShipCatalog.spec_for(ShipCatalog.PLAYER_TYPE)
 	combatant = ShipAssembly.build(spec, world, projectiles, {
 		ShipAssembly.OPT_FACTION: Factions.EARTH_ALLIANCE,
 		ShipAssembly.OPT_DISPLAY_NAME: "PLAYER",
 		ShipAssembly.OPT_CONSOLE_OWNER: true,
 	})
 	world.spawn(combatant.ship, _spawn_position, _spawn_basis)
+	# The player is part of the wing the allies broadcast for (M3-T10): heard like an allied Starfury, to 100 km.
+	combatant.targetable.broadcast_range_m = ShipPool.ALLY_BROADCAST_RANGE_M
 	ship = combatant.ship
 	thrusters = combatant.thrusters
 	cannon = combatant.cannon
@@ -334,14 +503,28 @@ func _handle_ui(ui: UiCommand) -> void:
 		Settings.set_value(&"show_overlay", not bool(Settings.get_value(&"show_overlay")))
 	if ui.toggle_fallback_mesh:
 		splat_status.toggle_fallback()
+	if ui.toggle_running_lights and player_alive:
+		ship.running_lights = not ship.running_lights
 	if ui.screenshot:
 		var result: ConsoleResult = DebugConsole.registry.execute_tokens(PackedStringArray(["screenshot"]))
 		print("[screenshot] ", result.lines[0] if result.ok and not result.lines.is_empty() else result.error)
+	_give_wing_orders(ui)
 
 
-# The mouse is captured (hidden, unbounded) while flying with a mouse-capable source; holding Alt, the console, the pause and a
-# window that lost focus give it back to the desktop (Alt + drag then moves the window in most window managers). While it is
-# the desktop's, the source reads it as idle.
+# Keys 1-4 (UiCommand edges, never `Input`): orders for the player's wing (architecture §16.3).
+func _give_wing_orders(ui: UiCommand) -> void:
+	if ui.wing_attack:
+		wings.give_order(AiContext.Order.ATTACK_MY_TARGET)
+	if ui.wing_form:
+		wings.give_order(AiContext.Order.FORM_ON_ME)
+	if ui.wing_engage:
+		wings.give_order(AiContext.Order.ENGAGE_AT_WILL)
+	if ui.wing_cover:
+		wings.give_order(AiContext.Order.COVER_ME)
+
+
+# Captures the mouse while flying. Alt (window managers use Alt+drag to move a window), the console, the pause and a window without focus give it back, and the source
+# then reads it as idle.
 func _update_mouse_capture() -> void:
 	var godot_source := input_source as GodotInputSource
 	if godot_source == null or DisplayServer.get_name() == "headless":
@@ -373,8 +556,31 @@ func _register_console() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"pause", "Pause or resume the game (toggles with no argument)",
 			[ConsoleArg.bool_optional(&"state")] as Array[ConsoleArg]), _cmd_pause, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"scenario",
-			"Load a scenario (combat_sandbox or free_flight): sets settings.scenario for this session and reloads the scene",
+			"Load a scenario (%s): sets settings.scenario for this session and reloads the scene" % ", ".join(PackedStringArray(SCENARIO_CHOICES)),
 			[ConsoleArg.enum_optional(&"name", SCENARIO_CHOICES, null)] as Array[ConsoleArg]), _cmd_scenario, self)
+	if instructor_path != null:
+		_register_route_provider()
+
+
+# Provider `route` (§16.4), on a scenario with a ship leading a route: the instructor's progress, read live.
+func _register_route_provider() -> void:
+	DebugConsole.registry.register_provider(&"route", ConsoleVars.new({
+		&"index": {"get": func() -> int: return instructor_path.nav_number() if instructor_path != null else 0,
+				"doc": "The waypoint the instructor leads to (1-based, the HUD's NAV n)"},
+		&"count": {"get": func() -> int: return instructor_path.waypoint_count() if instructor_path != null else 0,
+				"doc": "Waypoints on the route"},
+		&"lag_m": {"get": func() -> float: return instructor_path.lag_m if instructor_path != null and instructor_path.lag_m < INF else -1.0,
+				"unit": "m", "doc": "Distance from the instructor to the player (-1 when out of sight)"},
+		&"state": {"get": func() -> String: return instructor_path.state_name() if route_active() else "none",
+				"doc": "lead, wait (for the player), run_up, demo, hold, done; none when the instructor is not in play"},
+		&"demo": {"get": func() -> String: return _route_demo(),
+				"doc": "The demo at the waypoint flown to (none, roll, flip_and_burn, strafe_box, pod_turn, all_stop)"},
+	}), self)
+
+
+func _route_demo() -> String:
+	var demo: String = instructor_path.demo_name() if instructor_path != null else ""
+	return demo if not demo.is_empty() else "none"
 
 
 func _cmd_throttle(args: Dictionary) -> String:
@@ -423,5 +629,5 @@ func _cmd_pause(args: Dictionary) -> String:
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
-	if key in [&"stick_deadzone", &"invert_y", &"yaw_ramp_s", &"target_hold_s", &"trigger_deadzone", &"mouse_full_rate_px_s", &"physics_jitter_fix"]:
+	if key in [&"stick_deadzone", &"invert_y", &"target_hold_s", &"trigger_deadzone", &"mouse_full_rate_px_s", &"physics_jitter_fix"]:
 		_apply_input_settings()

@@ -15,6 +15,7 @@ func before_each() -> void:
 	main.waves_auto_start = false
 	add_child_autofree(main)
 	await _ticks(2)
+	DebugConsole.registry.execute("despawn all")  # the sandbox's wingmen (M3-T10) would shoot the targets these tests track
 
 
 func after_each() -> void:
@@ -125,7 +126,7 @@ func test_autotrack_puts_the_nose_on_the_lead_of_a_crossing_target() -> void:
 	# the position trails by that rate over its gain (about 5 degrees); with the rate fed forward the nose sits on the lead.
 	DebugConsole.registry.execute("spawn raider idle 1500 0 0")
 	await _ticks(4)
-	var raider: Combatant = main.ships.alive()[0]
+	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
 	raider.ship.linear_velocity = main.ship.global_basis.x * 200.0
 	assert_true(main.ship.targeting.select_by_name("RAIDER 1"))
 	source.hold(InputAdapter.AUTOTRACK)
@@ -181,9 +182,8 @@ func test_with_assist_off_turning_with_the_sticks_does_not_change_the_velocity_e
 	main.ship.set_assist(false)
 	main.ship.linear_velocity = Vector3(0.0, 0.0, -400.0)
 	var before: Vector3 = main.ship.linear_velocity
-	source.hold(InputAdapter.ROLL_RIGHT, 1.0)
-	source.hold(InputAdapter.PITCH_UP, 0.8)
-	source.hold(InputAdapter.YAW_LEFT)
+	source.hold(InputAdapter.ROLL_RIGHT, 1.0)  # G
+	source.hold(InputAdapter.PITCH_UP, 0.8)  # the stick straight back: pitch (its diagonals roll, M3-T15)
 	await _ticks(180)
 	assert_gt(main.ship.angular_velocity.length(), 0.1, "it is spinning")
 	assert_lt(main.ship.linear_velocity.distance_to(before), 0.01, "but not going anywhere new")
@@ -193,9 +193,8 @@ func test_with_assist_on_turning_with_the_sticks_does_not_change_the_velocity() 
 	assert_true(main.ship.assist_on, "assist is on by default")
 	main.ship.linear_velocity = Vector3(10.0, -4.0, -400.0)
 	var before: Vector3 = main.ship.linear_velocity
-	source.hold(InputAdapter.ROLL_RIGHT, 1.0)
-	source.hold(InputAdapter.PITCH_UP, 0.8)
-	source.hold(InputAdapter.YAW_LEFT)
+	source.hold(InputAdapter.ROLL_RIGHT, 1.0)  # G
+	source.hold(InputAdapter.PITCH_UP, 0.8)  # the stick straight back: pitch (its diagonals roll, M3-T15)
 	var worst: float = 0.0
 	var peak_rate: float = 0.0
 	for i: int in 240:
@@ -225,3 +224,19 @@ func test_the_canopy_glass_is_cleared_in_the_cockpit_and_back_outside() -> void:
 	main.camera_rig.mode = CameraRig.Mode.CHASE
 	await _ticks(2)
 	assert_null(main.ship.hull_mesh_fallback.get_surface_override_material(glass), "chase: the real glass again")
+
+
+func test_the_hulls_window_frames_are_cleared_in_the_cockpit_too() -> void:
+	# They would cross the interior's side panes (M3-T29).
+	var mesh: Mesh = main.ship.hull_mesh_fallback.mesh
+	var frame: int = -1
+	for i: int in mesh.get_surface_count():
+		if String(mesh.surface_get_material(i).resource_name).contains("canopy_frame"):
+			frame = i
+	assert_gte(frame, 0, "the hull mesh has a window frame surface")
+	main.camera_rig.mode = CameraRig.Mode.COCKPIT
+	await _ticks(2)
+	assert_not_null(main.ship.hull_mesh_fallback.get_surface_override_material(frame))
+	main.camera_rig.mode = CameraRig.Mode.CHASE
+	await _ticks(2)
+	assert_null(main.ship.hull_mesh_fallback.get_surface_override_material(frame))

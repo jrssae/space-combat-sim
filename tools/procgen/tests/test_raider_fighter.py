@@ -62,10 +62,29 @@ class RaiderFighterTests(unittest.TestCase):
     # --- files, manifest, budget --------------------------------------------------------------------
     def test_all_files_are_written_and_listed(self) -> None:
         expected = {raider.PLY_NAME, raider.OBJ_NAME, "raider_fighter.mtl", raider.HARDPOINTS_NAME, "manifest.json"}
+        expected |= {entry[0] for entry in raider.FAR_LODS.values()}
+        expected |= {lod["lighting"] for lod in self.manifest["lods"]}
         for entry in self.hp["chunks"]:
-            expected |= {entry["ply"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
+            expected |= {entry["ply"], entry["lighting"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
         self.assertEqual({p.name for p in self.dir_a.iterdir()}, expected)
         self.assertEqual({p.name for p in self.out_a.files}, expected)
+
+    def test_lods_one_to_three_share_bounds_and_determinism(self) -> None:
+        # M3-T19 (AC28): coarser levels for the LOD switcher, with LOD0's box, centred, deterministic.
+        lod0 = self.manifest["lods"][0]
+        self.assertEqual([e["level"] for e in self.manifest["lods"]], [0, 1, 2, 3])
+        for level, (name, factor, _stream, bounds) in raider.FAR_LODS.items():
+            entry = self.manifest["lods"][level]
+            self.assertEqual(entry["file"], name)
+            self.assertAlmostEqual(entry["spacing_m"], factor * raider.DEFAULT_SPACING_M)
+            share = entry["splats"] / lod0["splats"]
+            self.assertTrue(bounds[0] <= share <= bounds[1], (level, share))
+            xyz = frames.flip_xy(read_ply(self.dir_a / name).to_splats().xyz)
+            self.assertLess(float(np.abs(xyz.mean(axis=0)).max()), 1e-3, "centred like LOD0")
+            np.testing.assert_allclose(xyz.min(axis=0), self.manifest["aabb_min"], atol=0.3)
+            np.testing.assert_allclose(xyz.max(axis=0), self.manifest["aabb_max"], atol=0.3)
+            self.assertEqual((self.dir_a / name).read_bytes(), (self.dir_b / name).read_bytes(), "deterministic")
+        self.assertEqual(self.out_a.warnings, (), "every share inside its range")
 
     def test_manifest_lods_zero_and_the_budget(self) -> None:
         lod = self.manifest["lods"][0]
@@ -272,6 +291,48 @@ class RaiderFighterTests(unittest.TestCase):
             for bad in ({"spacing": 0.0}, {"overlap": -1.0}, {"thickness": 0}):
                 with self.assertRaises(ValueError):
                     raider.build(BuildContext(Path(tmp), seed=1, options=bad))
+
+
+class RaiderNavLightTests(unittest.TestCase):
+    """Running lights (M3-T27, Q27): read from a generated ``hardpoints.json``, never from typed-in positions."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory()
+        out = Path(cls._tmp.name) / "a"
+        raider.build(BuildContext(out, seed=42))
+        cls.hp = json.loads((out / raider.HARDPOINTS_NAME).read_text(encoding="utf-8"))
+        cls.nav = cls.hp["nav_lights"]
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
+
+    def test_port_is_the_ships_left_and_starboard_its_right_on_the_wingtips(self) -> None:
+        # -X is the ship's left (DamageZones: +X right, +Y up, -Z forward).
+        half_span = SPEC.wing.half_span
+        self.assertLess(self.nav["port"][0], -half_span, "port is past the left wingtip")
+        self.assertGreater(self.nav["starboard"][0], half_span, "starboard past the right one")
+        self.assertEqual(self.nav["port"], [-self.nav["starboard"][0], *self.nav["starboard"][1:]], "a mirrored pair")
+
+    def test_the_top_light_is_on_top_of_the_hump(self) -> None:
+        top = self.nav["top"]
+        hump = next(c for c in self.hp["collision"] if c["name"] == "hump")
+        self.assertEqual(top[0], 0.0)
+        self.assertGreater(top[1], hump["position"][1] + 0.5 * hump["size"][1], "above the hump")
+        self.assertGreater(top[2], self.hp["cockpit_camera"]["position"][2], "behind the canopy: +Z is aft")
+
+    def test_the_top_lamp_stands_over_the_hump_and_reaches_it(self) -> None:
+        lamp, top = self.nav["top_lamp"], self.nav["top"]
+        self.assertEqual(lamp[0], 0.0)
+        self.assertGreater(lamp[1], top[1], "it shines down on the hump")
+        self.assertGreater(self.nav["top_lamp_range_m"], lamp[1] - top[1], "the hump is within its range")
+
+    def test_the_cabin_glow_is_at_the_canopy_panel(self) -> None:
+        cabin, eye = self.nav["cabin"], self.hp["cockpit_camera"]["position"]
+        self.assertEqual(cabin[0], 0.0)
+        self.assertLess(abs(cabin[2] - eye[2]), 1.0, "over the pilot: the panel is above the eye")
+        self.assertLess(self.nav["cabin_range_m"], 3.0, "it stays on the hump's front: the wings are outside it")
 
 
 def mirrored(v: list[float]) -> list[float]:

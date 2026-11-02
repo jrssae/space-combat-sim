@@ -7,12 +7,30 @@ dependency, add a row here in the same PR and keep its licence file next to the 
 
 | Component | Version | Location | Licence | Upstream |
 |---|---|---|---|---|
-| GDGS (Godot Gaussian Splatting plugin) | v3.3.0 | `addons/gdgs/` (+ `addons/gdgs/LICENSE`) | MIT | https://github.com/ReconWorldLab/godot-gaussian-splatting |
 | GUT (Godot Unit Test) | v9.7.1 | `addons/gut/` (+ `addons/gut/LICENSE.md`) | MIT | https://github.com/bitwes/Gut |
+| Compositor Lens Effects (lens flare and god rays) | commit `0ce061271f672f05fbb9aed08a61e019a875c1ad` (2026-07-05; the repo has no tags) | `addons/lens_effects/` (+ `addons/lens_effects/LICENSE`) | MIT (copyright 2025 ARez) | https://github.com/ARez2/compositor-effect-lens-effects |
 
-Vendored addons are upstream code: do not edit them in place. GDGS carries two documented local fixes (sort-buffer
-overflow, narrow-subgroup fallback): see `addons/gdgs/PATCHES.md`. If a patch is unavoidable, put it in
+`scripts/vendor_addons.sh` pins an add-on by tag, or by full commit when the repo has no tags (the lens effects). The `.uid` and `.import` files next to vendored code are written by the engine, not upstream, so run `--import` after re-vendoring. The add-on's files are unedited; `SceneLensFlareEffect` patches a few lines of its shader in memory, so the flare takes the star's colour (Q30) and shows no haze or god rays (Q31). The lens
+effects add-on is used as vendored: only its `LensFlareEffect` class and shader are used (not its `plugin.gd`, which is not
+enabled, nor `world_environment.gd`, whose job `src/rendering/post_effects.gd` does). `src/rendering/lens_flare_effect.gd` is a
+thin subclass of ours that compiles the add-on's shader when the game starts: a headless import has no renderer, so it cannot
+resolve the shader's `#include "godot/scene_data_inc.glsl"` and caches an empty shader (see `docs/research-notes.md`).
+
+Vendored addons are upstream code: do not edit them in place. If a patch is unavoidable, put it in
 `addons/<name>/PATCHES.md`, keep it minimal, and upstream it.
+
+## Our fork (`addons/`)
+
+| Component | Forked from | Location | Licence | Upstream |
+|---|---|---|---|---|
+| GDGS (Godot Gaussian Splatting plugin), by ReconWorldLab | v3.3.0, commit `d9de8db` | `addons/gdgs_scs/` (+ `addons/gdgs_scs/LICENSE`); fork: https://github.com/jrssae/godot-gaussian-splatting, branch `space-combat-sim` | MIT, unchanged (copyright ReconWorldLab) | https://github.com/ReconWorldLab/godot-gaussian-splatting |
+
+The project owns this fork (maintainer, 2026-11-01) because the game needs renderer changes upstream may never take. Edit it in
+this repo, where the game needs it, then run `scripts/sync_gdgs_fork.sh "<subject>"`, which commits the same tree to the fork, pushes
+it and updates the pin in `scripts/vendor_addons.sh`. `addons/gdgs_scs/PATCHES.md` lists every change and how to revert it; the general fixes
+are still upstream candidates. The fork keeps upstream's licence, so the rest of the project stays GPL-3.0 and this directory
+stays MIT. The fork's description says it is vibe coded for this project and not intended or optimized for anyone else's use, though
+everyone is welcome to it.
 
 ## Used but not vendored
 
@@ -32,8 +50,8 @@ overflow, narrow-subgroup fallback): see `addons/gdgs/PATCHES.md`. If a patch is
 | Brush (splat trainer) | Apache-2.0 | Needs a GPU; optional M2+ polish path |
 | OpenSplat | AGPL-3.0 | CPU path too slow for CI; AGPL is fine for an external tool but adds nothing over sampling |
 | gdUnit4 | MIT | Fine framework; GUT chosen for its simpler headless CLI |
-| Piper TTS (`OHF-Voice/piper1-gpl`; the original `rhasspy/piper` was MIT and is archived) | GPL-3.0 (voice models: per-voice `MODEL_CARD` licence) | Candidate for voiced dialog (roadmap M14), run offline on the user's machine; adopt only voices whose licence permits it |
-| Kokoro TTS | Apache-2.0 (code and weights) | Alternative TTS candidate for M14 |
+| Piper TTS (`OHF-Voice/piper1-gpl`; the original `rhasspy/piper` was MIT and is archived) | GPL-3.0 (voice models: per-voice `MODEL_CARD` licence) | Candidate for voiced dialog (roadmap M15), run offline on the user's machine; adopt only voices whose licence permits it |
+| Kokoro TTS | Apache-2.0 (code and weights) | Alternative TTS candidate for M15 |
 | espeak-ng | GPL-3.0 | Phonemizer used by Piper/Kokoro; also usable alone for synthetic radio voices |
 
 ## Content

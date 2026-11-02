@@ -14,7 +14,7 @@ official or ripped franchise assets (models, textures, audio, footage, logos). A
 
 - `docs/architecture.md`: the design contract (stack, decisions, layout, flight model, input, rendering, assets,
   tests, conventions). Read it before writing code.
-- `docs/milestones/m1-first-flight.md`: current milestone, acceptance criteria and the **ordered task list**.
+- `docs/milestones/`: one file per milestone; the latest is the current one, with its acceptance criteria and the **ordered task list**.
 - `docs/roadmap.md`: what comes after, so you do not paint us into a corner.
 - `docs/playtest.md`: how the maintainer runs the game and the human (H) acceptance checklist.
 - `docs/design-references.md`: written descriptions of the reference designs (Starfury, station, raiders, bots).
@@ -27,19 +27,34 @@ official or ripped franchise assets (models, textures, audio, footage, logos). A
 1. `scripts/setup_godot.sh` (installs Godot 4.7.2 into `.tools/godot/`, verified by SHA-256).
 2. `scripts/gen_assets.sh` (runs `python3 -m tools.procgen build all` into `assets/generated/`; needs `numpy`).
 3. `scripts/run_tests.sh` (Python tests, `godot --headless --import`, GUT headless; must exit 0).
-4. Open `docs/milestones/m1-first-flight.md`, find the first task whose "Done when" is not met, and do that one
-   task as one PR-sized change. If none of the scripts exist yet, you are on **M1-T01**. Once M1 is accepted
-   (its status line says so), work from `docs/milestones/m2-combat-sandbox.md` the same way.
+4. Open the latest milestone entry in `docs/milestones/`, find the first task in its task table whose Status is not
+   `done` (or `not needed`) and whose "Done when" is not met, and do that one task as one PR-sized change. If none of the scripts exist yet, you are on **M1-T01**. Once a milestone is accepted
+   (its status line says so), the next milestone's file is the latest one.
 
 Until T01 lands, download/clone details are in `docs/research-notes.md` ("Container findings"): GitHub release
 assets and `git clone` work through the proxy; `archive/refs/tags/*.zip`, `api.github.com` and the Godot docs
 site do not.
 
+## Milestone documents
+
+Every milestone file in `docs/milestones/` has an ordered task table (`## Task breakdown (ordered)`) with a **Status**
+column: `done` (merged into the milestone branch, its "Done" notes written), `in progress`, `not started`, or `not
+needed` (a conditional task whose trigger never arose). A new milestone file starts with every task `not started`.
+Update the row in the same commit as the task's work, and when you pick the next task, trust the code and the git log
+over the column (planning commits, `M3-T10: plan: ...`, are not the work) and fix the column if they disagree.
+
+Why: before the column existed, status was only implied by "Done" bullets, as-built notes and commit subjects, so
+neither the maintainer nor an agent could see at a glance which tasks were finished, and two M3 tasks that had only
+been planned were taken for done.
+
 ## Rules of the road
 
+- Do not create your own branches unless explicitely instructed. branches are expected to tie directly to a milestone, with all tasks kept in that milestone branch.
 - Do not commit `assets/generated/`, `.tools/`, `.godot/`, `references/` or `reports/` (already in `.gitignore`).
-- Do not edit `README.md`, `LICENSE`, `DISCLAIMER.md` (owned by the maintainer) or files under `addons/`
-  (vendored upstream code; see `docs/third-party.md`).
+- Do not edit `README.md`, `LICENSE`, `DISCLAIMER.md` (owned by the maintainer) or files under `addons/gut/` and `addons/lens_effects/`
+  (vendored upstream code; see `docs/third-party.md`). `addons/gdgs_scs/` is the project's own fork of GDGS (GitHub:
+  `jrssae/godot-gaussian-splatting`, branch `space-combat-sim`): edit it here where the game needs it, keep its MIT `LICENSE`, record each change in
+  its `PATCHES.md`, and when a change is pushed run `scripts/sync_gdgs_fork.sh "<subject>"` so the fork matches.
 - Statically typed GDScript, one class per file, pure logic in `RefCounted` classes with GUT unit tests in the
   same PR; nodes are thin adapters. Physics in `_physics_process`, visuals in `_process`.
 - Gameplay never reads `Input`; ships consume `FlightCommand` + `CombatCommand` from `InputAdapter` (or, later,
@@ -49,16 +64,20 @@ site do not.
 - New subsystems register their debug-console commands and a whitelisted state provider with `DebugConsole` in
   `_ready` (`docs/architecture.md` §6.4); new settings are `SettingsSchema` entries. The ` key is reserved for
   the console: never bind it to an action.
-- Keep Newtonian motion honest: zero gravity, zero damping (project *and* body, `DAMP_MODE_REPLACE`), forces
-  re-applied every physics tick. The damping guard test must stay.
-- Anything that needs a GPU cannot be verified in the container; mark it `(H)` and leave it for the human
-  tester instead of faking it.
-- To look at frames without a GPU: install llvmpipe (`apt-get install mesa-vulkan-drivers xvfb`) and run
-  `scripts/capture.sh "wait 60; screenshot /tmp/x.png"`. GDGS falls back to Raster there, so Compute-only
-  artifacts still need the human tester (`docs/research-notes.md`).
+- Keep Newtonian motion honest: zero damping (project *and* body, `DAMP_MODE_REPLACE`), forces
+  re-applied every physics tick. The damping guard test must stay. Gravity effects only matter when in a reasonable proximity to a planet, moon, or star; 0 gravitational effects from anything smaller than a moon.
+- GPU work: the maintainer's machine (AMD Radeon RX 6950 XT, RADV, Wayland) runs the game on the GPU with GDGS's
+  Compute backend, so an agent working there verifies GPU behaviour itself: run the real renderer
+  (`.tools/godot/godot --path . --resolution 960x540 -- --console-exec="...; screenshot /tmp/x.png; quit"`; it opens a
+  window for a few seconds), read `state render` (`splat_backend = compute`, fps), and VRAM from
+  `/sys/class/drm/card1/device/mem_info_vram_used`. Judging how something looks (visual appearance, feel) stays with the
+  human tester as `(H)`. In a container without a GPU, mark GPU checks `(H)` instead of faking them; llvmpipe
+  (`scripts/capture.sh`) only shows GDGS's Raster backend (`docs/research-notes.md`).
 - Commit subjects start with the task id, e.g. `M1-T08: flight model and assist`. Do not push or open PRs unless
   asked; the maintainer handles git remotes.
 - Confirm each milestone is complete by asking the user, but once confirmed, merge to main.
+- Comments in the code must explain the goal of the method, not the functionality of the code. complex logic must explain what it's purpose is, not what it is actually doing. Comments must be human readable and short; do not over explain. Summarize. 
+- Each task mentioned to the user must use a short, one sentance explanation in parenthesis such as this example: "After that I'll start T19 (Splat LOD chain and LodSwitcher) properly." This is so the user can more easily understand what the task is.
 
 ## Commands
 

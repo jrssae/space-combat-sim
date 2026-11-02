@@ -18,6 +18,9 @@ extends Node
 
 var _body: Node3D = null
 var _local: Transform3D = Transform3D.IDENTITY
+# More splat nodes on the same body (a ship's other levels of detail, M3-T19), each with its pose relative to the body.
+var _more: Array[Node3D] = []
+var _more_local: Array[Transform3D] = []
 
 
 func _ready() -> void:
@@ -34,6 +37,15 @@ func _process(_delta: float) -> void:
 	sync()
 
 
+## Also drives `node`, another splat node below the same body (once).
+func add_splats(node: Node3D) -> void:
+	if node == null or _more.has(node) or _body == null:
+		return
+	_more.append(node)
+	_more_local.append(_body.global_transform.affine_inverse() * node.global_transform)
+	node.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+
+
 ## The splat node's pose relative to the body (its scene pose, GDGS's Rz(180) correction included).
 func local_pose() -> Transform3D:
 	return _local
@@ -43,7 +55,14 @@ func local_pose() -> Transform3D:
 func sync() -> void:
 	if _body == null or splats == null or not is_instance_valid(splats) or not splats.is_inside_tree():
 		return
-	var pose: Transform3D = _body.get_global_transform_interpolated() * _local
-	# Skip a no-op write: it would still notify GDGS, and the scene's exact pose should survive a resting body.
-	if not pose.is_equal_approx(splats.global_transform):
-		splats.global_transform = pose
+	var body_pose: Transform3D = _body.get_global_transform_interpolated()
+	_place(splats, body_pose * _local)
+	for i: int in _more.size():
+		if is_instance_valid(_more[i]) and _more[i].visible:  # a hidden level is placed when it is shown
+			_place(_more[i], body_pose * _more_local[i])
+
+
+# Skip a no-op write: it would still notify GDGS, and the scene's exact pose should survive a resting body.
+static func _place(node: Node3D, pose: Transform3D) -> void:
+	if not pose.is_equal_approx(node.global_transform):
+		node.global_transform = pose

@@ -122,6 +122,25 @@ class SfxCombatTests(unittest.TestCase):
         peak_freq = np.fft.rfftfreq(len(beep), 1.0 / rate)[int(np.argmax(np.abs(np.fft.rfft(beep))))]
         self.assertAlmostEqual(float(peak_freq), 880.0, delta=15.0)
 
+    def test_the_guns_and_the_impact_are_two_octaves_below_their_first_design(self) -> None:
+        # M3-T15 (Q17): every frequency a quarter, the length unchanged (not a resample). Measured as the frequency below
+        # which half the energy lies (the clicks' broadband noise would swamp a spectral centroid).
+        def energy_median(samples: np.ndarray) -> float:
+            n = 8 * len(samples)
+            power = np.abs(np.fft.rfft(samples, n)) ** 2
+            freqs = np.fft.rfftfreq(n, 1.0 / audio.SAMPLE_RATE)
+            return float(freqs[np.searchsorted(np.cumsum(power) / power.sum(), 0.5)])
+
+        self.assertEqual(sfx_combat.GUN_PITCH, 0.25)
+        for make, (lo, hi) in ((sfx_combat.pulse_fire, (0.22, 0.28)), (sfx_combat.hit_hull, (0.22, 0.28)),
+                               (sfx_combat.raider_fire, (0.0, 0.8))):  # fmt: skip
+            low = make(np.random.default_rng(3))
+            first = make(np.random.default_rng(3), pitch=1.0)
+            self.assertEqual(len(low), len(first), make.__name__)
+            ratio = energy_median(low) / energy_median(first)
+            # The raider's thump falls to 11-27 Hz, where its 80 ms decay smears the spectrum: lower, not a clean quarter.
+            self.assertTrue(lo <= ratio <= hi, (make.__name__, ratio))
+
     def test_same_seed_gives_byte_identical_files(self) -> None:
         for out in self.out_a.files:
             self.assertEqual(sha256(out), sha256(self.dir_b / out.name), out.name)

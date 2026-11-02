@@ -38,13 +38,53 @@ wide across the pods and 8 m tall. The X is wider than tall: struts sit about 30
   reddish-orange in the show. The rest of the view is open space; the frame never crosses the centre.
   Implications: `cockpit_interior` is the frame, struts and sill only. The targeting display is a HUD element
   (M2-T08), drawn in the green line theme per the maintainer's HUD answer.
+- **Cockpit view, second reference (maintainer, 2026-11-01, fan art, supersedes the frame above for the interior; the image is kept in the
+  ignored `references/` directory and never committed).** Two heavy, deep struts rise from the centre console and lean outward to the upper
+  corners, forming a V, with a dark bar across the top and dark curved conduits at the top corners. Their inner faces glow saturated red, with
+  cable runs along them. The main opening is the V: narrow at the console, wide at the top. Beyond each strut a large side pane shows
+  open space. Low on each side a broad sill of dark ribbed panels runs toward the pilot, with a small round white lamp set in each. In the
+  lower centre a flat octagonal display sits in the console, rim lit, tilted up to the pilot, showing a red grid with green ship icons and
+  a green target ring; a short row of small red and white indicator lamps sits on the console's edge just above it. Everything else is near black, lit
+  only by the red. Proportions, at 4:3: the octagon covers the middle quarter of the width and the lowest third of the height.
+  Implications: see M3-T29. The show-frame targeting grid above leaves the cockpit view for the octagon.
+  As built (M3-T29), the maintainer's slimmer proportions win over this image, for the view: the struts are about half as wide (about 180 px at the top of a
+  1080p frame, 100 px at the octagon) and land on the sides of the octagon, with no console above it, so the opening runs down to the octagon's top edge; the
+  bar across the top is 15 px; the sills stand 75 px tall at the frame's bottom outside the screens, each lamp inside that; the indicator row is a thin line of
+  lamps on the octagon's top rim, showing assist, guns, running lights and auto-track. No conduits were built at the top corners, to keep those corners open.
 - **Colours.** Light grey hull with darker panel lines and greebles; hazard stripes on the struts; dark metal
   pods with lighter bands.
+
+- **Reference model (2026-10-30).** The maintainer added a fan-made 3D-print model of the Starfury (an STL in the
+  untracked `references/`, never committed). Its geometry is not copied: we read orthographic renders and
+  cross-sections of it, scaled to a 15.4 m claw span, and rebuilt the hull from those measurements.
+  - **Overall**: 9.85 m long, 15.4 m across the claws, 7.5 m tall.
+  - **Nose**: a hexagonal beak. Its blunt tip is a small hexagon at mid height; flat facets flare back over about
+    1 m to the full section (about 1.5 m wide, 2.1 m deep). The deck overhangs it from above, with cheeks either
+    side reaching further forward.
+  - **Body**: slung between two decks. The upper deck runs across the top from one upper arm to the other, the lower
+    deck the same underneath. Under the chin: a keel box along the centre line, and on each side a long gun fairing
+    ending in a block with a heavy barrel over a lighter one. On each flank: a block with two forward ports under the
+    deck, a pointed teardrop fairing lower down, and a wedge fairing between the upper flank and the deck. The rear
+    is a hexagonal panel.
+  - **Arms**: each is two plates. The deck plate climbs from the body out to the pod. A brace plate starts at the
+    body (at the shoulder for the upper arms, low on the flank for the lower ones) and closes in under the deck
+    plate. From about 3 m out they run as one thick beam, with a slot and ladder bays along both edges. Seen from
+    the front they rise about 23 degrees. The leading edge is swept about 33 degrees beyond a steeper inboard
+    section; the trailing edge has a tooth.
+  - **Pods**: 5.6 m lathes on axes at (±5.53, ±2.3). Front to back: a narrow ring face, a groove, a long body
+    widening to a 0.93 m radius, a second groove, then a rear housing tapering to the main nozzle's face. Ahead of
+    the middle, a dome stands up (down on the lower pods) and a sensor bulb out, both 1.44 m from the axis. Two rings
+    of clamps.
+  - **Claws**: behind each pod, a plate bent along its length over the pod's outboard flank. It splits about 3 m
+    behind the pod centre into an upper and a lower prong, which reach a further 1.7 m. A smaller bent blade sits
+    under the arm on the inboard side.
+
+  `starfury_aurora` generator v4 (M3-T26) is built from these measurements (`docs/assets-starfury.md`).
 
 The M1 generator produced a long cylindrical fuselage with cylindrical pods. The maintainer judged that
 closer to a Thunderbolt than a Starfury. The rework must hit the silhouette above.
 
-## Babylon 5 station (M6)
+## Babylon 5 station (M7)
 
 About 8 km long, arranged along one axis. From aft to fore:
 
@@ -78,14 +118,14 @@ spikes hanging from the nacelle sides and wing roots. `docs/assets-raider.md` li
 56°) and where they differ from the earlier written defaults (9 m × 17 m, 60°). Open: scale (is 17 m across right?)
 and colour (worn grey-brown is used, per the mood shot); the maintainer can overrule both in `RaiderSpec`.
 
-## Raider carrier (M11)
+## Raider carrier (M12)
 
 A blocky "battlewagon": a long rectangular box hull, dark green-grey with plating. **Two large concentric
 rings** encircle the middle and aft of the box. Many cone- or spike-shaped launch pods (yellow-gold triangular
 fins) stand around the rings, which gives it a spiky wheel look. Spindly antennae at the corners.
 This is the first of two raider capital types.
 
-## Raider Battle Wagon (second raider carrier type, M11)
+## Raider Battle Wagon (second raider carrier type, M12)
 
 A heavier raider carrier built around one huge ring, weathered grey-brown with heavy plating.
 
@@ -108,8 +148,112 @@ A raider base station orbiting a Mars-like orange planet with a thin blue atmosp
 the foreground show **two bright yellow-white engine glows** at the rear of the central hump, worn brown-grey
 plating and visible panel detail. Useful for raider colours, engine-glow colour and a planet backdrop.
 
-## Maintenance bot (M6 ambience, tutorial set dressing)
+## Maintenance bot (M7 ambience, tutorial set dressing)
 
 A small craft a few metres across. Two large curved shell halves (blue-purple, with yellow-orange bands and a
 painted number) sit side by side like a split egg or clam, joined by a grey central truss body. Two jointed
 manipulator arms hang below with claw grippers. A sensor head with a green lens sits under the front centre.
+
+## Combat sounds (reference for the M5 sound pass)
+
+The source is the YouTube clip "Starfury Dogfight with Raider Forces | Babylon 5"
+(https://www.youtube.com/watch?v=b3uTt3MGqPg), 1:12 to 1:53 only. It was measured locally from a mono 48 kHz downmix and
+is not stored in the repository. The trimmed file and a `NOTES.txt` with every command sit in the maintainer's untracked
+`references/sound/b5_dogfight/`. Nobody listened to it. Everything below comes from envelopes, spectrograms and spectra,
+so it gives shapes and numbers for original synthesis in `tools/procgen/assets/sfx_combat.py`, never audio to copy. Times
+are video times.
+
+The mix is TV audio and heavily compressed, sitting between -11 and -15 dBFS RMS for all 41 s. Two layers dominate it,
+and both were set aside.
+
+- **Score.** A held low E (41, 62, 82, 123 and 165 Hz, an E with its fifth) runs from 1:12 to at least 1:48, with higher
+  partials on a 330 Hz series. Its 20.6 Hz beat first looked like an event train. Confidence high.
+- **Dialogue.** Radio chatter covers about half the window (1:12-1:18, 1:24-1:26.5, 1:29.5-1:32, 1:33.7-1:35.5,
+  1:48-1:52). Its "s" sounds are 100-130 ms noise bursts at 3-10 kHz and look like effects. A burst counted as speech when
+  the 250-2500 Hz voice band dropped 4-11 dB while it lasted. Effects leave the voice band alone. Confidence high.
+
+The effects sit 6-10 dB under the dialogue and the score.
+
+### Gun (one type found)
+
+Four bursts at 1:29.54, 1:30.29, 1:31.16 and 1:32.04, each of three shots. A shot is a short click, then a cluster of
+steady, bright, metallic tones held flat for about 100 ms until the next shot cuts in. The pitch does not move and there
+is no low thump. The shots are near-identical: the main tone is 4.79 kHz in every one, to within 0.15 %. Confidence is
+high that this is gunfire. The maintainer watched 1:29.5-1:32.0: it is the **Starfury's** gun (2026-10-25). No other
+shot sound occurs in the window, so the raider gun, and how the two differ, is not measured.
+
+| | Reference | `pulse_fire` today | `raider_fire` today |
+|---|---|---|---|
+| Length | 95-105 ms per shot; the last one falls 30 dB in about 40 ms | 180 ms, above -6 dB for 40 ms | 220 ms, above -6 dB for 41 ms |
+| Attack | under 10 ms, with a broadband click | under 1 ms | 1 ms |
+| Body | flat hold, then a 10-20 ms dip of 10-20 dB between shots | exponential decay, tau 53 ms | exponential decay, tau 72 ms |
+| Pitch | constant, within 10 Hz across a shot | sine falling 1.5 kHz to 260 Hz over 0.18 s | saws falling 520 to 170 Hz |
+| Partials | 2.06, 2.73, 4.79, 5.46, 6.18, 6.84 kHz | one sine plus a 140 to 60 Hz thump | two detuned saws plus a thump |
+| Energy over the bed | +8 dB at 2.5-4 kHz, +18 dB at 4-6.5 kHz, +14 dB at 6.5-10 kHz, none below 1 kHz | centroid 555 Hz, nothing above 2.5 kHz | centroid 273 Hz |
+| Tone vs noise | tones carry 78 % of the shot's band energy | almost all tone | tone with some noise |
+| Rate | 3 shots 102-112 ms apart (about 9.3/s), bursts 0.75-0.88 s apart | one shot per trigger | one shot per trigger |
+| Tail | an echo 15-20 dB down about 60 ms after the last shot, gone 450 ms after the burst began | none | none |
+| Level | -23 to -27 dBFS RMS, 7-11 dB under the dialogue | | |
+
+The partials are not harmonic. They fit two frequencies, a = 2.06 kHz and b = 0.67 kHz, as a, a+b, 2a+b, 2a+2b, 3a
+and 3a+b. That is the sideband pattern FM or ring modulation produces.
+
+### Roars and pass-bys (engine candidates)
+
+Two shapes of broadband noise, neither with a voice-band dip or a low boom. Confidence is medium that they are ships
+passing the camera, and low for which ship, or main engine versus manoeuvring jet.
+
+- **Step roars** at 1:26.85 (held to 1:27.86), 1:28.03 and 1:44.75. The noise switches on in 5-35 ms, holds for up to a
+  second with slow swells of about 3 dB and no decay, then stops within 30-50 ms. Starts and stops this hard are
+  probably picture cuts. Inside the roar, bands of noise slide downward like a comb filter whose delay grows, the usual
+  flanged pass-by. Read off the spectrograms, the bands fall about 1-7 octaves per second; an automated fit was
+  inconclusive.
+- **Swells** at 1:22.10, 1:32.70, 1:39.15, 1:40.99, 1:42.30 and 1:43.44. The high band rises 8-11 dB over 0.1-0.35 s,
+  stays up for about half a second and dies away. Brightness follows the level. At 1:40.99 the centroid of the added
+  noise climbs from 2.5 kHz to 8 kHz in 0.2 s and is back at 2.3 kHz by 0.65 s.
+
+| | Step roar | Swell | Today |
+|---|---|---|---|
+| Attack (10-90 %) | 5-35 ms | 55-345 ms, mostly 105-145 ms | loops; the game ramps the level with thrust or RCS demand |
+| Duration | 0.6-1.0 s, held | 0.5-0.6 s above the bed +6 dB | continuous |
+| Release | cut, 30-50 ms | exponential, tau 0.65-1.4 s | ramp |
+| Added noise above +3 dB | 400 Hz-16 kHz (2-13 kHz at 1:44.75) | 2-16 kHz | `engine_loop` 18-180 Hz harmonics and noise under 260 Hz, centroid 63 Hz |
+| Peak | +14 to +24 dB at 4-8 kHz | +9 to +28 dB at 6-16 kHz | `thruster_loop` noise 90-900 Hz, centroid 498 Hz, nothing above 2.5 kHz |
+| Slope above 1 kHz | -5 to -7.5 dB per octave | 0 to -10 dB per octave | |
+| Level added | about -22 dBFS RMS | -22 to -27 dBFS RMS | |
+
+The score covers everything under about 300 Hz at -17 dBFS, so an engine rumble 10 dB below it would not show. The
+missing low end in these roars is a limit of the measurement, not evidence of no rumble. No isolated short jet puff is
+certain. One candidate at 1:12.56 lasts about 120 ms (attack 25 ms, decay tau about 125 ms, +5 to +9 dB at 2.5-8 kHz),
+confidence low.
+
+### Impacts and explosions (not found)
+
+No sharp broadband event follows any gun burst. The 30-200 Hz band never rises more than 8.5 dB over its running median,
+and then only for 40-200 ms inside speech or score phrases, so the window has no explosion booms. `hit_hull` (350 ms,
+a 296 Hz inharmonic clank) and `explosion` (1.8 s, centroid 131 Hz) get no reference from this clip.
+
+### Design notes for original synthesis
+
+- **Gun.** Keep the character: constant pitch, a metallic inharmonic cluster from two-frequency FM, a click attack, a
+  flat hold of about 100 ms, triplet bursts at about 9 shots per second. Against today's `pulse_fire` that means moving
+  the energy up about three octaves (4-7 kHz instead of 0.5-1.3 kHz), dropping the falling sweep and the thump, and
+  replacing the exponential decay with hold-and-cut. Choose our own base frequency and ratio near these values rather
+  than reusing 2.06 and 0.67 kHz. A soft echo 60 ms after the burst is optional.
+- **Raider gun.** No reference will be measured: the maintainer chose to invent it (2026-10-25). It should still sit
+  with the Starfury gun as a pair, built the same way (click, flat hold, inharmonic cluster, hold-and-cut) but clearly
+  another weapon, for example lower and buzzier as it is now, with a different burst rhythm.
+- **Engines become per-thruster bursts.** The maintainer chose this model. Each main pod and each RCS jet sounds while
+  it fires, from a voice placed where it sits on the ship, replacing the two global loops. Burst parameters suggested by
+  the measurements:
+  - Main pod: noise 400 Hz-16 kHz, peak 4-8 kHz, about -5 dB per octave above 1 kHz. Attack 5-35 ms; held while firing
+    with a slow 3 dB wander at 0.5-2 Hz; release 30-50 ms on cutoff, up to 150 ms for a softer stop. Add a slow comb
+    sweep (notches falling 1-4 octaves per second) for close passes. A body under 300 Hz is a design choice the
+    reference neither confirms nor rules out; today's 36 Hz rumble could stay as a quieter layer.
+  - RCS jet: noise 2-16 kHz, brightest at 6-16 kHz. Attack 25-100 ms; held for the firing time; release tau 120-250 ms
+    for short pulses, up to 0.65 s after long burns. Brightness rises about an octave during the attack and falls during
+    the release.
+  - Today's `engine_loop` (nothing above about 260 Hz) and `thruster_loop` (90-900 Hz) sit 3-6 octaves below anything
+    measured in the reference.
+- **Hits and explosions.** No reference will be measured: the maintainer chose to invent them (2026-10-25), in keeping
+  with the gun and engine sounds above (bright, metallic, short), while `explosion` keeps a low body for weight.

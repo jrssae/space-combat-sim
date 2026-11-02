@@ -1,0 +1,234 @@
+class_name BehaviourAttack
+extends AiBehaviour
+## Gun runs (architecture §16 D34): M2's `AttackBrain` (approach, fire, break, extend) with the profile's tactics and aim
+## error, on a target this behaviour chooses.
+##
+## Target choice, every tick among the hostiles the orders allow (`AiContext.may_attack`): the best of `W_NEAR` x nearness,
+## `W_CLOSING` x closing speed (full at `CLOSING_FULL_MPS`), `W_ATTACKING_FRIEND` and `W_DAMAGED` x missing hull. The
+## current target gets `KEEP_BONUS` so the choice does not flicker. A new target restarts the run.
+##
+## Objective (M3-T17; a fallback since M3-T10): with an objective in sight or earshot and no allowed hostile in sight, the
+## objective is the target whatever its faction (orders still stand aside under FORM_ON_ME). A hostile in sight is fought
+## first, so a raider sent at a buoy fights the defenders on the way. Beyond the near scan (5 km) it transits instead,
+## closing at a speed it can still shed by 5 km (`TRANSIT_BRAKE_FRACTION`), without firing.
+##
+## Temperament (M3-T13): aim error and tactics come from the effective profile (`retune`). A passive pilot
+## (`AiTemperament.never_starts`) attacks only the ship that hit it within `AiTemperament.PROVOKED_S`, and no objective.
+##
+## Slashing pass (M3-T18): each run is, by a seeded roll, an `AttackSlash` pass with the temperament's `slash_chance`, else
+## `AttackBrain`'s standard gun run. A profile with `slashing` off never slashes. A run ends, and the next is rolled, when
+## the standard run comes round to approach again, the chase loses the target, or the target changes. The pass offset is
+## the close one with `close_pass_chance`.
+##
+## Score: 0 without an allowed target, else `SCORE_BASE + SCORE_SPAN` x the best value (0.3..0.8), so a tail threat (evade)
+## or a retreat outranks it.
+##
+## Aim: `AiProfile.aim_error_deg` is the amplitude of a slowly wandering lead offset (two seeded sines per axis, 0.05 to
+## 0.35 Hz), so misses are correlated over seconds, not noise from tick to tick.
+
+const W_NEAR: float = 0.4
+const W_CLOSING: float = 0.2
+const W_ATTACKING_FRIEND: float = 0.3
+const W_DAMAGED: float = 0.1
+const KEEP_BONUS: float = 0.1
+const CLOSING_FULL_MPS: float = 200.0
+const SCORE_BASE: float = 0.3
+const SCORE_SPAN: float = 0.5
+const INV_SENSOR_RANGE: float = 1.0 / ContactScan.SENSOR_RANGE_M
+const OBJECTIVE_VALUE: float = 1.0
+## Transit to a far objective: top closing speed, m/s, and the share of main-pod acceleration it plans to brake with.
+const TRANSIT_MAX_MPS: float = 1000.0
+const TRANSIT_BRAKE_FRACTION: float = 0.5
+
+var brain: AttackBrain = null
+## Radians: the aim wander's amplitude per axis.
+var aim_error_rad: float = 0.0
+
+var _seed: int = 0
+var _target: Contact = null
+var _engaged_id: int = 0
+var _time_s: float = 0.0
+var _transit: bool = false
+var _passive: bool = false
+## The slashing pass, whether the current run is one, and the share of runs that are (0 with slashing off; tests may set it)
+## and of passes flown close.
+var slash: AttackSlash = AttackSlash.new()
+var uses_slash: bool = false
+var slash_chance: float = 0.0
+var close_pass_chance: float = 0.0
+
+var _run_rng := RandomNumberGenerator.new()
+var _last_brain_state: AttackBrain.State = AttackBrain.State.APPROACH
+var _last_slash_state: AttackSlash.State = AttackSlash.State.PASS
+## Per axis (x right, y up): two frequencies (Hz) and two phases (rad).
+var _wander: PackedFloat64Array = PackedFloat64Array()
+
+
+func _init(profile: AiProfile, p_seed: int = 0) -> void:
+	id = &"attack"
+	_seed = p_seed
+	brain = AttackBrain.new(profile.tactics, hash([p_seed, "attack brain"]))
+	aim_error_rad = deg_to_rad(profile.aim_error_deg)
+	reset()
+
+
+func retune(profile: AiProfile, temperament: AiTemperament) -> void:
+	brain.tactics = profile.tactics
+	aim_error_rad = deg_to_rad(profile.aim_error_deg)
+	_passive = temperament.never_starts()
+	slash.tactics = profile.tactics
+	slash_chance = temperament.slash_chance() if profile.slashing else 0.0
+	close_pass_chance = temperament.close_pass_chance()
+	_roll_run()
+
+
+func reset() -> void:
+	brain.reset()
+	slash.reset()
+	_run_rng.seed = hash([_seed, "runs"])
+	_roll_run()
+	_target = null
+	_engaged_id = 0
+	_time_s = 0.0
+	_transit = false
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([_seed, "aim"])
+	_wander = PackedFloat64Array()
+	for axis: int in 2:
+		_wander.append_array([rng.randf_range(0.05, 0.15), rng.randf_range(0.15, 0.35), rng.randf_range(0.0, TAU),
+				rng.randf_range(0.0, TAU)])
+
+
+func score(ctx: AiContext) -> float:
+	var p: Perception = ctx.perception
+	var keep_id: int = _target.id if _target != null else _engaged_id
+	_target = null
+	var best: float = -INF
+	# Engage at will with no guard post allows every hostile, so skip the per-contact check.
+	var at_will: bool = ctx.order == AiContext.Order.ENGAGE_AT_WILL and not ctx.guarding
+	var own_velocity: Vector3 = p.velocity
+	var friendly_ids: PackedInt64Array = ctx.friendly_ids
+	var hostiles: Array[Contact] = ctx.hostiles
+	var provoker: int = 0
+	if _passive:
+		at_will = false
+		if p.last_attacker_id != 0 and p.now_s - p.last_hit_s <= AiTemperament.PROVOKED_S:
+			provoker = p.last_attacker_id
+	for i: int in hostiles.size():
+		var c: Contact = hostiles[i]
+		if _passive and c.id != provoker:
+			continue  # passive: only fire back
+		if not at_will and not ctx.may_attack(c):
+			continue
+		var los: Vector3 = ctx.hostile_offsets[i]
+		var d: float = ctx.hostile_ranges[i]
+		var value: float = W_NEAR * clampf(1.0 - d * INV_SENSOR_RANGE, 0.0, 1.0)
+		if d > 1e-3:
+			value += W_CLOSING * clampf((own_velocity - c.velocity).dot(los) / (d * CLOSING_FULL_MPS), 0.0, 1.0)
+		if friendly_ids.has(c.target_id):
+			value += W_ATTACKING_FRIEND
+		var hull: float = c.hull_fraction
+		if hull >= 0.0:
+			value += W_DAMAGED * (1.0 - hull)
+		if c.id == keep_id:
+			value += KEEP_BONUS
+		if value > best:
+			best = value
+			_target = c
+	if _target == null:
+		if ctx.objective != null and ctx.order != AiContext.Order.FORM_ON_ME and not _passive:
+			_target = ctx.objective
+			return clampf(SCORE_BASE + SCORE_SPAN * OBJECTIVE_VALUE, 0.0, 1.0)
+		return 0.0
+	return clampf(SCORE_BASE + SCORE_SPAN * best, 0.0, 1.0)
+
+
+func enter() -> void:
+	_engaged_id = 0  # so the first think restarts the run
+
+
+func think(ctx: AiContext, dt: float) -> PilotCommand:
+	_transit = false
+	if _target == null:
+		brain.firing = false
+		return PilotCommand.new()  # nothing allowed to attack: hold course
+	if _target == ctx.objective and ctx.objective_range_m > ContactScan.SENSOR_RANGE_M:
+		return _transit_to(ctx.perception, ctx.objective_range_m)
+	if _target.id != _engaged_id:
+		_engaged_id = _target.id
+		_roll_run()
+		slash.restart()
+		brain.restart()
+	elif uses_slash and slash.state == AttackSlash.State.PASS and _last_slash_state != AttackSlash.State.PASS:
+		_roll_run()  # the chase lost it: a new run
+		if not uses_slash:
+			brain.restart()
+	elif not uses_slash and brain.state == AttackBrain.State.APPROACH and _last_brain_state == AttackBrain.State.EXTEND:
+		_roll_run()  # round to approach again: a new run
+		if uses_slash:
+			slash.restart()
+	_last_slash_state = slash.state
+	_last_brain_state = brain.state
+	var run: PilotBrain = slash if uses_slash else brain
+	_time_s += dt
+	var aim: Vector2 = aim_offset_at(_time_s)
+	brain.aim_offset_rad = aim
+	slash.aim_offset_rad = aim
+	run.has_desired_velocity = false
+	var cmd: PilotCommand
+	if uses_slash:
+		cmd = slash.engage(ctx.perception, _target.id, _target.position, _target.velocity, dt)
+	else:
+		cmd = brain.engage(ctx.perception, _target.id, _target.position, _target.velocity, dt)
+	desired_velocity = run.desired_velocity
+	has_desired_velocity = run.has_desired_velocity
+	desired_all_axes = run.desired_all_axes
+	return cmd
+
+
+func target_id() -> int:
+	return _target.id if _target != null else PilotBrain.TARGET_NONE
+
+
+# Closes on a far objective as fast as the ship can still stop by the near scan's edge, without firing.
+func _transit_to(p: Perception, range_m: float) -> PilotCommand:
+	_transit = true
+	_engaged_id = 0
+	brain.firing = false
+	var cmd := PilotCommand.new()
+	var los_dir: Vector3 = (_target.position - p.position) / range_m
+	var brake: float = TRANSIT_BRAKE_FRACTION * p.capability.a_main
+	var arrive: float = sqrt(2.0 * brake * maxf(range_m - ContactScan.SENSOR_RANGE_M, 0.0))
+	var v_des: Vector3 = _target.velocity + los_dir * clampf(arrive, brain.tactics.closing_far_mps, TRANSIT_MAX_MPS)
+	var dv: Vector3 = v_des - p.velocity
+	cmd.flight.rot = PilotSteering.face(p.basis, dv.normalized() if dv.length() > 1.0 else los_dir, p.capability.rate_max_rad)
+	seek_velocity(cmd.flight, p, v_des)
+	return cmd
+
+
+# Rolls the next run: slashing pass or standard gun run, close or normal pass offset.
+func _roll_run() -> void:
+	uses_slash = slash_chance > 0.0 and _run_rng.randf() < slash_chance
+	slash.pass_offset_m = AttackSlash.CLOSE_PASS_OFFSET_M if _run_rng.randf() < close_pass_chance else AttackSlash.PASS_OFFSET_M
+
+
+## The aim offset (radians, right and up) at `t_s`, within `aim_error_rad` per axis.
+func aim_offset_at(t_s: float) -> Vector2:
+	if aim_error_rad <= 0.0:
+		return Vector2.ZERO
+	var out := Vector2.ZERO
+	for axis: int in 2:
+		var k: int = axis * 4
+		out[axis] = aim_error_rad * (0.6 * sin(TAU * _wander[k] * t_s + _wander[k + 2])
+				+ 0.4 * sin(TAU * _wander[k + 1] * t_s + _wander[k + 3]))
+	return out
+
+
+func describe() -> Dictionary:
+	if _target == null:
+		return {"state": "no target"}
+	if _transit:
+		return {"state": "transit", "target": _target.name, "firing": false}
+	var inner: Dictionary = slash.describe() if uses_slash else brain.describe()
+	return {"state": inner["state"], "target": _target.name, "range_m": inner["range_m"],
+			"firing": slash.firing if uses_slash else brain.firing}

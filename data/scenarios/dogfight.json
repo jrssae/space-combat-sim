@@ -1,0 +1,30 @@
+{"scenario_id": "dogfight", "system_id": "local",
+ "player": {"position": [3000, 0, 0], "forward": [-1, 0, 0]},
+ "pools": {"raider_fighter": 6, "starfury_ally": 4},
+ "wings": [
+   {"name": "ALPHA", "faction": "earth_alliance", "leader": "ALPHA 2", "order": "engage", "formation": "finger_four",
+    "members": [
+      {"type": "starfury_ally", "name": "ALPHA 2", "anchor": "origin", "offset": [0, 0, 2000],
+       "behaviour": {"type": "ai", "profile": "ally_starfury"}},
+      {"type": "starfury_ally", "name": "ALPHA 3", "anchor": "origin", "offset": [-60, 0, 2040],
+       "behaviour": {"type": "ai", "profile": "ally_starfury"}},
+      {"type": "starfury_ally", "name": "ALPHA 4", "anchor": "origin", "offset": [60, 0, 2040],
+       "behaviour": {"type": "ai", "profile": "ally_starfury"}},
+      {"type": "starfury_ally", "name": "ALPHA 5", "anchor": "origin", "offset": [120, 0, 2080],
+       "behaviour": {"type": "ai", "profile": "ally_starfury"}}]},
+   {"name": "RED", "faction": "raiders", "formation": "wedge",
+    "members": [
+      {"type": "raider_fighter", "name": "RAIDER 1", "anchor": "origin", "offset": [-400, 50, -2000],
+       "behaviour": {"type": "ai", "profile": "raider"}},
+      {"type": "raider_fighter", "name": "RAIDER 2", "anchor": "origin", "offset": [-460, 50, -2040],
+       "behaviour": {"type": "ai", "profile": "raider"}},
+      {"type": "raider_fighter", "name": "RAIDER 3", "anchor": "origin", "offset": [-340, 50, -2040],
+       "behaviour": {"type": "ai", "profile": "raider"}}]},
+   {"name": "BLUE", "faction": "raiders", "formation": "wedge",
+    "members": [
+      {"type": "raider_fighter", "name": "RAIDER 4", "anchor": "origin", "offset": [400, -50, -2000],
+       "behaviour": {"type": "ai", "profile": "raider", "aggression": "reckless"}},
+      {"type": "raider_fighter", "name": "RAIDER 5", "anchor": "origin", "offset": [340, -50, -2040],
+       "behaviour": {"type": "ai", "profile": "raider", "aggression": "reckless"}},
+      {"type": "raider_fighter", "name": "RAIDER 6", "anchor": "origin", "offset": [460, -50, -2040],
+       "behaviour": {"type": "ai", "profile": "raider", "aggression": "reckless"}}]}]}

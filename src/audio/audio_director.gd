@@ -4,11 +4,10 @@ extends Node3D
 ## `VOICES` `AudioStreamPlayer3D`s (when all are busy the oldest voice is stolen), an engine hum per ship, and a few 2D players for
 ## warnings. Space is audible, as in the show (Q5): shots, hits and explosions play positionally, outside the ship.
 ##
-## Hooks (`connect_combat`, `watch_ship`): a ship's `PulseCannon.projectile_fired` (`pulse_fire` for the Starfury's side,
-## `raider_fire` for the others), `HitResolver.hit_resolved` (`hit_hull` at the hit point), the destruction director's
-## `raider_destroyed` / `player_destroyed` (`explosion`), the player's hull below 25 % (`warning_beep`, repeating) and a new
-## selection (`target_blip`). Each ship gets a looping `engine_loop` child (so it follows the ship and a rebase) that plays while
-## the ship is in play and within `ENGINE_RANGE_M` of the listener; its pitch and volume follow the flight output's thrust levels.
+## Hooks (`connect_combat`, `watch_ship`): cannon fire (`pulse_fire` for the Starfury's side, `raider_fire` for the others),
+## hits (`hit_hull`), destruction (`explosion`), the player's hull below 25 % (`warning_beep`, repeating) and a new selection
+## (`target_blip`). Each ship gets a looping `engine_loop` child, so it follows the ship and a rebase, that plays while the
+## ship is in play within `ENGINE_RANGE_M` of the listener. Pitch and volume follow the thrust levels.
 ##
 ## `settings.sfx_volume` (0..1) is the gain of the `SFX` bus (`default_bus_layout.tres`; created at run time if it is missing).
 ## The Dummy audio driver of a headless run plays silently, and nothing here errors without sound files.
@@ -27,8 +26,7 @@ const WARNING_INTERVAL_S: float = 1.5
 const HUM_DB: Vector2 = Vector2(-30.0, -9.0)
 const HUM_PITCH: Vector2 = Vector2(0.8, 1.25)
 const HUM_IDLE_LEVEL: float = 0.12
-## The engines spool: the heard level moves toward the thrust level at these rates (per second), so the rumble builds when
-## the throttle opens and dies away when it closes. 1 / rate = seconds for a full swing.
+## The heard level moves toward the thrust level at these rates (per second), so the rumble builds and dies away.
 const HUM_RISE_PER_S: float = 1.2
 const HUM_FALL_PER_S: float = 0.8
 ## Attitude thrusters: gain (dB) at silence and at full demand, pitch range, and their quicker spool.
@@ -84,6 +82,13 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+	# A voice still sounding at quit would keep its stream alive past the scene ("resources still in use at exit").
+	for voice: AudioStreamPlayer3D in _voices:
+		voice.stop()
+		voice.stream = null
+	for ui: AudioStreamPlayer in _ui_voices:
+		ui.stop()
+		ui.stream = null
 
 
 func _process(delta: float) -> void:
@@ -131,6 +136,7 @@ func play(sound_name: StringName, at: Vector3, volume_db: float = 0.0, pitch: fl
 	_voice_serial[index] = _serial
 	voice.stream = _streams[sound_name]
 	voice.global_position = at
+	voice.reset_physics_interpolation()  # no blend from its last sound or a rebase
 	voice.volume_db = volume_db
 	voice.pitch_scale = pitch
 	voice.play()
@@ -174,7 +180,7 @@ func _load_sounds() -> void:
 		var stream := load(path) as AudioStreamWAV
 		if stream != null:
 			_streams[sound_name] = stream
-	# The engine hum and the thruster loop run over the whole file (the manifest's loop points are 0 to the last sample).
+	# The loops run over the whole file.
 	for loop_name: StringName in [&"engine_loop", &"thruster_loop"]:
 		if _streams.has(loop_name):
 			var loop: AudioStreamWAV = (_streams[loop_name] as AudioStreamWAV).duplicate() as AudioStreamWAV
@@ -217,9 +223,9 @@ func connect_combat(resolver: HitResolver, destruction: DestructionDirector, p_p
 	if resolver != null:
 		resolver.hit_resolved.connect(func(info: HitInfo) -> void: play(&"hit_hull", info.point, -4.0, randf_range(0.92, 1.08)))
 	if destruction != null:
-		destruction.raider_destroyed.connect(func(c: Combatant, _info: HitInfo) -> void: play(&"explosion", c.ship.global_position, 3.0))
+		destruction.ship_destroyed.connect(func(_c: Combatant, _info: HitInfo) -> void: play(&"explosion", destruction.last_blast_position, 3.0))
 		destruction.buoy_destroyed.connect(func(buoy: NavBuoy, _info: HitInfo) -> void: play(&"explosion", buoy.global_position, 0.0, 1.15))
-		destruction.player_destroyed.connect(func(_info: HitInfo) -> void: play(&"explosion", player.ship.global_position, 3.0))
+		destruction.player_destroyed.connect(func(_info: HitInfo) -> void: play(&"explosion", destruction.last_blast_position, 3.0))
 	if player != null:
 		player.ship.targeting.target_changed.connect(func(id: int) -> void:
 			if id != TargetingSystem.NO_TARGET:
@@ -282,7 +288,7 @@ func _update_engines(delta: float) -> void:
 		var ship: Ship = combatant.ship
 		var live: bool = ship.is_visible_in_tree() and ship.can_process() and ship.global_position.distance_to(listener) <= ENGINE_RANGE_M
 		if not live:
-			# A ship out of play starts from a cold engine when it comes back.
+			# A ship out of play restarts cold.
 			entry["level"] = HUM_IDLE_LEVEL
 			entry["thruster_level"] = 0.0
 			if hum.playing:

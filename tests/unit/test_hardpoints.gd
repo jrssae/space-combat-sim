@@ -208,3 +208,62 @@ func test_bad_collision_primitives_are_rejected() -> void:
 	var flat: Dictionary = {"basis": {"x": [1, 0, 0], "y": [1, 0, 0], "z": [0, 0, 1]}}
 	assert_string_contains(_collision_variant(0, flat).error, "columns of a rotation")  # degenerate
 	assert_false(_collision_variant(0, {"basis": "identity"}).valid)
+
+
+func test_a_chunk_joint_is_parsed_and_defaults_to_the_offset() -> void:
+	var data: Dictionary = fixture.duplicate(true)
+	data["chunks"] = [
+		{"name": "cabin", "ply": "c.ply", "obj": "c.obj", "offset": [0.0, -0.4, -2.1], "joint": [0.0, -0.2, -1.3]},
+		{"name": "arm", "ply": "a.ply", "obj": "a.obj", "offset": [4.0, 1.9, 0.4]},
+	]
+	var parsed: Hardpoints = Hardpoints.from_dict(data)
+	assert_true(parsed.valid, parsed.error)
+	assert_eq(parsed.chunks[0]["joint"], Vector3(0.0, -0.2, -1.3))
+	assert_eq(parsed.chunks[1]["joint"], Vector3(4.0, 1.9, 0.4), "a file without a joint detaches the chunk at its centroid")
+
+
+# --- the console's screens (M3-T29) ------------------------------------------------------------------------------------
+
+
+func _screens() -> Dictionary:
+	return {"left": {"center": [-0.5, 0.2, -4.0], "size": [0.42, 0.3], "normal": [0.03, 0.1, 0.99], "up": [0.0, 1.0, 0.0], "corner": 0.0},
+			"octagon": {"center": [0.0, 0.2, -4.0], "size": [0.4, 0.3], "normal": [0.0, 0.0, 1.0], "up": [0.0, 1.0, 0.0], "corner": 0.08}}
+
+
+func test_screens_are_optional() -> void:
+	assert_true(_variant("screens", null).valid, "a ship with no console")
+	assert_true(_variant("screens", null).screens.is_empty())
+
+
+func test_screens_parse_with_a_transform_on_the_screens_plane() -> void:
+	var parsed: Hardpoints = _variant("screens", _screens())
+	assert_true(parsed.valid, parsed.error)
+	assert_eq_deep(parsed.screens.keys(), ["left", "octagon"])
+	var left: Dictionary = parsed.screens["left"]
+	assert_almost_eq(left["center"], Vector3(-0.5, 0.2, -4.0), _tol())
+	assert_eq(left["size"], Vector2(0.42, 0.3))
+	assert_eq(float(parsed.screens["octagon"]["corner"]), 0.08)
+	var frame: Transform3D = left["transform"]
+	assert_almost_eq(frame.origin, left["center"], _tol())
+	assert_almost_eq(frame.basis.z, (left["normal"] as Vector3).normalized(), _tol(), "+Z to the pilot")
+	assert_gt(frame.basis.x.x, 0.9, "+X the pilot's right, so the picture does not read mirrored")
+	assert_gt(frame.basis.y.y, 0.9, "+Y up")
+	assert_almost_eq(frame.basis.determinant(), 1.0, 1e-4, "a proper rotation")
+
+
+func test_bad_screens_are_refused() -> void:
+	assert_false(_variant("screens", "nope").valid)
+	var cases: Array = [{"left": "nope"}, {"left": {"size": [1.0, 1.0], "normal": [0, 0, 1], "up": [0, 1, 0]}},
+			{"left": {"center": [0, 0, 0], "size": [0.0, 1.0], "normal": [0, 0, 1], "up": [0, 1, 0]}},
+			{"left": {"center": [0, 0, 0], "size": [1.0], "normal": [0, 0, 1], "up": [0, 1, 0]}},
+			{"left": {"center": [0, 0, 0], "size": [1.0, 1.0], "normal": [0, 0, 0], "up": [0, 1, 0]}}]
+	for value: Variant in cases:
+		assert_false(_variant("screens", value).valid, str(value))
+
+
+func test_the_generated_screens_load() -> void:
+	var generated: Hardpoints = Hardpoints.load_file("res://assets/generated/starfury_aurora/hardpoints.json")
+	assert_true(generated.valid, generated.error)
+	assert_eq(generated.screens.size(), 3)
+	assert_lt((generated.screens["left"]["center"] as Vector3).x, 0.0, "left is port (-X)")
+	assert_gt((generated.screens["right"]["center"] as Vector3).x, 0.0)

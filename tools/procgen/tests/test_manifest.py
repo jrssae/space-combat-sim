@@ -72,6 +72,8 @@ class ManifestTests(unittest.TestCase):
             "float splats": lambda m: m["lods"][0].update(splats=1.5),
             "no file": lambda m: m["lods"][0].pop("file"),
             "bad spacing": lambda m: m["lods"][0].update(spacing_m=0),
+            "lighting type": lambda m: m["lods"][0].update(lighting=3),
+            "lighting file": lambda m: m["lods"][0].update(lighting="demo.ply"),
             "frame": lambda m: m.update(frame="3dgs"),
             "units": lambda m: m.update(units="cm"),
             "seed type": lambda m: m.update(seed="42"),
@@ -83,6 +85,34 @@ class ManifestTests(unittest.TestCase):
         for name, mutate in cases.items():
             with self.subTest(name), self.assertRaises(ValueError):
                 manifest.validate_manifest(broken(mutate))
+
+    def test_a_level_may_name_its_lighting_records(self) -> None:
+        self.assertNotIn("lighting", manifest.lod_entry(0, "d.ply", 1, 1.0))
+        entry = manifest.lod_entry(0, "d.ply", 1, 1.0, "d_lod0.light")
+        self.assertEqual(entry["lighting"], "d_lod0.light")
+        m = copy.deepcopy(sample())
+        m["lods"][0] = entry
+        manifest.validate_manifest(m)
+
+    def test_a_hero_entry_is_validated_like_a_level(self) -> None:
+        good = {"file": "d_hero.ply", "splats": 9, "spacing_m": 0.02, "lighting": "d_hero.light"}
+        m = copy.deepcopy(sample())
+        m["hero"] = dict(good)
+        manifest.validate_manifest(m)
+        for name, change in {
+            "file": {"file": ""},
+            "splats": {"splats": 0},
+            "spacing": {"spacing_m": -1},
+            "lighting": {"lighting": "d_hero.ply"},
+        }.items():
+            with self.subTest(name), self.assertRaises(ValueError):
+                broken = copy.deepcopy(sample())
+                broken["hero"] = {**good, **change}
+                manifest.validate_manifest(broken)
+        with self.assertRaises(ValueError):
+            broken = copy.deepcopy(sample())
+            broken["hero"] = "d_hero.ply"
+            manifest.validate_manifest(broken)
 
     def test_write_and_read_round_trip_with_stable_text(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

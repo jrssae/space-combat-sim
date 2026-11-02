@@ -201,7 +201,11 @@ func test_selection_clears_beyond_sensor_range() -> void:
 	controller.apply(_next())
 	var alpha: NavBuoy = buoys["NAV ALPHA"]
 	watch_signals(controller)
+	# Buoys broadcast (M3-T17): past the sensors a buoy stays within reach up to its own broadcast range.
 	alpha.global_position = Vector3(0.0, 0.0, -(TargetingSystem.SENSOR_RANGE_M + 100.0))
+	await get_tree().physics_frame
+	assert_eq(controller.selected_id(), _id_of("NAV ALPHA"), "beyond the sensors, inside its broadcast: kept")
+	alpha.targetable.broadcast_range_m = 0.0  # a silent target goes at the sensor range
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	assert_eq(controller.selected_id(), TargetingSystem.NO_TARGET)
@@ -316,28 +320,23 @@ func test_buoys_share_one_splat_resource_that_matches_the_manifest() -> void:
 			"identity in the scene; GDGS applies its own Rz(180) correction on entering the tree")
 
 
-func test_beacon_sits_at_the_hardpoint_and_blinks_from_sim_clock() -> void:
+func test_beacon_sits_at_the_hardpoint_steady_with_a_slow_fade_from_sim_clock() -> void:
 	var alpha: NavBuoy = buoys["NAV ALPHA"]
 	var hp: Dictionary = _read_json(HARDPOINTS_PATH)
 	assert_true(hp.has("beacon"), "hardpoints.json has a beacon (%s)" % GEN_ASSETS_HINT)
 	if hp.has("beacon"):
 		var p: Array = hp["beacon"]["position"]
 		assert_almost_eq(alpha.beacon.position, Vector3(float(p[0]), float(p[1]), float(p[2])), Vector3.ONE * 1e-5)
-	# 1 Hz, lit for the first quarter of each second.
-	assert_true(NavBuoy.beacon_lit(0.0))
-	assert_true(NavBuoy.beacon_lit(0.24))
-	assert_false(NavBuoy.beacon_lit(0.25))
-	assert_false(NavBuoy.beacon_lit(0.99))
-	assert_true(NavBuoy.beacon_lit(41.1))
-	assert_true(NavBuoy.beacon_lit(0.9, 0.2), "the phase shifts the blink")
-	# The node follows SimClock: pick phases that put "now" in the lit and the dark part of the period.
+	# The node follows SimClock: pick phases that put "now" at the fade's full and at its nothing.
 	var now: float = SimClock.now()
-	alpha.blink_phase_s = 0.1 - fposmod(now, 1.0)
+	alpha.fade_phase_s = NavBuoy.FADE_PERIOD_S * 0.5 - now
 	alpha._process(0.0)
-	assert_true(alpha.beacon.visible, "lit")
-	alpha.blink_phase_s = 0.6 - fposmod(now, 1.0)
+	assert_almost_eq(alpha.beacon_fade.transparency, 0.0, 1e-3, "fully in")
+	assert_true(alpha.beacon.visible, "the steady light")
+	alpha.fade_phase_s = -now
 	alpha._process(0.0)
-	assert_false(alpha.beacon.visible, "dark")
+	assert_almost_eq(alpha.beacon_fade.transparency, 1.0, 1e-3, "fully out")
+	assert_true(alpha.beacon.visible, "and it never goes out")
 
 
 func test_buoys_spin_about_their_axis_and_drift() -> void:

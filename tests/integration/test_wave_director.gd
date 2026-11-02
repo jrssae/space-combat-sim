@@ -46,7 +46,7 @@ func _wait_for_state(state: StringName, limit_s: float = 60.0) -> void:
 
 func test_the_sandbox_is_the_default_scenario_and_waits_for_wave_start() -> void:
 	assert_eq(main.waves.scenario_id, &"combat_sandbox")
-	assert_eq(main.ships.pool_size(), 6)
+	assert_eq(main.ships.pool_size(ShipPool.DEFAULT_TYPE), 9, "nine raiders (M3-T10)")
 	assert_eq(main.waves.plan.state, WavePlan.State.IDLE, "auto start is off for tests")
 	assert_eq(main.buoys.size(), 5, "the buoys stay as scenery")
 	assert_eq(DebugConsole.registry.format_path("waves.scenario"), "waves.scenario = combat_sandbox")
@@ -69,8 +69,8 @@ func test_wave_start_runs_the_countdown_then_spawns_the_waves_raiders() -> void:
 	await _wait_for_state(&"active")
 	await _ticks(3)
 	Engine.time_scale = 1.0
-	assert_eq(main.ships.alive().size(), 3, "TARGET PRACTICE: three raiders")
-	for combatant: Combatant in main.ships.alive():
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 4, "TARGET PRACTICE: four raiders")
+	for combatant: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
 		assert_true(combatant.driver.brain is IdleBrain)
 		assert_gt(combatant.ship.linear_velocity.length(), 4.0, "drifting")
 		assert_lt(combatant.ship.linear_velocity.length(), 21.0)
@@ -87,11 +87,35 @@ func test_spawns_are_offsets_from_the_players_position_at_wave_start() -> void:
 	await _wait_for_state(&"active")
 	await _ticks(2)
 	Engine.time_scale = 1.0
-	var first: Combatant = main.ships.alive()[0]
+	var first: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
 	var expected := Vector3(-700.0, 60.0, -1300.0)
 	var at: UniversePos = main.world.to_universe(first.ship.global_position)
 	var drifted: Vector3 = first.ship.linear_velocity * 2.0 * DT * 4.0
 	assert_lt(at.distance_to(anchor.plus_local(expected)), drifted.length() + 5.0, "the first raider's offset from the anchor")
+
+
+func test_an_origin_spawn_is_an_offset_from_the_scenario_origin_whatever_the_rebases() -> void:
+	# M3-T14: the World's local origin follows the player now, so "origin" must mean the scenario's (universe) origin.
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ScenarioLoader.SANDBOX_PATH))
+	data["waves"] = [{"name": "FROM THE ORIGIN", "delay_s": 0.1, "spawns": [
+		{"type": "raider_fighter", "anchor": "origin", "offset": [300, 20, -800], "behaviour": {"type": "idle", "hold": true}}]}]
+	data.erase("loop")
+	var scenario: Dictionary = ScenarioLoader.from_data(data, "test")
+	assert_true(bool(scenario["ok"]), str(scenario["error"]))
+	main.waves.setup(main.world, main.ships, main.combatant, scenario, null, false)
+	main.ship.reset_to(Transform3D(Basis.IDENTITY, Vector3(4000.0, 0.0, -1000.0)))
+	assert_true(_exec("rebase 4000 0 -1000").ok, "the local origin is on the player, 4 km from the scenario origin")
+	await _ticks(1)
+	assert_almost_eq(main.world.origin.distance_to(UniversePos.new(4000.0, 0.0, -1000.0)), 0.0, 1e-3)
+	main.waves.start(0)
+	await _wait_for_state(&"active", 5.0)
+	await _ticks(1)
+	var raiders: Array[Combatant] = main.ships.alive(ShipPool.DEFAULT_TYPE)
+	assert_eq(raiders.size(), 1)
+	if raiders.is_empty():
+		return
+	var at: UniversePos = main.world.to_universe(raiders[0].ship.global_position)
+	assert_almost_eq(at.distance_to(UniversePos.new(300.0, 20.0, -800.0)), 0.0, 1.0, "at its offset from the scenario origin: %s" % at)
 
 
 func test_kill_all_clears_a_wave_and_the_next_one_comes() -> void:
@@ -99,9 +123,9 @@ func test_kill_all_clears_a_wave_and_the_next_one_comes() -> void:
 	Engine.time_scale = 4.0
 	await _wait_for_state(&"active")
 	await _ticks(3)
-	assert_eq(main.ships.alive().size(), 3)
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 4)
 	assert_true(_exec("kill all").ok)
-	assert_eq(main.waves.kills, 3, "every raider destroyed counts")
+	assert_eq(main.waves.kills, 4, "every raider destroyed counts")
 	await _wait_for_state(&"cleared")
 	assert_eq(main.waves.plan.state, WavePlan.State.CLEARED)
 	assert_string_contains(main.status_line, "CLEARED")
@@ -119,21 +143,21 @@ func test_three_waves_advance_with_the_expected_kills() -> void:
 		await _wait_for_state(&"active", 90.0)
 		# Strike spawns over 6 s: wait for them all, then kill everything.
 		var t0: float = SimClock.now()
-		while main.ships.alive().size() < main.waves.plan.spawn_total() and SimClock.now() - t0 < 30.0:
+		while main.ships.alive(ShipPool.DEFAULT_TYPE).size() < main.waves.plan.spawn_total() and SimClock.now() - t0 < 30.0:
 			await _ticks(1)
 		await _ticks(2)
-		expected_kills += main.ships.alive().size()
+		expected_kills += main.ships.alive(ShipPool.DEFAULT_TYPE).size()
 		assert_true(_exec("kill all").ok)
 		await _wait_for_state(&"cleared", 20.0)
 		assert_eq(main.waves.plan.wave_number, wave + 1)
 		assert_eq(main.waves.plan.state, WavePlan.State.CLEARED, "wave %d cleared" % (wave + 1))
 	Engine.time_scale = 1.0
 	assert_eq(main.waves.kills, expected_kills)
-	assert_eq(expected_kills, 3 + 3 + 4)
-	assert_eq(DebugConsole.registry.format_path("waves.kills"), "waves.kills = 10")
+	assert_eq(expected_kills, 4 + 5 + 6)
+	assert_eq(DebugConsole.registry.format_path("waves.kills"), "waves.kills = 15")
 	await _wait_for_state(&"countdown", 20.0)
 	assert_eq(main.waves.plan.wave_number, 4, "and it loops: wave 4 is the strike again with one more")
-	assert_eq(main.waves.plan.spawn_total(), 5)
+	assert_eq(main.waves.plan.spawn_total(), 7)
 
 
 func test_the_status_line_follows_the_state() -> void:
@@ -144,7 +168,7 @@ func test_the_status_line_follows_the_state() -> void:
 	await _wait_for_state(&"active")
 	await _ticks(3)
 	Engine.time_scale = 1.0
-	assert_string_contains(main.status_line, "RAIDERS 3")
+	assert_string_contains(main.status_line, "RAIDERS 5")
 	assert_string_contains(main.status_line, "KILLS 0")
 	_exec("wave stop")
 	assert_eq(main.status_line, "")
@@ -177,20 +201,20 @@ func test_the_wave_goes_on_across_the_players_death() -> void:
 	Engine.time_scale = 5.0
 	await _wait_for_state(&"active")
 	await _ticks(3)
-	assert_eq(main.ships.alive().size(), 3)
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 5)
 	DebugConsole.flags.invulnerable = false
 	assert_true(_exec("kill player").ok)
 	assert_eq(main.waves.losses, 1)
-	assert_eq(main.ships.alive().size(), 3, "the raiders stay")
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 5, "the raiders stay")
 	assert_eq(main.waves.plan.state, WavePlan.State.ACTIVE, "and the wave is still on")
 	var t0: float = SimClock.now()
 	while not main.player_alive and SimClock.now() - t0 < 10.0:
 		await _ticks(1)
 	Engine.time_scale = 1.0
 	assert_true(main.player_alive)
-	assert_eq(main.ships.alive().size(), 3)
+	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 5)
 	assert_eq(main.waves.plan.wave_number, 2, "the same wave")
-	for combatant: Combatant in main.ships.alive():
+	for combatant: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
 		assert_eq(combatant.driver._retarget_in_s, 0.0, "pilots look for the respawned player at once")
 
 
@@ -222,3 +246,34 @@ func test_scenario_path_overrides_the_setting() -> void:
 	assert_eq(main.resolved_scenario_path(), "res://data/scenarios/combat_sandbox.json")
 	main.scenario_path = "res://data/scenarios/free_flight.json"
 	assert_eq(main.resolved_scenario_path(), "res://data/scenarios/free_flight.json")
+
+
+func test_wave_raiders_roll_their_skill_and_aggression_inside_the_waves_ranges() -> void:
+	# M3-T13: PATROL's raiders are the easiest, STRIKE's first round easy, each loop's floor higher; aggression varies per raider.
+	var seen: Dictionary = {}
+	for number: int in [2, 3, 6]:
+		_exec("wave start %d" % mini(number, 3))
+		while main.waves.plan.wave_number < number:
+			main.waves.plan.skip()
+		Engine.time_scale = 5.0
+		await _wait_for_state(&"active")
+		await _ticks(40)
+		Engine.time_scale = 1.0
+		var skill: Vector2 = main.waves.plan.skill_range(number)
+		var aggressions := PackedFloat64Array()
+		for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
+			var pilot := c.driver.brain as AiPilot
+			assert_not_null(pilot, "%s flies the AI" % c.display_name)
+			if pilot == null:
+				continue
+			assert_between(pilot.temperament.skill, skill.x, skill.y, "wave %d: %s's skill" % [number, c.display_name])
+			assert_between(pilot.temperament.aggression, 0.25, 1.0)
+			aggressions.append(pilot.temperament.aggression)
+		seen[number] = aggressions
+		_exec("wave stop")
+	assert_lt(main.waves.plan.skill_range(2).y, main.waves.plan.skill_range(3).y, "the patrol is easier than the first strike")
+	assert_gt(main.waves.plan.skill_range(6).x, main.waves.plan.skill_range(3).x, "a later strike starts higher")
+	for number: Variant in seen:
+		var a: PackedFloat64Array = seen[number]
+		assert_gt(a.size(), 1)
+		assert_ne(a[0], a[1], "wave %d: aggression varies from raider to raider" % number)

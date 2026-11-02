@@ -131,9 +131,17 @@ func test_the_project_map_is_a_valid_profile() -> void:
 	assert_eq(profile.validate(), PackedStringArray(), "project.godot follows the profile rules")
 	assert_eq(profile.bindings.size(), InputAdapter.ACTIONS.size())
 	assert_eq(profile.descriptors_for(&"fire"), PackedStringArray(["pad:button:0", "key:Space", "mouse:1"]))
-	assert_eq(profile.descriptors_for(&"main_right"), PackedStringArray(["pad:axis:5+", "key:R", "key:E"]))
+	assert_eq(profile.descriptors_for(&"main_right"), PackedStringArray(["pad:axis:5+", "key:E", "key:W"]))
+	assert_eq(profile.descriptors_for(&"roll_left"), PackedStringArray(["key:CapsLock"]), "the stick's diagonals roll")
+	assert_eq(profile.descriptors_for(&"yaw_left"), PackedStringArray(["pad:axis:2-"]))
+	assert_eq(profile.descriptors_for(&"target_next"), PackedStringArray(["key:B", "mouse:2"]))
+	assert_eq(profile.descriptors_for(&"target_cycle"), PackedStringArray(["pad:button:1"]), "pad B")
+	assert_eq(profile.descriptors_for(&"toggle_flight_assist"), PackedStringArray(["pad:button:11", "key:T"]))
+	assert_eq(profile.descriptors_for(&"autotrack"), PackedStringArray(["pad:button:2", "key:Shift", "mouse:8"]))
+	assert_eq(profile.descriptors_for(&"weapon_next"), PackedStringArray(["pad:button:12", "key:V", "mouse:9"]))
+	assert_eq(profile.descriptors_for(&"target_prev"), PackedStringArray(), "the wheel covers it: no event")
 	assert_almost_eq(float(profile.deadzones[&"main_right"]), 0.05, 1e-6)
-	assert_almost_eq(float(profile.deadzones[&"yaw_left"]), 0.5, 1e-6)
+	assert_almost_eq(float(profile.deadzones[&"yaw_left"]), 0.15, 1e-6, "a stick")
 
 
 func test_input_map_to_profile_to_text_to_profile_to_input_map_is_exact() -> void:
@@ -374,7 +382,8 @@ func test_unbind_cannot_remove_the_last_pad_binding() -> void:
 
 func test_describe_action() -> void:
 	assert_eq(_default.describe_action(&"fire"), "fire: pad:button:0 key:Space mouse:1 (deadzone 0.50)")
-	assert_eq(_default.describe_action(&"main_left"), "main_left: pad:axis:4+ key:Q key:E (deadzone 0.05)")
+	assert_eq(_default.describe_action(&"main_left"), "main_left: pad:axis:4+ key:Q key:W (deadzone 0.05)")
+	assert_eq(_default.describe_action(&"target_prev"), "target_prev: (unbound) (deadzone 0.50)", "no event: the wheel steps back")
 
 
 func test_same_bindings_ignores_names() -> void:
@@ -389,27 +398,45 @@ func test_same_bindings_ignores_names() -> void:
 # --- The built-in classic layout ------------------------------------------------------------------------------
 
 
-func test_m1_classic_is_the_default_with_yaw_and_roll_swapped_between_stick_and_dpad() -> void:
+func test_m1_classic_keeps_the_m1_pad_layout() -> void:
 	var loaded: Dictionary = ControlProfiles.store.load_profile("m1_classic")
 	assert_true(loaded["ok"], str(loaded["errors"]))
 	var classic: ControlProfile = loaded["profile"]
 	assert_string_contains(classic.description, "right stick X yaws")
-	var swapped: Array[StringName] = [&"yaw_left", &"yaw_right", &"roll_left", &"roll_right"]
+	# Since M3-T15 the default yaws on the stick too; m1_classic differs in rolling on the D-pad, targeting with D-pad Up
+	# and toggling assist with B.
+	# It has no button left for the running lights (M3-T27): those are key 5 alone.
+	var own: Array[StringName] = [&"roll_left", &"roll_right", &"target_next", &"toggle_flight_assist", &"target_cycle",
+			&"toggle_running_lights"]
+	assert_eq(classic.descriptors_for(&"toggle_running_lights"), PackedStringArray(["key:5"]))
 	for action: StringName in InputAdapter.ACTIONS:
-		if swapped.has(action):
+		if own.has(action):
 			continue
 		assert_eq(classic.descriptors_for(action), _default.descriptors_for(action), "%s is unchanged" % action)
 		assert_almost_eq(float(classic.deadzones[action]), float(_default.deadzones[action]), 1e-6, "%s deadzone" % action)
-	assert_eq(classic.descriptors_for(&"yaw_left"), PackedStringArray(["pad:axis:2-", "key:J"]), "right stick X yaws")
-	assert_eq(classic.descriptors_for(&"yaw_right"), PackedStringArray(["pad:axis:2+", "key:L"]))
-	assert_eq(classic.descriptors_for(&"roll_left"), PackedStringArray(["pad:button:13", "key:Z"]), "D-pad rolls")
-	assert_eq(classic.descriptors_for(&"roll_right"), PackedStringArray(["pad:button:14", "key:X"]))
+	assert_eq(classic.descriptors_for(&"roll_left"), PackedStringArray(["pad:button:13", "key:CapsLock"]), "D-pad rolls")
+	assert_eq(classic.descriptors_for(&"roll_right"), PackedStringArray(["pad:button:14", "key:G"]))
+	assert_eq(classic.descriptors_for(&"target_next"), PackedStringArray(["pad:button:11", "key:B", "mouse:2"]))
+	assert_eq(classic.descriptors_for(&"toggle_flight_assist"), PackedStringArray(["pad:button:1", "key:T"]))
+	assert_eq(classic.descriptors_for(&"target_cycle"), PackedStringArray(), "no pad B target cycling")
+	# Layout B belongs to the keyboard and the mouse, not to the pad: every non-pad binding is the default's.
+	for action: StringName in InputAdapter.ACTIONS:
+		assert_eq(_non_pad(classic, action), _non_pad(_default, action), "%s: same keyboard and mouse bindings" % action)
 	# The deadzones travel with the bindings: a stick-bound action wants the stick's, a button-bound one 0.5.
 	assert_almost_eq(float(classic.deadzones[&"yaw_left"]), 0.15, 1e-6)
 	assert_almost_eq(float(classic.deadzones[&"roll_left"]), 0.5, 1e-6)
 
 
 # --- Helpers --------------------------------------------------------------------------------------------------
+
+
+# The descriptors of an action that are not pad inputs (keys and mouse buttons), in order.
+func _non_pad(profile: ControlProfile, action: StringName) -> PackedStringArray:
+	var out := PackedStringArray()
+	for descriptor: String in profile.descriptors_for(action):
+		if not descriptor.begins_with("pad:"):
+			out.append(descriptor)
+	return out
 
 
 # action -> {"deadzone", "events": [[class, fields...], ...]}: every field the profile can express, exactly.
@@ -443,3 +470,63 @@ func _assert_apply_refused_and_map_unchanged(profile: ControlProfile) -> void:
 	var errors: PackedStringArray = profile.apply_to_input_map()
 	assert_gt(errors.size(), 0, "apply refuses an invalid profile")
 	assert_eq(_capture_input_map(), before, "and leaves the InputMap exactly as it was")
+
+
+# --- Saved profiles across M3-T15's pad layout -------------------------------------------------------------------------
+
+
+# A user profile as saved before M3-T15: the old default pad layout (and its own keys), no target_cycle.
+func _old_saved_text(extra_key: String = "") -> String:
+	var old: ControlProfile = _default.duplicate_profile()
+	old.bindings.erase(&"target_cycle")
+	old.deadzones.erase(&"target_cycle")
+	for action: StringName in InputAdapter.ACTIONS:
+		if not old.bindings.has(action):
+			continue
+		var kept: Array = []
+		for descriptor: Variant in old.bindings[action]:
+			if not String(descriptor).begins_with("pad:"):
+				kept.append(descriptor)
+		old.bindings[action] = (ControlProfile.PAD_LAYOUT_BEFORE_T15.get(action, []) as Array) + kept
+	old.deadzones[&"yaw_left"] = 0.5
+	old.deadzones[&"yaw_right"] = 0.5
+	if not extra_key.is_empty():
+		(old.bindings[&"fire"] as Array).append(extra_key)
+	return old.to_config_text()
+
+
+func test_a_profile_saved_with_the_old_default_pad_layout_gets_the_new_one_and_keeps_its_keys() -> void:
+	var parsed: Dictionary = ControlProfile.from_config_text(_old_saved_text("key:H"), "mine", _default)
+	assert_true(parsed["ok"], str(parsed["errors"]))
+	assert_true(parsed["pad_migrated"])
+	var mine: ControlProfile = parsed["profile"]
+	for action: StringName in InputAdapter.ACTIONS:
+		var pads: Array = []
+		for descriptor: String in mine.descriptors_for(action):
+			if descriptor.begins_with("pad:"):
+				pads.append(descriptor)
+		var wanted: Array = []
+		for descriptor: String in _default.descriptors_for(action):
+			if descriptor.begins_with("pad:"):
+				wanted.append(descriptor)
+		assert_eq(pads, wanted, "%s: the new default pad bindings" % action)
+	assert_eq(mine.descriptors_for(&"fire"), PackedStringArray(["pad:button:0", "key:Space", "mouse:1", "key:H"]),
+			"its own key kept")
+	assert_almost_eq(float(mine.deadzones[&"yaw_left"]), 0.15, 1e-6, "a stick action takes the stick's deadzone")
+
+
+func test_a_profile_with_its_own_pad_bindings_is_left_alone() -> void:
+	var text: String = _old_saved_text().replace('"pad:button:0"', '"pad:button:3", "pad:button:0"')
+	var parsed: Dictionary = ControlProfile.from_config_text(text, "mine", _default)
+	assert_false(parsed["pad_migrated"])
+	var mine: ControlProfile = parsed["profile"]
+	assert_eq(mine.descriptors_for(&"yaw_left"), PackedStringArray(["pad:button:13"]), "its D-pad yaw stays")
+	assert_eq(mine.descriptors_for(&"target_cycle"), PackedStringArray(["pad:button:1"]), "the new action is filled")
+	assert_true(PackedStringArray(parsed["filled"]).has("target_cycle"))
+
+
+func test_a_profile_saved_after_t15_is_never_migrated() -> void:
+	var parsed: Dictionary = ControlProfile.from_config_text(_default.to_config_text(), "mine", _default)
+	assert_true(parsed["ok"], str(parsed["errors"]))
+	assert_false(parsed["pad_migrated"])
+	assert_true(_default.same_bindings(parsed["profile"]))

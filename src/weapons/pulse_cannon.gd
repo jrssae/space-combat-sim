@@ -108,6 +108,13 @@ func setup(body: RigidBody3D, muzzles: Array[Node3D], projectiles_parent: Node3D
 		_register_console()
 
 
+## Ends every muzzle flash at once (a ship back in play).
+func reset_flashes() -> void:
+	for flash: MuzzleFlash in _flashes:
+		if is_instance_valid(flash):
+			flash.reset()
+
+
 ## Capacitor charge now, 0..1 (1 when the gate has no capacitor). The HUD's weapon gauge reads this.
 func charge_fraction() -> float:
 	if gate.capacitor == null:

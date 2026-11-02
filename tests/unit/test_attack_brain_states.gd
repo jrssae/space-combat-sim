@@ -95,15 +95,17 @@ func test_it_fires_when_in_range_and_on_the_lead_and_not_before() -> void:
 
 
 func test_the_cone_tightens_with_range() -> void:
-	# At 301 m the miss gate is atan(3 / 301) = 0.57 degrees: 0.4 degrees (2.1 m) fires, 0.7 degrees (3.7 m) does not.
-	var close := _p(301.0, Vector3(0.0, 0.0, -tactics.closing_near_mps), Vector3.ZERO, Basis(Vector3.UP, deg_to_rad(0.4)))
+	# At 301 m the miss gate is atan(fire_miss_m / 301) (0.95 degrees for the raider's 5 m): 0.7 of it fires, 1.3 of it does not.
+	var gate_deg: float = minf(tactics.fire_cone_deg, rad_to_deg(atan(tactics.fire_miss_m / 301.0)))
+	var close := _p(301.0, Vector3(0.0, 0.0, -tactics.closing_near_mps), Vector3.ZERO, Basis(Vector3.UP, deg_to_rad(0.7 * gate_deg)))
 	assert_true(brain.think(close, DT).combat.fire)
 	brain.reset()
-	var wide := _p(301.0, Vector3(0.0, 0.0, -tactics.closing_near_mps), Vector3.ZERO, Basis(Vector3.UP, deg_to_rad(0.7)))
+	var wide := _p(301.0, Vector3(0.0, 0.0, -tactics.closing_near_mps), Vector3.ZERO, Basis(Vector3.UP, deg_to_rad(1.3 * gate_deg)))
 	assert_false(brain.think(wide, DT).combat.fire)
 	brain.reset()
-	var far := _p(1100.0, Vector3(0.0, 0.0, -tactics.closing_near_mps), Vector3.ZERO, Basis(Vector3.UP, deg_to_rad(0.5)))
-	assert_false(brain.think(far, DT).combat.fire, "0.5 degrees at 1 100 m misses by 9 m: the miss gate says no")
+	# The same angle at 1 100 m misses by 1 100 x tan(0.7 x gate): past the gate there, so it holds fire.
+	var far := _p(1100.0, Vector3(0.0, 0.0, -tactics.closing_near_mps), Vector3.ZERO, Basis(Vector3.UP, deg_to_rad(0.7 * gate_deg)))
+	assert_false(brain.think(far, DT).combat.fire, "the cone tightens with range: the miss gate says no")
 
 
 func test_it_breaks_off_inside_the_break_range() -> void:
@@ -252,3 +254,46 @@ func test_aggro_patrols_until_a_hostile_is_close_or_the_hull_is_hurt() -> void:
 	assert_true(aggro.aggroed, "hurt")
 	aggro.think(_p(5000.0), DT)
 	assert_true(aggro.aggroed, "and it stays angry")
+
+
+func test_the_lead_is_solved_from_the_muzzles() -> void:
+	# Guns 1.4 m under the centre (the Starfury's chin): to put the bolts through a target dead ahead the nose pitches up
+	# by the angle that offset subtends at the range.
+	brain.think(_p(400.0), DT)
+	assert_almost_eq(brain.lead_error_deg, 0.0, 1e-4, "from the centre: dead ahead")
+	var p := _p(400.0)
+	p.muzzle_offset = Vector3(0.0, -1.4, 0.0)
+	brain = AttackBrain.new(tactics, 99)
+	brain.think(p, DT)
+	assert_almost_eq(brain.lead_error_deg, rad_to_deg(atan(1.4 / 400.0)), 1e-3, "from the muzzles: a little up")
+
+
+# --- speed caps (M3-T10) -------------------------------------------------------------------------------------------
+
+
+func test_the_approach_always_outruns_a_fleeing_target_however_fast() -> void:
+	# A player running flat out at 800 m/s, 3 km ahead: the chaser seeks its speed plus the closing speed, never the AI cap.
+	var p := _p(3000.0, Vector3(0.0, 0.0, -600.0), Vector3(0.0, 0.0, -800.0))
+	brain.think(p, DT)
+	assert_eq(brain.state, AttackBrain.State.APPROACH)
+	assert_true(brain.has_desired_velocity)
+	assert_almost_eq(brain.desired_velocity.length(), 800.0 + tactics.closing_far_mps, 1e-3, "gaining at the closing speed")
+	assert_gt(brain.desired_velocity.length(), tactics.max_speed_mps + tactics.closing_far_mps)
+
+
+func test_against_a_slow_target_the_approach_is_capped_and_an_extension_too() -> void:
+	# A target drifting sideways at 400 m/s: target velocity plus closure would be 400+ m/s, but the target is not running
+	# away faster than the cap allows, so the approach stops at the higher of the cap and its speed, plus the closure.
+	var p := _p(3000.0, Vector3.ZERO, Vector3(400.0, 0.0, 0.0))
+	brain.think(p, DT)
+	assert_lte(brain.desired_velocity.length(), 400.0 + tactics.closing_far_mps + 1e-3)
+	var slow := _p(3000.0, Vector3.ZERO, Vector3(0.0, 0.0, 100.0))  # coming at us at 100 m/s
+	brain.reset()
+	brain.think(slow, DT)
+	assert_lte(brain.desired_velocity.length(), tactics.max_speed_mps + tactics.closing_far_mps + 1e-3)
+	brain.state = AttackBrain.State.EXTEND
+	brain.state_time_s = 0.0
+	var away := _p(800.0, Vector3.ZERO, Vector3(0.0, 0.0, 300.0))  # extending from a target closing at 300 m/s
+	brain.think(away, DT)
+	assert_eq(brain.state, AttackBrain.State.EXTEND)
+	assert_almost_eq(brain.desired_velocity.length(), tactics.max_speed_mps, 1e-3, "an extension never runs past the cap")

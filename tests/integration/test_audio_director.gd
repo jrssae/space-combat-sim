@@ -46,6 +46,24 @@ func test_play_uses_a_voice_and_unknown_sounds_are_ignored() -> void:
 	assert_null(main.audio.play(&"no_such_sound", Vector3.ZERO))
 
 
+func test_a_reused_voice_is_heard_at_its_new_sound_at_once() -> void:
+	# Physics interpolation is on: a voice moved to a new sound in a tick would be blended from where its last sound was (and,
+	# since M3-T14, from where a rebase left it) for the frames until the next tick.
+	await get_tree().physics_frame
+	var voice: AudioStreamPlayer3D = main.audio.play(&"pulse_fire", Vector3(0.0, 0.0, -50.0))
+	await get_tree().process_frame
+	await get_tree().physics_frame  # inside a tick, as shots and hits are
+	var again: AudioStreamPlayer3D = null
+	for i: int in AudioDirector.VOICES:
+		again = main.audio.play(&"pulse_fire", Vector3(400.0, 0.0, 0.0))
+		if again == voice:
+			break
+	assert_eq(again, voice, "the same voice, stolen for the new sound")
+	await get_tree().process_frame
+	assert_almost_eq(voice.get_global_transform_interpolated().origin, Vector3(400.0, 0.0, 0.0), Vector3.ONE * 1e-3,
+			"heard where the new sound is, not on the way from the old one")
+
+
 func test_the_voice_pool_never_exceeds_sixteen_and_steals_the_oldest() -> void:
 	var voices: Array[AudioStreamPlayer3D] = []
 	for i: int in 40:
@@ -76,7 +94,7 @@ func test_a_players_shot_makes_a_pulse_sound_and_a_raiders_shot_a_raider_sound()
 	main.cannon.step(SimClock.now() + 2.0)
 	assert_eq(main.audio.times_played(&"pulse_fire"), before + 1)
 	DebugConsole.registry.execute("spawn raider 400")
-	var raider: Combatant = main.ships.alive()[0]
+	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
 	var raider_before: int = main.audio.times_played(&"raider_fire")
 	raider.cannon.set_combat_command(cmd)
 	raider.cannon.step(SimClock.now() + 3.0)
@@ -85,7 +103,7 @@ func test_a_players_shot_makes_a_pulse_sound_and_a_raiders_shot_a_raider_sound()
 
 func test_hits_and_explosions_are_heard_where_they_happen() -> void:
 	DebugConsole.registry.execute("spawn raider 300")
-	var raider: Combatant = main.ships.alive()[0]
+	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
 	var hits: int = main.audio.times_played(&"hit_hull")
 	var resolver: HitResolver = main.get_node("Combat/HitResolver") as HitResolver
 	resolver.hit_resolved.emit(HitInfo.new(1, 2, Factions.EARTH_ALLIANCE, 10.0, Vector3(5.0, 0.0, -20.0)))
@@ -120,7 +138,8 @@ func test_the_hull_warning_repeats_below_a_quarter_and_stops_above() -> void:
 
 
 func test_every_ship_has_an_engine_hum_that_follows_thrust() -> void:
-	assert_eq(main.audio.engine_count(), 7, "the player and six pooled raiders")
+	assert_eq(main.ships.pool_size(), 13, "nine raiders and four allied Starfuries (M3-T10)")
+	assert_eq(main.audio.engine_count(), 1 + main.ships.pool_size(), "the player and every pooled ship")
 	var idle: float = AudioDirector.engine_level(FlightOutput.new())
 	assert_almost_eq(idle, AudioDirector.HUM_IDLE_LEVEL, 1e-9, "no thrust: the idle floor")
 	var out := FlightOutput.new()
@@ -155,7 +174,8 @@ func test_the_players_hum_plays_and_parked_raiders_are_silent() -> void:
 	assert_true(hum.playing, "the player's own engine")
 	assert_true((hum.stream as AudioStreamWAV).loop_mode == AudioStreamWAV.LOOP_FORWARD, "it loops")
 	for pooled: Combatant in main.ships.all_ships():
-		assert_false((pooled.ship.get_node("EngineHum") as AudioStreamPlayer3D).playing, "parked")
+		if not main.ships.alive().has(pooled):  # the sandbox's wingmen fly from the start (M3-T10)
+			assert_false((pooled.ship.get_node("EngineHum") as AudioStreamPlayer3D).playing, "parked")
 	var hum_off_pitch: float = hum.pitch_scale
 	source.hold(InputAdapter.MAIN_LEFT)
 	source.hold(InputAdapter.MAIN_RIGHT)
@@ -168,7 +188,7 @@ func test_a_distant_ship_hum_stops() -> void:
 	DebugConsole.registry.execute("spawn raider 400")
 	await get_tree().process_frame
 	await get_tree().process_frame
-	var raider: Combatant = main.ships.alive()[0]
+	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
 	var hum := raider.ship.get_node("EngineHum") as AudioStreamPlayer3D
 	assert_true(hum.playing, "400 m away")
 	raider.ship.global_position = main.ship.global_position + Vector3(0.0, 0.0, -AudioDirector.ENGINE_RANGE_M - 500.0)

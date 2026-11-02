@@ -33,9 +33,17 @@ var muzzles: Array[Dictionary] = []
 ## BoxShape3D or CapsuleShape3D) and `transform` (Transform3D: the primitive's `basis` and `position`; for a capsule
 ## also the turn that lays Godot's capsule axis, local Y, along the named `axis`).
 var collision: Array[Dictionary] = []
-## Break-up chunks (optional; M2-T04), one entry per group in file order: `name` (String), `ply` and `obj` (file names in the
-## asset directory), `offset` (Vector3: the chunk's centroid in the body frame) and `splats` (int).
+## Break-up chunks (optional; M2-T04), one entry per group in file order: `name` (String), `ply`, `lighting` ("" when it has none)
+## and `obj` (file names in the asset directory), `offset` (Vector3: the chunk's centroid in the body frame), `joint` (Vector3:
+## where it detaches from the body, M3-T28; the offset when the file has none) and `splats` (int).
 var chunks: Array[Dictionary] = []
+## Running lights (optional; M3-T27), ship frame: `port`, `starboard` and `top` (markers), `top_lamp` (where the light on the top of the
+## hull comes from), `cabin` (the cockpit glow) as Vector3, `top_lamp_range_m` and `cabin_range_m` as floats. Empty when the file has none.
+var nav_lights: Dictionary = {}
+## The console's screens (optional; M3-T29), ship frame, by name: `center`, `normal` (to the pilot) and `up` as Vector3, `size` (metres) as Vector2,
+## `corner` (metres cut off each corner; 0 for a rectangle), and `transform` (a screen's plane: +X the pilot's right, +Y up, +Z to the pilot).
+## Empty when the file has none.
+var screens: Dictionary = {}
 
 
 static func load_file(path: String) -> Hardpoints:
@@ -162,6 +170,63 @@ func _parse(data: Dictionary) -> String:
 		var problem: String = _parse_chunk(value)
 		if not problem.is_empty():
 			return problem
+	var lights_problem: String = _parse_nav_lights(data.get("nav_lights", {}))
+	if not lights_problem.is_empty():
+		return lights_problem
+	return _parse_screens(data.get("screens", {}))
+
+
+func _parse_nav_lights(value: Variant) -> String:
+	if not (value is Dictionary):
+		return "hardpoints nav_lights must be an object"
+	var entry: Dictionary = value
+	if entry.is_empty():
+		return ""
+	var out: Dictionary = {}
+	for key: String in ["port", "starboard", "top", "top_lamp", "cabin"]:
+		if not _is_vec3(entry.get(key)):
+			return "hardpoints nav_lights.%s must be [x, y, z]" % key
+		out[key] = _to_vec3(entry[key])
+	for key: String in ["top_lamp_range_m", "cabin_range_m"]:
+		var range_m: float = _number_or(entry.get(key), 0.0)
+		if range_m <= 0.0:
+			return "hardpoints nav_lights.%s must be a number above 0" % key
+		out[key] = range_m
+	nav_lights = out
+	return ""
+
+
+func _parse_screens(value: Variant) -> String:
+	if not (value is Dictionary):
+		return "hardpoints screens must be an object"
+	var out: Dictionary = {}
+	for key: Variant in value as Dictionary:
+		var entry: Variant = (value as Dictionary)[key]
+		if not (entry is Dictionary):
+			return "screen %s is not an object" % str(key)
+		var screen: Dictionary = entry
+		for field: String in ["center", "normal", "up"]:
+			if not _is_vec3(screen.get(field)):
+				return "screen %s needs %s [x, y, z]" % [str(key), field]
+		var extent: Variant = screen.get("size")
+		if not (extent is Array) or (extent as Array).size() != 2 or _number_or((extent as Array)[0], 0.0) <= 0.0 or _number_or((extent as Array)[1], 0.0) <= 0.0:
+			return "screen %s needs a positive size [width, height]" % str(key)
+		var normal: Vector3 = _to_vec3(screen["normal"])
+		var up: Vector3 = _to_vec3(screen["up"])
+		if normal.is_zero_approx() or up.is_zero_approx():
+			return "screen %s has a zero normal or up" % str(key)
+		normal = normal.normalized()
+		up = (up - normal * up.dot(normal)).normalized()
+		var center: Vector3 = _to_vec3(screen["center"])
+		out[str(key)] = {
+			"center": center,
+			"normal": normal,
+			"up": up,
+			"size": Vector2(float((extent as Array)[0]), float((extent as Array)[1])),
+			"corner": _number_or(screen.get("corner"), 0.0),
+			"transform": Transform3D(Basis(up.cross(normal), up, normal), center),
+		}
+	screens = out
 	return ""
 
 
@@ -177,8 +242,10 @@ func _parse_chunk(value: Variant) -> String:
 	chunks.append({
 		"name": String(entry["name"]),
 		"ply": String(entry["ply"]),
+		"lighting": String(entry.get("lighting", "")),
 		"obj": String(entry["obj"]),
 		"offset": _to_vec3(entry["offset"]),
+		"joint": _to_vec3(entry["joint"]) if _is_vec3(entry.get("joint")) else _to_vec3(entry["offset"]),
 		"splats": int(_number_or(entry.get("splats"), 0.0)),
 	})
 	return ""

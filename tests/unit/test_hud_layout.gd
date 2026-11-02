@@ -185,6 +185,42 @@ func test_no_target_no_box_no_lead() -> void:
 	assert_false(f.edge_arrow_visible)
 
 
+# --- route waypoint (M3-T09) -------------------------------------------------------------------------------------------
+
+
+func test_the_waypoint_marker_sits_on_the_projected_route_point() -> void:
+	var input: HudInput = _hud_input()
+	assert_false(HudLayout.compute(input).waypoint_present, "no route, no marker")
+	input.has_waypoint = true
+	input.waypoint_position = Vector3(120.0, -40.0, -900.0)
+	input.waypoint_label = "NAV 2"
+	input.own_position = Vector3(0.0, 0.0, -10.0)
+	var f: HudFrame = HudLayout.compute(input)
+	assert_true(f.waypoint_present)
+	assert_true(f.waypoint_on_screen)
+	assert_almost_eq(f.waypoint_pos, HudLayout.project(input, input.waypoint_position)["pos"] as Vector2, Vector2.ONE * TOL)
+	assert_eq(f.waypoint_label, "NAV 2")
+	assert_almost_eq(f.waypoint_range_m, input.own_position.distance_to(input.waypoint_position), 1e-3, "range from the ship")
+	assert_false(f.waypoint_edge_visible)
+	assert_false(f.edge_arrow_visible, "the target's arrow is its own")
+
+
+func test_a_waypoint_off_screen_or_behind_gets_an_edge_arrow() -> void:
+	var input: HudInput = _hud_input()
+	input.has_waypoint = true
+	input.waypoint_label = "NAV 3"
+	input.waypoint_position = Vector3(3000.0, 0.0, -100.0)  # far right
+	var right: HudFrame = HudLayout.compute(input)
+	assert_false(right.waypoint_on_screen)
+	assert_true(right.waypoint_edge_visible)
+	assert_gt(right.waypoint_edge_pos.x, VIEW.x - 100.0, "on the right border")
+	assert_almost_eq(right.waypoint_edge_angle, 0.0, 1e-3, "pointing right")
+	input.waypoint_position = Vector3(0.0, 0.0, 800.0)  # dead astern
+	var behind: HudFrame = HudLayout.compute(input)
+	assert_true(behind.waypoint_edge_visible)
+	assert_false(behind.target_present, "no target meanwhile")
+
+
 func test_the_lead_reticle_sits_on_the_projected_intercept_point() -> void:
 	var input: HudInput = _hud_input()
 	input.muzzle_position = Vector3(0.0, -1.0, -3.0)
@@ -507,3 +543,54 @@ func test_the_world_marker_can_be_switched_off() -> void:
 	input.show_velocity_marker = false
 	assert_false(HudLayout.compute(input).velocity_visible)
 	assert_gt(HudLayout.compute(input).drift_dir.length(), 0.5, "the sphere is unaffected")
+
+
+# --- wing roster and acknowledgements (M3-T11) -----------------------------------------------------------------------
+
+
+func test_the_roster_tags_say_what_each_wingman_is_doing() -> void:
+	assert_eq(HudLayout.roster_tag("formation"), "FORM")
+	assert_eq(HudLayout.roster_tag("attack", "RAIDER 3"), "ATK RAIDER 3")
+	assert_eq(HudLayout.roster_tag("attack"), "ATK")
+	assert_eq(HudLayout.roster_tag("evade", "RAIDER 3"), "EVADE", "only an attack names its target")
+	assert_eq(HudLayout.roster_tag("retreat"), "RETREAT")
+	assert_eq(HudLayout.roster_tag("follow_path"), "NAV")
+	assert_eq(HudLayout.roster_tag("guard"), "GUARD", "an unknown behaviour reads as its id")
+	assert_eq(HudLayout.roster_tag("formation", "", true), "DOWN")
+
+
+func test_the_roster_stacks_one_row_per_wingman_top_left() -> void:
+	var input := _hud_input()
+	input.roster = [
+		{"callsign": "ALPHA 2", "hull": 1.0, "behaviour": "formation", "target": "", "down": false},
+		{"callsign": "ALPHA 3", "hull": 0.5, "behaviour": "attack", "target": "RAIDER 3", "down": false},
+		{"callsign": "ALPHA 4", "hull": 0.8, "behaviour": "", "target": "", "down": true},
+	] as Array[Dictionary]
+	var f: HudFrame = HudLayout.compute(input)
+	assert_eq(f.roster_rows.size(), 3)
+	assert_eq(f.roster_rows[0].text, "ALPHA 2  FORM")
+	assert_eq(f.roster_rows[1].text, "ALPHA 3  ATK RAIDER 3")
+	assert_eq(f.roster_rows[2].text, "ALPHA 4  DOWN")
+	assert_almost_eq(f.roster_rows[1].hull, 0.5, TOL)
+	assert_eq(f.roster_rows[2].hull, 0.0, "a downed wingman's bar is empty")
+	assert_eq(f.roster_rows[0].color, Factions.FRIENDLY_COLOR, "the wing's faction colour")
+	assert_eq(f.roster_rows[2].color, HudLayout.RED)
+	for i: int in 3:
+		var row: HudLayout.RosterRow = f.roster_rows[i]
+		assert_lt(row.bar_rect.end.x, row.text_pos.x, "the bar left of the text")
+		assert_lt(row.bar_rect.position.x, VIEW.x * 0.2, "left")
+		assert_lt(row.text_pos.y, VIEW.y * 0.25, "top")
+		if i > 0:
+			assert_almost_eq(row.text_pos.y - f.roster_rows[i - 1].text_pos.y, HudLayout.ROSTER_ROW_PX, TOL, "stacked")
+	assert_eq(HudLayout.compute(_hud_input()).roster_rows.size(), 0, "no wing, no roster")
+
+
+func test_the_acknowledgement_sits_under_the_status_line_and_auto_track() -> void:
+	var input := _hud_input()
+	input.ack_line = "ALPHA 2: COPY, FORMING UP"
+	var f: HudFrame = HudLayout.compute(input)
+	assert_eq(f.ack_line, "ALPHA 2: COPY, FORMING UP")
+	assert_almost_eq(f.ack_pos.x, VIEW.x * 0.5, TOL, "centred")
+	assert_gt(f.ack_pos.y, 62.0, "below AUTO-TRACK's line")
+	assert_lt(f.ack_pos.y, VIEW.y * 0.15, "near the top")
+	assert_eq(HudLayout.compute(_hud_input()).ack_line, "")

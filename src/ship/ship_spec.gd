@@ -9,6 +9,9 @@ extends Resource
 ## in §5.1 are all pinned to the inertia here. Geometry (nozzle positions, centre of mass) does come from the
 ## hardpoints, through `ThrusterLayout`.
 
+## Where `tools/procgen` writes every asset (one folder per `asset_id`): the one definition `Ship`, `SplatLod` and `DebrisPool` share.
+const ASSET_ROOT: String = "res://assets/generated"
+
 ## Folder name under assets/generated/ that holds this ship's splats, meshes and hardpoints.json.
 @export var asset_id: String = ""
 ## kg.
@@ -17,10 +20,11 @@ extends Resource
 @export var inertia: Vector3 = Vector3(6.0e5, 6.0e5, 5.0e5)
 ## N per pod main nozzle (exhaust +Z, thrust forward).
 @export var pod_main_thrust: float = 3.6e5
-## N per pod retro nozzle (exhaust -Z, thrust aft).
-@export var pod_retro_thrust: float = 1.8e5
-## N, body frame: x sway, y heave, z 0 (fore/aft is the pods' job).
-@export var rcs_force_max: Vector3 = Vector3(4.8e5, 4.8e5, 0.0)
+## N per pod retro nozzle (exhaust -Z, thrust aft). The Starfury reverses as hard as it goes forward (M3-T15, Q20).
+@export var pod_retro_thrust: float = 3.6e5
+## N, body frame: x sway, y heave, z 0 (fore/aft is the pods' job). The Starfury's is half its forward thrust on both axes
+## (M3-T15, Q20).
+@export var rcs_force_max: Vector3 = Vector3(7.2e5, 7.2e5, 0.0)
 ## N·m, body frame: x pitch, y yaw, z roll.
 @export var rcs_torque_max: Vector3 = Vector3(9.4e5, 9.4e5, 1.57e6)
 ## deg/s, pilot axes (pitch, yaw, roll): the assist's rate target at full deflection.
@@ -47,6 +51,11 @@ extends Resource
 @export var assist_speed_max_mps: float = 5000.0
 ## Hull points (`HullHealth`, M2-T03). 300 is about 30 hits from a Starfury pulse bolt.
 @export var hull_max: float = 300.0
+## m/s: ram damage (§16 D32, `RamMath`). A change of the ship's own velocity up to this in a collision is harmless...
+@export var ram_safe_dv_mps: float = 5.0
+## m/s: ... and one of this or more takes the whole hull, quadratic in between. A 30 m/s head-on between two Starfuries is
+## about 15 m/s each, about 60 % of the hull at the Starfury's 18.
+@export var ram_lethal_dv_mps: float = 18.0
 ## HDR colour of the engine plumes (`ThrusterVisuals`). The default is the Starfury's blue-white.
 @export var engine_glow_color: Color = Color(0.7, 0.9, 1.8, 1.0)
 ## Which main components the HUD's damage silhouette shows (`DamageZones.layout_from_name`): `x_fighter` or `delta`.
@@ -58,11 +67,18 @@ extends Resource
 ## Whether the asset has a first-person `cockpit_interior.obj` (the Starfury does; AI ships such as the raider do not,
 ## so the ship does not look for it or warn about it).
 @export var has_cockpit_interior: bool = true
+## Which level of detail of the asset's splats the hull draws: 0 is the full `<asset_id>.ply`, a higher level is the one the
+## asset's `manifest.json` lists under `lods` (`SplatLod`). Allied Starfuries draw LOD1, about a quarter of the splats (§16 D35).
+## The collision, hardpoints, fallback mesh and break-up chunks are the asset's, whatever the level.
+@export_range(0, 8) var splat_lod: int = 0
+## Whether the ship also carries the asset's hero level, one finer than LOD0, for when it fills the screen (M3-T24). Only the
+## player's Starfury does: it holds about 0.5 GB of GPU memory for the whole session.
+@export var splat_hero: bool = false
 
 
 ## Where this ship's generated hardpoints live.
 func hardpoints_path() -> String:
-	return "res://assets/generated/%s/hardpoints.json" % asset_id
+	return "%s/%s/hardpoints.json" % [ASSET_ROOT, asset_id]
 
 
 ## `rate_max` in rad/s.

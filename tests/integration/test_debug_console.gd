@@ -173,7 +173,7 @@ func test_startup_runs_autoexec_then_files_then_exec() -> void:
 	_write(SCRIPT_PATH, "get settings.invert_y\nset settings.show_fps on; get settings.show_fps\n")
 	var start_frame: int = Engine.get_physics_frames()
 	var console: DebugConsoleScript = _make_console(PackedStringArray([
-		"--console-file=" + SCRIPT_PATH, "--console-exec", "get settings.yaw_ramp_s; quit 4"]), true)
+		"--console-file=" + SCRIPT_PATH, "--console-exec", "get settings.target_hold_s; quit 4"]), true)
 	await wait_for_signal(console.startup_completed, 2.0)
 	assert_gt(Engine.get_physics_frames(), start_frame, "startup waits for a physics frame after the scene")
 	assert_eq(quit_codes, [4])
@@ -182,7 +182,7 @@ func test_startup_runs_autoexec_then_files_then_exec() -> void:
 		if text.begins_with("> "):
 			echoes.append(text)
 	assert_eq(Array(echoes), ["> set settings.invert_y on", "> get settings.invert_y", "> set settings.show_fps on",
-			"> get settings.show_fps", "> get settings.yaw_ramp_s", "> quit 4"])
+			"> get settings.show_fps", "> get settings.target_hold_s", "> quit 4"])
 	assert_string_contains(_log(console), "settings.invert_y = true")
 
 
@@ -222,13 +222,13 @@ func test_wait_delays_the_rest_by_physics_frames() -> void:
 func test_exec_runs_a_file_before_the_rest_of_the_line() -> void:
 	_write(SCRIPT_PATH, "set settings.invert_y on\n# comment\nwait 1\nset settings.show_fps on\n")
 	var console: DebugConsoleScript = _make_console()
-	console.submit("exec %s; set settings.yaw_ramp_s 0.5" % SCRIPT_PATH)
+	console.submit("exec %s; set settings.target_hold_s 0.5" % SCRIPT_PATH)
 	assert_eq(settings.get_value(&"invert_y"), true)
 	assert_eq(settings.get_value(&"show_fps"), false, "behind the file's wait")
-	assert_almost_eq(float(settings.get_value(&"yaw_ramp_s")), 0.25, 1e-9, "the rest of the line waits too")
+	assert_almost_eq(float(settings.get_value(&"target_hold_s")), 0.35, 1e-9, "the rest of the line waits too")
 	await wait_physics_frames(4)
 	assert_eq(settings.get_value(&"show_fps"), true)
-	assert_almost_eq(float(settings.get_value(&"yaw_ramp_s")), 0.5, 1e-9)
+	assert_almost_eq(float(settings.get_value(&"target_hold_s")), 0.5, 1e-9)
 	console.submit("exec test_no_such_script.cfg")
 	assert_string_contains(_log(console), "error: no such file 'test_no_such_script.cfg' in user:// or res://")
 
@@ -297,7 +297,7 @@ func test_watch_and_unwatch() -> void:
 	assert_eq(console.fps_counter.compose_text(), "settings.invert_y = true", "live")
 	console.submit("watch settings.nope")
 	assert_string_contains(_log(console), "error: unknown key 'settings.nope'")
-	for key: String in ["stick_deadzone", "trigger_deadzone", "yaw_ramp_s", "assist_default", "camera_default",
+	for key: String in ["stick_deadzone", "trigger_deadzone", "target_hold_s", "assist_default", "camera_default",
 			"show_overlay", "show_fps"]:
 		console.submit("watch settings." + key)
 	assert_eq(console.watches().size(), DebugConsoleScript.MAX_WATCHES)
@@ -454,18 +454,18 @@ func test_opening_and_closing_with_a_key_held_fires_no_edge() -> void:
 
 	_key(KEY_QUOTELEFT, true, 96)
 	assert_false(adapter.sample(source, 1.0 / 60.0).ui.toggle_camera, "opening with Tab held")
-	_key(KEY_U, true)  # target_next (U), pressed while typing
+	_key(KEY_B, true)  # target_next (B), pressed while typing
 	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_next, "typing never fires")
 	_key(KEY_QUOTELEFT, true, 96)
 	var after_close: PilotCommand = adapter.sample(source, 1.0 / 60.0)
 	assert_false(after_close.ui.toggle_camera, "closing with Tab still held fires no edge")
-	assert_false(after_close.combat.target_next, "closing with U still held fires no edge")
+	assert_false(after_close.combat.target_next, "closing with B still held fires no edge")
 
-	_key(KEY_U, false)
-	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_next, "nor does releasing it: U is tap-on-release")
-	_key(KEY_U, true)
+	_key(KEY_B, false)
+	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_next, "nor does releasing it: B is tap-on-release")
+	_key(KEY_B, true)
 	assert_false(adapter.sample(source, 1.0 / 60.0).combat.target_next, "a tap acts on release")
-	_key(KEY_U, false)
+	_key(KEY_B, false)
 	assert_true(adapter.sample(source, 1.0 / 60.0).combat.target_next, "a real tap after closing still works")
 
 
@@ -541,7 +541,7 @@ func _pad_axis(axis: JoyAxis, value: float) -> void:
 
 
 func _release_inputs() -> void:
-	for key: Key in [KEY_E, KEY_V, KEY_T, KEY_QUOTELEFT, KEY_ESCAPE, KEY_TAB, KEY_ENTER, KEY_UP, KEY_DOWN]:
+	for key: Key in [KEY_E, KEY_V, KEY_T, KEY_B, KEY_QUOTELEFT, KEY_ESCAPE, KEY_TAB, KEY_ENTER, KEY_UP, KEY_DOWN]:
 		if Input.is_physical_key_pressed(key):
 			_key(key, false)
 	for button: JoyButton in [JOY_BUTTON_A, JOY_BUTTON_X]:

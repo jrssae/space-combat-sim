@@ -3,10 +3,21 @@ extends RefCounted
 ## InputSource -> PilotCommand, once per physics tick (architecture §6.1, §6.2). The only place that knows
 ## action names. Pure: no Input, no scene tree, so every curve, ramp and edge rule is unit-tested.
 ##
-## Layout (§6.1): the right stick is pitch (Y) and roll (X), analog with a radial deadzone and expo; the D-pad
-## Left/Right is yaw, digital with a ramp; D-pad Up is tap = next target, hold = target nearest the nose. The mouse is
-## pitch (Y) and yaw (X): its speed, smoothed over a few ticks, is the rate command. Holding `camera_look` (L3, the middle
-## mouse button) sends the right stick and the mouse to the camera instead (`UiCommand.look_*`); the ship ignores them.
+## Layout (§6.1, M3-T15): the right stick flies three axes by direction, read as one vector with a radial deadzone and
+## expo: straight up or down pitches, straight left or right yaws, the four diagonals roll toward the side the stick leans
+## (`split_stick`). The roll keys (Caps Lock, G) add to its roll. B on the pad is tap = next target, hold = previous target
+## (`target_cycle`, as the mouse wheel); B on the keyboard and Mouse 2 are tap = next target, hold = target nearest the
+## nose (`target_next`). D-pad Up toggles flight assist. The mouse is pitch (Y) and yaw (X): its speed, smoothed over a few
+## ticks, is the rate command. Holding
+## `camera_look` (L3, the middle mouse button) sends the right stick and the mouse to the camera instead
+## (`UiCommand.look_*`); the ship ignores them.
+##
+## The keyboard (layout B) is all under the left hand because the right hand flies the mouse: this class sees only action
+## names, so which key drives which action is project.godot's and the control profile's business. Two keys drive a pair
+## of actions at once (W = both main pods, S = both retro pods), which needs nothing here: each pod reads its own action.
+## The mouse side buttons are bound like any other (Mouse 4 `autotrack`, Mouse 5 `weapon_next`). Keys 1-4 are the wing orders
+## (attack my target, form on me, engage at will, cover me; M3-T07), press edges in `UiCommand` for `Main` to pass on. D-pad Left
+## and key 5 switch the running lights (M3-T27).
 
 const MAIN_RIGHT := &"main_right"
 const MAIN_LEFT := &"main_left"
@@ -34,23 +45,31 @@ const PAUSE := &"pause"
 const TOGGLE_OVERLAY := &"debug_toggle_overlay"
 const TOGGLE_FALLBACK := &"debug_toggle_fallback_mesh"
 const TARGET_PREV := &"target_prev"
+## The pad's tap-or-hold target button (B): tap = next, hold = previous.
+const TARGET_CYCLE := &"target_cycle"
 const AUTOTRACK := &"autotrack"
 const CAMERA_LOOK := &"camera_look"
 const SCREENSHOT := &"screenshot"
+const WING_ATTACK := &"wing_attack"
+const WING_FORM := &"wing_form"
+const WING_ENGAGE := &"wing_engage"
+const WING_COVER := &"wing_cover"
+const TOGGLE_RUNNING_LIGHTS := &"toggle_running_lights"
 
 ## Every action the game reads; project.godot must declare each one (tests/unit/test_input_map.gd).
 const ACTIONS: Array[StringName] = [
 	MAIN_RIGHT, MAIN_LEFT, RETRO_RIGHT, RETRO_LEFT, PITCH_DOWN, PITCH_UP, YAW_LEFT, YAW_RIGHT,
 	STRAFE_LEFT, STRAFE_RIGHT, STRAFE_DOWN, STRAFE_UP, ROLL_LEFT, ROLL_RIGHT, TARGET_NEXT, WEAPON_NEXT,
 	TARGET_AHEAD, FIRE, TOGGLE_ASSIST, BRAKE, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY, TOGGLE_FALLBACK,
-	TARGET_PREV, AUTOTRACK, CAMERA_LOOK, SCREENSHOT,
+	TARGET_PREV, AUTOTRACK, CAMERA_LOOK, SCREENSHOT, WING_ATTACK, WING_FORM, WING_ENGAGE, WING_COVER, TARGET_CYCLE,
+	TOGGLE_RUNNING_LIGHTS,
 ]
 
-## Actions reported as one-tick edges on press rather than held state. `TARGET_NEXT` is not one of them: it is
-## the tap-or-hold button (see `target_hold_s`).
+## Actions reported as one-tick edges on press rather than held state. `TARGET_NEXT` and `TARGET_CYCLE` are not among
+## them: they are the tap-or-hold buttons (see `target_hold_s`).
 const EDGE_ACTIONS: Array[StringName] = [
 	TOGGLE_ASSIST, WEAPON_NEXT, TARGET_AHEAD, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY, TOGGLE_FALLBACK,
-	TARGET_PREV, SCREENSHOT, AUTOTRACK,
+	TARGET_PREV, SCREENSHOT, AUTOTRACK, WING_ATTACK, WING_FORM, WING_ENGAGE, WING_COVER, TOGGLE_RUNNING_LIGHTS,
 ]
 
 const AIM_EXPO := 1.5
@@ -58,6 +77,11 @@ const AIM_EXPO := 1.5
 const MOUSE_FULL_RATE_PX_S := 1200.0
 ## Share of the gap to the mouse's current speed that the smoothed rate closes each tick.
 const MOUSE_SMOOTHING := 0.4
+## Half-width of the right stick's pitch and yaw sectors, degrees from straight up/down and left/right; the diagonals
+## between them roll (`split_stick`).
+const STICK_SECTOR_HALF_DEG := 22.5
+## The tap-or-hold buttons and what their tap and hold give.
+const TAP_HOLD: Dictionary = {TARGET_NEXT: [TARGET_NEXT, TARGET_AHEAD], TARGET_CYCLE: [TARGET_NEXT, TARGET_PREV]}
 ## Default for `target_hold_s` (`Settings.target_hold_s`).
 const TARGET_HOLD_S := 0.35
 # Slack for comparing accumulated tick times with the hold threshold (21 × 1/60 s must reach 0.35 s).
@@ -65,11 +89,10 @@ const _HOLD_EPS := 1e-6
 
 var stick_deadzone: float = 0.15
 var invert_y: bool = false
-## Seconds for a held D-pad yaw to ramp from 0 to full (`Settings.yaw_ramp_s`).
-var yaw_ramp_s: float = 0.25
-## `target_next` (D-pad Up, T) is a tap-or-hold button: released sooner than this it gives `target_next` on the
-## release; held this long it gives `target_ahead` once, as the threshold is crossed, and its release then gives
-## nothing, so a hold never also cycles (`Settings.target_hold_s`).
+## `target_next` (keyboard B, Mouse 2) and `target_cycle` (pad B) are tap-or-hold buttons, on separate timers: released
+## sooner than this they give `target_next` on the release; held this long they give their hold action once, as the
+## threshold is crossed (`target_ahead` and `target_prev`), and the release then gives nothing, so a hold never also
+## cycles and never repeats (`Settings.target_hold_s`).
 var target_hold_s: float = TARGET_HOLD_S
 ## Mouse speed, pixels per second, that commands the full turn rate (`Settings.mouse_full_rate_px_s`).
 var mouse_full_rate_px_s: float = MOUSE_FULL_RATE_PX_S
@@ -81,17 +104,33 @@ var last: PilotCommand = PilotCommand.new()
 var autotrack_on: bool = false
 
 var _prev_pressed: Dictionary = {}
-var _yaw: float = 0.0
 ## The mouse's turn command, -1..1 per axis (x yaw right, y pitch up), after smoothing.
 var _mouse_rate: Vector2 = Vector2.ZERO
-## How long the tap-or-hold button has been down in the current press, s.
-var _select_held_s: float = 0.0
-## True from the press of the tap-or-hold button until it fires (tap on release, or hold at the threshold).
-var _select_armed: bool = false
+## Per tap-or-hold button: how long it has been down in the current press (s), and whether the press is armed (from the
+## press until it fires: tap on release, or hold at the threshold).
+var _held_s: Dictionary = {TARGET_NEXT: 0.0, TARGET_CYCLE: 0.0}
+var _armed: Dictionary = {TARGET_NEXT: false, TARGET_CYCLE: false}
 
 
 static func expo_curve(x: float, exponent: float) -> float:
 	return signf(x) * pow(absf(x), exponent)
+
+
+## The right stick (`v`, after the radial deadzone, length 0..1) as `(pitch, yaw, roll)`: one axis at a time, at the stick's
+## deflection after expo, chosen by direction. Within `STICK_SECTOR_HALF_DEG` of straight up or down it pitches (+ up),
+## within it of straight left or right it yaws (+ right), and on the diagonals between it rolls toward the side the stick
+## leans (+ right).
+static func split_stick(v: Vector2) -> Vector3:
+	var length: float = v.length()
+	if length <= 0.0:
+		return Vector3.ZERO
+	var m: float = expo_curve(minf(length, 1.0), AIM_EXPO)
+	var from_vertical_deg: float = rad_to_deg(atan2(absf(v.x), absf(v.y)))
+	if from_vertical_deg <= STICK_SECTOR_HALF_DEG:
+		return Vector3(signf(v.y) * m, 0.0, 0.0)
+	if from_vertical_deg >= 90.0 - STICK_SECTOR_HALF_DEG:
+		return Vector3(0.0, signf(v.x) * m, 0.0)
+	return Vector3(0.0, 0.0, signf(v.x) * m)
 
 
 func sample(source: InputSource, dt: float) -> PilotCommand:
@@ -104,21 +143,20 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	flight.retro_right = 1.0 if source.is_pressed(RETRO_RIGHT) else 0.0
 	flight.retro_left = 1.0 if source.is_pressed(RETRO_LEFT) else 0.0
 	flight.strafe = source.get_vector(STRAFE_LEFT, STRAFE_RIGHT, STRAFE_DOWN, STRAFE_UP, stick_deadzone)
-	# Right stick: x roll, y pitch, one radial deadzone over the pair, expo on both.
-	var aim: Vector2 = source.get_vector(ROLL_LEFT, ROLL_RIGHT, PITCH_DOWN, PITCH_UP, stick_deadzone)
+	# Right stick: x yaw, y pitch, one radial deadzone over the pair, then split by direction (pitch, yaw or roll).
+	var aim: Vector2 = source.get_vector(YAW_LEFT, YAW_RIGHT, PITCH_DOWN, PITCH_UP, stick_deadzone)
 	var mouse_px: Vector2 = source.take_mouse_delta()
 	var looking: bool = source.is_pressed(CAMERA_LOOK)
 	var mouse_turn: Vector2 = _step_mouse(mouse_px, dt, looking)
-	var pitch: float = expo_curve(aim.y, AIM_EXPO)
-	var roll: float = expo_curve(aim.x, AIM_EXPO)
+	var stick: Vector3 = split_stick(aim)
 	if looking:
 		# The right stick and the mouse belong to the camera; the ship keeps flying as it was.
-		pitch = 0.0
-		roll = 0.0
-	if invert_y:
-		pitch = -pitch
+		stick = Vector3.ZERO
+	var pitch: float = -stick.x if invert_y else stick.x
 	var mouse_pitch: float = -mouse_turn.y if invert_y else mouse_turn.y
-	flight.rot = Vector3(clampf(pitch + mouse_pitch, -1.0, 1.0), clampf(_step_yaw(source, dt) + mouse_turn.x, -1.0, 1.0), roll)
+	var key_roll: float = (1.0 if source.is_pressed(ROLL_RIGHT) else 0.0) - (1.0 if source.is_pressed(ROLL_LEFT) else 0.0)
+	flight.rot = Vector3(clampf(pitch + mouse_pitch, -1.0, 1.0), clampf(stick.y + mouse_turn.x, -1.0, 1.0),
+			clampf(stick.z + key_roll, -1.0, 1.0))
 	flight.brake = source.is_pressed(BRAKE)
 
 	var edges: Dictionary = _sample_edges(source)
@@ -130,10 +168,11 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 
 	cmd.combat.fire = source.is_pressed(FIRE)
 	cmd.combat.weapon_next = edges[WEAPON_NEXT]
-	var select: Dictionary = _step_target_select(source, dt)
+	var select: Dictionary = _step_tap_hold(source, TARGET_NEXT, dt)
+	var cycle: Dictionary = _step_tap_hold(source, TARGET_CYCLE, dt)
 	var wheel: int = source.take_wheel_steps()
-	cmd.combat.target_next = select[TARGET_NEXT] or wheel > 0
-	cmd.combat.target_prev = edges[TARGET_PREV] or wheel < 0
+	cmd.combat.target_next = select[TARGET_NEXT] or cycle[TARGET_NEXT] or wheel > 0
+	cmd.combat.target_prev = edges[TARGET_PREV] or cycle[TARGET_PREV] or wheel < 0
 	cmd.combat.target_ahead = edges[TARGET_AHEAD] or select[TARGET_AHEAD]
 
 	cmd.ui.toggle_camera = edges[TOGGLE_CAMERA]
@@ -142,6 +181,11 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	cmd.ui.toggle_overlay = edges[TOGGLE_OVERLAY]
 	cmd.ui.toggle_fallback_mesh = edges[TOGGLE_FALLBACK]
 	cmd.ui.screenshot = edges[SCREENSHOT]
+	cmd.ui.wing_attack = edges[WING_ATTACK]
+	cmd.ui.wing_form = edges[WING_FORM]
+	cmd.ui.wing_engage = edges[WING_ENGAGE]
+	cmd.ui.wing_cover = edges[WING_COVER]
+	cmd.ui.toggle_running_lights = edges[TOGGLE_RUNNING_LIGHTS]
 	cmd.ui.look_active = looking
 	if looking:
 		var look_y: float = -aim.y if not invert_y else aim.y
@@ -158,17 +202,18 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 func resync_edges(source: InputSource) -> void:
 	for action: StringName in EDGE_ACTIONS:
 		_prev_pressed[action] = source.is_pressed(action)
-	_prev_pressed[TARGET_NEXT] = source.is_pressed(TARGET_NEXT)
-	_disarm_select()
+	for button: StringName in TAP_HOLD:
+		_prev_pressed[button] = source.is_pressed(button)
+		_disarm(button)
 
 
-## Forget held state, the yaw ramp and any tap-or-hold press in progress (respawn, scene change).
+## Forget held state and any tap-or-hold press in progress (respawn, scene change).
 func reset() -> void:
 	_prev_pressed.clear()
-	_yaw = 0.0
 	_mouse_rate = Vector2.ZERO
 	autotrack_on = false
-	_disarm_select()
+	for button: StringName in TAP_HOLD:
+		_disarm(button)
 
 
 func _sample_edges(source: InputSource) -> Dictionary:
@@ -194,44 +239,29 @@ func _step_mouse(px: Vector2, dt: float, looking: bool) -> Vector2:
 	return _mouse_rate
 
 
-# Digital yaw ramps toward ±1 over yaw_ramp_s, snaps to 0 on release, restarts from 0 on reversal, so taps
-# give fine corrections from a D-pad.
-func _step_yaw(source: InputSource, dt: float) -> float:
-	var direction: float = 0.0
-	if source.is_pressed(YAW_RIGHT):
-		direction += 1.0
-	if source.is_pressed(YAW_LEFT):
-		direction -= 1.0
-	if direction == 0.0:
-		_yaw = 0.0
-	else:
-		if _yaw != 0.0 and signf(_yaw) != direction:
-			_yaw = 0.0
-		_yaw = move_toward(_yaw, direction, dt / maxf(yaw_ramp_s, 0.001))
-	return _yaw
-
-
-# The tap-or-hold button: {TARGET_NEXT: bool, TARGET_AHEAD: bool}, each true for at most one tick per press.
-# The held time counts every tick the button is seen down, the press tick included.
-func _step_target_select(source: InputSource, dt: float) -> Dictionary:
-	var out: Dictionary = {TARGET_NEXT: false, TARGET_AHEAD: false}
-	var pressed: bool = source.is_pressed(TARGET_NEXT)
-	var was_pressed: bool = bool(_prev_pressed.get(TARGET_NEXT, false))
-	_prev_pressed[TARGET_NEXT] = pressed
+# A tap-or-hold button (`TAP_HOLD`): {its tap action: bool, its hold action: bool}, each true for at most one tick per
+# press. The held time counts every tick the button is seen down, the press tick included.
+func _step_tap_hold(source: InputSource, button: StringName, dt: float) -> Dictionary:
+	var tap: StringName = TAP_HOLD[button][0]
+	var hold: StringName = TAP_HOLD[button][1]
+	var out: Dictionary = {tap: false, hold: false}
+	var pressed: bool = source.is_pressed(button)
+	var was_pressed: bool = bool(_prev_pressed.get(button, false))
+	_prev_pressed[button] = pressed
 	if pressed and not was_pressed:
-		_select_armed = true
-		_select_held_s = 0.0
-	if pressed and _select_armed:
-		_select_held_s += dt
-		if _select_held_s >= target_hold_s - _HOLD_EPS:
-			out[TARGET_AHEAD] = true
-			_disarm_select()
-	elif not pressed and _select_armed:
-		out[TARGET_NEXT] = true
-		_disarm_select()
+		_armed[button] = true
+		_held_s[button] = 0.0
+	if pressed and bool(_armed[button]):
+		_held_s[button] = float(_held_s[button]) + dt
+		if float(_held_s[button]) >= target_hold_s - _HOLD_EPS:
+			out[hold] = true
+			_disarm(button)
+	elif not pressed and bool(_armed[button]):
+		out[tap] = true
+		_disarm(button)
 	return out
 
 
-func _disarm_select() -> void:
-	_select_armed = false
-	_select_held_s = 0.0
+func _disarm(button: StringName) -> void:
+	_armed[button] = false
+	_held_s[button] = 0.0

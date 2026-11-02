@@ -5,7 +5,7 @@ extends GutTest
 
 const SCENE_PATH: String = "res://src/environment/space_environment.tscn"
 const ENVIRONMENT_DEFAULT_PATH: String = "res://assets/environment/environment_default.tres"
-const GDGS_EFFECT_SCRIPT_PATH: String = "res://addons/gdgs/runtime/compositor/gaussian_compositor_effect.gd"
+const GDGS_EFFECT_SCRIPT_PATH: String = "res://addons/gdgs_scs/runtime/compositor/gaussian_compositor_effect.gd"
 const MANIFEST_PATH: String = "res://assets/generated/sky_default/manifest.json"
 const PANORAMA_PATH: String = "res://assets/generated/sky_default/sky_default_panorama.png"
 const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tests.sh (it imports first)"
@@ -103,10 +103,13 @@ func test_default_environment_is_black_dim_filmic_with_modest_glow() -> void:
 # --- GDGS compositor ---------------------------------------------------------------------------------------------
 
 
-func test_compositor_holds_exactly_the_gdgs_effect() -> void:
+func test_compositor_holds_the_gdgs_effect_first_then_blur_and_flare() -> void:
 	var compositor: Compositor = env.world_environment.compositor
 	assert_not_null(compositor)
-	assert_eq(compositor.compositor_effects.size(), 1, "one effect")
+	assert_eq(compositor.compositor_effects.size(), 3, "GDGS, motion blur, lens flare (M3-T25)")
+	assert_true(compositor.compositor_effects[0] is GaussianCompositorEffect, "GDGS composites the splats first")
+	assert_true(compositor.compositor_effects[1] is MotionBlurEffect, "then the blur smears stars and hulls together")
+	assert_true(compositor.compositor_effects[2] is LensFlareEffect, "the flare goes on last, so it is never smeared")
 	var effect: GaussianCompositorEffect = env.get_gaussian_effect()
 	assert_not_null(effect, "the effect is a GaussianCompositorEffect")
 	assert_eq((effect.get_script() as Script).resource_path, GDGS_EFFECT_SCRIPT_PATH)

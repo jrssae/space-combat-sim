@@ -1,38 +1,44 @@
 class_name NavBuoy
 extends Node3D
-## A navigation buoy, the M1 target marker (architecture §6.3, §7.1, §9.3): a splat body, a blinking beacon
-## mesh on the mast, a 10 deg/s spin about its long axis (+Y), an optional constant drift, a `Targetable` and (post-M2) a
-## `Damageable`: any bolt hurts it (`hit_by_anyone`, it is neutral to everyone), and at zero hull the `DestructionDirector`
-## blows it up and calls `set_destroyed(true)`: hidden and not processing, so nothing targets or hits it, but never freed (no
-## splat node leaves the tree during play, D22). `restore()` brings it back with a full hull (the player's respawn does that).
+## A navigation buoy, the M1 target marker (architecture §6.3, §7.1, §9.3): a splat body, a steady beacon on the mast with a slow
+## fade over it (M3-T27), a 10 deg/s spin about +Y, an optional constant drift, a `Targetable` and a `Damageable`. Any bolt hurts it (it is neutral to
+## everyone), and so does a ram (M3-T04): it has no physics body, so ships pass through and the `RamResolver` splits the
+## momentum by `MASS_KG`. At zero hull the `DestructionDirector` calls `set_destroyed(true)`: hidden and not processing, but
+## never freed (no splat node leaves the tree during play, D22). `restore()` brings it back on the player's respawn.
 ##
 ## Spawn it through `World` from a scenario entry: `world.spawn(NavBuoy.create(name, velocity), position)`. It joins
 ## `world_shiftable` itself as well, so a rebase moves it whichever way it was added.
 ##
-## Assets are loaded here at run time, guarded (like `SpaceEnvironment`): the scene loads and the buoy works as a
-## target before `scripts/gen_assets.sh` has run, with a warning instead of a load error. Every buoy shares one
-## loaded `GaussianResource` (GDGS draws the instances from the same data), one fallback mesh and one hardpoints
+## Assets are loaded at run time, guarded like `SpaceEnvironment`, so the buoy works as a target before
+## `scripts/gen_assets.sh` has run, with a warning. All buoys share one `GaussianResource`, fallback mesh and hardpoints
 ## read. Without a GPU GDGS is a silent no-op, so how it looks is (H).
 ##
-## Motion (spin, drift) is physics state and runs in `_physics_process` from `delta`; the beacon is a visual and
-## blinks in `_process` from `SimClock`, never the wall clock.
+## Motion (spin, drift) is physics state and runs in `_physics_process` from `delta`; the fade is a visual and breathes in
+## `_process` from `SimClock`, never the wall clock.
 
 const SCENE_PATH: String = "res://src/props/nav_buoy.tscn"
 const ASSET_DIR: String = "res://assets/generated/nav_buoy"
 const GAUSSIAN_PATH: String = ASSET_DIR + "/nav_buoy.ply"
 const MESH_PATH: String = ASSET_DIR + "/nav_buoy.obj"
 const HARDPOINTS_PATH: String = ASSET_DIR + "/hardpoints.json"
+const ASSET_ID: String = "nav_buoy"
 
 const SPIN_DPS: float = 10.0
-const BLINK_HZ: float = 1.0
-## Fraction of each blink period the beacon is lit: a short flash, like an anti-collision light.
-const BLINK_DUTY: float = 0.25
+## One slow breath of the fade layer over the steady beacon, s (M3-T27).
+const FADE_PERIOD_S: float = 6.0
 ## Where the beacon goes when `hardpoints.json` is missing (the generator's value at seed 42, to the centimetre).
 const DEFAULT_BEACON_POSITION: Vector3 = Vector3(0.0, 2.46, 0.0)
 const DEFAULT_BEACON_RADIUS: float = 0.1
 
+## Every buoy broadcasts its position this far (M3-T17, Q21): 1 000 km.
+const BROADCAST_RANGE_M: float = 1.0e6
 ## Hull points of a buoy: six pulse-cannon hits.
 const HULL_MAX: float = 60.0
+## kg, for the ram maths (§16 D32; the generator's estimate is 1.94 t). A Starfury at 40 m/s changes a buoy's velocity by
+## 38.4 m/s and its own by 1.6 m/s.
+const MASS_KG: float = 2000.0
+## m/s: a ram that changes the buoy's velocity by this much or more destroys it (the safe value is every hull's 5 m/s).
+const RAM_LETHAL_DV_MPS: float = 15.0
 
 ## The buoy's hull (nodes are added in `_ready`).
 var damageable: Damageable = null
@@ -49,17 +55,18 @@ var damageable: Damageable = null
 	set(value):
 		velocity = value
 		_sync_targetable()
-## Offset of this buoy's blink within the 1 s period, seconds.
-@export var blink_phase_s: float = 0.0
-
 static var _shared_loaded: bool = false
 static var _shared_gaussian: GaussianResource = null
+static var _shared_lighting_path: String = ""
 static var _shared_mesh: Mesh = null
 static var _shared_beacon_position: Vector3 = DEFAULT_BEACON_POSITION
 static var _shared_beacon_radius: float = DEFAULT_BEACON_RADIUS
 
 ## Spin angle about +Y since spawn, radians in [0, TAU). Kept as an angle so the basis never drifts.
 var spin_angle_rad: float = 0.0
+
+## Where this buoy starts in the fade's cycle, s: seeded from its name when it is ready, so a buoy breathes the same every run.
+var fade_phase_s: float = 0.0
 
 var _base_basis: Basis = Basis.IDENTITY
 var _fallback_active: bool = false
@@ -68,6 +75,7 @@ var _fallback_active: bool = false
 @onready var mesh_fallback: MeshInstance3D = $BuoyMeshFallback
 @onready var depth_proxy: HullDepthProxy = $BuoyDepthProxy
 @onready var beacon: MeshInstance3D = $Beacon
+@onready var beacon_fade: MeshInstance3D = $Beacon/Fade
 @onready var targetable: Targetable = $Targetable
 
 
@@ -80,10 +88,14 @@ static func create(p_display_name: String, p_velocity: Vector3 = Vector3.ZERO) -
 	return buoy
 
 
-## Whether the beacon is lit at sim time `t` (1 Hz, `BLINK_DUTY` on). Pure.
-static func beacon_lit(t: float, phase_s: float = 0.0) -> bool:
-	var period: float = 1.0 / BLINK_HZ
-	return fposmod(t + phase_s, period) < BLINK_DUTY * period
+## The fade layer's level at sim time `t`, 0..1: out at the start of the cycle and in half way through it. Pure.
+static func fade_level(t: float, phase_s: float = 0.0) -> float:
+	return 0.5 - 0.5 * cos(TAU * fposmod(t + phase_s, FADE_PERIOD_S) / FADE_PERIOD_S)
+
+
+## A buoy's place in the fade's cycle, s, from its name. Pure.
+static func fade_phase_of(p_display_name: String) -> float:
+	return fposmod(float(hash(p_display_name)), FADE_PERIOD_S)
 
 
 func _init() -> void:
@@ -91,10 +103,16 @@ func _init() -> void:
 	add_to_group(SplatStatus.MESH_GROUP)  # SplatStatus calls use_fallback_mesh (no backend, console, F4)
 
 
+# Assigned before entering the tree: later, each buoy would make GDGS re-merge every splat in the scene.
+func _enter_tree() -> void:
+	_load_shared_assets()
+	var body := get_node(^"BuoySplats") as GaussianSplatNode
+	body.gaussian = _shared_gaussian
+	SplatLightingLoader.attach(body, _shared_lighting_path)
+
+
 func _ready() -> void:
 	_base_basis = basis
-	_load_shared_assets()
-	splats.gaussian = _shared_gaussian
 	MeshMaterials.matte(_shared_mesh)
 	mesh_fallback.mesh = _shared_mesh
 	depth_proxy.mesh = _shared_mesh  # hides the beacon behind the body (§7.2); splats write no depth
@@ -102,6 +120,7 @@ func _ready() -> void:
 	beacon.scale = Vector3.ONE * (_shared_beacon_radius / DEFAULT_BEACON_RADIUS)
 	use_fallback_mesh(_fallback_active)
 	_sync_targetable()
+	fade_phase_s = fade_phase_of(display_name)
 	_update_beacon()
 	_build_hull()
 
@@ -142,6 +161,8 @@ func _build_hull() -> void:
 	add_child(damageable)
 	damageable.setup(Hardpoints.load_collision_only(HARDPOINTS_PATH), HULL_MAX, Factions.NEUTRAL)
 	damageable.hit_by_anyone = true
+	damageable.ram_mass_kg = MASS_KG
+	damageable.ram_lethal_dv_mps = RAM_LETHAL_DV_MPS
 
 
 ## Shows the fallback mesh instead of the splats (splats unavailable, or the F4 comparison toggle).
@@ -159,7 +180,7 @@ func is_fallback_mesh_active() -> bool:
 
 
 func _update_beacon() -> void:
-	beacon.visible = beacon_lit(SimClock.now(), blink_phase_s)
+	beacon_fade.transparency = 1.0 - fade_level(SimClock.now(), fade_phase_s)
 
 
 func _sync_targetable() -> void:
@@ -168,6 +189,7 @@ func _sync_targetable() -> void:
 		return
 	marker.display_name = display_name
 	marker.velocity = velocity
+	marker.broadcast_range_m = BROADCAST_RANGE_M
 
 
 ## Loads the splats, the fallback mesh and the beacon hardpoint once for every buoy. Missing files only warn.
@@ -179,6 +201,7 @@ static func _load_shared_assets() -> void:
 		_shared_gaussian = load(GAUSSIAN_PATH) as GaussianResource
 	if _shared_gaussian == null:
 		push_warning("NavBuoy: %s is missing or not imported (run scripts/gen_assets.sh, then import); no buoy splats" % GAUSSIAN_PATH)
+	_shared_lighting_path = SplatLod.lighting_path(ASSET_ID, 0)
 	if ResourceLoader.exists(MESH_PATH):
 		_shared_mesh = load(MESH_PATH) as Mesh
 	var file := FileAccess.open(HARDPOINTS_PATH, FileAccess.READ)

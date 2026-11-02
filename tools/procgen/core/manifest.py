@@ -14,13 +14,17 @@ FRAME = "godot"
 UNITS = "m"
 
 
-def lod_entry(level: int, file: str, splats: int, spacing_m: float) -> dict[str, Any]:
-    return {
+def lod_entry(level: int, file: str, splats: int, spacing_m: float, lighting: str | None = None) -> dict[str, Any]:
+    """One level of detail. ``lighting`` names its ``.light`` records when the level is lit in the game (the sky is not)."""
+    entry: dict[str, Any] = {
         "level": int(level),
         "file": file,
         "splats": int(splats),
         "spacing_m": float(spacing_m),
     }
+    if lighting is not None:
+        entry["lighting"] = lighting
+    return entry
 
 
 def sound_entry(
@@ -160,6 +164,11 @@ def validate_manifest(manifest: Mapping[str, Any]) -> None:
             raise ValueError(
                 f"manifest lods[{index}].spacing_m must be a positive number"
             )
+        if "lighting" in entry and not (isinstance(entry["lighting"], str) and entry["lighting"].endswith(".light")):
+            raise ValueError(f"manifest lods[{index}].lighting must be a .light file name")
+
+    if "hero" in manifest:
+        _validate_hero(manifest["hero"])
 
     for key in ("aabb_min", "aabb_max", "centroid_offset"):
         _check_vec3(manifest, key)
@@ -171,6 +180,21 @@ def validate_manifest(manifest: Mapping[str, Any]) -> None:
         isinstance(k, str) and isinstance(v, str) for k, v in files.items()
     ):
         raise ValueError("manifest 'files' must map names to file names")
+
+
+def _validate_hero(entry: Any) -> None:
+    """The optional ``hero`` entry: a level's file, splat count, spacing and lighting, but outside the ``lods`` ladder."""
+    if not isinstance(entry, dict):
+        raise ValueError("manifest 'hero' must be an object")  # noqa: TRY004
+    if not isinstance(entry.get("file"), str) or not entry["file"]:
+        raise ValueError("manifest hero.file must be a non-empty string")
+    splats = entry.get("splats")
+    if not isinstance(splats, int) or isinstance(splats, bool) or splats <= 0:
+        raise ValueError("manifest hero.splats must be a positive integer")
+    if not _is_number(entry.get("spacing_m")) or entry["spacing_m"] <= 0:
+        raise ValueError("manifest hero.spacing_m must be a positive number")
+    if "lighting" in entry and not (isinstance(entry["lighting"], str) and entry["lighting"].endswith(".light")):
+        raise ValueError("manifest hero.lighting must be a .light file name")
 
 
 def _validate_sounds(manifest: Mapping[str, Any]) -> None:

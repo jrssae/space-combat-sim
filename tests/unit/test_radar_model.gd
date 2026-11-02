@@ -108,3 +108,29 @@ func test_the_unit_sphere_stays_inside_its_pixel_radius_roughly() -> void:
 		var a: float = TAU * float(i) / 24.0
 		var p: Vector2 = RadarModel.to_screen(Vector3(cos(a), sin(a), 0.0), Vector2.ZERO, 100.0)
 		assert_lt(p.length(), 100.0 * 1.25, "the slow perspective only stretches a little")
+
+
+func test_a_broadcast_beyond_the_sensor_range_sits_on_the_rim_in_its_true_direction() -> void:
+	var offset := Vector3(3.0e5, 4.0e5, 0.0)  # 500 km, right and above
+	var rim: RadarModel.Dot = RadarModel.dot_for(1, offset, Factions.EARTH_ALLIANCE, false, Vector3.ZERO, Basis.IDENTITY,
+			Factions.EARTH_ALLIANCE, 1.0e6)
+	assert_not_null(rim)
+	assert_true(rim.rim, "hollow, on the rim")
+	assert_almost_eq(rim.point, Vector3(0.6, 0.0, 0.8), Vector3.ONE * TOL, "unit radius, true bearing")
+	assert_almost_eq(rim.range_m, 5.0e5, 1e-3)
+	assert_null(RadarModel.dot_for(1, offset, Factions.EARTH_ALLIANCE, false, Vector3.ZERO, Basis.IDENTITY,
+			Factions.EARTH_ALLIANCE, 4.0e5), "beyond its own broadcast: dropped")
+	var near: RadarModel.Dot = RadarModel.dot_for(1, Vector3(0.0, 0.0, -1000.0), Factions.EARTH_ALLIANCE, false, Vector3.ZERO,
+			Basis.IDENTITY, Factions.EARTH_ALLIANCE, 1.0e6)
+	assert_false(near.rim, "inside 25 km a broadcaster is drawn as any contact")
+
+
+func test_dots_carry_each_contacts_broadcast_range() -> void:
+	var far := TargetInfo.new(9, "NAV ALPHA", Factions.NEUTRAL, Vector3(0.0, 0.0, -9.0e5))
+	far.broadcast_range_m = 1.0e6
+	var silent := TargetInfo.new(10, "RAIDER 1", Factions.RAIDERS, Vector3(0.0, 0.0, -3.0e4))
+	var infos: Array[TargetInfo] = [far, silent]
+	var dots: Array[RadarModel.Dot] = RadarModel.dots(infos, 0, Vector3.ZERO, Basis.IDENTITY, Factions.EARTH_ALLIANCE)
+	assert_eq(dots.size(), 1)
+	assert_eq(dots[0].id, 9)
+	assert_true(dots[0].rim)

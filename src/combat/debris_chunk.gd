@@ -5,7 +5,8 @@ extends Node3D
 ## `SplatPoseSync` only draws it at the chunk's interpolated pose), and a `MeshInstance3D` with the chunk's OBJ, in group
 ## `splat_fallback_mesh`, shown instead of the splats when the splat renderer cannot draw them (and always for a chunk
 ## made without splats). It drifts and spins kinematically (no collisions), lives `LIFETIME_S`, shrinks to nothing over
-## `SHRINK_S`, hides and parks (`parked` is emitted; a one-shot chunk frees itself instead).
+## `SHRINK_S`, hides and parks (`parked` is emitted; a one-shot chunk frees itself instead). A Starfury's chunk is first
+## *held* (M3-T28): drawn and busy, but placed by its wreck (`place_held`) until `release` sets it flying.
 ##
 ## Frames: the chunk's PLY and OBJ are centred on the chunk's own centroid, so the node's origin is that centroid;
 ## `offset` (from `hardpoints.json` `chunks[]`) is where it sat in the ship's body frame.
@@ -30,9 +31,13 @@ var splats: GaussianSplatNode = null
 var mesh_instance: MeshInstance3D = null
 
 var _age_s: float = 0.0
+var _vent: FxPool = null
+var _vent_handle: int = 0
 var _orientation: Basis = Basis.IDENTITY  # orthonormal, kept apart from the scale so spinning cannot drift the size
 var _active: bool = false
 var _fallback: bool = false
+var _placed_this_tick: bool = false
+var _held: bool = false
 
 
 ## A parked chunk from a `hardpoints.json` `chunks[]` entry (`name`, `ply`, `obj`, `offset`) in `asset_dir`. With
@@ -63,6 +68,8 @@ static func create(entry: Dictionary, asset_dir: String, with_splats: bool) -> D
 		var ply_path: String = asset_dir.path_join(String(entry.get("ply", "")))
 		if ResourceLoader.exists(ply_path):
 			chunk.splats.gaussian = load(ply_path) as GaussianResource
+			var records: String = String(entry.get("lighting", ""))
+			SplatLightingLoader.attach(chunk.splats, asset_dir.path_join(records) if not records.is_empty() else "")
 		else:
 			push_warning("DebrisChunk: %s is missing or not imported (run scripts/gen_assets.sh, then import)" % ply_path)
 	chunk._park_state()
@@ -105,7 +112,14 @@ func _ready() -> void:
 	_apply_visibility()
 
 
+func _exit_tree() -> void:
+	_stop_vent()
+
+
 func _physics_process(delta: float) -> void:
+	if _placed_this_tick:  # the pool already put it where the wreck is this tick; a step now would pop it ahead
+		_placed_this_tick = false
+		return
 	advance(delta)
 
 
@@ -135,9 +149,52 @@ func launch(xform: Transform3D, p_velocity: Vector3, p_angular_velocity: Vector3
 	reset_physics_interpolation()
 
 
+## Puts the chunk at `xform` as part of a wreck moving at `p_velocity` (the wreck's motion at the chunk): drawn and busy, but
+## only `place_held` moves it. Its life and vent start at `release`.
+func hold(xform: Transform3D, p_velocity: Vector3, p_angular_velocity: Vector3) -> void:
+	launch(xform, p_velocity, p_angular_velocity)
+	_held = true
+
+
+## Follows its wreck to `xform` (World-local), moving at `p_velocity`.
+func place_held(xform: Transform3D, p_velocity: Vector3) -> void:
+	_orientation = xform.basis.orthonormalized()
+	global_transform = Transform3D(_orientation, xform.origin)
+	velocity = p_velocity
+
+
+func is_held() -> bool:
+	return _held
+
+
+## Lets a held chunk go: it flies on at `p_velocity` and `p_angular_velocity` from where it is, its life starting now.
+func release(p_velocity: Vector3, p_angular_velocity: Vector3, placed_this_tick: bool = false) -> void:
+	_held = false
+	_placed_this_tick = placed_this_tick
+	velocity = p_velocity
+	angular_velocity = p_angular_velocity
+	_age_s = 0.0
+
+
+## Sparks and venting from `pool` for `duration_s`, following the chunk (same velocity, same start). Ends with the chunk.
+func vent(pool: FxPool, duration_s: float) -> void:
+	_stop_vent()
+	_vent = pool
+	_vent_handle = pool.burst(FxSpecs.DEBRIS, global_position, Vector3.UP, velocity, duration_s)
+
+
+## True while an emitter is venting for this chunk, and its handle in the pool (tests).
+func has_vent() -> bool:
+	return _vent != null and _vent.is_live(_vent_handle)
+
+
+func vent_handle() -> int:
+	return _vent_handle
+
+
 ## Moves the chunk `delta` seconds: drift, spin, and the shrink-out at the end of its life. Public for tests.
 func advance(delta: float) -> void:
-	if not _active:
+	if not _active or _held:
 		return
 	_age_s += delta
 	global_position += velocity * delta
@@ -159,16 +216,28 @@ func age_s() -> float:
 
 func park() -> void:
 	_active = false
+	_held = false
+	_stop_vent()
 	_park_state()
 
 
 func _finish() -> void:
 	_active = false
+	_held = false
+	_stop_vent()
 	parked.emit(self)
 	if one_shot:
 		queue_free()
 	else:
 		_park_state()
+
+
+# A chunk that is gone leaves no emitter venting where it was.
+func _stop_vent() -> void:
+	if _vent != null and is_instance_valid(_vent):
+		_vent.stop(_vent_handle)
+	_vent = null
+	_vent_handle = 0
 
 
 func _park_state() -> void:

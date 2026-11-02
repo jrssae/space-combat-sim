@@ -27,6 +27,12 @@ extends Node3D
 ## `glow_color` (the ship's `engine_glow_color`) tints the plumes: the shared materials carry the Starfury's blue-white,
 ## and any other colour gets its own copies of the two materials, shared by this ship's plumes (set it before `setup`).
 ##
+## Lights (M3-T22): each main pod nozzle also owns a `LightEmitter`, `EmitterCurves.NOZZLE_OFFSET_M` out along the exhaust, so
+## the plume lights its pod and strut. Its energy follows the smoothed level (0 at idle), its colour is the plume's, and
+## it competes through the `SplatLightRig`'s `LightPicker` for a slot. RCS and retro nozzles give no light (too many). The
+## emitters are in the rig's candidates only while the ship is in play: a parked or freed ship takes them out, and
+## `_process` puts them back when it is back. `own_ship` (the player's) gives them the picker's top priority.
+##
 ## The plumes are children of the ship and keep the default physics-interpolation mode, so they ride with the
 ## interpolated hull; only their scale and alpha change per frame, which is invisible next to a 16 ms tick.
 ## How it looks is (H).
@@ -64,6 +70,8 @@ const MIN_RADIUS_FRACTION: float = 0.6
 @export var rcs_radius_m: float = 0.06
 ## HDR colour of the plumes; differs from the default only for ships with another engine colour.
 @export var glow_color: Color = DEFAULT_GLOW_COLOR
+## The player's own ship: its nozzle lights outrank every other emitter, so they stay picked while it fires.
+@export var own_ship: bool = false
 ## Time constant of the level smoothing, s.
 @export var smoothing_s: float = 0.08
 ## Plumes with a smoothed level under this are hidden.
@@ -82,10 +90,21 @@ var _cores: Array[MeshInstance3D] = []
 var _lengths: PackedFloat64Array = PackedFloat64Array()
 var _radii: PackedFloat64Array = PackedFloat64Array()
 var _levels: PackedFloat64Array = PackedFloat64Array()
+# One entry per plume: the nozzle's light, or null for retro and RCS nozzles.
+var _lights: Array[LightEmitter] = []
+var _rig: SplatLightRig = null
+var _lights_in_rig: bool = false
 
 
 func _process(delta: float) -> void:
 	advance(delta)
+	_enter_rig()
+
+
+func _notification(what: int) -> void:
+	# A ship that leaves play stops processing, so its lights must go from the competition here.
+	if what == NOTIFICATION_EXIT_TREE or what == NOTIFICATION_DISABLED:
+		_leave_rig()
 
 
 ## Called by Main with the ship's thruster layout and a Callable returning the latest `FlightOutput` (or null).
@@ -102,7 +121,7 @@ func setup(layout: ThrusterLayout, output_source: Callable) -> void:
 	for i: int in layout.nozzle_count():
 		var is_main: bool = ThrusterLayout.is_main_group(layout.nozzle_groups[i])
 		_add_plume(POD_PREFIX + layout.nozzle_names[i], layout.nozzle_positions[i], layout.nozzle_exhausts[i],
-				main_length_m if is_main else retro_length_m, main_radius_m if is_main else retro_radius_m)
+				main_length_m if is_main else retro_length_m, main_radius_m if is_main else retro_radius_m, is_main)
 	for entry: Dictionary in layout.rcs_nozzles:
 		_add_plume(RCS_PREFIX + str(entry["name"]), entry["position"], entry["exhaust"], rcs_length_m, rcs_radius_m)
 
@@ -133,6 +152,19 @@ func glow_level(index: int) -> float:
 	return _levels[index]
 
 
+## The light of the plume at `index`, or null when that nozzle gives none (only main pod nozzles do).
+func nozzle_light(index: int) -> LightEmitter:
+	return _lights[index]
+
+
+## Number of nozzle lights.
+func light_count() -> int:
+	var n: int = 0
+	for emitter: LightEmitter in _lights:
+		n += 1 if emitter != null else 0
+	return n
+
+
 ## Reads the output and moves every plume `delta` seconds along its smoothing. `_process` calls it each frame; public
 ## so tests can step it with a chosen `delta`.
 func advance(delta: float) -> void:
@@ -145,6 +177,17 @@ func advance(delta: float) -> void:
 	for i: int in _plumes.size():
 		_levels[i] = ThrusterGlowLevels.smooth(_levels[i], targets[i], delta, smoothing_s)
 		_apply(i)
+		if _lights[i] != null:
+			_lights[i].energy = EmitterCurves.nozzle_energy(_levels[i])
+
+
+## Puts every plume and nozzle light out at once: a ship back in play (a new pilot, a respawn) starts cold.
+func reset() -> void:
+	for i: int in _plumes.size():
+		_levels[i] = 0.0
+		_apply(i)
+		if _lights[i] != null:
+			_lights[i].energy = 0.0
 
 
 ## A basis whose +Y axis is `exhaust` (any length; zero falls back to +Z) and whose other axes are arbitrary but
@@ -207,7 +250,7 @@ static func core_mesh() -> QuadMesh:
 	return _core_mesh
 
 
-func _add_plume(plume_name: String, at: Vector3, exhaust: Vector3, length: float, radius: float) -> void:
+func _add_plume(plume_name: String, at: Vector3, exhaust: Vector3, length: float, radius: float, lit: bool = false) -> void:
 	var plume := Node3D.new()
 	plume.name = plume_name
 	plume.transform = Transform3D(plume_basis(exhaust), at)
@@ -230,6 +273,13 @@ func _add_plume(plume_name: String, at: Vector3, exhaust: Vector3, length: float
 	plume.add_child(core_node)
 
 	add_child(plume)
+	var light: LightEmitter = null
+	if lit:
+		light = LightEmitter.new(plume_name, LightEmitter.PRIORITY_PLAYER_OWN if own_ship else LightEmitter.PRIORITY_NOZZLE,
+				EmitterCurves.light_color(glow_color), 0.0, EmitterCurves.NOZZLE_RANGE_M)
+		light.anchor = plume
+		light.offset = Vector3(0.0, EmitterCurves.NOZZLE_OFFSET_M, 0.0)  # +Y is along the exhaust
+	_lights.append(light)
 	_plumes.append(plume)
 	_cones.append(cone_node)
 	_cores.append(core_node)
@@ -267,7 +317,30 @@ func _tinted(base: Material) -> Material:
 	return copy
 
 
+# Puts the nozzle lights in the rig's competition (once, however often it is called).
+func _enter_rig() -> void:
+	if _lights_in_rig:
+		return
+	_rig = SplatLightRig.of(self)
+	if _rig == null:
+		return
+	for emitter: LightEmitter in _lights:
+		if emitter != null:
+			_rig.add_emitter(emitter)
+	_lights_in_rig = true
+
+
+func _leave_rig() -> void:
+	for emitter: LightEmitter in _lights:
+		if emitter != null:
+			emitter.energy = 0.0
+			if _rig != null and is_instance_valid(_rig):
+				_rig.remove_emitter(emitter)
+	_lights_in_rig = false
+
+
 func _clear() -> void:
+	_leave_rig()
 	for node: Node3D in _plumes:
 		if is_instance_valid(node):
 			remove_child(node)
@@ -278,3 +351,4 @@ func _clear() -> void:
 	_lengths.clear()
 	_radii.clear()
 	_levels.clear()
+	_lights.clear()

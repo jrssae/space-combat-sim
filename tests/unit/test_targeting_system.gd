@@ -359,3 +359,41 @@ func test_select_ahead_ignores_faction() -> void:
 	system.update(candidates, Vector3.ZERO)
 	system.select_ahead(Vector3.ZERO, Vector3.FORWARD)
 	assert_eq(system.selected_id(), 1, "the target nearest the nose, hostile or not")
+
+
+# --- broadcasts (M3-T17) -----------------------------------------------------------------------------------------
+
+
+func _broadcaster(id: int, position: Vector3, range_m: float) -> TargetInfo:
+	var info := _info(id, position)
+	info.broadcast_range_m = range_m
+	return info
+
+
+func test_a_broadcast_reaches_past_the_sensor_range_to_its_own_range() -> void:
+	var buoy := _broadcaster(1, Vector3(0.0, 0.0, -900000.0), 1.0e6)
+	var near_ally := _broadcaster(2, Vector3(90000.0, 0.0, 0.0), 1.0e5)
+	var far_ally := _broadcaster(3, Vector3(-110000.0, 0.0, 0.0), 1.0e5)
+	var silent := _info(4, Vector3(0.0, 30000.0, 0.0))
+	var weak := _broadcaster(5, Vector3(0.0, -24000.0, 0.0), 1000.0)  # a short broadcast never shrinks the sensor range
+	var candidates: Array[TargetInfo] = [buoy, near_ally, far_ally, silent, weak]
+	system.update(candidates, Vector3.ZERO)
+	var ids: Array[int] = []
+	for info: TargetInfo in system.in_range(Vector3.ZERO):
+		ids.append(info.id)
+	assert_eq(ids, [5, 2, 1], "nearest first; the 110 km ally and the silent 30 km contact are out")
+	assert_eq(system.reach_m(buoy), 1.0e6)
+	assert_eq(system.reach_m(silent), TargetingSystem.SENSOR_RANGE_M)
+	assert_eq(system.reach_m(weak), TargetingSystem.SENSOR_RANGE_M)
+
+
+func test_a_broadcast_selection_holds_to_its_range_and_infinity_works() -> void:
+	var gate := _broadcaster(7, Vector3(0.0, 1.0e9, 0.0), INF)
+	var ally := _broadcaster(8, Vector3(0.0, 0.0, -99000.0), 1.0e5)
+	var candidates: Array[TargetInfo] = [gate, ally]
+	system.update(candidates, Vector3.ZERO)
+	assert_true(system.select_id(7, Vector3.ZERO), "an INF broadcast at 1e9 m")
+	assert_almost_eq(system.readout(Vector3.ZERO, Vector3.ZERO).range_m, 1.0e9, 1.0)
+	assert_true(system.select_id(8, Vector3.ZERO))
+	assert_false(system.update(candidates, Vector3(0.0, 0.0, 999.0)), "at 99.999 km: kept")
+	assert_true(system.update(candidates, Vector3(0.0, 0.0, 1001.0)), "past its 100 km: cleared")

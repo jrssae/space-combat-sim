@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3]
+[gd_scene load_steps=18 format=3]
 
 [ext_resource type="Script" path="res://src/game/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://src/environment/space_environment.tscn" id="2_env"]
@@ -13,6 +13,9 @@
 [ext_resource type="Script" path="res://src/hud/hud.gd" id="11_hud"]
 [ext_resource type="Script" path="res://src/game/wave_director.gd" id="12_waves"]
 [ext_resource type="Script" path="res://src/audio/audio_director.gd" id="13_audio"]
+[ext_resource type="Script" path="res://src/combat/ram_resolver.gd" id="14_rams"]
+[ext_resource type="Script" path="res://src/game/wing_director.gd" id="15_wings"]
+[ext_resource type="Script" path="res://src/combat/fx_pool.gd" id="16_fx"]
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_main")
@@ -21,6 +24,7 @@ script = ExtResource("1_main")
 
 [node name="World" type="Node3D" parent="."]
 script = ExtResource("3_world")
+auto_rebase_distance_m = 5000.0
 
 [node name="CameraRig" parent="World" instance=ExtResource("4_rig")]
 
@@ -32,6 +36,9 @@ script = ExtResource("3_world")
 script = ExtResource("8_pool")
 
 [node name="Effects" type="Node3D" parent="World"]
+
+[node name="Fx" type="Node3D" parent="World"]
+script = ExtResource("16_fx")
 
 [node name="Debris" type="Node3D" parent="World"]
 script = ExtResource("9_debris")
@@ -45,8 +52,14 @@ process_mode = 1
 [node name="HitResolver" type="Node" parent="Combat"]
 script = ExtResource("7_resolver")
 
+[node name="RamResolver" type="Node" parent="Combat"]
+script = ExtResource("14_rams")
+
 [node name="DestructionDirector" type="Node" parent="Combat"]
 script = ExtResource("10_director")
+
+[node name="WingDirector" type="Node" parent="Combat"]
+script = ExtResource("15_wings")
 
 [node name="WaveDirector" type="Node" parent="Combat"]
 script = ExtResource("12_waves")

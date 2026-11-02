@@ -15,7 +15,7 @@ const ENVIRONMENT_PATH: String = "res://src/environment/space_environment.tscn"
 const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tests.sh (it imports first)"
 const TOL: float = 1e-4
 const SHIP_KEYS: Array[StringName] = [&"position", &"universe_position", &"velocity", &"speed", &"body_velocity",
-		&"angular_rate_dps", &"assist_on", &"trim", &"pod_yaw", &"main_levels", &"retro_levels", &"mass_flow", &"fuel_kg", &"fuel_fraction"]
+		&"angular_rate_dps", &"assist_on", &"running_lights", &"trim", &"pod_yaw", &"main_levels", &"retro_levels", &"mass_flow", &"fuel_kg", &"fuel_fraction"]
 
 var world: WorldFrame
 var spec: ShipSpec
@@ -381,7 +381,7 @@ func test_console_ship_provider_and_assist_command() -> void:
 	for key: StringName in SHIP_KEYS:
 		# `fuel_kg` (M2-T14) is writable so a tank can be emptied from the console; see test_reaction_mass.gd.
 		# `velocity` is a debug shove (captures, HUD checks); nothing in the game writes it through the console.
-		assert_eq(provider.is_writable(key), key == &"assist_on" or key == &"fuel_kg" or key == &"velocity", "%s writable only if assist_on, fuel_kg or velocity" % key)
+		assert_eq(provider.is_writable(key), key == &"assist_on" or key == &"running_lights" or key == &"fuel_kg" or key == &"velocity", "%s writable only if assist_on, fuel_kg or velocity" % key)
 	assert_string_contains(registry.help(&"assist")[0], "assist [on|off]")
 
 	ship.assist_on = true
@@ -520,7 +520,8 @@ func test_render_provider_and_entries_leave_with_the_status() -> void:
 	var registry: ConsoleRegistry = DebugConsole.registry
 	var provider: ConsoleStateProvider = registry.get_provider(&"render")
 	assert_not_null(provider, "SplatStatus registers provider 'render'")
-	var expected_keys: Array[StringName] = [&"splat_backend", &"fallback", &"fps", &"gpu"]
+	var expected_keys: Array[StringName] = [&"splat_backend", &"fallback", &"fps", &"gpu", &"gdgs_rebuilds", &"gdgs_splat_uploads",
+			&"gdgs_render_states", &"splat_visible", &"splat_clipped", &"splat_budget_mb", &"gpu_ms"]
 	assert_eq(provider.keys(), expected_keys, "the §6.4 keys")
 	assert_true(provider.is_writable(&"fallback"))
 	assert_false(provider.is_writable(&"splat_backend"))

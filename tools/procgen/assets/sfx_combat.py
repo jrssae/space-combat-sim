@@ -5,6 +5,10 @@ Eight mono 16-bit 48 kHz WAVs, each peaking at -1.5 dBFS, all from seeded genera
 * ``pulse_fire`` (0.18 s): the Starfury's pulse cannon: a falling sine sweep with a fast decay, a noise click and a low thump.
 * ``raider_fire`` (0.22 s): the raiders' plasma gun: lower and buzzier (a detuned sawtooth pair, band-passed noise).
 * ``hit_hull`` (0.35 s): a bolt on a hull: a clank of inharmonic partials with a fast decay and a short click.
+
+  These three sit two octaves down (``GUN_PITCH``, M3-T15, the maintainer's Q17): every frequency in them (sweeps, partials,
+  noise bands) is a quarter of the original design's, their lengths and envelopes unchanged (not a resample, which would stretch
+  them four times).
 * ``explosion`` (1.8 s): a boom (a falling sine), noise swept down through a low-pass, and a crackle of sparse impulses.
 * ``engine_loop`` (2.0 s, **seamless**): a low rumble, harmonics of 36 Hz (nothing above 180 Hz) and band-limited periodic noise
   below 260 Hz; every component repeats exactly within the 2 s, and the manifest gives the loop points (0 to the last sample).
@@ -30,39 +34,40 @@ from ..core.context import AssetOutputs, BuildContext
 from ..core.manifest import build_audio_manifest, sound_entry, write_manifest
 
 ASSET_ID = "sfx_combat"
-GENERATOR_VERSION = 2
+GENERATOR_VERSION = 3
 PEAK_DBFS = -1.5
 ENGINE_BASE_HZ = 36.0
 ENGINE_SECONDS = 2.0
 PARTIALS = (1.0, 2.76, 5.40, 8.93, 13.34)  # inharmonic partials of a struck plate
+GUN_PITCH = 0.25  # the gun and impact sounds' frequencies against their first design: two octaves down
 
 
-def pulse_fire(rng: np.random.Generator) -> np.ndarray:
+def pulse_fire(rng: np.random.Generator, pitch: float = GUN_PITCH) -> np.ndarray:
     t = audio.time_axis(0.18)
-    body = audio.sine(audio.phase_from_frequency(audio.sweep(t, 1500.0, 260.0, 0.18))) * audio.attack_decay(t, 0.002, 0.05)
-    thump = audio.sine(audio.phase_from_frequency(audio.sweep(t, 140.0, 60.0, 0.18))) * audio.exp_decay(t, 0.06)
-    click = audio.highpass(audio.white_noise(rng, len(t)), 2500.0) * audio.exp_decay(t, 0.004)
+    body = audio.sine(audio.phase_from_frequency(audio.sweep(t, 1500.0 * pitch, 260.0 * pitch, 0.18))) * audio.attack_decay(t, 0.002, 0.05)
+    thump = audio.sine(audio.phase_from_frequency(audio.sweep(t, 140.0 * pitch, 60.0 * pitch, 0.18))) * audio.exp_decay(t, 0.06)
+    click = audio.highpass(audio.white_noise(rng, len(t)), 2500.0 * pitch) * audio.exp_decay(t, 0.004)
     return audio.fade(0.8 * body + 0.5 * thump + 0.35 * click, 0.0, 0.01)
 
 
-def raider_fire(rng: np.random.Generator) -> np.ndarray:
+def raider_fire(rng: np.random.Generator, pitch: float = GUN_PITCH) -> np.ndarray:
     t = audio.time_axis(0.22)
-    freq = audio.sweep(t, 520.0, 170.0, 0.22)
+    freq = audio.sweep(t, 520.0 * pitch, 170.0 * pitch, 0.22)
     buzz = 0.6 * audio.saw(audio.phase_from_frequency(freq)) + 0.5 * audio.saw(audio.phase_from_frequency(freq * 1.013))
-    buzz = audio.lowpass(buzz, 2400.0) * audio.attack_decay(t, 0.003, 0.07)
-    hiss = audio.bandpass(audio.white_noise(rng, len(t)), 800.0, 4000.0) * audio.attack_decay(t, 0.002, 0.04)
-    thump = audio.sine(audio.phase_from_frequency(audio.sweep(t, 110.0, 45.0, 0.22))) * audio.exp_decay(t, 0.08)
+    buzz = audio.lowpass(buzz, 2400.0 * pitch) * audio.attack_decay(t, 0.003, 0.07)
+    hiss = audio.bandpass(audio.white_noise(rng, len(t)), 800.0 * pitch, 4000.0 * pitch) * audio.attack_decay(t, 0.002, 0.04)
+    thump = audio.sine(audio.phase_from_frequency(audio.sweep(t, 110.0 * pitch, 45.0 * pitch, 0.22))) * audio.exp_decay(t, 0.08)
     return audio.fade(0.7 * buzz + 0.35 * hiss + 0.5 * thump, 0.0, 0.015)
 
 
-def hit_hull(rng: np.random.Generator) -> np.ndarray:
+def hit_hull(rng: np.random.Generator, pitch: float = GUN_PITCH) -> np.ndarray:
     t = audio.time_axis(0.35)
     ring = np.zeros_like(t)
-    base = 310.0 * (1.0 + 0.08 * rng.uniform(-1.0, 1.0))
+    base = 310.0 * pitch * (1.0 + 0.08 * rng.uniform(-1.0, 1.0))
     for k, ratio in enumerate(PARTIALS):
         tau = 0.09 / (1.0 + 0.7 * k)  # the higher partials die first
         ring += audio.sine(audio.phase_from_frequency(np.full_like(t, base * ratio)) + rng.uniform(0.0, 6.28)) * audio.exp_decay(t, tau) / (1.0 + 0.4 * k)
-    click = audio.highpass(audio.white_noise(rng, len(t)), 1800.0) * audio.exp_decay(t, 0.006)
+    click = audio.highpass(audio.white_noise(rng, len(t)), 1800.0 * pitch) * audio.exp_decay(t, 0.006)
     return audio.fade(0.7 * ring + 0.5 * click, 0.003, 0.02)
 
 

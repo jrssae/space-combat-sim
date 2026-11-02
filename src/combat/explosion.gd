@@ -1,16 +1,22 @@
 class_name Explosion
 extends Node3D
 ## The explosion of a destroyed ship (architecture §15.7), made entirely in code (no textures, no splats): a light
-## flash, an additive billboard flash, a noisy fireball sphere, one-shot sparks and embers. Transparent meshes and
-## particles draw after the splats and are hidden behind hulls in front of them by the hull depth proxy.
+## emitter, an additive billboard flash, a noisy fireball sphere, and sparks, fragments and a gas shell thrown from the `FxPool`
+## (M3-T23). Transparent meshes and particles draw after the splats and are hidden behind hulls in front of them by the hull
+## depth proxy.
 ##
-## - `OmniLight3D`: energy 0 -> 8 -> 0 over 0.25 s, range 4 x radius (it lights meshes only; splats are unlit).
+## - light: a `LightEmitter` (M3-T22), never a `Light3D` of its own. It competes through the `SplatLightRig`'s `LightPicker`
+##   for a slot, so nearby hulls are lit, and sits in the rig's candidate list only while it shines. Energy 0 -> 8 -> 0 over
+##   0.25 s, range 4 x radius.
 ## - billboard flash: an additive quad, 0.15 s.
 ## - fireball: a sphere growing to 1.2 x radius over 0.8 s, `explosion_fireball.gdshader`, gone by 1.5 s.
-## - sparks: 80 streaks, 40-150 m/s, 0.6-1.2 s; embers: 20, 5-20 m/s, 2-3 s (`GPUParticles3D`, one shot).
+## - pool bursts (`FxSpecs`): 80 sparks, 40-150 m/s, 0.6-1.2 s; 20 glowing fragments, 5-20 m/s, 2-3 s; a gas shell of 10 puffs.
 ##
 ## It drifts with `velocity` (it was the ship's), joins `world_shiftable` so a rebase moves it, and frees itself after
 ## 3 s. Animation is `_process` (visuals), so a paused game freezes it; `advance` is public for tests.
+##
+## The pool's bursts start where the ship blew up and fly on at the ship's velocity (they inherit it); their emitters are shifted
+## by a rebase with the world (`FxPool`). The explosion owns no particle nodes of its own, so the count never changes.
 
 const LIFETIME_S: float = 3.0
 const LIGHT_S: float = 0.25
@@ -19,8 +25,6 @@ const FLASH_S: float = 0.15
 const FIREBALL_S: float = 1.5
 const FIREBALL_GROW_S: float = 0.8
 const FIREBALL_FINAL_SCALE: float = 1.2
-const SPARK_COUNT: int = 80
-const EMBER_COUNT: int = 20
 const FIREBALL_SHADER: Shader = preload("res://src/combat/explosion_fireball.gdshader")
 const GLOW_MATERIAL: StandardMaterial3D = preload("res://assets/materials/thruster_glow.tres")
 
@@ -29,13 +33,14 @@ var radius_m: float = 4.0
 ## World-frame drift velocity, m/s.
 var velocity: Vector3 = Vector3.ZERO
 
-var light: OmniLight3D = null
+var emitter: LightEmitter = null
 var flash: MeshInstance3D = null
 var fireball: MeshInstance3D = null
-var sparks: GPUParticles3D = null
-var embers: GPUParticles3D = null
+## Where the sparks, fragments and gas shell come from (`DestructionDirector` sets it); without one the explosion has none.
+var fx: FxPool = null
 
 var _age_s: float = 0.0
+var _rig: SplatLightRig = null
 var _fireball_material: ShaderMaterial = null
 
 
@@ -54,11 +59,21 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	if light == null:
+	if emitter == null:
 		_build()  # instanced from the scene instead of `create`
-	sparks.restart()
-	embers.restart()
+	_rig = SplatLightRig.of(self)
+	if _rig != null:
+		_rig.add_emitter(emitter)
+	if fx != null:
+		for effect: int in [FxSpecs.EXPLOSION_SPARKS, FxSpecs.EXPLOSION_FRAGMENTS, FxSpecs.EXPLOSION_GAS]:
+			fx.burst(effect, global_position, Vector3.UP, velocity)
 	advance(0.0)
+
+
+func _exit_tree() -> void:
+	if _rig != null and is_instance_valid(_rig):
+		_rig.remove_emitter(emitter)
+	_rig = null
 
 
 func _physics_process(delta: float) -> void:
@@ -75,11 +90,10 @@ func advance(delta: float) -> void:
 	if _age_s >= LIFETIME_S:
 		queue_free()
 		return
-	# Light: a triangle, up to the peak at a third of the way and back to zero.
-	var t_light: float = clampf(_age_s / LIGHT_S, 0.0, 1.0)
-	var rise: float = 1.0 / 3.0
-	light.light_energy = LIGHT_PEAK_ENERGY * (t_light / rise if t_light < rise else (1.0 - t_light) / (1.0 - rise))
-	light.visible = _age_s < LIGHT_S
+	emitter.energy = light_energy(_age_s)
+	if _age_s >= LIGHT_S and _rig != null:
+		_rig.remove_emitter(emitter)  # the light is over; the rest of the effect is meshes
+		_rig = null
 	# Billboard flash: full to start, linear fade, then hidden.
 	var t_flash: float = clampf(_age_s / FLASH_S, 0.0, 1.0)
 	flash.visible = _age_s < FLASH_S
@@ -92,19 +106,21 @@ func advance(delta: float) -> void:
 	_fireball_material.set_shader_parameter(&"age", _age_s)
 
 
+## Energy of the explosion's light `age_s` after it appeared: a triangle, up to the peak at a third of the way and back to zero.
+static func light_energy(age_s: float) -> float:
+	var t: float = clampf(age_s / LIGHT_S, 0.0, 1.0)
+	var rise: float = 1.0 / 3.0
+	return LIGHT_PEAK_ENERGY * (t / rise if t < rise else (1.0 - t) / (1.0 - rise))
+
+
 ## Seconds since it appeared.
 func age_s() -> float:
 	return _age_s
 
 
 func _build() -> void:
-	light = OmniLight3D.new()
-	light.name = "Light"
-	light.omni_range = 4.0 * radius_m
-	light.light_color = Color(1.0, 0.78, 0.5)
-	light.light_energy = 0.0
-	light.shadow_enabled = false
-	add_child(light)
+	emitter = LightEmitter.new("explosion", LightEmitter.PRIORITY_EXPLOSION, Color(1.0, 0.78, 0.5), 0.0, 4.0 * radius_m)
+	emitter.anchor = self
 
 	var glow := GLOW_MATERIAL.duplicate() as StandardMaterial3D
 	glow.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
@@ -133,69 +149,3 @@ func _build() -> void:
 	fireball.mesh = sphere
 	fireball.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(fireball)
-
-	sparks = _particles("Sparks", SPARK_COUNT, Vector2(0.6, 1.2), Vector2(40.0, 150.0), _spark_mesh(), 0.8)
-	embers = _particles("Embers", EMBER_COUNT, Vector2(2.0, 3.0), Vector2(5.0, 20.0), _ember_mesh(), 0.5)
-	add_child(sparks)
-	add_child(embers)
-
-
-func _particles(node_name: String, count: int, lifetime_s: Vector2, speed: Vector2, mesh: Mesh, damping: float) -> GPUParticles3D:
-	var p := GPUParticles3D.new()
-	p.name = node_name
-	p.amount = count
-	p.lifetime = lifetime_s.y
-	p.one_shot = true
-	p.explosiveness = 1.0
-	p.local_coords = false
-	p.emitting = false
-	p.fixed_fps = 0
-	p.visibility_aabb = AABB(Vector3(-300.0, -300.0, -300.0), Vector3(600.0, 600.0, 600.0))
-	p.draw_pass_1 = mesh
-	var material := ParticleProcessMaterial.new()
-	material.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
-	material.emission_sphere_radius = 0.25 * radius_m
-	material.direction = Vector3.UP
-	material.spread = 180.0
-	material.initial_velocity_min = speed.x
-	material.initial_velocity_max = speed.y
-	material.gravity = Vector3.ZERO
-	material.damping_min = damping
-	material.damping_max = damping * 2.0
-	material.lifetime_randomness = 1.0 - lifetime_s.x / lifetime_s.y
-	material.particle_flag_align_y = true
-	var ramp := Gradient.new()
-	ramp.offsets = PackedFloat32Array([0.0, 0.4, 1.0])
-	ramp.colors = PackedColorArray([Color(1.0, 0.95, 0.8, 1.0), Color(1.0, 0.5, 0.15, 0.9), Color(0.6, 0.12, 0.03, 0.0)])
-	var ramp_texture := GradientTexture1D.new()
-	ramp_texture.gradient = ramp
-	material.color_ramp = ramp_texture
-	p.process_material = material
-	return p
-
-
-func _spark_mesh() -> Mesh:
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.03, 0.9, 0.03)  # long along +Y, which the particle aligns with its velocity
-	mesh.material = _particle_material(Color(3.0, 2.0, 1.0))
-	return mesh
-
-
-func _ember_mesh() -> Mesh:
-	var mesh := SphereMesh.new()
-	mesh.radius = 0.06
-	mesh.height = 0.12
-	mesh.radial_segments = 6
-	mesh.rings = 3
-	mesh.material = _particle_material(Color(3.0, 1.1, 0.3))
-	return mesh
-
-
-static func _particle_material(color: Color) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	material.vertex_color_use_as_albedo = true
-	material.albedo_color = color
-	return material

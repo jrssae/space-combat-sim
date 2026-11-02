@@ -31,11 +31,10 @@ from typing import Any
 
 import numpy as np
 
-from ..core import frames
+from ..core import frames, lighting
 from ..core.chunks import ChunkSource, write_chunks
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Mesh, box
-from ..core.lighting import STUDIO_DEFAULT, StudioRig
 from ..core.manifest import build_manifest, lod_entry, write_manifest
 from ..core.obj import write_obj
 from ..core.ply import SplatData, write_ply
@@ -55,30 +54,31 @@ from ..styles import Style
 from ..styles.raider import RAIDER
 
 ASSET_ID = "raider_fighter"
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2  # 2: flat paint and lighting records (M3-T21)
 PLY_NAME = "raider_fighter.ply"
 OBJ_NAME = "raider_fighter.obj"
 HARDPOINTS_NAME = "hardpoints.json"
 
 DEFAULT_SPACING_M = 0.09
 SPLAT_BUDGET = (15_000, 40_000)  # AC4, at the default spacing
+# M3-T19: the coarser levels for the LOD switcher, at 2x, 4x and 8x the spacing.
+FAR_LODS = {
+    1: ("raider_fighter_lod1.ply", 2.0, "lod1", (0.20, 0.30)),  # level: file, spacing factor, stream, share of LOD0
+    2: ("raider_fighter_lod2.ply", 4.0, "lod2", (0.04, 0.09)),
+    3: ("raider_fighter_lod3.ply", 8.0, "lod3", (0.01, 0.025)),
+}
 CHASE_ANCHOR = (0.0, 3.5, 14.0)  # authored frame: behind and above, frames the 17 m span at 70 degrees
 EYE = (0.0, 0.95, 1.5)  # the pilot's eye under the canopy panel (authored frame); looks down -Z
 JSON_DIGITS = 5
+# Running lights (M3-T27): how far a marker stands off the hull, where the top one sits, and the lamp over the hump.
+NAV_LIGHT_CLEARANCE_M = 0.12
+NAV_TOP_BEHIND_CANOPY_M = 0.5
+NAV_LAMP_HEIGHT_M = 2.2
+NAV_LAMP_RANGE_M = 5.5
+NAV_CABIN_RANGE_M = 1.4
 BURIED_MARGIN_M = 0.01
 CHUNK_ORDER = ("wing_l", "wing_r", "hump", "nacelle_l", "nacelle_r")
 MUZZLE_ORDER = ("root_l", "root_r", "nacelle_l", "nacelle_r")  # left and right take turns in ALTERNATING fire
-
-
-# The default studio rig leaves surfaces that face away from the key light (a fighter seen from behind or below, which is
-# how raiders are mostly seen) at about 0.3 x albedo, near black in an unlit scene. A raised ambient keeps every side
-# readable while the hull facing up still reads brightest.
-RAIDER_RIG = StudioRig(
-    sky=(0.46, 0.47, 0.50),
-    ground=(0.24, 0.24, 0.26),
-    lights=STUDIO_DEFAULT.lights,
-    exposure=1.1,
-)
 
 
 @dataclass(frozen=True)
@@ -178,11 +178,14 @@ def _plate(width: float, length: float, height: float, role: str, style: Style) 
     return box((width, height, length), style.material(role), center=(0.0, 0.5 * height, 0.0))
 
 
-def build_parts(spec: RaiderSpec, style: Style, ctx: BuildContext, spacing: float) -> list[Placed]:
-    """Every part in the authored frame, sampled, mirrored to the left side where it has one."""
+def build_parts(
+    spec: RaiderSpec, style: Style, ctx: BuildContext, spacing: float, stream_suffix: tuple[str, ...] = ()
+) -> list[Placed]:
+    """Every part in the authored frame, sampled, mirrored to the left side where it has one. ``stream_suffix``
+    keeps another LOD's random draws apart from LOD0's."""
 
     def sample(mesh: Mesh, stream: str) -> SurfaceSamples:
-        return sample_mesh(mesh, spacing, ctx.rng("splats", stream))
+        return sample_mesh(mesh, spacing, ctx.rng("splats", stream, *stream_suffix))
 
     wing_spec, hump_spec = spec.wing, spec.hump
     nac_origin = np.array([spec.nacelle_x, spec.nacelle_y, spec.nacelle_z])
@@ -284,17 +287,39 @@ def _phase(name: str, style: Style) -> tuple[float, float, float]:
     return tuple(((h * k) % 97) / 97.0 * style.panel_size_m for k in (7, 11, 13))
 
 
-def colour_samples(placed: Placed, style: Style, rig: StudioRig) -> np.ndarray:
+def colour_samples(placed: Placed, style: Style) -> np.ndarray:
+    """Paint only (paint, panel lines, weathering): the scene's lights do the shading in the game."""
     s = placed.samples
-    albedo = style.shade_panels(
+    return style.shade_panels(
         s.albedo(), s.positions, s.normals, s.material_flag("paneled") > 0.5, _phase(placed.part.name, style)
     )
-    return rig.shade(s.normals, albedo, s.material_flag("metallic"))
 
 
 # --- hardpoints ------------------------------------------------------------------------------------------
 def _r(v: Any) -> list[float]:
     return [round(float(x), JSON_DIGITS) + 0.0 for x in np.asarray(v, dtype=float).reshape(-1)]
+
+
+def nav_lights(by_name: dict[str, Part], spec: RaiderSpec, offset: np.ndarray) -> dict[str, Any]:
+    """Running lights (M3-T27): red and green past the wingtips, white on top of the hump behind the canopy, a lamp standing
+    over the hump to light it, and the cabin glow on the canopy panel."""
+    wing = spec.wing
+    tip_x = wing.half_span + NAV_LIGHT_CLEARANCE_M
+    tip_y = 0.0 - float(offset[1])
+    tip_z = 0.5 * (wing.tip_leading_z + wing.tip_trailing_z) - float(offset[2])
+    hump_lo, hump_hi = by_name["hump"].mesh.bounds()
+    canopy_lo, canopy_hi = by_name["canopy"].mesh.bounds()
+    top_z = float(canopy_hi[2]) + NAV_TOP_BEHIND_CANOPY_M
+    canopy_centre = 0.5 * (canopy_lo + canopy_hi)
+    return {
+        "port": _r((-tip_x, tip_y, tip_z)),
+        "starboard": _r((tip_x, tip_y, tip_z)),
+        "top": _r((0.0, float(hump_hi[1]) + NAV_LIGHT_CLEARANCE_M, top_z)),
+        "top_lamp": _r((0.0, float(hump_hi[1]) + NAV_LAMP_HEIGHT_M, 0.5 * (top_z + float(hump_hi[2])))),
+        "top_lamp_range_m": NAV_LAMP_RANGE_M,
+        "cabin": _r((0.0, canopy_centre[1], canopy_centre[2])),
+        "cabin_range_m": NAV_CABIN_RANGE_M,
+    }
 
 
 def hardpoints(placed: list[Placed], spec: RaiderSpec, chunks: list[dict[str, Any]], offset: np.ndarray) -> dict[str, Any]:
@@ -368,6 +393,7 @@ def hardpoints(placed: list[Placed], spec: RaiderSpec, chunks: list[dict[str, An
         "pods": pods,
         "rcs": rcs,
         "collision": collision,
+        "nav_lights": nav_lights(by_name, spec, offset),
         "chunks": chunks,
     }
 
@@ -384,7 +410,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
     thickness = float(ctx.option("thickness", DEFAULT_THICKNESS))
     if min(spacing, overlap, thickness) <= 0.0:
         raise ValueError("spacing, overlap and thickness must be positive")
-    spec, style, rig = DEFAULT_SPEC, RAIDER, RAIDER_RIG
+    spec, style = DEFAULT_SPEC, RAIDER
 
     out_dir = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -397,7 +423,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
         members = [p for p in placed if p.part.group == group]
         sampled = [p for p in members if p.samples is not None]
         splats = SplatData.concatenate(
-            [to_splats(p.samples, colour_samples(p, style, rig), p.spacing, overlap, thickness) for p in sampled]
+            [to_splats(p.samples, colour_samples(p, style), p.spacing, overlap, thickness) for p in sampled]
         )
         mesh = Mesh.concatenate(p.part.mesh for p in members if p.hull)
         chunk_sources.append(ChunkSource(group, splats, mesh))
@@ -415,12 +441,30 @@ def build(ctx: BuildContext) -> AssetOutputs:
         normals=frames.flip_xy(authored.normals),
     )
     comments = (f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}", "frame: 3dgs (Rz180 of godot)")
-    files: list[Path] = [write_ply(out_dir / PLY_NAME, written, comments)]
+    light_names = {0: lighting.lod_file_name(ASSET_ID, 0)}
+    files: list[Path] = [write_ply(out_dir / PLY_NAME, written, comments), lighting.write_lighting(out_dir / light_names[0], written)]
     hull_mesh = Mesh.concatenate(p.part.mesh for p in placed if p.hull)
     files += write_obj(out_dir / OBJ_NAME, hull_mesh, ASSET_ID, comments[:1])
 
     chunk_files, chunk_entries = write_chunks(out_dir, ASSET_ID, chunk_sources, comments)
     files += chunk_files
+
+    # LOD1-LOD3: whole-ship files for distant ships, resampled from their own streams.
+    far: dict[int, int] = {}
+    for level, (name, factor, stream, _share) in FAR_LODS.items():
+        lod_placed, _ = centre(build_parts(spec, style, ctx, factor * spacing, (stream,)))
+        lod = SplatData.concatenate(
+            [to_splats(p.samples, colour_samples(p, style), p.spacing, overlap, thickness)
+             for p in lod_placed if p.samples is not None]
+        )
+        far[level] = len(lod)
+        lod_written = SplatData(
+            xyz=frames.godot_to_3dgs_positions(lod.xyz), rgb=lod.rgb, alpha=lod.alpha, scale=lod.scale,
+            rot=frames.godot_to_3dgs_quats(lod.rot), normals=frames.flip_xy(lod.normals),
+        )
+        files.append(write_ply(out_dir / name, lod_written, comments + (f"lod {level}",)))
+        light_names[level] = lighting.lod_file_name(ASSET_ID, level)
+        files.append(lighting.write_lighting(out_dir / light_names[level], lod_written))
 
     hp = hardpoints(placed, spec, chunk_entries, offset)
     hp_path = out_dir / HARDPOINTS_NAME
@@ -431,11 +475,16 @@ def build(ctx: BuildContext) -> AssetOutputs:
     warnings: list[str] = []
     if abs(spacing - DEFAULT_SPACING_M) < 1e-12 and not SPLAT_BUDGET[0] <= total <= SPLAT_BUDGET[1]:
         warnings.append(f"{total} splats is outside the AC4 budget {SPLAT_BUDGET} at the default spacing")
+    if abs(spacing - DEFAULT_SPACING_M) < 1e-12:
+        for level, (_name, _factor, _stream, bounds) in FAR_LODS.items():
+            if not bounds[0] <= far[level] / total <= bounds[1]:
+                warnings.append(f"LOD{level} has {far[level] / total:.1%} of LOD0's splats, outside {bounds}")
     manifest = build_manifest(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,
         seed=ctx.seed,
-        lods=[lod_entry(0, PLY_NAME, total, spacing)],
+        lods=[lod_entry(0, PLY_NAME, total, spacing, light_names[0])]
+        + [lod_entry(level, FAR_LODS[level][0], far[level], FAR_LODS[level][1] * spacing, light_names[level]) for level in FAR_LODS],
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,

@@ -15,7 +15,7 @@ func test_every_key_has_a_valid_default() -> void:
 
 
 func test_m1_schema_keys_present() -> void:
-	for key: StringName in [&"invert_y", &"stick_deadzone", &"trigger_deadzone", &"yaw_ramp_s", &"target_hold_s",
+	for key: StringName in [&"invert_y", &"stick_deadzone", &"trigger_deadzone", &"target_hold_s",
 			&"assist_default", &"camera_default", &"show_overlay", &"show_fps", &"console_enabled",
 			&"console_pause_on_open", &"camera_chase_smoothing_s"]:
 		assert_true(schema.has_key(key), "schema has %s" % key)
@@ -31,13 +31,17 @@ func test_fuel_unlimited_is_a_bool_that_defaults_to_true() -> void:
 
 
 func test_renamed_keys_point_at_current_keys() -> void:
-	assert_false(schema.has_key(&"roll_ramp_s"), "the D-pad ramp is yaw now")
-	assert_eq(SettingsSchema.RENAMED[&"roll_ramp_s"], &"yaw_ramp_s")
 	for old: StringName in SettingsSchema.RENAMED.keys():
 		assert_false(schema.has_key(old), "%s is no longer a key" % old)
 		assert_true(schema.has_key(SettingsSchema.RENAMED[old]), "%s maps to a current key" % old)
-	assert_eq(schema.old_names(&"yaw_ramp_s"), [&"roll_ramp_s"] as Array[StringName])
 	assert_eq(schema.old_names(&"invert_y"), [] as Array[StringName])
+
+
+func test_the_dpad_yaw_ramp_is_gone() -> void:
+	# M3-T15: the right stick yaws, so the D-pad ramp (yaw_ramp_s, before it roll_ramp_s) has no user left.
+	assert_false(schema.has_key(&"yaw_ramp_s"))
+	assert_false(schema.has_key(&"roll_ramp_s"))
+	assert_false(SettingsSchema.RENAMED.has(&"roll_ramp_s"))
 
 
 func test_target_hold_range() -> void:
@@ -77,7 +81,7 @@ func test_float_range_enforced() -> void:
 
 
 func test_int_is_coerced_to_float() -> void:
-	var result: Dictionary = schema.validate(&"yaw_ramp_s", 1)
+	var result: Dictionary = schema.validate(&"target_hold_s", 1)
 	assert_true(result["ok"])
 	assert_eq(typeof(result["value"]), TYPE_FLOAT)
 
@@ -119,3 +123,18 @@ func test_control_profile_is_a_string_with_a_pattern() -> void:
 	assert_eq(schema.validate(&"control_profile", &"mine")["value"], "mine", "and is stored as a String")
 	assert_false(schema.validate(&"control_profile", 3)["ok"])
 	assert_string_contains(schema.validate(&"control_profile", 3)["error"], "expects text")
+
+
+func test_an_int_setting_validates_parses_and_describes() -> void:
+	assert_eq(schema.get_type(&"splat_budget"), TYPE_INT)
+	assert_eq(schema.get_default(&"splat_budget"), 2000000)
+	assert_eq(schema.describe(&"splat_budget"), "int 100000..6000000")
+	assert_eq(schema.validate(&"splat_budget", 500000)["value"], 500000)
+	assert_eq(typeof(schema.validate(&"splat_budget", 500000.0)["value"]), TYPE_INT, "a whole float is an int")
+	assert_false(schema.validate(&"splat_budget", 500000.5)["ok"])
+	assert_false(schema.validate(&"splat_budget", 10)["ok"])
+	assert_false(schema.validate(&"splat_budget", 7000000)["ok"])
+	assert_false(schema.validate(&"splat_budget", "many")["ok"])
+	assert_eq(schema.parse(&"splat_budget", "750000")["value"], 750000)
+	assert_false(schema.parse(&"splat_budget", "1.5")["ok"])
+	assert_false(schema.parse(&"splat_budget", "many")["ok"])

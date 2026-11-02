@@ -14,7 +14,7 @@ describe what M1 builds and §15 what M2 adds; §14 is the long-term design that
 | Renderer | Forward+ (Vulkan) | - | - |
 | Controller | Generic XInput-class gamepad through Godot/SDL3's standard `JOY_*` layout; no Xbox-only features | - | - |
 | Physics | Jolt (built in, set explicitly) | bundled | MIT |
-| Splat rendering | GDGS `addons/gdgs`, Compute backend | **v3.3.0** | MIT |
+| Splat rendering | GDGS, the project's fork `addons/gdgs_scs`, Compute backend | forked from **v3.3.0** | MIT |
 | World coordinates | Floating-origin `WorldFrame` + 64-bit script-side `UniversePos` (§14.1) | - | - |
 | Language | GDScript, statically typed | - | - |
 | Tests (engine) | GUT `addons/gut` | **v9.7.1** | MIT |
@@ -35,13 +35,13 @@ M2 decisions (D20-D29) are in §15.1.
 | D3 | **No splat training.** Splats are produced by sampling procedurally authored surfaces (mesh-to-splat) and by writing Gaussians directly for stars/nebula | Deterministic, CPU-only, seconds to run, reproducible in CI and in the GPU-less container. Training (Brush) stays an optional polish step on a GPU machine. |
 | D4 | RigidBody3D + Jolt. Pod nozzle forces are applied **at their hardpoint positions** (`apply_force`); RCS as central force + torque; no custom integrator | Correct rigid-body dynamics (inertia, angular momentum); differential pod thrust yaws the ship through real r × F computed by the engine; free collision later. Verified headless. Custom integrator only if Jolt limits ever block us (§5.6). |
 | D5 | Flight logic in pure `RefCounted` classes, nodes are thin adapters | Unit-testable without a scene tree, display or controller. |
-| D6 | Flight assist in M1. **ON (default)**: rate-command fly-by-wire; the trigger/bumper difference is a smoothed **yaw command** added to the D-pad's, so pod steering works in both modes; pod torque helps the turn and is trimmed when RCS cannot hold the commanded rate; no pod ever exceeds its trigger. **OFF**: raw pods + raw RCS torque (tank-steer). **Brake** (hold) is an all stop (velocity and rotation) in both, and turns the nose onto the selected target | User decision: pod steering is the Starfury identity in both modes; assist makes it bounded and stop-on-release; one closed-form rule (§5.5). |
-| D7 | User-chosen pad layout (§6.1): triggers = left/right main pods, bumpers = left/right retros, left stick = strafe, right stick = pitch / roll, D-pad = yaw + target/weapon cycling (Up: tap next, hold ahead). `InputMap` actions only, SDL3 standard layout, keyboard as extra events | Every DOF and combat function reachable without modifiers or stick clicks (generic pads may lack them); per-side pod control is the Starfury identity; rebindable, testable, works on a generic pad. |
-| D8 | Hybrid rendering: splats for hulls, buoys and sky; meshes for cockpit interior, projectiles, flashes, thruster plumes, beacons, the hull depth proxy; primitives for collision | Splats are static radiance; anything animated per frame, emissive-dynamic, or needing depth writes is a mesh. Each exception is justified in §7. |
+| D6 | Flight assist in M1. **ON (default)**: rate-command fly-by-wire; the trigger/bumper difference is a smoothed **yaw command** added to the right stick's (the D-pad's before M3-T15), so pod steering works in both modes; pod torque helps the turn and is trimmed when RCS cannot hold the commanded rate; no pod ever exceeds its trigger. **OFF**: raw pods + raw RCS torque (tank-steer). **Brake** (hold) is an all stop (velocity and rotation) in both, and turns the nose onto the selected target | User decision: pod steering is the Starfury identity in both modes; assist makes it bounded and stop-on-release; one closed-form rule (§5.5). |
+| D7 | User-chosen pad layout (§6.1): triggers = left/right main pods, bumpers = left/right retros, left stick = strafe, right stick = pitch / yaw by direction, roll on its diagonals; B = target cycling (tap next, hold previous); D-pad Up = flight assist, Down = weapon; D-pad Left / Right free (M3-T15). `InputMap` actions only, SDL3 standard layout, keyboard as extra events | Every DOF and combat function reachable without modifiers or stick clicks (generic pads may lack them); per-side pod control is the Starfury identity; rebindable, testable, works on a generic pad. |
+| D8 | Hybrid rendering: splats for hulls, buoys and sky; meshes for cockpit interior, projectiles, flashes, thruster plumes, beacons, the hull depth proxy; primitives for collision | Splats hold static paint, lit per splat from the scene's lights (§7.3, M3-T21); anything animated per frame, emissive-dynamic, or needing depth writes is a mesh. Each exception is justified in §7. |
 | D9 | Generated assets are **not committed**; generators are. No Git LFS | Everything binary is reproducible from `tools/procgen` in seconds; LFS adds quotas and fork friction. |
 | D10 | GUT over gdUnit4 | Simpler headless CLI (`-gexit`, exit code 1 on failure), no xvfb caveats, GDScript-first, tracks Godot 4.7. |
 | D11 | 1 unit = 1 metre, SI everywhere, Godot axes (+X right, +Y up, **-Z forward**) | Avoids conversion bugs; Godot's `Basis.z` is backward, so forward is `-basis.z`. |
-| D12 | Vendor addons into `addons/` | Offline-reproducible builds; standard Godot practice; licences travel with the code. |
+| D12 | Vendor addons into `addons/`; GDGS is a fork the project owns (`addons/gdgs_scs/`, on GitHub as `jrssae/godot-gaussian-splatting`, 2026-11-01) | Offline-reproducible builds; standard Godot practice; licences travel with the code. The fork lets the renderer change with the game (T20's splat budget). |
 | D13 | Linux x86_64 + Vulkan is the only target; GDGS Compute is the acceptance backend | The maintainer builds this for their own Linux gaming desktop. No per-OS code is written, so Godot keeps other doors open, but nothing else is tested or promised. |
 | D14 | Pod thrust = 8 discrete nozzle forces (4 main, 4 retro) at hardpoint positions; RCS = ideal per-axis force/torque actuator with limits | The asymmetry that matters is in the big pod nozzles; modelling every RCS jet adds allocation maths with no gameplay gain. |
 | D15 | M1 has targeting and weapon modes but nothing shootable: `TargetingSystem` over inert splat **nav buoys**; `weapon_next` cycles pulse-cannon fire modes | Smallest behaviour that makes every bound button do something verifiable; spinning buoys exercise several independently moving splat nodes before enemies need them. |
@@ -54,7 +54,7 @@ M2 decisions (D20-D29) are in §15.1.
 
 ```
 project.godot                 Forward+, Jolt, zero default damping, physics interpolation on, InputMap actions
-addons/gdgs/                  vendored GDGS v3.3.0 (MIT)
+addons/gdgs_scs/              the project's fork of GDGS v3.3.0 (MIT; changes in its PATCHES.md)
 addons/gut/                   vendored GUT v9.7.1 (MIT)
 data/scenarios/free_flight.json  M1 scenario: player start + nav buoys in universe coordinates
 src/
@@ -88,6 +88,10 @@ src/
   ship/thruster_visuals.gd    exhaust plumes (cone + core disc along each nozzle's exhaust axis) from FlightOutput levels
   ship/hull_depth_proxy.gd    MeshInstance3D: the fallback mesh inset along its normals, opaque black, depth only (§7.2)
   rendering/splat_pose_sync.gd Node: draws a splat node at its parent's physics-interpolated pose (§7.2)
+  rendering/splat_light_rig.gd Node: the scene's 8 lights, the key star and 7 omni slots filled from emitters (§7.3)
+  rendering/light_picker.gd   RefCounted, pure: which emitters fill the 7 slots each frame (§7.3)
+  rendering/light_emitter.gd  RefCounted: something that gives off light, as the picker sees it (§7.3)
+  rendering/splat_lighting_loader.gd RefCounted: a generator's `.light` bytes as a GDGS lighting resource, on a splat node (§7.3)
   weapons/pulse_cannon_gate.gd RefCounted, pure: fire modes, rate gate, muzzle selection (fake-time testable)
   weapons/pulse_cannon.gd     node adapter: trigger state, spawns projectiles at muzzle hardpoints
   weapons/projectile.tscn|.gd kinematic projectile (inherits ship velocity), lifetime, emissive mesh
@@ -138,9 +142,11 @@ so it works in every scene (the future front end included) and is not part of `m
 Main (Node3D)                              main.gd
 ├── SpaceEnvironment (space_environment.tscn)   outside World: camera-relative, never rebased
 │   ├── WorldEnvironment                   Environment (black sky, no fog, tonemap filmic, glow on) + Compositor[gdgs effect]
-│   ├── KeyStar (DirectionalLight3D)       lights meshes only; splats are pre-lit
+│   ├── SplatLightRig (Node3D)             the scene's only lights, before World so GDGS's walk finds them (§7.3)
+│   │   ├── KeyStar (DirectionalLight3D)   slot 0: lights meshes and splats
+│   │   └── Slot1..Slot7 (OmniLight3D)     filled from emitters by LightPicker each frame; energy 0 when unused
 │   └── SkySplats (GaussianSplatNode)      top_level = true; sky_follower.gd keeps origin == active camera origin
-├── World (Node3D, world_frame.gd)         every world object lives under here (group "world_shiftable")
+├── World (Node3D, world_frame.gd)         every world object lives under here (group "world_shiftable"); rebases at 5 km (M3-T14)
 │   ├── PlayerShip (ship.tscn, RigidBody3D)    ship.gd
 │   │   ├── CollisionShape3D x N           from hardpoints "collision" primitives (boxes/capsules)
 │   │   ├── HullSplats (GaussianSplatNode) identity transform; gaussian = starfury_aurora.ply import
@@ -184,7 +190,9 @@ Rules:
 - The ship never reads `Input`. It consumes a `FlightCommand` and a `CombatCommand` handed to it by `main.gd`
   each physics tick. An AI pilot (§14.7) produces the same two commands; `UiCommand` is player-only.
 - World objects are spawned through `World` (`WorldFrame`) from universe coordinates and must tolerate
-  `World.rebase()` at any tick (no cached world positions across ticks).
+  `World.rebase()` at any tick (no cached world positions across ticks). Since M3-T14 the main scene rebases whenever the
+  player is 5 km from the local origin: keep places as `UniversePos` or rebuild them from the live nodes every tick; a
+  World-local point that must outlive a tick follows `World.rebased` (§14.1).
 - Weapons and visuals read ship state through typed getters, never by reaching into sibling nodes.
 - Rendering (splat vs mesh) is invisible to gameplay code: `Ship` exposes hardpoints; which node draws the hull is
   decided by `SplatStatus`.
@@ -204,8 +212,8 @@ Owned by Jolt via `RigidBody3D`: position (m), orientation (`Basis`), linear vel
 | `inertia` (body, diagonal) | (6.0e5, 6.0e5, 5.0e5) kg·m² | x pitch, y yaw, z roll; four heavy pods at 4.5 m radius dominate |
 | `center_of_mass` | hardpoints `center_of_mass` | `center_of_mass_mode = CUSTOM` |
 | `pod_main_thrust` | 0.36 MN per pod | 4 pods = 1.44 MN = 30 m/s² (~3 g) with both triggers |
-| `pod_retro_thrust` | 0.18 MN per pod | 4 pods = 0.72 MN = 15 m/s² with both bumpers |
-| `rcs_force_max` | (0.48 MN, 0.48 MN, 0) | sway / heave, 10 m/s²; no axial RCS: fore/aft is the pods' job |
+| `pod_retro_thrust` | 0.36 MN per pod | 4 pods = 1.44 MN = 30 m/s² with both bumpers: reverse = forward (M3-T15, Q20; was 0.18) |
+| `rcs_force_max` | (0.72 MN, 0.72 MN, 0) | sway / heave, 15 m/s², half the forward thrust (M3-T15, Q20; was 0.48); no axial RCS: fore/aft is the pods' job |
 | `rcs_torque_max` | (9.4e5, 9.4e5, 1.57e6) N·m | = inertia × (1.57, 1.57, 3.14) rad/s² |
 | `rate_max` | (60, 60, 90) deg/s | assist target at full deflection |
 | `assist_gain_k` | 6.0 s⁻¹ | rate controller P gain |
@@ -330,12 +338,11 @@ What the player must experience:
 | LT alone | accelerate and yaw nose **right** | mirror of RT alone |
 | RB + LB | straight deceleration (retros) | same |
 | RB alone | decelerate and yaw nose **right** | decelerate and turn nose **right** at ≈ 30 °/s |
-| D-pad right + LT | (raw torque + pod yaw) | D-pad and pod yaw add, capped at `rate_max`; left-pod torque speeds the turn-in |
-| Right stick back / right | nose up / roll right (torque) | nose up / roll right (rate); stops when centred |
-| D-pad right | yaw right (torque, ramped) | yaw right (rate, ramped) |
+| Right stick right + LT | (raw torque + pod yaw) | stick yaw and pod yaw add, capped at `rate_max`; left-pod torque speeds the turn-in |
+| Right stick back / right / up-right diagonal | nose up / yaw right / roll right (torque) | nose up / yaw right / roll right (rate); stops when centred |
 | Left stick right / up | translate right / up; nose does not turn | same |
 | Release everything (or even out the triggers) | velocity unchanged; spin unchanged | velocity unchanged; rotation stops |
-| X held | all stop: velocity → 0 with symmetric pods + RCS, rotation → 0; sticks, D-pad, triggers ignored | same |
+| X held | all stop: velocity → 0 with symmetric pods + RCS, rotation → 0; sticks, triggers ignored | same |
 | X held, target selected | velocity → 0 while the nose swings onto the target and holds there (no roll) | same |
 
 ### 5.3 Integration
@@ -359,22 +366,22 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
 ### 5.5 Flight assist semantics
 
 - **Assist ON** (toggle B, persisted in `Settings`, default on): the flight computer owns attitude and commands
-  angular *rates*. Pitch and roll come from the right stick, and yaw from the D-pad (ramped) **plus the pod-yaw
+  angular *rates*. Pitch, yaw and roll come from the right stick (one axis by direction, §6.1) **plus the pod-yaw
   command**: the left/right difference of the triggers (and of the bumpers), with a 10 % deadzone, smoothed over
-  0.15 s, scaled by `pod_yaw_gain` (one full trigger = 30 °/s) and capped together with the D-pad at `rate_max`.
-  Stick and D-pad centred and sides even means "stop rotating". The flight computer knows the pods' torque
+  0.15 s, scaled by `pod_yaw_gain` (one full trigger = 30 °/s) and capped together with the stick's yaw at `rate_max`.
+  Stick centred and sides even means "stop rotating". The flight computer knows the pods' torque
   exactly (from hardpoints) and treats it as feed-forward: it lets pod torque drive the turn-in, cancels the
   excess with RCS once the commanded rate is reached, and trims (only ever reduces) the side causing it when RCS
   authority is not enough. The pilot's trigger and bumper levels are a ceiling, never exceeded. Translation is
   untouched except by that trim and by the brake.
 - **Assist OFF**: raw Newtonian. Pods fire exactly as demanded and their r × F torque acts in full, so uneven
-  triggers tank-steer the ship. Stick and D-pad command raw RCS torque. Nothing damps rotation. This is the
+  triggers tank-steer the ship. The stick commands raw RCS torque. Nothing damps rotation. This is the
   flip-and-burn mode.
 - **Brake** (hold X), both modes: **all stop**. The flight computer takes over translation and rotation.
   Translation: pods fire symmetrically (no torque) plus RCS sway/heave, nulling velocity relative to the `World`
   frame (later: relative to a chosen reference such as the station). Rotation: the rate target is zero and the P
   rate controller (gain `assist_gain_k`, RCS only, pods symmetric so nothing to trim) nulls any spin, with assist
-  off too. Triggers, bumpers, both sticks and the D-pad are ignored while held. Measured in Jolt (both modes): a
+  off too. Triggers, bumpers and both sticks are ignored while held. Measured in Jolt (both modes): a
   60 °/s tumble plus 50 m/s of drift is below 0.5 °/s after 0.87 s and below 0.5 m/s after 4.3 s (RCS sway/heave
   at 10 m/s² is the slow part); AC5f.
 - **Brake with a target selected**: rotation tracks `face_rate(face_dir_b)` (§5.2) instead of zero, so the nose
@@ -398,8 +405,8 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
   identity in both modes; assist off is the raw tank-steer, assist on is the same gesture made controllable: a
   bounded, predictable turn rate instead of ≈ 220 °/s² of runaway, which stops when the sides are evened out.
   (2) The deadzone exists because generic-pad triggers rarely read exactly equal at full squeeze; the smoothing
-  removes jerk from noisy analog triggers. (3) Gain 0.5 keeps one trigger below the D-pad yaw's authority while
-  trigger plus D-pad still reach full rate. (4) The "never above the trigger" rule still holds: the commanded yaw
+  removes jerk from noisy analog triggers. (3) Gain 0.5 keeps one trigger below the stick yaw's authority while
+  trigger plus stick still reach full rate. (4) The "never above the trigger" rule still holds: the commanded yaw
   points the same way as the pods' own torque, so the flight computer only ever needs to cancel or trim, never to
   add thrust; the pilot's throttle stays a ceiling. (5) One closed-form rule plus one first-order filter:
   deterministic, unit-testable, and identical for AI pilots, which write the same `FlightCommand`. All three
@@ -428,13 +435,13 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
 ```
 RT  right main pods (analog)      LT  left main pods (analog)
 RB  right retros (hold)           LB  left retros (hold)
-R-stick  pitch / roll (aim)       L-stick  strafe L/R + up/down
-D-pad L/R  yaw (ramped)           D-pad Down  next weapon
-D-pad Up  tap: next target        hold (0.35 s): target nearest the nose
-A  fire       B  flight assist    X  auto-track (hold): the nose follows the lead point of the selected target
+R-stick  up/down pitch, left/right yaw, diagonals roll       L-stick  strafe L/R + up/down
+D-pad Up  flight assist           D-pad Down  next weapon           D-pad Left  running lights        D-pad Right  free
+A  fire       B  tap: next target, hold (0.35 s): previous target
+X  auto-track (toggle): the nose follows the lead point of the selected target
 Y  camera 1st/3rd
 R3  brake (hold): all stop; faces the target if one is selected
-L3  free look (hold): the right stick turns the camera, not the ship; release returns it to the nose
+L3  free look (hold): the right stick turns the camera, not the ship; the view stays where it is left until L3 is released
 Back  reset                       Start  pause
 ```
 
@@ -442,41 +449,61 @@ Revised after the M2 play test: X toggles the auto-track (`FlightCommand.autotra
 that swings the nose onto `track_dir_b`, the lead point of the selected target, plus `track_rate_b`, the rate at which that
 direction is turning, fed forward so a crossing target is followed without the standing lag of a position-only controller; thrust
 and drift are untouched; with no target it takes the nearest hostile, and `Main` switches it off when none is left), R3 is the
-brake, L3 is free look (`CameraLook`: cockpit head turn up to 135° / 80°, chase orbit around the ship; the right stick is an
-absolute direction, the mouse turns the view by its travel; released, the view eases back to centre). The debug overlay is F3
-only. The keyboard is split by hand: the left hand has the engines (Q/E/R mains, A/D/F retros), roll (Z/X), brake (Ctrl), the
-camera (Tab) and auto-track (Shift); the right hand has pitch and yaw (I/K, J/L), strafe (arrows), assist (Y), targets (U next,
-O previous, P nearest the nose), fire mode (H) and screenshot (N, Print). The mouse flies (its speed, smoothed over a few ticks,
-is the pitch and yaw rate command; `settings.mouse_full_rate_px_s`), mouse 1 fires, mouse 2 is the tap-or-hold target button,
-the wheel steps through the targets, the middle button is free look. The mouse is captured while flying and freed by holding Alt, the console,
-the pause or a lost window focus (`GodotInputSource.mouse_free` then reads it as idle).
+brake, L3 is free look (`CameraLook`: cockpit head turn up to 135° / 80°, chase orbit around the ship; the right stick turns the
+view at up to 180°/s and a centred stick holds it (M3-T15; it was an absolute direction), the mouse turns it by its travel; only
+releasing the button eases the view back to centre). The debug overlay is F3
+only. The mouse flies (its speed, smoothed over a few ticks, is the pitch and yaw rate command; `settings.mouse_full_rate_px_s`),
+mouse 1 fires, mouse 2 is the tap-or-hold target button, the wheel steps through the targets, the middle button is free look.
+The mouse is captured while flying and freed by holding Alt, the console, the pause or a lost window focus
+(`GodotInputSource.mouse_free` then reads it as idle).
+
+Keyboard layout B (M3-T01, maintainer answer Q9). The M2.1 keyboard put pitch, yaw, strafe and targets on the right side, under
+the hand that holds the mouse. Layout B puts every flight key under the left hand and none right of the G / B column; physical
+keys, US positions. Pods are by position: Q / E drive the left / right main pod and W both, A / D the left / right retro and S
+both. R / F strafe up / down, Z / C strafe left / right, Caps Lock / G roll left / right, X brake (hold), Shift auto-track
+(toggle), Space fire, V fire mode, T flight assist, B the tap-or-hold target button (as mouse 2: tap next, hold nearest the nose), Tab camera. The
+housekeeping keys stay where they were (Esc, Backspace, N and Print, F3, F4). There are no keys for pitch, yaw, `target_prev`
+or `target_ahead`: the mouse flies, the wheel steps targets both ways, and a hold of B or mouse 2 is target-ahead. Mouse 4 / 5
+(the side buttons, `mouse:8` / `mouse:9`) are auto-track and fire mode. Ctrl, Alt (frees the mouse), the number row (keys 1-4
+are the wing orders of M3-T07) and ` (console) are not bound to flight. Caps Lock is read as a held key by polling
+`Input.is_physical_key_pressed(KEY_CAPSLOCK)` like any other; a desktop that delivers it as a toggle would need Ctrl instead.
+Saved user profiles in `user://controls/` keep the keys they were saved with; `controls use default` loads layout B.
 
 Revised after the M1 play test on the maintainer's generic pad: yaw and roll swapped places (right stick X was
 yaw, the D-pad was roll), and because that pad has no stick clicks, `target_ahead` moved onto a D-pad Up hold
-(R3 still works where it exists). Saved, selectable control profiles are on the roadmap.
+(R3 still works where it exists). Revised again after the M3 play test (M3-T15, Q15): the right stick flies all three
+axes by direction (pitch on up/down, yaw on left/right, roll on the diagonals), B cycles targets (tap next, hold
+previous, as the mouse wheel), D-pad Up toggles assist and D-pad Left / Right are left free; the pad has no
+`target_ahead` (keyboard B, a Mouse 2 hold or the console give it). A saved profile with the old default pad layout
+is moved onto the new one when it loads (its keys and mouse kept; `ControlProfile.PAD_LAYOUT_BEFORE_T15`); one with
+its own pad bindings is left alone, with a warning. D-pad Left became the running lights (M3-T27, Q27), with key 5, the free key beside the
+wing orders. A saved profile gets the action when it loads, like any new action; one that already uses D-pad Left keeps it, and its lights
+are key 5 alone (m1_classic, which rolls on the D-pad, is the same).
 
 All via `InputMap` actions in `project.godot`; `device = -1` (any pad). Names are the Xbox-style names Godot/SDL3
 use for the standard layout; any pad SDL3 recognises, generic XInput clones included, presents it.
 
 | Action | Pad (Godot enum, index) | Keyboard | Type | Deadzone | Curve |
 |---|---|---|---|---|---|
-| `main_right` | RT `JOY_AXIS_TRIGGER_RIGHT` (axis 5, +) | R, E | analog 0..1 via `get_trigger` | 0.05 | linear |
-| `main_left` | LT `JOY_AXIS_TRIGGER_LEFT` (axis 4, +) | Q, E | analog 0..1 via `get_trigger` | 0.05 | linear |
-| `retro_right` | RB `JOY_BUTTON_RIGHT_SHOULDER` (10) | F, D | hold | - | - |
-| `retro_left` | LB `JOY_BUTTON_LEFT_SHOULDER` (9) | A, D | hold | - | - |
-| `pitch_down` / `pitch_up` | Right stick Y `JOY_AXIS_RIGHT_Y` (axis 3, -/+): stick back = nose up; `Settings.invert_y` flips | I / K (and the mouse's Y) | analog pair | radial 0.15 | expo 1.5 |
-| `roll_left` / `roll_right` | Right stick X `JOY_AXIS_RIGHT_X` (axis 2, -/+): stick right = roll right | Z / X | analog pair | radial 0.15 (one deadzone with pitch) | expo 1.5 |
-| `strafe_left` / `strafe_right` | Left stick X `JOY_AXIS_LEFT_X` (axis 0, -/+) | Left / Right arrows | analog pair | radial 0.15 | linear |
-| `strafe_down` / `strafe_up` | Left stick Y `JOY_AXIS_LEFT_Y` (axis 1, +/-) | Down / Up arrows | analog pair | radial 0.15 | linear |
-| `yaw_left` / `yaw_right` | D-pad `JOY_BUTTON_DPAD_LEFT` / `DPAD_RIGHT` (13 / 14) | J / L (and the mouse's X) | hold, ramped | - | 0→1 in 0.25 s |
-| `target_next` | D-pad `JOY_BUTTON_DPAD_UP` (11) | U, mouse 2 | tap or hold: a tap gives `target_next` on release; a hold of 0.35 s gives `target_ahead` once | - | - |
-| `target_prev` | none (keyboard; the wheel steps both ways) | O | edge | - | - |
-| `weapon_next` | D-pad `JOY_BUTTON_DPAD_DOWN` (12) | H | edge | - | - |
-| `target_ahead` | none (the D-pad Up hold) | P | edge | - | - |
+| `main_right` | RT `JOY_AXIS_TRIGGER_RIGHT` (axis 5, +) | E, W | analog 0..1 via `get_trigger` | 0.05 | linear |
+| `main_left` | LT `JOY_AXIS_TRIGGER_LEFT` (axis 4, +) | Q, W | analog 0..1 via `get_trigger` | 0.05 | linear |
+| `retro_right` | RB `JOY_BUTTON_RIGHT_SHOULDER` (10) | D, S | hold | - | - |
+| `retro_left` | LB `JOY_BUTTON_LEFT_SHOULDER` (9) | A, S | hold | - | - |
+| `pitch_down` / `pitch_up` | Right stick Y `JOY_AXIS_RIGHT_Y` (axis 3, -/+): stick back = nose up; `Settings.invert_y` flips | none (the mouse's Y) | analog pair, split by direction (below) | radial 0.15 | expo 1.5 |
+| `yaw_left` / `yaw_right` | Right stick X `JOY_AXIS_RIGHT_X` (axis 2, -/+): stick right = yaw right; the diagonals roll | none (the mouse's X) | analog pair with pitch, split by direction | radial 0.15 (one deadzone with pitch) | expo 1.5 |
+| `roll_left` / `roll_right` | none (the right stick's diagonals) | Caps Lock / G | hold, full roll, added to the stick's | - | - |
+| `strafe_left` / `strafe_right` | Left stick X `JOY_AXIS_LEFT_X` (axis 0, -/+) | Z / C | analog pair | radial 0.15 | linear |
+| `strafe_down` / `strafe_up` | Left stick Y `JOY_AXIS_LEFT_Y` (axis 1, +/-) | F / R | analog pair | radial 0.15 | linear |
+| `target_cycle` | B `JOY_BUTTON_B` (1) | none | tap or hold: a tap gives `target_next` on release; a hold of 0.35 s gives `target_prev` once | - | - |
+| `target_next` | none (pad B, `target_cycle`) | B, mouse 2 | tap or hold: a tap gives `target_next` on release; a hold of 0.35 s gives `target_ahead` once | - | - |
+| `target_prev` | none (the wheel steps both ways) | none | edge | - | - |
+| `weapon_next` | D-pad `JOY_BUTTON_DPAD_DOWN` (12) | V, mouse 5 | edge | - | - |
+| `target_ahead` | none | none (the B / mouse 2 hold) | edge | - | - |
 | `fire` | A `JOY_BUTTON_A` (0) | Space, mouse 1 | hold | - | - |
-| `toggle_flight_assist` | B `JOY_BUTTON_B` (1) | Y | edge | - | - |
-| `brake` | R3 `JOY_BUTTON_RIGHT_STICK` (8) | Ctrl | hold | - | - |
-| `autotrack` | X `JOY_BUTTON_X` (2) | Shift | edge (toggles auto-track; `InputAdapter.autotrack_on`) | - | - |
+| `toggle_flight_assist` | D-pad `JOY_BUTTON_DPAD_UP` (11) | T | edge | - | - |
+| `toggle_running_lights` | D-pad `JOY_BUTTON_DPAD_LEFT` (13) | 5 | edge (M3-T27) | - | - |
+| `brake` | R3 `JOY_BUTTON_RIGHT_STICK` (8) | X | hold | - | - |
+| `autotrack` | X `JOY_BUTTON_X` (2) | Shift, mouse 4 | edge (toggles auto-track; `InputAdapter.autotrack_on`) | - | - |
 | `camera_look` | L3 `JOY_BUTTON_LEFT_STICK` (7) | mouse 3 (middle) | hold | - | - |
 | `toggle_camera` | Y `JOY_BUTTON_Y` (3) | Tab | edge | - | - |
 | `reset_ship` | Back `JOY_BUTTON_BACK` (4) | Backspace | edge | - | - |
@@ -489,7 +516,7 @@ use for the standard layout; any pad SDL3 recognises, generic XInput clones incl
 Notes:
 - Only axes 0-5 and buttons 0-14 are used. Guide (5) and SDL extras (paddles, misc, touchpad, ≥ 15) are not.
   No rumble, no impulse triggers, no light bar, no motion sensors.
-- E and D are "both sides" keys: the same key is an event on two actions. The mouse wheel is not an action (it cannot be held):
+- W and S are "both sides" keys: the same key is an event on two actions (W the two main pods, S the two retros). The mouse wheel is not an action (it cannot be held):
   `Main._input` feeds wheel notches and mouse motion to `GodotInputSource`, which hands them to `InputAdapter` once per tick.
 - The ` key belongs to the console alone: it is not an `InputMap` action and must never be bound to one (a test
   enforces it). While the console is open, Esc closes it instead of pausing (keyboard gameplay bindings are
@@ -498,23 +525,24 @@ Notes:
   (`Input.get_joy_axis`, `is_joy_button_pressed`, `is_physical_key_pressed`, `is_mouse_button_pressed`), never via
   `Input.is_action_pressed`. That is what lets it mask keyboard and mouse per device class while the console is
   open: `Input` action state would still report keys typed into the prompt.
-- Tap or hold on D-pad Up (in `InputAdapter`, so it works for T too): a press released before
-  `Settings.target_hold_s` (default 0.35 s, counted in physics ticks) gives `target_next` on the release tick; a
-  press still held when it crosses the threshold gives `target_ahead` once, on that tick, and its release gives
-  nothing, so a hold never also cycles. A tap therefore acts on release, which costs nothing when cycling targets.
-  A console open/close (`resync_edges`) or `reset()` drops a press in progress. Many generic pads have no stick
-  clicks (the maintainer's has neither R3 nor L3), so nothing needed to fly sits on them: R3 keeps `target_ahead`
-  where it exists, and L3's overlay toggle is also F3.
+- Tap or hold (in `InputAdapter`): two buttons, on separate timers. Pad B (`target_cycle`) and keyboard B / Mouse 2
+  (`target_next`): a press released before `Settings.target_hold_s` (default 0.35 s, counted in physics ticks) gives
+  `target_next` on the release tick; a press still held when it crosses the threshold gives its hold action once, on
+  that tick (`target_prev` for pad B, `target_ahead` for keyboard B and Mouse 2), and its release gives nothing, so a
+  hold never also cycles and never repeats. A tap therefore acts on release, which costs nothing when cycling targets.
+  A console open/close (`resync_edges`) or `reset()` drops a press in progress on either. Many generic pads have no
+  stick clicks (the maintainer's has neither R3 nor L3), so nothing needed to fly sits on them: R3 is the brake (also
+  X on the keyboard) and the overlay toggle is F3.
 - `target_ahead` samples the boresight when it fires, so the small stick jolt of an R3 click does not matter.
-- Yaw ramp: while a yaw action is held, `rot.y` moves toward ±1 at `1 / Settings.yaw_ramp_s` per second
-  (default 0.25 s to full); release snaps to 0; reversing direction restarts from 0. Taps give fine corrections
-  from a digital D-pad. Analog yaw stays available through pod steering (the triggers, §5.5). The setting was
-  `roll_ramp_s` before the swap; `Settings` reads that key from an old file (`SettingsSchema.RENAMED`) and the next
-  `save` writes the new name.
+- The right stick by direction (`InputAdapter.split_stick`, M3-T15): within `STICK_SECTOR_HALF_DEG` (22.5°) of straight
+  up or down it pitches, within it of straight left or right it yaws, and on the four diagonals between it rolls toward
+  the side the stick leans (up-right and down-right roll right). One axis at a time, at the stick's deflection after
+  deadzone and expo. The D-pad yaw ramp (`yaw_ramp_s`) went with it; `Settings` reads only schema keys, so an old
+  file's line is ignored and dropped on the next `save`.
 - Sticks: `Input.get_vector(neg_x, pos_x, neg_y, pos_y, Settings.stick_deadzone)` (radial deadzone with
-  rescaling), then `sign(x)·|x|^1.5` on pitch and roll in `InputAdapter`. The right stick is one vector (x roll,
-  y pitch), so pitch and roll share the radial deadzone. The keyboard's U/O give full roll at once (no ramp, like
-  any stick key); J/L ramp like the D-pad.
+  rescaling), then `sign(r)·|r|^1.5` on the right stick's length in `InputAdapter`. The right stick is one vector (x yaw,
+  y pitch, split as above), so its three axes share the radial deadzone. The keyboard's Caps Lock/G give full roll at
+  once (no ramp), added to the stick's roll and clamped; yaw and pitch have no keys (the mouse flies them, §16 D38).
 
 Generic-pad quirks, handled in the input layer (never in gameplay code):
 
@@ -562,8 +590,8 @@ var face_dir_b: Vector3 # body frame (+X right, +Y up, -Z forward), any length, 
 class_name CombatCommand extends RefCounted   # weapons + targeting; written by the player or an AI
 var fire: bool          # held
 var weapon_next: bool   # edge
-var target_next: bool   # edge (D-pad Up tap, on release)
-var target_ahead: bool  # edge (R3 press, or D-pad Up held for target_hold_s)
+var target_next: bool   # edge (a pad B, keyboard B or Mouse 2 tap, on release)
+var target_ahead: bool  # edge (keyboard B or Mouse 2 held for target_hold_s)
 
 class_name UiCommand extends RefCounted       # player-only
 var toggle_camera: bool # edges, all of them
@@ -591,7 +619,11 @@ set it directly.
 ### 6.3 Combat functions behind the buttons (M1)
 
 - **TargetingSystem** (pure). Candidates are `Array[TargetInfo]` (`id`, `display_name`, `faction`, `position`,
-  `velocity`), sensor range 25 km.
+  `velocity`, `broadcast_range_m`), sensor range 25 km. Broadcasts (M3-T17, Q21): a candidate is within reach inside the
+  sensor range or inside its own `Targetable.broadcast_range_m` (0 = none; nav buoys 1 000 km, allied ships 100 km, `INF`
+  for M11's hyperspace gates), so it can be cycled to, selected and read out from there. Ranges are taken from this tick's
+  World-local positions in 64-bit; the rebase keeps the World origin near the player, so they equal the universe distances
+  to float32 rounding at that range (6 cm at 900 km, 64 m at 1e9 m).
   - `select_next(ship_pos)`: candidates in range sorted by range; picks the one after the current, wrapping to
     the nearest; with no selection, the nearest.
   - `select_ahead(ship_pos, forward)`: smallest angle between `forward` and the direction to the target, forward
@@ -601,8 +633,7 @@ set it directly.
 - **TargetingController** (node under the ship) gathers group `targetable` each physics tick, feeds the system,
   applies `CombatCommand` edges, emits `target_changed(id)`. `selected_offset()` is the live World-frame line of
   sight to the selection (zero without one); the Ship turns it into `FlightCommand.face_dir_b` every tick.
-- **NavBuoy**: inert marker with a splat body (one shared `GaussianResource`, GDGS instancing), a blinking beacon
-  mesh, a 10 °/s spin about its long axis, optional constant drift. No collision; cannot be shot. Five are spawned
+- **NavBuoy**: inert marker with a splat body (one shared `GaussianResource`, GDGS instancing), a steady beacon mesh with a slow fade over it, a 10 °/s spin about its long axis, optional constant drift. No collision; cannot be shot. Five are spawned
   from `data/scenarios/free_flight.json` at 0.5-5 km; faction `neutral`.
 - **Pulse cannon modes** (`PulseCannonGate`, pure): `ALTERNATING` (4 Hz, muzzles alternate) and `LINKED`
   (2 Hz, both muzzles together). `weapon_next` cycles and wraps; the cooldown carries over, so switching cannot
@@ -666,11 +697,12 @@ validates before calling. Values are formatted consistently (vectors to 2 decima
 | `time` | SimClock (T07) | `sim_time_s`, `warp`, `timescale` |
 | `input` | GodotInputSource (T07) | `pads` (name, GUID, trigger rest, raw axes), `keyboard_masked`, last command fields |
 | `ship` | Ship (T10) | `position`, `universe_position`, `velocity`, `speed`, `body_velocity`, `angular_rate_dps`, `assist_on` (w), `trim`, `pod_yaw`, `main_levels`, `retro_levels`, `mass_flow`, `fuel_kg` (w; M2-T14), `fuel_fraction` (0..1; 1 while `fuel_unlimited`) |
-| `world` | WorldFrame (T09) | `origin`, `origin_velocity`, `auto_rebase_distance_m` |
+| `world` | WorldFrame (T09) | `origin`, `origin_velocity`, `auto_rebase_distance_m` (5 000 in the main scene), `rebases` (count, automatic and console), `rebase_us` (the last one's wall-clock cost, shift, handlers and end-of-tick reset; M3-T14) |
 | `camera` | CameraRig (T12) | `mode` (w), `fov` |
 | `weapons` | PulseCannon (T13) | `mode` (w), `cooldown_s`, `charge` (w, 0..1 capacitor; M2-T14) |
 | `targeting` | TargetingController (T14) | `selected` (w: display name or `none`), `range_m`, `closing_mps`, `candidates` |
 | `render` | SplatStatus (T10) | `splat_backend` (`compute`, `raster`, `headless` or `none`), `fallback` (w), `fps`, `gpu` |
+| `lights` | SplatLightRig (M3-T21) | `picked`, `candidates`, `active`, `cost_us` (§7.3) |
 
 M1 commands:
 
@@ -687,7 +719,7 @@ M1 commands:
 | `watch <path>` / `unwatch <path\|all>` | console | live values under the FPS counter (max 8, session) |
 | `fps [on\|off]` | console | shorthand for `toggle settings.show_fps` |
 | `god [on\|off]` | console | shorthand for `toggle debug.invulnerable`; session-only, never saved. M1 has no damage; M2 hull damage on the player skips while it is set |
-| `timescale <0.05..1>` | console | debug slow motion via `Engine.time_scale`, which scales physics delta and therefore `SimClock`. Capped at 1 in M1; real warp is `SimClock`'s job (M8 adds a `warp` command) |
+| `timescale <0.05..1>` | console | debug slow motion via `Engine.time_scale`, which scales physics delta and therefore `SimClock`. Capped at 1 in M1; real warp is `SimClock`'s job (M9 adds a `warp` command) |
 | `exec <file>` | console | run commands from a `res://` or `user://` file |
 | `wait <frames>` | console | delay the rest of the queue by N physics frames (scripts, headless runs) |
 | `quit [code]` | console | quit with an exit code |
@@ -695,9 +727,10 @@ M1 commands:
 | `refuel [kg]` | Ship | refill the reaction-mass tank, or add `kg` (M2-T14) |
 | `camera [cockpit\|chase]` | CameraRig | set, or toggle with no argument |
 | `fallback [on\|off]` | SplatStatus | fallback meshes and panorama sky |
+| `relight [on\|off]` | SplatLightRig (M3-T21) | shorthand for `toggle settings.splat_relight`: hulls, chunks and buoys lit by the scene or drawn in flat paint (§7.3) |
 | `respawn` | Main | ship reset (same as Back) |
 | `pause [on\|off]` | Main | tree pause (same as Start) |
-| `rebase <dx> <dy> <dz>` | WorldFrame | manual `World.rebase()`: the only way to exercise the seam at runtime in M1 |
+| `rebase <dx> <dy> <dz>` | WorldFrame | manual `World.rebase()`. Since M3-T14 the main scene's automatic rebase brings the player back to the origin in the same tick, so `rebase -900000 0 0` ends with `world.origin` on the player and `world.rebases` up by two |
 
 Weapon mode and target selection are reached with `set weapons.mode linked` and `set targeting.selected "NAV
 BRAVO"` rather than extra commands.
@@ -712,7 +745,6 @@ unsaved, emits `changed(key, value)`), `reset(key)`, `save()`, `revert()`. Nothi
 | `invert_y` | bool | false | |
 | `stick_deadzone` | float | 0.15 | 0.0-0.30 |
 | `trigger_deadzone` | float | 0.05 | 0.0-0.20 |
-| `yaw_ramp_s` (was `roll_ramp_s`) | float | 0.25 | 0.05-1.0 |
 | `target_hold_s` | float | 0.35 | 0.15-1.0 |
 | `assist_default` | bool | true | |
 | `fuel_unlimited` | bool | true | M2-T14: reaction mass is never drawn down and the fuel gauge stays full; off = finite tank |
@@ -758,12 +790,12 @@ ring buffer; engine errors in red and warnings in yellow from `ConsoleLogger`.
 
 | Element | Representation | Why |
 |---|---|---|
-| Ship hull (fuselage, struts, pods, canopy exterior) | **Splats** (`HullSplats`, ~150k Gaussians) | The point of the project; GDGS re-uploads a node's transform on change, so a moving, rotating body works. |
-| Nav buoy bodies | **Splats** (~8k each, one shared resource, 5 instances, spinning) | Exercises several independently moving splat nodes before enemies need them. |
-| Stars | **Splats** (in `SkySplats`, ~12k tiny Gaussians) | A Gaussian is the ideal star PSF; brightness/colour per splat; crisp at any resolution unlike a panorama texture. |
-| Nebula | **Splats** (in `SkySplats`, ~4k large soft Gaussians) | Volumetric look for free; per-tile depth sort handles overlapping translucency. |
-| Cockpit interior (frame, canopy struts, dash slab) | Mesh (`cockpit_interior.obj`) | Needs hard edges at the near plane and **depth writes** so hull splats behind the frame are rejected by the compositor's depth test; visible only in first person. |
-| Thruster plumes, buoy beacons | Meshes, unshaded emissive, additive, animated per frame. A plume is a cone from the nozzle position along its `exhaust` axis (length, radius, alpha follow the level) plus a small core disc at the exit; no billboards | Per-frame intensity animation; splats are static radiance (no per-splat opacity animation in GDGS). Tied to the nozzle axis, so the plume reads as coming out of the nozzle from every camera. |
+| Ship hull (fuselage, struts, pods, canopy exterior) | **Splats** (`HullSplats`, ~150k Gaussians), lit by the scene (§7.3) | The point of the project; GDGS re-uploads a node's transform on change, so a moving, rotating body works. |
+| Nav buoy bodies, debris chunks | **Splats** (~8k each, one shared resource, 5 instances, spinning; chunks cut from LOD1), lit by the scene (§7.3) | Exercises several independently moving splat nodes before enemies need them. |
+| Stars | **Splats** (in `SkySplats`, ~12k tiny Gaussians), never lit: they are emitters | A Gaussian is the ideal star PSF; brightness/colour per splat; crisp at any resolution unlike a panorama texture. |
+| Nebula | **Splats** (in `SkySplats`, ~4k large soft Gaussians), never lit | Volumetric look for free; per-tile depth sort handles overlapping translucency. |
+| Cockpit interior (V struts, bar, sills, lamps, the console around its screens, a closed shell; M3-T29) | Mesh (`cockpit_interior.obj`), with 2D-only `SubViewport`s on screen meshes the hardpoints place (`CockpitScreens`, §15.9). GDGS never sees them: a viewport with 3D disabled starts no render state (1 on the GPU in P13) | Needs hard edges at the near plane and **depth writes** so hull splats behind the frame are rejected by the compositor's depth test; visible only in first person. |
+| Thruster plumes, buoy beacons | Meshes, unshaded emissive, additive, animated per frame. A plume is a cone from the nozzle position along its `exhaust` axis (length, radius, alpha follow the level) plus a small core disc at the exit; no billboards | Per-frame intensity animation (no per-splat opacity animation in GDGS). Tied to the nozzle axis, so the plume reads as coming out of the nozzle from every camera. Anything that glows is one of these, not a splat: a lit splat cannot stay brighter than its surroundings (§7.3). |
 | Hull depth proxy (ship, buoys) | Mesh (`HullDepthProxy`): the fallback mesh, opaque black, vertices inset ~4 cm along their normals | Splats write no depth (§7.2). The proxy writes it just inside the splat surface, so effects behind a hull are hidden and the splats are never covered. Shown exactly when the splats are shown. |
 | Projectiles, muzzle flash | Meshes, unshaded emissive | Tiny, fast-moving, short-lived; spawning/destroying splat nodes per shot would churn GPU buffers. |
 | Target bracket | 2D `Control` in the debug overlay | Screen-space UI. |
@@ -774,7 +806,8 @@ ring buffer; engine errors in red and warnings in yellow from `ConsoleLogger`.
 
 1. Godot renders opaque meshes (cockpit interior, fallback meshes if visible) -> colour + depth.
 2. GDGS `CompositorEffect` runs at `EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT`: projects all `GaussianSplatNode`s
-   (hull, buoys, sky) in one pass, radix-sorts `(tile | depth)` keys, blends front-to-back, depth-tests against
+   (hull, buoys, sky) in one pass, lighting each splat of a relit node there (§7.3), radix-sorts `(tile | depth)` keys,
+   blends front-to-back, depth-tests against
    the resolved scene depth (`depth_bias`, `depth_test_min_alpha`, `alpha_cutoff` are tunables on the effect).
 3. Godot renders transparent meshes (thruster plumes, beacons, projectiles, flashes) on top. Correct for additive
    effects even when the emitter sits inside hull splats. **But splats write no depth**, so a transparent mesh
@@ -786,7 +819,7 @@ ring buffer; engine errors in red and warnings in yellow from `ConsoleLogger`.
    cover it. Ship and `NavBuoy` have one; it is visible exactly when the splats are (hidden while the fallback mesh
    shows, `SplatStatus`) and reuses whatever fallback mesh is loaded, so a regenerated hull needs no change.
    Back-face culling makes it invisible from inside the hull (cockpit camera).
-4. Post: glow/bloom, tonemap. Keep glow modest so star splats do not bloom into blobs.
+4. Post: motion blur and lens flare (§7.5), then glow/bloom, tonemap. Keep glow modest so star splats do not bloom into blobs.
 
 **Splat pose.** GDGS's Compute backend reads a splat node's plain `global_transform`, i.e. the pose of the last
 physics tick, while meshes, the proxy, the plumes and the chase camera use the physics-interpolated pose. At speed
@@ -804,13 +837,107 @@ Raster backend differences (automatic fallback on GPUs without compute): splats 
 `MultiMeshInstance3D` quads in the normal transparent pass with hardware depth test; sort can lag 1-2 frames
 (mild popping on fast rolls). Acceptable; nothing in gameplay depends on the backend.
 
+**Splat budget (M3-T20, GDGS patch 5).** Upstream sizes its sort buffers by every instanced splat in the scene, hidden ones
+included. The fork sizes them from `settings.splat_budget` (visible splats, default 2 000 000): 576 B per budget splat (64 B of
+projected data, 32 sort slots at 8 B in each of the two double-buffered sort buffers) plus about 8 B of histogram, so 1.17 GB at the
+default, however many ships are resident. Each frame, at render time, the renderer builds a table of the instances it will draw,
+leaving out hidden ones and those whose bounding sphere is off screen, and the projection pass runs over that table only. The dispatch sizes
+follow the visible total, on the CPU. Over the budget the `LodSwitcher` steps the farthest ships in view down a level until the sum
+fits (`SplatBudgetMath`, from wanted levels, so it cannot flap); the renderer itself truncates anything left over, and `render.splat_clipped` says
+so. The Raster backend is not changed, though the step-down runs on every backend. `addons/gdgs_scs/PATCHES.md` has the detail.
+
 ### 7.3 Lighting
 
-Splats are unlit: the generators bake a "studio" light rig **in asset-local space** (hemisphere ambient + two
-directional lights) into the DC colour, so shading rotates with the object. Meshes are lit by `KeyStar`
-(`DirectionalLight3D`) plus a dark ambient. To avoid a visible mismatch, M1 mesh materials are either unshaded
-emissive (glow, beacons, projectiles) or dim neutral (cockpit interior). GDGS relighting (bakes a lighting proxy
-in the editor, lights splats from scene `Light3D`s) is the later option for consistent lighting from a real sun.
+Hulls, buoys and debris are lit by the scene (M3-T21, Q23), so each has a lit and a dark side that changes as it rolls. The
+sky is not lit: stars and nebula are emitters, and `SkySplats` never has `relight_enabled`.
+
+**Paint and records.** The generators write flat paint into the PLY colours (paint, panel lines, weathering; no light or
+shade term), and beside each PLY the surface it needs: a `.light` file, 4 bytes per splat in PLY order (octahedral normal x 2,
+AO, confidence), which is GDGS's `GaussianLightingResource` format 1 with nothing around it (`tools/procgen/core/lighting.py`,
+§9). GDGS would bake these in its editor from a voxel proxy; a generator already knows each sample's exact normal. AO is 1.0
+everywhere: the ambient term is small and recesses are already dark paint, so a cavity term would not earn its code. Confidence
+is 255 on the surface. `SplatLightingLoader` wraps the bytes without a per-splat loop, one shared resource per file, and hands
+them to a node **before it enters the tree** (assigned later, GDGS re-merges every splat in the scene, once per node). Every
+node of a `GaussianResource` carries its records, because GDGS uses the first node's when they disagree. `relight_cast_shadows`
+is off: splats do not receive shadows and nothing mesh-like needs theirs.
+
+**What GDGS does with them.** Once per splat, in the projection pass, both backends multiply the PLY colour (before the
+composite's sRGB to linear step, so in the same space the old baked rig multiplied it) by
+
+```
+factor = relight_unlit_level + relight_light_gain * (relight_ambient * AO + sum(light colour * energy * attenuation * max(N.L, 0)) * confidence)
+```
+
+Defaults, as settings the tester can change live: `relight_unlit_level` 0.12, `relight_ambient` 0.3, `relight_light_gain` 0.6.
+With the key star's energy 1.5 that gives about 1.2 on a hull facing the star, what the baked rig gave a hull facing its key, and
+0.30 on the dark side (the baked rig's was 0.36), which stays legible against the black sky. `splat_relight` (`relight [on|off]`)
+switches every lit node at once; off draws the flat paint, for comparison.
+
+**Nothing on a hull glows.** The formula cannot keep a splat at its own colour: a splat with confidence 0 still gets
+`unlit + gain * ambient * AO`, 0.30 by default. So low confidence would not do for an emissive part; it needs a node with
+`relight_enabled` off, as the sky has, or a mesh, as the beacons and plumes are. No ship or buoy has such a part today: the
+window glass is a dark tinted sheet and lights like any surface.
+
+**The 8 lights.** GDGS's own rig walks the scene for `Light3D` nodes every 30 frames, ranks them by energy x range at that moment
+and drops all past 8: a 60 ms muzzle flash would be missed, and a far explosion could push out the player's nozzles. So the
+scene holds exactly 8, created once and never freed: `SplatLightRig` owns the `KeyStar` (slot 0) and 7 `OmniLight3D` slots. Things
+that give off light are `LightEmitter` records, entered with `add_emitter`; each frame `LightPicker` (pure) keeps the 7 highest by
+
+```
+score = priority class * energy * range / distance to the camera^2    (closer than 1 m counts as 1 m; an incumbent counts 20 % more)
+```
+
+with classes player's own 16 > explosion 8 > muzzle flash 4 > nozzle 2 > cabin 1, and the rig copies position, colour, energy,
+range and attenuation into the slots. GDGS re-reads the lights it has found every frame, so a moved slot shows at once, and it
+skips a slot at energy 0. An emitter keeps its slot while it is picked. Meshes are lit by the same 8, so meshes and splats agree.
+GDGS's walk stops after 20 000 nodes, so the rig sits before `World` in the tree. The cabin lamp is an emitter in the rig only
+while the cockpit interior is shown.
+
+**Own lights (M3-T27, GDGS patch 6).** The 8 are shared, and 13 to 100 ships could not each hold a slot, so a splat node can also carry up to
+2 lights of its own (`GaussianOwnLights.MAX_OWN_LIGHTS`), which light that node's splats alone and use no slot. They sit in the node's
+per-instance relight record, patched by setters like the knobs, and are defined in the node's own frame, so the shader needs no matrix per
+light and a node without any skips the loop. They add inside `relight_factor`, so `relight_enabled` off means none. There are two kinds. A
+surface light joins the `direct` sum above, with Godot's omni falloff at decay 1. A glow is light seen through glass: it is added to the colour
+after the multiply, whichever way the splat faces, only on dark paint (full up to 0.1 on the brightest channel, none from 0.25: glass, canopy
+panels, window frames; light hull takes none), falling off as `(1 - (d/range)^2)^2`, and gone within its view range of the camera. No
+record marks a splat as glass, and its paint is the one thing that tells it from hull without changing a PLY or a `.light` file.
+
+Own light positions come from hardpoints in the ship's frame, while a splat node's frame is that frame turned by GDGS's Rz(180): the ship's +Y
+is the instance's -Y. `NavLights.own_lights` converts them (`GaussianOwnLights.to_instance_frame`); `test_running_lights` runs the
+lamp over real splats and records, because a wrong sign would light the belly and nothing else would say so. Every level of a ship carries
+the same two; debris chunks, buoys and the sky carry none. `settings.own_lights` off drops them all, for comparison.
+
+**Running lights (M3-T27, Q27).** Every ship has a port red marker on -X, a starboard green on +X and a top white, steady, at its `nav_lights`
+hardpoints: `RunningLights`, one node per ship with three `MeshInstance3D`s, built once with the pool. A marker is one shared quad and one
+material per colour (`assets/shaders/running_light_marker.gdshader`): additive, facing the camera, 0.1 m in radius and never under
+`settings.running_light_min_px` on screen (3 px), all in the vertex shader, so it stays a point at several km with no work on the CPU. It keeps its
+centre's depth, so the hull depth proxy hides it behind hulls, and it hides with a parked or destroyed ship. Red and green are markers only. The top
+marker has a lamp: a white own surface light at `nav_lights.top_lamp`, 2.5 m over the Starfury's cabin top and 2.2 m over the raider's hump,
+`settings.top_lamp_energy` 2.5, range 6 and 5.5 m, which lights the top of the cockpit section for the designs a later milestone paints there. It goes
+out with the markers. `Ship.running_lights` holds the state; nothing per frame reads it, and radar and AI contact lists never do.
+
+The cabin glow stays on when a ship is dark. Outside it is a red own glow at `nav_lights.cabin` (the eye on a Starfury, the canopy panel on a
+raider), range 2.2 and 1.4 m, `settings.cabin_glow_level` 0.3, seen within `settings.cabin_glow_view_m` 150 m and fading over the last 30 m. Inside, the
+`cabin` emitter is red too, and dimmer, since red saturates the frame at the old white lamp's energy; it stays in the rig only while the cockpit
+interior is shown, as before.
+
+The dark rule: `BrainFactory` sets `PilotBrain.flies_dark` from a behaviour's `"running_lights": "on" | "off"`, by default off for a ship on patrol
+(`patrol`, `aggro`, `ai` with a `patrol` route) and on for every other. `AiPilotDriver` sets the ship's lights when it is given a brain, so a
+pool ship starts as its new pilot wants, and turns them on in the tick of its first shot (Q27). Once a ship fires it has stopped hiding for the rest of that life, so it does not flicker as it breaks
+off and comes back. In `combat_sandbox` the PATROL wave's five raiders start dark, by data. The player's toggle is a `UiCommand` edge (`Main`) or
+`running_lights [on|off]`; `WingDirector` copies the player's state to its wing each tick, and a respawn puts them back on.
+
+**Ship lights (M3-T22).** Every light is an emitter, so with any effect live the scene still holds exactly the rig's 8 `Light3D`
+nodes. Main pod nozzles (`ThrusterVisuals`): one emitter each, 1.5 m out along the exhaust so it falls on the pod and strut, energy
+from the smoothed plume level (0 at idle, 2.5 at full thrust), the plume's colour at display brightness, range 15 m; the player's
+own are class 16. RCS and retro nozzles and bolts give none. A shot (`MuzzleFlash`): the flash owns one emitter for life, 1 m ahead of
+the muzzle, in the competition for 60 ms per shot, so a shot allocates nothing. The explosion (`Explosion`): its old `OmniLight3D`
+is now an emitter with the same curve (0 to 8 to 0 over 0.25 s, range 4 x radius), in the competition only while it shines. Emitters
+follow their node's drawn pose each frame, so a rebase moves them with it. A ship that is parked, freed or out of the tree takes its
+emitters out (`ThrusterVisuals` and `MuzzleFlash` watch the node's disable and exit), and `_process` puts them back when it plays
+again. Numbers: `src/rendering/emitter_curves.gd`.
+
+Console: `state lights` (`picked`, `candidates`, `active`, `cost_us`).
 
 ### 7.4 Risks and fallback plan
 
@@ -823,12 +950,40 @@ in the editor, lights splats from scene `Light3D`s) is the later option for cons
 | GDGS breaking change on a Godot bump | low | Versions pinned; CI runs `--import` + resource assertions headless. |
 | Splat path blocks M1 entirely | low | Acceptance criteria are written so that mesh fallback + panorama still satisfies "flyable ship in a starry background with nebula"; M1 is then marked "splats pending" and the splat work moves to M1.5. |
 
+### 7.5 Lens flare and motion blur (M3-T25, Q23, Q26)
+
+Two effects on the `WorldEnvironment`'s Compositor, after GDGS's, in this order: GDGS (`PRE_TRANSPARENT`), `MotionBlurEffect`,
+then the lens flare (both `POST_TRANSPARENT`, so the blur smears the stars and hulls but never the flare). The HUD and the console
+are canvas layers drawn after the 3D scene and are never touched. `PostEffects` (a node of `SpaceEnvironment`) switches them from
+`settings.lens_flare` (default on), `settings.motion_blur` (default off) and `settings.motion_blur_strength` (0-1, default 0.5), live,
+and feeds them each frame. Console: `flare [on|off]`, `blur [on|off]`, provider `post`.
+
+- **No haze (Q31).** The flare is a lens effect only: no veil, no broad lobes, no god rays, since space has nothing to scatter light (`SceneLensFlareEffect.SHADER_PATCHES`).
+- **Star colour (Q30).** `data/star_systems.json` gives each `system_id` a star temperature; `StarColor` turns it into one colour for the flare and the key star's light (`SpaceEnvironment.set_star`).
+- **Lens flare.** ARez's add-on (`addons/lens_effects/`, vendored unedited, `docs/third-party.md`) draws the sun disc, ghosts, an
+  anamorphic streak (its god rays are patched out, Q31). It wants the sun's screen position from its own `world_environment.gd`; `PostEffects` sets
+  `sun_position` and `sun_dir_sign` instead (`LensFlareAim`), from the key star's direction (`KeyStar`'s +Z, the way to the star).
+  **Occlusion** is the add-on's: it treats depth 0 (reverse-Z far plane) as open sky, so a hull hides the flare because the hull
+  depth proxy (§7.2) writes depth. A node without a proxy (debris chunks) does not hide
+  it. The add-on's shader `#include`s Godot's built-in `godot/scene_data_inc.glsl`, which a headless import cannot resolve (it caches an empty
+  shader), so `SceneLensFlareEffect` (a thin subclass of ours) compiles it at start-up (`RuntimeShader`).
+- **Motion blur.** An in-house compute effect, two passes (blur into a scratch image, copy back; Godot's colour buffer is not
+  copy-readable). Hull pixels (depth above 0) blur by the velocity buffer Forward+ writes when an enabled effect has
+  `needs_motion_vectors`. The buffer is zero for the sky and the stars (splats write no depth or velocity), so pixels at depth 0 derive
+  their motion from how far the camera turned since last frame (previous and current view and projection, rotation only: they
+  are at infinity). That is what smears the stars on a fast turn; a far ship with no proxy blurs like a star. A sky pixel never
+  samples a hull pixel, so the hull's paint is not dragged across the stars. While `settings.motion_blur` is off the effect is disabled,
+  so the renderer is not asked for motion vectors and nothing runs. **Rebase:** `World.rebased` calls `MotionBlurGate.note_rebase`;
+  the next two frames get strength 0 (the previous-frame transforms the renderer holds are kilometres off), then the blur returns.
+- Headless runs and the smoke runs have no `RenderingDevice`, so both effects do nothing there; `tests/integration/test_post_effects.gd`
+  checks the wiring and the values the effects are given.
+
 ## 8. Camera
 
-- **Cockpit**: `Camera3D` glued to `CockpitAnchor` (hardpoint) via `RemoteTransform3D`; FOV 75°. The pilot looks
-  out through the nose window as in the maintainer's reference (`docs/design-references.md`, "Cockpit view"): a
-  broad trapezoid pane, a bar across the top, struts down its sides, side panes at the edges, the sill below; the
-  frame never crosses the centre. Cockpit interior mesh visible.
+- **Cockpit**: `Camera3D` glued to `CockpitAnchor` (hardpoint) via `RemoteTransform3D`; FOV 75°. The pilot looks out of a built cabin (M3-T29, `docs/design-references.md`, the second
+  cockpit reference, and `docs/assets-starfury.md`, "Cockpit view", for the numbers): slim red V struts landing on the sides of the octagonal display, a thin bar across the top, side panes
+  past them down to low sills, and the console's three screens below. Nothing crosses the centre. Cockpit interior mesh visible, and the hull mesh with its canopy glass and window frames
+  cleared. Instruments are on the screens (§15.9); the window keeps only what must line up with the world.
 - **Chase**: `top_level` camera, **rigidly attached to the ship**. Every rendered frame `CameraRig._process` sets
   its transform to the ship's *physics-interpolated* global transform (`get_global_transform_interpolated()`) times
   one fixed ship-space pose from `ChaseCameraMath.local_pose`: position = the hardpoints' `chase_anchor` (behind and
@@ -859,7 +1014,7 @@ tools/procgen/
   __init__.py
   __main__.py      CLI: python3 -m tools.procgen list | build <asset_id>... | build all  [--seed N] [--out DIR]
   core/            ply.py (3DGS PLY writer + reader), frames.py (Godot <-> 3DGS), geometry.py (tessellation),
-                   sampling.py (surface -> splats), lighting.py (baked studio rig), color.py (blackbody, palettes),
+                   sampling.py (surface -> splats), lighting.py (per-splat lighting records), color.py (blackbody, palettes),
                    obj.py (OBJ/MTL writer), manifest.py, context.py (BuildContext: seed, out_dir, options)
   parts/           reusable parametric parts. M1: hull.py (box, tapered box, canopy), propulsion.py (pod, nozzle),
                    structure.py (strut, mast, panel), weapons.py (gun barrel)
@@ -874,13 +1029,18 @@ Output contract: each asset writes to `assets/generated/<asset_id>/` (gitignored
 
 ```json
 {"asset_id": "starfury_aurora", "generator_version": 1, "seed": 42, "frame": "godot", "units": "m",
- "lods": [{"level": 0, "file": "starfury_aurora.ply", "splats": 152340, "spacing_m": 0.06}],
+ "lods": [{"level": 0, "file": "starfury_aurora.ply", "splats": 152340, "spacing_m": 0.06,
+           "lighting": "starfury_aurora_lod0.light"}],
  "aabb_min": [-5.1, -3.9, -5.3], "aabb_max": [5.1, 3.9, 4.8], "centroid_offset": [0.0, 0.1, 0.6],
  "files": {"fallback_mesh": "starfury_aurora.obj", "cockpit_mesh": "cockpit_interior.obj",
            "hardpoints": "hardpoints.json"}}
 ```
 
-M1 emits LOD 0 only; the `lods` array is the seam for the LOD chain (§14.4). AABBs are in the Godot frame.
+M1 emits LOD 0 only; the `lods` array is the seam for the LOD chain (§14.4). AABBs are in the Godot frame. `lighting` names the
+level's lighting records (§7.3, M3-T21), in that PLY's order and frame; a chunk names its own in its `hardpoints.json` `chunks[]`
+entry. The sky lists none.
+The Starfury's manifest adds `chunk_lod`, the level its chunks were cut from (LOD1, M3-T03; without it chunks come from LOD0, as the raider's do), and a `hero` entry beside `lods` (`file`, `splats`, `spacing_m`, `lighting`;
+level -1 in `LodSwitcherMath`, M3-T24).
 
 ### 9.1 `starfury_aurora`
 
@@ -893,11 +1053,10 @@ M1 emits LOD 0 only; the `lods` array is the seam for the LOD chain (§14.4). AA
    - `starfury_aurora.obj` + `.mtl` (fallback mesh; also a future multi-view render source).
    - `starfury_aurora.ply`: area-weighted stratified surface sampling at spacing `s` (default 0.04 m -> ~230k
      points; the faces the pilot sees up close at 0.55 `s`); per point: normal, tangent frame -> quaternion;
-     scales `(k·s, k·s, 0.03·s)` with `k = 1.4`; colour = albedo × baked local lighting; opacity 0.98 (stored as
+     scales `(k·s, k·s, 0.03·s)` with `k = 1.4`; colour = flat paint (§7.3); opacity 0.98 (stored as
      logit; the window glass is a 70 % transmittance sheet); SH degree 0 only (`f_dc_*`).
-   - `cockpit_interior.obj`: the window frame seen from inside (bars) and the sill, nothing across the forward
-     view; interior-facing normals.
-   - `hardpoints.json`: `center_of_mass`, `cockpit_camera`, `chase_anchor`, `muzzles[]`, `pods[]` (side, main and
+   - `cockpit_interior.obj`: the cabin seen from inside (`parts/cockpit.py`, M3-T29), nothing across the forward view; hard edges, faces toward the eye.
+   - `hardpoints.json`: `screens` (M3-T29, §15.9: per screen `center`, `size`, `normal`, `up`, `corner`), `nav_lights` (M3-T27, §7.3: `port`, `starboard`, `top`, `top_lamp`, `cabin`, `top_lamp_range_m`, `cabin_range_m`; `raider_fighter` too), `center_of_mass`, `cockpit_camera`, `chase_anchor`, `muzzles[]`, `pods[]` (side, main and
      retro nozzle position + exhaust direction), `rcs[]` (cosmetic nozzle positions with effect tags for glow),
      `collision[]` (boxes/capsules). Schema in the M1 task T04.
    - Re-centre **everything** (splats, meshes, hardpoints) on the splat centroid, so GDGS's unconditional import
@@ -936,7 +1095,9 @@ are the only requirements).
 1 unit = 1 m, SI. Ship ≈ 10 m long; M1 play area ≈ ±20 km (float32 error ≈ 2 mm there; fine). Sky radius 20 km
 around the camera, independent of ship position. M1 already routes all world content through `World`
 (`WorldFrame`): spawns take a `UniversePos` (64-bit) and are converted with `universe_to_local()` (not `to_local`, which would clash with Node3D's native method); `rebase(offset)` exists
-and is tested, but automatic rebasing is off (threshold 0 = disabled) because the M1 play area does not need it.
+and is tested. Automatic rebasing was off in M1 (threshold 0 = disabled, still the default of a bare `WorldFrame`) because
+the M1 play area does not need it; since M3-T14 the main scene rebases at 5 km (maintainer Q13: far from the launch point,
+float32 positions made the ship jump visibly).
 The full large-world design is §14.1.
 
 ## 11. Performance targets (M1)
@@ -946,6 +1107,8 @@ The full large-world design is §14.1.
 - Physics 60 Hz fixed; `_physics_process` for the ship < 0.2 ms.
 - Input-to-thrust latency: one physics tick after the input event.
 - Startup to flyable < 5 s after import (first import of the PLYs may take longer; that is a one-time cost).
+- Many ships (M4): the tick budget for 100-500 ships (median ≤ 8 ms, p99 ≤ 12 ms headless at 60 Hz) and how it is
+  measured are in `docs/milestones/m4-performance-and-scale.md`.
 
 ## 12. Testing strategy
 
@@ -958,6 +1121,11 @@ The full large-world design is §14.1.
 
 Rules: every pure class gets unit tests in the same PR; every scene gets at least an instantiate-and-run test;
 anything that depends on a GPU is marked `(H)` in acceptance criteria and is never faked in CI.
+
+CI (M3-T12) runs GUT in two jobs: `GUT_SHARD=k/n` makes `scripts/run_tests.sh` run every n-th GUT script from the k-th, in path
+order, and shard 1 also runs the Python tests and the console smoke runs; locally, unset, it runs everything. Wall-clock budgets (AI
+think time, resolver ticks, rebase cost) are asserted on the maintainer's machine and only recorded on CI (`CI=true`), through
+`WallClockBudget` (`tests/fixtures/wall_clock_budget.gd`): a shared runner's clock says nothing about the game.
 
 Commands (also in `scripts/run_tests.sh`):
 
@@ -1020,10 +1188,42 @@ Verified for Godot 4.7.2 (details in `docs/research-notes.md`):
   velocity (64-bit) and propagates them as a **free-falling test particle**, so local physics only feels tidal
   gravity (a ship near the orbiting station is effectively weightless, which is physically right).
 - **Position rebase** when the focus object is > 5 km from the local origin: every `world_shiftable` node moves
-  by `-offset` (`global_position`, then `reset_physics_interpolation()`); `origin += offset`.
-- **Velocity rebase** when the focus speed relative to the frame exceeds 200 m/s: subtract `v` from every body's
-  `linear_velocity` and projectile velocity; `origin_velocity += v`. Keeps Jolt well under its cap and keeps
-  float32 velocities small.
+  by `-offset` (`global_translate`); `origin += offset`; interpolation is reset at the end of that tick (below). **On in play since M3-T14**
+  (maintainer Q13: at 900 km a float32 coordinate steps in 6.25 cm, and the ship's splats jumped while thrusting):
+  `main.tscn` sets `World.auto_rebase_distance_m` to 5 000 with the player as `focus`; a bare `WorldFrame` keeps 0.
+  - Where in the tick: `World._physics_process` (priority 0; §15.3), after the AI drivers (-10), the console and `Main`,
+    whose commands are levels and rates and stay valid, and before every node below `World` (ships, bolts, props, effects)
+    and the late systems, which all see the new frame. Jolt's contacts of the last step are still in the old frame
+    (`RamResolver` takes the rebase off them).
+  - Rules: places that outlive a tick are `UniversePos` (wave anchors, waypoints, the wing's leader link, the HUD's
+    reference point, the respawn point) or are rebuilt from the live nodes each tick (contacts, perceptions, targets,
+    hit sweeps, slots). The two things a rebase cannot reach by itself listen to `World.rebased`: the cockpit pivot's
+    interpolation (`Main`; it follows the ship through a `RemoteTransform3D`) and the points of open ram contact windows
+    (`RamTracker.shift`). Parked pool ships and debris are shifted
+    with the rest (harmless: they are placed again from a `UniversePos` when taken out). Particles stay in their node's
+    frame (`local_coords`), never in global space, or a rebase would leave them behind (the explosion's sparks; since M3-T23 the `FxPool`'s emitters, which are `top_level` and `world_shiftable`).
+  - Physics interpolation: **the world stalls together for the rebase tick.** A rebase inside a tick leaves interpolation
+    alone; `World`'s internal `RebaseSettler` (physics priority 1 000 000, last in the tick, §15.3) then resets every visible,
+    interpolated shiftable node, after everything has moved. The frames until the next tick draw every body, bolt, piece of
+    debris, effect and both cameras at their tick pose, unblended: nothing blends across the jump, view-relative motion is
+    kept (a bolt beside the ship stays beside it), and the HUD, which projects tick positions, matches what is drawn. The
+    cost is at most one tick of held motion per rebase (one repeated frame; AC22 (H)). Hidden (parked) nodes and silent
+    voices are skipped (`acquire`, `launch`, `play` reset them when they come back); a rebase outside a tick (the console
+    between frames) resets at once. Measured at 5 000 m/s through a 5 km rebase (`test_rebase_in_play`, per rendered frame):
+    resetting at the rebase itself (the first M3-T14 build) drew the bodies held while bolts and debris blended on, so a
+    bolt's offset from the ship jumped 83 m off its motion in the frames of the rebase tick; not resetting at all draws
+    everything sweeping by the offset over that tick (view-relative motion exact), but the HUD's markers through the chase
+    camera were then 3.4 km off what is drawn (and the sky in the cockpit view, and anything spawned in that tick, would be
+    too), so that was rejected. Now: 0.001 m and 0.000 m.
+  - Cost: one rebase of the full sandbox (the player and 10 pooled ships, 20 parked debris chunks, 16 sound voices, 5 buoys
+    and the chase camera: 53 nodes, plus bolts and effects in flight) costs about 0.28-0.30 ms idle (the median of a fight's
+    rebases, from run to run; min about 0.12 ms, wall-clock spikes to about 0.6 ms), the shift, the `rebased` handlers and
+    the end-of-tick reset together; the ships dominate it (a Starfury is 108 nodes, which the shift and the reset both walk).
+    `world.rebases` and `world.rebase_us` watch it. Tests: `tests/integration/test_rebase_in_play.gd` and the `RebaseFight`
+    fixture (`tests/fixtures/rebase_fight.gd`), which runs any live scene with the threshold forced low.
+- **Velocity rebase** (roadmap M6, still off) when the focus speed relative to the frame exceeds 200 m/s: subtract `v`
+  from every body's `linear_velocity` and projectile velocity; `origin_velocity += v`. Keeps Jolt well under its cap and
+  keeps float32 velocities small.
 - Local space radius ~10 km. Anything farther (planets, sun, distant ships and stations) is not in Jolt: it is
   propagated in universe coordinates and rendered in scaled space (§14.4). B5's ~8 km length fits: at ±8 km
   float32 resolution is ~1 mm.
@@ -1067,8 +1267,8 @@ perihelion or from flybys of moving planets, and the sim does both correctly bec
 ### 14.4 Far-field rendering and LOD ("model blurring")
 
 GDGS facts (v3.3.0 source): no LOD support (open upstream proposal, issue #32); changing a node's `gaussian`
-re-merges and re-uploads **every** node's splat buffer; hidden nodes still cost one read per splat in the
-projection pass (early-out on the visibility flag); visibility is a flag in the per-node transform upload (cheap).
+re-merges and re-uploads **every** node's splat buffer. The project's fork (M3-T20, patch 5) makes hidden and off-screen nodes
+free: the projection pass runs over a per-frame table of the instances drawn, and the sort buffers follow a visible-splat budget (§7.2).
 
 Decisions:
 - Every asset ships a generated **LOD chain** (manifest `lods`): LOD0 full; LOD1 ~25 % of splats with ~2× scales;
@@ -1077,7 +1277,8 @@ Decisions:
 - A `LodSwitcher` per object picks a level from projected size in pixels with hysteresis. Levels are pre-loaded
   sibling `GaussianSplatNode`s toggled by **visibility**, never by swapping resources.
 - A resident splat budget (start at ~3-4 M) is managed per region: objects beyond the near field are not resident
-  at all, only their far representation. LOD and paging go upstream to GDGS as PRs rather than a fork.
+  at all, only their far representation. M3-T20 did the first half in the project's fork: a budget of visible splats, with
+everything still resident in the splat buffer. Paging is later, and also goes in the fork.
 - **Scaled space** for the sun, Epsilon III, moons and anything beyond ~50 km: a separate render layer drawn
   before the near world, placed at `camera_dir × (distance / scale)` with matching angular size, lit from the true
   sun direction. Planets and the sun are procedural-shader meshes (sphere + atmosphere scattering + generated
@@ -1111,7 +1312,7 @@ volumetric splats and a shader backdrop. Combat in hyperspace reuses everything.
   arrived. **Objectives** with success/fail states feed the debrief.
 - **Launch bays**: station hardpoints with a launch rail; the launch is a scripted state with a `CINEMATIC`
   camera mode (Path3D + look-at), then hand-off to the player with the bay's velocity.
-- **Dialog**: subtitles + comms panel first (M4, used by the M7 tutorial). Voiced dialog comes later from an
+- **Dialog**: subtitles + comms panel first (M5, used by the M8 tutorial). Voiced dialog comes later from an
   offline TTS generator run on the user's machine (candidate: Piper, see `docs/third-party.md`). Voices are produced
   by code, so they satisfy the procedural-only rule; generated audio stays out of git like every other generated
   asset. Dialog lines are data (speaker, text, voice id), so adding voices changes no mission scripts.
@@ -1159,7 +1360,7 @@ Built in M1 because each is cheap and avoids a later rewrite:
 
 | Seam | M1 task | Avoids later |
 |---|---|---|
-| `UniversePos` + `World`/`WorldFrame` parent for all world objects, `rebase()` tested, auto-rebase off | T09 | Re-parenting every scene and auditing raw `Vector3` positions when large worlds arrive |
+| `UniversePos` + `World`/`WorldFrame` parent for all world objects, `rebase()` tested, auto-rebase off (on in play since M3-T14, §14.1) | T09 | Re-parenting every scene and auditing raw `Vector3` positions when large worlds arrive |
 | `World.environment_accel()` applied by the Ship each tick (returns zero); `env_accel_b` feed-forward in the brake | T08, T10 | Retrofitting gravity and hyperspace fields into the flight path |
 | `SimClock` autoload; rule: no wall-clock time in gameplay | T01 | Hunting timers when time warp lands |
 | Flight/Combat/Ui command split | T06 | Untangling player-only input from what AI pilots write |
@@ -1186,7 +1387,7 @@ only lists what is new. Task ids below are M2 tasks.
 | D20 | Raiders are ordinary `Ship`s (RigidBody3D, `FlightModel`, assist always on, same limits) driven by a `PilotBrain` that writes `FlightCommand` + `CombatCommand`. No kinematic path followers | It is the M3 seam (§14.7): AI obeys the player's physics, and targeting, hits, HUD and destruction have one code path |
 | D21 | Projectile hits: one `HitResolver` sweeps each bolt's last tick against each hostile target **in that target's frame** (relative motion): segment vs. bounding sphere, then vs. the target's hardpoints `collision` primitives inflated by the bolt's hit radius. Pure script maths, not Jolt queries | Exact for straight-line relative motion at any closing speed (1 400 m/s is 23 m per tick against hulls about 1 m thick); independent of when Jolt moves the target; rebase-safe, because a bolt stores its last displacement rather than a position; unit-testable; bounded cost (64 bolts × 8 targets of broadphase is well under 1 ms) |
 | D22 | No `GaussianSplatNode` enters or leaves the tree during play. Splat-bearing entities (raiders, debris chunks) are pooled at scenario load and switched by visibility | GDGS v3.3.0 re-merges every node's splat data on each register and unregister (`gaussian_scene_registry.gd`: a GDScript loop over every splat in the scene, then new GPU buffers), so a spawn would hitch. A visibility change only re-packs instance transforms |
-| D23 | Damage model: hull points only. No shields (Starfuries and Delta-Vs have none), no subsystems, no collision damage. Bolt damage comes from `WeaponSpec`, hull from `ShipSpec`. `debug.invulnerable` zeroes damage on `Damageable`s with `respects_god_mode` (the player) | Smallest model that gives kills and deaths. Subsystems are M11, ram damage M3 |
+| D23 | Damage model: hull points only. No shields (Starfuries and Delta-Vs have none), no subsystems, no collision damage. Bolt damage comes from `WeaponSpec`, hull from `ShipSpec`. `debug.invulnerable` zeroes damage on `Damageable`s with `respects_god_mode` (the player) | Smallest model that gives kills and deaths. Subsystems are M12, ram damage M3 |
 | D24 | Destruction = a code-generated explosion (shader, particles, light: meshes, never splats) + break-up into the asset's generated `chunks` (pooled chunk splats, chunk meshes once the pool is used up). Debris drifts and spins kinematically, no collisions | Reuses the hull's own look, causes no registry churn, stays procedural |
 | D25 | Factions: `earth_alliance`, `raiders`, `neutral`, with a fixed rule in `Factions` (M3 turns it into data). Bolts hit only hostiles and never their shooter. `target_next` cycles hostiles first (nearest first), then the rest | Enough IFF for one enemy faction. Hostile-first cycling needs no new button, and the maintainer's pad has none free |
 | D26 | The HUD is its own CanvasLayer drawn from a pure `HudLayout` that projects with the camera's matrices (tested against `Camera3D.unproject_position`) | Layout is unit-testable; the debug overlay stays a debug tool |
@@ -1206,7 +1407,7 @@ src/combat/intercept_math.gd      RefCounted, pure: lead solution for bolts that
 src/combat/damageable.gd          Node component, group "damageable": HullHealth + HitShapes, signals
 src/combat/hit_resolver.gd        Node: per-tick swept hits, damage, impact flashes; console `combat`, `damage`, `heal`
 src/combat/impact_flash.gd        short additive flash + sparks, child of the hit ship at the hit point
-src/combat/explosion.tscn|.gd     generated explosion (fireball shader, flash light, sparks); drifts, self-frees
+src/combat/explosion.tscn|.gd     generated explosion (fireball shader, light emitter since M3-T22; its sparks come from the FxPool since M3-T23); drifts, self-frees
 src/combat/explosion_fireball.gdshader
 src/combat/debris_chunk.tscn|.gd  one chunk: GaussianSplatNode + chunk mesh fallback
 src/combat/debris_pool.gd         Node: pooled chunk splat sets, mesh-only chunks and generic shards; drift, spin, shrink-out
@@ -1226,10 +1427,13 @@ src/game/wave_plan.gd             RefCounted, pure: wave state machine
 src/game/wave_director.gd         Node: runs the WavePlan, spawns from the pool, counts kills; console `wave`, `spawn`
 src/hud/hud.tscn|.gd              CanvasLayer 40 (below the overlay's 50): draws a HudFrame
 src/hud/hud_layout.gd, hud_frame.gd   RefCounted, pure: projection and every HUD element's screen state
+src/hud/hud_surface.gd            RefCounted: one surface the HUD draws on and where each instrument goes on it; HudFrame extends it (M3-T29)
+src/hud/hud_painter.gd            RefCounted: the one set of drawing code, for the 2D layer and each console screen (M3-T29)
+src/hud/cockpit_screens.gd        Node3D: the player's console screens and indicator lamps (M3-T29)
 src/input/control_profile.gd      RefCounted, pure: bindings <-> InputMap <-> config text, validation
 src/input/control_profile_store.gd RefCounted: built-in and user profiles; list, load, save, delete
 src/autoload/control_profiles.gd  Node (autoload): applies the selected profile at start-up; console `controls`, `bind`, `unbind`
-data/controls/m1_classic.cfg      built-in profile: the original M1 stick-yaw / D-pad-roll layout
+data/controls/m1_classic.cfg      built-in profile: the original M1 pad layout (stick yaw, D-pad roll, D-pad Up targets, B assist)
 src/audio/audio_director.gd       Node: pooled 3D players, engine hum, volume (T12)
 assets/ships/raider_delta_v.tres, assets/weapons/{pulse_cannon_ef,raider_plasma}.tres
 data/scenarios/combat_sandbox.json
@@ -1261,12 +1465,17 @@ One physics tick, in order (`process_physics_priority`, then tree order):
 2. `DebugConsole` statements (autoload, so first among the priority-0 nodes; a `rebase` here moves everything
    together).
 3. `Main` (0): player `PilotCommand` -> `Combatant.apply_commands` (the same call).
+3b. `World` (0, `Main`'s child, so after it and before every node below it; M3-T14): the automatic position rebase when
+   the player is more than 5 km from the local origin (§14.1). Commands built before it are levels and rates and stay
+   valid; everything after it in the tick works in the new frame.
 4. Ships (0): flight model and forces; their `PulseCannon`s spawn bolts (`last_step = 0`).
 5. Projectiles (0): move, record `last_step = velocity * delta`, expire.
 6. `TargetingController`s (100): refresh candidates (inactive targetables skipped).
 7. `HitResolver` (200): sweep, damage, impact flashes. `destroyed` -> `DestructionDirector`, which hides and
    disables the ship in the same tick, so nothing targets or hits it afterwards.
 8. `WaveDirector` (300): count the dead, spawn from the pool.
+8b. `World`'s `RebaseSettler` (1 000 000, last; M3-T14): in a tick with a rebase, resets the interpolation of every visible
+   shiftable node, so that tick is drawn held, all together (§14.1).
 9. Jolt steps the bodies.
 
 ```
@@ -1323,7 +1532,7 @@ hit point (World-local) = t0 + v_t * dt * t + B * (a + t * (b - a))
   `World.universe_to_local(at)`, the velocities and a full hull, and calls `reset_physics_interpolation()`.
   `release` parks it again. The M2 raider pool holds 6.
 - `DebrisPool` holds 2 chunk splat sets per chunked asset type (one break-up's worth each); a third simultaneous
-  break-up gets mesh chunks. Hidden splat nodes still cost an early-out per splat in projection and sort-buffer
+  break-up gets mesh chunks (a Starfury's chunks are held as a staged wreck for about a second first, §15.7). Hidden splat nodes still cost an early-out per splat in projection and sort-buffer
   memory, so pools stay small.
 - GDGS applies its Rz(180°) correction when a splat node enters the tree with an identity basis. Keep splat nodes
   as identity children of a moving parent and never reset their own transform; reparenting would also unregister
@@ -1342,6 +1551,31 @@ explosion plus generic generated shards. Player: same effects, controls ignored,
 after 3 s of sim time with a full hull, and `WaveDirector.on_player_respawned()` keeps the wave going (surviving
 raiders re-target the player; maintainer decision).
 `kill` (console) bypasses god mode.
+
+**A Starfury dies where it was hit (M3-T28, Q28).** For a ship with the X-fighter damage layout (the player, the allies,
+the instructor) the director takes the killing `HitInfo.point` (`World`-local), puts it in the ship's frame with the
+transform it read before the ship left play, and `DamageZones.zone_for` names the part: the cabin or one of the four
+arms, which are the five chunks. The main `Explosion` (same size, light and sound as before) starts at that chunk's
+`joint` (`hardpoints.json` `chunks[].joint`, `docs/assets-starfury.md`) and `DestructionDirector.last_blast_position`
+carries the place to `AudioDirector`. A console `kill` has no point: the blast is at the ship's centre and the order
+is drawn from the seed alone. A ram is a hit with its contact point. Raiders, buoys and shards break up as before.
+
+`DebrisPool.stage_wreck` replaces `burst` for these ships. `BreakupPlan` (pure) draws, from the seed (ship id and tick),
+the order, the release times, the kicks and the tumbles: the first part leaves at once, the other four at about
+0.2 + 0.25 k s (k = 0..3, each jittered by up to 0.05 s), so all five are away by about 1.0 s. `StagedWreck` (pure)
+holds the chunks as one rigid body on the ship's velocity and spin, integrated exactly, and says when each leaves. A
+chunk is held as a `DebrisChunk` (`hold`, `place_held`): drawn and busy, so its set stays taken, but placed by the pool
+each physics tick. At its time it is released (`release`) with the wreck's velocity at its centroid (`v + w x r`) plus
+a 4-15 m/s kick away from the wreck's centre (11-15 for the first), and the wreck's spin plus its own tumble. After
+that it is the old chunk: constant velocity, no damping, 8 s of life, shrink, park. Its debris vent starts at the
+release. Every later release also throws a small blast of `FxSpecs.HIT` sparks (24 particles, 0.45 s) at its joint:
+no node, no light, no mesh, and the particles come from the hit pool's twelve emitters, never the explosion's, so
+a wreck holds at most three at once and `fx.reused` moves only if all twelve are busy. Every set busy means mesh-only
+chunks, staged the same way. The wreck copies everything it needs when it is made, so the pooled `Ship` can be
+reacquired, or the player respawn, while it is held.
+
+Rebase: the wreck's pose is `World`-local, so `DebrisPool` listens to `WorldFrame.rebased` and shifts every held wreck
+by the same offset the shiftable chunks were just shifted by; nothing moves relative to the wreck.
 
 ### 15.8 Pilot brains (the M3 seam)
 
@@ -1370,16 +1604,39 @@ Elements: boresight (nose axis at 1 km), velocity marker (prograde, or retrograd
 speed, target box (at least 24 px, faction colour) with name, range, closing speed and hull bar, an edge arrow when
 the target is off-screen or behind, lead reticle (`InterceptMath`, hidden without a solution or beyond bolt
 range), own hull bar with a `GOD` tag, and one status line (wave, raiders left, kills). `Hud` only draws it.
-`settings.show_hud` toggles it; while it shows, the debug overlay hides its own bracket.
+Radar (`RadarModel`): inside 25 km as before; a broadcast contact beyond it (M3-T17) sits on the rim in its true direction
+as a hollow dot (`Dot.rim`).
+`settings.show_hud` toggles it; while it shows, the debug overlay hides its own bracket. While the overlay shows, the wing roster sits below its text (M3-T29).
+
+Console screens (M3-T29, Q29). In the cockpit camera of a ship with `screens` hardpoints the instruments leave the window. `HudSurface` is one surface the HUD draws on: what it lists (`items`) and
+where each goes; `HudFrame` extends it, so the frame is also the 2D layer's layout, and `frame.screens` holds the octagon's, the left's and the right's, all drawn from that one frame by one
+`HudPainter`. The window draws only the crosshair, lead marker, target brackets or edge arrow, and waypoint marker (and the prograde marker if `settings.hud_velocity_marker` is on, off by default: it
+must line up with the world too). The octagon has the red grid, radar rings named by range, own ship, the same contact dots in the same faction colours as the chase view's radar (with a dark backing, over a dimmed grid), the selected
+contact ringed, the grid's marker as a ring on a diagonal stroke, and AUTO-TRACK. The left screen has the damage wireframe, the hull bar with its percentage and GOD, speed, angles, reference, drift
+sphere, lights, and fuel while the tank is finite. The right screen has the target's name, range, closing speed, hull bar and outline across its full width, a divider, then at the right edge the
+upright charge bar (40/640 of the width, `CHARGE` and the fire mode above it) with the wing roster, acknowledgement and status lines to its left. `CockpitScreens` shows each `SubViewport` (`disable_3d`,
+updated once per new frame, disabled while hidden) on an unshaded mesh without mipmaps, on the player's ship only (`console_owner`). Off with `settings.show_hud`. The chase camera, and a cockpit with no
+screens, keep the whole 2D HUD. Indicator lamps are surfaces of the interior mesh, lit from `HudFrame.lamps`: assist, guns (the capacitor can pay for a shot), running lights, auto-track.
 
 ### 15.10 Scenarios and waves
 
 `ScenarioLoader` gains optional `pools` (`{"raider_fighter": 6}`), `waves[]` and `loop`. A spawn is `{type, name,
 anchor: "player" | "origin", offset, velocity, behaviour}`; positions and waypoints are offsets from the anchor's
-universe position at wave start (summed as `UniversePos`, never through float32). `ShipCatalog` maps `type` to a
+universe position at wave start (summed as `UniversePos`, never through float32). `origin` is the scenario's origin,
+universe (0, 0, 0), where its props are placed, not the World's local origin, which the rebase keeps near the player
+(M3-T14). `ShipCatalog` maps `type` to a
 `ShipSpec`. `WavePlan` (pure, fake-clock tested): `COUNTDOWN(delay) -> ACTIVE -> CLEARED -> next`, then loop from
-`loop.from_wave`, one more attacker per loop up to the pool size. `settings.scenario` (`combat_sandbox` by
+`loop.from_wave`, one more attacker per loop up to the pool size. A wave may set `skill` and `aggression` ranges for its AI
+raiders and `loop.skill_step` raises the skill range per pass up to an ace (M3-T13); each raider's values are rolled inside
+them, seeded by its name and the wave number. `settings.scenario` (`combat_sandbox` by
 default, or `free_flight`) picks the file; `Main.scenario_path` overrides it for tests.
+
+Kill credit (M3-T16, Q18): `WaveDirector.kills` counts every raider destroyed, by anyone (rams included). `KillCredit` (pure)
+splits out the player's share. A raider whose killing `HitInfo.shooter_id` is the player's ship (a bolt, or a ram: `RamResolver`
+puts the other body there) is a player kill. One the player fired at least one shot at while it was the selected target
+(the cannon's `projectile_fired`, with `TargetingController.selected_id()` at that moment), and someone else killed, is an
+assist, never both. The mark is kept per `Targetable` id until that raider dies or `ShipPool.acquired` hands its ship out
+again. The counts last the session, across respawns. Status line: `WAVE 2  PATROL   RAIDERS 2   KILLS 7   YOURS 3   ASSISTS 2`.
 
 ### 15.11 `raider_fighter` and chunks
 
@@ -1402,7 +1659,7 @@ uses the M1 input rules: every `InputAdapter.ACTIONS` entry present, a pad event
 keyboard-only debug ones, standard indices only, never `KEY_QUOTELEFT`. `default` is a snapshot of the
 `project.godot` map taken before any profile is applied. `settings.control_profile` (new schema type `string`)
 selects the profile at start-up and on change; an invalid profile warns and falls back to `default`. Bindings
-changed with `bind`/`unbind` are session-only until `controls save <name>`. A rebinding menu comes with the M4
+changed with `bind`/`unbind` are session-only until `controls save <name>`. A rebinding menu comes with the M5
 front end.
 
 As built (M2-T11): the `ControlProfiles` autoload applies the selection in `_ready`, before the main scene, and
@@ -1415,7 +1672,15 @@ each builds the edited copy, validates it and applies it all at once, so an acti
 binding by binding another first. Applying replaces every game action's events and deadzone in the InputMap, then
 `DebugConsole.resync_input_edges()` re-seeds the adapter so a button that now means something else cannot fire an
 edge. Per-action shaping beyond the deadzone (ramps, expo, tap-or-hold) stays in `InputAdapter`/`Settings`, so a
-profile moves bindings, not feel: `m1_classic` makes the stick yaw through the D-pad's ramp.
+profile moves bindings, not feel: under `m1_classic` the stick yaws in proportion and rolls on its diagonals (M3-T15), and
+its D-pad rolls at full rate on top.
+
+Saved profiles and new actions (M3-T07): a user profile that does not mention an action at all (neither in `[bindings]`
+nor in `[deadzones]`: the action was added to the game after the profile was saved, like the wing orders on keys 1-4)
+takes the `default` profile's bindings and deadzone for it when it loads (`ControlProfile.from_config_text`'s
+`fill_from`, `ControlProfileStore.load_profile`), and applying it posts a notice naming them (printed, and shown by
+`controls use`); `controls save <name>` writes them into the file. An action the file mentions in one section only, or
+with bad entries, still makes the profile invalid. The built-in data profiles are not filled: they must be complete.
 
 ### 15.13 Console and settings (additions to §6.4)
 
@@ -1424,7 +1689,7 @@ profile moves bindings, not feel: `m1_classic` makes the stick yaw through the D
 | `combat` | HitResolver (T03) | `projectiles`, `hits`, `last_hit`, `pairs_tested`, `resolve_us` (profiling only; the one wall-clock read) |
 | `hull` | player Damageable (T03) | `hp`, `max_hp`, `fraction`, `invulnerable` (mirror of `debug.invulnerable`), `destroyed` |
 | `raiders` | ShipPool (T05, T07) | `pool_size`, `free`, `alive`, `list` (name, behaviour/state, hull %, range), `selected_brain` |
-| `waves` | WaveDirector (T09) | `scenario`, `index`, `name`, `state`, `next_in_s`, `alive`, `kills`, `losses` |
+| `waves` | WaveDirector (T09, M3-T16) | `scenario`, `index`, `name`, `state`, `next_in_s`, `alive`, `kills`, `player_kills`, `player_assists`, `losses` |
 | `hud` | Hud (T08) | `visible`, `lead_tof_s`, `lead_on_screen`, `prograde_on_screen`, `target_box` |
 | `controls` | ControlProfiles (T11) | `profile`, `profiles`, `unsaved` |
 | `audio` | AudioDirector (T12) | `sounds`, `voices_active`, `volume` |
@@ -1476,10 +1741,10 @@ Details per task are in the as-built notes of `docs/milestones/m2-combat-sandbox
 |---|---|---|
 | `PilotBrain` / `Perception` / `PilotSteering` / `AiPilotDriver`; brains write only commands | T07 | M3 rewriting how AI ships are driven |
 | `InterceptMath` shared by HUD and AI | T01 | Two lead solutions that disagree |
-| `Factions` as the one relation query | T01 | Hunting faction string compares when M3/M11 add factions |
+| `Factions` as the one relation query | T01 | Hunting faction string compares when M3/M12 add factions |
 | `Combatant` + `ShipAssembly` build player and AI ships the same way | T02 | Special-casing allies, wingmen, the Thunderbolt |
 | Hardpoints `chunks[]` via `core/chunks.py` | T04 | Per-asset debris code for every later ship |
-| Pools filled at scenario load | T05 | Spawn hitches when missions spawn ships (M4) |
+| Pools filled at scenario load | T05 | Spawn hitches when missions spawn ships (M5) |
 | `ControlProfile` | T11 | HOTAS / keyboard+mouse / menu remapping starting from scratch |
 
 
@@ -1494,3 +1759,153 @@ Details per task are in the as-built notes of `docs/milestones/m2-combat-sandbox
   firing). The only writes to `linear_velocity` in `src/` are pool spawn / release, `reset_to` (respawn) and the 9 999 m/s ceiling clamp.
   Tests: `test_flight_model::test_turning_alone_never_produces_a_net_force`, `test_speed_and_autotrack` (a 180 degree auto-track turn at 250 m/s
   leaves the velocity unchanged to 0.01 m/s).
+
+## 16. AI pilots and wingmen (M3)
+
+What M3 adds to §1-§15 (tasks in `docs/milestones/m3-ai-pilots-and-wingmen.md`). Every earlier rule still holds; task ids
+below are M3 tasks.
+
+### 16.1 Decisions
+
+| # | Decision | Rationale (short) |
+|---|---|---|
+| D30 | Factions come from `data/factions.json` (ids, names, symmetric relation pairs, a default). `Factions.relation` / `is_hostile` keep their signatures; the table is loaded lazily and can be swapped for tests and the console | M2's fixed rule was the seam (D25); callers do not change, and M12's factions are data |
+| D31 | Friendly fire is `settings.friendly_fire` (default off, maintainer Q2). AI ships always check their fire lane for friends before firing | The forgiving default suits wingmen crossing the player's line; the check keeps AI behaviour right with the setting on |
+| D32 | Ram damage from the ship's own velocity change: `hull_max × clamp((Δv - safe) / (lethal - safe))²` (Δv per ship; a 30 m/s head-on between equals is about 15 m/s each). Jolt contacts give Δv at ordinary speeds; at tunnelling speeds and for props without bodies, a swept test of each hit volume against each of the other's (exact for boxes and capsules) finds the hit, with the momentum split for both sides (fatal once that Δv reaches lethal) | Physical (the lighter ship suffers more), tunable per `ShipSpec`. At tunnelling speed (and always for props), hit volumes that overlap by 0.3 m or more always ram and a pass 0.3 m clear never does; below it, and for a shallower clip between two ships, Jolt's contacts decide |
+| D33 | Collision avoidance is a filter in `AiPilotDriver` on every brain's desired velocity (closest-approach maths against `Perception.contacts`), not a behaviour | Every AI ship, M2 brains included, avoids collisions whatever it is doing |
+| D34 | `AiPilot extends PilotBrain`: scored behaviours (attack, evade, formation, follow path, guard, retreat, idle) × `AiProfile` weights, with stickiness, a minimum dwell and an emergency margin. Orders and wings gate scores through `AiContext` | Utility selection (§14.7) without a behaviour tree; profiles give allies, raiders and the instructor different characters from one brain |
+| D35 | `starfury_aurora` gains a generated LOD1 (about 25 % of the splats, coarser spacing) and `chunks[]` from LOD1. Allies (`ShipSpec.splat_lod` 1) and all Starfury debris use LOD1; the player keeps LOD0 | Four Starfuries at LOD0 would add about 700k splats; allies are seen at range. A fixed LOD per class, not M6's `LodSwitcher` |
+| D36 | Wings: the player leads `ALPHA` (finger-four). Orders (attack my target, form on me, engage at will, cover me) arrive as `UiCommand` edges from keys 1-4 (keyboard-only actions) or the console, and go to brains through `WingDirector`, never through `Input` | Maintainer Q1; the pad has no free button and the M5 comms panel will add a pad route on the same `WingDirector` API |
+| D37 | The instructor is an `AiPilot` with the `instructor` profile, a `Route` (paced to the player) and demo `Manoeuvre`s, invulnerable via its scenario spawn | The M8 tour and control checks reuse it unchanged; manoeuvres are closed loops on measured state, so the tutorial can compare the player against the same goals |
+| D38 | Keyboard layout B: every flight key is under the left hand (pods by position on Q/W/E and A/S/D), the mouse flies pitch and yaw, no keyboard pitch/yaw | Maintainer Q9: the right hand is on the mouse |
+| D39 | Broadcasts (M3-T17, Q21): `Targetable.broadcast_range_m` lets a contact be heard beyond the sensors. Targeting and the radar use it directly; the AI hears the same broadcasts at the same ranges (any faction) as a separate `Perception.broadcasts` list from `ContactScan.shared_broadcasts`, a scan of `Targetable.broadcasters()` alone. `ContactScan` (5 km) stays the near list for avoidance, the fire lane and threats. Behaviours do not chase far contacts on their own: a pilot **objective** (`AiContext.objective_name`, `ai <name> objective <target|none>`, a spawn's `objective`) makes the attack transit to it and attack it once inside 5 km, as a fallback while no hostile in sight may be attacked (M3-T10); the player broadcasts like an ally (100 km) and wave raiders take the player as their objective | Missions (M5) send raiders at a buoy or the station from beyond sensor range; one registry, no second sweep over every body, so AC13's budget holds |
+| D40 | Hit reaction, guard, wings in scenarios (M3-T10, Q11): a fresh bolt hit hands control to evade at once for one full jink (`AiPilot.select`, `BehaviourEvade.locked`). A guard post gates the attack through `AiContext.may_attack` (hostiles inside the radius or after the guarded ship) and `BehaviourGuard` keeps station. Scenarios declare `wings[]` and spawns name a `wing`; an AI-led wing hands the lead to its next member; its ships rally on an engaged wingmate (`BehaviourRally`). `AttackBrain` caps the speed it seeks (`RaiderTactics.max_speed_mps`: break and extend at it, approach at the higher of it and the target's speed, plus the closure) | Ships under fire behave like pilots; raider groups and wings come from data; AI-versus-AI fights stay at fighting speed and together while a chaser still outruns any target |
+| D42 | Slashing pass (M3-T18, Q19): each attack run is, by a seeded roll, `AttackSlash` (an offset firing pass, a turn and burn, a chase at 500 m) or `AttackBrain`'s standard run; rookies always slash, higher skill less often (`AiTemperament.slash_chance`), the most aggressive pass at 100 m instead of 200 m; evade weighs threats from ships other than the attack's target by skill (`awareness`); `AiProfile.slashing` opts out; the nose tracks the lead with its turn rate fed forward (`PilotSteering.face_tracking`) | Better pilots keep their guns on the target far longer (3.8x the time in the fire gate against a drone), with the same gate, target choice and caps |
+| D43 | Splat LOD (M3-T19, Q22): every ship carries one `GaussianSplatNode` per level its asset lists (LOD0-LOD3; allies from LOD1), built once with the pool, and a `LodSwitcher` shows exactly one by its projected size (200 / 60 / 16 px, 25 % hysteresis); levels change by visibility, never by assigning a resource | Showing or hiding a node costs GDGS no upload (M3-T20: it only changes the per-frame visible table); a resource change rebuilds every buffer. D22's fixed node count still holds (more nodes per ship, none added in play) |
+| D44 | Splat budget (M3-T20, Q22): the renderer's culled and sort buffers are sized from `settings.splat_budget` (visible splats, 2 000 000), not from every resident splat; a per-frame table of drawn instances replaces the per-splat instance ids; over budget the `LodSwitcher` steps the farthest ships in view down, on top of the level their size calls for | Hidden LODs and off-screen ships cost no sort memory, so 100 ships cost the same buffers as 13 (VRAM added at 100 ships: 3.2 GB before, 1.5 GB after). The cost moves: the buffers are fixed at 1.17 GB even when little is visible, so 13 ships take about 600 MB more than they did |
+| D45 | Hero splat level (M3-T24, Q23): the player's Starfury alone (`ShipSpec.splat_hero`, `settings.splat_hero`) also carries the asset's `hero` level, about 975k splats at half LOD0's spacing, as level -1 in front of its chain (`[-1, 0, 1, 2, 3]`), drawn from 400 px of projected size and stepped down to LOD0 like any level | Level -1 keeps every other ship's levels, thresholds and tests as they were (a chain that does not start at -1 never sees the hero); "no level yet" became `LodSwitcherMath.NONE` (-2). Costs about 0.5 GB of memory for the whole session and 1.4 ms of GPU time while drawn; the cockpit camera draws the hull as a mesh, so it never shows there. D22 holds: the node is built with the ship |
+| D41 | Skill and aggressiveness (M3-T13, Q12): `AiTemperament` scales a copy of the pilot's `AiProfile` (weights, retreat threshold, aim error, miss gate, engage and break-off ranges) and sets the reaction time, jink quality, passivity and the reckless ram; `regular` + `balanced` leave a profile as tuned. `BehaviourRam` commits a reckless, badly hurt, mostly alone ship to a collision course with avoidance off for its target only | Civilian, raider and military AI feel different from one brain and one set of behaviours; numbers stay data |
+
+### 16.2 Layout additions
+
+```
+data/factions.json                       faction ids, names, relation pairs, default (T02)
+src/combat/faction_table.gd              RefCounted, pure: parsed factions.json; relation lookup (T02)
+src/combat/ram_math.gd, ram_resolver.gd  pure severity maths; Node: contacts + swept rams -> Damageable (T04)
+src/ai/contact.gd, contact_scan.gd       per-tick contact list shared by every driver (T05)
+src/ai/avoidance_math.gd, fire_lane.gd   pure: closest-approach dodge; friendly-in-lane check (T05)
+src/ai/ai_pilot.gd, ai_context.gd, ai_behaviour.gd, ai_profile.gd        utility brain (T06)
+src/ai/behaviour_{attack,evade,retreat,idle,formation,guard,follow_path}.gd  (T06, T07, T09, T10)
+src/ai/wing.gd, formation.gd             wing state and slot offsets (T07)
+src/ai/behaviour_{guard,rally}.gd        guard post, rally on an engaged wingmate (T10)
+src/ai/ai_temperament.gd, behaviour_ram.gd   skill and aggression; last-ditch ram (T13)
+src/ai/attack_slash.gd                   the slashing pass and chase (T18)
+src/rendering/lod_switcher{,_math}.gd    splat level of detail by size on screen (T19)
+src/combat/fx_specs.gd, fx_pool.gd       pure effect numbers; fixed GPUParticles3D pools, one per effect (T23)
+assets/fx/*.tres                         the effects' process materials and draw meshes (T23)
+src/rendering/{splat_light_rig,light_picker,light_emitter,splat_lighting_loader}.gd   the 8 lights and who fills them (T21)
+src/rendering/splat_budget_math.gd       pure: which ships step down to fit the splat budget (T20)
+assets/ai/civilian.tres                  never attacks, flees within 3 km (T13)
+src/ai/route.gd, manoeuvre.gd, manoeuvres.gd   instructor route and demo moves (T09)
+src/game/wing_director.gd                Node (Combat, priority 290): wings, orders, acknowledgements, replenish (T07, T08)
+assets/ai/{ally_starfury,raider,instructor}.tres, starfury_tactics.tres
+assets/ships/starfury_ally.tres          the Starfury's numbers, splat_lod 1, no cockpit (T08)
+src/ship/splat_lod.gd                    RefCounted, pure: which PLY an asset draws at a splat LOD, from its manifest (T08)
+data/scenarios/{instructor_route,dogfight}.json   (dogfight: wings ALPHA, RED, BLUE; T10)
+data/star_systems.json, src/environment/star_catalog.gd, star_color.gd   a system's star and its colour, by `system_id` (T25, Q30)
+src/ai/ai_console.gd, src/combat/faction_console.gd   the console sides of the AI drivers and the factions (T06, T02)
+src/combat/kill_credit.gd                the player's kills and assists (T16)
+src/combat/ram_tracker.gd, convex_sweep.gd   ram bookkeeping; exact swept hull test at tunnelling speed (T04)
+src/combat/breakup_plan.gd, staged_wreck.gd  pure: which part leaves when; the wreck that holds the rest until then (T28)
+src/rendering/post_effects.gd, lens_flare_*.gd, motion_blur_*.gd   the compositor effects after GDGS (T25)
+src/ship/running_lights.gd, nav_lights.gd    markers and own lights, from generated `nav_lights` hardpoints (T27)
+src/hud/hud_surface.gd, hud_painter.gd, cockpit_screens.gd   one drawing code for the 2D layer and the console screens (T29)
+tools/procgen/parts/cockpit.py           the Starfury's interior and its `screens` hardpoints (T29)
+addons/gdgs_scs/                         the project's fork of GDGS, `PATCHES.md` lists every change (T20, Q25, Q32)
+scripts/capture_m3.sh, measure_m3.sh, measure_fight{,_node}.gd, measure_held_brain.gd   the capture set; AC19's fight and 100 ships measured on the GPU (T12)
+tests/integration/test_m3_run.gd         the whole sandbox in one build; the dogfight's AI time and resolver budget (T12)
+```
+
+### 16.3 Tick order (changes to §15.3)
+
+1. `AiPilotDriver`s (-10): `ContactScan` (first driver of the tick builds it), `Perception`, brain, avoidance filter,
+   `Combatant.apply_commands`.
+2. Console, `Main` (0), the World's automatic rebase (0, M3-T14), ships, projectiles as before. `Main` passes order edges
+   from `UiCommand` to the `WingDirector`.
+3. `TargetingController`s (100), `HitResolver` (200), `RamResolver` (210): contacts reported by Jolt since its last run
+   and swept rams; destruction in the same tick (§15.7).
+4. `WingDirector` (290): orders, acknowledgements, leader changes; `WaveDirector` (300): waves; on `wave_started` it calls
+   `WingDirector.replenish()` (allies for the player wing's empty slots, 1 500 m behind the player, T08).
+5. Jolt steps the bodies (and reports the contacts the `RamResolver` reads next tick).
+
+### 16.4 Console and settings (additions to §6.4 and §15.13)
+
+| Provider | Owner (task) | Keys |
+|---|---|---|
+| `factions` | Factions (T02) | `ids`, `relations`, `friendly_fire` |
+| `ram` | RamResolver (T04) | `events`, `last`, `resolve_us` |
+| `ai` | AI drivers (T06) | `ships`, `by_behaviour`, `think_us` |
+| `allies` | ShipPool (T08) | `pool_size`, `free`, `alive`, `list`, `selected_brain` |
+| `wing` | WingDirector (T07) | `name`, `order`, `formation`, `members`, `last_ack` |
+| `route` | instructor (T09) | `index`, `count`, `lag_m`, `state`, `demo` |
+
+Commands: `relation <a> <b> [friendly|neutral|hostile]` / `relation reset`; `wing order <attack|form|engage|cover>`;
+`wing formation <finger_four|wedge|line_abreast>`; `wing replenish`; `spawn ally [idle|ai] [distance_m] [yaw_deg] [pitch_deg]`; `kill allies`; `ai <name>`;
+`ai <name> objective <target|none>` (M3-T17: an `AiPilot` flies to the named target from any broadcast range and attacks it);
+`ai <name> skill <rookie|regular|veteran|ace|0-1>`, `ai <name> aggression <passive|cautious|balanced|aggressive|reckless|0-1>`,
+`spawn raider|ally ai ... skill=<...> aggression=<...>` (M3-T13);
+`scenario [free_flight|combat_sandbox|instructor_route|dogfight]`. Settings: `friendly_fire` (bool, false), `ram_damage`
+(bool, true), `splat_budget` (int, 100 000 to 6 000 000, 2 000 000; M3-T20). Provider `render` gains `gdgs_rebuilds`,
+`gdgs_splat_uploads`, `splat_visible`, `splat_clipped`, `splat_budget_mb` and `gpu_ms` (M3-T20).
+`splat_hero` (bool, true; M3-T24: the player's Starfury builds its hero level, read when the ship is built). `lod <ship|all>
+<hero|0-3|auto>` accepts `hero` (M3-T24), and the `lod` provider's `levels` names it.
+M3-T27: command `running_lights [on|off]`, key
+`ship.running_lights`, `spawn ... lights=on|off`, and settings `own_lights` (bool, true), `top_lamp_energy` (0-20, 2.5), `cabin_glow_level` (0-2, 0.3),
+`cabin_glow_view_m` (1-2000, 150), `running_light_min_px` (0.5-12, 3). `raiders.list` and `allies.list` mark a ship flying dark.
+M3-T19: command `lod <ship|all> <n|auto>`, provider `lod` (`levels`, `visible_splats`), setting `splat_lod_bias` (float, 0). M3-T21: command `relight [on|off]`, provider `lights` (`picked`,
+`candidates`, `active`, `cost_us`), settings `splat_relight` (bool, true), `relight_ambient` (0.3), `relight_unlit_level` (0.12), `relight_light_gain` (0.6). M3-T25: commands `flare [on|off]` and
+`blur [on|off]`, provider `post`, settings `lens_flare` (bool, true), `motion_blur` (bool, false), `motion_blur_strength` (0.5). M3-T29: provider `screens` (`shown`, `powered`, `paints`, `lamps`),
+`render.gdgs_render_states`, `hud.window_items`. M3-T12: command `look <yaw> [pitch]` / `look off` holds the view off the nose from the console, for captures and for looking back at a formation.
+
+### 16.5 Particles (M3-T23)
+
+Hull hits, rams, explosions and debris throw sparks and glowing fragments from `GPUParticles3D` (D8: splats cannot animate).
+`FxPool` (`World/Fx`) holds a fixed set of one-shot emitters per effect (`FxSpecs`: `hit` 12, `ram` 6, `explosion_sparks` 4,
+`explosion_fragments` 4, `explosion_gas` 4, `debris` 16), built once in `_ready` and restarted for each burst, so the particle node
+count never changes. `HitResolver`, `RamResolver`, `Explosion` (through `DestructionDirector`) and `DebrisPool` hold a reference
+(`fx`, set by `Main`) and call `FxPool.burst(effect, position, direction, velocity, duration)` in the physics tick.
+
+- **Newtonian.** The process materials (`assets/fx/fx_*.tres`) have zero gravity and zero damping (the damping guard test checks
+  them). A burst inherits its source's velocity by flying its emitter at that velocity; the particles live in the emitter's frame
+  (`local_coords`), so they go where it goes. The explosion's old 0.8-1.6 damping on its sparks is gone with that.
+- **Rebase.** Every emitter is `top_level` and in `world_shiftable`, so `WorldFrame.rebase` shifts its transform (the emitters'
+  transforms are shifted, there is no anchor node). A burst asked for in the tick is placed at once and only started in
+  `_process`, so a rebase between the two shifts it as well.
+- **Hot path.** `burst` allocates nothing and does no tree lookup: parallel packed arrays hold the state, the setting is cached from
+  `Settings.changed`, and the return value is an int handle (slot plus generation) for `stop`. With every emitter of an effect busy
+  the oldest is restarted (a fresh hit matters more than a fading one); effects never grow the pool.
+- **Density.** `settings.particle_density` (0-1) sets `amount_ratio`; at 0 `burst` returns 0 before it claims anything and the pool's
+  `_process` stays off (it is on only while an emitter is busy).
+- **Aim.** A hull hit's sparks leave along the bolt mirrored about the hull's surface (taken as radial from the hull's centre); a ram's
+  along the contact normal in a wide cone; explosions in every direction.
+- **Vents.** Each debris chunk vents for 2-4 s (`FxSpecs.debris_duration_s`, from the break-up's seed); `DebrisChunk` stops its vent
+  when it parks, finishes or leaves the tree, so no emitter is left venting where a chunk was.
+- Meshes are additive, unshaded, transparent, so the hull depth proxies hide them behind hulls like the plumes.
+
+Console: provider `fx` (`emitters`, `busy`, `bursts`, `reused`, `density`); command `fxburst [hit|ram|explosion_sparks|
+explosion_fragments|explosion_gas|debris]` throws one burst 40 m in front of the camera. Setting: `particle_density` (float 0-1, 1).
+
+### 16.6 As built (M3 deviations from §16.1-§16.5)
+
+Details per task are in the as-built notes of `docs/milestones/m3-ai-pilots-and-wingmen.md`. The ones that change the design above:
+
+- **Renderer.** GDGS is no longer vendored upstream code: `addons/gdgs_scs/` is the project's fork (Q25, Q32), and every renderer change lives there with a note in its `PATCHES.md`. Its patches 5 and 6 are the
+  splat budget and per-instance own lights (a ship's top lamp and cabin glow, which use none of the 8 scene lights).
+- **Who slashes.** The plan had veterans and aces only. As built every pilot does, on a seeded share of attack runs, a rookie on all of them (D42, T18, the maintainer's call). The balance this leaves is AC12's, below.
+- **AC12's balance is open.** With the skills and slashing as built, rookies shoot down the sandbox's wing in wave 2 and the dogfight does not always end in 6 sim minutes. The maintainer holds that tuning, so `test_m3_sandbox` and
+  `test_dogfight` record their runs and go pending instead of failing.
+- **Break-up.** A Starfury does not burst into its five chunks in one tick: the part hit last leaves first and the rest follow over about a second (T28, Q28). Raiders and buoys burst as before.
+- **Cockpit HUD.** In the cockpit camera the instruments are on three `SubViewport` screens built into the console (T29, Q29), for the player's ship only; the window keeps the aiming marks. The chase camera keeps the 2D HUD. Both draw through `HudPainter`.
+- **Lights the player can't see.** A dark ship (Q27) is dark to the eye only: radar and AI contact lists never use lights.
+- **Star.** A system's star is data; the flare and the key light take its colour, and the flare is a lens effect only, with no veil or god rays (Q30, Q31).
+- **What runs on what.** The one number that limits scale is on the CPU: 100 ships miss 60 fps because of `TargetingController` (as T20 measured it, before the visual pass), not the renderer (M3-T20; `docs/roadmap.md`, M4).

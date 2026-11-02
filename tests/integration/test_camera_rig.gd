@@ -512,3 +512,25 @@ func test_console_entries_leave_with_the_rig() -> void:
 	assert_false(DebugConsole.registry.has_command(&"camera"), "command unregistered on exit")
 	rig.free()
 	rig = null
+
+
+# --- `look`: free look from the console, for captures -------------------------------------------------------------------
+
+
+func test_look_holds_the_view_until_look_off() -> void:
+	rig = _make_wired_rig()
+	assert_true(_console("look 170 -10").ok)
+	rig.set_look(0.1, false, Vector2.ZERO, Vector2.ZERO)
+	assert_almost_eq(rig.look_goal().x, 170.0, TOL, "a released stick does not ease a held view back")
+	assert_almost_eq(rig.look_goal().y, -10.0, TOL)
+	rig.set_look(0.1, true, Vector2(1.0, 0.0), Vector2.ZERO)
+	assert_almost_eq(rig.look_goal().x, 170.0, TOL, "the stick does not move a held view")
+	assert_true(_console("look off").ok)
+	rig.set_look(0.1, false, Vector2.ZERO, Vector2.ZERO)
+	assert_lt(rig.look_goal().x, 170.0, "let go, it eases back to the nose")
+
+
+func test_look_rejects_nonsense() -> void:
+	rig = _make_wired_rig()
+	assert_false(_console("look north").ok)
+	assert_false(_console("look 10 200").ok, "pitch is limited")

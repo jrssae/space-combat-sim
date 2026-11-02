@@ -1,7 +1,12 @@
 extends GutTest
-## Factions (architecture §15.1 D25, AC1): the relation table, the hostility query and the HUD colours.
+## Factions (architecture §15.1 D25, AC1; §16 D30, M3 AC2): the relation table, the hostility query and the HUD colours,
+## and the active table behind them (loaded from data/factions.json, swappable, resettable).
 
 const ALL_KNOWN: Array[StringName] = [Factions.EARTH_ALLIANCE, Factions.RAIDERS, Factions.NEUTRAL]
+
+
+func after_each() -> void:
+	Factions.reset()  # the table is process-wide: no test may leak a swapped or edited one
 
 
 func test_faction_ids() -> void:
@@ -101,3 +106,112 @@ func test_hud_color_through_the_relation_query() -> void:
 	assert_eq(Factions.hud_color(Factions.relation(own, Factions.NEUTRAL)), Factions.NEUTRAL_COLOR)
 	assert_eq(Factions.hud_color(Factions.relation(own, &"pirates")), Factions.NEUTRAL_COLOR)
 	assert_eq(Factions.hud_color(Factions.relation(own, own)), Factions.FRIENDLY_COLOR)
+
+
+# --- the active table (M3-T02, D30) ----------------------------------------------------------------------------
+
+
+func _doc_with(relation: String) -> Dictionary:
+	return {
+		"factions": [{"id": "earth_alliance", "name": "Earth Alliance"}, {"id": "raiders", "name": "Raiders"},
+				{"id": "neutral", "name": "Neutral"}],
+		"relations": [{"a": "earth_alliance", "b": "raiders", "relation": relation}],
+		"default": "neutral",
+	}
+
+
+func test_the_active_table_is_loaded_lazily_from_the_data_file() -> void:
+	Factions.reset()
+	var table: FactionTable = Factions.table()
+	assert_eq(table.ids(), ALL_KNOWN as Array[StringName])
+	assert_eq(table.display_name(Factions.EARTH_ALLIANCE), "Earth Alliance")
+	assert_same(Factions.table(), table, "loaded once, then reused")
+	assert_true(Factions.is_hostile(Factions.EARTH_ALLIANCE, Factions.RAIDERS))
+
+
+func test_use_table_swaps_the_rule_for_every_caller() -> void:
+	var friendly_doc: Dictionary = _doc_with("friendly")
+	Factions.use_table(FactionTable.from_dict(friendly_doc)["table"])
+	assert_eq(Factions.relation(Factions.EARTH_ALLIANCE, Factions.RAIDERS), Factions.Relation.FRIENDLY)
+	assert_false(Factions.is_hostile(Factions.EARTH_ALLIANCE, Factions.RAIDERS))
+	assert_false(Factions.is_hostile(Factions.RAIDERS, Factions.EARTH_ALLIANCE))
+	Factions.use_table(FactionTable.from_dict(_doc_with("hostile"))["table"])
+	assert_true(Factions.is_hostile(Factions.RAIDERS, Factions.EARTH_ALLIANCE))
+
+
+func test_a_table_with_another_faction_changes_what_is_known() -> void:
+	var doc: Dictionary = _doc_with("hostile")
+	(doc["factions"] as Array).append({"id": "pirates", "name": "Pirates"})
+	(doc["relations"] as Array).append({"a": "pirates", "b": "raiders", "relation": "hostile"})
+	Factions.use_table(FactionTable.from_dict(doc)["table"])
+	assert_true(Factions.is_known(&"pirates"))
+	assert_true(Factions.is_hostile(&"pirates", Factions.RAIDERS))
+	assert_false(Factions.is_hostile(&"pirates", Factions.EARTH_ALLIANCE), "unlisted pair: the default")
+	Factions.reset()
+	assert_false(Factions.is_known(&"pirates"), "reset forgets the swapped table")
+	assert_eq(Factions.relation(&"pirates", Factions.RAIDERS), Factions.Relation.NEUTRAL)
+
+
+func test_reset_drops_session_changes_and_reloads_the_file() -> void:
+	assert_eq(Factions.table().set_relation(Factions.EARTH_ALLIANCE, Factions.RAIDERS, Factions.Relation.NEUTRAL), "")
+	assert_false(Factions.is_hostile(Factions.EARTH_ALLIANCE, Factions.RAIDERS))
+	Factions.reset()
+	assert_true(Factions.is_hostile(Factions.EARTH_ALLIANCE, Factions.RAIDERS), "the file says hostile")
+
+
+func test_use_table_null_is_a_reset() -> void:
+	Factions.use_table(FactionTable.from_dict(_doc_with("friendly"))["table"])
+	Factions.use_table(null)
+	assert_true(Factions.is_hostile(Factions.EARTH_ALLIANCE, Factions.RAIDERS))
+
+
+func test_load_table_installs_a_valid_file() -> void:
+	var path: String = "user://test_factions_valid.json"
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(JSON.stringify(_doc_with("friendly")))
+	file.close()
+	assert_eq(Factions.load_table(path), "")
+	assert_eq(Factions.relation(Factions.EARTH_ALLIANCE, Factions.RAIDERS), Factions.Relation.FRIENDLY)
+	DirAccess.remove_absolute(path)
+
+
+func test_a_broken_file_leaves_the_active_table_unchanged() -> void:
+	Factions.use_table(FactionTable.from_dict(_doc_with("friendly"))["table"])
+	var broken: Dictionary = _doc_with("hostile")
+	((broken["relations"] as Array)[0] as Dictionary)["relation"] = "enemy"
+	var path: String = "user://test_factions_broken.json"
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(JSON.stringify(broken))
+	file.close()
+	var error: String = Factions.load_table(path)
+	assert_string_contains(error, "relations[0].relation must be one of friendly|neutral|hostile")
+	assert_string_starts_with(error, path)
+	assert_eq(Factions.relation(Factions.EARTH_ALLIANCE, Factions.RAIDERS), Factions.Relation.FRIENDLY, "still the table in use")
+	assert_ne(Factions.load_table("user://no_such_factions.json"), "")
+	assert_eq(Factions.relation(Factions.EARTH_ALLIANCE, Factions.RAIDERS), Factions.Relation.FRIENDLY)
+	DirAccess.remove_absolute(path)
+
+
+func test_the_built_in_rule_matches_the_shipped_file_for_every_query() -> void:
+	# What a broken file falls back to must read the same as the file at its defaults.
+	var from_file: Array[int] = []
+	var probes: Array[StringName] = [Factions.EARTH_ALLIANCE, Factions.RAIDERS, Factions.NEUTRAL, &"pirates", &""]
+	for a: StringName in probes:
+		for b: StringName in probes:
+			from_file.append(Factions.relation(a, b))
+	Factions.use_table(FactionTable.builtin())
+	var index: int = 0
+	for a: StringName in probes:
+		for b: StringName in probes:
+			assert_eq(Factions.relation(a, b), from_file[index], "%s vs %s" % [a, b])
+			index += 1
+
+
+func test_hud_colours_follow_a_changed_pair() -> void:
+	# AC2: `relation earth_alliance raiders neutral` recolours the raiders yellow, `friendly` blue.
+	var own: StringName = Factions.EARTH_ALLIANCE
+	assert_eq(Factions.hud_color(Factions.relation(own, Factions.RAIDERS)), Factions.HOSTILE_COLOR)
+	Factions.table().set_relation(own, Factions.RAIDERS, Factions.Relation.NEUTRAL)
+	assert_eq(Factions.hud_color(Factions.relation(own, Factions.RAIDERS)), Factions.NEUTRAL_COLOR)
+	Factions.table().set_relation(own, Factions.RAIDERS, Factions.Relation.FRIENDLY)
+	assert_eq(Factions.hud_color(Factions.relation(own, Factions.RAIDERS)), Factions.FRIENDLY_COLOR)

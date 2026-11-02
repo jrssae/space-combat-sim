@@ -508,6 +508,13 @@ func test_damping_guard_project_and_body_settings() -> void:
 	assert_eq(ship.angular_damp, 0.0)
 	assert_false(ship.can_sleep, "a coasting ship must never fall asleep")
 	assert_false(ship.continuous_cd)
+	# M3-T23: the particle process materials are held to the same rule, so sparks and fragments keep the speed they were thrown at.
+	for effect: int in FxSpecs.COUNT:
+		var fx_material := load(String(FxSpecs.spec(effect)["material"])) as ParticleProcessMaterial
+		assert_not_null(fx_material, "%s process material" % FxSpecs.spec(effect)["name"])
+		assert_eq(fx_material.gravity, Vector3.ZERO, "%s: no particle gravity" % FxSpecs.spec(effect)["name"])
+		assert_eq(fx_material.damping_min, 0.0, "%s: no particle damping" % FxSpecs.spec(effect)["name"])
+		assert_eq(fx_material.damping_max, 0.0, "%s: no particle damping" % FxSpecs.spec(effect)["name"])
 
 
 func test_damping_guard_measured_in_jolt() -> void:

@@ -36,7 +36,7 @@ func _frames(n: int) -> void:
 
 func _spawn_and_select(distance: float = 600.0) -> Combatant:
 	assert_true(DebugConsole.registry.execute("spawn raider %s" % distance)[0].ok)
-	var raider: Combatant = main.ships.alive()[0]
+	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
 	main.ship.targeting.refresh()
 	assert_true(main.ship.targeting.select_by_name(raider.display_name))
 	return raider
@@ -108,7 +108,7 @@ func test_the_input_carries_the_players_state() -> void:
 	assert_eq(input.weapon_speed_mps, main.cannon.weapon.muzzle_speed_mps)
 	assert_true(input.fuel_unlimited)
 	assert_eq(input.faction, Factions.EARTH_ALLIANCE)
-	assert_eq(input.contacts.size(), main.buoys.size(), "the five buoys")
+	assert_eq(input.contacts.size(), main.buoys.size() + main.ships.alive().size(), "the five buoys and the wingmen")
 	assert_almost_eq(input.muzzle_position, main.ship.global_position + (main.ship.get_muzzles()[0].global_position - main.ship.global_position + main.ship.get_muzzles()[1].global_position - main.ship.global_position) * 0.5, Vector3.ONE * 1e-3)
 
 

@@ -15,16 +15,40 @@ const ENTRIES: Dictionary = {
 		"doc": "Radial stick deadzone, rescaled so full deflection still reaches 1"},
 	&"trigger_deadzone": {"type": TYPE_FLOAT, "default": 0.05, "min": 0.0, "max": 0.20,
 		"doc": "Trigger deadzone applied after rest calibration"},
-	&"yaw_ramp_s": {"type": TYPE_FLOAT, "default": 0.25, "min": 0.05, "max": 1.0,
-		"doc": "Seconds for D-pad yaw to ramp from 0 to full"},
 	&"target_hold_s": {"type": TYPE_FLOAT, "default": 0.35, "min": 0.15, "max": 1.0,
-		"doc": "Hold D-pad Up this long to target the nearest to the nose; a shorter tap selects the next target"},
+		"doc": "Hold a target button this long for its second function (pad B: previous target; keyboard B, Mouse 2: nearest the nose); a shorter tap selects the next target"},
 	&"assist_default": {"type": TYPE_BOOL, "default": true,
 		"doc": "Flight assist state at spawn"},
 	&"fuel_unlimited": {"type": TYPE_BOOL, "default": true,
 		"doc": "Reaction mass is never drawn down (the fuel gauge stays full); off = a finite tank that can run dry"},
+	&"friendly_fire": {"type": TYPE_BOOL, "default": false,
+		"doc": "Bolts hurt any ship but their shooter, allies and the player included; off = only hostile ships (and buoys) take hits"},
+	&"ram_damage": {"type": TYPE_BOOL, "default": true,
+		"doc": "Collisions hurt by the velocity change they cause (rams); off = ships still bounce but take no damage"},
 	&"camera_default": {"type": TYPE_ENUM, "default": &"chase", "choices": [&"chase", &"cockpit"],
 		"doc": "Camera mode at spawn"},
+	&"splat_lod_bias": {"type": TYPE_FLOAT, "default": 0.0, "min": -1.0, "max": 1.0,
+		"doc": "Shift every ship's splat level of detail by whole levels: + coarser, - finer (M3-T19)"},
+	&"particle_density": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.0, "max": 1.0,
+		"doc": "How much of each spark and debris burst is thrown, 0 (none) to 1 (full); 0 costs nothing per frame (M3-T23)"},
+	&"splat_relight": {"type": TYPE_BOOL, "default": true,
+		"doc": "Light hulls, chunks and buoys with the scene's lights (M3-T21); off draws their flat paint"},
+	&"relight_ambient": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 1.0,
+		"doc": "Light a relit hull gets on every side, whichever way it faces; the gain scales it (live)"},
+	&"relight_unlit_level": {"type": TYPE_FLOAT, "default": 0.12, "min": 0.0, "max": 1.0,
+		"doc": "How much of its paint a relit hull shows with no light at all (live)"},
+	&"relight_light_gain": {"type": TYPE_FLOAT, "default": 0.6, "min": 0.0, "max": 4.0,
+		"doc": "How strongly light brightens a relit hull: the key star and every other light (live)"},
+	&"splat_hero": {"type": TYPE_BOOL, "default": true,
+		"doc": "The player's Starfury also loads its hero splat level, about 975k splats, for when it fills the screen (M3-T24); read when the ship is built, so it applies from the next run or spawn"},
+	&"splat_budget": {"type": TYPE_INT, "default": 2000000, "min": 100000, "max": 6000000,
+		"doc": "Splats the renderer can draw at once (M3-T20): 584 bytes of video memory each, however many are on screen; over it, the farthest ships draw a coarser level"},
+	&"lens_flare": {"type": TYPE_BOOL, "default": true,
+		"doc": "Lens flare and glare from the star, hidden behind hulls (M3-T25)"},
+	&"motion_blur": {"type": TYPE_BOOL, "default": false,
+		"doc": "Smear the stars and hulls on fast turns; off asks the renderer for nothing (M3-T25)"},
+	&"motion_blur_strength": {"type": TYPE_FLOAT, "default": 0.5, "min": 0.0, "max": 1.0,
+		"doc": "How much of each frame's motion the blur smears, 0 (none) to 1 (the whole frame) (M3-T25)"},
 	&"camera_chase_smoothing_s": {"type": TYPE_FLOAT, "default": 0.0, "min": 0.0, "max": 0.5,
 		"doc": "Chase camera orientation lag, s; 0 = rigid mount locked to the ship"},
 	&"chase_bolt_scale": {"type": TYPE_FLOAT, "default": 3.0, "min": 1.0, "max": 10.0,
@@ -37,18 +61,28 @@ const ENTRIES: Dictionary = {
 		"doc": "Degrees the camera turns per pixel of mouse travel while free look is held"},
 	&"show_overlay": {"type": TYPE_BOOL, "default": true,
 		"doc": "Show the debug overlay"},
-	&"scenario": {"type": TYPE_ENUM, "default": &"combat_sandbox", "choices": [&"combat_sandbox", &"free_flight"],
-		"doc": "The scenario the game loads: the wave sandbox, or free flight with the nav buoys"},
+	&"scenario": {"type": TYPE_ENUM, "default": &"combat_sandbox", "choices": [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight"],
+		"doc": "The scenario the game loads: the wave sandbox, free flight with the nav buoys, or the instructor's route"},
 	&"sfx_volume": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0,
 		"doc": "Gain of the SFX audio bus, 0 (silent) to 1 (full)"},
 	&"show_hud": {"type": TYPE_BOOL, "default": true,
 		"doc": "Show the combat HUD (target box, lead reticle, radar, gauges)"},
 	&"hud_targeting_grid": {"type": TYPE_BOOL, "default": false,
-		"doc": "Show the targeting grid in the chase view too (it is always shown in the cockpit view)"},
+		"doc": "Show the targeting grid in the chase view too (in the cockpit view it is on the console's octagon)"},
 	&"hud_chase_opacity": {"type": TYPE_FLOAT, "default": 0.7, "min": 0.1, "max": 1.0,
 		"doc": "How opaque the HUD is in the chase view (the cockpit view always draws it fully)"},
 	&"cockpit_light_energy": {"type": TYPE_FLOAT, "default": 1.6, "min": 0.0, "max": 8.0,
 		"doc": "Brightness of the cabin lamp that lights the cockpit frame in the first-person view (applies on the next spawn)"},
+	&"own_lights": {"type": TYPE_BOOL, "default": true,
+		"doc": "The lights each ship carries for itself in the splat renderer (top lamp, cabin glow). Off is for comparison"},
+	&"top_lamp_energy": {"type": TYPE_FLOAT, "default": 2.5, "min": 0.0, "max": 20.0,
+		"doc": "Brightness of the white light that a lit ship's top lamp throws on its own hull"},
+	&"cabin_glow_level": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 2.0,
+		"doc": "How much red the cockpit glow adds in the canopy, seen from outside"},
+	&"cabin_glow_view_m": {"type": TYPE_FLOAT, "default": 150.0, "min": 1.0, "max": 2000.0,
+		"doc": "How far off the cockpit glow can be seen, m (it fades over the last fifth)"},
+	&"running_light_min_px": {"type": TYPE_FLOAT, "default": 3.0, "min": 0.5, "max": 12.0,
+		"doc": "A running light is never smaller than this on screen, radius in pixels"},
 	&"hud_velocity_marker": {"type": TYPE_BOOL, "default": false,
 		"doc": "Also draw the prograde / retrograde marker in the world (it is only on screen when you fly near your nose); the drift sphere is always drawn"},
 	&"hull_splat_sync": {"type": TYPE_BOOL, "default": true,
@@ -67,9 +101,9 @@ const ENTRIES: Dictionary = {
 
 ## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current
 ## one is absent, and the next `save` writes only the current name.
-const RENAMED: Dictionary = {
-	&"roll_ramp_s": &"yaw_ramp_s",  # the D-pad ramp moved from roll to yaw when the two were swapped
-}
+## (The D-pad yaw ramp, `yaw_ramp_s` and before it `roll_ramp_s`, went with M3-T15: the stick yaws now. `revert` reads
+## only schema keys, so a saved file's old line is ignored and dropped on the next `save`.)
+const RENAMED: Dictionary = {}
 
 const _TRUE_WORDS: PackedStringArray = ["true", "on", "1", "yes"]
 const _FALSE_WORDS: PackedStringArray = ["false", "off", "0", "no"]
@@ -122,6 +156,8 @@ func describe(key: StringName) -> String:
 			return "bool"
 		TYPE_FLOAT:
 			return "float %s..%s" % [entry["min"], entry["max"]]
+		TYPE_INT:
+			return "int %s..%s" % [entry["min"], entry["max"]]
 		TYPE_ENUM:
 			return "enum " + "|".join(PackedStringArray(entry["choices"]))
 		TYPE_STRING:
@@ -147,6 +183,13 @@ func validate(key: StringName, value: Variant) -> Dictionary:
 			if is_nan(f) or f < float(entry["min"]) or f > float(entry["max"]):
 				return _fail("%s must be in %s..%s, got %s" % [key, entry["min"], entry["max"], f])
 			return _ok(f)
+		TYPE_INT:
+			if typeof(value) != TYPE_INT and not (typeof(value) == TYPE_FLOAT and float(value) == floorf(float(value))):
+				return _fail("%s expects a whole number, got %s" % [key, str(value)])
+			var i: int = int(value)
+			if i < int(entry["min"]) or i > int(entry["max"]):
+				return _fail("%s must be in %s..%s, got %s" % [key, entry["min"], entry["max"], i])
+			return _ok(i)
 		TYPE_ENUM:
 			if typeof(value) != TYPE_STRING and typeof(value) != TYPE_STRING_NAME:
 				return _fail("%s expects one of %s" % [key, describe(key).trim_prefix("enum ")])
@@ -183,6 +226,10 @@ func parse(key: StringName, text: String) -> Dictionary:
 			if not t.is_valid_float():
 				return _fail("%s expects a number, got '%s'" % [key, t])
 			return validate(key, t.to_float())
+		TYPE_INT:
+			if not t.is_valid_int():
+				return _fail("%s expects a whole number, got '%s'" % [key, t])
+			return validate(key, t.to_int())
 		TYPE_ENUM:
 			return validate(key, StringName(t.to_lower()))
 		TYPE_STRING:

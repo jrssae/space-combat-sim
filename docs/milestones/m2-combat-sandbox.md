@@ -20,7 +20,7 @@ The M1 play-test fixes land before M2 and change code that M2 builds on. Read th
   attitude control was built before writing `PilotSteering` (T07); reuse it if it fits.
 - **Rendering**: rigid chase camera, plumes along the nozzle axes (`ThrusterVisuals`), a hull depth proxy (an inset
   opaque mesh, so transparent effects behind the hull are hidden), a reworked Starfury silhouette, GDGS sort-overflow
-  and narrow-subgroup patches (`addons/gdgs/PATCHES.md`).
+  and narrow-subgroup patches (`addons/gdgs_scs/PATCHES.md`).
 - **Tooling**: the console `screenshot` command and `scripts/capture.sh` (llvmpipe; GDGS falls back to Raster).
 
 Where those fixes renamed something §15 mentions, follow the code and record the difference in the task's "As
@@ -46,15 +46,15 @@ In:
 
 Out (explicitly):
 - Full AI pilots: utility selection, evasion, formation, wingmen, allies, collision avoidance (M3).
-- Raider carriers and the Raider Battle Wagon, as models or spawn points (M11; see the roadmap). Raiders appear
+- Raider carriers and the Raider Battle Wagon, as models or spawn points (M12; see the roadmap). Raiders appear
   from the pool beyond 1 km.
 - Shields, subsystems, missiles or other secondary weapons, ammo, heat, energy, finite reaction mass.
 - Ship-to-ship collision damage (Jolt still makes ships bounce; ram damage is M3).
 - Starfury break-up chunks (the Starfury is being reworked; M3 adds chunks for allied Starfuries). The player's
   death uses the explosion and generic shards.
-- Mission framework, objectives, subtitles, menus, a controls menu (M4), jumpgate arrivals (M5/M7), music, voice.
+- Mission framework, objectives, subtitles, menus, a controls menu (M5), jumpgate arrivals (M6/M8), music, voice.
 - Damage decals or scorch marks on splats, smoke trails, camera shake, kill cam, scoring beyond a kill counter.
-- Splat LOD and relighting (M5 / M1.5).
+- Splat LOD and relighting (M6 / M1.5).
 
 ## Acceptance criteria
 
@@ -122,7 +122,7 @@ because some commands contain double quotes.
 - **Q5 Sound:** audible space, as in the show. Generated SFX are required in M2 (T12 no longer slips).
 - **Q6 Death:** respawn at the start after 3 s with a full hull, and **the wave keeps going**: surviving raiders
   stay and keep fighting. Tunables as proposed (6 / 50 hits).
-- **Q8 Raid entry:** in the M7 tutorial the raiders come **through the jumpgate**. Both carriers stay in M11.
+- **Q8 Raid entry:** in the M8 tutorial the raiders come **through the jumpgate**. Both carriers stay in M12.
 - **Q2, Q3, Q7, Q9:** proceed on the proposed defaults until the maintainer says otherwise.
 - **Fuel** (follow-up to Q4): the M1 decision "unlimited fuel for now" stands. M2 adds a reaction-mass tank so the
   fuel gauge is real, behind `settings.fuel_unlimited` (default true; the gauge then stays full) (M2-T14).
@@ -149,10 +149,10 @@ The plan proceeds on the proposed defaults unless you say otherwise; Q1 blocks T
 6. **Sandbox rules.** On death: respawn at the start after 3 s and restart the current wave (proposed)? Starting
    tunables: a raider dies to 6 Starfury hits, the player to 50 raider hits. Collision damage waits for M3. OK?
 7. **Targeting.** No free buttons on your pad, so `target_next` cycles hostiles first, then buoys (proposed). OK?
-8. **Carriers.** Both raider carriers go to M11 (they need large-asset LOD from M5 and capital-ship work). For the M7
+8. **Carriers.** Both raider carriers go to M12 (they need large-asset LOD from M6 and capital-ship work). For the M8
    tutorial, do the raiders come through the jumpgate (current roadmap) or launch from a Battle Wagon? If the latter,
    the Battle Wagon moves earlier and needs top, side and end views plus its scale.
-9. **Control profiles.** Console-only in M2 (a controls menu comes with M4). Should the original M1 layout ship as a
+9. **Control profiles.** Console-only in M2 (a controls menu comes with M5). Should the original M1 layout ship as a
    built-in `m1_classic` profile?
 
 Record the answers in `docs/design-references.md` (designs) or in this section (rules), so agents never rely on chat
@@ -160,22 +160,24 @@ history.
 
 ## Task breakdown (ordered)
 
-| Task | Title | Depends on | Agent |
-|---|---|---|---|
-| M2-T01 | Combat maths (pure) | M1 accepted | Sonnet |
-| M2-T02 | Multi-ship readiness | T01 | Sonnet |
-| M2-T03 | Hit detection and damage | T01, T02 | Opus |
-| M2-T04 | `raider_fighter` generator | Q1 answered; Python only, parallel with T01-T03 | Opus (Fable if available) |
-| M2-T05 | Raider ship and pool | T02, T03, T04 | Sonnet |
-| M2-T06 | Destruction | T03, T05 | Sonnet |
-| M2-T07 | AI seam and simple brains | T01, T02, T05 | Opus |
-| M2-T08 | HUD | T01, T02, T03 | Sonnet |
-| M2-T09 | Combat sandbox scenario and waves | T05, T06, T07 | Sonnet |
-| M2-T10 | Integration, smoke runs, capture set, play-test guide | T01-T09 | Opus |
-| M2-T11 | Control profiles | M1 input fix only; any time, in parallel | Sonnet |
-| M2-T12 | Generated sound (required: audible space, Q5) | T03, T06 | Sonnet |
-| M2-T14 | Reaction mass and weapon capacitor | M1 fixes; any time, before T08's gauges are final | Sonnet |
-| M2-T13 | (conditional) Raider look pass | AC15 rejected | Opus (Fable if available) |
+Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `not needed` (a conditional task whose trigger never arose). Update the column with each task's commit.
+
+| Task | Title | Depends on | Agent | Status |
+|---|---|---|---|---|
+| M2-T01 | Combat maths (pure) | M1 accepted | Sonnet | done |
+| M2-T02 | Multi-ship readiness | T01 | Sonnet | done |
+| M2-T03 | Hit detection and damage | T01, T02 | Opus | done |
+| M2-T04 | `raider_fighter` generator | Q1 answered; Python only, parallel with T01-T03 | Opus (Fable if available) | done |
+| M2-T05 | Raider ship and pool | T02, T03, T04 | Sonnet | done |
+| M2-T06 | Destruction | T03, T05 | Sonnet | done |
+| M2-T07 | AI seam and simple brains | T01, T02, T05 | Opus | done |
+| M2-T08 | HUD | T01, T02, T03 | Sonnet | done |
+| M2-T09 | Combat sandbox scenario and waves | T05, T06, T07 | Sonnet | done |
+| M2-T10 | Integration, smoke runs, capture set, play-test guide | T01-T09 | Opus | done |
+| M2-T11 | Control profiles | M1 input fix only; any time, in parallel | Sonnet | done |
+| M2-T12 | Generated sound (required: audible space, Q5) | T03, T06 | Sonnet | done |
+| M2-T14 | Reaction mass and weapon capacitor | M1 fixes; any time, before T08's gauges are final | Sonnet | done |
+| M2-T13 | (conditional) Raider look pass | AC15 rejected | Opus (Fable if available) | not needed |
 
 ### M2-T01 Combat maths (pure)
 
@@ -818,10 +820,10 @@ maintainer's eyes or ears on the real GPU.
 | 1 | X = auto-track onto the lead reticle (velocity untouched); R3 = all stop; L3 held + right stick = camera look (returns to centre on release); in the chase view L3 pans the camera around the ship | `FlightCommand.autotrack` / `track_dir_b`, `FlightModel` tracking branch, `CameraLook`, `CameraRig.set_look`, `ChaseCameraMath` look basis. Tests: `test_speed_and_autotrack`, `test_camera_look`, `test_input_adapter` |
 | 2 | Keyboard remap: left hand mains, retros, roll, brake, camera, auto-track; right hand the rest; mouse pitch/yaw, mouse 2 target, wheel cycles targets, middle button free look | `project.godot` input map, `InputAdapter` mouse/wheel, `GodotInputSource.add_mouse_motion`, mouse capture in `Main`; layout in `docs/playtest.md` |
 | 3 | Console noise | `OpArrayLength is not supported yet.` is Godot's SPIR-V translation of an unsized-array `length()` in a GDGS compute shader: harmless, upstream. `PlayerShip destroyed` was a leftover debug print, removed. The "ObjectDB instances leaked at exit" warning is a still-playing audio stream at shutdown (2-3 instances, also in a headless run); not fixed, cosmetic |
-| 4 | Tearing / flicker in the nebula and ship, blur: smaller splats | Splat sigma 1.4 to 1.0 x spacing, thickness 0.03 to 0.08 (`core/sampling.py`); GDGS depth sort key was a 16-bit `d/(1+d)` that ties everything past a few hundred metres (6 km steps at the sky), now logarithmic (`addons/gdgs/PATCHES.md` 3). `(H)` |
+| 4 | Tearing / flicker in the nebula and ship, blur: smaller splats | Splat sigma 1.4 to 1.0 x spacing, thickness 0.03 to 0.08 (`core/sampling.py`); GDGS depth sort key was a 16-bit `d/(1+d)` that ties everything past a few hundred metres (6 km steps at the sky), now logarithmic (`addons/gdgs_scs/PATCHES.md` 3). `(H)` |
 | 5 | Max speed 0.1 c replaced by: hard limit 9 999 m/s, assist's safe speed 5 000 m/s, thrust fading with speed | `SpeedGovernor`, `ShipSpec.speed_limit_mps` / `assist_speed_max_mps`, Jolt limit 10 000. Bolts 1 000 m/s relative to the ship |
 | 6 | Velocity readout with direction | Speed, then H / V angles of the travel direction against the nose, then range and closing speed to the reference point (the launch point for now; later the bay or the jump gate): `HudLayout.velocity_angles_deg`, `HudInput.reference_*` |
-| 7 | Gravity in the plan | It is: M5 (restricted n-body gravity with Kepler-rail bodies), M8 (gravity assists, Oberth), M10 (hyperspace incline). `docs/roadmap.md` now has a "Gravity" section spelling out what it must do to ships, bolts and debris, and what to revisit (the hard speed clamp) |
+| 7 | Gravity in the plan | It is: M6 (restricted n-body gravity with Kepler-rail bodies), M9 (gravity assists, Oberth), M11 (hyperspace incline). `docs/roadmap.md` now has a "Gravity" section spelling out what it must do to ships, bolts and debris, and what to revisit (the hard speed clamp) |
 | 8 | Engine sound too high; ramps up and down; same for the thrusters | `engine_loop` is now harmonics of 36 Hz below 180 Hz plus noise below 260 Hz, played at 0.8-1.25 x; the heard level spools at 1.2 / 0.8 per second; new `thruster_loop` ramps with RCS demand. `(H)` |
 | 9 | M1 AC12: the ship with splats off looks slightly smaller | The splats' fuzz stood proud of the mesh; the smaller sigma (4) brings the two together. `(H)` |
 | 10 | M1 AC16: bolts small in the chase view, Starfury bolts blue-white | Bolts are drawn `settings.chase_bolt_scale` (3) times larger in the chase view, true size in the cockpit; Starfury bolt and impact colour blue-white, raiders stay orange |

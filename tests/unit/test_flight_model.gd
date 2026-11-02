@@ -46,8 +46,8 @@ func test_ship_spec_resource_matches_the_section_5_1_defaults() -> void:
 	assert_eq(spec.mass, 48000.0)
 	assert_eq(spec.inertia, Vector3(6.0e5, 6.0e5, 5.0e5))
 	assert_eq(spec.pod_main_thrust, 3.6e5)
-	assert_eq(spec.pod_retro_thrust, 1.8e5)
-	assert_eq(spec.rcs_force_max, Vector3(4.8e5, 4.8e5, 0.0))
+	assert_eq(spec.pod_retro_thrust, 3.6e5, "reverse = forward (M3-T15)")
+	assert_eq(spec.rcs_force_max, Vector3(7.2e5, 7.2e5, 0.0), "half the forward thrust, sway and heave (M3-T15)")
 	assert_eq(spec.rcs_torque_max, Vector3(9.4e5, 9.4e5, 1.57e6))
 	assert_eq(spec.rate_max, Vector3(60.0, 60.0, 90.0))
 	assert_eq(spec.assist_gain_k, 6.0)
@@ -58,7 +58,8 @@ func test_ship_spec_resource_matches_the_section_5_1_defaults() -> void:
 	assert_eq(spec.exhaust_velocity, 30000.0)
 	for property: Dictionary in defaults.get_property_list():
 		var usage: int = property["usage"]
-		if (usage & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0 and property["name"] != "asset_id" and property["name"] != "weapon":
+		if (usage & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0 and property["name"] != "asset_id" and property["name"] != "weapon" \
+				and property["name"] != "splat_hero":  # the player's Starfury alone carries the hero level (M3-T24)
 			assert_eq(spec.get(property["name"]), defaults.get(property["name"]), "resource agrees with the code default for %s" % property["name"])
 	assert_eq(spec.hull_max, 300.0)
 	assert_eq(spec.engine_glow_color, Color(0.7, 0.9, 1.8, 1.0))

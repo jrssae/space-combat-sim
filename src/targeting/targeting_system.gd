@@ -5,14 +5,15 @@ extends RefCounted
 ## `target_next` / `target_ahead` edges; an AI pilot can drive one the same way.
 ##
 ## Rules:
-## - Only candidates within `sensor_range_m` (25 km) of the ship can be selected.
+## - Only candidates within reach can be selected: `sensor_range_m` (25 km) of the ship, or the candidate's own
+##   `broadcast_range_m` when that is farther (M3-T17: buoys 1 000 km, allies 100 km, `INF` everywhere).
 ## - `select_next`: candidates in range, hostile ones to `own_faction` first (`Factions.is_hostile`), then the rest,
 ##   each group sorted by range (ties by id); picks the one after the current selection, wrapping to the first; with
 ##   no selection, the first. With no hostile in range this is plain nearest-first, as in M1.
 ## - `select_prev`: the same order walked backwards.
 ## - `select_ahead`: the smallest angle between the ship's forward axis and the line of sight, forward hemisphere
 ##   only (< 90 deg); ties go to the nearer. If no candidate is ahead, the selection is unchanged.
-## - The selection clears when its target leaves the candidate list or sensor range (`update`).
+## - The selection clears when its target leaves the candidate list or its reach (`update`).
 ## - Readout: `range_m`, `closing_mps = -(v_t - v_s) . (p_t - p_s) / range` (positive = closing), `angle_off_deg`.
 ##
 ## Positions are `World`-local `Vector3`s (float32), but every difference is taken in 64-bit script floats, so the
@@ -35,15 +36,20 @@ var _selected_id: int = NO_TARGET
 
 
 ## Replaces the candidate list (call once per physics tick) and clears the selection if its target is gone or
-## beyond sensor range. Returns true when that cleared the selection.
+## beyond its reach. Returns true when that cleared the selection.
 func update(candidates: Array[TargetInfo], ship_pos: Vector3) -> bool:
 	_candidates = candidates.duplicate()
 	if _selected_id == NO_TARGET:
 		return false
 	var current: TargetInfo = _find(_selected_id)
-	if current == null or range_between(ship_pos, current.position) > sensor_range_m:
+	if current == null or range_between(ship_pos, current.position) > reach_m(current):
 		return clear()
 	return false
+
+
+## How far away `info` can be and still be selected: the sensor range, or its broadcast range when that is farther.
+func reach_m(info: TargetInfo) -> float:
+	return maxf(sensor_range_m, info.broadcast_range_m)
 
 
 ## Every candidate of the last `update`, in the order given, in range or not.
@@ -51,13 +57,13 @@ func all_candidates() -> Array[TargetInfo]:
 	return _candidates.duplicate()
 
 
-## The selectable candidates: within sensor range of `ship_pos`, nearest first (ties by id, so the order is stable).
+## The selectable candidates: within reach of `ship_pos` (`reach_m`), nearest first (ties by id, so the order is stable).
 func in_range(ship_pos: Vector3) -> Array[TargetInfo]:
 	var ranges: Dictionary = {}
 	var out: Array[TargetInfo] = []
 	for info: TargetInfo in _candidates:
 		var r: float = range_between(ship_pos, info.position)
-		if r <= sensor_range_m:
+		if r <= reach_m(info):
 			ranges[info.id] = r
 			out.append(info)
 	out.sort_custom(func(a: TargetInfo, b: TargetInfo) -> bool:
@@ -80,8 +86,7 @@ func selected() -> TargetInfo:
 	return _find(_selected_id) if has_selection() else null
 
 
-## The order `select_next` walks: hostile targets first, then the others, each nearest first (stable: the in-range
-## order is already nearest first, ties by id).
+## The order `select_next` walks: hostile targets first, then the others, each nearest first.
 func cycle_order(ship_pos: Vector3) -> Array[TargetInfo]:
 	var hostile: Array[TargetInfo] = []
 	var others: Array[TargetInfo] = []
@@ -103,7 +108,7 @@ func select_next(ship_pos: Vector3) -> bool:
 		if ordered[i].id == _selected_id:
 			index = i
 			break
-	# index -1 (no selection, or it is not selectable) gives 0: the first. The last one wraps to the first.
+	# No selection (index -1) gives the first; the last wraps to the first.
 	return _select(ordered[(index + 1) % ordered.size()].id)
 
 
@@ -118,7 +123,7 @@ func select_prev(ship_pos: Vector3) -> bool:
 		if ordered[i].id == _selected_id:
 			index = i
 			break
-	# Not selected (index stays 0) wraps to the last; otherwise one step back, the first wraps to the last.
+	# No selection wraps to the last; the first wraps to the last.
 	return _select(ordered[(index - 1 + ordered.size()) % ordered.size()].id)
 
 
@@ -135,7 +140,7 @@ func select_ahead(ship_pos: Vector3, forward: Vector3) -> bool:
 		if r == 0.0:
 			continue  # no line of sight to a target at the ship's own position
 		var d: PackedFloat64Array = _offset64(ship_pos, info.position)
-		# Forward hemisphere: a positive dot product, tested exactly rather than through a rounded 90 degrees.
+		# Forward hemisphere, tested exactly rather than through a rounded 90 degrees.
 		if forward.x * d[0] + forward.y * d[1] + forward.z * d[2] <= 0.0:
 			continue
 		var angle: float = angle_between(forward, d)
@@ -151,7 +156,7 @@ func select_ahead(ship_pos: Vector3, forward: Vector3) -> bool:
 	return _select(best.id)
 
 
-## Selects a candidate by id if it is in sensor range. Returns true if the selection changed.
+## Selects a candidate by id if it is within reach. Returns true if the selection changed.
 func select_id(target_id: int, ship_pos: Vector3) -> bool:
 	for info: TargetInfo in in_range(ship_pos):
 		if info.id == target_id:
@@ -159,7 +164,7 @@ func select_id(target_id: int, ship_pos: Vector3) -> bool:
 	return false
 
 
-## The in-range candidate whose display name matches `display_name` (case-insensitive), nearest first; or null.
+## The candidate within reach whose display name matches `display_name` (case-insensitive), nearest first; or null.
 func find_by_name(display_name: String, ship_pos: Vector3) -> TargetInfo:
 	var wanted: String = display_name.strip_edges().to_lower()
 	for info: TargetInfo in in_range(ship_pos):

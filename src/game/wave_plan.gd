@@ -1,15 +1,18 @@
 class_name WavePlan
 extends RefCounted
-## The wave sandbox's state machine (architecture §15.10), pure: time and the number of raiders alive come in as arguments
-## (a fake clock in tests, `WaveDirector` in the game); spawn requests come out. Nothing here touches the scene tree.
+## The wave sandbox's state machine (architecture §15.10), pure: time and the number of raiders alive come in as arguments,
+## spawn requests come out. Nothing here touches the scene tree.
 ##
-## Per wave: `COUNTDOWN` (the wave's `delay_s`) -> `ACTIVE` (its spawns are issued at their `at_s` offsets; once all are issued
-## and none is alive) -> `CLEARED` (`CLEARED_PAUSE_S`) -> the next wave's `COUNTDOWN`. After the last scripted wave the plan
-## loops from wave `loop.from_wave` (1-based) over the waves from there to the end. The n-th time round a looped wave gets
-## `n * loop.add_per_loop` more attackers (copies of its last spawn, 2 s apart), up to `max_spawns` (the pool size).
+## Per wave: `COUNTDOWN` (`delay_s`) -> `ACTIVE` (spawns issued at their `at_s`; done once all are issued and none alive) ->
+## `CLEARED` (`CLEARED_PAUSE_S`) -> the next wave's `COUNTDOWN`. After the last scripted wave the plan loops from wave
+## `loop.from_wave` (1-based). The n-th time round, a looped wave gets `n * loop.add_per_loop` more attackers (copies of
+## its last spawn, 2 s apart), up to `max_spawns` (the pool size).
 ##
-## `wave_number` counts waves played, from 1, and keeps counting through the loops; `wave_index(number)` is the scripted
-## wave it plays.
+## Temperament (M3-T13): a wave may carry a `skill` and an `aggression` range (Vector2 low, high; (-1, -1) for none).
+## `skill_range(number)` raises the range by `skill_step` each loop, capped at an ace's 0.95, so the floor climbs until every
+## raider is an ace. `aggression_range` stays as scripted. `WaveDirector` rolls each AI raider's values inside them.
+##
+## `wave_number` counts waves played from 1 through the loops; `wave_index(number)` is the scripted wave it plays.
 
 enum State { IDLE, COUNTDOWN, ACTIVE, CLEARED }
 
@@ -25,6 +28,8 @@ var waves: Array[Dictionary] = []
 var loop_from: int = 0
 var loop_add: int = 1
 var max_spawns: int = 6
+## Added to a looped wave's skill range per pass (M3-T13).
+var skill_step: float = 0.0
 
 var state: State = State.IDLE
 ## The wave in its countdown, running or cleared (1-based); 0 before `start`.
@@ -91,6 +96,27 @@ func loops_done(number: int) -> int:
 	return (number - 1 - (loop_from - 1)) / (count - (loop_from - 1))
 
 
+## The skill range of wave `number` (see the class notes), or (-1, -1) when its wave sets none.
+func skill_range(number: int) -> Vector2:
+	var r: Vector2 = _range(number, "skill")
+	if r.x < 0.0:
+		return r
+	var lift: float = skill_step * float(loops_done(number))
+	var top: float = AiTemperament.SKILL_RANKS[&"ace"]
+	return Vector2(minf(r.x + lift, top), minf(r.y + lift, top))
+
+
+## The aggression range of wave `number`, or (-1, -1).
+func aggression_range(number: int) -> Vector2:
+	return _range(number, "aggression")
+
+
+func _range(number: int, key: String) -> Vector2:
+	if waves.is_empty() or number < 1:
+		return Vector2(-1.0, -1.0)
+	return waves[wave_index(number)].get(key, Vector2(-1.0, -1.0))
+
+
 ## The spawns of wave `number`, sorted by `at_s`, with the loop's extra attackers added.
 func spawns_for(number: int) -> Array[Dictionary]:
 	var base: Array[Dictionary] = []
@@ -148,8 +174,7 @@ func update(dt: float, alive: int) -> Array[Dictionary]:
 				request["wave_number"] = wave_number
 				due.append(request)
 				_issued += 1
-			# Cleared when everything has been issued and nothing is left: judged on a later tick than the last issue, so the
-			# caller has had a chance to put the new ships in `alive`.
+			# Cleared judged on a later tick than the last issue, so the caller has put the new ships in `alive`.
 			if due.is_empty() and _issued >= _spawn_list.size() and alive <= 0:
 				state = State.CLEARED
 				_time_s = 0.0

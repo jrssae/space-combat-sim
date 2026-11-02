@@ -89,6 +89,27 @@ hardpoints, never hard-coded.
 
 ## Task breakdown (ordered)
 
+Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `not needed` (a conditional task whose trigger never arose). Update the column with each task's commit.
+
+| Task | Title | Status |
+|---|---|---|
+| M1-T01 | Bootstrap: Godot install, vendored addons, project skeleton | done |
+| M1-T02 | procgen framework and `sky_default` | done |
+| M1-T03 | CI workflow | done |
+| M1-T04 | `starfury_aurora` generator | done |
+| M1-T05 | Godot asset import tests | done |
+| M1-T06 | Input layer | done |
+| M1-T07 | Debug console | done |
+| M1-T08 | Flight model and assist (pure) | done |
+| M1-T09 | World frame and universe coordinates | done |
+| M1-T10 | Ship scene | done |
+| M1-T11 | Space environment | done |
+| M1-T12 | Camera rig | done |
+| M1-T13 | Thruster visuals and weapons | done |
+| M1-T14 | Nav buoys and targeting | done |
+| M1-T15 | Main scene, overlay, glue, human acceptance | done |
+| M1-T16 | (conditional) Splat fallback activation and triage | not needed |
+
 ### M1-T01 Bootstrap: Godot install, vendored addons, project skeleton
 
 - Goal: a `project.godot` that imports cleanly headless with GDGS and GUT enabled.

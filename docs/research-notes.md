@@ -28,13 +28,16 @@ bumping versions. "Container" means the Claude cloud Linux container used for im
 | `4321ba/GodotGaussianSplattingNodes` | thesis WIP built on GDGS layout | - | Not production |
 | `klausi3D/godotGS` | engine fork, alpha | - | Requires a custom engine build |
 
+Since 2026-11-01 the project runs its own fork of GDGS, `addons/gdgs_scs/` (`docs/third-party.md`).
+
 GDGS behaviours that shape our pipeline (read from the v3.3.0 source):
 
 - `GaussianSplatNode._enter_tree()` applies a one-time **180 deg rotation about Z** when the node's basis is identity (`get_model_orientation_correction()`), to turn COLMAP-style Y-down data into Y-up. Our generators therefore write PLY data pre-rotated by Rz(180 deg) (negate x and y) so the node can stay at identity.
 - `GaussianResourceBuilder.build()` **unconditionally subtracts the mean position** from all splats (`_get_import_options()` returns `[]`). Our generators re-centre every output (splats, fallback mesh, hardpoints) on the splat centroid so this is a no-op.
 - `standard_ply_decoder.gd` reads properties with defaults, so `f_rest_*` may be omitted (SH degree 0 files import). `opacity` is passed through sigmoid and `scale_*` through `exp`, i.e. the standard 3DGS PLY encoding (store logit opacity and log scale).
 - `GaussianResource` exposes `point_count`, `aabb`, `xyz` -> usable for headless assertions.
-- Node `@export`s: `gaussian: GaussianResource`, relighting group (`lighting`, `relight_enabled`, `relight_cast_shadows`, ...). Relighting needs a lighting proxy baked in the editor; not used in M1.
+- Node `@export`s: `gaussian: GaussianResource`, relighting group (`lighting`, `relight_enabled`, `relight_cast_shadows`, ...). Used since M3-T21 (`docs/architecture.md` §7.3), without GDGS's editor bake: procgen writes the 4-byte records itself and `SplatLightingLoader` wraps them.
+- Relighting as read in the code (GDGS 3.3.0): the factor is computed once per splat in the projection pass (`relight_factor()` in `gsplat_projection.glsl`, the same maths in `gaussian_raster.gdshader`) and multiplies the SH colour **before** the composite's `srgb_to_linear`, so it acts on PLY colours as the old baked rig did. The rig (`gaussian_light_rig.gd`) rescans the tree every 30 frames, re-reads the lights it holds every frame, skips invisible or zero-energy lights and stops its walk after 20 000 nodes. `_set_lighting` on a node in the tree marks the scene's resources dirty (a full re-merge), and `relight_cast_shadows` defaults to true. The importer keeps PLY order, so a `.light` file lines up with its PLY; `test_relight` checks each record's normal against the thin axis of the covariance GDGS imported.
 - Project setting `gdgs/rendering/backend` = `Auto` | `Compute` | `Raster`, read at startup, falls back to the other backend on init failure.
 
 ## Splat asset production
@@ -53,6 +56,17 @@ GDGS behaviours that shape our pipeline (read from the v3.3.0 source):
 |---|---|---|---|
 | **GUT** `bitwes/Gut` | **v9.7.1** (branch `godot_4_7`, targets Godot 4.7.x) | MIT | `godot --headless -s addons/gut/gut_cmdln.gd -gdir=res://tests -ginclude_subdirs -gexit -gjunit_xml_file=reports/gut.xml`; exits 1 on failure. Options verified in `addons/gut/cli/gut_cli.gd` |
 | gdUnit4 `godot-gdunit-labs/gdUnit4` | v6.2.2 (2026-10-07) | MIT | `gdUnit4-action@v1`; has had headless input-handling caveats (historically needed xvfb) |
+
+## The maintainer's machine (local sessions, 2026-11-01)
+
+- Bazzite (Fedora Atomic), Wayland, AMD Radeon RX 6950 XT on RADV (Mesa); Vulkan 1.4. `/dev/dri/renderD128` is open to the
+  session, so Claude Code running there reaches the GPU directly, no extra permissions needed.
+- Verified: `.tools/godot/godot --path . --resolution 960x540 -- --console-exec="wait 180; state render; screenshot /tmp/x.png;
+  quit"` draws on the GPU (`Vulkan 1.4.354 - Forward+ - Using Device #0: AMD Radeon RX 6950 XT (RADV NAVI21)`), GDGS picks its
+  **Compute** backend, 59 fps in the sandbox at 960x540. The window opens on the desktop for the length of the run.
+- VRAM in use: `/sys/class/drm/card1/device/mem_info_vram_used` (bytes); total in `mem_info_vram_total`.
+- Headless runs (`--headless`) still have no GDGS backend and a 64 x 64 px viewport; tests that need screen sizes set the
+  root window size themselves.
 
 ## Container findings (implementation sessions)
 
@@ -103,3 +117,18 @@ GDGS behaviours that shape our pipeline (read from the v3.3.0 source):
 - llvmpipe runs compute with 8-wide subgroups. GDGS's radix sort needs 32+, so the Compute backend declines
   (local patch) and GDGS renders through its Raster backend: good for geometry, layout, cockpit framing and
   compositing; Compute-only artifacts still need the human tester's GPU.
+
+## Shaders that use Godot's built-in includes (verified 2026-11-01, Godot 4.7.2, M3-T25)
+
+- A compute `.glsl` that does `#include "godot/scene_data_inc.glsl"` (the scene data UBO, as the lens flare add-on's and our motion
+  blur's do) imports to an empty `RDShaderFile` under `godot --headless --path . --import`: the `godot/...` includes are only
+  registered once a real renderer is up (`base_error` = "#include failed for file 'godot/scene_data_inc.glsl'", no versions). A
+  non-headless `--import` compiles it. The import cache is not rebuilt unless the source changes, so a headless import leaves the
+  broken one in `.godot/imported/`. We compile such shaders when the game starts instead (`RuntimeShader`); compiling at run time finds the includes.
+- Forward+ velocity buffer (`needs_motion_vectors`): a render-thread RG16F texture, `prev_uv - current_uv` per pixel (uv units), written
+  by meshes (the hull depth proxies); it stays zero for the sky and for splats. Disabled compositor effects do not request it
+  (`compositor_get_compositor_effects(..., true)` returns enabled ones only).
+- The colour buffer lacks `TEXTURE_USAGE_CAN_COPY_FROM_BIT`, so `texture_copy` out of it fails; an effect that needs the frame as it was
+  samples it and writes to its own scratch image.
+- `RenderSceneBuffersRD.create_texture` takes 10 arguments in 4.7 (a trailing `discardable`).
+- A `CompositorEffect` script cannot call its own methods from `NOTIFICATION_PREDELETE` ("null instance"); free RIDs inline.

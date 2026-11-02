@@ -21,6 +21,11 @@ func get_text() -> String:
 	return _label.text
 
 
+## Where the readout's text ends on screen, pixels: what the HUD keeps its top-left instruments clear of.
+func text_bottom_px() -> float:
+	return _label.position.y + _label.get_minimum_size().y
+
+
 func show_bracket(screen_pos: Vector2) -> void:
 	_bracket.show_at(screen_pos)
 

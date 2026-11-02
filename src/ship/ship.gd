@@ -11,20 +11,25 @@ extends RigidBody3D
 ## so a command that is not refreshed never repeats them.
 ##
 ## Built from data in `_ready` (or again on a later `setup`): mass and inertia from the `ShipSpec`; centre of mass,
-## collision primitives, gun muzzles and the cockpit eye point from the ship's `hardpoints.json`; the hull splats and
-## meshes from `assets/generated/<asset_id>/`, loaded guarded so the scene loads (with warnings) before
-## `scripts/gen_assets.sh` has run. Without hardpoints the ship cannot fly and only coasts.
+## collision primitives, gun muzzles and the cockpit eye point from the ship's `hardpoints.json`; the hull splats (at the spec's
+## `splat_lod`, §16 D35), their lighting records (§7.3) and meshes from `assets/generated/<asset_id>/`, loaded guarded so the scene
+## loads (with warnings) before `scripts/gen_assets.sh` has run. Without hardpoints the ship cannot fly and only coasts.
 ##
 ## Children: `HullSplats` (GaussianSplatNode, identity in the scene: GDGS applies its own Rz(180°) on entering the
 ## tree, §9.1; `HullSplatSync` draws it at the interpolated pose), `HullMeshFallback` (shown when `SplatStatus` finds
 ## no splat backend, or forced), `HullDepthProxy` (the fallback mesh inset by a few centimetres, opaque black, shown
 ## exactly when the splats are: it writes the depth splats do not, so effects behind the hull are hidden, §7.2), `CockpitInterior`
 ## (first person only), `Thrusters` and `Guns` (attach points for M1-T13; `Guns` holds one Marker3D per muzzle),
-## `Targeting` (`TargetingController`), `CockpitAnchor` (Marker3D at the hardpoints' `cockpit_camera`).
+## `Targeting` (`TargetingController`), `CockpitAnchor` (Marker3D at the hardpoints' `cockpit_camera`), `RunningLights` (M3-T27), and on the
+## player's ship `CockpitScreens` (M3-T29).
 ##
 ## Reaction mass (M2-T14): every tick the flow the model reports is drawn from a `FuelTank` (sized by
 ## `ShipSpec.fuel_capacity_kg`, never drawn down while `settings.fuel_unlimited` is on), and when the tank is empty the
 ## model is told to cut all thrust.
+##
+## Contacts (M3-T04): Jolt reports up to `CONTACTS_REPORTED` contact points (`contact_monitor` on), and the ship keeps the
+## World-frame sum of the forces it applied on its last tick (`applied_force`), so the `RamResolver` can tell the velocity
+## change a collision caused from what the ship's own thrust did.
 ##
 ## Rebase-safe: nothing here caches a World position between ticks. Console (§6.4, §15.1 D27): only the player's ship
 ## registers (`console_owner`, set before the ship enters the tree, `ShipAssembly` does it): provider `ship` and commands
@@ -33,12 +38,16 @@ extends RigidBody3D
 
 ## Assist was switched on or off (by `set_assist`, the console, or a `toggle_assist` edge).
 signal assist_toggled(on: bool)
+## The running lights went on or off (M3-T27).
+signal running_lights_changed(on: bool)
 
 const SCENE_PATH: String = "res://src/ship/ship.tscn"
-const ASSET_ROOT: String = "res://assets/generated"
+const ASSET_ROOT: String = ShipSpec.ASSET_ROOT
 const COCKPIT_MESH_FILE: String = "cockpit_interior.obj"
 ## Used when the hardpoints are missing (the chase camera still needs somewhere to sit); matches §8.
 const DEFAULT_CHASE_OFFSET: Vector3 = Vector3(0.0, 2.5, 9.0)
+## Contact points Jolt reports per tick: a few, enough for two or three bodies touching at once (`RamResolver`).
+const CONTACTS_REPORTED: int = 8
 
 ## True for the ship the player flies: it registers the console providers and commands (set before the ship enters the
 ## tree). Every other ship leaves the console alone.
@@ -63,14 +72,19 @@ var force_assist: bool = false:
 		if value:
 			set_assist(true)
 
+## Running lights (M3-T27, architecture §7.3): the three markers and the top lamp, on at spawn. The cabin glow stays on either way.
+## Visual only: radar and AI contact lists never read it.
+var running_lights: bool = true:
+	set = set_running_lights
+
 var _assist_on: bool = true
 var _hardpoints: Hardpoints = Hardpoints.new()
 var _layout: ThrusterLayout = ThrusterLayout.new()
 ## Share of the gap to this tick's measured turn rate of the lead direction that the smoothed rate closes each tick.
 const TRACK_RATE_SMOOTHING: float = 0.35
 
-## The cabin lamp: a short-range light that comes on with the cockpit view and lights the frame (the hull's splats take no light).
-var _cabin_light: OmniLight3D = null
+## The cabin lamp: a short-range emitter that competes for a light slot while the cockpit view is on, and lights the frame.
+var _cabin_emitter: LightEmitter = null
 var _track_prev_dir: Vector3 = Vector3.ZERO
 var _track_rate_w: Vector3 = Vector3.ZERO
 var _model: FlightModel = null
@@ -79,11 +93,21 @@ var _fuel: FuelTank = FuelTank.new()
 var _flight: FlightCommand = FlightCommand.new()
 var _flight_fresh: bool = false
 var _combat: CombatCommand = CombatCommand.new()
+static var _warned_no_screens: bool = false
 var _combat_fresh: bool = false
 var _fallback_active: bool = false
 var _interior_visible: bool = false
+# Levels of detail (M3-T19): the splat node per level, the levels in order (`HullSplats` is `spec.splat_lod`; the player's hero
+# level, -1, comes before it, M3-T24), and the one drawn.
+var _lod_nodes: Array[GaussianSplatNode] = []
+var _lod_levels: PackedInt32Array = PackedInt32Array()
+var _lod_level: int = 0
+# The hull's finest level as `SplatLod.resolve` gave it, and the spec it was resolved for.
+var _hull_lod: Dictionary = {}
+var _hull_lod_spec: ShipSpec = null
 var _muzzles: Array[Node3D] = []
 var _collision_nodes: Array[CollisionShape3D] = []
+var _applied_force: Vector3 = Vector3.ZERO
 
 @onready var hull_splats: GaussianSplatNode = $HullSplats
 @onready var hull_mesh_fallback: MeshInstance3D = $HullMeshFallback
@@ -93,6 +117,8 @@ var _collision_nodes: Array[CollisionShape3D] = []
 @onready var guns: Node3D = $Guns
 @onready var targeting: TargetingController = $Targeting
 @onready var cockpit_anchor: Marker3D = $CockpitAnchor
+## The console's screens (M3-T29): the player's ship only, built once; null on every other ship.
+var cockpit_screens: CockpitScreens = null
 
 
 ## A ship ready for `World.spawn()`: `world.spawn(Ship.create(spec, world), start_pos, start_basis)`.
@@ -114,11 +140,21 @@ func _init() -> void:
 	_assist_on = bool(Settings.get_value(&"assist_default"))
 
 
+# The child's splats and lighting records go on here, before it enters the tree: assigned later, each makes GDGS re-merge every
+# splat in the scene, once per ship.
+func _enter_tree() -> void:
+	_assign_hull_splats(get_node_or_null(^"HullSplats") as GaussianSplatNode)
+
+
 func _ready() -> void:
 	_apply_newtonian_body()
 	targeting.setup(self, console_owner)
 	_build()
-	_build_cabin_light()
+	_build_cabin_emitter()
+	if get_node_or_null(^"LodSwitcher") == null:
+		var switcher := LodSwitcher.new()
+		switcher.name = "LodSwitcher"
+		add_child(switcher)
 	Settings.changed.connect(_on_hull_setting_changed)
 	_apply_hull_sync_setting()
 	use_fallback_mesh(_fallback_active or SplatStatus.needs_fallback(SplatStatus.active_backend()))
@@ -127,8 +163,17 @@ func _ready() -> void:
 		_register_console()
 
 
+func _notification(what: int) -> void:
+	# The cabin lamp leaves play with the ship and comes back with it, like the plumes and flashes.
+	if what == NOTIFICATION_DISABLED or what == NOTIFICATION_ENABLED:
+		_apply_cabin_emitter()
+
+
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+	var rig: SplatLightRig = SplatLightRig.of(self)
+	if rig != null and _cabin_emitter != null:
+		rig.remove_emitter(_cabin_emitter)
 	if Settings.changed.is_connected(_on_hull_setting_changed):
 		Settings.changed.disconnect(_on_hull_setting_changed)
 
@@ -149,6 +194,7 @@ func _physics_process(delta: float) -> void:
 	var combat_fresh: bool = _take_combat_edges()
 
 	var env_accel: Vector3 = _environment_accel()
+	_applied_force = mass * env_accel
 	if _model != null:
 		var b: Basis = global_basis
 		var to_body: Basis = b.transposed()
@@ -161,14 +207,19 @@ func _physics_process(delta: float) -> void:
 		# Inertia grows with speed: the same thrust gives less acceleration the faster the ship goes (SpeedGovernor).
 		var gain: float = SpeedGovernor.thrust_gain(linear_velocity.length(), spec.speed_limit_mps)
 		for nozzle: Dictionary in _output.nozzle_forces:
-			var force: Vector3 = nozzle["force"]
+			var force: Vector3 = b * (nozzle["force"] as Vector3) * gain
 			var at: Vector3 = nozzle["position"]
-			apply_force(b * force * gain, b * at)  # offset from the body origin, world orientation
-		apply_central_force(b * _output.rcs_force_b * gain)
+			apply_force(force, b * at)  # offset from the body origin, world orientation
+			_applied_force += force
+		var rcs_force: Vector3 = b * _output.rcs_force_b * gain
+		apply_central_force(rcs_force)
+		_applied_force += rcs_force
 		apply_torque(b * _output.rcs_torque_b)
 		if _assist_on:
 			var net: Vector3 = b * (_output.pod_force_b + _output.rcs_force_b) * gain
-			apply_central_force(SpeedGovernor.assist_cap_correction(net, linear_velocity, spec.assist_speed_max_mps))
+			var cap: Vector3 = SpeedGovernor.assist_cap_correction(net, linear_velocity, spec.assist_speed_max_mps)
+			apply_central_force(cap)
+			_applied_force += cap
 	apply_central_force(mass * env_accel)
 	# Hard ceiling: nothing takes the ship past the speed limit.
 	if spec != null and spec.speed_limit_mps > 0.0 and linear_velocity.length() > spec.speed_limit_mps:
@@ -227,6 +278,17 @@ func reset_to(xform: Transform3D) -> void:
 	reset_physics_interpolation()
 
 
+## Switches the running lights.
+func set_running_lights(on: bool) -> void:
+	if on == running_lights:
+		return
+	running_lights = on
+	var lights := get_node_or_null(^"RunningLights") as RunningLights
+	if lights != null:
+		lights.apply()
+	running_lights_changed.emit(on)
+
+
 # --- state -------------------------------------------------------------------------------------------------------
 
 
@@ -243,6 +305,13 @@ func body_velocity() -> Vector3:
 ## Angular velocity in body axes, rad/s: +X pitches the nose up, +Y yaws it left, +Z rolls left.
 func body_angular_velocity() -> Vector3:
 	return global_basis.transposed() * angular_velocity
+
+
+## World-frame sum of the forces the ship applied on its last physics tick (nozzles, RCS, the assist's speed cap and the
+## environment), N. Jolt adds `applied_force() / mass * delta` to the velocity in the coming step; anything beyond that
+## came from a contact.
+func applied_force() -> Vector3:
+	return _applied_force
 
 
 ## The reaction-mass tank, with `unlimited` brought in line with `settings.fuel_unlimited` as of now. Never null.
@@ -282,8 +351,9 @@ func set_cockpit_interior_visible(shown: bool) -> void:
 	if is_node_ready():
 		cockpit_interior.visible = shown
 		_apply_hull_visuals()
-		if _cabin_light != null:
-			_cabin_light.visible = shown
+		_apply_cabin_emitter()
+		if cockpit_screens != null:
+			cockpit_screens.set_shown(shown)
 
 
 func is_cockpit_interior_visible() -> bool:
@@ -308,11 +378,71 @@ func _apply_hull_visuals() -> void:
 	hull_mesh_fallback.visible = mesh_mode
 	_apply_canopy_glass()
 	hull_depth_proxy.visible = (_interior_visible or not _fallback_active) and bool(Settings.get_value(&"hull_depth_proxy"))
-	hull_splats.visible = not mesh_mode
+	for i: int in _lod_nodes.size():
+		_lod_nodes[i].visible = not mesh_mode and _lod_levels[i] == _lod_level
+	var sync := get_node_or_null(^"HullSplatSync") as SplatPoseSync
+	if sync != null:
+		sync.sync()  # a level just shown is placed at once
 
 
 func is_fallback_mesh_active() -> bool:
 	return _fallback_active
+
+
+## The splat levels this ship can draw, finest first (M3-T19).
+func lod_levels() -> PackedInt32Array:
+	return _lod_levels
+
+
+func lod_level() -> int:
+	return _lod_level
+
+
+## Draws `level` (one of `lod_levels()`, the nearest one otherwise), by visibility only.
+func set_lod_level(level: int) -> void:
+	if _lod_levels.is_empty():
+		return
+	var pick: int = _lod_levels[0]
+	for l: int in _lod_levels:
+		if l <= level:
+			pick = l
+	if pick == _lod_level:
+		return
+	_lod_level = pick
+	_apply_hull_visuals()
+
+
+## Splats in the level drawn now (0 while the mesh is drawn instead).
+func visible_splat_count() -> int:
+	for i: int in _lod_nodes.size():
+		if _lod_nodes[i].visible and _lod_nodes[i].gaussian != null:
+			return _lod_nodes[i].gaussian.point_count
+	return 0
+
+
+## Splats in each of `lod_levels()`, same order (M3-T20).
+func lod_splat_counts() -> PackedInt32Array:
+	var out := PackedInt32Array()
+	for node: GaussianSplatNode in _lod_nodes:
+		out.append(node.gaussian.point_count if node.gaussian != null else 0)
+	return out
+
+
+## The splat node of every level of detail: each carries the same own lights (M3-T27).
+func splat_nodes() -> Array[GaussianSplatNode]:
+	return _lod_nodes
+
+
+## The radius of a sphere that holds the hull, m (its hit volumes' bound, 10 m before the hull is built).
+func bounding_radius() -> float:
+	var damageable: Damageable = Damageable.of(self)
+	return damageable.bounding_radius if damageable != null and damageable.bounding_radius > 0.0 else 10.0
+
+
+## The name other ships read on this one's targeting marker.
+func display_name() -> String:
+	var marker := get_node_or_null(^"Targetable") as Targetable
+	return marker.display_name if marker != null else String(name)
 
 
 # --- build -------------------------------------------------------------------------------------------------------
@@ -320,6 +450,7 @@ func is_fallback_mesh_active() -> bool:
 
 # §5.4: no gravity, no damping on the body *and* REPLACE so the project defaults are not combined in, never asleep
 # (a coasting ship must keep coasting), no CCD. Set here as well as in the scene so an edited scene cannot break it.
+# Contacts are reported for the ram damage (M3-T04).
 func _apply_newtonian_body() -> void:
 	gravity_scale = 0.0
 	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
@@ -328,6 +459,8 @@ func _apply_newtonian_body() -> void:
 	angular_damp = 0.0
 	can_sleep = false
 	continuous_cd = false
+	contact_monitor = true
+	max_contacts_reported = CONTACTS_REPORTED
 
 
 func _build() -> void:
@@ -356,10 +489,12 @@ func _build() -> void:
 		center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 		center_of_mass = _hardpoints.center_of_mass
 		cockpit_anchor.transform = _hardpoints.cockpit_camera
-		_place_cabin_light()
+		_place_cabin_emitter()
 		_build_collision()
 		_build_muzzles()
 	_load_visuals()
+	_build_running_lights()
+	_build_cockpit_screens()
 	_output = _idle_output()
 
 
@@ -394,15 +529,37 @@ func _build_muzzles() -> void:
 		_muzzles.append(marker)
 
 
+# On the ship the player flies, when its hardpoints have a console: a rebuild only places what exists.
+func _build_cockpit_screens() -> void:
+	if not console_owner or cockpit_interior.mesh == null:
+		return
+	if _hardpoints.screens.is_empty():
+		if _hardpoints.valid and not _warned_no_screens:
+			_warned_no_screens = true  # stale generated assets would otherwise just look like the old 2D HUD
+			push_warning("Ship: %s lists no screens (run scripts/gen_assets.sh)" % spec.asset_id)
+		return
+	if cockpit_screens == null:
+		cockpit_screens = CockpitScreens.new()
+		cockpit_screens.name = "CockpitScreens"
+		add_child(cockpit_screens)
+	cockpit_screens.setup(_hardpoints.screens, cockpit_interior)
+	cockpit_screens.set_shown(_interior_visible)
+
+
+# One node with three markers per ship, built once: a rebuild only places them again.
+func _build_running_lights() -> void:
+	var lights := get_node_or_null(^"RunningLights") as RunningLights
+	if lights == null:
+		lights = RunningLights.new()
+		lights.name = "RunningLights"
+		add_child(lights)
+	lights.setup(self)
+
+
 func _load_visuals() -> void:
 	var dir: String = asset_dir(spec)
-	var splat_path: String = dir.path_join(spec.asset_id + ".ply")
-	var gaussian: GaussianResource = null
-	if ResourceLoader.exists(splat_path):
-		gaussian = load(splat_path) as GaussianResource
-	if gaussian == null:
-		push_warning("Ship: %s is missing or not imported (run scripts/gen_assets.sh, then import); no hull splats" % splat_path)
-	hull_splats.gaussian = gaussian
+	_assign_hull_splats(hull_splats)
+	_load_far_levels(_hull_lod)
 	hull_mesh_fallback.mesh = _load_mesh(dir.path_join(spec.asset_id + ".obj"))
 	hull_depth_proxy.mesh = hull_mesh_fallback.mesh  # whatever is loaded, so a regenerated hull needs no changes here
 	cockpit_interior.mesh = _load_mesh(dir.path_join(COCKPIT_MESH_FILE)) if spec.has_cockpit_interior else null
@@ -410,7 +567,78 @@ func _load_visuals() -> void:
 	MeshMaterials.matte(cockpit_interior.mesh)
 	_make_double_sided(hull_mesh_fallback.mesh)
 	_make_double_sided(cockpit_interior.mesh)
-	_lift_shadows(cockpit_interior.mesh)
+	MeshMaterials.cockpit(cockpit_interior.mesh)
+
+
+# The spec's finest level and its lighting records on `node`, once per spec.
+func _assign_hull_splats(node: GaussianSplatNode) -> void:
+	if node == null or spec == null or _hull_lod_spec == spec:
+		return
+	_hull_lod_spec = spec
+	_hull_lod = SplatLod.resolve(spec.asset_id, spec.splat_lod)
+	var splat_path: String = _hull_lod["path"]
+	if not String(_hull_lod["warning"]).is_empty():
+		push_warning("Ship: %s" % _hull_lod["warning"])  # one message per problem: a manifest that cannot be read draws nothing, below
+	var gaussian: GaussianResource = null
+	if not splat_path.is_empty() and ResourceLoader.exists(splat_path):
+		gaussian = load(splat_path) as GaussianResource
+	if gaussian == null and not splat_path.is_empty():
+		push_warning("Ship: %s is missing or not imported (run scripts/gen_assets.sh, then import); no hull splats" % splat_path)
+	node.gaussian = gaussian
+	SplatLightingLoader.attach(node, SplatLod.lighting_path(spec.asset_id, int(_hull_lod["level"])) if gaussian != null else "")
+
+
+# One splat node per coarser level the asset has (M3-T19), built once: the switcher shows one at a time, so GDGS never
+# rebuilds its buffers while the ship flies. A new node gets its splats and lighting records before it enters the tree.
+func _load_far_levels(base: Dictionary) -> void:
+	_lod_nodes = [hull_splats]
+	_lod_levels = PackedInt32Array([maxi(int(base["level"]), 0)])
+	var manifest: Dictionary = SplatLod.read_manifest(spec.asset_id)
+	for level: int in range(_lod_levels[0] + 1, LodSwitcherMath.COARSEST + 1):
+		var path: String = SplatLod.file_path_in(manifest, spec.asset_id, level)
+		if path.is_empty() or not ResourceLoader.exists(path):
+			continue
+		var lighting: String = SplatLod.lighting_path_in(manifest, spec.asset_id, level)
+		_lod_nodes.append(_level_node("HullSplatsLod%d" % level, path, lighting))
+		_lod_levels.append(level)
+	_lod_level = _lod_levels[0]
+	_add_hero_level()  # drawn once the switcher asks for it, never as the first frame's guess
+	_apply_hull_visuals()
+
+
+# The finest level of all, in front of the chain, for a ship whose spec asks for it and while `settings.splat_hero` is on
+# (read here, once, when the ship is built: its node and splats are fixed from then on, like the other levels).
+func _add_hero_level() -> void:
+	if not spec.splat_hero or not bool(Settings.get_value(&"splat_hero")):
+		return
+	var hero: Dictionary = SplatLod.hero_paths(spec.asset_id)
+	var path: String = hero["path"]
+	if path.is_empty() or not ResourceLoader.exists(path):
+		push_warning("Ship: %s has no imported hero level (run scripts/gen_assets.sh, then import); drawing LOD0 at the closest" % spec.asset_id)
+		return
+	_lod_nodes.push_front(_level_node("HullSplatsHero", path, hero["lighting"]))
+	_lod_levels.insert(0, LodSwitcherMath.HERO)
+
+
+# The hidden splat node of one level: built once, kept in step with the hull, and given a new resource only if it changed.
+func _level_node(node_name: String, path: String, lighting: String) -> GaussianSplatNode:
+	var node := get_node_or_null(NodePath(node_name)) as GaussianSplatNode
+	var resource := load(path) as GaussianResource
+	if node == null:
+		node = GaussianSplatNode.new()
+		node.name = node_name
+		node.transform = hull_splats.transform
+		node.visible = false
+		node.gaussian = resource
+		SplatLightingLoader.attach(node, lighting)
+		add_child(node)
+		var sync := get_node_or_null(^"HullSplatSync") as SplatPoseSync
+		if sync != null:
+			sync.add_splats(node)
+	elif node.gaussian != resource:
+		node.gaussian = resource
+		SplatLightingLoader.attach(node, lighting)
+	return node
 
 
 func _on_hull_setting_changed(key: StringName, _value: Variant) -> void:
@@ -432,34 +660,41 @@ func _apply_hull_sync_setting() -> void:
 		hull_splats.reset_physics_interpolation()
 
 
-# A soft lamp just behind and above the pilot's eyes. Its range stops short of the wings, so it lights only the cockpit frame.
-func _build_cabin_light() -> void:
-	_cabin_light = OmniLight3D.new()
-	_cabin_light.name = "CabinLight"
-	_cabin_light.omni_range = 4.5
-	_cabin_light.omni_attenuation = 0.8
-	_cabin_light.light_energy = float(Settings.get_value(&"cockpit_light_energy"))
-	_cabin_light.light_color = Color(0.85, 0.92, 1.0)
-	_cabin_light.shadow_enabled = false
-	_cabin_light.visible = _interior_visible
-	add_child(_cabin_light)
-	_place_cabin_light()
+# A soft red lamp just behind and above the pilot's eyes. Its range stops short of the wings, so it lights only the cockpit frame.
+func _build_cabin_emitter() -> void:
+	_cabin_emitter = LightEmitter.new("cabin", LightEmitter.PRIORITY_CABIN, NavLights.CABIN_LAMP_COLOR,
+			float(Settings.get_value(&"cockpit_light_energy")), 4.5, 0.8)
+	_cabin_emitter.anchor = self
+	_place_cabin_emitter()
+	_apply_cabin_emitter()
 
 
-func _place_cabin_light() -> void:
-	if _cabin_light != null:
-		_cabin_light.position = cockpit_anchor.position + Vector3(0.0, 0.45, 0.5)
+func _place_cabin_emitter() -> void:
+	if _cabin_emitter != null:
+		_cabin_emitter.offset = cockpit_anchor.position + Vector3(0.0, 0.45, 0.5)
 
 
-# The canopy glass is a green translucent surface of the hull mesh. Seen from inside it tints the whole view green, so the pilot's
-# window is clear: from the cockpit the glass surface gets an override that draws nothing (from outside it is the real glass).
+# The cabin lamp competes for a slot only in the cockpit camera; no other ship's interior is ever shown, so the pool adds no candidates.
+# A disabled ship (the player dead, a parked ship) gives none.
+func _apply_cabin_emitter() -> void:
+	var rig: SplatLightRig = SplatLightRig.of(self)
+	if rig == null or _cabin_emitter == null:
+		return
+	if _interior_visible and process_mode != Node.PROCESS_MODE_DISABLED:
+		rig.add_emitter(_cabin_emitter)
+	else:
+		rig.remove_emitter(_cabin_emitter)
+
+
+# From inside, the interior is the whole cabin: the hull's canopy glass would tint the view green and its window frames would cross the
+# side panes, so while the interior is shown those surfaces get an override that draws nothing (from outside they are the real thing).
 func _apply_canopy_glass() -> void:
 	var mesh: Mesh = hull_mesh_fallback.mesh
 	if mesh == null:
 		return
 	for i: int in mesh.get_surface_count():
 		var material: Material = mesh.surface_get_material(i)
-		if material == null or not String(material.resource_name).contains("glass"):
+		if material == null or not String(material.resource_name).contains("canopy"):
 			continue
 		hull_mesh_fallback.set_surface_override_material(i, _clear_glass() if _interior_visible else null)
 
@@ -486,18 +721,6 @@ static func _make_double_sided(mesh: Mesh) -> void:
 		var material := mesh.surface_get_material(i) as BaseMaterial3D
 		if material != null and material.cull_mode != BaseMaterial3D.CULL_DISABLED:
 			material.cull_mode = BaseMaterial3D.CULL_DISABLED
-
-
-# The cockpit frame on the side away from the sun would be pure black against the black sky (and read as a hole): a faint
-# emission keeps both struts visible.
-static func _lift_shadows(mesh: Mesh) -> void:
-	if mesh == null:
-		return
-	for i: int in mesh.get_surface_count():
-		var material := mesh.surface_get_material(i) as BaseMaterial3D
-		if material != null:
-			material.emission_enabled = true
-			material.emission = Color(0.045, 0.047, 0.055)
 
 
 static func _load_mesh(path: String) -> Mesh:
@@ -577,6 +800,8 @@ func _environment_accel() -> Vector3:
 func _register_console() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"assist", "Toggle or set flight assist",
 			[ConsoleArg.bool_optional(&"state")]), _cmd_assist, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"running_lights", "Toggle or set the running lights (the wing follows)",
+			[ConsoleArg.bool_optional(&"state")]), _cmd_running_lights, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"refuel", "Refill the reaction-mass tank, or add kg",
 			[ConsoleArg.float_optional(&"kg", null, 0.0)]), _cmd_refuel, self)
 	DebugConsole.registry.register_provider(&"ship", ConsoleVars.new({
@@ -592,6 +817,8 @@ func _register_console() -> void:
 		&"angular_rate_dps": {"get": _angular_rate_dps, "unit": "deg/s",
 				"doc": "Angular rate in body axes (+x pitch up, +y yaw left, +z roll left)"},
 		&"assist_on": {"get": get_assist, "set": set_assist, "type": TYPE_BOOL, "doc": "Flight assist"},
+		&"running_lights": {"get": func() -> bool: return running_lights, "set": set_running_lights, "type": TYPE_BOOL,
+				"doc": "Port, starboard and top lights (the cabin glow stays on)"},
 		&"trim": {"get": func() -> float: return _output.trim,
 				"doc": "0..1: how far the flight computer cut the trimmed pod side (POD TRIM)"},
 		&"pod_yaw": {"get": _pod_yaw_dps, "unit": "deg/s",
@@ -612,6 +839,10 @@ func _register_console() -> void:
 
 func _cmd_assist(args: Dictionary) -> ConsoleResult:
 	return DebugConsole.registry.toggle("ship.assist_on", args[&"state"])
+
+
+func _cmd_running_lights(args: Dictionary) -> ConsoleResult:
+	return DebugConsole.registry.toggle("ship.running_lights", args[&"state"])
 
 
 func _cmd_refuel(args: Dictionary) -> String:

@@ -29,7 +29,7 @@ const CONSOLE_KEY: Key = KEY_QUOTELEFT
 const DEFAULT_AUTOEXEC_PATH: String = "user://autoexec.cfg"
 const MAX_WATCHES: int = 8
 const TIMESCALE_MIN: float = 0.05
-const TIMESCALE_MAX: float = 1.0  # M1 cap: above 1 each physics tick stretches; real warp is SimClock's (M8)
+const TIMESCALE_MAX: float = 1.0  # M1 cap: above 1 each physics tick stretches; real warp is SimClock's (M9)
 const TIMESCALE_RANGE: String = "0.05..1"
 const MAX_STATEMENTS_PER_PUMP: int = 10000
 const ARG_EXEC: String = "--console-exec"
@@ -110,8 +110,7 @@ func _exit_tree() -> void:
 		OS.remove_logger(_logger)
 		_logger_added = false
 	if _open:
-		# Leaving the tree while open: hand the keyboard back and undo our pause, without touching the UI (its
-		# nodes have already left the tree).
+		# Leaving while open: hand the keyboard back and undo our pause. The UI nodes have already left the tree.
 		_open = false
 		_apply_input_mask()
 		if _paused_by_console:
@@ -380,7 +379,24 @@ func _quit(code: int) -> void:
 	if quit_handler.is_valid():
 		quit_handler.call(code)
 	elif is_inside_tree():
+		# A sound playing at quit keeps its stream alive ("resources still in use at exit"), so silence everything and quit a frame later.
+		_silence(get_tree().root)
+		await get_tree().process_frame
 		get_tree().quit(code)
+
+
+static func _silence(node: Node) -> void:
+	if node is AudioStreamPlayer:
+		(node as AudioStreamPlayer).stop()
+		(node as AudioStreamPlayer).stream = null
+	elif node is AudioStreamPlayer3D:
+		(node as AudioStreamPlayer3D).stop()
+		(node as AudioStreamPlayer3D).stream = null
+	elif node is AudioStreamPlayer2D:
+		(node as AudioStreamPlayer2D).stop()
+		(node as AudioStreamPlayer2D).stream = null
+	for child: Node in node.get_children():
+		_silence(child)
 
 
 func _output(text: String, kind: ConsoleUI.LineKind) -> void:
@@ -691,8 +707,8 @@ static func settings_vars(source: SettingsScript) -> ConsoleVars:
 		match schema.get_type(key):
 			TYPE_BOOL:
 				spec["type"] = TYPE_BOOL
-			TYPE_FLOAT:
-				spec["type"] = TYPE_FLOAT
+			TYPE_FLOAT, TYPE_INT:
+				spec["type"] = schema.get_type(key)
 				spec["min"] = entry["min"]
 				spec["max"] = entry["max"]
 			SettingsSchema.TYPE_ENUM:
