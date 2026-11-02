@@ -8,6 +8,8 @@ const RELIGHT_KEYS: Array[StringName] = [&"splat_relight", &"relight_ambient", &
 
 var main: Main
 var rig: SplatLightRig
+## Emitters already competing once the scene has settled: the ships' nozzles (M3-T22), dark at idle.
+var baseline: int = 0
 
 
 func before_each() -> void:
@@ -19,7 +21,9 @@ func before_each() -> void:
 	add_child_autofree(main)
 	await get_tree().physics_frame
 	await get_tree().physics_frame
+	await get_tree().process_frame  # the ships' first `_process` enters their nozzle lights
 	rig = main.space_environment.light_rig
+	baseline = rig.candidate_count()
 
 
 func after_each() -> void:
@@ -135,7 +139,23 @@ func test_an_emitter_on_a_node_moves_with_it_and_goes_when_it_goes() -> void:
 	body.free()
 	rig.update(Vector3.ZERO)
 	assert_eq(rig.slots()[1].light_energy, 0.0, "the emitter's node is gone, and so is the light")
-	assert_eq(rig.candidate_count(), 0)
+	assert_eq(rig.candidate_count(), baseline)
+
+
+func test_a_live_explosion_adds_no_light_node() -> void:
+	# M3-T22: the explosion's light is an emitter, so with one alive the scene still holds exactly the rig's eight. GDGS's own
+	# 30-frame scan used to catch the old OmniLight3D only some of the time; it has nothing extra to find now.
+	var explosion := Explosion.create(6.0, Vector3.ZERO)
+	main.world.add_child(explosion)
+	explosion.global_position = Vector3(0.0, 0.0, -60.0)
+	explosion.advance(Explosion.LIGHT_S / 3.0)
+	rig.update(Vector3.ZERO)
+	var lights: Array = _collect(main, Light3D, [])
+	assert_eq(lights.size(), 8, "the key star and seven omni slots, with an explosion alive")
+	for light: Variant in lights:
+		assert_true(rig.slots().has(light), "%s is not a slot" % (light as Node).name)
+	assert_true(rig.picked().has(explosion.emitter), "and it is lit through a slot")
+	explosion.free()
 
 
 func test_never_more_than_eight_lights_shine() -> void:
@@ -157,9 +177,9 @@ func test_never_more_than_eight_lights_shine() -> void:
 
 
 func test_the_cabin_light_counts_only_in_the_cockpit_camera() -> void:
-	assert_eq(rig.candidate_count(), 0, "chase camera: no cabin light")
+	assert_eq(rig.candidate_count(), baseline, "chase camera: no cabin light")
 	main.camera_rig.set_mode(CameraRig.Mode.COCKPIT)
-	assert_eq(rig.candidate_count(), 1)
+	assert_eq(rig.candidate_count(), baseline + 1)
 	rig.update(main.camera_rig.cockpit_camera.global_position)
 	var picked: Array[LightEmitter] = []
 	for emitter: LightEmitter in rig.picked():
@@ -172,19 +192,19 @@ func test_the_cabin_light_counts_only_in_the_cockpit_camera() -> void:
 	assert_lt(picked[0].position.distance_to(eye), 1.0, "just behind and above the pilot's eyes")
 	assert_eq(_collect(main, Light3D, []).size(), 8, "the ship has no light node of its own")
 	main.camera_rig.set_mode(CameraRig.Mode.CHASE)
-	assert_eq(rig.candidate_count(), 0)
+	assert_eq(rig.candidate_count(), baseline)
 
 
 func test_a_freed_ship_takes_its_cabin_light_with_it() -> void:
 	main.camera_rig.set_mode(CameraRig.Mode.COCKPIT)
-	assert_eq(rig.candidate_count(), 1)
+	assert_eq(rig.candidate_count(), baseline + 1)
 	main.camera_rig.set_mode(CameraRig.Mode.CHASE)
 	var ship := Ship.create(main.ship.spec, main.world)
 	main.world.spawn(ship, main.world.to_universe(Vector3(0.0, 500.0, 0.0)))
 	ship.set_cockpit_interior_visible(true)
-	assert_eq(rig.candidate_count(), 1)
+	assert_eq(rig.candidate_count(), baseline + 1)
 	ship.free()
-	assert_eq(rig.candidate_count(), 0)
+	assert_eq(rig.candidate_count(), baseline)
 
 
 # --- who is lit ----------------------------------------------------------------------------------------------------
@@ -380,7 +400,7 @@ func test_the_lights_provider_reports_picks_candidates_and_cost() -> void:
 	rig.update(Vector3.ZERO)
 	var picked: Variant = DebugConsole.registry.read("lights.picked")["value"]
 	assert_eq(Array(picked as PackedStringArray), ["lamp"])
-	assert_eq(DebugConsole.registry.read("lights.candidates")["value"], 1)
+	assert_eq(DebugConsole.registry.read("lights.candidates")["value"], baseline + 1)
 	assert_eq(DebugConsole.registry.read("lights.active")["value"], 2, "the key star and the lamp")
 	assert_true(DebugConsole.registry.read("lights.cost_us")["ok"])
 	assert_gte(int(DebugConsole.registry.read("lights.cost_us")["value"]), 0)

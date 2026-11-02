@@ -84,6 +84,11 @@ func add_emitter(emitter: LightEmitter) -> void:
 		_emitters.append(emitter)
 
 
+## Whether the emitter is in the competition.
+func has_emitter(emitter: LightEmitter) -> bool:
+	return _emitters.has(emitter)
+
+
 ## Takes an emitter out; its slot goes dark at the next `update`.
 func remove_emitter(emitter: LightEmitter) -> void:
 	_emitters.erase(emitter)

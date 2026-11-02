@@ -1,11 +1,13 @@
 class_name Explosion
 extends Node3D
 ## The explosion of a destroyed ship (architecture §15.7), made entirely in code (no textures, no splats): a light
-## flash, an additive billboard flash, a noisy fireball sphere, and sparks, fragments and a gas shell thrown from the `FxPool`
+## emitter, an additive billboard flash, a noisy fireball sphere, and sparks, fragments and a gas shell thrown from the `FxPool`
 ## (M3-T23). Transparent meshes and particles draw after the splats and are hidden behind hulls in front of them by the hull
 ## depth proxy.
 ##
-## - `OmniLight3D`: energy 0 -> 8 -> 0 over 0.25 s, range 4 x radius (it lights meshes only; splats are unlit).
+## - light: a `LightEmitter` (M3-T22), never a `Light3D` of its own. It competes through the `SplatLightRig`'s `LightPicker`
+##   for a slot, so nearby hulls are lit, and sits in the rig's candidate list only while it shines. Energy 0 -> 8 -> 0 over
+##   0.25 s, range 4 x radius.
 ## - billboard flash: an additive quad, 0.15 s.
 ## - fireball: a sphere growing to 1.2 x radius over 0.8 s, `explosion_fireball.gdshader`, gone by 1.5 s.
 ## - pool bursts (`FxSpecs`): 80 sparks, 40-150 m/s, 0.6-1.2 s; 20 glowing fragments, 5-20 m/s, 2-3 s; a gas shell of 10 puffs.
@@ -31,13 +33,14 @@ var radius_m: float = 4.0
 ## World-frame drift velocity, m/s.
 var velocity: Vector3 = Vector3.ZERO
 
-var light: OmniLight3D = null
+var emitter: LightEmitter = null
 var flash: MeshInstance3D = null
 var fireball: MeshInstance3D = null
 ## Where the sparks, fragments and gas shell come from (`DestructionDirector` sets it); without one the explosion has none.
 var fx: FxPool = null
 
 var _age_s: float = 0.0
+var _rig: SplatLightRig = null
 var _fireball_material: ShaderMaterial = null
 
 
@@ -56,12 +59,21 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	if light == null:
+	if emitter == null:
 		_build()  # instanced from the scene instead of `create`
+	_rig = SplatLightRig.of(self)
+	if _rig != null:
+		_rig.add_emitter(emitter)
 	if fx != null:
 		for effect: int in [FxSpecs.EXPLOSION_SPARKS, FxSpecs.EXPLOSION_FRAGMENTS, FxSpecs.EXPLOSION_GAS]:
 			fx.burst(effect, global_position, Vector3.UP, velocity)
 	advance(0.0)
+
+
+func _exit_tree() -> void:
+	if _rig != null and is_instance_valid(_rig):
+		_rig.remove_emitter(emitter)
+	_rig = null
 
 
 func _physics_process(delta: float) -> void:
@@ -78,11 +90,9 @@ func advance(delta: float) -> void:
 	if _age_s >= LIFETIME_S:
 		queue_free()
 		return
-	# Light: a triangle, up to the peak at a third of the way and back to zero.
-	var t_light: float = clampf(_age_s / LIGHT_S, 0.0, 1.0)
-	var rise: float = 1.0 / 3.0
-	light.light_energy = LIGHT_PEAK_ENERGY * (t_light / rise if t_light < rise else (1.0 - t_light) / (1.0 - rise))
-	light.visible = _age_s < LIGHT_S
+	emitter.energy = light_energy(_age_s)
+	if _age_s >= LIGHT_S and _rig != null:
+		_rig.remove_emitter(emitter)  # the light is over; the rest of the effect is meshes
 	# Billboard flash: full to start, linear fade, then hidden.
 	var t_flash: float = clampf(_age_s / FLASH_S, 0.0, 1.0)
 	flash.visible = _age_s < FLASH_S
@@ -95,19 +105,21 @@ func advance(delta: float) -> void:
 	_fireball_material.set_shader_parameter(&"age", _age_s)
 
 
+## Energy of the explosion's light `age_s` after it appeared: a triangle, up to the peak at a third of the way and back to zero.
+static func light_energy(age_s: float) -> float:
+	var t: float = clampf(age_s / LIGHT_S, 0.0, 1.0)
+	var rise: float = 1.0 / 3.0
+	return LIGHT_PEAK_ENERGY * (t / rise if t < rise else (1.0 - t) / (1.0 - rise))
+
+
 ## Seconds since it appeared.
 func age_s() -> float:
 	return _age_s
 
 
 func _build() -> void:
-	light = OmniLight3D.new()
-	light.name = "Light"
-	light.omni_range = 4.0 * radius_m
-	light.light_color = Color(1.0, 0.78, 0.5)
-	light.light_energy = 0.0
-	light.shadow_enabled = false
-	add_child(light)
+	emitter = LightEmitter.new("explosion", LightEmitter.PRIORITY_EXPLOSION, Color(1.0, 0.78, 0.5), 0.0, 4.0 * radius_m)
+	emitter.anchor = self
 
 	var glow := GLOW_MATERIAL.duplicate() as StandardMaterial3D
 	glow.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
