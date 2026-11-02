@@ -193,10 +193,10 @@ Status: `done` (merged into `m3`, its "Done" notes below), `in progress`, `not s
 | M3-T21 | Splat relighting: procgen normals, flat colours, `LightPicker` (Q23) | T19 | Opus | done (2026-11-01) |
 | M3-T22 | Ship lights: nozzles, muzzle flashes, explosions (Q23) | T21 | Sonnet | in progress |
 | M3-T23 | `GPUParticles3D` sparks and debris (Q23) | T14 | Sonnet | done |
-| M3-T24 | Hero LOD for the player's ship (Q23) | T20, T21 | Sonnet | not started |
+| M3-T24 | Hero LOD for the player's ship (Q23) | T20, T21 | Sonnet | in progress |
 | M3-T25 | Lens flare and motion blur, after sign-off (Q23) | T21 | Sonnet | in progress |
 | M3-T26 | Starfury after the reference model, wireframe damage display (Q24) | - | Opus | done (second pass 2026-10-31) |
-| M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13-T26 | Opus | not started |
+| M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13-T26 | Opus | in progress |
 
 Parallel lanes: T01, T02 and T03 touch disjoint files and can run together; T04 and T05 can run together after T02.
 Two agents at a time is steadier than four (`docs/handoff.md`).
