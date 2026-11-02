@@ -172,8 +172,10 @@ On the maintainer's machine the agent takes these on the GPU itself (GDGS Comput
   spawn raider idle 6000 30 0; wait 30; screenshot reports/m3/p10_lod.png; state lod`
 - **P11 running lights** (AC36, AC37, AC39; T27): `god on; spawn ally idle 40 0 10; spawn raider idle 80 10 0; wait 20; screenshot reports/m3/p11_near.png;
   spawn raider idle 800 0 0; wait 20; screenshot reports/m3/p11_far.png; camera cockpit; wait 20; screenshot reports/m3/p11_cockpit.png`
-- **P12 last-hit break-up** (AC38, AC39; T28): `god on; spawn ally idle 60 0 0; timescale 0.1; set targeting.selected "ALPHA 2"; kill target; wait 30;
-  screenshot reports/m3/p12_a.png; wait 30; screenshot reports/m3/p12_b.png; timescale 1`
+- **P12 last-hit break-up** (AC38, AC39; T28): `god on; despawn all; spawn ally idle 60 0 0; timescale 0.1; wait 5; kill allies; wait 15;
+  screenshot reports/m3/p12_a.png; wait 210; screenshot reports/m3/p12_b.png; timescale 1` (the sandbox's own wingmen sit beside the player, so
+  `despawn all` first or `ALPHA 2` is one of them, off screen; a `kill` has no hit point, so the blast is at the centre. For a blast at a joint let a
+  raider kill a damaged player: `god off; despawn all; damage 296 player; spawn raider ai 120 0 0; timescale 2; wait 23; screenshot ...`)
 
 ## Task breakdown (ordered)
 
@@ -207,7 +209,7 @@ Status: `done` (merged into `m3`, its "Done" notes below), `in progress`, `not s
 | M3-T25 | Lens flare and motion blur, after sign-off (Q23) | T21 | Sonnet | in progress |
 | M3-T26 | Starfury after the reference model, wireframe damage display (Q24) | - | Opus | done (second pass 2026-10-31) |
 | M3-T27 | Running lights, own lights in the fork, cockpit glow, buoy fade (Q27) | T20, T22 | Opus | not started |
-| M3-T28 | Starfury last-hit break-up (Q28) | T22, T23 | Sonnet | in progress |
+| M3-T28 | Starfury last-hit break-up (Q28) | T22, T23 | Sonnet | done |
 | M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13-T28 | Opus | in progress |
 
 Parallel lanes: T01, T02 and T03 touch disjoint files and can run together; T04 and T05 can run together after T02.
@@ -1274,6 +1276,20 @@ Added 2026-11-01 for Q28; after T22 and T23.
   - Particles come from `FxPool`, and blasts must not grow it. Say how the smaller blasts are built and what they do to `fx.reused`.
   - Every set busy means mesh-only chunks: they stage the same way.
 - Done when: AC38 passes; P12 is taken on the GPU; the look is AC39's.
+- Done (2026-11-01):
+  - The generator writes `chunks[].joint` (an arm: where its strut leaves the fuselage flank; the cabin: the centre line at the middle of the four),
+    tested in `test_starfury_aurora.py`; PLY and OBJ bytes and `generator_version` are unchanged. `Hardpoints` parses `joint` (the offset when absent).
+  - `BreakupPlan` (pure, seeded: order, times, kicks, tumbles) and `StagedWreck` (pure: the rigid wreck, exact integration, release velocities, shift) are new,
+    with `tests/unit/test_breakup_plan.gd`. `DebrisPool.stage_wreck` holds the chunks (`DebrisChunk.hold`, `place_held`, `release`) and releases them on the plan;
+    `DestructionDirector` picks the first part with `DamageZones.zone_for` on the killing point (ship frame, from the transform read before the ship leaves play)
+    and starts the `Explosion` at its joint; `last_blast_position` moves the sound there (`AudioDirector`). Raiders, buoys and shards take the old path.
+  - Smaller blasts: one `FxSpecs.HIT` burst (24 sparks, 0.45 s) at each later joint. They add no node, no mesh and no `Light3D`, and take hit emitters,
+    never the explosion's; a wreck holds at most three at once (releases are 0.15 s or more apart), so `fx.reused` stays 0 in one death
+    (`test_the_blasts_add_no_nodes_no_lights_and_do_not_reuse_particle_emitters`).
+  - Rebase: `DebrisPool` listens to `WorldFrame.rebased` and shifts held wrecks (`test_a_rebase_during_the_staged_part_moves_nothing_relative_to_the_wreck`, 1 mm).
+  - Changed existing tests: `test_starfury_breakup.gd`'s `_run_chunks_out` also steps the held wrecks (chunks held by a wreck do not move on their own, and
+    the last is released up to 1.2 s later). `test_destruction.gd` needed no change: its player death only counts the chunks, held ones included.
+  - P12 taken on the GPU (Compute, RX 6950 XT): `.superpowers/sdd/m3-ai-pilots-and-wingmen/task-28-shots/`; the look is AC39 (H).
 
 ### M3-T12 Integration, smoke runs, capture set, play-test guide
 

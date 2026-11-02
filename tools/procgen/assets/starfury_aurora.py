@@ -128,6 +128,8 @@ CHUNK_LOD = 1  # the chunks partition this LOD's splats
 # (pod, strut, claw) per corner, named after the pods (DamageZones' X-fighter cabin and arms).
 CHUNK_ORDER = ("cabin",) + tuple(f"arm_{pod}" for pod, _ in POD_SIDES)
 ARM_PARTS = ("pod", "strut", "claw")
+JOINT_FLANK_X = 1.0  # |x| where a strut leaves the fuselage: the arm's joint (M3-T28)
+JOINT_SLAB_M = 0.1  # half thickness of the strut slice the joint is averaged over
 
 
 # --- the parametric description --------------------------------------------------------------
@@ -478,6 +480,21 @@ def chunk_of(part_name: str) -> str:
     return "cabin"
 
 
+def chunk_joints(placed: list[Placed]) -> dict[str, list[float]]:
+    """Where each break-up chunk detaches from the body, in the body frame (M3-T28): an arm where its
+    strut leaves the fuselage's flank, the cabin on the centre line at the middle of the four."""
+    joints: dict[str, np.ndarray] = {}
+    for p in placed:
+        kind, _, pod = p.part.name.rpartition("_")
+        if kind == "strut" and pod in POD_NAMES.values():
+            v = p.part.mesh.vertices
+            near_flank = np.abs(np.abs(v[:, 0]) - JOINT_FLANK_X) <= JOINT_SLAB_M
+            joints[f"arm_{pod}"] = v[near_flank].mean(axis=0)
+    arms = np.array([joints[f"arm_{pod}"] for pod in POD_NAMES.values()])
+    joints["cabin"] = np.array([0.0, arms[:, 1].mean(), arms[:, 2].mean()])
+    return {name: _r(point) for name, point in joints.items()}
+
+
 # --- colour -----------------------------------------------------------------------------------
 def _phase(name: str, style: Style) -> tuple[float, float, float]:
     base = name.split("_")[0]
@@ -577,6 +594,7 @@ def hardpoints(
         for n in ("left", "right")
     ]
     eye = by_name["fuselage"].anchor("eye")
+    joints = chunk_joints(placed)
     collision = []
     for part in hull_parts:
         for shape in part.collision:
@@ -603,7 +621,7 @@ def hardpoints(
         "pods": pods,
         "rcs": rcs,
         "collision": collision,
-        "chunks": chunks,
+        "chunks": [{**c, "joint": joints[c["name"]]} for c in chunks],
     }
 
 

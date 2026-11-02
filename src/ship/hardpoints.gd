@@ -34,7 +34,8 @@ var muzzles: Array[Dictionary] = []
 ## also the turn that lays Godot's capsule axis, local Y, along the named `axis`).
 var collision: Array[Dictionary] = []
 ## Break-up chunks (optional; M2-T04), one entry per group in file order: `name` (String), `ply`, `lighting` ("" when it has none)
-## and `obj` (file names in the asset directory), `offset` (Vector3: the chunk's centroid in the body frame) and `splats` (int).
+## and `obj` (file names in the asset directory), `offset` (Vector3: the chunk's centroid in the body frame), `joint` (Vector3:
+## where it detaches from the body, M3-T28; the offset when the file has none) and `splats` (int).
 var chunks: Array[Dictionary] = []
 
 
@@ -180,6 +181,7 @@ func _parse_chunk(value: Variant) -> String:
 		"lighting": String(entry.get("lighting", "")),
 		"obj": String(entry["obj"]),
 		"offset": _to_vec3(entry["offset"]),
+		"joint": _to_vec3(entry["joint"]) if _is_vec3(entry.get("joint")) else _to_vec3(entry["offset"]),
 		"splats": int(_number_or(entry.get("splats"), 0.0)),
 	})
 	return ""

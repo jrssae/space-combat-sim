@@ -90,10 +90,11 @@ func _effects() -> Array[Explosion]:
 	return out
 
 
-## Runs every chunk in flight to the end of its life.
+## Runs every chunk in flight to the end of its life (a Starfury's wreck lets its chunks go first, M3-T28).
 func _run_chunks_out() -> void:
 	var active: Array[DebrisChunk] = _active_chunks()
-	for i: int in roundi((DebrisChunk.LIFETIME_S + DebrisChunk.SHRINK_S + 0.2) * 60.0):
+	for i: int in roundi((1.2 + DebrisChunk.LIFETIME_S + DebrisChunk.SHRINK_S + 0.2) * 60.0):
+		main.debris.advance_wrecks(DT)
 		for chunk: DebrisChunk in active:
 			chunk.advance(DT)
 
