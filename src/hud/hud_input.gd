@@ -25,6 +25,8 @@ var has_reference: bool = false
 var show_velocity_marker: bool = true
 ## Auto-track is holding the nose on the lead point.
 var tracking: bool = false
+## The player's running lights are on (M3-T27).
+var running_lights: bool = true
 var muzzle_position: Vector3 = Vector3.ZERO
 var weapon_speed_mps: float = 1000.0
 var weapon_lifetime_s: float = 4.0

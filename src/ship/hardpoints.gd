@@ -37,6 +37,9 @@ var collision: Array[Dictionary] = []
 ## and `obj` (file names in the asset directory), `offset` (Vector3: the chunk's centroid in the body frame), `joint` (Vector3:
 ## where it detaches from the body, M3-T28; the offset when the file has none) and `splats` (int).
 var chunks: Array[Dictionary] = []
+## Running lights (optional; M3-T27), ship frame: `port`, `starboard` and `top` (markers), `top_lamp` (where the light on the top of the
+## hull comes from), `cabin` (the cockpit glow) as Vector3, `top_lamp_range_m` and `cabin_range_m` as floats. Empty when the file has none.
+var nav_lights: Dictionary = {}
 
 
 static func load_file(path: String) -> Hardpoints:
@@ -163,6 +166,26 @@ func _parse(data: Dictionary) -> String:
 		var problem: String = _parse_chunk(value)
 		if not problem.is_empty():
 			return problem
+	return _parse_nav_lights(data.get("nav_lights", {}))
+
+
+func _parse_nav_lights(value: Variant) -> String:
+	if not (value is Dictionary):
+		return "hardpoints nav_lights must be an object"
+	var entry: Dictionary = value
+	if entry.is_empty():
+		return ""
+	var out: Dictionary = {}
+	for key: String in ["port", "starboard", "top", "top_lamp", "cabin"]:
+		if not _is_vec3(entry.get(key)):
+			return "hardpoints nav_lights.%s must be [x, y, z]" % key
+		out[key] = _to_vec3(entry[key])
+	for key: String in ["top_lamp_range_m", "cabin_range_m"]:
+		var range_m: float = _number_or(entry.get(key), 0.0)
+		if range_m <= 0.0:
+			return "hardpoints nav_lights.%s must be a number above 0" % key
+		out[key] = range_m
+	nav_lights = out
 	return ""
 
 

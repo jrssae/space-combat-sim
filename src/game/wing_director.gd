@@ -30,6 +30,8 @@ extends Node
 ## first to join. The player's wing is created by Main. An AI-led wing whose leader is down hands the lead to its lowest
 ## slot (`refresh`), so a raider group keeps flying as a group; the player's wing waits for the player.
 ##
+## Running lights (M3-T27): the members of the player's wing copy the player's, every tick.
+##
 ## Console (§16.4), for the player's wing (`player_wing`): provider `wing` (`name`, `order`, `formation`, `members`,
 ## `last_ack`) and `wing [order|formation|replenish] [value]`.
 
@@ -380,6 +382,8 @@ func refresh(wing: Wing) -> void:
 		ctx.slot_offset = wing.slot_offset(wing.slot_of(member))
 		ctx.leader_link_position = link
 		ctx.leader_link_velocity = link_velocity
+		if alive and wing.leader.is_player:
+			member.ship.running_lights = wing.leader.ship.running_lights
 
 
 # `ids` without `self_ship`'s own.

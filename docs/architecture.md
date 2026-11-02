@@ -436,7 +436,7 @@ Expected test behaviour (verified headless): with F applied for n ticks from res
 RT  right main pods (analog)      LT  left main pods (analog)
 RB  right retros (hold)           LB  left retros (hold)
 R-stick  up/down pitch, left/right yaw, diagonals roll       L-stick  strafe L/R + up/down
-D-pad Up  flight assist           D-pad Down  next weapon           D-pad L/R  free
+D-pad Up  flight assist           D-pad Down  next weapon           D-pad Left  running lights        D-pad Right  free
 A  fire       B  tap: next target, hold (0.35 s): previous target
 X  auto-track (toggle): the nose follows the lead point of the selected target
 Y  camera 1st/3rd
@@ -476,7 +476,9 @@ axes by direction (pitch on up/down, yaw on left/right, roll on the diagonals), 
 previous, as the mouse wheel), D-pad Up toggles assist and D-pad Left / Right are left free; the pad has no
 `target_ahead` (keyboard B, a Mouse 2 hold or the console give it). A saved profile with the old default pad layout
 is moved onto the new one when it loads (its keys and mouse kept; `ControlProfile.PAD_LAYOUT_BEFORE_T15`); one with
-its own pad bindings is left alone, with a warning.
+its own pad bindings is left alone, with a warning. D-pad Left became the running lights (M3-T27, Q27), with key 5, the free key beside the
+wing orders. A saved profile gets the action when it loads, like any new action; one that already uses D-pad Left keeps it, and its lights
+are key 5 alone (m1_classic, which rolls on the D-pad, is the same).
 
 All via `InputMap` actions in `project.godot`; `device = -1` (any pad). Names are the Xbox-style names Godot/SDL3
 use for the standard layout; any pad SDL3 recognises, generic XInput clones included, presents it.
@@ -499,6 +501,7 @@ use for the standard layout; any pad SDL3 recognises, generic XInput clones incl
 | `target_ahead` | none | none (the B / mouse 2 hold) | edge | - | - |
 | `fire` | A `JOY_BUTTON_A` (0) | Space, mouse 1 | hold | - | - |
 | `toggle_flight_assist` | D-pad `JOY_BUTTON_DPAD_UP` (11) | T | edge | - | - |
+| `toggle_running_lights` | D-pad `JOY_BUTTON_DPAD_LEFT` (13) | 5 | edge (M3-T27) | - | - |
 | `brake` | R3 `JOY_BUTTON_RIGHT_STICK` (8) | X | hold | - | - |
 | `autotrack` | X `JOY_BUTTON_X` (2) | Shift, mouse 4 | edge (toggles auto-track; `InputAdapter.autotrack_on`) | - | - |
 | `camera_look` | L3 `JOY_BUTTON_LEFT_STICK` (7) | mouse 3 (middle) | hold | - | - |
@@ -630,8 +633,7 @@ set it directly.
 - **TargetingController** (node under the ship) gathers group `targetable` each physics tick, feeds the system,
   applies `CombatCommand` edges, emits `target_changed(id)`. `selected_offset()` is the live World-frame line of
   sight to the selection (zero without one); the Ship turns it into `FlightCommand.face_dir_b` every tick.
-- **NavBuoy**: inert marker with a splat body (one shared `GaussianResource`, GDGS instancing), a blinking beacon
-  mesh, a 10 °/s spin about its long axis, optional constant drift. No collision; cannot be shot. Five are spawned
+- **NavBuoy**: inert marker with a splat body (one shared `GaussianResource`, GDGS instancing), a steady beacon mesh with a slow fade over it, a 10 °/s spin about its long axis, optional constant drift. No collision; cannot be shot. Five are spawned
   from `data/scenarios/free_flight.json` at 0.5-5 km; faction `neutral`.
 - **Pulse cannon modes** (`PulseCannonGate`, pure): `ALTERNATING` (4 Hz, muzzles alternate) and `LINKED`
   (2 Hz, both muzzles together). `weapon_next` cycles and wraps; the cooldown carries over, so switching cannot
@@ -891,6 +893,40 @@ skips a slot at energy 0. An emitter keeps its slot while it is picked. Meshes a
 GDGS's walk stops after 20 000 nodes, so the rig sits before `World` in the tree. The cabin lamp is an emitter in the rig only
 while the cockpit interior is shown.
 
+**Own lights (M3-T27, GDGS patch 6).** The 8 are shared, and 13 to 100 ships could not each hold a slot, so a splat node can also carry up to
+2 lights of its own (`GaussianOwnLights.MAX_OWN_LIGHTS`), which light that node's splats alone and use no slot. They sit in the node's
+per-instance relight record, patched by setters like the knobs, and are defined in the node's own frame, so the shader needs no matrix per
+light and a node without any skips the loop. They add inside `relight_factor`, so `relight_enabled` off means none. There are two kinds. A
+surface light joins the `direct` sum above, with Godot's omni falloff at decay 1. A glow is light seen through glass: it is added to the colour
+after the multiply, whichever way the splat faces, only on dark paint (full up to 0.1 on the brightest channel, none from 0.25: glass, canopy
+panels, window frames; light hull takes none), falling off as `(1 - (d/range)^2)^2`, and gone within its view range of the camera. No
+record marks a splat as glass, and its paint is the one thing that tells it from hull without changing a PLY or a `.light` file.
+
+Own light positions come from hardpoints in the ship's frame, while a splat node's frame is that frame turned by GDGS's Rz(180): the ship's +Y
+is the instance's -Y. `NavLights.own_lights` converts them (`GaussianOwnLights.to_instance_frame`); `test_running_lights` runs the
+lamp over real splats and records, because a wrong sign would light the belly and nothing else would say so. Every level of a ship carries
+the same two; debris chunks, buoys and the sky carry none. `settings.own_lights` off drops them all, for comparison.
+
+**Running lights (M3-T27, Q27).** Every ship has a port red marker on -X, a starboard green on +X and a top white, steady, at its `nav_lights`
+hardpoints: `RunningLights`, one node per ship with three `MeshInstance3D`s, built once with the pool. A marker is one shared quad and one
+material per colour (`assets/shaders/running_light_marker.gdshader`): additive, facing the camera, 0.1 m in radius and never under
+`settings.running_light_min_px` on screen (3 px), all in the vertex shader, so it stays a point at several km with no work on the CPU. It keeps its
+centre's depth, so the hull depth proxy hides it behind hulls, and it hides with a parked or destroyed ship. Red and green are markers only. The top
+marker has a lamp: a white own surface light at `nav_lights.top_lamp`, 2.5 m over the Starfury's cabin top and 2.2 m over the raider's hump,
+`settings.top_lamp_energy` 2.5, range 6 and 5.5 m, which lights the top of the cockpit section for the designs a later milestone paints there. It goes
+out with the markers. `Ship.running_lights` holds the state; nothing per frame reads it, and radar and AI contact lists never do.
+
+The cabin glow stays on when a ship is dark. Outside it is a red own glow at `nav_lights.cabin` (the eye on a Starfury, the canopy panel on a
+raider), range 2.2 and 1.4 m, `settings.cabin_glow_level` 0.3, seen within `settings.cabin_glow_view_m` 150 m and fading over the last 30 m. Inside, the
+`cabin` emitter is red too, and dimmer, since red saturates the frame at the old white lamp's energy; it stays in the rig only while the cockpit
+interior is shown, as before.
+
+The dark rule: `BrainFactory` sets `PilotBrain.flies_dark` from a behaviour's `"running_lights": "on" | "off"`, by default off for a ship on patrol
+(`patrol`, `aggro`, `ai` with a `patrol` route) and on for every other. `AiPilotDriver` sets the ship's lights when it is given a brain, so a
+pool ship starts as its new pilot wants, and turns them on in the tick of its first shot (Q27). Once a ship fires it has stopped hiding for the rest of that life, so it does not flicker as it breaks
+off and comes back. In `combat_sandbox` the PATROL wave's five raiders start dark, by data. The player's toggle is a `UiCommand` edge (`Main`) or
+`running_lights [on|off]`; `WingDirector` copies the player's state to its wing each tick, and a respawn puts them back on.
+
 **Ship lights (M3-T22).** Every light is an emitter, so with any effect live the scene still holds exactly the rig's 8 `Light3D`
 nodes. Main pod nozzles (`ThrusterVisuals`): one emitter each, 1.5 m out along the exhaust so it falls on the pod and strut, energy
 from the smoothed plume level (0 at idle, 2.5 at full thrust), the plume's colour at display brightness, range 15 m; the player's
@@ -1019,7 +1055,7 @@ entry. The sky lists none.
      logit; the window glass is a 70 % transmittance sheet); SH degree 0 only (`f_dc_*`).
    - `cockpit_interior.obj`: the window frame seen from inside (bars) and the sill, nothing across the forward
      view; interior-facing normals.
-   - `hardpoints.json`: `center_of_mass`, `cockpit_camera`, `chase_anchor`, `muzzles[]`, `pods[]` (side, main and
+   - `hardpoints.json`: `nav_lights` (M3-T27, §7.3: `port`, `starboard`, `top`, `top_lamp`, `cabin`, `top_lamp_range_m`, `cabin_range_m`; `raider_fighter` too), `center_of_mass`, `cockpit_camera`, `chase_anchor`, `muzzles[]`, `pods[]` (side, main and
      retro nozzle position + exhaust direction), `rcs[]` (cosmetic nozzle positions with effect tags for glow),
      `collision[]` (boxes/capsules). Schema in the M1 task T04.
    - Re-centre **everything** (splats, meshes, hardpoints) on the splat centroid, so GDGS's unconditional import
@@ -1792,6 +1828,9 @@ Commands: `relation <a> <b> [friendly|neutral|hostile]` / `relation reset`; `win
 `gdgs_splat_uploads`, `splat_visible`, `splat_clipped`, `splat_budget_mb` and `gpu_ms` (M3-T20).
 `splat_hero` (bool, true; M3-T24: the player's Starfury builds its hero level, read when the ship is built). `lod <ship|all>
 <hero|0-3|auto>` accepts `hero` (M3-T24), and the `lod` provider's `levels` names it.
+M3-T27: command `running_lights [on|off]`, key
+`ship.running_lights`, `spawn ... lights=on|off`, and settings `own_lights` (bool, true), `top_lamp_energy` (0-20, 2.5), `cabin_glow_level` (0-2, 0.3),
+`cabin_glow_view_m` (1-2000, 150), `running_light_min_px` (0.5-12, 3). `raiders.list` and `allies.list` mark a ship flying dark.
 
 ### 16.5 Particles (M3-T23)
 

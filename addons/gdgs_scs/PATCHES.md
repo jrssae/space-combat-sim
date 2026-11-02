@@ -116,3 +116,38 @@ To revert: `git revert` the commit `M3-T20: resident splat budget in the GDGS fo
 side goes with it (`settings.splat_budget`, the `LodSwitcher` step-down, the `render` fields); nothing else depends on it.
 
 Upstream candidate, like patches 1 and 2, apart from two things that assume this project's single-safe thread model: the deferred merge, and the main thread patching instance arrays in place while the render step reads them. A window size not drawn for 120 frames gives its buffers back (`UNUSED_STATE_FRAMES`), so a fullscreen toggle does not hold two budgets for long.
+
+## 6. Own lights (a ship's top lamp and cockpit glow use no slot of the 8)
+
+GDGS lights splats from up to 8 scene lights, shared by everything, and the game's nozzles, flashes and explosions already compete for them. A
+top lamp on each of 13 to 100 ships cannot hold a slot. So a node can carry up to 2 lights of its own (`GaussianOwnLights.MAX_OWN_LIGHTS`), which
+light only that node's splats.
+
+What changed:
+
+- `runtime/render/gaussian_own_lights.gd` (new, pure): packs a light into two vec4 (position and 1/range; colour times energy and view range),
+  converts a point into a node's frame, and holds a CPU copy of the shaders' sums for the tests.
+- `gaussian_splat_node.gd`: `set_own_lights`, `get_own_lights`, `own_light_count`. The setter follows patch 5's relight knobs: only a change
+  patches the node's own record.
+- `gaussian_scene_registry.gd`, `gaussian_gpu_state_cache.gd`: the per-instance relight record grows from 2 vec4 to 6, 96 B: the knobs, with the
+  own light count in the second vec4's w, then room for both lights.
+- `gsplat_projection.glsl`: `relight_factor` takes the splat's position in the instance's frame, and its normal stays in that frame for the own
+  lights, so there is no matrix per light; an instance with none skips the loop. A view range of 0 makes a surface light, summed with the
+  scene's lights (Godot's omni falloff, decay 1). Above 0 it makes a glow: light seen through glass, so it is added to the colour after the multiply,
+  whichever way the splat faces, only on dark paint, and is gone that far from the camera. All of it is inside the `relight.w` test, so
+  `relight_enabled` off means no own lights.
+- `gaussian_raster.gdshader`, `raster_render_backend.gd`: the same, as two uniform arrays on each node's material, which is per node already. **The
+  Raster backend matches.** Checked by forcing it on the maintainer's GPU: the raider's lamp, glow and markers look the same as on Compute.
+
+The frame matters: a node's own frame is the PLY's, turned 180 degrees about Z from the ship's, so the top of the ship is the instance's -Y. The caller
+converts (`to_instance_frame`, with the node's pose relative to its parent). The node's scale is assumed to be 1.
+
+Measured on an RX 6950 XT (RADV) at 1080p, in one hold of the GPU lock, one physics tick per frame, three alternating blocks, own lights on / off:
+AC19's 13 ships (532 306 visible splats, 180 frames a block) GPU 2.94 / 2.97 ms; 100 ships close in view (1 817 726 visible splats, 60 frames a
+block) GPU 10.35 / 10.63 ms. The cost is below the noise between blocks (about 0.3 ms).
+
+To revert: `git revert` the commit `M3-T27: running lights, own lights, cockpit glow, buoy fade`, then run `--import` (a shader changed). To keep the
+game side and drop only this patch, restore the two shaders' `relight_factor` and the 2 vec4 record, and remove `set_own_lights` and its callers in
+`src/ship/running_lights.gd`.
+
+Not an upstream candidate as it stands: the paint test for a glow suits this project's generated assets, where glass is the dark paint.

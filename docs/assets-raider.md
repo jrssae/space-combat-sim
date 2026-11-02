@@ -11,7 +11,7 @@ committed.
 | `raider_fighter.obj` + `.mtl` | fallback mesh, Godot frame; the game also uses it as the hull depth proxy (as for the Starfury, manifest `files.fallback_mesh`) |
 | `raider_fighter_chunk_<name>.ply/.light/.obj/.mtl` | the break-up chunks (below) |
 | `raider_fighter_lod<0-3>.light` | lighting records (M3-T21): 4 bytes per splat of that level's PLY, same order and frame |
-| `hardpoints.json` | the contract for the flight model, weapons, collision / hit volumes, cameras, chunks (schema as `assets-starfury.md`, plus `chunks[]`) |
+| `hardpoints.json` | the contract for the flight model, weapons, collision / hit volumes, cameras, chunks (schema as `assets-starfury.md`, plus `chunks[]`; `nav_lights` (M3-T27): markers past the wingtips and on the hump behind the canopy, the lamp over the hump, the glow on the canopy panel) |
 | `manifest.json` | `lods[0]`, AABB, `centroid_offset`, `files`, `counts` (per chunk), `chunks`, `sampling`, `dimensions_m` |
 
 ## What it is

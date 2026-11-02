@@ -112,6 +112,13 @@ JSON_DIGITS = 5
 BURIED_MARGIN_M = 0.01  # samples deeper than this inside another part are dropped
 FACING_REACH_M = 0.05  # samples facing into another part closer than this are dropped too
 POD_NAMES = {"": "ur", "y": "lr", "x": "ul", "xy": "ll"}  # mirror key -> pod name
+# Running lights (M3-T27): how far a marker stands off the hull, where the top one sits, and the lamp over the cabin top.
+NAV_LIGHT_CLEARANCE_M = 0.12
+NAV_NEAR_M = 0.3
+NAV_TOP_BEHIND_GLASS_M = 0.6
+NAV_LAMP_HEIGHT_M = 2.5
+NAV_LAMP_RANGE_M = 6.0
+NAV_CABIN_RANGE_M = 2.2
 POD_SIDES = (("ur", "right"), ("lr", "right"), ("ul", "left"), ("ll", "left"))
 
 # LOD1 (allies and all Starfury debris, architecture section 16 D35): every spacing (the cockpit
@@ -545,6 +552,38 @@ def _axis_label(direction: np.ndarray) -> str:
     return ("p" if direction[axis] > 0 else "n") + "xyz"[axis]
 
 
+def _hull_samples(placed: list[Placed]) -> np.ndarray:
+    """Every LOD0 surface sample of the hull: what the markers must stand clear of."""
+    return np.concatenate([p.samples.positions for p in placed if p.hull and p.samples is not None])
+
+
+def nav_lights(placed: list[Placed], by_name: dict[str, Any], eye: np.ndarray) -> dict[str, Any]:
+    """Running lights (M3-T27): red and green on the highest point of the upper pods, where no claw or pod hides them from ahead,
+    astern or abeam, white on the cabin top behind the canopy, a lamp standing over that top to light it, and the cabin glow at
+    the pilot's eye."""
+    hull = _hull_samples(placed)
+    pod_lo, pod_hi = by_name["pod_ur"].mesh.bounds()
+    on_pod = (hull[:, 0] >= pod_lo[0]) & (hull[:, 0] <= pod_hi[0]) & (hull[:, 1] >= pod_lo[1]) & (hull[:, 2] <= pod_hi[2])
+    pod_top = hull[on_pod][np.argmax(hull[on_pod, 1])]
+    outer_x, pod_y, pod_z = float(pod_top[0]), float(pod_top[1]) + NAV_LIGHT_CLEARANCE_M, float(pod_top[2])
+    fuselage = by_name["fuselage"].mesh
+    glass = fuselage.face_material == fuselage.material_index(EARTHFORCE.material("canopy_glass").name)
+    glass_rear_z = float(fuselage.face_centroids()[glass][:, 2].max())
+    top_z = glass_rear_z + NAV_TOP_BEHIND_GLASS_M
+    on_top = (np.abs(hull[:, 0]) < NAV_NEAR_M) & (np.abs(hull[:, 2] - top_z) < NAV_NEAR_M)
+    top_y = float(hull[on_top, 1].max())
+    lamp_z = glass_rear_z + 0.5 * (float(fuselage.bounds()[1][2]) - glass_rear_z)
+    return {
+        "port": _r((-outer_x, pod_y, pod_z)),
+        "starboard": _r((outer_x, pod_y, pod_z)),
+        "top": _r((0.0, top_y + NAV_LIGHT_CLEARANCE_M, top_z)),
+        "top_lamp": _r((0.0, top_y + NAV_LAMP_HEIGHT_M, lamp_z)),
+        "top_lamp_range_m": NAV_LAMP_RANGE_M,
+        "cabin": _r(eye),
+        "cabin_range_m": NAV_CABIN_RANGE_M,
+    }
+
+
 def hardpoints(
     placed: list[Placed], spec: StarfurySpec, chunks: list[dict[str, Any]]
 ) -> dict[str, Any]:
@@ -632,6 +671,7 @@ def hardpoints(
         "pods": pods,
         "rcs": rcs,
         "collision": collision,
+        "nav_lights": nav_lights(placed, by_name, eye.position),
         "chunks": [{**c, "joint": joints[c["name"]]} for c in chunks],
     }
 

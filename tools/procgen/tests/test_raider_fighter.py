@@ -293,6 +293,48 @@ class RaiderFighterTests(unittest.TestCase):
                     raider.build(BuildContext(Path(tmp), seed=1, options=bad))
 
 
+class RaiderNavLightTests(unittest.TestCase):
+    """Running lights (M3-T27, Q27): read from a generated ``hardpoints.json``, never from typed-in positions."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory()
+        out = Path(cls._tmp.name) / "a"
+        raider.build(BuildContext(out, seed=42))
+        cls.hp = json.loads((out / raider.HARDPOINTS_NAME).read_text(encoding="utf-8"))
+        cls.nav = cls.hp["nav_lights"]
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
+
+    def test_port_is_the_ships_left_and_starboard_its_right_on_the_wingtips(self) -> None:
+        # -X is the ship's left (DamageZones: +X right, +Y up, -Z forward).
+        half_span = SPEC.wing.half_span
+        self.assertLess(self.nav["port"][0], -half_span, "port is past the left wingtip")
+        self.assertGreater(self.nav["starboard"][0], half_span, "starboard past the right one")
+        self.assertEqual(self.nav["port"], [-self.nav["starboard"][0], *self.nav["starboard"][1:]], "a mirrored pair")
+
+    def test_the_top_light_is_on_top_of_the_hump(self) -> None:
+        top = self.nav["top"]
+        hump = next(c for c in self.hp["collision"] if c["name"] == "hump")
+        self.assertEqual(top[0], 0.0)
+        self.assertGreater(top[1], hump["position"][1] + 0.5 * hump["size"][1], "above the hump")
+        self.assertGreater(top[2], self.hp["cockpit_camera"]["position"][2], "behind the canopy: +Z is aft")
+
+    def test_the_top_lamp_stands_over_the_hump_and_reaches_it(self) -> None:
+        lamp, top = self.nav["top_lamp"], self.nav["top"]
+        self.assertEqual(lamp[0], 0.0)
+        self.assertGreater(lamp[1], top[1], "it shines down on the hump")
+        self.assertGreater(self.nav["top_lamp_range_m"], lamp[1] - top[1], "the hump is within its range")
+
+    def test_the_cabin_glow_is_at_the_canopy_panel(self) -> None:
+        cabin, eye = self.nav["cabin"], self.hp["cockpit_camera"]["position"]
+        self.assertEqual(cabin[0], 0.0)
+        self.assertLess(abs(cabin[2] - eye[2]), 1.0, "over the pilot: the panel is above the eye")
+        self.assertLess(self.nav["cabin_range_m"], 3.0, "it stays on the hump's front: the wings are outside it")
+
+
 def mirrored(v: list[float]) -> list[float]:
     return [-v[0], v[1], v[2]]
 

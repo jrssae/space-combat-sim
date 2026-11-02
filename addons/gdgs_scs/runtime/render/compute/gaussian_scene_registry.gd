@@ -7,7 +7,9 @@ const BYTES_PER_FLOAT := 4
 # Relighting: one baked record per splat (oct normal, AO, confidence) and two
 # vec4 of per-instance knobs. Must match gsplat_projection.glsl.
 const LIGHTING_BYTES_PER_SPLAT := 4
-const RELIGHT_FLOATS_PER_INSTANCE := 8
+# [space-combat-sim patch] The two vec4 of knobs, then the instance's own lights (always room for all of them).
+const RELIGHT_KNOB_FLOATS := 8
+const RELIGHT_FLOATS_PER_INSTANCE := RELIGHT_KNOB_FLOATS + GaussianOwnLights.MAX_OWN_LIGHTS * GaussianOwnLights.FLOATS_PER_LIGHT
 # [space-combat-sim patch] One mat4 per instance, and one world sphere (x, y, z, r) for the visible-instance table.
 const FLOATS_PER_TRANSFORM := 16
 const FLOATS_PER_SPHERE := 4
@@ -441,9 +443,10 @@ func _node_has_bake(node: Node) -> bool:
 	var resource := lighting as Resource
 	return resource.has_method("is_splat_data_valid") and bool(resource.call("is_splat_data_valid"))
 
-## Two vec4 per instance, in instance order:
+## Six vec4 per instance, in instance order:
 ##   [0] unlit level, light gain, DC-only flag, enabled flag
-##   [1] ambient rgb, unused
+##   [1] ambient rgb, own light count
+##   [2..5] the own lights (GaussianOwnLights), zeros past the count
 func _build_instance_relight_floats() -> PackedFloat32Array:
 	var packed := PackedFloat32Array()
 	if _instance_count <= 0:
@@ -461,13 +464,17 @@ func _build_instance_relight_floats() -> PackedFloat32Array:
 func _relight_floats_of(node: Node, entry: NodeEntry) -> PackedFloat32Array:
 	var enabled := entry.has_lighting and bool(node.get("relight_enabled"))
 	var ambient: Color = node.get("relight_ambient")
-	return PackedFloat32Array([
+	var own: PackedFloat32Array = node.call("get_own_lights")
+	var knobs := PackedFloat32Array([
 		float(node.get("relight_unlit_level")),
 		float(node.get("relight_light_gain")),
 		1.0 if bool(node.get("relight_dc_only")) else 0.0,
 		1.0 if enabled else 0.0,
-		ambient.r, ambient.g, ambient.b, 0.0,
+		ambient.r, ambient.g, ambient.b, float(own.size() / GaussianOwnLights.FLOATS_PER_LIGHT),
 	])
+	knobs.append_array(own)
+	knobs.resize(RELIGHT_FLOATS_PER_INSTANCE)  # zeros past the count
+	return knobs
 
 func _get_node_transform(node: Node) -> Transform3D:
 	if node is Node3D:

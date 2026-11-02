@@ -64,6 +64,8 @@ const PROXY_SHADOW_CASTER_PATH := "res://addons/gdgs_scs/runtime/lighting/proxy_
 		relight_dc_only = value
 		_mark_backend_relight_dirty()  # [space-combat-sim patch]
 
+# [space-combat-sim patch] This node's own lights (GaussianOwnLights records), at most MAX_OWN_LIGHTS of them.
+var _own_lights := PackedFloat32Array()
 var _gaussian: GaussianResource
 var _lighting: GaussianLightingResource
 var _relight_cast_shadows := true
@@ -72,6 +74,25 @@ var _aabb_valid := false
 
 static func get_model_orientation_correction() -> Transform3D:
 	return Transform3D(Basis.from_euler(Vector3(0.0, 0.0, -PI)), Vector3.ZERO)
+
+## [space-combat-sim patch] Replaces this node's own lights: records from GaussianOwnLights, joined. Those past MAX_OWN_LIGHTS are dropped.
+func set_own_lights(lights: PackedFloat32Array) -> void:
+	var limit: int = GaussianOwnLights.MAX_OWN_LIGHTS * GaussianOwnLights.FLOATS_PER_LIGHT
+	if lights.size() > limit:
+		push_warning("[gdgs] a node takes %d own lights; dropped the rest" % GaussianOwnLights.MAX_OWN_LIGHTS)
+		lights = lights.slice(0, limit)
+	if lights == _own_lights:
+		return
+	_own_lights = lights
+	_mark_backend_relight_dirty()
+
+## [space-combat-sim patch] This node's own lights, as set.
+func get_own_lights() -> PackedFloat32Array:
+	return _own_lights
+
+## [space-combat-sim patch] How many own lights this node has.
+func own_light_count() -> int:
+	return _own_lights.size() / GaussianOwnLights.FLOATS_PER_LIGHT
 
 func _enter_tree() -> void:
 	_apply_default_orientation_if_needed()

@@ -31,6 +31,9 @@ const TARGET_NONE: int = -1
 var wanted_target_id: int = TARGET_NEAREST_HOSTILE
 ## A `Contact.id` the driver's avoidance filter leaves out this tick (a committed rammer's target, M3-T13), 0 for none.
 var avoid_exempt_id: int = 0
+## Hides with its running lights off until it attacks (M3-T27, Q27; `BrainFactory` sets it). Once it attacks it has stopped hiding,
+## for the rest of this life.
+var flies_dark: bool = false
 
 
 ## One tick. `dt` is the physics step. Returns a command the caller owns (a fresh one each call).

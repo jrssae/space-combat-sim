@@ -40,6 +40,7 @@ var brain: PilotBrain = null:
 		_unselectable_id = 0
 		if value != null:
 			value.reset()
+		_start_lights(value)
 ## Whether the avoidance filter changed this tick's command (the ship is dodging), and whether it was urgent.
 var avoiding: bool = false
 var avoiding_urgent: bool = false
@@ -55,6 +56,8 @@ var _muzzle_local: Vector3 = Vector3.ZERO
 var _muzzle_known: bool = false
 var _retarget_in_s: float = 0.0
 var _unselectable_id: int = 0
+# This ship is hiding: its lights are off until the brain attacks (M3-T27).
+var _hiding: bool = false
 
 
 func _init() -> void:
@@ -91,10 +94,20 @@ func step(delta: float) -> void:
 	var p: Perception = perceive()
 	brain.has_desired_velocity = false
 	var pc: PilotCommand = brain.think(p, delta)
+	if _hiding and pc.combat != null and pc.combat.fire:  # the first shot ends the hiding (Q27)
+		_hiding = false
+		combatant.ship.running_lights = true
 	_follow_brain_target()
 	_avoid(p, pc.flight)
 	combatant.apply_commands(pc.flight, pc.combat)
 	_add_think_time(Time.get_ticks_usec() - started_us)
+
+
+# A pool ship is somebody new each time: its lights start as its new pilot wants them, whatever the last one did.
+func _start_lights(new_brain: PilotBrain) -> void:
+	_hiding = new_brain != null and new_brain.flies_dark
+	if combatant != null and is_instance_valid(combatant.ship):
+		combatant.ship.running_lights = not _hiding
 
 
 ## Wall-clock microseconds every driver's `step` took in the last complete physics tick (the console's `ai.think_us`).

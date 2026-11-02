@@ -1,7 +1,7 @@
 class_name NavBuoy
 extends Node3D
-## A navigation buoy, the M1 target marker (architecture §6.3, §7.1, §9.3): a splat body, a blinking beacon on the mast, a
-## 10 deg/s spin about +Y, an optional constant drift, a `Targetable` and a `Damageable`. Any bolt hurts it (it is neutral to
+## A navigation buoy, the M1 target marker (architecture §6.3, §7.1, §9.3): a splat body, a steady beacon on the mast with a slow
+## fade over it (M3-T27), a 10 deg/s spin about +Y, an optional constant drift, a `Targetable` and a `Damageable`. Any bolt hurts it (it is neutral to
 ## everyone), and so does a ram (M3-T04): it has no physics body, so ships pass through and the `RamResolver` splits the
 ## momentum by `MASS_KG`. At zero hull the `DestructionDirector` calls `set_destroyed(true)`: hidden and not processing, but
 ## never freed (no splat node leaves the tree during play, D22). `restore()` brings it back on the player's respawn.
@@ -13,8 +13,8 @@ extends Node3D
 ## `scripts/gen_assets.sh` has run, with a warning. All buoys share one `GaussianResource`, fallback mesh and hardpoints
 ## read. Without a GPU GDGS is a silent no-op, so how it looks is (H).
 ##
-## Motion (spin, drift) is physics state and runs in `_physics_process` from `delta`; the beacon is a visual and
-## blinks in `_process` from `SimClock`, never the wall clock.
+## Motion (spin, drift) is physics state and runs in `_physics_process` from `delta`; the fade is a visual and breathes in
+## `_process` from `SimClock`, never the wall clock.
 
 const SCENE_PATH: String = "res://src/props/nav_buoy.tscn"
 const ASSET_DIR: String = "res://assets/generated/nav_buoy"
@@ -24,9 +24,8 @@ const HARDPOINTS_PATH: String = ASSET_DIR + "/hardpoints.json"
 const ASSET_ID: String = "nav_buoy"
 
 const SPIN_DPS: float = 10.0
-const BLINK_HZ: float = 1.0
-## Fraction of each blink period the beacon is lit: a short flash, like an anti-collision light.
-const BLINK_DUTY: float = 0.25
+## One slow breath of the fade layer over the steady beacon, s (M3-T27).
+const FADE_PERIOD_S: float = 6.0
 ## Where the beacon goes when `hardpoints.json` is missing (the generator's value at seed 42, to the centimetre).
 const DEFAULT_BEACON_POSITION: Vector3 = Vector3(0.0, 2.46, 0.0)
 const DEFAULT_BEACON_RADIUS: float = 0.1
@@ -56,9 +55,6 @@ var damageable: Damageable = null
 	set(value):
 		velocity = value
 		_sync_targetable()
-## Offset of this buoy's blink within the 1 s period, seconds.
-@export var blink_phase_s: float = 0.0
-
 static var _shared_loaded: bool = false
 static var _shared_gaussian: GaussianResource = null
 static var _shared_lighting_path: String = ""
@@ -69,6 +65,9 @@ static var _shared_beacon_radius: float = DEFAULT_BEACON_RADIUS
 ## Spin angle about +Y since spawn, radians in [0, TAU). Kept as an angle so the basis never drifts.
 var spin_angle_rad: float = 0.0
 
+## Where this buoy starts in the fade's cycle, s: seeded from its name when it is ready, so a buoy breathes the same every run.
+var fade_phase_s: float = 0.0
+
 var _base_basis: Basis = Basis.IDENTITY
 var _fallback_active: bool = false
 
@@ -76,6 +75,7 @@ var _fallback_active: bool = false
 @onready var mesh_fallback: MeshInstance3D = $BuoyMeshFallback
 @onready var depth_proxy: HullDepthProxy = $BuoyDepthProxy
 @onready var beacon: MeshInstance3D = $Beacon
+@onready var beacon_fade: MeshInstance3D = $Beacon/Fade
 @onready var targetable: Targetable = $Targetable
 
 
@@ -88,10 +88,14 @@ static func create(p_display_name: String, p_velocity: Vector3 = Vector3.ZERO) -
 	return buoy
 
 
-## Whether the beacon is lit at sim time `t` (1 Hz, `BLINK_DUTY` on). Pure.
-static func beacon_lit(t: float, phase_s: float = 0.0) -> bool:
-	var period: float = 1.0 / BLINK_HZ
-	return fposmod(t + phase_s, period) < BLINK_DUTY * period
+## The fade layer's level at sim time `t`, 0..1: out at the start of the cycle and in half way through it. Pure.
+static func fade_level(t: float, phase_s: float = 0.0) -> float:
+	return 0.5 - 0.5 * cos(TAU * fposmod(t + phase_s, FADE_PERIOD_S) / FADE_PERIOD_S)
+
+
+## A buoy's place in the fade's cycle, s, from its name. Pure.
+static func fade_phase_of(p_display_name: String) -> float:
+	return fposmod(float(hash(p_display_name)), FADE_PERIOD_S)
 
 
 func _init() -> void:
@@ -116,6 +120,7 @@ func _ready() -> void:
 	beacon.scale = Vector3.ONE * (_shared_beacon_radius / DEFAULT_BEACON_RADIUS)
 	use_fallback_mesh(_fallback_active)
 	_sync_targetable()
+	fade_phase_s = fade_phase_of(display_name)
 	_update_beacon()
 	_build_hull()
 
@@ -175,7 +180,7 @@ func is_fallback_mesh_active() -> bool:
 
 
 func _update_beacon() -> void:
-	beacon.visible = beacon_lit(SimClock.now(), blink_phase_s)
+	beacon_fade.transparency = 1.0 - fade_level(SimClock.now(), fade_phase_s)
 
 
 func _sync_targetable() -> void:

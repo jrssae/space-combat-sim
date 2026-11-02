@@ -124,9 +124,15 @@ Schema (all vectors `[x, y, z]`, numbers rounded to 5 decimals), unchanged from 
                {"name": "pod_ur", "type": "capsule", "position": [...], "radius": 0.928, "height": 6.004, "axis": "z", "basis": {"...": "..."}},
                {"name": "strut_ur", "type": "box", "position": [...], "size": [6.727, 2.121, 4.492], "basis": {"x": [0.83337, 0.40875, 0.37204], "...": "..."}},
                {"name": "claw_ur", "type": "box", "...": "..."}, "... 14 entries"],
+ "nav_lights": {"port": [-5.368, 3.951, -0.165], "starboard": [5.368, 3.951, -0.165], "top": [0, 1.62, -2.567],
+                "top_lamp": [0, 4.0, -1.747], "top_lamp_range_m": 6.0, "cabin": [0, 0.796, -3.327], "cabin_range_m": 2.2},
  "chunks": [{"name": "cabin", "ply": "starfury_aurora_chunk_cabin.ply", "lighting": "starfury_aurora_chunk_cabin.light", "obj": "starfury_aurora_chunk_cabin.obj",
              "offset": [0, -0.404, -2.155], "joint": [0, -0.219, -1.308], "splats": 9692}, "... arm_ur, arm_lr, arm_ul, arm_ll (M3-T03)"]}
 ```
+
+- `nav_lights` (M3-T27): the running-light markers on the highest point of the upper pods (port on -X, starboard on +X) and on the cabin top
+  behind the canopy, where the white lamp over that top stands, and where the cockpit glow is centred (architecture §7.3). PLY bytes do not
+  depend on it, so the generator version did not change.
 
 - `exhaust` is the exhaust direction; thrust acts opposite. `radius` is the bell exit radius (plume size). The main
   and retro positions are the exit centres the plumes start from.

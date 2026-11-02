@@ -9,7 +9,7 @@ extends CanvasLayer
 ## centre; bottom edge: speed (centre) with the direction of travel against the nose (horizontal then vertical degrees) and the
 ## range and closing speed to the reference point, hull bar (left) with the ship's damage silhouette above it, a fuel bar
 ## (only when the tank is finite), weapon charge and fire mode (right), the radar sphere above the speed readout and the target's
-## damage silhouette beside it; in the cockpit view (or by `settings.hud_targeting_grid`) a translucent grid with a reticle low and
+## damage silhouette beside it; above the charge bar whether the running lights are on (M3-T27); in the cockpit view (or by `settings.hud_targeting_grid`) a translucent grid with a reticle low and
 ## centred, and the target's offset from the nose on it.
 
 const LINE_COLOR: Color = Factions.HUD_LINE_COLOR
@@ -256,6 +256,7 @@ class HudCanvas extends Control:
 			_text("FUEL", f.fuel_rect.position + Vector2(0.0, -6.0 * s), 14.0 * s, LINE_COLOR)
 		_bar(f.charge_rect, f.charge_fraction, LINE_COLOR, w)
 		_text("CHARGE  %s" % f.fire_mode.to_upper(), f.charge_rect.position + Vector2(0.0, -6.0 * s), 14.0 * s, LINE_COLOR)
+		_text(f.running_lights_text, f.running_lights_pos, 14.0 * s, HudLayout.AMBER if f.running_lights_dark else LINE_COLOR)
 
 	# --- drift sphere -------------------------------------------------------------------------------------------------
 

@@ -19,6 +19,7 @@ const PAD_BINDINGS: Dictionary = {
 	&"weapon_next": ["button", JOY_BUTTON_DPAD_DOWN, 0],
 	&"fire": ["button", JOY_BUTTON_A, 0],
 	&"toggle_flight_assist": ["button", JOY_BUTTON_DPAD_UP, 0],
+	&"toggle_running_lights": ["button", JOY_BUTTON_DPAD_LEFT, 0],
 	&"brake": ["button", JOY_BUTTON_RIGHT_STICK, 0],
 	&"autotrack": ["button", JOY_BUTTON_X, 0],
 	&"camera_look": ["button", JOY_BUTTON_LEFT_STICK, 0],
@@ -65,6 +66,7 @@ const KEYS_B: Dictionary = {
 	&"wing_form": [KEY_2],
 	&"wing_engage": [KEY_3],
 	&"wing_cover": [KEY_4],
+	&"toggle_running_lights": [KEY_5],
 }
 
 # action -> mouse buttons in event order (an action not listed has none).
@@ -76,10 +78,10 @@ const MOUSE_B: Dictionary = {
 	&"weapon_next": [MOUSE_BUTTON_XBUTTON2],
 }
 
-# The left block of a US keyboard: the 1-4, Q-T, A-G and Z-B columns, Shift, Caps Lock, Tab and Space. The number keys are
+# The left block of a US keyboard: the 1-5, Q-T, A-G and Z-B columns, Shift, Caps Lock, Tab and Space. The number keys are
 # the wing orders (M3-T07).
 const LEFT_BLOCK: Array[Key] = [
-	KEY_1, KEY_2, KEY_3, KEY_4,
+	KEY_1, KEY_2, KEY_3, KEY_4, KEY_5,
 	KEY_Q, KEY_W, KEY_E, KEY_R, KEY_T, KEY_A, KEY_S, KEY_D, KEY_F, KEY_G, KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B,
 	KEY_SHIFT, KEY_CAPSLOCK, KEY_TAB, KEY_SPACE,
 ]
@@ -214,9 +216,9 @@ func test_trigger_deadzone() -> void:
 	assert_almost_eq(InputMap.action_get_deadzone(&"strafe_left"), 0.15, 1e-6)
 
 
-func test_the_right_stick_pitches_and_yaws_and_the_dpad_sides_are_free() -> void:
+func test_the_right_stick_pitches_and_yaws_and_the_dpad_sides_are_lights_and_free() -> void:
 	# M3-T15: the right stick is pitch (Y) and yaw (X), read as one vector (InputAdapter.split_stick rolls on its
-	# diagonals); the roll actions are the keys alone; D-pad Left / Right are unbound.
+	# diagonals); the roll actions are the keys alone. M3-T27: D-pad Left is the running lights; D-pad Right is unbound.
 	for action: StringName in [&"yaw_left", &"yaw_right", &"pitch_down", &"pitch_up"]:
 		assert_almost_eq(InputMap.action_get_deadzone(action), 0.15, 1e-6, "%s: stick deadzone" % action)
 		assert_false(_has_pad_button(action), "%s: no pad button" % action)
@@ -225,7 +227,7 @@ func test_the_right_stick_pitches_and_yaws_and_the_dpad_sides_are_free() -> void
 		for event: InputEvent in InputMap.action_get_events(action):
 			assert_false(event is InputEventJoypadMotion, "%s: no stick axis" % action)
 	assert_true(_has_key(&"roll_left", KEY_CAPSLOCK) and _has_key(&"roll_right", KEY_G), "Caps Lock / G roll (left hand)")
-	assert_eq(_actions_on_button(JOY_BUTTON_DPAD_LEFT), [] as Array[StringName], "D-pad Left is free")
+	assert_eq(_actions_on_button(JOY_BUTTON_DPAD_LEFT), [&"toggle_running_lights"] as Array[StringName], "D-pad Left: the lights")
 	assert_eq(_actions_on_button(JOY_BUTTON_DPAD_RIGHT), [] as Array[StringName], "D-pad Right is free")
 
 

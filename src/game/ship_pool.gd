@@ -13,7 +13,7 @@ extends Node3D
 ## `projectiles` and (for the console's `spawn`) `player` before `prepare`.
 ##
 ## Console (§15.13, D27, §16.4): providers `raiders` and `allies`, and commands `despawn [target|all]` and
-## `spawn <raider|ally> [behaviour] [distance_m] [yaw_deg] [pitch_deg]` (an ally takes only `idle` or `ai`). Raiders are
+## `spawn <raider|ally> [behaviour] [distance_m] [yaw_deg] [pitch_deg] [lights=on|off]` (an ally takes only `idle` or `ai`). Raiders are
 ## named `RAIDER <n>`, allies `ALPHA <n>` from 2 (the player is ALPHA 1). A pooled ship has an `AiPilotDriver`; `acquire`
 ## gives it the brain and `release` takes it away.
 
@@ -243,7 +243,8 @@ func _console_list(type: StringName) -> PackedStringArray:
 		var range_text: String = ""
 		if player != null and is_instance_valid(player):
 			range_text = " %.0f m" % player.global_position.distance_to(combatant.ship.global_position)
-		out.append("%s hull %.0f%%%s" % [combatant.display_name, 100.0 * combatant.damageable.hull.fraction(), range_text])
+		var dark_text: String = "" if combatant.ship.running_lights else " dark"
+		out.append("%s hull %.0f%%%s%s" % [combatant.display_name, 100.0 * combatant.damageable.hull.fraction(), range_text, dark_text])
 	return out
 
 
@@ -251,17 +252,21 @@ func _cmd_spawn(args: Dictionary) -> ConsoleResult:
 	var kind: StringName = StringName(args[&"type"])
 	var type: StringName = SPAWN_TYPES[kind]
 	var usage: String = ("spawn raider [idle|patrol|attack|aggro|ai] [distance_m] [yaw_deg] [pitch_deg]" if kind == &"raider" \
-			else "spawn ally [idle|ai] [distance_m] [yaw_deg] [pitch_deg]") + " [skill=<rank|0-1>] [aggression=<level|0-1>]"
+			else "spawn ally [idle|ai] [distance_m] [yaw_deg] [pitch_deg]") + " [skill=<rank|0-1>] [aggression=<level|0-1>] [lights=on|off]"
 	if player == null or not is_instance_valid(player) or world == null:
 		return ConsoleResult.failure("no player ship to place the %s relative to" % kind)
 	# `[behaviour] [distance_m] [yaw_deg] [pitch_deg]`: the behaviour word is optional (idle), the numbers too (30 0 0).
 	var words: PackedStringArray = String(args[&"options"]).split(" ", false)
 	# `skill=` and `aggression=` (M3-T13) anywhere among the words, for an `ai` spawn.
 	var temper: Dictionary = {}
+	var lights: Variant = null  # `lights=` (M3-T27), on any spawn
 	for i: int in range(words.size() - 1, -1, -1):
 		var pair: PackedStringArray = words[i].split("=", true, 1)
 		if pair.size() == 2 and (pair[0] == "skill" or pair[0] == "aggression"):
 			temper[pair[0]] = pair[1]
+			words.remove_at(i)
+		elif pair.size() == 2 and pair[0] == "lights":
+			lights = pair[1]
 			words.remove_at(i)
 	var behaviour: StringName = &"idle"
 	if not words.is_empty() and BrainFactory.BEHAVIOURS.has(StringName(words[0])):
@@ -290,6 +295,8 @@ func _cmd_spawn(args: Dictionary) -> ConsoleResult:
 		if behaviour != &"ai":
 			return ConsoleResult.failure("skill= and aggression= take an ai spawn (%s)" % usage)
 		spec.merge(temper, true)
+	if lights != null:
+		spec["running_lights"] = lights
 	var made: Dictionary = BrainFactory.from_behaviour(spec, at, hash([ship_name, 0]))
 	if not bool(made["ok"]):
 		return ConsoleResult.failure(String(made["error"]))

@@ -38,7 +38,8 @@ second.
 RT / LT       right / left main pods (analog)        RB / LB     right / left retros
 Right stick   up/down: pitch (stick back = nose up)   Left stick  strafe left/right, up/down
               left/right: yaw;  the four diagonals: roll toward the side you lean (up-right or down-right = roll right)
-D-pad Up      flight assist on/off                   D-pad Down  fire mode               D-pad Left/Right  free
+D-pad Up      flight assist on/off                   D-pad Down  fire mode
+D-pad Left    running lights on/off (key 5; the HUD says LIGHTS ON or OFF, and your wingmen follow)     D-pad Right  free
 B             tap: next target                       hold (about 0.35 s): previous target (as the mouse wheel)
 X (toggle)    auto-track on/off: the nose swings onto the lead reticle of the selected target and follows it as it moves
               (with none selected it takes the nearest hostile; it switches itself off when none is left); your speed and
@@ -58,6 +59,7 @@ Q / W / E     left main / both mains / right main     A / S / D   left retro / b
 R / F         strafe up / down                        Z / C       strafe left / right
 Caps Lock / G roll left / right                       X           brake (hold)           Shift  auto-track (toggle)
 Space         fire                                    V           fire mode              T      flight assist on/off
+5             running lights on/off (as D-pad Left)
 B             tap: next target, hold: target nearest the nose (as Mouse 2)              Tab    cockpit / chase camera
 Mouse         pitch and yaw: how fast you move it is how fast you turn (stop the mouse and the turn stops)
 Alt (hold)    frees the mouse: the cursor appears, the ship ignores it and clicks do not fire; Alt + drag moves the window
@@ -94,9 +96,10 @@ R3 is the brake; L3 is free look (the debug overlay is F3 only); the keyboard mo
 Changed in M3: keyboard layout B, every flight key under the left hand (the M2.1 layout had pitch, yaw, strafe and targets on
 the right side, under the hand that holds the mouse). Changed after the M3 play test: the right stick flies all three axes (pitch
 up/down, yaw left/right, roll on the diagonals), B selects targets (hold for the previous one), D-pad Up is flight assist and
-D-pad Left/Right are free; free look holds its view until L3 is released. A control profile you saved with the old default pad
+D-pad Left/Right were free; free look holds its view until L3 is released. A control profile you saved with the old default pad
 layout is moved onto the new one when it loads (your keys and mouse buttons stay; the console says so; `controls save <name>`
-keeps it). Tune the hold with `set settings.target_hold_s 0.5`.
+keeps it). Tune the hold with `set settings.target_hold_s 0.5`. Running lights on D-pad Left and key 5 came later (M3-T27): a saved profile gets them when
+it loads, and one that already uses D-pad Left keeps it, with the lights on key 5 alone.
 
 Nav buoys can be shot: six hits (60 hull) and one blows up with an explosion and shards. A destroyed buoy is gone until you
 respawn (Back / Backspace, or dying), which restores them all. Any ship's bolts hurt them.
@@ -130,6 +133,8 @@ spawn raider attack 1500   an attacking raider 1.5 km ahead (idle|patrol|attack|
 spawn raider 40 35 20      an idle raider 40 m ahead, nose to you, yaw 35 / pitch 20
 kill target                destroy the selected raider (kill all / kill player too; god on does not stop it)
 damage 50 / heal           hit or restore your hull (god on blocks the damage)
+running_lights off         your lights, and your wing's (on|off, alone it toggles)
+spawn raider aggro 3000    a raider that patrols dark and lights up when it attacks you (lights=on|off on any spawn)
 ```
 
 ### Control profiles
@@ -188,7 +193,7 @@ The full wording is in `docs/milestones/m1-first-flight.md`. Tick each one, or n
       holding keyboard B or Mouse 2 picks the one nearest the nose; bracket and readout look right; buoys are splats and spin; NAV DELTA
       (drifting) shows a non-zero closing speed.
 - [ ] **AC27 Play-test tweaks (M3-T15).** (1) Pad: B taps to the next target and a long press steps back one; D-pad
-      Up toggles assist; D-pad Left/Right do nothing; the right stick pitches straight up/down, yaws straight left/right
+      Up toggles assist; D-pad Right does nothing (Left is the running lights since M3-T27); the right stick pitches straight up/down, yaws straight left/right
       and rolls on the diagonals, and L3 free look stays where you left it until you let go of L3. (2) Gun and impact
       sounds sit two octaves lower than before (by ear). (3) Reverse (both bumpers) is as strong as forward, and
       strafing feels strong (half the forward thrust, sway and heave).
@@ -239,7 +244,7 @@ bottom left         HULL bar (green, amber under 50 %, red under 25 %; GOD when 
                     tank is finite: `set settings.fuel_unlimited off`). Above it, your ship's outline (front view: cabin and the
                     four arms): a part turns yellow, orange, then red as it takes damage
 beside the radar    the target's outline in the same colours (Raiders: the two wings and the centre), while a ship is selected
-bottom right        CHARGE: the weapon capacitor and the fire mode
+bottom right        CHARGE: the weapon capacitor and the fire mode; above it LIGHTS ON, or LIGHTS OFF in amber (D-pad Left, key 5)
 drift sphere        a small sphere left of the speed readout, always drawn: your ship at its centre, nose up the screen, and an arrow
                     along your direction of travel (straight up the sphere = flying where you point; sideways = drifting; down =
                     backing up; a short stalk to the equator tells above from below; the small circle is where you came from).
@@ -305,3 +310,11 @@ a few minutes of both mains with assist on (up to its 5 000 m/s) cover 900 km, a
       no hitch at each one (the picture holds still for one tick at a rebase, everything together: at most one repeated
       frame; watch a buoy, a ship or your own bolts passing), and an explosion or debris flying when it happens stays where
       it is and looks as in M2 (AC16).
+- [ ] **AC39 Running lights (M3-T27).** Every ship shows red on its left, green on its right and white on top: read them at combat range and
+      as points from several km (`spawn raider idle 3000`). Fly over a Starfury (`spawn ally idle 26 0 -80` turns its top toward you in the
+      cockpit camera): its cabin top is lit, and it goes darker with `running_lights off`. The cockpit glow is soft, inside and in the canopy
+      from outside within about 150 m. A dark raider is hard to spot and its lights coming on reads as a threat: `spawn raider aggro 3000`
+      patrols dark and lights up when it attacks you (the sandbox's PATROL wave starts dark too, but it spawns inside your sensor range and
+      attacks at once). D-pad Left or key 5 switches yours, the HUD says so, and your wingmen follow. Buoys keep a steady light and breathe
+      slowly. Knobs: `settings.top_lamp_energy`, `cabin_glow_level`, `cabin_glow_view_m`, `running_light_min_px`, `cockpit_light_energy`;
+      positions are `nav_lights` in the generators.
