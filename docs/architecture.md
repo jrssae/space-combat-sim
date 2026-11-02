@@ -1980,3 +1980,17 @@ scripts/bench_quick.sh      the quick check: ramps furball and spread until 30 F
   One difference stays inside a tick: a target that left play or reach since the last refresh can no longer be selected by id
   before the next refresh, where the last tick's list used to allow it until the refresh at priority 100 cleared it.
 - **Work count**: `TargetInfo.built_count` (every `TargetInfo` built in the process), for tests and profiling.
+
+### 17.3 Cycle 2: the ram resolver's broad phase (T03)
+
+- **Before**, `RamResolver`'s swept pass looked at every pair of active hulls every tick: a velocity difference, the tunnelling
+  test and either the shape sweep or `RamTracker.keep_touching`, about 1.5 us a pair, so O(N^2) and 7.8 of the 9.5 ms of rams at
+  100 ships in every layout, though nearly every pair was hundreds of metres apart.
+- **Now** `RamBroadPhase` (pure) boxes each hull's bounding sphere along its path through the tick, grown by a metre, and sorts
+  and sweeps the boxes along x. Only overlapping pairs, and the pairs Jolt reported touching in its last step, reach the old
+  per-pair code, in the old pass's order (a ram earlier in the pass can destroy a hull a later pair holds).
+- **Why nothing changes**: a pair whose boxes do not overlap cannot meet the resolver's first exact test (the two bounding spheres
+  meeting over the tick), so its shape sweep would have found nothing; and `keep_touching` only acts on a pair Jolt holds in
+  contact, which is always looked at. So `RamTracker` sees the same calls that matter, and a skipped pair stops touching exactly
+  when it did before. `test_ram_broad_phase` checks every candidate against the sphere test on seeded crowds near the origin and
+  45 km out; `test_ram_scale` counts the pairs looked at per tick and pins the rams that must still land.

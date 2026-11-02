@@ -21,6 +21,9 @@ extends Node
 ##   destroyed. The sweep runs at tunnelling speed even while Jolt reports a contact (that is when Jolt cannot be trusted);
 ##   `RamTracker` keeps it to one ram per pair per collision.
 ##
+## Only the pairs `RamBroadPhase` finds near each other this tick, and the pairs Jolt holds in contact, are looked at (M4-T03,
+## §17.3): any other pair could neither sweep into each other nor be kept touching, so skipping it changes nothing.
+##
 ## God mode protects the player's hull (`Damageable.apply_hit`); the bounce is Jolt's and still happens. `HitInfo.shooter_id` is
 ## the other body and `faction` its faction: relations and friendly fire do not matter, a collision hurts whoever it hits.
 ## `settings.ram_damage` (read every tick) switches it off; ships still bounce.
@@ -101,8 +104,8 @@ func resolve(delta: float) -> void:
 	enabled = bool(Settings.get_value(&"ram_damage"))
 	if enabled:
 		var hulls: Array[Dictionary] = _gather(delta)
-		_resolve_contacts(hulls, delta)
-		_resolve_swept(hulls, delta)
+		var in_contact: PackedInt64Array = _resolve_contacts(hulls, delta)
+		_resolve_swept(hulls, in_contact, delta)
 		tracker.end_tick()
 	else:
 		tracker.reset()  # a contact that began while off is never rammed when it is switched back on
@@ -152,17 +155,27 @@ func _gather(delta: float) -> Array[Dictionary]:
 # --- contacts: Jolt bounced them ---------------------------------------------------------------------------------
 
 
-func _resolve_contacts(hulls: Array[Dictionary], delta: float) -> void:
+# Lands the contact rams; returns the pairs of `hulls` Jolt reported touching, in `RamBroadPhase`'s form.
+func _resolve_contacts(hulls: Array[Dictionary], delta: float) -> PackedInt64Array:
 	var by_id: Dictionary = {}
+	var index_of: Dictionary[int, int] = {}
+	for i: int in hulls.size():
+		by_id[hulls[i]["id"]] = hulls[i]
+		index_of[hulls[i]["id"]] = i
 	var samples: Array[RamTracker.Sample] = []
-	for hull: Dictionary in hulls:
-		by_id[hull["id"]] = hull
+	var in_contact := PackedInt64Array()
+	for i: int in hulls.size():
+		var hull: Dictionary = hulls[i]
 		if hull["rigid"]:
 			var damageable: Damageable = hull["damageable"]
 			var sample := RamTracker.Sample.new(hull["id"], hull["velocity"], hull["accel"], damageable.ram_safe_dv_mps,
 					damageable.ram_lethal_dv_mps)
 			_read_contacts(hull["body"] as RigidBody3D, sample, _shift_since_step)
 			samples.append(sample)
+			for other_id: int in sample.contacts:
+				var k: int = index_of.get(other_id, -1)
+				if k >= 0:
+					in_contact.append(mini(i, k) * hulls.size() + maxi(i, k))
 	var pending: Array[Array] = []
 	for ram: RamTracker.ContactRam in tracker.contacts(samples, delta):
 		var damageable: Damageable = (by_id[ram.hull_id] as Dictionary)["damageable"]
@@ -171,6 +184,7 @@ func _resolve_contacts(hulls: Array[Dictionary], delta: float) -> void:
 				damageable.hull.max_hp * ram.severity, ram.point, ram.normal, ram.relative_speed, HitInfo.CAUSE_RAM)
 		pending.append(_pending(damageable, info, KIND_CONTACT, ram.dv))
 	_apply_all(pending)
+	return in_contact
 
 
 # Every body Jolt reported touching `rigid` in its last step, with the first contact point and `rigid`'s surface normal there
@@ -187,26 +201,40 @@ static func _read_contacts(rigid: RigidBody3D, sample: RamTracker.Sample, shift:
 # --- swept: tunnelling speeds and props -------------------------------------------------------------------------
 
 
-func _resolve_swept(hulls: Array[Dictionary], delta: float) -> void:
-	for i: int in hulls.size():
+# The pairs near enough to meet this tick, and those in contact, in the order of a pass over every pair (a ram earlier in the
+# pass can destroy a hull a later pair holds).
+func _resolve_swept(hulls: Array[Dictionary], in_contact: PackedInt64Array, delta: float) -> void:
+	var count: int = hulls.size()
+	var starts := PackedVector3Array()
+	var ends := PackedVector3Array()
+	var radii := PackedFloat32Array()
+	starts.resize(count)
+	ends.resize(count)
+	radii.resize(count)
+	for i: int in count:
+		starts[i] = hulls[i]["start"]
+		ends[i] = hulls[i]["end"]
+		radii[i] = (hulls[i]["damageable"] as Damageable).bounding_radius
+	for key: int in RamBroadPhase.pairs(starts, ends, radii, in_contact):
+		@warning_ignore("integer_division")
+		var i: int = key / count
 		var first: Dictionary = hulls[i]
-		for j: int in range(i + 1, hulls.size()):
-			var second: Dictionary = hulls[j]
-			if not (first["rigid"] or second["rigid"]):
-				continue  # props never ram each other
-			var first_hull: Damageable = first["damageable"]
-			var second_hull: Damageable = second["damageable"]
-			if first_hull.hull.destroyed or second_hull.hull.destroyed:
-				continue  # a hull that went earlier this tick
-			var both_rigid: bool = first["rigid"] and second["rigid"]
-			var relative_speed: float = ((first["velocity"] as Vector3) - (second["velocity"] as Vector3)).length()
-			if both_rigid and not RamMath.is_tunnelling(relative_speed, delta, first_hull.core_radius, second_hull.core_radius):
-				tracker.keep_touching(first["id"], second["id"])  # Jolt's speed: its contacts decide
-				continue
-			# A ship's Jolt contacts handle shallow clips; a prop has no body, so any touch is a ram.
-			var hit: Dictionary = _sweep_pair(first, second, both_rigid)
-			if not hit.is_empty() and tracker.swept_meeting(first["id"], second["id"]):
-				_ram_swept(first, second, hit["point"], KIND_TUNNEL if both_rigid else KIND_PROP)
+		var second: Dictionary = hulls[key - i * count]
+		if not (first["rigid"] or second["rigid"]):
+			continue  # props never ram each other
+		var first_hull: Damageable = first["damageable"]
+		var second_hull: Damageable = second["damageable"]
+		if first_hull.hull.destroyed or second_hull.hull.destroyed:
+			continue  # a hull that went earlier this tick
+		var both_rigid: bool = first["rigid"] and second["rigid"]
+		var relative_speed: float = ((first["velocity"] as Vector3) - (second["velocity"] as Vector3)).length()
+		if both_rigid and not RamMath.is_tunnelling(relative_speed, delta, first_hull.core_radius, second_hull.core_radius):
+			tracker.keep_touching(first["id"], second["id"])  # Jolt's speed: its contacts decide
+			continue
+		# A ship's Jolt contacts handle shallow clips; a prop has no body, so any touch is a ram.
+		var hit: Dictionary = _sweep_pair(first, second, both_rigid)
+		if not hit.is_empty() and tracker.swept_meeting(first["id"], second["id"]):
+			_ram_swept(first, second, hit["point"], KIND_TUNNEL if both_rigid else KIND_PROP)
 
 
 # Shape by shape, whether some point of one body comes at least `RamMath.RAM_DEPTH_M` deep inside the other over this tick,

@@ -6,7 +6,8 @@ extends GutTest
 ## The rest pins what may not change while it gets cheaper, among bystanders the resolver must leave out: a ram at speed lands,
 ## even when the hulls meet in the middle of a tick and are far apart at both its ends; a glancing pass lands at the overlap's
 ## edge and a hand's breadth outside it does not; a slow scrape is Jolt's contact and its pair stays touching while Jolt holds
-## it; a pair that separates and comes back is rammed again, once per meeting.
+## it, even when its bounding spheres are too small to bring it in; a pair that separates and comes back is rammed again, once
+## per meeting.
 ##
 ## The ships fly in real physics ticks (Jolt, the real resolver at priority 210). Ships drift without input.
 
@@ -213,6 +214,25 @@ func test_a_slow_scrape_is_a_jolt_contact_and_its_pair_stays_touching() -> void:
 	assert_true(touched, "Jolt reported the scrape")
 	assert_true(tracker.kept.has(key), "the resolver kept the pair touching while Jolt held it")
 	assert_eq(_kinds(), PackedStringArray(["contact", "contact"]), "a scrape is a contact ram, one on each hull")
+
+
+func test_a_pair_jolt_holds_in_contact_is_kept_touching_whatever_its_bounding_spheres() -> void:
+	# The bounding spheres shrunk to half a metre: the scrape's two origins stay metres apart, so only Jolt's report of the
+	# contact can bring the pair to the resolver.
+	_bystanders(8, 400.0)
+	var a: Combatant = _ship(STARFURY_PATH, Vector3(0.0, 0.0, 600.0))
+	var b: Combatant = _ship(STARFURY_PATH, Vector3(0.0, 0.0, -600.0))
+	await _ticks(2)
+	a.damageable.bounding_radius = 0.5
+	b.damageable.bounding_radius = 0.5
+	_head_on(a, b, SCRAPE_MPS, 14.0, SCRAPE_X_M)
+	var touched: bool = false
+	for i: int in 60:
+		await _ticks(1)
+		touched = touched or tracker.in_contact(a.ship.get_instance_id(), b.ship.get_instance_id())
+	assert_true(touched, "Jolt reported the scrape")
+	assert_true(tracker.kept.has(RamTracker.pair_key(a.ship.get_instance_id(), b.ship.get_instance_id())),
+			"the resolver kept the pair touching while Jolt held it")
 
 
 func test_a_pair_that_separates_and_comes_back_is_rammed_once_per_meeting() -> void:
