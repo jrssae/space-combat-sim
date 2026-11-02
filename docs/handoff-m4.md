@@ -11,7 +11,7 @@ its Cycle log holds the full numbers. This file is the short version plus the de
 | `main` | M3 merged (`b2f8ce1`). |
 | `m4` | `14acadd`, pushed, CI green. Holds T01 and the quick check. |
 | T01 benchmark harness, budget and baseline | Done and merged. Reviewed twice, full suite green (GUT 2178 of 2180 passing, 2 pending AC12 balance tests; Python 363 OK). |
-| T02 cycle 1 | Built and measured, **not reviewed or merged**. Branch `t3/m4-t02-profile-and-optimize-cycle-1`, worktree `/home/josef/.t3/worktrees/Space Combat Sim/t3-8db0efa6`. At the time of writing its agent was running the below-sweep counts (30, 35, 40 ships), then writes the Cycle log entry, runs the full suite and reports to `.superpowers/sdd/m4-performance-and-scale/task-2-report.md`. |
+| T02 cycle 1 | Built and measured, **not reviewed or merged**. Branch `t3/m4-t02-profile-and-optimize-cycle-1` (`15b59b6`, `7cc168e`, `29e8f35`, base `14acadd`), worktree `/home/josef/.t3/worktrees/Space Combat Sim/t3-8db0efa6`. Report: `.superpowers/sdd/m4-performance-and-scale/task-2-report.md`. The full suite was **not run**: the maintainer stopped it partway through GUT. The new tests (9/9) and 25 targeting scripts (307/307) pass. |
 | T03 to T05 cycles 2 to 4, T06 report | Not started. **On hold**: the maintainer asked to stop after T02's agent finishes and to see the options in section 7 first. |
 
 ## 2. Decisions and standing orders
@@ -96,13 +96,18 @@ Sweep after cycle 1 (`m4_c1_after`, three seeds):
 | spread | 5.28 ms, pass 3/3 | 11.9 ms | 28.8 ms (was 102.8) | 25 (was 0) |
 | transit | 4.10 ms, pass 3/3 | 8.4 ms | 18.8 ms (was 91.6) | 25 (was 0) |
 
-**Headline max N: 0 to 25.** The quick check puts the budget ceiling at 30 ships in furball and spread (was 20). Both now
-fall under 30 FPS at 100 ships, where before they gave out at 75. The below-sweep counts (30, 35, 40) were still running
-when this was written; the agent's Cycle log entry will have them.
+**Headline max N: 0 to 25.** The largest passing count below the next sweep count rose from 20 to 30 in the furball, 35
+in spread and 45 in transit. With the engine's own frame sleep kept, the furball still passes at 25 and 30 on every run
+(p99 9.2 and 9.5 ms), so 30 is not an artefact of the bench's busy loop. The gain matched the prediction within 0.3 ms at 25
+ships, 0.6 ms at 50 and 1.5 ms at 100. Both furball and spread fall under 30 FPS at 100 ships in the quick check, where
+before they gave out at 75.
 
-What T02 still owes when its agent finishes: the Cycle log entry, the status row, the full suite and its report. Then the
-controller's part (on hold): the task review (`reviewer-instructions.md`, Sonnet), fix rounds, merge into `m4`, a full suite
-read by its totals, push.
+One edge differs inside a tick, listed for the maintainer: a target that left play or reach since the last refresh can no
+longer be selected by id before the next refresh (before, the last tick's list allowed it until the refresh at priority 100
+cleared it).
+
+What T02 still owes, all on the controller's side and on hold: the full suite (AC13's paired budget and the rest of M1 to M3
+are unconfirmed until it runs), the task review (`reviewer-instructions.md`, Sonnet), fix rounds, merge into `m4`, push.
 
 ## 6. Where the time goes now
 
@@ -153,7 +158,8 @@ My recommendation:
 
 ## 8. Open items
 
-- **T02:** review, merge and push are waiting for the maintainer's go.
+- **T02:** full suite, review, merge and push are waiting for the maintainer's go. To pass 50 ships the furball needs
+  about 5 ms off its 13 ms median, more than option 1 or 2 gives alone.
 - **M3 carry-overs** (also at the end of the M4 doc): AC12 balance (dogfight unfinished on all five seeds; sandbox idle clears
   only wave 1); AC13's resolver worst tick (recorded, not asserted); the join warning from the wave loop; the CI GUT timeout
   longer than the job limit; stale wing state when the same Combatant is reacquired; repeated frames about once a second
