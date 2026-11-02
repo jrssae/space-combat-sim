@@ -38,6 +38,7 @@ voices. M8's tutorial is written on top of all this, so the framework matters mo
 | Q11 | More civilian ships? Colours? (maintainer, with Q8) | **Add the Centauri Brezebel transport, about 60 m.** For **every** civilian model, take the colour scheme from online images of that ship |
 | Q12 | The player's radar reaches 25 km, the AI's sensors 5 km: how do arriving ships appear without popping onto the radar? | **Raiders jump in, traffic cruises.** Raiders arrive through a jump point 6-12 km out with a placeholder flash (M6's vortex replaces it). Patrols and civilians spawn past 25 km on routes that bring them by |
 | Q13 | (maintainer, with Q12) Are civilians unarmed? | **No: civilian ships carry defensive weapons.** They still run, and fire defensively. Details in Q14 |
+| Q14 | What weapons, when do they fire, how strong? | **Small turrets**: 2-4 light turrets per hull by size, each with its own firing arc, lead-aimed, about 1.5 km range, built as a turret system M12's capital ships can reuse. **Only at attackers**: a turret fires at a ship that has shot at its own ship, or at another civilian or ally close by; a raider flying past is left alone. **Deterrent only**: they hurt raiders and may finish a damaged one, but a raid of two or more raiders still wins unless the player or a patrol helps |
 
 ## Scope
 
@@ -233,8 +234,9 @@ Out (explicitly):
 - Four generators, seven hulls, the same output contract as §9 and §15.11: hull PLYs for LOD0-3 with lighting records,
   fallback mesh and depth proxy, `hardpoints.json` with pods and nozzles (main and RCS), collision primitives that cover
   the splats, `cockpit_camera` and `chase_anchor` (the parser needs them), running lights, and `chunks[]` from
-  `core/chunks.py`. **Defensive weapons (Q13, Q14):** the hardpoints carry weapon mounts; civilians still run from
-  raiders (the `civilian` profile) and fire only in their own defence, as Q14 settles.
+  `core/chunks.py`. **Defensive turrets (Q13, Q14, D61):** `hardpoints.json` gains `turrets[]` (2-4 per hull by size,
+  placed where they cover the hull's quarters), and each style has one generated turret model; civilians still run
+  from raiders (the `civilian` profile) while their turrets fire in their own defence.
   - `saturn_family` with variants `saturn_3_freighter`, `saturn_4_transport`, `saturn_8_transport` and
     `saturn_fuel_tanker`. The four share the control section (command sphere), the truss spine, the engine section and
     the cargo-arm parts. The Saturn 4 transport (about 100 m, Q8) fixes the size of the shared parts; the Saturn 8 and the
@@ -257,6 +259,26 @@ Out (explicitly):
   time on screen. The task sets each budget so that all seven in view stay within `splat_budget` and records VRAM.
 - Flight: each hull flies through the one `FlightModel` (§15.16), heavy and slow (`ShipSpec` mass, thrust and inertia per
   hull; turning is torque only). Civilians break up into their chunks when destroyed, with the usual explosion.
+
+### D61 Defensive turrets (Q14)
+
+- A turret is a gunner, not a pilot: the ship's `AiPilot` keeps flying (a civilian runs) while its turrets pick their own
+  targets. `TurretAim` (pure): traverse and elevation limits from the mount's arc, slew rates, lead from `InterceptMath`,
+  a fire gate (inside the arc, inside range, the lead error under the bolt's spread at that range). `ThreatMemory`
+  (pure): a ship becomes an attacker of a victim when one of its bolts hits that victim (`HitResolver`'s results, shooter
+  and victim) and stays one for 30 s; a turret may fire only at an attacker of its own ship, or of a civilian or ally
+  within 2 km of it. Both are unit-tested.
+- `hardpoints.json` `turrets[]`: `{name, position, up, arc_deg, barrel_m}` in the body frame. `TurretMount` (node, child
+  of the ship, built by `ShipAssembly`) holds the turret's model, turns it in `_process` from the physics-tick aim, and
+  fires through the existing kinematic projectile pool and `HitResolver` (no new hit path). A generated `turret_fire`
+  sound, built like D60's guns but lighter.
+- Strength (Q14, deterrent): a light bolt, low fire rate, about 1.5 km range. A seeded headless fight pins the balance:
+  two raiders destroy a lone Saturn 4 transport within 180 s in at least two of three seeds, and the transport's turrets
+  finish a raider left at 15 % hull that keeps attacking it.
+- The seam is general: any ship with `turrets[]` gets them (M12's capital ships). Targeting and the fire gate cost work
+  linear in turrets times attackers, never a sweep over all ships (`ThreatMemory` keeps the short attacker list).
+- Visuals: the turret model is a small splat (pooled with its ship, D22). If turning many small splat nodes each frame
+  costs measurable GPU or sort time, the task falls back to the fallback-mesh model for turrets and says so.
 
 ### D60 The sound pass
 
@@ -296,6 +318,7 @@ Out (explicitly):
 | AC15 | Sounds: generator tests pin the new guns' shape (length, flat hold, constant pitch, energy band after the 0.25 register, inharmonic partials), the impact's length and band, and the engine bursts' band (no energy to speak of below 300 Hz); voices sit at the nozzles; the voice cap holds and the per-frame update is linear in voices (work count); the old loops are gone | A | |
 | AC16 | Cost: M5 adds nothing measurable to AC13 of M3 (the paired 13-ship AI budget still passes, `test_ai_think_time`); the mission runner with 20 triggers and the encounter director stay inside their work counts | A | |
 | AC17 | Docs and the suite: `docs/architecture.md` §18 as built, a `docs/playtest.md` M5 section (how to start, menus, mission, comms menu, encounters, new settings and commands), the roadmap row; `scripts/run_tests.sh` green **once, at the end** (Q10), read from the suite's own totals | A | |
+| AC19 | Defensive turrets (D61): `TurretAim` and `ThreatMemory` unit-tested; civilians fire only at attackers of themselves or of a civilian or ally within 2 km; they keep running while firing; turret bolts go through the projectile pool and `HitResolver`; the seeded balance fight holds (two raiders beat a lone Saturn 4 in at least two of three seeds; its turrets finish a 15 % raider that keeps attacking); `turret_fire` sound | A | |
 | AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear | H | |
 
 ## Working rules for M5
@@ -341,7 +364,8 @@ whose trigger never arose). Update the column with each task's commit.
 | T13 | C | `skylark_transport` generator | T11 | Opus | Geometry | not started |
 | T14 | C | `narn_transport` generator and the `narn` style | T11 | Opus | Geometry and a new style | not started |
 | T15 | C | `centauri_brezebel` generator and the `centauri` style | T11 | Opus | Geometry and a new style | not started |
-| T16 | C | Civilian ships in the game | T12, T13, T14, T15 | Opus | Specs for heavy hulls, factions, pools, AI, GPU check | not started |
+| T21 | C | Defensive turrets (placed here in the order; numbered last because it was added after the others had numbers) | T12, T13, T14, T15, T19 | Opus | A new gunner seam with a balance test | not started |
+| T16 | C | Civilian ships in the game | T12, T13, T14, T15, T21 | Opus | Specs for heavy hulls, factions, pools, AI, GPU check | not started |
 | T17 | C | Free-flight encounters | T16, T02 | Opus | Seeded director under a CPU cap | not started |
 | T18 | D | New guns and impacts | - | Opus | Synthesis to measured shapes | not started |
 | T19 | D | Per-thruster engine bursts | T18 | Opus | Voice placement and a voice budget | not started |
@@ -477,13 +501,19 @@ whose trigger never arose). Update the column with each task's commit.
   them under `reports/refs/<ship>/web/` (each download in its own new directory, never opened by an interpreter), list the
   source URLs in the description, and write the scheme as colours and where they go. Pick values that read like the
   images; no image pixels go into the generators.
-- **Done when:** AC11; each description names its parts, their proportions, its length and its colour scheme.
+- **Turrets (Q14):** note where each reference shows turret-like mounts or where 2-4 turrets would cover the hull's
+  quarters, for D61's `turrets[]`.
+- **Done when:** AC11; each description names its parts, their proportions, its length, its colour scheme and its
+  turret positions.
 
 ### M5-T12 `saturn_family` generator
 
 - **Goal:** AC12 for the four Saturn hulls.
 - **Files:** `tools/procgen/assets/saturn_family.py`, shared parts in `tools/procgen/parts/` (command sphere, truss spine,
   engine section, cargo module, tank), `tools/procgen/styles/ea_civilian.py`, `tools/procgen/tests/test_saturn_family.py`.
+- **Turrets (D61):** each variant's `hardpoints.json` carries `turrets[]` (2-4 by size) and the `ea_civilian` style a
+  small turret model (base, dome, twin barrel) written like a chunk (PLY, lighting record, fallback mesh). T13-T15 do the
+  same for their hulls and styles.
 - **Notes:** one generator, a variant per asset id, so `python3 -m tools.procgen build saturn_4_transport` builds one hull.
   The variant data holds the length (Q8) and the module layout.
 - **Done when:** AC12 for the four variants; `tests/integration/test_splat_import.gd` covers them.
@@ -507,6 +537,18 @@ whose trigger never arose). Update the column with each task's commit.
 - **Files:** `tools/procgen/assets/centauri_brezebel.py`, `tools/procgen/styles/centauri.py`, parts it needs,
   `tools/procgen/tests/test_centauri_brezebel.py`.
 - **Done when:** AC12 for the Brezebel.
+
+### M5-T21 Defensive turrets
+
+- **Goal:** AC19 (D61, Q14). In the order it comes after T15 and before T16.
+- **Files:** `src/combat/turret_aim.gd` (pure), `src/combat/threat_memory.gd` (pure), `src/combat/turret_mount.gd` (node),
+  `src/game/ship_assembly.gd` (build mounts from `turrets[]`), the `Hardpoints` parser (`turrets[]`, optional),
+  `tools/procgen/assets/sfx_combat.py` (`turret_fire`; after T19, which also edits that file), a turret `WeaponSpec`,
+  `tests/unit/test_turret_aim.gd`, `test_threat_memory.gd`, `tests/integration/test_turret_defence.gd` (the balance fight).
+- **Notes:** the generators of T12-T15 emit `turrets[]` and the turret model; if one of them landed without them, add
+  them here. `HitResolver` is read through its existing results signal; do not change M4's files. Civilians are the only
+  ships with turrets in M5.
+- **Done when:** AC19.
 
 ### M5-T16 Civilian ships in the game
 
