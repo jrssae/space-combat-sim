@@ -344,7 +344,10 @@ Out (explicitly):
   branches, no worktrees per agent (the maintainer's rule from M4). Parallel agents keep to their task's files.
 - **Locks.** Every Godot run in the `m5` worktree goes through `flock /tmp/m5-godot.lock <command>` (one Godot process at a
   time on the shared `.godot/` import cache). Every `git add` + `git commit` goes through `flock /tmp/m5-git.lock`, and an
-  agent stages only the paths it changed (never `git add -A`). GPU checks take `flock /tmp/gpu.lock` as well.
+  agent stages only the paths it changed (never `git add -A`). GPU checks take `flock /tmp/gpu.lock` as well. M4's
+  benchmark runs take `/tmp/m5-godot.lock` too (2026-11-02, from the M4 session), so a Godot run may wait up to about 10
+  minutes; never kill or bypass the lock. Other CPU-heavy work (asset builds, STL renders, long Python runs) takes the same
+  lock so M4's numbers stay clean.
 - **Tests (Q10).** Each task runs the Python tests and GUT scripts for what it touched and the new tests it adds, never the
   whole suite. GUT by file: `.tools/godot/godot --headless --path . -s addons/gut/gut_cmdln.gd -gtest=res://tests/<dir>/<file>.gd -gexit`.
   Read GUT's own totals (Passing, Failing, Pending). The full suite runs in T20.
