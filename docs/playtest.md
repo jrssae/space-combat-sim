@@ -463,7 +463,7 @@ ran the capture, and the milestone's as-built notes say what each one shows.
       to chase.
 - [ ] **AC35 Visual pass.** No visible pop as a ship changes level at combat ranges. Plumes light the pods, muzzle flashes light the nose, explosions light nearby hulls,
       and the star gives each hull a lit and a dark side as it rolls. Hits throw sparks and debris vents. Your own hull is visibly sharper close up in the chase view
-      (`set settings.splat_hero off` and restart to compare). The flare follows the star and hides behind hulls. Motion blur (`blur on`) smears the stars on fast turns, not the
+      (`set settings.splat_hero off; save` and restart to compare). The flare follows the star and hides behind hulls. Motion blur (`blur on`) smears the stars on fast turns, not the
       HUD. Raiders read almost black from their unlit side at 80-150 m, gas puffs may read as flat discs, and a debris chunk can read as a flat black shape: say if any of that bothers you. If the flare is too strong or too yellow, its
       numbers are in `space_environment.tscn`.
 - [ ] **AC39 Running lights and break-up.** Every ship shows red on its left, green on its right and white on top: read them at combat range and as points from several km

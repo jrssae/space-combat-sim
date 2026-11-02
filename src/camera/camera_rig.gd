@@ -66,7 +66,7 @@ func _ready() -> void:
 			"Switch to the cockpit or chase camera; with no argument, toggle",
 			[ConsoleArg.enum_optional(&"mode", MODE_CHOICES)]), _cmd_camera, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"look",
-			"Hold the view at yaw and pitch degrees off the nose (free look for captures); `look off` lets it go",
+			"Hold the view at yaw and pitch degrees off the nose, for captures; L3 and the mouse do nothing until `look off`",
 			[ConsoleArg.string_required(&"yaw"), ConsoleArg.float_optional(&"pitch", 0.0, -80.0, 80.0)]), _cmd_look, self)
 
 

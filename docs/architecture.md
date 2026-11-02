@@ -1903,4 +1903,4 @@ Details per task are in the as-built notes of `docs/milestones/m3-ai-pilots-and-
 - **Cockpit HUD.** In the cockpit camera the instruments are on three `SubViewport` screens built into the console (T29, Q29), for the player's ship only; the window keeps the aiming marks. The chase camera keeps the 2D HUD. Both draw through `HudPainter`.
 - **Lights the player can't see.** A dark ship (Q27) is dark to the eye only: radar and AI contact lists never use lights.
 - **Star.** A system's star is data; the flare and the key light take its colour, and the flare is a lens effect only, with no veil or god rays (Q30, Q31).
-- **What runs on what.** The one number that limits scale is on the CPU: 100 ships miss 60 fps because of `TargetingController`, not the renderer (M3-T20; `docs/roadmap.md`, M4).
+- **What runs on what.** The one number that limits scale is on the CPU: 100 ships miss 60 fps because of `TargetingController` (as T20 measured it, before the visual pass), not the renderer (M3-T20; `docs/roadmap.md`, M4).
