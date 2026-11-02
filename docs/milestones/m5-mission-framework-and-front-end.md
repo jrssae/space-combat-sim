@@ -368,7 +368,7 @@ whose trigger never arose). Update the column with each task's commit.
 
 | Task | Track | Title | Depends on | Agent | Why | Status |
 |---|---|---|---|---|---|---|
-| T01 | A | `Game` flow, boot routing and loading | - | Opus | Changes how every run starts; must not break a single script or test | not started |
+| T01 | A | `Game` flow, boot routing and loading | - | Opus | Changes how every run starts; must not break a single script or test | done |
 | T02 | A | Menu kit, front end and pause menu | T01 | Sonnet | Godot UI work on a clear spec | not started |
 | T03 | A | Settings menu and audio buses | T02 | Sonnet | Schema-driven screen | not started |
 | T04 | A | Controls menu | T02 | Sonnet | Wraps the existing profile API | not started |
@@ -404,6 +404,17 @@ whose trigger never arose). Update the column with each task's commit.
   ready (§6.4). Start §18 in `docs/architecture.md` with D50 as built.
 - **Done when:** AC1; a normal launch shows the placeholder front end and Free flight reaches `Main` through the loading
   screen; every `scripts/*.sh` smoke line and `test_main_scene` pass unchanged.
+- **Done (as built, 2026-11-02):** `run/main_scene` is `src/frontend/boot.tscn`.
+  - **Routing.** `Boot` hands the command line to the new `Game` autoload (after ControlProfiles). The pure `GameFlow.boot_route` sends `--headless`, `--console-exec`/`--console-file` with a script, `--scenario=<id>` (which sets `settings.scenario` for the session) and `settings.skip_front_end` (new, false) straight to Main, which reads `Settings.scenario` as before. Other launches go to a placeholder front end (Free flight, Quit). `Game` swaps the scene itself in a deferred call, so `DebugConsole`'s startup queue still runs after `Main._ready`: a script's first statement finds Main's providers with no `wait`.
+  - **Flow.** `GameFlow` holds `FRONT_END`/`LOADING`/`IN_SPACE`/`DEBRIEF` (a run starts at the front end; refused moves change nothing and say why), the request `{kind, scenario_id, encounters, seed}` and the last result.
+  - **Loading.** The loading screen compiles `main.tscn`'s scripts on the main thread, then loads the scene with `load_threaded_request` (compiled on the worker, their preloads leaked 8-10 objects at exit in Godot 4.7.2). `Game` builds Main with the request's `scenario_path` and `scenario_seed`.
+  - **Console.** `menu`, `play <scenario_id> [seed]` (any `data/scenarios/*.json`, encounters off) and provider `game` (`state`, `request`, `last_result`).
+  - **Tests.** `tests/unit/test_game_flow.gd` (21) and `tests/integration/test_boot_routing.gd` (11). `run_tests.sh` gains four M5 smoke runs at the end, and `game` in its two `providers:` lines.
+  - **GPU.** On the maintainer's GPU a windowed launch shows the front end, and Free flight reaches Main through the loading screen (`splat_backend = compute`, 60 fps).
+  - **Docs.** Architecture §18 starts with D50.
+  - **Left for later.** `scenario` reloads do not update `game.request` (T17). Pool-overrun-as-error is left to T05/T17. No M4 file or `main.gd` was touched.
+  - Review: approved, no Critical or Important findings. Carried: the abandoned threaded load and null checks to T02, the
+    pool-overrun error (D50) to T05.
 
 ### M5-T02 Menu kit, front end and pause menu
 
