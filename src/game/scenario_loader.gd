@@ -153,8 +153,8 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 
 
 ## `wings[]` (M3-T10): each wing's declaration, its members appended to `spawns`, or an error string. `leader` is "player",
-## a spawn's name, or absent (the first ship leads). `faction`, when given, must be every member's. `formation` defaults to
-## finger_four, `order` to cover for a player-led wing, else engage.
+## a spawn's name, or absent (the first ship leads). `faction`, when given, must be every member's. `formation` is a `Formation.NAMES` word, default
+## finger_four; `order` an `AiContext.ORDER_WORDS` word, default cover for a player-led wing, else engage.
 static func _wings(raw: Variant, spawns: Array[Dictionary], system: StringName, source: String) -> Variant:
 	if not (raw is Array):
 		return "%s: wings must be an array" % source

@@ -488,7 +488,7 @@ func _give_wing_orders(ui: UiCommand) -> void:
 		wings.give_order(AiContext.Order.COVER_ME)
 
 
-# Captures the mouse while flying. Alt, the console, the pause and a window without focus give it back, and the source
+# Captures the mouse while flying. Alt (window managers use Alt+drag to move a window), the console, the pause and a window without focus give it back, and the source
 # then reads it as idle.
 func _update_mouse_capture() -> void:
 	var godot_source := input_source as GodotInputSource

@@ -25,6 +25,7 @@ extends Resource
 @export var extend_min_s: float = 4.0
 @export var extend_range_m: float = 1400.0
 ## Speed cap, m/s, World frame (0 = none). BREAK and EXTEND seek at most this; APPROACH at most this or the target's own
-## speed, whichever is higher, plus its closing speed. Without it two ships each seeking the other's velocity plus a closing
-## speed feed on each other, so the cap keeps a dogfight at fighting speed (M3-T10).
+## speed, whichever is higher, plus its closing speed, so a chaser always gains, even on a player flat out. Without it two
+## ships each seeking the other's velocity plus a closing speed feed on each other, so the cap keeps a dogfight at fighting
+## speed (M3-T10).
 @export var max_speed_mps: float = 150.0

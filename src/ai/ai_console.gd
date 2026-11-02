@@ -56,7 +56,7 @@ static func names() -> PackedStringArray:
 ## Handler of `ai <name>` and `ai <name> objective <target|none>` (names case-insensitive).
 static func run(args: Dictionary) -> ConsoleResult:
 	var wanted: String = String(args[&"name"]).strip_edges()
-	# `<name> <verb> <value>`: ship names hold spaces, never the verbs.
+	# `<name> <verb> <value>`: ship names hold spaces, never the verbs, and the last verb found wins.
 	var verb: String = ""
 	var value: String = ""
 	var at: int = -1
