@@ -139,11 +139,18 @@ static func sweep_summary(runs: Array[Dictionary], meta: Dictionary = {}, expect
 		var results: Dictionary = {}
 		var counts: Array[Dictionary] = []
 		for n: int in ns:
-			var list: Array[Dictionary] = by_n[n]
+			# A dead run's placeholder (`missing`) and a run with no file at all both count as failed, and neither has a tick.
+			var list: Array[Dictionary] = []
+			var dead: int = 0
+			for run: Dictionary in by_n[n]:
+				if bool(run.get("missing", false)):
+					dead += 1
+				else:
+					list.append(run)
 			var passes: Array = []
 			for run: Dictionary in list:
 				passes.append(bool((run.get("verdict", {}) as Dictionary).get("pass", false)))
-			var missing: int = maxi(0, expected_runs - list.size())
+			var missing: int = dead + maxi(0, expected_runs - list.size() - dead)
 			for i: int in missing:
 				passes.append(false)
 			results[n] = passes

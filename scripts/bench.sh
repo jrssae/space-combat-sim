@@ -68,6 +68,10 @@ one() {
         echo "bench.sh: ${name} exited ${status} (124 is the timeout); see ${run_log}" | tee -a "${LOG}" >&2
     fi
     if [[ ! -f "${OUT}/runs/${name}/summary.json" ]]; then
+        # A placeholder, so the sweep sees the count even when every run of it died, and counts this one as a failed run.
+        mkdir -p "${OUT}/runs/${name}"
+        printf '{"layout": "%s", "n": %d, "seed": %d, "missing": true, "verdict": {"pass": false, "failures": ["the run exited %d without a report"]}}\n' \
+            "${layout}" "${n}" "${seed}" "${status}" > "${OUT}/runs/${name}/summary.json"
         echo "bench.sh: ${name} wrote no summary; the sweep counts it as a failed run" | tee -a "${LOG}" >&2
     fi
 }

@@ -117,3 +117,19 @@ func test_a_missing_run_counts_as_a_failure() -> void:
 	assert_true(bool(count_two["pass"]), "two passes of three still pass")
 	assert_eq(int(count_two["missing"]), 1)
 	assert_string_contains(BenchReport.sweep_markdown(BenchReport.sweep_summary(one, {}, 3)), "2 missing")
+
+
+func test_a_placeholder_for_a_dead_run_is_a_missing_failure_and_stays_out_of_the_medians() -> void:
+	# bench.sh writes one when a run exits without a report, so a count whose every run died still shows, and stops the sweep.
+	var placeholder: Dictionary = {"layout": "furball", "n": 25, "seed": 2, "missing": true,
+			"verdict": {"pass": false, "failures": ["the run exited 134 without a report"]}}
+	var runs: Array[Dictionary] = [_run("furball", 25, 7000.0, true, 1000.0), placeholder]
+	var count: Dictionary = ((((BenchReport.sweep_summary(runs, {}, 3)["layouts"] as Dictionary)["furball"] as Dictionary)["counts"]) as Array)[0]
+	assert_eq(int(count["missing"]), 2, "the placeholder and the run with no file at all")
+	assert_eq(int(count["runs"]), 3)
+	assert_false(bool(count["pass"]))
+	assert_eq(float(count["tick_median_us"]), 7000.0, "a dead run has no tick to count")
+	var all_dead: Array[Dictionary] = [placeholder, placeholder.duplicate(), placeholder.duplicate()]
+	var dead: Dictionary = BenchReport.sweep_summary(all_dead, {}, 3)
+	assert_true((dead["layouts"] as Dictionary).has("furball"), "a count whose every run died still shows")
+	assert_eq(int((((dead["layouts"] as Dictionary)["furball"] as Dictionary)["counts"] as Array)[0]["missing"]), 3)
