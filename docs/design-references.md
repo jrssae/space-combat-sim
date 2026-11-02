@@ -154,6 +154,282 @@ A small craft a few metres across. Two large curved shell halves (blue-purple, w
 painted number) sit side by side like a split egg or clam, joined by a grey central truss body. Two jointed
 manipulator arms hang below with claw grippers. A sensor head with a green lens sits under the front centre.
 
+## Civilian ships (M5)
+
+Seven civilian hulls for free-flight traffic (Q5, Q8, Q11, D59). The maintainer supplied fan-made 3D-print models of
+each (STL files in the untracked `references/`, never committed). As with the Starfury, nothing of them is copied.
+`tools/refview` (M5-T11) turns a model into the ship frame, scales it to the length the design asks for and writes
+orthographic views from six sides and two obliques, silhouettes, 24 to 32 cross-sections along the length, cuts along
+the centre planes and a table of the model's separate shells into the gitignored `reports/refs/<ship>/`. Print models
+are built from closed parts, so each pod, drum or tank is its own shell with its own box, which is where most numbers
+below come from. The generators (T12 to T15) build the hulls from these words; `docs/assets-civilian.md` turns them
+into parts, budgets and hardpoints.
+
+Colours come from screen captures on the fan wiki The Babylon Project (babylon5.fandom.com), read by eye. The captures
+sit in `reports/refs/<ship>/web/` beside the renders and are never committed. The wiki's HTML pages refuse plain
+clients; its API (`/api.php`) and the image host answer.
+
+Frame in this section: x to starboard, y up, z aft from the nose tip (z = 0), metres. These are Godot's axes (-Z
+forward, so +Z is aft) with the origin at the nose, the raider's authored frame. Rerun any ship with
+`.venv/bin/python3 -I tools/refview/refview.py references/<file>.stl --name <ship> --length <m> --right=<axis>
+--up=<axis> --aft=<axis>`; each section gives its file and axis mapping.
+
+### Saturn family: Earth Alliance freighters
+
+The four Saturn models are one family built from the same parts. On screen this is the Earth Alliance freighter the
+fan wiki calls the "Achilles" type: a disc-shaped bridge, a truss, a banded cylinder and cargo pods. The wiki notes
+that these ships were assembled from a few reconfigurable parts, and that the tubular sections were first built for
+the tanker in "Midnight on the Firing Line". "Saturn" is the fan models' name, not one from the show.
+
+All four files share one frame: file +y is aft (disc at -y, engine at +y) and file z is up, so the mapping is
+`--right=-x --up=+z --aft=+y`. Up is read from the captures: in "Achilles.jpg" and "Raiders01.jpg" the pods hang
+below the banded cylinder. The models are mirror-symmetric, so the choice only decides which side is the top.
+
+**Shared parts**, measured on the Saturn 4 at 100 m. Here y is measured from the spine axis, the line through the
+disc, the hull cylinder and the engine.
+
+| Part | Size and place |
+|---|---|
+| Nose antenna | a 2.4 m spike in front of a 4.5 m dish that faces forward, z 0 to 3.5, on a short boom 2.8 m below the axis |
+| Command disc (the control section) | a lens 17.8 m across, 3.8 m thick at the centre and about 1 m at the rim, centred on the axis at z 12.0. Its aft quarter is cut square at z 18.7, leaving an 8 m wide neck that reaches the truss at z 20.9. A ring of 12 radial fins stands on each face between 1.6 m and 5.5 m from the centre, round a hub. A block of 4.2 x 2.7 x 4.9 m sits in each cut corner. |
+| Forward truss | z 20.9 to 38.9 (18 m): three longerons in a triangle about 4 m across, with V braces |
+| Drum frame | at z 26.4 to 31.6, a triangular frame round the truss holding drums 2.0 to 2.5 m across and 5.2 m long, axes along z: one 3.5 m above the axis, two at x ±5.85 and 6.7 m below it, and a fourth on the truss 3.3 m below the axis |
+| Hull cylinder | 11.06 m across, z 38.9 to 86.55 (47.6 m), with shallow domes 3.7 m deep at both ends and a ring of radial brackets on the front dome where the truss lands |
+| Engine section | z 85.7 to 100 (14.3 m): a 6 m collar on the aft dome, four propellant tanks 2.4 m across round a 3.2 m central tank, U-shaped feed pipes to the throat, and a bell with a 4.0 m exit at z 100 on the axis |
+| Cargo arm | 8.2 m long (from x ±6.0 to ±14.2), 3.8 m wide along z and 2.8 m deep, leaving the cylinder's lower flank 3.8 to 6.6 m below the axis, with a diagonal brace from higher up the cylinder's flank to the arm's tip |
+| Pod rail | a rod 1.73 m across along each pod's inboard edge, at x ±12.8 and 5.0 m below the axis, 26.1 m long, with a 2.8 x 3.6 x 1.5 m block at each end |
+| Transport pod | a flat hexagonal prism 19.6 m wide, 10.9 m tall and 27.15 m long. Its section is a kite pointed inboard and outboard: tallest 6.1 m from the inboard tip, with flat end faces 3.8 m tall inboard and 2.4 m tall outboard. Both end faces of the prism are recessed behind a 1 m frame with ladder ribs inside, and a raised band 2.3 m long wraps each end. |
+
+**Colours**, shared by the family; per-hull trim follows in each ship's section.
+
+| Where | sRGB | Read from |
+|---|---|---|
+| Plating: disc, truss, drums, arms, rails, engine section | #A7A49E, panel lines and recesses #55534F | Achilles.jpg (the disc's face), Epsilon.JPG (the disc's rim) |
+| Hull cylinder and the tanker's tanks: bands about one diameter wide, alternating | red #A33A2E and off-white #D9D5CC; the red reads maroon #6B2B24 in shadow | Achilles.jpg, Red Star 9.jpg, Raiders01.jpg |
+| Pods | grey #8C8B86 with panel patches #75736E; end frames and ribs #55534F | Red Star 9.jpg, Dionysus.JPG, Valjean.JPG |
+| Disc's top face | a rust-red ring #9C4A3C between the rim and the hub, dark radial fins #3B3735, a white hub #E2DED6 | Epsilon.JPG |
+| Windows | small warm-white windows #F2E6C8 in a band round the disc's rim | not readable in any capture; our choice |
+| Engine glow | blue-white #DCE8FF | Valjean.JPG |
+
+No capture shows weapons, and the wiki lists "None" for the Achilles. The turrets below are Q14's, placed to cover the
+hull's quarters. The drum frame's drums are the only turret-like mounts in the models; they stay RCS clusters.
+
+Sources, checked 2026-11-02:
+https://babylon5.fandom.com/wiki/%22Achilles%22_Type_Freighter,
+https://babylon5.fandom.com/wiki/File:Achilles.jpg, https://babylon5.fandom.com/wiki/File:Red_Star_9.jpg,
+https://babylon5.fandom.com/wiki/File:Dionysus.JPG, https://babylon5.fandom.com/wiki/File:Valjean.JPG,
+https://babylon5.fandom.com/wiki/File:Epsilon.JPG (the cargo ship Epsilon on "List of Transports"),
+https://babylon5.fandom.com/wiki/File:Raiders01.jpg (on "Raiders"). "File:Tanker 12.JPG" on the same wiki is a
+smaller tanker of another design and was not used. `references/EA_cargo_pod.stl` is a different pod (a block with twin
+cylinders and docking clamps), not the Saturn pod; it was rendered and set aside.
+
+#### Saturn 4 transport (100 m)
+
+`EA_Saturn_4_transport.stl`, 0.0615 m per file unit at 100 m. Length 100.0 m (Q8), span 67.0 m across the pods,
+height 15.5 m.
+
+- Layout: antenna, disc, forward truss with the drum frame, one hull cylinder, engine section. Four pods, two per side,
+  at x ±13.9 to ±33.5 and z 33.3 to 60.5 and 64.9 to 92.0, 4.4 m apart. Each pod hangs on one arm under its middle
+  (arms at z 45.0 to 48.8 and 76.6 to 80.4).
+- The pods' centres are 4.6 m below the axis: their tops (+0.8 m) are level with the cylinder's lower half and their
+  bottoms 10 m below the axis. From behind the ship is a shallow W, the cylinder on top and a pod slung on each side.
+- Pod trim: a red stripe (#A33A2E) along each pod's top edge and a yellow and black hazard band (#D6AE2A, #262626)
+  along its flank, as on Red Star 9 and Dionysus.
+- Turrets (3 by size): `dorsal_fwd` on the disc's top hub at (0, +2.4, 12.0), up +y, for the forward upper quarter;
+  `ventral_fwd` under the drum frame's centre drum at (0, -4.6, 29.0), up -y, for forward and below; `dorsal_aft` on
+  the cylinder's top over the aft arm pair at (0, +5.9, 82.0), up +y, for the rear and the flanks above the pods.
+
+#### Saturn 8 transport (200 m)
+
+`EA_Saturn_8_transport.stl`, 0.1516 m per file unit at 200 m. Span 80.0 m, height 18.8 m.
+
+- The model is the Saturn 4's layout doubled: disc (21.2 m across), forward truss with the drum frame, hull cylinder 1
+  (z 47.1 to 104.6), a junction (z 104.6 to 124.9) with a hexagonal module about 10 m across and 8 m long held by
+  struts from both domes, hull cylinder 2 (z 124.9 to 182.4), and an engine that ends in a crown of short nozzles
+  instead of the bell (z 182.9 to 200). Each cylinder shows two seams, about a fifth of its length in from each end.
+- Eight pods (23.1 x 11.9 x 32.75 m), four per side, each on its own arm, evenly spaced along the cargo length with
+  gaps of 5.8 to 6.4 m; the second and third pod rows reach past the junction.
+- Against the Saturn 4: at 200 m every shared part is about 1.19 times its Saturn 4 size (disc 21.23 against 17.83 m,
+  cylinder 13.19 against 11.06 m, pods 23.14 x 32.75 against 19.6 x 27.15 m). Built from the Saturn 4's parts the
+  model is 168 m long (166 to 169 m, depending on the part compared), not 200 m.
+- The stated length wins (Q8, D59). Every shared part keeps its Saturn 4 size and the missing 32 m go into the spine.
+  Generator layout: antenna and disc as on the Saturn 4 (z 0 to 20.9); forward truss 30 m (z 20.9 to 50.9, against
+  18 m), the drum frame at the same place behind the disc; cylinder 1 with two pod pairs (z 50.9 to 98.5); junction
+  40.45 m (z 98.5 to 138.95; the model's is 17 m at Saturn 4 scale) with the hexagonal module, 8.4 m across and 6.7 m
+  long, at its middle; cylinder 2 with two pod pairs (z 138.95 to 186.55); engine section to z 200.0.
+- What that changes: the pods keep the Saturn 4's spacing on each cylinder, so they read as two groups of four with a
+  40 m gap, where the model spaces all eight evenly. If that looks wrong, the variant data can move length from the
+  junction into longer cylinders with wider pod spacing. The generator uses the shared bell, not the model's crown.
+- Pod trim as on the Saturn 4.
+- Turrets (4): `dorsal_fwd` (0, +2.4, 12.0) and `ventral_fwd` (0, -4.6, 29.0) as on the Saturn 4; `dorsal_mid` on top
+  of the junction module (0, +4.6, 118.7), up +y; `ventral_mid` under it (0, -4.6, 118.7), up -y. The junction is
+  clear of pods, so the middle pair sees the flanks fore and aft.
+
+#### Saturn fuel tanker (200 m)
+
+`EA_Saturn_Fuel_tanker.stl`, 0.1143 m per file unit at 200 m. Span 40.5 m, height 24.3 m.
+
+- The model: disc (22.2 m across), forward truss with the drum frame (z 26.0 to 48.4), then two rows of three tanks
+  (z 48.35 to 107.52 and 124.35 to 183.51), and the engine on the axis (z 182.3 to 200). Each tank is a capsule
+  13.74 m across and 59.16 m long. In each row one tank runs on the spine axis and two hang below and outboard,
+  centres at x ±12.94 and 10.6 m below the axis, braced to the spine tank. From behind the three form an inverted
+  triangle.
+- Between the rows (z 108.4 to 123.4) each tank column has a hexagonal module 14.3 x 13.2 x 15 m with two recessed
+  panels on each face and a neck 7.1 m across to the tank at each side; plates join the three modules.
+- Against the Saturn 4: at the Saturn 4's scale (0.805 of the model at 200 m) each tank is 11.06 m across and 47.6 m
+  long, exactly the Saturn 4's hull cylinder, and the forward truss is the Saturn 4's 18 m. Built from the Saturn 4's
+  parts the tanker is 161 m long.
+- The stated 200 m wins. The tank is a part of its own (D59 lists it apart from the shared parts), so the tanks take
+  most of the length. Generator layout: forward truss 30 m as on the Saturn 8 (z 20.9 to 50.9); tanks 59.3 m, the
+  Saturn 4's cylinder with 11.7 m more barrel, in rows at z 50.9 to 110.2 and 127.25 to 186.55; junction 17.05 m with
+  the three hexagonal modules (11.5 x 10.6 x 12.1 m at this scale) in its middle; engine section to z 200.0. Lower tanks
+  at x ±10.4, 8.5 m below the axis.
+- Colours: tanks in the family's red and off-white bands (the tubular sections the wiki says were built for a tanker),
+  hexagonal modules in the plating grey with #55534F recesses.
+- Turrets (4): `dorsal_fwd` (0, +2.4, 12.0), `ventral_fwd` (0, -4.6, 29.0), `dorsal_mid` on the top module
+  (0, +5.3, 118.7), up +y, and `ventral_mid` on the plate between the two lower modules (0, -13.5, 118.7), up -y.
+
+#### Saturn 3 freighter (about 58 m)
+
+`EA_Saturn_3_Freighter.stl`, 0.2574 m per file unit at 57.5 m.
+
+- The model: a disc, truss and drum frame like the Saturn 4's, then a cross-beam and three pods. At the scale where
+  its disc matches the Saturn 4's 17.83 m, its drum frame starts 23.8 m behind the disc's front edge against the
+  Saturn 4's 23.3 m, which confirms the scale. The antenna differs: a 2.3 m ball on a curved boom under the disc's
+  front edge, in place of the dish and spike.
+- Pods: three, turned 90 degrees against the Saturn 4's. Their long axis runs across the ship and the kite section
+  points fore and aft, short side forward; the hexagonal end frames face port and starboard. One pod sits on top on
+  the centre line and two below, side by side with a 3.8 m gap; the top pod rests on the inner halves of the lower
+  two. In the model each pod is 20.6 m across, 9.5 m tall and 19.2 m deep (z 38.1 to 57.3), a little smaller than a
+  turned Saturn 4 pod (27.15 x 10.9 x 19.6 m).
+- Each pod sits on a mounting block (4.0 x 2.8 x 8.5 m, with vent grilles) on its front face, z 29.75 to 38.25. The
+  lower pods hang from a cross-beam 27.8 m wide at z 28.2 to 29.2, 5.4 to 8.3 m below the axis.
+- Length from the parts (Q8): the nose through the drum frame, cross-beam and blocks (z 0 to 38.1, the ball antenna
+  inside that length) plus one Saturn 4 pod turned (19.6 m deep) is 57.7 m. With two Saturn 4 pods side by side the
+  span is 2 x 27.15 + 3.8 = 58.1 m, about 60 m over the end frames; two pods and a 0.85 m gap make it 22.7 m tall.
+- Pod trim: rust-red tops (#8E4A3F) as on Epsilon.JPG.
+- Turrets (2): `dorsal` on the disc's top hub (0, +2.4, 8.9), up +y; `ventral` under the cross-beam's centre
+  (0, -8.6, 28.7), up -y.
+
+### Skylark transport (60 m)
+
+`EA_Skylark_transport.stl`, 1.468 m per file unit at 60 m. The fan wiki files the capture "Skylark class.jpg" under the
+"Delta Gamma 9" type commercial transport (7 Tango 7, Delta Gamma 9, Mothak'cha, Transport 1), and the model matches
+it: a capsule forward, a broad body aft with two nacelles and swept claws.
+
+File +y is aft (the capsule with its small nose vanes at -y, the nacelle bells and the centre exhaust cone at +y) and
+file z is up, the side with the dorsal fin: `--right=-x --up=+z --aft=+y`. Length 60.0 m (Q8), span 40.2 m across the
+claw tips, height 10.3 m. y is measured from the box centre; the capsule's axis is 0.45 m below it.
+
+| Part | Size and place |
+|---|---|
+| Nose | a cap 4 m across, z 0 to 2, with four small vanes splayed forward |
+| Forward capsule | 7.46 m across, z 1.7 to 20. On top a raised plate 3.2 x 0.9 x 6.2 m (z 10.4 to 16.7), the likely bridge. Underneath, two cones 6.2 m across at the root, pointing down and outboard at z 6.3 to 12.5. |
+| Spine | a tube 4.2 m across, z 20 to 29, with a ring of short radial vanes at each end, then a collar 6.3 m across (z 29.2 to 35.3) into the body |
+| Side tanks | at x ±5.4: a capsule tank 4.3 m across, z 19.4 to 34.7, its rear end in the body's front face, and ahead of it a dumbbell-shaped tank 1.7 m across, z 10.2 to 20.9 |
+| Central body | a faceted slab 23.8 m wide and 7.2 m deep, z 32.1 to 54.6. In plan it widens from 16 m at its front face to 23.8 m at z 39 to 50 and tapers to 10 m at its aft face, with small swept fins at the aft corners. A sharp dorsal fin, 2.4 m wide at the root, rises to 5.1 m above centre at z 41.7 to 54.5. Two thin struts angle down and out from the belly. |
+| Nacelles | centred at x ±13.45, 6.6 m across, z 35.6 to 55.5, joined flat to the body's flanks along its widest part. Each has a ribbed intake ring at the front (z 35.6 to 39), a conical pod on its outboard side and one above and one below (z 40 to 45, reaching 1.5 m out), and a ribbed bell 6.6 m across at the rear (z 50 to 55.5). |
+| Claws | two swept blades per nacelle at the rear, reaching aft to z 60: the outboard one out to x ±20.1, the inboard one to x ±9. From behind each nacelle carries a forked clamp at x ±17 to ±20. |
+| Centre engine | a drum 4.7 m across inside the body (z 42.8 to 53.5) ending in an exhaust cone 3.7 m across at z 59.2 |
+
+D59's "two engine nacelles on short pylons" is a looser reading: in the model the nacelles sit against the body's
+flanks.
+
+| Where | sRGB | Read from |
+|---|---|---|
+| Plating | sand khaki #B3A982, panel patches olive brown #7E7552, recesses #4A4536 | Transport 1.png (the monitor shot, the clearest), Skylark class.jpg (the same paint reads olive #8F8A4E in its dim light) |
+| Bands | red-orange #B8452B: two on the forward capsule, one on each side tank | 7Tango7.JPG, Mothak'cha.jpg |
+| Nacelle bells and ribs | dark metal #4A4A46 | 7Tango7.JPG |
+| Engine glow | warm white #FFE9C2 | 7Tango7.JPG |
+
+Mothak'cha.jpg shows the same ship with a lighter grey body (#B9B7B1) and orange bands: a second livery the variant
+data can offer.
+
+Turrets (2): `dorsal` on the body's top ahead of the dorsal fin (0, +3.6, 37.5), up +y; `ventral` under the capsule
+between the cones' roots (0, -4.2, 15.0), up -y.
+
+Sources, checked 2026-11-02: https://babylon5.fandom.com/wiki/%22Delta_Gamma_9%22_Type_Transport,
+https://babylon5.fandom.com/wiki/File:Skylark_class.jpg, https://babylon5.fandom.com/wiki/File:7Tango7.JPG,
+https://babylon5.fandom.com/wiki/File:Mothak%27cha.jpg, https://babylon5.fandom.com/wiki/File:Transport_1.png.
+
+### Narn transport (70 m)
+
+`Narn_Transport.stl` (an ASCII STL), 0.190 m per file unit at 70 m. This is the ship the fan wiki calls the Narn
+freighter (Tal'Quith, Na'Tan): "a forward cockpit ... and a large aft cargo area", "based on the Frazi class (Narn
+fighter) mesh with a different, up-scaled cockpit and a large cargo container on the rear". The wiki gives 70 m long,
+33 m beam and 18.7 m draught, from the game "Babylon 5: Into the Fire".
+
+Reading the frame: the crescent's prongs and the cockpit point to file -x and the box ends at +x, so file x, the
+file's longest axis, is the length. The model is mirror-symmetric about file y = 0 and not about z, so file y is the
+span and z the height. The draught of 18.7 m matches the 18.05 m the model has along file z at 70 m, and
+"Tal'Quith.JPG" shows a flat ship whose length is about three times its visible height. File +z is up: the flank
+towers and a small dorsal block are on that side, and the box hangs mostly below the crescent. Mapping
+`--right=+y --up=+z --aft=+x`. Length 70.0 m, span 46.0 m across the crescent, height 18.05 m; y is measured from the
+crescent's centre plane.
+
+| Part | Size and place |
+|---|---|
+| Crescent | a flat plate 46 m across, z 0 to 51.3, a flat diamond in section, 7.8 m thick along the centre line and thinning to sharp edges. In plan two prongs reach forward to sharp tips at x ±10, z 0. Their outer edges sweep out to the full 46 m at z 27; their inner edges step out to x ±13.2 by z 9 and run straight back to z 15, so the notch between them is 26 m wide at its back. Behind z 27 the outline sweeps in to x ±13 at z 47, where the box covers it; the centre runs on under the box to z 51.3. |
+| Cockpit | in the notch, a blunt hexagonal nose 17 m across at its widest and 4.9 m tall, z 2.8 to 15.8, with a framed canopy recess 12 x 7 m on top (z 6.2 to 13.3) |
+| Dorsal block | 6.9 x 2.5 x 6.1 m on the crescent's top, z 20.3 to 26.5, with a rod 2.5 m across running aft to the box |
+| Fins | two upright plates 0.5 m thick at x ±17.1, reaching 8.1 m above and 8.6 m below the centre plane, z 28.4 to 44.1. The leading edge is upright; the trailing edge sweeps forward from z 44 at the root to z 38 at the tips. |
+| Flank towers | inboard of each fin (x ±13.1 to ±17.0), on top, rising to 9.0 m above the centre plane, z 35.25 to 43.9. Each has three upright vanes with rounded ends (5.4 m tall, 5.3 m long) on its front and a U-shaped slot in its top. |
+| Cargo box | 25.7 m wide and 14.0 m tall (9.0 m below to 5.0 m above the centre plane), z 31.2 to 70.0, chamfered edges. Its front stands against the crescent's rear edge, its aft lower edge is cut back from z 66 to 70, and two vent grilles of five slats sit on its top near the aft end. |
+
+The model has no nozzle. The flank towers are the "engines on the flanks" of D59, so the generator puts the main
+nozzles on the towers' aft faces (z 43.9).
+
+| Where | sRGB | Read from |
+|---|---|---|
+| Crescent, cockpit, fins, towers | dark green #2E4A3B, panel lines #1E2E25 (lit faces read #4F6E5A) | Tal'Quith.JPG, Tal'Quith's collision.JPG, Na'Tan.JPG |
+| Red marking | a red band #A3241C on each side of the crescent, where Tal'Quith.JPG has the Narn emblem. The emblem is a franchise mark and is not reproduced. | Tal'Quith.JPG |
+| Cargo box | light grey #B7BAB5, one green panel #4E7552 on each side, yellow and black hazard marks (#D2B032, #262626) at its corners | Tal'Quith's collision.JPG |
+| Canopy | dark green glass #10201A | not readable in the captures; our choice |
+| Engine glow | orange-white #FFB070 | not seen in the captures; our choice |
+
+Turrets (2): the wiki gives the freighter "pulsed green bolts" from a "twin emplacement" ("And Now for a Word"). The
+towers' slotted tops are the model's turret-like mounts: one turret on each tower top at (±15.0, +9.0, 39.5), up +y,
+with an arc wide enough to fire down past the crescent's edge. Below the crescent that covers only the space beyond its
+edge; if the balance fight needs the belly, move one turret to the box's keel at (0, -9.0, 55.0), up -y.
+
+Sources, checked 2026-11-02: https://babylon5.fandom.com/wiki/Narn_freighter,
+https://babylon5.fandom.com/wiki/File:Tal%27Quith.JPG, https://babylon5.fandom.com/wiki/File:Tal%27Quith%27s_collision.JPG,
+https://babylon5.fandom.com/wiki/File:Na%27Tan.JPG, https://babylon5.fandom.com/wiki/File:Na%27TanvsMolios.JPG.
+
+### Centauri Brezebel transport (60 m)
+
+`Centauri_Brezebel_Transport.stl` (an ASCII STL), 1.625 m per file unit at 60 m. The model's shape matches the purple
+Centauri liner on the fan wiki (Vellurian in "Signs and Portents", Molios in "And Now for a Word"), and that page
+quotes Ron Thornton naming "the horrific Brezebel" among the models he built.
+
+File +x is aft (the round bow at -x, the arm tips at +x) and file z is up, since the U lies flat in file x-y:
+`--right=+y --up=+z --aft=+x`. Length 60.0 m (Q11), span 39.1 m, height 25.3 m over the tip fins; the hull itself is
+8.75 m thick. y is measured from the box centre.
+
+| Part | Size and place |
+|---|---|
+| Bow | a lens-shaped body. In plan a half ellipse from the nose to its full width (x ±19.56) at z 17, then straight sides that taper into the arms. Its section is a lens 8.75 m thick on the centre line with a rounded rim. |
+| Engine bay | in the bow's rear face at z 19, between the arm roots: an open bay 14.8 m wide and 5.8 m tall, its machinery block of tanks, pipes and pumps reaching aft to z 25.4. The main engine, a drum 3.2 m across, stands out of the bay's middle to z 31.4 with its nozzle facing aft. Twelve small blocks (1.9 x 1.3 x 1.3 m) on the bay's side walls look like RCS clusters. |
+| Dorsal fitting | a raised flat-topped panel 9.7 m wide and 3 m tall on the bow's top centre, z 1.5 to 11.7, with a row of five small windows across its front face |
+| Arms | two, from the bow's flanks to z 60, each a long beam of lens section: the outer edge runs straight from x ±19.5 at z 17 to x ±12.7 at z 60, the inner edge is straight at x ±10.4 to ±10.8 with a rail along it (z 18.5 to 58.8), and the tips are rounded. 7.6 m deep at the root (z 17), 5.2 m at z 40 and 3.5 m at the tip. |
+| Arm fairings | an ellipsoid bulge on each arm's root, 7.7 m wide and 7.7 m tall, z 21.75 to 42.8, likely the engine housings |
+| Tip fins | a hooked fin above and one below each arm's tip: 3.4 m thick at the root, reaching 12.5 m above and below the centre plane, z 41.4 to 57.2, leading edge swept back, trailing edge hooked; they lean inward about 10 degrees. These are the "fin cluster at the stern". |
+
+| Where | sRGB | Read from |
+|---|---|---|
+| Hull | deep violet #4C3C8E, lit faces read #6A5AB0, shadow #2B2257 | Centauri Liner.jpg, Molios.JPG |
+| Trim | gold #D9B23A on the tip fins' caps; a pale lavender edge band #D7D2E6 round the bow's rim | Centauri Liner.jpg (the caps), Carbo.JPG (the Centauri transport's edge band; its gold Centauri emblems are franchise marks and are not reproduced) |
+| Windows | white #F3F1FF | Centauri Liner.jpg (the row of five) |
+| Fin-tip lights and engine glow | pink-white #FFB8E0 | Centauri Liner.jpg |
+
+Turrets (2): the wiki gives the liner "pulsed orange bolts". `dorsal` on top of the dorsal fitting (0, +4.3, 7.0), up
++y; `ventral` under the bow (0, -4.5, 9.0), up -y. The gold caps glow in the capture and could be gun ports; the
+generator keeps them as lights.
+
+Sources, checked 2026-11-02: https://babylon5.fandom.com/wiki/Centauri_liner,
+https://babylon5.fandom.com/wiki/File:Centauri_Liner.jpg, https://babylon5.fandom.com/wiki/File:Molios.JPG,
+https://babylon5.fandom.com/wiki/Centauri_transport, https://babylon5.fandom.com/wiki/File:Carbo.JPG.
+
 ## Combat sounds (reference for the M5 sound pass)
 
 The source is the YouTube clip "Starfury Dogfight with Raider Forces | Babylon 5"
