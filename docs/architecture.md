@@ -1924,6 +1924,7 @@ src/perf/perf_probe.gd      Node (Main/PerfProbe): times every tick's stages; pr
 src/perf/bench_runner.gd    Node (Main/BenchRunner): command `bench`, runs a layout on the live scene, writes the report
 src/perf/bench_report.gd    RefCounted: a run's and a sweep's summary.json and summary.md, and the machine they ran on
 scripts/bench.sh, bench_sweep.gd   the sweep: one headless process per run, pinned to the performance cores, then the summary
+scripts/bench_quick.sh      the quick check: ramps furball and spread until 30 FPS, one short run per count, under 10 minutes
 ```
 
 - **The tick** is the whole physics frame: the sync of the bodies back to their nodes, every script and Jolt's step.
@@ -1943,6 +1944,12 @@ scripts/bench.sh, bench_sweep.gd   the sweep: one headless process per run, pinn
   open the frame's drawing sits there instead and `sync_us` stays 0. When ticks run back to back (a simulation behind real
   time) a tick's sync lands in the previous tick's engine window, so `sync` is a lower bound; summaries give the share of ticks
   in which it was timed.
+- **The quick check** (`scripts/bench_quick.sh`) ramps furball and spread from 10 ships up, one seed, 2 s of warm-up and 6 s
+  measured per count, and stops a layout at the first count under 30 FPS (simulation ticks per wall second, 60 while it keeps
+  real time; `QUICK_MIN_FPS`) or when its share of a 9 minute budget runs out. Per count it prints the FPS, tick, p99, worst
+  rebase tick and the three costliest stages; when a layout stops it lists the counts that passed the budget, those over budget
+  but still above the floor (with why), and the count where it failed. One short run is indicative only: it is for iterating,
+  and the sweep gives max N.
 - **A run** (`bench <layout> <n> [seconds] [warmup=] [seed=] [label=] [probe=paired] [rebase_m=]`) parks every pool ship,
   grows the pools to the layout's count (`Main.ensure_pool`; that is the run's load time), stops the waves, turns god mode on,
   turns the player to face -Z and gives it 60 m/s, lowers the rebase threshold to 180 m (a rebase every 3 s, under 1 % of the
