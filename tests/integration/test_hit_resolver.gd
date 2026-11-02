@@ -280,7 +280,7 @@ func test_64_bolts_against_8_targets_resolve_well_under_two_milliseconds() -> vo
 	assert_eq(resolver.pairs_tested, 0, "every pair culled: no bolt comes within reach of a hull")
 	var mean_us: float = float(total_us) / float(ticks)
 	gut.p("64 bolts x 8 targets: %.0f us per tick (mean of %d)" % [mean_us, ticks])
-	assert_true(mean_us < 2000.0, "mean %.0f us" % mean_us)
+	WallClockBudget.assert_under(self, mean_us, 2000.0, "64 bolts x 8 targets resolve in under 2 ms a tick (mean)")
 
 
 func test_the_combat_provider_reports_the_work() -> void:

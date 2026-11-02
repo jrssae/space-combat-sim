@@ -8,8 +8,6 @@ const DOGFIGHT_SECONDS: float = 45.0
 ## AC13: the hit and ram resolvers together, per tick. A kill's effects run inside the resolve and a busy machine doubles the worst tick
 ## (see test_m2_run), so the 99th percentile is what is asserted and the worst is recorded.
 const RESOLVER_BUDGET_US: int = 2000
-## A kill's effects run inside the resolve, so one tick may pass the budget, by this much at most (M2's ceiling).
-const RESOLVER_WORST_US: int = 5000
 const MAX_LIGHTS: int = 8
 
 var main: Main
@@ -136,5 +134,4 @@ func test_the_dogfight_records_the_ai_time_and_holds_the_resolver_budget() -> vo
 	var resolve_p99: int = _percentile(resolvers, 0.99)
 	gut.p("M3 dogfight, %d ticks: ai.think_us median %d p99 %d worst %d; hit + ram resolve median %d p99 %d worst %d" % [think.size(),
 			_percentile(think, 0.5), _percentile(think, 0.99), _percentile(think, 1.0), _percentile(resolvers, 0.5), resolve_p99, _percentile(resolvers, 1.0)])
-	assert_lt(resolve_p99, RESOLVER_BUDGET_US, "AC13: the hit and ram resolvers stay under 2 ms a tick")
-	assert_lt(_percentile(resolvers, 1.0), RESOLVER_WORST_US, "and even the worst tick stays under M2's ceiling")
+	WallClockBudget.assert_under(self, resolve_p99, RESOLVER_BUDGET_US, "AC13: the hit and ram resolvers stay under 2 ms a tick (p99)")

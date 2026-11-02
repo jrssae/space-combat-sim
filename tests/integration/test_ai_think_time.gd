@@ -142,4 +142,4 @@ func test_ai_pilots_cost_at_most_half_a_millisecond_more_than_m2_brains_in_the_s
 		assert_not_null(member.behaviour(&"formation"), "%s flies in the wing" % ships[slot].display_name)
 		assert_true(member.context.has_slot)
 		assert_eq(member.context.order, AiContext.Order.COVER_ME)
-	assert_lte(paired, PILOT_SHARE_US, "AiPilot within its 0.5 ms share over the M2 brains")
+	WallClockBudget.assert_under(self, paired, PILOT_SHARE_US, "AiPilot within its 0.5 ms share over the M2 brains")

@@ -3,6 +3,8 @@
 # must be free of script errors, a compile check of every project script, the GUT suites, and debug-console
 # smoke runs that drive a live headless build through --console-exec.
 # Exits non-zero on any failure. Logs and the GUT JUnit XML land in reports/ (gitignored; CI uploads it).
+# GUT_SHARD=k/n (CI) runs only every n-th GUT script from the k-th, in path order, so n jobs share the GUT run; the Python
+# tests and the console smoke runs then run in shard 1 only. Unset (the default) runs everything.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -33,7 +35,28 @@ if [[ ! -x "${GODOT}" ]]; then
     fail "Godot not found at ${GODOT}; run scripts/setup_godot.sh (or set GODOT_BIN)."
 fi
 
-if [[ -d tools/procgen/tests ]]; then
+gut_select=(-gdir=res://tests -ginclude_subdirs)
+run_extras=1
+if [[ -n "${GUT_SHARD:-}" ]]; then
+    [[ "${GUT_SHARD}" =~ ^([0-9]+)/([0-9]+)$ ]] || fail "GUT_SHARD must be k/n, got '${GUT_SHARD}'."
+    shard="${BASH_REMATCH[1]}"
+    shards="${BASH_REMATCH[2]}"
+    (( shard >= 1 && shard <= shards )) || fail "GUT_SHARD ${GUT_SHARD}: k must be 1..n."
+    # The scripts GUT finds with -gdir=res://tests -ginclude_subdirs, in a stable order.
+    mapfile -t all_scripts < <(find tests -name 'test_*.gd' | LC_ALL=C sort)
+    picked=()
+    for i in "${!all_scripts[@]}"; do
+        if (( i % shards == shard - 1 )); then
+            picked+=("res://${all_scripts[$i]}")
+        fi
+    done
+    (( ${#picked[@]} > 0 )) || fail "GUT_SHARD ${GUT_SHARD} picks no script."
+    gut_select=("-gtest=$(IFS=,; echo "${picked[*]}")")
+    (( shard == 1 )) || run_extras=0
+    echo "run_tests.sh: GUT shard ${shard} of ${shards}: ${#picked[@]} of ${#all_scripts[@]} scripts."
+fi
+
+if (( run_extras )) && [[ -d tools/procgen/tests ]]; then
     echo "== Python tests"
     python3 -m unittest discover -s tools/procgen/tests -t . -v
 fi
@@ -55,12 +78,17 @@ if grep -E "${SCRIPT_ERRORS}" "${REPORTS}/check_scripts.log"; then
 fi
 
 echo "== GUT"
+# The whole run takes about 25 minutes on the maintainer's machine; the timeout leaves room for a slower one.
 gut_status=0
-run_logged "${REPORTS}/gut.log" timeout 1800 "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd \
-    -gdir=res://tests -ginclude_subdirs -gexit -gjunit_xml_file=reports/gut.xml \
+run_logged "${REPORTS}/gut.log" timeout 3600 "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd \
+    "${gut_select[@]}" -gexit -gjunit_xml_file=reports/gut.xml \
     || gut_status=$?
 if (( gut_status != 0 )); then
     echo "run_tests.sh: GUT failed with exit code ${gut_status} (see reports/gut.log)." >&2
+fi
+if (( ! run_extras )); then
+    echo "run_tests.sh: the console smoke runs are in GUT shard 1."
+    exit "${gut_status}"
 fi
 
 # Debug console smoke runs (architecture §6.4, AC21): a live headless build driven by --console-exec must print the
