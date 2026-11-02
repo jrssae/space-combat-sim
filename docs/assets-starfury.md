@@ -240,7 +240,27 @@ file and a separate manifest entry; LOD0-LOD3 and every chunk are unchanged, and
   disk would notice. GDGS keeps about 490 bytes per splat in that resource.
 - **Option.** `--option hero=false` skips it (the tests use this to prove the other files are byte-identical with and
   without the hero).
-- **Not yet used.** Nothing renders it: `ShipSpec.splat_hero` and the `LodSwitcher` chain are T24's game half.
+- **In the game (M3-T24 part 2).** `ShipSpec.splat_hero` is true in `starfury_aurora.tres` only (the allies' and the raider's
+  specs leave it false, so no other ship builds the node). `Ship` adds a `HullSplatsHero` node in front of its chain, which
+  becomes level -1 (`LodSwitcherMath.HERO`): chain `[-1, 0, 1, 2, 3]`. The switcher picks it from 400 px of projected
+  diameter, with the usual 25 % margin to come back (500 px), so in the chase camera, about 25 m behind the hull and 900 px
+  across, it is the level drawn. It steps down to LOD0 at 400 px like any level, and `settings.splat_lod_bias` moves it too.
+  The console forces it with `lod player hero`. `settings.splat_hero` (default on) turns it off at build time, for
+  comparing: the player then builds `[0, 1, 2, 3]` and loads nothing of it.
+- **In the cockpit camera it is not drawn.** Since the 2026-10-21 play test the hull is the mesh while the cockpit interior
+  is shown, so the hero node stays hidden there (`visible_splat_count` is 0, the switcher ignores the ship). It is
+  still resident: the cost below is paid in both cameras.
+- **Cost in the game, on the RX 6950 XT (1080p, vsync off, Compute).** Resident: the unique splat buffer grows from 113 MB to
+  347 MB (+234 MB) and resident instanced splats from 1.19 M to 2.16 M. Memory added at load, hero on against off:
+  about +440 MB in GTT and +50 MB in VRAM (the VRAM figure moves 100 MB between identical runs because other processes share
+  the card), so about +0.5 GB in all, as the 480 MB import suggested. Load: 0.7 s longer (0.64 s to 1.3 s). The first import
+  of the PLY takes 43 s. Frame, chase camera with the hero drawn: GPU 3.05 ms against 1.6 ms, frame 3.4 ms against 2.0 ms
+  (about 280 fps against 500); the same scene with the hero resident but LOD0 drawn (`lod player 0`) is 1.61 ms, so the
+  cost is the 975k splats drawn, not the resident ones. AC19's 13-ship fight: GPU 3.23 ms against 2.63 ms, frame 4.40 ms
+  against 3.98 ms, p99 9.9 ms against 10.0 ms; 1.05 M splats visible of the 2 M budget.
+- **Budget.** The worst case from the manifests (hero 975 058, four allies at LOD1, nine raiders at LOD0, the sky and five
+  buoys) is 1 511 274 splats, 76 % of `settings.splat_budget`. Over a smaller budget the farthest ships step down first, the
+  player's hero last (it is the nearest ship), then to LOD0.
 
 ## Determinism and options
 

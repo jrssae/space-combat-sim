@@ -63,3 +63,68 @@ func test_the_bias_moves_whole_levels_inside_the_chain() -> void:
 	assert_eq(LodSwitcherMath.applied(1, -1.0, 0, 3), 0, "-1: finer")
 	assert_eq(LodSwitcherMath.applied(0, -1.0, 1, 3), 1, "an ally never goes below its LOD1")
 	assert_eq(LodSwitcherMath.applied(3, 1.0, 0, 3), 3)
+
+
+# --- the hero level (M3-T24): level -1, from 400 px, for a chain that starts there -----------------------------------
+
+
+func test_a_chain_without_the_hero_never_reaches_it() -> void:
+	assert_eq(LodSwitcherMath.next_level(5000.0, -1), 0, "from nothing: LOD0, however big")
+	assert_eq(LodSwitcherMath.next_level(5000.0, 2), 0)
+	assert_eq(LodSwitcherMath.next_level(INF, 0), 0)
+
+
+func test_the_hero_chain_picks_hero_from_400_px() -> void:
+	var hero: int = LodSwitcherMath.HERO
+	assert_eq(hero, -1)
+	assert_eq(LodSwitcherMath.next_level(400.0, LodSwitcherMath.NONE, hero), hero, "400 px is hero")
+	assert_eq(LodSwitcherMath.next_level(INF, LodSwitcherMath.NONE, hero), hero, "inside the hull")
+	assert_eq(LodSwitcherMath.next_level(399.0, LodSwitcherMath.NONE, hero), 0)
+	assert_eq(LodSwitcherMath.next_level(200.0, LodSwitcherMath.NONE, hero), 0)
+	assert_eq(LodSwitcherMath.next_level(199.0, LodSwitcherMath.NONE, hero), 1)
+	assert_eq(LodSwitcherMath.next_level(15.0, LodSwitcherMath.NONE, hero), 3)
+
+
+func test_hero_needs_a_quarter_more_than_its_threshold_to_come_back() -> void:
+	var hero: int = LodSwitcherMath.HERO
+	assert_eq(LodSwitcherMath.next_level(450.0, 0, hero), 0, "450 px is hero from nothing, but not yet from LOD0")
+	assert_eq(LodSwitcherMath.next_level(500.0, 0, hero), hero, "500 px: 400 x 1.25")
+	assert_eq(LodSwitcherMath.next_level(399.0, hero, hero), 0, "hero is left at its threshold")
+	assert_eq(LodSwitcherMath.next_level(2000.0, 3, hero), hero, "a jump closer skips every level")
+
+
+func test_a_slow_sweep_through_the_hero_chain_switches_each_boundary_once_each_way() -> void:
+	var level: int = LodSwitcherMath.HERO
+	var away: Array[int] = []
+	for i: int in 4001:
+		var px: float = lerpf(800.0, 5.0, float(i) / 4000.0)
+		var next: int = LodSwitcherMath.next_level(px, level, LodSwitcherMath.HERO)
+		if next != level:
+			away.append(next)
+			level = next
+	assert_eq(away, [0, 1, 2, 3] as Array[int], "moving away")
+	var back: Array[int] = []
+	for i: int in 4001:
+		var px: float = lerpf(5.0, 800.0, float(i) / 4000.0)
+		var next: int = LodSwitcherMath.next_level(px, level, LodSwitcherMath.HERO)
+		if next != level:
+			back.append(next)
+			level = next
+	assert_eq(back, [2, 1, 0, -1] as Array[int], "coming back")
+
+
+func test_a_ship_held_on_the_hero_threshold_never_flaps() -> void:
+	var level: int = LodSwitcherMath.next_level(400.0 * 0.99, LodSwitcherMath.NONE, LodSwitcherMath.HERO)
+	var changes: int = 0
+	for i: int in 1000:
+		var next: int = LodSwitcherMath.next_level(400.0 * (1.0 + 0.02 * sin(float(i))), level, LodSwitcherMath.HERO)
+		changes += 1 if next != level else 0
+		level = next
+	assert_eq(changes, 0, "LOD0 stays LOD0 inside the margin")
+
+
+func test_the_bias_can_reach_and_leave_the_hero_inside_its_chain() -> void:
+	assert_eq(LodSwitcherMath.applied(0, -1.0, -1, 3), -1, "finer than LOD0 is hero for a hero chain")
+	assert_eq(LodSwitcherMath.applied(0, -1.0, 0, 3), 0, "and still LOD0 for the rest")
+	assert_eq(LodSwitcherMath.applied(-1, 1.0, -1, 3), 0)
+	assert_eq(LodSwitcherMath.applied(-1, -1.0, -1, 3), -1)

@@ -28,7 +28,7 @@ func test_the_ally_type_is_listed() -> void:
 func test_the_ally_flies_the_starfurys_numbers_with_lod1_and_no_cockpit() -> void:
 	var starfury: ShipSpec = ShipCatalog.spec_for(&"starfury_aurora")
 	var ally: ShipSpec = ShipCatalog.spec_for(&"starfury_ally")
-	var differing: PackedStringArray = ["splat_lod", "has_cockpit_interior"]
+	var differing: PackedStringArray = ["splat_lod", "has_cockpit_interior", "splat_hero"]
 	var checked: int = 0
 	for property: Dictionary in ShipSpec.new().get_property_list():
 		if not (int(property["usage"]) & PROPERTY_USAGE_STORAGE):
@@ -44,3 +44,10 @@ func test_the_ally_flies_the_starfurys_numbers_with_lod1_and_no_cockpit() -> voi
 	assert_eq(ally.splat_lod, 1)
 	assert_true(starfury.has_cockpit_interior)
 	assert_false(ally.has_cockpit_interior)
+
+
+func test_only_the_players_starfury_draws_the_hero_level() -> void:
+	for type: StringName in ShipCatalog.types():
+		var spec: ShipSpec = ShipCatalog.spec_for(type)
+		assert_eq(spec.splat_hero, type == ShipCatalog.PLAYER_TYPE, "%s: splat_hero" % type)
+	assert_false(ShipSpec.new().splat_hero, "off unless a spec asks for it")

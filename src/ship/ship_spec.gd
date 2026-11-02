@@ -71,6 +71,9 @@ const ASSET_ROOT: String = "res://assets/generated"
 ## asset's `manifest.json` lists under `lods` (`SplatLod`). Allied Starfuries draw LOD1, about a quarter of the splats (§16 D35).
 ## The collision, hardpoints, fallback mesh and break-up chunks are the asset's, whatever the level.
 @export_range(0, 8) var splat_lod: int = 0
+## Whether the ship also carries the asset's hero level, one finer than LOD0, for when it fills the screen (M3-T24). Only the
+## player's Starfury does: it holds about 0.5 GB of GPU memory for the whole session.
+@export var splat_hero: bool = false
 
 
 ## Where this ship's generated hardpoints live.

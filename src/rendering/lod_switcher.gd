@@ -7,17 +7,20 @@ extends Node
 ## ships in view draw coarser levels until the sum fits (`SplatBudgetMath`), and one warning says so when even the coarsest
 ## everywhere does not fit. That is applied on top of the level the ship's size calls for, like the tester's bias.
 ##
+## The player's Starfury has one level finer than LOD0, the hero (M3-T24), as level -1 at the front of its chain: the other levels
+## and their thresholds keep their numbers, and a chain that does not start at -1 never sees it.
+##
 ## Console (§16.4): provider `lod` (`levels`, `visible_splats`) and `lod <ship|all> <n|auto>`, registered by the newest
 ## switcher and handed on when it leaves, like the AI console.
 
 const VIEW_RADIUS_FACTOR: float = 1.5
 
-## A level forced from the console, or -1 for automatic.
-var forced: int = -1
-## The level chosen before the tester's bias, -1 before the first frame.
-var unbiased: int = -1
-## The level the ship's size calls for before the budget steps it down, -1 before the first frame.
-var wanted: int = -1
+## A level forced from the console (`LodSwitcherMath.HERO` is one), or `LodSwitcherMath.NONE` for automatic.
+var forced: int = LodSwitcherMath.NONE
+## The level chosen before the tester's bias, `NONE` before the first frame.
+var unbiased: int = LodSwitcherMath.NONE
+## The level the ship's size calls for before the budget steps it down, `NONE` before the first frame.
+var wanted: int = LodSwitcherMath.NONE
 ## Levels the budget steps this ship down, on top of `wanted`.
 var budget_extra: int = 0
 
@@ -64,6 +67,10 @@ func update() -> void:
 	_apply()
 
 
+func _is_forced() -> bool:
+	return forced != LodSwitcherMath.NONE
+
+
 func _shown() -> bool:
 	return _ship != null and _ship.is_inside_tree() and _ship.is_visible_in_tree()
 
@@ -75,7 +82,7 @@ func _pick() -> void:
 	var levels: PackedInt32Array = _ship.lod_levels()
 	if levels.is_empty():
 		return
-	if forced >= 0:
+	if _is_forced():
 		wanted = clampi(forced, levels[0], levels[levels.size() - 1])
 		return
 	var camera: Camera3D = get_viewport().get_camera_3d() if get_viewport() != null else null
@@ -83,18 +90,18 @@ func _pick() -> void:
 		return
 	var px: float = LodSwitcherMath.projected_px(_ship.bounding_radius(), camera.global_position.distance_to(
 			_ship.global_position), camera.fov, get_viewport().get_visible_rect().size.y)
-	unbiased = LodSwitcherMath.next_level(px, unbiased)
+	unbiased = LodSwitcherMath.next_level(px, unbiased, mini(levels[0], 0))
 	wanted = LodSwitcherMath.applied(unbiased, float(Settings.get_value(&"splat_lod_bias")), levels[0], levels[levels.size() - 1])
 
 
 func _apply() -> void:
-	if not _shown() or wanted < 0:
+	if not _shown() or wanted == LodSwitcherMath.NONE:
 		return
 	var levels: PackedInt32Array = _ship.lod_levels()
 	if levels.is_empty():
 		return
 	var at: int = SplatBudgetMath.chain_index(levels, wanted)
-	var level: int = levels[mini(at + (budget_extra if forced < 0 else 0), levels.size() - 1)]
+	var level: int = levels[mini(at + (budget_extra if not _is_forced() else 0), levels.size() - 1)]
 	if level != _ship.lod_level():
 		_ship.set_lod_level(level)
 
@@ -119,7 +126,7 @@ static func run_budget() -> void:
 	for s: LodSwitcher in _live:
 		s._pick()
 		s.budget_extra = 0
-		if not s._shown() or s.wanted < 0:
+		if not s._shown() or s.wanted == LodSwitcherMath.NONE:
 			continue
 		var drawn: int = s._ship.visible_splat_count()
 		if drawn <= 0:  # the mesh is drawn instead
@@ -181,7 +188,7 @@ func _budget_entry(camera: Camera3D, planes: PackedFloat32Array) -> Dictionary:
 		if not GaussianVisibleTable.sphere_visible(planes, at.x, at.y, at.z, _ship.bounding_radius() * VIEW_RADIUS_FACTOR + 1.0):
 			return {}
 		distance = camera.global_position.distance_to(at)
-	return {"wanted": wanted, "levels": _ship.lod_levels(), "splats": _level_splats(), "distance": distance, "forced": forced >= 0}
+	return {"wanted": wanted, "levels": _ship.lod_levels(), "splats": _level_splats(), "distance": distance, "forced": _is_forced()}
 
 
 # --- console ---------------------------------------------------------------------------------------------------------
@@ -193,8 +200,13 @@ static func _register(registry: ConsoleRegistry, owner: Object) -> void:
 		&"visible_splats": {"get": _visible_splats, "doc": "Splats drawn by every ship in play at its current level"},
 	}), owner)
 	registry.register_command(ConsoleCommand.new(&"lod",
-			"Force a ship's splat level (lod <ship|all> <0-3|auto>; auto lets its size on screen decide)",
+			"Force a ship's splat level (lod <ship|all> <hero|0-3|auto>; hero is the player's finest; auto lets its size on screen decide)",
 			[ConsoleArg.string_rest(&"args")]), _cmd_lod, owner)
+
+
+## A level as the console writes it: `hero` for the finest, else its number.
+static func level_name(level: int) -> String:
+	return "hero" if level == LodSwitcherMath.HERO else str(level)
 
 
 static func _in_play() -> Array[LodSwitcher]:
@@ -208,7 +220,7 @@ static func _in_play() -> Array[LodSwitcher]:
 static func _levels() -> PackedStringArray:
 	var out := PackedStringArray()
 	for s: LodSwitcher in _in_play():
-		out.append("%s %d%s" % [s._ship.display_name(), s._ship.lod_level(), "*" if s.forced >= 0 else ""])
+		out.append("%s %s%s" % [s._ship.display_name(), level_name(s._ship.lod_level()), "*" if s._is_forced() else ""])
 	return out
 
 
@@ -222,13 +234,15 @@ static func _visible_splats() -> int:
 static func _cmd_lod(args: Dictionary) -> ConsoleResult:
 	var words: PackedStringArray = String(args[&"args"]).strip_edges().split(" ", false)
 	if words.size() < 2:
-		return ConsoleResult.failure("usage: lod <ship|all> <0-3|auto>")
+		return ConsoleResult.failure("usage: lod <ship|all> <hero|0-3|auto>")
 	var value: String = words[words.size() - 1].to_lower()
 	var who: String = " ".join(words.slice(0, words.size() - 1))
-	var level: int = -1
-	if value != "auto":
+	var level: int = LodSwitcherMath.NONE
+	if value == "hero":
+		level = LodSwitcherMath.HERO
+	elif value != "auto":
 		if not value.is_valid_int() or int(value) < 0 or int(value) > LodSwitcherMath.COARSEST:
-			return ConsoleResult.failure("the level must be 0-%d or auto, got '%s'" % [LodSwitcherMath.COARSEST, value])
+			return ConsoleResult.failure("the level must be hero, 0-%d or auto, got '%s'" % [LodSwitcherMath.COARSEST, value])
 		level = int(value)
 	var hit: int = 0
 	for s: LodSwitcher in _in_play():
