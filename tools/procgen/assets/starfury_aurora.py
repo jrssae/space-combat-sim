@@ -32,6 +32,9 @@ LOD1 (``starfury_aurora_lod1.ply``, architecture section 16 D35) is the same bui
 changes), balanced and centred the same way; its splats are written chunk by chunk (``cabin``
 and the four ``arm_<pod>``), and each chunk is also written as a break-up chunk
 (``core/chunks.py``), so the chunks partition LOD1 exactly.
+
+The hero level (``starfury_aurora_hero.ply``, M3-T24) is the same build at ``HERO_SPACING_FACTOR`` times every spacing, from
+``hero`` RNG streams, for the player's own ship up close. It has a manifest entry of its own (``hero``), outside ``lods``.
 """
 
 from __future__ import annotations
@@ -123,6 +126,14 @@ FAR_LODS = {
     2: ("starfury_aurora_lod2.ply", 4.0, "lod2", (0.04, 0.09)),  # level: file, spacing factor, stream, share of LOD0
     3: ("starfury_aurora_lod3.ply", 8.0, "lod3", (0.01, 0.025)),
 }
+# M3-T24 (AC33): the hero level for the player's own ship, every spacing (the cockpit faces' too) at half LOD0's, so about
+# 4x its splats. It is a manifest entry of its own (``hero``) outside the LOD ladder, from its own RNG streams.
+HERO_PLY_NAME = "starfury_aurora_hero.ply"
+HERO_LIGHT_NAME = lighting.hero_file_name(ASSET_ID)
+HERO_SPACING_FACTOR = 0.5
+HERO_STREAM = "hero"
+HERO_SHARE = (3.6, 4.4)  # hero splats / LOD0 splats, at the default spacing and factor
+HERO_SPLAT_BUDGET = (850_000, 1_100_000)  # the budget T24 records, at the default spacing
 CHUNK_LOD = 1  # the chunks partition this LOD's splats
 # Break-up chunks, in LOD1 file order: the cabin (fuselage, cockpit faces, gun mount) and one arm
 # (pod, strut, claw) per corner, named after the pods (DamageZones' X-fighter cabin and arms).
@@ -624,18 +635,22 @@ def part_splats(
 
 
 def _write_level(
-    out_dir: Path, level: int, ply_name: str, splats: SplatData, comments: tuple[str, ...]
+    out_dir: Path, light_name: str, ply_name: str, splats: SplatData, comments: tuple[str, ...]
 ) -> list[Path]:
     """One level's PLY and its lighting records (body frame in, the file's frame out)."""
     written = _to_3dgs(splats)
     return [
         write_ply(out_dir / ply_name, written, comments),
-        lighting.write_lighting(out_dir / lighting.lod_file_name(ASSET_ID, level), written),
+        lighting.write_lighting(out_dir / light_name, written),
     ]
 
 
+def _level_light(level: int) -> str:
+    return lighting.lod_file_name(ASSET_ID, level)
+
+
 def _lod(level: int, file: str, splats: int, spacing: float) -> dict[str, Any]:
-    return lod_entry(level, file, splats, spacing, lighting.lod_file_name(ASSET_ID, level))
+    return lod_entry(level, file, splats, spacing, _level_light(level))
 
 
 def _to_3dgs(splats: SplatData) -> SplatData:
@@ -672,7 +687,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
     Options: ``spacing`` (m, default 0.04; the CLI's ``--spacing``), ``cockpit_spacing`` (m,
     default 0.55 x the spacing: the window segment's frames, chin and lining), ``overlap``
     (sigma / spacing, default 1.0), ``thickness`` (normal sigma / spacing, default 0.08),
-    ``lod1_factor`` (LOD1 spacing / LOD0 spacing, default 2.0).
+    ``lod1_factor`` (LOD1 spacing / LOD0 spacing, default 2.0), ``hero`` (write the hero level, default true).
     """
     spacing = float(ctx.option("spacing", DEFAULT_SPACING_M))
     cockpit_spacing = float(
@@ -685,6 +700,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
         raise ValueError(
             "spacing, cockpit_spacing, overlap, thickness and lod1_factor must be positive"
         )
+    with_hero = bool(ctx.option("hero", True))
     spec, style = DEFAULT_SPEC, EARTHFORCE
 
     out_dir = ctx.out_dir
@@ -702,7 +718,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
         f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}",
         "frame: 3dgs (Rz180 of godot)",
     )
-    files: list[Path] = _write_level(out_dir, 0, PLY_NAME, authored, comments)
+    files: list[Path] = _write_level(out_dir, _level_light(0), PLY_NAME, authored, comments)
 
     hull_mesh = Mesh.concatenate(p.part.mesh for p in placed if p.hull)
     files += write_obj(out_dir / OBJ_NAME, hull_mesh, ASSET_ID, comments[:1])
@@ -727,7 +743,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
     chunk_sources = build_chunks(lod1_placed, style, overlap, thickness)
     lod1 = SplatData.concatenate([c.splats for c in chunk_sources])
     lod1_comments = comments + (f"lod {CHUNK_LOD}",)
-    files += _write_level(out_dir, CHUNK_LOD, LOD1_PLY_NAME, lod1, lod1_comments)
+    files += _write_level(out_dir, _level_light(CHUNK_LOD), LOD1_PLY_NAME, lod1, lod1_comments)
     chunk_files, chunk_entries = write_chunks(
         out_dir, ASSET_ID, chunk_sources, lod1_comments
     )
@@ -741,7 +757,26 @@ def build(ctx: BuildContext) -> AssetOutputs:
         )
         lod_splats = part_splats(lod_placed, style, overlap, thickness)
         far[level] = len(lod_splats)
-        files += _write_level(out_dir, level, name, lod_splats, comments + (f"lod {level}",))
+        files += _write_level(out_dir, _level_light(level), name, lod_splats, comments + (f"lod {level}",))
+
+    # The hero level: LOD0's parts at half the spacing, written after the others so none of them can change.
+    hero_count = 0
+    if with_hero:
+        hero_placed, _ = centre(
+            build_parts(
+                spec,
+                style,
+                ctx,
+                HERO_SPACING_FACTOR * spacing,
+                HERO_SPACING_FACTOR * cockpit_spacing,
+                (HERO_STREAM,),
+            )
+        )
+        hero_splats = part_splats(hero_placed, style, overlap, thickness)
+        hero_count = len(hero_splats)
+        files += _write_level(
+            out_dir, HERO_LIGHT_NAME, HERO_PLY_NAME, hero_splats, comments + ("lod hero",)
+        )
 
     hp = hardpoints(placed, spec, chunk_entries)
     hp_path = out_dir / HARDPOINTS_NAME
@@ -767,6 +802,12 @@ def build(ctx: BuildContext) -> AssetOutputs:
             far_share = far[level] / total
             if not bounds[0] <= far_share <= bounds[1]:
                 warnings.append(f"LOD{level} has {far_share:.1%} of LOD0's splats, outside {bounds}")
+        if with_hero:
+            hero_share = hero_count / total
+            if not HERO_SHARE[0] <= hero_share <= HERO_SHARE[1]:
+                warnings.append(f"the hero has {hero_share:.2f}x LOD0's splats, outside {HERO_SHARE}")
+            if not HERO_SPLAT_BUDGET[0] <= hero_count <= HERO_SPLAT_BUDGET[1]:
+                warnings.append(f"the hero has {hero_count} splats, outside the budget {HERO_SPLAT_BUDGET}")
     manifest = build_manifest(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,
@@ -799,6 +840,18 @@ def build(ctx: BuildContext) -> AssetOutputs:
             },
             "chunks": [c["name"] for c in chunk_entries],
             "chunk_lod": CHUNK_LOD,
+            **(
+                {
+                    "hero": {
+                        "file": HERO_PLY_NAME,
+                        "splats": hero_count,
+                        "spacing_m": HERO_SPACING_FACTOR * spacing,
+                        "lighting": HERO_LIGHT_NAME,
+                    }
+                }
+                if with_hero
+                else {}
+            ),
         },
     )
     files.append(write_manifest(out_dir, manifest))

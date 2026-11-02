@@ -521,27 +521,28 @@ func _assign_hull_splats(node: GaussianSplatNode) -> void:
 func _load_far_levels(base: Dictionary) -> void:
 	_lod_nodes = [hull_splats]
 	_lod_levels = PackedInt32Array([maxi(int(base["level"]), 0)])
+	var manifest: Dictionary = SplatLod.read_manifest(spec.asset_id)
 	for level: int in range(_lod_levels[0] + 1, LodSwitcherMath.COARSEST + 1):
-		var lod: Dictionary = SplatLod.resolve(spec.asset_id, level)
-		if int(lod["level"]) != level or not ResourceLoader.exists(String(lod["path"])):
+		var path: String = SplatLod.file_path_in(manifest, spec.asset_id, level)
+		if path.is_empty() or not ResourceLoader.exists(path):
 			continue
 		var node_name: String = "HullSplatsLod%d" % level
 		var node := get_node_or_null(NodePath(node_name)) as GaussianSplatNode
-		var resource := load(String(lod["path"])) as GaussianResource
+		var resource := load(path) as GaussianResource
 		if node == null:
 			node = GaussianSplatNode.new()
 			node.name = node_name
 			node.transform = hull_splats.transform
 			node.visible = false
 			node.gaussian = resource
-			SplatLightingLoader.attach(node, SplatLod.lighting_path(spec.asset_id, level))
+			SplatLightingLoader.attach(node, SplatLod.lighting_path_in(manifest, spec.asset_id, level))
 			add_child(node)
 			var sync := get_node_or_null(^"HullSplatSync") as SplatPoseSync
 			if sync != null:
 				sync.add_splats(node)
 		elif node.gaussian != resource:
 			node.gaussian = resource
-			SplatLightingLoader.attach(node, SplatLod.lighting_path(spec.asset_id, level))
+			SplatLightingLoader.attach(node, SplatLod.lighting_path_in(manifest, spec.asset_id, level))
 		_lod_nodes.append(node)
 		_lod_levels.append(level)
 	_lod_level = _lod_levels[0]

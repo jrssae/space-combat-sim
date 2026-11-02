@@ -119,6 +119,7 @@ class LightingFileTests(unittest.TestCase):
 
     def test_file_names(self) -> None:
         self.assertEqual(lighting.lod_file_name("thing", 2), "thing_lod2.light")
+        self.assertEqual(lighting.hero_file_name("thing"), "thing_hero.light")
         self.assertEqual(lighting.chunk_file_name("thing", "arm_ur"), "thing_chunk_arm_ur.light")
 
 

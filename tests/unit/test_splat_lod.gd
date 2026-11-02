@@ -98,6 +98,58 @@ func test_the_manifest_names_each_levels_lighting_records() -> void:
 	assert_eq(SplatLod.lighting_for({}, 0), "")
 
 
+func test_the_file_path_comes_from_a_manifest_already_read() -> void:
+	var manifest: Dictionary = {"lods": [{"level": 2, "file": "ship_lod2.ply"}]}
+	assert_eq(SplatLod.file_path_in(manifest, "ship", 2, "res://root"), "res://root/ship/ship_lod2.ply")
+	assert_eq(SplatLod.file_path_in(manifest, "ship", 3, "res://root"), "", "a level it does not list")
+
+
+func test_a_malformed_entry_is_skipped_by_the_lighting_lookup_like_the_file_lookup() -> void:
+	var manifest: Dictionary = {"lods": [3, null, {"level": null, "lighting": "a.light"}, {"lighting": "b.light"}, {"level": "1", "lighting": "c.light"},
+			{"level": 1, "file": "x_lod1.ply", "lighting": "x_lod1.light"}]}
+	assert_eq(SplatLod.lighting_for(manifest, 1), "x_lod1.light", "the first entry that is a level 1 with a string")
+	assert_eq(SplatLod.lighting_for(manifest, 0), "", "a null level is not level 0")
+	assert_eq(SplatLod.file_for(manifest, 1), "x_lod1.ply")
+	assert_eq(SplatLod.lighting_for({"lods": [{"level": null, "lighting": "a.light"}]}, 0), "")
+	assert_eq(SplatLod.lighting_for({"lods": [{"level": 1, "lighting": 7}]}, 1), "", "records that are not a name")
+
+
+func test_one_parsed_manifest_serves_every_levels_lighting_path() -> void:
+	var manifest: Dictionary = SplatLod.read_manifest("starfury_aurora")
+	assert_false(manifest.is_empty())
+	for level: int in range(0, 4):
+		assert_eq(SplatLod.lighting_path_in(manifest, "starfury_aurora", level), SplatLod.lighting_path("starfury_aurora", level))
+	assert_eq(SplatLod.lighting_path_in({}, "starfury_aurora", 0), "")
+	assert_eq(SplatLod.read_manifest("no_such_asset"), {})
+	assert_eq(SplatLod.read_manifest("nothing_here", "res://no/such/root"), {})
+
+
+# --- the hero level (M3-T24) --------------------------------------------------------------------------------------
+
+
+func test_the_manifest_names_the_hero_file_and_lighting_outside_the_lods() -> void:
+	var manifest: Dictionary = {
+		"lods": [{"level": 0, "file": "x.ply", "lighting": "x_lod0.light"}],
+		"hero": {"file": "x_hero.ply", "splats": 9, "spacing_m": 0.02, "lighting": "x_hero.light"},
+	}
+	assert_eq(SplatLod.hero_file_for(manifest), "x_hero.ply")
+	assert_eq(SplatLod.hero_lighting_for(manifest), "x_hero.light")
+	assert_eq(SplatLod.file_for(manifest, 1), "", "the hero is not a level of the ladder")
+	for broken: Variant in [{}, {"hero": 3}, {"hero": {}}, {"hero": {"file": 4, "lighting": null}}]:
+		assert_eq(SplatLod.hero_file_for(broken as Dictionary), "")
+		assert_eq(SplatLod.hero_lighting_for(broken as Dictionary), "")
+
+
+func test_the_hero_paths_of_a_generated_asset() -> void:
+	var hero: Dictionary = SplatLod.hero_paths("starfury_aurora")
+	assert_eq(hero["path"], "res://assets/generated/starfury_aurora/starfury_aurora_hero.ply", GEN_ASSETS_HINT)
+	assert_eq(hero["lighting"], "res://assets/generated/starfury_aurora/starfury_aurora_hero.light")
+	assert_true(FileAccess.file_exists(String(hero["path"])))
+	assert_true(FileAccess.file_exists(String(hero["lighting"])))
+	for asset: String in ["raider_fighter", "nav_buoy", "sky_default", "no_such_asset"]:
+		assert_eq(SplatLod.hero_paths(asset), {"path": "", "lighting": ""}, "%s has no hero level" % asset)
+
+
 func test_the_lighting_path_of_a_generated_asset() -> void:
 	assert_eq(SplatLod.lighting_path("starfury_aurora", 0), "res://assets/generated/starfury_aurora/starfury_aurora_lod0.light")
 	assert_eq(SplatLod.lighting_path("raider_fighter", 3), "res://assets/generated/raider_fighter/raider_fighter_lod3.light")
