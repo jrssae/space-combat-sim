@@ -95,6 +95,7 @@ Record later answers here (rules) or in `docs/design-references.md` (designs), s
 | Q26 | (2026-11-01, M3-T25's gate) Lens flare and motion blur: which? | **Flare: ARez's "Compositor Lens Effects / Lens flare"** (MIT, pinned at commit `0ce0612`, vendored unedited in `addons/lens_effects/`), falling back to an in-house effect if it does not work on Godot 4.7. **Motion blur: in-house** `CompositorEffect` over the velocity texture, default off; no maintained add-on exists for 4.7 |
 | Q27 | (2026-11-01, maintainer request) Running lights | **Every ship shows port red, starboard green and a top white light, unless it is trying to be sneaky.** The top white light also lights the top of the Starfury's cockpit section, so its designs and colours read (they come in a later milestone). Every ship has a soft red cockpit light, inside in the cockpit view and faintly in the canopy from outside up close. A raider on patrol is dark and its lights come on when it attacks; raiders in attack waves are lit from the start. The player can switch their own lights off (a key, D-pad Left, a HUD indicator, the console) and the wingmen follow. Visual only: radar and AI detection do not change. Navigation buoys keep a steady light and add a slow fade in and out (M3-T27) |
 | Q28 | (2026-11-01, maintainer request) How a Starfury dies | **The part hit last breaks off first**: the killing hit picks the cockpit or one of the four arms, the explosion starts at that part's detachment point, and that part flies off first. The rest stays joined for a moment, then comes apart one piece at a time over about 1 s with smaller blasts at each joint, ending in the same five pieces (M3-T28) |
+| Q29 | (2026-11-01, maintainer request) The Starfury's interior view looks odd; rebuild it after a new reference and make the horizontal display's screens carry the HUD | **Rebuild it (M3-T29)**: V struts, side panes, sills, red light, per the written description in `docs/design-references.md`. In the cockpit view the instruments move to screens in the console: an octagon (radar and tactical grid), a left screen (own damage, hull, charge, speed, drift) and a right screen (target, wing roster). The window keeps the crosshair, lead marker, target brackets, waypoint marker, and hull and charge bars. The floating targeting grid leaves the cockpit view, its place taken by the octagon. The chase view keeps today's 2D HUD |
 
 Calls made by the planner (say if you want them changed): callsigns `ALPHA 1` (player) to `ALPHA 4`, the instructor
 `INSTRUCTOR`; the default order is **cover me** (hold formation, engage hostiles that come within 2 km of the player);
@@ -150,6 +151,8 @@ mouse. Expected values in (A) tests come from specs, profiles and hardpoints, ne
 | AC37 | Own lights (Q27): the fork lights a splat from up to `MAX_OWN_LIGHTS` per-instance lights, in the instance's own frame and using no slot of the 8. The top white light lights the Starfury's top cockpit section and the raider's top: on the test shape, a splat facing it within range gains light and one facing away gains none. The red cabin glow is on every ship: it lights the cockpit mesh in the cockpit camera and shows in the canopy from outside within the T27 range, and a dark ship keeps it. GPU time with own lights on and off is recorded at AC19's fight and 100 ships. The change is in the fork's `PATCHES.md`; the Raster backend matches or is recorded as not matching | A | P11 |
 | AC38 | Last-hit break-up (Q28): for each of the five parts, a killing bolt on that part makes it leave first and starts the explosion within 0.5 m of its joint (`hardpoints.json` `chunks[].joint`), for the player, an ally and the instructor's hull type. The others stay rigid with the wreck until released, one at a time, smaller blast at each joint, all gone within 1.2 s; the five chunks are the same as before. Every chunk's velocity at release is the wreck's rigid motion at that point plus its kick, then constant (no damping). A ram uses its contact point. A console `kill` (no hit point) blasts from the centre and uses a seeded order. Same seed, same order and times. A rebase during the staged part moves nothing relative to the wreck (1 mm). Raiders and buoys break up as before. AC13's paired budget holds, and AC32's fixed particle and splat node counts hold | A | P12 |
 | AC39 | Running lights read at combat ranges and from far off, the top of the cockpit is readable, the cockpit glow is soft, dark raiders are hard to spot and their lights coming on reads as a threat, buoys breathe slowly; a Starfury's death starts where it was hit and tears apart in stages | H | P11, P12 |
+| AC40 | Cockpit and screens (Q29): the generator writes the new `cockpit_interior` (V struts, top bar, side panes, sills, lamps, indicator row, console), deterministic, with `screens` hardpoints for the octagon and two side screens; hull PLY bytes do not change. The view test holds the opening T29 records, narrowing toward the console, with the crosshair's area clear. In the cockpit camera the window draws only the crosshair, lead marker, target brackets, waypoint marker, hull and charge bars, and the screens show every other instrument, from the same frame data as the 2D HUD (a test reads what each screen was given); in the chase camera the 2D HUD is unchanged. Screen viewports exist once, for the player's ship only, draw 2D only, and leave GDGS's render state count at 1. The indicator lamps follow their states. No `Light3D` is added (AC30's 8 hold). AC19's 60 fps holds; frame time with the screens is recorded | A | P13 |
+| AC41 | The cockpit reads like the reference: heavy red-lit V struts with space and ships visible past them, a console that looks built in; the screens are legible at a glance at 1080p without free look; bars on the window are enough in a fight; nothing important is hidden by the struts | H | P13 |
 
 ## Capture pre-checks
 
@@ -174,6 +177,8 @@ On the maintainer's machine the agent takes these on the GPU itself (GDGS Comput
   spawn raider idle 800 0 0; wait 20; screenshot reports/m3/p11_far.png; camera cockpit; wait 20; screenshot reports/m3/p11_cockpit.png`
 - **P12 last-hit break-up** (AC38, AC39; T28): `god on; spawn ally idle 60 0 0; timescale 0.1; set targeting.selected "ALPHA 2"; kill target; wait 30;
   screenshot reports/m3/p12_a.png; wait 30; screenshot reports/m3/p12_b.png; timescale 1`
+- **P13 cockpit** (AC40, AC41; T29): `god on; wave stop; spawn ally idle 40 8 -80; spawn raider idle 60 -10 -120; camera cockpit; set targeting.selected "ALPHA 2"; wait 60;
+  screenshot reports/m3/p13_cockpit.png; state render`
 
 ## Task breakdown (ordered)
 
@@ -208,7 +213,8 @@ Status: `done` (merged into `m3`, its "Done" notes below), `in progress`, `not s
 | M3-T26 | Starfury after the reference model, wireframe damage display (Q24) | - | Opus | done (second pass 2026-10-31) |
 | M3-T27 | Running lights, own lights in the fork, cockpit glow, buoy fade (Q27) | T20, T22 | Opus | in progress |
 | M3-T28 | Starfury last-hit break-up (Q28) | T22, T23 | Sonnet | in progress |
-| M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13-T28 | Opus | in progress |
+| M3-T29 | Starfury cockpit after the new reference, console screens (Q29) | T27 | Opus | not started |
+| M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13-T29 | Opus | in progress |
 
 Parallel lanes: T01, T02 and T03 touch disjoint files and can run together; T04 and T05 can run together after T02.
 Two agents at a time is steadier than four (`docs/handoff.md`).
@@ -1327,6 +1333,22 @@ Added 2026-11-01 for Q28; after T22 and T23.
   - Every set busy means mesh-only chunks: they stage the same way.
 - Done when: AC38 passes; P12 is taken on the GPU; the look is AC39's.
 
+### M3-T29 Starfury cockpit after the new reference, console screens
+
+Added 2026-11-01 for Q29; after T27, since both touch the cabin light; before T12.
+
+- Goal: the cockpit view looks like a built, red-lit Starfury cockpit, and its console's screens carry the instruments, leaving the window for what must line up with the world.
+- Agent: **Opus**. A generator change, a HUD split and an in-world display path.
+- Files: `tools/procgen/parts/` and `tools/procgen/assets/starfury_aurora.py` (interior, `screens` hardpoints) and tests, `src/hud/hud.gd`, `src/hud/hud_layout.gd`, `src/hud/cockpit_screens.gd` (new), `src/ship/ship.gd`, `tests/unit/` and `tests/integration/test_cockpit_screens.gd`, `docs/design-references.md`, `docs/architecture.md` §7, §8 as it describes the HUD.
+- Notes:
+  - Original geometry: the reference is someone else's fan art and is never committed (`references/` is ignored), so the build follows the written description, in its proportions, not traced shapes.
+  - **Forward view (maintainer approved)**: the opening narrows toward the console, about +/-10 deg at the horizon, widening upward (planner's estimate; record what is built). `test_starfury_aurora.py`'s clear box changes to match. Free look stays.
+  - **Screens** are 2D-only `SubViewport`s (`disable_3d`) drawn by the existing HUD code from the same `HudFrame`, shown on console meshes as unshaded emissive textures. Split the draw calls; do not fork the drawing. Red grid and green ship icons on the octagon (planner call); warnings amber and red as now.
+  - **Legibility beats fidelity** (planner call, approved): if text is too small at 1080p from the eye, make the screens bigger.
+  - **Indicator lamps** show real states (assist, guns, running lights, auto-track), not decoration (planner call, approved).
+  - Chase view: today's 2D HUD unchanged, floating grid included.
+- Done when: AC40 passes; P13 is taken on the GPU; the look is AC41's.
+
 ### M3-T12 Integration, smoke runs, capture set, play-test guide
 
 - Goal: M3 complete in one build, every (A) criterion green, the maintainer handed a checklist and screenshots.
@@ -2082,9 +2104,9 @@ player, waiting to show the roll as without rebases; every fixture check held). 
 
 ## Definition of done (M3)
 
-- T01-T28 merged into `m3`, `scripts/run_tests.sh` green, `docs/third-party.md` current, no generated binaries committed.
+- T01-T29 merged into `m3`, `scripts/run_tests.sh` green, `docs/third-party.md` current, no generated binaries committed.
 - Every (A) criterion passes.
-- AC14-AC19, AC35 and AC39 ticked by the maintainer, with GPU, driver, FPS and VRAM recorded below. Then `m3` merges into `main`.
+- AC14-AC19, AC35, AC39 and AC41 ticked by the maintainer, with GPU, driver, FPS and VRAM recorded below. Then `m3` merges into `main`.
 
 Human acceptance record (fill in):
 
@@ -2092,7 +2114,7 @@ Human acceptance record (fill in):
 Tester:                                  Date:
 OS / kernel / Mesa or driver:            GPU:
 Splat backend shown:                     FPS with 4 Starfuries + 9 raiders + effects:
-AC14 [ ]  AC15 [ ]  AC16 [ ]  AC17 [ ]  AC18 [ ]  AC19 [ ]  AC35 [ ]  AC39 [ ]
+AC14 [ ]  AC15 [ ]  AC16 [ ]  AC17 [ ]  AC18 [ ]  AC19 [ ]  AC35 [ ]  AC39 [ ]  AC41 [ ]
 VRAM / frame time, AC19 fight and 100 ships, before and after T19-T20:
 Notes:
 ```

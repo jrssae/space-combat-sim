@@ -38,6 +38,15 @@ wide across the pods and 8 m tall. The X is wider than tall: struts sit about 30
   reddish-orange in the show. The rest of the view is open space; the frame never crosses the centre.
   Implications: `cockpit_interior` is the frame, struts and sill only. The targeting display is a HUD element
   (M2-T08), drawn in the green line theme per the maintainer's HUD answer.
+- **Cockpit view, second reference (maintainer, 2026-11-01, fan art, supersedes the frame above for the interior; the image is kept in the
+  ignored `references/` directory and never committed).** Two heavy, deep struts rise from the centre console and lean outward to the upper
+  corners, forming a V, with a dark bar across the top and dark curved conduits at the top corners. Their inner faces glow saturated red, with
+  cable runs along them. The main opening is the V: narrow at the console, wide at the top. Beyond each strut a large side pane shows
+  open space. Low on each side a broad sill of dark ribbed panels runs toward the pilot, with a small round white lamp set in each. In the
+  lower centre a flat octagonal display sits in the console, rim lit, tilted up to the pilot, showing a red grid with green ship icons and
+  a green target ring; a short row of small red and white indicator lamps sits on the console's edge just above it. Everything else is near black, lit
+  only by the red. Proportions, at 4:3: the octagon covers the middle quarter of the width and the lowest third of the height.
+  Implications: see M3-T29. The show-frame targeting grid above leaves the cockpit view for the octagon.
 - **Colours.** Light grey hull with darker panel lines and greebles; hazard stripes on the struts; dark metal
   pods with lighter bands.
 
