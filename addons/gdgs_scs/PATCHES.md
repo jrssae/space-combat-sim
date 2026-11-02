@@ -151,3 +151,9 @@ game side and drop only this patch, restore the two shaders' `relight_factor` an
 `src/ship/running_lights.gd`.
 
 Not an upstream candidate as it stands: the paint test for a glow suits this project's generated assets, where glass is the dark paint.
+
+## 7. A light leaving the tree (an error on every scene swap)
+
+The rig caches its lights between scans. During a scene swap a cached light is still valid and still counts as visible, but it has left
+the tree, so reading its transform printed `Condition "!is_inside_tree()" is true`. `_is_active` now skips it. To revert, remove that one line.
+Upstream candidate.

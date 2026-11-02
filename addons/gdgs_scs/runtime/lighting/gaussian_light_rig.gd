@@ -242,6 +242,7 @@ static func _reach(light: Light3D) -> float:
 static func _is_active(light: Light3D) -> bool:
 	return (
 		light != null and is_instance_valid(light)
+		and light.is_inside_tree()  # [space-combat-sim patch] a scene being swapped out still counts as visible
 		and light.is_visible_in_tree() and not is_zero_approx(light.light_energy)
 	)
 

@@ -247,3 +247,14 @@ func test_the_light_rig_still_reports_changes() -> void:
 	assert_false(registry.refresh_relight(rig.duplicate(), 1), "the same bytes are not a change")
 	assert_eq(registry.get_light_count(), 1)
 	assert_true(registry.refresh_relight(PackedFloat32Array([3.0, 2.0]).to_byte_array(), 1))
+
+
+# A scene swap leaves cached lights valid but out of the tree, where reading their transform is an error (patch 7).
+func test_the_light_rig_skips_a_light_out_of_the_tree() -> void:
+	var rig_script: GDScript = load("res://addons/gdgs_scs/runtime/lighting/gaussian_light_rig.gd")
+	var light := OmniLight3D.new()
+	light.light_energy = 1.0
+	assert_false(rig_script._is_active(light), "out of the tree")
+	add_child_autofree(light)
+	assert_true(rig_script._is_active(light), "in the tree")
+
