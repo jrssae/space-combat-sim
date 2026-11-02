@@ -387,7 +387,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T16 | C | Civilian ships in the game | T12, T13, T14, T15, T21 | Opus | Specs for heavy hulls, factions, pools, AI, GPU check | not started |
 | T17 | C | Free-flight encounters | T16, T02 | Opus | Seeded director under a CPU cap | not started |
 | T18 | D | New guns and impacts | - | Opus | Synthesis to measured shapes | done |
-| T19 | D | Per-thruster engine bursts | T18 | Opus | Voice placement and a voice budget | not started |
+| T19 | D | Per-thruster engine bursts | T18 | Opus | Voice placement and a voice budget | done |
 | T20 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M5-T01 `Game` flow, boot routing and loading
@@ -644,6 +644,23 @@ whose trigger never arose). Update the column with each task's commit.
 - **Notes:** envelopes run on sim time in `_process` (visuals and audio in `_process`, physics in `_physics_process`). The
   RCS grouping comes from `ThrusterLayout`'s positions, so the civilian hulls get it for free.
 - **Done when:** the engine half of AC15 and AC16's cost clause for audio.
+- **Done (as built, 2026-11-02):**
+  - **The old loops are gone.** `engine_loop` and `thruster_loop` are removed (Q7). `sfx_combat` (generator 5) now has two seamless loops shaped on the reference:
+    - `main_burst` (4 s): noise from 400 Hz to 16 kHz with its loudest octave at 4-8 kHz (36.6 % of the energy), a -5.6 dB/oct tilt above 1 kHz and a slow 3.1 dB wander at 0.5-1.75 Hz.
+    - `rcs_burst` (2 s): noise from 2 to 16 kHz, 79 % of it at 6-16 kHz.
+    - Neither has energy to speak of below 300 Hz (6.8e-6 and 4e-11). A new `audio.shaped_periodic_noise` helper builds both.
+  - **`EngineVoices`** (`src/audio/engine_voices.gd`) is the pure decision side:
+    - **Voices:** one per pod for every ship, heard at the pod's main or retro nozzle, whichever fires harder. The player's ship also gets one per RCS cluster. Jets are grouped by their side of the centre of mass along each axis, with a 20 % centre-line band: the Starfury gets 4 clusters and the raider 4, and any hull gets at most 27.
+    - **Cap:** `engine_voice_cap` (default 24, min 8) bounds the grants: the player's 8 first, then whole ships, nearest first, within 1.5 km. Ships are re-ranked at 4 Hz, on a cap change, or when a voiced ship leaves play.
+    - **Envelopes** run on the frame's delta with the reference's numbers: pod attack 20 ms, pod release 30 dB in 40 ms, jet attack 59 ms, jet release tau 0.15-0.65 s by burn length. A jet's brightness follows its level (an octave of `pitch_scale`).
+  - **`AudioDirector`** puts `EnginePod<i>`/`EngineRcs<j>` players on each ship at those places. Each frame it touches only granted voices: work counts show `step_work` equals the granted voices (24) for 300 ships of 16 pods and 64 jets, and a re-rank is one unit per ship. Gains are `POD_DB` -9 and `RCS_DB` -10, so four pods sit at about the loudness of a held shot.
+  - **Console:** `audio.engine_voices`, `engine_sounding` and `engine_frame_work` are new.
+  - **README:** the procgen README now lists the eight current sounds.
+  - **Tests:** `tests/unit/test_engine_voices.gd` (21), `tests/integration/test_engine_audio.gd` (9), and the burst shape tests in `test_sfx_combat.py`.
+  - **Not done:** the reference's optional comb sweep and 150 ms soft stop.
+  - **(H):** levels and feel.
+  - Review: approved, no Critical or Important findings. Carried to T16/T17: engine voices for ships without a
+    `PulseCannon` and a removal path for despawned traffic.
 
 ### M5-T20 Integration, full suite, docs and acceptance
 
