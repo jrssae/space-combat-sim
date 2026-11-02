@@ -199,7 +199,7 @@ Status: `done` (merged into `m3`, its "Done" notes below), `in progress`, `not s
 | M3-T17 | Broadcast contacts for the radar and the AI (Q21) | T08, T10 | Opus | done (2026-10-31) |
 | M3-T18 | Slashing pass and chase (Q19) | T13 | Opus | done (2026-11-01) |
 | M3-T19 | Splat LOD chain and `LodSwitcher` (Q22) | T08 | Opus | done (2026-11-01) |
-| M3-T20 | Resident splat budget: GDGS patch 5 (Q22) | T19 | Opus | in progress |
+| M3-T20 | Resident splat budget: GDGS patch 5 (Q22) | T19 | Opus | done (2026-11-01) |
 | M3-T21 | Splat relighting: procgen normals, flat colours, `LightPicker` (Q23) | T19 | Opus | done (2026-11-01) |
 | M3-T22 | Ship lights: nozzles, muzzle flashes, explosions (Q23) | T21 | Sonnet | done |
 | M3-T23 | `GPUParticles3D` sparks and debris (Q23) | T14 | Sonnet | done |
@@ -937,10 +937,10 @@ Added 2026-10-28 for Q22 (pulled forward from M6); after T08 (the ally pool and 
     `LodSwitcherMath` (pure: projected diameter, the 200 / 60 / 16 px thresholds, 25 % to step finer, whole-level bias) and a
     `LodSwitcher` child per ship (`_process`, the viewport's camera); `settings.splat_lod_bias` (-1..1); provider `lod`
     (`levels`, `visible_splats`) and `lod <ship|all> <0-3|auto>`.
-  - Deviation: the brief's "count GDGS rebuilds on the render manager's rebuild path" would mean editing `addons/`
-    (`CLAUDE.md` forbids it) and counts nothing headless (no GDGS backend runs there). Instead `test_lod_in_play` proves
-    the cause cannot happen: across the sweep no splat node's `gaussian` changes (only a resource change marks GDGS's
-    resources dirty; visibility rides in the instance transform) and the node count is fixed.
+  - The brief's "count GDGS rebuilds on the render manager's rebuild path" could not be done here (`addons/` was closed), so
+    `test_lod_in_play` proves the cause cannot happen: across the sweep no splat node's `gaussian` changes and the node count is fixed.
+    T20 closed it: the counters exist (`render.gdgs_rebuilds`, `render.gdgs_splat_uploads`), and on the GPU a 40 m to 20 km sweep and
+    back at 13 ships changes neither.
   - Tests: `test_lod_switcher_math` (6: size, levels, a slow sweep switches each boundary once each way, a ship on a threshold
     never flaps, the 25 %, the bias), `test_lod_in_play` (4, at a 1080p root window: headless windows are 64 px: one node per
     level and one shown; 13 ships swept 40 m to 20 km and back, a raider 0-1-2-3-2-1-0, an ally 1-2-3-2-1, no node or resource
@@ -961,9 +961,10 @@ Added 2026-10-28 for Q22; after T19.
   (patch 5), a pure sizing helper the tests can call, `src/rendering/lod_switcher.gd` (budget step-down),
   `src/autoload/settings_schema.gd`, `tests/unit/test_splat_budget.gd`.
 - Notes:
-  - Today GDGS sizes its buffers by every resident instanced splat, hidden ones included: 32 sort slots × 8 B, 64 B of
-    projected data and 8 B of instance id, about 330 B each. LOD1 allies at 100 ships are about 1.2 GB; at 500, about
-    6 GB. Carrying the LOD chain makes it about 1.35x LOD0 per ship.
+  - Today GDGS sizes its buffers by every resident instanced splat, hidden ones included: 32 sort slots at 8 B in each of two
+    double-buffered sort buffers (512 B), 64 B of projected data, 8 B of histogram and 8 B of instance id, about 592 B each
+    (corrected by T20 from the 330 B first planned). 100 ships (70 raiders, 30 allies, each with its LOD chain) are 5.4 M resident
+    splats, measured at 3.2 GB; 500 would be about 16 GB by the same sum.
   - Patch: (1) a small per-frame table of visible instances (start, count, resource base), with a prefix sum; the
     projection pass runs over visible splats only and finds its instance by binary search, which replaces the per-splat
     instance-id buffer; (2) the culled and sort buffers sized from `settings.splat_budget` (visible splats, planner call
@@ -975,6 +976,46 @@ Added 2026-10-28 for Q22; after T19.
     and records them for AC35; whether the frames look unchanged is (H).
 - Done when: AC29 passes; the change is in the fork's `PATCHES.md` (patch 5) with how to revert it; the before / after frame
   time and VRAM numbers are recorded.
+- Done (2026-11-01):
+  - In the fork (patch 5): `GaussianSplatBudget` (pure: buffer sizes from a visible-splat budget, 576 B per budget splat plus about 8 B of
+    histogram, 1.168 GB at 2 000 000), `GaussianVisibleTable` (pure: one row per instance drawn this frame, culling hidden ones and whole
+    instances off screen, conservative against the shader's own test), the projection pass over that table by binary search, dispatch
+    sizes that follow the visible total. In the registry: one deferred merge however many nodes register, a moved node patches its own
+    entry, the bytes are produced at render time, relight knobs follow setters.
+  - In the game: `settings.splat_budget` (int, 100 000 to 6 000 000, default 2 000 000), pushed by `SplatStatus`; `SplatBudgetMath` (pure) and
+    the `LodSwitcher` step-down, once per frame across all switchers, on top of the level the ship's size calls for; provider `render` gains
+    `gdgs_rebuilds`, `gdgs_splat_uploads`, `splat_visible`, `splat_clipped`, `splat_budget_mb`, `gpu_ms`.
+  - Numbers for AC35, AMD RX 6950 XT, RADV, 1920x1080, vsync off, Compute backend, before / after. Load is from adding the main scene to four
+    frames later. VRAM is what the run added to `mem_info_vram_used`, within about 100 MB (other processes share the GPU).
+
+    | Scene | Load, s | Frame, ms (mean) | GPU, ms (mean) | VRAM added, MB |
+    |---|---|---|---|---|
+    | 13 ships, at rest | 6.79 / 0.67 | 3.92 / 3.33 | 2.89 / 2.23 | 927 / 1539 |
+    | 13 ships, all moving | 6.94 / 0.59 | 8.81 / 3.76 | 3.21 / 2.63 | 892 / 1495 |
+    | The sky in the cockpit view | 7.23 / 0.57 | 2.46 / 1.66 | 1.48 / 1.13 | 881 / 1637 |
+    | 100 ships, at rest | 53.3 / 0.74 | 754 / 713 | 4.29 / 2.68 | 3217 / 1515 |
+    | 100 ships, all moving, one physics tick per frame | 54.0 / 0.76 | 289 / 98.5 | 4.32 / 2.68 | 3256 / 1544 |
+
+    13 ships are nine raiders and four allies; 100 are 70 and 30; the player's own hull comes on top. Before the patch every moving ship's
+    nodes rebuilt every instance's bytes, 0.33 ms a time at 400 instances, which is the gap in the moving rows. `refresh_relight` read
+    0.27-0.29 ms of node properties per frame at 100 ships, over R5's 0.2 ms, so it now follows changes.
+  - Frames: the fixed scene (13 ships from 150 m to 9 km) differs before to after by a mean of 0.033 per channel (max 158), against 0.040
+    (max 116) between two runs before and 0.038 (max 151) between two runs after, so the difference is the noise of translucent ties.
+    Whether they look unchanged is (H) in AC35.
+  - On the GPU: a 40 m to 20 km sweep and back at 13 ships leaves `gdgs_rebuilds` and `gdgs_splat_uploads` at 1, closing T19's deviation (AC28). A
+    budget change rebuilds once. With nothing visible the frame has no lit tile. At a budget of 150 000 the ships step down to 126 242 visible
+    without clipping; forced past it with `lod all 0`, it clips at exactly 150 000 and warns once, with no error. No Vulkan or GDScript errors in stderr.
+  - Budget: stays 2 000 000. The most drawn in these scenes is 339 000 splats and 1.9 M sort keys, so it has plenty of room, including for T24's
+    hero level. The cost is that 13 ships take about 600 MB more VRAM than before the patch, in exchange for 100 ships taking 1.7 GB less
+    and, by the sizing (500 ships were not run), 500 taking about what 100 do. Nothing measured says that trade is wrong on a 16 GB card; 1 000 000 would save 584 MB if a smaller card matters.
+  - Deviation from the plan: dispatching over `min(visible x 32, capacity)` would lose sky. The sky alone writes 983 332 sort keys from 16 000
+    visible splats (limit 512 000), since nebula splats touch hundreds of tiles; tried, it dims the nebula (mean difference 1.57, max 124). So the
+    elements have a floor of 1024 per screen tile, and the sort and boundary passes clamp to that per-frame limit (`PATCHES.md`, patch 5).
+  - `SettingsSchema` had no int type, so it gained one (three match arms, and one in `DebugConsole`'s settings provider); `test_ship_scene` lists the
+    new `render` keys. Tests: `test_splat_budget` (17), `test_splat_budget_math` (11), `test_gaussian_scene_registry` (13),
+    `test_splat_budget_in_play` (8), and one more in `test_settings_schema`.
+  - For later: 100 ships still do not reach 60 fps, and the renderer is not why. `TargetingController` costs about 63 of the 87 ms per frame at 100
+    ships (one per ship, each scanning every contact). The light rig's scene walk costs 3.3 ms every 30 frames at 100 ships.
 
 ### M3-T21 Splat relighting: procgen normals, flat colours, `LightPicker`
 

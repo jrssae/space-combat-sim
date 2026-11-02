@@ -19,7 +19,11 @@ extends Node
 ## without a SplatStatus in the scene.
 ##
 ## Main (M1-T15) adds one SplatStatus outside `World`. Console: provider `render` (`splat_backend`, `fallback` (w),
-## `fps`, `gpu`) and command `fallback [on|off]`.
+## `fps`, `gpu`, and what the renderer did: `gdgs_rebuilds`, `gdgs_splat_uploads`, `splat_visible`, `splat_clipped`,
+## `splat_budget_mb`, `gpu_ms`) and command `fallback [on|off]`.
+##
+## It is also the game's link to the renderer's splat budget (M3-T20): it pushes `settings.splat_budget` into GDGS at start and on
+## change.
 
 ## The fallback state changed (forced or not); `active` is `is_fallback_active()`.
 signal fallback_changed(active: bool)
@@ -65,6 +69,8 @@ func _ready() -> void:
 	if _applied:
 		_apply_all()
 	get_tree().node_added.connect(_on_node_added)
+	_push_splat_budget()
+	Settings.changed.connect(_on_setting_changed)
 	DebugConsole.registry.register_provider(&"render", ConsoleVars.new({
 		&"splat_backend": {"get": func() -> StringName: return active_backend(),
 				"doc": "GDGS backend: compute, raster, headless (nothing renders) or none (fallback on)"},
@@ -72,6 +78,17 @@ func _ready() -> void:
 				"doc": "Fallback meshes and panorama sky instead of splats"},
 		&"fps": {"get": func() -> float: return Engine.get_frames_per_second(), "doc": "Frames per second"},
 		&"gpu": {"get": _gpu_name, "doc": "Video adapter name"},
+		&"gdgs_rebuilds": {"get": func() -> int: return int(GaussianRenderManager.get_stats().get("rebuilds", 0)),
+				"doc": "Times GDGS rebuilt its GPU buffers (a change of level must not)"},
+		&"gdgs_splat_uploads": {"get": func() -> int: return int(GaussianRenderManager.get_stats().get("splat_uploads", 0)),
+				"doc": "Times GDGS uploaded the splat data (a change of level must not)"},
+		&"splat_visible": {"get": func() -> int: return int(GaussianRenderManager.get_stats().get("visible", 0)),
+				"doc": "Splats the last frame drew, hidden and off-screen ones left out"},
+		&"splat_clipped": {"get": func() -> bool: return bool(GaussianRenderManager.get_stats().get("clipped", false)),
+				"doc": "The budget cut splats from the last frame (settings.splat_budget)"},
+		&"splat_budget_mb": {"get": func() -> float: return float(GaussianSplatBudget.sizes(GaussianRenderManager.get_splat_budget())["total"]) / 1e6,
+				"doc": "Video memory the budget's buffers take, MB"},
+		&"gpu_ms": {"get": _gpu_ms, "doc": "Last frame's GPU time, ms (0 on the first read: measuring starts then)"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"fallback",
 			"Show the fallback meshes and panorama sky instead of splats; with no argument, toggle",
@@ -80,6 +97,8 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+	if Settings.changed.is_connected(_on_setting_changed):
+		Settings.changed.disconnect(_on_setting_changed)
 	if get_tree().node_added.is_connected(_on_node_added):
 		get_tree().node_added.disconnect(_on_node_added)
 
@@ -147,6 +166,21 @@ func _console_set_fallback(value: Variant) -> String:
 
 func _cmd_fallback(args: Dictionary) -> ConsoleResult:
 	return DebugConsole.registry.toggle("render.fallback", args[&"state"])
+
+
+func _on_setting_changed(key: StringName, _value: Variant) -> void:
+	if key == &"splat_budget":
+		_push_splat_budget()
+
+
+static func _push_splat_budget() -> void:
+	GaussianRenderManager.set_splat_budget(int(Settings.get_value(&"splat_budget")))
+
+
+func _gpu_ms() -> float:
+	var viewport: RID = get_viewport().get_viewport_rid()
+	RenderingServer.viewport_set_measure_render_time(viewport, true)
+	return RenderingServer.viewport_get_measured_render_time_gpu(viewport)
 
 
 static func _gpu_name() -> String:

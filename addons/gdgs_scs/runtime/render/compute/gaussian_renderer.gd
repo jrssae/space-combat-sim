@@ -4,8 +4,6 @@ class_name GaussianRenderer
 
 const RenderingDeviceContext := preload("res://addons/gdgs_scs/runtime/render/compute/gaussian_rendering_device_context.gd")
 const RADIX := 256
-# [space-combat-sim patch] 10 -> 32: close-up hulls and large nebula splats touch far more than 10 tiles each.
-const MAX_SORT_ELEMENTS_PER_SPLAT := 32
 
 func render_for_compositor(
 	state_cache: GaussianGpuStateCache,
@@ -14,7 +12,8 @@ func render_for_compositor(
 	camera_transform: Transform3D,
 	camera_projection: Projection,
 	camera_world_position: Vector3,
-	depth_capture_alpha: float = 0.5
+	depth_capture_alpha: float = 0.5,
+	budget_splats: int = GaussianSplatBudget.DEFAULT_SPLATS  # [space-combat-sim patch]
 ) -> Dictionary:
 	state_cache.flush_pending_cleanup()
 
@@ -23,7 +22,6 @@ func render_for_compositor(
 			state_cache.cleanup_all()
 		return {}
 
-	var point_count := scene_registry.get_point_count()
 	var safe_size := Vector2i(maxi(texture_size.x, 1), maxi(texture_size.y, 1))
 	var state = state_cache.get_or_create_render_state(safe_size)
 	_update_camera_from_transform(state, camera_transform, camera_projection)
@@ -32,13 +30,14 @@ func render_for_compositor(
 
 	var unique_data_size := scene_registry.get_point_data_byte().size()
 
-	if state.context == null or state.needs_gpu_rebuild:
-		state_cache.rebuild_gpu_state(state, point_count, unique_data_size, scene_registry.get_instance_count())
+	# [space-combat-sim patch] A budget change reallocates here, once.
+	if state.context == null or state.needs_gpu_rebuild or state.budget_splats != budget_splats:
+		state_cache.rebuild_gpu_state(state, unique_data_size, scene_registry.get_instance_count(), budget_splats)
 	if state.context == null:
 		return {}
 
 	if state.needs_splat_upload:
-		state_cache.upload_splats(state, scene_registry.get_point_data_byte(), scene_registry.get_splat_instance_ids_byte())
+		state_cache.upload_splats(state, scene_registry.get_point_data_byte())
 		state_cache.upload_splat_lighting(state, scene_registry.get_splat_lighting_byte())
 	if state.needs_instance_upload:
 		state_cache.upload_instance_transforms(state, scene_registry.get_instance_transforms_byte())
@@ -50,7 +49,13 @@ func render_for_compositor(
 	if state.camera_push_constants.is_empty():
 		return {}
 
-	_rasterize_state(state, point_count, scene_registry.get_light_count())
+	# [space-combat-sim patch] Hidden and off-screen instances leave the frame here, at render time: the poses are final by now.
+	var planes := GaussianVisibleTable.frustum_planes(state.camera_view, state.camera_projection)
+	var table := scene_registry.build_visible_table(planes, state.budget_splats)
+	state_cache.upload_visible_table(state, table["bytes"])
+	state_cache.set_frame_elements(state, int(table["visible"]))
+
+	_rasterize_state(state, int(table["visible"]), int(table["rows"]), scene_registry.get_light_count())
 	if state.descriptors.has("render_texture") and state.descriptors.has("depth_texture"):
 		return {
 			"color_alpha_texture": state.descriptors["render_texture"].rid,
@@ -58,7 +63,7 @@ func render_for_compositor(
 		}
 	return {}
 
-func _rasterize_state(state, point_count: int, light_count: int) -> void:
+func _rasterize_state(state, visible_splats: int, table_rows: int, light_count: int) -> void:
 	if state.context == null:
 		return
 
@@ -69,12 +74,14 @@ func _rasterize_state(state, point_count: int, light_count: int) -> void:
 		Time.get_ticks_msec() * 1e-3,
 		state.texture_size.x,
 		state.texture_size.y,
-		point_count,
+		visible_splats,  # [space-combat-sim patch] the shader's point_count: visible splats, not resident ones
 		# The trailing slot used to be padding; it now carries the active light
 		# count, which is what bounds the projection shader's relight loop.
-		light_count
+		light_count,
+		table_rows,  # [space-combat-sim patch]
+		0, 0, 0
 	])
-	state.context.device.buffer_update(state.descriptors["uniforms"].rid, 0, 8 * 4, uniforms)
+	state.context.device.buffer_update(state.descriptors["uniforms"].rid, 0, 12 * 4, uniforms)
 	state.context.device.buffer_clear(state.descriptors["histogram"].rid, 0, 4 + 4 * RADIX * 4)
 	state.context.device.buffer_clear(state.descriptors["tile_bounds"].rid, 0, state.tile_dims.x * state.tile_dims.y * 2 * 4)
 
@@ -83,12 +90,16 @@ func _rasterize_state(state, point_count: int, light_count: int) -> void:
 	state.context.compute_list_end()
 
 	compute_list = state.context.compute_list_begin()
+	# [space-combat-sim patch] The offsets are the buffer's two halves. The element limit is what this frame dispatches over, not the
+	# whole capacity: past it the sort would count keys no workgroup ran for. Overflow drops cleanly instead.
+	var capacity: int = state.sort_capacity
+	var element_limit: int = state.frame_elements
 	for radix_shift_pass in range(4):
 		var sort_push_constant := RenderingDeviceContext.create_push_constant([
 			radix_shift_pass,
-			point_count * MAX_SORT_ELEMENTS_PER_SPLAT * (radix_shift_pass % 2),
-			point_count * MAX_SORT_ELEMENTS_PER_SPLAT * (1 - (radix_shift_pass % 2)),
-			point_count * MAX_SORT_ELEMENTS_PER_SPLAT  # [space-combat-sim patch] capacity: sort passes clamp element_count to it
+			capacity * (radix_shift_pass % 2),
+			capacity * (1 - (radix_shift_pass % 2)),
+			element_limit  # [space-combat-sim patch] capacity: sort passes clamp element_count to it
 		])
 		state.pipelines["radix_sort_upsweep"].call(state.context, compute_list, sort_push_constant, [], state.descriptors["grid_dimensions"].rid, 0)
 		state.pipelines["radix_sort_spine"].call(state.context, compute_list, sort_push_constant)
@@ -96,7 +107,11 @@ func _rasterize_state(state, point_count: int, light_count: int) -> void:
 	state.context.compute_list_end()
 
 	compute_list = state.context.compute_list_begin()
-	state.pipelines["gsplat_boundaries"].call(state.context, compute_list, PackedByteArray(), [], state.descriptors["grid_dimensions"].rid, 3 * 4)
+	state.pipelines["gsplat_boundaries"].call(
+		state.context, compute_list,
+		RenderingDeviceContext.create_push_constant([element_limit, 0, 0, 0]),  # [space-combat-sim patch]
+		[], state.descriptors["grid_dimensions"].rid, 3 * 4
+	)
 	state.context.compute_list_end()
 
 	compute_list = state.context.compute_list_begin()

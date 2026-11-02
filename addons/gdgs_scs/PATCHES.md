@@ -56,3 +56,62 @@ maintainer's GPU in the 2026-10-21 play test).
 Fix: the opacity factor is floored at 0.9 (`max(pow(opacity, 0.2), 0.9)`): a cut at 2.25 sigma, under 8 % of the splat's own opacity.
 Opaque splats (hulls, stars) are unaffected; faint large ones touch about four times as many tiles. To revert, restore
 `pow(splat_opacity, 0.2) * 2.5*sqrt(max(eigenvalues.x, eigenvalues.y))`. Not verifiable without a GPU: AC13 decides.
+
+## 5. Resident splat budget (hidden and off-screen splats cost no sort memory)
+
+Upstream sizes the culled, sort and histogram buffers by every instanced splat in the scene, hidden ones included, and the projection
+pass visits them all, to skip the hidden ones one by one. A ship carrying its whole LOD chain pays for all of it: 100 ships are about
+5.4 M resident splats, measured at 3.2 GB of video memory, however few are drawn.
+
+The real cost of a splat in those buffers is 576 B, not the "about 330 B" first planned: 64 B of projected data, and 32 sort slots at
+8 B in each of two double-buffered sort buffers (512 B). The histogram adds about 8 B, and the instance ids this patch removes were 8 B.
+
+What changed:
+
+- `gaussian_splat_budget.gd` (new, pure) owns `MAX_SORT_ELEMENTS_PER_SPLAT` and sizes the culled, sort and histogram buffers from a
+  budget of visible splats. They do not change when visibility does; a changed budget reallocates once. Splats, lighting, transforms
+  and the table keep their own sizes.
+- `gaussian_visible_table.gd` (new, pure) builds, each frame at render time, a table with one row per drawn instance: first visible
+  splat (a running sum), count, resource base, instance index. Hidden instances take no row, and neither do instances whose bounding
+  sphere is outside the frustum. An instance past the budget is truncated and the rest dropped.
+- `gsplat_projection.glsl`: binding 6 is that table instead of the per-splat ids, `id` counts visible splats, and a binary search finds the
+  row. `point_count` carries the visible total, and the uniform block grew by the row count. Visibility no longer rides in the matrix.
+- `gaussian_gpu_state_cache.gd`, `gaussian_renderer.gd`: the indirect dispatch sizes and the projection pass's size follow the visible
+  total, set on the CPU and only when it changes, so a big budget does not dispatch tens of thousands of no-op workgroups.
+- `gaussian_rendering_device_context.gd`: `create_scratch_buffer`, for buffers the GPU fills before it reads, instead of building a zero-filled
+  copy on the CPU and uploading it.
+- `gaussian_scene_registry.gd`, `gaussian_render_manager.gd`: registrations and resource changes coalesce into one merge, deferred, before
+  the next render, and the per-splat GDScript loop is gone (the merge was quadratic at load). A moved node patches its own matrix and
+  sphere, where each moved node used to rebuild every instance's bytes; a hidden node writes nothing until it is shown; the bytes are
+  produced at render time, once, because Godot delivers `NOTIFICATION_TRANSFORM_CHANGED` after `_process` and an earlier snapshot would
+  lag a frame.
+- `gaussian_splat_node.gd`, `gaussian_compute_backend.gd`: relight knobs have setters that patch their own entry, where the manager used
+  to read five properties of every node every frame. The light rig is still compared each frame. The Raster backend has no such hook
+  and reads the knobs itself, as before.
+- `gaussian_render_manager.gd`: `set_splat_budget`, `get_stats` (counters on `rebuild_gpu_state` and `upload_splats`, the last frame's visible total).
+
+The culling is conservative against the shader's own per-splat test, which keeps a centre out to 1.2x the view bounds: the planes are
+at those bounds, and the sphere comes from the resource's `aabb` (splat centres), scaled by the node's transform, with 25 % plus 1 m for
+the splats' own extent. A sphere that holds the camera, as the sky's does, always passes. Near and far planes are left out: they
+depend on the depth convention and save almost nothing.
+
+**One decision against the plan.** The plan was to dispatch over `min(visible * 32, capacity)` elements and clamp the sort to the whole
+capacity. Measured, the sky alone writes more keys than that: 983 332 at 1080p from 16 000 visible splats, whose limit would be 512 000,
+because each big nebula splat touches hundreds of tiles. Tried that way, the keys past the dispatch are lost and the nebula dims (mean
+per-channel difference 1.57, max 124, where the noise between two runs is 0.04). So `frame_elements` keeps a floor of 1024 elements per
+screen tile (8.4 M at 1080p, 8.5 times what the sky needs), and the upsweep, spine, downsweep and boundary passes all clamp to that same
+per-frame limit, which needed a push constant on the boundary pass. Patch 1's clamps stay as the overflow guard: if a frame ever writes past
+the limit, the keys past it are dropped cleanly.
+
+Measured on an RX 6950 XT (RADV) at 1080p, before / after: 13 ships load in 6.8 / 0.67 s, frame 3.92 / 3.33 ms, GPU 2.89 / 2.23 ms, VRAM
+added 927 / 1539 MB. 100 ships load in 53 / 0.74 s, GPU 4.29 / 2.68 ms, VRAM added 3217 / 1515 MB, and with every ship moving a frame goes from
+289 to 98.5 ms at one physics tick per frame. The fixed test scene differs by no more than two runs of the same code do. The numbers are in
+`docs/milestones/m3-ai-pilots-and-wingmen.md`, M3-T20.
+
+Not changed: the Raster backend; `MAX_RENDER_STATES` is still 4, so resizing the window through four sizes holds four sets of budget
+buffers until the oldest is evicted.
+
+To revert: `git revert` the commit `M3-T20: resident splat budget in the GDGS fork`, then run `--import` (a shader changed). The game's
+side goes with it (`settings.splat_budget`, the `LodSwitcher` step-down, the `render` fields); nothing else depends on it.
+
+Upstream candidate, like patches 1 and 2, apart from the deferred merge, which assumes nodes register on the main thread.

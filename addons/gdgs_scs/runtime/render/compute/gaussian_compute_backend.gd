@@ -119,6 +119,12 @@ func notify_lighting_changed(node: Node) -> void:
 	if manager != null and manager.has_method("mark_resource_dirty"):
 		manager.mark_resource_dirty(node)
 
+## [space-combat-sim patch] A relight knob changed; the renderer no longer re-reads them all each frame.
+func notify_relight_changed(node: Node) -> void:
+	var manager := _get_manager(node)
+	if manager != null and manager.has_method("mark_relight_dirty"):
+		manager.mark_relight_dirty(node)
+
 func shutdown() -> void:
 	# Best-effort: the manager also frees GPU state on its own PREDELETE, but a
 	# selector-driven shutdown should release it eagerly.

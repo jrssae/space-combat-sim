@@ -18,10 +18,18 @@ layout (std430, set = 0, binding = 2) restrict writeonly buffer BoundsBuffer {
     uvec2 bounds_buffer[];
 };
 
+// [space-combat-sim patch] the sort's element limit for this frame.
+layout (push_constant) restrict readonly uniform PushConstants {
+    uint element_limit;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
+};
+
 void main() {
     const uint id = gl_GlobalInvocationID.x;
-    // [space-combat-sim patch] the projection pass can over-count; only the first half of sort_buffer holds sorted keys.
-    const uint count = min(sort_buffer_size, uint(sort_buffer.length()) / 2u);
+    // [space-combat-sim patch] the projection pass can over-count; only the keys up to the frame's limit were sorted.
+    const uint count = min(sort_buffer_size, element_limit);
     if (id >= count) return;
 
     const uint tile_id = sort_buffer[id] >> 16;
