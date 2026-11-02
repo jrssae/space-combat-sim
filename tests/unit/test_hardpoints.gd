@@ -208,3 +208,15 @@ func test_bad_collision_primitives_are_rejected() -> void:
 	var flat: Dictionary = {"basis": {"x": [1, 0, 0], "y": [1, 0, 0], "z": [0, 0, 1]}}
 	assert_string_contains(_collision_variant(0, flat).error, "columns of a rotation")  # degenerate
 	assert_false(_collision_variant(0, {"basis": "identity"}).valid)
+
+
+func test_a_chunk_joint_is_parsed_and_defaults_to_the_offset() -> void:
+	var data: Dictionary = fixture.duplicate(true)
+	data["chunks"] = [
+		{"name": "cabin", "ply": "c.ply", "obj": "c.obj", "offset": [0.0, -0.4, -2.1], "joint": [0.0, -0.2, -1.3]},
+		{"name": "arm", "ply": "a.ply", "obj": "a.obj", "offset": [4.0, 1.9, 0.4]},
+	]
+	var parsed: Hardpoints = Hardpoints.from_dict(data)
+	assert_true(parsed.valid, parsed.error)
+	assert_eq(parsed.chunks[0]["joint"], Vector3(0.0, -0.2, -1.3))
+	assert_eq(parsed.chunks[1]["joint"], Vector3(4.0, 1.9, 0.4), "a file without a joint detaches the chunk at its centroid")

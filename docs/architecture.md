@@ -1459,7 +1459,7 @@ hit point (World-local) = t0 + v_t * dt * t + B * (a + t * (b - a))
   `World.universe_to_local(at)`, the velocities and a full hull, and calls `reset_physics_interpolation()`.
   `release` parks it again. The M2 raider pool holds 6.
 - `DebrisPool` holds 2 chunk splat sets per chunked asset type (one break-up's worth each); a third simultaneous
-  break-up gets mesh chunks. Hidden splat nodes still cost an early-out per splat in projection and sort-buffer
+  break-up gets mesh chunks (a Starfury's chunks are held as a staged wreck for about a second first, §15.7). Hidden splat nodes still cost an early-out per splat in projection and sort-buffer
   memory, so pools stay small.
 - GDGS applies its Rz(180°) correction when a splat node enters the tree with an identity basis. Keep splat nodes
   as identity children of a moving parent and never reset their own transform; reparenting would also unregister
@@ -1478,6 +1478,31 @@ explosion plus generic generated shards. Player: same effects, controls ignored,
 after 3 s of sim time with a full hull, and `WaveDirector.on_player_respawned()` keeps the wave going (surviving
 raiders re-target the player; maintainer decision).
 `kill` (console) bypasses god mode.
+
+**A Starfury dies where it was hit (M3-T28, Q28).** For a ship with the X-fighter damage layout (the player, the allies,
+the instructor) the director takes the killing `HitInfo.point` (`World`-local), puts it in the ship's frame with the
+transform it read before the ship left play, and `DamageZones.zone_for` names the part: the cabin or one of the four
+arms, which are the five chunks. The main `Explosion` (same size, light and sound as before) starts at that chunk's
+`joint` (`hardpoints.json` `chunks[].joint`, `docs/assets-starfury.md`) and `DestructionDirector.last_blast_position`
+carries the place to `AudioDirector`. A console `kill` has no point: the blast is at the ship's centre and the order
+is drawn from the seed alone. A ram is a hit with its contact point. Raiders, buoys and shards break up as before.
+
+`DebrisPool.stage_wreck` replaces `burst` for these ships. `BreakupPlan` (pure) draws, from the seed (ship id and tick),
+the order, the release times, the kicks and the tumbles: the first part leaves at once, the other four at about
+0.2 + 0.25 k s (k = 0..3, each jittered by up to 0.05 s), so all five are away by about 1.0 s. `StagedWreck` (pure)
+holds the chunks as one rigid body on the ship's velocity and spin, integrated exactly, and says when each leaves. A
+chunk is held as a `DebrisChunk` (`hold`, `place_held`): drawn and busy, so its set stays taken, but placed by the pool
+each physics tick. At its time it is released (`release`) with the wreck's velocity at its centroid (`v + w x r`) plus
+a 4-15 m/s kick away from the wreck's centre (11-15 for the first), and the wreck's spin plus its own tumble. After
+that it is the old chunk: constant velocity, no damping, 8 s of life, shrink, park. Its debris vent starts at the
+release. Every later release also throws a small blast of `FxSpecs.HIT` sparks (24 particles, 0.45 s) at its joint:
+no node, no light, no mesh, and the particles come from the hit pool's twelve emitters, never the explosion's, so
+a wreck holds at most three at once and `fx.reused` moves only if all twelve are busy. Every set busy means mesh-only
+chunks, staged the same way. The wreck copies everything it needs when it is made, so the pooled `Ship` can be
+reacquired, or the player respawn, while it is held.
+
+Rebase: the wreck's pose is `World`-local, so `DebrisPool` listens to `WorldFrame.rebased` and shifts every held wreck
+by the same offset the shiftable chunks were just shifted by; nothing moves relative to the wreck.
 
 ### 15.8 Pilot brains (the M3 seam)
 

@@ -839,6 +839,31 @@ class StarfuryAuroraTests(unittest.TestCase):
                 chunks[f"arm_{left}"]["offset"], mirrored(chunks[f"arm_{right}"]["offset"], "x"), atol=SYM_TOL
             )
 
+    def test_chunk_joints_are_where_each_part_meets_the_body(self) -> None:
+        """M3-T28: every chunk names its detachment point, in the body frame, beside its offset."""
+        chunks = {c["name"]: c for c in self.hp["chunks"]}
+        for entry in chunks.values():
+            self.assertEqual(len(entry["joint"]), 3, entry["name"])
+        # An arm leaves the fuselage at its flank, on its own side of both centre planes.
+        axis = np.array([0.0, self.axis_y(), 0.0])
+        pods = {p["name"]: np.array(p["center"]) for p in self.hp["pods"]}
+        for pod in POD_NAMES:
+            joint = np.array(chunks[f"arm_{pod}"]["joint"])
+            self.assertAlmostEqual(abs(joint[0]), 1.0, delta=0.15, msg=pod)
+            self.assertEqual(np.sign(joint[0]), np.sign(pods[pod][0]), pod)
+            self.assertEqual(np.sign(joint[1] - axis[1]), np.sign(pods[pod][1] - axis[1]), pod)
+            # Inside the fuselage's height, well inboard of the arm's own centroid.
+            self.assertLess(abs(joint[0]), abs(chunks[f"arm_{pod}"]["offset"][0]))
+        # The cabin leaves the body on the centre line, at the strut roots' middle.
+        cabin = np.array(chunks["cabin"]["joint"])
+        self.assertEqual(cabin[0], 0.0)
+        arms = np.array([chunks[f"arm_{pod}"]["joint"] for pod in POD_NAMES])
+        np.testing.assert_allclose(cabin[1:], arms[:, 1:].mean(axis=0), atol=SYM_TOL)
+        for right, left in (("ur", "ul"), ("lr", "ll")):
+            np.testing.assert_allclose(
+                chunks[f"arm_{left}"]["joint"], mirrored(chunks[f"arm_{right}"]["joint"], "x"), atol=SYM_TOL
+            )
+
     def test_chunk_objs_are_the_fallback_mesh_split_by_chunk(self) -> None:
         vertices = []
         for entry in self.hp["chunks"]:

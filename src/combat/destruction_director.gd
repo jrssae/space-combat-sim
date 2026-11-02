@@ -5,9 +5,11 @@ extends Node
 ## - a **pooled ship**, raider or ally alike: its pose and velocity are read, then it is released to the `ShipPool` in the same
 ##   tick (hidden, not processing, `Targetable` and `Damageable` inactive, so nothing targets or hits it afterwards); an
 ##   `Explosion` (radius = its bounding radius) appears under `effects` at its position, drifting with its velocity, and
-##   `DebrisPool.burst` breaks it into its asset's chunks (the raider's wings and hump; the Starfury's cabin and four arms for an
-##   ally; generic shards for an asset without any);
-## - the **player**: the same effects (the Starfury's chunks), then the ship is hidden and disabled and `player_destroyed` is
+##   `DebrisPool.burst` breaks it into its asset's chunks (the raider's wings and hump; generic shards for an asset without
+##   any). A **Starfury** (an ally or the player) dies where it was hit (M3-T28): the killing hit's point picks the cabin or arm
+##   that leaves first, the explosion starts at that chunk's joint and `DebrisPool.stage_wreck` frees the rest one by one over
+##   the next second. A console `kill` or a hit without a point blasts from the centre, in a seeded order;
+## - the **player**: the same effects, then the ship is hidden and disabled and `player_destroyed` is
 ##   emitted (Main ignores input while the player is dead); after `RESPAWN_DELAY_S` of sim time `respawn_due` is emitted and Main
 ##   puts the ship back at the scenario start with a full hull.
 ##
@@ -30,6 +32,11 @@ signal player_destroyed(info: HitInfo)
 signal respawn_due
 
 const RESPAWN_DELAY_S: float = 3.0
+## DamageZones' X-fighter zones -> the Starfury chunk each one is.
+const ZONE_CHUNKS: Dictionary[int, StringName] = {
+	DamageZones.CABIN: &"cabin", DamageZones.UPPER_LEFT: &"arm_ul", DamageZones.UPPER_RIGHT: &"arm_ur",
+	DamageZones.LOWER_LEFT: &"arm_ll", DamageZones.LOWER_RIGHT: &"arm_lr",
+}
 const KILL_CHOICES: Array[StringName] = [&"target", &"all", &"allies", &"player"]
 
 var world: WorldFrame = null
@@ -40,6 +47,9 @@ var fx: FxPool = null
 ## Where explosions are added (`World/Effects`).
 var effects: Node3D = null
 var player: Combatant = null
+
+## Where the last ship's explosion started (World-local); sounds follow it.
+var last_blast_position: Vector3 = Vector3.ZERO
 
 var _watched: Array[Combatant] = []
 var _respawn_at_s: float = INF
@@ -100,6 +110,8 @@ func _on_destroyed(info: HitInfo, combatant: Combatant) -> void:
 	var spin: Vector3 = ship.angular_velocity
 	var radius: float = combatant.damageable.bounding_radius
 	var hardpoints: Hardpoints = ship.get_hardpoints()
+	var staged: bool = combatant.damageable.zones.layout == DamageZones.Layout.X_FIGHTER and hardpoints.valid and not hardpoints.chunks.is_empty()
+	var first: int = first_chunk(hardpoints.chunks, info, xform) if staged else -1
 	# The ship leaves play in this very tick, before anything else in it looks at it.
 	if combatant == player:
 		ship.visible = false
@@ -107,7 +119,7 @@ func _on_destroyed(info: HitInfo, combatant: Combatant) -> void:
 		_respawn_at_s = SimClock.now() + RESPAWN_DELAY_S
 	else:
 		pool.release(combatant)
-	_spawn_effects(ship, xform, velocity, spin, radius, hardpoints)
+	_spawn_effects(ship, xform, velocity, spin, radius, hardpoints, staged, first)
 	if combatant == player:
 		player_destroyed.emit(info)
 	else:
@@ -138,16 +150,36 @@ func _spawn_buoy_effects(xform: Transform3D, radius: float, velocity: Vector3, s
 		debris.burst(&"nav_buoy", [] as Array[Dictionary], xform, velocity, spin, hash([buoy_id, Engine.get_physics_frames()]))
 
 
-func _spawn_effects(ship: Ship, xform: Transform3D, velocity: Vector3, spin: Vector3, radius: float, hardpoints: Hardpoints) -> void:
+func _spawn_effects(ship: Ship, xform: Transform3D, velocity: Vector3, spin: Vector3, radius: float, hardpoints: Hardpoints,
+		staged: bool, first: int) -> void:
+	var chunks: Array[Dictionary] = hardpoints.chunks if hardpoints.valid else ([] as Array[Dictionary])
+	var seed_value: int = hash([ship.get_instance_id(), Engine.get_physics_frames()])
+	# A Starfury's blast starts at the joint of the part that leaves first.
+	last_blast_position = xform * (chunks[first]["joint"] as Vector3) if first >= 0 else xform.origin
 	if effects != null and is_instance_valid(effects):
 		var explosion: Explosion = Explosion.create(radius, velocity)
 		explosion.fx = fx
-		explosion.position = xform.origin
+		explosion.position = last_blast_position
 		effects.add_child(explosion)
 		explosion.reset_physics_interpolation()
 	if debris != null and is_instance_valid(debris):
-		var chunks: Array[Dictionary] = hardpoints.chunks if hardpoints.valid else ([] as Array[Dictionary])
-		debris.burst(StringName(ship.spec.asset_id), chunks, xform, velocity, spin, hash([ship.get_instance_id(), Engine.get_physics_frames()]))
+		if staged:
+			debris.stage_wreck(StringName(ship.spec.asset_id), chunks, xform, velocity, spin, seed_value, first)
+		else:
+			debris.burst(StringName(ship.spec.asset_id), chunks, xform, velocity, spin, seed_value)
+
+
+## The index in `chunks` of the part the killing hit landed on (`info.point` is World-local, put into the ship's frame by
+## `xform`), or -1 when there is no point (a console kill) or no chunk by that name.
+static func first_chunk(chunks: Array[Dictionary], info: HitInfo, xform: Transform3D) -> int:
+	if info == null or info.cause == HitInfo.CAUSE_CONSOLE:
+		return -1
+	var zone: int = DamageZones.zone_for(DamageZones.Layout.X_FIGHTER, xform.affine_inverse() * info.point)
+	var wanted: StringName = ZONE_CHUNKS.get(zone, &"")
+	for i: int in chunks.size():
+		if StringName(chunks[i]["name"]) == wanted:
+			return i
+	return -1
 
 
 # --- console -----------------------------------------------------------------------------------------------------

@@ -125,7 +125,7 @@ Schema (all vectors `[x, y, z]`, numbers rounded to 5 decimals), unchanged from 
                {"name": "strut_ur", "type": "box", "position": [...], "size": [6.727, 2.121, 4.492], "basis": {"x": [0.83337, 0.40875, 0.37204], "...": "..."}},
                {"name": "claw_ur", "type": "box", "...": "..."}, "... 14 entries"],
  "chunks": [{"name": "cabin", "ply": "starfury_aurora_chunk_cabin.ply", "lighting": "starfury_aurora_chunk_cabin.light", "obj": "starfury_aurora_chunk_cabin.obj",
-             "offset": [0, -0.404, -2.155], "splats": 9692}, "... arm_ur, arm_lr, arm_ul, arm_ll (M3-T03)"]}
+             "offset": [0, -0.404, -2.155], "joint": [0, -0.219, -1.308], "splats": 9692}, "... arm_ur, arm_lr, arm_ul, arm_ll (M3-T03)"]}
 ```
 
 - `exhaust` is the exhaust direction; thrust acts opposite. `radius` is the bell exit radius (plume size). The main
@@ -212,6 +212,12 @@ re-pinned for generator v3 and v4).
   is the same part meshes' fallback mesh (the cockpit interior is not in any chunk): the five OBJs back at their
   offsets are the hull OBJ, vertex for vertex in count, within 1 cm in bounds. The manifest gains `chunks` (the
   names) and `chunk_lod` 1 (the LOD the chunks partition; absent means 0, as for the raider).
+- **Joints (M3-T28).** Each chunk entry also has `joint`, the point where the part detaches from the body, in the
+  same frame as `offset`: the break-up starts its explosion there when that part was hit last. An arm's joint is
+  where its strut leaves the fuselage's flank (the mean of the strut mesh's vertices within 0.1 m of |x| = 1 m, so
+  about (+-0.98 to 1.0, +0.67 or -1.10, -1.3)); the cabin's is on the centre line (x = 0) at the middle of the four
+  arm joints. The values come from the part meshes alone, so the chunk PLY and OBJ bytes, the LOD files and
+  `generator_version` do not change.
 - **Unchanged by T03.** `generator_version` stayed 2 (it is in the LOD0 PLY header), and so did the cockpit
   interior, the hull depth proxy (the LOD0 fallback mesh) and every LOD0 hardpoint.
 
