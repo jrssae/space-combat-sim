@@ -3,9 +3,9 @@ extends RefCounted
 ## The statistics behind the many-ships benchmark (M4-T01, `docs/milestones/m4-performance-and-scale.md`, "The budget").
 ## Pure: medians and percentiles of a run's ticks, the budget verdict of one run, and the max-N search over a sweep.
 ##
-## A run passes when its tick median and p99 are inside budget, no tick holding a rebase (the whole tick, not just the shift) is
-## longer than one 60 Hz frame and the simulation kept up with the wall clock. A ship count passes on two runs of three; a layout's max N is the largest passing
-## count in its sweep, and a sweep stops after two failing counts in a row. The headline is the lower of furball and spread.
+## A run passes when its tick median and p99 are inside budget, no tick holding a rebase is longer than one 60 Hz frame and the
+## simulation kept up with the wall clock. A ship count passes on two runs of three; a sweep stops after two failing counts in a
+## row. The headline is the lower of furball's and spread's max N.
 
 ## Simulation tick budget, microseconds: median and p99 over the measured window.
 const TICK_MEDIAN_BUDGET_US: float = 8000.0

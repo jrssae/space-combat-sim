@@ -76,9 +76,17 @@ one() {
     fi
 }
 
+# A sweep that prints no verdicts (a script error, a crash) shows its output instead of failing silently.
 summarise() {
-    "${GODOT}" --headless --path . -s res://scripts/bench_sweep.gd -- "res://${OUT}" "runs=${#SEEDS[@]}" "commit=${COMMIT}" "label=${LABEL}" \
-        2> /dev/null | grep '^\[bench-sweep\]' || true
+    local out
+    out="$("${GODOT}" --headless --path . -s res://scripts/bench_sweep.gd -- "res://${OUT}" "runs=${#SEEDS[@]}" \
+        "commit=${COMMIT}" "label=${LABEL}" 2>&1)" || true
+    if grep -q '^\[bench-sweep\]' <<< "${out}"; then
+        grep '^\[bench-sweep\]' <<< "${out}"
+    else
+        echo "bench.sh: the sweep summary printed no verdicts; its output:" | tee -a "${LOG}" >&2
+        tail -n 20 <<< "${out}" | tee -a "${LOG}" >&2
+    fi
 }
 
 for layout in "${LAYOUTS[@]}"; do

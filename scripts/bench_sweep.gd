@@ -1,12 +1,8 @@
 extends SceneTree
-## Summarises a benchmark sweep (M4-T01, run by scripts/bench.sh after every ship count): reads every run's summary.json under
-## `<dir>/runs/`, decides each layout's max N and whether its sweep stops (`PerfStats`), and writes `<dir>/summary.json` and
-## `<dir>/summary.md`. Prints one `[bench-sweep]` line per ship count, layout and headline for the shell to read.
-##
-## Arguments after `--`: <dir> (a res:// or absolute path) [runs=<n>] [key=value ...] (recorded: commit, date, label). With
-## `runs`, a ship count with fewer summaries than that counts each missing run (crashed or killed) as a failure.
-## A `-s` script is compiled before the autoloads exist, so `BenchReport` (which reaches them through `PerfProbe`) is loaded at
-## run time and called through its script.
+## Summarises a benchmark sweep (M4-T01, run by scripts/bench.sh): decides each layout's max N from the runs' summaries and
+## writes `<dir>/summary.json` and `summary.md`, with one `[bench-sweep]` line per verdict for the shell.
+## Arguments after `--`: <dir> [runs=<n>] [key=value ...]; with `runs`, each missing run counts as a failure.
+## `BenchReport` is loaded at run time: a `-s` script compiles before the autoloads it reaches exist.
 
 
 func _initialize() -> void:

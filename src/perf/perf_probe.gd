@@ -163,15 +163,16 @@ func _disconnect() -> void:
 # The start of a tick's scripts: closes the last tick if it ran back to back with this one, and opens this one.
 func _on_physics_frame() -> void:
 	var now: int = Time.get_ticks_usec()
-	_sync_timed = false
+	var timed: bool = false
 	if _state == State.POST:
 		_finish(now)
 		_pre_us = 0  # back to back: this tick's sync went into the last tick's engine window
 	elif _state == State.IDLE and time_sync and _idle_end_valid:
 		_pre_us = now - _idle_end_us
-		_sync_timed = true
+		timed = true
 	else:
 		_pre_us = 0
+	_sync_timed = timed  # only after the last tick is closed, which keeps its own flag
 	_idle_end_valid = false
 	_t0 = now
 	_tick_frame = Engine.get_physics_frames()

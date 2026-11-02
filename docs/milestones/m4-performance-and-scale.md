@@ -227,8 +227,9 @@ headless, where the splat renderer is off.
 **Stage breakdown**, mean ms per tick (the median over the three runs of each run's mean; means add up to the mean tick, the
 median tick is above). `scan` and `think` are inside `ai`, `hit` and `ram` inside `resolvers`, `sync` inside `physics`; `other`
 is the tick's unaccounted remainder. At 50 and 100 ships the simulation runs behind and its ticks run back to back, so the sync
-of one tick lands in the engine window of the one before: `sync` was timed in under 1 % of those ticks and is a lower bound
-there (it was timed in every tick at 25 and below).
+of one tick lands in the engine window of the one before: `sync` was timed only in the first tick of each catch-up frame
+(12.5 % of ticks at 50 and 100 ships, re-measured after a probe fix) and is a lower bound there (it was timed in every tick
+at 25 and below).
 
 | layout | N | tick | ai | (scan) | (think) | flight | targeting | resolvers | (hit) | (ram) | late | physics | (sync) | other (unaccounted) | bolts |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
