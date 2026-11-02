@@ -14,11 +14,10 @@ func before_each() -> void:
 
 
 func test_it_has_every_component() -> void:
-	assert_not_null(explosion.light)
+	assert_not_null(explosion.emitter)
 	assert_not_null(explosion.flash)
 	assert_not_null(explosion.fireball)
-	assert_almost_eq(explosion.light.omni_range, 4.0 * RADIUS, 1e-6)
-	assert_false(explosion.light.shadow_enabled)
+	assert_almost_eq(explosion.emitter.omni_range, 4.0 * RADIUS, 1e-6)
 	assert_eq(explosion.radius_m, RADIUS)
 	# M3-T23: the sparks, fragments and gas come from the FxPool, so an explosion owns no particle node.
 	assert_eq(_particle_nodes(explosion), 0, "the pool makes the particles, not the explosion")
@@ -33,12 +32,11 @@ func _particle_nodes(node: Node) -> int:
 
 func test_the_light_peaks_at_8_and_is_out_by_a_quarter_second() -> void:
 	explosion.advance(0.0)
-	assert_eq(explosion.light.light_energy, 0.0, "starts dark")
+	assert_eq(explosion.emitter.energy, 0.0, "starts dark")
 	explosion.advance(Explosion.LIGHT_S / 3.0)
-	assert_almost_eq(explosion.light.light_energy, 8.0, 1e-4, "the peak")
+	assert_almost_eq(explosion.emitter.energy, 8.0, 1e-4, "the peak")
 	explosion.advance(Explosion.LIGHT_S * 2.0 / 3.0)
-	assert_almost_eq(explosion.light.light_energy, 0.0, 1e-4, "out after 0.25 s")
-	assert_false(explosion.light.visible)
+	assert_almost_eq(explosion.emitter.energy, 0.0, 1e-4, "out after 0.25 s")
 
 
 func test_the_flash_is_gone_after_150_ms() -> void:
@@ -132,7 +130,8 @@ func test_the_scene_builds_itself_when_instanced() -> void:
 	var instanced := (load("res://src/combat/explosion.tscn") as PackedScene).instantiate() as Explosion
 	add_child_autofree(instanced)
 	assert_not_null(instanced.fireball)
-	assert_eq(instanced.get_child_count(), 3, "light, flash and fireball")
+	assert_eq(instanced.get_child_count(), 2, "flash and fireball: the light is an emitter, not a node")
+	assert_not_null(instanced.emitter)
 
 
 func test_a_tiny_radius_is_raised_to_something_visible() -> void:

@@ -880,8 +880,17 @@ with classes player's own 16 > explosion 8 > muzzle flash 4 > nozzle 2 > cabin 1
 range and attenuation into the slots. GDGS re-reads the lights it has found every frame, so a moved slot shows at once, and it
 skips a slot at energy 0. An emitter keeps its slot while it is picked. Meshes are lit by the same 8, so meshes and splats agree.
 GDGS's walk stops after 20 000 nodes, so the rig sits before `World` in the tree. The cabin lamp is an emitter in the rig only
-while the cockpit interior is shown. The explosion's own `OmniLight3D` is the one exception until T22 makes it an emitter: while an
-explosion lives the scene has 9 lights, which GDGS warns about once and handles, because the unused slots are skipped.
+while the cockpit interior is shown.
+
+**Ship lights (M3-T22).** Every light is an emitter, so with any effect live the scene still holds exactly the rig's 8 `Light3D`
+nodes. Main pod nozzles (`ThrusterVisuals`): one emitter each, 1.5 m out along the exhaust so it falls on the pod and strut, energy
+from the smoothed plume level (0 at idle, 2.5 at full thrust), the plume's colour at display brightness, range 15 m; the player's
+own are class 16. RCS and retro nozzles and bolts give none. A shot (`MuzzleFlash`): the flash owns one emitter for life, 1 m ahead of
+the muzzle, in the competition for 60 ms per shot, so a shot allocates nothing. The explosion (`Explosion`): its old `OmniLight3D`
+is now an emitter with the same curve (0 to 8 to 0 over 0.25 s, range 4 x radius), in the competition only while it shines. Emitters
+follow their node's drawn pose each frame, so a rebase moves them with it. A ship that is parked, freed or out of the tree takes its
+emitters out (`ThrusterVisuals` and `MuzzleFlash` watch the node's disable and exit), and `_process` puts them back when it plays
+again. Numbers: `src/rendering/emitter_curves.gd`.
 
 Console: `state lights` (`picked`, `candidates`, `active`, `cost_us`).
 
@@ -1318,7 +1327,7 @@ src/combat/intercept_math.gd      RefCounted, pure: lead solution for bolts that
 src/combat/damageable.gd          Node component, group "damageable": HullHealth + HitShapes, signals
 src/combat/hit_resolver.gd        Node: per-tick swept hits, damage, impact flashes; console `combat`, `damage`, `heal`
 src/combat/impact_flash.gd        short additive flash + sparks, child of the hit ship at the hit point
-src/combat/explosion.tscn|.gd     generated explosion (fireball shader, flash light; its sparks come from the FxPool since M3-T23); drifts, self-frees
+src/combat/explosion.tscn|.gd     generated explosion (fireball shader, light emitter since M3-T22; its sparks come from the FxPool since M3-T23); drifts, self-frees
 src/combat/explosion_fireball.gdshader
 src/combat/debris_chunk.tscn|.gd  one chunk: GaussianSplatNode + chunk mesh fallback
 src/combat/debris_pool.gd         Node: pooled chunk splat sets, mesh-only chunks and generic shards; drift, spin, shrink-out

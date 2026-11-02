@@ -41,11 +41,12 @@ func _init(p_label: String = "", p_priority: float = PRIORITY_NOZZLE, p_color: C
 	attenuation = p_attenuation
 
 
-## Puts a lit emitter on its anchor's drawn pose, so the light does not judder against a moving hull. False when the anchor is gone.
+## Puts a lit emitter on its anchor's drawn pose, so the light does not judder against a moving hull. False when the anchor is
+## gone or out of the tree (a freed or released ship): the rig drops the emitter, and its owner adds it again when it is back.
 func follow() -> bool:
 	if not _anchored:
 		return true
-	if not is_instance_valid(anchor):
+	if not is_instance_valid(anchor) or not anchor.is_inside_tree():
 		return false
 	if energy > 0.0:
 		position = anchor.get_global_transform_interpolated() * offset

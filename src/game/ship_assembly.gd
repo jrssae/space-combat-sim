@@ -45,6 +45,7 @@ static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D,
 	var thrusters := ThrusterVisuals.new()
 	thrusters.name = "ThrusterVisuals"
 	thrusters.glow_color = spec.engine_glow_color
+	thrusters.own_ship = combatant.is_player
 	ship.get_node("Thrusters").add_child(thrusters)
 	combatant.thrusters = thrusters
 

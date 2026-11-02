@@ -191,7 +191,7 @@ Status: `done` (merged into `m3`, its "Done" notes below), `in progress`, `not s
 | M3-T19 | Splat LOD chain and `LodSwitcher` (Q22) | T08 | Opus | done (2026-11-01) |
 | M3-T20 | Resident splat budget: GDGS patch 5 (Q22) | T19 | Opus | in progress |
 | M3-T21 | Splat relighting: procgen normals, flat colours, `LightPicker` (Q23) | T19 | Opus | done (2026-11-01) |
-| M3-T22 | Ship lights: nozzles, muzzle flashes, explosions (Q23) | T21 | Sonnet | in progress |
+| M3-T22 | Ship lights: nozzles, muzzle flashes, explosions (Q23) | T21 | Sonnet | done |
 | M3-T23 | `GPUParticles3D` sparks and debris (Q23) | T14 | Sonnet | done |
 | M3-T24 | Hero LOD for the player's ship (Q23) | T20, T21 | Sonnet | not started |
 | M3-T25 | Lens flare and motion blur, after sign-off (Q23) | T21 | Sonnet | in progress |
@@ -1037,7 +1037,7 @@ Added 2026-10-28 for Q23; after T19 (it writes records for every LOD). The bigge
     backend shows the ally's sunward tops lit and its faces toward the camera on the dark side, at the player's chase view; turned to face
     away from the star, the camera sees the bright side and the claws falling off into shade; a test omni emitter beside the ally
     tints that ally only. Grey blotches on the struts are in the flat frame too: they are the panel grid in the paint, not the records.
-  - Until T22: `explosion.gd` keeps its own `OmniLight3D` (ruling), so a live explosion makes 9 lights. GDGS warns once and copes, since
+  - (Closed by T22: the explosion's light is an emitter now.) Until T22: `explosion.gd` keeps its own `OmniLight3D` (ruling), so a live explosion makes 9 lights. GDGS warns once and copes, since
     it skips the unused slots; only with all 8 slots in use could it drop a light. Its header comment still says splats are unlit.
 
 ### M3-T22 Ship lights: nozzles, muzzle flashes, explosions
@@ -1058,6 +1058,42 @@ Added 2026-10-28 for Q23; after T21.
   - Visuals in `_process`; the physics tick only publishes levels. Record the picker's per-frame cost in `lights`.
 - Done when: AC31 passes; P9's fight frame, taken on the GPU, shows lit pods; at most 8 lights and the frame time are
   checked there too (the look is AC35's).
+- Done (2026-11-01):
+  - `EmitterCurves` (pure, `src/rendering/emitter_curves.gd`) holds the numbers: nozzle 1.5 m out along the exhaust, range 15 m, energy
+    2.5 x the smoothed plume level (0 under 0.01), the plume's colour scaled to display brightness; flash 60 ms, peak 6, range 10 m, 1 m
+    ahead of the muzzle; the explosion's curve moved to `Explosion.light_energy` unchanged (0 to 8 to 0 over 0.25 s, range 4 x radius).
+    All are tuned by eye (AC35, H).
+  - Nozzles: `ThrusterVisuals` makes one `LightEmitter` per main pod nozzle (Starfury and raider: 4 each), anchored to the plume node so
+    it follows the drawn pose and a rebase. Energy is set in `advance` (`_process`). `own_ship` (set by `ShipAssembly` for the player)
+    gives class 16, others class 2. RCS and retro nozzles and bolts have none. `_process` enters them in the rig once (the rig may not
+    exist at `setup`); `NOTIFICATION_DISABLED` and exit take them out, so a parked pool ship has no candidates and a reacquired one
+    enters once (`add_emitter` is idempotent too).
+  - Muzzle flash: each `MuzzleFlash` owns one emitter for life, so a shot allocates nothing and no node is made or freed; `trigger`
+    enters it, 60 ms later (or on park or exit) it leaves. The light outlasts the 50 ms quad by 10 ms. No separate record pool was
+    needed: one record per muzzle, reused.
+  - Explosion: `light` (an `OmniLight3D`) is now `emitter`, a `LightEmitter` on the explosion node, in the rig only while it shines. With
+    any explosion alive the scene holds exactly the rig's 8 `Light3D` nodes (`test_relight` checks it with one alive). GDGS's 30-frame
+    scan used to catch the old node only some of the time; it has nothing extra to find now, so the 9-light case is gone for good.
+    The stale header comment is fixed and `docs/architecture.md` §7.3 now describes the ship lights.
+  - `LightEmitter.follow` now gives up (returns false) on an anchor that is valid but out of the tree, instead of asking it for an
+    interpolated pose (an engine error, and the light at `offset` from the origin). Test in `test_light_emitters`. `SplatLightRig` gained
+    `has_emitter`.
+  - Tests: `test_light_emitters` (7: curves, colour, follow), `test_ship_lights` (14: nozzle per main pod and none else, energy from idle
+    to full, colour, position and priority, rebase of nozzle and explosion lights, shot flash for 60 ms and no pile-up, explosion through
+    the picker, pooled ship out on park and once on reacquire, freed ship, and a 900-tick sandbox fight with wingmen: never over 8
+    lights, no extra `Light3D`, the player's lit nozzles always picked). `test_relight` and `test_explosion` follow the changes (the
+    rig now holds the ships' dark nozzle lights as candidates).
+  - The fight (900 ticks, headless): most candidates 27, the player's nozzles lit 899 ticks, flash picked 300 slot-ticks, picker cost
+    about 50 us mean.
+  - GPU (RX 6950 XT, Compute, 1080p, sandbox wave 1, `throttle 1`): `state lights` shows the 4 plumes and an explosion picked, 6 lights
+    active (key star included), `cost_us` 43-48 with 24-25 candidates. P9's frame (`/tmp/t22-fight.png`, read by the agent) shows the
+    pods and struts washed blue by their plumes. In the same fight at 1080p, vsync off, both locks held, three runs each way alternating, four `render.fps`
+    reads per run (at 300, 360, 420 and 480 frames in), lights off being the base commit 4148a72: median 152 fps (6.6 ms) without ship
+    lights (range 101-201) and 127 fps (7.9 ms) with them (range 103-221); `lights.active` 8 and `cost_us` 40-76 with 25 candidates,
+    against 1 and 6-16 without. The fight itself differs run to run, so the spread is wider than the gap: the cost is on the order of
+    1 ms at the GPU, from GDGS shading with 8 lights instead of 1 (T21 measured 0.15 ms for 8 lights in a still view; here the fight
+    adds ships and bolts), and far above 60 fps either way. The look is AC35's.
+  - Suite: `scripts/run_tests.sh` exit 0, 1867 of 1869 passing (2 pending); AC13's paired test +344 us against its 500 us share.
 
 ### M3-T23 `GPUParticles3D` sparks and debris
 
