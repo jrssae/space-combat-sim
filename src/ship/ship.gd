@@ -534,24 +534,8 @@ func _load_far_levels(base: Dictionary) -> void:
 		var path: String = SplatLod.file_path_in(manifest, spec.asset_id, level)
 		if path.is_empty() or not ResourceLoader.exists(path):
 			continue
-		var node_name: String = "HullSplatsLod%d" % level
-		var node := get_node_or_null(NodePath(node_name)) as GaussianSplatNode
-		var resource := load(path) as GaussianResource
-		if node == null:
-			node = GaussianSplatNode.new()
-			node.name = node_name
-			node.transform = hull_splats.transform
-			node.visible = false
-			node.gaussian = resource
-			SplatLightingLoader.attach(node, SplatLod.lighting_path_in(manifest, spec.asset_id, level))
-			add_child(node)
-			var sync := get_node_or_null(^"HullSplatSync") as SplatPoseSync
-			if sync != null:
-				sync.add_splats(node)
-		elif node.gaussian != resource:
-			node.gaussian = resource
-			SplatLightingLoader.attach(node, SplatLod.lighting_path_in(manifest, spec.asset_id, level))
-		_lod_nodes.append(node)
+		var lighting: String = SplatLod.lighting_path_in(manifest, spec.asset_id, level)
+		_lod_nodes.append(_level_node("HullSplatsLod%d" % level, path, lighting))
 		_lod_levels.append(level)
 	_lod_level = _lod_levels[0]
 	_add_hero_level()  # drawn once the switcher asks for it, never as the first frame's guess
@@ -568,24 +552,29 @@ func _add_hero_level() -> void:
 	if path.is_empty() or not ResourceLoader.exists(path):
 		push_warning("Ship: %s has no imported hero level (run scripts/gen_assets.sh, then import); drawing LOD0 at the closest" % spec.asset_id)
 		return
-	var node := get_node_or_null(^"HullSplatsHero") as GaussianSplatNode
+	_lod_nodes.push_front(_level_node("HullSplatsHero", path, hero["lighting"]))
+	_lod_levels.insert(0, LodSwitcherMath.HERO)
+
+
+# The hidden splat node of one level: built once, kept in step with the hull, and given a new resource only if it changed.
+func _level_node(node_name: String, path: String, lighting: String) -> GaussianSplatNode:
+	var node := get_node_or_null(NodePath(node_name)) as GaussianSplatNode
 	var resource := load(path) as GaussianResource
 	if node == null:
 		node = GaussianSplatNode.new()
-		node.name = "HullSplatsHero"
+		node.name = node_name
 		node.transform = hull_splats.transform
 		node.visible = false
 		node.gaussian = resource
-		SplatLightingLoader.attach(node, hero["lighting"])
+		SplatLightingLoader.attach(node, lighting)
 		add_child(node)
 		var sync := get_node_or_null(^"HullSplatSync") as SplatPoseSync
 		if sync != null:
 			sync.add_splats(node)
 	elif node.gaussian != resource:
 		node.gaussian = resource
-		SplatLightingLoader.attach(node, hero["lighting"])
-	_lod_nodes.push_front(node)
-	_lod_levels.insert(0, LodSwitcherMath.HERO)
+		SplatLightingLoader.attach(node, lighting)
+	return node
 
 
 func _on_hull_setting_changed(key: StringName, _value: Variant) -> void:

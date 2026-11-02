@@ -149,6 +149,17 @@ func test_the_console_forces_the_hero_and_names_it() -> void:
 	assert_false(_exec("lod all -1").ok, "hero is a word, not a number")
 
 
+func test_forcing_the_hero_on_a_ship_without_it_says_so() -> void:
+	await _start()
+	await get_tree().process_frame
+	assert_true(_exec("spawn raider idle 200 0 0").ok)
+	await get_tree().process_frame
+	var result: ConsoleResult = _exec("lod all hero")
+	assert_true(result.ok)
+	assert_string_contains("\n".join(result.lines), "lack it")
+	assert_true(_exec("lod all auto").ok)
+
+
 func test_the_hero_counts_in_the_visible_splats_and_nodes_never_change() -> void:
 	await _start()
 	await get_tree().process_frame

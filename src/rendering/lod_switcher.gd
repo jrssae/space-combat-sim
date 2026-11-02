@@ -245,11 +245,15 @@ static func _cmd_lod(args: Dictionary) -> ConsoleResult:
 			return ConsoleResult.failure("the level must be hero, 0-%d or auto, got '%s'" % [LodSwitcherMath.COARSEST, value])
 		level = int(value)
 	var hit: int = 0
+	var missed: int = 0
 	for s: LodSwitcher in _in_play():
 		if who.to_lower() == "all" or s._ship.display_name().to_lower() == who.to_lower():
 			s.forced = level
 			s.update()
 			hit += 1
+			if level != LodSwitcherMath.NONE and s._ship.lod_level() != level:
+				missed += 1
 	if hit == 0:
 		return ConsoleResult.failure("no ship in play named '%s'" % who)
-	return ConsoleResult.line("%d ship(s): splat level %s" % [hit, value])
+	var note: String = " (%d lack it: nearest level instead)" % missed if missed > 0 else ""
+	return ConsoleResult.line("%d ship(s): splat level %s%s" % [hit, value, note])
