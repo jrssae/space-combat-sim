@@ -71,8 +71,8 @@ Backspace     respawn                                 Esc         pause (also fr
 ```
 
 No flight key sits right of G and B: pitch and yaw are the mouse (or the pad), and previous target and "nearest the nose"
-have no keys of their own (the wheel and a B or Mouse 2 hold do both). Ctrl and the number row are free (keys 1-4 arrive with
-the wing orders). Caps Lock is read as a held key (down = roll left); if your desktop turns it into a toggle, tell the
+have no keys of their own (the wheel and a B or Mouse 2 hold do both). Ctrl is free, and keys 1-4 are the wing orders and 5 the
+running lights. Caps Lock is read as a held key (down = roll left); if your desktop turns it into a toggle, tell the
 maintainer (the fallback is Ctrl). Your own saved control profiles keep the keys they had: `controls use default` in the console
 loads layout B.
 
@@ -87,8 +87,8 @@ mesh hull does not): `throttle 1` holds both main pods, then flip these while it
 `set settings.physics_jitter_fix 0` (no frame-time smoothing). `window max` / `window normal` / `window 1800 900` resize the window from the console. Mouse feel: `set settings.mouse_full_rate_px_s 1200`
 (the mouse speed that commands the full turn rate; lower = more sensitive) and `set settings.mouse_look_deg_per_px 0.12`
 (free look). Sizes: `set settings.debug_text_size 22` (overlay text) and `set settings.chase_bolt_scale 3` (how much larger bolts
-are drawn in the chase view) and `set settings.hud_chase_opacity 0.7` (how solid the HUD is in the chase view, where the radar
-and speed readout also sit in the bottom-right corner instead of the middle) and `set settings.cockpit_light_energy 1.6` (the cabin lamp that lights the cockpit frame; takes effect on the next spawn). Hull lighting: `relight off` compares with the flat paint; `set settings.relight_light_gain 0.6` (how strongly light brightens a hull), `set settings.relight_ambient 0.3` and `set settings.relight_unlit_level 0.12` (together, how dark the dark side gets) change it live. Add `save` to keep a setting.
+are drawn in the chase view) and `set settings.hud_chase_opacity 0.7` (how solid the HUD is in the chase view; in the cockpit view the
+radar, speed and bars are on the console's screens) and `set settings.cockpit_light_energy 1.6` (the cabin lamp that lights the cockpit frame; takes effect on the next spawn). Hull lighting: `relight off` compares with the flat paint; `set settings.relight_light_gain 0.6` (how strongly light brightens a hull), `set settings.relight_ambient 0.3` and `set settings.relight_unlit_level 0.12` (together, how dark the dark side gets) change it live. Add `save` to keep a setting.
 
 Changed after the first play test: yaw and roll swapped (the right stick used to yaw and the D-pad to roll), and
 target-ahead moved to a D-pad Up hold because the pad had no stick clicks. Changed after the M2 play test: X is auto-track and
@@ -112,7 +112,7 @@ Flight notes:
 - Pad X (keyboard Shift) auto-tracks: only the nose is taken over (pitch and yaw; roll stays yours), the thrust and the drift are not.
 - Speed: thrust fades as you go faster (the ship gets heavier, like relativity without the rest), so 9 999 m/s is the most you
   can reach and the last thousand take a long time. With assist on the flight computer stops adding speed at 5 000 m/s,
-  the "maximum safe speed"; switch assist off (pad B, keyboard T) to go beyond it. Bolts leave at 1 000 m/s relative to your ship, so fired
+  the "maximum safe speed"; switch assist off (pad D-pad Up, keyboard T) to go beyond it. Bolts leave at 1 000 m/s relative to your ship, so fired
   forward at 5 000 m/s they fly at 6 000 m/s, fired backward at 4 000 m/s.
 - Assist on (default): uneven triggers turn the ship smoothly (overlay `POD YAW`). Assist off: raw physics,
   so uneven pods tank-steer and spins persist (until you hold R3).
@@ -192,11 +192,6 @@ The full wording is in `docs/milestones/m1-first-flight.md`. Tick each one, or n
 - [ ] **AC17 Targeting.** Tapping B cycles buoys; holding it steps back one, once, without also cycling forward;
       holding keyboard B or Mouse 2 picks the one nearest the nose; bracket and readout look right; buoys are splats and spin; NAV DELTA
       (drifting) shows a non-zero closing speed.
-- [ ] **AC27 Play-test tweaks (M3-T15).** (1) Pad: B taps to the next target and a long press steps back one; D-pad
-      Up toggles assist; D-pad Right does nothing (Left is the running lights since M3-T27); the right stick pitches straight up/down, yaws straight left/right
-      and rolls on the diagonals, and L3 free look stays where you left it until you let go of L3. (2) Gun and impact
-      sounds sit two octaves lower than before (by ear). (3) Reverse (both bumpers) is as strong as forward, and
-      strafing feels strong (half the forward thrust, sway and heave).
 - [ ] **AC18 Backend.** Overlay shows `SPLATS COMPUTE`. If it says `RASTER` or `NONE`, note your GPU and driver.
 - [ ] **AC22 Console.** ` opens and closes it without typing a character. Typing never moves the ship, and the pad
       still flies while it's open. Esc closes it. History and Tab work. `fps` and `watch ship.speed` work.
@@ -269,7 +264,7 @@ spawn raider [idle|patrol|attack|aggro] [distance_m] [yaw_deg] [pitch_deg]    a 
 despawn [target|all]       return raiders to the pool       kill [target|all|player]   destroy now (bypasses god)
 damage <n> [player|target] hit with no shooter              heal [player|target|all]   restore hulls
 wave start [1-3] | next | stop | restart     drive the waves          state waves     index, name, state, alive, kills, player_kills, player_assists, losses
-scenario [combat_sandbox|free_flight]        reload into a scenario (the startup script carries on)
+scenario [combat_sandbox|free_flight|instructor_route|dogfight]    reload into a scenario (the startup script carries on)
 controls ... / bind / unbind                 control profiles (above)
 sfx <name>                 play a sound at you              set audio.volume 0.5    SFX gain (settings.sfx_volume)
 state combat / hull / raiders / debris / hud / audio       the new providers
@@ -296,25 +291,191 @@ Acceptance record: copy the block at the end of `docs/milestones/m2-combat-sandb
 
 # Play-testing M3 (AI Pilots and Wingmen)
 
-The full M3 guide (keyboard, orders, instructor, AC14-AC19) comes with M3-T12. This check can be run now.
+M3 adds other pilots to the sandbox: three wingmen who fly on you and take orders, raiders on the same AI, an instructor who leads a
+route and shows manoeuvres, ram damage, kill credit, and a visual pass (relit hulls, ship lights, sparks and debris, running lights, a
+sharper hull for your own ship, lens flare, motion blur). The Starfury has a new cockpit whose console screens carry the instruments.
+This section is the guide for the (H) checks; the numbers an agent measured are in the milestone's acceptance record.
 
-Far from the launch point (maintainer Q13): the World now keeps its origin within 5 km of you (`world.auto_rebase_distance_m`),
-re-centring as you fly ("a rebase"), so float32 positions stay fine however far you go. `watch world.rebases` counts the rebases
-and `get world.rebase_us` gives the last one's cost. `rebase -900000 0 0`, the console line that showed the jumping before, is
-now undone in the same tick (you will see `world.rebases` go up by two and `world.origin` back on you); to be truly far away, fly:
-a few minutes of both mains with assist on (up to its 5 000 m/s) cover 900 km, and the HUD's `REF` range shows how far you are.
+## Run it
 
-- [ ] **AC22 Far from the launch point.** After `rebase -900000 0 0`, and again after a long flight (`REF` several hundred km),
-      thrust in every direction (both mains, retros, strafe, while pitching and yawing): the ship shows no jumping, in splat mode
-      and in mesh mode (F4). Then fly at full speed through rebases (one every 5 km: every second at 5 000 m/s) in both cameras:
-      no hitch at each one (the picture holds still for one tick at a rebase, everything together: at most one repeated
-      frame; watch a buoy, a ship or your own bolts passing), and an explosion or debris flying when it happens stays where
-      it is and looks as in M2 (AC16).
-- [ ] **AC39 Running lights (M3-T27).** Every ship shows red on its left, green on its right and white on top: read them at combat range and
-      as points from several km (`spawn raider idle 3000`). Fly over a Starfury (`spawn ally idle 26 0 -80` turns its top toward you in the
-      cockpit camera): its cabin top is lit, and it goes darker with `running_lights off`. The cockpit glow is soft, inside and in the canopy
-      from outside within about 150 m. A dark raider is hard to spot and its lights coming on reads as a threat: `spawn raider aggro 3000`
-      patrols dark and lights up when it attacks you (the sandbox's PATROL wave starts dark too, but it spawns inside your sensor range and
-      attacks at once). D-pad Left or key 5 switches yours, the HUD says so, and your wingmen follow. Buoys keep a steady light and breathe
-      slowly. Knobs: `settings.top_lamp_energy`, `cabin_glow_level`, `cabin_glow_view_m`, `running_light_min_px`, `cockpit_light_energy`;
-      positions are `nav_lights` in the generators.
+The generators changed a lot, so build the assets again and import them once. The first import takes about a minute (the hero hull alone
+takes about 43 s). If the cockpit shows no screens, or a ship warns about missing `nav_lights`, the assets are stale.
+
+```
+git checkout m3
+scripts/gen_assets.sh
+.tools/godot/godot --headless --path . --import
+.tools/godot/godot --path .
+```
+
+The game opens in `combat_sandbox`: your three wingmen beside you and wave 1's countdown running. The console's `scenario` command
+switches to the others, and any further commands in the same line still run:
+
+```
+scenario combat_sandbox      the waves, with your wing                  scenario instructor_route   the instructor's route
+scenario dogfight            four allies against six raiders, 3 km ahead of where you start; you are not in it
+scenario free_flight         only the nav buoys
+```
+
+## Controls
+
+The tables in "Controls" at the top of this page are current. In short, keyboard layout B puts every flight key under your left hand and
+the mouse flies pitch and yaw:
+
+```
+Q / W / E        left main / both mains / right main       A / S / D     left retro / both retros / right retro
+R / F            strafe up / down                          Z / C         strafe left / right
+Caps Lock / G    roll left / right                         X             brake (hold)
+Space or Mouse 1 fire                                      V             fire mode
+B or Mouse 2     tap: next target, hold: nearest the nose  Wheel         previous / next target
+Shift or Mouse 4 auto-track                                T             flight assist
+Tab              cockpit / chase camera                    Middle mouse  free look (hold)
+1 2 3 4          wing orders                               5             running lights
+```
+
+On the pad the triggers are the mains and the bumpers the retros. The right stick pitches straight up or down, yaws straight left or
+right, and rolls on the diagonals. The left stick strafes. A fires, B taps to the next target and holds for the previous one, X is
+auto-track, Y the camera. D-pad Up is flight assist, Down the fire mode, Left the running lights, and Right is free. R3 is the brake and L3 held is
+free look. Wing orders have no pad button in M3 (the comms menu comes with M5).
+
+## Wing orders
+
+Keys 1 to 4, or `wing order <attack|form|engage|cover>` in the console. The HUD names the order for 3.5 s, for example
+`ALPHA 2: COPY, FORMING UP`.
+
+- **1, attack my target:** every wingman goes for your selected hostile, and only that one. With no hostile selected it is refused
+  (`ALPHA 2: UNABLE, NO HOSTILE SELECTED`) and the old order stands. In a console script under `--console-strict`, a refusal stops the
+  script, as any failed command does.
+- **2, form on me:** they hold formation and never attack.
+- **3, engage at will:** they attack anything they see, with no leash.
+- **4, cover me (the default):** they hold formation, engage only hostiles within 2 km of you, and a wingman more than 3 km from you
+  breaks off and rejoins.
+
+A wingman that goes down is replaced when the next wave starts, entering 1 500 m behind you. While you are dead they engage at will, and
+they go back to their order when you respawn. `wing` prints the wing, `wing formation <finger_four|wedge|line_abreast>` changes its shape,
+and `wing replenish` fills empty slots at once.
+
+## Running lights
+
+Every ship shows red on its left, green on its right and white on top. Key 5, D-pad Left or `running_lights [on|off]` switches yours; the HUD
+says LIGHTS ON or LIGHTS OFF, and your wingmen follow within a second. Radar and AI detection do not change: it is how you look, not
+whether you are seen. Raiders on patrol fly dark and light up with their first shot.
+
+## The instructor
+
+`scenario instructor_route` puts the instructor 200 m ahead of you. Follow it. The HUD marks it, marks its next waypoint with a diamond, and
+says on the status line what comes next: `FOLLOW INSTRUCTOR`, `CLOSE UP ON INSTRUCTOR` when you have fallen behind (it stops within 1 600 m
+and goes on when you close to 800 m), and `WATCH INSTRUCTOR` during a demo. It cannot be hurt and never fires. The six waypoints show a roll, a
+strafe box, a pod turn, a flip and burn, and an all stop, in that order. `state route` and `ai INSTRUCTOR` show where it is up to.
+
+## New console commands
+
+```
+wing [order|formation|replenish] [value]     orders, shape, replacements (above)
+spawn <raider|ally> [behaviour] [distance_m] [yaw_deg] [pitch_deg] [skill=<rank|0-1>] [aggression=<level|0-1>] [lights=on|off]
+                                             behaviours: raider idle|patrol|attack|aggro|ai, ally idle|ai. The ship is placed straight
+                                             ahead of you; yaw and pitch turn the ship, not where it is
+ai <name>                                    a pilot's behaviour, state and every score
+ai <name> skill <rookie|regular|veteran|ace|0-1>    ai <name> aggression <passive|cautious|balanced|aggressive|reckless|0-1>
+ai <name> objective <target|none>            send a pilot to a target (a broadcast is enough to find it)
+relation <a> [b] [friendly|neutral|hostile]  show or change (this session) how two factions see each other; relation reset reloads the file
+kill allies                                  destroy every allied ship
+rebase <dx> <dy> <dz>                        shift the local origin (see "Far from the launch point")
+lod <ship|all> <hero|0-3|auto>               force a ship's splat level
+relight [on|off]   flare [on|off]   blur [on|off]     the visual pass's switches
+running_lights [on|off]                      your lights, and your wing's
+look <yaw> [pitch]   look off                hold the view off the nose (free look from the console; in chase the camera orbits the ship)
+fxburst [hit|ram|explosion_sparks|explosion_fragments|explosion_gas|debris]    one burst 40 m in front of the camera
+scenario <name>                              as above
+state wing|ai|factions|ram|route|lod|lights|post|screens|world     the new providers
+```
+
+## New settings and their defaults
+
+Set one with `set settings.<name> <value>`; add `save` to keep it. Every one is listed by `state settings`.
+
+```
+friendly_fire false            bolts hit anything but their shooter when on
+ram_damage true                collisions hurt
+splat_budget 2000000           splats drawn at once; video memory is reserved for this many (584 bytes each)
+splat_hero true                your own ship loads its 975k-splat hull for the chase view
+splat_lod_bias 0               shifts every ship's level of detail by whole levels (+ coarser)
+splat_relight true             light hulls, chunks and buoys (relight on|off)
+relight_ambient 0.3            how much of a hull's colour shows with no light on it
+relight_unlit_level 0.12       how dark the side away from all lights gets
+relight_light_gain 0.6         how strongly light brightens a hull
+particle_density 1.0           how much of each spark and debris burst is thrown; 0 costs nothing per frame
+lens_flare true                the star's flare (flare on|off)
+motion_blur false              blur on fast turns (blur on|off)
+motion_blur_strength 0.5       how strong the blur is
+own_lights true                the light each ship carries for itself (top lamp, cabin glow)
+top_lamp_energy 2.5            how brightly the top lamp lights the ship's own hull
+cabin_glow_level 0.3           how much red the cockpit glow adds in the canopy, seen from outside
+cabin_glow_view_m 150          how far off the glow can be seen
+running_light_min_px 3         a running light is never smaller than this on screen
+cockpit_light_energy 1.6       the cabin lamp that lights the cockpit frame (takes effect on the next spawn)
+target_hold_s 0.35             how long a press on B is a hold
+hud_targeting_grid false       the targeting grid in the chase view too (in the cockpit it is on the octagon)
+hud_velocity_marker false      the prograde marker in the world
+```
+
+## Captures and measurements
+
+`scripts/capture_m3.sh` takes the screenshots P5 to P13 into `reports/m3/`, and `scripts/capture_m3.sh p7 p9` takes only those.
+`scripts/measure_m3.sh` measures the fight and the 100 ships at 1080p into `reports/m3/measure.log`, with `ac19`, `vsync`, `costs` or
+`hundred` for one group. Both open short windows that close by themselves, and they take the mouse while they run. `F3` hides the debug text.
+
+## Far from the launch point
+
+The World keeps its origin within 5 km of you (`world.auto_rebase_distance_m`), re-centring as you fly ("a rebase"), so float32 positions
+stay fine however far you go. `watch world.rebases` counts the rebases and `get world.rebase_us` gives the last one's cost. `rebase -900000 0 0`,
+the console line that showed the jumping before, is now undone in the same tick: `world.rebases` goes up by two and `world.origin` lands back on
+you. To be truly far away, fly: a few minutes of both mains with assist on (up to its 5 000 m/s) cover 900 km, and the HUD's `REF` range shows how far you are.
+
+## Acceptance checklist (M3 (H) criteria; the full wording is in `docs/milestones/m3-ai-pilots-and-wingmen.md`)
+
+Tick each one, or say what you saw. A screenshot with the debug text (`F3`) is the most useful report. Screenshots are in `reports/m3/` if you
+ran the capture, and the milestone's as-built notes say what each one shows.
+
+- [ ] **AC14 Keyboard layout B.** With your right hand on the mouse, every flight key is easy to reach without looking. Caps Lock rolls left while
+      it is held and stops when released (press and release both register; if your desktop treats it as a toggle, say so: the fallback is Ctrl).
+- [ ] **AC15 Wingmen and raiders.** In the sandbox the wing holds a believable finger-four on you (look back with L3, the middle mouse button or
+      `look 165 15`), keeps it through turns, breaks to engage, and rejoins. Try orders 1 to 4. They are useful in a fight. Raiders fly in groups of
+      two or three, evade when chased, and still make attack runs. Some pilots make slashing passes. The balance itself is yours to judge:
+      `scenario dogfight` and the sandbox's wave 2, where rookies on slashing passes shoot down the wing.
+- [ ] **AC16 Rams.** A bump under about 5 m/s does nothing, a hit around 30 m/s closing hurts badly, a head-on at speed kills both, and nothing passes
+      through anything without a collision. `god on` protects you, and you still bounce.
+- [ ] **AC17 Instructor.** On `scenario instructor_route` the route is easy to follow, the waypoint diamond reads, and every demo is clearly visible from
+      behind.
+- [ ] **AC18 Allied Starfuries.** At combat ranges (`spawn ally idle 150 35 20`) they look right; they use the lighter LOD1 hull. Close up they go soft: judge whether
+      that matters. A Starfury's break-up shows its cabin and four arms tumbling apart (`set targeting.selected "ALPHA 2"`, `kill target`).
+- [ ] **AC19 Frame rate.** Hold 60 fps at 1080p in a real fight (`god on; wing order engage; wave start 3`, overlay or `fps`). An agent measured the worst
+      case on this GPU (136-182 fps with vsync off); see the acceptance record. With vsync on it read about one repeated frame a second, and half of those were there with no ships
+      at all, so say if you feel stutter, in the fight or in empty space, and whether fullscreen changes it.
+- [ ] **AC22 Far from the launch point.** After `rebase -900000 0 0`, and again after a long flight (`REF` several hundred km), thrust in every direction
+      (both mains, retros, strafe, while pitching and yawing): the ship shows no jumping, in splat mode and in mesh mode (F4). Then fly at full speed through
+      rebases (one every 5 km: every second at 5 000 m/s) in both cameras: no hitch at each one (the picture holds still for one tick at a rebase, everything
+      together: at most one repeated frame; watch a buoy, a ship or your own bolts passing), and an explosion or debris flying when it happens stays where it is
+      and looks as in M2 (AC16).
+- [ ] **AC27 Play-test tweaks.** B selects targets (a tap goes to the next, a hold to the previous) and D-pad Up toggles assist. The right stick pitches, yaws and rolls
+      (diagonals roll). L3 free look stays where you left it until you let go of L3. Gun and impact sounds sit two octaves lower than they did. Reverse and side thrust
+      feel strong. The KILLS, YOURS and ASSISTS numbers read at a glance. Buoys and wingmen far out show on the radar's rim. Some AI ships make slashing passes and turn
+      to chase.
+- [ ] **AC35 Visual pass.** No visible pop as a ship changes level at combat ranges. Plumes light the pods, muzzle flashes light the nose, explosions light nearby hulls,
+      and the star gives each hull a lit and a dark side as it rolls. Hits throw sparks and debris vents. Your own hull is visibly sharper close up in the chase view
+      (`set settings.splat_hero off` and restart to compare). The flare follows the star and hides behind hulls. Motion blur (`blur on`) smears the stars on fast turns, not the
+      HUD. Raiders read almost black from their unlit side at 80-150 m, gas puffs may read as flat discs, and a debris chunk can read as a flat black shape: say if any of that bothers you. If the flare is too strong or too yellow, its
+      numbers are in `space_environment.tscn`.
+- [ ] **AC39 Running lights and break-up.** Every ship shows red on its left, green on its right and white on top: read them at combat range and as points from several km
+      (`spawn raider idle 3000`). Fly over a Starfury (`spawn ally idle 26 0 -80` turns its top toward you in the cockpit camera): its cabin top is lit, and it goes darker
+      with `running_lights off`. The cockpit glow is soft, inside and in the canopy from outside within about 150 m. A dark raider is hard to spot and its lights coming on
+      reads as a threat: `spawn raider aggro 3000` patrols dark and lights up when it attacks you (the sandbox's PATROL wave starts dark too, but it spawns inside your
+      sensor range and attacks at once). D-pad Left or key 5 switches yours, the HUD says so, and your wingmen follow. Buoys keep a steady light and breathe slowly. A Starfury's
+      death starts where it was hit and tears apart in stages: the first fireball hides much of that at 60 m or closer, so also watch one from a few hundred metres, and your own hull turns soft as it breaks up, because the chunks are the lighter LOD1. Knobs:
+      `settings.top_lamp_energy`, `cabin_glow_level`, `cabin_glow_view_m`, `running_light_min_px`, `cockpit_light_energy`; positions are `nav_lights` in the generators.
+- [ ] **AC41 Cockpit and screens.** The cockpit reads like the reference in your slimmer proportions: slim red-lit V struts with space and ships visible past them, and a console that looks
+      built in. The screens are legible at a glance at 1080p without free look. The hull bar (left screen) and charge bar (right screen) read in a fight from the screens alone. Nothing
+      important is hidden by the struts. Look too at what T29 left open: the strut on the star's side reads bright and the other dark (no shadows in the cabin), the shell behind you is
+      plain facets (free look), and the four lamps have no labels (assist, guns, lights, track).
+
+Record your GPU, driver, FPS and VRAM in the acceptance record at the end of the milestone doc.

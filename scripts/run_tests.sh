@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs every automated check that works without a GPU: Python generator tests, a headless Godot import that
-# must be free of script errors, a compile check of every project script, the GUT suites, and two debug-console
+# must be free of script errors, a compile check of every project script, the GUT suites, and debug-console
 # smoke runs that drive a live headless build through --console-exec.
 # Exits non-zero on any failure. Logs and the GUT JUnit XML land in reports/ (gitignored; CI uploads it).
 set -euo pipefail
@@ -520,6 +520,42 @@ expect_line "${log}" "[console] route.demo = none" || smoke_status=1
 expect_text "${log}" "[console] INSTRUCTOR: follow_path (lead)" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 reject_text "${log}" "ERROR:" || smoke_status=1
+
+echo "== Console smoke run: the visual pass's commands and settings on the real main scene"
+# M3-T12 / AC13: the commands added since T19 answer under --console-strict; the renderer's own numbers need a GPU, so only the
+# switches are checked here.
+log="${REPORTS}/console_visual.log"
+visual_status=0
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; wave stop; relight off; relight on; flare off; flare on; blur on; blur off; lod all 3; lod all auto; set settings.particle_density 0.5; get fx.density; running_lights off; get ship.running_lights; running_lights on; look 170 10; look off; state lights; state lod; state post; state screens; quit' \
+    > "${log}" 2>&1 || visual_status=$?
+cat "${log}"
+if (( visual_status != 0 )); then
+    echo "run_tests.sh: visual pass smoke run exited ${visual_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] fx.density = 0.50" || smoke_status=1
+expect_line "${log}" "[console] ship.running_lights = false" || smoke_status=1
+expect_line "${log}" "[console] the view held at yaw 170, pitch 10" || smoke_status=1
+expect_line "${log}" "[console] the view is free again" || smoke_status=1
+expect_text "${log}" "[console] lights.active = " || smoke_status=1
+expect_text "${log}" "[console] lod.levels = " || smoke_status=1
+expect_text "${log}" "[console] screens.shown = " || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
+
+echo "== Console smoke run: a bad look must exit 1"
+log="${REPORTS}/console_visual_strict.log"
+visual_strict_status=0
+timeout 180 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; look north; quit 0' > "${log}" 2>&1 || visual_strict_status=$?
+cat "${log}"
+if (( visual_strict_status != 1 )); then
+    echo "run_tests.sh: bad look smoke run exited ${visual_strict_status}, expected 1 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_text "${log}" "[console] error: look takes yaw and pitch in degrees, or off, not 'north'" || smoke_status=1
+reject_text "${log}" "[console] > quit 0" || smoke_status=1
 
 if (( smoke_status != 0 )); then
     echo "run_tests.sh: console smoke runs failed (see reports/console_*.log)."  >&2

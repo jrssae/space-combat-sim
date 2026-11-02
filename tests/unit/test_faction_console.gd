@@ -98,6 +98,21 @@ func test_relation_reset_reloads_the_file() -> void:
 	assert_eq(registry.format_path("factions.relations"), "factions.relations = [earth_alliance raiders hostile]")
 
 
+func test_relation_reset_says_so_when_the_file_is_broken_and_keeps_the_table() -> void:
+	var broken: String = "user://broken_factions.json"
+	var file: FileAccess = FileAccess.open(broken, FileAccess.WRITE)
+	file.store_string("{ not json")
+	file.close()
+	_run("relation earth_alliance raiders friendly")
+	FactionConsole.table_path = broken
+	var result: ConsoleResult = _run("relation reset")
+	FactionConsole.table_path = Factions.TABLE_PATH
+	DirAccess.remove_absolute(broken)
+	assert_false(result.ok, "a reset that loaded nothing is no success")
+	assert_string_contains(result.error, broken)
+	assert_eq(Factions.relation(Factions.EARTH_ALLIANCE, Factions.RAIDERS), Factions.Relation.FRIENDLY, "the session's table stays")
+
+
 func test_relation_never_writes_the_data_file() -> void:
 	var before: String = FileAccess.get_file_as_string(Factions.TABLE_PATH)
 	_run("relation earth_alliance raiders friendly")
