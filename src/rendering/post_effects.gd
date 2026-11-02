@@ -15,6 +15,9 @@ extends Node
 ## The key star: the flare follows its direction.
 @export var sun: DirectionalLight3D
 
+## How bright the flare's tint is, the add-on's own default level.
+const FLARE_LEVEL: float = 0.39
+
 var _flare: LensFlareEffect
 var _blur: MotionBlurEffect
 var _gate: MotionBlurGate = MotionBlurGate.new()
@@ -64,6 +67,12 @@ func watch_world(world: WorldFrame) -> void:
 	_world = world
 	if _world != null:
 		_world.rebased.connect(_on_rebased)
+
+
+## Tints the flare to the star. `color` is linear, as the picture the flare is added to.
+func set_star_color(color: Color) -> void:
+	if _flare != null:
+		_flare.sun_color = Color(color.r * FLARE_LEVEL, color.g * FLARE_LEVEL, color.b * FLARE_LEVEL)
 
 
 func flare_effect() -> LensFlareEffect:

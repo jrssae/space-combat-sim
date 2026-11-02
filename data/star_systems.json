@@ -1,0 +1,6 @@
+{
+  "default": "local",
+  "systems": {
+    "local": {"name": "Epsilon Eridani", "class": "K2V orange dwarf", "temperature_k": 5084.0}
+  }
+}

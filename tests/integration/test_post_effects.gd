@@ -184,3 +184,33 @@ func test_watching_a_second_world_stops_listening_to_the_first() -> void:
 	assert_eq(post.blur_gate().skipping(), 0)
 	second.rebase(Vector3(1.0, 0.0, 0.0))
 	assert_gt(post.blur_gate().skipping(), 0)
+
+
+func test_the_flare_and_the_key_star_show_the_systems_star() -> void:
+	var star: Color = StarColor.linear_from_kelvin(5084.0)
+	var flare: Color = env.post_effects.flare_effect().sun_color
+	assert_almost_eq(flare.g / flare.r, star.g, 1e-3, "the flare has the star's colour")
+	assert_almost_eq(flare.b / flare.r, star.b, 1e-3)
+	var light: Color = env.key_star.light_color.srgb_to_linear()
+	assert_almost_eq(light.g / light.r, star.g, 1e-3, "and so does its light")
+	assert_almost_eq(light.b / light.r, star.b, 1e-3)
+
+
+func test_another_system_changes_both() -> void:
+	env.set_star(3000.0)
+	var red: Color = StarColor.linear_from_kelvin(3000.0)
+	var flare: Color = env.post_effects.flare_effect().sun_color
+	assert_almost_eq(flare.g / flare.r, red.g, 1e-3)
+	assert_almost_eq(env.key_star.light_color.srgb_to_linear().b, red.b, 1e-3)
+	env.set_star(5084.0)
+
+
+func test_the_colour_patches_still_apply_to_the_vendored_shader() -> void:
+	var path: String = "res://addons/lens_effects/lens_flares.glsl"
+	var original: String = FileAccess.get_file_as_string(path)
+	for old: String in SceneLensFlareEffect.COLOUR_PATCHES:
+		assert_string_contains(original, old, "still in the add-on")
+	var patched: String = SceneLensFlareEffect.patched_source(path)
+	assert_false(patched.contains("lensflare.r -= yellow"), "the ghosts are no longer pushed toward blue")
+	assert_false(patched.contains("always_on_flare = sun_color"), "the always-on glow is tinted once")
+

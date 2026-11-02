@@ -11,6 +11,11 @@ static func compile(rd: RenderingDevice, path: String) -> RID:
 	if text.is_empty():
 		push_error("RuntimeShader: cannot read %s" % path)
 		return RID()
+	return compile_text(rd, text, path)
+
+
+## The same for GLSL already in memory; `path` names it in messages.
+static func compile_text(rd: RenderingDevice, text: String, path: String) -> RID:
 	var source := RDShaderSource.new()
 	source.language = RenderingDevice.SHADER_LANGUAGE_GLSL
 	source.set_stage_source(RenderingDevice.SHADER_STAGE_COMPUTE, text.replace("#[compute]", ""))

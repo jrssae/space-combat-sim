@@ -144,6 +144,7 @@ func _ready() -> void:
 	rams.world = world
 	# The motion blur skips the frames around a rebase (M3-T25).
 	space_environment.post_effects.watch_world(world)
+	space_environment.use_star_of(_system_id)
 	_register_console()
 
 
