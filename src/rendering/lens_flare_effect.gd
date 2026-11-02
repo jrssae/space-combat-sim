@@ -7,5 +7,10 @@ extends LensFlareEffect
 
 func create_shader(p_file_path: String) -> RID:
 	var shader: RID = RuntimeShader.compile(rd, p_file_path)
+	if not shader.is_valid():
+		# The add-on would retry and fail on every frame.
+		push_warning("SceneLensFlareEffect: %s did not compile; the lens flare stays off" % p_file_path)
+		enabled = false
+		return shader
 	add_rid_to_free(shader, "shader: %s" % p_file_path)
 	return shader

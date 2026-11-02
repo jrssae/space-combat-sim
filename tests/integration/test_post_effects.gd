@@ -120,8 +120,9 @@ func test_set_settings_path_works_from_the_console() -> void:
 
 func test_the_post_provider_answers_state() -> void:
 	assert_true(DebugConsole.registry.has_provider(&"post"))
-	var lines: PackedStringArray = DebugConsole.registry.describe_provider(&"post")
-	assert_gt(lines.size(), 0)
+	var lines: String = "\n".join(DebugConsole.registry.describe_provider(&"post"))
+	for key: String in ["flare", "blur", "sun_uv"]:
+		assert_string_contains(lines, key)
 
 
 # --- the star ------------------------------------------------------------------------------------------------------
