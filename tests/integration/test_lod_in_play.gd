@@ -146,6 +146,23 @@ func test_the_console_forces_levels_and_reads_them() -> void:
 	assert_false(_exec("lod NOBODY 1").ok)
 
 
+func test_the_console_sees_the_ships_in_play_while_paused() -> void:
+	var fleet: Array[Combatant] = _fleet()
+	_place(fleet, 3000.0)
+	await get_tree().process_frame
+	var in_play: int = main.ships.alive().size() + 1  # and the player
+	get_tree().paused = true
+	var result: ConsoleResult = _exec("lod all 1")
+	assert_true(result.ok, result.error)
+	assert_eq(fleet[0].ship.lod_level(), 1, "forced while paused")
+	assert_eq((DebugConsole.registry.read("lod.levels")["value"] as PackedStringArray).size(), in_play, "every ship in play listed")
+	assert_gt(int(DebugConsole.registry.read("lod.visible_splats")["value"]), 0)
+	main.ships.release(fleet[1])
+	assert_eq((DebugConsole.registry.read("lod.levels")["value"] as PackedStringArray).size(), in_play - 1, "a parked ship is not")
+	get_tree().paused = false
+	assert_true(_exec("lod all auto").ok)
+
+
 func test_the_bias_shifts_every_level() -> void:
 	var fleet: Array[Combatant] = _fleet()
 	_place(fleet, 150.0)

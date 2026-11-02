@@ -164,3 +164,22 @@ func test_back_while_dead_is_the_only_respawn() -> void:
 	assert_eq(respawns.size(), 1, "one respawn, Back's")
 	assert_almost_eq(main.ship.linear_velocity, away, Vector3.ONE * 1e-3, "nothing stopped the ship")
 
+
+func test_the_respawned_player_starts_with_cold_plumes() -> void:
+	main = await _launch(ScenarioLoader.FREE_FLIGHT_PATH)
+	main.debug_throttle = 1.0
+	await _ticks(2)
+	main.thrusters.advance(1.0)
+	var lit: int = 0
+	for i: int in main.thrusters.glow_count():
+		lit += 1 if main.thrusters.glow_level(i) > 0.5 else 0
+	assert_gt(lit, 0, "the plumes burn")
+	main.debug_throttle = 0.0
+	DebugConsole.flags.invulnerable = false
+	assert_true(DebugConsole.registry.execute("kill player")[0].ok)
+	main.respawn()
+	for i: int in main.thrusters.glow_count():
+		assert_eq(main.thrusters.glow_level(i), 0.0, "plume %d starts cold" % i)
+		var light: LightEmitter = main.thrusters.nozzle_light(i)
+		if light != null:
+			assert_eq(light.energy, 0.0, "its nozzle light %d too" % i)

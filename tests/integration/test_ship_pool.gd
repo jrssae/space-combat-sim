@@ -117,6 +117,43 @@ func test_acquire_gives_a_fresh_ship_every_time() -> void:
 	assert_true(seen_it_again, "the released ship came back")
 
 
+func test_a_reused_ship_shows_nothing_of_its_last_pilot() -> void:
+	var raider: Combatant = pool.acquire("RAIDER 1", UniversePos.new(0.0, 0.0, -100.0))
+	var burn := FlightCommand.new()
+	burn.main_left = 1.0
+	burn.main_right = 1.0
+	raider.ship.set_flight_command(burn)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	raider.thrusters.advance(1.0)
+	var lit: int = 0
+	for i: int in raider.thrusters.glow_count():
+		lit += 1 if raider.thrusters.glow_level(i) > 0.5 else 0
+	assert_gt(lit, 0, "the plumes burn")
+	var flash := raider.ship.get_muzzles()[0].get_node("MuzzleFlash") as MuzzleFlash
+	flash.trigger()
+	flash.advance(0.01)
+	assert_true(flash.is_active(), "a flash at the gun")
+	assert_true(_console('lod "RAIDER 1" 3').ok)
+	var switcher := raider.ship.get_node("LodSwitcher") as LodSwitcher
+	assert_eq(switcher.forced, 3, "the console forced a level")
+	for i: int in POOL_SIZE - 1:  # the others in use, so the next acquire takes this one again
+		pool.acquire("RAIDER %d" % (i + 2), UniversePos.new(float(i + 1) * 50.0, 0.0, -100.0))
+	pool.release(raider)
+	var again: Combatant = pool.acquire("RAIDER 9", UniversePos.new(0.0, 0.0, -200.0))
+	assert_eq(again, raider, "the same ship, for its next pilot")
+	for i: int in again.thrusters.glow_count():
+		assert_eq(again.thrusters.glow_level(i), 0.0, "plume %d starts cold" % i)
+		var light: LightEmitter = again.thrusters.nozzle_light(i)
+		if light != null:
+			assert_eq(light.energy, 0.0, "its nozzle light %d too" % i)
+		assert_false(again.thrusters.glow(i).visible, "plume %d hidden" % i)
+	assert_false(flash.is_active(), "no rest of the last flash")
+	assert_false(flash.visible)
+	assert_eq(flash.light_emitter().energy, 0.0)
+	assert_eq(switcher.forced, LodSwitcherMath.NONE, "the size on screen picks the level again")
+
+
 func test_release_parks_the_ship_again() -> void:
 	var raider: Combatant = pool.acquire("RAIDER 1", UniversePos.new(0.0, 0.0, -100.0), Basis.IDENTITY, Vector3(0.0, 0.0, -9.0))
 	pool.release(raider)
