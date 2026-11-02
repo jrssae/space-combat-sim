@@ -271,35 +271,19 @@ func test_a_screens_sizes_scale_with_its_height() -> void:
 # --- the octagon's look ------------------------------------------------------------------------------------------------
 
 
-func test_the_octagon_has_a_red_grid_and_its_own_icons() -> void:
+func test_the_octagon_has_a_red_grid_and_named_range_rings() -> void:
 	var f: HudFrame = HudLayout.compute(_hud())
 	var octagon: HudSurface = f.screens[&"octagon"]
 	assert_eq(octagon.grid_color, HudLayout.OCTAGON_GRID_COLOR)
 	assert_gt(octagon.grid_color.r, octagon.grid_color.g * 2.0, "red")
-	assert_true(octagon.radar_icons, "icons, not faction dots")
+	assert_true(octagon.radar_labels, "its range rings are named")
 	assert_true(octagon.grid_marker_diagonal, "the tactical grid's diagonal marker")
 	var chase: HudInput = _hud(false)
 	chase.show_grid = true
 	var c: HudFrame = HudLayout.compute(chase)
 	assert_eq(c.grid_color, HudLayout.LINE_COLOR, "the chase view's grid stays green")
-	assert_false(c.radar_icons)
+	assert_false(c.radar_labels)
 	assert_false(c.grid_marker_diagonal)
-
-
-func test_the_octagons_icons_tell_friend_from_foe_by_colour() -> void:
-	var ally: Color = HudLayout.octagon_icon_color(Factions.Relation.FRIENDLY)
-	var hostile: Color = HudLayout.octagon_icon_color(Factions.Relation.HOSTILE)
-	var nav: Color = HudLayout.octagon_icon_color(Factions.Relation.NEUTRAL)
-	assert_eq(ally, HudLayout.LINE_COLOR, "allies green")
-	assert_eq(hostile, HudLayout.AMBER, "hostiles amber")
-	assert_gt(nav.b, nav.r, "nav points cyan")
-	assert_gt(nav.g, nav.r)
-	assert_ne(ally, hostile)
-	assert_ne(ally, nav)
-	assert_ne(hostile, nav)
-	assert_gt(hostile.r, hostile.b * 2.0, "the hostile colour stands off the red grid by its green")
-	assert_gt(hostile.g, HudLayout.OCTAGON_GRID_COLOR.g * 3.0)
-
 
 func test_the_frame_carries_the_targets_relation() -> void:
 	var input: HudInput = _hud()

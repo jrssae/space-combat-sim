@@ -296,8 +296,7 @@ func _draw_grid(surface: HudSurface, f: HudFrame, s: float, w: float) -> void:
 	_canvas.draw_arc(centre, minf(rect.size.x, rect.size.y) * 0.12, 0.0, TAU, 32, LINE_COLOR, w)
 	if surface.grid_marker_visible:
 		var m: Vector2 = surface.grid_marker
-		var base: Color = HudLayout.octagon_icon_color(f.target_relation) if surface.radar_icons else f.target_color
-		var color := Color(base.r, base.g, base.b, 1.0 if surface.grid_marker_inside else 0.5)
+		var color := Color(f.target_color.r, f.target_color.g, f.target_color.b, 1.0 if surface.grid_marker_inside else 0.5)
 		if surface.grid_marker_diagonal:
 			_canvas.draw_arc(m, 9.0 * s, 0.0, TAU, 20, color, w * 0.75)
 			_canvas.draw_line(m + Vector2(-16.0, 16.0) * s, m + Vector2(16.0, -16.0) * s, color, w * 0.75)
@@ -403,52 +402,33 @@ func _draw_radar(f: HudFrame, surface: HudSurface, s: float, w: float) -> void:
 	var r: float = surface.radar_radius_px
 	if r <= 0.0:
 		return
-	var dim := Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.7 if surface.radar_icons else 0.35)
+	var k: float = r / HudLayout.RADAR_RADIUS_UNITS  # the same radar on every surface, only larger
+	var dim := Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.7 if surface.radar_labels else 0.35)
 	# The sphere: its outline, the equatorial ring and the forward-up meridian, all in the ship's frame.
 	_canvas.draw_arc(c, r, 0.0, TAU, 48, dim, w * 0.75)
 	_ring(c, r, dim, w * 0.75, 0)
 	_ring(c, r, dim, w * 0.75, 1)
-	if surface.radar_icons:
+	if surface.radar_labels:
 		# Named, with the ring where the scale turns logarithmic.
 		_ring(c, r, dim, w * 0.6, 0, RadarModel.LINEAR_RADIUS)
 		_text("%d km" % int(RadarModel.MAX_RANGE_M / 1000.0), c + Vector2(r * 0.72, -r * 0.72), 14.0 * s, LINE_COLOR)
 		_text("%d km" % int(RadarModel.LINEAR_RANGE_M / 1000.0), RadarModel.to_screen(Vector3(RadarModel.LINEAR_RADIUS, 0.0, 0.0), c, r) + Vector2(4.0, -3.0) * s, 14.0 * s, LINE_COLOR)
+	if surface.radar_labels:  # dark backings under everything, so contacts read over the octagon's grid and never hide each other
+		for dot: RadarModel.Dot in f.radar_dots:
+			_canvas.draw_circle(RadarModel.to_screen(dot.point, c, r), 5.5 * k, TEXT_SHADOW)
 	# Own ship at the centre, nose up.
-	_canvas.draw_polyline(PackedVector2Array([c + Vector2(0.0, -6.0 * s), c + Vector2(4.0 * s, 5.0 * s), c + Vector2(-4.0 * s, 5.0 * s), c + Vector2(0.0, -6.0 * s)]), LINE_COLOR, w * 0.75)
+	_canvas.draw_polyline(PackedVector2Array([c + Vector2(0.0, -6.0 * k), c + Vector2(4.0 * k, 5.0 * k), c + Vector2(-4.0 * k, 5.0 * k), c + Vector2(0.0, -6.0 * k)]), LINE_COLOR, w * 0.75)
 	for dot: RadarModel.Dot in f.radar_dots:
 		var at: Vector2 = RadarModel.to_screen(dot.point, c, r)
 		var foot: Vector2 = RadarModel.to_screen(dot.foot, c, r)
-		var color: Color = HudLayout.octagon_icon_color(dot.relation) if surface.radar_icons else dot.color
+		var color: Color = dot.color
 		_canvas.draw_line(foot, at, Color(color.r, color.g, color.b, 0.5), w * 0.5)
-		if surface.radar_icons:
-			_draw_icon(at, dot, 6.0 * s, color, w)
-		elif dot.rim:  # a broadcast beyond the sensors: hollow, on the rim (M3-T17)
-			_canvas.draw_arc(at, (4.5 if dot.selected else 3.0) * s, 0.0, TAU, 12, color, w * 0.6)
+		if dot.rim:  # a broadcast beyond the sensors: hollow, on the rim (M3-T17)
+			_canvas.draw_arc(at, (4.5 if dot.selected else 3.0) * k, 0.0, TAU, 12, color, w * 0.6)
 		else:
-			_canvas.draw_circle(at, (4.5 if dot.selected else 3.0) * s, color)
+			_canvas.draw_circle(at, (4.5 if dot.selected else 3.0) * k, color)
 		if dot.selected:
-			_canvas.draw_arc(at, (13.0 if surface.radar_icons else 8.0) * s, 0.0, TAU, 20, color, w * 0.75)
-
-
-# A contact on the octagon: a square is an ally, a diamond hostile, a circle a nav point; hollow for a broadcast contact beyond the sensors.
-func _draw_icon(at: Vector2, dot: RadarModel.Dot, size: float, color: Color, w: float) -> void:
-	if dot.relation != Factions.Relation.FRIENDLY and dot.relation != Factions.Relation.HOSTILE:
-		if dot.rim:
-			_canvas.draw_arc(at, size * 0.7, 0.0, TAU, 16, color, w * 0.6)
-		else:
-			_canvas.draw_circle(at, size * 0.7, color)
-		return
-	var outline: PackedVector2Array
-	if dot.relation == Factions.Relation.HOSTILE:
-		outline = PackedVector2Array([at + Vector2(0.0, -size * 1.25), at + Vector2(size, 0.0), at + Vector2(0.0, size * 1.25), at + Vector2(-size, 0.0)])
-	else:
-		outline = PackedVector2Array([at + Vector2(-size, -size) * 0.8, at + Vector2(size, -size) * 0.8, at + Vector2(size, size) * 0.8, at + Vector2(-size, size) * 0.8])
-	if dot.rim:
-		var closed := outline.duplicate()
-		closed.append(outline[0])
-		_canvas.draw_polyline(closed, color, w * 0.6)
-	else:
-		_canvas.draw_colored_polygon(outline, color)
+			_canvas.draw_arc(at, 8.0 * k, 0.0, TAU, 20, color, w * 0.75)
 
 
 # A ring of the radar sphere at `reach` of its radius: 0 = the equatorial plane (X/Y), 1 = the vertical plane through the nose (Y/Z).

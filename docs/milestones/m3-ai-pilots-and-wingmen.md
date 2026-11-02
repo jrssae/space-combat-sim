@@ -1456,6 +1456,8 @@ Added 2026-11-01 for Q29; after T27, since both touch the cabin light; before T1
   - Changed existing tests: `test_starfury_aurora.py`'s clear box became the V; the old interior's test in `test_parts.py` left with the function it tested.
   - P13 and free-look frames: `.superpowers/sdd/m3-ai-pilots-and-wingmen/task-29-shots/`. The look is AC41 (H).
 
+- Same map in both views (maintainer, 2026-11-02): the octagon draws the radar's contacts exactly as the chase view does, the same dots in the same faction colours and indicators, replacing the green squares and amber diamonds of the earlier mockup. The red grid stays behind them, dimmed to 0.45 with a dark backing under each contact, because the hostile colour is close to the grid's red. Range rings stay named on the octagon.
+
 ### M3-T12 Integration, smoke runs, capture set, play-test guide
 
 - Goal: M3 complete in one build, every (A) criterion green, the maintainer handed a checklist and screenshots.

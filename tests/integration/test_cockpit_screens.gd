@@ -285,3 +285,20 @@ func test_the_console_can_report_the_screens_and_lamps() -> void:
 	assert_not_null(provider)
 	assert_eq(provider.keys(), [&"shown", &"powered", &"paints", &"lamps"] as Array[StringName])
 
+
+# Q29, maintainer: the map uses the same colours and indicators in both views, so a contact keeps its faction colour.
+func test_the_octagons_contacts_look_as_they_do_on_the_chase_radar() -> void:
+	DebugConsole.registry.execute("spawn raider idle 300")
+	await _frames(2)
+	await _cockpit()
+	var hostile: int = 0
+	var friendly: int = 0
+	for dot: RadarModel.Dot in main.hud.frame.radar_dots:
+		hostile += 1 if dot.color == Factions.hud_color(Factions.Relation.HOSTILE) else 0
+		friendly += 1 if dot.color == Factions.hud_color(Factions.Relation.FRIENDLY) else 0
+	assert_gt(hostile, 0, "the raider is in the hostile colour")
+	assert_gt(friendly, 0, "the wing in the friendly colour")
+	var octagon: HudSurface = main.hud.frame.screens[&"octagon"]
+	assert_has(octagon.items, HudSurface.RADAR)
+	assert_true(octagon.radar_labels, "the one thing the octagon adds: named rings")
+
