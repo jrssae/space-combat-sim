@@ -12,7 +12,7 @@ config_version=5
 
 config/name="space-combat-sim"
 config/description="Exploring a 3d space combat simulator using Newtonian physics"
-run/main_scene="res://src/game/main.tscn"
+run/main_scene="res://src/frontend/boot.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
 [autoload]
@@ -21,6 +21,7 @@ Settings="*res://src/autoload/settings.gd"
 SimClock="*res://src/autoload/sim_clock.gd"
 DebugConsole="*res://src/autoload/debug_console.gd"
 ControlProfiles="*res://src/autoload/control_profiles.gd"
+Game="*res://src/autoload/game.gd"
 
 [debug]
 

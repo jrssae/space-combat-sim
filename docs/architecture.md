@@ -1909,3 +1909,57 @@ Details per task are in the as-built notes of `docs/milestones/m3-ai-pilots-and-
 - **Lights the player can't see.** A dark ship (Q27) is dark to the eye only: radar and AI contact lists never use lights.
 - **Star.** A system's star is data; the flare and the key light take its colour, and the flare is a lens effect only, with no veil or god rays (Q30, Q31).
 - **What runs on what.** The one number that limits scale is on the CPU: 100 ships miss 60 fps because of `TargetingController` (as T20 measured it, before the visual pass), not the renderer (M3-T20; `docs/roadmap.md`, M4).
+
+## 18. Mission framework and front end (M5)
+
+What M5 adds to §1-§16 (tasks in `docs/milestones/m5-mission-framework-and-front-end.md`). M4 writes §17 on its own branch;
+until the two branches meet, this section follows §16. Every earlier rule still holds; task ids below are M5 tasks. Decision
+numbers start at D50 (D46-D49 are M4's).
+
+### 18.1 Decisions
+
+| # | Decision | Rationale (short) |
+|---|---|---|
+| D50 | Boot and the `Game` flow (T01). The main scene is `src/frontend/boot.tscn`; `Boot` hands the command line to the `Game` autoload once, and the pure `GameFlow.boot_route` decides: a windowed launch shows the front end; `--headless` (the display server or the engine argument), `--console-exec` or `--console-file` with a script, `--scenario=<id>` (after `--`, or before it) and `settings.skip_front_end` go straight to Main, which reads `Settings.scenario` as before (`--scenario=<id>` sets it for the session, like the `scenario` command). `GameFlow` (`RefCounted`) holds the states `FRONT_END`, `LOADING`, `IN_SPACE`, `DEBRIEF`, the request `{kind: free_flight \| mission \| sandbox, scenario_id, encounters, seed}` and the last result; a run starts at `FRONT_END`, and a refused move changes nothing and says why. `Game` only swaps scenes: the loading screen loads `main.tscn` with `ResourceLoader.load_threaded_request` (its scripts compiled first on the main thread, §18.3), `Game` builds Main with the request's `scenario_path` and `scenario_seed`, and `Main._ready` fills the pools behind the loading screen (D22 unchanged). Leaving a scene unpauses the tree and frees the mouse. The console's `scenario <id>` still reloads Main in place | Every tool, benchmark, smoke run and test starts as it did, and the menus get a flow that the debrief, retry and missions plug into without touching Main |
+
+### 18.2 Layout additions
+
+```
+src/game/game_flow.gd                    RefCounted, pure: states, moves, the request, the boot rule (T01)
+src/autoload/game.gd                     autoload `Game` after ControlProfiles: scene changes, `menu`, `play`, provider `game` (T01)
+src/frontend/boot.tscn|.gd               the project's main scene: hands the command line to Game (T01)
+src/frontend/loading_screen.tscn|.gd     shown while main.tscn loads on a thread (T01)
+src/frontend/front_end.tscn|.gd          placeholder: Free flight and Quit (T01; T02 builds the real menus)
+tests/unit/test_game_flow.gd, tests/integration/test_boot_routing.gd   (T01)
+```
+
+### 18.3 Boot, scene changes and the console's startup scripts
+
+- `Boot._ready` runs while the root is still readying its children, so `Game` changes the scene with a deferred call. On the
+  straight route that call adds Main in the first message flush, before the first process frame ends; `DebugConsole` waits a
+  process frame and then a physics frame (§6.4), so its startup scripts still run after `Main._ready` and after the calls
+  Main deferred from it. A script's first statement finds Main's providers without a `wait` (smoke run in
+  `scripts/run_tests.sh`).
+- `Game` replaces the current scene itself (remove, `queue_free`, add, `current_scene`), rather than through
+  `change_scene_to_*`, which adds the new scene only at the end of the frame, after the console has started waiting. Tests
+  point `Game.scene_parent` at a node of their own and `Game.main_scene_path` at a light stand-in.
+- Loading: `Game.play(request)` checks the request and that `data/scenarios/<id>.json` exists, moves to `LOADING` and shows
+  the loading screen. After two drawn frames the screen compiles `main.tscn`'s own scripts on the main thread (holding
+  them), then requests the scene on a worker thread, polls it, and hands the `PackedScene` to `Game.finish_loading`, which
+  builds Main and moves to `IN_SPACE`. A failed load goes back to the front end with an error. Why the scripts first: in
+  Godot 4.7.2, when Main's scripts compile on the worker thread, the preloads they resolve there leave 8 to 10 engine
+  objects behind ("ObjectDB instances leaked at exit"); compiled on the main thread first, nothing leaks. The smoke run
+  that starts at the front end rejects the warning.
+- The `scenario` command reloads Main without telling `Game`, so `game.request` keeps naming the scenario that was started
+  (from the menu, `play` or boot).
+- `user://autoexec.cfg` runs at the first scene the console sees: the front end on a normal launch, Main on a scripted run.
+
+### 18.4 Console and settings (additions to §6.4)
+
+| Provider | Owner (task) | Keys |
+|---|---|---|
+| `game` | Game (T01) | `state` (`front_end`, `loading`, `in_space`, `debrief`), `request` (`<scenario> (<kind>), encounters on\|off, seed <n>`, or `none`), `last_result` (`success`, `failure: <reason>`, or `none`) |
+
+Commands: `menu` (back to the front end); `play <scenario_id> [seed]` (any `data/scenarios/*.json`, through the loading screen
+as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` (bool, false). Command line: `--scenario=<id>`
+(goes straight to Main with that scenario for the session).

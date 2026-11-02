@@ -208,7 +208,7 @@ if grep -E "${SCRIPT_ERRORS}" "${log}"; then
     echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lights, lod, post, raiders, ram, render, screens, settings, ship, targeting, time, waves, weapons, wing, world" \
+expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, game, hud, hull, input, lights, lod, post, raiders, ram, render, screens, settings, ship, targeting, time, waves, weapons, wing, world" \
     || smoke_status=1
 expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
 expect_line "${log}" "[console] render.splat_backend = headless" || smoke_status=1
@@ -539,7 +539,7 @@ if (( route_status != 0 )); then
     echo "run_tests.sh: instructor route smoke run exited ${route_status}, expected 0 (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lights, lod, post, raiders, ram, render, route, screens, settings, ship, targeting, time, waves, weapons, wing, world" \
+expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, game, hud, hull, input, lights, lod, post, raiders, ram, render, route, screens, settings, ship, targeting, time, waves, weapons, wing, world" \
     || smoke_status=1
 expect_line "${log}" "[console] route.index = 1" || smoke_status=1
 expect_line "${log}" "[console] route.count = 6" || smoke_status=1
@@ -584,6 +584,84 @@ if (( visual_strict_status != 1 )); then
 fi
 expect_text "${log}" "[console] error: look takes yaw and pitch in degrees, or off, not 'north'" || smoke_status=1
 reject_text "${log}" "[console] > quit 0" || smoke_status=1
+
+echo "== Console smoke run: --scenario=free_flight still goes straight to Main without a window (M5-T01)"
+# AC1 (D50): boot.tscn is the main scene now; a scripted run skips the front end, and the startup script runs once Main is
+# ready, so even its first statement (no wait) finds Main's providers.
+log="${REPORTS}/console_boot.log"
+boot_status=0
+timeout 180 "${GODOT}" --headless --path . -- --scenario=free_flight --console-strict \
+    --console-exec="get game.state; get game.request; get settings.scenario; get raiders.pool_size; get ship.assist_on; quit" \
+    > "${log}" 2>&1 || boot_status=$?
+cat "${log}"
+if (( boot_status != 0 )); then
+    echo "run_tests.sh: boot smoke run exited ${boot_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] game.state = in_space" || smoke_status=1
+expect_line "${log}" "[console] game.request = free_flight (free_flight), encounters off, seed 0" || smoke_status=1
+expect_line "${log}" "[console] settings.scenario = free_flight" || smoke_status=1
+expect_line "${log}" "[console] raiders.pool_size = 0" || smoke_status=1
+expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
+
+echo "== Console smoke run: menu, play and the game provider under --console-strict (M5-T01)"
+# AC1, AC2 (D50): `menu` shows the front end, `play` goes through the loading screen into Main with the request's scenario
+# and seed, and a scenario that does not exist is refused.
+log="${REPORTS}/console_game.log"
+game_status=0
+timeout 240 "${GODOT}" --headless --path . -- --scenario=free_flight --console-strict \
+    --console-exec="menu; wait 5; get game.state; play instructor_route 7; get game.state; wait 600; get game.state; get game.request; get game.last_result; get allies.pool_size; quit" \
+    > "${log}" 2>&1 || game_status=$?
+cat "${log}"
+if (( game_status != 0 )); then
+    echo "run_tests.sh: game flow smoke run exited ${game_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] front end" || smoke_status=1
+expect_line "${log}" "[console] game.state = front_end" || smoke_status=1
+expect_line "${log}" "[console] loading instructor_route (sandbox), encounters off, seed 7" || smoke_status=1
+expect_line "${log}" "[console] game.state = loading" || smoke_status=1
+expect_line "${log}" "[console] game.state = in_space" || smoke_status=1
+expect_line "${log}" "[console] game.request = instructor_route (sandbox), encounters off, seed 7" || smoke_status=1
+expect_line "${log}" "[console] game.last_result = none" || smoke_status=1
+expect_line "${log}" "[console] allies.pool_size = 1" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
+
+echo "== Console smoke run: play of a scenario that does not exist must exit 1 (M5-T01)"
+log="${REPORTS}/console_game_strict.log"
+game_strict_status=0
+timeout 180 "${GODOT}" --headless --path . -- --scenario=free_flight --console-strict \
+    --console-exec="play nowhere; quit 0" > "${log}" 2>&1 || game_strict_status=$?
+cat "${log}"
+if (( game_strict_status != 1 )); then
+    echo "run_tests.sh: bad play smoke run exited ${game_strict_status}, expected 1 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_text "${log}" "[console] error: <scenario_id> expects one of " || smoke_status=1
+reject_text "${log}" "[console] > quit 0" || smoke_status=1
+
+echo "== Console smoke run: from the front end, Main loads cleanly through the loading screen (M5-T01)"
+# AC2 (D50): the front end named on the command line, so Main is first loaded by the loading screen's worker thread, as on
+# a windowed launch. Nothing may leak at exit (scripts compile on the main thread first; see architecture §18.3).
+log="${REPORTS}/console_loading.log"
+loading_status=0
+timeout 180 "${GODOT}" --headless --path . res://src/frontend/front_end.tscn -- --console-strict \
+    --console-exec="get game.state; play free_flight; wait 300; get game.state; get raiders.pool_size; quit" \
+    > "${log}" 2>&1 || loading_status=$?
+cat "${log}"
+if (( loading_status != 0 )); then
+    echo "run_tests.sh: loading smoke run exited ${loading_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_line "${log}" "[console] game.state = front_end" || smoke_status=1
+expect_line "${log}" "[console] game.state = in_space" || smoke_status=1
+expect_line "${log}" "[console] raiders.pool_size = 0" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "ERROR:" || smoke_status=1
+reject_text "${log}" "leaked" || smoke_status=1
 
 if (( smoke_status != 0 )); then
     echo "run_tests.sh: console smoke runs failed (see reports/console_*.log)."  >&2

@@ -63,6 +63,8 @@ const ENTRIES: Dictionary = {
 		"doc": "Show the debug overlay"},
 	&"scenario": {"type": TYPE_ENUM, "default": &"combat_sandbox", "choices": [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight"],
 		"doc": "The scenario the game loads: the wave sandbox, free flight with the nav buoys, or the instructor's route"},
+	&"skip_front_end": {"type": TYPE_BOOL, "default": false,
+		"doc": "Start straight in the scenario setting, without the front end (headless, console-script and --scenario= runs always do)"},
 	&"sfx_volume": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0,
 		"doc": "Gain of the SFX audio bus, 0 (silent) to 1 (full)"},
 	&"show_hud": {"type": TYPE_BOOL, "default": true,
