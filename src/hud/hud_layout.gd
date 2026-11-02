@@ -19,7 +19,7 @@ const RED: Color = Color(1.0, 0.3, 0.25)
 ## The chase view's radar radius at 1080p; a bigger radar draws everything on it larger by the same ratio.
 const RADAR_RADIUS_UNITS: float = 78.0
 const OCTAGON_GRID_COLOR: Color = Color(0.95, 0.12, 0.10)
-const OCTAGON_GRID_ALPHA: float = 0.45  # dim enough that the radar's red hostile contacts stand off it
+const OCTAGON_GRID_ALPHA: float = 0.2  # dim enough that the radar's red hostile contacts stand off it
 ## The console's indicator lamps, by id: lit in this colour, dark otherwise.
 const LAMP_COLORS: Dictionary = {&"assist": Color(0.92, 0.95, 1.0), &"guns": Color(1.0, 0.16, 0.12), &"lights": Color(0.92, 0.95, 1.0),
 		&"track": Color(1.0, 0.16, 0.12)}
