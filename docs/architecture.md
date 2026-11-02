@@ -1933,18 +1933,26 @@ scripts/bench.sh, bench_sweep.gd   the sweep: one headless process per run, pinn
   split the tick without timing any system from inside: `ai`, `flight` (priority 0: the console, `Main`, the rebase's shift,
   the ships' flight model, bolts, props), `targeting`, `resolvers`, `late` (wings, waves, the rebase's reset), `physics` (Jolt and
   the body sync with the engine's flushes around them) and `other`, the remainder before the AI drivers. `scan` (the contact
-  scans, timed inside `AiPilotDriver.perceive` only while the probe is on), `think` (the drivers' own timer) and `rebase`
-  (`WorldFrame.last_rebase_us`) are listed inside them. The engine's `Performance.TIME_PHYSICS_PROCESS` is the worst step of
-  each second, not a per-tick number, so it is only a check on the probe's window (they agree within a few per cent).
+  scans, timed inside `AiPilotDriver.perceive` only while the probe is on), `think` (the drivers' own timer), `hit` and `ram`
+  (the resolvers' own `resolve_us`) and `rebase` (the shift, `WorldFrame.last_rebase_us`) are listed inside them. The engine's
+  `Performance.TIME_PHYSICS_PROCESS` is the worst step of each second, not a per-tick number, so it is only a check on the
+  probe's window: the two agree within noise.
 - **The body sync** happens after the last frame and before the scripts, so it is only timed when nothing sits in between:
   headless the engine sleeps up to 6.9 ms between frames (`OS.low_processor_usage_mode_sleep_usec`), and a bench run sets that
-  to 0 for its duration (`PerfProbe.time_sync`). With a window open the frame's drawing sits there instead and `sync_us` stays 0.
+  to 0 for its duration (`PerfProbe.time_sync`; `sleep=keep` leaves it, to measure what the busy loop changes). With a window
+  open the frame's drawing sits there instead and `sync_us` stays 0. When ticks run back to back (a simulation behind real
+  time) a tick's sync lands in the previous tick's engine window, so `sync` is a lower bound; summaries give the share of ticks
+  in which it was timed.
 - **A run** (`bench <layout> <n> [seconds] [warmup=] [seed=] [label=] [probe=paired] [rebase_m=]`) parks every pool ship,
   grows the pools to the layout's count (`Main.ensure_pool`; that is the run's load time), stops the waves, turns god mode on,
   turns the player to face -Z and gives it 60 m/s, lowers the rebase threshold to 180 m (a rebase every 3 s, under 1 % of the
   ticks), makes the sides neutral for `transit`, and takes `BenchLayout`'s ships from the pools, invulnerable so the count holds.
+  N counts those ships; the player flies too. The rebase budget is on the whole tick that held a rebase, not the shift alone.
   Windows are counted in ticks; real time kept is the recorded ticks' sim time against the wall time they took. The command
   holds the console queue until it ends (`DebugConsole.release_wait`); a run under a tenth of real time is cut short. Afterwards
-  everything it changed is put back, and its ships stay in play.
-- **Tests** never assert milliseconds: `test_perf_stats` and `test_bench_layout` are pure, `test_bench` checks the provider's
-  stages add up and that runs write their reports, and `run_tests.sh` runs `bench furball 25 5` and checks the report is there.
+  everything it changed is put back, and its ships stay in play. A run that dies without a report leaves a failing
+  placeholder, so the sweep counts it as a failed run (one surviving pass cannot pass a count) and still sees the count.
+- **Tests** never assert milliseconds: `test_perf_stats`, `test_bench_layout` and `test_bench_report` are pure; `test_bench`
+  checks per tick that the stages split the tick and that each inner stage fits in its own (scan and think in ai, hit and ram in
+  resolvers, sync in physics, the rebase in flight and late), and that runs write their reports; `run_tests.sh` runs
+  `bench furball 25 5` and checks the report is there.

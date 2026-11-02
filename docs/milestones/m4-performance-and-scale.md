@@ -128,15 +128,23 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
     sampler last in the tick, and the next frame's start (the end of Jolt's step). The engine's number is kept as a check on that
     window (see the baseline).
   - The body sync (Jolt's bodies written back to their nodes, before the scripts) can only be timed when the engine does not
-    sleep between frames, so a headless run sets `OS.low_processor_usage_mode_sleep_usec` to 0 for its duration.
+    sleep between frames, so a headless run sets `OS.low_processor_usage_mode_sleep_usec` to 0 for its duration (`sleep=keep`
+    leaves it; the baseline measures the difference). When ticks run back to back the sync is a lower bound, and every summary
+    gives the share of ticks in which it was timed.
   - Windows are counted in ticks (300 of warm-up, 1 800 measured), so every run has the same number of samples; real time kept
     is their sim time against the wall time they took. A run under a tenth of real time is cut short and fails.
   - The rebase threshold is lowered to 180 m for the run: at the player's 60 m/s that is a rebase every 3 s (ten per window,
-    enough to see their cost) while rebase ticks stay under 1 % of the ticks and so do not decide the p99 on their own.
+    enough to see their cost) while rebase ticks stay under 1 % of the ticks and so do not decide the p99 on their own. The
+    rebase budget is checked on the whole tick that held a rebase; the shift's own cost is recorded beside it.
   - Bench ships are invulnerable and god mode is on, so N holds for the whole window (no deaths, explosions or respawns);
     `transit` makes the two sides neutral for the run, which is its "no fight".
   - The machine is a hybrid i5-13600KF (performance cores 0-11 at 5.1 GHz, efficiency cores at 3.9 GHz), so `bench.sh` pins
-    every run to cores 0-11 (`BENCH_CPUS`); the allowed cores are in every summary.
+    every run to cores 0-11 (`BENCH_CPUS`); the allowed cores and the Godot binary (the official 4.7.2 editor build, debug) are
+    in every summary. N counts the layout's ships; the player flies too.
+  - A run that dies without a report leaves a failing placeholder summary, so the sweep counts it as a failed run against the
+    runs it asked for (one surviving pass cannot pass a count).
+  - Review round 1 (2026-11-02) fixed the rebase budget (it had checked the shift alone), missing runs, and split the resolvers
+    into hit and ram; the baseline below was taken again on the fixed harness (`935ae1a`).
 
 ### M4-T02 to M4-T05 Cycles 1-4
 
@@ -180,68 +188,100 @@ run more cycles toward 500 or to close M4.
 
 (T01 records the baseline here; each cycle adds its entry: before, candidates, test, change, after.)
 
-### Baseline (M4-T01, 2026-11-02)
+### Baseline (M4-T01, 2026-11-02, taken again after review round 1)
 
-Measured on commit `0d4a503` (the harness, before any change), headless on the development desktop with nothing else heavy
-running: an i5-13600KF (six performance cores at 5.1 GHz, eight efficiency cores), 31 GB, Bazzite 44, Godot 4.7.2-stable
-official (`ed1daf0bf`). `scripts/bench.sh m4_baseline`: the `combat_sandbox` scene, 5 s of warm-up and 30 s measured, seeds 1, 2
-and 3, each run its own process pinned to cores 0-11. The full reports are in `reports/perf/m4_baseline*/` (not committed).
+Measured on commit `935ae1a` (the harness after review round 1, no game change since M3), headless on the development desktop
+with nothing else heavy running: an i5-13600KF (six performance cores at 5.1 GHz, eight efficiency cores), 31 GB, Bazzite 44,
+the official Godot 4.7.2-stable editor build (`ed1daf0bf`, debug), as `run_tests.sh` uses it. `scripts/bench.sh
+m4_baseline_r1`: the `combat_sandbox` scene, 5 s of warm-up and 30 s measured, seeds 1, 2 and 3, each run its own process pinned
+to cores 0-11. N counts the layout's ships; the player flies too. The full reports are in `reports/perf/m4_baseline_r1*/`,
+`m4_sleep_*/` (not committed). The first baseline, before the review, gave the same ticks within 1.2 %.
 
 **Max N: furball 0, spread 0, transit 0; headline 0.** No layout passes at 25 ships, the sweep's smallest count, so each one
 stopped after 25 and 50. Three runs at 100 were added past the stop for the breakdown, and counts of 12, 16 and 20 were run
-below the sweep to find the real ceiling (`m4_baseline_below`, not part of max N): all three layouts pass at 20 on every run,
-so today's limit is between 20 and 25 ships. The runs agree closely: three run medians never spread more than 2.7 % (furball at 20).
+below the sweep to find the real ceiling (`m4_baseline_r1_below`, not part of max N): all three layouts pass at 20 on every
+run. Three run medians never spread more than 3.3 % (furball at 20). How far the bench's busy main thread flatters these
+numbers is measured below (frame sleep): at 20 ships it is the p99, so the limit is about 20 ships, not comfortably above it.
 
-| layout | N | runs passed | tick median ms (three runs) | p99 ms | behind real time | worst rebase ms |
-|---|---|---|---|---|---|---|
-| furball | 20 | 3/3 (below the sweep) | 6.99 (6.99, 6.99, 6.80) | 8.21 | 0.00 % | 0.34 |
-| furball | 25 | 0/3 | 9.69 (9.67, 9.83, 9.69) | 11.65 | 0.00 % | 0.48 |
-| furball | 50 | 0/3 | 28.99 (28.95, 29.43, 28.99) | 32.83 | 44.3 % | 1.28 |
-| furball | 100 | 0/3 (past the stop) | 109.29 (109.49, 109.29, 108.62) | 116.04 | 85.0 % | 2.77 |
-| spread | 20 | 3/3 (below the sweep) | 6.80 (6.80, 6.85, 6.79) | 7.94 | 0.02 % | 0.36 |
-| spread | 25 | 0/3 | 9.42 (9.57, 9.42, 9.37) | 11.20 | 0.00 % | 0.49 |
-| spread | 50 | 0/3 | 27.32 (27.53, 27.19, 27.32) | 31.00 | 41.0 % | 1.23 |
-| spread | 100 | 0/3 (past the stop) | 102.52 (103.54, 102.52, 102.20) | 111.37 | 84.0 % | 2.59 |
-| transit | 20 | 3/3 (below the sweep) | 5.99 (5.99, 5.99, 5.96) | 6.67 | 0.00 % | 0.41 |
-| transit | 25 | 0/3 | 8.12 (8.12, 8.12, 8.14) | 9.39 | 0.00 % | 0.36 |
-| transit | 50 | 0/3 | 24.14 (24.27, 24.06, 24.14) | 26.64 | 33.0 % | 1.06 |
-| transit | 100 | 0/3 (past the stop) | 91.15 (91.15, 91.03, 91.61) | 96.15 | 81.9 % | 2.10 |
+| layout | N | runs passed | tick median ms (three runs) | p99 ms | behind real time | worst rebase tick ms | worst shift ms |
+|---|---|---|---|---|---|---|---|
+| furball | 20 | 3/3 (below the sweep) | 6.96 (6.96, 7.01, 6.78) | 8.16 | 0.00 % | 8.10 | 0.37 |
+| furball | 25 | 0/3 | 9.63 (9.63, 9.74, 9.63) | 11.52 | 0.00 % | 12.76 | 0.41 |
+| furball | 50 | 0/3 | 28.99 (28.96, 29.09, 28.99) | 32.85 | 44.2 % | 33.24 | 1.17 |
+| furball | 100 | 0/3 (past the stop) | 109.07 (109.07, 109.26, 109.02) | 116.02 | 84.9 % | 116.84 | 3.78 |
+| spread | 20 | 3/3 (below the sweep) | 6.78 (6.83, 6.77, 6.78) | 8.00 | 0.00 % | 11.23 | 0.51 |
+| spread | 25 | 0/3 | 9.41 (9.47, 9.41, 9.36) | 11.17 | 0.00 % | 12.71 | 0.70 |
+| spread | 50 | 0/3 | 27.63 (27.25, 27.63, 27.82) | 31.21 | 41.5 % | 30.99 | 1.19 |
+| spread | 100 | 0/3 (past the stop) | 102.83 (102.83, 102.41, 103.67) | 112.54 | 84.1 % | 113.79 | 2.62 |
+| transit | 20 | 3/3 (below the sweep) | 6.02 (6.00, 6.02, 6.04) | 6.74 | 0.00 % | 6.71 | 0.32 |
+| transit | 25 | 0/3 | 8.13 (8.14, 8.13, 8.11) | 9.49 | 0.00 % | 9.44 | 0.40 |
+| transit | 50 | 0/3 | 24.17 (24.06, 24.17, 24.43) | 26.66 | 33.1 % | 27.42 | 1.02 |
+| transit | 100 | 0/3 (past the stop) | 91.55 (92.49, 91.12, 91.55) | 97.18 | 82.0 % | 100.24 | 2.25 |
 
-Every failure at 25 is the tick median alone (p99, rebase and real time hold); from 50 the simulation falls behind the wall
-clock. Pool growth (the load) took 30, 80 and 185 ms at 25, 50 and 100 ships headless, where the splat renderer is off.
+Every failure at 25 is the tick median alone (p99, real time and the rebase ticks hold); from 50 the simulation falls behind
+the wall clock and every tick, rebase or not, is over a frame. The rebase budget is on the whole tick that held a rebase: the
+shift itself costs under 1.2 ms up to 50 ships and 2.3-3.8 ms at 100, and the median rebase tick is about 0.3-0.5 ms over the
+median tick at 12-25 ships, 1-1.6 ms at 50 and 2.3-4.3 ms at 100 (the shift, Jolt moving every body, the interpolation reset). Pool growth (the load) took 30, 80 and 185 ms at 25, 50 and 100 ships
+headless, where the splat renderer is off.
 
 **Stage breakdown**, mean ms per tick (the median over the three runs of each run's mean; means add up to the mean tick, the
-median tick is above). `scan` is inside `ai`, `sync` inside `physics`; `other` is the tick's unaccounted remainder:
+median tick is above). `scan` and `think` are inside `ai`, `hit` and `ram` inside `resolvers`, `sync` inside `physics`; `other`
+is the tick's unaccounted remainder. At 50 and 100 ships the simulation runs behind and its ticks run back to back, so the sync
+of one tick lands in the engine window of the one before: `sync` was timed in under 1 % of those ticks and is a lower bound
+there (it was timed in every tick at 25 and below).
 
-| layout | N | tick | ai | (scan) | flight | targeting | resolvers | late | physics | (sync) | rebase | other (unaccounted) | bolts |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| furball | 50 | 29.30 | 6.19 | 2.06 | 1.82 | 16.75 | 3.56 | 0.05 | 0.86 | 0.11 | 0.01 | 0.05 | 115 |
-| furball | 100 | 109.92 | 17.59 | 5.79 | 3.86 | 74.32 | 12.09 | 0.07 | 1.82 | 0.28 | 0.01 | 0.11 | 214 |
-| spread | 50 | 27.64 | 4.72 | 1.82 | 1.77 | 16.63 | 3.55 | 0.05 | 0.85 | 0.11 | 0.01 | 0.05 | 107 |
-| spread | 100 | 103.01 | 11.04 | 4.86 | 3.82 | 73.96 | 12.30 | 0.07 | 1.79 | 0.23 | 0.01 | 0.11 | 230 |
-| transit | 50 | 24.30 | 3.59 | 1.45 | 1.52 | 16.50 | 1.66 | 0.27 | 0.71 | 0.05 | 0.00 | 0.03 | 0 |
-| transit | 100 | 91.22 | 8.43 | 3.70 | 3.27 | 72.22 | 5.14 | 0.59 | 1.54 | 0.13 | 0.01 | 0.03 | 0 |
+| layout | N | tick | ai | (scan) | (think) | flight | targeting | resolvers | (hit) | (ram) | late | physics | (sync) | other (unaccounted) | bolts |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| furball | 50 | 29.28 | 6.18 | 2.05 | 6.09 | 1.81 | 16.75 | 3.56 | 0.85 | 2.68 | 0.05 | 0.86 | 0.11 | 0.05 | 115 |
+| furball | 100 | 109.49 | 17.64 | 5.82 | 17.45 | 3.86 | 73.98 | 12.13 | 2.63 | 9.46 | 0.07 | 1.85 | 0.28 | 0.11 | 214 |
+| spread | 50 | 27.90 | 4.71 | 1.82 | 4.62 | 1.77 | 16.98 | 3.52 | 0.82 | 2.71 | 0.05 | 0.86 | 0.10 | 0.05 | 107 |
+| spread | 100 | 103.59 | 11.01 | 4.83 | 10.82 | 3.80 | 74.39 | 12.41 | 2.84 | 9.53 | 0.07 | 1.81 | 0.23 | 0.11 | 230 |
+| transit | 50 | 24.33 | 3.59 | 1.44 | 3.50 | 1.52 | 16.52 | 1.67 | 0.10 | 1.55 | 0.27 | 0.72 | 0.05 | 0.03 | 0 |
+| transit | 100 | 91.69 | 8.43 | 3.68 | 8.25 | 3.29 | 72.66 | 5.13 | 0.19 | 4.91 | 0.59 | 1.54 | 0.13 | 0.03 | 0 |
 
 What the baseline says, for cycle 1 to test rather than follow:
 
-- **Targeting is two thirds of the tick and the same in every layout**: 4.4 ms at 25 ships, 16.6 ms at 50, 72-74 ms at 100
-  (3.7 and 4.4 times per doubling, so quadratic), whether the ships share one fight or sit 20 km apart. M3-T20's figure
-  (`TargetingController` about 63 of 87 ms at 100 ships) is confirmed in a real fight: 74 of 110 ms. Every ship's controller
+- **Targeting is two thirds of the tick and the same in every layout**: 4.5 ms at 25 ships, 16.5-17.0 ms at 50, 72.7-74.4 ms
+  at 100 (3.7 and 4.4 times per doubling, so quadratic), whether the ships share one fight or sit 20 km apart. M3-T20's figure
+  (`TargetingController` about 63 of 87 ms at 100 ships) is confirmed in a real fight: 74 of 109 ms. Every ship's controller
   turns every targetable into a `TargetInfo` each tick before the range cut.
-- **The AI** is the second cost and grows faster than linearly: 2.6, 6.2 and 17.6 ms at 25, 50 and 100 in the furball,
-  11.0 ms at 100 in spread and 8.4 ms in transit. The scan inside it (5.8 ms at 100 in the furball, 4.9 ms in spread) costs
+- **The AI** is the second cost and grows faster than linearly: 2.5, 6.2 and 17.6 ms at 25, 50 and 100 in the furball,
+  11.0 ms at 100 in spread and 8.4 ms in transit. The scan inside it (5.8 ms at 100 in the furball, 4.8 ms in spread) costs
   nearly as much in spread as in the furball, so it too walks every body whatever the range.
-- **The resolvers** are third: 12 ms at 100 with about 220 bolts in flight, and still 5.1 ms in transit with no bolt at all
-  (0.6, 1.7, 5.1 ms at 25, 50, 100), which points at the ram resolver's pair checks rather than the bolt sweep.
-- Flight (the flight model, bolts, `Main`) grows linearly (1.9 ms at 50, 3.9 ms at 100); Jolt and the body sync are under 2 ms
-  at 100; the wings and waves (late) and the rebase are small: the worst rebase tick at 100 ships was 2.8 ms, far inside its
-  16.7 ms budget.
+- **The resolvers** are third, and most of them is the ram resolver: at 100 ships 9.5 ms of 12.1 is rams and 2.6 ms is the bolt
+  sweep (about 220 bolts); in transit, with no bolt at all, rams are 4.9 of 5.1 ms (0.57, 1.55, 4.91 ms at 25, 50, 100: quadratic).
+- Flight (the flight model, bolts, `Main`) grows linearly (1.8 ms at 50, 3.9 ms at 100); Jolt and the body sync are under 2 ms
+  at 100; the wings and waves (late) are small.
 
-Checks on the harness: the engine's own worst physics step of each second (`Performance.TIME_PHYSICS_PROCESS`) is 2-3 % under
-the probe's worst tick per 60 ticks in every run (111.8 against 115.3 ms at furball 100), so the probe's tick window misses
-nothing the engine counts. The stage timers cost nothing measurable: `bench furball 100 30 probe=paired` (30 blocks with them
-on, 29 off, half a second each) gives a paired difference of +48 us on a 109 ms tick (0.04 %, inside the noise; the on blocks'
-median was even 0.25 ms below the off blocks').
+**Frame sleep** (review round 1). A bench run turns the engine's 6.9 ms sleep between headless frames off so the body sync can
+be timed, which keeps the main thread busy and its core awake; the shipped game idles between frames. The same furball runs
+with the engine's own sleep kept (`sleep=keep`, seeds 1-3, run alternately with `sleep=0`):
+
+| furball | tick median ms (three runs) | median less the sync | p99 ms | mean ms | verdicts |
+|---|---|---|---|---|---|
+| 20, sleep off (the bench) | 6.95 (6.95, 7.01, 6.81) | about 6.80 | 8.12 | 7.03 | 3/3 pass |
+| 20, sleep kept | 7.13 (7.13, 7.16, 7.05), no sync in it | 7.13 | 11.95 | 7.89 | 2/3 pass (p99 12.02 ms) |
+| 25, sleep off (the bench) | 9.64 (9.59, 9.66, 9.64) | about 9.43 | 11.30 | 9.77 | 0/3 |
+| 25, sleep kept | 9.48 (9.42, 9.51, 9.48), no sync in it | 9.48 | 12.30 | 9.71 | 0/3 |
+
+The median moves by 0 to 5 % (about the run spread at 25, above it at 20), but the tail does not: with the sleep kept, the p99
+rises from 8.1 to 12.0 ms at 20 ships and from 11.3 to 12.3 ms at 25. The scripts themselves are slower right after a sleep
+(at 20 ships targeting's p99 is 5.2 against 3.2 ms and the AI's 4.5 against 2.5 ms; the engine's own worst tick per second says
+the same, 12 against 8 ms), so this is the CPU waking up, not the probe. It leans the baseline optimistic: with the game's own
+idle, 20 ships sit on the p99 budget's edge (two runs of three pass), so today's limit is about 20 ships, not 20 to 25. The
+bench keeps the sleep off so cycles compare like with like; read its p99 at low load as a best case.
+
+**Spread far from the origin** (review round 1). Spread's lattice puts the farthest fight 47 km from the origin at 500 ships
+(about 37 km at 300), not 100 km. The nearest fight and the three farthest of the 500-ship lattice, flown alone for 31 s (48
+ships, cheap ticks): 117 hits, 72 m/s mean speed and an attack/evade mix of 79/21 % near the player, against 87-122 hits,
+63-68 m/s and 71-76 % attack 46-47 km out, no position or velocity ever non-finite. Fights that far out behave like the near
+one, so large-N spread numbers are not skewed by float precision.
+
+Checks on the harness: the engine's own worst physics step of each second (`Performance.TIME_PHYSICS_PROCESS`) agrees with the
+probe's worst tick per 60 ticks within noise in every run (the engine's is 0.3-5.4 % lower, as a worst over one wall second
+against a worst over 60 ticks should be; 111.0 against 114.9 ms at furball 100). The stage timers cost little against what they time: `bench furball 100 30 probe=paired` (30 blocks with them on, 29
+off, half a second each) gave a paired difference of +255 us on a 109 ms tick (0.2 %); the first baseline's run gave +48 us.
+Both are noise next to stages of milliseconds.
 
 ## Definition of done (M4)
 
