@@ -98,6 +98,12 @@ func test_the_manifest_names_each_levels_lighting_records() -> void:
 	assert_eq(SplatLod.lighting_for({}, 0), "")
 
 
+func test_the_file_path_comes_from_a_manifest_already_read() -> void:
+	var manifest: Dictionary = {"lods": [{"level": 2, "file": "ship_lod2.ply"}]}
+	assert_eq(SplatLod.file_path_in(manifest, "ship", 2, "res://root"), "res://root/ship/ship_lod2.ply")
+	assert_eq(SplatLod.file_path_in(manifest, "ship", 3, "res://root"), "", "a level it does not list")
+
+
 func test_a_malformed_entry_is_skipped_by_the_lighting_lookup_like_the_file_lookup() -> void:
 	var manifest: Dictionary = {"lods": [3, null, {"level": null, "lighting": "a.light"}, {"lighting": "b.light"}, {"level": "1", "lighting": "c.light"},
 			{"level": 1, "file": "x_lod1.ply", "lighting": "x_lod1.light"}]}

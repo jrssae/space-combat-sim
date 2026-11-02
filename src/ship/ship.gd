@@ -523,12 +523,12 @@ func _load_far_levels(base: Dictionary) -> void:
 	_lod_levels = PackedInt32Array([maxi(int(base["level"]), 0)])
 	var manifest: Dictionary = SplatLod.read_manifest(spec.asset_id)
 	for level: int in range(_lod_levels[0] + 1, LodSwitcherMath.COARSEST + 1):
-		var lod: Dictionary = SplatLod.resolve(spec.asset_id, level)
-		if int(lod["level"]) != level or not ResourceLoader.exists(String(lod["path"])):
+		var path: String = SplatLod.file_path_in(manifest, spec.asset_id, level)
+		if path.is_empty() or not ResourceLoader.exists(path):
 			continue
 		var node_name: String = "HullSplatsLod%d" % level
 		var node := get_node_or_null(NodePath(node_name)) as GaussianSplatNode
-		var resource := load(String(lod["path"])) as GaussianResource
+		var resource := load(path) as GaussianResource
 		if node == null:
 			node = GaussianSplatNode.new()
 			node.name = node_name

@@ -44,6 +44,12 @@ static func read_manifest(asset_id: String, asset_root: String = ASSET_ROOT) -> 
 	return data if data is Dictionary else {}
 
 
+## The PLY `manifest`, read once by the caller, lists for `level`, or "" when it lists none.
+static func file_path_in(manifest: Dictionary, asset_id: String, level: int, asset_root: String = ASSET_ROOT) -> String:
+	var file_name: String = file_for(manifest, level)
+	return asset_root.path_join(asset_id).path_join(file_name) if not file_name.is_empty() else ""
+
+
 ## The lighting records of `asset_id` at `level` from an already parsed `manifest`, or "" when it lists none (the sky).
 static func lighting_path_in(manifest: Dictionary, asset_id: String, level: int, asset_root: String = ASSET_ROOT) -> String:
 	var file_name: String = lighting_for(manifest, level)

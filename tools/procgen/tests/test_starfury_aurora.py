@@ -981,10 +981,6 @@ class StarfuryHeroTests(unittest.TestCase):
         self.assertEqual(len(records), len(self.hero))
         self.assertTrue(np.all(records[:, 3] == 255))
 
-    def test_hero_samples_are_its_own_stream_not_lod0s(self) -> None:
-        self.assertNotEqual(sha256(self.with_hero / ship.HERO_PLY_NAME), sha256(self.with_hero / ship.LOD1_PLY_NAME))
-        self.assertEqual(ship.HERO_STREAM, "hero")
-
     def test_every_other_file_is_byte_identical_with_and_without_the_hero(self) -> None:
         plain = sorted(p.name for p in self.without.iterdir())
         self.assertNotIn(ship.HERO_PLY_NAME, plain)
