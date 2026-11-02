@@ -115,6 +115,11 @@ static func think_us() -> int:
 	return _think_last_us
 
 
+## Wall-clock microseconds every driver's `step` has taken so far in the current physics tick (`PerfProbe`, M4-T01).
+static func think_us_this_tick() -> int:
+	return _think_sum_us if _think_frame == Engine.get_physics_frames() else 0
+
+
 ## A `Perception` of this tick.
 func perceive() -> Perception:
 	var ship: Ship = combatant.ship
@@ -150,11 +155,15 @@ func perceive() -> Perception:
 		if targetable != null and targetable.is_active():
 			p.target = targetable.to_target_info()
 			p.target_hostile = Factions.is_hostile(combatant.faction, targetable.faction)
+	var timed: bool = ContactScan.timing
+	var scan_started_us: int = Time.get_ticks_usec() if timed else 0  # profiling readout only (M4-T01)
 	var scan: ContactScan = ContactScan.shared(get_tree())
 	var own_id: int = ship.get_instance_id()
 	p.contacts = scan.contacts_for(own_id, p.position, p.faction)
 	p.incoming_fire = scan.incoming_fire(own_id, p.position, p.velocity, p.faction)
 	p.broadcasts = ContactScan.shared_broadcasts().broadcasts_for(own_id, p.position, p.faction)
+	if timed:
+		ContactScan.add_time(Time.get_ticks_usec() - scan_started_us)
 	p.last_hit_s = last_hit_s
 	p.last_bolt_hit_s = last_bolt_hit_s
 	p.last_attacker_id = last_attacker_id

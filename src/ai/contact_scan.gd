@@ -22,6 +22,12 @@ const SENSOR_RANGE_M: float = 5000.0
 const INCOMING_MISS_M: float = 15.0
 const INCOMING_HORIZON_S: float = 2.0
 
+## Profiling (M4-T01): while `PerfProbe` is on, `AiPilotDriver` times its calls into the scans and adds them here. Wall
+## clock, never gameplay time.
+static var timing: bool = false
+static var _time_frame: int = -1
+static var _time_sum_us: int = 0
+
 static var _shared: ContactScan = null
 static var _shared_broadcasts: ContactScan = null
 ## Returned for a frame with no broadcaster, so a ship that hears nothing allocates nothing. Read, never write.
@@ -60,6 +66,20 @@ static func shared(tree: SceneTree) -> ContactScan:
 		_shared = from_tree(tree)
 		_shared.physics_frame = frame
 	return _shared
+
+
+## Adds one ship's scan time to this tick's total (`timing`).
+static func add_time(us: int) -> void:
+	var frame: int = Engine.get_physics_frames()
+	if frame != _time_frame:
+		_time_frame = frame
+		_time_sum_us = 0
+	_time_sum_us += us
+
+
+## Microseconds spent building and querying the scans in the current physics tick (0 when nothing was timed).
+static func time_this_tick_us() -> int:
+	return _time_sum_us if _time_frame == Engine.get_physics_frames() else 0
 
 
 ## Drops the shared scans; the next `shared` (and `shared_broadcasts`) call builds a new one.
