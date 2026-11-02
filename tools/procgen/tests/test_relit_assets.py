@@ -63,10 +63,12 @@ class RelitAssetTests(unittest.TestCase):
         out = [(lod["file"], lod["lighting"]) for lod in manifest["lods"]]
         hardpoints = json.loads((directory / manifest["files"]["hardpoints"]).read_text(encoding="utf-8"))
         out += [(chunk["ply"], chunk["lighting"]) for chunk in hardpoints.get("chunks", [])]
+        if "hero" in manifest:
+            out.append((manifest["hero"]["file"], manifest["hero"]["lighting"]))
         return out
 
     def test_every_level_and_chunk_lists_its_records(self) -> None:
-        expected = {ship.ASSET_ID: 4 + 5, raider.ASSET_ID: 4 + 5, buoy.ASSET_ID: 1}
+        expected = {ship.ASSET_ID: 4 + 5 + 1, raider.ASSET_ID: 4 + 5, buoy.ASSET_ID: 1}
         for asset_id, count in expected.items():
             pairs = self.pairs(asset_id)
             self.assertEqual(len(pairs), count, asset_id)
@@ -77,6 +79,10 @@ class RelitAssetTests(unittest.TestCase):
                 [lod["lighting"] for lod in levels],
                 [lighting.lod_file_name(asset_id, lod["level"]) for lod in levels],
             )
+        self.assertEqual(
+            manifest_io.read_manifest(self.dirs[ship.ASSET_ID])["hero"]["lighting"],
+            lighting.hero_file_name(ship.ASSET_ID),
+        )
 
     def test_records_match_their_ply_one_for_one(self) -> None:
         for asset_id in self.dirs:

@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from tools.procgen.assets import starfury_aurora as ship
-from tools.procgen.core import frames
+from tools.procgen.core import frames, lighting
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.sampling import DEFAULT_OVERLAP, DEFAULT_THICKNESS
@@ -161,6 +161,8 @@ class StarfuryAuroraTests(unittest.TestCase):
                     "starfury_aurora_lod1.ply",
                     "starfury_aurora_lod2.ply",
                     "starfury_aurora_lod3.ply",
+                    "starfury_aurora_hero.ply",
+                    "starfury_aurora_hero.light",
                     "starfury_aurora_lod0.light",
                     "starfury_aurora_lod1.light",
                     "starfury_aurora_lod2.light",
@@ -871,7 +873,7 @@ class StarfuryAuroraTests(unittest.TestCase):
 
     def test_hardpoints_and_manifest_only_gain_the_new_keys_at_the_end(self) -> None:
         self.assertEqual(list(self.hp)[-1], "chunks")
-        self.assertEqual(list(self.manifest)[-2:], ["chunks", "chunk_lod"])
+        self.assertEqual(list(self.manifest)[-3:], ["chunks", "chunk_lod", "hero"])
         self.assertEqual(self.out_a.warnings, ())  # the LOD1 share is inside AC6
 
     # --- determinism ------------------------------------------------------------------------
@@ -917,6 +919,92 @@ class StarfuryAuroraTests(unittest.TestCase):
                 - self.hp["pods"][0]["main"]["position"][2],
                 places=4,
             )
+
+
+class StarfuryHeroTests(unittest.TestCase):
+    """M3-T24 (AC33): the hero level, a separate manifest entry that leaves LOD0-LOD3 and every chunk untouched."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory()
+        root = Path(cls._tmp.name)
+        cls.with_hero = root / "with"
+        cls.without = root / "without"
+        cls.out = ship.build(BuildContext(cls.with_hero, seed=42))
+        cls.out_plain = ship.build(BuildContext(cls.without, seed=42, options={"hero": False}))
+        cls.manifest = manifest_io.read_manifest(cls.with_hero)
+        cls.entry = cls.manifest["hero"]
+        cls.hero = read_ply(cls.with_hero / ship.HERO_PLY_NAME).to_splats()
+        cls.lod0 = read_ply(cls.with_hero / ship.PLY_NAME).to_splats()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
+
+    def test_the_hero_entry_is_listed_apart_from_the_lods(self) -> None:
+        self.assertEqual(len(self.manifest["lods"]), 4)
+        self.assertEqual(
+            self.entry,
+            {
+                "file": "starfury_aurora_hero.ply",
+                "splats": len(self.hero),
+                "spacing_m": ship.HERO_SPACING_FACTOR * ship.DEFAULT_SPACING_M,
+                "lighting": "starfury_aurora_hero.light",
+            },
+        )
+        self.assertEqual(self.out.warnings, ())
+
+    def test_hero_is_about_four_times_lod0_inside_its_budget(self) -> None:
+        self.assertEqual(ship.HERO_SPACING_FACTOR, 0.5)
+        share = len(self.hero) / len(self.lod0)
+        self.assertTrue(ship.HERO_SHARE[0] <= share <= ship.HERO_SHARE[1], share)
+        self.assertTrue(ship.HERO_SPLAT_BUDGET[0] <= len(self.hero) <= ship.HERO_SPLAT_BUDGET[1], len(self.hero))
+
+    def test_hero_splats_are_lod0_splats_at_half_the_spacing_cockpit_included(self) -> None:
+        sampling = self.manifest["sampling"]
+        in_plane = self.hero.scale[:, 0]
+        self.assertAlmostEqual(
+            float(in_plane.max()), DEFAULT_OVERLAP * ship.HERO_SPACING_FACTOR * sampling["spacing_m"], places=5
+        )
+        self.assertAlmostEqual(
+            float(in_plane.min()), DEFAULT_OVERLAP * ship.HERO_SPACING_FACTOR * sampling["cockpit_spacing_m"], places=5
+        )
+
+    def test_hero_is_centred_in_lod0s_box_like_every_level(self) -> None:
+        xyz = frames.flip_xy(self.hero.xyz)
+        self.assertLess(float(np.abs(xyz.mean(axis=0)).max()), 1e-4)
+        np.testing.assert_allclose(xyz.min(axis=0), self.manifest["aabb_min"], atol=0.05)
+        np.testing.assert_allclose(xyz.max(axis=0), self.manifest["aabb_max"], atol=0.05)
+
+    def test_hero_has_its_own_lighting_records_one_per_splat(self) -> None:
+        records = lighting.read_lighting(self.with_hero / self.entry["lighting"])
+        self.assertEqual(len(records), len(self.hero))
+        self.assertTrue(np.all(records[:, 3] == 255))
+
+    def test_hero_samples_are_its_own_stream_not_lod0s(self) -> None:
+        self.assertNotEqual(sha256(self.with_hero / ship.HERO_PLY_NAME), sha256(self.with_hero / ship.LOD1_PLY_NAME))
+        self.assertEqual(ship.HERO_STREAM, "hero")
+
+    def test_every_other_file_is_byte_identical_with_and_without_the_hero(self) -> None:
+        plain = sorted(p.name for p in self.without.iterdir())
+        self.assertNotIn(ship.HERO_PLY_NAME, plain)
+        self.assertEqual(
+            sorted(p.name for p in self.with_hero.iterdir()),
+            sorted([*plain, ship.HERO_PLY_NAME, ship.HERO_LIGHT_NAME]),
+        )
+        for name in plain:
+            if name == "manifest.json":
+                continue
+            self.assertEqual(sha256(self.with_hero / name), sha256(self.without / name), name)
+        grown = dict(self.manifest)
+        del grown["hero"]
+        self.assertEqual(grown, manifest_io.read_manifest(self.without))
+
+    def test_the_hero_build_is_deterministic(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ship.build(BuildContext(Path(tmp), seed=42))
+            for name in (ship.HERO_PLY_NAME, ship.HERO_LIGHT_NAME, "manifest.json"):
+                self.assertEqual(sha256(Path(tmp) / name), sha256(self.with_hero / name), name)
 
 
 class StarfuryOptionTests(unittest.TestCase):

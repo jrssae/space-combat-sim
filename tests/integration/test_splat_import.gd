@@ -89,6 +89,12 @@ func test_every_listed_file_exists_and_every_ply_is_a_lod() -> void:
 		for lod: Dictionary in reader.lods:
 			lod_files.append(lod["file"])
 			assert_true(FileAccess.file_exists(reader.lod_path(lod)), "%s lod %s is missing: %s" % [reader.asset_id, lod["file"], GEN_ASSETS_HINT])
+		# The hero level (M3-T24) is listed beside the ladder, not in it.
+		var hero: Variant = reader.data.get("hero")
+		if hero is Dictionary:
+			lod_files.append(String((hero as Dictionary).get("file", "")))
+			assert_true(FileAccess.file_exists("%s/%s" % [reader.directory, (hero as Dictionary).get("file", "")]), "%s hero PLY is missing: %s" % [reader.asset_id, GEN_ASSETS_HINT])
+			assert_true(FileAccess.file_exists("%s/%s" % [reader.directory, (hero as Dictionary).get("lighting", "")]), "%s hero records are missing: %s" % [reader.asset_id, GEN_ASSETS_HINT])
 		for role: String in reader.files:
 			assert_true(FileAccess.file_exists(reader.file_path(role)), "%s files.%s (%s) is missing: %s" % [reader.asset_id, role, reader.files[role], GEN_ASSETS_HINT])
 		# Break-up chunks (hardpoints `chunks[]`, M2-T04) are the other PLYs an asset may have.

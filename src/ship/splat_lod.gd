@@ -56,6 +56,38 @@ static func lighting_path(asset_id: String, level: int, asset_root: String = ASS
 	return lighting_path_in(read_manifest(asset_id, asset_root), asset_id, level, asset_root)
 
 
+## The PLY file name of the hero level `manifest` lists, or "". The hero is an entry of its own, outside the `lods` ladder
+## (the player's ship draws it close up, M3-T24).
+static func hero_file_for(manifest: Dictionary) -> String:
+	return _hero_name(manifest, "file")
+
+
+## The lighting records file of the hero level `manifest` lists, or "".
+static func hero_lighting_for(manifest: Dictionary) -> String:
+	return _hero_name(manifest, "lighting")
+
+
+## The hero level of `asset_id` as `{"path": String, "lighting": String}`; both are "" when the asset lists no hero level
+## (every asset but the player's Starfury) or has no manifest.
+static func hero_paths(asset_id: String, asset_root: String = ASSET_ROOT) -> Dictionary:
+	var manifest: Dictionary = read_manifest(asset_id, asset_root)
+	var dir: String = asset_root.path_join(asset_id)
+	var file_name: String = hero_file_for(manifest)
+	var light_name: String = hero_lighting_for(manifest)
+	return {
+		"path": dir.path_join(file_name) if not file_name.is_empty() else "",
+		"lighting": dir.path_join(light_name) if not light_name.is_empty() else "",
+	}
+
+
+static func _hero_name(manifest: Dictionary, key: String) -> String:
+	var hero: Variant = manifest.get("hero")
+	if not (hero is Dictionary):
+		return ""
+	var name: Variant = (hero as Dictionary).get(key)
+	return name if name is String else ""
+
+
 ## The PLY to draw for `asset_id` at `level`, as `{"path": String, "level": int, "warning": String}`.
 ## - Level 0 (or below): `<asset_id>.ply`, level 0, no warning, and the manifest is not read.
 ## - A higher level the manifest lists: that file, that level, no warning.

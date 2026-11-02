@@ -29,6 +29,10 @@ def lod_file_name(asset_id: str, level: int) -> str:
     return f"{asset_id}_lod{level}{SUFFIX}"
 
 
+def hero_file_name(asset_id: str) -> str:
+    return f"{asset_id}_hero{SUFFIX}"
+
+
 def chunk_file_name(asset_id: str, name: str) -> str:
     return f"{asset_id}_chunk_{name}{SUFFIX}"
 

@@ -116,3 +116,37 @@ func test_one_parsed_manifest_serves_every_levels_lighting_path() -> void:
 	assert_eq(SplatLod.lighting_path_in({}, "starfury_aurora", 0), "")
 	assert_eq(SplatLod.read_manifest("no_such_asset"), {})
 	assert_eq(SplatLod.read_manifest("nothing_here", "res://no/such/root"), {})
+
+
+# --- the hero level (M3-T24) --------------------------------------------------------------------------------------
+
+
+func test_the_manifest_names_the_hero_file_and_lighting_outside_the_lods() -> void:
+	var manifest: Dictionary = {
+		"lods": [{"level": 0, "file": "x.ply", "lighting": "x_lod0.light"}],
+		"hero": {"file": "x_hero.ply", "splats": 9, "spacing_m": 0.02, "lighting": "x_hero.light"},
+	}
+	assert_eq(SplatLod.hero_file_for(manifest), "x_hero.ply")
+	assert_eq(SplatLod.hero_lighting_for(manifest), "x_hero.light")
+	assert_eq(SplatLod.file_for(manifest, 1), "", "the hero is not a level of the ladder")
+	for broken: Variant in [{}, {"hero": 3}, {"hero": {}}, {"hero": {"file": 4, "lighting": null}}]:
+		assert_eq(SplatLod.hero_file_for(broken as Dictionary), "")
+		assert_eq(SplatLod.hero_lighting_for(broken as Dictionary), "")
+
+
+func test_the_hero_paths_of_a_generated_asset() -> void:
+	var hero: Dictionary = SplatLod.hero_paths("starfury_aurora")
+	assert_eq(hero["path"], "res://assets/generated/starfury_aurora/starfury_aurora_hero.ply", GEN_ASSETS_HINT)
+	assert_eq(hero["lighting"], "res://assets/generated/starfury_aurora/starfury_aurora_hero.light")
+	assert_true(FileAccess.file_exists(String(hero["path"])))
+	assert_true(FileAccess.file_exists(String(hero["lighting"])))
+	for asset: String in ["raider_fighter", "nav_buoy", "sky_default", "no_such_asset"]:
+		assert_eq(SplatLod.hero_paths(asset), {"path": "", "lighting": ""}, "%s has no hero level" % asset)
+
+
+func test_the_lighting_path_of_a_generated_asset() -> void:
+	assert_eq(SplatLod.lighting_path("starfury_aurora", 0), "res://assets/generated/starfury_aurora/starfury_aurora_lod0.light")
+	assert_eq(SplatLod.lighting_path("raider_fighter", 3), "res://assets/generated/raider_fighter/raider_fighter_lod3.light")
+	assert_eq(SplatLod.lighting_path("nav_buoy", 0), "res://assets/generated/nav_buoy/nav_buoy_lod0.light")
+	assert_eq(SplatLod.lighting_path("sky_default", 0), "", "the sky is not lit")
+	assert_eq(SplatLod.lighting_path("no_such_asset", 0), "")

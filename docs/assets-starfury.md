@@ -20,10 +20,11 @@ outboard sensor bulb, and a bent pincer and a smaller blade behind every pod. It
 | `cockpit_interior.obj` + `.mtl` | the window frame seen from inside (bars) and the sill; first person only |
 | `starfury_aurora_lod1.ply` | LOD1 (M3-T03): 60 956 splats (25.0 % of LOD0) at 0.094 m spacing, for allies and debris; see "LOD1 and break-up chunks" |
 | `starfury_aurora_lod2.ply`, `starfury_aurora_lod3.ply` | LOD2 and LOD3 (M3-T19): 15 210 and 3 718 splats (6.2 % and 1.5 % of LOD0) at 4x and 8x LOD0's spacing, for distant ships (the `LodSwitcher` shows one level at a time) |
+| `starfury_aurora_hero.ply` | the hero level (M3-T24): 975 058 splats (4.00x LOD0) at 0.0235 m spacing, for the player's own ship up close; see "Hero level" |
 | `starfury_aurora_chunk_<cabin\|arm_ur\|arm_lr\|arm_ul\|arm_ll>.ply/.light/.obj/.mtl` | the break-up chunks, cut from LOD1 |
-| `starfury_aurora_lod<0-3>.light` | lighting records (M3-T21): 4 bytes per splat of that level's PLY, same order and frame; see "Paint and lighting records" |
+| `starfury_aurora_lod<0-3>.light`, `starfury_aurora_hero.light` | lighting records (M3-T21, M3-T24): 4 bytes per splat of that level's PLY, same order and frame; see "Paint and lighting records" |
 | `hardpoints.json` | the contract for the flight model, cameras, weapons, RCS glow, collision and chunks (schema below) |
-| `manifest.json` | asset contract (`docs/architecture.md` section 9): `lods[0]` and `lods[1]`, AABB, `centroid_offset`, `files`, `counts`, `sampling`, `dimensions_m`, `chunks`, `chunk_lod` |
+| `manifest.json` | asset contract (`docs/architecture.md` section 9): `lods[0]` and `lods[1]`, AABB, `centroid_offset`, `files`, `counts`, `sampling`, `dimensions_m`, `chunks`, `chunk_lod`, `hero` |
 
 ## Frames
 
@@ -217,14 +218,38 @@ re-pinned for generator v3 and v4).
 Until M3-T08 prepares Starfury chunk sets in `DebrisPool`, the player's death already uses these chunks, as
 mesh-only debris (the DestructionDirector bursts any `chunks[]` it finds; `test_destruction.gd` expects that).
 
+## Hero level (M3-T24)
+
+The player's own ship is the one the camera sits next to, so it gets a level finer than LOD0 (AC33). It is a separate
+file and a separate manifest entry; LOD0-LOD3 and every chunk are unchanged, and the ladder (`lods`) does not list it.
+
+- **Sampling.** `build_parts` runs once more with every spacing times `HERO_SPACING_FACTOR` = 0.5 (hull 0.0235 m,
+  cockpit faces 0.011 m) and every RNG stream suffixed `hero`. Splat scales shrink with the spacing, so the sheet
+  closes as LOD0's does. The paint is flat and the normals come from the same surface, so the hero needs no colour work.
+  It is centred on its own centroid like every level.
+- **Count and budget.** 975 058 splats, 4.00x LOD0's 243 728 (`HERO_SHARE` 3.6-4.4, a build warning outside it) and
+  inside `HERO_SPLAT_BUDGET` 850 000-1 100 000, the budget T24 records. The brief's "about 600k" was written against an
+  older, smaller LOD0; half the spacing is 4x whatever LOD0 is.
+- **Files.** `starfury_aurora_hero.ply` (66.3 MB) and `starfury_aurora_hero.light` (3.9 MB, written by the same
+  `lighting.write_lighting` as the other levels). The manifest gains a last key, `hero`:
+  `{"file": "starfury_aurora_hero.ply", "splats": 975058, "spacing_m": 0.0235, "lighting": "starfury_aurora_hero.light"}`.
+  `SplatLod.hero_paths` finds both paths.
+- **Cost, measured on the maintainer's machine.** `gen_assets.sh` took 3.4 s before and 5.5 s after (the Starfury 0.9 s
+  to 3.0 s). The headless import of the hero PLY alone takes 43 s and writes a 480 MB `.res` into `.godot/`, which grows
+  from about 200 MB to 684 MB: a fresh checkout's first import takes about a minute longer, and a CI cache or a small
+  disk would notice. GDGS keeps about 490 bytes per splat in that resource.
+- **Option.** `--option hero=false` skips it (the tests use this to prove the other files are byte-identical with and
+  without the hero).
+- **Not yet used.** Nothing renders it: `ShipSpec.splat_hero` and the `LodSwitcher` chain are T24's game half.
+
 ## Determinism and options
 
-Everything comes from `ctx.rng("splats", <part>)` streams (one per part; LOD1's are suffixed `lod1`) and pure
+Everything comes from `ctx.rng("splats", <part>)` streams (one per part; LOD1's are suffixed `lod1`, the hero's `hero`) and pure
 geometry; two builds with the same seed are byte-identical (checked by SHA-256 in `test_starfury_aurora.py`). Options
 (`BuildContext.options`, CLI `--spacing` / `--option`): `spacing` (m, 0.047), `cockpit_spacing` (m, 0.47 x spacing),
 `overlap` (k, 1.0 since the post-M2 play test), `thickness` (normal sigma / s, 0.08), `lod1_factor` (LOD1 spacing /
 LOD0 spacing, 2.0; LOD0 is byte-identical whatever its value). The AC3 budget warning only fires at the default
-spacing, the AC6 LOD1 share warning only at the default spacing and factor.
+spacing, the AC6 LOD1 share warning only at the default spacing and factor. `hero` (default true) writes the hero level.
 
 ## Tests
 
@@ -239,7 +264,9 @@ milestone tags, collision primitives wrapping their parts, nothing buried in the
 M3-T03 also LOD0 unchanged (counts, header, splat records; `lod1_factor` never moves LOD0), the LOD1 entry, share,
 bounds, scales and symmetry, LOD1's frame and probe-point coverage against LOD0's, the chunk partition, the cabin
 and arms layout, and the chunk OBJs. The Godot half (LOD1 and chunk PLYs import with the manifest and hardpoints
-counts, LOD1's imported box is LOD0's within 0.3 m) is in `tests/integration/test_splat_import.gd`.
+counts, LOD1's imported box is LOD0's within 0.3 m) is in `tests/integration/test_splat_import.gd`. Since M3-T24
+`StarfuryHeroTests` checks the hero entry, its share and budget, its spacing and cockpit scales, its box, its records, and
+that every other file is byte-identical with and without it.
 
 ## Known limits / for the human tester `(H)`
 

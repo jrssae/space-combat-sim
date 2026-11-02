@@ -1128,6 +1128,14 @@ Added 2026-10-28 for Q23; after T20 (the budget) and T21 (lighting records for t
     time of the hero PLY.
 - Done when: AC33 passes; P9's cockpit frame, taken on the GPU before and after, with the frame time and VRAM of both;
   whether it reads sharper is AC35's.
+- Done, part 1 (2026-11-01): the generator writes the `hero` level and `SplatLod` can find it; nothing is rendered with it yet. `starfury_aurora_hero.ply` has
+  975 058 splats (4.00x LOD0's 243 728, not the 600k the notes guessed from an older LOD0; budget 850k-1.1M in the generator as `HERO_SPLAT_BUDGET`, share `HERO_SHARE` 3.6-4.4), 66.3 MB, with
+  `starfury_aurora_hero.light`, as a top-level manifest key `hero` (outside `lods`). LOD0-LOD3, the chunks and every other file are byte-identical with and without it
+  (`--option hero=false` in `StarfuryHeroTests`; also compared against the build before the change); the generator version stays 5. `SplatLod.hero_file_for`,
+  `hero_lighting_for` and `hero_paths` find it. `gen_assets.sh` 3.4 s to 5.5 s; the headless import of the hero PLY takes 43 s and its imported resource is 480 MB, so
+  `.godot/` grows from about 200 MB to 684 MB. Concern for the game half: that resource is what GDGS would upload to VRAM once loaded (not yet measured, about 480 MB if it is the whole thing), and 975k visible
+  splats is most of what T20's budget was sized for; check both before wiring `splat_hero`. Left for part 2: `ShipSpec.splat_hero`, the player's `.tres`, the `LodSwitcher`
+  chain, `test_hero_lod.gd` and the GPU frames. Review minors from T21 went in `M3-T21: review minors`.
 
 ### M3-T25 Lens flare and motion blur, after sign-off
 
