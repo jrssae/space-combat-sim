@@ -56,11 +56,19 @@ AXIS_NAMES = ("x", "y", "z")
 
 # --- STL -------------------------------------------------------------------------------------------------------------
 def read_stl(path: Path) -> tuple[np.ndarray, str]:
-    """Triangles ``(n, 3, 3)`` of an STL file, binary or ASCII, and which of the two it was."""
+    """Triangles ``(n, 3, 3)`` of an STL file, binary or ASCII, and which of the two it was. A file with no triangles
+    fails here with its name, not later inside the renderer."""
     data = Path(path).read_bytes()
     if is_binary_stl(data):
-        return parse_binary_stl(data), "binary"
-    return parse_ascii_stl(data.decode("ascii", errors="replace")), "ascii"
+        tris, kind = parse_binary_stl(data), "binary"
+    else:
+        tris, kind = parse_ascii_stl(data.decode("ascii", errors="replace")), "ascii"
+        if len(tris) == 0 and binary_count_fits(data):
+            # A binary file whose header says "solid" but whose size is off (trailing bytes): read what it declares.
+            tris, kind = parse_binary_stl(data), "binary"
+    if len(tris) == 0:
+        raise ValueError(f"{path}: no triangles read as {kind} STL; the file is empty, cut short or not an STL")
+    return tris, kind
 
 
 def is_binary_stl(data: bytes) -> bool:
@@ -72,7 +80,17 @@ def is_binary_stl(data: bytes) -> bool:
     return not data.lstrip()[:5].lower().startswith(b"solid")
 
 
+def binary_count_fits(data: bytes) -> bool:
+    """True when the binary header's triangle count fits inside the file (it may have bytes after the records)."""
+    if len(data) < 84:
+        return False
+    count = struct.unpack_from("<I", data, 80)[0]
+    return count > 0 and 84 + 50 * count <= len(data)
+
+
 def parse_binary_stl(data: bytes) -> np.ndarray:
+    if len(data) < 84:
+        return np.zeros((0, 3, 3))
     count = struct.unpack_from("<I", data, 80)[0]
     count = min(count, (len(data) - 84) // 50)
     record = np.dtype([("normal", "<f4", (3,)), ("v", "<f4", (3, 3)), ("attr", "<u2")])
@@ -83,7 +101,10 @@ _VERTEX = re.compile(r"vertex\s+(\S+)\s+(\S+)\s+(\S+)")
 
 
 def parse_ascii_stl(text: str) -> np.ndarray:
-    values = np.array(_VERTEX.findall(text), dtype=np.float64)
+    try:
+        values = np.array(_VERTEX.findall(text), dtype=np.float64)
+    except ValueError as exc:
+        raise ValueError(f"ASCII STL has a vertex that is not a number ({exc})") from exc
     if len(values) % 3:
         raise ValueError(f"ASCII STL has {len(values)} vertices, not a multiple of three")
     return values.reshape(-1, 3, 3)
@@ -135,6 +156,8 @@ def to_ship_frame(tris: np.ndarray, rotation: np.ndarray, length_m: float | None
     ``length_m``; returns them and the metres per file unit (1 when no length is given)."""
     p = tris.reshape(-1, 3) @ rotation.T
     lo, hi = p.min(axis=0), p.max(axis=0)
+    if length_m is not None and hi[2] - lo[2] <= 0.0:
+        raise ValueError("the model has no extent along the aft axis, so it cannot be scaled to a length")
     scale = 1.0 if length_m is None else float(length_m) / float(hi[2] - lo[2])
     origin = np.array([0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1]), lo[2]])
     return ((p - origin) * scale).reshape(-1, 3, 3), scale
@@ -628,9 +651,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", type=Path, default=None)
     args = ap.parse_args(argv)
 
-    raw, fmt = read_stl(args.stl)
-    rotation = frame_matrix(args.right, args.up, args.aft)
-    tris, scale = to_ship_frame(raw, rotation, args.length)
+    try:
+        raw, fmt = read_stl(args.stl)
+        rotation = frame_matrix(args.right, args.up, args.aft)
+        tris, scale = to_ship_frame(raw, rotation, args.length)
+    except (OSError, ValueError) as exc:
+        print(f"refview: {exc}", file=sys.stderr)
+        return 2
     pts = tris.reshape(-1, 3)
     length = float(np.ptp(pts[:, 2]))
     out = args.out or default_out(args.name)

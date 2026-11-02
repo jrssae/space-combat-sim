@@ -3,8 +3,11 @@ synthetic models (no reference file is read)."""
 
 from __future__ import annotations
 
+import io
+import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import numpy as np
@@ -53,6 +56,21 @@ class StlReaderTests(unittest.TestCase):
         tris, kind = refview.read_stl(self.dir / "s.stl")
         self.assertEqual(kind, "binary")
         self.assertEqual(len(tris), 12)
+
+    def test_trailing_bytes_after_a_solid_header_still_read_as_binary(self) -> None:
+        path = self.dir / "t.stl"
+        refview.write_binary_stl(path, self.tris, header=b"solid exported by some tool")
+        path.write_bytes(path.read_bytes() + b"\0" * 7)
+        tris, kind = refview.read_stl(path)
+        self.assertEqual(kind, "binary")
+        np.testing.assert_allclose(tris, self.tris, atol=1e-6)
+
+    def test_a_file_without_triangles_fails_with_its_name(self) -> None:
+        for name, data in (("empty.stl", b""), ("solid.stl", b"solid nothing\nendsolid nothing\n"), ("short.stl", b"\1" * 40)):
+            path = self.dir / name
+            path.write_bytes(data)
+            with self.assertRaisesRegex(ValueError, f"{name}: no triangles"):
+                refview.read_stl(path)
 
 
 @needs_pillow
@@ -114,6 +132,38 @@ class GeometryTests(unittest.TestCase):
         self.assertTrue(np.all(depth[4:6, 4:6] == 1.0))
         self.assertTrue(np.all(index[4:6, 4:6] >= 2))
         self.assertTrue(np.all(depth[2, 2:8] == 5.0))
+
+
+@needs_pillow
+class MainTests(unittest.TestCase):
+    """A whole run on a small synthetic ship: the files it promises appear and the numbers are in metres."""
+
+    def test_main_writes_views_sections_and_measurements(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            ship = np.concatenate(
+                [_box((-1.0, 0.0, -1.0), (1.0, 20.0, 1.0)), _box((-6.0, 12.0, -0.5), (-3.0, 18.0, 0.5)), _box((3.0, 12.0, -0.5), (6.0, 18.0, 0.5))]
+            )
+            refview.write_binary_stl(tmp_path / "ship.stl", ship)
+            out = tmp_path / "out"
+            argv = [str(tmp_path / "ship.stl"), "--name", "ship", "--out", str(out), "--length", "50", "--right=-x", "--up=+z", "--aft=+y", "--px", "160", "--stations", "4"]
+            with mock.patch("sys.stdout", new=io.StringIO()):
+                self.assertEqual(refview.main(argv), 0)
+            for name in ("view_top.png", "silhouette_port.png", "sections.png", "cut_x_0.png", "cut_y_0.png", "shells_top.png"):
+                self.assertTrue((out / name).is_file(), name)
+            m = json.loads((out / "measurements.json").read_text())
+            self.assertEqual(m["dimensions_m"], {"length": 50.0, "span": 30.0, "height": 5.0})
+            self.assertEqual(len(m["shells"]), 3)
+            self.assertEqual(len(m["sections"]), 4)
+
+    def test_main_reports_a_bad_file_and_returns_two(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.stl"
+            path.write_bytes(b"solid nothing\nendsolid nothing\n")
+            err = io.StringIO()
+            with mock.patch("sys.stderr", new=err):
+                self.assertEqual(refview.main([str(path), "--name", "bad", "--out", str(Path(tmp) / "out")]), 2)
+            self.assertIn("no triangles", err.getvalue())
 
 
 if __name__ == "__main__":

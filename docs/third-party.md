@@ -41,7 +41,7 @@ everyone is welcome to it.
 | SDL3 | bundled in Godot 4.7 | Zlib | Gamepad input backend |
 | Python | 3.11+ | PSF-2.0 | Asset generators in `tools/` |
 | NumPy | 2.x | BSD-3-Clause | Asset generators |
-| Pillow | 10+ (optional) | MIT-CMU | Only for the fallback panorama sky PNG |
+| Pillow | 10+ (optional) | MIT-CMU | The fallback panorama sky PNG, and `tools/refview` (development only: renders the untracked reference models into the gitignored `reports/refs/`) |
 
 ## Candidates evaluated and not adopted (yet)
 
