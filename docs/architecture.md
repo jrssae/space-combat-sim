@@ -794,7 +794,7 @@ ring buffer; engine errors in red and warnings in yellow from `ConsoleLogger`.
 | Nav buoy bodies, debris chunks | **Splats** (~8k each, one shared resource, 5 instances, spinning; chunks cut from LOD1), lit by the scene (§7.3) | Exercises several independently moving splat nodes before enemies need them. |
 | Stars | **Splats** (in `SkySplats`, ~12k tiny Gaussians), never lit: they are emitters | A Gaussian is the ideal star PSF; brightness/colour per splat; crisp at any resolution unlike a panorama texture. |
 | Nebula | **Splats** (in `SkySplats`, ~4k large soft Gaussians), never lit | Volumetric look for free; per-tile depth sort handles overlapping translucency. |
-| Cockpit interior (frame, canopy struts, dash slab) | Mesh (`cockpit_interior.obj`) | Needs hard edges at the near plane and **depth writes** so hull splats behind the frame are rejected by the compositor's depth test; visible only in first person. |
+| Cockpit interior (V struts, bar, sills, lamps, the console around its screens, a closed shell; M3-T29) | Mesh (`cockpit_interior.obj`), with 2D-only `SubViewport`s on screen meshes the hardpoints place (`CockpitScreens`, §15.9). GDGS never sees them: a viewport with 3D disabled starts no render state (1 on the GPU in P13) | Needs hard edges at the near plane and **depth writes** so hull splats behind the frame are rejected by the compositor's depth test; visible only in first person. |
 | Thruster plumes, buoy beacons | Meshes, unshaded emissive, additive, animated per frame. A plume is a cone from the nozzle position along its `exhaust` axis (length, radius, alpha follow the level) plus a small core disc at the exit; no billboards | Per-frame intensity animation (no per-splat opacity animation in GDGS). Tied to the nozzle axis, so the plume reads as coming out of the nozzle from every camera. Anything that glows is one of these, not a splat: a lit splat cannot stay brighter than its surroundings (§7.3). |
 | Hull depth proxy (ship, buoys) | Mesh (`HullDepthProxy`): the fallback mesh, opaque black, vertices inset ~4 cm along their normals | Splats write no depth (§7.2). The proxy writes it just inside the splat surface, so effects behind a hull are hidden and the splats are never covered. Shown exactly when the splats are shown. |
 | Projectiles, muzzle flash | Meshes, unshaded emissive | Tiny, fast-moving, short-lived; spawning/destroying splat nodes per shot would churn GPU buffers. |
@@ -980,10 +980,10 @@ and feeds them each frame. Console: `flare [on|off]`, `blur [on|off]`, provider 
 
 ## 8. Camera
 
-- **Cockpit**: `Camera3D` glued to `CockpitAnchor` (hardpoint) via `RemoteTransform3D`; FOV 75°. The pilot looks
-  out through the nose window as in the maintainer's reference (`docs/design-references.md`, "Cockpit view"): a
-  broad trapezoid pane, a bar across the top, struts down its sides, side panes at the edges, the sill below; the
-  frame never crosses the centre. Cockpit interior mesh visible.
+- **Cockpit**: `Camera3D` glued to `CockpitAnchor` (hardpoint) via `RemoteTransform3D`; FOV 75°. The pilot looks out of a built cabin (M3-T29, `docs/design-references.md`, the second
+  cockpit reference, and `docs/assets-starfury.md`, "Cockpit view", for the numbers): slim red V struts landing on the sides of the octagonal display, a thin bar across the top, side panes
+  past them down to low sills, and the console's three screens below. Nothing crosses the centre. Cockpit interior mesh visible, and the hull mesh with its canopy glass and window frames
+  cleared. Instruments are on the screens (§15.9); the window keeps only what must line up with the world.
 - **Chase**: `top_level` camera, **rigidly attached to the ship**. Every rendered frame `CameraRig._process` sets
   its transform to the ship's *physics-interpolated* global transform (`get_global_transform_interpolated()`) times
   one fixed ship-space pose from `ChaseCameraMath.local_pose`: position = the hardpoints' `chase_anchor` (behind and
@@ -1053,9 +1053,8 @@ entry. The sky lists none.
      points; the faces the pilot sees up close at 0.55 `s`); per point: normal, tangent frame -> quaternion;
      scales `(k·s, k·s, 0.03·s)` with `k = 1.4`; colour = flat paint (§7.3); opacity 0.98 (stored as
      logit; the window glass is a 70 % transmittance sheet); SH degree 0 only (`f_dc_*`).
-   - `cockpit_interior.obj`: the window frame seen from inside (bars) and the sill, nothing across the forward
-     view; interior-facing normals.
-   - `hardpoints.json`: `nav_lights` (M3-T27, §7.3: `port`, `starboard`, `top`, `top_lamp`, `cabin`, `top_lamp_range_m`, `cabin_range_m`; `raider_fighter` too), `center_of_mass`, `cockpit_camera`, `chase_anchor`, `muzzles[]`, `pods[]` (side, main and
+   - `cockpit_interior.obj`: the cabin seen from inside (`parts/cockpit.py`, M3-T29), nothing across the forward view; hard edges, faces toward the eye.
+   - `hardpoints.json`: `screens` (M3-T29, §15.9: per screen `center`, `size`, `normal`, `up`, `corner`), `nav_lights` (M3-T27, §7.3: `port`, `starboard`, `top`, `top_lamp`, `cabin`, `top_lamp_range_m`, `cabin_range_m`; `raider_fighter` too), `center_of_mass`, `cockpit_camera`, `chase_anchor`, `muzzles[]`, `pods[]` (side, main and
      retro nozzle position + exhaust direction), `rcs[]` (cosmetic nozzle positions with effect tags for glow),
      `collision[]` (boxes/capsules). Schema in the M1 task T04.
    - Re-centre **everything** (splats, meshes, hardpoints) on the splat centroid, so GDGS's unconditional import
@@ -1421,6 +1420,9 @@ src/game/wave_plan.gd             RefCounted, pure: wave state machine
 src/game/wave_director.gd         Node: runs the WavePlan, spawns from the pool, counts kills; console `wave`, `spawn`
 src/hud/hud.tscn|.gd              CanvasLayer 40 (below the overlay's 50): draws a HudFrame
 src/hud/hud_layout.gd, hud_frame.gd   RefCounted, pure: projection and every HUD element's screen state
+src/hud/hud_surface.gd            RefCounted: one surface the HUD draws on and where each instrument goes on it; HudFrame extends it (M3-T29)
+src/hud/hud_painter.gd            RefCounted: the one set of drawing code, for the 2D layer and each console screen (M3-T29)
+src/hud/cockpit_screens.gd        Node3D: the player's console screens and indicator lamps (M3-T29)
 src/input/control_profile.gd      RefCounted, pure: bindings <-> InputMap <-> config text, validation
 src/input/control_profile_store.gd RefCounted: built-in and user profiles; list, load, save, delete
 src/autoload/control_profiles.gd  Node (autoload): applies the selected profile at start-up; console `controls`, `bind`, `unbind`
@@ -1597,7 +1599,17 @@ the target is off-screen or behind, lead reticle (`InterceptMath`, hidden withou
 range), own hull bar with a `GOD` tag, and one status line (wave, raiders left, kills). `Hud` only draws it.
 Radar (`RadarModel`): inside 25 km as before; a broadcast contact beyond it (M3-T17) sits on the rim in its true direction
 as a hollow dot (`Dot.rim`).
-`settings.show_hud` toggles it; while it shows, the debug overlay hides its own bracket.
+`settings.show_hud` toggles it; while it shows, the debug overlay hides its own bracket. While the overlay shows, the wing roster sits below its text (M3-T29).
+
+Console screens (M3-T29, Q29). In the cockpit camera of a ship with `screens` hardpoints the instruments leave the window. `HudSurface` is one surface the HUD draws on: what it lists (`items`) and
+where each goes; `HudFrame` extends it, so the frame is also the 2D layer's layout, and `frame.screens` holds the octagon's, the left's and the right's, all drawn from that one frame by one
+`HudPainter`. The window draws only the crosshair, lead marker, target brackets or edge arrow, and waypoint marker (and the prograde marker if `settings.hud_velocity_marker` is on, off by default: it
+must line up with the world too). The octagon has the red grid, radar rings named by range, own ship, allies as green squares, hostiles as amber diamonds, nav points as cyan circles, the selected
+contact ringed, the grid's marker as a ring on a diagonal stroke, and AUTO-TRACK. The left screen has the damage wireframe, the hull bar with its percentage and GOD, speed, angles, reference, drift
+sphere, lights, and fuel while the tank is finite. The right screen has the target's name, range, closing speed, hull bar and outline across its full width, a divider, then at the right edge the
+upright charge bar (40/640 of the width, `CHARGE` and the fire mode above it) with the wing roster, acknowledgement and status lines to its left. `CockpitScreens` shows each `SubViewport` (`disable_3d`,
+updated once per new frame, disabled while hidden) on an unshaded mesh without mipmaps, on the player's ship only (`console_owner`). Off with `settings.show_hud`. The chase camera, and a cockpit with no
+screens, keep the whole 2D HUD. Indicator lamps are surfaces of the interior mesh, lit from `HudFrame.lamps`: assist, guns (the capacitor can pay for a shot), running lights, auto-track.
 
 ### 15.10 Scenarios and waves
 

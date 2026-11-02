@@ -17,7 +17,7 @@ outboard sensor bulb, and a bent pincer and a smaller blade behind every pod. It
 |---|---|
 | `starfury_aurora.ply` | 243 728 Gaussian splats, 3DGS binary PLY (SH degree 0), written in GDGS orientation (Rz 180 of the Godot frame) |
 | `starfury_aurora.obj` + `.mtl` | fallback mesh, Godot frame, faces grouped by material (the glass is `ef_canopy_glass`) |
-| `cockpit_interior.obj` + `.mtl` | the window frame seen from inside (bars) and the sill; first person only |
+| `cockpit_interior.obj` + `.mtl` | the cabin seen from inside (V struts, top bar, sills, lamps, the console around its screens, a closed shell behind them); first person only |
 | `starfury_aurora_lod1.ply` | LOD1 (M3-T03): 60 956 splats (25.0 % of LOD0) at 0.094 m spacing, for allies and debris; see "LOD1 and break-up chunks" |
 | `starfury_aurora_lod2.ply`, `starfury_aurora_lod3.ply` | LOD2 and LOD3 (M3-T19): 15 210 and 3 718 splats (6.2 % and 1.5 % of LOD0) at 4x and 8x LOD0's spacing, for distant ships (the `LodSwitcher` shows one level at a time) |
 | `starfury_aurora_hero.ply` | the hero level (M3-T24): 975 058 splats (4.00x LOD0) at 0.0235 m spacing, for the player's own ship up close; see "Hero level" |
@@ -51,7 +51,7 @@ outboard sensor bulb, and a bent pincer and a smaller blade behind every pod. It
 |---|---|---|---|
 | fuselage (`hull.wedge_fuselage`) | seven hexagonal stations (flat top, widest at the shoulder, narrow keel, 4.5 cm chamfers): the canopy is a beak from a 0.66 x 0.37 m tip to a 1.52 x 2.1 m section 1 m back; the body behind it is 1.8 m across the shoulders, 2.25 m deep, its flat top under the deck; dark rear panel | tip z = -4.93, rear panel z = -0.85 | 16 000 kg |
 | cockpit window (part of the fuselage) | every facet of the beak and the next 0.45 m (`keel`, `lower`, `upper`, `top`) is glass; the tip is the front pane; the chamfers between the facets are the frame bars, converging on the tip; 6 cm frame bands; bulkhead at z = -3.56 | z = -4.93 .. -3.5 | (in the fuselage) |
-| cockpit interior (`hull.wedge_cockpit_interior`) | 9 cm x 6 cm bars 3 cm inside every frame, a 45 cm sill strip (mesh only, not splatted) | with the window | 0 |
+| cockpit interior (`cockpit.cockpit_interior`, M3-T29) | slim V struts landing on the octagon, a 15 px bar, side panes, 75 px sills with a round lamp each, the screens' bezels, an indicator row on the octagon's rim, a shell closed behind them (mesh only, not splatted) | authored from the eye, in 1080p pixels and depths | 0 |
 | guns (`starfury.fury_guns`) | a keel box along the centre line (0.5 m wide, 0.53 m deep, pointed prow at z = -4.72); per side a 2.65 m fairing (0.46 x 0.45 m), a gun block, the main barrel (r 0.12, 1.05 m; the muzzle) above a second barrel (r 0.11) | barrels at x = +-0.72, y = -1.38; muzzles z = -4.65 | 2 000 kg |
 | fittings (`starfury.fury_fittings`) | per side a thruster block on the flank under the deck's cheek with two forward ports; a pointed teardrop fairing (r 0.4, 3.1 m) along the lower flank; a wedge fairing filling the corner between the upper flank and the deck | block z = -4.1 .. -3.1, teardrop tip z = -3.6 | 0 (no collision) |
 | struts x4 (`starfury.fury_strut`) | a deck plate (0.32-0.46 m thick, chamfered edges) from the centre line out to the pod: a notch over the canopy, cheeks to z = -4.27, a 55 deg then 33 deg swept leading edge, a tooth in the trailing edge at x = 2-2.8; a brace plate climbing from the fuselage's shoulder (upper arms) or lower flank (lower arms); from x = 2.9 the two are one beam with a 22 cm slot along both edges, ladder rungs every 0.3 m and a dark slot floor; six 0.3 m hazard bands behind the leading edge | x = 0 .. 4.95 (into the pod), about 23 deg above/below horizontal | 1 500 kg each |
@@ -71,19 +71,28 @@ section with per-edge materials and hard edges.
 
 ## Cockpit view
 
-The camera sits inside the glazed beak, 1.08 m behind its tip and 0.7 m above the pods' centre plane
-(`cockpit_camera`, looking -Z). Seen from there (75 deg vertical FOV):
+The camera sits inside the glazed beak, 1.08 m behind its tip and 0.7 m above the pods' centre plane (`cockpit_camera`, looking -Z). Since M3-T29 the interior
+mesh is the whole cabin, authored in what the eye sees (`parts/cockpit.py`, `CockpitSpec`): 1080p pixels from the screen's centre, with a depth per point. At 75 deg
+vertical FOV the camera's focal length is 703.7 px.
 
-- the view ahead is through the beak's top and upper side panes; the frame bars run from the corners of the full
-  section in to the small front pane at the tip, which sits 25 deg below the line of sight;
-- the deck's leading edge overhangs the canopy above, its cheeks at the upper left and right; the flank port blocks
-  show through the side panes;
-- nothing crosses the centre: no opaque splat (soft edge, 2.5 sigma, included) and no cockpit-mesh vertex lies in
-  the box |azimuth| < 20 deg, -12 deg < elevation < 28 deg (tested), and the guns are 70 deg down, under the chin.
+| What | On a 1080p frame | Tested in |
+|---|---|---|
+| V opening, half width off the nose | 11.2 deg at the octagon's top edge (row 706), 15.9 deg at the horizon, 29.3 deg under the top bar | `test_starfury_aurora.py`, `test_cockpit.py` |
+| Opening's lower and upper edge | -13.3 deg (the octagon's bezel, no console above it), +36.7 deg (the bar, 15 px) | both |
+| Clear box round the crosshair | +-60 px | both |
+| Struts, inner to outer edge | 178 px at the top of the frame, 123 px at the horizon, 106 px at row 700, 100 px where the inner edge lands on the octagon's cut corner | `test_cockpit.py` |
+| Side panes | from the strut's outer edge out past the frame, down to the housing's top (row 713 to 736) and, outside the screens, to the sill | `test_cockpit.py` |
+| Sills outside the screens | 75 px tall: top edge at row 1005, running to the frame's bottom, each holding a round lamp | `test_cockpit.py` |
+| Screens (facing, size) | octagon 0.375 x 0.285 m on the console's plane, tilted 24 deg; side screens 0.42 x 0.305 m, tilted 6 deg and yawed 2 deg, nearly square to the view so text stays upright | `test_cockpit.py` |
 
-The cockpit mesh is depth-tested against the splats, so its bars hide the frame splats behind them; the hull depth
-proxy (`HullDepthProxy`, back-face culled) does not block the window from inside. The targeting grid of the
-reference is a HUD element (M2-T08) and is not modelled. `(H)`: compare the cockpit screenshot with the reference.
+Nothing of the interior lies in the V, and no direction outside the V and the side panes misses it, so free look (135 deg sideways, 80 deg up and down) finds a bulkhead
+everywhere else. The shell stays inside the hull's own faces: the hull mesh is drawn in the cockpit view too, with its canopy glass and window frames cleared, and
+`test_the_hull_never_stands_inside_the_interior` holds the rest of it outside. Those frames and the hull's splats are unchanged for the view from outside: the interior
+is mesh only, so no PLY depends on it and the generator version did not move.
+
+Materials (`styles/earthforce.py`, glow in `MeshMaterials.cockpit`, since the OBJ importer reads no emission): `ef_cockpit_red` and `ef_cockpit_red_dim` on the struts' faces,
+`ef_cockpit_dark`, `ef_cockpit_sill` and `ef_cockpit_metal` near black, `ef_cockpit_lamp` and `ef_cockpit_rim` unshaded, and one `ef_cockpit_ind_*` surface per indicator
+lamp, relit by `CockpitScreens` when its state changes. `(H)`: compare the cockpit screenshot with the reference (AC41).
 
 ## Hardpoints (`hardpoints.json`, centred Godot frame, metres)
 
@@ -126,10 +135,15 @@ Schema (all vectors `[x, y, z]`, numbers rounded to 5 decimals), unchanged from 
                {"name": "claw_ur", "type": "box", "...": "..."}, "... 14 entries"],
  "nav_lights": {"port": [-5.368, 3.951, -0.165], "starboard": [5.368, 3.951, -0.165], "top": [0, 1.62, -2.567],
                 "top_lamp": [0, 4.0, -1.747], "top_lamp_range_m": 6.0, "cabin": [0, 0.796, -3.327], "cabin_range_m": 2.2},
+ "screens": {"octagon": {"center": [0.0, 0.463, -4.025], "size": [0.375, 0.285], "normal": [0.0, 0.407, 0.914], "up": [0.0, 0.914, -0.407], "corner": 0.08},
+             "left": {"center": [-0.49, 0.433, -4.063], "size": [0.42, 0.305], "normal": [0.035, 0.105, 0.994], "up": [-0.004, 0.995, -0.104], "corner": 0.0},
+             "right": {"...": "the left screen mirrored"}},
  "chunks": [{"name": "cabin", "ply": "starfury_aurora_chunk_cabin.ply", "lighting": "starfury_aurora_chunk_cabin.light", "obj": "starfury_aurora_chunk_cabin.obj",
              "offset": [0, -0.404, -2.155], "joint": [0, -0.219, -1.308], "splats": 9692}, "... arm_ur, arm_lr, arm_ul, arm_ll (M3-T03)"]}
 ```
 
+- `screens` (M3-T29): the console's screens, from the same numbers as the interior mesh, so the game's screens sit in the bezels: `center`, `size` (width, height), `normal` (to the
+  pilot), `up`, and `corner`, how far each corner is cut along both edges (0 for a rectangle). `left` is port (-X). PLY bytes do not depend on it.
 - `nav_lights` (M3-T27): the running-light markers on the highest point of the upper pods (port on -X, starboard on +X) and on the cabin top
   behind the canopy, where the white lamp over that top stands, and where the cockpit glow is centred (architecture §7.3). PLY bytes do not
   depend on it, so the generator version did not change.

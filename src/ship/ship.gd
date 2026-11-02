@@ -20,7 +20,8 @@ extends RigidBody3D
 ## no splat backend, or forced), `HullDepthProxy` (the fallback mesh inset by a few centimetres, opaque black, shown
 ## exactly when the splats are: it writes the depth splats do not, so effects behind the hull are hidden, §7.2), `CockpitInterior`
 ## (first person only), `Thrusters` and `Guns` (attach points for M1-T13; `Guns` holds one Marker3D per muzzle),
-## `Targeting` (`TargetingController`), `CockpitAnchor` (Marker3D at the hardpoints' `cockpit_camera`), `RunningLights` (M3-T27).
+## `Targeting` (`TargetingController`), `CockpitAnchor` (Marker3D at the hardpoints' `cockpit_camera`), `RunningLights` (M3-T27), and on the
+## player's ship `CockpitScreens` (M3-T29).
 ##
 ## Reaction mass (M2-T14): every tick the flow the model reports is drawn from a `FuelTank` (sized by
 ## `ShipSpec.fuel_capacity_kg`, never drawn down while `settings.fuel_unlimited` is on), and when the tank is empty the
@@ -115,6 +116,8 @@ var _applied_force: Vector3 = Vector3.ZERO
 @onready var guns: Node3D = $Guns
 @onready var targeting: TargetingController = $Targeting
 @onready var cockpit_anchor: Marker3D = $CockpitAnchor
+## The console's screens (M3-T29): the player's ship only, built once; null on every other ship.
+var cockpit_screens: CockpitScreens = null
 
 
 ## A ship ready for `World.spawn()`: `world.spawn(Ship.create(spec, world), start_pos, start_basis)`.
@@ -342,6 +345,8 @@ func set_cockpit_interior_visible(shown: bool) -> void:
 		cockpit_interior.visible = shown
 		_apply_hull_visuals()
 		_apply_cabin_emitter()
+		if cockpit_screens != null:
+			cockpit_screens.set_shown(shown)
 
 
 func is_cockpit_interior_visible() -> bool:
@@ -482,6 +487,7 @@ func _build() -> void:
 		_build_muzzles()
 	_load_visuals()
 	_build_running_lights()
+	_build_cockpit_screens()
 	_output = _idle_output()
 
 
@@ -516,6 +522,18 @@ func _build_muzzles() -> void:
 		_muzzles.append(marker)
 
 
+# On the ship the player flies, when its hardpoints have a console: a rebuild only places what exists.
+func _build_cockpit_screens() -> void:
+	if not console_owner or cockpit_interior.mesh == null or _hardpoints.screens.is_empty():
+		return
+	if cockpit_screens == null:
+		cockpit_screens = CockpitScreens.new()
+		cockpit_screens.name = "CockpitScreens"
+		add_child(cockpit_screens)
+	cockpit_screens.setup(_hardpoints.screens, cockpit_interior)
+	cockpit_screens.set_shown(_interior_visible)
+
+
 # One node with three markers per ship, built once: a rebuild only places them again.
 func _build_running_lights() -> void:
 	var lights := get_node_or_null(^"RunningLights") as RunningLights
@@ -537,7 +555,7 @@ func _load_visuals() -> void:
 	MeshMaterials.matte(cockpit_interior.mesh)
 	_make_double_sided(hull_mesh_fallback.mesh)
 	_make_double_sided(cockpit_interior.mesh)
-	_lift_shadows(cockpit_interior.mesh)
+	MeshMaterials.cockpit(cockpit_interior.mesh)
 
 
 # The spec's finest level and its lighting records on `node`, once per spec.
@@ -655,15 +673,15 @@ func _apply_cabin_emitter() -> void:
 		rig.remove_emitter(_cabin_emitter)
 
 
-# The canopy glass is a green translucent surface of the hull mesh. Seen from inside it tints the whole view green, so the pilot's
-# window is clear: from the cockpit the glass surface gets an override that draws nothing (from outside it is the real glass).
+# From inside, the interior is the whole cabin: the hull's canopy glass would tint the view green and its window frames would cross the
+# side panes, so while the interior is shown those surfaces get an override that draws nothing (from outside they are the real thing).
 func _apply_canopy_glass() -> void:
 	var mesh: Mesh = hull_mesh_fallback.mesh
 	if mesh == null:
 		return
 	for i: int in mesh.get_surface_count():
 		var material: Material = mesh.surface_get_material(i)
-		if material == null or not String(material.resource_name).contains("glass"):
+		if material == null or not String(material.resource_name).contains("canopy"):
 			continue
 		hull_mesh_fallback.set_surface_override_material(i, _clear_glass() if _interior_visible else null)
 
@@ -690,18 +708,6 @@ static func _make_double_sided(mesh: Mesh) -> void:
 		var material := mesh.surface_get_material(i) as BaseMaterial3D
 		if material != null and material.cull_mode != BaseMaterial3D.CULL_DISABLED:
 			material.cull_mode = BaseMaterial3D.CULL_DISABLED
-
-
-# The cockpit frame on the side away from the sun would be pure black against the black sky (and read as a hole): a faint
-# emission keeps both struts visible.
-static func _lift_shadows(mesh: Mesh) -> void:
-	if mesh == null:
-		return
-	for i: int in mesh.get_surface_count():
-		var material := mesh.surface_get_material(i) as BaseMaterial3D
-		if material != null:
-			material.emission_enabled = true
-			material.emission = Color(0.045, 0.047, 0.055)
 
 
 static func _load_mesh(path: String) -> Mesh:

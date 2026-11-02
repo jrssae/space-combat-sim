@@ -423,22 +423,6 @@ class WedgeFuselageTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _wedge_spec(frame_width=0.3)  # the front pane's inset would fold over
 
-    def test_cockpit_interior_frames_the_view_and_leaves_the_centre_clear(self) -> None:
-        spec = _wedge_spec()
-        mesh = hull.wedge_cockpit_interior(spec, S, bar_width=0.09, sill_depth=0.4)
-        self.assertEqual({m.name for m in mesh.materials}, {"ef_interior"})
-        eye = np.array(spec.eye)
-        v = mesh.vertices - eye
-        ahead = -v[:, 2]
-        off_axis = np.degrees(np.arctan2(np.hypot(v[:, 0], v[:, 1]), ahead))
-        self.assertGreater(float(off_axis[ahead > 0.0].min()), 15.0)
-        self.assertLess(float(mesh.vertices[:, 2].min()), 0.1)  # reaches the front pane
-        self.assertLess(
-            float(mesh.vertices[:, 2].max()), 1.4 + 0.1
-        )  # nothing aft of the window
-        with self.assertRaises(ValueError):
-            hull.wedge_cockpit_interior(_wedge_spec(window_end=0), S)
-
 
 class StarfuryPartTests(unittest.TestCase):
     def test_truss_strut_plate_bands_webs_and_box(self) -> None:

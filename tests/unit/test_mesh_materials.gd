@@ -37,3 +37,45 @@ func test_null_and_unmaterialled_meshes_are_ignored() -> void:
 	var bare := ArrayMesh.new()
 	MeshMaterials.matte(bare)
 	pass_test("no error")
+
+
+# --- the cockpit interior (M3-T29) --------------------------------------------------------------------------------------
+
+
+func _named_mesh(names: Array[String]) -> ArrayMesh:
+	var mesh := ArrayMesh.new()
+	for surface_name: String in names:
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([Vector3.ZERO, Vector3.RIGHT, Vector3.UP])
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var material := StandardMaterial3D.new()
+		material.resource_name = surface_name
+		mesh.surface_set_material(mesh.get_surface_count() - 1, material)
+	return mesh
+
+
+func _material(mesh: ArrayMesh, index: int) -> StandardMaterial3D:
+	return mesh.surface_get_material(index) as StandardMaterial3D
+
+
+func test_the_struts_glow_red_of_their_own() -> void:
+	var mesh: ArrayMesh = _named_mesh(["ef_cockpit_red", "ef_cockpit_dark"])
+	MeshMaterials.cockpit(mesh)
+	assert_true(_material(mesh, 0).emission_enabled, "whether or not the cabin lamp has a light slot")
+	assert_gt(_material(mesh, 0).emission.r, _material(mesh, 0).emission.g * 10.0, "saturated red")
+	assert_gt(_material(mesh, 0).emission.r, _material(mesh, 1).emission.r * 10.0, "the rest stays near black")
+	assert_lt(_material(mesh, 0).emission.r, 1.0, "dim enough that the view outside still reads")
+
+
+func test_lamps_and_rims_are_unlit_and_lamp_states_are_left_alone() -> void:
+	var mesh: ArrayMesh = _named_mesh(["ef_cockpit_lamp", "ef_cockpit_rim", "ef_cockpit_ind_assist"])
+	MeshMaterials.cockpit(mesh)
+	assert_eq(_material(mesh, 0).shading_mode, BaseMaterial3D.SHADING_MODE_UNSHADED)
+	assert_eq(_material(mesh, 1).shading_mode, BaseMaterial3D.SHADING_MODE_UNSHADED)
+	assert_false(_material(mesh, 2).emission_enabled, "a state lamp is lit by CockpitScreens")
+
+
+func test_cockpit_ignores_a_null_mesh() -> void:
+	MeshMaterials.cockpit(null)
+	assert_true(true, "no error")

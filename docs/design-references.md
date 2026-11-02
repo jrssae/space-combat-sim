@@ -47,6 +47,10 @@ wide across the pods and 8 m tall. The X is wider than tall: struts sit about 30
   a green target ring; a short row of small red and white indicator lamps sits on the console's edge just above it. Everything else is near black, lit
   only by the red. Proportions, at 4:3: the octagon covers the middle quarter of the width and the lowest third of the height.
   Implications: see M3-T29. The show-frame targeting grid above leaves the cockpit view for the octagon.
+  As built (M3-T29), the maintainer's slimmer proportions win over this image, for the view: the struts are about half as wide (about 180 px at the top of a
+  1080p frame, 100 px at the octagon) and land on the sides of the octagon, with no console above it, so the opening runs down to the octagon's top edge; the
+  bar across the top is 15 px; the sills stand 75 px tall at the frame's bottom outside the screens, each lamp inside that; the indicator row is a thin line of
+  lamps on the octagon's top rim, showing assist, guns, running lights and auto-track. No conduits were built at the top corners, to keep those corners open.
 - **Colours.** Light grey hull with darker panel lines and greebles; hazard stripes on the struts; dark metal
   pods with lighter bands.
 

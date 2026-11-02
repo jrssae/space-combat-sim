@@ -18,7 +18,9 @@ from tools.procgen.core.context import BuildContext
 from tools.procgen.core.sampling import DEFAULT_OVERLAP, DEFAULT_THICKNESS
 from tools.procgen.core.obj import read_obj
 from tools.procgen.core.ply import PROPERTY_NAMES, SplatData, ply_header, read_ply
+from tools.procgen.parts import cockpit
 from tools.procgen.styles.earthforce import EARTHFORCE
+from tools.procgen.tests.test_cockpit import first_hit, sphere
 
 PILOT_TERMS = {
     "sway_left", "sway_right", "heave_up", "heave_down", "pitch_up", "pitch_down",
@@ -27,12 +29,15 @@ PILOT_TERMS = {
 SYM_TOL = 1e-6
 POD_NAMES = ("ur", "lr", "ul", "ll")
 SPEC = ship.DEFAULT_SPEC
-# Cockpit view (camera FOV 75 deg vertical, 16:9): the box every opaque splat, halo included,
-# and the cockpit mesh stay out of. It is the narrow bottom of the trapezoid front pane: the
-# struts close in towards the sill (bottom corners +-26 deg, top corners +-42 deg), the bar
-# across the top is at about 33 deg and the sill edge at -20 deg.
-CLEAR_AZIMUTH_DEG = 20.0
-CLEAR_ELEVATION_DEG = (-12.0, 28.0)
+# Cockpit view (camera FOV 75 deg vertical, 16:9, M3-T29): the opening every opaque splat, halo included, and the cockpit mesh stay out
+# of is the V, narrow at the octagon and wide above. What it records, half widths off the nose at the octagon's top edge, the horizon and
+# the top bar; the elevations of that edge and the bar; and the box around the crosshair that must stay clear, 1080p pixels.
+V_HALF_DEG = {"octagon": 11.2, "horizon": 15.9, "bar": 29.3}
+V_ELEVATION_DEG = (-13.3, 36.7)
+CROSSHAIR_CLEAR_PX = 60.0
+COCKPIT = ship.STARFURY_COCKPIT
+# The hull's own window, for the fallback mesh seen from outside: below this elevation the chin hides the guns.
+CHIN_ELEVATION_DEG = -12.0
 CHUNK_NAMES = ("cabin", "arm_ur", "arm_lr", "arm_ul", "arm_ll")
 LOD1_AABB_TOLERANCE_M = 0.3  # AC6: LOD1's bounds are LOD0's within this
 # The LOD0 contract (M3-T03; re-pinned for generator v4, the rebuild after the reference model, M3-T26, and for v5, M3-T21:
@@ -80,6 +85,13 @@ def slices(manifest: dict) -> dict[str, tuple[int, int]]:
         out[name] = (start, start + n)
         start += n
     return out
+
+
+def in_the_v(rel_screen: np.ndarray, margin_px: np.ndarray | float = 0.0) -> np.ndarray:
+    """Which 1080p screen points (centred, Y up) lie inside the V, within ``margin_px`` of it counting as inside."""
+    x, y = rel_screen[:, 0], rel_screen[:, 1]
+    half = COCKPIT.opening_px_at_horizon + COCKPIT.opening_px_per_y * y
+    return (np.abs(x) - margin_px < half) & (y + margin_px > COCKPIT.opening_floor_y_px) & (y - margin_px < COCKPIT.bar_y_px)
 
 
 def eye_angles(
@@ -329,7 +341,7 @@ class StarfuryAuroraTests(unittest.TestCase):
         hp = self.hp
         for key in (
             "frame", "units", "length_m", "center_of_mass", "cockpit_camera", "chase_anchor",
-            "muzzles", "pods", "rcs", "collision", "mass_kg",
+            "muzzles", "pods", "rcs", "collision", "mass_kg", "screens",
         ):  # fmt: skip
             self.assertIn(key, hp)
         self.assertEqual((hp["frame"], hp["units"]), ("godot", "m"))
@@ -426,37 +438,42 @@ class StarfuryAuroraTests(unittest.TestCase):
             float(np.linalg.norm(self.godot_xyz - cam, axis=1).min()), 0.2
         )
 
+    def test_the_opening_records_the_v(self) -> None:
+        """The numbers Q29 and the maintainer's change set: about +-10 deg at the horizon, narrower at the console, wider above."""
+        self.assertAlmostEqual(cockpit.opening_half_deg(COCKPIT, COCKPIT.opening_floor_y_px), V_HALF_DEG["octagon"], delta=0.2)
+        self.assertAlmostEqual(cockpit.opening_half_deg(COCKPIT, 0.0), V_HALF_DEG["horizon"], delta=0.1)
+        self.assertAlmostEqual(cockpit.opening_half_deg(COCKPIT, COCKPIT.bar_y_px), V_HALF_DEG["bar"], delta=0.1)
+        f = COCKPIT.focal_px
+        self.assertAlmostEqual(float(np.degrees(np.arctan2(COCKPIT.opening_floor_y_px, f))), V_ELEVATION_DEG[0], delta=0.2)
+        self.assertAlmostEqual(float(np.degrees(np.arctan2(COCKPIT.bar_y_px, f))), V_ELEVATION_DEG[1], delta=0.1)
+        self.assertGreater(COCKPIT.opening_half_px(-CROSSHAIR_CLEAR_PX), CROSSHAIR_CLEAR_PX, "the crosshair's area is inside it")
+        self.assertLess(COCKPIT.opening_floor_y_px, -CROSSHAIR_CLEAR_PX)
+
     def test_cockpit_view_is_clear_but_for_the_window_frame(self) -> None:
-        """No opaque splat, soft edge (2.5 sigma) included, reaches into the central view; the
-        panes cover it; the guns are below the sill line, so the chin hides them."""
+        """No opaque splat, soft edge (2.5 sigma) included, reaches into the V; the panes cover it; the guns are below the sill line,
+        so the chin hides them. The cockpit camera draws the hull as a mesh, but a level of detail must never put splats there."""
         cam = np.array(self.hp["cockpit_camera"]["position"])
         ahead, az, el = eye_angles(self.godot_xyz, cam)
         opaque = (self.splats.alpha > 0.5) & (ahead > 0.0)
-        halo = np.degrees(
-            2.5 * self.splats.scale[:, 0] / np.linalg.norm(self.godot_xyz - cam, axis=1)
-        )
-        lo, hi = CLEAR_ELEVATION_DEG
-        intrudes = (
-            opaque
-            & (np.abs(az) - halo < CLEAR_AZIMUTH_DEG)
-            & (el + halo > lo)
-            & (el - halo < hi)
-        )
+        distance = np.linalg.norm(self.godot_xyz - cam, axis=1)
+        halo_px = COCKPIT.focal_px * 2.5 * self.splats.scale[:, 0] / distance
+        rel = self.godot_xyz - cam
+        front = ahead > 1e-6
+        screen = np.full((len(rel), 2), 1e9)
+        screen[front] = COCKPIT.focal_px * rel[front, :2] / ahead[front, None]
+        intrudes = opaque & front & in_the_v(screen, halo_px)
         self.assertEqual(int(intrudes.sum()), 0)
         glass = (self.splats.alpha < 0.5) & (ahead > 0.0)
-        self.assertGreater(
-            int(
-                (glass & (np.abs(az) < CLEAR_AZIMUTH_DEG) & (el > lo) & (el < hi)).sum()
-            ),
-            30,
-        )
-        # The panes reach past the clear box on every side (they are what the eye looks through).
-        self.assertLess(float(az[glass].min()), -CLEAR_AZIMUTH_DEG)
-        self.assertGreater(float(az[glass].max()), CLEAR_AZIMUTH_DEG)
-        self.assertLess(float(el[glass].min()), lo)
-        self.assertGreater(float(el[glass].max()), hi)
+        self.assertGreater(int((glass & in_the_v(screen)).sum()), 20)
+        # The panes reach past the V on every side (they are what the eye looks through).
+        top = V_HALF_DEG["bar"]
+        self.assertLess(float(az[glass].min()), -top)
+        self.assertGreater(float(az[glass].max()), top)
+        self.assertLess(float(el[glass].min()), V_ELEVATION_DEG[0])
+        self.assertGreater(float(el[glass].max()), V_ELEVATION_DEG[1])
         # The opaque splats that frame the view above the sill are the window's own: the fuselage
         # and cockpit slices (the guns are further down, behind the chin).
+        lo = CHIN_ELEVATION_DEG
         near = opaque & (np.abs(az) < 53.6) & (el > lo) & (el < 37.5) & (ahead < 2.0)
         a, b = self.slices["fuselage"][0], self.slices["cockpit"][1]
         self.assertFalse(near[:a].any() or near[b:].any())
@@ -657,19 +674,63 @@ class StarfuryAuroraTests(unittest.TestCase):
         )  # around the pilot
         self.assertLess(float(lo[2]), cam[2])  # reaches forward to the front pane
         self.assertLess(float(np.linalg.norm(obj.vertices - cam, axis=1).min()), 1.2)
-        ahead, az, el = eye_angles(obj.vertices, cam)
-        lo_el, hi_el = CLEAR_ELEVATION_DEG
-        in_view = (
-            (ahead > 0.0)
-            & (np.abs(az) < CLEAR_AZIMUTH_DEG)
-            & (el > lo_el)
-            & (el < hi_el)
-        )
-        self.assertEqual(int(in_view.sum()), 0)
-        off_axis = np.degrees(
-            np.arctan2(np.hypot(*(obj.vertices - cam)[:, :2].T), ahead)
-        )
-        self.assertGreater(float(off_axis[ahead > 0.0].min()), 15.0)
+        rel = obj.vertices - cam
+        ahead = -rel[:, 2]
+        front = ahead > 1e-6
+        screen = COCKPIT.focal_px * rel[front, :2] / ahead[front, None]
+        self.assertEqual(int(in_the_v(screen, -0.5).sum()), 0, "half a pixel in: its corners lie on the edge")
+        off_axis = np.degrees(np.arctan2(np.hypot(*rel[:, :2].T), ahead))
+        self.assertGreater(float(off_axis[front].min()), 8.0, "the crosshair's area is clear")
+
+    def test_the_hull_never_stands_inside_the_interior(self) -> None:
+        # The cockpit camera draws the hull mesh too, with its glass and window frames cleared; whatever else of it the shell does not
+        # hold out would cut into the cabin from outside.
+        cam = np.array(self.hp["cockpit_camera"]["position"])
+        hull = read_obj(self.dir_a / ship.OBJ_NAME)
+        materials = np.array(hull.face_materials)
+        kept = ~np.isin(materials, ["ef_canopy_glass", "ef_canopy_frame"])
+        triangles = hull.vertices[hull.faces[kept]]
+        triangles = triangles[np.linalg.norm(triangles - cam, axis=2).min(axis=1) < 2.2]
+        interior = read_obj(self.dir_a / ship.COCKPIT_NAME)
+        rays = sphere(3000)
+        to_hull, _ = first_hit(cam, rays, triangles)
+        to_interior, _ = first_hit(cam, rays, interior.vertices[interior.faces])
+        both = np.isfinite(to_hull) & np.isfinite(to_interior)
+        # Out past the walls the sill only hides what lies below the side panes: hull seen through a pane is meant to be there.
+        finite = np.where(np.isfinite(to_interior), to_interior, 0.0)
+        both &= np.abs(rays[:, 0] * finite) < COCKPIT.wall_x + 0.01
+        self.assertGreater(int(both.sum()), 300, "the shell and the hull overlap in many directions")
+        self.assertTrue(np.all(to_interior[both] < to_hull[both]), rays[both][to_interior[both] >= to_hull[both]][:5])
+
+    # --- the console's screens (M3-T29) ---------------------------------------------------------
+    def test_hardpoints_carry_the_screens_the_interior_was_built_around(self) -> None:
+        screens = self.hp["screens"]
+        self.assertEqual(sorted(screens), ["left", "octagon", "right"])
+        eye = self.hp["cockpit_camera"]["position"]
+        built = cockpit.cockpit_screens(COCKPIT, eye)
+        for name, screen in screens.items():
+            self.assertEqual(sorted(screen), ["center", "corner", "normal", "size", "up"], name)
+            for key in ("center", "normal", "up", "size"):
+                np.testing.assert_allclose(screen[key], built[name][key], atol=1e-4, err_msg=f"{name}.{key}")
+
+    def test_port_and_starboard_screens_are_on_the_right_sides(self) -> None:
+        # -X is the ship's left, as for the running lights.
+        screens, eye = self.hp["screens"], self.hp["cockpit_camera"]["position"]
+        self.assertLess(screens["left"]["center"][0], -0.2)
+        self.assertGreater(screens["right"]["center"][0], 0.2)
+        self.assertEqual(screens["octagon"]["center"][0], 0.0)
+        self.assertEqual(screens["left"]["center"][1:], screens["right"]["center"][1:], "a mirrored pair")
+        for name, screen in screens.items():
+            self.assertLess(screen["center"][1], eye[1], f"{name}: below the eye")
+            self.assertLess(screen["center"][2], eye[2], f"{name}: ahead of the pilot")
+
+    def test_a_new_interior_leaves_the_hull_alone(self) -> None:
+        # No new generator version for the hull (T29 changes no splat): the pinned LOD0 records below still hold, and the hull's OBJ
+        # has none of the interior's materials.
+        self.assertEqual(ship.GENERATOR_VERSION, 5)
+        hull = read_obj(self.dir_a / ship.OBJ_NAME)
+        self.assertFalse([m for m in hull.materials if "ef_cockpit" in m])
+        self.assertEqual(self.manifest["counts"], LOD0_COUNTS)
 
     # --- LOD1 and chunks (AC6) --------------------------------------------------------------
     def test_lod0_is_the_build_from_before_lod1(self) -> None:
