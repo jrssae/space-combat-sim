@@ -14,7 +14,7 @@ official or ripped franchise assets (models, textures, audio, footage, logos). A
 
 - `docs/architecture.md`: the design contract (stack, decisions, layout, flight model, input, rendering, assets,
   tests, conventions). Read it before writing code.
-- `docs/milestones/m1-first-flight.md`: current milestone, acceptance criteria and the **ordered task list**.
+- `docs/milestones/`: one file per milestone; the latest is the current one, with its acceptance criteria and the **ordered task list**.
 - `docs/roadmap.md`: what comes after, so you do not paint us into a corner.
 - `docs/playtest.md`: how the maintainer runs the game and the human (H) acceptance checklist.
 - `docs/design-references.md`: written descriptions of the reference designs (Starfury, station, raiders, bots).
@@ -28,9 +28,9 @@ official or ripped franchise assets (models, textures, audio, footage, logos). A
 2. `scripts/gen_assets.sh` (runs `python3 -m tools.procgen build all` into `assets/generated/`; needs `numpy`).
 3. `scripts/run_tests.sh` (Python tests, `godot --headless --import`, GUT headless; must exit 0).
 4. Open the latest milestone entry in `docs/milestones/`, find the first task in its task table whose Status is not
-   `done` (or `not needed`) and whose "Done when" is not met, and do that one task as one PR-sized change. If none of the scripts exist yet, you are on **M1-T01**. Once M1 is accepted
-   (its status line says so), 
-   
+   `done` (or `not needed`) and whose "Done when" is not met, and do that one task as one PR-sized change. If none of the scripts exist yet, you are on **M1-T01**. Once a milestone is accepted
+   (its status line says so), the next milestone's file is the latest one.
+
 Until T01 lands, download/clone details are in `docs/research-notes.md` ("Container findings"): GitHub release
 assets and `git clone` work through the proxy; `archive/refs/tags/*.zip`, `api.github.com` and the Godot docs
 site do not.
