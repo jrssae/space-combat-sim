@@ -122,10 +122,6 @@ func restart() -> void:
 	_last_range_m = INF
 
 
-func is_attacking() -> bool:
-	return true
-
-
 func describe() -> Dictionary:
 	return {"behaviour": "attack", "state": String(STATE_NAMES[state]), "state_time_s": snappedf(state_time_s, 0.1),
 			"range_m": snappedf(_last_range_m, 1.0) if _last_range_m < INF else -1.0, "firing": firing}

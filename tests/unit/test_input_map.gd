@@ -78,7 +78,7 @@ const MOUSE_B: Dictionary = {
 	&"weapon_next": [MOUSE_BUTTON_XBUTTON2],
 }
 
-# The left block of a US keyboard: the 1-4, Q-T, A-G and Z-B columns, Shift, Caps Lock, Tab and Space. The number keys are
+# The left block of a US keyboard: the 1-5, Q-T, A-G and Z-B columns, Shift, Caps Lock, Tab and Space. The number keys are
 # the wing orders (M3-T07).
 const LEFT_BLOCK: Array[Key] = [
 	KEY_1, KEY_2, KEY_3, KEY_4, KEY_5,

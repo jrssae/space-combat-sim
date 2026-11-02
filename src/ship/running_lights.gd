@@ -14,11 +14,16 @@ static var _materials: Dictionary[Color, ShaderMaterial] = {}
 var _ship: Ship = null
 var _markers: Array[MeshInstance3D] = []
 
+static var _warned_no_lights: bool = false
+
 
 ## Places the markers and hands over the own lights: the first call builds the markers, a later one (a rebuilt ship) moves them.
 func setup(ship: Ship) -> void:
 	_ship = ship
 	var wanted: Array[Dictionary] = NavLights.markers(ship.get_hardpoints().nav_lights)
+	if wanted.is_empty() and not _warned_no_lights:
+		_warned_no_lights = true  # stale generated assets would otherwise just look like a ship with its lights off
+		push_warning("RunningLights: %s lists no nav_lights (run scripts/gen_assets.sh)" % ship.spec.asset_id)
 	for i: int in wanted.size():
 		if i == _markers.size():
 			_markers.append(_new_marker())

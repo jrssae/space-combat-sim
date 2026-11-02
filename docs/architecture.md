@@ -633,8 +633,7 @@ set it directly.
 - **TargetingController** (node under the ship) gathers group `targetable` each physics tick, feeds the system,
   applies `CombatCommand` edges, emits `target_changed(id)`. `selected_offset()` is the live World-frame line of
   sight to the selection (zero without one); the Ship turns it into `FlightCommand.face_dir_b` every tick.
-- **NavBuoy**: inert marker with a splat body (one shared `GaussianResource`, GDGS instancing), a steady beacon with a slow fade over it
-  mesh, a 10 °/s spin about its long axis, optional constant drift. No collision; cannot be shot. Five are spawned
+- **NavBuoy**: inert marker with a splat body (one shared `GaussianResource`, GDGS instancing), a steady beacon mesh with a slow fade over it, a 10 °/s spin about its long axis, optional constant drift. No collision; cannot be shot. Five are spawned
   from `data/scenarios/free_flight.json` at 0.5-5 km; faction `neutral`.
 - **Pulse cannon modes** (`PulseCannonGate`, pure): `ALTERNATING` (4 Hz, muzzles alternate) and `LINKED`
   (2 Hz, both muzzles together). `weapon_next` cycles and wraps; the cooldown carries over, so switching cannot
@@ -924,8 +923,7 @@ interior is shown, as before.
 
 The dark rule: `BrainFactory` sets `PilotBrain.flies_dark` from a behaviour's `"running_lights": "on" | "off"`, by default off for a ship on patrol
 (`patrol`, `aggro`, `ai` with a `patrol` route) and on for every other. `AiPilotDriver` sets the ship's lights when it is given a brain, so a
-pool ship starts as its new pilot wants, and turns them on the tick `PilotBrain.is_attacking` first says so (the attack or ram behaviour in
-control, an attack brain, an aggroed one). Once a ship attacks it has stopped hiding for the rest of that life, so it does not flicker as it breaks
+pool ship starts as its new pilot wants, and turns them on in the tick of its first shot (Q27). Once a ship fires it has stopped hiding for the rest of that life, so it does not flicker as it breaks
 off and comes back. In `combat_sandbox` the PATROL wave's five raiders start dark, by data. The player's toggle is a `UiCommand` edge (`Main`) or
 `running_lights [on|off]`; `WingDirector` copies the player's state to its wing each tick, and a respawn puts them back on.
 

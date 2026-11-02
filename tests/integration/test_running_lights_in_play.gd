@@ -143,7 +143,7 @@ func test_a_parked_ship_shows_none() -> void:
 # --- the dark rule -------------------------------------------------------------------------------------------------------------
 
 
-func test_a_patrolling_raider_is_dark_and_lights_up_within_a_quarter_second_of_attacking() -> void:
+func test_a_patrolling_raider_stays_dark_on_its_run_in_and_lights_up_with_its_first_shot() -> void:
 	await _start()
 	var far := Vector3(9000.0, 0.0, 0.0)
 	var raider: Combatant = _acquire(_patrol(far), far)
@@ -156,19 +156,21 @@ func test_a_patrolling_raider_is_dark_and_lights_up_within_a_quarter_second_of_a
 	# The player flies into its sensor range.
 	main.ship.global_position = raider.ship.global_position + Vector3(0.0, 0.0, -1500.0)
 	main.ship.reset_physics_interpolation()
-	var attack_tick: int = -1
+	var fired_tick: int = -1
 	var lit_tick: int = -1
-	for tick: int in 300:
+	var closed_in_dark: bool = false
+	for tick: int in 900:
 		await _ticks(1)
-		if attack_tick < 0 and pilot.is_attacking():
-			attack_tick = tick
+		if fired_tick < 0 and raider.ship.get_combat_command().fire:
+			fired_tick = tick
 		if lit_tick < 0 and raider.ship.running_lights:
 			lit_tick = tick
-		if attack_tick >= 0 and lit_tick >= 0:
+		closed_in_dark = closed_in_dark or (pilot.current.id == &"attack" and not raider.ship.running_lights)
+		if lit_tick >= 0:
 			break
-	assert_gt(attack_tick, -1, "it attacks")
-	assert_gt(lit_tick, -1, "its lights come on")
-	assert_lte((lit_tick - attack_tick) * DT, 0.25, "within 0.25 s of starting to attack")
+	assert_true(closed_in_dark, "it attacks with its lights off")
+	assert_gt(fired_tick, -1, "it fires")
+	assert_eq(lit_tick, fired_tick, "its lights come on with the first shot")
 	assert_true(_lights_of(raider.ship).markers()[0].visible)
 
 
@@ -209,9 +211,9 @@ func test_a_reacquired_pool_ship_does_not_keep_the_last_pilots_lights() -> void:
 	assert_false(third.ship.running_lights, "and the other way round")
 
 
-func test_the_sandboxs_patrol_wave_is_dark_and_its_strike_wave_lit() -> void:
+func test_the_sandboxs_patrol_wave_spawns_dark_and_its_strike_wave_lit() -> void:
 	await _start(ScenarioLoader.SANDBOX_PATH, 9, 4)
-	# At the moment it enters play: the wave spawns inside the player's sensor range, so its pilots start to attack on their next tick.
+	# At the moment each enters play; a patrol ship stays dark until its first shot.
 	var at_spawn: Array[bool] = []
 	main.ships.acquired.connect(func(c: Combatant) -> void: at_spawn.append(c.ship.running_lights))
 	assert_true(DebugConsole.registry.execute("wave start 2")[0].ok)

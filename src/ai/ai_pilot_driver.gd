@@ -94,7 +94,7 @@ func step(delta: float) -> void:
 	var p: Perception = perceive()
 	brain.has_desired_velocity = false
 	var pc: PilotCommand = brain.think(p, delta)
-	if _hiding and brain.is_attacking():
+	if _hiding and pc.combat != null and pc.combat.fire:  # the first shot ends the hiding (Q27)
 		_hiding = false
 		combatant.ship.running_lights = true
 	_follow_brain_target()

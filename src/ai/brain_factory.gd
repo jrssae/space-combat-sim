@@ -36,7 +36,7 @@ static func from_behaviour(data: Variant, anchor: UniversePos, seed_value: int, 
 		return made
 	var spec: Dictionary = data
 	var lights: Variant = spec.get("running_lights", "off" if _hides_by_default(spec) else "on")
-	if lights != "on" and lights != "off":
+	if not (lights is String) or (lights != "on" and lights != "off"):
 		return _fail("behaviour.running_lights must be on or off, got %s" % JSON.stringify(lights))
 	(made["brain"] as PilotBrain).flies_dark = lights == "off"
 	return made

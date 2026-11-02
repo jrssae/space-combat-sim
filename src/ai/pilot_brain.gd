@@ -57,11 +57,6 @@ func reads_target() -> bool:
 	return true
 
 
-## Whether the brain is attacking something right now: what ends a dark ship's hiding (M3-T27).
-func is_attacking() -> bool:
-	return false
-
-
 ## Writes the thrust that moves the velocity toward `v_des` (`PilotSteering.seek`, with `all_axes` for a held nose) into
 ## `flight` and records the wish, for the driver's avoidance filter.
 func seek_velocity(flight: FlightCommand, p: Perception, v_des: Vector3, all_axes: bool = false) -> void:

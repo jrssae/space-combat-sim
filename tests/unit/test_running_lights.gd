@@ -223,27 +223,12 @@ func test_a_spawn_can_set_it_either_way() -> void:
 	assert_true(_brain({"type": "ai", "profile": "raider", "running_lights": "off"}).flies_dark)
 	assert_false(_brain({"type": "patrol", "waypoints": WAYPOINTS, "running_lights": "on"}).flies_dark)
 	assert_true(_brain({"type": "idle", "running_lights": "off"}).flies_dark)
+	for wrong: Variant in ["maybe", true, 1]:
+		var refused: Dictionary = BrainFactory.from_behaviour({"type": "idle", "running_lights": wrong}, UniversePos.new(), 1)
+		assert_false(refused["ok"], "running_lights %s" % str(wrong))
 	var bad: Dictionary = BrainFactory.from_behaviour({"type": "idle", "running_lights": "maybe"}, UniversePos.new(), 1)
 	assert_false(bad["ok"])
 	assert_string_contains(bad["error"], "behaviour.running_lights")
-
-
-func test_only_an_attack_counts_as_attacking() -> void:
-	assert_false(_brain({"type": "patrol", "waypoints": WAYPOINTS}).is_attacking())
-	assert_false(_brain({"type": "idle"}).is_attacking())
-	assert_true(_brain({"type": "attack"}).is_attacking())
-	var aggro := _brain({"type": "aggro", "waypoints": WAYPOINTS}) as AggroBrain
-	assert_false(aggro.is_attacking(), "still patrolling")
-	aggro.aggroed = true
-	assert_true(aggro.is_attacking())
-	var pilot := _brain({"type": "ai", "profile": "raider"}) as AiPilot
-	assert_false(pilot.is_attacking(), "no behaviour in control yet")
-	pilot.current = pilot.behaviour(&"idle")
-	assert_false(pilot.is_attacking())
-	pilot.current = pilot.behaviour(&"attack")
-	assert_true(pilot.is_attacking())
-	pilot.current = pilot.behaviour(&"ram")
-	assert_true(pilot.is_attacking())
 
 
 func test_the_sandboxs_patrol_wave_starts_dark_and_its_strike_wave_lit() -> void:
