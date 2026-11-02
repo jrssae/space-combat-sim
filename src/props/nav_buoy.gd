@@ -1,18 +1,16 @@
 class_name NavBuoy
 extends Node3D
-## A navigation buoy, the M1 target marker (architecture §6.3, §7.1, §9.3): a splat body, a blinking beacon
-## mesh on the mast, a 10 deg/s spin about its long axis (+Y), an optional constant drift, a `Targetable` and (post-M2) a
-## `Damageable`: any bolt hurts it (`hit_by_anyone`, it is neutral to everyone), so does a ram (M3-T04: it has no physics
-## body, so ships pass through it and the `RamResolver` splits the momentum by `MASS_KG`), and at zero hull the `DestructionDirector`
-## blows it up and calls `set_destroyed(true)`: hidden and not processing, so nothing targets or hits it, but never freed (no
-## splat node leaves the tree during play, D22). `restore()` brings it back with a full hull (the player's respawn does that).
+## A navigation buoy, the M1 target marker (architecture §6.3, §7.1, §9.3): a splat body, a blinking beacon on the mast, a
+## 10 deg/s spin about +Y, an optional constant drift, a `Targetable` and a `Damageable`. Any bolt hurts it (it is neutral to
+## everyone), and so does a ram (M3-T04): it has no physics body, so ships pass through and the `RamResolver` splits the
+## momentum by `MASS_KG`. At zero hull the `DestructionDirector` calls `set_destroyed(true)`: hidden and not processing, but
+## never freed (no splat node leaves the tree during play, D22). `restore()` brings it back on the player's respawn.
 ##
 ## Spawn it through `World` from a scenario entry: `world.spawn(NavBuoy.create(name, velocity), position)`. It joins
 ## `world_shiftable` itself as well, so a rebase moves it whichever way it was added.
 ##
-## Assets are loaded here at run time, guarded (like `SpaceEnvironment`): the scene loads and the buoy works as a
-## target before `scripts/gen_assets.sh` has run, with a warning instead of a load error. Every buoy shares one
-## loaded `GaussianResource` (GDGS draws the instances from the same data), one fallback mesh and one hardpoints
+## Assets are loaded at run time, guarded like `SpaceEnvironment`, so the buoy works as a target before
+## `scripts/gen_assets.sh` has run, with a warning. All buoys share one `GaussianResource`, fallback mesh and hardpoints
 ## read. Without a GPU GDGS is a silent no-op, so how it looks is (H).
 ##
 ## Motion (spin, drift) is physics state and runs in `_physics_process` from `delta`; the beacon is a visual and
@@ -37,8 +35,8 @@ const DEFAULT_BEACON_RADIUS: float = 0.1
 const BROADCAST_RANGE_M: float = 1.0e6
 ## Hull points of a buoy: six pulse-cannon hits.
 const HULL_MAX: float = 60.0
-## kg, for the ram maths (§16 D32): the buoy has no physics body, so a ram uses the momentum split with this mass (the
-## generator's estimate is 1.94 t). A Starfury at 40 m/s changes a buoy's velocity by 38.4 m/s and its own by 1.6 m/s.
+## kg, for the ram maths (§16 D32; the generator's estimate is 1.94 t). A Starfury at 40 m/s changes a buoy's velocity by
+## 38.4 m/s and its own by 1.6 m/s.
 const MASS_KG: float = 2000.0
 ## m/s: a ram that changes the buoy's velocity by this much or more destroys it (the safe value is every hull's 5 m/s).
 const RAM_LETHAL_DV_MPS: float = 15.0
@@ -101,8 +99,7 @@ func _init() -> void:
 	add_to_group(SplatStatus.MESH_GROUP)  # SplatStatus calls use_fallback_mesh (no backend, console, F4)
 
 
-# The splats and their lighting records go on before the node enters the tree: assigned later, each makes GDGS re-merge every splat in
-# the scene, once per buoy.
+# Assigned before entering the tree: later, each buoy would make GDGS re-merge every splat in the scene.
 func _enter_tree() -> void:
 	_load_shared_assets()
 	var body := get_node(^"BuoySplats") as GaussianSplatNode

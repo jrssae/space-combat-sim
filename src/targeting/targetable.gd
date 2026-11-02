@@ -12,10 +12,9 @@ const GROUP: StringName = &"targetable"
 @export var display_name: String = ""
 ## IFF (§14.9, `Factions`). Buoys are `neutral`; ships carry their own.
 @export var faction: StringName = &"neutral"
-## How far this target is heard beyond the sensors, as with a beacon's broadcast (M3-T17, Q21), m: 0 = not at all, `INF` =
-## everywhere. A contact counts when it is within the 25 km sensor range or within its own broadcast range (nav buoys
-## 1 000 km, allied ships 100 km). The targetables with a broadcast are kept in one list (`broadcasters`), which the AI's
-## `ContactScan.shared_broadcasts` reads instead of sweeping every body.
+## How far this target is heard beyond the sensors (M3-T17, Q21), m: 0 = not at all, `INF` = everywhere. Nav buoys use
+## 1 000 km, allied ships 100 km. Broadcasters are kept in one list (`broadcasters`) so the AI's
+## `ContactScan.shared_broadcasts` need not sweep every body.
 @export var broadcast_range_m: float = 0.0:
 	set(value):
 		broadcast_range_m = maxf(value, 0.0)
@@ -55,9 +54,7 @@ func _sync_broadcaster() -> void:
 		_broadcasters.erase(self)
 
 
-## True while the target can be selected: visible in the tree and its parent processing (a parked pool ship is hidden
-## and disabled, a destroyed one the same). `TargetingController` skips inactive targetables and drops a selection that
-## turns inactive.
+## True while the target can be selected: visible and its parent processing (parked and destroyed ships are neither).
 func is_active() -> bool:
 	if not is_inside_tree() or not is_visible_in_tree():
 		return false

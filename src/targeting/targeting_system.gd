@@ -86,8 +86,7 @@ func selected() -> TargetInfo:
 	return _find(_selected_id) if has_selection() else null
 
 
-## The order `select_next` walks: hostile targets first, then the others, each nearest first (stable: the in-range
-## order is already nearest first, ties by id).
+## The order `select_next` walks: hostile targets first, then the others, each nearest first.
 func cycle_order(ship_pos: Vector3) -> Array[TargetInfo]:
 	var hostile: Array[TargetInfo] = []
 	var others: Array[TargetInfo] = []
@@ -109,7 +108,7 @@ func select_next(ship_pos: Vector3) -> bool:
 		if ordered[i].id == _selected_id:
 			index = i
 			break
-	# index -1 (no selection, or it is not selectable) gives 0: the first. The last one wraps to the first.
+	# No selection (index -1) gives the first; the last wraps to the first.
 	return _select(ordered[(index + 1) % ordered.size()].id)
 
 
@@ -124,7 +123,7 @@ func select_prev(ship_pos: Vector3) -> bool:
 		if ordered[i].id == _selected_id:
 			index = i
 			break
-	# Not selected (index stays 0) wraps to the last; otherwise one step back, the first wraps to the last.
+	# No selection wraps to the last; the first wraps to the last.
 	return _select(ordered[(index - 1 + ordered.size()) % ordered.size()].id)
 
 
@@ -141,7 +140,7 @@ func select_ahead(ship_pos: Vector3, forward: Vector3) -> bool:
 		if r == 0.0:
 			continue  # no line of sight to a target at the ship's own position
 		var d: PackedFloat64Array = _offset64(ship_pos, info.position)
-		# Forward hemisphere: a positive dot product, tested exactly rather than through a rounded 90 degrees.
+		# Forward hemisphere, tested exactly rather than through a rounded 90 degrees.
 		if forward.x * d[0] + forward.y * d[1] + forward.z * d[2] <= 0.0:
 			continue
 		var angle: float = angle_between(forward, d)

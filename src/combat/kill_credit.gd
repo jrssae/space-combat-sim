@@ -9,7 +9,7 @@ extends RefCounted
 ##
 ## A death is either a kill or an assist, never both. Ids: `player_id` is the player ship's body instance id (what
 ## `shooter_id` holds); targets are their `Targetable`'s instance id (what `TargetingSystem.selected_id()` returns).
-## The counts last the session, across the player's respawns. `WaveDirector` owns one and feeds it.
+## The counts last the session, across respawns. `WaveDirector` owns one.
 
 const NONE: StringName = &"none"
 const KILL: StringName = &"kill"
