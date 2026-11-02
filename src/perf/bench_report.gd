@@ -45,10 +45,10 @@ static func run_summary(meta: Dictionary, series: Array[PackedInt64Array]) -> Di
 	var tick: Dictionary = stages["tick"]
 	var lag_share: float = PerfStats.lag(float(meta.get("sim_s", 0.0)), float(meta.get("wall_s", 0.0)))
 	var verdict: Dictionary = PerfStats.verdict(tick["median_us"], tick["p99_us"], PerfStats.max_value(rebases), lag_share)
+	var failures: PackedStringArray = verdict["failures"]  # a packed array is a value: changed here, stored back below
 	var aborted: String = String(meta.get("aborted", ""))
 	if not aborted.is_empty():
-		(verdict["failures"] as PackedStringArray).append("aborted: " + aborted)
-		verdict["pass"] = false
+		failures.append("aborted: " + aborted)
 	var out: Dictionary = meta.duplicate()
 	out["ticks"] = series[PerfProbe.Field.TICK].size()
 	out["lag"] = lag_share
@@ -59,7 +59,7 @@ static func run_summary(meta: Dictionary, series: Array[PackedInt64Array]) -> Di
 	out["ships_max"] = _max_int(ships)
 	out["bolts_mean"] = PerfStats.mean(_floats(series[PerfProbe.Field.BOLTS], on, true))
 	out["pairs_mean"] = PerfStats.mean(_floats(series[PerfProbe.Field.PAIRS], on, true))
-	out["verdict"] = {"pass": verdict["pass"], "failures": Array(verdict["failures"] as PackedStringArray)}
+	out["verdict"] = {"pass": failures.is_empty(), "failures": Array(failures)}
 	return out
 
 
@@ -168,9 +168,10 @@ static func _count_entry(n: int, runs: Array[Dictionary], passes: Array) -> Dict
 		rebase_worst = maxf(rebase_worst, float((run.get("rebase", {}) as Dictionary).get("max_us", 0.0)))
 		failures.append_array((run.get("verdict", {}) as Dictionary).get("failures", []))
 		for name: StringName in [&"tick"] + BREAKDOWN + INSIDE:
-			if not stage_means.has(String(name)):
-				stage_means[String(name)] = PackedFloat64Array()
-			(stage_means[String(name)] as PackedFloat64Array).append(float((stages.get(String(name), {}) as Dictionary).get("mean_us", 0.0)))
+			# A packed array is a value: take it, add to it, store it back.
+			var means: PackedFloat64Array = stage_means.get(String(name), PackedFloat64Array())
+			means.append(float((stages.get(String(name), {}) as Dictionary).get("mean_us", 0.0)))
+			stage_means[String(name)] = means
 	var breakdown: Dictionary = {}
 	for key: String in stage_means:
 		breakdown[key] = PerfStats.median(stage_means[key] as PackedFloat64Array)
