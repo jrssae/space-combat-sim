@@ -3,8 +3,8 @@ extends RefCounted
 ## Reads a scenario file (`data/scenarios/*.json`) into a validated spawn list (architecture §3, §14.6, §14.9).
 ## Pure: parses and checks, never touches the scene tree; the caller spawns every entry through `World.spawn()`.
 ##
-## Positions are universe coordinates and come back as `UniversePos` (64-bit: JSON numbers are doubles, and they
-## are never squeezed through a float32 `Vector3`). Velocities and directions are small local vectors (`Vector3`).
+## Positions are universe coordinates and come back as `UniversePos`, never squeezed through a float32 `Vector3`.
+## Velocities and directions are small local vectors.
 ##
 ## Result (also on failure, so callers can read it without checking every key):
 ##     {"ok": bool, "error": String,               # error is "" when ok, else "<source>: <what is wrong>"
@@ -152,10 +152,9 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	return result
 
 
-## `wings[]` (M3-T10): each wing's declaration, its members appended to `spawns` (placed at load with their wing), or an error
-## string. `leader` is "player", the name of a spawn (one of `spawns` or of its own members), or absent (its first ship leads);
-## `faction`, when given, must be every member's; `formation` a `Formation.NAMES` word (finger_four); `order` an
-## `AiContext.ORDER_WORDS` word (cover for a player-led wing, else engage).
+## `wings[]` (M3-T10): each wing's declaration, its members appended to `spawns`, or an error string. `leader` is "player",
+## a spawn's name, or absent (the first ship leads). `faction`, when given, must be every member's. `formation` defaults to
+## finger_four, `order` to cover for a player-led wing, else engage.
 static func _wings(raw: Variant, spawns: Array[Dictionary], system: StringName, source: String) -> Variant:
 	if not (raw is Array):
 		return "%s: wings must be an array" % source
@@ -220,8 +219,7 @@ static func _wings(raw: Variant, spawns: Array[Dictionary], system: StringName, 
 	return out
 
 
-## `pools`: `{"raider_fighter": 6, "starfury_ally": 4}` -> `{&"raider_fighter": 6, &"starfury_ally": 4}`, or an error string. Any
-## `ShipCatalog` type may be named; the counts are whole numbers, 0 or more.
+## `pools`: ship type -> count (whole, 0 or more), or an error string. Any `ShipCatalog` type may be named.
 static func _pools(raw: Variant, source: String) -> Variant:
 	if not (raw is Dictionary):
 		return "%s: pools must be an object" % source
@@ -270,7 +268,7 @@ static func _temper_range(wave: Dictionary, key: String, where: String) -> Varia
 	return Vector2(lo, hi)
 
 
-## `routes[]` as `Route`s (universe waypoints, no pace ship yet: the spawner sets `pace_id`), or an error string.
+## `routes[]` as `Route`s, or an error string. The spawner sets `pace_id`.
 static func _routes(raw: Variant, system: StringName, source: String) -> Variant:
 	if not (raw is Array):
 		return "%s: routes must be an array" % source

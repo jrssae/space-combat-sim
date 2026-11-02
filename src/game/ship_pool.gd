@@ -1,24 +1,23 @@
 class_name ShipPool
 extends Node3D
 ## Pooled AI ships (architecture §15.6, D22). GDGS re-merges the splat data of every node in the scene each time a
-## `GaussianSplatNode` enters or leaves the tree, so a spawn mid-fight would hitch. Raiders and allied Starfuries are therefore
-## built once, at scenario load (`prepare`, one call per ship type), and only switched afterwards: parked ships are hidden, not
-## processing (their bodies leave the physics space), not targetable and not hittable; `acquire` brings one of a type back at a
-## universe position, `release` parks it again. The number of splat nodes in the tree never changes.
+## `GaussianSplatNode` enters or leaves the tree, so a spawn mid-fight would hitch. Raiders and allied Starfuries are built
+## once at scenario load (`prepare`) and only switched afterwards: parked ships are hidden, not processing, not targetable
+## and not hittable. `acquire` brings one back at a universe position, `release` parks it again. The splat node count never
+## changes.
 ##
-## Each type is built with its `ShipCatalog` faction, so a raider is `raiders` and a `starfury_ally` is `earth_alliance`. Whoever
-## acquires a ship names it (`acquire(display_name, ...)`); `next_name(prefix, first)` finds the next free callsign.
+## Each type is built with its `ShipCatalog` faction (`raiders`, `earth_alliance`). Whoever acquires a ship names it;
+## `next_name(prefix, first)` finds the next free callsign.
 ##
-## This node is `World/Ships`: the parent of the pooled ships, spawned through `World.spawn` like everything else
-## (it has an identity transform, so a ship's local position is its World position). Set `world`, `projectiles` and
-## (for the console's `spawn`) `player` before `prepare`.
+## This node is `World/Ships`, with an identity transform so a ship's local position is its World position. Set `world`,
+## `projectiles` and (for the console's `spawn`) `player` before `prepare`.
 ##
-## Console (§15.13, D27, §16.4): providers `raiders` and `allies` (`pool_size`, `free`, `alive`, `list`, `selected_brain`, each for
-## its own type) and commands `despawn [target|all]` and `spawn <raider|ally> [idle|patrol|attack|aggro|ai] [distance_m] [yaw_deg]
-## [pitch_deg]` (an ally takes only `idle` or `ai`). Raiders are named `RAIDER <n>`, allies `ALPHA <n>` from 2 (the player is
-## ALPHA 1), the next free number. A pooled ship has an `AiPilotDriver`; `acquire` gives it the brain and `release` takes it away.
+## Console (§15.13, D27, §16.4): providers `raiders` and `allies`, and commands `despawn [target|all]` and
+## `spawn <raider|ally> [behaviour] [distance_m] [yaw_deg] [pitch_deg]` (an ally takes only `idle` or `ai`). Raiders are
+## named `RAIDER <n>`, allies `ALPHA <n>` from 2 (the player is ALPHA 1). A pooled ship has an `AiPilotDriver`; `acquire`
+## gives it the brain and `release` takes it away.
 
-## A pooled ship is back in play (end of `acquire`): it is somebody new, so per-ship records about it start over (M3-T16).
+## A pooled ship is back in play. It is somebody new, so per-ship records start over (M3-T16).
 signal acquired(combatant: Combatant)
 
 const DEFAULT_TYPE: StringName = &"raider_fighter"
@@ -93,10 +92,8 @@ func prepare(type: StringName, count: int) -> int:
 	return built
 
 
-## Takes a ship of `type` out of the pool and puts it at `at` (universe) with orientation `basis` and World-frame `velocity`, at
-## full hull, fuel and charge, called `display_name`. `brain` is kept for the AI (M2-T07). Returns null, with one warning, when
-## no ship of that type is free. The ship is enabled first, then placed, then its physics interpolation is reset (no smear from
-## the park).
+## Takes a ship of `type` out of the pool, restored and called `display_name`, at `at` (universe) with World-frame `velocity`.
+## Returns null, with one warning, when none is free. Interpolation is reset so the move from the park does not smear.
 func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTITY, velocity: Vector3 = Vector3.ZERO,
 		brain: PilotBrain = null, type: StringName = DEFAULT_TYPE) -> Combatant:
 	var combatant: Combatant = _take(type)
@@ -113,7 +110,7 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	ship.targeting.clear_selection()
 	combatant.cannon.gate.reset()
 	combatant.damageable.restore()
-	combatant.damageable.invulnerable = false  # a scenario's `invulnerable` is per spawn (M3-T09); the caller sets it again
+	combatant.damageable.invulnerable = false  # per spawn (M3-T09); the caller sets it
 	combatant.display_name = display_name
 	combatant.targetable.display_name = display_name
 	_set_brain(combatant, brain)

@@ -1,20 +1,18 @@
 class_name WavePlan
 extends RefCounted
-## The wave sandbox's state machine (architecture §15.10), pure: time and the number of raiders alive come in as arguments
-## (a fake clock in tests, `WaveDirector` in the game); spawn requests come out. Nothing here touches the scene tree.
+## The wave sandbox's state machine (architecture §15.10), pure: time and the number of raiders alive come in as arguments,
+## spawn requests come out. Nothing here touches the scene tree.
 ##
-## Per wave: `COUNTDOWN` (the wave's `delay_s`) -> `ACTIVE` (its spawns are issued at their `at_s` offsets; once all are issued
-## and none is alive) -> `CLEARED` (`CLEARED_PAUSE_S`) -> the next wave's `COUNTDOWN`. After the last scripted wave the plan
-## loops from wave `loop.from_wave` (1-based) over the waves from there to the end. The n-th time round a looped wave gets
-## `n * loop.add_per_loop` more attackers (copies of its last spawn, 2 s apart), up to `max_spawns` (the pool size).
+## Per wave: `COUNTDOWN` (`delay_s`) -> `ACTIVE` (spawns issued at their `at_s`; done once all are issued and none alive) ->
+## `CLEARED` (`CLEARED_PAUSE_S`) -> the next wave's `COUNTDOWN`. After the last scripted wave the plan loops from wave
+## `loop.from_wave` (1-based). The n-th time round, a looped wave gets `n * loop.add_per_loop` more attackers (copies of
+## its last spawn, 2 s apart), up to `max_spawns` (the pool size).
 ##
-## Temperament (M3-T13): a scripted wave may carry a `skill` and an `aggression` range (Vector2 low, high; (-1, -1) for none).
-## `skill_range(number)` raises the wave's skill range by `skill_step` each time round the loop, capped at an ace's 0.95, so the
-## floor climbs until every raider is an ace; `aggression_range` stays as scripted. `WaveDirector` rolls each AI raider's
-## values inside them.
+## Temperament (M3-T13): a wave may carry a `skill` and an `aggression` range (Vector2 low, high; (-1, -1) for none).
+## `skill_range(number)` raises the range by `skill_step` each loop, capped at an ace's 0.95, so the floor climbs until every
+## raider is an ace. `aggression_range` stays as scripted. `WaveDirector` rolls each AI raider's values inside them.
 ##
-## `wave_number` counts waves played, from 1, and keeps counting through the loops; `wave_index(number)` is the scripted
-## wave it plays.
+## `wave_number` counts waves played from 1 through the loops; `wave_index(number)` is the scripted wave it plays.
 
 enum State { IDLE, COUNTDOWN, ACTIVE, CLEARED }
 
@@ -176,8 +174,7 @@ func update(dt: float, alive: int) -> Array[Dictionary]:
 				request["wave_number"] = wave_number
 				due.append(request)
 				_issued += 1
-			# Cleared when everything has been issued and nothing is left: judged on a later tick than the last issue, so the
-			# caller has had a chance to put the new ships in `alive`.
+			# Cleared judged on a later tick than the last issue, so the caller has put the new ships in `alive`.
 			if due.is_empty() and _issued >= _spawn_list.size() and alive <= 0:
 				state = State.CLEARED
 				_time_s = 0.0

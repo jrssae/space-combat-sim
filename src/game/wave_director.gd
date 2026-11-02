@@ -1,18 +1,18 @@
 class_name WaveDirector
 extends Node
 ## Runs the combat sandbox's waves (architecture §15.10, M2-T09): owns the pure `WavePlan`, spawns raiders from the `ShipPool`
-## with a `BrainFactory` brain at the position the scenario gives (an offset from the player's universe position at the moment
-## the wave activates, or from the scenario's origin, universe (0, 0, 0), summed as `UniversePos`; never from the World's local
-## origin, which the rebase keeps near the player, M3-T14), counts kills and losses, and feeds the HUD's status line. Free
-## flight has no waves: the director then never starts and does nothing. The waves are about the raiders: allied ships in the pool
-## (M3-T08) are not counted as raiders, not cleared when a wave starts or stops, and a destroyed ally is no kill.
+## with a `BrainFactory` brain, counts kills and losses, and feeds the HUD's status line. Free flight has no waves.
+##
+## Spawn positions are offsets from the player's universe position when the wave activates, or from the scenario's origin,
+## as `UniversePos`. Never from the World's local origin, which the rebase keeps near the player (M3-T14).
+##
+## Waves are about raiders: allied ships in the pool (M3-T08) are not counted, not cleared when a wave starts or stops, and
+## a destroyed ally is no kill.
 ##
 ## `process_physics_priority` 300: after the hit resolver (200), so a raider destroyed this tick is already out of `alive`.
-## Kills: every raider destroyed counts, by anyone (rams included). Of those, `credit` (`KillCredit`, M3-T16, Q18) counts the
-## player's own kills and assists: it hears every shot of the player's cannon with the player's selection at that moment, and
-## forgets a pool ship's mark when the pool hands that ship out again. Losses: the player's deaths. All counts last the session.
-## The wave goes on across the player's death (maintainer answer Q6): the raiders left keep fighting, and
-## `on_player_respawned()` only makes their pilots pick the respawned player up at once.
+## Kills: every raider destroyed counts, by anyone (rams included). `credit` (`KillCredit`, M3-T16, Q18) counts the player's
+## own kills and assists. Losses: the player's deaths. All counts last the session. The wave goes on across the player's
+## death (maintainer answer Q6): `on_player_respawned()` only makes the raiders pick the respawned player up at once.
 ##
 ## Console: provider `waves` and `wave [start|next|stop|restart] [index]`.
 
@@ -143,20 +143,20 @@ func _spawn(request: Dictionary) -> void:
 		return
 	var player_local: Vector3 = player.ship.global_position if player != null and is_instance_valid(player.ship) else Vector3.ZERO
 	var at_local: Vector3 = world.universe_to_local(at)
-	# The nose along its drift, or toward the player for a raider that starts at rest.
+	# Nose along its drift, or toward the player when it starts at rest.
 	var heading: Vector3 = velocity if velocity.length() > 1.0 else (player_local - at_local)
 	var basis: Basis = ScenarioLoader.basis_facing(heading if heading.length() > 1e-3 else Vector3.FORWARD)
 	var brain: PilotBrain = made["brain"]
 	if brain is AiPilot and player != null and (brain as AiPilot).context.objective_name.is_empty():
-		# The wave is about the player (Q6): a raider that loses everything else from sight comes back for it (M3-T10).
+		# The wave is about the player (Q6): a raider with nothing else in sight comes back for it (M3-T10).
 		(brain as AiPilot).context.objective_name = player.display_name
 	var placed: Combatant = pool.acquire(raider_name, at, basis, velocity, brain, StringName(request["type"]))
 	if placed != null and wings != null and not String(request.get("wing", "")).is_empty():
 		wings.join(String(request["wing"]), placed)
 
 
-# An AI spawn's behaviour with its skill and aggression rolled inside the wave's ranges (M3-T13), seeded by the raider and the
-# wave, unless the spawn sets them itself. Anything else comes back unchanged.
+# Rolls an AI spawn's skill and aggression inside the wave's ranges (M3-T13), unless the spawn sets them. Seeded per raider
+# and wave. Other behaviours come back unchanged.
 func _tempered(behaviour: Variant, raider_name: String, number: int) -> Variant:
 	if not (behaviour is Dictionary) or str((behaviour as Dictionary).get("type", "")) != "ai":
 		return behaviour
@@ -172,12 +172,12 @@ func _tempered(behaviour: Variant, raider_name: String, number: int) -> Variant:
 	return out
 
 
-# The anchor's universe position when the wave activated, kept for the rest of the wave (offsets and waypoints are relative to it).
+# The anchor's universe position when the wave activated, kept for the whole wave.
 func _anchor_for(request: Dictionary) -> UniversePos:
 	var number: int = int(request["wave_number"])
 	if _anchor_wave != number or _anchor_player == null:
 		_anchor_wave = number
-		_anchor_origin = UniversePos.new(0.0, 0.0, 0.0, world.origin.system_id)  # the scenario's origin, where its props are
+		_anchor_origin = UniversePos.new(0.0, 0.0, 0.0, world.origin.system_id)  # where the scenario's props are
 		_anchor_player = world.to_universe(player.ship.global_position) if player != null and is_instance_valid(player.ship) else _anchor_origin
 	return _anchor_player if StringName(request["anchor"]) == &"player" else _anchor_origin
 

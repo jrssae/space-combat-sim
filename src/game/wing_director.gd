@@ -1,38 +1,34 @@
 class_name WingDirector
 extends Node
 ## Owns the wings and carries their orders to the pilots (architecture §16 D36, §16.3, M3-T07). `Combat/WingDirector` in the
-## main scene, `process_physics_priority` 290: after the resolvers (a member destroyed this tick is already down) and before
-## the waves (300).
+## main scene, `process_physics_priority` 290: after the resolvers (a member destroyed this tick is already down), before the
+## waves (300).
 ##
-## Every tick, for every wing (`refresh`): members whose hull is down or whose ship left play (`Damageable.is_active`), or
-## that no longer fly an `AiPilot`, leave their slot. Then each member's `AiContext` gets the wing's view: the order it flies
-## (`Wing.effective_order`: engage at will while the leader is dead), the leader's `Targetable` id and selected target, the
-## engage radius, its slot offset in the current formation, and the link to the leader (universe position and velocity),
-## which a member beyond sensor range flies on. The pilots read them on their next tick.
+## Each tick, for every wing (`refresh`): members that are down, left play or no longer fly an `AiPilot` leave their slot.
+## Then each member's `AiContext` gets the wing's view: its order (`Wing.effective_order`: engage at will while the leader is
+## dead), the leader's id and selected target, the engage radius, its slot offset, and the link to the leader that a member
+## beyond sensor range flies on.
 ##
-## Members: `add_member` takes a ship in play whose driver flies an `AiPilot` and gives the pilot the formation behaviour
-## when it has none; `remove_member` gives the ship back its own orders (engage at will, no slot).
+## Members: `add_member` takes a ship in play whose driver flies an `AiPilot` and gives it the formation behaviour if it has
+## none; `remove_member` gives the ship back its own orders.
 ##
-## Orders (`give_order`) come from `UiCommand` edges (keys 1-4, through `Main`) and the console, never from `Input`. An
-## order changes the wing's order, and with it every member's at once, and posts one acknowledgement line
-## (`acknowledged`, `last_ack`; `ack_text` is the HUD's line, shown for `ACK_HOLD_S` of sim time). ATTACK MY TARGET is
-## refused, with a line saying so, while the leader has no hostile selected; the order then stays as it was.
+## Orders (`give_order`) come from `UiCommand` edges (keys 1-4, through `Main`) and the console, never from `Input`. An order
+## changes every member's at once and posts one acknowledgement line (`acknowledged`, `last_ack`; `ack_text` is the HUD's
+## line, held `ACK_HOLD_S` of sim time). ATTACK MY TARGET is refused, with a line saying so, while the leader has no hostile
+## selected.
 ##
-## Replenish (maintainer Q8, AC11): `replenish` gives every empty slot of the player's wing an allied Starfury from the pool
-## (`ShipPool.ALLY_TYPE`), `Wing.callsign(slot)` by name, `REPLENISH_DISTANCE_M` behind the leader along its nose axis (the body
-## frame's +Z, as the formation's slots are; its velocity can be zero or point anywhere) in the slot's lane, at the leader's
-## velocity, on the `ally_starfury` profile and the wing's current order. `Main` calls it on `WaveDirector.wave_started`
-## (`on_wave_started`). It refreshes the wing first, so a wingman shot down in the very tick the wave starts counts as an empty
-## slot whoever calls it, in the physics order or not. It launches nothing while the leader is down or the game is paused, and fills what the pool can: one warning
-## when it falls short, none when the scenario pools no allies. A callsign already carried by a ship in play (a console `spawn
-## ally`) is not given twice: that slot takes the next free number after the wing's own.
+## Replenish (maintainer Q8, AC11): `replenish` gives every empty slot of the player's wing an allied Starfury from the pool,
+## named by `Wing.callsign(slot)`, `REPLENISH_DISTANCE_M` behind the leader along the body frame's +Z (the leader's velocity
+## may be zero or anything), at the leader's velocity, on the `ally_starfury` profile and the wing's order. `Main` calls it
+## on `WaveDirector.wave_started`. It refreshes first, so a wingman shot down this very tick counts as empty whatever the
+## physics order. It launches nothing while the leader is down or the game is paused, fills what the pool can, and warns
+## once if it falls short (not when the scenario pools no allies). A callsign already carried by a ship in play is not given
+## twice: that slot takes the next free number.
 ##
-## Scenario wings (M3-T10): `declare` takes a scenario's `wings[]` entries (leader word, order, formation); `join` puts a
-## ship placed from a spawn naming a wing into it: the wing is created on first use (as declared, or a group engaging at
-## will in a finger-four), the declared leader or, without one, the first ship to join leads, and the others take slots.
-## The player-led wing is the player's (Main creates it). A wing led by an AI ship whose leader is down hands the lead to
-## its member in the lowest slot (`refresh`), so a raider group keeps flying as a group; the player's wing waits for the
-## player instead.
+## Scenario wings (M3-T10): `declare` takes a scenario's `wings[]`; `join` puts a ship spawned into a named wing. The wing is
+## created on first use (as declared, or a group engaging at will in a finger-four). The declared leader leads, or else the
+## first to join. The player's wing is created by Main. An AI-led wing whose leader is down hands the lead to its lowest
+## slot (`refresh`), so a raider group keeps flying as a group; the player's wing waits for the player.
 ##
 ## Console (§16.4), for the player's wing (`player_wing`): provider `wing` (`name`, `order`, `formation`, `members`,
 ## `last_ack`) and `wing [order|formation|replenish] [value]`.
@@ -58,9 +54,9 @@ var wings: Array[Wing] = []
 var last_ack: String = ""
 
 var _ack_age_s: float = INF
-# Scenario declarations by lower-case wing name: {name, faction, leader, formation, order} (ScenarioLoader `wings[]`).
+# Scenario `wings[]` declarations by lower-case name.
 var _declared: Dictionary = {}
-# Replacements launched so far: part of each one's brain seed, so a run repeats.
+# Replacements launched so far; part of each brain seed so a run repeats.
 var _launched: int = 0
 
 
@@ -142,7 +138,7 @@ func join(wing_name: String, ship: Combatant) -> Wing:
 	return wing if add_member(wing, ship) > 0 else null
 
 
-# `ship` leads `wing` from now on: out of its slot if it had one, flying on its own orders; the old leader (alive) takes a slot.
+# Makes `ship` lead `wing`. A living old leader takes a slot.
 func _lead(wing: Wing, ship: Combatant) -> void:
 	var old: Combatant = wing.leader
 	if wing.slot_of(ship) > 0:
@@ -170,9 +166,8 @@ func player_wing() -> Wing:
 	return wings[0] if not wings.is_empty() else null
 
 
-## Puts a ship in play into `slot` of `wing` (-1: the first empty one) and briefs its pilot at once. Returns the slot, or -1
-## when the wing refuses it (`Wing.add_member`), it does not fly an `AiPilot`, or it is not in play (spawn or acquire it
-## first: `refresh` would drop it at once).
+## Puts a ship in play into `slot` of `wing` (-1: the first empty one) and briefs its pilot. Returns the slot, or -1 when the
+## wing refuses it, it does not fly an `AiPilot`, or it is not in play (`refresh` would drop it).
 func add_member(wing: Wing, member: Combatant, slot: int = -1) -> int:
 	var pilot: AiPilot = _pilot_of(member)
 	if wing == null or pilot == null or member.damageable == null or not member.damageable.is_active():
@@ -187,8 +182,8 @@ func add_member(wing: Wing, member: Combatant, slot: int = -1) -> int:
 	return at
 
 
-## Gives every empty slot of `wing` (default: the player's) a replacement from the ally pool and returns the ships launched,
-## lowest slot first (see the class notes). `Main` calls it when a wave starts; the console's `wing replenish` calls it too.
+## Gives every empty slot of `wing` (default: the player's) a replacement from the ally pool and returns the ships launched
+## (see the class notes).
 func replenish(wing: Wing = null) -> Array[Combatant]:
 	var launched: Array[Combatant] = []
 	if wing == null:
@@ -202,7 +197,7 @@ func replenish(wing: Wing = null) -> Array[Combatant]:
 	var leader: Ship = wing.leader.ship
 	var basis: Basis = leader.global_basis.orthonormalized()
 	var velocity: Vector3 = leader.linear_velocity
-	# Positions are taken now, as universe positions, and used at once: nothing here outlives the call (a rebase moves the origin).
+	# Universe positions, used at once: nothing outlives the call, since a rebase moves the origin.
 	var anchor: UniversePos = world.to_universe(leader.global_position)
 	for slot: int in empty:
 		if pool.free_count(ShipPool.ALLY_TYPE) == 0:
@@ -219,7 +214,7 @@ func replenish(wing: Wing = null) -> Array[Combatant]:
 		if ally == null:
 			break
 		if add_member(wing, ally, slot) != slot:
-			pool.release(ally)  # not in play after all; leave the slot for the next call
+			pool.release(ally)  # leave the slot for the next call
 			break
 		_launched += 1
 		launched.append(ally)
@@ -244,9 +239,8 @@ func remove_member(wing: Wing, member: Combatant) -> void:
 		pilot.context.clear_wing()
 
 
-## Gives `wing` (default: the player's) a new order and posts its one acknowledgement line. Returns `{"ok", "line"}`;
-## ATTACK MY TARGET without a hostile selected by the leader is refused (`ok` false, the order unchanged, the refusal is
-## the line posted).
+## Gives `wing` (default: the player's) a new order and posts one acknowledgement line. Returns `{"ok", "line"}`. ATTACK MY
+## TARGET without a hostile selected is refused (`ok` false, order unchanged, the refusal is the line).
 func give_order(new_order: AiContext.Order, wing: Wing = null) -> Dictionary:
 	if wing == null:
 		wing = player_wing()
@@ -299,8 +293,8 @@ func leader_alive(wing: Wing) -> bool:
 	return leader != null and leader.damageable != null and is_instance_valid(leader.ship) and leader.damageable.is_active()
 
 
-## One row per member of `wing` (default: the player's), in slot order: `callsign`, `slot`, `hull` (0..1), `behaviour`
-## and `state` (its brain's `describe`). The console's `wing.members`; the HUD roster's data (M3-T11).
+## One row per member of `wing` (default: the player's), in slot order: `callsign`, `slot`, `hull` (0..1), `behaviour` and
+## `state`. The console's `wing.members`.
 func roster(wing: Wing = null) -> Array[Dictionary]:
 	if wing == null:
 		wing = player_wing()
@@ -315,9 +309,8 @@ func roster(wing: Wing = null) -> Array[Dictionary]:
 	return out
 
 
-## The HUD roster of `wing` (default: the player's), one row per slot in slot order (M3-T11): `callsign`, `hull` (0..1),
-## `behaviour` and `target` (its pilot's, "" when none) and `down`. A slot whose member was shot down reads `down` with
-## its slot's callsign until a replacement takes it; a slot never flown is left out.
+## The HUD roster of `wing` (default: the player's), one row per slot (M3-T11): `callsign`, `hull`, `behaviour`, `target`
+## and `down`. A shot-down slot reads `down` until a replacement takes it; a slot never flown is left out.
 func hud_roster(wing: Wing = null) -> Array[Dictionary]:
 	if wing == null:
 		wing = player_wing()
@@ -349,10 +342,10 @@ func refresh(wing: Wing) -> void:
 		if _pilot_of(member) == null or member.damageable == null or not member.damageable.is_active():
 			var slot: int = wing.slot_of(member)
 			remove_member(wing, member)
-			wing.mark_lost(slot)  # shot down: the slot reads DOWN on the HUD until a replacement takes it
+			wing.mark_lost(slot)
 	var alive: bool = leader_alive(wing)
 	if not alive and (wing.leader == null or not wing.leader.is_player) and not wing.members().is_empty():
-		_lead(wing, wing.members()[0])  # the AI leader is down: the lowest slot leads on
+		_lead(wing, wing.members()[0])  # the lowest slot leads on
 		alive = true
 	var order: AiContext.Order = wing.effective_order(alive)
 	var leader_id: int = 0
@@ -404,8 +397,8 @@ func _post(line: String) -> void:
 	acknowledged.emit(line)
 
 
-# The slot's callsign, unless a ship in play carries it (a console `spawn ally`, say): then the first free number after the wing's
-# own, so no two ships answer to one name and the callsigns of the slots still to be filled stay free.
+# The slot's callsign, unless a ship in play carries it (a console `spawn ally`): then the first free number after the
+# wing's own, so no two ships share a name.
 func _callsign_for(wing: Wing, slot: int) -> String:
 	var callsign: String = wing.callsign(slot)
 	var taken: bool = wing.leader != null and wing.leader.display_name == callsign
@@ -445,7 +438,7 @@ func _console_members() -> PackedStringArray:
 	return out
 
 
-# The order words in key order: attack, form, engage, cover.
+# The order words in key order.
 static func _order_words() -> PackedStringArray:
 	var out := PackedStringArray()
 	for order: AiContext.Order in ORDERS_BY_KEY:
