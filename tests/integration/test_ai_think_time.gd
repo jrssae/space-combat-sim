@@ -1,24 +1,21 @@
 extends GutTest
-## AC13, AI half (M3-T06): the AI think time of 13 ships (four Starfuries on the `ally_starfury` profile and nine raiders on
-## the `raider` profile, AC19's mix, in one fight with bolts flying), headless, at the game's 60 Hz step. `ai.think_us` is the
-## wall-clock time of every `AiPilotDriver.step` in a tick: contact scan, perception, retarget, brain, avoidance filter.
+## AC13, AI half (M3-T06): the AI think time of 13 ships (four Starfuries on the `ally_starfury` profile, nine raiders on
+## the `raider` profile, AC19's mix) in one fight with bolts flying, headless, at 60 Hz. `ai.think_us` is the wall-clock time
+## of every `AiPilotDriver.step` in a tick.
 ##
-## Paired: the same 13 ships fly alternating blocks on `AiPilot` and on M2's `AttackBrain` in one process, so both brains see
-## the same fight and the same machine; `AiPilot`'s median tick must stay within `PILOT_SHARE_US` of the M2 brains' (T05 left
-## `AiPilot` about 0.5 ms of AC13's 1.5 ms). On the development desktop the speed of the whole frame swings by up to 2x over
-## seconds whatever flies the ships, so the blocks are short and many. Every M2 block sits between two AiPilot blocks, and
-## the statistic is the median over the M2 blocks of (the mean of the two AiPilot block medians either side) minus (the M2
-## block median): the bracketing cancels a steady drift of the frame cost, a block that straddles one of those swings is off
-## by about a millisecond either way, and the median of six is not moved by one or two. The first
-## seconds after 13 ships spawn are slow whatever flies them, so the fight warms up for `WARM_UP_TICKS`, and each block
-## settles for `SETTLE_TICKS` after the brains change.
+## Paired: the same ships fly alternating blocks on `AiPilot` and M2's `AttackBrain` in one process, so both see the same
+## fight and machine. `AiPilot`'s median tick must stay within `PILOT_SHARE_US` of the M2 brains' (T05 left it about 0.5 ms of
+## AC13's 1.5 ms). Frame speed on the development desktop swings up to 2x over seconds, so the blocks are short and many.
+## Every M2 block sits between two AiPilot blocks, and the statistic is the median over the M2 blocks of (the mean of the two
+## neighbouring AiPilot medians) minus the M2 median, which cancels a steady drift. The fight warms up for `WARM_UP_TICKS`,
+## and each block settles for `SETTLE_TICKS` after the brains change.
 ##
-## On `AiPilot`, the Starfuries fly as a wing (M3-T07): ALPHA 1 leads, ALPHA 2-4 are its members on COVER ME through a real
-## `WingDirector`, so the formation behaviour's score and the order gate are in the cost (the director drops members flying
-## M2 brains, so they rejoin at every switch back).
+## On `AiPilot`, the Starfuries fly as a wing (M3-T07): ALPHA 1 leads, ALPHA 2-4 are on COVER ME through a real
+## `WingDirector`, so the formation score and order gate are in the cost. The director drops members flying M2 brains, so
+## they rejoin at every switch back.
 ##
-## There is no absolute assertion: the quiet median of the whole path is about 2 ms for both brains on that desktop, over
-## AC13's 1.5 ms (recorded in the M3-T06 as-built notes, with the cost by component, for the maintainer to rebaseline).
+## There is no absolute assertion: the whole path's quiet median is about 2 ms for both brains on that desktop, over AC13's
+## 1.5 ms (recorded in the M3-T06 as-built notes for the maintainer to rebaseline).
 
 const STARFURY_SPEC: String = "res://assets/ships/starfury_aurora.tres"
 const RAIDER_SPEC: String = "res://assets/ships/raider_delta_v.tres"

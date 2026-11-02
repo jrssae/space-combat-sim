@@ -1,28 +1,24 @@
 class_name AiContext
 extends RefCounted
-## What an `AiPilot`'s behaviours decide from (architecture §16 D34): this tick's `Perception` plus what the pilot's wing
-## tells it, and a few lists derived from the contacts once per tick so every behaviour does not walk them again.
+## What an `AiPilot`'s behaviours decide from (architecture §16 D34): this tick's `Perception`, what the wing tells the
+## pilot, and lists derived once per tick so behaviours do not each walk the contacts.
 ##
-## One context per pilot, kept across ticks: `AiPilot.think` calls `refresh(p)` with the tick's perception; the wing fields
-## (`order`, `leader_id`, `leader_target_id`, `engage_radius_m`, the slot and the leader link) are set from outside the
-## brain (M3-T07's `WingDirector`; `BrainFactory`'s `orders`) and stay until changed. Later tasks add their own fields here
-## the same way: the guard post (T10); the route (`route`, T09).
+## One context per pilot, kept across ticks. The wing fields (`order`, `leader_id`, `leader_target_id`, `engage_radius_m`,
+## the slot, the leader link) are set from outside (`WingDirector`, `BrainFactory`) and stay until changed.
 ##
-## The objective (M3-T17, Q21): one target by display name (`objective_name`), set by `ai <name> objective <target|none>`, a
-## spawn's `objective` or (M5) a mission script. `refresh` finds it among the near contacts, then the broadcasts; the attack
-## flies to it from any broadcast range and attacks it once near, whatever its faction (a raider sent at a buoy).
+## Objective (M3-T17, Q21): one target by display name (`objective_name`), set by `ai <name> objective`, a spawn's
+## `objective` or (M5) a mission script. Attack flies to it from any broadcast range and attacks it once near, whatever
+## its faction (a raider sent at a buoy).
 ##
-## A guard post (M3-T10, `BehaviourGuard`): a fixed `guard_post` or the ship `guard_name` (its slot `guard_offset`, body frame)
-## and `guard_radius_m`. While the post is known this tick (`guarding`), `may_attack` also requires the hostile to be inside
-## the radius of it (`guard_point`) or to have the guarded ship selected, whatever the order.
+## Guard post (M3-T10): while the post is known (`guarding`), `may_attack` also needs the hostile inside the post's radius
+## or the guarded ship to have it selected, whatever the order.
 ##
-## Orders gate what may be attacked (`may_attack`), so a behaviour that attacks asks the context instead of reading the
-## order itself:
-## - ENGAGE_AT_WILL (the default, and a ship without a wing): any hostile ship.
-## - ATTACK_MY_TARGET: only the leader's selected target (`leader_target_id`); nothing while it has none.
-## - FORM_ON_ME: nothing, and no retreat either (`may_retreat`): formation only, though an evasion is still allowed.
-## - COVER_ME: stay with the leader and defend it: hostiles within `engage_radius_m` of it, while within `COVER_LEASH_M`
-##   of it. A ship with no leader at all engages at will.
+## Orders gate what may be attacked (`may_attack`), so behaviours ask the context instead of reading the order:
+## - ENGAGE_AT_WILL (default, and a ship without a wing): any hostile ship.
+## - ATTACK_MY_TARGET: only the leader's selected target; nothing while it has none.
+## - FORM_ON_ME: nothing, and no retreat (`may_retreat`). An evasion is still allowed.
+## - COVER_ME: defend the leader: hostiles within `engage_radius_m` of it, while within `COVER_LEASH_M` of it. With no
+##   leader at all, engage at will.
 
 enum Order { ENGAGE_AT_WILL, ATTACK_MY_TARGET, FORM_ON_ME, COVER_ME }
 
@@ -43,24 +39,22 @@ var leader_id: int = 0
 ## The target the leader has selected (a `Contact.id`), 0 for none.
 var leader_target_id: int = 0
 var engage_radius_m: float = DEFAULT_ENGAGE_RADIUS_M
-## The formation slot (M3-T07): whether this pilot has one, and its offset from the leader in the leader's body frame
-## (`Formation.offset`).
+## The formation slot (M3-T07) and its offset from the leader in the leader's body frame (`Formation.offset`).
 var has_slot: bool = false
 ## m, x right, y up, +z behind.
 var slot_offset: Vector3 = Vector3.ZERO
 ## The `Targetable` ids of this ship's wingmates, leader included, itself not (M3-T10, `BehaviourRally`); empty outside a wing.
 var wing_ids: PackedInt64Array = PackedInt64Array()
-## The wing's link to its leader (M3-T07): where the leader is (null when it has no live leader) and how fast it moves
-## (World frame), as of the `WingDirector`'s last tick. The formation flies on it when the leader is beyond sensor range;
-## in sight, the leader's contact (this tick, with its attitude) is used instead.
+## The wing's link to its leader (M3-T07), World frame, null without a live leader. Used while the leader is beyond
+## sensor range; in sight, its contact (with attitude) is used instead.
 var leader_link_position: UniversePos = null
 var leader_link_velocity: Vector3 = Vector3.ZERO
 ## The route this pilot leads (M3-T09, the instructor; `BehaviourFollowPath.attach` sets it), or null.
 var route: Route = null
-## The last target the attack behaviour flew at (kept while other behaviours fly, 0 before the first): evade's awareness tells
-## its own target's fire from everyone else's (M3-T18).
+## The last target attack flew at, kept while other behaviours fly (M3-T18). Evade uses it to tell its own target's fire
+## from everyone else's.
 var attack_target_id: int = 0
-## The target the pilot's behaviour in control wanted selected last tick (`AiPilot.wanted_target_id`), for a rammer's pick.
+## The target selected last tick (`AiPilot.wanted_target_id`), for a rammer's pick.
 var current_target_id: int = 0
 ## The objective's display name ("NAV ALPHA", compared case-insensitively), "" for none (M3-T17).
 var objective_name: String = ""
@@ -70,9 +64,8 @@ var guard_name: String = ""
 var guard_offset: Vector3 = Vector3.ZERO
 var guard_radius_m: float = 1500.0
 
-## Derived each tick by `refresh`: the leader among the friendly contacts (null when not in sight), the hostile ships in
-## sensor range with, by the same index, the offset from this ship to each (World frame) and its length, and the ids of
-## this ship and of every friendly contact (the targets that count as "a friend" being attacked).
+## Derived each tick by `refresh`: the leader (null when not in sight), hostile ships in sensor range with their offsets
+## (World frame) and ranges at the same index, and the ids of this ship and every friendly contact.
 var leader: Contact = null
 var hostiles: Array[Contact] = []
 var hostile_offsets: PackedVector3Array = PackedVector3Array()
@@ -81,8 +74,7 @@ var friendly_ids: PackedInt64Array = PackedInt64Array()
 ## The objective's contact this tick (near first, then broadcast), null while it is not seen or heard; and its range, m.
 var objective: Contact = null
 var objective_range_m: float = INF
-## The guard post this tick: whether there is one, where (World) and how fast it moves, and the guarded ship's contact (null
-## for a fixed post).
+## The guard post this tick: where (World), how fast it moves, and the guarded ship's contact (null for a fixed post).
 var guarding: bool = false
 var guard_point: Vector3 = Vector3.ZERO
 var guard_velocity: Vector3 = Vector3.ZERO
@@ -98,7 +90,7 @@ static func order_word(value: Order) -> StringName:
 	return ORDER_WORDS[value]
 
 
-## Takes this tick's perception and rebuilds the derived lists (reusing their storage).
+## Takes this tick's perception and rebuilds the derived lists.
 func refresh(p: Perception) -> void:
 	perception = p
 	leader = null
@@ -163,7 +155,7 @@ static func _named(contacts: Array[Contact], wanted: String) -> Contact:
 	return null
 
 
-## Back to a ship without a wing: engage at will, no leader, no slot, no link (the wing fields only).
+## Back to a ship without a wing (the wing fields only).
 func clear_wing() -> void:
 	order = Order.ENGAGE_AT_WILL
 	leader_id = 0
@@ -196,7 +188,7 @@ func may_attack(c: Contact) -> bool:
 	return true
 
 
-## Whether the orders let this pilot attack any hostile ship it sees now (the formation stands aside then).
+## Whether the orders let this pilot attack a hostile it sees now (the formation stands aside then).
 func has_attackable() -> bool:
 	match order:
 		Order.FORM_ON_ME:

@@ -1,27 +1,19 @@
 class_name HitResolver
 extends Node
 ## Swept hit detection for bolts (architecture §15.3, §15.5, D21). Once per physics tick, after every bolt has moved
-## (`process_physics_priority` 200), it sweeps the segment each bolt just flew against every active `Damageable` that is
-## hostile to the bolt and is not its shooter; with `settings.friendly_fire` (D31, read at the start of each tick) every
-## active hull but the shooter's can be hit. Pure script maths (`SweepMath` through `HitShape`), no Jolt queries, so it
-## is exact at any closing speed and does not depend on when Jolt moves the target.
+## (`process_physics_priority` 200), it sweeps each bolt's flight this tick against every active `Damageable` hostile to it
+## and not its shooter. With `settings.friendly_fire` (D31) every hull but the shooter's can be hit. Pure script maths
+## (`SweepMath` through `HitShape`), no Jolt queries, so it is exact at any closing speed.
 ##
-## Per bolt and target, in the target's body frame (the target's body has not been stepped yet this tick, so it is still at
-## its start-of-tick pose `(t0, B)` with velocity `v_t`):
-##
-##     a = B^T ((p1 - step) - t0)             # the bolt at the start of the tick, relative to the target
-##     b = B^T (p1 - (t0 + v_t * dt))         # ... and at its end
-##
-## A bounding-sphere test comes first, then each hit volume inflated by the bolt's hit radius; the earliest hit over all
-## targets wins. The bolt is spent, the target's `Damageable.apply_hit` runs, an `ImpactFlash` is added to the hit ship
-## and `hit_resolved` is emitted for the HUD and sound. Nothing is cached between ticks (a `World.rebase()` between ticks
-## changes nothing: the bolt stores a displacement, and positions shift together). The target's rotation during one tick
-## is ignored.
+## Each bolt and target are compared in the target's body frame, using its start-of-tick pose (its body has not been
+## stepped yet). A bounding-sphere test comes first, then each hit volume inflated by the bolt's hit radius; the earliest
+## hit wins. The bolt is spent, `Damageable.apply_hit` runs, an `ImpactFlash` is added and `hit_resolved` is emitted for the
+## HUD and sound. Nothing is cached between ticks, so a `World.rebase()` changes nothing. The target's rotation during one
+## tick is ignored.
 ##
 ## Console: provider `combat` (`projectiles`, `hits`, `last_hit`, `pairs_tested`, `resolve_us`) and commands
-## `damage <amount> [player|target]` and `heal [player|target|all]`. `resolve_us` is a profiling readout from the wall
-## clock, not gameplay time. It also registers the faction entries (`FactionConsole`: provider `factions`, command
-## `relation`), because `Factions` is static and has no node of its own.
+## `damage <amount> [player|target]` and `heal [player|target|all]`. `resolve_us` is wall clock, a profiling readout. It
+## also registers the faction entries (`FactionConsole`), because `Factions` is static and has no node of its own.
 
 ## A bolt hit a ship; `info.applied` is set by then.
 signal hit_resolved(info: HitInfo)
@@ -122,8 +114,7 @@ func _earliest_hit(bolt: Projectile, targets: Array[Dictionary], _delta: float) 
 	var best_t: float = INF
 	var p1: Vector3 = bolt.global_position
 	var start: Vector3 = p1 - bolt.last_step
-	# The bolt's step and each hull's motion this tick both fit in a sphere round their midpoints: a pair whose spheres do not
-	# touch cannot hit (M3-T18: slashing pilots keep many more bolts in flight; this skips most pairs before any other work).
+	# Cheap sphere test first: slashing pilots keep many more bolts in flight (M3-T18), and this skips most pairs.
 	var bolt_mid: Vector3 = start + bolt.last_step * 0.5
 	var bolt_reach: float = bolt.last_step.length() * 0.5 + bolt.hit_radius_m
 	for target: Dictionary in targets:
@@ -131,7 +122,7 @@ func _earliest_hit(bolt: Projectile, targets: Array[Dictionary], _delta: float) 
 		if bolt_mid.distance_squared_to(target["mid"]) > reach * reach:
 			continue
 		var damageable: Damageable = target["damageable"]
-		# A hull destroyed earlier in this very tick (by another bolt) cannot be hit again.
+		# Already destroyed this tick by another bolt.
 		if damageable.hull.destroyed or int(target["body_id"]) == bolt.shooter_id or not damageable.can_be_hit_by(bolt.faction, friendly_fire):
 			continue
 		pairs_tested += 1
@@ -169,8 +160,7 @@ func _land(bolt: Projectile, best: Dictionary, delta: float) -> void:
 			relative.length() / maxf(delta, 1e-6))
 	bolt.spend()
 	_apply(damageable, info)
-	# A hull that was destroyed by this hit is already hidden (the explosion replaces the flash), and a flash on a parked
-	# ship would sit there unprocessed until it is reused.
+	# A destroyed hull is hidden and the explosion replaces the flash; a flash on a parked ship would never be processed.
 	var body: Node3D = target["body"]
 	if body.is_visible_in_tree():
 		var flash := ImpactFlash.create(bolt.color, hash([bolt.shooter_id, info.target_id, Engine.get_physics_frames()]))
@@ -182,7 +172,7 @@ func _land(bolt: Projectile, best: Dictionary, delta: float) -> void:
 	hit_resolved.emit(info)
 
 
-# Sparks fly off the hull back along the bolt, mirrored about the surface (taken as radial from the hull's centre).
+# Sparks fly back off the hull, mirrored about the surface (taken as radial from the centre).
 func _throw_sparks(info: HitInfo, hull_centre: Vector3, hull_velocity: Vector3) -> void:
 	fx.burst(FxSpecs.HIT, info.point, FxSpecs.hit_direction(-info.normal, info.point - hull_centre), hull_velocity)
 

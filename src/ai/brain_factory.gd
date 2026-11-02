@@ -11,12 +11,11 @@ extends RefCounted
 ##      "skill": "rookie" | "regular" | "veteran" | "ace" | 0-1, "aggression": "passive" | ... | "reckless" | 0-1,
 ##      "objective": "NAV ALPHA", "guard": {"post": [x, y, z]} | {"ship": "ALPHA 2", "offset": [x, y, z]}, + "radius_m": 1500}
 ##
-## `ai` (M3-T06) is an `AiPilot` with the named `AiProfile` (required) and its orders (`AiContext.ORDER_WORDS`, default
-## `engage`), its skill and aggression (M3-T13, `AiTemperament`; default the profile's) and an optional objective, a target's display name (M3-T17: it flies to it from any broadcast range); its
-## behaviours are seeded from the seed. `guard` (M3-T10) gives it a post: a point relative to the anchor, or a ship by name and
-## a slot in its body frame (x right, y up, +z behind), with `radius_m` (1 500 by default, above 0). `patrol` (M3-T10),
-## `{"waypoints": [[x, y, z], ...], "cruise_mps": 80}` relative to the anchor, flies them in a loop (`BehaviourFollowPath` on a
-## `Route` with no pacing that yields to any attack the orders allow).
+## `ai` (M3-T06) is an `AiPilot` with the named `AiProfile` (required), orders (`AiContext.ORDER_WORDS`, default `engage`),
+## skill and aggression (M3-T13, default the profile's) and an optional objective (M3-T17), seeded from the seed. `guard`
+## (M3-T10) gives it a post: a point relative to the anchor, or a ship by name and a body-frame slot (x right, y up, +z
+## behind), with `radius_m` (default 1500). `patrol` (M3-T10) is `{"waypoints": [[x, y, z], ...], "cruise_mps": 80}`
+## relative to the anchor, looped, and yields to any attack the orders allow.
 ##
 ## Returns `{"ok": bool, "error": String, "brain": PilotBrain}`; the error names the offending key
 ## (`behaviour.waypoints[1]: ...`) so a scenario loader can report it with its own prefix.
@@ -93,7 +92,7 @@ static func _ai(spec: Dictionary, seed_value: int, anchor: UniversePos) -> Dicti
 	return _ok(pilot)
 
 
-# The looping, unpaced, yielding route an `ai` behaviour's `patrol` describes, or what is wrong with it.
+# The route an `ai` behaviour's `patrol` describes, or what is wrong with it.
 static func _ai_patrol(raw: Variant, anchor: UniversePos) -> Variant:
 	if not (raw is Dictionary):
 		return "behaviour.patrol must be an object: {\"waypoints\": [[x, y, z], ...], \"cruise_mps\": 80}"
@@ -117,7 +116,7 @@ static func _ai_patrol(raw: Variant, anchor: UniversePos) -> Variant:
 	return route
 
 
-# Attaches the guard post `raw` describes to `pilot`; "" when it is valid, else what is wrong.
+# Attaches the guard post `raw` describes; "" when valid, else what is wrong.
 static func _guard(pilot: AiPilot, raw: Variant, anchor: UniversePos) -> String:
 	if not (raw is Dictionary):
 		return "behaviour.guard must be an object: {\"post\": [x, y, z]} or {\"ship\": name, \"offset\": [x, y, z]}"

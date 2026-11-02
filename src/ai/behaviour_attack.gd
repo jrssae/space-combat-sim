@@ -1,37 +1,30 @@
 class_name BehaviourAttack
 extends AiBehaviour
-## Gun runs (architecture §16 D34): M2's `AttackBrain` state machine (approach, fire, break, extend) with the profile's
-## tactics, on a target this behaviour chooses, with the profile's aim error.
+## Gun runs (architecture §16 D34): M2's `AttackBrain` (approach, fire, break, extend) with the profile's tactics and aim
+## error, on a target this behaviour chooses.
 ##
-## Target choice, every tick among the hostile ships the orders allow (`AiContext.may_attack`; under ATTACK MY TARGET that
-## is the leader's target alone): the best of `W_NEAR` x nearness (1 at zero range, 0 at sensor range), `W_CLOSING` x the
-## closing speed (full at `CLOSING_FULL_MPS`), `W_ATTACKING_FRIEND` when its selected target is this ship or a friend, and
-## `W_DAMAGED` x its missing hull; the current target gets `KEEP_BONUS` so the choice does not flicker. A new target
-## restarts the run (APPROACH).
+## Target choice, every tick among the hostiles the orders allow (`AiContext.may_attack`): the best of `W_NEAR` x nearness,
+## `W_CLOSING` x closing speed (full at `CLOSING_FULL_MPS`), `W_ATTACKING_FRIEND` and `W_DAMAGED` x missing hull. The
+## current target gets `KEEP_BONUS` so the choice does not flicker. A new target restarts the run.
 ##
-## Objective (M3-T17; a fallback since M3-T10): while the pilot has an objective it can see or hear (`AiContext.objective`)
-## and no hostile ship in sight it may attack, the objective is the target, whatever its faction (the orders still stand
-## aside under FORM_ON_ME), scored as the best value (`OBJECTIVE_VALUE`). A hostile in sight is fought first, so a raider
-## sent at a buoy fights the defenders it meets on the way. Beyond the near scan (5 km) the run does not start: the ship
-## transits, flying at the target's
-## velocity plus a closing speed that it can still shed by 5 km (`TRANSIT_BRAKE_FRACTION` of its main-pod acceleration, a
-## flip included) between the tactics' `closing_far_mps` and `TRANSIT_MAX_MPS`, without firing. Inside 5 km the gun run takes
-## over as for any target.
+## Objective (M3-T17; a fallback since M3-T10): with an objective in sight or earshot and no allowed hostile in sight, the
+## objective is the target whatever its faction (orders still stand aside under FORM_ON_ME). A hostile in sight is fought
+## first, so a raider sent at a buoy fights the defenders on the way. Beyond the near scan (5 km) it transits instead,
+## closing at a speed it can still shed by 5 km (`TRANSIT_BRAKE_FRACTION`), without firing.
 ##
-## Temperament (M3-T13): the aim error and the gun run's tactics come from the effective profile (`retune`); a passive pilot
-## (`AiTemperament.never_starts`) attacks only the ship that hit it in the last `AiTemperament.PROVOKED_S`, and no objective.
+## Temperament (M3-T13): aim error and tactics come from the effective profile (`retune`). A passive pilot
+## (`AiTemperament.never_starts`) attacks only the ship that hit it within `AiTemperament.PROVOKED_S`, and no objective.
 ##
-## Slashing pass (M3-T18): each attack run is, by a seeded roll, either a slashing pass (`AttackSlash`: a firing pass, a turn
-## and burn, a chase) with the temperament's `slash_chance` or `AttackBrain`'s standard gun run; a profile with `slashing` off
-## never slashes. A run ends, and the next is rolled, when the standard run extends and comes round to approach again or the
-## slashing chase loses the target and passes again; a new target starts a new run too. Each pass is flown at the close 100 m
-## offset with the temperament's `close_pass_chance`. The target choice, the aim error and the objective are the same.
+## Slashing pass (M3-T18): each run is, by a seeded roll, an `AttackSlash` pass with the temperament's `slash_chance`, else
+## `AttackBrain`'s standard gun run. A profile with `slashing` off never slashes. A run ends, and the next is rolled, when
+## the standard run comes round to approach again, the chase loses the target, or the target changes. The pass offset is
+## the close one with `close_pass_chance`.
 ##
-## Score: 0 without an allowed target, else `SCORE_BASE + SCORE_SPAN` x the best target's value (0.3..0.8), so a tail threat
-## (evade) or a retreat outranks it.
+## Score: 0 without an allowed target, else `SCORE_BASE + SCORE_SPAN` x the best value (0.3..0.8), so a tail threat (evade)
+## or a retreat outranks it.
 ##
-## Aim: `AiProfile.aim_error_deg` is the amplitude of a slowly wandering offset on the lead (two seeded sines per axis, 0.05
-## to 0.35 Hz, in this behaviour's own time), so a pilot's misses are correlated over seconds, not noise from tick to tick.
+## Aim: `AiProfile.aim_error_deg` is the amplitude of a slowly wandering lead offset (two seeded sines per axis, 0.05 to
+## 0.35 Hz), so misses are correlated over seconds, not noise from tick to tick.
 
 const W_NEAR: float = 0.4
 const W_CLOSING: float = 0.2
@@ -43,7 +36,7 @@ const SCORE_BASE: float = 0.3
 const SCORE_SPAN: float = 0.5
 const INV_SENSOR_RANGE: float = 1.0 / ContactScan.SENSOR_RANGE_M
 const OBJECTIVE_VALUE: float = 1.0
-## The transit to a far objective: the top closing speed, m/s, and the share of the main-pod acceleration it plans to brake with.
+## Transit to a far objective: top closing speed, m/s, and the share of main-pod acceleration it plans to brake with.
 const TRANSIT_MAX_MPS: float = 1000.0
 const TRANSIT_BRAKE_FRACTION: float = 0.5
 
@@ -57,8 +50,8 @@ var _engaged_id: int = 0
 var _time_s: float = 0.0
 var _transit: bool = false
 var _passive: bool = false
-## The slashing pass; whether the current run is one; and the share of runs that are (`AiTemperament.slash_chance`, 0 when
-## the profile has slashing off; a test may set it), and of passes flown close.
+## The slashing pass, whether the current run is one, and the share of runs that are (0 with slashing off; tests may set it)
+## and of passes flown close.
 var slash: AttackSlash = AttackSlash.new()
 var uses_slash: bool = false
 var slash_chance: float = 0.0
@@ -111,7 +104,7 @@ func score(ctx: AiContext) -> float:
 	var keep_id: int = _target.id if _target != null else _engaged_id
 	_target = null
 	var best: float = -INF
-	# Engage at will with no guard post: every hostile ship, so skip the per-contact check.
+	# Engage at will with no guard post allows every hostile, so skip the per-contact check.
 	var at_will: bool = ctx.order == AiContext.Order.ENGAGE_AT_WILL and not ctx.guarding
 	var own_velocity: Vector3 = p.velocity
 	var friendly_ids: PackedInt64Array = ctx.friendly_ids
@@ -151,7 +144,7 @@ func score(ctx: AiContext) -> float:
 
 
 func enter() -> void:
-	_engaged_id = 0  # the first think restarts the run on whatever target it has
+	_engaged_id = 0  # so the first think restarts the run
 
 
 func think(ctx: AiContext, dt: float) -> PilotCommand:
@@ -197,8 +190,7 @@ func target_id() -> int:
 	return _target.id if _target != null else PilotBrain.TARGET_NONE
 
 
-# Toward a far objective: closing as fast as the ship can still stop by the near scan's edge, no fire. The run starts afresh
-# inside 5 km.
+# Closes on a far objective as fast as the ship can still stop by the near scan's edge, without firing.
 func _transit_to(p: Perception, range_m: float) -> PilotCommand:
 	_transit = true
 	_engaged_id = 0
@@ -214,13 +206,13 @@ func _transit_to(p: Perception, range_m: float) -> PilotCommand:
 	return cmd
 
 
-# The next run: a slashing pass with `slash_chance`, its pass close with `close_pass_chance`; else a standard gun run.
+# Rolls the next run: slashing pass or standard gun run, close or normal pass offset.
 func _roll_run() -> void:
 	uses_slash = slash_chance > 0.0 and _run_rng.randf() < slash_chance
 	slash.pass_offset_m = AttackSlash.CLOSE_PASS_OFFSET_M if _run_rng.randf() < close_pass_chance else AttackSlash.PASS_OFFSET_M
 
 
-## The aim offset (radians, right and up) at `t_s` of this behaviour's time: each axis within `aim_error_rad`.
+## The aim offset (radians, right and up) at `t_s`, within `aim_error_rad` per axis.
 func aim_offset_at(t_s: float) -> Vector2:
 	if aim_error_rad <= 0.0:
 		return Vector2.ZERO

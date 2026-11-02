@@ -1,24 +1,21 @@
 class_name ContactScan
 extends RefCounted
 ## What every AI ship can see this tick (architecture §16 D33, §16.3): one list of `Contact`s built from the active
-## `Targetable`s and `Damageable`s in the tree, and the bolts in flight. The first `AiPilotDriver` of a physics tick builds
-## it (`shared`, a process-wide cache keyed by `Engine.get_physics_frames()`); the others reuse it. The drivers run at
-## priority -10, before any ship, bolt or rebase moves anything, so one snapshot is right for all of them.
+## `Targetable`s and `Damageable`s in the tree, and the bolts in flight. The first `AiPilotDriver` of a physics tick builds it
+## (`shared`, cached per physics frame) and the others reuse it. Drivers run at priority -10, before anything moves, so one
+## snapshot is right for all.
 ##
-## A body with both a `Targetable` and a `Damageable` (every ship, every buoy) is one contact; it counts while either is
-## active, so a parked pool ship (hidden, not processing) is never one. `contacts_for` gives one ship the contacts within
-## `SENSOR_RANGE_M` but itself, stamped with its relation to them: the scan keeps each body's data in packed arrays and
-## builds the `Contact`s of a faction from them once, the first time a ship of that faction asks, shared by every ship of
-## that faction (read-only). When every two bodies are within sensor range of each other (a fight), a ship's list is that
-## faction list without itself, copied in one go. `incoming_fire` counts the hostile bolts about to pass close by.
+## A body with both a `Targetable` and a `Damageable` is one contact, counted while either is active, so a parked pool ship
+## is never one. `contacts_for` gives one ship the contacts within `SENSOR_RANGE_M` but itself, stamped with its relation.
+## Each faction's stamped list is built once from packed arrays and shared read-only by all its ships. `incoming_fire` counts
+## the hostile bolts about to pass close by.
 ##
-## Broadcasts (M3-T17, Q21): `shared_broadcasts` is a second, short scan of the frame built from `Targetable.broadcasters()`
-## alone (the buoys and the allies; never a sweep over every body), and `broadcasts_for` gives one ship those beyond the near
-## `SENSOR_RANGE_M` and within each broadcaster's own `broadcast_range_m`, stamped and shared per faction like the contacts.
-## Every faction hears the same broadcasts at the same ranges.
+## Broadcasts (M3-T17, Q21): `shared_broadcasts` is a second, short scan built from `Targetable.broadcasters()` alone (buoys
+## and allies, never a sweep over every body). `broadcasts_for` gives one ship those beyond the near `SENSOR_RANGE_M` and
+## within each broadcaster's own `broadcast_range_m`. Every faction hears the same broadcasts at the same ranges.
 ##
-## Within a frame the cache is rebuilt when a body it saw has been freed (a test that tears its world down mid-frame); a
-## body added later in the same frame appears from the next one. Tests that need a fresh scan call `invalidate()`.
+## The cache is rebuilt within a frame if a body it saw was freed; a body added later appears next frame. Tests that need a
+## fresh scan call `invalidate()`.
 
 const SENSOR_RANGE_M: float = 5000.0
 ## A hostile bolt is incoming when its closest approach is under this distance within this time.
@@ -33,7 +30,7 @@ static var _no_contacts: Array[Contact] = []
 ## The physics frame this scan is of (-1 for one built by hand).
 var physics_frame: int = -1
 
-# Per body, in scan order (packed: the scan runs every tick, AC13's budget).
+# Per body, in scan order. Packed because the scan runs every tick (AC13's budget).
 var _body_ids: PackedInt64Array = PackedInt64Array()
 var _ids: PackedInt64Array = PackedInt64Array()
 var _names: PackedStringArray = PackedStringArray()
@@ -46,14 +43,14 @@ var _radii: PackedFloat64Array = PackedFloat64Array()
 var _is_ship: PackedByteArray = PackedByteArray()
 var _hulls: PackedFloat64Array = PackedFloat64Array()
 var _target_ids: PackedInt64Array = PackedInt64Array()
-var _stamped: Dictionary = {}  # faction StringName -> Array[Contact] with the relation set
-var _extent_m: float = -1.0  # the diagonal of the box round every body, computed on first use
+var _stamped: Dictionary = {}  # faction -> Array[Contact] with the relation set
+var _extent_m: float = -1.0  # computed on first use
 var _bolt_positions: PackedVector3Array = PackedVector3Array()
 var _bolt_velocities: PackedVector3Array = PackedVector3Array()
 var _bolt_factions: Array[StringName] = []
 var _bolt_shooters: PackedInt64Array = PackedInt64Array()
-var _hostile_bolts: Dictionary = {}  # faction StringName -> PackedInt32Array of the bolts hostile to it
-var _reach: PackedFloat64Array = PackedFloat64Array()  # per body, its broadcast range (a broadcast scan only)
+var _hostile_bolts: Dictionary = {}  # faction -> indices of the bolts hostile to it
+var _reach: PackedFloat64Array = PackedFloat64Array()  # per body broadcast range (broadcast scan only)
 
 
 ## The scan of the current physics frame, built on the first call of the frame.
@@ -98,8 +95,7 @@ static func from_broadcasters(list: Array[Targetable]) -> ContactScan:
 static func from_tree(tree: SceneTree) -> ContactScan:
 	var scan := ContactScan.new()
 	var seen: Dictionary = {}
-	# Each body's hull, as `Damageable.of` finds it (its first one), from the group once instead of a walk over every body's
-	# children (AC13's budget).
+	# Hulls found from the group once, not by walking every body's children (AC13's budget).
 	var damageable_nodes: Array[Node] = tree.get_nodes_in_group(Damageable.GROUP)
 	var hulls: Dictionary = {}  # body instance id -> Damageable
 	for node: Node in damageable_nodes:
@@ -139,8 +135,7 @@ func contacts_for(own_body_id: int, own_position: Vector3, own_faction: StringNa
 		range_m: float = SENSOR_RANGE_M) -> Array[Contact]:
 	var stamped: Array[Contact] = _stamped_for(own_faction)
 	var own_index: int = _body_ids.find(own_body_id)
-	# Every body within `range_m` of this ship for sure (the box round them all, plus how far the ship moved since the scan,
-	# with a margin for rounding): the faction list without the ship itself, the same list the loop below would build.
+	# Fast path: everything is in range for sure, so the faction list without this ship is what the loop would build.
 	if own_index >= 0 and _extent() + own_position.distance_to(_positions[own_index]) < range_m * 0.999:
 		var all: Array[Contact] = stamped.duplicate()
 		all.remove_at(own_index)
@@ -153,8 +148,8 @@ func contacts_for(own_body_id: int, own_position: Vector3, own_faction: StringNa
 	return out
 
 
-## The broadcasts a ship of `own_faction` at `own_position` hears (a scan from `from_broadcasters`): farther than `near_m` (the
-## near contacts hold those) and within each broadcaster's own range, never its own body.
+## The broadcasts a ship hears (from a `from_broadcasters` scan): beyond `near_m`, where contacts take over, and within
+## each broadcaster's own range.
 func broadcasts_for(own_body_id: int, own_position: Vector3, own_faction: StringName,
 		near_m: float = SENSOR_RANGE_M) -> Array[Contact]:
 	if _body_ids.is_empty():
@@ -180,7 +175,7 @@ func incoming_fire(own_body_id: int, own_position: Vector3, own_velocity: Vector
 			continue
 		var rel_pos: Vector3 = _bolt_positions[i] - own_position
 		var rel_vel: Vector3 = _bolt_velocities[i] - own_velocity
-		# Farther than it can close in the horizon plus the miss distance (and a metre for rounding): it cannot pass close.
+		# Too far to close within the horizon, so it cannot pass close.
 		var reach: float = rel_vel.length() * INCOMING_HORIZON_S + INCOMING_MISS_M + 1.0
 		if rel_pos.length_squared() > reach * reach:
 			continue
@@ -220,12 +215,12 @@ func _add(body: Node3D, targetable: Targetable, damageable: Damageable) -> void:
 		_target_ids.append(-1)
 
 
-# The contacts as a ship of `faction` sees them, built once per faction from the packed arrays.
+# The contacts as a ship of `faction` sees them, built once per faction.
 func _stamped_for(faction: StringName) -> Array[Contact]:
 	if _stamped.has(faction):
 		return _stamped[faction]
 	var list: Array[Contact] = []
-	var relations: Dictionary = {}  # contact faction -> relation, looked up once per faction pair
+	var relations: Dictionary = {}  # looked up once per faction pair
 	for i: int in _body_ids.size():
 		var c := Contact.new()
 		c.id = _ids[i]
@@ -248,7 +243,7 @@ func _stamped_for(faction: StringName) -> Array[Contact]:
 	return list
 
 
-# The diagonal of the box round every body (an upper bound on the distance between any two of them).
+# Upper bound on the distance between any two bodies.
 func _extent() -> float:
 	if _extent_m < 0.0:
 		var lo: Vector3 = Vector3.INF
@@ -260,7 +255,7 @@ func _extent() -> float:
 	return _extent_m
 
 
-# The bolts hostile to `faction`, resolved once per faction per scan (the relation lookup is the costly part per bolt).
+# The bolts hostile to `faction`, resolved once per faction because the relation lookup is the costly part.
 func _hostile_bolts_for(faction: StringName) -> PackedInt32Array:
 	if _hostile_bolts.has(faction):
 		return _hostile_bolts[faction]

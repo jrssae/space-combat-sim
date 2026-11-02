@@ -5,9 +5,8 @@ extends RefCounted
 ## and brains that remember places (waypoints) keep them as `UniversePos` and convert them every tick with
 ## `to_local(...)`. Plain data; no scene-tree access from a brain.
 ##
-## The defaults of `capability` and `frame_origin` are shared by every perception that is not given its own (read them,
-## never write them): one `ShipCapability` and one `UniversePos` per perception would be two allocations per AI ship per
-## tick (AC13's budget). The driver sets both every tick (the origin only when it has a world).
+## The defaults of `capability` and `frame_origin` are shared (read, never write) to save two allocations per AI ship per
+## tick (AC13's budget). The driver sets both every tick.
 
 static var _default_capability: ShipCapability = ShipCapability.new()
 static var _default_origin: UniversePos = UniversePos.new()
@@ -27,8 +26,8 @@ var hull_fraction: float = 1.0
 var faction: StringName = Factions.NEUTRAL
 ## What this ship can do: accelerations and turn rates (`ShipCapability`).
 var capability: ShipCapability = _default_capability
-## Where the bolts leave the ship: the mean muzzle position less `position`, World axes (zero: from the centre). The
-## Starfury's guns hang 1.4 m under its centre, enough to miss a raider when the lead is solved from the centre.
+## Where the bolts leave the ship, relative to `position`, World axes. The Starfury's guns hang 1.4 m under its centre,
+## enough to miss a raider when the lead is solved from the centre.
 var muzzle_offset: Vector3 = Vector3.ZERO
 ## The weapon's muzzle speed (m/s, relative to the shooter) and a bolt's lifetime (s).
 var muzzle_speed_mps: float = 400.0
@@ -43,21 +42,17 @@ var target_hostile: bool = false
 ## Everything active within `ContactScan.SENSOR_RANGE_M` (5 km) but this ship: ships, drones, props, as of this tick,
 ## with their relation to this ship (§16 D33). Shared with other ships of the faction: read, never write.
 var contacts: Array[Contact] = []
-## The broadcasts this ship hears (M3-T17, Q21): contacts beyond the 5 km of `contacts` and within each one's own broadcast
-## range (buoys 1 000 km, allies 100 km), as of this tick, stamped with their relation to this ship
-## (`ContactScan.broadcasts_for`). Avoidance and the fire lane never read it; behaviours do not chase it on their own, only a
-## pilot objective (`AiContext.objective_name`). Shared: read, never write.
+## The broadcasts this ship hears (M3-T17, Q21): contacts beyond the 5 km of `contacts` and within their own broadcast
+## range (buoys 1 000 km, allies 100 km). Avoidance and the fire lane never read it, and behaviours chase it only for a pilot
+## objective (`AiContext.objective_name`). Shared: read, never write.
 var broadcasts: Array[Contact] = _no_broadcasts
-## Hostile bolts whose closest approach comes within `ContactScan.INCOMING_MISS_M` (15 m) in the next
-## `ContactScan.INCOMING_HORIZON_S` (2 s).
+## Hostile bolts that will pass within `ContactScan.INCOMING_MISS_M` (15 m) in the next `ContactScan.INCOMING_HORIZON_S` (2 s).
 var incoming_fire: int = 0
 ## Sim time of the latest hit this hull took (a bolt or anything else `Damageable.hit_taken` reports), -INF when none yet.
 var last_hit_s: float = -INF
-## Sim time of the latest bolt hit on this hull (`HitInfo.CAUSE_BOLT`; rams and the console are not), -INF when none: the
-## hit reaction's trigger (M3-T10, Q11).
+## Sim time of the latest bolt hit (not rams or the console), -INF when none. The hit reaction's trigger (M3-T10, Q11).
 var last_bolt_hit_s: float = -INF
-## The `Targetable` id of the ship behind the latest hit with a shooter (a bolt or a ram), 0 when none (M3-T13: a passive
-## pilot fires back at it).
+## The `Targetable` id of whoever made the latest hit (a bolt or a ram), 0 when none. A passive pilot fires back at it (M3-T13).
 var last_attacker_id: int = 0
 ## `settings.friendly_fire` this tick: bolts then hurt every hull but the shooter's (`FireLane`).
 var friendly_fire: bool = false

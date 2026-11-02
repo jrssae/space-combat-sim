@@ -1,17 +1,13 @@
 class_name BehaviourRally
 extends AiBehaviour
-## Back to the wing's fight (architecture §16 D34, M3-T10): a ship of a wing with nothing it may attack in sight flies to the
-## nearest wingmate that is engaged (has a target selected), seen near or heard through its broadcast
-## (`Perception.broadcasts`, allies 100 km), so a wing whose fight has spread past the 5 km near scan comes together again
-## instead of idling while a wingmate fights on alone. It flies to a wingmate, never to a far hostile: behaviours still do
-## not chase far contacts on their own (Q21).
+## Back to the wing's fight (architecture §16 D34, M3-T10): a wing ship with nothing it may attack in sight flies to the
+## nearest engaged wingmate (one with a target selected), seen or heard through broadcast (`Perception.broadcasts`, allies
+## 100 km). So a fight that spread past the 5 km near scan comes together instead of a wingmate fighting alone. It flies to
+## a wingmate, never a far hostile: behaviours do not chase far contacts on their own (Q21).
 ##
-## Score: `SCORE` (above idle, below formation's 0.25, so a member keeps its slot and only a leader, or a member without a
-## leader, rallies) while the orders allow no attack on anything in sight and an engaged wingmate is farther than
-## `ARRIVE_M`; else 0. `WingDirector` gives it to the AI ships of a wing and keeps `AiContext.wing_ids` current.
-##
-## Flight: toward the wingmate at its velocity plus a closure of the profile's cruise + `EXTRA_MPS`, nose along the velocity
-## change while that is over `FACE_DV_MPS`.
+## Score: `SCORE` (above idle, below formation's 0.25, so only a leader or a leaderless member rallies) while the orders
+## allow no attack on anything in sight and an engaged wingmate is beyond `ARRIVE_M`; else 0. `WingDirector` gives it to a
+## wing's AI ships and keeps `AiContext.wing_ids` current.
 
 const SCORE: float = 0.2
 const ARRIVE_M: float = 1500.0
@@ -34,7 +30,7 @@ func score(ctx: AiContext) -> float:
 	if ctx.wing_ids.is_empty() or ctx.has_attackable():
 		return 0.0
 	var p: Perception = ctx.perception
-	# The nearest engaged wingmate beyond ARRIVE_M.
+	# Nearest engaged wingmate beyond ARRIVE_M.
 	var nearest: float = INF
 	for list: Array[Contact] in [p.contacts, p.broadcasts]:
 		for c: Contact in list:

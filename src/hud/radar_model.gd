@@ -7,10 +7,10 @@ extends RefCounted
 ## Radar space: X right, Y forward (nose, up the screen), Z ship-up (toward the viewer). A contact dead ahead is (0, r, 0),
 ## dead astern (0, -r, 0), above (0, 0, r), below (0, 0, -r), to the right (r, 0, 0), to the left (-r, 0, 0).
 ##
-## Radius `r` grows linearly to `LINEAR_RANGE_M` (5 km) where it reaches `LINEAR_RADIUS` (0.6), then logarithmically to
-## 1.0 at `MAX_RANGE_M` (25 km, the sensor range); contacts beyond that are dropped, except a broadcast contact (M3-T17) within
-## its own broadcast range: it sits on the rim (radius 1) in its true direction, drawn hollow (`Dot.rim`). Each dot has a
-## stalk down (or up) to the equatorial plane (Z = 0), which tells above from below at a glance.
+## Radius `r` grows linearly to `LINEAR_RADIUS` (0.6) at `LINEAR_RANGE_M` (5 km), then logarithmically to 1.0 at
+## `MAX_RANGE_M` (25 km, the sensor range). Contacts beyond that are dropped, except a broadcast contact (M3-T17) within its
+## own range: it sits on the rim in its true direction, drawn hollow (`Dot.rim`). Each dot has a stalk to the equatorial plane
+## (Z = 0), which tells above from below at a glance.
 
 const MAX_RANGE_M: float = 25000.0
 const LINEAR_RANGE_M: float = 5000.0
@@ -72,8 +72,8 @@ static func dot_for(id: int, position: Vector3, faction: StringName, selected: b
 	return dot
 
 
-## Every contact in `infos` (`TargetInfo`s) within sensor range or its broadcast range, farthest first and the selected one last, so a drawing pass
-## in this order leaves the near ones and the selection on top.
+## Every contact in `infos` within sensor or broadcast range, farthest first and the selected one last, so drawing in this
+## order leaves the near ones and the selection on top.
 static func dots(infos: Array[TargetInfo], selected_id: int, own_position: Vector3, own_basis: Basis,
 		viewer_faction: StringName) -> Array[Dot]:
 	var out: Array[Dot] = []

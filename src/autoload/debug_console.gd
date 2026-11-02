@@ -110,8 +110,7 @@ func _exit_tree() -> void:
 		OS.remove_logger(_logger)
 		_logger_added = false
 	if _open:
-		# Leaving the tree while open: hand the keyboard back and undo our pause, without touching the UI (its
-		# nodes have already left the tree).
+		# Leaving while open: hand the keyboard back and undo our pause. The UI nodes have already left the tree.
 		_open = false
 		_apply_input_mask()
 		if _paused_by_console:
@@ -380,8 +379,7 @@ func _quit(code: int) -> void:
 	if quit_handler.is_valid():
 		quit_handler.call(code)
 	elif is_inside_tree():
-		# A sound still playing at the quit keeps its stream alive in the audio server past the scene ("resources still in
-		# use at exit"): stop every player and drop its stream, then quit a frame later, once the server has let go.
+		# A sound playing at quit keeps its stream alive ("resources still in use at exit"), so silence everything and quit a frame later.
 		_silence(get_tree().root)
 		await get_tree().process_frame
 		get_tree().quit(code)

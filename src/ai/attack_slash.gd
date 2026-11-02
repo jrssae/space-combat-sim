@@ -1,31 +1,26 @@
 class_name AttackSlash
 extends PilotBrain
-## The slashing pass and chase (architecture §16 D34, M3-T18, maintainer Q19): how better pilots fight a Starfury-style fight.
-## `BehaviourAttack` delegates to it instead of `AttackBrain` for the pilots `AiTemperament.slashes` picks. States:
+## The slashing pass and chase (architecture §16 D34, M3-T18, maintainer Q19): how better pilots fight a Starfury-style
+## fight. `BehaviourAttack` delegates to it instead of `AttackBrain` for the pilots `AiTemperament.slash_chance` picks.
 ##
-## - **PASS**: close at speed (the target's velocity plus `tactics.closing_far_mps`) on a course that goes by `PASS_OFFSET_M`
-##   to the side of the target, on whichever side the ship already is, so the line of sight turns slowly enough for the nose to
-##   stay on the lead: facing the lead and firing through closest approach under the same fire gate as `AttackBrain` (cone, miss distance,
-##   fire range, `FireLane`). The driver's avoidance stays on, so the pass goes by clear of the target. Once the range opens
-##   again after closest approach, the run turns.
-## - **TURN**: face the target and burn to kill the overshoot: the wish is the target's velocity plus `CHASE_CLOSING_MPS`
-##   toward it, with the mains (and on the Starfury the retros, equal since M3-T15) and the RCS all working (`all_axes`). It
-##   fires whenever the gate allows. When the nose is on the lead and the ship closes on the target again, it chases.
-## - **CHASE**: hold the target in the fire gate from behind at a small closing speed: the wish is the target's velocity plus
-##   a closure that settles the range at `CHASE_RANGE_M` (at most `CHASE_CLOSING_MPS` in, `CHASE_OPENING_MPS` out). Beyond
-##   `LOST_RANGE_FACTOR` x the fire range it starts a new pass.
+## - **PASS**: close on a course that goes by `PASS_OFFSET_M` to the side of the target, so the nose can stay on the lead
+##   through closest approach, firing under the same gate as `AttackBrain`. Avoidance stays on. Once the range opens
+##   again, the run turns.
+## - **TURN**: face the target and burn to kill the overshoot, all axes working (mains and, equal since M3-T15, retros).
+##   Fires whenever the gate allows. Once the nose is on the lead and the ship closes again, it chases.
+## - **CHASE**: hold the target in the gate from behind, settling the range at `CHASE_RANGE_M`. Beyond `LOST_RANGE_FACTOR`
+##   x the fire range it starts a new pass.
 ##
-## `time_on_target_s` counts the sim time with the target inside the fire gate (cone, miss distance and range), the measure
-## AC26 compares with the standard attack's. The speed caps are `AttackBrain`'s (`RaiderTactics.max_speed_mps`).
+## `time_on_target_s` is the sim time the target spent inside the fire gate, the measure AC26 compares with the standard
+## attack's. Speed caps are `AttackBrain`'s.
 
 enum State { PASS, TURN, CHASE }
 
 const STATE_NAMES: Array[StringName] = [&"pass", &"turn", &"chase"]
-## m: the pass goes by this far to the side (the line of sight then turns at about the closing speed / this, 0.75 rad/s at
-## 150 m/s: trackable, where a pass straight through swings faster than any nose turns).
+## m: the pass goes by this far to the side, so the line of sight turns slowly enough to track (0.75 rad/s at 150 m/s). A
+## pass straight through swings faster than any nose turns.
 const PASS_OFFSET_M: float = 200.0
-## m: the close pass of the most aggressive pilots (`AiTemperament.close_pass_chance`); harder to track, the guns on target
-## for less of it, but nearer the target.
+## m: the close pass of the most aggressive pilots (`AiTemperament.close_pass_chance`): harder to track, nearer the target.
 const CLOSE_PASS_OFFSET_M: float = 100.0
 const CHASE_RANGE_M: float = 500.0
 const CHASE_CLOSING_MPS: float = 60.0
@@ -95,8 +90,7 @@ func engage(p: Perception, target_id: int, target_position: Vector3, target_velo
 	if aim_offset_rad != Vector2.ZERO:
 		lead_dir = _offset(lead_dir)
 	lead_error_deg = rad_to_deg(PilotSteering.angle_to(p.basis, lead_dir))
-	# How fast the lead turns, fed forward into the nose's turn (`PilotSteering.face_tracking`): a pass's line of sight turns
-	# faster and faster toward closest approach, and a P loop alone trails it by more than the gate allows.
+	# Lead turn rate, fed forward to the nose: near closest approach a P loop alone trails the lead by more than the gate allows.
 	var lead_omega := Vector3.ZERO
 	if _last_lead_dir != Vector3.ZERO and dt > 0.0:
 		lead_omega = _last_lead_dir.cross(lead_dir) / dt
@@ -110,10 +104,10 @@ func engage(p: Perception, target_id: int, target_position: Vector3, target_velo
 	_last_range_m = range_m
 	var v_des := Vector3.ZERO
 	var face_dir: Vector3 = lead_dir
-	var tracking: bool = true  # facing the lead, its turn fed forward
+	var tracking: bool = true
 	var all_axes: bool = false
 	var cap: float = tactics.max_speed_mps
-	# The state changes first, so a tick flies the state it ends in.
+	# Change state first so the tick flies the state it ends in.
 	match state:
 		State.PASS:
 			if opening and range_m < tactics.fire_range_m:
@@ -154,8 +148,7 @@ func engage(p: Perception, target_id: int, target_position: Vector3, target_velo
 	return cmd
 
 
-# Toward a point `PASS_OFFSET_M` to the side of the target, square to the line of sight, on the side the ship is already
-# moving to (relative to the target; straight up when it has no sideways motion), so the pass goes by rather than through.
+# Course that goes by the target on the side the ship is already moving to, rather than through it.
 func _pass_dir(p: Perception, target_position: Vector3, target_velocity: Vector3, los: Vector3, los_dir: Vector3) -> Vector3:
 	var rel_v: Vector3 = p.velocity - target_velocity
 	var side: Vector3 = rel_v - los_dir * rel_v.dot(los_dir)
@@ -178,7 +171,7 @@ func _enter(next: State) -> void:
 	state_time_s = 0.0
 
 
-# The lead turned by the aim error (as `AttackBrain._offset`).
+# The lead turned by the aim error, as in `AttackBrain`.
 func _offset(lead_dir: Vector3) -> Vector3:
 	var right: Vector3 = lead_dir.cross(Vector3.UP if absf(lead_dir.dot(Vector3.UP)) < 0.95 else Vector3.RIGHT).normalized()
 	var up: Vector3 = right.cross(lead_dir)

@@ -1,13 +1,13 @@
 class_name BehaviourRetreat
 extends AiBehaviour
-## Run for it (architecture §16 D34): below the profile's `retreat_below` hull, with a hostile ship in sensor range, fly
-## away from the hostiles at `cruise_mps + EXTRA_MPS` (World frame, so a chaser that is faster still catches up: a retreat
-## opens the range, it is not an escape). The way out is away from every hostile in sight, the nearer ones counting more
-## (each pulls with 1 / distance). Never fires. Scores 0 with `retreat_below` 0 (the instructor, raiders that fight to the
-## death), above the threshold, with no hostile in sight, or under FORM ON ME (`AiContext.may_retreat`, M3-T07); below it,
-## from `SCORE_MIN` at the threshold to 1 at zero hull, so it outranks an attack. A profile's `retreat_within_m` (the civilian's
-## 3 km, M3-T13) also scores `SCORE_MIN` whenever a hostile ship is that near, whatever the hull. The threshold comes from the
-## effective profile (`retune`: the temperament scales it).
+## Run for it (architecture §16 D34): below the profile's `retreat_below` hull, with a hostile ship in sensor range, fly away
+## from the hostiles at `cruise_mps + EXTRA_MPS`, nearer ones counting more (each pulls with 1 / distance). A faster chaser
+## still catches up: a retreat opens the range, it is not an escape. Never fires.
+##
+## Scores 0 with `retreat_below` 0 (the instructor, raiders that fight to the death), above the threshold, with no hostile in
+## sight, or under FORM ON ME (`AiContext.may_retreat`, M3-T07). Below it, `SCORE_MIN` at the threshold up to 1 at zero hull,
+## so it outranks an attack. A profile's `retreat_within_m` (M3-T13) also scores `SCORE_MIN` whenever a hostile is that
+## near. The threshold comes from the effective profile (`retune`).
 
 const EXTRA_MPS: float = 50.0
 const SCORE_MIN: float = 0.85

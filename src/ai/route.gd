@@ -1,19 +1,18 @@
 class_name Route
 extends RefCounted
-## A waypoint route a ship leads another along (architecture §16 D37, M3-T09, maintainer Q5): the instructor's lesson.
-## Pure data and the pacing rule; `BehaviourFollowPath` flies it and keeps the progress.
+## A waypoint route a ship leads another along (architecture §16 D37, M3-T09, maintainer Q5): the instructor's lesson. Pure
+## data and the pacing rule; `BehaviourFollowPath` flies it and keeps the progress.
 ##
 ## - Waypoints are `UniversePos` (rebase-proof), each with an optional `demo` (a `Manoeuvres.NAMES` move shown on arrival)
-##   and `hold_s` (seconds held there with the brake, after the demo if there is one).
-## - `cruise_mps` (60) is the leading speed; `loop` starts over after the last waypoint, else the route ends there.
-## - `pace` is who sets the pace (`player` or `none`, the scenario's word); `pace_id` is that ship's `Contact.id` (its
-##   `Targetable`'s instance id), set by whoever spawns the leader, 0 for no pacing.
+##   and `hold_s` (brake time there, after the demo).
+## - `cruise_mps` is the leading speed; `loop` starts over after the last waypoint, else the route ends.
+## - `pace` is who sets the pace (`player` or `none`); `pace_id` is that ship's `Contact.id`, set by whoever spawns the
+##   leader, 0 for no pacing.
 ## - Pacing: the lag is the distance to the pace ship. Full cruise under `FULL_PACE_M`, linear to zero at `STOP_PACE_M`;
 ##   beyond `WAIT_BEYOND_M` the leader brakes, faces the pace ship and waits until it is within `RESUME_WITHIN_M`.
-##   A waypoint counts as reached within `ARRIVAL_M`.
-## - `yield_to_attack` (M3-T10, an AI patrol): the route stands aside while the orders allow an attack on something in sight,
-##   and is taken up again from the waypoint it was flying to.
-## Scenario files describe routes as `routes[]` (`ScenarioLoader`); an `ai` behaviour's `patrol` builds one (`BrainFactory`).
+## - `yield_to_attack` (M3-T10, an AI patrol): the route stands aside while the orders allow an attack on something in
+##   sight, then resumes from the waypoint it was flying to.
+## Scenarios describe routes as `routes[]` (`ScenarioLoader`); an `ai` behaviour's `patrol` builds one (`BrainFactory`).
 
 const DEFAULT_CRUISE_MPS: float = 60.0
 const FULL_PACE_M: float = 600.0

@@ -1,18 +1,16 @@
 class_name BehaviourGuard
 extends AiBehaviour
-## Hold a post (architecture §16 D34, M3-T10): a fixed point (`AiContext.guard_post`, a `UniversePos`) or a ship's slot (the
-## ship `AiContext.guard_name` plus `guard_offset` in its body frame). The context does the gating: while a pilot guards,
-## `AiContext.may_attack` allows only hostiles inside `guard_radius_m` (1 500 m) of the post or attacking the guarded ship,
-## so the attack behaviour engages those and lets go of a hostile that leaves the zone. This behaviour flies back to the
-## post and keeps station there.
+## Hold a post (architecture §16 D34, M3-T10): a fixed point (`AiContext.guard_post`) or a ship's slot (`guard_name` plus
+## `guard_offset` in its body frame). The context does the gating: while a pilot guards, `AiContext.may_attack` allows only
+## hostiles inside `guard_radius_m` of the post or attacking the guarded ship. This behaviour flies back to the post and
+## keeps station.
 ##
-## Score: 0 while the pilot has no post this tick (none set, or the guarded ship out of sight). Otherwise `SCORE` (beats
-## idle by more than the stickiness) while nothing in sight may be attacked, and `STAND_BY_SCORE` while something may, so
-## the attack (0.3 or more) takes over; evade and retreat outrank it either way.
+## Score: 0 with no post this tick (none set, or the guarded ship out of sight). Otherwise `SCORE` (beats idle by more than
+## the stickiness) while nothing in sight may be attacked, `STAND_BY_SCORE` while something may, so the attack takes over.
+## Evade and retreat outrank it either way.
 ##
-## Station keeping: v_des = v_post + the error times `K_PER_S`, its closure capped at `NEAR_CLOSURE_MPS` within
-## `NEAR_RANGE_M` of the post and at the profile's cruise beyond (the formation's loop without the leader's attitude). The
-## nose turns toward the velocity change while it is over `FACE_DV_MPS`, else holds.
+## Station keeping is the formation's loop without the leader's attitude: closure capped at `NEAR_CLOSURE_MPS` near the
+## post and at the profile's cruise beyond it.
 ##
 ## Only pilots given a post have this behaviour (`attach`), so the others pay nothing for it (AC13's paired budget).
 
@@ -37,8 +35,7 @@ func _init(profile: AiProfile = null) -> void:
 		cruise_mps = profile.cruise_mps
 
 
-## Gives `pilot` a fixed post (`post`, a universe position) or a ship to guard (`ship_name`, with `offset` in its body
-## frame), `radius_m` round it, and adds this behaviour once. Returns the behaviour.
+## Gives `pilot` a fixed post or a ship to guard, `radius_m` round it, and adds this behaviour once.
 static func attach(pilot: AiPilot, post: UniversePos, ship_name: String = "", offset: Vector3 = Vector3.ZERO,
 		radius_m: float = DEFAULT_RADIUS_M) -> BehaviourGuard:
 	pilot.context.guard_post = post

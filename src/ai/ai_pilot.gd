@@ -1,40 +1,28 @@
 class_name AiPilot
 extends PilotBrain
-## The utility brain (architecture §16 D34): a set of `AiBehaviour`s that score themselves every tick, weighted by the
-## pilot's `AiProfile`; the winner flies the ship. Behind the same `PilotBrain` interface as M2's brains, so the
-## `AiPilotDriver`, its avoidance filter and the pool do not change.
+## The utility brain (architecture §16 D34): behaviours score themselves every tick, weighted by the pilot's `AiProfile`,
+## and the winner flies the ship. Same `PilotBrain` interface as M2's brains, so the driver, avoidance and pool are unchanged.
 ##
-## Selection, each tick: every behaviour's `score(ctx)` (clamped to 0..1) times `profile.weight(id)` (a behaviour weighted
-## 0 is not scored). The best weighted score above 0 wins; ties go to the behaviour earlier in `TIE_ORDER`. A challenger
-## replaces the behaviour in control only when its weighted score beats the current one's by more than
-## `profile.stickiness`, or, within `profile.min_dwell_s` of the last switch, by more than `profile.emergency_margin`. A
-## current behaviour that scores 0 has nothing to do (its target is gone) and hands over at once. When nothing scores above
-## 0 the pilot falls back to idle (`AiProfile.validate` requires idle a weight above 0); it never hands control to a
-## behaviour that scored 0. The behaviour that takes over gets `enter()`. No randomness and no clock in the
-## selection itself: the same scores give the same choices; the behaviours' own randomness comes from seeds derived from
-## the pilot's seed.
+## Selection: the best weighted score above 0 wins (ties go to the earlier `TIE_ORDER`; a behaviour weighted 0 is not
+## scored). A challenger replaces the one in control only if it beats it by more than `profile.stickiness`, or within
+## `profile.min_dwell_s` of the last switch, by more than `profile.emergency_margin`. A current behaviour scoring 0 (its
+## target is gone) hands over at once. When nothing scores, the pilot idles. No randomness or clock in the selection.
 ##
-## The context (`context`) carries the orders and the wing (`AiContext`); the pilot refreshes its perception every tick.
-## Temperament (M3-T13, Q12): the pilot flies `profile`, its `base_profile` scaled by `temperament` (skill and aggression,
-## `AiTemperament.apply`); `set_temperament` changes them live and retunes every behaviour.
+## Temperament (M3-T13, Q12): the pilot flies `profile`, its `base_profile` scaled by `temperament` (skill, aggression).
 ##
-## Hit reaction (M3-T10, Q11): a fresh bolt hit (`Perception.last_bolt_hit_s` later than the last one reacted to) hands control
-## to the evade behaviour after the pilot's reaction time (`AiTemperament.reaction_s`: an ace 0.1 s, a regular 0.25 s, a
-## rookie 0.6 s), whatever the scores, the stickiness and the minimum dwell, and the evasion keeps control
-## while `BehaviourEvade.locked()` (one full jink after the latest hit). A pilot without evade, or weighting it 0 (the
-## instructor), never reacts.
+## Hit reaction (M3-T10, Q11): a fresh bolt hit hands control to evade after the pilot's reaction time (ace 0.1 s, regular
+## 0.25 s, rookie 0.6 s), whatever the scores, and evade keeps it while `BehaviourEvade.locked()`. A pilot without evade, or
+## weighting it 0 (the instructor), never reacts.
 ##
-## `wanted_target_id` follows the behaviour in control: the attack's target, `TARGET_NONE` for anything else, so the ship's
-## targeting computer, and with it what other ships see as this ship's target, shows what it is really attacking. With
-## `profile.fires` false the trigger is never pulled.
+## `wanted_target_id` follows the behaviour in control, so the targeting computer shows what the ship is really attacking.
+## With `profile.fires` false the trigger is never pulled.
 ##
-## Later tasks add behaviours with `add_behaviour` (formation T07, follow path T09, guard T10: `BehaviourGuard.attach`) and their fields to
-## `AiContext`; the selection does not change.
+## Later tasks add behaviours with `add_behaviour` and fields to `AiContext`; the selection does not change.
 
 const TIE_ORDER: Array[StringName] = [&"ram", &"retreat", &"evade", &"attack", &"guard", &"formation", &"rally", &"follow_path",
 		&"idle"]
 
-## The numbers it flies (the base profile scaled by the temperament), the profile it was given, and its skill and aggression.
+## `profile` is what it flies: `base_profile` scaled by `temperament`.
 var profile: AiProfile = null
 var base_profile: AiProfile = null
 var temperament: AiTemperament = null
@@ -47,8 +35,7 @@ var dwell_s: float = 0.0
 ## How many times control changed hands.
 var switches: int = 0
 
-# By behaviour index: the profile's weight (read when the behaviour is added), and this tick's score as the behaviour gave
-# it (0..1) and weighted. Packed arrays: the selection runs for every AI ship every tick (AC13's budget).
+# Scores by behaviour index, in packed arrays: selection runs for every AI ship every tick (AC13's budget).
 var _weights: PackedFloat64Array = PackedFloat64Array()
 var _raw: PackedFloat64Array = PackedFloat64Array()
 var _weighted: PackedFloat64Array = PackedFloat64Array()
@@ -59,8 +46,7 @@ var _evade_index: int = -1
 var _reacted_hit_s: float = -INF
 
 
-## `p_behaviours` empty: the standard set (ram, retreat, evade, attack, idle) built from the profile, seeded from `p_seed`.
-## `p_temperament` null: the profile's own skill and aggression.
+## No behaviours given: the standard set (ram, retreat, evade, attack, idle). No temperament: the profile's own.
 func _init(p_profile: AiProfile = null, p_seed: int = 0, p_behaviours: Array[AiBehaviour] = [],
 		p_temperament: AiTemperament = null) -> void:
 	base_profile = p_profile if p_profile != null else AiProfile.new()
@@ -94,7 +80,7 @@ func add_behaviour(b: AiBehaviour) -> void:
 	_evade_index = _index_of(&"evade")
 
 
-## New skill and aggression: the effective profile is rebuilt from the base one, every behaviour retuned and reweighted.
+## Changes skill and aggression live and retunes every behaviour.
 func set_temperament(t: AiTemperament) -> void:
 	temperament = t
 	profile = t.apply(base_profile)
@@ -151,8 +137,7 @@ func reads_target() -> bool:
 	return false
 
 
-## Scores every behaviour against `context` (already refreshed) and hands control over by the rule above. Returns the
-## behaviour in control.
+## Scores the behaviours and hands control over by the rule above. Returns the behaviour in control.
 func select(dt: float) -> AiBehaviour:
 	dwell_s += dt
 	var best: int = -1
@@ -181,7 +166,7 @@ func select(dt: float) -> AiBehaviour:
 		if _current_index == _evade_index and evade != null and evade.locked():
 			return current
 	if best < 0:
-		# Nothing scores: idle, the fallback (no idle: the current behaviour keeps flying, or none does).
+		# Nothing scores: idle is the fallback.
 		if _idle_index >= 0 and _idle_index != _current_index:
 			_switch(_idle_index)
 		return current

@@ -1,32 +1,26 @@
 class_name AiTemperament
 extends RefCounted
-## A pilot's skill and aggressiveness (M3-T13, maintainer Q12), pure: the named ranks or a number 0..1, and how they scale an
-## `AiProfile`'s tuned numbers. The profile's own values are what `regular` skill and `balanced` aggression give, so every
-## factor below is 1 there; each one moves monotonically with its dial.
+## A pilot's skill and aggressiveness (M3-T13, maintainer Q12), pure: named ranks or a number 0..1, and how they scale an
+## `AiProfile`'s tuned numbers. `regular` skill and `balanced` aggression leave the profile as is (every factor is 1).
 ##
 ## Skill (`rookie` 0.2, `regular` 0.45, `veteran` 0.7, `ace` 0.95):
-## - aim error: the profile's `aim_error_deg` times `aim_factor` (rookie 2.5x, ace 0.4x);
-## - reaction: `reaction_s` before a hit or a new threat is acted on (rookie 0.6 s, regular 0.25 s, ace 0.1 s);
-## - fire discipline: the attack's miss gate (`RaiderTactics.fire_miss_m`) times `miss_factor` (rookie 1.6x, ace 0.6x: fewer
-##   wasted bolts);
-## - evade quality: jinks `jink_factor` as long (rookie 1.3x, ace 0.7x) and reversals turned by up to `reversal_spread_deg`
-##   (rookie 20, regular 45, ace 80 degrees: less regular).
+## - aim error: times `aim_factor` (rookie 2.5x, ace 0.4x);
+## - `reaction_s` before a hit or new threat is acted on (rookie 0.6 s, regular 0.25 s, ace 0.1 s);
+## - fire discipline: the attack's miss gate times `miss_factor` (rookie 1.6x, ace 0.6x, fewer wasted bolts);
+## - evade quality: jinks `jink_factor` as long (rookie 1.3x, ace 0.7x), reversals up to `reversal_spread_deg`
+##   (rookie 20, ace 80 degrees: less regular).
 ## Aggression (`passive` 0, `cautious` 0.25, `balanced` 0.5, `aggressive` 0.75, `reckless` 1):
-## - weights: attack times `attack_weight_factor` (up), evade and retreat times `evade_weight_factor` /
-##   `retreat_weight_factor` (down); weights stay 0..1;
-## - retreat threshold: the profile's `retreat_below` times `retreat_threshold_factor` (passive 2.5x, cautious 2x, aggressive
-##   0.5x, reckless never);
-## - engage and break-off: the attack's `near_range_m` and `break_range_m` times `press_factor` (passive 1.4x down to reckless
-##   0.6x: closer with aggression);
-## - the slashing pass (M3-T18, maintainer 2026-11-01): every pilot may fly `AttackSlash` (unless the profile turns it off,
-##   `AiProfile.slashing`); `slash_chance` is the share of attack runs that are slashing passes: a rookie always (1.0, with its
-##   rookie aim), falling with skill (regular 0.8, veteran 0.65, ace 0.5), the rest standard gun runs; `close_pass_chance` is the
-##   share of passes flown at `AttackSlash.CLOSE_PASS_OFFSET_M` (100 m) instead of 200 m: 0 up to `balanced`, 0.25 at
-##   `aggressive`, 1 at `reckless`, whatever the skill;
-## - awareness (M3-T18): `awareness` scales evade's score for a threat that is not the ship it is attacking (a tail threat,
-##   incoming fire): a rookie notices them less (0.4), an ace more (1.2: it breaks off sooner);
-## - `passive` never starts an attack (`never_starts`); it fires back at a ship that hit it in the last `PROVOKED_S`, unless the
-##   profile never fires. `reckless` alone may ram (`may_ram`, `BehaviourRam`).
+## - weights: attack up, evade and retreat down, kept within 0..1;
+## - retreat threshold times `retreat_threshold_factor` (passive 2.5x, aggressive 0.5x, reckless never);
+## - engage and break-off ranges times `press_factor` (passive 1.4x to reckless 0.6x: closer with aggression);
+## - slashing pass (M3-T18, maintainer 2026-11-01): `slash_chance` is the share of attack runs flown as `AttackSlash`
+##   (unless `AiProfile.slashing` is off): a rookie always, falling with skill to 0.5 for an ace, the rest standard gun runs.
+##   `close_pass_chance` is the share flown at `AttackSlash.CLOSE_PASS_OFFSET_M` (100 m) instead of 200 m: 0 up to
+##   `balanced`, 0.25 at `aggressive`, 1 at `reckless`, whatever the skill;
+## - `awareness` (M3-T18) scales evade's score for threats other than the ship it is attacking: a rookie notices them
+##   less (0.4), an ace more (1.2);
+## - `passive` never starts an attack (`never_starts`) but fires back at a ship that hit it in the last `PROVOKED_S`. Only
+##   `reckless` may ram (`may_ram`, `BehaviourRam`).
 
 const SKILL_RANKS: Dictionary[StringName, float] = {&"rookie": 0.2, &"regular": 0.45, &"veteran": 0.7, &"ace": 0.95}
 const AGGRESSION_LEVELS: Dictionary[StringName, float] = {&"passive": 0.0, &"cautious": 0.25, &"balanced": 0.5,

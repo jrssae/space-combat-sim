@@ -1301,6 +1301,11 @@ Added 2026-11-01 for Q28; after T22 and T23.
   `src/autoload/debug_console.gd`, and the M3 test files' header comments. The full suite must stay green.
 - Done when: every (A) criterion passes (the GPU ones measured on the maintainer's machine); the capture set is taken on
   the GPU and attached; the maintainer runs the (H) checklist (appearance and feel); the comment cleanup is committed.
+- Done, part 1 (2026-11-01): comment cleanup, comments only, one commit per group (`M3-T12: comment cleanup: <group>`).
+  35 of the 36 listed source files were trimmed (`src/targeting/target_info.gd` needed nothing), and the header comments of
+  five test files (`test_ai_avoidance`, `test_ai_evade`, `test_ai_formation`, `test_ai_think_time`, `rebase_fight`) were
+  condensed; the other M3 test headers were already short. A throwaway script that strips comments on both sides of the
+  diff confirmed the code of all 40 changed `.gd` files is identical.
 
 ## As-built notes
 

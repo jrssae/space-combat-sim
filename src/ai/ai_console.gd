@@ -1,14 +1,11 @@
 class_name AiConsole
 extends RefCounted
 ## The console side of the AI drivers (architecture §16.4, M3-T06): provider `ai` (`ships`, `by_behaviour`, `think_us`)
-## and the command `ai <name>`, which prints that ship's brain `describe()`: `NAME: behaviour (state)`, the behaviour's
-## other fields, then every behaviour's score with `*` on the one in control (M2 brains print their `describe()`).
-## `ai <name> objective <target|none>` (M3-T17) sets or clears an `AiPilot`'s objective, a target by display name that must
-## exist (in play or parked). `ai <name> skill <rank|0-1>` and `ai <name> aggression <level|0-1>` (M3-T13) change an
-## `AiPilot`'s temperament live; `ai <name>` shows both.
-## The drivers are many nodes and come and go with the pool, so each `AiPilotDriver` entering the tree registers these with
-## itself as owner and hands them to another live driver when it leaves (`register`); the entries read
-## `AiPilotDriver.flying()` every time, so they always show the ships in play.
+## and the command `ai <name>`, which prints that ship's brain `describe()` with a `*` on the behaviour in control.
+## `ai <name> objective <target|none>` (M3-T17) sets an `AiPilot`'s objective; `ai <name> skill <rank|0-1>` and
+## `ai <name> aggression <level|0-1>` (M3-T13) change its temperament live.
+## Drivers come and go with the pool, so each registers these as owner when it enters the tree and hands them to another
+## live driver when it leaves (`register`).
 
 
 ## Registers (or re-registers, replacing the entries) the provider and the command on `registry`, owned by `owner`.
@@ -59,7 +56,7 @@ static func names() -> PackedStringArray:
 ## Handler of `ai <name>` and `ai <name> objective <target|none>` (names case-insensitive).
 static func run(args: Dictionary) -> ConsoleResult:
 	var wanted: String = String(args[&"name"]).strip_edges()
-	# `<name> <verb> <value>`: the verb is the last of VERBS found (ship names hold spaces, never these words).
+	# `<name> <verb> <value>`: ship names hold spaces, never the verbs.
 	var verb: String = ""
 	var value: String = ""
 	var at: int = -1

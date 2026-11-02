@@ -4,9 +4,9 @@ extends Node3D
 ## World, wires camera, weapons, thruster glow and overlay, and turns one PilotCommand per physics tick into ship
 ## commands and UI actions. Main runs while paused (so Start can unpause); World and everything in it pause.
 ##
-## Ships the scenario places at load (`spawns`, M3-T09) come from the pool with their brain and `invulnerable` flag; one that
-## leads a `route` (the instructor) gets it paced to the player, and then the HUD marks its next waypoint, the status line
-## follows the route and the console has provider `route`. They are placed again on every respawn (the lesson restarts).
+## Ships the scenario places at load (`spawns`, M3-T09) come from the pool. One that leads a `route` (the instructor) is paced
+## to the player, and the HUD, status line and console `route` provider follow it. All are placed again on every respawn, so
+## the lesson restarts.
 
 const SCENARIO_DIR := "res://data/scenarios/"
 const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight"]
@@ -16,18 +16,17 @@ signal player_died
 ## The player is back at the scenario start with a full hull (after `DestructionDirector.RESPAWN_DELAY_S`, or `respawn`).
 signal player_respawned
 
-## Raiders built (parked) at load for the waves and the console's `spawn`. -1 = what the scenario's `pools` says (the
-## sandbox 6, free flight none); 0 or more overrides it. Set before the node enters the tree.
+## Raiders built (parked) at load for the waves and the console's `spawn`. -1 = the scenario's `pools`; 0 or more overrides
+## it. Set before the node enters the tree.
 var raider_pool_size: int = -1
-## Allied Starfuries built (parked) at load for the wings and the console's `spawn ally` (M3-T08): -1 = the scenario's `pools`
-## (the sandbox 4, free flight none); 0 or more overrides it. Set before the node enters the tree.
+## Allied Starfuries built (parked) at load (M3-T08), same rule as `raider_pool_size`.
 var ally_pool_size: int = -1
 ## Overrides `settings.scenario` with a scenario file (tests). Empty = the setting.
 var scenario_path: String = ""
 ## The sandbox starts wave 1's countdown at load. Tests that drive the waves themselves turn this off.
 var waves_auto_start: bool = true
-## Mixed into the brain seed of every ship the scenario places at load (M3-T10): the same seed flies the same fight, another
-## seed another one (the dogfight's AC12 runs). Set before the node enters the tree.
+## Mixed into the brain seed of every ship the scenario places (M3-T10): the same seed flies the same fight (the dogfight's
+## AC12 runs). Set before the node enters the tree.
 var scenario_seed: int = 0
 
 ## Set before the node enters the tree to drive Main from a script (tests use FakeInputSource).
@@ -57,7 +56,7 @@ var _system_id: StringName = &"local"
 var _scenario_spawns: Array[Dictionary] = []
 var _scenario_routes: Array[Route] = []
 var _scenario_wings: Array[Dictionary] = []
-# By the index of `scenario_ships`: the brain each was given (a ship flown by another brain has been reused since).
+# By `scenario_ships` index: the brain each was given, to tell when the pool has reused the ship.
 var _scenario_brains: Array[PilotBrain] = []
 
 @onready var world: WorldFrame = $World
@@ -97,8 +96,7 @@ func _ready() -> void:
 		_scenario_routes = scenario["routes"]
 		_scenario_wings = scenario["wings"]
 	_spawn_ship()
-	# The player leads wing ALPHA (architecture §16 D36). Its members join later: allies from the pool (M3-T08) or a
-	# scenario's `wings` (M3-T10).
+	# The player leads wing ALPHA (architecture §16 D36). Members join later (M3-T08, M3-T10).
 	wings.setup(world, ships)
 	if not _ai_leads_player_wing():
 		wings.create_wing(Wing.DEFAULT_NAME, combatant)
@@ -137,8 +135,7 @@ func _ready() -> void:
 	camera_rig.setup(ship, ship.cockpit_anchor, ship.get_chase_offset(), ship.set_cockpit_interior_visible)
 	# The World keeps its origin within `auto_rebase_distance_m` (5 km, main.tscn) of the player (M3-T14, §14.1).
 	world.focus = ship
-	# The chase camera is world_shiftable; the cockpit camera follows a RemoteTransform3D, so drop its interpolation
-	# history on a rebase too, or it would smear the jump across one frame.
+	# The cockpit camera follows a RemoteTransform3D, so reset its interpolation on a rebase or the jump smears.
 	world.rebased.connect(func(_offset: Vector3) -> void: camera_rig.cockpit_pivot.reset_physics_interpolation())
 	# Ram contact points outlive a tick; they move with the rebase.
 	rams.world = world
@@ -338,8 +335,7 @@ func _build_hud_input() -> HudInput:
 	return input
 
 
-## Whether a ship is leading a route right now: the instructor is in play and still flown by the pilot with that route (a pooled
-## ship released and acquired again for something else is not).
+## Whether a ship is leading a route right now (a pooled ship reused for something else is not).
 func route_active() -> bool:
 	if instructor_path == null or instructor == null or not instructor.damageable.is_active() or instructor.driver == null:
 		return false
@@ -350,13 +346,11 @@ func route_active() -> bool:
 # --- ships at load (M3-T09) ------------------------------------------------------------------------------------------
 
 
-# Places the scenario's `spawns` from the pool (again, after releasing the ones still out, on a respawn): each at its anchor plus
-# offset, the player's start attitude, with its brain, its `invulnerable` flag and, for one with a `route`, the route paced to
-# the player.
+# Places the scenario's `spawns` from the pool, releasing the ones still out first on a respawn.
 func _spawn_scenario_ships() -> void:
 	for i: int in scenario_ships.size():
 		var placed: Combatant = scenario_ships[i]
-		if placed.driver != null and placed.driver.brain == _scenario_brains[i]:  # not a pool ship since reused for another
+		if placed.driver != null and placed.driver.brain == _scenario_brains[i]:  # not reused by the pool
 			ships.release(placed)
 	scenario_ships.clear()
 	_scenario_brains.clear()
@@ -393,8 +387,7 @@ func _spawn_scenario_ships() -> void:
 			instructor_path = path
 
 
-# A scenario wing with the player's wing name led by an AI ship (the dogfight's ALPHA, led by ALPHA 2): then the player leads
-# no wing of its own.
+# Whether an AI ship leads the player's wing (the dogfight's ALPHA), so the player leads none of its own.
 func _ai_leads_player_wing() -> bool:
 	for d: Dictionary in _scenario_wings:
 		if String(d["name"]).to_lower() == Wing.DEFAULT_NAME.to_lower() and String(d["leader"]) != "player":
@@ -495,9 +488,8 @@ func _give_wing_orders(ui: UiCommand) -> void:
 		wings.give_order(AiContext.Order.COVER_ME)
 
 
-# The mouse is captured (hidden, unbounded) while flying with a mouse-capable source; holding Alt, the console, the pause and a
-# window that lost focus give it back to the desktop (Alt + drag then moves the window in most window managers). While it is
-# the desktop's, the source reads it as idle.
+# Captures the mouse while flying. Alt, the console, the pause and a window without focus give it back, and the source
+# then reads it as idle.
 func _update_mouse_capture() -> void:
 	var godot_source := input_source as GodotInputSource
 	if godot_source == null or DisplayServer.get_name() == "headless":
