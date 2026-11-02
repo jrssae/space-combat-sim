@@ -115,7 +115,7 @@ buffers until the oldest is evicted.
 To revert: `git revert` the commit `M3-T20: resident splat budget in the GDGS fork`, then run `--import` (a shader changed). The game's
 side goes with it (`settings.splat_budget`, the `LodSwitcher` step-down, the `render` fields); nothing else depends on it.
 
-Upstream candidate, like patches 1 and 2, apart from two things that assume this project's single-safe thread model: the deferred merge, and the main thread patching instance arrays in place while the render step reads them. A window size not drawn for 120 frames gives its buffers back (`UNUSED_STATE_FRAMES`), so a fullscreen toggle does not hold two budgets for long.
+Upstream candidate, like patches 1 and 2, apart from two things that assume this project's single-safe thread model: the deferred merge, and the main thread patching instance arrays in place while the render step reads them. `GaussianRenderManager.get_stats()` also reports how many window sizes hold buffers (`render_states`). A window size not drawn for 120 frames gives its buffers back (`UNUSED_STATE_FRAMES`), so a fullscreen toggle does not hold two budgets for long.
 
 ## 6. Own lights (a ship's top lamp and cockpit glow use no slot of the 8)
 

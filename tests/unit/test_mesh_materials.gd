@@ -78,4 +78,4 @@ func test_lamps_and_rims_are_unlit_and_lamp_states_are_left_alone() -> void:
 
 func test_cockpit_ignores_a_null_mesh() -> void:
 	MeshMaterials.cockpit(null)
-	assert_true(true, "no error")
+	pass_test("no error")

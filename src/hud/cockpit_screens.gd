@@ -51,6 +51,19 @@ class ScreenCanvas extends Control:
 
 
 ## Builds the screens from the hardpoints' `screens` and finds the lamps on `interior`. Calling it again places what is already built.
+func _ready() -> void:
+	DebugConsole.registry.register_provider(&"screens", ConsoleVars.new({
+		&"shown": {"get": func() -> bool: return _shown, "doc": "The screens show (the cockpit camera)"},
+		&"powered": {"get": func() -> bool: return _powered, "doc": "The HUD is on, so the screens and lamps are"},
+		&"paints": {"get": _paint_counts, "doc": "How many times each screen has been painted"},
+		&"lamps": {"get": _lit_lamps, "doc": "The indicator lamps lit now"},
+	}), self)
+
+
+func _exit_tree() -> void:
+	DebugConsole.registry.unregister_owner(self)
+
+
 func setup(screens: Dictionary, interior: MeshInstance3D) -> void:
 	_interior = interior
 	for id: String in screens:
@@ -235,3 +248,27 @@ func _apply_visibility() -> void:
 		view.mesh.visible = _shown and _powered
 		if not view.mesh.visible:
 			view.viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	if not _powered:
+		_lamps_dark()
+
+
+# With no frame coming, a lit lamp would go on claiming a state it no longer knows.
+func _lamps_dark() -> void:
+	for lamp: Variant in _lamp_surfaces:
+		_lamp_lit[lamp] = false
+		_interior.set_surface_override_material(_lamp_surfaces[lamp], _dark_materials[lamp])
+
+
+func _paint_counts() -> PackedStringArray:
+	var out := PackedStringArray()
+	for id: StringName in _views:
+		out.append("%s %d" % [id, (_views[id] as ScreenView).canvas.paints])
+	return out
+
+
+func _lit_lamps() -> PackedStringArray:
+	var out := PackedStringArray()
+	for lamp: Variant in _lamp_lit:
+		if bool(_lamp_lit[lamp]):
+			out.append(String(lamp))
+	return out

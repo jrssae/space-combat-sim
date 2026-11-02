@@ -201,6 +201,7 @@ func test_switching_the_hud_off_takes_the_screens_dark() -> void:
 	await _frames(1)
 	assert_false(screens.screen_mesh(&"octagon").visible)
 	assert_eq(screens.viewport(&"octagon").render_target_update_mode, SubViewport.UPDATE_DISABLED)
+	assert_eq(str(DebugConsole.registry.read("screens.lamps")["value"]), "[]", "the lamps go dark with it")
 	Settings.set_value(&"show_hud", true)
 	await _frames(2)
 	assert_true(screens.screen_mesh(&"octagon").visible)
@@ -269,3 +270,18 @@ func test_in_the_chase_view_the_roster_clears_the_debug_overlay() -> void:
 	assert_true(main.overlay.visible, "on by default")
 	assert_false(main.hud.frame.roster_rows.is_empty())
 	assert_gt(main.hud.frame.roster_rows[0].bar_rect.position.y, main.overlay.text_bottom_px(), "below its last line")
+
+
+func test_the_ref_line_can_run_wide_without_touching_lights_or_fuel() -> void:
+	var surface: HudSurface = HudLayout._left_screen(screens.sizes()[&"left"])
+	var ref_y: float = surface.speed_pos.y + 20.0 * surface.scale
+	assert_lt(surface.running_lights_pos.y, surface.speed_pos.y - 22.0 * surface.scale, "lights sit above the speed block")
+	assert_lt(surface.fuel_rect.end.y, surface.speed_pos.y - 22.0 * surface.scale, "and so does fuel")
+	assert_lt(surface.fuel_rect.end.y, ref_y)
+
+
+func test_the_console_can_report_the_screens_and_lamps() -> void:
+	var provider: ConsoleStateProvider = DebugConsole.registry.get_provider(&"screens")
+	assert_not_null(provider)
+	assert_eq(provider.keys(), [&"shown", &"powered", &"paints", &"lamps"] as Array[StringName])
+

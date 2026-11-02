@@ -11,6 +11,7 @@ extends RefCounted
 ## lights are on (M3-T27), a grid with a reticle and the target's offset from the nose on it.
 
 const LINE_COLOR: Color = HudLayout.LINE_COLOR
+const TEXT_SHADOW: Color = Color(0.0, 0.0, 0.0, 0.8)
 
 static var _shared_font: Font = null
 
@@ -97,14 +98,13 @@ func _draw_roster(surface: HudSurface, s: float, w: float) -> void:
 
 
 func _text(text: String, pos: Vector2, size: float, color: Color, align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT) -> void:
-	var shadow := Color(0.0, 0.0, 0.0, 0.8)
 	var width: float = _font.get_string_size(text, align, -1.0, int(size)).x
 	var origin: Vector2 = pos
 	if align == HORIZONTAL_ALIGNMENT_CENTER:
 		origin.x -= width * 0.5
 	elif align == HORIZONTAL_ALIGNMENT_RIGHT:
 		origin.x -= width
-	_canvas.draw_string(_font, origin + Vector2(1.5, 1.5), text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, int(size), shadow)
+	_canvas.draw_string(_font, origin + Vector2(1.5, 1.5), text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, int(size), TEXT_SHADOW)
 	_canvas.draw_string(_font, origin, text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, int(size), color)
 
 
@@ -114,7 +114,7 @@ func _line(surface: HudSurface, text: String, at: Vector2, size: float) -> void:
 		_text(text, at, size, LINE_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
 		return
 	var fitted: int = int(13.0 * surface.scale)
-	_canvas.draw_multiline_string(_font, at + Vector2(1.5, 1.5), text, HORIZONTAL_ALIGNMENT_LEFT, surface.lines_width, fitted, -1, Color(0.0, 0.0, 0.0, 0.8))
+	_canvas.draw_multiline_string(_font, at + Vector2(1.5, 1.5), text, HORIZONTAL_ALIGNMENT_LEFT, surface.lines_width, fitted, -1, TEXT_SHADOW)
 	_canvas.draw_multiline_string(_font, at, text, HORIZONTAL_ALIGNMENT_LEFT, surface.lines_width, fitted, -1, LINE_COLOR)
 
 

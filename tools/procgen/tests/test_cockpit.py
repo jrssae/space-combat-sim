@@ -91,7 +91,7 @@ class CockpitInteriorTests(unittest.TestCase):
         for y in (-40.0, 0.0, 150.0, 300.0):
             inner = SPEC.opening_half_px(y)
             outer = SPEC.strut_outer_px(y)
-            self.assertGreater(outer - inner, 80.0, "a heavy strut")
+            self.assertGreater(outer - inner, 80.0, "a strut with depth")
             for sign in (-1.0, 1.0):
                 on_strut = np.array([(sign * (inner + 6.0), y), (sign * 0.5 * (inner + outer), y), (sign * (outer - 6.0), y)])
                 self.assertTrue(np.isfinite(self.hits(on_strut)).all(), (sign, y))

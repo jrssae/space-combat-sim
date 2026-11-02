@@ -446,8 +446,8 @@ static func _left_screen(size: Vector2) -> HudSurface:
 	surface.drift_centre = Vector2(width - 8.0 - 42.0, 20.0 + 42.0) * s
 	surface.speed_pos = Vector2(width * 0.5, 158.0) * s
 	surface.speed_size = 30.0
-	surface.running_lights_pos = Vector2(8.0, 178.0) * s
-	surface.fuel_rect = Rect2(Vector2(width - 8.0 - 74.0, 174.0) * s, Vector2(74.0, 5.0) * s)
+	surface.running_lights_pos = Vector2(8.0, 126.0) * s  # above the speed block: the REF line can run wide
+	surface.fuel_rect = Rect2(Vector2(width - 8.0 - 74.0, 122.0) * s, Vector2(74.0, 5.0) * s)
 	surface.hull_rect = Rect2(Vector2(8.0, 212.0) * s, Vector2(width - 16.0, 30.0) * s)
 	surface.bar_caption_size = 17.0
 	surface.bar_percent = true

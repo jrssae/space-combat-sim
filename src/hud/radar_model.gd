@@ -27,7 +27,7 @@ class Dot extends RefCounted:
 	var range_m: float = 0.0
 	var faction: StringName = Factions.NEUTRAL
 	var color: Color = Factions.NEUTRAL_COLOR
-	## The contact's relation to the viewer: the console's all-green icons tell it by shape.
+	## The contact's relation to the viewer: it picks the console's icon shape and colour.
 	var relation: Factions.Relation = Factions.Relation.NEUTRAL
 	var selected: bool = false
 	## True when the contact is above the ship's plane (the stalk runs down to the foot).

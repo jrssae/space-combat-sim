@@ -93,6 +93,7 @@ var _fuel: FuelTank = FuelTank.new()
 var _flight: FlightCommand = FlightCommand.new()
 var _flight_fresh: bool = false
 var _combat: CombatCommand = CombatCommand.new()
+static var _warned_no_screens: bool = false
 var _combat_fresh: bool = false
 var _fallback_active: bool = false
 var _interior_visible: bool = false
@@ -524,7 +525,12 @@ func _build_muzzles() -> void:
 
 # On the ship the player flies, when its hardpoints have a console: a rebuild only places what exists.
 func _build_cockpit_screens() -> void:
-	if not console_owner or cockpit_interior.mesh == null or _hardpoints.screens.is_empty():
+	if not console_owner or cockpit_interior.mesh == null:
+		return
+	if _hardpoints.screens.is_empty():
+		if _hardpoints.valid and not _warned_no_screens:
+			_warned_no_screens = true  # stale generated assets would otherwise just look like the old 2D HUD
+			push_warning("Ship: %s lists no screens (run scripts/gen_assets.sh)" % spec.asset_id)
 		return
 	if cockpit_screens == null:
 		cockpit_screens = CockpitScreens.new()

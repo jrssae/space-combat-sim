@@ -439,7 +439,7 @@ class StarfuryAuroraTests(unittest.TestCase):
         )
 
     def test_the_opening_records_the_v(self) -> None:
-        """The numbers Q29 and the maintainer's change set: about +-10 deg at the horizon, narrower at the console, wider above."""
+        """The numbers Q29 and the maintainer's change set: about +-16 deg at the horizon, narrower at the console, wider above."""
         self.assertAlmostEqual(cockpit.opening_half_deg(COCKPIT, COCKPIT.opening_floor_y_px), V_HALF_DEG["octagon"], delta=0.2)
         self.assertAlmostEqual(cockpit.opening_half_deg(COCKPIT, 0.0), V_HALF_DEG["horizon"], delta=0.1)
         self.assertAlmostEqual(cockpit.opening_half_deg(COCKPIT, COCKPIT.bar_y_px), V_HALF_DEG["bar"], delta=0.1)

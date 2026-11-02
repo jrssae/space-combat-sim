@@ -22,7 +22,6 @@ from ..core.geometry import (
     lathe,
     loft,
     superellipse_ring,
-    sweep_rect,
     unit,
 )
 from ..styles import Style
