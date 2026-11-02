@@ -3,7 +3,10 @@ extends SceneTree
 ## `<dir>/runs/`, decides each layout's max N and whether its sweep stops (`PerfStats`), and writes `<dir>/summary.json` and
 ## `<dir>/summary.md`. Prints one `[bench-sweep]` line per ship count, layout and headline for the shell to read.
 ##
-## Arguments after `--`: <dir> (a res:// or absolute path) [key=value ...] (recorded in the summary: commit, date, label).
+## Arguments after `--`: <dir> (a res:// or absolute path) [runs=<n>] [key=value ...] (recorded: commit, date, label). With
+## `runs`, a ship count with fewer summaries than that counts each missing run (crashed or killed) as a failure.
+## A `-s` script is compiled before the autoloads exist, so `BenchReport` (which reaches them through `PerfProbe`) is loaded at
+## run time and called through its script.
 
 
 func _initialize() -> void:
@@ -21,8 +24,9 @@ func _initialize() -> void:
 	var runs: Array[Dictionary] = _read_runs(dir.path_join("runs"))
 	if not runs.is_empty():
 		meta["machine"] = runs[0].get("machine", {})
-	var summary: Dictionary = BenchReport.sweep_summary(runs, meta)
-	var problem: String = BenchReport.write(dir, summary, BenchReport.sweep_markdown(summary))
+	var report: GDScript = load("res://src/perf/bench_report.gd") as GDScript
+	var summary: Dictionary = report.call("sweep_summary", runs, meta, int(meta.get("runs", "0")))
+	var problem: String = report.call("write", dir, summary, report.call("sweep_markdown", summary))
 	if not problem.is_empty():
 		printerr("bench_sweep.gd: %s" % problem)
 		quit(1)
@@ -31,8 +35,9 @@ func _initialize() -> void:
 	for layout: String in layouts:
 		var entry: Dictionary = layouts[layout]
 		for c: Dictionary in entry["counts"]:
-			print("[bench-sweep] %s %d %s %d/%d tick median %.2f ms" % [layout, int(c["n"]), "pass" if bool(c["pass"]) else "fail",
-					int(c["passes"]), int(c["runs"]), float(c["tick_median_us"]) * 1e-3])
+			print("[bench-sweep] %s %d %s %d/%d tick median %.2f ms%s" % [layout, int(c["n"]), "pass" if bool(c["pass"]) else "fail",
+					int(c["passes"]), int(c["runs"]), float(c["tick_median_us"]) * 1e-3,
+					", %d missing" % int(c["missing"]) if int(c["missing"]) > 0 else ""])
 		print("[bench-sweep] %s max_n %d%s" % [layout, int(entry["max_n"]), " stop" if bool(entry["stopped"]) else ""])
 	print("[bench-sweep] headline %d (%d runs)" % [int(summary["headline_max_n"]), runs.size()])
 	quit(0)

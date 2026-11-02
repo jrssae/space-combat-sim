@@ -59,6 +59,7 @@ one() {
     local layout="$1" n="$2" seed="$3" status=0
     local name="${layout}_${n}_s${seed}"
     local run_log="${OUT}/runs/${name}.log"
+    rm -rf "${OUT:?}/runs/${name}"  # a summary left from an earlier sweep under this label must not stand in for this run
     "${PIN[@]}" timeout "${RUN_TIMEOUT}" "${GODOT}" --headless --path . -- --console-strict \
         --console-exec="scenario ${SCENARIO}; wait 30; bench ${layout} ${n} ${SECONDS_MEASURED} warmup=${WARMUP} seed=${seed} label=${LABEL}/runs/${name} ${EXTRA}; quit" \
         > "${run_log}" 2>&1 || status=$?
@@ -66,10 +67,13 @@ one() {
     if (( status != 0 )); then
         echo "bench.sh: ${name} exited ${status} (124 is the timeout); see ${run_log}" | tee -a "${LOG}" >&2
     fi
+    if [[ ! -f "${OUT}/runs/${name}/summary.json" ]]; then
+        echo "bench.sh: ${name} wrote no summary; the sweep counts it as a failed run" | tee -a "${LOG}" >&2
+    fi
 }
 
 summarise() {
-    "${GODOT}" --headless --path . -s res://scripts/bench_sweep.gd -- "res://${OUT}" "commit=${COMMIT}" "label=${LABEL}" \
+    "${GODOT}" --headless --path . -s res://scripts/bench_sweep.gd -- "res://${OUT}" "runs=${#SEEDS[@]}" "commit=${COMMIT}" "label=${LABEL}" \
         2> /dev/null | grep '^\[bench-sweep\]' || true
 }
 

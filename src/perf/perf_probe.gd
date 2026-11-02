@@ -1,24 +1,8 @@
 class_name PerfProbe
 extends Node
-## Times the stages of every physics tick (M4-T01, `docs/milestones/m4-performance-and-scale.md`): what the many-ships
-## benchmark measures and the console's `perf` provider shows. Off by default; `perf on` or a `bench` run turns it on.
-##
-## The tick is all of a physics frame's work, from the sync of the bodies before the scripts to the end of Jolt's step.
-## Marker nodes at priorities between the systems cut it into stages without touching the systems:
-## - `other_us`: anything before the AI drivers (normally nothing but the bench's own counter);
-## - `ai_us`: the AI drivers (-10). `scan_us` is the part of it spent in the contact scans, `think_us` the drivers' own timer;
-## - `flight_us`: priority 0: the console, `Main`, the rebase's shift, every ship's flight model, bolts and props;
-## - `targeting_us`: every `TargetingController` (100);
-## - `resolvers_us`: the hit and ram resolvers (200, 210);
-## - `late_us`: wings, waves, the rebase's interpolation reset, everything after the resolvers;
-## - `physics_us`: the engine's part outside the scripts: Jolt's step and the sync of the bodies back to their nodes
-##   (`sync_us`), with the transform notifications, deletes and messages the engine flushes around them.
-## The stages add up to `tick_us`. `rebase_us` is the rebase's own cost in a tick with one (inside flight and late).
-##
-## The body sync runs before the scripts and after the last frame, so it is only timed when nothing else sits in between
-## (`time_sync`: headless with the frame sleep off, as `bench` runs it); otherwise `sync_us` is 0 and the tick lacks it. When
-## two ticks run back to back, the sync of the second is counted with the first. `stages_enabled` off keeps only the tick
-## window, to measure what the stage timers themselves cost. Every number is the wall clock, never gameplay time.
+## Times every physics tick by stage for the many-ships benchmark and the `perf` provider (M4-T01, architecture §17.1).
+## Marker nodes between the systems' priorities split the tick; the engine's part (Jolt, the body sync) is timed around the
+## scripts. The stages add up to the tick. Off by default (`perf on`, or a `bench` run); wall clock only, never gameplay.
 
 const AI_BEGIN_PRIORITY: int = -11
 const AI_END_PRIORITY: int = -9
@@ -29,17 +13,19 @@ const RESOLVERS_END_PRIORITY: int = RamResolver.LATE_PRIORITY + 1
 const END_PRIORITY: int = 2_000_000
 
 ## What one tick records, in this order (`last`, `series`).
-enum Field { TICK, AI, SCAN, THINK, FLIGHT, REBASE, TARGETING, RESOLVERS, LATE, PHYSICS, SYNC, OTHER, SHIPS, BOLTS, PAIRS, STAGES_ON }
+enum Field { TICK, AI, SCAN, THINK, FLIGHT, REBASE, TARGETING, RESOLVERS, HIT, RAM, LATE, PHYSICS, SYNC, OTHER, SHIPS, BOLTS,
+		PAIRS, STAGES_ON, SYNC_ON }
 const FIELD_NAMES: Array[StringName] = [&"tick", &"ai", &"scan", &"think", &"flight", &"rebase", &"targeting", &"resolvers",
-		&"late", &"physics", &"sync", &"other", &"ships", &"bolts", &"pairs", &"stages_on"]
+		&"hit", &"ram", &"late", &"physics", &"sync", &"other", &"ships", &"bolts", &"pairs", &"stages_on", &"sync_on"]
 
 enum State { IDLE, SCRIPT, POST }
 
-## Where the rebase cost and the bolt counts come from, and how many ships are in play (Main sets them).
+## Where the rebase cost, the resolvers' own timers and the bolt counts come from, and how many ships are in play (Main sets them).
 var world: WorldFrame = null
 var hits: HitResolver = null
+var rams: RamResolver = null
 var ships_in_play: Callable = Callable()
-## The body sync can be timed (see the class notes).
+## Nothing runs between frames (headless, frame sleep off), so the body sync before the scripts can be timed; else it is 0.
 var time_sync: bool = false
 var enabled: bool = false:
 	set = set_enabled
@@ -63,7 +49,8 @@ var _pre_us: int = 0
 var _idle_end_us: int = 0
 var _idle_end_valid: bool = false
 var _rebases_seen: int = 0
-var _captured: PackedInt64Array = PackedInt64Array()  # rebase, scan, think, ships, bolts, pairs at the end of the script phase
+var _sync_timed: bool = false
+var _captured: PackedInt64Array = PackedInt64Array()  # rebase, scan, think, ships, bolts, pairs, hit, ram at the end of the scripts
 
 
 ## One clock read at a fixed place in the tick.
@@ -89,7 +76,7 @@ func _init() -> void:
 	last.resize(FIELD_NAMES.size())
 	_marks.resize(5)
 	_mark_frames.resize(5)
-	_captured.resize(6)
+	_captured.resize(8)
 	clear_series()
 
 
@@ -176,11 +163,13 @@ func _disconnect() -> void:
 # The start of a tick's scripts: closes the last tick if it ran back to back with this one, and opens this one.
 func _on_physics_frame() -> void:
 	var now: int = Time.get_ticks_usec()
+	_sync_timed = false
 	if _state == State.POST:
 		_finish(now)
-		_pre_us = 0
+		_pre_us = 0  # back to back: this tick's sync went into the last tick's engine window
 	elif _state == State.IDLE and time_sync and _idle_end_valid:
 		_pre_us = now - _idle_end_us
+		_sync_timed = true
 	else:
 		_pre_us = 0
 	_idle_end_valid = false
@@ -209,6 +198,8 @@ func _end_script() -> void:
 	_captured[3] = int(ships_in_play.call()) if ships_in_play.is_valid() else 0
 	_captured[4] = hits.projectiles_last_tick if hits != null else 0
 	_captured[5] = hits.pairs_tested if hits != null else 0
+	_captured[6] = hits.resolve_us if hits != null else 0
+	_captured[7] = rams.resolve_us if rams != null else 0
 	_state = State.POST
 
 
@@ -239,6 +230,9 @@ func _finish(now: int) -> void:
 	last[Field.SHIPS] = _captured[3]
 	last[Field.BOLTS] = _captured[4]
 	last[Field.PAIRS] = _captured[5]
+	last[Field.HIT] = _captured[6]
+	last[Field.RAM] = _captured[7]
+	last[Field.SYNC_ON] = 1 if _sync_timed else 0
 	var staged: bool = stages_enabled
 	for f: int in _mark_frames:
 		staged = staged and f == _tick_frame
@@ -272,9 +266,11 @@ func _register_console() -> void:
 		&"rebase": "The rebase in this tick (shift, handlers and reset), 0 without one",
 		&"targeting": "Every TargetingController (100)",
 		&"resolvers": "The hit and ram resolvers (200, 210)",
+		&"hit": "The hit resolver's own timer (combat.resolve_us), inside resolvers",
+		&"ram": "The ram resolver's own timer (ram.resolve_us), inside resolvers",
 		&"late": "Wings, waves, the rebase's reset and the rest after the resolvers",
 		&"physics": "Jolt's step and the body sync, with the engine's flushes around them",
-		&"sync": "The body sync before the scripts (only timed headless with the frame sleep off, as bench runs)",
+		&"sync": "The body sync before the scripts; 0 unless headless with the frame sleep off (bench), and 0 when ticks ran back to back",
 		&"other": "The tick's remainder outside every named stage (before the AI drivers)",
 	}
 	for key: StringName in docs:

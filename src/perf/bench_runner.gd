@@ -1,22 +1,8 @@
 class_name BenchRunner
 extends Node
-## Runs one many-ships benchmark on the live main scene (M4-T01, `docs/milestones/m4-performance-and-scale.md`):
-## `bench <layout> <n> [seconds] [warmup=<s>] [seed=<k>] [label=<name>] [probe=paired] [rebase_m=<m>]`.
-##
-## Setup happens in the command's own frame, and its wall time is the run's `load_ms`: the waves stop, god mode goes on, every
-## pool ship parks, the pools grow to the layout's count, the player turns to face -Z (the layout's frame) and cruises at
-## 60 m/s, the automatic rebase threshold drops to `rebase_m`, the sides go neutral for a layout without a fight, and
-## `BenchLayout`'s ships come out of the pools, invulnerable so the count holds. Then `warmup` seconds of ticks, then `seconds`
-## of ticks recorded by the `PerfProbe`. Both windows are counted in ticks (sim time); real time kept compares the recorded
-## ticks with the wall clock they took. Headless, the frame sleep is off for the run so the probe can time the body sync.
-##
-## The rebase threshold (180 m by default) gives a rebase every 3 s at cruise: ten in a 30 s window, enough to see their cost,
-## while rebase ticks stay under 1 % of the window so they do not decide its p99 (their own budget is separate).
-## `probe=paired` switches the stage timers off and on in half-second blocks to measure what they cost.
-##
-## The command holds the console queue until the run is over (`DebugConsole.release_wait`), so a startup script can say
-## `bench furball 100; quit`. The report goes to `report_root/<label>/`. Afterwards the threshold, the relation, the sleep, god
-## mode and the probe are as they were, and the ships stay in play. A run that falls under a tenth of real time is cut short.
+## Runs one many-ships benchmark on the live main scene (M4-T01, architecture §17.1): `bench <layout> <n> [seconds]
+## [warmup=<s>] [seed=<k>] [label=<name>] [probe=paired] [rebase_m=<m>] [sleep=keep]`. Sets the scene up from the pools, warms
+## up, records ticks with the `PerfProbe`, writes the report and puts back what it changed; the ships stay in play.
 
 ## The report is written; the run's summary.
 signal finished(summary: Dictionary)
@@ -33,7 +19,7 @@ const MAX_SLOWDOWN: float = 10.0
 ## The console waits this many frames at most; the run releases the wait when it ends.
 const HOLD_FRAMES: int = 1_000_000
 const DEFAULT_ROOT: String = "res://reports/perf"
-const OPTION_KEYS: Array[String] = ["warmup", "seed", "label", "probe", "rebase_m"]
+const OPTION_KEYS: Array[String] = ["warmup", "seed", "label", "probe", "rebase_m", "sleep"]
 
 var main: Main = null
 var probe: PerfProbe = null
@@ -75,10 +61,10 @@ func _exit_tree() -> void:
 
 
 ## Reads the words after `bench <layout> <n>`: an optional window in seconds first, then `key=value` options.
-## `{"ok", "error", "seconds", "warmup", "seed", "label", "paired", "rebase_m"}`.
+## `{"ok", "error", "seconds", "warmup", "seed", "label", "paired", "rebase_m", "keep_sleep"}`.
 static func parse_options(words: PackedStringArray) -> Dictionary:
 	var out: Dictionary = {"ok": true, "error": "", "seconds": DEFAULT_SECONDS, "warmup": DEFAULT_WARMUP_S, "seed": 1, "label": "",
-			"paired": false, "rebase_m": REBASE_THRESHOLD_M}
+			"paired": false, "rebase_m": REBASE_THRESHOLD_M, "keep_sleep": false}
 	for i: int in words.size():
 		var word: String = words[i]
 		var pair: PackedStringArray = word.split("=", true, 1)
@@ -110,6 +96,11 @@ static func parse_options(words: PackedStringArray) -> Dictionary:
 				if not text.is_valid_float() or float(text) <= 0.0:
 					return _bad("rebase_m must be metres above 0")
 				out["rebase_m"] = float(text)
+			"sleep":
+				# keep: the engine's own frame sleep stays (as the game idles), at the price of an untimed body sync.
+				if text != "keep" and text != "0":
+					return _bad("sleep must be keep or 0")
+				out["keep_sleep"] = text == "keep"
 			_:
 				return _bad("unknown option '%s' (%s)" % [key, ", ".join(PackedStringArray(OPTION_KEYS))])
 	return out
@@ -202,7 +193,7 @@ func _set_up_scene() -> void:
 		_placed[type] = int(_placed[type]) + 1
 		if not String(e["wing"]).is_empty():
 			main.wings.join(String(e["wing"]), placed)
-	if DisplayServer.get_name() == "headless":
+	if DisplayServer.get_name() == "headless" and not bool(_options["keep_sleep"]):
 		OS.low_processor_usage_mode_sleep_usec = 0
 		probe.time_sync = true
 	probe.recording = false
@@ -247,6 +238,7 @@ func _finish(now: int, aborted: String) -> void:
 	var meta: Dictionary = {
 		"layout": String(_layout),
 		"n": _n,
+		"n_includes_player": false,
 		"seed": int(_options["seed"]),
 		"label": String(_options["label"]),
 		"date": Time.get_datetime_string_from_system(false, true),
@@ -270,9 +262,9 @@ func _finish(now: int, aborted: String) -> void:
 	var dir: String = report_root.path_join(String(_options["label"]))
 	var problem: String = BenchReport.write(dir, summary, BenchReport.run_markdown(summary))
 	var tick: Dictionary = (summary["stages"] as Dictionary)["tick"]
-	print("[bench] %s %d seed %d: tick median %.2f ms, p99 %.2f ms, %.2f %% behind real time, %d rebases (worst %.2f ms), %s -> %s" % [
+	print("[bench] %s %d seed %d: tick median %.2f ms, p99 %.2f ms, %.2f %% behind real time, %d rebases (worst tick holding one %.2f ms), %s -> %s" % [
 			_layout, _n, int(_options["seed"]), float(tick["median_us"]) * 1e-3, float(tick["p99_us"]) * 1e-3, float(summary["lag"]) * 100.0,
-			int((summary["rebase"] as Dictionary)["count"]), float((summary["rebase"] as Dictionary)["max_us"]) * 1e-3,
+			int((summary["rebase"] as Dictionary)["count"]), float((summary["rebase"] as Dictionary)["tick_max_us"]) * 1e-3,
 			"pass" if bool((summary["verdict"] as Dictionary)["pass"]) else "fail: " + "; ".join(PackedStringArray((summary["verdict"] as Dictionary)["failures"])),
 			ProjectSettings.globalize_path(dir) if problem.is_empty() else problem])
 	_put_back()

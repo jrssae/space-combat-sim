@@ -97,12 +97,59 @@ func test_a_short_furball_bench_writes_its_report() -> void:
 	assert_true(s.has("load_ms") and s.has("lag"), "load time and real time kept")
 	assert_eq(int(s.get("ships_min", 0)), 13, "all twelve and the player stayed in play")
 	assert_true(FileAccess.file_exists(ROOT.path_join("furball_test/summary.md")), "summary.md written")
+	for key: String in ["hit", "ram"]:
+		assert_true(((s["stages"] as Dictionary).get(key, {}) as Dictionary).has("mean_us"), "the resolvers split: %s" % key)
+	assert_true(s.has("sync_timed_share"), "how often the body sync was timed")
+	assert_true((s.get("rebase", {}) as Dictionary).has("tick_max_us"), "the worst tick that held a rebase")
+	assert_true((s.get("machine", {}) as Dictionary).has("godot_binary"), "which Godot binary ran")
+	assert_false(bool(s.get("n_includes_player", true)), "N counts the layout's ships, not the player")
+	_assert_stages_are_consistent(main.perf_probe.series)
 	assert_eq(main.ships.alive().size(), 12)
 	for c: Combatant in main.ships.alive():
 		assert_true(c.damageable.invulnerable, "%s holds the count steady" % c.display_name)
 		assert_true(c.driver.brain is AiPilot, "%s flies an AiPilot" % c.display_name)
 	assert_eq(main.world.auto_rebase_distance_m, 5000.0, "the rebase threshold is back")
 	assert_false(bool(_read("perf.enabled")), "the probe is off again")
+
+
+# Per tick, every stage timed inside another is no larger than it, and the stages split the tick.
+func _assert_stages_are_consistent(series: Array[PackedInt64Array]) -> void:
+	var ticks: int = series[PerfProbe.Field.TICK].size()
+	assert_gt(ticks, 0, "ticks were recorded")
+	var broken := PackedStringArray()
+	for i: int in ticks:
+		var v: Callable = func(field: int) -> int: return series[field][i]
+		if v.call(PerfProbe.Field.STAGES_ON) != 1:
+			continue
+		if v.call(PerfProbe.Field.SCAN) > v.call(PerfProbe.Field.AI):
+			broken.append("tick %d: scan %d over ai %d" % [i, v.call(PerfProbe.Field.SCAN), v.call(PerfProbe.Field.AI)])
+		if v.call(PerfProbe.Field.THINK) > v.call(PerfProbe.Field.AI):
+			broken.append("tick %d: think %d over ai %d" % [i, v.call(PerfProbe.Field.THINK), v.call(PerfProbe.Field.AI)])
+		if v.call(PerfProbe.Field.SCAN) > v.call(PerfProbe.Field.THINK):
+			broken.append("tick %d: scan %d over think %d" % [i, v.call(PerfProbe.Field.SCAN), v.call(PerfProbe.Field.THINK)])
+		if v.call(PerfProbe.Field.HIT) + v.call(PerfProbe.Field.RAM) > v.call(PerfProbe.Field.RESOLVERS):
+			broken.append("tick %d: hit %d + ram %d over resolvers %d" % [i, v.call(PerfProbe.Field.HIT), v.call(PerfProbe.Field.RAM),
+					v.call(PerfProbe.Field.RESOLVERS)])
+		if v.call(PerfProbe.Field.SYNC) > v.call(PerfProbe.Field.PHYSICS):
+			broken.append("tick %d: sync over physics" % i)
+		if v.call(PerfProbe.Field.REBASE) > v.call(PerfProbe.Field.FLIGHT) + v.call(PerfProbe.Field.LATE):
+			broken.append("tick %d: rebase %d over flight + late" % [i, v.call(PerfProbe.Field.REBASE)])
+		var parts: int = 0
+		for f: int in [PerfProbe.Field.AI, PerfProbe.Field.FLIGHT, PerfProbe.Field.TARGETING, PerfProbe.Field.RESOLVERS,
+				PerfProbe.Field.LATE, PerfProbe.Field.PHYSICS, PerfProbe.Field.OTHER]:
+			parts += v.call(f)
+		if parts != v.call(PerfProbe.Field.TICK):
+			broken.append("tick %d: stages %d, tick %d" % [i, parts, v.call(PerfProbe.Field.TICK)])
+	assert_eq(broken.size(), 0, "stages nest inside the stage that contains them: %s" % "; ".join(broken.slice(0, 6)))
+	assert_gt(PerfStats.max_value(_floats(series[PerfProbe.Field.SCAN])), 0.0, "the scan was timed")
+	assert_gt(PerfStats.max_value(_floats(series[PerfProbe.Field.THINK])), 0.0, "the drivers were timed")
+
+
+static func _floats(values: PackedInt64Array) -> PackedFloat64Array:
+	var out := PackedFloat64Array()
+	for x: int in values:
+		out.append(float(x))
+	return out
 
 
 func test_transit_flies_wings_of_four_with_the_sides_neutral() -> void:
@@ -138,7 +185,7 @@ func test_bad_requests_are_refused() -> void:
 
 func test_options_are_read_from_key_value_words() -> void:
 	var o: Dictionary = BenchRunner.parse_options(PackedStringArray(["12", "warmup=2", "seed=4", "label=a/b", "probe=paired",
-			"rebase_m=90"]))
+			"rebase_m=90", "sleep=keep"]))
 	assert_true(o["ok"], String(o.get("error", "")))
 	assert_eq(float(o["seconds"]), 12.0)
 	assert_eq(float(o["warmup"]), 2.0)
@@ -146,6 +193,9 @@ func test_options_are_read_from_key_value_words() -> void:
 	assert_eq(String(o["label"]), "a/b")
 	assert_true(bool(o["paired"]))
 	assert_eq(float(o["rebase_m"]), 90.0)
+	assert_true(bool(o["keep_sleep"]), "sleep=keep leaves the engine's frame sleep alone")
+	assert_false(bool(BenchRunner.parse_options(PackedStringArray())["keep_sleep"]))
+	assert_false(bool(BenchRunner.parse_options(PackedStringArray(["sleep=forever"]))["ok"]))
 	var defaults: Dictionary = BenchRunner.parse_options(PackedStringArray())
 	assert_eq(float(defaults["seconds"]), BenchRunner.DEFAULT_SECONDS)
 	assert_eq(float(defaults["warmup"]), BenchRunner.DEFAULT_WARMUP_S)

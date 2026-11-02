@@ -272,6 +272,7 @@ func _setup_perf() -> void:
 	perf_probe.process_mode = Node.PROCESS_MODE_PAUSABLE
 	perf_probe.world = world
 	perf_probe.hits = $Combat/HitResolver as HitResolver
+	perf_probe.rams = rams
 	perf_probe.ships_in_play = func() -> int: return ships.in_use_count() + (1 if player_alive else 0)
 	add_child(perf_probe)
 	bench = BenchRunner.new()

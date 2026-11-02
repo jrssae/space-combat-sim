@@ -3,14 +3,14 @@ extends RefCounted
 ## The statistics behind the many-ships benchmark (M4-T01, `docs/milestones/m4-performance-and-scale.md`, "The budget").
 ## Pure: medians and percentiles of a run's ticks, the budget verdict of one run, and the max-N search over a sweep.
 ##
-## A run passes when its tick median and p99 are inside budget, no rebase tick is longer than one 60 Hz frame and the
-## simulation kept up with the wall clock. A ship count passes on two runs of three; a layout's max N is the largest passing
+## A run passes when its tick median and p99 are inside budget, no tick holding a rebase (the whole tick, not just the shift) is
+## longer than one 60 Hz frame and the simulation kept up with the wall clock. A ship count passes on two runs of three; a layout's max N is the largest passing
 ## count in its sweep, and a sweep stops after two failing counts in a row. The headline is the lower of furball and spread.
 
 ## Simulation tick budget, microseconds: median and p99 over the measured window.
 const TICK_MEDIAN_BUDGET_US: float = 8000.0
 const TICK_P99_BUDGET_US: float = 12000.0
-## No rebase tick may be longer than one physics frame at 60 Hz.
+## No tick holding a rebase may be longer than one physics frame at 60 Hz.
 const REBASE_BUDGET_US: float = 1.0e6 / 60.0
 ## The share of wall time the simulation may fall behind over a run.
 const LAG_BUDGET: float = 0.01
@@ -67,14 +67,16 @@ static func lag(sim_s: float, wall_s: float) -> float:
 
 
 ## One run against the budget: `{"pass": bool, "failures": PackedStringArray}`, one line per budget it broke.
-static func verdict(tick_median_us: float, tick_p99_us: float, rebase_max_us: float, lag_share: float) -> Dictionary:
+## `rebase_tick_max_us` is the longest whole tick in which a rebase happened.
+static func verdict(tick_median_us: float, tick_p99_us: float, rebase_tick_max_us: float, lag_share: float) -> Dictionary:
 	var failures := PackedStringArray()
 	if tick_median_us > TICK_MEDIAN_BUDGET_US:
 		failures.append("tick median %.2f ms over %.1f ms" % [tick_median_us * 1e-3, TICK_MEDIAN_BUDGET_US * 1e-3])
 	if tick_p99_us > TICK_P99_BUDGET_US:
 		failures.append("tick p99 %.2f ms over %.1f ms" % [tick_p99_us * 1e-3, TICK_P99_BUDGET_US * 1e-3])
-	if rebase_max_us > REBASE_BUDGET_US + 1e-6:
-		failures.append("a rebase tick took %.2f ms, over one frame (%.1f ms)" % [rebase_max_us * 1e-3, REBASE_BUDGET_US * 1e-3])
+	if rebase_tick_max_us > REBASE_BUDGET_US + 1e-6:
+		failures.append("a tick holding a rebase took %.2f ms, over one frame (%.1f ms)" % [rebase_tick_max_us * 1e-3,
+				REBASE_BUDGET_US * 1e-3])
 	if lag_share >= LAG_BUDGET:
 		failures.append("real time not kept: %.2f %% behind the wall clock (budget under %.0f %%)" % [lag_share * 100.0,
 				LAG_BUDGET * 100.0])
