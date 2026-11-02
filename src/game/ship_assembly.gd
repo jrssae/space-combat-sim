@@ -15,7 +15,8 @@ extends RefCounted
 ## - `faction` (StringName, default `neutral`): the Targetable's faction and the targeting system's own faction.
 ## - `display_name` (String, default ""): what the pilot reads on the target bracket.
 ## - `console_owner` (bool, default false): the player's ship; it registers the console providers (D27).
-## - `is_player` (bool, default `console_owner`).
+## - `is_player` (bool, default `console_owner`). Only the player's targeting rebuilds its whole candidate list every tick, for
+##   the HUD and the radar (`TargetingController.keeps_candidates`, M4-T02).
 ## - `force_assist` (bool, default false): AI ships fly with flight assist always on.
 ## - `ai` (bool, default false): adds an `AiPilotDriver` (priority -10) that flies the ship with whatever `PilotBrain` it
 ##   is given (`combatant.driver.brain`); with no brain it does nothing.
@@ -40,7 +41,9 @@ static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D,
 	ship.console_owner = console_owner
 	ship.force_assist = bool(opts.get(OPT_FORCE_ASSIST, false))
 	combatant.ship = ship
-	(ship.get_node("Targeting") as TargetingController).system.own_faction = combatant.faction
+	var targeting := ship.get_node("Targeting") as TargetingController
+	targeting.system.own_faction = combatant.faction
+	targeting.keeps_candidates = combatant.is_player  # only the player's list is read every frame (M4-T02)
 
 	var thrusters := ThrusterVisuals.new()
 	thrusters.name = "ThrusterVisuals"

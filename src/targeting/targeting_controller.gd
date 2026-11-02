@@ -1,8 +1,10 @@
 class_name TargetingController
 extends Node
 ## The ship's targeting computer (architecture §3, §6.3): a thin node around the pure `TargetingSystem`. Every
-## physics tick it rebuilds the candidate list from group `targetable` (so nothing survives a `World.rebase()` stale)
-## and drops a selection that left sensor range; `apply(cmd)` handles the `target_next` / `target_ahead` edges.
+## physics tick it drops a selection that left its reach or play; `apply(cmd)` handles the `target_next` / `target_ahead`
+## edges. The player's controller (`keeps_candidates`) also rebuilds its whole candidate list from group `targetable` every
+## tick, for the HUD and the radar; other ships build theirs only when asked (M4-T02). Lists are built from the live nodes,
+## so nothing survives a `World.rebase()` stale.
 ##
 ## It lives under the ship but is handed the ship's body explicitly (`setup(body)`) rather than reaching up the tree:
 ## it reads the body's position, `linear_velocity` and forward axis (`-global_basis.z`). Targetables under that body
@@ -22,6 +24,10 @@ signal target_changed(id: int)
 const LATE_PRIORITY: int = 100
 
 var system: TargetingSystem = TargetingSystem.new()
+## Whether every tick rebuilds the whole candidate list (M4-T02): the player's does, since the HUD and the radar read it every
+## frame. Other ships only check their selection each tick and build a list when something asks for one, so their ticks
+## cost nothing per targetable (with every ship gathering, targeting was two thirds of a 100-ship tick).
+var keeps_candidates: bool = true
 
 var _body: RigidBody3D = null
 
@@ -58,10 +64,14 @@ func _physics_process(_delta: float) -> void:
 	refresh()
 
 
-## Rebuilds the candidates now and clears a selection that is gone or out of range (emits `target_changed` then).
+## Clears a selection that is gone or out of reach (emits `target_changed` then), and rebuilds the candidates now when the
+## controller keeps them.
 func refresh() -> void:
 	var before: int = system.selected_id()
-	_gather()
+	if keeps_candidates:
+		_gather()
+	else:
+		_check_selection()
 	_emit_if_changed(before)
 
 
@@ -115,10 +125,15 @@ func selected_name() -> String:
 	return target.display_name if target != null else ""
 
 
-## Selectable targets as of the last refresh: in sensor range, nearest first.
+## Selectable targets: in sensor range, nearest first. As of the last refresh when the controller keeps its candidates,
+## gathered now when it does not.
 func candidates() -> Array[TargetInfo]:
 	if not _has_body():
 		return []
+	if not keeps_candidates:
+		var before: int = system.selected_id()
+		_gather()
+		_emit_if_changed(before)
 	return system.in_range(_ship_position())
 
 
@@ -128,13 +143,22 @@ func select_nearest_hostile() -> bool:
 	if not _has_body():
 		return false
 	var before: int = system.selected_id()
-	_gather()
-	var order: Array[TargetInfo] = system.cycle_order(_ship_position())
-	var found: bool = not order.is_empty() and Factions.is_hostile(system.own_faction, order[0].faction)
-	if found:
-		system.select_id(order[0].id, _ship_position())
+	var found: bool = false
+	if keeps_candidates:
+		_gather()
+		var order: Array[TargetInfo] = system.cycle_order(_ship_position())
+		found = not order.is_empty() and Factions.is_hostile(system.own_faction, order[0].faction)
+		if found:
+			system.select_id(order[0].id, _ship_position())
+		else:
+			system.clear()
 	else:
-		system.clear()
+		var nearest: Targetable = _nearest_hostile()
+		found = nearest != null
+		if found:
+			_select_alone(nearest)
+		else:
+			system.clear()
 	_emit_if_changed(before)
 	return found
 
@@ -153,14 +177,22 @@ func select_by_name(display_name: String) -> bool:
 
 
 ## Selects the in-range target with this id (a `Targetable` instance id: an AI brain's choice), from the candidates of the
-## last refresh, gathering them again only when it is not among them. Returns whether it is selected.
+## last refresh, gathering them again only when it is not among them; a controller that does not keep its candidates checks
+## that one target alone. Returns whether it is selected.
 func select_id(target_id: int) -> bool:
 	if not _has_body():
 		return false
 	var before: int = system.selected_id()
-	if before != target_id and not system.select_id(target_id, _ship_position()):
-		_gather()
-		system.select_id(target_id, _ship_position())
+	if before != target_id:
+		if not keeps_candidates:
+			var target: Targetable = _selectable(target_id)
+			if target != null:
+				_select_alone(target)
+			else:
+				_check_selection()
+		elif not system.select_id(target_id, _ship_position()):
+			_gather()
+			system.select_id(target_id, _ship_position())
 	_emit_if_changed(before)
 	return system.selected_id() == target_id
 
@@ -181,6 +213,57 @@ func _gather() -> void:
 			continue
 		infos.append(targetable.to_target_info())
 	system.update(infos, _ship_position())
+
+
+# Clears a selection this ship could no longer select, without gathering anything.
+func _check_selection() -> void:
+	if system.has_selection() and _has_body() and is_inside_tree() and _selectable(system.selected_id()) == null:
+		system.clear()
+
+
+# The targetable with this id if this ship could select it now (in play, not its own, within reach), else null.
+func _selectable(target_id: int) -> Targetable:
+	if target_id == TargetingSystem.NO_TARGET or not is_instance_id_valid(target_id):
+		return null
+	var target := instance_from_id(target_id) as Targetable
+	if target == null or _body.is_ancestor_of(target) or not target.is_active():
+		return null
+	var reach: float = maxf(system.sensor_range_m, target.broadcast_range_m)
+	if TargetingSystem.range_between(_ship_position(), target.global_position) > reach:
+		return null
+	return target
+
+
+# The nearest targetable hostile to this ship within its reach, ties to the lower id, or null. The same pick as the head of
+# `TargetingSystem.cycle_order`, without building a list.
+func _nearest_hostile() -> Targetable:
+	var ship_pos: Vector3 = _ship_position()
+	var hostile: Dictionary = {}  # faction -> hostile to this ship, looked up once per faction
+	var best: Targetable = null
+	var best_range: float = INF
+	for node: Node in get_tree().get_nodes_in_group(Targetable.GROUP):
+		var targetable := node as Targetable
+		if targetable == null or _body.is_ancestor_of(targetable) or not targetable.is_active():
+			continue
+		var faction: StringName = targetable.faction
+		if not hostile.has(faction):
+			hostile[faction] = Factions.is_hostile(system.own_faction, faction)
+		if not hostile[faction]:
+			continue
+		var r: float = TargetingSystem.range_between(ship_pos, targetable.global_position)
+		if r > maxf(system.sensor_range_m, targetable.broadcast_range_m):
+			continue
+		if best == null or r < best_range or (r == best_range and targetable.get_instance_id() < best.get_instance_id()):
+			best = targetable
+			best_range = r
+	return best
+
+
+# Selects a target `_selectable` passed, holding it as the only candidate (a controller that does not keep the list).
+func _select_alone(target: Targetable) -> void:
+	var only: Array[TargetInfo] = [target.to_target_info()]
+	system.update(only, _ship_position())
+	system.select_id(target.get_instance_id(), _ship_position())
 
 
 func _emit_if_changed(before: int) -> void:

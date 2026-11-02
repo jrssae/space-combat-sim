@@ -91,6 +91,7 @@ func test_ai_ships_do_not_build_a_target_list_every_tick() -> void:
 		await get_tree().physics_frame
 	var per_tick: float = float(TargetInfo.built_count - before) / float(MEASURED_TICKS)
 	var ships: int = FLEET + 1
+	gut.p("%.1f TargetInfos per tick for %d ships" % [per_tick, ships])
 	assert_lt(per_tick, 3.0 * float(ships),
 			"%.0f TargetInfos per tick for %d ships: linear, not a list per ship (that would be about %d)" % [
 			per_tick, ships, ships * (ships - 1)])
@@ -211,3 +212,98 @@ func test_an_ai_ships_candidates_are_current_when_asked() -> void:
 	assert_eq(names, PackedStringArray(["SECOND", "FIRST", "PLAYER"]), "nearest first, never itself")
 	(first.get_parent() as Node3D).position = Vector3(0.0, 0.0, -100.0)
 	assert_eq(raider.ship.targeting.candidates()[0].display_name, "FIRST", "as the targets are now")
+
+
+# --- the same choices either way ----------------------------------------------------------------------------------
+
+
+## A frictionless, gravity-free body (architecture §5.4) to carry two targeting computers side by side.
+func _bare_ship() -> RigidBody3D:
+	var ship := RigidBody3D.new()
+	ship.name = "Watcher"
+	ship.gravity_scale = 0.0
+	ship.linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
+	ship.angular_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
+	ship.linear_damp = 0.0
+	ship.angular_damp = 0.0
+	ship.can_sleep = false
+	var shape := CollisionShape3D.new()
+	shape.shape = SphereShape3D.new()
+	ship.add_child(shape)
+	return ship
+
+
+func _controller(body: RigidBody3D, keeps: bool) -> TargetingController:
+	var controller := TargetingController.new()
+	controller.name = "Keeps" if keeps else "Asks"
+	controller.keeps_candidates = keeps
+	controller.system.own_faction = Factions.RAIDERS
+	body.add_child(controller)
+	controller.setup(body)
+	return controller
+
+
+func _ids(infos: Array[TargetInfo]) -> Array[int]:
+	var out: Array[int] = []
+	for info: TargetInfo in infos:
+		out.append(info.id)
+	return out
+
+
+func test_a_controller_that_asks_chooses_as_one_that_keeps_its_list() -> void:
+	player.ship.visible = false
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	var factions: Array[StringName] = [Factions.EARTH_ALLIANCE, Factions.RAIDERS, Factions.NEUTRAL]
+	var markers: Array[Targetable] = []
+	for i: int in 16:
+		markers.append(_marker("M%d" % i, factions[i % 3], Vector3.ZERO, 100000.0 if i % 5 == 0 else 0.0))
+	var body: RigidBody3D = _bare_ship()
+	world.add_child(body)
+	body.global_transform = Transform3D.IDENTITY
+	var keeps: TargetingController = _controller(body, true)
+	var asks: TargetingController = _controller(body, false)
+	var keeps_seen: Array[int] = _watch(keeps)
+	var asks_seen: Array[int] = _watch(asks)
+	var mismatches: int = 0
+	for step: int in 400:
+		# The world moves on, then the tick's refresh, then a choice.
+		var moved: Targetable = markers[rng.randi_range(0, markers.size() - 1)]
+		var holder := moved.get_parent() as Node3D
+		if rng.randf() < 0.15:
+			holder.visible = not holder.visible
+		else:
+			holder.position = Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * 30000.0
+		keeps.refresh()
+		asks.refresh()
+		var op: int = rng.randi_range(0, 6)
+		var picked: int = markers[rng.randi_range(0, markers.size() - 1)].get_instance_id()
+		var cmd := CombatCommand.new()
+		var a: Variant = null
+		var b: Variant = null
+		match op:
+			0:
+				a = keeps.select_id(picked)
+				b = asks.select_id(picked)
+			1:
+				a = keeps.select_nearest_hostile()
+				b = asks.select_nearest_hostile()
+			2, 3, 4:
+				cmd.target_next = op == 2
+				cmd.target_prev = op == 3
+				cmd.target_ahead = op == 4
+				keeps.apply(cmd)
+				asks.apply(cmd)
+			5:
+				a = _ids(keeps.candidates())
+				b = _ids(asks.candidates())
+			6:
+				keeps.clear_selection()
+				asks.clear_selection()
+		if a != b or keeps.selected_id() != asks.selected_id() or keeps.selected_name() != asks.selected_name():
+			mismatches += 1
+			if mismatches <= 3:
+				gut.p("step %d op %d: %s / %s, selected %d / %d" % [step, op, str(a), str(b), keeps.selected_id(), asks.selected_id()])
+	assert_eq(mismatches, 0, "the same answers and selections over 400 seeded steps")
+	assert_eq(asks_seen, keeps_seen, "and the same target_changed signals")
+	assert_gt(keeps_seen.size(), 50, "the steps changed the selection often")

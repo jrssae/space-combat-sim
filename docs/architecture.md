@@ -1963,3 +1963,20 @@ scripts/bench_quick.sh      the quick check: ramps furball and spread until 30 F
   checks per tick that the stages split the tick and that each inner stage fits in its own (scan and think in ai, hit and ram in
   resolvers, sync in physics, the rebase in flight and late), and that runs write their reports; `run_tests.sh` runs
   `bench furball 25 5` and checks the report is there.
+
+### 17.2 Cycle 1: only the player's targeting keeps a list (T02)
+
+- **Before**, every ship's `TargetingController` turned every targetable into a `TargetInfo` each tick, so targeting cost
+  O(N^2) and was two thirds of a 100-ship tick (74 of 109 ms in the furball), the same in every layout.
+- **Now** `TargetingController.keeps_candidates` says whether the whole list is rebuilt every tick. `ShipAssembly` sets it from
+  `is_player`: the player's list is read by the HUD and the radar every frame and is built as before. Every other ship's
+  controller checks only its selection each tick (the target still exists, is in play, is not its own, and is within the
+  sensors or its own broadcast range) and builds a list only when asked: `candidates()`, the target edges and `select_by_name`
+  gather on demand, `select_id` checks the one target, and `select_nearest_hostile` walks the targetables for the nearest hostile
+  without building a `TargetInfo` (the same pick as the head of `TargetingSystem.cycle_order`). A target picked this way is held
+  as the system's only candidate, so `TargetingSystem` keeps its rule that a selection is among its candidates.
+- **Behaviour** is the same: `test_targeting_scale` runs a controller of each kind side by side over 400 seeded steps and
+  compares every answer, selection and `target_changed` signal, and a seeded bench run gives identical outcomes before and after.
+  One difference stays inside a tick: a target that left play or reach since the last refresh can no longer be selected by id
+  before the next refresh, where the last tick's list used to allow it until the refresh at priority 100 cleared it.
+- **Work count**: `TargetInfo.built_count` (every `TargetInfo` built in the process), for tests and profiling.
