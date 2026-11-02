@@ -1,25 +1,23 @@
 extends GutTest
-## AC9, formation (M3-T07, architecture §16 D34, D36): three allied Starfuries on the `ally_starfury` profile in a
-## finger-four on a leading Starfury, the real ships in Jolt, the real drivers (avoidance included) and the real
-## `WingDirector`. The leader is flown like the player's ship (commands straight to `Combatant.apply_commands`, no AI
-## driver, no avoidance): 100 m/s straight on, then a 90 degree turn at 100 m/s, then straight on again. It turns the way a
-## pilot does: its flight path swings at a steady rate and the nose goes ahead of it, toward the acceleration that takes
-## (the centripetal part plus closing any gap), by as much as the RCS needs the mains to carry, mains burning. The RCS alone
-## (10 m/s^2 sideways) turns a Starfury at up to about 5.7 degrees/s at 100 m/s; with the mains, up to about 18.
+## AC9, formation (M3-T07, architecture §16 D34, D36): three allied Starfuries on the `ally_starfury` profile in a finger-four
+## on a leading Starfury, with real ships in Jolt, real drivers (avoidance included) and the real `WingDirector`. The leader is
+## flown like the player's ship (no AI driver, no avoidance): 100 m/s straight on, a 90 degree turn at 100 m/s, then straight
+## on again. It turns like a pilot: its flight path swings at a steady rate and the nose leads it toward the acceleration
+## needed, by as much as the RCS needs the mains to carry. The RCS alone turns a Starfury at up to about 5.7 degrees/s at
+## 100 m/s; with the mains, up to about 18.
 ##
-## Four formations fly at once in one world, 10 km apart (beyond sensor range), one per entry of `TURNS`: a left and a
-## right turn at 6 degrees/s (90 degrees in 15 s) and at 10 (in 9 s), so either side of the finger-four flies the outside.
+## Four formations fly at once, 10 km apart (beyond sensor range), one per entry of `TURNS`: a left and a right turn at 6
+## degrees/s and at 10, so either side of the finger-four flies the outside.
 ##
-## The slots are in the leader's body frame, so they swing round the leader as its nose moves onto and off its lead over
-## the flight path (23 degrees at 6 degrees/s, 61 at 10). A member that holds its place relative to the flight path is then
-## 2 r sin(lead / 2) from its slot: at 10 degrees/s 57 m for #2 and #3 and about 115 m for #4 (113 m out). Hence AC9's
-## bounds (maintainer Q14): every member within `TURN_TOL_M`, the far slot #4 within `FAR_SLOT_TOL_M` at 10 degrees/s; at
-## 6 degrees/s #4 is held to `TURN_TOL_M` too.
+## Slots are in the leader's body frame, so they swing round the leader as its nose moves off its flight path (23 degrees at
+## 6 degrees/s, 61 at 10). A member holding its place relative to the flight path is then 2 r sin(lead / 2) from its slot:
+## at 10 degrees/s 57 m for #2 and #3 and about 115 m for #4. Hence AC9's bounds (maintainer Q14): every member within
+## `TURN_TOL_M`, the far slot #4 within `FAR_SLOT_TOL_M` at 10 degrees/s; at 6 degrees/s #4 is held to `TURN_TOL_M` too.
 ##
-## The members start 200 m behind their slots and 60 m out to the side, at the leader's velocity, and join. Measured from
-## the true slot (the leader's position plus its attitude times the slot offset, no lead): within `STRAIGHT_TOL_M` through
-## the straight leg, within `TURN_TOL_M` from the start of the turn until `AFTER_TURN_S` after it, and no two ships ever
-## closer than `MIN_CLEARANCE_M` between their bounding spheres (the avoidance margin).
+## The members start 200 m behind their slots and 60 m out to the side, at the leader's velocity, and join. Measured from the
+## true slot (the leader's position plus its attitude times the slot offset): within `STRAIGHT_TOL_M` through the straight
+## leg, within `TURN_TOL_M` from the start of the turn until `AFTER_TURN_S` after it, and no two ships ever closer than
+## `MIN_CLEARANCE_M` between bounding spheres (the avoidance margin).
 
 const STARFURY_SPEC: String = "res://assets/ships/starfury_aurora.tres"
 ## `Engine.time_scale`: 2 makes each 60 Hz tick 1/30 s of sim time (the 60 Hz step gave the same numbers within 0.1 m).

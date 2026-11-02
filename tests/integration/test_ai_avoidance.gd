@@ -1,14 +1,11 @@
 extends GutTest
-## AC5 in Jolt (M3-T05, architecture §16 D33): the avoidance filter in `AiPilotDriver`, closed loop through the real
-## flight model. Two AI ships set on a head-on course at 150 m/s closing pass without contact in 20 of 20 seeded runs; an
-## AI ship aimed at a buoy at 100 m/s misses it. Real ships from `ShipAssembly`, real drivers and brains (patrol through
-## the other ship, or coast), the game's own 60 Hz physics step.
+## AC5 in Jolt (M3-T05, architecture §16 D33): the avoidance filter in `AiPilotDriver`, closed loop through the real flight
+## model. Two AI ships on a head-on course at 150 m/s closing pass without contact in 20 of 20 seeded runs; an AI ship aimed
+## at a buoy at 100 m/s misses it. Real ships from `ShipAssembly`, real drivers and brains, the game's own 60 Hz step.
 ##
-## Every seeded run of a test flies in the same world at once, each in its own lane 6 km from the next: beyond the 5 km
-## sensor range, so no run sees another (each ship's contacts are only its own run's). "Without contact" is measured
-## swept, tick to tick, between the body origins, and must stay above the sum of the two bounding radii: the bounding
-## spheres never touch, so no hull can. Nor may the loop oscillate: one engagement per encounter, at most one strafe
-## reversal.
+## Every seeded run of a test flies in the same world at once, each in its own lane 6 km from the next: beyond the 5 km sensor
+## range, so no run sees another. "Without contact" is measured swept, tick to tick, between body origins, and must stay above
+## the sum of the two bounding radii. Nor may the loop oscillate: one engagement per encounter, at most one strafe reversal.
 
 const RAIDER_SPEC: String = "res://assets/ships/raider_delta_v.tres"
 const STARFURY_SPEC: String = "res://assets/ships/starfury_aurora.tres"

@@ -1,36 +1,31 @@
 class_name RebaseFight
 extends RefCounted
 ## Test fixture (M3-T14, AC21): runs a live main scene with the World's automatic rebase threshold forced down, so the world
-## rebases every second or so in the middle of whatever the scene does, and checks every tick and every frame that the
-## rebases leave no trace. Later tasks prove their own systems rebase-safe (routes, guard posts, rams) with one line, once
-## their scene is set up and running:
+## rebases every second or so in the middle of whatever the scene does, and checks every tick and frame that the rebases leave
+## no trace. Later tasks prove their own systems rebase-safe (routes, guard posts, rams) with one line once their scene runs:
 ##
 ##     var fight: RebaseFight = await RebaseFight.run(self, main, 20.0)
 ##
-## `run` lowers `World.auto_rebase_distance_m` to `threshold_m`, gives the player `cruise_mps` along its nose when it is slower
-## (0: leave the player to the caller), runs for `sim_s` seconds of sim time or until `until` returns true, puts the threshold
-## back, and asserts on `test`. With `rebase_every_s` > 0 it also forces a rebase of `FORCED_REBASE_M` (in a direction that
-## turns each time) at the start of a tick whenever that long has passed without one, so a scene whose player sits still
-## (a route or guard test: `cruise_mps` 0) still rebases. Pass `threshold_m` above `FORCED_REBASE_M` with it: below that,
-## the automatic rebase re-centres on the player later in the same tick and only the nodes ticking in between see the shift.
+## `run` lowers `World.auto_rebase_distance_m` to `threshold_m`, gives the player `cruise_mps` along its nose when slower (0:
+## leave the player to the caller), runs for `sim_s` seconds of sim time or until `until` returns true, restores the threshold
+## and asserts on `test`. With `rebase_every_s` > 0 it also forces a rebase of `FORCED_REBASE_M` at the start of a tick
+## whenever that long has passed without one, for scenes whose player sits still. Pass `threshold_m` above `FORCED_REBASE_M`
+## with it, or the automatic rebase re-centres later in the same tick and only the nodes ticking in between see the shift.
 ## It asserts:
-## - the world rebased at least every `MAX_GAP_S` (2 s) of sim time, from the start to the end;
+## - the world rebased at least every `MAX_GAP_S` (2 s) of sim time;
 ## - no ship, prop or bolt moved in universe terms across a tick by more than its own motion plus `JUMP_SLACK_M` (1 m);
-## - no hit landed along a jump: each bolt hit lies on the path its bolt flew that tick and on its target's hull, each ram on
-##   the hull it hurt;
-## - every rebase moved the chase camera with the player (to 1 mm), and every frame the chase camera kept its offset from the
-##   ship as drawn (to 1 cm with the default rigid camera);
-## - every frame the HUD's reference range is the 64-bit universe distance from the player to `Main.reference_point()`;
+## - no hit landed along a jump: each bolt hit lies on its bolt's path that tick and on its target's hull, each ram on the
+##   hull it hurt;
+## - every rebase moved the chase camera with the player (to 1 mm), and every frame it kept its offset from the ship (to 1 cm);
+## - every frame the HUD's reference range is the 64-bit universe distance to `Main.reference_point()`;
 ## - in the first frame after a rebase every visible, physics-interpolated node of World (and the cockpit camera's pivot) is
-##   drawn at its tick pose, to `SNAP_TOL_M` (the world stalls together for that tick: none is left blending, across the jump
-##   or otherwise; silent voices are not checked, nothing hears them);
-## - after every rebase, the structure: each object under World (a child of World or of one of its plain containers) is in
-##   `world_shiftable` or below a shiftable node, every `top_level` node below World is in the group itself, and no particles
-##   below World are emitted in global space (a rebase cannot move what they already emitted; the M3-T14 sparks bug).
-## The counts (`rebases`, `hits`, `rams`, `kills`) and worst cases stay on the returned object for the caller's own asserts
-## (the waves clear, bolts hit), and `summary()` is one line for `gut.p`. Rebases must come from the scene's own ticks (the
-## automatic one or a console statement), not from the test between frames. A `Watch` node samples during the run (at the
-## start of every tick and the end of every frame) and is freed when it ends.
+##   drawn at its tick pose, to `SNAP_TOL_M`, with none left blending across the jump (silent voices are not checked);
+## - after every rebase, each object under World is in `world_shiftable` or below a shiftable node, every `top_level` node is
+##   in the group itself, and no particles below World emit in global space (a rebase cannot move what they already emitted;
+##   the M3-T14 sparks bug).
+## The counts (`rebases`, `hits`, `rams`, `kills`) and worst cases stay on the returned object for the caller's asserts, and
+## `summary()` is one line for `gut.p`. Rebases must come from the scene's own ticks, not from the test between frames. A
+## `Watch` node samples during the run and is freed when it ends.
 
 const MAX_GAP_S: float = 2.0
 const JUMP_SLACK_M: float = 1.0

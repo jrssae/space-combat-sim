@@ -1,12 +1,12 @@
 extends GutTest
-## AC9, evade (M3-T06, architecture §16 D34): an M2 attack raider (`AttackBrain`, the M2 tactics, a fixed seed) starts 2 km
-## behind a Starfury flown by an `AiPilot` that cannot fight back (attack weight 0) and does not retreat. The same seeded
-## setup is flown twice: with evade weight 0 the Starfury only holds position; with evade weight 1 it jinks. Evading must cut
-## the raider's hits on it at least in half. The real ships in Jolt, the real drivers (avoidance included) and the real
-## `HitResolver`; sim time sped up with `Engine.time_scale` (1/30 s steps; the same holds at 60 Hz, see the M3-T06 notes).
+## AC9, evade (M3-T06, architecture §16 D34): an M2 attack raider (`AttackBrain`, a fixed seed) starts 2 km behind a Starfury
+## flown by an `AiPilot` that cannot fight back (attack weight 0) and does not retreat. The same seeded setup is flown twice,
+## with evade weight 0 (the Starfury only holds position) and 1 (it jinks). Evading must cut the raider's hits on it at least
+## in half. Real ships in Jolt, real drivers (avoidance included) and the real `HitResolver`; sim time sped up with
+## `Engine.time_scale` (1/30 s steps; 60 Hz holds too, see the M3-T06 notes).
 ##
-## Both setups fly at once in one world, 10 km apart (beyond the 5 km sensor range and any bolt's reach, so neither sees the
-## other), at mirrored positions so both get the same float precision. That halves the wall-clock time of the test.
+## Both setups fly at once, 10 km apart (beyond sensor range and any bolt's reach), at mirrored positions so both get the same
+## float precision. That halves the test's wall-clock time.
 
 const STARFURY_SPEC: String = "res://assets/ships/starfury_aurora.tres"
 const RAIDER_SPEC: String = "res://assets/ships/raider_delta_v.tres"
