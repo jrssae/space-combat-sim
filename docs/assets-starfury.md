@@ -190,7 +190,8 @@ re-pinned for generator v3 and v4).
   LOD0's streams are never touched. Splat scales grow with the spacing (`to_splats`: in-plane sigma 0.094 m, normal
   sigma 7.5 mm), so the sheet closes the way LOD0's does. Same parts, burial rules, materials and glass.
 - **Count.** 60 956 splats, 25.0 % of LOD0's 243 728 (AC6 range 20-30 %, checked by a build warning and the tests).
-  Manifest `lods[1]`: `{"level": 1, "file": "starfury_aurora_lod1.ply", "splats": 60956, "spacing_m": 0.094}`.
+  Manifest `lods[1]`: `{"level": 1, "file": "starfury_aurora_lod1.ply", "splats": 60956, "spacing_m": 0.094,
+  "lighting": "starfury_aurora_lod1.light"}`.
 - **Frame.** LOD1 is centred like LOD0 (its own y and z mean), so its splat centroid is the origin and GDGS's
   import centring is a no-op for it too. Its frame differs from LOD0's (the hardpoints frame) by the difference of
   the two means: 2.0 mm in y and 1.7 mm in z at seed 42. Its AABB is LOD0's within 1.1 cm (AC6 allows 0.3 m). Exact

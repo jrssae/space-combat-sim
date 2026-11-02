@@ -9,7 +9,8 @@ GDGS bakes these in its editor from a voxel proxy; a generator already knows eve
 writes them itself. A ``.light`` file is those bytes and nothing else. The normals are read from the splats as they
 are written, so they are in the PLY's frame, which is the frame the GDGS shader rotates them out of.
 
-The encoding must stay byte-identical to ``addons/gdgs_scs/runtime/resources/gaussian_lighting_resource.gd``.
+The encoding must use the same codec as ``addons/gdgs_scs/runtime/resources/gaussian_lighting_resource.gd``. GDGS goes through
+float32 and this module through float64, so a value exactly on a rounding boundary can differ by one unit.
 """
 
 from __future__ import annotations

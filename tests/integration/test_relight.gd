@@ -359,7 +359,8 @@ func test_the_knobs_reach_every_lit_node_live() -> void:
 		assert_almost_eq((buoy as GaussianSplatNode).relight_light_gain, 1.5, 1e-5)
 
 
-func test_a_hulls_lit_side_reads_near_the_old_baked_brightness_and_its_dark_side_stays_legible() -> void:
+func test_the_default_knobs_read_near_the_old_baked_brightness_and_keep_the_dark_side_legible() -> void:
+	# Pins the default values only: the shader formula is recomputed here, so a change to GDGS's own factor is not caught.
 	# GDGS: factor = unlit + gain * (ambient * AO + star energy * star colour * cos), multiplying the PLY colour. The baked rig gave
 	# about 1.2 on a hull facing the key light and 0.36 on its belly.
 	var unlit: float = Settings.get_value(&"relight_unlit_level")

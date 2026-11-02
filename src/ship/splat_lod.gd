@@ -7,42 +7,53 @@ extends RefCounted
 const ASSET_ROOT: String = ShipSpec.ASSET_ROOT
 
 
-## The PLY file name `manifest` lists for `level`, or "" when it lists none. Godot parses every JSON number as a float, so the
-## levels compare as ints.
-static func file_for(manifest: Dictionary, level: int) -> String:
+## The manifest entry that lists `level`, or {} when none does. Godot parses every JSON number as a float, so the levels
+## compare as ints; an entry that is not a Dictionary or has no numeric level is skipped.
+static func entry_for(manifest: Dictionary, level: int) -> Dictionary:
 	var lods: Variant = manifest.get("lods")
 	if not (lods is Array):
-		return ""
+		return {}
 	for entry: Variant in lods as Array:
 		if not (entry is Dictionary):
 			continue
 		var lod: Dictionary = entry
 		var number: Variant = lod.get("level")
-		if (number is int or number is float) and int(number) == level and lod.get("file") is String:
-			return lod["file"]
-	return ""
+		if (number is int or number is float) and int(number) == level:
+			return lod
+	return {}
+
+
+## The PLY file name `manifest` lists for `level`, or "" when it lists none.
+static func file_for(manifest: Dictionary, level: int) -> String:
+	var file: Variant = entry_for(manifest, level).get("file")
+	return file if file is String else ""
 
 
 ## The lighting records file `manifest` lists for `level`, or "" when it lists none.
 static func lighting_for(manifest: Dictionary, level: int) -> String:
-	var lods: Variant = manifest.get("lods")
-	if not (lods is Array):
-		return ""
-	for entry: Variant in lods as Array:
-		if entry is Dictionary and int((entry as Dictionary).get("level", -1)) == level and (entry as Dictionary).get("lighting") is String:
-			return (entry as Dictionary)["lighting"]
-	return ""
+	var lighting: Variant = entry_for(manifest, level).get("lighting")
+	return lighting if lighting is String else ""
 
 
-## The lighting records of `asset_id` at `level`, or "" when its manifest is missing or lists none (the sky).
-static func lighting_path(asset_id: String, level: int, asset_root: String = ASSET_ROOT) -> String:
-	var dir: String = asset_root.path_join(asset_id)
-	var file := FileAccess.open(dir.path_join("manifest.json"), FileAccess.READ)
+## The parsed `manifest.json` of `asset_id`, or {} when it is missing or unreadable. Parse once per ship, then ask it.
+static func read_manifest(asset_id: String, asset_root: String = ASSET_ROOT) -> Dictionary:
+	var file := FileAccess.open(asset_root.path_join(asset_id).path_join("manifest.json"), FileAccess.READ)
 	if file == null:
-		return ""
+		return {}
 	var data: Variant = JSON.parse_string(file.get_as_text())
-	var file_name: String = lighting_for(data as Dictionary, level) if data is Dictionary else ""
-	return dir.path_join(file_name) if not file_name.is_empty() else ""
+	return data if data is Dictionary else {}
+
+
+## The lighting records of `asset_id` at `level` from an already parsed `manifest`, or "" when it lists none (the sky).
+static func lighting_path_in(manifest: Dictionary, asset_id: String, level: int, asset_root: String = ASSET_ROOT) -> String:
+	var file_name: String = lighting_for(manifest, level)
+	return asset_root.path_join(asset_id).path_join(file_name) if not file_name.is_empty() else ""
+
+
+## The lighting records of `asset_id` at `level`, or "" when its manifest is missing or lists none. Reads the manifest each
+## call: a caller that asks for several levels uses `read_manifest` and `lighting_path_in`.
+static func lighting_path(asset_id: String, level: int, asset_root: String = ASSET_ROOT) -> String:
+	return lighting_path_in(read_manifest(asset_id, asset_root), asset_id, level, asset_root)
 
 
 ## The PLY to draw for `asset_id` at `level`, as `{"path": String, "level": int, "warning": String}`.

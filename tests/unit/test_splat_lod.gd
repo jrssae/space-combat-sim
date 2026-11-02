@@ -98,9 +98,21 @@ func test_the_manifest_names_each_levels_lighting_records() -> void:
 	assert_eq(SplatLod.lighting_for({}, 0), "")
 
 
-func test_the_lighting_path_of_a_generated_asset() -> void:
-	assert_eq(SplatLod.lighting_path("starfury_aurora", 0), "res://assets/generated/starfury_aurora/starfury_aurora_lod0.light")
-	assert_eq(SplatLod.lighting_path("raider_fighter", 3), "res://assets/generated/raider_fighter/raider_fighter_lod3.light")
-	assert_eq(SplatLod.lighting_path("nav_buoy", 0), "res://assets/generated/nav_buoy/nav_buoy_lod0.light")
-	assert_eq(SplatLod.lighting_path("sky_default", 0), "", "the sky is not lit")
-	assert_eq(SplatLod.lighting_path("no_such_asset", 0), "")
+func test_a_malformed_entry_is_skipped_by_the_lighting_lookup_like_the_file_lookup() -> void:
+	var manifest: Dictionary = {"lods": [3, null, {"level": null, "lighting": "a.light"}, {"lighting": "b.light"}, {"level": "1", "lighting": "c.light"},
+			{"level": 1, "file": "x_lod1.ply", "lighting": "x_lod1.light"}]}
+	assert_eq(SplatLod.lighting_for(manifest, 1), "x_lod1.light", "the first entry that is a level 1 with a string")
+	assert_eq(SplatLod.lighting_for(manifest, 0), "", "a null level is not level 0")
+	assert_eq(SplatLod.file_for(manifest, 1), "x_lod1.ply")
+	assert_eq(SplatLod.lighting_for({"lods": [{"level": null, "lighting": "a.light"}]}, 0), "")
+	assert_eq(SplatLod.lighting_for({"lods": [{"level": 1, "lighting": 7}]}, 1), "", "records that are not a name")
+
+
+func test_one_parsed_manifest_serves_every_levels_lighting_path() -> void:
+	var manifest: Dictionary = SplatLod.read_manifest("starfury_aurora")
+	assert_false(manifest.is_empty())
+	for level: int in range(0, 4):
+		assert_eq(SplatLod.lighting_path_in(manifest, "starfury_aurora", level), SplatLod.lighting_path("starfury_aurora", level))
+	assert_eq(SplatLod.lighting_path_in({}, "starfury_aurora", 0), "")
+	assert_eq(SplatLod.read_manifest("no_such_asset"), {})
+	assert_eq(SplatLod.read_manifest("nothing_here", "res://no/such/root"), {})
