@@ -93,6 +93,7 @@ func advance(delta: float) -> void:
 	emitter.energy = light_energy(_age_s)
 	if _age_s >= LIGHT_S and _rig != null:
 		_rig.remove_emitter(emitter)  # the light is over; the rest of the effect is meshes
+		_rig = null
 	# Billboard flash: full to start, linear fade, then hidden.
 	var t_flash: float = clampf(_age_s / FLASH_S, 0.0, 1.0)
 	flash.visible = _age_s < FLASH_S

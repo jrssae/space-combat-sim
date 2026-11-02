@@ -139,9 +139,10 @@ func test_the_light_is_the_plumes_colour_out_along_the_exhaust_and_the_players_o
 		assert_eq(emitter.color, EmitterCurves.light_color(main.ship.spec.engine_glow_color))
 		assert_eq(emitter.priority, LightEmitter.PRIORITY_PLAYER_OWN, "the player's nozzles outrank the rest")
 		assert_almost_eq(emitter.omni_range, EmitterCurves.NOZZLE_RANGE_M, 1e-6)
-		var pose: Transform3D = plume.get_global_transform_interpolated()
-		assert_lt(emitter.position.distance_to(pose.origin + pose.basis.y * EmitterCurves.NOZZLE_OFFSET_M), 1e-3,
-				"1.5 m out along the exhaust")
+		# From the layout, not the plume's own axis: a plume mounted the wrong way must fail here.
+		var exhaust: Vector3 = main.ship.get_global_transform_interpolated().basis * main.ship.get_layout().nozzle_exhausts[i]
+		assert_lt(emitter.position.distance_to(plume.get_global_transform_interpolated().origin
+				+ exhaust.normalized() * EmitterCurves.NOZZLE_OFFSET_M), 1e-3, "1.5 m out along the exhaust")
 	assert_gt(checked, 0)
 
 
@@ -163,9 +164,11 @@ func test_a_nozzle_light_survives_a_rebase() -> void:
 	await get_tree().process_frame
 	rig.update(_camera_position())
 	var emitter: LightEmitter = null
+	var plume: Node3D = null
 	for i: int in visuals.glow_count():
-		emitter = emitter if emitter != null else visuals.nozzle_light(i)
-	var plume: Node3D = visuals.glow(0)
+		if emitter == null and visuals.nozzle_light(i) != null:
+			emitter = visuals.nozzle_light(i)
+			plume = visuals.glow(i)
 	var pose: Transform3D = plume.get_global_transform_interpolated()
 	assert_lt(emitter.position.distance_to(pose.origin + pose.basis.y * EmitterCurves.NOZZLE_OFFSET_M), 1e-3,
 			"still on the nozzle after the world moved")
