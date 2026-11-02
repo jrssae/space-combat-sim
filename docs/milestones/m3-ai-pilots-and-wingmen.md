@@ -194,7 +194,7 @@ Status: `done` (merged into `m3`, its "Done" notes below), `in progress`, `not s
 | M3-T22 | Ship lights: nozzles, muzzle flashes, explosions (Q23) | T21 | Sonnet | in progress |
 | M3-T23 | `GPUParticles3D` sparks and debris (Q23) | T14 | Sonnet | done |
 | M3-T24 | Hero LOD for the player's ship (Q23) | T20, T21 | Sonnet | not started |
-| M3-T25 | Lens flare and motion blur, after sign-off (Q23) | T21 | Sonnet | in progress |
+| M3-T25 | Lens flare and motion blur, after sign-off (Q23) | T21 | Sonnet | done (2026-11-01) |
 | M3-T26 | Starfury after the reference model, wireframe damage display (Q24) | - | Opus | done (second pass 2026-10-31) |
 | M3-T12 | Integration, smoke runs, capture set, play-test guide | T01-T11, T13-T26 | Opus | not started |
 
@@ -1149,6 +1149,44 @@ no code until the maintainer picks.
   - Order after GDGS's effect (`PRE_TRANSPARENT`); the HUD and console are canvas layers and are never blurred.
   - `settings.lens_flare` (default on), `settings.motion_blur` (default off) and `motion_blur_strength`.
 - Done when: the maintainer has picked; AC34 passes; AC35's flare and blur lines are in the play-test checklist.
+
+**Done notes (2026-11-01).**
+
+- **Flare: ARez's add-on works on Godot 4.7.2**, so there is no in-house fallback. Vendored at commit `0ce0612` (`scripts/vendor_addons.sh`
+  now pins by full commit when a repo has no tags), `addons/lens_effects/` is unedited with its `LICENSE`; `docs/third-party.md` and
+  `CLAUDE.md`'s rule name it. We use only its `LensFlareEffect` and shader (not `plugin.gd`, not enabled; not `world_environment.gd`,
+  whose job `PostEffects` does through `LensFlareAim`, from `KeyStar`).
+- **One thing the add-on cannot do alone:** its shader `#include`s `godot/scene_data_inc.glsl`, which `--headless --import` cannot
+  resolve (it caches an empty shader, and the import never retries), so the flare would fail on any machine whose first import was the
+  one in `scripts/run_tests.sh`. `SceneLensFlareEffect` (`src/rendering/lens_flare_effect.gd`, a 5-line subclass of the add-on's class)
+  compiles the shader at start-up through `RuntimeShader`; the motion blur does the same. Checked with the headless-imported (broken)
+  cache in place: both effects run. Details in `docs/research-notes.md`.
+- **Occlusion, on the GPU (RX 6950 XT, 960x540):** with the player's hull between camera and star the flare and ghosts vanish, and the god rays
+  turn into the hull's shadow; with `set settings.hull_depth_proxy false` the same frame shows the whole flare through the hull (frames
+  `occl_p11_on` and `occl_p11_noproxy`, kept in `/tmp`, not committed). The star is placed by `PostEffects` and follows the ship as it
+  turns. A node with no depth proxy (debris chunks) does not hide it; buoys and ships have proxies. Not fixed (out of scope).
+- **Motion blur is in-house** (`MotionBlurEffect`, `motion_blur.glsl`, `motion_blur_copy.glsl`): over the velocity texture for hull pixels, and
+  **derived from the camera's turn since last frame (previous and current view and projection) for pixels at depth 0**, because the velocity
+  buffer is zero for the sky and for splats. Built both. On a 1.5 rad/s turn the stars streak and the hull stays sharp (checked on the GPU,
+  screenshots `blur_off` / `blur_on_5` / `blur_on_rest`); at rest the frame is untouched. The colour buffer cannot be copied out of
+  (no `CAN_COPY_FROM`), hence two passes through a scratch image. HUD and console are canvas layers: not blurred (structural; the HUD
+  was off in the blur shots, so confirm it by eye with AC35).
+- **Rebase:** `PostEffects.watch_world(world)` (called from `Main`) listens to `World.rebased`; `MotionBlurGate` blanks the next 2 frames
+  (strength 0). Unit-tested; not seen on the GPU (the harness does not rebase).
+- **Order and settings:** Compositor is GDGS (`PRE_TRANSPARENT`), blur, flare (both `POST_TRANSPARENT`), so the flare is never smeared.
+  `settings.lens_flare` (default on), `settings.motion_blur` (default off), `settings.motion_blur_strength` (0-1, 0.5); `flare` and `blur`
+  console commands, provider `post`. Disabled effects ask the renderer for nothing. `test_compositor_holds_exactly_the_gdgs_effect` became
+  `test_compositor_holds_the_gdgs_effect_first_then_blur_and_flare`. `run_tests.sh`'s two `providers:` smoke lines gained `post`.
+- **GPU numbers, 1080p, vsync off, free flight (static scene), 12 samples each, one process:** nothing 2.12 ms (473 fps); flare 2.50 ms
+  (+0.39); blur on, at rest 2.24 ms (+0.13); both 2.57 ms. In a wave fight the frame rate swings 68-149 fps with the fight, so flare
+  and blur are not visible in it. Blur during a 1.5 rad/s turn (3 fresh runs, first 700 frames of each): spinning alone 3.4-3.7 ms; strength 0.5
+  adds 0.1-0.3 ms; strength 1.0 adds 0.15-1.0 ms. Frame times drifted up 2x over a long process with nothing toggled (another
+  agent's GPU work at the same time), so only the early samples count. VRAM not recorded: the blur's scratch image is one RGBA16F frame (16 MB
+  at 1080p) while the blur is on.
+- `docs/playtest.md` has no AC35 section yet (T12 writes it): **T12 should add** "the flare follows the star and hides behind hulls; motion
+  blur (`blur on`) smears the stars on fast turns, not the HUD".
+- (H): how the flare and the blur look and feel (AC35). `Effect_*` and the sun colour on the effect are the add-on's defaults; tune
+  them in `space_environment.tscn` if the flare is too strong or too yellow.
 
 ### M3-T26 Starfury after the reference model, wireframe damage display
 

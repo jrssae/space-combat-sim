@@ -142,6 +142,8 @@ func _ready() -> void:
 	world.rebased.connect(func(_offset: Vector3) -> void: camera_rig.cockpit_pivot.reset_physics_interpolation())
 	# Ram contact points outlive a tick; they move with the rebase.
 	rams.world = world
+	# The motion blur skips the frames around a rebase (M3-T25).
+	space_environment.post_effects.watch_world(world)
 	_register_console()
 
 

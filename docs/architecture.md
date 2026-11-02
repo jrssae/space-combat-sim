@@ -817,7 +817,7 @@ ring buffer; engine errors in red and warnings in yellow from `ConsoleLogger`.
    cover it. Ship and `NavBuoy` have one; it is visible exactly when the splats are (hidden while the fallback mesh
    shows, `SplatStatus`) and reuses whatever fallback mesh is loaded, so a regenerated hull needs no change.
    Back-face culling makes it invisible from inside the hull (cockpit camera).
-4. Post: glow/bloom, tonemap. Keep glow modest so star splats do not bloom into blobs.
+4. Post: motion blur and lens flare (§7.5), then glow/bloom, tonemap. Keep glow modest so star splats do not bloom into blobs.
 
 **Splat pose.** GDGS's Compute backend reads a splat node's plain `global_transform`, i.e. the pose of the last
 physics tick, while meshes, the proxy, the plumes and the chase camera use the physics-interpolated pose. At speed
@@ -895,6 +895,32 @@ Console: `state lights` (`picked`, `candidates`, `active`, `cost_us`).
 | Sorting/perf with sky + hull + buoys in one pass | low | M1 total ≈ 210k splats (150k hull + 16k sky + 5 × 8k buoys) against a 400k budget; GDGS showcases 6M. |
 | GDGS breaking change on a Godot bump | low | Versions pinned; CI runs `--import` + resource assertions headless. |
 | Splat path blocks M1 entirely | low | Acceptance criteria are written so that mesh fallback + panorama still satisfies "flyable ship in a starry background with nebula"; M1 is then marked "splats pending" and the splat work moves to M1.5. |
+
+### 7.5 Lens flare and motion blur (M3-T25, Q23, Q26)
+
+Two effects on the `WorldEnvironment`'s Compositor, after GDGS's, in this order: GDGS (`PRE_TRANSPARENT`), `MotionBlurEffect`,
+then the lens flare (both `POST_TRANSPARENT`, so the blur smears the stars and hulls but never the flare). The HUD and the console
+are canvas layers drawn after the 3D scene and are never touched. `PostEffects` (a node of `SpaceEnvironment`) switches them from
+`settings.lens_flare` (default on), `settings.motion_blur` (default off) and `settings.motion_blur_strength` (0-1, default 0.5), live,
+and feeds them each frame. Console: `flare [on|off]`, `blur [on|off]`, provider `post`.
+
+- **Lens flare.** ARez's add-on (`addons/lens_effects/`, vendored unedited, `docs/third-party.md`) draws the sun disc, ghosts, an
+  anamorphic streak and god rays. It wants the sun's screen position from its own `world_environment.gd`; `PostEffects` sets
+  `sun_position` and `sun_dir_sign` instead (`LensFlareAim`), from the key star's direction (`KeyStar`'s +Z, the way to the star).
+  **Occlusion** is the add-on's: it treats depth 0 (reverse-Z far plane) as open sky, so a hull hides the flare because the hull
+  depth proxy (§7.2) writes depth, and the god rays are cut by the same depth. A node without a proxy (debris chunks) does not hide
+  it. The add-on's shader `#include`s Godot's built-in `godot/scene_data_inc.glsl`, which a headless import cannot resolve (it caches an empty
+  shader), so `SceneLensFlareEffect` (a thin subclass of ours) compiles it at start-up (`RuntimeShader`).
+- **Motion blur.** An in-house compute effect, two passes (blur into a scratch image, copy back; Godot's colour buffer is not
+  copy-readable). Hull pixels (depth above 0) blur by the velocity buffer Forward+ writes when an enabled effect has
+  `needs_motion_vectors`. The buffer is zero for the sky and the stars (splats write no depth or velocity), so pixels at depth 0 derive
+  their motion from how far the camera turned since last frame (previous and current view and projection, rotation only: they
+  are at infinity). That is what smears the stars on a fast turn; a far ship with no proxy blurs like a star. A sky pixel never
+  samples a hull pixel, so the hull's paint is not dragged across the stars. While `settings.motion_blur` is off the effect is disabled,
+  so the renderer is not asked for motion vectors and nothing runs. **Rebase:** `World.rebased` calls `MotionBlurGate.note_rebase`;
+  the next two frames get strength 0 (the previous-frame transforms the renderer holds are kilometres off), then the blur returns.
+- Headless runs and the smoke runs have no `RenderingDevice`, so both effects do nothing there; `tests/integration/test_post_effects.gd`
+  checks the wiring and the values the effects are given.
 
 ## 8. Camera
 

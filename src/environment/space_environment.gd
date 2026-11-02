@@ -1,9 +1,9 @@
 class_name SpaceEnvironment
 extends Node3D
-## The sky and the light, outside `World` (architecture §3, §7): a black WorldEnvironment with the GDGS compositor
-## effect, the `SplatLightRig` (the warm `KeyStar` and the 7 omni slots: the scene's only lights), and `SkySplats` (stars and
-## nebula as Gaussian splats, never lit: they are emitters) pinned to the camera by `SkyFollower`. Camera-relative, so it is
-## never rebased and holds nothing a gameplay system needs.
+## The sky and the light, outside `World` (architecture §3, §7): a black WorldEnvironment with the GDGS compositor effect, then
+## the motion blur and the lens flare (`PostEffects` drives both), the `SplatLightRig` (the warm `KeyStar` and the 7 omni slots:
+## the scene's only lights), and `SkySplats` (stars and nebula as Gaussian splats, never lit: they are emitters) pinned to the
+## camera by `SkyFollower`. Camera-relative, so it is never rebased and holds nothing a gameplay system needs.
 ##
 ## It loads without any generated asset: the sky splats and the manifest are loaded here, guarded, so the scene (and
 ## the headless tests) work before `scripts/gen_assets.sh` has run, with a warning instead of a load error.
@@ -41,6 +41,7 @@ var _fallback_active: bool = false
 @onready var key_star: DirectionalLight3D = $SplatLightRig/KeyStar
 @onready var sky_splats: GaussianSplatNode = $SkySplats
 @onready var sky_follower: SkyFollower = $SkyFollower
+@onready var post_effects: PostEffects = $PostEffects
 
 
 func _init() -> void:

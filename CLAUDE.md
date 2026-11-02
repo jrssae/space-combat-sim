@@ -51,7 +51,7 @@ been planned were taken for done.
 
 - Do not create your own branches unless explicitely instructed. branches are expected to tie directly to a milestone, with all tasks kept in that milestone branch.
 - Do not commit `assets/generated/`, `.tools/`, `.godot/`, `references/` or `reports/` (already in `.gitignore`).
-- Do not edit `README.md`, `LICENSE`, `DISCLAIMER.md` (owned by the maintainer) or files under `addons/gut/`
+- Do not edit `README.md`, `LICENSE`, `DISCLAIMER.md` (owned by the maintainer) or files under `addons/gut/` and `addons/lens_effects/`
   (vendored upstream code; see `docs/third-party.md`). `addons/gdgs_scs/` is the project's own fork of GDGS: edit it where
   the game needs it, keep its MIT `LICENSE`, and record each change in its `PATCHES.md`.
 - Statically typed GDScript, one class per file, pure logic in `RefCounted` classes with GUT unit tests in the
