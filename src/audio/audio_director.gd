@@ -22,6 +22,9 @@ const UI_VOICES: int = 4
 const ENGINE_RANGE_M: float = 1500.0
 const WARNING_HULL: float = 0.25
 const WARNING_INTERVAL_S: float = 1.5
+## Gain (dB) of each gun's shot. The M5 guns hold a flat tone, so they play lower than M2's decaying shots (-3 dB) to keep
+## the same loudness per shot (K-weighted, M5-T18).
+const SHOT_DB: Dictionary[StringName, float] = {&"pulse_fire": -12.0, &"raider_fire": -13.0}
 ## Engine hum: gain (dB) and pitch at idle and at full thrust. The pitch stays low: a rumble, not a whine.
 const HUM_DB: Vector2 = Vector2(-30.0, -9.0)
 const HUM_PITCH: Vector2 = Vector2(0.8, 1.25)
@@ -237,8 +240,9 @@ func watch_ship(combatant: Combatant) -> void:
 	if combatant == null or combatant.cannon == null:
 		return
 	var shot: StringName = &"pulse_fire" if combatant.faction == Factions.EARTH_ALLIANCE else &"raider_fire"
+	var shot_db: float = SHOT_DB[shot]
 	combatant.cannon.projectile_fired.connect(func(_index: int, projectile: Projectile) -> void:
-		play(shot, projectile.global_position, -3.0, randf_range(0.96, 1.04)))
+		play(shot, projectile.global_position, shot_db, randf_range(0.96, 1.04)))
 	if not _streams.has(&"engine_loop"):
 		return
 	var hum := AudioStreamPlayer3D.new()

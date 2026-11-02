@@ -12,6 +12,10 @@ import numpy as np
 from tools.procgen.core import audio, manifest
 
 
+def _at(seconds: float) -> int:
+    return int(round(seconds * audio.SAMPLE_RATE))
+
+
 class EnvelopeTests(unittest.TestCase):
     def test_time_axis_length_and_step(self) -> None:
         t = audio.time_axis(0.5)
@@ -35,6 +39,24 @@ class EnvelopeTests(unittest.TestCase):
         self.assertEqual(float(out[-1]), 0.0)
         self.assertEqual(float(out[500]), 1.0)
 
+    def test_hold_and_cut_rises_holds_flat_then_cuts_to_silence(self) -> None:
+        t = audio.time_axis(0.12)
+        env = audio.hold_and_cut(t, 0.002, 0.100, 0.005)
+        self.assertEqual(float(env[0]), 0.0)
+        self.assertAlmostEqual(float(env[_at(0.001)]), 0.5)
+        np.testing.assert_allclose(env[_at(0.002) : _at(0.100) + 1], 1.0)
+        self.assertAlmostEqual(float(env[_at(0.1025)]), 0.5)
+        self.assertTrue(np.all(np.diff(env[_at(0.100) : _at(0.105)]) < 0.0), "the cut only falls")
+        np.testing.assert_allclose(env[_at(0.105) :], 0.0, atol=1e-12)
+
+    def test_hold_and_release_falls_exponentially_after_the_hold(self) -> None:
+        t = audio.time_axis(0.2)
+        env = audio.hold_and_release(t, 0.002, 0.120, 0.006)
+        self.assertEqual(float(env[0]), 0.0)
+        np.testing.assert_allclose(env[_at(0.002) : _at(0.120) + 1], 1.0)
+        self.assertAlmostEqual(float(env[_at(0.126)]), np.exp(-1.0), places=6)
+        self.assertTrue(np.all(np.diff(env[_at(0.120) :]) < 0.0))
+
 
 class OscillatorTests(unittest.TestCase):
     def test_a_sine_of_a_steady_frequency_has_its_period(self) -> None:
@@ -54,6 +76,37 @@ class OscillatorTests(unittest.TestCase):
         phase = audio.phase_from_frequency(np.full(4800, 300.0))
         for shape in (audio.saw(phase), audio.square(phase)):
             self.assertLessEqual(float(np.max(np.abs(shape))), 1.0)
+
+
+class FmTests(unittest.TestCase):
+    # One second at whole-hertz frequencies: every partial falls on its own FFT bin, so its amplitude reads exactly.
+    @staticmethod
+    def _amplitudes(samples: np.ndarray) -> np.ndarray:
+        return np.abs(np.fft.rfft(samples)) / (len(samples) / 2.0)
+
+    def test_without_modulators_it_is_a_sine_at_the_carrier(self) -> None:
+        t = audio.time_axis(1.0)
+        np.testing.assert_allclose(audio.fm(t, 440.0, ()), np.sin(2.0 * np.pi * 440.0 * t), atol=1e-12)
+
+    def test_one_modulator_gives_sidebands_with_bessel_amplitudes(self) -> None:
+        amp = self._amplitudes(audio.fm(audio.time_axis(1.0), 1000.0, ((200.0, 1.0),)))
+        self.assertAlmostEqual(float(amp[1000]), 0.7651977, places=5)  # J0(1)
+        for sideband in (800, 1200):
+            self.assertAlmostEqual(float(amp[sideband]), 0.4400506, places=5)  # J1(1)
+        for sideband in (600, 1400):
+            self.assertAlmostEqual(float(amp[sideband]), 0.1149035, places=5)  # J2(1)
+        self.assertLess(float(amp[1100]), 1e-9, "nothing between the sidebands")
+
+    def test_two_modulators_add_their_cross_sidebands(self) -> None:
+        amp = self._amplitudes(audio.fm(audio.time_axis(1.0), 1000.0, ((200.0, 1.0), (37.0, 0.5))))
+        self.assertAlmostEqual(float(amp[1000 + 200 - 37]), 0.4400506 * 0.2422685, places=5)  # J1(1) J1(0.5)
+        self.assertAlmostEqual(float(amp[1000]), 0.7651977 * 0.9384698, places=5)  # J0(1) J0(0.5)
+
+    def test_the_amplitude_is_constant_and_a_time_varying_index_is_accepted(self) -> None:
+        t = audio.time_axis(0.5)
+        out = audio.fm(t, 900.0, ((1270.0, 3.0 * np.exp(-t / 0.05)),))
+        self.assertLessEqual(float(np.max(np.abs(out))), 1.0)
+        self.assertAlmostEqual(float(np.sqrt(np.mean(out**2))), np.sqrt(0.5), places=2)
 
 
 class FilterTests(unittest.TestCase):

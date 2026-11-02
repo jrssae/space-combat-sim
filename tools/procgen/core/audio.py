@@ -1,6 +1,6 @@
 """Procedural sound synthesis (docs/architecture.md section 15.1 D29): WAV writing on the standard library's ``wave`` module,
-envelopes, oscillators and filtered noise, all NumPy. Everything is deterministic: randomness comes from a generator the
-caller passes in (``BuildContext.rng``), never from the clock.
+envelopes, oscillators (FM among them) and filtered noise, all NumPy. Everything is deterministic: randomness comes from a
+generator the caller passes in (``BuildContext.rng``), never from the clock.
 
 Conventions: mono, float64 samples in [-1, 1] while building, 48 kHz, 16-bit PCM on disk. ``normalize_peak`` brings a sound to a
 chosen peak level (dBFS) before it is written, so the game's mixer never clips on a single voice.
@@ -9,6 +9,7 @@ chosen peak level (dBFS) before it is written, so the game's mixer never clips o
 from __future__ import annotations
 
 import wave
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -33,6 +34,22 @@ def attack_decay(t: np.ndarray, attack_s: float, tau_s: float) -> np.ndarray:
     t = np.asarray(t, dtype=float)
     rise = np.clip(t / max(attack_s, 1e-9), 0.0, 1.0)
     return rise * np.exp(-np.maximum(t - attack_s, 0.0) / tau_s)
+
+
+def hold_and_cut(t: np.ndarray, attack_s: float, hold_s: float, cut_s: float) -> np.ndarray:
+    """A held shot: a linear attack to 1, flat until ``hold_s``, then a half-cosine cut to silence over ``cut_s``."""
+    t = np.asarray(t, dtype=float)
+    rise = np.clip(t / max(attack_s, 1e-9), 0.0, 1.0)
+    cut = np.clip((t - hold_s) / max(cut_s, 1e-9), 0.0, 1.0)
+    return rise * 0.5 * (1.0 + np.cos(np.pi * cut))
+
+
+def hold_and_release(t: np.ndarray, attack_s: float, hold_s: float, tau_s: float) -> np.ndarray:
+    """A held shot with a softer end: like ``hold_and_cut``, but after ``hold_s`` it falls exponentially (time constant
+    ``tau_s``)."""
+    t = np.asarray(t, dtype=float)
+    rise = np.clip(t / max(attack_s, 1e-9), 0.0, 1.0)
+    return rise * np.exp(-np.maximum(t - hold_s, 0.0) / tau_s)
 
 
 def fade(samples: np.ndarray, in_s: float, out_s: float, sample_rate: int = SAMPLE_RATE) -> np.ndarray:
@@ -69,6 +86,18 @@ def saw(phase: np.ndarray) -> np.ndarray:
 
 def square(phase: np.ndarray) -> np.ndarray:
     return np.where(np.mod(phase / (2.0 * np.pi), 1.0) < 0.5, 1.0, -1.0)
+
+
+def fm(t: np.ndarray, carrier_hz: float, modulators: Sequence[tuple[float, float | np.ndarray]]) -> np.ndarray:
+    """Frequency modulation (as phase modulation): a sine at ``carrier_hz`` whose phase is pushed by each ``(freq_hz, index)``
+    modulator. Its partials sit at the carrier plus whole multiples of every modulator, with Bessel-function amplitudes, so
+    modulators that are not harmonics of each other give an inharmonic, metallic cluster. An index may be an array (one value
+    per sample) to brighten or dull the sound over time. The amplitude stays 1."""
+    t = np.asarray(t, dtype=float)
+    phase = 2.0 * np.pi * carrier_hz * t
+    for freq_hz, index in modulators:
+        phase = phase + np.asarray(index, dtype=float) * np.sin(2.0 * np.pi * freq_hz * t)
+    return np.sin(phase)
 
 
 # --- noise and filters ------------------------------------------------------------------------------

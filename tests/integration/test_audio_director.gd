@@ -31,6 +31,16 @@ func _ticks(n: int) -> void:
 		await get_tree().physics_frame
 
 
+## The 3D voices now playing `sound_name`.
+func _voices_playing(sound_name: StringName) -> Array[AudioStreamPlayer3D]:
+	var out: Array[AudioStreamPlayer3D] = []
+	for i: int in AudioDirector.VOICES:
+		var voice := main.audio.get_node("Voice%d" % i) as AudioStreamPlayer3D
+		if voice.playing and voice.stream != null and voice.stream.resource_path.get_file() == "%s.wav" % sound_name:
+			out.append(voice)
+	return out
+
+
 func test_every_sound_loads() -> void:
 	for sound_name: StringName in AudioDirector.SOUND_NAMES:
 		assert_true(main.audio.has_sound(sound_name), "%s loaded (run scripts/gen_assets.sh, then import)" % sound_name)
@@ -93,6 +103,9 @@ func test_a_players_shot_makes_a_pulse_sound_and_a_raiders_shot_a_raider_sound()
 	main.cannon.set_combat_command(cmd)
 	main.cannon.step(SimClock.now() + 2.0)
 	assert_eq(main.audio.times_played(&"pulse_fire"), before + 1)
+	for voice: AudioStreamPlayer3D in _voices_playing(&"pulse_fire"):
+		assert_eq(voice.volume_db, AudioDirector.SHOT_DB[&"pulse_fire"], "a shot plays at its gun's gain")
+	assert_false(_voices_playing(&"pulse_fire").is_empty())
 	DebugConsole.registry.execute("spawn raider 400")
 	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
 	var raider_before: int = main.audio.times_played(&"raider_fire")
