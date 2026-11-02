@@ -9,6 +9,8 @@ extends RefCounted
 ## reloads the file. The HUD, target cycling and the resolver ask `Factions` every time, so they follow at once.
 
 const RESET_WORD: String = "reset"
+## The file `relation reset` reloads (a test points it at a broken one).
+static var table_path: String = Factions.TABLE_PATH
 
 
 static func provider() -> ConsoleVars:
@@ -54,8 +56,10 @@ static func run(args: Dictionary) -> ConsoleResult:
 		if a != RESET_WORD:
 			return ConsoleResult.failure("relation needs a second faction: relation <a> <b> [%s], or relation %s" % [
 					"|".join(PackedStringArray(FactionTable.RELATION_NAMES)), RESET_WORD])
-		Factions.reset()
-		return ConsoleResult.line("factions reloaded from %s" % Factions.TABLE_PATH)
+		var error: String = Factions.load_table(table_path)
+		if not error.is_empty():
+			return ConsoleResult.failure("relation reset: %s; the session's table stays" % error)
+		return ConsoleResult.line("factions reloaded from %s" % table_path)
 	var b: String = String(args[&"b"]).to_lower()
 	var table: FactionTable = Factions.table()
 	for id: String in [a, b]:

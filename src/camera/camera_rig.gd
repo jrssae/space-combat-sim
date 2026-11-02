@@ -41,6 +41,8 @@ var _shown_pitch: float = 0.0
 var _target: Node3D = null
 var _remote: RemoteTransform3D = null
 var _set_interior_visible: Callable = Callable()
+# The console's `look` is holding the view.
+var _look_held: bool = false
 
 @onready var cockpit_pivot: Node3D = $CockpitPivot
 @onready var cockpit_camera: Camera3D = $CockpitPivot/CockpitCamera
@@ -63,6 +65,9 @@ func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"camera",
 			"Switch to the cockpit or chase camera; with no argument, toggle",
 			[ConsoleArg.enum_optional(&"mode", MODE_CHOICES)]), _cmd_camera, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"look",
+			"Hold the view at yaw and pitch degrees off the nose (free look for captures); `look off` lets it go",
+			[ConsoleArg.string_required(&"yaw"), ConsoleArg.float_optional(&"pitch", 0.0, -80.0, 80.0)]), _cmd_look, self)
 
 
 func _exit_tree() -> void:
@@ -120,12 +125,19 @@ func setup(target: Node3D, cockpit_anchor: Node3D, chase_offset_local: Vector3, 
 ## stick (absolute, x right, y up) or the mouse travel (pixels, x right, y up) and the ship does not; released, it eases back
 ## to centre. In the cockpit the pilot turns their head; in the chase view the camera pans around the ship.
 func set_look(dt: float, active: bool, stick: Vector2, mouse_px: Vector2) -> void:
+	if _look_held:
+		return
 	_look.step(dt, active, stick, mouse_px, float(Settings.get_value(&"mouse_look_deg_per_px")))
 
 
 ## Where the view is looking now relative to the nose, degrees (yaw right, pitch up), as drawn.
 func look_angles() -> Vector2:
 	return Vector2(_shown_yaw, _shown_pitch)
+
+
+## The look angles the view is easing toward, degrees (yaw right, pitch up).
+func look_goal() -> Vector2:
+	return Vector2(_look.yaw_deg, _look.pitch_deg)
 
 
 func toggle() -> void:
@@ -239,3 +251,16 @@ func _cmd_camera(args: Dictionary) -> ConsoleResult:
 	else:
 		set_mode(mode_from_name(StringName(str(requested))))
 	return ConsoleResult.line(ConsoleFormat.key_value("camera.mode", mode_name(_mode)))
+
+
+func _cmd_look(args: Dictionary) -> ConsoleResult:
+	var yaw_text: String = String(args[&"yaw"])
+	if yaw_text == "off":
+		_look_held = false
+		return ConsoleResult.line("the view is free again")
+	if not yaw_text.is_valid_float():
+		return ConsoleResult.failure("look takes yaw and pitch in degrees, or off, not '%s'" % yaw_text)
+	_look_held = true
+	_look.yaw_deg = clampf(yaw_text.to_float(), -_look.max_yaw_deg, _look.max_yaw_deg)
+	_look.pitch_deg = clampf(float(args[&"pitch"]), -_look.max_pitch_deg, _look.max_pitch_deg)
+	return ConsoleResult.line("the view held at yaw %.0f, pitch %.0f" % [_look.yaw_deg, _look.pitch_deg])

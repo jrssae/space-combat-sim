@@ -324,6 +324,14 @@ func test_the_console_replenishes_on_demand() -> void:
 	assert_eq(wing.members().size(), 3)
 
 
+func test_the_console_refuses_a_value_after_replenish() -> void:
+	await _launch(4)
+	var result: ConsoleResult = _exec("wing replenish now")
+	assert_false(result.ok, "replenish takes no value")
+	assert_string_contains(result.error, "now")
+	assert_eq(wing.members().size(), 0, "nothing launched")
+
+
 func test_the_console_says_why_nothing_launched() -> void:
 	await _launch(1)
 	assert_true(_exec("wing replenish").ok, "one ship, one slot filled")

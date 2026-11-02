@@ -469,6 +469,8 @@ func _cmd_wing(args: Dictionary) -> ConsoleResult:
 		return ConsoleResult.line("%s: order %s, formation %s, members %s" % [wing.name, AiContext.order_word(wing.order),
 				wing.formation.shape_name(), ", ".join(names) if not names.is_empty() else "none"])
 	if StringName(what) == &"replenish":
+		if value != null:
+			return ConsoleResult.failure("wing replenish takes no value, got '%s'" % value)
 		return _cmd_replenish(wing)
 	if StringName(what) == &"order":
 		var words: PackedStringArray = _order_words()
