@@ -30,6 +30,17 @@ Ship counts in the setting (maintainer, 2026-11-02): The standard “full” squ
 | Q4 | When to stop | **After four cycles, report a summary to the maintainer.** If the game is still under 100 ships, **ask for guidance** before going on |
 | Q5 | What "good game performance" means | Not given; the planner's default is the budget below. The maintainer may change the numbers before T01 or at any report |
 
+## Maintainer answers (2026-11-02)
+
+After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 and the native-code proposal, and decided:
+
+| Q | Question | Answer |
+|---|---|---|
+| Q6 | Plan for cycles 2 to 4 | Cycle 2: the ram resolver's broad phase. Cycle 3: the AI think rate with nearest-k contacts. Cycle 4: native code (below). The release export template is measured once, in cycle 2 |
+| Q7 | How cycles measure | With `scripts/bench_quick.sh` ("the shorter performance test"), plus single `bench` runs for the stage breakdown; not the full sweep |
+| Q8 | Think rate | AI ships within about 2 km of the player think every tick; farther ones think at 20 Hz on staggered ticks and hold their last command between (their physics still runs every tick). A behaviour change, listed in the report |
+| Q9 | Native code | Allowed (this answers the rule below). **Rust with godot-rust `gdext`** (pinned, `api-4-7`). Cycle 4 is native: first the toolchain, CI and seam (N0), then the contact scan's queries in native code behind `ContactScan` (N1); the GDScript grid is dropped. Seeded outcomes stay bit-identical where that is cheap (N1 must be); later ports may differ within a stated tolerance, with every test green, listed in the report. Worker threads are allowed inside the native code only, with tests that one thread and six give the same output |
+
 ## The budget ("good game performance", Q5)
 
 The physics runs at a fixed 60 Hz, so a frame has 16.7 ms. The budget is measured **headless on the development desktop**, on
@@ -77,7 +88,7 @@ are M5's mission work).
 - **Newtonian motion stays honest** (§15.16): every ship goes through the one `FlightModel` with forces every tick; the
   damping guard stays. An AI may think less often; its ship never skips physics.
 - **No new dependency** without the maintainer: a native GDExtension, a threading change or anything that needs
-  `docs/third-party.md` is a question for the report, not a cycle's pick.
+  `docs/third-party.md` is a question for the report, not a cycle's pick. (Answered for native code on 2026-11-02, Q9.)
 - Console and settings as everywhere (§6.4): the `perf` provider and `bench` command register with `DebugConsole`; new settings
   are `SettingsSchema` entries.
 - GPU checks run on the maintainer's machine (`CLAUDE.md`); only judgements of how it looks or feels are (H).
@@ -103,7 +114,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T02 | Cycle 1 | T01 | Opus | Profiling and a ranked judgement call | done |
 | T03 | Cycle 2 | T02 | Opus | Same | not started |
 | T04 | Cycle 3 | T03 | Opus | Same | not started |
-| T05 | Cycle 4 | T04 | Opus | Same | not started |
+| T05 | Cycle 4: native contact scan (Rust `gdext`, N0 then N1, Q9) | T04 | Opus or Fable | A new toolchain and bit-identical parity | not started |
 | T06 | Report to the maintainer | T05 | controller | A summary and a question, no code | not started |
 
 ### M4-T01 Benchmark harness, budget and baseline
@@ -349,14 +360,14 @@ targeting is gone, but it trades behaviour, so later cycles weigh it with the nu
 `Damageable` in the `Targetable` (a constant factor on the `TargetInfo`s still built: the player's list and each AI ship's
 perceived target, about 0.5 ms each at 100); nearest-k contacts (a behaviour trade, furball only).
 
-**Test** (`15b59b6`, before the change): `tests/integration/test_targeting_scale.gd`. `TargetInfo.built_count` counts every
+**Test** (`0438c56`, before the change): `tests/integration/test_targeting_scale.gd`. `TargetInfo.built_count` counts every
 `TargetInfo` built; in a fight of 24 AI ships (`AiPilot`, ally and raider profiles, seeded) plus the player, the test failed
 with 600 per tick against a linear bound of 75, and an AI ship's `candidates()` returned the last tick's list instead of the
 targets as they are. Six behaviour tests passed before and after: a selection that leaves the sensors, turns inactive or is
 freed clears in the refresh and says so, a broadcast stretches the reach, an id out of reach is refused and the selection
 kept, the nearest hostile wins over a nearer neutral, two hostiles at the same range go to the lower id.
 
-**Change** (`7cc168e`): `TargetingController.keeps_candidates`, set by `ShipAssembly` from `is_player`. The player's controller
+**Change** (`2e83ca3`): `TargetingController.keeps_candidates`, set by `ShipAssembly` from `is_player`. The player's controller
 rebuilds its list every tick as before. Every other one checks only its selection each tick and builds a list when asked:
 `candidates()`, the target edges and names gather on demand, `select_id` checks the one target, and `select_nearest_hostile`
 walks the targetables without building a `TargetInfo`. Design in `docs/architecture.md` §17.2. With it the test counts 24
@@ -364,7 +375,7 @@ walks the targetables without building a `TargetInfo`. Design in `docs/architect
 hiding and selecting gives the same answers, selections and signals (a mutation that drops the broadcast reach makes that test
 fail 97 times).
 
-**After**: `scripts/bench.sh m4_c1_after` on `7cc168e` (the same settings as the baseline, nothing else heavy running), plus
+**After**: `scripts/bench.sh m4_c1_after` on `2e83ca3` (the same settings as the baseline, nothing else heavy running), plus
 the counts below the sweep (`m4_c1_after_below` at 30, 35 and 40, `m4_c1_after_transit45`). **Max N: furball 25, spread 25,
 transit 25; headline 25** (was 0). Every layout passes 25 on every run and fails 50 on every run, so each stopped after 50
 and 100. The ceiling below the next sweep count: furball 30, spread 35, transit 45 (was 20 in all three).
@@ -425,10 +436,10 @@ seed=1` (bolts in flight 67.658 on average, ship pairs 0.587, behaviours attack 
 from the player the same to the metre) and `bench spread 50 6 seed=2` (bolts 251.839, pairs 2.294, behaviours and ranges the
 same); two runs of the base were identical to each other too, so the comparison means something. One edge differs inside a
 tick and is listed for the maintainer: a target that left play or reach since the last refresh can no longer be selected by id
-before the next refresh (the last tick's list allowed it until the refresh at priority 100 cleared it). The full suite was not run
-for this cycle: the maintainer stopped the run on purpose, partway through GUT, and asked for it not to be restarted, so AC13's
-paired budget and the rest of M1-M3 are not confirmed here. What did run on the change: the new test file (9/9) and 25
-targeting-related test scripts (307/307 passing, 2706 asserts), and the 24 GUT scripts the stopped run reached passed.
+before the next refresh (the last tick's list allowed it until the refresh at priority 100 cleared it). The first full suite run
+was stopped partway through GUT at the maintainer's request; the controller ran it again on `m4` after the merge (`ae6d02a`):
+GUT 2187 of 2189 passing, 0 failing, 2 pending (the AC12 balance tests, as before), Python 363 OK, AC13's paired budget held.
+The new test file alone: 9/9; 25 targeting-related scripts: 307/307 passing, 2706 asserts.
 
 **What is left for cycle 2** (re-rank with these numbers): at 50 ships the AI is 47 % of the furball tick (the scans 2.1 ms,
 the brains and avoidance 4.0 ms) and the resolvers 27 % (rams 2.7 ms); at 100 the AI is 17.1 ms, the rams 9.5 ms and the bolt sweep 2.6 ms.

@@ -1470,7 +1470,7 @@ One physics tick, in order (`process_physics_priority`, then tree order):
    valid; everything after it in the tick works in the new frame.
 4. Ships (0): flight model and forces; their `PulseCannon`s spawn bolts (`last_step = 0`).
 5. Projectiles (0): move, record `last_step = velocity * delta`, expire.
-6. `TargetingController`s (100): refresh candidates (inactive targetables skipped).
+6. `TargetingController`s (100): the player's refreshes its candidate list (inactive targetables skipped); an AI ship's checks its one selection (§17.2).
 7. `HitResolver` (200): sweep, damage, impact flashes. `destroyed` -> `DestructionDirector`, which hides and
    disables the ship in the same tick, so nothing targets or hits it afterwards.
 8. `WaveDirector` (300): count the dead, spawn from the pool.

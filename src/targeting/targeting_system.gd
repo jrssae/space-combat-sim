@@ -1,8 +1,9 @@
 class_name TargetingSystem
 extends RefCounted
 ## Target selection and the target readout (architecture §6.3), pure: no scene tree, no Input, no clock. The
-## `TargetingController` node feeds it a fresh candidate list every physics tick and calls the selectors on the
-## `target_next` / `target_ahead` edges; an AI pilot can drive one the same way.
+## player's `TargetingController` feeds it a fresh candidate list every physics tick (an AI ship's only when it picks a
+## target, §17.2) and calls the selectors on the `target_next` / `target_ahead` edges; an AI pilot can drive one the
+## same way.
 ##
 ## Rules:
 ## - Only candidates within reach can be selected: `sensor_range_m` (25 km) of the ship, or the candidate's own
