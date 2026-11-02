@@ -97,7 +97,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 
 | Task | Title | Depends on | Agent | Why | Status |
 |---|---|---|---|---|---|
-| T01 | Benchmark harness, budget and baseline | M3 | Opus | Measurement design on a noisy machine; touches the tick order | not started |
+| T01 | Benchmark harness, budget and baseline | M3 | Opus | Measurement design on a noisy machine; touches the tick order | in progress |
 | T02 | Cycle 1 | T01 | Opus | Profiling and a ranked judgement call | not started |
 | T03 | Cycle 2 | T02 | Opus | Same | not started |
 | T04 | Cycle 3 | T03 | Opus | Same | not started |
