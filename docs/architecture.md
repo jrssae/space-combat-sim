@@ -922,6 +922,7 @@ are canvas layers drawn after the 3D scene and are never touched. `PostEffects` 
 `settings.lens_flare` (default on), `settings.motion_blur` (default off) and `settings.motion_blur_strength` (0-1, default 0.5), live,
 and feeds them each frame. Console: `flare [on|off]`, `blur [on|off]`, provider `post`.
 
+- **No haze (Q31).** The flare is a lens effect only: no veil, no broad lobes, no god rays, since space has nothing to scatter light (`SceneLensFlareEffect.SHADER_PATCHES`).
 - **Star colour (Q30).** `data/star_systems.json` gives each `system_id` a star temperature; `StarColor` turns it into one colour for the flare and the key star's light (`SpaceEnvironment.set_star`).
 - **Lens flare.** ARez's add-on (`addons/lens_effects/`, vendored unedited, `docs/third-party.md`) draws the sun disc, ghosts, an
   anamorphic streak and god rays. It wants the sun's screen position from its own `world_environment.gd`; `PostEffects` sets
