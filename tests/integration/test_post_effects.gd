@@ -205,12 +205,13 @@ func test_another_system_changes_both() -> void:
 	env.set_star(5084.0)
 
 
-func test_the_colour_patches_still_apply_to_the_vendored_shader() -> void:
+func test_the_shader_patches_still_apply_to_the_vendored_shader() -> void:
 	var path: String = "res://addons/lens_effects/lens_flares.glsl"
 	var original: String = FileAccess.get_file_as_string(path)
-	for old: String in SceneLensFlareEffect.COLOUR_PATCHES:
+	for old: String in SceneLensFlareEffect.SHADER_PATCHES:
 		assert_string_contains(original, old, "still in the add-on")
 	var patched: String = SceneLensFlareEffect.patched_source(path)
 	assert_false(patched.contains("lensflare.r -= yellow"), "the ghosts are no longer pushed toward blue")
-	assert_false(patched.contains("always_on_flare = sun_color"), "the always-on glow is tinted once")
-
+	assert_string_contains(patched, "vec3 always_on_flare = vec3(0.0);", "no veil over the picture")
+	assert_false(patched.contains("col *= godrays"), "no shafts of light in empty space")
+	assert_string_contains(patched, "for (int i = 0; i < 0; i++) {", "and no depth reads marching them")
