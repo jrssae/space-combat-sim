@@ -1963,6 +1963,11 @@ scripts/bench_quick.sh      the quick check: ramps furball and spread until 30 F
   checks per tick that the stages split the tick and that each inner stage fits in its own (scan and think in ai, hit and ram in
   resolvers, sync in physics, the rebase in flight and late), and that runs write their reports; `run_tests.sh` runs
   `bench furball 25 5` and checks the report is there.
+- **A release build** (M4-T03r): numbers come from the editor build (debug), which the suite uses. To measure what players
+  run, `scripts/setup_export_templates.sh` installs the official Linux templates under `.tools/godot/templates/`, and its
+  header gives the steps: snapshot a commit with `git archive`, export it with a "Linux release" preset, link the export's
+  `reports/` to the snapshot's, and point `GODOT_BIN` at a wrapper that drops `--path` (a template cannot open a project
+  folder). The release export runs GDScript stages about 1.2 to 1.3 times faster (Cycle log, cycle 2).
 
 ### 17.2 Cycle 1: only the player's targeting keeps a list (T02)
 

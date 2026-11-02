@@ -66,7 +66,7 @@ func test_and_so_it_is_45_km_from_the_origin() -> void:
 	_check_crowds(Vector3(45000.0, -3000.0, 12000.0))
 
 
-func test_pairs_come_in_a_full_passs_order_without_repeats() -> void:
+func test_pairs_come_in_a_full_pass_order_without_repeats() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = SEED + 1
 	var made: Array = _crowd(rng, Vector3.ZERO)

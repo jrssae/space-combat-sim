@@ -40,6 +40,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q7 | How cycles measure | With `scripts/bench_quick.sh` ("the shorter performance test"), plus single `bench` runs for the stage breakdown; not the full sweep |
 | Q8 | Think rate | AI ships within about 2 km of the player think every tick; farther ones think at 20 Hz on staggered ticks and hold their last command between (their physics still runs every tick). A behaviour change, listed in the report |
 | Q9 | Native code | Allowed (this answers the rule below). **Rust with godot-rust `gdext`** (pinned, `api-4-7`). Cycle 4 is native: first the toolchain, CI and seam (N0), then the contact scan's queries in native code behind `ContactScan` (N1); the GDScript grid is dropped. Seeded outcomes stay bit-identical where that is cheap (N1 must be); later ports may differ within a stated tolerance, with every test green, listed in the report. Worker threads are allowed inside the native code only, with tests that one thread and six give the same output |
+| Q10 | How cycles test | Focused GUT runs on the code a task touches plus AC13's paired-budget file, and the quick check; then the push, and CI's full suite is the gate. `scripts/run_tests.sh` runs locally **once per milestone**, before it closes |
 
 ## The budget ("good game performance", Q5)
 
@@ -100,7 +101,7 @@ are M5's mission work).
 | AC1 | Harness: `bench <layout> <n> [seconds]` on the console and `scripts/bench.sh` (the sweep) run the three layouts at any N headless on the real main scene and write `reports/perf/<label>/` (`summary.json`, `summary.md`); the `perf` provider shows the last tick's stages (`tick_us`, `ai_us`, `scan_us`, `physics_us`, `resolvers_us`, `targeting_us`, `rebase_us`, `ships`); the statistics (median, p99, the budget verdict, the max-N search) are unit-tested; `scripts/run_tests.sh` has a short smoke run (`furball`, 25 ships, 5 s) that checks the report is written, not its numbers | A | M4-T01, 2026-11-02 |
 | AC2 | Baseline: before any change, the sweep's max N per layout and the stage breakdown at 50 and 100 ships are recorded below | A | M4-T01, 2026-11-02 (Cycle log, Baseline) |
 | AC3 | Four cycles, each recorded below: the numbers before, three candidates ranked by confidence with the evidence for each, the first built **test first** (the failing test committed before the change), the numbers after, the gain against the prediction | A | |
-| AC4 | No regressions: `scripts/run_tests.sh` green after each cycle; AC13's paired budget holds; every behaviour change listed | A | |
+| AC4 | No regressions: after each cycle the focused runs (the touched code and AC13's paired budget) are green locally and CI's full suite is green on the push (Q10); `scripts/run_tests.sh` green locally once, before M4 closes; every behaviour change listed | A | |
 | AC5 | Goal: the headline max N is at least 100, and toward 500. Not reached after cycle 4: the report says so and asks for guidance (T06) | A | |
 | AC6 | Render check at the headline max N on the maintainer's GPU: FPS, frame time, VRAM, GPU and driver recorded (by the agent, 2026-11-01) | A | |
 
@@ -159,17 +160,17 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 
 ### M4-T02 to M4-T05 Cycles 1-4
 
-Each cycle is one task, committed directly on `m4` (no task branches, maintainer 2026-11-02), with a green suite and a push before the next starts:
+Each cycle is one task, committed directly on `m4` (no task branches, maintainer 2026-11-02), with its focused runs green, a push and CI green before the next starts (Q10):
 
-1. **Measure.** Run the sweep on the branch's base. Profile the worst layout at the largest passing N and at the first failing
+1. **Measure.** Run the sweep on the branch's base (from cycle 2, the quick check and single `bench` runs, Q7). Profile the worst layout at the largest passing N and at the first failing
    one: which stage grows, and how fast with N.
 2. **Rank.** Write three candidate improvements in the cycle log, ranked by confidence that they improve the headline max N,
    each with its evidence (the measured stage and its growth), the expected gain and the behaviour risk. The previous cycle's
    unbuilt candidates are ranked again with the new numbers, not carried over unexamined.
 3. **Test first.** Commit a failing test that pins the improvement: a work count (for example contacts touched per tick in
    `spread`, or nodes walked per rebase) or a cost compared in one process, plus behaviour tests for anything it may change.
-4. **Build** candidate 1 until the test passes and the full suite is green.
-5. **Measure again.** The sweep after; record the gain against the prediction. A candidate that gains nothing is reverted, says
+4. **Build** candidate 1 until the test passes and the focused runs are green (the full suite runs once per milestone, Q10).
+5. **Measure again.** The sweep after (from cycle 2, the quick check, Q7); record the gain against the prediction. A candidate that gains nothing is reverted, says
    why, and the cycle still counts.
 
 While iterating, `scripts/bench_quick.sh` (under 10 minutes: furball and spread ramped from 10 ships until they fall under
@@ -577,7 +578,31 @@ behaviours attack 70 and evade 30, one ram: the player into NAV ALPHA) and `benc
 1.444); every AI ship's behaviour and state line from `state ai`, `state ram` and `state combat` is the same line for line.
 Tests (the maintainer's rule for this task, 2026-11-02: focused runs instead of the full suite, which CI runs): 38 GUT files
 that touch the ram resolver, the tracker, ram maths, collisions, the hit resolver and AC13's paired budget
-(`test_ai_think_time`), each run alone on `a894c9b`: 495 passing, 0 failing, 0 pending. No Python changed.
+(`test_ai_think_time`), each run alone on `a894c9b`: 495 passing, 0 failing, 0 pending. No Python changed. The seeded runs held
+one ram between them, so they show little about rams; the case that nothing ram-related moved rests on the unit test against the
+resolver's own sphere test and the six pins. The after runs' reports name `968cd29` because the change was not yet committed;
+the code they measured is `a894c9b`.
+
+**The release build, measured once** (handoff option 11, M4-T03r). Every number in this log is the Godot 4.7.2 editor build
+(debug). The same quick check and stage runs with an exported release build (the official `linux_release.x86_64` template, from
+a `git archive` snapshot of `ae6d02a`, before the ram change; `scripts/setup_export_templates.sh` installs the templates and its
+header holds every step to repeat the run), in the order debug, release, release, debug, all under both locks:
+
+| furball | editor build (debug) | release export | ratio |
+|---|---|---|---|
+| quick-check ceiling, furball and spread | 30 | 30 | |
+| first count under 30 FPS (furball, spread) | 100, 100 | 150, 150 (100 holds 30.6 to 30.7 FPS; the next count tried is 150) | |
+| tick median at 50 ships (quick check, two runs) | 14.33, 14.44 ms | 11.79, 11.85 ms | 1.22x |
+| tick median at 100 ships (quick check, two runs) | 39.13, 39.41 ms | 31.60, 31.69 ms | 1.24x |
+| stage means at 50 and 100 ships | | | ai 1.22 to 1.26x, flight 1.29 to 1.31x, targeting 1.38 to 1.40x, resolvers 1.24 to 1.26x, physics (Jolt, native) 1.06 to 1.12x |
+
+Every GDScript stage runs 1.2 to 1.3 times faster in the release export; Jolt barely moves. The same workload ran in both (identical
+bolts, pairs and rebases), and repeating a binary moved its median by at most 0.6 ms, so the gap is real; the p99 moves 1 to 2 ms
+between repeats of one binary. Interpolating the 30 and 40 ship medians, the 8 ms crossing is at about 32 ships for the editor
+build and 37 for the release export, so a player's build holds about 17 to 19 % more ships than the numbers in this log. The
+comparison is the editor build against the release template; the debug template was not run, so how much comes from dropping debug
+checks and how much from leaving the editor is not separated. Later cycles keep measuring the editor build, like for like; the T06
+report gives both.
 
 **What is left for cycle 3**: at 50 ships the AI is 56 % of the furball tick (6.46 of 11.64 ms) and 49 % in spread; at 100 it
 is 17.6 ms of 27.7. Rams are 3 % of the tick. To pass 40 the furball needs 1.5 ms off its 9.5 ms median, 50 needs 4.2 ms off
