@@ -16,10 +16,10 @@ const LINE_COLOR: Color = Factions.HUD_LINE_COLOR
 const AMBER: Color = Color(1.0, 0.8, 0.2)
 const RED: Color = Color(1.0, 0.3, 0.25)
 ## The octagon's grid (M3-T29): red, with the rings and own ship in the line colour.
+## The chase view's radar radius at 1080p; a bigger radar draws everything on it larger by the same ratio.
+const RADAR_RADIUS_UNITS: float = 78.0
 const OCTAGON_GRID_COLOR: Color = Color(0.95, 0.12, 0.10)
-const OCTAGON_GRID_ALPHA: float = 0.8
-## Its nav points; allies are the line colour and hostiles amber (`octagon_icon_color`).
-const OCTAGON_NAV_COLOR: Color = Color(0.35, 0.9, 1.0)
+const OCTAGON_GRID_ALPHA: float = 0.2  # dim enough that the radar's red hostile contacts stand off it
 ## The console's indicator lamps, by id: lit in this colour, dark otherwise.
 const LAMP_COLORS: Dictionary = {&"assist": Color(0.92, 0.95, 1.0), &"guns": Color(1.0, 0.16, 0.12), &"lights": Color(0.92, 0.95, 1.0),
 		&"track": Color(1.0, 0.16, 0.12)}
@@ -103,16 +103,6 @@ static func damage_color(severity: float) -> Color:
 	if severity < 0.67:
 		return Color(1.0, 0.55, 0.15)
 	return RED
-
-
-## A contact's colour on the octagon: allies green, hostiles amber, anything else (nav points) cyan.
-static func octagon_icon_color(relation: Factions.Relation) -> Color:
-	match relation:
-		Factions.Relation.FRIENDLY:
-			return LINE_COLOR
-		Factions.Relation.HOSTILE:
-			return AMBER
-	return OCTAGON_NAV_COLOR
 
 
 static func hull_color(fraction: float) -> Color:
@@ -327,7 +317,7 @@ static func _fill_grid(input: HudInput, surface: HudSurface, rect: Rect2) -> voi
 
 
 static func _radar(input: HudInput, f: HudFrame) -> void:
-	f.radar_radius_px = 78.0 * f.scale
+	f.radar_radius_px = RADAR_RADIUS_UNITS * f.scale
 	f.radar_centre = Vector2(input.viewport_size.x * 0.5, input.viewport_size.y - 176.0 * f.scale)
 	if not input.cockpit:
 		# Chase view: bottom-right corner, over the charge bar.
@@ -429,7 +419,7 @@ static func _octagon_screen(input: HudInput, size: Vector2) -> HudSurface:
 	_fill_grid(input, surface, Rect2(Vector2.ZERO, size))
 	surface.radar_centre = size * 0.5
 	surface.radar_radius_px = 0.40 * size.y
-	surface.radar_icons = true
+	surface.radar_labels = true
 	surface.tracking_pos = Vector2(size.x * 0.5, 30.0 * surface.scale)
 	return surface
 

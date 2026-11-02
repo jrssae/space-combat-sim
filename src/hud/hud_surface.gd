@@ -71,11 +71,11 @@ var grid_marker_diagonal: bool = false
 var grid_color: Color = HudLayout.LINE_COLOR
 var grid_line_alpha: float = 0.22
 
-## The radar sphere: its centre and radius in pixels. With `radar_icons` its contacts are icons coloured and shaped by relation
-## (`HudLayout.octagon_icon_color`), because a red grid would swallow the faction colours, and its range rings are named.
+## The radar sphere: its centre and radius in pixels. Contacts look the same on every surface; with `radar_labels` the range rings
+## are named.
 var radar_centre: Vector2 = Vector2.ZERO
 var radar_radius_px: float = 0.0
-var radar_icons: bool = false
+var radar_labels: bool = false
 
 ## The target panel's first line (left end of its baseline) and its hull bar, and the line that closes the panel off (0 for none).
 var target_panel_pos: Vector2 = Vector2.ZERO

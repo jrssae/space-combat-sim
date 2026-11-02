@@ -1604,7 +1604,7 @@ as a hollow dot (`Dot.rim`).
 Console screens (M3-T29, Q29). In the cockpit camera of a ship with `screens` hardpoints the instruments leave the window. `HudSurface` is one surface the HUD draws on: what it lists (`items`) and
 where each goes; `HudFrame` extends it, so the frame is also the 2D layer's layout, and `frame.screens` holds the octagon's, the left's and the right's, all drawn from that one frame by one
 `HudPainter`. The window draws only the crosshair, lead marker, target brackets or edge arrow, and waypoint marker (and the prograde marker if `settings.hud_velocity_marker` is on, off by default: it
-must line up with the world too). The octagon has the red grid, radar rings named by range, own ship, allies as green squares, hostiles as amber diamonds, nav points as cyan circles, the selected
+must line up with the world too). The octagon has the red grid, radar rings named by range, own ship, the same contact dots in the same faction colours as the chase view's radar (with a dark backing, over a dimmed grid), the selected
 contact ringed, the grid's marker as a ring on a diagonal stroke, and AUTO-TRACK. The left screen has the damage wireframe, the hull bar with its percentage and GOD, speed, angles, reference, drift
 sphere, lights, and fuel while the tank is finite. The right screen has the target's name, range, closing speed, hull bar and outline across its full width, a divider, then at the right edge the
 upright charge bar (40/640 of the width, `CHARGE` and the fire mode above it) with the wing roster, acknowledgement and status lines to its left. `CockpitScreens` shows each `SubViewport` (`disable_3d`,
