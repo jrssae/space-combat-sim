@@ -383,7 +383,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T21 | C | Defensive turrets (placed here in the order; numbered last because it was added after the others had numbers) | T12, T13, T14, T15, T19 | Opus | A new gunner seam with a balance test | not started |
 | T16 | C | Civilian ships in the game | T12, T13, T14, T15, T21 | Opus | Specs for heavy hulls, factions, pools, AI, GPU check | not started |
 | T17 | C | Free-flight encounters | T16, T02 | Opus | Seeded director under a CPU cap | not started |
-| T18 | D | New guns and impacts | - | Opus | Synthesis to measured shapes | not started |
+| T18 | D | New guns and impacts | - | Opus | Synthesis to measured shapes | done |
 | T19 | D | Per-thruster engine bursts | T18 | Opus | Voice placement and a voice budget | not started |
 | T20 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
@@ -597,6 +597,28 @@ whose trigger never arose). Update the column with each task's commit.
   or pitch needs to change).
 - **Done when:** the tests pin the shapes; the agent writes the measured numbers of the new sounds next to the reference's
   in its Done notes for the maintainer's ear test.
+- **Done (as built, 2026-11-02):** `sfx_combat` v4 replaces the three sounds; `explosion` is untouched.
+  - `pulse_fire` (105 ms): a band-passed noise click, then a two-frequency FM cluster held flat for 100 ms and cut in
+    5 ms. The carrier is 2a + b, modulated by a (index 0.8) and b (0.9), with our own a = 2.10 kHz and b = 0.66 kHz near
+    the reference's 2.06 / 0.67 kHz. The six reference partial positions are all in it.
+  - `raider_fire` (150 ms): the same build, lower (a = 1.16, b = 0.43 kHz) and buzzier (indices 1.4 / 1.6,
+    tanh-clipped), held 120 ms, with an exponential cut (tau 6 ms).
+  - `hit_hull` (140 ms): FM at 1 : 1.414 whose index dies (tau 20 ms) faster than its level (tau 28 ms), plus a click.
+  - All three are designed at reference-like frequencies, then ×`GUN_PITCH` 0.25 with lengths unchanged.
+  - `core/audio` gains `fm`, `hold_and_cut` and `hold_and_release`.
+  - **Measured, reference / new after ×0.25:**
+    - Starfury: main tone 1.198 / 1.215 kHz; hold 95-105 / 99 ms (flat within 0.23 dB); attack under 10 ms / 2 ms
+      with a click (+32 dB above 3.5 kHz over the hold); pitch within 2.5 / 0.02 Hz; energy 4-6.5 kHz band ->
+      1000-1625 Hz 73.6 % (625-1000 Hz 11.7 %, 1625-2500 Hz 11.8 %, below 250 Hz 0.3 %); inharmonicity 0.026 / 0.075.
+    - Raider: median 689 Hz against 1214 Hz; 18 partials within 10 dB against 5; cut 20 ms to -30 dB against 4 ms;
+      below 150 Hz 0.7 %; inharmonicity 0.272.
+    - Hit: 30 dB down in 96 ms; 250 Hz-4 kHz 93.2 %; median 1516 Hz.
+  - `AudioDirector.SHOT_DB` plays the shots at -12 / -13 dB (was -3). The flat tones carry +9.3 / +9.9 dB more
+    K-weighted energy per shot than the old decays. The hit stays at -4 dB.
+  - Tests: `test_sfx_combat.py` (23, including `GunAndImpactShapeTests`), `test_audio.py` (25), `test_audio_director.gd`
+    (17/17, with the shot gain) and `test_splat_import.gd` (15/15).
+  - The ear test (character, level, the ±4 % shot pitch jitter) is (H).
+  - Review: approved, no Critical or Important findings (minor test tightening deferred).
 
 ### M5-T19 Per-thruster engine bursts
 
