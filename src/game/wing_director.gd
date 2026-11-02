@@ -25,7 +25,8 @@ extends Node
 ## once if it falls short (not when the scenario pools no allies). A callsign already carried by a ship in play is not given
 ## twice: that slot takes the next free number.
 ##
-## Scenario wings (M3-T10): `declare` takes a scenario's `wings[]`; `join` puts a ship spawned into a named wing. The wing is
+## Scenario wings (M3-T10): `declare` takes a scenario's `wings[]`; `join` puts a ship spawned into a named wing, after the
+## ships that left play this tick give up their slots, and warns when the wing cannot take it. The wing is
 ## created on first use (as declared, or a group engaging at will in a finger-four). The declared leader leads, or else the
 ## first to join. The player's wing is created by Main. An AI-led wing whose leader is down hands the lead to its lowest
 ## slot (`refresh`), so a raider group keeps flying as a group; the player's wing waits for the player.
@@ -116,10 +117,15 @@ func wing_named(wing_name: String) -> Wing:
 	return null
 
 
-## Puts `ship`, just placed in play from a spawn naming `wing_name`, into that wing (see the class notes). Returns the wing,
-## or null when the ship cannot join (no `AiPilot`, the wing full).
+## Puts `ship`, just placed in play from a spawn naming `wing_name`, into that wing (see the class notes). Ships that left
+## play this tick give up their slots first. Returns the wing, or null with a warning when the ship cannot join (no
+## `AiPilot`, the wing full).
 func join(wing_name: String, ship: Combatant) -> Wing:
-	if wing_name.is_empty() or _pilot_of(ship) == null:
+	if wing_name.is_empty():
+		return null
+	if _pilot_of(ship) == null:
+		push_warning("WingDirector: %s could not join %s: it flies no AiPilot" % [ship.display_name if ship != null else "null",
+				wing_name])
 		return null
 	var d: Dictionary = _declared.get(wing_name.to_lower(), {})
 	var wing: Wing = wing_named(wing_name)
@@ -127,9 +133,11 @@ func join(wing_name: String, ship: Combatant) -> Wing:
 		wing = create_wing(String(d.get("name", wing_name)), null)
 		wing.order = int(d.get("order", AiContext.Order.ENGAGE_AT_WILL)) as AiContext.Order
 		wing.formation.shape = int(d.get("formation", Formation.Shape.FINGER_FOUR)) as Formation.Shape
+	else:
+		refresh(wing)
 	var named_leader: String = String(d.get("leader", ""))
 	if wing.leader != null and wing.leader.is_player:
-		return wing if add_member(wing, ship) > 0 else null
+		return _add_joining(wing, ship)
 	if not leader_alive(wing) and (named_leader.is_empty() or named_leader.to_lower() == ship.display_name.to_lower()
 			or wing.members().is_empty()):
 		_lead(wing, ship)
@@ -137,7 +145,17 @@ func join(wing_name: String, ship: Combatant) -> Wing:
 	if named_leader.to_lower() == ship.display_name.to_lower():
 		_lead(wing, ship)
 		return wing
-	return wing if add_member(wing, ship) > 0 else null
+	return _add_joining(wing, ship)
+
+
+# A joining ship takes a slot; a refusal is a scenario that does not fit its wing, so it is reported.
+func _add_joining(wing: Wing, ship: Combatant) -> Wing:
+	if add_member(wing, ship) > 0:
+		return wing
+	var why: String = "already in it" if wing.slot_of(ship) > 0 else ("not in play" if ship.damageable == null
+			or not ship.damageable.is_active() else "the wing is full")
+	push_warning("WingDirector: %s could not join %s: %s" % [ship.display_name, wing.name, why])
+	return null
 
 
 # Makes `ship` lead `wing`. A living old leader takes a slot.
