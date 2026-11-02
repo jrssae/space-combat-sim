@@ -39,6 +39,7 @@ voices. M8's tutorial is written on top of all this, so the framework matters mo
 | Q12 | The player's radar reaches 25 km, the AI's sensors 5 km: how do arriving ships appear without popping onto the radar? | **Raiders jump in, traffic cruises.** Raiders arrive through a jump point 6-12 km out with a placeholder flash (M6's vortex replaces it). Patrols and civilians spawn past 25 km on routes that bring them by |
 | Q13 | (maintainer, with Q12) Are civilians unarmed? | **No: civilian ships carry defensive weapons.** They still run, and fire defensively. Details in Q14 |
 | Q14 | What weapons, when do they fire, how strong? | **Small turrets**: 2-4 light turrets per hull by size, each with its own firing arc, lead-aimed, about 1.5 km range, built as a turret system M12's capital ships can reuse. **Only at attackers**: a turret fires at a ship that has shot at its own ship, or at another civilian or ally close by; a raider flying past is left alone. **Deterrent only**: they hurt raiders and may finish a damaged one, but a raid of two or more raiders still wins unless the player or a patrol helps |
+| Q15 | (maintainer, after reading the menu list) Settings layout | **Options on the left; the bottom left is reserved for a controller image with what each button does; the right side has a place for mission objectives.** It applies to the in-flight pause menu and the settings and controls screens, opened from pause or from the front end |
 
 ## Scope
 
@@ -194,6 +195,18 @@ Out (explicitly):
   `Settings.encounters`), **Sandbox** (combat_sandbox, dogfight, instructor_route), **Settings**, **Controls**, **Quit**.
 - **Pause menu** on Start in flight (the `pause` action, as today): Resume, Restart, Settings, Controls, Quit to menu. The
   world pauses; the menu's process mode is always.
+- **The three-panel frame (Q15).** The pause menu and the settings and controls screens share one layout, `MenuFrame`:
+  - **Left, top:** the options (the pause entries, or the settings list by category, or the controls list), scrolling
+    when long.
+  - **Left, bottom (reserved):** a controller diagram with a legend of what each button does. The pad is drawn in code
+    (an original generic XInput outline: sticks, D-pad, face buttons, bumpers, triggers, Back and Start), no image file.
+    Labels come from the active control profile (`ControlProfile.describe_action` per pad descriptor), so a remap shows
+    at once. In flight it shows the flight layout; the controls screen highlights the button of the action in focus.
+  - **Right:** mission objectives from the running mission's `ObjectiveBook` (state marks, primary and optional). In
+    free flight it shows "Free flight" and whether encounters are on; opened from the front end it shows the briefing of
+    the mission selected there, or nothing.
+  The panel contents come from small providers (`objectives_source`, `bindings_source`), so T02 builds the frame before
+  T05's objectives exist and T05 only plugs its book in.
 - `SettingsSchema` entries gain `category` (`flight`, `controls`, `camera`, `hud`, `graphics`, `audio`, `game`) and
   `menu: false` for the debug switches that stay console-only. The settings screen is built from the schema: a toggle,
   slider or option list per entry, with apply, revert and defaults (`Settings.save`, `revert`, `reset`). A test fails when
@@ -302,7 +315,7 @@ Out (explicitly):
 | # | Criterion | Kind | Done |
 |---|---|---|---|
 | AC1 | Boot: a windowed launch shows the front end; `--headless`, `--console-exec`, `--console-file`, `--scenario=<id>` and `skip_front_end` go straight to `Main` as before; `GameFlow` transitions unit-tested; `game` provider, `menu` and `play` commands work under `--console-strict` | A | |
-| AC2 | Front end and pause: every screen is reachable and usable with the pad alone (a test drives focus with injected `ui_*` events); free flight starts with encounters on or off; Missions lists Buoy defence with its briefing; Sandbox starts each existing scenario; Quit quits; Start in flight opens the pause menu and Quit to menu returns to the front end; a loading screen shows while `Main` loads; no splat node enters the tree during play | A | |
+| AC2 | Front end and pause: the pause menu and the settings and controls screens use the three-panel frame of Q15 (options left, pad diagram with live bindings bottom left, objectives right; a test checks the legend follows a rebind); every screen is reachable and usable with the pad alone (a test drives focus with injected `ui_*` events); free flight starts with encounters on or off; Missions lists Buoy defence with its briefing; Sandbox starts each existing scenario; Quit quits; Start in flight opens the pause menu and Quit to menu returns to the front end; a loading screen shows while `Main` loads; no splat node enters the tree during play | A | |
 | AC3 | Settings menu: every schema entry has a category; entries with `menu: false` are hidden; changing, applying, reverting and resetting a value works and persists through `Settings.save`; four audio buses with their volumes | A | |
 | AC4 | Controls menu: pick a profile; rebind an action by pressing a button; unbind; save as; the profile rules are enforced with the reason shown; applying a profile leaves the `ui_*` actions intact | A | |
 | AC5 | Mission runtime: `MissionScript`, `MissionApi`, `MissionRunner`; every trigger kind unit-tested; `ObjectiveBook` success and failure; the result rules of D51 (all primaries done, a primary failed, the player destroyed, `m.end`); sim time only; console `mission` provider, `mission skip`, `mission goto <step>`, `mission objectives`, `play <id>`; a skip leaves the world as the step would (a test compares a skipped and an unskipped run's spawns and objectives) | A | |
@@ -390,7 +403,8 @@ whose trigger never arose). Update the column with each task's commit.
 
 - **Goal:** AC2 (D57).
 - **Files:** `src/frontend/theme.tres`, `src/frontend/menu_screen.gd` (a base for focusable screens: back on B or Esc,
-  first focus, UI sounds), `src/frontend/front_end.tscn|.gd` (the sky backdrop with a slow drift and the main menu),
+  first focus, UI sounds), `src/frontend/menu_frame.tscn|.gd` (Q15's three panels), `src/frontend/pad_diagram.gd` (the
+  pad drawn in code, its legend from a bindings source; a pure `PadLegend` model with a unit test), `src/frontend/front_end.tscn|.gd` (the sky backdrop with a slow drift and the main menu),
   `mission_select`, `free_flight_select`, `sandbox_select` screens, `src/hud/pause_menu.tscn|.gd`, `src/game/main.gd` (create
   the pause menu; `pause` opens it), `tools/procgen/assets/sfx_ui.py` (move, accept, back; T06 adds the radio sounds) and its
   test, `tests/integration/test_front_end.gd`, `tests/integration/test_pause_menu.gd`.
