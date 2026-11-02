@@ -9,7 +9,7 @@ chosen peak level (dBFS) before it is written, so the game's mixer never clips o
 from __future__ import annotations
 
 import wave
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -130,6 +130,20 @@ def periodic_noise(rng: np.random.Generator, n: int, low_bin: int, high_bin: int
     spectrum = np.zeros(n // 2 + 1, dtype=complex)
     bins = np.arange(low_bin, min(high_bin, n // 2) + 1)
     spectrum[bins] = np.exp(1j * rng.uniform(0.0, 2.0 * np.pi, len(bins)))
+    out = np.fft.irfft(spectrum, n=n)
+    return out / max(float(np.max(np.abs(out))), 1e-12)
+
+
+def shaped_periodic_noise(
+    rng: np.random.Generator, n: int, gain: Callable[[np.ndarray], np.ndarray], sample_rate: int = SAMPLE_RATE
+) -> np.ndarray:
+    """Seamless noise with a chosen spectrum: like ``periodic_noise``, but every bin above DC gets the amplitude ``gain(Hz)``
+    (a callable of the bin frequencies), so a loop can carry an exact spectral shape. Peak 1."""
+    freqs = np.fft.rfftfreq(n, 1.0 / sample_rate)
+    spectrum = np.asarray(gain(freqs), dtype=float) * np.exp(1j * rng.uniform(0.0, 2.0 * np.pi, len(freqs)))
+    spectrum[0] = 0.0
+    if n % 2 == 0:
+        spectrum[-1] = abs(spectrum[-1])  # the Nyquist bin is real, or irfft would drop part of its gain
     out = np.fft.irfft(spectrum, n=n)
     return out / max(float(np.max(np.abs(out))), 1e-12)
 

@@ -31,6 +31,8 @@ const ENTRIES: Dictionary = {
 		"doc": "Shift every ship's splat level of detail by whole levels: + coarser, - finer (M3-T19)"},
 	&"particle_density": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.0, "max": 1.0,
 		"doc": "How much of each spark and debris burst is thrown, 0 (none) to 1 (full); 0 costs nothing per frame (M3-T23)"},
+	&"engine_voice_cap": {"type": TYPE_INT, "default": 24, "min": 8, "max": 64,
+		"doc": "Most engine voices heard at once (M5-T19): your own pods and RCS clusters first, then the nearest ships' pods; at least 8, so your Starfury always fits"},
 	&"splat_relight": {"type": TYPE_BOOL, "default": true,
 		"doc": "Light hulls, chunks and buoys with the scene's lights (M3-T21); off draws their flat paint"},
 	&"relight_ambient": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 1.0,

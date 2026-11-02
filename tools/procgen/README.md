@@ -144,10 +144,17 @@ Things the Godot side must know:
 
 ## `sfx_combat`
 
-The combat sounds (docs/milestones M2-T12): seven mono 16-bit 48 kHz WAVs (`pulse_fire`, `raider_fire`, `hit_hull`, `explosion`,
-`engine_loop`, `warning_beep`, `target_blip`) synthesised with NumPy, peaks at -1.5 dBFS, byte-identical per seed. Its manifest has
-`kind` `audio`, a `sounds` object (file, samples, sample rate, duration, peak, and `loop_begin` / `loop_end` for the engine loop,
-which is seamless by construction) and no `lods`. Option: `peak_dbfs` (default -1.5, at most -1).
+The combat sounds (M2-T12, reshaped by M5-T18 and T19 on the reference in docs/design-references.md "Combat sounds"): eight
+mono 16-bit 48 kHz WAVs synthesised with NumPy, peaks at -1.5 dBFS, byte-identical per seed:
+
+- `pulse_fire`, `raider_fire`: the Starfury's and the raiders' guns, a click and a held, inharmonic FM cluster, cut hard.
+- `hit_hull`: a bolt striking a hull, short and metallic. `explosion`: a boom, swept noise and crackle.
+- `main_burst`, `rcs_burst`: seamless loops for the per-thruster engine voices, a main pod's roar (400 Hz-16 kHz, loudest
+  at 4-8 kHz) and an attitude jet's hiss (2-16 kHz). Nothing below 300 Hz.
+- `warning_beep`, `target_blip`: the hull warning and the target-selected blip.
+
+Its manifest has `kind` `audio`, a `sounds` object (file, samples, sample rate, duration, peak, and `loop_begin` / `loop_end`
+for the two loops, seamless by construction) and no `lods`. Option: `peak_dbfs` (default -1.5, at most -1).
 
 ## `sky_default`
 

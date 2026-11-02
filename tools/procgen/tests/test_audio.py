@@ -141,6 +141,19 @@ class FilterTests(unittest.TestCase):
         self.assertLessEqual(seam, typical + 1e-12)
 
 
+    def test_shaped_periodic_noise_repeats_and_follows_its_gain(self) -> None:
+        n = 9600  # 0.2 s: bins every 5 Hz
+        noise = audio.shaped_periodic_noise(np.random.default_rng(2), n, lambda f: np.where(f < 1000.0, 1.0, 0.1))
+        power = np.abs(np.fft.rfft(noise)) ** 2
+        freqs = np.fft.rfftfreq(n, 1.0 / audio.SAMPLE_RATE)
+        low, high = power[(freqs > 0) & (freqs < 1000.0)].mean(), power[freqs >= 1000.0].mean()
+        self.assertAlmostEqual(10.0 * np.log10(low / high), 20.0, places=6)  # every bin carries exactly its gain
+        self.assertLess(float(power[0]), 1e-12, "no DC")
+        self.assertAlmostEqual(float(np.max(np.abs(noise))), 1.0, places=6)
+        both = np.concatenate([noise, noise])
+        self.assertLessEqual(abs(float(both[n] - both[n - 1])), float(np.max(np.abs(np.diff(noise)))) + 1e-12)
+
+
 class LevelAndFileTests(unittest.TestCase):
     def test_peak_dbfs_and_normalise(self) -> None:
         samples = np.array([0.0, 0.25, -0.5])

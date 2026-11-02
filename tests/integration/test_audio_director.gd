@@ -1,7 +1,7 @@
 extends GutTest
 ## AudioDirector (M2-T12, AC14): the generated sounds load and play headless without errors; a hit, a shot and an explosion
-## each make a sound; the 3D voice pool never exceeds 16 (the oldest voice is stolen); the engine hum follows thrust and
-## distance; the hull warning repeats below 25 %; `sfx_volume` sets the SFX bus; the console surface works.
+## each make a sound; the 3D voice pool never exceeds 16 (the oldest voice is stolen); the hull warning repeats below 25 %;
+## `sfx_volume` sets the SFX bus; the console surface works. The engine voices (M5-T19) are in test_engine_audio.gd.
 
 var main: Main
 var source: FakeInputSource
@@ -77,7 +77,7 @@ func test_a_reused_voice_is_heard_at_its_new_sound_at_once() -> void:
 func test_the_voice_pool_never_exceeds_sixteen_and_steals_the_oldest() -> void:
 	var voices: Array[AudioStreamPlayer3D] = []
 	for i: int in 40:
-		voices.append(main.audio.play(&"engine_loop", Vector3(float(i), 0.0, 0.0)))
+		voices.append(main.audio.play(&"main_burst", Vector3(float(i), 0.0, 0.0)))  # 4 s long: all still playing
 		assert_lte(main.audio.voices_active(), AudioDirector.VOICES, "after %d plays" % (i + 1))
 	assert_eq(main.audio.voices_active(), AudioDirector.VOICES)
 	var distinct: Dictionary = {}
@@ -148,66 +148,6 @@ func test_the_hull_warning_repeats_below_a_quarter_and_stops_above() -> void:
 	hull.restore()
 	main.audio._update_warning(5.0)
 	assert_eq(main.audio.times_played(&"warning_beep"), beeps + 2, "silent once repaired")
-
-
-func test_every_ship_has_an_engine_hum_that_follows_thrust() -> void:
-	assert_eq(main.ships.pool_size(), 13, "nine raiders and four allied Starfuries (M3-T10)")
-	assert_eq(main.audio.engine_count(), 1 + main.ships.pool_size(), "the player and every pooled ship")
-	var idle: float = AudioDirector.engine_level(FlightOutput.new())
-	assert_almost_eq(idle, AudioDirector.HUM_IDLE_LEVEL, 1e-9, "no thrust: the idle floor")
-	var out := FlightOutput.new()
-	out.main_levels = PackedFloat64Array([1.0, 1.0])
-	assert_eq(AudioDirector.engine_level(out), 1.0)
-	out.main_levels = PackedFloat64Array([0.5, 0.5])
-	assert_eq(AudioDirector.engine_level(out), 0.5)
-	assert_eq(AudioDirector.engine_level(null), AudioDirector.HUM_IDLE_LEVEL)
-
-
-func test_ramp_moves_at_the_rise_and_fall_rates() -> void:
-	assert_almost_eq(AudioDirector.ramp(0.0, 1.0, 0.25, 1.2, 0.8), 0.3, 1e-9, "rising at 1.2 per second")
-	assert_almost_eq(AudioDirector.ramp(1.0, 0.0, 0.25, 1.2, 0.8), 0.8, 1e-9, "falling at 0.8 per second")
-	assert_eq(AudioDirector.ramp(0.5, 0.52, 1.0, 1.2, 0.8), 0.52, "never overshoots the target")
-	assert_eq(AudioDirector.ramp(0.5, 1.0, -1.0, 1.2, 0.8), 0.5, "a negative step does nothing")
-
-
-func test_thruster_level_is_the_strongest_rcs_demand() -> void:
-	assert_eq(AudioDirector.thruster_level(null), 0.0)
-	var out := FlightOutput.new()
-	assert_eq(AudioDirector.thruster_level(out), 0.0)
-	out.rcs_force_level = Vector3(-0.4, 0.2, 0.0)
-	out.rcs_torque_level = Vector3(0.1, 0.0, -0.7)
-	assert_almost_eq(AudioDirector.thruster_level(out), 0.7, 1e-6)
-
-
-func test_the_players_hum_plays_and_parked_raiders_are_silent() -> void:
-	await get_tree().process_frame
-	await get_tree().process_frame
-	var hum := main.ship.get_node("EngineHum") as AudioStreamPlayer3D
-	assert_not_null(hum)
-	assert_true(hum.playing, "the player's own engine")
-	assert_true((hum.stream as AudioStreamWAV).loop_mode == AudioStreamWAV.LOOP_FORWARD, "it loops")
-	for pooled: Combatant in main.ships.all_ships():
-		if not main.ships.alive().has(pooled):  # the sandbox's wingmen fly from the start (M3-T10)
-			assert_false((pooled.ship.get_node("EngineHum") as AudioStreamPlayer3D).playing, "parked")
-	var hum_off_pitch: float = hum.pitch_scale
-	source.hold(InputAdapter.MAIN_LEFT)
-	source.hold(InputAdapter.MAIN_RIGHT)
-	await _ticks(10)
-	await get_tree().process_frame
-	assert_gt(hum.pitch_scale, hum_off_pitch, "pitch rises with thrust")
-
-
-func test_a_distant_ship_hum_stops() -> void:
-	DebugConsole.registry.execute("spawn raider 400")
-	await get_tree().process_frame
-	await get_tree().process_frame
-	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
-	var hum := raider.ship.get_node("EngineHum") as AudioStreamPlayer3D
-	assert_true(hum.playing, "400 m away")
-	raider.ship.global_position = main.ship.global_position + Vector3(0.0, 0.0, -AudioDirector.ENGINE_RANGE_M - 500.0)
-	await get_tree().process_frame
-	await get_tree().process_frame
-	assert_false(hum.playing, "out of range")
 
 
 func test_sfx_volume_sets_the_bus_gain() -> void:

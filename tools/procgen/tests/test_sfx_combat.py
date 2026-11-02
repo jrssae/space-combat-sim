@@ -1,5 +1,6 @@
-"""``sfx_combat`` (AC14 of M2, AC15 of M5): eight sounds, 48 kHz mono 16-bit, peaks at most -1 dBFS, seeded, the engine loop
-seamless; the guns and the impact keep the shapes measured from the reference (docs/design-references.md "Combat sounds")."""
+"""``sfx_combat`` (AC14 of M2, AC15 of M5): eight sounds, 48 kHz mono 16-bit, peaks at most -1 dBFS, seeded, the engine bursts
+seamless; the guns, the impact and the bursts keep the shapes measured from the reference (docs/design-references.md "Combat
+sounds")."""
 
 from __future__ import annotations
 
@@ -20,8 +21,9 @@ from tools.procgen.core.context import BuildContext
 
 EXPECTED = {
     "pulse_fire": 0.105, "raider_fire": 0.15, "hit_hull": 0.14, "explosion": 1.8,
-    "engine_loop": 2.0, "thruster_loop": 2.0, "warning_beep": 0.3, "target_blip": 0.08,
+    "main_burst": 4.0, "rcs_burst": 2.0, "warning_beep": 0.3, "target_blip": 0.08,
 }  # fmt: skip
+LOOPS = ("main_burst", "rcs_burst")
 
 
 SR = audio.SAMPLE_RATE
@@ -110,6 +112,31 @@ def high_band_energy(samples: np.ndarray, start_s: float, end_s: float) -> float
     return float(np.sum(high[int(round(start_s * SR)) : int(round(end_s * SR))] ** 2))
 
 
+def loop_power(samples: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The power spectrum of a loop read as one period of a repeating signal (no window, no padding): a seam would spread
+    energy across the spectrum, the low end included."""
+    return np.fft.rfftfreq(len(samples), 1.0 / SR), np.abs(np.fft.rfft(samples)) ** 2
+
+
+def loop_share(samples: np.ndarray, low_hz: float, high_hz: float) -> float:
+    freqs, power = loop_power(samples)
+    return float(power[(freqs >= low_hz) & (freqs < high_hz)].sum() / power.sum())
+
+
+def octave_shares(samples: np.ndarray, edges: tuple[float, ...]) -> list[float]:
+    """The loop's energy share in each octave between consecutive ``edges``."""
+    return [loop_share(samples, lo, hi) for lo, hi in zip(edges[:-1], edges[1:])]
+
+
+def psd_slope(samples: np.ndarray, low_hz: float, high_hz: float) -> float:
+    """dB per octave of a straight line through the third-octave band levels (power per hertz) from ``low_hz`` to
+    ``high_hz``: the spectrum's tilt."""
+    freqs, power = loop_power(samples)
+    centres = low_hz * 2.0 ** (np.arange(0, round(3.0 * np.log2(high_hz / low_hz)) + 1) / 3.0)
+    levels = [10.0 * np.log10(power[(freqs >= c * 2.0 ** (-1 / 6)) & (freqs < c * 2.0 ** (1 / 6))].mean()) for c in centres]
+    return float(np.polyfit(np.log2(centres / low_hz), levels, 1)[0])
+
+
 def onsets(samples: np.ndarray) -> int:
     """How many times the 2 ms level jumps by 10 dB within 6 ms (silence before the file counts)."""
     env = np.concatenate([np.full(3, -120.0), frame_levels(samples, 0.002)])
@@ -170,33 +197,29 @@ class SfxCombatTests(unittest.TestCase):
 
     def test_one_shots_start_and_end_quietly_so_they_do_not_click(self) -> None:
         for name in EXPECTED:
-            if name in ("engine_loop", "thruster_loop"):
+            if name in LOOPS:
                 continue
             samples, _ = audio.read_wav(self.dir_a / f"{name}.wav")
             self.assertLess(abs(float(samples[-1])), 0.02, f"{name}: ends at silence")
             self.assertLess(abs(float(samples[0])), 0.35, f"{name}: no hard start")
 
-    def test_the_engine_loop_is_seamless_and_its_points_are_the_whole_file(self) -> None:
-        entry = self.manifest["sounds"]["engine_loop"]
-        self.assertEqual((entry["loop_begin"], entry["loop_end"]), (0, entry["samples"]))
-        for name in ("engine_loop", "thruster_loop"):
+    def test_the_bursts_are_seamless_loops_over_the_whole_file(self) -> None:
+        for name in LOOPS:
+            entry = self.manifest["sounds"][name]
+            self.assertEqual((entry["loop_begin"], entry["loop_end"]), (0, entry["samples"]), name)
             samples, _ = audio.read_wav(self.dir_a / f"{name}.wav")
             step = float(np.max(np.abs(np.diff(samples))))
             seam = abs(float(samples[0] - samples[-1]))
             self.assertLessEqual(seam, 1.2 * step, f"{name}: the jump from the last sample to the first is an ordinary step")
         for name in EXPECTED:
-            if name not in ("engine_loop", "thruster_loop"):
+            if name not in LOOPS:
                 self.assertNotIn("loop_begin", self.manifest["sounds"][name])
 
-    def test_the_engine_loop_is_periodic_in_its_synthesis(self) -> None:
-        # The float signal before 16-bit rounding repeats exactly: every component has a whole number of cycles in 2 s.
-        loop = sfx_combat.engine_loop(np.random.default_rng(9))
-        n = len(loop)
-        shifted = np.roll(loop, n // 2)
-        spectrum = np.abs(np.fft.rfft(loop))
-        # All energy sits on integer-Hz bins (multiples of 0.5 Hz for a 2 s loop): nothing leaks between them.
-        self.assertGreater(float(np.sum(spectrum[::1])), 0.0)
-        self.assertEqual(len(shifted), n)
+    def test_the_main_bursts_wander_repeats_with_the_loop(self) -> None:
+        # The float signal before 16-bit rounding: the slow level wander is whole cycles of the loop, so it meets itself.
+        phases = np.random.default_rng(5).uniform(0.0, 2.0 * np.pi, len(sfx_combat.WANDER_CYCLES))
+        ends = sfx_combat.wander_db(np.array([0.0, sfx_combat.MAIN_BURST_S]), phases)
+        self.assertAlmostEqual(float(ends[0]), float(ends[1]), places=9)
 
     def test_the_sounds_have_the_character_the_design_asks_for(self) -> None:
         def spectral_centroid(name: str) -> float:
@@ -209,8 +232,7 @@ class SfxCombatTests(unittest.TestCase):
         # Measured as the energy median: the explosion's crackle and noise would swamp a spectral centroid.
         boom, clank = (audio.read_wav(self.dir_a / f"{name}.wav")[0] for name in ("explosion", "hit_hull"))
         self.assertLess(energy_median(boom), 0.25 * energy_median(clank), "an explosion is a low rumble, a clank bright")
-        self.assertLess(spectral_centroid("engine_loop"), 150.0, "the engine is a low rumble")
-        self.assertLess(spectral_centroid("engine_loop"), spectral_centroid("thruster_loop"), "the thrusters are brighter than the engine")
+        self.assertLess(spectral_centroid("main_burst"), spectral_centroid("rcs_burst"), "the jets are brighter than the mains")
         beep, rate = audio.read_wav(self.dir_a / "warning_beep.wav")
         peak_freq = np.fft.rfftfreq(len(beep), 1.0 / rate)[int(np.argmax(np.abs(np.fft.rfft(beep))))]
         self.assertAlmostEqual(float(peak_freq), 880.0, delta=15.0)
@@ -357,6 +379,65 @@ class GunAndImpactShapeTests(unittest.TestCase):
         self.assertGreaterEqual(band_share(hit, 250.0, 4000.0), 0.85)
         self.assertLessEqual(band_share(hit, 0.0, 150.0), 0.01, "no low body: that is the explosion's")
         self.assertTrue(1000.0 <= energy_median(hit) <= 2000.0, energy_median(hit))
+
+
+class EngineBurstTests(unittest.TestCase):
+    """M5-T19 (AC15, D60, Q7): per-thruster bursts, bright only, shaped on the reference's roars and swells
+    (docs/design-references.md "Roars and pass-bys"). Measured on the files as loops, so a seam would show too."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sfx_combat.build(BuildContext(Path(tmp), seed=42))
+            cls.wav = {name: audio.read_wav(Path(tmp) / f"{name}.wav")[0] for name in LOOPS}
+
+    def test_the_old_low_loops_are_gone(self) -> None:
+        for name in ("engine_loop", "thruster_loop"):
+            self.assertNotIn(name, sfx_combat.SOUNDS)
+            self.assertFalse(hasattr(sfx_combat, name), name)
+        self.assertEqual(set(sfx_combat.LOOPS), set(LOOPS))
+
+    def test_nothing_below_300_hz(self) -> None:
+        # Q7: bright bursts only, no rumble under them.
+        for name, samples in self.wav.items():
+            self.assertLessEqual(loop_share(samples, 0.0, 300.0), 1e-3, name)
+
+    def test_the_main_burst_fills_400_hz_to_16_khz_with_its_peak_at_4_to_8_khz(self) -> None:
+        # Reference roar: added noise 400 Hz-16 kHz, the peak at 4-8 kHz, -5 to -7.5 dB per octave above 1 kHz.
+        burst = self.wav["main_burst"]
+        self.assertGreaterEqual(loop_share(burst, 400.0, 16000.0), 0.98)
+        octaves = octave_shares(burst, (500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0))
+        self.assertEqual(int(np.argmax(octaves)), 3, octaves)
+        self.assertGreaterEqual(octaves[3], 1.3 * sorted(octaves)[-2], "a clear peak, not a tie")
+        slope = psd_slope(burst, 1000.0, 16000.0)
+        self.assertTrue(-7.5 <= slope <= -5.0, slope)
+
+    def test_the_main_burst_wanders_slowly_by_about_3_db(self) -> None:
+        # Reference: held with slow swells of about 3 dB at 0.5-2 Hz, no decay.
+        levels = frame_levels(self.wav["main_burst"], 0.1)
+        self.assertTrue(2.0 <= float(levels.max() - levels.min()) <= 4.0, levels.max() - levels.min())
+        swing = np.abs(np.fft.rfft(levels - levels.mean())) ** 2
+        rates = np.fft.rfftfreq(len(levels), 0.1)
+        slow = float(swing[(rates >= 0.4) & (rates <= 2.1)].sum() / swing.sum())
+        self.assertGreaterEqual(slow, 0.8, "the swing is slow, not a flutter")
+
+    def test_the_rcs_burst_is_brightest_at_6_to_16_khz(self) -> None:
+        # Reference swell: added noise 2-16 kHz, the peak at 6-16 kHz.
+        burst = self.wav["rcs_burst"]
+        self.assertGreaterEqual(loop_share(burst, 2000.0, 16000.0), 0.97)
+        self.assertGreaterEqual(loop_share(burst, 6000.0, 16000.0), 0.6)
+        octaves = octave_shares(burst, (1000.0, 2000.0, 4000.0, 8000.0, 16000.0))
+        self.assertEqual(int(np.argmax(octaves)), 3, octaves)
+
+    def test_the_rcs_burst_an_octave_down_still_has_nothing_below_300_hz(self) -> None:
+        # The game plays a jet an octave low at the start of its attack and the end of its release (the reference's
+        # brightness follows the level), so the file must be clean down to 600 Hz.
+        self.assertLessEqual(loop_share(self.wav["rcs_burst"], 0.0, 600.0), 1e-3)
+
+    def test_the_rcs_burst_holds_flat(self) -> None:
+        # Held for the firing time: the attack, the release and the brightness are shaped per voice in the game.
+        levels = frame_levels(self.wav["rcs_burst"], 0.1)
+        self.assertLessEqual(float(levels.max() - levels.min()), 1.0)
 
 
 if __name__ == "__main__":

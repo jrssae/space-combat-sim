@@ -17,16 +17,21 @@ Eight mono 16-bit 48 kHz WAVs, each peaking at -1.5 dBFS, all from seeded genera
   unchanged (not a resample, which would stretch them four times). Each is one attack: the guns follow the cannon's own rate
   of fire.
 * ``explosion`` (1.8 s): a boom (a falling sine), noise swept down through a low-pass, and a crackle of sparse impulses.
-* ``engine_loop`` (2.0 s, **seamless**): a low rumble, harmonics of 36 Hz (nothing above 180 Hz) and band-limited periodic noise
-  below 260 Hz; every component repeats exactly within the 2 s, and the manifest gives the loop points (0 to the last sample).
-  The game plays it at a pitch of 0.8 to 1.25 and ramps its level up and down with the thrust.
-* ``thruster_loop`` (2.0 s, **seamless**): the attitude thrusters' hiss-rumble, periodic noise between 90 and 900 Hz, softer and
-  brighter than the engine; the game ramps it with the RCS demand.
+* ``main_burst`` (4.0 s, **seamless**): a main pod's roar, shaped on the reference's step roars (M5-T19, D60): noise from
+  400 Hz to 16 kHz with the most energy of any octave at 4-8 kHz, a presence peak on a spectrum falling 6.5 dB per octave
+  above 1 kHz (fitted over 1-16 kHz, about -5.6 dB per octave), and a slow 3 dB wander at 0.5-1.75 Hz. Nothing below 300 Hz
+  (the maintainer's Q7: bright bursts only).
+* ``rcs_burst`` (2.0 s, **seamless**): an attitude jet, shaped on the reference's swells: noise from 2 to 16 kHz, brightest at
+  6-16 kHz, held flat. The game plays it up to an octave low while the jet spools, so its brightness follows the level.
+
+  The game plays one burst per main pod and per cluster of RCS jets, at their place on the ship, and shapes each voice's
+  attack and release from the reference's numbers (``EngineVoices``). Both loops are whole periods of their spectrum and
+  wander, and the manifest gives their loop points (0 to the last sample).
 * ``warning_beep`` (0.3 s): two short 880 Hz beeps (hull below 25 %).
 * ``target_blip`` (0.08 s): a short 1.2 kHz blip (a target selected).
 
-The manifest has ``kind`` ``audio`` and a ``sounds`` object (file, samples, sample rate, duration, peak level and, for the engine
-loop, ``loop_begin`` / ``loop_end``).
+The manifest has ``kind`` ``audio`` and a ``sounds`` object (file, samples, sample rate, duration, peak level and, for the two
+bursts, ``loop_begin`` / ``loop_end``).
 """
 
 from __future__ import annotations
@@ -41,10 +46,12 @@ from ..core.context import AssetOutputs, BuildContext
 from ..core.manifest import build_audio_manifest, sound_entry, write_manifest
 
 ASSET_ID = "sfx_combat"
-GENERATOR_VERSION = 4
+GENERATOR_VERSION = 5
 PEAK_DBFS = -1.5
-ENGINE_BASE_HZ = 36.0
-ENGINE_SECONDS = 2.0
+MAIN_BURST_S = 4.0
+RCS_BURST_S = 2.0
+WANDER_CYCLES = (2, 3, 5, 7)  # the main burst's swells: whole cycles in its loop, 0.5 to 1.75 Hz
+WANDER_DB = 3.0  # their peak-to-peak depth
 GUN_PITCH = 0.25  # the gun and impact sounds' frequencies against their design: two octaves down
 CLICK_BAND_HZ = (1000.0, 20000.0)  # the attack click's noise, before the register
 
@@ -102,23 +109,48 @@ def explosion(rng: np.random.Generator) -> np.ndarray:
     return audio.fade(0.9 * boom + 0.7 * rumble + 0.35 * crackle, 0.0, 0.2)
 
 
-def engine_loop(rng: np.random.Generator) -> np.ndarray:
-    n = int(round(ENGINE_SECONDS * audio.SAMPLE_RATE))
-    t = audio.time_axis(ENGINE_SECONDS)
-    out = np.zeros(n)
-    for harmonic, gain in ((1, 1.0), (2, 0.8), (3, 0.5), (4, 0.3), (5, 0.15)):
-        # Every frequency is a whole number of cycles in the loop, so the end meets the start.
-        out += gain * np.sin(2.0 * np.pi * ENGINE_BASE_HZ * harmonic * t + rng.uniform(0.0, 6.28))
-    out += 0.3 * np.sin(2.0 * np.pi * 0.5 * ENGINE_BASE_HZ * t)  # sub-harmonic, 18 Hz: 36 cycles in 2 s
-    low_bin, high_bin = int(25.0 * ENGINE_SECONDS), int(260.0 * ENGINE_SECONDS)
-    out += 0.5 * audio.periodic_noise(rng, n, low_bin, high_bin)
-    return out
+def _band_edges(f: np.ndarray, low_hz: float, high_hz: float) -> np.ndarray:
+    """Steep (8th-order) high- and low-pass edges: the noise's band, with nothing to speak of outside it."""
+    f = np.maximum(f, 1e-9)
+    return 1.0 / np.sqrt((1.0 + (low_hz / f) ** 16) * (1.0 + (f / high_hz) ** 16))
 
 
-def thruster_loop(rng: np.random.Generator) -> np.ndarray:
-    n = int(round(ENGINE_SECONDS * audio.SAMPLE_RATE))
-    low_bin, high_bin = int(90.0 * ENGINE_SECONDS), int(900.0 * ENGINE_SECONDS)
-    return audio.periodic_noise(rng, n, low_bin, high_bin)
+def main_spectrum(f: np.ndarray) -> np.ndarray:
+    """The roar's amplitude per hertz: rising 6 dB per octave to 1 kHz, falling 6.5 dB per octave above it, with a 10 dB
+    presence peak at 5.7 kHz that makes 4-8 kHz the loudest octave."""
+    octaves = np.log2(np.maximum(f, 1e-9) / 1000.0)
+    tilt_db = np.where(octaves > 0.0, -6.5 * octaves, 6.0 * octaves)
+    peak_db = 10.0 * np.exp(-0.5 * (np.log2(np.maximum(f, 1e-9) / 5657.0) / 0.6) ** 2)
+    return 10.0 ** ((tilt_db + peak_db) / 20.0) * _band_edges(f, 400.0, 16000.0)
+
+
+def rcs_spectrum(f: np.ndarray) -> np.ndarray:
+    """The jet's amplitude per hertz: a 2-16 kHz band whose level climbs 9 dB from 2 to 6 kHz and stays up to the top edge
+    (set at 14 kHz so the steep roll-off is spent by 16 kHz)."""
+    climb = np.clip(np.log2(np.maximum(f, 1e-9) / 2000.0) / np.log2(3.0), 0.0, 1.0)
+    return 10.0 ** (9.0 * (climb - 1.0) / 20.0) * _band_edges(f, 2000.0, 14000.0)
+
+
+def wander_db(t: np.ndarray, phases: np.ndarray) -> np.ndarray:
+    """The main burst's slow swells, in dB from 0 to ``WANDER_DB``. Every component is whole cycles of the loop, so the swell
+    repeats with it."""
+
+    def swing(x: np.ndarray) -> np.ndarray:
+        return sum(np.sin(2.0 * np.pi * cycles / MAIN_BURST_S * x + phase) for cycles, phase in zip(WANDER_CYCLES, phases))
+
+    period = swing(audio.time_axis(MAIN_BURST_S))  # one loop, for the depth
+    return WANDER_DB * (swing(np.asarray(t, dtype=float)) - period.min()) / max(float(np.ptp(period)), 1e-12)
+
+
+def main_burst(rng: np.random.Generator) -> np.ndarray:
+    n = int(round(MAIN_BURST_S * audio.SAMPLE_RATE))
+    noise = audio.shaped_periodic_noise(rng, n, main_spectrum)
+    swell = wander_db(audio.time_axis(MAIN_BURST_S), rng.uniform(0.0, 2.0 * np.pi, len(WANDER_CYCLES)))
+    return noise * 10.0 ** (swell / 20.0)
+
+
+def rcs_burst(rng: np.random.Generator) -> np.ndarray:
+    return audio.shaped_periodic_noise(rng, int(round(RCS_BURST_S * audio.SAMPLE_RATE)), rcs_spectrum)
 
 
 def warning_beep(_rng: np.random.Generator) -> np.ndarray:
@@ -139,12 +171,12 @@ SOUNDS: dict[str, Callable[[np.random.Generator], np.ndarray]] = {
     "raider_fire": raider_fire,
     "hit_hull": hit_hull,
     "explosion": explosion,
-    "engine_loop": engine_loop,
-    "thruster_loop": thruster_loop,
+    "main_burst": main_burst,
+    "rcs_burst": rcs_burst,
     "warning_beep": warning_beep,
     "target_blip": target_blip,
 }
-LOOPS = {"engine_loop", "thruster_loop"}
+LOOPS = {"main_burst", "rcs_burst"}
 
 
 def build(ctx: BuildContext) -> AssetOutputs:
