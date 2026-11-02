@@ -1,33 +1,27 @@
 class_name BehaviourEvade
 extends AiBehaviour
-## Get out of the line of fire (architecture §16 D34). Scores:
+## Get out of the line of fire (architecture §16 D34). Scores the highest that applies, 0 when none does:
 ##
-## - a hostile ship within `RANGE_M` in the rear hemisphere with its nose within `NOSE_CONE_DEG` of us: `TAIL_SCORE_MIN` at
-##   1.2 km up to 1 point blank (it outranks an attack);
+## - a hostile in the rear hemisphere within `RANGE_M` with its nose within `NOSE_CONE_DEG` of us: `TAIL_SCORE_MIN` at 1.2 km
+##   up to 1 point blank (it outranks an attack);
 ## - `Perception.incoming_fire` (hostile bolts about to pass within 15 m): `INCOMING_SCORE`;
-## - a hit in the last `HIT_MEMORY_S`: `HIT_SCORE`;
-## the highest that applies, 0 when none does: the evasion ends when the threat no longer points at us, the bolts have
-## passed and the last hit is 2 s old.
+## - a hit in the last `HIT_MEMORY_S`: `HIT_SCORE`.
 ##
-## The threat is the tail hostile, or else the hostile whose nose points closest at us (the likely shooter). The line of fire
-## runs from it to us. Jinks, seeded: a break turn across the line of fire (the nose turned toward the sideways velocity
-## change, mains and RCS strafe together), held `JINK_MIN_S`..`JINK_MAX_S`, then a reversal to the other side (turned by up
-## to `REVERSAL_SPREAD_DEG` about the line of fire), and so on. Each jink seeks the velocity the ship had when the evasion
-## began plus `JINK_SPEED_MPS` across the line of fire: more than a jink can reach, so the thrust stays on for the whole jink
-## (a steady acceleration is what spoils a shooter's lead), and the speed stays bounded however long it lasts.
+## The threat is the tail hostile, else the one whose nose points closest at us (the likely shooter). Jinks, seeded: a break
+## turn across the line of fire, held `JINK_MIN_S`..`JINK_MAX_S`, then a reversal turned by up to `REVERSAL_SPREAD_DEG`
+## about it, and so on. Each jink seeks the velocity the evasion began with plus `JINK_SPEED_MPS` across the line of fire,
+## more than a jink can reach, so thrust stays on for the whole jink (steady acceleration spoils a shooter's lead) and the
+## speed stays bounded.
 ##
-## Awareness (M3-T18): a threat that is not the ship this pilot is attacking (`AiContext.attack_target_id`) scores the
-## temperament's `awareness` times as much (a rookie 0.4, an ace 1.2, the score clamped to 1): a rookie on a pass fixates on its
-## target, an ace breaks off sooner when someone else has it under fire. A hit still interrupts as before.
+## Awareness (M3-T18): a threat other than the ship this pilot is attacking (`AiContext.attack_target_id`) scores the
+## temperament's `awareness` times as much (a rookie fixates on its target, an ace breaks off sooner). A hit still interrupts.
 ##
-## Temperament (M3-T13, `retune`): jinks last `JINK_MIN_S`..`JINK_MAX_S` times the skill's `jink_factor` and reversals turn by
-## up to its `reversal_spread_deg` (an ace's jinks are shorter and less regular); a tail threat or incoming fire counts once it
-## has lasted the pilot's `reaction_s` (a new threat is noticed, not foreseen).
+## Temperament (M3-T13, `retune`): jink length and reversal spread scale with skill, and a tail threat or incoming fire
+## counts once it has lasted the pilot's `reaction_s`.
 ##
-## Hit reaction (M3-T10, maintainer Q11): `AiPilot` hands control to this behaviour on a fresh bolt hit whatever the scores,
-## the stickiness and the minimum dwell, and calls `on_hit`. It then keeps control while `locked()`: until at least one full
-## jink after the latest hit has been flown (the jink running when a hit lands is finished, then one more), so repeated hits
-## keep it evading; after that normal selection resumes (a retreating ship goes back to its retreat).
+## Hit reaction (M3-T10, maintainer Q11): `AiPilot` hands control here on a fresh bolt hit and calls `on_hit`. Control is
+## kept while `locked()`: until one full jink after the latest hit, so repeated hits keep it evading. Then normal selection
+## resumes.
 
 const RANGE_M: float = 1200.0
 const NOSE_CONE_DEG: float = 15.0
@@ -58,7 +52,7 @@ var _jink_scale: float = 1.0
 var _spread_deg: float = REVERSAL_SPREAD_DEG
 var _reaction_s: float = 0.0
 var _awareness: float = 1.0
-# Since when the current threat (a tail or incoming fire) has been there, -INF while there is none.
+# Since when the current threat has been there, -INF while there is none.
 var _threat_since_s: float = -INF
 
 
@@ -100,7 +94,7 @@ func score(ctx: AiContext) -> float:
 			continue
 		var off: Vector3 = -ctx.hostile_offsets[i]  # from the hostile to us
 		if forward.dot(off) <= 0.0:
-			continue  # not behind us (behind: we are ahead of it along our own nose)
+			continue  # not behind us
 		var c: Contact = hostiles[i]
 		if c.forward.dot(off / d) < _cos_cone:
 			continue
@@ -112,7 +106,7 @@ func score(ctx: AiContext) -> float:
 	if best < INCOMING_SCORE and p.incoming_fire > 0:
 		best = INCOMING_SCORE
 		_reason = &"fire"
-	# A threat (tail or fire) counts once it has lasted the reaction time.
+	# A threat counts once it has lasted the reaction time.
 	if best > 0.0:
 		if _threat_since_s == -INF:
 			_threat_since_s = p.now_s
@@ -127,7 +121,7 @@ func score(ctx: AiContext) -> float:
 		_reason = &"hit"
 	if best > 0.0 and _threat == null:
 		_threat = _likely_shooter(ctx)
-	# Awareness: a tail threat or fire from someone other than its own target counts by the skill (a hit is the interrupt's).
+	# Awareness scales threats from anyone but its own target. A hit is the interrupt's.
 	if best > 0.0 and _reason != &"hit" and _threat != null and _threat.id != ctx.attack_target_id:
 		best = clampf(best * _awareness, 0.0, 1.0)
 	return best
@@ -140,8 +134,7 @@ func enter() -> void:
 
 ## A bolt hit this ship (call after `enter` when it takes over): hold control for one full jink from here.
 func on_hit() -> void:
-	# Entering afresh, the first jink starts on the next think (jinks 1): held until it ends. Mid-evasion: the running jink,
-	# then one more full one.
+	# Fresh: hold through the first jink. Mid-evasion: the running jink, then one more full one.
 	_lock_until_jinks = 2 if _fresh else jinks + 2
 
 
@@ -183,8 +176,7 @@ func describe() -> Dictionary:
 			"jink_left_s": snappedf(jink_left_s, 0.1)}
 
 
-# Who is shooting (incoming fire and hits name no shooter): the nearest hostile whose nose is within `NOSE_CONE_DEG` of us,
-# else the one whose nose points closest at us.
+# Guesses the shooter, since incoming fire and hits name none: the nearest hostile aiming at us, else the closest to it.
 func _likely_shooter(ctx: AiContext) -> Contact:
 	var aiming: Contact = null
 	var aiming_d2: float = INF
@@ -205,7 +197,7 @@ func _likely_shooter(ctx: AiContext) -> Contact:
 	return aiming if aiming != null else closest
 
 
-# The first jink breaks to a seeded side; the next ones reverse, turned by a seeded angle about the line of fire.
+# The first jink breaks to a seeded side, the next ones reverse by a seeded angle.
 func _new_jink(line_of_fire: Vector3) -> void:
 	if jinks == 0:
 		side = _perpendicular(line_of_fire).rotated(line_of_fire, _rng.randf_range(0.0, TAU))
@@ -216,7 +208,7 @@ func _new_jink(line_of_fire: Vector3) -> void:
 	jinks += 1
 
 
-# The jink side kept square to the line of fire as the geometry turns.
+# The jink side, kept square to the line of fire.
 func _across(line_of_fire: Vector3) -> Vector3:
 	var s: Vector3 = side - line_of_fire * side.dot(line_of_fire)
 	if s.length_squared() < 0.01:

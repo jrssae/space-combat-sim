@@ -2,16 +2,15 @@ class_name BehaviourRam
 extends AiBehaviour
 ## The last-ditch ram (architecture §16 D34, M3-T13, maintainer Q12): a reckless pilot that is losing flies into the enemy.
 ##
-## Eligible only at aggression 1 (`AiTemperament.may_ram`), with its hull under `HULL_BELOW`, and with at most a quarter of the
-## most friendly ships it has seen in sensor range this life still there (none counts: a ship alone is eligible). While it is
-## eligible a seeded roll every `ROLL_EVERY_S` commits it with `COMMIT_CHANCE`. A committed rammer takes the target it was
-## attacking (`AiContext.current_target_id`) or else the nearest hostile ship (never a prop), flies a collision course on it
-## (its velocity plus `CLOSURE_MPS` along the line of sight, the mains and the RCS together), and has the driver leave that one
-## contact out of avoidance (`PilotBrain.avoid_exempt_id`; every other contact is still avoided). It stays committed until the
-## target is gone from sight (destroyed), then normal selection resumes. `RamResolver` (M3-T04) does the damage.
+## Eligible only at aggression 1 (`AiTemperament.may_ram`), with hull under `HULL_BELOW` and at most a quarter of the
+## most friendly ships it has seen this life still in range (a ship alone is eligible). While eligible, a seeded roll every
+## `ROLL_EVERY_S` commits it with `COMMIT_CHANCE`. A committed rammer takes the target it was attacking, else the nearest
+## hostile ship (never a prop), flies a collision course, and has the driver leave that one contact out of avoidance
+## (`PilotBrain.avoid_exempt_id`). It stays committed until the target is gone, then normal selection resumes. `RamResolver`
+## (M3-T04) does the damage.
 ##
-## Score: 1 while committed (it outranks everything; the hit reaction does not interrupt it), else 0. Below reckless the score
-## returns at once, so the other pilots pay one comparison for it (AC13's paired budget).
+## Score: 1 while committed (it outranks everything, and a hit reaction does not interrupt it), else 0. Below reckless it
+## returns at once, so other pilots pay one comparison for it (AC13's paired budget).
 
 const HULL_BELOW: float = 0.25
 const ALLIES_LEFT_SHARE: float = 0.25
@@ -21,7 +20,7 @@ const CLOSURE_MPS: float = 200.0
 
 var committed: bool = false
 var target_id_value: int = 0
-## Rolls made and how many friendly ships it has seen at most (the tests and the console).
+## Rolls made and the most friendly ships seen at once (tests and console).
 var rolls: int = 0
 var max_friends_seen: int = 0
 
@@ -61,7 +60,7 @@ func score(ctx: AiContext) -> float:
 	if committed:
 		_target = _hostile(ctx, target_id_value)
 		if _target == null:
-			committed = false  # the target is down: back to normal selection
+			committed = false  # the target is down
 			target_id_value = 0
 			_eligible_since_s = -INF
 			return 0.0
@@ -87,7 +86,7 @@ func score(ctx: AiContext) -> float:
 	return 1.0 if committed else 0.0
 
 
-## Commits to a ram now (the roll came up; tests call it directly): the attack's target, else the nearest hostile ship.
+## Commits to a ram now (tests call it directly): the attack's target, else the nearest hostile ship.
 func commit(ctx: AiContext) -> bool:
 	var pick: Contact = _hostile(ctx, ctx.current_target_id)
 	if pick == null:

@@ -5,9 +5,7 @@ extends Resource
 ## of pilot in `assets/ai/` (`ally_starfury`, `raider`, `instructor`; `PATHS`); the defaults below are the plan's selection
 ## numbers. Tune in (H).
 ##
-## Selection (see `AiPilot`): each behaviour's score (0..1) times `weight(id)`; a challenger replaces the current behaviour
-## when it beats the current's weighted score by more than `stickiness`, or, within `min_dwell_s` of the last switch, by
-## more than `emergency_margin`.
+## How the numbers are used is in `AiPilot`.
 
 const PATHS: Dictionary[StringName, String] = {
 	&"ally_starfury": "res://assets/ai/ally_starfury.tres",
@@ -17,8 +15,7 @@ const PATHS: Dictionary[StringName, String] = {
 }
 const STARFURY_TACTICS_PATH: String = "res://assets/ai/starfury_tactics.tres"
 
-## Behaviour id -> weight 0..1. A behaviour the profile does not name weighs 1 (`weight`), so behaviours added later
-## work in every profile until a profile opts out with 0.
+## Behaviour id -> weight 0..1. An unnamed behaviour weighs 1, so later behaviours work in every profile until it opts out.
 @export var weights: Dictionary[StringName, float] = {}
 ## Score units: the current behaviour's bonus against challengers, and the lead a challenger needs inside the dwell.
 @export var stickiness: float = 0.15
@@ -27,10 +24,10 @@ const STARFURY_TACTICS_PATH: String = "res://assets/ai/starfury_tactics.tres"
 @export var min_dwell_s: float = 1.0
 ## Retreat below this hull fraction (0 = fights to the death).
 @export var retreat_below: float = 0.25
-## Also retreat whenever a hostile ship is within this many metres, whatever the hull (0 = never; the civilian's 3 km, M3-T13).
+## Also retreat when a hostile ship is this close, whatever the hull (0 = never; the civilian uses 3 km, M3-T13).
 @export var retreat_within_m: float = 0.0
-## The pilot's default skill and aggressiveness, 0..1 (`AiTemperament`; a spawn may override them). The values above are
-## tuned for `regular` (0.45) and `balanced` (0.5), where the temperament changes nothing.
+## Default skill and aggressiveness, 0..1 (`AiTemperament`; a spawn may override). The values above are tuned for `regular`
+## and `balanced`.
 @export var skill: float = AiTemperament.REGULAR
 @export var aggression: float = AiTemperament.BALANCED
 ## m/s: the pilot's travelling speed (retreat flies at this plus `BehaviourRetreat.EXTRA_MPS`).

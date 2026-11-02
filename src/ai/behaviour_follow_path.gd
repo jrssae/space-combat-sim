@@ -1,19 +1,17 @@
 class_name BehaviourFollowPath
 extends AiBehaviour
-## Lead a route, paced to the player, and show a demo move at a waypoint (architecture §16 D37, M3-T09, maintainer Q5):
-## the instructor's behaviour. The route is the context's (`AiContext.route`, set by `attach`); the progress is kept here.
+## Lead a route, paced to the player, and show a demo move at a waypoint (architecture §16 D37, M3-T09, maintainer Q5): the
+## instructor's behaviour. The route is the context's (`AiContext.route`, set by `attach`); progress is kept here.
 ##
 ## States (`state_name`, the console's `route.state`):
-## - `lead`: toward the waypoint at the route's paced speed (`Route.pace_speed` of the lag), nose along. A waypoint within
-##   `Route.ARRIVAL_M` is reached: its demo comes next, else its hold, else the next waypoint. With the pace ship beyond
-##   `Route.WAIT_BEYOND_M` it waits.
-## - `wait`: the brake, with the pace ship selected so the brake turns the nose onto it (`target_id`), until it is within
-##   `Route.RESUME_WITHIN_M`. A demo also waits for that: the player should be close enough to see it.
-## - `run_up`: a move that takes speed away (`Manoeuvre.needs_speed`) is shown from cruise: below `RUN_UP_FRACTION` of it the
-##   ship first speeds up toward the next waypoint.
+## - `lead`: toward the waypoint at the route's paced speed. Within `Route.ARRIVAL_M` it is reached: its demo comes next,
+##   else its hold, else the next waypoint. With the pace ship beyond `Route.WAIT_BEYOND_M` it waits.
+## - `wait`: brake, with the pace ship selected so the nose turns onto it, until it is within `Route.RESUME_WITHIN_M`. A demo
+##   also waits for that, so the player is close enough to see it.
+## - `run_up`: a move that takes speed away (`Manoeuvre.needs_speed`) is shown from cruise, so the ship first speeds up.
 ## - `demo`: the `Manoeuvre` flies the ship until its goal is met; the result goes into `results`.
-## - `hold`: the brake for the waypoint's `hold_s`.
-## - `done`: the end of a route that does not loop; the score drops to 0 and the pilot idles (the instructor holds).
+## - `hold`: brake for the waypoint's `hold_s`.
+## - `done`: the end of a route that does not loop; the score drops to 0 and the pilot idles.
 ## Pacing never interrupts a move that has started. Losing control to another behaviour restarts a running move on return.
 
 const SCORE: float = 0.5
@@ -37,7 +35,7 @@ var visited: PackedInt32Array = PackedInt32Array()
 var results: Array[Dictionary] = []
 
 var _route: Route = null
-## The current waypoint's demo is due (it was reached; the move has not finished yet).
+## The current waypoint's demo is due: reached, not finished.
 var _demo_due: bool = false
 var _hold_left_s: float = 0.0
 
@@ -68,7 +66,7 @@ func score(ctx: AiContext) -> float:
 
 func enter() -> void:
 	if phase == Phase.DEMO and manoeuvre != null:
-		manoeuvre = Manoeuvres.create(manoeuvre.id)  # its measured start is stale: show it again from here
+		manoeuvre = Manoeuvres.create(manoeuvre.id)  # its measured start is stale
 
 
 func think(ctx: AiContext, dt: float) -> PilotCommand:
@@ -139,7 +137,8 @@ func waypoint_position() -> UniversePos:
 	return _route.waypoint(index).position
 
 
-## The HUD's status line: `FOLLOW INSTRUCTOR — NAV 2/6 — NEXT: ROLL` (`leader_name` is the leader's callsign).
+## The HUD's status line: what the player should do (follow, watch, close up), the leader's callsign, the NAV number and the
+## next demo.
 func status_line(leader_name: String) -> String:
 	if _route == null:
 		return ""
@@ -185,7 +184,7 @@ func reset() -> void:
 # --- internals -----------------------------------------------------------------------------------------------------
 
 
-# Moves through the phases until one has something to fly this tick (each transition at most once per tick).
+# Moves through the phases until one has something to fly this tick.
 func _settle(p: Perception) -> void:
 	for i: int in PHASE_NAMES.size():
 		var before: Phase = phase
@@ -200,7 +199,7 @@ func _settle(p: Perception) -> void:
 					phase = Phase.RUN_UP if _demo_due else Phase.LEAD
 			Phase.RUN_UP:
 				if Route.should_wait(lag_m, true):
-					phase = Phase.WAIT  # the player is not close enough to see it: wait first
+					phase = Phase.WAIT  # the player is too far to see it
 				elif not manoeuvre.needs_speed() or p.velocity.length() >= RUN_UP_FRACTION * _route.cruise_mps:
 					phase = Phase.DEMO
 			Phase.HOLD:
@@ -215,7 +214,7 @@ func _arrive() -> void:
 	var w: Route.Waypoint = _route.waypoint(index)
 	if w.demo != &"":
 		_demo_due = true
-		manoeuvre = Manoeuvres.create(w.demo)  # not started until the phase is DEMO
+		manoeuvre = Manoeuvres.create(w.demo)  # starts when the phase is DEMO
 		phase = Phase.RUN_UP
 	elif w.hold_s > 0.0:
 		_hold_left_s = w.hold_s
@@ -248,7 +247,7 @@ func _advance() -> void:
 	phase = Phase.LEAD
 
 
-# The run-up heads for the waypoint after this one (or straight on when there is none, or it is right here).
+# The run-up heads for the next waypoint, or straight on.
 func _run_up_direction(p: Perception) -> Vector3:
 	var next: int = _route.next_index(index)
 	if next >= 0:
