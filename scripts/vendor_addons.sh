@@ -14,7 +14,7 @@ trap 'rm -rf "${TMP}"' EXIT
 ADDONS=(
     "gut|https://github.com/bitwes/Gut|v9.7.1|addons/gut|LICENSE.md"
     "lens_effects|https://github.com/ARez2/compositor-effect-lens-effects|0ce061271f672f05fbb9aed08a61e019a875c1ad|addons/lens_effects|LICENSE"
-    "gdgs_scs|https://github.com/jrssae/godot-gaussian-splatting|a20b4cb3ac30a9d0ef7067d0d85ca08396d1362e|addons/gdgs_scs|LICENSE"
+    "gdgs_scs|https://github.com/jrssae/godot-gaussian-splatting|abba48016279a883b3fbfefe1a9916d5ee57525c|addons/gdgs_scs|LICENSE"
 )
 
 for entry in "${ADDONS[@]}"; do
