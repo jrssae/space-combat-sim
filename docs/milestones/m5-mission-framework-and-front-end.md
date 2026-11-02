@@ -378,7 +378,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T08 | B | `CINEMATIC` camera and locked controls | T05 | Opus | Rebase-safe camera paths | not started |
 | T09 | B | Debrief | T05, T02 | Sonnet | Model and screen | not started |
 | T10 | B | Mission: Buoy defence with a cinematic intro | T06, T07, T08, T09 | Opus | Pacing, writing and the first real use of the API | not started |
-| T11 | C | Civilian references: measurements and descriptions | - | Opus | Reading shapes off renders; sizes from Q8 | not started |
+| T11 | C | Civilian references: measurements and descriptions | - | Opus | Reading shapes off renders; sizes from Q8 | done |
 | T12 | C | `saturn_family` generator (five variants, Q16) | T11 | Opus | Large shared part library | not started |
 | T13 | C | `skylark_transport` generator | T11 | Opus | Geometry | not started |
 | T14 | C | `narn_transport` generator and the `narn` style | T11 | Opus | Geometry and a new style | not started |
@@ -536,6 +536,31 @@ whose trigger never arose). Update the column with each task's commit.
   quarters, for D61's `turrets[]`.
 - **Done when:** AC11; each description names its parts, their proportions, its length, its colour scheme and its
   turret positions.
+- **Done (as built, 2026-11-02):** `tools/refview/refview.py` (venv, run with `-I`) renders any reference STL in the
+  ship frame at a given length into the gitignored `reports/refs/<ship>/`: eight shaded views and silhouettes with a
+  metre grid and scale bar, 24 to 32 cross-sections, centre-plane cuts, a table of the model's separate shells with
+  boxes in metres, and `measurements.json`; `--zrange` renders a slice larger. It reads binary and ASCII STL (binary
+  told by size, and a `solid` header with trailing bytes still reads as binary), fails with the file's name when no
+  triangles come out, and exits 2 with a message on a bad file or mapping. 12 unit tests in
+  `tools/procgen/tests/test_refview.py`, one a whole `main()` run on a synthetic STL, skipped without Pillow
+  (`docs/third-party.md` lists refview under Pillow). `docs/design-references.md` gains "Civilian ships (M5)" for eight
+  hulls. The Saturn family is the wiki's "Achilles" type freighter, modular per Q16: one lead ship (dish antenna, 28.3 m
+  command disc, 6.3 m truss with a three-drum frame, 22.6 m engine section with a 6.3 m bell) the same on every variant,
+  plus 100 m cargo sections (four 31.1 x 17.3 x 43.0 m pods on arms round a 17.5 x 75.5 m cylinder, or three such
+  cylinders as tanks), at 0.09746 m per unit of the Saturn 4 model. Lengths follow from the parts: Saturn 4 transport and
+  Saturn 4 tanker 158.5 m, Saturn 8 transport and Saturn 8 tanker 258.5 m (the Saturn 8 tanker was
+  `saturn_fuel_tanker`), Saturn 3 119.5 m with three pods turned crosswise and the shared engine section behind them,
+  which its model lacks. Every Saturn variant has its z stations, pods, arms and turrets tabulated. Skylark 60 m (the
+  wiki's "Delta Gamma 9" type), Narn transport 70 m (flat crescent 46 m across; the file's longest axis is its length,
+  not its span as the brief expected), Centauri Brezebel 60 m (the purple Centauri liner). Every ship has its colour
+  scheme in sRGB from wiki screen captures with the URLs listed, and 2 to 4 turret positions.
+  `docs/assets-civilian.md` plans T12 to T15: output contract, LOD0 budgets of 810 000 for all eight (1.84 M with the
+  hero, the sky and five buoys, 92 % of `splat_budget`), hardpoints with their exact JSON fields per hull and per Saturn
+  variant, chunk groups, parts mapped to `core/geometry.py` and `parts/`, styles `ea_civilian`, `narn` and `centauri`,
+  turret models. No STL data or image is in git.
+  - Review: approved after two fix rounds (Q16's modular Saturns arrived after the first review; one Saturn 3 pod
+    figure corrected). Open for the maintainer (H): the Saturn 3's added engine section and raised pod stack, soft Saturn
+    close-ups at about 0.52 m LOD0 spacing, which way is up on the Narn transport.
 
 ### M5-T12 `saturn_family` generator
 
