@@ -1039,6 +1039,8 @@ Output contract: each asset writes to `assets/generated/<asset_id>/` (gitignored
 M1 emits LOD 0 only; the `lods` array is the seam for the LOD chain (§14.4). AABBs are in the Godot frame. `lighting` names the
 level's lighting records (§7.3, M3-T21), in that PLY's order and frame; a chunk names its own in its `hardpoints.json` `chunks[]`
 entry. The sky lists none.
+The Starfury's manifest adds `chunk_lod`, the level its chunks were cut from (LOD1, M3-T03; without it chunks come from LOD0, as the raider's do), and a `hero` entry beside `lods` (`file`, `splats`, `spacing_m`, `lighting`;
+level -1 in `LodSwitcherMath`, M3-T24).
 
 ### 9.1 `starfury_aurora`
 
@@ -1805,6 +1807,18 @@ assets/ai/{ally_starfury,raider,instructor}.tres, starfury_tactics.tres
 assets/ships/starfury_ally.tres          the Starfury's numbers, splat_lod 1, no cockpit (T08)
 src/ship/splat_lod.gd                    RefCounted, pure: which PLY an asset draws at a splat LOD, from its manifest (T08)
 data/scenarios/{instructor_route,dogfight}.json   (dogfight: wings ALPHA, RED, BLUE; T10)
+data/star_systems.json, src/environment/star_catalog.gd, star_color.gd   a system's star and its colour, by `system_id` (T25, Q30)
+src/ai/ai_console.gd, src/combat/faction_console.gd   the console sides of the AI drivers and the factions (T06, T02)
+src/combat/kill_credit.gd                the player's kills and assists (T16)
+src/combat/ram_tracker.gd, convex_sweep.gd   ram bookkeeping; exact swept hull test at tunnelling speed (T04)
+src/combat/breakup_plan.gd, staged_wreck.gd  pure: which part leaves when; the wreck that holds the rest until then (T28)
+src/rendering/post_effects.gd, lens_flare_*.gd, motion_blur_*.gd   the compositor effects after GDGS (T25)
+src/ship/running_lights.gd, nav_lights.gd    markers and own lights, from generated `nav_lights` hardpoints (T27)
+src/hud/hud_surface.gd, hud_painter.gd, cockpit_screens.gd   one drawing code for the 2D layer and the console screens (T29)
+tools/procgen/parts/cockpit.py           the Starfury's interior and its `screens` hardpoints (T29)
+addons/gdgs_scs/                         the project's fork of GDGS, `PATCHES.md` lists every change (T20, Q25, Q32)
+scripts/capture_m3.sh, measure_m3.sh, measure_fight{,_node}.gd, measure_held_brain.gd   the capture set; AC19's fight and 100 ships measured on the GPU (T12)
+tests/integration/test_m3_run.gd         the whole sandbox in one build; the dogfight's AI time and resolver budget (T12)
 ```
 
 ### 16.3 Tick order (changes to §15.3)
@@ -1843,6 +1857,10 @@ Commands: `relation <a> <b> [friendly|neutral|hostile]` / `relation reset`; `win
 M3-T27: command `running_lights [on|off]`, key
 `ship.running_lights`, `spawn ... lights=on|off`, and settings `own_lights` (bool, true), `top_lamp_energy` (0-20, 2.5), `cabin_glow_level` (0-2, 0.3),
 `cabin_glow_view_m` (1-2000, 150), `running_light_min_px` (0.5-12, 3). `raiders.list` and `allies.list` mark a ship flying dark.
+M3-T19: command `lod <ship|all> <n|auto>`, provider `lod` (`levels`, `visible_splats`), setting `splat_lod_bias` (float, 0). M3-T21: command `relight [on|off]`, provider `lights` (`picked`,
+`candidates`, `active`, `cost_us`), settings `splat_relight` (bool, true), `relight_ambient` (0.3), `relight_unlit_level` (0.12), `relight_light_gain` (0.6). M3-T25: commands `flare [on|off]` and
+`blur [on|off]`, provider `post`, settings `lens_flare` (bool, true), `motion_blur` (bool, false), `motion_blur_strength` (0.5). M3-T29: provider `screens` (`shown`, `powered`, `paints`, `lamps`),
+`render.gdgs_render_states`, `hud.window_items`. M3-T12: command `look <yaw> [pitch]` / `look off` holds the view off the nose from the console, for captures and for looking back at a formation.
 
 ### 16.5 Particles (M3-T23)
 
@@ -1871,3 +1889,18 @@ count never changes. `HitResolver`, `RamResolver`, `Explosion` (through `Destruc
 
 Console: provider `fx` (`emitters`, `busy`, `bursts`, `reused`, `density`); command `fxburst [hit|ram|explosion_sparks|
 explosion_fragments|explosion_gas|debris]` throws one burst 40 m in front of the camera. Setting: `particle_density` (float 0-1, 1).
+
+### 16.6 As built (M3 deviations from §16.1-§16.5)
+
+Details per task are in the as-built notes of `docs/milestones/m3-ai-pilots-and-wingmen.md`. The ones that change the design above:
+
+- **Renderer.** GDGS is no longer vendored upstream code: `addons/gdgs_scs/` is the project's fork (Q25, Q32), and every renderer change lives there with a note in its `PATCHES.md`. Its patches 5 and 6 are the
+  splat budget and per-instance own lights (a ship's top lamp and cabin glow, which use none of the 8 scene lights).
+- **Who slashes.** The plan had veterans and aces only. As built every pilot does, on a seeded share of attack runs, a rookie on all of them (D42, T18, the maintainer's call). The balance this leaves is AC12's, below.
+- **AC12's balance is open.** With the skills and slashing as built, rookies shoot down the sandbox's wing in wave 2 and the dogfight does not always end in 6 sim minutes. The maintainer holds that tuning, so `test_m3_sandbox` and
+  `test_dogfight` record their runs and go pending instead of failing.
+- **Break-up.** A Starfury does not burst into its five chunks in one tick: the part hit last leaves first and the rest follow over about a second (T28, Q28). Raiders and buoys burst as before.
+- **Cockpit HUD.** In the cockpit camera the instruments are on three `SubViewport` screens built into the console (T29, Q29), for the player's ship only; the window keeps the aiming marks. The chase camera keeps the 2D HUD. Both draw through `HudPainter`.
+- **Lights the player can't see.** A dark ship (Q27) is dark to the eye only: radar and AI contact lists never use lights.
+- **Star.** A system's star is data; the flare and the key light take its colour, and the flare is a lens effect only, with no veil or god rays (Q30, Q31).
+- **What runs on what.** The one number that limits scale is on the CPU: 100 ships miss 60 fps because of `TargetingController`, not the renderer (M3-T20; `docs/roadmap.md`, M4).
