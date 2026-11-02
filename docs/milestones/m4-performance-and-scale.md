@@ -112,7 +112,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 |---|---|---|---|---|---|
 | T01 | Benchmark harness, budget and baseline | M3 | Opus | Measurement design on a noisy machine; touches the tick order | done |
 | T02 | Cycle 1 | T01 | Opus | Profiling and a ranked judgement call | done |
-| T03 | Cycle 2 | T02 | Opus | Same | not started |
+| T03 | Cycle 2 | T02 | Opus | Same | done |
 | T04 | Cycle 3 | T03 | Opus | Same | not started |
 | T05 | Cycle 4: native contact scan (Rust `gdext`, N0 then N1, Q9) | T04 | Opus or Fable | A new toolchain and bit-identical parity | not started |
 | T06 | Report to the maintainer | T05 | controller | A summary and a question, no code | not started |
@@ -178,6 +178,10 @@ While iterating, `scripts/bench_quick.sh` (under 10 minutes: furball and spread 
 - **Done when:** the cycle's entry in the log is complete and the merge is green and pushed.
 - **Done (T02, cycle 1, 2026-11-02):** only the player's targeting keeps a candidate list (`TargetingController.keeps_candidates`,
   `docs/architecture.md` §17.2); headline max N 0 to 25, the ceiling below the sweep 20 to 30 ships. Entry in the Cycle log.
+- **Done (T03, cycle 2, 2026-11-02):** the ram resolver looks only at pairs `RamBroadPhase` finds near each other and pairs Jolt
+  holds in contact (`docs/architecture.md` §17.3); rams at 100 ships 10.2 to 0.7 ms, the quick check's ceiling stays 30 in
+  furball and spread (35 ships now 0.1 to 0.2 ms over). Measured with the quick check and single runs, not the sweep. Entry in
+  the Cycle log.
 
 Starting hypotheses from the M3 measurements, for T02 to test, not to follow:
 
@@ -444,6 +448,140 @@ The new test file alone: 9/9; 25 targeting-related scripts: 307/307 passing, 270
 **What is left for cycle 2** (re-rank with these numbers): at 50 ships the AI is 47 % of the furball tick (the scans 2.1 ms,
 the brains and avoidance 4.0 ms) and the resolvers 27 % (rams 2.7 ms); at 100 the AI is 17.1 ms, the rams 9.5 ms and the bolt sweep 2.6 ms.
 To pass 50 the furball needs 5 ms off its 13 ms median, more than candidate 2 or 3 gives alone.
+
+### Cycle 2 (M4-T03, 2026-11-02): a broad phase for the ram resolver
+
+**How this cycle measured** (maintainer, 2026-11-02): with `scripts/bench_quick.sh` (furball and spread ramped through 10, 15,
+20, 25, 30, 40, 50, 75, 100, 150 ships; **one run of seed 1, 2 s of warm-up and 6 s measured per count**, so indicative, not
+the sweep's verdict) for the ceiling, and single `bench <layout> <n> 10 seed=1` runs (5 s of warm-up, 10 s measured) at 50
+and 100 ships in all three layouts for the stage breakdown. No full sweep, so no max N moves in this entry: the sweep's
+numbers stay cycle 1's (headline 25). Every run was pinned to cores 0-11 and held both bench locks (`/tmp/m5-godot.lock`,
+`/tmp/scs-bench.lock`), so no other Godot run overlapped it; the before and after runs were taken within 15 minutes of each
+other (12:00 to 12:20). The base is `0db8953` plus the failing test (`314dab4`) and the release-build script (`968cd29`), no
+game change since cycle 1.
+
+**Before** (`m4_c2_before2_quick`, `m4_c2_before_stages`). Quick check: furball and spread both hold the budget up to 30 ships
+and fail at 40 (tick median 11.06 and 10.96 ms); an earlier quick check of the same code, at 10:37 before the second lock
+existed, gave the same ceilings and 40-ship medians within 0.13 ms. Single runs at 35 ships: 9.26 ms (furball) and 9.30 ms
+(spread). Stage breakdown, mean ms per tick (one run each; the median tick in the second column):
+
+| layout | N | tick median | tick mean | ai | (scan) | (think) | flight | targeting | resolvers | (hit) | (ram) | late | physics | (sync) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| furball | 50 | 14.30 | 14.41 | 6.56 | 2.28 | 6.46 | 1.99 | 0.55 | 3.89 | 1.09 | 2.78 | 0.06 | 1.30 | 0.31 |
+| furball | 100 | 37.82 | 38.34 | 18.13 | 6.19 | 17.92 | 3.78 | 1.09 | 13.29 | 3.00 | 10.24 | 0.07 | 1.85 | 0.25 |
+| spread | 50 | 12.70 | 12.90 | 5.07 | 2.06 | 4.97 | 1.87 | 0.51 | 3.91 | 1.12 | 2.76 | 0.06 | 1.42 | 0.50 |
+| spread | 100 | 30.73 | 32.10 | 11.57 | 5.45 | 11.37 | 3.77 | 1.05 | 13.67 | 4.05 | 9.57 | 0.07 | 1.84 | 0.23 |
+| transit | 50 | 8.57 | 8.68 | 3.71 | 1.49 | 3.62 | 1.56 | 0.45 | 1.75 | 0.10 | 1.63 | 0.28 | 0.93 | 0.44 |
+| transit | 100 | 19.30 | 19.65 | 8.34 | 3.72 | 8.15 | 3.07 | 0.92 | 5.18 | 0.19 | 4.95 | 0.57 | 1.54 | 0.14 |
+
+These 10 s runs read about 1 ms higher at 50 ships than cycle 1's 30 s sweep (furball 14.30 against 13.03 ms); the cycle
+compares them only with each other. The profile agrees with cycle 1's: the AI is the largest stage (46 % of the furball tick
+at 50, 47 % at 100), and the rams are the second at 100 ships in every layout (10.2, 9.6 and 5.0 ms) and grow with N squared
+(2.8 to 10.2 ms for twice the ships), while the bolt hits are 1.1 ms at 50 and 3.0 to 4.1 ms at 100.
+
+**Candidates**, ranked by confidence that they raise the headline, against the plan the maintainer set for the cycles left
+(Q6: cycle 3 the think rate with nearest-k contacts, cycle 4 the contact scan in native code):
+
+1. **A broad phase for the ram resolver's swept pass** (built). Evidence: the rams above, N squared and the same per pair in
+   every layout; in the test below a spread-out fleet of 24 ships has all 276 of its pairs looked at every tick, though every
+   pair is at least 250 m apart. Predicted: the rams fall to the hull gather and Jolt's contacts, about 0.4 ms at 50 and
+   0.8 ms at 100, so the tick falls by about 2.4 ms at 50 and 9 ms at 100 in the fights and 1.3 and 4.2 ms in transit. The
+   quick check's ceiling stays 30 in both layouts: 40 ships needs 11.0 ms down to 8, and the rams at 40 are only about
+   1.8 ms; 35 ships comes close. Behaviour risk: none if the filter is conservative (below). Confidence: high, 90 %, for the
+   stage; low, 20 %, that the quick check's ceiling moves a step.
+2. **The AI think rate with nearest-k contacts** (cycle 3, Q8). Evidence: after candidate 1 the AI is about 55 % of the
+   furball tick at 50 ships and 64 % at 100; the brains and avoidance (think less scan) are 4.1 ms at 50 and 11.4 ms at 100 in
+   the furball, growing faster than N with every contact scored. A ship more than 2 km from the player thinking every third
+   tick takes most of that off in spread (the player's own fight is one group of twelve) and much of it in the furball, where
+   most of a 5 km ball is beyond 2 km; nearest-k caps the furball's per-contact growth. Predicted: the AI about halved in the
+   furball and cut by about two thirds in spread, enough to bring 40 and likely 50 ships under 8 ms. Behaviour risk: the one
+   the maintainer accepted (up to 50 ms slower reactions far from the player; far contacts ignored when choosing); AC13 must
+   hold. Confidence: high, 80 %, that it moves the ceiling at least one step.
+3. **The contact scan in native code** (cycle 4, Q9, N0 then N1). Evidence: the scan inside the AI costs 2.3 ms at 50 and
+   6.0 ms at 100 in the furball, and nearly as much in spread (5.4 ms) though a spread ship sees 12 contacts, not 100.
+   Predicted: 10 to 50 times faster, so about 2 ms off at 50 and 5 ms at 100 in every layout, less if cycle 3's think rate has
+   already cut how often far ships perceive. Behaviour risk: none (N1 must be bit-identical). Confidence: high that the scan
+   gets much cheaper, 85 %; medium, 60 %, that it moves the ceiling on its own after cycle 3, and it carries a toolchain.
+
+Cycle 1's unbuilt candidates, ranked again: its candidate 3 (the contact scan by space in GDScript) is replaced by the native
+scan (Q9 drops the GDScript grid). Looked at and not ranked: a broad phase for the bolt hits (the hit resolver is now 80 and
+84 % of the resolvers at 100 ships in the fights, 3.0 and 4.1 ms, and 1.1 ms at 50; the next resolver cost, but under a step of the
+ceiling now, and a natural part of later native work); flight (3.8 ms at 100, linear).
+
+**Test** (`314dab4`, before the change): `tests/integration/test_ram_scale.gd`. In a spread-out fleet of 24 ships 250 m
+apart, half still and half crossing at 300 m/s, it counts the pairs the resolver looks at per tick (pairs swept shape by shape,
+counted by a subclass of the resolver, plus `RamTracker.keep_touching` calls, counted by a subclass of the tracker). It failed
+with 276 per tick (144 swept, 132 kept touching: every pair) against a linear bound of 48 (two per ship). Five behaviour pins
+passed before the change and after: a 600 m/s head-on among bystanders destroys both with one tunnelling ram each; at
+3 000 m/s closing (50 m per tick), where the two origins are beyond both bounding spheres at each end of the tick of the hit,
+both are still destroyed; a glancing pass 15.40 m abreast at 600 m/s lands and 15.60 m does not (the edge, sampled on the base,
+lies between 15.45 and 15.50 m); a 20 m/s scrape with the wings overlapping is a contact ram on each hull, never a tunnelling
+one, and its pair is kept touching while Jolt holds it; two raiders that take a swept ram, are pulled 300 m apart and sent back
+take a second ram each, once per meeting. A sixth pin came with the change (below).
+
+**Change** (`a894c9b`): `RamBroadPhase` (pure, `src/combat/ram_broad_phase.gd`) boxes each hull's bounding sphere along its
+path through the tick, grown by a metre, and sorts and sweeps the boxes along x. Only the overlapping pairs, plus every pair
+Jolt reported touching in its last step, reach the resolver's per-pair code, in the full pass's order (a ram earlier in the
+pass can destroy a hull that a later pair holds). Why it changes nothing: a pair whose boxes do not overlap cannot pass the
+resolver's first exact test (the two bounding spheres meeting over the tick), so its shape sweep would have found nothing; and
+`RamTracker.keep_touching` acts only on a pair Jolt holds in contact, and those are always looked at. So the tracker gets every
+call that matters, and a skipped pair stops touching exactly when it did before. Design in `docs/architecture.md` §17.3. With
+it the work-count test passes (no pair of the spread-out fleet is near another). `tests/unit/test_ram_broad_phase.gd` checks
+every candidate against the resolver's sphere test on 40 seeded crowds of 60 hulls at up to 1 500 m/s near the origin and again
+45 km out, the order, the far pairs left out and the contact pairs always in. Two mutations were tried and caught: boxes
+without the bounding radius (the unit tests and the glancing pin fail), and the contact pairs dropped (caught by the sixth pin,
+`test_a_pair_jolt_holds_in_contact_is_kept_touching_whatever_its_bounding_spheres`, which shrinks the spheres so only Jolt's
+report can bring the pair in; real hulls in contact are always inside their spheres, so this path is a safety net).
+
+**After** (`m4_c2_after_quick`, `m4_c2_after2_quick`, `m4_c2_after_stages`, `m4_c2_after35`, `m4_c2_before35`):
+
+| quick check | furball ceiling | furball 40 ms | spread ceiling | spread 40 ms |
+|---|---|---|---|---|
+| before (two runs) | 30, 30 | 10.93, 11.06 | 30, 30 | 11.04, 10.96 |
+| after (two runs) | 30, 30 | 9.46, 9.62 | 30, 30 | 9.21, 9.51 |
+| single run at 35, before to after | | 9.26 to 8.10 | | 9.30 to 8.19 |
+
+The quick check's ceiling does not move (30 in both layouts, four quick checks agree), so the step is not noise either way.
+Every count's median falls (furball 25: 5.92 to 5.21 ms, 50: 14.62 to 12.19 ms, 100: 39.69 to 30.48 ms), 35 ships now misses
+the 8 ms median by 0.10 and 0.19 ms (p99 9.9 and 10.5 ms hold), and both layouts now hold 30 FPS at 100 ships (31.7 and 35.6)
+and fall under it at 150 (at 100 before).
+
+| layout | N | tick median | tick mean | ai | (scan) | (think) | flight | targeting | resolvers | (hit) | (ram) | late | physics | (sync) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| furball | 50 | 11.27 | 11.64 | 6.46 | 2.25 | 6.36 | 1.86 | 0.50 | 1.46 | 1.08 | 0.37 | 0.05 | 1.25 | 0.49 |
+| furball | 100 | 27.18 | 27.66 | 17.57 | 5.99 | 17.38 | 3.55 | 1.00 | 3.70 | 2.95 | 0.71 | 0.06 | 1.66 | 0.23 |
+| spread | 50 | 9.88 | 10.16 | 4.95 | 2.02 | 4.86 | 1.80 | 0.48 | 1.51 | 1.12 | 0.36 | 0.05 | 1.31 | 0.55 |
+| spread | 100 | 21.38 | 22.89 | 11.37 | 5.38 | 11.18 | 3.66 | 1.02 | 4.90 | 4.10 | 0.75 | 0.06 | 1.75 | 0.23 |
+| transit | 50 | 7.10 | 7.28 | 3.68 | 1.48 | 3.59 | 1.54 | 0.44 | 0.48 | 0.10 | 0.36 | 0.27 | 0.86 | 0.40 |
+| transit | 100 | 14.76 | 15.13 | 8.19 | 3.67 | 8.01 | 2.98 | 0.89 | 0.92 | 0.19 | 0.70 | 0.53 | 1.58 | 0.20 |
+
+Transit at 50 ships passes the budget in its run (median 7.10 ms, p99 9.30 ms; cycle 1's sweep failed it at 8.44 ms), and
+transit at 100 now keeps real time (it fell 20 % behind before).
+
+**Gain against the prediction:**
+
+| | predicted | measured (furball, spread, transit) |
+|---|---|---|
+| rams at 50 | about 0.4 ms | 2.78 to 0.37, 2.76 to 0.36, 1.63 to 0.36 ms |
+| rams at 100 | about 0.8 ms | 10.24 to 0.71, 9.57 to 0.75, 4.95 to 0.70 ms |
+| tick mean at 50 | -2.4, -2.4, -1.3 ms | -2.77, -2.74, -1.40 ms |
+| tick mean at 100 | -9, -9, -4.2 ms | -10.68, -9.21, -4.52 ms |
+| quick-check ceiling | stays 30, 30 | 30, 30 |
+
+The rams fell as predicted; the ticks fell slightly more than the rams did (by 0.1 to 1.2 ms), within what single runs
+spread. The stage is gone, but it was not enough to move the quick check a step: 35 ships is 0.1 to 0.2 ms over.
+
+**Behaviour changes: none intended, none seen.** Seeded runs give identical outcomes on the base (twice) and after:
+`bench furball 25 10 seed=1` (bolts 60.647 on average, pairs 0.497), `bench furball 100 6 seed=1` (bolts 268.447, pairs 1.922,
+behaviours attack 70 and evade 30, one ram: the player into NAV ALPHA) and `bench spread 50 6 seed=2` (bolts 177.144, pairs
+1.444); every AI ship's behaviour and state line from `state ai`, `state ram` and `state combat` is the same line for line.
+Tests (the maintainer's rule for this task, 2026-11-02: focused runs instead of the full suite, which CI runs): 38 GUT files
+that touch the ram resolver, the tracker, ram maths, collisions, the hit resolver and AC13's paired budget
+(`test_ai_think_time`), each run alone on `a894c9b`: 495 passing, 0 failing, 0 pending. No Python changed.
+
+**What is left for cycle 3**: at 50 ships the AI is 56 % of the furball tick (6.46 of 11.64 ms) and 49 % in spread; at 100 it
+is 17.6 ms of 27.7. Rams are 3 % of the tick. To pass 40 the furball needs 1.5 ms off its 9.5 ms median, 50 needs 4.2 ms off
+12.2.
 
 ## Definition of done (M4)
 
