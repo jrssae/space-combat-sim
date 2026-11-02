@@ -28,6 +28,14 @@ static var _live: Array[AiPilotDriver] = []
 static var _think_frame: int = -1
 static var _think_sum_us: int = 0
 static var _think_last_us: int = 0
+## The player's ship (`ShipAssembly` registers it), for the think rate's distance rule (M4-T04). Null: no player.
+static var player: Combatant = null
+# Work counts of the latest tick the drivers ran (M4-T04): thinks near and far, held ticks, contacts handed to a brain.
+static var _count_frame: int = -1
+static var _thinks_near: int = 0
+static var _thinks_far: int = 0
+static var _held: int = 0
+static var _contacts_max: int = 0
 
 var combatant: Combatant = null
 var world: WorldFrame = null
@@ -49,6 +57,8 @@ var last_hit_s: float = -INF
 var last_bolt_hit_s: float = -INF
 ## The `Targetable` id of whoever hit this hull last (0: nobody, or the console).
 var last_attacker_id: int = 0
+## Whether the ship was within `ai_think_near_m` of a live player at its last step (M4-T04).
+var near_player: bool = false
 
 var _capability: ShipCapability = null
 ## The mean of the ship's muzzles, ship-local (muzzles never move on the hull, so computed once).
@@ -90,8 +100,11 @@ func step(delta: float) -> void:
 	if brain == null or combatant == null or not is_instance_valid(combatant.ship):
 		return
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
+	near_player = _is_near_player()
+	_count_think(near_player)
 	_retarget(delta)
 	var p: Perception = perceive()
+	_contacts_max = maxi(_contacts_max, p.contacts.size())
 	brain.has_desired_velocity = false
 	var pc: PilotCommand = brain.think(p, delta)
 	if _hiding and pc.combat != null and pc.combat.fire:  # the first shot ends the hiding (Q27)
@@ -118,6 +131,26 @@ static func think_us() -> int:
 ## Wall-clock microseconds every driver's `step` has taken so far in the current physics tick (`PerfProbe`, M4-T01).
 static func think_us_this_tick() -> int:
 	return _think_sum_us if _think_frame == Engine.get_physics_frames() else 0
+
+
+## How many AI ships near the player thought in the latest tick the drivers ran (M4-T04).
+static func thinks_near() -> int:
+	return _thinks_near
+
+
+## How many AI ships far from the player (or with no player alive) thought in the latest tick the drivers ran.
+static func thinks_far() -> int:
+	return _thinks_far
+
+
+## How many AI ships held their last command in the latest tick the drivers ran.
+static func held() -> int:
+	return _held
+
+
+## The most contacts any AI ship scored and avoided in the latest tick the drivers ran.
+static func contacts_max() -> int:
+	return _contacts_max
 
 
 ## A `Perception` of this tick.
@@ -232,6 +265,33 @@ func _follow_brain_target() -> void:
 	if wanted == _unselectable_id or targeting.selected_id() == wanted:
 		return
 	_unselectable_id = 0 if targeting.select_id(wanted) else wanted
+
+
+# Starts the work counts afresh on the first driver of a tick.
+static func _roll_counts() -> void:
+	var frame: int = Engine.get_physics_frames()
+	if frame != _count_frame:
+		_count_frame = frame
+		_thinks_near = 0
+		_thinks_far = 0
+		_held = 0
+		_contacts_max = 0
+
+
+static func _count_think(near: bool) -> void:
+	_roll_counts()
+	if near:
+		_thinks_near += 1
+	else:
+		_thinks_far += 1
+
+
+# Whether a live player flies within `ai_think_near_m` of this ship.
+func _is_near_player() -> bool:
+	if player == null or not is_instance_valid(player.ship) or player.damageable == null or not player.damageable.is_active():
+		return false
+	var near_m: float = float(Settings.get_value(&"ai_think_near_m"))
+	return combatant.ship.global_position.distance_squared_to(player.ship.global_position) <= near_m * near_m
 
 
 static func _add_think_time(us: int) -> void:

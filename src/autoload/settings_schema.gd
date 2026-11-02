@@ -97,6 +97,14 @@ const ENTRIES: Dictionary = {
 		"doc": "Allow the ` key to open the debug console"},
 	&"console_pause_on_open": {"type": TYPE_BOOL, "default": false,
 		"doc": "Pause the game while the console is open"},
+	&"ai_think_rate": {"type": TYPE_BOOL, "default": true,
+		"doc": "AI ships far from the player think at ai_think_far_hz and hold their last command between (M4-T04); off = every AI ship thinks every tick"},
+	&"ai_think_near_m": {"type": TYPE_FLOAT, "default": 2000.0, "min": 0.0, "max": 100000.0,
+		"doc": "AI ships within this distance of the player think every tick; farther ones (and every one with no player alive) think at ai_think_far_hz"},
+	&"ai_think_far_hz": {"type": TYPE_FLOAT, "default": 20.0, "min": 1.0, "max": 60.0,
+		"doc": "How often a far AI ship thinks, Hz, on staggered physics ticks (20 = every third tick at 60 Hz)"},
+	&"ai_nearest_k": {"type": TYPE_INT, "default": 12, "min": 0, "max": 64,
+		"doc": "An AI ship scores, avoids and checks its fire lane against its nearest this many contacts, plus its target and its latest attacker (M4-T04); 0 = every contact"},
 }
 
 ## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current
