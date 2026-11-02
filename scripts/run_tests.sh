@@ -208,7 +208,7 @@ if grep -E "${SCRIPT_ERRORS}" "${log}"; then
     echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lights, lod, post, raiders, ram, render, screens, settings, ship, targeting, time, waves, weapons, wing, world" \
+expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lights, lod, perf, post, raiders, ram, render, screens, settings, ship, targeting, time, waves, weapons, wing, world" \
     || smoke_status=1
 expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
 expect_line "${log}" "[console] render.splat_backend = headless" || smoke_status=1
@@ -539,7 +539,7 @@ if (( route_status != 0 )); then
     echo "run_tests.sh: instructor route smoke run exited ${route_status}, expected 0 (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lights, lod, post, raiders, ram, render, route, screens, settings, ship, targeting, time, waves, weapons, wing, world" \
+expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lights, lod, perf, post, raiders, ram, render, route, screens, settings, ship, targeting, time, waves, weapons, wing, world" \
     || smoke_status=1
 expect_line "${log}" "[console] route.index = 1" || smoke_status=1
 expect_line "${log}" "[console] route.count = 6" || smoke_status=1
@@ -584,6 +584,39 @@ if (( visual_strict_status != 1 )); then
 fi
 expect_text "${log}" "[console] error: look takes yaw and pitch in degrees, or off, not 'north'" || smoke_status=1
 reject_text "${log}" "[console] > quit 0" || smoke_status=1
+
+echo "== Console smoke run: the benchmark harness writes its report on the real main scene"
+# M4-T01 / AC1: `bench furball 25 5` flies 25 ships from the pools for 5 s after a second of warm-up and writes
+# reports/perf/smoke/; only that the report is there is checked, never its numbers (they are scripts/bench.sh's job). `quit`
+# waits for the run, and the probe is off again afterwards.
+log="${REPORTS}/console_bench.log"
+bench_dir="${REPORTS}/perf/smoke"
+rm -rf "${bench_dir}"
+touch "${REPORTS}/.gdignore"
+bench_status=0
+timeout 300 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; bench furball 25 5 warmup=1 label=smoke; get perf.enabled; get perf.tick_us; quit' \
+    > "${log}" 2>&1 || bench_status=$?
+cat "${log}"
+if (( bench_status != 0 )); then
+    echo "run_tests.sh: bench smoke run exited ${bench_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_text "${log}" "[console] bench furball 25: 25 ships in play" || smoke_status=1
+expect_text "${log}" "[bench] furball 25 seed 1: tick median " || smoke_status=1
+expect_line "${log}" "[console] perf.enabled = false" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "SCRIPT ERROR" || smoke_status=1
+for report_file in summary.json summary.md; do
+    if [[ ! -s "${bench_dir}/${report_file}" ]]; then
+        echo "run_tests.sh: the bench smoke run did not write ${bench_dir}/${report_file}." >&2
+        smoke_status=1
+    fi
+done
+for key in '"stages"' '"tick"' '"verdict"' '"machine"' '"lag"'; do
+    grep -qF -- "${key}" "${bench_dir}/summary.json" 2> /dev/null \
+        || { echo "run_tests.sh: ${bench_dir}/summary.json lacks ${key}." >&2; smoke_status=1; }
+done
 
 if (( smoke_status != 0 )); then
     echo "run_tests.sh: console smoke runs failed (see reports/console_*.log)."  >&2

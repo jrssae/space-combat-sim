@@ -49,6 +49,9 @@ var scenario_ships: Array[Combatant] = []
 ## The ship leading a route (the instructor) and its follow-path behaviour; null when the scenario has none.
 var instructor: Combatant = null
 var instructor_path: BehaviourFollowPath = null
+## The tick's stage timers (`perf`) and the many-ships benchmark (`bench`), M4-T01.
+var perf_probe: PerfProbe = null
+var bench: BenchRunner = null
 
 var _spawn_position: UniversePos = UniversePos.new()
 var _spawn_basis: Basis = Basis.IDENTITY
@@ -144,6 +147,7 @@ func _ready() -> void:
 	# The motion blur skips the frames around a rebase (M3-T25).
 	space_environment.post_effects.watch_world(world)
 	space_environment.use_star_of(_system_id)
+	_setup_perf()
 	_register_console()
 
 
@@ -246,6 +250,37 @@ func _pool_count(scenario: Dictionary, type: StringName, override_count: int) ->
 	if override_count >= 0:
 		return override_count
 	return int((scenario.get("pools", {}) as Dictionary).get(type, 0))
+
+
+## Grows the pool of `type` to at least `count` ships, heard like the scenario's own (the benchmark's load, M4-T01). Returns
+## how many were built.
+func ensure_pool(type: StringName, count: int) -> int:
+	var missing: int = count - ships.pool_size(type)
+	if missing <= 0:
+		return 0
+	var known: int = ships.pool_size()
+	var built: int = ships.prepare(type, missing)
+	for pooled: Combatant in ships.all_ships().slice(known):
+		audio.watch_ship(pooled)
+	return built
+
+
+# The tick's stage timers and the benchmark (M4-T01); both pause with the world.
+func _setup_perf() -> void:
+	perf_probe = PerfProbe.new()
+	perf_probe.name = "PerfProbe"
+	perf_probe.process_mode = Node.PROCESS_MODE_PAUSABLE
+	perf_probe.world = world
+	perf_probe.hits = $Combat/HitResolver as HitResolver
+	perf_probe.rams = rams
+	perf_probe.ships_in_play = func() -> int: return ships.in_use_count() + (1 if player_alive else 0)
+	add_child(perf_probe)
+	bench = BenchRunner.new()
+	bench.name = "BenchRunner"
+	bench.process_mode = Node.PROCESS_MODE_PAUSABLE
+	bench.main = self
+	bench.probe = perf_probe
+	add_child(bench)
 
 
 ## The scenario file in use: `scenario_path`, else the one `settings.scenario` names.

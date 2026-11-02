@@ -146,6 +146,11 @@ func alive(type: StringName = &"") -> Array[Combatant]:
 	return out
 
 
+## How many ships are in the world, without building a list (`PerfProbe` reads it every tick).
+func in_use_count() -> int:
+	return _in_use.size()
+
+
 ## Every pooled ship, parked or not.
 func all_ships() -> Array[Combatant]:
 	return _all.duplicate()
