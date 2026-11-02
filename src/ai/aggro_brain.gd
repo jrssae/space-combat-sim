@@ -30,6 +30,10 @@ func think(p: Perception, dt: float) -> PilotCommand:
 	return cmd
 
 
+func is_attacking() -> bool:
+	return aggroed
+
+
 func describe() -> Dictionary:
 	var inner: Dictionary = attack.describe() if aggroed else patrol.describe()
 	return {"behaviour": "aggro", "state": "attack: %s" % inner["state"] if aggroed else "patrol: %s" % inner["state"]}

@@ -25,12 +25,13 @@ const NAME_PATTERN: String = "^[a-z0-9_]{1,32}$"
 ## keys add to the right stick's diagonal roll; target_next, target_prev and target_ahead are the keyboard's and the
 ## mouse's (the pad cycles with B, `target_cycle`, which a layout that targets with another button, such as m1_classic's
 ## D-pad Up on target_next, can leave unbound). The wing orders are keys 1-4 and the console until M5's comms panel gives
-## the pad a route (architecture §16 D36).
+## the pad a route (architecture §16 D36). The running lights are D-pad Left in the default, but a layout that rolls on the
+## D-pad (m1_classic) has no button left for them.
 const KEYBOARD_ONLY: Array[StringName] = [
 	InputAdapter.TOGGLE_FALLBACK, InputAdapter.TOGGLE_OVERLAY, InputAdapter.TARGET_AHEAD, InputAdapter.TARGET_PREV,
 	InputAdapter.SCREENSHOT, InputAdapter.WING_ATTACK, InputAdapter.WING_FORM, InputAdapter.WING_ENGAGE,
 	InputAdapter.WING_COVER, InputAdapter.ROLL_LEFT, InputAdapter.ROLL_RIGHT, InputAdapter.TARGET_NEXT,
-	InputAdapter.TARGET_CYCLE,
+	InputAdapter.TARGET_CYCLE, InputAdapter.TOGGLE_RUNNING_LIGHTS,
 ]
 ## The default pad layout before M3-T15 (action -> pad descriptors; actions without one are left out). A saved profile with
 ## exactly these pad bindings and no `target_cycle` gets the current default's pad bindings (`from_config`): its keys and
@@ -437,11 +438,29 @@ static func from_config(cfg: ConfigFile, p_name: String = "", fill_from: Control
 		for action: StringName in InputAdapter.ACTIONS:
 			if profile.bindings.has(action) or profile.deadzones.has(action) or not fill_from.bindings.has(action):
 				continue
-			profile.bindings[action] = (fill_from.bindings[action] as Array).duplicate()
+			var taken: Array = (fill_from.bindings[action] as Array).duplicate()
+			if action == InputAdapter.TOGGLE_RUNNING_LIGHTS:
+				taken = profile._free_of_others(taken, action)  # a layout that rolls on D-pad Left keeps it; the lights keep their key
+			profile.bindings[action] = taken
 			profile.deadzones[action] = fill_from.deadzones.get(action, 0.5)
 			filled.append(String(action))
 	errors.append_array(profile.validate())
 	return {"ok": errors.is_empty(), "profile": profile, "errors": errors, "filled": filled, "pad_migrated": pad_migrated}
+
+
+# `descriptors` without those another action of this profile already uses.
+func _free_of_others(descriptors: Array, action: StringName) -> Array:
+	var kept: Array = []
+	for descriptor: Variant in descriptors:
+		var taken_by: StringName = &""
+		for other: Variant in bindings.keys():
+			if StringName(other) != action and (bindings[other] as Array).has(descriptor):
+				taken_by = StringName(other)
+		if taken_by == &"":
+			kept.append(descriptor)
+		else:
+			push_warning("Controls: profile '%s' keeps %s on %s, so %s does not get it" % [name, descriptor, taken_by, action])
+	return kept
 
 
 ## Whether this profile's pad bindings are exactly `layout`'s (action -> pad descriptors; an action missing from `layout`

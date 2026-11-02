@@ -70,6 +70,12 @@ FAR_LODS = {
 CHASE_ANCHOR = (0.0, 3.5, 14.0)  # authored frame: behind and above, frames the 17 m span at 70 degrees
 EYE = (0.0, 0.95, 1.5)  # the pilot's eye under the canopy panel (authored frame); looks down -Z
 JSON_DIGITS = 5
+# Running lights (M3-T27): how far a marker stands off the hull, where the top one sits, and the lamp over the hump.
+NAV_LIGHT_CLEARANCE_M = 0.12
+NAV_TOP_BEHIND_CANOPY_M = 0.5
+NAV_LAMP_HEIGHT_M = 2.2
+NAV_LAMP_RANGE_M = 5.5
+NAV_CABIN_RANGE_M = 1.4
 BURIED_MARGIN_M = 0.01
 CHUNK_ORDER = ("wing_l", "wing_r", "hump", "nacelle_l", "nacelle_r")
 MUZZLE_ORDER = ("root_l", "root_r", "nacelle_l", "nacelle_r")  # left and right take turns in ALTERNATING fire
@@ -294,6 +300,28 @@ def _r(v: Any) -> list[float]:
     return [round(float(x), JSON_DIGITS) + 0.0 for x in np.asarray(v, dtype=float).reshape(-1)]
 
 
+def nav_lights(by_name: dict[str, Part], spec: RaiderSpec, offset: np.ndarray) -> dict[str, Any]:
+    """Running lights (M3-T27): red and green past the wingtips, white on top of the hump behind the canopy, a lamp standing
+    over the hump to light it, and the cabin glow on the canopy panel."""
+    wing = spec.wing
+    tip_x = wing.half_span + NAV_LIGHT_CLEARANCE_M
+    tip_y = 0.0 - float(offset[1])
+    tip_z = 0.5 * (wing.tip_leading_z + wing.tip_trailing_z) - float(offset[2])
+    hump_lo, hump_hi = by_name["hump"].mesh.bounds()
+    canopy_lo, canopy_hi = by_name["canopy"].mesh.bounds()
+    top_z = float(canopy_hi[2]) + NAV_TOP_BEHIND_CANOPY_M
+    canopy_centre = 0.5 * (canopy_lo + canopy_hi)
+    return {
+        "port": _r((-tip_x, tip_y, tip_z)),
+        "starboard": _r((tip_x, tip_y, tip_z)),
+        "top": _r((0.0, float(hump_hi[1]) + NAV_LIGHT_CLEARANCE_M, top_z)),
+        "top_lamp": _r((0.0, float(hump_hi[1]) + NAV_LAMP_HEIGHT_M, 0.5 * (top_z + float(hump_hi[2])))),
+        "top_lamp_range_m": NAV_LAMP_RANGE_M,
+        "cabin": _r((0.0, canopy_centre[1], canopy_centre[2])),
+        "cabin_range_m": NAV_CABIN_RANGE_M,
+    }
+
+
 def hardpoints(placed: list[Placed], spec: RaiderSpec, chunks: list[dict[str, Any]], offset: np.ndarray) -> dict[str, Any]:
     """The hardpoints document (centred Godot frame) from the placed (already centred) parts."""
     by_name = {p.part.name: p.part for p in placed}
@@ -365,6 +393,7 @@ def hardpoints(placed: list[Placed], spec: RaiderSpec, chunks: list[dict[str, An
         "pods": pods,
         "rcs": rcs,
         "collision": collision,
+        "nav_lights": nav_lights(by_name, spec, offset),
         "chunks": chunks,
     }
 

@@ -245,6 +245,9 @@ static func _gauges(input: HudInput, f: HudFrame) -> void:
 	f.hull_rect = Rect2(Vector2(margin, h - 90.0 * s), bar)
 	f.fuel_rect = Rect2(Vector2(margin, h - 56.0 * s), bar)
 	f.charge_rect = Rect2(Vector2(w - margin - bar.x, h - 56.0 * s), bar)
+	f.running_lights_dark = not input.running_lights
+	f.running_lights_text = "LIGHTS OFF" if f.running_lights_dark else "LIGHTS ON"
+	f.running_lights_pos = f.charge_rect.position + Vector2(0.0, -24.0 * s)
 	var outline := Vector2(150.0, 112.0) * s
 	f.own_silhouette_rect = Rect2(Vector2(margin, h - 98.0 * s - outline.y - 22.0 * s), outline)
 

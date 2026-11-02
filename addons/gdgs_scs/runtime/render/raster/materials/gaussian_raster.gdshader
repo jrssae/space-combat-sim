@@ -74,6 +74,11 @@ uniform vec4 light_params[8];
 // Direction the light travels (spot cone axis).
 uniform vec3 light_spot_directions[8];
 
+// [space-combat-sim patch] This node's own lights, in its own frame (GaussianOwnLights): position, 1/range; colour * energy, view range.
+uniform int own_light_count = 0;
+uniform vec4 own_light_places[2];
+uniform vec4 own_light_tints[2];
+
 const float SH_C0 = 0.28209479177387814;
 const float SH_C1 = 0.4886025119029199;
 const float SH_C2_0 = 1.0925484305920792;
@@ -159,7 +164,9 @@ float omni_attenuation(float distance, float inv_range, float decay) {
 // Per-splat lighting multiplier. Evaluated once per splat in vertex() rather
 // than per fragment: a splat cloud has 10-50x overdraw, so per-fragment
 // lighting would run the whole loop that many times per pixel.
-vec3 relight_factor(int sidx, vec3 world_position, mat3 object_linear) {
+// [space-combat-sim patch] Also the node's own lights; `own_glow` is what they add to the colour after the multiply. Parity with
+// relight_factor() in gsplat_projection.glsl and GaussianOwnLights.evaluate.
+vec3 relight_factor(int sidx, vec3 world_position, mat3 object_linear, vec3 local_position, float camera_distance, out vec3 own_glow) {
 	vec4 packed = fetch_lighting(sidx);
 	vec3 local_normal = oct_decode(packed.rg * 2.0 - 1.0);
 	vec3 world_normal = object_linear * local_normal;
@@ -193,6 +200,21 @@ vec3 relight_factor(int sidx, vec3 world_position, mat3 object_linear) {
 			}
 		}
 		direct += tint.rgb * attenuation * max(dot(world_normal, to_light), 0.0);
+	}
+
+	own_glow = vec3(0.0);
+	for (int i = 0; i < own_light_count; i++) {
+		vec4 place = own_light_places[i];
+		vec4 tint = own_light_tints[i];
+		vec3 relative = place.xyz - local_position;
+		float dist = length(relative);
+		if (tint.a > 0.0) {
+			float window = dist * place.w;
+			window = max(1.0 - window * window, 0.0);
+			own_glow += tint.rgb * window * window * (1.0 - smoothstep(0.8 * tint.a, tint.a, camera_distance));
+		} else if (dist >= 1e-6) {
+			direct += tint.rgb * omni_attenuation(dist, place.w, 1.0) * max(dot(local_normal, relative / dist), 0.0);
+		}
 	}
 
 	vec3 irradiance = relight_ambient.rgb * ao + direct * confidence;
@@ -362,7 +384,11 @@ void vertex() {
 					// Applied here, in the sRGB space the SH colours live in and
 					// BEFORE fragment()'s srgb_to_linear, so both backends modulate in
 					// the same space and stay comparable on the A/B harness.
-					base_color *= relight_factor(sidx, world_pos.xyz, object_linear);
+					vec3 own_glow;
+					float paint_level = max(base_color.r, max(base_color.g, base_color.b));
+					base_color *= relight_factor(sidx, world_pos.xyz, object_linear, splat_pos, length(world_pos.xyz - CAMERA_POSITION_WORLD), own_glow);
+					// [space-combat-sim patch] A glow is light seen through glass, so it shows on dark paint only.
+					base_color += own_glow * (1.0 - smoothstep(0.1, 0.25, paint_level));
 				}
 				v_color = vec4(base_color, eff_opacity);
 				} // sub-pixel discard guard

@@ -77,6 +77,10 @@ var speed_pos: Vector2 = Vector2.ZERO
 var hull_rect: Rect2 = Rect2()
 var fuel_rect: Rect2 = Rect2()
 var charge_rect: Rect2 = Rect2()
+## The running-lights indicator (M3-T27): its text and its left end, above the charge bar's caption; `running_lights_dark` when off.
+var running_lights_text: String = ""
+var running_lights_pos: Vector2 = Vector2.ZERO
+var running_lights_dark: bool = false
 
 ## The targeting grid (cockpit view, or by setting): a square low and centred, a circular reticle, and the target's offset
 ## from the nose as a marker (clamped to the grid; `grid_marker_inside` is false when the target is beyond its edge).

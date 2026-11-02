@@ -17,6 +17,10 @@ extends RefCounted
 ## behind), with `radius_m` (default 1500). `patrol` (M3-T10) is `{"waypoints": [[x, y, z], ...], "cruise_mps": 80}`
 ## relative to the anchor, looped, and yields to any attack the orders allow.
 ##
+## Any behaviour may carry `"running_lights": "on" | "off"` (M3-T27, Q27): whether the ship starts lit, or dark until it attacks. By
+## default a ship on patrol hides (`patrol`, `aggro`, and `ai` with a `patrol` route); every other starts lit. Pure data, so a scenario
+## can change one with no code.
+##
 ## Returns `{"ok": bool, "error": String, "brain": PilotBrain}`; the error names the offending key
 ## (`behaviour.waypoints[1]: ...`) so a scenario loader can report it with its own prefix.
 
@@ -27,6 +31,24 @@ const DEFAULT_AGGRO_RANGE_M: float = 1500.0
 
 
 static func from_behaviour(data: Variant, anchor: UniversePos, seed_value: int, tactics: RaiderTactics = null) -> Dictionary:
+	var made: Dictionary = _build(data, anchor, seed_value, tactics)
+	if not bool(made["ok"]):
+		return made
+	var spec: Dictionary = data
+	var lights: Variant = spec.get("running_lights", "off" if _hides_by_default(spec) else "on")
+	if lights != "on" and lights != "off":
+		return _fail("behaviour.running_lights must be on or off, got %s" % JSON.stringify(lights))
+	(made["brain"] as PilotBrain).flies_dark = lights == "off"
+	return made
+
+
+# A ship going about a patrol hides.
+static func _hides_by_default(spec: Dictionary) -> bool:
+	var type: String = str(spec.get("type", ""))
+	return type == "patrol" or type == "aggro" or (type == "ai" and spec.has("patrol"))
+
+
+static func _build(data: Variant, anchor: UniversePos, seed_value: int, tactics: RaiderTactics) -> Dictionary:
 	if not (data is Dictionary):
 		return _fail("behaviour must be an object")
 	var spec: Dictionary = data

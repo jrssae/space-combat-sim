@@ -921,6 +921,56 @@ class StarfuryAuroraTests(unittest.TestCase):
             )
 
 
+class StarfuryNavLightTests(unittest.TestCase):
+    """Running lights (M3-T27, Q27): read from a generated ``hardpoints.json``, never from typed-in positions."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory()
+        out = Path(cls._tmp.name) / "a"
+        ship.build(BuildContext(out, seed=42, options={"hero": False}))
+        cls.hp = json.loads((out / ship.HARDPOINTS_NAME).read_text(encoding="utf-8"))
+        cls.nav = cls.hp["nav_lights"]
+        cls.pods = {pod["name"]: pod for pod in cls.hp["pods"]}
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
+
+    def test_port_is_the_ships_left_and_starboard_its_right(self) -> None:
+        # -X is the ship's left (DamageZones: +X right, +Y up, -Z forward). Pod sides are the generator's own labels.
+        self.assertEqual(self.pods["ul"]["side"], "left")
+        self.assertEqual(self.pods["ur"]["side"], "right")
+        self.assertLess(self.nav["port"][0], -4.0, "port is on the left upper pod")
+        self.assertGreater(self.nav["starboard"][0], 4.0, "starboard on the right one")
+        self.assertEqual(self.nav["port"], [-self.nav["starboard"][0], *self.nav["starboard"][1:]], "a mirrored pair")
+
+    def test_the_side_lights_sit_on_the_upper_arms_clear_of_the_hull(self) -> None:
+        for key, pod in (("port", "ul"), ("starboard", "ur")):
+            centre = self.pods[pod]["center"]
+            self.assertGreater(self.nav[key][1], centre[1], f"{key}: above the upper pod, where a claw cannot hide it")
+            self.assertLess(abs(self.nav[key][0] - centre[0]), 1.0, f"{key}: on the pod, not floating off it")
+            self.assertLess(self.nav[key][1] - centre[1], 2.0, f"{key}: on the pod, not floating over it")
+
+    def test_the_top_light_is_behind_the_canopy_on_the_centre_line(self) -> None:
+        top, eye = self.nav["top"], self.hp["cockpit_camera"]["position"]
+        self.assertEqual(top[0], 0.0)
+        self.assertGreater(top[1], eye[1], "above the pilot")
+        self.assertGreater(top[2], eye[2], "behind the pilot: +Z is aft")
+        self.assertGreater(top[1], 1.4, "clear of the struts' root, the highest hull on the centre line")
+
+    def test_the_top_lamp_stands_over_the_cabin_top_and_reaches_it(self) -> None:
+        lamp, top = self.nav["top_lamp"], self.nav["top"]
+        self.assertEqual(lamp[0], 0.0)
+        self.assertGreater(lamp[1], top[1], "it shines down on the section")
+        self.assertGreater(self.nav["top_lamp_range_m"], lamp[1] - top[1], "the section is within its range")
+
+    def test_the_cabin_glow_is_in_the_cockpit(self) -> None:
+        cabin, eye = self.nav["cabin"], self.hp["cockpit_camera"]["position"]
+        self.assertEqual(cabin, eye)
+        self.assertLess(self.nav["cabin_range_m"], 3.0, "it stays in the cabin section: the arms are outside it")
+
+
 class StarfuryHeroTests(unittest.TestCase):
     """M3-T24 (AC33): the hero level, a separate manifest entry that leaves LOD0-LOD3 and every chunk untouched."""
 

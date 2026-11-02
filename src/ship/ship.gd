@@ -20,7 +20,7 @@ extends RigidBody3D
 ## no splat backend, or forced), `HullDepthProxy` (the fallback mesh inset by a few centimetres, opaque black, shown
 ## exactly when the splats are: it writes the depth splats do not, so effects behind the hull are hidden, §7.2), `CockpitInterior`
 ## (first person only), `Thrusters` and `Guns` (attach points for M1-T13; `Guns` holds one Marker3D per muzzle),
-## `Targeting` (`TargetingController`), `CockpitAnchor` (Marker3D at the hardpoints' `cockpit_camera`).
+## `Targeting` (`TargetingController`), `CockpitAnchor` (Marker3D at the hardpoints' `cockpit_camera`), `RunningLights` (M3-T27).
 ##
 ## Reaction mass (M2-T14): every tick the flow the model reports is drawn from a `FuelTank` (sized by
 ## `ShipSpec.fuel_capacity_kg`, never drawn down while `settings.fuel_unlimited` is on), and when the tank is empty the
@@ -37,6 +37,8 @@ extends RigidBody3D
 
 ## Assist was switched on or off (by `set_assist`, the console, or a `toggle_assist` edge).
 signal assist_toggled(on: bool)
+## The running lights went on or off (M3-T27).
+signal running_lights_changed(on: bool)
 
 const SCENE_PATH: String = "res://src/ship/ship.tscn"
 const ASSET_ROOT: String = ShipSpec.ASSET_ROOT
@@ -68,6 +70,11 @@ var force_assist: bool = false:
 		force_assist = value
 		if value:
 			set_assist(true)
+
+## Running lights (M3-T27, architecture §7.3): the three markers and the top lamp, on at spawn. The cabin glow stays on either way.
+## Visual only: radar and AI contact lists never read it.
+var running_lights: bool = true:
+	set = set_running_lights
 
 var _assist_on: bool = true
 var _hardpoints: Hardpoints = Hardpoints.new()
@@ -261,6 +268,17 @@ func reset_to(xform: Transform3D) -> void:
 	reset_physics_interpolation()
 
 
+## Switches the running lights.
+func set_running_lights(on: bool) -> void:
+	if on == running_lights:
+		return
+	running_lights = on
+	var lights := get_node_or_null(^"RunningLights") as RunningLights
+	if lights != null:
+		lights.apply()
+	running_lights_changed.emit(on)
+
+
 # --- state -------------------------------------------------------------------------------------------------------
 
 
@@ -398,6 +416,11 @@ func lod_splat_counts() -> PackedInt32Array:
 	return out
 
 
+## The splat node of every level of detail: each carries the same own lights (M3-T27).
+func splat_nodes() -> Array[GaussianSplatNode]:
+	return _lod_nodes
+
+
 ## The radius of a sphere that holds the hull, m (its hit volumes' bound, 10 m before the hull is built).
 func bounding_radius() -> float:
 	var damageable: Damageable = Damageable.of(self)
@@ -458,6 +481,7 @@ func _build() -> void:
 		_build_collision()
 		_build_muzzles()
 	_load_visuals()
+	_build_running_lights()
 	_output = _idle_output()
 
 
@@ -490,6 +514,16 @@ func _build_muzzles() -> void:
 		marker.transform = entry["transform"]
 		guns.add_child(marker)
 		_muzzles.append(marker)
+
+
+# One node with three markers per ship, built once: a rebuild only places them again.
+func _build_running_lights() -> void:
+	var lights := get_node_or_null(^"RunningLights") as RunningLights
+	if lights == null:
+		lights = RunningLights.new()
+		lights.name = "RunningLights"
+		add_child(lights)
+	lights.setup(self)
 
 
 func _load_visuals() -> void:
@@ -576,9 +610,9 @@ func _apply_hull_sync_setting() -> void:
 		hull_splats.reset_physics_interpolation()
 
 
-# A soft lamp just behind and above the pilot's eyes. Its range stops short of the wings, so it lights only the cockpit frame.
+# A soft red lamp just behind and above the pilot's eyes. Its range stops short of the wings, so it lights only the cockpit frame.
 func _build_cabin_emitter() -> void:
-	_cabin_emitter = LightEmitter.new("cabin", LightEmitter.PRIORITY_CABIN, Color(0.85, 0.92, 1.0),
+	_cabin_emitter = LightEmitter.new("cabin", LightEmitter.PRIORITY_CABIN, NavLights.CABIN_LAMP_COLOR,
 			float(Settings.get_value(&"cockpit_light_energy")), 4.5, 0.8)
 	_cabin_emitter.anchor = self
 	_place_cabin_emitter()
@@ -727,6 +761,8 @@ func _environment_accel() -> Vector3:
 func _register_console() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"assist", "Toggle or set flight assist",
 			[ConsoleArg.bool_optional(&"state")]), _cmd_assist, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"running_lights", "Toggle or set the running lights (the wing follows)",
+			[ConsoleArg.bool_optional(&"state")]), _cmd_running_lights, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"refuel", "Refill the reaction-mass tank, or add kg",
 			[ConsoleArg.float_optional(&"kg", null, 0.0)]), _cmd_refuel, self)
 	DebugConsole.registry.register_provider(&"ship", ConsoleVars.new({
@@ -742,6 +778,8 @@ func _register_console() -> void:
 		&"angular_rate_dps": {"get": _angular_rate_dps, "unit": "deg/s",
 				"doc": "Angular rate in body axes (+x pitch up, +y yaw left, +z roll left)"},
 		&"assist_on": {"get": get_assist, "set": set_assist, "type": TYPE_BOOL, "doc": "Flight assist"},
+		&"running_lights": {"get": func() -> bool: return running_lights, "set": set_running_lights, "type": TYPE_BOOL,
+				"doc": "Port, starboard and top lights (the cabin glow stays on)"},
 		&"trim": {"get": func() -> float: return _output.trim,
 				"doc": "0..1: how far the flight computer cut the trimmed pod side (POD TRIM)"},
 		&"pod_yaw": {"get": _pod_yaw_dps, "unit": "deg/s",
@@ -762,6 +800,10 @@ func _register_console() -> void:
 
 func _cmd_assist(args: Dictionary) -> ConsoleResult:
 	return DebugConsole.registry.toggle("ship.assist_on", args[&"state"])
+
+
+func _cmd_running_lights(args: Dictionary) -> ConsoleResult:
+	return DebugConsole.registry.toggle("ship.running_lights", args[&"state"])
 
 
 func _cmd_refuel(args: Dictionary) -> String:

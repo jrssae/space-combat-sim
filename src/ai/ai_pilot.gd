@@ -137,6 +137,11 @@ func reads_target() -> bool:
 	return false
 
 
+## Attacking or ramming counts; flying a patrol or a formation, or dodging, does not.
+func is_attacking() -> bool:
+	return current != null and (current.id == &"attack" or current.id == &"ram")
+
+
 ## Scores the behaviours and hands control over by the rule above. Returns the behaviour in control.
 func select(dt: float) -> AiBehaviour:
 	dwell_s += dt

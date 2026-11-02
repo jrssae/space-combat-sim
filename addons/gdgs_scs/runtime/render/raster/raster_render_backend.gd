@@ -145,6 +145,7 @@ func _drive_lighting(entry: Entry, rig: RefCounted, rig_changed: bool) -> void:
 		float(node.get("relight_light_gain")),
 		node.get("relight_ambient"),
 		bool(node.get("relight_dc_only")),
+		node.call("get_own_lights"),  # [space-combat-sim patch]
 	]
 	if knobs != entry.applied_knobs:
 		entry.applied_knobs = knobs
@@ -153,10 +154,26 @@ func _drive_lighting(entry: Entry, rig: RefCounted, rig_changed: bool) -> void:
 		entry.material.set_shader_parameter("relight_light_gain", knobs[2])
 		entry.material.set_shader_parameter("relight_ambient", knobs[3])
 		entry.material.set_shader_parameter("relight_dc_only", knobs[4])
+		_apply_own_lights(entry.material, knobs[5])  # [space-combat-sim patch]
 
 	if rig != null and enabled and (rig_changed or entry.applied_rig_version != rig.version):
 		entry.applied_rig_version = rig.version
 		rig.apply(entry.material)
+
+## [space-combat-sim patch] Hands the node's own lights to its material: positions and tints in two uniform arrays.
+func _apply_own_lights(material: ShaderMaterial, lights: PackedFloat32Array) -> void:
+	var places := PackedVector4Array()
+	var tints := PackedVector4Array()
+	places.resize(GaussianOwnLights.MAX_OWN_LIGHTS)
+	tints.resize(GaussianOwnLights.MAX_OWN_LIGHTS)
+	var count: int = lights.size() / GaussianOwnLights.FLOATS_PER_LIGHT
+	for i: int in count:
+		var at: int = i * GaussianOwnLights.FLOATS_PER_LIGHT
+		places[i] = Vector4(lights[at], lights[at + 1], lights[at + 2], lights[at + 3])
+		tints[i] = Vector4(lights[at + 4], lights[at + 5], lights[at + 6], lights[at + 7])
+	material.set_shader_parameter("own_light_count", count)
+	material.set_shader_parameter("own_light_places", places)
+	material.set_shader_parameter("own_light_tints", tints)
 
 ## Builds (or drops) the per-splat lighting texture for the node's currently
 ## assigned bake. A resource whose splat count disagrees with the Gaussian is a

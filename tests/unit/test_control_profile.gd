@@ -405,7 +405,10 @@ func test_m1_classic_keeps_the_m1_pad_layout() -> void:
 	assert_string_contains(classic.description, "right stick X yaws")
 	# Since M3-T15 the default yaws on the stick too; m1_classic differs in rolling on the D-pad, targeting with D-pad Up
 	# and toggling assist with B.
-	var own: Array[StringName] = [&"roll_left", &"roll_right", &"target_next", &"toggle_flight_assist", &"target_cycle"]
+	# It has no button left for the running lights (M3-T27): those are key 5 alone.
+	var own: Array[StringName] = [&"roll_left", &"roll_right", &"target_next", &"toggle_flight_assist", &"target_cycle",
+			&"toggle_running_lights"]
+	assert_eq(classic.descriptors_for(&"toggle_running_lights"), PackedStringArray(["key:5"]))
 	for action: StringName in InputAdapter.ACTIONS:
 		if own.has(action):
 			continue

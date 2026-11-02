@@ -256,6 +256,7 @@ func respawn() -> void:
 	ship.visible = true
 	ship.reset_to(Transform3D(_spawn_basis, world.universe_to_local(_spawn_position)))
 	combatant.damageable.restore()
+	ship.running_lights = true  # lit at spawn; the wing follows
 	for buoy: NavBuoy in buoys:
 		buoy.restore()
 	_spawn_scenario_ships()  # the lesson starts over with the player
@@ -301,6 +302,7 @@ func _build_hud_input() -> HudInput:
 	input.has_reference = true
 	input.reference_position = world.universe_to_local(reference_point())  # with this frame's origin: it follows every rebase
 	input.tracking = ship.get_flight_output().tracking
+	input.running_lights = ship.running_lights
 	var muzzles: Array[Node3D] = ship.get_muzzles()
 	var mean := Vector3.ZERO
 	for muzzle: Node3D in muzzles:
@@ -470,6 +472,8 @@ func _handle_ui(ui: UiCommand) -> void:
 		Settings.set_value(&"show_overlay", not bool(Settings.get_value(&"show_overlay")))
 	if ui.toggle_fallback_mesh:
 		splat_status.toggle_fallback()
+	if ui.toggle_running_lights and player_alive:
+		ship.running_lights = not ship.running_lights
 	if ui.screenshot:
 		var result: ConsoleResult = DebugConsole.registry.execute_tokens(PackedStringArray(["screenshot"]))
 		print("[screenshot] ", result.lines[0] if result.ok and not result.lines.is_empty() else result.error)

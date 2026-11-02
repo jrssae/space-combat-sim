@@ -4,7 +4,7 @@ extends GutTest
 ## backend, so the tests drive the registry directly with real nodes in the tree.
 
 const BYTES_PER_MATRIX: int = 64
-const BYTES_PER_RELIGHT: int = 32
+const BYTES_PER_RELIGHT: int = 96
 
 var registry: GaussianSceneRegistry = null
 var holder: Node3D = null
@@ -207,9 +207,35 @@ func test_a_changed_relight_knob_patches_its_own_entry() -> void:
 	b.relight_unlit_level = 0.75
 	assert_true(registry.mark_relight_dirty(b), "the renderer needs a new upload")
 	var after: PackedFloat32Array = registry.get_instance_relight_byte().to_float32_array()
-	assert_almost_eq(after[8], 0.75, 0.001, "the second instance's unlit level")
-	assert_eq(after.slice(0, 8), before.to_float32_array().slice(0, 8), "the first is untouched")
+	var stride: int = GaussianSceneRegistry.RELIGHT_FLOATS_PER_INSTANCE
+	assert_almost_eq(after[stride], 0.75, 0.001, "the second instance's unlit level")
+	assert_eq(after.slice(0, stride), before.to_float32_array().slice(0, stride), "the first is untouched")
 	assert_false(registry.mark_relight_dirty(b), "no change: no upload")
+
+
+func test_a_nodes_own_lights_ride_in_its_record_and_patch_only_it() -> void:
+	# M3-T27: the second vec4's w counts them and the lights follow; instances without any have a count of 0 and skip the loop.
+	var a: GaussianSplatNode = _node(_resource(4))
+	var b: GaussianSplatNode = _node(_resource(8))
+	var lamp: PackedFloat32Array = GaussianOwnLights.surface(Vector3(1.0, -2.0, 3.0), Color.WHITE, 2.0, 4.0)
+	b.set_own_lights(lamp)
+	registry.register_splat_node(a)
+	registry.register_splat_node(b)
+	registry.flush_scene()
+	var stride: int = GaussianSceneRegistry.RELIGHT_FLOATS_PER_INSTANCE
+	var floats: PackedFloat32Array = registry.get_instance_relight_byte().to_float32_array()
+	assert_eq(floats.size(), 2 * stride)
+	assert_eq(floats[GaussianSceneRegistry.RELIGHT_KNOB_FLOATS - 1], 0.0, "no own lights on the first")
+	assert_eq(floats[stride + GaussianSceneRegistry.RELIGHT_KNOB_FLOATS - 1], 1.0, "one on the second")
+	assert_eq(Array(floats.slice(stride + GaussianSceneRegistry.RELIGHT_KNOB_FLOATS, stride + GaussianSceneRegistry.RELIGHT_KNOB_FLOATS + 8)), Array(lamp))
+	var merges: int = registry.get_merge_count()
+	b.set_own_lights(lamp + lamp)
+	assert_true(registry.mark_relight_dirty(b), "a change asks for an upload")
+	var after: PackedFloat32Array = registry.get_instance_relight_byte().to_float32_array()
+	assert_eq(after[stride + GaussianSceneRegistry.RELIGHT_KNOB_FLOATS - 1], 2.0)
+	assert_eq(after.slice(0, stride), floats.slice(0, stride), "the first is untouched")
+	assert_eq(registry.get_merge_count(), merges, "no merge")
+	assert_true(registry.flush_scene().is_empty(), "and nothing else waits")
 
 
 func test_the_light_rig_still_reports_changes() -> void:

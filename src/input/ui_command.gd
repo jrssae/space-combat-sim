@@ -13,6 +13,8 @@ var wing_attack: bool = false
 var wing_form: bool = false
 var wing_engage: bool = false
 var wing_cover: bool = false
+## D-pad Left, key 5 (M3-T27): the player's running lights on or off.
+var toggle_running_lights: bool = false
 ## Free look (L3 held on a pad, the middle mouse button held): the camera turns, the ship does not. `look_stick` is the right
 ## stick as an absolute look direction (x right, y up, -1..1); `look_mouse_px` is the mouse travel this tick in pixels
 ## (x right, y up).
@@ -26,5 +28,6 @@ func to_dict() -> Dictionary:
 		"toggle_camera": toggle_camera, "reset": reset, "pause": pause,
 		"toggle_overlay": toggle_overlay, "toggle_fallback_mesh": toggle_fallback_mesh, "screenshot": screenshot,
 		"wing_attack": wing_attack, "wing_form": wing_form, "wing_engage": wing_engage, "wing_cover": wing_cover,
+		"toggle_running_lights": toggle_running_lights,
 		"look_active": look_active, "look_stick": look_stick, "look_mouse_px": look_mouse_px,
 	}

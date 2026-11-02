@@ -117,7 +117,11 @@ layout (std430, set = 0, binding = 10) restrict readonly buffer SplatLightingBuf
 	uint splat_lighting[];
 };
 
-// Two vec4 per instance: (unlit level, gain, DC-only, enabled), (ambient rgb, _).
+// Six vec4 per instance: (unlit level, gain, DC-only, enabled), (ambient rgb, own light count),
+// [space-combat-sim patch] then the instance's own lights, two vec4 each, in its own frame:
+//   position, 1/range
+//   colour * energy, view range (0: a surface light; above 0: a glow, gone that far from the camera)
+#define RELIGHT_VEC4_PER_INSTANCE 6u
 layout (std430, set = 0, binding = 11) restrict readonly buffer InstanceRelightBuffer {
 	vec4 instance_relight[];
 };
@@ -198,17 +202,24 @@ float omni_attenuation(in float dist, in float inv_range, in float decay) {
 /** Per-splat lighting multiplier. Parity with relight_factor() in the raster
     shader; `confidence` gates only the directional response so floaters and
     interior splats fade to flat ambient instead of picking up a bogus
-    terminator. */
+    terminator.
+    [space-combat-sim patch] Also the instance's own lights, in its own frame with the splat's own position and normal, so an instance
+    pays for no matrix and one without any skips the loop. `own_glow` is what they add to the colour after the multiply. Parity with
+    GaussianOwnLights.evaluate. */
 vec3 relight_factor(
 	in uint splat_index,
 	in vec3 world_position,
 	in mat3 object_linear,
 	in float unlit_level,
 	in float gain,
-	in vec3 ambient
+	in vec3 ambient,
+	in vec3 local_position,
+	in uint instance_id,
+	out vec3 own_glow
 ) {
 	vec4 record = unpack_lighting(splat_lighting[splat_index]);
-	vec3 world_normal = object_linear * oct_decode(record.rg * 2.0 - 1.0);
+	vec3 local_normal = oct_decode(record.rg * 2.0 - 1.0);
+	vec3 world_normal = object_linear * local_normal;
 	float normal_length = length(world_normal);
 	world_normal = normal_length > 0.0 ? world_normal / normal_length : vec3(0.0, 0.0, 1.0);
 	float ao = record.b;
@@ -236,6 +247,23 @@ vec3 relight_factor(
 			}
 		}
 		direct += tint.rgb * attenuation * max(dot(world_normal, to_light), 0.0);
+	}
+
+	own_glow = vec3(0.0);
+	uint own_base = instance_id * RELIGHT_VEC4_PER_INSTANCE + 2u;
+	int own_count = int(instance_relight[own_base - 1u].a + 0.5);
+	for (int i = 0; i < own_count; i++) {
+		vec4 place = instance_relight[own_base + uint(i) * 2u];
+		vec4 tint = instance_relight[own_base + uint(i) * 2u + 1u];
+		vec3 relative = place.xyz - local_position;
+		float dist = length(relative);
+		if (tint.a > 0.0) {
+			float window = dist * place.w;
+			window = max(1.0 - window * window, 0.0);
+			own_glow += tint.rgb * window * window * (1.0 - smoothstep(0.8 * tint.a, tint.a, distance(world_position, camera_pos)));
+		} else if (dist >= 1e-6) {
+			direct += tint.rgb * omni_attenuation(dist, place.w, 1.0) * max(dot(local_normal, relative / dist), 0.0);
+		}
 	}
 
 	vec3 irradiance = ambient * ao + direct * confidence;
@@ -348,7 +376,7 @@ void main() {
 	vec3 view_dir = normalize(world_pos.xyz - camera_pos);
 
 	vec3 base_color = get_color(view_dir, splat.sh_coefficients);
-	vec4 relight = instance_relight[instance_id * 2u];
+	vec4 relight = instance_relight[instance_id * RELIGHT_VEC4_PER_INSTANCE];
 	if (relight.w > 0.5) {
 		if (relight.z > 0.5) {
 			// DC-only: baked view-dependent specular fights new lighting.
@@ -356,10 +384,15 @@ void main() {
 				splat.sh_coefficients[0], splat.sh_coefficients[1], splat.sh_coefficients[2]
 			) * SH_C0);
 		}
+		vec3 own_glow;
+		float paint_level = max(base_color.r, max(base_color.g, base_color.b));
 		base_color *= relight_factor(
 			unique_splat_index, world_pos.xyz, object_linear,
-			relight.x, relight.y, instance_relight[instance_id * 2u + 1u].rgb
+			relight.x, relight.y, instance_relight[instance_id * RELIGHT_VEC4_PER_INSTANCE + 1u].rgb,
+			splat.position, instance_id, own_glow
 		);
+		// [space-combat-sim patch] A glow is light seen through glass, so it shows on dark paint only.
+		base_color += own_glow * (1.0 - smoothstep(0.1, 0.25, paint_level));
 	}
 
 	RasterizeData data;

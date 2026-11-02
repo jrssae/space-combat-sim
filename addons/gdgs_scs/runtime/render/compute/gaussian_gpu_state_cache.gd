@@ -13,7 +13,7 @@ const FLOATS_PER_SPLAT := 60
 const BYTES_PER_FLOAT := 4
 # Relighting. Must match gsplat_projection.glsl and gaussian_light_rig.gd.
 const LIGHTING_BYTES_PER_SPLAT := 4
-const RELIGHT_FLOATS_PER_INSTANCE := 8
+const RELIGHT_FLOATS_PER_INSTANCE := GaussianSceneRegistry.RELIGHT_FLOATS_PER_INSTANCE  # [space-combat-sim patch]
 const MAX_LIGHTS := 8
 const LIGHT_RIG_FLOATS := MAX_LIGHTS * 16
 
