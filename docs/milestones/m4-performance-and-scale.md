@@ -148,7 +148,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 
 ### M4-T02 to M4-T05 Cycles 1-4
 
-Each cycle is one task on its own branch (`m4-tNN`), merged into `m4` with a green suite before the next starts:
+Each cycle is one task, committed directly on `m4` (no task branches, maintainer 2026-11-02), with a green suite and a push before the next starts:
 
 1. **Measure.** Run the sweep on the branch's base. Profile the worst layout at the largest passing N and at the first failing
    one: which stage grows, and how fast with N.

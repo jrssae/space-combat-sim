@@ -9,10 +9,10 @@ its Cycle log holds the full numbers. This file is the short version plus the de
 | Item | State |
 |---|---|
 | `main` | M3 merged (`b2f8ce1`). |
-| `m4` | `14acadd`, pushed, CI green. Holds T01 and the quick check. |
+| `m4` | Holds T01, the quick check and T02's three commits (`0438c56`, `2e83ca3`, `63cc752`). Every task is committed directly on `m4`. |
 | T01 benchmark harness, budget and baseline | Done and merged. Reviewed twice, full suite green (GUT 2178 of 2180 passing, 2 pending AC12 balance tests; Python 363 OK). |
-| T02 cycle 1 | Built and measured, **not reviewed or merged**. Branch `t3/m4-t02-profile-and-optimize-cycle-1` (`15b59b6`, `7cc168e`, `29e8f35`, base `14acadd`), worktree `/home/josef/.t3/worktrees/Space Combat Sim/t3-8db0efa6`. Report: `.superpowers/sdd/m4-performance-and-scale/task-2-report.md`. The full suite was **not run**: the maintainer stopped it partway through GUT. The new tests (9/9) and 25 targeting scripts (307/307) pass. |
-| T03 to T05 cycles 2 to 4, T06 report | Not started. **On hold**: the maintainer asked to stop after T02's agent finishes and to see the options in section 7 first. |
+| T02 cycle 1 | Built and measured, **not reviewed or merged**. Its commits were made on a worktree branch, then moved onto `m4` (`0438c56`, `2e83ca3`, `63cc752`); the branch and worktree are gone. Report: `.superpowers/sdd/m4-performance-and-scale/task-2-report.md`. The full suite was **not run**: the maintainer stopped it partway through GUT. The new tests (9/9) and 25 targeting scripts (307/307) pass. |
+| T03 to T05 cycles 2 to 4, T06 report | Not started. The hold is lifted (section 2, the order to run the recommendations). |
 
 ## 2. Decisions and standing orders
 
@@ -26,9 +26,13 @@ its Cycle log holds the full numbers. This file is the short version plus the de
   cost. The language and the scope of a native port are still to agree (section 7, option 6).
 - **Ship counts in the setting** (in the milestone's goal): a full Starfury squadron is 12, patrols are 6 or 4, scouts fly
   alone or in twos and threes, Babylon 5 has three full squadrons plus the station's defences.
-- **Controller rulings recorded in the ledger:** tasks run in worktrees on temporary branches and the controller merges them
-  into `m4` (CLAUDE.md forbids agent-made branches, so the milestone's `m4-tNN` branches are not used). `spread` uses groups
-  of 12 (6 against 6), `transit` uses wings of four.
+- **2026-11-02, run the recommendations:** "begin executing the top 3 recommendations. follow the test cycle approach using
+  the shorter performance test." So: finish T02, then cycles 2 to 4 (option 1; options 3 and 4; option 2), with option 11
+  measured once in cycle 2. Cycles measure with `scripts/bench_quick.sh`, not the full sweep.
+- **2026-11-02, think rate (option 3):** AI ships within about 2 km of the player think every tick; farther ones think at
+  20 Hz on staggered ticks and hold their last command between. A behaviour change, listed in the T06 report.
+- **2026-11-02, branches:** all work is committed directly on `m4`, never on a task or worktree branch (CLAUDE.md). The
+  milestone's `m4-tNN` branches are not used. `spread` uses groups of 12 (6 against 6), `transit` uses wings of four.
 - **Working rules that carry over:** one task at a time, finished and merged before the next. Push `m4` after each merged
   task with a green suite. Keep the milestone's Status column current. Read the suite's own totals (Passing, Failing,
   Pending), never a wrapper's exit code: a red push on 2026-11-01 came from trusting the wrapper.
@@ -158,7 +162,7 @@ My recommendation:
 
 ## 8. Open items
 
-- **T02:** full suite, review, merge and push are waiting for the maintainer's go. To pass 50 ships the furball needs
+- **T02:** full suite, review and push are under way on `m4`. To pass 50 ships the furball needs
   about 5 ms off its 13 ms median, more than option 1 or 2 gives alone.
 - **M3 carry-overs** (also at the end of the M4 doc): AC12 balance (dogfight unfinished on all five seeds; sandbox idle clears
   only wave 1); AC13's resolver worst tick (recorded, not asserted); the join warning from the wave loop; the CI GUT timeout
@@ -166,16 +170,13 @@ My recommendation:
   with vsync on.
 - **Maintainer's (H) checks** in `docs/playtest.md`: AC14 to AC19, AC22, AC27, AC35, AC39, AC41.
 - **AC6:** the GPU check at the headline max N (FPS, frame time, VRAM) comes with T06's report.
-- **Cleanup:** T01's worktree (`/var/home/josef/.t3/worktrees/Space Combat Sim/t3-c27ca68f`, branch
-  `t3/m4-t01-benchmark-harness-baseline`) is merged and can go.
 
 ## 9. Picking it up
 
 - Read `CLAUDE.md`, then the M4 milestone, then this file.
 - The SDD ledger is `.superpowers/sdd/m4-performance-and-scale/progress.md`. Briefs, reports, reviewer and re-reviewer
   instructions and review diffs sit beside it (`task-N-brief.md`, `task-N-report.md`, `rules.md`).
-- Agents work in worktrees from `m4` with `GODOT_BIN` set to the main checkout's `.tools/godot/godot` and their own
-  `XDG_DATA_HOME`. Real-renderer runs take `flock /tmp/scs-gpu.lock`; the full suite needs no lock and takes about 25
+- Agents work in the main checkout on `m4`, one at a time, with their own `XDG_DATA_HOME`. Real-renderer runs take `flock /tmp/scs-gpu.lock`; the full suite needs no lock and takes about 25
   minutes.
 - If AC13's paired test or AC21's rebase cost fails in a loaded suite, rerun that file alone once; a second failure is real.
-- `scripts/bench_quick.sh` for iterating, `scripts/bench.sh` for the numbers in the Cycle log.
+- `scripts/bench_quick.sh` for iterating and, from cycle 2, for the Cycle log's numbers; `scripts/bench.sh` for a full sweep.
