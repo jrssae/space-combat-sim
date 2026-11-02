@@ -327,8 +327,8 @@ func _sync_scene_resources(force_rebuild: bool) -> Dictionary:
 	)
 
 func _sync_node_transform(node: Node) -> Dictionary:
-	# [space-combat-sim patch] This ran for each moved node and rebuilt every instance's bytes, O(n^2) per frame. Now it patches
-	# the one entry. A waiting merge reads every pose anyway, and a hidden node writes nothing until it is shown.
+	# [space-combat-sim patch] Keeps one moved node cheap: patch its entry only. A waiting merge reads every pose anyway, and a hidden
+	# node writes nothing until it is shown.
 	if _scene_dirty or node == null or not is_instance_valid(node):
 		return {}
 

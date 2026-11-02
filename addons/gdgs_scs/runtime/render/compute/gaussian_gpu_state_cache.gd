@@ -7,6 +7,8 @@ const RenderingDeviceContext := preload("res://addons/gdgs_scs/runtime/render/co
 const TILE_SIZE := 16
 const RADIX := 256
 const MAX_RENDER_STATES := 4
+# [space-combat-sim patch] A state holds a whole budget of sort memory, so a window size not drawn for this long gives it back.
+const UNUSED_STATE_FRAMES := 120
 const FLOATS_PER_SPLAT := 60
 const BYTES_PER_FLOAT := 4
 # Relighting. Must match gsplat_projection.glsl and gaussian_light_rig.gd.
@@ -25,6 +27,7 @@ const SHADER_PATH_RENDER := "res://addons/gdgs_scs/runtime/render/compute/shader
 class RenderState:
 	extends RefCounted
 
+	var last_used_frame := 0  # [space-combat-sim patch]
 	var texture_size := Vector2i.ONE
 	var tile_dims := Vector2i.ONE
 	var camera_projection: Projection
@@ -62,6 +65,10 @@ func get_splat_upload_count() -> int:
 func has_render_states() -> bool:
 	return not _render_states.is_empty()
 
+# [space-combat-sim patch] How many window sizes hold buffers now.
+func render_state_count() -> int:
+	return _render_states.size()
+
 func request_cleanup() -> void:
 	_pending_gpu_cleanup = true
 
@@ -69,14 +76,16 @@ func flush_pending_cleanup() -> void:
 	if _pending_gpu_cleanup:
 		cleanup_all()
 
-func get_or_create_render_state(texture_size: Vector2i):
+func get_or_create_render_state(texture_size: Vector2i, frame: int = Engine.get_frames_drawn()):
 	var state: RenderState = _render_states.get(texture_size, null)
 	if state == null:
 		state = RenderState.new()
 		state.texture_size = texture_size
 		state.tile_dims = (texture_size + Vector2i(TILE_SIZE - 1, TILE_SIZE - 1)) / TILE_SIZE
 		_render_states[texture_size] = state
+	state.last_used_frame = frame  # [space-combat-sim patch]
 	_touch_render_state(texture_size)
+	_evict_unused_render_states(frame)  # [space-combat-sim patch]
 	_enforce_render_state_cache_limit()
 	return state
 
@@ -288,6 +297,15 @@ func _touch_render_state(texture_size: Vector2i) -> void:
 	if existing_index != -1:
 		_render_state_lru.remove_at(existing_index)
 	_render_state_lru.push_back(texture_size)
+
+# [space-combat-sim patch] Frees the sort memory of window sizes no longer drawn, so a fullscreen toggle does not strand it.
+func _evict_unused_render_states(frame: int) -> void:
+	for size in _render_state_lru.duplicate():
+		var state = _render_states.get(size, null)
+		if state != null and frame - state.last_used_frame > UNUSED_STATE_FRAMES:
+			cleanup_state(state)
+			_render_states.erase(size)
+			_render_state_lru.erase(size)
 
 func _enforce_render_state_cache_limit() -> void:
 	while _render_state_lru.size() > MAX_RENDER_STATES:

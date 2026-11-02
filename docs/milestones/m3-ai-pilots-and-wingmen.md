@@ -1017,6 +1017,9 @@ Added 2026-10-28 for Q22; after T19.
   - For later: 100 ships still do not reach 60 fps, and the renderer is not why. `TargetingController` costs about 63 of the 87 ms per frame at 100
     ships (one per ship, each scanning every contact). The light rig's scene walk costs 3.3 ms every 30 frames at 100 ships.
 
+- Added at review (2026-11-01): the step-down runs on every backend, Raster included, since a fleet can pass the budget there too (70 raiders at LOD0 and 30 allies at LOD1 is about 3.6 M); AC29's "Raster unaffected" holds for the renderer. A window size not drawn for 120 frames frees its budget buffers. On the merged tree with T21, a live `relight_unlit_level` change reaches the GPU and returns (mean difference 30.2 then 0.07), and `state render` shows the visible total following `lod all 3` (351 084 to 53 836) with no rebuild.
+- 100 ships still miss 60 fps with the renderer no longer the cause: `TargetingController` takes about 63 of 87 ms per frame. Recorded for M4.
+
 ### M3-T21 Splat relighting: procgen normals, flat colours, `LightPicker`
 
 Added 2026-10-28 for Q23; after T19 (it writes records for every LOD). The biggest visual gain, with no new dependency.

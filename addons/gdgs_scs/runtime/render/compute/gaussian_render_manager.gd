@@ -51,9 +51,9 @@ func _enter_tree() -> void:
 	_instance = self
 
 ## Main-thread tick. render_for_compositor() runs on the rendering thread, where
-## walking the scene tree and reading node transforms would be unsafe, so every
-## piece of relight state is gathered here and parked in the registry as bytes
-## for the renderer to upload.
+## walking the scene tree and reading node transforms would be unsafe, so the light
+## rig is gathered here and parked in the registry as bytes for the renderer to
+## upload. Per-node relight knobs follow their setters instead.
 func _process(_delta: float) -> void:
 	var rig := _resolve_light_rig()
 	if rig == null:
