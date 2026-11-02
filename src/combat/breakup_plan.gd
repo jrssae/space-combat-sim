@@ -9,6 +9,8 @@ const STAGE_START_S: float = 0.2
 const STAGE_SPAN_S: float = 0.75
 const JITTER_S: float = 0.05
 ## Separation speed of a chunk (the old range) and of the one that leaves first.
+## How fast a chunk may tumble.
+const MAX_SPIN_DEG_S: float = 90.0
 const KICK_MPS: Vector2 = Vector2(4.0, 15.0)
 const FIRST_KICK_MPS: Vector2 = Vector2(11.0, 15.0)
 
@@ -60,6 +62,6 @@ static func make(p_count: int, first: int, seed_value: int) -> BreakupPlan:
 		plan.direction_hint[chunk] = hint.normalized() if hint.length_squared() > 1e-9 else Vector3.UP
 		var axis := Vector3(rng.randfn(), rng.randfn(), rng.randfn())
 		axis = axis.normalized() if axis.length_squared() > 1e-9 else Vector3.UP
-		plan.spin[chunk] = axis * deg_to_rad(rng.randf_range(0.0, DebrisPool.MAX_SPIN_DEG_S))
+		plan.spin[chunk] = axis * deg_to_rad(rng.randf_range(0.0, MAX_SPIN_DEG_S))
 		plan.vent_roll[chunk] = rng.randf()
 	return plan

@@ -189,6 +189,7 @@ func test_the_instructors_hull_type_breaks_up_the_same_way() -> void:
 	var wreck: StagedWreck = scenario.debris.last_wreck
 	assert_not_null(wreck)
 	assert_eq(wreck.plan.order[0], _chunk_index(&"arm_lr"))
+	assert_lt(scenario.director.last_blast_position.distance_to(xform * _joint_of(&"arm_lr")), 0.5, "the blast is at its joint")
 
 
 func test_a_console_kill_blasts_from_the_centre_with_a_seeded_order() -> void:
@@ -204,6 +205,21 @@ func test_a_console_kill_blasts_from_the_centre_with_a_seeded_order() -> void:
 
 
 # --- the staged part ---------------------------------------------------------------------------------------------
+
+
+func test_a_chunk_let_go_in_a_real_tick_does_not_pop_ahead_of_the_wreck() -> void:
+	var ally: Combatant = _spawn_ally()
+	ally.ship.linear_velocity = Vector3(0.0, 0.0, -80.0)
+	_kill_at(ally, PART_POINTS[&"arm_ur"])
+	var wreck: StagedWreck = main.debris.last_wreck
+	var next: int = wreck.plan.order[1]
+	var chunk: DebrisChunk = _node_of(StringName(chunk_entries[next]["name"]))
+	var ticks: int = 0
+	while chunk.is_held() and ticks < 120:
+		await get_tree().physics_frame
+		ticks += 1
+	assert_false(chunk.is_held(), "it was let go")
+	assert_lt(chunk.global_position.distance_to(wreck.chunk_transform(next).origin), 1e-3, "still exactly where the wreck has it")
 
 
 func test_the_others_come_away_one_at_a_time_inside_1_2_s_with_the_wrecks_motion_plus_a_kick() -> void:
@@ -224,7 +240,11 @@ func test_the_others_come_away_one_at_a_time_inside_1_2_s_with_the_wrecks_motion
 		main.debris.advance_wrecks(DT)
 		for i: int in held_before:
 			var chunk: DebrisChunk = _node_of(StringName(chunk_entries[i]["name"]))
-			if not chunk.is_held():
+			if chunk.is_held():
+				assert_false(chunk.has_vent(), "no venting while it is still part of the wreck")
+			else:
+				assert_true(chunk.has_vent(), "venting starts at release")
+				assert_almost_eq(chunk.age_s(), 0.0, 1e-6, "its life starts at release")
 				assert_false(released_at.has(i))
 				released_at[i] = tick
 				velocities[i] = chunk.velocity
@@ -340,8 +360,11 @@ func test_the_blasts_add_no_nodes_no_lights_and_do_not_reuse_particle_emitters()
 	var emitters: int = main.fx.get_child_count()
 	var reused: int = main.fx.reused
 	_kill_at(ally, PART_POINTS[&"arm_ur"])
+	var most_hit_bursts: int = 0
 	for i: int in 80:
 		_step()
+		most_hit_bursts = maxi(most_hit_bursts, main.fx.busy_count(FxSpecs.HIT))
+	assert_gt(most_hit_bursts, 0, "the smaller blasts did happen")
 	assert_eq(_splat_nodes(get_tree().root), splats, "AC32: no splat node enters or leaves")
 	assert_eq(_lights(get_tree().root), lights, "the smaller blasts add no Light3D")
 	assert_eq(main.fx.get_child_count(), emitters, "and no particle emitter")

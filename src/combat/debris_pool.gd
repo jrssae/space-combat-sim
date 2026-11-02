@@ -22,7 +22,7 @@ extends Node3D
 
 const SETS_PER_TYPE: int = 2
 const OUTWARD_SPEED_MPS: Vector2 = Vector2(4.0, 15.0)
-const MAX_SPIN_DEG_S: float = 90.0
+const MAX_SPIN_DEG_S: float = BreakupPlan.MAX_SPIN_DEG_S
 const SHARD_COUNT: int = 12
 const ASSET_ROOT: String = ShipSpec.ASSET_ROOT
 
@@ -149,7 +149,7 @@ func stage_wreck(asset_id: StringName, chunks: Array[Dictionary], xform: Transfo
 	last_wreck = wreck
 	_wrecks.append({"wreck": wreck, "chunks": nodes})
 	set_physics_process(true)
-	_release(wreck, nodes, wreck.advance(0.0))
+	_release(wreck, nodes, wreck.advance(0.0), false)
 	_drop_finished()
 	return wreck
 
@@ -163,7 +163,7 @@ func advance_wrecks(delta: float) -> void:
 		for i: int in nodes.size():
 			if not wreck.is_released(i) and is_instance_valid(nodes[i]):
 				nodes[i].place_held(wreck.chunk_transform(i), wreck.point_velocity(wreck.offset_of(i)))
-		_release(wreck, nodes, due)
+		_release(wreck, nodes, due, true)
 	_drop_finished()
 
 
@@ -220,13 +220,13 @@ func _physics_process(delta: float) -> void:
 
 
 # Sets `due` chunks flying at the wreck's motion plus their kick; each one after the first marks its joint with a small blast.
-func _release(wreck: StagedWreck, nodes: Array[DebrisChunk], due: PackedInt32Array) -> void:
+func _release(wreck: StagedWreck, nodes: Array[DebrisChunk], due: PackedInt32Array, in_tick: bool) -> void:
 	for i: int in due:
 		var chunk: DebrisChunk = nodes[i]
 		if not is_instance_valid(chunk):
 			continue
 		chunk.place_held(wreck.chunk_transform(i), wreck.point_velocity(wreck.offset_of(i)))
-		chunk.release(wreck.release_velocity(i), wreck.release_spin(i))
+		chunk.release(wreck.release_velocity(i), wreck.release_spin(i), in_tick)
 		if fx == null:
 			continue
 		chunk.vent(fx, FxSpecs.debris_duration_s(wreck.plan.vent_roll[i]))

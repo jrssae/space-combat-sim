@@ -36,6 +36,7 @@ var _vent_handle: int = 0
 var _orientation: Basis = Basis.IDENTITY  # orthonormal, kept apart from the scale so spinning cannot drift the size
 var _active: bool = false
 var _fallback: bool = false
+var _placed_this_tick: bool = false
 var _held: bool = false
 
 
@@ -116,6 +117,9 @@ func _exit_tree() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if _placed_this_tick:  # the pool already put it where the wreck is this tick; a step now would pop it ahead
+		_placed_this_tick = false
+		return
 	advance(delta)
 
 
@@ -164,8 +168,9 @@ func is_held() -> bool:
 
 
 ## Lets a held chunk go: it flies on at `p_velocity` and `p_angular_velocity` from where it is, its life starting now.
-func release(p_velocity: Vector3, p_angular_velocity: Vector3) -> void:
+func release(p_velocity: Vector3, p_angular_velocity: Vector3, placed_this_tick: bool = false) -> void:
 	_held = false
+	_placed_this_tick = placed_this_tick
 	velocity = p_velocity
 	angular_velocity = p_angular_velocity
 	_age_s = 0.0
