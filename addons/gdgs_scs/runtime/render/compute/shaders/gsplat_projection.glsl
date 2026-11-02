@@ -73,8 +73,10 @@ layout (std430, set = 0, binding = 5) restrict writeonly buffer GridDimensionsBu
 	uint grid_dims[];
 };
 
-layout (std430, set = 0, binding = 6) restrict readonly buffer SplatInstanceIdsBuffer {
-	uvec2 splat_instance_data[]; // x = unique instance id, y = which splat data to use
+// [space-combat-sim patch] One row per instance drawn this frame, sorted by first_visible: first visible splat, count, base of its
+// resource in the splat buffer, instance index. Replaces 8 B per resident splat.
+layout (std430, set = 0, binding = 6) restrict readonly buffer VisibleTableBuffer {
+	uvec4 visible_table[];
 };
 
 layout (std430, set = 0, binding = 7) restrict readonly buffer InstanceTransformsBuffer {
@@ -85,8 +87,12 @@ layout (std140, set = 0, binding = 8) restrict uniform Uniforms {
 	vec3 camera_pos;
 	float time;
 	ivec2 dims; // Texture size
-	int point_count;
+	int point_count; // [space-combat-sim patch] visible splats this frame
 	int light_count; // relighting; 0 disables the loop entirely
+	int table_rows; // [space-combat-sim patch] rows in visible_table
+	int _pad0;
+	int _pad1;
+	int _pad2;
 };
 
 // --- relighting (see CLAUDE.md, phase R4) ------------------------------------
@@ -265,6 +271,21 @@ uvec4 get_rect(in vec2 image_pos, in float radius, in uvec2 grid_size) {
 		clamp(ceil((image_pos + radius) / TILE_SIZE), vec2(0), grid_size));
 }
 
+// [space-combat-sim patch] The table row holding visible splat `id`: the last one that starts at or before it.
+uvec4 find_visible_row(in uint id) {
+	uint low = 0u;
+	uint high = uint(table_rows) - 1u;
+	while (low < high) {
+		uint middle = (low + high + 1u) / 2u;
+		if (visible_table[middle].x <= id) {
+			low = middle;
+		} else {
+			high = middle - 1u;
+		}
+	}
+	return visible_table[low];
+}
+
 void main() {
 	const int id = int(gl_GlobalInvocationID.x);
 	const uvec2 grid_size = (dims + TILE_SIZE - 1) / TILE_SIZE;
@@ -272,18 +293,14 @@ void main() {
 	if (id >= uint(point_count)) return;
 	
 	barrier();
-	uvec2 instance_data = splat_instance_data[id];
-	uint instance_id = instance_data.x;
-	uint unique_splat_index = instance_data.y;
+	// [space-combat-sim patch] The table holds only what is shown and on screen, so `id` counts visible splats.
+	const uvec4 row = find_visible_row(uint(id));
+	uint instance_id = row.w;
+	uint unique_splat_index = row.z + (uint(id) - row.x);
 	
 	const Splat splat = splat_buffer[unique_splat_index];
 	mat4 model_matrix = instance_model_matrices[instance_id];
 
-	// --- VISIBILITY ---
-	float is_visible = model_matrix[0][3];
-	if (is_visible < 0.5) return;
-	model_matrix[0][3] = 0.0;
-	
 	// --- FRUSTUM CULLING ---
 	mat3 object_linear = mat3(model_matrix);
 	mat3 world_covariance = object_linear * DECODE_COVARIANCE(splat.covariance) * transpose(object_linear);

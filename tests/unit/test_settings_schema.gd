@@ -123,3 +123,18 @@ func test_control_profile_is_a_string_with_a_pattern() -> void:
 	assert_eq(schema.validate(&"control_profile", &"mine")["value"], "mine", "and is stored as a String")
 	assert_false(schema.validate(&"control_profile", 3)["ok"])
 	assert_string_contains(schema.validate(&"control_profile", 3)["error"], "expects text")
+
+
+func test_an_int_setting_validates_parses_and_describes() -> void:
+	assert_eq(schema.get_type(&"splat_budget"), TYPE_INT)
+	assert_eq(schema.get_default(&"splat_budget"), 2000000)
+	assert_eq(schema.describe(&"splat_budget"), "int 100000..6000000")
+	assert_eq(schema.validate(&"splat_budget", 500000)["value"], 500000)
+	assert_eq(typeof(schema.validate(&"splat_budget", 500000.0)["value"]), TYPE_INT, "a whole float is an int")
+	assert_false(schema.validate(&"splat_budget", 500000.5)["ok"])
+	assert_false(schema.validate(&"splat_budget", 10)["ok"])
+	assert_false(schema.validate(&"splat_budget", 7000000)["ok"])
+	assert_false(schema.validate(&"splat_budget", "many")["ok"])
+	assert_eq(schema.parse(&"splat_budget", "750000")["value"], 750000)
+	assert_false(schema.parse(&"splat_budget", "1.5")["ok"])
+	assert_false(schema.parse(&"splat_budget", "many")["ok"])

@@ -35,19 +35,34 @@ const PROXY_SHADOW_CASTER_PATH := "res://addons/gdgs_scs/runtime/lighting/proxy_
 
 ## Light the splats from the scene's Light3D nodes using the baked proxy
 ## normals. Needs a `lighting` resource; ignored without one.
-@export var relight_enabled: bool = false
+@export var relight_enabled: bool = false:
+	set(value):
+		relight_enabled = value
+		_mark_backend_relight_dirty()  # [space-combat-sim patch]
 ## Colour floor where no light reaches. This is the "darken everything, let
 ## only lit regions climb back" control: 1.0 leaves the splats at their
 ## original brightness and only adds light on top.
-@export_range(0.0, 1.0, 0.01) var relight_unlit_level: float = 0.25
+@export_range(0.0, 1.0, 0.01) var relight_unlit_level: float = 0.25:
+	set(value):
+		relight_unlit_level = value
+		_mark_backend_relight_dirty()  # [space-combat-sim patch]
 ## How strongly gathered light brightens the splats.
-@export_range(0.0, 4.0, 0.01) var relight_light_gain: float = 1.0
+@export_range(0.0, 4.0, 0.01) var relight_light_gain: float = 1.0:
+	set(value):
+		relight_light_gain = value
+		_mark_backend_relight_dirty()  # [space-combat-sim patch]
 ## Ambient term, modulated by the baked ambient occlusion.
-@export var relight_ambient: Color = Color(0.25, 0.25, 0.25, 1.0)
+@export var relight_ambient: Color = Color(0.25, 0.25, 0.25, 1.0):
+	set(value):
+		relight_ambient = value
+		_mark_backend_relight_dirty()  # [space-combat-sim patch]
 ## Use only the spherical-harmonics DC term as the base colour. Baked
 ## view-dependent specular fights new lighting; this is the closest thing the
 ## data has to an albedo.
-@export var relight_dc_only: bool = false
+@export var relight_dc_only: bool = false:
+	set(value):
+		relight_dc_only = value
+		_mark_backend_relight_dirty()  # [space-combat-sim patch]
 
 var _gaussian: GaussianResource
 var _lighting: GaussianLightingResource
@@ -191,6 +206,14 @@ func _mark_backend_lighting_dirty() -> void:
 	var backend := SELECTOR_SCRIPT.get_backend(self)
 	if backend != null and backend.has_method("notify_lighting_changed"):
 		backend.notify_lighting_changed(self)
+
+# [space-combat-sim patch] Tells a backend that caches the relight knobs. Raster reads them itself and has no such method.
+func _mark_backend_relight_dirty() -> void:
+	if not is_inside_tree():
+		return
+	var backend := SELECTOR_SCRIPT.get_backend(self)
+	if backend != null and backend.has_method("notify_relight_changed"):
+		backend.notify_relight_changed(self)
 
 func _notification(what: int) -> void:
 	if (what == NOTIFICATION_TRANSFORM_CHANGED

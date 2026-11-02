@@ -10,7 +10,10 @@ const RendererScript := preload("res://addons/gdgs_scs/runtime/render/compute/ga
 const LIGHT_RIG_PATH := "res://addons/gdgs_scs/runtime/lighting/gaussian_light_rig.gd"
 
 static var _instance
+# [space-combat-sim patch] The visible-splat budget. Static so the game can set it before the first splat node creates this manager.
+static var _budget_splats: int = GaussianSplatBudget.DEFAULT_SPLATS
 
+var _scene_flush_queued := false  # [space-combat-sim patch]
 var _scene_registry: GaussianSceneRegistry = SceneRegistryScript.new()
 var _gpu_state_cache: GaussianGpuStateCache = GpuStateCacheScript.new()
 var _renderer: GaussianRenderer = RendererScript.new()
@@ -21,6 +24,28 @@ static func get_instance():
 	if _instance != null and is_instance_valid(_instance):
 		return _instance
 	return null
+
+## [space-combat-sim patch] Sets the visible-splat budget. The buffers reallocate before the next frame if it changed.
+static func set_splat_budget(budget_splats: int) -> void:
+	_budget_splats = maxi(budget_splats, 1)
+
+static func get_splat_budget() -> int:
+	return _budget_splats
+
+## [space-combat-sim patch] What the renderer did, for the game's console. Empty until a splat node has created the manager.
+static func get_stats() -> Dictionary:
+	var manager: GaussianRenderManager = get_instance()
+	if manager == null:
+		return {}
+	return {
+		"rebuilds": manager._gpu_state_cache.get_rebuild_count(),
+		"splat_uploads": manager._gpu_state_cache.get_splat_upload_count(),
+		"visible": manager._scene_registry.get_last_visible_total(),
+		"clipped": manager._scene_registry.get_last_clipped(),
+		"visible_flagged": manager._scene_registry.get_visible_flag_total(),
+		"resident": manager._scene_registry.get_point_count(),
+		"merges": manager._scene_registry.get_merge_count(),
+	}
 
 func _enter_tree() -> void:
 	_instance = self
@@ -68,6 +93,17 @@ func mark_resource_dirty(node: Node) -> void:
 func mark_transform_dirty(node: Node) -> void:
 	_apply_registry_result(_scene_registry.mark_transform_dirty(node))
 
+## [space-combat-sim patch] A node's relight knob changed.
+func mark_relight_dirty(node: Node) -> void:
+	if _scene_registry.mark_relight_dirty(node):
+		_gpu_state_cache.mark_all_render_states_needs_relight_upload(true)
+
+# [space-combat-sim patch] Deferred, so every node registering this frame shares one merge, still before the frame renders.
+func _flush_scene() -> void:
+	_scene_flush_queued = false
+	_apply_registry_result(_scene_registry.flush_scene())
+	_gpu_state_cache.mark_all_render_states_needs_relight_upload(true)  # a merge rewrites the per-instance knobs too
+
 func shutdown() -> void:
 	if not _gpu_state_cache.has_render_states():
 		return
@@ -87,7 +123,8 @@ func render_for_compositor(
 		camera_transform,
 		camera_projection,
 		camera_world_position,
-		depth_capture_alpha
+		depth_capture_alpha,
+		_budget_splats  # [space-combat-sim patch]
 	)
 
 func _cleanup_on_render_thread() -> void:
@@ -95,6 +132,12 @@ func _cleanup_on_render_thread() -> void:
 
 func _apply_registry_result(result: Dictionary) -> void:
 	if result.is_empty():
+		return
+	# [space-combat-sim patch]
+	if result.get("scene_dirty", false):
+		if not _scene_flush_queued:
+			_scene_flush_queued = true
+			_flush_scene.call_deferred()
 		return
 	if result.get("request_cleanup", false):
 		_gpu_state_cache.request_cleanup()

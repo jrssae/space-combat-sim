@@ -379,6 +379,14 @@ func visible_splat_count() -> int:
 	return 0
 
 
+## Splats in each of `lod_levels()`, same order (M3-T20).
+func lod_splat_counts() -> PackedInt32Array:
+	var out := PackedInt32Array()
+	for node: GaussianSplatNode in _lod_nodes:
+		out.append(node.gaussian.point_count if node.gaussian != null else 0)
+	return out
+
+
 ## The radius of a sphere that holds the hull, m (its hit volumes' bound, 10 m before the hull is built).
 func bounding_radius() -> float:
 	var damageable: Damageable = Damageable.of(self)

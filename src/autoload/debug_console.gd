@@ -709,8 +709,8 @@ static func settings_vars(source: SettingsScript) -> ConsoleVars:
 		match schema.get_type(key):
 			TYPE_BOOL:
 				spec["type"] = TYPE_BOOL
-			TYPE_FLOAT:
-				spec["type"] = TYPE_FLOAT
+			TYPE_FLOAT, TYPE_INT:
+				spec["type"] = schema.get_type(key)
 				spec["min"] = entry["min"]
 				spec["max"] = entry["max"]
 			SettingsSchema.TYPE_ENUM:

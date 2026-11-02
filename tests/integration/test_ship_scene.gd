@@ -520,7 +520,8 @@ func test_render_provider_and_entries_leave_with_the_status() -> void:
 	var registry: ConsoleRegistry = DebugConsole.registry
 	var provider: ConsoleStateProvider = registry.get_provider(&"render")
 	assert_not_null(provider, "SplatStatus registers provider 'render'")
-	var expected_keys: Array[StringName] = [&"splat_backend", &"fallback", &"fps", &"gpu"]
+	var expected_keys: Array[StringName] = [&"splat_backend", &"fallback", &"fps", &"gpu", &"gdgs_rebuilds", &"gdgs_splat_uploads",
+			&"splat_visible", &"splat_clipped", &"splat_budget_mb", &"gpu_ms"]
 	assert_eq(provider.keys(), expected_keys, "the §6.4 keys")
 	assert_true(provider.is_writable(&"fallback"))
 	assert_false(provider.is_writable(&"splat_backend"))

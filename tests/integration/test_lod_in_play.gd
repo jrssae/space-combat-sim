@@ -1,8 +1,9 @@
 extends GutTest
 ## AC28 in play (M3-T19, Q22): every ship carries one splat node per level it can draw and shows exactly one; across a sweep
 ## from 40 m to 20 km and back with 13 ships the splat-node count never changes and no node's resource changes (a change of
-## resource is what makes GDGS rebuild every buffer; headless runs have no GDGS backend to count rebuilds in, and its code is
-## vendored), each ship steps through its chain once each way; the `lod` provider and command and `settings.splat_lod_bias`.
+## resource is what makes GDGS rebuild every buffer; headless runs have no GDGS backend to count rebuilds in, so the counters
+## themselves, `render.gdgs_rebuilds` and `render.gdgs_splat_uploads`, are read on the GPU: M3-T20), each ship steps through its
+## chain once each way; the `lod` provider and command and `settings.splat_lod_bias`.
 
 var main: Main
 

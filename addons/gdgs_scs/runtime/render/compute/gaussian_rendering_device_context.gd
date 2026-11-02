@@ -64,6 +64,11 @@ func create_storage_buffer(size: int, data: PackedByteArray = PackedByteArray(),
 		buffer_data += padding
 	return Descriptor.new(deletion_queue.push(device.storage_buffer_create(maxi(size, buffer_data.size()), buffer_data, usage)), RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER)
 
+# [space-combat-sim patch] A buffer the GPU fills before it reads it. create_storage_buffer() would build and upload a zero-filled
+# copy first, over a gigabyte for a full splat budget.
+func create_scratch_buffer(size: int) -> Descriptor:
+	return Descriptor.new(deletion_queue.push(device.storage_buffer_create(size)), RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER)
+
 func create_uniform_buffer(size: int, data: PackedByteArray = PackedByteArray()) -> Descriptor:
 	var full_size := maxi(16, size)
 	var buffer_data := data

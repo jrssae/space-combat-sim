@@ -29,6 +29,8 @@ const ENTRIES: Dictionary = {
 		"doc": "Camera mode at spawn"},
 	&"splat_lod_bias": {"type": TYPE_FLOAT, "default": 0.0, "min": -1.0, "max": 1.0,
 		"doc": "Shift every ship's splat level of detail by whole levels: + coarser, - finer (M3-T19)"},
+	&"splat_budget": {"type": TYPE_INT, "default": 2000000, "min": 100000, "max": 6000000,
+		"doc": "Splats the renderer can draw at once (M3-T20): 584 bytes of video memory each, however many are on screen; over it, the farthest ships draw a coarser level"},
 	&"camera_chase_smoothing_s": {"type": TYPE_FLOAT, "default": 0.0, "min": 0.0, "max": 0.5,
 		"doc": "Chase camera orientation lag, s; 0 = rigid mount locked to the ship"},
 	&"chase_bolt_scale": {"type": TYPE_FLOAT, "default": 3.0, "min": 1.0, "max": 10.0,
@@ -126,6 +128,8 @@ func describe(key: StringName) -> String:
 			return "bool"
 		TYPE_FLOAT:
 			return "float %s..%s" % [entry["min"], entry["max"]]
+		TYPE_INT:
+			return "int %s..%s" % [entry["min"], entry["max"]]
 		TYPE_ENUM:
 			return "enum " + "|".join(PackedStringArray(entry["choices"]))
 		TYPE_STRING:
@@ -151,6 +155,13 @@ func validate(key: StringName, value: Variant) -> Dictionary:
 			if is_nan(f) or f < float(entry["min"]) or f > float(entry["max"]):
 				return _fail("%s must be in %s..%s, got %s" % [key, entry["min"], entry["max"], f])
 			return _ok(f)
+		TYPE_INT:
+			if typeof(value) != TYPE_INT and not (typeof(value) == TYPE_FLOAT and float(value) == floorf(float(value))):
+				return _fail("%s expects a whole number, got %s" % [key, str(value)])
+			var i: int = int(value)
+			if i < int(entry["min"]) or i > int(entry["max"]):
+				return _fail("%s must be in %s..%s, got %s" % [key, entry["min"], entry["max"], i])
+			return _ok(i)
 		TYPE_ENUM:
 			if typeof(value) != TYPE_STRING and typeof(value) != TYPE_STRING_NAME:
 				return _fail("%s expects one of %s" % [key, describe(key).trim_prefix("enum ")])
@@ -187,6 +198,10 @@ func parse(key: StringName, text: String) -> Dictionary:
 			if not t.is_valid_float():
 				return _fail("%s expects a number, got '%s'" % [key, t])
 			return validate(key, t.to_float())
+		TYPE_INT:
+			if not t.is_valid_int():
+				return _fail("%s expects a whole number, got '%s'" % [key, t])
+			return validate(key, t.to_int())
 		TYPE_ENUM:
 			return validate(key, StringName(t.to_lower()))
 		TYPE_STRING:

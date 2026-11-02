@@ -826,6 +826,15 @@ Raster backend differences (automatic fallback on GPUs without compute): splats 
 `MultiMeshInstance3D` quads in the normal transparent pass with hardware depth test; sort can lag 1-2 frames
 (mild popping on fast rolls). Acceptable; nothing in gameplay depends on the backend.
 
+**Splat budget (M3-T20, GDGS patch 5).** Upstream sizes its sort buffers by every instanced splat in the scene, hidden ones
+included. The fork sizes them from `settings.splat_budget` (visible splats, default 2 000 000): 576 B per budget splat (64 B of
+projected data, 32 sort slots at 8 B in each of the two double-buffered sort buffers) plus about 8 B of histogram, so 1.17 GB at the
+default, however many ships are resident. Each frame, at render time, the renderer builds a table of the instances it will draw,
+leaving out hidden ones and those whose bounding sphere is off screen, and the projection pass runs over that table only. The dispatch sizes
+follow the visible total, on the CPU. Over the budget the `LodSwitcher` steps the farthest ships in view down a level until the sum
+fits (`SplatBudgetMath`, from wanted levels, so it cannot flap); the renderer itself truncates anything left over, and `render.splat_clipped` says
+so. The Raster backend is not changed, though the step-down runs on every backend. `addons/gdgs_scs/PATCHES.md` has the detail.
+
 ### 7.3 Lighting
 
 Splats are unlit: the generators bake a "studio" light rig **in asset-local space** (hemisphere ambient + two
@@ -1125,8 +1134,8 @@ perihelion or from flybys of moving planets, and the sim does both correctly bec
 ### 14.4 Far-field rendering and LOD ("model blurring")
 
 GDGS facts (v3.3.0 source): no LOD support (open upstream proposal, issue #32); changing a node's `gaussian`
-re-merges and re-uploads **every** node's splat buffer; hidden nodes still cost one read per splat in the
-projection pass (early-out on the visibility flag); visibility is a flag in the per-node transform upload (cheap).
+re-merges and re-uploads **every** node's splat buffer. The project's fork (M3-T20, patch 5) makes hidden and off-screen nodes
+free: the projection pass runs over a per-frame table of the instances drawn, and the sort buffers follow a visible-splat budget (§7.2).
 
 Decisions:
 - Every asset ships a generated **LOD chain** (manifest `lods`): LOD0 full; LOD1 ~25 % of splats with ~2× scales;
@@ -1135,7 +1144,8 @@ Decisions:
 - A `LodSwitcher` per object picks a level from projected size in pixels with hysteresis. Levels are pre-loaded
   sibling `GaussianSplatNode`s toggled by **visibility**, never by swapping resources.
 - A resident splat budget (start at ~3-4 M) is managed per region: objects beyond the near field are not resident
-  at all, only their far representation. LOD and paging go upstream to GDGS as PRs rather than a fork.
+  at all, only their far representation. M3-T20 did the first half in the project's fork: a budget of visible splats, with
+everything still resident in the splat buffer. Paging is later, and also goes in the fork.
 - **Scaled space** for the sun, Epsilon III, moons and anything beyond ~50 km: a separate render layer drawn
   before the near world, placed at `camera_dir × (distance / scale)` with matching angular size, lit from the true
   sun direction. Planets and the sun are procedural-shader meshes (sphere + atmosphere scattering + generated
@@ -1601,6 +1611,7 @@ below are M3 tasks.
 | D40 | Hit reaction, guard, wings in scenarios (M3-T10, Q11): a fresh bolt hit hands control to evade at once for one full jink (`AiPilot.select`, `BehaviourEvade.locked`). A guard post gates the attack through `AiContext.may_attack` (hostiles inside the radius or after the guarded ship) and `BehaviourGuard` keeps station. Scenarios declare `wings[]` and spawns name a `wing`; an AI-led wing hands the lead to its next member; its ships rally on an engaged wingmate (`BehaviourRally`). `AttackBrain` caps the speed it seeks (`RaiderTactics.max_speed_mps`: break and extend at it, approach at the higher of it and the target's speed, plus the closure) | Ships under fire behave like pilots; raider groups and wings come from data; AI-versus-AI fights stay at fighting speed and together while a chaser still outruns any target |
 | D42 | Slashing pass (M3-T18, Q19): each attack run is, by a seeded roll, `AttackSlash` (an offset firing pass, a turn and burn, a chase at 500 m) or `AttackBrain`'s standard run; rookies always slash, higher skill less often (`AiTemperament.slash_chance`), the most aggressive pass at 100 m instead of 200 m; evade weighs threats from ships other than the attack's target by skill (`awareness`); `AiProfile.slashing` opts out; the nose tracks the lead with its turn rate fed forward (`PilotSteering.face_tracking`) | Better pilots keep their guns on the target far longer (3.8x the time in the fire gate against a drone), with the same gate, target choice and caps |
 | D43 | Splat LOD (M3-T19, Q22): every ship carries one `GaussianSplatNode` per level its asset lists (LOD0-LOD3; allies from LOD1), built once with the pool, and a `LodSwitcher` shows exactly one by its projected size (200 / 60 / 16 px, 25 % hysteresis); levels change by visibility, never by assigning a resource | Visibility is one transform upload in GDGS; a resource change rebuilds every buffer. D22's fixed node count still holds (more nodes per ship, none added in play) |
+| D44 | Splat budget (M3-T20, Q22): the renderer's culled and sort buffers are sized from `settings.splat_budget` (visible splats, 2 000 000), not from every resident splat; a per-frame table of drawn instances replaces the per-splat instance ids; over budget the `LodSwitcher` steps the farthest ships in view down, on top of the level their size calls for | Hidden LODs and off-screen ships cost no sort memory, so 100 ships cost the same buffers as 13 (VRAM added at 100 ships: 3.2 GB before, 1.5 GB after). The cost moves: the buffers are fixed at 1.17 GB even when little is visible, so 13 ships take about 600 MB more than they did |
 | D41 | Skill and aggressiveness (M3-T13, Q12): `AiTemperament` scales a copy of the pilot's `AiProfile` (weights, retreat threshold, aim error, miss gate, engage and break-off ranges) and sets the reaction time, jink quality, passivity and the reckless ram; `regular` + `balanced` leave a profile as tuned. `BehaviourRam` commits a reckless, badly hurt, mostly alone ship to a collision course with avoidance off for its target only | Civilian, raider and military AI feel different from one brain and one set of behaviours; numbers stay data |
 
 ### 16.2 Layout additions
@@ -1618,6 +1629,7 @@ src/ai/behaviour_{guard,rally}.gd        guard post, rally on an engaged wingmat
 src/ai/ai_temperament.gd, behaviour_ram.gd   skill and aggression; last-ditch ram (T13)
 src/ai/attack_slash.gd                   the slashing pass and chase (T18)
 src/rendering/lod_switcher{,_math}.gd    splat level of detail by size on screen (T19)
+src/rendering/splat_budget_math.gd       pure: which ships step down to fit the splat budget (T20)
 assets/ai/civilian.tres                  never attacks, flees within 3 km (T13)
 src/ai/route.gd, manoeuvre.gd, manoeuvres.gd   instructor route and demo moves (T09)
 src/game/wing_director.gd                Node (Combat, priority 290): wings, orders, acknowledgements, replenish (T07, T08)
@@ -1656,4 +1668,5 @@ Commands: `relation <a> <b> [friendly|neutral|hostile]` / `relation reset`; `win
 `ai <name> skill <rookie|regular|veteran|ace|0-1>`, `ai <name> aggression <passive|cautious|balanced|aggressive|reckless|0-1>`,
 `spawn raider|ally ai ... skill=<...> aggression=<...>` (M3-T13);
 `scenario [free_flight|combat_sandbox|instructor_route|dogfight]`. Settings: `friendly_fire` (bool, false), `ram_damage`
-(bool, true).
+(bool, true), `splat_budget` (int, 100 000 to 6 000 000, 2 000 000; M3-T20). Provider `render` gains `gdgs_rebuilds`,
+`gdgs_splat_uploads`, `splat_visible`, `splat_clipped`, `splat_budget_mb` and `gpu_ms` (M3-T20).

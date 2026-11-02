@@ -5,16 +5,10 @@ class_name GaussianGpuStateCache
 const RenderingDeviceContext := preload("res://addons/gdgs_scs/runtime/render/compute/gaussian_rendering_device_context.gd")
 
 const TILE_SIZE := 16
-const WORKGROUP_SIZE := 512
 const RADIX := 256
-const PARTITION_DIVISION := 8
-const PARTITION_SIZE := PARTITION_DIVISION * WORKGROUP_SIZE
 const MAX_RENDER_STATES := 4
 const FLOATS_PER_SPLAT := 60
-const FLOATS_PER_CULLED_SPLAT := 16
 const BYTES_PER_FLOAT := 4
-# [space-combat-sim patch] 10 -> 32, must match gaussian_renderer.gd.
-const MAX_SORT_ELEMENTS_PER_SPLAT := 32
 # Relighting. Must match gsplat_projection.glsl and gaussian_light_rig.gd.
 const LIGHTING_BYTES_PER_SPLAT := 4
 const RELIGHT_FLOATS_PER_INSTANCE := 8
@@ -42,6 +36,11 @@ class RenderState:
 	var needs_splat_upload := false
 	var needs_instance_upload := false
 	var needs_relight_upload := false
+	# [space-combat-sim patch] What this state's buffers were sized for, and what the current dispatch sizes cover.
+	var budget_splats := 0
+	var sort_capacity := 0
+	var frame_elements := -1
+	var projection_dims: Array = [1, 1, 1]
 	var context: GdgsRenderingDeviceContext
 	var shaders: Dictionary = {}
 	var pipelines: Dictionary = {}
@@ -50,6 +49,15 @@ class RenderState:
 var _render_states: Dictionary = {}
 var _render_state_lru: Array = []
 var _pending_gpu_cleanup := false
+# [space-combat-sim patch] How often the expensive paths ran. A LOD switch must never bump either.
+var _rebuild_count := 0
+var _splat_upload_count := 0
+
+func get_rebuild_count() -> int:
+	return _rebuild_count
+
+func get_splat_upload_count() -> int:
+	return _splat_upload_count
 
 func has_render_states() -> bool:
 	return not _render_states.is_empty()
@@ -88,10 +96,17 @@ func mark_all_render_states_needs_relight_upload(value: bool) -> void:
 	for state in _render_states.values():
 		state.needs_relight_upload = value
 
-func rebuild_gpu_state(state, point_count: int, unique_data_size: int, instance_count: int) -> void:
+# [space-combat-sim patch] The culled, sort and histogram buffers follow the budget, not the resident splats, so nothing here
+# changes when visibility does.
+func rebuild_gpu_state(state, unique_data_size: int, instance_count: int, budget_splats: int) -> void:
 	cleanup_state(state)
-	if point_count <= 0:
+	if unique_data_size <= 0:
 		return
+	_rebuild_count += 1
+	state.budget_splats = budget_splats
+	state.sort_capacity = GaussianSplatBudget.sort_capacity(budget_splats)
+	state.frame_elements = -1
+	var budget_sizes: Dictionary = GaussianSplatBudget.sizes(budget_splats)
 
 	state.context = RenderingDeviceContext.create(RenderingServer.get_rendering_device())
 
@@ -102,15 +117,10 @@ func rebuild_gpu_state(state, point_count: int, unique_data_size: int, instance_
 	state.shaders["boundaries"] = state.context.load_shader(SHADER_PATH_BOUNDARIES)
 	state.shaders["render"] = state.context.load_shader(SHADER_PATH_RENDER)
 
-	var num_sort_elements_max := point_count * MAX_SORT_ELEMENTS_PER_SPLAT
-	var num_partitions := (num_sort_elements_max + PARTITION_SIZE - 1) / PARTITION_SIZE
-	var block_dims := PackedInt32Array()
-	block_dims.resize(6)
-	block_dims.fill(1)
 	# Pre-size indirect dispatch dimensions on the CPU. On macOS/Metal, updating this
 	# buffer from the projection pass can cause the entire GS pipeline to go blank.
-	block_dims[0] = num_partitions
-	block_dims[3] = ceili(num_sort_elements_max / 256.0)
+	# [space-combat-sim patch] Now only a start: set_frame_elements() keeps them on the visible total.
+	var block_dims: PackedInt32Array = GaussianSplatBudget.dispatch_dims(0)
 
 	# Relighting buffers, sized off the same unique-splat and instance counts as
 	# the data above. Always allocated (a minimum of one element) so the shader's
@@ -124,14 +134,16 @@ func rebuild_gpu_state(state, point_count: int, unique_data_size: int, instance_
 		LIGHT_RIG_FLOATS * BYTES_PER_FLOAT)
 	state.descriptors["instance_relight"] = state.context.create_storage_buffer(
 		maxi(1, instance_count) * RELIGHT_FLOATS_PER_INSTANCE * BYTES_PER_FLOAT)
-	state.descriptors["culled_splats"] = state.context.create_storage_buffer(point_count * FLOATS_PER_CULLED_SPLAT * BYTES_PER_FLOAT)
+	# [space-combat-sim patch] Sized from the budget. Scratch: the GPU writes them before it reads, so no zero-filled upload.
+	state.descriptors["culled_splats"] = state.context.create_scratch_buffer(budget_sizes["culled"])
 	state.descriptors["grid_dimensions"] = state.context.create_storage_buffer(6 * 4, block_dims.to_byte_array(), RenderingDevice.STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT)
-	state.descriptors["histogram"] = state.context.create_storage_buffer(4 + (1 + 4 * RADIX + num_partitions * RADIX) * 4)
-	state.descriptors["sort_keys"] = state.context.create_storage_buffer(num_sort_elements_max * 4 * 2)
-	state.descriptors["sort_values"] = state.context.create_storage_buffer(num_sort_elements_max * 4 * 2)
-	state.descriptors["splat_instance_ids"] = state.context.create_storage_buffer(point_count * 4 * 2)
+	state.descriptors["histogram"] = state.context.create_scratch_buffer(budget_sizes["histogram"])
+	state.descriptors["sort_keys"] = state.context.create_scratch_buffer(budget_sizes["sort_keys"])
+	state.descriptors["sort_values"] = state.context.create_scratch_buffer(budget_sizes["sort_values"])
+	# [space-combat-sim patch] The visible-instance table takes the old splat_instance_ids binding. One row at least: a binding cannot be empty.
+	state.descriptors["visible_table"] = state.context.create_scratch_buffer(maxi(1, instance_count) * GaussianVisibleTable.BYTES_PER_ROW)
 	state.descriptors["instance_transforms"] = state.context.create_storage_buffer(instance_count * 16 * BYTES_PER_FLOAT)
-	state.descriptors["uniforms"] = state.context.create_uniform_buffer(8 * 4)
+	state.descriptors["uniforms"] = state.context.create_uniform_buffer(12 * 4)  # [space-combat-sim patch] 8 -> 12: the table's row count
 	state.descriptors["tile_bounds"] = state.context.create_storage_buffer(state.tile_dims.x * state.tile_dims.y * 2 * 4)
 	state.descriptors["tile_splat_pos"] = state.context.create_storage_buffer(4 * 4)
 	state.descriptors["render_texture"] = state.context.create_texture(state.texture_size, RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT)
@@ -144,7 +156,7 @@ func rebuild_gpu_state(state, point_count: int, unique_data_size: int, instance_
 		state.descriptors["sort_keys"],
 		state.descriptors["sort_values"],
 		state.descriptors["grid_dimensions"],
-		state.descriptors["splat_instance_ids"],
+		state.descriptors["visible_table"],  # [space-combat-sim patch]
 		state.descriptors["instance_transforms"],
 		state.descriptors["uniforms"],
 		# Bindings are assigned by position in create_descriptor_set, so these
@@ -184,7 +196,9 @@ func rebuild_gpu_state(state, point_count: int, unique_data_size: int, instance_
 		state.descriptors["depth_texture"]
 	], state.shaders["render"], 0)
 
-	state.pipelines["gsplat_projection"] = state.context.create_pipeline([ceili(point_count / 256.0), 1, 1], [projection_set], state.shaders["projection"])
+	# [space-combat-sim patch] Shared with the pipeline, which reads it at every dispatch; set_frame_elements() keeps it on the visible splats.
+	state.projection_dims = [1, 1, 1]
+	state.pipelines["gsplat_projection"] = state.context.create_pipeline(state.projection_dims, [projection_set], state.shaders["projection"])
 	state.pipelines["radix_sort_upsweep"] = state.context.create_pipeline([], [radix_upsweep_set], state.shaders["radix_upsweep"])
 	state.pipelines["radix_sort_spine"] = state.context.create_pipeline([RADIX, 1, 1], [radix_spine_set], state.shaders["radix_spine"])
 	state.pipelines["radix_sort_downsweep"] = state.context.create_pipeline([], [radix_downsweep_set], state.shaders["radix_downsweep"])
@@ -196,12 +210,31 @@ func rebuild_gpu_state(state, point_count: int, unique_data_size: int, instance_
 	state.needs_instance_upload = true
 	state.needs_relight_upload = true
 
-func upload_splats(state, point_data_byte: PackedByteArray, splat_instance_ids_byte: PackedByteArray) -> void:
-	if state.context == null or point_data_byte.is_empty() or splat_instance_ids_byte.is_empty():
+func upload_splats(state, point_data_byte: PackedByteArray) -> void:
+	if state.context == null or point_data_byte.is_empty():
 		return
+	_splat_upload_count += 1  # [space-combat-sim patch]
 	state.context.device.buffer_update(state.descriptors["splats"].rid, 0, point_data_byte.size(), point_data_byte)
-	state.context.device.buffer_update(state.descriptors["splat_instance_ids"].rid, 0, splat_instance_ids_byte.size(), splat_instance_ids_byte)
 	state.needs_splat_upload = false
+
+## [space-combat-sim patch] This frame's visible-instance table. Empty when nothing is drawn: the shader then reads no row.
+func upload_visible_table(state, table_byte: PackedByteArray) -> void:
+	if state.context == null or table_byte.is_empty():
+		return
+	state.context.device.buffer_update(state.descriptors["visible_table"].rid, 0, table_byte.size(), table_byte)
+
+## [space-combat-sim patch] Keeps the dispatch sizes on the visible total, on the CPU (see the Metal note above) and only when the
+## total changes, so a big budget does not dispatch tens of thousands of no-op workgroups.
+func set_frame_elements(state, visible_splats: int) -> void:
+	if state.context == null:
+		return
+	var tile_count: int = state.tile_dims.x * state.tile_dims.y
+	var elements: int = GaussianSplatBudget.frame_elements(visible_splats, state.budget_splats, tile_count)
+	if elements != state.frame_elements:
+		state.frame_elements = elements
+		var dims := GaussianSplatBudget.dispatch_dims(elements).to_byte_array()
+		state.context.device.buffer_update(state.descriptors["grid_dimensions"].rid, 0, dims.size(), dims)
+	state.projection_dims[0] = GaussianSplatBudget.projection_groups(visible_splats)
 
 func upload_instance_transforms(state, instance_transforms_byte: PackedByteArray) -> void:
 	if state.context == null or instance_transforms_byte.is_empty():
@@ -235,6 +268,9 @@ func cleanup_state(state) -> void:
 	state.shaders.clear()
 	state.pipelines.clear()
 	state.descriptors.clear()
+	state.budget_splats = 0  # [space-combat-sim patch]
+	state.sort_capacity = 0
+	state.frame_elements = -1
 	state.needs_gpu_rebuild = true
 	state.needs_splat_upload = true
 	state.needs_instance_upload = true
