@@ -161,6 +161,9 @@ Each cycle is one task on its own branch (`m4-tNN`), merged into `m4` with a gre
 5. **Measure again.** The sweep after; record the gain against the prediction. A candidate that gains nothing is reverted, says
    why, and the cycle still counts.
 
+While iterating, `scripts/bench_quick.sh` (under 10 minutes: furball and spread ramped from 10 ships, one short run per
+count) shows whether a change moves the ceiling; the numbers recorded in the log come from the sweep.
+
 - **Done when:** the cycle's entry in the log is complete and the merge is green and pushed.
 
 Starting hypotheses from the M3 measurements, for T02 to test, not to follow:

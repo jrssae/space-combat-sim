@@ -92,4 +92,6 @@ python3 -m tools.procgen list
 .tools/godot/godot --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests -ginclude_subdirs -gexit
 .tools/godot/godot --path . --quit-after 180 --headless        # smoke-run the main scene (after M1-T15)
 .tools/godot/godot --headless --path . -- --console-strict --console-exec="wait 30; state ship; quit"  # drive a live build
+scripts/bench_quick.sh                                          # quick performance check, ramps the ship count (< 10 min)
+scripts/bench.sh <label>                                        # the full M4 benchmark sweep (max N per layout; 30 min or more)
 ```
