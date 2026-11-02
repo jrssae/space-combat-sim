@@ -181,6 +181,15 @@ func advance(delta: float) -> void:
 			_lights[i].energy = EmitterCurves.nozzle_energy(_levels[i])
 
 
+## Puts every plume and nozzle light out at once: a ship back in play (a new pilot, a respawn) starts cold.
+func reset() -> void:
+	for i: int in _plumes.size():
+		_levels[i] = 0.0
+		_apply(i)
+		if _lights[i] != null:
+			_lights[i].energy = 0.0
+
+
 ## A basis whose +Y axis is `exhaust` (any length; zero falls back to +Z) and whose other axes are arbitrary but
 ## orthonormal and right-handed.
 static func plume_basis(exhaust: Vector3) -> Basis:

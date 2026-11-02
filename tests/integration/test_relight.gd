@@ -207,6 +207,19 @@ func test_a_freed_ship_takes_its_cabin_light_with_it() -> void:
 	assert_eq(rig.candidate_count(), baseline)
 
 
+func test_a_dead_players_cabin_light_goes_with_the_ship_and_comes_back_on_respawn() -> void:
+	var lamp: LightEmitter = main.ship._cabin_emitter
+	main.camera_rig.set_mode(CameraRig.Mode.COCKPIT)
+	assert_true(rig.has_emitter(lamp), "the cockpit view lights the cabin")
+	DebugConsole.flags.invulnerable = false
+	assert_true(DebugConsole.registry.execute("kill player")[0].ok)
+	assert_false(rig.has_emitter(lamp), "a dead cabin gives no light")
+	main.respawn()
+	assert_true(rig.has_emitter(lamp), "back with the ship, still in the cockpit view")
+	main.camera_rig.set_mode(CameraRig.Mode.CHASE)
+	assert_false(rig.has_emitter(lamp))
+
+
 # --- who is lit ----------------------------------------------------------------------------------------------------
 
 

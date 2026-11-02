@@ -90,5 +90,5 @@ func test_three_waves_headless_keep_the_splat_node_count_and_the_counters() -> v
 	assert_gt(max_bolts, 0, "bolts flew")
 	# Wall clock: the worst single tick is a kill (the destruction's effects run inside the resolve) and doubles on a busy
 	# machine (M3-T18: 4 ms alone, 8 ms during the full suite), so the 99th percentile is asserted and the worst recorded.
-	assert_lt(p99_us, 5000, "the hit resolver's 99th-percentile tick stayed under 5 ms (the slack is for a busy machine)")
+	WallClockBudget.assert_under(self, p99_us, 5000, "the hit resolver's 99th-percentile tick stayed under 5 ms (the slack is for a busy machine)")
 	assert_eq(main.debris.active_chunk_count() >= 0, true)

@@ -5,8 +5,8 @@ extends Node3D
 ## commands and UI actions. Main runs while paused (so Start can unpause); World and everything in it pause.
 ##
 ## Ships the scenario places at load (`spawns`, M3-T09) come from the pool. One that leads a `route` (the instructor) is paced
-## to the player, and the HUD, status line and console `route` provider follow it. All are placed again on every respawn, so
-## the lesson restarts.
+## to the player, and the HUD, status line and console `route` provider follow it. A respawn places the route leaders again, so
+## the lesson restarts; wing ships and fighting ships stay in play (maintainer Q8: a downed wingman is replaced at the next wave).
 
 const SCENARIO_DIR := "res://data/scenarios/"
 const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight"]
@@ -44,7 +44,7 @@ var ship: Ship = null
 var thrusters: ThrusterVisuals = null
 var cannon: PulseCannon = null
 var buoys: Array[NavBuoy] = []
-## The ships the scenario places at load (`spawns`, M3-T09), from the pool; placed again on every respawn.
+## The ships the scenario places at load (`spawns`, M3-T09), from the pool; the route leaders are placed again on a respawn.
 var scenario_ships: Array[Combatant] = []
 ## The ship leading a route (the instructor) and its follow-path behaviour; null when the scenario has none.
 var instructor: Combatant = null
@@ -56,8 +56,9 @@ var _system_id: StringName = &"local"
 var _scenario_spawns: Array[Dictionary] = []
 var _scenario_routes: Array[Route] = []
 var _scenario_wings: Array[Dictionary] = []
-# By `scenario_ships` index: the brain each was given, to tell when the pool has reused the ship.
+# By `scenario_ships` index: the brain each was given, to tell when the pool has reused the ship, and the spawn it came from.
 var _scenario_brains: Array[PilotBrain] = []
+var _scenario_entries: Array[Dictionary] = []
 
 @onready var world: WorldFrame = $World
 @onready var space_environment: SpaceEnvironment = $SpaceEnvironment
@@ -263,8 +264,11 @@ func respawn() -> void:
 	ship.running_lights = true  # lit at spawn; the wing follows
 	for buoy: NavBuoy in buoys:
 		buoy.restore()
-	_spawn_scenario_ships()  # the lesson starts over with the player
+	director.cancel_respawn()  # Back while dead: the death's own respawn must not follow
+	_restart_lessons()
 	combatant.cannon.gate.reset()
+	combatant.cannon.reset_flashes()
+	thrusters.reset()  # the dead ship's last burn does not fade out at the start
 	ship.set_flight_command(FlightCommand.new())
 	ship.set_combat_command(CombatCommand.new())
 	adapter.reset()
@@ -356,45 +360,64 @@ func route_active() -> bool:
 # --- ships at load (M3-T09) ------------------------------------------------------------------------------------------
 
 
-# Places the scenario's `spawns` from the pool, releasing the ones still out first on a respawn.
+# Places the scenario's `spawns` from the pool, at load.
 func _spawn_scenario_ships() -> void:
-	for i: int in scenario_ships.size():
+	for entry: Dictionary in _scenario_spawns:
+		_place_spawn(entry)
+
+
+# A respawn restarts the lessons: the ships leading a route are placed again. Wing ships and fighting ships stay in play.
+func _restart_lessons() -> void:
+	var restarted: Array[Dictionary] = []
+	for i: int in range(scenario_ships.size() - 1, -1, -1):
+		if String(_scenario_entries[i]["route"]).is_empty():
+			continue
 		var placed: Combatant = scenario_ships[i]
 		if placed.driver != null and placed.driver.brain == _scenario_brains[i]:  # not reused by the pool
 			ships.release(placed)
-	scenario_ships.clear()
-	_scenario_brains.clear()
+		restarted.push_front(_scenario_entries[i])
+		scenario_ships.remove_at(i)
+		_scenario_brains.remove_at(i)
+		_scenario_entries.remove_at(i)
+	if restarted.is_empty():
+		return
 	instructor = null
 	instructor_path = null
-	for entry: Dictionary in _scenario_spawns:
-		var type: StringName = entry["type"]
-		var anchor: UniversePos = _spawn_position if StringName(entry["anchor"]) == &"player" \
-				else UniversePos.new(0.0, 0.0, 0.0, _system_id)
-		var ship_name: String = String(entry["name"])
-		if ship_name.is_empty():
-			ship_name = ships.next_name(ShipPool.ALLY_NAME_PREFIX, ShipPool.ALLY_FIRST_NUMBER) if type == ShipPool.ALLY_TYPE \
-					else ships.next_name()
-		var made: Dictionary = BrainFactory.from_behaviour(entry["behaviour"], anchor, hash([ship_name, scenario_seed]))
-		if not bool(made["ok"]):
-			push_warning("Main: spawn %s: %s" % [ship_name, made["error"]])
-			continue
-		var brain: PilotBrain = made["brain"]
-		var path: BehaviourFollowPath = null
-		var route: Route = _route_named(String(entry["route"]))
-		if route != null and brain is AiPilot:
-			route.pace_id = combatant.targetable.get_instance_id() if route.pace == Route.PACE_PLAYER else 0
-			path = BehaviourFollowPath.attach(brain as AiPilot, route)
-		var placed: Combatant = ships.acquire(ship_name, anchor.plus_local(entry["offset"]), _spawn_basis, entry["velocity"], brain, type)
-		if placed == null:
-			continue
-		placed.damageable.invulnerable = bool(entry["invulnerable"])
-		scenario_ships.append(placed)
-		if not String(entry.get("wing", "")).is_empty():
-			wings.join(String(entry["wing"]), placed)
-		_scenario_brains.append(brain)
-		if path != null and instructor == null:
-			instructor = placed
-			instructor_path = path
+	for entry: Dictionary in restarted:
+		_place_spawn(entry)
+
+
+# Takes one spawn's ship from the pool and gives it its brain, route and wing.
+func _place_spawn(entry: Dictionary) -> void:
+	var type: StringName = entry["type"]
+	var anchor: UniversePos = _spawn_position if StringName(entry["anchor"]) == &"player" \
+			else UniversePos.new(0.0, 0.0, 0.0, _system_id)
+	var ship_name: String = String(entry["name"])
+	if ship_name.is_empty():
+		ship_name = ships.next_name(ShipPool.ALLY_NAME_PREFIX, ShipPool.ALLY_FIRST_NUMBER) if type == ShipPool.ALLY_TYPE \
+				else ships.next_name()
+	var made: Dictionary = BrainFactory.from_behaviour(entry["behaviour"], anchor, hash([ship_name, scenario_seed]))
+	if not bool(made["ok"]):
+		push_warning("Main: spawn %s: %s" % [ship_name, made["error"]])
+		return
+	var brain: PilotBrain = made["brain"]
+	var path: BehaviourFollowPath = null
+	var route: Route = _route_named(String(entry["route"]))
+	if route != null and brain is AiPilot:
+		route.pace_id = combatant.targetable.get_instance_id() if route.pace == Route.PACE_PLAYER else 0
+		path = BehaviourFollowPath.attach(brain as AiPilot, route)
+	var placed: Combatant = ships.acquire(ship_name, anchor.plus_local(entry["offset"]), _spawn_basis, entry["velocity"], brain, type)
+	if placed == null:
+		return
+	placed.damageable.invulnerable = bool(entry["invulnerable"])
+	scenario_ships.append(placed)
+	_scenario_brains.append(brain)
+	_scenario_entries.append(entry)
+	if not String(entry.get("wing", "")).is_empty():
+		wings.join(String(entry["wing"]), placed)  # says so itself when the wing cannot take it
+	if path != null and instructor == null:
+		instructor = placed
+		instructor_path = path
 
 
 # Whether an AI ship leads the player's wing (the dogfight's ALPHA), so the player leads none of its own.

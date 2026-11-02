@@ -134,4 +134,4 @@ func test_the_dogfight_records_the_ai_time_and_holds_the_resolver_budget() -> vo
 	var resolve_p99: int = _percentile(resolvers, 0.99)
 	gut.p("M3 dogfight, %d ticks: ai.think_us median %d p99 %d worst %d; hit + ram resolve median %d p99 %d worst %d" % [think.size(),
 			_percentile(think, 0.5), _percentile(think, 0.99), _percentile(think, 1.0), _percentile(resolvers, 0.5), resolve_p99, _percentile(resolvers, 1.0)])
-	assert_lt(resolve_p99, RESOLVER_BUDGET_US, "AC13: the hit and ram resolvers stay under 2 ms a tick")
+	WallClockBudget.assert_under(self, resolve_p99, RESOLVER_BUDGET_US, "AC13: the hit and ram resolvers stay under 2 ms a tick (p99)")

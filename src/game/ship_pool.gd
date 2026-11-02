@@ -109,6 +109,13 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	ship.set_combat_command(CombatCommand.new())
 	ship.targeting.clear_selection()
 	combatant.cannon.gate.reset()
+	# Nothing of the last pilot shows: no plume or flash fading out, no level the console forced.
+	combatant.cannon.reset_flashes()
+	if combatant.thrusters != null:
+		combatant.thrusters.reset()
+	var switcher := ship.get_node_or_null(^"LodSwitcher") as LodSwitcher
+	if switcher != null:
+		switcher.forced = LodSwitcherMath.NONE
 	combatant.damageable.restore()
 	combatant.damageable.invulnerable = false  # per spawn (M3-T09); the caller sets it
 	combatant.display_name = display_name

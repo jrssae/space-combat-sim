@@ -212,7 +212,9 @@ static func level_name(level: int) -> String:
 static func _in_play() -> Array[LodSwitcher]:
 	var out: Array[LodSwitcher] = []
 	for s: LodSwitcher in _live:
-		if s._ship != null and s._ship.is_inside_tree() and s._ship.can_process() and s._ship.is_visible_in_tree():
+		# Parked ships are disabled; a paused game still has its ships in play.
+		if s._ship != null and s._ship.is_inside_tree() and s._ship.process_mode != Node.PROCESS_MODE_DISABLED \
+				and s._ship.is_visible_in_tree():
 			out.append(s)
 	return out
 

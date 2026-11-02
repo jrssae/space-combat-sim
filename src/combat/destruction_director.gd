@@ -11,7 +11,7 @@ extends Node
 ##   the next second. A console `kill` or a hit without a point blasts from the centre, in a seeded order;
 ## - the **player**: the same effects, then the ship is hidden and disabled and `player_destroyed` is
 ##   emitted (Main ignores input while the player is dead); after `RESPAWN_DELAY_S` of sim time `respawn_due` is emitted and Main
-##   puts the ship back at the scenario start with a full hull.
+##   puts the ship back at the scenario start with a full hull. A respawn before then (Back) cancels it (`cancel_respawn`).
 ##
 ## Signals: `ship_destroyed` for every pooled ship; `raider_destroyed` as well when it is a raider (a kill, which is what the
 ## waves count). An ally's death is a `ship_destroyed` only. Which is which is the pool type (`ShipPool.DEFAULT_TYPE` raiders,
@@ -101,6 +101,11 @@ func watch_buoy(buoy: NavBuoy) -> void:
 ## True while a respawn of the player is pending.
 func respawn_pending() -> bool:
 	return _respawn_at_s < INF
+
+
+## Drops a pending respawn: the player was put back another way (Back, the console's `respawn`).
+func cancel_respawn() -> void:
+	_respawn_at_s = INF
 
 
 func _on_destroyed(info: HitInfo, combatant: Combatant) -> void:

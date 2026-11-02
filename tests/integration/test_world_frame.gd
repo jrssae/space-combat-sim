@@ -216,7 +216,7 @@ func test_rebases_are_counted_and_the_last_one_timed() -> void:
 	world.rebase(Vector3(-5000.0, 0.0, 0.0))
 	assert_eq(world.rebases, 2)
 	assert_gt(world.last_rebase_us, 0, "the cost of the last one, in microseconds (wall clock, profiling only)")
-	assert_lt(world.last_rebase_us, 100000)
+	WallClockBudget.assert_under(self, world.last_rebase_us, 100000, "a rebase of 20 nodes takes under 100 ms")
 
 
 func test_auto_rebase_is_off_by_default() -> void:

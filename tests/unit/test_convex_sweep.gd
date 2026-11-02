@@ -149,7 +149,10 @@ func test_box_pairs_agree_with_the_separating_axis_test_at_every_instant() -> vo
 		var best: float = -INF
 		for k: int in INSTANTS + 1:
 			best = maxf(best, _sat_depth(start + move * (float(k) / INSTANTS), ba, sa * 0.5, Vector3.ZERO, bb, sb * 0.5))
-		if absf(best) < MARGIN:
+		# Between two samples the depth can peak above the best one by up to half a step of the motion, so a near-touch that
+		# close to apart is no clear-cut case either.
+		var slack: float = move.length() / float(INSTANTS) * 0.5
+		if best < MARGIN and best > -(MARGIN + slack):
 			continue
 		checked += 1
 		var swept: bool = ConvexSweep.overlaps(_box(start, sa, ba), move, _box(Vector3.ZERO, sb, bb))

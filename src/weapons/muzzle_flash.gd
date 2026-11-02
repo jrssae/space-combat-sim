@@ -58,6 +58,13 @@ func trigger() -> void:
 	_start_light()
 
 
+## Ends the flash at once: a ship back in play shows nothing of its last shot.
+func reset() -> void:
+	_age_s = INF
+	visible = false
+	_end_light()
+
+
 ## The flash's light record (always the same one), for the lights provider and tests.
 func light_emitter() -> LightEmitter:
 	return _light

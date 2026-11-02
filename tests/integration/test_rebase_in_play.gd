@@ -189,7 +189,7 @@ func test_a_sandbox_fight_with_wingmen_rebasing_every_second_clears_its_waves() 
 	gut.p("wingmen left: %d of %d" % [main.wings.player_wing().members().size(), wing_at_start])
 	# AC21: one rebase of the full sandbox (pools, wing, raiders, bolts, debris, voices) under 0.5 ms. Wall clock, so the median
 	# over the fight is asserted and the spread recorded.
-	assert_lt(fight.median_rebase_us(), 500, "a rebase of the full sandbox costs %d us (median; min %d, max %d)" % [
+	WallClockBudget.assert_under(self, fight.median_rebase_us(), 500, "a rebase of the full sandbox costs %d us (median; min %d, max %d)" % [
 			fight.median_rebase_us(), fight.min_rebase_us(), fight.max_rebase_us()])
 
 
@@ -237,6 +237,14 @@ class ViewSampler extends Node:
 				"pivot": view * main.camera_rig.cockpit_pivot.get_global_transform_interpolated().origin})
 
 
+# Whether a frame after the first was drawn in one of the rebase ticks, as the checks below count them.
+static func _drawn_in_a_rebase_tick(rows: Array[Dictionary], rebase_ticks: Array[int]) -> bool:
+	for k: int in range(1, rows.size()):
+		if rebase_ticks.has(int(rows[k]["tick"])):
+			return true
+	return false
+
+
 func test_through_a_rebase_at_full_speed_the_view_keeps_the_ship_its_bolts_and_the_hud_together() -> void:
 	# AC22 at 5 000 m/s, nose up (clear of the buoys): a 5 km rebase every second. Every rendered frame, the rebase ticks
 	# included: the chase camera stays on the drawn ship (1 cm); a bolt flying ahead keeps its motion relative to the ship (its
@@ -260,7 +268,11 @@ func test_through_a_rebase_at_full_speed_the_view_keeps_the_ship_its_bolts_and_t
 	var on_rebased := func(_offset: Vector3) -> void: rebase_ticks.append(Engine.get_physics_frames())
 	main.world.rebased.connect(on_rebased)
 	add_child_autofree(sampler)
-	await _ticks(90)
+	# 90 ticks, and on until a frame was drawn in a rebase tick: a slow machine steps two ticks in some frames and can skip one.
+	var ran: int = 0
+	while ran < 90 or (not _drawn_in_a_rebase_tick(sampler.rows, rebase_ticks) and ran < 600):
+		await _ticks(1)
+		ran += 1
 	sampler.bolt = null
 	main.world.rebased.disconnect(on_rebased)
 	assert_gte(rebase_ticks.size(), 1, "the run crossed a 5 km rebase")

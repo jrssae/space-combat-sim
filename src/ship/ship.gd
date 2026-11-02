@@ -163,6 +163,12 @@ func _ready() -> void:
 		_register_console()
 
 
+func _notification(what: int) -> void:
+	# The cabin lamp leaves play with the ship and comes back with it, like the plumes and flashes.
+	if what == NOTIFICATION_DISABLED or what == NOTIFICATION_ENABLED:
+		_apply_cabin_emitter()
+
+
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
 	var rig: SplatLightRig = SplatLightRig.of(self)
@@ -669,11 +675,12 @@ func _place_cabin_emitter() -> void:
 
 
 # The cabin lamp competes for a slot only in the cockpit camera; no other ship's interior is ever shown, so the pool adds no candidates.
+# A disabled ship (the player dead, a parked ship) gives none.
 func _apply_cabin_emitter() -> void:
 	var rig: SplatLightRig = SplatLightRig.of(self)
 	if rig == null or _cabin_emitter == null:
 		return
-	if _interior_visible:
+	if _interior_visible and process_mode != Node.PROCESS_MODE_DISABLED:
 		rig.add_emitter(_cabin_emitter)
 	else:
 		rig.remove_emitter(_cabin_emitter)

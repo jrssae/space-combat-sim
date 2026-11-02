@@ -1122,6 +1122,11 @@ The full large-world design is §14.1.
 Rules: every pure class gets unit tests in the same PR; every scene gets at least an instantiate-and-run test;
 anything that depends on a GPU is marked `(H)` in acceptance criteria and is never faked in CI.
 
+CI (M3-T12) runs GUT in two jobs: `GUT_SHARD=k/n` makes `scripts/run_tests.sh` run every n-th GUT script from the k-th, in path
+order, and shard 1 also runs the Python tests and the console smoke runs; locally, unset, it runs everything. Wall-clock budgets (AI
+think time, resolver ticks, rebase cost) are asserted on the maintainer's machine and only recorded on CI (`CI=true`), through
+`WallClockBudget` (`tests/fixtures/wall_clock_budget.gd`): a shared runner's clock says nothing about the game.
+
 Commands (also in `scripts/run_tests.sh`):
 
 ```
@@ -1903,4 +1908,4 @@ Details per task are in the as-built notes of `docs/milestones/m3-ai-pilots-and-
 - **Cockpit HUD.** In the cockpit camera the instruments are on three `SubViewport` screens built into the console (T29, Q29), for the player's ship only; the window keeps the aiming marks. The chase camera keeps the 2D HUD. Both draw through `HudPainter`.
 - **Lights the player can't see.** A dark ship (Q27) is dark to the eye only: radar and AI contact lists never use lights.
 - **Star.** A system's star is data; the flare and the key light take its colour, and the flare is a lens effect only, with no veil or god rays (Q30, Q31).
-- **What runs on what.** The one number that limits scale is on the CPU: 100 ships miss 60 fps because of `TargetingController`, not the renderer (M3-T20; `docs/roadmap.md`, M4).
+- **What runs on what.** The one number that limits scale is on the CPU: 100 ships miss 60 fps because of `TargetingController` (as T20 measured it, before the visual pass), not the renderer (M3-T20; `docs/roadmap.md`, M4).
