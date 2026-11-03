@@ -19,7 +19,9 @@ same ``--length``, ``--right``, ``--up`` and ``--aft`` as ``refview.py``; the ma
 How the two sides are put on one grid
 -------------------------------------
 * The model is in the authored frame: x to starboard, y up, z aft from the nose tip (z = 0), metres, x and y centred on
-  the model's box (``refview.to_ship_frame``). A generator that authors about another axis shows it as a shift.
+  the model's box (``refview.to_ship_frame``). A generator that authors about another origin (the Saturns measure y
+  from the spine axis) shows it as a shift; ``--model-offset X,Y,Z`` moves the model onto that origin, and the output
+  suggests a value when the two boxes' centres are further apart than the shift window.
 * The asset's LOD0 PLY is stored as the generators write it: the authored positions minus ``manifest.centroid_offset``,
   then turned by Rz(180) into the GDGS orientation (``core.frames``). The tool reverses both: it flips x and y of the
   positions and rotations back and adds the centroid offset.
