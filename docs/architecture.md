@@ -1996,6 +1996,14 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
 - **Journal.** `MissionApi.journal` lists every world change in order (`spawn RAIDER 1 raider_fighter`, `send ...`,
   `objective_add ...`, `objective raiders done`, `end success: ...`); `mission journal` prints its tail, and the skip test
   compares a skipped run's whole journal, objectives and ships in play with a played one's.
+- **Not yet arrived is not destroyed.** `MissionWorld` remembers every name it has seen in play; `destroyed` counts a name only
+  once it was seen and is gone, so an objective or an `until` may be live before its ships spawn (a new spawn is refreshed at
+  once, so a ship lost before the next tick still counts). Forcing a never-seen name releases nothing and latches.
+- **Skips and polling.** Scripts wait with `until`, never poll: a skipped step's waits return at once, so after
+  `MissionApi.SKIP_SPIN_LIMIT` (1 000) such returns in one skip the step is reported (`push_error`) and waits a tick at a time.
+  `until_objective` on a hidden objective warns. A forced release takes the ship out of its wing slots first (not marked lost);
+  a wing it led hands the lead on. A forced placement goes through `Ship.reset_to` (D51), which also refills the tank and
+  starts the assist afresh; velocity and spin are put back.
 - **HUD and menus.** `Hud.extra_input` (set by the runner) adds the active objectives (top right, right-aligned, on the window
   in both views: `HudSurface.OBJECTIVES`, only while there are any), the mission's waypoint when no route marks one, and the
   result line. `Main.objectives()` returns `ObjectiveBook.snapshot()` (empty outside a mission): the pause menu's
@@ -2003,9 +2011,11 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
 - **Spawns.** `m.spawn` takes a scenario spawn (`ScenarioLoader.parse_spawn`) plus `arrival` and `invulnerable`; `anchor` is the
   player's position at the call or the scenario origin. `ShipPool` is unchanged: the stage checks `free_count` first and pushes
   the error itself.
+- **Game.** `GameFlow.kind_for` reads the scenario file: one with a `mission` block is a `mission` (so `play <id>` and boot ask
+  for it). `Game.end_mission` moves the flow to `DEBRIEF`, or, for a Main the flow did not start (tests), keeps the result
+  through `GameFlow.keep_result`. The console's `respawn` is refused in a mission, as Back is.
 - **Left for later.** `say` waits for nothing until T06's dialog queue; `cinematic` and the control lock are T08's; the debrief
-  screen is T09's. `play <id>` starts a mission scenario like any other (its request's kind stays `sandbox`, from
-  `GameFlow.kind_for`; T02's mission menu asks for `mission`).
+  screen is T09's.
 
 ### 18.6 Front end and pause menu as built (T02)
 

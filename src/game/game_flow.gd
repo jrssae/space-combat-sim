@@ -67,6 +67,11 @@ func end_run(result: Dictionary) -> bool:
 	return _move_to(State.DEBRIEF)
 
 
+## Keeps how a run ended without moving: a run the flow did not start (a test's Main) still leaves its result for the console.
+func keep_result(result: Dictionary) -> void:
+	last_result = result.duplicate()
+
+
 ## From the debrief, the same scenario and seed again.
 func retry() -> bool:
 	if state != State.DEBRIEF:
@@ -94,8 +99,17 @@ static func validate_request(candidate: Dictionary) -> String:
 	return ""
 
 
-## The kind of run a scenario makes when nothing else says so.
-static func kind_for(scenario_id: StringName) -> StringName:
+## The kind of run a scenario makes when nothing else says so: `mission` for a scenario with a `mission` block (M5-T05),
+## `free_flight` for free flight, else `sandbox`. `scenario_text` is the file's JSON; null reads it from `data/scenarios/`.
+static func kind_for(scenario_id: StringName, scenario_text: Variant = null) -> StringName:
+	var text: String = scenario_text if scenario_text is String else ""
+	if scenario_text == null and FileAccess.file_exists(scenario_path(scenario_id)):
+		text = FileAccess.get_file_as_string(scenario_path(scenario_id))
+	var json := JSON.new()
+	var root: Variant = json.data if not text.is_empty() and json.parse(text) == OK else null
+	if root is Dictionary and (root as Dictionary).get("mission") is Dictionary \
+			and not ((root as Dictionary)["mission"] as Dictionary).is_empty():
+		return &"mission"
 	return &"free_flight" if scenario_id == &"free_flight" else &"sandbox"
 
 

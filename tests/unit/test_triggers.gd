@@ -121,6 +121,31 @@ func test_destroyed_any_needs_one_name_gone() -> void:
 	assert_true(t.check(world))
 
 
+func test_a_name_never_seen_in_play_is_not_destroyed() -> void:
+	var t: Trigger = TriggerSpec.destroyed(["RAIDER 7"])
+	assert_false(t.check(world), "not spawned yet: not destroyed")
+	world.set_alive("RAIDER 7", false)
+	assert_false(t.check(world), "reported out of play before it was ever in it: still not destroyed")
+	world.set_actor("RAIDER 7", _at(0.0, 0.0, -5000.0))
+	assert_false(t.check(world), "in play")
+	world.set_alive("RAIDER 7", false)
+	assert_true(t.check(world), "seen, then lost")
+
+
+func test_an_unseen_name_holds_up_all_but_not_any() -> void:
+	world.set_actor("RAIDER 1", _at(0.0, 0.0, -5000.0))
+	world.set_alive("RAIDER 1", false)
+	assert_false(TriggerSpec.destroyed(["RAIDER 1", "RAIDER 2"]).check(world), "RAIDER 2 has not come yet")
+	assert_true(TriggerSpec.destroyed(["RAIDER 1", "RAIDER 2"], false).check(world), "one of them is gone")
+
+
+func test_forcing_a_never_seen_name_releases_nothing_and_latches() -> void:
+	var t: Trigger = TriggerSpec.destroyed(["RAIDER 7"])
+	t.make_true(world)
+	assert_eq(world.released, PackedStringArray())
+	assert_true(t.check(world))
+
+
 func test_forced_destroyed_releases_the_named_ships() -> void:
 	world.set_actor("RAIDER 1", _at(0.0, 0.0, -5000.0))
 	world.set_actor("RAIDER 2", _at(0.0, 0.0, -5100.0))

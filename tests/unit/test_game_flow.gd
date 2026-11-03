@@ -152,6 +152,21 @@ func test_kind_for_a_scenario() -> void:
 		assert_eq(GameFlow.kind_for(id), &"sandbox", String(id))
 
 
+func test_a_scenario_with_a_mission_block_is_a_mission() -> void:
+	var text: String = JSON.stringify({"scenario_id": "buoy_defence", "mission": {"title": "Buoy defence"}})
+	assert_eq(GameFlow.kind_for(&"buoy_defence", text), &"mission")
+	assert_eq(GameFlow.kind_for(&"free_flight", JSON.stringify({"mission": {}})), &"free_flight", "an empty block is none")
+	assert_eq(GameFlow.kind_for(&"dogfight", "{not json"), &"sandbox", "an unreadable file falls back")
+	assert_eq(GameFlow.kind_for(&"no_such_scenario"), &"sandbox", "no file: the old rule")
+
+
+func test_keep_result_leaves_the_state_alone() -> void:
+	var result: Dictionary = {"success": true, "reason": "every primary objective done"}
+	flow.keep_result(result)
+	assert_eq(flow.last_result, result)
+	assert_eq(flow.state, GameFlow.State.FRONT_END, "a run the flow did not start: no move")
+
+
 func test_scenario_path() -> void:
 	assert_eq(GameFlow.scenario_path(&"dogfight"), "res://data/scenarios/dogfight.json")
 

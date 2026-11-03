@@ -76,7 +76,8 @@ func refresh(snapshot: MissionWorld, names: PackedStringArray) -> void:
 				snapshot.set_route(k, route.waypoint(route.count() - 1).position, path.phase == BehaviourFollowPath.Phase.DONE)
 
 
-## A forced trigger moved `actor` to `at`: placed there, velocity kept.
+## A forced trigger moved `actor` to `at`: placed there, velocity and spin kept. A ship goes through `Ship.reset_to`, as D51
+## says, so its tank is refilled and its assist starts afresh as well.
 func place(actor: String, at: UniversePos) -> void:
 	var node: Node3D = _node_of(MissionWorld.key(actor))
 	if node == null:
@@ -94,8 +95,8 @@ func place(actor: String, at: UniversePos) -> void:
 	node.reset_physics_interpolation()
 
 
-## A forced `destroyed` took `actor` out of play: a pooled ship goes back to its pool, a buoy is hidden; no explosion, no kill
-## credit. The player is never removed this way.
+## A forced `destroyed` took `actor` out of play: a pooled ship leaves its wing and goes back to its pool, a buoy is hidden; no
+## explosion, no kill credit. The player is never removed this way.
 func release(actor: String) -> void:
 	var k: String = MissionWorld.key(actor)
 	if _node_of(k) == null:
@@ -104,7 +105,10 @@ func release(actor: String) -> void:
 	if thing == player:
 		push_warning("Mission: a skip cannot destroy the player")
 	elif thing is Combatant:
+		var led: Array[Wing] = _leave_wings(thing as Combatant)
 		ships.release(thing as Combatant)
+		for wing: Wing in led:
+			wings.refresh(wing)  # the next member takes the lead from the parked ship
 	elif thing is NavBuoy:
 		(thing as NavBuoy).set_destroyed(true)
 
@@ -196,6 +200,19 @@ func _node_of(k: String) -> Node3D:
 		var buoy := thing as NavBuoy
 		return buoy if buoy.is_inside_tree() and buoy.visible and not buoy.is_destroyed() else null
 	return null
+
+
+# Takes a ship out of every wing slot it holds (not marked lost: it was not shot down) and returns the wings it led.
+func _leave_wings(combatant: Combatant) -> Array[Wing]:
+	var led: Array[Wing] = []
+	if wings == null:
+		return led
+	for wing: Wing in wings.wings:
+		if wing.slot_of(combatant) >= 1:
+			wings.remove_member(wing, combatant)
+		if wing.leader == combatant:
+			led.append(wing)
+	return led
 
 
 func _path_of(combatant: Combatant) -> BehaviourFollowPath:

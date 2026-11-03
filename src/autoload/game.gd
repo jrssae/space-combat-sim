@@ -119,7 +119,7 @@ func fail_loading(reason: String) -> void:
 ## in space meanwhile). A Main built outside the flow (a test, the `scenario` command) still leaves the result here.
 func end_mission(result: Dictionary) -> void:
 	if not flow.end_run(result):
-		flow.last_result = result.duplicate()
+		flow.keep_result(result)
 
 
 ## Every scenario file `play` can start, by id.

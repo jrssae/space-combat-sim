@@ -35,7 +35,7 @@ static func provider(runner: MissionRunner) -> ConsoleVars:
 				"doc": "Triggers evaluated each tick: the awaited one and the active objectives'"},
 		&"tick_work": {"get": func() -> int: return runner.api.tick_work,
 				"doc": "Lookups and trigger checks in the last tick (D52's cost, counted)"},
-		&"skipping": {"get": func() -> bool: return runner.api.skipping(), "doc": "The current step is being skipped"},
+		&"skipping": {"get": func() -> bool: return runner.api.is_skipping(), "doc": "The current step is being skipped"},
 		&"waypoint": {"get": func() -> String: return runner.api.waypoint_name if not runner.api.waypoint_name.is_empty() else "none",
 				"doc": "The actor the HUD's waypoint marks"},
 		&"controls_locked": {"get": func() -> bool: return runner.api.controls_locked, "doc": "The script holds the player's controls"},

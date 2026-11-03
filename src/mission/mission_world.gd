@@ -5,7 +5,8 @@ extends RefCounted
 ## the runner's `MissionStage` fills it each tick for the names the live triggers watch, and tests fill it by hand.
 ##
 ## Names are matched without case ("player" is the player's ship, whose name is PLAYER). Every lookup a trigger makes adds one to
-## `work`, so the cost of the live triggers is counted, never timed (D52).
+## `work`, so the cost of the live triggers is counted, never timed (D52). A name counts as destroyed only once it has been seen
+## alive: a ship the script has not spawned yet is not "destroyed" (an objective declared before its ships arrive waits for them).
 ##
 ## A forced trigger (D51's skip) changes the world through `place`, `release`, `finish_line` and `finish_route`: the snapshot
 ## changes at once and the `stage`, when there is one, makes the same change in the game.
@@ -26,6 +27,7 @@ var _alive: Dictionary = {}  # key -> bool
 var _route_end: Dictionary = {}  # key -> UniversePos
 var _route_done: Dictionary = {}  # key -> bool
 var _lines: Dictionary = {}  # StringName -> true
+var _seen: Dictionary = {}  # key -> true once it was in play
 var _actions: Dictionary = {}  # StringName -> true, this tick only
 
 
@@ -42,10 +44,15 @@ func set_actor(actor: String, position: UniversePos, alive: bool = true) -> void
 	var k: String = key(actor)
 	_positions[k] = position
 	_alive[k] = alive
+	if alive:
+		_seen[k] = true
 
 
 func set_alive(actor: String, alive: bool) -> void:
-	_alive[key(actor)] = alive
+	var k: String = key(actor)
+	_alive[k] = alive
+	if alive:
+		_seen[k] = true
 
 
 ## The end of the route `actor` leads, and whether it has got there.
@@ -53,15 +60,6 @@ func set_route(actor: String, end: UniversePos, done: bool) -> void:
 	var k: String = key(actor)
 	_route_end[k] = end
 	_route_done[k] = done
-
-
-## Drops everything known about `actor` (it left play, or its pooled ship took another name).
-func forget(actor: String) -> void:
-	var k: String = key(actor)
-	_positions.erase(k)
-	_alive[k] = false
-	_route_end.erase(k)
-	_route_done.erase(k)
 
 
 ## This tick's player actions (`PlayerActions.from_command`).
@@ -84,6 +82,13 @@ func position_of(actor: String) -> UniversePos:
 func is_alive(actor: String) -> bool:
 	work += 1
 	return bool(_alive.get(key(actor), false))
+
+
+## Whether `actor` was in play and is no longer (never seen: not destroyed, it has not arrived yet).
+func is_destroyed(actor: String) -> bool:
+	work += 1
+	var k: String = key(actor)
+	return _seen.has(k) and not bool(_alive.get(k, false))
 
 
 func route_done(actor: String) -> bool:

@@ -51,6 +51,34 @@ class EndsEarly extends MissionScript:
 		after_end = true
 
 
+## Waits for its raider before spawning it (D52: a name not yet in play is not destroyed), then polls, which it should not.
+class EarlyWait extends MissionScript:
+	var trace: Array[String] = []
+
+	func steps() -> Array[StringName]:
+		return [&"early"]
+
+	func step_early(m: MissionApi) -> void:
+		var gone: Trigger = TriggerSpec.destroyed(["RAIDER 9"])
+		trace.append("waiting")
+		m.spawn({"type": "raider_fighter", "name": "RAIDER 9", "anchor": "origin", "offset": [0, 0, -6000]})
+		await m.until(gone)
+		trace.append("gone")
+
+
+## Polls with wait instead of waiting with until: under a skip every wait returns at once.
+class Polls extends MissionScript:
+	var loops: int = 0
+
+	func steps() -> Array[StringName]:
+		return [&"poll"]
+
+	func step_poll(m: MissionApi) -> void:
+		while m.alive("PLAYER"):
+			loops += 1
+			await m.wait(1.0)
+
+
 class MissingStep extends MissionScript:
 	func steps() -> Array[StringName]:
 		return [&"there", &"missing"]
@@ -142,7 +170,7 @@ func test_skip_forces_the_awaited_trigger_and_keeps_the_world_changes() -> void:
 	assert_false(world.is_alive("RAIDER 1"), "destroyed was made true: the raider is released")
 	assert_eq(book.state_of(&"raider"), ObjectiveBook.DONE, "and the objective it completes is done")
 	assert_has(api.journal, "spawn RAIDER 1 raider_fighter")
-	assert_false(api.skipping(), "only that step was skipped")
+	assert_false(api.is_skipping(), "only that step was skipped")
 	assert_eq(api.step_name(), &"hold")
 
 
@@ -162,7 +190,7 @@ func test_goto_skips_every_step_before_the_named_one() -> void:
 	assert_eq(api.goto(&"finish"), "")
 	assert_eq(script.trace, ["intercept", "intercept done", "hold", "hold waited", "hold rolled", "finish"] as Array[String])
 	assert_eq(api.step_name(), &"finish")
-	assert_false(api.skipping(), "the named step runs normally")
+	assert_false(api.is_skipping(), "the named step runs normally")
 	_ticks(10)
 	assert_false(script.trace.has("finish done"), "it waits as usual")
 
@@ -258,6 +286,33 @@ func test_the_result_carries_the_objectives_and_the_time() -> void:
 	api.end(true)
 	assert_almost_eq(float(api.result["time_s"]), 30.0 * DT, 1e-9)
 	assert_eq((api.result["objectives"] as Array).size(), 2)
+
+
+func test_an_until_destroyed_on_a_ship_not_yet_in_play_waits_for_it() -> void:
+	var early := ObjectiveBook.new()
+	early.add(&"stay", "Keep the mission open", true)
+	api.release()
+	api = MissionApi.new(world, early)
+	var gone: Trigger = TriggerSpec.destroyed(["RAIDER 8"])
+	assert_false(gone.check(world), "a ship the script has not spawned is not destroyed")
+	var script := EarlyWait.new()
+	_start(script)
+	_ticks(5)
+	assert_eq(script.trace, ["waiting"] as Array[String], "the raider is in play")
+	world.set_alive("RAIDER 9", false)
+	_ticks(1)
+	assert_eq(script.trace, ["waiting", "gone"] as Array[String])
+
+
+func test_a_polling_step_under_skip_is_reported_and_does_not_spin() -> void:
+	var script := Polls.new()
+	_start(script)
+	assert_eq(api.skip(), "", "returns: the loop did not spin forever")
+	assert_push_error("it polls")
+	# One loop waited before the skip; the skip's first wait comes back from it, then LIMIT waits return at once.
+	assert_eq(script.loops, MissionApi.SKIP_SPIN_LIMIT + 2, "then the step waits")
+	_ticks(3)
+	assert_eq(script.loops, MissionApi.SKIP_SPIN_LIMIT + 5, "one wait per tick from there")
 
 
 # --- refusals ----------------------------------------------------------------------------------------------------------

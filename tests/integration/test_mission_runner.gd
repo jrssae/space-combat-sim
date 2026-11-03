@@ -155,6 +155,15 @@ func test_the_player_destroyed_fails_the_mission_and_there_is_no_respawn() -> vo
 	assert_false(main.player_alive, "Back does not bring the ship back either")
 
 
+func test_the_console_respawn_is_refused_in_a_mission() -> void:
+	main.combatant.damageable.kill()
+	await _ticks(2)
+	var result: ConsoleResult = _run("respawn")
+	assert_false(result.ok)
+	assert_string_contains(result.error, "no respawn in a mission")
+	assert_false(main.player_alive)
+
+
 func test_back_does_not_reset_the_ship_in_a_mission() -> void:
 	main.ship.linear_velocity = Vector3(0.0, 0.0, -40.0)
 	await _ticks(20)
@@ -283,5 +292,6 @@ func test_twenty_live_triggers_stay_inside_a_counted_bound() -> void:
 	var live: int = _api().live_trigger_count()
 	var watched: int = _api().watched().size()
 	gut.p("live runner: %d live triggers, %d watched names: %d units of work in a tick" % [live, watched, _api().tick_work])
-	assert_gte(live, 20)
-	assert_lte(_api().tick_work, live * 3 + watched, "a check and at most two lookups per trigger, one refresh per name")
+	assert_eq(live, 37, "17 extra objectives with two triggers each, raiders, protect and the awaited destroyed")
+	assert_eq(watched, 4, "player, NAV ALPHA, RAIDER 1, RAIDER 2")
+	assert_lte(_api().tick_work, 115, "absolute: a check and at most two lookups per trigger, one refresh per name")

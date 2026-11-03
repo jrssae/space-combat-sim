@@ -69,6 +69,27 @@ func test_fail_wins_over_success_in_the_same_tick() -> void:
 	assert_eq(book.state_of(&"race"), ObjectiveBook.FAILED)
 
 
+func test_a_json_objective_declared_before_its_ships_spawn_waits_for_them() -> void:
+	assert_eq(book.declare([
+		{"id": "wave", "text": "Destroy the second wave", "active": true,
+				"success": {"kind": "destroyed", "names": ["RAIDER 5", "RAIDER 6"]}},
+		{"id": "escort", "text": "Keep ALPHA 2 alive", "active": true, "fail": {"kind": "destroyed", "name": "ALPHA 2"}},
+	]), "")
+	assert_eq(book.evaluate(world), [] as Array[StringName], "tick 1: none of them has arrived")
+	assert_eq(book.state_of(&"wave"), ObjectiveBook.ACTIVE)
+	assert_eq(book.state_of(&"escort"), ObjectiveBook.ACTIVE, "the escort that jumps in later has not failed")
+	world.set_actor("RAIDER 5", UniversePos.new(0.0, 0.0, -7000.0))
+	world.set_actor("RAIDER 6", UniversePos.new(0.0, 0.0, -7100.0))
+	world.set_actor("ALPHA 2", UniversePos.new(50.0, 0.0, 0.0))
+	assert_eq(book.evaluate(world), [] as Array[StringName], "all in play")
+	world.set_alive("RAIDER 5", false)
+	world.set_alive("RAIDER 6", false)
+	assert_eq(book.evaluate(world), [&"wave"] as Array[StringName])
+	world.set_alive("ALPHA 2", false)
+	assert_eq(book.evaluate(world), [&"escort"] as Array[StringName])
+	assert_eq(book.state_of(&"escort"), ObjectiveBook.FAILED)
+
+
 func test_hidden_objectives_are_not_evaluated() -> void:
 	_declare_buoy_defence()
 	world.set_alive("RAIDER 1", false)

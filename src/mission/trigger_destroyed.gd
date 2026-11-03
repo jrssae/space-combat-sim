@@ -1,6 +1,7 @@
 class_name TriggerDestroyed
 extends Trigger
-## `destroyed` (D52): every named ship is out of play (`all`), or at least one is. Forced (D51), the named ships still in play
+## `destroyed` (D52): every named ship is out of play (`all`), or at least one is. A ship that was never in play does not count
+## (`MissionWorld.is_destroyed`): the trigger may be live before its ships spawn. Forced (D51), the named ships still in play
 ## are released, with no explosion and no kill credit: all of them, or only the first for `all` false (the step would have gone
 ## on at the first loss).
 
@@ -20,7 +21,7 @@ func actors() -> PackedStringArray:
 
 func test(world: MissionWorld) -> bool:
 	for actor: String in names:
-		var gone: bool = not world.is_alive(actor)
+		var gone: bool = world.is_destroyed(actor)
 		if gone and not all:
 			return true
 		if not gone and all:

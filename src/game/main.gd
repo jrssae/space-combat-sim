@@ -622,9 +622,11 @@ func _cmd_window(args: Dictionary) -> ConsoleResult:
 	return ConsoleResult.line("window %dx%d" % [size.x, size.y])
 
 
-func _cmd_respawn(_args: Dictionary) -> String:
+func _cmd_respawn(_args: Dictionary) -> ConsoleResult:
+	if mission != null:
+		return ConsoleResult.failure("no respawn in a mission (D51)")
 	respawn()
-	return "ship reset to the scenario start"
+	return ConsoleResult.line("ship reset to the scenario start")
 
 
 func _cmd_scenario(args: Dictionary) -> ConsoleResult:

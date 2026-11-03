@@ -113,6 +113,18 @@ func test_a_skipped_destroyed_releases_its_ships_without_explosion_or_credit() -
 	assert_eq(_api().step_name(), &"report")
 
 
+func test_a_skipped_destroyed_takes_its_ships_out_of_their_wing_first() -> void:
+	assert_true(_run("mission goto raid").ok)
+	var raiders: Array[Combatant] = main.ships.alive(ShipPool.DEFAULT_TYPE)
+	var red: Wing = main.wings.join("RED", raiders[0])
+	main.wings.join("RED", raiders[1])
+	assert_eq(red.leader, raiders[0])
+	assert_eq(red.members().size(), 1)
+	assert_true(_run("mission skip").ok)
+	assert_eq(red.members().size(), 0, "no member left in a slot of a parked ship's wing")
+	assert_false(red.is_lost(1), "released, not shot down: the slot is not marked lost")
+
+
 func test_a_skipped_proximity_places_the_player_at_the_goal_with_its_velocity() -> void:
 	main.ship.linear_velocity = Vector3(3.0, 0.0, -20.0)
 	await _ticks(1)
@@ -130,7 +142,7 @@ func test_a_skipped_proximity_places_the_player_at_the_goal_with_its_velocity() 
 func test_goto_runs_the_world_changes_of_the_steps_it_skips() -> void:
 	assert_true(_run("mission goto report").ok)
 	assert_eq(_api().step_name(), &"report")
-	assert_false(_api().skipping(), "the named step runs normally")
+	assert_false(_api().is_skipping(), "the named step runs normally")
 	assert_eq(_api().objective_state(&"reach"), ObjectiveBook.DONE)
 	assert_eq(_api().objective_state(&"raiders"), ObjectiveBook.DONE)
 	assert_eq(_api().objective_state(&"report"), ObjectiveBook.ACTIVE)

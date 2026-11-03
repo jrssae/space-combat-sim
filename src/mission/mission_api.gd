@@ -17,20 +17,24 @@ extends RefCounted
 ##     m.waypoint(name or null)        the HUD's waypoint marker on an actor
 ##     m.lock_controls(on)             the player's controls held (T08 does the zeroing; the flag is kept here)
 ##     m.end(success [, reason])
-##     m.time_s(), m.alive(name), m.objective_state(id), m.skipping()
+##     m.time_s(), m.alive(name), m.objective_state(id)
 ##
 ## Skipping (D51): in a skipped step every wait returns at once; `until` first makes its trigger true (`Trigger.make_true`),
 ## `until_objective` completes the objective through its forced success trigger, and the objectives are evaluated right after,
 ## so the world ends where the step would have left it. World changes still run. Nothing runs once the mission has ended: a
-## step that waits after `end` never resumes.
+## step that waits after `end` never resumes. Scripts wait with `until`, never poll: a skipped step that keeps waiting
+## (`SKIP_SPIN_LIMIT` returns in one skip) is reported and then waits a tick at a time instead of spinning.
 ##
-## Runner side: `begin`, `tick` (once per physics tick, after the world moved), `skip`, `goto`, `player_destroyed`, `release`.
+## Runner side: `begin`, `tick` (once per physics tick, after the world moved), `skip`, `goto`, `is_skipping`,
+## `player_destroyed`, `release`.
 
 ## The mission is over: `result` holds how.
 signal ended(result: Dictionary)
 
 ## Slack when comparing summed tick times with a wait's end (120 ticks of 1/60 s must reach 2 s).
 const TIME_EPS_S: float = 1e-6
+## Waits that may return at once in one skip before the step counts as polling (a script that waits in a loop).
+const SKIP_SPIN_LIMIT: int = 1000
 
 var world: MissionWorld = null
 var book: ObjectiveBook = null
@@ -77,6 +81,8 @@ func say(line_id: StringName) -> void:
 ## Waits `seconds` of sim time.
 func wait(seconds: float) -> void:
 	var until_s: float = world.time_s + seconds
+	if _seq.skipping and not _seq.stopped and _spinning():
+		await _seq.wake
 	while not _seq.stopped and not _seq.skipping and world.time_s < until_s - TIME_EPS_S:
 		await _seq.wake
 	while _seq.stopped:
@@ -94,6 +100,9 @@ func until(condition: Variant) -> void:
 		stage.refresh(world, trigger.actors())
 	while not _seq.stopped and not trigger.check(world):
 		if _seq.skipping:
+			if _spinning():
+				await _seq.wake
+				continue
 			trigger.make_true(world)
 			print("[mission] skip: forced %s" % trigger.describe())
 			settle()
@@ -109,8 +118,13 @@ func until_objective(id: StringName) -> void:
 	if not book.has(id):
 		push_error("Mission: until_objective: no objective '%s'" % id)
 		return
+	if book.state_of(id) == ObjectiveBook.HIDDEN:
+		push_warning("Mission: until_objective: '%s' is hidden; it waits until it is shown (objective_add) and finished" % id)
 	while not _seq.stopped and _open(id):
 		if _seq.skipping:
+			if _spinning():
+				await _seq.wake
+				continue
 			book.force_success(id, world)
 			journal.append("objective %s %s" % [id, book.state_of(id)])
 			print("[mission] skip: forced objective %s" % id)
@@ -164,6 +178,7 @@ func spawn(entry: Dictionary) -> Combatant:
 		if placed == null:
 			return null  # the stage said why
 		ship_name = placed.display_name
+		stage.refresh(world, PackedStringArray([ship_name]))  # seen in play from now, even if lost before the next tick
 	else:
 		if ship_name.is_empty():
 			push_error("Mission: spawn needs a name without a stage")
@@ -253,11 +268,6 @@ func objective_state(id: StringName) -> StringName:
 	return book.state_of(id)
 
 
-## The current step is being skipped.
-func skipping() -> bool:
-	return _seq.skipping
-
-
 # --- runner side -------------------------------------------------------------------------------------------------------
 
 
@@ -304,6 +314,11 @@ func skip() -> String:
 	if has_ended():
 		return "the mission has ended"
 	return _seq.skip()
+
+
+## The current step is being skipped (the console; not for scripts, which must not branch on a skip).
+func is_skipping() -> bool:
+	return _seq.skipping
 
 
 ## Skips every step before `step`. Returns "" or why not.
@@ -379,6 +394,15 @@ func _trigger_of(condition: Variant) -> Trigger:
 		push_error("Mission: until: %s" % made["error"])
 		return null
 	return made["trigger"] as Trigger
+
+
+# A skipped step that keeps waiting is polling: it is reported once and from then on waits a tick at a time.
+func _spinning() -> bool:
+	_seq.skip_returns += 1
+	if _seq.skip_returns == SKIP_SPIN_LIMIT + 1:
+		push_error("Mission: step %s waited %d times in one skip: it polls; wait with until instead" % [step_name(),
+				SKIP_SPIN_LIMIT])
+	return _seq.skip_returns > SKIP_SPIN_LIMIT
 
 
 func _open(id: StringName) -> bool:

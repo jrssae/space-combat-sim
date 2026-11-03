@@ -25,6 +25,8 @@ var index: int = -1
 var skipping: bool = false
 ## No more ticks (the mission ended): waits never return, `release` drops them.
 var stopped: bool = false
+## Waits that returned at once in the current skip (the API's guard against a polling loop).
+var skip_returns: int = 0
 
 var _script: MissionScript = null
 var _api: MissionApi = null
@@ -64,6 +66,7 @@ func skip() -> String:
 	if not problem.is_empty():
 		return problem
 	skipping = true
+	skip_returns = 0
 	wake.emit()
 	return ""
 
@@ -80,6 +83,7 @@ func goto(step: StringName) -> String:
 		return "step %s is already %s" % [step, "running" if target == index else "done"]
 	_goto = target
 	skipping = true
+	skip_returns = 0
 	wake.emit()
 	return ""
 
@@ -105,6 +109,7 @@ func _run() -> void:
 			return
 		index = i
 		skipping = i < _goto
+		skip_returns = 0
 		step_started.emit(i, steps[i])
 		await _script.call(MissionScript.STEP_PREFIX + String(steps[i]), _api)
 		if stopped:

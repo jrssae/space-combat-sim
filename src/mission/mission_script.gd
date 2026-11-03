@@ -7,6 +7,9 @@ extends RefCounted
 ## `m.until_objective(...)`, `m.cinematic(...)`), never on timers or signals of its own: that is how `mission skip`
 ## fast-forwards it and `mission goto` reaches a later step. World changes (`spawn`, `send`, objectives) still run when skipped.
 ##
+## Wait with `until`, never poll: in a skipped step every wait returns at once, so `while m.alive("X"): await m.wait(1.0)` would
+## spin. After `MissionApi.SKIP_SPIN_LIMIT` such returns in one skip the API reports the step and gives it one wait per tick.
+##
 ##     extends MissionScript
 ##
 ##     func steps() -> Array[StringName]:

@@ -23,5 +23,10 @@ func test(world: MissionWorld) -> bool:
 	return world.time_s - started_s >= seconds
 
 
+## D51: nothing in the world to change; `make_true` latches it.
+func force(_world: MissionWorld) -> void:
+	pass
+
+
 func describe() -> String:
 	return "timer %.1f s" % seconds
