@@ -2078,6 +2078,10 @@ native/src/contact_field.rs     ScsContactField: the contact scan's queries (T05
   still calls the brain's keeper and adds what it names (ids and case-insensitive names) in GDScript, sorts, and builds the
   `Array[Contact]` from the faction's shared list. Factions cross as `StringName`s, and the facade sends each querying
   faction's hostility row (from `Factions`, which native code never calls).
+- **Bad input never panics.** `load` checks that the parallel arrays line up (bodies, positions, factions, ship flags, reach
+  when given, and the four bolt arrays). On a mismatch it logs one error, keeps an empty scan (every query answers nothing) and
+  returns false; `ContactScan` then marks the scan rejected and answers it from GDScript. The grid's cell count is a checked
+  product, so a range too large to enumerate (a huge finite one saturates the cell indices) tests every body instead.
 - **Parity is bit for bit** (maintainer, 2026-11-02). The field repeats GDScript's arithmetic: 32-bit vectors, 64-bit scalars,
   the engine's order (`x*x + y*y + z*z`), a float rounded to 32 bits before it scales a vector, the same comparisons
   (`<=` for contacts, "not greater" for nearest-k, equal ranges to the earlier body) and no fused multiply-add (Rust never

@@ -978,6 +978,12 @@ once with the library and once without: with it 271 passing, 0 failing, 2 pendin
 `test_m3_sandbox`, as before); without it 265 passing, 0 failing, 8 pending (the same two and `test_contact_field`'s 6). No
 Python changed.
 
+**Fix round 2, robustness of the native field** (review). The grid's cell count is now a checked product: a huge finite range
+saturates the cell indices, the count overflowed `i64` and could send a query through billions of cells, so a box too large to
+count takes the scan-every-body path (same results). `load` checks that the parallel arrays line up; on a mismatch it logs one
+error, keeps an empty scan and returns false, and `ContactScan` then answers that scan from GDScript. New tests pin both, and
+three edges that were right but unpinned: a negative range, more than 256 factions, a hostility row shorter than the faction list.
+
 ## Definition of done (M4)
 
 - The maintainer has the T06 report and has answered it: more cycles, or M4 closed with the number reached.

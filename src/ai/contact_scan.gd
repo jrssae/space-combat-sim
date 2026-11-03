@@ -72,6 +72,7 @@ var _bolt_shooters: PackedInt64Array = PackedInt64Array()
 var _hostile_bolts: Dictionary = {}  # faction -> indices of the bolts hostile to it
 var _reach: PackedFloat64Array = PackedFloat64Array()  # per body broadcast range (broadcast scan only)
 var _field: Object = null  # the native field over this scan's arrays, made on the first native query
+var _field_rejected: bool = false  # the field refused this scan's arrays (they differ in length): GDScript answers it
 var _field_rows: Dictionary = {}  # faction -> true once the field has its hostility row
 
 
@@ -363,11 +364,17 @@ func _native() -> Object:
 	if _native_class_known == 0:
 		return null
 	if _field == null:
-		_field = NativeLib.instantiate(NATIVE_CLASS)
-		if _field == null:
+		if _field_rejected:
 			return null
-		_field.load(_body_ids, _positions, _factions, _is_ship, _reach, _bolt_positions, _bolt_velocities, _bolt_factions,
-				_bolt_shooters, SENSOR_RANGE_M)
+		var field: Object = NativeLib.instantiate(NATIVE_CLASS)
+		if field == null:
+			return null
+		# A field that refuses the arrays has logged why; this scan then stays on the GDScript path.
+		if not field.load(_body_ids, _positions, _factions, _is_ship, _reach, _bolt_positions, _bolt_velocities,
+				_bolt_factions, _bolt_shooters, SENSOR_RANGE_M):
+			_field_rejected = true
+			return null
+		_field = field
 	return _field
 
 

@@ -45,7 +45,8 @@ impl ScsContactField {
     }
 
     /// Takes this tick's scan: bodies (with each one's broadcast reach, empty when not a broadcast scan), bolts, and
-    /// the grid's cell size (the sensor range).
+    /// the grid's cell size (the sensor range). Returns false, after logging why, when the arrays do not line up; the
+    /// field then holds an empty scan, so every query answers nothing and the caller can fall back to GDScript.
     #[func]
     #[allow(clippy::too_many_arguments)]
     fn load(
@@ -60,7 +61,31 @@ impl ScsContactField {
         bolt_factions: Array<StringName>,
         bolt_shooters: PackedInt64Array,
         cell_m: f64,
-    ) {
+    ) -> bool {
+        let n = body_ids.len();
+        let lined_up = positions.len() == n
+            && factions.len() == n
+            && is_ship.len() == n
+            && (reach.is_empty() || reach.len() == n)
+            && bolt_velocities.len() == bolt_positions.len()
+            && bolt_factions.len() == bolt_positions.len()
+            && bolt_shooters.len() == bolt_positions.len();
+        if !lined_up {
+            godot_error!(
+                "ScsContactField.load: array lengths differ (bodies {n}, positions {}, factions {}, is_ship {}, reach {}, \
+                 bolts {}, velocities {}, bolt factions {}, shooters {}); the scan is dropped",
+                positions.len(),
+                factions.len(),
+                is_ship.len(),
+                reach.len(),
+                bolt_positions.len(),
+                bolt_velocities.len(),
+                bolt_factions.len(),
+                bolt_shooters.len()
+            );
+            self.clear();
+            return false;
+        }
         self.body_ids = body_ids.as_slice().to_vec();
         self.positions = positions.as_slice().to_vec();
         self.is_ship = is_ship.as_slice().iter().map(|&b| b == 1).collect();
@@ -85,6 +110,7 @@ impl ScsContactField {
             .collect();
         self.cells.sort_unstable();
         self.visited = 0;
+        true
     }
 
     /// Every faction in the scan, in the order `set_hostile_row` expects.
@@ -204,6 +230,25 @@ impl ScsContactField {
 }
 
 impl ScsContactField {
+    // Forgets the whole scan, so a rejected load leaves nothing for a query to index.
+    fn clear(&mut self) {
+        self.body_ids.clear();
+        self.positions.clear();
+        self.body_faction.clear();
+        self.is_ship.clear();
+        self.reach.clear();
+        self.factions.clear();
+        self.hostile_rows.clear();
+        self.bolt_positions.clear();
+        self.bolt_velocities.clear();
+        self.bolt_faction.clear();
+        self.bolt_shooters.clear();
+        self.cells.clear();
+        self.candidates.clear();
+        self.in_range.clear();
+        self.visited = 0;
+    }
+
     // The index of `faction` in this scan's faction list, added on first sight.
     fn faction_index(&mut self, faction: StringName) -> usize {
         if let Some(at) = self.factions.iter().position(|f| *f == faction) {
@@ -227,8 +272,12 @@ impl ScsContactField {
         let hi = |v: f32| cell_of(f64::from(v) + pad, self.cell_m);
         let (lx, ly, lz) = (lo(at.x), lo(at.y), lo(at.z));
         let (hx, hy, hz) = (hi(at.x), hi(at.y), hi(at.z));
-        let columns = (i64::from(hx) - i64::from(lx) + 1) * (i64::from(hy) - i64::from(ly) + 1);
-        let grid_usable = self.cell_m > 0.0 && range.is_finite() && columns <= self.cells.len() as i64;
+        // A huge range saturates the cell indices, so the box can hold more cells than a 64-bit count: too many to walk.
+        let span = |l: i32, h: i32| i64::from(h) - i64::from(l) + 1;
+        let columns = span(lx, hx).checked_mul(span(ly, hy));
+        let grid_usable = self.cell_m > 0.0
+            && range.is_finite()
+            && columns.is_some_and(|c| c <= self.cells.len() as i64);
         if grid_usable {
             for cx in lx..=hx {
                 for cy in ly..=hy {
