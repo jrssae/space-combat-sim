@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-# The fullscreen render check (M4-T07, maintainer Q20): a bench layout in a fullscreen 1920x1080 window on this machine's GPU,
+# The fullscreen render check (M4-T07, maintainer Q20): a bench layout fullscreen, the 3D at 1080p, on this machine's GPU,
 # under the GPU lock, measured for 20 s after a warm-up by scripts/measure_fight.gd (the chase camera on the player at the
 # player's fight). Records FPS, frame time, GPU time, VRAM, draw calls and the 3D scale, with the verdict: the battle's floor is
 # 30 FPS and its target 60; typical must hold 60 with headroom (frame mean 12 ms or under). Vsync is off so headroom shows.
+# The window is fullscreen at the screen's own size (3840x2160 on this machine); the 3D is rendered at 1 080 lines
+# (FULLSCREEN_SCALE, `1080p` by default; 1 for the screen's own resolution), the HUD at the screen's.
 #
 # Usage: scripts/fullscreen_check.sh <layout> <n> [label]      e.g. scripts/fullscreen_check.sh typical 58
 # Environment: FULLSCREEN_WARMUP (8), FULLSCREEN_WINDOW (20), FULLSCREEN_SEED (1), FULLSCREEN_RES (1920x1080),
-#              FULLSCREEN_EXEC (more console statements after the bench starts), GODOT_BIN.
+#              FULLSCREEN_EXEC (more console statements after the bench starts), FULLSCREEN_SCALE (1080p),
+#              FULLSCREEN_BENCH_OPTS (more bench options, e.g. "rocks=0"), GODOT_BIN.
 # Writes reports/perf/<label>/fullscreen.md and fullscreen.log, and a screenshot. Opens a window for about a minute.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -21,6 +24,7 @@ WINDOW="${FULLSCREEN_WINDOW:-20}"
 SEED="${FULLSCREEN_SEED:-1}"
 RES="${FULLSCREEN_RES:-1920x1080}"
 EXTRA="${FULLSCREEN_EXEC:-}"
+SCALE="${FULLSCREEN_SCALE:-1080p}"
 OUT="reports/perf/${LABEL}"
 LOG="${OUT}/fullscreen.log"
 REPORT="${OUT}/fullscreen.md"
@@ -33,12 +37,12 @@ mkdir -p "${OUT}"
 touch reports/.gdignore  # or the next --import takes the screenshot for a game texture
 # The bench outlives the measured window; the measure quits the game when its window ends.
 BENCH_S=$(( WARMUP + WINDOW + 30 ))
-EXEC="bench ${LAYOUT} ${N} ${BENCH_S} warmup=0 seed=${SEED} label=${LABEL}/bench"
+EXEC="bench ${LAYOUT} ${N} ${BENCH_S} warmup=0 seed=${SEED} label=${LABEL}/bench ${FULLSCREEN_BENCH_OPTS:-}"
 [[ -n "${EXTRA}" ]] && EXEC="${EXEC}; ${EXTRA}"
 status=0
 flock /tmp/scs-gpu.lock timeout $(( WARMUP + WINDOW + 240 )) "${GODOT}" --path . --resolution "${RES}" --fullscreen --disable-vsync \
     -s res://scripts/measure_fight.gd -- scene=quiet camera=chase warmup="${WARMUP}" window="${WINDOW}" label="${LAYOUT}_${N}" \
-    exec="${EXEC}" shot="${OUT}/fullscreen.png" > "${LOG}" 2>&1 || status=$?
+    exec="${EXEC}" scale3d="${SCALE}" shot="${OUT}/fullscreen.png" > "${LOG}" 2>&1 || status=$?
 grep -E '^\[measure\]|^\[bench\]|SCRIPT ERROR' "${LOG}" || true
 if (( status != 0 )); then
     echo "fullscreen_check.sh: the run exited ${status} (124 is the timeout); see ${LOG}" >&2
@@ -54,7 +58,7 @@ def num(pattern, line):
     m = re.search(pattern, line)
     return float(m.group(1)) if m else None
 fps = num(r"fps mean ([0-9.]+)", scale)
-frame = num(r"frame ms mean ([0-9.]+)", scale)
+frame = num(r"frame mean ms ([0-9.]+)", scale)
 if fps is None:
     verdict = "no measurement: the run printed no summary (see fullscreen.log)"
 elif layout == "typical":
@@ -65,7 +69,7 @@ else:
     target = "holds" if fps >= 60.0 else "misses"
     verdict = "%s: the 30 FPS floor %s, the 60 FPS target %s (%.1f FPS, frame mean %.2f ms)" % (layout, floor, target, fps, frame)
 with open(report, "w") as f:
-    f.write("# Fullscreen check: %s %s\n\nCommit %s. Fullscreen 1920x1080, vsync off, chase camera, the bench's own layout.\n\n" % (layout, n, commit))
+    f.write("# Fullscreen check: %s %s\n\nCommit %s. Fullscreen, the 3D at 1 080 lines unless the log says otherwise, vsync off, chase camera, the bench's own layout.\n\n" % (layout, n, commit))
     f.write("**Verdict:** %s\n\n```\n%s\n```\n" % (verdict, "\n".join(lines)))
 print("[fullscreen] %s -> %s" % (verdict, report))
 PY

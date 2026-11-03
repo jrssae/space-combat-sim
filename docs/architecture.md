@@ -2101,7 +2101,7 @@ src/perf/standins/capital_standin.gd    RigidBody3D: a box hull with Targetable 
 src/perf/standins/turret_standin.gd     Node3D under a capital: a gun or an interceptor, stepped by the director
 src/perf/standins/asteroid_field.gd     Node3D: one MultiMeshInstance3D, static sphere bodies by RID, a marker per rock
 src/perf/standins/gravity_standin.gd    Node: a point source installed as WorldFrame.environment_field
-scripts/fullscreen_check.sh         a layout fullscreen at 1920x1080 under the GPU lock, with the Q20 verdict
+scripts/fullscreen_check.sh         a layout fullscreen, the 3D at 1080p, under the GPU lock, with the Q20 verdict
 ```
 
 - **What they are for.** Q19 and Q21 put capital ships, turrets, interceptors, missiles, mines, asteroid fields and a moon's
@@ -2148,8 +2148,10 @@ scripts/fullscreen_check.sh         a layout fullscreen at 1920x1080 under the G
   `entities` (means per tick, launches summed) beside the ship count. A sweep's summary lists them per ship count, and its
   headline is battle's max N when battle was measured.
 - **The fullscreen check** (Q20) runs `scripts/measure_fight.gd` with `scene=quiet` and the bench as its console statement,
-  fullscreen at 1920x1080 with vsync off and the chase camera, 20 s after 8 s of warm-up, and writes the verdict: the battle's
-  floor 30 FPS and target 60, typical 60 with a frame mean of 12 ms or under.
+  fullscreen with vsync off and the chase camera, 20 s after 8 s of warm-up, and writes the verdict: the battle's floor 30 FPS
+  and target 60, typical 60 with a frame mean of 12 ms or under. The maintainer's screens are 3840x2160, so a fullscreen window
+  is 4K; the check renders the 3D at 1 080 lines (`scale3d=1080p`, the HUD at the screen's size) to measure Q20's 1080p, and
+  `FULLSCREEN_SCALE=1` measures the screen's own resolution.
 - **Tests**: `test_battle_mix` (the table at 58, 100, 500 and 1 000, scaling, parameters), `test_bench_layout` (seeded plans,
   spacing hull to hull, the 8 km lattice, a quarter of the capitals a side, four sides every pair hostile, the slab clear of
   every ship, the moon), `test_standins` (a gun fires only at hostiles within 4 km and only inside its gate at a limited turn

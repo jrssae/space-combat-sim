@@ -91,8 +91,22 @@ with the player at cruise along its nose (60 m/s, `RebaseFight`'s default), so r
 - **`transit`**: wings of four (the setting's common patrol) cruising on routes, no fight. Tracking, perception and the rebase
   without combat.
 
-- **`battle`** (T07, Q15, Q19 and Q21): the headline layout from phase 1 on, the grand multi-side battle; fighters, capital stand-ins with turrets, missiles, beams, mines, an asteroid field and a gravity source over a 60 km area, four sides, in the mix `BattleMix` states (the plan section, "What the battle is").
-- **`typical`** (T07, Q21): the usual mission's load, about 50 fighters and under 10 capitals with every weapon on two sides; it must hold the budget and 60 FPS fullscreen with headroom.
+- **`battle`** (T07, Q15, Q19 and Q21): the headline layout from phase 1 on, the grand multi-side battle in the mix
+  `BattleMix.GRAND` states (the plan section, "What the battle is"). N counts fighters and capitals: `round(0.15 N)` capitals
+  (carriers `floor(0.2 c)`, destroyers `round(c / 3)`, the rest cruisers, a quarter a side), the rest fighters. Fights of 24 on
+  an 8 km lattice in a 60 by 60 by 20 km area (growing with the square root of N past 500), the player's fight first, 2.5 km
+  ahead; in each fight the four sides (`earth_alliance`, `raiders`, `bench_c`, `bench_d`, every pair hostile through a session
+  faction table) come in from their own directions, and each side's capitals sit 5 km behind its fights, cruising in at 30 m/s
+  with their gun turrets (carrier 12, destroyer 10, cruiser 8) and 4 interceptors each. An asteroid slab of 1 000 rocks (20 by
+  5 by 20 km) over the player's fight, a moon 400 km below pulling 0.03 m/s^2, and every carrier launching a fighter every 5 s.
+  Missiles, beams and mines are counted in the mix and arrive with T12.
+- **`typical`** (T07, Q21): the usual mission's load, `BattleMix.TYPICAL`: at N 58, 50 fighters and 8 capitals (2 carriers, 3
+  destroyers, 3 cruisers) on two sides in two fights of 25, 20 by 20 by 10 km, with the same rocks and moon. It must hold the
+  budget and 60 FPS fullscreen with headroom.
+- Every run of either prints its mix and writes it, and the per-entity counts (`entities`: fighters near and far of the
+  player, capitals, turrets, interceptors, beams, missiles, mines, bolts, asteroids, launches, sides), beside the stages; the
+  stand-ins' own cost is the `standins` stage inside `flight`. `rocks=<count>` overrides the asteroids (0 for none).
+  `scripts/fullscreen_check.sh <layout> <n>` is the Q20 render check.
 
 The sweep is N in {25, 50, 100, 150, 200, 300, 400, 500}: 5 s of warm-up, 30 s measured, three runs each. A layout's sweep stops
 after two failing ship counts in a row. Pools are pre-warmed to N at load; the load time is recorded, not budgeted (load hitches
@@ -134,7 +148,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T04 | Cycle 3 | T03 | Opus | Same | - | done |
 | T05 | Cycle 4: native contact scan (Rust `gdext`, N0 then N1, Q9) | T04 | Opus or Fable | A new toolchain and bit-identical parity | - | done |
 | T06 | Report to the maintainer | T05 | controller | A summary and a question, no code | - | done (waiting for the maintainer's answer) |
-| T07 | The `battle` and `typical` layouts, the mix (`BattleMix`), capital, turret, asteroid and gravity stand-ins, per-entity counters, the fullscreen check script | T06 | Opus | The ruler every later task measures against; what the stand-ins cost needs judgement | A | not started |
+| T07 | The `battle` and `typical` layouts, the mix (`BattleMix`), capital, turret, asteroid and gravity stand-ins, per-entity counters, the fullscreen check script | T06 | Opus | The ruler every later task measures against; what the stand-ins cost needs judgement | A | in progress |
 | T08 | Bolt broad phase in native code (`ScsHitSweep`), projectile kinds | T06 | Opus | Hits grow with bolts times ships; the windowed spikes | G, N | not started |
 | T09 | Native body registry: the scan built from RIDs, entity kinds, nearest-k per kind | T06 | Opus | The per-tick gather cycle 4 left; rocks must not fill a fighter's contacts | G, N | not started |
 | T10 | N4: the flight force step in native code for AI ships (`ScsFlightStep`) | T06 | Fable | The riskiest parity maths (`FlightModel`, the assist's state) | G, N | not started |
@@ -551,6 +565,23 @@ No question is open.
   lists and T20 moves the turrets native. `typical` at phase 1 is expected near the furball's 50 to 60 ship cost plus about 1.5 ms
   of stand-ins.
 - **Architecture:** §17.6.
+- **Done (2026-11-03):** `BattleMix`, the `battle` and `typical` layouts, the stand-ins under `src/perf/standins/` (capitals,
+  gun and interceptor turrets, the asteroid field, the moon, the carrier launch cycle), `Targetable.kind`,
+  `WorldFrame.environment_field`, the per-entity counters and `standins` stage, the sweep's battle headline and entity table,
+  `scripts/fullscreen_check.sh`, and the bench option `rocks=<count>`. Numbers in the Cycle log, "M4-T07".
+- **As built, where it differs from the plan:**
+  - Rocks are hulls the current GDScript paths can see: each rock has one bare marker node with a `Damageable` (physics by RID
+    and drawing by one multimesh, as planned). So the 1 000 rocks go through the contact scan's gather, the hit resolver's
+    per-bolt loop and the ram resolver's gather every tick. That costs far more than the plan's 2 to 3 ms: about 24 ms at
+    typical 58 and 49 ms at battle 100 (mostly the hit resolver: bolts times 1 058 hulls). T08's broad phase and T09's registry
+    are what removes it; `rocks=0` measures everything else meanwhile. The ram resolver's gather of static hulls (about 3.8 ms
+    for 1 000 rocks) is no wave-1 task's: listed for the controller.
+  - Turrets aim at contacts no larger than 50 m (fighters), because the scan does not carry kinds yet (T09).
+  - Bolts fly straight (they never took `environment_accel`), so the moon bends ships' paths and intercepts, not bolts; the
+    test checks a coasting path over 30 s (13.5 m).
+  - Mines are counted per ship in the mix (`max(100, N)`), which is what the table's 500 at N 500 and 1 000 at 1 000 give.
+  - The maintainer's screens are 3840x2160 (the window reports 6144x3456 at the desktop's scale), so a fullscreen window is not
+    1080p: the check holds the 3D scale at 1 080 lines (`scale3d=1080p`), the HUD at the screen's size.
 
 ##### M4-T08 Bolt broad phase in native code, projectile kinds
 
@@ -1843,6 +1874,53 @@ the frames over 25 ms at 25 ships; the headless run's p99 for the same layout is
 **Concerns carried to T06.** AC5 is not met: the headline is 25 by the sweep and 45 counting the below-sweep runs, against the
 minimum of 100. The release build holds 50 in the quick check. The render check shows the headless budget is not enough on its own
 above about 25 to 40 ships: at 45 the windowed game is under 60 FPS.
+
+### M4-T07 (2026-11-03): the battle and typical layouts, the phase 1 before
+
+Single seeded runs (`seed=1`, 5 s warm-up, 10 s measured, editor build, headless, both locks, load 1.4 to 2.6), on `31ec5fe`
+in the T07 worktree, so only T07's change. Reports under `reports/perf/m4_t07/`. Means in ms per tick; the tick's median and
+p99. "No rocks" is `rocks=0`, the same run without the asteroid field.
+
+| run | tick median | p99 | ai | (scan) | flight | (standins) | targeting | (hit) | (ram) | physics | behind real time |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| typical 58 | 33.45 | 51.63 | 6.23 | 4.68 | 3.83 | 1.82 | 0.58 | 20.44 | 4.34 | 1.03 | 55.6 % |
+| typical 58, no rocks | 9.13 | 11.99 | 2.97 | 1.47 | 2.27 | 0.30 | 0.58 | 1.48 | 0.56 | 1.42 | 0.0 % |
+| battle 100 | 67.70 | 83.35 | 10.61 | 7.62 | 7.21 | 3.73 | 1.07 | 41.22 | 5.29 | 1.92 | 75.8 % |
+| battle 100, no rocks | 19.07 | 24.52 | 6.06 | 3.19 | 4.55 | 1.09 | 1.07 | 4.58 | 1.03 | 1.81 | 18.3 % |
+| battle 300 | 215.60 | 235.66 | 27.08 | 18.72 | 22.55 | 12.09 | 3.31 | 148.68 | 7.51 | 6.05 | 92.4 % (cut short) |
+| battle 300, no rocks | 86.96 | 108.99 | 20.10 | 11.82 | 17.15 | 6.19 | 3.65 | 37.96 | 3.55 | 6.08 | 81.9 % |
+
+Per entity (means per tick): typical 58 holds 50 fighters (all within 10 km of the player), 8 capitals, 78 turrets,
+32 interceptors, about 190 bolts, 1 000 asteroids, 4 launches in the window, 2 sides; battle 100 holds 76 near and 9 far
+fighters, 15 capitals, 142 turrets, 60 interceptors, about 385 bolts, 6 launches, 4 sides; battle 300 160 near and 95 far,
+45 capitals, 426 turrets, 180 interceptors, about 1 230 bolts, 16 to 18 launches. Interceptors shot down 62 (typical) to
+1 158 (battle 300, no rocks) bolts in 10 s. Missiles, beams and mines are 0 until T12.
+
+- **The rocks dominate** through the GDScript paths that see every hull every tick: at typical 58 they add 19.0 ms of hits
+  (each of about 190 bolts tested against 1 058 hulls), 3.8 ms of rams (the gather), 3.2 ms of scan (the gather) and 1.5 ms
+  of turret retargeting (bigger contact lists). The plan expected 2 to 3 ms for the statics and turrets together. T08 (hit
+  broad phase) and T09 (the registry, statics out of the brains' lists) are what removes most of it.
+- **Without rocks** typical 58 is 9.1 ms (the plan: near the furball's 50 to 60 ship cost plus about 1.5 ms of stand-ins; the
+  stand-ins themselves are 0.30 ms) and battle 100 19.1 ms (spread 100 is 19 ms; the plan: plus 2 to 3 ms). At battle 300 the
+  turrets in GDScript are 6.2 ms and the hits 38 ms with 1 230 bolts.
+- **The quick check** on furball and spread (the layouts add nothing to them): budget held up to 40 ships in both, as on the
+  base (T08's and T10's before runs on `f134e00`, code-identical to `34c704b`). Tick medians came out 5 to 10 % higher in two
+  runs (furball 100: 18.85 and 19.30 ms against 18.04 and 18.68; spread 100: 21.66 and 21.30 against 18.96 and 19.52), but
+  evenly in every stage, including the AI and targeting stages that T07 does not touch on those layouts (the stand-in director
+  does nothing outside a battle), at a load of 1.8 to 2.2: read as the machine's noise.
+- **Fullscreen** (`scripts/fullscreen_check.sh`, the 3D at 1 080 lines in a fullscreen window on the 4K screen, vsync off,
+  20 s; reports `reports/perf/m4_t07_fs_*`):
+
+| run | FPS | frame mean ms | GPU ms mean | render CPU ms | draw calls | VRAM added MB | verdict |
+|---|---|---|---|---|---|---|---|
+| typical 58 | 2.8 | 356.7 | 6.1 | 1.45 | 908 | 1 389 | fails 60 FPS |
+| typical 58, no rocks | 32.9 | 30.4 | 5.9 | 1.39 | 856 | 1 612 | fails 60 FPS |
+| battle 100 | 1.8 | 559.8 | 5.9 | 1.81 | 1 545 | 1 290 | misses the 30 FPS floor |
+| battle 100, no rocks | 5.5 | 182.5 | 6.3 | 1.73 | 1 479 | 1 320 | misses the 30 FPS floor |
+
+  The GPU is not what binds (6 ms a frame at 1080p): the main thread is. With a tick over about 10 ms the windowed frame runs
+  two or more ticks plus the frame's own process work (up to 17 to 20 ms a second's worst), so it falls behind. That is the
+  phase 1 before for T11 (render proxies and the node diet); T26's trigger (the GPU binding) was not seen.
 
 ## Definition of done (M4)
 

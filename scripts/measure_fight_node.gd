@@ -8,7 +8,8 @@ extends Node
 ## the 13-ship scenes, so one is always live.
 ##
 ## Arguments after `--`: scene=<name> camera=<chase|cockpit> warmup=<s> window=<s> near=<m> far=<m> steps=<n> label=<text>
-## exec="<console statements>" shot=<png path> hero=off
+## exec="<console statements>" shot=<png path> hero=off scale3d=<1080p|factor> (M4-T07: the 3D scale, held every frame;
+## 1080p renders the 3D at 1 080 lines whatever the window's size, for the fullscreen check on a larger screen)
 
 const WARMUP_S: float = 6.0
 const WINDOW_S: float = 20.0
@@ -30,7 +31,7 @@ const MAX_SPIKES_PRINTED: int = 40
 
 var main: Main
 var options: Dictionary = {"scene": "held", "camera": "chase", "warmup": str(WARMUP_S), "window": str(WINDOW_S), "near": "120", "far": "500",
-		"steps": "0", "label": "", "exec": "", "shot": "", "hero": "on"}
+		"steps": "0", "label": "", "exec": "", "shot": "", "hero": "on", "scale3d": ""}
 var measuring: bool = false
 var frame_ms := PackedFloat64Array()
 var gpu_ms := PackedFloat64Array()
@@ -232,6 +233,7 @@ func _on_tick() -> void:
 
 
 func _on_frame() -> void:
+	_hold_3d_scale()
 	if _started_usec == 0:
 		return
 	var now: int = Time.get_ticks_usec()
@@ -248,6 +250,17 @@ func _on_frame() -> void:
 			_finish()
 			return
 	_last_frame_usec = now
+
+
+# The 3D scale the run asked for, set again whenever something (Main on a resize) changed it.
+func _hold_3d_scale() -> void:
+	var wanted: String = String(options["scale3d"])
+	if wanted.is_empty():
+		return
+	var root: Window = get_tree().root
+	var scale: float = minf(1.0, 1080.0 / float(maxi(root.size.y, 1))) if wanted == "1080p" else float(wanted)
+	if scale > 0.0 and not is_equal_approx(root.scaling_3d_scale, scale):
+		root.scaling_3d_scale = scale
 
 
 # An explosion on a timer and hulls topped up, so the sustained window always has wrecks in it and the same ships in it.
@@ -369,7 +382,8 @@ func _finish() -> void:
 			Settings.get_value(&"particle_density"), Settings.get_value(&"lens_flare"), Settings.get_value(&"motion_blur"), Settings.get_value(&"splat_hero"), _read("ship.running_lights"),
 			Settings.get_value(&"splat_budget")])
 	var root: Window = get_tree().root
-	print("[measure] %s: window mode %s, 3d scale %.2f, 3d scaling mode %d, frame mean ms %.2f, fps mean %.1f" % [label,
+	print("[measure] %s: window %dx%d %s, 3d scale %.2f, 3d scaling mode %d, frame mean ms %.2f, fps mean %.1f" % [label,
+			root.size.x, root.size.y,
 			"fullscreen" if DisplayServer.window_get_mode() in [DisplayServer.WINDOW_MODE_FULLSCREEN, DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN] else "windowed",
 			root.scaling_3d_scale, root.scaling_3d_mode, _mean(frame_ms), 1000.0 / maxf(_mean(frame_ms), 1e-6)])  # M4-T07: the fullscreen check
 	print("[measure] %s: VRAM before %.0f MB, peak %.0f MB, added %.0f MB; GTT before %.0f MB, peak %.0f MB, added %.0f MB" % [
