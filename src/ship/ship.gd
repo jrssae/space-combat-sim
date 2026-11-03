@@ -78,6 +78,8 @@ var running_lights: bool = true:
 	set = set_running_lights
 
 var _assist_on: bool = true
+## Whether this ship may fly in the native flight batch (M4-T10): every ship but the player's. Stub: nothing joins yet.
+var batched: bool = false
 var _hardpoints: Hardpoints = Hardpoints.new()
 var _layout: ThrusterLayout = ThrusterLayout.new()
 ## Share of the gap to this tick's measured turn rate of the lead direction that the smoothed rate closes each tick.
@@ -312,6 +314,11 @@ func body_angular_velocity() -> Vector3:
 ## came from a contact.
 func applied_force() -> Vector3:
 	return _applied_force
+
+
+## Which path flew the last physics tick: `native` (the flight batch, M4-T10) or `gdscript` (this node's own model).
+func flight_path() -> StringName:
+	return &"gdscript"
 
 
 ## The reaction-mass tank, with `unlimited` brought in line with `settings.fuel_unlimited` as of now. Never null.
