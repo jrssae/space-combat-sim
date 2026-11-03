@@ -504,6 +504,112 @@ Sources, checked 2026-11-02: https://babylon5.fandom.com/wiki/Centauri_liner,
 https://babylon5.fandom.com/wiki/File:Centauri_Liner.jpg, https://babylon5.fandom.com/wiki/File:Molios.JPG,
 https://babylon5.fandom.com/wiki/Centauri_transport, https://babylon5.fandom.com/wiki/File:Carbo.JPG.
 
+### Brakiri Bokmai transport (80 m)
+
+`Brakiri_Bokmai_transport_80m.STL` (binary, 16 998 triangles), 0.06063 m per file unit at 80 m (Q17). The fan wiki has
+no page or capture of a Bokmai and a web search found none, so the shape comes from the model alone and the colours
+from other Brakiri ships.
+
+Reading the frame (T22, 2026-11-03). File y (1 319.5 units) is the length. The model is mirror-symmetric about file
+x = 0, so file x is the span and file z the height. One end is a tall solid blade; the other carries two nacelles with
+tall fins. The blade is read as the bow, so file +y is forward, and file +z is up, the side of the dorsal spine:
+`--right=+x --up=+z --aft=-y`. For the bow:
+
+- the blade is the only closed volume big enough for a crew, and it holds the model's only window-like insets, high on
+  both flanks;
+- each nacelle ends in an open cup with a dome inside, which reads as an exhaust;
+- the pods ride on a spindle anchored in the blade, its free end towards the nacelles;
+- `references/Brakiri_Falkosi_fighter.STL` has the same motif: a dome in a ring sits at the end away from its pointed
+  pod, whose tip carries two barrel-like prongs, and behind its wings' raked edges, as the Bokmai's domes sit behind
+  its fins' raked edges.
+
+Against it, the fins' raked edges then trail and their tips lean forward. Read the other way they would be ordinary
+swept fins and the blade a tail. The nose is about 70 % sure. Up is safer: the fins are nearly symmetric, so up only
+decides that the spine runs over the pods rather than under them as a keel.
+
+Length 80.0 m (Q17), span 31.62 m across the nacelles, height 30.91 m across the fin tips. y is measured from the
+model's box centre, which lies close to the nacelle axis (y 2.09) and the pods' axis (y 1.70).
+
+| Part | Size and place |
+|---|---|
+| Bow | a tall blade, z 0 to 14, from the keel (y -0.35) to the crown (y 13.3). Its section is widest at the top (5.3 to 5.7 m), pinches to 3.4 m at y 3 to 5 and flares again at the keel. The prow is a rounded upright edge, foremost at (0, 8.8, 0). The crown rises from it to y 13.2 by z 10; the face below slopes back to the keel (y 0 at z 5, the keel at z 6 to 8). Behind z 10 the keel flares into the two lower arms (8.7 m wide at z 10.9), with the spindle's socket between them. A stepped inset 4.9 m long and 2.4 m tall sits flush in each flank, high up (x ±2.3, y 7.2 to 9.7, z 4.1 to 8.9), read as the bridge windows. |
+| Dorsal spine | from the bow's crown aft to a fork at z 47.6. 5.24 m wide and 3.5 m deep at z 15 to 30 (y 9.75 to 13.3); its top falls to y 12.4 by z 47 while it widens to 8.2 m at the fork. |
+| Fork struts | from the fork aft and outboard to the posts, about 2.6 m wide and 2.0 m deep: y 9.8 to 12.3 at the fork, 8.9 to 11.2 at z 59 |
+| Posts | at x ±13.0, z 59.2 to 61.7, 1.6 by 2.5 m, from the struts (y about 11) down to the joints (y about 4) |
+| Lower arms | from the bow's keel (z 10 to 15) out to x ±12 by z 22, then straight aft at x 12.0 to 14.0 to the joints at z 60. About 2.0 m wide and 1.3 m deep. The centre line lies at y -1.45 at z 20, -0.15 at z 40 and +1.9 at z 58, where the arm thickens into the joint. |
+| Joints | where arm, post and neck meet, x ±13.1, z 59 to 62 |
+| Necks | z 62 to 68, upright ovals 2.0 m wide and 4.0 m tall (y 0.2 to 4.15) at x ±13.1 |
+| Nacelles | z 68 to 79.5, 4.6 m wide (x ±11.2 to ±15.8), about 6 m tall at the fin roots (y -1 to 5). The aft end is an open cup, 2.0 by 4.0 m inside, its rim at z 79. |
+| Engine domes | a separate shell in each cup on the nacelle axis (±13.16, 2.09): 1.70 m wide, 2.83 m tall and 3.89 m long (z 76.1 to 80.0). About 1 m stands out of the cup and is the ship's aft end. |
+| Upper fins | through each nacelle at x ±12.92. The leading edge is upright at z 69.8; the tip is rounded, y 15.45 at z 70.5 to 73.5; the trailing edge rakes from (z 79.0, y 6.0) up to (74.0, 14.7). Chord 9.8 m at y 5, 7.8 m at y 8, 5.3 m at y 12, 3.9 m at y 15; 1.3 m thick at y 10 and 1.0 m at y 14. An inset on each face, y 8.2 to 12.8, z 69.9 to 77.0, follows the outline. |
+| Lower fins | at x ±12.93. The leading edge runs from (z 70.0, y -1) to (71.8, -14); the tip is rounded, y -15.43 at z 72.5 to 74.5; the trailing edge runs from (78.4, -2) to (75.2, -14). Chord 8.0 m at y -2, 6.8 m at y -4, 4.5 m at y -10, 3.4 m at y -14; 1.7 m thick at y -4 and 1.0 m at y -14. |
+| Spindle | a rod 1.93 m across on the axis (0, 1.70), from inside the bow (z 12.5) to inside the aft pod (z 58.0), with a coupling drum 2.43 m across and 1.87 m long at z 15.35 to 17.22, just behind the bow. The pods slide onto it. |
+
+From behind, the two fins stand at the sides, joined at the top by the fork struts and at the bottom by the arms, with
+the pods between them under the spine.
+
+**Cargo pods (Q17).** The three pods are separate shells of one pod, identical in triangle count, area and box, so one
+pod model serves all three mounts. A pod is a rounded box 17.81 m wide, 11.74 m tall and 13.39 m long, centred on the
+spindle. Its section is a rounded rectangle with corners of about 3.5 m radius and a slightly crowned top (y 7.57 on
+the centre line, 7.29 at x ±6). Its ends are domed: 14.7 by 8.7 m at 1 m in from the end, 16.5 by 10.4 m at 2 m, the
+full section from 3 m in. Each pod carries:
+
+- an axial sleeve 2.96 m across round the spindle, standing 0.35 m out of each end;
+- two straps 0.49 m wide at x ±3.47, hoops that run fore and aft over the top, the ends and the bottom, 0.15 m proud;
+- a plate 2.25 by 4.13 m on the top centre line, 0.25 m proud, with two small blocks on it;
+- a plate 3.65 m long and 1.84 m tall on each side face at the axis height;
+- a saddle 2.9 m long at each upper corner, amidships.
+
+Two rods 0.38 m across run along each upper corner, at (±8.32, 6.14) and (±7.48, 6.98), through the saddles from the
+front pod's middle to the aft pod's (z 24.8 to 53.2), with couplers 0.54 m across and 3.43 m long over the gaps. They
+tie the pods together and touch nothing on the frame.
+
+| Mount (`cargo_pods[]`) | Centre | Pod spans z |
+|---|---|---|
+| `pod_fwd` | (0, 1.70, 24.63) | 17.94 to 31.33 |
+| `pod_mid` | (0, 1.70, 39.07) | 32.37 to 45.76 |
+| `pod_aft` | (0, 1.70, 53.57) | 46.87 to 60.26 |
+
+`up` is (0, 1, 0) and `forward` (0, 0, -1) at every mount; the pod is the same fore and aft. The pitch is 14.47 m and
+the gaps 1.04 and 1.11 m. The pods clear the spine by 1.9 m and the arms by 2.9 m, hang 2 to 4 m below the arms, and
+the aft pod ends at the joints. With no pods the bare spindle stays between the arms.
+
+**Colours (Q11, Q17).** No capture shows a Bokmai, so the scheme is the Brakiri house colours. The Brakiri cruiser in
+"Brakiri ship.jpg" is dark olive green with lemon-yellow panels and bands and rows of small white windows. Terry
+Miesle's painted miniatures of the Brakiri fleet for the Babylon 5 Wars game show the same scheme lighter: "Tamiya Sky
+... a light putty green" with stripes in "GS H-329 Yellow". The frame takes the on-screen green, the pods the lighter
+green so they read as cargo against it, and yellow marks the fins, the necks and the pod straps.
+
+| Where | sRGB | Read from |
+|---|---|---|
+| Frame: bow, spine, struts, posts, arms, necks, nacelles, fins | olive green #5A6B59 (the lit faces; mid tones read #4E5F4D), panel lines and recesses #3A4538 | Brakiri ship.jpg |
+| Pods | pale putty green #ABAE9A, panel lines #868A78 | brakiri_fleet1.jpg, brakiri_fleet2.jpg |
+| Yellow | #D8B840: the upper fins' insets, the top 1.5 m of every fin, a band round each neck (z 63.5 to 65.5), the pods' straps | Brakiri ship.jpg (the spar's tip panel and the band at the boom's end read #C1C064 under the capture's green cast), the miniatures' stripes (#D1A245) |
+| Windows | #E8F0DC in a dark strip #1E2620, in the bow's flank insets | Brakiri ship.jpg (#CCDBCA under the cast) |
+| Spindle, drum, sleeves, rails | #3A4538 | our choice |
+| Nacelle cups | dark metal #2E3530 | our choice |
+| Engine domes and glow | the domes #F2EDC4, the glow yellow-white #FFF0B0 | no capture shows the drive lit; our choice |
+
+The cruiser's yellow tip panel carries the Brakiri emblem, a franchise mark, which is not reproduced. The scheme is a
+proposal: the maintainer confirms it before the generator paints with it (Q19).
+
+**Turrets (proposed, awaiting the maintainer; Q19).** Dorsal only, on the frame and not on the pods, so an empty
+Bokmai still defends itself. Two, as on the 70 m Narn transport:
+
+- `dorsal_fwd` (0, +13.3, 17.0) on the spine's top just behind the bow's crown, up +y, `arc_deg` 200: forward and
+  both upper quarters. The crown ahead is no higher (y 13.2).
+- `dorsal_aft` (0, +12.5, 45.0) on the spine's top just ahead of the fork, where it is 7.2 m wide, up +y, `arc_deg`
+  200: aft between the fins, which rise 3 m above it 13 m outboard, and the flanks above the pods.
+
+The belly stays blind, as on every civilian. If the maintainer wants one turret, `dorsal_mid` at (0, +12.9, 32.0)
+mid-spine.
+
+Sources, checked 2026-11-03: https://babylon5.fandom.com/wiki/Brakiri_cruiser,
+https://babylon5.fandom.com/wiki/File:Brakiri_ship.jpg, https://starshipmodeler.com/b5/b5minis4b.htm (with its
+brakiri_fleet1.jpg, brakiri_fleet2.jpg and brakiri_avioki1.jpg). Set aside: File:Flag_Brakiri.png (an emblem; its
+orange #FFA00B only backs a warm yellow), File:BattleSector83c.jpg (a Brakiri cruiser in hyperspace, too blue to read),
+File:Brakos_Ring_(Merchants,_Traders,_&_Raiders).jpg and File:DotD.jpg (no Brakiri ship).
+
 ## Combat sounds (reference for the M5 sound pass)
 
 The source is the YouTube clip "Starfury Dogfight with Raider Forces | Babylon 5"

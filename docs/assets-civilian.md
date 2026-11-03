@@ -408,6 +408,120 @@ The turret model: a `hull_dark` flange 1.5 m across and 0.15 m tall, a stalk 0.6
 z 1.9), twin barrels at x ±0.45 on the pod's axis with the muzzles 2.6 m ahead of the turning axis, and two gold collars
 on each barrel (where it leaves the pod, and near the muzzle); 2 080 splats at 0.11 m.
 
+## `brakiri_bokmai` and the `brakiri` style (T22, plan)
+
+`tools/procgen/assets/brakiri_bokmai.py`, `tools/procgen/styles/brakiri.py`, parts in a new
+`tools/procgen/parts/brakiri.py`. This is T22's plan from the survey of 2026-11-03 ("Brakiri Bokmai transport" in
+`docs/design-references.md`). The colours and the turrets are proposals: the generator commits them once the maintainer
+confirms them (Q19). Authored frame as in the design references: y from the model's box centre, z from the prow, so the
+fidelity check needs no model offset. The generator writes the hull without its pods and one pod model,
+`brakiri_bokmai_pod.*`, LOD0 to LOD3 at the hull's spacings so it switches with the hull (D59).
+
+| Part | How to build it | Size |
+|---|---|---|
+| `bow` | `section_loft` (`parts/starfury.py`) along z through the blade's measured sections: wide top, waist, flared keel. The prow's rounded edge and the crown's rise come from the side profile. The two flank insets are flush `canopy_glass` panels with rows of `window` dots. | z 0 to 14, 13.5 m tall, at most 5.7 m across |
+| `spine` | `section_loft` of rounded rectangles (`superellipse_ring`) from the crown to the fork | 5.24 x 3.5 m at z 15 to 30, 8.2 m wide at the fork (z 47.6) |
+| `fork_strut`, `post` | `section_loft` along the strut's centre line from the fork to the post's top, then down the post | struts 2.6 x 2.0 m, posts 1.6 x 2.5 m |
+| `lower_arm` | `section_loft` along the measured centre line: out from the keel, then straight aft, rising from y -1.45 to +1.9 | about 2.0 x 1.3 m, z 10 to 60 |
+| `neck`, `nacelle` | `loft` of upright ovals (`superellipse_ring`) along the nacelle axis (±13.16, 2.09): the neck's 2.0 x 4.0 m oval swelling to the nacelle's 4.6 x 6 m body. The open cup at the aft end is an inner wall in `nozzle`. | z 62 to 79.5 |
+| `engine_dome` | `ellipsoid_cap` (or a short `lathe`) in the cup | 1.70 x 2.83 x 3.89 m, aft end at z 80.0 |
+| `fin` | `section_loft` along y through thin sections (leading edge z, trailing edge z, thickness) from the fin rows of the design references. The upper fins' insets are `stripe` faces; every fin's top 1.5 m is `stripe`. | upper to y 15.45, lower to -15.43 |
+| `spindle` | `lathe` rod and coupling drum, `hull_dark` | rod 1.93 m x 45.5 m; drum 2.43 x 1.87 m |
+| `cargo_pod` (the pod model) | `loft` of `superellipse_ring` sections (17.81 x 11.74 m, corners about 3.5 m, the crowned top) with domed ends from the end stations. The sleeve is a `lathe` tube, the straps `sweep_rect` hoops, the top and side plates `box`es, the saddles `ellipsoid_cap`s, the corner rails `lathe` rods. | 17.81 x 11.74 x 13.39 m |
+
+The pod model's origin is its mount point, the pod's centre on the spindle axis, with +y up and -z forward. In the
+model the corner rails run unbroken from the front pod's middle to the aft pod's, with couplers over the gaps, and touch
+only the pods. The pod model carries its own rails, from its saddles to its end faces, and leaves the couplers out, so
+an empty mount shows no floating rail. The rods are 0.38 m across and lie inside the pods' outlines from above and from
+the side, so the silhouettes barely see the difference.
+
+The spindle runs through every pod's sleeve. D59's test that the hull alone has no splats inside the pod volumes
+therefore leaves out the bore, a cylinder of radius 1.48 m (the sleeve's) round the spindle's axis; with no pods the
+bare spindle is what an empty mount looks like.
+
+**Budget.** The surfaces come from the reference's shells table: the frame 3 112 m², the spindle and drum 298, the domes
+52, the fin insets 102 and the bow insets 15; a pod's body 896 m², its straps 68, plates 26, and rails, saddles and
+couplers about 60 (the sleeve's 145 m² lies mostly inside the pod). Scaling the 60 m hulls' switch distances, the
+Bokmai is LOD0 inside about 280 m, LOD1 to 930 m and LOD2 to 3.5 km.
+
+| Asset | Surface | LOD0 target (range) | Start spacing | LOD1 | LOD2 | LOD3 |
+|---|---|---|---|---|---|---|
+| `brakiri_bokmai` (hull) | about 3 600 m² | 40 500 (32 000 to 49 000) | 0.30 m | 10 100 | 2 500 | 630 |
+| `brakiri_bokmai_pod` (each) | about 1 000 m² | 11 500 (9 000 to 14 000) | 0.30 m | 2 900 | 720 | 180 |
+| Hull and three pods | about 6 600 m² | 75 000 | | 18 800 | 4 660 | 1 170 |
+
+All nine hulls at LOD0, the Bokmai with its three pods: the eight planned in "Splat budgets" make 810 000 and the
+Bokmai 75 000, 885 000 in all. With the hero (975 058), the sky (16 000) and five buoys (38 000) that is 1 914 058,
+95.7 % of `settings.splat_budget` (2 000 000). All nine at LOD1 make 221 300, at LOD2 55 360, at LOD3 13 870. The
+Bokmai keeps about 80 000 splats resident (LOD0 to LOD3, its chunks and the pod's levels), about 19 MB at M3-T24's
+240 bytes a splat. The generated surfaces will come out 10 to 30 % smaller than the reference's, as on the other
+hulls, so tune the spacing into the ranges.
+
+**Hardpoints.** In the body frame after the centroid shift, like every hardpoint.
+
+| Hardpoint | Position (authored frame) |
+|---|---|
+| Mains (`l`, `r`) | the cups' rims on the nacelle axis, (±13.16, 2.09, 79.3), exhaust (0, 0, 1), radius 1.0; the dome glows inside the cup |
+| Retros (`l`, `r`) | the nacelles' front shoulders beside the necks, (±14.8, 2.09, 68.5), exhaust (0, 0, -1), radius 0.6 |
+| RCS | the four fin tips (up or down), the prow (0, 8.8, 0) forward, the bow's flanks at (±2.8, 4.0, 7.0) and the nacelles' outboard flanks at (±15.8, 2.09, 74.0) sideways |
+| `cockpit_camera` | in the bow behind the window insets, (0, +8.5, 6.5) |
+| `cabin` | the same point, `cabin_range_m` 4 (0.05 L) |
+| Port / starboard lights | the arms' outer faces at mid-length, (±14.0, -0.1, 40.0) |
+| `top`, `top_lamp` | the spine's crown (0, +13.3, 15.0); lamp (0, +19.5, 40.0), range 24 m |
+| Turrets (proposed) | `dorsal_fwd` (0, +13.3, 17.0) and `dorsal_aft` (0, +12.5, 45.0), up (0, 1, 0), `arc_deg` 200, `barrel_m` 3.0 |
+| `cargo_pods[]` | `pod_fwd` (0, 1.70, 24.63), `pod_mid` (0, 1.70, 39.07), `pod_aft` (0, 1.70, 53.57); `up` (0, 1, 0), `forward` (0, 0, -1) |
+
+The thrust line is the nacelle axis (y 2.09), so the centre of mass is trimmed onto it, as on the Saturns. The pods'
+axis lies 0.4 m below it, so a loaded and an empty Bokmai trim alike; each pod's mass goes in the manifest's `pod`
+entry for T16's `ShipSpec`.
+
+Collision, hull without pods: the bow a box 5.7 x 13.6 x 14 m; the spine a box 5.3 x 3.6 x 33 m and one over the fork;
+each strut an oriented box; each post a box 1.6 x 7 x 2.5 m; each lower arm an oriented box for its root and one along
+its straight run (it rises 3.3 m); each neck and nacelle a capsule of radius 2.3 m along z; each fin an oriented box;
+the spindle a capsule of radius 0.97 m. The pod: one box 17.81 x 11.74 x 13.39 m about its origin, in the manifest's
+`pod` entry; its saddles and rails lie inside it, and the side plates stand 0.25 m out, inside the coverage test's
+one-spacing margin.
+
+**Chunks** (`core/chunks.py`, cut from LOD1, the pods left out): `bow` (bow, spine to the fork, spindle and drum),
+`arm_l`, `arm_r` (the lower arms), `engine_l`, `engine_r` (fork strut, post, neck, nacelle, fins, dome). Each mounted
+pod comes off whole as its own debris piece (D59), so a destroyed Bokmai sheds five chunks and up to three pods.
+
+**The `brakiri` style.**
+
+| Role | sRGB | Where |
+|---|---|---|
+| `hull` | #5A6B59 | the frame: bow, spine, struts, posts, arms, necks, nacelles, fins; the pods' top plates and saddles |
+| `hull_dark` | #3A4538 | panel lines, recesses, the spindle and drum, the pods' sleeves and rails |
+| `hull_panel` | #ABAE9A | the pods' plating |
+| `pod_line` (extra) | #868A78 | the pods' panel lines |
+| `stripe` | #D8B840 | the yellow: the upper fins' insets, every fin's top 1.5 m, a band round each neck (z 63.5 to 65.5), the pods' straps, the turret's band and muzzle rings |
+| `hazard`, `hazard_dark` | #D8B840, #3A4538 | the pods' side plates (our choice) |
+| `canopy_glass`, `canopy_frame` | #1E2620, #3A4538 | the bow's window insets |
+| `window` (extra) | #E8F0DC | the small windows in the insets |
+| `nozzle`, `nozzle_throat` | #2E3530, #121512 | the cups' walls and depths |
+| `engine_dome` (extra) | #F2EDC4 | the domes |
+| `barrel`, `bore`, `interior`, `rcs` | #2E3530, #101210, #101210, #3A4538 | our choice |
+
+Panel grid 2.4 m with 0.25 m lines on the frame, 2.0 m on the pods; tint jitter 0.06. Engine glow yellow-white
+#FFF0B0 (`GLOW_SRGB` for T16's `ShipSpec`). Turret bolts yellow-green, our choice; the wiki only says Brakiri warships
+carry graviton weapons. The frame green is lighter than the Narn's #2E4A3B, but the raider's warning about dark albedo
+still applies: T16's GPU check decides whether it needs a lift.
+
+**The turret model** (proposed): a round base 2.4 m across and 0.4 m tall in `hull_dark`; on it a flattened lens-shaped
+housing 2.2 m wide, 1.0 m tall and 2.6 m long in `hull`, with a yellow band round its rim; twin barrels 0.24 m across and
+0.7 m apart with yellow muzzle rings, the muzzles 3.0 m ahead of the turning axis (`barrel_m` 3.0). About 2 000 splats
+at 0.11 m, like the others. The lens shape follows the frame's rounded, organic lines.
+
+**Fidelity.** The mapping for the compare run, with the three pods drawn from `hardpoints.json`:
+
+```
+.venv/bin/python3 -I tools/refview/compare.py references/Brakiri_Bokmai_transport_80m.STL brakiri_bokmai --length 80 \
+    --right=+x --up=+z --aft=-y --pods-from-hardpoints
+```
+
+The arms (2.0 m), struts (2.6 m) and fins (1 to 1.7 m) are only a few spacings across. The verdict scores the mesh, so
+build them at their measured size and let the splat check show the reading loss.
+
 ## Styles
 
 Three styles, each a `Style` with the required roles plus extras. Hex values are sRGB from the design references;
