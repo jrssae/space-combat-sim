@@ -100,10 +100,10 @@ are M5's mission work).
 |---|---|---|---|
 | AC1 | Harness: `bench <layout> <n> [seconds]` on the console and `scripts/bench.sh` (the sweep) run the three layouts at any N headless on the real main scene and write `reports/perf/<label>/` (`summary.json`, `summary.md`); the `perf` provider shows the last tick's stages (`tick_us`, `ai_us`, `scan_us`, `physics_us`, `resolvers_us`, `targeting_us`, `rebase_us`, `ships`); the statistics (median, p99, the budget verdict, the max-N search) are unit-tested; `scripts/run_tests.sh` has a short smoke run (`furball`, 25 ships, 5 s) that checks the report is written, not its numbers | A | M4-T01, 2026-11-02 |
 | AC2 | Baseline: before any change, the sweep's max N per layout and the stage breakdown at 50 and 100 ships are recorded below | A | M4-T01, 2026-11-02 (Cycle log, Baseline) |
-| AC3 | Four cycles, each recorded below: the numbers before, three candidates ranked by confidence with the evidence for each, the first built **test first** (the failing test committed before the change), the numbers after, the gain against the prediction | A | |
-| AC4 | No regressions: after each cycle the focused runs (the touched code and AC13's paired budget) are green locally and CI's full suite is green on the push (Q10); `scripts/run_tests.sh` green locally once, before M4 closes; every behaviour change listed | A | |
-| AC5 | Goal: the headline max N is at least 100, and toward 500. Not reached after cycle 4: the report says so and asks for guidance (T06) | A | |
-| AC6 | Render check at the headline max N on the maintainer's GPU: FPS, frame time, VRAM, GPU and driver recorded (by the agent, 2026-11-01) | A M4-T06m, 2026-11-03 (Cycle log, Final measurements) |
+| AC3 | Four cycles, each recorded below: the numbers before, three candidates ranked by confidence with the evidence for each, the first built **test first** (the failing test committed before the change), the numbers after, the gain against the prediction | A | M4-T02 to M4-T05, 2026-11-03 (Cycle log) |
+| AC4 | No regressions: after each cycle the focused runs (the touched code and AC13's paired budget) are green locally and CI's full suite is green on the push (Q10); `scripts/run_tests.sh` green locally once, before M4 closes; every behaviour change listed | A | M4-T06m, 2026-11-03: full suite 2 257 of 2 259 passing, 0 failing, 2 pending (AC12); CI green on every cycle's push; behaviour changes in the T06 report |
+| AC5 | Goal: the headline max N is at least 100, and toward 500. Not reached after cycle 4: the report says so and asks for guidance (T06) | A | **Not met**: headline 25 by the sweep, 45 with the below-sweep runs (release build: 50 in the quick check). T06 asks for guidance, 2026-11-03 |
+| AC6 | Render check at the headline max N on the maintainer's GPU: FPS, frame time, VRAM, GPU and driver recorded (by the agent, 2026-11-01) | A | M4-T06m, 2026-11-03 (Cycle log, Final measurements) |
 
 ## Task breakdown (ordered)
 
@@ -116,7 +116,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T03 | Cycle 2 | T02 | Opus | Same | done |
 | T04 | Cycle 3 | T03 | Opus | Same | done |
 | T05 | Cycle 4: native contact scan (Rust `gdext`, N0 then N1, Q9) | T04 | Opus or Fable | A new toolchain and bit-identical parity | done |
-| T06 | Report to the maintainer | T05 | controller | A summary and a question, no code | not started |
+| T06 | Report to the maintainer | T05 | controller | A summary and a question, no code | done (waiting for the maintainer's answer) |
 
 ### M4-T01 Benchmark harness, budget and baseline
 
@@ -214,6 +214,65 @@ After cycle 4, the controller writes the summary: the headline max N and each la
 100 and at the max, what each cycle built and gained, the behaviour changes, and the remaining candidates ranked. **If the
 headline max N is under 100, the report asks the maintainer for guidance and M4 stops there.** At 100 or more it asks whether to
 run more cycles toward 500 or to close M4.
+
+#### Report (2026-11-03)
+
+**Where M4 ended.** The headline max N went from **0 to 25** by the milestone's sweep, and to **45** counting the runs below the
+sweep's 50-ship step (the furball passes 45 on two runs of three; spread passes 50 and transit 50). The release export holds **50**
+in both headline layouts in the quick check. AC5's minimum is 100, so it is **not met**, and M4 stops here for guidance.
+
+| | baseline | cycle 1 | cycle 2 | cycle 3 | cycle 4 (final) |
+|---|---|---|---|---|---|
+| sweep max N (furball, spread, transit) | 0, 0, 0 | 25, 25, 25 | | | 25, 50, 50 |
+| real ceiling below the sweep (furball) | 20 | 30 | 30 | 40 | 45 |
+| quick check (furball, spread) | | 30, 30 | 30, 30 | 40, 40 | 40, 40 (release export: 50, 50) |
+| furball tick median at 50 ships | 28.99 ms | 13.03 | 12.19 | 8.23 | 8.39 |
+| furball tick median at 100 ships | 109.07 ms | 34.57 | 30.48 | 17.06 | 15.22 |
+
+The tick medians come from each cycle's own runs (sweeps for the baseline and cycle 1, the quick check for cycle 2, 10 s stage runs
+for cycle 3, the final 30 s stage runs for cycle 4), so they compare roughly, not to the tenth of a millisecond.
+
+**What each cycle built** (all four test first, all green on CI):
+
+| cycle | change | stage it hit, furball 100 ships | behaviour |
+|---|---|---|---|
+| 1 (T02) | only the player's targeting keeps a per-tick candidate list | targeting 74.0 to 1.0 ms | one in-tick edge (selecting by id a target that left reach since the last refresh) |
+| 2 (T03) | broad phase for the ram resolver | rams 10.2 to 0.7 ms | none (seeded runs identical) |
+| 3 (T04) | AI think rate (near the player every tick, far at 20 Hz staggered, Q8) and nearest-12 contacts | AI 17.6 to 6.95 ms | **far ships react up to 50 ms later; hits fall about 13 % at 100 ships (15 to 21 % with every ship far); far contacts beyond the nearest 12 are ignored when choosing (the nearest hostile, target, wing and recent attacker are always kept)** |
+| 4 (T05) | Rust toolchain and native seam (N0), the contact scan's queries in native code (N1) | scan 3.9 to 2.4 ms | none (bit-identical with `perf_native` on and off) |
+
+Also measured or fixed along the way: the release export runs GDScript 1.2 to 1.3 times faster than the editor build; a CI-only
+test flake (the dogfight test's time scale) fixed; the native field hardened against huge ranges and malformed input; the asset
+generator rejects non-finite values (the maintainer's code review).
+
+**Where the time goes now** (furball, 100 ships, tick mean 16.0 ms against 109.5 at the baseline): AI 6.2 ms (scan 2.6), flight
+3.6, the hit resolver 2.5, physics (Jolt and sync) 1.9, targeting 1.0, rams 0.7. Every stage now grows about linearly; reaching
+100 ships needs the tick halved.
+
+**A finding the headless budget hides.** On the GPU (AC6, RX 6950 XT) the headline's 25 ships run at 120 FPS unconstrained and 60
+on vsync, but at 45 ships, which pass the 8 ms headless budget, the windowed game falls to 52 FPS: the tick plus the renderer's
+own CPU work and the rest of the frame no longer fit 16.7 ms. The hit resolver also spikes to 7.5 to 8.5 ms every few seconds in
+the window (not investigated). The budget's "half the frame for rendering" holds to about 25 to 40 ships.
+
+**Remaining candidates, ranked by confidence that they raise the headline:**
+
+| # | candidate | evidence (furball 100) | expected | confidence |
+|---|---|---|---|---|
+| 1 | AI perception and brain work across worker threads inside the native code (N3; allowed by Q9), with 1-thread and 6-thread outputs identical | AI 6.2 ms, the largest stage; six performance cores idle | AI 6.2 to about 1.5 to 2 ms | medium-high, 70 % |
+| 2 | Bolt broad phase for the hit resolver (and `incoming_fire`), which may also explain the windowed spikes | hits 2.5 ms, bolts times ships | 2.5 to about 0.5 ms; spikes likely gone | high, 75 % |
+| 3 | The flight model's per-tick maths in native code (N4) | flight 3.6 ms, linear | 3.6 to about 1 ms | medium, 60 % |
+| 4 | A cheaper per-tick gather for the scan (cache the broadcast scan, skip the freed-body check) | scan remainder about 2.4 ms is GDScript gather | about 1 ms | medium, 60 % |
+| 5 | Jolt collision layers (ships do not pair-test ships) | physics 1.9 ms | under 1 ms; matters at 300 and up | low now, 30 % |
+| 6 | Broadcast and incoming-fire broad phase in the native field (code review P2) | 0.12 and 0.14 ms | about 0.1 ms; matters toward 500 | low now |
+
+Candidates 1 to 4 together (about 9 ms off 16) would put 100 ships near the 8 ms tick, headless and in the debug build. 500 needs
+those and physics work, and a budget conversation (Jolt alone is about 8.5 ms at 500).
+
+**The question for the maintainer:**
+
+1. Continue M4 toward 100 with more cycles (candidates 1 to 4 in that order), or close M4 at 45 (debug) and 50 (release)?
+2. Which build sets the budget from here: the editor build (as so far) or the release export players run?
+3. Should the budget also cover the windowed frame (the 45-ship finding), for example a render check at each cycle's ceiling?
 
 ## Cycle log
 

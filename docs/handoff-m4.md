@@ -12,7 +12,7 @@ its Cycle log holds the full numbers. This file is the short version plus the de
 | `m4` | Holds T01, the quick check and T02's three commits (`0438c56`, `2e83ca3`, `63cc752`). Every task is committed directly on `m4`. |
 | T01 benchmark harness, budget and baseline | Done and merged. Reviewed twice, full suite green (GUT 2178 of 2180 passing, 2 pending AC12 balance tests; Python 363 OK). |
 | T02 cycle 1 | Built and measured, **not reviewed or merged**. Its commits were made on a worktree branch, then moved onto `m4` (`0438c56`, `2e83ca3`, `63cc752`); the branch and worktree are gone. Report: `.superpowers/sdd/m4-performance-and-scale/task-2-report.md`. The full suite was **not run**: the maintainer stopped it partway through GUT. The new tests (9/9) and 25 targeting scripts (307/307) pass. |
-| T03 to T05 cycles 2 to 4, T06 report | Not started. The hold is lifted (section 2, the order to run the recommendations). |
+| T03 to T05 cycles 2 to 4, T06 report | Done (2026-11-03). Headline 25 by the sweep, 45 below it, 50 in the release export. The T06 report in the milestone asks the maintainer how to go on. |
 
 ## 2. Decisions and standing orders
 
