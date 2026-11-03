@@ -137,6 +137,19 @@ func reads_target() -> bool:
 	return false
 
 
+## Its wing, leader, targets and route pace ship stay in its contacts beyond the nearest k (`AiContext.keep_ids`).
+func keep_ids() -> PackedInt64Array:
+	var ids: PackedInt64Array = context.keep_ids()
+	if wanted_target_id > 0:
+		ids.append(wanted_target_id)
+	return ids
+
+
+## The objective and the guarded ship, by name (`AiContext.keep_names`).
+func keep_names() -> PackedStringArray:
+	return context.keep_names()
+
+
 ## Scores the behaviours and hands control over by the rule above. Returns the behaviour in control.
 func select(dt: float) -> AiBehaviour:
 	dwell_s += dt

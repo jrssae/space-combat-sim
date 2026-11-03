@@ -50,6 +50,7 @@ var _is_ship: PackedByteArray = PackedByteArray()
 var _hulls: PackedFloat64Array = PackedFloat64Array()
 var _target_ids: PackedInt64Array = PackedInt64Array()
 var _stamped: Dictionary = {}  # faction -> Array[Contact] with the relation set
+var _hostile_ships: Dictionary = {}  # faction -> PackedByteArray, 1 for a ship hostile to it (nearest-k, M4-T04)
 var _extent_m: float = -1.0  # computed on first use
 var _bolt_positions: PackedVector3Array = PackedVector3Array()
 var _bolt_velocities: PackedVector3Array = PackedVector3Array()
@@ -168,6 +169,58 @@ func contacts_for(own_body_id: int, own_position: Vector3, own_faction: StringNa
 	return out
 
 
+## The nearest `k` of the contacts `contacts_for` gives (M4-T04), in scan order. When that leaves any out, the nearest
+## hostile ship joins them (so a crowd of friends never hides the fight), and so does every contact `keeper` names: it is
+## called only then and returns `[PackedInt64Array ids, PackedStringArray names]` (names case-insensitive). With `k` or
+## fewer in range it is `contacts_for`'s list. Equal ranges go to the earlier body in the scan.
+func nearest_for(own_body_id: int, own_position: Vector3, own_faction: StringName, k: int, keeper: Callable = Callable(),
+		range_m: float = SENSOR_RANGE_M) -> Array[Contact]:
+	var stamped: Array[Contact] = _stamped_for(own_faction)
+	var hostile: PackedByteArray = _hostile_ships[own_faction]
+	var range_sq: float = range_m * range_m
+	# The nearest so far, sorted by range: a partial selection, no sort of the whole list.
+	var best_sq := PackedFloat64Array()
+	var best := PackedInt32Array()
+	var limit: float = range_sq
+	var dropped: bool = false
+	var hostile_at: int = -1
+	var hostile_sq: float = INF
+	for i: int in _body_ids.size():
+		var d_sq: float = _positions[i].distance_squared_to(own_position)
+		if d_sq > range_sq or _body_ids[i] == own_body_id:
+			continue
+		if hostile[i] == 1 and d_sq < hostile_sq:
+			hostile_sq = d_sq
+			hostile_at = i
+		if d_sq > limit:
+			dropped = true
+			continue
+		var at: int = best_sq.bsearch(d_sq, false)
+		best_sq.insert(at, d_sq)
+		best.insert(at, i)
+		if best.size() >= k:
+			dropped = dropped or best.size() > k
+			best_sq.resize(k)
+			best.resize(k)
+			limit = best_sq[k - 1]
+	if dropped:
+		_keep(hostile_at, best, own_body_id, own_position, range_sq)
+		if keeper.is_valid():
+			var kept: Array = keeper.call()
+			for id: int in kept[0] as PackedInt64Array:
+				if id > 0:
+					_keep(_ids.find(id), best, own_body_id, own_position, range_sq)
+			for wanted: String in kept[1] as PackedStringArray:
+				for i: int in _names.size():
+					if _names[i].length() == wanted.length() and _names[i].nocasecmp_to(wanted) == 0:
+						_keep(i, best, own_body_id, own_position, range_sq)
+	best.sort()
+	var out: Array[Contact] = []
+	for i: int in best:
+		out.append(stamped[i])
+	return out
+
+
 ## The broadcasts a ship hears (from a `from_broadcasters` scan): beyond `near_m`, where contacts take over, and within
 ## each broadcaster's own range.
 func broadcasts_for(own_body_id: int, own_position: Vector3, own_faction: StringName,
@@ -202,6 +255,13 @@ func incoming_fire(own_body_id: int, own_position: Vector3, own_velocity: Vector
 		if AvoidanceMath.closest_approach(rel_pos, rel_vel, INCOMING_HORIZON_S) < INCOMING_MISS_M:
 			count += 1
 	return count
+
+
+# Adds body `i` to a nearest-k selection when it is in range, not the ship's own and not in it yet.
+func _keep(i: int, chosen: PackedInt32Array, own_body_id: int, own_position: Vector3, range_sq: float) -> void:
+	if i >= 0 and _body_ids[i] != own_body_id and not chosen.has(i) \
+			and _positions[i].distance_squared_to(own_position) <= range_sq:
+		chosen.append(i)
 
 
 func _add(body: Node3D, targetable: Targetable, damageable: Damageable) -> void:
@@ -240,6 +300,7 @@ func _stamped_for(faction: StringName) -> Array[Contact]:
 	if _stamped.has(faction):
 		return _stamped[faction]
 	var list: Array[Contact] = []
+	var hostile := PackedByteArray()
 	var relations: Dictionary = {}  # looked up once per faction pair
 	for i: int in _body_ids.size():
 		var c := Contact.new()
@@ -259,7 +320,9 @@ func _stamped_for(faction: StringName) -> Array[Contact]:
 		c.hull_fraction = _hulls[i]
 		c.target_id = _target_ids[i]
 		list.append(c)
+		hostile.append(1 if c.is_ship and c.relation == Factions.Relation.HOSTILE else 0)
 	_stamped[faction] = list
+	_hostile_ships[faction] = hostile
 	return list
 
 

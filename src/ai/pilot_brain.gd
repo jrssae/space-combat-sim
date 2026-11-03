@@ -57,6 +57,16 @@ func reads_target() -> bool:
 	return true
 
 
+## The `Contact.id`s the driver keeps in this brain's contacts beyond the nearest k (M4-T04): the target it wants.
+func keep_ids() -> PackedInt64Array:
+	return PackedInt64Array([wanted_target_id]) if wanted_target_id > 0 else PackedInt64Array()
+
+
+## Display names kept the same way (case-insensitive): none by default.
+func keep_names() -> PackedStringArray:
+	return PackedStringArray()
+
+
 ## Writes the thrust that moves the velocity toward `v_des` (`PilotSteering.seek`, with `all_axes` for a held nose) into
 ## `flight` and records the wish, for the driver's avoidance filter.
 func seek_velocity(flight: FlightCommand, p: Perception, v_des: Vector3, all_axes: bool = false) -> void:

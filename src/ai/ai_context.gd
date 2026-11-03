@@ -155,6 +155,28 @@ static func _named(contacts: Array[Contact], wanted: String) -> Contact:
 	return null
 
 
+## The contacts this pilot keeps beyond its nearest k (M4-T04): its wingmates, its leader and the leader's target, its own
+## targets and the route's pace ship.
+func keep_ids() -> PackedInt64Array:
+	var ids: PackedInt64Array = wing_ids.duplicate()
+	for id: int in [leader_id, leader_target_id, current_target_id, attack_target_id]:
+		if id > 0:
+			ids.append(id)
+	if route != null and route.pace_id != 0:
+		ids.append(route.pace_id)
+	return ids
+
+
+## The names it keeps the same way: the objective and the guarded ship.
+func keep_names() -> PackedStringArray:
+	var names := PackedStringArray()
+	if not objective_name.is_empty():
+		names.append(objective_name)
+	if not guard_name.is_empty():
+		names.append(guard_name)
+	return names
+
+
 ## Back to a ship without a wing (the wing fields only).
 func clear_wing() -> void:
 	order = Order.ENGAGE_AT_WILL

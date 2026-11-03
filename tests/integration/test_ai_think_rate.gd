@@ -167,7 +167,7 @@ func test_a_far_ship_holds_its_decision_and_its_physics_still_steps() -> void:
 	var brain := CountingBrain.new()
 	brain.thrust = 1.0
 	var raider: Combatant = _raider("FAR", Vector3(0.0, 0.0, -3000.0), brain)
-	await _ticks(1)
+	await _ticks(2)  # its first think (a new pilot thinks at once); a frame's signal comes before its drivers run
 	var before: int = brain.thinks
 	var speeds: PackedFloat64Array = PackedFloat64Array()
 	for i: int in 30:

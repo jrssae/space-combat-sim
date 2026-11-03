@@ -1999,3 +1999,35 @@ scripts/bench_quick.sh      the quick check: ramps furball and spread until 30 F
   contact, which is always looked at. So `RamTracker` sees the same calls that matter, and a skipped pair stops touching exactly
   when it did before. `test_ram_broad_phase` checks every candidate against the sphere test on seeded crowds near the origin and
   45 km out; `test_ram_scale` counts the pairs looked at per tick and pins the rams that must still land.
+
+### 17.4 Cycle 3: the AI think rate and nearest-k contacts (T04)
+
+- **Before**, every AI ship perceived, thought and filtered its wish through avoidance every tick, against every contact
+  within 5 km: the AI was 56 % of a 50-ship furball tick and grew faster than N (each ship scored and avoided all N).
+- **Think rate** (Q8, settings `ai_think_rate` on, `ai_think_near_m` 2 000, `ai_think_far_hz` 20). A ship within
+  `ai_think_near_m` of the live player thinks every tick. A farther one thinks every `AiThinkRate.period_ticks` ticks (3 at
+  20 Hz and 60 Hz physics), on a beat shifted by its driver's place in the tree when its pilot was set, so consecutive pool
+  ships share the ticks evenly. Between thinks the driver leaves the ship's last `FlightCommand` and `CombatCommand` in place:
+  `Ship` keeps flying a command until it is replaced (edges act once, `fire` holds), so the flight model and Jolt still step
+  every tick. Each think is given the time since the last one, so the brain's timers keep sim time. A new pilot or a hit
+  (`Damageable.hit_taken`) wakes the ship for the next tick; anything else waits at most one far period (50 ms). Avoidance
+  (D33) runs with the think, against the contacts of that think. **With no player in play, or the player dead, every AI ship
+  thinks at the far rate.** The player is the `Combatant` `ShipAssembly` built with `is_player` (`AiPilotDriver.player`).
+- **Nearest-k** (option 4, setting `ai_nearest_k`, 12; 0 = every contact). The perception's `contacts` are the nearest k of
+  the contacts within 5 km (`ContactScan.nearest_for`, a partial selection over the scan's packed positions, back in scan
+  order, so with k or fewer in range it is `contacts_for`'s list). When the cut leaves anything out, the nearest hostile
+  ship joins them (a crowd of friends must not hide the fight: without it some furball ships idled), and so do the contacts
+  the brain keeps: its wanted target (`PilotBrain.keep_ids`; an `AiPilot` adds its wingmates, leader, the leader's target, its
+  attack target and the route's pace ship, and keeps its objective and guarded ship by name), the ship's selection and whoever
+  hit it in the last `KEEP_ATTACKER_S` (10 s). The kept lists are built only then (`AiPilotDriver._keep_lists`, called by the
+  scan), so a ship that sees k or fewer pays nothing for them. Behaviours, the avoidance filter and the fire lane all read
+  that one list. Broadcasts are not cut.
+- **Holding the command, not the decision.** Re-running the steering between thinks was allowed if held commands misbehaved.
+  They did not: a veteran against a straight-flying drone for 60 s keeps it in its fire gate within 1 % as long at 20 Hz as at
+  60 Hz, with no shot outside the gate and 3 % more change in turn rate per tick (Cycle log, cycle 3). So nothing is re-run on a
+  held tick.
+- **Console**: provider `ai` gains `thinks_near`, `thinks_far`, `held` and `contacts_max` (the latest tick's work counts) and
+  `mean_speed_mps`. Both settings off give the M3 behaviour bit for bit (a seeded bench comparison in the Cycle log).
+- **Tests**: `test_ai_think_rate` (work counts per tick against the near ships plus a third of the far ones, contacts per ship
+  against k, and the behaviour pins), `test_nearest_contacts` (the selection against a full sort on seeded crowds) and
+  `test_ai_think_rate_math`.

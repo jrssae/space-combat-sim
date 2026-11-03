@@ -100,16 +100,25 @@ func test_in_the_dogfight_no_ship_below_reckless_ever_rams() -> void:
 	SimClock.reset()
 	var main: Main = await _launch("res://data/scenarios/dogfight.json")
 	var rammers: Dictionary = {}
+	var seen: Dictionary = {}  # every AI pilot that flew, by name: its aggression
 	var t0: float = SimClock.now()
 	while SimClock.now() - t0 < 360.0 and main.ships.alive(ShipPool.ALLY_TYPE).size() > 0 \
 			and main.ships.alive(ShipPool.DEFAULT_TYPE).size() > 0:
 		await get_tree().physics_frame
 		for c: Combatant in main.ships.alive():
 			var pilot := c.driver.brain as AiPilot
+			if pilot != null:
+				seen[c.display_name] = pilot.temperament.aggression
 			if pilot != null and pilot.current != null and pilot.current.id == &"ram":
 				rammers[c.display_name] = pilot.temperament.aggression
 	Engine.time_scale = 1.0
-	gut.p("dogfight rammers: %s" % str(rammers))
+	gut.p("dogfight rammers: %s of %d pilots" % [str(rammers), seen.size()])
+	# Whether a reckless ship gets low enough to ram depends on how the fight goes (M4-T04's think rate changed this seed's):
+	# every pilot below reckless is checked, so the test asserts whoever rams.
+	assert_gt(seen.size(), 0, "the dogfight flew AI pilots")
+	for ship_name: Variant in seen:
+		if float(seen[ship_name]) < 1.0:
+			assert_false(rammers.has(ship_name), "%s rammed below reckless" % ship_name)
 	for ship_name: Variant in rammers:
 		assert_eq(float(rammers[ship_name]), 1.0, "%s rammed below reckless" % ship_name)
 	await _close(main)
