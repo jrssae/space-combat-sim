@@ -412,7 +412,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T02 | A | Menu kit, front end and pause menu | T01 | Sonnet | Godot UI work on a clear spec | in progress |
 | T03 | A | Settings menu and audio buses | T02 | Sonnet | Schema-driven screen | not started |
 | T04 | A | Controls menu | T02 | Sonnet | Wraps the existing profile API | not started |
-| T05 | B | Mission core: runner, script API, triggers, objectives, console | T01 | Opus | The framework M8 stands on; coroutine skipping is subtle | in progress |
+| T05 | B | Mission core: runner, script API, triggers, objectives, console | T01 | Opus | The framework M8 stands on; coroutine skipping is subtle | done |
 | T24 | A | Console command list in `info.md` and its guard test (`CLAUDE.md` rule of 2026-11-03; numbered last because it was added during the build) | T01, T02, T05 | Sonnet | A doc and one test | not started |
 | T06 | B | Dialog, subtitles and the comms panel | T05 | Sonnet | Data and HUD | not started |
 | T07 | B | Comms menu on D-pad Right | T06 | Sonnet | Input routing with clear rules | not started |
@@ -505,6 +505,34 @@ whose trigger never arose). Update the column with each task's commit.
 - **Notes:** `say` and `cinematic` are stubs that resolve at once until T06 and T08. The input-performed trigger reads the
   tick's `PilotCommand` edges that `Main` already samples, never `Input`. Measure the per-tick cost as a work count.
 - **Done when:** AC5 with the stubbed `say` and `cinematic`.
+- **Done (as built, 2026-11-02):** `src/mission/`: pure `MissionWorld` (actors by name as `UniversePos`, sim time, lines, the
+  tick's `PlayerActions` from `InputAdapter.last`; every lookup counted), seven `Trigger` kinds each with `test` and `force`,
+  `TriggerSpec` (JSON and script builders), `ObjectiveBook` (hidden/active/done/failed, fail first, `snapshot()`),
+  `MissionScript`, `MissionSequencer` and `MissionApi`; `MissionRunner` (under Main, priority 400, pausable), `MissionStage`
+  (name map kept by `ShipPool.acquired`, pools, `AiContext.objective_name`), `MissionConsole`, `JumpArrival` +
+  `JumpArrivalPool` (4 mesh points under `World/Effects`, light, `jump_in` from the new `sfx_world`).
+  - **Skip.** Waits resume on the sequencer's `wake` (once per tick after the world moved); `mission skip` emits it at once with
+    the step marked skipped, so awaited triggers are made true (destroyed: released, no explosion or credit; proximity, area,
+    arrived: placed, velocity kept; the rest latch), objectives are evaluated, and the step finishes inside the command;
+    `mission goto <step>` skips up to the named step. A skipped and a played run of the test mission leave the same journal,
+    objectives and ships in play.
+  - **Result.** Every primary done or `m.end(true)`: success; a failed primary, `m.end(false)` or the player destroyed: failure;
+    `Game.end_mission` keeps it (`DEBRIEF`), Main stays in space with the result on the status line. No respawn in a mission.
+    A spawn past its pool is a `push_error` (`ShipPool` unchanged).
+  - **Wiring.** `ScenarioLoader` passes `mission` and `cinematics` through and exposes `parse_spawn`; Main creates the runner,
+    ignores Back in a mission and offers `objectives()` for the pause menu; the HUD lists active objectives top right in both
+    views. `say` and `cinematic` resolve at once (T06, T08 seams); `lock_controls` keeps a flag for T08.
+  - **Console.** Provider `mission`; `mission [status|skip|goto <step>|objectives|journal]` while a mission runs.
+  - **Tests.** `test_triggers` (29), `test_objective_book` (17), `test_mission_sequencer` (17), `test_mission_runner` (15), `test_mission_skip` (5); 5 loader and 3 HUD-layout tests added; `tools/procgen/tests/test_sfx_world.py` (8). The test mission is `tests/fixtures/missions/test_mission.json|.gd`.
+  - **Cost.** counted, not timed: 20 live triggers cost 49 units of work in a tick (a check and at most two lookups each, plus one refresh per watched name), the same with 4 or 502 actors; the live runner with 37 triggers, 95.
+  - **Docs.** Architecture §18: D51, D52, layout, console, §18.5 as built.
+  - **Review.** Approved after two fix rounds (opus): a `destroyed` trigger counts a name only once the game has had that
+    ship (placed at load, handed out by a pool, or spawned by the script), so objectives declared before their ships
+    spawn hold, and a ship lost before any trigger watched it still counts; a polling loop under `mission skip` trips a
+    guard; a forced release leaves the wing first; `respawn` is refused in a mission; `play <mission>` gives the request
+    kind `mission`; `Game.end_mission` goes through `GameFlow.keep_result`. Final counts: triggers 32, objective book 18,
+    sequencer 19, runner 18, skip 7, game_flow 23, boot routing 11. Names are the identity: a replenished wingman reuses
+    its slot's callsign, so arm wingman triggers while the wingman is in play (§18.5).
 
 ### M5-T24 Console command list in `info.md`
 
