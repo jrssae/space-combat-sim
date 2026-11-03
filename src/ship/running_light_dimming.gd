@@ -4,6 +4,7 @@ extends RefCounted
 ## (architecture §7.3, M4-T28). Its footprint stays at the floor so it is still seen, and its brightness falls with the inverse square of
 ## distance, so the light it delivers is what the real disc would. The marker shader (`running_light_marker.gdshader`) mirrors
 ## `brightness_factor`; keep the two in parity. Pure.
+## `distance_m` is the depth along the view axis (the shader's `clip.w`), not the straight-line range.
 ##
 ## `focal_px` is the vertical focal length in pixels: `projection[1][1] * 0.5 * viewport_height`.
 
