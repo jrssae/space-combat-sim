@@ -44,6 +44,8 @@ voices. M8's tutorial is written on top of all this, so the framework matters mo
 | Q16 | (after T11 measured the references) Built from the Saturn 4's parts, the Saturn 8 is only about 168 m and the tanker about 161 m: how do they reach 200 m? | **The Saturns are modular.** The Saturn 4's **100 m is the length of its cargo section**, not of the whole ship. The Saturn 8's **200 m is two Saturn 4 cargo sections** (or two tank sections for the tanker). A **Saturn 4 with tanks** also exists, half a Saturn 8 tanker. **The Saturn 3 uses the same lead ship** (control section) as the 4 and the 8. Ids (planner's call): `saturn_4_tanker` (new) and `saturn_8_tanker` (was `saturn_fuel_tanker`) |
 | Q17 | (maintainer, during the build) Another civilian ship | **Add the Brakiri Bokmai transport, about 80 m, in the Brakiri green and yellow** (the maintainer first said brown and corrected it the same evening). **The cargo pods in its centre are removable.** Reference: `references/Brakiri_Bokmai_transport_80m.STL`. Planner's calls: the generator builds the hull and one pod model apart, a Bokmai flies with three, two, one or no pods, a destroyed Bokmai sheds its pods as debris, letting go of a pod in flight or towing one waits for M14's tether, and its faction is a new `brakiri` |
 | Q18 | (maintainer, during the build) How close to the references? | **Every civilian model within 90 % of its STL**, measured as **silhouettes and size**: the top, side and front silhouettes each overlap the STL's by at least 90 % (intersection over union) at the same length, and length, width and height each lie within 10 %. **Civilian ships only**: the Starfury stays as built, and the raider has no STL. Planner's calls: the score is taken on the LOD0 splats by `tools/refview`'s compare mode (T23); where Q16 departs from a model on purpose (the Saturn 8s' 200 m of cargo, the Saturn 3's engine section, the Saturn 4 tanker, which has no model of its own), each part is scored against the part of the model it came from |
+| Q19 | (after the review sheet of turret spots and colours) Turrets and colours | **Turrets on top only:** keep every dorsal spot proposed, drop every ventral one. That leaves the Saturn 4 transport, Saturn 4 tanker, Saturn 8 transport and Saturn 8 tanker with two each (`dorsal_fwd` on the disc hub and `dorsal_aft` or `dorsal_mid`), the Saturn 3 with one (`dorsal_fwd`), the Skylark and the Brezebel with one (`dorsal`), the Narn transport with its two tower turrets. **Colours confirmed** as written for the Saturn family, the Skylark, the Narn transport and the Brezebel. **The Narn transport's towers point up** (T11's reading). The maintainer places turrets and confirms colours for any further ship (the Bokmai) before its generator commits them |
+| Q20 | (same day) Where is the Saturn 3's engine? | **Between the two lower pods, on the centre line, directly under the top pod**, and **just long enough that its exhaust clears the pods**. It is a **slimmer engine** than the shared section so it fits the gap between the lower pods; the pods keep their places. The Saturn 3's aft turret is dropped. For the 90 % check (Q18) the Saturn 3's pod group is scored against the model's pod group **scaled up to the shared pod size** (Q8), so shape and layout are checked rather than the size the maintainer chose |
 
 ## Scope
 
@@ -252,8 +254,8 @@ Out (explicitly):
 - Five generators, nine hulls, the same output contract as §9 and §15.11: hull PLYs for LOD0-3 with lighting records,
   fallback mesh and depth proxy, `hardpoints.json` with pods and nozzles (main and RCS), collision primitives that cover
   the splats, `cockpit_camera` and `chase_anchor` (the parser needs them), running lights, and `chunks[]` from
-  `core/chunks.py`. **Defensive turrets (Q13, Q14, D61):** `hardpoints.json` gains `turrets[]` (2-4 per hull by size,
-  placed where they cover the hull's quarters), and each style has one generated turret model; civilians still run
+  `core/chunks.py`. **Defensive turrets (Q13, Q14, D61):** `hardpoints.json` gains `turrets[]` (dorsal mounts only, one or
+  two per hull, where the maintainer placed them, Q19), and each style has one generated turret model; civilians still run
   from raiders (the `civilian` profile) while their turrets fire in their own defence.
   - `saturn_family` with variants `saturn_3_freighter`, `saturn_4_transport`, `saturn_4_tanker`, `saturn_8_transport` and
     `saturn_8_tanker` (Q16). The family is modular: one **lead ship** (the control section with the command sphere, its
@@ -261,7 +263,9 @@ Out (explicitly):
     transport pods on their arms, or the tank group) is **100 m long**. The Saturn 4 transport and the Saturn 4 tanker
     carry one such section; the Saturn 8 transport and the Saturn 8 tanker carry two of the same sections, **200 m** of
     cargo; the Saturn 3 freighter carries three of the same transport pods in a group behind the same lead ship. Each
-    ship's overall length is the lead ship plus its cargo, so it follows from the parts.
+    ship's overall length is the lead ship plus its cargo, so it follows from the parts. The Saturn 3's engine (Q20) is a
+    slimmer one that sits between its two lower pods, under the top pod, with its exhaust just clear of the pods' aft
+    faces, so the Saturn 3 ends a little behind its pods.
   - `skylark_transport` (about 60 m): a central body with two engine nacelles on short pylons and a rear module.
   - `narn_transport` (about 70 m): a crescent bow, a boxy cargo hull and engines on the flanks, in a new `narn` style.
   - `centauri_brezebel` (about 60 m): the Centauri Brezebel transport (`references/Centauri_Brezebel_Transport.stl`, an
@@ -276,7 +280,8 @@ Out (explicitly):
     the game (T16) a Bokmai spawns with 0-3 pods from its spawn data (`cargo_pods`, default 3; encounter traffic draws
     the count from the seed). Each pod is a splat pooled with its ship (D22) and adds its mass and collision shape; a
     destroyed Bokmai sheds its pods as debris along with its chunks. Letting go of a pod in flight, or towing one, waits
-    for M14's tether (§14.7). Turrets sit on the frame, not on the pods, so an empty Bokmai still defends itself.
+    for M14's tether (§14.7). Turrets sit on the frame, not on the pods, so an empty Bokmai still defends itself; the
+    maintainer places them (Q19).
 - **The references are never copied.** As with the Starfury (`docs/design-references.md`, 2026-10-30), the agent renders
   orthographic views and cross-sections of the untracked STL files, measures them, writes a description of each ship into
   `docs/design-references.md`, and builds the hull in code from those measurements. No STL geometry, vertex data, image or
@@ -285,7 +290,9 @@ Out (explicitly):
   silhouettes of the STL (at the ship's length, in the authored frame) and of the asset's LOD0 splats on one grid, and
   each view's intersection over union must be at least 0.90, with length, width and height within 10 %. Turrets are left
   out (the models have none); the Bokmai is scored with its three pods mounted. Where Q16 departs from a model on
-  purpose, both are cropped to the same part (the lead ship, one cargo section) and each part is scored. Overlays and
+  purpose, both are cropped to the same part (the lead ship, one cargo section) and each part is scored; where the
+  maintainer set a part's size apart from the model (the Saturn 3's shared pods, Q8), the model's part is scaled to
+  that size first (Q20). Overlays and
   scores go to `reports/refs/<ship>/compare/`; each generator task writes its scores into `docs/assets-civilian.md`.
 - **Colours from online images (Q11).** For each of the nine ships the agent finds images online (screen captures, fan
   wiki pages), reads the colour scheme off them (base plating, panel and trim colours, markings, window and engine glow),
@@ -657,7 +664,9 @@ whose trigger never arose). Update the column with each task's commit.
   LOD0 budget counts the hull plus three pods, about 75 000 for an 80 m ship, so all nine hulls at LOD0 with the hero,
   the sky and five buoys stay under `splat_budget`; write the new total into `docs/assets-civilian.md`. The hull's
   chunks leave the pods out (each pod is its own debris piece).
-- **Turrets (D61):** 2-3 in `turrets[]`, on the frame, and a `brakiri` turret model.
+- **Turrets (D61, Q19):** dorsal mounts on the frame and a `brakiri` turret model. Propose the spots on the model's views
+  and send them, with the colour scheme, to the controller, who confirms both with the maintainer before the generator
+  commits them.
 - **Done when:** AC11, AC12 and AC20 for the Bokmai; Python tests also cover the pod model (budget, determinism), that the
   hull alone has no splats inside the pod volumes (an empty mount looks empty) and that the pods sit at their
   `cargo_pods[]` mounts; every PLY, the pod's included, imports in Godot with the manifest's count.
