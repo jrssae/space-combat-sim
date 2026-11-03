@@ -92,6 +92,7 @@ Out (explicitly):
 - **`docs/architecture.md`**: M4 writes §17. M5's design goes in a new **§18** at the end of the file. In `m5` it follows
   §16 until the rebase; then it moves after §17. Decision numbers for M5 start at **D50**, leaving D46-D49 to M4.
 - `scripts/run_tests.sh`: M5 adds its smoke runs as separate lines at the end, so a conflict is a two-line merge.
+- `info.md` (the console command list, `CLAUDE.md`): M4 may create it too; on the rebase the two lists merge into one.
 - The M4 benchmark numbers come from an otherwise idle machine (`docs/handoff-m4.md` §3). Before a heavy Godot run
   (a GUT directory, a GPU capture), check `pgrep -af 'bench'`; if an M4 benchmark is running, wait for it to finish.
 
@@ -388,6 +389,9 @@ Out (explicitly):
   `DebriefModel`, `EncounterPlan`): the failing test is written before the code.
 - After each task: the task's row in the table says `done` with its Done notes, in the same commit; then `git push origin
   m5` (Q6).
+- **Console commands in `info.md`** (`CLAUDE.md`, maintainer, 2026-11-03): every console command is listed in `info.md` at
+  the repository root with its arguments and a one-line purpose. A task that adds, renames or removes a command updates
+  `info.md` in the same commit; T24 writes the list and a test that fails when a registered command is missing from it.
 - Assets: `assets/generated/` in the worktree is a copy of the main checkout's; a task that changes a generator rebuilds
   only its asset (`python3 -m tools.procgen build <id>`). New Python tests run with the project's `.venv` Python.
 
@@ -403,6 +407,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T03 | A | Settings menu and audio buses | T02 | Sonnet | Schema-driven screen | not started |
 | T04 | A | Controls menu | T02 | Sonnet | Wraps the existing profile API | not started |
 | T05 | B | Mission core: runner, script API, triggers, objectives, console | T01 | Opus | The framework M8 stands on; coroutine skipping is subtle | in progress |
+| T24 | A | Console command list in `info.md` and its guard test (`CLAUDE.md` rule of 2026-11-03; numbered last because it was added during the build) | T01, T02, T05 | Sonnet | A doc and one test | not started |
 | T06 | B | Dialog, subtitles and the comms panel | T05 | Sonnet | Data and HUD | not started |
 | T07 | B | Comms menu on D-pad Right | T06 | Sonnet | Input routing with clear rules | not started |
 | T08 | B | `CINEMATIC` camera and locked controls | T05 | Opus | Rebase-safe camera paths | not started |
@@ -494,6 +499,18 @@ whose trigger never arose). Update the column with each task's commit.
 - **Notes:** `say` and `cinematic` are stubs that resolve at once until T06 and T08. The input-performed trigger reads the
   tick's `PilotCommand` edges that `Main` already samples, never `Input`. Measure the per-tick cost as a work count.
 - **Done when:** AC5 with the stubbed `say` and `cinematic`.
+
+### M5-T24 Console command list in `info.md`
+
+- **Goal:** the `CLAUDE.md` rule (maintainer, 2026-11-03): keep a list of all console commands in an `info.md` document.
+- **Files:** `info.md` (new, repository root), `tests/integration/test_console_command_list.gd` (new).
+- **What:** `info.md` lists every console command registered anywhere in the game, M1 to M5: name, arguments, a one-line
+  purpose, the subsystem that registers it, and whether it exists only in some runs (a mission, the front end, a
+  benchmark). A second table lists the state providers (`state <name>`). Group by subsystem; keep it plain.
+- **Test:** boot `main.tscn` (and the contexts that register extra commands: a mission fixture, the front end) and
+  read `ConsoleRegistry.command_names()`; every registered command must appear in `info.md`, and every command in
+  `info.md` must exist in at least one context. A task that adds a command without listing it fails this test.
+- **Done when:** `info.md` is complete for the commands on `m5` at the time, and the test passes.
 
 ### M5-T06 Dialog, subtitles and the comms panel
 
