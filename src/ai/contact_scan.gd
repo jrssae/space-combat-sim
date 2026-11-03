@@ -203,11 +203,12 @@ func contacts_for(own_body_id: int, own_position: Vector3, own_faction: StringNa
 ## hostile ship joins them (so a crowd of friends never hides the fight), and so does every contact `keeper` names: it is
 ## called only then and returns `[PackedInt64Array ids, PackedStringArray names]` (names case-insensitive). With `k` or
 ## fewer in range it is `contacts_for`'s list, at about `contacts_for`'s cost. Equal ranges go to the earlier body in the scan.
+## `k` of 0 or less cuts nothing: `contacts_for`'s list (as the `ai_nearest_k` setting's 0 means).
 func nearest_for(own_body_id: int, own_position: Vector3, own_faction: StringName, k: int, keeper: Callable = Callable(),
 		range_m: float = SENSOR_RANGE_M) -> Array[Contact]:
 	var stamped: Array[Contact] = _stamped_for(own_faction)
-	if _body_ids.size() <= k:
-		return contacts_for(own_body_id, own_position, own_faction, range_m)  # never more than k to cut
+	if k <= 0 or _body_ids.size() <= k:
+		return contacts_for(own_body_id, own_position, own_faction, range_m)  # no cut asked, or never more than k to cut
 	var range_sq: float = range_m * range_m
 	var field: Object = _native_with_row(own_faction)
 	if field != null:

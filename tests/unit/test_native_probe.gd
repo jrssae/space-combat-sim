@@ -44,6 +44,17 @@ func test_perf_native_off_selects_gdscript() -> void:
 	assert_null(NativeLib.instantiate(NativeProbe.NATIVE_CLASS))
 
 
+func test_an_existing_probe_follows_a_live_flip() -> void:
+	var probe := NativeProbe.new()
+	var loaded: StringName = &"native" if _loaded() else &"gdscript"
+	assert_eq(probe.path(), loaded)
+	Settings.set_value(&"perf_native", false)
+	assert_eq(probe.path(), &"gdscript", "off: the same probe answers from GDScript at once")
+	assert_eq(probe.echo(9), 9)
+	Settings.set_value(&"perf_native", true)
+	assert_eq(probe.path(), loaded, "and back")
+
+
 func test_use_native_false_forces_gdscript() -> void:
 	assert_eq(NativeProbe.new(false).path(), &"gdscript")
 

@@ -19,14 +19,14 @@ pub struct ScsContactField {
     base: Base<RefCounted>,
     body_ids: Vec<i64>,
     positions: Vec<Vector3>,
-    body_faction: Vec<u8>,
+    body_faction: Vec<usize>,
     is_ship: Vec<bool>,
     reach: Vec<f64>,
     factions: Vec<StringName>,
     hostile_rows: Vec<(StringName, Vec<bool>)>,
     bolt_positions: Vec<Vector3>,
     bolt_velocities: Vec<Vector3>,
-    bolt_faction: Vec<u8>,
+    bolt_faction: Vec<usize>,
     bolt_shooters: Vec<i64>,
     cell_m: f64,
     // Bodies sorted by grid cell, then by scan index.
@@ -124,7 +124,7 @@ impl ScsContactField {
         PackedInt32Array::from(out.as_slice())
     }
 
-    /// `ContactScan.nearest_for` before its keeper: with `k` or fewer in range, all of them in scan order; otherwise
+    /// `ContactScan.nearest_for` before its keeper: with `k` or fewer in range (or `k` 0 or less), all of them in scan order; otherwise
     /// the nearest `k` (equal ranges to the earlier body) plus the nearest hostile ship, in any order, then -1 to say
     /// the cut left something out.
     #[func]
@@ -132,8 +132,8 @@ impl ScsContactField {
         let range_sq = range * range;
         // GDScript's nearest loop skips only what is beyond the range, so its test is "not greater".
         self.gather(own_body_id, at, range, |d_sq| !(f64::from(d_sq) > range_sq));
-        let k = k.max(0) as usize;
-        if self.in_range.len() <= k {
+        // k of 0 or less means no cut: every contact in range, as `ContactScan.nearest_for` defines it.
+        if k <= 0 || self.in_range.len() <= k as usize {
             let out: Vec<i32> = self.in_range.iter().map(|&(_, i)| i as i32).collect();
             return PackedInt32Array::from(out.as_slice());
         }
@@ -141,16 +141,15 @@ impl ScsContactField {
         let mut nearest_hostile: Option<(f32, u32)> = None;
         for &(d_sq, i) in &self.in_range {
             let j = i as usize;
-            let is_hostile = self.is_ship[j] && hostile.is_some_and(|row| row[self.body_faction[j] as usize]);
+            let is_hostile = self.is_ship[j] && hostile.is_some_and(|row| hostile_at(row, self.body_faction[j]));
             if is_hostile && nearest_hostile.is_none_or(|(best, _)| d_sq < best) {
                 nearest_hostile = Some((d_sq, i));
             }
         }
         // Ranked by range, then by scan index (in_range is in scan order, so a stable sort keeps that).
+        let k = k as usize;
         let mut ranked = self.in_range.clone();
-        if k > 0 {
-            ranked.select_nth_unstable_by(k - 1, |a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-        }
+        ranked.select_nth_unstable_by(k - 1, |a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
         let mut out: Vec<i32> = ranked[..k].iter().map(|&(_, i)| i as i32).collect();
         if let Some((_, h)) = nearest_hostile
             && !out.contains(&(h as i32))
@@ -187,7 +186,7 @@ impl ScsContactField {
         };
         let mut count: i64 = 0;
         for i in 0..self.bolt_positions.len() {
-            if !hostile[self.bolt_faction[i] as usize] || self.bolt_shooters[i] == own_body_id {
+            if !hostile_at(hostile, self.bolt_faction[i]) || self.bolt_shooters[i] == own_body_id {
                 continue;
             }
             let rel_pos = sub(self.bolt_positions[i], at);
@@ -206,12 +205,12 @@ impl ScsContactField {
 
 impl ScsContactField {
     // The index of `faction` in this scan's faction list, added on first sight.
-    fn faction_index(&mut self, faction: StringName) -> u8 {
+    fn faction_index(&mut self, faction: StringName) -> usize {
         if let Some(at) = self.factions.iter().position(|f| *f == faction) {
-            return at as u8;
+            return at;
         }
         self.factions.push(faction);
-        (self.factions.len() - 1) as u8
+        self.factions.len() - 1
     }
 
     fn hostile_row(&self, faction: &StringName) -> Option<&[bool]> {
@@ -223,7 +222,7 @@ impl ScsContactField {
     fn gather(&mut self, own_body_id: i64, at: Vector3, range: f64, accept: impl Fn(f32) -> bool) {
         self.candidates.clear();
         self.in_range.clear();
-        let pad = range * (1.0 + PAD_REL) + PAD_M;
+        let pad = range.abs() * (1.0 + PAD_REL) + PAD_M;
         let lo = |v: f32| cell_of(f64::from(v) - pad, self.cell_m);
         let hi = |v: f32| cell_of(f64::from(v) + pad, self.cell_m);
         let (lx, ly, lz) = (lo(at.x), lo(at.y), lo(at.z));
@@ -251,6 +250,11 @@ impl ScsContactField {
             }
         }
     }
+}
+
+// Whether faction `index` is hostile in `row`; a row too short to hold it says no.
+fn hostile_at(row: &[bool], index: usize) -> bool {
+    row.get(index).copied().unwrap_or(false)
 }
 
 // The grid cell holding coordinate `v`.

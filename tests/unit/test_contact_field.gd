@@ -247,6 +247,29 @@ func test_incoming_fire_agrees_on_bolts_that_graze_the_15_m_line() -> void:
 	assert_between(counted, 200, 1400, "the bolts straddle the line")
 
 
+func test_k_of_zero_or_less_cuts_nothing_on_both_paths() -> void:
+	if _skipped():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 23
+	var scan := _world(rng, 60, 0)
+	var own_at: Vector3 = scan._positions[4]
+	var faction: StringName = scan._factions[4]
+	for k: int in [0, -3]:
+		var answers: Array = []
+		for native: bool in [true, false]:
+			scan.use_native = native
+			answers.append(scan.nearest_for(1004, own_at, faction, k))
+		scan.use_native = false
+		var every: Array[Contact] = scan.contacts_for(1004, own_at, faction)
+		assert_gt(every.size(), 12, "a crowd that k 12 would cut")
+		assert_true(_same(answers[0], every), "k %d, native: contacts_for's list" % k)
+		assert_true(_same(answers[1], every), "k %d, GDScript: contacts_for's list" % k)
+		scan.use_native = true
+		var raw: PackedInt32Array = scan._native().nearest(1004, own_at, faction, k, ContactScan.SENSOR_RANGE_M)
+		assert_eq(raw.size(), every.size(), "k %d: the field itself cuts nothing and adds no marker" % k)
+
+
 func test_a_query_visits_only_the_cells_its_range_reaches() -> void:
 	if _skipped():
 		return

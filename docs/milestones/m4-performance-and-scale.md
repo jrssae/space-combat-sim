@@ -191,7 +191,8 @@ While iterating, `scripts/bench_quick.sh` (under 10 minutes: furball and spread 
 - **Done (T05, cycle 4, 2026-11-03):** N0 (T05a) put the Rust toolchain, the CI build and the `NativeLib` seam in place; N1
   (T05b) moved the contact scan's queries into the native `ScsContactField` behind `ContactScan`'s unchanged interface, bit for
   bit (`docs/architecture.md` §17.5). The scan at 100 ships 3.91 to 2.40 ms in the furball and 3.12 to 2.66 ms in spread; the
-  quick check's ceiling stays 40 in both, and 30 FPS now holds to 150 ships (it failed at 150 before). Seeded outcomes are
+  quick check's ceiling stays 40 in both, and in this run 30 FPS held to 150 ships (the before's run failed at 150, at a
+lower load: 0.48 against 0.95 to 1.64). Seeded outcomes are
   identical with `perf_native` on and off. Entry in the Cycle log.
 
 Starting hypotheses from the M3 measurements, for T02 to test, not to follow:
@@ -954,8 +955,9 @@ already has the lazy contacts, so this is the native part alone):
 | furball | 100 | 3.76, 3.81 | 2.43, 2.45 | 6.81, 6.90 | 5.48, 5.54 | 17.08, 17.39 | 16.02, 16.31 |
 | spread | 100 | 3.47, 3.44 | 2.69, 2.65 | 6.34, 6.29 | 5.53, 5.49 | 17.05, 16.99 | 16.51, 16.49 |
 
-Native saves 0.42 ms of scan at furball 50, 1.35 ms at furball 100 and 0.79 ms at spread 100; the lazy contacts save about
-0.1 to 0.25 ms more on both paths (before against after: the scan 1.65 to 1.21 and 3.91 to 2.40 ms in the furball).
+Native saves 0.42 ms of scan at furball 50, 1.35 ms at furball 100 and 0.79 ms at spread 100; the lazy contacts save
+little more on both paths: about 0.00 to 0.02 ms at furball 50 (the before's 1.65 against the paired GDScript runs' 1.63 and
+1.65) and about 0.10 to 0.15 ms at furball 100 (3.91 against 3.76 and 3.81).
 
 **Gain against the prediction:** the scan got cheaper, but by a third to a half of what was predicted (furball 0.44 ms off at 50
 against about 1.4, 1.51 off at 100 against about 3.5; spread 0.09 and 0.46 against about the same as the furball), and the quick
