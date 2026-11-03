@@ -50,6 +50,12 @@ parts/             reusable parametric parts: hull (fuselage, canopy, cockpit in
                    mass)
 core/chunks.py     break-up chunks: splats and mesh partitioned by part group, re-centred per chunk
 styles/            design languages: Style (material roles + panel-shading parameters); earthforce.py, raider.py
+parts/saturn.py    the Saturn family (M5-T12): lead ship, frames, drum frame, engine section, banded cylinders and
+                   tanks, transport pods with recessed ribbed ends and rails, arms, junctions, turret pads; each
+                   piece carries a burial volume and a side (centre line or right, mirrored)
+parts/turret.py    defensive turret model (base, dome, twin barrels) at any size, and write_turret (its files)
+parts/solids.py    burial volumes (box, lathe, prism, capsule, union, difference) that drop hidden samples
+styles/ea_civilian.py the Earth Alliance civilian palette; ea_civilian(overrides) repaints roles per hull
 assets/__init__.py registry: ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]]
 assets/<id>.py     one module per asset, exposing build(ctx)
 tests/             unittest: core, parts, CLI, and every asset
@@ -159,6 +165,30 @@ Things the Godot side must know:
   `spacing_m`, `offset` (the PLY's centroid in the turret frame: pivot at the origin, +Y up, barrels along -Z),
   `barrel_m`, `trunnion` and `muzzles`.
 - The hull green is lifted off the written #2E4A3B to #5F997A (same hue) so it does not read black (`styles/narn.py`).
+
+## `saturn_family`
+
+The Earth Alliance Saturn freighters (M5-T12, Q16, docs/assets-civilian.md): one module, five ids. Every variant is the
+same lead ship (antenna, command disc, frames and drum frame, engine section) plus cargo, so its length follows from the
+parts: `saturn_4_transport` and `saturn_4_tanker` carry one 100 m section (four pods round a banded hull cylinder, or three
+banded tanks) and are 158.48 m long, `saturn_8_transport` and `saturn_8_tanker` carry two with a junction (258.48 m), and
+`saturn_3_freighter` three pods in a stack (119.46 m). Style `ea_civilian`. Per id: LOD0-3 PLYs and lighting records, the
+fallback mesh (also the depth proxy), chunks cut from LOD1, the turret model, `hardpoints.json` and `manifest.json`.
+Option: `spacing` (each variant's default lands its LOD0 on its budget), `overlap`, `thickness`.
+
+Things the Godot side must know:
+
+- The chunks partition LOD1 (manifest `chunk_lod` 1); LOD0 is the chunk groups concatenated in `counts` order. Chunk
+  names per variant are in docs/assets-civilian.md; `joint` is where each breaks away.
+- `hardpoints.json`: two pods (the bell's exit split in two for the mains, retros on the disc's front rim), twelve
+  cosmetic RCS, `muzzles: []`, collision boxes and capsules (each cylinder's capsule reaches past its dome tips so its
+  caps cover the shallow domes), and `turrets[]` `{name, position, up, arc_deg, barrel_m}`; each turret `position` is
+  the top of a pad (or the disc's hub) it stands on. The centre of mass is on the spine axis, the thrust line.
+- Manifest `turret`: `{ply, lighting, obj, splats, spacing_m, offset, barrel_m, trunnion, muzzles}`. The turret frame
+  has its origin at the base's centre on the mount, +Y the mount's `up`, the barrels along -Z; its PLY is centred on its
+  own centroid like a chunk, and `offset` is that centroid in the turret frame.
+- Levels are sampled with systematic rounding (`sample_mesh(systematic=True)`) and centre-line pieces right half first,
+  so a coarse level keeps LOD0's centroid to a fraction of its spacing.
 
 ## `sfx_combat`
 

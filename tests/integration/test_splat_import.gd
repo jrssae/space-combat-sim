@@ -42,6 +42,11 @@ const REQUIRED_ROLES: Dictionary = {
 	"raider_fighter": ["fallback_mesh", "hardpoints"],
 	"sfx_combat": [],
 	"narn_transport": ["fallback_mesh", "hardpoints"],
+	"saturn_3_freighter": ["fallback_mesh", "hardpoints"],
+	"saturn_4_transport": ["fallback_mesh", "hardpoints"],
+	"saturn_4_tanker": ["fallback_mesh", "hardpoints"],
+	"saturn_8_transport": ["fallback_mesh", "hardpoints"],
+	"saturn_8_tanker": ["fallback_mesh", "hardpoints"],
 }
 
 var _readers: Array[ManifestReader] = []

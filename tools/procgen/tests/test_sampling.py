@@ -56,6 +56,19 @@ class SampleMeshTests(unittest.TestCase):
         self.assertGreater(float(sp.face_sample_counts(mesh.face_areas(), 0.2, self.rng).max()), 0)
         self.assertAlmostEqual(len(s), expected, delta=0.06 * expected)
 
+    def test_systematic_rounding_keeps_the_expectation_and_the_centroid(self) -> None:
+        # M5-T12: one random offset shared along the faces, so rounding errors cancel between neighbours. Each face keeps
+        # its expected count, the total is exact to one sample, and a coarse sampling of many small faces keeps its centroid.
+        barrel = [(float(z), 4.0) for z in np.linspace(0.0, 40.0, 161)]
+        mesh = g.lathe([(0.0, 0.0), *barrel, (40.0, 0.0)], 64, HULL)  # 20 000 faces of about 0.05 m2
+        expected = mesh.face_areas() / 1.5**2
+        draws = np.array([sp.face_sample_counts(mesh.face_areas(), 1.5, np.random.default_rng(k), systematic=True) for k in range(400)])
+        np.testing.assert_allclose(draws.mean(axis=0), expected, atol=0.12)
+        self.assertTrue(np.all(np.abs(draws.sum(axis=1) - expected.sum()) <= 1.0))
+        centroids = [sp.sample_mesh(mesh, 1.5, np.random.default_rng(k), systematic=True).positions.mean(axis=0) for k in range(20)]
+        loose = [sp.sample_mesh(mesh, 1.5, np.random.default_rng(k)).positions.mean(axis=0) for k in range(20)]
+        self.assertLess(float(np.std([c[2] for c in centroids])), 0.25 * float(np.std([c[2] for c in loose])))
+
     def test_samples_lie_on_their_faces(self) -> None:
         mesh = g.lathe([(-1.0, 0.0), (0.0, 0.6), (1.0, 0.6), (2.0, 0.0)], 24, HULL)
         s = sp.sample_mesh(mesh, 0.04, self.rng)

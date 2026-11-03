@@ -118,7 +118,7 @@ Per variant:
 | `saturn_4_tanker` | 158.5 | 158.48 | `dorsal_aft` (0, +9.3, 124.4) | the lower tanks' flanks (±25.6, -13.53, 99.4) | (0, +8.6, 75.0), lamp (0, +16.6, 99.4), range 48 m | `bow`, `spine`, `engine`, `tank_l`, `tank_r` |
 | `saturn_8_transport` | 258.5 | 258.48 | `dorsal_mid` (0, +7.2, 149.4), `ventral_aft` (0, -5.3, 240.0) | (±53.4, -7.29, 74.3) | (0, +8.6, 75.0), lamp (0, +21.5, 149.4), range 78 m | `bow`, `hull_1`, `junction`, `hull_2`, `engine`, `pods_1l`, `pods_1r`, `pods_2l`, `pods_2r` |
 | `saturn_8_tanker` | 258.5 | 258.48 | `dorsal_mid` (0, +9.0, 149.4), `ventral_aft` (0, -5.3, 240.0) | (±25.6, -13.53, 99.4) | (0, +8.6, 75.0), lamp (0, +21.5, 149.4), range 78 m | `bow`, `spine_1`, `junction`, `spine_2`, `engine`, `tanks_1l`, `tanks_1r`, `tanks_2l`, `tanks_2r` |
-| `saturn_3_freighter` | 119.5 | 119.46 | `dorsal_aft` (0, +5.3, 99.0) | the lower pods' outboard ends (±46.8, -5.46, 79.7) | the top pod (0, +21.8, 79.7), lamp (0, +27.8, 79.7), range 36 m | `bow` (with the cross-beam and blocks), `pod_top`, `pod_l`, `pod_r`, `engine` (with the truss behind the drum frame) |
+| `saturn_3_freighter` | 119.5 | 119.46 | `dorsal_aft` (0, +5.3, 99.0) | the lower pods' outboard ends (±46.8, -5.46, 79.7) | the top pod's ridge (0, +21.8, 73.9), lamp (0, +27.8, 79.7), range 36 m | `bow` (with the cross-beam and blocks), `pod_top`, `pod_l`, `pod_r`, `engine` (with the truss behind the drum frame) |
 
 Collision, per part: the disc a box 28.3 x 6.0 x 28.3 m with the antenna inside it; the forward truss a box 6.3 x 6.3
 m along its length; the drum frame a box 21.7 x 19.3 x 8.2 m; each hull cylinder or tank a capsule of radius 8.77 m (it covers the 17.53 x 17.27 m polygon) and
