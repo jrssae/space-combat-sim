@@ -1,8 +1,9 @@
 """Skylark transport parts (docs/design-references.md "Skylark transport", docs/assets-civilian.md "skylark_transport").
 
 The forward capsule with its nose vanes and bridge plate, the spine and collar with their vane rings, the side tanks and
-the bars ahead of them, the belly fins, the faceted body with its corner fins, dorsal fin, centre engine and turret
-pedestal, and the nacelles with their cones, ribbed rings, claws and the short pylons that carry the claws.
+the bars ahead of them, the belly fins, the faceted body with its corner fins, dorsal fin, centre engine and the
+turret's seat on its ridge, and the nacelles with their cones, ribbed rings, claws and the short pylons that carry the
+claws.
 
 Frame of the design references: x to starboard, y up from the reference model's box centre, z aft from the nose tip,
 metres (Godot's axes). Every shape is our own lathe, loft or plate through the sizes measured off the reference views.
@@ -19,14 +20,13 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..core.geometry import Material, Mesh, assign_material_by_predicate, box, lathe, prism, rotation_x, rotation_z, sweep_rect
+from ..core.geometry import Material, Mesh, assign_material_by_predicate, box, lathe, prism, rotation_z, sweep_rect
 from ..styles import Style
 from . import Anchor, Collision, Part
 from .solids import Solid, lathe_solid, prism_solid
 from .starfury import closed_loft, section_loft
 
 CENTRE, RIGHT = "c", "r"
-_Z_TO_Y = rotation_x(-0.5 * math.pi)  # local +Z to +Y
 _Y_UP = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]])  # a prism's plan (x, -z) flat, thickness on +Y
 
 # --- layout (authored frame, the design references' measurements) -------------------------------------------------
@@ -46,8 +46,7 @@ NACELLE_EXIT_Z = 55.48
 NACELLE_EXIT_R = 1.62
 NACELLE_INTAKE_R = 1.3
 CONE_Z = 41.9  # both nacelle cones stand at this z
-TURRET_MOUNT = (0.0, 3.6, 37.5)  # Q19: the only turret, on a pedestal on the body's top ahead of the fin
-PEDESTAL_R = 1.05  # under the turret's 2.4 m base, as the Saturns' pads are under theirs
+TURRET_MOUNT = (0.0, 2.87, 37.5)  # Q19: the only turret, seated on the body's ridge ahead of the fin (the ridge's height there)
 BRIDGE_EYE = (0.0, 3.6, 11.8)  # inside the bridge plate, behind its glazed front
 
 
@@ -191,7 +190,16 @@ def capsule(style: Style) -> Piece:
     c0, c1 = DOME_CENTRES
     hit = Collision("capsule", (CAPSULE_AXIS[0], CAPSULE_AXIS[1], 0.5 * (c0 + c1)), radius=CAPSULE_R,
                     height=(c1 - c0) + 2.0 * CAPSULE_R, name="barrel")  # fmt: skip
-    return _piece("capsule", "capsule", mesh, solid, mass_kg=300_000.0, collision=[hit])
+    # The neck reaches ahead of the barrel capsule's rounded end, so it gets its own box.
+    neck_end = front_dome_start()
+    neck = Collision("box", (CAPSULE_AXIS[0], CAPSULE_AXIS[1], 0.5 * (CAPSULE_FACE_Z + neck_end)),
+                     size=(2.0 * NECK_R, 2.0 * NECK_R, neck_end - CAPSULE_FACE_Z), name="neck")  # fmt: skip
+    return _piece("capsule", "capsule", mesh, solid, mass_kg=300_000.0, collision=[hit, neck])
+
+
+def front_dome_start() -> float:
+    """Where the front dome meets the neck."""
+    return DOME_CENTRES[0] - math.sqrt(CAPSULE_R * CAPSULE_R - NECK_R * NECK_R)
 
 
 @dataclass(frozen=True)
@@ -456,7 +464,7 @@ class BodySpec:
 
 def body(style: Style, spec: BodySpec = BodySpec()) -> Piece:
     """The body slab. Olive patches run along its ridge and its flanks. Collision: two centre boxes (front and aft) and
-    one box over each flank."""
+    one box over each flank. Anchors: ``turret`` (the dorsal turret's seat on the ridge, up)."""
     hull, panel = style.material("hull"), style.material("hull_panel")
     rings = [spec.ring(s[0]) for s in spec.stations]
     half = [hull, panel, hull, panel, panel, hull, hull, hull, hull]  # top ridge, ridge flank, top, side face, ...
@@ -477,7 +485,9 @@ def body(style: Style, spec: BodySpec = BodySpec()) -> Piece:
         x0 = 6.2
         collision.append(Collision("box", (sx * 0.5 * (x0 + w_max), 0.5 * (flank_lo + flank_hi), 0.5 * (34.0 + z1)),
                                    size=(w_max - x0, flank_hi - flank_lo, z1 - 34.0), name=f"side_{side}"))  # fmt: skip
-    return _piece("body", "body", mesh, spec.solid(), mass_kg=700_000.0, collision=collision, fine=1.15)
+    seat = (0.0, float(spec.at(TURRET_MOUNT[2])[1]), TURRET_MOUNT[2])
+    return _piece("body", "body", mesh, spec.solid(), mass_kg=700_000.0, collision=collision, fine=1.15,
+                  anchors={"turret": Anchor(seat, (0.0, 1.0, 0.0))})  # fmt: skip
 
 
 CORNER_FIN = ((4.9, 51.2), (8.75, 51.2), (6.05, 54.5), (5.6, 54.5))  # plan (x, z) of the right aft corner fin
@@ -551,7 +561,7 @@ def centre_engine(style: Style) -> list[Piece]:
                collision=[Collision("box", (0.0, CAPSULE_AXIS[1], 52.16), size=(4.74, 4.74, 2.72))]),  # fmt: skip
         _piece("engine_cone", "body", cone, _axial_solid(cone_profile[1:5], CAPSULE_AXIS), mass_kg=20_000.0,
                collision=[_box_of(cone)]),  # fmt: skip
-        _piece("engine_vanes", "body", vane_mesh, mass_kg=3_000.0, fine=0.8),
+        _piece("engine_vanes", "body", vane_mesh, mass_kg=3_000.0, collision=[_box_of(vane_mesh)], fine=0.8),
     ]
 
 
@@ -563,17 +573,6 @@ def aft_blocks(style: Style) -> Piece:
     dark = style.material("hull_dark")
     mesh = Mesh.concatenate(box(size, dark, center=centre) for size, centre in AFT_BLOCKS)
     return _piece("aft_blocks_r", "body", mesh, side=RIGHT, mass_kg=6_000.0, collision=[_box_of(mesh)], fine=0.8)
-
-
-def pedestal(style: Style) -> Piece:
-    """The low drum the dorsal turret stands on, reaching down into the body's top. Anchors: ``turret`` (its top, up)."""
-    x, y, z = TURRET_MOUNT
-    profile = [(2.4, 0.0), (2.4, PEDESTAL_R), (y, PEDESTAL_R), (y, 0.0)]
-    panel, dark = style.material("hull_panel"), style.material("hull_dark")
-    mesh = lathe(profile, 32, [panel, panel, dark], creases={1, 2}).transformed(_Z_TO_Y, (x, 0.0, z))
-    solid = lathe_solid(profile[1:3]).transformed(_Z_TO_Y, (x, 0.0, z))
-    return _piece("pedestal", "body", mesh, solid, mass_kg=4_000.0, collision=[_box_of(mesh)],
-                  anchors={"turret": Anchor(TURRET_MOUNT, (0.0, 1.0, 0.0))})  # fmt: skip
 
 
 # --- the nacelles --------------------------------------------------------------------------------------------------------
@@ -777,7 +776,7 @@ def assemble(style: Style) -> list[Piece]:
     """Every centre and right piece of the hull, authored frame (the asset mirrors the right ones)."""
     pieces = [capsule(style), *nose_vanes(style), bridge(style), belly_fin(style), collar(style), vane_rings(style),
               side_tank(style), tank_bracket(style), dumbbell(style), spine_plate(style), front_bar(style)]  # fmt: skip
-    pieces += [body(style), corner_fin(style), dorsal_fin(style), *centre_engine(style), aft_blocks(style), pedestal(style)]
+    pieces += [body(style), corner_fin(style), dorsal_fin(style), *centre_engine(style), aft_blocks(style)]
     pieces += [nacelle(style), *nacelle_cones(style), *nacelle_ribs(style), *claws(style)]
     names = [p.name for p in pieces]
     if len(names) != len(set(names)):

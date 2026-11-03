@@ -48,7 +48,7 @@ all eight).
 | `saturn_8_transport` | 258.5 m | about 65 000 m² | 210 000 (170 000 to 250 000) | 0.56 m | 52 500 | 13 100 | 3 300 |
 | `saturn_8_tanker` | 258.5 m | about 36 900 m² | 120 000 (95 000 to 145 000) | 0.55 m | 30 000 | 7 500 | 1 900 |
 | `saturn_3_freighter` | 96.8 m | about 19 700 m² | 75 000 (60 000 to 90 000) | 0.51 m | 18 750 | 4 700 | 1 200 |
-| `skylark_transport` | 60 m | 6 400 m² | 60 000 (48 000 to 72 000) | 0.33 m | 15 000 | 3 800 | 900 |
+| `skylark_transport` | 60 m | 6 400 m² | 60 000 (48 000 to 72 000) | 0.26 m (as built, T13; 0.33 m planned) | 15 000 | 3 800 | 900 |
 | `narn_transport` | 70 m | 9 200 m² | 75 000 (60 000 to 90 000) | 0.35 m | 18 750 | 4 700 | 1 200 |
 | `centauri_brezebel` | 60 m | 8 000 m² | 70 000 (55 000 to 85 000) | 0.34 m | 17 500 | 4 400 | 1 100 |
 | All eight | | | 810 000 | | 202 500 | 50 700 | 12 700 |
@@ -132,7 +132,7 @@ The Saturns' thrust line is the spine axis, so their centre of mass is trimmed o
 
 | Hull | Pods (`l`, `r`): main / retro | RCS | Cockpit camera | Port / starboard light | Chunks |
 |---|---|---|---|---|---|
-| Skylark | main: the bells' exits on the nacelles' axis, (±13.03, -0.26, 55.48), radius 1.62; retro: the intakes' faces, (±13.03, -0.26, 35.64), radius 1.3 (T13: the axis measured off the nacelles; ±13.45, -0.45 was their box with the pods) | the tips of the nacelles' two pods each, the four nose vanes' tips, the corner fins' tips, the dorsal fin's crest and the keel aft (12) | in the bridge plate behind its glazing, (0, +3.6, 11.8) | the nacelles' outboard flanks, (±15.84, -0.26, 46.5) | `capsule` (nose, vanes, capsule, bridge, belly fins, spine, collar, side tanks), `body` (body, corner fins, dorsal fin, centre engine, pedestal), `nacelle_l`, `nacelle_r` (pods, ribs, claws, pylons) |
+| Skylark | main: the bells' exits on the nacelles' axis, (±13.03, -0.26, 55.48), radius 1.62; retro: the intakes' faces, (±13.03, -0.26, 35.64), radius 1.3 (T13: the axis measured off the nacelles; ±13.45, -0.45 was their box with the pods) | the tips of the nacelles' two pods each, the four nose vanes' tips, the corner fins' tips, the dorsal fin's crest and the keel aft (12) | in the bridge plate behind its glazing, (0, +3.6, 11.8) | the nacelles' outboard flanks, (±15.84, -0.26, 46.5) | `capsule` (nose, vanes, capsule, bridge, belly fins, spine, collar, side tanks), `body` (body, corner fins, dorsal fin, centre engine), `nacelle_l`, `nacelle_r` (pods, ribs, claws, pylons) |
 | Narn | main: a 0.9 m bell on each tower's aft face (z 43.9), its exit at (±15.0, +5.0, 44.72), radius 1.4; retro: the towers' fronts (the vanes' front face on the thrust line), (±15.0, +5.0, 35.7), radius 1.0 | the prong tips (forward and outboard), the fin tips (up and down), the box's aft corners | in the windscreen block behind the canopy, (0, +1.2, 11.3) | the crescent's widest points (±23.0, 0, 27.0) | `cockpit` (cockpit block, dorsal block, the crescent's centre), `wing_l`, `wing_r` (prong, crescent half, fin, tower), `box` |
 | Brezebel | main: the arm tips, (±12.0, 0, 60.0), radius 1.2, in the middle of the arm's flat tip face (z 59.4, x 10.67 to 13.2; T15: at x 12.2 the bell would stand out of it); retro: on the fairings' axis where it leaves the bow's rim, (±14.6, 0, 5.7), radius 1.0, firing forward clear of the hull (T15 review: at the fairing's front, z 22.1, it sat 2.6 m inside the arm and the depth proxy hid its plume) | the twelve blocks on the engine bay's walls (their top or bottom faces, exhausting up or down), the four fins' outer faces near their tips (outboard) | behind the window row, (0, +3.5, 2.5) | the bow's widest points (±19.6, 0, 17.0) | `bow` (bow, dorsal fitting, engine bay, main engine), `arm_l`, `arm_r` (arm, fairing, fins) |
 
@@ -288,7 +288,7 @@ rows.
 | `saturn_3_freighter` | lead ship (z 0-41.5) (splats vs STL) | 0.660 | 0.499 | 0.665 | 1.007 | 1.023 | 0.812 | - | 2026-11-03 |
 | `saturn_3_freighter` | pod group (model 41.5-91.1 scaled 1.244, 1.093, 1; asset 41.5-96.8) (splats vs STL) | 0.772 | 0.383 | 0.655 | 1.130 | 0.996 | 1.038 | - | 2026-11-03 |
 | `centauri_brezebel` | whole ship (best shift x -0.15 m, the model's fins sit 0.2 m to port; unshifted 0.972, 0.984, 0.945) | 0.966 | 0.984 | 0.970 | 1.000 | 1.000 | 0.999 | 0.992 (side) / 1.000 | 2026-11-03 |
-| `skylark_transport` | whole ship (splats vs STL; against its own fallback mesh the splats read IoU 0.964, 0.958, 0.926) | 0.958 | 0.949 | 0.911 | 1.004 | 1.006 | 1.022 | - | 2026-11-03 |
+| `skylark_transport` | whole ship (no shift) | 0.979 | 0.980 | 0.956 | 1.001 | 1.000 | 0.998 | 0.983 (side) / 1.000 | 2026-11-03 |
 
 ## `saturn_family` (T12)
 
@@ -342,16 +342,18 @@ the fidelity check needs no model offset. 60.04 m long, 40.2 m across the claw t
 | Body | a `section_loft` through 18 stations of an 18-point flattened diamond (ridge, flanks, side faces, a knee on the bottom, the keel), from the measured plan and sections; olive patches on the ridge's flanks and the side faces; `prism` corner fins; two dark blocks on its aft face |
 | Dorsal fin | a `section_loft` of lens sections stacked up y, from the root inside the body to the crest at y 5.13 |
 | Centre engine | a `lathe` drum, a `lathe` exhaust cone (dark metal) with a dark bore, twelve dark vanes round its neck |
-| Pedestal | a `lathe` drum 2.1 m across from inside the body up to the turret mount at y 3.6 |
+| Turret seat | none built: the turret sits on the body's ridge at (0, 2.87, 37.5), the ridge's height there (the `body` piece's `turret` anchor) |
 | Nacelles | a `lathe` about (±13.03, -0.26): dark ribbed intake ring, sand body, dark bell with its bore; 16 intake ribs and 24 bell ribs as `prism` plates; two pods as lofts of elliptic sections |
 | Claws, pylons | each claw two `section_loft` prongs either side of a `section_loft` web, from stations measured along it; flat `prism` pylons from the nacelle |
 
-Budget at the default spacing of 0.26 m (thin parts are sampled finer, the body a little coarser): LOD0 61 014 splats
-(capsule 23 020, body 15 104, each nacelle 11 446), LOD1 15 200, LOD2 3 804, LOD3 964; the turret 2 372 at 0.08 m. The
+Budget at the default spacing of 0.26 m (thin parts are sampled finer, the body a little coarser): LOD0 60 924 splats
+(capsule 23 018, body 15 014, each nacelle 11 446), LOD1 15 176, LOD2 3 798, LOD3 962; the turret 2 372 at 0.08 m. The
 0.26 m spacing (not the planned 0.33 m) follows from the built surface being smaller than the reference's (no inner
 faces); it stays at 0.25 m or more so the Godot import test's looser box rule for big hulls applies to its coarse levels.
-Hardpoints: the table above. The centre of mass is on the nacelles' axis, the thrust line. Collision: 43 primitives
-(a capsule for the capsule's barrel, boxes elsewhere, oriented boxes for the belly fins, pods and claws).
+Hardpoints: the table above. The centre of mass is on the nacelles' axis, the thrust line. Collision: 44 primitives
+(a capsule for the capsule's barrel, boxes elsewhere, oriented boxes for the belly fins, pods and claws); every LOD0
+splat centre lies inside them grown by one spacing (the neck ahead of the barrel capsule and the engine's vane ring have
+their own boxes).
 
 ## `narn_transport` and the `narn` style (T14)
 
@@ -613,7 +615,7 @@ From the design references, authored frame; `up` is (0, 1, 0) for dorsal mounts 
 | Saturn 8 transport (2) | `dorsal_fwd` (0, +3.8, 19.1), `dorsal_mid` (0, +7.2, 149.4) |
 | Saturn 8 tanker (2) | `dorsal_fwd` (0, +3.8, 19.1), `dorsal_mid` (0, +9.0, 149.4) |
 | Saturn 3 (1) | `dorsal_fwd` (0, +3.8, 19.1) |
-| Skylark (1) | `dorsal` (0, +3.6, 37.5) on a pedestal 2.1 m across (the body's top is at y 2.87 there); no ventral (Q19) |
+| Skylark (1) | `dorsal` (0, +2.87, 37.5), seated on the body's ridge; no ventral (Q19) |
 | Narn (2) | `tower_l` (-14.85, +9.0, 41.7), `tower_r` (14.85, +9.0, 41.7), on the slotted crowns |
 | Brezebel (1) | `dorsal` (0, +4.3, 7.0), on the dorsal fitting's turret ring |
 

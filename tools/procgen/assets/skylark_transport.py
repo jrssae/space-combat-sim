@@ -12,7 +12,7 @@ reference model's box, as ``tools/refview`` draws it):
   front, two red-orange bands and two thin fins under it; behind it the spine and the collar with a ring of vanes at
   each end, and beside them the side tanks (a band each) with a dumbbell tank ahead of each;
 * the faceted body (z 32.1 to 51.6), 23.9 m wide, with swept fins at its aft corners, the dorsal fin, the centre
-  engine's drum and exhaust cone, and the pedestal of the dorsal turret (Q19, the only turret);
+  engine's drum and exhaust cone, and the dorsal turret seated on the body's ridge (Q19, the only turret);
 * the nacelles against the body's flanks on a thrust line 0.26 m below the box centre: a ribbed intake, two pods
   pointing up and down outboard, a ribbed dark bell, and two forked claws on short pylons reaching aft to z 60.
 
@@ -290,7 +290,7 @@ def hardpoints(everything: list[Piece], chunks: list[dict[str, Any]], offset: np
         for shape in part.collision:
             collision.append({**shape.to_json(offset=offset, digits=JSON_DIGITS), "name": f"{part.name}_{shape.name}" if shape.name else part.name})
 
-    mount = by_name["pedestal"].anchor("turret")
+    mount = by_name["body"].anchor("turret")
     turrets = [{"name": "dorsal", "position": _r(mount.position - offset), "up": _r(mount.direction), "arc_deg": TURRET_ARC_DEG,
                 "barrel_m": round(TURRET.barrel_m, JSON_DIGITS)}]  # fmt: skip
     joints = chunk_joints()

@@ -59,8 +59,8 @@ styles/ea_civilian.py the Earth Alliance civilian palette; ea_civilian(overrides
 parts/centauri.py  the Centauri Brezebel (M5-T15): the elliptic lens hull (bow, arms), engine bay, dorsal fitting,
                    fairings, hooked tip fins and the Centauri turret, each with its burial solid
 parts/skylark.py   the Skylark transport (M5-T13): capsule with nose vanes, bridge and belly fins, spine vane rings,
-                   collar, side tanks, the faceted body with corner fins, dorsal fin, centre engine and turret
-                   pedestal, nacelles with pods, ribbed rings, forked claws and their pylons; burial solids and sides
+                   collar, side tanks, the faceted body with corner fins, dorsal fin, centre engine and the turret's
+                   seat on its ridge, nacelles with pods, ribbed rings, forked claws and their pylons; burial solids and sides
 styles/centauri.py the Centauri palette (violet, gold, lavender trim), painted as written
 assets/__init__.py registry: ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]]
 assets/<id>.py     one module per asset, exposing build(ctx)
@@ -230,8 +230,8 @@ Things the Godot side must know:
 
 - LOD0 is written group by group (`manifest.counts`), LOD1 chunk by chunk; `chunk_lod` is 1.
 - `hardpoints.json` has two pods on the nacelles' axis (x ±13.03, y -0.26: mains at the bells' exits, retros at the
-  intakes), the centre of mass on that thrust line, 12 RCS ports, `muzzles` empty, and one turret (`dorsal`, Q19) on a
-  pedestal on the body's top at (0, 3.6, 37.5) in the authored frame. The manifest's `turret` entry has the keys of
+  intakes), the centre of mass on that thrust line, 12 RCS ports, `muzzles` empty, and one turret (`dorsal`, Q19) seated
+  on the body's ridge at (0, 2.87, 37.5) in the authored frame. The manifest's `turret` entry has the keys of
   `parts/turret.py`'s.
 - The engine glow is warm white #FFE9C2 (`ENGINE_GLOW_SRGB`), a `ShipSpec` tint, not paint.
 

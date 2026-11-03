@@ -414,9 +414,9 @@ flanks, and the short pylons carry the claws (T13).
 Mothak'cha.jpg shows the same ship with a lighter grey body (#B9B7B1) and orange bands: a second livery the variant
 data can offer.
 
-Turret (1, Q19: dorsal only): `dorsal` on the body's top ahead of the dorsal fin (0, +3.6, 37.5), up +y. The body's
-top is at y 2.87 there, so the turret stands on a pedestal 2.1 m across (T13). The `ventral` spot under the capsule
-is dropped.
+Turret (1, Q19: dorsal only): `dorsal` on the body's top ahead of the dorsal fin (0, +2.87, 37.5), up +y, seated on
+the ridge (the body's top is at y 2.87 there; T13 first stood it on a pedestal at y 3.6 and then dropped it). The
+`ventral` spot under the capsule is dropped.
 
 Sources, checked 2026-11-02: https://babylon5.fandom.com/wiki/%22Delta_Gamma_9%22_Type_Transport,
 https://babylon5.fandom.com/wiki/File:Skylark_class.jpg, https://babylon5.fandom.com/wiki/File:7Tango7.JPG,

@@ -23,6 +23,7 @@ from tools.procgen.core.color import linear_to_srgb
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.obj import read_obj
 from tools.procgen.core.ply import read_ply
+from tools.procgen.parts import skylark as sp
 
 PILOT_TERMS = {
     "sway_left", "sway_right", "heave_up", "heave_down", "pitch_up", "pitch_down",
@@ -34,7 +35,7 @@ CHUNKS = ("capsule", "body", "nacelle_l", "nacelle_r")
 BUDGET = (48_000, 72_000)  # docs/assets-civilian.md: 60 000 (48 000 to 72 000)
 LOD_SHARES = {1: (0.20, 0.30), 2: (0.04, 0.09), 3: (0.01, 0.025)}
 NACELLE_AXIS = (13.03, -0.26)  # x, y of the nacelles' axis (authored frame, y from the box centre)
-DORSAL_TURRET = (0.0, 3.6, 37.5)  # Q19: the only turret, on the body's top ahead of the dorsal fin
+DORSAL_TURRET = (0.0, 2.87, 37.5)  # Q19: the only turret, seated on the body's ridge ahead of the dorsal fin
 
 
 def sha256(path: Path) -> str:
@@ -171,9 +172,10 @@ class SkylarkTransportTests(unittest.TestCase):
         self.assertAlmostEqual(float(0.5 * (lo[1] + hi[1])), 0.0, delta=0.3)
         self.assertAlmostEqual(float(0.5 * (lo[0] + hi[0])), 0.0, delta=1e-6)
 
-    def test_lod0_and_lod1_are_exactly_mirror_symmetric_in_x(self) -> None:
-        for xyz in (self.xyz, frames.flip_xy(self.lod1.xyz)):
-            np.testing.assert_allclose(sorted_rows(xyz), sorted_rows(xyz * np.array([-1.0, 1.0, 1.0])), atol=SYM_TOL)
+    def test_every_level_is_exactly_mirror_symmetric_in_x(self) -> None:
+        levels = [self.xyz] + [godot_xyz(self.dir_a / sky.LODS[level][0]) for level in (1, 2, 3)]
+        for level, xyz in enumerate(levels):
+            np.testing.assert_allclose(sorted_rows(xyz), sorted_rows(xyz * np.array([-1.0, 1.0, 1.0])), atol=SYM_TOL, err_msg=f"LOD{level}")
 
     def test_splats_are_flat_oriented_opaque_discs(self) -> None:
         scale = self.splats.scale
@@ -392,7 +394,7 @@ class SkylarkTransportTests(unittest.TestCase):
         self.assertEqual(t["up"], [0.0, 1.0, 0.0])
         self.assertEqual(t["arc_deg"], 200.0, "a hemisphere plus 10 degrees below the base")
         self.assertEqual(t["barrel_m"], 3.0, "the EA turret at two thirds of its size")
-        # It stands on hull (its pedestal) with nothing above it.
+        # It sits on the body's ridge with nothing above it.
         p = np.array(t["position"])
         column = self.xyz[np.hypot(self.xyz[:, 0] - p[0], self.xyz[:, 2] - p[2]) < 0.8]
         self.assertGreater(len(column), 0)
@@ -427,7 +429,7 @@ class SkylarkTransportTests(unittest.TestCase):
         inside = np.zeros(len(self.xyz), dtype=bool)
         for c in shapes:
             inside |= inside_primitive(self.xyz, c, inflate=self.spacing)
-        self.assertGreaterEqual(float(inside.mean()), 0.97, "at least 97 % of the LOD0 splat centres")
+        self.assertGreaterEqual(float(inside.mean()), 0.999, "at least 99.9 % of the LOD0 splat centres")
         lo, hi = self.xyz.min(axis=0), self.xyz.max(axis=0)
         for c in shapes:
             basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T
@@ -452,6 +454,15 @@ class SkylarkTransportTests(unittest.TestCase):
                 self.assertAlmostEqual(c["position"][0], 0.0, places=4, msg=name)
 
     # --- meshes ----------------------------------------------------------------------------------------------------------
+    def test_the_fallback_mesh_and_chunk_meshes_hold_every_piece(self) -> None:
+        parts = [p.part for p in sky.with_twins(sp.assemble(sky.STYLE))]
+        self.assertNotIn("pedestal", {p.name for p in parts}, "the turret sits on the ridge itself")
+        self.assertTrue(all(p.mesh.face_count > 0 for p in parts))
+        self.assertEqual(len(self.obj.faces), sum(p.mesh.face_count for p in parts), "the hull OBJ is every piece")
+        for entry in self.hp["chunks"]:
+            expected = sum(p.mesh.face_count for p in parts if p.group == entry["name"])
+            self.assertEqual(len(read_obj(self.dir_a / entry["obj"]).faces), expected, entry["name"])
+
     def test_fallback_obj_is_valid_and_matches_the_splat_bounds(self) -> None:
         v = self.obj.vertices
         self.assertTrue(np.all(np.isfinite(v)))
