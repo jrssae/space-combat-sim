@@ -286,6 +286,7 @@ func test_bad_input_is_refused_and_never_panics() -> void:
 	var short := PackedFloat64Array([spec.mass])
 	assert_eq(int(step.register(RID(), short, PackedVector3Array(), layout.nozzle_groups, layout.nozzle_positions,
 			layout.nozzle_exhausts, PackedVector3Array())), -1, "a short spec is refused")
+	assert_engine_error("line up", "one error says why")
 	var slot: int = FlightBatch.register_slot(step, RID(), spec, layout)
 	assert_gte(slot, 0)
 	var scalars := PackedFloat64Array()
@@ -296,14 +297,17 @@ func test_bad_input_is_refused_and_never_panics() -> void:
 	flags.resize(FlightBatch.CMD_FLAGS)
 	assert_false(step.step(PackedInt32Array([slot]), PackedFloat64Array(), vectors, flags, PackedVector3Array(), DT),
 			"short scalars are refused")
+	assert_engine_error("nothing applied", "one error says why")
 	assert_false(step.step(PackedInt32Array([slot + 7]), scalars, vectors, flags, PackedVector3Array(), DT),
 			"an unknown slot is refused")
+	assert_engine_error("nothing applied", "one error says why")
 	assert_eq(step.out_vectors().size(), 0, "a refused step leaves no rows")
 	assert_true(step.step(PackedInt32Array([]), PackedFloat64Array(), PackedVector3Array(), PackedByteArray(),
 			PackedVector3Array(), DT), "an empty step is fine")
 	step.unregister(slot)
 	assert_false(step.step(PackedInt32Array([slot]), scalars, vectors, flags, PackedVector3Array(), DT),
 			"a slot that was unregistered is unknown")
+	assert_engine_error("nothing applied", "one error says why")
 	step.unregister(-5)
 	step.unregister(1000)
 	assert_eq(step.assist_state(1000), 0.0, "an unknown slot reads zero")

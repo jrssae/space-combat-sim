@@ -31,6 +31,13 @@ extends RigidBody3D
 ## World-frame sum of the forces it applied on its last tick (`applied_force`), so the `RamResolver` can tell the velocity
 ## change a collision caused from what the ship's own thrust did.
 ##
+## The flight batch (M4-T10, architecture §17.9): every ship but the player's is `batched`, so `FlightBatch` (under `World`,
+## priority -1) runs its model, governor and force application in one native call per tick for all of them; this node's
+## `_physics_process` then only takes the command edges and leaves the forces to the batch. The player's ship, a ship whose
+## `batched` is off, and every ship when the library or `perf_native` is off, fly the GDScript path below. On the batched
+## path `get_flight_output()` fills its `FlightOutput` from the batch's row on demand (levels, RCS shares, forces, flags; the
+## per-nozzle `nozzle_forces` stay empty) and `applied_force()` reads the batch's sum.
+##
 ## Rebase-safe: nothing here caches a World position between ticks. Console (§6.4, §15.1 D27): only the player's ship
 ## registers (`console_owner`, set before the ship enters the tree, `ShipAssembly` does it): provider `ship` and commands
 ## `assist [on|off]` and `refuel [kg]`, and it passes the flag on to its `TargetingController`. Other ships stay out of
@@ -78,8 +85,16 @@ var running_lights: bool = true:
 	set = set_running_lights
 
 var _assist_on: bool = true
-## Whether this ship may fly in the native flight batch (M4-T10): every ship but the player's. Stub: nothing joins yet.
-var batched: bool = false
+## Whether this ship flies in the native flight batch when it can (M4-T10): on for every ship but the player's, whose
+## `_ready` switches it off. Changing it joins or leaves the batch at once.
+var batched: bool = true:
+	set(value):
+		batched = value
+		if is_inside_tree():
+			if value:
+				_join_batch()
+			else:
+				_leave_batch()
 var _hardpoints: Hardpoints = Hardpoints.new()
 var _layout: ThrusterLayout = ThrusterLayout.new()
 ## Share of the gap to this tick's measured turn rate of the lead direction that the smoothed rate closes each tick.
@@ -110,6 +125,13 @@ var _hull_lod_spec: ShipSpec = null
 var _muzzles: Array[Node3D] = []
 var _collision_nodes: Array[CollisionShape3D] = []
 var _applied_force: Vector3 = Vector3.ZERO
+# The flight batch (M4-T10): the batch this ship joined, its row and the physics frame of the last gather, whether the last
+# path flown was the batch's (the assist state follows a change of path), and the frame `_output` was last filled from a row.
+var _batch: FlightBatch = null
+var _batch_row: int = -1
+var _batch_tick: int = -1
+var _native_last: bool = false
+var _output_tick: int = -1
 
 @onready var hull_splats: GaussianSplatNode = $HullSplats
 @onready var hull_mesh_fallback: MeshInstance3D = $HullMeshFallback
@@ -149,6 +171,8 @@ func _enter_tree() -> void:
 
 
 func _ready() -> void:
+	if console_owner:
+		batched = false
 	_apply_newtonian_body()
 	targeting.setup(self, console_owner)
 	_build()
@@ -172,6 +196,7 @@ func _notification(what: int) -> void:
 
 
 func _exit_tree() -> void:
+	_leave_batch()
 	DebugConsole.registry.unregister_owner(self)
 	var rig: SplatLightRig = SplatLightRig.of(self)
 	if rig != null and _cabin_emitter != null:
@@ -190,10 +215,23 @@ func setup(p_spec: ShipSpec, p_world: WorldFrame) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if _flight_fresh and _flight.toggle_assist:
-		set_assist(not _assist_on)
-	_flight_fresh = false
+	var in_batch: bool = _in_batch_this_tick()
+	if not in_batch:
+		if _flight_fresh and _flight.toggle_assist:
+			set_assist(not _assist_on)
+		_flight_fresh = false
 	var combat_fresh: bool = _take_combat_edges()
+	if in_batch:
+		# The batch applied this tick's forces before this node ran; only the combat edges are left.
+		if combat_fresh:
+			targeting.apply(_combat)
+		return
+	if _native_last:
+		# Back on this node's model: it carries on from the assist state the batch held.
+		if _model != null and _batch != null:
+			_model.assist.pod_yaw_smoothed = _batch.assist_state(self)
+		_native_last = false
+	_batch_tick = -1  # this node's model flies this tick, so the batch's row is no longer the latest
 
 	var env_accel: Vector3 = _environment_accel()
 	_applied_force = mass * env_accel
@@ -264,6 +302,8 @@ func set_assist(on: bool) -> void:
 	_assist_on = on
 	if _model != null:
 		_model.reset_assist()
+	if _batch != null:
+		_batch.reset_assist(self)
 	assist_toggled.emit(on)
 
 
@@ -277,6 +317,10 @@ func reset_to(xform: Transform3D) -> void:
 	if _model != null:
 		_model.reset_assist()
 		_output = _idle_output()
+	if _batch != null:
+		_batch.reset_assist(self)
+	_batch_tick = -1
+	_output_tick = -1
 	reset_physics_interpolation()
 
 
@@ -313,12 +357,49 @@ func body_angular_velocity() -> Vector3:
 ## environment), N. Jolt adds `applied_force() / mass * delta` to the velocity in the coming step; anything beyond that
 ## came from a contact.
 func applied_force() -> Vector3:
+	if _in_batch_row():
+		return _batch.out_vectors[_batch_row * FlightBatch.OUT_VECTORS + FlightBatch.Out.FORCE]
 	return _applied_force
 
 
 ## Which path flew the last physics tick: `native` (the flight batch, M4-T10) or `gdscript` (this node's own model).
 func flight_path() -> StringName:
-	return &"gdscript"
+	return &"native" if _in_batch_row() else &"gdscript"
+
+
+## The flight batch's gather for this tick (M4-T10): the assist edge, the brake's facing and the auto-track's lead (as
+## `_physics_process` would), the command packed at `row`, and the marks that tell `_physics_process` the batch flies this tick.
+func batch_gather(batch: FlightBatch, row: int, frame: int, delta: float, fuel_unlimited: bool,
+		scalars: PackedFloat64Array, vectors: PackedVector3Array, flags: PackedByteArray) -> void:
+	if _flight_fresh and _flight.toggle_assist:
+		set_assist(not _assist_on)
+	_flight_fresh = false
+	if _flight.brake or _flight.autotrack:
+		var to_body: Basis = global_basis.transposed()
+		if _flight.brake:
+			_flight.face_dir_b = to_body * targeting.selected_offset()  # what the brake faces (§5.5); zero = no target
+		_update_tracking(delta, to_body)
+	elif not _track_prev_dir.is_zero_approx() or not _flight.track_dir_b.is_zero_approx():
+		_flight.track_dir_b = Vector3.ZERO
+		_flight.track_rate_b = Vector3.ZERO
+		_track_prev_dir = Vector3.ZERO
+		_track_rate_w = Vector3.ZERO
+	_fuel.unlimited = fuel_unlimited
+	FlightBatch.pack_command(_flight, _environment_accel(), _assist_on, not _fuel.is_empty(), scalars, vectors, flags, row)
+	if not _native_last:
+		# Onto the batch: it carries on from the assist state this node's model held.
+		if _model != null:
+			batch.set_assist_state(self, _model.assist.pod_yaw_smoothed)
+		_native_last = true
+	_batch = batch
+	_batch_row = row
+	_batch_tick = frame
+	_output_tick = -1
+
+
+## The batch draws this tick's reaction mass for a batched ship (only when the tank is finite).
+func batch_draw_fuel(flow_kg_s: float, delta: float) -> void:
+	_fuel.draw(flow_kg_s, delta)
 
 
 ## The reaction-mass tank, with `unlimited` brought in line with `settings.fuel_unlimited` as of now. Never null.
@@ -327,8 +408,12 @@ func get_fuel_tank() -> FuelTank:
 	return _fuel
 
 
-## What the flight model produced on the last physics tick (all zero before the first one). Never null.
+## What the flight model produced on the last physics tick (all zero before the first one). Never null. On the batched
+## path it is filled from the batch's row when first asked after a tick.
 func get_flight_output() -> FlightOutput:
+	if _output_tick != _batch_tick and _in_batch_row():
+		_fill_output_from_batch()
+		_output_tick = _batch_tick
 	return _output
 
 
@@ -503,6 +588,8 @@ func _build() -> void:
 	_build_running_lights()
 	_build_cockpit_screens()
 	_output = _idle_output()
+	_output_tick = -1
+	_join_batch()
 
 
 # Freed at once rather than queued: a rebuild must not leave the old shapes in the body for the rest of the frame.
@@ -799,6 +886,79 @@ func _environment_accel() -> Vector3:
 	if world == null or not is_instance_valid(world):
 		return Vector3.ZERO
 	return world.environment_accel(position)
+
+
+# --- the flight batch (M4-T10) ----------------------------------------------------------------------------------------
+
+
+# Whether the batch gathered this ship in the current physics tick and its step went through.
+func _in_batch_this_tick() -> bool:
+	return _batch != null and _batch_tick == Engine.get_physics_frames() and _batch.tick == _batch_tick
+
+
+# Whether the batch's outputs hold a row for this ship from its latest step.
+func _in_batch_row() -> bool:
+	return _batch != null and _batch_tick >= 0 and _batch_tick == _batch.tick
+
+
+func _join_batch() -> void:
+	if not batched or _model == null or world == null or not is_instance_valid(world) or not is_inside_tree():
+		return
+	var batch: FlightBatch = FlightBatch.attach(world)
+	if batch == null:
+		return
+	_batch = batch
+	batch.join(self)
+
+
+func _leave_batch() -> void:
+	if _batch == null:
+		return
+	if is_instance_valid(_batch):
+		if _native_last and _model != null:
+			_model.assist.pod_yaw_smoothed = _batch.assist_state(self)
+		_batch.leave(self)
+	_native_last = false
+	_batch_tick = -1
+	_batch = null
+
+
+# `_output` from the batch's row: the levels per group and per pod, the RCS shares, the body-frame forces and torques, the
+# flags and the flow. The per-nozzle list stays empty: nothing reads it for a batched ship.
+func _fill_output_from_batch() -> void:
+	var v: int = _batch_row * FlightBatch.OUT_VECTORS
+	var s: int = _batch_row * FlightBatch.OUT_SCALARS
+	var ov: PackedVector3Array = _batch.out_vectors
+	var os: PackedFloat64Array = _batch.out_scalars
+	var out: FlightOutput = _output
+	out.nozzle_forces.clear()
+	out.group_levels = PackedFloat64Array([os[s], os[s + 1], os[s + 2], os[s + 3]])
+	var pods: int = _layout.pod_count()
+	if out.main_levels.size() != pods:
+		out.main_levels.resize(pods)
+		out.retro_levels.resize(pods)
+	for pod: int in pods:
+		var right: bool = _layout.pod_is_right[pod] != 0
+		out.main_levels[pod] = os[s + (ThrusterLayout.Group.R_MAIN if right else ThrusterLayout.Group.L_MAIN)]
+		out.retro_levels[pod] = os[s + (ThrusterLayout.Group.R_RETRO if right else ThrusterLayout.Group.L_RETRO)]
+	out.pod_force_b = ov[v + FlightBatch.Out.POD_FORCE]
+	out.pod_torque_b = ov[v + FlightBatch.Out.POD_TORQUE]
+	out.rcs_force_b = ov[v + FlightBatch.Out.RCS_FORCE]
+	out.rcs_torque_b = ov[v + FlightBatch.Out.RCS_TORQUE]
+	out.force_b = out.pod_force_b + out.rcs_force_b
+	out.torque_b = out.pod_torque_b + out.rcs_torque_b
+	out.rcs_force_level = ov[v + FlightBatch.Out.RCS_FORCE_LEVEL]
+	out.rcs_torque_level = ov[v + FlightBatch.Out.RCS_TORQUE_LEVEL]
+	out.rate_target_b = ov[v + FlightBatch.Out.RATE_TARGET]
+	out.trim = os[s + FlightBatch.OutScalar.TRIM]
+	out.pod_yaw_cmd = os[s + FlightBatch.OutScalar.POD_YAW_CMD]
+	out.mass_flow_kg_s = os[s + FlightBatch.OutScalar.MASS_FLOW]
+	out.face_error_rad = os[s + FlightBatch.OutScalar.FACE_ERROR]
+	out.braking = os[s + FlightBatch.OutScalar.BRAKING] != 0.0
+	out.facing = os[s + FlightBatch.OutScalar.FACING] != 0.0
+	out.tracking = os[s + FlightBatch.OutScalar.TRACKING] != 0.0
+	out.propellant_empty = os[s + FlightBatch.OutScalar.PROPELLANT_EMPTY] != 0.0
+	out.assist_on = _assist_on
 
 
 # --- console -----------------------------------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 use godot::prelude::*;
 
 mod contact_field;
+mod flight_step;
 mod native_probe;
 
 struct ScsNative;
