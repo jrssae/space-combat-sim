@@ -123,6 +123,7 @@ Source: `src/autoload/debug_console.gd`
 | `combat` | `src/combat/hit_resolver.gd` |
 | `controls` | `src/autoload/control_profiles.gd` |
 | `debris` | `src/combat/debris_pool.gd` |
+| `flight` | `src/ship/flight_batch.gd` (M4-T10: the native flight batch: `path`, `ships`, `stepped`, `gather_us`, `step_us`, `positions`) |
 | `debug` | `src/autoload/debug_console.gd` |
 | `factions` | `src/combat/faction_console.gd` (registered by `src/combat/hit_resolver.gd`) |
 | `fx` | `src/combat/fx_pool.gd` |

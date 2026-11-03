@@ -2161,3 +2161,43 @@ scripts/fullscreen_check.sh         a layout fullscreen, the 3D at 1080p, under 
   rate, an interceptor removes only hostile bolts within 1.5 km, rocks are static rows that bolts hit, a rebase moves rocks and
   capitals, the moon bends a coasting path about 13.5 m in 30 s) and `test_bench` (battle and typical runs write every entity
   count, the factions and stand-ins go afterwards).
+
+### 17.9 The native flight step (T10, N4)
+
+```
+native/src/flight_step.rs       ScsFlightStep: FlightModel.compute, the SpeedGovernor and the ship's force application for every
+                                batched ship in one call, by body RID through PhysicsServer3D
+src/ship/flight_batch.gd        FlightBatch: a child of World at physics priority -1; gathers, steps, keeps the outputs; the
+                                `flight` console provider
+src/ship/ship.gd                a ship is `batched` (every ship but the player's); its _physics_process then only takes the edges
+```
+
+- **One call for all AI ships.** After the AI drivers (-10) and before the ships (0), `FlightBatch` packs each batched ship's
+  `FlightCommand` (the four group levels, strafe, rot, the track and face directions, the environment acceleration, and the
+  flags brake, autotrack, assist and propellant) into packed arrays and calls `ScsFlightStep.step` once. The step reads each
+  body's basis and velocities from the physics server (what `RigidBody3D` reads too), runs the model, the governor's gain and
+  cap and the hard ceiling, and applies the nozzle forces at their positions, the RCS force and torque, the cap and the
+  environment force to the body in the order `Ship._physics_process` applied them. The outputs (the applied force and torque,
+  the body-frame forces and torques, the levels, the RCS shares, the flow, the flags) come back as two packed arrays; a ship
+  reads its row only when asked (`applied_force()` for the ram resolver, `get_flight_output()` for the glow and the audio),
+  and the batch draws the reaction mass when the tank is finite. The per-nozzle `nozzle_forces` of a batched ship's output
+  stay empty: nothing reads them for an AI ship.
+- **The player's ship never joins** (`console_owner` switches `batched` off in `_ready`), so the GDScript path stays the
+  reference and the player's feel is untouched. Any ship can be taken out (`batched = false`), and when the library lacks the
+  class or `perf_native` or `perf_native_flight` is off, the batch steps nothing and every ship flies its own model that same
+  tick; the flip works live, and a bench pairs the two paths in one process by flipping `perf_native_flight` alone.
+- **The assist's state follows the ship.** `FlightAssist.pod_yaw_smoothed` is the model's only state; the native slot keeps
+  its own copy. When a ship changes path the value is carried over (to native at the next gather, back to the model at the
+  next GDScript tick), and `set_assist` and `reset_to` clear both.
+- **Parity is bit for bit.** The step repeats GDScript's arithmetic: 32-bit vectors, 64-bit scalars, a scalar rounded to 32
+  bits before it scales a vector, Godot's `Vector3` operator order, its `clampf`, `minf`, `maxf` and `signf` comparisons, and
+  the same `exp` and `atan2` (both paths call the host's libm). `test_flight_step` runs 10 000 seeded commands and states per
+  ship type through both and finds no mismatch in any field; `test_flight_batch` flies a batched ship and its GDScript twin
+  through one position (collisions off: Jolt rounds the torque of a force at a point against the body's world position, so
+  twins at different positions can never match bit for bit) and finds the same velocity, spin, track and applied force.
+- **Entity-type-agnostic.** A slot is a spec (mass, thrusts, gains, limits, inertia, maxima) and a layout (any number of
+  nozzles in the four groups, their positions and exhausts, the group torque axes), so a capital ship's or any other
+  `ShipSpec` and hardpoints register the same way; nothing in the step is sized for a fighter.
+- **Bad input never panics.** `register` checks the arrays line up and returns -1 after one error; `step` checks the per-ship
+  array sizes and that every slot is known, and on a mismatch logs one error, applies nothing and returns false, so the batch
+  leaves every ship to its own model that tick. A body not in a space (a parked pool ship) gives a row of zeros and no force.

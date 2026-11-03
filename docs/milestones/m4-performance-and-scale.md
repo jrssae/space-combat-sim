@@ -153,7 +153,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T07 | The `battle` and `typical` layouts, the mix (`BattleMix`), capital, turret, asteroid and gravity stand-ins, per-entity counters, the fullscreen check script | T06 | Opus | The ruler every later task measures against; what the stand-ins cost needs judgement | A | in progress |
 | T08 | Bolt broad phase in native code (`ScsHitSweep`), projectile kinds | T06 | Opus | Hits grow with bolts times ships; the windowed spikes | G, N | not started |
 | T09 | Native body registry: the scan built from RIDs, entity kinds, nearest-k per kind | T06 | Opus | The per-tick gather cycle 4 left; rocks must not fill a fighter's contacts | G, N | not started |
-| T10 | N4: the flight force step in native code for AI ships (`ScsFlightStep`) | T06 | Fable | The riskiest parity maths (`FlightModel`, the assist's state) | G, N | not started |
+| T10 | N4: the flight force step in native code for AI ships (`ScsFlightStep`) | T06 | Fable | The riskiest parity maths (`FlightModel`, the assist's state) | G, N | done (2026-11-03, in a worktree on `f134e00`; Cycle log, M4-T10) |
 | T11 | Far-ship render proxies and the node diet for AI ships | T10 | Opus | 108 nodes and 27 draw calls a ship; GPU numbers by the agent, the look (H) | R | not started |
 | T12 | Missile, beam, interceptor and mine stand-ins | T07, T08 | Opus | The weapon kinds Q19 and Q21 name, measured | A, G | not started |
 | T13 | Phase 1 measurements and report P1 (checkpoint 1) | T11, T12, T14 | Sonnet | Measurement, no code | M | not started |
@@ -656,6 +656,12 @@ No question is open.
 - **Done when:** parity as stated and listed, the flight stage falls, the player's ship unchanged.
 - **Expected gain:** flight 3.6 to about 1.2 ms at furball 100 (60 %); at 500 the difference between 18 ms and about 3 ms.
 - **Architecture:** §17.9.
+- **Done (2026-11-03, worktree on `f134e00`):** `ScsFlightStep` and `FlightBatch` as planned; the ship adapter's
+  `batched` flag (on for every ship but the player's), `flight_path()`, the lazy row read for `applied_force()` and
+  `get_flight_output()`, the `perf_native_flight` setting (pairs the flight step alone in one process) and the `flight`
+  console provider (`path`, `ships`, `stepped`, `gather_us`, `step_us`, `positions`). Parity is bit for bit: the
+  differential test finds no mismatch in 20 000 samples, the Jolt twins match, and the seeded fights with the batch on and
+  off give the same outcome line for line (the Cycle log entry, M4-T10). The numbers are in the Cycle log.
 
 ##### M4-T11 Far-ship render proxies and the node diet for AI ships
 
@@ -1766,6 +1772,86 @@ saturates the cell indices, the count overflowed `i64` and could send a query th
 count takes the scan-every-body path (same results). `load` checks that the parallel arrays line up; on a mismatch it logs one
 error, keeps an empty scan and returns false, and `ContactScan` then answers that scan from GDScript. New tests pin both, and
 three edges that were right but unpinned: a negative range, more than 256 factions, a hostility row shorter than the faction list.
+
+### M4-T10 (2026-11-03): N4, the flight force step in native code
+
+Built in a detached worktree on `f134e00` (wave 1, Q18), so these numbers see only this change; T07's `battle` layout was not in
+the base, so the quick check and single `bench` runs at furball 50 and 100 and spread 100 measure it. Debug editor build, headless,
+all runs under both bench locks and pinned to cores 0-11, load 1.5 to 2.1 throughout.
+
+**Change.** `ScsFlightStep` (`native/src/flight_step.rs`) and `FlightBatch` (`src/ship/flight_batch.gd`, a child of `World` at
+priority -1): every ship but the player's is `batched`, so its `FlightModel.compute`, the `SpeedGovernor` and the force
+application of `Ship._physics_process` run in one native call per tick for all of them, by body RID through the physics server;
+the ship node then only takes its command edges, and reads the applied force and the glow levels from the batch's row on
+demand. `perf_native` and the new `perf_native_flight` flip it live; the assist's smoothed pod-yaw command follows a ship
+across the two paths (architecture §17.9).
+
+**Tests** (`5d03616`, before the change; both files failed, 0 of 4 and 0 of 7): `tests/unit/test_flight_step.gd`, a
+differential test of 10 000 seeded commands and states per ship type (Starfury and raider) through the native step and the
+GDScript model plus the ship's force maths, 23 fields each, exact; `tests/integration/test_flight_batch.gd`, ships in Jolt: the
+player's ship stays on GDScript, a batched ship and its GDScript twin at one position (collisions off) fly the same, the damping
+guard with a batched ship, an empty tank coasts, a live `perf_native` flip switches the path and keeps the assist state, a
+parked ship leaves the step, the `flight` provider. With the change (`a19089a`) 11 of 11.
+
+**Parity: bit for bit** (the stronger of the plan's two options, so Q16's tolerance is not needed). The native maths repeats
+GDScript's 32-bit vectors and 64-bit scalars op for op (a scalar rounded to 32 bits before it scales a vector, Godot's operator
+order and its `clampf`, `minf`, `maxf`, `signf`, the host's `exp` and `atan2`): zero mismatches in 20 000 differential samples
+(brake, auto-track, the face controller's edges, an empty tank, assist on and off, speeds up to past the hard ceiling, random
+bases, environment acceleration, `dt` of 1/60, 1/20 and 0); the Jolt twins give the same velocity, spin, position and applied
+force after 3 s of changing commands. Seeded fights with `perf_native` on and off in separate processes
+(`reports/perf/m4_t10_outcome`): `bench furball 25 30 seed=1` (a 35 s fight), `bench furball 25 5 seed=1` (positions at 10 s) and `bench spread 50 6 seed=2` give the same `state ai` line for every ship, the same behaviour counts (furball 25 at 35 s: 19 attack and 6 evade; spread 50: 31 and 19), the same mean speed (71.26 and 65.11 m/s), hits (154 and 156), last hit and rams, and every ship's position at 10 s (and at 15 s and 35 s) equal to the centimetre the console prints, worst distance 0.000 m over 25 and 50 ships, against Q16's 50 m.
+
+**Before** (`m4_t10_before_quick`, load 1.9; `m4_t10_before_stages`) and **after** (`m4_t10_after_quick`, load 1.9;
+`m4_t10_after_stages`):
+
+| quick check | furball ceiling | furball 40 / 50 / 100 ms | spread ceiling | spread 40 / 50 / 100 ms | 30 FPS holds to |
+|---|---|---|---|---|---|
+| before | 40 | 6.48 / 8.16 / 18.04 | 40 | 6.67 / 8.58 / 18.96 | 150 in both |
+| after | **50** | 5.84 / 7.62 / 16.85 | 40 | 6.35 / 8.27 / 18.36 | 150 in both |
+
+Stages, mean ms per tick (single runs, `bench <layout> <n> 10 seed=1`):
+
+| layout | N | | tick median | ai | (scan) | flight | targeting | resolvers | (hit) | (ram) | physics |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| furball | 50 | before | 7.89 | 2.70 | 1.22 | 1.87 | 0.50 | 1.49 | 1.09 | 0.37 | 1.21 |
+| furball | 50 | after | 7.26 | 2.83 | 1.28 | **0.81** | 0.56 | 1.54 | 1.11 | 0.40 | 1.44 |
+| furball | 100 | before | 16.05 | 5.53 | 2.45 | 3.62 | 1.01 | 4.48 | 3.71 | 0.73 | 1.73 |
+| furball | 100 | after | 15.25 | 5.82 | 2.57 | **1.41** | 1.13 | 4.71 | 3.81 | 0.84 | 2.13 |
+| spread | 100 | before | 16.46 | 5.54 | 2.69 | 3.60 | 1.00 | 4.54 | 3.76 | 0.73 | 1.76 |
+| spread | 100 | after | 15.77 | 5.93 | 2.87 | **1.41** | 1.14 | 4.83 | 3.91 | 0.86 | 2.19 |
+
+The batch's own cost inside the flight stage (`state flight` at the end of each run): 50 ships, gather 125 us and step 98 us;
+100 ships, gather 233 us and step 179 us, so about 2.3 us a ship in GDScript (the command packed, the fuel flag, the
+environment acceleration) and 1.8 us a ship natively (the body state read, the model, five force calls), against about 36 us a
+ship before. The rest of the flight stage is the console, `Main`, the bolts and the props.
+
+**Paired, the batch on and off in one process** (`m4_t10_paired`, `perf_native_flight` flipped between four 10 s runs, seed 1;
+only the flight step changes, the native scan runs in both):
+
+| layout | N | flight, off | flight, on | tick median, off | tick median, on | off the tick |
+|---|---|---|---|---|---|---|
+| furball | 50 | 2.05, 2.08 | 0.82, 0.83 | 8.66, 8.77 | 7.29, 7.39 | about 1.4 ms |
+| furball | 100 | 4.17, 4.15 | 1.46, 1.47 | 18.05, 18.36 | 15.35, 15.82 | about 2.6 ms |
+| spread | 100 | 4.07, 4.07 | 1.42, 1.42 | 17.82, 17.82 | 15.80, 15.76 | about 2.0 ms |
+
+**Gain against the prediction:** the plan said flight 3.6 to about 1.2 ms at furball 100 (60 %); measured 3.6 to 1.4 in the
+single runs and 4.2 to 1.5 paired (65 %). The tick at furball 100 fell 0.8 ms in the single runs and 2.6 ms paired: the other
+stages read 0.1 to 0.4 ms higher in the after runs (AI, resolvers, physics), which the paired runs show to be the machine, not
+the change, except physics, which reads 0.05 to 0.15 ms higher with the batch on in every pair (five server calls per ship from
+native code instead of the node's `apply_force`; unexplained, small). The quick check moved the furball a step (50 ships hold
+the budget, 7.62 ms) and left spread at 40 (8.27 ms at 50, 0.27 over).
+
+**Behaviour changes:** none. Everything a batched ship's output used to carry is still there except the per-nozzle
+`nozzle_forces` list, which stays empty for a batched ship (nothing reads it for an AI ship; the glow and the audio read the
+levels). A batched ship's `FlightCommand.face_dir_b` is written only while it brakes (the only time the model reads it).
+
+**Tests** (focused, Q10; CI's full suite after the push): the 82 GUT files that spawn ships, fly them in Jolt, read the flight
+output or the applied force, or run the bench, plus AC13's paired budget (`test_ai_think_time`, `test_m3_run`), once with the
+library and once without: with it 993 tests, 991 passing, 0 failing, 2 pending (the AC12 balance tests of `test_dogfight` and
+`test_m3_sandbox`, as before); without it 993 tests, 967 passing, 0 failing, 26 pending (the same two, `test_contact_field`'s 13,
+`test_flight_step`'s 4 and `test_flight_batch`'s 7, each saying the library is not built). `cargo fmt --check` and
+`cargo clippy --release -- -D warnings` are clean for `flight_step.rs` (clippy 1.99 flags gdext's generated `base: base` in every
+native class; this file allows that one lint at module level, the two older files are not this task's). No Python changed.
 
 ### Final measurements (M4-T06m, 2026-11-03)
 

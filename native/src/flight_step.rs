@@ -1,6 +1,8 @@
 // The flight force step for every batched ship in one call (M4-T10, N4; docs/architecture.md 17.9).
-use godot::classes::physics_server_3d::BodyState;
+// gdext's generated constructor writes `base: base`, which clippy 1.99 flags; the maths below has no struct literals of its own.
+#![allow(clippy::redundant_field_names)]
 use godot::classes::PhysicsServer3D;
+use godot::classes::physics_server_3d::BodyState;
 use godot::prelude::*;
 
 /// Per ship per tick: `main_right, main_left, retro_right, retro_left` (the nozzle groups' order).
@@ -135,7 +137,10 @@ impl ScsFlightStep {
             && nozzle_positions.len() == n
             && nozzle_exhausts.len() == n
             && torque_axes.len() == GROUPS
-            && nozzle_groups.as_slice().iter().all(|&g| (0..GROUPS as i32).contains(&g));
+            && nozzle_groups
+                .as_slice()
+                .iter()
+                .all(|&g| (0..GROUPS as i32).contains(&g));
         if !lined_up {
             godot_error!(
                 "ScsFlightStep.register: arrays do not line up (spec {}, spec vectors {}, nozzles {}, positions {}, exhausts {}, \
@@ -168,7 +173,11 @@ impl ScsFlightStep {
             rcs_torque_max: v[2],
             rate_max_rad: v[3],
         };
-        let groups: Vec<usize> = nozzle_groups.as_slice().iter().map(|&g| g as usize).collect();
+        let groups: Vec<usize> = nozzle_groups
+            .as_slice()
+            .iter()
+            .map(|&g| g as usize)
+            .collect();
         let mut counts = [0i64; GROUPS];
         for &g in &groups {
             counts[g] += 1;
@@ -197,7 +206,10 @@ impl ScsFlightStep {
     /// Forgets a ship; its slot number may be reused.
     #[func]
     fn unregister(&mut self, slot: i64) {
-        if let Some(entry) = usize::try_from(slot).ok().and_then(|i| self.slots.get_mut(i)) {
+        if let Some(entry) = usize::try_from(slot)
+            .ok()
+            .and_then(|i| self.slots.get_mut(i))
+        {
             *entry = None;
         }
     }
@@ -248,7 +260,10 @@ impl ScsFlightStep {
             && vectors.len() == n * CMD_VECTORS
             && flags.len() == n * CMD_FLAGS
             && (states.is_empty() || states.len() == n * STATE_VECTORS)
-            && slots.as_slice().iter().all(|&s| self.slot(i64::from(s)).is_some());
+            && slots
+                .as_slice()
+                .iter()
+                .all(|&s| self.slot(i64::from(s)).is_some());
         if !lined_up {
             godot_error!(
                 "ScsFlightStep.step: arrays do not line up or a slot is unknown ({n} ships, scalars {}, vectors {}, flags {}, \
@@ -285,20 +300,41 @@ impl ScsFlightStep {
             let env_w = vc[i * CMD_VECTORS + 5];
             let assist_on = fl[i * CMD_FLAGS + 2] != 0;
             let has_propellant = fl[i * CMD_FLAGS + 3] != 0;
-            let slot = self.slots[slot_id as usize].as_mut().expect("checked above");
+            let slot = self.slots[slot_id as usize]
+                .as_mut()
+                .expect("checked above");
             // The body's pose and motion: from the caller, or from the physics server as `RigidBody3D` reads them.
             let (basis, v_w, w_w, apply) = if st.is_empty() {
                 let rid = slot.rid;
-                let Some(body) = (rid.is_valid()).then(|| server.body_get_direct_state(rid)).flatten() else {
+                let Some(body) = (rid.is_valid())
+                    .then(|| server.body_get_direct_state(rid))
+                    .flatten()
+                else {
                     // Not in a space (parked or freed): nothing to fly; the row reads as zeros.
                     self.out_vectors.extend([Vector3::ZERO; OUT_VECTORS]);
                     self.out_scalars.extend([0.0; OUT_SCALARS]);
                     continue;
                 };
-                (body.get_transform().basis, body.get_linear_velocity(), body.get_angular_velocity(), true)
+                (
+                    body.get_transform().basis,
+                    body.get_linear_velocity(),
+                    body.get_angular_velocity(),
+                    true,
+                )
             } else {
-                let b = Basis { rows: [st[i * STATE_VECTORS], st[i * STATE_VECTORS + 1], st[i * STATE_VECTORS + 2]] };
-                (b, st[i * STATE_VECTORS + 3], st[i * STATE_VECTORS + 4], false)
+                let b = Basis {
+                    rows: [
+                        st[i * STATE_VECTORS],
+                        st[i * STATE_VECTORS + 1],
+                        st[i * STATE_VECTORS + 2],
+                    ],
+                };
+                (
+                    b,
+                    st[i * STATE_VECTORS + 3],
+                    st[i * STATE_VECTORS + 4],
+                    false,
+                )
             };
             let v_b = xform_inv(&basis, v_w);
             let w_b = xform_inv(&basis, w_w);
@@ -317,7 +353,10 @@ impl ScsFlightStep {
                 let force_w = scale(xform(&basis, force_b), gain);
                 let at_w = xform(&basis, slot.nozzle_positions[k]);
                 if apply {
-                    server.body_apply_force_ex(slot.rid, force_w).position(at_w).done();
+                    server
+                        .body_apply_force_ex(slot.rid, force_w)
+                        .position(at_w)
+                        .done();
                 }
                 applied = add(applied, force_w);
             }
@@ -345,7 +384,11 @@ impl ScsFlightStep {
             if spec.speed_limit_mps > 0.0 && f64::from(length(v_w)) > spec.speed_limit_mps {
                 v_after = scale(normalized(v_w), spec.speed_limit_mps as f32);
                 if apply {
-                    server.body_set_state(slot.rid, BodyState::LINEAR_VELOCITY, &Variant::from(v_after));
+                    server.body_set_state(
+                        slot.rid,
+                        BodyState::LINEAR_VELOCITY,
+                        &Variant::from(v_after),
+                    );
                 }
             }
             self.out_vectors.extend([
@@ -393,17 +436,32 @@ impl ScsFlightStep {
 
 impl ScsFlightStep {
     fn slot(&self, slot: i64) -> Option<&Slot> {
-        usize::try_from(slot).ok().and_then(|i| self.slots.get(i)).and_then(Option::as_ref)
+        usize::try_from(slot)
+            .ok()
+            .and_then(|i| self.slots.get(i))
+            .and_then(Option::as_ref)
     }
 
     fn slot_mut(&mut self, slot: i64) -> Option<&mut Slot> {
-        usize::try_from(slot).ok().and_then(|i| self.slots.get_mut(i)).and_then(Option::as_mut)
+        usize::try_from(slot)
+            .ok()
+            .and_then(|i| self.slots.get_mut(i))
+            .and_then(Option::as_mut)
     }
 }
 
 // `FlightModel.compute`: one tick of architecture 5.2, body frame.
 #[allow(clippy::too_many_arguments)]
-fn compute(slot: &mut Slot, cmd: &Cmd, v_b: Vector3, w_b: Vector3, env_b: Vector3, assist_on: bool, dt: f64, has_propellant: bool) -> ModelOut {
+fn compute(
+    slot: &mut Slot,
+    cmd: &Cmd,
+    v_b: Vector3,
+    w_b: Vector3,
+    env_b: Vector3,
+    assist_on: bool,
+    dt: f64,
+    has_propellant: bool,
+) -> ModelOut {
     let spec = slot.spec.clone();
     // 1. Pilot demand per nozzle group and RCS translation.
     let mut levels = cmd.levels;
@@ -415,9 +473,21 @@ fn compute(slot: &mut Slot, cmd: &Cmd, v_b: Vector3, w_b: Vector3, env_b: Vector
     // 2. Brake overrides all translational demand: symmetric sides, so zero pod torque.
     if cmd.brake {
         let a_des = sub(scale(v_b, (-spec.brake_gain_k) as f32), env_b);
-        let f_z = clampf(spec.mass * f64::from(a_des.z), -slot.main_total, slot.retro_total);
-        let main_level = if f_z < 0.0 && slot.main_total > 0.0 { -f_z / slot.main_total } else { 0.0 };
-        let retro_level = if f_z > 0.0 && slot.retro_total > 0.0 { f_z / slot.retro_total } else { 0.0 };
+        let f_z = clampf(
+            spec.mass * f64::from(a_des.z),
+            -slot.main_total,
+            slot.retro_total,
+        );
+        let main_level = if f_z < 0.0 && slot.main_total > 0.0 {
+            -f_z / slot.main_total
+        } else {
+            0.0
+        };
+        let retro_level = if f_z > 0.0 && slot.retro_total > 0.0 {
+            f_z / slot.retro_total
+        } else {
+            0.0
+        };
         levels = [main_level, main_level, retro_level, retro_level];
         rcs_force = clamp_cw(
             scale(Vector3::new(a_des.x, a_des.y, 0.0), spec.mass as f32),
@@ -447,7 +517,11 @@ fn compute(slot: &mut Slot, cmd: &Cmd, v_b: Vector3, w_b: Vector3, env_b: Vector
     if cmd.brake {
         // 4c. All stop, or the nose onto `face_dir_b`; RCS supplies the whole rate-controller torque.
         let w_face = face_rate_target(&spec, cmd.face_dir_b);
-        tau_rcs = clamp_cw(sub(rate_torque(&spec, w_face, w_b), tau_pods), neg(spec.rcs_torque_max), spec.rcs_torque_max);
+        tau_rcs = clamp_cw(
+            sub(rate_torque(&spec, w_face, w_b), tau_pods),
+            neg(spec.rcs_torque_max),
+            spec.rcs_torque_max,
+        );
         rate_target = w_face;
         facing = !is_zero_approx(cmd.face_dir_b);
         face_error = f64::from(length(face_error_vector(cmd.face_dir_b)));
@@ -455,13 +529,19 @@ fn compute(slot: &mut Slot, cmd: &Cmd, v_b: Vector3, w_b: Vector3, env_b: Vector
         let mut w_target;
         if tracking {
             w_target = track_rate_target(&spec, cmd.track_dir_b, cmd.track_rate_b);
-            w_target.z = (f64::from(cmd.rot.z) * f64::from(AXIS_SIGN.z) * f64::from(spec.rate_max_rad.z)) as f32;
+            w_target.z = (f64::from(cmd.rot.z)
+                * f64::from(AXIS_SIGN.z)
+                * f64::from(spec.rate_max_rad.z)) as f32;
             facing = true;
             face_error = f64::from(length(face_error_vector(cmd.track_dir_b)));
         } else {
             let rot = Vector3::new(
                 cmd.rot.x,
-                clampf(f64::from(cmd.rot.y) + pod_yaw_command(&spec, slot.pod_yaw_smoothed), -1.0, 1.0) as f32,
+                clampf(
+                    f64::from(cmd.rot.y) + pod_yaw_command(&spec, slot.pod_yaw_smoothed),
+                    -1.0,
+                    1.0,
+                ) as f32,
                 cmd.rot.z,
             );
             w_target = mul_cw(mul_cw(rot, AXIS_SIGN), spec.rate_max_rad);
@@ -469,7 +549,10 @@ fn compute(slot: &mut Slot, cmd: &Cmd, v_b: Vector3, w_b: Vector3, env_b: Vector
         // 4b. Rate controller with the pods' torque as feed-forward; the groups fighting an RCS overflow are trimmed.
         let tau_des = rate_torque(&spec, w_target, w_b);
         let mut residual = sub(tau_des, tau_pods);
-        let overflow = sub(residual, clamp_cw(residual, neg(spec.rcs_torque_max), spec.rcs_torque_max));
+        let overflow = sub(
+            residual,
+            clamp_cw(residual, neg(spec.rcs_torque_max), spec.rcs_torque_max),
+        );
         if overflow.y != 0.0 {
             let overflow_y = f64::from(overflow.y);
             lam = yaw_trim_factor(overflow_y, &group_torque_y);
@@ -498,7 +581,10 @@ fn compute(slot: &mut Slot, cmd: &Cmd, v_b: Vector3, w_b: Vector3, env_b: Vector
     for k in 0..slot.nozzle_groups.len() {
         let g = slot.nozzle_groups[k];
         let magnitude = levels[g] * group_thrust(&spec, g);
-        pod_force = add(pod_force, scale(neg(slot.nozzle_exhausts[k]), magnitude as f32));
+        pod_force = add(
+            pod_force,
+            scale(neg(slot.nozzle_exhausts[k]), magnitude as f32),
+        );
         thrust_sum += magnitude.abs();
     }
     let mass_flow = if spec.exhaust_velocity > 0.0 {
@@ -524,14 +610,21 @@ fn compute(slot: &mut Slot, cmd: &Cmd, v_b: Vector3, w_b: Vector3, env_b: Vector
 }
 
 fn group_thrust(spec: &Spec, group: usize) -> f64 {
-    if group < 2 { spec.pod_main_thrust } else { spec.pod_retro_thrust }
+    if group < 2 {
+        spec.pod_main_thrust
+    } else {
+        spec.pod_retro_thrust
+    }
 }
 
 // `FlightModel._pod_torque`: the groups' torque about the centre of mass, and each group's yaw part for the trim.
 fn pod_torque(slot: &Slot, levels: &[f64; GROUPS], group_torque_y: &mut [f64; GROUPS]) -> Vector3 {
     let mut total = Vector3::ZERO;
     for g in 0..GROUPS {
-        let tau_g = scale(slot.torque_axes[g], (levels[g] * group_thrust(&slot.spec, g)) as f32);
+        let tau_g = scale(
+            slot.torque_axes[g],
+            (levels[g] * group_thrust(&slot.spec, g)) as f32,
+        );
         group_torque_y[g] = f64::from(tau_g.y);
         total = add(total, tau_g);
     }
@@ -540,7 +633,11 @@ fn pod_torque(slot: &Slot, levels: &[f64; GROUPS], group_torque_y: &mut [f64; GR
 
 // `FlightAssist.update_pod_yaw`: the smoothed pod-yaw command, one tick on.
 fn update_pod_yaw(slot: &mut Slot, cmd: &Cmd, dt: f64) {
-    let raw = if cmd.brake { 0.0 } else { (cmd.levels[1] - cmd.levels[0]) + (cmd.levels[2] - cmd.levels[3]) };
+    let raw = if cmd.brake {
+        0.0
+    } else {
+        (cmd.levels[1] - cmd.levels[0]) + (cmd.levels[2] - cmd.levels[3])
+    };
     let deadzone = clampf(slot.spec.pod_yaw_deadzone, 0.0, 0.999);
     let shaped = signf(raw) * maxf(0.0, raw.abs() - deadzone) / (1.0 - deadzone);
     let target = clampf(shaped, -1.0, 1.0);
@@ -560,12 +657,23 @@ fn pod_yaw_command(spec: &Spec, smoothed: f64) -> f64 {
 
 // `FlightAssist.rate_torque`: the P rate controller's torque.
 fn rate_torque(spec: &Spec, w_target: Vector3, w_b: Vector3) -> Vector3 {
-    mul_cw(spec.inertia, scale(sub(w_target, w_b), spec.assist_gain_k as f32))
+    mul_cw(
+        spec.inertia,
+        scale(sub(w_target, w_b), spec.assist_gain_k as f32),
+    )
 }
 
 fn turn_accel_max(spec: &Spec) -> f64 {
-    let pitch = if spec.inertia.x > 0.0 { f64::from(spec.rcs_torque_max.x) / f64::from(spec.inertia.x) } else { 0.0 };
-    let yaw = if spec.inertia.y > 0.0 { f64::from(spec.rcs_torque_max.y) / f64::from(spec.inertia.y) } else { 0.0 };
+    let pitch = if spec.inertia.x > 0.0 {
+        f64::from(spec.rcs_torque_max.x) / f64::from(spec.inertia.x)
+    } else {
+        0.0
+    };
+    let yaw = if spec.inertia.y > 0.0 {
+        f64::from(spec.rcs_torque_max.y) / f64::from(spec.inertia.y)
+    } else {
+        0.0
+    };
     maxf(0.0, minf(pitch, yaw))
 }
 
@@ -577,7 +685,10 @@ fn face_rate_target(spec: &Spec, dir_b: Vector3) -> Vector3 {
         return Vector3::ZERO;
     }
     let decel = FACE_DECEL_FRACTION * turn_accel_max(spec);
-    let rate = minf(spec.assist_gain_k / 4.0 * angle, (2.0 * decel * angle).sqrt());
+    let rate = minf(
+        spec.assist_gain_k / 4.0 * angle,
+        (2.0 * decel * angle).sqrt(),
+    );
     let w = scale(div_s(error, angle as f32), rate as f32);
     let cap = spec.rate_max_rad;
     let mut s = 1.0;
@@ -668,8 +779,18 @@ fn assist_cap_correction(force: Vector3, velocity: Vector3, cap: f64) -> Vector3
 
 // `FlightModel._level_of`: a vector as a share of its per-axis limit.
 fn level_of(value: Vector3, limit: Vector3) -> Vector3 {
-    let part = |v: f32, l: f32| if l > 0.0 { (f64::from(v) / f64::from(l)) as f32 } else { 0.0 };
-    Vector3::new(part(value.x, limit.x), part(value.y, limit.y), part(value.z, limit.z))
+    let part = |v: f32, l: f32| {
+        if l > 0.0 {
+            (f64::from(v) / f64::from(l)) as f32
+        } else {
+            0.0
+        }
+    };
+    Vector3::new(
+        part(value.x, limit.x),
+        part(value.y, limit.y),
+        part(value.z, limit.z),
+    )
 }
 
 // --- Godot's 32-bit vector arithmetic, op for op (gdext's own operators go through glam, so none are used) ---------
@@ -722,7 +843,15 @@ fn normalized(a: Vector3) -> Vector3 {
 }
 
 fn clamp_cw(a: Vector3, lo: Vector3, hi: Vector3) -> Vector3 {
-    let c = |v: f32, lo: f32, hi: f32| if v < lo { lo } else if v > hi { hi } else { v };
+    let c = |v: f32, lo: f32, hi: f32| {
+        if v < lo {
+            lo
+        } else if v > hi {
+            hi
+        } else {
+            v
+        }
+    };
     Vector3::new(c(a.x, lo.x, hi.x), c(a.y, lo.y, hi.y), c(a.z, lo.z, hi.z))
 }
 
