@@ -757,7 +757,7 @@ line, and both settings off still match the base). The scan stage, where `neares
 | spread | 100 | 5.42 | 5.80 | 5.70 |
 
 Where nothing is cut (transit, at most 8 in range) nearest-k now costs what `contacts_for` did, within a run's noise. Spread still
-pays about 0.2 to 0.3 ms: its ships see 13 to 17 contacts at times (`contacts_max` 13), so the cut, the nearest hostile and the keeps
+pays about 0.2 to 0.3 ms: its ships see up to 17 contacts in range at times (with the cut, `contacts_max` reads 13: the 12 nearest plus one kept), so the cut, the nearest hostile and the keeps
 do run there, for little gain. The rest of the AI stage's difference with the think rate off (0.1 to 0.2 ms at 50 ships) is the
 driver's own bookkeeping (the player distance and the counts), which the both-settings-off runs show too (spread 50: 5.18 to 5.26
 against the base's 5.08 ms). With the think rate on, nearest-k costs spread about 0.1 ms.

@@ -2,7 +2,7 @@ extends GutTest
 ## The AI think rate and nearest-k contacts (M4-T04, cycle 3; architecture §17.4). AI ships within `ai_think_near_m` of
 ## the player think every tick; farther ones (all of them with no player alive) think at `ai_think_far_hz` on staggered
 ## ticks and hold their last command between, while their physics still steps every tick. A ship scores, avoids and checks
-## its fire lane against its nearest `ai_nearest_k` contacts plus its selected target and its latest attacker.
+## its fire lane against its nearest `ai_nearest_k` contacts, keeping its nearest hostile, target, wing and latest attacker.
 ##
 ## Work counts, never milliseconds: thinks per tick against the near ships plus a third of the far ones, and the contacts
 ## handed to a brain against k. Real ships from `ShipAssembly`, real physics frames.
