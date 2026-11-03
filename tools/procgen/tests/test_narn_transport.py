@@ -128,7 +128,7 @@ class NarnTransportTests(unittest.TestCase):
             xyz = godot_xyz(self.dir_a / name)
             self.assertEqual(len(xyz), entry["splats"])
             self.assertLess(float(np.abs(xyz.mean(axis=0)).max()), 1e-3, "centred like LOD0")
-            # Coarse samples miss sharp extremes (the prong tips, the slotted tower tops) but never reach past them.
+            # Coarse samples miss sharp extremes (the prong tips, the slotted tower tops) and reach past them only by centroid drift.
             assert_lod_box(self, xyz, self.manifest, entry["spacing_m"], level)
 
     def test_coarse_levels_keep_lod0s_centroid(self) -> None:

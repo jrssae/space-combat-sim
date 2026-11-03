@@ -350,8 +350,8 @@ the fidelity check needs no model offset. 60.04 m long, 40.2 m across the claw t
 Budget at the default spacing of 0.26 m (thin parts are sampled finer, the body a little coarser): LOD0 60 924 splats
 (capsule 23 018, body 15 014, each nacelle 11 446), LOD1 15 176, LOD2 3 798, LOD3 962; the turret 2 372 at 0.08 m. The
 0.26 m spacing (not the planned 0.33 m) follows from the built surface being smaller than the reference's (no inner
-faces). The Godot import test lets a coarse level of a hull 30 m or more long fall short of LOD0's box by 1.25 of its
-spacing, never reach past it by more than 0.3 m (T14).
+faces). The Godot import test lets a coarse level of a hull whose box is 30 m or more across fall short of LOD0's box by 1.25 of
+its spacing, and reach past it by at most max(0.3 m, 0.25 of its spacing) (T14).
 Hardpoints: the table above. The centre of mass is on the nacelles' axis, the thrust line. Collision: 44 primitives
 (a capsule for the capsule's barrel, boxes elsewhere, oriented boxes for the belly fins, pods and claws); every LOD0
 splat centre lies inside them grown by one spacing (the neck ahead of the barrel capsule and the engine's vane ring have
@@ -376,7 +376,7 @@ off the STL's shells and sections. Authored frame: y from the crescent's centre 
 | Crescent section | Measured |
 |---|---|
 | Outline (z, half-width) | (0, 10.0), (3.6, 15.3), (15.3, 22.0), (27.0, 23.0), (38.8, 19.1), (45.0, 15.5), (51.3, 6.7); the notch's inner edge (0, 10.0), (6.3, 10.0), (9.4, 13.2), (15.0, 13.2) |
-| Thinning to the rim | top 0.62 + 0.137 d, bottom -(0.89 + 0.135 d), d the distance in from the rim; beveled over the last 1.2 m to an edge at y -0.15 |
+| Thinning to the rim | top 0.62 + 0.137 d, bottom -(0.89 + 0.135 d), d the distance in from the rim; beveled over the last 1.2 m to an edge at y -0.15 (1.84 m thick where the bevel starts, 2.33 m 3 m in; the STL's bevel is about 1.9 m wide and reads 2.2 m 3 m in, T14) |
 | Centre body caps, z: top / bottom | 15: 2.5 / -2.85; 27: 3.76 / -4.04; 45: 2.2 / -2.4; 51.3: 1.0 / -1.2 |
 | Prong caps, z: top / bottom | 0: -0.15 / -0.15; 0.3: 0.02 / -0.28; 1.5: 0.43 / -0.70; 2.5: 0.77 / -1.05; 4.5: 0.88 / -1.16; 6: 1.04 / -1.32; 8: 1.13 / -1.41; 12: 1.20 / -1.48; 15: 1.33 / -1.61 (the plate steps up behind them) |
 
