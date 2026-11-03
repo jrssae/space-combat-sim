@@ -2,7 +2,7 @@
 
 > "Many ships at once." (`docs/roadmap.md`)
 
-**Status:** paused 2026-11-03 at the maintainer's request after the T06 report (45 ships; AC5 not met; Q11 to Q13). Earlier: planned 2026-10-28 at the maintainer's request, inserted after M3; the later milestones moved up one (the mission
+**Status:** resumed 2026-11-03 (Q14 to Q18): the research's phases 1 to 3 toward 500 ships in one battle. Paused earlier the same day after the T06 report (45 ships; Q11 to Q13). Earlier: planned 2026-10-28 at the maintainer's request, inserted after M3; the later milestones moved up one (the mission
 framework is now M5, Epsilon space M6, and so on to voiced dialog, M15). M4 starts when M3 is accepted and merged into `main`,
 on branch `m4`, unless the maintainer pulls it forward.
 
@@ -44,6 +44,11 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q11 | The T06 report (2026-11-03) | **Stop M4 here for now** at 45 ships (25 by the sweep, 50 in the release export). A research agent reviews every route to 500 ships, engine changes included, before more work is planned |
 | Q12 | Which build sets the budget | The editor build, as so far; the release export is measured once per report |
 | Q13 | The windowed frame | Add a windowed check: each future cycle also checks the windowed build holds 60 FPS at its ceiling (a short GPU run) |
+| Q14 | After the research (`docs/research/scaling-to-500-ships.md`, 2026-11-03) | **Stay in Godot** and run its phases 1 to 3 inside M4 (its goal already reads at least 100, up to 500), in the most efficient order, parallel where tracks do not collide |
+| Q15 | What 500 means | **500 ships in one battle, stretch goal 1000**, but not a small battle area: one battle spread over a large area with many engagements. Ships near the player at full fidelity; the far parts of the battle may run in a cheaper tier that still fights. A `battle` benchmark layout measures it |
+| Q16 | Parity for ports past N1 (the brains) | A stated tolerance: over a seeded 30 s fight, hits within 10 %, behaviour mix within 5 points, no ship more than 50 m from its GDScript twin at 10 s; every test green; listed in the report |
+| Q17 | Ships out of Jolt | Decide by measurement: Jolt stays through phase 1; phase 2 measures and proposes it only if Jolt binds, with the maintainer's sign-off (it changes D4) |
+| Q18 | Parallel work | Detached git worktrees (no branch), the controller cherry-picks onto `m4`; a branch off `m4` only if that is truly helpful |
 
 ## The budget ("good game performance", Q5)
 
