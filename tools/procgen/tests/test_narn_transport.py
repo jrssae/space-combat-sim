@@ -26,6 +26,7 @@ PILOT_TERMS = {
 SYM_TOL = 1e-6
 MAX_ROUND_TRIP_DEG = 1.5
 LOD_AABB_TOLERANCE_M = 0.3  # test_splat_import.gd's floor
+LARGE_HULL_EXTENT_M = 30.0  # ... and from this box size a coarse level may fall short by 1.25 of its spacing
 
 
 def sha256(path: Path) -> str:
@@ -49,6 +50,18 @@ def inside_primitive(points: np.ndarray, c: dict, inflate: float) -> np.ndarray:
 
 def godot_xyz(path: Path) -> np.ndarray:
     return frames.flip_xy(read_ply(path).to_splats().xyz)
+
+
+def assert_lod_box(tc: unittest.TestCase, xyz: np.ndarray, manifest: dict, spacing: float, label: object) -> None:
+    """test_splat_import.gd's rule for a coarse level's box against LOD0's: it may reach past it only by its centroid
+    drift, and a big hull's may fall short by up to 1.25 of the level's spacing (the sharp extremes it misses)."""
+    lo0, hi0 = np.array(manifest["aabb_min"]), np.array(manifest["aabb_max"])
+    lo, hi = xyz.min(axis=0), xyz.max(axis=0)
+    past = max(float((lo0 - lo).max()), float((hi - hi0).max()))
+    short = max(float((lo - lo0).max()), float((hi0 - hi).max()))
+    tc.assertLessEqual(past, max(LOD_AABB_TOLERANCE_M, 0.25 * spacing), (label, "past LOD0's box", past))
+    big = float((hi0 - lo0).max()) >= LARGE_HULL_EXTENT_M
+    tc.assertLessEqual(short, max(LOD_AABB_TOLERANCE_M, 1.25 * spacing) if big else LOD_AABB_TOLERANCE_M, (label, "short of LOD0's box", short))
 
 
 def mirrored(v: list[float]) -> list[float]:
@@ -115,10 +128,8 @@ class NarnTransportTests(unittest.TestCase):
             xyz = godot_xyz(self.dir_a / name)
             self.assertEqual(len(xyz), entry["splats"])
             self.assertLess(float(np.abs(xyz.mean(axis=0)).max()), 1e-3, "centred like LOD0")
-            # Coarse samples miss sharp extremes (the prong tips, the slotted tower tops) by up to one of their spacings.
-            tolerance = max(LOD_AABB_TOLERANCE_M, entry["spacing_m"])
-            np.testing.assert_allclose(xyz.min(axis=0), self.manifest["aabb_min"], atol=tolerance)
-            np.testing.assert_allclose(xyz.max(axis=0), self.manifest["aabb_max"], atol=tolerance)
+            # Coarse samples miss sharp extremes (the prong tips, the slotted tower tops) but never reach past them.
+            assert_lod_box(self, xyz, self.manifest, entry["spacing_m"], level)
 
     def test_coarse_levels_keep_lod0s_centroid(self) -> None:
         # Every level is drawn in LOD0's frame but centred on its own centroid, so the two must agree. Systematic sampling

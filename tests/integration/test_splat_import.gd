@@ -13,20 +13,23 @@ extends GutTest
 ##     starfury_aurora is x/y symmetric, so only the sky would catch a missing flip.
 ## Fallback OBJs and hardpoints.json stay in the Godot frame (no flip). Nothing here needs a GPU.
 ##
-## Lower LODs (M3-T03: `starfury_aurora_lod1.ply`) are centred on their own centroid and keep LOD0's box within
-## `LOD_AABB_TOLERANCE_M`, a big hull's within `LOD_AABB_SPACINGS` of the level's spacing. Break-up chunks partition the
+## Lower LODs (M3-T03: `starfury_aurora_lod1.ply`) are centred on their own centroid and keep LOD0's box: never past it
+## by more than `LOD_AABB_TOLERANCE_M` (or `LOD_AABB_OVERSHOOT_SPACINGS` of the level's spacing), and never short of it by
+## more than `LOD_AABB_TOLERANCE_M`, a big hull's by `LOD_AABB_SPACINGS` of the level's spacing. Break-up chunks partition the
 ## LOD named by the manifest's `chunk_lod` (0 when absent: the raider's chunks are its LOD0, the Starfury's its LOD1).
 
 const GENERATED_DIR: String = "res://assets/generated"
 const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tests.sh (it imports first)"
 ## AC4: the imported AABB matches the manifest within 1 cm.
 const AABB_TOLERANCE_M: float = 0.01
-## M3 AC6: a lower LOD's imported AABB matches LOD0's (the manifest's) within 0.3 m. A big hull (LOD0 spacing from
-## `LARGE_HULL_SPACING_M`: the civilians, not the fighters) may miss by `LOD_AABB_SPACINGS` of the level's own spacing
-## instead, if larger: its coarse levels sample sharp extremes up to about a spacing short (M5-T14; the Saturn 4
-## transport's LOD3 misses by 1.02 of its spacing).
+## M3 AC6: a lower LOD's imported AABB matches LOD0's (the manifest's) within 0.3 m. The two sides differ (M5-T14): a
+## coarse level samples the same surfaces, so it only overshoots LOD0's box by its centroid drift (at most
+## `LOD_AABB_OVERSHOOT_SPACINGS` of its spacing, if that is larger), but a big hull (a box of `LARGE_HULL_EXTENT_M` or
+## more: the civilians, not the fighters) may fall short by `LOD_AABB_SPACINGS` of its spacing: its coarse levels miss
+## sharp extremes by up to about a spacing (the Saturn 4 transport's LOD3 by 1.02 of its spacing).
 const LOD_AABB_TOLERANCE_M: float = 0.3
-const LARGE_HULL_SPACING_M: float = 0.25
+const LOD_AABB_OVERSHOOT_SPACINGS: float = 0.25
+const LARGE_HULL_EXTENT_M: float = 30.0
 const LOD_AABB_SPACINGS: float = 1.25
 ## M3 AC6: the Starfury's LOD1 and the chunks made from it.
 const STARFURY_ID: String = "starfury_aurora"
@@ -203,10 +206,13 @@ func test_lower_lods_keep_the_lod0_box() -> void:
 			var label: String = "%s lod %d" % [reader.asset_id, lod["level"]]
 			assert_lt(int(lod["splats"]), int(reader.lods[0]["splats"]), "%s: lighter than lod 0" % label)
 			assert_gt(float(lod["spacing_m"]), float(reader.lods[0]["spacing_m"]), "%s: coarser than lod 0" % label)
-			var tolerance: float = LOD_AABB_TOLERANCE_M
-			if float(reader.lods[0]["spacing_m"]) >= LARGE_HULL_SPACING_M:
-				tolerance = maxf(tolerance, LOD_AABB_SPACINGS * float(lod["spacing_m"]))
-			_assert_aabb_near(gaussian.aabb, reader.imported_aabb(), tolerance, "%s: imported AABB vs the lod 0 manifest box" % label)
+			var spacing: float = float(lod["spacing_m"])
+			var expected: AABB = reader.imported_aabb()
+			var overshoot: float = maxf(LOD_AABB_TOLERANCE_M, LOD_AABB_OVERSHOOT_SPACINGS * spacing)
+			var undershoot: float = LOD_AABB_TOLERANCE_M
+			if _max_component(expected.size) >= LARGE_HULL_EXTENT_M:
+				undershoot = maxf(undershoot, LOD_AABB_SPACINGS * spacing)
+			_assert_box_within(gaussian.aabb, expected, overshoot, undershoot, "%s: imported AABB vs the lod 0 manifest box" % label)
 
 
 ## M3 AC6, the Godot half: the Starfury has a LOD1 with 20-30 % of LOD0's splats, and its five chunks come from it.
@@ -435,6 +441,14 @@ func _assert_aabb_near(actual: AABB, expected: AABB, tolerance: float, label: St
 	var worst: float = maxf(_max_component((actual.position - expected.position).abs()), _max_component((actual.end - expected.end).abs()))
 	assert_true(worst <= tolerance, "%s: min %s max %s, expected min %s max %s (worst corner error %.4f m, tolerance %.3f m)" % [
 		label, actual.position, actual.end, expected.position, expected.end, worst, tolerance])
+
+
+## A coarse level's box against LOD0's: how far it reaches past it and how far it falls short of it, each with its own limit.
+func _assert_box_within(actual: AABB, expected: AABB, overshoot: float, undershoot: float, label: String) -> void:
+	var past: float = maxf(_max_component(expected.position - actual.position), _max_component(actual.end - expected.end))
+	var short: float = maxf(_max_component(actual.position - expected.position), _max_component(expected.end - actual.end))
+	assert_true(past <= overshoot and short <= undershoot, "%s: min %s max %s, expected min %s max %s (past it by %.4f m of %.3f, short by %.4f m of %.3f)" % [
+		label, actual.position, actual.end, expected.position, expected.end, past, overshoot, short, undershoot])
 
 
 func _max_component(v: Vector3) -> float:

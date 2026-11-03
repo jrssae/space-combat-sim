@@ -30,6 +30,8 @@ PILOT_TERMS = {
     "yaw_left", "yaw_right", "roll_left", "roll_right",
 }  # fmt: skip
 SYM_TOL = 1e-5
+LOD_AABB_TOLERANCE_M = 0.3  # test_splat_import.gd's floor
+LARGE_HULL_EXTENT_M = 30.0  # ... and from this box size a coarse level may fall short by 1.25 of its spacing
 MAX_ROUND_TRIP_DEG = 1.5
 CHUNKS = ("capsule", "body", "nacelle_l", "nacelle_r")
 BUDGET = (48_000, 72_000)  # docs/assets-civilian.md: 60 000 (48 000 to 72 000)
@@ -59,6 +61,18 @@ def inside_primitive(points: np.ndarray, c: dict, inflate: float) -> np.ndarray:
 
 def godot_xyz(path: Path) -> np.ndarray:
     return frames.flip_xy(read_ply(path).to_splats().xyz)
+
+
+def assert_lod_box(tc: unittest.TestCase, xyz: np.ndarray, manifest: dict, spacing: float, label: object) -> None:
+    """test_splat_import.gd's rule for a coarse level's box against LOD0's: it may reach past it only by its centroid
+    drift, and a big hull's may fall short by up to 1.25 of the level's spacing (the sharp extremes it misses)."""
+    lo0, hi0 = np.array(manifest["aabb_min"]), np.array(manifest["aabb_max"])
+    lo, hi = xyz.min(axis=0), xyz.max(axis=0)
+    past = max(float((lo0 - lo).max()), float((hi - hi0).max()))
+    short = max(float((lo - lo0).max()), float((hi0 - hi).max()))
+    tc.assertLessEqual(past, max(LOD_AABB_TOLERANCE_M, 0.25 * spacing), (label, "past LOD0's box", past))
+    big = float((hi0 - lo0).max()) >= LARGE_HULL_EXTENT_M
+    tc.assertLessEqual(short, max(LOD_AABB_TOLERANCE_M, 1.25 * spacing) if big else LOD_AABB_TOLERANCE_M, (label, "short of LOD0's box", short))
 
 
 def mirrored(v: list[float]) -> list[float]:
@@ -132,8 +146,6 @@ class SkylarkTransportTests(unittest.TestCase):
     def test_lods_one_to_three_are_coarser_centred_and_keep_the_box(self) -> None:
         lod0 = self.manifest["lods"][0]
         self.assertEqual([e["level"] for e in self.manifest["lods"]], [0, 1, 2, 3])
-        # The Godot import test allows a big hull's coarse levels a looser box only from a 0.25 m LOD0 spacing.
-        self.assertGreaterEqual(lod0["spacing_m"], 0.25)
         for level, (name, factor, _stream) in sky.LODS.items():
             entry = self.manifest["lods"][level]
             self.assertEqual(entry["file"], name)
@@ -143,9 +155,7 @@ class SkylarkTransportTests(unittest.TestCase):
             xyz = godot_xyz(self.dir_a / name)
             self.assertEqual(len(xyz), entry["splats"])
             self.assertLess(float(np.abs(xyz.mean(axis=0)).max()), 1e-3, "centred like LOD0")
-            tolerance = max(0.3, 1.25 * entry["spacing_m"])  # the import test's rule for big hulls
-            np.testing.assert_allclose(xyz.min(axis=0), self.manifest["aabb_min"], atol=tolerance)
-            np.testing.assert_allclose(xyz.max(axis=0), self.manifest["aabb_max"], atol=tolerance)
+            assert_lod_box(self, xyz, self.manifest, entry["spacing_m"], level)
         self.assertGreater(self.manifest["lods"][3]["splats"], 500, "the farthest level still draws the outline")
 
     def test_dimensions_match_the_design(self) -> None:

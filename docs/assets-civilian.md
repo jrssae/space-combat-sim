@@ -287,6 +287,7 @@ rows.
 | `saturn_8_tanker` | cargo 2 and engine (model 146.2-255.1, asset 149.3-258.5) (splats vs STL) | 0.970 | 0.929 | 0.888 | 1.010 | 1.001 | 1.021 | - | 2026-11-03 |
 | `saturn_3_freighter` | lead ship (z 0-41.5) (splats vs STL) | 0.660 | 0.499 | 0.665 | 1.007 | 1.023 | 0.812 | - | 2026-11-03 |
 | `saturn_3_freighter` | pod group (model 41.5-91.1 scaled 1.244, 1.093, 1; asset 41.5-96.8) (splats vs STL) | 0.772 | 0.383 | 0.655 | 1.130 | 0.996 | 1.038 | - | 2026-11-03 |
+| `narn_transport` | whole ship (no shift) | 0.991 | 0.985 | 0.974 | 1.000 | 1.000 | 0.997 | 0.976 (side) / 1.000 | 2026-11-03 |
 | `centauri_brezebel` | whole ship (best shift x -0.15 m, the model's fins sit 0.2 m to port; unshifted 0.972, 0.984, 0.945) | 0.966 | 0.984 | 0.970 | 1.000 | 1.000 | 0.999 | 0.992 (side) / 1.000 | 2026-11-03 |
 | `skylark_transport` | whole ship (no shift) | 0.979 | 0.980 | 0.956 | 1.001 | 1.000 | 0.998 | 0.983 (side) / 1.000 | 2026-11-03 |
 
@@ -349,7 +350,8 @@ the fidelity check needs no model offset. 60.04 m long, 40.2 m across the claw t
 Budget at the default spacing of 0.26 m (thin parts are sampled finer, the body a little coarser): LOD0 60 924 splats
 (capsule 23 018, body 15 014, each nacelle 11 446), LOD1 15 176, LOD2 3 798, LOD3 962; the turret 2 372 at 0.08 m. The
 0.26 m spacing (not the planned 0.33 m) follows from the built surface being smaller than the reference's (no inner
-faces); it stays at 0.25 m or more so the Godot import test's looser box rule for big hulls applies to its coarse levels.
+faces). The Godot import test lets a coarse level of a hull 30 m or more long fall short of LOD0's box by 1.25 of its
+spacing, never reach past it by more than 0.3 m (T14).
 Hardpoints: the table above. The centre of mass is on the nacelles' axis, the thrust line. Collision: 44 primitives
 (a capsule for the capsule's barrel, boxes elsewhere, oriented boxes for the belly fins, pods and claws); every LOD0
 splat centre lies inside them grown by one spacing (the neck ahead of the barrel capsule and the engine's vane ring have
