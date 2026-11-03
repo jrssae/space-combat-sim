@@ -78,6 +78,7 @@ been planned were taken for done.
 - Confirm each milestone is complete by asking the user, but once confirmed, merge to main.
 - Comments in the code must explain the goal of the method, not the functionality of the code. complex logic must explain what it's purpose is, not what it is actually doing. Comments must be human readable and short; do not over explain. Summarize. 
 - Each task mentioned to the user must use a short, one sentance explanation in parenthesis such as this example: "After that I'll start T19 (Splat LOD chain and LodSwitcher) properly." This is so the user can more easily understand what the task is.
+- Keep a list of all console commands in an info.md document
 
 ## Commands
 
