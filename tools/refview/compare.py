@@ -6,8 +6,8 @@ its fallback mesh ``<id>.obj`` (every civilian generator builds it from the same
 draws the top, side and front silhouettes of both, and scores each view's intersection over union (IoU) together with
 the length, width and height of asset against model. The bar is an IoU of at least 0.90 in every view and every
 dimension within 10 %: the *geometry verdict*. A second check, the *splat check*, keeps the LOD0 splats honest against
-their own mesh, per view and with a band one LOD0 spacing wide (``manifest.sampling.spacing_m``, else derived from the
-splat scales): at least 95 % of the mesh silhouette must be covered by splats (nothing missing) and at least 95 % of the
+their own mesh, per view and with a band one LOD0 spacing wide (the manifest's LOD0 spacing, else derived from the
+splat scales), on a grid of a third of that spacing whatever the ship's length: at least 95 % of the mesh silhouette must be covered by splats (nothing missing) and at least 95 % of the
 splat silhouette must lie within the mesh silhouette grown by one spacing (nothing misplaced). A splat reaches about 0.75
 spacings past an edge whatever the setting, so a plain overlap would fail faithful thin parts; the band does not. Nothing
 from the STL is kept: overlays and numbers go to the gitignored ``reports/refs/<name>/compare/``.
@@ -32,10 +32,12 @@ How the two sides are put on one grid
   ``manifest.centroid_offset`` is the authored position of that origin. The OBJ is in the Godot frame as it is, so the
   tool adds the offset; the PLY is also turned by Rz(180) into the GDGS orientation (``core.frames``), which the tool
   undoes on positions and rotations before adding the offset.
-* The pixel is ``PIXEL_FRACTION`` of the length (never above 0.5 %). The asset may then move by a whole number of pixels
-  in x, y and z, up to 2 % of the length each, to the place where the three views overlap best; the shift is reported
-  and the geometry scores are those at that place (``iou_unshifted`` in the JSON is the score without it). The splat
-  check takes no shift: splats and mesh come from the same parts in the same frame.
+* The geometry check's pixel is ``PIXEL_FRACTION`` of the length (never above 0.5 %). The asset may then move by a whole
+  number of pixels in x, y and z, up to 2 % of the length each, to the place where the three views overlap best; the
+  shift is reported and the geometry scores are those at that place (``iou_unshifted`` in the JSON is the score without
+  it). The splat check takes no shift (splats and mesh come from the same parts in the same frame) and has its own grid:
+  a pixel of a third of the LOD0 spacing, so its band is exactly three pixels and its numbers do not depend on the ship's
+  length, the crop or ``--pixel-frac``.
 * Each splat of the splat check is drawn as the orthographic projection of its Gaussian: an ellipse, not a disc, so a
   flat splat seen edge-on is a thin line and a closed hull is not grown by the splat size at its horizon. The ellipse
   reaches ``SPLAT_SIGMAS`` sigmas from the centre (see the constant for why).
@@ -88,6 +90,9 @@ SPLAT_PRECISION_MIN = 0.95  # ... and this share of the splat silhouette lies wi
 SHIFT_FRACTION = 0.02  # the best-fit shift of the asset: at most this share of the length, per axis
 PIXEL_FRACTION = 0.0025  # default pixel as a share of the length
 PIXEL_FRACTION_MAX = 0.005  # the brief's coarsest allowed pixel
+SPLAT_PIXELS_PER_SPACING = 3  # the splat check's pixel is the LOD0 spacing over this; the band is this many pixels
+SPLAT_GRID_MAX_PX = 20_000  # a splat-check view longer than this many pixels is refused (a spacing far too fine for the ship)
+SPACING_TOLERANCE = 0.10  # a declared LOD0 spacing this far from the one the splat scales imply fails the splat check
 HINT_PIXEL_FRACTION = 0.01  # the wider search behind the --model-offset hint runs on a coarser grid
 HINT_WINDOW = 0.10  # ... over this share of the length each way in x and y
 CROP_EPS = 1e-4  # m; a crop plane inside a ship moves this far inward, so a face lying in it is not kept face-on
@@ -589,41 +594,70 @@ def dilate(mask: np.ndarray, radius_px: float) -> np.ndarray:
     return out
 
 
+def _positive(v: object) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0.0
+
+
+def _overlap(manifest: dict) -> float:
+    sampling = manifest.get("sampling")
+    overlap = sampling.get("overlap") if isinstance(sampling, dict) else None
+    return float(overlap) if _positive(overlap) else 1.0
+
+
+def derived_spacing(manifest: dict, splats: SplatSet) -> float:
+    """The LOD0 spacing the splat scales imply: the largest sigma is ``overlap * spacing`` (overlap from ``sampling`` or 1,
+    the generators' default)."""
+    sigma = np.sqrt(np.max(np.einsum("nii->ni", splats.cov), axis=1))
+    return float(np.median(sigma)) / _overlap(manifest)
+
+
 def splat_spacing(manifest: dict, splats: SplatSet) -> tuple[float, str]:
-    """The asset's LOD0 sampling spacing and where it came from: the manifest's ``sampling.spacing_m``, else derived from the
-    splat scales (the largest sigma is ``overlap * spacing``; overlap from ``sampling`` or 1, the generators' default)."""
+    """The asset's LOD0 sampling spacing and where it came from: the manifest's ``lods[0].spacing_m``, else its
+    ``sampling.spacing_m``, else derived from the splat scales."""
+    lods = manifest.get("lods")
+    lod0 = lods[0] if isinstance(lods, list) and lods and isinstance(lods[0], dict) else {}
+    if _positive(lod0.get("spacing_m")):
+        return float(lod0["spacing_m"]), "manifest lods[0].spacing_m"
     sampling = manifest.get("sampling")
     spacing = sampling.get("spacing_m") if isinstance(sampling, dict) else None
-    if isinstance(spacing, (int, float)) and not isinstance(spacing, bool) and spacing > 0.0:
+    if _positive(spacing):
         return float(spacing), "manifest sampling.spacing_m"
-    overlap = sampling.get("overlap") if isinstance(sampling, dict) else None
-    overlap = float(overlap) if isinstance(overlap, (int, float)) and overlap > 0.0 else 1.0
-    sigma = np.sqrt(np.max(np.einsum("nii->ni", splats.cov), axis=1))
-    return float(np.median(sigma)) / overlap, f"derived from the splat scales (overlap {overlap:g})"
+    return derived_spacing(manifest, splats), f"derived from the splat scales (overlap {_overlap(manifest):g})"
+
+
+def spacing_mismatch(manifest: dict, splats: SplatSet, spacing: float, source: str) -> str | None:
+    """A failure when a declared spacing disagrees with the splats themselves, so a generator cannot widen the band by
+    declaring a coarser spacing than it sampled at. ``None`` when it agrees or was derived."""
+    if source.startswith("derived"):
+        return None
+    implied = derived_spacing(manifest, splats)
+    if abs(spacing / max(implied, 1e-12) - 1.0) > SPACING_TOLERANCE + 1e-9:
+        return f"splats spacing {spacing:g} m ({source}) is off the {implied:.3f} m the splat scales imply by more than {SPACING_TOLERANCE:.0%}"
+    return None
 
 
 def check_splats(
     mesh_tris: np.ndarray,
     splats: SplatSet,
-    length_ref: float,
     spacing: float,
     spacing_source: str = "given",
-    pixel_fraction: float = PIXEL_FRACTION,
     sigmas: float = SPLAT_SIGMAS,
 ) -> SplatCheck:
-    """The splat check: the splats' silhouettes against their own mesh's, in place (no shift). Per view, coverage is the
-    share of the mesh silhouette the splats cover and precision the share of the splat silhouette inside the mesh
-    silhouette grown by one ``spacing``. A faithful thin part passes (splats reach about 0.75 spacings past an edge); a
-    missing part fails coverage and a part moved by several spacings fails precision."""
-    _check_pixel(pixel_fraction)
+    """The splat check: the splats' silhouettes against their own mesh's, in place (no shift), on a grid of a third of
+    ``spacing`` so the numbers depend on the sampling alone. Per view, coverage is the share of the mesh silhouette the
+    splats cover and precision the share of the splat silhouette inside the mesh silhouette grown by one ``spacing``. A
+    faithful thin part passes (splats reach about 0.75 spacings past an edge); a missing part fails coverage and a part
+    moved by several spacings fails precision."""
     if len(mesh_tris) == 0 or len(splats) == 0:
         raise ValueError("nothing to compare: the mesh or the splats are empty")
     if not spacing > 0.0:
         raise ValueError(f"the LOD0 spacing must be positive (got {spacing:g})")
-    px = pixel_fraction * length_ref
-    band_px = float(max(math.ceil(spacing / px - 1e-9), 1))  # rounded up, so the pixel grid never makes the band narrower than a spacing
+    px = spacing / SPLAT_PIXELS_PER_SPACING
+    band_px = float(SPLAT_PIXELS_PER_SPACING)
     (m_lo, m_hi), (s_lo, s_hi) = _bounds(mesh_tris), splats.bounds(sigmas)
     lo, hi = np.minimum(m_lo, s_lo), np.maximum(m_hi, s_hi)
+    if float(np.max(hi - lo)) / px > SPLAT_GRID_MAX_PX:
+        raise ValueError(f"a spacing of {spacing:g} m is too fine for a {float(np.max(hi - lo)):.1f} m part (over {SPLAT_GRID_MAX_PX} pixels)")
     views = {}
     for name in VIEWS:
         grid = view_grid(name, lo, hi, px, int(band_px) + 1)
@@ -826,7 +860,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--pod-obj", type=Path, default=None, help="mesh of the removable part (default: beside --pod-ply or <id>_pod.obj)")
     ap.add_argument("--pod-at", action="append", default=[], metavar="X,Y,Z", help="a mount in the body frame (repeatable)")
     ap.add_argument("--pods-from-hardpoints", action="store_true", help="mounts from the asset's hardpoints.json cargo_pods[]")
-    ap.add_argument("--pixel-frac", type=float, default=PIXEL_FRACTION, help=f"pixel as a share of the length (at most {PIXEL_FRACTION_MAX})")
+    ap.add_argument("--pixel-frac", type=float, default=PIXEL_FRACTION, help=f"geometry check's pixel as a share of the length (at most {PIXEL_FRACTION_MAX}); the splat check's is a third of the spacing")
     ap.add_argument("--out", type=Path, default=None, help="output folder (default: reports/refs/<name>/compare)")
     args = ap.parse_args(argv)
 
@@ -841,6 +875,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest = read_asset_manifest(folder)
         mesh, splats = load_asset_mesh(folder), load_asset_splats(folder)
         spacing, spacing_source = splat_spacing(manifest, splats)
+        spacing_failure = spacing_mismatch(manifest, splats, spacing, spacing_source)
 
         mounts = pod_mounts(args, folder)
         if mounts:
@@ -878,9 +913,10 @@ def main(argv: list[str] | None = None) -> int:
         if length_ref <= 0.0:
             raise ValueError("the model has no extent along z")
         comp = compare_shapes(tris, mesh, length_ref, pixel_fraction=args.pixel_frac)
-        check = check_splats(mesh, splats, length_ref, spacing, spacing_source, pixel_fraction=args.pixel_frac)
+        check = check_splats(mesh, splats, spacing, spacing_source)
         failures = judge({n: s.iou for n, s in comp.views.items()}, comp.ratios)
         splat_failures = judge_splats({n: s.coverage for n, s in check.views.items()}, {n: s.precision for n, s in check.views.items()})
+        splat_failures += [spacing_failure] if spacing_failure else []
         suggestion = None
         if not cropped and (failures or any(comp.at_limit[:2])):
             gap, best, unmoved = suggest_offset(tris, mesh, length_ref)
@@ -890,76 +926,81 @@ def main(argv: list[str] | None = None) -> int:
         print(f"compare: {type(exc).__name__ + ': ' if not isinstance(exc, (OSError, ValueError)) else ''}{exc}", file=sys.stderr)
         return 2
 
-    name = args.name or folder.name
-    out = args.out / args.part if (args.out and args.part) else (args.out or default_out(name, args.part))
-    out.mkdir(parents=True, exist_ok=True)
-    label = f"{name} / {args.part}" if args.part else name
-    shift = ", ".join(f"{v:+.2f}" for v in comp.shift_m)
-    for view in VIEWS:
-        write_overlay(out / f"overlay_{view}.png", comp.views, view, f"{label}: {view}, STL against mesh, IoU {comp.views[view].iou:.3f}, mesh moved ({shift}) m", ("STL", "mesh"))
-        write_overlay(out / f"splats_{view}.png", check.views, view, f"{label}: {view}, mesh against LOD0 splats, coverage {check.views[view].coverage:.3f}, precision {check.views[view].precision:.3f}", ("mesh", "splats"))
+    try:
+        name = args.name or folder.name
+        out = args.out / args.part if (args.out and args.part) else (args.out or default_out(name, args.part))
+        out.mkdir(parents=True, exist_ok=True)
+        label = f"{name} / {args.part}" if args.part else name
+        shift = ", ".join(f"{v:+.2f}" for v in comp.shift_m)
+        for view in VIEWS:
+            write_overlay(out / f"overlay_{view}.png", comp.views, view, f"{label}: {view}, STL against mesh, IoU {comp.views[view].iou:.3f}, mesh moved ({shift}) m", ("STL", "mesh"))
+            write_overlay(out / f"splats_{view}.png", check.views, view, f"{label}: {view}, mesh against LOD0 splats, coverage {check.views[view].coverage:.3f}, precision {check.views[view].precision:.3f}", ("mesh", "splats"))
 
-    verdict_failures = failures + splat_failures
-    report = {
-        "name": name,
-        "part": args.part,
-        "model": {
-            "stl": args.stl.name,
-            "format": fmt,
-            "triangles": int(len(tris)),
-            "zrange": model_range,
-            "offset_m": [round(float(v), 4) for v in model_offset],
-            "scale": [round(float(v), 4) for v in model_scale],
-            "dims_m": {n: round(v, 3) for n, v in comp.model_dims.items()},
-        },
-        "asset": {
-            "id": manifest["asset_id"],
-            "dir": str(folder),
-            "lod0": manifest["lods"][0]["file"],
-            "mesh_triangles": int(len(mesh)),
-            "splats": int(len(splats)),
-            "extra_parts": len(mounts),
-            "zrange": asset_range,
-            "centroid_offset": manifest["centroid_offset"],
-            "dims_m": {n: round(v, 3) for n, v in comp.asset_dims.items()},
-        },
-        "mapping": {"right": args.right, "up": args.up, "aft": args.aft},
-        "basis": "mesh",
-        "length_m": round(length_ref, 3),
-        "pixel_m": round(comp.pixel_m, 5),
-        "shift_m": [round(float(v), 4) for v in comp.shift_m],
-        "shift_limit_m": round(comp.shift_limit_m, 4),
-        "shift_at_limit": list(comp.at_limit),
-        "part_align_m": [round(float(v), 4) for v in align],
-        "suggested_model_offset_m": None if suggestion is None else [round(float(v), 3) for v in suggestion],
-        "views": {n: view_report(s) for n, s in comp.views.items()},
-        "dimensions": {
-            n: {"model_m": round(comp.model_dims[n], 3), "asset_m": round(comp.asset_dims[n], 3), "ratio": round(comp.ratios[n], 4)}
-            for n in DIMENSIONS
-        },
-        "geometry": {"verdict": "fail" if failures else "pass", "failures": failures},
-        "splat_check": {
-            "splat_sigmas": SPLAT_SIGMAS,
-            "spacing_m": round(check.spacing_m, 4),
-            "spacing_source": check.spacing_source,
-            "band_px": round(next(iter(check.views.values())).band_px, 3),
-            "coverage_min": SPLAT_COVERAGE_MIN,
-            "precision_min": SPLAT_PRECISION_MIN,
-            "views": {n: view_report(s) for n, s in check.views.items()},
-            "verdict": "fail" if splat_failures else "pass",
-            "failures": splat_failures,
-        },
-        "thresholds": {
-            "iou_min": IOU_MIN,
-            "dimension_tolerance": DIM_TOLERANCE,
-            "shift_fraction": SHIFT_FRACTION,
-            "splat_coverage_min": SPLAT_COVERAGE_MIN,
-            "splat_precision_min": SPLAT_PRECISION_MIN,
-        },
-        "failures": verdict_failures,
-        "verdict": "fail" if verdict_failures else "pass",
-    }
-    (out / "fidelity.json").write_text(json.dumps(report, indent=1) + "\n")
+        verdict_failures = failures + splat_failures
+        report = {
+            "name": name,
+            "part": args.part,
+            "model": {
+                "stl": args.stl.name,
+                "format": fmt,
+                "triangles": int(len(tris)),
+                "zrange": model_range,
+                "offset_m": [round(float(v), 4) for v in model_offset],
+                "scale": [round(float(v), 4) for v in model_scale],
+                "dims_m": {n: round(v, 3) for n, v in comp.model_dims.items()},
+            },
+            "asset": {
+                "id": manifest["asset_id"],
+                "dir": str(folder),
+                "lod0": manifest["lods"][0]["file"],
+                "mesh_triangles": int(len(mesh)),
+                "splats": int(len(splats)),
+                "extra_parts": len(mounts),
+                "zrange": asset_range,
+                "centroid_offset": manifest["centroid_offset"],
+                "dims_m": {n: round(v, 3) for n, v in comp.asset_dims.items()},
+            },
+            "mapping": {"right": args.right, "up": args.up, "aft": args.aft},
+            "basis": "mesh",
+            "length_m": round(length_ref, 3),
+            "pixel_m": round(comp.pixel_m, 5),
+            "shift_m": [round(float(v), 4) for v in comp.shift_m],
+            "shift_limit_m": round(comp.shift_limit_m, 4),
+            "shift_at_limit": list(comp.at_limit),
+            "part_align_m": [round(float(v), 4) for v in align],
+            "suggested_model_offset_m": None if suggestion is None else [round(float(v), 3) for v in suggestion],
+            "views": {n: view_report(s) for n, s in comp.views.items()},
+            "dimensions": {
+                n: {"model_m": round(comp.model_dims[n], 3), "asset_m": round(comp.asset_dims[n], 3), "ratio": round(comp.ratios[n], 4)}
+                for n in DIMENSIONS
+            },
+            "geometry": {"verdict": "fail" if failures else "pass", "failures": failures},
+            "splat_check": {
+                "splat_sigmas": SPLAT_SIGMAS,
+                "spacing_m": round(check.spacing_m, 4),
+                "spacing_source": check.spacing_source,
+                "pixel_m": round(check.pixel_m, 5),
+                "band_px": round(next(iter(check.views.values())).band_px, 3),
+                "coverage_min": SPLAT_COVERAGE_MIN,
+                "precision_min": SPLAT_PRECISION_MIN,
+                "views": {n: view_report(s) for n, s in check.views.items()},
+                "verdict": "fail" if splat_failures else "pass",
+                "failures": splat_failures,
+            },
+            "thresholds": {
+                "iou_min": IOU_MIN,
+                "dimension_tolerance": DIM_TOLERANCE,
+                "shift_fraction": SHIFT_FRACTION,
+                "splat_coverage_min": SPLAT_COVERAGE_MIN,
+                "splat_precision_min": SPLAT_PRECISION_MIN,
+            },
+            "failures": verdict_failures,
+            "verdict": "fail" if verdict_failures else "pass",
+        }
+        (out / "fidelity.json").write_text(json.dumps(report, indent=1) + "\n")
+    except OSError as exc:
+        print(f"compare: cannot write the results: {exc}", file=sys.stderr)
+        return 2
 
     print(f"{label}: {args.stl.name} against {manifest['asset_id']} (mesh {len(mesh)} triangles, LOD0 {len(splats)} splats), length {length_ref:.1f} m, pixel {comp.pixel_m:.3f} m -> {out}")
     print(f"geometry: the STL against the asset's mesh, bar {IOU_MIN:.2f} per view and {DIM_TOLERANCE:.0%} on each dimension")
@@ -976,7 +1017,7 @@ def main(argv: list[str] | None = None) -> int:
     print("geometry verdict: " + ("PASS" if not failures else "FAIL (" + "; ".join(failures) + ")"))
     band = next(iter(check.views.values())).band_px
     print(
-        f"splats: LOD0 against the mesh, no shift; band one spacing = {check.spacing_m:.3f} m ({check.spacing_source}) = {band:.1f} px; "
+        f"splats: LOD0 against the mesh, no shift, pixel {check.pixel_m:.3f} m; band one spacing = {check.spacing_m:.3f} m ({check.spacing_source}) = {band:.0f} px; "
         f"bar {SPLAT_COVERAGE_MIN:.2f} coverage and {SPLAT_PRECISION_MIN:.2f} precision per view"
     )
     for view, score in check.views.items():

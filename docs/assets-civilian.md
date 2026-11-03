@@ -43,11 +43,11 @@ all eight).
 
 | Hull | Length | Surface | LOD0 target (range) | Start spacing | LOD1 | LOD2 | LOD3 |
 |---|---|---|---|---|---|---|---|
-| `saturn_4_transport` | 158.5 m | 34 500 m² | 130 000 (105 000 to 155 000) | 0.52 m | 32 500 | 8 100 | 2 000 |
-| `saturn_4_tanker` | 158.5 m | about 18 400 m² | 70 000 (55 000 to 85 000) | 0.51 m | 17 500 | 4 400 | 1 100 |
-| `saturn_8_transport` | 258.5 m | about 65 000 m² | 210 000 (170 000 to 250 000) | 0.56 m | 52 500 | 13 100 | 3 300 |
-| `saturn_8_tanker` | 258.5 m | about 36 900 m² | 120 000 (95 000 to 145 000) | 0.55 m | 30 000 | 7 500 | 1 900 |
-| `saturn_3_freighter` | 96.8 m | about 19 700 m² | 75 000 (60 000 to 90 000) | 0.51 m | 18 750 | 4 700 | 1 200 |
+| `saturn_4_transport` | 158.5 m (splats vs STL) | 34 500 m² | 130 000 (105 000 to 155 000) | 0.52 m | 32 500 | 8 100 | - | 2 000 |
+| `saturn_4_tanker` | 158.5 m (splats vs STL) | about 18 400 m² | 70 000 (55 000 to 85 000) | 0.51 m | 17 500 | 4 400 | - | 1 100 |
+| `saturn_8_transport` | 258.5 m (splats vs STL) | about 65 000 m² | 210 000 (170 000 to 250 000) | 0.56 m | 52 500 | 13 100 | - | 3 300 |
+| `saturn_8_tanker` | 258.5 m (splats vs STL) | about 36 900 m² | 120 000 (95 000 to 145 000) | 0.55 m | 30 000 | 7 500 | - | 1 900 |
+| `saturn_3_freighter` | 96.8 m (splats vs STL) | about 19 700 m² | 75 000 (60 000 to 90 000) | 0.51 m | 18 750 | 4 700 | - | 1 200 |
 | `skylark_transport` | 60 m | 6 400 m² | 60 000 (48 000 to 72 000) | 0.33 m | 15 000 | 3 800 | 900 |
 | `narn_transport` | 70 m | 9 200 m² | 75 000 (60 000 to 90 000) | 0.35 m | 18 750 | 4 700 | 1 200 |
 | `centauri_brezebel` | 60 m | 8 000 m² | 70 000 (55 000 to 85 000) | 0.34 m | 17 500 | 4 400 | 1 100 |
@@ -114,11 +114,11 @@ Per variant:
 
 | Variant | Length L | Mains at z | More turrets | Port / starboard | Top, top lamp | Chunks |
 |---|---|---|---|---|---|---|
-| `saturn_4_transport` | 158.5 | 158.48 | `dorsal_aft` (0, +9.3, 124.4) | the first pods' outboard tips (±53.4, -7.29, 74.3) | (0, +8.6, 75.0), lamp (0, +16.6, 99.4), range 48 m | `bow`, `hull`, `engine`, `pods_l`, `pods_r` |
-| `saturn_4_tanker` | 158.5 | 158.48 | `dorsal_aft` (0, +9.3, 124.4) | the lower tanks' flanks (±25.6, -13.53, 99.4) | (0, +8.6, 75.0), lamp (0, +16.6, 99.4), range 48 m | `bow`, `spine`, `engine`, `tank_l`, `tank_r` |
-| `saturn_8_transport` | 258.5 | 258.48 | `dorsal_mid` (0, +7.2, 149.4) | (±53.4, -7.29, 74.3) | (0, +8.6, 75.0), lamp (0, +21.5, 149.4), range 78 m | `bow`, `hull_1`, `junction`, `hull_2`, `engine`, `pods_1l`, `pods_1r`, `pods_2l`, `pods_2r` |
-| `saturn_8_tanker` | 258.5 | 258.48 | `dorsal_mid` (0, +9.0, 149.4) | (±25.6, -13.53, 99.4) | (0, +8.6, 75.0), lamp (0, +21.5, 149.4), range 78 m | `bow`, `spine_1`, `junction`, `spine_2`, `engine`, `tanks_1l`, `tanks_1r`, `tanks_2l`, `tanks_2r` |
-| `saturn_3_freighter` | 96.8 | 96.80 | none (Q19, Q20) | the lower pods' outboard ends (±46.8, -5.46, 79.7) | the top pod's ridge (0, +21.8, 73.9), lamp (0, +27.8, 79.7), range 36 m | `bow` (with the cross-beam and blocks), `pod_top`, `pod_l`, `pod_r`, `engine` (with the truss behind the drum frame) |
+| `saturn_4_transport` | 158.5 (splats vs STL) | 158.48 | `dorsal_aft` (0, +9.3, 124.4) | the first pods' outboard tips (±53.4, -7.29, 74.3) | (0, +8.6, 75.0), lamp (0, +16.6, 99.4), range 48 m | - | `bow`, `hull`, `engine`, `pods_l`, `pods_r` |
+| `saturn_4_tanker` | 158.5 (splats vs STL) | 158.48 | `dorsal_aft` (0, +9.3, 124.4) | the lower tanks' flanks (±25.6, -13.53, 99.4) | (0, +8.6, 75.0), lamp (0, +16.6, 99.4), range 48 m | - | `bow`, `spine`, `engine`, `tank_l`, `tank_r` |
+| `saturn_8_transport` | 258.5 (splats vs STL) | 258.48 | `dorsal_mid` (0, +7.2, 149.4) | (±53.4, -7.29, 74.3) | (0, +8.6, 75.0), lamp (0, +21.5, 149.4), range 78 m | - | `bow`, `hull_1`, `junction`, `hull_2`, `engine`, `pods_1l`, `pods_1r`, `pods_2l`, `pods_2r` |
+| `saturn_8_tanker` | 258.5 (splats vs STL) | 258.48 | `dorsal_mid` (0, +9.0, 149.4) | (±25.6, -13.53, 99.4) | (0, +8.6, 75.0), lamp (0, +21.5, 149.4), range 78 m | - | `bow`, `spine_1`, `junction`, `spine_2`, `engine`, `tanks_1l`, `tanks_1r`, `tanks_2l`, `tanks_2r` |
+| `saturn_3_freighter` | 96.8 (splats vs STL) | 96.80 | none (Q19, Q20) | the lower pods' outboard ends (±46.8, -5.46, 79.7) | the top pod's ridge (0, +21.8, 73.9), lamp (0, +27.8, 79.7), range 36 m | - | `bow` (with the cross-beam and blocks), `pod_top`, `pod_l`, `pod_r`, `engine` (with the truss behind the drum frame) |
 
 Collision, per part: the disc a box 28.3 x 6.0 x 28.3 m with the antenna inside it; the forward truss a box 6.3 x 6.3
 m along its length; the drum frame a box 21.7 x 19.3 x 8.2 m; each hull cylinder or tank a capsule of radius 8.77 m (it covers the 17.53 x 17.27 m polygon) and
@@ -155,21 +155,28 @@ past it whatever the settings, so the loss follows the shape.
 | Check | What is drawn | Bar | Shift |
 |---|---|---|---|
 | Geometry (Q18) | the STL's triangles and the asset's mesh, top (x-z), side (y-z) and front (x-y), on one grid | each view's intersection over union (IoU) at least 0.90, and the mesh's length, width and height each within 10 % of the STL's (a ratio from 0.90 to 1.10) | the mesh may move up to 2 % of the length per axis, reported |
-| Splats | the asset's mesh and its LOD0 splats, same views, with a band one LOD0 spacing wide | per view, **coverage** at least 0.95 (the share of the mesh silhouette's pixels that splat pixels cover: nothing missing) and **banded precision** at least 0.95 (the share of the splat silhouette's pixels within the mesh silhouette grown by one spacing: nothing misplaced) | none: same parts, same frame |
+| Splats | the asset's mesh and its LOD0 splats, same views, on a grid of a third of the LOD0 spacing, with a band one spacing (three pixels) wide | per view, **coverage** at least 0.95 (the share of the mesh silhouette's pixels that splat pixels cover: nothing missing) and **banded precision** at least 0.95 (the share of the splat silhouette's pixels within the mesh silhouette grown by one spacing: nothing misplaced) | none: same parts, same frame |
 
-The band is the asset's LOD0 spacing: `manifest.sampling.spacing_m`, or, if the manifest has none, derived from the splat
-scales (the median of the largest sigma, divided by `sampling.overlap` or 1). The console line and `fidelity.json` say
-which was used, and the band in pixels (the spacing over the pixel, rounded up, never under one pixel). Plain IoU at 0.85
-was tried first and failed faithful thin parts, so the band stands in for it: it passes a fringe of up to a spacing and
-fails parts that are absent or moved by several spacings. The tool's own tests pin it. Splats sampled from a 46 x 18 x
-70 m box read coverage 0.998 or better and precision 1.000 against it at 0.31 and 0.5 m spacing; from a hull with a
-0.6 m wing (two spacings thick at 0.31 m, where plain IoU read 0.77 in front) coverage 0.977 or better and precision
-1.000; with the wing missing from the splats top coverage is 0.33; with the wing's splats eight spacings aft top
-precision is 0.90 (three spacings aft passes, 0.97); a box's splats grown by a spacing keep precision at 0.97 or more and
-by three spacings fall to 0.88. Coverage is the tight number on thin parts seen edge-on (the Saturn lead ship's side view
-reads 0.95 to 0.96, the built raider's 0.95), where a slab thicker than the splats' reach is covered only by its end faces.
+The band is the asset's LOD0 spacing: the manifest's `lods[0].spacing_m` (every generator writes it), else
+`sampling.spacing_m`, else derived from the splat scales (the median of the largest sigma, divided by `sampling.overlap`
+or 1). A declared spacing more than 10 % off the one the splat scales imply fails the splat check, so a generator cannot
+widen the band by declaring a coarser spacing than it sampled at (every built asset agrees within 2 %). The splat check
+has its own grid, a pixel of a third of that spacing, so the band is exactly three pixels and the numbers depend on the
+sampling alone, not on the ship's length, the crop or `--pixel-frac` (the T23 re-review found that on the length-based grid
+a lead ship's side coverage moved from 0.939 to 0.979 with `--pixel-frac`). The console line and `fidelity.json` give the
+spacing, its source, the pixel and the band. Plain IoU at 0.85 was tried first and failed faithful thin parts, so the band
+stands in for it: it passes a fringe of up to a spacing and fails parts that are absent or moved by several spacings. A
+small misplaced part can still pass if it is under 5 % of a view, which the bar accepts. The tool's own tests pin it:
+splats sampled from a 46 x 18 x 70 m box read coverage over 0.99 and precision 1.000 against it at 0.31 and 0.5 m spacing;
+from a hull with a 0.6 m wing (two spacings thick at 0.31 m, where plain IoU read 0.77 in front) coverage over 0.985 at
+0.31 m and over 0.96 at 0.5 m; with the wing missing from the splats top coverage is under 0.5; with the wing's splats
+eight spacings aft top precision is under 0.95; splats moved 1.5 spacings off their mesh fail coverage (no shift); a fin
+in the splats that the mesh lacks fails precision with full coverage. Coverage is the tight number on thin parts seen
+edge-on, where a slab thicker than the splats' reach is covered only by its end faces: the Saturn lead ships' side view
+reads 0.964 to 0.968, the built raider's 0.962, the whole ships' 0.974 to 0.992.
 `splats_<view>.png` shows which failed: orange is mesh the splats do not cover, red is splat beyond the band, blue is
-splat inside the band. Exit status is 0 when both checks pass, 1 when either fails, 2 on bad input. The terminal gets one
+splat inside the band. Exit status is 0 when both checks pass, 1 when either fails, 2 on bad input (an output folder that cannot be
+written included). The terminal gets one
 block per check and a `verdict:` line last.
 
 **How the two are put on one grid.**
@@ -186,7 +193,8 @@ block per check and a `verdict:` line last.
   (its mesh starts at z = 0 with the offset, its splats follow its mesh).
 - A splat is drawn as the outline of its Gaussian at 0.75 sigma, so a flat splat seen edge-on is a thin line; the factor
   is calibrated against the built raider, Starfury and Narn transport (mean IoU over the views peaks at 0.7 to 0.8).
-- The pixel is 0.25 % of the part's length (`--pixel-frac`, never above 0.5 %). The move is the same for all three views,
+- The geometry check's pixel is 0.25 % of the part's length (`--pixel-frac`, never above 0.5 %; the splat check keeps its own
+  grid of a third of the spacing). The move is the same for all three views,
   whole pixels, to where they overlap best; it is printed and written to `fidelity.json`, and the geometry scores are
   taken there (`iou_unshifted` is the score without it).
 
@@ -260,25 +268,27 @@ tank (the Saturn 3: its disc's rim): `--model-offset 0,-3.643,0` for `EA_Saturn_
 for `EA_Saturn_3_Freighter.stl` (91.13). The Saturn 3's pod group is scored against the model's scaled to the shared pod
 (`--model-scale 1.2436,1.093,1`, an option T12 added: 43.03/34.6 across, 17.27/15.8 tall, Q20).
 
-**Scores.** One row per ship and part, filled by the generator task that builds it (the date is the run's). The
-rows written before the planner's change of 2026-11-03 (the mesh as the verdict) read the LOD0 splats against the STL, the tool's first version; each generator
-task re-scores its rows on the mesh (the geometry check's numbers) and says which check each row is.
+**Scores.** One row per ship and part, filled by the generator task that builds it (the date is the run's). The IoU and
+size columns are the geometry check (the mesh against the STL); the splat column is the splat check's lowest coverage and
+lowest precision over the three views (with the view that set each). Rows marked "splats vs STL" were written before the
+planner's change of 2026-11-03 (the mesh as the verdict) by the tool's first version; each generator task re-scores its
+rows.
 
-| Ship | Part | Top IoU | Side IoU | Front IoU | Length | Width | Height | Date |
-|---|---|---|---|---|---|---|---|---|
-| `saturn_4_transport` | whole ship | 0.926 | 0.904 | 0.908 | 1.002 | 1.007 | 1.050 | 2026-11-03 |
-| `saturn_4_tanker` | lead ship (vs Saturn 4 model, z 0-49.3) | 0.895 | 0.764 | 0.795 | 1.007 | 1.024 | 1.028 | 2026-11-03 |
-| `saturn_4_tanker` | tank section (vs tanker model's first) | 0.880 | 0.856 | 0.905 | 1.039 | 0.980 | 1.030 | 2026-11-03 |
-| `saturn_8_transport` | lead ship (z 0-49.3) | 0.873 | 0.715 | 0.808 | 1.008 | 1.019 | 1.030 | 2026-11-03 |
-| `saturn_8_transport` | cargo 1 (model 49.3-152.8, asset 49.3-149.3) | 0.901 | 0.882 | 0.842 | 0.973 | 1.004 | 1.002 | 2026-11-03 |
-| `saturn_8_transport` | cargo 2 and engine (model 152.8-266.2, asset 149.3-258.5) | 0.905 | 0.906 | 0.837 | 0.969 | 1.004 | 1.003 | 2026-11-03 |
-| `saturn_8_tanker` | lead ship (z 0-49.3) | 0.894 | 0.762 | 0.792 | 1.008 | 1.023 | 1.036 | 2026-11-03 |
-| `saturn_8_tanker` | cargo 1 (model 49.3-146.2, asset 49.3-149.3) | 0.926 | 0.887 | 0.889 | 1.040 | 1.001 | 1.020 | 2026-11-03 |
-| `saturn_8_tanker` | cargo 2 and engine (model 146.2-255.1, asset 149.3-258.5) | 0.970 | 0.929 | 0.888 | 1.010 | 1.001 | 1.021 | 2026-11-03 |
-| `saturn_3_freighter` | lead ship (z 0-41.5) | 0.660 | 0.499 | 0.665 | 1.007 | 1.023 | 0.812 | 2026-11-03 |
-| `saturn_3_freighter` | pod group (model 41.5-91.1 scaled 1.244, 1.093, 1; asset 41.5-96.8) | 0.772 | 0.383 | 0.655 | 1.130 | 0.996 | 1.038 | 2026-11-03 |
-| `centauri_brezebel` | whole ship, mesh against the STL (best shift x -0.15 m, the model's fins sit 0.2 m to port; unshifted 0.972, 0.984, 0.945); the LOD0 splats against the mesh read 0.978, 0.960, 0.951 | 0.966 | 0.984 | 0.970 | 1.000 | 1.000 | 0.999 | 2026-11-03 |
-| `skylark_transport` | whole ship (no shift; against its own fallback mesh the splats read 0.964, 0.958, 0.926) | 0.958 | 0.949 | 0.911 | 1.004 | 1.006 | 1.022 | 2026-11-03 |
+| Ship | Part | Top IoU | Side IoU | Front IoU | Length | Width | Height | Splats: min coverage / min precision | Date |
+|---|---|---|---|---|---|---|---|---|---|
+| `saturn_4_transport` | whole ship (splats vs STL) | 0.926 | 0.904 | 0.908 | 1.002 | 1.007 | 1.050 | - | 2026-11-03 |
+| `saturn_4_tanker` | lead ship (vs Saturn 4 model, z 0-49.3) (splats vs STL) | 0.895 | 0.764 | 0.795 | 1.007 | 1.024 | 1.028 | - | 2026-11-03 |
+| `saturn_4_tanker` | tank section (vs tanker model's first) (splats vs STL) | 0.880 | 0.856 | 0.905 | 1.039 | 0.980 | 1.030 | - | 2026-11-03 |
+| `saturn_8_transport` | lead ship (z 0-49.3) (splats vs STL) | 0.873 | 0.715 | 0.808 | 1.008 | 1.019 | 1.030 | - | 2026-11-03 |
+| `saturn_8_transport` | cargo 1 (model 49.3-152.8, asset 49.3-149.3) (splats vs STL) | 0.901 | 0.882 | 0.842 | 0.973 | 1.004 | 1.002 | - | 2026-11-03 |
+| `saturn_8_transport` | cargo 2 and engine (model 152.8-266.2, asset 149.3-258.5) (splats vs STL) | 0.905 | 0.906 | 0.837 | 0.969 | 1.004 | 1.003 | - | 2026-11-03 |
+| `saturn_8_tanker` | lead ship (z 0-49.3) (splats vs STL) | 0.894 | 0.762 | 0.792 | 1.008 | 1.023 | 1.036 | - | 2026-11-03 |
+| `saturn_8_tanker` | cargo 1 (model 49.3-146.2, asset 49.3-149.3) (splats vs STL) | 0.926 | 0.887 | 0.889 | 1.040 | 1.001 | 1.020 | - | 2026-11-03 |
+| `saturn_8_tanker` | cargo 2 and engine (model 146.2-255.1, asset 149.3-258.5) (splats vs STL) | 0.970 | 0.929 | 0.888 | 1.010 | 1.001 | 1.021 | - | 2026-11-03 |
+| `saturn_3_freighter` | lead ship (z 0-41.5) (splats vs STL) | 0.660 | 0.499 | 0.665 | 1.007 | 1.023 | 0.812 | - | 2026-11-03 |
+| `saturn_3_freighter` | pod group (model 41.5-91.1 scaled 1.244, 1.093, 1; asset 41.5-96.8) (splats vs STL) | 0.772 | 0.383 | 0.655 | 1.130 | 0.996 | 1.038 | - | 2026-11-03 |
+| `centauri_brezebel` | whole ship (best shift x -0.15 m, the model's fins sit 0.2 m to port; unshifted 0.972, 0.984, 0.945) | 0.966 | 0.984 | 0.970 | 1.000 | 1.000 | 0.999 | 0.992 (side) / 1.000 | 2026-11-03 |
+| `skylark_transport` | whole ship (splats vs STL; against its own fallback mesh the splats read IoU 0.964, 0.958, 0.926) | 0.958 | 0.949 | 0.911 | 1.004 | 1.006 | 1.022 | - | 2026-11-03 |
 
 ## `saturn_family` (T12)
 
@@ -304,11 +314,11 @@ only in how many cargo sections they carry and of which kind.
 
 | Variant | Cargo | Junction | Engine section | Length |
 |---|---|---|---|---|
-| `saturn_4_transport` | one transport section at z 49.3 to 149.3 | none | z 135.9 to 158.5 | 158.5 m |
-| `saturn_4_tanker` | one tank section at z 49.3 to 149.3 | none | z 135.9 to 158.5 | 158.5 m |
-| `saturn_8_transport` | transport sections at z 49.3 to 149.3 and 149.3 to 249.3 | z 137.2 to 161.7, one module | z 235.9 to 258.5 | 258.5 m |
-| `saturn_8_tanker` | tank sections at z 49.3 to 149.3 and 149.3 to 249.3 | z 137.2 to 161.7, three modules | z 235.9 to 258.5 | 258.5 m |
-| `saturn_3_freighter` | cross-beam, blocks and three pods crosswise (z 48.5 to 95.3), the truss through the stack | none | slim (0.583 scale, Q20), z 83.6 to 96.8, between the lower pods and under the top pod | 96.8 m |
+| `saturn_4_transport` | one transport section at z 49.3 to 149.3 (splats vs STL) | none | z 135.9 to 158.5 | - | 158.5 m |
+| `saturn_4_tanker` | one tank section at z 49.3 to 149.3 (splats vs STL) | none | z 135.9 to 158.5 | - | 158.5 m |
+| `saturn_8_transport` | transport sections at z 49.3 to 149.3 and 149.3 to 249.3 (splats vs STL) | z 137.2 to 161.7, one module | z 235.9 to 258.5 | - | 258.5 m |
+| `saturn_8_tanker` | tank sections at z 49.3 to 149.3 and 149.3 to 249.3 (splats vs STL) | z 137.2 to 161.7, three modules | z 235.9 to 258.5 | - | 258.5 m |
+| `saturn_3_freighter` | cross-beam, blocks and three pods crosswise (z 48.5 to 95.3), the truss through the stack (splats vs STL) | none | slim (0.583 scale, Q20), z 83.6 to 96.8, between the lower pods and under the top pod | - | 96.8 m |
 
 The length rule (Q16) is lead ship plus cargo: 49.3 m of lead ship ahead of the first section, 100 m per section, and
 the engine section's last 9.2 m behind the last section. The section's own stations, the Saturn 3's stack and every
