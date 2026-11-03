@@ -1,0 +1,4 @@
+{"scenario_id": "mission_demo", "system_id": "local",
+ "player": {"position": [0, 0, 0], "forward": [0, 0, -1]},
+ "mission": {"title": "Demo Run", "briefing": "Escort the freighter to the buoy.\nDo not let a raider through.",
+  "script": "", "dialog": ""}}

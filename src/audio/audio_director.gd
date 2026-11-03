@@ -13,6 +13,9 @@ extends Node3D
 ## (at most `settings.engine_voice_cap`: the player's first, then the nearest ships in range, re-ranked every
 ## `ENGINE_REALLOCATE_S`) and shapes each voice's attack and release on the frame's delta; a frame touches only those voices.
 ##
+## The menus' sounds (`sfx_ui`: move, accept, back; M5-T02) load beside these and play through `play_ui`. The front end has an
+## `AudioDirector` of its own for them; they keep sounding while the tree is paused, because the pause menu is where they are heard.
+##
 ## `settings.sfx_volume` (0..1) is the gain of the `SFX` bus (`default_bus_layout.tres`; created at run time if it is missing).
 ## The Dummy audio driver of a headless run plays silently, and nothing here errors without sound files.
 ##
@@ -20,6 +23,8 @@ extends Node3D
 ## `sfx <name>` (play at the player; a burst plays once).
 
 const SOUND_DIR: String = "res://assets/generated/sfx_combat"
+const UI_SOUND_DIR: String = "res://assets/generated/sfx_ui"
+const UI_SOUND_NAMES: Array[StringName] = [&"ui_move", &"ui_accept", &"ui_back"]
 const SOUND_NAMES: Array[StringName] = [&"pulse_fire", &"raider_fire", &"hit_hull", &"explosion", &"main_burst", &"rcs_burst", &"warning_beep", &"target_blip"]
 ## The engine bursts, looped for as long as their thrusters fire.
 const LOOPS: Array[StringName] = [&"main_burst", &"rcs_burst"]
@@ -81,6 +86,7 @@ func _ready() -> void:
 	for i: int in UI_VOICES:
 		var ui := AudioStreamPlayer.new()
 		ui.name = "UiVoice%d" % i
+		ui.process_mode = Node.PROCESS_MODE_ALWAYS
 		ui.bus = BUS
 		add_child(ui)
 		_ui_voices.append(ui)
@@ -195,14 +201,8 @@ func _free_voice() -> int:
 
 
 func _load_sounds() -> void:
-	for sound_name: StringName in SOUND_NAMES:
-		var path: String = SOUND_DIR.path_join("%s.wav" % sound_name)
-		if not ResourceLoader.exists(path):
-			push_warning("AudioDirector: %s is missing or not imported (run scripts/gen_assets.sh, then import); no %s" % [path, sound_name])
-			continue
-		var stream := load(path) as AudioStreamWAV
-		if stream != null:
-			_streams[sound_name] = stream
+	_load_set(SOUND_DIR, SOUND_NAMES)
+	_load_set(UI_SOUND_DIR, UI_SOUND_NAMES)
 	# The engine voices loop the whole file; `play` keeps the plain stream, so a burst played by name ends.
 	for loop_name: StringName in LOOPS:
 		if _streams.has(loop_name):
@@ -212,6 +212,17 @@ func _load_sounds() -> void:
 			loop.loop_end = int(loop.get_length() * float(loop.mix_rate))
 			loop.resource_name = String(loop_name)
 			_loops[loop_name] = loop
+
+
+func _load_set(dir: String, names: Array[StringName]) -> void:
+	for sound_name: StringName in names:
+		var path: String = dir.path_join("%s.wav" % sound_name)
+		if not ResourceLoader.exists(path):
+			push_warning("AudioDirector: %s is missing or not imported (run scripts/gen_assets.sh, then import); no %s" % [path, sound_name])
+			continue
+		var stream := load(path) as AudioStreamWAV
+		if stream != null:
+			_streams[sound_name] = stream
 
 
 # --- volume ----------------------------------------------------------------------------------------------------------

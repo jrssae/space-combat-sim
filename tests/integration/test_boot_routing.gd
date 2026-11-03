@@ -79,8 +79,10 @@ func test_a_windowed_launch_shows_the_front_end() -> void:
 	assert_eq(_shown_path(), GameScript.FRONT_END_SCENE, "the boot scene is replaced by the front end")
 	assert_eq(game.flow.state, GameFlow.State.FRONT_END)
 	assert_eq(game.flow.request, {})
-	assert_not_null(_shown().get_node_or_null(^"%FreeFlight"), "the placeholder offers Free flight")
-	assert_not_null(_shown().get_node_or_null(^"%Quit"), "and Quit")
+	var menu: ChoiceListScreen = (_shown() as FrontEnd).frame().current_page() as ChoiceListScreen
+	assert_not_null(menu, "the main menu is on show")
+	assert_has(menu.option_ids(), &"free_flight")
+	assert_has(menu.option_ids(), &"quit")
 
 
 func test_every_scripted_run_goes_straight_to_main_with_the_scenario_setting() -> void:
@@ -126,7 +128,11 @@ func test_free_flight_reaches_the_real_main_through_the_loading_screen() -> void
 	await _boot([])
 	var seen: Array[String] = []  # an Array, so the lambda appends to this one (a packed array would be copied)
 	host.child_entered_tree.connect(func(node: Node) -> void: seen.append(node.scene_file_path))
-	(_shown().get_node(^"%FreeFlight") as Button).pressed.emit()
+	var front: FrontEnd = _shown() as FrontEnd
+	(front.frame().current_page() as ChoiceListScreen).button_of(&"free_flight").pressed.emit()
+	var page: FreeFlightSelect = front.frame().current_page() as FreeFlightSelect
+	assert_not_null(page, "Free flight opens its page")
+	page.start_requested.emit(page.encounters)
 	assert_eq(game.flow.state, GameFlow.State.LOADING)
 	await wait_until(func() -> bool: return _in_space_with(GameScript.MAIN_SCENE), 60.0)
 	assert_true(_in_space_with(GameScript.MAIN_SCENE), "Main replaced the loading screen")
@@ -140,7 +146,7 @@ func test_free_flight_reaches_the_real_main_through_the_loading_screen() -> void
 	assert_eq(main.resolved_scenario_path(), ScenarioLoader.FREE_FLIGHT_PATH, "the request's scenario")
 	assert_eq(main.scenario_seed, 0, "and its seed")
 	assert_eq(main.buoys.size(), 5, "free flight's nav buoys")
-	assert_eq(game.flow.request, GameFlow.make_request(&"free_flight", &"free_flight"))
+	assert_eq(game.flow.request, GameFlow.make_request(&"free_flight", &"free_flight", true), "encounters start on")
 
 
 func test_leaving_a_paused_scene_unpauses_the_tree() -> void:

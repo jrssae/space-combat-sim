@@ -13,6 +13,7 @@ var game: GameScript = null  ## null: /root/Game
 var _path: String = ""
 var _frames_shown: int = 0
 var _loading: bool = false
+var _collected: bool = false  # the threaded request has been taken (or has failed and been collected)
 var _progress: Array = []
 ## The scene's own scripts, held so they stay compiled while the worker thread loads the rest.
 var _scripts: Array[Resource] = []
@@ -32,6 +33,12 @@ func _ready() -> void:
 	_path = game.main_scene_path
 
 
+func _exit_tree() -> void:
+	# Leaving mid-load: a request nobody takes keeps its resource (and its thread) alive to the end of the run.
+	if _loading and not _collected:
+		_collect()
+
+
 func _process(_delta: float) -> void:
 	_frames_shown += 1
 	if not _loading:
@@ -44,10 +51,20 @@ func _process(_delta: float) -> void:
 		ResourceLoader.THREAD_LOAD_LOADED:
 			_bar.value = 1.0
 			set_process(false)
-			game.finish_loading(ResourceLoader.load_threaded_get(_path) as PackedScene)
+			game.finish_loading(_collect() as PackedScene)
+		ResourceLoader.THREAD_LOAD_FAILED:
+			set_process(false)
+			_collect()
+			game.fail_loading("could not load %s" % _path)
 		_:
 			set_process(false)
 			game.fail_loading("could not load %s" % _path)
+
+
+# Takes the loaded resource, which also ends the request.
+func _collect() -> Resource:
+	_collected = true
+	return ResourceLoader.load_threaded_get(_path)
 
 
 # Scripts compile here on the main thread before the worker starts: preloads resolved while a script compiles on a

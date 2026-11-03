@@ -174,6 +174,12 @@ mono 16-bit 48 kHz WAVs synthesised with NumPy, peaks at -1.5 dBFS, byte-identic
 Its manifest has `kind` `audio`, a `sounds` object (file, samples, sample rate, duration, peak, and `loop_begin` / `loop_end`
 for the two loops, seamless by construction) and no `lods`. Option: `peak_dbfs` (default -1.5, at most -1).
 
+## `sfx_ui`
+
+The menu sounds (M5-T02, D57): three mono 16-bit 48 kHz WAVs, peaks at -1.5 dBFS, byte-identical per seed, plain sine tones in
+the family of `target_blip`. `ui_move` (a quiet 45 ms tick), `ui_accept` (two notes rising) and `ui_back` (two notes falling).
+`AudioDirector` loads them beside `sfx_combat` and plays them with `play_ui`. Same manifest shape as `sfx_combat`, no loops.
+
 ## `sfx_world`
 
 Sounds of the world itself (M5-T05, D51): one mono 16-bit 48 kHz WAV, peak -1.5 dBFS, byte-identical per seed. `jump_in`

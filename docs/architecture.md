@@ -1923,6 +1923,7 @@ numbers start at D50 (D46-D49 are M4's).
 | D50 | Boot and the `Game` flow (T01). The main scene is `src/frontend/boot.tscn`; `Boot` hands the command line to the `Game` autoload once, and the pure `GameFlow.boot_route` decides: a windowed launch shows the front end; `--headless` (the display server or the engine argument), `--console-exec` or `--console-file` with a script, `--scenario=<id>` (after `--`, or before it) and `settings.skip_front_end` go straight to Main, which reads `Settings.scenario` as before (`--scenario=<id>` sets it for the session, like the `scenario` command). `GameFlow` (`RefCounted`) holds the states `FRONT_END`, `LOADING`, `IN_SPACE`, `DEBRIEF`, the request `{kind: free_flight \| mission \| sandbox, scenario_id, encounters, seed}` and the last result; a run starts at `FRONT_END`, and a refused move changes nothing and says why. `Game` only swaps scenes: the loading screen loads `main.tscn` with `ResourceLoader.load_threaded_request` (its scripts compiled first on the main thread, §18.3), `Game` builds Main with the request's `scenario_path` and `scenario_seed`, and `Main._ready` fills the pools behind the loading screen (D22 unchanged). Leaving a scene unpauses the tree and frees the mouse. The console's `scenario <id>` still reloads Main in place | Every tool, benchmark, smoke run and test starts as it did, and the menus get a flow that the debrief, retry and missions plug into without touching Main |
 | D51 | Missions are scenarios with a script of named steps (T05). `ScenarioLoader` passes a scenario's `mission` block through (`title`, `briefing`, `script`, `dialog`, `objectives[]`; strings type-checked only, objectives by `ObjectiveBook.declare`) and `cinematics` beside it; `Main` creates a `MissionRunner` (under Main, physics priority 400, pausable) when the block is there. The script extends `MissionScript` (`steps()`, `step_<name>(m)`); `MissionSequencer` awaits each step as a coroutine, and every wait in `MissionApi` resumes on the sequencer's `wake`, emitted once per tick after the world moved, so mission time is sim time. `mission skip` marks the step skipped and emits `wake` at once: waits return, an awaited trigger is first made true (`Trigger.make_true`), the objectives are evaluated right after, and the step runs to its end and the next starts inside the command (an emission calls only the waits it began with); `mission goto <step>` skips every step before the named one. World changes go through `MissionStage`: pools, `AiContext.objective_name` for `send`, the jump points. `say` and `cinematic` resolve at once (T06, T08 seams); `lock_controls` keeps a flag (T08 zeroes the commands). Success: every primary done, or `m.end(true)`; failure: a primary failed, `m.end(false)`, or the player destroyed. The result goes to `Game.end_mission` (`last_result`, `DEBRIEF`); Main stays in space with `MISSION COMPLETE` or `MISSION FAILED - <REASON>` on the status line until T09's debrief. In a mission the player does not respawn (the runner cancels it, Back is ignored); a spawn past its pool is a `push_error`, never a new ship. Jump arrivals (Q12): `JumpArrivalPool` holds 4 `JumpArrival`s under `World/Effects` (billboard flash, a `LightEmitter`, the `sfx_world` `jump_in` sound; no splats), a spawn with `arrival: "jump"` opens one (a group within 600 m in the same second shares it) and comes out of it on its own velocity | Scripts read like the mission; skipping by forcing leaves the world where the step would have (a skipped wave is gone, not alive and ignored), which M8's tutorial checks need; one script surface keeps missions out of Main |
 | D52 | Triggers and objectives (T05). Seven kinds (`proximity`, `area`, `timer`, `destroyed`, `dialog_finished`, `input_performed`, `arrived`), each a `RefCounted` with its `test` and `force` side by side, over a `MissionWorld` snapshot: actors by name (case-free; `player` is the player) with `UniversePos`, alive and route end, sim time, finished lines, and this tick's `PlayerActions` from the `PilotCommand` Main sampled (`InputAdapter.last`; held controls past half way and edges). Forced, `destroyed` releases its ships to the pool (no explosion, no credit), `proximity`, `area` and `arrived` place the actor (`reset_to`, velocity kept; beside a goal actor at half the radius), the rest latch. `TriggerSpec.from_dict` builds them from JSON and has builders for scripts. `ObjectiveBook` (pure): hidden, active, done, failed (final); success and fail triggers evaluated while active, fail first; `snapshot()` is `{id, text, primary, state}`. Cost: every lookup is one unit of `MissionWorld.work`, and the stage refreshes only the names the live triggers read, from a name map `ShipPool.acquired` keeps current, so a tick costs a check and at most two lookups per trigger plus one refresh per name, whatever the number of ships | Pure predicates are unit-tested without a scene; a counted bound is stable on any machine where a millisecond budget is not |
+| D57 | The front end, the pause menu and the three-panel frame (T02). `MenuFrame` (`menu_frame.tscn`) is the one layout of Q15: the options top left (a scroll container), the controller diagram with what each button does bottom left, the objectives right. It holds a stack of `MenuScreen` pages (the D-pad and left stick walk Godot's `ui_*` focus, A accepts, B goes back; arrow keys, Enter, Esc and the mouse work too) and reads three providers: `bindings_source` (a `ControlProfile`; unset, the InputMap as it is now, so a rebind shows at once), `objectives_source` (`Array[Dictionary]`, the `ObjectiveBook.snapshot()` shape) and `request_source` (`Game`'s request). `PadLegend` (pure) maps each pad descriptor of the profile to a part of the pad and the menu's word for the action; `PadDiagram` draws the pad in code, no image. The right panel shows the page's own content (a mission's briefing), else the objectives, else the run (`Free flight`, `Encounters: on|off`), else nothing (`ObjectivesModel`, pure). The front end is the sky (the camera sways about the nebula view) behind a frame whose root page is Missions, Free flight, Sandbox, Settings, Controls and Quit; the pause menu (`src/hud/pause_menu.tscn`, a `CanvasLayer` that always processes, created by `Main`) opens on the `pause` edge, pauses the tree and offers Resume, Restart, Settings, Controls and Quit to menu. Missions are the scenarios with a `mission` block (`MissionCatalog`, through `ScenarioLoader`); Settings and Controls are placeholders from `MenuScreens` until T03 and T04 return their pages from there | One layout for the pause menu, settings and controls screens, and providers so the mission core and the controls screen plug in without touching the frame |
 
 ### 18.2 Layout additions
 
@@ -1931,7 +1932,13 @@ src/game/game_flow.gd                    RefCounted, pure: states, moves, the re
 src/autoload/game.gd                     autoload `Game` after ControlProfiles: scene changes, `menu`, `play`, provider `game` (T01)
 src/frontend/boot.tscn|.gd               the project's main scene: hands the command line to Game (T01)
 src/frontend/loading_screen.tscn|.gd     shown while main.tscn loads on a thread (T01)
-src/frontend/front_end.tscn|.gd          placeholder: Free flight and Quit (T01; T02 builds the real menus)
+src/frontend/front_end.tscn|.gd          the sky with a slow drift and the main menu in a MenuFrame (T01 placeholder, T02)
+src/frontend/menu_frame.tscn|.gd, menu_screen.gd, theme.tres   the three-panel frame, the base page, the one Theme (T02)
+src/frontend/choice_list_screen.gd, mission_select.gd, sandbox_select.gd, free_flight_select.gd, placeholder_screen.gd, menu_screens.gd   the pages (T02)
+src/frontend/pad_legend.gd, pad_diagram.gd, objectives_model.gd, objectives_panel.gd, mission_catalog.gd   legend, diagram, right panel, mission list (T02)
+src/hud/pause_menu.tscn|.gd              the pause menu, created by Main (T02)
+tools/procgen/assets/sfx_ui.py           `ui_move`, `ui_accept`, `ui_back` (T02)
+tests/unit/test_pad_legend.gd, test_pad_diagram.gd, test_objectives_model.gd, test_mission_catalog.gd, tests/integration/test_front_end.gd, test_pause_menu.gd, test_menu_frame.gd, test_loading_screen.gd   (T02)
 tests/unit/test_game_flow.gd, tests/integration/test_boot_routing.gd   (T01)
 src/mission/mission_script.gd, mission_sequencer.gd, mission_api.gd   the script's base, step and skip sequencing, the script surface (T05)
 src/mission/mission_runner.gd, mission_stage.gd, mission_console.gd   the node under Main, its game side, provider and command `mission` (T05)
@@ -1961,6 +1968,8 @@ tests/unit/test_triggers.gd, test_objective_book.gd, test_mission_sequencer.gd, 
   that starts at the front end rejects the warning.
 - The `scenario` command reloads Main without telling `Game`, so `game.request` keeps naming the scenario that was started
   (from the menu, `play` or boot).
+- `play` does not change `Settings.scenario`: the `scenario` command with no argument still names the scenario the setting holds, not the one `play` started.
+- `scenario x; menu` on one console line races the engine's deferred reload of Main: put a `wait` between them.
 - `user://autoexec.cfg` runs at the first scene the console sees: the front end on a normal launch, Main on a scripted run.
 
 ### 18.4 Console and settings (additions to §6.4)
@@ -1969,6 +1978,7 @@ tests/unit/test_triggers.gd, test_objective_book.gd, test_mission_sequencer.gd, 
 |---|---|---|
 | `game` | Game (T01) | `state` (`front_end`, `loading`, `in_space`, `debrief`), `request` (`<scenario> (<kind>), encounters on\|off, seed <n>`, or `none`), `last_result` (`success`, `failure: <reason>`, or `none`) |
 | `mission` | MissionRunner (T05), only while a mission runs | `id`, `title`, `state` (`running`, `success`, `failure`, `error`), `result`, `step` (`<name> (n/N)`), `steps`, `time_s`, `objectives`, `live_triggers`, `tick_work`, `skipping`, `waypoint`, `controls_locked`, `jump_points` |
+| `pause_menu` | PauseMenu (T02) | `open`, `page` (the title of the page on top: `PAUSED`, `Settings`, `Controls`), `depth` (pages open, 1 is the pause list) |
 
 Commands: `menu` (back to the front end); `play <scenario_id> [seed]` (any `data/scenarios/*.json`, through the loading screen
 as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` (bool, false). Command line: `--scenario=<id>`
@@ -1996,3 +2006,28 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
 - **Left for later.** `say` waits for nothing until T06's dialog queue; `cinematic` and the control lock are T08's; the debrief
   screen is T09's. `play <id>` starts a mission scenario like any other (its request's kind stays `sandbox`, from
   `GameFlow.kind_for`; T02's mission menu asks for `mission`).
+
+### 18.6 Front end and pause menu as built (T02)
+
+- **Input.** Menus are UI and use Godot's `ui_*` actions; gameplay still never reads them. Godot 4.7's defaults put the D-pad and the
+  left stick on `ui_up/down/left/right` but only keys on `ui_accept` and `ui_cancel`, so `project.godot` adds pad A and B to those two.
+  `ControlProfile` covers `InputAdapter.ACTIONS` only, so applying a profile leaves every `ui_*` action alone (test).
+- **Esc and Start.** In flight Esc is both `ui_cancel` and the `pause` action, so one press would go back twice. The pause menu's pages
+  ignore the key (`MenuScreen.cancel_ignores_keys`); `Main` hands the pause edge (Start, Esc) to `PauseMenu.on_pause_action`, which
+  opens the menu, goes back a page, or at the list resumes. B on the pad is `ui_cancel`: the page asks the frame to go back, and at
+  the list that closes the menu. In the front end Esc and B both go back.
+- **Sounds.** `AudioDirector` loads `sfx_ui` (`ui_move` on a focus move, `ui_accept` on a press, `ui_back` on going back) and plays it
+  with `play_ui`; its UI voices always process, so the sounds play behind the paused World. The front end carries an `AudioDirector`
+  of its own. The gain is `sfx_volume` until T03's `ui_volume` bus.
+- **Objectives.** `Main` sets `pause_menu.objectives_source` to its `objectives()` (`ObjectiveBook.snapshot()`, empty outside a mission), so the right panel lists the running mission's objectives with a mark per state and `(optional)` on the secondary ones.
+- **Resume.** `Main` re-seeds the adapter's edges when the menu closes (`InputAdapter.resync_edges`), so the button that closed it (B is also the target button) does not also tap a target when it is released.
+- **Missions.** `MissionCatalog.entries(dir, read)` lists the scenario files whose loader result has a non-empty `mission` block (its
+  `title`, else the id made readable, and `briefing`). No shipped scenario has one until T10; the page then says "No missions yet".
+- **Free flight.** `encounters` lives in `Game`'s request only (the menu starts it on; `play` and boot keep it off); `Settings.encounters`
+  comes with T17. Restart is `Game.restart()`: the request that started the run, else the scenario setting.
+- **Loading.** Leaving the loading screen mid-load collects the threaded request; a failed load is collected too. `Game` refuses a scene
+  it cannot build instead of failing on a null.
+- **Sky.** The front end's camera has the rig's far plane (50 km): the sky sphere is 20 km across and a default far plane clips the stars.
+- **Pad diagram.** The legend lists each side's rows top to bottom by where the button sits, pushed apart where several are close
+  (`PadDiagram.stack_rows`); the face buttons carry their letter and need no leader line. The controls page lights the buttons of the
+  action in focus through `MenuFrame.highlight_actions`.

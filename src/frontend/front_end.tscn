@@ -1,6 +1,9 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://src/frontend/front_end.gd" id="1_front_end"]
+[ext_resource type="PackedScene" path="res://src/environment/space_environment.tscn" id="2_env"]
+[ext_resource type="Script" path="res://src/audio/audio_director.gd" id="3_audio"]
+[ext_resource type="PackedScene" path="res://src/frontend/menu_frame.tscn" id="4_frame"]
 
 [node name="FrontEnd" type="Control"]
 layout_mode = 3
@@ -11,43 +14,21 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_front_end")
 
-[node name="Backdrop" type="ColorRect" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-color = Color(0.02, 0.03, 0.04, 1)
+[node name="Sky" type="Node3D" parent="."]
 
-[node name="Center" type="CenterContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+[node name="SpaceEnvironment" parent="Sky" instance=ExtResource("2_env")]
 
-[node name="Menu" type="VBoxContainer" parent="Center"]
-custom_minimum_size = Vector2(360, 0)
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="Title" type="Label" parent="Center/Menu"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.55, 1, 0.65, 1)
-theme_override_font_sizes/font_size = 36
-text = "SPACE COMBAT SIM"
-horizontal_alignment = 1
-
-[node name="FreeFlight" type="Button" parent="Center/Menu"]
+[node name="Camera" type="Camera3D" parent="Sky"]
 unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 24
-text = "Free flight"
+current = true
+fov = 75.0
+near = 0.05
+far = 50000.0
 
-[node name="Quit" type="Button" parent="Center/Menu"]
+[node name="Audio" type="Node3D" parent="."]
 unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 24
-text = "Quit"
+script = ExtResource("3_audio")
+
+[node name="Frame" parent="." instance=ExtResource("4_frame")]
+unique_name_in_owner = true
+layout_mode = 1

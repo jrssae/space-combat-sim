@@ -51,6 +51,8 @@ var scenario_ships: Array[Combatant] = []
 ## The ship leading a route (the instructor) and its follow-path behaviour; null when the scenario has none.
 var instructor: Combatant = null
 var instructor_path: BehaviourFollowPath = null
+## The pause menu (M5-T02): Start opens it and the world pauses behind it.
+var pause_menu: PauseMenu = null
 
 var _spawn_position: UniversePos = UniversePos.new()
 var _spawn_basis: Basis = Basis.IDENTITY
@@ -148,6 +150,12 @@ func _ready() -> void:
 	# The motion blur skips the frames around a rebase (M3-T25).
 	space_environment.post_effects.watch_world(world)
 	space_environment.use_star_of(_system_id)
+	pause_menu = (preload("res://src/hud/pause_menu.tscn") as PackedScene).instantiate() as PauseMenu
+	pause_menu.audio = audio
+	pause_menu.objectives_source = objectives
+	# The button that closed the menu may still be down: it must not also tap a target or toggle something.
+	pause_menu.resumed.connect(func() -> void: adapter.resync_edges(input_source))
+	add_child(pause_menu)
 	_register_console()
 
 
@@ -503,7 +511,7 @@ func _spawn_props(props: Array) -> void:
 
 func _handle_ui(ui: UiCommand) -> void:
 	if ui.pause:
-		set_paused(not get_tree().paused)
+		pause_menu.on_pause_action()
 	if ui.toggle_camera:
 		camera_rig.toggle()
 	if ui.reset and mission == null:  # no respawn in a mission (D51)

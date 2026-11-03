@@ -1,0 +1,90 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/frontend/menu_frame.gd" id="1_frame"]
+[ext_resource type="Theme" path="res://src/frontend/theme.tres" id="2_theme"]
+[ext_resource type="Script" path="res://src/frontend/pad_diagram.gd" id="3_pad"]
+[ext_resource type="Script" path="res://src/frontend/objectives_panel.gd" id="4_objectives"]
+
+[node name="MenuFrame" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_frame")
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 48
+theme_override_constants/margin_top = 40
+theme_override_constants/margin_right = 48
+theme_override_constants/margin_bottom = 40
+
+[node name="Columns" type="HBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="Left" type="VBoxContainer" parent="Margin/Columns"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.3
+theme_override_constants/separation = 16
+
+[node name="OptionsPanel" type="PanelContainer" parent="Margin/Columns/Left"]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 1.5
+
+[node name="Box" type="VBoxContainer" parent="Margin/Columns/Left/OptionsPanel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="Margin/Columns/Left/OptionsPanel/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"Title"
+
+[node name="Scroll" type="ScrollContainer" parent="Margin/Columns/Left/OptionsPanel/Box"]
+layout_mode = 2
+size_flags_vertical = 3
+follow_focus = true
+horizontal_scroll_mode = 0
+
+[node name="Host" type="VBoxContainer" parent="Margin/Columns/Left/OptionsPanel/Box/Scroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Message" type="Label" parent="Margin/Columns/Left/OptionsPanel/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.55, 0.4, 1)
+autowrap_mode = 3
+
+[node name="PadPanel" type="PanelContainer" parent="Margin/Columns/Left"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PadDiagram" type="Control" parent="Margin/Columns/Left/PadPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("3_pad")
+
+[node name="RightPanel" type="PanelContainer" parent="Margin/Columns"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Objectives" type="VBoxContainer" parent="Margin/Columns/RightPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 10
+script = ExtResource("4_objectives")

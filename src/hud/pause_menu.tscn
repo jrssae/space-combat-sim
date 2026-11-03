@@ -1,0 +1,22 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/hud/pause_menu.gd" id="1_pause"]
+[ext_resource type="PackedScene" path="res://src/frontend/menu_frame.tscn" id="2_frame"]
+
+[node name="PauseMenu" type="CanvasLayer"]
+process_mode = 3
+layer = 60
+visible = false
+script = ExtResource("1_pause")
+
+[node name="Dim" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0.01, 0.01, 0.6)
+
+[node name="Frame" parent="." instance=ExtResource("2_frame")]
+unique_name_in_owner = true
+layout_mode = 3

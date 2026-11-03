@@ -80,6 +80,16 @@ func play(request: Dictionary) -> String:
 	return ""
 
 
+## Plays the current run again from its start (the pause menu's Restart): the request that started it, else the scenario the
+## setting names. Returns why it was refused, or "".
+func restart() -> String:
+	if not flow.request.is_empty():
+		return play(flow.request)
+	var scenario_id := StringName(settings.get_value(&"scenario") if settings != null \
+			else SettingsSchema.new().get_default(&"scenario"))
+	return play(GameFlow.make_request(GameFlow.kind_for(scenario_id), scenario_id))
+
+
 ## The loading screen has Main's scene: build it for the request and put it in place. Building it here, while the
 ## loading screen is still the last frame drawn, keeps the pool-filling hitch behind that screen.
 func finish_loading(packed: PackedScene) -> void:
@@ -89,6 +99,9 @@ func finish_loading(packed: PackedScene) -> void:
 		fail_loading("could not load %s" % main_scene_path)
 		return
 	var main: Node = packed.instantiate()
+	if main == null:
+		fail_loading("could not build %s" % main_scene_path)
+		return
 	# Set by name, so this autoload does not compile Main and everything it uses at start-up.
 	main.set(&"scenario_path", GameFlow.scenario_path(flow.request["scenario_id"]))
 	main.set(&"scenario_seed", int(flow.request["seed"]))
@@ -120,7 +133,11 @@ func scenario_ids() -> PackedStringArray:
 
 
 func _show_scene(path: String) -> void:
-	var node: Node = (load(path) as PackedScene).instantiate()
+	var packed: PackedScene = load(path) as PackedScene
+	var node: Node = packed.instantiate() if packed != null else null
+	if node == null:
+		push_error("Game: could not build %s" % path)
+		return
 	if &"game" in node:
 		node.set(&"game", self)
 	_show(node)
