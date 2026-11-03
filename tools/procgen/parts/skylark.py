@@ -25,6 +25,7 @@ from ..styles import Style
 from . import Anchor, Collision, Part
 from .solids import Solid, lathe_solid, prism_solid
 from .starfury import closed_loft, section_loft
+from .turret import TurretSpec
 
 CENTRE, RIGHT = "c", "r"
 _Y_UP = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]])  # a prism's plan (x, -z) flat, thickness on +Y
@@ -47,7 +48,8 @@ NACELLE_EXIT_R = 1.62
 NACELLE_INTAKE_R = 1.3
 CONE_Z = 41.9  # both nacelle cones stand at this z
 TURRET_Z = 37.5  # Q19: the only turret, seated on the body's ridge ahead of the dorsal fin
-TURRET_BASE_R = 1.2  # the EA turret's base at two thirds of its size (2.4 m across)
+TURRET = TurretSpec().scaled(2.0 / 3.0)  # the EA turret at two thirds of its size: barrel_m 3.0, base 2.4 m across
+TURRET_BASE_R = 0.5 * TURRET.base_diameter
 BRIDGE_EYE = (0.0, 3.6, 11.8)  # inside the bridge plate, behind its glazed front
 
 
@@ -808,6 +810,7 @@ __all__ = [
     "CONE_UP",
     "NACELLE_AXIS",
     "RIGHT",
+    "TURRET",
     "TURRET_BASE_R",
     "TURRET_Z",
     "BodySpec",

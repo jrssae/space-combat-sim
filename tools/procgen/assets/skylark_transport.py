@@ -43,7 +43,7 @@ from ..parts import Part, mass_centroid, total_mass
 from ..parts import skylark as sp
 from ..parts.propulsion import pilot_tags
 from ..parts.skylark import CENTRE, RIGHT, Piece
-from ..parts.turret import TurretSpec, write_turret
+from ..parts.turret import write_turret
 from ..styles import Style
 from ..styles.ea_civilian import ea_civilian
 
@@ -71,7 +71,7 @@ SKYLARK_PAINT = {"hull": 0xB3A982, "hull_panel": 0x7E7552, "hull_dark": 0x4A4536
 STYLE = replace(ea_civilian(SKYLARK_PAINT), panel_size_m=2.4, panel_line_width_m=0.25)
 ENGINE_GLOW_SRGB = 0xFFE9C2  # warm white; a ShipSpec tint (T16), not in the splats
 
-TURRET = TurretSpec().scaled(2.0 / 3.0)  # the EA turret at two thirds: barrel_m 3.0
+TURRET = sp.TURRET  # the EA turret at two thirds: barrel_m 3.0; the body's seat is sized to its base
 TURRET_SPACING_M = 0.08
 TURRET_SPLATS = (1_500, 3_500)
 TURRET_ARC_DEG = 200.0  # a hemisphere plus 10 degrees below the mount's base

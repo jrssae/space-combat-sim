@@ -342,7 +342,7 @@ the fidelity check needs no model offset. 60.04 m long, 40.2 m across the claw t
 | Body | a `section_loft` through 18 stations of an 18-point flattened diamond (ridge, flanks, side faces, a knee on the bottom, the keel), from the measured plan and sections; olive patches on the ridge's flanks and the side faces; `prism` corner fins; two dark blocks on its aft face |
 | Dorsal fin | a `section_loft` of lens sections stacked up y, from the root inside the body to the crest at y 5.13 |
 | Centre engine | a `lathe` drum, a `lathe` exhaust cone (dark metal) with a dark bore, twelve dark vanes round its neck |
-| Turret seat | none built: the turret sits on the body's ridge at (0, 2.766, 37.5), as low as the hull under its 2.4 m base (the ridge is 2.87 on the centre line and falls away aft and outboard), so the base meets the hull all round and its front is buried 0.17 m (`BodySpec.turret_seat`, the `body` piece's `turret` anchor) |
+| Turret seat | none built: the turret sits on the body's ridge at (0, 2.766, 37.5), as low as the hull under its 2.4 m base (the ridge is 2.87 on the centre line and falls away aft and outboard), so the base meets the hull all round and its front edge is buried about 0.2 m (`BodySpec.turret_seat`, the `body` piece's `turret` anchor) |
 | Nacelles | a `lathe` about (±13.03, -0.26): dark ribbed intake ring, sand body, dark bell with its bore; 16 intake ribs and 24 bell ribs as `prism` plates; two pods as lofts of elliptic sections |
 | Claws, pylons | each claw two `section_loft` prongs either side of a `section_loft` web, from stations measured along it; flat `prism` pylons from the nacelle |
 
