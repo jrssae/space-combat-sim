@@ -135,6 +135,36 @@ func test_the_native_path_gives_the_same_pairs_and_work_as_gdscript() -> void:
 		assert_eq(native.visited, gdscript.visited, "crowd %d: the same work" % index)
 
 
+func test_pairs_right_on_the_edge_of_the_sphere_test_agree_on_both_paths() -> void:
+	# 3 000 projectiles 45 km out, each with a reach within a few parts in ten million of its distance to a hull, so a different
+	# rounding of the distance (64-bit maths, another order of operations) puts many pairs on the other side of the line.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4508
+	var hull_mids := PackedVector3Array()
+	var hull_reach := PackedFloat64Array()
+	var bolt_mids := PackedVector3Array()
+	var bolt_reach := PackedFloat64Array()
+	for j: int in 60:
+		hull_mids.append(Vector3(45000.0, -45000.0, 30000.0) + _in_box(rng, 3000.0))
+		hull_reach.append(rng.randf_range(5.0, 40.0))
+	for i: int in 3000:
+		var j: int = i % hull_mids.size()
+		var at: Vector3 = hull_mids[j] + _direction(rng) * rng.randf_range(6.0, 50.0)
+		var distance: float = sqrt(at.distance_squared_to(hull_mids[j])) * (1.0 + rng.randf_range(-3e-7, 3e-7))
+		bolt_mids.append(at)
+		bolt_reach.append(distance - hull_reach[j])
+	var expected: PackedInt64Array = _every_pair(bolt_mids, bolt_reach, hull_mids, hull_reach)
+	gut.p("%d of 3000 edge pairs pass the sphere test" % expected.size())
+	assert_between(expected.size(), 300, 2700, "the edge splits the pairs")
+	var phase := HitBroadPhase.new()
+	phase.use_native = false
+	assert_eq(phase.pairs(bolt_mids, bolt_reach, hull_mids, hull_reach), expected, "GDScript")
+	if _skipped():
+		return
+	phase.use_native = true
+	assert_eq(phase.pairs(bolt_mids, bolt_reach, hull_mids, hull_reach), expected, "native")
+
+
 func test_odd_inputs_give_what_the_sphere_test_gives_on_both_paths() -> void:
 	# Not finite, negative, beyond the grid and larger than the top level: each falls back to testing everything it must.
 	var hull_mids := PackedVector3Array([Vector3.ZERO, Vector3(NAN, 0, 0), Vector3(30, 0, 0), Vector3(1.0e12, 0, 0),

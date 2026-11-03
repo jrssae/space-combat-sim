@@ -20,12 +20,15 @@ extends Node3D
 const GROUP: StringName = &"projectiles"
 const SCENE_PATH: String = "res://src/weapons/projectile.tscn"
 const DEFAULT_MATERIAL: Material = preload("res://assets/materials/projectile.tres")
-## What a projectile is (M4-T08). Surface only, for the tests written first.
+## What a projectile is (M4-T08, architecture §17.7). The hit resolver treats every kind alike, a sphere of `hit_radius_m` swept
+## along the tick's flight: a bolt, a beam (its whole length flown in the tick it fires), a guided missile, a proximity mine.
 const KIND_BOLT: StringName = &"bolt"
 const KIND_BEAM: StringName = &"beam"
 const KIND_MISSILE: StringName = &"missile"
 const KIND_MINE: StringName = &"mine"
 const KINDS: Array[StringName] = [KIND_BOLT, KIND_BEAM, KIND_MISSILE, KIND_MINE]
+## Each kind's hit radius (m): stand-in values until the real weapons (roadmap M12) bring their own. A mine's is its fuse.
+const HIT_RADIUS_BY_KIND: Dictionary = {KIND_BOLT: 0.25, KIND_BEAM: 0.5, KIND_MISSILE: 2.0, KIND_MINE: 25.0}
 
 # Bolt meshes by look (length, radius, material), so a volley does not build a mesh per bolt.
 static var _meshes: Dictionary = {}
@@ -123,14 +126,15 @@ func launch(at: Vector3, launch_velocity: Vector3, now_s: float) -> void:
 	reset_physics_interpolation()
 
 
-## Makes this projectile a `p_kind`.
+## Makes this projectile a `p_kind`, with that kind's hit radius.
 func set_kind(p_kind: StringName) -> void:
 	kind = p_kind
+	hit_radius_m = hit_radius_for(p_kind)
 
 
-## The hit radius of a projectile of `p_kind`.
-static func hit_radius_for(_p_kind: StringName) -> float:
-	return 0.25
+## The hit radius of a projectile of `p_kind`; a bolt's for a kind it does not know.
+static func hit_radius_for(p_kind: StringName) -> float:
+	return float(HIT_RADIUS_BY_KIND.get(p_kind, HIT_RADIUS_BY_KIND[KIND_BOLT]))
 
 
 ## Retires the bolt after a hit. Idempotent.

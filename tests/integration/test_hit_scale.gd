@@ -337,12 +337,15 @@ func test_a_1_km_hull_is_hit_anywhere_along_it_on_both_paths() -> void:
 		for k: int in 9:
 			var z: float = -2450.0 + float(k) * 112.0
 			_bolt(Vector3(-300.0, 0.0, z), Vector3(BOLT_SPEED, 0.0, 0.0))
-		_tick_n(60)
+		var most: int = 0
+		for t: int in 60:
+			_tick()
+			most = maxi(most, resolver.pairs_visited)
 		assert_eq(hits.size(), 9, "%s: every bolt along the hull's length hits it" % _path_name(native))
 		for info: HitInfo in hits:
 			assert_eq(info.target_id, capital.get_instance_id())
 			assert_almost_eq(info.point.x, -50.25, 0.1, "%s: on its side" % _path_name(native))
-		gut.p("%s: %d pairs tested on the last tick" % [_path_name(native), resolver.pairs_visited])
+		gut.p("%s: at most %d pairs tested in a tick for 9 bolts" % [_path_name(native), most])
 
 
 func test_the_combat_provider_shows_the_broad_phase_work_and_path() -> void:

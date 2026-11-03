@@ -2162,6 +2162,34 @@ scripts/fullscreen_check.sh         a layout fullscreen, the 3D at 1080p, under 
   capitals, the moon bends a coasting path about 13.5 m in 30 s) and `test_bench` (battle and typical runs write every entity
   count, the factions and stand-ins go afterwards).
 
+### 17.7 The hit broad phase and projectile kinds (T08)
+
+- **Before**, `HitResolver` put every projectile against every active hull each tick (a bounding-sphere test, then the shape
+  sweep for the few that passed): projectiles times hulls, so about N squared in a fight (3.7 ms of a 17 ms tick at furball 100,
+  300 bolts against 100 hulls).
+- **Now** the resolver gathers the tick's hulls and projectiles into packed arrays once and asks `HitBroadPhase` (pure,
+  `src/combat/hit_broad_phase.gd`) for the pairs that pass the sphere test, as `bolt * hulls + hull` in ascending order, which is
+  the old loop's order. Only those pairs reach the faction, shooter and destroyed checks and the shape sweep, unchanged.
+- **Any hull size.** Hulls sit in a grid of five levels (cells of 64 m, 256 m, 1 km, 4 km and 16 km); each goes into the finest
+  level whose cell is at least twice its reach, at the cell holding its centre, and each level keeps its largest reach. A
+  projectile looks, per level, at the cells its reach plus that largest reach can touch, so a 10 m fighter and a 1 km capital
+  are both found from anywhere they reach without filling the fine cells. A look that would cover more cells than the level
+  has hulls (a 3 km beam), and a hull that fits no cell (not finite, beyond the top level or the grid), test everything instead.
+- **Native and GDScript run the same grid.** With the library loaded and `perf_native` on, `ScsHitSweep`
+  (`native/src/hit_sweep.rs`) answers; the GDScript code is the reference and the fallback. Both use the same levels, cells and
+  fallbacks and the sphere test in 32-bit vectors with 64-bit scalars in the engine's order, so the pairs and the work count
+  (`pairs_visited`) are the same bit for bit. The plan named sort and sweep for the fallback; the same grid was chosen so the
+  two paths can be compared pair for pair and count for count.
+- **Why nothing changes**: the broad phase returns exactly the pairs the old sphere test accepted, in the old order, so the
+  resolver sweeps the same pairs and lands the same hits (`test_hit_scale` compares a seeded melee against a broad phase that
+  tests every pair, on both paths). A hit handler that retires a later projectile still stops it, as before.
+- **Projectile kinds.** `Projectile.kind` is `bolt`, `beam`, `missile` or `mine`, each with a stand-in hit radius
+  (`HIT_RADIUS_BY_KIND`, set by `set_kind`) until roadmap M12 brings the real weapons. The resolver treats every kind alike: a
+  sphere of the projectile's radius swept along the segment it flew this tick, so a beam is a projectile that flies its whole
+  length in the tick it fires, and a proximity mine a slow one with a fuse-sized radius.
+- **Not moved**: `ContactScan.incoming_fire` still tests every bolt per querying ship inside the native contact field; T15's
+  simulation core unifies the two.
+
 ### 17.9 The native flight step (T10, N4)
 
 ```

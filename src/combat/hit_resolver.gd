@@ -7,13 +7,15 @@ extends Node
 ##
 ## Each bolt and target are compared in the target's body frame, using its start-of-tick pose (its body has not been
 ## stepped yet). A bounding-sphere test comes first, then each hit volume inflated by the bolt's hit radius; the earliest
-## hit wins. The bolt is spent, `Damageable.apply_hit` runs, an `ImpactFlash` is added and `hit_resolved` is emitted for the
-## HUD and sound. Nothing is cached between ticks, so a `World.rebase()` changes nothing. The target's rotation during one
+## hit wins. The sphere test runs in `HitBroadPhase` (M4-T08, §17.7), which finds the pairs that pass it without testing every
+## pair, natively when the library is loaded; the resolver sweeps only those, in the same order, so the hits are the same.
+## Every projectile kind (bolt, beam, missile, mine) is swept alike, with its own hit radius. The bolt is spent,
+## `Damageable.apply_hit` runs, an `ImpactFlash` is added and `hit_resolved` is emitted for the HUD and sound. Nothing is cached between ticks, so a `World.rebase()` changes nothing. The target's rotation during one
 ## tick is ignored.
 ##
-## Console: provider `combat` (`projectiles`, `hits`, `last_hit`, `pairs_tested`, `resolve_us`) and commands
-## `damage <amount> [player|target]` and `heal [player|target|all]`. `resolve_us` is wall clock, a profiling readout. It
-## also registers the faction entries (`FactionConsole`), because `Factions` is static and has no node of its own.
+## Console: provider `combat` (`projectiles`, `hits`, `last_hit`, `pairs_tested`, `pairs_visited`, `hit_path`, `resolve_us`)
+## and commands `damage <amount> [player|target]` and `heal [player|target|all]`. `resolve_us` is wall clock, a profiling
+## readout. It also registers the faction entries (`FactionConsole`), because `Factions` is static and has no node of its own.
 
 ## A bolt hit a ship; `info.applied` is set by then.
 signal hit_resolved(info: HitInfo)
@@ -28,10 +30,31 @@ var pairs_tested: int = 0
 var hits_total: int = 0
 var last_hit: String = "none"
 var resolve_us: int = 0
-## Projectile and hull pairs put to the bounding-sphere test on the last tick (the work count). Surface for the tests.
+## Projectile and hull pairs the broad phase put to the bounding-sphere test on the last tick (the work count).
 var pairs_visited: int = 0
-## Finds the pairs worth sweeping. Surface for the tests.
+## Finds the pairs that pass the bounding-sphere test (M4-T08); a test may swap in its own.
 var broad_phase: HitBroadPhase = HitBroadPhase.new()
+
+# This tick's hulls (parallel arrays, index j) and projectiles (index i), refilled every tick.
+var _damageables: Array[Damageable] = []
+var _bodies: Array[Node3D] = []
+var _body_ids := PackedInt64Array()
+var _starts := PackedVector3Array()
+var _bases: Array[Basis] = []
+var _to_body: Array[Basis] = []
+var _moves := PackedVector3Array()
+var _mids := PackedVector3Array()
+var _reach := PackedFloat64Array()
+var _bolts: Array[Projectile] = []
+var _bolt_starts := PackedVector3Array()
+var _bolt_ends := PackedVector3Array()
+var _bolt_mids := PackedVector3Array()
+var _bolt_reach := PackedFloat64Array()
+# The earliest hit `_earliest_hit` found: the hull, the time along the tick and the segment in the hull's frame.
+var _best: int = -1
+var _best_t: float = INF
+var _best_a := Vector3.ZERO
+var _best_b := Vector3.ZERO
 ## `settings.friendly_fire` as of the last tick.
 var friendly_fire: bool = false
 ## Throws the sparks of a hull hit (`Main` sets it); none without it.
@@ -48,8 +71,10 @@ func _ready() -> void:
 		&"hits": {"get": func() -> int: return hits_total, "doc": "Hits resolved this session"},
 		&"last_hit": {"get": func() -> String: return last_hit, "doc": "The last hit: shooter -> target, damage"},
 		&"pairs_tested": {"get": func() -> int: return pairs_tested, "doc": "Bolt and ship pairs swept on the last tick (past the distance cull)"},
-		&"pairs_visited": {"get": func() -> int: return pairs_visited, "doc": "Bolt and ship pairs put to the distance cull on the last tick"},
-		&"hit_path": {"get": func() -> String: return String(broad_phase.path()), "doc": "Which code finds the pairs: native or gdscript"},
+		&"pairs_visited": {"get": func() -> int: return pairs_visited,
+				"doc": "Bolt and ship pairs the broad phase put to the distance cull on the last tick (the work)"},
+		&"hit_path": {"get": func() -> String: return String(broad_phase.path()),
+				"doc": "Which code finds the pairs worth sweeping: native or gdscript"},
 		&"resolve_us": {"get": func() -> int: return resolve_us, "unit": "us",
 				"doc": "Cost of the last tick's resolve (profiling only, wall clock)"},
 	}), self)
@@ -78,21 +103,37 @@ func resolve(delta: float) -> void:
 	pairs_tested = 0
 	pairs_visited = 0
 	friendly_fire = bool(Settings.get_value(&"friendly_fire"))
-	var targets: Array[Dictionary] = _gather_targets(delta)
-	for node: Node in get_tree().get_nodes_in_group(Projectile.GROUP):
-		var bolt := node as Projectile
-		if bolt == null or bolt.is_spent() or bolt.is_queued_for_deletion() or not bolt.is_inside_tree():
+	_gather_targets(delta)
+	_gather_bolts()
+	var hull_count: int = _damageables.size()
+	var keys: PackedInt64Array = broad_phase.pairs(_bolt_mids, _bolt_reach, _mids, _reach)
+	pairs_visited = broad_phase.visited
+	var next: int = 0  # the first pair not yet taken; pairs come in bolt order
+	for i: int in _bolts.size():
+		var first: int = next
+		while next < keys.size() and keys[next] / hull_count == i:
+			next += 1
+		var bolt: Projectile = _bolts[i]
+		# A hit handler may have retired a bolt later in the list, as the per-bolt checks before the broad phase allowed.
+		if bolt.is_spent() or bolt.is_queued_for_deletion() or not bolt.is_inside_tree():
 			continue
 		projectiles_last_tick += 1
-		var best: Dictionary = _earliest_hit(bolt, targets, delta)
-		if not best.is_empty():
-			_land(bolt, best, delta)
+		if next > first and _earliest_hit(bolt, i, keys, first, next, hull_count):
+			_land(bolt, delta)
 	resolve_us = Time.get_ticks_usec() - started_us
 
 
-# Everything about the active ships that does not depend on the bolt, as of this tick's start.
-func _gather_targets(delta: float) -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
+# Everything about the active hulls that does not depend on the bolt, as of this tick's start.
+func _gather_targets(delta: float) -> void:
+	_damageables.clear()
+	_bodies.clear()
+	_body_ids.clear()
+	_starts.clear()
+	_bases.clear()
+	_to_body.clear()
+	_moves.clear()
+	_mids.clear()
+	_reach.clear()
 	for node: Node in get_tree().get_nodes_in_group(Damageable.GROUP):
 		var damageable := node as Damageable
 		if damageable == null or not damageable.is_active():
@@ -102,43 +143,54 @@ func _gather_targets(delta: float) -> Array[Dictionary]:
 		if body is RigidBody3D:
 			velocity = (body as RigidBody3D).linear_velocity
 		var basis: Basis = body.global_basis
-		out.append({
-			"damageable": damageable,
-			"body": body,
-			"body_id": body.get_instance_id(),
-			"t0": body.global_position,
-			"basis": basis,
-			"to_body": basis.transposed(),
-			"move": velocity * delta,
-			"mid": body.global_position + velocity * (0.5 * delta),
-			"reach": damageable.bounding_radius + velocity.length() * delta * 0.5,
-		})
-	return out
+		_damageables.append(damageable)
+		_bodies.append(body)
+		_body_ids.append(body.get_instance_id())
+		_starts.append(body.global_position)
+		_bases.append(basis)
+		_to_body.append(basis.transposed())
+		_moves.append(velocity * delta)
+		_mids.append(body.global_position + velocity * (0.5 * delta))
+		_reach.append(damageable.bounding_radius + velocity.length() * delta * 0.5)
 
 
-func _earliest_hit(bolt: Projectile, targets: Array[Dictionary], _delta: float) -> Dictionary:
-	var best: Dictionary = {}
-	var best_t: float = INF
-	var p1: Vector3 = bolt.global_position
-	var start: Vector3 = p1 - bolt.last_step
-	# Cheap sphere test first: slashing pilots keep many more bolts in flight (M3-T18), and this skips most pairs.
-	var bolt_mid: Vector3 = start + bolt.last_step * 0.5
-	var bolt_reach: float = bolt.last_step.length() * 0.5 + bolt.hit_radius_m
-	for target: Dictionary in targets:
-		pairs_visited += 1
-		var reach: float = bolt_reach + float(target["reach"])
-		if bolt_mid.distance_squared_to(target["mid"]) > reach * reach:
+# Every live projectile and the sphere round the segment it flew this tick.
+func _gather_bolts() -> void:
+	_bolts.clear()
+	_bolt_starts.clear()
+	_bolt_ends.clear()
+	_bolt_mids.clear()
+	_bolt_reach.clear()
+	for node: Node in get_tree().get_nodes_in_group(Projectile.GROUP):
+		var bolt := node as Projectile
+		if bolt == null or bolt.is_spent() or bolt.is_queued_for_deletion() or not bolt.is_inside_tree():
 			continue
-		var damageable: Damageable = target["damageable"]
+		var p1: Vector3 = bolt.global_position
+		var start: Vector3 = p1 - bolt.last_step
+		_bolts.append(bolt)
+		_bolt_starts.append(start)
+		_bolt_ends.append(p1)
+		_bolt_mids.append(start + bolt.last_step * 0.5)
+		_bolt_reach.append(bolt.last_step.length() * 0.5 + bolt.hit_radius_m)
+
+
+# The earliest hit of bolt `i` among its pairs `keys[first..next)`, kept in `_best_*`; false when it hits nothing.
+func _earliest_hit(bolt: Projectile, i: int, keys: PackedInt64Array, first: int, next: int, hull_count: int) -> bool:
+	var best_t: float = INF
+	_best = -1
+	var start: Vector3 = _bolt_starts[i]
+	var p1: Vector3 = _bolt_ends[i]
+	for k: int in range(first, next):
+		var j: int = keys[k] - i * hull_count
+		var damageable: Damageable = _damageables[j]
 		# Already destroyed this tick by another bolt.
-		if damageable.hull.destroyed or int(target["body_id"]) == bolt.shooter_id or not damageable.can_be_hit_by(bolt.faction, friendly_fire):
+		if damageable.hull.destroyed or _body_ids[j] == bolt.shooter_id or not damageable.can_be_hit_by(bolt.faction, friendly_fire):
 			continue
 		pairs_tested += 1
-		var to_body: Basis = target["to_body"]
-		var t0: Vector3 = target["t0"]
-		var move: Vector3 = target["move"]
+		var to_body: Basis = _to_body[j]
+		var t0: Vector3 = _starts[j]
 		var a: Vector3 = to_body * (start - t0)
-		var b: Vector3 = to_body * (p1 - (t0 + move))
+		var b: Vector3 = to_body * (p1 - (t0 + _moves[j]))
 		if SweepMath.segment_sphere(a, b, Vector3.ZERO, damageable.bounding_radius + bolt.hit_radius_m) < 0.0:
 			continue
 		var t: float = INF
@@ -148,35 +200,39 @@ func _earliest_hit(bolt: Projectile, targets: Array[Dictionary], _delta: float) 
 				t = shape_t
 		if t < best_t:
 			best_t = t
-			best = {"target": target, "t": t, "a": a, "b": b}
-	return best
+			_best = j
+			_best_t = t
+			_best_a = a
+			_best_b = b
+	return _best >= 0
 
 
-func _land(bolt: Projectile, best: Dictionary, delta: float) -> void:
-	var target: Dictionary = best["target"]
-	var damageable: Damageable = target["damageable"]
-	var basis: Basis = target["basis"]
-	var t: float = best["t"]
-	var a: Vector3 = best["a"]
-	var b: Vector3 = best["b"]
-	var move: Vector3 = target["move"]
+func _land(bolt: Projectile, delta: float) -> void:
+	var j: int = _best
+	var damageable: Damageable = _damageables[j]
+	var basis: Basis = _bases[j]
+	var t: float = _best_t
+	var a: Vector3 = _best_a
+	var b: Vector3 = _best_b
+	var move: Vector3 = _moves[j]
+	var t0: Vector3 = _starts[j]
 	var local_point: Vector3 = a + t * (b - a)
 	var relative: Vector3 = basis * (b - a)
-	var info := HitInfo.new(int(target["body_id"]), bolt.shooter_id, bolt.faction, bolt.damage,
-			(target["t0"] as Vector3) + move * t + basis * local_point,
+	var info := HitInfo.new(_body_ids[j], bolt.shooter_id, bolt.faction, bolt.damage,
+			t0 + move * t + basis * local_point,
 			-relative.normalized() if relative.length_squared() > 1e-12 else Vector3.ZERO,
 			relative.length() / maxf(delta, 1e-6))
 	bolt.spend()
 	_apply(damageable, info)
 	# A destroyed hull is hidden and the explosion replaces the flash; a flash on a parked ship would never be processed.
-	var body: Node3D = target["body"]
+	var body: Node3D = _bodies[j]
 	if body.is_visible_in_tree():
 		var flash := ImpactFlash.create(bolt.color, hash([bolt.shooter_id, info.target_id, Engine.get_physics_frames()]))
 		flash.position = local_point
 		body.add_child(flash)
 		flash.reset_physics_interpolation()
 	if fx != null:
-		_throw_sparks(info, (target["t0"] as Vector3) + move * t, move / maxf(delta, 1e-6))
+		_throw_sparks(info, t0 + move * t, move / maxf(delta, 1e-6))
 	hit_resolved.emit(info)
 
 
