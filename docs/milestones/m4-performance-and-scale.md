@@ -151,7 +151,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T05 | Cycle 4: native contact scan (Rust `gdext`, N0 then N1, Q9) | T04 | Opus or Fable | A new toolchain and bit-identical parity | - | done |
 | T06 | Report to the maintainer | T05 | controller | A summary and a question, no code | - | done (waiting for the maintainer's answer) |
 | T07 | The `battle` and `typical` layouts, the mix (`BattleMix`), capital, turret, asteroid and gravity stand-ins, per-entity counters, the fullscreen check script | T06 | Opus | The ruler every later task measures against; what the stand-ins cost needs judgement | A | in progress |
-| T08 | Bolt broad phase in native code (`ScsHitSweep`), projectile kinds | T06 | Opus | Hits grow with bolts times ships; the windowed spikes | G, N | not started |
+| T08 | Bolt broad phase in native code (`ScsHitSweep`), projectile kinds | T06 | Opus | Hits grow with bolts times ships; the windowed spikes | G, N | done |
 | T09 | Native body registry: the scan built from RIDs, entity kinds, nearest-k per kind | T06 | Opus | The per-tick gather cycle 4 left; rocks must not fill a fighter's contacts | G, N | not started |
 | T10 | N4: the flight force step in native code for AI ships (`ScsFlightStep`) | T06 | Fable | The riskiest parity maths (`FlightModel`, the assist's state) | G, N | done (2026-11-03, in a worktree on `f134e00`; Cycle log, M4-T10) |
 | T11 | Far-ship render proxies and the node diet for AI ships | T10 | Opus | 108 nodes and 27 draw calls a ship; GPU numbers by the agent, the look (H) | R | not started |
@@ -609,6 +609,10 @@ No question is open.
   falls and the p99 spike is measured before and after in the window.
 - **Expected gain:** hits 2.5 to about 0.6 ms at furball 100 (75 %); at 500 the difference between 13 ms and about 1 ms (70 %).
 - **Architecture:** §17.7.
+- **Done (2026-11-03):** as planned, with one change: the GDScript fallback is the same grid of levels as the native code, not sort
+  and sweep, so the two paths can be compared pair for pair and count for count. Projectile kinds include `mine` (Q19's latest
+  answer). The windowed hit spike was the impact flash building its quad and materials per hit, now shared per colour (the
+  windowed hit p99 at furball 25 went from 7.6 to 0.4 ms). Numbers in the Cycle log, "M4-T08".
 
 ##### M4-T09 Native body registry: the scan built in native code, kinds and nearest-k per kind
 
@@ -2016,6 +2020,97 @@ fighters, 15 capitals, 142 turrets, 60 interceptors, about 385 bolts, 6 launches
   The GPU is not what binds (6 ms a frame at 1080p): the main thread is. With a tick over about 10 ms the windowed frame runs
   two or more ticks plus the frame's own process work (up to 17 to 20 ms a second's worst), so it falls behind. That is the
   phase 1 before for T11 (render proxies and the node diet); T26's trigger (the GPU binding) was not seen.
+
+### M4-T08 (2026-11-03): the bolt broad phase in native code, projectile kinds
+
+**How it measured.** In its own worktree (base `f134e00`), so the numbers see only this change: `scripts/bench_quick.sh` (furball
+and spread) and single `bench <layout> <n> 10 seed=1` runs at furball 50 and 100 and spread 100, under both bench locks and pinned
+to cores 0-11, debug editor build, before on the base and after on the change. T07's `battle` layout was not in this base, so
+battle numbers come with wave 1's combined measurement. The windowed check: `bench furball 25|45 20 warmup=3 seed=1` in a
+1920x1080 window on the maintainer's GPU (compute backend), under the GPU lock, the base from a snapshot of `f134e00`.
+
+**Before** (`m4_t08_before_quick`, load 2.42; `m4_t08_before_stages`). The hit resolver put every bolt against every active hull:
+300 bolts against 100 hulls at furball 100 is 30 000 sphere tests a tick. Quick check: both layouts hold the budget to 40 and
+miss it at 50 (8.59 ms furball, 8.73 spread); 30 FPS holds to 100.
+
+**Candidates** (the plan chose this task; ranked again here against the before):
+
+1. **The bolt broad phase, native with a GDScript twin** (built). The hit stage is 3.70 ms of the furball's 15.9 ms at 100 ships
+   and grows with bolts times hulls. Predicted 3.7 to about 0.6 ms at furball 100. Behaviour risk: none if the broad phase
+   returns exactly the pairs the sphere test accepts. Confidence 75 %.
+2. **The same grid in GDScript only.** Most of the gain without native code; predicted about 1 ms at furball 100. Kept as the
+   fallback and the reference (measured below: 1.09 ms).
+3. **Bolts as rows (no node per bolt).** The bolt moves and the per-tick gather are still node work; that is T15's core.
+
+**Tests first** (`5dcf58b`): `tests/unit/test_hit_broad_phase.gd` (40 seeded crowds near the origin and 45 km out, hulls of
+5 m to 1 km, bolts, missiles and 3 km beams: the broad phase gives exactly the pairs the sphere test accepts, ascending; native
+and GDScript give the same pairs and work; 3 000 pairs within float rounding of the line; odd inputs; a 1 km hull among 200
+fighters) and `tests/integration/test_hit_scale.gd` (24 drones 250 m apart, 300 bolts between two of them: at most 3 pairs tested
+a bolt; a seeded melee of 30 drones and 400 bolts lands the same hits, bit for bit, as a broad phase that tests every pair, on
+both paths; the grazing, tunnelling and friendly-fire pins on both paths; a missile's radius, a 3 km beam and a 1 km hull).
+Committed with surface stubs: 4 of 6 and 4 of 10 failing (24 pairs a bolt against the bound of 3, no `ScsHitSweep`, one radius
+for every kind). Each maths test was checked against a broken native build: the distance in 64 bits and another order of
+operations each failed the edge test, a look without the level's largest reach or without the pad failed parity.
+
+**Change** (`5848bda`): `HitBroadPhase` and `ScsHitSweep`, the resolver on packed arrays, `Projectile.kind` (§17.7). Then
+(`298222d`) impact flashes share their quad and materials per colour, which removes the windowed hit spike (below).
+
+**After** (`m4_t08_after_quick`, load 1.02; `m4_t08_after_stages`):
+
+| quick check | furball ceiling | furball 40 / 50 ms | spread ceiling | spread 40 / 50 ms | 30 FPS holds to |
+|---|---|---|---|---|---|
+| before (`m4_t08_before_quick`) | 40 | 6.42 / 8.59 | 40 | 6.80 / 8.73 | 100 in both |
+| after (`m4_t08_after_quick`) | 50 | 5.85 / 7.19 | 50 | 6.01 / 7.46 | 200 in both |
+| final (`m4_t08_final_quick`, load 2.37, with the shared flashes) | 50 | 5.88 / 7.38 | 50 | 6.12 / 7.54 | 200 in both |
+
+| run | tick median | tick p99 | resolvers | hit mean | hit p99 | hit max | bolts (mean) |
+|---|---|---|---|---|---|---|---|
+| furball 50 before | 8.08 | 10.64 | 1.49 | 1.09 | 1.84 | 2.58 | 153 |
+| furball 50 after | 7.01 | 8.55 | 0.67 | 0.30 | 0.94 | 1.44 | 153 |
+| furball 100 before | 15.93 | 22.37 | 4.47 | 3.70 | 6.27 | 6.93 | 317 |
+| furball 100 after | 13.19 | 18.02 | 1.34 | 0.59 | 1.13 | 1.38 | 317 |
+| furball 100 after, GDScript path | 15.51 | | | 1.09 | 1.83 | 2.29 | 317 |
+| spread 100 before | 16.76 | 23.32 | 4.57 | 3.78 | 7.29 | 9.80 | 321 |
+| spread 100 after | 13.40 | 17.76 | 1.36 | 0.61 | 1.16 | 1.33 | 321 |
+
+(The GDScript-path run has `perf_native` off, so its contact scan is GDScript too: only its hit stage compares.) In the tests'
+fleet of 24 the resolver now tests 0.51 pairs a bolt at worst against 24 before.
+
+**Gain against the prediction:** the hit stage at furball 100 fell from 3.70 to 0.59 ms (predicted about 0.6), its p99 from
+6.27 to 1.13 ms; the tick median 2.7 ms. The quick check moved a step in both layouts (40 to 50) and 30 FPS now holds to 200.
+What is left of the hit stage is the gather (two group walks and the packed arrays) and the hits themselves.
+
+**The windowed spike (AC6).** It was not the sweep. In a 1920x1080 window on the maintainer's GPU (compute
+backend), `bench furball 25|45 20 warmup=3 seed=1`, the base's hit stage has a median of 0.37 ms and a p99 of 7.63 ms (max
+11.25); with the broad phase alone the median falls to 0.16 ms and the p99 stays 7.71 ms. Headless the same run has no spike
+(max 1.35 ms). A throwaway timing build (never committed) split each slow resolve: in 20 s at 25 ships, 42 resolves over 2.5 ms,
+each with one hit (no kill), where making and adding the `ImpactFlash` took 6.9 to 17.1 ms (median 7.4) and the damage, sparks
+and signal tens of microseconds. Each flash built a quad and two materials; in the window that creation stalls on the renderer.
+Flashes now share them per bolt colour (`64a00d3` test, `298222d` change), so a hit makes only nodes; the fade is per instance,
+so the look is unchanged ((H) may confirm).
+
+| window, furball seed 1, 20 s | tick median | tick p99 | tick max | hit median | hit p99 | hit max | render.fps at the end |
+|---|---|---|---|---|---|---|---|
+| 25, base | 4.37 | 12.35 | 18.79 | 0.37 | 7.63 | 11.25 | 60 |
+| 25, broad phase | 4.68 | 12.70 | 23.71 | 0.16 | 7.71 | 10.72 | 60 |
+| 25, broad phase and shared flashes | 4.47 | 8.51 | 14.19 | 0.15 | 0.43 | 0.72 | 60 |
+| 45, base | 8.01 | 15.95 | 23.49 | 0.79 | 8.24 | 11.30 | 47 |
+| 45, broad phase | 7.69 | 15.76 | 24.96 | 0.25 | 7.77 | 11.95 | 49 |
+| 45, broad phase and shared flashes | 7.32 | 12.27 | 36.95 | 0.24 | 0.56 | 1.02 | 54 |
+
+All six windows give the same hits (100 and 172) and bolt means. The tick max of 36.95 ms at 45 with the fix is not the hit
+stage (its max is 1.02 ms); not investigated here. `render.fps` is one reading at the end of the run, not a mean.
+
+**Behaviour changes:** none. Seeded outcomes (`m4_t08_before_outcome`, `m4_t08_after_outcome`, each a fresh process):
+`bench furball 25 10 seed=1` and `bench spread 50 6 seed=2` give the same `state ai`, `combat` and `ram` lines, bolts and pairs
+means on the base and on the change, with `perf_native` on and off (hits 50 and 156, behaviours 16/9 and 31/19, mean speed
+70.06 and 65.11 m/s, bolts 84.19 and 184.09), the values cycle 4 recorded.
+
+**Tests** (focused, Q10): 30 GUT files run alone, every file that covers the hit resolver,
+projectiles, impact flashes, weapons, damage and destruction, the AI fights, the bench and the probe, and AC13's paired budget
+(`test_ai_think_time`, `test_m3_run`), on `298222d`, once with the library and once without: with it 325 passing, 0 failing,
+0 pending; without it 320 passing, 0 failing, 5 pending (`test_hit_broad_phase`'s native cases, saying why). No Python
+changed. The full suite runs on CI after the push.
 
 ## Definition of done (M4)
 

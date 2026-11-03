@@ -2187,6 +2187,9 @@ scripts/fullscreen_check.sh         a layout fullscreen, the 3D at 1080p, under 
   (`HIT_RADIUS_BY_KIND`, set by `set_kind`) until roadmap M12 brings the real weapons. The resolver treats every kind alike: a
   sphere of the projectile's radius swept along the segment it flew this tick, so a beam is a projectile that flies its whole
   length in the tick it fires, and a proximity mine a slow one with a fuse-sized radius.
+- **The windowed hit spike (AC6)** was not the sweep: `ImpactFlash` built a quad and two materials for every hit, and in a
+  window that creation stalled the tick by about 7 ms on many hits. Flashes now share them per bolt colour; the fade is per
+  instance (`transparency`), so the look is unchanged.
 - **Not moved**: `ContactScan.incoming_fire` still tests every bolt per querying ship inside the native contact field; T15's
   simulation core unifies the two.
 
