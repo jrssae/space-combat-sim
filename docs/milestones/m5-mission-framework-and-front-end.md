@@ -409,7 +409,7 @@ whose trigger never arose). Update the column with each task's commit.
 | Task | Track | Title | Depends on | Agent | Why | Status |
 |---|---|---|---|---|---|---|
 | T01 | A | `Game` flow, boot routing and loading | - | Opus | Changes how every run starts; must not break a single script or test | done |
-| T02 | A | Menu kit, front end and pause menu | T01 | Sonnet | Godot UI work on a clear spec | in progress |
+| T02 | A | Menu kit, front end and pause menu | T01 | Sonnet | Godot UI work on a clear spec | done |
 | T03 | A | Settings menu and audio buses | T02 | Sonnet | Schema-driven screen | not started |
 | T04 | A | Controls menu | T02 | Sonnet | Wraps the existing profile API | not started |
 | T05 | B | Mission core: runner, script API, triggers, objectives, console | T01 | Opus | The framework M8 stands on; coroutine skipping is subtle | done |
@@ -472,6 +472,27 @@ whose trigger never arose). Update the column with each task's commit.
   the default `ui_*` maps and add them in `project.godot` if not. Missions are listed from scenarios with a `mission` block,
   read through `ScenarioLoader` (no hard-coded list). The Settings and Controls entries open placeholders until T03 and T04.
 - **Done when:** AC2 apart from Settings and Controls content.
+- **Done (as built, 2026-11-02):** `MenuFrame` is the one three-panel layout of Q15 (`src/frontend/menu_frame.tscn`): options top left,
+  a code-drawn XInput pad with a legend read from the live control profile bottom left (`PadLegend`, `PadDiagram`; it redraws on
+  `ControlProfiles.applied` and on a `bindings_source` refresh, so a rebind shows at once), objectives or briefing on the right
+  (`ObjectivesModel`; `objectives_source`, `request_source`). It holds a stack of `MenuScreen` pages; `Game` hosts are the front end
+  (sky with a slow sway, its own `AudioDirector`; Missions from `MissionCatalog`, Free flight with encounters on by default in
+  `Game`'s request only, Sandbox with the three scenarios, Settings and Controls as placeholders from `MenuScreens`, Quit) and the
+  pause menu (`src/hud/pause_menu.tscn`: Resume, Restart via the new `Game.restart()`, Settings, Controls, Quit to menu; the world
+  pauses, `Main` hands it the `pause` edge and its `objectives()`). Godot 4.7's defaults lack pad A and B on `ui_accept` and
+  `ui_cancel`, so `project.godot` adds them; profiles never touch `ui_*`. Esc is `pause` and `ui_cancel` at once, so pause pages
+  ignore the key and the edge does one step. `sfx_ui` (`ui_move`, `ui_accept`, `ui_back`) plays through `AudioDirector.play_ui`,
+  whose UI voices always process. T01's review items are closed (collect on leaving mid-load, null checks, two 18.3 notes). Tests:
+  `test_pad_legend`, `test_pad_diagram`, `test_objectives_model`, `test_mission_catalog`, `test_menu_frame`, `test_front_end` (pad-only
+  navigation with injected `ui_*` events), `test_pause_menu`, `test_loading_screen`, `test_sfx_ui`. Not built: focus wrap at the ends
+  of a list; `Settings.encounters` (T17); real Settings and Controls pages (T03, T04).
+  - **Review.** Approved after one fix round (sonnet): while the pause menu is open the pad belongs to it
+    (`InputAdapter.sample_menu` reads only the pause edge, re-seeds every other button and drains the mouse and wheel), so
+    Back, Y, D-pad left and X no longer act on the game behind it and nothing fires on Resume; the loading screen carries
+    the Theme and collects a failed load; Back plays its sound only when a page pops; a broken mission file warns; a page
+    with no focus takes it back on the next D-pad or A press. Open for later: the console's `pause off` with the menu open
+    lets the ship coast uncommanded (debug only); keyboard debug keys are dead while the menu is open (the console still
+    works).
 
 ### M5-T03 Settings menu and audio buses
 
