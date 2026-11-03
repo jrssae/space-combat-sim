@@ -61,6 +61,23 @@ def angle_deg(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return np.degrees(np.arccos(np.clip(cos, -1.0, 1.0)))
 
 
+def ray_hits(origin: np.ndarray, direction: np.ndarray, vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
+    """Distances along the ray to every triangle it crosses (Moller-Trumbore), ahead of the origin only."""
+    a, b, c = vertices[faces[:, 0]], vertices[faces[:, 1]], vertices[faces[:, 2]]
+    e1, e2 = b - a, c - a
+    p = np.cross(direction, e2)
+    det = np.einsum("ij,ij->i", e1, p)
+    ok = np.abs(det) > 1e-12
+    inv = np.where(ok, 1.0 / np.where(ok, det, 1.0), 0.0)
+    s = origin - a
+    u = np.einsum("ij,ij->i", s, p) * inv
+    q = np.cross(s, e1)
+    v = (q @ direction) * inv
+    t = np.einsum("ij,ij->i", e2, q) * inv
+    hit = ok & (u >= 0.0) & (v >= 0.0) & (u + v <= 1.0) & (t > 0.0)
+    return t[hit]
+
+
 def srgb_hex(albedo: tuple[float, float, float]) -> int:
     r, g, b = (round(float(c) * 255) for c in linear_to_srgb(np.array(albedo)))
     return (r << 16) | (g << 8) | b
@@ -292,7 +309,7 @@ class CentauriBrezebelTests(unittest.TestCase):
         self.assertGreater(hp["mass_kg"], 100_000.0, "a heavy liner")
         self.assertEqual(hp["center_of_mass"][0], 0.0)
 
-    def test_two_pods_main_in_the_arm_tips_retro_on_the_fairings(self) -> None:
+    def test_two_pods_main_in_the_arm_tips_retro_on_the_bow_ahead_of_the_fairings(self) -> None:
         pods = {p["name"]: p for p in self.hp["pods"]}
         self.assertEqual(set(pods), {"l", "r"})
         self.assertEqual((pods["l"]["side"], pods["r"]["side"]), ("left", "right"))
@@ -305,8 +322,9 @@ class CentauriBrezebelTests(unittest.TestCase):
             retro = np.array(p["retro"]["position"]) + self.offset
             self.assertAlmostEqual(abs(main[0]), 12.0, delta=0.25, msg="in the arm's tip")
             self.assertAlmostEqual(main[2], 60.0, delta=0.05)
-            self.assertAlmostEqual(abs(retro[0]), 14.6, delta=0.25, msg="the fairing's front")
-            self.assertAlmostEqual(retro[2], 22.0, delta=0.5)
+            self.assertAlmostEqual(abs(retro[0]), 14.6, delta=0.25, msg="on the fairing's axis")
+            self.assertAlmostEqual(retro[2], brez.DEFAULT_SPEC.lens.rim_z(14.6), delta=1e-3, msg="where that axis meets the bow's rim")
+            self.assertAlmostEqual(retro[2], 5.7, delta=0.1)
         np.testing.assert_allclose(pods["l"]["main"]["position"], mirrored(pods["r"]["main"]["position"]), atol=SYM_TOL)
         np.testing.assert_allclose(pods["l"]["retro"]["position"], mirrored(pods["r"]["retro"]["position"]), atol=SYM_TOL)
         self.assertLess(pods["l"]["main"]["position"][0], 0.0)
@@ -317,6 +335,18 @@ class CentauriBrezebelTests(unittest.TestCase):
             for key in ("main", "retro"):
                 self.assertAlmostEqual(p[key]["position"][1], com_y, delta=1e-6, msg=(p["name"], key))
         self.assertAlmostEqual(com_y + self.offset[1], brez.CENTRE_Y, delta=1e-3)
+
+    def test_each_retro_fires_clear_of_the_hull(self) -> None:
+        # The depth proxy (the fallback mesh) hides a plume inside the hull: the retro's forward ray leaves the skin within
+        # half a metre of the nozzle and never meets the hull again, and the skin is right behind the nozzle.
+        v, f = self.obj.vertices, self.obj.faces
+        for p in self.hp["pods"]:
+            nozzle, exhaust = np.array(p["retro"]["position"]), np.array(p["retro"]["exhaust"])
+            ahead = ray_hits(nozzle, exhaust, v, f)
+            self.assertTrue(np.all(ahead <= 0.5), (p["name"], ahead[ahead > 0.5][:5]))
+            behind = ray_hits(nozzle + 0.5 * exhaust, -exhaust, v, f)
+            self.assertGreater(len(behind), 0, p["name"])
+            self.assertLess(float(behind.min()), 1.0, "the nozzle sits on the skin")
 
     def test_the_main_exits_are_the_rearmost_points_at_their_axes(self) -> None:
         for p in self.hp["pods"]:
@@ -428,27 +458,26 @@ class CentauriBrezebelTests(unittest.TestCase):
         self.assertTrue(np.all(frames.flip_xy(splats.xyz).max(axis=0) <= hi + 0.1))
 
     # --- collision -----------------------------------------------------------------------------------------------------
-    def test_collision_primitives_cover_the_splats_and_stay_close(self) -> None:
+    def test_collision_boxes_cover_every_splat_and_fit_what_they_hold(self) -> None:
         shapes = self.hp["collision"]
         names = [c["name"] for c in shapes]
         self.assertEqual(len(names), len(set(names)), "unique names")
+        self.assertEqual({c["type"] for c in shapes}, {"box"})
         inside = np.zeros(len(self.xyz), dtype=bool)
         for c in shapes:
             inside |= inside_primitive(self.xyz, c, inflate=brez.DEFAULT_SPACING_M)
-        self.assertGreaterEqual(float(inside.mean()), 0.97, "at least 97 % of the LOD0 splat centres")
-        lo, hi = self.xyz.min(axis=0), self.xyz.max(axis=0)
+        self.assertGreaterEqual(float(inside.mean()), 0.999, "the hit volumes cover the LOD0 splat centres")
         for c in shapes:
             basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T
             np.testing.assert_allclose(basis.T @ basis, np.eye(3), atol=1e-4)
             self.assertAlmostEqual(float(np.linalg.det(basis)), 1.0, places=3)
-            if c["type"] == "box":
-                corners = np.array([[sx, sy, sz] for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]) * 0.5 * np.array(c["size"])
-                extent = corners @ basis.T + np.array(c["position"])
-            else:
-                half = 0.5 * c["height"] - c["radius"]
-                ends = np.array([[0, 0, -half], [0, 0, half]]) @ basis.T + np.array(c["position"])
-                extent = np.concatenate([ends - c["radius"], ends + c["radius"]])
-            self.assertTrue(np.all(extent.min(axis=0) >= lo - 1.0) and np.all(extent.max(axis=0) <= hi + 1.0), c["name"])
+            # Tight: every face of a box lies within 0.45 m of the splats it holds, so no box reaches into empty space.
+            held = inside_primitive(self.xyz, c, inflate=brez.DEFAULT_SPACING_M)
+            self.assertGreater(int(held.sum()), 0, c["name"])
+            local = (self.xyz[held] - np.array(c["position"])) @ basis
+            half = 0.5 * np.array(c["size"])
+            slack = np.concatenate([local.min(axis=0) + half, half - local.max(axis=0)])
+            self.assertLess(float(slack.max()), 0.45, (c["name"], np.round(slack, 3)))
 
     def test_collision_is_mirror_symmetric(self) -> None:
         shapes = {c["name"]: c for c in self.hp["collision"]}
@@ -460,6 +489,19 @@ class CentauriBrezebelTests(unittest.TestCase):
                 self.assertAlmostEqual(c["position"][0], 0.0, places=4, msg=name)
 
     # --- meshes ----------------------------------------------------------------------------------------------------------
+    def test_the_fallback_mesh_and_chunk_meshes_hold_every_piece(self) -> None:
+        parts = [p.part for p in brez.with_twins(brez.assemble(brez.DEFAULT_SPEC, brez.CENTAURI))]
+        self.assertEqual(
+            {p.name for p in parts},
+            {"bow", "bay", "engine", "dorsal", "windows", "arm_r", "arm_l", "rail_r", "rail_l", "fairing_r", "fairing_l",
+             "fin_top_r", "fin_top_l", "fin_bot_r", "fin_bot_l"},
+        )  # fmt: skip
+        self.assertTrue(all(p.mesh.face_count > 0 for p in parts))
+        self.assertEqual(len(self.obj.faces), sum(p.mesh.face_count for p in parts), "the hull OBJ is every piece")
+        for entry in self.hp["chunks"]:
+            expected = sum(p.mesh.face_count for p in parts if p.group == entry["name"])
+            self.assertEqual(len(read_obj(self.dir_a / entry["obj"]).faces), expected, entry["name"])
+
     def test_fallback_obj_is_valid_and_matches_the_splat_bounds(self) -> None:
         v = self.obj.vertices
         self.assertGreater(len(v), 0)

@@ -52,6 +52,7 @@ from ..parts.centauri import (
     LensSpec,
     Piece,
     RailSpec,
+    RetroSpec,
     TipNozzleSpec,
     arm,
     bow,
@@ -101,15 +102,13 @@ NAV_LIGHT_CLEARANCE_M = 0.15
 NAV_LAMP_HEIGHT_M = 6.0
 NAV_LAMP_RANGE_SHARE = 0.3
 NAV_CABIN_RANGE_SHARE = 0.05
-RETRO_RADIUS_M = 1.0
-RETRO_X = 14.6  # the fairing's front, on the thrust line
-FIN_RCS_H, FIN_RCS_Z = 12.1, 42.5  # the fin-tip ports: height above the centre plane, z
 
 
 @dataclass(frozen=True)
 class BrezebelSpec:
     lens: LensSpec = LensSpec()
     tip: TipNozzleSpec = TipNozzleSpec()
+    retro: RetroSpec = RetroSpec()
     rail: RailSpec = RailSpec()
     fairing: FairingSpec = FairingSpec()
     fin: FinSpec = FinSpec()
@@ -129,7 +128,7 @@ def _grouped(pieces: list[Piece], group: str) -> list[Piece]:
 def assemble(spec: BrezebelSpec, style: Style) -> list[Piece]:
     """Every centre and right piece of the ship in the authored frame, each in its chunk."""
     front = [bow(spec.lens, style), *engine_bay(spec.bay, style), *dorsal_fitting(spec.dorsal, style)]
-    arm_r = [*arm(spec.lens, spec.tip, spec.rail, style), fairing(spec.fairing, style),
+    arm_r = [*arm(spec.lens, spec.tip, spec.retro, spec.rail, style), fairing(spec.fairing, style),
              tip_fin(spec.fin, style, upper=True), tip_fin(spec.fin, style, upper=False)]  # fmt: skip
     return _grouped(front, "bow") + _grouped(arm_r, "arm_r")
 
@@ -282,16 +281,16 @@ def _r(v: Any) -> list[float]:
     return [round(float(x), JSON_DIGITS) + 0.0 for x in np.asarray(v, dtype=float).reshape(-1)]
 
 
-def rcs_ports(spec: BrezebelSpec) -> list[tuple[str, np.ndarray, np.ndarray]]:
+def rcs_ports(spec: BrezebelSpec, by_name: dict[str, Part]) -> list[tuple[str, np.ndarray, np.ndarray]]:
     """Cosmetic RCS ports of the right side (authored frame): the six bay blocks' outer faces (up or down), and each
-    fin's outer face near its tip (outboard)."""
+    fin's port by its hook's tip (outboard)."""
     ports = []
     for name, centre_, size in spec.bay.rcs_blocks():
         up = 1.0 if centre_[1] > CENTRE_Y else -1.0
         ports.append((f"block_{name[4:]}", centre_ + np.array([0.0, up * 0.5 * size[1], 0.0]), np.array([0.0, up, 0.0])))
-    x_out = spec.fin.faces_x(FIN_RCS_H)[1]
-    for name, sign in (("fin_top", 1.0), ("fin_bot", -1.0)):
-        ports.append((name, np.array([x_out, CENTRE_Y + sign * FIN_RCS_H, FIN_RCS_Z]), np.array([1.0, 0.0, 0.0])))
+    for name in ("fin_top", "fin_bot"):
+        port = by_name[f"{name}_r"].anchor("rcs")
+        ports.append((name, port.position, port.direction))
     return ports
 
 
@@ -334,20 +333,19 @@ def hardpoints(spec: BrezebelSpec, style: Style, chunks: list[dict[str, Any]], o
         inertia += part.mass_kg * np.array([d[1] ** 2 + d[2] ** 2, d[0] ** 2 + d[2] ** 2, d[0] ** 2 + d[1] ** 2])
 
     pods = []
-    for name, side, sx in (("l", "left", -1.0), ("r", "right", 1.0)):
-        main = by_name[f"arm_{name}"].anchor("main")
-        retro = np.array([sx * RETRO_X, CENTRE_Y, spec.fairing.stations[0][0]])
+    for name, side in (("l", "left"), ("r", "right")):
+        main, retro = by_name[f"arm_{name}"].anchor("main"), by_name[f"arm_{name}"].anchor("retro")
         pods.append({
             "name": name,
             "side": side,
-            "center": _r(0.5 * (main.position + retro) - offset),
+            "center": _r(0.5 * (main.position + retro.position) - offset),
             "main": {"position": _r(main.position - offset), "exhaust": _r(main.direction), "radius": spec.tip.nozzle.exit_r},
-            "retro": {"position": _r(retro - offset), "exhaust": [0.0, 0.0, -1.0], "radius": RETRO_RADIUS_M},
+            "retro": {"position": _r(retro.position - offset), "exhaust": _r(retro.direction), "radius": spec.retro.radius},
         })  # fmt: skip
 
     rcs = []
     for prefix, flip in (("r", 1.0), ("l", -1.0)):
-        for name, position, exhaust in rcs_ports(spec):
+        for name, position, exhaust in rcs_ports(spec, by_name):
             p = position * np.array([flip, 1.0, 1.0])
             e = exhaust * np.array([flip, 1.0, 1.0])
             rcs.append({"name": f"{prefix}_{name}", "pod": prefix, "position": _r(p - offset), "exhaust": _r(e),

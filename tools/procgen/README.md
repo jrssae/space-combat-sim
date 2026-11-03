@@ -183,7 +183,7 @@ LOD1 (`bow`, `arm_l`, `arm_r`), the turret model `centauri_brezebel_turret.ply/.
 Things the Godot side must know:
 
 - LOD0 is written group by group (`manifest.counts`), LOD1 chunk by chunk; `chunk_lod` is 1.
-- `hardpoints.json` has two pods (mains in the arms' tip faces at z 60, retros on the fairings' lips), the thrust line and
+- `hardpoints.json` has two pods (mains in the arms' tip faces at z 60, retros on the bow's rim ahead of the fairings), the thrust line and
   centre of mass on the hull's centre plane, 16 RCS ports, `muzzles` empty, and one turret (`dorsal`, Q19) on the dorsal
   fitting's ring. The manifest's `turret` entry has the keys of `parts/turret.py`'s.
 - The engine and fin-tip glow is pink-white #FFB8E0 (`styles/centauri.py` `GLOW_SRGB`), a `ShipSpec` tint, not paint.

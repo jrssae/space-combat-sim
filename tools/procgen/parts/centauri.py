@@ -77,14 +77,20 @@ def _loft_solid(axis: int, levels: Sequence[float], rings: Sequence[np.ndarray])
 
 
 def stretch_boxes(mesh: Mesh, cuts: Sequence[float], name: str) -> list[Collision]:
-    """One box per z stretch round the mesh's vertices in it: hit volumes that follow a tapering part."""
+    """One box per z stretch, the boxes meeting at the cuts: hit volumes that follow a tapering part. Each box's width
+    and height take in the sections just outside its stretch, so the part between two sections stays inside."""
     v = mesh.vertices
+    zs = np.unique(v[:, 2])
+    z_lo, z_hi = float(zs[0]), float(zs[-1])
     out = []
     for k, (z0, z1) in enumerate(zip(cuts[:-1], cuts[1:], strict=True)):
-        sel = v[(v[:, 2] >= z0 - 1e-6) & (v[:, 2] <= z1 + 1e-6)]
-        if len(sel) == 0:
+        a, b = max(z0, z_lo), min(z1, z_hi)
+        if b <= a:
             continue
+        below, above = zs[zs <= a + 1e-9], zs[zs >= b - 1e-9]
+        sel = v[(v[:, 2] >= below[-1] - 1e-9) & (v[:, 2] <= above[0] + 1e-9)]
         lo, hi = sel.min(axis=0), sel.max(axis=0)
+        lo[2], hi[2] = a, b
         out.append(Collision("box", 0.5 * (lo + hi), size=hi - lo, name=f"{name}{k}"))
     return out
 
@@ -107,7 +113,6 @@ class LensSpec:
     height: float = 4.375  # half-height on the centre line there
     width_taper: float = 0.1402  # half-width lost per metre aft of plan_b
     height_taper: float = 0.0389
-    centre_y: float = CENTRE_Y
     nose_z: float = 0.02
     rear_z: float = 19.0  # the bow's rear face between the arms
     inner_x: float = 10.67  # the arms' inner walls
@@ -116,7 +121,6 @@ class LensSpec:
     tip_length: float = 1.7  # the rounding's reach (the reference's tip ends at z 60)
     tip_exponent: float = 2.5
     band_deg: float = 9.0  # the pale band either side of the bow's rim
-    wall_inset: float = 0.15  # the back wall's edge inside the hull's section
     ring_points: int = 64
     arm_points: int = 33
     bow_mass_kg: float = 300_000.0
@@ -132,6 +136,10 @@ class LensSpec:
         u = np.clip((self.plan_b - z) / self.plan_b, 0.0, 1.0)
         return np.where(z < self.plan_b, self.height * np.sqrt(1.0 - u * u), self.height - self.height_taper * (z - self.plan_b))
 
+    def rim_z(self, x: float) -> float:
+        """Where the bow's rim, on the centre plane, is ``x`` out from the centre line."""
+        return self.plan_b * (1.0 - math.sqrt(1.0 - (x / self.plan_a) ** 2))
+
     def tip_scale(self, z: np.ndarray | float) -> np.ndarray:
         """How far the arm's section has shrunk towards its inner edge at ``z``: 1 ahead of the tip."""
         t = np.clip((np.asarray(z, dtype=float) - self.tip_z[0]) / self.tip_length, 0.0, 1.0)
@@ -141,7 +149,7 @@ class LensSpec:
     def top(self, x: np.ndarray | float, z: np.ndarray | float) -> np.ndarray:
         """The hull's top at ``(x, z)`` (bow or arm, before the tip rounding)."""
         w = self.half_width(z)
-        return self.centre_y + self.half_height(z) * np.sqrt(np.clip(1.0 - (np.asarray(x) / w) ** 2, 0.0, None))
+        return CENTRE_Y + self.half_height(z) * np.sqrt(np.clip(1.0 - (np.asarray(x) / w) ** 2, 0.0, None))
 
     def bow_ring(self, z: float) -> tuple[np.ndarray, list[bool]]:
         """The bow's section at ``z``: points counter-clockwise from the starboard rim, and per edge whether it is rim band."""
@@ -149,7 +157,7 @@ class LensSpec:
         uniform = list(np.linspace(0.0, 2.0 * math.pi, self.ring_points, endpoint=False))
         angles = sorted({round(a, 9) for a in uniform + [b, math.pi - b, math.pi + b, 2.0 * math.pi - b]})
         w, h = float(self.half_width(z)), float(self.half_height(z))
-        ring = np.array([[w * math.cos(a), self.centre_y + h * math.sin(a), z] for a in angles])
+        ring = np.array([[w * math.cos(a), CENTRE_Y + h * math.sin(a), z] for a in angles])
         mids = [0.5 * (a0 + a1) for a0, a1 in zip(angles, angles[1:] + [2.0 * math.pi], strict=True)]
         band = [min(abs(math.sin(m)), 1.0) < math.sin(b) - 1e-9 for m in mids]
         return ring, band
@@ -163,7 +171,7 @@ class LensSpec:
         x, y = w * np.cos(a), h * np.sin(a)
         x[[0, -1]] = self.inner_x
         s = float(self.tip_scale(z))
-        return np.column_stack([self.inner_x + s * (x - self.inner_x), self.centre_y + s * y, np.full(len(a), z)])
+        return np.column_stack([self.inner_x + s * (x - self.inner_x), CENTRE_Y + s * y, np.full(len(a), z)])
 
     def bow_solid(self) -> Solid:
         def test(p: np.ndarray, margin: float) -> np.ndarray:
@@ -171,10 +179,10 @@ class LensSpec:
             w, h = self.half_width(z), self.half_height(z)
             ok = (z > self.nose_z + margin) & (z < self.rear_z - margin) & (w > margin)
             q = np.clip(1.0 - (p[:, 0] / np.maximum(w, 1e-9)) ** 2, 0.0, None)
-            return ok & (np.abs(p[:, 0]) < w - margin) & (np.abs(p[:, 1] - self.centre_y) < h * np.sqrt(q) - margin)
+            return ok & (np.abs(p[:, 0]) < w - margin) & (np.abs(p[:, 1] - CENTRE_Y) < h * np.sqrt(q) - margin)
 
         a, h = self.plan_a, self.height
-        return Solid(test, ((-a, self.centre_y - h, 0.0), (a, self.centre_y + h, self.rear_z)))
+        return Solid(test, ((-a, CENTRE_Y - h, 0.0), (a, CENTRE_Y + h, self.rear_z)))
 
     def arm_solid(self) -> Solid:
         def test(p: np.ndarray, margin: float) -> np.ndarray:
@@ -182,13 +190,13 @@ class LensSpec:
             s = np.maximum(self.tip_scale(z), 1e-6)
             w, h = self.half_width(z), self.half_height(z)
             x0 = self.inner_x + (p[:, 0] - self.inner_x) / s
-            yr = (p[:, 1] - self.centre_y) / s
+            yr = (p[:, 1] - CENTRE_Y) / s
             q = np.clip(1.0 - (x0 / w) ** 2, 0.0, None)
             ok = (z > self.rear_z + margin) & (z < self.tip_z[1] - margin) & (p[:, 0] > self.inner_x + margin)
             return ok & (x0 < w - margin / s) & (np.abs(yr) < h * np.sqrt(q) - margin / s)
 
         w0, h0 = float(self.half_width(self.rear_z)), float(self.half_height(self.rear_z))
-        return Solid(test, ((self.inner_x, self.centre_y - h0, self.rear_z), (w0, self.centre_y + h0, self.tip_z[1])))
+        return Solid(test, ((self.inner_x, CENTRE_Y - h0, self.rear_z), (w0, CENTRE_Y + h0, self.tip_z[1])))
 
     def bow_stations(self) -> list[float]:
         """Dense near the round nose (equal steps of the plan's angle), then on to the rear face."""
@@ -212,13 +220,11 @@ def bow(spec: LensSpec, style: Style) -> Piece:
     edges = [trim if b else hull for b in band[0]]
     creases = [j for j in range(len(edges)) if edges[j] != edges[j - 1]]
     shell = _without_caps(section_loft(list(rings), edges, hull, creases), len(zs), len(edges), True, False)
-    # The back wall: the bow's last section between the two inner walls, set in a little so its splats stay inside the
-    # bow's outline seen from ahead.
-    w = float(spec.half_width(spec.rear_z)) - spec.wall_inset
-    h = float(spec.half_height(spec.rear_z)) - spec.wall_inset
+    # The back wall: the bow's last section between the two inner walls.
+    w, h = float(spec.half_width(spec.rear_z)), float(spec.half_height(spec.rear_z))
     edge = math.acos(spec.inner_x / w)
     top = [(w * math.cos(a), h * math.sin(a)) for a in np.linspace(edge, math.pi - edge, 24)]
-    wall = np.array([[x, spec.centre_y + y, spec.rear_z] for x, y in top + [(-x, -y) for x, y in top]])
+    wall = np.array([[x, CENTRE_Y + y, spec.rear_z] for x, y in top + [(-x, -y) for x, y in top]])
     mesh = Mesh.concatenate([shell, _fan(wall, dark, (0.0, 0.0, 1.0))])
     collision = stretch_boxes(shell, [0.0, 4.0, 10.0, spec.rear_z], "s")
     return Piece(Part("bow", mesh, collision=collision, mass_kg=spec.bow_mass_kg), spec.bow_solid(), CENTRE)
@@ -233,6 +239,14 @@ class TipNozzleSpec:
 
 
 @dataclass(frozen=True)
+class RetroSpec:
+    """The retro on the fairing's axis: it fires forward from where that line leaves the bow's skin, on the centre plane."""
+
+    x: float = 14.6
+    radius: float = 1.0
+
+
+@dataclass(frozen=True)
 class RailSpec:
     """The bar along each arm's inner wall."""
 
@@ -241,8 +255,9 @@ class RailSpec:
     z: tuple[float, float] = (18.6, 58.8)
 
 
-def arm(spec: LensSpec, tip: TipNozzleSpec, rail: RailSpec, style: Style) -> list[Piece]:
-    """The right arm with its rail and tip nozzle. The arm's anchors: ``main`` (the nozzle's exit, aft)."""
+def arm(spec: LensSpec, tip: TipNozzleSpec, retro: RetroSpec, rail: RailSpec, style: Style) -> list[Piece]:
+    """The right arm with its rail and tip nozzle. The arm's anchors: ``main`` (the nozzle's exit, aft) and ``retro``
+    (on the bow's rim, forward)."""
     hull, dark = style.material("hull"), style.material("hull_dark")
     zs = spec.arm_stations()
     split = zs.index(spec.bay_end_z)
@@ -254,13 +269,14 @@ def arm(spec: LensSpec, tip: TipNozzleSpec, rail: RailSpec, style: Style) -> lis
         edges = [hull] * (n - 1) + [wall]
         pieces.append(_without_caps(section_loft(rings, edges, hull, creases), len(rings), n, False, k == 1))
     shell = Mesh.concatenate(pieces)
-    bell = nozzle(tip.nozzle, style).translated((tip.x, spec.centre_y, spec.tip_z[1]))
-    collision = stretch_boxes(shell, [spec.rear_z, 26.0, 34.0, 42.0, 50.0, spec.tip_z[1] + tip.nozzle.length], "s")
-    arm_part = Part("arm_r", Mesh.concatenate([shell, bell.mesh]), anchors={"main": bell.anchor("exit")},
-                    collision=collision, mass_kg=spec.arm_mass_kg + tip.nozzle.mass_kg)  # fmt: skip
+    bell = nozzle(tip.nozzle, style).translated((tip.x, CENTRE_Y, spec.tip_z[1]))
+    collision = stretch_boxes(Mesh.concatenate([shell, bell.mesh]), [spec.rear_z, 26.0, 34.0, 42.0, 50.0, 61.0], "s")
+    anchors = {"main": bell.anchor("exit"), "retro": Anchor((retro.x, CENTRE_Y, spec.rim_z(retro.x)), (0.0, 0.0, -1.0))}
+    arm_part = Part("arm_r", Mesh.concatenate([shell, bell.mesh]), anchors=anchors, collision=collision,
+                    mass_kg=spec.arm_mass_kg + tip.nozzle.mass_kg)  # fmt: skip
     (x0, x1), (y0, y1), (z0, z1) = rail.x, rail.y, rail.z
     size, centre = (x1 - x0, y1 - y0, z1 - z0), (0.5 * (x0 + x1), 0.5 * (y0 + y1), 0.5 * (z0 + z1))
-    rail_part = Part("rail_r", box(size, dark, center=centre), mass_kg=4_000.0)
+    rail_part = Part("rail_r", box(size, dark, center=centre), collision=[Collision("box", centre, size=size)], mass_kg=4_000.0)
     return [Piece(arm_part, spec.arm_solid(), RIGHT), Piece(rail_part, box_solid(size, centre), RIGHT)]
 
 
@@ -281,7 +297,6 @@ class FairingSpec:
         (0.0, 0.80), (0.03, 0.885), (0.1, 0.964), (0.2, 1.0), (0.3, 0.997), (0.4, 0.972), (0.5, 0.927),
         (0.6, 0.868), (0.7, 0.792), (0.8, 0.686), (0.9, 0.548), (0.97, 0.40), (1.0, 0.0),
     )  # fmt: skip
-    centre_y: float = CENTRE_Y
     mass_kg: float = 15_000.0
 
     def ring(self, z: float, x_in: float, x_out: float, peak: float) -> np.ndarray:
@@ -289,8 +304,8 @@ class FairingSpec:
         u = np.array([p[0] for p in self.profile])
         f = np.array([p[1] for p in self.profile])
         x = x_in + u * (x_out - x_in)
-        lower = np.column_stack([x[:-1], self.centre_y - peak * f[:-1]])
-        upper = np.column_stack([x[::-1], self.centre_y + peak * f[::-1]])
+        lower = np.column_stack([x[:-1], CENTRE_Y - peak * f[:-1]])
+        upper = np.column_stack([x[::-1], CENTRE_Y + peak * f[::-1]])
         pts = np.vstack([lower, upper])
         return np.column_stack([pts, np.full(len(pts), z)])
 
@@ -323,25 +338,22 @@ class FinSpec:
     h_ref: float = 3.105
     inner: tuple[float, float] = (10.785, -0.178)  # the mean of the reference's port and starboard fins
     outer: tuple[float, float] = (12.145, -0.272)
-    thinning: float = 0.16  # off the measured thickness: the edges' splats read that much wider
     bevel: float = 0.4  # of the thickness: the edges' chamfers
     cap_m: float = 0.65
     finger_h: float = 10.6  # where the blade's hit box gives way to the hook's
     light_radius: float = 0.14
     light_at: tuple[float, float] = (12.58, 41.95)  # (h, z) of the light on the hook's tip
-    centre_y: float = CENTRE_Y
+    rcs_at: tuple[float, float] = (12.1, 42.5)  # (h, z) of the cosmetic RCS port on the outer face, by the hook's tip
     mass_kg: float = 6_000.0
 
     def faces_x(self, h: float) -> tuple[float, float]:
-        xi = self.inner[0] + self.inner[1] * (h - self.h_ref)
-        xo = self.outer[0] + self.outer[1] * (h - self.h_ref)
-        return xi + 0.5 * self.thinning, xo - 0.5 * self.thinning
+        return (self.inner[0] + self.inner[1] * (h - self.h_ref), self.outer[0] + self.outer[1] * (h - self.h_ref))
 
     def ring(self, h: float, z0: float, z1: float) -> np.ndarray:
         """The horizontal section at ``h``: a thin plate from ``z0`` to ``z1`` with chamfered edges, ``(6, 3)``."""
         xi, xo = self.faces_x(h)
         xm, e = 0.5 * (xi + xo), self.bevel * (xo - xi)
-        y = self.centre_y + h
+        y = CENTRE_Y + h
         return np.array([[xm, y, z0], [xo, y, z0 + e], [xo, y, z1 - e], [xm, y, z1], [xi, y, z1 - e], [xi, y, z0 + e]])
 
     def lean_basis(self) -> np.ndarray:
@@ -354,7 +366,8 @@ class FinSpec:
 
 
 def tip_fin(spec: FinSpec, style: Style, upper: bool) -> Piece:
-    """The right arm's upper (or lower) fin: hit boxes along its lean for the blade and the hook."""
+    """The right arm's upper (or lower) fin: hit boxes along its lean for the blade and the hook. Anchor: ``rcs`` (the
+    port by the hook's tip, outboard)."""
     hull, gold = style.material("hull"), style.material("stripe")
     rings = [spec.ring(*e) for e in spec.edges]
     top_h = spec.edges[-1][0]
@@ -376,7 +389,7 @@ def tip_fin(spec: FinSpec, style: Style, upper: bool) -> Piece:
         xm = 0.5 * sum(spec.faces_x(h))
         r = spec.light_radius
         knob = lathe([(-r, 0.0), (-0.7 * r, 0.71 * r), (0.0, r), (0.7 * r, 0.71 * r), (r, 0.0)], 12, gold)
-        meshes = meshes + [knob.translated((xm, spec.centre_y + h, z))]
+        meshes = meshes + [knob.translated((xm, CENTRE_Y + h, z))]
     mesh = Mesh.concatenate(meshes)
     basis = spec.lean_basis()
     collision = []
@@ -385,11 +398,13 @@ def tip_fin(spec: FinSpec, style: Style, upper: bool) -> Piece:
         local = pts @ basis
         lo, hi = local.min(axis=0), local.max(axis=0)
         collision.append(Collision("box", basis @ (0.5 * (lo + hi)), basis=basis, size=hi - lo, name=name))
-    solid = _loft_solid(1, [spec.centre_y + e[0] for e in spec.edges], [r[:, [0, 2]] for r in rings])
-    part = Part("fin_top_r", mesh, collision=collision, mass_kg=spec.mass_kg)
+    solid = _loft_solid(1, [CENTRE_Y + e[0] for e in spec.edges], [r[:, [0, 2]] for r in rings])
+    h, z = spec.rcs_at
+    port = Anchor((spec.faces_x(h)[1], CENTRE_Y + h, z), (1.0, 0.0, 0.0))
+    part = Part("fin_top_r", mesh, anchors={"rcs": port}, collision=collision, mass_kg=spec.mass_kg)
     if upper:
         return Piece(part, solid, RIGHT)
-    flip = (0.0, 2.0 * spec.centre_y, 0.0)
+    flip = (0.0, 2.0 * CENTRE_Y, 0.0)
     return Piece(part.transformed(_MIRROR_Y, flip).renamed("fin_bot_r"), solid.transformed(_MIRROR_Y, flip), RIGHT)
 
 
@@ -412,7 +427,6 @@ class BaySpec:
         (30.47, 1.25),
     )  # fmt: skip
     nozzle: NozzleSpec = NozzleSpec(throat_r=0.85, exit_r=1.2, length=0.9, wall=0.05, segments=36, mass_kg=5_000.0)
-    centre_y: float = CENTRE_Y
     mass_kg: float = 60_000.0
     engine_mass_kg: float = 25_000.0
 
@@ -423,14 +437,14 @@ class BaySpec:
         out = []
         for level, sign in (("up", 1.0), ("down", -1.0)):
             for k, z in enumerate(self.rcs_z):
-                out.append((f"rcs_{level}{k}", np.array([0.5 * (x0 + x1), self.centre_y + sign * 0.5 * (y0 + y1), z]), size))
+                out.append((f"rcs_{level}{k}", np.array([0.5 * (x0 + x1), CENTRE_Y + sign * 0.5 * (y0 + y1), z]), size))
         return out
 
 
 def engine_bay(spec: BaySpec, style: Style) -> list[Piece]:
     """The bay's machinery and the main engine (centre pieces, both sides built)."""
     dark, rcs, metal = style.material("hull_dark"), style.material("rcs"), style.material("nozzle")
-    cy = spec.centre_y
+    cy = CENTRE_Y
     boxes: list[tuple[tuple[float, float, float], tuple[float, float, float], Material]] = []
     w, h, z0, z1 = spec.block
     boxes.append(((2 * w, 2 * h, z1 - z0), (0.0, cy, 0.5 * (z0 + z1)), dark))
@@ -605,6 +619,7 @@ __all__ = [
     "Piece",
     "RIGHT",
     "RailSpec",
+    "RetroSpec",
     "TipNozzleSpec",
     "arm",
     "bow",
