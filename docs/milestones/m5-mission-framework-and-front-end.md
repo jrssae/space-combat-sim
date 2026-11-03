@@ -413,7 +413,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T03 | A | Settings menu and audio buses | T02 | Sonnet | Schema-driven screen | not started |
 | T04 | A | Controls menu | T02 | Sonnet | Wraps the existing profile API | not started |
 | T05 | B | Mission core: runner, script API, triggers, objectives, console | T01 | Opus | The framework M8 stands on; coroutine skipping is subtle | done |
-| T24 | A | Console command list in `info.md` and its guard test (`CLAUDE.md` rule of 2026-11-03; numbered last because it was added during the build) | T01, T02, T05 | Sonnet | A doc and one test | in progress |
+| T24 | A | Console command list in `info.md` and its guard test (`CLAUDE.md` rule of 2026-11-03; numbered last because it was added during the build) | T01, T02, T05 | Sonnet | A doc and one test | done |
 | T06 | B | Dialog, subtitles and the comms panel | T05 | Sonnet | Data and HUD | in progress |
 | T07 | B | Comms menu on D-pad Right | T06 | Sonnet | Input routing with clear rules | not started |
 | T08 | B | `CINEMATIC` camera and locked controls | T05 | Opus | Rebase-safe camera paths | not started |
@@ -566,6 +566,19 @@ whose trigger never arose). Update the column with each task's commit.
   read `ConsoleRegistry.command_names()`; every registered command must appear in `info.md`, and every command in
   `info.md` must exist in at least one context. A task that adds a command without listing it fails this test.
 - **Done when:** `info.md` is complete for the commands on `m5` at the time, and the test passes.
+- **Done (as built, 2026-11-03):** `info.md` at the repository root lists the 51 console commands and 32 state providers on `m5`, in
+  8 tables by subsystem (console, game flow and controls, flight, rendering and effects, combat, ships and waves, audio,
+  missions) with arguments, a one-line purpose and where each exists (`always`, `front end, flight`, `in flight`, `AI ships`,
+  `mission`, `route`, `benchmark`), and a legend of the intro for `--console-exec`, `--console-file` and `--console-strict`.
+  `tests/integration/test_console_command_list.gd` boots free flight, the mission fixture, the instructor route and the front
+  end, reads `ConsoleRegistry.command_names()` and `provider_names()`, and fails when a registered command or provider is
+  missing from `info.md`, when a listed one is registered by no booted scene (rows marked `benchmark` are exempt, none
+  yet), or when a name is listed twice; 7 tests, all passing. `docs/architecture.md` §6.4 points to the list. A task that
+  adds, renames or removes a command now updates `info.md` in the same commit.
+  - **Review.** Approved (sonnet), no fixes needed: an independent grep of every `register_command` and
+    `register_provider` site matched the 51 commands and 32 providers, and twelve rows checked against their usage
+    strings were right. Open: the `benchmark` skip and the Where column are not checked further (after the M4 rebase,
+    `bench`, `native` and `perf` arrive marked `benchmark`).
 
 ### M5-T06 Dialog, subtitles and the comms panel
 
