@@ -172,7 +172,8 @@ The Earth Alliance Saturn freighters (M5-T12, Q16, docs/assets-civilian.md): one
 same lead ship (antenna, command disc, frames and drum frame, engine section) plus cargo, so its length follows from the
 parts: `saturn_4_transport` and `saturn_4_tanker` carry one 100 m section (four pods round a banded hull cylinder, or three
 banded tanks) and are 158.48 m long, `saturn_8_transport` and `saturn_8_tanker` carry two with a junction (258.48 m), and
-`saturn_3_freighter` three pods in a stack (119.46 m). Style `ea_civilian`. Per id: LOD0-3 PLYs and lighting records, the
+`saturn_3_freighter` three pods in a stack with a slim engine between its lower pods (Q20, 96.80 m). Turrets are dorsal
+only (Q19). Style `ea_civilian`. Per id: LOD0-3 PLYs and lighting records, the
 fallback mesh (also the depth proxy), chunks cut from LOD1, the turret model, `hardpoints.json` and `manifest.json`.
 Option: `spacing` (each variant's default lands its LOD0 on its budget), `overlap`, `thickness`.
 

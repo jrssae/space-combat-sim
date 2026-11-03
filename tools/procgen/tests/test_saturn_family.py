@@ -35,12 +35,15 @@ SECTION_M = 100.0  # one Saturn 4 cargo section (Q16)
 ENGINE_TAIL_M = 9.18  # the engine section behind the last section
 ENGINE_M = 22.6
 UP, DOWN = (0.0, 1.0, 0.0), (0.0, -1.0, 0.0)
-LEAD_TURRETS = {"dorsal_fwd": ((0.0, 3.8, 19.1), UP), "ventral_fwd": ((0.0, -7.4, 46.0), DOWN)}
+LEAD_TURRETS = {"dorsal_fwd": ((0.0, 3.8, 19.1), UP)}  # Q19: dorsal mounts only
+SLIM = 2.8 / 4.8  # Q20: the Saturn 3's engine, the shared section scaled to fit between its lower pods
+STACK_REAR_Z = 95.30  # the Saturn 3's pods' aft faces (64.24 + the shared pod's 31.06 m turned)
 
 # docs/assets-civilian.md: budgets, hardpoints, chunks; docs/design-references.md: turrets.
 DESIGN: dict[str, dict[str, Any]] = {
     "saturn_4_transport": {
         "length": 158.48,
+        "engine": 1.0,
         "budget": (105_000, 155_000),
         "turrets": {**LEAD_TURRETS, "dorsal_aft": ((0.0, 9.3, 124.4), UP)},
         "starboard": (53.4, -7.29, 74.3),
@@ -49,6 +52,7 @@ DESIGN: dict[str, dict[str, Any]] = {
     },
     "saturn_4_tanker": {
         "length": 158.48,
+        "engine": 1.0,
         "budget": (55_000, 85_000),
         "turrets": {**LEAD_TURRETS, "dorsal_aft": ((0.0, 9.3, 124.4), UP)},
         "starboard": (25.6, -13.53, 99.4),
@@ -57,24 +61,27 @@ DESIGN: dict[str, dict[str, Any]] = {
     },
     "saturn_8_transport": {
         "length": 258.48,
+        "engine": 1.0,
         "budget": (170_000, 250_000),
-        "turrets": {**LEAD_TURRETS, "dorsal_mid": ((0.0, 7.2, 149.4), UP), "ventral_aft": ((0.0, -5.3, 240.0), DOWN)},
+        "turrets": {**LEAD_TURRETS, "dorsal_mid": ((0.0, 7.2, 149.4), UP)},
         "starboard": (53.4, -7.29, 74.3),
         "lamp": ((0.0, 21.5, 149.4), 78.0),
         "chunks": ("bow", "hull_1", "junction", "hull_2", "engine", "pods_1l", "pods_1r", "pods_2l", "pods_2r"),
     },
     "saturn_8_tanker": {
         "length": 258.48,
+        "engine": 1.0,
         "budget": (95_000, 145_000),
-        "turrets": {**LEAD_TURRETS, "dorsal_mid": ((0.0, 9.0, 149.4), UP), "ventral_aft": ((0.0, -5.3, 240.0), DOWN)},
+        "turrets": {**LEAD_TURRETS, "dorsal_mid": ((0.0, 9.0, 149.4), UP)},
         "starboard": (25.6, -13.53, 99.4),
         "lamp": ((0.0, 21.5, 149.4), 78.0),
         "chunks": ("bow", "spine_1", "junction", "spine_2", "engine", "tanks_1l", "tanks_1r", "tanks_2l", "tanks_2r"),
     },
     "saturn_3_freighter": {
-        "length": 119.46,
+        "length": STACK_REAR_Z + 1.5,  # Q20: the bell's exit 1.5 m behind the pods
+        "engine": SLIM,
         "budget": (60_000, 90_000),
-        "turrets": {**LEAD_TURRETS, "dorsal_aft": ((0.0, 5.3, 99.0), UP)},
+        "turrets": dict(LEAD_TURRETS),
         "starboard": (46.8, -5.46, 79.7),
         "lamp": ((0.0, 27.8, 79.7), 36.0),
         "chunks": ("bow", "pod_top", "pod_l", "pod_r", "engine"),
@@ -281,14 +288,14 @@ class SaturnVariantChecks:
         pods = {p["name"]: p for p in self.hp["pods"]}
         self.assertEqual(set(pods), {"l", "r"})
         self.assertEqual((pods["l"]["side"], pods["r"]["side"]), ("left", "right"))
-        length = self.design["length"]
+        length, k = self.design["length"], self.design["engine"]
         for name, sx in (("l", -1.0), ("r", 1.0)):
             p = pods[name]
-            np.testing.assert_allclose(self.authored(p["main"]["position"]), [sx * 0.95, 0.0, length], atol=0.02)
+            np.testing.assert_allclose(self.authored(p["main"]["position"]), [sx * 0.95 * k, 0.0, length], atol=0.02)
             np.testing.assert_allclose(self.authored(p["retro"]["position"]), [sx * 9.51, 0.0, 8.56], atol=POS_TOL)
             self.assertEqual(p["main"]["exhaust"], [0.0, 0.0, 1.0])
             self.assertEqual(p["retro"]["exhaust"], [0.0, 0.0, -1.0])
-            self.assertAlmostEqual(p["main"]["radius"], 2.2)
+            self.assertAlmostEqual(p["main"]["radius"], round(2.2 * k, 5))
             self.assertAlmostEqual(p["retro"]["radius"], 0.95)
 
     def test_centre_of_mass_on_the_spine_axis(self) -> None:
@@ -337,16 +344,18 @@ class SaturnVariantChecks:
             self.assertIn(port["pod"], ("l", "r"))
             self.assertAlmostEqual(float(np.linalg.norm(port["exhaust"])), 1.0, places=4)
             self.assertTrue(port["tags"], f"{port['name']} turns or moves the ship")
-        engine_z = self.design["length"] - ENGINE_M + 3.0
+        k = self.design["engine"]
+        engine_z = self.design["length"] - k * (ENGINE_M - 3.0)
         collar = [self.authored(r["position"]) for r in rcs if abs(self.authored(r["position"])[2] - engine_z) < 0.01]
         self.assertEqual(len(collar), 4)
         for p in collar:
-            self.assertAlmostEqual(float(np.hypot(p[0], p[1])), 4.78, delta=0.01)
+            self.assertAlmostEqual(float(np.hypot(p[0], p[1])), 4.78 * k, delta=0.01)
 
     def test_turrets_as_tabulated(self) -> None:
         turrets = {t["name"]: t for t in self.hp["turrets"]}
         self.assertEqual(set(turrets), set(self.design["turrets"]))
-        self.assertTrue(2 <= len(turrets) <= 4)
+        self.assertTrue(1 <= len(turrets) <= 2, "Q19: dorsal mounts only")
+        self.assertTrue(all(t["up"] == list(UP) for t in turrets.values()))
         for name, (position, up) in self.design["turrets"].items():
             t = turrets[name]
             np.testing.assert_allclose(self.authored(t["position"]), position, atol=POS_TOL, err_msg=name)
@@ -456,9 +465,14 @@ class SaturnFamilyTests(unittest.TestCase):
         for four, eight in (("saturn_4_transport", "saturn_8_transport"), ("saturn_4_tanker", "saturn_8_tanker")):
             self.assertAlmostEqual(self.length(eight) - lead, 2.0 * (self.length(four) - lead), delta=0.02, msg=eight)
 
-    def test_the_saturn_3_is_the_lead_ship_behind_its_pod_stack(self) -> None:
-        # Pods 64.24 to 95.30 (the shared pod's 31.06 m turned), 1.56 m gap, the shared 22.6 m engine section.
-        self.assertAlmostEqual(self.length("saturn_3_freighter"), 95.30 + 1.56 + ENGINE_M, delta=0.02)
+    def test_the_saturn_3_ends_just_behind_its_pods(self) -> None:
+        # Q20: a slim engine between the lower pods, under the top pod, its exhaust 1.5 m behind the pods' aft faces.
+        self.assertAlmostEqual(self.length("saturn_3_freighter"), STACK_REAR_Z + 1.5, delta=0.02)
+        hp, off = self.hp["saturn_3_freighter"], self.offset["saturn_3_freighter"]
+        engine = next(c for c in hp["collision"] if c["name"].startswith("engine"))
+        self.assertLess(engine["radius"], 3.5 - 0.5, "clear of the lower pods' inner faces at x 3.5")
+        self.assertLess(engine["radius"], 4.52 - 0.5, "clear of the top pod's underside at y 4.52")
+        self.assertGreater(engine["position"][2] + off[2] - 0.5 * engine["height"], 64.24, "under the top pod")
 
     def test_one_lead_ship_on_every_variant(self) -> None:
         def lead_points(asset_id: str) -> np.ndarray:
@@ -469,16 +483,19 @@ class SaturnFamilyTests(unittest.TestCase):
             return np.array(points) + off
 
         reference = lead_points("saturn_4_transport")
-        self.assertEqual(len(reference), 1 + 2 + 8 + 2)
+        self.assertEqual(len(reference), 1 + 2 + 8 + 1)
         for asset_id in DESIGN:
             np.testing.assert_allclose(lead_points(asset_id), reference, atol=POS_TOL, err_msg=asset_id)
 
     def test_every_variant_has_the_same_engine_section(self) -> None:
-        for asset_id in DESIGN:
-            hp, off, length = self.hp[asset_id], self.offset[asset_id], self.length(asset_id)
+        # The Saturn 3's is the same section scaled down (Q20).
+        for asset_id, design in DESIGN.items():
+            hp, off, length, k = self.hp[asset_id], self.offset[asset_id], self.length(asset_id), design["engine"]
             engine = next(c for c in hp["collision"] if c["name"].startswith("engine"))
-            self.assertEqual((engine["type"], engine["radius"], engine["height"]), ("capsule", 4.8, 22.6), asset_id)
-            self.assertAlmostEqual(engine["position"][2] + off[2], length - 0.5 * ENGINE_M, delta=0.02)
+            self.assertEqual(engine["type"], "capsule", asset_id)
+            self.assertAlmostEqual(engine["radius"], 4.8 * k, places=4)
+            self.assertAlmostEqual(engine["height"], 22.6 * k, places=4)
+            self.assertAlmostEqual(engine["position"][2] + off[2], length - 0.5 * ENGINE_M * k, delta=0.02)
 
 
 class SaturnDeterminismTests(unittest.TestCase):

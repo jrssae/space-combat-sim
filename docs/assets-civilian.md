@@ -31,8 +31,8 @@ The same as `starfury_aurora` and `raider_fighter` (`docs/architecture.md` §9 a
 
 Big ships are mostly seen far away. With `LodSwitcherMath`'s thresholds (LOD0 from 200 px of projected diameter, LOD1
 from 60 px, LOD2 from 16 px, at 1080p and 75 degrees vertical), a 258.5 m Saturn 8 is LOD0 inside 910 m, LOD1 to 3.0 km
-and LOD2 to 11.4 km; a 158.5 m Saturn 4 switches at 560 m, 1.9 km and 7.0 km; the 119.5 m Saturn 3 at 420 m, 1.4 km
-and 5.3 km; a 60 m hull at 210 m, 700 m and 2.6 km. Raiders jump in 6 to 12 km out; patrols and civilians spawn 26 to
+and LOD2 to 11.4 km; a 158.5 m Saturn 4 switches at 560 m, 1.9 km and 7.0 km; the 96.8 m Saturn 3 at 340 m, 1.1 km
+and 4.3 km; a 60 m hull at 210 m, 700 m and 2.6 km. Raiders jump in 6 to 12 km out; patrols and civilians spawn 26 to
 30 km out, past the player's 25 km radar (Q12). Patrols fly a route through the area; civilian traffic flies a straight
 route that passes 2 to 10 km from the player (T17). LOD2 and LOD3 carry most of the screen time.
 
@@ -47,7 +47,7 @@ all eight).
 | `saturn_4_tanker` | 158.5 m | about 18 400 m² | 70 000 (55 000 to 85 000) | 0.51 m | 17 500 | 4 400 | 1 100 |
 | `saturn_8_transport` | 258.5 m | about 65 000 m² | 210 000 (170 000 to 250 000) | 0.56 m | 52 500 | 13 100 | 3 300 |
 | `saturn_8_tanker` | 258.5 m | about 36 900 m² | 120 000 (95 000 to 145 000) | 0.55 m | 30 000 | 7 500 | 1 900 |
-| `saturn_3_freighter` | 119.5 m | about 19 700 m² | 75 000 (60 000 to 90 000) | 0.51 m | 18 750 | 4 700 | 1 200 |
+| `saturn_3_freighter` | 96.8 m | about 19 700 m² | 75 000 (60 000 to 90 000) | 0.51 m | 18 750 | 4 700 | 1 200 |
 | `skylark_transport` | 60 m | 6 400 m² | 60 000 (48 000 to 72 000) | 0.33 m | 15 000 | 3 800 | 900 |
 | `narn_transport` | 70 m | 9 200 m² | 75 000 (60 000 to 90 000) | 0.35 m | 18 750 | 4 700 | 1 200 |
 | `centauri_brezebel` | 60 m | 8 000 m² | 70 000 (55 000 to 85 000) | 0.34 m | 17 500 | 4 400 | 1 100 |
@@ -104,11 +104,11 @@ The lead ship gives every variant the same retro nozzles, cockpit, RCS and two t
 | Hardpoint | Position (authored frame) |
 |---|---|
 | Retros (`l`, `r`) | the disc's front rim, (±9.51, 0, 8.56), exhaust (0, 0, -1), radius 0.95 |
-| Mains (`l`, `r`) | the bell's exit split in two, (±0.95, 0, length), exhaust (0, 0, 1), radius 2.2 |
+| Mains (`l`, `r`) | the bell's exit split in two, (±0.95, 0, length), exhaust (0, 0, 1), radius 2.2; on the Saturn 3's slim engine (Q20, 0.583 scale) (±0.55, 0, length), radius 1.28 |
 | `cockpit_camera` | inside the disc's front rim, (0, +0.8, 8.0) |
 | `cabin` | the same point, `cabin_range_m` 0.05 L |
 | RCS | both ends of the drum frame's three outer drums: the top one at (0, +5.55, z) and the lower ones at (±9.27, -10.55, z), z 41.9 exhausting -z and 50.1 exhausting +z; the disc's flanks (±14.13, 0, 19.06) exhausting ±x; four on the engine collar 3 m behind its front, (±4.78, 0, z) and (0, ±4.78, z), exhausting outward |
-| Turrets | `dorsal_fwd` (0, +3.8, 19.1), up (0, 1, 0); `ventral_fwd` (0, -7.4, 46.0), up (0, -1, 0) |
+| Turrets | `dorsal_fwd` (0, +3.8, 19.1), up (0, 1, 0); dorsal mounts only (Q19) |
 
 Per variant:
 
@@ -116,9 +116,9 @@ Per variant:
 |---|---|---|---|---|---|---|
 | `saturn_4_transport` | 158.5 | 158.48 | `dorsal_aft` (0, +9.3, 124.4) | the first pods' outboard tips (±53.4, -7.29, 74.3) | (0, +8.6, 75.0), lamp (0, +16.6, 99.4), range 48 m | `bow`, `hull`, `engine`, `pods_l`, `pods_r` |
 | `saturn_4_tanker` | 158.5 | 158.48 | `dorsal_aft` (0, +9.3, 124.4) | the lower tanks' flanks (±25.6, -13.53, 99.4) | (0, +8.6, 75.0), lamp (0, +16.6, 99.4), range 48 m | `bow`, `spine`, `engine`, `tank_l`, `tank_r` |
-| `saturn_8_transport` | 258.5 | 258.48 | `dorsal_mid` (0, +7.2, 149.4), `ventral_aft` (0, -5.3, 240.0) | (±53.4, -7.29, 74.3) | (0, +8.6, 75.0), lamp (0, +21.5, 149.4), range 78 m | `bow`, `hull_1`, `junction`, `hull_2`, `engine`, `pods_1l`, `pods_1r`, `pods_2l`, `pods_2r` |
-| `saturn_8_tanker` | 258.5 | 258.48 | `dorsal_mid` (0, +9.0, 149.4), `ventral_aft` (0, -5.3, 240.0) | (±25.6, -13.53, 99.4) | (0, +8.6, 75.0), lamp (0, +21.5, 149.4), range 78 m | `bow`, `spine_1`, `junction`, `spine_2`, `engine`, `tanks_1l`, `tanks_1r`, `tanks_2l`, `tanks_2r` |
-| `saturn_3_freighter` | 119.5 | 119.46 | `dorsal_aft` (0, +5.3, 99.0) | the lower pods' outboard ends (±46.8, -5.46, 79.7) | the top pod's ridge (0, +21.8, 73.9), lamp (0, +27.8, 79.7), range 36 m | `bow` (with the cross-beam and blocks), `pod_top`, `pod_l`, `pod_r`, `engine` (with the truss behind the drum frame) |
+| `saturn_8_transport` | 258.5 | 258.48 | `dorsal_mid` (0, +7.2, 149.4) | (±53.4, -7.29, 74.3) | (0, +8.6, 75.0), lamp (0, +21.5, 149.4), range 78 m | `bow`, `hull_1`, `junction`, `hull_2`, `engine`, `pods_1l`, `pods_1r`, `pods_2l`, `pods_2r` |
+| `saturn_8_tanker` | 258.5 | 258.48 | `dorsal_mid` (0, +9.0, 149.4) | (±25.6, -13.53, 99.4) | (0, +8.6, 75.0), lamp (0, +21.5, 149.4), range 78 m | `bow`, `spine_1`, `junction`, `spine_2`, `engine`, `tanks_1l`, `tanks_1r`, `tanks_2l`, `tanks_2r` |
+| `saturn_3_freighter` | 96.8 | 96.80 | none (Q19, Q20) | the lower pods' outboard ends (±46.8, -5.46, 79.7) | the top pod's ridge (0, +21.8, 73.9), lamp (0, +27.8, 79.7), range 36 m | `bow` (with the cross-beam and blocks), `pod_top`, `pod_l`, `pod_r`, `engine` (with the truss behind the drum frame) |
 
 Collision, per part: the disc a box 28.3 x 6.0 x 28.3 m with the antenna inside it; the forward truss a box 6.3 x 6.3
 m along its length; the drum frame a box 21.7 x 19.3 x 8.2 m; each hull cylinder or tank a capsule of radius 8.77 m (it covers the 17.53 x 17.27 m polygon) and
@@ -215,11 +215,27 @@ tables of `docs/design-references.md` and the asset's from its own; a gap betwee
 a metre scale) and `fidelity.json` (per-view IoU and pixel counts, the three ratios, the shift, the thresholds, the
 failures and the verdict). The terminal gets one line per view, the sizes, the shift and a verdict.
 
+**Saturn model offsets (T12).** The spine axis's height above each model's box centre, read off the model's cylinder or
+tank (the Saturn 3: its disc's rim): `--model-offset 0,-3.643,0` for `EA_Saturn_4_transport.stl` (length 158.48),
+`0,-2.804,0` for `EA_Saturn_8_transport.stl` (266.2), `0,-6.835,0` for `EA_Saturn_Fuel_tanker.stl` (255.1) and `0,-1.293,0`
+for `EA_Saturn_3_Freighter.stl` (91.13). The Saturn 3's pod group is scored against the model's scaled to the shared pod
+(`--model-scale 1.2436,1.093,1`, an option T12 added: 43.03/34.6 across, 17.27/15.8 tall, Q20).
+
 **Scores.** One row per ship and part, filled by the generator task that builds it (the date is the run's):
 
 | Ship | Part | Top IoU | Side IoU | Front IoU | Length | Width | Height | Date |
 |---|---|---|---|---|---|---|---|---|
-| | | | | | | | | |
+| `saturn_4_transport` | whole ship | 0.926 | 0.904 | 0.908 | 1.002 | 1.007 | 1.050 | 2026-11-03 |
+| `saturn_4_tanker` | lead ship (vs Saturn 4 model, z 0-49.3) | 0.895 | 0.764 | 0.795 | 1.007 | 1.024 | 1.028 | 2026-11-03 |
+| `saturn_4_tanker` | tank section (vs tanker model's first) | 0.880 | 0.856 | 0.905 | 1.039 | 0.980 | 1.030 | 2026-11-03 |
+| `saturn_8_transport` | lead ship (z 0-49.3) | 0.873 | 0.715 | 0.808 | 1.008 | 1.019 | 1.030 | 2026-11-03 |
+| `saturn_8_transport` | cargo 1 (model 49.3-152.8, asset 49.3-149.3) | 0.901 | 0.882 | 0.842 | 0.973 | 1.004 | 1.002 | 2026-11-03 |
+| `saturn_8_transport` | cargo 2 and engine (model 152.8-266.2, asset 149.3-258.5) | 0.905 | 0.906 | 0.837 | 0.969 | 1.004 | 1.003 | 2026-11-03 |
+| `saturn_8_tanker` | lead ship (z 0-49.3) | 0.894 | 0.762 | 0.792 | 1.008 | 1.023 | 1.036 | 2026-11-03 |
+| `saturn_8_tanker` | cargo 1 (model 49.3-146.2, asset 49.3-149.3) | 0.926 | 0.887 | 0.889 | 1.040 | 1.001 | 1.020 | 2026-11-03 |
+| `saturn_8_tanker` | cargo 2 and engine (model 146.2-255.1, asset 149.3-258.5) | 0.970 | 0.929 | 0.888 | 1.010 | 1.001 | 1.021 | 2026-11-03 |
+| `saturn_3_freighter` | lead ship (z 0-41.5) | 0.660 | 0.499 | 0.665 | 1.007 | 1.023 | 0.812 | 2026-11-03 |
+| `saturn_3_freighter` | pod group (model 41.5-91.1 scaled 1.244, 1.093, 1; asset 41.5-96.8) | 0.772 | 0.383 | 0.655 | 1.130 | 0.996 | 1.038 | 2026-11-03 |
 
 ## `saturn_family` (T12)
 
@@ -249,7 +265,7 @@ only in how many cargo sections they carry and of which kind.
 | `saturn_4_tanker` | one tank section at z 49.3 to 149.3 | none | z 135.9 to 158.5 | 158.5 m |
 | `saturn_8_transport` | transport sections at z 49.3 to 149.3 and 149.3 to 249.3 | z 137.2 to 161.7, one module | z 235.9 to 258.5 | 258.5 m |
 | `saturn_8_tanker` | tank sections at z 49.3 to 149.3 and 149.3 to 249.3 | z 137.2 to 161.7, three modules | z 235.9 to 258.5 | 258.5 m |
-| `saturn_3_freighter` | cross-beam, blocks and three pods crosswise (z 48.5 to 95.3), the truss through the stack | none | z 96.9 to 119.5 | 119.5 m |
+| `saturn_3_freighter` | cross-beam, blocks and three pods crosswise (z 48.5 to 95.3), the truss through the stack | none | slim (0.583 scale, Q20), z 83.6 to 96.8, between the lower pods and under the top pod | 96.8 m |
 
 The length rule (Q16) is lead ship plus cargo: 49.3 m of lead ship ahead of the first section, 100 m per section, and
 the engine section's last 9.2 m behind the last section. The section's own stations, the Saturn 3's stack and every
@@ -370,11 +386,11 @@ From the design references, authored frame; `up` is (0, 1, 0) for dorsal mounts 
 
 | Hull | Turrets |
 |---|---|
-| Saturn 4 transport (3) | `dorsal_fwd` (0, +3.8, 19.1), `ventral_fwd` (0, -7.4, 46.0), `dorsal_aft` (0, +9.3, 124.4) |
-| Saturn 4 tanker (3) | `dorsal_fwd` (0, +3.8, 19.1), `ventral_fwd` (0, -7.4, 46.0), `dorsal_aft` (0, +9.3, 124.4) |
-| Saturn 8 transport (4) | `dorsal_fwd` (0, +3.8, 19.1), `ventral_fwd` (0, -7.4, 46.0), `dorsal_mid` (0, +7.2, 149.4), `ventral_aft` (0, -5.3, 240.0) |
-| Saturn 8 tanker (4) | `dorsal_fwd` (0, +3.8, 19.1), `ventral_fwd` (0, -7.4, 46.0), `dorsal_mid` (0, +9.0, 149.4), `ventral_aft` (0, -5.3, 240.0) |
-| Saturn 3 (3) | `dorsal_fwd` (0, +3.8, 19.1), `ventral_fwd` (0, -7.4, 46.0), `dorsal_aft` (0, +5.3, 99.0) |
+| Saturn 4 transport (2) | `dorsal_fwd` (0, +3.8, 19.1), `dorsal_aft` (0, +9.3, 124.4) |
+| Saturn 4 tanker (2) | `dorsal_fwd` (0, +3.8, 19.1), `dorsal_aft` (0, +9.3, 124.4) |
+| Saturn 8 transport (2) | `dorsal_fwd` (0, +3.8, 19.1), `dorsal_mid` (0, +7.2, 149.4) |
+| Saturn 8 tanker (2) | `dorsal_fwd` (0, +3.8, 19.1), `dorsal_mid` (0, +9.0, 149.4) |
+| Saturn 3 (1) | `dorsal_fwd` (0, +3.8, 19.1) |
 | Skylark (2) | `dorsal` (0, +3.6, 37.5), `ventral` (0, -4.2, 15.0) |
 | Narn (2) | `tower_l` (-14.85, +9.0, 41.7), `tower_r` (14.85, +9.0, 41.7), on the slotted crowns; fallback for the belly: one moves to (0, -9.0, 55.0) |
 | Brezebel (2) | `dorsal` (0, +4.3, 7.0), `ventral` (0, -4.5, 9.0) |

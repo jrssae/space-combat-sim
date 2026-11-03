@@ -60,7 +60,7 @@ TURRET_SPACING_M = 0.12
 TURRET_SPLAT_BUDGET = (1_500, 3_500)
 TURRET_ARC_DEG = 200.0  # a hemisphere plus 10 degrees below the mount's base
 TURRET_PAD_RADIUS = 1.6
-UP, DOWN = (0.0, 1.0, 0.0), (0.0, -1.0, 0.0)
+UP = (0.0, 1.0, 0.0)
 BANDS = ("band_light", "stripe", "band_light", "stripe", "band_light")
 TANK_MASS_KG = 6_000_000.0  # a loaded tank; informational, ShipSpec (T16) sets the flight mass  # domes off-white, barrel red-white-red
 
@@ -75,7 +75,7 @@ class Mount:
     host: str | None
 
 
-LEAD_MOUNTS = (Mount("dorsal_fwd", (0.0, 3.8, 19.1), UP, None), Mount("ventral_fwd", (0.0, -7.4, 46.0), DOWN, "bow"))
+LEAD_MOUNTS = (Mount("dorsal_fwd", (0.0, 3.8, 19.1), UP, None),)  # Q19: dorsal mounts only
 
 
 @dataclass(frozen=True)
@@ -95,20 +95,25 @@ class Variant:
     top_lamp_range_m: float
     pod_trim: PodTrim = PodTrim()
     bands: tuple[str, ...] = BANDS
+    engine_scale: float = 1.0  # the Saturn 3's slim engine (Q20)
 
     def section_start(self, k: int) -> float:
         """Where cargo section ``k`` (from 0) starts."""
         return LEAD_FORE_M + k * sp.SECTION_LENGTH
 
     @property
+    def engine_length(self) -> float:
+        return self.engine_scale * sp.ENGINE_LENGTH
+
+    @property
     def engine_front_z(self) -> float:
-        if self.cargo == "stack":
-            return sp.STACK_FRONT_Z + sp.POD.width + sp.STACK_GAP_TO_ENGINE
+        if self.cargo == "stack":  # Q20: the bell's exit just behind the pods' aft faces
+            return sp.STACK_FRONT_Z + sp.POD.width + sp.STACK_EXHAUST_CLEARANCE - self.engine_length
         return self.section_start(self.sections - 1) + sp.CYLINDER_Z[1] - ENGINE_INSET_M
 
     @property
     def length(self) -> float:
-        return self.engine_front_z + sp.ENGINE_LENGTH
+        return self.engine_front_z + self.engine_length
 
 
 TRANSPORT_TRIM = PodTrim(stripe_role="stripe", hazard_flank=True)
@@ -129,19 +134,20 @@ VARIANTS: dict[str, Variant] = {
         Variant(
             "saturn_8_transport", "transport", 2, 0.52, (170_000, 250_000),
             ("bow", "hull_1", "junction", "hull_2", "engine", "pods_1l", "pods_1r", "pods_2l", "pods_2r"),
-            (*LEAD_MOUNTS, Mount("dorsal_mid", (0.0, 7.2, 149.4), UP, "junction"), Mount("ventral_aft", (0.0, -5.3, 240.0), DOWN, "engine")),
+            (*LEAD_MOUNTS, Mount("dorsal_mid", (0.0, 7.2, 149.4), UP, "junction")),
             (53.4, -7.29, 74.3), 75.0, (0.0, 21.5, 149.4), 78.0, TRANSPORT_TRIM,
         ),
         Variant(
             "saturn_8_tanker", "tank", 2, 0.545, (95_000, 145_000),
             ("bow", "spine_1", "junction", "spine_2", "engine", "tanks_1l", "tanks_1r", "tanks_2l", "tanks_2r"),
-            (*LEAD_MOUNTS, Mount("dorsal_mid", (0.0, 9.0, 149.4), UP, "junction"), Mount("ventral_aft", (0.0, -5.3, 240.0), DOWN, "engine")),
+            (*LEAD_MOUNTS, Mount("dorsal_mid", (0.0, 9.0, 149.4), UP, "junction")),
             (25.6, -13.53, 99.4), 75.0, (0.0, 21.5, 149.4), 78.0,
         ),
         Variant(
             "saturn_3_freighter", "stack", 0, 0.54, (60_000, 90_000), ("bow", "pod_top", "pod_l", "pod_r", "engine"),
-            (*LEAD_MOUNTS, Mount("dorsal_aft", (0.0, 5.3, 99.0), UP, "engine")),
+            LEAD_MOUNTS,
             (46.8, -5.46, 79.7), STACK_RIDGE_Z, (0.0, 27.8, 79.7), 36.0, PodTrim(top_paint=0x8E4A3F),
+            engine_scale=sp.SLIM_ENGINE_SCALE,
         ),
     )
 }
@@ -178,11 +184,12 @@ def lead_ship(v: Variant, style: Style) -> list[Piece]:
     pieces += _place(sp.forward_frame(style), "bow")
     if v.cargo == "stack":
         # Q16: the Saturn 3 has the shared engine, so a truss runs on through its pod stack to it.
-        aft = list(np.linspace(sp.DRUM_FRAME_Z[1] - 0.7, v.engine_front_z + 0.4, 8))
+        aft = list(np.linspace(sp.DRUM_FRAME_Z[1] - 0.7, v.engine_front_z - 0.2, 7))
         pieces += _place(sp.truss(aft, style, "truss_aft"), "engine")
+        pieces += _place([sp.truss_end_plate(style, v.engine_front_z - 0.2)], "engine")
     else:
         pieces += _place(sp.aft_frame(style, v.section_start(0) + sp.CYLINDER_Z[0]), "bow")
-    pieces += _place(sp.engine_section(style), "engine", (0.0, 0.0, v.engine_front_z))
+    pieces += _place(sp.engine_section(style, v.engine_scale), "engine", (0.0, 0.0, v.engine_front_z))
     return pieces
 
 
@@ -223,7 +230,7 @@ def cargo(v: Variant, style: Style) -> list[Piece]:
             pieces += _place([sp.hull_cylinder(v.bands, style, "tank", TANK_MASS_KG)], hull, (0.0, 0.0, cyl_z), tag)
             tanks = _chunk_name("tank", k, n, right=True)
             pieces += _place([sp.hull_cylinder(v.bands, style, "tank", TANK_MASS_KG)], tanks, (*sp.LOWER_TANK, cyl_z), tag, side=RIGHT)
-            braces = Piece(Part("braces", sp.tank_braces(style), mass_kg=20_000.0), None, RIGHT)
+            braces = Piece(Part("braces", sp.tank_braces(style), collision=sp.tank_brace_collision(), mass_kg=20_000.0), None, RIGHT)
             pieces += _place([braces], tanks, (0.0, 0.0, s0), tag)
         if k == 0 or v.cargo == "transport":
             pieces += _place([sp.dome_brackets(style)], hull, (0.0, 0.0, cyl_z), f"{tag}front_")
@@ -408,8 +415,8 @@ def rcs_ports(v: Variant) -> list[tuple[str, np.ndarray, np.ndarray]]:
         ports.append((f"{name}_aft", np.array([x, y, z1]), np.array([0.0, 0.0, 1.0])))
     for name, sx in (("disc_r", 1.0), ("disc_l", -1.0)):
         ports.append((name, np.array([sx * sp.DISC_RADIUS, 0.0, 19.06]), np.array([sx, 0.0, 0.0])))
-    z = v.engine_front_z + sp.ENGINE_RCS_Z
-    r = sp.ENGINE_RCS_RADIUS
+    z = v.engine_front_z + v.engine_scale * sp.ENGINE_RCS_Z
+    r = v.engine_scale * sp.ENGINE_RCS_RADIUS
     for name, d in (("collar_r", (1.0, 0.0)), ("collar_l", (-1.0, 0.0)), ("collar_top", (0.0, 1.0)), ("collar_bottom", (0.0, -1.0))):
         ports.append((name, np.array([r * d[0], r * d[1], z]), np.array([d[0], d[1], 0.0])))
     return ports
@@ -460,13 +467,13 @@ def hardpoints(v: Variant, everything: list[Piece], chunks: list[dict[str, Any]]
 
     pods = []
     for name, side, sx in (("l", "left", -1.0), ("r", "right", 1.0)):
-        main = np.array([sx * 0.95, 0.0, length])
+        main = np.array([sx * 0.95 * v.engine_scale, 0.0, length])
         retro = np.array([sx * sp.RETRO_EXIT[0], sp.RETRO_EXIT[1], sp.RETRO_EXIT[2]])
         pods.append({
             "name": name,
             "side": side,
             "center": _r(0.5 * (main + retro) - offset),
-            "main": {"position": _r(main - offset), "exhaust": [0.0, 0.0, 1.0], "radius": sp.MAIN_RADIUS},
+            "main": {"position": _r(main - offset), "exhaust": [0.0, 0.0, 1.0], "radius": round(sp.MAIN_RADIUS * v.engine_scale, 5)},
             "retro": {"position": _r(retro - offset), "exhaust": [0.0, 0.0, -1.0], "radius": sp.RETRO_RADIUS},
         })
     rcs = [

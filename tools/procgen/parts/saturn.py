@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -49,13 +49,13 @@ _SECTION_STEPS = 64  # round sections of the big drums
 DISC_CENTRE_Z = 19.1
 DISC_RADIUS = 14.13
 DISC_THICKNESS = 6.0  # at the centre
-DISC_RIM = 1.6  # thickness at the rim
+DISC_RIM = 1.9  # thickness at the rim (the reference's front reads thicker than the planned 1.6 m)
 DISC_CUT_Z = 29.6  # the aft quarter is cut square here
 NECK_WIDTH = 12.7
 NECK_END_Z = 33.2
 HUB_RADIUS = 2.5
 HUB_TOP_Y = 3.8  # the dorsal_fwd turret stands on the hub
-FIN_RADII = (2.5, 8.7)
+FIN_RADII = (2.5, 7.3)  # the reference's fins end before r 8 m (planned 8.7)
 RUST_RING_RADII = (2.5, 11.0)
 WINDOW_HALF_HEIGHT = 0.3
 # Aft of z 22 the disc's edge is straight, not round (the reference's top silhouette): half-widths at these z.
@@ -283,7 +283,7 @@ def antenna(style: Style) -> list[Piece]:
     profile = [(5.0, 0.0), (4.85, 1.3), (4.4, 2.5), (3.8, r), (3.8, r + 0.15), (4.4, 2.9), (5.0, 1.8), (5.5, 0.0)]
     dish = outward(lathe(profile, 40, [hull, hull, hull, dark, dark, dark, dark], creases={3, 4})).translated((0.0, ANTENNA_Y, 0.0))
     spike = outward(lathe([(0.0, 0.0), (0.0, 0.1), (5.1, 0.36), (5.1, 0.0)], 16, dark, creases={1, 2})).translated((0.0, ANTENNA_Y, 0.0))
-    boom = bar([(0.0, ANTENNA_Y, 5.3), (0.0, -1.7, 10.8)], (1.0, 0.0, 0.0), 0.9, 0.7, hull)
+    boom = bar([(0.0, ANTENNA_Y + 0.1, 5.3), (0.0, -2.2, 12.5)], (1.0, 0.0, 0.0), 0.9, 0.7, hull)
     box_size = (2.0 * r + 0.3, 2.0 * r + 0.3, 5.5)
     hit = Collision("box", (0.0, ANTENNA_Y, 2.75), size=box_size)
     return [
@@ -366,8 +366,10 @@ def command_disc(style: Style) -> list[Piece]:
     neck_centre = (0.0, 0.0, 0.5 * (neck_z0 + NECK_END_Z))
     neck = tapered_box(NECK_END_Z - neck_z0, (NECK_WIDTH + 0.9, 3.4), (NECK_END_WIDTH, 3.4), hull, center=neck_centre)
     pieces.append(_piece("disc_neck", neck, box_solid((NECK_END_WIDTH, 3.2, NECK_END_Z - neck_z0), neck_centre), mass_kg=60_000.0))
-    plate_size, plate_centre = (7.4, 7.6, 0.9), (0.0, -0.4, NECK_END_Z + 0.4)
+    plate_size, plate_centre = (7.4, 7.6, 0.9), (0.0, 0.2, NECK_END_Z - 0.35)
     pieces.append(_piece("truss_plate", box(plate_size, hull, center=plate_centre), box_solid(plate_size, plate_centre), mass_kg=20_000.0))
+    keel_size, keel_centre = (5.0, 1.3, 3.2), (0.0, -3.0, NECK_END_Z - 1.75)
+    pieces.append(_piece("neck_keel", box(keel_size, hull, center=keel_centre), box_solid(keel_size, keel_centre), mass_kg=15_000.0))
 
     # Hubs: the top one is white and carries the forward dorsal turret.
     top_hub = lathe_y([(2.6, 0.0), (2.6, HUB_RADIUS), (HUB_TOP_Y - 0.2, HUB_RADIUS), (HUB_TOP_Y, HUB_RADIUS - 0.2), (HUB_TOP_Y, 0.0)],
@@ -448,13 +450,19 @@ def _frame(style: Style, name: str, upper: tuple, lower: tuple, k_bars: Sequence
     ]
 
 
+DRUM_FRONT_BLOCK = ((2.6, 3.1, 2.3), (0.0, 5.85, 41.15))  # size, centre: on the top drum's front, as the reference's side view
+
+
 def forward_frame(style: Style) -> list[Piece]:
     """From the neck's end plate to the drum frame's front."""
-    z0, z1, joint = TRUSS_START_Z, DRUM_FRAME_Z[0] + 0.3, (2.4, -0.6, 38.0)
-    upper = ((3.0, 2.0, z0), (1.0, TOP_DRUM[1] - 0.3, z1))
+    z0, z1 = NECK_END_Z - 0.2, DRUM_FRAME_Z[0] + 0.3
+    upper = ((3.0, 3.3, z0), (1.0, 5.0, DRUM_FRONT_BLOCK[1][2] - 0.5))
     lower = ((0.0, -3.3, z0), (0.0, TRUSS_DRUM[1] - 0.2, z1))
-    k = [((2.4, 1.8, z0 + 0.4), joint), ((2.4, -3.0, z0 + 0.4), joint), (joint, (2.4, 2.4, z1 - 0.3))]
-    return _frame(style, "frame_fwd", upper, lower, k)
+    k = [((2.4, 2.2, z0 + 1.0), (2.4, -1.6, 40.8)), ((2.4, -1.6, z0 + 1.0), (2.4, 2.2, 40.8))]
+    pieces = _frame(style, "frame_fwd", upper, lower, k)
+    size, centre = DRUM_FRONT_BLOCK
+    pieces.append(_piece("drum_front_block", box(size, style.material("hull"), center=centre), box_solid(size, centre), mass_kg=8_000.0))
+    return pieces
 
 
 def aft_frame(style: Style, dome_tip_z: float) -> list[Piece]:
@@ -478,6 +486,9 @@ def _drum(radius: float, length: float, style: Style) -> tuple[Mesh, Solid]:
     return mesh, lathe_solid([(0.0, radius - c), (c, radius), (length - c, radius), (length, radius - c)])
 
 
+DRUM_POSTS_Z = (43.3, 47.9)  # the frames round the drums, where the reference's side view has them
+
+
 def drum_frame(style: Style) -> list[Piece]:
     """Three drums round the truss (one on top, two low and outboard) and a larger drum on the truss, held by frames."""
     z0, z1 = DRUM_FRAME_Z
@@ -493,8 +504,8 @@ def drum_frame(style: Style) -> list[Piece]:
         pieces.append(_piece(name, mesh.translated((x, y, z0)), solid.translated((x, y, z0)), side=side, mass_kg=60_000.0))
     (bx, by), (rx, ry) = _longerons()
     frames = []
-    for z in (z0 + 0.8, z1 - 0.8):
-        frames.append(bar([(1.1, ry, z), (1.1, TOP_DRUM[1] - 1.2, z)], (0.0, 0.0, 1.0), 0.8, 0.8, hull))
+    for z in DRUM_POSTS_Z:
+        frames.append(bar([(1.1, TRUSS_DRUM[1] + 1.6, z), (1.1, TOP_DRUM[1] - 1.2, z)], (0.0, 0.0, 1.0), 0.8, 0.8, hull))
         frames.append(bar([(1.2, TRUSS_DRUM[1] - 1.0, z), (LOWER_DRUM[0] - 0.9, LOWER_DRUM[1] + 0.6, z)], (0.0, 0.0, 1.0), 0.9, 0.9, hull))
         frames.append(bar([(rx, ry, z), (LOWER_DRUM[0] - 0.4, LOWER_DRUM[1] + 1.0, z)], (0.0, 0.0, 1.0), 0.7, 0.7, hull))
     pieces.append(_piece("drum_frames", Mesh.concatenate(frames), side=RIGHT, mass_kg=20_000.0))
@@ -507,17 +518,22 @@ def drum_frame(style: Style) -> list[Piece]:
 
 
 # --- engine section ---------------------------------------------------------------------------------------------------
-def engine_section(style: Style) -> list[Piece]:
+def engine_section(style: Style, k: float = 1.0) -> list[Piece]:
     """22.6 m from the collar's front (z = 0): a 9.6 m collar, four propellant tanks round a central one, U-shaped feed
-    pipes to the throat and a bell with a 6.3 m exit on the axis."""
+    pipes to the throat and a bell with a 6.3 m exit on the axis. ``k`` scales all of it (the Saturn 3's slim engine,
+    Q20); masses scale with the volume."""
+    if k <= 0.0:
+        raise ValueError("the engine's scale must be positive")
     hull, dark = style.material("hull"), style.material("hull_dark")
-    R, L = COLLAR_RADIUS, COLLAR_LENGTH
-    collar_profile = [(0.0, 0.0), (0.0, R - 0.5), (0.4, R), (L - 0.4, R), (L, R - 0.4), (L, 0.0)]
+    R, L, length = k * COLLAR_RADIUS, k * COLLAR_LENGTH, k * ENGINE_LENGTH
+    m = k**3
+    collar_profile = [(0.0, 0.0), (0.0, R - 0.5 * k), (0.4 * k, R), (L - 0.4 * k, R), (L, R - 0.4 * k), (L, 0.0)]
     collar = lathe(collar_profile, _SECTION_STEPS, [dark, hull, hull, hull, dark], creases={1, 2, 3, 4})
-    hit = Collision("capsule", (0.0, 0.0, 0.5 * ENGINE_LENGTH), radius=R, height=ENGINE_LENGTH)
-    pieces = [_piece("engine_collar", collar, lathe_solid(collar_profile[1:-1]), mass_kg=300_000.0, collision=[hit])]
+    hit = Collision("capsule", (0.0, 0.0, 0.5 * length), radius=R, height=length)
+    pieces = [_piece("engine_collar", collar, lathe_solid(collar_profile[1:-1]), mass_kg=300_000.0 * m, collision=[hit])]
 
     def capsule_tank(radius: float, z0: float, z1: float) -> tuple[Mesh, Solid]:
+        radius, z0, z1 = k * radius, k * z0, k * z1
         steps = 5
         front = [(z0 + radius * 0.6 * (1.0 - math.sin(a)), radius * math.cos(a)) for a in np.linspace(0.5 * math.pi, 0.0, steps)]
         back = [(z1 - radius * 0.6 * (1.0 - math.sin(a)), radius * math.cos(a)) for a in np.linspace(0.0, 0.5 * math.pi, steps)]
@@ -525,23 +541,33 @@ def engine_section(style: Style) -> list[Piece]:
         return lathe(profile, 32, hull), lathe_solid(profile)
 
     core, core_solid = capsule_tank(2.55, 1.7, 14.63)
-    pieces.append(_piece("engine_core_tank", core, core_solid, mass_kg=200_000.0))
+    pieces.append(_piece("engine_core_tank", core, core_solid, mass_kg=200_000.0 * m))
     tank, tank_solid = capsule_tank(1.9, 6.2, 13.4)
     for name, (x, y), side in (("engine_tank_side", (3.0, 0.0), RIGHT), ("engine_tank_top", (0.0, 3.0), CENTRE), ("engine_tank_bottom", (0.0, -3.0), CENTRE)):
-        pieces.append(_piece(name, tank.translated((x, y, 0.0)), tank_solid.translated((x, y, 0.0)), side=side, mass_kg=60_000.0))
+        at = (k * x, k * y, 0.0)
+        pieces.append(_piece(name, tank.translated(at), tank_solid.translated(at), side=side, mass_kg=60_000.0 * m))
     # U-shaped pipes in each tank's radial plane: aft out of the tank, over and back into the throat.
     for name, direction, side in (("engine_pipe_side", (1.0, 0.0), RIGHT), ("engine_pipe_top", (0.0, 1.0), CENTRE), ("engine_pipe_bottom", (0.0, -1.0), CENTRE)):
         d = np.array([*direction, 0.0])
         rho_z = [(3.1, 12.9), (3.1, 15.4), (2.85, 16.2), (2.3, 16.55), (1.65, 16.35)]
-        path = [d * rho + (0.0, 0.0, z) for rho, z in rho_z]
+        path = [k * (d * rho + (0.0, 0.0, z)) for rho, z in rho_z]
         width_axis = (-direction[1], direction[0], 0.0)
-        pieces.append(_piece(name, bar(path, width_axis, 0.9, 0.9, dark), side=side, mass_kg=5_000.0))
-    throat_profile = [(14.0, 0.0), (14.0, 2.2), (16.25, 2.2), (16.25, 0.0)]
+        pieces.append(_piece(name, bar(path, width_axis, 0.9 * k, 0.9 * k, dark), side=side, mass_kg=5_000.0 * m))
+    throat_profile = [(14.0 * k, 0.0), (14.0 * k, 2.2 * k), (16.25 * k, 2.2 * k), (16.25 * k, 0.0)]
     throat = lathe(throat_profile, 40, dark, creases={1, 2})
-    pieces.append(_piece("engine_throat", throat, lathe_solid(throat_profile[1:-1]), mass_kg=40_000.0))
-    bell = nozzle(BELL, style).translated((0.0, 0.0, ENGINE_LENGTH - BELL.length))
-    pieces.append(_piece("engine_bell", bell.mesh, mass_kg=80_000.0))
+    pieces.append(_piece("engine_throat", throat, lathe_solid(throat_profile[1:-1]), mass_kg=40_000.0 * m))
+    bell_spec = replace(BELL, throat_r=k * BELL.throat_r, exit_r=k * BELL.exit_r, length=k * BELL.length, wall=k * BELL.wall)
+    bell = nozzle(bell_spec, style).translated((0.0, 0.0, length - bell_spec.length))
+    pieces.append(_piece("engine_bell", bell.mesh, mass_kg=80_000.0 * m))
     return pieces
+
+
+def truss_end_plate(style: Style, z: float) -> Piece:
+    """Where a truss wider than its engine's collar lands on the collar's front (the Saturn 3's slim engine)."""
+    (bx, by), (rx, ry) = _longerons()
+    size = (2.0 * rx + 1.2, ry - by + 1.2, 0.8)
+    centre = (0.0, 0.5 * (ry + by), z)
+    return _piece("truss_end_plate", box(size, style.material("hull_dark"), center=centre), box_solid(size, centre), mass_kg=15_000.0)
 
 
 # --- hull cylinders and tanks -----------------------------------------------------------------------------------------
@@ -742,38 +768,56 @@ def _vertical_extent(poly: np.ndarray, u: float) -> tuple[float, float]:
 
 
 # --- the transport section's arms -----------------------------------------------------------------------------------------
+ARM_PEDESTAL = ((12.8, 17.6), (ARM_Y[1] - 0.2, -2.3))  # x, y: the block on each arm the reference's front view shows
+
+
 def cargo_arm(style: Style, z0: float, z1: float) -> list[Piece]:
-    """One arm under a pod's middle (right side, section frame), hung from two brackets on the cylinder's upper flank."""
+    """One arm under a pod's middle (right side, section frame): a pedestal on it, a brace from the pedestal up to the
+    cylinder's flank and a leg from the arm's root, as the reference's front view shows."""
     hull = style.material("hull")
     size = (ARM_X[1] - ARM_X[0], ARM_Y[1] - ARM_Y[0], z1 - z0)
     centre = (0.5 * sum(ARM_X), 0.5 * sum(ARM_Y), 0.5 * (z0 + z1))
-    hangers = []
-    top = 4.7
-    for zh in (z0 + 0.6, z1 - 0.6):
-        path = [(7.1, top, zh), (9.2, top, zh), (ARM_X[0] + 0.6, ARM_Y[1] - 0.2, zh)]
-        hangers.append(bar(path, (0.0, 0.0, 1.0), 0.7, 0.6, hull))
-    hanger_lo = np.array([7.1, ARM_Y[1] - 0.2, z0 + 0.25])
-    hanger_hi = np.array([ARM_X[0] + 1.0, top + 0.35, z1 - 0.25])
+    (px0, px1), (py0, py1) = ARM_PEDESTAL
+    ped_size = (px1 - px0, py1 - py0, z1 - z0 - 1.6)
+    ped_centre = (0.5 * (px0 + px1), 0.5 * (py0 + py1), centre[2])
+    struts = []
+    for zh in (z0 + 0.9, z1 - 0.9):
+        struts.append(bar([(px0 + 0.3, py1 - 0.3, zh), (8.2, 2.6, zh)], (0.0, 0.0, 1.0), 0.8, 0.7, hull))
+        struts.append(bar([(ARM_X[0] + 0.3, ARM_Y[1] - 0.2, zh), (8.5, 0.4, zh)], (0.0, 0.0, 1.0), 0.8, 0.7, hull))
+    lo = np.array([8.2, ARM_Y[1] - 0.2, z0 + 0.5])
+    hi = np.array([px0 + 0.6, 3.0, z1 - 0.5])
     hit = Collision("box", centre, size=size)
-    hanger_hit = Collision("box", 0.5 * (hanger_lo + hanger_hi), size=hanger_hi - hanger_lo, name="hangers")
+    brace_hit = Collision("box", 0.5 * (lo + hi), size=hi - lo, name="braces")
     return [
         _piece("arm", box(size, hull, center=centre), box_solid(size, centre), side=RIGHT, mass_kg=60_000.0, collision=[hit]),
-        _piece("arm_hangers", Mesh.concatenate(hangers), side=RIGHT, mass_kg=12_000.0, collision=[hanger_hit]),
+        _piece("arm_pedestal", box(ped_size, hull, center=ped_centre), box_solid(ped_size, ped_centre), side=RIGHT, mass_kg=10_000.0,
+               collision=[Collision("box", ped_centre, size=ped_size)]),
+        _piece("arm_braces", Mesh.concatenate(struts), side=RIGHT, mass_kg=8_000.0, collision=[brace_hit]),
     ]
 
 
 # --- tank section ---------------------------------------------------------------------------------------------------------
+TANK_PEDESTAL = ((10.0, 15.8), (-7.4, -3.4))  # x, y: the block on each lower tank under its braces
+
+
 def tank_braces(style: Style) -> Mesh:
-    """Bars from the spine tank to the right lower tank at three stations along the section (section frame)."""
+    """An A-frame at three stations along the section (section frame, right side): from a pedestal on the lower tank up
+    to the spine tank's upper flank, as the reference's front view shows."""
     hull = style.material("hull")
-    d = np.array([LOWER_TANK[0], LOWER_TANK[1]])
-    d /= np.linalg.norm(d)
-    a = d * 7.6
-    b = np.array(LOWER_TANK) - d * 7.6
+    (px0, px1), (py0, py1) = TANK_PEDESTAL
     meshes = []
     for z in (25.0, 50.0, 75.0):
-        meshes.append(bar([(a[0], a[1], z), (b[0], b[1], z)], (0.0, 0.0, 1.0), 1.6, 1.0, hull))
+        meshes.append(box((px1 - px0, py1 - py0, 2.2), hull, center=(0.5 * (px0 + px1), 0.5 * (py0 + py1), z)))
+        meshes.append(bar([(px0 + 0.3, py1 - 0.3, z), (8.0, 2.6, z)], (0.0, 0.0, 1.0), 1.4, 0.8, hull))
+        meshes.append(bar([(px0 + 3.5, py1 - 0.3, z), (8.0, 3.3, z)], (0.0, 0.0, 1.0), 1.4, 0.8, hull))
     return Mesh.concatenate(meshes)
+
+
+def tank_brace_collision() -> list[Collision]:
+    """One box round each A-frame of :func:`tank_braces` (section frame, right side)."""
+    (px0, px1), (py0, _py1) = TANK_PEDESTAL
+    lo, hi = np.array([7.6, py0, -1.1]), np.array([px1, 3.6, 1.1])
+    return [Collision("box", 0.5 * (lo + hi) + (0.0, 0.0, z), size=hi - lo, name=f"z{int(z)}") for z in (25.0, 50.0, 75.0)]
 
 
 # --- junctions ------------------------------------------------------------------------------------------------------------
@@ -825,7 +869,8 @@ def tanker_junction(style: Style, centre_z: float, dome_aft_z: float, dome_front
 
 # --- the Saturn 3's pod stack ---------------------------------------------------------------------------------------------
 STACK_FRONT_Z = 64.24  # the pods' front faces (their inboard faces, turned forward)
-STACK_GAP_TO_ENGINE = 1.56
+STACK_EXHAUST_CLEARANCE = 1.5  # Q20: the slim engine's bell exit behind the pods' aft faces
+SLIM_ENGINE_SCALE = 2.8 / COLLAR_RADIUS  # Q20: a 5.6 m collar in the 7.0 m gap between the lower pods
 LOWER_POD_CENTRE = (25.015, -5.46)  # x of the pod's middle
 TOP_POD_CENTRE = (0.0, 13.16)
 CROSS_BEAM = ((56.4, 4.4, 1.6), (0.0, -6.9, 49.3))  # size, centre

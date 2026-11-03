@@ -202,7 +202,7 @@ cargo:
 | `saturn_4_tanker` | one tank section | 158.5 m | none; half the Saturn 8 tanker, from the same parts |
 | `saturn_8_transport` | two transport sections | 258.5 m | `EA_Saturn_8_transport.stl` |
 | `saturn_8_tanker` | two tank sections | 258.5 m | `EA_Saturn_Fuel_tanker.stl` |
-| `saturn_3_freighter` | three pods in a group | 119.5 m | `EA_Saturn_3_Freighter.stl` |
+| `saturn_3_freighter` | three pods in a group | 96.8 m | `EA_Saturn_3_Freighter.stl` |
 
 **Scale.** With the Saturn 4 model at 100 m overall (T11's first reading), its four pods and one pod gap measure
 63.10 m. Q16 makes that 100 m, so the family is 1.585 times larger: 0.09746 m per file unit of
@@ -220,7 +220,7 @@ of the nose tip.
 | Part | Size and place |
 |---|---|
 | Nose antenna | a 3.8 m spike in front of a 7.2 m dish that faces forward, z 0 to 5.5, on a short boom 4.4 m below the axis |
-| Command disc (the control section) | a lens 28.3 m across, 6.0 m thick at the centre and about 1.6 m at the rim, centred on the axis at z 19.1 (z 4.9 to 33.2). Its aft quarter is cut square at z 29.6, leaving a neck 12.7 m wide that reaches the truss at z 33.2. A ring of 12 radial fins stands on each face between 2.5 m and 8.7 m from the centre, round a hub. A block of 6.7 x 4.3 x 7.8 m sits in each cut corner. |
+| Command disc (the control section) | a lens 28.3 m across, 6.0 m thick at the centre and about 1.9 m at the rim (T12, from the compare tool; first read as 1.6 m), centred on the axis at z 19.1 (z 4.9 to 33.2). Its aft quarter is cut square at z 29.6, leaving a neck 12.7 m wide that reaches the truss at z 33.2. A ring of 12 radial fins stands on each face between 2.5 m and 7.3 m from the centre (T12; first read as 8.7 m), round a hub. A block of 6.7 x 4.3 x 7.8 m sits in each cut corner. |
 | Forward truss | from z 33.2: three longerons in a triangle 6.3 m across, with V braces. It ends at the first cylinder's front dome (z 61.7) on the transports and tankers, and runs on to the engine on the Saturn 3. |
 | Drum frame | at z 41.9 to 50.1, a triangular frame round the truss holding drums 8.2 m long, axes along z: one 3.2 m across, 5.55 m above the axis; two 3.2 m across at x ±9.27, 10.55 m below; and a 4.0 m drum on the truss 5.18 m below the axis |
 | Engine section | 22.6 m long: a 9.6 m collar, four propellant tanks 3.8 m across round a 5.1 m central tank, U-shaped feed pipes to the throat, and a bell with a 6.3 m exit on the axis. On the transports and tankers its collar starts 1.3 m inside the last cylinder's aft dome. |
@@ -254,8 +254,8 @@ the spine tank; from behind they form an inverted triangle 50.5 m wide and 30.8 
 
 No capture shows weapons, and the wiki lists "None" for the Achilles. The turrets below are Q14's, placed to cover the
 hull's quarters. The drum frame's drums are the only turret-like mounts in the models; they stay RCS clusters. Every
-variant has the lead ship's two turrets, `dorsal_fwd` on the disc's top hub at (0, +3.8, 19.1), up +y, for the forward
-upper quarter, and `ventral_fwd` under the drum frame's centre drum at (0, -7.4, 46.0), up -y, for forward and below.
+variant has the lead ship's turret, `dorsal_fwd` on the disc's top hub at (0, +3.8, 19.1), up +y, for the forward upper
+quarter. Turrets are dorsal only (Q19): the ventral mounts first proposed (`ventral_fwd`, `ventral_aft`) are dropped.
 
 Sources, checked 2026-11-02:
 https://babylon5.fandom.com/wiki/%22Achilles%22_Type_Freighter,
@@ -284,8 +284,8 @@ cylinders and docking clamps), not the Saturn pod; it was rendered and set aside
 
 - Pod trim: a red stripe (#A33A2E) along each pod's top edge and a yellow and black hazard band (#D6AE2A, #262626)
   along its flank, as on Red Star 9 and Dionysus.
-- Turrets (3 by size): the lead ship's two, and `dorsal_aft` on the cylinder's top over the aft arm pair at
-  (0, +9.3, 124.4), up +y, for the rear and the flanks above the pods.
+- Turrets (2, Q19): `dorsal_fwd`, and `dorsal_aft` on the cylinder's top over the aft arm pair at (0, +9.3, 124.4), up
+  +y, for the rear and the flanks above the pods.
 
 #### Saturn 4 tanker (158.5 m)
 
@@ -301,7 +301,7 @@ No model: half the Saturn 8 tanker, built from the same parts (Q16). Lead ship a
 | Engine section | 135.9 to 158.5 | on the spine tank's aft dome |
 
 - Colours: tanks in the family's red and off-white bands (the tubular sections the wiki says were built for a tanker).
-- Turrets (3): the lead ship's two, and `dorsal_aft` on the spine tank's top at (0, +9.3, 124.4), up +y.
+- Turrets (2, Q19): `dorsal_fwd`, and `dorsal_aft` on the spine tank's top at (0, +9.3, 124.4), up +y.
 
 #### Saturn 8 transport (258.5 m)
 
@@ -324,9 +324,8 @@ from each end. Its engine ends in a crown of short nozzles; the generator uses t
 
 - All eight pods sit 6.97 m apart, across the junction too, as in the model.
 - Pod trim as on the Saturn 4 transport.
-- Turrets (4): the lead ship's two; `dorsal_mid` on top of the junction module (0, +7.2, 149.4), up +y, which sees fore
-  and aft over the pods; `ventral_aft` under the engine collar (0, -5.3, 240.0), up -y, which sees down between the
-  pod rows and aft.
+- Turrets (2, Q19): `dorsal_fwd`, and `dorsal_mid` on top of the junction module (0, +7.2, 149.4), up +y, which sees
+  fore and aft over the pods.
 
 #### Saturn 8 tanker (258.5 m)
 
@@ -342,12 +341,11 @@ long, 50.5 m wide, 30.8 m tall. In the model each junction module has two recess
 | Engine section | 235.9 to 258.5 | |
 
 - Colours: tanks banded as on the Saturn 4 tanker, junction modules in the plating grey with #55534F recesses.
-- Turrets (4): the lead ship's two; `dorsal_mid` on the top junction module (0, +9.0, 149.4), up +y; `ventral_aft`
-  under the engine collar (0, -5.3, 240.0), up -y.
+- Turrets (2, Q19): `dorsal_fwd`, and `dorsal_mid` on the top junction module (0, +9.0, 149.4), up +y.
 
-#### Saturn 3 freighter (119.5 m)
+#### Saturn 3 freighter (96.8 m)
 
-`EA_Saturn_3_Freighter.stl`. Lead ship and three transport pods in a group; 119.5 m long, 93.1 m wide, 35.9 m tall.
+`EA_Saturn_3_Freighter.stl`. Lead ship and three transport pods in a group; 96.8 m long, 94.7 m wide, 35.9 m tall.
 
 - The model: a disc, truss and drum frame like the Saturn 4's, then a cross-beam and three pods. Scaled so its disc
   matches the Saturn 4's, its drum frame lands within 1 m of the Saturn 4's, which confirms the scale. It has its own
@@ -363,22 +361,24 @@ long, 50.5 m wide, 30.8 m tall. In the model each junction module has two recess
   tall.
 - Each pod sits on a mounting block (6.3 x 4.4 x 13.4 m, with vent grilles) on its front face, the lower ones on a
   cross-beam behind the drum frame and the top one on a strut from the drum frame's top drum.
-- Q16 gives the Saturn 3 the same lead ship, engine section included, so the generator adds what the model lacks: the
-  forward truss runs on along the axis through the stack to the engine section behind it. To make room the stack rides
-  about 4.7 m higher on the axis than in the model (the lower pods' tops, over the frames) and the lower pods stand
-  7.0 m apart (4.2 m between their end frames in the model): the truss passes between them and under the top pod.
+- The model has no engine. Q20 puts a slim engine on the centre line between the two lower pods, directly under the top
+  pod: the shared engine section at 0.583 of its size (a 5.6 m collar in the 7.0 m gap, 13.2 m long), its bell's exit
+  1.5 m behind the pods' aft faces so the exhaust clears them. The forward truss runs on along the axis from the drum
+  frame through the stack to a plate on the engine's front. To make room the stack rides about 4.7 m higher on the axis
+  than in the model (the lower pods' tops, over the frames) and the lower pods stand 7.0 m apart (4.2 m between their
+  end frames in the model): the truss and the engine pass between them and under the top pod.
 
 | Part | z | Place |
 |---|---|---|
-| Antenna, disc, forward truss, drum frame | 0 to 50.1 | as the Saturn 4 transport; the truss continues to z 96.9 |
+| Antenna, disc, forward truss, drum frame | 0 to 50.1 | as the Saturn 4 transport; the truss continues to the engine at z 83.6 |
 | Cross-beam | 48.5 to 50.1 | x ±28.2, 9.1 to 4.7 m below the axis |
 | Pod blocks | 51.0 to 64.4 | on the pods' centres |
 | Lower pods | 64.2 to 95.3 | centres x ±25.02 and 5.46 m below the axis (x ±3.5 to ±46.5, 14.10 m below to 3.17 m above) |
 | Top pod | 64.2 to 95.3 | centre 13.16 m above the axis (4.52 to 21.79 m above), x ±21.5 |
-| Engine section | 96.9 to 119.5 | on the axis, 1.6 m behind the pods |
+| Engine section (slim, Q20) | 83.6 to 96.8 | on the axis between the lower pods and under the top pod; the bell's exit 1.5 m behind the pods |
 
 - Pod trim: rust-red tops (#8E4A3F) as on Epsilon.JPG.
-- Turrets (3 by size): the lead ship's two, and `dorsal_aft` on the engine collar (0, +5.3, 99.0), up +y, for the rear.
+- Turrets (1, Q19, Q20): `dorsal_fwd` only; the aft turret is dropped.
 
 ### Skylark transport (60 m)
 

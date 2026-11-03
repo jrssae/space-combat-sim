@@ -35,6 +35,9 @@ How the two sides are put on one grid
   Q16). The model is cut exactly at the planes; the asset keeps the splats whose centres lie inside. Each cropped side
   is moved so that the start of its range is z = 0, so two parts meet at their starts; a side without a range keeps its
   own z = 0. ``--part NAME`` puts the result in its own folder.
+* ``--model-scale SX,SY,SZ`` scales the model, after any crop, about its centre line (x), its origin's height (y, after
+  ``--model-offset``) and its start (z): a part whose size the maintainer set apart from the model (the Saturn 3's shared
+  pods, Q20) is scored for shape and layout at that size.
 * Extra parts (the Bokmai's removable pods) are drawn with the hull: ``--pod-ply FILE`` is a splat file in the pod's own
   frame, put at every mount from ``--pod-at X,Y,Z`` (body frame, repeatable) and ``--pods-from-hardpoints`` (the
   asset's ``hardpoints.json`` ``cargo_pods[]``, whose ``position`` and ``up`` are in the body frame, as the other
@@ -534,6 +537,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--model-offset", default=None, metavar="X,Y,Z", help="metres added to the model's coordinates, for a generator whose origin is not the model's box centre")
     ap.add_argument("--model-zrange", nargs=2, type=float, default=None, metavar=("Z0", "Z1"), help="keep this z range (m) of the model")
     ap.add_argument("--asset-zrange", nargs=2, type=float, default=None, metavar=("Z0", "Z1"), help="keep this z range (m) of the asset")
+    ap.add_argument("--model-scale", default=None, metavar="SX,SY,SZ",
+                    help="scale the (cropped) model per axis, about its centre line, its origin's height and its start (Q20)")
     ap.add_argument("--pod-ply", type=Path, default=None, help="splat file of a removable part, drawn at every mount")
     ap.add_argument("--pod-at", action="append", default=[], metavar="X,Y,Z", help="a mount in the body frame (repeatable)")
     ap.add_argument("--pods-from-hardpoints", action="store_true", help="mounts from the asset's hardpoints.json cargo_pods[]")
@@ -571,6 +576,10 @@ def main(argv: list[str] | None = None) -> int:
             if len(tris) == 0:
                 raise ValueError(f"the model has no triangles within z {model_range[0]:g}..{model_range[1]:g} m")
             tris = tris - np.array([0.0, 0.0, model_range[0]])
+        model_scale = parse_vec3(args.model_scale) if args.model_scale else np.ones(3)
+        if np.any(model_scale <= 0.0):
+            raise ValueError("--model-scale needs three positive factors")
+        tris = tris * model_scale
         if asset_range is not None:
             splats = splats.cropped(2, *asset_range)
             if len(splats) == 0:
@@ -603,6 +612,7 @@ def main(argv: list[str] | None = None) -> int:
             "triangles": int(len(tris)),
             "zrange": model_range,
             "offset_m": [round(float(v), 4) for v in model_offset],
+            "scale": [round(float(v), 4) for v in model_scale],
             "dims_m": {n: round(v, 3) for n, v in comp.model_dims.items()},
         },
         "asset": {

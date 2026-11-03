@@ -383,6 +383,17 @@ class MainTests(TmpCase):
         self.assertEqual(code, 1, out)
         self.assertAlmostEqual(self.report()["dimensions"]["width"]["ratio"], 0.5, delta=0.03)
 
+    def test_model_scale_grows_the_cropped_model_to_the_asset_size(self) -> None:
+        # Q20 (M5-T12): a part the maintainer sized apart from the model is scored at the asset's size.
+        bigger = ((-2.5, -1.2, 0.0), (2.5, 1.2, 12.0))
+        code, out, _ = self.compare(self.stl(_box(*HULL)), self.asset([bigger]))
+        self.assertEqual(code, 1, out)
+        code, out, _ = self.compare(self.stl(_box(*HULL)), self.asset([bigger]), "--model-scale", "1.25,1.2,1")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.report()["model"]["scale"], [1.25, 1.2, 1.0])
+        code, out, _ = self.compare(self.stl(_box(*HULL)), self.asset([bigger]), "--model-scale", "1,0,1")
+        self.assertEqual(code, 2, out)
+
     def test_an_authored_origin_off_the_box_centre_is_given_with_model_offset(self) -> None:
         # A generator that authors y from an axis 5 m above the model's box centre (the Saturns' spine axis).
         raised = ((-2.0, 4.0, 0.0), (2.0, 6.0, 12.0))
