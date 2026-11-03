@@ -1,0 +1,213 @@
+extends GutTest
+## The hit resolver's broad phase (M4-T08, architecture §17.7): `HitBroadPhase` must hand the resolver exactly the projectile
+## and hull pairs its bounding-sphere test accepts (never fewer, so no hit is lost; never more, so the native and GDScript paths
+## agree bit for bit), in the resolver's order, for hulls from 5 m to 1 km, near the origin and far from it. The native path
+## (`ScsHitSweep`) must give the same pairs and the same work count as the GDScript one. Native cases go pending, saying why,
+## when the native library is not built.
+
+const CROWDS: int = 40
+const FAR_M: float = 45000.0
+
+var _native_backup: bool
+
+
+func before_each() -> void:
+	_native_backup = bool(Settings.get_value(&"perf_native"))
+	Settings.set_value(&"perf_native", true)
+
+
+func after_each() -> void:
+	Settings.set_value(&"perf_native", _native_backup)
+
+
+# True (and the test marked pending, saying why) when there is no native library to compare against.
+func _skipped() -> bool:
+	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
+		return false
+	pending("the native library is not built (scripts/build_native.sh), so there is no native path to compare")
+	return true
+
+
+# The pairs the resolver's sphere test accepts, by testing every pair: the reference.
+static func _every_pair(bolt_mids: PackedVector3Array, bolt_reach: PackedFloat64Array, hull_mids: PackedVector3Array,
+		hull_reach: PackedFloat64Array) -> PackedInt64Array:
+	var out := PackedInt64Array()
+	for i: int in bolt_mids.size():
+		for j: int in hull_mids.size():
+			var reach: float = bolt_reach[i] + hull_reach[j]
+			if bolt_mids[i].distance_squared_to(hull_mids[j]) > reach * reach:
+				continue
+			out.append(i * hull_mids.size() + j)
+	return out
+
+
+# A seeded crowd: hulls of 5 m to 1 km (some moving fast) and bolts, beams and missiles among them, near the origin or 45 km out.
+static func _crowd(rng: RandomNumberGenerator, index: int) -> Dictionary:
+	var centre := Vector3.ZERO
+	if index % 2 == 1:
+		centre = Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)).normalized() * FAR_M
+	var box_m: float = [600.0, 2000.0, 6000.0][index % 3]
+	var hull_mids := PackedVector3Array()
+	var hull_reach := PackedFloat64Array()
+	for j: int in rng.randi_range(1, 120):
+		hull_mids.append(centre + _in_box(rng, box_m))
+		var radius: float = [5.0, 12.0, 30.0, 150.0, 600.0, 1000.0][rng.randi_range(0, 5)] if rng.randf() < 0.3 \
+				else rng.randf_range(5.0, 15.0)
+		hull_reach.append(radius + rng.randf_range(0.0, 400.0) / 60.0 * 0.5)
+	var bolt_mids := PackedVector3Array()
+	var bolt_reach := PackedFloat64Array()
+	for i: int in rng.randi_range(0, 400):
+		var roll: float = rng.randf()
+		var at: Vector3
+		if roll < 0.5 and hull_mids.size() > 0:
+			# Near a hull, often right on the edge of the sphere test.
+			var j: int = rng.randi_range(0, hull_mids.size() - 1)
+			at = hull_mids[j] + _direction(rng) * float(hull_reach[j]) * rng.randf_range(0.9, 1.1)
+		else:
+			at = centre + _in_box(rng, box_m)
+		bolt_mids.append(at)
+		if roll > 0.98:
+			bolt_reach.append(1500.0 + 0.5)  # a 3 km beam
+		elif roll > 0.9:
+			bolt_reach.append(rng.randf_range(2.0, 6.0) + 2.0)  # a missile
+		else:
+			bolt_reach.append(rng.randf_range(400.0, 1400.0) / 60.0 * 0.5 + 0.25)
+	return {"bolt_mids": bolt_mids, "bolt_reach": bolt_reach, "hull_mids": hull_mids, "hull_reach": hull_reach}
+
+
+static func _in_box(rng: RandomNumberGenerator, box_m: float) -> Vector3:
+	var half: float = box_m * 0.5
+	return Vector3(rng.randf_range(-half, half), rng.randf_range(-half, half), rng.randf_range(-half, half))
+
+
+static func _direction(rng: RandomNumberGenerator) -> Vector3:
+	var v := Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
+	return v.normalized() if v.length_squared() > 1e-6 else Vector3.UP
+
+
+static func _pairs(phase: HitBroadPhase, crowd: Dictionary) -> PackedInt64Array:
+	return phase.pairs(crowd["bolt_mids"], crowd["bolt_reach"], crowd["hull_mids"], crowd["hull_reach"])
+
+
+static func _ascending(keys: PackedInt64Array) -> bool:
+	for k: int in range(1, keys.size()):
+		if keys[k] <= keys[k - 1]:
+			return false
+	return true
+
+
+# --- what the resolver gets ---------------------------------------------------------------------------------------
+
+
+func test_the_gdscript_path_gives_exactly_the_pairs_the_sphere_test_accepts() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261103
+	var phase := HitBroadPhase.new()
+	phase.use_native = false
+	var accepted: int = 0
+	for index: int in CROWDS:
+		var crowd: Dictionary = _crowd(rng, index)
+		var expected: PackedInt64Array = _every_pair(crowd["bolt_mids"], crowd["bolt_reach"], crowd["hull_mids"],
+				crowd["hull_reach"])
+		var got: PackedInt64Array = _pairs(phase, crowd)
+		assert_eq(phase.path(), &"gdscript")
+		assert_eq(got, expected, "crowd %d: every pair the sphere test accepts, and no other" % index)
+		assert_true(_ascending(got), "crowd %d: in the resolver's order (bolt, then hull)" % index)
+		accepted += got.size()
+	gut.p("%d accepted pairs over %d crowds" % [accepted, CROWDS])
+	assert_gt(accepted, 1000, "the crowds put many pairs right on the edge of the test")
+
+
+func test_the_native_path_gives_the_same_pairs_and_work_as_gdscript() -> void:
+	if _skipped():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261103
+	var native := HitBroadPhase.new()
+	var gdscript := HitBroadPhase.new()
+	gdscript.use_native = false
+	assert_eq(native.path(), &"native", "library loaded and perf_native on: %s answers (%s)" % [HitBroadPhase.NATIVE_CLASS,
+			NativeLib.version(HitBroadPhase.NATIVE_CLASS)])
+	for index: int in CROWDS:
+		var crowd: Dictionary = _crowd(rng, index)
+		var expected: PackedInt64Array = _pairs(gdscript, crowd)
+		assert_eq(_pairs(native, crowd), expected, "crowd %d: the same pairs" % index)
+		assert_eq(native.visited, gdscript.visited, "crowd %d: the same work" % index)
+
+
+func test_odd_inputs_give_what_the_sphere_test_gives_on_both_paths() -> void:
+	# Not finite, negative, beyond the grid and larger than the top level: each falls back to testing everything it must.
+	var hull_mids := PackedVector3Array([Vector3.ZERO, Vector3(NAN, 0, 0), Vector3(30, 0, 0), Vector3(1.0e12, 0, 0),
+			Vector3(INF, 0, 0), Vector3(-200, 0, 0), Vector3(0, 9000, 0)])
+	var hull_reach := PackedFloat64Array([10.0, 10.0, -20.0, 10.0, 10.0, NAN, 20000.0])
+	var bolt_mids := PackedVector3Array([Vector3(5, 0, 0), Vector3(1.0e12 + 4.0, 0, 0), Vector3(NAN, NAN, NAN),
+			Vector3(-195, 0, 0), Vector3(25, 0, 0), Vector3(0, 0, 0)])
+	var bolt_reach := PackedFloat64Array([1.0, 1.0, 1.0, 1.0, INF, -3.0])
+	var expected: PackedInt64Array = _every_pair(bolt_mids, bolt_reach, hull_mids, hull_reach)
+	var phase := HitBroadPhase.new()
+	phase.use_native = false
+	assert_eq(phase.pairs(bolt_mids, bolt_reach, hull_mids, hull_reach), expected, "GDScript")
+	if _skipped():
+		return
+	phase.use_native = true
+	assert_eq(phase.path(), &"native")
+	assert_eq(phase.pairs(bolt_mids, bolt_reach, hull_mids, hull_reach), expected, "native")
+
+
+func test_nothing_to_pair_gives_no_pairs_and_no_work() -> void:
+	for use_native: bool in [false, true]:
+		var phase := HitBroadPhase.new()
+		phase.use_native = use_native
+		assert_eq(phase.pairs(PackedVector3Array(), PackedFloat64Array(), PackedVector3Array([Vector3.ZERO]),
+				PackedFloat64Array([10.0])).size(), 0)
+		assert_eq(phase.visited, 0)
+		assert_eq(phase.pairs(PackedVector3Array([Vector3.ZERO]), PackedFloat64Array([1.0]), PackedVector3Array(),
+				PackedFloat64Array()).size(), 0)
+		assert_eq(phase.visited, 0)
+
+
+func test_the_native_sweep_refuses_arrays_that_do_not_line_up() -> void:
+	if _skipped():
+		return
+	var sweep: Object = NativeLib.instantiate(HitBroadPhase.NATIVE_CLASS)
+	assert_not_null(sweep, "the library provides %s" % HitBroadPhase.NATIVE_CLASS)
+	if sweep == null:
+		return
+	var out: PackedInt64Array = sweep.pairs(PackedVector3Array([Vector3.ZERO]), PackedFloat64Array(),
+			PackedVector3Array([Vector3.ZERO]), PackedFloat64Array([1.0]))
+	assert_engine_error("lengths", "it says why")
+	assert_eq(out.size(), 0, "no pairs")
+	assert_eq(sweep.visited(), -1, "and no work count")
+
+
+# --- the work ------------------------------------------------------------------------------------------------------
+
+
+func test_a_capital_hull_is_found_from_anywhere_it_reaches_without_testing_the_fighters() -> void:
+	# One 1 km hull among 200 fighters 250 m apart: a bolt anywhere in the hull's reach finds it, and tests few fighters.
+	var hull_mids := PackedVector3Array([Vector3(1000, 0, 0)])
+	var hull_reach := PackedFloat64Array([600.0])
+	for k: int in 200:
+		hull_mids.append(Vector3(float(k % 10) * 250.0, float((k / 10) % 5) * 250.0, float(k / 50) * 250.0) + Vector3(0, 0, 40))
+		hull_reach.append(12.0)
+	var bolt_mids := PackedVector3Array()
+	var bolt_reach := PackedFloat64Array()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	for i: int in 300:
+		bolt_mids.append(Vector3(1000, 0, 0) + _direction(rng) * rng.randf_range(0.0, 600.0))
+		bolt_reach.append(4.0)
+	for use_native: bool in [false, true]:
+		if use_native and _skipped():
+			return
+		var phase := HitBroadPhase.new()
+		phase.use_native = use_native
+		var got: PackedInt64Array = phase.pairs(bolt_mids, bolt_reach, hull_mids, hull_reach)
+		assert_eq(got, _every_pair(bolt_mids, bolt_reach, hull_mids, hull_reach), "%s: the same as every pair" % phase.path())
+		var capital_hits: int = 0
+		for key: int in got:
+			if key % hull_mids.size() == 0:
+				capital_hits += 1
+		assert_eq(capital_hits, 300, "%s: every bolt finds the capital" % phase.path())
+		gut.p("%s: %d pairs tested for 300 bolts (every pair: %d)" % [phase.path(), phase.visited, 300 * hull_mids.size()])
+		assert_lte(phase.visited, 300 * 3, "%s: at most 3 pairs a bolt" % phase.path())

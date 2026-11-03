@@ -20,6 +20,12 @@ extends Node3D
 const GROUP: StringName = &"projectiles"
 const SCENE_PATH: String = "res://src/weapons/projectile.tscn"
 const DEFAULT_MATERIAL: Material = preload("res://assets/materials/projectile.tres")
+## What a projectile is (M4-T08). Surface only, for the tests written first.
+const KIND_BOLT: StringName = &"bolt"
+const KIND_BEAM: StringName = &"beam"
+const KIND_MISSILE: StringName = &"missile"
+const KIND_MINE: StringName = &"mine"
+const KINDS: Array[StringName] = [KIND_BOLT, KIND_BEAM, KIND_MISSILE, KIND_MINE]
 
 # Bolt meshes by look (length, radius, material), so a volley does not build a mesh per bolt.
 static var _meshes: Dictionary = {}
@@ -42,6 +48,8 @@ var faction: StringName = Factions.NEUTRAL
 ## Hull points a hit removes, and the bolt's radius for hit detection (m).
 var damage: float = 0.0
 var hit_radius_m: float = 0.25
+## What this projectile is, one of `KINDS`.
+var kind: StringName = KIND_BOLT
 ## Impact flash tint.
 var color: Color = Color(0.9, 1.5, 3.0, 1.0)
 ## World-frame displacement of the latest physics tick (velocity × delta); zero until the first tick. A displacement,
@@ -113,6 +121,16 @@ func launch(at: Vector3, launch_velocity: Vector3, now_s: float) -> void:
 		global_basis = Basis.looking_at(direction, up)
 	# Appear here, not smeared from wherever the node was a tick ago (project-wide physics interpolation is on).
 	reset_physics_interpolation()
+
+
+## Makes this projectile a `p_kind`.
+func set_kind(p_kind: StringName) -> void:
+	kind = p_kind
+
+
+## The hit radius of a projectile of `p_kind`.
+static func hit_radius_for(_p_kind: StringName) -> float:
+	return 0.25
 
 
 ## Retires the bolt after a hit. Idempotent.

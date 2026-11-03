@@ -28,6 +28,10 @@ var pairs_tested: int = 0
 var hits_total: int = 0
 var last_hit: String = "none"
 var resolve_us: int = 0
+## Projectile and hull pairs put to the bounding-sphere test on the last tick (the work count). Surface for the tests.
+var pairs_visited: int = 0
+## Finds the pairs worth sweeping. Surface for the tests.
+var broad_phase: HitBroadPhase = HitBroadPhase.new()
 ## `settings.friendly_fire` as of the last tick.
 var friendly_fire: bool = false
 ## Throws the sparks of a hull hit (`Main` sets it); none without it.
@@ -44,6 +48,8 @@ func _ready() -> void:
 		&"hits": {"get": func() -> int: return hits_total, "doc": "Hits resolved this session"},
 		&"last_hit": {"get": func() -> String: return last_hit, "doc": "The last hit: shooter -> target, damage"},
 		&"pairs_tested": {"get": func() -> int: return pairs_tested, "doc": "Bolt and ship pairs swept on the last tick (past the distance cull)"},
+		&"pairs_visited": {"get": func() -> int: return pairs_visited, "doc": "Bolt and ship pairs put to the distance cull on the last tick"},
+		&"hit_path": {"get": func() -> String: return String(broad_phase.path()), "doc": "Which code finds the pairs: native or gdscript"},
 		&"resolve_us": {"get": func() -> int: return resolve_us, "unit": "us",
 				"doc": "Cost of the last tick's resolve (profiling only, wall clock)"},
 	}), self)
@@ -70,6 +76,7 @@ func resolve(delta: float) -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
 	projectiles_last_tick = 0
 	pairs_tested = 0
+	pairs_visited = 0
 	friendly_fire = bool(Settings.get_value(&"friendly_fire"))
 	var targets: Array[Dictionary] = _gather_targets(delta)
 	for node: Node in get_tree().get_nodes_in_group(Projectile.GROUP):
@@ -118,6 +125,7 @@ func _earliest_hit(bolt: Projectile, targets: Array[Dictionary], _delta: float) 
 	var bolt_mid: Vector3 = start + bolt.last_step * 0.5
 	var bolt_reach: float = bolt.last_step.length() * 0.5 + bolt.hit_radius_m
 	for target: Dictionary in targets:
+		pairs_visited += 1
 		var reach: float = bolt_reach + float(target["reach"])
 		if bolt_mid.distance_squared_to(target["mid"]) > reach * reach:
 			continue
