@@ -410,8 +410,8 @@ whose trigger never arose). Update the column with each task's commit.
 |---|---|---|---|---|---|---|
 | T01 | A | `Game` flow, boot routing and loading | - | Opus | Changes how every run starts; must not break a single script or test | done |
 | T02 | A | Menu kit, front end and pause menu | T01 | Sonnet | Godot UI work on a clear spec | done |
-| T03 | A | Settings menu and audio buses | T02 | Sonnet | Schema-driven screen | not started |
-| T04 | A | Controls menu | T02 | Sonnet | Wraps the existing profile API | not started |
+| T03 | A | Settings menu and audio buses | T02 | Sonnet | Schema-driven screen | in progress |
+| T04 | A | Controls menu | T02 | Sonnet | Wraps the existing profile API | in progress |
 | T05 | B | Mission core: runner, script API, triggers, objectives, console | T01 | Opus | The framework M8 stands on; coroutine skipping is subtle | done |
 | T24 | A | Console command list in `info.md` and its guard test (`CLAUDE.md` rule of 2026-11-03; numbered last because it was added during the build) | T01, T02, T05 | Sonnet | A doc and one test | done |
 | T06 | B | Dialog, subtitles and the comms panel | T05 | Sonnet | Data and HUD | in progress |
