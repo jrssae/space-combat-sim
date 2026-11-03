@@ -426,8 +426,8 @@ whose trigger never arose). Update the column with each task's commit.
 | T11 | C | Civilian references: measurements and descriptions | - | Opus | Reading shapes off renders; sizes from Q8 | done |
 | T23 | C | Fidelity check: silhouettes and size against the STL, `refview` compare (Q18; numbered last because it was added during the build) | T11 | Sonnet | A small measuring tool that every civilian generator must pass | done |
 | T12 | C | `saturn_family` generator (five variants, Q16) | T11, T23 | Opus | Large shared part library | in progress |
-| T13 | C | `skylark_transport` generator | T11, T23 | Opus | Geometry | in progress |
-| T14 | C | `narn_transport` generator and the `narn` style | T11, T23 | Opus | Geometry and a new style | in progress |
+| T13 | C | `skylark_transport` generator | T11, T23 | Opus | Geometry | done |
+| T14 | C | `narn_transport` generator and the `narn` style | T11, T23 | Opus | Geometry and a new style | done |
 | T15 | C | `centauri_brezebel` generator and the `centauri` style | T11, T23 | Opus | Geometry and a new style | done |
 | T22 | C | Brakiri Bokmai: references, generator with removable pods, the `brakiri` style (placed here in the order; numbered last because it was added during the build, Q17) | T11, T23 | Opus | A new reference read end to end, modular cargo, a new style | in progress |
 | T21 | C | Defensive turrets (placed here in the order; numbered last because it was added after the others had numbers) | T12, T13, T14, T15, T22, T19 | Opus | A new gunner seam with a balance test | not started |
@@ -772,6 +772,29 @@ whose trigger never arose). Update the column with each task's commit.
 - **Goal:** AC12 for the Skylark.
 - **Files:** `tools/procgen/assets/skylark_transport.py`, parts it needs, `tools/procgen/tests/test_skylark_transport.py`.
 - **Done when:** AC12 and AC20 for the Skylark.
+- **Done (as built, 2026-11-03):** `skylark_transport` (`tools/procgen/assets/skylark_transport.py`, parts in
+  `tools/procgen/parts/skylark.py`, the `ea_civilian` style with the Skylark's sand paint).
+  - **Shape:** the EA "Delta Gamma 9" type, 60.0 x 40.2 x 10.2 m. A capsule with nose vanes, a glazed bridge plate, two
+    red-orange bands and belly fins; spine vane rings and a collar; banded side tanks with dumbbells; the faceted body
+    with corner fins, the dorsal fin and the centre engine; nacelles on their measured axis (x ±13.03, y -0.26) with two
+    pods, ribbed intakes and bells, and forked claws on short pylons.
+  - **Outputs:** LOD0 60 924 splats at 0.26 m (budget 48 000 to 72 000; capsule 23 018, body 15 014, each nacelle
+    11 446), LOD1-3 15 176 / 3 798 / 962 with lighting records, fallback mesh, four chunks from LOD1 (`capsule`,
+    `body`, `nacelle_l`, `nacelle_r`).
+  - **Hardpoints:** two pods on the nacelles' axis (mains at the bells, retros at the intakes), the centre of mass on
+    that thrust line, 12 RCS ports, 44 collision primitives that hold every LOD0 splat centre.
+  - **Turret (Q19):** one, `dorsal` at (0, 2.766, 37.5), on the body's ridge as low as the hull under its 2.4 m base
+    (no pedestal); the EA turret at two thirds, 2 372 splats at 0.08 m, `barrel_m` 3.0.
+  - **Fidelity (Q18), mesh against the STL:** 0.979 / 0.980 / 0.956; length, width, height 1.001 / 1.000 / 0.998; the
+    splats cover at least 0.983 of their mesh (side), precision 1.000.
+  - **Tests:** 34 Python tests (every level mirror-symmetric, the fallback and chunk meshes hold every piece, every splat
+    inside a collision primitive, the turret's base meets the hull round its rim, the LOD box rule of T14);
+    `test_splat_import.gd` 16/16.
+  - **Review.** Built and approved in 47d5627. Follow-up (1c20bf3, the hand-off's list): the turret off its pedestal,
+    full collision cover (a box for the nose neck and one for the engine's vane ring), the fallback-mesh test, 99.9 %
+    coverage, symmetry to LOD3, the mesh Fidelity row, the budget row's 0.26 m. Two fix rounds: the base floated up
+    to 0.10 m over the ridge's fall aft and outboard, so the seat is the lowest hull height under the rim (df298a9), sized
+    from the turret model itself (a6074c6). Approved. Open (H): the sand paint and the soft close-ups at 0.26 m.
 
 ### M5-T14 `narn_transport` generator and the `narn` style
 
@@ -779,6 +802,33 @@ whose trigger never arose). Update the column with each task's commit.
 - **Files:** `tools/procgen/assets/narn_transport.py`, `tools/procgen/styles/narn.py`, parts it needs,
   `tools/procgen/tests/test_narn_transport.py`.
 - **Done when:** AC12 and AC20 for the Narn transport.
+- **Done (as built, 2026-11-03):** `narn_transport` (`tools/procgen/assets/narn_transport.py`, parts in
+  `tools/procgen/parts/narn.py`, style `tools/procgen/styles/narn.py`).
+  - **Shape:** 70.0 x 46.0 x 18.0 m. The crescent (thinning from 7.8 m on the centre line to a beveled rim, thinner
+    prongs, a step behind the notch), the cockpit with a framed canopy and windscreen block, the dorsal block and bar,
+    fins, the flank towers with vanes, slotted crowns and the main nozzles, the cargo box with its wedge front, aft cut,
+    green panels, hazard corners and vent grilles.
+  - **Outputs:** LOD0 77 224 splats at 0.31 m (`cockpit` 15 718, `wing_l` and `wing_r` 13 526 each, `box` 34 454),
+    LOD1-3 19 292 / 4 872 / 1 222 with lighting records, fallback mesh, four chunks from LOD1.
+  - **Hardpoints:** two pods (mains in the towers' aft faces, retros at their fronts) on the thrust line 5 m above the
+    centre plane, 14 RCS ports, 19 collision primitives (99.9 % of the LOD0 centres), cockpit camera, chase anchor,
+    running lights.
+  - **Turrets (Q19):** `tower_l` and `tower_r` on the slotted crowns, `arc_deg` 220, `barrel_m` 3.0; the Narn turret
+    model (six-sided base, wedge housing, red band, twin barrels) 1 894 splats on its own 0.65 m panel grid.
+  - **Colours** as confirmed (Q19): hull #2E4A3B, panel lines #1E2E25, cargo panels #4E7552, the red band; the green is
+    not lifted, T16's GPU check decides that with the maintainer.
+  - **Fidelity (Q18), mesh against the STL:** 0.991 / 0.985 / 0.974; length, width, height 1.000 / 1.000 / 0.997; the
+    splats cover at least 0.976 of their mesh (side), precision 1.000.
+  - **LOD box rule (follow-up):** `test_splat_import.gd` checks a coarse level's box against LOD0's per side: past it by
+    at most max(0.3 m, 0.25 of its spacing), short of it by 0.3 m, or for a hull whose box is 30 m or more across by
+    1.25 of its spacing (worst today: the Saturn 4 transport's LOD3 1.02 spacings short). The Narn and Skylark tests
+    use the same rule.
+  - **Tests:** 35 Python tests; `test_splat_import.gd` 16/16.
+  - **Review.** Built in 48fd358 and approved after a fix round (d4c66a9: the confirmed colours unlifted, the LOD box
+    tolerance for big hulls only, systematic coarse levels, 99.9 % collision coverage). Follow-up (c742c52, the
+    hand-off's list): the asymmetric box rule keyed on a 30 m box, the crescent's thickness re-measured on the STL, the
+    mesh Fidelity row. One fix round (3e0d3ae): the STL's bevel is about 1.9 m wide (1.9 m thick where it starts, 2.2 m
+    3 m in), the rule's wording. Approved. Open (H): the dark green on the GPU, which way is up.
 
 ### M5-T15 `centauri_brezebel` generator and the `centauri` style
 
