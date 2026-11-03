@@ -32,6 +32,10 @@ fi
 # rustup reads rust-toolchain.toml from the working directory, so build from inside the crate.
 cd "${CRATE}"
 start="${SECONDS}"
+# Some rustup versions do not fetch the pinned toolchain on first use, so make sure it is there.
+if command -v rustup > /dev/null && ! rustup show active-toolchain > /dev/null 2>&1; then
+    rustup toolchain install
+fi
 cargo build --release --locked
 built="${CARGO_TARGET_DIR}/release/libscs_native.so"
 [[ -f "${built}" ]] || { echo "build_native.sh: cargo did not produce ${built}" >&2; exit 1; }

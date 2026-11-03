@@ -18,7 +18,7 @@ scripts/gen_assets.sh                   # generates the Starfury, nav buoys and 
 ```
 
 Re-run `scripts/gen_assets.sh` after pulling changes to `tools/procgen`.
-Run `scripts/build_native.sh` after a pull: it rebuilds the optional native library when `native/` changed (needs rustup; without it the game uses its GDScript code).
+Run `scripts/build_native.sh` after a pull, then `.tools/godot/godot --headless --path . --import` once so Godot registers the library: it rebuilds the optional native library when `native/` changed (needs rustup; without it the game uses its GDScript code).
 
 ## Run
 

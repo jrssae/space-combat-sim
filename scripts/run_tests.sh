@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs every automated check that works without a GPU: Python generator tests, the optional native library's build,
-# a headless Godot import that must be free of script errors, a compile check of every project script, the GUT suites, and debug-console
-# smoke runs that drive a live headless build through --console-exec.
+# a headless Godot import that must be free of script errors, a compile check of every project script, the GUT suites,
+# and debug-console smoke runs that drive a live headless build through --console-exec.
 # Exits non-zero on any failure. Logs and the GUT JUnit XML land in reports/ (gitignored; CI uploads it).
 # GUT_SHARD=k/n (CI) runs only every n-th GUT script from the k-th, in path order, so n jobs share the GUT run; the Python
 # tests and the console smoke runs then run in shard 1 only. Unset (the default) runs everything.
