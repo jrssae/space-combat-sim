@@ -392,17 +392,17 @@ claw tips, height 10.3 m. y is measured from the box centre; the capsule's axis 
 
 | Part | Size and place |
 |---|---|
-| Nose | a cap 4 m across, z 0 to 2, with four small vanes splayed forward |
-| Forward capsule | 7.46 m across, z 1.7 to 20. On top a raised plate 3.2 x 0.9 x 6.2 m (z 10.4 to 16.7), the likely bridge. Underneath, two cones 6.2 m across at the root, pointing down and outboard at z 6.3 to 12.5. |
-| Spine | a tube 4.2 m across, z 20 to 29, with a ring of short radial vanes at each end, then a collar 6.3 m across (z 29.2 to 35.3) into the body |
-| Side tanks | at x ±5.4: a capsule tank 4.3 m across, z 19.4 to 34.7, its rear end in the body's front face, and ahead of it a dumbbell-shaped tank 1.7 m across, z 10.2 to 20.9 |
-| Central body | a faceted slab 23.8 m wide and 7.2 m deep, z 32.1 to 54.6. In plan it widens from 16 m at its front face to 23.8 m at z 39 to 50 and tapers to 10 m at its aft face, with small swept fins at the aft corners. A sharp dorsal fin, 2.4 m wide at the root, rises to 5.1 m above centre at z 41.7 to 54.5. Two thin struts angle down and out from the belly. |
-| Nacelles | centred at x ±13.45, 6.6 m across, z 35.6 to 55.5, joined flat to the body's flanks along its widest part. Each has a ribbed intake ring at the front (z 35.6 to 39), a conical pod on its outboard side and one above and one below (z 40 to 45, reaching 1.5 m out), and a ribbed bell 6.6 m across at the rear (z 50 to 55.5). |
-| Claws | two swept blades per nacelle at the rear, reaching aft to z 60: the outboard one out to x ±20.1, the inboard one to x ±9. From behind each nacelle carries a forked clamp at x ±17 to ±20. |
-| Centre engine | a drum 4.7 m across inside the body (z 42.8 to 53.5) ending in an exhaust cone 3.7 m across at z 59.2 |
+| Nose | the capsule's flat face, 4.4 m across at z 1.7. Four vanes stand in front of it, up, down and to each side, each a plate square to its radius splayed forward to z 0 at 4.55 m from the axis, 2.1 m wide at the root and 1.1 m at the tip (T13 measured) |
+| Forward capsule | 7.46 m across, z 1.7 to 20.5; its domes are spheres of its own radius. On top a raised plate (z 10.4 to 16.7), the likely bridge: pointed in front, 3.2 m wide at its foot and 1.9 m at its top, which rises to 4.29 m above centre at z 14.7. Underneath, two thin fins, not cones (T13): plates angled 24 degrees below the horizontal out to x ±7.6, y -5.1, with a chord of 6.2 m at the capsule (z 6.3 to 12.5) and 2.1 m at the tip. |
+| Spine | a tube 4.4 m across, z 20.5 to 29.2, with a ring of twelve short radial vanes at each end (wedges, tallest by the capsule's aft dome and by the collar), then a collar 6.3 m across (z 29.2 to 35.3) into the body |
+| Side tanks | at x ±5.44: a capsule tank 4.3 m across, z 19.4 to 34.7, its rear end a 2.5 m neck into the body's front face, and ahead of it a dumbbell-shaped tank 1.7 m across, z 10.2 to 20.9, its rod held by a flat bracket at the tank's nose. A flat plate joins each tank to the spine, and a pointed flat bar beside each neck reaches ahead of the body to z 30.9. |
+| Central body | a faceted slab 23.9 m wide and 7.1 m deep, z 32.1 to 54.6. T13 measured the plan: 14.1 m wide at its front face (z 32.1), widening to 23.9 m at z 41.5 to 46 and tapering to 17 m at its aft face (z 51.6), with small swept fins at the aft corners reaching z 54.5 at x ±5.9. In section it is a flattened diamond: the ridge 3.1 m above centre at z 33.5 falling to 1.8 m at z 51, the keel 4.0 m below falling to 2.7 m, low side faces at y -0.5 to -2.2. A sharp dorsal fin, 2.4 m wide at the root, rises to 5.1 m above centre at z 41.7 to 54.5. There are no struts under the body: the two thin slanted bars seen from ahead are the capsule's belly fins (T13). |
+| Nacelles | on an axis at x ±13.03, y -0.26 (T13: ±13.45 is their box with the pods), z 35.6 to 55.5, joined flat to the body's flanks along its widest part: 3.4 m across at the intake, 4.4 m at z 39, 5.7 m at z 49.5. Each has a ribbed intake ring at the front (z 35.6 to 39), two conical pods, not three (T13), at 42 degrees above and 48 degrees below the outboard horizontal (z 40.3 to 43.9, reaching 4.6 and 5.0 m from the axis), and a bell at the rear (z 49.5 to 55.5) with 24 ribs 6.05 m across round its front and its exit 3.2 m across. |
+| Claws | two swept blades per nacelle at the rear, reaching aft to z 60: the outboard one out to x ±20.1, the inboard one to x ±8.2 (z 57.6). Each is a fork: two prongs either side of a gap at y -0.44 (the outboard claw's 1.3 m thick, y -2.34 to -1.06 and 0.18 to 1.46; the inboard claw's 0.8 m), joined by a web over the front half, and each hangs on a short flat pylon from the nacelle. |
+| Centre engine | a drum 4.7 m across inside the body (z 42.8 to 53.5) ending in an exhaust cone 3.7 m across at its widest (z 55.5) and 2.4 m at its end (z 59.2), with twelve vanes round its neck |
 
 D59's "two engine nacelles on short pylons" is a looser reading: in the model the nacelles sit against the body's
-flanks.
+flanks, and the short pylons carry the claws (T13).
 
 | Where | sRGB | Read from |
 |---|---|---|
@@ -414,8 +414,9 @@ flanks.
 Mothak'cha.jpg shows the same ship with a lighter grey body (#B9B7B1) and orange bands: a second livery the variant
 data can offer.
 
-Turrets (2): `dorsal` on the body's top ahead of the dorsal fin (0, +3.6, 37.5), up +y; `ventral` under the capsule
-just behind its cones (0, -4.2, 15.0), up -y.
+Turret (1, Q19: dorsal only): `dorsal` on the body's top ahead of the dorsal fin (0, +3.6, 37.5), up +y. The body's
+top is at y 2.87 there, so the turret stands on a pedestal 2.1 m across (T13). The `ventral` spot under the capsule
+is dropped.
 
 Sources, checked 2026-11-02: https://babylon5.fandom.com/wiki/%22Delta_Gamma_9%22_Type_Transport,
 https://babylon5.fandom.com/wiki/File:Skylark_class.jpg, https://babylon5.fandom.com/wiki/File:7Tango7.JPG,

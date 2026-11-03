@@ -58,6 +58,9 @@ parts/solids.py    burial volumes (box, lathe, prism, capsule, union, difference
 styles/ea_civilian.py the Earth Alliance civilian palette; ea_civilian(overrides) repaints roles per hull
 parts/centauri.py  the Centauri Brezebel (M5-T15): the elliptic lens hull (bow, arms), engine bay, dorsal fitting,
                    fairings, hooked tip fins and the Centauri turret, each with its burial solid
+parts/skylark.py   the Skylark transport (M5-T13): capsule with nose vanes, bridge and belly fins, spine vane rings,
+                   collar, side tanks, the faceted body with corner fins, dorsal fin, centre engine and turret
+                   pedestal, nacelles with pods, ribbed rings, forked claws and their pylons; burial solids and sides
 styles/centauri.py the Centauri palette (violet, gold, lavender trim), painted as written
 assets/__init__.py registry: ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]]
 assets/<id>.py     one module per asset, exposing build(ctx)
@@ -209,6 +212,28 @@ Things the Godot side must know:
   own centroid like a chunk, and `offset` is that centroid in the turret frame.
 - Levels are sampled with systematic rounding (`sample_mesh(systematic=True)`) and centre-line pieces right half first,
   so a coarse level keeps LOD0's centroid to a fraction of its spacing.
+
+## `skylark_transport`
+
+The Earth Alliance "Delta Gamma 9" type transport (M5-T13, docs/assets-civilian.md): 60 m, a capsule forward (nose vanes,
+glazed bridge plate, two red-orange bands, belly fins), the spine and collar, two banded side tanks with dumbbell tanks
+ahead of them, a faceted body with corner fins and a dorsal fin, the centre engine, and two nacelles against the body's
+flanks with two pods each, ribbed intakes and bells and forked claws on short pylons. Style `ea_civilian` with the
+Skylark's sand paint (`STYLE`: plating #B3A982, patches #7E7552, recesses #4A4536, bands #B8452B, bells #4A4A46; 2.4 m
+panels). Outputs `skylark_transport.ply` (about 61k splats at 0.26 m; budget 48k-72k), `_lod1` to `_lod3` (25 %, 6 %,
+1.6 %), a `.light` per level, `skylark_transport.obj/.mtl` (fallback mesh and depth proxy), four chunks cut from LOD1
+(`capsule`, `body`, `nacelle_l`, `nacelle_r`), the turret model `skylark_transport_turret.ply/.light/.obj/.mtl` (the EA
+turret at two thirds, about 2.4k splats at 0.08 m), `hardpoints.json` and `manifest.json`. Options: `spacing`, `overlap`,
+`thickness`, `turret_spacing`.
+
+Things the Godot side must know:
+
+- LOD0 is written group by group (`manifest.counts`), LOD1 chunk by chunk; `chunk_lod` is 1.
+- `hardpoints.json` has two pods on the nacelles' axis (x ±13.03, y -0.26: mains at the bells' exits, retros at the
+  intakes), the centre of mass on that thrust line, 12 RCS ports, `muzzles` empty, and one turret (`dorsal`, Q19) on a
+  pedestal on the body's top at (0, 3.6, 37.5) in the authored frame. The manifest's `turret` entry has the keys of
+  `parts/turret.py`'s.
+- The engine glow is warm white #FFE9C2 (`ENGINE_GLOW_SRGB`), a `ShipSpec` tint, not paint.
 
 ## `sfx_combat`
 

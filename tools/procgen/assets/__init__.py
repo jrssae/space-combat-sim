@@ -10,7 +10,7 @@ from collections.abc import Callable
 
 from ..core.context import AssetOutputs, BuildContext
 from . import centauri_brezebel
-from . import saturn_family
+from . import saturn_family, skylark_transport
 from . import narn_transport, nav_buoy, raider_fighter, sfx_combat, sfx_ui, sfx_world, sky_default, starfury_aurora
 
 ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
@@ -22,6 +22,7 @@ ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
     "sfx_ui": sfx_ui.build,
     "sfx_world": sfx_world.build,
     "sky_default": sky_default.build,
+    "skylark_transport": skylark_transport.build,
     "starfury_aurora": starfury_aurora.build,
     **saturn_family.BUILDERS,
 }

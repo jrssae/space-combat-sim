@@ -132,7 +132,7 @@ The Saturns' thrust line is the spine axis, so their centre of mass is trimmed o
 
 | Hull | Pods (`l`, `r`): main / retro | RCS | Cockpit camera | Port / starboard light | Chunks |
 |---|---|---|---|---|---|
-| Skylark | main: the nacelle bells, (±13.45, -0.45, 55.5), radius 3.0; retro: the nacelle intake rings, (±13.45, -0.45, 35.6), radius 1.5 | the nacelles' three cones each, the capsule's two cones, the nose vanes | under the capsule's dorsal plate, (0, +3.0, 11.0) | the nacelles' outboard cones (±16.8, -0.45, 42.5) | `capsule` (nose, capsule, spine, side tanks, collar), `body` (body, dorsal fin, centre engine), `nacelle_l`, `nacelle_r` (with claws) |
+| Skylark | main: the bells' exits on the nacelles' axis, (±13.03, -0.26, 55.48), radius 1.62; retro: the intakes' faces, (±13.03, -0.26, 35.64), radius 1.3 (T13: the axis measured off the nacelles; ±13.45, -0.45 was their box with the pods) | the tips of the nacelles' two pods each, the four nose vanes' tips, the corner fins' tips, the dorsal fin's crest and the keel aft (12) | in the bridge plate behind its glazing, (0, +3.6, 11.8) | the nacelles' outboard flanks, (±15.84, -0.26, 46.5) | `capsule` (nose, vanes, capsule, bridge, belly fins, spine, collar, side tanks), `body` (body, corner fins, dorsal fin, centre engine, pedestal), `nacelle_l`, `nacelle_r` (pods, ribs, claws, pylons) |
 | Narn | main: a 0.9 m bell on each tower's aft face (z 43.9), its exit at (±15.0, +5.0, 44.72), radius 1.4; retro: the towers' fronts (the vanes' front face on the thrust line), (±15.0, +5.0, 35.7), radius 1.0 | the prong tips (forward and outboard), the fin tips (up and down), the box's aft corners | in the windscreen block behind the canopy, (0, +1.2, 11.3) | the crescent's widest points (±23.0, 0, 27.0) | `cockpit` (cockpit block, dorsal block, the crescent's centre), `wing_l`, `wing_r` (prong, crescent half, fin, tower), `box` |
 | Brezebel | main: the arm tips, (±12.0, 0, 60.0), radius 1.2, in the middle of the arm's flat tip face (z 59.4, x 10.67 to 13.2; T15: at x 12.2 the bell would stand out of it); retro: the fairings' fronts, (±14.6, 0, 22.1), radius 1.0 | the twelve blocks on the engine bay's walls (their top or bottom faces, exhausting up or down), the four fins' outer faces near their tips (outboard) | behind the window row, (0, +3.5, 2.5) | the bow's widest points (±19.6, 0, 17.0) | `bow` (bow, dorsal fitting, engine bay, main engine), `arm_l`, `arm_r` (arm, fairing, fins) |
 
@@ -237,6 +237,7 @@ for `EA_Saturn_3_Freighter.stl` (91.13). The Saturn 3's pod group is scored agai
 | `saturn_3_freighter` | lead ship (z 0-41.5) | 0.660 | 0.499 | 0.665 | 1.007 | 1.023 | 0.812 | 2026-11-03 |
 | `saturn_3_freighter` | pod group (model 41.5-91.1 scaled 1.244, 1.093, 1; asset 41.5-96.8) | 0.772 | 0.383 | 0.655 | 1.130 | 0.996 | 1.038 | 2026-11-03 |
 | `centauri_brezebel` | whole ship (best shift x -0.15 m; unshifted 0.967, 0.961, 0.928) | 0.962 | 0.961 | 0.957 | 1.004 | 1.000 | 1.010 | 2026-11-03 |
+| `skylark_transport` | whole ship (no shift; against its own fallback mesh the splats read 0.964, 0.958, 0.926) | 0.958 | 0.949 | 0.911 | 1.004 | 1.006 | 1.022 | 2026-11-03 |
 
 ## `saturn_family` (T12)
 
@@ -275,18 +276,31 @@ top stripe and the hazard band, the Saturn 3 pods rust-red tops, every tank the 
 
 ## `skylark_transport` (T13)
 
-`tools/procgen/assets/skylark_transport.py`; parts that other hulls will not reuse can live in the asset module.
+As built (2026-11-03): `tools/procgen/assets/skylark_transport.py` places the pieces of `tools/procgen/parts/skylark.py`
+in the authored frame of the design references (x and y from the model's box centre, the nose vanes' tips at z = 0), so
+the fidelity check needs no model offset. 60.04 m long, 40.2 m across the claw tips, 10.25 m tall.
 
-| Part | How to build it |
+| Part | As built |
 |---|---|
-| Nose cap and vanes | a `lathe` cap and four `sweep_rect` vanes |
-| Forward capsule | a `lathe` capsule 7.46 m across with a `box` dorsal plate (the bridge, glazed front) and two `lathe` cones turned down and outboard |
-| Spine and collar | `lathe` tubes with rings of short `box` vanes at both ends of the spine |
-| Side tanks | `lathe` capsules and dumbbells |
-| Central body | `section_loft` through faceted sections, about eight sides, following the plan widths (16 m, 23.8 m, 10 m) and 7.2 m depth; `prism` corner fins; a tapered `section_loft` dorsal fin; `sweep_rect` belly struts |
-| Nacelles | `lathe` with ribbed rings at the intake and the bell, like `propulsion.ring_pod`'s ribbing, and three `lathe` cones |
-| Claws | bent blades as `section_loft` or `sweep_rect`, like the Starfury's claw plates |
-| Centre engine | a `lathe` drum and `propulsion.nozzle` for the cone |
+| Capsule, nose | one `lathe` from the dark nose face through the neck, a front dome, the barrel with its two bands (z 6.6 to 7.8 and 15.6 to 16.8), an aft dome and the spine to z 29.6; both domes are spheres of the capsule's 3.73 m radius |
+| Nose vanes | four `sweep_rect` plates square to their radius, narrowing from 2.09 m to 1.13 m, 0.22 m thick, each with a strut back into the neck |
+| Bridge | a `section_loft` of hexagons: straight walls up from inside the capsule to y 3.39, sides leaning in to a ridge that peaks at y 4.29 (z 14.7); its faces ahead of z 12.6 are dark glass |
+| Belly fins | `prism` trapezoids 0.32 m thick, 24.1 degrees below the horizontal, root chord z 6.0 to 12.75, tip chord 7.8 to 9.95 |
+| Spine vanes, collar | twelve `prism` wedges per ring round the spine; a `lathe` collar 6.34 m across |
+| Side tanks | `lathe` tanks with their band (z 23.8 to 25.0) and neck, `lathe` dumbbells, a flat bracket at each tank's nose, a flat plate to the spine, a pointed flat bar beside each neck |
+| Body | a `section_loft` through 18 stations of an 18-point flattened diamond (ridge, flanks, side faces, a knee on the bottom, the keel), from the measured plan and sections; olive patches on the ridge's flanks and the side faces; `prism` corner fins; two dark blocks on its aft face |
+| Dorsal fin | a `section_loft` of lens sections stacked up y, from the root inside the body to the crest at y 5.13 |
+| Centre engine | a `lathe` drum, a `lathe` exhaust cone (dark metal) with a dark bore, twelve dark vanes round its neck |
+| Pedestal | a `lathe` drum 2.1 m across from inside the body up to the turret mount at y 3.6 |
+| Nacelles | a `lathe` about (±13.03, -0.26): dark ribbed intake ring, sand body, dark bell with its bore; 16 intake ribs and 24 bell ribs as `prism` plates; two pods as lofts of elliptic sections |
+| Claws, pylons | each claw two `section_loft` prongs either side of a `section_loft` web, from stations measured along it; flat `prism` pylons from the nacelle |
+
+Budget at the default spacing of 0.26 m (thin parts are sampled finer, the body a little coarser): LOD0 61 014 splats
+(capsule 23 020, body 15 104, each nacelle 11 446), LOD1 15 200, LOD2 3 804, LOD3 964; the turret 2 372 at 0.08 m. The
+0.26 m spacing (not the planned 0.33 m) follows from the built surface being smaller than the reference's (no inner
+faces); it stays at 0.25 m or more so the Godot import test's looser box rule for big hulls applies to its coarse levels.
+Hardpoints: the table above. The centre of mass is on the nacelles' axis, the thrust line. Collision: 43 primitives
+(a capsule for the capsule's barrel, boxes elsewhere, oriented boxes for the belly fins, pods and claws).
 
 ## `narn_transport` and the `narn` style (T14)
 
@@ -373,7 +387,7 @@ Three styles, each a `Style` with the required roles plus extras. Hex values are
 | `canopy_glass`, `canopy_frame` | dark glass, #55534F | bridge glazing |
 | `nozzle`, `nozzle_throat`, `rcs` | #4A4946, #1C1B1A, #6E6C68 | bells and RCS ports |
 | `barrel`, `bore` | #5A5955, #101010 | turret barrels |
-| Skylark override | `hull` #B3A982, `hull_panel` #7E7552, `hull_dark` #4A4536, `stripe` #B8452B | its sand plating and red-orange bands |
+| Skylark override | `hull` #B3A982, `hull_panel` #7E7552, `hull_dark` #4A4536, `stripe` #B8452B, `nozzle` #4A4A46 | its sand plating, red-orange bands and dark nacelle bells and ribs (`skylark_transport.STYLE`) |
 
 Panel grid 3.6 m with 0.4 m lines on the Saturns, 2.4 m with 0.25 m lines on the Skylark; tint jitter 0.06. Engine glow
 (a `ShipSpec` tint): Saturns blue-white #DCE8FF, Skylark warm white #FFE9C2.
@@ -420,7 +434,7 @@ in T16's GPU check, lift the value and keep the hue, and record the change here.
 
 | Style | Model | `barrel_m` |
 |---|---|---|
-| `ea_civilian` | a round base 3.6 m across and 0.9 m tall, a dome 3.0 m across, twin barrels 0.8 m apart; plating grey, barrels dark. The Skylark uses it at two thirds of that size. | 4.5 (Skylark 3.0) |
+| `ea_civilian` | a round base 3.6 m across and 0.9 m tall, a dome 3.0 m across, twin barrels 0.8 m apart; plating grey, barrels dark. The Skylark uses it at two thirds of that size (`TurretSpec.scaled`), in the Skylark's paint. | 4.5 (Skylark 3.0) |
 | `narn` | a six-sided base 2.6 m across, a wedge-shaped housing, twin barrels; dark green with the red band | 3.0 |
 | `centauri` | a teardrop pod 2.2 m across on a short stalk, twin barrels with gold collars (as built: see `centauri_brezebel` above) | 2.6 |
 
@@ -435,7 +449,7 @@ From the design references, authored frame; `up` is (0, 1, 0) for dorsal mounts 
 | Saturn 8 transport (2) | `dorsal_fwd` (0, +3.8, 19.1), `dorsal_mid` (0, +7.2, 149.4) |
 | Saturn 8 tanker (2) | `dorsal_fwd` (0, +3.8, 19.1), `dorsal_mid` (0, +9.0, 149.4) |
 | Saturn 3 (1) | `dorsal_fwd` (0, +3.8, 19.1) |
-| Skylark (2) | `dorsal` (0, +3.6, 37.5), `ventral` (0, -4.2, 15.0) |
+| Skylark (1) | `dorsal` (0, +3.6, 37.5) on a pedestal 2.1 m across (the body's top is at y 2.87 there); no ventral (Q19) |
 | Narn (2) | `tower_l` (-14.85, +9.0, 41.7), `tower_r` (14.85, +9.0, 41.7), on the slotted crowns |
 | Brezebel (1) | `dorsal` (0, +4.3, 7.0), on the dorsal fitting's turret ring |
 
