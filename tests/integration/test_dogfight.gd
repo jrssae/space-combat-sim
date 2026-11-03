@@ -27,13 +27,16 @@ func after_each() -> void:
 
 
 # A fresh game at the sped-up step: the step is settled before the scene enters the tree, and the clock starts at 0 s (the
-# cooldowns compare absolute sim times, so the same fight needs the same clock and the same first step).
+# cooldowns compare absolute sim times, so the same fight needs the same clock and the same first step). Godot reads the time
+# scale once per main-loop iteration, and a slow step before this one (freeing the last fight) leaves catch-up physics steps
+# at the old scale, so the scale only counts from the next iteration.
 func _launch(seed_value: int) -> Main:
 	var main := (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.input_source = FakeInputSource.new()
 	main.scenario_path = SCENARIO_PATH
 	main.scenario_seed = seed_value
 	Engine.time_scale = SPEED_UP
+	await get_tree().process_frame
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	SimClock.reset()
@@ -125,6 +128,21 @@ func test_the_same_seed_flies_the_same_fight() -> void:
 			worst = maxf(worst, (runs[0][ship_name] as UniversePos).distance_to(runs[1][ship_name] as UniversePos))
 	gut.p("dogfight seed 3, twice: worst position difference after 60 s %.6f m over %d ships" % [worst, runs[0].size()])
 	assert_lt(worst, 1e-3)
+
+
+# CI's flake (2026-11-02): freeing the last fight is slow on a CI runner, and the catch-up steps after it still ran at the old
+# time scale, so the next fight began with a few 1/60 s ticks and flew differently. The delay plays that slow step.
+func test_a_slow_step_before_the_launch_still_starts_the_fight_at_the_sped_up_step() -> void:
+	Engine.time_scale = 1.0
+	await get_tree().physics_frame
+	OS.delay_msec(200)
+	await get_tree().physics_frame
+	var main: Main = await _launch(3)
+	var first_tick_s: float = SimClock.now()
+	Engine.time_scale = 1.0
+	await _close(main)
+	assert_almost_eq(first_tick_s, SPEED_UP / float(Engine.physics_ticks_per_second), 1e-9,
+			"the fight's first tick is a sped-up one")
 
 
 func test_a_raider_catches_a_player_running_at_800_mps() -> void:

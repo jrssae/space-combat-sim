@@ -95,6 +95,7 @@ func test_a_committed_rammer_hits_its_target_in_at_least_8_of_10_runs() -> void:
 
 func test_in_the_dogfight_no_ship_below_reckless_ever_rams() -> void:
 	Engine.time_scale = 6.0
+	await get_tree().process_frame  # the scale counts from the next main-loop iteration
 	await get_tree().physics_frame
 	SimClock.reset()
 	var main: Main = await _launch("res://data/scenarios/dogfight.json")
