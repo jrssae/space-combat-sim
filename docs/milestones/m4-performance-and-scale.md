@@ -114,7 +114,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T01 | Benchmark harness, budget and baseline | M3 | Opus | Measurement design on a noisy machine; touches the tick order | done |
 | T02 | Cycle 1 | T01 | Opus | Profiling and a ranked judgement call | done |
 | T03 | Cycle 2 | T02 | Opus | Same | done |
-| T04 | Cycle 3 | T03 | Opus | Same | not started |
+| T04 | Cycle 3 | T03 | Opus | Same | done |
 | T05 | Cycle 4: native contact scan (Rust `gdext`, N0 then N1, Q9) | T04 | Opus or Fable | A new toolchain and bit-identical parity | not started |
 | T06 | Report to the maintainer | T05 | controller | A summary and a question, no code | not started |
 
@@ -183,6 +183,11 @@ While iterating, `scripts/bench_quick.sh` (under 10 minutes: furball and spread 
   holds in contact (`docs/architecture.md` §17.3); rams at 100 ships 10.2 to 0.7 ms, the quick check's ceiling stays 30 in
   furball and spread (35 ships now 0.1 to 0.2 ms over). Measured with the quick check and single runs, not the sweep. Entry in
   the Cycle log.
+- **Done (T04, cycle 3, 2026-11-02):** AI ships beyond 2 km of the player (all of them with no player alive) think at 20 Hz on
+  staggered ticks and hold their last command between, and every AI ship weighs its nearest 12 contacts plus the nearest hostile
+  ship and what it keeps (`docs/architecture.md` §17.4); the AI at 100 ships 18.2 to 7.0 ms in the furball, 11.6 to 6.1 ms in
+  spread, the quick check's ceiling 30 to 40 in both. A behaviour change, listed in the Cycle log with the outcome comparison.
+  Measured with the quick check and single runs, not the sweep.
 
 Starting hypotheses from the M3 measurements, for T02 to test, not to follow:
 
@@ -607,6 +612,199 @@ report gives both.
 **What is left for cycle 3**: at 50 ships the AI is 56 % of the furball tick (6.46 of 11.64 ms) and 49 % in spread; at 100 it
 is 17.6 ms of 27.7. Rams are 3 % of the tick. To pass 40 the furball needs 1.5 ms off its 9.5 ms median, 50 needs 4.2 ms off
 12.2.
+
+### Cycle 3 (M4-T04, 2026-11-02): the AI think rate with nearest-k contacts
+
+**How this cycle measured** (Q7, as in cycle 2): `scripts/bench_quick.sh` (furball and spread, one run of seed 1 per count, 2 s
+of warm-up and 6 s measured) for the ceiling, and single `bench <layout> <n> 10 seed=1` runs at 50 and 100 ships in all three
+layouts for the stages. Every run held both bench locks and was pinned to cores 0-11. The quick check's numbers drift a little
+between sessions, so the before was taken again on this cycle's base (`e296d35`, no game change since cycle 2; the runs had one
+console readout added, `ai.mean_speed_mps`, which changes nothing in the simulation) rather than taken from cycle 2's after.
+Each stage run also printed `state ai`, `state combat` and `state ram` at its end, for the outcome comparison. No full sweep, so no
+max N moves in this entry (the sweep's headline stays cycle 1's 25).
+
+**Before** (`m4_c3_before_quick`, `m4_c3_before_stages`, load 2.95). Quick check: furball and spread hold the budget to 30 ships
+and fail at 40 (tick median 9.60 and 10.39 ms; cycle 2's after gave 9.46 to 9.62 and 9.21 to 9.51). Stages, mean ms per tick
+(one run each; the median tick in the third column):
+
+| layout | N | tick median | tick mean | ai | (scan) | (think) | flight | targeting | resolvers | (hit) | (ram) | late | physics | (sync) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| furball | 50 | 12.25 | 12.36 | 6.65 | 2.31 | 6.55 | 2.01 | 0.56 | 1.53 | 1.11 | 0.39 | 0.06 | 1.49 | 0.57 |
+| furball | 100 | 28.55 | 29.23 | 18.18 | 6.18 | 17.97 | 3.91 | 1.16 | 3.84 | 3.00 | 0.79 | 0.07 | 1.96 | 0.27 |
+| spread | 50 | 10.28 | 10.54 | 5.08 | 2.06 | 4.98 | 1.89 | 0.52 | 1.51 | 1.11 | 0.38 | 0.05 | 1.44 | 0.60 |
+| spread | 100 | 22.24 | 23.48 | 11.55 | 5.42 | 11.35 | 3.79 | 1.08 | 4.96 | 4.12 | 0.79 | 0.07 | 1.90 | 0.25 |
+| transit | 50 | 7.27 | 7.41 | 3.72 | 1.50 | 3.63 | 1.57 | 0.44 | 0.48 | 0.10 | 0.36 | 0.27 | 0.91 | 0.44 |
+| transit | 100 | 15.00 | 15.32 | 8.27 | 3.71 | 8.09 | 3.03 | 0.92 | 0.93 | 0.19 | 0.71 | 0.54 | 1.59 | 0.17 |
+
+The AI is 54 % of the furball tick at 50 ships and 62 % at 100; inside it the scans are 2.31 and 6.18 ms and the rest (the brains
+scoring every contact, avoidance against every contact, the selection) 4.24 and 11.79 ms, 2.8 times for twice the ships. In spread
+a ship sees about 12 contacts, yet the AI still grows faster than N (5.08 to 11.55 ms): every ship perceives and thinks every tick.
+
+**Candidates**, ranked by confidence that they raise the headline, against the plan for the cycles left (Q6: cycle 4 is the
+contact scan in native Rust behind `ContactScan`, Q9):
+
+1. **The think rate with nearest-k contacts** (built; decided by the maintainer, Q6 and Q8). Evidence: the AI above, the largest
+   stage at every count, and its per-contact part growing with N squared in the furball. Predicted (written down before any after
+   run was read): in the furball, a ball 5 km across with the player in it, about half the ships are within 2 km, so the think rate
+   alone takes the AI to about two thirds; in spread only the player's group of 12 is near, so about half at 50 and 40 % at 100;
+   nearest-k (12) helps only the furball (a spread group sees 11). Together: furball 50 AI 6.65 to about 3.3 ms (tick about 9),
+   furball 100 18.2 to about 7 ms (tick about 17), spread 50 5.08 to about 2.5 ms (tick about 7.7), spread 100 11.55 to about 4.8 ms
+   (tick about 15.5); each half alone about -6 ms at furball 100; the quick check's ceiling 30 to 40 in both layouts. Behaviour risk:
+   the one the maintainer accepted (far ships react up to 50 ms later; far contacts ignored when choosing). Confidence: 80 %.
+2. **The contact scan in native code** (cycle 4, Q9). Evidence: after candidate 1 the scans are still 1.67 and 3.91 ms of the
+   furball's 3.16 and 7.00 ms of AI at 50 and 100 ships (more than half of what is left), and `ContactScan.shared` still checks that
+   every body is alive on every driver's call (O(N) per think) before `contacts_for` or `nearest_for` walks every body in GDScript.
+   Predicted: 10 to 50 times faster scans, so about 1.4 ms off at 50 and 3.5 ms at 100 in the furball, about the same in spread.
+   Behaviour risk: none (N1 must be bit-identical). Confidence: 85 % that the scan gets much cheaper, 60 % that it moves the quick
+   check a step.
+3. **A broad phase for the bolt hits** (the hit resolver and `incoming_fire`). Evidence: after candidate 1 the hit resolver is the
+   largest stage outside the AI that grows faster than N: 1.09 and 3.71 ms at 50 and 100 in the furball, 1.02 and 3.81 ms in
+   spread, against about 150 and 320 bolts in flight. Predicted: about 0.8 ms off at 50, 3 ms at 100. Behaviour risk: none if
+   conservative (like cycle 2's). Confidence: 70 % for the stage, 35 % that it moves the ceiling alone.
+
+Cycle 2's unbuilt candidates, ranked again: its candidate 2 is this cycle's; its candidate 3, the native scan, stays cycle 4 and
+ranks second. Looked at and not ranked: re-running the cheap steering between thinks (below: held commands aim as well in a duel;
+it would cost part of the gain); flight (3.7 ms at 100, linear).
+
+**Test** (`d4e7265`, before the change): `tests/integration/test_ai_think_rate.gd`, with the work counts it reads
+(`AiPilotDriver.thinks_near`, `thinks_far`, `contacts_max`), the player registry and the four settings entries, nothing reading the
+settings yet. Real ships, real physics frames. It failed 7 of 10: with six ships within 1 km of the player and 24 between 3 and
+4.3 km, the far ships thought 24 per tick against a bound of 9 (a third plus one); 25 ships in one 800 m crowd handed 25 contacts
+per ship to their brains against k plus 2 (14); a far ship thought every tick (30 of 30, against 10) and was given one tick, not
+three; the stagger carried 24 a tick, not 7 to 9; a ship leaving 2 km kept thinking every tick; the brain's target 4.4 km out and the
+latest attacker were among 19 contacts, not 10; with no player alive a ship thought every tick. The three that passed before and
+after: a near ship thinks every tick, a hit wakes a far ship on the next tick, and both settings off give every ship every tick and
+every contact. One test was corrected with the change: a far ship's count started one tick early (a physics frame's signal comes
+before its drivers run, so the first await had not yet seen the ship's first think).
+
+**Change** (`5d4d267`): `AiThinkRate` (pure: the period, the staggered beat, when a ship thinks) and the driver (design in
+`docs/architecture.md` §17.4).
+- A ship within `ai_think_near_m` (2 000 m) of the live player thinks every tick; a farther one every third tick at
+  `ai_think_far_hz` 20, on a beat set by its driver's place in the tree, so consecutive pool ships share the ticks evenly. Each think
+  is given the time since the last. A new pilot or a hit wakes it for the next tick; a lost target or the 2 km line waits at most one
+  far period (50 ms). With no player in play, or the player dead, every AI ship thinks at the far rate.
+- **What is held**: the ship's last `FlightCommand` and `CombatCommand`, after avoidance. The driver just does not replace them, and
+  `Ship` flies a command until the next (edges act once, `fire` holds), so the flight model and Jolt step every tick. Evidence that
+  this does not misbehave, so re-running the steering was not needed: four veterans hunting straight-flying drones for 60 s (the
+  AC26 duel of `test_ai_slash`, two slashing and two standard, no player, so every ship far) kept their drones in the fire gate
+  139.1 s in total at 60 Hz and 137.8 s at 20 Hz (-1 %), fired 286 and 288 shots inside the gate and 2 and 0 outside, and their
+  turn rate changed 3 % more per tick (0.00659 against 0.00678 rad/s per tick). A throwaway test, not committed.
+- **Avoidance** (D33) runs with the think, against that think's contacts; at 20 Hz its 4 s horizon still sees every threat several
+  thinks ahead. Two allies grazing each other (a tunnelling ram of 29 m/s, no damage under god mode) appeared in the after run at
+  100 ships; the base shows the same kind (ALPHA 12 into ALPHA 24, four of them in its seed 2 run at 50 ships), so the rate of these
+  is within what seeds give (below).
+- **Nearest-k**: `ContactScan.nearest_for` gives the nearest `ai_nearest_k` (12) of the contacts in 5 km, by a partial selection
+  over the scan's packed positions (no full sort), back in scan order, so a ship that sees 12 or fewer gets `contacts_for`'s very
+  list. When the cut leaves something out, the nearest hostile ship joins them, and so do the contacts the brain keeps (its target,
+  wingmates, leader and the leader's target, the route's pace ship, its objective and guarded ship by name), the selection and
+  whoever hit it in the last 10 s; those lists are built only then. Why the nearest hostile: the first build kept only the nearest
+  12 and some furball ships idled with hostiles 1 to 3 km away behind a crowd of friends (3 of 100 at the end of the 100-ship run, 11
+  of 50 with k 8); with the rule no ship idles at 100 and the hits come back from 254 to 320 (366 on the base), for 0.2 ms at 50 and
+  0.6 ms at 100. k 12 is the evidence's choice among 8, 12 and 16 (below).
+- Console: provider `ai` gains `thinks_near`, `thinks_far`, `held`, `contacts_max` and `mean_speed_mps`. Settings `ai_think_rate`,
+  `ai_think_near_m`, `ai_think_far_hz`, `ai_nearest_k` (0 = every contact).
+
+**Both settings off is the base, bit for bit**: `bench furball 50`, `spread 50` and `furball 100` (seed 1, 10 s) with
+`ai_think_rate` off and `ai_nearest_k` 0 give, against the base, the same `state ai` line for every ship, the same behaviour counts
+and mean speed to the centimetre per second, the same hit count and last hit, the same rams and the same mean bolts and pairs
+(`m4_c3_off`, and `m4_c3_v2_off` again on the final code).
+
+**After** (`m4_c3_v2_after_quick`, `m4_c3_v2_after_stages`; the first build's runs are `m4_c3_after_*`):
+
+| quick check | furball ceiling | furball 40 / 50 ms | spread ceiling | spread 40 / 50 ms |
+|---|---|---|---|---|
+| before (`m4_c3_before_quick`, load 2.95) | 30 | 9.60 / 12.79 | 30 | 10.39 / 12.20 |
+| after, first build (`m4_c3_after_quick`, load 2.68) | 40 | 6.88 / 8.05 | 40 | 7.32 / 9.47 |
+| after, final (`m4_c3_v2_after_quick`, load 1.72) | 40 | 6.77 / 8.70 | 40 | 7.07 / 9.07 |
+
+Both layouts now hold the budget at 40 ships (p99 8.19 and 8.50 ms) and miss it at 50 by 0.7 and 1.1 ms (the first build, without
+the nearest hostile kept, missed the furball's 50 by 0.05 ms). Both hold 30 FPS to 100 ships and fall under it at 150 (the first
+build's furball held it to 150). The quick check's 35 is not a count it runs.
+
+| layout | N | tick median | tick mean | ai | (scan) | (think) | flight | targeting | resolvers | (hit) | (ram) | late | physics | (sync) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| furball | 50 | 8.42 | 8.45 | 3.16 | 1.67 | 3.09 | 1.90 | 0.51 | 1.49 | 1.09 | 0.38 | 0.05 | 1.29 | 0.55 |
+| furball | 100 | 17.55 | 18.23 | 7.00 | 3.91 | 6.86 | 3.74 | 1.04 | 4.52 | 3.71 | 0.76 | 0.06 | 1.76 | 0.25 |
+| spread | 50 | 8.06 | 8.13 | 2.92 | 1.44 | 2.85 | 1.87 | 0.51 | 1.42 | 1.02 | 0.38 | 0.05 | 1.31 | 0.57 |
+| spread | 100 | 17.42 | 17.40 | 6.06 | 3.20 | 5.93 | 3.71 | 1.03 | 4.62 | 3.81 | 0.77 | 0.06 | 1.79 | 0.25 |
+| transit | 50 | 5.60 | 5.67 | 2.01 | 1.02 | 1.96 | 1.59 | 0.45 | 0.48 | 0.10 | 0.37 | 0.28 | 0.84 | 0.40 |
+| transit | 100 | 11.35 | 11.61 | 4.16 | 2.20 | 4.05 | 2.99 | 0.90 | 0.93 | 0.19 | 0.71 | 0.55 | 2.05 | 0.63 |
+
+The resolvers rise at 100 ships in the furball (3.84 to 4.52 ms) because the fight there has more bolts in flight (246 to 317);
+the AI falls by 11.2 ms. Transit's ships are all far from the player (none in 2 km), so they all think at 20 Hz.
+
+**Each half alone**, AI ms (the think-rate-only runs, `m4_c3_rate_only`, have `ai_nearest_k` 0, a path the final change did not
+touch; the nearest-k-only runs, `m4_c3_v2_k_only`, have `ai_think_rate` off, on the final code):
+
+| layout | N | base | think rate only | nearest-k only | both | predicted, both |
+|---|---|---|---|---|---|---|
+| furball | 50 | 6.65 | 3.73 (-2.92) | 5.61 (-1.04) | 3.16 (-3.49) | about 3.3 |
+| furball | 100 | 18.18 | 10.61 (-7.57) | 12.53 (-5.65) | 7.00 (-11.18) | about 7 |
+| spread | 50 | 5.08 | 2.83 (-2.25) | 5.48 (+0.40) | 2.92 (-2.16) | about 2.5 |
+| spread | 100 | 11.55 | 5.88 (-5.67) | 12.07 (+0.52) | 6.06 (-5.49) | about 4.8 |
+| transit | 50 | 3.72 | 1.99 (-1.73) | 3.93 (+0.21) | 2.01 (-1.71) | |
+
+**Gain against the prediction:** the furball is where predicted (AI 3.16 against about 3.3 ms at 50, 7.00 against about 7 at 100;
+tick medians 8.42 against about 9 and 17.55 against about 17), and each half at furball 100 too (think rate -7.6 against -6, nearest-k
+-5.7 against -6). Spread gained less than predicted (AI 2.92 against 2.5 at 50, 6.06 against 4.8 at 100): the per-tick scan
+build and the bookkeeping on held ticks are a larger share than I allowed for, and nearest-k costs spread 0.4 to 0.5 ms alone (its
+selection loop is dearer than `contacts_for`'s plain one and spread ships sometimes see 13 to 17, so the cut and the keeps run);
+with the think rate on that cost falls to 0.1 ms (2.92 against 2.83). The quick check moved as predicted: 30 to 40 in both layouts; 50 is 0.7 to 1.1 ms away.
+
+**Behaviour changes** (the trade the maintainer accepted, Q8, and what came with it):
+- Far ships (beyond 2 km of the player, or all of them with no player alive) decide every 50 ms instead of every 16.7 ms: a new
+  threat, a lost target or the 2 km line is answered up to 50 ms later; a hit is answered on the next tick as before (then the
+  pilot's own reaction time applies).
+- Their commands are held between decisions: thrust, turn and the trigger, after avoidance, for two ticks. In a duel this aims as
+  well as before (above).
+- Avoidance for far ships runs at 20 Hz.
+- Ships that see more than 12 contacts choose, avoid and check fire lanes against the nearest 12, the nearest hostile ship, their
+  own target, wingmates, leader, objective, guarded ship and latest attacker; farther ones within 5 km are ignored when choosing.
+- In the dogfight scenario's seed, `test_ai_ram`'s fight went differently: the only reckless raider (RAIDER 6) was shot to 17 %
+  hull by 148 s on the base and then rammed; with the think rate it was never hit in 360 s, so nobody rammed and the test asserted
+  nothing (risky). The ram itself is unchanged: the committed-rammer test, its rammers 3 km and more from the player (so at the far
+  rate), hits 10 of 10. The dogfight test now asserts over every pilot it saw, rammer or not.
+
+**Outcome comparison**, seeded runs (seed 1, 10 s measured after 5 s of warm-up and 30 s of scenario; hits and rams are session
+totals at the end, behaviours and mean AI speed at the end; bench ships are invulnerable, so no kills):
+
+| run | | hits | rams | behaviours at the end | mean speed m/s | bolts in flight (mean) | ship pairs (mean) |
+|---|---|---|---|---|---|---|---|
+| furball 50 | before | 157 | 1 | attack 41, evade 9 | 72.3 | 149.5 | 1.22 |
+| | after | 140 | 1 | attack 34, evade 15, idle 1 | 76.6 | 152.7 | 1.12 |
+| furball 100 | before | 366 | 1 | attack 73, evade 27 | 73.4 | 245.6 | 1.99 |
+| | after | 320 | 3 | attack 76, evade 24 | 68.9 | 317.0 | 2.50 |
+| spread 50 | before | 241 | 1 | attack 33, evade 17 | 64.6 | 153.4 | 1.31 |
+| | after | 246 | 1 | attack 24, evade 26 | 61.4 | 136.7 | 1.28 |
+| spread 100 | before | 429 | 1 | attack 61, evade 39 | 79.6 | 341.8 | 3.02 |
+| | after | 375 | 1 | attack 60, evade 40 | 72.0 | 320.7 | 2.63 |
+| transit 50 and 100 | before and after | 0 | 1 | the same (formation and follow path) | 80.0 | 0 | 0 |
+
+The one ram in most runs is the player flying into NAV ALPHA. The fights still look like fights: the same mix of attack and evade,
+speeds within 10 %, hits 11 % lower to 2 % higher at 50 ships and about 13 % lower at 100. How much of the hit loss is the far rate: with every
+ship far (`ai_think_near_m` 0, nearest-k off), over three seeds, the hits fall 15 % at 50 ships (157, 149, 138 to 150, 102, 125) and
+21 % at 100 (366, 309, 349 to 240, 253, 310), with the same attack and evade mix and speeds; rams 1 to 5 per run on the base and 1
+to 2 with every ship far. Since the duel aims as well at 20 Hz, I read the loss as decisions taken up to 50 ms late in a crowd (whom
+to attack, when to evade), not as wobble. It is the cost of the rule as set; a far radius larger than 2 km would buy hits back.
+
+**Choosing k** (`m4_c3_v2_k8`, `m4_c3_v2_k16`, furball, both halves on): 
+
+| k | furball 50: AI ms, tick median | furball 100: AI ms, tick median | hits 50 / 100 | idle at the end 50 / 100 | contacts max |
+|---|---|---|---|---|---|
+| 8 | 3.12, 8.51 | 6.87, 17.98 | 133 / 437 | 1 / 1 | 11 / 12 |
+| 12 | 3.16, 8.42 | 7.00, 17.55 | 140 / 320 | 1 / 0 | 15 |
+| 16 | 3.30, 8.59 | 7.19, 17.83 | 156 / 283 | 1 / 1 | 19 |
+
+With the nearest hostile kept, k moves the AI by only 0.2 to 0.3 ms between 8 and 16, inside one run's noise for the tick, and the
+outcomes move by more between seeds than between k (furball 100's hits run 283 to 437). So k is chosen by the setting: 12 is a full
+squadron's fight, so a 6-against-6 (spread's groups) is never cut, which 8 would; 16 costs the most. Before the nearest-hostile
+rule, k 8 left 11 of 50 ships idle and slowed the fight to 60 m/s (`m4_c3_k8`).
+
+**Tests** (focused, Q10; no full suite, CI runs it after the push): 57 GUT files run alone, every file that covers the AI driver,
+brains, behaviours, avoidance, the fire lane, perception, the contact scan, wings, formations, routes, the pools, the settings and
+console, the new tests, AC13's paired budget (`test_ai_think_time`), `test_ai_ram` and `test_dogfight`: 692 passing, 0 failing, 2
+pending (the AC12 balance tests of `test_dogfight` and `test_m3_sandbox`, as before), none risky. AC13's paired budget held; the
+dogfight's seeded determinism test gave 0.000000 m twice. No Python changed.
 
 ## Definition of done (M4)
 
