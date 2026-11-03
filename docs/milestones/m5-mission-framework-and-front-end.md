@@ -426,7 +426,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T12 | C | `saturn_family` generator (five variants, Q16) | T11, T23 | Opus | Large shared part library | in progress |
 | T13 | C | `skylark_transport` generator | T11, T23 | Opus | Geometry | in progress |
 | T14 | C | `narn_transport` generator and the `narn` style | T11, T23 | Opus | Geometry and a new style | in progress |
-| T15 | C | `centauri_brezebel` generator and the `centauri` style | T11, T23 | Opus | Geometry and a new style | in progress |
+| T15 | C | `centauri_brezebel` generator and the `centauri` style | T11, T23 | Opus | Geometry and a new style | done |
 | T22 | C | Brakiri Bokmai: references, generator with removable pods, the `brakiri` style (placed here in the order; numbered last because it was added during the build, Q17) | T11, T23 | Opus | A new reference read end to end, modular cargo, a new style | in progress |
 | T21 | C | Defensive turrets (placed here in the order; numbered last because it was added after the others had numbers) | T12, T13, T14, T15, T22, T19 | Opus | A new gunner seam with a balance test | not started |
 | T16 | C | Civilian ships in the game | T12, T13, T14, T15, T22, T21 | Opus | Specs for heavy hulls, factions, pools, AI, GPU check | not started |
@@ -744,6 +744,33 @@ whose trigger never arose). Update the column with each task's commit.
 - **Files:** `tools/procgen/assets/centauri_brezebel.py`, `tools/procgen/styles/centauri.py`, parts it needs,
   `tools/procgen/tests/test_centauri_brezebel.py`.
 - **Done when:** AC12 and AC20 for the Brezebel.
+- **Done (as built, 2026-11-02):** `centauri_brezebel` (`tools/procgen/assets/centauri_brezebel.py`, parts in
+  `tools/procgen/parts/centauri.py`, style `tools/procgen/styles/centauri.py`).
+  - **Shape:** one elliptic lens hull measured off the STL. Every section is an ellipse; the quarter-ellipse bow is
+    39.1 m wide at z 17 with a pale rim band, and the arms taper to flat tip faces holding the main nozzles at z 60.
+    Around it: the engine bay with twelve RCS blocks and the main engine, a dorsal fitting with five windows and the
+    turret ring, arm fairings, and hooked tip fins (1.45 to 0.47 m thick, leaning 12.7 degrees, gold caps, lights on
+    the upper hooks).
+  - **Outputs:** 67 230 LOD0 splats at 0.26 m (budget 55 000 to 85 000), LOD1-3 16 774 / 4 198 / 1 060 with lighting
+    records, fallback mesh and depth proxy, and three chunks from LOD1 (`bow`, `arm_l`, `arm_r`).
+  - **Hardpoints:** two pods (mains in the arm tips; retros firing forward from the bow's rim on the fairings' axis,
+    z 5.7) with the thrust line and centre of mass on the hull's centre plane (y -0.105), 16 RCS ports and 30
+    collision boxes that cover every LOD0 splat.
+  - **Turret (Q19):** one, `dorsal` at (0, 4.3, 7.0). The Centauri turret model has 2 080 splats and `barrel_m` 2.6.
+  - **Colours** are painted as written (Q19). The panel lines are #2B2257 on #4C3C8E, and #FFB8E0 glow is kept for
+    T16.
+  - **Fidelity (Q18), mesh against the STL:** top 0.966, side 0.984, front 0.970; length 1.000, width 1.000, height
+    0.999. The STL's fins are 0.43 m asymmetric, so the tool shifts the ship 0.15 m to port. The LOD0 splats against
+    their mesh read 0.978, 0.960 and 0.951 (bar 0.85).
+  - **Tests:** 40 Python tests and the Godot import test (16/16) pass.
+  - **Docs:** both Brezebel sections carry the corrected turret row and the STL-proven numbers (fin thickness and lean,
+    arm tip, fairings, nozzle x).
+  - **Review.** Approved after one fix round (sonnet): the two splat-compensation nudges were reverted (fins at their
+    measured thickness, the back wall meets the hull); the retros fire forward from where the fairing's line leaves the
+    bow's skin, (±14.6, centre plane, 5.7), so their plume shows and they add no pitch torque (test); the rail has its own
+    collision box (30 boxes, every splat covered); a test checks that the fallback mesh holds every piece. Mesh against
+    the STL 0.966 / 0.984 / 0.970, length, width and height 1.000 / 1.000 / 0.999. Open (H): the dark violet and its
+    panel lines on the GPU, the retro plume leaving bare skin in the rim band.
 
 ### M5-T22 Brakiri Bokmai: references, generator and the `brakiri` style
 
