@@ -2,6 +2,8 @@ extends GutTest
 ## BenchLayout (M4-T01): where the benchmark's ships start, pure and seeded. `furball`: everyone in one fight within 5 km;
 ## `spread`: fights of about 12 (6 against 6, the setting's full squadron) 20 km apart; `transit`: wings of four on looped
 ## routes, no fight. Half allies, half raiders, in a frame where the player sits at the origin with its nose along -Z.
+## `battle` and `typical` (M4-T07): fights of 24 on an 8 km lattice with capital stand-ins behind each side, the mix
+## `BattleMix` states, an asteroid slab and a gravity source; four sides every pair hostile, or two.
 
 const SENSOR_M: float = ContactScan.SENSOR_RANGE_M
 
@@ -24,7 +26,7 @@ func _groups(plan: Array[Dictionary]) -> Dictionary:
 
 
 func test_every_layout_places_n_ships_half_allies_half_raiders() -> void:
-	for layout: StringName in BenchLayout.NAMES:
+	for layout: StringName in BenchLayout.FIGHTER_LAYOUTS:
 		for n: int in [1, 25, 50, 101]:
 			var plan: Array[Dictionary] = BenchLayout.plan(layout, n, 1)
 			assert_eq(plan.size(), n, "%s %d" % [layout, n])
@@ -36,7 +38,7 @@ func test_every_layout_places_n_ships_half_allies_half_raiders() -> void:
 
 
 func test_ships_fly_the_ai_profile_of_their_side() -> void:
-	for layout: StringName in BenchLayout.NAMES:
+	for layout: StringName in BenchLayout.FIGHTER_LAYOUTS:
 		for e: Dictionary in BenchLayout.plan(layout, 24, 3):
 			var behaviour: Dictionary = e["behaviour"]
 			assert_eq(String(behaviour["type"]), "ai")
@@ -175,3 +177,190 @@ func test_transit_wings_start_beyond_each_others_sensor_range() -> void:
 		for j: int in range(i + 1, leaders.size()):
 			closest = minf(closest, leaders[i].distance_to(leaders[j]))
 	assert_gt(closest, SENSOR_M, "wing leaders start out of each other's sensor range (closest %.0f m)" % closest)
+
+
+# --- battle and typical (M4-T07) -------------------------------------------------------------------------------
+
+
+func _of_kind(plan: Array[Dictionary], kind: StringName) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for e: Dictionary in plan:
+		if StringName(e["kind"]) == kind:
+			out.append(e)
+	return out
+
+
+# The fight centres a plan's fighters gather around, by group.
+func _fight_centres(plan: Array[Dictionary]) -> Dictionary:
+	var out: Dictionary = {}
+	for e: Dictionary in plan:
+		if StringName(e["kind"]) == BenchLayout.KIND_FIGHTER:
+			out[int(e["group"])] = e["fight_centre"]
+	return out
+
+
+func test_battle_and_typical_are_layouts_that_fight() -> void:
+	for layout: StringName in [BenchLayout.BATTLE, BenchLayout.TYPICAL]:
+		assert_true(BenchLayout.is_layout(layout))
+		assert_true(BenchLayout.fights(layout))
+		assert_true(BenchLayout.NAMES.has(layout), "%s is a bench layout" % layout)
+		assert_false(BenchLayout.FIGHTER_LAYOUTS.has(layout))
+
+
+func test_battle_holds_the_mix_with_a_quarter_of_the_capitals_a_side() -> void:
+	for n: int in [50, 100, 300, 500]:
+		var plan: Array[Dictionary] = BenchLayout.plan(BenchLayout.BATTLE, n, 1)
+		var mix: Dictionary = BenchLayout.mix(BenchLayout.BATTLE, n)
+		assert_eq(plan.size(), n, "%d: N counts fighters and capitals" % n)
+		var capitals: Array[Dictionary] = _of_kind(plan, BenchLayout.KIND_CAPITAL)
+		assert_eq(capitals.size(), roundi(0.15 * n), "%d: round(0.15 n) capitals" % n)
+		assert_eq(capitals.size(), int(mix["capitals"]))
+		var per_side: Dictionary = {}
+		var per_class: Dictionary = {}
+		for c: Dictionary in capitals:
+			per_side[int(c["side"])] = int(per_side.get(int(c["side"]), 0)) + 1
+			per_class[String(c["class"])] = int(per_class.get(String(c["class"]), 0)) + 1
+			assert_true(CapitalStandin.CLASSES.has(StringName(c["class"])), "%d: a known class" % n)
+		assert_eq(per_side.size(), 4, "%d: every side has capitals" % n)
+		for side: int in per_side:
+			assert_lte(absi(int(per_side[side]) * 4 - capitals.size()), 4, "%d: a quarter a side (%s)" % [n, per_side])
+		assert_eq(int(per_class.get("carrier", 0)), int(mix["carriers"]))
+		assert_eq(int(per_class.get("destroyer", 0)), int(mix["destroyers"]))
+		assert_eq(int(per_class.get("cruiser", 0)), int(mix["cruisers"]))
+
+
+func test_battle_has_four_sides_every_pair_hostile() -> void:
+	var sides: Array[StringName] = BenchLayout.sides(BenchLayout.BATTLE)
+	assert_eq(sides.size(), 4)
+	assert_eq(sides[0], Factions.EARTH_ALLIANCE, "the player's side is the first")
+	assert_eq(sides[1], Factions.RAIDERS)
+	var table: FactionTable = BenchLayout.faction_table(BenchLayout.BATTLE)
+	assert_not_null(table)
+	for a: StringName in sides:
+		for b: StringName in sides:
+			var want: Factions.Relation = Factions.Relation.FRIENDLY if a == b else Factions.Relation.HOSTILE
+			assert_eq(table.relation(a, b), want, "%s against %s" % [a, b])
+	var seen: Dictionary = {}
+	for e: Dictionary in BenchLayout.plan(BenchLayout.BATTLE, 200, 1):
+		seen[StringName(e["faction"])] = true
+		assert_eq(StringName(e["faction"]), sides[int(e["side"])], "a ship flies for its side")
+	assert_eq(seen.size(), 4, "all four sides fly")
+	assert_null(BenchLayout.faction_table(BenchLayout.FURBALL), "the other layouts keep the game's table")
+
+
+func test_battle_fights_are_eight_km_apart_with_the_players_at_the_centre() -> void:
+	for n: int in [100, 500, 1000]:
+		var plan: Array[Dictionary] = BenchLayout.plan(BenchLayout.BATTLE, n, 1)
+		var centres: Dictionary = _fight_centres(plan)
+		var fighters: int = int(BenchLayout.mix(BenchLayout.BATTLE, n)["fighters"])
+		assert_eq(centres.size(), maxi(1, roundi(float(fighters) / float(BenchLayout.FIGHT_SIZE))), "%d: fights of about 24" % n)
+		assert_eq(centres[0] as Vector3, Vector3(0.0, 0.0, -BenchLayout.FIGHT_AHEAD_M), "%d: the player's fight is first, just ahead" % n)
+		var area: Vector3 = BenchLayout.mix(BenchLayout.BATTLE, n)["area_m"]
+		for g: int in centres:
+			var nearest: float = INF
+			for h: int in centres:
+				if g != h:
+					nearest = minf(nearest, (centres[g] as Vector3).distance_to(centres[h] as Vector3))
+			if centres.size() > 1:
+				assert_almost_eq(nearest, BenchLayout.FIGHT_SPACING_M, 1e-3, "%d: fight %d is 8 km from the next" % [n, g])
+			var c: Vector3 = centres[g]
+			assert_lte(absf(c.y), area.y * 0.5, "%d: fight %d inside the area's depth" % [n, g])
+		for e: Dictionary in plan:
+			var at: Vector3 = (e["offset"] as Vector3) - (centres[0] as Vector3)
+			assert_true(absf(at.x) <= area.x * 0.5 and absf(at.y) <= area.y * 0.5 and absf(at.z) <= area.z * 0.5,
+					"%d: every ship inside the area (%s)" % [n, at])
+
+
+func test_no_two_ships_start_within_fifty_metres() -> void:
+	for layout: StringName in [BenchLayout.BATTLE, BenchLayout.TYPICAL]:
+		var plan: Array[Dictionary] = BenchLayout.plan(layout, 300 if layout == BenchLayout.BATTLE else 58, 2)
+		var closest: float = INF
+		for i: int in plan.size():
+			for j: int in range(i + 1, plan.size()):
+				var gap: float = (plan[i]["offset"] as Vector3).distance_to(plan[j]["offset"] as Vector3) \
+						- float(plan[i]["radius"]) - float(plan[j]["radius"])
+				closest = minf(closest, gap)
+		assert_gte(closest, BenchLayout.MIN_SPACING_M, "%s: closest pair %.1f m apart (hull to hull for capitals)" % [layout, closest])
+
+
+func test_a_sides_capitals_sit_five_km_behind_its_fight_heading_into_it() -> void:
+	var plan: Array[Dictionary] = BenchLayout.plan(BenchLayout.BATTLE, 300, 1)
+	for c: Dictionary in _of_kind(plan, BenchLayout.KIND_CAPITAL):
+		var back: Vector3 = BenchLayout.side_direction(int(c["side"]))
+		var from_fight: Vector3 = (c["offset"] as Vector3) - (c["fight_centre"] as Vector3)
+		assert_almost_eq(from_fight.dot(back), BenchLayout.CAPITAL_STANDOFF_M, 1e-2, "behind its side's fighters")
+		var nose: Vector3 = -(c["basis"] as Basis).z
+		assert_almost_eq(nose.dot(-back), 1.0, 1e-5, "nose toward the fight")
+		assert_almost_eq((c["velocity"] as Vector3).length(), CapitalStandin.CRUISE_MPS, 1e-3, "cruising")
+		assert_almost_eq((c["velocity"] as Vector3).normalized().dot(nose), 1.0, 1e-5, "along its nose")
+	for f: Dictionary in _of_kind(plan, BenchLayout.KIND_FIGHTER):
+		var toward: Vector3 = (f["fight_centre"] as Vector3) - (f["offset"] as Vector3)
+		assert_gt((-(f["basis"] as Basis).z).dot(toward.normalized()), 0.0, "a fighter faces into its fight")
+
+
+func test_typical_is_two_fights_of_two_sides() -> void:
+	var plan: Array[Dictionary] = BenchLayout.plan(BenchLayout.TYPICAL, 58, 1)
+	assert_eq(plan.size(), 58)
+	assert_eq(_of_kind(plan, BenchLayout.KIND_FIGHTER).size(), 50)
+	assert_eq(_of_kind(plan, BenchLayout.KIND_CAPITAL).size(), 8)
+	assert_eq(_fight_centres(plan).size(), 2, "two fights")
+	assert_eq(BenchLayout.sides(BenchLayout.TYPICAL), [Factions.EARTH_ALLIANCE, Factions.RAIDERS] as Array[StringName])
+	assert_null(BenchLayout.faction_table(BenchLayout.TYPICAL), "two sides: the game's own table")
+	var allies: int = 0
+	for e: Dictionary in _of_kind(plan, BenchLayout.KIND_FIGHTER):
+		allies += 1 if StringName(e["type"]) == ShipPool.ALLY_TYPE else 0
+		assert_true(bool(BrainFactory.from_behaviour(e["behaviour"], UniversePos.new(), int(e["seed"]))["ok"]), "the brain builds")
+	assert_eq(allies, 25, "half and half")
+
+
+func test_battle_plans_are_seeded() -> void:
+	var a: Array[Dictionary] = BenchLayout.plan(BenchLayout.BATTLE, 100, 4)
+	var b: Array[Dictionary] = BenchLayout.plan(BenchLayout.BATTLE, 100, 4)
+	var c: Array[Dictionary] = BenchLayout.plan(BenchLayout.BATTLE, 100, 5)
+	var same: bool = true
+	var differs: bool = false
+	for i: int in a.size():
+		same = same and (a[i]["offset"] as Vector3) == (b[i]["offset"] as Vector3) and int(a[i]["seed"]) == int(b[i]["seed"])
+		differs = differs or (a[i]["offset"] as Vector3) != (c[i]["offset"] as Vector3)
+	assert_true(same)
+	assert_true(differs)
+	var ra: Array[Dictionary] = BenchLayout.rocks(BenchLayout.BATTLE, 100, 4)
+	var rb: Array[Dictionary] = BenchLayout.rocks(BenchLayout.BATTLE, 100, 4)
+	assert_eq(ra.size(), rb.size())
+	assert_eq(ra[17]["offset"] as Vector3, rb[17]["offset"] as Vector3, "the rocks too")
+
+
+func test_the_rock_slab_clears_every_ship() -> void:
+	for layout: StringName in [BenchLayout.BATTLE, BenchLayout.TYPICAL]:
+		var n: int = 100 if layout == BenchLayout.BATTLE else 58
+		var plan: Array[Dictionary] = BenchLayout.plan(layout, n, 1)
+		var rocks: Array[Dictionary] = BenchLayout.rocks(layout, n, 1)
+		assert_eq(rocks.size(), int(BenchLayout.mix(layout, n)["asteroids"]), "%s: the mix's rocks" % layout)
+		var slab: AABB = BenchLayout.rock_slab(layout, n)
+		assert_eq(slab.size, BenchLayout.ROCK_SLAB_M)
+		var smallest: float = INF
+		var largest: float = 0.0
+		var clear: float = INF
+		for r: Dictionary in rocks:
+			var at: Vector3 = r["offset"]
+			var radius: float = r["radius"]
+			smallest = minf(smallest, radius)
+			largest = maxf(largest, radius)
+			assert_true(slab.has_point(at), "%s: a rock in the slab" % layout)
+			clear = minf(clear, at.length() - radius)  # the player at the origin
+			for e: Dictionary in plan:
+				clear = minf(clear, at.distance_to(e["offset"] as Vector3) - radius - float(e["radius"]))
+		assert_gte(smallest, BenchLayout.ROCK_RADIUS_MIN_M)
+		assert_lte(largest, BenchLayout.ROCK_RADIUS_MAX_M)
+		assert_gt(largest, 4.0 * smallest, "%s: rocks of many sizes" % layout)
+		assert_gte(clear, BenchLayout.ROCK_CLEARANCE_M, "%s: no ship starts inside a rock (closest %.0f m)" % [layout, clear])
+		assert_gt(BenchLayout.fights_in_slab(layout, n), 0, "%s: the player's fight is among the rocks" % layout)
+	assert_eq(BenchLayout.rocks(BenchLayout.FURBALL, 50, 1).size(), 0, "the other layouts have no rocks")
+
+
+func test_the_gravity_source_is_a_moon_far_below() -> void:
+	var g: Dictionary = BenchLayout.gravity_source(BenchLayout.BATTLE)
+	assert_almost_eq((g["offset"] as Vector3).length(), 400000.0, 1.0, "a moon 400 km off")
+	var at_centre: float = float(g["gm"]) / (g["offset"] as Vector3).length_squared()
+	assert_almost_eq(at_centre, 0.03, 1e-6, "0.03 m/s^2 at the battle")
+	assert_true(BenchLayout.gravity_source(BenchLayout.SPREAD).is_empty())

@@ -202,3 +202,69 @@ func test_options_are_read_from_key_value_words() -> void:
 	assert_eq(float(defaults["rebase_m"]), BenchRunner.REBASE_THRESHOLD_M)
 	assert_false(bool(BenchRunner.parse_options(PackedStringArray(["seed=x"]))["ok"]))
 	assert_false(bool(BenchRunner.parse_options(PackedStringArray(["0"]))["ok"]), "no zero-length window")
+
+
+# --- battle and typical (M4-T07) ---------------------------------------------------------------------------------
+
+
+const ENTITY_KEYS: Array[String] = ["fighters_near", "fighters_far", "capitals", "turrets", "interceptors", "beams", "missiles",
+		"mines", "bolts", "asteroids", "launches", "sides"]
+
+
+func test_a_short_battle_writes_every_entity_count_and_puts_the_factions_back() -> void:
+	var game_table: FactionTable = Factions.table()
+	assert_true(_exec("bench battle 50 3 warmup=0.5 seed=1 label=battle_test").ok)
+	await _ticks(2)
+	var sides: Array[StringName] = BenchLayout.sides(BenchLayout.BATTLE)
+	for a: StringName in sides:
+		for b: StringName in sides:
+			if a != b:
+				assert_true(Factions.is_hostile(a, b), "during the run %s and %s fight" % [a, b])
+	var mix: Dictionary = BenchLayout.mix(BenchLayout.BATTLE, 50)
+	assert_eq(main.bench.standins.capitals().size(), int(mix["capitals"]), "the capitals are in play")
+	assert_eq(main.bench.standins.asteroid_count(), int(mix["asteroids"]), "and the rocks")
+	assert_ne(main.world.environment_accel(Vector3.ZERO), Vector3.ZERO, "and the moon")
+	var by_faction: Dictionary = {}
+	for c: Combatant in main.ships.alive():
+		by_faction[c.faction] = int(by_faction.get(c.faction, 0)) + 1
+		assert_eq(c.targetable.faction, c.faction)
+		assert_eq(c.damageable.faction, c.faction)
+		assert_eq(c.cannon.faction, c.faction)
+	assert_eq(by_faction.size(), 4, "fighters of four sides: %s" % by_faction)
+	await wait_for_signal(main.bench.finished, 90.0, "the bench finishes")
+	var s: Dictionary = _summary_of("battle_test")
+	assert_eq(String(s.get("layout", "")), "battle")
+	var entities: Dictionary = s.get("entities", {})
+	for key: String in ENTITY_KEYS:
+		assert_true(entities.has(key), "the summary counts %s" % key)
+	assert_eq(int(entities.get("capitals", 0)), int(mix["capitals"]))
+	assert_eq(int(entities.get("turrets", 0)), int(mix["turrets"]))
+	assert_eq(int(entities.get("interceptors", 0)), int(mix["interceptors"]))
+	assert_eq(int(entities.get("asteroids", 0)), int(mix["asteroids"]))
+	assert_eq(int(entities.get("sides", 0)), 4)
+	assert_eq(int(entities.get("fighters_near", 0)) + int(entities.get("fighters_far", 0)), int(mix["fighters"]),
+			"every fighter is near or far")
+	assert_true((s.get("mix", {}) as Dictionary).has("turrets"), "the mix the run asked for")
+	assert_true((s.get("stages", {}) as Dictionary).has("standins"), "the stand-ins' own stage")
+	assert_true(FileAccess.get_file_as_string(ROOT.path_join("battle_test/summary.md")).contains("turrets"), "the page lists them")
+	assert_eq(Factions.table(), game_table, "the game's faction table is back")
+	assert_false(Factions.is_known(sides[2]), "the bench factions are gone")
+	for c: Combatant in main.ships.alive():
+		assert_true(c.faction == Factions.EARTH_ALLIANCE or c.faction == Factions.RAIDERS, "%s flies for a game faction again" % c.display_name)
+	assert_eq(main.bench.standins.capitals().size(), 0, "the stand-ins are gone")
+	assert_eq(main.bench.standins.asteroid_count(), 0)
+	assert_eq(main.world.environment_accel(Vector3.ZERO), Vector3.ZERO, "and the moon")
+
+
+func test_a_short_typical_run_writes_its_summary() -> void:
+	await _run("bench typical 58 3 warmup=0.5 seed=1 label=typical_test")
+	var s: Dictionary = _summary_of("typical_test")
+	assert_eq(String(s.get("layout", "")), "typical")
+	var entities: Dictionary = s.get("entities", {})
+	for key: String in ENTITY_KEYS:
+		assert_true(entities.has(key), "the summary counts %s" % key)
+	assert_eq(int(entities.get("capitals", 0)), 8)
+	assert_eq(int(entities.get("turrets", 0)), 78)
+	assert_eq(int(entities.get("sides", 0)), 2)
+	assert_gt(int(entities.get("launches", 0)), 0, "the carriers launched")
+	assert_eq(int(s.get("ships_max", 0)), 51, "the fighters and the player; capitals are counted apart")
