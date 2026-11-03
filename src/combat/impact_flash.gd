@@ -5,6 +5,9 @@ extends Node3D
 ##
 ## Add it as a child of the hit ship with `position` set in the ship's body frame. Timing is visual (`_process` delta), so
 ## a paused game freezes it.
+##
+## Flashes of one colour share their quad and materials (M4-T08): making them per hit stalled a windowed tick by about 7 ms
+## on many hits. The fade is per flash (`transparency` on the instance), so sharing changes nothing on screen.
 
 const FLASH_S: float = 0.08
 const SPARK_S: float = 0.18
@@ -15,7 +18,12 @@ const SPARK_SPEED_MPS: Vector2 = Vector2(8.0, 22.0)
 const SPARK_LENGTH_M: float = 0.7
 const GLOW_MATERIAL: StandardMaterial3D = preload("res://assets/materials/thruster_glow.tres")
 
+## Colours whose resources are kept; past this a flash makes its own (bolt colours come from a few weapon specs).
+const MAX_SHARED_COLOURS: int = 64
+
 static var _spark_mesh: BoxMesh = null
+# Colour -> [the flash quad with its glow material, the spark material].
+static var _shared: Dictionary = {}
 
 var _age_s: float = 0.0
 var _flash: MeshInstance3D = null
@@ -68,24 +76,14 @@ func is_flash_visible() -> bool:
 func _build(color: Color, seed_value: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
-	var glow := GLOW_MATERIAL.duplicate() as StandardMaterial3D
-	glow.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	glow.albedo_color = color
-	glow.emission = color
-	var quad := QuadMesh.new()
-	quad.size = Vector2.ONE
-	quad.material = glow
+	var resources: Array = _resources_for(color)
 	_flash = MeshInstance3D.new()
 	_flash.name = "Flash"
-	_flash.mesh = quad
+	_flash.mesh = resources[0]
 	_flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_flash)
 
-	var spark_material := StandardMaterial3D.new()
-	spark_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	spark_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	spark_material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	spark_material.albedo_color = color
+	var spark_material: Material = resources[1]
 	for i: int in rng.randi_range(MIN_SPARKS, MAX_SPARKS):
 		var direction := Vector3(rng.randfn(), rng.randfn(), rng.randfn()).normalized()
 		if direction.is_zero_approx():
@@ -100,6 +98,29 @@ func _build(color: Color, seed_value: int) -> void:
 		add_child(spark)
 		_sparks.append(spark)
 		_spark_velocities.append(direction * rng.randf_range(SPARK_SPEED_MPS.x, SPARK_SPEED_MPS.y))
+
+
+# The flash quad and spark material for `color`, made once per colour.
+static func _resources_for(color: Color) -> Array:
+	var kept: Variant = _shared.get(color)
+	if kept != null:
+		return kept as Array
+	var glow := GLOW_MATERIAL.duplicate() as StandardMaterial3D
+	glow.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	glow.albedo_color = color
+	glow.emission = color
+	var quad := QuadMesh.new()
+	quad.size = Vector2.ONE
+	quad.material = glow
+	var spark_material := StandardMaterial3D.new()
+	spark_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	spark_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	spark_material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	spark_material.albedo_color = color
+	var made: Array = [quad, spark_material]
+	if _shared.size() < MAX_SHARED_COLOURS:
+		_shared[color] = made
+	return made
 
 
 static func _shared_spark_mesh() -> BoxMesh:
