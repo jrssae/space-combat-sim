@@ -334,3 +334,188 @@ func test_a_freed_body_is_noticed_on_both_paths() -> void:
 		scan.use_native = native
 		assert_false(scan._bodies_alive(), "one was freed (%s)" % scan.path())
 	alive.free()
+
+
+# The arguments of a valid `load` of three bodies and one bolt; a test replaces one entry to break it.
+static func _load_args() -> Dictionary:
+	var factions: Array[StringName] = [Factions.RAIDERS, Factions.EARTH_ALLIANCE, Factions.RAIDERS]
+	var bolt_factions: Array[StringName] = [Factions.EARTH_ALLIANCE]
+	return {
+		"body_ids": PackedInt64Array([1000, 1001, 1002]),
+		"positions": PackedVector3Array([Vector3.ZERO, Vector3(10, 0, 0), Vector3(20, 0, 0)]),
+		"factions": factions,
+		"is_ship": PackedByteArray([1, 1, 1]),
+		"reach": PackedFloat64Array(),
+		"bolt_positions": PackedVector3Array([Vector3(0, 0, 100)]),
+		"bolt_velocities": PackedVector3Array([Vector3(0, 0, -300)]),
+		"bolt_factions": bolt_factions,
+		"bolt_shooters": PackedInt64Array([0]),
+	}
+
+
+static func _load_raw(field: Object, args: Dictionary) -> Variant:
+	return field.load(args["body_ids"], args["positions"], args["factions"], args["is_ship"], args["reach"],
+			args["bolt_positions"], args["bolt_velocities"], args["bolt_factions"], args["bolt_shooters"],
+			ContactScan.SENSOR_RANGE_M)
+
+
+func test_a_huge_finite_range_gives_the_same_answers_on_both_paths_and_finishes_quickly() -> void:
+	if _skipped():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 31
+	var n: int = 120
+	var scan := _world(rng, n, 0)
+	var own_at: Vector3 = scan._positions[7]
+	var faction: StringName = scan._factions[7]
+	# Past 2^31 cells of 5 km on every axis the box's cell count no longer fits a 64-bit product.
+	for range_m: float in [1.0e13, 1.0e14, 1.0e30, 1.0e300]:
+		var started: int = Time.get_ticks_msec()
+		var answers: Array = []
+		for native: bool in [true, false]:
+			scan.use_native = native
+			answers.append([scan.contacts_for(1007, own_at, faction, range_m),
+					scan.nearest_for(1007, own_at, faction, 12, Callable(), range_m)])
+			if native:
+				assert_eq(scan.native_visits(), n, "range %s: too big a box to enumerate, so every body is tested" % range_m)
+		assert_lt(Time.get_ticks_msec() - started, 2000, "range %s: finishes quickly" % range_m)
+		assert_eq((answers[1][0] as Array).size(), n - 1, "range %s: GDScript sees every other body" % range_m)
+		assert_true(_same(answers[0][0], answers[1][0]), "range %s: contacts_for" % range_m)
+		assert_true(_same(answers[0][1], answers[1][1]), "range %s: nearest_for" % range_m)
+
+
+func test_a_load_with_mismatched_array_lengths_is_rejected_and_the_field_answers_nothing() -> void:
+	if _skipped():
+		return
+	var control: Object = NativeLib.instantiate(ContactScan.NATIVE_CLASS)
+	assert_eq(_load_raw(control, _load_args()), true, "a consistent load is taken")
+	assert_eq(control.contacts(1000, Vector3.ZERO, 5000.0).size(), 2, "and answers")
+	var cases: Dictionary = {
+		"positions short": ["positions", PackedVector3Array([Vector3.ZERO, Vector3(10, 0, 0)])],
+		"positions long": ["positions", PackedVector3Array([Vector3.ZERO, Vector3(10, 0, 0), Vector3(20, 0, 0), Vector3.ONE])],
+		"factions short": ["factions", [Factions.RAIDERS] as Array[StringName]],
+		"is_ship short": ["is_ship", PackedByteArray([1])],
+		"reach wrong": ["reach", PackedFloat64Array([1.0, 2.0])],
+		"body ids short": ["body_ids", PackedInt64Array([1000])],
+		"bolt velocities short": ["bolt_velocities", PackedVector3Array()],
+		"bolt factions long": ["bolt_factions", [Factions.RAIDERS, Factions.RAIDERS] as Array[StringName]],
+		"bolt shooters long": ["bolt_shooters", PackedInt64Array([0, 0])],
+	}
+	for label: String in cases:
+		var args: Dictionary = _load_args()
+		args[cases[label][0]] = cases[label][1]
+		var field: Object = NativeLib.instantiate(ContactScan.NATIVE_CLASS)
+		_load_raw(field, _load_args())  # a scan the field already holds must be dropped too
+		assert_eq(_load_raw(field, args), false, "%s: the load is rejected" % label)
+		assert_engine_error("lengths", "%s: one error says why" % label)
+		assert_eq(field.contacts(1000, Vector3.ZERO, 5000.0).size(), 0, "%s: no contacts" % label)
+		assert_eq(field.nearest(1000, Vector3.ZERO, Factions.RAIDERS, 1, 5000.0).size(), 0, "%s: no nearest" % label)
+		assert_eq(field.broadcasts(1000, Vector3.ZERO, 0.0).size(), 0, "%s: no broadcasts" % label)
+		assert_eq(field.incoming(1000, Vector3.ZERO, Vector3.ZERO, Factions.RAIDERS), 0, "%s: no incoming fire" % label)
+		assert_eq(field.factions().size(), 0, "%s: no factions" % label)
+		assert_true(field.bodies_alive(), "%s: nothing to be freed" % label)
+
+
+func test_the_facade_falls_back_to_gdscript_for_a_scan_the_field_rejects() -> void:
+	if _skipped():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 41
+	var scan := _world(rng, 50, 0)
+	scan._is_ship.append(1)  # one flag too many: the field refuses it, GDScript never reads it
+	var own_at: Vector3 = scan._positions[3]
+	var faction: StringName = scan._factions[3]
+	var found: Array[Contact] = scan.nearest_for(1003, own_at, faction, 12)
+	assert_engine_error("lengths", "the field says why it refused")
+	assert_eq(scan.path(), &"gdscript", "the scan answers from GDScript")
+	assert_eq(scan.native_visits(), -1, "and has no native work count")
+	assert_gt(found.size(), 0, "the query still answered")
+	scan.use_native = false
+	assert_true(_same(found, scan.nearest_for(1003, own_at, faction, 12)), "the same as the GDScript path")
+	var expected_fire: int = scan.incoming_fire(1003, own_at, Vector3.ZERO, faction)
+	var expected_contacts: Array[Contact] = scan.contacts_for(1003, own_at, faction)
+	scan.use_native = true
+	assert_eq(scan.path(), &"gdscript", "the refusal sticks for this scan")
+	assert_eq(scan.incoming_fire(1003, own_at, Vector3.ZERO, faction), expected_fire, "incoming_fire still answers")
+	assert_true(_same(scan.contacts_for(1003, own_at, faction), expected_contacts), "contacts_for still answers")
+	assert_true(scan._bodies_alive() == false, "the freed-body check runs without the field (these ids are not nodes)")
+
+
+func test_a_negative_range_acts_as_its_magnitude_on_both_paths() -> void:
+	if _skipped():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 53
+	var scan := _world(rng, 80, 0)
+	var own_at: Vector3 = scan._positions[4]
+	var faction: StringName = scan._factions[4]
+	for magnitude: float in [2500.0, 5000.0, 9000.0]:
+		var answers: Array = []
+		for native: bool in [true, false]:
+			scan.use_native = native
+			answers.append([scan.contacts_for(1004, own_at, faction, -magnitude),
+					scan.nearest_for(1004, own_at, faction, 12, Callable(), -magnitude)])
+		assert_gt((answers[1][0] as Array).size(), 0, "range -%s: something is in range" % magnitude)
+		assert_true(_same(answers[0][0], answers[1][0]), "range -%s: contacts_for" % magnitude)
+		assert_true(_same(answers[0][1], answers[1][1]), "range -%s: nearest_for" % magnitude)
+		scan.use_native = true
+		assert_true(_same(answers[0][0], scan.contacts_for(1004, own_at, faction, magnitude)), "range -%s: as +%s" % [magnitude, magnitude])
+
+
+func test_more_than_256_factions_are_told_apart() -> void:
+	if _skipped():
+		return
+	# Bodies f0 to f299 along a line; only f0 and f290 are hostile. A faction index kept in a byte would read f290 as f34.
+	var count: int = 300
+	var ids: Array = []
+	for i: int in count:
+		ids.append({"id": "f%d" % i, "name": "F%d" % i})
+	var table_dict: Dictionary = {"factions": ids,
+			"relations": [{"a": "f0", "b": "f290", "relation": "hostile"}], "default": "neutral"}
+	var parsed: Dictionary = FactionTable.from_dict(table_dict)
+	assert_true(parsed["ok"], "the 300 faction table is valid: %s" % parsed["error"])
+	Factions.use_table(parsed["table"])
+	var positions := PackedVector3Array()
+	var factions: Array[StringName] = []
+	var ships := PackedByteArray()
+	for i: int in count:
+		positions.append(Vector3(float(i) * 10.0, 0.0, 0.0))
+		factions.append(StringName("f%d" % i))
+		ships.append(1)
+	var scan := _scan(positions, factions, ships)
+	scan._bolt_positions.append(Vector3(0.0, 0.0, 100.0))
+	scan._bolt_velocities.append(Vector3(0.0, 0.0, -300.0))
+	scan._bolt_factions.append(&"f290")
+	scan._bolt_shooters.append(0)
+	var answers: Array = []
+	for native: bool in [true, false]:
+		scan.use_native = native
+		answers.append([scan.nearest_for(1000, Vector3.ZERO, &"f0", 3), scan.incoming_fire(1000, Vector3.ZERO, Vector3.ZERO, &"f0")])
+	assert_eq(answers[1][1], 1, "GDScript: the f290 bolt is hostile to f0")
+	assert_eq(answers[0][1], 1, "native: the same")
+	assert_true(_same(answers[0][0], answers[1][0]), "nearest_for: the same contacts")
+	assert_true(_ids(answers[0][0]).has(5290), "the cut keeps the nearest hostile ship, body 290")
+	scan.use_native = true
+	assert_eq(scan._native().factions().size(), count, "the field lists every faction")
+
+
+func test_a_hostility_row_too_short_for_a_faction_counts_it_as_not_hostile() -> void:
+	if _skipped():
+		return
+	var args: Dictionary = _load_args()
+	args["positions"] = PackedVector3Array([Vector3.ZERO, Vector3(10, 0, 0), Vector3(20, 0, 0), Vector3(30, 0, 0)])
+	args["body_ids"] = PackedInt64Array([1000, 1001, 1002, 1003])
+	args["is_ship"] = PackedByteArray([1, 1, 1, 1])
+	var factions: Array[StringName] = [&"a", &"b", &"c", &"b"]
+	args["factions"] = factions
+	var bolt_factions: Array[StringName] = [&"c"]
+	args["bolt_factions"] = bolt_factions
+	var field: Object = NativeLib.instantiate(ContactScan.NATIVE_CLASS)
+	_load_raw(field, args)
+	assert_eq(field.factions(), factions.slice(0, 3) as Array[StringName], "a, b, c in first-seen order")
+	field.set_hostile_row(&"a", PackedByteArray([0, 0]))  # nothing for c at index 2
+	assert_eq(field.incoming(1000, Vector3.ZERO, Vector3.ZERO, &"a"), 0, "the bolt of c is not hostile")
+	assert_eq(field.nearest(1000, Vector3.ZERO, &"a", 1, 5000.0), PackedInt32Array([1, -1]), "no hostile ship is added")
+	field.set_hostile_row(&"a", PackedByteArray([0, 0, 1]))
+	assert_eq(field.incoming(1000, Vector3.ZERO, Vector3.ZERO, &"a"), 1, "with c in the row the bolt counts")
+	assert_eq(field.nearest(1000, Vector3.ZERO, &"a", 1, 5000.0), PackedInt32Array([1, 2, -1]), "and c's ship joins the cut")
