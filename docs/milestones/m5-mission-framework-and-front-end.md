@@ -42,7 +42,8 @@ voices. M8's tutorial is written on top of all this, so the framework matters mo
 | Q14 | What weapons, when do they fire, how strong? | **Small turrets**: 2-4 light turrets per hull by size, each with its own firing arc, lead-aimed, about 1.5 km range, built as a turret system M12's capital ships can reuse. **Only at attackers**: a turret fires at a ship that has shot at its own ship, or at another civilian or ally close by; a raider flying past is left alone. **Deterrent only**: they hurt raiders and may finish a damaged one, but a raid of two or more raiders still wins unless the player or a patrol helps |
 | Q15 | (maintainer, after reading the menu list) Settings layout | **Options on the left; the bottom left is reserved for a controller image with what each button does; the right side has a place for mission objectives.** It applies to the in-flight pause menu and the settings and controls screens, opened from pause or from the front end |
 | Q16 | (after T11 measured the references) Built from the Saturn 4's parts, the Saturn 8 is only about 168 m and the tanker about 161 m: how do they reach 200 m? | **The Saturns are modular.** The Saturn 4's **100 m is the length of its cargo section**, not of the whole ship. The Saturn 8's **200 m is two Saturn 4 cargo sections** (or two tank sections for the tanker). A **Saturn 4 with tanks** also exists, half a Saturn 8 tanker. **The Saturn 3 uses the same lead ship** (control section) as the 4 and the 8. Ids (planner's call): `saturn_4_tanker` (new) and `saturn_8_tanker` (was `saturn_fuel_tanker`) |
-| Q17 | (maintainer, during the build) Another civilian ship | **Add the Brakiri Bokmai transport, about 80 m, in the Brakiri brown and yellow. The cargo pods in its centre are removable.** Reference: `references/Brakiri_Bokmai_transport_80m.STL`. Planner's calls: the generator builds the hull and one pod model apart, a Bokmai flies with three, two, one or no pods, a destroyed Bokmai sheds its pods as debris, letting go of a pod in flight or towing one waits for M14's tether, and its faction is a new `brakiri` |
+| Q17 | (maintainer, during the build) Another civilian ship | **Add the Brakiri Bokmai transport, about 80 m, in the Brakiri green and yellow** (the maintainer first said brown and corrected it the same evening). **The cargo pods in its centre are removable.** Reference: `references/Brakiri_Bokmai_transport_80m.STL`. Planner's calls: the generator builds the hull and one pod model apart, a Bokmai flies with three, two, one or no pods, a destroyed Bokmai sheds its pods as debris, letting go of a pod in flight or towing one waits for M14's tether, and its faction is a new `brakiri` |
+| Q18 | (maintainer, during the build) How close to the references? | **Every civilian model within 90 % of its STL**, measured as **silhouettes and size**: the top, side and front silhouettes each overlap the STL's by at least 90 % (intersection over union) at the same length, and length, width and height each lie within 10 %. **Civilian ships only**: the Starfury stays as built, and the raider has no STL. Planner's calls: the score is taken on the LOD0 splats by `tools/refview`'s compare mode (T23); where Q16 departs from a model on purpose (the Saturn 8s' 200 m of cargo, the Saturn 3's engine section, the Saturn 4 tanker, which has no model of its own), each part is scored against the part of the model it came from |
 
 ## Scope
 
@@ -266,7 +267,7 @@ Out (explicitly):
   - `centauri_brezebel` (about 60 m): the Centauri Brezebel transport (`references/Centauri_Brezebel_Transport.stl`, an
     ASCII STL added 2026-11-02): a rounded bow and two long swept arms reaching aft, in a new `centauri` style.
   - `brakiri_bokmai` (about 80 m, Q17): the Brakiri Bokmai transport (`references/Brakiri_Bokmai_transport_80m.STL`,
-    binary, added 2026-11-02), in a new `brakiri` style, brown and yellow. A first look: three rounded cargo pods in a
+    binary, added 2026-11-02), in a new `brakiri` style, green and yellow. A first look: three rounded cargo pods in a
     row amidships, held in an open frame of curved arms under a dorsal spine; at one end a crossbar carries two tall
     vertical fins or nacelles at its tips. T22 reads which end is the nose. **The pods are removable.** The generator
     writes the hull without its pods and one pod model (`<id>_pod.*`, LOD0-3 at the hull's spacings so it switches with
@@ -280,6 +281,12 @@ Out (explicitly):
   orthographic views and cross-sections of the untracked STL files, measures them, writes a description of each ship into
   `docs/design-references.md`, and builds the hull in code from those measurements. No STL geometry, vertex data, image or
   texture goes into the generators or into git. Renders and downloaded images go to `reports/refs/<ship>/` (gitignored).
+- **Fidelity (Q18).** Each model is within 90 % of its STL: `tools/refview` compare (T23) draws the top, side and front
+  silhouettes of the STL (at the ship's length, in the authored frame) and of the asset's LOD0 splats on one grid, and
+  each view's intersection over union must be at least 0.90, with length, width and height within 10 %. Turrets are left
+  out (the models have none); the Bokmai is scored with its three pods mounted. Where Q16 departs from a model on
+  purpose, both are cropped to the same part (the lead ship, one cargo section) and each part is scored. Overlays and
+  scores go to `reports/refs/<ship>/compare/`; each generator task writes its scores into `docs/assets-civilian.md`.
 - **Colours from online images (Q11).** For each of the nine ships the agent finds images online (screen captures, fan
   wiki pages), reads the colour scheme off them (base plating, panel and trim colours, markings, window and engine glow),
   and writes it into the ship's description as colour values and where they go. The generators paint from that written
@@ -350,6 +357,7 @@ Out (explicitly):
 | AC16 | Cost: M5 adds nothing measurable to AC13 of M3 (the paired 13-ship AI budget still passes, `test_ai_think_time`); the mission runner with 20 triggers and the encounter director stay inside their work counts | A | |
 | AC17 | Docs and the suite: `docs/architecture.md` §18 as built, a `docs/playtest.md` M5 section (how to start, menus, mission, comms menu, encounters, new settings and commands), the roadmap row; `scripts/run_tests.sh` green **once, at the end** (Q10), read from the suite's own totals | A | |
 | AC19 | Defensive turrets (D61): `TurretAim` and `ThreatMemory` unit-tested; civilians fire only at attackers of themselves or of a civilian or ally within 2 km; they keep running while firing; turret bolts go through the projectile pool and `HitResolver`; the seeded balance fight holds (two raiders beat a lone Saturn 4 in at least two of three seeds; its turrets finish a 15 % raider that keeps attacking); `turret_fire` sound | A | |
+| AC20 | Fidelity (Q18): every civilian model's top, side and front silhouettes overlap its STL's by at least 90 % (intersection over union) and its length, width and height are within 10 %, Q16's deliberate departures scored part by part; measured on LOD0 splats by `tools/refview` compare with unit tests on synthetic shapes; each model's scores recorded in `docs/assets-civilian.md` | A | |
 | AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear | H | |
 
 ## Working rules for M5
@@ -357,7 +365,7 @@ Out (explicitly):
 - **Tracks.** The maintainer allowed parallel agents for M5 (Q10), so four tracks can run at the same time: A (flow and front end), B (missions), C (civilian ships and
   encounters), D (sound). Inside a track the order holds. Track C's reference and generator tasks (T11-T15) are Python and run beside
   anything; the Godot tasks of every track share one machine, so they follow the locks below. If work has to go one task at
-  a time, the order is T01, T02, T05, T06, T08, T09, T07, T10, T03, T04, T11-T15, T22, T21, T16, T17, T18, T19, T20.
+  a time, the order is T01, T02, T05, T06, T08, T09, T07, T10, T03, T04, T11, T23, T12-T15, T22, T21, T16, T17, T18, T19, T20.
 - **One working copy.** All M5 work happens in the `m5` worktree (`.claude/worktrees/m5`) on branch `m5`; no task
   branches, no worktrees per agent (the maintainer's rule from M4). Parallel agents keep to their task's files.
 - **Locks.** Every Godot run in the `m5` worktree goes through `flock /tmp/m5-godot.lock <command>` (one Godot process at a
@@ -384,21 +392,22 @@ whose trigger never arose). Update the column with each task's commit.
 | Task | Track | Title | Depends on | Agent | Why | Status |
 |---|---|---|---|---|---|---|
 | T01 | A | `Game` flow, boot routing and loading | - | Opus | Changes how every run starts; must not break a single script or test | done |
-| T02 | A | Menu kit, front end and pause menu | T01 | Sonnet | Godot UI work on a clear spec | not started |
+| T02 | A | Menu kit, front end and pause menu | T01 | Sonnet | Godot UI work on a clear spec | in progress |
 | T03 | A | Settings menu and audio buses | T02 | Sonnet | Schema-driven screen | not started |
 | T04 | A | Controls menu | T02 | Sonnet | Wraps the existing profile API | not started |
-| T05 | B | Mission core: runner, script API, triggers, objectives, console | T01 | Opus | The framework M8 stands on; coroutine skipping is subtle | not started |
+| T05 | B | Mission core: runner, script API, triggers, objectives, console | T01 | Opus | The framework M8 stands on; coroutine skipping is subtle | in progress |
 | T06 | B | Dialog, subtitles and the comms panel | T05 | Sonnet | Data and HUD | not started |
 | T07 | B | Comms menu on D-pad Right | T06 | Sonnet | Input routing with clear rules | not started |
 | T08 | B | `CINEMATIC` camera and locked controls | T05 | Opus | Rebase-safe camera paths | not started |
 | T09 | B | Debrief | T05, T02 | Sonnet | Model and screen | not started |
 | T10 | B | Mission: Buoy defence with a cinematic intro | T06, T07, T08, T09 | Opus | Pacing, writing and the first real use of the API | not started |
 | T11 | C | Civilian references: measurements and descriptions | - | Opus | Reading shapes off renders; sizes from Q8 | done |
-| T12 | C | `saturn_family` generator (five variants, Q16) | T11 | Opus | Large shared part library | not started |
-| T13 | C | `skylark_transport` generator | T11 | Opus | Geometry | not started |
-| T14 | C | `narn_transport` generator and the `narn` style | T11 | Opus | Geometry and a new style | not started |
-| T15 | C | `centauri_brezebel` generator and the `centauri` style | T11 | Opus | Geometry and a new style | not started |
-| T22 | C | Brakiri Bokmai: references, generator with removable pods, the `brakiri` style (placed here in the order; numbered last because it was added during the build, Q17) | T11 | Opus | A new reference read end to end, modular cargo, a new style | not started |
+| T23 | C | Fidelity check: silhouettes and size against the STL, `refview` compare (Q18; numbered last because it was added during the build) | T11 | Sonnet | A small measuring tool that every civilian generator must pass | not started |
+| T12 | C | `saturn_family` generator (five variants, Q16) | T11, T23 | Opus | Large shared part library | in progress |
+| T13 | C | `skylark_transport` generator | T11, T23 | Opus | Geometry | not started |
+| T14 | C | `narn_transport` generator and the `narn` style | T11, T23 | Opus | Geometry and a new style | in progress |
+| T15 | C | `centauri_brezebel` generator and the `centauri` style | T11, T23 | Opus | Geometry and a new style | not started |
+| T22 | C | Brakiri Bokmai: references, generator with removable pods, the `brakiri` style (placed here in the order; numbered last because it was added during the build, Q17) | T11, T23 | Opus | A new reference read end to end, modular cargo, a new style | not started |
 | T21 | C | Defensive turrets (placed here in the order; numbered last because it was added after the others had numbers) | T12, T13, T14, T15, T22, T19 | Opus | A new gunner seam with a balance test | not started |
 | T16 | C | Civilian ships in the game | T12, T13, T14, T15, T22, T21 | Opus | Specs for heavy hulls, factions, pools, AI, GPU check | not started |
 | T17 | C | Free-flight encounters | T16, T02 | Opus | Seeded director under a CPU cap | not started |
@@ -578,6 +587,26 @@ whose trigger never arose). Update the column with each task's commit.
     figure corrected). Open for the maintainer (H): the Saturn 3's added engine section and raised pod stack, soft Saturn
     close-ups at about 0.52 m LOD0 spacing, which way is up on the Narn transport.
 
+### M5-T23 Fidelity check: `refview` compare
+
+- **Goal:** AC20's tool (Q18). In the order it comes after T11 and before T12; the generator tasks need it to finish.
+- **Files:** `tools/refview/` (a compare mode beside the render), `tools/procgen/tests/test_refview_compare.py`,
+  `docs/assets-civilian.md` (a "Fidelity" section: how to run it, the thresholds, a score table the generator tasks fill
+  in), `docs/design-references.md` only for the line that names the commands.
+- **What it does:** reads an STL with the same axis mapping and length as refview's render, so the model sits in the
+  authored frame (x to starboard, y up, z aft from the nose), and a built asset from `assets/generated/<id>/` (the LOD0
+  PLY, with `manifest.centroid_offset` undone; each splat drawn as a disc of its own scale). It draws the top, side and
+  front silhouettes of both on one grid (a pixel at most 0.5 % of the length), allows a small best-fit shift (at most
+  2 % of the length, reported), and scores each view's intersection over union and the length, width and height
+  ratios. Crops by z range, set separately for the model and the asset, score one part at a time. It writes overlays
+  (model only, asset only, both in three colours) and `fidelity.json` to `reports/refs/<ship>/compare/`, prints a
+  one-line verdict per view, and exits non-zero when a view is under 0.90 or a dimension is off by more than 10 %.
+  Optional extra parts (the Bokmai's pods at their `cargo_pods[]` mounts) are drawn with the hull.
+- **Tests:** synthetic STLs and splat sets: identical shapes score 1.0; a known shift, scale or missing part gives the
+  known overlap; crops; the exit code at the thresholds; skipped without Pillow, like `test_refview.py`.
+- **Done when:** the tests pass and the tool has been run on every civilian asset already built, with the scores in
+  the report (a generator under the bar is that generator's fix, not this task's).
+
 ### M5-T12 `saturn_family` generator
 
 - **Goal:** AC12 for the five Saturn hulls (Q16).
@@ -588,27 +617,27 @@ whose trigger never arose). Update the column with each task's commit.
   the same for their hulls and styles.
 - **Notes:** one generator, a variant per asset id, so `python3 -m tools.procgen build saturn_4_transport` builds one hull.
   The variant data holds the length (Q8) and the module layout.
-- **Done when:** AC12 for the five variants; `tests/integration/test_splat_import.gd` covers them.
+- **Done when:** AC12 and AC20 for the five variants; `tests/integration/test_splat_import.gd` covers them.
 
 ### M5-T13 `skylark_transport` generator
 
 - **Goal:** AC12 for the Skylark.
 - **Files:** `tools/procgen/assets/skylark_transport.py`, parts it needs, `tools/procgen/tests/test_skylark_transport.py`.
-- **Done when:** AC12 for the Skylark.
+- **Done when:** AC12 and AC20 for the Skylark.
 
 ### M5-T14 `narn_transport` generator and the `narn` style
 
 - **Goal:** AC12 for the Narn transport.
 - **Files:** `tools/procgen/assets/narn_transport.py`, `tools/procgen/styles/narn.py`, parts it needs,
   `tools/procgen/tests/test_narn_transport.py`.
-- **Done when:** AC12 for the Narn transport.
+- **Done when:** AC12 and AC20 for the Narn transport.
 
 ### M5-T15 `centauri_brezebel` generator and the `centauri` style
 
 - **Goal:** AC12 for the Brezebel.
 - **Files:** `tools/procgen/assets/centauri_brezebel.py`, `tools/procgen/styles/centauri.py`, parts it needs,
   `tools/procgen/tests/test_centauri_brezebel.py`.
-- **Done when:** AC12 for the Brezebel.
+- **Done when:** AC12 and AC20 for the Brezebel.
 
 ### M5-T22 Brakiri Bokmai: references, generator and the `brakiri` style
 
@@ -621,15 +650,15 @@ whose trigger never arose). Update the column with each task's commit.
   units; the 1320-unit y axis is its length, about 0.0606 m per unit at 80 m). Measure it with `tools/refview` as T11
   measured the others: views, sections, the shells table (the pods should come out as their own shells), z stations and
   proportions. Read the nose and the engines from the views.
-- **Colours (Q11, Q17):** Brakiri brown and yellow. Find online images of the Bokmai (other Brakiri ships help if the
+- **Colours (Q11, Q17):** Brakiri green and yellow. Find online images of the Bokmai (other Brakiri ships help if the
   Bokmai has few), save them under `reports/refs/brakiri_bokmai/web/` as T11 did, list the URLs, and write which parts
-  are brown and which yellow, with the panel, window and engine glow colours.
+  are green and which yellow, with the panel, window and engine glow colours.
 - **Pods (Q17):** one pod model for the three mounts if the pods match (a variant per mount if they do not). The hull's
   LOD0 budget counts the hull plus three pods, about 75 000 for an 80 m ship, so all nine hulls at LOD0 with the hero,
   the sky and five buoys stay under `splat_budget`; write the new total into `docs/assets-civilian.md`. The hull's
   chunks leave the pods out (each pod is its own debris piece).
 - **Turrets (D61):** 2-3 in `turrets[]`, on the frame, and a `brakiri` turret model.
-- **Done when:** AC11 and AC12 for the Bokmai; Python tests also cover the pod model (budget, determinism), that the
+- **Done when:** AC11, AC12 and AC20 for the Bokmai; Python tests also cover the pod model (budget, determinism), that the
   hull alone has no splats inside the pod volumes (an empty mount looks empty) and that the pods sit at their
   `cargo_pods[]` mounts; every PLY, the pod's included, imports in Godot with the manifest's count.
 
