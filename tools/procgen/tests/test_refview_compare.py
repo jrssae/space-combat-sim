@@ -383,6 +383,21 @@ class MainTests(TmpCase):
         self.assertEqual(code, 1, out)
         self.assertAlmostEqual(self.report()["dimensions"]["width"]["ratio"], 0.5, delta=0.03)
 
+    def test_an_authored_origin_off_the_box_centre_is_given_with_model_offset(self) -> None:
+        # A generator that authors y from an axis 5 m above the model's box centre (the Saturns' spine axis).
+        raised = ((-2.0, 4.0, 0.0), (2.0, 6.0, 12.0))
+        asset = self.asset([raised])
+        code, out, _ = self.compare(self.stl(_box(*HULL)), asset)
+        self.assertEqual(code, 1, out)
+        report = self.report()
+        np.testing.assert_allclose(report["centre_gap_m"], [0.0, 5.0, 0.0], atol=0.05)
+        self.assertEqual(len(report["shift_at_limit"]), 3)
+        self.assertIn("--model-offset 0.00,5.00,0.00", out)  # the hint names the value to pass
+        code, out, _ = self.compare(self.stl(_box(*HULL)), asset, "--model-offset", "0,5,0")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.report()["model"]["offset_m"], [0.0, 5.0, 0.0])
+        self.assertNotIn("--model-offset", out)
+
     def test_part_runs_write_to_their_own_folder(self) -> None:
         argv = [str(self.stl(_box(*HULL))), str(self.asset([HULL])), "--length", "12", "--name", "ship", "--part", "lead", "--out", str(self.dir / "rep")]
         code, _, _ = run(argv)
@@ -469,6 +484,7 @@ class MainTests(TmpCase):
             "backwards crop": ([str(good_stl), str(good_asset), "--model-zrange", "6", "2"], "zrange"),
             "coarse pixel": ([str(good_stl), str(good_asset), "--pixel-frac", "0.02"], "pixel"),
             "missing pod file": ([str(good_stl), str(good_asset), "--pod-ply", str(self.dir / "no.ply"), "--pod-at", "0,0,0"], "no.ply"),
+            "bad model offset": ([str(good_stl), str(good_asset), "--model-offset", "1,2"], "x,y,z"),
             "pods without a file": ([str(good_stl), str(good_asset), "--pod-at", "0,0,0"], "pod-ply"),
         }
         for label, (argv, needle) in cases.items():

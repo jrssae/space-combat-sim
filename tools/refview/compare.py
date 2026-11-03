@@ -351,6 +351,8 @@ class Comparison:
     model_dims: dict[str, float]
     asset_dims: dict[str, float]
     ratios: dict[str, float] = field(default_factory=dict)
+    centre_gap_m: np.ndarray = field(default_factory=lambda: np.zeros(3))  # asset box centre minus model box centre
+    at_limit: tuple[bool, bool, bool] = (False, False, False)  # the best-fit shift reached its limit on x, y, z
 
 
 def shift_table(model: np.ndarray, asset: np.ndarray, reach: int) -> np.ndarray:
@@ -422,7 +424,9 @@ def compare_shapes(
     model_dims = {n: float(m_hi[a] - m_lo[a]) for n, a in DIMENSIONS.items()}
     asset_dims = {n: float(a_hi[a] - a_lo[a]) for n, a in DIMENSIONS.items()}
     ratios = {n: asset_dims[n] / max(model_dims[n], 1e-9) for n in DIMENSIONS}
-    return Comparison(views, move * px, shift_fraction * length_ref, px, model_dims, asset_dims, ratios)
+    centre_gap = 0.5 * ((a_lo + a_hi) - (m_lo + m_hi))
+    at_limit = tuple(bool(abs(int(v)) >= reach) for v in move)
+    return Comparison(views, move * px, shift_fraction * length_ref, px, model_dims, asset_dims, ratios, centre_gap, at_limit)
 
 
 def judge(ious: dict[str, float], ratios: dict[str, float]) -> list[str]:
@@ -525,6 +529,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--right", default="+x", help="file axis pointing to starboard, e.g. -y")
     ap.add_argument("--up", default="+y", help="file axis pointing up")
     ap.add_argument("--aft", default="+z", help="file axis pointing from the nose to the engines")
+    ap.add_argument("--model-offset", default=None, metavar="X,Y,Z", help="metres added to the model's coordinates, for a generator whose origin is not the model's box centre")
     ap.add_argument("--model-zrange", nargs=2, type=float, default=None, metavar=("Z0", "Z1"), help="keep this z range (m) of the model")
     ap.add_argument("--asset-zrange", nargs=2, type=float, default=None, metavar=("Z0", "Z1"), help="keep this z range (m) of the asset")
     ap.add_argument("--pod-ply", type=Path, default=None, help="splat file of a removable part, drawn at every mount")
@@ -539,6 +544,8 @@ def main(argv: list[str] | None = None) -> int:
         raw, fmt = refview.read_stl(args.stl)
         rotation = refview.frame_matrix(args.right, args.up, args.aft)
         tris, _ = refview.to_ship_frame(raw, rotation, args.length)
+        model_offset = parse_vec3(args.model_offset) if args.model_offset else np.zeros(3)
+        tris = tris + model_offset
         folder = resolve_asset(args.asset)
         manifest = read_asset_manifest(folder)
         splats = load_asset_splats(folder)
@@ -593,6 +600,7 @@ def main(argv: list[str] | None = None) -> int:
             "format": fmt,
             "triangles": int(len(tris)),
             "zrange": model_range,
+            "offset_m": [round(float(v), 4) for v in model_offset],
             "dims_m": {n: round(v, 3) for n, v in comp.model_dims.items()},
         },
         "asset": {
@@ -611,6 +619,8 @@ def main(argv: list[str] | None = None) -> int:
         "pixel_m": round(comp.pixel_m, 5),
         "shift_m": [round(float(v), 4) for v in comp.shift_m],
         "shift_limit_m": round(comp.shift_limit_m, 4),
+        "shift_at_limit": list(comp.at_limit),
+        "centre_gap_m": [round(float(v), 4) for v in comp.centre_gap_m],
         "views": {n: view_report(s) for n, s in comp.views.items()},
         "dimensions": {
             n: {"model_m": round(comp.model_dims[n], 3), "asset_m": round(comp.asset_dims[n], 3), "ratio": round(comp.ratios[n], 4)}
@@ -628,6 +638,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{view:<6} IoU {score.iou:.3f} {mark} (unshifted {score.iou_unshifted:.3f})  model {score.model_px} px  asset {score.asset_px} px  both {score.both_px} px")
     print("size   " + "  ".join(f"{n} {comp.ratios[n]:.3f} ({comp.asset_dims[n]:.1f}/{comp.model_dims[n]:.1f} m)" for n in DIMENSIONS) + "  (asset / model)")
     print(f"shift  asset moved ({shift}) m of at most {comp.shift_limit_m:.2f} m per axis")
+    if any(comp.at_limit[:2]) or float(np.abs(comp.centre_gap_m[:2]).max()) > comp.shift_limit_m:
+        # A generator authoring about another origin (the Saturns measure y from the spine axis) looks like this.
+        gap = ",".join(f"{v:.2f}" for v in (comp.centre_gap_m[0], comp.centre_gap_m[1], 0.0))
+        print(f"note   the boxes' centres differ by {gap} m (x,y,z) beyond the shift limit; if only the origin differs, try --model-offset {gap}")
     print("verdict: " + ("PASS" if not failures else "FAIL (" + "; ".join(failures) + ")"))
     return 1 if failures else 0
 

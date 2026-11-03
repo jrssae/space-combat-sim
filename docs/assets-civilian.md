@@ -154,8 +154,12 @@ dimension is under the bar, 2 is bad input.
 **How the two are put on one grid.**
 
 - The STL goes through `refview`'s frame with the same `--length`, `--right`, `--up` and `--aft`: x to starboard, y up,
-  z aft from the nose tip, x and y centred on the model's box. A generator that authors about another axis (the Saturns
-  measure y from the spine axis) shows up as a shift, so keep the authored origin where the design reference says.
+  z aft from the nose tip, x and y centred on the model's box. A generator that authors about another origin shows up as
+  a shift beyond the window below. The Saturns measure y from the spine axis, not from the box centre, so they pass
+  `--model-offset 0,<dy>,0` (metres added to the model; dy is minus the spine axis's height above the model's box
+  centre). When the two boxes' centres are further apart than the window the tool prints a `note` with that value, a
+  first guess from the bounding boxes (for the built Saturn 4 transport it reads -3.35 m); T12 pins each Saturn's dy down
+  from the model.
 - The asset's `<id>.ply` comes back to the authored frame: the Rz(180) flip of positions and rotations is undone and
   `manifest.centroid_offset` added. This was checked on the built raider, Starfury and Narn transport against their own
   fallback meshes (the best-fit shift came out as zero for all three).
@@ -175,7 +179,8 @@ dimension is under the bar, 2 is bad input.
 .venv/bin/python3 -I tools/refview/compare.py references/EA_Skylark_transport.stl skylark_transport --length 60 --right=-x --up=+z --aft=+y
 .venv/bin/python3 -I tools/refview/compare.py references/Narn_Transport.stl narn_transport --length 70 --right=+y --up=+z --aft=+x
 .venv/bin/python3 -I tools/refview/compare.py references/Centauri_Brezebel_Transport.stl centauri_brezebel --length 60 --right=+y --up=+z --aft=+x
-.venv/bin/python3 -I tools/refview/compare.py references/EA_Saturn_4_transport.stl saturn_4_transport --length 158.5 --right=-x --up=+z --aft=+y
+.venv/bin/python3 -I tools/refview/compare.py references/EA_Saturn_4_transport.stl saturn_4_transport --length 158.5 --right=-x --up=+z --aft=+y \
+    --model-offset 0,-3.35,0
 ```
 
 The Saturn models are scaled to the family scale of Q16, so their `--length` is the model's length there: 158.5 m for the
