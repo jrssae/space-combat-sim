@@ -780,6 +780,8 @@ the overlay is hidden; watched values are drawn under it.
   `--console-file=<path>` and `--console-exec="cmd; cmd"`. With `--console-strict`, the first error quits with exit
   code 1. Example: `godot --headless --path . -- --console-exec="wait 60; state ship; quit"`.
 
+**Command list.** `info.md` (repository root) lists every console command and state provider with its arguments and where it exists; `tests/integration/test_console_command_list.gd` fails when a registered one is missing from it, so a task that adds a command updates `info.md` in the same commit.
+
 **UI.** Top 40 % of the screen, translucent panel, monospace, prompt `>`, Up/Down history, Tab completion (command
 names, then provider paths, setting keys and enum values; repeated Tab cycles), PageUp/PageDown scroll, 1000-line
 ring buffer; engine errors in red and warnings in yellow from `ConsoleLogger`.
