@@ -424,7 +424,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T09 | B | Debrief | T05, T02 | Sonnet | Model and screen | in progress |
 | T10 | B | Mission: Buoy defence with a cinematic intro | T06, T07, T08, T09 | Opus | Pacing, writing and the first real use of the API | not started |
 | T11 | C | Civilian references: measurements and descriptions | - | Opus | Reading shapes off renders; sizes from Q8 | done |
-| T23 | C | Fidelity check: silhouettes and size against the STL, `refview` compare (Q18; numbered last because it was added during the build) | T11 | Sonnet | A small measuring tool that every civilian generator must pass | in progress |
+| T23 | C | Fidelity check: silhouettes and size against the STL, `refview` compare (Q18; numbered last because it was added during the build) | T11 | Sonnet | A small measuring tool that every civilian generator must pass | done |
 | T12 | C | `saturn_family` generator (five variants, Q16) | T11, T23 | Opus | Large shared part library | in progress |
 | T13 | C | `skylark_transport` generator | T11, T23 | Opus | Geometry | in progress |
 | T14 | C | `narn_transport` generator and the `narn` style | T11, T23 | Opus | Geometry and a new style | in progress |
@@ -711,18 +711,49 @@ whose trigger never arose). Update the column with each task's commit.
   `docs/assets-civilian.md` (a "Fidelity" section: how to run it, the thresholds, a score table the generator tasks fill
   in), `docs/design-references.md` only for the line that names the commands.
 - **What it does:** reads an STL with the same axis mapping and length as refview's render, so the model sits in the
-  authored frame (x to starboard, y up, z aft from the nose), and a built asset from `assets/generated/<id>/` (the LOD0
-  PLY, with `manifest.centroid_offset` undone; each splat drawn as a disc of its own scale). It draws the top, side and
-  front silhouettes of both on one grid (a pixel at most 0.5 % of the length), allows a small best-fit shift (at most
-  2 % of the length, reported), and scores each view's intersection over union and the length, width and height
-  ratios. Crops by z range, set separately for the model and the asset, score one part at a time. It writes overlays
-  (model only, asset only, both in three colours) and `fidelity.json` to `reports/refs/<ship>/compare/`, prints a
-  one-line verdict per view, and exits non-zero when a view is under 0.90 or a dimension is off by more than 10 %.
-  Optional extra parts (the Bokmai's pods at their `cargo_pods[]` mounts) are drawn with the hull.
+  authored frame (x to starboard, y up, z aft from the nose), and a built asset from `assets/generated/<id>/`. The
+  verdict (Q18, as changed on 2026-11-03) scores the asset's fallback mesh `<id>.obj` against the STL: top, side and front
+  silhouettes on one grid (a pixel at most 0.5 % of the length), a small best-fit shift (at most 2 % of the length,
+  reported), each view's intersection over union and the length, width and height ratios. A second check holds the LOD0
+  splats (with `manifest.centroid_offset` and the GDGS flip undone) to their own mesh: per view, coverage and banded
+  precision within one LOD0 spacing, each at least 0.95. Crops by z range, set separately for the model and the asset,
+  score one part at a time. It writes overlays and `fidelity.json` to `reports/refs/<ship>/compare/`, prints a verdict
+  per view, and exits 1 when either check fails (2 on bad input). Optional extra parts (the Bokmai's pods at their
+  `cargo_pods[]` mounts) are drawn with the hull.
 - **Tests:** synthetic STLs and splat sets: identical shapes score 1.0; a known shift, scale or missing part gives the
   known overlap; crops; the exit code at the thresholds; skipped without Pillow, like `test_refview.py`.
 - **Done when:** the tests pass and the tool has been run on every civilian asset already built, with the scores in
   the report (a generator under the bar is that generator's fix, not this task's).
+- **Done (as built, 2026-11-03):** `tools/refview/compare.py` (venv, run with `-I`), 69 tests in
+  `tools/procgen/tests/test_refview_compare.py` (skipped without Pillow; two read the built raider when it exists).
+  - **Geometry verdict (Q18):** the STL in refview's frame against the asset's fallback mesh, on a grid of 0.25 % of the
+    (part's) length; a best-fit shift of up to 2 % per axis, reported with the unshifted scores; IoU at least 0.90 per
+    view and each dimension within 10 %. `--model-offset` for whole ships whose origin is not the model's box centre
+    (with a hint from a wider silhouette search), `--model-zrange` and `--asset-zrange` to score one part (cut exactly at
+    the planes, each side starting at z = 0, the asset part aligned on the model part's box centre), `--model-scale`
+    for Q20's scaled pod group, `--part` for its own folder.
+  - **Splat check:** the LOD0 splats (each the outline of its Gaussian at 0.75 sigma) against their own mesh, no shift,
+    on a grid of a third of the LOD0 spacing so the band is exactly three pixels and the numbers depend on the sampling
+    alone (not on the length, the crop or `--pixel-frac`). Coverage of the mesh silhouette and precision within the
+    mesh silhouette grown by one spacing, each at least 0.95. The spacing is `lods[0].spacing_m`, and a declared spacing
+    more than 10 % off the one the splat scales imply fails the check.
+  - **Pods:** `--pods-from-hardpoints` or `--pod-at` draw `<id>_pod.obj` and `<id>_pod.ply` at each mount (the pod's +y
+    on `up`, its -z on an optional `forward`).
+  - **Outputs:** `overlay_<view>.png` (STL against mesh), `splats_<view>.png` (mesh against splats, splats beyond the
+    band in red), `fidelity.json`. Exit 0 when both pass, 1 when either fails, 2 on bad input or an output folder that
+    cannot be written.
+  - **Scores on 2026-11-03 (whole ships):** Narn transport 0.991 / 0.985 / 0.974, Skylark 0.979 / 0.976 / 0.956,
+    Brezebel 0.966 / 0.984 / 0.970, Saturn 4 transport 0.949 / 0.933 / 0.901; splat coverage 0.974 to 1.000 and
+    precision 1.000 on all four. The Saturn parts and the per-generator rows are T12 to T14's
+    (`docs/assets-civilian.md`, Fidelity).
+  - **Review.** Four fix rounds. 1 (86888f9): the verdict moved from the splats to the mesh (12b2165), because splats
+    under-read a perfect copy of the Saturn 4 by 5 to 8 %. 2 (d2a2adc): coverage and banded precision replaced 0.85 IoU
+    (7ab9e05). 3 (7bcd755), after the scoped re-review of 1 and 2: the splat check got its own spacing grid (on the
+    length-based grid a lead ship's side coverage read 0.939 to 0.979 depending on `--pixel-frac`, and the band rounded
+    up to 1.65 spacings), `lods[0].spacing_m` first with the mismatch check, an unwritable output exits 2, the score
+    table gained a splat column, tests for no shift, a precision-only failure and the built raider at the 0.95 bar.
+    4 (8d276ac): Saturn rows of three other tables that round 3 had broken were restored, a length test that could not
+    fail was made real, the grid guard checks area. Approved after round 4.
 
 ### M5-T12 `saturn_family` generator
 
