@@ -6,6 +6,8 @@ extends GutTest
 ## 20 live triggers stay inside a counted bound.
 
 const MISSION_PATH: String = "res://tests/fixtures/missions/test_mission.json"
+## The same mission with a scout placed at load (`spawns`), which no trigger watches.
+const SCOUT_PATH: String = "res://tests/fixtures/missions/test_mission_scout.json"
 
 var main: Main
 var source: FakeInputSource
@@ -192,6 +194,48 @@ func test_the_script_ending_it() -> void:
 	assert_eq(Game.flow.last_result["reason"], "scripted")
 	await _ticks(5)
 	assert_eq(_api().step_name(), &"brief", "the steps stop where they were")
+
+
+# --- ships lost before any trigger watched them (review round 2) ------------------------------------------------------------
+
+
+func _with_the_scout_lost() -> Combatant:
+	main.queue_free()
+	await _frames(1)
+	main = await _make_main(SCOUT_PATH)
+	var scout: Combatant = null
+	for combatant: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
+		if combatant.display_name == "SCOUT 1":
+			scout = combatant
+	assert_not_null(scout, "the scenario placed it at load")
+	assert_false(_api().watched().has("scout 1"), "no trigger watches it")
+	scout.damageable.kill()
+	await _ticks(2)
+	return scout
+
+
+func test_an_objective_naming_a_scenario_ship_lost_earlier_fails_when_shown() -> void:
+	await _with_the_scout_lost()
+	_api().book.add(&"guard", "Keep SCOUT 1 alive", false, null, TriggerSpec.destroyed(["SCOUT 1"]))
+	_api().objective_add(&"guard")
+	await _ticks(1)
+	assert_eq(_api().objective_state(&"guard"), ObjectiveBook.FAILED, "the scout was in play and is gone")
+
+
+func test_until_destroyed_on_a_scenario_ship_lost_earlier_resolves() -> void:
+	await _with_the_scout_lost()
+	var done: Array[bool] = [false, false]
+	var wait_scout := func() -> void:
+		await _api().until(TriggerSpec.destroyed(["SCOUT 1"]))
+		done[0] = true
+	var wait_ghost := func() -> void:
+		await _api().until(TriggerSpec.destroyed(["GHOST 1"]))
+		done[1] = true
+	wait_scout.call()
+	wait_ghost.call()
+	await _ticks(2)
+	assert_true(done[0], "the lost scout counts as destroyed")
+	assert_false(done[1], "a name the game never had is still not arrived")
 
 
 # --- spawns: pools and jump arrivals ---------------------------------------------------------------------------------------

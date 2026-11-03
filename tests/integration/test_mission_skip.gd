@@ -125,6 +125,24 @@ func test_a_skipped_destroyed_takes_its_ships_out_of_their_wing_first() -> void:
 	assert_false(red.is_lost(1), "released, not shot down: the slot is not marked lost")
 
 
+func test_a_forced_release_of_a_wing_leader_hands_the_lead_to_the_member_left() -> void:
+	assert_true(_run("mission goto raid").ok)
+	var raiders: Array[Combatant] = main.ships.alive(ShipPool.DEFAULT_TYPE)
+	var third: Combatant = _api().spawn({"type": "raider_fighter", "name": "RAIDER 3", "anchor": "origin",
+			"offset": [600, 0, -9000], "behaviour": {"type": "ai", "profile": "raider"}})
+	var red: Wing = main.wings.join("RED", raiders[0])
+	main.wings.join("RED", raiders[1])
+	main.wings.join("RED", third)
+	assert_eq(red.leader, raiders[0])
+	assert_eq(red.members().size(), 2)
+	assert_true(_api().alive(raiders[0].display_name))
+	TriggerSpec.destroyed([raiders[0].display_name]).make_true(_api().world)  # what a skipped step does
+	assert_false(main.ships.alive().has(raiders[0]), "the leader went back to the pool")
+	assert_ne(red.leader, raiders[0], "the lead passed on at once")
+	assert_true(red.leader == raiders[1] or red.leader == third, "to the member that is left")
+	assert_eq(red.members().size() + 1, 2, "one leader and one member remain")
+
+
 func test_a_skipped_proximity_places_the_player_at_the_goal_with_its_velocity() -> void:
 	main.ship.linear_velocity = Vector3(3.0, 0.0, -20.0)
 	await _ticks(1)

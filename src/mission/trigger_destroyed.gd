@@ -1,7 +1,9 @@
 class_name TriggerDestroyed
 extends Trigger
 ## `destroyed` (D52): every named ship is out of play (`all`), or at least one is. A ship that was never in play does not count
-## (`MissionWorld.is_destroyed`): the trigger may be live before its ships spawn. Forced (D51), the named ships still in play
+## (`MissionWorld.is_destroyed`): the trigger may be live before its ships spawn. A name is the ship's identity: if a ship is lost
+## and a later spawn reuses its name, a trigger that goes live between the two holds at once (that ship is destroyed); give a
+## new ship a new name. Forced (D51), the named ships still in play
 ## are released, with no explosion and no kill credit: all of them, or only the first for `all` false (the step would have gone
 ## on at the first loss).
 

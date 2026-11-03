@@ -55,6 +55,13 @@ func set_alive(actor: String, alive: bool) -> void:
 		_seen[k] = true
 
 
+## `actor` was in play and is gone (the stage knew it, but it died or left before any trigger looked).
+func set_gone(actor: String) -> void:
+	var k: String = key(actor)
+	_alive[k] = false
+	_seen[k] = true
+
+
 ## The end of the route `actor` leads, and whether it has got there.
 func set_route(actor: String, end: UniversePos, done: bool) -> void:
 	var k: String = key(actor)

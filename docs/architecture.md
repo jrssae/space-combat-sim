@@ -1998,7 +1998,10 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
   compares a skipped run's whole journal, objectives and ships in play with a played one's.
 - **Not yet arrived is not destroyed.** `MissionWorld` remembers every name it has seen in play; `destroyed` counts a name only
   once it was seen and is gone, so an objective or an `until` may be live before its ships spawn (a new spawn is refreshed at
-  once, so a ship lost before the next tick still counts). Forcing a never-seen name releases nothing and latches.
+  once, so a ship lost before the next tick still counts). A name the stage knows (placed at load, or handed out by the pool to
+  anyone) but finds gone is recorded as seen and gone, however long ago it died and whether or not a trigger watched it; a name
+  the game never had stays "not arrived". Forcing a never-seen name releases nothing and latches. A name is the ship's
+  identity: a `destroyed` that goes live between a ship's loss and a later spawn reusing its name holds at once.
 - **Skips and polling.** Scripts wait with `until`, never poll: a skipped step's waits return at once, so after
   `MissionApi.SKIP_SPIN_LIMIT` (1 000) such returns in one skip the step is reported (`push_error`) and waits a tick at a time.
   `until_objective` on a hidden objective warns. A forced release takes the ship out of its wing slots first (not marked lost);

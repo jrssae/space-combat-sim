@@ -65,7 +65,11 @@ func refresh(snapshot: MissionWorld, names: PackedStringArray) -> void:
 		var k: String = MissionWorld.key(actor)
 		var node: Node3D = _node_of(k)
 		if node == null:
-			snapshot.set_alive(k, false)
+			# A name the stage knows was in play once (load, a pool hand-out): gone, not "not arrived yet".
+			if _actors.has(k):
+				snapshot.set_gone(k)
+			else:
+				snapshot.set_alive(k, false)
 			continue
 		snapshot.set_actor(k, world.to_universe(node.global_position))
 		var combatant := _actors[k] as Combatant

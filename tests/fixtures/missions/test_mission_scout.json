@@ -1,0 +1,27 @@
+{
+	"scenario_id": "test_mission_scout",
+	"system_id": "local",
+	"player": {"position": [0, 0, 0], "forward": [0, 0, -1]},
+	"props": [
+		{"type": "nav_buoy", "name": "NAV ALPHA", "position": [0, 0, -2000]}
+	],
+	"pools": {"raider_fighter": 4},
+	"spawns": [
+		{"type": "raider_fighter", "name": "SCOUT 1", "anchor": "origin", "offset": [3000, 0, -4000], "behaviour": {"type": "idle"}}
+	],
+	"mission": {
+		"title": "Test Mission",
+		"briefing": "Fly to the buoy, see off two raiders, report in.",
+		"script": "res://tests/fixtures/missions/test_mission.gd",
+		"dialog": "",
+		"objectives": [
+			{"id": "reach", "text": "Fly to NAV ALPHA", "primary": true,
+				"success": {"kind": "proximity", "actor": "player", "to": "NAV ALPHA", "radius_m": 400}},
+			{"id": "raiders", "text": "Destroy the raiders", "primary": true,
+				"success": {"kind": "destroyed", "names": ["RAIDER 1", "RAIDER 2"]}},
+			{"id": "protect", "text": "Keep NAV ALPHA in one piece", "primary": false,
+				"fail": {"kind": "destroyed", "name": "NAV ALPHA"}},
+			{"id": "report", "text": "Report to Control", "primary": true}
+		]
+	}
+}
