@@ -2284,3 +2284,48 @@ src/combat/hit_resolver.gd             + a beam is retired after the resolve tha
   a hostile, never a friend, hurts every hull in its blast and is gone, checks every third tick and is laid again, a rebase moves
   the mines), `test_bench_layout` (the belts hold the mix per side, on their arcs, clear of every ship, seeded) and `test_bench`
   (a battle run counts beams, missiles and mines).
+### 17.8 The body registry and entity kinds (M4-T09)
+
+```
+native/src/body_registry.rs     ScsBodyRegistry: the scan's bodies, known once, read natively in one refresh a tick
+src/ai/body_kind.gd             BodyKind: ship, capital, turret, missile, mine, static, prop; rocks and mines are obstacles
+```
+
+- **What it ends.** After cycle 4 the scan's queries were native but the scan itself was still gathered in GDScript every
+  tick (`ContactScan.from_tree`: walking the groups and reading about fifteen properties a body), with the broadcast scan
+  built the same way and a freed-body check on every `shared` call. With the library and `perf_native` on, `shared` now
+  comes from `ContactScan.from_registry`: no per-body GDScript a tick. `from_tree` stays the reference and is counted
+  (`ContactScan.gathers`, 0 a tick on the native path).
+- **Membership.** The registry is told the `targetable` and `damageable` groups (`set_members`, the group arrays passed
+  whole) when they change: `ContactScan` listens to the tree's `node_added` and `node_removed` for markers and hulls. A
+  pool ship stays in the tree when parked, so play rarely changes the members; spawning and parking do not.
+- **The refresh.** Each tick's first scan calls `refresh` once. For every member it asks the engine what
+  `Targetable.is_active()` and `Damageable.is_active()` ask (in the tree, visible, processing; a hull's `destroyed` flag only
+  for a body with no active marker), then reads the active body's global transform and its `linear_velocity` (a prop's
+  marker `velocity`) through the node's own getters, so every value is the one GDScript reads. The plan said
+  `PhysicsServer3D` by RID; that differs from the node by a quaternion round trip after any teleport (a spawn, a rebase),
+  which breaks bit parity, so the node's getters are used (they are engine calls, not script). The axes are normalised as
+  `Vector3.normalized` does it, in 32 bits. Faction, name, kind and radius are read only when a body turns active, when it
+  is hidden or shown (each body's `visibility_changed` touches it, which covers the pool's release and acquire in one
+  tick), or after `ContactScan.touch(body)` or `invalidate()`. Rows come in group order (markers, then hulls with no
+  active marker, deduplicated by body), then the node-less static rows.
+- **Hull and selection** are read when a contact is first handed out (`Contact`s are made lazily since cycle 4), not in
+  the refresh: nothing changes a hull while the drivers run, and a driver that changes its ship's selection first calls
+  `ContactScan.note_selection`, so this frame's scan still hands out the selection it had when the scan was built.
+- **The broadcast scan** is the main snapshot's rows for `Targetable.broadcasters()` in that list's order
+  (`ScsBodyRegistry.select`), with each broadcaster's range read in GDScript.
+- **Kinds** (`BodyKind`). A marker's `kind` property (M4-T07 adds it to `Targetable`) is read as a name or a value; a
+  body without one is a ship. `static` and `mine` rows are never contacts: `contacts_for` and `nearest_for` skip them on
+  both paths, so a rock field or a mine belt never fills a fighter's twelve. `statics_for(own, at, faction, k)` gives the
+  `k` nearest by surface distance (centre distance less radius, equal ones to the earlier row) within the sensor range,
+  in scan order; the field searches the cells the range plus the largest static radius reaches. `Perception.statics`
+  holds them (setting `ai_nearest_static_k`, 4; 0 = none) and `AiPilotDriver` adds them to avoidance's contacts:
+  `AvoidanceMath` treats a contact as an obstacle with its radius and velocity; for a rock or mine its horizon is at least
+  the time a sideways RCS burn takes to clear the obstacle's reach (plus `URGENT_SETTLE_S`), so a 150 m rock is seen early
+  enough to go round, while ship-sized contacts keep M3's horizon. The fire lane does not read statics.
+- **Rows with no node.** `ContactScan.register_static(id, position, radius, kind, faction)` adds a rock (by RID) or a
+  mine row to both paths, after the bodies, in registration order; `unregister_static`, `clear_statics`, and
+  `shift_statics(offset)`, which `WorldFrame.rebase` calls with the nodes' shift. Ids must be unique and not instance ids.
+- **Bad input never panics.** `set_statics` and the field's `set_kinds` check their array lengths, log one error and keep
+  nothing; the scan then answers from GDScript, as for a rejected `load`.
+- **Still per tick in GDScript:** the bolts' gather for `incoming_fire` (T15 unifies it with the hit sweep's rows).

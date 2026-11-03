@@ -153,7 +153,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T06 | Report to the maintainer | T05 | controller | A summary and a question, no code | - | done (waiting for the maintainer's answer) |
 | T07 | The `battle` and `typical` layouts, the mix (`BattleMix`), capital, turret, asteroid and gravity stand-ins, per-entity counters, the fullscreen check script | T06 | Opus | The ruler every later task measures against; what the stand-ins cost needs judgement | A | done |
 | T08 | Bolt broad phase in native code (`ScsHitSweep`), projectile kinds | T06 | Opus | Hits grow with bolts times ships; the windowed spikes | G, N | done |
-| T09 | Native body registry: the scan built from RIDs, entity kinds, nearest-k per kind | T06 | Opus | The per-tick gather cycle 4 left; rocks must not fill a fighter's contacts | G, N | not started |
+| T09 | Native body registry: the scan built from RIDs, entity kinds, nearest-k per kind | T06 | Opus | The per-tick gather cycle 4 left; rocks must not fill a fighter's contacts | G, N | done |
 | T10 | N4: the flight force step in native code for AI ships (`ScsFlightStep`) | T06 | Fable | The riskiest parity maths (`FlightModel`, the assist's state) | G, N | done (2026-11-03, in a worktree on `f134e00`; Cycle log, M4-T10) |
 | T11 | Far-ship render proxies and the node diet for AI ships | T10 | Opus | 108 nodes and 27 draw calls a ship; GPU numbers by the agent, the look (H) | R | not started |
 | T12 | Missile, beam, interceptor and mine stand-ins | T07, T08 | Opus | The weapon kinds Q19 and Q21 name, measured | A, G | done (2026-11-03, in a worktree on `441a3b4`; Cycle log, M4-T12) |
@@ -638,6 +638,16 @@ No question is open.
 - **Done when:** parity bit for bit on the contacts, the scan stage falls, the rock slab costs the brains nothing measurable.
 - **Expected gain:** scan 2.6 to about 1.2 ms at furball 100 (60 %); the registry is the seed of T15's core.
 - **Architecture:** §17.8.
+- **Done (2026-11-03, as built; Cycle log, "M4-T09").** `ScsBodyRegistry` builds the shared scan in one native refresh a
+  tick, equal to `from_tree` bit for bit (`ContactScan.gathers` stays 0 on the native path); `BodyKind` keeps rocks and mines
+  out of every contact list, `statics_for` and `Perception.statics` (`ai_nearest_static_k`, 4) hand the nearest to avoidance,
+  and node-less rows register through `ContactScan.register_static`. Deviations: the refresh reads the nodes' own getters,
+  not `PhysicsServer3D` by RID (the server's basis differs from the node's after a teleport, which would break parity);
+  there is no per-cell maximum radius, a statics query pads by the largest static radius instead; the bolts are still
+  gathered in GDScript each tick (0.16 ms of the 0.23 ms build at furball 100, T15's); avoidance's horizon for a static
+  is at least the time to sidestep its reach (fighters keep M3's). Gain: the scan at furball 100 from 2.43 (cycle 4,
+  native) to 2.13 ms, not the 1.2 ms planned: the gather was 0.37 ms of it, the rest is the queries, the contacts and
+  the keepers. `typical` and `battle 100` wait for T07 (T07 adds `Targetable.kind`; see the Cycle log entry).
 
 ##### M4-T10 N4: the flight force step in native code
 
@@ -2173,6 +2183,61 @@ What each stand-in part costs (the director's own timers, means per tick at batt
 - **Furball and spread are unchanged:** the quick check held the budget up to 50 ships in both, as on the base (failing at 300
   at 24.8 and 24.3 FPS against 24.7 and 24.2; load 1.2 against 1.5), and seeded runs give the same outcome on base and change
   (furball 25: 113 projectiles, 17 hits, the same last hit; spread 24: 115 and 19).
+### M4-T09 (2026-11-03): the native body registry, kinds and nearest statics
+
+**How it measured** (as cycle 4): the quick check and single `bench <layout> <n> 10 seed=1` runs, all under both bench locks
+and pinned to cores 0-11, on the debug editor build; the before on this task's base (`34c704b`) exported beside the
+worktree with its own library build, the after on `2ede5a9`; and a paired run in one process (`perf_native` on, off, on,
+off). `typical` and `battle 100` need T07's layouts and are not in this worktree. The machine was shared with three other
+agents' runs, so loads were 1.0 to 2.9 and the single runs are noisier than the paired ones.
+
+**Before** (`m4_t09_before_quick`, load 1.63; `m4_t09_before_stages`) and **after** (`m4_t09_after_quick`, load 2.09;
+`m4_t09_after_stages`):
+
+| run | before tick median | before scan | after tick median | after scan |
+|---|---|---|---|---|
+| furball 50 | 8.05 | 1.25 | 8.26 | 1.15 |
+| furball 100 | 18.18 | 2.75 | 17.38 | 2.32 |
+| spread 100 | 18.33 | 2.94 | 17.47 | 2.76 |
+| quick, furball 50 | 8.55 | | 8.11 | |
+| quick, spread 50 | 8.66 | | 9.02 | |
+
+The quick check's ceilings did not move (40 ships in both layouts, before and after; 30 FPS holds to 150 ships in the furball and 100 in spread, both times).
+
+**Paired, native against GDScript in one process** (`m4_t09_after_paired_*`, load 1.0 to 1.6; mean ms per tick):
+
+| layout | N | scan, native | scan, GDScript | AI, native | AI, GDScript | tick median, native | tick median, GDScript |
+|---|---|---|---|---|---|---|---|
+| furball | 50 | 1.08, 1.11 | 1.73, 1.76 | 2.58, 2.65 | 3.26, 3.33 | 7.50, 7.56 | 8.27, 8.34 |
+| furball | 100 | 2.13, 2.13 | 4.04, 4.06 | 5.30, 5.30 | 7.19, 7.21 | 16.19, 16.01 | 17.45, 17.96 |
+| spread | 100 | 2.57, 2.55 | 3.66, 3.66 | 5.46, 5.46 | 6.57, 6.59 | 16.16, 16.43 | 17.18, 17.11 |
+
+Against cycle 4's paired native scan (1.21 at furball 50, 2.43 at 100, 2.66 at spread 100) the native scan is 0.1 to 0.3 ms
+cheaper. Inside the build (a throwaway timing run, a 100-ship fight, 542 bolts in flight): `from_tree` 522 us, the registry
+scan 233 us, of which the native refresh 53 us, the snapshot's arrays 16 us and the bolts' GDScript gather 158 us; loading the
+field 46 us. The GDScript path got about 0.25 ms slower at furball 100 (3.78 to 4.05): the reference now reads each marker's
+`kind` and skips static rows.
+
+**Gain against the prediction:** about 0.3 ms off the scan at furball 100, against the 1.4 ms predicted (2.6 to 1.2). The
+prediction counted cycle 4's whole "gather" bucket (building the scan 0.61, the broadcast scan 0.31, the freed-body checks
+0.16); measured on this base the body gather was about 0.37 ms and the bolts' gather, which this task leaves to T15, about
+0.16 ms. What remains of the 2.1 ms native scan is per query and per result: about 45 `nearest_for`, `incoming_fire`,
+`statics_for` and `broadcasts_for` calls a tick, making the `Contact`s and the keepers' lists. Those move with the brains
+(T16, T17) and the core's rows (T15).
+
+**Behaviour changes:** none for fighters. Seeded outcomes with `perf_native` on and off (`m4_t09_after_outcome`, each in a
+fresh process): `bench furball 25 10 seed=1` and `bench spread 50 6 seed=2` give the same `state ai` line for every ship and
+the same work counts, behaviour mix (16 attack and 9 evade; 31 and 19), mean speed (70.06 and 65.11 m/s), mean bolts in
+flight (84.19 and 184.09) and ship pairs (0.61 and 1.36), which are also cycle 4's values. New behaviour where nothing
+existed before: rocks and mines are avoided (a fighter at 100 m/s straight at a 150 m rock passes 170 m from its centre,
+`test_contact_registry`), and avoidance looks further ahead for a big static.
+
+**What T07's `kind` needs** (T07 owns `Targetable` this wave): the registry and `from_tree` read a marker's `kind` property
+as a `BodyKind` name (`ship`, `capital`, `turret`, `missile`, `mine`, `static`, `prop`, any case) or as an int in that order;
+anything else is a ship. If T07's `kind` is an enum in another order, map it in `BodyKind.from_variant` and in
+`body_registry.rs` (`kind_of`). T07's asteroid field registers its rocks with `ContactScan.register_static(id, position,
+radius, BodyKind.STATIC)` (ids unique, not instance ids); `WorldFrame.rebase` already shifts them. A body whose kind or
+faction changes while it stays shown calls `ContactScan.touch(body)`.
 
 ## Definition of done (M4)
 
