@@ -359,6 +359,7 @@ static func _load_raw(field: Object, args: Dictionary) -> Variant:
 			ContactScan.SENSOR_RANGE_M)
 
 
+# If the grid's overflow guard regresses, this test hangs instead of failing: a shard stuck here is that regression.
 func test_a_huge_finite_range_gives_the_same_answers_on_both_paths_and_finishes_quickly() -> void:
 	if _skipped():
 		return
