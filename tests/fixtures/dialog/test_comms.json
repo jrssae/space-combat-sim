@@ -1,0 +1,10 @@
+{
+	"lines": [
+		{"id": "hail", "speaker": "control", "voice": "hail",
+			"text": "Alpha wing, this is Control. Raiders have been seen heading for the relay. Move to intercept.", "hold_s": 1.0},
+		{"id": "warning", "speaker": "raider_lead", "voice": "warning",
+			"text": "You are in the wrong place, Earthers.", "hold_s": 1.0},
+		{"id": "unused", "speaker": "civilian", "voice": "unused",
+			"text": "Transport six, clear of the lane."}
+	]
+}

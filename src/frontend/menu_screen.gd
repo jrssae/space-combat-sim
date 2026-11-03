@@ -4,11 +4,13 @@ extends VBoxContainer
 ## focus), A accepts and B (or Esc) asks to go back. Menus are UI, so they use `ui_*` and never the game's actions.
 ##
 ## A page never plays sound or changes screens itself: it asks. `sound_requested` for the move/accept sounds, `back_requested`
-## for B, and `info_changed` when the frame's right panel may need new content. The `MenuFrame` that holds the page answers.
+## for B, `info_changed` when the frame's right panel may need new content, and `highlight_requested` when the diagram should
+## light the buttons of some actions. The `MenuFrame` that holds the page answers.
 
 signal back_requested
 signal sound_requested(sound: StringName)
 signal info_changed
+signal highlight_requested(actions: Array[StringName])
 
 const SOUND_MOVE: StringName = &"ui_move"
 const SOUND_ACCEPT: StringName = &"ui_accept"
@@ -63,6 +65,12 @@ func restore_focus() -> void:
 ## The right panel's content while this page is up (`ObjectivesModel` shape), or empty for the frame's own.
 func info() -> Dictionary:
 	return {}
+
+
+## Asked by the frame before it leaves this page. A page with views of its own, or one that is waiting for a press, takes
+## the step itself and returns true; the frame then stays.
+func back_step() -> bool:
+	return false
 
 
 ## The option that has the focus now, or null when it is elsewhere.

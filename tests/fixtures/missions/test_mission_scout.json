@@ -13,7 +13,7 @@
 		"title": "Test Mission",
 		"briefing": "Fly to the buoy, see off two raiders, report in.",
 		"script": "res://tests/fixtures/missions/test_mission.gd",
-		"dialog": "",
+		"dialog": "res://tests/fixtures/dialog/test_mission.json",
 		"objectives": [
 			{"id": "reach", "text": "Fly to NAV ALPHA", "primary": true,
 				"success": {"kind": "proximity", "actor": "player", "to": "NAV ALPHA", "radius_m": 400}},

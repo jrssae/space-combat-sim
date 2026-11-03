@@ -5,7 +5,7 @@ extends RefCounted
 ## game; without one (tests) they land in the `MissionWorld` snapshot only.
 ##
 ## Script surface (`m` in `step_<name>(m)`):
-##     await m.say(line_id)            a comms line (T06 shows it; for now it is logged and finished at once)
+##     await m.say(line_id [, interrupt]) a comms line (D53): shown by the comms panel; resolves when it has finished showing
 ##     await m.wait(seconds)           sim time, from physics ticks only
 ##     await m.until(trigger)          a `Trigger` (TriggerSpec builders) or its JSON dictionary
 ##     await m.until_objective(id)     until the objective is done or failed
@@ -18,6 +18,10 @@ extends RefCounted
 ##     m.lock_controls(on)             the player's controls held (T08 does the zeroing; the flag is kept here)
 ##     m.end(success [, reason])
 ##     m.time_s(), m.alive(name), m.objective_state(id)
+##
+## Lines (D53): `dialog_book` holds the mission's dialog file and `dialog` is the queue the comms panel shows; a line is recorded
+## in the `MissionWorld` as finished when it ends, shown out or cut (an interrupt, a skip, the mission's end). Without a book
+## (a mission with no dialog file) `say` is logged and finished at once; a line the book lacks is an error and also finishes.
 ##
 ## Skipping (D51): in a skipped step every wait returns at once; `until` first makes its trigger true (`Trigger.make_true`),
 ## `until_objective` completes the objective through its forced success trigger, and the objectives are evaluated right after,
@@ -53,6 +57,10 @@ var tick_work: int = 0
 var waypoint_name: String = ""
 ## `lock_controls` asked for the player's controls to be held (T08 zeroes the commands while it is set).
 var controls_locked: bool = false
+## The mission's dialog file (the runner loads it), or null: `say` then resolves at once.
+var dialog_book: DialogBook = null
+## The comms lines in play: the comms panel reads and draws it, `tick` moves it on sim time.
+var dialog: DialogQueue = DialogQueue.new()
 
 var _seq: MissionSequencer = MissionSequencer.new()
 var _live: Array[Trigger] = []
@@ -69,13 +77,29 @@ func _init(p_world: MissionWorld = null, p_book: ObjectiveBook = null, p_stage: 
 # --- awaits ------------------------------------------------------------------------------------------------------------
 
 
-## Shows a comms line and waits until it has been read. T06's seam: for now the line is logged and finished at once.
-func say(line_id: StringName) -> void:
+## Shows the comms line `line_id` (D53) and waits until it has finished showing. With `interrupt` it cuts the line showing and
+## takes its place. In a skipped step, or when the book lacks the line, it is logged and not shown.
+func say(line_id: StringName, interrupt: bool = false) -> void:
 	if has_ended():
 		return
 	journal.append("say %s" % line_id)
-	print("[mission] %s%s" % ["(skipped) " if _seq.skipping else "", line_id])
-	world.finish_line(line_id)
+	if _seq.skipping and not _seq.stopped and _spinning():
+		await _seq.wake
+	var line: DialogBook.Line = dialog_book.line(line_id) if dialog_book != null else null
+	if dialog_book != null and line == null:
+		push_error("Mission: say: no line '%s' in the dialog (%d lines)" % [line_id, dialog_book.line_count()])
+	if line == null or _seq.skipping:
+		print("[mission] %ssay %s" % ["(skipped) " if _seq.skipping else "", line_id])
+		world.finish_line(line_id)
+		return
+	var ticket: int = dialog.say(line, interrupt)
+	_record_finished_lines()
+	while not _seq.stopped and not _seq.skipping and dialog.is_pending(ticket):
+		await _seq.wake
+	if dialog.cancel(ticket):  # skipped or ended while showing: the line is cut, not shown out
+		_record_finished_lines()
+	while _seq.stopped:
+		await _seq.wake  # ended meanwhile: this step goes no further
 
 
 ## Waits `seconds` of sim time.
@@ -245,6 +269,8 @@ func end(success: bool, reason: String = "") -> void:
 			"objectives": book.snapshot(), "time_s": world.time_s}
 	_seq.stop()
 	_live.clear()
+	dialog.clear()  # nothing keeps talking over the debrief
+	_record_finished_lines()
 	journal.append("end %s%s" % ["success" if success else "failure", ": " + reason if not reason.is_empty() else ""])
 	print("[mission] ended: %s" % GameFlow.describe_result(result))
 	ended.emit(result)
@@ -293,6 +319,8 @@ func tick(delta: float, actions: Dictionary) -> void:
 	world.work = 0
 	world.time_s += delta
 	world.set_actions(actions)
+	dialog.tick(delta)
+	_record_finished_lines()
 	settle()
 	if not has_ended():
 		_seq.tick()
@@ -384,6 +412,12 @@ func watched() -> PackedStringArray:
 
 
 # --- internals ---------------------------------------------------------------------------------------------------------
+
+
+# The lines that ended since the last look are finished in the world, so `dialog_finished` triggers see them this tick.
+func _record_finished_lines() -> void:
+	for line_id: StringName in dialog.take_finished():
+		world.finish_line(line_id)
 
 
 func _trigger_of(condition: Variant) -> Trigger:

@@ -6,6 +6,10 @@ extends VBoxContainer
 const DONE_COLOR: Color = Color(0.4, 0.75, 0.5)
 const FAILED_COLOR: Color = Color(1.0, 0.42, 0.36)
 const OPTIONAL_COLOR: Color = Color(0.55, 1.0, 0.65, 0.7)
+## A content with `compact: true` (the debrief, which is the longest) sets its lines smaller and closer together.
+const LINE_SEPARATION: int = 10
+const COMPACT_SEPARATION: int = 4
+const COMPACT_FONT_SIZE: int = 18
 
 ## What is showing now (tests).
 var content: Dictionary = {"title": "", "lines": []}
@@ -25,7 +29,7 @@ func _ready() -> void:
 	add_child(scroll)
 	_lines = VBoxContainer.new()
 	_lines.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_lines.add_theme_constant_override(&"separation", 10)
+	_lines.add_theme_constant_override(&"separation", LINE_SEPARATION)
 	scroll.add_child(_lines)
 	show_content(content)
 
@@ -35,6 +39,8 @@ func show_content(new_content: Dictionary) -> void:
 	if _lines == null:
 		return
 	_heading.text = String(content.get("title", ""))
+	var compact: bool = bool(content.get("compact", false))
+	_lines.add_theme_constant_override(&"separation", COMPACT_SEPARATION if compact else LINE_SEPARATION)
 	for child: Node in _lines.get_children():
 		_lines.remove_child(child)
 		child.queue_free()
@@ -44,6 +50,8 @@ func show_content(new_content: Dictionary) -> void:
 		label.text = "%s %s" % [mark, line["text"]] if not mark.is_empty() else String(line["text"])
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if compact:
+			label.add_theme_font_size_override(&"font_size", COMPACT_FONT_SIZE)
 		match StringName(line.get("state", &"")):
 			&"done":
 				label.add_theme_color_override(&"font_color", DONE_COLOR)

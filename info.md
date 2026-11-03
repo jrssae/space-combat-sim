@@ -64,6 +64,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 |---|---|---|---|
 | `menu` | | Go back to the front end | always |
 | `play` | `<scenario_id> [seed]` | Play a scenario through the loading screen, as the menu does; the same seed plays the same run | always |
+| `retry` | | From the debrief, play the same mission again (same scenario and seed) through the loading screen; refused anywhere else | always |
 | `controls` | `[list\|use\|save\|show\|delete] [name\|action]` | Control profiles: list them, use or save one, show bindings, delete a saved one | always |
 | `bind` | `<action> <binding>` | Add a binding to an action (session only until `controls save`) | always |
 | `unbind` | `<action> <binding>` | Remove a binding from an action | always |
@@ -136,6 +137,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `debug` | `invulnerable` (writable): the player takes no damage | always |
 | `time` | Sim time, time warp and the engine time scale | always |
 | `game` | The game flow: `state`, the `request` being played and the `last_result` | always |
+| `debrief` | The last mission's debrief: result, reason, time, kills, assists, wing losses, shots fired and hit, accuracy, objectives (`none` until a mission ends) | always |
 | `controls` | The active control profile, the profile list and unsaved binding changes | always |
 | `input` | Connected pads, whether the keyboard is masked, and the last flight, combat and UI commands | in flight |
 | `ship` | The player's ship: position, velocity, speed, angular rate, assist, pods, mass flow, fuel | in flight |

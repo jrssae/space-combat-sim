@@ -6,100 +6,162 @@ extends RefCounted
 
 const TYPE_ENUM := -1  # pseudo type for string settings restricted to `choices`
 
+## The groups the settings menu lists entries under (M5-T03, D57), in the order it shows them. Every entry names one in `category`.
+const CATEGORIES: Array[StringName] = [&"flight", &"controls", &"camera", &"hud", &"graphics", &"audio", &"game"]
+## Menu fields an entry may carry besides its type, default, range and `doc`: `category` (required), `label` (the menu's
+## name for it), `menu: false` (console-only: debug switches, tuning knobs, text a pad cannot edit), `step` (what one D-pad
+## press moves a number) and `percent: true` (a 0..1 number the menu shows as 0..100 %).
+
 const ENTRIES: Dictionary = {
 	&"control_profile": {"type": TYPE_STRING, "default": "default", "pattern": "^[a-z0-9_]{1,32}$",
+		"category": &"controls", "label": "Control profile", "menu": false,
 		"doc": "Control profile applied at start-up and on change (console: controls list)"},
 	&"invert_y": {"type": TYPE_BOOL, "default": false,
+		"category": &"controls", "label": "Invert pitch",
 		"doc": "Invert pitch: stick back = nose down"},
 	&"stick_deadzone": {"type": TYPE_FLOAT, "default": 0.15, "min": 0.0, "max": 0.30,
+		"category": &"controls", "label": "Stick deadzone", "step": 0.01,
 		"doc": "Radial stick deadzone, rescaled so full deflection still reaches 1"},
 	&"trigger_deadzone": {"type": TYPE_FLOAT, "default": 0.05, "min": 0.0, "max": 0.20,
+		"category": &"controls", "label": "Trigger deadzone", "step": 0.01,
 		"doc": "Trigger deadzone applied after rest calibration"},
 	&"target_hold_s": {"type": TYPE_FLOAT, "default": 0.35, "min": 0.15, "max": 1.0,
+		"category": &"controls", "label": "Target button hold time", "step": 0.05,
 		"doc": "Hold a target button this long for its second function (pad B: previous target; keyboard B, Mouse 2: nearest the nose); a shorter tap selects the next target"},
 	&"assist_default": {"type": TYPE_BOOL, "default": true,
+		"category": &"flight", "label": "Flight assist at start",
 		"doc": "Flight assist state at spawn"},
 	&"fuel_unlimited": {"type": TYPE_BOOL, "default": true,
+		"category": &"flight", "label": "Unlimited fuel",
 		"doc": "Reaction mass is never drawn down (the fuel gauge stays full); off = a finite tank that can run dry"},
 	&"friendly_fire": {"type": TYPE_BOOL, "default": false,
+		"category": &"game", "label": "Friendly fire",
 		"doc": "Bolts hurt any ship but their shooter, allies and the player included; off = only hostile ships (and buoys) take hits"},
 	&"ram_damage": {"type": TYPE_BOOL, "default": true,
+		"category": &"game", "label": "Ram damage",
 		"doc": "Collisions hurt by the velocity change they cause (rams); off = ships still bounce but take no damage"},
 	&"camera_default": {"type": TYPE_ENUM, "default": &"chase", "choices": [&"chase", &"cockpit"],
+		"category": &"camera", "label": "Camera at start",
 		"doc": "Camera mode at spawn"},
 	&"splat_lod_bias": {"type": TYPE_FLOAT, "default": 0.0, "min": -1.0, "max": 1.0,
+		"category": &"graphics", "label": "Detail bias", "step": 0.1,
 		"doc": "Shift every ship's splat level of detail by whole levels: + coarser, - finer (M3-T19)"},
 	&"particle_density": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.0, "max": 1.0,
+		"category": &"graphics", "label": "Spark and debris density", "step": 0.05, "percent": true,
 		"doc": "How much of each spark and debris burst is thrown, 0 (none) to 1 (full); 0 costs nothing per frame (M3-T23)"},
+	&"master_volume": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.0, "max": 1.0,
+		"category": &"audio", "label": "Master volume", "step": 0.05, "percent": true,
+		"doc": "Gain of the Master audio bus, 0 (silent) to 1 (full); every other bus plays through it"},
+	&"sfx_volume": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0,
+		"category": &"audio", "label": "Effects volume", "step": 0.05, "percent": true,
+		"doc": "Gain of the SFX audio bus, 0 (silent) to 1 (full)"},
+	&"ui_volume": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0,
+		"category": &"audio", "label": "Menu volume", "step": 0.05, "percent": true,
+		"doc": "Gain of the UI audio bus (menu sounds), 0 (silent) to 1 (full)"},
+	&"comms_volume": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0,
+		"category": &"audio", "label": "Radio volume", "step": 0.05, "percent": true,
+		"doc": "Gain of the Comms audio bus (radio chatter and its open and close clicks), 0 (silent) to 1 (full)"},
 	&"engine_voice_cap": {"type": TYPE_INT, "default": 24, "min": 8, "max": 64,
+		"category": &"audio", "label": "Engine voices", "step": 4,
 		"doc": "Most engine voices heard at once (M5-T19): your own pods and RCS clusters first, then the nearest ships' pods; at least 8, so your Starfury always fits"},
 	&"splat_relight": {"type": TYPE_BOOL, "default": true,
+		"category": &"graphics", "label": "Light hulls with the scene",
 		"doc": "Light hulls, chunks and buoys with the scene's lights (M3-T21); off draws their flat paint"},
 	&"relight_ambient": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 1.0,
+		"category": &"graphics", "label": "Relight ambient", "menu": false, "step": 0.05,
 		"doc": "Light a relit hull gets on every side, whichever way it faces; the gain scales it (live)"},
 	&"relight_unlit_level": {"type": TYPE_FLOAT, "default": 0.12, "min": 0.0, "max": 1.0,
+		"category": &"graphics", "label": "Relight unlit level", "menu": false, "step": 0.02,
 		"doc": "How much of its paint a relit hull shows with no light at all (live)"},
 	&"relight_light_gain": {"type": TYPE_FLOAT, "default": 0.6, "min": 0.0, "max": 4.0,
+		"category": &"graphics", "label": "Relight light gain", "menu": false, "step": 0.2,
 		"doc": "How strongly light brightens a relit hull: the key star and every other light (live)"},
 	&"splat_hero": {"type": TYPE_BOOL, "default": true,
+		"category": &"graphics", "label": "Hero detail for your ship",
 		"doc": "The player's Starfury also loads its hero splat level, about 975k splats, for when it fills the screen (M3-T24); read when the ship is built, so it applies from the next run or spawn"},
 	&"splat_budget": {"type": TYPE_INT, "default": 2000000, "min": 100000, "max": 6000000,
+		"category": &"graphics", "label": "Splat budget", "step": 100000,
 		"doc": "Splats the renderer can draw at once (M3-T20): 584 bytes of video memory each, however many are on screen; over it, the farthest ships draw a coarser level"},
 	&"lens_flare": {"type": TYPE_BOOL, "default": true,
+		"category": &"graphics", "label": "Lens flare",
 		"doc": "Lens flare and glare from the star, hidden behind hulls (M3-T25)"},
 	&"motion_blur": {"type": TYPE_BOOL, "default": false,
+		"category": &"graphics", "label": "Motion blur",
 		"doc": "Smear the stars and hulls on fast turns; off asks the renderer for nothing (M3-T25)"},
 	&"motion_blur_strength": {"type": TYPE_FLOAT, "default": 0.5, "min": 0.0, "max": 1.0,
+		"category": &"graphics", "label": "Motion blur strength", "step": 0.05, "percent": true,
 		"doc": "How much of each frame's motion the blur smears, 0 (none) to 1 (the whole frame) (M3-T25)"},
 	&"camera_chase_smoothing_s": {"type": TYPE_FLOAT, "default": 0.0, "min": 0.0, "max": 0.5,
+		"category": &"camera", "label": "Chase camera lag", "step": 0.05,
 		"doc": "Chase camera orientation lag, s; 0 = rigid mount locked to the ship"},
 	&"chase_bolt_scale": {"type": TYPE_FLOAT, "default": 3.0, "min": 1.0, "max": 10.0,
+		"category": &"camera", "label": "Bolt size in the chase view", "step": 0.5,
 		"doc": "How much larger bolts are drawn in the chase view (the cockpit view always draws them true size)"},
 	&"debug_text_size": {"type": TYPE_FLOAT, "default": 22.0, "min": 8.0, "max": 64.0,
+		"category": &"hud", "label": "Debug text size", "menu": false, "step": 2.0,
 		"doc": "Font size in pixels of the debug overlay text (1080p; it does not scale with the window)"},
 	&"mouse_full_rate_px_s": {"type": TYPE_FLOAT, "default": 1200.0, "min": 100.0, "max": 10000.0,
+		"category": &"controls", "label": "Mouse full-turn speed", "step": 100.0,
 		"doc": "Mouse speed in pixels per second that commands the full turn rate; lower = more sensitive"},
 	&"mouse_look_deg_per_px": {"type": TYPE_FLOAT, "default": 0.12, "min": 0.01, "max": 1.0,
+		"category": &"controls", "label": "Mouse look sensitivity", "step": 0.01,
 		"doc": "Degrees the camera turns per pixel of mouse travel while free look is held"},
 	&"show_overlay": {"type": TYPE_BOOL, "default": true,
+		"category": &"hud", "label": "Debug overlay", "menu": false,
 		"doc": "Show the debug overlay"},
 	&"scenario": {"type": TYPE_ENUM, "default": &"combat_sandbox", "choices": [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight"],
+		"category": &"game", "label": "Scenario", "menu": false,
 		"doc": "The scenario the game loads: the wave sandbox, free flight with the nav buoys, or the instructor's route"},
 	&"skip_front_end": {"type": TYPE_BOOL, "default": false,
+		"category": &"game", "label": "Skip the front end", "menu": false,
 		"doc": "Start straight in the scenario setting, without the front end (headless, console-script and --scenario= runs always do)"},
-	&"sfx_volume": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0,
-		"doc": "Gain of the SFX audio bus, 0 (silent) to 1 (full)"},
 	&"show_hud": {"type": TYPE_BOOL, "default": true,
+		"category": &"hud", "label": "Show HUD",
 		"doc": "Show the combat HUD (target box, lead reticle, radar, gauges)"},
 	&"hud_targeting_grid": {"type": TYPE_BOOL, "default": false,
+		"category": &"hud", "label": "Targeting grid in the chase view",
 		"doc": "Show the targeting grid in the chase view too (in the cockpit view it is on the console's octagon)"},
 	&"hud_chase_opacity": {"type": TYPE_FLOAT, "default": 0.7, "min": 0.1, "max": 1.0,
+		"category": &"hud", "label": "HUD opacity in the chase view", "step": 0.05, "percent": true,
 		"doc": "How opaque the HUD is in the chase view (the cockpit view always draws it fully)"},
 	&"cockpit_light_energy": {"type": TYPE_FLOAT, "default": 1.6, "min": 0.0, "max": 8.0,
+		"category": &"graphics", "label": "Cockpit lamp", "menu": false, "step": 0.4,
 		"doc": "Brightness of the cabin lamp that lights the cockpit frame in the first-person view (applies on the next spawn)"},
 	&"own_lights": {"type": TYPE_BOOL, "default": true,
+		"category": &"graphics", "label": "Ships carry their own lights", "menu": false,
 		"doc": "The lights each ship carries for itself in the splat renderer (top lamp, cabin glow). Off is for comparison"},
 	&"top_lamp_energy": {"type": TYPE_FLOAT, "default": 2.5, "min": 0.0, "max": 20.0,
+		"category": &"graphics", "label": "Top lamp", "menu": false, "step": 0.5,
 		"doc": "Brightness of the white light that a lit ship's top lamp throws on its own hull"},
 	&"cabin_glow_level": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 2.0,
+		"category": &"graphics", "label": "Cabin glow", "menu": false, "step": 0.1,
 		"doc": "How much red the cockpit glow adds in the canopy, seen from outside"},
 	&"cabin_glow_view_m": {"type": TYPE_FLOAT, "default": 150.0, "min": 1.0, "max": 2000.0,
+		"category": &"graphics", "label": "Cabin glow range", "menu": false, "step": 50.0,
 		"doc": "How far off the cockpit glow can be seen, m (it fades over the last fifth)"},
 	&"running_light_min_px": {"type": TYPE_FLOAT, "default": 3.0, "min": 0.5, "max": 12.0,
+		"category": &"graphics", "label": "Running light size", "menu": false, "step": 0.5,
 		"doc": "A running light is never smaller than this on screen, radius in pixels"},
 	&"hud_velocity_marker": {"type": TYPE_BOOL, "default": false,
+		"category": &"hud", "label": "Velocity marker in the world",
 		"doc": "Also draw the prograde / retrograde marker in the world (it is only on screen when you fly near your nose); the drift sphere is always drawn"},
 	&"hull_splat_sync": {"type": TYPE_BOOL, "default": true,
+		"category": &"graphics", "label": "Hull splat sync", "menu": false,
 		"doc": "Debug switch: draw the hull splats at the script-interpolated pose (on). Off lets the engine interpolate the splat node, which GDGS reads as the last physics tick's pose"},
 	&"hull_depth_proxy": {"type": TYPE_BOOL, "default": true,
+		"category": &"graphics", "label": "Hull depth proxy", "menu": false,
 		"doc": "Debug switch: the black depth proxy that hides things behind the splat hull. Off draws no proxy (plumes may then show through the hull)"},
 	&"physics_jitter_fix": {"type": TYPE_FLOAT, "default": 0.5, "min": 0.0, "max": 2.0,
+		"category": &"graphics", "label": "Physics jitter fix", "menu": false, "step": 0.1,
 		"doc": "Debug switch: Godot's physics jitter fix (Engine.physics_jitter_fix); 0 turns the frame-time smoothing off"},
 	&"show_fps": {"type": TYPE_BOOL, "default": false,
+		"category": &"hud", "label": "FPS counter", "menu": false,
 		"doc": "Show the console FPS counter"},
 	&"console_enabled": {"type": TYPE_BOOL, "default": true,
+		"category": &"game", "label": "Debug console", "menu": false,
 		"doc": "Allow the ` key to open the debug console"},
 	&"console_pause_on_open": {"type": TYPE_BOOL, "default": false,
+		"category": &"game", "label": "Pause when the console opens", "menu": false,
 		"doc": "Pause the game while the console is open"},
 }
 
@@ -136,6 +198,42 @@ func old_names(key: StringName) -> Array[StringName]:
 
 func get_entry(key: StringName) -> Dictionary:
 	return ENTRIES.get(key, {})
+
+
+## The group `key` is listed under in the settings menu.
+func category_of(key: StringName) -> StringName:
+	return StringName(get_entry(key).get("category", &""))
+
+
+## False for the entries that stay console-only.
+func is_menu(key: StringName) -> bool:
+	return bool(get_entry(key).get("menu", true))
+
+
+## The menu's name for `key`; the key itself, spaced out, when the entry gives none.
+func label_of(key: StringName) -> String:
+	return String(get_entry(key).get("label", String(key).replace("_", " ").capitalize()))
+
+
+## What one D-pad press moves a number setting: the entry's `step`, else a twentieth of the range (a whole number for ints).
+func step_of(key: StringName) -> float:
+	var entry: Dictionary = get_entry(key)
+	if entry.has("step"):
+		return float(entry["step"])
+	var type: int = get_type(key)
+	if type != TYPE_FLOAT and type != TYPE_INT:
+		return 0.0
+	var step: float = (float(entry["max"]) - float(entry["min"])) / 20.0
+	return maxf(1.0, roundf(step)) if type == TYPE_INT else step
+
+
+## The keys the menu lists (all of them, or those of one `category`), in the order ENTRIES declares them.
+func menu_keys(category: StringName = &"") -> Array[StringName]:
+	var out: Array[StringName] = []
+	for key: StringName in ENTRIES.keys():
+		if is_menu(key) and (category == &"" or category_of(key) == category):
+			out.append(key)
+	return out
 
 
 func get_type(key: StringName) -> int:

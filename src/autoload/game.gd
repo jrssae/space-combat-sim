@@ -14,6 +14,7 @@ const DebugConsoleScript := preload("res://src/autoload/debug_console.gd")
 const FRONT_END_SCENE: String = "res://src/frontend/front_end.tscn"
 const LOADING_SCENE: String = "res://src/frontend/loading_screen.tscn"
 const MAIN_SCENE: String = "res://src/game/main.tscn"
+const DEBRIEF_SCENE: String = "res://src/frontend/debrief_screen.tscn"
 const SEED_MAX: int = 2147483647
 
 var flow: GameFlow = GameFlow.new()
@@ -115,11 +116,32 @@ func fail_loading(reason: String) -> void:
 	show_front_end()
 
 
-## A mission is over (M5-T05): its result is kept for the debrief and the flow moves to `DEBRIEF` (T09 shows it; Main stays
-## in space meanwhile). A Main built outside the flow (a test, the `scenario` command) still leaves the result here.
-func end_mission(result: Dictionary) -> void:
-	if not flow.end_run(result):
-		flow.keep_result(result)
+## A mission is over (M5-T05): its result, with the player's counters, is kept for the debrief. For a mission the flow
+## started, the flow moves to `DEBRIEF` and this returns true: the caller (the mission runner) shows the debrief after its
+## beat with `show_debrief`, and Main stays in space meanwhile. A run the flow did not start as a mission (a test's Main, the
+## `scenario` command's reload, free flight) only keeps the result, and nothing is shown.
+func end_mission(result: Dictionary) -> bool:
+	if GameFlow.is_mission(flow.request) and flow.end_run(result):
+		return true
+	flow.keep_result(result)
+	return false
+
+
+## Replaces Main with the debrief screen. Returns why it was refused, or "": it needs the flow in `DEBRIEF` with a
+## mission's result (a debrief with no mission must not happen).
+func show_debrief() -> String:
+	var problem: String = flow.debrief_problem()
+	if problem.is_empty():
+		_show_scene.call_deferred(DEBRIEF_SCENE)
+	return problem
+
+
+## From the debrief, the same scenario and seed again through the loading screen. Returns why it was refused, or "".
+func retry() -> String:
+	if not flow.retry():
+		return flow.error
+	_show_scene.call_deferred(LOADING_SCENE)
+	return ""
 
 
 ## Every scenario file `play` can start, by id.
@@ -175,6 +197,10 @@ func _register_console() -> void:
 			"Play a scenario through the loading screen, as the menu does; the same seed plays the same run",
 			[ConsoleArg.enum_required(&"scenario_id", scenario_ids), ConsoleArg.int_optional(&"seed", 0, 0, SEED_MAX)]),
 			_cmd_play, self)
+	registry.register_command(ConsoleCommand.new(&"retry",
+			"From the debrief, play the same mission again (same scenario and seed) through the loading screen",
+			[] as Array[ConsoleArg]), _cmd_retry, self)
+	registry.register_provider(&"debrief", _debrief_provider(), self)
 	registry.register_provider(&"game", ConsoleVars.new({
 		&"state": {"get": func() -> String: return GameFlow.state_name(flow.state),
 				"doc": "front_end, loading, in_space or debrief"},
@@ -183,6 +209,32 @@ func _register_console() -> void:
 		&"last_result": {"get": func() -> String: return GameFlow.describe_result(flow.last_result),
 				"doc": "How the last run ended (success or failure and why); none until one ends"},
 	}), self)
+
+
+# The last mission's debrief, one value per key; "none" until a mission ends.
+func _debrief_provider() -> ConsoleVars:
+	var keys: Dictionary = {}
+	var docs: Dictionary = {
+		&"result": "success or failure", &"reason": "Why the mission ended that way",
+		&"time": "Mission time (sim time), m:ss", &"kills": "Raiders the player destroyed", &"assists": "Raiders someone else destroyed after the player fired at them",
+		&"wing_losses": "Wingmen lost", &"shots_fired": "Bolts the player's cannon fired", &"shots_hit": "Of them, the bolts that hit",
+		&"accuracy": "Hits over shots, whole percent", &"objectives": "Each objective and its state",
+	}
+	for key: StringName in docs:
+		keys[key] = {"get": func() -> String: return _debrief_value(key), "doc": docs[key]}
+	return ConsoleVars.new(keys)
+
+
+func _debrief_value(key: StringName) -> String:
+	var model: DebriefModel = DebriefModel.from_result(flow.last_result)
+	return "none" if model == null else str(model.summary()[str(key)])
+
+
+func _cmd_retry(_args: Dictionary) -> ConsoleResult:
+	var problem: String = retry()
+	if not problem.is_empty():
+		return ConsoleResult.failure(problem)
+	return ConsoleResult.line("loading %s" % GameFlow.describe_request(flow.request))
 
 
 func _cmd_menu(_args: Dictionary) -> String:

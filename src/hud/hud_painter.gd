@@ -27,6 +27,11 @@ func _init(canvas: CanvasItem) -> void:
 	_font = _hud_font()
 
 
+## The HUD's font, for what is drawn beside the instruments (the comms panel's subtitles).
+static func font() -> Font:
+	return _hud_font()
+
+
 static func _hud_font() -> Font:
 	if _shared_font == null:
 		var system := SystemFont.new()

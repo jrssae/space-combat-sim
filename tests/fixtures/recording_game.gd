@@ -5,6 +5,7 @@ extends "res://src/autoload/game.gd"
 
 var played: Array[Dictionary] = []
 var restarts: int = 0
+var retries: int = 0
 var menus_shown: int = 0
 var refusal: String = ""
 ## What the loading screen handed over, and why a load failed.
@@ -19,6 +20,11 @@ func play(request: Dictionary) -> String:
 
 func restart() -> String:
 	restarts += 1
+	return refusal
+
+
+func retry() -> String:
+	retries += 1
 	return refusal
 
 

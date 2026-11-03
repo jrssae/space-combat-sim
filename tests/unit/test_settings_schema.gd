@@ -138,3 +138,84 @@ func test_an_int_setting_validates_parses_and_describes() -> void:
 	assert_eq(schema.parse(&"splat_budget", "750000")["value"], 750000)
 	assert_false(schema.parse(&"splat_budget", "1.5")["ok"])
 	assert_false(schema.parse(&"splat_budget", "many")["ok"])
+
+
+# --- Menu metadata (M5-T03, D57): every entry has a category, debug switches stay out of the menu ---------------------
+
+
+func test_every_entry_has_a_known_category() -> void:
+	for key: StringName in schema.keys():
+		var category: Variant = schema.get_entry(key).get("category")
+		assert_true(category is StringName, "%s has a category" % key)
+		assert_true(SettingsSchema.CATEGORIES.has(category), "%s: '%s' is a known category" % [key, category])
+		assert_eq(schema.category_of(key), category)
+
+
+func test_every_category_is_used() -> void:
+	for category: StringName in SettingsSchema.CATEGORIES:
+		var used: bool = false
+		for key: StringName in schema.keys():
+			used = used or schema.category_of(key) == category
+		assert_true(used, "nothing is filed under %s" % category)
+
+
+func test_the_menu_flag_is_a_bool_and_defaults_to_shown() -> void:
+	for key: StringName in schema.keys():
+		var entry: Dictionary = schema.get_entry(key)
+		assert_true(not entry.has("menu") or entry["menu"] is bool, "%s: menu is a bool" % key)
+		assert_eq(schema.is_menu(key), bool(entry.get("menu", true)))
+
+
+func test_the_debug_switches_stay_console_only() -> void:
+	for key: StringName in [&"hull_splat_sync", &"hull_depth_proxy", &"physics_jitter_fix", &"show_fps", &"show_overlay",
+			&"debug_text_size", &"console_enabled", &"console_pause_on_open", &"scenario", &"skip_front_end", &"control_profile"]:
+		assert_false(schema.is_menu(key), "%s is not in the menu" % key)
+	for key: StringName in [&"invert_y", &"sfx_volume", &"camera_default", &"show_hud", &"lens_flare", &"friendly_fire"]:
+		assert_true(schema.is_menu(key), "%s is in the menu" % key)
+
+
+func test_a_menu_entry_has_a_control_the_pad_can_use() -> void:
+	# Text has no pad editor (the controls page owns the profile name), so a string setting must stay out of the menu.
+	for key: StringName in schema.menu_keys():
+		assert_ne(schema.get_type(key), TYPE_STRING, "%s is text and cannot be edited on a pad" % key)
+		assert_false(schema.label_of(key).is_empty(), "%s has a label" % key)
+		if schema.get_type(key) == TYPE_FLOAT or schema.get_type(key) == TYPE_INT:
+			assert_gt(schema.step_of(key), 0.0, "%s has a step" % key)
+
+
+func test_the_steps_fit_the_ranges() -> void:
+	for key: StringName in schema.keys():
+		var type: int = schema.get_type(key)
+		if type != TYPE_FLOAT and type != TYPE_INT:
+			continue
+		var entry: Dictionary = schema.get_entry(key)
+		var span: float = float(entry["max"]) - float(entry["min"])
+		assert_gt(schema.step_of(key), 0.0, "%s: step above zero" % key)
+		assert_lte(schema.step_of(key), span, "%s: a step fits in the range" % key)
+		assert_gte(span / schema.step_of(key), 4.0, "%s: at least four steps, or a slider is pointless" % key)
+		assert_lte(span / schema.step_of(key), 100.0, "%s: at most a hundred steps, or the D-pad takes forever" % key)
+
+
+func test_menu_keys_come_in_declaration_order_within_a_category() -> void:
+	var flight: Array[StringName] = schema.menu_keys(&"flight")
+	assert_eq(flight, [&"assist_default", &"fuel_unlimited"] as Array[StringName])
+	assert_eq(schema.menu_keys(&"none_such"), [] as Array[StringName])
+	assert_eq(schema.menu_keys().size(), _count_menu_entries())
+
+
+func test_the_four_bus_volumes_are_settings_from_zero_to_one() -> void:
+	for key: StringName in [&"master_volume", &"sfx_volume", &"ui_volume", &"comms_volume"]:
+		assert_true(schema.has_key(key), key)
+		assert_eq(schema.get_type(key), TYPE_FLOAT)
+		assert_eq(schema.category_of(key), &"audio")
+		assert_true(schema.is_menu(key))
+		assert_true(schema.validate(key, 0.0)["ok"])
+		assert_true(schema.validate(key, 1.0)["ok"])
+		assert_false(schema.validate(key, 1.01)["ok"])
+
+
+func _count_menu_entries() -> int:
+	var n: int = 0
+	for key: StringName in schema.keys():
+		n += 1 if bool(schema.get_entry(key).get("menu", true)) else 0
+	return n

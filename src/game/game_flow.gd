@@ -79,9 +79,26 @@ func retry() -> bool:
 	return _move_to(State.LOADING)
 
 
+## Why there is no debrief to show now ("" when there is one, M5-T09): the run must be over, be a mission and have said how it
+## ended. A free-flight or sandbox run, or a mission the flow did not start, never gets one.
+func debrief_problem() -> String:
+	if state != State.DEBRIEF:
+		return "no debrief yet: the run is not over"
+	if not is_mission(request):
+		return "no debrief: the last run was not a mission"
+	if last_result.is_empty():
+		return "no debrief: the mission left no result"
+	return ""
+
+
 ## A request: what to play, with or without free-flight encounters, and the seed that makes it repeatable.
 static func make_request(kind: StringName, scenario_id: StringName, encounters: bool = false, seed_value: int = 0) -> Dictionary:
 	return {"kind": kind, "scenario_id": scenario_id, "encounters": encounters, "seed": seed_value}
+
+
+## Whether `candidate` asks for a mission, the only kind of run that ends in a debrief.
+static func is_mission(candidate: Dictionary) -> bool:
+	return StringName(str(candidate.get("kind", ""))) == &"mission"
 
 
 ## Empty when `candidate` is a well-formed request, otherwise what is wrong with it.

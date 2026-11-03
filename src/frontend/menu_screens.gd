@@ -1,7 +1,9 @@
 class_name MenuScreens
 extends RefCounted
-## Where the front end and the pause menu get the pages they share (architecture §18, D57). Settings and Controls are
-## placeholders until M5-T03 and M5-T04 return their real pages from here; neither host changes.
+## Where the front end and the pause menu get the pages they share (architecture §18, D57). Settings is a placeholder until
+## M5-T03 returns its real page from here; neither host changes.
+
+const ControlsScene: PackedScene = preload("res://src/frontend/controls_screen.tscn")
 
 
 static func settings() -> MenuScreen:
@@ -10,7 +12,6 @@ static func settings() -> MenuScreen:
 	return page
 
 
+## The controls page (M5-T04): a new one each time, so a page left open elsewhere is never shared.
 static func controls() -> MenuScreen:
-	var page := PlaceholderScreen.new()
-	page.setup_placeholder("Controls", "The controls page arrives with M5-T04.")
-	return page
+	return ControlsScene.instantiate() as MenuScreen

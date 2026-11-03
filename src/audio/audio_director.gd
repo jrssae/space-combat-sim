@@ -13,10 +13,14 @@ extends Node3D
 ## (at most `settings.engine_voice_cap`: the player's first, then the nearest ships in range, re-ranked every
 ## `ENGINE_REALLOCATE_S`) and shapes each voice's attack and release on the frame's delta; a frame touches only those voices.
 ##
-## The menus' sounds (`sfx_ui`: move, accept, back; M5-T02) load beside these and play through `play_ui`. The front end has an
-## `AudioDirector` of its own for them; they keep sounding while the tree is paused, because the pause menu is where they are heard.
+## The menus' sounds (`sfx_ui`: move, accept, back; M5-T02) and the comms squelches (`radio_open`, `radio_close`; M5-T06) load
+## beside these and play through `play_ui`. The front end has an `AudioDirector` of its own for them; they keep sounding while
+## the tree is paused, because the pause menu is where they are heard.
 ##
-## `settings.sfx_volume` (0..1) is the gain of the `SFX` bus (`default_bus_layout.tres`; created at run time if it is missing).
+## Four buses (M5-T03, D57; `AudioBuses`): `Master` over `SFX`, `UI` and `Comms`, in `default_bus_layout.tres` (created at run
+## time if one is missing). Menu sounds play on `UI` (`play_ui`), the radio on `Comms` (`play_comms`, and `play_ui` of a radio
+## sound), everything else on `SFX`. `settings.master_volume`, `sfx_volume`, `ui_volume` and `comms_volume` (0..1) are the buses'
+## gains and apply the moment they change.
 ## The Dummy audio driver of a headless run plays silently, and nothing here errors without sound files.
 ##
 ## Console: provider `audio` (`sounds`, `voices_active`, `volume`, `engine_voices`, `engine_sounding`, `engine_frame_work`) and
@@ -24,11 +28,11 @@ extends Node3D
 
 const SOUND_DIR: String = "res://assets/generated/sfx_combat"
 const UI_SOUND_DIR: String = "res://assets/generated/sfx_ui"
-const UI_SOUND_NAMES: Array[StringName] = [&"ui_move", &"ui_accept", &"ui_back"]
+const UI_SOUND_NAMES: Array[StringName] = [&"ui_move", &"ui_accept", &"ui_back", &"radio_open", &"radio_close"]
 const SOUND_NAMES: Array[StringName] = [&"pulse_fire", &"raider_fire", &"hit_hull", &"explosion", &"main_burst", &"rcs_burst", &"warning_beep", &"target_blip"]
 ## The engine bursts, looped for as long as their thrusters fire.
 const LOOPS: Array[StringName] = [&"main_burst", &"rcs_burst"]
-const BUS: StringName = &"SFX"
+const BUS: StringName = AudioBuses.SFX  ## the bus the 3D voices and the engines play on
 const VOICES: int = 16
 const UI_VOICES: int = 4
 const WARNING_HULL: float = 0.25
@@ -68,8 +72,8 @@ var _engine_rerank_in_s: float = 0.0
 
 
 func _ready() -> void:
-	_ensure_bus()
-	apply_volume(float(Settings.get_value(&"sfx_volume")))
+	_ensure_buses()
+	apply_all_volumes()
 	_engine.cap = int(Settings.get_value(&"engine_voice_cap"))
 	Settings.changed.connect(_on_setting_changed)
 	_load_sounds()
@@ -87,7 +91,6 @@ func _ready() -> void:
 		var ui := AudioStreamPlayer.new()
 		ui.name = "UiVoice%d" % i
 		ui.process_mode = Node.PROCESS_MODE_ALWAYS
-		ui.bus = BUS
 		add_child(ui)
 		_ui_voices.append(ui)
 	DebugConsole.registry.register_provider(&"audio", ConsoleVars.new({
@@ -173,8 +176,18 @@ func play(sound_name: StringName, at: Vector3, volume_db: float = 0.0, pitch: fl
 	return voice
 
 
-## Plays `sound_name` in 2D (warnings, the target blip).
+## Plays `sound_name` in 2D (menu sounds, warnings, the target blip) on the bus `AudioBuses.bus_of_sound` gives it: `UI` for a
+## menu sound, `Comms` for a radio click, else `SFX`.
 func play_ui(sound_name: StringName, volume_db: float = 0.0) -> AudioStreamPlayer:
+	return _play_2d(sound_name, volume_db, AudioBuses.bus_of_sound(sound_name))
+
+
+## Plays `sound_name` in 2D on the `Comms` bus, for the radio: a line of dialog, its open and close clicks (M5-T06).
+func play_comms(sound_name: StringName, volume_db: float = 0.0) -> AudioStreamPlayer:
+	return _play_2d(sound_name, volume_db, AudioBuses.COMMS)
+
+
+func _play_2d(sound_name: StringName, volume_db: float, bus: StringName) -> AudioStreamPlayer:
 	if not _streams.has(sound_name):
 		return null
 	var ui: AudioStreamPlayer = _ui_voices[0]
@@ -183,6 +196,7 @@ func play_ui(sound_name: StringName, volume_db: float = 0.0) -> AudioStreamPlaye
 			ui = candidate
 			break
 	ui.stream = _streams[sound_name]
+	ui.bus = bus
 	ui.volume_db = volume_db
 	ui.play()
 	_played[sound_name] = times_played(sound_name) + 1
@@ -230,23 +244,37 @@ func _load_set(dir: String, names: Array[StringName]) -> void:
 
 ## Sets the SFX bus gain from a 0..1 value.
 func apply_volume(linear: float) -> void:
-	var index: int = AudioServer.get_bus_index(BUS)
+	apply_bus_volume(BUS, linear)
+
+
+## Sets `bus`'s gain from a 0..1 value.
+func apply_bus_volume(bus: StringName, linear: float) -> void:
+	var index: int = AudioServer.get_bus_index(bus)
 	if index >= 0:
-		AudioServer.set_bus_volume_db(index, linear_to_db(clampf(linear, 0.0, 1.0)) if linear > 0.0 else -80.0)
+		AudioServer.set_bus_volume_db(index, AudioBuses.volume_db(linear))
 
 
-func _ensure_bus() -> void:
-	if AudioServer.get_bus_index(BUS) >= 0:
-		return
-	AudioServer.add_bus()
-	var index: int = AudioServer.bus_count - 1
-	AudioServer.set_bus_name(index, BUS)
-	AudioServer.set_bus_send(index, &"Master")
+## Sets every bus from its volume setting.
+func apply_all_volumes() -> void:
+	for bus: StringName in AudioBuses.NAMES:
+		apply_bus_volume(bus, float(Settings.get_value(AudioBuses.setting_of(bus))))
+
+
+# A layout without a bus (a project from before M5-T03) gets it here, sending to Master.
+func _ensure_buses() -> void:
+	for bus: StringName in AudioBuses.NAMES:
+		if bus == AudioBuses.MASTER or AudioServer.get_bus_index(bus) >= 0:
+			continue
+		AudioServer.add_bus()
+		var index: int = AudioServer.bus_count - 1
+		AudioServer.set_bus_name(index, bus)
+		AudioServer.set_bus_send(index, AudioBuses.MASTER)
 
 
 func _on_setting_changed(key: StringName, value: Variant) -> void:
-	if key == &"sfx_volume":
-		apply_volume(float(value))
+	var bus: StringName = AudioBuses.bus_of_setting(key)
+	if bus != &"":
+		apply_bus_volume(bus, float(value))
 	elif key == &"engine_voice_cap":
 		_engine.cap = int(value)
 		_engine_rerank_in_s = 0.0

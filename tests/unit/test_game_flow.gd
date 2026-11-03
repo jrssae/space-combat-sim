@@ -189,6 +189,47 @@ func test_every_state_has_a_name() -> void:
 	assert_eq(GameFlow.state_name(GameFlow.State.DEBRIEF), "debrief")
 
 
+# --- The debrief (M5-T09, D56) -------------------------------------------------------------------------------------
+
+
+func _mission(seed_value: int = 0) -> Dictionary:
+	return GameFlow.make_request(&"mission", &"buoy_defence", false, seed_value)
+
+
+func test_only_a_mission_has_a_debrief() -> void:
+	assert_true(GameFlow.is_mission(_mission()))
+	assert_false(GameFlow.is_mission(_free_flight()))
+	assert_false(GameFlow.is_mission(GameFlow.make_request(&"sandbox", &"dogfight")))
+	assert_false(GameFlow.is_mission({}), "nothing was asked for")
+
+
+func test_the_debrief_is_offered_after_a_mission_ends() -> void:
+	flow.enter_directly(_mission(4))
+	assert_eq(flow.debrief_problem(), "no debrief yet: the run is not over", "still in space")
+	flow.end_run({"success": true, "reason": "every primary objective done"})
+	assert_eq(flow.debrief_problem(), "")
+
+
+func test_no_debrief_without_a_mission_or_a_result() -> void:
+	flow.enter_directly(_free_flight())
+	flow.end_run({"success": true})
+	assert_string_contains(flow.debrief_problem(), "not a mission")
+	flow.open_menu()
+	assert_string_contains(flow.debrief_problem(), "run is not over", "back at the front end")
+	var empty := GameFlow.new()
+	empty.enter_directly(_mission())
+	empty.end_run({})
+	assert_string_contains(empty.debrief_problem(), "no result", "a debrief with nothing to say never opens")
+
+
+func test_retry_of_a_mission_keeps_its_seed_and_encounters() -> void:
+	flow.enter_directly(GameFlow.make_request(&"mission", &"buoy_defence", true, 123))
+	flow.end_run({"success": false, "reason": "player destroyed"})
+	assert_true(flow.retry())
+	assert_eq(flow.request, GameFlow.make_request(&"mission", &"buoy_defence", true, 123))
+	assert_eq(flow.state, GameFlow.State.LOADING)
+
+
 # --- Boot routing --------------------------------------------------------------------------------------------------
 
 

@@ -251,9 +251,12 @@ for the two loops, seamless by construction) and no `lods`. Option: `peak_dbfs` 
 
 ## `sfx_ui`
 
-The menu sounds (M5-T02, D57): three mono 16-bit 48 kHz WAVs, peaks at -1.5 dBFS, byte-identical per seed, plain sine tones in
-the family of `target_blip`. `ui_move` (a quiet 45 ms tick), `ui_accept` (two notes rising) and `ui_back` (two notes falling).
-`AudioDirector` loads them beside `sfx_combat` and plays them with `play_ui`. Same manifest shape as `sfx_combat`, no loops.
+The menu sounds (M5-T02, D57) and the comms squelches (M5-T06, D53): five mono 16-bit 48 kHz WAVs, peaks at -1.5 dBFS,
+byte-identical per seed. `ui_move` (a quiet 45 ms tick), `ui_accept` (two notes rising) and `ui_back` (two notes falling) are
+plain sine tones in the family of `target_blip`. `radio_open` (0.22 s: band-limited static fading into a rising key-up chirp)
+and `radio_close` (0.16 s: a falling chirp and a short tail of static) frame each comms line; they stay in the voice band
+(nothing below 400 Hz). `AudioDirector` loads them beside `sfx_combat` and plays them with `play_ui`. Same manifest shape as
+`sfx_combat`, no loops.
 
 ## `sfx_world`
 

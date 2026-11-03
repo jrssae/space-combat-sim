@@ -54,6 +54,7 @@ func clear() -> void:
 	_pages.clear()
 	_title.text = ""
 	_message.text = ""
+	_lit_actions.clear()
 
 
 ## Puts `page` on top of the current one.
@@ -64,8 +65,11 @@ func push_screen(page: MenuScreen) -> void:
 
 
 ## Leaves the top page for the one under it, with the back sound. Returns false when the top page is the root: then
-## `closed` is emitted instead, silently (the host decides whether leaving is worth a sound).
+## `closed` is emitted instead, silently (the host decides whether leaving is worth a sound). A page that steps back inside
+## itself (`MenuScreen.back_step`) keeps the frame where it is.
 func go_back() -> bool:
+	if not _pages.is_empty() and _pages.back().back_step():
+		return true
 	if _pages.size() <= 1:
 		closed.emit()
 		return false
@@ -74,6 +78,7 @@ func go_back() -> bool:
 	var below: MenuScreen = _pages.back()
 	below.visible = true
 	_title.text = below.title
+	_lit_actions.clear()
 	below.restore_focus()
 	refresh()
 	return true
@@ -159,6 +164,8 @@ func _show_page(page: MenuScreen) -> void:
 	page.back_requested.connect(go_back)
 	page.sound_requested.connect(_play)
 	page.info_changed.connect(refresh_panel)
+	page.highlight_requested.connect(highlight_actions)
+	_lit_actions.clear()
 	_host.add_child(page)
 	_title.text = page.title
 	_message.text = ""
