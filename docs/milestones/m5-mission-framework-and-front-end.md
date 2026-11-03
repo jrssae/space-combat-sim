@@ -294,8 +294,10 @@ Out (explicitly):
   the asset's fallback mesh (`<id>.obj`), which every civilian generator builds from the same parts as its splats and
   which must therefore hold every visible part. (Planner's call after the T23 review, 2026-11-03: scoring the splats
   themselves under-read a perfect copy of the Saturn 4 by 5 to 8 % and favoured parts built too thin.) A second check
-  keeps the splats honest: the LOD0 splats against their own mesh score at least 0.85 per view, which catches a missing
-  or misplaced part without the splat penalty deciding the verdict. Turrets are left out (the models have none); the
+  keeps the splats honest against their own mesh, per view, with a band one LOD0 spacing wide for the splats' soft
+  edge: at least 95 % of the mesh's silhouette is covered by splats (nothing missing), and at least 95 % of the splats'
+  silhouette lies within the band of the mesh's (nothing misplaced). Plain IoU at 0.85 was tried first and failed
+  faithful thin parts (a Saturn lead ship's truss, a 0.6 m wing), so it is not the measure. Turrets are left out (the models have none); the
   Bokmai is scored with its three pods mounted. Where Q16 departs from a model on purpose, each part is scored against
   the model it was built from, cropped on both sides and aligned on its own: the Saturns' lead ship and transport
   section against the Saturn 4 model, the tank section against the tanker model, the Saturn 3's pod group against the
@@ -371,7 +373,7 @@ Out (explicitly):
 | AC16 | Cost: M5 adds nothing measurable to AC13 of M3 (the paired 13-ship AI budget still passes, `test_ai_think_time`); the mission runner with 20 triggers and the encounter director stay inside their work counts | A | |
 | AC17 | Docs and the suite: `docs/architecture.md` §18 as built, a `docs/playtest.md` M5 section (how to start, menus, mission, comms menu, encounters, new settings and commands), the roadmap row; `scripts/run_tests.sh` green **once, at the end** (Q10), read from the suite's own totals | A | |
 | AC19 | Defensive turrets (D61): `TurretAim` and `ThreatMemory` unit-tested; civilians fire only at attackers of themselves or of a civilian or ally within 2 km; they keep running while firing; turret bolts go through the projectile pool and `HitResolver`; the seeded balance fight holds (two raiders beat a lone Saturn 4 in at least two of three seeds; its turrets finish a 15 % raider that keeps attacking); `turret_fire` sound | A | |
-| AC20 | Fidelity (Q18): every civilian model's top, side and front silhouettes overlap its STL's by at least 90 % (intersection over union) and its length, width and height are within 10 %, Q16's deliberate departures scored part by part against the model each part was built from; measured on the model's geometry (its fallback mesh) by `tools/refview` compare, with the LOD0 splats scoring at least 0.85 against their own mesh, and unit tests that pin the tool's calibration; each model's scores recorded in `docs/assets-civilian.md` | A | |
+| AC20 | Fidelity (Q18): every civilian model's top, side and front silhouettes overlap its STL's by at least 90 % (intersection over union) and its length, width and height are within 10 %, Q16's deliberate departures scored part by part against the model each part was built from; measured on the model's geometry (its fallback mesh) by `tools/refview` compare, with the LOD0 splats covering at least 95 % of their own mesh's silhouette and lying at least 95 % within a one-spacing band of it, and unit tests that pin the tool's calibration; each model's scores recorded in `docs/assets-civilian.md` | A | |
 | AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear | H | |
 
 ## Working rules for M5
