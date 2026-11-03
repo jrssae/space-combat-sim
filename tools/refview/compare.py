@@ -5,10 +5,12 @@ stick. It puts the STL (in the same ship frame and at the same length as ``refvi
 its fallback mesh ``<id>.obj`` (every civilian generator builds it from the same parts as its splats), on one grid,
 draws the top, side and front silhouettes of both, and scores each view's intersection over union (IoU) together with
 the length, width and height of asset against model. The bar is an IoU of at least 0.90 in every view and every
-dimension within 10 %: the *geometry verdict*. A second check, the *splat check*, holds the LOD0 splats to 0.85 per view
-against their own mesh: it catches a missing or misplaced part without the splat-reading loss (a few per cent at thin
-parts and edges, whatever the setting) deciding the verdict. Nothing from the STL is kept: overlays and numbers go to
-the gitignored ``reports/refs/<name>/compare/``.
+dimension within 10 %: the *geometry verdict*. A second check, the *splat check*, keeps the LOD0 splats honest against
+their own mesh, per view and with a band one LOD0 spacing wide (``manifest.sampling.spacing_m``, else derived from the
+splat scales): at least 95 % of the mesh silhouette must be covered by splats (nothing missing) and at least 95 % of the
+splat silhouette must lie within the mesh silhouette grown by one spacing (nothing misplaced). A splat reaches about 0.75
+spacings past an edge whatever the setting, so a plain overlap would fail faithful thin parts; the band does not. Nothing
+from the STL is kept: overlays and numbers go to the gitignored ``reports/refs/<name>/compare/``.
 
 Usage, with the project's venv and isolated mode::
 
@@ -81,7 +83,8 @@ GENERATED = REPO_ROOT / "assets" / "generated"
 
 IOU_MIN = 0.90  # each view's intersection over union must reach this (Q18)
 DIM_TOLERANCE = 0.10  # length, width and height of asset / model within this of 1 (Q18)
-SPLAT_IOU_MIN = 0.85  # the LOD0 splats against their own mesh, per view (the planner's second check)
+SPLAT_COVERAGE_MIN = 0.95  # splat check: this share of the mesh silhouette is covered by splats (nothing missing)
+SPLAT_PRECISION_MIN = 0.95  # ... and this share of the splat silhouette lies within one spacing of the mesh's (nothing misplaced)
 SHIFT_FRACTION = 0.02  # the best-fit shift of the asset: at most this share of the length, per axis
 PIXEL_FRACTION = 0.0025  # default pixel as a share of the length
 PIXEL_FRACTION_MAX = 0.005  # the brief's coarsest allowed pixel
@@ -100,6 +103,7 @@ SPLAT_SIGMAS = 0.75
 MODEL_ONLY = (232, 128, 24)  # orange
 ASSET_ONLY = (36, 112, 224)  # blue
 BOTH = (64, 64, 64)  # dark grey
+OUTSIDE = (200, 30, 40)  # red: splat pixels beyond the one-spacing band (the splat check's misplaced part)
 
 # This tool's names for the three silhouettes and refview's views they are drawn from.
 VIEWS = {"top": "top", "side": "port", "front": "front"}
@@ -450,11 +454,29 @@ class Comparison:
 
 
 @dataclass
-class SplatCheck:
-    """The splat check: the LOD0 splats against their own mesh (no shift)."""
+class SplatView(ViewScore):
+    """One view of the splat check: ``model_mask`` is the mesh's silhouette and ``asset_mask`` the splats'. ``coverage`` is
+    the share of the mesh's pixels the splats cover; ``precision`` the share of the splats' pixels within the band (the
+    mesh silhouette dilated by one spacing); ``outside`` marks the splat pixels beyond the band."""
 
-    views: dict[str, ViewScore]
+    coverage: float = 0.0
+    precision: float = 0.0
+    band_px: float = 1.0
+    outside: np.ndarray = field(default_factory=lambda: np.zeros((0, 0), dtype=bool))
+
+    @property
+    def outside_px(self) -> int:
+        return int(self.outside.sum())
+
+
+@dataclass
+class SplatCheck:
+    """The splat check: the LOD0 splats against their own mesh (no shift), with a band one LOD0 spacing wide."""
+
+    views: dict[str, SplatView]
     pixel_m: float
+    spacing_m: float
+    spacing_source: str
 
 
 def shift_table(model: np.ndarray, asset: np.ndarray, reach: int) -> np.ndarray:
@@ -541,28 +563,86 @@ def compare_shapes(
     return Comparison(views, move * px, shift_fraction * length_ref, px, model_dims, asset_dims, ratios, at_limit)
 
 
+def dilate(mask: np.ndarray, radius_px: float) -> np.ndarray:
+    """The mask grown by a disc of ``radius_px`` pixels (rows of runs, each run by a running sum)."""
+    r = int(math.floor(radius_px))
+    if r < 1:
+        return mask.copy()
+    h, w = mask.shape
+    runs: dict[int, np.ndarray] = {}
+
+    def widened(k: int) -> np.ndarray:
+        if k not in runs:
+            padded = np.pad(mask.astype(np.int32), ((0, 0), (k, k)))
+            total = np.concatenate([np.zeros((h, 1), dtype=np.int32), np.cumsum(padded, axis=1)], axis=1)
+            runs[k] = (total[:, 2 * k + 1 : 2 * k + 1 + w] - total[:, :w]) > 0
+        return runs[k]
+
+    out = np.zeros_like(mask)
+    for dy in range(-r, r + 1):
+        half = int(math.floor(math.sqrt(max(radius_px * radius_px - dy * dy, 0.0))))
+        row = widened(half)
+        if dy >= 0:
+            out[dy:] |= row[: h - dy]
+        else:
+            out[:dy] |= row[-dy:]
+    return out
+
+
+def splat_spacing(manifest: dict, splats: SplatSet) -> tuple[float, str]:
+    """The asset's LOD0 sampling spacing and where it came from: the manifest's ``sampling.spacing_m``, else derived from the
+    splat scales (the largest sigma is ``overlap * spacing``; overlap from ``sampling`` or 1, the generators' default)."""
+    sampling = manifest.get("sampling")
+    spacing = sampling.get("spacing_m") if isinstance(sampling, dict) else None
+    if isinstance(spacing, (int, float)) and not isinstance(spacing, bool) and spacing > 0.0:
+        return float(spacing), "manifest sampling.spacing_m"
+    overlap = sampling.get("overlap") if isinstance(sampling, dict) else None
+    overlap = float(overlap) if isinstance(overlap, (int, float)) and overlap > 0.0 else 1.0
+    sigma = np.sqrt(np.max(np.einsum("nii->ni", splats.cov), axis=1))
+    return float(np.median(sigma)) / overlap, f"derived from the splat scales (overlap {overlap:g})"
+
+
 def check_splats(
     mesh_tris: np.ndarray,
     splats: SplatSet,
     length_ref: float,
+    spacing: float,
+    spacing_source: str = "given",
     pixel_fraction: float = PIXEL_FRACTION,
     sigmas: float = SPLAT_SIGMAS,
 ) -> SplatCheck:
-    """The splat check: the splats' silhouettes against their own mesh's, in place (no shift)."""
+    """The splat check: the splats' silhouettes against their own mesh's, in place (no shift). Per view, coverage is the
+    share of the mesh silhouette the splats cover and precision the share of the splat silhouette inside the mesh
+    silhouette grown by one ``spacing``. A faithful thin part passes (splats reach about 0.75 spacings past an edge); a
+    missing part fails coverage and a part moved by several spacings fails precision."""
     _check_pixel(pixel_fraction)
     if len(mesh_tris) == 0 or len(splats) == 0:
         raise ValueError("nothing to compare: the mesh or the splats are empty")
+    if not spacing > 0.0:
+        raise ValueError(f"the LOD0 spacing must be positive (got {spacing:g})")
     px = pixel_fraction * length_ref
+    band_px = float(max(math.ceil(spacing / px - 1e-9), 1))  # rounded up, so the pixel grid never makes the band narrower than a spacing
     (m_lo, m_hi), (s_lo, s_hi) = _bounds(mesh_tris), splats.bounds(sigmas)
     lo, hi = np.minimum(m_lo, s_lo), np.maximum(m_hi, s_hi)
     views = {}
     for name in VIEWS:
-        grid = view_grid(name, lo, hi, px, 1)
+        grid = view_grid(name, lo, hi, px, int(band_px) + 1)
         mesh_mask, splat_mask_ = triangle_mask(mesh_tris, grid), splat_mask(splats, grid, sigmas)
-        inter, union = int((mesh_mask & splat_mask_).sum()), int((mesh_mask | splat_mask_).sum())
-        iou = inter / max(union, 1)
-        views[name] = ViewScore(grid, iou, iou, mesh_mask, splat_mask_)
-    return SplatCheck(views, px)
+        both = int((mesh_mask & splat_mask_).sum())
+        union = int((mesh_mask | splat_mask_).sum())
+        outside = splat_mask_ & ~dilate(mesh_mask, band_px)
+        views[name] = SplatView(
+            grid,
+            both / max(union, 1),
+            both / max(union, 1),
+            mesh_mask,
+            splat_mask_,
+            coverage=both / max(int(mesh_mask.sum()), 1),
+            precision=1.0 - int(outside.sum()) / max(int(splat_mask_.sum()), 1),
+            band_px=band_px,
+            outside=outside,
+        )
+    return SplatCheck(views, px, spacing, spacing_source)
 
 
 def suggest_offset(model_tris: np.ndarray, asset_tris: np.ndarray, length_ref: float) -> tuple[np.ndarray, float, float]:
@@ -587,9 +667,12 @@ def judge(ious: dict[str, float], ratios: dict[str, float]) -> list[str]:
     return failures
 
 
-def judge_splats(ious: dict[str, float]) -> list[str]:
-    """What fails the splat check: a view under ``SPLAT_IOU_MIN`` against the asset's own mesh. Empty = pass."""
-    return [f"splats {name} IoU {v:.3f} is under {SPLAT_IOU_MIN:.2f}" for name, v in ious.items() if v < SPLAT_IOU_MIN - 1e-9]
+def judge_splats(coverage: dict[str, float], precision: dict[str, float]) -> list[str]:
+    """What fails the splat check: a view whose splats cover under ``SPLAT_COVERAGE_MIN`` of the mesh silhouette (something
+    is missing) or whose splat silhouette lies under ``SPLAT_PRECISION_MIN`` within the band (something is misplaced)."""
+    failures = [f"splats {n} coverage {v:.3f} is under {SPLAT_COVERAGE_MIN:.2f}" for n, v in coverage.items() if v < SPLAT_COVERAGE_MIN - 1e-9]
+    failures += [f"splats {n} precision {v:.3f} is under {SPLAT_PRECISION_MIN:.2f}" for n, v in precision.items() if v < SPLAT_PRECISION_MIN - 1e-9]
+    return failures
 
 
 # --- placing the two sides -------------------------------------------------------------------------------------------
@@ -621,6 +704,10 @@ def write_overlay(path: Path, views: dict[str, ViewScore], view: str, title: str
     paint[score.model_mask & ~score.asset_mask] = MODEL_ONLY
     paint[score.asset_mask & ~score.model_mask] = ASSET_ONLY
     paint[score.model_mask & score.asset_mask] = BOTH
+    outside = getattr(score, "outside", None)
+    banded = outside is not None and outside.shape == score.asset_mask.shape
+    if banded:
+        paint[outside] = OUTSIDE
     covered = np.repeat(np.repeat(score.model_mask | score.asset_mask, zoom, axis=0), zoom, axis=1)
     layer = np.repeat(np.repeat(paint, zoom, axis=0), zoom, axis=1)
     left, top = canvas.margin[0], canvas.margin[1]
@@ -631,11 +718,16 @@ def write_overlay(path: Path, views: dict[str, ViewScore], view: str, title: str
     draw = ImageDraw.Draw(img)
     font = refview._font(13)
     x = max(left, 140)  # right of the axis name that decorate() puts in the top left
-    for colour, label in (
-        (MODEL_ONLY, f"{names[0]} only ({score.model_px - score.both_px} px)"),
-        (ASSET_ONLY, f"{names[1]} only ({score.asset_px - score.both_px} px)"),
-        (BOTH, f"both ({score.both_px} px)"),
-    ):
+    entries = [(MODEL_ONLY, f"{names[0]} only ({score.model_px - score.both_px} px)")]
+    if banded:
+        entries += [
+            (ASSET_ONLY, f"{names[1]} in the band ({score.asset_px - score.both_px - score.outside_px} px)"),
+            (OUTSIDE, f"{names[1]} beyond it ({score.outside_px} px)"),
+        ]
+    else:
+        entries.append((ASSET_ONLY, f"{names[1]} only ({score.asset_px - score.both_px} px)"))
+    entries.append((BOTH, f"both ({score.both_px} px)"))
+    for colour, label in entries:
         draw.rectangle([x, 26, x + 13, 39], fill=colour, outline=refview.INK)
         draw.text((x + 19, 33), label, fill=refview.INK, font=font, anchor="lm")
         x += 40 + int(draw.textlength(label, font=font))
@@ -643,7 +735,15 @@ def write_overlay(path: Path, views: dict[str, ViewScore], view: str, title: str
 
 
 def view_report(score: ViewScore) -> dict:
-    return {
+    extra = {}
+    if isinstance(score, SplatView):
+        extra = {
+            "coverage": round(score.coverage, 4),
+            "precision": round(score.precision, 4),
+            "band_px": round(score.band_px, 3),
+            "outside_px": score.outside_px,
+        }
+    return extra | {
         "iou": round(score.iou, 4),
         "iou_unshifted": round(score.iou_unshifted, 4),
         "model_px": score.model_px,
@@ -740,6 +840,7 @@ def main(argv: list[str] | None = None) -> int:
         folder = resolve_asset(args.asset)
         manifest = read_asset_manifest(folder)
         mesh, splats = load_asset_mesh(folder), load_asset_splats(folder)
+        spacing, spacing_source = splat_spacing(manifest, splats)
 
         mounts = pod_mounts(args, folder)
         if mounts:
@@ -777,9 +878,9 @@ def main(argv: list[str] | None = None) -> int:
         if length_ref <= 0.0:
             raise ValueError("the model has no extent along z")
         comp = compare_shapes(tris, mesh, length_ref, pixel_fraction=args.pixel_frac)
-        check = check_splats(mesh, splats, length_ref, pixel_fraction=args.pixel_frac)
+        check = check_splats(mesh, splats, length_ref, spacing, spacing_source, pixel_fraction=args.pixel_frac)
         failures = judge({n: s.iou for n, s in comp.views.items()}, comp.ratios)
-        splat_failures = judge_splats({n: s.iou for n, s in check.views.items()})
+        splat_failures = judge_splats({n: s.coverage for n, s in check.views.items()}, {n: s.precision for n, s in check.views.items()})
         suggestion = None
         if not cropped and (failures or any(comp.at_limit[:2])):
             gap, best, unmoved = suggest_offset(tris, mesh, length_ref)
@@ -796,7 +897,7 @@ def main(argv: list[str] | None = None) -> int:
     shift = ", ".join(f"{v:+.2f}" for v in comp.shift_m)
     for view in VIEWS:
         write_overlay(out / f"overlay_{view}.png", comp.views, view, f"{label}: {view}, STL against mesh, IoU {comp.views[view].iou:.3f}, mesh moved ({shift}) m", ("STL", "mesh"))
-        write_overlay(out / f"splats_{view}.png", check.views, view, f"{label}: {view}, mesh against LOD0 splats, IoU {check.views[view].iou:.3f}", ("mesh", "splats"))
+        write_overlay(out / f"splats_{view}.png", check.views, view, f"{label}: {view}, mesh against LOD0 splats, coverage {check.views[view].coverage:.3f}, precision {check.views[view].precision:.3f}", ("mesh", "splats"))
 
     verdict_failures = failures + splat_failures
     report = {
@@ -839,7 +940,11 @@ def main(argv: list[str] | None = None) -> int:
         "geometry": {"verdict": "fail" if failures else "pass", "failures": failures},
         "splat_check": {
             "splat_sigmas": SPLAT_SIGMAS,
-            "iou_min": SPLAT_IOU_MIN,
+            "spacing_m": round(check.spacing_m, 4),
+            "spacing_source": check.spacing_source,
+            "band_px": round(next(iter(check.views.values())).band_px, 3),
+            "coverage_min": SPLAT_COVERAGE_MIN,
+            "precision_min": SPLAT_PRECISION_MIN,
             "views": {n: view_report(s) for n, s in check.views.items()},
             "verdict": "fail" if splat_failures else "pass",
             "failures": splat_failures,
@@ -848,7 +953,8 @@ def main(argv: list[str] | None = None) -> int:
             "iou_min": IOU_MIN,
             "dimension_tolerance": DIM_TOLERANCE,
             "shift_fraction": SHIFT_FRACTION,
-            "splat_iou_min": SPLAT_IOU_MIN,
+            "splat_coverage_min": SPLAT_COVERAGE_MIN,
+            "splat_precision_min": SPLAT_PRECISION_MIN,
         },
         "failures": verdict_failures,
         "verdict": "fail" if verdict_failures else "pass",
@@ -868,10 +974,18 @@ def main(argv: list[str] | None = None) -> int:
         gap = ",".join(f"{v:.2f}" for v in suggestion)
         print(f"note   the silhouettes meet best further away than the shift window; if only the origin differs, try --model-offset {gap}")
     print("geometry verdict: " + ("PASS" if not failures else "FAIL (" + "; ".join(failures) + ")"))
-    print(f"splats: LOD0 against the mesh, bar {SPLAT_IOU_MIN:.2f} per view, no shift")
+    band = next(iter(check.views.values())).band_px
+    print(
+        f"splats: LOD0 against the mesh, no shift; band one spacing = {check.spacing_m:.3f} m ({check.spacing_source}) = {band:.1f} px; "
+        f"bar {SPLAT_COVERAGE_MIN:.2f} coverage and {SPLAT_PRECISION_MIN:.2f} precision per view"
+    )
     for view, score in check.views.items():
-        mark = "ok  " if score.iou >= SPLAT_IOU_MIN - 1e-9 else "LOW "
-        print(f"splats {view:<5} IoU {score.iou:.3f} {mark} mesh {score.model_px} px  splats {score.asset_px} px  both {score.both_px} px")
+        cov_mark = "ok  " if score.coverage >= SPLAT_COVERAGE_MIN - 1e-9 else "LOW "
+        prec_mark = "ok  " if score.precision >= SPLAT_PRECISION_MIN - 1e-9 else "LOW "
+        print(
+            f"splats {view:<5} coverage {score.coverage:.3f} {cov_mark} precision {score.precision:.3f} {prec_mark} "
+            f"mesh {score.model_px} px  splats {score.asset_px} px  beyond the band {score.outside_px} px"
+        )
     print("splats verdict: " + ("PASS" if not splat_failures else "FAIL (" + "; ".join(splat_failures) + ")"))
     print("verdict: " + ("PASS" if not verdict_failures else "FAIL (" + "; ".join(verdict_failures) + ")"))
     return 1 if verdict_failures else 0

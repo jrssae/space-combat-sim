@@ -148,24 +148,29 @@ fallback mesh or the LOD0 file); the Bokmai is scored with its three pods mounte
 
 **Two checks, one run.** The verdict scores the model's *geometry*, the fallback mesh `<id>.obj` that every civilian
 generator builds from the same parts as its splats (so it must hold every visible part), against the STL. A second check
-holds the LOD0 splats to their own mesh. Scoring the splats against the STL directly under-read a perfect copy of the
-Saturn 4 by 5 to 8 % and favoured parts built too thin: a splat near an edge reaches about 0.75 spacings past it whatever
-the settings, so the loss follows the shape.
+keeps the LOD0 splats honest against their own mesh. Scoring the splats against the STL directly under-read a perfect
+copy of the Saturn 4 by 5 to 8 % and favoured parts built too thin: a splat near an edge reaches about 0.75 spacings
+past it whatever the settings, so the loss follows the shape.
 
 | Check | What is drawn | Bar | Shift |
 |---|---|---|---|
 | Geometry (Q18) | the STL's triangles and the asset's mesh, top (x-z), side (y-z) and front (x-y), on one grid | each view's intersection over union (IoU) at least 0.90, and the mesh's length, width and height each within 10 % of the STL's (a ratio from 0.90 to 1.10) | the mesh may move up to 2 % of the length per axis, reported |
-| Splats | the asset's mesh and its LOD0 splats, same views | each view's IoU at least 0.85 | none: same parts, same frame |
+| Splats | the asset's mesh and its LOD0 splats, same views, with a band one LOD0 spacing wide | per view, **coverage** at least 0.95 (the share of the mesh silhouette's pixels that splat pixels cover: nothing missing) and **banded precision** at least 0.95 (the share of the splat silhouette's pixels within the mesh silhouette grown by one spacing: nothing misplaced) | none: same parts, same frame |
 
-The splat check catches a missing or misplaced part without the splat-reading loss deciding the verdict. That loss is
-small for a thick shape and large for a thin one, which the tool's own tests pin: splats sampled from a 46 x 18 x 70 m
-box read 0.98 / 0.96 / 0.95 (top, side, front) against it at 0.31 and 0.5 m spacing, and from a hull with a 0.6 m wing
-(two spacings thick at 0.31 m) 0.97 / 0.93 / 0.77, because the wing's front outline is only two splats high. So a thin
-part can read under 0.85 in one view against a faithful mesh (the built Saturn lead ship's side view reads 0.84 to 0.86
-from its truss and braces), and finer sampling does not remove it (the wing reads 0.82 at 0.2 m and 0.84 at 0.1 m).
-`splats_<view>.png` shows which it is: a fringe of blue along every edge is the reading loss, a patch of one colour is a
-missing or misplaced part. Exit status is 0 when both checks pass, 1 when either fails, 2 on bad input. The terminal gets
-one block per check and a `verdict:` line last.
+The band is the asset's LOD0 spacing: `manifest.sampling.spacing_m`, or, if the manifest has none, derived from the splat
+scales (the median of the largest sigma, divided by `sampling.overlap` or 1). The console line and `fidelity.json` say
+which was used, and the band in pixels (the spacing over the pixel, rounded up, never under one pixel). Plain IoU at 0.85
+was tried first and failed faithful thin parts, so the band stands in for it: it passes a fringe of up to a spacing and
+fails parts that are absent or moved by several spacings. The tool's own tests pin it. Splats sampled from a 46 x 18 x
+70 m box read coverage 0.998 or better and precision 1.000 against it at 0.31 and 0.5 m spacing; from a hull with a
+0.6 m wing (two spacings thick at 0.31 m, where plain IoU read 0.77 in front) coverage 0.977 or better and precision
+1.000; with the wing missing from the splats top coverage is 0.33; with the wing's splats eight spacings aft top
+precision is 0.90 (three spacings aft passes, 0.97); a box's splats grown by a spacing keep precision at 0.97 or more and
+by three spacings fall to 0.88. Coverage is the tight number on thin parts seen edge-on (the Saturn lead ship's side view
+reads 0.95 to 0.96, the built raider's 0.95), where a slab thicker than the splats' reach is covered only by its end faces.
+`splats_<view>.png` shows which failed: orange is mesh the splats do not cover, red is splat beyond the band, blue is
+splat inside the band. Exit status is 0 when both checks pass, 1 when either fails, 2 on bad input. The terminal gets one
+block per check and a `verdict:` line last.
 
 **How the two are put on one grid.**
 
@@ -244,9 +249,10 @@ NAME` writes the result to `compare/<name>/`. Take the model's ranges from the p
 
 **Output.** `reports/refs/<ship>/compare/` (`.../compare/<part>/` for a part; gitignored): `overlay_top.png`,
 `overlay_side.png` and `overlay_front.png` (STL only in orange, mesh only in blue, both in dark grey, with a legend and a
-metre scale), `splats_top.png`, `splats_side.png` and `splats_front.png` (the same for mesh and splats) and
-`fidelity.json` (the geometry check's per-view IoU and pixel counts, dimensions, shift, part alignment and suggested
-offset; `splat_check` with its views; the thresholds, failures and verdicts).
+metre scale), `splats_top.png`, `splats_side.png` and `splats_front.png` (mesh only in orange, splats inside the band in
+blue, splats beyond it in red, both in dark grey) and `fidelity.json` (the geometry check's per-view IoU and pixel counts,
+dimensions, shift, part alignment and suggested offset; `splat_check` with the spacing and where it came from, the band in
+pixels and each view's coverage and precision; the thresholds, failures and verdicts).
 
 **Saturn model offsets (T12).** The spine axis's height above each model's box centre, read off the model's cylinder or
 tank (the Saturn 3: its disc's rim): `--model-offset 0,-3.643,0` for `EA_Saturn_4_transport.stl` (length 158.48),

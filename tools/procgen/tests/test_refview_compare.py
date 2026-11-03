@@ -331,44 +331,126 @@ class GeometryCheckTests(TmpCase):
 
 @needs_pillow
 class SplatCheckTests(TmpCase):
-    """The splats against their own mesh, and the calibration of how a perfect copy reads."""
+    """The splats against their own mesh: coverage of the mesh silhouette and precision within a one-spacing band, and the
+    calibration of how a perfect copy reads."""
+
+    WING = ((-20.0, -0.3, 10.0), (20.0, 0.3, 25.0))  # 0.6 m thick: two splat spacings at 0.31 m
+    HULL_40 = ((-3.0, -2.0, 0.0), (3.0, 2.0, 40.0))
+
+    def check(self, mesh: np.ndarray, splats: "compare.SplatSet", length: float, spacing: float) -> "compare.SplatCheck":
+        return compare.check_splats(mesh, splats, length, spacing, "test")
+
+    def passes(self, check: "compare.SplatCheck") -> bool:
+        return not compare.judge_splats({n: v.coverage for n, v in check.views.items()}, {n: v.precision for n, v in check.views.items()})
 
     def test_the_lattice_of_a_box_matches_its_mesh_in_all_views(self) -> None:
-        check = compare.check_splats(_box(*HULL), compare.splat_set(*lattice_splats([HULL])), 12.0)
+        check = self.check(_box(*HULL), compare.splat_set(*lattice_splats([HULL])), 12.0, SPACING)
         for name in ("top", "side", "front"):
-            self.assertGreater(check.views[name].iou, 0.95, name)
+            self.assertGreater(check.views[name].coverage, 0.99, name)
+            self.assertGreater(check.views[name].precision, 0.99, name)
 
-    def test_sampled_splats_of_a_box_read_at_least_the_floor_against_their_mesh(self) -> None:
-        # Pinned from measurement (a 46 x 18 x 70 m box, the Narn's size): 0.98 / 0.96 / 0.95 at 0.31 m and 0.5 m spacing.
+    def test_sampled_splats_of_a_box_pass_both_numbers_with_margin(self) -> None:
+        # Pinned from measurement (a 46 x 18 x 70 m box, the Narn's size): coverage 0.998 to 1.000, precision 1.000.
         tris = _box((-23.0, -9.0, 0.0), (23.0, 9.0, 70.0))
         for spacing in (0.31, 0.5):
-            check = compare.check_splats(tris, sampled_splats(tris, spacing), 70.0)
-            self.assertGreater(check.views["top"].iou, 0.97, spacing)
-            self.assertGreater(check.views["side"].iou, 0.95, spacing)
-            self.assertGreater(check.views["front"].iou, 0.94, spacing)
+            check = self.check(tris, sampled_splats(tris, spacing), 70.0, spacing)
+            for name, v in check.views.items():
+                self.assertGreater(v.coverage, 0.99, (spacing, name))
+                self.assertGreater(v.precision, 0.99, (spacing, name))
+            self.assertTrue(self.passes(check))
 
-    def test_sampled_splats_of_a_thin_wing_read_lower_in_front_and_that_is_pinned(self) -> None:
-        # A hull with a 0.6 m wing, two splat spacings thick at 0.31 m: seen edge-on from the front the splats reach about
-        # 0.75 spacings past each edge of the wing, so a perfect copy reads 0.77 there (0.70 at 0.5 m spacing). The floor
-        # pins that, so the 0.85 bar is read knowing where the wing's loss comes from.
-        tris = _boxes([((-3.0, -2.0, 0.0), (3.0, 2.0, 40.0)), ((-20.0, -0.3, 10.0), (20.0, 0.3, 25.0))])
-        check = compare.check_splats(tris, sampled_splats(tris, 0.31), 40.0)
-        self.assertGreater(check.views["top"].iou, 0.95)
-        self.assertGreater(check.views["side"].iou, 0.90)
-        self.assertGreater(check.views["front"].iou, 0.74)
-        thick = _boxes([((-3.0, -2.0, 0.0), (3.0, 2.0, 40.0)), ((-20.0, -3.0, 10.0), (20.0, 3.0, 25.0))])
-        self.assertGreater(compare.check_splats(thick, sampled_splats(thick, 0.31), 40.0).views["front"].iou, 0.93)
+    def test_sampled_splats_of_a_thin_wing_pass_both_numbers_where_plain_overlap_did_not(self) -> None:
+        # A hull with a 0.6 m wing, two splats thick at 0.31 m: the splats reach about 0.75 spacings past each edge, so a
+        # plain overlap of a perfect copy read 0.77 in front (0.70 at 0.5 m). Within a one-spacing band it is faithful.
+        tris = _boxes([self.HULL_40, self.WING])
+        for spacing, floor in ((0.31, 0.985), (0.5, 0.96)):  # measured coverage 0.994 and 0.977 at worst, precision 1.000
+            check = self.check(tris, sampled_splats(tris, spacing), 40.0, spacing)
+            for name, v in check.views.items():
+                self.assertGreater(v.coverage, floor, (spacing, name))
+                self.assertGreater(v.precision, 0.99, (spacing, name))
+            self.assertTrue(self.passes(check))
+            self.assertLess(check.views["front"].iou, 0.85 if spacing == 0.31 else 0.75)  # what plain IoU said, kept for the record
 
-    def test_a_missing_part_fails_the_splat_check(self) -> None:
-        tris = _boxes([HULL, ((-6.0, -0.5, 4.0), (6.0, 0.5, 8.0))])
-        check = compare.check_splats(tris, compare.splat_set(*lattice_splats([HULL])), 12.0)
-        self.assertLess(check.views["top"].iou, compare.SPLAT_IOU_MIN)
+    def test_a_part_removed_from_the_splats_fails_coverage(self) -> None:
+        tris = _boxes([self.HULL_40, self.WING])
+        check = self.check(tris, sampled_splats(_box(*self.HULL_40), 0.31), 40.0, 0.31)
+        self.assertLess(check.views["top"].coverage, 0.5)  # the wing is most of the plan
+        self.assertLess(check.views["front"].coverage, 0.95)
+        self.assertGreater(check.views["top"].precision, 0.99)  # what is there is where it should be
+        self.assertFalse(self.passes(check))
+        self.assertTrue(any("coverage" in f for f in compare.judge_splats({n: v.coverage for n, v in check.views.items()}, {n: v.precision for n, v in check.views.items()})))
 
-    def test_a_misplaced_part_fails_the_splat_check(self) -> None:
-        mesh = _boxes([HULL, ((-6.0, -0.5, 1.0), (6.0, 0.5, 4.0))])
-        moved = ((-6.0, -0.5, 7.0), (6.0, 0.5, 10.0))  # the wing's splats three metres aft of its mesh
-        check = compare.check_splats(mesh, compare.splat_set(*lattice_splats([HULL, moved])), 12.0)
-        self.assertLess(check.views["top"].iou, compare.SPLAT_IOU_MIN)
+    def test_a_part_shifted_by_several_spacings_fails_banded_precision(self) -> None:
+        spacing = 0.31
+        tris = _boxes([self.HULL_40, self.WING])
+        shifted = lambda n: _boxes([self.HULL_40, ((-20.0, -0.3, 10.0 + n * spacing), (20.0, 0.3, 25.0 + n * spacing))])  # noqa: E731
+        far = self.check(tris, sampled_splats(shifted(8), spacing), 40.0, spacing)
+        self.assertLess(far.views["top"].precision, 0.95)
+        self.assertFalse(self.passes(far))
+        self.assertTrue(any("precision" in f for f in compare.judge_splats({n: v.coverage for n, v in far.views.items()}, {n: v.precision for n, v in far.views.items()})))
+        near = self.check(tris, sampled_splats(shifted(3), spacing), 40.0, spacing)  # a few spacings of slack is the band's job
+        self.assertTrue(self.passes(near))
+
+    def test_a_one_spacing_edge_fringe_passes_and_a_wide_one_does_not(self) -> None:
+        spacing = 0.31
+        tris = _box((-23.0, -9.0, 0.0), (23.0, 9.0, 70.0))
+
+        def grown(by: float) -> "compare.SplatSet":
+            g = by * spacing
+            return sampled_splats(_box((-23.0 - g, -9.0 - g, -g), (23.0 + g, 9.0 + g, 70.0 + g)), spacing)
+
+        # Splats of a box grown by a spacing reach 1.75 spacings past the mesh: about the band and a fraction more.
+        for name, v in self.check(tris, grown(1.0), 70.0, spacing).views.items():
+            self.assertGreater(v.precision, 0.95, name)
+            self.assertGreater(v.coverage, 0.99, name)
+        wide = self.check(tris, grown(3.0), 70.0, spacing)
+        self.assertFalse(self.passes(wide))
+        self.assertTrue(all(v.coverage > 0.99 for v in wide.views.values()))  # nothing missing, only too wide
+
+    def test_a_lattice_fringe_of_about_a_spacing_passes_and_two_spacings_more_fails(self) -> None:
+        def fringe(spacings: float) -> "compare.SplatCheck":
+            lo = tuple(np.array(HULL[0]) - spacings * SPACING)
+            hi = tuple(np.array(HULL[1]) + spacings * SPACING)
+            return self.check(_box(*HULL), compare.splat_set(*lattice_splats([(lo, hi)])), 12.0, SPACING)
+
+        self.assertTrue(self.passes(fringe(0.7)))  # the lattice disc reaches 0.22 spacings past its grown edge: 0.92 in all
+        self.assertFalse(self.passes(fringe(2.0)))
+
+    def test_the_band_is_one_spacing_rounded_up_to_whole_pixels(self) -> None:
+        check = self.check(_box(*HULL), compare.splat_set(*lattice_splats([HULL])), 12.0, SPACING)  # pixel 0.03 m
+        self.assertEqual(check.views["top"].band_px, 3.0)  # 0.08 / 0.03 = 2.67
+        check = self.check(_box(*HULL), compare.splat_set(*lattice_splats([HULL])), 12.0, 0.01)
+        self.assertEqual(check.views["top"].band_px, 1.0)  # never under a pixel
+
+    def test_a_zero_spacing_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "spacing"):
+            self.check(_box(*HULL), compare.splat_set(*lattice_splats([HULL])), 12.0, 0.0)
+
+    def test_dilate_grows_a_pixel_into_a_disc_without_wrapping(self) -> None:
+        mask = np.zeros((21, 21), dtype=bool)
+        mask[10, 10] = True
+        for r, count in ((1, 5), (2, 13), (3, 29)):
+            grown = compare.dilate(mask, r)
+            self.assertEqual(int(grown.sum()), count, r)
+            self.assertTrue(grown[10, 10 + r] and not grown[10, 10 + r + 1])
+        edge = np.zeros((9, 9), dtype=bool)
+        edge[0, 0] = True
+        grown = compare.dilate(edge, 2)
+        self.assertEqual(int(grown.sum()), 6)  # the quarter disc inside the grid: (0,0) (0,1) (0,2) (1,0) (1,1) (2,0)
+        self.assertFalse(grown[8, 8] or grown[0, 8] or grown[8, 0])
+
+    def test_the_spacing_comes_from_the_manifest_sampling_or_the_splat_scales(self) -> None:
+        splats = compare.splat_set(np.zeros((5, 3)), np.tile([0.31, 0.31, 0.025], (5, 1)))
+        spacing, source = compare.splat_spacing({"sampling": {"spacing_m": 0.4, "overlap": 1.0}}, splats)
+        self.assertEqual((spacing, source), (0.4, "manifest sampling.spacing_m"))
+        spacing, source = compare.splat_spacing({}, splats)
+        self.assertAlmostEqual(spacing, 0.31, places=6)
+        self.assertIn("derived", source)
+        spacing, source = compare.splat_spacing({"sampling": {"overlap": 1.4}}, splats)  # sampling present, spacing missing
+        self.assertAlmostEqual(spacing, 0.31 / 1.4, places=6)
+        self.assertIn("derived", source)
+        spacing, source = compare.splat_spacing({"sampling": {"spacing_m": "wide"}}, splats)
+        self.assertIn("derived", source)
 
     def test_a_rotated_ellipse_covers_its_own_area(self) -> None:
         a = np.radians(30.0)
@@ -438,12 +520,17 @@ class VerdictTests(unittest.TestCase):
     def test_several_failures_are_all_listed(self) -> None:
         self.assertEqual(len(compare.judge({"top": 0.5, "side": 0.5, "front": 0.95}, {**self.SIZE, "width": 2.0})), 3)
 
-    def test_the_splat_bar_is_085_and_inclusive(self) -> None:
-        self.assertEqual(compare.SPLAT_IOU_MIN, 0.85)
-        self.assertEqual(compare.judge_splats({"top": 0.85, "side": 0.9, "front": 0.99}), [])
-        failures = compare.judge_splats({"top": 0.9, "side": 0.8499, "front": 0.99})
+    def test_the_splat_bars_are_95_percent_and_inclusive(self) -> None:
+        self.assertEqual((compare.SPLAT_COVERAGE_MIN, compare.SPLAT_PRECISION_MIN), (0.95, 0.95))
+        ok = {"top": 0.99, "side": 0.95, "front": 1.0}
+        self.assertEqual(compare.judge_splats(ok, ok), [])
+        failures = compare.judge_splats({**ok, "side": 0.9499}, ok)
         self.assertEqual(len(failures), 1)
-        self.assertIn("side", failures[0])
+        self.assertIn("side coverage", failures[0])
+        failures = compare.judge_splats(ok, {**ok, "front": 0.9499})
+        self.assertEqual(len(failures), 1)
+        self.assertIn("front precision", failures[0])
+        self.assertEqual(len(compare.judge_splats({"top": 0.2, "side": 0.2, "front": 0.2}, {"top": 0.2, "side": 0.99, "front": 0.99})), 4)
 
 
 @needs_pillow
@@ -464,9 +551,22 @@ class MainTests(TmpCase):
         self.assertEqual(report["verdict"], "pass")
         self.assertEqual(report["basis"], "mesh")
         self.assertEqual((report["geometry"]["verdict"], report["splat_check"]["verdict"]), ("pass", "pass"))
-        self.assertEqual(report["thresholds"], {"iou_min": 0.9, "dimension_tolerance": 0.1, "shift_fraction": 0.02, "splat_iou_min": 0.85})
+        self.assertEqual(
+            report["thresholds"],
+            {"iou_min": 0.9, "dimension_tolerance": 0.1, "shift_fraction": 0.02, "splat_coverage_min": 0.95, "splat_precision_min": 0.95},
+        )
         self.assertEqual(sorted(report["views"]), ["front", "side", "top"])
-        self.assertEqual(sorted(report["splat_check"]["views"]), ["front", "side", "top"])
+        splat_check = report["splat_check"]
+        self.assertEqual(sorted(splat_check["views"]), ["front", "side", "top"])
+        for v in splat_check["views"].values():  # both numbers per view, in the report and (below) in the console line
+            self.assertGreater(v["coverage"], 0.99)
+            self.assertGreater(v["precision"], 0.99)
+        self.assertEqual((splat_check["coverage_min"], splat_check["precision_min"]), (0.95, 0.95))
+        self.assertIn("derived", splat_check["spacing_source"])  # these synthetic manifests carry no sampling entry
+        self.assertGreater(splat_check["spacing_m"], 0.0)
+        splat_lines = [line for line in lines if line.startswith("splats top")]
+        self.assertRegex(splat_lines[0], r"coverage 1\.000 ok\s+precision 1\.000 ok")
+        self.assertTrue(any("band one spacing" in line and "derived" in line for line in lines))
         self.assertEqual(sorted(report["dimensions"]), ["height", "length", "width"])
         self.assertLessEqual(report["pixel_m"], 0.005 * 12.0)
         self.assertEqual(len(report["shift_m"]), 3)
@@ -474,6 +574,18 @@ class MainTests(TmpCase):
         self.assertEqual(top["iou"], 1.0)  # the mesh is the STL
         self.assertEqual(top["both_px"] + top["model_only_px"], top["model_px"])
         self.assertEqual(top["both_px"] + top["asset_only_px"], top["asset_px"])
+
+    def test_the_band_uses_the_manifest_sampling_spacing_when_there_is_one(self) -> None:
+        folder = self.asset([HULL])
+        manifest = json.loads((folder / "manifest.json").read_text())
+        manifest["sampling"] = {"spacing_m": 0.5, "overlap": 1.0, "thickness": 0.08}
+        (folder / "manifest.json").write_text(json.dumps(manifest))
+        code, out, _ = self.compare(self.stl(_box(*HULL)), folder)
+        self.assertEqual(code, 0, out)
+        check = self.report()["splat_check"]
+        self.assertEqual((check["spacing_m"], check["spacing_source"]), (0.5, "manifest sampling.spacing_m"))
+        self.assertEqual(check["band_px"], 17.0)  # 0.5 / 0.03 = 16.7 pixels, rounded up
+        self.assertIn("0.500 m (manifest sampling.spacing_m)", out)
 
     def test_the_overlay_marks_model_only_asset_only_and_both_in_three_colours(self) -> None:
         from PIL import Image
@@ -778,13 +890,17 @@ class BuiltAssetTests(unittest.TestCase):
         lo, hi = splats.bounds()
         self.assertLess(abs(float(lo[2] - mesh[..., 2].min())), 0.5)
         self.assertLess(abs(float(hi[2] - mesh[..., 2].max())), 0.5)
-        check = compare.check_splats(mesh, splats, float(np.ptp(mesh[..., 2])))
-        for name in ("top", "side", "front"):
-            self.assertGreater(check.views[name].iou, 0.8, name)  # the raider's wings are a few splat spacings thick
-        self.assertGreater(check.views["top"].iou, 0.95)
+        spacing, source = compare.splat_spacing(json.loads((self.dir / "manifest.json").read_text()), splats)
+        self.assertEqual(source, "manifest sampling.spacing_m")
+        length = float(np.ptp(mesh[..., 2]))
+        check = compare.check_splats(mesh, splats, length, spacing, source)
+        for name, v in check.views.items():
+            self.assertGreater(v.coverage, 0.93, name)  # 0.997 / 0.952 / 0.992: the wings are 0.1 to 0.35 m, a few spacings thick
+            self.assertGreater(v.precision, 0.99, name)
         # With the splats left in the centred frame (the offset not added back) they miss the mesh by half the ship.
-        lost = compare.check_splats(mesh, compare.SplatSet(splats.centres - self.offset, splats.cov), float(np.ptp(mesh[..., 2])))
-        self.assertLess(lost.views["top"].iou, 0.7)
+        lost = compare.check_splats(mesh, compare.SplatSet(splats.centres - self.offset, splats.cov), length, spacing, source)
+        self.assertLess(lost.views["top"].coverage, 0.7)
+        self.assertLess(lost.views["top"].precision, 0.7)
 
 
 if __name__ == "__main__":
