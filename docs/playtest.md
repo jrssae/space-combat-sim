@@ -413,7 +413,7 @@ own_lights true                the light each ship carries for itself (top lamp,
 top_lamp_energy 2.5            how brightly the top lamp lights the ship's own hull
 cabin_glow_level 0.3           how much red the cockpit glow adds in the canopy, seen from outside
 cabin_glow_view_m 150          how far off the glow can be seen
-running_light_min_px 3         a running light is never smaller than this on screen
+running_light_min_px 1         a running light is never smaller than this on screen; farther out it dims instead
 cockpit_light_energy 1.6       the cabin lamp that lights the cockpit frame (takes effect on the next spawn)
 target_hold_s 0.35             how long a press on B is a hold
 hud_targeting_grid false       the targeting grid in the chase view too (in the cockpit it is on the octagon)

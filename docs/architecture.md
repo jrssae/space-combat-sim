@@ -910,7 +910,10 @@ the same two; debris chunks, buoys and the sky carry none. `settings.own_lights`
 **Running lights (M3-T27, Q27).** Every ship has a port red marker on -X, a starboard green on +X and a top white, steady, at its `nav_lights`
 hardpoints: `RunningLights`, one node per ship with three `MeshInstance3D`s, built once with the pool. A marker is one shared quad and one
 material per colour (`assets/shaders/running_light_marker.gdshader`): additive, facing the camera, 0.1 m in radius and never under
-`settings.running_light_min_px` on screen (3 px), all in the vertex shader, so it stays a point at several km with no work on the CPU. It keeps its
+`settings.running_light_min_px` on screen (1 px, M4-T28), all in the vertex shader, so it stays a point at several km with no work on the CPU. Past
+the distance where the real disc is one pixel wide (about 70 m at 1080p) the footprint stays at the floor and the brightness falls by the inverse
+square of distance, `(real_px / floor_px)^2`, so the light delivered is what the real disc would deliver and there is no jump at the crossover
+(`RunningLightDimming` is the tested copy of that sum; there is no atmosphere to scatter a far light into a globe). It keeps its
 centre's depth, so the hull depth proxy hides it behind hulls, and it hides with a parked or destroyed ship. Red and green are markers only. The top
 marker has a lamp: a white own surface light at `nav_lights.top_lamp`, 2.5 m over the Starfury's cabin top and 2.2 m over the raider's hump,
 `settings.top_lamp_energy` 2.5, range 6 and 5.5 m, which lights the top of the cockpit section for the designs a later milestone paints there. It goes
@@ -1861,7 +1864,7 @@ Commands: `relation <a> <b> [friendly|neutral|hostile]` / `relation reset`; `win
 <hero|0-3|auto>` accepts `hero` (M3-T24), and the `lod` provider's `levels` names it.
 M3-T27: command `running_lights [on|off]`, key
 `ship.running_lights`, `spawn ... lights=on|off`, and settings `own_lights` (bool, true), `top_lamp_energy` (0-20, 2.5), `cabin_glow_level` (0-2, 0.3),
-`cabin_glow_view_m` (1-2000, 150), `running_light_min_px` (0.5-12, 3). `raiders.list` and `allies.list` mark a ship flying dark.
+`cabin_glow_view_m` (1-2000, 150), `running_light_min_px` (0.5-12, 1; 3 before M4-T28). `raiders.list` and `allies.list` mark a ship flying dark.
 M3-T19: command `lod <ship|all> <n|auto>`, provider `lod` (`levels`, `visible_splats`), setting `splat_lod_bias` (float, 0). M3-T21: command `relight [on|off]`, provider `lights` (`picked`,
 `candidates`, `active`, `cost_us`), settings `splat_relight` (bool, true), `relight_ambient` (0.3), `relight_unlit_level` (0.12), `relight_light_gain` (0.6). M3-T25: commands `flare [on|off]` and
 `blur [on|off]`, provider `post`, settings `lens_flare` (bool, true), `motion_blur` (bool, false), `motion_blur_strength` (0.5). M3-T29: provider `screens` (`shown`, `powered`, `paints`, `lamps`),
