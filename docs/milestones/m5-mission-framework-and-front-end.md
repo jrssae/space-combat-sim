@@ -46,6 +46,7 @@ voices. M8's tutorial is written on top of all this, so the framework matters mo
 | Q18 | (maintainer, during the build) How close to the references? | **Every civilian model within 90 % of its STL**, measured as **silhouettes and size**: the top, side and front silhouettes each overlap the STL's by at least 90 % (intersection over union) at the same length, and length, width and height each lie within 10 %. **Civilian ships only**: the Starfury stays as built, and the raider has no STL. Planner's calls: the score is taken on the LOD0 splats by `tools/refview`'s compare mode (T23); where Q16 departs from a model on purpose (the Saturn 8s' 200 m of cargo, the Saturn 3's engine section, the Saturn 4 tanker, which has no model of its own), each part is scored against the part of the model it came from |
 | Q19 | (after the review sheet of turret spots and colours) Turrets and colours | **Turrets on top only:** keep every dorsal spot proposed, drop every ventral one. That leaves the Saturn 4 transport, Saturn 4 tanker, Saturn 8 transport and Saturn 8 tanker with two each (`dorsal_fwd` on the disc hub and `dorsal_aft` or `dorsal_mid`), the Saturn 3 with one (`dorsal_fwd`), the Skylark and the Brezebel with one (`dorsal`), the Narn transport with its two tower turrets. **Colours confirmed** as written for the Saturn family, the Skylark, the Narn transport and the Brezebel. **The Narn transport's towers point up** (T11's reading). The maintainer places turrets and confirms colours for any further ship (the Bokmai) before its generator commits them |
 | Q20 | (same day) Where is the Saturn 3's engine? | **Between the two lower pods, on the centre line, directly under the top pod**, and **just long enough that its exhaust clears the pods**. It is a **slimmer engine** than the shared section so it fits the gap between the lower pods; the pods keep their places. The Saturn 3's aft turret is dropped. For the 90 % check (Q18) the Saturn 3's pod group is scored against the model's pod group **scaled up to the shared pod size** (Q8), so shape and layout are checked rather than the size the maintainer chose |
+| Q21 | (maintainer, 2026-11-03) The mission's buoys | **Buoy defence is set on a string of nav buoys in a huge circle, as if round a planet: 16 buoys on a ring of 20 000 km radius, about 7 850 km apart.** **Every buoy broadcasts to 10 000 km** (was 1 000 km, M3 Q21), and the spacing is set so that a ship always has **at least two buoys in broadcast range**, on the radar and targetable: anywhere on the ring, and within about 6 000 km of it. There is no planet in the middle yet (M6 brings Epsilon III) |
 
 ## Scope
 
@@ -356,7 +357,7 @@ Out (explicitly):
 | AC7 | Comms menu: D-pad Right opens it; the four directions give the four wing orders through `WingDirector`; B or 4 s closes it; while open, the D-pad's flight actions and the target button do not fire; a profile saved before M5 loads with `comms_menu` filled in | A | |
 | AC8 | `CINEMATIC`: shots from data relative to actors or the origin, unit-tested interpolation; a rebase during a shot moves nothing on screen (test); HUD hidden, letterbox, the player's commands zeroed while the ship keeps its physics; A or Start skips | A | |
 | AC9 | Debrief: result and reason, objectives, time, kills and assists, wing losses, shots and hits; retry restarts the same scenario and seed; menu returns to the front end | A | |
-| AC10 | Buoy defence: starts from the menu with its cinematic intro, runs to success and to failure (buoy destroyed; player destroyed) in headless tests driven by console commands, and ends in the debrief | A | |
+| AC10 | Buoy defence: starts from the menu with its cinematic intro, runs to success and to failure (buoy destroyed; player destroyed) in headless tests driven by console commands, and ends in the debrief; it is set on a ring of 16 buoys, 20 000 km in radius, that broadcast to 10 000 km, with at least two buoys in broadcast range anywhere on or near the ring (Q21, test) | A | |
 | AC11 | Civilian references: each of the nine ships described (the Saturn 4 tanker from the Saturn parts, Q16; the Bokmai, Q17) in `docs/design-references.md` with the lengths from Q8, Q11, Q16 and Q17, from orthographic views and cross-sections of its STL; every ship's colour scheme written from online images (Q11) with the sources listed; nothing from the STL files or the images is in git | A | |
 | AC12 | Civilian generators: nine hulls from five generators meet the output contract (LOD0-3 PLYs and lighting records, fallback mesh, hardpoints with pods, RCS, collision, cockpit camera, chase anchor, running lights, chunks; the Bokmai's pod model and `cargo_pods[]`); Python tests for budgets, frames, symmetry where the design has it, chunk partition, collision coverage and determinism; every PLY imports in Godot with the manifest's count | A | |
 | AC13 | Civilian ships in the game: each flies through `FlightModel` with zero damping (the damping guard covers it), turns by torque only, flees raiders on the `civilian` profile, takes hull damage, breaks into its chunks, shows running lights and switches LOD; a Bokmai flies with 0-3 cargo pods and sheds them when destroyed; raiders attack them through faction data; on the maintainer's GPU all nine in view at once run with `splat_backend = compute`, FPS and VRAM recorded by the agent | A | |
@@ -559,7 +560,19 @@ whose trigger never arose). Update the column with each task's commit.
   buoy from beyond sensor range (`m.send`); a second group (four) comes from another bearing after a comms warning.
   Objectives: protect `NAV ALPHA` (primary, fails if it is destroyed), destroy the raiders (primary), bring Alpha wing
   home (optional). Success and failure lines, then the debrief. Pools sized for every ship the script spawns.
-- **Done when:** AC10; the cinematic and dialog read well in a windowed run (captured frames for the maintainer).
+- **The buoy ring (Q21):** the scenario places 16 nav buoys evenly on a ring of 20 000 km radius (about 7 850 km apart)
+  in one plane, as if round a planet; `NAV ALPHA` is one of them, and the mission plays out beside it. The ring's
+  positions come from a small pure helper (centre, radius, count, plane -> `UniversePos` per buoy, names), not from
+  hand-typed coordinates. `NavBuoy.BROADCAST_RANGE_M` becomes 10 000 km (1.0e7 m) for every buoy in the game, so a
+  ship anywhere on the ring or within about 6 000 km of it always has at least two buoys in broadcast range: on the
+  radar's rim and targetable (M3-T17), and heard by the AI. A unit test samples points on and around the ring and
+  checks the two-buoy rule; `test_broadcast.gd`'s 1 000 km assert moves to 10 000 km, and §18 records the change
+  against M3's Q21. Far buoys are thousands of km away: they stay in the tree (D22) but must cost no splat sorting or
+  drawing while out of sight (hide the splat node beyond a few tens of km, show it again inside; visibility only, no
+  nodes added or removed). Their contacts in `ContactScan`'s broadcast list are one entry each, so 16 buoys add
+  nothing measurable to M4's scan.
+- **Done when:** AC10; the cinematic and dialog read well in a windowed run (captured frames for the maintainer); the
+  ring and the two-buoy rule hold (test), and the radar shows the two nearest ring buoys on its rim from `NAV ALPHA`.
 
 ### M5-T11 Civilian references: measurements and descriptions
 
