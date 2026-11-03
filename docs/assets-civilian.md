@@ -139,6 +139,83 @@ The Saturns' thrust line is the spine axis, so their centre of mass is trimmed o
 The Narn's thrust line is 5 m above its centre plane, the Brezebel's on it. Centre engines (the Skylark's cone, the
 Brezebel's drum) glow but are not pods.
 
+## Fidelity (Q18, T23)
+
+Every civilian model must lie within 90 % of its STL, measured as silhouettes and size. `tools/refview/compare.py` is the
+measuring stick: each generator task (T12 to T15, T22) runs it on its asset, fixes what falls under the bar and records
+its scores in the table at the end of this section. Turrets are left out (the models have none, and they are not in the
+LOD0 file); the Bokmai is scored with its three pods mounted.
+
+**The bar.** The top (x-z), side (y-z) and front (x-y) silhouettes of the STL and of the asset's LOD0 splats are drawn
+on one grid. Each view's intersection over union (IoU) must be at least 0.90, and the asset's length, width and height
+must each be within 10 % of the model's (a ratio from 0.90 to 1.10). Exit status 0 is a pass, 1 means a view or a
+dimension is under the bar, 2 is bad input.
+
+**How the two are put on one grid.**
+
+- The STL goes through `refview`'s frame with the same `--length`, `--right`, `--up` and `--aft`: x to starboard, y up,
+  z aft from the nose tip, x and y centred on the model's box. A generator that authors about another axis (the Saturns
+  measure y from the spine axis) shows up as a shift, so keep the authored origin where the design reference says.
+- The asset's `<id>.ply` comes back to the authored frame: the Rz(180) flip of positions and rotations is undone and
+  `manifest.centroid_offset` added. This was checked on the built raider, Starfury and Narn transport against their own
+  fallback meshes (the best-fit shift came out as zero for all three).
+- A splat is drawn as the outline of its Gaussian at 0.75 sigma, so a flat splat seen edge-on is a thin line. The factor
+  is calibrated against those fallback meshes: the three views' mean IoU peaks at 0.7 to 0.8. Reading a splat set costs
+  some overlap even for a perfect generator: those three read 0.91 (the raider, whose wings are a few splat spacings
+  thick), 0.96 and 0.96 against the meshes they were sampled from, so aim above 0.95 against the STL.
+- The pixel is 0.25 % of the part's length (`--pixel-frac`, never above 0.5 %). The asset may move by whole pixels up to
+  2 % of the length on each axis, one move for all three views, to where they overlap best; the move is printed and
+  written to `fidelity.json` and the scores are taken there (`iou_unshifted` is the score without it). A larger offset
+  is the generator's to fix.
+
+**Running it** (the STLs are in the main checkout's `references/`; the mappings and lengths are from
+`docs/design-references.md`):
+
+```
+.venv/bin/python3 -I tools/refview/compare.py references/EA_Skylark_transport.stl skylark_transport --length 60 --right=-x --up=+z --aft=+y
+.venv/bin/python3 -I tools/refview/compare.py references/Narn_Transport.stl narn_transport --length 70 --right=+y --up=+z --aft=+x
+.venv/bin/python3 -I tools/refview/compare.py references/Centauri_Brezebel_Transport.stl centauri_brezebel --length 60 --right=+y --up=+z --aft=+x
+.venv/bin/python3 -I tools/refview/compare.py references/EA_Saturn_4_transport.stl saturn_4_transport --length 158.5 --right=-x --up=+z --aft=+y
+```
+
+The Saturn models are scaled to the family scale of Q16, so their `--length` is the model's length there: 158.5 m for the
+Saturn 4 transport, 266.2 m for `EA_Saturn_8_transport.stl`, 255.1 m for `EA_Saturn_Fuel_tanker.stl` and 91.1 m for
+`EA_Saturn_3_Freighter.stl` (no engine section). The Bokmai takes its three pods from its `hardpoints.json`; T22 fills in
+its file mapping from the reference:
+
+```
+.venv/bin/python3 -I tools/refview/compare.py references/Brakiri_Bokmai_transport_80m.STL brakiri_bokmai --length 80 \
+    --right=<axis> --up=<axis> --aft=<axis> --pods-from-hardpoints
+```
+
+`--pods-from-hardpoints` draws `<id>_pod.ply` (beside the asset; `--pod-ply FILE` names another) at every `cargo_pods[]`
+mount of `hardpoints.json`. A mount's `position` and `up` are in the body frame (the centroid offset removed, like the
+other hardpoints) and the pod file's origin is the mount point; `--pod-at X,Y,Z` (repeatable) gives a mount by hand.
+
+**Part by part (Q16).** The Saturn 8 transport and tanker (200 m of cargo against the Saturn 4's 100 m), the Saturn 3
+(three pods and no engine in the model) and the Saturn 4 tanker (no model of its own) are not scored as wholes. Each
+part is scored against the part of the model it came from: the lead ship, one cargo section, the pod group. `--model-zrange
+Z0 Z1` keeps one z range of the model (cut exactly at the planes) and `--asset-zrange Z0 Z1` one of the asset (the
+splats whose centres lie inside); each cropped side is moved so that its range starts at z = 0, so the two ranges differ
+in z but must hold the same part. `--part NAME` writes the result to its own folder. Take the model's ranges from the part
+tables of `docs/design-references.md` and the asset's from its own; a gap between two parts is a good place to cut.
+
+```
+.venv/bin/python3 -I tools/refview/compare.py references/EA_Saturn_8_transport.stl saturn_8_transport --length 266.2 \
+    --right=-x --up=+z --aft=+y --part cargo_1 --model-zrange <z0> <z1> --asset-zrange <z0> <z1>
+```
+
+**Output.** `reports/refs/<ship>/compare/` (`.../compare/<part>/` for a part; gitignored): `overlay_top.png`,
+`overlay_side.png` and `overlay_front.png` (model only in orange, asset only in blue, both in dark grey, with a legend and
+a metre scale) and `fidelity.json` (per-view IoU and pixel counts, the three ratios, the shift, the thresholds, the
+failures and the verdict). The terminal gets one line per view, the sizes, the shift and a verdict.
+
+**Scores.** One row per ship and part, filled by the generator task that builds it (the date is the run's):
+
+| Ship | Part | Top IoU | Side IoU | Front IoU | Length | Width | Height | Date |
+|---|---|---|---|---|---|---|---|---|
+| | | | | | | | | |
+
 ## `saturn_family` (T12)
 
 One module, `tools/procgen/assets/saturn_family.py`, registering the five ids; each id is a variant record. The shared

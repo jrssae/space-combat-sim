@@ -173,7 +173,9 @@ clients; its API (`/api.php`) and the image host answer.
 Frame in this section: x to starboard, y up, z aft from the nose tip (z = 0), metres. These are Godot's axes (-Z
 forward, so +Z is aft) with the origin at the nose, the raider's authored frame. Rerun any ship with
 `.venv/bin/python3 -I tools/refview/refview.py references/<file>.stl --name <ship> --length <m> --right=<axis>
---up=<axis> --aft=<axis>`; each section gives its file and axis mapping.
+--up=<axis> --aft=<axis>`; each section gives its file and axis mapping. The same mapping scores a built asset against its
+model (Q18): `.venv/bin/python3 -I tools/refview/compare.py references/<file>.stl <asset_id> --length <m> --right=<axis>
+--up=<axis> --aft=<axis>`; see "Fidelity" in `docs/assets-civilian.md`.
 
 ### Saturn family: Earth Alliance freighters
 
