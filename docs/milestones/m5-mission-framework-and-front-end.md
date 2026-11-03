@@ -289,13 +289,18 @@ Out (explicitly):
   `docs/design-references.md`, and builds the hull in code from those measurements. No STL geometry, vertex data, image or
   texture goes into the generators or into git. Renders and downloaded images go to `reports/refs/<ship>/` (gitignored).
 - **Fidelity (Q18).** Each model is within 90 % of its STL: `tools/refview` compare (T23) draws the top, side and front
-  silhouettes of the STL (at the ship's length, in the authored frame) and of the asset's LOD0 splats on one grid, and
-  each view's intersection over union must be at least 0.90, with length, width and height within 10 %. Turrets are left
-  out (the models have none); the Bokmai is scored with its three pods mounted. Where Q16 departs from a model on
-  purpose, both are cropped to the same part (the lead ship, one cargo section) and each part is scored; where the
-  maintainer set a part's size apart from the model (the Saturn 3's shared pods, Q8), the model's part is scaled to
-  that size first (Q20). Overlays and
-  scores go to `reports/refs/<ship>/compare/`; each generator task writes its scores into `docs/assets-civilian.md`.
+  silhouettes of the STL (at the ship's length, in the authored frame) and of the model's **geometry** on one grid, and
+  each view's intersection over union must be at least 0.90, with length, width and height within 10 %. The geometry is
+  the asset's fallback mesh (`<id>.obj`), which every civilian generator builds from the same parts as its splats and
+  which must therefore hold every visible part. (Planner's call after the T23 review, 2026-11-03: scoring the splats
+  themselves under-read a perfect copy of the Saturn 4 by 5 to 8 % and favoured parts built too thin.) A second check
+  keeps the splats honest: the LOD0 splats against their own mesh score at least 0.85 per view, which catches a missing
+  or misplaced part without the splat penalty deciding the verdict. Turrets are left out (the models have none); the
+  Bokmai is scored with its three pods mounted. Where Q16 departs from a model on purpose, each part is scored against
+  the model it was built from, cropped on both sides and aligned on its own: the Saturns' lead ship and transport
+  section against the Saturn 4 model, the tank section against the tanker model, the Saturn 3's pod group against the
+  Saturn 3 model scaled up to the shared pod size (Q20). Overlays and scores go to `reports/refs/<ship>/compare/`; each
+  generator task writes its scores into `docs/assets-civilian.md`.
 - **Colours from online images (Q11).** For each of the nine ships the agent finds images online (screen captures, fan
   wiki pages), reads the colour scheme off them (base plating, panel and trim colours, markings, window and engine glow),
   and writes it into the ship's description as colour values and where they go. The generators paint from that written
@@ -366,7 +371,7 @@ Out (explicitly):
 | AC16 | Cost: M5 adds nothing measurable to AC13 of M3 (the paired 13-ship AI budget still passes, `test_ai_think_time`); the mission runner with 20 triggers and the encounter director stay inside their work counts | A | |
 | AC17 | Docs and the suite: `docs/architecture.md` §18 as built, a `docs/playtest.md` M5 section (how to start, menus, mission, comms menu, encounters, new settings and commands), the roadmap row; `scripts/run_tests.sh` green **once, at the end** (Q10), read from the suite's own totals | A | |
 | AC19 | Defensive turrets (D61): `TurretAim` and `ThreatMemory` unit-tested; civilians fire only at attackers of themselves or of a civilian or ally within 2 km; they keep running while firing; turret bolts go through the projectile pool and `HitResolver`; the seeded balance fight holds (two raiders beat a lone Saturn 4 in at least two of three seeds; its turrets finish a 15 % raider that keeps attacking); `turret_fire` sound | A | |
-| AC20 | Fidelity (Q18): every civilian model's top, side and front silhouettes overlap its STL's by at least 90 % (intersection over union) and its length, width and height are within 10 %, Q16's deliberate departures scored part by part; measured on LOD0 splats by `tools/refview` compare with unit tests on synthetic shapes; each model's scores recorded in `docs/assets-civilian.md` | A | |
+| AC20 | Fidelity (Q18): every civilian model's top, side and front silhouettes overlap its STL's by at least 90 % (intersection over union) and its length, width and height are within 10 %, Q16's deliberate departures scored part by part against the model each part was built from; measured on the model's geometry (its fallback mesh) by `tools/refview` compare, with the LOD0 splats scoring at least 0.85 against their own mesh, and unit tests that pin the tool's calibration; each model's scores recorded in `docs/assets-civilian.md` | A | |
 | AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear | H | |
 
 ## Working rules for M5
