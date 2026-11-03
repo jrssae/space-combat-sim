@@ -22,8 +22,8 @@ static func instantiate(native_class: StringName) -> Object:
 	return ClassDB.instantiate(native_class)
 
 
-## The library's version, or "" when it is not loaded.
-static func version() -> String:
-	if not has_class(NativeProbe.NATIVE_CLASS):
+## The library's version as `native_class` reports it, or "" when the library does not provide that class.
+static func version(native_class: StringName) -> String:
+	if not has_class(native_class) or not ClassDB.class_has_method(native_class, &"version"):
 		return ""
-	return String(ClassDB.class_call_static(NativeProbe.NATIVE_CLASS, &"version"))
+	return String(ClassDB.class_call_static(native_class, &"version"))

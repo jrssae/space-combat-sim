@@ -21,6 +21,8 @@ const SENSOR_RANGE_M: float = 5000.0
 ## A hostile bolt is incoming when its closest approach is under this distance within this time.
 const INCOMING_MISS_M: float = 15.0
 const INCOMING_HORIZON_S: float = 2.0
+## The native class that answers the queries when the library is loaded and `perf_native` is on (M4-T05b).
+const NATIVE_CLASS: StringName = &"ScsContactField"
 
 ## Profiling (M4-T01): while `PerfProbe` is on, `AiPilotDriver` times its calls into the scans and adds them here. Wall
 ## clock, never gameplay time.
@@ -35,6 +37,8 @@ static var _no_contacts: Array[Contact] = []
 
 ## The physics frame this scan is of (-1 for one built by hand).
 var physics_frame: int = -1
+## False forces the GDScript path for this scan, so a test or a bench can pair it with the native one.
+var use_native: bool = true
 
 # Per body, in scan order. Packed because the scan runs every tick (AC13's budget).
 var _body_ids: PackedInt64Array = PackedInt64Array()
@@ -149,6 +153,16 @@ static func from_tree(tree: SceneTree) -> ContactScan:
 		scan._bolt_factions.append(bolt.faction)
 		scan._bolt_shooters.append(bolt.shooter_id)
 	return scan
+
+
+## Which code answers this scan's queries now: &"native" or &"gdscript".
+func path() -> StringName:
+	return &"gdscript"
+
+
+## Bodies the native field tested in its latest contact or nearest query (the work count), -1 on the GDScript path.
+func native_visits() -> int:
+	return -1
 
 
 ## The contacts a ship of `own_faction` at `own_position` sees: within `range_m`, never its own body.

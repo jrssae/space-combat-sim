@@ -282,7 +282,7 @@ func _register_console() -> void:
 	entries[&"bolts"] = {"get": func() -> int: return value(&"bolts"), "doc": "Bolts swept in the last tick"}
 	entries[&"native_loaded"] = {"get": func() -> bool: return NativeLib.has_class(NativeProbe.NATIVE_CLASS),
 			"doc": "Whether the native library is loaded (scripts/build_native.sh; M4-T05)"}
-	entries[&"native_version"] = {"get": func() -> String: return NativeLib.version(),
+	entries[&"native_version"] = {"get": func() -> String: return NativeLib.version(NativeProbe.NATIVE_CLASS),
 			"doc": "The loaded native library's version, empty when it is not loaded"}
 	DebugConsole.registry.register_provider(&"perf", ConsoleVars.new(entries), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"perf",
@@ -302,7 +302,7 @@ func _cmd_perf(args: Dictionary) -> String:
 func _cmd_native(args: Dictionary) -> PackedStringArray:
 	var loaded: bool = NativeLib.has_class(NativeProbe.NATIVE_CLASS)
 	var out := PackedStringArray(["native library %s, perf_native %s, probe path %s" % [
-			"loaded (%s)" % NativeLib.version() if loaded else "not loaded",
+			"loaded (%s)" % NativeLib.version(NativeProbe.NATIVE_CLASS) if loaded else "not loaded",
 			"on" if NativeLib.enabled() else "off", NativeProbe.new().path()]])
 	if args.get(&"action") == &"bench":
 		out.append_array(NativeBoundaryBench.format(NativeBoundaryBench.run()))

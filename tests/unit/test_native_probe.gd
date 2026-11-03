@@ -35,7 +35,7 @@ func test_the_probe_takes_the_native_path_exactly_when_the_library_is_loaded() -
 	gut.p("native library %s: probe path %s" % ["loaded" if _loaded() else "absent", probe.path()])
 	assert_eq(probe.path(), expected)
 	assert_eq(NativeLib.has_class(NativeProbe.NATIVE_CLASS), _loaded())
-	assert_eq(NativeLib.version() != "", _loaded(), "a version only from a loaded library")
+	assert_eq(NativeLib.version(NativeProbe.NATIVE_CLASS) != "", _loaded(), "a version only from a loaded library")
 
 
 func test_perf_native_off_selects_gdscript() -> void:
