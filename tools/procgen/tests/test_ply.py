@@ -171,5 +171,59 @@ class PlyTests(unittest.TestCase):
             parsed.to_splats()
 
 
+class NonFiniteSplatTests(unittest.TestCase):
+    """validate() must refuse NaN, infinity and zero-length quaternions before anything is written."""
+
+    FIELDS = ("xyz", "rgb", "alpha", "scale", "rot", "normals")
+
+    def _with(self, field: str, row: int, col: int | None, value: float) -> SplatData:
+        s = random_splats(8)
+        arr = np.array(getattr(s, field), dtype=np.float64)
+        if col is None:
+            arr[row] = value
+        else:
+            arr[row, col] = value
+        setattr(s, field, arr)
+        return s
+
+    def test_nan_in_any_field_is_rejected_naming_field_and_row(self) -> None:
+        for field in self.FIELDS:
+            col = None if field == "alpha" else 1
+            with self.subTest(field), self.assertRaises(ValueError) as ctx:
+                self._with(field, 5, col, float("nan")).validate()
+            self.assertIn(field, str(ctx.exception))
+            self.assertIn("row 5", str(ctx.exception))
+
+    def test_infinity_in_any_field_is_rejected_naming_field_and_row(self) -> None:
+        for field in self.FIELDS:
+            col = None if field == "alpha" else 2
+            for value in (float("inf"), float("-inf")):
+                with self.subTest(field=field, value=value), self.assertRaises(ValueError) as ctx:
+                    self._with(field, 3, col, value).validate()
+                self.assertIn(field, str(ctx.exception))
+                self.assertIn("row 3", str(ctx.exception))
+
+    def test_zero_length_quaternion_is_rejected_naming_the_row(self) -> None:
+        s = random_splats(8)
+        s.rot = np.array(s.rot)
+        s.rot[6] = 0.0
+        with self.assertRaises(ValueError) as ctx:
+            s.validate()
+        self.assertIn("rot", str(ctx.exception))
+        self.assertIn("row 6", str(ctx.exception))
+
+    def test_write_ply_writes_nothing_for_bad_data(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.ply"
+            with self.assertRaises(ValueError):
+                ply.write_ply(path, self._with("scale", 0, 0, float("nan")))
+            self.assertFalse(path.exists())
+
+    def test_finite_data_with_a_normals_none_still_validates(self) -> None:
+        s = random_splats(8)
+        s.normals = None
+        s.validate()
+
+
 if __name__ == "__main__":
     unittest.main()

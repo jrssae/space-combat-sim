@@ -86,6 +86,33 @@ class ManifestTests(unittest.TestCase):
             with self.subTest(name), self.assertRaises(ValueError):
                 manifest.validate_manifest(broken(mutate))
 
+    def test_non_finite_numbers_are_rejected_naming_the_field(self) -> None:
+        def with_value(mutate, value: float) -> dict:
+            m = copy.deepcopy(sample())
+            mutate(m, value)
+            return m
+
+        cases = {
+            "spacing_m": lambda m, v: m["lods"][0].update(spacing_m=v),
+            "hero.spacing_m": lambda m, v: m.update(hero={"file": "h.ply", "splats": 1, "spacing_m": v}),
+            "aabb_min": lambda m, v: m.update(aabb_min=[-1.0, v, -3.0]),
+            "aabb_max": lambda m, v: m.update(aabb_max=[1.0, 2.0, v]),
+            "centroid_offset": lambda m, v: m.update(centroid_offset=[v, 0.1, 0.6]),
+        }
+        for name, mutate in cases.items():
+            for value in (float("nan"), float("inf"), float("-inf")):
+                with self.subTest(field=name, value=value), self.assertRaises(ValueError) as ctx:
+                    manifest.validate_manifest(with_value(mutate, value))
+                self.assertIn(name.split(".")[-1], str(ctx.exception))
+
+    def test_non_finite_peak_dbfs_is_rejected(self) -> None:
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=value), self.assertRaises(ValueError) as ctx:
+                manifest.build_audio_manifest(
+                    "snd", 1, 7, {"beep": manifest.sound_entry("beep.wav", 100, 48000, value)}
+                )
+            self.assertIn("peak_dbfs", str(ctx.exception))
+
     def test_a_level_may_name_its_lighting_records(self) -> None:
         self.assertNotIn("lighting", manifest.lod_entry(0, "d.ply", 1, 1.0))
         entry = manifest.lod_entry(0, "d.ply", 1, 1.0, "d_lod0.light")
