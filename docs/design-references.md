@@ -475,16 +475,18 @@ quotes Ron Thornton naming "the horrific Brezebel" among the models he built.
 
 File +x is aft (the round bow at -x, the arm tips at +x) and file z is up, since the U lies flat in file x-y:
 `--right=+y --up=+z --aft=+x`. Length 60.0 m (Q11), span 39.1 m, height 25.3 m over the tip fins; the hull itself is
-8.75 m thick. y is measured from the box centre.
+8.75 m thick. y is measured from the box centre; the hull's centre plane lies 0.1 m below it (y -0.105), since the lights
+on the upper fins' hooks stand 0.2 m proud of the fins. The model is not quite symmetric: its port fins sit 0.43 m
+further out than its starboard ones and the dorsal fitting 0.2 m to port; the generator takes the mean (T15).
 
 | Part | Size and place |
 |---|---|
-| Bow | a lens-shaped body. In plan a half ellipse from the nose to its full width (x ±19.56) at z 17, then straight sides that taper into the arms. Its section is a lens 8.75 m thick on the centre line with a rounded rim. |
-| Engine bay | in the bow's rear face at z 19, between the arm roots: an open bay 14.8 m wide and 5.8 m tall, its machinery block of tanks, pipes and pumps reaching aft to z 25.4. The main engine, a drum 3.2 m across, stands out of the bay's middle to z 31.4 with its nozzle facing aft. Twelve small blocks (1.9 x 1.3 x 1.3 m) on the bay's side walls look like RCS clusters. |
+| Bow | a lens-shaped body. In plan a half ellipse from the nose to its full width (x ±19.56) at z 17, then straight sides that taper into the arms. Its section is a lens 8.75 m thick on the centre line with a rounded rim. Measured (T15): every section of bow and arms is an ellipse about the centre line, half-width W and half-height H; ahead of z 17 both follow the same quarter ellipse from the nose (W 19.56 m, H 4.375 m at z 17), so the side profile has the plan's shape, and behind z 17 they shrink by 0.140 and 0.039 m per metre. The rear face between the arms is flat, at z 19. |
+| Engine bay | in the bow's rear face at z 19, between the arm roots: an open bay 14.8 m wide and 5.8 m tall, its machinery block of tanks, pipes and pumps reaching aft to z 25.4. The main engine, a drum 3.2 m across, stands out of the bay's middle to z 31.4 with its nozzle facing aft. Twelve small blocks (1.9 x 1.3 x 1.3 m) on the bay's side walls look like RCS clusters. Measured (T15): the bay is the U between the arms' inner walls (21.3 m apart); the 14.8 by 5.8 m machinery block stands against the bow's rear face, with low boxes 1.8 m tall out to the walls and the twelve blocks above and below those, three a side at z 20.1, 22.0 and 23.85; two engine mounts (x ±2.2 to ±5.6) sit behind the block. |
 | Dorsal fitting | a raised flat-topped panel 9.7 m wide and 3 m tall on the bow's top centre, z 1.5 to 11.7, with a row of five small windows across its front face |
-| Arms | two, from the bow's flanks to z 60, each a long beam of lens section: the outer edge runs straight from x ±19.5 at z 17 to x ±12.7 at z 60, the inner edge is straight at x ±10.4 to ±10.8 with a rail along it (z 18.5 to 58.8), and the tips are rounded. 7.6 m deep at the root (z 17), 5.2 m at z 40 and 3.5 m at the tip. |
-| Arm fairings | an ellipsoid bulge on each arm's root, 7.7 m wide and 7.7 m tall, z 21.75 to 42.8, likely the engine housings |
-| Tip fins | a hooked fin above and one below each arm's tip: 3.4 m thick at the root, reaching 12.5 m above and below the centre plane, z 41.4 to 57.2, leading edge swept back, trailing edge hooked; they lean inward about 10 degrees. These are the "fin cluster at the stern". |
+| Arms | two, from the bow's flanks to z 60, each a long beam of lens section: the outer edge runs straight from x ±19.56 at z 17 to x ±13.8 at z 58.3, where the tip rounds off in plan and side view to the inner edge at z 60 (T15: the first reading's x ±12.7 at z 60 is the rounded tip at z 59.8). The inner wall is flat at x ±10.67 with a rail 0.35 m wide and 0.64 m tall along it (x ±10.38 to ±10.73, y -0.64 to 0, z 18.5 to 58.8). Deep at the inner wall: 7.2 m at z 19, 5.3 m at z 40 and 3.5 m at z 58. |
+| Arm fairings | a bulge on each arm's root, above and below alike: a blunt lip at z 22 whose top stands 3.9 m above the centre plane (up to 1 m above the arm), tapering into the arm by z 40, likely the engine housings. T15: the first reading's 7.7 by 7.7 m, z 21.75 to 42.8, is the box of its shells, which lie mostly inside the arm. |
+| Tip fins | a hooked fin above and one below each arm's tip, reaching 12.5 m above and below the centre plane, z 41.4 to 57.2; a plate 1.45 m thick at the root and 0.47 m at the top, leaning inward 12.7 degrees (its inner face 10, its outer 15). The trailing edge runs straight from z 57.2 at the root to z 49.2 at the top; the leading edge rises from z 44.4 at the root, curves back to z 48.3 at 7 m up and then forward into the hook, whose tip reaches z 41.4 at the top. T15: the first reading's 3.4 m root thickness is the fin's box across, lean included. Each upper hook carries a small light. These are the "fin cluster at the stern". |
 
 | Where | sRGB | Read from |
 |---|---|---|
@@ -493,9 +495,9 @@ File +x is aft (the round bow at -x, the arm tips at +x) and file z is up, since
 | Windows | white #F3F1FF | Centauri Liner.jpg (the row of five) |
 | Fin-tip lights and engine glow | pink-white #FFB8E0 | Centauri Liner.jpg |
 
-Turrets (2): the wiki gives the liner "pulsed orange bolts". `dorsal` on top of the dorsal fitting (0, +4.3, 7.0), up
-+y; `ventral` under the bow (0, -4.5, 9.0), up -y. The gold caps glow in the capture and could be gun ports; the
-generator keeps them as lights.
+Turret (1, Q19: turrets on top only): the wiki gives the liner "pulsed orange bolts". `dorsal` on top of the dorsal
+fitting (0, +4.3, 7.0), up +y. The first reading's `ventral` mount under the bow is dropped. The gold caps glow in the
+capture and could be gun ports; the generator keeps them as lights.
 
 Sources, checked 2026-11-02: https://babylon5.fandom.com/wiki/Centauri_liner,
 https://babylon5.fandom.com/wiki/File:Centauri_Liner.jpg, https://babylon5.fandom.com/wiki/File:Molios.JPG,

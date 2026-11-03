@@ -56,6 +56,9 @@ parts/saturn.py    the Saturn family (M5-T12): lead ship, frames, drum frame, en
 parts/turret.py    defensive turret model (base, dome, twin barrels) at any size, and write_turret (its files)
 parts/solids.py    burial volumes (box, lathe, prism, capsule, union, difference) that drop hidden samples
 styles/ea_civilian.py the Earth Alliance civilian palette; ea_civilian(overrides) repaints roles per hull
+parts/centauri.py  the Centauri Brezebel (M5-T15): the elliptic lens hull (bow, arms), engine bay, dorsal fitting,
+                   fairings, hooked tip fins and the Centauri turret, each with its burial solid
+styles/centauri.py the Centauri palette (violet, gold, lavender trim), painted as written
 assets/__init__.py registry: ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]]
 assets/<id>.py     one module per asset, exposing build(ctx)
 tests/             unittest: core, parts, CLI, and every asset
@@ -164,6 +167,23 @@ Things the Godot side must know:
   slotted crowns). The manifest's `turret` entry has the keys of `parts/turret.py`'s: `ply`, `lighting`, `obj`, `splats`,
   `spacing_m`, `offset` (the PLY's centroid in the turret frame: pivot at the origin, +Y up, barrels along -Z),
   `barrel_m`, `trunnion` and `muzzles`.
+
+## `centauri_brezebel`
+
+The Centauri Brezebel transport (M5-T15, docs/assets-civilian.md): a 60 m liner, a round lens bow with a pale rim band and
+two arms reaching aft to hooked tip fins (gold caps), the engine bay between the arms, a dorsal fitting with five windows,
+`centauri` style. Outputs `centauri_brezebel.ply` (about 67k splats at 0.26 m; budget 55k-85k), `_lod1` to `_lod3` (25 %,
+6 %, 1.6 %), a `.light` per level, `centauri_brezebel.obj/.mtl` (fallback mesh and depth proxy), three chunks cut from
+LOD1 (`bow`, `arm_l`, `arm_r`), the turret model `centauri_brezebel_turret.ply/.light/.obj/.mtl` (about 2.1k splats at
+0.11 m), `hardpoints.json` and `manifest.json`.
+
+Things the Godot side must know:
+
+- LOD0 is written group by group (`manifest.counts`), LOD1 chunk by chunk; `chunk_lod` is 1.
+- `hardpoints.json` has two pods (mains in the arms' tip faces at z 60, retros on the fairings' lips), the thrust line and
+  centre of mass on the hull's centre plane, 16 RCS ports, `muzzles` empty, and one turret (`dorsal`, Q19) on the dorsal
+  fitting's ring. The manifest's `turret` entry has the keys of `parts/turret.py`'s.
+- The engine and fin-tip glow is pink-white #FFB8E0 (`styles/centauri.py` `GLOW_SRGB`), a `ShipSpec` tint, not paint.
 
 ## `saturn_family`
 

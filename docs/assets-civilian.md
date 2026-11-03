@@ -134,9 +134,9 @@ The Saturns' thrust line is the spine axis, so their centre of mass is trimmed o
 |---|---|---|---|---|---|
 | Skylark | main: the nacelle bells, (±13.45, -0.45, 55.5), radius 3.0; retro: the nacelle intake rings, (±13.45, -0.45, 35.6), radius 1.5 | the nacelles' three cones each, the capsule's two cones, the nose vanes | under the capsule's dorsal plate, (0, +3.0, 11.0) | the nacelles' outboard cones (±16.8, -0.45, 42.5) | `capsule` (nose, capsule, spine, side tanks, collar), `body` (body, dorsal fin, centre engine), `nacelle_l`, `nacelle_r` (with claws) |
 | Narn | main: a 0.9 m bell on each tower's aft face (z 43.9), its exit at (±15.0, +5.0, 44.72), radius 1.4; retro: the towers' fronts (the vanes' front face on the thrust line), (±15.0, +5.0, 35.7), radius 1.0 | the prong tips (forward and outboard), the fin tips (up and down), the box's aft corners | in the windscreen block behind the canopy, (0, +1.2, 11.3) | the crescent's widest points (±23.0, 0, 27.0) | `cockpit` (cockpit block, dorsal block, the crescent's centre), `wing_l`, `wing_r` (prong, crescent half, fin, tower), `box` |
-| Brezebel | main: the arm tips, (±12.2, 0, 60.0), radius 1.2, inside the 2.8 m wide tip; retro: the fairings' fronts, (±14.6, 0, 21.75), radius 1.0 | the twelve blocks on the engine bay's walls, the fin tips | behind the window row, (0, +3.5, 2.5) | the bow's widest points (±19.6, 0, 17.0) | `bow` (bow, dorsal fitting, engine bay, main engine), `arm_l`, `arm_r` (arm, fairing, fins) |
+| Brezebel | main: the arm tips, (±12.0, 0, 60.0), radius 1.2, in the middle of the arm's flat tip face (z 59.4, x 10.67 to 13.2; T15: at x 12.2 the bell would stand out of it); retro: the fairings' fronts, (±14.6, 0, 22.1), radius 1.0 | the twelve blocks on the engine bay's walls (their top or bottom faces, exhausting up or down), the four fins' outer faces near their tips (outboard) | behind the window row, (0, +3.5, 2.5) | the bow's widest points (±19.6, 0, 17.0) | `bow` (bow, dorsal fitting, engine bay, main engine), `arm_l`, `arm_r` (arm, fairing, fins) |
 
-The Narn's thrust line is 5 m above its centre plane, the Brezebel's on it. Centre engines (the Skylark's cone, the
+The Narn's thrust line is 5 m above its centre plane, the Brezebel's on it (y -0.105 in the box-centred frame). Centre engines (the Skylark's cone, the
 Brezebel's drum) glow but are not pods.
 
 ## Fidelity (Q18, T23)
@@ -236,6 +236,7 @@ for `EA_Saturn_3_Freighter.stl` (91.13). The Saturn 3's pod group is scored agai
 | `saturn_8_tanker` | cargo 2 and engine (model 146.2-255.1, asset 149.3-258.5) | 0.970 | 0.929 | 0.888 | 1.010 | 1.001 | 1.021 | 2026-11-03 |
 | `saturn_3_freighter` | lead ship (z 0-41.5) | 0.660 | 0.499 | 0.665 | 1.007 | 1.023 | 0.812 | 2026-11-03 |
 | `saturn_3_freighter` | pod group (model 41.5-91.1 scaled 1.244, 1.093, 1; asset 41.5-96.8) | 0.772 | 0.383 | 0.655 | 1.130 | 0.996 | 1.038 | 2026-11-03 |
+| `centauri_brezebel` | whole ship (best shift x -0.15 m; unshifted 0.967, 0.961, 0.928) | 0.962 | 0.961 | 0.957 | 1.004 | 1.000 | 1.010 | 2026-11-03 |
 
 ## `saturn_family` (T12)
 
@@ -327,14 +328,30 @@ ahead of the turning axis; 1 894 splats at 0.11 m on its own 0.65 m panel grid.
 
 `tools/procgen/assets/centauri_brezebel.py`, `tools/procgen/styles/centauri.py`.
 
-| Part | How to build it |
+As built (M5-T15); the parts are in `tools/procgen/parts/centauri.py`. Numbers the design references leave open were
+measured off the STL's shells and sections. Authored frame: y from the box centre, the hull's centre plane at
+`CENTRE_Y` -0.105 (heights below are above that plane), z from the nose.
+
+| Part | As built |
 |---|---|
-| Bow | a `section_loft` of lens sections from the nose to z 19, widths from the half-ellipse plan |
-| Arms | one `section_loft` per arm from z 17 to 60, lens sections from the outer and inner edges and the depths (7.6 m, 5.2 m at z 40, 3.5 m at the tip), overlapping the bow at the root; a `lathe` or `box` rail on the inner edge |
-| Engine bay | an open box in the bow's rear face, filled with `box` and `lathe` machinery and the twelve RCS blocks; the main engine as a `lathe` drum with `propulsion.nozzle` |
-| Dorsal fitting | `tapered_box` with five window insets |
-| Arm fairings | two `ellipsoid_cap`s or a `lathe` ellipsoid per arm |
-| Tip fins | `section_loft` of the hooked outline, thinning from 3.4 m at the root, leaning inward 10 degrees, gold caps as a material band; the main nozzle sits in the arm's tip between the fins |
+| Bow | a smooth `section_loft` of ellipses from z 0.02 (a small cap) to z 19: half-width W and half-height H from a quarter ellipse (W = 19.56 s, H = 4.375 s, s = sqrt(1 - ((17 - z) / 17)^2)), straight on behind z 17 (W 19.56 - 0.1402 (z - 17), H 4.375 - 0.0389 (z - 17)); 64 points a ring, 33 stations dense at the nose. The `trim_light` band is the rim's 9 degrees either side of the centre plane, bow only. The rear face between the inner walls is a flat `hull_dark` panel set 0.15 m inside the section, so its edge splats stay inside the bow's outline |
+| Arms | one smooth `section_loft` per arm from z 19 to 59.4 through the same ellipses outboard of the flat inner wall at x 10.67 (33 points); the wall is `hull_dark` up to z 25.4 (the bay). From z 58.3 the section shrinks towards the wall's middle by (1 - t^2.5)^(1/2.5), t = (z - 58.3) / 1.7, to a flat tip face at z 59.4 holding a `propulsion.nozzle` (throat 0.85, exit 1.2, 0.6 m long) at x 12.0 whose exit is the reference's tip at z 60. A `hull_dark` rail box x 10.39 to 10.75, y -0.64 to 0, z 18.6 to 58.8 |
+| Engine bay | `hull_dark` boxes: the block x ±7.40, ±2.89 about the centre plane, z 18.8 to 25.43; low side boxes x 7.40 to 10.75, ±0.90, z 19.0 to 25.28; engine mounts x 2.2 to 5.6, ±1.53, z 25.3 to 28.7. Twelve `rcs` blocks x 7.43 to 9.34, 0.635 to 1.955 above and below, 1.29 m long at z 20.11, 22.0 and 23.85. The main engine: a `lathe` drum (radius 1.2 from z 25.3, 1.58 from 26.4 to 29.5, a 1.62 ring at 29.8 to 30.1, 1.25 to 30.47) and a `propulsion.nozzle` (throat 0.85, exit 1.2, 0.9 m) to z 31.37 |
+| Dorsal fitting | a `section_loft` along y through horizontal rectangles (y, half-width, z front, z back): (0.9, 4.90, 1.30, 10.88), (3.95, 3.86, 2.30, 11.58), (4.2, 2.80, 2.42, 11.45), the front raked back 18 degrees; five `window` boxes 0.6 by 1.2 m, 0.95 m apart, centred 2.95 m up on the raked front and standing 0.08 m proud of it; a `hull_dark` turret ring 2.4 m across from y 4.12 to 4.3 at z 7.0, the turret's mount |
+| Arm fairings | a smooth `section_loft` per arm, upper and lower halves alike, through stations (z, x in, x out, peak): (22.1, 11.13, 18.48, 3.865), (24, 11.04, 18.32, 3.765), (27, 10.86, 18.0, 3.565), (30, 10.83, 17.58, 3.305), (33, 10.85, 17.1, 3.015), (36, 11.01, 16.43, 2.645), (38, 11.25, 15.89, 2.335), (40, 11.56, 15.25, 1.995), (41.5, 12.06, 14.49, 1.585), (42.6, 12.7, 13.6, 1.0); the top at u of the way out is peak times 0.80, 0.885, 0.964, 1.0, 0.997, 0.972, 0.927, 0.868, 0.792, 0.686, 0.548, 0.40, 0 at u 0, 0.03, 0.1, 0.2 ... 0.9, 0.97, 1. Only the part outside the arm shows: the lip at z 22.1 and up to 1 m of bulge |
+| Tip fins | a `section_loft` along y through thin chamfered sections (h, leading edge z, trailing edge z): (1.0, 44.40, 57.15), (2.1, 44.38, 56.22), (2.6, 44.92, 55.78), (3.1, 45.52, 55.32), (4.1, 46.68, 54.72), (5.1, 47.58, 54.08), (6.1, 48.12, 53.48), (7.1, 48.28, 52.88), (8.1, 48.12, 52.22), (9.1, 47.72, 51.62), (9.6, 47.42, 51.32), (10.1, 46.88, 50.98), (10.6, 46.02, 50.68), (10.9, 44.42, 50.48), (11.1, 43.18, 50.38), (11.3, 42.18, 50.28), (11.5, 41.62, 50.12), (11.9, 41.42, 49.88), (12.3, 41.48, 49.62), (12.4, 41.58, 49.48), (12.53, 42.0, 49.2). Inner face x 10.785 - 0.178 (h - 3.105), outer 12.145 - 0.272 (h - 3.105) (the mean of the model's port and starboard fins), each 0.08 m in: the edges' splats read that much wider, so the fins read at the measured width from ahead. The top 0.65 m is the gold cap; a gold light 0.28 m across stands on each upper hook's tip (h 12.58, z 41.95). The lower fins mirror the upper ones in the centre plane |
+
+| Level | Spacing | Splats (seed 42) |
+|---|---|---|
+| LOD0 | 0.26 m | 67 042 (`bow` 34 050, `arm_l` and `arm_r` 16 496 each; budget 55 000 to 85 000) |
+| LOD1 (the chunks) | 0.52 m | 16 720 (24.9 %) |
+| LOD2 | 1.04 m | 4 178 (6.2 %) |
+| LOD3 | 2.08 m | 1 048 (1.6 %) |
+
+The turret model: a `hull_dark` flange 1.5 m across and 0.15 m tall, a stalk 0.64 m across up to 0.8 m, a teardrop pod
+2.2 m across lying fore and aft on its axis 1.75 m up (a round front from z -1.2, widest at z -0.1, tapering to a point at
+z 1.9), twin barrels at x ±0.45 on the pod's axis with the muzzles 2.6 m ahead of the turning axis, and two gold collars
+on each barrel (where it leaves the pod, and near the muzzle); 2 080 splats at 0.11 m.
 
 ## Styles
 
@@ -389,7 +406,11 @@ Panel grid 2.4 m, 0.25 m lines, tint jitter 0.08. Engine glow orange-white #FFB0
 | `nozzle`, `nozzle_throat` | #3A3448, #141218 | main engine and arm-tip nozzles |
 
 Panel grid 2.4 m, 0.25 m lines, tint jitter 0.04 (the liner reads smooth). Engine and fin-tip glow pink-white #FFB8E0;
-turret bolts orange.
+turret bolts orange. As built (T15): every value as written (Q19); the panel lines are `hull_dark` on the violet, so
+the style's line darkness is #2B2257's share of #4C3C8E's albedo (0.35). Roles the design leaves open are our choice:
+`hull_panel` the hull violet, `hazard` and `hazard_dark` the gold and the dark violet, `canopy_glass` #1A1530 (unused),
+`barrel` and `rcs` #3A3448, `bore` and `interior` #141218. `styles/centauri.py` keeps the glow as `GLOW_SRGB` for
+T16's `ShipSpec`.
 
 Two warnings from the raider (`docs/assets-raider.md`): on the RX 6950 XT a dark albedo read as a black silhouette, and
 civilians are often seen on their dark side. If the Narn green (#2E4A3B) or the Centauri violet (#4C3C8E) reads black
@@ -401,7 +422,7 @@ in T16's GPU check, lift the value and keep the hue, and record the change here.
 |---|---|---|
 | `ea_civilian` | a round base 3.6 m across and 0.9 m tall, a dome 3.0 m across, twin barrels 0.8 m apart; plating grey, barrels dark. The Skylark uses it at two thirds of that size. | 4.5 (Skylark 3.0) |
 | `narn` | a six-sided base 2.6 m across, a wedge-shaped housing, twin barrels; dark green with the red band | 3.0 |
-| `centauri` | a teardrop pod 2.2 m across on a short stalk, twin barrels with gold collars | 2.6 |
+| `centauri` | a teardrop pod 2.2 m across on a short stalk, twin barrels with gold collars (as built: see `centauri_brezebel` above) | 2.6 |
 
 ## Turret positions
 
@@ -416,7 +437,7 @@ From the design references, authored frame; `up` is (0, 1, 0) for dorsal mounts 
 | Saturn 3 (1) | `dorsal_fwd` (0, +3.8, 19.1) |
 | Skylark (2) | `dorsal` (0, +3.6, 37.5), `ventral` (0, -4.2, 15.0) |
 | Narn (2) | `tower_l` (-14.85, +9.0, 41.7), `tower_r` (14.85, +9.0, 41.7), on the slotted crowns |
-| Brezebel (2) | `dorsal` (0, +4.3, 7.0), `ventral` (0, -4.5, 9.0) |
+| Brezebel (1) | `dorsal` (0, +4.3, 7.0), on the dorsal fitting's turret ring |
 
 ## Open for the human tester `(H)`
 
@@ -425,3 +446,6 @@ From the design references, authored frame; `up` is (0, 1, 0) for dorsal mounts 
 - The Saturn 3's engine section and its raised, wider pod stack are not in its reference; Q16's shared lead ship needs
   them.
 - Close fly-bys look soft: about 0.52 m spacing on the Saturns, 0.33 to 0.35 m on the others.
+- The Brezebel's violet (#4C3C8E) with its #2B2257 panel lines (35 % of the hull's albedo, about a fifth of the
+  surface) is painted as written and may read dark on its shadow side; T16's GPU check decides, and a lift goes to the
+  maintainer first.

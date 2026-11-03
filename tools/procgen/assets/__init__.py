@@ -9,10 +9,12 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from ..core.context import AssetOutputs, BuildContext
+from . import centauri_brezebel
 from . import saturn_family
 from . import narn_transport, nav_buoy, raider_fighter, sfx_combat, sfx_ui, sfx_world, sky_default, starfury_aurora
 
 ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
+    "centauri_brezebel": centauri_brezebel.build,
     "narn_transport": narn_transport.build,
     "nav_buoy": nav_buoy.build,
     "raider_fighter": raider_fighter.build,

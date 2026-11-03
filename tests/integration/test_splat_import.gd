@@ -50,6 +50,7 @@ const REQUIRED_ROLES: Dictionary = {
 	"saturn_4_tanker": ["fallback_mesh", "hardpoints"],
 	"saturn_8_transport": ["fallback_mesh", "hardpoints"],
 	"saturn_8_tanker": ["fallback_mesh", "hardpoints"],
+	"centauri_brezebel": ["fallback_mesh", "hardpoints"],
 }
 
 var _readers: Array[ManifestReader] = []
