@@ -103,7 +103,7 @@ are M5's mission work).
 | AC3 | Four cycles, each recorded below: the numbers before, three candidates ranked by confidence with the evidence for each, the first built **test first** (the failing test committed before the change), the numbers after, the gain against the prediction | A | |
 | AC4 | No regressions: after each cycle the focused runs (the touched code and AC13's paired budget) are green locally and CI's full suite is green on the push (Q10); `scripts/run_tests.sh` green locally once, before M4 closes; every behaviour change listed | A | |
 | AC5 | Goal: the headline max N is at least 100, and toward 500. Not reached after cycle 4: the report says so and asks for guidance (T06) | A | |
-| AC6 | Render check at the headline max N on the maintainer's GPU: FPS, frame time, VRAM, GPU and driver recorded (by the agent, 2026-11-01) | A | |
+| AC6 | Render check at the headline max N on the maintainer's GPU: FPS, frame time, VRAM, GPU and driver recorded (by the agent, 2026-11-01) | A M4-T06m, 2026-11-03 (Cycle log, Final measurements) |
 
 ## Task breakdown (ordered)
 
@@ -983,6 +983,117 @@ saturates the cell indices, the count overflowed `i64` and could send a query th
 count takes the scan-every-body path (same results). `load` checks that the parallel arrays line up; on a mismatch it logs one
 error, keeps an empty scan and returns false, and `ContactScan` then answers that scan from GDScript. New tests pin both, and
 three edges that were right but unpinned: a negative range, more than 256 factions, a hostility row shorter than the faction list.
+
+### Final measurements (M4-T06m, 2026-11-03)
+
+Taken on commit `9b6091f` (all four cycles and the two robustness fixes), the debug editor build with the native library built
+(`bin/libscs_native.so`, `perf.native_loaded = true`), default settings (think rate on, nearest-k 12, `perf_native` on), on the
+maintainer's desktop with their browser and sync client running (load 1.6 to 2.5 at the start of each sweep, no other Godot
+process; the M5 and bench locks held for every number). Runs are pinned to cores 0-11. Reports are in `reports/perf/m4_final*/`
+(not committed).
+
+**The full suite, once for the milestone (Q10).** `scripts/run_tests.sh` under the bench lock, 27 min 35 s, exit 0: the Python
+tests 370 run, OK; GUT 172 scripts, 2 259 tests, **2 257 passing, 0 failing, 2 pending** (the two AC12 balance tests, as in every
+run since M3), 52 499 asserts. AC13's paired budget and AC21's rebase cost passed the first time, so nothing was rerun.
+
+**The sweep** (`scripts/bench.sh m4_final`, 22 min, all three layouts, seeds 1 to 3, 5 s + 30 s; a layout stops after two failing
+counts in a row). Max N: **furball 25, spread 50, transit 50; headline 25** (the lower of furball and spread), against the
+baseline's 0 and cycle 1's 25.
+
+| layout | N | runs passed | tick median ms (three runs) | p99 ms | behind real time | worst rebase tick ms |
+|---|---|---|---|---|---|---|
+| furball | 25 | 3/3 | 4.38 (4.38, 4.36, 4.47) | 5.85 | 0.00 % | 5.58 |
+| furball | 50 | 0/3 | 8.49 (8.43, 8.79, 8.49) | 10.73 | 0.00 % | 11.33 |
+| furball | 100 | 0/3 | 15.88 (15.71, 15.88, 17.35) | 23.02 | 5.29 % | 23.85 |
+| spread | 25 | 3/3 | 4.32 (4.32, 4.36, 4.29) | 5.57 | 0.00 % | 5.74 |
+| spread | 50 | 2/3 | 7.98 (7.98, 8.03, 7.75) | 10.37 | 0.01 % | 11.00 |
+| spread | 100 | 0/3 | 15.03 (15.03, 15.58, 15.01) | 23.10 | 3.68 % | 22.44 |
+| spread | 150 | 0/3 | 23.08 (22.68, 24.91, 23.08) | 36.68 | 36.04 % | 44.17 |
+| transit | 25 | 3/3 | 3.06 (3.02, 3.06, 3.09) | 4.04 | 0.00 % | 4.57 |
+| transit | 50 | 3/3 | 5.38 (5.38, 5.39, 5.34) | 6.86 | 0.00 % | 7.11 |
+| transit | 100 | 0/3 | 11.26 (10.93, 11.54, 11.26) | 15.03 | 0.00 % | 17.88 |
+| transit | 150 | 0/3 | 16.22 (16.22, 16.19, 16.22) | 22.12 | 9.27 % | 25.08 |
+
+Every failure from 50 up in the furball is the tick median alone until 100; at 100 the p99 and the rebase tick go over too, and
+real time is kept (under 1 % behind) up to 50 in the furball and spread, and up to 100 in transit. Furball 50 misses the median
+by 0.4 to 0.8 ms; spread 50 passes on seeds 1 and 3 and misses on seed 2 by 0.03 ms.
+
+**Below the sweep's first failing count** (`m4_final_below`, `m4_final_below75`, the same settings, seeds 1 to 3). They show the
+real ceiling is above the sweep's step:
+
+| layout | N | runs passed | tick median ms (three runs) | p99 ms | worst rebase tick ms |
+|---|---|---|---|---|---|
+| furball | 35 | 3/3 | 5.51 (5.51, 6.15, 5.49) | 7.30 | 7.72 |
+| furball | 40 | 3/3 | 6.70 (6.66, 7.20, 6.70) | 9.47 | 10.09 |
+| furball | 45 | 2/3 | 7.88 (7.88, 7.69, 8.03) | 11.29 | 11.46 |
+| spread | 75 | 0/3 | 11.87 (12.00, 11.66, 11.87) | 16.47 | 18.87 |
+| transit | 75 | 0/3 | 8.52 (8.52, 8.53, 8.40) | 11.39 | 11.91 |
+
+So **the furball's ceiling is 45** (two runs of three; seed 3 misses by 0.03 ms, and at 50 all three miss), spread passes 50 and
+fails 75 (50 to 74 not run), and transit passes 50 and fails 75. Counted with these runs, the headline is **45** (the furball,
+below spread's 50 or more); the sweep's own number stays 25, since the sweep steps from 25 to 50 and the furball fails 50.
+
+**Stage breakdown** (single 30 s runs, seed 1, `m4_final_stages`, `m4_final_stages_head`), mean ms per tick, in the form of the
+baseline and cycle tables. The baseline's 50 and 100 are the baseline table above (tick means 29.28 and 109.49 in the furball);
+the final tick means are 8.43 and 16.00:
+
+| layout | N | tick median | tick mean | ai | (scan) | (think) | flight | targeting | resolvers | (hit) | (ram) | late | physics | (sync) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| furball | 25 | 4.06 | 4.10 | 1.71 | 0.74 | 1.68 | 0.96 | 0.25 | 0.52 | 0.31 | 0.20 | 0.04 | 0.58 | 0.21 |
+| furball | 45 | 7.41 | 7.55 | 3.10 | 1.29 | 3.03 | 1.67 | 0.45 | 1.11 | 0.76 | 0.33 | 0.05 | 1.12 | 0.47 |
+| furball | 50 | 8.39 | 8.43 | 3.31 | 1.38 | 3.24 | 1.89 | 0.52 | 1.23 | 0.83 | 0.38 | 0.05 | 1.38 | 0.60 |
+| furball | 100 | 15.22 | 16.00 | 6.16 | 2.57 | 6.01 | 3.56 | 1.00 | 3.27 | 2.52 | 0.71 | 0.06 | 1.86 | 0.35 |
+| spread | 50 | 7.70 | 7.79 | 3.00 | 1.38 | 2.94 | 1.80 | 0.49 | 1.16 | 0.77 | 0.37 | 0.05 | 1.24 | 0.54 |
+| spread | 100 | 14.48 | 15.41 | 5.58 | 2.65 | 5.45 | 3.50 | 0.99 | 3.28 | 2.54 | 0.71 | 0.06 | 1.89 | 0.35 |
+| transit | 50 | 5.36 | 5.41 | 1.93 | 0.95 | 1.87 | 1.52 | 0.42 | 0.47 | 0.10 | 0.36 | 0.27 | 0.78 | 0.36 |
+| transit | 100 | 10.87 | 11.10 | 3.91 | 1.96 | 3.81 | 2.95 | 0.87 | 0.92 | 0.19 | 0.70 | 0.53 | 1.90 | 0.66 |
+
+The headline's furball at 25 ships and 45 are in the table. At 100 ships the AI (6.2 ms, 38 %), flight (3.6 ms), the hit resolver
+(2.5 ms) and physics (1.9 ms) are the largest stages in the furball; targeting is 1.0 ms and the ram resolver 0.7 ms.
+
+**The release build, once on the final code.** A snapshot of `9b6091f` (`git archive`, the generated assets and the native
+library copied in, imported), exported with the script header's preset to `scs_release.x86_64` (embedded pack, release template
+4.7.2). The export keeps the native library: `bin/scs_native.gdextension` is in the pack, and `libscs_native.so` is written beside
+the binary byte for byte equal to the built one; `state perf` in the exported build says `native_loaded = true`,
+`native_version = 0.1.0`. `scripts/bench_quick.sh` with the export, under both locks (`m4_final_release_quick`, load 1.49, 247 s,
+seed 1, 2 s + 6 s per count):
+
+| N | 10 | 25 | 40 | 50 | 75 | 100 | 150 | 200 |
+|---|---|---|---|---|---|---|---|---|
+| furball tick median ms | 1.47 | 3.09 | 4.97 | 6.39 | 10.74 | 14.18 | 24.56 | 36.75 |
+| furball FPS | 60.0 | 60.1 | 60.1 | 60.0 | 59.9 | 59.8 | 39.0 | 26.2 |
+| spread tick median ms | 1.58 | 3.46 | 5.25 | 6.69 | 11.48 | 15.16 | 24.47 | 40.06 |
+| spread FPS | 60.0 | 60.0 | 60.0 | 60.0 | 60.1 | 59.3 | 38.3 | 23.5 |
+
+**The release quick check holds the budget to 50 ships in the furball and in spread (6.39 and 6.69 ms at 50 ships, against 8.39 and
+7.70 ms for the debug build's sweep runs)**; 75 misses (10.74 and 11.48 ms), and 30 FPS holds to 150 and falls under it at 200. The debug build's quick check
+for the same code (cycle 4's table) held 40 and 30 FPS to 150, so the release build gains one step of the quick check's ladder. The
+75-ship counts were not run in the full sweep's form, so the release ceiling between 50 and 75 is not known.
+
+**AC6, the render check on the GPU** (maintainer's machine; windowed, 1920x1080, AMD Radeon RX 6950 XT, RADV NAVI21, Vulkan 1.4.354
+Forward+, GDGS `splat_backend = compute`, `fallback = false`, splat budget 2 000 000; the furball at the headline's 25 ships, flown
+by the bench's layout for a 20 s window after 8 s of warm-up, with `scripts/measure_fight.gd`, `scene=quiet`, under
+`/tmp/scs-gpu.lock`; load 0.9 to 1.2). Drive: `scripts/measure_fight.gd -- scene=quiet exec="bench furball N 60
+warmup=2 seed=1 ..."`. Screenshot `/tmp/m4_ac6.png` (the player's view of 25 ships and the radar full of blips; how it looks stays (H)).
+
+| scene | vsync | FPS | frame ms mean / p99 / max | frames over 16.7 ms | GPU ms mean / max | splats visible (mean) | VRAM added (MB) | draw calls |
+|---|---|---|---|---|---|---|---|---|
+| furball 25 | off | 120 (min 114) | 8.34 / 17.36 / 34.92 | 39 (1.6 %) | 4.62 / 5.17 | 1.05 M | 1 630 | 678 |
+| furball 25 | on | 60 (min 59) | 16.72 / 26.90 / 38.47 | 594 (49.6 %, vsync paced) | 4.59 / 5.11 | 1.05 M | 1 641 | 677 |
+| furball 45 (the real ceiling) | off | 52 (min 47) | 19.10 / 34.44 / 42.15 | 796 (76 %) | 4.87 / 5.68 | 1.09 M | 1 657 | 1 201 |
+
+VRAM at rest on the desktop was 2.8 GB of 17.2 GB before each run (other programs share the GPU), peak 4.44 GB, so the game
+added about 1.6 GB (within about 100 MB). GTT added 0.7 GB. Render CPU time 0.8 ms (25 ships) and 1.4 ms (45). Findings: at the headline's
+25 ships the game runs at 60 FPS on vsync and 120 FPS unconstrained, with the GPU at 4.6 ms a frame. **At 45 ships, which holds the
+8 ms budget headless, the real renderer falls to 52 FPS (frame mean 19.1 ms)**: the main thread carries the 7.4 ms tick plus the
+renderer's CPU work (1.4 ms) and the rest of the frame, and the frames over 25 ms mostly hold two ticks. The headless budget leaves
+the main thread about half a frame for rendering, as designed; at 45 ships the real frame is over that. Also in every window: the
+hit resolver has a spike of 7.5 to 8.5 ms every few seconds (`combat.resolve_us` p99 7.5 ms at 25 ships, mean 0.5 ms), behind several of
+the frames over 25 ms at 25 ships; the headless run's p99 for the same layout is 5.9 ms. Not investigated here.
+
+**Concerns carried to T06.** AC5 is not met: the headline is 25 by the sweep and 45 counting the below-sweep runs, against the
+minimum of 100. The release build holds 50 in the quick check. The render check shows the headless budget is not enough on its own
+above about 25 to 40 ships: at 45 the windowed game is under 60 FPS.
 
 ## Definition of done (M4)
 
