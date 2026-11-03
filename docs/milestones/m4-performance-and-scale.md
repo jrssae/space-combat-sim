@@ -192,8 +192,7 @@ While iterating, `scripts/bench_quick.sh` (under 10 minutes: furball and spread 
   (T05b) moved the contact scan's queries into the native `ScsContactField` behind `ContactScan`'s unchanged interface, bit for
   bit (`docs/architecture.md` §17.5). The scan at 100 ships 3.91 to 2.40 ms in the furball and 3.12 to 2.66 ms in spread; the
   quick check's ceiling stays 40 in both, and in this run 30 FPS held to 150 ships (the before's run failed at 150, at a
-lower load: 0.48 against 0.95 to 1.64). Seeded outcomes are
-  identical with `perf_native` on and off. Entry in the Cycle log.
+  lower load: 0.48 against 0.95 to 1.64). Seeded outcomes are identical with `perf_native` on and off. Entry in the Cycle log.
 
 Starting hypotheses from the M3 measurements, for T02 to test, not to follow:
 
