@@ -8,10 +8,16 @@ extends Node3D
 
 const GROUP: StringName = &"targetable"
 
+## What sort of thing it marks (M4-T07): later scans, broad phases and the tier read it so a rock or a mine never fills a
+## fighter's contacts. Ships are the default; the battle's stand-ins set their own.
+enum Kind { SHIP, CAPITAL, TURRET, MISSILE, MINE, STATIC, PROP }
+
 ## What the pilot reads ("NAV ALPHA"); the console selects targets by it.
 @export var display_name: String = ""
 ## IFF (§14.9, `Factions`). Buoys are `neutral`; ships carry their own.
 @export var faction: StringName = &"neutral"
+## Its `Kind` (M4-T07).
+@export var kind: Kind = Kind.SHIP
 ## How far this target is heard beyond the sensors (M3-T17, Q21), m: 0 = not at all, `INF` = everywhere. Nav buoys use
 ## 1 000 km, allied ships 100 km. Broadcasters are kept in one list (`broadcasters`) so the AI's
 ## `ContactScan.shared_broadcasts` need not sweep every body.

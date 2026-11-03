@@ -2090,3 +2090,69 @@ native/src/contact_field.rs     ScsContactField: the contact scan's queries (T05
 - **Contacts are made when first handed out.** Each faction's list starts empty and a `Contact` is built the first time a
   query returns that body, on both paths (a broadcaster nobody hears, or a body no ship of the faction sees, costs nothing).
   The objects are still one per body per faction per scan, shared and read-only.
+
+### 17.6 The battle and typical layouts and the stand-ins (T07)
+
+```
+src/perf/battle_mix.gd              BattleMix, pure: the typical and grand profiles, counts per entity type from N
+src/perf/bench_layout.gd            + battle and typical: fights on an 8 km lattice, capitals, rocks, the moon, the sides
+src/perf/standins/standin_director.gd   Node3D (World/Standins): holds and steps the stand-ins, counts the battle
+src/perf/standins/capital_standin.gd    RigidBody3D: a box hull with Targetable (kind capital) and Damageable, cruising
+src/perf/standins/turret_standin.gd     Node3D under a capital: a gun or an interceptor, stepped by the director
+src/perf/standins/asteroid_field.gd     Node3D: one MultiMeshInstance3D, static sphere bodies by RID, a marker per rock
+src/perf/standins/gravity_standin.gd    Node: a point source installed as WorldFrame.environment_field
+scripts/fullscreen_check.sh         a layout fullscreen at 1920x1080 under the GPU lock, with the Q20 verdict
+```
+
+- **What they are for.** Q19 and Q21 put capital ships, turrets, interceptors, missiles, mines, asteroid fields and a moon's
+  gravity in the battles the game must hold, and none of them exist yet (M6, M12, M14). The stand-ins put their load on the
+  tick so every M4 task measures against it: bench-only (the runner spawns them; no scenario does), built by code with no
+  assets, and replaced by the roadmap's real work. Missiles, beams and mines are T12's.
+- **The mix** (`BattleMix`): a profile is a Dictionary of parameters and `counts(profile, n)` gives fighters, capitals by class,
+  turrets, interceptors, beams, missiles, mines, asteroids, sides and the area. `typical` is 1 capital in 7 (8 at N 58), two
+  sides; `grand` is `round(0.15 N)` capitals, carriers `floor(0.2 c)`, destroyers `round(c / 3)`, four sides. Every run of a
+  battle or typical layout prints its mix and writes it in `summary.json` (`mix`, `mix_line`).
+- **The layouts.** N counts fighters and capitals. Fights of 24 sit on an 8 km lattice in as many layers as the area's depth
+  holds, the player's fight first, 2.5 km ahead. In each fight every side comes in from its own direction (+Z, -Z, +X, -X; the
+  player's side, Earth Alliance, from +Z) in a 400 m ball 800 m out, facing in. A side's capitals sit 5 km behind its fights,
+  taken in turn, side by side 2.5 km apart, cruising into the fight at 30 m/s. The rock slab (20 by 5 by 20 km, 1 000 rocks of
+  20 to 200 m, log-uniform) is centred on the player's fight and clears every hull by 100 m; the moon is a point source 400 km
+  below pulling 0.03 m/s^2. Sides 3 and 4 (`bench_c`, `bench_d`) fly raider and Starfury hulls with their own faction, so the
+  runner installs a session `FactionTable` with every pair hostile and puts the game's table and every pool ship's own faction
+  back afterwards.
+- **Capitals** are Newtonian bodies like ships (no damping; engines re-apply a force every tick that holds the cruise velocity
+  and the environment's pull, capped at 2 m/s^2). Their `Targetable` has `kind` capital (new: `Targetable.Kind`, default ship),
+  so later scans and broad phases can tell them apart; the scan sees them as ships today. Hull points only, invulnerable in
+  the bench like the fighters.
+- **Turrets** do not process themselves: the director steps them once per tick at priority -5, after the AI drivers built the
+  tick's shared `ContactScan`. A gun asks the scan for the nearest hostile fighter within 4 km every sixth tick (staggered across
+  guns; contacts over 50 m are capitals or rocks until the scan carries kinds, T09), turns at 30 deg/s toward the
+  `InterceptMath` lead and fires a pulse-cannon bolt through its own `PulseCannonGate` (1 s) only while the aim is within 1.5 deg.
+  The bolt is a normal `Projectile` with the capital as shooter, so the hit resolver, the scan's incoming fire and the
+  interceptors see it like any other. An interceptor shoots down the nearest hostile bolt within 1.5 km every 0.5 s (staggered
+  ticks) by spending it; T12 adds missiles. No turret has a mesh.
+- **The asteroid field** draws every rock with one `MultiMeshInstance3D` and collides through one static sphere body per rock
+  made by RID (`PhysicsServer3D`), with no mesh or physics node per rock. The scan and the hit and ram resolvers still find hulls
+  through `Damageable` nodes, so each rock also has one bare marker `Node3D` with an unbreakable, `hit_by_anyone` sphere hull: the
+  scan sees it as a static row (not a ship, no velocity, its radius) and bolts hit it. The field node is shiftable; after a rebase
+  `on_rebased` moves the RID bodies. T09's registry and T08's sweep can read rows from the field instead of the markers.
+- **The moon** is `WorldFrame.environment_field` (new), a `Callable` that `environment_accel` calls when set. Ships already add
+  `mass * environment_accel(position)` every tick, and capitals do in their engines. Bolts fly straight (they never took the
+  environment), so the moon bends ships' paths and every intercept's drift, not bolts.
+- **Carrier launches**: every 5 s each carrier (first launches spread over the period) releases one in-play fighter of its side
+  to the pool, taken in turn, and acquires one again at its bay with a new brain and 80 m/s along its nose, so N holds and the
+  pool's release and acquire run in play.
+- **Counters.** `PerfProbe` records the director's own time (`standins`, inside `flight`) and per tick `fighters_near` and
+  `fighters_far` (within 10 km of the player, the tier's radius to come), `capitals`, `turrets`, `interceptors`, `beams`,
+  `missiles`, `mines` (0 until T12), `asteroids`, `launches` and `sides`; the `perf` provider shows them and a run's summary has
+  `entities` (means per tick, launches summed) beside the ship count. A sweep's summary lists them per ship count, and its
+  headline is battle's max N when battle was measured.
+- **The fullscreen check** (Q20) runs `scripts/measure_fight.gd` with `scene=quiet` and the bench as its console statement,
+  fullscreen at 1920x1080 with vsync off and the chase camera, 20 s after 8 s of warm-up, and writes the verdict: the battle's
+  floor 30 FPS and target 60, typical 60 with a frame mean of 12 ms or under.
+- **Tests**: `test_battle_mix` (the table at 58, 100, 500 and 1 000, scaling, parameters), `test_bench_layout` (seeded plans,
+  spacing hull to hull, the 8 km lattice, a quarter of the capitals a side, four sides every pair hostile, the slab clear of
+  every ship, the moon), `test_standins` (a gun fires only at hostiles within 4 km and only inside its gate at a limited turn
+  rate, an interceptor removes only hostile bolts within 1.5 km, rocks are static rows that bolts hit, a rebase moves rocks and
+  capitals, the moon bends a coasting path about 13.5 m in 30 s) and `test_bench` (battle and typical runs write every entity
+  count, the factions and stand-ins go afterwards).

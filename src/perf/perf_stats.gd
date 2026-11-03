@@ -5,7 +5,7 @@ extends RefCounted
 ##
 ## A run passes when its tick median and p99 are inside budget, no tick holding a rebase is longer than one 60 Hz frame and the
 ## simulation kept up with the wall clock. A ship count passes on two runs of three; a sweep stops after two failing counts in a
-## row. The headline is the lower of furball's and spread's max N.
+## row. The headline is battle's max N when the sweep measured it (M4-T07, Q15), else the lower of furball's and spread's.
 
 ## Simulation tick budget, microseconds: median and p99 over the measured window.
 const TICK_MEDIAN_BUDGET_US: float = 8000.0
@@ -14,8 +14,10 @@ const TICK_P99_BUDGET_US: float = 12000.0
 const REBASE_BUDGET_US: float = 1.0e6 / 60.0
 ## The share of wall time the simulation may fall behind over a run.
 const LAG_BUDGET: float = 0.01
-## Layouts that set the headline; the others are recorded.
+## Layouts that set the headline when battle was not measured; the others are recorded.
 const HEADLINE_LAYOUTS: Array[StringName] = [&"furball", &"spread"]
+## The headline layout from M4-T07 on: the grand battle.
+const HEADLINE_BATTLE: StringName = &"battle"
 
 
 ## The middle value (the mean of the two middle ones for an even count); 0 for no samples.
@@ -129,8 +131,11 @@ static func should_stop(ns_in_order: Array, results: Dictionary) -> bool:
 	return true
 
 
-## The milestone's headline number: the lowest max N over `HEADLINE_LAYOUTS` (`{layout: max N}`); 0 if one is missing.
+## The milestone's headline number (`{layout: max N}`): battle's max N when it is there, else the lowest over
+## `HEADLINE_LAYOUTS`; 0 if one of those is missing.
 static func headline(max_by_layout: Dictionary) -> int:
+	if max_by_layout.has(HEADLINE_BATTLE):
+		return int(max_by_layout[HEADLINE_BATTLE])
 	var lowest: int = -1
 	for layout: StringName in HEADLINE_LAYOUTS:
 		if not max_by_layout.has(layout):

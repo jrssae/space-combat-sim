@@ -6,8 +6,11 @@ extends RefCounted
 
 ## Stages in the order a breakdown lists them; `tick` is their total.
 const BREAKDOWN: Array[StringName] = [&"ai", &"flight", &"targeting", &"resolvers", &"late", &"physics", &"other"]
-## Inside other stages, listed beside them.
-const INSIDE: Array[StringName] = [&"scan", &"think", &"hit", &"ram", &"rebase", &"sync"]
+## Inside other stages, listed beside them (the stand-ins, M4-T07, inside flight).
+const INSIDE: Array[StringName] = [&"scan", &"think", &"hit", &"ram", &"rebase", &"sync", &"standins"]
+## Probe fields that count things rather than time them.
+const COUNTS: Array[StringName] = [&"ships", &"bolts", &"pairs", &"stages_on", &"sync_on", &"fighters_near", &"fighters_far",
+		&"capitals", &"turrets", &"interceptors", &"beams", &"missiles", &"mines", &"asteroids", &"launches", &"sides"]
 ## Ship counts whose stage breakdown the sweep summary lists (the milestone's AC2).
 const BREAKDOWN_NS: Array[int] = [50, 100]
 
@@ -29,7 +32,7 @@ static func run_summary(meta: Dictionary, series: Array[PackedInt64Array]) -> Di
 	var stages: Dictionary = {}
 	for i: int in PerfProbe.FIELD_NAMES.size():
 		var field: StringName = PerfProbe.FIELD_NAMES[i]
-		if field in [&"ships", &"bolts", &"pairs", &"stages_on", &"sync_on"]:
+		if field in COUNTS:
 			continue
 		# The tick, the engine's part and the remainder are timed in every tick; the stages only where their markers ran.
 		var every_tick: bool = field in [&"tick", &"physics", &"sync"]
@@ -62,6 +65,7 @@ static func run_summary(meta: Dictionary, series: Array[PackedInt64Array]) -> Di
 	out["ships_max"] = _max_int(ships)
 	out["bolts_mean"] = PerfStats.mean(_floats(series[PerfProbe.Field.BOLTS], on, true))
 	out["pairs_mean"] = PerfStats.mean(_floats(series[PerfProbe.Field.PAIRS], on, true))
+	out["entities"] = entity_counts(series)
 	out["verdict"] = {"pass": failures.is_empty(), "failures": Array(failures)}
 	return out
 
@@ -83,6 +87,13 @@ static func run_markdown(s: Dictionary) -> String:
 			_ms(tick, "median_us"), _ms(tick, "p99_us"), _ms(tick, "max_us"), int(s.get("ticks", 0)), float(s.get("lag", 0.0)) * 100.0,
 			int(rebase.get("count", 0)), float(rebase.get("tick_max_us", 0.0)) * 1e-3, float(rebase.get("shift_max_us", 0.0)) * 1e-3,
 			float(s.get("load_ms", 0.0)), int(s.get("ships_min", 0)), int(s.get("ships_max", 0)), float(s.get("bolts_mean", 0.0))])
+	if s.has("mix"):
+		lines.append("")
+		lines.append("Mix asked for: %s" % String(s.get("mix_line", "")))
+	var entities: Dictionary = s.get("entities", {})
+	if int(entities.get("capitals", 0)) > 0 or int(entities.get("asteroids", 0)) > 0:
+		lines.append("")
+		lines.append("Entities (mean per tick; launches in the window): %s" % entity_line(entities))
 	lines.append("")
 	lines.append_array(_breakdown_table(s.get("stages", {}) as Dictionary, float(s.get("sync_timed_share", 0.0))))
 	var engine: Dictionary = s.get("engine_check", {})
@@ -114,6 +125,29 @@ static func _breakdown_table(stages: Dictionary, sync_share: float) -> PackedStr
 				_ms(st, "median_us"), _ms(st, "p99_us")])
 	lines.append("| **tick** | %.3f | 100 %% | %.3f | %.3f |" % [_ms(tick, "mean_us"), _ms(tick, "median_us"), _ms(tick, "p99_us")])
 	return lines
+
+
+## What a run held per entity type (M4-T07): each count's mean per tick, rounded, and the launches summed over the window.
+static func entity_counts(series: Array[PackedInt64Array]) -> Dictionary:
+	var out: Dictionary = {}
+	for field: StringName in PerfProbe.ENTITY_FIELDS:
+		var values: PackedInt64Array = series[PerfProbe.FIELD_NAMES.find(field)]
+		var total: int = 0
+		for v: int in values:
+			total += v
+		if field == &"launches":
+			out[String(field)] = total
+		else:
+			out[String(field)] = roundi(float(total) / float(values.size())) if not values.is_empty() else 0
+	return out
+
+
+## The entity counts as one line, in `PerfProbe.ENTITY_FIELDS` order.
+static func entity_line(entities: Dictionary) -> String:
+	var parts := PackedStringArray()
+	for field: StringName in PerfProbe.ENTITY_FIELDS:
+		parts.append("%s %d" % [String(field).replace("_", " "), int(entities.get(String(field), 0))])
+	return ", ".join(parts)
 
 
 ## A sweep's summary from its runs' summaries: per layout and ship count the runs, their verdicts and the medians over runs,
@@ -193,6 +227,12 @@ static func _count_entry(n: int, runs: Array[Dictionary], passes: Array, missing
 	var breakdown: Dictionary = {}
 	for key: String in stage_means:
 		breakdown[key] = PerfStats.median(stage_means[key] as PackedFloat64Array)
+	var entities: Dictionary = {}
+	for field: StringName in PerfProbe.ENTITY_FIELDS:
+		var values := PackedFloat64Array()
+		for run: Dictionary in runs:
+			values.append(float((run.get("entities", {}) as Dictionary).get(String(field), 0)))
+		entities[String(field)] = roundi(PerfStats.median(values))
 	var run_medians: Array = Array(medians)
 	return {
 		"n": n,
@@ -209,6 +249,7 @@ static func _count_entry(n: int, runs: Array[Dictionary], passes: Array, missing
 		"rebase_shift_max_us": shift_worst,
 		"load_ms": PerfStats.median(loads),
 		"stage_means_us": breakdown,
+		"entities": entities,
 		"failures": failures,
 	}
 
@@ -218,7 +259,7 @@ static func sweep_markdown(s: Dictionary) -> String:
 	var lines := PackedStringArray()
 	lines.append("# Bench sweep %s" % s.get("label", ""))
 	lines.append("")
-	lines.append("Headline max N (the lower of furball and spread): **%d**" % int(s.get("headline_max_n", 0)))
+	lines.append("Headline max N (battle's when it was measured, M4-T07; else the lower of furball and spread): **%d**" % int(s.get("headline_max_n", 0)))
 	lines.append("")
 	var layouts: Dictionary = s.get("layouts", {})
 	for layout: String in layouts:
@@ -236,6 +277,25 @@ static func sweep_markdown(s: Dictionary) -> String:
 					verdict_text, float(c["tick_median_us"]) * 1e-3, ", ".join(run_medians), float(c["tick_p99_us"]) * 1e-3,
 					float(c["lag"]) * 100.0, float(c["rebase_tick_max_us"]) * 1e-3, float(c["rebase_shift_max_us"]) * 1e-3, float(c["load_ms"]) * 1e-3])
 		lines.append("")
+		var with_entities: bool = false
+		for c: Dictionary in entry.get("counts", []):
+			with_entities = with_entities or int((c.get("entities", {}) as Dictionary).get("capitals", 0)) > 0
+		if with_entities:
+			lines.append("Entities per ship count (median over runs of each run's mean per tick; launches per window):")
+			lines.append("")
+			var header := PackedStringArray(["N"])
+			var rule := PackedStringArray(["---"])
+			for field: StringName in PerfProbe.ENTITY_FIELDS:
+				header.append(String(field).replace("_", " "))
+				rule.append("---")
+			lines.append("| " + " | ".join(header) + " |")
+			lines.append("| " + " | ".join(rule) + " |")
+			for c: Dictionary in entry.get("counts", []):
+				var row := PackedStringArray([str(int(c["n"]))])
+				for field: StringName in PerfProbe.ENTITY_FIELDS:
+					row.append(str(int((c.get("entities", {}) as Dictionary).get(String(field), 0))))
+				lines.append("| " + " | ".join(row) + " |")
+			lines.append("")
 		for c: Dictionary in entry.get("counts", []):
 			if int(c["n"]) in BREAKDOWN_NS:
 				lines.append("Stage means at %d ships (median over runs), ms per tick:" % int(c["n"]))

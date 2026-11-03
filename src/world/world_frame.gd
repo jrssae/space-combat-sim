@@ -40,6 +40,8 @@ const SETTLE_PRIORITY: int = 1_000_000
 
 ## Universe position of the local origin (64-bit).
 var origin: UniversePos = UniversePos.new()
+## The environment's pull, `func(local_pos: Vector3) -> Vector3`, or empty for none (M4-T07: the battle's moon stand-in).
+var environment_field: Callable = Callable()
 ## Velocity of the local frame in the system frame, m/s, as [x, y, z]. Always zero in M1: the velocity rebase
 ## (§14.1) is a roadmap milestone, but the field exists so nothing has to be retrofitted.
 var origin_velocity: PackedFloat64Array = PackedFloat64Array([0.0, 0.0, 0.0])
@@ -186,6 +188,9 @@ func _cmd_rebase(args: Dictionary) -> ConsoleResult:
 
 
 ## Acceleration, m/s^2, that the environment applies at a local position (gravity, hyperspace fields). Ships add
-## `mass * environment_accel(position)` every physics tick. None exists in M1.
-func environment_accel(_local_pos: Vector3) -> Vector3:
+## `mass * environment_accel(position)` every physics tick. None exists in the game yet; the battle benchmark's moon
+## (M4-T07, `GravityStandin`) installs one as `environment_field`.
+func environment_accel(local_pos: Vector3) -> Vector3:
+	if environment_field.is_valid():
+		return environment_field.call(local_pos)
 	return Vector3.ZERO

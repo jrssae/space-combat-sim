@@ -7,7 +7,8 @@
 # Writes reports/perf/<label>/: runs/<layout>_<n>_s<seed>/summary.{json,md} for every run, sweep.log, and the sweep's own
 # summary.json and summary.md (max N per layout, the headline, the stage breakdown at 50 and 100 ships).
 #
-# Usage: scripts/bench.sh [label] [layout...]        (layouts: furball spread transit, all three by default)
+# Usage: scripts/bench.sh [label] [layout...]        (layouts: furball spread transit battle typical; the first three by
+#        default. battle is the headline from M4-T07 on, typical the second gate)
 # Environment: BENCH_NS ("25 50 100 150 200 300 400 500"), BENCH_SEEDS ("1 2 3"), BENCH_SECONDS (30), BENCH_WARMUP (5),
 #              BENCH_CPUS (0-11, the i5-13600KF's performance cores; empty for no pinning), BENCH_SCENARIO (combat_sandbox),
 #              BENCH_EXTRA (more bench options, e.g. "probe=paired"), GODOT_BIN.

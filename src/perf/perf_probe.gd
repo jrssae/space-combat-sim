@@ -13,10 +13,17 @@ const RESOLVERS_END_PRIORITY: int = RamResolver.LATE_PRIORITY + 1
 const END_PRIORITY: int = 2_000_000
 
 ## What one tick records, in this order (`last`, `series`).
+## The battle's stage and per-entity counts (M4-T07) follow the first nineteen, in `StandinDirector.Count` order.
 enum Field { TICK, AI, SCAN, THINK, FLIGHT, REBASE, TARGETING, RESOLVERS, HIT, RAM, LATE, PHYSICS, SYNC, OTHER, SHIPS, BOLTS,
-		PAIRS, STAGES_ON, SYNC_ON }
+		PAIRS, STAGES_ON, SYNC_ON, STANDINS, FIGHTERS_NEAR, FIGHTERS_FAR, CAPITALS, TURRETS, INTERCEPTORS, BEAMS, MISSILES, MINES,
+		ASTEROIDS, LAUNCHES, SIDES }
 const FIELD_NAMES: Array[StringName] = [&"tick", &"ai", &"scan", &"think", &"flight", &"rebase", &"targeting", &"resolvers",
-		&"hit", &"ram", &"late", &"physics", &"sync", &"other", &"ships", &"bolts", &"pairs", &"stages_on", &"sync_on"]
+		&"hit", &"ram", &"late", &"physics", &"sync", &"other", &"ships", &"bolts", &"pairs", &"stages_on", &"sync_on",
+		&"standins", &"fighters_near", &"fighters_far", &"capitals", &"turrets", &"interceptors", &"beams", &"missiles", &"mines",
+		&"asteroids", &"launches", &"sides"]
+## The per-entity counts (M4-T07): what a battle holds, beside the ship count.
+const ENTITY_FIELDS: Array[StringName] = [&"fighters_near", &"fighters_far", &"capitals", &"turrets", &"interceptors", &"beams",
+		&"missiles", &"mines", &"bolts", &"asteroids", &"launches", &"sides"]
 
 enum State { IDLE, SCRIPT, POST }
 
@@ -25,6 +32,8 @@ var world: WorldFrame = null
 var hits: HitResolver = null
 var rams: RamResolver = null
 var ships_in_play: Callable = Callable()
+## The battle's stand-ins (M4-T07): their own cost and the per-entity counts. Main sets it.
+var standins: StandinDirector = null
 ## Nothing runs between frames (headless, frame sleep off), so the body sync before the scripts can be timed; else it is 0.
 var time_sync: bool = false
 var enabled: bool = false:
@@ -50,7 +59,7 @@ var _idle_end_us: int = 0
 var _idle_end_valid: bool = false
 var _rebases_seen: int = 0
 var _sync_timed: bool = false
-var _captured: PackedInt64Array = PackedInt64Array()  # rebase, scan, think, ships, bolts, pairs, hit, ram at the end of the scripts
+var _captured: PackedInt64Array = PackedInt64Array()  # rebase, scan, think, ships, bolts, pairs, hit, ram, standins, the counts
 
 
 ## One clock read at a fixed place in the tick.
@@ -76,7 +85,7 @@ func _init() -> void:
 	last.resize(FIELD_NAMES.size())
 	_marks.resize(5)
 	_mark_frames.resize(5)
-	_captured.resize(8)
+	_captured.resize(9 + StandinDirector.COUNT_NAMES.size())
 	clear_series()
 
 
@@ -201,6 +210,10 @@ func _end_script() -> void:
 	_captured[5] = hits.pairs_tested if hits != null else 0
 	_captured[6] = hits.resolve_us if hits != null else 0
 	_captured[7] = rams.resolve_us if rams != null else 0
+	var standing: bool = standins != null and standins.active
+	_captured[8] = standins.us_this_tick() if standing else 0
+	for i: int in StandinDirector.COUNT_NAMES.size():
+		_captured[9 + i] = standins.counts[i] if standing else 0
 	_state = State.POST
 
 
@@ -233,6 +246,9 @@ func _finish(now: int) -> void:
 	last[Field.PAIRS] = _captured[5]
 	last[Field.HIT] = _captured[6]
 	last[Field.RAM] = _captured[7]
+	last[Field.STANDINS] = _captured[8]
+	for i: int in StandinDirector.COUNT_NAMES.size():
+		last[Field.FIGHTERS_NEAR + i] = _captured[9 + i]
 	last[Field.SYNC_ON] = 1 if _sync_timed else 0
 	var staged: bool = stages_enabled
 	for f: int in _mark_frames:
@@ -273,6 +289,7 @@ func _register_console() -> void:
 		&"physics": "Jolt's step and the body sync, with the engine's flushes around them",
 		&"sync": "The body sync before the scripts; 0 unless headless with the frame sleep off (bench), and 0 when ticks ran back to back",
 		&"other": "The tick's remainder outside every named stage (before the AI drivers)",
+		&"standins": "The battle's stand-ins (capitals, turrets, interceptors, launches; M4-T07), inside flight",
 	}
 	for key: StringName in docs:
 		var field: StringName = key
@@ -280,6 +297,10 @@ func _register_console() -> void:
 				"doc": String(docs[key]) + "; last tick, wall clock"}
 	entries[&"ships"] = {"get": func() -> int: return value(&"ships"), "doc": "Ships in play in the last tick (pool ships and the player)"}
 	entries[&"bolts"] = {"get": func() -> int: return value(&"bolts"), "doc": "Bolts swept in the last tick"}
+	for count_name: StringName in StandinDirector.COUNT_NAMES:
+		var field: StringName = count_name
+		entries[field] = {"get": func() -> int: return value(field),
+				"doc": "In the last tick of a battle bench (M4-T07): %s" % String(field).replace("_", " ")}
 	entries[&"native_loaded"] = {"get": func() -> bool: return NativeLib.has_class(NativeProbe.NATIVE_CLASS),
 			"doc": "Whether the native library is loaded (scripts/build_native.sh; M4-T05)"}
 	entries[&"native_version"] = {"get": func() -> String: return NativeLib.version(NativeProbe.NATIVE_CLASS),

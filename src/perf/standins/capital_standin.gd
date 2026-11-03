@@ -1,0 +1,167 @@
+class_name CapitalStandin
+extends RigidBody3D
+## A capital ship stand-in for the battle benchmark (M4-T07, Q19, Q22): bench-only, built by code with no assets, replaced by
+## M12's capital ships. A box hull 300 m (cruiser), 600 m (destroyer) or 1 200 m (carrier) long with a `Targetable` of kind
+## capital and a `Damageable` (hull points only), cruising on a fixed heading, with its gun turrets and interceptors as
+## `TurretStandin` children. It costs the tick what a big body costs Jolt, the scan and every broad phase; `StandinDirector`
+## steps its engines and turrets.
+##
+## Newtonian like every body (§15.16): no damping, and the engines hold the cruise velocity with a force each tick that also
+## holds off the environment's pull (the gravity stand-in).
+
+const CRUISE_MPS: float = 30.0
+## How fast the engines bring the velocity back to cruise, s, and the most they can push, m/s^2.
+const CRUISE_RESPONSE_S: float = 5.0
+const MAX_ACCEL_MPS2: float = 2.0
+const INTERCEPTORS_PER_CAPITAL: int = 4
+## Where a carrier's launches leave from: this far below its keel, m.
+const BAY_DROP_M: float = 40.0
+## Per class: the hull box (m), mass (kg), hull points and gun turrets (the milestone's table).
+const CLASSES: Dictionary = {
+	&"cruiser": {"length": 300.0, "width": 60.0, "height": 40.0, "mass": 5.0e6, "hull": 2.0e4, "turrets": 8},
+	&"destroyer": {"length": 600.0, "width": 110.0, "height": 70.0, "mass": 2.0e7, "hull": 5.0e4, "turrets": 10},
+	&"carrier": {"length": 1200.0, "width": 220.0, "height": 140.0, "mass": 8.0e7, "hull": 1.2e5, "turrets": 12},
+}
+const HULL_COLOR: Color = Color(0.42, 0.44, 0.47)
+
+var ship_class: StringName = &"cruiser"
+var faction: StringName = Factions.NEUTRAL
+## The velocity the engines hold, World frame, m/s.
+var cruise_velocity: Vector3 = Vector3.ZERO
+## For the environment's pull; null means none.
+var world: WorldFrame = null
+var targetable: Targetable = null
+var damageable: Damageable = null
+
+var _guns: Array[TurretStandin] = []
+var _interceptors: Array[TurretStandin] = []
+
+static var _materials: Dictionary = {}
+
+
+## A capital of `cls` for `p_faction`, called `display_name`, holding `velocity`. Add it to the tree (`WorldFrame.spawn`).
+static func create(cls: StringName, p_faction: StringName, display_name: String, velocity: Vector3) -> CapitalStandin:
+	var cap := CapitalStandin.new()
+	cap.ship_class = cls if CLASSES.has(cls) else &"cruiser"
+	cap.faction = p_faction
+	cap.cruise_velocity = velocity
+	cap.linear_velocity = velocity
+	cap.name = display_name.replace(" ", "_")
+	cap._build(display_name)
+	return cap
+
+
+## The radius of the sphere that holds the hull of a `cls` capital, m.
+static func hull_radius(cls: StringName) -> float:
+	var spec: Dictionary = CLASSES.get(cls, CLASSES[&"cruiser"])
+	return 0.5 * Vector3(float(spec["width"]), float(spec["height"]), float(spec["length"])).length()
+
+
+func _init() -> void:
+	gravity_scale = 0.0
+	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
+	angular_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
+	linear_damp = 0.0
+	angular_damp = 0.0
+	can_sleep = false
+
+
+func length_m() -> float:
+	return float((CLASSES[ship_class] as Dictionary)["length"])
+
+
+func guns() -> Array[TurretStandin]:
+	return _guns
+
+
+func interceptors() -> Array[TurretStandin]:
+	return _interceptors
+
+
+## Whether it launches fighters (a carrier).
+func is_carrier() -> bool:
+	return ship_class == &"carrier"
+
+
+## Where a launched fighter leaves from, World frame.
+func bay_position() -> Vector3:
+	var spec: Dictionary = CLASSES[ship_class]
+	return global_position - global_basis.y * (float(spec["height"]) * 0.5 + BAY_DROP_M)
+
+
+## The force the engines apply this tick: back toward the cruise velocity, plus what holds off the environment's pull.
+func cruise_force(delta: float) -> Vector3:
+	var wanted: Vector3 = (cruise_velocity - linear_velocity) / maxf(CRUISE_RESPONSE_S, delta)
+	var pull: Vector3 = world.environment_accel(global_position) if world != null and is_instance_valid(world) else Vector3.ZERO
+	return mass * (wanted - pull).limit_length(MAX_ACCEL_MPS2)
+
+
+## One tick of the engines (forces are re-applied every tick).
+func step_engines(delta: float) -> void:
+	apply_central_force(cruise_force(delta))
+
+
+func _build(display_name: String) -> void:
+	var spec: Dictionary = CLASSES[ship_class]
+	var size := Vector3(float(spec["width"]), float(spec["height"]), float(spec["length"]))
+	mass = float(spec["mass"])
+	var box := BoxShape3D.new()
+	box.size = size
+	var shape := CollisionShape3D.new()
+	shape.name = "Hull"
+	shape.shape = box
+	add_child(shape)
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	mesh.material = _material()
+	var hull_mesh := MeshInstance3D.new()
+	hull_mesh.name = "HullMesh"
+	hull_mesh.mesh = mesh
+	add_child(hull_mesh)
+	targetable = Targetable.new()
+	targetable.name = "Targetable"
+	targetable.display_name = display_name
+	targetable.faction = faction
+	targetable.kind = Targetable.Kind.CAPITAL
+	add_child(targetable)
+	damageable = Damageable.new()
+	damageable.name = "Damageable"
+	add_child(damageable)
+	var collision: Array[Dictionary] = [{"name": "hull", "shape": box, "transform": Transform3D.IDENTITY}]
+	damageable.setup(collision, float(spec["hull"]), faction)
+	_add_turrets(size, int(spec["turrets"]))
+
+
+# Guns along the spine, alternately on top and underneath so the two halves cover the whole sphere; interceptors at the
+# four corners of the beam.
+func _add_turrets(size: Vector3, count: int) -> void:
+	var rows: int = maxi(1, ceili(count / 2.0))
+	for i: int in count:
+		var row: int = i / 2
+		var along: float = lerpf(-0.4, 0.4, float(row) / float(maxi(rows - 1, 1))) * size.z
+		var above: float = (size.y * 0.5 + 3.0) * (1.0 if i % 2 == 0 else -1.0)
+		_guns.append(_turret(TurretStandin.Role.GUN, Vector3(0.0, above, along), "Gun%d" % i))
+	for i: int in INTERCEPTORS_PER_CAPITAL:
+		var side: float = 1.0 if i % 2 == 0 else -1.0
+		var end: float = 0.35 if i < 2 else -0.35
+		_interceptors.append(_turret(TurretStandin.Role.INTERCEPTOR, Vector3(side * (size.x * 0.5 + 3.0), 0.0, end * size.z),
+				"Interceptor%d" % i))
+
+
+func _turret(role: TurretStandin.Role, at: Vector3, turret_name: String) -> TurretStandin:
+	var turret := TurretStandin.new()
+	turret.name = turret_name
+	turret.role = role
+	turret.position = at
+	turret.capital = self
+	add_child(turret)
+	return turret
+
+
+static func _material() -> StandardMaterial3D:
+	if not _materials.has(&"hull"):
+		var m := StandardMaterial3D.new()
+		m.albedo_color = HULL_COLOR
+		m.roughness = 0.8
+		_materials[&"hull"] = m
+	return _materials[&"hull"]

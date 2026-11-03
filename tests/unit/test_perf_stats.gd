@@ -169,6 +169,11 @@ func test_the_headline_is_the_lower_of_furball_and_spread() -> void:
 	assert_eq(PerfStats.headline({&"spread": 150}), 0, "a layout not measured counts as nothing")
 
 
+func test_the_battle_is_the_headline_once_it_is_measured() -> void:
+	assert_eq(PerfStats.headline({&"furball": 100, &"spread": 300, &"battle": 150, &"typical": 58}), 150, "M4-T07: battle sets it")
+	assert_eq(PerfStats.headline({&"battle": 0, &"furball": 100, &"spread": 100}), 0, "even when it is 0")
+
+
 # --- paired blocks (the probe's own cost) ----------------------------------------------------------------------------
 
 

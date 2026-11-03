@@ -31,9 +31,11 @@ func _initialize() -> void:
 	for layout: String in layouts:
 		var entry: Dictionary = layouts[layout]
 		for c: Dictionary in entry["counts"]:
-			print("[bench-sweep] %s %d %s %d/%d tick median %.2f ms%s" % [layout, int(c["n"]), "pass" if bool(c["pass"]) else "fail",
+			var entities: Dictionary = c.get("entities", {})
+			print("[bench-sweep] %s %d %s %d/%d tick median %.2f ms%s%s" % [layout, int(c["n"]), "pass" if bool(c["pass"]) else "fail",
 					int(c["passes"]), int(c["runs"]), float(c["tick_median_us"]) * 1e-3,
-					", %d missing" % int(c["missing"]) if int(c["missing"]) > 0 else ""])
+					", %d missing" % int(c["missing"]) if int(c["missing"]) > 0 else "",
+					"; " + String(report.call("entity_line", entities)) if int(entities.get("capitals", 0)) > 0 else ""])
 		print("[bench-sweep] %s max_n %d%s" % [layout, int(entry["max_n"]), " stop" if bool(entry["stopped"]) else ""])
 	print("[bench-sweep] headline %d (%d runs)" % [int(summary["headline_max_n"]), runs.size()])
 	quit(0)

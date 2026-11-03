@@ -265,8 +265,16 @@ func ensure_pool(type: StringName, count: int) -> int:
 	return built
 
 
-# The tick's stage timers and the benchmark (M4-T01); both pause with the world.
+# The tick's stage timers and the benchmark (M4-T01); both pause with the world. The battle benchmark's stand-ins live in
+# `World/Standins` (M4-T07), empty outside a battle run.
 func _setup_perf() -> void:
+	var standins := StandinDirector.new()
+	standins.name = "Standins"
+	standins.world = world
+	standins.projectiles = projectiles
+	standins.ships = ships
+	standins.player = ship
+	world.add_child(standins)
 	perf_probe = PerfProbe.new()
 	perf_probe.name = "PerfProbe"
 	perf_probe.process_mode = Node.PROCESS_MODE_PAUSABLE
@@ -274,12 +282,14 @@ func _setup_perf() -> void:
 	perf_probe.hits = $Combat/HitResolver as HitResolver
 	perf_probe.rams = rams
 	perf_probe.ships_in_play = func() -> int: return ships.in_use_count() + (1 if player_alive else 0)
+	perf_probe.standins = standins
 	add_child(perf_probe)
 	bench = BenchRunner.new()
 	bench.name = "BenchRunner"
 	bench.process_mode = Node.PROCESS_MODE_PAUSABLE
 	bench.main = self
 	bench.probe = perf_probe
+	bench.standins = standins
 	add_child(bench)
 
 

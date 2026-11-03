@@ -4,7 +4,7 @@
 # FPS here is simulation ticks per wall-clock second (60 while the simulation keeps real time). A layout stops at the first
 # count under the FPS floor, or when its next run would not fit in its share of the time budget.
 #
-# Usage: scripts/bench_quick.sh [label] [layout...]   (furball and spread by default, the headline's two; or transit)
+# Usage: scripts/bench_quick.sh [label] [layout...]   (furball and spread by default; or transit, battle, typical (M4-T07))
 # Environment: QUICK_NS ("10 15 20 25 30 40 50 75 100 150 200 300 400 500"), QUICK_MIN_FPS (30), QUICK_SECONDS (6),
 #              QUICK_WARMUP (2), QUICK_SEED (1), QUICK_BUDGET_S (540), BENCH_CPUS (0-11; empty for no pinning), GODOT_BIN.
 # Writes reports/perf/<label>/quick.md and each run's summary under runs/.
@@ -34,7 +34,7 @@ if [[ ! -x "${GODOT}" ]]; then
     exit 1
 fi
 for layout in "${LAYOUTS[@]}"; do
-    case "${layout}" in furball|spread|transit) ;; *) echo "bench_quick.sh: unknown layout '${layout}'" >&2; exit 2 ;; esac
+    case "${layout}" in furball|spread|transit|battle|typical) ;; *) echo "bench_quick.sh: unknown layout '${layout}'" >&2; exit 2 ;; esac
 done
 mkdir -p "${OUT}/runs"
 touch reports/.gdignore  # or the next --import takes the reports for game files
@@ -50,14 +50,14 @@ read_run() {
 import json, sys
 d = json.load(open(sys.argv[1]))
 if d.get("missing"):
-    print("| %d | run died | | | | | | | fail |" % d["n"]); print("0 0"); print("the run died without a report"); sys.exit()
+    print("| %d | run died | | | | | | | | fail |" % d["n"]); print("0 0"); print("the run died without a report"); sys.exit()
 s, ms = d["stages"], lambda us: "%.2f" % (us / 1000.0)
 mean = lambda k: s.get(k, {}).get("mean_us", 0.0)
 ok = d["verdict"]["pass"]
 fps = d["ticks"] / d["wall_s"] if d.get("wall_s", 0) > 0 else 0.0
-print("| %d | %.1f | %s | %s | %s | %s | %s | %s | %s |" % (d["n"], fps, ms(s["tick"]["median_us"]), ms(s["tick"]["p99_us"]),
+print("| %d | %.1f | %s | %s | %s | %s | %s | %s | %s | %s |" % (d["n"], fps, ms(s["tick"]["median_us"]), ms(s["tick"]["p99_us"]),
       ms(d["rebase"]["tick_max_us"]) if d["rebase"]["count"] else "none", ms(mean("targeting")), ms(mean("ai")),
-      ms(mean("resolvers")), "pass" if ok else "fail" + (" (cut short)" if d.get("aborted") else "")))
+      ms(mean("resolvers")), ms(mean("standins")), "pass" if ok else "fail" + (" (cut short)" if d.get("aborted") else "")))
 print("%d %d" % (round(fps * 10), 1 if ok else 0))
 print("; ".join(d["verdict"]["failures"]) or "none")
 EOF
@@ -83,8 +83,8 @@ ramp() {
         echo
         echo "## ${layout}"
         echo
-        echo "| N | FPS | tick median ms | p99 ms | worst rebase tick ms | targeting ms | ai ms | resolvers ms | budget |"
-        echo "|---|---|---|---|---|---|---|---|---|"
+        echo "| N | FPS | tick median ms | p99 ms | worst rebase tick ms | targeting ms | ai ms | resolvers ms | stand-ins ms | budget |"
+        echo "|---|---|---|---|---|---|---|---|---|---|"
     } | tee -a "${REPORT}"
     for n in "${NS[@]}"; do
         local elapsed=$(( $(date +%s) - t_start ))
@@ -106,7 +106,7 @@ ramp() {
         fi
         mapfile -t lines < <(read_run "${OUT}/runs/${name}/summary.json")
         if (( ${#lines[@]} < 3 )); then
-            lines=("| ${n} | report unreadable | | | | | | | fail |" "0 0" "its report could not be read")
+            lines=("| ${n} | report unreadable | | | | | | | | fail |" "0 0" "its report could not be read")
         fi
         echo "${lines[0]}" | tee -a "${REPORT}"
         read -r fps10 ok <<< "${lines[1]}"

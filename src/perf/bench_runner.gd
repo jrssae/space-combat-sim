@@ -1,8 +1,14 @@
 class_name BenchRunner
 extends Node
 ## Runs one many-ships benchmark on the live main scene (M4-T01, architecture §17.1): `bench <layout> <n> [seconds]
-## [warmup=<s>] [seed=<k>] [label=<name>] [probe=paired] [rebase_m=<m>] [sleep=keep]`. Sets the scene up from the pools, warms
-## up, records ticks with the `PerfProbe`, writes the report and puts back what it changed; the ships stay in play.
+## [warmup=<s>] [seed=<k>] [label=<name>] [probe=paired] [rebase_m=<m>] [sleep=keep] [rocks=<count>]`. Sets the scene up from
+## the pools, warms up, records ticks with the `PerfProbe`, writes the report and puts back what it changed; the ships stay in
+## play.
+##
+## `battle` and `typical` (M4-T07, §17.6) also bring the battle's stand-ins through `standins` (`World/Standins`): the
+## capitals with their turrets, the asteroid field (`rocks=` overrides the mix's count; 0 for none), the moon, the carriers'
+## launch cycle, and for four sides a session faction table and the bench factions on the fighters of sides three and four.
+## All of it goes when the run ends.
 
 ## The report is written; the run's summary.
 signal finished(summary: Dictionary)
@@ -19,10 +25,14 @@ const MAX_SLOWDOWN: float = 10.0
 ## The console waits this many frames at most; the run releases the wait when it ends.
 const HOLD_FRAMES: int = 1_000_000
 const DEFAULT_ROOT: String = "res://reports/perf"
-const OPTION_KEYS: Array[String] = ["warmup", "seed", "label", "probe", "rebase_m", "sleep"]
+const OPTION_KEYS: Array[String] = ["warmup", "seed", "label", "probe", "rebase_m", "sleep", "rocks"]
+## A carrier's launch leaves its bay this much faster than the carrier, along its nose, m/s.
+const LAUNCH_MPS: float = 80.0
 
 var main: Main = null
 var probe: PerfProbe = null
+## The battle's stand-ins (M4-T07); Main makes it.
+var standins: StandinDirector = null
 ## Where reports go; a label is a path below it.
 var report_root: String = DEFAULT_ROOT
 var running: bool = false
@@ -39,6 +49,9 @@ var _load_ms: float = 0.0
 var _engine_worst := PackedFloat64Array()
 var _placed: Dictionary = {}
 var _restore: Dictionary = {}
+var _mix: Dictionary = {}
+var _rocks_placed: int = 0
+var _launch_turn: Dictionary = {}  # carrier -> how many it launched, to take its side's fighters in turn
 
 
 func _init() -> void:
@@ -47,7 +60,7 @@ func _init() -> void:
 
 func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"bench",
-			"Fly a benchmark layout (%s) with n ships from the pools, measure [seconds] (30) after warmup=<s> (5), and write reports/perf/<label>/ (seed=<k> label=<name> probe=paired rebase_m=<m>)"
+			"Fly a benchmark layout (%s) with n ships from the pools, measure [seconds] (30) after warmup=<s> (5), and write reports/perf/<label>/ (seed=<k> label=<name> probe=paired rebase_m=<m> rocks=<count>)"
 			% ", ".join(PackedStringArray(BenchLayout.NAMES)),
 			[ConsoleArg.enum_required(&"layout", BenchLayout.NAMES), ConsoleArg.int_required(&"n", 1, 2000),
 			ConsoleArg.string_rest(&"options").make_optional("")]), _cmd_bench, self)
@@ -61,10 +74,10 @@ func _exit_tree() -> void:
 
 
 ## Reads the words after `bench <layout> <n>`: an optional window in seconds first, then `key=value` options.
-## `{"ok", "error", "seconds", "warmup", "seed", "label", "paired", "rebase_m", "keep_sleep"}`.
+## `{"ok", "error", "seconds", "warmup", "seed", "label", "paired", "rebase_m", "keep_sleep", "rocks"}` (`rocks` -1: the mix's).
 static func parse_options(words: PackedStringArray) -> Dictionary:
 	var out: Dictionary = {"ok": true, "error": "", "seconds": DEFAULT_SECONDS, "warmup": DEFAULT_WARMUP_S, "seed": 1, "label": "",
-			"paired": false, "rebase_m": REBASE_THRESHOLD_M, "keep_sleep": false}
+			"paired": false, "rebase_m": REBASE_THRESHOLD_M, "keep_sleep": false, "rocks": -1}
 	for i: int in words.size():
 		var word: String = words[i]
 		var pair: PackedStringArray = word.split("=", true, 1)
@@ -101,6 +114,10 @@ static func parse_options(words: PackedStringArray) -> Dictionary:
 				if text != "keep" and text != "0":
 					return _bad("sleep must be keep or 0")
 				out["keep_sleep"] = text == "keep"
+			"rocks":
+				if not text.is_valid_int() or int(text) < 0:
+					return _bad("rocks must be a count, 0 or more")
+				out["rocks"] = int(text)
 			_:
 				return _bad("unknown option '%s' (%s)" % [key, ", ".join(PackedStringArray(OPTION_KEYS))])
 	return out
@@ -143,12 +160,17 @@ func start(layout: StringName, n: int, options: Dictionary) -> ConsoleResult:
 	var result := ConsoleResult.line("bench %s %d: %d ships in play after %.1f s of load; warm-up %.1f s, measuring %.1f s -> %s" % [
 			layout, n, main.ships.in_use_count(), _load_ms * 1e-3, float(_options["warmup"]), float(_options["seconds"]),
 			report_root.path_join(String(_options["label"]))])
+	if not _mix.is_empty():
+		result.lines.append("bench %s %d mix: %s; %d rocks placed, %d fights among them" % [layout, n, BattleMix.describe(_mix),
+				_rocks_placed, BenchLayout.fights_in_slab(layout, n)])
+		print("[bench] %s" % result.lines[-1])
 	result.wait_frames = HOLD_FRAMES
 	return result
 
 
 func _set_up_scene() -> void:
 	_restore = {
+		"table": Factions.table(),
 		"threshold": main.world.auto_rebase_distance_m,
 		"god": DebugConsole.flags.invulnerable,
 		"probe": probe.enabled,
@@ -162,7 +184,8 @@ func _set_up_scene() -> void:
 	var plan: Array[Dictionary] = BenchLayout.plan(_layout, _n, int(_options["seed"]))
 	var wanted: Dictionary = {ShipPool.ALLY_TYPE: 0, ShipPool.DEFAULT_TYPE: 0}
 	for e: Dictionary in plan:
-		wanted[e["type"]] = int(wanted[e["type"]]) + 1
+		if StringName(e["kind"]) == BenchLayout.KIND_FIGHTER:
+			wanted[e["type"]] = int(wanted[e["type"]]) + 1
 	for type: StringName in wanted:
 		main.ensure_pool(type, int(wanted[type]))
 	# The layout's frame: the player at its origin, nose along -Z, cruising so the world rebases as in play.
@@ -173,10 +196,15 @@ func _set_up_scene() -> void:
 	main.world.auto_rebase_distance_m = float(_options["rebase_m"])
 	if not BenchLayout.fights(_layout):
 		Factions.table().set_relation(Factions.EARTH_ALLIANCE, Factions.RAIDERS, Factions.Relation.NEUTRAL)
+	var session_table: FactionTable = BenchLayout.faction_table(_layout)
+	if session_table != null:
+		Factions.use_table(session_table)
 	var anchor: UniversePos = main.world.to_universe(ship.global_position)
 	var numbers: Dictionary = {ShipPool.ALLY_TYPE: ShipPool.ALLY_FIRST_NUMBER, ShipPool.DEFAULT_TYPE: 1}
 	_placed = {ShipPool.ALLY_TYPE: 0, ShipPool.DEFAULT_TYPE: 0}
 	for e: Dictionary in plan:
+		if StringName(e["kind"]) != BenchLayout.KIND_FIGHTER:
+			continue
 		var type: StringName = e["type"]
 		var prefix: String = ShipPool.ALLY_NAME_PREFIX if type == ShipPool.ALLY_TYPE else ShipPool.NAME_PREFIX
 		var ship_name: String = "%s %d" % [prefix, int(numbers[type])]
@@ -190,9 +218,15 @@ func _set_up_scene() -> void:
 		if placed == null:
 			continue
 		placed.damageable.invulnerable = true
+		if placed.faction != StringName(e["faction"]):
+			set_faction(placed, StringName(e["faction"]))
 		_placed[type] = int(_placed[type]) + 1
 		if not String(e["wing"]).is_empty():
 			main.wings.join(String(e["wing"]), placed)
+	_mix = BenchLayout.mix(_layout, _n)
+	_rocks_placed = 0
+	if not _mix.is_empty() and standins != null:
+		_set_up_standins(plan, anchor)
 	if DisplayServer.get_name() == "headless" and not bool(_options["keep_sleep"]):
 		OS.low_processor_usage_mode_sleep_usec = 0
 		probe.time_sync = true
@@ -200,6 +234,71 @@ func _set_up_scene() -> void:
 	probe.clear_series()
 	probe.stages_enabled = true
 	probe.enabled = true
+
+
+# The capitals, the rocks, the moon and the launch cycle of a battle or typical run (M4-T07).
+func _set_up_standins(plan: Array[Dictionary], anchor: UniversePos) -> void:
+	standins.clear()
+	standins.sides = int(_mix["sides"])
+	var numbers: Dictionary = {}
+	for e: Dictionary in plan:
+		if StringName(e["kind"]) != BenchLayout.KIND_CAPITAL:
+			continue
+		var cls: String = String(e["class"])
+		numbers[cls] = int(numbers.get(cls, 0)) + 1
+		var cap: CapitalStandin = standins.add_capital(StringName(cls), StringName(e["faction"]),
+				"%s %d" % [cls.to_upper(), int(numbers[cls])], anchor.plus_local(e["offset"]), e["basis"], e["velocity"])
+		cap.damageable.invulnerable = true
+	var rocks: Array[Dictionary] = BenchLayout.rocks(_layout, _n, int(_options["seed"]), int(_options.get("rocks", -1)))
+	if not rocks.is_empty():
+		standins.add_asteroids(rocks, anchor)
+	_rocks_placed = rocks.size()
+	var moon: Dictionary = BenchLayout.gravity_source(_layout)
+	if not moon.is_empty():
+		standins.add_gravity(anchor.plus_local(moon["offset"]), float(moon["gm"]))
+	_launch_turn.clear()
+	standins.launcher = _launch_from
+	standins.active = true
+
+
+# A carrier's launch: one fighter of its side goes back to the pool and comes out again at the carrier's bay, so N holds.
+func _launch_from(carrier: CapitalStandin) -> bool:
+	var side: Array[Combatant] = []
+	for c: Combatant in main.ships.alive():
+		if c.faction == carrier.faction:
+			side.append(c)
+	if side.is_empty():
+		return false
+	var turn: int = int(_launch_turn.get(carrier, 0))
+	_launch_turn[carrier] = turn + 1
+	var leaving: Combatant = side[turn % side.size()]
+	var type: StringName = main.ships.type_of(leaving)
+	var ship_name: String = leaving.display_name
+	var side_index: int = maxi(0, BenchLayout.sides(_layout).find(carrier.faction))
+	main.ships.release(leaving)
+	var at: UniversePos = main.world.to_universe(carrier.bay_position())
+	var made: Dictionary = BrainFactory.from_behaviour({"type": "ai", "profile": BenchLayout.SIDE_PROFILES[side_index]}, at,
+			hash([ship_name, standins.launches, int(_options["seed"])]))
+	if not bool(made["ok"]):
+		return false
+	var nose: Vector3 = -carrier.global_basis.z
+	var placed: Combatant = main.ships.acquire(ship_name, at, carrier.global_basis, carrier.linear_velocity + nose * LAUNCH_MPS,
+			made["brain"] as PilotBrain, type)
+	if placed == null:
+		return false
+	placed.damageable.invulnerable = true
+	if placed.faction != carrier.faction:
+		set_faction(placed, carrier.faction)
+	return true
+
+
+## Gives a pooled ship another faction: its hull, marker, guns, targeting and pilot all read it (the bench's sides 3 and 4).
+static func set_faction(c: Combatant, faction: StringName) -> void:
+	c.faction = faction
+	c.targetable.faction = faction
+	c.damageable.faction = faction
+	c.cannon.faction = faction
+	c.ship.targeting.system.own_faction = faction
 
 
 func _physics_process(_delta: float) -> void:
@@ -249,6 +348,11 @@ func _finish(now: int, aborted: String) -> void:
 		"wall_s": float(now - _wall_start_us) * 1e-6 if _wall_start_us > 0 and recorded > 0 else 0.0,
 		"load_ms": _load_ms,
 		"placed": {"allies": int(_placed.get(ShipPool.ALLY_TYPE, 0)), "raiders": int(_placed.get(ShipPool.DEFAULT_TYPE, 0))},
+		"mix": _json_mix(_mix),
+		"mix_line": BattleMix.describe(_mix),
+		"rocks_placed": _rocks_placed,
+		"fights_in_slab": BenchLayout.fights_in_slab(_layout, _n),
+		"intercepts": standins.intercepts if standins != null else 0,
 		"rebase_threshold_m": float(_options["rebase_m"]),
 		"sync_timed": probe.time_sync,
 		"sleep_usec_during_run": OS.low_processor_usage_mode_sleep_usec,
@@ -258,6 +362,9 @@ func _finish(now: int, aborted: String) -> void:
 	}
 	if bool(_options["paired"]):
 		meta["probe_cost"] = _probe_cost(series[PerfProbe.Field.TICK])
+	if _mix.is_empty():
+		for key: String in ["mix", "mix_line", "rocks_placed", "fights_in_slab", "intercepts"]:
+			meta.erase(key)
 	var summary: Dictionary = BenchReport.run_summary(meta, series)
 	var dir: String = report_root.path_join(String(_options["label"]))
 	var problem: String = BenchReport.write(dir, summary, BenchReport.run_markdown(summary))
@@ -284,8 +391,26 @@ func _put_back() -> void:
 	DebugConsole.flags.invulnerable = bool(_restore["god"])
 	if main != null and is_instance_valid(main.world):
 		main.world.auto_rebase_distance_m = float(_restore["threshold"])
+	if standins != null and is_instance_valid(standins):
+		standins.clear()
+	if main != null and is_instance_valid(main.ships):
+		for c: Combatant in main.ships.all_ships():
+			var own: StringName = ShipCatalog.faction_for(main.ships.type_of(c))
+			if c.faction != own:
+				set_faction(c, own)
+	Factions.use_table(_restore["table"] as FactionTable)
 	Factions.table().set_relation(Factions.EARTH_ALLIANCE, Factions.RAIDERS, int(_restore["relation"]) as Factions.Relation)
+	_mix = {}
 	_restore = {}
+
+
+# The mix for summary.json: the area as a plain list.
+static func _json_mix(m: Dictionary) -> Dictionary:
+	var out: Dictionary = m.duplicate()
+	if out.has("area_m"):
+		var area: Vector3 = out["area_m"]
+		out["area_m"] = [area.x, area.y, area.z]
+	return out
 
 
 # The engine's own worst tick of each second against the probe's, as a check that the probe's window misses nothing.

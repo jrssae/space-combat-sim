@@ -368,6 +368,10 @@ func _finish() -> void:
 			label, _read("render.splat_backend"), _read("render.gpu"), get_window().size.x, get_window().size.y, DisplayServer.window_get_vsync_mode(), Settings.get_value(&"splat_relight"),
 			Settings.get_value(&"particle_density"), Settings.get_value(&"lens_flare"), Settings.get_value(&"motion_blur"), Settings.get_value(&"splat_hero"), _read("ship.running_lights"),
 			Settings.get_value(&"splat_budget")])
+	var root: Window = get_tree().root
+	print("[measure] %s: window mode %s, 3d scale %.2f, 3d scaling mode %d, frame mean ms %.2f, fps mean %.1f" % [label,
+			"fullscreen" if DisplayServer.window_get_mode() in [DisplayServer.WINDOW_MODE_FULLSCREEN, DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN] else "windowed",
+			root.scaling_3d_scale, root.scaling_3d_mode, _mean(frame_ms), 1000.0 / maxf(_mean(frame_ms), 1e-6)])  # M4-T07: the fullscreen check
 	print("[measure] %s: VRAM before %.0f MB, peak %.0f MB, added %.0f MB; GTT before %.0f MB, peak %.0f MB, added %.0f MB" % [
 			label, vram_before_mb, vram_peak_mb, vram_peak_mb - vram_before_mb, gtt_before_mb, gtt_peak_mb, gtt_peak_mb - gtt_before_mb])
 	for spike: String in spikes:
