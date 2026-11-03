@@ -19,6 +19,9 @@ extends RefCounted
 ## - **Inside the margin**: straight away from the contact at `(reach - d) / PUSH_S`, plus whatever speed closes on it.
 ## - **Ties** (a dead-centre course, or the same position): the side comes from `tie_direction`, seeded and odd in `w`,
 ##   so two ships meeting head-on dodge apart whatever their two seeds.
+## - **Rocks and mines** (`BodyKind.is_static`, M4-T09) are obstacles like any contact, with their radius. Their horizon is
+##   at least the time a sideways RCS burn takes to clear their reach, plus `URGENT_SETTLE_S`, so a 200 m rock is seen
+##   early enough to go round; ship-sized contacts keep the horizon above.
 ## - `urgent`: a threat closer in time than a 90 degree turn plus `URGENT_SETTLE_S`, or a contact inside the margin that
 ##   closes: the driver then seeks harder, so the RCS strafe does the dodge before any turn could.
 
@@ -52,6 +55,7 @@ static func filter(own_pos: Vector3, own_vel: Vector3, own_radius: float, contac
 	var a_stop: float = maxf(capability.a_retro, 0.01)
 	var turn_rate: float = maxf(minf(capability.rate_max_rad.x, capability.rate_max_rad.y), 0.01)
 	var urgent_s: float = 0.5 * PI / turn_rate + URGENT_SETTLE_S
+	var a_side: float = maxf(minf(capability.a_rcs.x, capability.a_rcs.y), 0.01)
 	for c: Contact in contacts:
 		var reach: float = own_radius + c.bounding_radius + MARGIN_M
 		var s: Vector3 = own_pos - c.position
@@ -71,6 +75,8 @@ static func filter(own_pos: Vector3, own_vel: Vector3, own_radius: float, contac
 			continue  # opening
 		var speed: float = sqrt(speed_sq)
 		var horizon: float = maxf(HORIZON_MIN_S, maxf(speed, (own_vel - c.velocity).length()) / a_stop)
+		if BodyKind.is_static(c.kind):
+			horizon = maxf(horizon, sqrt(2.0 * reach / a_side) + URGENT_SETTLE_S)
 		if t_star > horizon:
 			continue
 		var offset: Vector3 = s + w * t_star

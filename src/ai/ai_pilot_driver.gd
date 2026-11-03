@@ -27,6 +27,9 @@ extends Node
 ## selected target and the latest attacker of the last `KEEP_ATTACKER_S`. The brain scores, avoids and checks its fire lane
 ## against them alone.
 ##
+## Statics (M4-T09): the perception's `statics` are the nearest `ai_nearest_static_k` rocks and mines (`ContactScan.statics_for`),
+## never among the contacts; avoidance steers round them with the contacts.
+##
 ## Console (§16.4, M3-T06): `AiConsole` is registered while any driver is in the tree, owned by the newest. `think_us()` is
 ## wall-clock time, a profiling readout (AC13), never gameplay time.
 
@@ -36,7 +39,8 @@ const RETARGET_S: float = 0.5
 const URGENT_SEEK_HORIZON_S: float = 0.25
 ## Whoever hit this ship stays in its contacts this long after the hit, however far within the sensors (M4-T04).
 const KEEP_ATTACKER_S: float = AiTemperament.PROVOKED_S
-const RATE_SETTINGS: Array[StringName] = [&"ai_think_rate", &"ai_think_near_m", &"ai_think_far_hz", &"ai_nearest_k"]
+const RATE_SETTINGS: Array[StringName] = [&"ai_think_rate", &"ai_think_near_m", &"ai_think_far_hz", &"ai_nearest_k",
+		&"ai_nearest_static_k"]
 
 # Every driver in the tree (the console's view), and the think-time sums for `think_us`.
 static var _live: Array[AiPilotDriver] = []
@@ -58,6 +62,7 @@ static var _rate_on: bool = true
 static var _near_sq: float = 4.0e6
 static var _period: int = 3
 static var _nearest_k: int = 12
+static var _nearest_static_k: int = 4
 # The player as seen at the start of this physics tick.
 static var _player_frame: int = -1
 static var _player_for: Combatant = null
@@ -261,6 +266,7 @@ func perceive() -> Perception:
 		p.contacts = scan.nearest_for(own_id, p.position, p.faction, _nearest_k, _keeper)
 	else:
 		p.contacts = scan.contacts_for(own_id, p.position, p.faction)
+	p.statics = scan.statics_for(own_id, p.position, p.faction, _nearest_static_k)
 	p.incoming_fire = scan.incoming_fire(own_id, p.position, p.velocity, p.faction)
 	p.broadcasts = ContactScan.shared_broadcasts().broadcasts_for(own_id, p.position, p.faction)
 	if timed:
@@ -276,7 +282,7 @@ func perceive() -> Perception:
 func _avoid(p: Perception, flight: FlightCommand) -> void:
 	avoiding = false
 	avoiding_urgent = false
-	if flight.brake or p.contacts.is_empty():
+	if flight.brake or (p.contacts.is_empty() and p.statics.is_empty()):
 		return
 	var wish: Vector3 = brain.desired_velocity if brain.has_desired_velocity else p.velocity
 	var radius: float = combatant.damageable.bounding_radius if combatant.damageable != null else 0.0
@@ -286,6 +292,8 @@ func _avoid(p: Perception, flight: FlightCommand) -> void:
 		for c: Contact in p.contacts:
 			if c.id != brain.avoid_exempt_id:
 				contacts.append(c)
+	if not p.statics.is_empty():  # rocks and mines are obstacles too (M4-T09)
+		contacts = contacts + p.statics
 	var result: Dictionary = AvoidanceMath.filter(p.position, p.velocity, radius, contacts, wish, p.capability,
 			hash(combatant.display_name))
 	var filtered: Vector3 = result["v_des"]
@@ -330,6 +338,7 @@ func _retarget(delta: float) -> void:
 	_retarget_in_s -= delta
 	if _retarget_in_s <= 0.0 or not _selection_is_live(targeting):
 		_retarget_in_s = RETARGET_S
+		ContactScan.note_selection(combatant.ship)
 		targeting.select_nearest_hostile()
 
 
@@ -341,10 +350,12 @@ func _follow_brain_target() -> void:
 	var targeting: TargetingController = combatant.ship.targeting
 	if wanted == PilotBrain.TARGET_NONE:
 		if targeting.system.has_selection():
+			ContactScan.note_selection(combatant.ship)
 			targeting.clear_selection()
 		return
 	if wanted == _unselectable_id or targeting.selected_id() == wanted:
 		return
+	ContactScan.note_selection(combatant.ship)
 	_unselectable_id = 0 if targeting.select_id(wanted) else wanted
 
 
@@ -392,6 +403,7 @@ static func _read_settings() -> void:
 	_near_sq = near_m * near_m
 	_period = AiThinkRate.period_ticks(float(Settings.get_value(&"ai_think_far_hz")), Engine.physics_ticks_per_second)
 	_nearest_k = int(Settings.get_value(&"ai_nearest_k"))
+	_nearest_static_k = int(Settings.get_value(&"ai_nearest_static_k"))
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:

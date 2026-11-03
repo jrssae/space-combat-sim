@@ -22,6 +22,12 @@ extends RefCounted
 ## answers with body indices; the contact lists are still built here from the shared faction lists. The GDScript code is
 ## the fallback and the reference, and both give the same answers bit for bit. The setting is read on every query, so a
 ## flip takes effect at once, even on a scan already in use. A scan's arrays must not change once it has been queried.
+##
+## The body registry (M4-T09, architecture §17.8): with the library and `perf_native` on, `shared` comes from the native
+## `REGISTRY_CLASS`, which knows the tree's bodies (it is told when the groups change) and reads them in one call a tick;
+## `from_tree` stays the reference it equals bit for bit. Hull and selection are read when a contact is first handed out.
+## Kinds (`BodyKind`): rocks and mines are never contacts; `statics_for` gives a ship its nearest ones as obstacles. Rows
+## with no node (an asteroid field's rocks) are registered here with `register_static` and shifted on a rebase.
 
 const SENSOR_RANGE_M: float = 5000.0
 ## A hostile bolt is incoming when its closest approach is under this distance within this time.
@@ -47,6 +53,20 @@ static var _shared_broadcasts: ContactScan = null
 static var _no_contacts: Array[Contact] = []
 # Whether the loaded library provides `NATIVE_CLASS` (-1 until first asked; classes never change while the game runs).
 static var _native_class_known: int = -1
+# The registry (M4-T09): made on the first native `shared`, told when the tree's groups change.
+static var _registry_class_known: int = -1
+static var _registry: Object = null
+static var _registry_tree: SceneTree = null
+static var _members_dirty: bool = true
+static var _removals: int = 0  # members that left the tree, so a registry scan knows to look for freed bodies
+# Rows with no node, in the order they were registered (both paths).
+static var _static_ids: PackedInt64Array = PackedInt64Array()
+static var _static_positions: PackedVector3Array = PackedVector3Array()
+static var _static_radii: PackedFloat64Array = PackedFloat64Array()
+static var _static_factions: Array[StringName] = []
+static var _static_kinds: PackedByteArray = PackedByteArray()
+static var _statics_version: int = 0
+static var _registry_statics_version: int = -1
 
 ## The physics frame this scan is of (-1 for one built by hand).
 var physics_frame: int = -1
@@ -66,27 +86,36 @@ var _radii: PackedFloat64Array = PackedFloat64Array()
 var _is_ship: PackedByteArray = PackedByteArray()
 var _hulls: PackedFloat64Array = PackedFloat64Array()
 var _target_ids: PackedInt64Array = PackedInt64Array()
+var _kinds: PackedByteArray = PackedByteArray()  # per body `BodyKind`; empty when every row is a ship
+var _node_count: int = -1  # rows before this are nodes, the rest node-less statics; -1: every row
 var _stamped: Dictionary = {}  # faction -> Array[Contact] with the relation set, each made when first handed out
 var _relations: Dictionary = {}  # faction -> {other faction -> relation}, looked up once per pair
 var _hostile_ships: Dictionary = {}  # faction -> PackedByteArray, 1 for a ship hostile to it (nearest-k, M4-T04)
 var _extent_m: float = -1.0  # computed on first use
+var _statics_n: int = -1  # rock and mine rows, counted on first use
 var _bolt_positions: PackedVector3Array = PackedVector3Array()
 var _bolt_velocities: PackedVector3Array = PackedVector3Array()
 var _bolt_factions: Array[StringName] = []
 var _bolt_shooters: PackedInt64Array = PackedInt64Array()
 var _hostile_bolts: Dictionary = {}  # faction -> indices of the bolts hostile to it
 var _reach: PackedFloat64Array = PackedFloat64Array()  # per body broadcast range (broadcast scan only)
-var _kinds: PackedByteArray = PackedByteArray()  # per body `BodyKind`; empty when every row is a ship
 var _field: Object = null  # the native field over this scan's arrays, made on the first native query
 var _field_rejected: bool = false  # the field refused this scan's arrays (they differ in length): GDScript answers it
 var _field_rows: Dictionary = {}  # faction -> true once the field has its hostility row
+# A registry scan (M4-T09) reads hull and selection when a contact is first handed out: the hulls' instance ids, the
+# selections drivers changed after this scan was built (body id -> the selection it had), and the removals it has seen.
+var _lazy: bool = false
+var _hull_ids: PackedInt64Array = PackedInt64Array()
+var _target_before: Dictionary = {}
+var _removals_at: int = 0
 
 
 ## The scan of the current physics frame, built on the first call of the frame.
 static func shared(tree: SceneTree) -> ContactScan:
 	var frame: int = Engine.get_physics_frames()
 	if _shared == null or _shared.physics_frame != frame or not _shared._bodies_alive():
-		_shared = from_tree(tree)
+		var built: ContactScan = from_registry(tree)
+		_shared = built if built != null else from_tree(tree)
 		_shared.physics_frame = frame
 	return _shared
 
@@ -105,17 +134,25 @@ static func time_this_tick_us() -> int:
 	return _time_sum_us if _time_frame == Engine.get_physics_frames() else 0
 
 
-## Drops the shared scans; the next `shared` (and `shared_broadcasts`) call builds a new one.
+## Drops the shared scans; the next `shared` (and `shared_broadcasts`) call builds a new one, reading every body's faction,
+## name, kind and radius again.
 static func invalidate() -> void:
 	_shared = null
 	_shared_broadcasts = null
+	_members_dirty = true
+	if _registry != null:
+		_registry.forget_attributes()
 
 
 ## The broadcasters of the current physics frame, built on the first call of the frame from `Targetable.broadcasters()`.
 static func shared_broadcasts() -> ContactScan:
 	var frame: int = Engine.get_physics_frames()
 	if _shared_broadcasts == null or _shared_broadcasts.physics_frame != frame or not _shared_broadcasts._bodies_alive():
-		_shared_broadcasts = from_broadcasters(Targetable.broadcasters())
+		var main: ContactScan = _shared
+		if main != null and main._lazy and main.physics_frame == frame and _registry != null:
+			_shared_broadcasts = main._broadcast_scan(Targetable.broadcasters())
+		else:
+			_shared_broadcasts = from_broadcasters(Targetable.broadcasters())
 		_shared_broadcasts.physics_frame = frame
 	return _shared_broadcasts
 
@@ -134,8 +171,9 @@ static func from_broadcasters(list: Array[Targetable]) -> ContactScan:
 	return scan
 
 
-## A scan of the tree as it is now (no cache).
+## A scan of the tree as it is now (no cache), then the node-less static rows.
 static func from_tree(tree: SceneTree) -> ContactScan:
+	gathers += 1
 	var scan := ContactScan.new()
 	var seen: Dictionary = {}
 	# Hulls found from the group once, not by walking every body's children (AC13's budget).
@@ -162,52 +200,117 @@ static func from_tree(tree: SceneTree) -> ContactScan:
 		if body != null and not seen.has(body.get_instance_id()):
 			seen[body.get_instance_id()] = true
 			scan._add(body, null, damageable)
-	for node: Node in tree.get_nodes_in_group(Projectile.GROUP):
-		var bolt := node as Projectile
-		if bolt == null or bolt.is_spent() or not bolt.is_inside_tree():
-			continue
-		scan._bolt_positions.append(bolt.global_position)
-		scan._bolt_velocities.append(bolt.velocity)
-		scan._bolt_factions.append(bolt.faction)
-		scan._bolt_shooters.append(bolt.shooter_id)
+	scan._node_count = scan._body_ids.size()
+	for s: int in _static_ids.size():
+		scan._body_ids.append(_static_ids[s])
+		scan._ids.append(_static_ids[s])
+		scan._names.append("")
+		scan._factions.append(_static_factions[s])
+		scan._positions.append(_static_positions[s])
+		scan._velocities.append(Vector3.ZERO)
+		scan._forwards.append(Vector3.FORWARD)
+		scan._ups.append(Vector3.UP)
+		scan._radii.append(_static_radii[s])
+		scan._is_ship.append(0)
+		scan._hulls.append(-1.0)
+		scan._target_ids.append(-1)
+		scan._kinds.append(_static_kinds[s])
+	scan._gather_bolts(tree)
 	return scan
 
 
-## The scan of the tree as the native registry sees it now (no cache), or null without the library (stub).
-static func from_registry(_tree: SceneTree) -> ContactScan:
-	return null
+## The scan of the tree as the native registry reads it now (no cache), equal to `from_tree` bit for bit; null when the
+## library does not provide the registry or `perf_native` is off.
+static func from_registry(tree: SceneTree) -> ContactScan:
+	var registry: Object = _registry_for(tree)
+	if registry == null:
+		return null
+	if _members_dirty:
+		_members_dirty = false
+		registry.set_members(tree.get_nodes_in_group(Targetable.GROUP), tree.get_nodes_in_group(Damageable.GROUP))
+	if _registry_statics_version != _statics_version:
+		_registry_statics_version = _statics_version
+		registry.set_statics(_static_ids, _static_positions, _static_radii, _static_factions, _static_kinds)
+	registry.refresh()
+	var scan := ContactScan.new()
+	scan._take_rows(registry.snapshot())
+	scan._gather_bolts(tree)
+	return scan
 
 
-## The native registry, or null (stub).
+## The native registry in use, or null (no library, `perf_native` off, or no registry scan built yet).
 static func registry() -> Object:
-	return null
+	return _registry
 
 
-## Adds a static row with no node (stub).
-static func register_static(_id: int, _position: Vector3, _radius: float, _kind: int = BodyKind.STATIC,
-		_faction: StringName = Factions.NEUTRAL) -> void:
-	pass
+## Asks the registry to read `body`'s faction, name, kind and radius again at the next scan: for code that changes one of
+## them on a body that stays in play (a pool ship hidden and shown again is noticed by itself).
+static func touch(body: Node) -> void:
+	if _registry != null and body != null:
+		_registry.touch(body.get_instance_id())
 
 
-## Removes a static row (stub).
-static func unregister_static(_id: int) -> void:
-	pass
+## Called by a ship's driver just before it changes its selection: this frame's registry scan (built before the change)
+## then hands out the selection as it was when the scan was built, as the tree gather does.
+static func note_selection(body: Node) -> void:
+	var scan: ContactScan = _shared
+	if scan == null or not scan._lazy or scan.physics_frame != Engine.get_physics_frames():
+		return
+	var body_id: int = body.get_instance_id()
+	if not scan._target_before.has(body_id):
+		scan._target_before[body_id] = selection_of(body)
 
 
-## Moves every static row (stub).
-static func shift_statics(_offset: Vector3) -> void:
-	pass
+## The selection a ship's targeting holds as a contact reports it: a `Targetable` id, or -1.
+static func selection_of(body: Node) -> int:
+	var ship := body as Ship
+	if ship != null and ship.targeting != null and ship.targeting.system.has_selection():
+		return ship.targeting.system.selected_id()
+	return -1
 
 
-## Removes every static row (stub).
+## Adds a body with no node to every scan (an asteroid field's rock by RID, a mine row): `id` must be unique and not an
+## instance id; `kind` is a `BodyKind`. Rows come after the bodies, in the order they were registered.
+static func register_static(id: int, position: Vector3, radius: float, kind: int = BodyKind.STATIC,
+		faction: StringName = Factions.NEUTRAL) -> void:
+	_static_ids.append(id)
+	_static_positions.append(position)
+	_static_radii.append(radius)
+	_static_factions.append(faction)
+	_static_kinds.append(kind)
+	_statics_version += 1
+
+
+## Removes the static row `id`.
+static func unregister_static(id: int) -> void:
+	var at: int = _static_ids.find(id)
+	if at < 0:
+		return
+	_static_ids.remove_at(at)
+	_static_positions.remove_at(at)
+	_static_radii.remove_at(at)
+	_static_factions.remove_at(at)
+	_static_kinds.remove_at(at)
+	_statics_version += 1
+
+
+## Moves every static row by `offset` (`WorldFrame.rebase` shifts them with the nodes).
+static func shift_statics(offset: Vector3) -> void:
+	if _static_ids.is_empty():
+		return
+	for s: int in _static_positions.size():
+		_static_positions[s] += offset
+	_statics_version += 1
+
+
+## Removes every static row.
 static func clear_statics() -> void:
-	pass
-
-
-## The nearest statics (stub).
-func statics_for(_own_body_id: int, _own_position: Vector3, _own_faction: StringName, _k: int,
-		_range_m: float = SENSOR_RANGE_M) -> Array[Contact]:
-	return []
+	_static_ids.clear()
+	_static_positions.clear()
+	_static_radii.clear()
+	_static_factions.clear()
+	_static_kinds.clear()
+	_statics_version += 1
 
 
 ## Which code answers this scan's queries now: &"native" or &"gdscript".
@@ -215,13 +318,13 @@ func path() -> StringName:
 	return &"native" if _native() != null else &"gdscript"
 
 
-## Bodies the native field tested in its latest contact or nearest query (the work count), -1 on the GDScript path.
+## Bodies the native field tested in its latest contact, nearest or statics query (the work count), -1 on the GDScript path.
 func native_visits() -> int:
 	var field: Object = _native()
 	return field.visited() if field != null else -1
 
 
-## The contacts a ship of `own_faction` at `own_position` sees: within `range_m`, never its own body.
+## The contacts a ship of `own_faction` at `own_position` sees: within `range_m`, never its own body, never a rock or mine.
 func contacts_for(own_body_id: int, own_position: Vector3, own_faction: StringName,
 		range_m: float = SENSOR_RANGE_M) -> Array[Contact]:
 	var stamped: Array[Contact] = _stamped_for(own_faction)
@@ -232,13 +335,15 @@ func contacts_for(own_body_id: int, own_position: Vector3, own_faction: StringNa
 		if own_index >= 0 and found.size() == stamped.size() - 1:
 			return _all_but(own_faction, stamped, own_index)
 		return _pick(own_faction, stamped, found)
+	var has_statics: bool = _statics_count() > 0
 	# Fast path: everything is in range for sure, so the faction list without this ship is what the loop would build.
-	if own_index >= 0 and _extent() + own_position.distance_to(_positions[own_index]) < range_m * 0.999:
+	if not has_statics and own_index >= 0 and _extent() + own_position.distance_to(_positions[own_index]) < range_m * 0.999:
 		return _all_but(own_faction, stamped, own_index)
 	var range_sq: float = range_m * range_m
 	var found := PackedInt32Array()
 	for i: int in stamped.size():
-		if _body_ids[i] != own_body_id and _positions[i].distance_squared_to(own_position) <= range_sq:
+		if _body_ids[i] != own_body_id and _positions[i].distance_squared_to(own_position) <= range_sq \
+				and not (has_statics and BodyKind.is_static(_kinds[i])):
 			found.append(i)
 	return _pick(own_faction, stamped, found)
 
@@ -247,11 +352,12 @@ func contacts_for(own_body_id: int, own_position: Vector3, own_faction: StringNa
 ## hostile ship joins them (so a crowd of friends never hides the fight), and so does every contact `keeper` names: it is
 ## called only then and returns `[PackedInt64Array ids, PackedStringArray names]` (names case-insensitive). With `k` or
 ## fewer in range it is `contacts_for`'s list, at about `contacts_for`'s cost. Equal ranges go to the earlier body in the scan.
-## `k` of 0 or less cuts nothing: `contacts_for`'s list (as the `ai_nearest_k` setting's 0 means).
+## `k` of 0 or less cuts nothing: `contacts_for`'s list (as the `ai_nearest_k` setting's 0 means). Rocks and mines are
+## never among them (`statics_for`).
 func nearest_for(own_body_id: int, own_position: Vector3, own_faction: StringName, k: int, keeper: Callable = Callable(),
 		range_m: float = SENSOR_RANGE_M) -> Array[Contact]:
 	var stamped: Array[Contact] = _stamped_for(own_faction)
-	if k <= 0 or _body_ids.size() <= k:
+	if k <= 0 or _body_ids.size() - _statics_count() <= k:
 		return contacts_for(own_body_id, own_position, own_faction, range_m)  # no cut asked, or never more than k to cut
 	var range_sq: float = range_m * range_m
 	var field: Object = _native_with_row(own_faction)
@@ -264,6 +370,7 @@ func nearest_for(own_body_id: int, own_position: Vector3, own_faction: StringNam
 		chosen.sort()
 		return _pick(own_faction, stamped, chosen)
 	var hostile: PackedByteArray = _hostile_ships_for(own_faction)
+	var has_statics: bool = _statics_count() > 0
 	# Gather like `contacts_for` until more than k are in range; only then select, keeping the nearest k sorted by range.
 	var gathered := PackedInt32Array()
 	var best_sq := PackedFloat64Array()
@@ -274,7 +381,7 @@ func nearest_for(own_body_id: int, own_position: Vector3, own_faction: StringNam
 	var hostile_sq: float = INF
 	for i: int in _body_ids.size():
 		var d_sq: float = _positions[i].distance_squared_to(own_position)
-		if d_sq > range_sq or _body_ids[i] == own_body_id:
+		if d_sq > range_sq or _body_ids[i] == own_body_id or (has_statics and BodyKind.is_static(_kinds[i])):
 			continue
 		if not selecting:
 			gathered.append(i)
@@ -310,6 +417,41 @@ func nearest_for(own_body_id: int, own_position: Vector3, own_faction: StringNam
 		_keep(hostile_at, best, own_body_id, own_position, range_sq)
 		_keep_named(best, keeper, own_body_id, own_position, range_sq)
 		best.sort()
+	return _pick(own_faction, stamped, best)
+
+
+## The rocks and mines a ship should steer round (M4-T09): those whose surface is within `range_m`, never its own body;
+## with more than `k`, the `k` nearest by surface distance (equal ones to the earlier row). In scan order. None for `k` 0.
+func statics_for(own_body_id: int, own_position: Vector3, own_faction: StringName, k: int,
+		range_m: float = SENSOR_RANGE_M) -> Array[Contact]:
+	if k <= 0 or _statics_count() == 0:
+		return _no_contacts
+	var stamped: Array[Contact] = _stamped_for(own_faction)
+	var field: Object = _native()
+	if field != null:
+		return _pick(own_faction, stamped, field.statics(own_body_id, own_position, k, range_m))
+	var reach: float = absf(range_m)
+	var found := PackedInt32Array()
+	var best_surface := PackedFloat64Array()
+	var best := PackedInt32Array()
+	for i: int in _body_ids.size():
+		if not BodyKind.is_static(_kinds[i]) or _body_ids[i] == own_body_id:
+			continue
+		var surface: float = _positions[i].distance_to(own_position) - _radii[i]
+		if surface > reach:
+			continue
+		found.append(i)
+		var at: int = best_surface.bsearch(surface, false)
+		if at >= k:
+			continue
+		best_surface.insert(at, surface)
+		best.insert(at, i)
+		if best.size() > k:
+			best_surface.resize(k)
+			best.resize(k)
+	if found.size() <= k:
+		return _pick(own_faction, stamped, found)
+	best.sort()
 	return _pick(own_faction, stamped, best)
 
 
@@ -355,10 +497,119 @@ func incoming_fire(own_body_id: int, own_position: Vector3, own_velocity: Vector
 	return count
 
 
+# The registry for a native scan of `tree`, made (and told of the tree's changes) on first use; null when not available.
+static func _registry_for(tree: SceneTree) -> Object:
+	if not NativeLib.enabled():
+		return null
+	if _registry_class_known < 0:
+		_registry_class_known = 1 if NativeLib.has_class(REGISTRY_CLASS) else 0
+	if _registry_class_known == 0:
+		return null
+	if _registry == null or _registry_tree != tree:
+		var registry: Object = NativeLib.instantiate(REGISTRY_CLASS)
+		if registry == null:
+			return null
+		_unhook()
+		_registry = registry
+		_registry_tree = tree
+		_members_dirty = true
+		_registry_statics_version = -1
+		tree.node_added.connect(_on_node_added)
+		tree.node_removed.connect(_on_node_removed)
+		for group: StringName in [Targetable.GROUP, Damageable.GROUP]:
+			for node: Node in tree.get_nodes_in_group(group):
+				_watch(node.get_parent())
+	return _registry
+
+
+static func _unhook() -> void:
+	if _registry_tree != null and is_instance_valid(_registry_tree):
+		if _registry_tree.node_added.is_connected(_on_node_added):
+			_registry_tree.node_added.disconnect(_on_node_added)
+		if _registry_tree.node_removed.is_connected(_on_node_removed):
+			_registry_tree.node_removed.disconnect(_on_node_removed)
+
+
+# A marker or hull joined the tree: the registry's members change, and its body is watched for being hidden and shown.
+static func _on_node_added(node: Node) -> void:
+	if node is Targetable or node is Damageable:
+		_members_dirty = true
+		_watch(node.get_parent())
+
+
+static func _on_node_removed(node: Node) -> void:
+	if node is Targetable or node is Damageable:
+		_members_dirty = true
+		_removals += 1
+
+
+# Reads a body's attributes again whenever it is hidden or shown (the pool parks and reuses ships that way).
+static func _watch(body: Node) -> void:
+	var visual := body as Node3D
+	if visual == null or visual.has_meta(&"_scs_registry_watch"):
+		return
+	visual.set_meta(&"_scs_registry_watch", true)
+	visual.visibility_changed.connect(_on_body_visibility.bind(visual.get_instance_id()))
+
+
+static func _on_body_visibility(body_id: int) -> void:
+	if _registry != null:
+		_registry.touch(body_id)
+
+
+# Takes the registry's rows (`ScsBodyRegistry.snapshot` or `select`).
+func _take_rows(rows: Array) -> void:
+	_body_ids = rows[0]
+	_ids = rows[1]
+	_factions = rows[2]
+	_positions = rows[3]
+	_velocities = rows[4]
+	_forwards = rows[5]
+	_ups = rows[6]
+	_radii = rows[7]
+	_is_ship = rows[8]
+	_kinds = rows[9]
+	_names = rows[10]
+	_hull_ids = rows[11]
+	_node_count = rows[12]
+	_statics_n = rows[13]
+	_lazy = true
+	_removals_at = _removals
+
+
+# The broadcast scan of this registry scan's frame: the active broadcasters of `list`, in that order, with their ranges.
+func _broadcast_scan(list: Array[Targetable]) -> ContactScan:
+	var marker_ids := PackedInt64Array()
+	var reaches := PackedFloat64Array()
+	for targetable: Targetable in list:
+		marker_ids.append(targetable.get_instance_id())
+		reaches.append(targetable.broadcast_range_m)
+	var rows: Array = _registry.select(marker_ids)
+	var scan := ContactScan.new()
+	scan._take_rows(rows)
+	scan._target_before = _target_before
+	for j: int in rows[14] as PackedInt32Array:
+		scan._reach.append(reaches[j])
+	return scan
+
+
+# The bolts in flight, for `incoming_fire`.
+func _gather_bolts(tree: SceneTree) -> void:
+	for node: Node in tree.get_nodes_in_group(Projectile.GROUP):
+		var bolt := node as Projectile
+		if bolt == null or bolt.is_spent() or not bolt.is_inside_tree():
+			continue
+		_bolt_positions.append(bolt.global_position)
+		_bolt_velocities.append(bolt.velocity)
+		_bolt_factions.append(bolt.faction)
+		_bolt_shooters.append(bolt.shooter_id)
+
+
 # Adds body `i` to a nearest-k selection when it is in range, not the ship's own and not in it yet.
 func _keep(i: int, chosen: PackedInt32Array, own_body_id: int, own_position: Vector3, range_sq: float) -> void:
 	if i >= 0 and _body_ids[i] != own_body_id and not chosen.has(i) \
-			and _positions[i].distance_squared_to(own_position) <= range_sq:
+			and _positions[i].distance_squared_to(own_position) <= range_sq \
+			and not (_statics_count() > 0 and BodyKind.is_static(_kinds[i])):
 		chosen.append(i)
 
 
@@ -414,7 +665,8 @@ func _native() -> Object:
 			return null
 		# A field that refuses the arrays has logged why; this scan then stays on the GDScript path.
 		if not field.load(_body_ids, _positions, _factions, _is_ship, _reach, _bolt_positions, _bolt_velocities,
-				_bolt_factions, _bolt_shooters, SENSOR_RANGE_M):
+				_bolt_factions, _bolt_shooters, SENSOR_RANGE_M) \
+				or (_statics_count() > 0 and not field.set_kinds(_kinds, _radii)):
 			_field_rejected = true
 			return null
 		_field = field
@@ -457,11 +709,8 @@ func _add(body: Node3D, targetable: Targetable, damageable: Damageable) -> void:
 	_radii.append(damageable.bounding_radius if damageable != null else 0.0)
 	_is_ship.append(1 if rigid != null else 0)
 	_hulls.append(damageable.hull.fraction() if damageable != null else -1.0)
-	var ship := body as Ship
-	if ship != null and ship.targeting != null and ship.targeting.system.has_selection():
-		_target_ids.append(ship.targeting.system.selected_id())
-	else:
-		_target_ids.append(-1)
+	_target_ids.append(selection_of(body))
+	_kinds.append(BodyKind.of(targetable))
 
 
 # The contacts as a ship of `faction` sees them: one list per faction, shared, each contact made when first handed out
@@ -488,9 +737,27 @@ func _stamp(faction: StringName, i: int) -> Contact:
 	c.up = _ups[i]
 	c.bounding_radius = _radii[i]
 	c.is_ship = _is_ship[i] == 1
-	c.hull_fraction = _hulls[i]
-	c.target_id = _target_ids[i]
+	if _lazy:
+		_stamp_live(c, i)
+	else:
+		c.hull_fraction = _hulls[i]
+		c.target_id = _target_ids[i]
+	c.kind = _kinds[i] if i < _kinds.size() else BodyKind.SHIP
 	return c
+
+
+# A registry scan's hull and selection for body `i`, read now: neither changes while the drivers run, but a selection a
+# driver changed after the scan was built is taken as it was then (`note_selection`).
+func _stamp_live(c: Contact, i: int) -> void:
+	if i >= _node_count:
+		return  # a static row: no hull, no selection (the contact's defaults)
+	var hull := instance_from_id(_hull_ids[i]) as Damageable if _hull_ids[i] != 0 else null
+	c.hull_fraction = hull.hull.fraction() if hull != null else -1.0
+	var body_id: int = _body_ids[i]
+	if _target_before.has(body_id):
+		c.target_id = _target_before[body_id]
+	else:
+		c.target_id = selection_of(instance_from_id(body_id) as Node)
 
 
 # How a ship of `faction` regards `other`, looked up once per pair in this scan.
@@ -526,6 +793,16 @@ func _extent() -> float:
 	return _extent_m
 
 
+# How many rows are rocks or mines (none when the scan has no kinds).
+func _statics_count() -> int:
+	if _statics_n < 0:
+		_statics_n = 0
+		for kind: int in _kinds:
+			if BodyKind.is_static(kind):
+				_statics_n += 1
+	return _statics_n
+
+
 # The bolts hostile to `faction`, resolved once per faction because the relation lookup is the costly part.
 func _hostile_bolts_for(faction: StringName) -> PackedInt32Array:
 	if _hostile_bolts.has(faction):
@@ -542,11 +819,21 @@ func _hostile_bolts_for(faction: StringName) -> PackedInt32Array:
 	return list
 
 
+# Whether every node this scan holds still exists. A registry scan looks only when a marker or hull has left the tree.
 func _bodies_alive() -> bool:
-	var field: Object = _native()
+	if _lazy:
+		if _removals_at == _removals:
+			return true
+		for i: int in _node_count:
+			if not is_instance_id_valid(_body_ids[i]):
+				return false
+		_removals_at = _removals
+		return true
+	var nodes: int = _node_count if _node_count >= 0 else _body_ids.size()
+	var field: Object = _native() if nodes == _body_ids.size() else null
 	if field != null:
 		return field.bodies_alive()
-	for id: int in _body_ids:
-		if not is_instance_id_valid(id):
+	for i: int in nodes:
+		if not is_instance_id_valid(_body_ids[i]):
 			return false
 	return true

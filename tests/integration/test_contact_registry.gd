@@ -42,6 +42,8 @@ class Checker extends Node:
 		if _tick % 7 != 0:
 			return
 		var native: ContactScan = ContactScan.from_registry(get_tree())
+		if native == null:
+			return  # perf_native is off: nothing to compare
 		var script: ContactScan = ContactScan.from_tree(get_tree())
 		compared += 1
 		for field: String in ROWS_COMPARED:
@@ -190,7 +192,7 @@ func test_a_fighter_flying_at_a_rock_steers_round_it_on_both_paths() -> void:
 		ContactScan.invalidate()
 		ContactScan.clear_statics()
 		var monitor := RockMonitor.new()
-		add_child_autofree(monitor)
+		add_child(monitor)
 		var rock := Vector3(float(i) * LANE_SPACING_M, 0.0, 0.0)
 		ContactScan.register_static(800000 + i, rock, ROCK_RADIUS_M)
 		var ship: Combatant = _ai_ship(cases[i]["spec"], "RUNNER %d" % i, Factions.RAIDERS,
@@ -208,5 +210,6 @@ func test_a_fighter_flying_at_a_rock_steers_round_it_on_both_paths() -> void:
 				"native" if cases[i]["native"] else "GDScript"]
 		gut.p("rock, %s: closest %.1f m (rock and hull %.1f m)" % [label, monitor.min_m[0], clearance])
 		assert_gt(monitor.min_m[0], clearance, "%s: no ram into the rock" % label)
+		monitor.free()
 		ship.ship.queue_free()
 		await _ticks(1)

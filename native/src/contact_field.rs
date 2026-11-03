@@ -8,6 +8,9 @@ const INCOMING_HORIZON_S: f64 = 2.0;
 // Grid queries pad their box so a body the 32-bit range test accepts is never in an unvisited cell.
 const PAD_REL: f64 = 1e-6;
 const PAD_M: f64 = 1.0;
+// `BodyKind` values of the rows that are obstacles, not contacts (src/ai/body_kind.gd).
+const KIND_MINE: u8 = 4;
+const KIND_STATIC: u8 = 5;
 
 /// One tick's bodies and bolts, handed over once by `ContactScan`, with per-ship queries that return body indices in
 /// scan order. The maths repeats GDScript's: 32-bit vectors, 64-bit scalars, the engine's order of operations and no
@@ -28,12 +31,17 @@ pub struct ScsContactField {
     bolt_velocities: Vec<Vector3>,
     bolt_faction: Vec<usize>,
     bolt_shooters: Vec<i64>,
+    // Rocks and mines (M4-T09): never contacts, found by `statics` by their surface distance.
+    is_static: Vec<bool>,
+    radii: Vec<f64>,
+    max_static_radius: f64,
     cell_m: f64,
     // Bodies sorted by grid cell, then by scan index.
     cells: Vec<((i32, i32, i32), u32)>,
     visited: i64,
     candidates: Vec<u32>,
     in_range: Vec<(f32, u32)>,
+    in_reach: Vec<(f64, u32)>,
 }
 
 #[godot_api]
@@ -97,6 +105,9 @@ impl ScsContactField {
         self.bolt_velocities = bolt_velocities.as_slice().to_vec();
         self.bolt_faction = bolt_factions.iter_shared().map(|f| self.faction_index(f)).collect();
         self.bolt_shooters = bolt_shooters.as_slice().to_vec();
+        self.is_static = vec![false; n];
+        self.radii.clear();
+        self.max_static_radius = 0.0;
         self.cell_m = cell_m;
         let cell = self.cell_m;
         self.cells = self
@@ -110,6 +121,30 @@ impl ScsContactField {
             .collect();
         self.cells.sort_unstable();
         self.visited = 0;
+        true
+    }
+
+    /// Says which loaded bodies are rocks or mines (`BodyKind` values, M4-T09) and every body's radius: those rows are
+    /// never contacts, and `statics` finds them. Returns false, after logging why, when the arrays do not match the
+    /// loaded bodies; the field then holds an empty scan, as a rejected `load` does.
+    #[func]
+    fn set_kinds(&mut self, kinds: PackedByteArray, radii: PackedFloat64Array) -> bool {
+        let n = self.body_ids.len();
+        if kinds.len() != n || radii.len() != n {
+            godot_error!(
+                "ScsContactField.set_kinds: array lengths differ (bodies {n}, kinds {}, radii {}); the scan is dropped",
+                kinds.len(),
+                radii.len()
+            );
+            self.clear();
+            return false;
+        }
+        self.is_static = kinds.as_slice().iter().map(|&k| k == KIND_MINE || k == KIND_STATIC).collect();
+        self.radii = radii.as_slice().to_vec();
+        self.max_static_radius = (0..n)
+            .filter(|&i| self.is_static[i])
+            .map(|i| self.radii[i].abs())
+            .fold(0.0, f64::max);
         true
     }
 
@@ -145,7 +180,7 @@ impl ScsContactField {
     #[func]
     fn contacts(&mut self, own_body_id: i64, at: Vector3, range: f64) -> PackedInt32Array {
         let range_sq = range * range;
-        self.gather(own_body_id, at, range, |d_sq| f64::from(d_sq) <= range_sq);
+        self.gather(own_body_id, at, range, |_, d_sq| f64::from(d_sq) <= range_sq);
         let out: Vec<i32> = self.in_range.iter().map(|&(_, i)| i as i32).collect();
         PackedInt32Array::from(out.as_slice())
     }
@@ -157,7 +192,7 @@ impl ScsContactField {
     fn nearest(&mut self, own_body_id: i64, at: Vector3, faction: StringName, k: i64, range: f64) -> PackedInt32Array {
         let range_sq = range * range;
         // GDScript's nearest loop skips only what is beyond the range, so its test is "not greater".
-        self.gather(own_body_id, at, range, |d_sq| !(f64::from(d_sq) > range_sq));
+        self.gather(own_body_id, at, range, |_, d_sq| !(f64::from(d_sq) > range_sq));
         // k of 0 or less means no cut: every contact in range, as `ContactScan.nearest_for` defines it.
         if k <= 0 || self.in_range.len() <= k as usize {
             let out: Vec<i32> = self.in_range.iter().map(|&(_, i)| i as i32).collect();
@@ -183,6 +218,37 @@ impl ScsContactField {
             out.push(h as i32);
         }
         out.push(-1);
+        PackedInt32Array::from(out.as_slice())
+    }
+
+    /// `ContactScan.statics_for`: the rocks and mines whose surface is within `range` of `at`, not `own_body_id`; with `k`
+    /// or fewer, all of them, otherwise the `k` nearest by surface distance (equal ones to the earlier row); in scan order.
+    #[func]
+    fn statics(&mut self, own_body_id: i64, at: Vector3, k: i64, range: f64) -> PackedInt32Array {
+        if k <= 0 {
+            return PackedInt32Array::new();
+        }
+        let reach = range.abs();
+        self.in_reach.clear();
+        self.collect_candidates(at, reach + self.max_static_radius, reach.is_finite());
+        for &i in &self.candidates {
+            let j = i as usize;
+            if !self.is_static[j] || self.body_ids[j] == own_body_id {
+                continue;
+            }
+            // `position.distance_to(at) - radius`, with GDScript's 32-bit length.
+            let surface = f64::from(length(sub(at, self.positions[j]))) - self.radii[j];
+            if surface <= reach {
+                self.in_reach.push((surface, i));
+            }
+        }
+        let k = k as usize;
+        if self.in_reach.len() > k {
+            self.in_reach.select_nth_unstable_by(k - 1, |a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+            self.in_reach.truncate(k);
+            self.in_reach.sort_unstable_by_key(|e| e.1);
+        }
+        let out: Vec<i32> = self.in_reach.iter().map(|&(_, i)| i as i32).collect();
         PackedInt32Array::from(out.as_slice())
     }
 
@@ -243,6 +309,9 @@ impl ScsContactField {
         self.bolt_velocities.clear();
         self.bolt_faction.clear();
         self.bolt_shooters.clear();
+        self.is_static.clear();
+        self.radii.clear();
+        self.max_static_radius = 0.0;
         self.cells.clear();
         self.candidates.clear();
         self.in_range.clear();
@@ -262,12 +331,28 @@ impl ScsContactField {
         self.hostile_rows.iter().find(|(f, _)| f == faction).map(|(_, row)| row.as_slice())
     }
 
-    // Fills `in_range` with the bodies near `at` that `accept` takes by squared distance, but not `own_body_id`, in scan
-    // order. Visits only the grid cells the range can reach, or every body when that would be more cells than bodies.
-    fn gather(&mut self, own_body_id: i64, at: Vector3, range: f64, accept: impl Fn(f32) -> bool) {
-        self.candidates.clear();
+    // Fills `in_range` with the bodies near `at` that `accept` takes by squared distance, but not `own_body_id` and never a
+    // rock or mine, in scan order.
+    fn gather(&mut self, own_body_id: i64, at: Vector3, range: f64, accept: impl Fn(usize, f32) -> bool) {
         self.in_range.clear();
-        let pad = range.abs() * (1.0 + PAD_REL) + PAD_M;
+        self.collect_candidates(at, range.abs(), range.is_finite());
+        for &i in &self.candidates {
+            let j = i as usize;
+            if self.is_static[j] {
+                continue;
+            }
+            let d_sq = dist_sq(self.positions[j], at);
+            if accept(j, d_sq) && self.body_ids[j] != own_body_id {
+                self.in_range.push((d_sq, i));
+            }
+        }
+    }
+
+    // Fills `candidates` with the bodies in the grid cells within `reach` of `at`, in scan order, or every body when that
+    // box would hold more cells than bodies. Counts them as the latest query's visits.
+    fn collect_candidates(&mut self, at: Vector3, reach: f64, finite: bool) {
+        self.candidates.clear();
+        let pad = reach * (1.0 + PAD_REL) + PAD_M;
         let lo = |v: f32| cell_of(f64::from(v) - pad, self.cell_m);
         let hi = |v: f32| cell_of(f64::from(v) + pad, self.cell_m);
         let (lx, ly, lz) = (lo(at.x), lo(at.y), lo(at.z));
@@ -275,9 +360,7 @@ impl ScsContactField {
         // A huge range saturates the cell indices, so the box can hold more cells than a 64-bit count: too many to walk.
         let span = |l: i32, h: i32| i64::from(h) - i64::from(l) + 1;
         let columns = span(lx, hx).checked_mul(span(ly, hy));
-        let grid_usable = self.cell_m > 0.0
-            && range.is_finite()
-            && columns.is_some_and(|c| c <= self.cells.len() as i64);
+        let grid_usable = self.cell_m > 0.0 && finite && columns.is_some_and(|c| c <= self.cells.len() as i64);
         if grid_usable {
             for cx in lx..=hx {
                 for cy in ly..=hy {
@@ -291,13 +374,6 @@ impl ScsContactField {
             self.candidates.extend(0..self.positions.len() as u32);
         }
         self.visited = self.candidates.len() as i64;
-        for &i in &self.candidates {
-            let j = i as usize;
-            let d_sq = dist_sq(self.positions[j], at);
-            if accept(d_sq) && self.body_ids[j] != own_body_id {
-                self.in_range.push((d_sq, i));
-            }
-        }
     }
 }
 

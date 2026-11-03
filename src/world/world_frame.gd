@@ -150,6 +150,7 @@ func rebase(offset: Vector3) -> void:
 		var node := member as Node3D
 		if node != null and is_ancestor_of(node):
 			node.global_translate(shift)
+	ContactScan.shift_statics(shift)  # the scan's rows with no node move with the nodes (M4-T09)
 	origin = origin.plus_local(offset)
 	rebases += 1
 	rebased.emit(offset)
