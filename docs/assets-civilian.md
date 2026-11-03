@@ -43,11 +43,11 @@ all eight).
 
 | Hull | Length | Surface | LOD0 target (range) | Start spacing | LOD1 | LOD2 | LOD3 |
 |---|---|---|---|---|---|---|---|
-| `saturn_4_transport` | 158.5 m (splats vs STL) | 34 500 m² | 130 000 (105 000 to 155 000) | 0.52 m | 32 500 | 8 100 | - | 2 000 |
-| `saturn_4_tanker` | 158.5 m (splats vs STL) | about 18 400 m² | 70 000 (55 000 to 85 000) | 0.51 m | 17 500 | 4 400 | - | 1 100 |
-| `saturn_8_transport` | 258.5 m (splats vs STL) | about 65 000 m² | 210 000 (170 000 to 250 000) | 0.56 m | 52 500 | 13 100 | - | 3 300 |
-| `saturn_8_tanker` | 258.5 m (splats vs STL) | about 36 900 m² | 120 000 (95 000 to 145 000) | 0.55 m | 30 000 | 7 500 | - | 1 900 |
-| `saturn_3_freighter` | 96.8 m (splats vs STL) | about 19 700 m² | 75 000 (60 000 to 90 000) | 0.51 m | 18 750 | 4 700 | - | 1 200 |
+| `saturn_4_transport` | 158.5 m | 34 500 m² | 130 000 (105 000 to 155 000) | 0.52 m | 32 500 | 8 100 | 2 000 |
+| `saturn_4_tanker` | 158.5 m | about 18 400 m² | 70 000 (55 000 to 85 000) | 0.51 m | 17 500 | 4 400 | 1 100 |
+| `saturn_8_transport` | 258.5 m | about 65 000 m² | 210 000 (170 000 to 250 000) | 0.56 m | 52 500 | 13 100 | 3 300 |
+| `saturn_8_tanker` | 258.5 m | about 36 900 m² | 120 000 (95 000 to 145 000) | 0.55 m | 30 000 | 7 500 | 1 900 |
+| `saturn_3_freighter` | 96.8 m | about 19 700 m² | 75 000 (60 000 to 90 000) | 0.51 m | 18 750 | 4 700 | 1 200 |
 | `skylark_transport` | 60 m | 6 400 m² | 60 000 (48 000 to 72 000) | 0.33 m | 15 000 | 3 800 | 900 |
 | `narn_transport` | 70 m | 9 200 m² | 75 000 (60 000 to 90 000) | 0.35 m | 18 750 | 4 700 | 1 200 |
 | `centauri_brezebel` | 60 m | 8 000 m² | 70 000 (55 000 to 85 000) | 0.34 m | 17 500 | 4 400 | 1 100 |
@@ -114,11 +114,11 @@ Per variant:
 
 | Variant | Length L | Mains at z | More turrets | Port / starboard | Top, top lamp | Chunks |
 |---|---|---|---|---|---|---|
-| `saturn_4_transport` | 158.5 (splats vs STL) | 158.48 | `dorsal_aft` (0, +9.3, 124.4) | the first pods' outboard tips (±53.4, -7.29, 74.3) | (0, +8.6, 75.0), lamp (0, +16.6, 99.4), range 48 m | - | `bow`, `hull`, `engine`, `pods_l`, `pods_r` |
-| `saturn_4_tanker` | 158.5 (splats vs STL) | 158.48 | `dorsal_aft` (0, +9.3, 124.4) | the lower tanks' flanks (±25.6, -13.53, 99.4) | (0, +8.6, 75.0), lamp (0, +16.6, 99.4), range 48 m | - | `bow`, `spine`, `engine`, `tank_l`, `tank_r` |
-| `saturn_8_transport` | 258.5 (splats vs STL) | 258.48 | `dorsal_mid` (0, +7.2, 149.4) | (±53.4, -7.29, 74.3) | (0, +8.6, 75.0), lamp (0, +21.5, 149.4), range 78 m | - | `bow`, `hull_1`, `junction`, `hull_2`, `engine`, `pods_1l`, `pods_1r`, `pods_2l`, `pods_2r` |
-| `saturn_8_tanker` | 258.5 (splats vs STL) | 258.48 | `dorsal_mid` (0, +9.0, 149.4) | (±25.6, -13.53, 99.4) | (0, +8.6, 75.0), lamp (0, +21.5, 149.4), range 78 m | - | `bow`, `spine_1`, `junction`, `spine_2`, `engine`, `tanks_1l`, `tanks_1r`, `tanks_2l`, `tanks_2r` |
-| `saturn_3_freighter` | 96.8 (splats vs STL) | 96.80 | none (Q19, Q20) | the lower pods' outboard ends (±46.8, -5.46, 79.7) | the top pod's ridge (0, +21.8, 73.9), lamp (0, +27.8, 79.7), range 36 m | - | `bow` (with the cross-beam and blocks), `pod_top`, `pod_l`, `pod_r`, `engine` (with the truss behind the drum frame) |
+| `saturn_4_transport` | 158.5 | 158.48 | `dorsal_aft` (0, +9.3, 124.4) | the first pods' outboard tips (±53.4, -7.29, 74.3) | (0, +8.6, 75.0), lamp (0, +16.6, 99.4), range 48 m | `bow`, `hull`, `engine`, `pods_l`, `pods_r` |
+| `saturn_4_tanker` | 158.5 | 158.48 | `dorsal_aft` (0, +9.3, 124.4) | the lower tanks' flanks (±25.6, -13.53, 99.4) | (0, +8.6, 75.0), lamp (0, +16.6, 99.4), range 48 m | `bow`, `spine`, `engine`, `tank_l`, `tank_r` |
+| `saturn_8_transport` | 258.5 | 258.48 | `dorsal_mid` (0, +7.2, 149.4) | (±53.4, -7.29, 74.3) | (0, +8.6, 75.0), lamp (0, +21.5, 149.4), range 78 m | `bow`, `hull_1`, `junction`, `hull_2`, `engine`, `pods_1l`, `pods_1r`, `pods_2l`, `pods_2r` |
+| `saturn_8_tanker` | 258.5 | 258.48 | `dorsal_mid` (0, +9.0, 149.4) | (±25.6, -13.53, 99.4) | (0, +8.6, 75.0), lamp (0, +21.5, 149.4), range 78 m | `bow`, `spine_1`, `junction`, `spine_2`, `engine`, `tanks_1l`, `tanks_1r`, `tanks_2l`, `tanks_2r` |
+| `saturn_3_freighter` | 96.8 | 96.80 | none (Q19, Q20) | the lower pods' outboard ends (±46.8, -5.46, 79.7) | the top pod's ridge (0, +21.8, 73.9), lamp (0, +27.8, 79.7), range 36 m | `bow` (with the cross-beam and blocks), `pod_top`, `pod_l`, `pod_r`, `engine` (with the truss behind the drum frame) |
 
 Collision, per part: the disc a box 28.3 x 6.0 x 28.3 m with the antenna inside it; the forward truss a box 6.3 x 6.3
 m along its length; the drum frame a box 21.7 x 19.3 x 8.2 m; each hull cylinder or tank a capsule of radius 8.77 m (it covers the 17.53 x 17.27 m polygon) and
@@ -314,11 +314,11 @@ only in how many cargo sections they carry and of which kind.
 
 | Variant | Cargo | Junction | Engine section | Length |
 |---|---|---|---|---|
-| `saturn_4_transport` | one transport section at z 49.3 to 149.3 (splats vs STL) | none | z 135.9 to 158.5 | - | 158.5 m |
-| `saturn_4_tanker` | one tank section at z 49.3 to 149.3 (splats vs STL) | none | z 135.9 to 158.5 | - | 158.5 m |
-| `saturn_8_transport` | transport sections at z 49.3 to 149.3 and 149.3 to 249.3 (splats vs STL) | z 137.2 to 161.7, one module | z 235.9 to 258.5 | - | 258.5 m |
-| `saturn_8_tanker` | tank sections at z 49.3 to 149.3 and 149.3 to 249.3 (splats vs STL) | z 137.2 to 161.7, three modules | z 235.9 to 258.5 | - | 258.5 m |
-| `saturn_3_freighter` | cross-beam, blocks and three pods crosswise (z 48.5 to 95.3), the truss through the stack (splats vs STL) | none | slim (0.583 scale, Q20), z 83.6 to 96.8, between the lower pods and under the top pod | - | 96.8 m |
+| `saturn_4_transport` | one transport section at z 49.3 to 149.3 | none | z 135.9 to 158.5 | 158.5 m |
+| `saturn_4_tanker` | one tank section at z 49.3 to 149.3 | none | z 135.9 to 158.5 | 158.5 m |
+| `saturn_8_transport` | transport sections at z 49.3 to 149.3 and 149.3 to 249.3 | z 137.2 to 161.7, one module | z 235.9 to 258.5 | 258.5 m |
+| `saturn_8_tanker` | tank sections at z 49.3 to 149.3 and 149.3 to 249.3 | z 137.2 to 161.7, three modules | z 235.9 to 258.5 | 258.5 m |
+| `saturn_3_freighter` | cross-beam, blocks and three pods crosswise (z 48.5 to 95.3), the truss through the stack | none | slim (0.583 scale, Q20), z 83.6 to 96.8, between the lower pods and under the top pod | 96.8 m |
 
 The length rule (Q16) is lead ship plus cargo: 49.3 m of lead ship ahead of the first section, 100 m per section, and
 the engine section's last 9.2 m behind the last section. The section's own stations, the Saturn 3's stack and every

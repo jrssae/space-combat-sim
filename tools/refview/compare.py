@@ -91,7 +91,6 @@ SHIFT_FRACTION = 0.02  # the best-fit shift of the asset: at most this share of 
 PIXEL_FRACTION = 0.0025  # default pixel as a share of the length
 PIXEL_FRACTION_MAX = 0.005  # the brief's coarsest allowed pixel
 SPLAT_PIXELS_PER_SPACING = 3  # the splat check's pixel is the LOD0 spacing over this; the band is this many pixels
-SPLAT_GRID_MAX_PX = 20_000  # a splat-check view longer than this many pixels is refused (a spacing far too fine for the ship)
 SPACING_TOLERANCE = 0.10  # a declared LOD0 spacing this far from the one the splat scales imply fails the splat check
 HINT_PIXEL_FRACTION = 0.01  # the wider search behind the --model-offset hint runs on a coarser grid
 HINT_WINDOW = 0.10  # ... over this share of the length each way in x and y
@@ -656,8 +655,9 @@ def check_splats(
     band_px = float(SPLAT_PIXELS_PER_SPACING)
     (m_lo, m_hi), (s_lo, s_hi) = _bounds(mesh_tris), splats.bounds(sigmas)
     lo, hi = np.minimum(m_lo, s_lo), np.maximum(m_hi, s_hi)
-    if float(np.max(hi - lo)) / px > SPLAT_GRID_MAX_PX:
-        raise ValueError(f"a spacing of {spacing:g} m is too fine for a {float(np.max(hi - lo)):.1f} m part (over {SPLAT_GRID_MAX_PX} pixels)")
+    a, b = sorted(float(v) for v in (hi - lo))[1:]
+    if (a / px + 2 * band_px + 2) * (b / px + 2 * band_px + 2) > MAX_GRID_PIXELS:
+        raise ValueError(f"a spacing of {spacing:g} m is too fine for a {b:.1f} m part (a view over {MAX_GRID_PIXELS} pixels)")
     views = {}
     for name in VIEWS:
         grid = view_grid(name, lo, hi, px, int(band_px) + 1)
