@@ -68,3 +68,6 @@ var ack_line: String = ""
 var has_waypoint: bool = false
 var waypoint_position: Vector3 = Vector3.ZERO
 var waypoint_label: String = ""
+## The running mission's active objectives (M5-T05), `ObjectiveBook.active()`: `{id, text, primary, state}`; empty outside a
+## mission.
+var objectives: Array[Dictionary] = []

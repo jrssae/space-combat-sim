@@ -499,3 +499,62 @@ func test_a_wave_spawn_names_its_wing() -> void:
 	assert_true(result["ok"], str(result["error"]))
 	assert_eq((result["waves"] as Array)[0]["spawns"][0]["wing"], "RED", "trimmed")
 	assert_eq(result["wings"], [] as Array[Dictionary], "an undeclared group needs no declaration")
+
+
+# --- the mission block (M5-T05, D51) -------------------------------------------------------------------------------------
+
+
+func test_a_scenario_without_a_mission_block_has_an_empty_one() -> void:
+	var result: Dictionary = ScenarioLoader.from_data(_minimal(), "case")
+	assert_true(result["ok"], str(result["error"]))
+	assert_eq(result["mission"], {})
+	assert_eq(result["cinematics"], {})
+	assert_eq(ScenarioLoader.load(ScenarioLoader.FREE_FLIGHT_PATH)["mission"], {}, "free flight runs as before")
+
+
+func test_the_mission_block_and_cinematics_are_passed_through() -> void:
+	var data: Dictionary = _minimal()
+	data["mission"] = {"title": " Buoy defence ", "briefing": "Hold the relay.\n", "script": "res://data/missions/x.gd",
+			"dialog": "res://data/dialog/x.json",
+			"objectives": [{"id": "protect", "text": "Protect NAV ALPHA", "fail": {"kind": "destroyed", "name": "NAV ALPHA"}}]}
+	data["cinematics"] = {"intro": {"keys": []}}
+	var result: Dictionary = ScenarioLoader.from_data(data, "case")
+	assert_true(result["ok"], str(result["error"]))
+	var mission: Dictionary = result["mission"]
+	assert_eq(mission["title"], "Buoy defence", "trimmed")
+	assert_eq(mission["briefing"], "Hold the relay.\n", "kept as written")
+	assert_eq(mission["script"], "res://data/missions/x.gd")
+	assert_eq(mission["dialog"], "res://data/dialog/x.json")
+	assert_eq((mission["objectives"] as Array).size(), 1)
+	assert_eq_deep(result["cinematics"], {"intro": {"keys": []}})
+
+
+func test_a_mission_block_may_leave_out_everything_but_what_it_has() -> void:
+	var data: Dictionary = _minimal()
+	data["mission"] = {"briefing": "No title here."}
+	var result: Dictionary = ScenarioLoader.from_data(data, "case")
+	assert_true(result["ok"], str(result["error"]))
+	assert_eq(result["mission"]["title"], "")
+	assert_eq(result["mission"]["script"], "", "the runner, not the loader, needs a script")
+
+
+func test_mission_errors_name_the_json_path() -> void:
+	var data: Dictionary = _minimal()
+	data["mission"] = "buoy"
+	_assert_fails(data, "case: mission must be an object")
+	data["mission"] = {"title": 5}
+	_assert_fails(data, "case: mission.title must be a string")
+	data["mission"] = {"objectives": [{"id": "a", "success": {"kind": "timer", "seconds": -1}}]}
+	_assert_fails(data, "case: mission.objectives[0].success: timer: seconds must be a number, 0 or more")
+	data["mission"] = {"objectives": [{"id": "a"}, {"id": "a"}]}
+	_assert_fails(data, "case: mission.objectives[1].id 'a' is declared twice")
+	data.erase("mission")
+	data["cinematics"] = []
+	_assert_fails(data, "case: cinematics must be an object")
+
+
+func test_the_test_mission_fixture_loads() -> void:
+	var result: Dictionary = ScenarioLoader.load("res://tests/fixtures/missions/test_mission.json")
+	assert_true(result["ok"], str(result["error"]))
+	assert_eq(result["mission"]["title"], "Test Mission")
+	assert_eq((result["mission"]["objectives"] as Array).size(), 4)

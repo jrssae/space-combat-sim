@@ -594,3 +594,47 @@ func test_the_acknowledgement_sits_under_the_status_line_and_auto_track() -> voi
 	assert_gt(f.ack_pos.y, 62.0, "below AUTO-TRACK's line")
 	assert_lt(f.ack_pos.y, VIEW.y * 0.15, "near the top")
 	assert_eq(HudLayout.compute(_hud_input()).ack_line, "")
+
+
+# --- mission objectives (M5-T05) ------------------------------------------------------------------------------------------
+
+
+func _objective(id: StringName, text: String, primary: bool = true) -> Dictionary:
+	return {"id": id, "text": text, "primary": primary, "state": &"active"}
+
+
+func test_without_objectives_there_is_no_list() -> void:
+	var f: HudFrame = HudLayout.compute(_hud_input())
+	assert_does_not_have(f.items, HudSurface.OBJECTIVES)
+	assert_eq(f.objective_lines.size(), 0)
+	assert_does_not_have(HudSurface.ALL_ITEMS, HudSurface.OBJECTIVES, "shown only while a mission has some")
+
+
+func test_active_objectives_are_listed_top_right_with_optional_ones_marked() -> void:
+	var input: HudInput = _hud_input()
+	input.objectives.append(_objective(&"protect", "Protect NAV ALPHA"))
+	input.objectives.append(_objective(&"home", "", false))
+	var f: HudFrame = HudLayout.compute(input)
+	assert_has(f.items, HudSurface.OBJECTIVES)
+	assert_eq(f.objective_lines.size(), 2)
+	assert_eq(f.objective_lines[0]["text"], "PROTECT NAV ALPHA")
+	assert_eq(f.objective_lines[1]["text"], "HOME  (OPTIONAL)", "its id when it has no text")
+	assert_false(bool(f.objective_lines[1]["primary"]))
+	var first: Vector2 = f.objective_lines[0]["pos"]
+	var second: Vector2 = f.objective_lines[1]["pos"]
+	assert_almost_eq(first.x, VIEW.x - 48.0, TOL, "right-aligned at the right margin")
+	assert_gt(first.y, f.objectives_caption_pos.y, "under its caption")
+	assert_gt(second.y, first.y)
+	assert_lt(second.y, VIEW.y * 0.25, "in the top quarter, clear of the radar")
+
+
+func test_the_cockpit_view_keeps_the_list_on_the_window() -> void:
+	var input: HudInput = _hud_input()
+	input.cockpit = true
+	input.screen_sizes = {&"octagon": Vector2(300.0, 300.0), &"left": Vector2(640.0, 250.0), &"right": Vector2(640.0, 250.0)}
+	input.objectives.append(_objective(&"protect", "Protect NAV ALPHA"))
+	var f: HudFrame = HudLayout.compute(input)
+	assert_eq(f.items, [HudSurface.BORESIGHT, HudSurface.VELOCITY, HudSurface.TARGET_MARKS, HudSurface.WAYPOINT,
+			HudSurface.OBJECTIVES] as Array[StringName])
+	for id: StringName in f.screens:
+		assert_does_not_have((f.screens[id] as HudSurface).items, HudSurface.OBJECTIVES, "not on the %s screen" % id)

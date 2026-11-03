@@ -35,6 +35,9 @@ const ROSTER_BAR: Vector2 = Vector2(64.0, 8.0)
 ## The acknowledgement line's baseline below the status line's (under AUTO-TRACK's, 26 px below it).
 const ACK_BELOW_STATUS_PX: float = 50.0
 const STATUS_Y_PX: float = 36.0
+## The objectives list (M5-T05), top right (at 1080 px; scaled): the caption's baseline below the FPS counter, and the line pitch.
+const OBJECTIVES_TOP_PX: float = 110.0
+const OBJECTIVE_ROW_PX: float = 22.0
 ## A roster row's short form of what a wingman is doing, by behaviour id.
 const ROSTER_TAGS: Dictionary = {"formation": "FORM", "attack": "ATK", "evade": "EVADE", "retreat": "RETREAT",
 		"follow_path": "NAV", "idle": "IDLE", "none": "-"}
@@ -64,6 +67,7 @@ static func compute(input: HudInput) -> HudFrame:
 	_radar(input, f)
 	_waypoint(input, f)
 	_wing(input, f)
+	_objectives(input, f)
 	f.status_line = input.status_line
 	f.items = HudSurface.ALL_ITEMS.duplicate()
 	if not f.grid_visible:
@@ -71,6 +75,8 @@ static func compute(input: HudInput) -> HudFrame:
 	f.lamps = {&"assist": input.assist, &"guns": input.guns_ready, &"lights": input.running_lights, &"track": input.tracking}
 	if on_screens(input):
 		_split_onto_screens(input, f)
+	if not f.objective_lines.is_empty():
+		f.items.append(HudSurface.OBJECTIVES)  # on the window in both views
 	return f
 
 
@@ -381,6 +387,31 @@ static func _roster_rows(input: HudInput, origin: Vector2, s: float, pitch: floa
 		row.text_pos = Vector2(origin.x + (ROSTER_BAR.x + 10.0) * s, top + 16.0 * s)
 		rows.append(row)
 	return rows
+
+
+# --- mission objectives (M5-T05) ------------------------------------------------------------------------------------------
+
+
+## The objectives list's line for one objective: its text (its id when it has none) in capitals, optional ones marked.
+static func objective_text(objective: Dictionary) -> String:
+	var text: String = str(objective.get("text", ""))
+	if text.is_empty():
+		text = str(objective.get("id", ""))
+	return text.to_upper() + ("" if bool(objective.get("primary", true)) else "  (OPTIONAL)")
+
+
+static func _objectives(input: HudInput, f: HudFrame) -> void:
+	f.objective_lines = []
+	if input.objectives.is_empty():
+		return
+	var s: float = f.scale
+	var x: float = input.viewport_size.x - 48.0 * s
+	f.objectives_caption_pos = Vector2(x, OBJECTIVES_TOP_PX * s)
+	for i: int in input.objectives.size():
+		var objective: Dictionary = input.objectives[i]
+		f.objective_lines.append({"text": objective_text(objective),
+				"pos": Vector2(x, (OBJECTIVES_TOP_PX + OBJECTIVE_ROW_PX * float(i + 1)) * s),
+				"primary": bool(objective.get("primary", true))})
 
 
 # --- the console's screens (M3-T29) ---------------------------------------------------------------------------------------

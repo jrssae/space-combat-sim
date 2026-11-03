@@ -1921,6 +1921,8 @@ numbers start at D50 (D46-D49 are M4's).
 | # | Decision | Rationale (short) |
 |---|---|---|
 | D50 | Boot and the `Game` flow (T01). The main scene is `src/frontend/boot.tscn`; `Boot` hands the command line to the `Game` autoload once, and the pure `GameFlow.boot_route` decides: a windowed launch shows the front end; `--headless` (the display server or the engine argument), `--console-exec` or `--console-file` with a script, `--scenario=<id>` (after `--`, or before it) and `settings.skip_front_end` go straight to Main, which reads `Settings.scenario` as before (`--scenario=<id>` sets it for the session, like the `scenario` command). `GameFlow` (`RefCounted`) holds the states `FRONT_END`, `LOADING`, `IN_SPACE`, `DEBRIEF`, the request `{kind: free_flight \| mission \| sandbox, scenario_id, encounters, seed}` and the last result; a run starts at `FRONT_END`, and a refused move changes nothing and says why. `Game` only swaps scenes: the loading screen loads `main.tscn` with `ResourceLoader.load_threaded_request` (its scripts compiled first on the main thread, §18.3), `Game` builds Main with the request's `scenario_path` and `scenario_seed`, and `Main._ready` fills the pools behind the loading screen (D22 unchanged). Leaving a scene unpauses the tree and frees the mouse. The console's `scenario <id>` still reloads Main in place | Every tool, benchmark, smoke run and test starts as it did, and the menus get a flow that the debrief, retry and missions plug into without touching Main |
+| D51 | Missions are scenarios with a script of named steps (T05). `ScenarioLoader` passes a scenario's `mission` block through (`title`, `briefing`, `script`, `dialog`, `objectives[]`; strings type-checked only, objectives by `ObjectiveBook.declare`) and `cinematics` beside it; `Main` creates a `MissionRunner` (under Main, physics priority 400, pausable) when the block is there. The script extends `MissionScript` (`steps()`, `step_<name>(m)`); `MissionSequencer` awaits each step as a coroutine, and every wait in `MissionApi` resumes on the sequencer's `wake`, emitted once per tick after the world moved, so mission time is sim time. `mission skip` marks the step skipped and emits `wake` at once: waits return, an awaited trigger is first made true (`Trigger.make_true`), the objectives are evaluated right after, and the step runs to its end and the next starts inside the command (an emission calls only the waits it began with); `mission goto <step>` skips every step before the named one. World changes go through `MissionStage`: pools, `AiContext.objective_name` for `send`, the jump points. `say` and `cinematic` resolve at once (T06, T08 seams); `lock_controls` keeps a flag (T08 zeroes the commands). Success: every primary done, or `m.end(true)`; failure: a primary failed, `m.end(false)`, or the player destroyed. The result goes to `Game.end_mission` (`last_result`, `DEBRIEF`); Main stays in space with `MISSION COMPLETE` or `MISSION FAILED - <REASON>` on the status line until T09's debrief. In a mission the player does not respawn (the runner cancels it, Back is ignored); a spawn past its pool is a `push_error`, never a new ship. Jump arrivals (Q12): `JumpArrivalPool` holds 4 `JumpArrival`s under `World/Effects` (billboard flash, a `LightEmitter`, the `sfx_world` `jump_in` sound; no splats), a spawn with `arrival: "jump"` opens one (a group within 600 m in the same second shares it) and comes out of it on its own velocity | Scripts read like the mission; skipping by forcing leaves the world where the step would have (a skipped wave is gone, not alive and ignored), which M8's tutorial checks need; one script surface keeps missions out of Main |
+| D52 | Triggers and objectives (T05). Seven kinds (`proximity`, `area`, `timer`, `destroyed`, `dialog_finished`, `input_performed`, `arrived`), each a `RefCounted` with its `test` and `force` side by side, over a `MissionWorld` snapshot: actors by name (case-free; `player` is the player) with `UniversePos`, alive and route end, sim time, finished lines, and this tick's `PlayerActions` from the `PilotCommand` Main sampled (`InputAdapter.last`; held controls past half way and edges). Forced, `destroyed` releases its ships to the pool (no explosion, no credit), `proximity`, `area` and `arrived` place the actor (`reset_to`, velocity kept; beside a goal actor at half the radius), the rest latch. `TriggerSpec.from_dict` builds them from JSON and has builders for scripts. `ObjectiveBook` (pure): hidden, active, done, failed (final); success and fail triggers evaluated while active, fail first; `snapshot()` is `{id, text, primary, state}`. Cost: every lookup is one unit of `MissionWorld.work`, and the stage refreshes only the names the live triggers read, from a name map `ShipPool.acquired` keeps current, so a tick costs a check and at most two lookups per trigger plus one refresh per name, whatever the number of ships | Pure predicates are unit-tested without a scene; a counted bound is stable on any machine where a millisecond budget is not |
 
 ### 18.2 Layout additions
 
@@ -1931,6 +1933,13 @@ src/frontend/boot.tscn|.gd               the project's main scene: hands the com
 src/frontend/loading_screen.tscn|.gd     shown while main.tscn loads on a thread (T01)
 src/frontend/front_end.tscn|.gd          placeholder: Free flight and Quit (T01; T02 builds the real menus)
 tests/unit/test_game_flow.gd, tests/integration/test_boot_routing.gd   (T01)
+src/mission/mission_script.gd, mission_sequencer.gd, mission_api.gd   the script's base, step and skip sequencing, the script surface (T05)
+src/mission/mission_runner.gd, mission_stage.gd, mission_console.gd   the node under Main, its game side, provider and command `mission` (T05)
+src/mission/mission_world.gd, trigger.gd, trigger_*.gd, trigger_spec.gd, player_actions.gd, objective_book.gd   pure (T05)
+src/mission/jump_arrival.gd, jump_arrival_pool.gd   the jump point opening (Q12) and its fixed pool (T05)
+tools/procgen/assets/sfx_world.py        `jump_in` (T05)
+tests/fixtures/missions/test_mission.json|.gd   the test mission (T05)
+tests/unit/test_triggers.gd, test_objective_book.gd, test_mission_sequencer.gd, tests/integration/test_mission_runner.gd, test_mission_skip.gd   (T05)
 ```
 
 ### 18.3 Boot, scene changes and the console's startup scripts
@@ -1959,7 +1968,31 @@ tests/unit/test_game_flow.gd, tests/integration/test_boot_routing.gd   (T01)
 | Provider | Owner (task) | Keys |
 |---|---|---|
 | `game` | Game (T01) | `state` (`front_end`, `loading`, `in_space`, `debrief`), `request` (`<scenario> (<kind>), encounters on\|off, seed <n>`, or `none`), `last_result` (`success`, `failure: <reason>`, or `none`) |
+| `mission` | MissionRunner (T05), only while a mission runs | `id`, `title`, `state` (`running`, `success`, `failure`, `error`), `result`, `step` (`<name> (n/N)`), `steps`, `time_s`, `objectives`, `live_triggers`, `tick_work`, `skipping`, `waypoint`, `controls_locked`, `jump_points` |
 
 Commands: `menu` (back to the front end); `play <scenario_id> [seed]` (any `data/scenarios/*.json`, through the loading screen
 as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` (bool, false). Command line: `--scenario=<id>`
-(goes straight to Main with that scenario for the session).
+(goes straight to Main with that scenario for the session). T05: `mission [status|skip|goto <step>|objectives|journal]`, registered only while a mission runs (elsewhere `mission` is an unknown command); a bad action, `goto` without a step or with an unknown or past one, and a step given to anything but `goto` are refused.
+
+### 18.5 Missions as built (T05)
+
+- **Tick.** `MissionRunner` (400) runs after `WaveDirector` (300) and before the `RebaseSettler`: time, the player's actions, the
+  snapshot for the watched names, the objectives (and the result rules), then `wake`, where the waiting step tests its trigger.
+  The first step starts in a call deferred from the runner's `_ready`, so it runs before the first tick and before any console
+  startup script. Paused, nothing ticks.
+- **Lifetime.** A waiting step holds the API and the script, and the API holds the sequencer: `MissionSequencer.release`
+  (the runner's `_exit_tree`) disconnects every wait, so the step is dropped and nothing is left at exit. After `end` a step that
+  waits again never resumes, and world changes after `end` are ignored.
+- **Journal.** `MissionApi.journal` lists every world change in order (`spawn RAIDER 1 raider_fighter`, `send ...`,
+  `objective_add ...`, `objective raiders done`, `end success: ...`); `mission journal` prints its tail, and the skip test
+  compares a skipped run's whole journal, objectives and ships in play with a played one's.
+- **HUD and menus.** `Hud.extra_input` (set by the runner) adds the active objectives (top right, right-aligned, on the window
+  in both views: `HudSurface.OBJECTIVES`, only while there are any), the mission's waypoint when no route marks one, and the
+  result line. `Main.objectives()` returns `ObjectiveBook.snapshot()` (empty outside a mission): the pause menu's
+  `objectives_source`.
+- **Spawns.** `m.spawn` takes a scenario spawn (`ScenarioLoader.parse_spawn`) plus `arrival` and `invulnerable`; `anchor` is the
+  player's position at the call or the scenario origin. `ShipPool` is unchanged: the stage checks `free_count` first and pushes
+  the error itself.
+- **Left for later.** `say` waits for nothing until T06's dialog queue; `cinematic` and the control lock are T08's; the debrief
+  screen is T09's. `play <id>` starts a mission scenario like any other (its request's kind stays `sandbox`, from
+  `GameFlow.kind_for`; T02's mission menu asks for `mission`).

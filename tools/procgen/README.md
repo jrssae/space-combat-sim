@@ -156,6 +156,13 @@ mono 16-bit 48 kHz WAVs synthesised with NumPy, peaks at -1.5 dBFS, byte-identic
 Its manifest has `kind` `audio`, a `sounds` object (file, samples, sample rate, duration, peak, and `loop_begin` / `loop_end`
 for the two loops, seamless by construction) and no `lods`. Option: `peak_dbfs` (default -1.5, at most -1).
 
+## `sfx_world`
+
+Sounds of the world itself (M5-T05, D51): one mono 16-bit 48 kHz WAV, peak -1.5 dBFS, byte-identical per seed. `jump_in`
+(1.6 s), a jump point opening (Q12): noise rising through four bands and a sine gliding up three octaves to the opening at
+0.8 s, then a bright FM chord over a short thump that dies away. `JumpArrival` plays it at the point. Same manifest shape as
+`sfx_combat`, no loops.
+
 ## `sky_default`
 
 12 000 star splats on a 20 km sphere (Milky Way band, magnitude distribution, blackbody colours) plus 4 000

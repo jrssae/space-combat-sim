@@ -7,6 +7,9 @@ extends CanvasLayer
 
 ## A Callable returning a `HudInput`; unset = nothing drawn.
 var input_provider: Callable = Callable()
+## Called with each frame's `HudInput` after `input_provider` (M5-T05: the running mission adds its objectives, waypoint and
+## result line); unset outside a mission.
+var extra_input: Callable = Callable()
 ## The frame drawn last (for tests and the console).
 var frame: HudFrame = HudFrame.new()
 ## The player ship's console screens (M3-T29), or null: they get the frame while the cockpit view shows them, and go dark with the HUD.
@@ -52,6 +55,8 @@ func _process(_delta: float) -> void:
 	var input: HudInput = input_provider.call() as HudInput
 	if input == null or input.viewport_size.x < 1.0 or input.viewport_size.y < 1.0:
 		return
+	if extra_input.is_valid():
+		extra_input.call(input)
 	frame = HudLayout.compute(input)
 	# The chase view is busier (the whole ship is on screen): the HUD is drawn fainter there.
 	_canvas.modulate.a = 1.0 if frame.cockpit else float(Settings.get_value(&"hud_chase_opacity"))

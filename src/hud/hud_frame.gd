@@ -92,3 +92,8 @@ var waypoint_range_m: float = 0.0
 var waypoint_edge_visible: bool = false
 var waypoint_edge_pos: Vector2 = Vector2.ZERO
 var waypoint_edge_angle: float = 0.0
+
+## The mission's objectives list (M5-T05), top right, right-aligned: the caption's baseline, then one line per active objective
+## (`{text: String, pos: Vector2, primary: bool}`).
+var objectives_caption_pos: Vector2 = Vector2.ZERO
+var objective_lines: Array[Dictionary] = []

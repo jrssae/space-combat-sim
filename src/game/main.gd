@@ -39,6 +39,8 @@ var status_line: String = ""
 var debug_throttle: float = 0.0
 ## False from the player's death until the respawn; input is ignored meanwhile.
 var player_alive: bool = true
+## The running mission (M5-T05), or null: free flight and the sandbox have none.
+var mission: MissionRunner = null
 var combatant: Combatant = null
 var ship: Ship = null
 var thrusters: ThrusterVisuals = null
@@ -134,6 +136,8 @@ func _ready() -> void:
 	if bool(scenario.get("ok", false)):
 		_spawn_props(scenario["props"])
 	_spawn_scenario_ships()
+	if not (scenario.get("mission", {}) as Dictionary).is_empty():
+		mission = MissionRunner.create(self, scenario)
 	camera_rig.setup(ship, ship.cockpit_anchor, ship.get_chase_offset(), ship.set_cockpit_interior_visible)
 	# The World keeps its origin within `auto_rebase_distance_m` (5 km, main.tscn) of the player (M3-T14, §14.1).
 	world.focus = ship
@@ -290,6 +294,11 @@ func _wire_audio() -> void:
 ## The HUD's reference point (its `REF` range and closing speed): the launch point, for now. Universe coordinates.
 func reference_point() -> UniversePos:
 	return _spawn_position
+
+
+## Every objective of the running mission (`ObjectiveBook.snapshot`), empty outside one: the pause menu's objectives source.
+func objectives() -> Array[Dictionary]:
+	return mission.objectives() if mission != null else ([] as Array[Dictionary])
 
 
 ## This frame's `HudInput`, read from the live nodes (the HUD never caches anything).
@@ -497,7 +506,7 @@ func _handle_ui(ui: UiCommand) -> void:
 		set_paused(not get_tree().paused)
 	if ui.toggle_camera:
 		camera_rig.toggle()
-	if ui.reset:
+	if ui.reset and mission == null:  # no respawn in a mission (D51)
 		respawn()
 	if ui.toggle_overlay:
 		Settings.set_value(&"show_overlay", not bool(Settings.get_value(&"show_overlay")))

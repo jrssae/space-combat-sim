@@ -83,6 +83,8 @@ func paint(f: HudFrame, surface: HudSurface) -> void:
 		_line(surface, f.ack_line, surface.ack_pos, 16.0 * s)
 	if items.has(HudSurface.ROSTER):
 		_draw_roster(surface, s, w)
+	if items.has(HudSurface.OBJECTIVES):
+		_draw_objectives(f, s)
 
 
 # The wing roster (M3-T11): per wingman a hull bar in the wing's colour, the callsign and what it is doing.
@@ -92,6 +94,15 @@ func _draw_roster(surface: HudSurface, s: float, w: float) -> void:
 	for row: HudLayout.RosterRow in surface.roster_rows:
 		_bar(row.bar_rect, row.hull, row.color, w)
 		_text(row.text, row.text_pos, surface.roster_text_size * s, row.color if row.down else LINE_COLOR)
+
+
+# The mission's active objectives (M5-T05), right-aligned at the top right: optional ones fainter.
+func _draw_objectives(f: HudFrame, s: float) -> void:
+	var faint := Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.7)
+	_text("OBJECTIVES", f.objectives_caption_pos, 12.0 * s, faint, HORIZONTAL_ALIGNMENT_RIGHT)
+	for line: Dictionary in f.objective_lines:
+		_text(String(line["text"]), line["pos"] as Vector2, 15.0 * s, LINE_COLOR if bool(line["primary"]) else faint,
+				HORIZONTAL_ALIGNMENT_RIGHT)
 
 
 # --- helpers --------------------------------------------------------------------------------------------------

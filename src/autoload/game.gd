@@ -102,6 +102,13 @@ func fail_loading(reason: String) -> void:
 	show_front_end()
 
 
+## A mission is over (M5-T05): its result is kept for the debrief and the flow moves to `DEBRIEF` (T09 shows it; Main stays
+## in space meanwhile). A Main built outside the flow (a test, the `scenario` command) still leaves the result here.
+func end_mission(result: Dictionary) -> void:
+	if not flow.end_run(result):
+		flow.last_result = result.duplicate()
+
+
 ## Every scenario file `play` can start, by id.
 func scenario_ids() -> PackedStringArray:
 	var ids := PackedStringArray()

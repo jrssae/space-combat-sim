@@ -23,9 +23,14 @@ extends RefCounted
 ##      "spawns": Array[Dictionary],                # ships placed at load (M3-T09): a wave spawn's fields plus
 ##                                                  #       "invulnerable" (bool, false) and "route" (a route's name, "" none);
 ##                                                  #       the members of `wings[]` come last, in their order
-##      "wings": Array[Dictionary]}                 # `wings[]` (M3-T10): {name, faction (StringName, &"" for any), leader
+##      "wings": Array[Dictionary],                 # `wings[]` (M3-T10): {name, faction (StringName, &"" for any), leader
 ##                                                  #       ("player", a spawn's name, or "" for its first ship), formation
 ##                                                  #       (Formation.Shape), order (AiContext.Order)}; may be empty
+##      "mission": Dictionary,                      # (M5-T05, D51) {} for none, else {title, briefing, script (a res://
+##                                                  #       MissionScript path, loaded by the runner), dialog (a dialog file
+##                                                  #       path), objectives: the raw `objectives[]`, already checked by
+##                                                  #       `ObjectiveBook.declare`}; strings may be ""
+##      "cinematics": Dictionary}                   # (M5-T05, D55) shot id -> shot, passed through for T08; may be empty
 ## Every spawn (wave or load) carries "wing" (a wing's name, "" for none; it needs an "ai" behaviour). A wing named by a spawn
 ## but not declared in `wings[]` is a group led by its first ship, engaging at will, in a finger-four.
 ## Errors are returned, not pushed: the caller decides how loud a broken scenario is.
@@ -129,6 +134,12 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 		if int(at_load[type]) > int((pools as Dictionary).get(type, 0)):
 			return _failure("%s: spawns and wings: %d ships of %s at load but pools.%s holds %d" % [source, at_load[type], type,
 					type, int((pools as Dictionary).get(type, 0))])
+	var mission: Variant = _mission(root.get("mission", {}), system, source)
+	if mission is String:
+		return _failure(mission as String)
+	var cinematics: Variant = root.get("cinematics", {})
+	if not (cinematics is Dictionary):
+		return _failure("%s: cinematics must be an object (shot id -> shot)" % source)
 	var waves: Variant = _waves(root.get("waves", []), pools as Dictionary, system, source, at_load)
 	if waves is String:
 		return _failure(waves as String)
@@ -149,7 +160,36 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	result["routes"] = routes
 	result["spawns"] = spawns
 	result["wings"] = wings
+	result["mission"] = mission
+	result["cinematics"] = cinematics
 	return result
+
+
+## The `mission` block (D51), or an error string: `{}` when absent. Strings are checked for type only (the script and the
+## dialog file are loaded by the mission runner), the objectives by `ObjectiveBook.declare`.
+static func _mission(raw: Variant, system: StringName, source: String) -> Variant:
+	if not (raw is Dictionary):
+		return "%s: mission must be an object" % source
+	var block: Dictionary = raw
+	if block.is_empty():
+		return {}
+	var out: Dictionary = {}
+	for key: String in ["title", "briefing", "script", "dialog"]:
+		var value: Variant = block.get(key, "")
+		if not (value is String):
+			return "%s: mission.%s must be a string" % [source, key]
+		out[key] = (value as String).strip_edges() if key != "briefing" else value as String
+	var objectives: Variant = block.get("objectives", [])
+	var problem: String = ObjectiveBook.new().declare(objectives, system)
+	if not problem.is_empty():
+		return "%s: mission.%s" % [source, problem]
+	out["objectives"] = objectives
+	return out
+
+
+## One spawn by the scenario's rules (a mission's `m.spawn`, M5-T05), or an error string naming `where`.
+static func parse_spawn(raw: Variant, where: String, system: StringName) -> Variant:
+	return _spawn(raw, where, system)
 
 
 ## `wings[]` (M3-T10): each wing's declaration, its members appended to `spawns`, or an error string. `leader` is "player",
@@ -492,7 +532,7 @@ static func _empty() -> Dictionary:
 			"player": {"position": UniversePos.new(), "forward": Vector3.FORWARD, "basis": Basis.IDENTITY},
 			"props": [] as Array[Dictionary], "pools": {}, "waves": [] as Array[Dictionary],
 			"loop": {"from_wave": 0, "add_per_loop": 1}, "routes": [] as Array[Route], "spawns": [] as Array[Dictionary],
-			"wings": [] as Array[Dictionary]}
+			"wings": [] as Array[Dictionary], "mission": {}, "cinematics": {}}
 
 
 static func _failure(message: String) -> Dictionary:
