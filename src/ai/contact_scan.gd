@@ -16,6 +16,12 @@ extends RefCounted
 ##
 ## The cache is rebuilt within a frame if a body it saw was freed; a body added later appears next frame. Tests that need a
 ## fresh scan call `invalidate()`.
+##
+## Native queries (M4-T05b, architecture §17.5): when the native library provides `NATIVE_CLASS` and `perf_native` is on,
+## the queries and the freed-body check run in a native field that takes this scan's arrays once, on its first query, and
+## answers with body indices; the contact lists are still built here from the shared faction lists. The GDScript code is
+## the fallback and the reference, and both give the same answers bit for bit. The setting is read on every query, so a
+## flip takes effect at once, even on a scan already in use. A scan's arrays must not change once it has been queried.
 
 const SENSOR_RANGE_M: float = 5000.0
 ## A hostile bolt is incoming when its closest approach is under this distance within this time.
@@ -34,6 +40,8 @@ static var _shared: ContactScan = null
 static var _shared_broadcasts: ContactScan = null
 ## Returned for a frame with no broadcaster, so a ship that hears nothing allocates nothing. Read, never write.
 static var _no_contacts: Array[Contact] = []
+# Whether the loaded library provides `NATIVE_CLASS` (-1 until first asked; classes never change while the game runs).
+static var _native_class_known: int = -1
 
 ## The physics frame this scan is of (-1 for one built by hand).
 var physics_frame: int = -1
@@ -53,7 +61,8 @@ var _radii: PackedFloat64Array = PackedFloat64Array()
 var _is_ship: PackedByteArray = PackedByteArray()
 var _hulls: PackedFloat64Array = PackedFloat64Array()
 var _target_ids: PackedInt64Array = PackedInt64Array()
-var _stamped: Dictionary = {}  # faction -> Array[Contact] with the relation set
+var _stamped: Dictionary = {}  # faction -> Array[Contact] with the relation set, each made when first handed out
+var _relations: Dictionary = {}  # faction -> {other faction -> relation}, looked up once per pair
 var _hostile_ships: Dictionary = {}  # faction -> PackedByteArray, 1 for a ship hostile to it (nearest-k, M4-T04)
 var _extent_m: float = -1.0  # computed on first use
 var _bolt_positions: PackedVector3Array = PackedVector3Array()
@@ -62,6 +71,8 @@ var _bolt_factions: Array[StringName] = []
 var _bolt_shooters: PackedInt64Array = PackedInt64Array()
 var _hostile_bolts: Dictionary = {}  # faction -> indices of the bolts hostile to it
 var _reach: PackedFloat64Array = PackedFloat64Array()  # per body broadcast range (broadcast scan only)
+var _field: Object = null  # the native field over this scan's arrays, made on the first native query
+var _field_rows: Dictionary = {}  # faction -> true once the field has its hostility row
 
 
 ## The scan of the current physics frame, built on the first call of the frame.
@@ -157,12 +168,13 @@ static func from_tree(tree: SceneTree) -> ContactScan:
 
 ## Which code answers this scan's queries now: &"native" or &"gdscript".
 func path() -> StringName:
-	return &"gdscript"
+	return &"native" if _native() != null else &"gdscript"
 
 
 ## Bodies the native field tested in its latest contact or nearest query (the work count), -1 on the GDScript path.
 func native_visits() -> int:
-	return -1
+	var field: Object = _native()
+	return field.visited() if field != null else -1
 
 
 ## The contacts a ship of `own_faction` at `own_position` sees: within `range_m`, never its own body.
@@ -170,17 +182,21 @@ func contacts_for(own_body_id: int, own_position: Vector3, own_faction: StringNa
 		range_m: float = SENSOR_RANGE_M) -> Array[Contact]:
 	var stamped: Array[Contact] = _stamped_for(own_faction)
 	var own_index: int = _body_ids.find(own_body_id)
+	var field: Object = _native()
+	if field != null:
+		var found: PackedInt32Array = field.contacts(own_body_id, own_position, range_m)
+		if own_index >= 0 and found.size() == stamped.size() - 1:
+			return _all_but(own_faction, stamped, own_index)
+		return _pick(own_faction, stamped, found)
 	# Fast path: everything is in range for sure, so the faction list without this ship is what the loop would build.
 	if own_index >= 0 and _extent() + own_position.distance_to(_positions[own_index]) < range_m * 0.999:
-		var all: Array[Contact] = stamped.duplicate()
-		all.remove_at(own_index)
-		return all
+		return _all_but(own_faction, stamped, own_index)
 	var range_sq: float = range_m * range_m
-	var out: Array[Contact] = []
+	var found := PackedInt32Array()
 	for i: int in stamped.size():
 		if _body_ids[i] != own_body_id and _positions[i].distance_squared_to(own_position) <= range_sq:
-			out.append(stamped[i])
-	return out
+			found.append(i)
+	return _pick(own_faction, stamped, found)
 
 
 ## The nearest `k` of the contacts `contacts_for` gives (M4-T04), in scan order. When that leaves any out, the nearest
@@ -192,8 +208,17 @@ func nearest_for(own_body_id: int, own_position: Vector3, own_faction: StringNam
 	var stamped: Array[Contact] = _stamped_for(own_faction)
 	if _body_ids.size() <= k:
 		return contacts_for(own_body_id, own_position, own_faction, range_m)  # never more than k to cut
-	var hostile: PackedByteArray = _hostile_ships[own_faction]
 	var range_sq: float = range_m * range_m
+	var field: Object = _native_with_row(own_faction)
+	if field != null:
+		var chosen: PackedInt32Array = field.nearest(own_body_id, own_position, own_faction, k, range_m)
+		if chosen.is_empty() or chosen[chosen.size() - 1] != -1:
+			return _pick(own_faction, stamped, chosen)  # k or fewer in range, in scan order
+		chosen.resize(chosen.size() - 1)  # the cut left something out: the nearest k and the nearest hostile
+		_keep_named(chosen, keeper, own_body_id, own_position, range_sq)
+		chosen.sort()
+		return _pick(own_faction, stamped, chosen)
+	var hostile: PackedByteArray = _hostile_ships_for(own_faction)
 	# Gather like `contacts_for` until more than k are in range; only then select, keeping the nearest k sorted by range.
 	var gathered := PackedInt32Array()
 	var best_sq := PackedFloat64Array()
@@ -238,20 +263,9 @@ func nearest_for(own_body_id: int, own_position: Vector3, own_faction: StringNam
 		best = gathered  # k or fewer in range: all of them, already in scan order
 	else:
 		_keep(hostile_at, best, own_body_id, own_position, range_sq)
-		if keeper.is_valid():
-			var kept: Array = keeper.call()
-			for id: int in kept[0] as PackedInt64Array:
-				if id > 0:
-					_keep(_ids.find(id), best, own_body_id, own_position, range_sq)
-			for wanted: String in kept[1] as PackedStringArray:
-				for i: int in _names.size():
-					if _names[i].length() == wanted.length() and _names[i].nocasecmp_to(wanted) == 0:
-						_keep(i, best, own_body_id, own_position, range_sq)
+		_keep_named(best, keeper, own_body_id, own_position, range_sq)
 		best.sort()
-	var out: Array[Contact] = []
-	for i: int in best:
-		out.append(stamped[i])
-	return out
+	return _pick(own_faction, stamped, best)
 
 
 ## The broadcasts a ship hears (from a `from_broadcasters` scan): beyond `near_m`, where contacts take over, and within
@@ -261,20 +275,26 @@ func broadcasts_for(own_body_id: int, own_position: Vector3, own_faction: String
 	if _body_ids.is_empty():
 		return _no_contacts
 	var stamped: Array[Contact] = _stamped_for(own_faction)
+	var field: Object = _native()
+	if field != null:
+		return _pick(own_faction, stamped, field.broadcasts(own_body_id, own_position, near_m))
 	var near_sq: float = near_m * near_m
-	var out: Array[Contact] = []
+	var found := PackedInt32Array()
 	for i: int in stamped.size():
 		if _body_ids[i] == own_body_id:
 			continue
 		var d_sq: float = _positions[i].distance_squared_to(own_position)
 		if d_sq > near_sq and d_sq <= _reach[i] * _reach[i]:
-			out.append(stamped[i])
-	return out
+			found.append(i)
+	return _pick(own_faction, stamped, found)
 
 
 ## How many bolts hostile to `own_faction` (and not this ship's own) pass within `INCOMING_MISS_M` of the ship in the next
 ## `INCOMING_HORIZON_S`, both flying straight on.
 func incoming_fire(own_body_id: int, own_position: Vector3, own_velocity: Vector3, own_faction: StringName) -> int:
+	var field: Object = _native_with_row(own_faction)
+	if field != null:
+		return field.incoming(own_body_id, own_position, own_velocity, own_faction)
 	var count: int = 0
 	for i: int in _hostile_bolts_for(own_faction):
 		if _bolt_shooters[i] == own_body_id:
@@ -295,6 +315,71 @@ func _keep(i: int, chosen: PackedInt32Array, own_body_id: int, own_position: Vec
 	if i >= 0 and _body_ids[i] != own_body_id and not chosen.has(i) \
 			and _positions[i].distance_squared_to(own_position) <= range_sq:
 		chosen.append(i)
+
+
+# Adds what `keeper` names (ids, then names case-insensitive) to a nearest-k selection that left something out.
+func _keep_named(chosen: PackedInt32Array, keeper: Callable, own_body_id: int, own_position: Vector3, range_sq: float) -> void:
+	if not keeper.is_valid():
+		return
+	var kept: Array = keeper.call()
+	for id: int in kept[0] as PackedInt64Array:
+		if id > 0:
+			_keep(_ids.find(id), chosen, own_body_id, own_position, range_sq)
+	for wanted: String in kept[1] as PackedStringArray:
+		for i: int in _names.size():
+			if _names[i].length() == wanted.length() and _names[i].nocasecmp_to(wanted) == 0:
+				_keep(i, chosen, own_body_id, own_position, range_sq)
+
+
+# The contacts at `indices` of `faction`'s list, in that order, each made the first time it is handed out.
+func _pick(faction: StringName, stamped: Array[Contact], indices: PackedInt32Array) -> Array[Contact]:
+	var out: Array[Contact] = []
+	for i: int in indices:
+		var c: Contact = stamped[i]
+		if c == null:
+			c = _stamp(faction, i)
+			stamped[i] = c
+		out.append(c)
+	return out
+
+
+# Every contact of `faction`'s list but body `skip`.
+func _all_but(faction: StringName, stamped: Array[Contact], skip: int) -> Array[Contact]:
+	for i: int in stamped.size():
+		if stamped[i] == null:
+			stamped[i] = _stamp(faction, i)
+	var all: Array[Contact] = stamped.duplicate()
+	all.remove_at(skip)
+	return all
+
+
+# The native field for this query, or null for the GDScript path. Made and loaded on the first native query.
+func _native() -> Object:
+	if not use_native or not NativeLib.enabled():
+		return null
+	if _native_class_known < 0:
+		_native_class_known = 1 if NativeLib.has_class(NATIVE_CLASS) else 0
+	if _native_class_known == 0:
+		return null
+	if _field == null:
+		_field = NativeLib.instantiate(NATIVE_CLASS)
+		if _field == null:
+			return null
+		_field.load(_body_ids, _positions, _factions, _is_ship, _reach, _bolt_positions, _bolt_velocities, _bolt_factions,
+				_bolt_shooters, SENSOR_RANGE_M)
+	return _field
+
+
+# The native field, once it knows which factions are hostile to `faction` (from `Factions`, which it never calls itself).
+func _native_with_row(faction: StringName) -> Object:
+	var field: Object = _native()
+	if field != null and not _field_rows.has(faction):
+		var row := PackedByteArray()
+		for other: StringName in field.factions():
+			row.append(1 if _relation(faction, other) == Factions.Relation.HOSTILE else 0)
+		field.set_hostile_row(faction, row)
+		_field_rows[faction] = true
+	return field
 
 
 func _add(body: Node3D, targetable: Targetable, damageable: Damageable) -> void:
@@ -328,35 +413,54 @@ func _add(body: Node3D, targetable: Targetable, damageable: Damageable) -> void:
 		_target_ids.append(-1)
 
 
-# The contacts as a ship of `faction` sees them, built once per faction.
+# The contacts as a ship of `faction` sees them: one list per faction, shared, each contact made when first handed out
+# (a broadcaster nobody hears, or a body no ship of the faction sees, costs nothing).
 func _stamped_for(faction: StringName) -> Array[Contact]:
 	if _stamped.has(faction):
 		return _stamped[faction]
 	var list: Array[Contact] = []
-	var hostile := PackedByteArray()
-	var relations: Dictionary = {}  # looked up once per faction pair
-	for i: int in _body_ids.size():
-		var c := Contact.new()
-		c.id = _ids[i]
-		c.name = _names[i]
-		var other: StringName = _factions[i]
-		c.faction = other
-		if not relations.has(other):
-			relations[other] = Factions.relation(faction, other)
-		c.relation = relations[other]
-		c.position = _positions[i]
-		c.velocity = _velocities[i]
-		c.forward = _forwards[i]
-		c.up = _ups[i]
-		c.bounding_radius = _radii[i]
-		c.is_ship = _is_ship[i] == 1
-		c.hull_fraction = _hulls[i]
-		c.target_id = _target_ids[i]
-		list.append(c)
-		hostile.append(1 if c.is_ship and c.relation == Factions.Relation.HOSTILE else 0)
+	list.resize(_body_ids.size())
 	_stamped[faction] = list
-	_hostile_ships[faction] = hostile
 	return list
+
+
+# Body `i` as a ship of `faction` sees it.
+func _stamp(faction: StringName, i: int) -> Contact:
+	var c := Contact.new()
+	c.id = _ids[i]
+	c.name = _names[i]
+	c.faction = _factions[i]
+	c.relation = _relation(faction, _factions[i])
+	c.position = _positions[i]
+	c.velocity = _velocities[i]
+	c.forward = _forwards[i]
+	c.up = _ups[i]
+	c.bounding_radius = _radii[i]
+	c.is_ship = _is_ship[i] == 1
+	c.hull_fraction = _hulls[i]
+	c.target_id = _target_ids[i]
+	return c
+
+
+# How a ship of `faction` regards `other`, looked up once per pair in this scan.
+func _relation(faction: StringName, other: StringName) -> Factions.Relation:
+	if not _relations.has(faction):
+		_relations[faction] = {}
+	var known: Dictionary = _relations[faction]
+	if not known.has(other):
+		known[other] = Factions.relation(faction, other)
+	return known[other]
+
+
+# 1 for each body that is a ship hostile to `faction` (the GDScript nearest-k path).
+func _hostile_ships_for(faction: StringName) -> PackedByteArray:
+	if _hostile_ships.has(faction):
+		return _hostile_ships[faction]
+	var hostile := PackedByteArray()
+	for i: int in _body_ids.size():
+		hostile.append(1 if _is_ship[i] == 1 and _relation(faction, _factions[i]) == Factions.Relation.HOSTILE else 0)
+	_hostile_ships[faction] = hostile
+	return hostile
 
 
 # Upper bound on the distance between any two bodies.
@@ -388,6 +492,9 @@ func _hostile_bolts_for(faction: StringName) -> PackedInt32Array:
 
 
 func _bodies_alive() -> bool:
+	var field: Object = _native()
+	if field != null:
+		return field.bodies_alive()
 	for id: int in _body_ids:
 		if not is_instance_id_valid(id):
 			return false

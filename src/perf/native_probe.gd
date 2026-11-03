@@ -5,33 +5,45 @@ extends RefCounted
 
 const NATIVE_CLASS: StringName = &"ScsNativeProbe"
 
-var _native: Object
+var _use_native: bool
+var _native: Object = null
 
 
 ## `use_native` false forces the GDScript path, so a test or the boundary bench can pair the two.
 func _init(use_native: bool = true) -> void:
-	_native = NativeLib.instantiate(NATIVE_CLASS) if use_native else null
+	_use_native = use_native
 
 
-## Which code answers: &"native" or &"gdscript".
+## Which code answers: &"native" or &"gdscript". Follows `perf_native` at once.
 func path() -> StringName:
-	return &"native" if _native != null else &"gdscript"
+	return &"native" if _active() != null else &"gdscript"
 
 
 ## Returns its argument: the cheapest possible call, for the boundary's per-call cost.
 func echo(value: int) -> int:
-	if _native != null:
-		return int(_native.call(&"echo", value))
+	var native: Object = _active()
+	if native != null:
+		return int(native.call(&"echo", value))
 	return value
 
 
 ## Indices of `positions` within `range_m` of `origin`, in order (the shape of the contact queries).
 func in_range(positions: PackedVector3Array, origin: Vector3, range_m: float) -> PackedInt32Array:
-	if _native != null:
-		return _native.call(&"in_range", positions, origin, range_m)
+	var native: Object = _active()
+	if native != null:
+		return native.call(&"in_range", positions, origin, range_m)
 	var out := PackedInt32Array()
 	var range_sq: float = range_m * range_m
 	for i: int in positions.size():
 		if positions[i].distance_squared_to(origin) <= range_sq:
 			out.append(i)
 	return out
+
+
+# The native object when this call should use it (made on first use), or null for the GDScript path.
+func _active() -> Object:
+	if not _use_native or not NativeLib.enabled():
+		return null
+	if _native == null:
+		_native = NativeLib.instantiate(NATIVE_CLASS)
+	return _native

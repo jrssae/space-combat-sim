@@ -90,16 +90,23 @@ static func _world(rng: RandomNumberGenerator, n: int, shape: int) -> ContactSca
 		ships.append(1 if rng.randf() < 0.85 else 0)
 	var scan := _scan(positions, factions, ships)
 	for b: int in rng.randi_range(0, 400):
-		var near: Vector3 = positions[rng.randi_range(0, n - 1)]
+		# Half the bolts fly about the first 30 bodies, so the queries on them see some incoming fire.
+		var target: int = rng.randi_range(0, mini(n, 30) - 1) if rng.randf() < 0.5 else rng.randi_range(0, n - 1)
 		var direction := Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
 		direction = direction.normalized() if direction.length_squared() > 1e-6 else Vector3.FORWARD
-		var at: Vector3 = near + direction * rng.randf_range(0.0, 1200.0)
+		var at: Vector3 = positions[target] + direction * rng.randf_range(0.0, 1200.0)
 		var velocity := Vector3(rng.randf_range(-600.0, 600.0), rng.randf_range(-600.0, 600.0), rng.randf_range(-600.0, 600.0))
-		if rng.randf() < 0.4:
+		var faction: StringName = FACTIONS[rng.randi_range(0, FACTIONS.size() - 1)]
+		if rng.randf() < 0.5:
+			# Aimed at the body, by its enemy, with a miss of a few metres either side of the 15 m line.
 			velocity = -direction * rng.randf_range(300.0, 600.0) + Vector3(rng.randf_range(-8.0, 8.0), 0.0, 0.0)
+			if factions[target] == Factions.RAIDERS:
+				faction = Factions.EARTH_ALLIANCE
+			elif factions[target] == Factions.EARTH_ALLIANCE:
+				faction = Factions.RAIDERS
 		scan._bolt_positions.append(at)
 		scan._bolt_velocities.append(velocity)
-		scan._bolt_factions.append(FACTIONS[rng.randi_range(0, FACTIONS.size() - 1)])
+		scan._bolt_factions.append(faction)
 		scan._bolt_shooters.append(1000 + rng.randi_range(0, n - 1) if rng.randf() < 0.7 else 0)
 	return scan
 
@@ -147,6 +154,8 @@ func test_seeded_worlds_give_the_same_answers_on_both_paths() -> void:
 	rng.seed = 2026_11_03
 	var compared: int = 0
 	var cut: int = 0
+	var under_fire: int = 0
+	var hearing: int = 0
 	for world: int in WORLDS:
 		var n: int = 1 if world == 0 else (MAX_BODIES if world == 1 else rng.randi_range(1, MAX_BODIES))
 		var shape: int = world % 4
@@ -154,7 +163,7 @@ func test_seeded_worlds_give_the_same_answers_on_both_paths() -> void:
 		var heard := _broadcasters(rng, scan)
 		assert_eq(scan.path(), &"native", "world %d: the native path" % world)
 		for q: int in mini(QUERIES_PER_WORLD, n + 2):
-			var at_index: int = rng.randi_range(0, n - 1)
+			var at_index: int = rng.randi_range(0, mini(n, 30) - 1) if rng.randf() < 0.5 else rng.randi_range(0, n - 1)
 			var own_id: int = 1000 + at_index
 			var own_at: Vector3 = scan._positions[at_index]
 			if q == n:
@@ -164,6 +173,8 @@ func test_seeded_worlds_give_the_same_answers_on_both_paths() -> void:
 			var faction: StringName = FACTIONS[rng.randi_range(0, FACTIONS.size() - 1)] if rng.randf() < 0.3 \
 					else scan._factions[at_index]
 			var velocity := Vector3(rng.randf_range(-300.0, 300.0), rng.randf_range(-300.0, 300.0), rng.randf_range(-300.0, 300.0))
+			if rng.randf() < 0.6:
+				velocity *= 0.02  # slow enough that the aimed bolts still arrive
 			var range_m: float = ContactScan.SENSOR_RANGE_M
 			if rng.randf() < 0.15:
 				range_m = [0.0, 700.0, 2500.0, 8000.0, 30000.0][rng.randi_range(0, 4)]
@@ -193,8 +204,47 @@ func test_seeded_worlds_give_the_same_answers_on_both_paths() -> void:
 			compared += 1
 			if (off[1] as Array).size() < (off[0] as Array).size():
 				cut += 1
-	gut.p("%d queries compared over %d worlds, %d of them cut by nearest-k" % [compared, WORLDS, cut])
+			if int(off[3]) > 0:
+				under_fire += 1
+			if not (off[4] as Array).is_empty():
+				hearing += 1
+	gut.p("%d queries compared over %d worlds: %d cut by nearest-k, %d under fire, %d hearing broadcasts" % [compared,
+			WORLDS, cut, under_fire, hearing])
 	assert_gt(cut, 50, "the nearest-k cut, the nearest hostile and the keeper were exercised")
+	assert_gt(under_fire, 50, "incoming fire was counted")
+	assert_gt(hearing, 50, "broadcasts were heard")
+
+
+func test_incoming_fire_agrees_on_bolts_that_graze_the_15_m_line() -> void:
+	if _skipped():
+		return
+	# Bolts whose closest approach is within a few micrometres of the line: the 32-bit rounding of GDScript's maths
+	# decides about one in ten of them, so only the same precision gives the same counts.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 15
+	var differ: int = 0
+	var counted: int = 0
+	for trial: int in 400:
+		var own_at := Vector3(rng.randf_range(-500.0, 500.0), rng.randf_range(-500.0, 500.0), rng.randf_range(-500.0, 500.0))
+		var own_velocity := Vector3(rng.randf_range(-150.0, 150.0), rng.randf_range(-150.0, 150.0), rng.randf_range(-150.0, 150.0))
+		var scan := _scan(PackedVector3Array([own_at]), [Factions.RAIDERS], PackedByteArray([1]))
+		for b: int in 4:
+			var along := Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)).normalized()
+			var side: Vector3 = along.cross(Vector3.UP if absf(along.y) < 0.9 else Vector3.RIGHT).normalized()
+			var miss: float = ContactScan.INCOMING_MISS_M + rng.randf_range(-5.0e-6, 5.0e-6)
+			scan._bolt_positions.append(own_at + side * miss - along * rng.randf_range(100.0, 700.0))
+			scan._bolt_velocities.append(own_velocity + along * rng.randf_range(400.0, 600.0))
+			scan._bolt_factions.append(Factions.EARTH_ALLIANCE)
+			scan._bolt_shooters.append(0)
+		var native: int = scan.incoming_fire(1000, own_at, own_velocity, Factions.RAIDERS)
+		scan.use_native = false
+		var script: int = scan.incoming_fire(1000, own_at, own_velocity, Factions.RAIDERS)
+		counted += script
+		if native != script:
+			differ += 1
+	gut.p("400 ships, 1 600 grazing bolts: %d counted as incoming, %d ships with a different count" % [counted, differ])
+	assert_eq(differ, 0, "the same count for every ship")
+	assert_between(counted, 200, 1400, "the bolts straddle the line")
 
 
 func test_a_query_visits_only_the_cells_its_range_reaches() -> void:

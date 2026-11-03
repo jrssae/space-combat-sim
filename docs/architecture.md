@@ -2046,6 +2046,7 @@ scripts/build_native.sh         cargo build --release --locked into .tools/nativ
 src/perf/native_lib.gd          NativeLib: the only way GDScript reaches a native class
 src/perf/native_probe.gd        NativeProbe: facade over the trivial ScsNativeProbe, the pattern for later ports
 src/perf/native_boundary_bench.gd   what a call into the library costs (console `native bench`)
+native/src/contact_field.rs     ScsContactField: the contact scan's queries (T05b, N1), behind ContactScan
 ```
 
 - **Optional during M4** (maintainer Q9). No GDScript names a native class: `NativeLib.instantiate(&"ScsName")` returns null when
@@ -2064,3 +2065,24 @@ src/perf/native_boundary_bench.gd   what a call into the library costs (console 
   out, never a call per contact, and native code never reads a GDScript object. Results are collected in Rust and handed over once.
 - **Threads** are allowed inside native code later (N3, maintainer Q9), with a test that one thread and six give the same
   output; T05a adds none.
+- **Following the setting.** `NativeLib.enabled()` caches `perf_native` and clears the cache on `Settings.changed`, so a
+  facade asks it on every call and a flip takes effect at once, also on objects made before it (T05b). `NativeLib.version`
+  takes the class to ask.
+- **The contact field (T05b, N1).** `ContactScan` keeps its interface, so brains, drivers and tests are unchanged. On a
+  scan's first native query it makes an `ScsContactField` and hands it the scan's arrays in one `load` call: body ids,
+  positions, factions, ship flags, broadcast reaches, the bolts, and the sensor range as the grid's cell size. The field
+  sorts the bodies into a uniform grid of 5 km cells; a contact or nearest query tests only the bodies in the cells its range
+  reaches (or every body when the range spans more cells than there are bodies), then works through them in scan order.
+  `contacts`, `nearest` (the nearest k and the nearest hostile ship, then a -1 marker when the cut left something out),
+  `broadcasts` and `incoming` return body indices or a count; the freed-body check (`bodies_alive`) moved too. The facade
+  still calls the brain's keeper and adds what it names (ids and case-insensitive names) in GDScript, sorts, and builds the
+  `Array[Contact]` from the faction's shared list. Factions cross as `StringName`s, and the facade sends each querying
+  faction's hostility row (from `Factions`, which native code never calls).
+- **Parity is bit for bit** (maintainer, 2026-11-02). The field repeats GDScript's arithmetic: 32-bit vectors, 64-bit scalars,
+  the engine's order (`x*x + y*y + z*z`), a float rounded to 32 bits before it scales a vector, the same comparisons
+  (`<=` for contacts, "not greater" for nearest-k, equal ranges to the earlier body) and no fused multiply-add (Rust never
+  contracts). `test_contact_field` compares both paths on seeded worlds of 1 to 300 bodies and on bolts that graze the
+  15 m line, where only the same precision gives the same count.
+- **Contacts are made when first handed out.** Each faction's list starts empty and a `Contact` is built the first time a
+  query returns that body, on both paths (a broadcaster nobody hears, or a body no ship of the faction sees, costs nothing).
+  The objects are still one per body per faction per scan, shared and read-only.
