@@ -1,5 +1,9 @@
 """tools/refview compare (M5-T23): the fidelity check of a built asset against its reference STL, on synthetic shapes
-(no reference file and no generated asset is needed, except the one test that reads a built raider when it exists)."""
+(no reference file and no generated asset is needed, except the one test that reads a built raider when it exists).
+
+The verdict (Q18) scores the asset's fallback mesh against the STL; a second check holds the LOD0 splats to 0.85 against
+that mesh. The calibration tests pin what the tool reads for a perfect copy: a mesh against itself is 1.0, and splats
+sampled from a mesh with the generators' convention read at least the pinned floors against it."""
 
 from __future__ import annotations
 
@@ -12,12 +16,15 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
 from tools.procgen.core import frames
+from tools.procgen.core.geometry import Material, Mesh
 from tools.procgen.core.manifest import build_manifest, lod_entry, write_manifest
 from tools.procgen.core.ply import SplatData, write_ply
+from tools.procgen.core.sampling import sample_mesh, to_splats
 
 try:
     import PIL  # noqa: F401
@@ -43,6 +50,10 @@ def _box(lo: tuple[float, float, float], hi: tuple[float, float, float]) -> np.n
     return np.array([[v[a], v[b], v[c]] for a, b, c in faces])
 
 
+def _boxes(boxes: list[tuple[tuple, tuple]]) -> np.ndarray:
+    return np.concatenate([_box(lo, hi) for lo, hi in boxes])
+
+
 SPACING = 0.08  # the synthetic splats' lattice spacing (m)
 
 
@@ -65,6 +76,26 @@ def lattice_splats(boxes: list[tuple[tuple, tuple]], spacing: float = SPACING) -
     return centres, np.full(centres.shape, sigma)
 
 
+def mesh_of(tris: np.ndarray) -> Mesh:
+    n = len(tris)
+    return Mesh(tris.reshape(-1, 3), np.arange(3 * n).reshape(-1, 3), np.zeros(n, dtype=int), (Material("m", (0.5, 0.5, 0.5)),))
+
+
+def sampled_splats(tris: np.ndarray, spacing: float, seed: int = 1) -> "compare.SplatSet":
+    """Splats of a mesh as the generators make them: ``sample_mesh`` at ``spacing``, then ``to_splats`` with the default
+    overlap and thickness."""
+    samples = sample_mesh(mesh_of(tris), spacing, np.random.default_rng(seed), smooth=False)
+    data = to_splats(samples, np.full((len(samples), 3), 0.5), spacing)
+    return compare.splat_set(data.xyz, data.scale, data.rot)
+
+
+def write_obj_triangles(path: Path, tris: np.ndarray) -> None:
+    """A minimal OBJ of ``tris`` (vertices as given, one triangle per ``f`` line)."""
+    lines = [f"v {v[0]:.6f} {v[1]:.6f} {v[2]:.6f}" for v in tris.reshape(-1, 3)]
+    lines += [f"f {3 * i + 1} {3 * i + 2} {3 * i + 3}" for i in range(len(tris))]
+    path.write_text("\n".join(lines) + "\n")
+
+
 def write_asset(
     folder: Path,
     asset_id: str,
@@ -73,10 +104,11 @@ def write_asset(
     offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
     rot: np.ndarray | None = None,
     ply_name: str | None = None,
-    extra_files: bool = True,
+    mesh_tris: np.ndarray | None = None,
 ) -> Path:
-    """An asset folder written the way a generator does it: authored positions minus ``centroid_offset``, then the
-    Godot -> 3DGS flip (``core.frames``), the LOD0 PLY and ``manifest.json``."""
+    """An asset folder written the way a generator does it: authored positions minus ``centroid_offset``, the LOD0 PLY
+    after the Godot -> 3DGS flip (``core.frames``), the fallback mesh ``<id>.obj`` in the centred Godot frame (when
+    ``mesh_tris``, authored, is given) and ``manifest.json``."""
     folder.mkdir(parents=True, exist_ok=True)
     n = len(centres)
     quats = frames.quat_identity(n) if rot is None else rot
@@ -89,12 +121,13 @@ def write_asset(
     )
     name = ply_name or f"{asset_id}.ply"
     write_ply(folder / name, written)
-    if extra_files:
-        centred = centres - np.asarray(offset)
-        manifest = build_manifest(
-            asset_id, 1, 1, [lod_entry(0, name, n, SPACING)], centred.min(axis=0), centred.max(axis=0), offset
-        )
-        write_manifest(folder, manifest)
+    files = {}
+    if mesh_tris is not None:
+        write_obj_triangles(folder / f"{asset_id}.obj", mesh_tris - np.asarray(offset))
+        files["fallback_mesh"] = f"{asset_id}.obj"
+    centred = centres - np.asarray(offset)
+    manifest = build_manifest(asset_id, 1, 1, [lod_entry(0, name, n, SPACING)], centred.min(axis=0), centred.max(axis=0), offset, files=files)
+    write_manifest(folder, manifest)
     return folder
 
 
@@ -116,9 +149,16 @@ class TmpCase(unittest.TestCase):
         refview.write_binary_stl(path, tris)
         return path
 
-    def asset(self, boxes: list[tuple[tuple, tuple]], asset_id: str = "ship", **kwargs) -> Path:
+    def asset(self, boxes: list[tuple[tuple, tuple]], asset_id: str = "ship", mesh_boxes: list | None = None, **kwargs) -> Path:
+        """An asset whose splats tile ``boxes`` and whose mesh is ``mesh_boxes`` (default: the same boxes)."""
         centres, scales = lattice_splats(boxes)
-        return write_asset(self.dir / asset_id, asset_id, centres, scales, **kwargs)
+        return write_asset(self.dir / asset_id, asset_id, centres, scales, mesh_tris=_boxes(mesh_boxes or boxes), **kwargs)
+
+    def pod(self, box: tuple[tuple, tuple], name: str = "pod") -> tuple[str, str]:
+        """A pod model (splats and mesh) in its own frame; returns the paths of its PLY and OBJ."""
+        centres, scales = lattice_splats([box])
+        write_asset(self.dir / name, name, centres, scales, mesh_tris=_box(*box))
+        return str(self.dir / name / f"{name}.ply"), str(self.dir / name / f"{name}.obj")
 
     def compare(self, stl: Path, asset: Path, *extra: str, length: float = 12.0) -> tuple[int, str, str]:
         argv = [str(stl), str(asset), "--length", str(length), "--out", str(self.dir / "out"), *extra]
@@ -154,6 +194,25 @@ class ClipTests(unittest.TestCase):
         self.assertAlmostEqual(float(pts[:, 2].min()), 40.0, places=9)
         self.assertAlmostEqual(float(pts[:, 2].max()), 60.0, places=9)
 
+    def test_a_face_lying_in_a_crop_plane_inside_the_ship_is_not_kept(self) -> None:
+        # Two parts touching at z = 6: the front part's rear cap lies in the plane and must not show face-on in the rear
+        # part's front view (the rear part's own front cap lies there too and goes with it; its rear cap stays).
+        tris = _boxes([((-2.0, -1.0, 0.0), (2.0, 1.0, 6.0)), ((-1.0, -0.5, 6.0), (1.0, 0.5, 12.0))])
+        rear = compare.crop_triangles(tris, 6.0, 12.0, 0.0, 12.0)
+        self.assertFalse(np.all(np.abs(rear[..., 2] - 6.0) < 1e-3, axis=1).any())
+        self.assertLessEqual(float(np.abs(rear[..., 0]).max()), 1.0 + 1e-9)  # nothing of the 4 m wide cap
+        self.assertTrue(np.all(np.abs(rear[..., 2] - 12.0) < 1e-3, axis=1).any())  # the rear cap at the ship's own end
+
+    def test_a_plane_at_the_ships_own_end_keeps_the_cap_there(self) -> None:
+        tris = _boxes([((-2.0, -1.0, 0.0), (2.0, 1.0, 6.0)), ((-1.0, -0.5, 6.0), (1.0, 0.5, 12.0))])
+        front = compare.crop_triangles(tris, 0.0, 6.0, 0.0, 12.0)
+        self.assertTrue(np.all(np.abs(front[..., 2] - 0.0) < 1e-3, axis=1).any())  # the nose cap stays
+
+    def test_splats_are_cropped_by_centre_with_the_same_planes(self) -> None:
+        splats = compare.splat_set(np.array([[0, 0, 5.99999], [0, 0, 6.0], [0, 0, 6.5], [0, 0, 11.0]]), np.full((4, 3), 0.1))
+        lo, hi = compare.crop_planes(6.0, 12.0, 0.0, 12.0)
+        self.assertEqual(len(splats.cropped(2, lo, hi)), 2)  # the centre on the plane counts as the neighbour's
+
 
 @needs_pillow
 class AssetFrameTests(TmpCase):
@@ -176,6 +235,22 @@ class AssetFrameTests(TmpCase):
         self.assertAlmostEqual(float(cov[0, 2]), 9.0 * np.cos(a) * -np.sin(a), places=3)
         self.assertAlmostEqual(float(cov[1, 1]), 9.0, places=3)
 
+    def test_the_mesh_returns_to_the_authored_frame_unflipped(self) -> None:
+        # The OBJ is in the centred Godot frame, not the GDGS-flipped one: an off-axis shape must come back unmirrored.
+        tris = _boxes([((1.0, 2.0, 10.0), (4.0, 3.0, 30.0))])
+        write_asset(self.dir / "a", "a", np.array([[0.0, 0.0, 0.0]]), np.full((1, 3), 0.1), offset=(0.0, -0.4468, 38.0806), mesh_tris=tris)
+        np.testing.assert_allclose(compare.load_asset_mesh(self.dir / "a"), tris, atol=2e-4)
+
+    def test_the_mesh_file_comes_from_the_manifest_or_the_asset_id(self) -> None:
+        folder = self.asset([HULL], asset_id="m")
+        (folder / "m.obj").rename(folder / "hull.obj")
+        with self.assertRaisesRegex(ValueError, "fallback mesh"):
+            compare.load_asset_mesh(folder)
+        manifest = json.loads((folder / "manifest.json").read_text())
+        manifest["files"]["fallback_mesh"] = "hull.obj"
+        (folder / "manifest.json").write_text(json.dumps(manifest))
+        self.assertEqual(len(compare.load_asset_mesh(folder)), 12)
+
     def test_the_lod0_file_comes_from_the_manifest(self) -> None:
         centres, scales = lattice_splats([HULL])
         write_asset(self.dir / "b", "b", centres, scales, ply_name="b_hull.ply")
@@ -190,62 +265,110 @@ class AssetFrameTests(TmpCase):
 
 
 @needs_pillow
-class ShapeTests(TmpCase):
-    def test_identical_boxes_score_about_one_with_no_shift(self) -> None:
-        centres, scales = lattice_splats([HULL])
-        splats = compare.splat_set(centres, scales)
-        result = compare.compare_shapes(_box(*HULL), splats, 12.0)
+class GeometryCheckTests(TmpCase):
+    """The verdict: the asset's mesh against the STL's triangles."""
+
+    def test_a_mesh_against_itself_scores_exactly_one_with_no_shift(self) -> None:
+        tris = _boxes([HULL, ((-6.0, -0.3, 3.0), (6.0, 0.3, 8.0)), ((-0.3, 1.0, 9.0), (0.3, 3.0, 11.0))])
+        result = compare.compare_shapes(tris, tris.copy(), 12.0)
         for name in ("top", "side", "front"):
-            self.assertGreater(result.views[name].iou, 0.95, name)
+            self.assertEqual(result.views[name].iou, 1.0, name)
+            self.assertEqual(result.views[name].iou_unshifted, 1.0, name)
         for ratio in result.ratios.values():
-            self.assertAlmostEqual(ratio, 1.0, delta=0.02)
-        self.assertLessEqual(float(np.abs(result.shift_m).max()), 0.05)
+            self.assertAlmostEqual(ratio, 1.0, places=9)
+        np.testing.assert_array_equal(result.shift_m, [0.0, 0.0, 0.0])
 
     def test_a_longer_asset_gets_the_known_overlap_and_length_ratio(self) -> None:
-        longer = ((-2.0, -1.0, 0.0), (2.0, 1.0, 14.4))  # 1.2 times the length
-        splats = compare.splat_set(*lattice_splats([longer]))
-        result = compare.compare_shapes(_box(*HULL), splats, 12.0)
-        self.assertAlmostEqual(result.views["top"].iou, 12.0 / 14.4, delta=0.03)
-        self.assertAlmostEqual(result.views["side"].iou, 12.0 / 14.4, delta=0.03)
-        self.assertGreater(result.views["front"].iou, 0.97)
-        self.assertAlmostEqual(result.ratios["length"], 1.2, delta=0.02)
-        self.assertAlmostEqual(result.ratios["width"], 1.0, delta=0.02)
+        longer = _box((-2.0, -1.0, 0.0), (2.0, 1.0, 14.4))  # 1.2 times the length
+        result = compare.compare_shapes(_box(*HULL), longer, 12.0)
+        self.assertAlmostEqual(result.views["top"].iou, 12.0 / 14.4, delta=0.01)
+        self.assertAlmostEqual(result.views["side"].iou, 12.0 / 14.4, delta=0.01)
+        self.assertAlmostEqual(result.views["front"].iou, 1.0, delta=0.005)
+        self.assertAlmostEqual(result.ratios["length"], 1.2, places=6)
+        self.assertAlmostEqual(result.ratios["width"], 1.0, places=6)
 
     def test_a_shift_beyond_the_window_leaves_the_rest_as_error(self) -> None:
-        moved = ((-2.0, -1.0, 0.6), (2.0, 1.0, 12.6))  # 5 % of the length; the search reaches 2 %
-        splats = compare.splat_set(*lattice_splats([moved]))
-        result = compare.compare_shapes(_box(*HULL), splats, 12.0)
+        moved = _box((-2.0, -1.0, 0.6), (2.0, 1.0, 12.6))  # 5 % of the length; the search reaches 2 %
+        result = compare.compare_shapes(_box(*HULL), moved, 12.0)
         self.assertAlmostEqual(float(result.shift_m[2]), -0.24, delta=0.04)
-        self.assertAlmostEqual(result.views["top"].iou, (12.0 - 0.36) / (12.0 + 0.36), delta=0.03)
-        self.assertGreater(result.views["front"].iou, 0.97)  # the front view does not see the z shift
+        self.assertAlmostEqual(result.views["top"].iou, (12.0 - 0.36) / (12.0 + 0.36), delta=0.01)
+        self.assertGreater(result.views["front"].iou, 0.995)  # the front view does not see the z shift
         self.assertLess(result.views["top"].iou_unshifted, result.views["top"].iou)
+        self.assertEqual(result.at_limit, (False, False, True))
 
     def test_a_small_offset_is_recovered_and_reported(self) -> None:
-        moved = ((-1.95, -1.0, 0.12), (2.05, 1.0, 12.12))  # 0.05 m across, 1 % of the length along
-        splats = compare.splat_set(*lattice_splats([moved]))
-        result = compare.compare_shapes(_box(*HULL), splats, 12.0)
+        moved = _box((-1.95, -1.0, 0.12), (2.05, 1.0, 12.12))  # 0.05 m across, 1 % of the length along
+        result = compare.compare_shapes(_box(*HULL), moved, 12.0)
         np.testing.assert_allclose(result.shift_m, [-0.05, 0.0, -0.12], atol=0.035)
         for name in ("top", "side", "front"):
-            self.assertGreater(result.views[name].iou, 0.95, name)
+            self.assertGreater(result.views[name].iou, 0.98, name)
 
     def test_a_missing_part_costs_its_share_of_the_silhouette(self) -> None:
         pod = ((-2.0, 1.0, 4.0), (2.0, 3.0, 8.0))  # on top of the hull: 4 x 4 in plan, 2 high
-        model = np.concatenate([_box(*HULL), _box(*pod)])
-        splats = compare.splat_set(*lattice_splats([HULL]))
-        result = compare.compare_shapes(model, splats, 12.0)
-        self.assertAlmostEqual(result.views["top"].iou, 1.0, delta=0.03)  # the pod hides in the hull's plan
-        self.assertAlmostEqual(result.views["side"].iou, 24.0 / 32.0, delta=0.04)
-        self.assertAlmostEqual(result.views["front"].iou, 8.0 / 16.0, delta=0.04)
-        self.assertAlmostEqual(result.ratios["height"], 2.0 / 4.0, delta=0.03)
+        result = compare.compare_shapes(_boxes([HULL, pod]), _box(*HULL), 12.0)
+        self.assertAlmostEqual(result.views["top"].iou, 1.0, delta=0.01)  # the pod hides in the hull's plan
+        self.assertAlmostEqual(result.views["side"].iou, 24.0 / 32.0, delta=0.02)
+        self.assertAlmostEqual(result.views["front"].iou, 8.0 / 16.0, delta=0.02)
+        self.assertAlmostEqual(result.ratios["height"], 2.0 / 4.0, delta=0.01)
 
     def test_the_search_window_is_two_percent_of_the_length_per_axis(self) -> None:
         self.assertEqual(compare.SHIFT_FRACTION, 0.02)
         self.assertLessEqual(compare.PIXEL_FRACTION, 0.005)
 
     def test_the_pixel_cannot_be_coarser_than_half_a_percent(self) -> None:
-        splats = compare.splat_set(*lattice_splats([HULL]))
         with self.assertRaisesRegex(ValueError, "pixel"):
-            compare.compare_shapes(_box(*HULL), splats, 12.0, pixel_fraction=0.01)
+            compare.compare_shapes(_box(*HULL), _box(*HULL), 12.0, pixel_fraction=0.01)
+
+    def test_the_hint_comes_from_the_silhouettes_not_the_box_centres(self) -> None:
+        # The asset is 1 m too high (8 % of the length) and carries a mast the model lacks, which moves its box centre to 3 m.
+        asset = _boxes([((-2.0, 0.0, 0.0), (2.0, 2.0, 12.0)), ((-0.1, 2.0, 5.0), (0.1, 6.0, 5.2))])
+        gap, best, unmoved = compare.suggest_offset(_box(*HULL), asset, 12.0)
+        self.assertAlmostEqual(float(gap[1]), -1.0, delta=0.13)  # the asset must come down; the model's offset is minus that
+        self.assertAlmostEqual(float(gap[0]), 0.0, delta=0.13)
+        self.assertEqual(float(gap[2]), 0.0)
+        self.assertGreater(best, unmoved + 0.1)
+
+
+@needs_pillow
+class SplatCheckTests(TmpCase):
+    """The splats against their own mesh, and the calibration of how a perfect copy reads."""
+
+    def test_the_lattice_of_a_box_matches_its_mesh_in_all_views(self) -> None:
+        check = compare.check_splats(_box(*HULL), compare.splat_set(*lattice_splats([HULL])), 12.0)
+        for name in ("top", "side", "front"):
+            self.assertGreater(check.views[name].iou, 0.95, name)
+
+    def test_sampled_splats_of_a_box_read_at_least_the_floor_against_their_mesh(self) -> None:
+        # Pinned from measurement (a 46 x 18 x 70 m box, the Narn's size): 0.98 / 0.96 / 0.95 at 0.31 m and 0.5 m spacing.
+        tris = _box((-23.0, -9.0, 0.0), (23.0, 9.0, 70.0))
+        for spacing in (0.31, 0.5):
+            check = compare.check_splats(tris, sampled_splats(tris, spacing), 70.0)
+            self.assertGreater(check.views["top"].iou, 0.97, spacing)
+            self.assertGreater(check.views["side"].iou, 0.95, spacing)
+            self.assertGreater(check.views["front"].iou, 0.94, spacing)
+
+    def test_sampled_splats_of_a_thin_wing_read_lower_in_front_and_that_is_pinned(self) -> None:
+        # A hull with a 0.6 m wing, two splat spacings thick at 0.31 m: seen edge-on from the front the splats reach about
+        # 0.75 spacings past each edge of the wing, so a perfect copy reads 0.77 there (0.70 at 0.5 m spacing). The floor
+        # pins that, so the 0.85 bar is read knowing where the wing's loss comes from.
+        tris = _boxes([((-3.0, -2.0, 0.0), (3.0, 2.0, 40.0)), ((-20.0, -0.3, 10.0), (20.0, 0.3, 25.0))])
+        check = compare.check_splats(tris, sampled_splats(tris, 0.31), 40.0)
+        self.assertGreater(check.views["top"].iou, 0.95)
+        self.assertGreater(check.views["side"].iou, 0.90)
+        self.assertGreater(check.views["front"].iou, 0.74)
+        thick = _boxes([((-3.0, -2.0, 0.0), (3.0, 2.0, 40.0)), ((-20.0, -3.0, 10.0), (20.0, 3.0, 25.0))])
+        self.assertGreater(compare.check_splats(thick, sampled_splats(thick, 0.31), 40.0).views["front"].iou, 0.93)
+
+    def test_a_missing_part_fails_the_splat_check(self) -> None:
+        tris = _boxes([HULL, ((-6.0, -0.5, 4.0), (6.0, 0.5, 8.0))])
+        check = compare.check_splats(tris, compare.splat_set(*lattice_splats([HULL])), 12.0)
+        self.assertLess(check.views["top"].iou, compare.SPLAT_IOU_MIN)
+
+    def test_a_misplaced_part_fails_the_splat_check(self) -> None:
+        mesh = _boxes([HULL, ((-6.0, -0.5, 1.0), (6.0, 0.5, 4.0))])
+        moved = ((-6.0, -0.5, 7.0), (6.0, 0.5, 10.0))  # the wing's splats three metres aft of its mesh
+        check = compare.check_splats(mesh, compare.splat_set(*lattice_splats([HULL, moved])), 12.0)
+        self.assertLess(check.views["top"].iou, compare.SPLAT_IOU_MIN)
 
     def test_a_rotated_ellipse_covers_its_own_area(self) -> None:
         a = np.radians(30.0)
@@ -265,6 +388,32 @@ class ShapeTests(TmpCase):
         mask = compare.splat_mask(splats, grid)
         self.assertLessEqual(len(np.flatnonzero(mask.any(axis=0))), 3)
         self.assertGreater(int(mask.any(axis=1).sum()), 0.6 * 2 * compare.SPLAT_SIGMAS / 0.02)  # most of its length is drawn (the tips taper)
+
+
+@needs_pillow
+class PlacementTests(unittest.TestCase):
+    def test_the_part_scale_keeps_the_boxes_centre_and_start(self) -> None:
+        tris = _box((2.0, 3.0, 5.0), (6.0, 5.0, 15.0))  # centre (4, 4), starts at z = 5
+        scaled = compare.scale_about_part(tris, np.array([2.0, 1.5, 0.5]))
+        lo, hi = scaled.reshape(-1, 3).min(axis=0), scaled.reshape(-1, 3).max(axis=0)
+        np.testing.assert_allclose(lo, [0.0, 2.5, 5.0])
+        np.testing.assert_allclose(hi, [8.0, 5.5, 10.0])
+
+    def test_a_part_is_moved_in_x_and_y_onto_the_model_partss_box_centre(self) -> None:
+        model = _box((-2.0, -1.0, 0.0), (2.0, 1.0, 6.0))
+        asset = _box((-1.0, 3.0, 0.0), (5.0, 5.0, 6.0))  # centre (2, 4)
+        np.testing.assert_allclose(compare.part_alignment(model, asset), [-2.0, -4.0, 0.0])
+
+    def test_a_pod_is_turned_up_onto_up_and_forward_onto_forward(self) -> None:
+        r = compare.pod_rotation(np.array([0.0, 1.0, 0.0]), np.array([1.0, 0.0, 0.0]))
+        np.testing.assert_allclose(r @ [0.0, 0.0, -1.0], [1.0, 0.0, 0.0], atol=1e-12)
+        np.testing.assert_allclose(r @ [0.0, 1.0, 0.0], [0.0, 1.0, 0.0], atol=1e-12)
+        self.assertAlmostEqual(float(np.linalg.det(r)), 1.0)
+        tilted = compare.pod_rotation(np.array([1.0, 1.0, 0.0]), np.array([0.0, 0.0, 1.0]))
+        np.testing.assert_allclose(tilted @ [0.0, 1.0, 0.0], np.array([1.0, 1.0, 0.0]) / np.sqrt(2.0), atol=1e-12)
+        np.testing.assert_allclose(tilted @ [0.0, 0.0, -1.0], [0.0, 0.0, 1.0], atol=1e-12)
+        np.testing.assert_allclose(compare.pod_rotation(np.array([0.0, 1.0, 0.0])), np.eye(3), atol=1e-12)  # no forward: the shortest turn
+        np.testing.assert_allclose(compare.pod_rotation(np.array([0.0, 1.0, 0.0]), np.array([0.0, 1.0, 0.0])), np.eye(3), atol=1e-12)
 
 
 @needs_pillow
@@ -289,54 +438,94 @@ class VerdictTests(unittest.TestCase):
     def test_several_failures_are_all_listed(self) -> None:
         self.assertEqual(len(compare.judge({"top": 0.5, "side": 0.5, "front": 0.95}, {**self.SIZE, "width": 2.0})), 3)
 
+    def test_the_splat_bar_is_085_and_inclusive(self) -> None:
+        self.assertEqual(compare.SPLAT_IOU_MIN, 0.85)
+        self.assertEqual(compare.judge_splats({"top": 0.85, "side": 0.9, "front": 0.99}), [])
+        failures = compare.judge_splats({"top": 0.9, "side": 0.8499, "front": 0.99})
+        self.assertEqual(len(failures), 1)
+        self.assertIn("side", failures[0])
+
 
 @needs_pillow
 class MainTests(TmpCase):
-    def test_identical_shapes_pass_with_exit_zero_and_write_the_report(self) -> None:
+    def test_identical_shapes_pass_both_checks_with_exit_zero_and_write_the_report(self) -> None:
         code, out, err = self.compare(self.stl(_box(*HULL)), self.asset([HULL]))
         self.assertEqual(code, 0, out + err)
         lines = out.strip().splitlines()
         for view in ("top", "side", "front"):
-            self.assertEqual(sum(1 for line in lines if line.startswith(view)), 1, out)
-        self.assertIn("PASS", lines[-1])
-        for name in ("overlay_top.png", "overlay_side.png", "overlay_front.png", "fidelity.json"):
+            self.assertEqual(sum(1 for line in lines if line.startswith(view)), 1, out)  # the geometry lines
+            self.assertEqual(sum(1 for line in lines if line.startswith(f"splats {view}")), 1, out)
+        self.assertIn("geometry verdict: PASS", out)
+        self.assertIn("splats verdict: PASS", out)
+        self.assertEqual(lines[-1], "verdict: PASS")
+        for name in ("overlay_top.png", "overlay_side.png", "overlay_front.png", "splats_top.png", "splats_side.png", "splats_front.png", "fidelity.json"):
             self.assertTrue((self.dir / "out" / name).is_file(), name)
         report = self.report()
         self.assertEqual(report["verdict"], "pass")
-        self.assertEqual(report["thresholds"], {"iou_min": 0.9, "dimension_tolerance": 0.1, "shift_fraction": 0.02})
+        self.assertEqual(report["basis"], "mesh")
+        self.assertEqual((report["geometry"]["verdict"], report["splat_check"]["verdict"]), ("pass", "pass"))
+        self.assertEqual(report["thresholds"], {"iou_min": 0.9, "dimension_tolerance": 0.1, "shift_fraction": 0.02, "splat_iou_min": 0.85})
         self.assertEqual(sorted(report["views"]), ["front", "side", "top"])
+        self.assertEqual(sorted(report["splat_check"]["views"]), ["front", "side", "top"])
         self.assertEqual(sorted(report["dimensions"]), ["height", "length", "width"])
         self.assertLessEqual(report["pixel_m"], 0.005 * 12.0)
         self.assertEqual(len(report["shift_m"]), 3)
         top = report["views"]["top"]
-        self.assertLessEqual(top["both_px"], min(top["model_px"], top["asset_px"]))
+        self.assertEqual(top["iou"], 1.0)  # the mesh is the STL
         self.assertEqual(top["both_px"] + top["model_only_px"], top["model_px"])
         self.assertEqual(top["both_px"] + top["asset_only_px"], top["asset_px"])
 
     def test_the_overlay_marks_model_only_asset_only_and_both_in_three_colours(self) -> None:
         from PIL import Image
 
-        model = np.concatenate([_box(*HULL), _box((-2.0, -1.0, 12.0), (2.0, 1.0, 14.0))])  # a tail the asset lacks
+        model = _boxes([HULL, ((-2.0, -1.0, 12.0), (2.0, 1.0, 14.0))])  # a tail the asset lacks
         fin = ((-3.0, -0.5, 4.0), (-2.0, 0.5, 8.0))  # a part the model lacks
         code, _, _ = self.compare(self.stl(model), self.asset([HULL, fin]), length=14.0)
         self.assertEqual(code, 1)
-        arr = np.asarray(Image.open(self.dir / "out" / "overlay_top.png").convert("RGB"))
+        for name in ("overlay_top.png", "splats_top.png"):
+            arr = np.asarray(Image.open(self.dir / "out" / name).convert("RGB"))
+            for colour in (compare.MODEL_ONLY, compare.ASSET_ONLY, compare.BOTH):
+                self.assertGreater(int((arr == np.array(colour)).all(axis=2).sum()), 20, (name, colour))
         top = self.report()["views"]["top"]
         self.assertGreater(top["model_only_px"], 0)
         self.assertGreater(top["asset_only_px"], 0)
-        for colour in (compare.MODEL_ONLY, compare.ASSET_ONLY, compare.BOTH):
-            self.assertGreater(int((arr == np.array(colour)).all(axis=2).sum()), 100, colour)
 
     def test_a_dimension_off_by_more_than_ten_percent_exits_one_even_with_a_good_overlap(self) -> None:
         # A thin mast makes the model 1.12 times longer; the silhouettes still overlap by about 99 %.
-        mast = _box((-0.05, -0.05, 12.0), (0.05, 0.05, 13.44))
-        code, out, _ = self.compare(self.stl(np.concatenate([_box(*HULL), mast])), self.asset([HULL]), length=13.44)
+        mast = ((-0.05, -0.05, 12.0), (0.05, 0.05, 13.44))
+        code, out, _ = self.compare(self.stl(_boxes([HULL, mast])), self.asset([HULL]), length=13.44)
         self.assertEqual(code, 1, out)
         report = self.report()
         self.assertGreater(report["views"]["top"]["iou"], 0.95)
         self.assertLess(report["dimensions"]["length"]["ratio"], 0.9)
         self.assertTrue(any("length" in f for f in report["failures"]))
+        self.assertEqual(report["geometry"]["verdict"], "fail")
+        self.assertEqual(report["splat_check"]["verdict"], "fail" if report["splat_check"]["failures"] else "pass")
         self.assertIn("FAIL", out.strip().splitlines()[-1])
+
+    def test_an_undersized_part_fails_the_geometry_check_while_the_splats_agree_with_the_mesh(self) -> None:
+        # The STL has a wing 16 m across; the asset's wing, mesh and splats alike, is 60 % of that.
+        wing, small = ((-8.0, -0.3, 3.0), (8.0, 0.3, 9.0)), ((-4.8, -0.3, 3.0), (4.8, 0.3, 9.0))
+        code, out, _ = self.compare(self.stl(_boxes([HULL, wing])), self.asset([HULL, small]))
+        self.assertEqual(code, 1, out)
+        report = self.report()
+        self.assertEqual(report["geometry"]["verdict"], "fail")
+        self.assertEqual(report["splat_check"]["verdict"], "pass")
+        self.assertLess(report["dimensions"]["width"]["ratio"], 0.7)
+        self.assertLess(report["views"]["top"]["iou"], 0.9)
+        self.assertIn("geometry verdict: FAIL", out)
+        self.assertIn("splats verdict: PASS", out)
+
+    def test_splats_that_do_not_follow_their_mesh_fail_the_splat_check_alone(self) -> None:
+        # The mesh is the model, so the geometry passes; the splats put the wing three metres aft of it.
+        wing, moved = ((-6.0, -0.5, 1.0), (6.0, 0.5, 4.0)), ((-6.0, -0.5, 7.0), (6.0, 0.5, 10.0))
+        code, out, _ = self.compare(self.stl(_boxes([HULL, wing])), self.asset([HULL, moved], mesh_boxes=[HULL, wing]))
+        self.assertEqual(code, 1, out)
+        report = self.report()
+        self.assertEqual(report["geometry"]["verdict"], "pass")
+        self.assertEqual(report["splat_check"]["verdict"], "fail")
+        self.assertIn("geometry verdict: PASS", out)
+        self.assertIn("splats verdict: FAIL", out)
 
     def test_an_overlap_under_the_bar_exits_one_with_the_right_dimensions(self) -> None:
         # The asset has the model's length, width and height but its middle third is half as wide.
@@ -344,10 +533,10 @@ class MainTests(TmpCase):
         code, out, _ = self.compare(self.stl(_box(*HULL)), self.asset(narrow))
         self.assertEqual(code, 1, out)
         report = self.report()
-        self.assertAlmostEqual(report["views"]["top"]["iou"], 10.0 / 12.0, delta=0.04)
-        self.assertGreater(report["views"]["front"]["iou"], 0.95)
+        self.assertAlmostEqual(report["views"]["top"]["iou"], 10.0 / 12.0, delta=0.02)
+        self.assertGreater(report["views"]["front"]["iou"], 0.98)
         for d in report["dimensions"].values():
-            self.assertAlmostEqual(d["ratio"], 1.0, delta=0.02)
+            self.assertAlmostEqual(d["ratio"], 1.0, delta=0.01)
 
     def test_a_slightly_short_asset_still_passes(self) -> None:
         short = ((-2.0, -1.0, 0.0), (2.0, 1.0, 11.52))  # 96 % of the length
@@ -367,7 +556,7 @@ class MainTests(TmpCase):
         # Two parts with a small gap between them, like the lead ship and a cargo section.
         front_part = ((-2.0, -1.0, 0.0), (2.0, 1.0, 5.8))
         rear_part = ((-1.0, -0.5, 6.2), (1.0, 0.5, 12.0))
-        model = np.concatenate([_box(*front_part), _box(*rear_part)])
+        model = _boxes([front_part, rear_part])
         both = self.asset([front_part, rear_part], asset_id="both")
         # The rear part of both sides, each cropped by its own range.
         code, out, _ = self.compare(self.stl(model), both, "--model-zrange", "6", "12", "--asset-zrange", "6", "12")
@@ -377,11 +566,29 @@ class MainTests(TmpCase):
         alone = self.asset([((-1.0, -0.5, 0.2), (1.0, 0.5, 6.0))], asset_id="alone")
         code, out, _ = self.compare(self.stl(model), alone, "--model-zrange", "6", "12")
         self.assertEqual(code, 0, out)
-        self.assertAlmostEqual(self.report()["dimensions"]["length"]["asset_m"], 5.8, delta=0.15)
+        self.assertAlmostEqual(self.report()["dimensions"]["length"]["asset_m"], 5.8, delta=0.01)
         # The front part against the wrong crop of the asset (its rear part): the widths differ by a factor of two.
         code, out, _ = self.compare(self.stl(model), both, "--model-zrange", "0", "6", "--asset-zrange", "6", "12")
         self.assertEqual(code, 1, out)
-        self.assertAlmostEqual(self.report()["dimensions"]["width"]["ratio"], 0.5, delta=0.03)
+        self.assertAlmostEqual(self.report()["dimensions"]["width"]["ratio"], 0.5, delta=0.01)
+
+    def test_a_cropped_part_is_aligned_on_its_own_and_scored_on_shape(self) -> None:
+        # The asset's pod group sits 4 m higher than the model's, by design (the Saturn 3's raised stack).
+        lead = ((-2.0, -1.0, 0.0), (2.0, 1.0, 5.8))
+        model = _boxes([lead, ((-3.0, -1.0, 6.2), (3.0, 1.0, 12.0))])
+        raised = ((-3.0, 3.0, 6.2), (3.0, 5.0, 12.0))
+        asset = self.asset([lead, raised], asset_id="raised")
+        code, out, _ = self.compare(self.stl(model), asset)
+        self.assertEqual(code, 1, out)  # the whole ship does not forgive a 4 m rise
+        code, out, _ = self.compare(self.stl(model), asset, "--model-zrange", "6", "12", "--asset-zrange", "6", "12", "--part", "pods")
+        self.assertEqual(code, 0, out)
+        report = json.loads((self.dir / "out" / "pods" / "fidelity.json").read_text())
+        np.testing.assert_allclose(report["part_align_m"], [0.0, -4.0, 0.0], atol=0.01)
+        self.assertIn("align  part moved (+0.00, -4.00, +0.00)", out)
+        # A part of another shape is still caught after the alignment: the asset's pods are half as wide.
+        narrow = self.asset([lead, ((-1.5, 3.0, 6.2), (1.5, 5.0, 12.0))], asset_id="narrow")
+        code, out, _ = self.compare(self.stl(model), narrow, "--model-zrange", "6", "12", "--asset-zrange", "6", "12", "--part", "pods")
+        self.assertEqual(code, 1, out)
 
     def test_model_scale_grows_the_cropped_model_to_the_asset_size(self) -> None:
         # Q20 (M5-T12): a part the maintainer sized apart from the model is scored at the asset's size.
@@ -395,18 +602,21 @@ class MainTests(TmpCase):
         self.assertEqual(code, 2, out)
 
     def test_an_authored_origin_off_the_box_centre_is_given_with_model_offset(self) -> None:
-        # A generator that authors y from an axis 5 m above the model's box centre (the Saturns' spine axis).
-        raised = ((-2.0, 4.0, 0.0), (2.0, 6.0, 12.0))
+        # A generator that authors y from an axis 1 m above the model's box centre (the Saturns' spine axis is 2 to 3 %
+        # of their length above theirs; here 8 %, beyond the 2 % shift window but inside the hint's 10 %).
+        raised = ((-2.0, 0.0, 0.0), (2.0, 2.0, 12.0))
         asset = self.asset([raised])
         code, out, _ = self.compare(self.stl(_box(*HULL)), asset)
         self.assertEqual(code, 1, out)
         report = self.report()
-        np.testing.assert_allclose(report["centre_gap_m"], [0.0, 5.0, 0.0], atol=0.05)
         self.assertEqual(len(report["shift_at_limit"]), 3)
-        self.assertIn("--model-offset 0.00,5.00,0.00", out)  # the hint names the value to pass
-        code, out, _ = self.compare(self.stl(_box(*HULL)), asset, "--model-offset", "0,5,0")
+        np.testing.assert_allclose(report["suggested_model_offset_m"], [0.0, 1.0, 0.0], atol=0.13)
+        suggested = ",".join(f"{v:.2f}" for v in report["suggested_model_offset_m"])
+        self.assertIn(f"--model-offset {suggested}", out)  # the hint names the value to pass
+        code, out, _ = self.compare(self.stl(_box(*HULL)), asset, "--model-offset", "0,1,0")
         self.assertEqual(code, 0, out)
-        self.assertEqual(self.report()["model"]["offset_m"], [0.0, 5.0, 0.0])
+        self.assertEqual(self.report()["model"]["offset_m"], [0.0, 1.0, 0.0])
+        self.assertIsNone(self.report()["suggested_model_offset_m"])
         self.assertNotIn("--model-offset", out)
 
     def test_part_runs_write_to_their_own_folder(self) -> None:
@@ -424,25 +634,25 @@ class MainTests(TmpCase):
         offset = np.array([0.0, 0.3, 6.1])
         mounts = [(0.0, -0.3, z) for z in (-3.0, 0.0, 3.0)]
         placed = [tuple(np.asarray(corner) + np.asarray(m) + offset) for m in mounts for corner in pod]
-        model = np.concatenate([_box(*thin)] + [_box(placed[i], placed[i + 1]) for i in range(0, len(placed), 2)])
+        model = _boxes([thin] + [(placed[i], placed[i + 1]) for i in range(0, len(placed), 2)])
         hull_dir = self.asset([thin], asset_id="bokmai", offset=tuple(offset))
         (hull_dir / "hardpoints.json").write_text(
             json.dumps({"cargo_pods": [{"name": f"pod_{i}", "position": list(m), "up": [0, 1, 0]} for i, m in enumerate(mounts)]})
         )
-        pod_centres, pod_scales = lattice_splats([pod])
-        write_asset(self.dir / "pod", "pod", pod_centres, pod_scales)
-        pod_ply = str(self.dir / "pod" / "pod.ply")
+        pod_ply, pod_obj = self.pod(pod)
 
-        code, out, _ = self.compare(self.stl(model), hull_dir, "--pod-ply", pod_ply, "--pods-from-hardpoints")
+        code, out, _ = self.compare(self.stl(model), hull_dir, "--pod-ply", pod_ply, "--pods-from-hardpoints")  # the mesh beside the splats
         self.assertEqual(code, 0, out)
-        self.assertGreater(self.report()["views"]["top"]["iou"], 0.95)
+        self.assertGreater(self.report()["views"]["top"]["iou"], 0.99)
         self.assertEqual(self.report()["asset"]["extra_parts"], 3)
-        # The pod file beside the asset (<id>_pod.ply) is the default.
+        self.assertEqual(self.report()["splat_check"]["verdict"], "pass")
+        # The pod files beside the asset (<id>_pod.ply and <id>_pod.obj) are the default.
         shutil.copy(pod_ply, hull_dir / "bokmai_pod.ply")
+        shutil.copy(pod_obj, hull_dir / "bokmai_pod.obj")
         code, out, _ = self.compare(self.stl(model), hull_dir, "--pods-from-hardpoints")
         self.assertEqual(code, 0, out)
-        # The same mounts given on the command line.
-        argv = ["--pod-ply", pod_ply] + [a for m in mounts for a in ("--pod-at", ",".join(str(v) for v in m))]
+        # The same mounts given on the command line, the two files named.
+        argv = ["--pod-ply", pod_ply, "--pod-obj", pod_obj] + [a for m in mounts for a in ("--pod-at", ",".join(str(v) for v in m))]
         code, out, _ = self.compare(self.stl(model), hull_dir, *argv)
         self.assertEqual(code, 0, out)
         # Without the pods the hull alone misses them.
@@ -452,11 +662,8 @@ class MainTests(TmpCase):
 
     def test_a_pod_follows_its_up_vector(self) -> None:
         # A pod taller above its origin than below, one mounted up on the top and one hanging down from the belly.
-        pod_box = ((-0.5, -0.5, -1.0), (0.5, 3.5, 1.0))
-        centres, scales = lattice_splats([pod_box])
-        write_asset(self.dir / "pod", "pod", centres, scales)
-        pod_ply = str(self.dir / "pod" / "pod.ply")
-        model = np.concatenate([_box(*HULL), _box((-0.5, 0.5, 2.0), (0.5, 4.5, 4.0)), _box((-0.5, -4.5, 8.0), (0.5, -0.5, 10.0))])
+        pod_ply, _ = self.pod(((-0.5, -0.5, -1.0), (0.5, 3.5, 1.0)))
+        model = _boxes([HULL, ((-0.5, 0.5, 2.0), (0.5, 4.5, 4.0)), ((-0.5, -4.5, 8.0), (0.5, -0.5, 10.0))])
 
         def score(up_down: list[int]) -> int:
             hull_dir = self.asset([HULL], asset_id="ship")
@@ -467,12 +674,47 @@ class MainTests(TmpCase):
         self.assertEqual(score([0, -1, 0]), 0)
         self.assertEqual(score([0, 1, 0]), 1)  # the same pod standing on the belly instead
 
+    def test_a_pod_follows_its_forward_vector(self) -> None:
+        # A pod that is not fore-aft symmetric (3 m behind its origin, 1 m ahead of it), mounted facing aft. A keel under
+        # the hull keeps the model's box centred in y, as the asset's authored frame is.
+        pod_ply, _ = self.pod(((-0.5, -0.5, -1.0), (0.5, 0.5, 3.0)))
+        keel = ((-0.5, -2.0, 4.0), (0.5, -1.0, 8.0))
+        model = _boxes([HULL, keel, ((-0.5, 1.0, 4.0), (0.5, 2.0, 8.0))])  # the pod: 3 m ahead of z = 7, 1 m behind it
+
+        def score(forward: list[float] | None) -> int:
+            hull_dir = self.asset([HULL, keel], asset_id="ship")
+            pod = {"name": "a", "position": [0.0, 1.5, 7.0], "up": [0, 1, 0]}
+            if forward is not None:
+                pod["forward"] = forward
+            (hull_dir / "hardpoints.json").write_text(json.dumps({"cargo_pods": [pod]}))
+            return self.compare(self.stl(model), hull_dir, "--pod-ply", pod_ply, "--pods-from-hardpoints")[0]
+
+        self.assertEqual(score([0, 0, 1]), 0)  # facing aft: its long side runs forward of the mount
+        self.assertEqual(score(None), 1)  # no forward given: the pod keeps its own orientation
+
     def test_it_runs_as_a_script_in_isolated_mode(self) -> None:
         # The documented command line: `python3 -I tools/refview/compare.py`, where the repo root is not on the path.
         argv = [sys.executable, "-I", str(Path(compare.__file__)), str(self.stl(_box(*HULL))), str(self.asset([HULL])), "--length", "12", "--out", str(self.dir / "out")]
         done = subprocess.run(argv, capture_output=True, text=True, cwd=self.dir, check=False)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("verdict: PASS", done.stdout)
+
+    def test_malformed_data_is_bad_input_not_a_crash(self) -> None:
+        good_stl = self.stl(_box(*HULL))
+        folder = self.asset([HULL], asset_id="bad")
+        (folder / "hardpoints.json").write_text(json.dumps({"cargo_pods": [{"name": "no position"}]}))  # KeyError inside
+        pod_ply, _ = self.pod(((-0.5, -0.5, -1.0), (0.5, 0.5, 1.0)))
+        code, _, err = run([str(good_stl), str(folder), "--length", "12", "--pod-ply", pod_ply, "--pods-from-hardpoints", "--out", str(self.dir / "out")])
+        self.assertEqual((code, "cargo_pods" in err, "KeyError" in err), (2, True, True), err)
+        (folder / "hardpoints.json").write_text(json.dumps({"cargo_pods": [{"position": [0, 0, 0], "up": "high"}]}))  # a string for a vector
+        code, _, err = run([str(good_stl), str(folder), "--length", "12", "--pod-ply", pod_ply, "--pods-from-hardpoints", "--out", str(self.dir / "out")])
+        self.assertEqual(code, 2, err)
+        # Any other KeyError, IndexError or TypeError out of the readers is reported the same way.
+        for exc in (KeyError("lods"), IndexError("list index out of range"), TypeError("not subscriptable")):
+            with self.subTest(exc=type(exc).__name__), mock.patch.object(compare, "load_asset_mesh", side_effect=exc):
+                code, _, err = run([str(good_stl), str(folder), "--length", "12", "--out", str(self.dir / "out")])
+                self.assertEqual(code, 2, err)
+                self.assertIn(type(exc).__name__, err)
 
     def test_bad_input_exits_two_with_a_message(self) -> None:
         good_stl, good_asset = self.stl(_box(*HULL)), self.asset([HULL])
@@ -483,12 +725,18 @@ class MainTests(TmpCase):
         broken = self.dir / "broken"
         broken.mkdir()
         (broken / "manifest.json").write_text("{not json")
+        no_mesh = self.asset([HULL], asset_id="nomesh")
+        (no_mesh / "nomesh.obj").unlink()
+        bad_mesh = self.asset([HULL], asset_id="badmesh")
+        (bad_mesh / "badmesh.obj").write_text("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 99\n")
         cases = {
             "missing stl": ([str(self.dir / "nope.stl"), str(good_asset)], "nope.stl"),
             "empty stl": ([str(empty), str(good_asset)], "no triangles"),
             "missing asset": ([str(good_stl), str(self.dir / "ghost")], "ghost"),
             "no manifest": ([str(good_stl), str(bare)], "manifest"),
             "broken manifest": ([str(good_stl), str(broken)], "manifest"),
+            "no fallback mesh": ([str(good_stl), str(no_mesh)], "fallback mesh"),
+            "a mesh face past the vertices": ([str(good_stl), str(bad_mesh)], "fallback mesh"),
             "mirrored mapping": ([str(good_stl), str(good_asset), "--right=+x", "--up=+z", "--aft=+y"], "mirrors"),
             "empty model crop": ([str(good_stl), str(good_asset), "--model-zrange", "50", "60"], "model"),
             "empty asset crop": ([str(good_stl), str(good_asset), "--asset-zrange", "50", "60"], "asset"),
@@ -497,6 +745,7 @@ class MainTests(TmpCase):
             "missing pod file": ([str(good_stl), str(good_asset), "--pod-ply", str(self.dir / "no.ply"), "--pod-at", "0,0,0"], "no.ply"),
             "bad model offset": ([str(good_stl), str(good_asset), "--model-offset", "1,2"], "x,y,z"),
             "pods without a file": ([str(good_stl), str(good_asset), "--pod-at", "0,0,0"], "pod-ply"),
+            "a pod file without mounts": ([str(good_stl), str(good_asset), "--pod-ply", str(self.dir / "no.ply")], "mounts"),
         }
         for label, (argv, needle) in cases.items():
             with self.subTest(label):
@@ -508,34 +757,33 @@ class MainTests(TmpCase):
 @unittest.skipUnless((REPO_ROOT / "assets" / "generated" / "raider_fighter" / "manifest.json").is_file(), "needs the built raider_fighter")
 @needs_pillow
 class BuiltAssetTests(unittest.TestCase):
-    """The frame of a real generator's output: a built raider against its own fallback mesh."""
+    """The frame of a real generator's output: a built raider's fallback mesh and splats."""
 
     def setUp(self) -> None:
         self.dir = REPO_ROOT / "assets" / "generated" / "raider_fighter"
-        manifest = json.loads((self.dir / "manifest.json").read_text())
-        self.offset = np.asarray(manifest["centroid_offset"])
-        verts, faces = [], []
-        for line in (self.dir / "raider_fighter.obj").read_text().splitlines():
-            if line.startswith("v "):
-                verts.append([float(v) for v in line.split()[1:4]])
-            elif line.startswith("f "):
-                faces.append([int(p.split("/")[0]) - 1 for p in line.split()[1:4]])
-        self.mesh = np.asarray(verts)[np.asarray(faces)]  # the centred Godot frame, like the splats after the flip
-        self.length = float(np.ptp(self.mesh[..., 2]))
+        self.offset = np.asarray(json.loads((self.dir / "manifest.json").read_text())["centroid_offset"])
 
-    def test_the_built_splats_match_their_own_mesh_after_the_frame_is_undone(self) -> None:
-        splats = compare.load_asset_splats(self.dir)
+    def test_the_obj_is_in_the_centred_godot_frame_and_the_offset_gives_the_authored_frame(self) -> None:
+        obj = compare.read_obj(self.dir / "raider_fighter.obj")
+        centred = obj.vertices[obj.faces]
+        mesh = compare.load_asset_mesh(self.dir)
+        # Authored: the nose tip at z = 0 and x symmetric. As written the OBJ is centred on the splat centroid instead.
+        self.assertLess(abs(float(mesh[..., 2].min())), 0.05)
+        self.assertLess(float(centred[..., 2].min()), -1.0)
+        self.assertLess(abs(float(mesh[..., 0].min() + mesh[..., 0].max())), 1e-3)
+        np.testing.assert_allclose(mesh, centred + self.offset, atol=1e-9)
+
+    def test_the_built_splats_follow_their_own_mesh_in_the_same_frame(self) -> None:
+        mesh, splats = compare.load_asset_mesh(self.dir), compare.load_asset_splats(self.dir)
         lo, hi = splats.bounds()
-        self.assertLess(abs(float(lo[2] - (self.mesh[..., 2].min() + self.offset[2]))), 0.5)
-        result = compare.compare_shapes(self.mesh + self.offset, splats, self.length)
+        self.assertLess(abs(float(lo[2] - mesh[..., 2].min())), 0.5)
+        self.assertLess(abs(float(hi[2] - mesh[..., 2].max())), 0.5)
+        check = compare.check_splats(mesh, splats, float(np.ptp(mesh[..., 2])))
         for name in ("top", "side", "front"):
-            self.assertGreater(result.views[name].iou_unshifted, 0.8, name)  # the thin wings cost the front view most
-        self.assertGreater(result.views["top"].iou, 0.95)
-        for ratio in result.ratios.values():
-            self.assertAlmostEqual(ratio, 1.0, delta=0.06)
-        self.assertLess(float(np.abs(result.shift_m).max()), 0.1)
-        # Left in the centred frame (the offset not added back), the same splats miss the mesh by half the ship.
-        lost = compare.compare_shapes(self.mesh + self.offset, compare.SplatSet(splats.centres - self.offset, splats.cov), self.length)
+            self.assertGreater(check.views[name].iou, 0.8, name)  # the raider's wings are a few splat spacings thick
+        self.assertGreater(check.views["top"].iou, 0.95)
+        # With the splats left in the centred frame (the offset not added back) they miss the mesh by half the ship.
+        lost = compare.check_splats(mesh, compare.SplatSet(splats.centres - self.offset, splats.cov), float(np.ptp(mesh[..., 2])))
         self.assertLess(lost.views["top"].iou, 0.7)
 
 

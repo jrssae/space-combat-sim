@@ -144,33 +144,46 @@ Brezebel's drum) glow but are not pods.
 Every civilian model must lie within 90 % of its STL, measured as silhouettes and size. `tools/refview/compare.py` is the
 measuring stick: each generator task (T12 to T15, T22) runs it on its asset, fixes what falls under the bar and records
 its scores in the table at the end of this section. Turrets are left out (the models have none, and they are not in the
-LOD0 file); the Bokmai is scored with its three pods mounted.
+fallback mesh or the LOD0 file); the Bokmai is scored with its three pods mounted.
 
-**The bar.** The top (x-z), side (y-z) and front (x-y) silhouettes of the STL and of the asset's LOD0 splats are drawn
-on one grid. Each view's intersection over union (IoU) must be at least 0.90, and the asset's length, width and height
-must each be within 10 % of the model's (a ratio from 0.90 to 1.10). Exit status 0 is a pass, 1 means a view or a
-dimension is under the bar, 2 is bad input.
+**Two checks, one run.** The verdict scores the model's *geometry*, the fallback mesh `<id>.obj` that every civilian
+generator builds from the same parts as its splats (so it must hold every visible part), against the STL. A second check
+holds the LOD0 splats to their own mesh. Scoring the splats against the STL directly under-read a perfect copy of the
+Saturn 4 by 5 to 8 % and favoured parts built too thin: a splat near an edge reaches about 0.75 spacings past it whatever
+the settings, so the loss follows the shape.
+
+| Check | What is drawn | Bar | Shift |
+|---|---|---|---|
+| Geometry (Q18) | the STL's triangles and the asset's mesh, top (x-z), side (y-z) and front (x-y), on one grid | each view's intersection over union (IoU) at least 0.90, and the mesh's length, width and height each within 10 % of the STL's (a ratio from 0.90 to 1.10) | the mesh may move up to 2 % of the length per axis, reported |
+| Splats | the asset's mesh and its LOD0 splats, same views | each view's IoU at least 0.85 | none: same parts, same frame |
+
+The splat check catches a missing or misplaced part without the splat-reading loss deciding the verdict. That loss is
+small for a thick shape and large for a thin one, which the tool's own tests pin: splats sampled from a 46 x 18 x 70 m
+box read 0.98 / 0.96 / 0.95 (top, side, front) against it at 0.31 and 0.5 m spacing, and from a hull with a 0.6 m wing
+(two spacings thick at 0.31 m) 0.97 / 0.93 / 0.77, because the wing's front outline is only two splats high. So a thin
+part can read under 0.85 in one view against a faithful mesh (the built Saturn lead ship's side view reads 0.84 to 0.86
+from its truss and braces), and finer sampling does not remove it (the wing reads 0.82 at 0.2 m and 0.84 at 0.1 m).
+`splats_<view>.png` shows which it is: a fringe of blue along every edge is the reading loss, a patch of one colour is a
+missing or misplaced part. Exit status is 0 when both checks pass, 1 when either fails, 2 on bad input. The terminal gets
+one block per check and a `verdict:` line last.
 
 **How the two are put on one grid.**
 
 - The STL goes through `refview`'s frame with the same `--length`, `--right`, `--up` and `--aft`: x to starboard, y up,
   z aft from the nose tip, x and y centred on the model's box. A generator that authors about another origin shows up as
   a shift beyond the window below. The Saturns measure y from the spine axis, not from the box centre, so they pass
-  `--model-offset 0,<dy>,0` (metres added to the model; dy is minus the spine axis's height above the model's box
-  centre). When the two boxes' centres are further apart than the window the tool prints a `note` with that value, a
-  first guess from the bounding boxes (for the built Saturn 4 transport it reads -3.35 m); T12 pins each Saturn's dy down
-  from the model.
-- The asset's `<id>.ply` comes back to the authored frame: the Rz(180) flip of positions and rotations is undone and
-  `manifest.centroid_offset` added. This was checked on the built raider, Starfury and Narn transport against their own
-  fallback meshes (the best-fit shift came out as zero for all three).
-- A splat is drawn as the outline of its Gaussian at 0.75 sigma, so a flat splat seen edge-on is a thin line. The factor
-  is calibrated against those fallback meshes: the three views' mean IoU peaks at 0.7 to 0.8. Reading a splat set costs
-  some overlap even for a perfect generator: those three read 0.91 (the raider, whose wings are a few splat spacings
-  thick), 0.96 and 0.96 against the meshes they were sampled from, so aim above 0.95 against the STL.
-- The pixel is 0.25 % of the part's length (`--pixel-frac`, never above 0.5 %). The asset may move by whole pixels up to
-  2 % of the length on each axis, one move for all three views, to where they overlap best; the move is printed and
-  written to `fidelity.json` and the scores are taken there (`iou_unshifted` is the score without it). A larger offset
-  is the generator's to fix.
+  `--model-offset 0,<dy>,0` (metres added to the model, whole ships only; dy is minus the spine axis's height above the
+  model's box centre, pinned per model below). When the silhouettes only meet further away than the window, the tool
+  prints a `note` with a value from a wider silhouette search (up to 10 % of the length in x and y).
+- The asset's `<id>.obj` is written in the Godot frame centred on the splat centroid, and `<id>.ply` is the same turned
+  by Rz(180) into the GDGS orientation; `manifest.centroid_offset` is the authored position of that centre. The tool
+  adds the offset to the mesh and undoes the flip and adds the offset to the splats. A test pins this on the built raider
+  (its mesh starts at z = 0 with the offset, its splats follow its mesh).
+- A splat is drawn as the outline of its Gaussian at 0.75 sigma, so a flat splat seen edge-on is a thin line; the factor
+  is calibrated against the built raider, Starfury and Narn transport (mean IoU over the views peaks at 0.7 to 0.8).
+- The pixel is 0.25 % of the part's length (`--pixel-frac`, never above 0.5 %). The move is the same for all three views,
+  whole pixels, to where they overlap best; it is printed and written to `fidelity.json`, and the geometry scores are
+  taken there (`iou_unshifted` is the score without it).
 
 **Running it** (the STLs are in the main checkout's `references/`; the mappings and lengths are from
 `docs/design-references.md`):
@@ -179,12 +192,12 @@ dimension is under the bar, 2 is bad input.
 .venv/bin/python3 -I tools/refview/compare.py references/EA_Skylark_transport.stl skylark_transport --length 60 --right=-x --up=+z --aft=+y
 .venv/bin/python3 -I tools/refview/compare.py references/Narn_Transport.stl narn_transport --length 70 --right=+y --up=+z --aft=+x
 .venv/bin/python3 -I tools/refview/compare.py references/Centauri_Brezebel_Transport.stl centauri_brezebel --length 60 --right=+y --up=+z --aft=+x
-.venv/bin/python3 -I tools/refview/compare.py references/EA_Saturn_4_transport.stl saturn_4_transport --length 158.5 --right=-x --up=+z --aft=+y \
-    --model-offset 0,-3.35,0
+.venv/bin/python3 -I tools/refview/compare.py references/EA_Saturn_4_transport.stl saturn_4_transport --length 158.48 \
+    --right=-x --up=+z --aft=+y --model-offset 0,-3.643,0
 ```
 
-The Saturn models are scaled to the family scale of Q16, so their `--length` is the model's length there: 158.5 m for the
-Saturn 4 transport, 266.2 m for `EA_Saturn_8_transport.stl`, 255.1 m for `EA_Saturn_Fuel_tanker.stl` and 91.1 m for
+The Saturn models are scaled to the family scale of Q16, so their `--length` is the model's length there: 158.48 m for the
+Saturn 4 transport, 266.2 m for `EA_Saturn_8_transport.stl`, 255.1 m for `EA_Saturn_Fuel_tanker.stl` and 91.13 m for
 `EA_Saturn_3_Freighter.stl` (no engine section). The Bokmai takes its three pods from its `hardpoints.json`; T22 fills in
 its file mapping from the reference:
 
@@ -193,27 +206,47 @@ its file mapping from the reference:
     --right=<axis> --up=<axis> --aft=<axis> --pods-from-hardpoints
 ```
 
-`--pods-from-hardpoints` draws `<id>_pod.ply` (beside the asset; `--pod-ply FILE` names another) at every `cargo_pods[]`
-mount of `hardpoints.json`. A mount's `position` and `up` are in the body frame (the centroid offset removed, like the
-other hardpoints) and the pod file's origin is the mount point; `--pod-at X,Y,Z` (repeatable) gives a mount by hand.
+`--pods-from-hardpoints` draws the pod's mesh and splats, `<id>_pod.obj` and `<id>_pod.ply` beside the asset (`--pod-obj
+FILE` and `--pod-ply FILE` name others; naming only one takes the other from beside it), at every `cargo_pods[]` mount of
+`hardpoints.json`. A mount's `position`, `up` and optional `forward` are in the body frame (the centroid offset removed,
+like the other hardpoints) and the pod files' origin is the mount point; the pod's +y is turned onto `up` and its forward
+(-z) onto `forward` (a pod that is not fore-aft symmetric needs it; without it the shortest turn is used). `--pod-at
+X,Y,Z` (repeatable) gives a mount by hand.
 
-**Part by part (Q16).** The Saturn 8 transport and tanker (200 m of cargo against the Saturn 4's 100 m), the Saturn 3
-(three pods and no engine in the model) and the Saturn 4 tanker (no model of its own) are not scored as wholes. Each
-part is scored against the part of the model it came from: the lead ship, one cargo section, the pod group. `--model-zrange
-Z0 Z1` keeps one z range of the model (cut exactly at the planes) and `--asset-zrange Z0 Z1` one of the asset (the
-splats whose centres lie inside); each cropped side is moved so that its range starts at z = 0, so the two ranges differ
-in z but must hold the same part. `--part NAME` writes the result to its own folder. Take the model's ranges from the part
-tables of `docs/design-references.md` and the asset's from its own; a gap between two parts is a good place to cut.
+**Part by part (Q16, Q20).** The Saturns are modular, so only the whole Saturn 4 transport is scored as a whole. Every
+other part is scored against the part of the model it was built from, cropped on both sides and aligned on its own:
+
+| Asset part | Model it is scored against |
+|---|---|
+| the lead ship of every Saturn | the Saturn 4 model's lead ship |
+| a transport section (Saturn 4, 8 transport) | the Saturn 4 model's transport section |
+| a tank section (Saturn 4 and 8 tanker) | the tanker model's tank section |
+| the Saturn 3's pod group | the Saturn 3 model's pods, scaled up to the shared pod size (`--model-scale`, Q20) |
+
+`--model-zrange Z0 Z1` keeps one z range of the model and `--asset-zrange Z0 Z1` one of the asset (meshes are cut exactly
+at the planes, splats are kept by centre; a plane inside a ship moves a tenth of a millimetre inward so a face lying in
+it goes with its neighbour: cut in a gap). Each cropped side then starts at z = 0, and the asset part is moved in x and y
+so that its box centre meets the model part's (`part_align_m` in the JSON), so a part placed differently by design, like
+the Saturn 3's raised stack, is scored on its shape; the usual 2 % fine shift follows. `--model-offset` is for whole
+ships. `--model-scale SX,SY,SZ` scales the cropped model about its own box centre in x and y and its start in z. `--part
+NAME` writes the result to `compare/<name>/`. Take the model's ranges from the part tables of
+`docs/design-references.md` and the asset's from its own:
 
 ```
-.venv/bin/python3 -I tools/refview/compare.py references/EA_Saturn_8_transport.stl saturn_8_transport --length 266.2 \
-    --right=-x --up=+z --aft=+y --part cargo_1 --model-zrange <z0> <z1> --asset-zrange <z0> <z1>
+.venv/bin/python3 -I tools/refview/compare.py references/EA_Saturn_4_transport.stl saturn_8_transport --length 158.48 \
+    --right=-x --up=+z --aft=+y --part transport_2 --model-zrange 49.3 149.3 --asset-zrange 149.3 249.3
+.venv/bin/python3 -I tools/refview/compare.py references/EA_Saturn_Fuel_tanker.stl saturn_8_tanker --length 255.1 \
+    --right=-x --up=+z --aft=+y --part tanks_1 --model-zrange 49.3 146.2 --asset-zrange 49.3 149.3
+.venv/bin/python3 -I tools/refview/compare.py references/EA_Saturn_3_Freighter.stl saturn_3_freighter --length 91.13 \
+    --right=-x --up=+z --aft=+y --part pod_group --model-zrange 41.5 91.13 --asset-zrange 41.5 96.8 \
+    --model-scale 1.2436,1.093,1
 ```
 
 **Output.** `reports/refs/<ship>/compare/` (`.../compare/<part>/` for a part; gitignored): `overlay_top.png`,
-`overlay_side.png` and `overlay_front.png` (model only in orange, asset only in blue, both in dark grey, with a legend and
-a metre scale) and `fidelity.json` (per-view IoU and pixel counts, the three ratios, the shift, the thresholds, the
-failures and the verdict). The terminal gets one line per view, the sizes, the shift and a verdict.
+`overlay_side.png` and `overlay_front.png` (STL only in orange, mesh only in blue, both in dark grey, with a legend and a
+metre scale), `splats_top.png`, `splats_side.png` and `splats_front.png` (the same for mesh and splats) and
+`fidelity.json` (the geometry check's per-view IoU and pixel counts, dimensions, shift, part alignment and suggested
+offset; `splat_check` with its views; the thresholds, failures and verdicts).
 
 **Saturn model offsets (T12).** The spine axis's height above each model's box centre, read off the model's cylinder or
 tank (the Saturn 3: its disc's rim): `--model-offset 0,-3.643,0` for `EA_Saturn_4_transport.stl` (length 158.48),
@@ -221,7 +254,9 @@ tank (the Saturn 3: its disc's rim): `--model-offset 0,-3.643,0` for `EA_Saturn_
 for `EA_Saturn_3_Freighter.stl` (91.13). The Saturn 3's pod group is scored against the model's scaled to the shared pod
 (`--model-scale 1.2436,1.093,1`, an option T12 added: 43.03/34.6 across, 17.27/15.8 tall, Q20).
 
-**Scores.** One row per ship and part, filled by the generator task that builds it (the date is the run's):
+**Scores.** One row per ship and part, filled by the generator task that builds it (the date is the run's). The
+rows written before the planner's change of 2026-11-03 (the mesh as the verdict) read the LOD0 splats against the STL, the tool's first version; each generator
+task re-scores its rows on the mesh (the geometry check's numbers) and says which check each row is.
 
 | Ship | Part | Top IoU | Side IoU | Front IoU | Length | Width | Height | Date |
 |---|---|---|---|---|---|---|---|---|
