@@ -2,7 +2,7 @@
 
 > "Many ships at once." (`docs/roadmap.md`)
 
-**Status:** resumed 2026-11-03 (Q14 to Q18): the research's phases 1 to 3 toward 500 ships in one battle. Paused earlier the same day after the T06 report (45 ships; Q11 to Q13). Earlier: planned 2026-10-28 at the maintainer's request, inserted after M3; the later milestones moved up one (the mission
+**Status:** resumed 2026-11-03 (Q14 to Q18): the research's phases 1 to 3 toward 500 ships in one battle. Planned as T07 to T25 on 2026-11-03 (the plan section below the T06 report; Q19 adds capital ships, turrets, missiles and asteroids to the load). Paused earlier the same day after the T06 report (45 ships; Q11 to Q13). Earlier: planned 2026-10-28 at the maintainer's request, inserted after M3; the later milestones moved up one (the mission
 framework is now M5, Epsilon space M6, and so on to voiced dialog, M15). M4 starts when M3 is accepted and merged into `main`,
 on branch `m4`, unless the maintainer pulls it forward.
 
@@ -49,6 +49,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q16 | Parity for ports past N1 (the brains) | A stated tolerance: over a seeded 30 s fight, hits within 10 %, behaviour mix within 5 points, no ship more than 50 m from its GDScript twin at 10 s; every test green; listed in the report |
 | Q17 | Ships out of Jolt | Decide by measurement: Jolt stays through phase 1; phase 2 measures and proposes it only if Jolt binds, with the maintainer's sign-off (it changes D4) |
 | Q18 | Parallel work | Detached git worktrees (no branch), the controller cherry-picks onto `m4`; a branch off `m4` only if that is truly helpful |
+| Q19 | What a large battle holds (2026-11-03) | **Capital ships too**: cruisers, destroyers and carriers beside the fighters, each with several gun turrets, lasers, interceptors and missiles; carriers launch fighters; and non-AI objects (asteroids, planets, moons) that the scan, the broad phases, avoidance, line of fire and gravity must account for. None exist yet (roadmap M6, M12, M14): M4 builds no game feature for them, it makes the performance work entity-type-agnostic and measures against stand-ins with a stated, adjustable mix (the plan below, T07) |
 
 ## The budget ("good game performance", Q5)
 
@@ -85,6 +86,8 @@ with the player at cruise along its nose (60 m/s, `RebaseFight`'s default), so r
 - **`transit`**: wings of four (the setting's common patrol) cruising on routes, no fight. Tracking, perception and the rebase
   without combat.
 
+- **`battle`** (T07, Q15 and Q19): the headline layout from phase 1 on; fighters, capital stand-ins with turrets, missiles, beams, an asteroid field and a gravity source over a 60 km area, in the mix `BattleMix` states (the plan section, "What the battle is").
+
 The sweep is N in {25, 50, 100, 150, 200, 300, 400, 500}: 5 s of warm-up, 30 s measured, three runs each. A layout's sweep stops
 after two failing ship counts in a row. Pools are pre-warmed to N at load; the load time is recorded, not budgeted (load hitches
 are M5's mission work).
@@ -117,14 +120,33 @@ are M5's mission work).
 
 Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `not needed` (a conditional task whose trigger never arose). Update the column with each task's commit.
 
-| Task | Title | Depends on | Agent | Why | Status |
-|---|---|---|---|---|---|
-| T01 | Benchmark harness, budget and baseline | M3 | Opus | Measurement design on a noisy machine; touches the tick order | done |
-| T02 | Cycle 1 | T01 | Opus | Profiling and a ranked judgement call | done |
-| T03 | Cycle 2 | T02 | Opus | Same | done |
-| T04 | Cycle 3 | T03 | Opus | Same | done |
-| T05 | Cycle 4: native contact scan (Rust `gdext`, N0 then N1, Q9) | T04 | Opus or Fable | A new toolchain and bit-identical parity | done |
-| T06 | Report to the maintainer | T05 | controller | A summary and a question, no code | done (waiting for the maintainer's answer) |
+| Task | Title | Depends on | Agent | Why | Track | Status |
+|---|---|---|---|---|---|---|
+| T01 | Benchmark harness, budget and baseline | M3 | Opus | Measurement design on a noisy machine; touches the tick order | - | done |
+| T02 | Cycle 1 | T01 | Opus | Profiling and a ranked judgement call | - | done |
+| T03 | Cycle 2 | T02 | Opus | Same | - | done |
+| T04 | Cycle 3 | T03 | Opus | Same | - | done |
+| T05 | Cycle 4: native contact scan (Rust `gdext`, N0 then N1, Q9) | T04 | Opus or Fable | A new toolchain and bit-identical parity | - | done |
+| T06 | Report to the maintainer | T05 | controller | A summary and a question, no code | - | done (waiting for the maintainer's answer) |
+| T07 | The `battle` layout, the mix (`BattleMix`), capital, turret, asteroid and gravity stand-ins, per-entity counters, the windowed check script | T06 | Opus | The ruler every later task measures against; what the stand-ins cost needs judgement | A | not started |
+| T08 | Bolt broad phase in native code (`ScsHitSweep`), projectile kinds | T06 | Opus | Hits grow with bolts times ships; the windowed spikes | G, N | not started |
+| T09 | Native body registry: the scan built from RIDs, entity kinds, nearest-k per kind | T06 | Opus | The per-tick gather cycle 4 left; rocks must not fill a fighter's contacts | G, N | not started |
+| T10 | N4: the flight force step in native code for AI ships (`ScsFlightStep`) | T06 | Fable | The riskiest parity maths (`FlightModel`, the assist's state) | G, N | not started |
+| T11 | Far-ship render proxies and the node diet for AI ships | T10 | Opus | 108 nodes and 27 draw calls a ship; GPU numbers by the agent, the look (H) | R | not started |
+| T12 | Missile, beam and interceptor stand-ins | T07, T08 | Opus | The projectile kinds Q19 names, measured | A, G | not started |
+| T13 | Phase 1 measurements and report P1 (checkpoint 1) | T11, T12, T14 | Sonnet | Measurement, no code | M | not started |
+| T14 | Jolt collision layers; interpolation off for far ships | T11 | Sonnet | Mechanical; matters from 300 ships | G | not started |
+| T15 | The native simulation core: entity rows, one call in and out (`ScsSimCore`) | T13 | Fable | Architecture: every native class moves onto it; serial | N | not started |
+| T16 | N2: avoidance, the fire lane and the context lists on the core | T15 | Opus | Per-contact loops, bit for bit | N, G | not started |
+| T17 | The brains in native code under Q16's tolerance (T17a maths, T17b behaviours) | T16 | Fable | 3 000 lines of seeded behaviour with a tolerance to meet | N, G | not started |
+| T18 | N3: threads inside the core (rayon), 1-thread and 6-thread identical | T17 | Opus | Determinism rules, a new crate | N | not started |
+| T19 | Jolt measured at 300 and 500, the ships-out-of-Jolt proposal (Q17, checkpoint 2) | T15 | Sonnet | Measurement and a proposal, no game code | M | not started |
+| T20 | Turrets, missiles and beams as native rows | T16, T12 | Opus | The non-fighter rows' budget; M12 inherits the path | N, A | not started |
+| T21 | The low-attention tier: state, 20 Hz integration, promotion and demotion | T20, checkpoint 3 | Fable | The pool and ship adapter handover must never pop; serial | T | not started |
+| T22 | Tier brains at 2 to 5 Hz and statistical fire | T21 | Opus | Far fights must stay fair | T, N | not started |
+| T23 | Far proxies for tier rows (dots, radar, targeting) | T21, T11 | Opus | GPU numbers by the agent, the look (H) | R | not started |
+| T24 | The simulation step on a worker thread (only if the window fails at 500; checkpoint 4) | T23 | Fable | A tick-order change, double-buffered snapshots | N | not started |
+| T25 | Phase 3 measurements, the 1 000 stretch, the full suite, report P3 | T23 (T24) | Sonnet | Measurement, no code | M | not started |
 
 ### M4-T01 Benchmark harness, budget and baseline
 
@@ -281,6 +303,570 @@ those and physics work, and a budget conversation (Jolt alone is about 8.5 ms at
 1. Continue M4 toward 100 with more cycles (candidates 1 to 4 in that order), or close M4 at 45 (debug) and 50 (release)?
 2. Which build sets the budget from here: the editor build (as so far) or the release export players run?
 3. Should the budget also cover the windowed frame (the 45-ship finding), for example a render check at each cycle's ceiling?
+
+### M4 phases 1 to 3, T07 to T25: the plan (2026-11-03)
+
+Planned on `439f4f0` from `docs/research/scaling-to-500-ships.md` (sections 1, 2 and 5), the maintainer's answers Q12 to Q19 and
+the final measurements above. Nothing below was built or measured. Every gain is an estimate with a confidence; the tick costs it
+starts from are the furball at 100 ships on the debug editor build (tick 16.0 ms: AI 6.2, of which the scan is 2.6 and the brains
+about 3.4; flight 3.6; hits 2.5; Jolt and the sync 1.9; targeting 1.0; rams 0.7).
+
+#### What the battle is (Q15 and Q19)
+
+Q19 changes what "500 ships" costs. The load is not 500 fighters: it is fighters, capital ships whose turrets each aim and fire,
+beam lasers, interceptor defences, guided missiles, carriers launching fighters, an asteroid field and a nearby moon's gravity.
+None of those exist in the game yet (capital ships, turrets and missiles are roadmap M12, asteroid fields M14, planets and gravity
+M6), so M4 does not build them. It makes the performance work ready for them (a native core whose rows carry an entity kind and a
+size, broad phases that take a 1 km hull beside a 10 m fighter, a projectile system whose rows can be a bolt, a beam or a guided
+missile) and measures against **stand-ins** that put the real load on the tick without the real features. The stand-ins live under
+`src/perf/standins/`, are built by code with no assets (box hulls, sphere asteroids, no splats), are bench-only (spawned by the
+`battle` layout, never by a scenario) and are replaced by the roadmap's real work:
+
+| stand-in (M4) | what it costs the tick | replaced by |
+|---|---|---|
+| `CapitalStandin`: a `RigidBody3D` with a `Damageable` and `Targetable`, a box hull 300 m (cruiser), 600 m (destroyer) or 1 200 m (carrier) long, cruising at 30 m/s on a fixed heading, hull points only | a large body in Jolt, the scan and every broad phase | M12's capital ships (generated hulls, subsystems, damage model) |
+| `TurretStandin`: a child of a capital that picks the nearest hostile fighter within 4 km from the contact scan, turns a gun axis at a limited rate and fires `PulseCannon` bolts through the fire gate; `interceptor` variant: targets missiles and bolts within 1.5 km and removes the nearest one at its rate (no bolt of its own) | an aiming and firing agent per turret; interceptors query bolts and missiles | M12's turrets, AI gunners and defence grid |
+| `BeamStandin`: a hitscan shot along a segment of 3 km, resolved by the hit sweep in the tick it fires, at 0.5 Hz per emitter | a long thin sweep per shot, no entity in flight | M12's lasers |
+| `MissileStandin`: a projectile row with a target, a turn rate and a lifetime, steered by proportional navigation in native code from phase 2 (GDScript before), launched by capitals at fighters | a guided agent in flight, swept like a bolt with a larger radius | M12's missiles |
+| `AsteroidField`: one `MultiMeshInstance3D` and static sphere shapes created through `PhysicsServer3D` by RID (no node per rock), kinds `static` in the scan, `hit_by_anyone` | static rows in the grid (built once, never moved except by a rebase), avoidance, line-of-fire and occlusion checks, Jolt's static set | M14's asteroid fields (generated rocks, LOD, mining) |
+| `GravityStandin`: the harness installs a point source in `WorldFrame.environment_accel` (a moon at 400 km, up to 0.03 m/s² over the area; no body, no visual) | one acceleration per body per tick, the drift it adds to every intercept | M6's Kepler bodies, the scaled-space renderer and true gravity |
+| carrier launches: every 5 s a carrier releases one fighter of its side to the pool and takes it again at its bay (N holds) | a pool release and acquire in play (the launch hitch) | M12's launch tubes and M5's spawning |
+
+**The mix** is a stated, adjustable parameter set, `BattleMix` (pure, in `src/perf/battle_mix.gd`, read by the `battle` layout and
+printed in every summary). Defaults per 500 ships, scaled by N (capitals `ceil(N / 40)`, split across the two sides, the field and
+the gravity source fixed because they are properties of the area, not of N):
+
+| entity | default at N 500 | at N 100 | rule |
+|---|---|---|---|
+| fighters (allies and raiders, half and half) | 488 | 97 | N minus the capitals |
+| capital ships | 12 (2 carriers, 4 destroyers, 6 cruisers) | 3 (1 of each) | `ceil(N / 40)`, carrier, destroyer, cruiser, repeating |
+| turrets | about 110 (carrier 12, destroyer 10, cruiser 8) | 30 | per class |
+| beam emitters | 24 | 6 | 2 per capital |
+| interceptors | 48 | 12 | 4 per capital |
+| missiles in flight | about 100 | 20 | capitals launch to hold 0.2 per fighter in flight |
+| bolts in flight | about 2 000 (1 500 from fighters at 3 per fighter, as measured; about 500 from turrets) | about 400 | emergent |
+| asteroids | 1 000 rocks of 20 to 200 m in a slab 20 by 20 by 5 km over a third of the fights | 1 000 | fixed |
+| gravity | one point source | one | fixed |
+| area | 60 by 60 by 20 km, fights of 24 (12 against 12) on an 8 km lattice, the player's fight at the centre | | fights see only themselves |
+
+The `battle` layout is the headline layout from T07 on. `furball` stays the worst case for one fight and `spread` and `transit`
+are recorded. Max N for `battle` counts ships (fighters plus capitals); the summary prints every entity count beside it.
+
+**Budget per entity type**, the target at N 500 inside a 5 ms tick (the share of a 16.7 ms frame the window needs, Q13 and
+question 1 below), with the native core (phase 2), the tier (phase 3) and the AI threaded. Estimates; each row has its own
+counter in the `perf` provider from T07 so the plan is checked per row, not per ship:
+
+| entity | count | target us each per tick | ms | where the cost goes |
+|---|---|---|---|---|
+| fighter near the player, full fidelity | 150 | 8 | 1.2 | brain 3 to 5 (native, 60 Hz), flight 1.5, scan 1, bolts and hits 1, sync 1 |
+| fighter in the tier | 350 | 0.3 | 0.1 | native integration at 20 Hz, a brain at 2 to 5 Hz, statistical fire |
+| capital ship | 12 | 5 | 0.06 | a big body in Jolt and the grid, no brain |
+| turret | 110 | 2 | 0.2 | a nearest-hostile query against the grid, an aim step, a fire gate |
+| interceptor | 48 | 3 | 0.15 | a query over bolts and missiles in 1.5 km |
+| beam shot | 24 emitters at 0.5 Hz | 1 per shot | 0.02 | one long segment through the hit sweep |
+| missile | 100 | 3 | 0.3 | guidance, a grid insert, a sweep |
+| bolt | 2 000 | 0.3 | 0.6 | move, a grid insert, the sweep's candidate pairs |
+| asteroid | 1 000 | 0.02 | 0.02 | static rows, queried not updated; avoidance against the nearest statics is counted in the fighters |
+| Jolt step and body sync (about 160 dynamic bodies, 12 capitals, 1 000 statics) | | | 1.2 | Jolt's own threaded step, the per-node sync of the near ships |
+| rebase, console, waves, HUD-side bookkeeping | | | 0.5 | |
+| **tick** | | | **about 4.4** | |
+
+Confidence 50 % that the battle at 500 lands under 5 ms headless with all three phases built, 65 % under 8 ms. The two rows that
+decide it are the near fighters (the brain port, phase 2) and Jolt with the sync (Q17's measurement, T19). The 1 000 stretch is
+measured in T25, not a gate: 30 % headless under 8 ms, 20 % windowed at 60 FPS; it needs the tier to carry 850 ships and the
+simulation step off the main thread (T24).
+
+**Revised phase targets** (the research's, with Q19's load):
+
+| phase | target on `battle` (editor build, headless) | windowed check (Q13) | confidence (research's) |
+|---|---|---|---|
+| 1 (T07 to T14) | 100 ships with 3 capitals, 30 turrets, 1 000 asteroids under 8 ms; the furball at 100 under 8 ms | 60 FPS at the battle's headline with far proxies and the node diet | 65 % (70 %) |
+| 2 (T15 to T20) | 300 ships, 8 capitals, 80 turrets, 60 missiles under 8 ms | 60 FPS at 200 | 50 % (55 %) |
+| 3 (T21 to T25) | 500 ships in the world, 100 to 150 at full fidelity near the player, the full mix, under 8 ms; 5 ms asked | 60 FPS at 500 | 65 % (75 %); 1 000 stretch 30 % |
+
+Why lower: turrets on far capitals still fight in the tier, missiles are guided agents that cannot be held like a far fighter's
+command, and the asteroid field adds occlusion and avoidance work to every near think. What would make 500 fit if a phase misses:
+the simulation step on a worker thread (T24, which also frees the window), ships out of Jolt (T19, the maintainer's call), far
+capitals' turret fire aggregated per capital in the tier, a smaller near radius (fewer full-fidelity ships).
+
+**Re-ranking the T06 candidates against cycle 4's finding.** The T06 report put threads inside the native perception first
+(70 %). Cycle 4 then found the native queries are about 0.2 ms of the 2.4 ms scan at 100 ships: the rest is the per-tick gather
+in GDScript and the brains. Threads over 0.2 ms gain nothing, so threads move to phase 2 (T18), after the brains are native and
+there is work to divide. Phase 1 takes the bolt broad phase (T08), the native flight step (T10) and a native body registry that
+ends the per-tick gather (T09) instead.
+
+#### The tracks and the shared files
+
+| track | what | files it owns |
+|---|---|---|
+| A, harness | the `battle` layout, the mix, the stand-ins, per-entity counters, the windowed check script | `src/perf/battle_mix.gd`, `src/perf/bench_layout.gd`, `src/perf/bench_runner.gd`, `src/perf/perf_probe.gd`, `src/perf/standins/`, `scripts/bench_quick.sh`, `scripts/bench.sh`, `scripts/bench_sweep.gd`, `scripts/windowed_check.sh`, `tests/unit/test_battle_mix.gd`, `tests/integration/test_standins.gd` |
+| N, native | the Rust crate: one file per native class, the sim core | `native/src/<class>.rs` (one per task), `src/perf/native_*.gd` facades named per task |
+| G, gameplay seams | the GDScript side of each port: resolvers, projectiles, the ship adapter, the scan | named per task |
+| R, render | far proxies, the node diet, the LOD switcher | `src/ship/ship.gd` (T11 only), `src/ship/thruster_visuals.gd`, `src/ship/running_lights.gd`, `src/ship/nav_lights.gd`, `src/rendering/lod_switcher.gd`, `src/game/ship_pool.gd` |
+| T, tier | the low-attention tier | `native/src/tier.rs`, `src/ai/tier_director.gd`, `src/game/ship_pool.gd` (T21 only) |
+| M, measurement | sweeps, headlines, the windowed check, reports | the Cycle log entries, `reports/` (not committed) |
+
+Rules for files two tasks might touch, so that tasks in one wave never edit the same file:
+
+- `native/src/lib.rs`: a task adds only its own `mod <file>;` line; the controller resolves the one-line conflict at the
+  cherry-pick. Nothing else in the file.
+- `native/Cargo.toml` and `Cargo.lock`: only T18 (rayon) edits them, with its `docs/third-party.md` rows in the same commit.
+- `src/autoload/settings_schema.gd`: a task appends its own entries under a comment with its task id, nothing else.
+- `info.md`: a task adds rows for its own commands under its own heading, nothing else.
+- `docs/architecture.md`: a task appends only the §17 subsection this plan assigns it (below); nobody reflows another's.
+- `docs/milestones/m4-performance-and-scale.md`: a task edits its own section, its own Cycle log entry (headed with its task id)
+  and its own status row.
+- `src/ship/ship.gd`: T10 in wave 1, T11 in wave 2, T14 in wave 3, T21 in wave 6; never two in one wave.
+- `src/combat/hit_resolver.gd` and `src/weapons/projectile.gd`: T08 in wave 1, T12 in wave 2.
+- `src/ai/contact_scan.gd`, `native/src/contact_field.rs`: T09 in wave 1, T15 in wave 4.
+- `src/targeting/targetable.gd`: T07 adds `kind`; nobody else.
+- `src/game/main.gd`: T07 only (the stand-in spawning hook); later tasks reach `Main` through what T07 adds.
+- A worktree task that needs a file another wave-mate owns writes what it needs in its report and the controller adds it.
+
+Every task: test first (the failing test committed before the change), no milliseconds in assertions, commit subjects start with
+the task id, focused GUT runs plus the quick check before the last commit (Q10), the report in
+`.superpowers/sdd/m4-performance-and-scale/task-<id>-report.md`, benchmarks under both locks (`rules.md`). A worktree is
+prepared by the controller: `.tools`, `assets/generated` and `reports` linked from the main checkout, `bin/libscs_native.so`
+built for the worktree (cargo serialises on the shared target directory), one import.
+
+#### Measuring a wave
+
+Each task measures its own before and after in its worktree with `scripts/bench_quick.sh` (furball and spread) and, once T07 is
+merged, single `bench battle <n> 10 seed=1` runs at 100 and 300 ships (and 500 from wave 4) for the stage and per-entity
+breakdown, so its gain is attributable. After a wave is cherry-picked onto `m4` the controller takes one combined measurement:
+the quick check, `battle` at 100, 300 and 500, and the windowed check at the battle's ceiling (`scripts/windowed_check.sh`, T07:
+`scripts/measure_fight.gd` with the battle layout under `/tmp/scs-gpu.lock`, 20 s, FPS, frame time, GPU, VRAM, draw calls). The
+headline (max N by the sweep) is taken at the three phase ends (T13, T20, T25) with `scripts/bench.sh`, the release export once per
+phase end. A wave's combined gain that is less than the sum of its parts is written down as such; the parts are what the Cycle log
+credits.
+
+#### Execution schedule
+
+| wave | tasks in parallel | merge order onto `m4` | measurement point | agents at once |
+|---|---|---|---|---|
+| 1 | T07 (A), T08 (G+N), T09 (G+N), T10 (G+N) | T07, T08, T09, T10 | each task's own; then the wave's combined quick check, battle 100 and 300, windowed at the ceiling | 4 |
+| 2 | T11 (R), T12 (A+G) | T11, T12 | the same; T11's own GPU numbers | 2 |
+| 3 | T13 (M), T14 (G) | T14, T13 (T13 measures after T14) | **phase 1 end: the sweep, battle headline, windowed, release once; report P1** | 2 |
+| 4 | T15 (N, serial: it touches every native class) | T15 | its own before and after at 100 and 300 | 1 |
+| 5 | T16 (N+G), T17 (N+G), T19 (M) | T16, T17, T19 | combined; T19's Jolt numbers at 300 and 500 feed **checkpoint Q17** | 3 |
+| 6 | T18 (N), T20 (N+A) | T18, T20 | **phase 2 end: sweep, battle headline, windowed, release once; report P2** | 2 |
+| 7 | T21 (T, serial: pool and ship adapter) | T21 | its own at 500 | 1 |
+| 8 | T22 (T+N), T23 (R) | T22, T23 | combined at 500; windowed at 500 | 2 |
+| 9 | T24 (N, only if the windowed check at the target fails), T25 (M) | T24, T25 | **phase 3 end: sweep, battle 500 and 1 000, windowed, release, the full local suite; report P3** | 1 or 2 |
+
+Wall clock: waves 1, 5 and 8 are the parallel ones; the serial waves (4 and 7) are the two architecture changes that touch every
+native class and the pool. The order inside a wave's merge puts the harness first so the others' Cycle log entries can cite
+`battle` numbers taken after the merge.
+
+#### Checkpoints for the maintainer
+
+1. **After wave 3 (report P1).** Phase 1's numbers, the windowed check at the headline, and question 1 (the 5 ms tick share).
+   The controller stops until the maintainer answers.
+2. **After T19 (wave 5), Q17.** Jolt's and the sync's measured share at 300 and 500 in the battle, with the proposal: keep Jolt for
+   every ship, or take AI ships out of Jolt (a change to D4 and §5.6). The controller stops; T20 and later do not assume either.
+3. **After wave 6 (report P2).** Phase 2's numbers; the tier's physics rule (question 4) confirmed before T21 starts.
+4. **Before T24.** Only if the windowed check at 500 fails after T23: the simulation thread changes §15.3's tick order and is a
+   design-contract change; the controller asks before dispatching it.
+5. **After T25 (report P3).** M4's definition of done; the maintainer confirms the milestone before `m4` merges into `main`.
+
+#### Questions for the maintainer (recommended answer first)
+
+1. **The tick's share of the frame at the headline.** Recommended: yes, state it. At the battle's headline the windowed check must
+   hold 60 FPS and the tick median there must be 5 ms or under (the headless sweep keeps its 8 ms gate for max N). Reason: AC6
+   showed 45 ships passing 8 ms headless and the window at 52 FPS.
+2. **The battle mix defaults** in the table above (12 capitals, 110 turrets, 24 beams, 48 interceptors, 100 missiles, 1 000
+   asteroids per 500 ships). Recommended: accept as the starting point; every number is a `BattleMix` parameter and the report at
+   each phase end shows the cost per entity type, so they can be changed without a code change later.
+3. **Stand-in fidelity.** Recommended: accept box hulls, sphere rocks, no splats, hull points only, bench-only spawning. They
+   measure the tick, not the look; M6, M12 and M14 replace them (the table above says which).
+4. **The tier's physics rule.** A far fighter in the tier is integrated by the native flight model at 20 Hz from its held command
+   with no Jolt body (§15.16 reads "its ship never skips physics": the tier never skips a step, it steps less often). Recommended:
+   accept, with promotion carrying position, velocity, attitude and command over exactly (a test pins no pop).
+5. **Parity for entities with no GDScript twin** (turrets, missiles, beams from T20 on). Recommended: Q16's tolerance applies to
+   fighters only; the stand-ins' native kernels are pinned by their own unit tests (seeded, work counts, geometry) and a seeded
+   battle outcome comparison between the GDScript stand-in (T07, T12) and the native row (T20): hits within 10 %.
+6. **The gravity stand-in.** Recommended: a point source through the existing `environment_accel` hook, harness-only, no body and
+   no visual, so M6 is not pre-empted; its only purpose is the per-body cost and the drift it puts on intercepts.
+7. **1 000 ships.** Recommended: measured once at T25 (battle 1 000, headless and windowed), reported, not a gate for closing M4.
+
+#### Task sections
+
+##### M4-T07 The `battle` layout, the mix, the first stand-ins and per-entity counters
+
+- **Track:** A. **Agent:** Opus (the stand-ins need judgement about what the real features will cost; the layout itself is
+  mechanical). **Depends on:** T06.
+- **Goal:** the headline layout of Q15 and Q19 exists and prints its load per entity type, so every later task measures against it.
+- **Files:** `src/perf/battle_mix.gd` (new, pure), `src/perf/bench_layout.gd` (the `battle` layout: fights of 24 on an 8 km
+  lattice over 60 by 60 by 20 km, the player's fight at the centre, capitals 5 km behind their side, the asteroid slab over a
+  third of the fights, carriers' launch cycle), `src/perf/standins/capital_standin.gd`, `turret_standin.gd` (gun and interceptor
+  variants, firing through the existing `PulseCannon` and the projectile pool), `asteroid_field.gd` (a `MultiMeshInstance3D` and
+  `PhysicsServer3D` static bodies by RID, shifted on `rebased`), `gravity_standin.gd`, `src/perf/bench_runner.gd` (spawns and
+  parks the stand-ins, prints the mix, the carrier launch cycle), `src/perf/perf_probe.gd` and `bench_report.gd` (counters per
+  entity type: `fighters_near`, `fighters_far`, `capitals`, `turrets`, `interceptors`, `beams`, `missiles`, `bolts`,
+  `asteroids`, `launches`, and the stage `standins_us`), `src/targeting/targetable.gd` (`kind`: ship, capital, turret, missile,
+  static, prop; default ship), `src/game/main.gd` (one hook: the runner's stand-in parent under `World`), `scripts/bench.sh`,
+  `scripts/bench_quick.sh`, `scripts/bench_sweep.gd` (the layout and the per-entity columns), `scripts/windowed_check.sh` (new),
+  `info.md` (the `bench` row), `tests/unit/test_battle_mix.gd`, `tests/unit/test_bench_layout.gd` (its battle cases),
+  `tests/integration/test_standins.gd`, `tests/integration/test_bench.gd` (battle smoke). Missiles and beams are T12.
+- **Tests first:** `BattleMix.counts(n)` gives the table above at 100 and 500 and scales as stated; `BenchLayout.plan("battle",
+  n, seed)` is seeded, puts no two ships within 50 m, keeps every fight 8 km from the next, puts `ceil(n / 40)` capitals in, half
+  a side; a turret stand-in fires only inside its gate and only at hostiles within 4 km; an interceptor removes only missiles and
+  bolts within 1.5 km; the asteroid field appears in the contact scan as `static` rows and is hit by a bolt; a rebase shifts every
+  rock and the capitals; the gravity stand-in bends a bolt measurably over 30 s; `bench battle 50 3` writes a summary with every
+  entity count.
+- **Measures:** `bench battle 100 10` and `battle 300 10` (seed 1), the stage and per-entity breakdown, the quick check on
+  furball and spread unchanged (the layout adds nothing to them, and a run of each shows it). The first battle numbers are the
+  phase 1 before.
+- **Done when:** the tests pass, `scripts/bench.sh x battle` runs a battle sweep, `windowed_check.sh battle 100` records FPS,
+  frame time, GPU, VRAM and draw calls on the maintainer's GPU, and the milestone's "Benchmark layouts" section describes
+  `battle` and the mix.
+- **Expected gain:** none; it is the ruler. Expected cost at battle 100: the 1 000 statics and 30 turrets add about 1 to 2 ms to
+  what 100 fighters cost in spread (60 %); recorded, not budgeted, until T09 keeps statics out of the brains' contact lists.
+- **Architecture:** §17.6.
+
+##### M4-T08 Bolt broad phase in native code, projectile kinds
+
+- **Track:** G and N. **Agent:** Opus. **Depends on:** T06.
+- **Goal:** the hit resolver and the scan's incoming-fire query test only the bolt and hull pairs that can meet this tick, whatever
+  the hull's size, so hits stop growing with bolts times ships; the windowed hit spikes (AC6) go with it or are explained.
+- **Files:** `native/src/hit_sweep.rs` (new: `ScsHitSweep`, a grid over the bolts' swept segments and the hulls' bounding spheres
+  with a per-cell maximum radius so a 1 km hull is found from any cell it reaches; returns candidate pairs in the resolver's
+  order), `src/combat/hit_broad_phase.gd` (new facade, GDScript fallback by sort and sweep like `RamBroadPhase`),
+  `src/combat/hit_resolver.gd` (gathers once into packed arrays, sweeps only the candidates, exact tests unchanged),
+  `src/weapons/projectile.gd` (`kind`: bolt, beam, missile; `hit_radius_m` per kind), `src/ai/contact_scan.gd` is not touched
+  (`incoming_fire` already runs in the field; T15 unifies). `tests/unit/test_hit_broad_phase.gd`,
+  `tests/integration/test_hit_scale.gd`.
+- **Tests first:** a work count: in a fleet of 24 ships 250 m apart with 300 bolts flying between two of them, pairs tested per
+  tick against a bound of 3 per bolt (the resolver today tests every pair); every candidate the broad phase drops fails the
+  resolver's sphere test on 40 seeded crowds, near the origin and 45 km out, with hull radii from 5 m to 1 km; the candidates'
+  order is the resolver's; the native and GDScript paths give the same pairs; hit pins from `test_hit_resolver` (a grazing bolt at
+  the edge, a bolt that tunnels a hull in one tick, friendly fire off and on).
+- **Measures:** quick check and `bench furball 100 10` before and after; the hit stage and `combat.resolve_us` p99; after T07
+  merges, `battle 100` in the wave's combined run.
+- **Done when:** the work count passes on both paths, parity is bit for bit (pairs are integers), the hit stage at furball 100
+  falls and the p99 spike is measured before and after in the window.
+- **Expected gain:** hits 2.5 to about 0.6 ms at furball 100 (75 %); at 500 the difference between 13 ms and about 1 ms (70 %).
+- **Architecture:** §17.7.
+
+##### M4-T09 Native body registry: the scan built in native code, kinds and nearest-k per kind
+
+- **Track:** G and N. **Agent:** Opus. **Depends on:** T06.
+- **Goal:** the per-tick gather that cycle 4 left in GDScript (building the scan from the tree, the broadcast scan, the freed-body
+  checks, about 1.2 ms at 100 ships) goes, and the scan knows an entity's kind and size so a field of rocks does not fill a
+  fighter's twelve contacts.
+- **Files:** `native/src/body_registry.rs` (new: `ScsBodyRegistry`; bodies register once with their RID, id, faction, kind,
+  radius and reach, unregister on release; each tick one `refresh` reads every registered body's transform and velocity through
+  `PhysicsServer3D` by RID, static rows only after a rebase), `native/src/contact_field.rs` (loads from the registry instead of
+  packed arrays; `nearest` takes k ships plus `k_static` nearest statics; a per-cell maximum radius), `src/ai/contact_scan.gd`
+  (registers and unregisters bodies, asks the field; the GDScript path keeps today's gather as the reference), `src/ai/perception.gd`
+  (`statics`: the nearest statics, read by avoidance), `src/ai/ai_pilot_driver.gd` (passes them), `src/ai/avoidance_math.gd`
+  (statics are obstacles with their radius), settings `ai_nearest_static_k` (4). `tests/unit/test_contact_field.gd` (extended),
+  `tests/unit/test_body_registry.gd`, `tests/integration/test_contact_registry.gd`.
+- **Tests first:** a work count: the scan builds no per-tick arrays in GDScript (a counter of `from_tree` gathers, 0 on the native
+  path); a released pool ship is gone from the next tick's scan; a body that moved is seen at its new place the same tick; 1 to
+  300 bodies with 1 000 statics give the same contacts on both paths (statics never among the k ships, the nearest `k_static`
+  beside them); a fighter in the rock slab avoids the rock in its path (a seeded flight through the field with no ram); the
+  freed-body behaviour of cycle 4's tests holds.
+- **Measures:** quick check and `furball 100`, `spread 100` before and after (the scan stage); `battle 100` after T07.
+- **Done when:** parity bit for bit on the contacts, the scan stage falls, the rock slab costs the brains nothing measurable.
+- **Expected gain:** scan 2.6 to about 1.2 ms at furball 100 (60 %); the registry is the seed of T15's core.
+- **Architecture:** §17.8.
+
+##### M4-T10 N4: the flight force step in native code
+
+- **Track:** G and N. **Agent:** Fable (the riskiest maths for parity: `FlightModel` mixes 32-bit vectors and 64-bit scalars,
+  and the assist's smoothing carries state). **Depends on:** T06.
+- **Goal:** every AI ship's flight step (the model, the governor, the assist, the force application) runs in one native call per
+  tick for all AI ships, with the player's ship on the GDScript path, so flight stops costing 36 us a ship.
+- **Files:** `native/src/flight_step.rs` (new: `ScsFlightStep`, ships' specs and layouts loaded once, per-tick commands in as
+  packed arrays, forces applied through `PhysicsServer3D.body_apply_force` by RID, glow levels and the applied force out),
+  `src/ship/flight_batch.gd` (new node under `World` at priority -1: collects every batched ship's command, calls the step,
+  hands glow levels to `ThrusterVisuals`), `src/ship/ship.gd` (a ship can be `batched`: its `_physics_process` skips the model
+  and reads `applied_force` from the batch; the player is never batched), `src/ship/flight_model.gd` and `flight_assist.gd`
+  untouched (the reference), `tests/unit/test_flight_step.gd`, `tests/integration/test_flight_batch.gd`.
+- **Tests first:** a differential test over 10 000 seeded commands and states compares the native step's forces, torques and
+  assist state with `FlightModel.compute` plus `SpeedGovernor`: bit for bit where the maths allows, else within 1e-6 relative
+  and listed; the damping guard stays green with batched ships; `test_flight_model`, `test_flight_assist`, `test_speed_governor`,
+  `test_raider_flight`, `test_ship_physics` green; a seeded 30 s fight with batching on and off meets Q16 (hits within 10 %,
+  behaviour mix within 5 points, no ship more than 50 m from its twin at 10 s); a batched ship that runs out of fuel coasts.
+- **Measures:** quick check and `furball 100` before and after (the flight stage); paired in one process by flipping
+  `perf_native` as cycle 4 did.
+- **Done when:** parity as stated and listed, the flight stage falls, the player's ship unchanged.
+- **Expected gain:** flight 3.6 to about 1.2 ms at furball 100 (60 %); at 500 the difference between 18 ms and about 3 ms.
+- **Architecture:** §17.9.
+
+##### M4-T11 Far-ship render proxies and the node diet for AI ships
+
+- **Track:** R. **Agent:** Opus; the GPU numbers are taken by the agent on the maintainer's machine, the look stays (H).
+  **Depends on:** T10 (it edits `ship.gd` after T10's change lands).
+- **Goal:** an AI ship costs the renderer and the scene tree a tenth of what it does now: beyond a distance a ship is one LOD3
+  splat node or a point in a `MultiMeshInstance3D` of dots, with no depth proxy, plumes, lights or chunks, and a near AI ship
+  carries about 12 nodes instead of 108.
+- **Files:** `src/ship/ship.gd` (AI ships build the lean set: body, collision shapes, LOD splat nodes, the proxy; thruster
+  visuals as one `MultiMeshInstance3D` per ship; no running lights, nav lights, cockpit or screens), `src/ship/thruster_visuals.gd`
+  (a multimesh mode), `src/ship/running_lights.gd`, `nav_lights.gd` (player only), `src/rendering/lod_switcher.gd` (the far level:
+  hide every splat node and show the dot), `src/rendering/far_dots.gd` (new: one multimesh for every far ship, updated in
+  `_process`), `src/game/ship_pool.gd` (builds AI ships lean), settings `far_ship_dot_m` (the distance). `tests/unit/test_far_dots.gd`,
+  `tests/integration/test_ship_nodes.gd`.
+- **Tests first:** a node count: a pooled AI ship has at most 16 nodes, the player's as today; a ship beyond `far_ship_dot_m`
+  shows no splat node and one dot, and back inside shows its LOD level; the dot's position tracks the ship each frame; the rebase
+  shifts the dots; GDGS's render state count stays 1; `test_lod_switcher` green.
+- **Measures:** the windowed check at battle 100 and furball 45 before and after (FPS, frame time, draw calls, render CPU time
+  from `state render`); the rebase shift cost (`WorldFrame.last_rebase_us`) at 100 and 300 headless.
+- **Done when:** draw calls per AI ship fall from about 27 to under 3, the rebase shift at 300 ships is under 2 ms, the windowed
+  check at the wave 1 ceiling holds 60 FPS or the report says why not.
+- **Expected gain:** render CPU at 500 from about 15 ms to under 3 ms (75 %); the sync and the rebase cut with the nodes (70 %).
+- **Architecture:** §17.10.
+
+##### M4-T12 Missile, beam and interceptor stand-ins
+
+- **Track:** A and G. **Agent:** Opus. **Depends on:** T07, T08.
+- **Goal:** the battle carries guided missiles, beam shots and interceptor defences, so the hit sweep and the scan are measured
+  with every projectile kind Q19 names.
+- **Files:** `src/perf/standins/missile_standin.gd` (a `Projectile` of kind missile: a target, proportional navigation with a turn
+  rate limit, a lifetime, launched by capitals to hold the mix's count in flight), `beam_standin.gd` (an emitter firing a 3 km
+  segment resolved in its tick through `HitBroadPhase`), the interceptor variant of `turret_standin.gd` gains bolt and missile
+  queries through the field, `src/weapons/projectile.gd` (the missile's steering hook; T08 added `kind`),
+  `src/combat/hit_resolver.gd` (beam segments through the same sweep), `tests/unit/test_missile_guidance.gd`,
+  `tests/integration/test_standins.gd` (extended).
+- **Tests first:** a missile launched at a crossing fighter closes and hits within its lifetime at the stand-in's turn rate and
+  misses at a tenth of it; a beam hits the first hull along its segment and none behind it; an interceptor removes a missile
+  inside 1.5 km and never a bolt outside; the missile count in flight holds the mix; the per-entity counters report them.
+- **Measures:** `battle 100` and `300` before and after (the hit stage, `missiles`, `beams` counters).
+- **Done when:** the tests pass and the battle's mix table is complete.
+- **Expected cost:** about 0.1 ms per 20 missiles in GDScript at 100 ships (60 %); T20 moves guidance native.
+- **Architecture:** §17.11.
+
+##### M4-T13 Phase 1 measurements and report P1
+
+- **Track:** M. **Agent:** Sonnet. **Depends on:** T11, T12, T14.
+- **Goal:** phase 1's headline and the maintainer's first checkpoint.
+- **Files:** the Cycle log entry "Phase 1 (T07 to T14)" and the "Report P1" subsection in this file; `reports/` (not committed).
+- **Tests:** none new; AC13's paired budget and the focused files of every phase 1 task run once.
+- **Measures:** `scripts/bench.sh m4_p1 battle furball spread transit` (the full sweep), below-sweep counts for the battle's real
+  ceiling, the stage and per-entity breakdown at battle 100, 300 and 500, the windowed check at the battle's headline and at
+  100, the release export's quick check once.
+- **Done when:** the entry holds every number in the form of the final measurements above, the gains per task against their
+  predictions, the behaviour changes, and question 1 for the maintainer.
+- **Expected:** battle headline 100 (65 %); furball 100 under 8 ms (65 %).
+
+##### M4-T14 Jolt collision layers and far-ship physics interpolation off
+
+- **Track:** G. **Agent:** Sonnet. **Depends on:** T11.
+- **Goal:** Jolt's broad phase stops pairing fighters with fighters (the ram resolver does the exact work), capitals and statics
+  pair only with what can hit them, and far AI ships skip the per-node interpolation reset at a rebase.
+- **Files:** `src/ship/ship.gd` (layers and masks by kind), `src/perf/standins/*` (the capitals' and rocks' layers),
+  `src/world/world_frame.gd` (the settle skips nodes flagged uninterpolated), `tests/integration/test_collision_layers.gd`.
+- **Tests first:** two fighters crossing report no Jolt contact and still take the swept ram; a fighter into a rock stops; a bolt
+  never has a body; the rebase settle walks only the interpolated nodes (a count).
+- **Measures:** `battle 300` and `500` before and after (the physics stage, `sync`, the rebase tick).
+- **Done when:** the counts pass and the physics stage at 300 is lower or the entry says it was not.
+- **Expected gain:** physics 1.9 ms at 100 unchanged; at 300 and up about 1 ms (30 %).
+- **Architecture:** §17.12.
+
+##### M4-T15 The native simulation core: entity rows, one call in and one call out
+
+- **Track:** N. **Agent:** Fable (architecture). **Depends on:** T13 (phase 1 accepted).
+- **Goal:** one struct-of-arrays store in the crate holds every simulated entity (fighter, capital, turret, missile, beam, bolt,
+  static) as a row with kind, radius, faction, flags, position, velocity, attitude, command and the per-kind state, filled once
+  per tick from Jolt and the registry and read by every native class, so the contact field, the hit sweep, the flight step and
+  the ram broad phase stop loading their own copies.
+- **Files:** `native/src/sim_core.rs` (new: `ScsSimCore`, the rows, `sync_in`, `sync_out`, a row's lifecycle), `body_registry.rs`
+  (becomes the core's registration), `contact_field.rs`, `hit_sweep.rs`, `flight_step.rs` (read the core), `native/src/ram_phase.rs`
+  (new: the ram broad phase on the core's rows, the GDScript `RamBroadPhase` stays the reference), `src/perf/sim_core.gd` (the
+  facade; a `SimCore` node under `World` at priority -11 does `sync_in`, and one at 2 000 000 does `sync_out`), `src/ai/contact_scan.gd`,
+  `src/combat/hit_broad_phase.gd`, `src/combat/ram_resolver.gd`, `src/ship/flight_batch.gd` (ask the core), `tests/unit/test_sim_core.gd`.
+- **Tests first:** rows survive a pool release and acquire with a new id; a rebase shifts every row once; the four classes give
+  the same answers from the core as from their own loads on seeded worlds (bit for bit); a row of each kind round-trips its state;
+  `sync_in` and `sync_out` are the only places the core touches the engine (a counter of engine calls per tick that does not grow
+  with ships).
+- **Measures:** quick check, `furball 100`, `battle 300` before and after: the sum of the four facades' load times, now one.
+- **Done when:** parity holds, the per-tick engine calls are one per body for the sync and nothing per query, and §17's tick
+  order names the core's two nodes.
+- **Expected gain:** about 0.5 ms at 100 (55 %); the real gain is that T16 to T22 have somewhere to live.
+- **Architecture:** §17.13 (a new subsection head, "The native core", that T16 to T24 add to).
+
+##### M4-T16 N2: avoidance, the fire lane and the context lists in native code
+
+- **Track:** N and G. **Agent:** Opus. **Depends on:** T15.
+- **Goal:** the per-contact loops that run on every think (avoidance over the contacts and statics, the fire lane, the hostile
+  and friendly splits in `AiContext.refresh`) run on the core's rows in one call per thinking ship.
+- **Files:** `native/src/pilot_kernels.rs` (new: `avoid`, `fire_lane`, `context_lists`), `src/ai/avoidance_math.gd`,
+  `src/ai/fire_lane.gd`, `src/ai/ai_context.gd` (facades over the kernels; the GDScript stays the reference), `src/ai/ai_pilot_driver.gd`
+  (the seed for the tie-break passed in), `tests/unit/test_pilot_kernels.gd`.
+- **Tests first:** differential tests over seeded contacts compare the filtered velocity, the lane verdict and the lists bit for
+  bit (the tie-break's `hash()` reproduced or passed in); `test_avoidance_math`, `test_fire_lane`, `test_ai_pilot_selection`,
+  `test_ai_avoidance`, `test_ai_ram` green.
+- **Measures:** `furball 100`, `battle 300` (the think stage) before and after.
+- **Done when:** bit for bit, the think stage falls.
+- **Expected gain:** about 1 ms at furball 100, 3 ms at 300 (55 %).
+- **Architecture:** §17.13.
+
+##### M4-T17 The brains in native code, under Q16's tolerance
+
+- **Track:** N and G. **Agent:** Fable (3 000 lines of seeded, stateful behaviour with a tolerance to meet, the single riskiest
+  port). **Depends on:** T16. Two commits sets, each test first: T17a `PilotSteering`, `InterceptMath`, `Manoeuvres` and the
+  temperament maths (pure, bit-identical plausible); T17b `AiPilot`'s scoring and the behaviours (attack, slash, evade, idle,
+  formation, follow path, guard, retreat, ram, rally), profiles and temperaments.
+- **Goal:** a thinking fighter costs about 5 us in native code instead of 25 to 30 in GDScript, with the GDScript brains kept as
+  the reference and the player-facing seams unchanged (`PilotBrain`'s interface, wings, orders, objectives, the console).
+- **Files:** `native/src/brain.rs`, `brain_behaviours.rs`, `brain_maths.rs` (new), `src/ai/ai_pilot.gd` (a facade: with the core,
+  `think` runs native and reads the result; without, today's code), `src/ai/brain_factory.gd` (builds the native row's profile),
+  `src/ai/ai_console.gd` (scores read from the row), `tests/unit/test_brain_parity.gd`, `tests/integration/test_brain_tolerance.gd`.
+  Seeded rolls: Godot's `hash([seed, "attack"])` reproduced in Rust (the engine's hash is public) or, failing that, rolled from a
+  per-ship seed table built once and listed as a tolerated difference.
+- **Tests first:** T17a bit for bit on seeded inputs; T17b the Q16 test: a seeded 30 s fight (furball 50 and spread 50, seeds 1
+  to 3) with native brains against GDScript twins gives hits within 10 %, behaviour mix within 5 points, no ship more than 50 m
+  from its twin at 10 s; every AI test file green on both paths (`test_ai_*`, `test_dogfight`, `test_m3_run`, AC13's paired budget).
+- **Measures:** `furball 100`, `battle 300` and `500` (the think stage) before and after, paired by `perf_native`.
+- **Done when:** the tolerance test passes on every seed and the differences are listed in the Cycle log; the think stage at 300
+  is under 2 ms single-threaded.
+- **Expected gain:** think about 3.4 to about 0.8 ms at furball 100 (50 %); at 500 the difference between 25 ms and about 4 ms.
+  If the tolerance cannot be met in two attempts the controller stops: the tier (phase 3) then carries more and the near count
+  falls (the research's fallback).
+- **Architecture:** §17.13.
+
+##### M4-T18 N3: threads inside the core
+
+- **Track:** N. **Agent:** Opus. **Depends on:** T17.
+- **Goal:** the per-ship kernels (perception queries, the brains, avoidance, flight, missile guidance) run across the performance
+  cores inside the crate under the determinism rules (read the snapshot, write only your own row, no engine call off the main
+  thread, merge in row order), with 1-thread and N-thread outputs identical.
+- **Files:** `native/Cargo.toml`, `Cargo.lock` (rayon, pinned), `docs/third-party.md` (its rows), `native/src/sim_core.rs` (the
+  parallel pass, a thread count setting), the kernel files' signatures, settings `perf_threads` (0 = the performance cores,
+  pinned for the bench), `tests/unit/test_core_threads.gd`.
+- **Tests first:** the same seeded battle stepped 600 ticks with 1 thread and with 6 gives identical rows byte for byte; a kernel
+  that reads another row's output (a mutation) is caught by the test; the thread count follows the setting at once.
+- **Measures:** `battle 300` and `500` with 1 and 6 threads in one process; p99 at 50 ships (the pool wake-up cost), with the
+  threshold below which the pass runs single-threaded chosen by the numbers.
+- **Done when:** identical outputs, the AI stage at 500 divided by about 3, no p99 loss at 50.
+- **Expected gain:** the native per-ship work divided by 3 to 4 above about 100 ships (60 %).
+- **Architecture:** §17.13.
+
+##### M4-T19 Jolt measured at 300 and 500: the ships-out-of-Jolt proposal (Q17)
+
+- **Track:** M. **Agent:** Sonnet. **Depends on:** T15.
+- **Goal:** the maintainer decides D4 on numbers: what Jolt's step, the body sync and the node propagation cost at 300 and 500
+  ships in the battle with the mix, against what a native 6DOF integrator for AI ships would cost (under 1 us a ship, the
+  research's estimate), and what Jolt would still be needed for (the player, near contacts, capitals, statics).
+- **Files:** the Cycle log entry and a proposal subsection in this file; a throwaway timing build (not committed).
+- **Measures:** `battle 300` and `500` with the probe's `physics` and `sync` stages and the rebase tick; the same with the AI
+  ships' bodies frozen for a tick to isolate the sync; Jolt's thread count varied.
+- **Done when:** the entry gives the costs, a recommendation (keep Jolt for every ship, or AI ships integrated natively with
+  Jolt for the player, capitals and statics, and what the ram resolver then does) and the controller stops for the answer.
+- **Expected:** the sync and node propagation, not Jolt's solver, bind at 500 (60 %, the research); if the maintainer says
+  yes, the integrator is a phase 3 task the controller adds (T21 takes it for tier ships either way).
+
+##### M4-T20 Turrets, missiles and beams as native rows
+
+- **Track:** N and A. **Agent:** Opus. **Depends on:** T16, T12.
+- **Goal:** the stand-ins' per-tick work (a turret's target pick, aim and gate; a missile's guidance; a beam's segment) runs as
+  kernels over the core's rows, so M12's real turrets and missiles inherit a budget-tested path and the battle's non-fighter
+  rows cost what the budget table says.
+- **Files:** `native/src/turret_kernel.rs`, `missile_kernel.rs` (new), `src/perf/standins/turret_standin.gd`,
+  `missile_standin.gd`, `beam_standin.gd` (facades over the rows; the GDScript stand-ins stay the reference),
+  `tests/unit/test_turret_kernel.gd`, `test_missile_kernel.gd`.
+- **Tests first:** the kernels against the GDScript stand-ins on seeded scenes: the same target picks, aim steps, fire ticks and
+  guidance commands bit for bit; a seeded 30 s battle at 100 with native rows against GDScript stand-ins: hits within 10 %
+  (question 5).
+- **Measures:** `battle 300` and `500` before and after (`standins_us`, the `turrets`, `missiles` counters).
+- **Done when:** the per-entity cost at 500 meets the budget table's turret, interceptor, missile and beam rows or the entry
+  says by how much it misses.
+- **Expected gain:** the stand-ins' GDScript cost (about 2 ms at 500) to under 0.7 ms (60 %).
+- **Architecture:** §17.13.
+
+##### M4-T21 The low-attention tier: state, integration, promotion and demotion
+
+- **Track:** T. **Agent:** Fable. **Depends on:** T20 and the maintainer's answers at checkpoint 3 (question 4; Q17's decision
+  shapes what a tier ship has when promoted).
+- **Goal:** a fighter beyond the attention radius leaves Jolt and the scene tree and lives as a core row integrated by the native
+  flight model at 20 Hz from its held command; coming within the radius promotes it onto a pooled body with its position,
+  velocity, attitude and command carried over exactly, and the reverse demotes it.
+- **Files:** `native/src/tier.rs` (new: the tier's integrator and cadence), `src/ai/tier_director.gd` (new node under `World`:
+  the radius, promotion and demotion with hysteresis, the row and body handover), `src/game/ship_pool.gd` (acquire and release
+  from a row's state), `src/ship/ship.gd` (a demoted ship parks its body), `src/perf/bench_layout.gd` is not touched (the layout
+  does not know the tier), settings `tier_radius_m` (10 000), `tier_hz` (20). `tests/unit/test_tier.gd`,
+  `tests/integration/test_tier_handover.gd`.
+- **Tests first:** a ship demoted and promoted 100 times over a seeded 60 s flight never pops (position within 1 cm, velocity
+  within 1 cm/s, the command identical at each handover); a tier ship keeps the Newtonian invariant (its velocity changes only
+  by its nozzle forces and gravity, the damping guard's reading); the count of bodies in Jolt equals the near count; the player
+  flying into a far fight sees it promoted before it is within 5 km; `test_ai_think_rate` green (the tier replaces the far rate
+  for tier ships and leaves it for near ones).
+- **Measures:** `battle 500` before and after (the physics, sync, flight and AI stages; `fighters_near`, `fighters_far`).
+- **Done when:** the handover tests pass and the tick at battle 500 scales with the near count (a run with the radius halved
+  shows it).
+- **Expected gain:** at 500 the tick falls to what about 150 near ships cost plus 0.3 us a tier ship (70 %).
+- **Architecture:** §17.14 (a new subsection head, "The low-attention tier", that T22 to T24 add to).
+
+##### M4-T22 Tier brains and statistical fire
+
+- **Track:** T and N. **Agent:** Opus. **Depends on:** T21.
+- **Goal:** tier ships still fight: a brain at 2 to 5 Hz on the same contact grid, fire resolved as a to-hit roll from the fire
+  gate's geometry and the shooter's skill, damage applied, no bolt row; turrets on far capitals fire the same way; a squadron out
+  of view wins or loses at the rate one in view does.
+- **Files:** `native/src/tier.rs` (the cadence and the roll), `native/src/tier_fire.rs` (new), `src/ai/tier_director.gd` (the
+  damage path through `Damageable`), settings `tier_brain_hz` (4), `tests/unit/test_tier_fire.gd`,
+  `tests/integration/test_tier_outcomes.gd`.
+- **Tests first:** the to-hit rate against a seeded full-fidelity duel (the same geometry, 1 000 shots) within 10 %; a 12 against
+  12 fight run 30 s in the tier and at full fidelity, seeds 1 to 3: hits within 15 %, the winning side the same, mean hull loss
+  within 15 %; a tier ship hit by a near ship's bolt (it has no body: the hit sweep tests tier rows as spheres) takes damage.
+- **Measures:** `battle 500` (the tier's cost per ship, `fighters_far`).
+- **Done when:** the outcome tests pass and the tier's cost per ship is at or under 0.3 us.
+- **Expected:** the tier's fairness (65 %); its cost (75 %).
+- **Architecture:** §17.14.
+
+##### M4-T23 Far proxies for tier rows
+
+- **Track:** R. **Agent:** Opus (GPU numbers by the agent, the look (H)). **Depends on:** T21, T11.
+- **Goal:** a tier row with no node is still drawn: a point in T11's far dots sized by angular size with a 1 px floor, radar and
+  targeting see it (the player's radar reads rows, not nodes, for tier ships), so 500 ships are on screen for the cost of one
+  multimesh.
+- **Files:** `src/rendering/far_dots.gd` (rows as a second source), `src/hud/radar_model.gd` (the radar's contact source gains the
+  tier's rows), `src/targeting/targeting_controller.gd` (the player's candidates include tier rows by id), `tests/integration/test_tier_proxies.gd`.
+- **Tests first:** every tier row has a dot and a radar blip; a promoted ship's dot disappears the frame its body shows; the
+  player can select a tier ship and the selection survives its promotion.
+- **Measures:** the windowed check at battle 500 (FPS, frame time, draw calls, render CPU, visible splats).
+- **Done when:** the window at 500 shows every ship and the renderer's CPU time at 500 is under 3 ms or the entry says why not.
+- **Expected:** 70 %.
+- **Architecture:** §17.14.
+
+##### M4-T24 The simulation step on a worker thread (conditional)
+
+- **Track:** N. **Agent:** Fable. **Depends on:** T23 and checkpoint 4. **Status `not needed`** if the windowed check at 500
+  holds 60 FPS after T23.
+- **Goal:** the whole native step (every kernel over the core) runs at a fixed 60 Hz on a worker thread into a double-buffered
+  snapshot; the main thread's physics tick does only `sync_in`, the handover of commands and `sync_out`, and the visuals
+  interpolate between the last two snapshots, so the tick no longer competes with rendering for the frame.
+- **Files:** `native/src/sim_core.rs` (the thread, the two buffers), `src/perf/sim_core.gd`, `src/rendering/splat_pose_sync.gd`
+  (interpolation from snapshots for tier rows' dots), `tests/unit/test_core_snapshot.gd`.
+- **Tests first:** the threaded step gives the same rows as the inline step tick for tick on a seeded battle; no engine call from
+  the worker (a guard that panics in debug); a missed deadline is counted, never skipped.
+- **Measures:** the windowed check at battle 500 before and after; the headless tick.
+- **Done when:** identical rows, 60 FPS in the window at 500, or the entry says what still binds.
+- **Expected:** 50 % that it is needed; 70 % that it holds 60 FPS at 500 when it is.
+- **Architecture:** §17.13 and §15.3 (the tick order; a design-contract change, checkpoint 4).
+
+##### M4-T25 Phase 3 measurements, the 1 000 stretch, the full suite and report P3
+
+- **Track:** M. **Agent:** Sonnet. **Depends on:** T23 (and T24 if built).
+- **Goal:** M4's definition of done.
+- **Files:** the Cycle log entry "Phase 3 (T21 to T25)" and "Report P3"; AC5 and AC6's Done cells; `docs/architecture.md` §11
+  (the entity budget), `docs/roadmap.md` (one line each at M6, M12 and M14 naming the stand-in each replaces); `reports/`.
+- **Measures:** `scripts/bench.sh m4_p3` on every layout, `battle` to 1 000 (the sweep's N list extended), the windowed check at
+  the battle's headline and at 500 and 1 000, the release export once, `scripts/run_tests.sh` once (Q10).
+- **Done when:** every number is in the entry in the form of the final measurements above, every behaviour change and every
+  tolerated difference is listed, the suite is green locally and on CI, and the maintainer is asked to confirm M4.
+- **Expected:** battle 500 in the world, 100 to 150 near, under 8 ms headless and 60 FPS windowed (65 %); under 5 ms (50 %);
+  1 000 under 8 ms headless (30 %).
+
+#### Architecture subsections this plan assigns
+
+§17.6 the battle layout and stand-ins (T07); §17.7 the hit broad phase and projectile kinds (T08); §17.8 the body registry and
+kinds (T09); §17.9 the native flight step (T10); §17.10 far proxies and the node diet (T11); §17.11 missile, beam and interceptor
+stand-ins (T12); §17.12 collision layers (T14); §17.13 the native core (T15, with T16, T17, T18, T20 and T24 adding paragraphs
+under their own task ids); §17.14 the low-attention tier (T21, with T22 and T23 adding paragraphs). T13, T19 and T25 write only in
+this file.
+
 
 ## Cycle log
 
