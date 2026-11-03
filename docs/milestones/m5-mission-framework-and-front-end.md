@@ -5,7 +5,8 @@
 **Status:** planned 2026-11-02 on branch `m5`, cut from `main` at `b2f8ce1` (M3 merged) while M4 goes on separately on `m4`.
 The maintainer asked for M5 to run beside M4 because most of it does not touch the performance work, and expects `m5` to
 be rebased onto `main` once M4 merges (see "Living beside M4"). The planning questions were answered the same day (below),
-including the civilian ships' lengths and a seventh civilian hull, the Centauri Brezebel (Q8, Q11).
+including the civilian ships' lengths and a seventh civilian hull, the Centauri Brezebel (Q8, Q11). A ninth hull, the
+Brakiri Bokmai transport with removable cargo pods, was added during the build (Q17).
 
 Read `docs/architecture.md` first, especially §6 (input and the console), §8 (camera), §14.6 (the mission framework as
 first sketched), §15.10 (scenarios and waves), §15.12 (control profiles) and §16 (the M3 AI: D36 wings, D37 the instructor,
@@ -17,7 +18,7 @@ recommended agent model.
 Turn the sandbox into a game you start from a menu. The player boots into a front end, picks free flight (with or without
 encounters) or a mission, and plays it. A mission is a scenario plus a script that talks to the player through subtitles,
 sets objectives, cuts to a cinematic camera, sends raiders at things and ends in a debrief. Settings and controls get real
-menus. Free flight gets traffic: raiders, allied patrols and eight new civilian ships built from the maintainer's
+menus. Free flight gets traffic: raiders, allied patrols and nine new civilian ships built from the maintainer's
 references and online images. The sound pass replaces the engine loops with per-thruster bursts and gives both guns and the bolt impacts new
 voices. M8's tutorial is written on top of all this, so the framework matters more than the one demo mission.
 
@@ -41,6 +42,7 @@ voices. M8's tutorial is written on top of all this, so the framework matters mo
 | Q14 | What weapons, when do they fire, how strong? | **Small turrets**: 2-4 light turrets per hull by size, each with its own firing arc, lead-aimed, about 1.5 km range, built as a turret system M12's capital ships can reuse. **Only at attackers**: a turret fires at a ship that has shot at its own ship, or at another civilian or ally close by; a raider flying past is left alone. **Deterrent only**: they hurt raiders and may finish a damaged one, but a raid of two or more raiders still wins unless the player or a patrol helps |
 | Q15 | (maintainer, after reading the menu list) Settings layout | **Options on the left; the bottom left is reserved for a controller image with what each button does; the right side has a place for mission objectives.** It applies to the in-flight pause menu and the settings and controls screens, opened from pause or from the front end |
 | Q16 | (after T11 measured the references) Built from the Saturn 4's parts, the Saturn 8 is only about 168 m and the tanker about 161 m: how do they reach 200 m? | **The Saturns are modular.** The Saturn 4's **100 m is the length of its cargo section**, not of the whole ship. The Saturn 8's **200 m is two Saturn 4 cargo sections** (or two tank sections for the tanker). A **Saturn 4 with tanks** also exists, half a Saturn 8 tanker. **The Saturn 3 uses the same lead ship** (control section) as the 4 and the 8. Ids (planner's call): `saturn_4_tanker` (new) and `saturn_8_tanker` (was `saturn_fuel_tanker`) |
+| Q17 | (maintainer, during the build) Another civilian ship | **Add the Brakiri Bokmai transport, about 80 m, in the Brakiri brown and yellow. The cargo pods in its centre are removable.** Reference: `references/Brakiri_Bokmai_transport_80m.STL`. Planner's calls: the generator builds the hull and one pod model apart, a Bokmai flies with three, two, one or no pods, a destroyed Bokmai sheds its pods as debris, letting go of a pod in flight or towing one waits for M14's tether, and its faction is a new `brakiri` |
 
 ## Scope
 
@@ -56,9 +58,10 @@ In:
   mode with locked controls, and a debrief.
 - **Comms menu on D-pad Right** with the four wing orders.
 - **One mission**: Buoy defence with a cinematic intro.
-- **Civilian ships**: eight hulls in four generators (the Saturn family with five variants, the Skylark, the Narn
-  transport, the Centauri Brezebel), measured from the references and rebuilt in `tools/procgen`, coloured after online
-  images of each ship; factions `civilian`, `narn` and `centauri`.
+- **Civilian ships**: nine hulls in five generators (the Saturn family with five variants, the Skylark, the Narn
+  transport, the Centauri Brezebel, the Brakiri Bokmai with removable cargo pods), measured from the references and
+  rebuilt in `tools/procgen`, coloured after online images of each ship; factions `civilian`, `narn`, `centauri` and
+  `brakiri`.
 - **Free-flight encounters**: raider raids, allied patrols and civilian traffic, seeded, spawned from pools beyond sensor
   range, capped in ship count.
 - **Sound pass**: new Starfury and raider gun sounds, new bolt impacts, per-thruster engine bursts placed on the ship.
@@ -232,9 +235,9 @@ Out (explicitly):
 - `encounter_max_ships` (default 24, ships alive at once besides the player and their wing) caps it: an event that would
   pass the cap waits. M4's numbers, not M5, decide when the cap can rise.
 - Factions (`data/factions.json`): `civilian` (Earth-registered merchants: the Saturns and the Skylark), `narn` (the Narn
-  transport) and `centauri` (the Brezebel). Raiders are hostile to all three. Earth Alliance and `civilian` are allied;
-  `narn` and `centauri` are neutral to everyone else (civilians never fire, so a Narn-Centauri feud would change nothing
-  in M5). Civilians fly the M3 `civilian` AI profile (never attack, evade, run from hostiles within 3 km).
+  transport), `centauri` (the Brezebel) and `brakiri` (the Bokmai, Q17). Raiders are hostile to all four. Earth Alliance
+  and `civilian` are allied; `narn`, `centauri` and `brakiri` are neutral to everyone else (civilian turrets fire only at
+  attackers, D61, so a feud between them would change nothing in M5). Civilians fly the M3 `civilian` AI profile (never attack, evade, run from hostiles within 3 km).
 - **Encounters run only when asked for.** The front end's Free flight screen puts `encounters` into `Game`'s request and
   remembers the choice in `Settings.encounters` (bool, true: the menu's default). A run that goes straight to `Main`
   (headless, `--console-exec`, `--scenario=`, the `scenario` command, every test) has encounters off unless the console
@@ -245,7 +248,7 @@ Out (explicitly):
 
 ### D59 Civilian ships
 
-- Four generators, eight hulls, the same output contract as §9 and §15.11: hull PLYs for LOD0-3 with lighting records,
+- Five generators, nine hulls, the same output contract as §9 and §15.11: hull PLYs for LOD0-3 with lighting records,
   fallback mesh and depth proxy, `hardpoints.json` with pods and nozzles (main and RCS), collision primitives that cover
   the splats, `cockpit_camera` and `chase_anchor` (the parser needs them), running lights, and `chunks[]` from
   `core/chunks.py`. **Defensive turrets (Q13, Q14, D61):** `hardpoints.json` gains `turrets[]` (2-4 per hull by size,
@@ -262,17 +265,29 @@ Out (explicitly):
   - `narn_transport` (about 70 m): a crescent bow, a boxy cargo hull and engines on the flanks, in a new `narn` style.
   - `centauri_brezebel` (about 60 m): the Centauri Brezebel transport (`references/Centauri_Brezebel_Transport.stl`, an
     ASCII STL added 2026-11-02): a rounded bow and two long swept arms reaching aft, in a new `centauri` style.
+  - `brakiri_bokmai` (about 80 m, Q17): the Brakiri Bokmai transport (`references/Brakiri_Bokmai_transport_80m.STL`,
+    binary, added 2026-11-02), in a new `brakiri` style, brown and yellow. A first look: three rounded cargo pods in a
+    row amidships, held in an open frame of curved arms under a dorsal spine; at one end a crossbar carries two tall
+    vertical fins or nacelles at its tips. T22 reads which end is the nose. **The pods are removable.** The generator
+    writes the hull without its pods and one pod model (`<id>_pod.*`, LOD0-3 at the hull's spacings so it switches with
+    the hull), and `hardpoints.json` gains `cargo_pods[]` (`{name, position, up}` in the body frame) for the three
+    mounts; the pod's collision primitives and splat counts go in a `pod` entry of the manifest, as the turret's do. In
+    the game (T16) a Bokmai spawns with 0-3 pods from its spawn data (`cargo_pods`, default 3; encounter traffic draws
+    the count from the seed). Each pod is a splat pooled with its ship (D22) and adds its mass and collision shape; a
+    destroyed Bokmai sheds its pods as debris along with its chunks. Letting go of a pod in flight, or towing one, waits
+    for M14's tether (§14.7). Turrets sit on the frame, not on the pods, so an empty Bokmai still defends itself.
 - **The references are never copied.** As with the Starfury (`docs/design-references.md`, 2026-10-30), the agent renders
   orthographic views and cross-sections of the untracked STL files, measures them, writes a description of each ship into
   `docs/design-references.md`, and builds the hull in code from those measurements. No STL geometry, vertex data, image or
   texture goes into the generators or into git. Renders and downloaded images go to `reports/refs/<ship>/` (gitignored).
-- **Colours from online images (Q11).** For each of the eight ships the agent finds images online (screen captures, fan
+- **Colours from online images (Q11).** For each of the nine ships the agent finds images online (screen captures, fan
   wiki pages), reads the colour scheme off them (base plating, panel and trim colours, markings, window and engine glow),
   and writes it into the ship's description as colour values and where they go. The generators paint from that written
-  scheme through the styles `ea_civilian`, `narn` and `centauri`; per-hull trim lives in the variant data. The images
+  scheme through the styles `ea_civilian`, `narn`, `centauri` and `brakiri`; per-hull trim lives in the variant data. The images
   themselves are references only, like the STLs.
 - Splat budgets scale with size and LOD; ships this large are mostly seen at range, so LOD2 and LOD3 carry most of the
-  time on screen. The task sets each budget so that all eight in view stay within `splat_budget` and records VRAM.
+  time on screen. The task sets each budget so that all nine in view (the Bokmai with its three pods) stay within `splat_budget` and
+  records VRAM.
 - Flight: each hull flies through the one `FlightModel` (§15.16), heavy and slow (`ShipSpec` mass, thrust and inertia per
   hull; turning is torque only). Civilians break up into their chunks when destroyed, with the usual explosion.
 
@@ -327,9 +342,9 @@ Out (explicitly):
 | AC8 | `CINEMATIC`: shots from data relative to actors or the origin, unit-tested interpolation; a rebase during a shot moves nothing on screen (test); HUD hidden, letterbox, the player's commands zeroed while the ship keeps its physics; A or Start skips | A | |
 | AC9 | Debrief: result and reason, objectives, time, kills and assists, wing losses, shots and hits; retry restarts the same scenario and seed; menu returns to the front end | A | |
 | AC10 | Buoy defence: starts from the menu with its cinematic intro, runs to success and to failure (buoy destroyed; player destroyed) in headless tests driven by console commands, and ends in the debrief | A | |
-| AC11 | Civilian references: each of the eight ships described (the Saturn 4 tanker from the Saturn parts, Q16) in `docs/design-references.md` with the lengths from Q8, Q11 and Q16, from orthographic views and cross-sections of its STL; every ship's colour scheme written from online images (Q11) with the sources listed; nothing from the STL files or the images is in git | A | |
-| AC12 | Civilian generators: eight hulls from four generators meet the output contract (LOD0-3 PLYs and lighting records, fallback mesh, hardpoints with pods, RCS, collision, cockpit camera, chase anchor, running lights, chunks); Python tests for budgets, frames, symmetry where the design has it, chunk partition, collision coverage and determinism; every PLY imports in Godot with the manifest's count | A | |
-| AC13 | Civilian ships in the game: each flies through `FlightModel` with zero damping (the damping guard covers it), turns by torque only, flees raiders on the `civilian` profile, takes hull damage, breaks into its chunks, shows running lights and switches LOD; raiders attack them through faction data; on the maintainer's GPU all eight in view at once run with `splat_backend = compute`, FPS and VRAM recorded by the agent | A | |
+| AC11 | Civilian references: each of the nine ships described (the Saturn 4 tanker from the Saturn parts, Q16; the Bokmai, Q17) in `docs/design-references.md` with the lengths from Q8, Q11, Q16 and Q17, from orthographic views and cross-sections of its STL; every ship's colour scheme written from online images (Q11) with the sources listed; nothing from the STL files or the images is in git | A | |
+| AC12 | Civilian generators: nine hulls from five generators meet the output contract (LOD0-3 PLYs and lighting records, fallback mesh, hardpoints with pods, RCS, collision, cockpit camera, chase anchor, running lights, chunks; the Bokmai's pod model and `cargo_pods[]`); Python tests for budgets, frames, symmetry where the design has it, chunk partition, collision coverage and determinism; every PLY imports in Godot with the manifest's count | A | |
+| AC13 | Civilian ships in the game: each flies through `FlightModel` with zero damping (the damping guard covers it), turns by torque only, flees raiders on the `civilian` profile, takes hull damage, breaks into its chunks, shows running lights and switches LOD; a Bokmai flies with 0-3 cargo pods and sheds them when destroyed; raiders attack them through faction data; on the maintainer's GPU all nine in view at once run with `splat_backend = compute`, FPS and VRAM recorded by the agent | A | |
 | AC14 | Encounters: `EncounterPlan` is deterministic per seed (test); raids, patrols and traffic spawn 6-12 km out from pools and are released past 30 km; raiders sent at a civilian attack it and allies engage them; `encounter_max_ships` holds; encounters off leaves free flight empty; `encounters` provider and an `encounter <kind>` command to force one | A | |
 | AC15 | Sounds: generator tests pin the new guns' shape (length, flat hold, constant pitch, energy band after the 0.25 register, inharmonic partials), the impact's length and band, and the engine bursts' band (no energy to speak of below 300 Hz); voices sit at the nozzles; the voice cap holds and the per-frame update is linear in voices (work count); the old loops are gone | A | |
 | AC16 | Cost: M5 adds nothing measurable to AC13 of M3 (the paired 13-ship AI budget still passes, `test_ai_think_time`); the mission runner with 20 triggers and the encounter director stay inside their work counts | A | |
@@ -342,7 +357,7 @@ Out (explicitly):
 - **Tracks.** The maintainer allowed parallel agents for M5 (Q10), so four tracks can run at the same time: A (flow and front end), B (missions), C (civilian ships and
   encounters), D (sound). Inside a track the order holds. Track C's reference and generator tasks (T11-T15) are Python and run beside
   anything; the Godot tasks of every track share one machine, so they follow the locks below. If work has to go one task at
-  a time, the order is T01, T02, T05, T06, T08, T09, T07, T10, T03, T04, T11-T17, T18, T19, T20.
+  a time, the order is T01, T02, T05, T06, T08, T09, T07, T10, T03, T04, T11-T15, T22, T21, T16, T17, T18, T19, T20.
 - **One working copy.** All M5 work happens in the `m5` worktree (`.claude/worktrees/m5`) on branch `m5`; no task
   branches, no worktrees per agent (the maintainer's rule from M4). Parallel agents keep to their task's files.
 - **Locks.** Every Godot run in the `m5` worktree goes through `flock /tmp/m5-godot.lock <command>` (one Godot process at a
@@ -383,8 +398,9 @@ whose trigger never arose). Update the column with each task's commit.
 | T13 | C | `skylark_transport` generator | T11 | Opus | Geometry | not started |
 | T14 | C | `narn_transport` generator and the `narn` style | T11 | Opus | Geometry and a new style | not started |
 | T15 | C | `centauri_brezebel` generator and the `centauri` style | T11 | Opus | Geometry and a new style | not started |
-| T21 | C | Defensive turrets (placed here in the order; numbered last because it was added after the others had numbers) | T12, T13, T14, T15, T19 | Opus | A new gunner seam with a balance test | not started |
-| T16 | C | Civilian ships in the game | T12, T13, T14, T15, T21 | Opus | Specs for heavy hulls, factions, pools, AI, GPU check | not started |
+| T22 | C | Brakiri Bokmai: references, generator with removable pods, the `brakiri` style (placed here in the order; numbered last because it was added during the build, Q17) | T11 | Opus | A new reference read end to end, modular cargo, a new style | not started |
+| T21 | C | Defensive turrets (placed here in the order; numbered last because it was added after the others had numbers) | T12, T13, T14, T15, T22, T19 | Opus | A new gunner seam with a balance test | not started |
+| T16 | C | Civilian ships in the game | T12, T13, T14, T15, T22, T21 | Opus | Specs for heavy hulls, factions, pools, AI, GPU check | not started |
 | T17 | C | Free-flight encounters | T16, T02 | Opus | Seeded director under a CPU cap | not started |
 | T18 | D | New guns and impacts | - | Opus | Synthesis to measured shapes | done |
 | T19 | D | Per-thruster engine bursts | T18 | Opus | Voice placement and a voice budget | done |
@@ -568,8 +584,8 @@ whose trigger never arose). Update the column with each task's commit.
 - **Files:** `tools/procgen/assets/saturn_family.py`, shared parts in `tools/procgen/parts/` (command sphere, truss spine,
   engine section, cargo module, tank), `tools/procgen/styles/ea_civilian.py`, `tools/procgen/tests/test_saturn_family.py`.
 - **Turrets (D61):** each variant's `hardpoints.json` carries `turrets[]` (2-4 by size) and the `ea_civilian` style a
-  small turret model (base, dome, twin barrel) written like a chunk (PLY, lighting record, fallback mesh). T13-T15 do the
-  same for their hulls and styles.
+  small turret model (base, dome, twin barrel) written like a chunk (PLY, lighting record, fallback mesh). T13-T15 and T22 do
+  the same for their hulls and styles.
 - **Notes:** one generator, a variant per asset id, so `python3 -m tools.procgen build saturn_4_transport` builds one hull.
   The variant data holds the length (Q8) and the module layout.
 - **Done when:** AC12 for the five variants; `tests/integration/test_splat_import.gd` covers them.
@@ -594,14 +610,37 @@ whose trigger never arose). Update the column with each task's commit.
   `tools/procgen/tests/test_centauri_brezebel.py`.
 - **Done when:** AC12 for the Brezebel.
 
+### M5-T22 Brakiri Bokmai: references, generator and the `brakiri` style
+
+- **Goal:** AC11 and AC12 for the Bokmai (Q17, D59). In the order it comes after T15 and before T21.
+- **Files:** `docs/design-references.md` (a Bokmai section under "Civilian ships (M5)"), `docs/assets-civilian.md` (its
+  parts, budget, hardpoints with `cargo_pods[]`, chunks, turrets and the `brakiri` style, then the as-built numbers),
+  `tools/procgen/assets/brakiri_bokmai.py`, `tools/procgen/styles/brakiri.py`, parts it needs,
+  `tools/procgen/tests/test_brakiri_bokmai.py`, its lines in `tests/integration/test_splat_import.gd`.
+- **Reference:** `references/Brakiri_Bokmai_transport_80m.STL` (binary, 16 998 triangles, about 522 x 1320 x 510
+  units; the 1320-unit y axis is its length, about 0.0606 m per unit at 80 m). Measure it with `tools/refview` as T11
+  measured the others: views, sections, the shells table (the pods should come out as their own shells), z stations and
+  proportions. Read the nose and the engines from the views.
+- **Colours (Q11, Q17):** Brakiri brown and yellow. Find online images of the Bokmai (other Brakiri ships help if the
+  Bokmai has few), save them under `reports/refs/brakiri_bokmai/web/` as T11 did, list the URLs, and write which parts
+  are brown and which yellow, with the panel, window and engine glow colours.
+- **Pods (Q17):** one pod model for the three mounts if the pods match (a variant per mount if they do not). The hull's
+  LOD0 budget counts the hull plus three pods, about 75 000 for an 80 m ship, so all nine hulls at LOD0 with the hero,
+  the sky and five buoys stay under `splat_budget`; write the new total into `docs/assets-civilian.md`. The hull's
+  chunks leave the pods out (each pod is its own debris piece).
+- **Turrets (D61):** 2-3 in `turrets[]`, on the frame, and a `brakiri` turret model.
+- **Done when:** AC11 and AC12 for the Bokmai; Python tests also cover the pod model (budget, determinism), that the
+  hull alone has no splats inside the pod volumes (an empty mount looks empty) and that the pods sit at their
+  `cargo_pods[]` mounts; every PLY, the pod's included, imports in Godot with the manifest's count.
+
 ### M5-T21 Defensive turrets
 
-- **Goal:** AC19 (D61, Q14). In the order it comes after T15 and before T16.
+- **Goal:** AC19 (D61, Q14). In the order it comes after T22 and before T16.
 - **Files:** `src/combat/turret_aim.gd` (pure), `src/combat/threat_memory.gd` (pure), `src/combat/turret_mount.gd` (node),
   `src/game/ship_assembly.gd` (build mounts from `turrets[]`), the `Hardpoints` parser (`turrets[]`, optional),
   `tools/procgen/assets/sfx_combat.py` (`turret_fire`; after T19, which also edits that file), a turret `WeaponSpec`,
   `tests/unit/test_turret_aim.gd`, `test_threat_memory.gd`, `tests/integration/test_turret_defence.gd` (the balance fight).
-- **Notes:** the generators of T12-T15 emit `turrets[]` and the turret model; if one of them landed without them, add
+- **Notes:** the generators of T12-T15 and T22 emit `turrets[]` and the turret model; if one of them landed without them, add
   them here. `HitResolver` is read through its existing results signal; do not change M4's files. Civilians are the only
   ships with turrets in M5.
 - **Done when:** AC19.
@@ -609,13 +648,18 @@ whose trigger never arose). Update the column with each task's commit.
 ### M5-T16 Civilian ships in the game
 
 - **Goal:** AC13 (D58 factions, D59).
-- **Files:** `data/factions.json` (`civilian`, `narn`, `centauri`, the relations), `src/game/ship_catalog.gd` (eight types),
+- **Files:** `data/factions.json` (`civilian`, `narn`, `centauri`, `brakiri`, the relations), `src/game/ship_catalog.gd`
+  (nine types),
   `assets/specs/` or wherever `ShipSpec` resources live (one per hull: mass, thrust, inertia, limits), the pools and
-  `LodSwitcher` entries, running lights, `DestructionDirector` chunk sets, `data/scenarios/civilian_showcase.json` (all eight
-  parked in view, for the GPU check and the maintainer), `tests/integration/test_civilian_ships.gd`.
+  `LodSwitcher` entries, running lights, `DestructionDirector` chunk sets, `data/scenarios/civilian_showcase.json` (all nine
+  parked in view, a Bokmai with three pods and one with none, for the GPU check and the maintainer), `tests/integration/test_civilian_ships.gd`.
 - **Notes:** check that `PilotSteering` and avoidance cope with a 200 m hull that turns slowly (radius from the collision
   shapes); if a fix is needed in the AI, keep it outside M4's files or list it. GPU check per `CLAUDE.md`: windowed run of
   `civilian_showcase`, `state render`, VRAM from `/sys/class/drm/card1/device/mem_info_vram_used`.
+- **Bokmai pods (Q17, D59):** `ShipAssembly` builds a pod at each `cargo_pods[]` mount up to the spawn's `cargo_pods`
+  count (0-3, default 3), pooled with the ship (D22); a pod adds its mass and collision shape and switches LOD with the
+  hull; when the ship breaks up its pods drift off as debris. A test spawns Bokmais with 3 and 0 pods and checks mass,
+  collision and the pods' debris.
 - **Done when:** AC13.
 
 ### M5-T17 Free-flight encounters
