@@ -172,38 +172,57 @@ func contacts_for(own_body_id: int, own_position: Vector3, own_faction: StringNa
 ## The nearest `k` of the contacts `contacts_for` gives (M4-T04), in scan order. When that leaves any out, the nearest
 ## hostile ship joins them (so a crowd of friends never hides the fight), and so does every contact `keeper` names: it is
 ## called only then and returns `[PackedInt64Array ids, PackedStringArray names]` (names case-insensitive). With `k` or
-## fewer in range it is `contacts_for`'s list. Equal ranges go to the earlier body in the scan.
+## fewer in range it is `contacts_for`'s list, at about `contacts_for`'s cost. Equal ranges go to the earlier body in the scan.
 func nearest_for(own_body_id: int, own_position: Vector3, own_faction: StringName, k: int, keeper: Callable = Callable(),
 		range_m: float = SENSOR_RANGE_M) -> Array[Contact]:
 	var stamped: Array[Contact] = _stamped_for(own_faction)
+	if _body_ids.size() <= k:
+		return contacts_for(own_body_id, own_position, own_faction, range_m)  # never more than k to cut
 	var hostile: PackedByteArray = _hostile_ships[own_faction]
 	var range_sq: float = range_m * range_m
-	# The nearest so far, sorted by range: a partial selection, no sort of the whole list.
+	# Gather like `contacts_for` until more than k are in range; only then select, keeping the nearest k sorted by range.
+	var gathered := PackedInt32Array()
 	var best_sq := PackedFloat64Array()
 	var best := PackedInt32Array()
+	var selecting: bool = false
 	var limit: float = range_sq
-	var dropped: bool = false
 	var hostile_at: int = -1
 	var hostile_sq: float = INF
 	for i: int in _body_ids.size():
 		var d_sq: float = _positions[i].distance_squared_to(own_position)
 		if d_sq > range_sq or _body_ids[i] == own_body_id:
 			continue
+		if not selecting:
+			gathered.append(i)
+			if gathered.size() <= k:
+				continue
+			selecting = true
+			for j: int in gathered:
+				var g_sq: float = _positions[j].distance_squared_to(own_position)
+				if hostile[j] == 1 and g_sq < hostile_sq:
+					hostile_sq = g_sq
+					hostile_at = j
+				var g_at: int = best_sq.bsearch(g_sq, false)
+				best_sq.insert(g_at, g_sq)
+				best.insert(g_at, j)
+			best_sq.resize(k)
+			best.resize(k)
+			limit = best_sq[k - 1]
+			continue
 		if hostile[i] == 1 and d_sq < hostile_sq:
 			hostile_sq = d_sq
 			hostile_at = i
 		if d_sq > limit:
-			dropped = true
 			continue
 		var at: int = best_sq.bsearch(d_sq, false)
 		best_sq.insert(at, d_sq)
 		best.insert(at, i)
-		if best.size() >= k:
-			dropped = dropped or best.size() > k
-			best_sq.resize(k)
-			best.resize(k)
-			limit = best_sq[k - 1]
-	if dropped:
+		best_sq.resize(k)
+		best.resize(k)
+		limit = best_sq[k - 1]
+	if not selecting:
+		best = gathered  # k or fewer in range: all of them, already in scan order
+	else:
 		_keep(hostile_at, best, own_body_id, own_position, range_sq)
 		if keeper.is_valid():
 			var kept: Array = keeper.call()
@@ -214,7 +233,7 @@ func nearest_for(own_body_id: int, own_position: Vector3, own_faction: StringNam
 				for i: int in _names.size():
 					if _names[i].length() == wanted.length() and _names[i].nocasecmp_to(wanted) == 0:
 						_keep(i, best, own_body_id, own_position, range_sq)
-	best.sort()
+		best.sort()
 	var out: Array[Contact] = []
 	for i: int in best:
 		out.append(stamped[i])

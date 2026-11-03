@@ -45,7 +45,7 @@ static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D,
 	targeting.system.own_faction = combatant.faction
 	targeting.keeps_candidates = combatant.is_player  # only the player's list is read every frame (M4-T02)
 	if combatant.is_player:
-		AiPilotDriver.player = combatant  # AI ships near it think every tick (M4-T04)
+		AiPilotDriver.register_player(combatant)  # AI ships near it think every tick (M4-T04)
 
 	var thrusters := ThrusterVisuals.new()
 	thrusters.name = "ThrusterVisuals"

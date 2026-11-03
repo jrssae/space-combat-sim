@@ -150,7 +150,7 @@ func test_contacts_scored_and_avoided_per_ship_stay_within_k() -> void:
 	for n: int in sampler.contacts:
 		worst = maxi(worst, n)
 	gut.p("contacts per ship: worst %d with k = %d (25 ships and the player in sight)" % [worst, k])
-	assert_lte(worst, k + 2, "the nearest k, plus the selected target and the latest attacker")
+	assert_lte(worst, k + 2, "the nearest k, plus what it keeps when it cuts (here the nearest hostile ship and its selection)")
 
 
 func test_a_near_ship_thinks_every_tick() -> void:
@@ -232,7 +232,7 @@ func test_a_hit_wakes_a_far_ship_within_one_period() -> void:
 	assert_eq(brain.thinks, at_hit + 1, "the next tick thinks, not two ticks later")
 
 
-func test_the_selected_target_and_the_attacker_stay_in_the_nearest_k_set() -> void:
+func test_the_brains_target_and_the_attacker_stay_in_the_nearest_k_set() -> void:
 	Settings.set_value(&"ai_nearest_k", 8)
 	var brain := CountingBrain.new()
 	var own: Combatant = _raider("OWN", Vector3(0.0, 0.0, -500.0), brain)
@@ -276,3 +276,66 @@ func test_with_no_player_alive_every_ship_thinks_at_the_far_rate() -> void:
 	await _ticks(12)
 	assert_false(raider.driver.near_player)
 	assert_eq(brain.thinks - before, 4, "no player: the far rate")
+
+
+func test_the_targeting_selection_stays_in_the_nearest_k_set() -> void:
+	Settings.set_value(&"ai_nearest_k", 8)
+	var brain := CountingBrain.new()
+	brain.wanted_target_id = PilotBrain.TARGET_NONE  # keeps nothing of its own; the selection is set by hand below
+	var own: Combatant = _raider("OWN", Vector3(0.0, 0.0, -500.0), brain)
+	for i: int in 16:
+		_raider("CROWD %d" % i, Vector3(float(i % 4) * 60.0 - 90.0, float(i / 4) * 60.0 - 90.0, -700.0), IdleBrain.new(),
+				Factions.EARTH_ALLIANCE)
+	var target: Combatant = _raider("FAR TARGET", Vector3(0.0, 0.0, -4400.0), IdleBrain.new(), Factions.EARTH_ALLIANCE)
+	ContactScan.invalidate()
+	assert_true(own.ship.targeting.select_id(target.targetable.get_instance_id()), "selected by hand")
+	var p: Perception = own.driver.perceive()
+	var ids: Array[int] = []
+	for c: Contact in p.contacts:
+		ids.append(c.id)
+	assert_eq(p.contacts.size(), 8 + 1, "the nearest 8 (the nearest hostile among them) and the selection")
+	assert_has(ids, target.targetable.get_instance_id(), "the selection is kept though 3.9 km out")
+
+
+func test_turning_the_think_rate_off_and_on_applies_to_live_ships_at_once() -> void:
+	var brain := CountingBrain.new()
+	_raider("FAR", Vector3(0.0, 0.0, -3000.0), brain)
+	await _ticks(3)
+	var before: int = brain.thinks
+	await _ticks(12)
+	assert_eq(brain.thinks - before, 4, "far: every third tick")
+	Settings.set_value(&"ai_think_rate", false)
+	before = brain.thinks
+	await _ticks(12)
+	assert_eq(brain.thinks - before, 12, "rule off: every tick, from the next tick")
+	Settings.set_value(&"ai_think_far_hz", 30.0)
+	Settings.set_value(&"ai_think_rate", true)
+	before = brain.thinks
+	await _ticks(12)
+	assert_eq(brain.thinks - before, 6, "on again at 30 Hz: every second tick")
+
+
+func test_the_player_stops_counting_once_its_ship_leaves_the_tree() -> void:
+	assert_same(AiPilotDriver.player, player, "the player built here is registered")
+	var brain := CountingBrain.new()
+	var raider: Combatant = _raider("NEAR", Vector3(0.0, 0.0, -500.0), brain)
+	await _ticks(2)
+	assert_true(raider.driver.near_player)
+	player.ship.get_parent().remove_child(player.ship)
+	assert_null(AiPilotDriver.player, "cleared when its ship leaves the tree")
+	await _ticks(2)
+	assert_false(raider.driver.near_player, "no player: far")
+	player.ship.free()
+
+
+func test_a_newer_player_is_not_cleared_by_an_older_one_leaving() -> void:
+	var second: Combatant = ShipAssembly.build(load(STARFURY_SPEC) as ShipSpec, world, projectiles, {
+		ShipAssembly.OPT_FACTION: Factions.EARTH_ALLIANCE,
+		ShipAssembly.OPT_DISPLAY_NAME: "PLAYER 2",
+		ShipAssembly.OPT_IS_PLAYER: true,
+	})
+	world.spawn(second.ship, world.to_universe(Vector3(0.0, 0.0, 9000.0)))
+	assert_same(AiPilotDriver.player, second, "the newest is the player")
+	player.ship.get_parent().remove_child(player.ship)
+	assert_same(AiPilotDriver.player, second, "the old one leaving changes nothing")
+	player.ship.free()

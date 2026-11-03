@@ -43,7 +43,8 @@ static var _live: Array[AiPilotDriver] = []
 static var _think_frame: int = -1
 static var _think_sum_us: int = 0
 static var _think_last_us: int = 0
-## The player's ship (`ShipAssembly` registers it), for the think rate's distance rule (M4-T04). Null: no player.
+## The player's ship (`ShipAssembly` registers it through `register_player`), for the think rate's distance rule (M4-T04).
+## Null: no player. Cleared when that ship leaves the tree, so a finished scene's player never counts.
 static var player: Combatant = null
 # Work counts of the latest tick the drivers ran (M4-T04): thinks near and far, held ticks, contacts handed to a brain.
 static var _count_frame: int = -1
@@ -185,6 +186,14 @@ static func think_us() -> int:
 ## Wall-clock microseconds every driver's `step` has taken so far in the current physics tick (`PerfProbe`, M4-T01).
 static func think_us_this_tick() -> int:
 	return _think_sum_us if _think_frame == Engine.get_physics_frames() else 0
+
+
+## Makes `c` the player AI ships measure their think rate from, until its ship leaves the tree.
+static func register_player(c: Combatant) -> void:
+	player = c
+	c.ship.tree_exited.connect(func() -> void:
+		if player == c:
+			player = null)
 
 
 ## How many AI ships near the player thought in the latest tick the drivers ran (M4-T04).

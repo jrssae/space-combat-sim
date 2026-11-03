@@ -744,6 +744,24 @@ touch; the nearest-k-only runs, `m4_c3_v2_k_only`, have `ai_think_rate` off, on 
 | spread | 100 | 11.55 | 5.88 (-5.67) | 12.07 (+0.52) | 6.06 (-5.49) | about 4.8 |
 | transit | 50 | 3.72 | 1.99 (-1.73) | 3.93 (+0.21) | 2.01 (-1.71) | |
 
+**Fix round 1, nearest-k where it cuts nothing** (`m4_c3_f1_k_only` against `m4_c3_v2_k_only`, nearest-k on and the think rate
+off, seed 1, 10 s). `nearest_for` now gathers like `contacts_for` until more than k contacts are in range and only then selects; its
+output is unchanged (every `state ai`, hit, ram and mean in `m4_c3_f1_k_only` and `m4_c3_f1_after` matches the v2 runs line for
+line, and both settings off still match the base). The scan stage, where `nearest_for` is timed:
+
+| layout | N | base (`contacts_for`) | nearest-k only, v2 | nearest-k only, fix round 1 |
+|---|---|---|---|---|
+| transit | 50 | 1.50 | 1.57 | 1.54 |
+| transit | 100 | 3.71 | 3.81 | 3.79 |
+| spread | 50 | 2.06 | 2.33 | 2.29 |
+| spread | 100 | 5.42 | 5.80 | 5.70 |
+
+Where nothing is cut (transit, at most 8 in range) nearest-k now costs what `contacts_for` did, within a run's noise. Spread still
+pays about 0.2 to 0.3 ms: its ships see 13 to 17 contacts at times (`contacts_max` 13), so the cut, the nearest hostile and the keeps
+do run there, for little gain. The rest of the AI stage's difference with the think rate off (0.1 to 0.2 ms at 50 ships) is the
+driver's own bookkeeping (the player distance and the counts), which the both-settings-off runs show too (spread 50: 5.18 to 5.26
+against the base's 5.08 ms). With the think rate on, nearest-k costs spread about 0.1 ms.
+
 **Gain against the prediction:** the furball is where predicted (AI 3.16 against about 3.3 ms at 50, 7.00 against about 7 at 100;
 tick medians 8.42 against about 9 and 17.55 against about 17), and each half at furball 100 too (think rate -7.6 against -6, nearest-k
 -5.7 against -6). Spread gained less than predicted (AI 2.92 against 2.5 at 50, 6.06 against 4.8 at 100): the per-tick scan
@@ -760,10 +778,16 @@ with the think rate on that cost falls to 0.1 ms (2.92 against 2.83). The quick 
 - Avoidance for far ships runs at 20 Hz.
 - Ships that see more than 12 contacts choose, avoid and check fire lanes against the nearest 12, the nearest hostile ship, their
   own target, wingmates, leader, objective, guarded ship and latest attacker; farther ones within 5 km are ignored when choosing.
-- In the dogfight scenario's seed, `test_ai_ram`'s fight went differently: the only reckless raider (RAIDER 6) was shot to 17 %
-  hull by 148 s on the base and then rammed; with the think rate it was never hit in 360 s, so nobody rammed and the test asserted
-  nothing (risky). The ram itself is unchanged: the committed-rammer test, its rammers 3 km and more from the player (so at the far
-  rate), hits 10 of 10. The dogfight test now asserts over every pilot it saw, rammer or not.
+- In the dogfight scenario's seed, `test_ai_ram`'s fight went differently: of its three reckless raiders (RAIDER 4, 5 and 6, BLUE
+  wing), RAIDER 6 was shot to 17 % hull by 148 s on the base and then rammed; with the think rate none of the three rammed in
+  360 s (RAIDER 6, traced, was never hit), so the test asserted nothing (risky). The ram itself is unchanged: the committed-rammer
+  test, its rammers 3 km and more from the player (so at the far rate), hits 10 of 10. Fix round 1 split the dogfight test in two:
+  the full dogfight asserts that no pilot below reckless rams, and a second run of the scenario leaves RAIDER 4 alone at 20 % hull
+  against ALPHA with the player 30 km off, where it chooses the ram from the fight at the far rate (at 20.3 s).
+- The far rate is counted in physics ticks, so `Engine.time_scale` stretches it in sim time: at the integration tests' 4 to 6
+  times speed-up (and the console's time scale) a far ship decides every 0.2 to 0.3 s of sim time, not every 50 ms, and near
+  ships every 0.07 to 0.1 s. Results from sped-up runs show more of the far rate's cost than real time does (the lost dogfight ram
+  above is partly this).
 
 **Outcome comparison**, seeded runs (seed 1, 10 s measured after 5 s of warm-up and 30 s of scenario; hits and rams are session
 totals at the end, behaviours and mean AI speed at the end; bench ships are invulnerable, so no kills):

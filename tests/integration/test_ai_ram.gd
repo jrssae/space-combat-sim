@@ -1,7 +1,8 @@
 extends GutTest
 ## AC20, the last-ditch ram in Jolt (M3-T13, Q12): a committed rammer (a reckless raider at 20 % hull) flies into a Starfury
 ## drone (no brain, so no avoidance of its own) crossing ahead of it and hits it (`RamResolver` reports the ram) in at least 8
-## of 10 seeded runs, its own avoidance leaving that one target out; and in the dogfight no ship below reckless ever rams. The
+## of 10 seeded runs, its own avoidance leaving that one target out; and in the dogfight no ship below reckless ever rams, while a
+## hurt reckless raider left alone there chooses the ram from the fight at the AI's far think rate (M4-T04). The
 ## real main scene, Jolt, the real drivers and resolvers; sim time sped up.
 
 const SPEED_UP: float = 4.0
@@ -94,31 +95,65 @@ func test_a_committed_rammer_hits_its_target_in_at_least_8_of_10_runs() -> void:
 
 
 func test_in_the_dogfight_no_ship_below_reckless_ever_rams() -> void:
+	var run: Dictionary = await _dogfight(Callable())
+	var rammers: Dictionary = run["rammers"]
+	var seen: Dictionary = run["seen"]
+	gut.p("dogfight rammers: %s of %d pilots" % [str(rammers), seen.size()])
+	assert_gt(seen.size(), 0, "the dogfight flew AI pilots")
+	for ship_name: Variant in seen:
+		if float(seen[ship_name]) < 1.0:
+			assert_false(rammers.has(ship_name), "%s rammed below reckless" % ship_name)
+
+
+func test_in_the_dogfight_a_hurt_reckless_raider_left_alone_rams_at_the_far_rate() -> void:
+	# Whether the full dogfight gets a reckless raider low enough to ram depends on how it goes, so this pins the case: RAIDER 4
+	# (reckless) at 20 % hull, kept there, with the rest of the raiders gone and the player 30 km off, so it decides at the far
+	# rate (M4-T04). It must choose the ram itself, from the fight, and no ally below reckless may.
+	var setup := func(main: Main) -> void:
+		main.ship.global_position += Vector3(30000.0, 0.0, 0.0)
+		for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
+			if c.display_name == "RAIDER 4":
+				c.damageable.hull.apply(c.damageable.hull.max_hp * 0.8)
+				c.damageable.invulnerable = true
+			else:
+				main.ships.release(c)
+	var run: Dictionary = await _dogfight(setup, &"RAIDER 4")
+	var rammers: Dictionary = run["rammers"]
+	gut.p("hurt reckless raider alone: rammers %s, first ram at %.1f s, near the player then: %s" % [str(rammers),
+			float(run["ram_at_s"]), str(run["ram_near"])])
+	assert_true(rammers.has("RAIDER 4"), "the hurt reckless raider chose the ram")
+	assert_false(bool(run["ram_near"]), "at the far rate (the player 30 km off)")
+	for ship_name: Variant in run["seen"] as Dictionary:
+		if float((run["seen"] as Dictionary)[ship_name]) < 1.0:
+			assert_false(rammers.has(ship_name), "%s rammed below reckless" % ship_name)
+
+
+# Flies the dogfight scenario at 6x for up to 360 s of sim time, or until one side is gone, or (with `until_ram`) until that
+# ship rams. `setup` changes the scene after launch. Returns the pilots seen and their aggression, who flew a ram, and when and
+# whether near the player `until_ram` first did.
+func _dogfight(setup: Callable, until_ram: String = "") -> Dictionary:
 	Engine.time_scale = 6.0
 	await get_tree().process_frame  # the scale counts from the next main-loop iteration
 	await get_tree().physics_frame
 	SimClock.reset()
 	var main: Main = await _launch("res://data/scenarios/dogfight.json")
-	var rammers: Dictionary = {}
-	var seen: Dictionary = {}  # every AI pilot that flew, by name: its aggression
+	if setup.is_valid():
+		setup.call(main)
+	var out: Dictionary = {"rammers": {}, "seen": {}, "ram_at_s": -1.0, "ram_near": false}
 	var t0: float = SimClock.now()
 	while SimClock.now() - t0 < 360.0 and main.ships.alive(ShipPool.ALLY_TYPE).size() > 0 \
-			and main.ships.alive(ShipPool.DEFAULT_TYPE).size() > 0:
+			and main.ships.alive(ShipPool.DEFAULT_TYPE).size() > 0 and not (out["rammers"] as Dictionary).has(until_ram):
 		await get_tree().physics_frame
 		for c: Combatant in main.ships.alive():
 			var pilot := c.driver.brain as AiPilot
-			if pilot != null:
-				seen[c.display_name] = pilot.temperament.aggression
-			if pilot != null and pilot.current != null and pilot.current.id == &"ram":
-				rammers[c.display_name] = pilot.temperament.aggression
+			if pilot == null:
+				continue
+			out["seen"][c.display_name] = pilot.temperament.aggression
+			if pilot.current != null and pilot.current.id == &"ram" and not (out["rammers"] as Dictionary).has(c.display_name):
+				out["rammers"][c.display_name] = pilot.temperament.aggression
+				if c.display_name == until_ram:
+					out["ram_at_s"] = SimClock.now() - t0
+					out["ram_near"] = c.driver.near_player
 	Engine.time_scale = 1.0
-	gut.p("dogfight rammers: %s of %d pilots" % [str(rammers), seen.size()])
-	# Whether a reckless ship gets low enough to ram depends on how the fight goes (M4-T04's think rate changed this seed's):
-	# every pilot below reckless is checked, so the test asserts whoever rams.
-	assert_gt(seen.size(), 0, "the dogfight flew AI pilots")
-	for ship_name: Variant in seen:
-		if float(seen[ship_name]) < 1.0:
-			assert_false(rammers.has(ship_name), "%s rammed below reckless" % ship_name)
-	for ship_name: Variant in rammers:
-		assert_eq(float(rammers[ship_name]), 1.0, "%s rammed below reckless" % ship_name)
 	await _close(main)
+	return out

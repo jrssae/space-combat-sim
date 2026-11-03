@@ -104,7 +104,7 @@ const ENTRIES: Dictionary = {
 	&"ai_think_far_hz": {"type": TYPE_FLOAT, "default": 20.0, "min": 1.0, "max": 60.0,
 		"doc": "How often a far AI ship thinks, Hz, on staggered physics ticks (20 = every third tick at 60 Hz)"},
 	&"ai_nearest_k": {"type": TYPE_INT, "default": 12, "min": 0, "max": 64,
-		"doc": "An AI ship scores, avoids and checks its fire lane against its nearest this many contacts, plus its target and its latest attacker (M4-T04); 0 = every contact"},
+		"doc": "An AI ship scores, avoids and checks its fire lane against its nearest this many contacts (M4-T04); when that cuts any, the nearest hostile ship, its target, wing, objective and latest attacker are kept too; 0 = every contact"},
 }
 
 ## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current

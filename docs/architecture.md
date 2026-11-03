@@ -2012,7 +2012,9 @@ scripts/bench_quick.sh      the quick check: ramps furball and spread until 30 F
   every tick. Each think is given the time since the last one, so the brain's timers keep sim time. A new pilot or a hit
   (`Damageable.hit_taken`) wakes the ship for the next tick; anything else waits at most one far period (50 ms). Avoidance
   (D33) runs with the think, against the contacts of that think. **With no player in play, or the player dead, every AI ship
-  thinks at the far rate.** The player is the `Combatant` `ShipAssembly` built with `is_player` (`AiPilotDriver.player`).
+  thinks at the far rate.** The player is the `Combatant` `ShipAssembly` built with `is_player` (`AiPilotDriver.player`,
+  cleared when that ship leaves the tree). The rate is counted in physics ticks, so `Engine.time_scale` stretches it in sim time:
+  at 4 to 6 times speed-up (the integration tests, the console's time scale) a far ship decides every 0.2 to 0.3 s of sim time.
 - **Nearest-k** (option 4, setting `ai_nearest_k`, 12; 0 = every contact). The perception's `contacts` are the nearest k of
   the contacts within 5 km (`ContactScan.nearest_for`, a partial selection over the scan's packed positions, back in scan
   order, so with k or fewer in range it is `contacts_for`'s list). When the cut leaves anything out, the nearest hostile
@@ -2020,7 +2022,8 @@ scripts/bench_quick.sh      the quick check: ramps furball and spread until 30 F
   the brain keeps: its wanted target (`PilotBrain.keep_ids`; an `AiPilot` adds its wingmates, leader, the leader's target, its
   attack target and the route's pace ship, and keeps its objective and guarded ship by name), the ship's selection and whoever
   hit it in the last `KEEP_ATTACKER_S` (10 s). The kept lists are built only then (`AiPilotDriver._keep_lists`, called by the
-  scan), so a ship that sees k or fewer pays nothing for them. Behaviours, the avoidance filter and the fire lane all read
+  scan), so a ship that sees k or fewer pays nothing for them, and until more than k are in range the scan only gathers, like
+  `contacts_for`, so where nothing is cut nearest-k costs what the full list did. Behaviours, the avoidance filter and the fire lane all read
   that one list. Broadcasts are not cut.
 - **Holding the command, not the decision.** Re-running the steering between thinks was allowed if held commands misbehaved.
   They did not: a veteran against a straight-flying drone for 60 s keeps it in its fire gate within 1 % as long at 20 Hz as at
