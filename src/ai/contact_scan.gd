@@ -29,6 +29,11 @@ const INCOMING_MISS_M: float = 15.0
 const INCOMING_HORIZON_S: float = 2.0
 ## The native class that answers the queries when the library is loaded and `perf_native` is on (M4-T05b).
 const NATIVE_CLASS: StringName = &"ScsContactField"
+## The native body registry the shared scan is built from (M4-T09).
+const REGISTRY_CLASS: StringName = &"ScsBodyRegistry"
+
+## How many scans were gathered from the tree in GDScript (`from_tree`): a work count, 0 a tick on the native path.
+static var gathers: int = 0
 
 ## Profiling (M4-T01): while `PerfProbe` is on, `AiPilotDriver` times its calls into the scans and adds them here. Wall
 ## clock, never gameplay time.
@@ -71,6 +76,7 @@ var _bolt_factions: Array[StringName] = []
 var _bolt_shooters: PackedInt64Array = PackedInt64Array()
 var _hostile_bolts: Dictionary = {}  # faction -> indices of the bolts hostile to it
 var _reach: PackedFloat64Array = PackedFloat64Array()  # per body broadcast range (broadcast scan only)
+var _kinds: PackedByteArray = PackedByteArray()  # per body `BodyKind`; empty when every row is a ship
 var _field: Object = null  # the native field over this scan's arrays, made on the first native query
 var _field_rejected: bool = false  # the field refused this scan's arrays (they differ in length): GDScript answers it
 var _field_rows: Dictionary = {}  # faction -> true once the field has its hostility row
@@ -165,6 +171,43 @@ static func from_tree(tree: SceneTree) -> ContactScan:
 		scan._bolt_factions.append(bolt.faction)
 		scan._bolt_shooters.append(bolt.shooter_id)
 	return scan
+
+
+## The scan of the tree as the native registry sees it now (no cache), or null without the library (stub).
+static func from_registry(_tree: SceneTree) -> ContactScan:
+	return null
+
+
+## The native registry, or null (stub).
+static func registry() -> Object:
+	return null
+
+
+## Adds a static row with no node (stub).
+static func register_static(_id: int, _position: Vector3, _radius: float, _kind: int = BodyKind.STATIC,
+		_faction: StringName = Factions.NEUTRAL) -> void:
+	pass
+
+
+## Removes a static row (stub).
+static func unregister_static(_id: int) -> void:
+	pass
+
+
+## Moves every static row (stub).
+static func shift_statics(_offset: Vector3) -> void:
+	pass
+
+
+## Removes every static row (stub).
+static func clear_statics() -> void:
+	pass
+
+
+## The nearest statics (stub).
+func statics_for(_own_body_id: int, _own_position: Vector3, _own_faction: StringName, _k: int,
+		_range_m: float = SENSOR_RANGE_M) -> Array[Contact]:
+	return []
 
 
 ## Which code answers this scan's queries now: &"native" or &"gdscript".

@@ -46,6 +46,9 @@ var contacts: Array[Contact] = []
 ## range (buoys 1 000 km, allies 100 km). Avoidance and the fire lane never read it, and behaviours chase it only for a pilot
 ## objective (`AiContext.objective_name`). Shared: read, never write.
 var broadcasts: Array[Contact] = _no_broadcasts
+## The nearest rocks and mines within the sensor range (`ai_nearest_static_k`, M4-T09): obstacles avoidance steers round,
+## never contacts. Shared: read, never write.
+var statics: Array[Contact] = []
 ## Hostile bolts that will pass within `ContactScan.INCOMING_MISS_M` (15 m) in the next `ContactScan.INCOMING_HORIZON_S` (2 s).
 var incoming_fire: int = 0
 ## Sim time of the latest hit this hull took (a bolt or anything else `Damageable.hit_taken` reports), -INF when none yet.

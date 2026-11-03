@@ -520,3 +520,175 @@ func test_a_hostility_row_too_short_for_a_faction_counts_it_as_not_hostile() -> 
 	field.set_hostile_row(&"a", PackedByteArray([0, 0, 1]))
 	assert_eq(field.incoming(1000, Vector3.ZERO, Vector3.ZERO, &"a"), 1, "with c in the row the bolt counts")
 	assert_eq(field.nearest(1000, Vector3.ZERO, &"a", 1, 5000.0), PackedInt32Array([1, 2, -1]), "and c's ship joins the cut")
+
+
+# Adds `count` static rows (rocks, every fourth a mine) to a hand-built scan, scattered over the bodies' space, with radii of
+# 20 to 200 m, and gives every row its kind (a few bodies are props). Body ids 100000 + i, contact ids 200000 + i.
+static func _add_statics(rng: RandomNumberGenerator, scan: ContactScan, count: int) -> void:
+	var n: int = scan._body_ids.size()
+	scan._kinds = PackedByteArray()
+	for i: int in n:
+		scan._kinds.append(BodyKind.PROP if scan._is_ship[i] == 0 and rng.randf() < 0.5 else BodyKind.SHIP)
+	for s: int in count:
+		var near: Vector3 = scan._positions[rng.randi_range(0, n - 1)] if n > 0 else Vector3.ZERO
+		scan._body_ids.append(100000 + s)
+		scan._ids.append(200000 + s)
+		scan._names.append("")
+		scan._factions.append(Factions.NEUTRAL)
+		scan._positions.append(near + Vector3(rng.randf_range(-4000.0, 4000.0), rng.randf_range(-4000.0, 4000.0),
+				rng.randf_range(-1500.0, 1500.0)))
+		scan._velocities.append(Vector3.ZERO)
+		scan._forwards.append(Vector3.FORWARD)
+		scan._ups.append(Vector3.UP)
+		scan._radii.append(rng.randf_range(20.0, 200.0))
+		scan._is_ship.append(0)
+		scan._hulls.append(-1.0)
+		scan._target_ids.append(-1)
+		scan._kinds.append(BodyKind.MINE if s % 4 == 3 else BodyKind.STATIC)
+
+
+# The nearest `k` statics by surface distance (ties to the earlier row), in scan order: the reference `statics_for` meets.
+static func _expected_statics(scan: ContactScan, own_id: int, at: Vector3, k: int, range_m: float) -> Array[int]:
+	var found: Array = []
+	for i: int in scan._body_ids.size():
+		if not BodyKind.is_static(scan._kinds[i]) or scan._body_ids[i] == own_id:
+			continue
+		var surface: float = scan._positions[i].distance_to(at) - scan._radii[i]
+		if surface <= absf(range_m):
+			found.append([surface, i])
+	if found.size() > k:
+		found.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0] or (a[0] == b[0] and a[1] < b[1]))
+		found.resize(k)
+	var out: Array[int] = []
+	for entry: Array in found:
+		out.append(scan._ids[entry[1]])
+	out.sort_custom(func(a: int, b: int) -> bool: return scan._ids.find(a) < scan._ids.find(b))
+	return out
+
+
+func test_statics_stay_out_of_the_contacts_and_the_nearest_k_static_come_beside_them() -> void:
+	if _skipped():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2026_11_09
+	var compared: int = 0
+	var with_statics: int = 0
+	for world: int in 12:
+		var n: int = [1, 300, 40, 120][world % 4] if world < 4 else rng.randi_range(1, MAX_BODIES)
+		var scan := _world(rng, n, world % 4)
+		_add_statics(rng, scan, 1000)
+		for q: int in 30:
+			var at_index: int = rng.randi_range(0, n - 1)
+			var own_id: int = 1000 + at_index
+			var own_at: Vector3 = scan._positions[at_index]
+			var faction: StringName = scan._factions[at_index]
+			var k: int = rng.randi_range(1, 20)
+			var k_static: int = [0, 1, 4, 4, 8][rng.randi_range(0, 4)]
+			var range_m: float = ContactScan.SENSOR_RANGE_M if rng.randf() < 0.8 else rng.randf_range(300.0, 9000.0)
+			var label: String = "world %d (%d bodies), query %d, k %d, k_static %d" % [world, n, q, k, k_static]
+			var answers: Array = []
+			for native: bool in [true, false]:
+				scan.use_native = native
+				answers.append([
+					scan.contacts_for(own_id, own_at, faction, range_m),
+					scan.nearest_for(own_id, own_at, faction, k, Callable(), range_m),
+					scan.statics_for(own_id, own_at, faction, k_static, range_m),
+				])
+			var statics_as_contacts: int = 0
+			for side: int in 2:
+				for list: int in 2:
+					for c: Contact in answers[side][list] as Array[Contact]:
+						if c.id >= 200000:
+							statics_as_contacts += 1
+			assert_eq(statics_as_contacts, 0, "%s: no static is ever a contact" % label)
+			assert_true(_same(answers[0][0], answers[1][0]), "%s: contacts_for" % label)
+			assert_true(_same(answers[0][1], answers[1][1]), "%s: nearest_for" % label)
+			assert_true(_same(answers[0][2], answers[1][2]), "%s: statics_for %s against %s" % [label, _ids(answers[0][2]),
+					_ids(answers[1][2])])
+			assert_eq(_ids(answers[1][2]), _expected_statics(scan, own_id, own_at, k_static, range_m),
+					"%s: the nearest k_static by surface distance, in scan order" % label)
+			compared += 1
+			if not (answers[1][2] as Array).is_empty():
+				with_statics += 1
+	gut.p("%d queries compared with 1 000 statics a world, %d of them near statics" % [compared, with_statics])
+	assert_gt(with_statics, 100, "statics were found")
+
+
+func test_a_query_for_statics_visits_only_the_cells_its_range_reaches() -> void:
+	if _skipped():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 17
+	# Spread's shape with a field of 1 000 rocks around every group: a query tests its own neighbourhood, not 1 120 rows.
+	var n: int = SPREAD_GROUPS * GROUP_SIZE
+	var positions := PackedVector3Array()
+	var factions: Array[StringName] = []
+	var ships := PackedByteArray()
+	for i: int in n:
+		positions.append(Vector3(float(i / GROUP_SIZE) * GROUP_SPACING_M, 0.0, 0.0)
+				+ Vector3(rng.randf_range(-1000.0, 1000.0), rng.randf_range(-1000.0, 1000.0), rng.randf_range(-1000.0, 1000.0)))
+		factions.append(Factions.RAIDERS if i % 2 == 0 else Factions.EARTH_ALLIANCE)
+		ships.append(1)
+	var scan := _scan(positions, factions, ships)
+	_add_statics(rng, scan, 1000)
+	var worst: int = 0
+	for i: int in n:
+		scan.use_native = true
+		var near: Array[Contact] = scan.statics_for(1000 + i, positions[i], factions[i], 4)
+		worst = maxi(worst, scan.native_visits())
+		scan.use_native = false
+		assert_true(_same(near, scan.statics_for(1000 + i, positions[i], factions[i], 4)), "body %d: statics" % i)
+	gut.p("worst rows visited by one statics query: %d of %d" % [worst, n + 1000])
+	assert_between(worst, 1, 400, "a query tests the rows near it, not the whole world")
+
+
+func test_four_factions_every_pair_hostile_give_the_same_hostile_lists_on_both_paths() -> void:
+	if _skipped():
+		return
+	var sides: Array[StringName] = [Factions.EARTH_ALLIANCE, Factions.RAIDERS, &"bench_a", &"bench_b"]
+	var table_ids: Array = []
+	for side: StringName in sides:
+		table_ids.append({"id": String(side), "name": String(side).capitalize()})
+	var parsed: Dictionary = FactionTable.from_dict({"factions": table_ids, "relations": [], "default": "hostile"})
+	assert_true(parsed["ok"], "the four-side table is valid: %s" % parsed["error"])
+	Factions.use_table(parsed["table"])
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4
+	var hostile_seen: int = 0
+	for world: int in 8:
+		var n: int = rng.randi_range(30, 300)
+		var scan := _world(rng, n, world % 4)
+		for i: int in n:
+			scan._factions[i] = sides[rng.randi_range(0, 3)]
+		for b: int in scan._bolt_factions.size():
+			scan._bolt_factions[b] = sides[rng.randi_range(0, 3)]
+		for q: int in 30:
+			var at_index: int = rng.randi_range(0, n - 1)
+			var faction: StringName = scan._factions[at_index]
+			var answers: Array = []
+			for native: bool in [true, false]:
+				scan.use_native = native
+				answers.append([scan.nearest_for(1000 + at_index, scan._positions[at_index], faction, 6),
+						scan.incoming_fire(1000 + at_index, scan._positions[at_index], Vector3.ZERO, faction)])
+			assert_true(_same(answers[0][0], answers[1][0]), "world %d query %d: nearest_for" % [world, q])
+			assert_eq(answers[0][1], answers[1][1], "world %d query %d: incoming_fire" % [world, q])
+			for c: Contact in answers[1][0] as Array[Contact]:
+				if c.relation == Factions.Relation.HOSTILE:
+					hostile_seen += 1
+	assert_gt(hostile_seen, 500, "every other side is hostile")
+
+
+func test_a_kinds_array_of_the_wrong_length_is_rejected_and_the_scan_answers_from_gdscript() -> void:
+	if _skipped():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 61
+	var scan := _world(rng, 40, 0)
+	_add_statics(rng, scan, 50)
+	scan._kinds.append(BodyKind.STATIC)  # one kind too many
+	var own_at: Vector3 = scan._positions[2]
+	var found: Array[Contact] = scan.statics_for(1002, own_at, scan._factions[2], 4)
+	assert_engine_error("lengths", "the field says why it refused")
+	assert_eq(scan.path(), &"gdscript", "the scan answers from GDScript")
+	scan.use_native = false
+	assert_true(_same(found, scan.statics_for(1002, own_at, scan._factions[2], 4)), "the same as the GDScript path")

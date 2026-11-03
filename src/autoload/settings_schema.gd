@@ -110,6 +110,9 @@ const ENTRIES: Dictionary = {
 	# M4-T10
 	&"perf_native_flight": {"type": TYPE_BOOL, "default": true,
 		"doc": "Fly every AI ship's flight model in the native batch (M4-T10) when perf_native is on and the library is built; off = each ship's own GDScript model, for pairing the two in one process"},
+	# M4-T09
+	&"ai_nearest_static_k": {"type": TYPE_INT, "default": 4, "min": 0, "max": 32,
+		"doc": "An AI ship avoids its nearest this many rocks and mines within 5 km (M4-T09); they are never among its contacts; 0 = none"},
 }
 
 ## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current
