@@ -115,7 +115,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T02 | Cycle 1 | T01 | Opus | Profiling and a ranked judgement call | done |
 | T03 | Cycle 2 | T02 | Opus | Same | done |
 | T04 | Cycle 3 | T03 | Opus | Same | done |
-| T05 | Cycle 4: native contact scan (Rust `gdext`, N0 then N1, Q9) | T04 | Opus or Fable | A new toolchain and bit-identical parity | in progress |
+| T05 | Cycle 4: native contact scan (Rust `gdext`, N0 then N1, Q9) | T04 | Opus or Fable | A new toolchain and bit-identical parity | done |
 | T06 | Report to the maintainer | T05 | controller | A summary and a question, no code | not started |
 
 ### M4-T01 Benchmark harness, budget and baseline
@@ -188,6 +188,11 @@ While iterating, `scripts/bench_quick.sh` (under 10 minutes: furball and spread 
   ship and what it keeps (`docs/architecture.md` §17.4); the AI at 100 ships 18.2 to 7.0 ms in the furball, 11.6 to 6.1 ms in
   spread, the quick check's ceiling 30 to 40 in both. A behaviour change, listed in the Cycle log with the outcome comparison.
   Measured with the quick check and single runs, not the sweep.
+- **Done (T05, cycle 4, 2026-11-03):** N0 (T05a) put the Rust toolchain, the CI build and the `NativeLib` seam in place; N1
+  (T05b) moved the contact scan's queries into the native `ScsContactField` behind `ContactScan`'s unchanged interface, bit for
+  bit (`docs/architecture.md` §17.5). The scan at 100 ships 3.91 to 2.40 ms in the furball and 3.12 to 2.66 ms in spread; the
+  quick check's ceiling stays 40 in both, and 30 FPS now holds to 150 ships (it failed at 150 before). Seeded outcomes are
+  identical with `perf_native` on and off. Entry in the Cycle log.
 
 Starting hypotheses from the M3 measurements, for T02 to test, not to follow:
 
@@ -837,14 +842,140 @@ with `api-4-7`, Rust 1.99.1 pinned by `native/rust-toolchain.toml`) with one tri
 `scripts/build_native.sh` builds it into `bin/libscs_native.so` when the library is missing or older than the crate, and
 `run_tests.sh` and CI call it before the import. GDScript reaches native classes only through `NativeLib` and falls back to its
 own code when the library is missing or `perf_native` is off (`docs/architecture.md` §17.5). Build times on the maintainer's
-machine (20 threads): cold 56 s (60 s with the crate downloads), 0.4 s after an edit to the crate, 0.02 s when nothing changed;
-CI's times are in the T05a report. The boundary (`native bench` on the main scene, debug editor build, three runs, load about
+machine (20 threads): cold 56 s (60 s with the crate downloads), 0.4 s after an edit to the crate, 0.02 s when nothing changed.
+CI's first run with the native build (run 41600109943 on `40c83c4`, green: shard 1 1 087 passing and 1 pending, shard 2 1 156
+passing and 1 pending, the AC12 tests) missed both caches (Godot and native): the native build step took 82 s on shard 1
+(cargo 1 m 14 s) and 111 s on shard 2 (cargo 1 m 42 s), `run_tests.sh` then found the library up to date, and the shards took
+20 m 22 s and 14 m 41 s against the 45-minute limit. A warm run's time (cache hit) comes from the next push and is still
+pending. The boundary (`native bench` on the main scene, debug editor build, three runs, load about
 1): a call through the facade with one int costs 0.21 to 0.24 us against 0.08 us for the GDScript method (a direct native call
 0.12 us). `in_range` (a packed array of positions in, the indices within 5 km out, about half the points in range) costs 1.0 to
 1.1 us at 100 points, 1.5 to 1.6 at 200 and 1.8 to 1.9 at 300 natively, against 2.7, 5.0 and 7.0 us in GDScript (27 to 24 ns a
 point): about 0.66 us fixed per native call plus 4 ns a point. At 300 calls a tick of 300 points that is 0.55 ms native against
 2.1 ms in GDScript. So a call costs about what 25 points cost in GDScript: T05b's per-ship calls pay off at the furball's sizes,
 and anything per contact must stay inside one call.
+
+**How N1 measured** (Q7, as in cycles 2 and 3): `scripts/bench_quick.sh` for the ceiling and single `bench <layout> <n> 10
+seed=1` runs at 50 and 100 ships in all three layouts for the stages, all under both bench locks and pinned to cores 0-11, on
+the debug editor build. The before was taken again on this task's base (`40c83c4`, the native library built but nothing calling
+it). New this cycle: a paired run in one process (`bench` twice per round, `set settings.perf_native true` then `false`, two
+rounds), so the native gain is measured without the machine's drift. No full sweep, so the sweep's headline stays cycle 1's 25.
+
+**Before** (`m4_c4_before_quick`, load 0.48; `m4_c4_before_stages`). Quick check: both layouts hold the budget to 40 ships
+and miss it at 50 (tick median 8.51 ms in the furball, 8.71 in spread); both fall under 30 FPS at 150. Stages, mean ms per tick:
+
+| layout | N | tick median | tick mean | ai | (scan) | (think) | flight | targeting | resolvers | (hit) | (ram) | late | physics | (sync) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| furball | 50 | 8.23 | 8.29 | 3.13 | 1.65 | 3.07 | 1.85 | 0.50 | 1.48 | 1.09 | 0.37 | 0.05 | 1.22 | 0.52 |
+| furball | 100 | 17.06 | 17.75 | 6.95 | 3.91 | 6.81 | 3.57 | 0.99 | 4.44 | 3.68 | 0.72 | 0.06 | 1.64 | 0.24 |
+| spread | 50 | 8.15 | 8.20 | 2.90 | 1.42 | 2.84 | 1.88 | 0.51 | 1.43 | 1.02 | 0.38 | 0.05 | 1.38 | 0.59 |
+| spread | 100 | 16.71 | 16.93 | 5.89 | 3.12 | 5.77 | 3.59 | 0.99 | 4.54 | 3.77 | 0.73 | 0.06 | 1.74 | 0.26 |
+| transit | 50 | 5.44 | 5.51 | 1.96 | 0.99 | 1.90 | 1.54 | 0.43 | 0.48 | 0.10 | 0.37 | 0.27 | 0.81 | 0.38 |
+| transit | 100 | 11.00 | 11.33 | 4.09 | 2.15 | 3.98 | 2.98 | 0.88 | 0.92 | 0.19 | 0.70 | 0.53 | 1.91 | 0.62 |
+
+Inside the scan stage (a throwaway timing build, furball 100, GDScript path, per tick, about 47 thinking ships a tick): building
+the scan from the tree 0.61 ms, the freed-body checks 0.16 ms, `nearest_for` 1.26 to 1.53 ms (0.56 ms of it making each
+faction's `Contact`s), `incoming_fire` 0.41 to 0.97 ms, the broadcast scan's build 0.31 ms and `broadcasts_for` 0.33 to 0.36 ms
+(nearly all of it making `Contact`s for broadcasters nobody hears).
+
+**Candidates**, ranked by confidence that they raise the headline:
+
+1. **N1, the contact scan's queries in native code** (built; decided by the maintainer, Q9). Evidence: the scan is 1.65 and
+   3.91 ms of the furball's 3.13 and 6.95 ms of AI at 50 and 100 ships, and the queries are 2.0 to 2.9 ms of the 3.9 at 100.
+   Predicted (cycle 3's candidate 2, written before this cycle): about 1.4 ms off at 50 and 3.5 ms at 100 in the furball, about
+   the same in spread; the native proposal said about 5 ms at 100. Behaviour risk: none (bit-identical). Confidence: 85 % that
+   the scan gets much cheaper, 60 % that it moves the quick check a step.
+2. **A broad phase for the bolt hits** (cycle 3's candidate 3, ranked again; native as the proposal's N5 or in GDScript). The
+   hit resolver is now the largest stage outside the AI that grows faster than N: 1.09 and 3.68 ms at 50 and 100 in the furball,
+   3.77 in spread. Predicted about 0.8 ms off at 50 and 3 ms at 100. Behaviour risk: none if conservative. Confidence 70 % for
+   the stage, 40 % that it moves the ceiling alone.
+3. **The flight force step in native code** (the proposal's N4). Flight is 1.85 and 3.57 ms at 50 and 100, linear, about 36 us
+   a ship. Predicted about 2.5 ms off at 100. Behaviour risk: the riskiest maths for parity (`FlightModel`). Confidence 55 %.
+
+Re-ranked and not chosen: the per-contact loops in the brains and the driver (N2) gain less after nearest-k (the AI outside the
+scan is 1.4 and 2.9 ms at 50 and 100 in the furball); the GDScript contact grid was dropped by the maintainer (Q6, Q9).
+
+**Tests** (`27107bb`, before the native class): `tests/unit/test_contact_field.gd`, with the facade's surface it reads
+(`ContactScan.NATIVE_CLASS`, `use_native`, `path`, `native_visits`) answering for GDScript only, and `NativeLib.version` taking the
+class (a review finding on T05a). Seeded worlds of 1 to 300 bodies in four shapes (a furball, spread groups, a coarse lattice
+for equal ranges, far from the origin, with bodies exactly on the 5 km line and one just past it), up to 400 bolts and a
+broadcast scan per world; 1 499 queries through the facade on both paths, comparing `contacts_for`, `nearest_for` with and
+without a keeper, `incoming_fire` and `broadcasts_for` (the same contact objects in the same order, the same counts); a work count
+(spread's shape, 120 bodies in groups of 12 20 km apart: a query may test 12 to 24 bodies); `perf_native` flipped live on a scan
+in use; freed bodies on both paths. With T05a's library loaded it failed 4 of 5 (the scan never took the native path; worst visits
+0 against 12 to 24). Without the library the file is 6 pending, saying why. Added with the change: bolts that graze the 15 m
+line (400 ships, 1 600 bolts within 5 micrometres of it), where only GDScript's precision gives the same counts. Each test was
+checked against a broken native build: `<` for `<=` on the range, equal ranges to the later body, and the closest approach in
+64 bits each failed it (the last on 117 of 400 ships).
+
+**Change** (`48f0d71`): `ScsContactField` and the facade (`docs/architecture.md` §17.5).
+- Once per tick, on a scan's first native query, `ContactScan` hands the field its arrays in one call; the field sorts the bodies
+  into a grid of 5 km cells. A contact or nearest query tests only the bodies in the cells its range reaches, then follows the
+  GDScript loop's rules in scan order. `incoming_fire`, `broadcasts_for` and the freed-body check moved too. The keeper (the
+  brain's kept ids and names) still runs in GDScript, after the native selection, exactly as before.
+- How cycle 3 changed the plan: the callers ask `nearest_for` (k 12) and only fall back to `contacts_for`, and only thinking
+  ships ask (about 45 a tick at furball 100, not 100), so the native query returns the nearest 12 and the nearest hostile ship
+  plus a marker when the cut left something out, and the keeper stays in GDScript; the per-call cost (about 0.7 us) is paid
+  about 140 times a tick rather than 300.
+- Factions cross as `StringName`s; the facade sends each querying faction's hostility row once per scan, so native code never
+  calls `Factions`.
+- `Contact`s are now made when first handed out, on both paths: a broadcaster nobody hears and a body no ship of the faction
+  sees cost nothing. This is most of what the GDScript path gained below.
+- `NativeLib.enabled()` caches `perf_native` and follows `Settings.changed`, so the scan (and `NativeProbe`) follow a flip at
+  once (a review finding on T05a).
+- Per query (a hand-built scan of 100 bodies in one 5 km ball, 300 bolts): `nearest_for` 5.9 us native against 14.4 us in
+  GDScript (the native call itself 1.7 us, building the 12-contact list 2.8 us), `incoming_fire` 1.3 against 10.1 us.
+
+**After** (`m4_c4_after_quick`, load 0.95 to 1.64; `m4_c4_after_stages`):
+
+| quick check | furball ceiling | furball 40 / 50 ms | spread ceiling | spread 40 / 50 ms | 30 FPS holds to |
+|---|---|---|---|---|---|
+| before (`m4_c4_before_quick`) | 40 | 6.50 / 8.51 | 40 | 6.81 / 8.71 | 100 in both |
+| after (`m4_c4_after_quick`) | 40 | 6.13 / 8.06 | 40 | 6.67 / 8.56 | 150 in both |
+
+| layout | N | tick median | tick mean | ai | (scan) | (think) | flight | targeting | resolvers | (hit) | (ram) | late | physics | (sync) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| furball | 50 | 7.61 | 7.70 | 2.67 | 1.21 | 2.60 | 1.82 | 0.49 | 1.46 | 1.08 | 0.37 | 0.05 | 1.15 | 0.48 |
+| furball | 100 | 16.02 | 16.23 | 5.43 | 2.40 | 5.29 | 3.51 | 0.99 | 4.42 | 3.68 | 0.70 | 0.06 | 1.72 | 0.27 |
+| spread | 50 | 7.71 | 7.80 | 2.79 | 1.33 | 2.73 | 1.81 | 0.49 | 1.39 | 1.00 | 0.37 | 0.05 | 1.22 | 0.52 |
+| spread | 100 | 16.37 | 16.50 | 5.49 | 2.66 | 5.36 | 3.58 | 0.99 | 4.51 | 3.75 | 0.73 | 0.06 | 1.75 | 0.27 |
+| transit | 50 | 5.35 | 5.44 | 1.92 | 0.94 | 1.87 | 1.52 | 0.43 | 0.48 | 0.10 | 0.36 | 0.27 | 0.80 | 0.37 |
+| transit | 100 | 10.79 | 11.03 | 3.91 | 1.96 | 3.80 | 2.93 | 0.87 | 0.91 | 0.18 | 0.70 | 0.52 | 1.86 | 0.66 |
+
+The furball at 50 now has a single run's median under 8 ms (7.61), but the quick check's shorter run still misses 50 by 0.06 ms,
+so the ceiling stays 40; 50 ships is within reach of the next cycle in both layouts.
+
+**Paired, native against GDScript in one process** (`m4_c4_paired_*`, seed 1, 10 s, two rounds each; the GDScript path here
+already has the lazy contacts, so this is the native part alone):
+
+| layout | N | scan, GDScript | scan, native | AI, GDScript | AI, native | tick median, GDScript | tick median, native |
+|---|---|---|---|---|---|---|---|
+| furball | 50 | 1.63, 1.65 | 1.21, 1.24 | 3.14, 3.19 | 2.68, 2.75 | 8.19, 8.33 | 7.66, 7.80 |
+| furball | 100 | 3.76, 3.81 | 2.43, 2.45 | 6.81, 6.90 | 5.48, 5.54 | 17.08, 17.39 | 16.02, 16.31 |
+| spread | 100 | 3.47, 3.44 | 2.69, 2.65 | 6.34, 6.29 | 5.53, 5.49 | 17.05, 16.99 | 16.51, 16.49 |
+
+Native saves 0.42 ms of scan at furball 50, 1.35 ms at furball 100 and 0.79 ms at spread 100; the lazy contacts save about
+0.1 to 0.25 ms more on both paths (before against after: the scan 1.65 to 1.21 and 3.91 to 2.40 ms in the furball).
+
+**Gain against the prediction:** the scan got cheaper, but by a third to a half of what was predicted (furball 0.44 ms off at 50
+against about 1.4, 1.51 off at 100 against about 3.5; spread 0.09 and 0.46 against about the same as the furball), and the quick
+check did not move a step. Why: the queries were not most of the scan. With the think rate, only about 45 ships query each tick at
+furball 100, and what N1 leaves in GDScript is per tick and per result: building the scan from the tree (0.56 ms native run),
+building the broadcast scan (0.21 ms), the freed-body checks (about 0.16 ms, no cheaper natively, as the engine does the lookup
+either way), making the `Contact`s (0.30 ms) and building each ship's list (about 3 us per query). After N1 the scan at furball
+100 is about 2.4 ms, of which the native queries are about 0.2 ms. Spread gains less because its queries were already short (a
+ship sees about 12) and its scan has the same per-tick builds.
+
+**Behaviour changes:** none. Seeded outcomes with `perf_native` on and off (`m4_c4_outcome`, each in a fresh process): `bench
+furball 25 10 seed=1` and `bench spread 50 6 seed=2` give the same `state ai` line for every ship, the same behaviour counts (16
+attack and 9 evade; 31 and 19), the same mean speed (70.06 and 65.11 m/s), hits (50 and 156), last hit, rams, mean bolts in flight
+(84.19 and 184.09) and ship pairs (0.61 and 1.36).
+
+**Tests** (focused, Q10; CI's full suite after the push): 33 GUT files run alone, every file that touches the contact scan,
+perception, the AI driver, avoidance, targeting scale, the bench and AC13's paired budget (`test_ai_think_time`, `test_m3_run`),
+once with the library and once without: with it 271 passing, 0 failing, 2 pending (the AC12 balance tests of `test_dogfight` and
+`test_m3_sandbox`, as before); without it 265 passing, 0 failing, 8 pending (the same two and `test_contact_field`'s 6). No
+Python changed.
 
 ## Definition of done (M4)
 
