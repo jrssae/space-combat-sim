@@ -19,7 +19,7 @@ then a commit `M5-TNN: docs: status and as-built` that sets the Status cell to `
 | T23 (`refview compare`: the 90 % check) | Built (2150669, d3f66e5, a0af8df), two fix rounds (86888f9, d2a2adc) | A scoped re-review of the two fix rounds, then the status commit |
 | T13 (`skylark_transport` generator) | Built and approved (47d5627) | A small follow-up, then the status commit |
 | T14 (`narn_transport` generator, `narn` style) | Built and approved (48fd358, d4c66a9) | A small follow-up, then the status commit |
-| T22 (Brakiri Bokmai: references, generator with removable pods, `brakiri` style) | Survey and plan written (2c9109f), no generator | Three of four maintainer answers in (Q22); confirm the inset and turret spots, then the generator |
+| T22 (Brakiri Bokmai: references, generator with removable pods, `brakiri` style) | Survey and plan written (2c9109f), no generator | Maintainer answers in (Q22); confirm the turret seats on a sheet, then the generator |
 | T12 (`saturn_family` generator, five hulls) | Built (eab08b1, c80eace) | A fix round to reach 0.90 (Saturn 3 pod group exempt, Q23), then a full review |
 
 T15 (Brezebel) and T11 (the references) are done. Use them as the model of a finished civilian generator:
@@ -62,14 +62,14 @@ compare command are in both docs (2c9109f). The maintainer answered T22's questi
   its tail (its length runs along file y).
 - The pods are pale green, #ABAE9A, as proposed. Put the rest of the scheme (frame #5A6B59, yellow #D8B840) on the
   same sheet for a final OK.
-- Two turrets: one on top and one underneath the bow (the section in front of the pods). Suggested spots: `dorsal` on
-  the crown at about (0, 13.2, 10.0) and `ventral` on the keel at about (0, -0.35, 7.0), pointing down. This is an
-  exception to Q19's top-only rule for the Bokmai.
-- Still open: the stepped inset high on each flank of the bow (4.9 x 2.4 m, x ±2.3, y 7.2 to 9.7, z 4.1 to 8.9). The
-  survey read it as the bridge windows; it could be a painted marking. Ask the maintainer with a close-up.
+- Two turrets, in the stepped Z-shaped insets high on each flank of the bow (4.9 x 2.4 m, x ±2.3, y 7.2 to 9.7, z 4.1
+  to 8.9), one a side, facing outboard (`flank_l`, `flank_r`, up (±1, 0, 0)). The survey had read the insets as windows;
+  they are the turret mounts. This is an exception to Q19's top-only rule for the Bokmai. The maintainer first said
+  one on top and one under the bow, then corrected it.
+- Brakiri turrets fire a bright green pulse (T21 and T16 use it for the bolt colour).
 
 Before the generator commits, show the maintainer a sheet with the two turret spots on the STL's port and front views
-and the inset close-up, and get their OK (Q19).
+and how each turret sits in its inset, and get their OK (Q19).
 
 Then build it. Notes from the survey and the controller's rulings:
 

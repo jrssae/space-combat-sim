@@ -412,14 +412,14 @@ on each barrel (where it leaves the pod, and near the muzzle); 2 080 splats at 0
 
 `tools/procgen/assets/brakiri_bokmai.py`, `tools/procgen/styles/brakiri.py`, parts in a new
 `tools/procgen/parts/brakiri.py`. This is T22's plan from the survey of 2026-11-03 ("Brakiri Bokmai transport" in
-`docs/design-references.md`). The maintainer confirmed the bow, the pale green pods and the turrets' places (Q22); the exact turret
-spots and the bow insets (windows or a marking) still go on a review sheet before the generator commits them. Authored frame as in the design references: y from the model's box centre, z from the prow, so the
+`docs/design-references.md`). The maintainer confirmed the bow, the pale green pods and the turrets in the bow's flank insets (Q22); the
+turret seats and the rest of the scheme go on a review sheet before the generator commits them. Authored frame as in the design references: y from the model's box centre, z from the prow, so the
 fidelity check needs no model offset. The generator writes the hull without its pods and one pod model,
 `brakiri_bokmai_pod.*`, LOD0 to LOD3 at the hull's spacings so it switches with the hull (D59).
 
 | Part | How to build it | Size |
 |---|---|---|
-| `bow` | `section_loft` (`parts/starfury.py`) along z through the blade's measured sections: wide top, waist, flared keel. The prow's rounded edge and the crown's rise come from the side profile. The two flank insets are flush `canopy_glass` panels with rows of `window` dots. | z 0 to 14, 13.5 m tall, at most 5.7 m across |
+| `bow` | `section_loft` (`parts/starfury.py`) along z through the blade's measured sections: wide top, waist, flared keel. The prow's rounded edge and the crown's rise come from the side profile. The two stepped flank insets are the turret mounts (Q22): recess them and seat a turret in each. | z 0 to 14, 13.5 m tall, at most 5.7 m across |
 | `spine` | `section_loft` of rounded rectangles (`superellipse_ring`) from the crown to the fork | 5.24 x 3.5 m at z 15 to 30, 8.2 m wide at the fork (z 47.6) |
 | `fork_strut`, `post` | `section_loft` along the strut's centre line from the fork to the post's top, then down the post | struts 2.6 x 2.0 m, posts 1.6 x 2.5 m |
 | `lower_arm` | `section_loft` along the measured centre line: out from the keel, then straight aft, rising from y -1.45 to +1.9 | about 2.0 x 1.3 m, z 10 to 60 |
@@ -468,7 +468,7 @@ hulls, so tune the spacing into the ranges.
 | `cabin` | the same point, `cabin_range_m` 4 (0.05 L) |
 | Port / starboard lights | the arms' outer faces at mid-length, (±14.0, -0.1, 40.0) |
 | `top`, `top_lamp` | the spine's crown (0, +13.3, 15.0); lamp (0, +19.5, 40.0), range 24 m |
-| Turrets (Q22) | one on top and one underneath the bow, the section in front of the pods: `dorsal` on the crown at about (0, +13.2, 10.0), up (0, 1, 0), and `ventral` on the keel at about (0, -0.35, 7.0), up (0, -1, 0); `arc_deg` 200, `barrel_m` 3.0. Exact spots go on the review sheet |
+| Turrets (Q22) | `flank_l` and `flank_r` in the stepped insets high on each flank of the bow, at about (±2.3, +8.45, 6.5), the insets' middle; up (±1, 0, 0), outboard; `arc_deg` 200, `barrel_m` 3.0. Bolts bright green. Exact seats go on the review sheet |
 | `cargo_pods[]` | `pod_fwd` (0, 1.70, 24.63), `pod_mid` (0, 1.70, 39.07), `pod_aft` (0, 1.70, 53.57); `up` (0, 1, 0), `forward` (0, 0, -1) |
 
 The thrust line is the nacelle axis (y 2.09), so the centre of mass is trimmed onto it, as on the Saturns. The pods'
@@ -496,15 +496,14 @@ pod comes off whole as its own debris piece (D59), so a destroyed Bokmai sheds f
 | `pod_line` (extra) | #868A78 | the pods' panel lines |
 | `stripe` | #D8B840 | the yellow: the upper fins' insets, every fin's top 1.5 m, a band round each neck (z 63.5 to 65.5), the pods' straps, the turret's band and muzzle rings |
 | `hazard`, `hazard_dark` | #D8B840, #3A4538 | the pods' side plates (our choice) |
-| `canopy_glass`, `canopy_frame` | #1E2620, #3A4538 | the bow's window insets |
-| `window` (extra) | #E8F0DC | the small windows in the insets |
+| `canopy_glass`, `canopy_frame` | #1E2620, #3A4538 | any bridge glazing on the bow (our choice; the flank insets are turret mounts) |
+| `window` (extra) | #E8F0DC | small windows, if any |
 | `nozzle`, `nozzle_throat` | #2E3530, #121512 | the cups' walls and depths |
 | `engine_dome` (extra) | #F2EDC4 | the domes |
 | `barrel`, `bore`, `interior`, `rcs` | #2E3530, #101210, #101210, #3A4538 | our choice |
 
 Panel grid 2.4 m with 0.25 m lines on the frame, 2.0 m on the pods; tint jitter 0.06. Engine glow yellow-white
-#FFF0B0 (`GLOW_SRGB` for T16's `ShipSpec`). Turret bolts yellow-green, our choice; the wiki only says Brakiri warships
-carry graviton weapons. The frame green is lighter than the Narn's #2E4A3B, but the raider's warning about dark albedo
+#FFF0B0 (`GLOW_SRGB` for T16's `ShipSpec`). Turret bolts bright green (the maintainer, Q22). The frame green is lighter than the Narn's #2E4A3B, but the raider's warning about dark albedo
 still applies: T16's GPU check decides whether it needs a lift.
 
 **The turret model** (proposed): a round base 2.4 m across and 0.4 m tall in `hull_dark`; on it a flattened lens-shaped

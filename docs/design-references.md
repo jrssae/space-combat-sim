@@ -515,8 +515,8 @@ x = 0, so file x is the span and file z the height. One end is a tall solid blad
 tall fins. The blade is read as the bow, so file +y is forward, and file +z is up, the side of the dorsal spine:
 `--right=+x --up=+z --aft=-y`. For the bow:
 
-- the blade is the only closed volume big enough for a crew, and it holds the model's only window-like insets, high on
-  both flanks;
+- the blade is the only closed volume big enough for a crew; the insets high on both flanks, first read as windows, are
+  its turret mounts (Q22);
 - each nacelle ends in an open cup with a dome inside, which reads as an exhaust;
 - the pods ride on a spindle anchored in the blade, its free end towards the nacelles;
 - `references/Brakiri_Falkosi_fighter.STL` has the same motif: a dome in a ring sits at the end away from its pointed
@@ -532,7 +532,7 @@ model's box centre, which lies close to the nacelle axis (y 2.09) and the pods' 
 
 | Part | Size and place |
 |---|---|
-| Bow | a tall blade, z 0 to 14, from the keel (y -0.35) to the crown (y 13.3). Its section is widest at the top (5.3 to 5.7 m), pinches to 3.4 m at y 3 to 5 and flares again at the keel. The prow is a rounded upright edge, foremost at (0, 8.8, 0). The crown rises from it to y 13.2 by z 10; the face below slopes back to the keel (y 0 at z 5, the keel at z 6 to 8). Behind z 10 the keel flares into the two lower arms (8.7 m wide at z 10.9), with the spindle's socket between them. A stepped inset 4.9 m long and 2.4 m tall sits flush in each flank, high up (x ±2.3, y 7.2 to 9.7, z 4.1 to 8.9), read as the bridge windows. |
+| Bow | a tall blade, z 0 to 14, from the keel (y -0.35) to the crown (y 13.3). Its section is widest at the top (5.3 to 5.7 m), pinches to 3.4 m at y 3 to 5 and flares again at the keel. The prow is a rounded upright edge, foremost at (0, 8.8, 0). The crown rises from it to y 13.2 by z 10; the face below slopes back to the keel (y 0 at z 5, the keel at z 6 to 8). Behind z 10 the keel flares into the two lower arms (8.7 m wide at z 10.9), with the spindle's socket between them. A stepped inset 4.9 m long and 2.4 m tall sits flush in each flank, high up (x ±2.3, y 7.2 to 9.7, z 4.1 to 8.9), first read as the bridge windows; the maintainer says they are the turret mounts (Q22). |
 | Dorsal spine | from the bow's crown aft to a fork at z 47.6. 5.24 m wide and 3.5 m deep at z 15 to 30 (y 9.75 to 13.3); its top falls to y 12.4 by z 47 while it widens to 8.2 m at the fork. |
 | Fork struts | from the fork aft and outboard to the posts, about 2.6 m wide and 2.0 m deep: y 9.8 to 12.3 at the fork, 8.9 to 11.2 at z 59 |
 | Posts | at x ±13.0, z 59.2 to 61.7, 1.6 by 2.5 m, from the struts (y about 11) down to the joints (y about 4) |
@@ -585,7 +585,7 @@ green so they read as cargo against it, and yellow marks the fins, the necks and
 | Frame: bow, spine, struts, posts, arms, necks, nacelles, fins | olive green #5A6B59 (the lit faces; mid tones read #4E5F4D), panel lines and recesses #3A4538 | Brakiri ship.jpg |
 | Pods | pale putty green #ABAE9A, panel lines #868A78 | brakiri_fleet1.jpg, brakiri_fleet2.jpg |
 | Yellow | #D8B840: the upper fins' insets, the top 1.5 m of every fin, a band round each neck (z 63.5 to 65.5), the pods' straps | Brakiri ship.jpg (the spar's tip panel and the band at the boom's end read #C1C064 under the capture's green cast), the miniatures' stripes (#D1A245) |
-| Windows | #E8F0DC in a dark strip #1E2620, in the bow's flank insets | Brakiri ship.jpg (#CCDBCA under the cast) |
+| Windows | #E8F0DC in a dark strip #1E2620 (the flank insets turned out to be turret mounts, Q22; place any windows elsewhere on the bow, our choice) | Brakiri ship.jpg (#CCDBCA under the cast) |
 | Spindle, drum, sleeves, rails | #3A4538 | our choice |
 | Nacelle cups | dark metal #2E3530 | our choice |
 | Engine domes and glow | the domes #F2EDC4, the glow yellow-white #FFF0B0 | no capture shows the drive lit; our choice |
@@ -593,8 +593,9 @@ green so they read as cargo against it, and yellow marks the fins, the necks and
 The cruiser's yellow tip panel carries the Brakiri emblem, a franchise mark, which is not reproduced. The scheme is a
 proposal: the maintainer confirms it before the generator paints with it (Q19).
 
-**Turrets (proposed, awaiting the maintainer; Q19).** Dorsal only, on the frame and not on the pods, so an empty
-Bokmai still defends itself. Two, as on the 70 m Narn transport:
+**Turrets (Q22).** The maintainer placed them in the stepped Z-shaped insets on both flanks of the bow (x ±2.3, y 7.2
+to 9.7, z 4.1 to 8.9), one a side, facing outboard. They fire a bright green pulse. The survey's dorsal proposal,
+replaced:
 
 - `dorsal_fwd` (0, +13.3, 17.0) on the spine's top just behind the bow's crown, up +y, `arc_deg` 200: forward and
   both upper quarters. The crown ahead is no higher (y 13.2).
