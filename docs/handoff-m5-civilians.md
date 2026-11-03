@@ -4,7 +4,7 @@ Five M5 tasks need only Python: the civilian ship generators and the fidelity to
 runs the game. This file is everything a Claude Code session on another computer needs to finish them on the `m5`
 branch while this machine carries on with the Godot tasks.
 
-Read first: `CLAUDE.md`, then `docs/milestones/m5-mission-framework-and-front-end.md` (Q8, Q11, Q14 and Q16 to Q20, D59,
+Read first: `CLAUDE.md`, then `docs/milestones/m5-mission-framework-and-front-end.md` (Q8, Q11, Q14 and Q16 to Q23, D59,
 D61, AC11, AC12, AC20 and the sections of T11, T12 to T15, T22 and T23), then `docs/assets-civilian.md` and the
 "Civilian ships (M5)" part of `docs/design-references.md`.
 
@@ -19,8 +19,8 @@ then a commit `M5-TNN: docs: status and as-built` that sets the Status cell to `
 | T23 (`refview compare`: the 90 % check) | Built (2150669, d3f66e5, a0af8df), two fix rounds (86888f9, d2a2adc) | A scoped re-review of the two fix rounds, then the status commit |
 | T13 (`skylark_transport` generator) | Built and approved (47d5627) | A small follow-up, then the status commit |
 | T14 (`narn_transport` generator, `narn` style) | Built and approved (48fd358, d4c66a9) | A small follow-up, then the status commit |
-| T22 (Brakiri Bokmai: references, generator with removable pods, `brakiri` style) | Survey and plan written (2c9109f), no generator | Four maintainer answers, then the generator |
-| T12 (`saturn_family` generator, five hulls) | Built (eab08b1, c80eace) | A fix round to reach 0.90, one maintainer call, then a full review |
+| T22 (Brakiri Bokmai: references, generator with removable pods, `brakiri` style) | Survey and plan written (2c9109f), no generator | Three of four maintainer answers in (Q22); confirm the inset and turret spots, then the generator |
+| T12 (`saturn_family` generator, five hulls) | Built (eab08b1, c80eace) | A fix round to reach 0.90 (Saturn 3 pod group exempt, Q23), then a full review |
 
 T15 (Brezebel) and T11 (the references) are done. Use them as the model of a finished civilian generator:
 `tools/procgen/assets/centauri_brezebel.py` and its T15 Done notes.
@@ -56,14 +56,20 @@ the milestone file). Known close calls are the Saturn 4 lead ship's side coverag
 ### T22: Brakiri Bokmai
 
 The survey is done: the frame mapping, pod mounts, stations, budget, hardpoints, chunks, the `brakiri` style and the
-compare command are in both docs (2c9109f). Before the generator commits colours or turrets, the maintainer must
-confirm them (Q19). Show them a sheet: the STL's port, top and rear views with the turret spots marked, the paint
-mock-ups and swatches. These four questions are still open:
+compare command are in both docs (2c9109f). The maintainer answered T22's questions on 2026-11-03 (Q22):
 
-1. Is the tall blade the bow? (The survey is about 70 % sure; it sets `--aft=-y`.)
-2. Pod colour: pale putty green #ABAE9A as proposed, yellow #D8B840, or the frame green #5A6B59?
-3. Two dorsal turrets (`dorsal_fwd` (0, 13.3, 17.0) and `dorsal_aft` (0, 12.5, 45.0)) or one mid-spine at (0, 12.9, 32.0)?
-4. The two insets high on the bow's flanks: windows or painted markings?
+- The tall fins are at the stern, so the blade is the bow and `--right=+x --up=+z --aft=-y` stands. The STL stands on
+  its tail (its length runs along file y).
+- The pods are pale green, #ABAE9A, as proposed. Put the rest of the scheme (frame #5A6B59, yellow #D8B840) on the
+  same sheet for a final OK.
+- Two turrets: one on top and one underneath the bow (the section in front of the pods). Suggested spots: `dorsal` on
+  the crown at about (0, 13.2, 10.0) and `ventral` on the keel at about (0, -0.35, 7.0), pointing down. This is an
+  exception to Q19's top-only rule for the Bokmai.
+- Still open: the stepped inset high on each flank of the bow (4.9 x 2.4 m, x ±2.3, y 7.2 to 9.7, z 4.1 to 8.9). The
+  survey read it as the bridge windows; it could be a painted marking. Ask the maintainer with a close-up.
+
+Before the generator commits, show the maintainer a sheet with the two turret spots on the STL's port and front views
+and the inset close-up, and get their OK (Q19).
 
 Then build it. Notes from the survey and the controller's rulings:
 
@@ -88,16 +94,15 @@ Saturn 3 STL scaled to the shared pod size, `--model-scale`):
 | Lead ship (every variant) | 0.906 / 0.788 / 0.809 | Trace the truss, drum-frame posts and neck member by member off the Saturn 4 model's side and front views |
 | Transport sections | front about 0.89 | Pod rims and arms, scored against the Saturn 4 STL (the Saturn 8 model's pods are shorter; Q16 uses the Saturn 4's) |
 | Tank sections | under 0.90 in side or front | Closer A-frames, junction recesses |
-| Saturn 3 pod group | side 0.639 | See the maintainer call below |
+| Saturn 3 pod group | side 0.639 | Exempt (Q23): record the scores with the note |
 
 Also: crop ranges that match each part on both sides, a test that the fallback mesh holds every piece, and the Fidelity
 rows in `docs/assets-civilian.md`.
 
-**Maintainer call (ask before working on the Saturn 3 pods).** T11 raised the Saturn 3's pod stack 4.7 m and spread the
-lower pods 7.0 m apart instead of the model's 4.2 m so the truss and engine pass between them. That layout costs most
-of the side score. Q20 placed the engine "centered between the lower two cargo pods, directly under the top cargo pod,
-just long enough to not damage the cargo pods". Ask whether to keep T11's layout or return to the model's pod spacing
-and route the truss and the slim engine to fit.
+**The Saturn 3's pod group is exempt (Q23).** T11 spread its lower pods 7.0 m apart (the model has 4.2 m) and raised the
+stack 4.7 m so the truss and the slim engine pass. The maintainer keeps that layout. Record the pod group's scores in its
+Fidelity row with the note "expected exemption (Q23)"; they do not fail T12. Every other Saturn part, the Saturn 3's
+lead ship included, must still pass.
 
 After the fix round, T12 needs a full review (not a scoped one): it is the largest generator and has had no full review
 since it was built.

@@ -47,6 +47,8 @@ voices. M8's tutorial is written on top of all this, so the framework matters mo
 | Q19 | (after the review sheet of turret spots and colours) Turrets and colours | **Turrets on top only:** keep every dorsal spot proposed, drop every ventral one. That leaves the Saturn 4 transport, Saturn 4 tanker, Saturn 8 transport and Saturn 8 tanker with two each (`dorsal_fwd` on the disc hub and `dorsal_aft` or `dorsal_mid`), the Saturn 3 with one (`dorsal_fwd`), the Skylark and the Brezebel with one (`dorsal`), the Narn transport with its two tower turrets. **Colours confirmed** as written for the Saturn family, the Skylark, the Narn transport and the Brezebel. **The Narn transport's towers point up** (T11's reading). The maintainer places turrets and confirms colours for any further ship (the Bokmai) before its generator commits them |
 | Q20 | (same day) Where is the Saturn 3's engine? | **Between the two lower pods, on the centre line, directly under the top pod**, and **just long enough that its exhaust clears the pods**. It is a **slimmer engine** than the shared section so it fits the gap between the lower pods; the pods keep their places. The Saturn 3's aft turret is dropped. For the 90 % check (Q18) the Saturn 3's pod group is scored against the model's pod group **scaled up to the shared pod size** (Q8), so shape and layout are checked rather than the size the maintainer chose |
 | Q21 | (maintainer, 2026-11-03) The mission's buoys | **Buoy defence is set on a string of nav buoys in a huge circle, as if round a planet: 16 buoys on a ring of 20 000 km radius, about 7 850 km apart.** **Every buoy broadcasts to 10 000 km** (was 1 000 km, M3 Q21), and the spacing is set so that a ship always has **at least two buoys in broadcast range**, on the radar and targetable: anywhere on the ring, and within about 6 000 km of it. There is no planet in the middle yet (M6 brings Epsilon III) |
+| Q22 | (after T22's survey) The Bokmai's frame, colours and turrets | **The tall fins are at the stern**, so the blade is the bow (T22's reading; the STL stands on its tail, its length along file y). **The pods are pale green** (#ABAE9A, as proposed). **Two turrets, one on top and one underneath the bow section in front of the cargo pods** (an exception to Q19's top-only rule, for the Bokmai). Still open: whether the stepped inset high on each flank of the bow (4.9 x 2.4 m) is windows or a painted marking |
+| Q23 | (same day) The Saturn 3's pod group misses 0.90 because T11 spread its pods wider than the model to let the truss and engine pass. Keep it? | **Keep the wider spread.** The Saturn 3's pod group is an **expected exemption** from Q18's bar: its scores are recorded with that note and do not fail T12. Every other Saturn part must still pass |
 
 ## Scope
 
@@ -440,8 +442,8 @@ whose trigger never arose). Update the column with each task's commit.
 - Track A and B on this machine. T03, T04, T06 and T09 were cut off mid-build by a usage limit; their unreviewed work is
   committed as found (8e0d13f) and each finishes on top of it. T07, T08, T10, T17, T20 not started.
 - Track C on a second machine, Python only: T23 (re-review of its fix rounds), T13 and T14 (small follow-ups), T22
-  (waits on four maintainer answers, then the generator) and T12 (fix round to reach 0.90, a maintainer call on the
-  Saturn 3 pods, a full review). `docs/handoff-m5-civilians.md` has the state, the open questions and the rules for two
+  (maintainer answers in Q22, one still open, then the generator) and T12 (fix round to reach 0.90, the Saturn 3 pods exempt by Q23,
+  a full review). `docs/handoff-m5-civilians.md` has the state, the open questions and the rules for two
   machines on `m5`. T21 and T16 wait for them.
 
 ### M5-T01 `Game` flow, boot routing and loading

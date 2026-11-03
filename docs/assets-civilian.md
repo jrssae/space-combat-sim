@@ -412,8 +412,8 @@ on each barrel (where it leaves the pod, and near the muzzle); 2 080 splats at 0
 
 `tools/procgen/assets/brakiri_bokmai.py`, `tools/procgen/styles/brakiri.py`, parts in a new
 `tools/procgen/parts/brakiri.py`. This is T22's plan from the survey of 2026-11-03 ("Brakiri Bokmai transport" in
-`docs/design-references.md`). The colours and the turrets are proposals: the generator commits them once the maintainer
-confirms them (Q19). Authored frame as in the design references: y from the model's box centre, z from the prow, so the
+`docs/design-references.md`). The maintainer confirmed the bow, the pale green pods and the turrets' places (Q22); the exact turret
+spots and the bow insets (windows or a marking) still go on a review sheet before the generator commits them. Authored frame as in the design references: y from the model's box centre, z from the prow, so the
 fidelity check needs no model offset. The generator writes the hull without its pods and one pod model,
 `brakiri_bokmai_pod.*`, LOD0 to LOD3 at the hull's spacings so it switches with the hull (D59).
 
@@ -468,7 +468,7 @@ hulls, so tune the spacing into the ranges.
 | `cabin` | the same point, `cabin_range_m` 4 (0.05 L) |
 | Port / starboard lights | the arms' outer faces at mid-length, (±14.0, -0.1, 40.0) |
 | `top`, `top_lamp` | the spine's crown (0, +13.3, 15.0); lamp (0, +19.5, 40.0), range 24 m |
-| Turrets (proposed) | `dorsal_fwd` (0, +13.3, 17.0) and `dorsal_aft` (0, +12.5, 45.0), up (0, 1, 0), `arc_deg` 200, `barrel_m` 3.0 |
+| Turrets (Q22) | one on top and one underneath the bow, the section in front of the pods: `dorsal` on the crown at about (0, +13.2, 10.0), up (0, 1, 0), and `ventral` on the keel at about (0, -0.35, 7.0), up (0, -1, 0); `arc_deg` 200, `barrel_m` 3.0. Exact spots go on the review sheet |
 | `cargo_pods[]` | `pod_fwd` (0, 1.70, 24.63), `pod_mid` (0, 1.70, 39.07), `pod_aft` (0, 1.70, 53.57); `up` (0, 1, 0), `forward` (0, 0, -1) |
 
 The thrust line is the nacelle axis (y 2.09), so the centre of mass is trimmed onto it, as on the Saturns. The pods'

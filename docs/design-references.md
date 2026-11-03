@@ -524,7 +524,7 @@ tall fins. The blade is read as the bow, so file +y is forward, and file +z is u
   its fins' raked edges.
 
 Against it, the fins' raked edges then trail and their tips lean forward. Read the other way they would be ordinary
-swept fins and the blade a tail. The nose is about 70 % sure. Up is safer: the fins are nearly symmetric, so up only
+swept fins and the blade a tail. The maintainer confirmed it (Q22): the tall fins are at the stern, so the blade is the bow. Up is safer: the fins are nearly symmetric, so up only
 decides that the spine runs over the pods rather than under them as a keel.
 
 Length 80.0 m (Q17), span 31.62 m across the nacelles, height 30.91 m across the fin tips. y is measured from the
