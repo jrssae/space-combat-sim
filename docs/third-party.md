@@ -44,6 +44,30 @@ everyone is welcome to it.
 | NumPy | 2.x | BSD-3-Clause | Asset generators |
 | Pillow | 10+ (optional) | MIT-CMU | Only for the fallback panorama sky PNG |
 
+## Built from source, not vendored (`native/`, M4-T05)
+
+Cargo downloads these crates from crates.io at the exact versions in `native/Cargo.lock` and builds them into
+`bin/libscs_native.so` (`scripts/build_native.sh`; never committed). "Linked" crates end up in the library; "build" crates only
+run while it compiles (procedural macros, code generation, build scripts).
+
+| Component | Version | Licence | Role |
+|---|---|---|---|
+| godot-rust gdext: `godot`, `godot-core`, `godot-ffi`, `godot-cell` | 0.5.5 | MPL-2.0 | Linked: the Rust bindings to Godot's GDExtension API |
+| godot-rust gdext: `godot-macros`, `godot-codegen`, `godot-bindings` | 0.5.5 | MPL-2.0 | Build: the class macros and the generated API |
+| `gdextension-api` (godot-rust) | 0.5.1 | MPL-2.0 | Build: Godot's prebuilt API description for gdext |
+| glam | 0.32.1 | MIT OR Apache-2.0 | Linked: vector maths inside gdext |
+| libc | 0.2.191 | MIT OR Apache-2.0 | Linked: C types for the FFI |
+| Rust toolchain and standard library | 1.99.1 (`native/rust-toolchain.toml`) | MIT OR Apache-2.0 | Compiler (the user's own rustup); std is linked into the library |
+| proc-macro2, quote | 1.0.107, 1.0.47 | MIT OR Apache-2.0 | Build: procedural macro support |
+| unicode-ident | 1.0.27 | (MIT OR Apache-2.0) AND Unicode-3.0 | Build: identifier tables for proc-macro2 |
+| venial | 0.6.1 | MIT | Build: parses Rust items for gdext's macros |
+| heck | 0.5.0 | MIT OR Apache-2.0 | Build: name case conversion in the code generator |
+| nanoserde, nanoserde-derive | 0.2.1 | MIT OR Apache-2.0; MIT | Build: reads the API description |
+
+MPL-2.0 combines with GPL-3.0 as a "Secondary License" (MPL-2.0 section 3.3) unless a file carries the "Incompatible With
+Secondary Licenses" notice. None of the 325 files in the eight MPL-2.0 crates above carries it (checked with grep on 2026-11-03).
+Re-check this table against `cargo metadata` whenever `Cargo.lock` changes.
+
 ## Candidates evaluated and not adopted (yet)
 
 | Component | Licence | Why not now |

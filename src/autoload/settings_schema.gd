@@ -105,6 +105,8 @@ const ENTRIES: Dictionary = {
 		"doc": "How often a far AI ship thinks, Hz, on staggered physics ticks (20 = every third tick at 60 Hz)"},
 	&"ai_nearest_k": {"type": TYPE_INT, "default": 12, "min": 0, "max": 64,
 		"doc": "An AI ship scores, avoids and checks its fire lane against its nearest this many contacts (M4-T04); when that cuts any, the nearest hostile ship, its target, wing, objective and latest attacker are kept too; 0 = every contact"},
+	&"perf_native": {"type": TYPE_BOOL, "default": true,
+		"doc": "Run the hot paths in the native library when it is built (M4-T05); off = the GDScript code, for pairing the two in one process"},
 }
 
 ## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current

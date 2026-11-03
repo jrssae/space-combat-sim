@@ -108,6 +108,7 @@ Source: `src/autoload/debug_console.gd`
 |---|---|---|---|
 | `perf` | `[on\|off]` | Times every tick's stages (the `perf` provider); toggles with no argument. | `src/perf/perf_probe.gd` |
 | `bench` | `<furball\|spread\|transit> <n> [options]` | Flies a benchmark layout with n ships from the pools, measures `[seconds]` (30) after `warmup=<s>` (5), and writes `reports/perf/<label>/`. Options: `seed=<k> label=<name> probe=paired rebase_m=<m>`. | `src/perf/bench_runner.gd` |
+| `native` | `[bench]` | Says whether the native library is loaded, whether `perf_native` is on and which path the probe takes; `bench` times calls into the library from GDScript against the GDScript code (M4-T05). | `src/perf/perf_probe.gd` |
 
 ## State providers
 

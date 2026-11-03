@@ -280,13 +280,30 @@ func _register_console() -> void:
 				"doc": String(docs[key]) + "; last tick, wall clock"}
 	entries[&"ships"] = {"get": func() -> int: return value(&"ships"), "doc": "Ships in play in the last tick (pool ships and the player)"}
 	entries[&"bolts"] = {"get": func() -> int: return value(&"bolts"), "doc": "Bolts swept in the last tick"}
+	entries[&"native_loaded"] = {"get": func() -> bool: return NativeLib.has_class(NativeProbe.NATIVE_CLASS),
+			"doc": "Whether the native library is loaded (scripts/build_native.sh; M4-T05)"}
+	entries[&"native_version"] = {"get": func() -> String: return NativeLib.version(),
+			"doc": "The loaded native library's version, empty when it is not loaded"}
 	DebugConsole.registry.register_provider(&"perf", ConsoleVars.new(entries), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"perf",
 			"Time every tick's stages (the perf provider); toggles with no argument",
 			[ConsoleArg.bool_optional(&"state")] as Array[ConsoleArg]), _cmd_perf, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"native",
+			"Show whether the native library is loaded and used; 'bench' times a call into it from GDScript",
+			[ConsoleArg.enum_optional(&"action", [&"bench"])] as Array[ConsoleArg]), _cmd_native, self)
 
 
 func _cmd_perf(args: Dictionary) -> String:
 	var wanted: Variant = args.get(&"state")
 	enabled = not enabled if wanted == null else bool(wanted)
 	return "perf %s" % ("on" if enabled else "off")
+
+
+func _cmd_native(args: Dictionary) -> PackedStringArray:
+	var loaded: bool = NativeLib.has_class(NativeProbe.NATIVE_CLASS)
+	var out := PackedStringArray(["native library %s, perf_native %s, probe path %s" % [
+			"loaded (%s)" % NativeLib.version() if loaded else "not loaded",
+			"on" if NativeLib.enabled() else "off", NativeProbe.new().path()]])
+	if args.get(&"action") == &"bench":
+		out.append_array(NativeBoundaryBench.format(NativeBoundaryBench.run()))
+	return out

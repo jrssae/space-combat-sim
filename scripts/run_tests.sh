@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Runs every automated check that works without a GPU: Python generator tests, a headless Godot import that
-# must be free of script errors, a compile check of every project script, the GUT suites, and debug-console
+# Runs every automated check that works without a GPU: Python generator tests, the optional native library's build,
+# a headless Godot import that must be free of script errors, a compile check of every project script, the GUT suites, and debug-console
 # smoke runs that drive a live headless build through --console-exec.
 # Exits non-zero on any failure. Logs and the GUT JUnit XML land in reports/ (gitignored; CI uploads it).
 # GUT_SHARD=k/n (CI) runs only every n-th GUT script from the k-th, in path order, so n jobs share the GUT run; the Python
@@ -59,6 +59,16 @@ fi
 if (( run_extras )) && [[ -d tools/procgen/tests ]]; then
     echo "== Python tests"
     python3 -m unittest discover -s tools/procgen/tests -t . -v
+fi
+
+# Built before the import so Godot finds it. It is optional (architecture §17.5): with no cargo the script skips it,
+# Godot logs three errors about the missing library at every start, and those are the only errors ignored below.
+echo "== Native library"
+scripts/build_native.sh || fail "The native library failed to build (see the cargo output above)."
+NATIVE_ABSENT_ERRORS='^$'
+if [[ ! -f bin/libscs_native.so ]]; then
+    echo "run_tests.sh: no native library; the GDScript fallbacks run."
+    NATIVE_ABSENT_ERRORS='libscs_native\.so|scs_native\.gdextension'
 fi
 
 # --import imports resources but does not compile scripts, hence the separate compile check below.
@@ -131,7 +141,8 @@ expect_text() {
     grep -qF -- "$2" "$1" || { echo "run_tests.sh: missing text in $1: $2" >&2; return 1; }
 }
 reject_text() {
-    if grep -qF -- "$2" "$1"; then
+    # No -q on the second grep: stopping early could kill the first with SIGPIPE, and pipefail would hide the match.
+    if grep -F -- "$2" "$1" | grep -vE -- "${NATIVE_ABSENT_ERRORS}" > /dev/null; then
         echo "run_tests.sh: unexpected text in $1: $2" >&2
         return 1
     fi

@@ -2034,3 +2034,33 @@ scripts/bench_quick.sh      the quick check: ramps furball and spread until 30 F
 - **Tests**: `test_ai_think_rate` (work counts per tick against the near ships plus a third of the far ones, contacts per ship
   against k, and the behaviour pins), `test_nearest_contacts` (the selection against a full sort on seeded crowds) and
   `test_ai_think_rate_math`.
+
+### 17.5 The native library (cycle 4, T05)
+
+```
+native/                         Rust crate scs_native (cdylib), skipped by Godot's scan (.gdignore); one native class per file
+native/Cargo.toml, Cargo.lock   gdext pinned "=0.5.5" with feature api-4-7; every crate locked
+native/rust-toolchain.toml      the one Rust version (1.99.1); rustup installs it on first use
+bin/scs_native.gdextension      committed; points Godot at bin/libscs_native.so (built, ignored by git)
+scripts/build_native.sh         cargo build --release --locked into .tools/native-target, then copies the library to bin/
+src/perf/native_lib.gd          NativeLib: the only way GDScript reaches a native class
+src/perf/native_probe.gd        NativeProbe: facade over the trivial ScsNativeProbe, the pattern for later ports
+src/perf/native_boundary_bench.gd   what a call into the library costs (console `native bench`)
+```
+
+- **Optional during M4** (maintainer Q9). No GDScript names a native class: `NativeLib.instantiate(&"ScsName")` returns null when
+  the library is not loaded or the setting `perf_native` (default on) is off, and the facade then runs its GDScript code. So a
+  missing or stale library never breaks parsing, the suite or the game, and a bench can pair native against GDScript in one
+  process by flipping the setting. Each facade keeps the GDScript code as the reference its parity tests compare against.
+  A native class gets its own name (`Scs...`), since a GDScript `class_name` cannot share it.
+- **Building.** `scripts/build_native.sh` builds only when the library is missing or older than a file under `native/`; with no
+  `cargo` it prints one line and exits 0. `run_tests.sh` runs it before the import, and CI builds once per job with cargo's
+  files cached on `Cargo.lock` and the toolchain file. Without the library Godot logs three errors about it at every start;
+  `run_tests.sh` ignores those three, and only when the library is absent. The library is built for baseline x86-64, never
+  `target-cpu=native`, so the maths is the same on every machine.
+- **Crossing the boundary** (Cycle log, cycle 4, debug editor build): a native call with one int costs 0.12 us, 0.22 us through
+  a facade, against 0.08 us for a GDScript call; one with a packed array in and one out about 0.35 us plus a few ns per element.
+  Packed arrays share their data (copy on write). So the seam is one call per ship per query with packed arrays in and indices
+  out, never a call per contact, and native code never reads a GDScript object. Results are collected in Rust and handed over once.
+- **Threads** are allowed inside native code later (N3, maintainer Q9), with a test that one thread and six give the same
+  output; T05a adds none.

@@ -115,7 +115,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T02 | Cycle 1 | T01 | Opus | Profiling and a ranked judgement call | done |
 | T03 | Cycle 2 | T02 | Opus | Same | done |
 | T04 | Cycle 3 | T03 | Opus | Same | done |
-| T05 | Cycle 4: native contact scan (Rust `gdext`, N0 then N1, Q9) | T04 | Opus or Fable | A new toolchain and bit-identical parity | not started |
+| T05 | Cycle 4: native contact scan (Rust `gdext`, N0 then N1, Q9) | T04 | Opus or Fable | A new toolchain and bit-identical parity | in progress |
 | T06 | Report to the maintainer | T05 | controller | A summary and a question, no code | not started |
 
 ### M4-T01 Benchmark harness, budget and baseline
@@ -829,6 +829,22 @@ brains, behaviours, avoidance, the fire lane, perception, the contact scan, wing
 console, the new tests, AC13's paired budget (`test_ai_think_time`), `test_ai_ram` and `test_dogfight`: 692 passing, 0 failing, 2
 pending (the AC12 balance tests of `test_dogfight` and `test_m3_sandbox`, as before), none risky. AC13's paired budget held; the
 dogfight's seeded determinism test gave 0.000000 m twice. No Python changed.
+
+### Cycle 4 (M4-T05, 2026-11-03): the contact scan in native code
+
+**N0, the toolchain and the seam (T05a).** No gameplay change. `native/` is a Rust crate (`scs_native`, gdext pinned `=0.5.5`
+with `api-4-7`, Rust 1.99.1 pinned by `native/rust-toolchain.toml`) with one trivial class, `ScsNativeProbe`.
+`scripts/build_native.sh` builds it into `bin/libscs_native.so` when the library is missing or older than the crate, and
+`run_tests.sh` and CI call it before the import. GDScript reaches native classes only through `NativeLib` and falls back to its
+own code when the library is missing or `perf_native` is off (`docs/architecture.md` §17.5). Build times on the maintainer's
+machine (20 threads): cold 56 s (60 s with the crate downloads), 0.4 s after an edit to the crate, 0.02 s when nothing changed;
+CI's times are in the T05a report. The boundary (`native bench` on the main scene, debug editor build, three runs, load about
+1): a call through the facade with one int costs 0.21 to 0.24 us against 0.08 us for the GDScript method (a direct native call
+0.12 us). `in_range` (a packed array of positions in, the indices within 5 km out, about half the points in range) costs 1.0 to
+1.1 us at 100 points, 1.5 to 1.6 at 200 and 1.8 to 1.9 at 300 natively, against 2.7, 5.0 and 7.0 us in GDScript (27 to 24 ns a
+point): about 0.66 us fixed per native call plus 4 ns a point. At 300 calls a tick of 300 points that is 0.55 ms native against
+2.1 ms in GDScript. So a call costs about what 25 points cost in GDScript: T05b's per-ship calls pay off at the furball's sizes,
+and anything per contact must stay inside one call.
 
 ## Definition of done (M4)
 
