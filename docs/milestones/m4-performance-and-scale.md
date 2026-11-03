@@ -2,7 +2,7 @@
 
 > "Many ships at once." (`docs/roadmap.md`)
 
-**Status:** planned 2026-10-28 at the maintainer's request, inserted after M3; the later milestones moved up one (the mission
+**Status:** paused 2026-11-03 at the maintainer's request after the T06 report (45 ships; AC5 not met; Q11 to Q13). Earlier: planned 2026-10-28 at the maintainer's request, inserted after M3; the later milestones moved up one (the mission
 framework is now M5, Epsilon space M6, and so on to voiced dialog, M15). M4 starts when M3 is accepted and merged into `main`,
 on branch `m4`, unless the maintainer pulls it forward.
 
@@ -41,6 +41,9 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q8 | Think rate | AI ships within about 2 km of the player think every tick; farther ones think at 20 Hz on staggered ticks and hold their last command between (their physics still runs every tick). A behaviour change, listed in the report |
 | Q9 | Native code | Allowed (this answers the rule below). **Rust with godot-rust `gdext`** (pinned, `api-4-7`). Cycle 4 is native: first the toolchain, CI and seam (N0), then the contact scan's queries in native code behind `ContactScan` (N1); the GDScript grid is dropped. Seeded outcomes stay bit-identical where that is cheap (N1 must be); later ports may differ within a stated tolerance, with every test green, listed in the report. Worker threads are allowed inside the native code only, with tests that one thread and six give the same output |
 | Q10 | How cycles test | Focused GUT runs on the code a task touches plus AC13's paired-budget file, and the quick check; then the push, and CI's full suite is the gate. `scripts/run_tests.sh` runs locally **once per milestone**, before it closes |
+| Q11 | The T06 report (2026-11-03) | **Stop M4 here for now** at 45 ships (25 by the sweep, 50 in the release export). A research agent reviews every route to 500 ships, engine changes included, before more work is planned |
+| Q12 | Which build sets the budget | The editor build, as so far; the release export is measured once per report |
+| Q13 | The windowed frame | Add a windowed check: each future cycle also checks the windowed build holds 60 FPS at its ceiling (a short GPU run) |
 
 ## The budget ("good game performance", Q5)
 
