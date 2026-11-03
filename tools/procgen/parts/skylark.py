@@ -46,7 +46,8 @@ NACELLE_EXIT_Z = 55.48
 NACELLE_EXIT_R = 1.62
 NACELLE_INTAKE_R = 1.3
 CONE_Z = 41.9  # both nacelle cones stand at this z
-TURRET_MOUNT = (0.0, 2.87, 37.5)  # Q19: the only turret, seated on the body's ridge ahead of the fin (the ridge's height there)
+TURRET_Z = 37.5  # Q19: the only turret, seated on the body's ridge ahead of the dorsal fin
+TURRET_BASE_R = 1.2  # the EA turret's base at two thirds of its size (2.4 m across)
 BRIDGE_EYE = (0.0, 3.6, 11.8)  # inside the bridge plate, behind its glazed front
 
 
@@ -440,6 +441,21 @@ class BodySpec:
         pts = right + left
         return np.array([[x, y, z] for x, y in pts])
 
+    def top_at(self, x: np.ndarray, z: np.ndarray) -> np.ndarray:
+        """The height of the slab's top surface over the points ``(x, z)``."""
+        x, z = np.atleast_1d(np.abs(np.asarray(x, dtype=float))), np.atleast_1d(np.asarray(z, dtype=float))
+        w, top, top3, up = self.at(z)[:4]
+        n = len(x)
+        tx = np.column_stack([np.zeros(n), np.ones(n), np.full(n, 3.0), w])
+        ty = np.column_stack([top, top - 0.03, top3, up])
+        return _pwl(x, tx, ty)
+
+    def turret_seat(self, z: float = TURRET_Z, radius: float = TURRET_BASE_R) -> tuple[float, float, float]:
+        """Where the turret's base meets the hull: on the centre line at ``z``, as low as the hull under its rim, so the
+        base never floats where the ridge falls away aft and outboard."""
+        a = np.linspace(0.0, 2.0 * math.pi, 73)
+        return (0.0, float(self.top_at(radius * np.cos(a), z + radius * np.sin(a)).min()), z)
+
     def solid(self) -> Solid:
         """Inside the slab: within the half-width and between the bottom and the top polylines at the point's z."""
         st = self.stations
@@ -485,9 +501,8 @@ def body(style: Style, spec: BodySpec = BodySpec()) -> Piece:
         x0 = 6.2
         collision.append(Collision("box", (sx * 0.5 * (x0 + w_max), 0.5 * (flank_lo + flank_hi), 0.5 * (34.0 + z1)),
                                    size=(w_max - x0, flank_hi - flank_lo, z1 - 34.0), name=f"side_{side}"))  # fmt: skip
-    seat = (0.0, float(spec.at(TURRET_MOUNT[2])[1]), TURRET_MOUNT[2])
     return _piece("body", "body", mesh, spec.solid(), mass_kg=700_000.0, collision=collision, fine=1.15,
-                  anchors={"turret": Anchor(seat, (0.0, 1.0, 0.0))})  # fmt: skip
+                  anchors={"turret": Anchor(spec.turret_seat(), (0.0, 1.0, 0.0))})  # fmt: skip
 
 
 CORNER_FIN = ((4.9, 51.2), (8.75, 51.2), (6.05, 54.5), (5.6, 54.5))  # plan (x, z) of the right aft corner fin
@@ -793,7 +808,8 @@ __all__ = [
     "CONE_UP",
     "NACELLE_AXIS",
     "RIGHT",
-    "TURRET_MOUNT",
+    "TURRET_BASE_R",
+    "TURRET_Z",
     "BodySpec",
     "BridgeSpec",
     "ClawSpec",

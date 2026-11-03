@@ -35,7 +35,7 @@ CHUNKS = ("capsule", "body", "nacelle_l", "nacelle_r")
 BUDGET = (48_000, 72_000)  # docs/assets-civilian.md: 60 000 (48 000 to 72 000)
 LOD_SHARES = {1: (0.20, 0.30), 2: (0.04, 0.09), 3: (0.01, 0.025)}
 NACELLE_AXIS = (13.03, -0.26)  # x, y of the nacelles' axis (authored frame, y from the box centre)
-DORSAL_TURRET = (0.0, 2.87, 37.5)  # Q19: the only turret, seated on the body's ridge ahead of the dorsal fin
+DORSAL_TURRET = (0.0, 2.766, 37.5)  # Q19: the only turret, on the body's ridge ahead of the dorsal fin, as low as the hull under its rim
 
 
 def sha256(path: Path) -> str:
@@ -394,11 +394,17 @@ class SkylarkTransportTests(unittest.TestCase):
         self.assertEqual(t["up"], [0.0, 1.0, 0.0])
         self.assertEqual(t["arc_deg"], 200.0, "a hemisphere plus 10 degrees below the base")
         self.assertEqual(t["barrel_m"], 3.0, "the EA turret at two thirds of its size")
-        # It sits on the body's ridge with nothing above it.
+        # Its base (2.4 m across) meets the hull all round: the hull's splats just inside the rim reach the base in every
+        # direction, and nothing stands above the base inside it.
         p = np.array(t["position"])
-        column = self.xyz[np.hypot(self.xyz[:, 0] - p[0], self.xyz[:, 2] - p[2]) < 0.8]
-        self.assertGreater(len(column), 0)
-        self.assertAlmostEqual(float(column[:, 1].max()), p[1], delta=0.3)
+        d = self.xyz[:, [0, 2]] - p[[0, 2]]
+        r, ang = np.hypot(d[:, 0], d[:, 1]), np.arctan2(d[:, 1], d[:, 0])
+        rim = (r > 0.9) & (r < 1.2)
+        for k in range(8):
+            sector = rim & (np.floor((ang + np.pi) / (np.pi / 4.0)) == k)
+            self.assertGreater(int(sector.sum()), 0, k)
+            self.assertGreater(float(self.xyz[sector, 1].max()), p[1] - 0.05, f"the base floats over sector {k}")
+        self.assertLess(float(self.xyz[r < 1.2, 1].max()), p[1] + 0.25, "only the front of the base is buried")
         fin = self.xyz[(np.abs(self.xyz[:, 0]) < 0.5) & (self.xyz[:, 1] > p[1] + 0.5) & (self.xyz[:, 2] > p[2] - 10.0)]
         self.assertGreater(float(fin[:, 2].min()), p[2] + 2.0, "ahead of the dorsal fin, nothing else above it")
 
@@ -429,7 +435,8 @@ class SkylarkTransportTests(unittest.TestCase):
         inside = np.zeros(len(self.xyz), dtype=bool)
         for c in shapes:
             inside |= inside_primitive(self.xyz, c, inflate=self.spacing)
-        self.assertGreaterEqual(float(inside.mean()), 0.999, "at least 99.9 % of the LOD0 splat centres")
+        missed = self.xyz[~inside] + self.offset
+        self.assertTrue(bool(inside.all()), f"every LOD0 splat centre; missed (authored frame): {np.round(missed[:10], 2).tolist()}")
         lo, hi = self.xyz.min(axis=0), self.xyz.max(axis=0)
         for c in shapes:
             basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T

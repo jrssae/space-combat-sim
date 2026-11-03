@@ -231,7 +231,7 @@ Things the Godot side must know:
 - LOD0 is written group by group (`manifest.counts`), LOD1 chunk by chunk; `chunk_lod` is 1.
 - `hardpoints.json` has two pods on the nacelles' axis (x ±13.03, y -0.26: mains at the bells' exits, retros at the
   intakes), the centre of mass on that thrust line, 12 RCS ports, `muzzles` empty, and one turret (`dorsal`, Q19) seated
-  on the body's ridge at (0, 2.87, 37.5) in the authored frame. The manifest's `turret` entry has the keys of
+  on the body's ridge at (0, 2.766, 37.5) in the authored frame. The manifest's `turret` entry has the keys of
   `parts/turret.py`'s.
 - The engine glow is warm white #FFE9C2 (`ENGINE_GLOW_SRGB`), a `ShipSpec` tint, not paint.
 
