@@ -435,6 +435,15 @@ whose trigger never arose). Update the column with each task's commit.
 | T19 | D | Per-thruster engine bursts | T18 | Opus | Voice placement and a voice budget | done |
 | T20 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
+**Progress (2026-11-03).** Done: T01, T02, T05, T11, T15, T18, T19, T24. In progress:
+
+- Track A and B on this machine. T03, T04, T06 and T09 were cut off mid-build by a usage limit; their unreviewed work is
+  committed as found (8e0d13f) and each finishes on top of it. T07, T08, T10, T17, T20 not started.
+- Track C on a second machine, Python only: T23 (re-review of its fix rounds), T13 and T14 (small follow-ups), T22
+  (waits on four maintainer answers, then the generator) and T12 (fix round to reach 0.90, a maintainer call on the
+  Saturn 3 pods, a full review). `docs/handoff-m5-civilians.md` has the state, the open questions and the rules for two
+  machines on `m5`. T21 and T16 wait for them.
+
 ### M5-T01 `Game` flow, boot routing and loading
 
 - **Goal:** AC1 and the loading half of AC2 (D50).
