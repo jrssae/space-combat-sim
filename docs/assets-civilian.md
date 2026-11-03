@@ -133,7 +133,7 @@ The Saturns' thrust line is the spine axis, so their centre of mass is trimmed o
 | Hull | Pods (`l`, `r`): main / retro | RCS | Cockpit camera | Port / starboard light | Chunks |
 |---|---|---|---|---|---|
 | Skylark | main: the nacelle bells, (±13.45, -0.45, 55.5), radius 3.0; retro: the nacelle intake rings, (±13.45, -0.45, 35.6), radius 1.5 | the nacelles' three cones each, the capsule's two cones, the nose vanes | under the capsule's dorsal plate, (0, +3.0, 11.0) | the nacelles' outboard cones (±16.8, -0.45, 42.5) | `capsule` (nose, capsule, spine, side tanks, collar), `body` (body, dorsal fin, centre engine), `nacelle_l`, `nacelle_r` (with claws) |
-| Narn | main: the flank towers' aft faces, (±15.0, +5.0, 43.9), radius 1.4; retro: the towers' fronts, (±15.0, +5.0, 35.25), radius 1.0 | the prong tips (forward and outboard), the fin tips (up and down), the box's aft corners | under the canopy, (0, +1.5, 7.0) | the crescent's widest points (±23.0, 0, 27.0) | `cockpit` (cockpit block, dorsal block, the crescent's centre), `wing_l`, `wing_r` (prong, crescent half, fin, tower), `box` |
+| Narn | main: the flank towers' aft faces, (±15.0, +5.0, 43.9), radius 1.4; retro: the towers' fronts (the vanes' front face on the thrust line), (±15.0, +5.0, 35.7), radius 1.0 | the prong tips (forward and outboard), the fin tips (up and down), the box's aft corners | in the windscreen block behind the canopy, (0, +1.2, 11.3) | the crescent's widest points (±23.0, 0, 27.0) | `cockpit` (cockpit block, dorsal block, the crescent's centre), `wing_l`, `wing_r` (prong, crescent half, fin, tower), `box` |
 | Brezebel | main: the arm tips, (±12.2, 0, 60.0), radius 1.2, inside the 2.8 m wide tip; retro: the fairings' fronts, (±14.6, 0, 21.75), radius 1.0 | the twelve blocks on the engine bay's walls, the fin tips | behind the window row, (0, +3.5, 2.5) | the bow's widest points (±19.6, 0, 17.0) | `bow` (bow, dorsal fitting, engine bay, main engine), `arm_l`, `arm_r` (arm, fairing, fins) |
 
 The Narn's thrust line is 5 m above its centre plane, the Brezebel's on it. Centre engines (the Skylark's cone, the
@@ -294,7 +294,7 @@ From the design references, authored frame; `up` is (0, 1, 0) for dorsal mounts 
 | Saturn 8 tanker (4) | `dorsal_fwd` (0, +3.8, 19.1), `ventral_fwd` (0, -7.4, 46.0), `dorsal_mid` (0, +9.0, 149.4), `ventral_aft` (0, -5.3, 240.0) |
 | Saturn 3 (3) | `dorsal_fwd` (0, +3.8, 19.1), `ventral_fwd` (0, -7.4, 46.0), `dorsal_aft` (0, +5.3, 99.0) |
 | Skylark (2) | `dorsal` (0, +3.6, 37.5), `ventral` (0, -4.2, 15.0) |
-| Narn (2) | `tower_l` (-15.0, +9.0, 39.5), `tower_r` (15.0, +9.0, 39.5); fallback for the belly: one moves to (0, -9.0, 55.0) |
+| Narn (2) | `tower_l` (-14.85, +9.0, 41.7), `tower_r` (14.85, +9.0, 41.7), on the slotted crowns; fallback for the belly: one moves to (0, -9.0, 55.0) |
 | Brezebel (2) | `dorsal` (0, +4.3, 7.0), `ventral` (0, -4.5, 9.0) |
 
 ## Open for the human tester `(H)`

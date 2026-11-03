@@ -456,9 +456,10 @@ nozzles on the towers' aft faces (z 43.9).
 | Engine glow | orange-white #FFB070 | not seen in the captures; our choice |
 
 Turrets (2): the wiki gives the freighter "pulsed green bolts" from a "twin emplacement" ("And Now for a Word"). The
-towers' slotted tops are the model's turret-like mounts: one turret on each tower top at (±15.0, +9.0, 39.5), up +y,
-with an arc wide enough to fire down past the crescent's edge. Below the crescent that covers only the space beyond its
-edge; if the balance fight needs the belly, move one turret to the box's keel at (0, -9.0, 55.0), up -y.
+towers' slotted tops are the model's turret-like mounts: one turret on each tower top at (±14.85, +9.0, 41.7) (the
+slotted crown, x 14.15 to 15.54, z 40.36 to 43.07), up +y, with an arc wide enough to fire down past the crescent's
+edge. Below the crescent that covers only the space beyond its edge; if the balance fight needs the belly, move one
+turret to the box's keel at (0, -9.0, 55.0), up -y.
 
 Sources, checked 2026-11-02: https://babylon5.fandom.com/wiki/Narn_freighter,
 https://babylon5.fandom.com/wiki/File:Tal%27Quith.JPG, https://babylon5.fandom.com/wiki/File:Tal%27Quith%27s_collision.JPG,

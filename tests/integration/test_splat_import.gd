@@ -14,15 +14,17 @@ extends GutTest
 ## Fallback OBJs and hardpoints.json stay in the Godot frame (no flip). Nothing here needs a GPU.
 ##
 ## Lower LODs (M3-T03: `starfury_aurora_lod1.ply`) are centred on their own centroid and keep LOD0's box within
-## `LOD_AABB_TOLERANCE_M`. Break-up chunks partition the LOD named by the manifest's `chunk_lod` (0 when absent: the
+## `LOD_AABB_TOLERANCE_M` (or `LOD_AABB_SPACINGS` of their spacings). Break-up chunks partition the LOD named by the manifest's `chunk_lod` (0 when absent: the
 ## raider's chunks are its LOD0, the Starfury's its LOD1).
 
 const GENERATED_DIR: String = "res://assets/generated"
 const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tests.sh (it imports first)"
 ## AC4: the imported AABB matches the manifest within 1 cm.
 const AABB_TOLERANCE_M: float = 0.01
-## M3 AC6: a lower LOD's imported AABB matches LOD0's (the manifest's) within 0.3 m.
+## M3 AC6: a lower LOD's imported AABB matches LOD0's (the manifest's) within 0.3 m, or within this many of the level's
+## own spacings if larger (M5-T14): a big civilian's coarse levels sample its sharp extremes a spacing or more short.
 const LOD_AABB_TOLERANCE_M: float = 0.3
+const LOD_AABB_SPACINGS: float = 2.0
 ## M3 AC6: the Starfury's LOD1 and the chunks made from it.
 const STARFURY_ID: String = "starfury_aurora"
 const STARFURY_LOD1_FILE: String = "starfury_aurora_lod1.ply"
@@ -39,6 +41,7 @@ const REQUIRED_ROLES: Dictionary = {
 	"nav_buoy": ["hardpoints"],
 	"raider_fighter": ["fallback_mesh", "hardpoints"],
 	"sfx_combat": [],
+	"narn_transport": ["fallback_mesh", "hardpoints"],
 }
 
 var _readers: Array[ManifestReader] = []
@@ -103,9 +106,15 @@ func test_every_listed_file_exists_and_every_ply_is_a_lod() -> void:
 			chunk_files.append(String(entry["ply"]))
 			for key: String in ["ply", "obj"]:
 				assert_true(FileAccess.file_exists("%s/%s" % [reader.directory, entry[key]]), "%s chunk %s %s is missing: %s" % [reader.asset_id, entry["name"], key, GEN_ASSETS_HINT])
+		# A civilian's turret model (manifest `turret`, D61) is written like a chunk.
+		var turret: Dictionary = _turret_entry(reader)
+		if not turret.is_empty():
+			chunk_files.append(String(turret.get("ply", "")))
+			for key: String in ["ply", "lighting", "obj"]:
+				assert_true(FileAccess.file_exists("%s/%s" % [reader.directory, turret.get(key, "")]), "%s turret %s is missing: %s" % [reader.asset_id, key, GEN_ASSETS_HINT])
 		for file_name: String in DirAccess.get_files_at(reader.directory):
 			if file_name.ends_with(".ply"):
-				assert_true(lod_files.has(file_name) or chunk_files.has(file_name), "%s/%s is a PLY that no manifest lod or hardpoints chunk lists" % [reader.asset_id, file_name])
+				assert_true(lod_files.has(file_name) or chunk_files.has(file_name), "%s/%s is a PLY that no manifest lod, hardpoints chunk or turret lists" % [reader.asset_id, file_name])
 
 
 # --- splats ------------------------------------------------------------------------------------------------------
@@ -158,6 +167,23 @@ func test_chunk_plys_import_with_their_counts_and_partition_the_hull() -> void:
 	assert_gt(assets_with_chunks, 1, "assets with chunks exist (raider_fighter, starfury_aurora): %s" % GEN_ASSETS_HINT)
 
 
+## D61: a civilian's turret model imports with its manifest count, centred on its own centroid like a chunk.
+func test_turret_plys_import_with_their_counts() -> void:
+	var turrets: int = 0
+	for reader: ManifestReader in _valid_readers():
+		var entry: Dictionary = _turret_entry(reader)
+		if entry.is_empty():
+			continue
+		turrets += 1
+		var gaussian: GaussianResource = _gaussian("%s/%s" % [reader.directory, entry.get("ply", "")])
+		if gaussian == null:
+			continue
+		var label: String = "%s turret" % reader.asset_id
+		assert_eq(gaussian.point_count, int(entry.get("splats", -1)), "%s: point_count vs manifest splats" % label)
+		assert_true(gaussian.aabb.grow(0.1).has_point(Vector3.ZERO), "%s: the imported box %s contains its own origin" % [label, gaussian.aabb])
+	assert_gt(turrets, 0, "a civilian with a turret exists (narn_transport): %s" % GEN_ASSETS_HINT)
+
+
 func test_lower_lods_keep_the_lod0_box() -> void:
 	for reader: ManifestReader in _valid_readers():
 		for lod: Dictionary in reader.lods.slice(1):
@@ -167,7 +193,8 @@ func test_lower_lods_keep_the_lod0_box() -> void:
 			var label: String = "%s lod %d" % [reader.asset_id, lod["level"]]
 			assert_lt(int(lod["splats"]), int(reader.lods[0]["splats"]), "%s: lighter than lod 0" % label)
 			assert_gt(float(lod["spacing_m"]), float(reader.lods[0]["spacing_m"]), "%s: coarser than lod 0" % label)
-			_assert_aabb_near(gaussian.aabb, reader.imported_aabb(), LOD_AABB_TOLERANCE_M, "%s: imported AABB vs the lod 0 manifest box" % label)
+			var tolerance: float = maxf(LOD_AABB_TOLERANCE_M, LOD_AABB_SPACINGS * float(lod["spacing_m"]))
+			_assert_aabb_near(gaussian.aabb, reader.imported_aabb(), tolerance, "%s: imported AABB vs the lod 0 manifest box" % label)
 
 
 ## M3 AC6, the Godot half: the Starfury has a LOD1 with 20-30 % of LOD0's splats, and its five chunks come from it.
@@ -304,6 +331,12 @@ func _chunk_entries(reader: ManifestReader) -> Array[Dictionary]:
 		if entry is Dictionary:
 			out.append(entry as Dictionary)
 	return out
+
+
+## The manifest's `turret` entry (D61: a civilian's turret model), empty when it has none.
+func _turret_entry(reader: ManifestReader) -> Dictionary:
+	var entry: Variant = reader.data.get("turret")
+	return entry as Dictionary if entry is Dictionary else {}
 
 
 ## The LOD whose splats the chunks partition: the manifest's `chunk_lod`, 0 when it has none.

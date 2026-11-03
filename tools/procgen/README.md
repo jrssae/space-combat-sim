@@ -142,6 +142,24 @@ Things the Godot side must know:
   are re-centred on its own centroid; `offset` is that centroid in the body frame.
 - The centre of mass is trimmed onto the nacelle axis (y = the pods' nozzle y).
 
+## `narn_transport`
+
+The Narn freighter (M5-T14, docs/assets-civilian.md): a 70 m civilian, a flat green crescent with the cockpit in its notch,
+flank towers with the main nozzles, fins and a light grey cargo box, `narn` style. Outputs `narn_transport.ply` (about 77k
+splats at 0.31 m; budget 60k-90k), `_lod1` to `_lod3` (25 %, 6 %, 1.6 %), a `.light` per level, `narn_transport.obj/.mtl`
+(fallback mesh and depth proxy), four chunks cut from LOD1 (`cockpit`, `wing_l`, `wing_r`, `box`), the turret model
+`narn_transport_turret.ply/.light/.obj/.mtl` (about 1.9k splats at 0.11 m), `hardpoints.json` and `manifest.json`.
+
+Things the Godot side must know:
+
+- LOD0 is written group by group (`manifest.counts`), LOD1 chunk by chunk; `chunk_lod` is 1, as the Starfury's.
+- `hardpoints.json` has two pods on the towers (the thrust line 5 m above the crescent, the centre of mass on it), 14 RCS
+  ports, `muzzles` empty, and `turrets[]` `{name, position, up, arc_deg, barrel_m}` (`tower_l`, `tower_r`, on the towers'
+  slotted crowns). The manifest's `turret` entry has the keys of `parts/turret.py`'s: `ply`, `lighting`, `obj`, `splats`,
+  `spacing_m`, `offset` (the PLY's centroid in the turret frame: pivot at the origin, +Y up, barrels along -Z),
+  `barrel_m`, `trunnion` and `muzzles`.
+- The hull green is lifted off the written #2E4A3B to #5F997A (same hue) so it does not read black (`styles/narn.py`).
+
 ## `sfx_combat`
 
 The combat sounds (M2-T12, reshaped by M5-T18 and T19 on the reference in docs/design-references.md "Combat sounds"): eight
