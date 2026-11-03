@@ -35,6 +35,8 @@ ALPHA_MIN = 1e-4
 ALPHA_MAX = 0.9999
 # GDGS clamps scales to 1e-6 as well, so a smaller value would only waste the log.
 SCALE_MIN = 1e-6
+# A quaternion shorter than this cannot be normalised into a usable rotation.
+QUAT_MIN_LENGTH = 1e-9
 
 _VERTEX_DTYPE = np.dtype([(name, "<f4") for name in PROPERTY_NAMES])
 
@@ -84,6 +86,18 @@ class SplatData:
             got = np.asarray(getattr(self, name)).shape
             if got != shape:
                 raise ValueError(f"SplatData.{name} has shape {got}, expected {shape}")
+        # Bad numbers must stop here, before they turn into NaN or infinity in the PLY the game loads.
+        for name in shapes:
+            values = np.asarray(getattr(self, name), dtype=np.float64)
+            bad = ~np.isfinite(values)
+            if bad.any():
+                row = int(np.argwhere(bad)[0][0])
+                raise ValueError(f"SplatData.{name} is not finite at row {row}")
+        lengths = np.linalg.norm(np.asarray(self.rot, dtype=np.float64), axis=1)
+        short = lengths <= QUAT_MIN_LENGTH
+        if short.any():
+            row = int(np.argmax(short))
+            raise ValueError(f"SplatData.rot has a zero-length quaternion at row {row}")
 
     @staticmethod
     def concatenate(parts: list[SplatData]) -> SplatData:
