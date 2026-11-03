@@ -14,17 +14,20 @@ extends GutTest
 ## Fallback OBJs and hardpoints.json stay in the Godot frame (no flip). Nothing here needs a GPU.
 ##
 ## Lower LODs (M3-T03: `starfury_aurora_lod1.ply`) are centred on their own centroid and keep LOD0's box within
-## `LOD_AABB_TOLERANCE_M` (or `LOD_AABB_SPACINGS` of their spacings). Break-up chunks partition the LOD named by the manifest's `chunk_lod` (0 when absent: the
-## raider's chunks are its LOD0, the Starfury's its LOD1).
+## `LOD_AABB_TOLERANCE_M`, a big hull's within `LOD_AABB_SPACINGS` of the level's spacing. Break-up chunks partition the
+## LOD named by the manifest's `chunk_lod` (0 when absent: the raider's chunks are its LOD0, the Starfury's its LOD1).
 
 const GENERATED_DIR: String = "res://assets/generated"
 const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tests.sh (it imports first)"
 ## AC4: the imported AABB matches the manifest within 1 cm.
 const AABB_TOLERANCE_M: float = 0.01
-## M3 AC6: a lower LOD's imported AABB matches LOD0's (the manifest's) within 0.3 m, or within this many of the level's
-## own spacings if larger (M5-T14): a big civilian's coarse levels sample its sharp extremes a spacing or more short.
+## M3 AC6: a lower LOD's imported AABB matches LOD0's (the manifest's) within 0.3 m. A big hull (LOD0 spacing from
+## `LARGE_HULL_SPACING_M`: the civilians, not the fighters) may miss by `LOD_AABB_SPACINGS` of the level's own spacing
+## instead, if larger: its coarse levels sample sharp extremes up to about a spacing short (M5-T14; the Saturn 4
+## transport's LOD3 misses by 1.02 of its spacing).
 const LOD_AABB_TOLERANCE_M: float = 0.3
-const LOD_AABB_SPACINGS: float = 2.0
+const LARGE_HULL_SPACING_M: float = 0.25
+const LOD_AABB_SPACINGS: float = 1.25
 ## M3 AC6: the Starfury's LOD1 and the chunks made from it.
 const STARFURY_ID: String = "starfury_aurora"
 const STARFURY_LOD1_FILE: String = "starfury_aurora_lod1.ply"
@@ -198,7 +201,9 @@ func test_lower_lods_keep_the_lod0_box() -> void:
 			var label: String = "%s lod %d" % [reader.asset_id, lod["level"]]
 			assert_lt(int(lod["splats"]), int(reader.lods[0]["splats"]), "%s: lighter than lod 0" % label)
 			assert_gt(float(lod["spacing_m"]), float(reader.lods[0]["spacing_m"]), "%s: coarser than lod 0" % label)
-			var tolerance: float = maxf(LOD_AABB_TOLERANCE_M, LOD_AABB_SPACINGS * float(lod["spacing_m"]))
+			var tolerance: float = LOD_AABB_TOLERANCE_M
+			if float(reader.lods[0]["spacing_m"]) >= LARGE_HULL_SPACING_M:
+				tolerance = maxf(tolerance, LOD_AABB_SPACINGS * float(lod["spacing_m"]))
 			_assert_aabb_near(gaussian.aabb, reader.imported_aabb(), tolerance, "%s: imported AABB vs the lod 0 manifest box" % label)
 
 

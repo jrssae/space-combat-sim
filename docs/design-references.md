@@ -439,15 +439,15 @@ prong tips.
 
 | Part | Size and place |
 |---|---|
-| Crescent | a flat plate 46 m across, z 0 to 51.3, a flat diamond in section, 7.8 m thick along the centre line and thinning to sharp edges. In plan two prongs reach forward to sharp tips at x ±10, z 0. Their outer edges sweep out to the full 46 m at z 27; their inner edges step out to x ±13.2 by z 9 and run straight back to z 15, so the notch between them is 26 m wide at its back. Behind z 27 the outline sweeps in to x ±13 at z 47, where the box covers it; the centre runs on under the box to z 51.3. |
+| Crescent | a flat plate 46 m across, z 0 to 51.3, 7.8 m thick along the centre line and thinning towards the rim by about 0.14 m per metre on each face, then beveled to an edge over the last 1.2 m (it is still about 1.3 m thick 3 m in from the rim). The prongs are a thinner slab, about 2.1 m, that thins to the tips, and the plate steps up behind the notch's back. In plan two prongs reach forward to sharp tips at x ±10, z 0. Their outer edges sweep out to the full 46 m at z 27; their inner edges step out to x ±13.2 by z 9 and run straight back to z 15, so the notch between them is 26 m wide at its back. Behind z 27 the outline sweeps in to x ±13 at z 47, where the box covers it; the centre runs on under the box to z 51.3. |
 | Cockpit | in the notch, a blunt hexagonal nose 17 m across at its widest and 4.9 m tall, z 2.8 to 15.8, with a framed canopy recess 12 x 7 m on top (z 6.2 to 13.3) |
 | Dorsal block | 6.9 x 2.5 x 6.1 m on the crescent's top, z 20.3 to 26.5, with a rod 2.5 m across running aft to the box |
 | Fins | two upright plates 0.5 m thick at x ±17.1, reaching 8.1 m above and 8.6 m below the centre plane, z 28.4 to 44.1. The leading edge is upright; the trailing edge sweeps forward from z 44 at the root to z 38 at the tips. |
-| Flank towers | inboard of each fin (x ±13.1 to ±17.0), on top, rising to 9.0 m above the centre plane, z 35.25 to 43.9. Each has three upright vanes with rounded ends (5.4 m tall, 5.3 m long) on its front and a U-shaped slot in its top. |
-| Cargo box | 25.7 m wide and 14.0 m tall (9.0 m below to 5.0 m above the centre plane), z 31.2 to 70.0, chamfered edges. Its front stands against the crescent's rear edge, its aft lower edge is cut back from z 66 to 70, and two vent grilles of five slats sit on its top near the aft end. |
+| Flank towers | inboard of each fin (x ±13.1 to ±17.0), on top, rising to 9.0 m above the centre plane, z 35.25 to 43.9; the front slopes back from z 34.8 at the foot to z 39.0 at the top (y 7.93). Three vanes 0.67 m thick stand in front (x ±14.1, ±15.0, ±16.0): each rises from the crescent at z 34 leaning back, bends over at y 5.9 and runs aft into the tower's front. A slotted crown (x ±14.15 to ±15.54, z 40.36 to 43.07, up to y 9.0) with a U-shaped slot 0.47 m wide tops it. |
+| Cargo box | 25.5 m wide and 14.0 m tall (9.0 m below to 5.0 m above the centre plane), z 31.2 to 70.0, chamfered edges. Its front stands against the crescent's rear edge, its aft lower edge is cut back from z 66 to 70, and two vent grilles of five slats sit on its top near the aft end. |
 
 The model has no nozzle. The flank towers are the "engines on the flanks" of D59, so the generator puts the main
-nozzles on the towers' aft faces (z 43.9).
+nozzles on the towers' aft faces (z 43.9; a 0.9 m bell, its exit at z 44.72).
 
 | Where | sRGB | Read from |
 |---|---|---|
@@ -460,8 +460,8 @@ nozzles on the towers' aft faces (z 43.9).
 Turrets (2): the wiki gives the freighter "pulsed green bolts" from a "twin emplacement" ("And Now for a Word"). The
 towers' slotted tops are the model's turret-like mounts: one turret on each tower top at (±14.85, +9.0, 41.7) (the
 slotted crown, x 14.15 to 15.54, z 40.36 to 43.07), up +y, with an arc wide enough to fire down past the crescent's
-edge. Below the crescent that covers only the space beyond its edge; if the balance fight needs the belly, move one
-turret to the box's keel at (0, -9.0, 55.0), up -y.
+edge. Below the crescent that covers only the space beyond its edge; turrets are dorsal only (Q19), so the belly has
+none.
 
 Sources, checked 2026-11-02: https://babylon5.fandom.com/wiki/Narn_freighter,
 https://babylon5.fandom.com/wiki/File:Tal%27Quith.JPG, https://babylon5.fandom.com/wiki/File:Tal%27Quith%27s_collision.JPG,

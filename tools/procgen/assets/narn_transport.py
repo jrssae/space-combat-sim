@@ -25,7 +25,7 @@ Samples buried inside another part are dropped. The turret (D61) is its own smal
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -80,15 +80,13 @@ LODS = {
 }
 CHUNK_LOD = 1
 CHUNK_ORDER = ("cockpit", "wing_l", "wing_r", "box")
-# A coarse level's box matches LOD0's to within this, or this many of its spacings: sparse samples miss sharp extremes.
-LOD_AABB_TOLERANCE_M = 0.3
-LOD_AABB_SPACINGS = 2.0
 
 # The turret (D61): sampled finer than the hull, about 2 000 splats; arcs and barrel length from docs/assets-civilian.md.
 TURRET_PLY_NAME = f"{ASSET_ID}_turret.ply"
 TURRET_OBJ_NAME = f"{ASSET_ID}_turret.obj"
 TURRET_LIGHT_NAME = f"{ASSET_ID}_turret{lighting.SUFFIX}"
 TURRET_SPACING_M = 0.11
+TURRET_PANEL_M = (0.65, 0.06)  # the turret's own panel grid and line width: the hull's 2.4 m grid is about its size
 TURRET_SPLATS = (1_500, 2_600)
 TURRET_ARC_DEG = 220.0  # the tower tops: a hemisphere and then some, to fire down past the crescent's edge
 
@@ -156,12 +154,14 @@ def _under_grilles(spec: CargoBoxSpec, samples: SurfaceSamples) -> np.ndarray:
     return covered & (p[:, 1] > spec.top_y - 0.05)
 
 
-def build_parts(spec: NarnSpec, style: Style, ctx: BuildContext, spacing: float, stream_suffix: tuple[str, ...] = ()) -> list[Placed]:
+def build_parts(
+    spec: NarnSpec, style: Style, ctx: BuildContext, spacing: float, stream_suffix: tuple[str, ...] = (), systematic: bool = False
+) -> list[Placed]:
     """Every part in the authored frame, sampled, with the hidden samples dropped; right-hand groups mirrored to the left.
-    ``stream_suffix`` keeps another LOD's random draws apart from LOD0's."""
+    ``stream_suffix`` keeps another LOD's random draws apart from LOD0's; ``systematic`` as ``sample_mesh``'s."""
 
     def sample(mesh: Mesh, stream: str) -> SurfaceSamples:
-        return sample_mesh(mesh, spacing, ctx.rng("splats", stream, *stream_suffix))
+        return sample_mesh(mesh, spacing, ctx.rng("splats", stream, *stream_suffix), systematic=systematic)
 
     crescent = spec.crescent
     cockpit_body, hump = spec.cockpit.body_solid(), spec.cockpit.hump.solid()
@@ -201,6 +201,13 @@ def centre(placed: list[Placed]) -> tuple[list[Placed], np.ndarray]:
     mean = sum(s.positions.sum(axis=0) for s in sampled) / total
     offset = np.array([0.0, float(mean[1]), float(mean[2])])
     return [p.translated(-offset) for p in placed], offset
+
+
+def level_parts(spec: NarnSpec, style: Style, ctx: BuildContext, spacing: float, level: int) -> tuple[list[Placed], np.ndarray]:
+    """A coarse level's parts (LOD1 to LOD3) and its centroid offset: resampled from the level's own streams, and
+    systematically, so its centroid stays on LOD0's (every level is drawn in LOD0's frame)."""
+    _name, factor, stream, _share = LODS[level]
+    return centre(build_parts(spec, style, ctx, factor * spacing, (stream,), systematic=True))
 
 
 def _phase(name: str, style: Style) -> tuple[float, float, float]:
@@ -244,8 +251,8 @@ def turret_splats(spec: NarnTurretSpec, style: Style, ctx: BuildContext, spacing
     """The turret model and its splats in the turret's own frame (pivot at the origin, +Y up, barrels along -Z)."""
     part = narn_turret(spec, style)
     samples = _unburied(sample_mesh(part.mesh, spacing, ctx.rng("splats", "turret")), tuple(spec.solids())).symmetrized("x")
-    placed = Placed(part, samples, spacing)
-    return part, to_splats(samples, colour_samples(placed, style), spacing, overlap, thickness)
+    fine = replace(style, panel_size_m=TURRET_PANEL_M[0], panel_line_width_m=TURRET_PANEL_M[1])
+    return part, to_splats(samples, colour_samples(Placed(part, samples, spacing), fine), spacing, overlap, thickness)
 
 
 def write_turret(
@@ -425,8 +432,8 @@ def build(ctx: BuildContext) -> AssetOutputs:
     # LOD1 to LOD3: resampled coarser from their own streams, each centred on its own centroid; LOD1's groups are the chunks.
     counts: dict[int, int] = {}
     chunk_entries: list[dict[str, Any]] = []
-    for level, (name, factor, stream, _share) in LODS.items():
-        lod_placed, _ = centre(build_parts(spec, style, ctx, factor * spacing, (stream,)))
+    for level, (name, _factor, _stream, _share) in LODS.items():
+        lod_placed, _ = level_parts(spec, style, ctx, spacing, level)
         lod_groups = group_splats(lod_placed, style, overlap, thickness)
         lod = SplatData.concatenate([g.splats for g in lod_groups])
         counts[level] = len(lod)

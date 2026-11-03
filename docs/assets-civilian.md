@@ -133,7 +133,7 @@ The Saturns' thrust line is the spine axis, so their centre of mass is trimmed o
 | Hull | Pods (`l`, `r`): main / retro | RCS | Cockpit camera | Port / starboard light | Chunks |
 |---|---|---|---|---|---|
 | Skylark | main: the nacelle bells, (±13.45, -0.45, 55.5), radius 3.0; retro: the nacelle intake rings, (±13.45, -0.45, 35.6), radius 1.5 | the nacelles' three cones each, the capsule's two cones, the nose vanes | under the capsule's dorsal plate, (0, +3.0, 11.0) | the nacelles' outboard cones (±16.8, -0.45, 42.5) | `capsule` (nose, capsule, spine, side tanks, collar), `body` (body, dorsal fin, centre engine), `nacelle_l`, `nacelle_r` (with claws) |
-| Narn | main: the flank towers' aft faces, (±15.0, +5.0, 43.9), radius 1.4; retro: the towers' fronts (the vanes' front face on the thrust line), (±15.0, +5.0, 35.7), radius 1.0 | the prong tips (forward and outboard), the fin tips (up and down), the box's aft corners | in the windscreen block behind the canopy, (0, +1.2, 11.3) | the crescent's widest points (±23.0, 0, 27.0) | `cockpit` (cockpit block, dorsal block, the crescent's centre), `wing_l`, `wing_r` (prong, crescent half, fin, tower), `box` |
+| Narn | main: a 0.9 m bell on each tower's aft face (z 43.9), its exit at (±15.0, +5.0, 44.72), radius 1.4; retro: the towers' fronts (the vanes' front face on the thrust line), (±15.0, +5.0, 35.7), radius 1.0 | the prong tips (forward and outboard), the fin tips (up and down), the box's aft corners | in the windscreen block behind the canopy, (0, +1.2, 11.3) | the crescent's widest points (±23.0, 0, 27.0) | `cockpit` (cockpit block, dorsal block, the crescent's centre), `wing_l`, `wing_r` (prong, crescent half, fin, tower), `box` |
 | Brezebel | main: the arm tips, (±12.2, 0, 60.0), radius 1.2, inside the 2.8 m wide tip; retro: the fairings' fronts, (±14.6, 0, 21.75), radius 1.0 | the twelve blocks on the engine bay's walls, the fin tips | behind the window row, (0, +3.5, 2.5) | the bow's widest points (±19.6, 0, 17.0) | `bow` (bow, dorsal fitting, engine bay, main engine), `arm_l`, `arm_r` (arm, fairing, fins) |
 
 The Narn's thrust line is 5 m above its centre plane, the Brezebel's on it. Centre engines (the Skylark's cone, the
@@ -291,14 +291,37 @@ top stripe and the hazard band, the Saturn 3 pods rust-red tops, every tank the 
 
 `tools/procgen/assets/narn_transport.py`, `tools/procgen/styles/narn.py`.
 
-| Part | How to build it |
+As built (M5-T14); the parts are in `tools/procgen/parts/narn.py`. Numbers the design references leave open were measured
+off the STL's shells and sections. Authored frame: y from the crescent's centre plane, z from the prong tips.
+
+| Part | As built |
 |---|---|
-| Crescent | the plan outline is not convex (the notch), so build it as pieces that overlap: a centre body from z 15 to 51.3 and two prongs from z 0 to 27, each a `section_loft` of flat diamond sections whose thickness falls from 7.8 m on the centre line to an edge at the rim |
-| Cockpit | a `section_loft` hexagonal nose with the canopy recess as inset faces in `canopy_glass` |
-| Dorsal block and rod | `tapered_box` and a `lathe` rod |
-| Fins | `prism` of the fin's outline, 0.5 m thick |
-| Flank towers | `tapered_box` with three rounded vanes (`sweep_rect`) on the front, the slot as an inset in the top, and `propulsion.nozzle` on the aft face |
-| Cargo box | a chamfered `section_loft` along z with the aft lower cut, two `wing.vent_grille`s on top, the green panel and hazard corners as material regions |
+| Crescent | a centre body (z 15 to 51.3, out to x ±13.2) and two halves (each prong from its tip, then the plate outboard of x 13.2 to z 46.65): faceted `section_loft`s whose seams are left open, the notch's walls and back built. Section in the table below. A red band on each half's top, z 18.5 to 22.5, from 15 % to 85 % of the way from the cap's corner to the bevel |
+| Cockpit | a hexagonal `section_loft` (stations below) with a flat top at y -0.16; a `canopy_glass` panel z 6.6 to 12.9 out to 84 % of the top's half-width, in a 0.4 m `canopy_frame`; a windscreen block (y -0.5 to 2.0; x ±4.48, z 10.06 to 15.8 at its foot; x ±2.45, z 11.1 to 15.8 at its top) whose front face is glass |
+| Dorsal block and bar | a frustum (x ±3.4, z 20.32 to 26.46 at y 2.25; x ±2.01, z 21.49 to 25.30 at y 4.78); a trapezoid bar z 25.44 to 35.28, half-width 1.25 at y 2.52 and 0.84 at y 4.21 (the model's bar, not a `lathe` rod); two plates 0.44 m thick at y 4.36 beside its end, outline (x, z) (0.9, 30.86), (2.95, 33.4), (2.95, 35.29), (0.9, 35.29) |
+| Fins | `prism` 0.5 m thick at x ±17.1, outline (z, y) (28.4, 0), (28.7, 8.1), (38.0, 8.1), (44.1, 0), (38.0, -8.6), (28.7, -8.6) |
+| Flank towers | a frustum from y 0 (x 12.98 to 16.96, z 34.82 to 43.82) to y 7.93 (x 13.36 to 16.58, z 39.03 to 43.90); a slotted crown x 14.15 to 15.54, z 40.36 to 43.07, y 7.8 to 9.0, its slot x 14.61 to 15.08 down to y 8.55; three vanes (`sweep_rect`, 0.67 m square) at x 14.09, 15.04 and 15.99 along (z, y) (34.0, 0.3), (35.75, 4.4), (36.1, 5.05), (36.6, 5.5), (37.3, 5.75), (38.2, 5.87), (39.2, 5.87); a `propulsion.nozzle` (throat 0.95, exit 1.4, 0.9 m long) on the aft face at x 15.0, y 5.0 |
+| Cargo box | a chamfered `section_loft` along z: x ±12.75, y -9.0 to 5.0, the chamfers from x ±11.6 to (±12.75, 4.35) and (±12.75, -8.5); the wedge front's edge at z 31.2, y 0.52, its top rising 1.158 and its bottom falling 2.70 per metre; the top's rear chamfer from z 69.2 down to y 4.35 at z 70; the aft cut from (z 66.4, y -9.0) to (70.0, 0.55). Paint as facets: `cargo_panel` z 41 to 61, y -6.5 to 2.5 on each side; 1.2 m hazard checkers z 35.2 to 40.0 and 61.4 to 66.2, y -8.3 to -7.1. Two `wing.vent_grille`s (five slats, 4.58 m across, 5.55 m long) at x ±8.88, z 65.09 |
+
+| Crescent section | Measured |
+|---|---|
+| Outline (z, half-width) | (0, 10.0), (3.6, 15.3), (15.3, 22.0), (27.0, 23.0), (38.8, 19.1), (45.0, 15.5), (51.3, 6.7); the notch's inner edge (0, 10.0), (6.3, 10.0), (9.4, 13.2), (15.0, 13.2) |
+| Thinning to the rim | top 0.62 + 0.137 d, bottom -(0.89 + 0.135 d), d the distance in from the rim; beveled over the last 1.2 m to an edge at y -0.15 |
+| Centre body caps, z: top / bottom | 15: 2.5 / -2.85; 27: 3.76 / -4.04; 45: 2.2 / -2.4; 51.3: 1.0 / -1.2 |
+| Prong caps, z: top / bottom | 0: -0.15 / -0.15; 0.3: 0.02 / -0.28; 1.5: 0.43 / -0.70; 2.5: 0.77 / -1.05; 4.5: 0.88 / -1.16; 6: 1.04 / -1.32; 8: 1.13 / -1.41; 12: 1.20 / -1.48; 15: 1.33 / -1.61 (the plate steps up behind them) |
+
+| Cockpit station z | Widest half-width (at y -1.43) | Top: half-width, y | Keel: half-width, y |
+|---|---|---|---|
+| 2.8 | 4.5 | 1.5, -1.43 | 1.5, -1.43 (a sharp front edge) |
+| 5.85 | 6.75 | 3.76, -0.16 | 2.1, -2.05 |
+| 6.9 | 7.5 | 4.4, -0.16 | 2.3, -2.27 |
+| 8.75 | 8.1 | 5.65, -0.16 | 2.6, -2.6 |
+| 9.8 | 8.3 | 5.85, -0.16 | 2.87, -2.85 |
+| 11.7 and 15.8 | 8.52 | 6.29, -0.16 | 2.87, -2.85 |
+
+The turret model: a six-sided base 2.6 m across its corners and 0.5 m tall, a wedge housing (z -1.0 to 1.1, half-width
+0.7 to 0.95, top 0.95 to 1.7 m) with a red band at z 0.15 to 0.45, twin barrels at x ±0.42, y 0.7 with the muzzles 3.0 m
+ahead of the turning axis; 1 894 splats at 0.11 m on its own 0.65 m panel grid.
 
 ## `centauri_brezebel` and the `centauri` style (T15)
 
@@ -392,7 +415,7 @@ From the design references, authored frame; `up` is (0, 1, 0) for dorsal mounts 
 | Saturn 8 tanker (2) | `dorsal_fwd` (0, +3.8, 19.1), `dorsal_mid` (0, +9.0, 149.4) |
 | Saturn 3 (1) | `dorsal_fwd` (0, +3.8, 19.1) |
 | Skylark (2) | `dorsal` (0, +3.6, 37.5), `ventral` (0, -4.2, 15.0) |
-| Narn (2) | `tower_l` (-14.85, +9.0, 41.7), `tower_r` (14.85, +9.0, 41.7), on the slotted crowns; fallback for the belly: one moves to (0, -9.0, 55.0) |
+| Narn (2) | `tower_l` (-14.85, +9.0, 41.7), `tower_r` (14.85, +9.0, 41.7), on the slotted crowns |
 | Brezebel (2) | `dorsal` (0, +4.3, 7.0), `ventral` (0, -4.5, 9.0) |
 
 ## Open for the human tester `(H)`

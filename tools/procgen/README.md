@@ -164,7 +164,6 @@ Things the Godot side must know:
   slotted crowns). The manifest's `turret` entry has the keys of `parts/turret.py`'s: `ply`, `lighting`, `obj`, `splats`,
   `spacing_m`, `offset` (the PLY's centroid in the turret frame: pivot at the origin, +Y up, barrels along -Z),
   `barrel_m`, `trunnion` and `muzzles`.
-- The hull green is lifted off the written #2E4A3B to #5F997A (same hue) so it does not read black (`styles/narn.py`).
 
 ## `saturn_family`
 

@@ -25,6 +25,7 @@ PILOT_TERMS = {
 }  # fmt: skip
 SYM_TOL = 1e-6
 MAX_ROUND_TRIP_DEG = 1.5
+LOD_AABB_TOLERANCE_M = 0.3  # test_splat_import.gd's floor
 
 
 def sha256(path: Path) -> str:
@@ -114,10 +115,20 @@ class NarnTransportTests(unittest.TestCase):
             xyz = godot_xyz(self.dir_a / name)
             self.assertEqual(len(xyz), entry["splats"])
             self.assertLess(float(np.abs(xyz.mean(axis=0)).max()), 1e-3, "centred like LOD0")
-            # Coarse samples miss sharp extremes (the prong tips, the slotted tower tops) by up to a couple of spacings.
-            tolerance = max(narn.LOD_AABB_TOLERANCE_M, narn.LOD_AABB_SPACINGS * entry["spacing_m"])
+            # Coarse samples miss sharp extremes (the prong tips, the slotted tower tops) by up to one of their spacings.
+            tolerance = max(LOD_AABB_TOLERANCE_M, entry["spacing_m"])
             np.testing.assert_allclose(xyz.min(axis=0), self.manifest["aabb_min"], atol=tolerance)
             np.testing.assert_allclose(xyz.max(axis=0), self.manifest["aabb_max"], atol=tolerance)
+
+    def test_coarse_levels_keep_lod0s_centroid(self) -> None:
+        # Every level is drawn in LOD0's frame but centred on its own centroid, so the two must agree. Systematic sampling
+        # keeps them within a quarter of the level's own spacing (far under a pixel where each level is shown).
+        ctx = BuildContext(Path("unused"), seed=42)
+        lod0 = np.array(self.manifest["centroid_offset"])
+        for level in narn.LODS:
+            _placed, offset = narn.level_parts(narn.DEFAULT_SPEC, narn.NARN, ctx, narn.DEFAULT_SPACING_M, level)
+            drift = float(np.linalg.norm(offset - lod0))
+            self.assertLess(drift, 0.25 * self.manifest["lods"][level]["spacing_m"], (level, drift))
 
     def test_the_lod_budgets_follow_the_design_table(self) -> None:
         # docs/assets-civilian.md: LOD1 18 750, LOD2 4 700, LOD3 1 200 for a 75 000 LOD0; the shares carry that.
@@ -178,26 +189,6 @@ class NarnTransportTests(unittest.TestCase):
         self.assertGreater(int(red.sum()), 200, "the red band on each side of the crescent")
         self.assertAlmostEqual(float(self.xyz[red, 0].mean()), 0.0, delta=0.5, msg="one band on each side")
         self.assertGreater(float(np.abs(self.xyz[red, 0]).min()), 12.0, "on the crescent halves, outboard of the box")
-
-    def test_the_hull_green_is_lifted_off_black_but_keeps_its_hue(self) -> None:
-        from tools.procgen.styles.narn import NARN, REFERENCE_SRGB
-
-        def hsv(rgb: np.ndarray) -> tuple[float, float, float]:
-            r, g, b = rgb
-            mx, mn = max(rgb), min(rgb)
-            hue = 60.0 * (((b - r) / (mx - mn)) + 2.0) if mx == g else -1.0
-            return hue, (mx - mn) / mx, mx
-
-        for role in ("hull", "cargo_panel"):
-            srgb = linear_to_srgb(np.array(NARN.material(role).albedo))
-            ref = np.array([(REFERENCE_SRGB[role] >> s) & 255 for s in (16, 8, 0)]) / 255.0
-            h, s, v = hsv(srgb)
-            h0, s0, v0 = hsv(ref)
-            self.assertAlmostEqual(h, h0, delta=4.0, msg=role)
-            self.assertAlmostEqual(s, s0, delta=0.03, msg=role)
-            self.assertGreater(v, v0, f"{role}: lifted (the raider's darker first paint read black on the GPU)")
-        lum = float(np.array(NARN.material("hull").albedo) @ np.array([0.2126, 0.7152, 0.0722]))
-        self.assertGreater(lum, 0.2, "brighter than the raider's first paint, which read as a black silhouette")
 
     def test_paint_brightness_does_not_follow_the_normal(self) -> None:
         normals, lum = [], []
@@ -341,11 +332,15 @@ class NarnTransportTests(unittest.TestCase):
         self.assertEqual(eye[0, 0], 0.0)
         cockpit = [c for c in self.hp["collision"] if c["name"].startswith("cockpit")]
         self.assertTrue(any(inside_primitive(eye, c, 0.0)[0] for c in cockpit), "inside the cockpit block")
-        ahead = self.xyz[(np.abs(self.xyz[:, 0]) < 1.0) & (np.abs(self.xyz[:, 1] - eye[0, 1]) < 1.0)]
-        self.assertLess(float(eye[0, 2] - ahead[:, 2].min()), 15.0, "near the nose")
-        above = self.xyz[(np.abs(self.xyz[:, 0]) < 0.5) & (np.abs(self.xyz[:, 2] - eye[0, 2]) < 0.5) & (self.xyz[:, 1] > eye[0, 1])]
-        self.assertGreater(len(above), 0, "hull over the eye: it is not outside the ship")
-        self.assertLess(float(above[:, 1].min() - eye[0, 1]), 1.5, "just under the canopy")
+        # Closed in by hull: the windscreen just ahead, the block's roof just above, the keel below.
+        x, y, z = (self.xyz[:, k] - eye[0, k] for k in range(3))
+        near_x = np.abs(x) < 0.5
+        ahead = -z[near_x & (np.abs(y) < 0.5) & (z < 0.0)]
+        above = y[near_x & (np.abs(z) < 0.5) & (y > 0.0)]
+        below = -y[near_x & (np.abs(z) < 0.5) & (y < 0.0)]
+        for label, gaps, reach in (("ahead", ahead, 1.5), ("above", above, 1.5), ("below", below, 5.0)):
+            self.assertGreater(len(gaps), 0, f"no hull {label} of the eye: it is outside the ship")
+            self.assertLess(float(gaps.min()), reach, f"the hull {label} of the eye is too far")
 
     def test_chase_anchor_is_behind_and_above_by_the_length(self) -> None:
         anchor = self.hp["chase_anchor"]["position"]
@@ -429,7 +424,7 @@ class NarnTransportTests(unittest.TestCase):
         inside = np.zeros(len(self.xyz), dtype=bool)
         for c in shapes:
             inside |= inside_primitive(self.xyz, c, inflate=narn.DEFAULT_SPACING_M)
-        self.assertGreaterEqual(float(inside.mean()), 0.97, "at least 97 % of the LOD0 splat centres")
+        self.assertGreaterEqual(float(inside.mean()), 0.999, "the hit volumes hold the hull: 99.9 % of the LOD0 splat centres")
         lo, hi = self.xyz.min(axis=0), self.xyz.max(axis=0)
         for c in shapes:
             basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T
@@ -445,13 +440,23 @@ class NarnTransportTests(unittest.TestCase):
             self.assertTrue(np.all(extent.min(axis=0) >= lo - 1.0) and np.all(extent.max(axis=0) <= hi + 1.0), c["name"])
 
     def test_collision_is_mirror_symmetric(self) -> None:
+        # Every side primitive (an `l` or `r` in its name) has a mirrored twin of the same size; the rest are centred.
         shapes = {c["name"]: c for c in self.hp["collision"]}
+        swap = {"l": "r", "r": "l"}
         for name, c in shapes.items():
-            if "_r" in name and name.replace("_r", "_l", 1) in shapes:
-                twin = shapes[name.replace("_r", "_l", 1)]
-                np.testing.assert_allclose(twin["position"], mirrored(c["position"]), atol=1e-4, err_msg=name)
-            elif "_l" not in name:
+            parts = name.split("_")
+            sides = [i for i, p in enumerate(parts) if p in swap]
+            if not sides:
                 self.assertAlmostEqual(c["position"][0], 0.0, places=4, msg=name)
+                continue
+            side = parts[sides[0]]
+            self.assertEqual(c["position"][0] < 0.0, side == "l", f"{name} is on its own side")
+            parts[sides[0]] = swap[side]
+            twin_name = "_".join(parts)
+            self.assertIn(twin_name, shapes, f"{name} has no mirrored twin")
+            twin = shapes[twin_name]
+            np.testing.assert_allclose(twin["position"], mirrored(c["position"]), atol=1e-4, err_msg=name)
+            self.assertEqual(twin.get("size"), c.get("size"), name)
 
     # --- meshes ----------------------------------------------------------------------------------------------------------
     def test_fallback_obj_is_valid_and_matches_the_splat_bounds(self) -> None:
@@ -511,16 +516,17 @@ class NarnStyleTests(unittest.TestCase):
         self.assertAlmostEqual(NARN.panel_tint_jitter, 0.08)
         self.assertEqual(NARN.material("canopy_glass").transmittance, 0.0, "dark opaque glass: there is no cockpit inside")
 
-    def test_the_written_scheme_is_kept_where_it_is_not_lifted(self) -> None:
+    def test_the_confirmed_scheme_is_painted_as_written(self) -> None:
+        # Q19: the maintainer confirmed the written scheme; a lift waits for T16's GPU check and the maintainer's OK.
         from tools.procgen.styles.narn import NARN
 
         def srgb_hex(role: str) -> int:
             r, g, b = (round(float(c) * 255) for c in linear_to_srgb(np.array(NARN.material(role).albedo)))
             return (r << 16) | (g << 8) | b
 
-        for role, value in (("hull_panel", 0xB7BAB5), ("stripe", 0xA3241C), ("hazard", 0xD2B032),
-                            ("hazard_dark", 0x262626), ("canopy_glass", 0x10201A), ("nozzle", 0x3A3A36),
-                            ("nozzle_throat", 0x141413)):  # fmt: skip
+        for role, value in (("hull", 0x2E4A3B), ("hull_dark", 0x1E2E25), ("cargo_panel", 0x4E7552), ("hull_panel", 0xB7BAB5),
+                            ("stripe", 0xA3241C), ("hazard", 0xD2B032), ("hazard_dark", 0x262626), ("canopy_glass", 0x10201A),
+                            ("canopy_frame", 0x1E2E25), ("nozzle", 0x3A3A36), ("nozzle_throat", 0x141413)):  # fmt: skip
             got = srgb_hex(role)
             for shift in (16, 8, 0):
                 self.assertAlmostEqual((got >> shift) & 255, (value >> shift) & 255, delta=1, msg=role)
