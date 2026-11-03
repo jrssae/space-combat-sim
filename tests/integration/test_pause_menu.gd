@@ -17,6 +17,7 @@ func before_each() -> void:
 	main.input_source = source
 	main.scenario_path = ScenarioLoader.FREE_FLIGHT_PATH
 	main.waves_auto_start = false
+	main.raider_pool_size = 1  # one hostile for the auto-track check
 	add_child_autofree(main)
 	main.pause_menu.game = game
 	await _ticks(2)
@@ -24,6 +25,7 @@ func before_each() -> void:
 
 func after_each() -> void:
 	get_tree().paused = false
+	ControlProfiles.use(ControlProfile.DEFAULT_NAME)  # a test that rebinds leaves the project's map as it found it
 
 
 func _ticks(n: int) -> void:
@@ -104,9 +106,65 @@ func test_resume_closes_the_menu() -> void:
 
 func test_b_at_the_root_resumes() -> void:
 	await _open()
+	var backs: int = main.audio.times_played(&"ui_back")
 	await _pad(&"ui_cancel")
 	assert_false(_menu().is_open())
 	assert_false(get_tree().paused)
+	assert_eq(main.audio.times_played(&"ui_back"), backs + 1, "leaving the menu has the back sound")
+
+
+func test_the_pads_buttons_act_on_nothing_behind_the_menu() -> void:
+	assert_true(DebugConsole.registry.execute("spawn raider idle 300")[0].ok)
+	var respawns: Array[int] = []
+	main.player_respawned.connect(func() -> void: respawns.append(1))
+	main.ship.linear_velocity = Vector3(0.0, 0.0, -40.0)
+	await _ticks(10)
+	await _open()
+	var position: Vector3 = main.ship.global_position
+	var velocity: Vector3 = main.ship.linear_velocity
+	var camera: CameraRig.Mode = main.camera_rig.mode
+	var lights: bool = main.ship.running_lights
+	var navigation: Array[StringName] = [InputAdapter.RESET_SHIP, InputAdapter.TOGGLE_CAMERA,
+			InputAdapter.TOGGLE_RUNNING_LIGHTS, InputAdapter.AUTOTRACK]  # Back, Y, D-pad left, X
+	for pass_number: int in 2:  # let go inside the menu, then close it while the buttons are still down
+		for action: StringName in navigation:
+			source.hold(action)
+		await _ticks(4)
+		if pass_number == 0:
+			for action: StringName in navigation:
+				source.release(action)
+			await _ticks(4)
+		else:
+			await _pad(&"ui_accept")  # Resume, A being the pad's accept
+			assert_false(_menu().is_open())
+			await _ticks(4)
+			for action: StringName in navigation:
+				source.release(action)
+			await _ticks(4)
+		assert_eq(respawns.size(), 0, "Back did not respawn the ship (pass %d)" % pass_number)
+		assert_eq(main.camera_rig.mode, camera, "Y did not change the camera (pass %d)" % pass_number)
+		assert_eq(main.ship.running_lights, lights, "D-pad left did not toggle the lights (pass %d)" % pass_number)
+		assert_false(main.adapter.autotrack_on, "X did not switch auto-track on (pass %d)" % pass_number)
+		assert_false(main.ship.targeting.system.has_selection(), "nor take the nearest hostile (pass %d)" % pass_number)
+		if pass_number == 0:
+			assert_eq(main.ship.global_position, position, "the paused ship did not move")
+			assert_eq(main.ship.linear_velocity, velocity, "and was not reset")
+
+
+func test_after_resume_a_and_b_in_flight_press_no_hidden_button() -> void:
+	await _open()
+	await _pad(&"ui_down")  # the focus is on Restart
+	await _tap(InputAdapter.PAUSE)  # Start resumes
+	assert_false(_menu().is_open())
+	var accepts: int = main.audio.times_played(&"ui_accept")
+	var backs: int = main.audio.times_played(&"ui_back")
+	await _pad(&"ui_accept")  # A in flight
+	await _pad(&"ui_cancel")  # B in flight
+	assert_eq(game.restarts, 0, "no stale Restart was pressed")
+	assert_false(_menu().is_open(), "B in flight does not open or close anything")
+	assert_eq(main.audio.times_played(&"ui_accept"), accepts, "no accept sound in flight")
+	assert_eq(main.audio.times_played(&"ui_back"), backs, "nor a back sound")
+	assert_eq(_menu().frame().depth(), 0, "the closed menu holds no pages")
 
 
 func test_the_button_that_closes_the_menu_does_not_also_act_in_flight() -> void:
@@ -247,8 +305,6 @@ func test_the_legend_follows_a_rebind_made_while_paused() -> void:
 	assert_eq(_menu().frame().pad_diagram().legend.label_for(&"x"), "Auto-track")
 	assert_true(ControlProfiles.bind(&"fire", "pad:button:2")["ok"])
 	assert_string_contains(_menu().frame().pad_diagram().legend.label_for(&"x"), "Fire")
-	ControlProfiles.use(ControlProfile.DEFAULT_NAME)
-	assert_eq(_menu().frame().pad_diagram().legend.label_for(&"x"), "Auto-track", "and back")
 
 
 # --- Sound and housekeeping --------------------------------------------------------------------------------------

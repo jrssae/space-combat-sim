@@ -1,6 +1,7 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://src/frontend/loading_screen.gd" id="1_loading"]
+[ext_resource type="Theme" path="res://src/frontend/theme.tres" id="2_theme"]
 
 [node name="LoadingScreen" type="Control"]
 layout_mode = 3
@@ -9,6 +10,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+theme = ExtResource("2_theme")
 script = ExtResource("1_loading")
 
 [node name="Backdrop" type="ColorRect" parent="."]
@@ -35,16 +37,13 @@ theme_override_constants/separation = 16
 
 [node name="Title" type="Label" parent="Center/Box"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.55, 1, 0.65, 1)
-theme_override_font_sizes/font_size = 32
+theme_type_variation = &"Title"
 text = "LOADING"
 horizontal_alignment = 1
 
 [node name="Scenario" type="Label" parent="Center/Box"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_colors/font_color = Color(0.55, 1, 0.65, 0.8)
-theme_override_font_sizes/font_size = 22
 horizontal_alignment = 1
 
 [node name="Progress" type="ProgressBar" parent="Center/Box"]

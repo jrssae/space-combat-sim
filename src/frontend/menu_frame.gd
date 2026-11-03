@@ -43,10 +43,17 @@ func _ready() -> void:
 
 ## Replaces every page with `page`, the first of the stack.
 func set_root(page: MenuScreen) -> void:
+	clear()
+	_show_page(page)
+
+
+## Drops every page (the pause menu does when it closes, so nothing stays focusable behind the game).
+func clear() -> void:
 	for old: MenuScreen in _pages:
 		_drop(old)
 	_pages.clear()
-	_show_page(page)
+	_title.text = ""
+	_message.text = ""
 
 
 ## Puts `page` on top of the current one.
@@ -57,12 +64,12 @@ func push_screen(page: MenuScreen) -> void:
 
 
 ## Leaves the top page for the one under it, with the back sound. Returns false when the top page is the root: then
-## `closed` is emitted instead.
+## `closed` is emitted instead, silently (the host decides whether leaving is worth a sound).
 func go_back() -> bool:
-	_play(SOUND_BACK)
 	if _pages.size() <= 1:
 		closed.emit()
 		return false
+	_play(SOUND_BACK)
 	_drop(_pages.pop_back())
 	var below: MenuScreen = _pages.back()
 	below.visible = true

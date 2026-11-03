@@ -158,6 +158,33 @@ func test_leaving_a_paused_scene_unpauses_the_tree() -> void:
 	assert_eq(_shown_path(), GameScript.FRONT_END_SCENE)
 
 
+# --- Restart (the pause menu's Restart, M5-T02) -----------------------------------------------------------------
+
+
+func test_restart_plays_the_request_that_started_the_run_again() -> void:
+	var request: Dictionary = GameFlow.make_request(&"sandbox", &"dogfight", false, 5)
+	assert_true(game.flow.enter_directly(request))
+	assert_eq(game.restart(), "", "accepted")
+	assert_eq(game.flow.state, GameFlow.State.LOADING)
+	assert_eq(game.flow.request, request, "the same scenario and seed")
+	await wait_until(func() -> bool: return _in_space_with(STAND_IN_MAIN), 10.0)
+	assert_true(_in_space_with(STAND_IN_MAIN), "the run was loaded again")
+
+
+func test_restart_with_no_request_plays_the_scenario_setting() -> void:
+	assert_eq(game.flow.request, {})
+	settings.set_value(&"scenario", &"instructor_route")
+	assert_eq(game.restart(), "")
+	assert_eq(game.flow.request, GameFlow.make_request(&"sandbox", &"instructor_route"))
+	await wait_until(func() -> bool: return _in_space_with(STAND_IN_MAIN), 10.0)
+
+
+func test_restart_while_loading_says_why() -> void:
+	assert_eq(game.restart(), "")
+	assert_string_contains(game.restart(), "already loading")
+	await wait_until(func() -> bool: return _in_space_with(STAND_IN_MAIN), 10.0)
+
+
 # --- Console (AC1) ---------------------------------------------------------------------------------------------
 
 

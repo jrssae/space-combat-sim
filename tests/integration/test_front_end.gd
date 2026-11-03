@@ -91,9 +91,21 @@ func test_the_pad_alone_walks_the_menu_and_back() -> void:
 func test_b_on_the_main_menu_does_nothing_harmful() -> void:
 	var front: FrontEnd = await _front_end()
 	await _pad(&"ui_cancel")
+	assert_eq((front.get_node(^"%Audio") as AudioDirector).times_played(&"ui_back"), 0, "no beep for a back that goes nowhere")
 	assert_eq(front.frame().depth(), 1)
 	assert_eq(game.played.size(), 0)
 	assert_eq(quits, 0)
+
+
+func test_the_pad_never_strands_when_the_focus_is_lost() -> void:
+	var front: FrontEnd = await _front_end()
+	await _pad(&"ui_down")
+	front.get_viewport().gui_release_focus()
+	assert_null(front.frame().current_page().focused_option())
+	await _pad(&"ui_down")
+	assert_eq(_focused_text(front), "Missions", "the D-pad lands on the first option")
+	await _pad(&"ui_down")
+	assert_eq(_focused_text(front), "Free flight", "and walks on from there")
 
 
 func test_quit_quits() -> void:

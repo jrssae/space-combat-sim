@@ -1,4 +1,4 @@
-[gd_resource type="Theme" load_steps=14 format=3]
+[gd_resource type="Theme" load_steps=16 format=3]
 
 ; The menus' one theme (architecture §18, D57): the HUD's green line colour on dark panels. Every menu screen is a Control
 ; under a MenuFrame (or the loading screen) that carries this theme.
@@ -97,6 +97,17 @@ content_margin_top = 6.0
 content_margin_right = 10.0
 content_margin_bottom = 6.0
 
+[sub_resource type="StyleBoxFlat" id="progress_back"]
+bg_color = Color(0.02, 0.05, 0.045, 0.8)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.55, 1, 0.6, 0.5)
+
+[sub_resource type="StyleBoxFlat" id="progress_fill"]
+bg_color = Color(0.55, 1, 0.6, 0.75)
+
 [sub_resource type="StyleBoxLine" id="separator"]
 color = Color(0.55, 1, 0.6, 0.3)
 thickness = 1
@@ -123,6 +134,8 @@ LineEdit/colors/font_color = Color(0.8, 1, 0.85, 1)
 LineEdit/styles/focus = SubResource("button_focus")
 LineEdit/styles/normal = SubResource("line_edit")
 PanelContainer/styles/panel = SubResource("panel")
+ProgressBar/styles/background = SubResource("progress_back")
+ProgressBar/styles/fill = SubResource("progress_fill")
 Title/base_type = &"Label"
 Title/colors/font_color = Color(0.7, 1, 0.78, 1)
 Title/font_sizes/font_size = 34

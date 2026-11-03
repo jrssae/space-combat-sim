@@ -67,12 +67,19 @@ func info() -> Dictionary:
 
 ## The option that has the focus now, or null when it is elsewhere.
 func focused_option() -> Control:
-	var owner: Control = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
-	return owner if owner != null and is_ancestor_of(owner) else null
+	var holder: Control = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	return holder if holder != null and is_ancestor_of(holder) else null
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not is_visible_in_tree() or not event.is_action_pressed(&"ui_cancel") or event.is_echo():
+	if not is_visible_in_tree() or event.is_echo():
+		return
+	if _is_navigation(event) and get_viewport().gui_get_focus_owner() == null:
+		# Focus is nowhere (a click on empty space, a page that came back empty): the pad takes the first option.
+		get_viewport().set_input_as_handled()
+		focus_first()
+		return
+	if not event.is_action_pressed(&"ui_cancel"):
 		return
 	if cancel_ignores_keys and event is InputEventKey:
 		return
@@ -81,6 +88,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		return  # the console, or another page, has the keyboard
 	get_viewport().set_input_as_handled()
 	back_requested.emit()
+
+
+func _is_navigation(event: InputEvent) -> bool:
+	for action: StringName in [&"ui_up", &"ui_down", &"ui_left", &"ui_right", &"ui_accept"]:
+		if event.is_action_pressed(action):
+			return true
+	return false
 
 
 func _on_option_focused(option: Control) -> void:

@@ -34,7 +34,7 @@ func _ready() -> void:
 	visible = false
 	if game == null:
 		game = get_node_or_null(^"/root/Game") as GameScript
-	_frame.closed.connect(close)
+	_frame.closed.connect(_on_frame_closed)
 	_frame.request_source = func() -> Dictionary: return game.flow.request if game != null else {}
 	DebugConsole.registry.register_provider(&"pause_menu", ConsoleVars.new({
 		&"open": {"get": func() -> bool: return _open, "doc": "The pause menu is showing"},
@@ -74,6 +74,11 @@ func close() -> void:
 	if not _open:
 		return
 	_open = false
+	# Nothing stays focused or focusable behind the game: a pad press in flight must not press a hidden button.
+	var holder: Control = get_viewport().gui_get_focus_owner()
+	if holder != null and _frame.is_ancestor_of(holder):
+		holder.release_focus()
+	_frame.clear()
 	visible = false
 	get_tree().paused = false
 	resumed.emit()
@@ -93,6 +98,13 @@ func _list_page() -> MenuScreen:
 	page.cancel_ignores_keys = true
 	page.chosen.connect(_on_chosen)
 	return page
+
+
+# B (or Start) on the list: leave the menu, with the back sound.
+func _on_frame_closed() -> void:
+	if audio != null:
+		audio.play_ui(MenuFrame.SOUND_BACK)
+	close()
 
 
 func _on_chosen(id: StringName) -> void:
@@ -116,10 +128,10 @@ func _push(page: MenuScreen) -> void:
 
 
 # Runs a Game call that answers with why it was refused, and shows that.
-func _ask_game(call: Callable) -> void:
+func _ask_game(ask: Callable) -> void:
 	if game == null:
 		_frame.show_message("There is no Game to restart with.")
 		return
-	var problem: String = call.call()
+	var problem: String = ask.call()
 	if not problem.is_empty():
 		_frame.show_message(problem)

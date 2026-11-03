@@ -2033,6 +2033,7 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
   with `play_ui`; its UI voices always process, so the sounds play behind the paused World. The front end carries an `AudioDirector`
   of its own. The gain is `sfx_volume` until T03's `ui_volume` bus.
 - **Objectives.** `Main` sets `pause_menu.objectives_source` to its `objectives()` (`ObjectiveBook.snapshot()`, empty outside a mission), so the right panel lists the running mission's objectives with a mark per state and `(optional)` on the secondary ones.
+- **Behind the menu.** While the menu is open `Main._physics_process` calls `InputAdapter.sample_menu` instead of `sample`: only the pause edge is read, every other button is re-seeded from what is held and the mouse and wheel are drained, so Back, Y, D-pad left and X (and T03's D-pad sliders) move the menu and do nothing in the game, and nothing fires when the menu closes. Closing drops the menu's pages (no hidden button keeps the focus), and a page with no focus takes it back on the next D-pad or A press.
 - **Resume.** `Main` re-seeds the adapter's edges when the menu closes (`InputAdapter.resync_edges`), so the button that closed it (B is also the target button) does not also tap a target when it is released.
 - **Missions.** `MissionCatalog.entries(dir, read)` lists the scenario files whose loader result has a non-empty `mission` block (its
   `title`, else the id made readable, and `briefing`). No shipped scenario has one until T10; the page then says "No missions yet".

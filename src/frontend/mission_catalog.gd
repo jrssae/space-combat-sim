@@ -17,6 +17,8 @@ static func entries(dir: String = GameFlow.SCENARIO_DIR, read: Callable = Scenar
 			continue
 		var scenario: Variant = read.call(dir.path_join(file))
 		if not (scenario is Dictionary) or not bool((scenario as Dictionary).get("ok", false)):
+			var why: Variant = (scenario as Dictionary).get("error", "") if scenario is Dictionary else "not a scenario"
+			push_warning("MissionCatalog: %s is not listed: %s" % [file, why])
 			continue
 		var block: Variant = (scenario as Dictionary).get("mission")
 		if not (block is Dictionary) or (block as Dictionary).is_empty():

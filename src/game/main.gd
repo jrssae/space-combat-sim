@@ -174,6 +174,10 @@ func _update_render_scale() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if pause_menu != null and pause_menu.is_open():
+		# Behind the pause menu the pad belongs to the menu: only Start (and Esc) is read.
+		_handle_ui(adapter.sample_menu(input_source, delta))
+		return
 	var pc: PilotCommand = adapter.sample(input_source, delta)
 	if debug_throttle > 0.0:
 		pc.flight.main_left = maxf(pc.flight.main_left, debug_throttle)

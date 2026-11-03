@@ -483,3 +483,42 @@ func test_reset_and_focus_changes_drop_a_pad_b_press() -> void:
 	adapter.resync_edges(source)
 	for i: int in 60:
 		assert_false(adapter.sample(source, DT).combat.target_prev, "resync: the press in progress never fires")
+
+
+# --- While a menu has the pad (M5-T02 review): only the pause edge is read -------------------------------------------
+
+
+func test_a_menu_reads_only_the_pause_edge() -> void:
+	var ui: UiCommand = adapter.sample_menu(source, DT)
+	assert_false(ui.pause)
+	source.hold(InputAdapter.PAUSE)
+	assert_true(adapter.sample_menu(source, DT).pause, "Start closes the menu")
+	assert_false(adapter.sample_menu(source, DT).pause, "an edge, not a level")
+	assert_almost_eq(source.polled_dt, DT, 1e-12, "the source is still polled")
+
+
+func test_buttons_that_move_a_menu_do_not_act_behind_it() -> void:
+	for action: StringName in [InputAdapter.RESET_SHIP, InputAdapter.TOGGLE_CAMERA, InputAdapter.TOGGLE_RUNNING_LIGHTS,
+			InputAdapter.AUTOTRACK, InputAdapter.TOGGLE_ASSIST, InputAdapter.WEAPON_NEXT, InputAdapter.TARGET_CYCLE]:
+		source.hold(action)
+	var ui: UiCommand = adapter.sample_menu(source, DT)
+	assert_false(ui.reset)
+	assert_false(ui.toggle_camera)
+	assert_false(ui.toggle_running_lights)
+	assert_false(adapter.autotrack_on, "X does not switch auto-track on behind the menu")
+	# Still held when the menu closes, and then let go: none of it fires.
+	var held: PilotCommand = adapter.sample(source, DT)
+	assert_false(held.ui.reset or held.ui.toggle_camera or held.ui.toggle_running_lights, "no edge at the first flight tick")
+	assert_false(held.flight.toggle_assist or held.combat.weapon_next or held.flight.autotrack)
+	source.release_all()
+	var released: PilotCommand = adapter.sample(source, DT)
+	assert_false(released.combat.target_next or released.combat.target_prev, "a target button held through the menu taps nothing")
+
+
+func test_a_menu_drains_the_mouse_and_the_wheel() -> void:
+	source.push_mouse(Vector2(500.0, 300.0))
+	source.push_wheel(3)
+	adapter.sample_menu(source, DT)
+	var cmd: PilotCommand = adapter.sample(source, DT)
+	assert_eq(cmd.flight.rot, Vector3.ZERO, "the mouse moved behind the menu does not turn the ship afterwards")
+	assert_false(cmd.combat.target_next, "nor does the wheel step a target")

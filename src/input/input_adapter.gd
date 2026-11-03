@@ -207,6 +207,21 @@ func resync_edges(source: InputSource) -> void:
 		_disarm(button)
 
 
+## One tick while a menu has the pad (the pause menu): only the pause edge is read, so Start or Esc can close the menu. Every other
+## button is re-seeded from what is held, so none that moves the menu acts behind it, or fires when it closes. The mouse and the wheel
+## are drained like any tick.
+func sample_menu(source: InputSource, dt: float) -> UiCommand:
+	source.poll(dt)
+	var cmd := PilotCommand.new()
+	cmd.ui.pause = source.is_pressed(PAUSE) and not bool(_prev_pressed.get(PAUSE, false))
+	source.take_mouse_delta()
+	source.take_wheel_steps()
+	_mouse_rate = Vector2.ZERO
+	resync_edges(source)
+	last = cmd
+	return cmd.ui
+
+
 ## Forget held state and any tap-or-hold press in progress (respawn, scene change).
 func reset() -> void:
 	_prev_pressed.clear()

@@ -34,7 +34,8 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	# Leaving mid-load: a request nobody takes keeps its resource (and its thread) alive to the end of the run.
+	# Leaving mid-load: a request nobody takes keeps its resource (and its thread) alive to the end of the run. Godot has no way
+	# to cancel a threaded load, so this waits for it to finish.
 	if _loading and not _collected:
 		_collect()
 
@@ -58,6 +59,7 @@ func _process(_delta: float) -> void:
 			game.fail_loading("could not load %s" % _path)
 		_:
 			set_process(false)
+			_collected = true  # no request is out any more: nothing to collect on the way out
 			game.fail_loading("could not load %s" % _path)
 
 
