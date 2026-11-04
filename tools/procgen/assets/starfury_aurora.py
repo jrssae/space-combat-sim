@@ -56,6 +56,7 @@ from ..core.obj import write_obj
 from ..core.paint_mesh import PaintPart, phase_steps, write_paint_mesh
 from ..core.textured_mesh import TexturedPart, write_textured_mesh
 from ..core.textures import Marking
+from ..core.livery import zone_of
 from ..core.ply import SplatData, write_ply
 from ..core.sampling import (
     DEFAULT_OVERLAP,
@@ -93,17 +94,15 @@ from ..styles import Style
 from ..styles.earthforce import EARTHFORCE
 
 ASSET_ID = "starfury_aurora"
-GENERATOR_VERSION = 6  # 6: the textured mesh (M4-T30a); 5: flat paint and lighting records (M3-T21)
+GENERATOR_VERSION = 7  # 7: wing liveries, Q36 cabin glow (M4-T30b); 6: the textured mesh (M4-T30a); 5: flat paint and lighting records (M3-T21)
 PLY_NAME = "starfury_aurora.ply"
 OBJ_NAME = "starfury_aurora.obj"
 MESH_NAME = "starfury_aurora.glb"
 # The textured mesh (M4-T30a): a 2 048 px atlas at about a centimetre a texel (the packer grows the texel until the hull fits).
 ATLAS_PX = 2048
 TEXEL_M = 0.011
-SQUADRON = "42"  # the number stencilled on the pods and the flanks
+PAINTABLE = ("ef_hull", "ef_hull_panel")  # what a wing's livery may paint over (M4-T30b)
 STENCIL = (0.035, 0.036, 0.04)  # near-black stencil paint, linear RGB
-POD_BAND_FRACTION = 0.33  # along the pod, 0 = front: on the long body between the grooves
-POD_BAND_WIDTH_M = 0.3
 COCKPIT_NAME = "cockpit_interior.obj"
 HARDPOINTS_NAME = "hardpoints.json"
 
@@ -545,27 +544,16 @@ def colour_samples(placed: Placed, style: Style) -> np.ndarray:
 
 # --- markings (M4-T30a) -----------------------------------------------------------------------
 def markings_for(placed: list[Placed], style: Style) -> dict[str, tuple[Marking, ...]]:
-    """What the texture maps paint on each part beyond its panels: a stripe-coloured band round every pod with the squadron
-    number on its outboard flank, the number on the fuselage's flanks, soot round every bell's mouth."""
-    stripe = style.material("stripe").albedo
+    """What the texture maps paint on each part beyond its panels: "EA" on the fuselage's flanks and soot round every bell's mouth.
+    The wing's colours and the ship's number are the livery's, painted by the shader (M4-T30b), so the maps stay the same for every wing."""
     out: dict[str, tuple[Marking, ...]] = {}
     for p in placed:
         name = p.part.name
         if name.startswith("pod_"):
-            centre = p.part.anchor("center").position
-            front = p.part.anchor("front").position
-            rear = p.part.anchor("rear").position
-            length = float(rear[2] - front[2])
-            side = 1.0 if centre[0] > 0.0 else -1.0
-            radius = 0.5 * float(np.ptp(p.part.mesh.vertices[:, 0]))
-            flank = centre + np.array([side * 0.78, 0.0, 0.35 * length - 0.5 * length])
             out[name] = (
-                Marking.band(name, centre, (0.0, 0.0, 1.0), float(front[2] - centre[2]) + POD_BAND_FRACTION * length, POD_BAND_WIDTH_M, stripe),
-                Marking.text(name, SQUADRON, flank, (0.0, 0.0, -side), (0.0, 1.0, 0.0), (side, 0.0, 0.0), 0.42, STENCIL),
                 Marking.soot(name, p.part.anchor("main").position, p.part.anchor("main").direction, 0.75, 0.5, 0.9),
                 Marking.soot(name, p.part.anchor("retro").position, p.part.anchor("retro").direction, 0.55, 0.4, 0.6),
             )
-            del radius
         elif name == "fuselage":
             v = p.part.mesh.vertices
             z_mid = 0.55 * float(v[:, 2].max()) + 0.45 * float(v[:, 2].min())
@@ -853,12 +841,14 @@ def build(ctx: BuildContext) -> AssetOutputs:
     textured_paths, mesh_entry = write_textured_mesh(
         out_dir,
         ASSET_ID,
-        [TexturedPart(p.part.mesh, phase_steps(p.part.name, True), marks.get(p.part.name, ()), p.part.name) for p in placed if p.hull],
+        [TexturedPart(p.part.mesh, phase_steps(p.part.name, True), marks.get(p.part.name, ()), p.part.name, zone_of(p.part.name))
+         for p in placed if p.hull],
         style,
         atlas_px=int(ctx.option("atlas_px", ATLAS_PX)),
         texel_m=float(ctx.option("texel_m", TEXEL_M)),
         seed=ctx.seed,
         occlusion=bool(ctx.option("occlusion", True)),
+        paintable=PAINTABLE,
     )
     files += textured_paths
 

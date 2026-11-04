@@ -39,6 +39,7 @@ class GlbPrimitive:
     base_color: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
     blend: bool = False
     extras: dict = field(default_factory=dict)
+    colors: np.ndarray | None = None  # optional COLOR_0, one RGBA per vertex (M4-T30b: the livery zone in red)
 
     def __post_init__(self) -> None:
         self.positions = np.asarray(self.positions, dtype=np.float32).reshape(-1, 3)
@@ -46,7 +47,9 @@ class GlbPrimitive:
         self.uv = np.asarray(self.uv, dtype=np.float32).reshape(-1, 2)
         self.indices = np.asarray(self.indices, dtype=np.uint32).reshape(-1)
         n = len(self.positions)
-        if len(self.normals) != n or len(self.uv) != n:
+        if self.colors is not None:
+            self.colors = np.asarray(self.colors, dtype=np.float32).reshape(-1, 4)
+        if len(self.normals) != n or len(self.uv) != n or (self.colors is not None and len(self.colors) != n):
             raise ValueError("primitive arrays disagree in length")
         if len(self.indices) % 3 != 0:
             raise ValueError("indices must be whole triangles")
@@ -87,6 +90,8 @@ def glb_bytes(primitives: Sequence[GlbPrimitive], mesh_name: str) -> bytes:
             "NORMAL": add(p.normals, FLOAT, "VEC3", ARRAY_BUFFER),
             "TEXCOORD_0": add(p.uv, FLOAT, "VEC2", ARRAY_BUFFER),
         }
+        if p.colors is not None:
+            attributes["COLOR_0"] = add(p.colors, FLOAT, "VEC4", ARRAY_BUFFER)
         indices = add(p.indices, UINT32, "SCALAR", ELEMENT_ARRAY_BUFFER)
         material: dict = {
             "name": p.material,
@@ -152,7 +157,7 @@ def read_glb(path: Path) -> GlbMesh:
     def read(index: int) -> np.ndarray:
         accessor = doc["accessors"][index]
         view = doc["bufferViews"][accessor["bufferView"]]
-        width = {"SCALAR": 1, "VEC2": 2, "VEC3": 3}[accessor["type"]]
+        width = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}[accessor["type"]]
         dtype = np.float32 if accessor["componentType"] == FLOAT else np.uint32
         raw = np.frombuffer(blob, dtype=dtype, count=accessor["count"] * width, offset=view["byteOffset"])
         return raw.reshape(-1, width) if width > 1 else raw
@@ -170,6 +175,7 @@ def read_glb(path: Path) -> GlbMesh:
                 tuple(material["pbrMetallicRoughness"]["baseColorFactor"]),
                 material.get("alphaMode") == "BLEND",
                 material.get("extras", {}),
+                read(p["attributes"]["COLOR_0"]) if "COLOR_0" in p["attributes"] else None,
             )
         )
     return GlbMesh(doc, primitives)

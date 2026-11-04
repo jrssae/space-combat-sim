@@ -243,6 +243,8 @@ def validate_mesh_section(entry: Any) -> None:
             raise ValueError(f"manifest mesh.surfaces[{index}].blend must be a bool")
         if not _is_number(surface["transmittance"]) or not 0.0 <= surface["transmittance"] < 1.0:
             raise ValueError(f"manifest mesh.surfaces[{index}].transmittance must be in [0, 1)")
+    if "livery" in entry:
+        _validate_livery(entry["livery"])
     lods = entry.get("lods")
     if not isinstance(lods, list):
         raise ValueError("manifest mesh.lods must be a list")
@@ -251,6 +253,32 @@ def validate_mesh_section(entry: Any) -> None:
             raise ValueError(f"manifest mesh.lods[{index}] must name a file, triangles and from_m")
         if not isinstance(lod.get("triangles"), int) or lod["triangles"] <= 0:
             raise ValueError(f"manifest mesh.lods[{index}].triangles must be a positive integer")
+
+
+def _validate_livery(livery: Any) -> None:
+    """The ``mesh.livery`` section (M4-T30b): the hull paint, the digit atlas, each pattern's stripes, the number fields and the
+    liveries naming patterns and fields that exist."""
+    if not isinstance(livery, dict):
+        raise ValueError("manifest mesh.livery must be an object")  # noqa: TRY004
+    _check_vec3(livery, "hull_paint")
+    digits = livery.get("digits")
+    if not isinstance(digits, dict) or not isinstance(digits.get("file"), str) or not digits["file"].endswith(".png"):
+        raise ValueError("manifest mesh.livery.digits must name a .png file")
+    patterns, fields = livery.get("patterns"), livery.get("number_fields")
+    if not isinstance(patterns, dict) or "plain" not in patterns or not isinstance(fields, dict):
+        raise ValueError("manifest mesh.livery needs patterns (with plain) and number_fields")
+    for name, stripes in patterns.items():
+        for index, stripe in enumerate(stripes if isinstance(stripes, list) else [None]):
+            if not isinstance(stripe, dict) or not all(key in stripe for key in ("zones", "axis", "lo", "hi", "slot", "facing", "min_facing")):
+                raise ValueError(f"manifest mesh.livery.patterns.{name}[{index}] must have zones, axis, lo, hi, slot, facing, min_facing")
+    for name, field in fields.items():
+        if not isinstance(field, dict) or not all(key in field for key in ("zones", "centre", "right", "up", "facing", "height_m")):
+            raise ValueError(f"manifest mesh.livery.number_fields.{name} must have zones, centre, right, up, facing, height_m")
+    rows = dict(livery.get("liveries", {}))
+    rows["plain"] = livery.get("plain")
+    for name, row in rows.items():
+        if not isinstance(row, dict) or row.get("pattern") not in patterns or any(f not in fields for f in row.get("numbers", [])):
+            raise ValueError(f"manifest mesh.livery livery {name!r} must name a pattern and number fields that exist")
 
 
 def _validate_sounds(manifest: Mapping[str, Any]) -> None:

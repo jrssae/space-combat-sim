@@ -3,7 +3,9 @@ extends Node
 ## The look sheets' scene (M4-T30a, checkpoint 1b): `sheet <asset_id> <distance_m> [lit|dark|off] [splat|painted|textured]` parks one idle
 ## ship of the asset ahead of the camera at that distance, three-quarters on, hides the player's own hull and turns the key star to light
 ## the ship from over the camera's shoulder (`lit`) or from behind it (`dark`), so `scripts/look_sheet.sh` can photograph the same ship
-## as splats, as T27's painted mesh and as the textured mesh. `sheet off` (or `sheet <asset> 0 off`) puts everything back.
+## as splats, as T27's painted mesh and as the textured mesh. `sheet off` (or `sheet <asset> 0 off`) puts everything back. The sheet's
+## optional livery (`<wing>:<number>`, M4-T30b) paints the parked ship. `livery <wing> [number] [ship]` repaints any ship for a look
+## (the player's by default), and the `livery` provider reports what the player's ship and the others wear.
 ## Bench-only: nothing in a scenario uses it.
 
 const LIGHTS: Array[StringName] = [&"lit", &"dark", &"off"]
@@ -32,7 +34,16 @@ func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"sheet",
 			"Park one idle ship of an asset ahead of the camera for a look sheet, lit from behind the camera or from behind the ship, as splats, the painted or the textured mesh; `sheet off` clears it",
 			[ConsoleArg.string_required(&"asset_id"), ConsoleArg.float_optional(&"distance_m", 30.0, 0.0, 20000.0),
-			ConsoleArg.enum_optional(&"light", LIGHTS, &"lit"), ConsoleArg.enum_optional(&"look", LOOKS, &"textured")]), _cmd_sheet, self)
+			ConsoleArg.enum_optional(&"light", LIGHTS, &"lit"), ConsoleArg.enum_optional(&"look", LOOKS, &"textured"),
+			ConsoleArg.string_optional(&"livery", "")]), _cmd_sheet, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"livery",
+			"Paint a ship in a wing's livery with a number (plain for none), for looking at it: the player's ship, `sheet` for the parked one, or a ship by name",
+			[ConsoleArg.string_required(&"wing"), ConsoleArg.int_optional(&"number", 1, 0, 99), ConsoleArg.string_rest(&"ship").make_optional("player")]), _cmd_livery, self)
+	DebugConsole.registry.register_provider(&"livery", ConsoleVars.new({
+		&"player": {"get": func() -> String: return _describe(player if player != null else _player_ship()),
+				"doc": "The player's ship's livery: wing, number, pattern"},
+		&"list": {"get": _livery_list, "doc": "Every ship in the world and the livery it wears"},
+	}), self)
 
 
 func _exit_tree() -> void:
@@ -160,4 +171,54 @@ func _cmd_sheet(args: Dictionary) -> ConsoleResult:
 	var error: String = show(asset_id, float(args[&"distance_m"]), light, look)
 	if not error.is_empty():
 		return ConsoleResult.failure(error)
+	var livery_arg: String = String(args[&"livery"])
+	if not livery_arg.is_empty():
+		var pair: PackedStringArray = livery_arg.split(":")
+		_parked.ship.set_livery(Livery.for_wing(pair[0] if pair[0] != "plain" else "", int(pair[1]) if pair.size() > 1 else 1,
+				MeshAssets.livery_section(asset_id)))
 	return ConsoleResult.line("sheet: %s at %.0f m, %s, %s" % [asset_id, float(args[&"distance_m"]), light, look])
+
+
+func _cmd_livery(args: Dictionary) -> ConsoleResult:
+	var target: Ship = _ship_named(String(args[&"ship"]))
+	if target == null:
+		return ConsoleResult.failure("no ship called '%s' (player, sheet, or a name from `state ships.list`)" % String(args[&"ship"]))
+	var wing: String = String(args[&"wing"])
+	var livery: Livery = Livery.for_wing("" if wing.to_lower() == "plain" else wing, int(args[&"number"]),
+			MeshAssets.livery_section(target.spec.asset_id))
+	target.set_livery(livery)
+	return ConsoleResult.line("livery: %s" % livery.describe())
+
+
+# The player's ship for "" or "player", the parked ship for "sheet", else the ship in the world with that name (any case).
+func _ship_named(ship_name: String) -> Ship:
+	var key: String = ship_name.strip_edges().to_lower()
+	if key.is_empty() or key == "player":
+		return player if player != null else _player_ship()
+	if key == "sheet":
+		return _parked.ship if _parked != null else null
+	_resolve()
+	if pool != null:
+		for combatant: Combatant in pool.alive():
+			if combatant.display_name.to_lower() == key:
+				return combatant.ship
+	return null
+
+
+func _player_ship() -> Ship:
+	var main := get_parent() as Main
+	return main.ship if main != null else null
+
+
+func _describe(ship: Ship) -> String:
+	return ship.livery.describe() if ship != null and ship.livery != null else "none"
+
+
+func _livery_list() -> PackedStringArray:
+	var out := PackedStringArray()
+	_resolve()
+	if pool == null:
+		return out
+	for combatant: Combatant in pool.alive():
+		out.append("%s: %s" % [combatant.display_name, _describe(combatant.ship)])
+	return out

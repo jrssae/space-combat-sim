@@ -296,8 +296,10 @@ def _occlusion(atlas: Atlas, seed: int) -> np.ndarray:
     return np.where(norm > 0.0, blurred / np.maximum(norm, 1e-9), 1.0)
 
 
-def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True) -> dict[str, np.ndarray]:
-    """The four maps as 8-bit RGB arrays: ``albedo`` (sRGB), ``normal`` (tangent space, +Y up), ``orm`` and ``emissive`` (sRGB)."""
+def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, paintable: Sequence[str] = ()) -> dict[str, np.ndarray]:
+    """The four maps as 8-bit RGB arrays: ``albedo`` (sRGB), ``normal`` (tangent space, +Y up), ``orm`` and ``emissive`` (sRGB).
+    With ``paintable`` material names the albedo is RGBA, its alpha where a livery may paint (M4-T30b): those materials, less the
+    chipped edges and the markings."""
     b = atlas.buffers
     size = b.size
     filled = b.filled
@@ -359,8 +361,9 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True) -> 
     roughness = roughness + 0.25 * on_line - 0.25 * chips
     metallic = metallic * (1.0 - chips) + 0.85 * chips
 
-    # The markings, in world space, on their parts.
+    # The markings, in world space, on their parts; what they cover is kept from the livery's paint.
     names = list(atlas.part_names)
+    marked = np.zeros(n)
     for marking in atlas.markings:
         sel = np.ones(n, dtype=bool) if not marking.part else part == names.index(marking.part)
         sel &= ~glass
@@ -398,6 +401,7 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True) -> 
         albedo[sel] = albedo[sel] * (1.0 - cover)[:, None] + colour * cover[:, None]
         if marking.kind != "soot":
             metallic[sel] *= 1.0 - 0.6 * cover
+            marked[np.flatnonzero(sel)] = np.maximum(marked[np.flatnonzero(sel)], cover)
 
     # The normal map: the height field's slope per metre, in the texel's tangent frame (u right, v down; Godot's +Y up).
     height_map = np.zeros((size, size))
@@ -430,8 +434,14 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True) -> 
     albedo_map[idx] = np.clip(albedo, 0.0, 1.0)
     mean = albedo[~glass].mean(axis=0) if (~glass).any() else albedo.mean(axis=0)
     albedo_map[~filled] = np.clip(mean, 0.0, 1.0)
+    albedo8 = _to8(linear_to_srgb(albedo_map))
+    if paintable:
+        may_paint = np.isin(np.array([m.name for m in table])[mat], list(paintable)) & ~glass
+        paint = np.zeros((size, size))
+        paint[idx] = np.where(may_paint, np.clip(1.0 - chips - marked, 0.0, 1.0), 0.0)
+        albedo8 = np.concatenate([albedo8, _to8(paint)[..., None]], axis=-1)
     return {
-        "albedo": _to8(linear_to_srgb(albedo_map)),
+        "albedo": albedo8,
         "normal": _to8(normal_ts * 0.5 + 0.5),
         "orm": _to8(orm),
         "emissive": _to8(linear_to_srgb(emissive_map)),

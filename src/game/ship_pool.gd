@@ -123,6 +123,9 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	combatant.damageable.invulnerable = false  # per spawn (M3-T09); the caller sets it
 	combatant.display_name = display_name
 	combatant.targetable.display_name = display_name
+	# A Starfury of a wing wears its wing's livery and its number from its callsign (M4-T30b); every other ship the plain one.
+	var wing_and_number: Array = Livery.parse_name(display_name) if type == ALLY_TYPE else ["", 0]
+	ship.set_livery(Livery.for_wing(wing_and_number[0], wing_and_number[1], MeshAssets.livery_section(ship.spec.asset_id)))
 	_set_brain(combatant, brain)
 	_in_use.append(combatant)
 	acquired.emit(combatant)

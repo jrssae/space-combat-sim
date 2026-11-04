@@ -20,6 +20,7 @@ from ..styles import Style
 from .geometry import Material, Mesh
 from .glb import GlbPrimitive, write_glb
 from .image import write_png
+from .livery import digit_atlas, digit_import_sidecar, livery_section
 from .paint_mesh import PHASE_STEPS, phase_of
 from .raster import dilate, rasterize, sharp_edges
 from .textures import Atlas, Marking, bake_maps, surface_emissive_strength
@@ -29,6 +30,7 @@ DEFAULT_ATLAS_PX = 2048
 DEFAULT_TEXEL_M = 0.01
 GUTTER_PX = 2
 MAP_KEYS = ("albedo", "normal", "orm", "emissive")
+DIGITS_KEY = "digits"
 OPAQUE_SURFACE = "hull"
 GLASS_SURFACE = "glass"
 
@@ -41,6 +43,7 @@ class TexturedPart:
     phase: tuple[int, int, int]
     markings: tuple[Marking, ...] = ()
     name: str = ""
+    zone: int = 0  # the livery zone its vertices carry (``core/livery.py``; 0: never painted)
 
 
 def _material_table(parts: Sequence[TexturedPart]) -> tuple[tuple[Material, ...], list[np.ndarray]]:
@@ -70,6 +73,7 @@ class PackedParts:
     face_uv01: np.ndarray
     face_chart: np.ndarray
     packed: Packed
+    vertex_zone: np.ndarray  # per merged-mesh vertex
 
 
 def pack_parts(parts: Sequence[TexturedPart], atlas_px: int, texel_m: float, gutter_px: int = GUTTER_PX) -> PackedParts:
@@ -80,7 +84,8 @@ def pack_parts(parts: Sequence[TexturedPart], atlas_px: int, texel_m: float, gut
     face_part = np.concatenate([np.full(p.mesh.face_count, k, dtype=np.int64) for k, p in enumerate(parts) if p.mesh.face_count > 0])
     charts = charts_of(merged)
     packed = pack(charts, texel_m, atlas_px, gutter_px)
-    return PackedParts(merged, face_part, packed.face_uv01(merged.face_count), packed.face_chart(merged.face_count), packed)
+    vertex_zone = np.concatenate([np.full(len(p.mesh.vertices), p.zone, dtype=np.int64) for p in used])
+    return PackedParts(merged, face_part, packed.face_uv01(merged.face_count), packed.face_chart(merged.face_count), packed, vertex_zone)
 
 
 def atlas_of(parts: Sequence[TexturedPart], atlas_px: int = DEFAULT_ATLAS_PX, texel_m: float = DEFAULT_TEXEL_M,
@@ -99,8 +104,9 @@ def atlas_of(parts: Sequence[TexturedPart], atlas_px: int = DEFAULT_ATLAS_PX, te
     return Atlas(buffers, mesh.materials, tuple(p.name for p in parts), phases, markings, packed.packed.texel_m, mesh)
 
 
-def _primitives(parts: Sequence[TexturedPart], packed: PackedParts) -> tuple[GlbPrimitive, GlbPrimitive]:
-    """The opaque and glass primitives: a glb vertex per (mesh vertex, UV), normals the parts' smooth vertex normals."""
+def _primitives(parts: Sequence[TexturedPart], packed: PackedParts, zones: bool = False) -> tuple[GlbPrimitive, GlbPrimitive]:
+    """The opaque and glass primitives: a glb vertex per (mesh vertex, UV), normals the parts' smooth vertex normals; with ``zones``
+    each vertex's livery zone in COLOR_0's red (zone / 255)."""
     mesh = packed.mesh
     normals = mesh.vertex_normals()
     transmittance = np.array([m.transmittance for m in mesh.materials], dtype=float)[mesh.face_material]
@@ -118,8 +124,13 @@ def _primitives(parts: Sequence[TexturedPart], packed: PackedParts) -> tuple[Glb
         unique, inverse = np.unique(keys, axis=0, return_inverse=True)
         source = unique[:, 0].astype(np.int64)
         base = (0.0, 0.0, 0.0, 0.3) if glass else (1.0, 1.0, 1.0, 1.0)
+        colors = None
+        if zones:
+            colors = np.zeros((len(source), 4))
+            colors[:, 0] = packed.vertex_zone[source] / 255.0
+            colors[:, 3] = 1.0
         out.append(GlbPrimitive(mesh.vertices[source], normals[source], unique[:, 1:3], inverse.reshape(-1), GLASS_SURFACE if glass else OPAQUE_SURFACE,
-                                base, glass))
+                                base, glass, colors=colors))
     return out[0], out[1]
 
 
@@ -171,8 +182,11 @@ def manifest_section(asset_id: str, parts: Sequence[TexturedPart], packed: Packe
 
 
 def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPart], style: Style, atlas_px: int = DEFAULT_ATLAS_PX,
-                        texel_m: float = DEFAULT_TEXEL_M, seed: int = 0, occlusion: bool = True) -> tuple[list[Path], dict[str, Any]]:
-    """Write the textured mesh of ``parts`` into ``out_dir`` and return its files and the manifest's ``mesh`` section."""
+                        texel_m: float = DEFAULT_TEXEL_M, seed: int = 0, occlusion: bool = True,
+                        paintable: Sequence[str] = ()) -> tuple[list[Path], dict[str, Any]]:
+    """Write the textured mesh of ``parts`` into ``out_dir`` and return its files and the manifest's ``mesh`` section. With
+    ``paintable`` material names the hull takes wing liveries (M4-T30b): the vertices carry their parts' zones, the albedo's alpha
+    says where paint may go, and the digit atlas and the ``livery`` section are written too."""
     out_dir = Path(out_dir)
     packed = pack_parts(parts, atlas_px, texel_m)
     mesh = packed.mesh
@@ -182,8 +196,8 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
     phases = tuple(phase_of(p.phase, style) for p in parts)
     atlas = Atlas(buffers, mesh.materials, tuple(p.name for p in parts), phases, tuple(m for p in parts for m in p.markings),
                   packed.packed.texel_m, mesh)
-    maps = bake_maps(atlas, style, seed, occlusion)
-    opaque, glass = _primitives(parts, packed)
+    maps = bake_maps(atlas, style, seed, occlusion, paintable)
+    opaque, glass = _primitives(parts, packed, zones=bool(paintable))
     paths = [write_glb(out_dir / f"{asset_id}.glb", [opaque, glass], asset_id)]
     for key in MAP_KEYS:
         png = out_dir / f"{asset_id}_{key}.png"
@@ -191,7 +205,16 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
         sidecar = Path(str(png) + ".import")
         sidecar.write_text(import_sidecar(key), encoding="utf-8", newline="\n")
         paths.append(sidecar)
-    return paths, manifest_section(asset_id, parts, packed, [opaque, glass], maps, atlas)
+    section = manifest_section(asset_id, parts, packed, [opaque, glass], maps, atlas)
+    if paintable:
+        digits = out_dir / f"{asset_id}_{DIGITS_KEY}.png"
+        paths.append(write_png(digits, digit_atlas()))
+        sidecar = Path(str(digits) + ".import")
+        sidecar.write_text(digit_import_sidecar(), encoding="utf-8", newline="\n")
+        paths.append(sidecar)
+        hull = style.materials.get("hull")
+        section["livery"] = livery_section(digits.name, hull.albedo if hull is not None else (0.35, 0.35, 0.35))
+    return paths, section
 
 
 __all__ = ["DEFAULT_ATLAS_PX", "DEFAULT_TEXEL_M", "PackedParts", "TexturedPart", "atlas_of", "import_sidecar", "pack_parts",

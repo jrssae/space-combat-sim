@@ -112,6 +112,9 @@ const TRACK_RATE_SMOOTHING: float = 0.35
 
 ## The cabin lamp: a short-range emitter that competes for a light slot while the cockpit view is on, and lights the frame.
 var _cabin_emitter: LightEmitter = null
+## The paint the textured hull is drawn in (M4-T30b): the wing's livery and this ship's number. Set at spawn by whoever names the
+## ship (`set_livery`); until then the player's ship is Alpha 01 and every other ship the plain field grey.
+var livery: Livery = null
 var _track_prev_dir: Vector3 = Vector3.ZERO
 var _track_rate_w: Vector3 = Vector3.ZERO
 var _model: FlightModel = null
@@ -793,6 +796,10 @@ func _load_visuals() -> void:
 	var dir: String = asset_dir(spec)
 	_fallback_mesh = _load_mesh(dir.path_join(spec.asset_id + ".obj"))
 	_paint_mesh = PaintMeshes.for_asset(spec.asset_id)
+	if livery == null:
+		var section: Dictionary = MeshAssets.livery_section(spec.asset_id)
+		livery = Livery.player(section) if console_owner else Livery.for_wing("", 0, section)
+	_apply_livery()
 	if hull_mesh_fallback != null:
 		hull_mesh_fallback.mesh = _fallback_mesh
 	MeshMaterials.matte(_fallback_mesh)
@@ -804,6 +811,21 @@ func _load_visuals() -> void:
 		MeshMaterials.cockpit(cockpit_interior.mesh)
 	_assign_hull_splats(hull_splats)
 	_load_far_levels(_hull_lod)  # the proxy takes whatever mesh is loaded, so a regenerated hull needs no changes here
+
+
+## Paints the hull in `p_livery` (its wing's colours and pattern and its number); null gives back the plain livery.
+func set_livery(p_livery: Livery) -> void:
+	livery = p_livery if p_livery != null else Livery.for_wing("", 0, MeshAssets.livery_section(spec.asset_id) if spec != null else {})
+	_apply_livery()
+
+
+# The hull nodes carry the livery as instance values, whichever mesh they draw.
+func _apply_livery() -> void:
+	if livery == null:
+		return
+	for node: GeometryInstance3D in [hull_mesh_fallback, hull_depth_proxy]:
+		if node != null:
+			livery.apply(node)
 
 
 # The spec's finest level and its lighting records on `node`, once per spec.
