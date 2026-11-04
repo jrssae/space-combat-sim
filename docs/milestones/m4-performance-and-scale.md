@@ -57,6 +57,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q24 | Splats against meshes (2026-11-03) | Add a direct render comparison (T27): the 500 battle with splat and with mesh ships, and a Babylon 5 station scene (an 8 km stand-in with a rotating central cylinder and a stationary top bar, 10 capitals, about 80 fighters, a nearby planet), splat and mesh variants. The maintainer weighs dropping splats if meshes carry the battles at the show's look |
 | Q25 | The fullscreen check on 4K screens | A native 4K fullscreen window with the 3D rendered at 1 080 lines and upscaled, as T07 built it |
 | Q26 | Running lights at distance (T28) | Point-sized past about 70 m and dimmed by the inverse square, no halo; at today's brightness they fade out past about 500 m, and that is accepted: far ships are found by radar and the HUD |
+| Q27 | Do AI ships know where mines are (2026-11-03) | **Depends on faction**: a side knows its own mines and steers clear of them; enemy mines are hidden from it (no avoidance) until they go off. Asteroids are obstacles for everyone |
 
 ## The budget ("good game performance", Q5)
 
@@ -173,6 +174,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T26 | Resolution scaling for the big battle (only if the GPU binds at the fullscreen check; Q20) | T11 | Sonnet | One setting and an automatic step on `RenderScale`; the look (H) | R | not started |
 | T27 | Render comparison: Gaussian splats against meshes, in the 500 battle and a Babylon 5 station scene (Q24) | T07, T11, T12 | Opus | Measures whether splats or meshes carry the big battles; GPU numbers by the agent, the look (H) | R, M | not started |
 | T28 | Running lights stay point-sized and dim by the inverse square (maintainer, 2026-11-03) | none | Sonnet | Lights in vacuum do not scatter into globes | R | done |
+| T29 | Rocks and mines as static rows: T07's asteroids registered as statics, T12's mines as faction-owned mine rows; avoidance sees rocks and its own side's mines only (Q27) | T09, T12 | Opus | Takes the rocks' 24 to 49 ms per tick out of the GDScript paths | G, N | not started |
 
 ### M4-T01 Benchmark harness, budget and baseline
 
