@@ -630,43 +630,69 @@ func test_the_flight_step_flies_the_same_from_the_core_as_from_the_physics_serve
 # --- the engine seam ---------------------------------------------------------------------------------------------------
 
 
-## The engine types a kernel must not name: an engine object handle, the engine's classes, a Variant or a script property
-## read, a singleton, an instance id. Godot's maths builtins (`godot::builtin::{Vector3, Basis}`) are data and allowed.
-const KERNEL_FORBIDDEN: Array[String] = ["Gd<", "godot::classes", "godot::prelude", "godot::obj", "godot::global",
-		"Variant", "InstanceId", "instance_id", "singleton", "PhysicsServer", "godot_error", "godot_print", "#[func]",
-		"#[godot_api]", "GodotClass", ".get(&", ".call(", "Node3D", "RigidBody3D", "StringName", "GString"]
+## The kernels (`native/src/kernels.rs`) and the row tables they read (`native/src/rows.rs`) must hold no way to the
+## engine: no engine object handle, class, Variant, property read, singleton, instance id, no path into another module of
+## the crate and no `godot::` path but the maths and string value types named below. Checked line by line on the source;
+## comments are skipped, block comments are refused outright so nothing hides in one.
 const KERNEL_FILE: String = "res://native/src/kernels.rs"
+const ROWS_FILE: String = "res://native/src/rows.rs"
 const KERNEL_USERS: Array[String] = ["res://native/src/contact_field.rs", "res://native/src/hit_sweep.rs",
 		"res://native/src/ram_phase.rs", "res://native/src/flight_step.rs"]
+const KERNEL_FORBIDDEN: Array[String] = ["Gd<", "Variant", "InstanceId", "instance_id", "singleton", "PhysicsServer",
+		"godot_error", "godot_print", "godot_warn", "#[func]", "#[godot_api]", "GodotClass", ".get(&", ".call(", "Node",
+		"RigidBody", "StringName", "GString", "Scs", "pub use", "/*", "unsafe"]
+const ROWS_FORBIDDEN: Array[String] = ["Gd<", "Variant", "InstanceId", "instance_id", "singleton", "PhysicsServer",
+		"godot_error", "godot_print", "godot_warn", "#[func]", "#[godot_api]", "GodotClass", ".get(&", ".call(", "Node",
+		"RigidBody", "Scs", "pub use", "/*", "unsafe", "Object", "Array", "Packed"]
+## The only `use` lines the kernels may hold: the standard library, two maths builtins, and the row tables' plain data.
+const KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
+		"use crate::rows::{Bolts, FLAG_RIGID, Rows};", "use crate::rows::{FLAG_RIGID, Rows};"]
+## The only `use` lines the row tables may hold: the standard library and the value types the columns are made of.
+const ROWS_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, GString, Vector3};"]
 
 
-func test_the_kernels_hold_no_engine_type() -> void:
-	var source: String = FileAccess.get_file_as_string(KERNEL_FILE)
-	assert_true(source.length() > 1000, "the kernels module exists and holds the queries and steps (%s)" % KERNEL_FILE)
+# Every non-comment line of `path` that names a forbidden token, a path into the crate, or a `godot::` path outside an
+# allowed `use` line.
+static func _engine_free_violations(path: String, forbidden: Array[String], use_allowed: Array[String]) -> PackedStringArray:
 	var found := PackedStringArray()
+	var source: String = FileAccess.get_file_as_string(path)
+	if source.length() < 200:
+		found.append("%s: missing or empty" % path)
+		return found
 	var lines: PackedStringArray = source.split("\n")
 	for i: int in lines.size():
 		var line: String = lines[i]
 		var code: String = line.strip_edges()
-		if code.begins_with("//") or code.begins_with("///") or code.begins_with("//!"):
+		if code.begins_with("//"):
 			continue  # comments may name what the code must not
-		for token: String in KERNEL_FORBIDDEN:
+		for token: String in forbidden:
 			if line.contains(token):
-				found.append("line %d: %s (%s)" % [i + 1, code, token])
-	assert_eq(found.size(), 0, "no engine type or call in the kernels: %s" % found)
-	# The only things a kernel may import: Godot's maths builtins, the standard library and the core's plain row tables.
-	var imports := PackedStringArray()
-	for line: String in lines:
-		var code: String = line.strip_edges()
-		if code.begins_with("use ") and not (code.begins_with("use godot::builtin::") or code.begins_with("use std::")
-				or code.begins_with("use crate::sim_core::{")):
-			imports.append(code)
-	assert_eq(imports.size(), 0, "the kernels import only maths builtins, std and the core's row tables: %s" % imports)
-	# And the four classes take their maths from there, so a query or step cannot grow an engine call outside the module.
-	for user: String in KERNEL_USERS:
-		assert_true(FileAccess.get_file_as_string(user).contains("use crate::kernels::"), "%s reads the kernels" % user)
+				found.append("%s:%d: %s (%s)" % [path.get_file(), i + 1, code, token])
+		if code.begins_with("use "):
+			var allowed: bool = false
+			for prefix: String in use_allowed:
+				if code.begins_with(prefix):
+					allowed = true
+			if not allowed:
+				found.append("%s:%d: %s (an import outside the allow-list)" % [path.get_file(), i + 1, code])
+			continue
+		# Outside a `use` line, no path leaves the module: not into the crate, not up a level, not into godot.
+		for path_token: String in ["crate::", "super::", "godot::"]:
+			if line.contains(path_token):
+				found.append("%s:%d: %s (%s)" % [path.get_file(), i + 1, code, path_token])
+	return found
+
+
+func test_the_kernels_hold_no_engine_type() -> void:
+	var violations: PackedStringArray = _engine_free_violations(KERNEL_FILE, KERNEL_FORBIDDEN, KERNEL_USE_ALLOWED)
+	violations.append_array(_engine_free_violations(ROWS_FILE, ROWS_FORBIDDEN, ROWS_USE_ALLOWED))
+	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the kernels or the row tables: %s" % violations)
+	var source: String = FileAccess.get_file_as_string(KERNEL_FILE)
 	assert_true(source.contains("pub mod contact") and source.contains("pub mod sweep") and source.contains("pub mod ram")
 			and source.contains("pub mod flight"), "the four kernels are there")
+	# The four classes take their maths from the kernels, so a query or step cannot grow an engine call outside the module.
+	for user: String in KERNEL_USERS:
+		assert_true(FileAccess.get_file_as_string(user).contains("use crate::kernels::"), "%s reads the kernels" % user)
 
 
 func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine() -> void:
@@ -728,7 +754,7 @@ func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine()
 		sync_reads.append(calls[0])
 		fallback_reads.append(calls[1])
 		assert_gte(calls[0], 3 * bodies.size(), "the sync made at least three calls a body at %d bodies" % size)
-		assert_eq(calls[0], quiet, "a tick full of queries and steps made the same engine calls as a tick with none at %d bodies" % size)
+		assert_eq(calls[0], quiet, "the sync points read nothing again for the queries and steps: the same calls as a quiet tick at %d bodies" % size)
 	assert_eq(fallback_reads[0], 0, "no ship read from the physics server at 10 bodies")
 	assert_eq(fallback_reads[1], 0, "none at 100 bodies either")
 	assert_gt(sync_reads[1], sync_reads[0], "the sync reads once per body and bolt, so it grows with them")
