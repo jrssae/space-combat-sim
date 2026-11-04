@@ -153,4 +153,5 @@ func test_the_cockpit_is_grey_lit_red() -> void:
 		assert_lt((top - minf(albedo.r, minf(albedo.g, albedo.b))) / maxf(top, 1e-6), 0.08, "%s is grey" % material.resource_name)
 		var glow: Color = material.emission
 		assert_gt(glow.r, 3.0 * maxf(glow.g, glow.b), "%s glows red" % material.resource_name)
+		assert_lt(glow.r, 0.25, "%s: Q37, a subtle glow so the grey shows" % material.resource_name)
 	assert_gt(seen, 3)

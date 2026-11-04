@@ -398,6 +398,7 @@ class CabinGlowTests(unittest.TestCase):
         self.assertGreater(glass.emissive_strength, 0.0)
         self.assertGreater(r, 3.0 * max(g, b))
         self.assertLess(saturation(glass.albedo), 0.15)
+        self.assertLessEqual(glass.emissive_strength, 0.06, "Q37: subtle, so the grey shows")
 
 
 if __name__ == "__main__":

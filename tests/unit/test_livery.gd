@@ -29,6 +29,8 @@ func test_a_named_wing_gets_its_own_livery_and_number() -> void:
 	assert_true(alpha.primary.is_equal_approx(Color(row[0], row[1], row[2])), str(alpha.primary))
 	var dorsal: int = (section["number_fields"] as Dictionary).keys().find("dorsal")
 	assert_true(alpha.field_bits & (1 << dorsal) != 0, "the dorsal number")
+	var wing_field: int = (section["number_fields"] as Dictionary).keys().find("wing")
+	assert_eq(alpha.field_bits, (1 << dorsal) | (1 << wing_field), "Q37: the deck and the upper left wing, no pods")
 	for wing: String in ["beta", "delta", "zeta"]:
 		var other: Livery = Livery.for_wing(wing, 3, section)
 		assert_ne(other.pattern, alpha.pattern, wing)

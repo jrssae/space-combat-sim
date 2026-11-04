@@ -107,5 +107,24 @@ class PackTests(unittest.TestCase):
         self.assertTrue(np.all(uv >= 0.0) and np.all(uv <= 1.0))
 
 
+class GutterTests(unittest.TestCase):
+    def test_the_gutter_is_four_texels_of_the_coarsest_map(self) -> None:
+        from tools.procgen.core.textured_mesh import GUTTER_PX
+        self.assertEqual(GUTTER_PX, 4)
+        parts = [g.box((0.4, 0.4, 0.4), DARK).translated((2.0 * k, 0.0, 0.0)) for k in range(6)]
+        mesh = g.Mesh.concatenate(parts)
+        packed = pack(charts_of(mesh), texel_m=0.01, atlas_px=512, gutter_px=GUTTER_PX)
+        rects = []
+        for p in packed.placements:
+            w, h = (int(np.ceil(s / packed.texel_m)) + 1 for s in p.chart.size_m)
+            if p.rotated:
+                w, h = h, w
+            rects.append((p.origin_px[0], p.origin_px[1], p.origin_px[0] + w, p.origin_px[1] + h))
+        for i, a in enumerate(rects):
+            for b in rects[i + 1 :]:
+                gap = max(b[0] - a[2], a[0] - b[2], b[1] - a[3], a[1] - b[3])
+                self.assertGreaterEqual(gap, 2 * GUTTER_PX, (a, b))
+
+
 if __name__ == "__main__":
     unittest.main()

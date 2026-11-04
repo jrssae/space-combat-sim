@@ -41,6 +41,12 @@ class TableTests(unittest.TestCase):
         for n in names:
             self.assertNotIn(lv.livery_for(n).primary, [l.primary for l in lv.LIVERIES.values()], n)
 
+    def test_every_wing_puts_its_number_on_the_deck_and_the_upper_left_wing(self) -> None:
+        # Q37: the large number on the dorsal deck, the small repeat on the upper left wing; no pod numbers.
+        for livery in list(lv.LIVERIES.values()) + [lv.livery_for("kilo")]:
+            self.assertEqual(livery.numbers, ("dorsal", "wing"), livery.name)
+        self.assertLess(lv.NUMBER_FIELDS["wing"].centre[0], 0.0, "the left wing is -x")
+
     def test_the_plain_livery_has_no_pattern_and_no_number(self) -> None:
         plain = lv.livery_for("")
         self.assertEqual(plain.pattern, lv.PLAIN_PATTERN)

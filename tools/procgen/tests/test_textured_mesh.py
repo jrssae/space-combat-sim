@@ -129,7 +129,9 @@ class StarfuryTests(unittest.TestCase):
             for key in ("albedo", "normal", "orm", "emissive"):
                 image = read_png(self.out / surface[key])
                 channels = 4 if key == "albedo" else 3  # the albedo's alpha is where a livery may paint (M4-T30b)
-                self.assertEqual(image.shape, (section["atlas_px"], section["atlas_px"], channels))
+                px = 2 * section["atlas_px"] if key == "normal" else section["atlas_px"]  # Q34: the fine detail at 4 096
+                self.assertEqual(image.shape, (px, px, channels), key)
+                self.assertEqual(section["map_px"][key], px, key)
         self.assertLess(section["texel_m"], 0.02, "about a centimetre a texel")
         emissive = read_png(self.out / section["surfaces"][0]["emissive"])
         self.assertGreater(int((emissive.max(axis=2) > 128).sum()), 500, "the nozzle throats glow")
@@ -189,6 +191,66 @@ class LiveryOutputTests(unittest.TestCase):
             broken = dict(manifest, mesh=dict(section, livery=dict(section["livery"], patterns={"plain": [{"zones": [1]}]})))
             with self.assertRaises(ValueError):
                 manifest_io.validate_manifest(broken)
+
+
+class StarfuryAtlasTests(unittest.TestCase):
+    """The T30a review's checks on the real Starfury atlas (Q34): no two charts share a texel, and the texel density is even
+    across the parts and inside each part (the unwrapped curved parts stretch less)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from tools.procgen.core.raster import rasterize, sharp_edges
+        from tools.procgen.core.textured_mesh import pack_parts
+
+        parts = starfury.textured_parts(starfury.DEFAULT_SPEC, BuildContext(Path(tempfile.gettempdir())))
+        cls.packed = pack_parts(parts, starfury.ATLAS_PX, starfury.TEXEL_M)
+        mesh = cls.packed.mesh
+        cls.buffers = rasterize(starfury.ATLAS_PX, cls.packed.face_uv01, mesh.vertices[mesh.faces], mesh.vertex_normals()[mesh.faces],
+                                cls.packed.face_part, mesh.face_material, cls.packed.face_chart, sharp_edges(mesh))
+        cls.parts = parts
+
+    def test_no_two_charts_overlap(self) -> None:
+        self.assertEqual(int(self.buffers.overlaps), 0)
+
+    def test_texel_density_is_even_across_and_inside_the_parts(self) -> None:
+        mesh = self.packed.mesh
+        uv = self.packed.face_uv01 * starfury.ATLAS_PX
+        px_area = np.abs(uv_area(uv))
+        m_area = mesh.face_areas()
+        big = m_area > 1e-4
+        per_face = np.sqrt(px_area[big] / m_area[big])
+        part_of = self.packed.face_part[big]
+        overall = []
+        for k in np.unique(part_of):
+            d = per_face[part_of == k]
+            overall.append(float(np.sqrt((px_area[big][part_of == k]).sum() / (m_area[big][part_of == k]).sum())))
+            p5, p95 = np.percentile(d, [5, 95])
+            self.assertLess(p95 / p5, 1.25, f"{self.parts[k].name}: {p5:.1f} to {p95:.1f} texels a metre")
+        self.assertLess(max(overall) / min(overall), 1.15, overall)
+
+
+class RenderTrianglesTests(unittest.TestCase):
+    """Q34: ``render_triangles`` builds a coarser render mesh with the fine mesh's normals in its normal map."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.out = Path(cls._tmp.name)
+        starfury.build(BuildContext(cls.out, seed=42, options={"hero": False, "occlusion": False, "render_triangles": 12000}))
+        cls.manifest = manifest_io.read_manifest(cls.out)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
+
+    def test_the_coarse_build_has_about_the_asked_triangles(self) -> None:
+        section = self.manifest["mesh"]
+        self.assertLess(abs(section["triangles"] - 12000) / 12000.0, 0.15, section["triangles"])
+        self.assertEqual(section["render_triangles"], 12000)
+        self.assertEqual(section["fine_triangles"], self.manifest["paint_mesh"]["triangles"])
+        mesh = read_glb(self.out / section["file"])
+        self.assertEqual(sum(len(p.indices) for p in mesh.primitives) // 3, section["triangles"])
+        manifest_io.validate_manifest(self.manifest)
 
 
 if __name__ == "__main__":
