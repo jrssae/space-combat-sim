@@ -2410,6 +2410,10 @@ median and p99.
 - **Work counts** (`test_rocks_and_mines`): 1 000 rocks registered once when the field is built and never again; the hit and
   ram resolvers gather the 6 ships' hulls a tick and no rock; the solid rows gathered once over 30 ticks; at most 52 rock pairs
   tested in a tick for 40 bolts falling onto rocks; a bolt 30 km from the slab tests no rock, one inside it 1 of 1 000.
+- **Tests** (focused, Q10): the 69 GUT files that cover the scan, the resolvers, the broad phase, the stand-ins, the bench, the
+  AI's perception and avoidance, the rebase and AC13's paired budget, each run alone on `801d895`: with the library 778
+  passing, 0 failing, 2 pending (AC12); without it 741 passing, 0 failing, 39 pending (AC12 and the tests that need the
+  library, saying so). RED on `db2d8c9`: 16 failing in five files.
 
 ## Definition of done (M4)
 
