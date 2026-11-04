@@ -2439,3 +2439,60 @@ native/src/contact_field.rs         + set_friendly_row; statics(..., faction, ..
   Jolt's own bounce off the RID body is unchanged (its contacts never named a rock: the RID body has no object id).
 - **Why nothing changes for fighters.** Furball, spread and transit have no rocks and no mines, so the rows are empty, the kept
   grids answer nothing and every contact list is what it was; the seeded outcomes match the base with `perf_native` on and off.
+### 17.16 Splats against meshes: the render comparison (T27)
+
+```
+tools/procgen/core/glb.py              a binary glTF writer (and a reader for tests): positions, normals, one UV set, a material a primitive
+tools/procgen/core/paint_mesh.py       the painted mesh: a hull's parts as one glb, the paint codes in the UVs, the manifest's paint_mesh
+tools/procgen/core/pieces.py           a big piece both ways: splat levels centred on their own centroids, and its painted mesh
+tools/procgen/assets/b5_station.py     the Babylon 5 station stand-in (shape only): a turning drum and a stationary frame, 8 km
+tools/procgen/assets/capital_hulls.py  the capital stand-ins' boxes as splats and painted meshes
+assets/shaders/paint_mesh*.gdshader*   the paint shader: Style.shade_panels and GDGS's relight factor on the GPU
+src/rendering/paint_meshes.gd          PaintMeshes: loads a painted mesh and puts one shared paint material on each surface
+src/rendering/paint_mesh_lights.gd     PaintMeshLights (under Main): the light rig's 8 lights into every paint material, each frame
+src/rendering/render_piece.gd          RenderPiece: a piece's splat levels (by projected spacing) or its painted mesh
+src/perf/standins/station_standin.gd   StationStandin: the station's two pieces, the drum turning
+src/perf/station_scene.gd              StationScene (under Main): the station, 10 capitals, 80 fighters, the planet; `station near|far|off`
+scripts/render_compare.sh              one scene one way, fullscreen, the 3D at 1 080 lines, measured like the fullscreen check
+scripts/probe_draw_calls.gd            what one hull costs in Godot's draw calls, by kind
+```
+
+- **What it is for.** Q24: whether the big battles are cheaper drawn as Gaussian splats or as polygon meshes at the same shapes and
+  detail, measured on the maintainer's GPU, so the maintainer can decide whether splats stay. The simulation does not depend on it.
+- **The painted mesh.** The splats are sampled from the parts' meshes and painted by `Style.shade_panels`; the generators now also
+  write those meshes (the hull parts the fallback OBJ holds, so the same triangles and bounds) as `<asset>_mesh.glb`, with each
+  vertex's part phase and material as whole numbers in its UV (`u = px + 97 py`, `v = pz + 97 material`, the phase in 97ths of a
+  panel as `_phase` already quantises it). Vertices are split per material; opaque faces are one primitive and see-through faces
+  (canopy glass) a second, so a ship is one opaque surface. The manifest's `paint_mesh` holds the material table (linear albedo,
+  paneled, transmittance) and the panel grid. Godot's scene importer builds the mesh's levels of detail; the mesh is drawn with
+  the engine's LOD and no instancing of our own (see the cycle log for what the renderer does with many copies).
+- **Paint and light like the splats.** `paint_mesh.gdshader` is unshaded and does the splats' sums itself: the panel lines and
+  per-panel tint of `shade_panels` on the lattice projected along the normal's dominant axis (a different hash for the tint, the
+  same ±jitter; lines faded to their mean once a panel is a few pixels across), then GDGS's relight factor over the same 8 lights
+  (`PaintMeshLights` packs the rig's lights in GDGS's layout) with `relight_unlit_level`, `relight_ambient` and
+  `relight_light_gain`, applied before the sRGB to linear step as GDGS applies it. Own lights (the cabin glow, the top lamp) are
+  not on the mesh.
+- **The switch.** `settings.ship_render`: `splat` (as before), `mesh` (every ship draws its painted mesh: a lean AI ship through its
+  one hull node, which already drew the fallback mesh, so the node diet holds; the player's ship through its fallback node, the
+  depth proxy hidden), or `hybrid` (splats near, the mesh past `settings.ship_mesh_beyond_m`, 400 m, back a tenth inside, decided
+  by the `LodSwitcher` beside the far dot). Far dots stay on every path. The cockpit view keeps the OBJ it was built around. It
+  applies live.
+- **The pieces.** A capital stand-in draws its box (the bench's), or with `set_look` the `capital_hulls` box as splats (1/300 of
+  the length apart, so about 60 000 a class, two coarser levels) or as its painted mesh (12 triangles). The station stand-in
+  (`b5_station`, from `docs/design-references.md`'s proportions: drum 1/9 of the 8 km length across and 42 % of it long, reactor,
+  truss spine, funnel with three pairs of vanes, the top bar with its cargo modules clear of the drum, the command sphere with its
+  ring, arms and masts, the forked bow) is two pieces, each four splat levels (4, 8, 16, 32 m; 1.38 million splats at LOD0) and a
+  painted mesh (10 000 triangles). A `RenderPiece` shows the coarsest level whose spacing projects to 2 px or less at its nearest
+  point. The drum turns at 0.148 rad/s (1 g at its radius) each frame.
+- **Levels for the lines drawn.** `LodSwitcherMath.render_height` is the window's height times its 3D scale; the `LodSwitcher` and
+  `RenderPiece` pick levels from it, so a 4K window drawing the 3D at 1 080 lines (the fullscreen check) picks for 1 080 lines.
+- **What was found** (the milestone's Cycle log, "T27 render comparison"): the painted meshes cost 2 to 3 times less GPU time than the
+  splats wherever hulls are on screen, with the same draw calls and render CPU time; neither path binds the big battles today. A splat
+  node adds no draw call (GDGS draws in its compositor effect); the depth proxy adds one per ship (its material is per node, so the
+  renderer cannot instance it) at full triangles. Godot's Forward+ renderer instances identical painted meshes on its own.
+- **Tests**: `test_paint_mesh.py` (the glb round trip, the codes, a vertex split per material, glass apart, the fighters' meshes hold
+  their OBJ's triangles and their splats' box, deterministic), `test_render_pieces.py` (the station's two pieces, levels and
+  centroids, 8 km and a ninth across, the drum on its axis and clear of everything stationary, the capital boxes), `test_paint_meshes`
+  (the imported mesh, its materials from the manifest, the codes survive the import, the lights packed as GDGS packs them, a piece's
+  level) and `test_render_path` (the switch live on an AI ship and the player's, hybrid with its hysteresis, dots on the mesh path,
+  a capital's three looks, the station both ways with its drum turning).

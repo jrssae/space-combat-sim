@@ -173,7 +173,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T24 | The simulation step on a worker thread (only if the fullscreen check misses the floor at 500; checkpoint 4) | T23, T26 | Fable | A tick-order change, double-buffered snapshots | N | not started |
 | T25 | Phase 3 measurements, the 1 000 stretch, the full suite, report P3 | T23 (T24, T26) | Sonnet | Measurement, no code | M | not started |
 | T26 | Resolution scaling for the big battle (only if the GPU binds at the fullscreen check; Q20) | T11 | Sonnet | One setting and an automatic step on `RenderScale`; the look (H) | R | not started |
-| T27 | Render comparison: Gaussian splats against meshes, in the 500 battle and a Babylon 5 station scene (Q24) | T07, T11, T12 | Opus | Measures whether splats or meshes carry the big battles; GPU numbers by the agent, the look (H) | R, M | not started |
+| T27 | Render comparison: Gaussian splats against meshes, in the 500 battle and a Babylon 5 station scene (Q24) | T07, T11, T12 | Opus | Measures whether splats or meshes carry the big battles; GPU numbers by the agent, the look (H) | R, M | done |
 | T28 | Running lights stay point-sized and dim by the inverse square (maintainer, 2026-11-03) | none | Sonnet | Lights in vacuum do not scatter into globes | R | done |
 | T29 | Rocks and mines as static rows: T07's asteroids registered as statics, T12's mines as faction-owned mine rows; avoidance sees rocks and its own side's mines only (Q27) | T09, T12 | Opus | Takes the rocks' 24 to 49 ms per tick out of the GDScript paths | G, N | done (2026-11-03, in a worktree on `9a3f525`; Cycle log, M4-T29) |
 
@@ -1054,6 +1054,12 @@ No question is open.
 - **Done when:** the Cycle log entry "T27 render comparison" holds both scenes' tables, a short reading (which path is cheaper,
   where each binds, what a hybrid of near splats and far meshes would cost), and a recommendation for the maintainer; the
   screenshots are listed for (H).
+- **Done** (2026-11-04): the painted mesh path (`settings.ship_render` splat, mesh or hybrid), the station and capital pieces, the
+  `station` scene, `scripts/render_compare.sh` and the draw-call probe; §17.16. The entry "T27 render comparison" in the Cycle log has
+  both scenes, the reading, the draw-call finding and the recommendation: meshes are 2 to 3 times cheaper on the GPU, but neither path
+  binds the battles today (the tick and the frame's process work do); stations and capitals as meshes, fighters as splats within about
+  150 m. Mesh LOD is the importer's; instancing is the renderer's own (20 identical painted meshes are one draw call). Fixed on the way:
+  the splat levels follow the lines the 3D is drawn at. Vsync-on numbers and the look are (H).
 
 ##### M4-T29 Rocks and mines as static rows
 
@@ -2415,6 +2421,132 @@ median and p99.
   AI's perception and avoidance, the rebase and AC13's paired budget, each run alone on `801d895`: with the library 778
   passing, 0 failing, 2 pending (AC12); without it 741 passing, 0 failing, 39 pending (AC12 and the tests that need the
   library, saying so). RED on `db2d8c9`: 16 failing in five files.
+### T27 render comparison (M4-T27, 2026-11-04): Gaussian splats against meshes (Q24)
+
+**How it measured.** In its own worktree (base `9038f0e`), so the numbers see only this change. Every run is
+`scripts/render_compare.sh <scene> <splat|mesh|hybrid>`: `scripts/measure_fight.gd` fullscreen on the maintainer's screen (the window
+reports 6144x3456), the 3D at 1 080 lines (`scale3d=1080p`, Q20, Q25), chase camera, 8 s of warm-up and 20 s measured, vsync off, under
+the GPU lock and both bench locks, one at a time; load 0.4 to 2.0 on 20 threads. "Frozen" runs pause the game 2 s before the window, so
+they measure the drawing alone (the simulation's tick is the same on both paths and dominates the live 500 battle). `ship_render` is set
+before the scene is built. Reports in `reports/perf/m4_t27_*` (after the LOD fix below) and `m4_t27_r1_*` (before it). The splat rows
+are after the LOD fix; the mesh rows are from the first round (the fix does not touch the mesh path). "Splats drawn" counts GDGS's
+visible splats, the sky's 16 000 and the sandbox's four buoys (30 400) included, so a mesh run still shows 46 400 (23 600 and 54 000 in
+the station scene, where the buoys are farther and drawn coarser). VRAM added is over the desktop's; about 1.2 GB of it is the splat
+budget's sort buffers, which GDGS sizes from `splat_budget` whatever is drawn (§7.2).
+
+**What was compared.** Splat ships against painted meshes of the same surface (the fallback OBJ's triangles: 5 700 a raider, 34 428 a
+Starfury, LODs by Godot's importer), painted and lit by the same sums (§17.16). Capitals and the planet are meshes in scene 1 on both
+paths, as the plan says; in scene 2 the station (1.38 million splats at LOD0, four levels; 9 896 triangles) and the 10 capitals
+(about 60 000 splats each, three levels; 12 triangles) switch too. Far dots past 3 km are the same on both paths.
+
+**Scene 1, the 500 battle** (`bench battle 500`, T07's mix: 425 fighters, 75 capitals, the rocks, four sides; the chase camera in the
+player's fight):
+
+| run | FPS | frame mean / p99 / max ms | GPU ms | render CPU ms | draw calls | triangles | splats drawn | VRAM added MB |
+|---|---|---|---|---|---|---|---|---|
+| splat, live | 1.4 | 713.8 / 766.5 / 766.5 | 5.74 | 1.39 | 1 278 | 640 274 | 1 049 273 | 1 520 |
+| mesh, live | 1.4 | 711.3 / 773.0 / 773.0 | 3.27 | 1.40 | 1 276 | 412 882 | 46 400 | 1 525 |
+| hybrid (mesh past 400 m), live | 1.4 | 714.5 / 768.6 / 768.6 | 5.71 | 1.37 | 1 276 | 412 872 | 1 021 458 | 1 514 |
+| splat, frozen | 55.5 | 18.02 / 20.64 / 24.89 | 7.06 | 0.77 | 1 183 | 772 365 | 1 064 586 | 1 399 |
+| mesh, frozen | 51.0 | 19.63 / 23.26 / 29.91 | 3.22 | 0.78 | 1 181 | 420 319 | 46 400 | 1 504 |
+
+**Scene 2, the Babylon 5 station** (`station near|far`: the station stand-in, 10 capitals at rest, 80 fighters fighting beside it, the
+planet 40 km off with its pull; near puts the player 1.4 km off the drum's side, far 11.2 km off the station's centre):
+
+| run | FPS | frame mean / p99 / max ms | GPU ms | render CPU ms | draw calls | triangles | splats drawn | VRAM added MB |
+|---|---|---|---|---|---|---|---|---|
+| near, splat, live | 7.9 | 126.8 / 152.5 / 165.4 | 5.88 | 0.82 | 516 | 1 565 312 | 1 809 528 | 2 016 |
+| near, mesh, live | 7.6 | 131.4 / 152.3 / 153.8 | 2.14 | 0.78 | 500 | 535 563 | 23 600 | 1 972 |
+| near, hybrid, live | 8.1 | 123.2 / 149.4 / 153.4 | 5.20 | 0.78 | 494 | 532 972 | 1 673 682 | 1 926 |
+| near, splat, frozen | 184.4 | 5.42 / 8.76 / 17.46 | 4.34 | 0.55 | 600 | 1 971 028 | 1 836 954 | 1 802 |
+| near, mesh, frozen | 183.2 | 5.46 / 9.62 / 15.71 | 2.17 | 0.50 | 569 | 636 888 | 23 600 | 1 797 |
+| far, splat, live | 51.5 | 19.41 / 35.72 / 54.93 | 4.57 | 0.77 | 359 | 128 368 | 1 153 578 | 1 993 |
+| far, mesh, live | 48.8 | 20.48 / 35.22 / 45.75 | 1.72 | 0.78 | 367 | 133 424 | 54 000 | 1 990 |
+| far, splat, frozen | 203.5 | 4.91 / 5.88 / 9.70 | 3.15 | 0.43 | 401 | 120 636 | 1 153 578 | 1 880 |
+| far, mesh, frozen | 199.0 | 5.03 / 8.80 / 18.30 | 1.74 | 0.45 | 437 | 131 006 | 54 000 | 1 897 |
+
+**Many ships close** (`hundred_view`: 100 idle ships from 150 m to 1.5 km, all in view, the sharpest per-ship comparison):
+
+| run | FPS | frame mean / p99 / max ms | GPU ms mean (max) | render CPU ms | draw calls | triangles | splats drawn |
+|---|---|---|---|---|---|---|---|
+| splat | 43.8 | 22.84 / 35.44 / 38.94 | 10.13 (12.42) | 0.68 | 583 | 1 820 716 | 1 570 768 |
+| mesh | 40.7 | 24.58 / 60.71 / 86.20 | 3.10 (3.20) | 0.61 | 519 | 697 830 | 46 400 |
+| hybrid, mesh past 400 m | 44.3 | 22.58 / 35.54 / 41.33 | 9.55 (12.41) | 0.62 | 528 | 889 498 | 1 279 316 |
+| hybrid, mesh past 150 m | 43.8 | 22.85 / 36.54 / 45.55 | 5.56 (6.63) | 0.61 | 518 | 697 830 | 1 021 458 |
+
+**Vsync on**: not measured. Every vsync-on run (battle and near station, both paths) showed exactly 1 FPS with about 880 ms of process
+time a frame: the compositor throttles a window it does not show (the runs were after midnight; the screen was likely asleep). Vsync off is
+not throttled. The maintainer can take them at the screen: `RC_VSYNC=on scripts/render_compare.sh station_near splat` (and `mesh`). (H)
+
+**Reading.**
+
+- **The GPU: meshes are 2 to 3 times cheaper wherever splats are on screen.** 100 ships close: 10.1 against 3.1 ms. The 500 battle,
+  frozen: 7.1 against 3.2 ms. The station near: 4.3 against 2.2 ms; far: 3.2 against 1.7 ms. GDGS's cost follows the splats it draws
+  and the pixels they cover (projection, a sort, per-tile blending); a mesh's is a depth prepass and one opaque pass of an unshaded
+  shader. Render CPU time is the same on both paths (0.4 to 1.4 ms) and draw calls are within a few percent: neither path is bound on
+  the CPU side of drawing.
+- **Neither path decides whether the battles hold 30 or 60 FPS today.** Live, the 500 battle runs at 1.4 FPS on both paths: the tick
+  (worst 86 to 91 ms a second) and the frame's process work bind, as at T07 and T11. Frozen, it is 55 and 51 FPS: the frame's own
+  process work (about 18 to 22 ms at worst a second, ships' visuals, lights, dots, the HUD) binds, not the GPU (7 ms). The station
+  scene's near view runs at 8 FPS live on both paths for the same reason (80 fighters and 10 capitals' turrets within 2 km of the player
+  all think every tick; the far view, beyond 2 km, is at 49 to 52 FPS) and at 184 FPS frozen. Under T26's trigger (GPU over 12 ms a frame)
+  only the splat path comes near it, with 100 ships close.
+- **Where each path binds.** Splats: the GPU with many hulls close (10 to 12.4 ms at 100 ships in view; about 2.5 ms of it is the player's
+  hero level, 975 058 splats on its own, and the few ships within 150 m, by the 150 m hybrid), and the splat budget (2 million visible): the station and its capitals as splats take
+  1.1 to 1.8 million of it, so before the LOD fix the budget pushed the player's own Starfury down to a coarse level, a visible smear in
+  `/tmp/m4_t27_r1_station_near_splat.png`. Meshes: nothing at these counts; triangles are fewer than the splat path's (the depth proxies
+  draw every hull's full triangles at every distance) and the importer's LODs cut far hulls further.
+- **What a hybrid costs.** Near splats and far meshes save little at 400 m (9.6 against 10.1 ms with 100 ships close; 5.2 against 5.9 ms
+  at the station), because nearly all of a splat ship's GPU cost is the pixels of near hulls; far hulls are already coarse levels and
+  dots. At 150 m it saves half (5.6 ms), and what is left is mostly the player's hero level. A hybrid adds no draw calls (the far ship
+  draws its mesh through the node that drew its depth proxy).
+
+**Why a splat node seemed to cost about 2 draw calls (T11's question).** It does not: `scripts/probe_draw_calls.gd` (the main scene
+with the player alone, 83 draw calls, then 20 copies of one kind 100 to 400 m ahead) counts 20 bare splat nodes in view, hidden or
+behind the camera at 83 draw calls, 0 more triangles and 0 more render objects: GDGS draws in a compositor effect that Godot's counters
+do not see. What costs is the **depth proxy**: 20 proxies add 20 draw calls and 114 000 triangles (5 700 each, every distance), because
+each `HullDepthProxy` makes its own `ShaderMaterial`, so the renderer cannot instance them, and its merged mesh has no LODs. 20 painted
+meshes add **1** draw call and 28 000 triangles: Godot's Forward+ renderer instances identical mesh and material pairs on its own, and the
+importer's LODs apply. 20 fallback OBJs add 12 (one per material surface). So a near splat ship is about 1 call for its proxy plus its
+plume and marker multimeshes (one each, a multimesh per ship cannot be merged), and T11's probe most likely took the proxy's call for the
+splat node's. One shared material for every proxy of the same inset would make the proxies instance (about 1 call a ship fewer), and LODs on
+the merged proxy would cut its triangles; neither is in this task.
+
+**Recommendation.** On numbers alone the painted mesh is the cheaper path, by 2 to 3 times on the GPU, with the same shapes and paint,
+fewer triangles and the same draw calls, and a splat budget it never fills (which could then be lowered to give back about 1 GB of VRAM).
+But the GPU is not what binds the big battles: the tick and the frame's process work are, on both paths, by an order of magnitude at 500.
+So the choice can be made on the look, and what I would choose is:
+
+1. **Stations and capitals as painted meshes**, always. At their size the splats are metres wide, they eat the splat budget the
+   fighters need, and they cost twice the GPU time of a mesh.
+2. **Fighters as splats near the camera and painted meshes past about 150 m** (the hybrid, `ship_render hybrid`,
+   `ship_mesh_beyond_m 150`), dots past 3 km as now. That keeps the splat look where it shows (the player's ship, a wingman alongside)
+   and costs about the same GPU time as all meshes plus the player's hero level.
+3. If the maintainer judges the meshes as good as the splats up close in the comparison sheets, **drop splats for hulls** altogether:
+   then the sky could stay splats, the splat budget drops, and the depth proxy goes. That is a look decision (H), not a performance
+   one at today's counts.
+
+Whichever is chosen, the next frame-rate gains in the big battles come from the tick (phase 2) and the frame's process work, not
+from the renderer. Two cheap fixes on the splat path either way: a shared proxy material, and LODs on the proxy.
+
+**Fixed on the way (a behaviour change for the splat path):** `LodSwitcher` picked splat levels from the window's height, so the
+fullscreen check's 4K window with the 3D at 1 080 lines asked for levels about three times finer than the picture shows.
+`LodSwitcherMath.render_height` is the window's height times its 3D scale. At the fullscreen check it cut the splats drawn by 20 % at
+100 ships close (1.95 to 1.57 million, GPU 12.3 to 10.1 ms), and at the far station from 1.99 to 1.15 million (GPU 7.0 to 3.2 ms frozen).
+Windowed at native 1080p nothing changes.
+
+**Screenshots for the maintainer (H)**, all in `/tmp`: side by side, splat on the left and mesh on the right,
+`m4_t27_compare_hundred_view.png`, `m4_t27_compare_battle.png` (frozen), `m4_t27_compare_station_near.png` (frozen),
+`m4_t27_compare_station_far.png` (frozen); each run's own picture, `m4_t27_<scene>_<splat|mesh|hybrid>[_frozen].png` for the scenes
+`hundred_view`, `battle`, `station_near`, `station_far`; `m4_t27_hundred_view_hybrid150.png`; and before the LOD fix,
+`m4_t27_r1_*` (the smeared player ship is in `m4_t27_r1_station_near_splat.png`). The `_vsync` pictures are from the throttled runs.
+
+**Tests** (focused, Q10): the Python suite (`python3 -m unittest discover -s tools/procgen/tests -t .`), with the new
+`test_paint_mesh.py` and `test_render_pieces.py`, and GUT files run alone, each with 0 failing and 0 pending: `test_paint_meshes` 7,
+`test_render_path` 7, `test_ship_nodes` 11, `test_far_dots` 12, `test_lod_switcher_math` 13, `test_lod_in_play` 5, `test_hull_depth_proxy`
+12, `test_hero_lod` 11, `test_splat_budget_in_play` 8, `test_standins` 19, `test_bench_layout` 23, `test_bench` 8, `test_ship_pool` 21,
+`test_settings` 13, `test_settings_schema` 15, `test_main_scene` 11, `test_ship_scene` 27, `test_relight` 26, `test_console_completer` 10,
+and AC13's `test_ai_think_time` 1, `test_m3_run` 2, `test_control_profiles` 32, `test_control_profile_store` 15, `test_control_profile` 34.
 
 ## Definition of done (M4)
 
