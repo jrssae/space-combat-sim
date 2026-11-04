@@ -11,6 +11,10 @@ extends Node
 ## `perf_native_flight` is off, no row is stepped and every ship flies its own GDScript model that tick, so the setting can
 ## flip live and a bench can pair the two paths in one process. Ships' types and nozzles are registered once; a rebuilt ship
 ## registers again.
+##
+## With the native core on (M4-T15, `SimCore`), the step reads each ship's basis and velocities from the core's rows (synced
+## at -11; nothing moves a body between) instead of the physics server; a ship the core has no row for (back from the
+## pool this tick) is read from the server as before. The batch attaches the core to the world when it attaches itself.
 
 ## The native class that flies the batch when the library is loaded and the settings are on.
 const NATIVE_CLASS: StringName = &"ScsFlightStep"
@@ -48,6 +52,10 @@ var _slots: Dictionary[Ship, int] = {}  # the native slot of every registered sh
 var _step: Object = null
 var _native_class_known: int = -1  # -1 until first asked; classes never change while the game runs
 var _slot_ids: PackedInt32Array = PackedInt32Array()
+var _body_ids: PackedInt64Array = PackedInt64Array()
+var _source: StringName = &"none"
+## Ships the last core step had to read from the physics server (no row: back from the pool this tick); a readout.
+var fallback_reads: int = 0
 var _scalars: PackedFloat64Array = PackedFloat64Array()
 var _vectors: PackedVector3Array = PackedVector3Array()
 var _flags: PackedByteArray = PackedByteArray()
@@ -76,6 +84,7 @@ static func attach(world: Node) -> FlightBatch:
 		return found
 	var made := FlightBatch.new()
 	world.add_child(made)
+	SimCore.attach(world)
 	return made
 
 
@@ -126,7 +135,7 @@ func reset_assist(ship: Ship) -> void:
 ## Where the last step read the ships' poses and motion: &"server" (the physics server by RID, M4-T10), &"core" (the
 ## native core's rows, M4-T15) or &"none" (nothing stepped).
 func source() -> StringName:
-	return &"server" if not rows.is_empty() else &"none"
+	return _source if not rows.is_empty() else &"none"
 
 
 ## Which path flew the last tick: `native` when the batch stepped any ship, else `gdscript`.
@@ -182,6 +191,7 @@ func _physics_process(delta: float) -> void:
 	var n: int = _ships.size()
 	if _slot_ids.size() < n:
 		_slot_ids.resize(n)
+		_body_ids.resize(n)
 		_scalars.resize(n * CMD_SCALARS)
 		_vectors.resize(n * CMD_VECTORS)
 		_flags.resize(n * CMD_FLAGS)
@@ -195,6 +205,7 @@ func _physics_process(delta: float) -> void:
 			continue
 		ship.batch_gather(self, row, frame, delta, _fuel_unlimited, _scalars, _vectors, _flags)
 		_slot_ids[row] = _slots[ship]
+		_body_ids[row] = ship.get_instance_id()
 		rows.append(ship)
 		row += 1
 	var slots: PackedInt32Array = _slot_ids.slice(0, row)
@@ -206,7 +217,17 @@ func _physics_process(delta: float) -> void:
 	if row == 0:
 		step_us = 0
 		return
-	if not step.step(slots, scalars, vectors, flags, PackedVector3Array(), delta):
+	var sim: SimCore = SimCore.for_tree(get_tree())
+	var stepped: bool
+	if sim != null and sim.ensure_synced():
+		_source = &"core"
+		stepped = step.step_core(sim.core, slots, _body_ids.slice(0, row), scalars, vectors, flags, delta)
+		fallback_reads = int(step.fallback_reads())
+	else:
+		_source = &"server"
+		stepped = step.step(slots, scalars, vectors, flags, PackedVector3Array(), delta)
+		fallback_reads = 0
+	if not stepped:
 		# The step refused the arrays (it logged why): every ship flies its own model this tick.
 		for ship: Ship in rows:
 			ship.batch_refused()
@@ -262,6 +283,8 @@ func _register_console() -> void:
 		&"stepped": {"get": func() -> int: return rows.size(), "doc": "Ships the batch flew in the last tick"},
 		&"gather_us": {"get": func() -> int: return gather_us, "unit": "us", "doc": "The last tick's GDScript gather; wall clock"},
 		&"step_us": {"get": func() -> int: return step_us, "unit": "us", "doc": "The last tick's native step and its outputs; wall clock"},
+		&"source": {"get": func() -> String: return String(source()), "doc": "Where the last step read the ships' poses: core (the native core's rows, M4-T15), server (the physics server by RID) or none"},
+		&"fallback_reads": {"get": func() -> int: return fallback_reads, "doc": "Ships the last core step read from the physics server because the core had no row for them (back from the pool this tick)"},
 		&"positions": {"get": _console_positions, "doc": "Every batchable ship's name and World position, for comparing seeded runs"},
 	}), self)
 

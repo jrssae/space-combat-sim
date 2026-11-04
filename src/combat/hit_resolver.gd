@@ -9,6 +9,9 @@ extends Node
 ## stepped yet). A bounding-sphere test comes first, then each hit volume inflated by the bolt's hit radius; the earliest
 ## hit wins. The sphere test runs in `HitBroadPhase` (M4-T08, §17.7), which finds the pairs that pass it without testing every
 ## pair, natively when the library is loaded; the resolver sweeps only those, in the same order, so the hits are the same.
+## With the native core on (M4-T15, `SimCore`), the hulls and bolts come as columns from the core's rows (the bolts read
+## again at this priority, since they moved at 0) and the broad phase pairs them natively from the same rows; the resolver
+## then looks up only the nodes the pairs name. Without it, the resolver walks the tree as before (the reference).
 ## Every projectile kind (bolt, beam, missile, mine) is swept alike, with its own hit radius; a beam (M4-T12) lives for one
 ## resolve, so its first hull along the segment takes the hit and it is retired whether it hit or not. Rocks (M4-T29, §17.16)
 ## are `StaticRows` with no node: they stay in a grid of their own between ticks, rebuilt only when a rock changes, and a bolt
@@ -36,30 +39,37 @@ var last_hit: String = "none"
 var resolve_us: int = 0
 ## Projectile and hull pairs the broad phase put to the bounding-sphere test on the last tick (the work count).
 var pairs_visited: int = 0
-## Hulls gathered from the tree on the last tick, and projectile and rock pairs the rocks' grid tested (work counts, M4-T29).
+## Hulls gathered on the last tick, and projectile and rock pairs the rocks' grid tested (work counts, M4-T29).
 var hulls_last_tick: int = 0
 var static_pairs_visited: int = 0
+## Wall-clock microseconds of the last tick's gather of hulls and bolts (a readout only).
+var gather_us: int = 0
 ## Finds the pairs that pass the bounding-sphere test (M4-T08); a test may swap in its own.
 var broad_phase: HitBroadPhase = HitBroadPhase.new()
 ## False keeps the resolver on its own gather of the tree even when the native core is on (M4-T15), for pairing the two.
 var use_core: bool = true
 
-# This tick's hulls (parallel arrays, index j) and projectiles (index i), refilled every tick.
-var _damageables: Array[Damageable] = []
-var _bodies: Array[Node3D] = []
+# This tick's hulls (columns, index j) and projectiles (columns, index i), refilled every tick: from the native core's rows
+# (M4-T15) or from the resolver's own walk of the tree. Nodes are looked up only for the pairs the broad phase gives.
+var _hull_count: int = 0
 var _body_ids := PackedInt64Array()
+var _hull_ids := PackedInt64Array()
 var _starts := PackedVector3Array()
-var _bases: Array[Basis] = []
-var _to_body: Array[Basis] = []
-var _moves := PackedVector3Array()
-var _mids := PackedVector3Array()
+var _velocities := PackedVector3Array()
+var _bases := PackedVector3Array()  # three columns (the x, y and z axes) a hull
+var _mids := PackedVector3Array()  # the own walk only: what `HitBroadPhase.pairs` takes
 var _reach := PackedFloat64Array()
-var _bolts: Array[Projectile] = []
+var _damageables: Array[Damageable] = []  # per hull, looked up when first needed (null until then)
+var _to_body: Dictionary = {}  # hull -> Basis, transposed when first needed
+var _bolt_ids := PackedInt64Array()
 var _bolt_starts := PackedVector3Array()
 var _bolt_ends := PackedVector3Array()
-var _bolt_mids := PackedVector3Array()
+var _bolt_radii := PackedFloat64Array()
+var _bolt_mids := PackedVector3Array()  # the own walk only
 var _bolt_reach := PackedFloat64Array()
-var _beams: Array[Projectile] = []
+var _beams := PackedInt32Array()
+var _delta: float = 0.0
+var _source: StringName = &"tree"
 # The rocks (M4-T29): their grid, kept until a rock changes, and the earliest rock hit `_earliest_rock` found.
 var _rocks: HitBroadPhase = HitBroadPhase.new()
 var _solid: StaticRows.Solid = null
@@ -83,7 +93,7 @@ func _init() -> void:
 
 func _ready() -> void:
 	DebugConsole.registry.register_provider(&"combat", ConsoleVars.new({
-		&"projectiles": {"get": func() -> int: return projectiles_last_tick, "doc": "Bolts swept on the last tick"},
+		&"projectiles": {"get": func() -> int: return projectiles_last_tick, "doc": "Bolts in flight at the last tick's resolve"},
 		&"hits": {"get": func() -> int: return hits_total, "doc": "Hits resolved this session"},
 		&"last_hit": {"get": func() -> String: return last_hit, "doc": "The last hit: shooter -> target, damage"},
 		&"pairs_tested": {"get": func() -> int: return pairs_tested, "doc": "Bolt and ship pairs swept on the last tick (past the distance cull)"},
@@ -91,6 +101,10 @@ func _ready() -> void:
 				"doc": "Bolt and ship pairs the broad phase put to the distance cull on the last tick (the work)"},
 		&"hit_path": {"get": func() -> String: return String(broad_phase.path()),
 				"doc": "Which code finds the pairs worth sweeping: native or gdscript"},
+		&"source": {"get": func() -> String: return String(_source),
+				"doc": "Where the last tick's hulls and bolts came from: core (the native core's rows, M4-T15) or tree (the resolver's own walk)"},
+		&"gather_us": {"get": func() -> int: return gather_us, "unit": "us",
+				"doc": "Cost of the last tick's gather of hulls and bolts (profiling only, wall clock)"},
 		&"resolve_us": {"get": func() -> int: return resolve_us, "unit": "us",
 				"doc": "Cost of the last tick's resolve (profiling only, wall clock)"},
 	}), self)
@@ -115,65 +129,106 @@ func _physics_process(delta: float) -> void:
 ## One tick of hit detection with time step `delta`. `_physics_process` calls it; public so tests can step it.
 func resolve(delta: float) -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
-	projectiles_last_tick = 0
 	pairs_tested = 0
 	pairs_visited = 0
 	friendly_fire = bool(Settings.get_value(&"friendly_fire"))
-	_gather_targets(delta)
-	_gather_bolts()
-	hulls_last_tick = _damageables.size()
-	var hull_count: int = _damageables.size()
-	var keys: PackedInt64Array = broad_phase.pairs(_bolt_mids, _bolt_reach, _mids, _reach)
+	var sim: SimCore = _gather(delta)
+	gather_us = Time.get_ticks_usec() - started_us
+	hulls_last_tick = _hull_count
+	projectiles_last_tick = _bolt_ids.size()
+	var hull_count: int = _hull_count
+	var keys: PackedInt64Array = broad_phase.pairs_core(sim.core, delta) if sim != null \
+			else broad_phase.pairs(_bolt_mids, _bolt_reach, _mids, _reach)
 	pairs_visited = broad_phase.visited
-	var rock_keys: PackedInt64Array = _rock_pairs()
+	var rock_keys: PackedInt64Array = _rock_pairs(sim)
 	var rock_count: int = _solid.ids.size()
-	var next: int = 0  # the first pair not yet taken; pairs come in bolt order
+	# Bolts come in order on both lists; each bolt with a pair on either takes the earliest of its hull and rock hits.
+	var next: int = 0
 	var rock_next: int = 0
-	for i: int in _bolts.size():
+	while next < keys.size() or rock_next < rock_keys.size():
+		@warning_ignore("integer_division")
+		var i_hull: int = keys[next] / hull_count if next < keys.size() else _bolt_ids.size()
+		@warning_ignore("integer_division")
+		var i_rock: int = rock_keys[rock_next] / rock_count if rock_next < rock_keys.size() else _bolt_ids.size()
+		var i: int = mini(i_hull, i_rock)
 		var first: int = next
 		while next < keys.size() and keys[next] / hull_count == i:
 			next += 1
 		var rock_first: int = rock_next
 		while rock_next < rock_keys.size() and rock_keys[rock_next] / rock_count == i:
 			rock_next += 1
-		var bolt: Projectile = _bolts[i]
+		var bolt: Projectile = _bolt(i)
 		# A hit handler may have retired a bolt later in the list, as the per-bolt checks before the broad phase allowed.
-		if bolt.is_spent() or bolt.is_queued_for_deletion() or not bolt.is_inside_tree():
+		if bolt == null or bolt.is_spent() or bolt.is_queued_for_deletion() or not bolt.is_inside_tree():
 			continue
-		projectiles_last_tick += 1
 		var hull_hit: bool = next > first and _earliest_hit(bolt, i, keys, first, next, hull_count)
 		var rock: int = _earliest_rock(bolt, i, rock_keys, rock_first, rock_next, rock_count) if rock_next > rock_first else -1
 		if rock >= 0 and (not hull_hit or _rock_t < _best_t):
 			_land_on_rock(bolt, rock, delta)
 		elif hull_hit:
 			_land(bolt, delta)
-	for beam: Projectile in _beams:
-		beam.spend()
+	for i: int in _beams:
+		var beam: Projectile = _bolt(i)
+		if beam != null:
+			beam.spend()
 	resolve_us = Time.get_ticks_usec() - started_us
 
 
 ## Where the last gather came from: &"tree" (the resolver's own walk) or &"core" (the native core's rows, M4-T15).
 func source() -> StringName:
-	return &"tree"
+	return _source
 
 
 ## The broad phase alone, for the parity tests (M4-T15): `[keys, visited]`, the keys as `resolve` sees them.
 func broad_phase_pairs(delta: float) -> Array:
-	_gather_targets(delta)
-	_gather_bolts()
-	var keys: PackedInt64Array = broad_phase.pairs(_bolt_mids, _bolt_reach, _mids, _reach)
+	var sim: SimCore = _gather(delta)
+	var keys: PackedInt64Array = broad_phase.pairs_core(sim.core, delta) if sim != null \
+			else broad_phase.pairs(_bolt_mids, _bolt_reach, _mids, _reach)
 	return [keys, broad_phase.visited]
 
 
-# Everything about the active hulls that does not depend on the bolt, as of this tick's start.
-func _gather_targets(delta: float) -> void:
+# This tick's hulls and bolts: from the core when it is on (the core it read, returned), else from the tree.
+func _gather(delta: float) -> SimCore:
+	_delta = delta
 	_damageables.clear()
-	_bodies.clear()
-	_body_ids.clear()
-	_starts.clear()
-	_bases.clear()
 	_to_body.clear()
-	_moves.clear()
+	var sim: SimCore = SimCore.for_tree(get_tree()) if use_core and broad_phase.native_available() else null
+	if sim != null and sim.ensure_bolts_synced():
+		_source = &"core"
+		var hulls: Array = sim.core.hull_columns()
+		_body_ids = hulls[0]
+		_hull_ids = hulls[1]
+		_starts = hulls[3]
+		_velocities = hulls[4]
+		_reach = hulls[5]
+		_bases = hulls[6]
+		_hull_count = _body_ids.size()
+		var bolts: Array = sim.core.bolt_columns()
+		_bolt_ids = bolts[0]
+		_bolt_starts = bolts[1]
+		_bolt_ends = bolts[2]
+		_bolt_radii = bolts[3]
+		_beams = bolts[5]
+		_mids.clear()
+		_bolt_mids.clear()
+		_bolt_reach.clear()
+	else:
+		_source = &"tree"
+		_gather_targets(delta)
+		_gather_bolts()
+		sim = null
+	_damageables.resize(_hull_count)
+	return sim
+
+
+# The own walk: everything about the active hulls that does not depend on the bolt, as of this tick's start, and the
+# spheres the broad phase takes.
+func _gather_targets(delta: float) -> void:
+	_body_ids.clear()
+	_hull_ids.clear()
+	_starts.clear()
+	_velocities.clear()
+	_bases.clear()
 	_mids.clear()
 	_reach.clear()
 	for node: Node in get_tree().get_nodes_in_group(Damageable.GROUP):
@@ -185,20 +240,73 @@ func _gather_targets(delta: float) -> void:
 		if body is RigidBody3D:
 			velocity = (body as RigidBody3D).linear_velocity
 		var basis: Basis = body.global_basis
-		_damageables.append(damageable)
-		_bodies.append(body)
 		_body_ids.append(body.get_instance_id())
+		_hull_ids.append(damageable.get_instance_id())
 		_starts.append(body.global_position)
-		_bases.append(basis)
-		_to_body.append(basis.transposed())
-		_moves.append(velocity * delta)
+		_velocities.append(velocity)
+		_bases.append(basis.x)
+		_bases.append(basis.y)
+		_bases.append(basis.z)
 		_mids.append(body.global_position + velocity * (0.5 * delta))
 		_reach.append(damageable.bounding_radius + velocity.length() * delta * 0.5)
+	_hull_count = _body_ids.size()
+
+
+# The own walk: every live projectile and the sphere round the segment it flew this tick.
+func _gather_bolts() -> void:
+	_bolt_ids.clear()
+	_bolt_starts.clear()
+	_bolt_ends.clear()
+	_bolt_radii.clear()
+	_bolt_mids.clear()
+	_bolt_reach.clear()
+	_beams.clear()
+	for node: Node in get_tree().get_nodes_in_group(Projectile.GROUP):
+		var bolt := node as Projectile
+		if bolt == null or bolt.is_spent() or bolt.is_queued_for_deletion() or not bolt.is_inside_tree():
+			continue
+		if bolt.kind == Projectile.KIND_BEAM:
+			_beams.append(_bolt_ids.size())
+		var p1: Vector3 = bolt.global_position
+		var start: Vector3 = p1 - bolt.last_step
+		_bolt_ids.append(bolt.get_instance_id())
+		_bolt_starts.append(start)
+		_bolt_ends.append(p1)
+		_bolt_radii.append(bolt.hit_radius_m)
+		_bolt_mids.append(start + bolt.last_step * 0.5)
+		_bolt_reach.append(bolt.last_step.length() * 0.5 + bolt.hit_radius_m)
+
+
+# Bolt `i`'s node, or null when it is gone.
+func _bolt(i: int) -> Projectile:
+	return instance_from_id(_bolt_ids[i]) as Projectile if is_instance_id_valid(_bolt_ids[i]) else null
+
+
+# Hull `j`'s `Damageable`, looked up when first needed.
+func _damageable(j: int) -> Damageable:
+	var found: Damageable = _damageables[j]
+	if found == null:
+		found = instance_from_id(_hull_ids[j]) as Damageable
+		_damageables[j] = found
+	return found
+
+
+# Hull `j`'s basis (its body's `global_basis` at the gather) and its transpose, the latter made when first needed.
+func _basis(j: int) -> Basis:
+	return Basis(_bases[j * 3], _bases[j * 3 + 1], _bases[j * 3 + 2])
+
+
+func _to_body_of(j: int) -> Basis:
+	var found: Variant = _to_body.get(j)
+	if found == null:
+		found = _basis(j).transposed()
+		_to_body[j] = found
+	return found
 
 
 # This tick's projectile and rock pairs that pass the sphere test, as `bolt * rocks + rock`, ascending; the rocks' grid is
 # built again only when a rock changed.
-func _rock_pairs() -> PackedInt64Array:
+func _rock_pairs(sim: SimCore) -> PackedInt64Array:
 	var solid: StaticRows.Solid = StaticRows.solid()
 	if solid != _solid:
 		_solid = solid
@@ -207,7 +315,8 @@ func _rock_pairs() -> PackedInt64Array:
 	static_pairs_visited = 0
 	if solid.ids.is_empty():
 		return PackedInt64Array()
-	var keys: PackedInt64Array = _rocks.kept_pairs(_bolt_mids, _bolt_reach)
+	var keys: PackedInt64Array = _rocks.kept_pairs_core(sim.core) if sim != null \
+			else _rocks.kept_pairs(_bolt_mids, _bolt_reach)
 	static_pairs_visited = _rocks.visited
 	return keys
 
@@ -250,29 +359,6 @@ func _land_on_rock(bolt: Projectile, s: int, delta: float) -> void:
 	hit_resolved.emit(info)
 
 
-# Every live projectile and the sphere round the segment it flew this tick.
-func _gather_bolts() -> void:
-	_bolts.clear()
-	_bolt_starts.clear()
-	_bolt_ends.clear()
-	_bolt_mids.clear()
-	_bolt_reach.clear()
-	_beams.clear()
-	for node: Node in get_tree().get_nodes_in_group(Projectile.GROUP):
-		var bolt := node as Projectile
-		if bolt == null or bolt.is_spent() or bolt.is_queued_for_deletion() or not bolt.is_inside_tree():
-			continue
-		if bolt.kind == Projectile.KIND_BEAM:
-			_beams.append(bolt)
-		var p1: Vector3 = bolt.global_position
-		var start: Vector3 = p1 - bolt.last_step
-		_bolts.append(bolt)
-		_bolt_starts.append(start)
-		_bolt_ends.append(p1)
-		_bolt_mids.append(start + bolt.last_step * 0.5)
-		_bolt_reach.append(bolt.last_step.length() * 0.5 + bolt.hit_radius_m)
-
-
 # The earliest hit of bolt `i` among its pairs `keys[first..next)`, kept in `_best_*`; false when it hits nothing.
 func _earliest_hit(bolt: Projectile, i: int, keys: PackedInt64Array, first: int, next: int, hull_count: int) -> bool:
 	var best_t: float = INF
@@ -281,15 +367,16 @@ func _earliest_hit(bolt: Projectile, i: int, keys: PackedInt64Array, first: int,
 	var p1: Vector3 = _bolt_ends[i]
 	for k: int in range(first, next):
 		var j: int = keys[k] - i * hull_count
-		var damageable: Damageable = _damageables[j]
-		# Already destroyed this tick by another bolt.
-		if damageable.hull.destroyed or _body_ids[j] == bolt.shooter_id or not damageable.can_be_hit_by(bolt.faction, friendly_fire):
+		var damageable: Damageable = _damageable(j)
+		# Already destroyed this tick by another bolt (or gone since the gather).
+		if damageable == null or damageable.hull.destroyed or _body_ids[j] == bolt.shooter_id \
+				or not damageable.can_be_hit_by(bolt.faction, friendly_fire):
 			continue
 		pairs_tested += 1
-		var to_body: Basis = _to_body[j]
+		var to_body: Basis = _to_body_of(j)
 		var t0: Vector3 = _starts[j]
 		var a: Vector3 = to_body * (start - t0)
-		var b: Vector3 = to_body * (p1 - (t0 + _moves[j]))
+		var b: Vector3 = to_body * (p1 - (t0 + _velocities[j] * _delta))
 		if SweepMath.segment_sphere(a, b, Vector3.ZERO, damageable.bounding_radius + bolt.hit_radius_m) < 0.0:
 			continue
 		var t: float = INF
@@ -308,12 +395,12 @@ func _earliest_hit(bolt: Projectile, i: int, keys: PackedInt64Array, first: int,
 
 func _land(bolt: Projectile, delta: float) -> void:
 	var j: int = _best
-	var damageable: Damageable = _damageables[j]
-	var basis: Basis = _bases[j]
+	var damageable: Damageable = _damageable(j)
+	var basis: Basis = _basis(j)
 	var t: float = _best_t
 	var a: Vector3 = _best_a
 	var b: Vector3 = _best_b
-	var move: Vector3 = _moves[j]
+	var move: Vector3 = _velocities[j] * _delta
 	var t0: Vector3 = _starts[j]
 	var local_point: Vector3 = a + t * (b - a)
 	var relative: Vector3 = basis * (b - a)
@@ -324,8 +411,8 @@ func _land(bolt: Projectile, delta: float) -> void:
 	bolt.spend()
 	_apply(damageable, info)
 	# A destroyed hull is hidden and the explosion replaces the flash; a flash on a parked ship would never be processed.
-	var body: Node3D = _bodies[j]
-	if body.is_visible_in_tree():
+	var body := instance_from_id(_body_ids[j]) as Node3D
+	if body != null and body.is_visible_in_tree():
 		var flash := ImpactFlash.create(bolt.color, hash([bolt.shooter_id, info.target_id, Engine.get_physics_frames()]))
 		flash.position = local_point
 		body.add_child(flash)

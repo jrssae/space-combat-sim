@@ -5,6 +5,8 @@ use godot::classes::PhysicsServer3D;
 use godot::classes::physics_server_3d::BodyState;
 use godot::prelude::*;
 
+use crate::sim_core::{FLAG_RIGID, ScsSimCore};
+
 /// Per ship per tick: `main_right, main_left, retro_right, retro_left` (the nozzle groups' order).
 pub const CMD_SCALARS: usize = 4;
 /// Per ship per tick: strafe (x, y, 0), rot, track_dir_b, track_rate_b, face_dir_b, env_accel (world frame).
@@ -103,6 +105,8 @@ pub struct ScsFlightStep {
     slots: Vec<Option<Slot>>,
     out_vectors: Vec<Vector3>,
     out_scalars: Vec<f64>,
+    // Ships the last `step_core` read from the physics server because the core had no row for them (M4-T15).
+    fallback_reads: i64,
 }
 
 #[godot_api]
@@ -254,6 +258,83 @@ impl ScsFlightStep {
         states: PackedVector3Array,
         dt: f64,
     ) -> bool {
+        self.fallback_reads = 0;
+        self.run(None, slots, scalars, vectors, flags, states, dt)
+    }
+
+    /// `step` with each ship's basis and velocities read from the core's rows (M4-T15): `body_ids` names the ships'
+    /// bodies, one per slot; a ship the core has no row for (back from the pool this tick) is read from the physics
+    /// server as `step` reads it, and counted in `fallback_reads`. The forces are applied as `step` applies them.
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn step_core(
+        &mut self,
+        mut core: Gd<ScsSimCore>,
+        slots: PackedInt32Array,
+        body_ids: PackedInt64Array,
+        scalars: PackedFloat64Array,
+        vectors: PackedVector3Array,
+        flags: PackedByteArray,
+        dt: f64,
+    ) -> bool {
+        self.fallback_reads = 0;
+        if body_ids.len() != slots.len() {
+            godot_error!(
+                "ScsFlightStep.step_core: {} slots but {} body ids; nothing applied",
+                slots.len(),
+                body_ids.len()
+            );
+            self.out_vectors.clear();
+            self.out_scalars.clear();
+            return false;
+        }
+        let ok = self.run(
+            Some((&core.bind(), body_ids.as_slice())),
+            slots,
+            scalars,
+            vectors,
+            flags,
+            PackedVector3Array::new(),
+            dt,
+        );
+        if self.fallback_reads > 0 {
+            core.bind_mut().note_kernel_read(self.fallback_reads);
+        }
+        ok
+    }
+
+    /// Ships the last `step_core` had to read from the physics server.
+    #[func]
+    fn fallback_reads(&self) -> i64 {
+        self.fallback_reads
+    }
+
+    /// The last step's vectors, `OUT_VECTORS` per ship in the order stepped.
+    #[func]
+    fn out_vectors(&self) -> PackedVector3Array {
+        PackedVector3Array::from(self.out_vectors.as_slice())
+    }
+
+    /// The last step's scalars, `OUT_SCALARS` per ship in the order stepped.
+    #[func]
+    fn out_scalars(&self) -> PackedFloat64Array {
+        PackedFloat64Array::from(self.out_scalars.as_slice())
+    }
+}
+
+impl ScsFlightStep {
+    // The step itself; with `core` each ship's state comes from its row when the core has one.
+    #[allow(clippy::too_many_arguments)]
+    fn run(
+        &mut self,
+        core: Option<(&ScsSimCore, &[i64])>,
+        slots: PackedInt32Array,
+        scalars: PackedFloat64Array,
+        vectors: PackedVector3Array,
+        flags: PackedByteArray,
+        states: PackedVector3Array,
+        dt: f64,
+    ) -> bool {
         let n = slots.len();
         let lined_up = scalars.len() == n * CMD_SCALARS
             && vectors.len() == n * CMD_VECTORS
@@ -302,8 +383,25 @@ impl ScsFlightStep {
             let slot = self.slots[slot_id as usize]
                 .as_mut()
                 .expect("checked above");
-            // The body's pose and motion: from the caller, or from the physics server as `RigidBody3D` reads them.
-            let (basis, v_w, w_w, apply) = if st.is_empty() {
+            // The body's pose and motion: from the core's row, from the caller, or from the physics server as
+            // `RigidBody3D` reads them.
+            let row = core.and_then(|(c, ids)| {
+                let r = c.row_of_id(ids[i]);
+                usize::try_from(r)
+                    .ok()
+                    .filter(|&r| c.rows.flags[r] & FLAG_RIGID != 0)
+            });
+            let (basis, v_w, w_w, apply) = if let (Some((c, _)), Some(r)) = (core, row) {
+                (
+                    c.rows.bases[r],
+                    c.rows.velocities[r],
+                    c.rows.angular[r],
+                    true,
+                )
+            } else if st.is_empty() {
+                if core.is_some() {
+                    self.fallback_reads += 1;
+                }
                 let rid = slot.rid;
                 let Some(body) = (rid.is_valid())
                     .then(|| server.body_get_direct_state(rid))
@@ -432,20 +530,6 @@ impl ScsFlightStep {
         true
     }
 
-    /// The last step's vectors, `OUT_VECTORS` per ship in the order stepped.
-    #[func]
-    fn out_vectors(&self) -> PackedVector3Array {
-        PackedVector3Array::from(self.out_vectors.as_slice())
-    }
-
-    /// The last step's scalars, `OUT_SCALARS` per ship in the order stepped.
-    #[func]
-    fn out_scalars(&self) -> PackedFloat64Array {
-        PackedFloat64Array::from(self.out_scalars.as_slice())
-    }
-}
-
-impl ScsFlightStep {
     fn slot(&self, slot: i64) -> Option<&Slot> {
         usize::try_from(slot)
             .ok()

@@ -29,6 +29,10 @@ extends Node
 ## changes) and each ship asks it for the rocks it could reach this tick. A rock is a prop to the swept test (any touch rams,
 ## a sphere of its radius, a mass nothing moves), so a ship that flies into one takes the whole closing speed.
 ##
+## With the native core on (M4-T15, `SimCore`), the hulls come as columns from the core's rows and `ScsRamPhase` pairs them
+## from the same rows (the GDScript `RamBroadPhase` stays the reference); the resolver then builds a hull's Dictionary only
+## for the pairs. Without it, the resolver walks the tree as before.
+##
 ## God mode protects the player's hull (`Damageable.apply_hit`); the bounce is Jolt's and still happens. `HitInfo.shooter_id` is
 ## the other body and `faction` its faction: relations and friendly fire do not matter, a collision hurts whoever it hits.
 ## `settings.ram_damage` (read every tick) switches it off; ships still bounce.
@@ -48,14 +52,18 @@ const LATE_PRIORITY: int = 210
 const KIND_CONTACT: String = "contact"
 const KIND_TUNNEL: String = "tunnelling"
 const KIND_PROP: String = "prop"
+## The native class that pairs the core's hull rows when the core is on (M4-T15).
+const PHASE_CLASS: StringName = &"ScsRamPhase"
 
 ## Rams resolved this session (one per hull reached), the last one, and the last tick's cost in microseconds.
 var events: int = 0
 var last_ram: String = "none"
 var resolve_us: int = 0
-## Hulls gathered from the tree on the last tick, and ship and rock pairs the rocks' grid tested (work counts, M4-T29).
+## Hulls gathered on the last tick, and ship and rock pairs the rocks' grid tested (work counts, M4-T29).
 var hulls_last_tick: int = 0
 var static_pairs_visited: int = 0
+## Wall-clock microseconds of the last tick's gather of hulls (a readout only).
+var gather_us: int = 0
 ## `settings.ram_damage` as of the last tick.
 var enabled: bool = true
 ## Throws the sparks of a ram (`Main` sets it); none without it.
@@ -70,6 +78,20 @@ var world: WorldFrame = null:
 
 # The rebases since Jolt's last step: this tick's contact points are still in the frame before them.
 var _shift_since_step := Vector3.ZERO
+# This tick's hulls as columns (M4-T15), from the core or the tree, and the per-hull Dictionaries made on demand.
+var _count: int = 0
+var _ids := PackedInt64Array()
+var _hull_ids := PackedInt64Array()
+var _rigid := PackedByteArray()
+var _rigid_rows := PackedInt32Array()  # the rigid hulls' indices
+var _positions := PackedVector3Array()
+var _velocities := PackedVector3Array()
+var _bases := PackedVector3Array()  # three columns (the x, y and z axes) a hull
+var _hulls: Array = []  # Dictionary or null per hull
+var _delta: float = 0.0
+var _source: StringName = &"tree"
+var _phase: Object = null  # the native ram phase (`PHASE_CLASS`), made on first use
+var _phase_class_known: int = -1
 # The rocks (M4-T29): their grid, kept until a rock changes, and a hull for each rock a ship came near (row id -> Damageable,
 # never in the tree, freed with this node).
 var _rocks: HitBroadPhase = HitBroadPhase.new()
@@ -88,6 +110,10 @@ func _ready() -> void:
 				"doc": "The last ram: other -> hull, how it was found, the hull's velocity change, damage"},
 		&"resolve_us": {"get": func() -> int: return resolve_us, "unit": "us",
 				"doc": "Cost of the last tick's ram checks (profiling only, wall clock)"},
+		&"gather_us": {"get": func() -> int: return gather_us, "unit": "us",
+				"doc": "Cost of the last tick's gather of hulls (profiling only, wall clock)"},
+		&"source": {"get": func() -> String: return String(_source),
+				"doc": "Where the last tick's hulls came from: core (the native core's rows, M4-T15) or tree (the resolver's own walk)"},
 	}), self)
 
 
@@ -125,11 +151,12 @@ func resolve(delta: float) -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
 	enabled = bool(Settings.get_value(&"ram_damage"))
 	if enabled:
-		var hulls: Array[Dictionary] = _gather(delta)
-		hulls_last_tick = hulls.size()
-		var in_contact: PackedInt64Array = _resolve_contacts(hulls, delta)
-		_resolve_swept(hulls, in_contact, delta)
-		_resolve_rocks(hulls)
+		var sim: SimCore = _gather(delta)
+		gather_us = Time.get_ticks_usec() - started_us
+		hulls_last_tick = _count
+		var in_contact: PackedInt64Array = _resolve_contacts(delta)
+		_resolve_swept(sim, in_contact, delta)
+		_resolve_rocks(sim, delta)
 		tracker.end_tick()
 	else:
 		tracker.reset()  # a contact that began while off is never rammed when it is switched back on
@@ -139,95 +166,172 @@ func resolve(delta: float) -> void:
 
 ## Where the last gather came from: &"tree" (the resolver's own walk) or &"core" (the native core's rows, M4-T15).
 func source() -> StringName:
-	return &"tree"
+	return _source
 
 
 ## The broad phase alone, for the parity tests (M4-T15): the keys `_resolve_swept` walks, with `always` added.
 func broad_phase_pairs(delta: float, always: PackedInt64Array) -> PackedInt64Array:
-	var hulls: Array[Dictionary] = _gather(delta)
-	var count: int = hulls.size()
-	var starts := PackedVector3Array()
-	var ends := PackedVector3Array()
-	var radii := PackedFloat32Array()
-	starts.resize(count)
-	ends.resize(count)
-	radii.resize(count)
-	for i: int in count:
-		starts[i] = hulls[i]["start"]
-		ends[i] = hulls[i]["end"]
-		radii[i] = (hulls[i]["damageable"] as Damageable).bounding_radius
-	return RamBroadPhase.pairs(starts, ends, radii, always)
+	var sim: SimCore = _gather(delta)
+	return _pairs(sim, delta, always)
 
 
-# Everything about the active hulls this tick needs, read before any ram is applied (a ram can park a ship mid-loop).
-func _gather(delta: float) -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
+# This tick's active hulls as columns (index i, in the `damageable` group's order): from the core when it is on (the core
+# it read, returned), else from the tree. Everything a ram needs of a hull is read before any ram is applied (a ram can
+# park a ship mid-loop); the per-hull Dictionary the swept test takes is made only for the hulls a pair names.
+func _gather(delta: float) -> SimCore:
+	_delta = delta
+	_hulls.clear()
+	var sim: SimCore = SimCore.for_tree(get_tree()) if use_core and _phase_available() else null
+	if sim != null and sim.ensure_bolts_synced():
+		_source = &"core"
+		var hulls: Array = sim.core.hull_columns()
+		_ids = hulls[0]
+		_hull_ids = hulls[1]
+		_rigid = hulls[2]
+		_positions = hulls[3]
+		_velocities = hulls[4]
+		_rigid_rows = hulls[7]
+		_bases = hulls[6]
+		_count = _ids.size()
+	else:
+		_source = &"tree"
+		sim = null
+		_gather_tree()
+	_hulls.resize(_count)
+	return sim
+
+
+# The own walk of the tree into the same columns.
+func _gather_tree() -> void:
+	_ids.clear()
+	_hull_ids.clear()
+	_rigid.clear()
+	_positions.clear()
+	_velocities.clear()
+	_bases.clear()
+	_rigid_rows.clear()
 	for node: Node in get_tree().get_nodes_in_group(Damageable.GROUP):
 		var damageable := node as Damageable
 		if damageable == null or not damageable.is_active():
 			continue
 		var body: Node3D = damageable.body()
 		var rigid := body as RigidBody3D
-		var position: Vector3 = body.global_position
-		var basis: Basis = body.global_basis
-		var hull: Dictionary = {
-			"damageable": damageable,
-			"body": body,
-			"id": body.get_instance_id(),
-			"rigid": rigid != null,
-			"basis": basis,
-			"to_body": basis.transposed(),
-			"mass": damageable.ram_mass(),
-		}
 		if rigid != null:
-			# Not stepped yet this tick: Jolt moves it by about velocity * delta in the coming step.
-			var velocity: Vector3 = rigid.linear_velocity
-			var ship := rigid as Ship
-			hull["velocity"] = velocity
-			hull["start"] = position
-			hull["end"] = position + velocity * delta
-			hull["accel"] = ship.applied_force() / rigid.mass if ship != null and rigid.mass > 0.0 else Vector3.ZERO
-		else:
-			# A prop moves itself in its own `_physics_process`, earlier in this tick.
-			var velocity: Vector3 = _prop_velocity(body)
-			hull["velocity"] = velocity
-			hull["start"] = position - velocity * delta
-			hull["end"] = position
-			hull["accel"] = Vector3.ZERO
-		out.append(hull)
-	return out
+			_rigid_rows.append(_ids.size())
+		_ids.append(body.get_instance_id())
+		_hull_ids.append(damageable.get_instance_id())
+		_rigid.append(1 if rigid != null else 0)
+		_positions.append(body.global_position)
+		# Not stepped yet this tick: Jolt moves a body by about velocity * delta in the coming step; a prop moved itself
+		# in its own `_physics_process`, earlier in this tick.
+		_velocities.append(rigid.linear_velocity if rigid != null else _prop_velocity(body))
+		var basis: Basis = body.global_basis
+		_bases.append(basis.x)
+		_bases.append(basis.y)
+		_bases.append(basis.z)
+	_count = _ids.size()
+
+
+# Whether the native ram phase answers now (the core path needs it).
+func _phase_available() -> bool:
+	if not NativeLib.enabled():
+		return false
+	if _phase_class_known < 0:
+		_phase_class_known = 1 if NativeLib.has_class(PHASE_CLASS) else 0
+	if _phase_class_known == 0:
+		return false
+	if _phase == null:
+		_phase = NativeLib.instantiate(PHASE_CLASS)
+	return _phase != null
+
+
+# The pairs near enough to meet this tick plus `always`, in `RamBroadPhase`'s form: natively from the core's rows, or
+# from the columns gathered here.
+func _pairs(sim: SimCore, delta: float, always: PackedInt64Array) -> PackedInt64Array:
+	if sim != null:
+		return _phase.pairs(sim.core, delta, always)
+	var starts := PackedVector3Array()
+	var ends := PackedVector3Array()
+	var radii := PackedFloat32Array()
+	starts.resize(_count)
+	ends.resize(_count)
+	radii.resize(_count)
+	for i: int in _count:
+		var hull: Dictionary = _hull(i)
+		starts[i] = hull["start"]
+		ends[i] = hull["end"]
+		radii[i] = (hull["damageable"] as Damageable).bounding_radius
+	return RamBroadPhase.pairs(starts, ends, radii, always)
+
+
+# Hull `i` as the swept test and the ram maths take it, made when first needed this tick.
+func _hull(i: int) -> Dictionary:
+	var found: Variant = _hulls[i]
+	if found != null:
+		return found
+	var damageable := instance_from_id(_hull_ids[i]) as Damageable
+	var body := instance_from_id(_ids[i]) as Node3D
+	var rigid: bool = _rigid[i] == 1
+	var basis := Basis(_bases[i * 3], _bases[i * 3 + 1], _bases[i * 3 + 2])
+	var position: Vector3 = _positions[i]
+	var velocity: Vector3 = _velocities[i]
+	var hull: Dictionary = {
+		"damageable": damageable,
+		"body": body,
+		"id": _ids[i],
+		"rigid": rigid,
+		"basis": basis,
+		"to_body": basis.transposed(),
+		"mass": damageable.ram_mass() if damageable != null else 0.0,
+		"velocity": velocity,
+		"start": position if rigid else position - velocity * _delta,
+		"end": position + velocity * _delta if rigid else position,
+		"accel": _accel(i),
+	}
+	_hulls[i] = hull
+	return hull
+
+
+# What hull `i`'s own forces do to its velocity this tick (`Ship.applied_force`), so thrust is never a ram.
+func _accel(i: int) -> Vector3:
+	if _rigid[i] != 1:
+		return Vector3.ZERO
+	var ship := instance_from_id(_ids[i]) as Ship
+	if ship == null or ship.mass <= 0.0:
+		return Vector3.ZERO
+	return ship.applied_force() / ship.mass
 
 
 # --- contacts: Jolt bounced them ---------------------------------------------------------------------------------
 
 
-# Lands the contact rams; returns the pairs of `hulls` Jolt reported touching, in `RamBroadPhase`'s form.
-func _resolve_contacts(hulls: Array[Dictionary], delta: float) -> PackedInt64Array:
-	var by_id: Dictionary = {}
+# Lands the contact rams; returns the pairs of hulls Jolt reported touching, in `RamBroadPhase`'s form.
+func _resolve_contacts(delta: float) -> PackedInt64Array:
 	var index_of: Dictionary[int, int] = {}
-	for i: int in hulls.size():
-		by_id[hulls[i]["id"]] = hulls[i]
-		index_of[hulls[i]["id"]] = i
+	for i: int in _count:
+		index_of[_ids[i]] = i
 	var samples: Array[RamTracker.Sample] = []
 	var in_contact := PackedInt64Array()
-	for i: int in hulls.size():
-		var hull: Dictionary = hulls[i]
-		if hull["rigid"]:
-			var damageable: Damageable = hull["damageable"]
-			var sample := RamTracker.Sample.new(hull["id"], hull["velocity"], hull["accel"], damageable.ram_safe_dv_mps,
-					damageable.ram_lethal_dv_mps)
-			_read_contacts(hull["body"] as RigidBody3D, sample, _shift_since_step)
-			samples.append(sample)
-			for other_id: int in sample.contacts:
-				var k: int = index_of.get(other_id, -1)
-				if k >= 0:
-					in_contact.append(mini(i, k) * hulls.size() + maxi(i, k))
+	for i: int in _rigid_rows:
+		var damageable := instance_from_id(_hull_ids[i]) as Damageable
+		var body := instance_from_id(_ids[i]) as RigidBody3D
+		if damageable == null or body == null:
+			continue
+		var sample := RamTracker.Sample.new(_ids[i], _velocities[i], _accel(i), damageable.ram_safe_dv_mps,
+				damageable.ram_lethal_dv_mps)
+		_read_contacts(body, sample, _shift_since_step)
+		samples.append(sample)
+		for other_id: int in sample.contacts:
+			var k: int = index_of.get(other_id, -1)
+			if k >= 0:
+				in_contact.append(mini(i, k) * _count + maxi(i, k))
 	var pending: Array[Array] = []
 	for ram: RamTracker.ContactRam in tracker.contacts(samples, delta):
-		var damageable: Damageable = (by_id[ram.hull_id] as Dictionary)["damageable"]
-		var other: Dictionary = by_id.get(ram.other_id, {})
-		var info := HitInfo.new(ram.hull_id, ram.other_id, (other["damageable"] as Damageable).faction if not other.is_empty() else &"",
-				damageable.hull.max_hp * ram.severity, ram.point, ram.normal, ram.relative_speed, HitInfo.CAUSE_RAM)
+		var damageable: Damageable = _hull(index_of[ram.hull_id])["damageable"]
+		var other_at: int = index_of.get(ram.other_id, -1)
+		var other_faction: StringName = (_hull(other_at)["damageable"] as Damageable).faction if other_at >= 0 else &""
+		var info := HitInfo.new(ram.hull_id, ram.other_id, other_faction, damageable.hull.max_hp * ram.severity, ram.point,
+				ram.normal, ram.relative_speed, HitInfo.CAUSE_RAM)
 		pending.append(_pending(damageable, info, KIND_CONTACT, ram.dv))
 	_apply_all(pending)
 	return in_contact
@@ -257,28 +361,18 @@ static func _jolt_can_touch(first: Dictionary, second: Dictionary) -> bool:
 
 # The pairs near enough to meet this tick, and those in contact, in the order of a pass over every pair (a ram earlier in the
 # pass can destroy a hull a later pair holds).
-func _resolve_swept(hulls: Array[Dictionary], in_contact: PackedInt64Array, delta: float) -> void:
-	var count: int = hulls.size()
-	var starts := PackedVector3Array()
-	var ends := PackedVector3Array()
-	var radii := PackedFloat32Array()
-	starts.resize(count)
-	ends.resize(count)
-	radii.resize(count)
-	for i: int in count:
-		starts[i] = hulls[i]["start"]
-		ends[i] = hulls[i]["end"]
-		radii[i] = (hulls[i]["damageable"] as Damageable).bounding_radius
-	for key: int in RamBroadPhase.pairs(starts, ends, radii, in_contact):
+func _resolve_swept(sim: SimCore, in_contact: PackedInt64Array, delta: float) -> void:
+	var count: int = _count
+	for key: int in _pairs(sim, delta, in_contact):
 		@warning_ignore("integer_division")
 		var i: int = key / count
-		var first: Dictionary = hulls[i]
-		var second: Dictionary = hulls[key - i * count]
+		var first: Dictionary = _hull(i)
+		var second: Dictionary = _hull(key - i * count)
 		if not (first["rigid"] or second["rigid"]):
 			continue  # props never ram each other
 		var first_hull: Damageable = first["damageable"]
 		var second_hull: Damageable = second["damageable"]
-		if first_hull.hull.destroyed or second_hull.hull.destroyed:
+		if first_hull == null or second_hull == null or first_hull.hull.destroyed or second_hull.hull.destroyed:
 			continue  # a hull that went earlier this tick
 		var both_rigid: bool = first["rigid"] and second["rigid"]
 		var relative_speed: float = ((first["velocity"] as Vector3) - (second["velocity"] as Vector3)).length()
@@ -294,37 +388,36 @@ func _resolve_swept(hulls: Array[Dictionary], in_contact: PackedInt64Array, delt
 
 # The ships that fly into a rock this tick, through the rocks' grid: each rigid hull asks for the rocks its swept sphere
 # could reach, and those go through the swept test as props.
-func _resolve_rocks(hulls: Array[Dictionary]) -> void:
+func _resolve_rocks(sim: SimCore, delta: float) -> void:
 	var solid: StaticRows.Solid = StaticRows.solid()
 	if solid != _solid:
 		_solid = solid
 		_rocks.keep(solid.positions, solid.radii)
 	static_pairs_visited = 0
-	if solid.ids.is_empty():
+	if solid.ids.is_empty() or _rigid_rows.is_empty():
 		return
-	var ships := PackedInt32Array()
-	var mids := PackedVector3Array()
-	var reach := PackedFloat64Array()
-	for i: int in hulls.size():
-		var hull: Dictionary = hulls[i]
-		if not hull["rigid"]:
-			continue  # props never ram each other
-		var start: Vector3 = hull["start"]
-		var end: Vector3 = hull["end"]
-		ships.append(i)
-		mids.append((start + end) * 0.5)
-		reach.append(start.distance_to(end) * 0.5 + (hull["damageable"] as Damageable).bounding_radius
-				+ RamBroadPhase.MARGIN_M)
-	if ships.is_empty():
-		return
-	var rock_count: int = solid.ids.size()
-	var keys: PackedInt64Array = _rocks.kept_pairs(mids, reach)
+	var keys: PackedInt64Array
+	if sim != null:
+		keys = _rocks.kept_pairs_hulls_core(sim.core, delta, RamBroadPhase.MARGIN_M)
+	else:
+		var mids := PackedVector3Array()
+		var reach := PackedFloat64Array()
+		for i: int in _rigid_rows:
+			var hull: Dictionary = _hull(i)
+			var start: Vector3 = hull["start"]
+			var end: Vector3 = hull["end"]
+			mids.append((start + end) * 0.5)
+			reach.append(start.distance_to(end) * 0.5 + (hull["damageable"] as Damageable).bounding_radius
+					+ RamBroadPhase.MARGIN_M)
+		keys = _rocks.kept_pairs(mids, reach)
 	static_pairs_visited = _rocks.visited
+	var rock_count: int = solid.ids.size()
 	for key: int in keys:
 		@warning_ignore("integer_division")
 		var k: int = key / rock_count
-		var ship: Dictionary = hulls[ships[k]]
-		if (ship["damageable"] as Damageable).hull.destroyed:
+		var ship: Dictionary = _hull(_rigid_rows[k])
+		var ship_hull: Damageable = ship["damageable"]
+		if ship_hull == null or ship_hull.hull.destroyed:
 			continue  # a hull that went earlier this tick
 		var rock: Dictionary = _rock(solid, key - k * rock_count)
 		var hit: Dictionary = _sweep_pair(ship, rock, false)

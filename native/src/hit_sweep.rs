@@ -3,6 +3,8 @@
 #![allow(clippy::redundant_field_names)]
 use godot::prelude::*;
 
+use crate::sim_core::{FLAG_RIGID, ScsSimCore};
+
 // The grid's levels, as `HitBroadPhase` defines them.
 const BASE_CELL_M: f64 = 64.0;
 const LEVEL_FACTOR: f64 = 4.0;
@@ -37,6 +39,11 @@ pub struct ScsHitSweep {
     kept_mids: Vec<Vector3>,
     kept_reach: Vec<f64>,
     candidates: Vec<u32>,
+    // The core's rows as spheres (M4-T15), filled per call: the hulls' and the bolts' mids and reaches.
+    hull_mids: Vec<Vector3>,
+    hull_reach: Vec<f64>,
+    bolt_mids: Vec<Vector3>,
+    bolt_reach: Vec<f64>,
 }
 
 #[godot_api]
@@ -87,6 +94,96 @@ impl ScsHitSweep {
             bolt_reach.as_slice(),
             hulls,
             hull_reach,
+            &mut self.candidates,
+            &mut self.visited,
+        );
+        PackedInt64Array::from(out.as_slice())
+    }
+
+    /// `pairs` over the core's rows (M4-T15): the hull rows (an active hull each, in the resolvers' order) as the spheres
+    /// the hit resolver builds, `position + velocity * (0.5 * delta)` with reach `radius + |velocity| * delta * 0.5`, and
+    /// the bolts as the spheres round the segment each flew this tick. Keys as `bolt * hulls + hull`, ascending.
+    #[func]
+    fn pairs_core(&mut self, core: Gd<ScsSimCore>, delta: f64) -> PackedInt64Array {
+        self.visited = 0;
+        self.spheres_from_core(&core.bind(), delta);
+        if self.hull_mids.is_empty() || self.bolt_mids.is_empty() {
+            return PackedInt64Array::new();
+        }
+        self.grid.place(&self.hull_mids, &self.hull_reach);
+        let out = sweep(
+            &self.grid,
+            &self.bolt_mids,
+            &self.bolt_reach,
+            &self.hull_mids,
+            &self.hull_reach,
+            &mut self.candidates,
+            &mut self.visited,
+        );
+        PackedInt64Array::from(out.as_slice())
+    }
+
+    /// `kept_pairs` with the bolts read from the core's rows (M4-T15).
+    #[func]
+    fn kept_pairs_core(&mut self, core: Gd<ScsSimCore>) -> PackedInt64Array {
+        self.visited = 0;
+        self.bolts_from_core(&core.bind());
+        if self.kept_mids.is_empty() || self.bolt_mids.is_empty() {
+            return PackedInt64Array::new();
+        }
+        let out = sweep(
+            &self.kept,
+            &self.bolt_mids,
+            &self.bolt_reach,
+            &self.kept_mids,
+            &self.kept_reach,
+            &mut self.candidates,
+            &mut self.visited,
+        );
+        PackedInt64Array::from(out.as_slice())
+    }
+
+    /// `kept_pairs` with the core's rigid hull rows as the moving spheres (M4-T15, the ram resolver's rocks): hull `k` (the
+    /// k-th rigid row in the core's hull order) moves from its position to `position + velocity * delta`, and is the
+    /// sphere `(start + end) * 0.5` with reach `|end - start| * 0.5 + radius + margin`. Keys as `k * kept + hull`.
+    #[func]
+    fn kept_pairs_hulls_core(
+        &mut self,
+        core: Gd<ScsSimCore>,
+        delta: f64,
+        margin_m: f64,
+    ) -> PackedInt64Array {
+        self.visited = 0;
+        {
+            let core = core.bind();
+            self.bolt_mids.clear();
+            self.bolt_reach.clear();
+            let dt = delta as f32;
+            for &row in &core.hull_rows {
+                let j = row as usize;
+                if core.rows.flags[j] & FLAG_RIGID == 0 {
+                    continue;
+                }
+                let start = core.rows.positions[j];
+                let v = core.rows.velocities[j];
+                let end = Vector3::new(start.x + v.x * dt, start.y + v.y * dt, start.z + v.z * dt);
+                let sum = Vector3::new(start.x + end.x, start.y + end.y, start.z + end.z);
+                self.bolt_mids
+                    .push(Vector3::new(sum.x * 0.5, sum.y * 0.5, sum.z * 0.5));
+                let travel = Vector3::new(end.x - start.x, end.y - start.y, end.z - start.z);
+                self.bolt_reach
+                    .push(f64::from(length(travel)) * 0.5 + core.rows.radii[j] + margin_m);
+            }
+        }
+        if self.kept_mids.is_empty() || self.bolt_mids.is_empty() {
+            return PackedInt64Array::new();
+        }
+        let out = sweep(
+            &self.kept,
+            &self.bolt_mids,
+            &self.bolt_reach,
+            &self.kept_mids,
+            &self.kept_reach,
             &mut self.candidates,
             &mut self.visited,
         );
@@ -144,6 +241,47 @@ impl ScsHitSweep {
             &mut self.visited,
         );
         PackedInt64Array::from(out.as_slice())
+    }
+}
+
+impl ScsHitSweep {
+    // The core's hull rows as the resolver's spheres: `global_position + velocity * (0.5 * delta)`, reach
+    // `bounding_radius + velocity.length() * delta * 0.5`, in GDScript's precision and order.
+    fn spheres_from_core(&mut self, core: &ScsSimCore, delta: f64) {
+        self.hull_mids.clear();
+        self.hull_reach.clear();
+        let half = (0.5 * delta) as f32;
+        for &row in &core.hull_rows {
+            let j = row as usize;
+            let v = core.rows.velocities[j];
+            let at = core.rows.positions[j];
+            self.hull_mids.push(Vector3::new(
+                at.x + v.x * half,
+                at.y + v.y * half,
+                at.z + v.z * half,
+            ));
+            self.hull_reach
+                .push(core.rows.radii[j] + f64::from(length(v)) * delta * 0.5);
+        }
+        self.bolts_from_core(core);
+    }
+
+    // The core's bolts as the resolver's spheres: `start + last_step * 0.5`, reach `last_step.length() * 0.5 + hit_radius`.
+    fn bolts_from_core(&mut self, core: &ScsSimCore) {
+        self.bolt_mids.clear();
+        self.bolt_reach.clear();
+        for i in 0..core.bolts.ids.len() {
+            let step = core.bolts.last_steps[i];
+            let end = core.bolts.positions[i];
+            let start = Vector3::new(end.x - step.x, end.y - step.y, end.z - step.z);
+            self.bolt_mids.push(Vector3::new(
+                start.x + step.x * 0.5,
+                start.y + step.y * 0.5,
+                start.z + step.z * 0.5,
+            ));
+            self.bolt_reach
+                .push(f64::from(length(step)) * 0.5 + core.bolts.radii[i]);
+        }
     }
 }
 
@@ -283,6 +421,14 @@ fn finite(v: Vector3) -> bool {
 
 fn within_grid(x: f64, y: f64, z: f64) -> bool {
     x.abs() <= MAX_CELL_INDEX && y.abs() <= MAX_CELL_INDEX && z.abs() <= MAX_CELL_INDEX
+}
+
+// `v.length()` in 32 bits, in the engine's order of operations.
+fn length(v: Vector3) -> f32 {
+    let x2 = v.x * v.x;
+    let y2 = v.y * v.y;
+    let z2 = v.z * v.z;
+    (x2 + y2 + z2).sqrt()
 }
 
 // `a.distance_squared_to(b)` in 32 bits, in the engine's order of operations.

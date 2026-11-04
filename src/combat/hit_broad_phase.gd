@@ -14,6 +14,10 @@ extends RefCounted
 ##
 ## Kept hulls (M4-T29): hulls that do not move between ticks (an asteroid field's rocks) are handed over once with `keep` and
 ## stay in their own grid; `kept_pairs` then finds a tick's pairs against them without handing them over again.
+##
+## The native core (M4-T15): `pairs_core` and `kept_pairs_core` take the hulls and bolts from the core's rows (the sweep
+## builds the same spheres natively), so the resolver hands nothing over; native only, the GDScript `pairs` stays the
+## reference.
 
 ## The native class that answers when the library is loaded and `perf_native` is on.
 const NATIVE_CLASS: StringName = &"ScsHitSweep"
@@ -85,6 +89,54 @@ func kept_pairs(bolt_mids: PackedVector3Array, bolt_reach: PackedFloat64Array) -
 ## Which code answers now: &"native" or &"gdscript".
 func path() -> StringName:
 	return &"native" if _native() != null else &"gdscript"
+
+
+## Whether the native sweep answers now (the core paths need it).
+func native_available() -> bool:
+	return _native() != null
+
+
+## `pairs` over the core's rows (M4-T15): the hull rows as the resolver's spheres (`position + velocity * (0.5 * delta)`,
+## reach `radius + |velocity| * delta * 0.5`) against the bolts' segments, keys as `bolt * hulls + hull`. Nothing without
+## the native sweep.
+func pairs_core(core: Object, delta: float) -> PackedInt64Array:
+	visited = 0
+	var sweep: Object = _native()
+	if sweep == null or core == null:
+		return PackedInt64Array()
+	var out: PackedInt64Array = sweep.pairs_core(core, delta)
+	visited = sweep.visited()
+	return out
+
+
+## `kept_pairs` with the bolts read from the core's rows (M4-T15); nothing without the native sweep.
+func kept_pairs_core(core: Object) -> PackedInt64Array:
+	visited = 0
+	var sweep: Object = _native()
+	if sweep == null or core == null or _kept_mids.is_empty():
+		return PackedInt64Array()
+	if not _kept_native:
+		sweep.keep(_kept_mids, _kept_reach)
+		_kept_native = true
+	var out: PackedInt64Array = sweep.kept_pairs_core(core)
+	visited = sweep.visited()
+	return out
+
+
+## `kept_pairs` with the core's rigid hull rows as the moving spheres (M4-T15, the ram resolver's rocks): each as
+## `(start + end) * 0.5` with reach `|end - start| * 0.5 + radius + margin`, keys as `rigid hull * kept + hull` where the
+## rigid hulls count in the core's hull order. Nothing without the native sweep.
+func kept_pairs_hulls_core(core: Object, delta: float, margin_m: float) -> PackedInt64Array:
+	visited = 0
+	var sweep: Object = _native()
+	if sweep == null or core == null or _kept_mids.is_empty():
+		return PackedInt64Array()
+	if not _kept_native:
+		sweep.keep(_kept_mids, _kept_reach)
+		_kept_native = true
+	var out: PackedInt64Array = sweep.kept_pairs_hulls_core(core, delta, margin_m)
+	visited = sweep.visited()
+	return out
 
 
 ## The pairs that pass the resolver's sphere test, as `bolt * hull_mids.size() + hull`, ascending. Projectile `i` is a sphere of

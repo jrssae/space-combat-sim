@@ -159,9 +159,11 @@ func _crowd(rng: RandomNumberGenerator, n: int, bolts: int = 0, statics: int = 0
 		ContactScan.register_static(900000 + s, at, 50.0 if mine else rng.randf_range(20.0, 200.0),
 				BodyKind.MINE if mine else BodyKind.STATIC, SIDES[rng.randi_range(0, 3)] if mine else Factions.NEUTRAL, world)
 	for b: int in bolts:
+		# Some bolts about to reach a body (a pair for the sweep), the rest well off it.
 		var near: Node3D = out[rng.randi_range(0, out.size() - 1)]
-		var at: Vector3 = near.global_position + Vector3(rng.randf_range(-200.0, 200.0), rng.randf_range(-200.0, 200.0),
-				rng.randf_range(-200.0, 200.0))
+		var spread: float = 20.0 if b % 2 == 0 else 200.0
+		var at: Vector3 = near.global_position + Vector3(rng.randf_range(-spread, spread), rng.randf_range(-spread, spread),
+				rng.randf_range(-spread, spread))
 		var velocity: Vector3 = (near.global_position - at).normalized() * rng.randf_range(300.0, 900.0)
 		var kind: StringName = Projectile.KIND_MISSILE if rng.randf() < 0.1 else Projectile.KIND_BOLT
 		_bolt(at, velocity, SIDES[rng.randi_range(0, 3)], out[rng.randi_range(0, out.size() - 1)].get_instance_id(), kind)
@@ -364,6 +366,7 @@ func test_the_hit_sweep_pairs_from_the_core_as_from_its_own_load() -> void:
 	var resolver := HitResolver.new()
 	resolver.name = "HitResolver"
 	add_child_autofree(resolver)
+	var bolts_moved_pairs: bool = false
 	for round: int in 4:
 		for node: Node in world.get_children():
 			if node != projectiles:
@@ -386,6 +389,20 @@ func test_the_hit_sweep_pairs_from_the_core_as_from_its_own_load() -> void:
 		assert_eq(from_core[1], own[1], "round %d: the same pairs visited" % round)
 		assert_true((own[0] as Array).size() > 0 or round == 0, "round %d: there were pairs to compare" % round)
 		assert_eq(resolver.source(), &"core", "round %d: the resolver read the core" % round)
+		# The bolts fly on after the tick's first sync (they move at priority 0, the resolver runs at 200): the resolver's
+		# sync point must read them where they are now, not where the first sync saw them.
+		core.sync_now()
+		for node: Node in projectiles.get_children():
+			var bolt := node as Projectile
+			bolt.global_position += bolt.last_step
+		resolver.use_core = false
+		var own_moved: Array = resolver.broad_phase_pairs(delta)
+		resolver.use_core = true
+		var core_moved: Array = resolver.broad_phase_pairs(delta)
+		assert_eq(core_moved[0], own_moved[0], "round %d: the same pairs after the bolts moved" % round)
+		if own_moved[0] != own[0]:
+			bolts_moved_pairs = true
+	assert_true(bolts_moved_pairs, "the moved bolts paired differently in some round, so the second sync was tested")
 
 
 func test_the_ram_broad_phase_pairs_from_the_core_as_from_its_own_load() -> void:
@@ -419,7 +436,7 @@ func test_the_ram_broad_phase_pairs_from_the_core_as_from_its_own_load() -> void
 		rams.use_core = true
 		var from_core: Array = rams.broad_phase_pairs(delta, always)
 		assert_eq(from_core, own, "round %d: the same hull pairs from the core as from the resolver's own gather" % round)
-		assert_true((own as Array).size() > 1 or round == 0, "round %d: there were pairs to compare" % round)
+		assert_true(own.size() > 1 or round == 0, "round %d: there were pairs to compare" % round)
 		assert_eq(rams.source(), &"core", "round %d: the resolver read the core" % round)
 
 
