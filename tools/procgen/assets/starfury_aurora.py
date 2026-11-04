@@ -53,6 +53,7 @@ from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Mesh
 from ..core.manifest import build_manifest, lod_entry, write_manifest
 from ..core.obj import write_obj
+from ..core.paint_mesh import PaintPart, phase_steps, write_paint_mesh
 from ..core.ply import SplatData, write_ply
 from ..core.sampling import (
     DEFAULT_OVERLAP,
@@ -795,6 +796,14 @@ def build(ctx: BuildContext) -> AssetOutputs:
     files += write_obj(
         out_dir / COCKPIT_NAME, interior, "cockpit_interior", comments[:1]
     )
+    # The painted mesh (M4-T27): the hull parts the OBJ holds, painted on the GPU like the splats.
+    paint_path, paint_entry = write_paint_mesh(
+        out_dir,
+        ASSET_ID,
+        [PaintPart(p.part.mesh, phase_steps(p.part.name, True)) for p in placed if p.hull],
+        style,
+    )
+    files.append(paint_path)
 
     # LOD1: the same parts resampled coarser from their own streams, balanced and centred
     # like LOD0 (its splat centroid is the origin too), written chunk by chunk.
@@ -891,6 +900,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
         centroid_offset=offset,
         files={
             "fallback_mesh": OBJ_NAME,
+            "paint_mesh": paint_entry["file"],
             "cockpit_mesh": COCKPIT_NAME,
             "hardpoints": HARDPOINTS_NAME,
         },
@@ -909,6 +919,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
             },
             "chunks": [c["name"] for c in chunk_entries],
             "chunk_lod": CHUNK_LOD,
+            "paint_mesh": paint_entry,
             **(
                 {
                     "hero": {

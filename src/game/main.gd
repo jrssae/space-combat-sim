@@ -52,6 +52,8 @@ var instructor_path: BehaviourFollowPath = null
 ## The tick's stage timers (`perf`) and the many-ships benchmark (`bench`), M4-T01.
 var perf_probe: PerfProbe = null
 var bench: BenchRunner = null
+## The render comparison's station scene (M4-T27), closed until `station near|far`.
+var station_scene: StationScene = null
 
 var _spawn_position: UniversePos = UniversePos.new()
 var _spawn_basis: Basis = Basis.IDENTITY
@@ -291,6 +293,15 @@ func _setup_perf() -> void:
 	bench.probe = perf_probe
 	bench.standins = standins
 	add_child(bench)
+	# M4-T27: the painted meshes' lights and the render comparison's station scene.
+	var paint_lights := PaintMeshLights.new()
+	paint_lights.name = "PaintMeshLights"
+	add_child(paint_lights)
+	station_scene = StationScene.new()
+	station_scene.name = "StationScene"
+	station_scene.process_mode = Node.PROCESS_MODE_PAUSABLE
+	station_scene.main = self
+	add_child(station_scene)
 
 
 ## The scenario file in use: `scenario_path`, else the one `settings.scenario` names.

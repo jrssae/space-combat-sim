@@ -139,6 +139,10 @@ var _shape_owners: PackedInt32Array = PackedInt32Array()
 # The fallback mesh as loaded (a lean ship has no node of its own for it), and whether the ship is drawn as a far dot.
 var _fallback_mesh: Mesh = null
 var _far_dot: bool = false
+# The painted mesh of the same surface (M4-T27, `settings.ship_render`), null before it is generated, and whether the ship is far
+# enough for the hybrid path to draw it.
+var _paint_mesh: Mesh = null
+var _mesh_far: bool = false
 var _applied_force: Vector3 = Vector3.ZERO
 # The flight batch (M4-T10): the batch this ship joined, its row and the physics frame of the last gather, whether the last
 # path flown was the batch's (the assist state follows a change of path), and the frame `_output` was last filled from a row.
@@ -479,16 +483,18 @@ func use_fallback_mesh(enabled: bool) -> void:
 func _apply_hull_visuals() -> void:
 	if not is_node_ready():
 		return
-	var mesh_mode: bool = _fallback_active or _interior_visible
+	var paint: bool = is_drawing_paint_mesh()
+	var mesh_mode: bool = _fallback_active or _interior_visible or paint
 	var proxy_on: bool = bool(Settings.get_value(&"hull_depth_proxy"))
 	if hull_mesh_fallback != null:
+		hull_mesh_fallback.mesh = _paint_mesh if paint else _fallback_mesh
 		hull_mesh_fallback.visible = mesh_mode and not _far_dot
 		_apply_canopy_glass()
 		hull_depth_proxy.use_mesh(_fallback_mesh)
-		hull_depth_proxy.visible = (_interior_visible or not _fallback_active) and proxy_on and not _far_dot
+		hull_depth_proxy.visible = (_interior_visible or not _fallback_active) and not paint and proxy_on and not _far_dot
 	else:
-		# Lean: the one node draws the fallback mesh, or the proxy while the splats are drawn.
-		hull_depth_proxy.use_mesh(_fallback_mesh, mesh_mode)
+		# Lean: the one node draws the fallback or painted mesh, or the proxy while the splats are drawn.
+		hull_depth_proxy.use_mesh(_paint_mesh if paint else _fallback_mesh, mesh_mode)
 		hull_depth_proxy.visible = (mesh_mode or proxy_on) and not _far_dot
 	for i: int in _lod_nodes.size():
 		_lod_nodes[i].visible = not mesh_mode and not _far_dot and _lod_levels[i] == _lod_level
@@ -499,6 +505,36 @@ func _apply_hull_visuals() -> void:
 
 func is_fallback_mesh_active() -> bool:
 	return _fallback_active
+
+
+## Whether the hull is drawn as its painted mesh now (M4-T27): `settings.ship_render` is mesh, or hybrid and the ship is far
+## (`set_mesh_far`); never while the fallback or the cockpit interior is shown, nor before the mesh is generated.
+func is_drawing_paint_mesh() -> bool:
+	if _paint_mesh == null or _fallback_active or _interior_visible:
+		return false
+	match StringName(Settings.get_value(&"ship_render")):
+		&"mesh":
+			return true
+		&"hybrid":
+			return _mesh_far
+	return false
+
+
+## The painted mesh as loaded (null before the assets are generated).
+func paint_mesh() -> Mesh:
+	return _paint_mesh
+
+
+## The hybrid path's switch (M4-T27): far enough from the camera to draw the painted mesh. Its `LodSwitcher` decides.
+func set_mesh_far(on: bool) -> void:
+	if on == _mesh_far:
+		return
+	_mesh_far = on
+	_apply_hull_visuals()
+
+
+func is_mesh_far() -> bool:
+	return _mesh_far
 
 
 ## The hull's fallback mesh as loaded (null before the assets are generated), whichever node draws it.
@@ -731,6 +767,7 @@ func _build_running_lights() -> void:
 func _load_visuals() -> void:
 	var dir: String = asset_dir(spec)
 	_fallback_mesh = _load_mesh(dir.path_join(spec.asset_id + ".obj"))
+	_paint_mesh = PaintMeshes.for_asset(spec.asset_id)
 	if hull_mesh_fallback != null:
 		hull_mesh_fallback.mesh = _fallback_mesh
 	MeshMaterials.matte(_fallback_mesh)
@@ -816,7 +853,7 @@ func _level_node(node_name: String, path: String, lighting: String) -> GaussianS
 
 
 func _on_hull_setting_changed(key: StringName, _value: Variant) -> void:
-	if key == &"hull_depth_proxy":
+	if key == &"hull_depth_proxy" or key == &"ship_render":
 		_apply_hull_visuals()
 	elif key == &"hull_splat_sync":
 		_apply_hull_sync_setting()

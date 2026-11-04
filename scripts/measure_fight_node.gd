@@ -10,6 +10,8 @@ extends Node
 ## Arguments after `--`: scene=<name> camera=<chase|cockpit> warmup=<s> window=<s> near=<m> far=<m> steps=<n> label=<text>
 ## exec="<console statements>" shot=<png path> hero=off scale3d=<1080p|factor> (M4-T07: the 3D scale, held every frame;
 ## 1080p renders the 3D at 1 080 lines whatever the window's size, for the fullscreen check on a larger screen)
+## render=<splat|mesh|hybrid> pause_at=<s> (M4-T27: `settings.ship_render` before the scene is built, and the game paused at that
+## many seconds after the start, so a window can measure the drawing alone)
 
 const WARMUP_S: float = 6.0
 const WINDOW_S: float = 20.0
@@ -31,7 +33,7 @@ const MAX_SPIKES_PRINTED: int = 40
 
 var main: Main
 var options: Dictionary = {"scene": "held", "camera": "chase", "warmup": str(WARMUP_S), "window": str(WINDOW_S), "near": "120", "far": "500",
-		"steps": "0", "label": "", "exec": "", "shot": "", "hero": "on", "scale3d": ""}
+		"steps": "0", "label": "", "exec": "", "shot": "", "hero": "on", "scale3d": "", "render": "", "pause_at": ""}
 var measuring: bool = false
 var frame_ms := PackedFloat64Array()
 var gpu_ms := PackedFloat64Array()
@@ -46,6 +48,9 @@ var particles_busy := PackedFloat64Array()
 var debris_chunks := PackedFloat64Array()
 var lights_on := PackedFloat64Array()
 var draw_calls := PackedFloat64Array()
+var primitives := PackedFloat64Array()
+var objects := PackedFloat64Array()
+var _paused: bool = false
 var ai_us := PackedFloat64Array()
 var hit_us := PackedFloat64Array()
 var ram_us := PackedFloat64Array()
@@ -82,6 +87,8 @@ func _ready() -> void:
 	gtt_before_mb = _read_mb("mem_info_gtt_used")
 	if options["hero"] == "off":
 		Settings.set_value(&"splat_hero", false)  # read when the ship is built
+	if not String(options["render"]).is_empty():
+		Settings.set_value(&"ship_render", StringName(options["render"]))
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.waves_auto_start = false
 	var source := FakeInputSource.new()
@@ -240,6 +247,9 @@ func _on_frame() -> void:
 	var elapsed_s: float = float(now - _started_usec) * 1e-6
 	if not _is_hundred() and options["scene"] != "quiet":
 		_keep_the_fight_going(elapsed_s)
+	if not _paused and not String(options["pause_at"]).is_empty() and elapsed_s >= float(options["pause_at"]):
+		_paused = true
+		_run("pause on")
 	var warmup: float = float(options["warmup"])
 	if elapsed_s >= warmup:
 		if not measuring:
@@ -325,6 +335,8 @@ func _sample(now: int) -> void:
 	debris_chunks.append(float(_read("debris.active_chunks")))
 	lights_on.append(float(_read("lights.active")))
 	draw_calls.append(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
+	primitives.append(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
+	objects.append(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME))
 	ai_us.append(float(_read("ai.think_us")))
 	hit_us.append(float(_read("combat.resolve_us")))
 	ram_us.append(float(_read("ram.resolve_us")))
@@ -381,6 +393,9 @@ func _finish() -> void:
 			label, _read("render.splat_backend"), _read("render.gpu"), get_window().size.x, get_window().size.y, DisplayServer.window_get_vsync_mode(), Settings.get_value(&"splat_relight"),
 			Settings.get_value(&"particle_density"), Settings.get_value(&"lens_flare"), Settings.get_value(&"motion_blur"), Settings.get_value(&"splat_hero"), _read("ship.running_lights"),
 			Settings.get_value(&"splat_budget")])
+	print("[measure] %s: render %s, paused %s, triangles mean %.0f max %d, objects mean %.0f, draw calls mean %.0f max %d, frame ms p99 %.2f max %.2f" % [
+			label, Settings.get_value(&"ship_render"), _paused, _mean(primitives), _max(primitives), _mean(objects), _mean(draw_calls), _max(draw_calls),
+			_percentile(frame_ms, 0.99), _max(frame_ms)])  # M4-T27: the render comparison
 	var root: Window = get_tree().root
 	print("[measure] %s: window %dx%d %s, 3d scale %.2f, 3d scaling mode %d, frame mean ms %.2f, fps mean %.1f" % [label,
 			root.size.x, root.size.y,

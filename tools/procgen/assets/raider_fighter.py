@@ -37,6 +37,7 @@ from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Mesh, box
 from ..core.manifest import build_manifest, lod_entry, write_manifest
 from ..core.obj import write_obj
+from ..core.paint_mesh import PaintPart, phase_steps, write_paint_mesh
 from ..core.ply import SplatData, write_ply
 from ..core.sampling import (
     DEFAULT_OVERLAP,
@@ -445,6 +446,11 @@ def build(ctx: BuildContext) -> AssetOutputs:
     files: list[Path] = [write_ply(out_dir / PLY_NAME, written, comments), lighting.write_lighting(out_dir / light_names[0], written)]
     hull_mesh = Mesh.concatenate(p.part.mesh for p in placed if p.hull)
     files += write_obj(out_dir / OBJ_NAME, hull_mesh, ASSET_ID, comments[:1])
+    # The painted mesh (M4-T27): the hull parts the OBJ holds, painted on the GPU like the splats.
+    paint_path, paint_entry = write_paint_mesh(
+        out_dir, ASSET_ID, [PaintPart(p.part.mesh, phase_steps(p.part.name, False)) for p in placed if p.hull], style
+    )
+    files.append(paint_path)
 
     chunk_files, chunk_entries = write_chunks(out_dir, ASSET_ID, chunk_sources, comments)
     files += chunk_files
@@ -488,10 +494,11 @@ def build(ctx: BuildContext) -> AssetOutputs:
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,
-        files={"fallback_mesh": OBJ_NAME, "hardpoints": HARDPOINTS_NAME},
+        files={"fallback_mesh": OBJ_NAME, "paint_mesh": paint_entry["file"], "hardpoints": HARDPOINTS_NAME},
         extra={
             "counts": counts,
             "chunks": [c["name"] for c in chunk_entries],
+            "paint_mesh": paint_entry,
             "sampling": {"spacing_m": spacing, "overlap": overlap, "thickness": thickness},
             "dimensions_m": {"length": hp["length_m"], "span": hp["span_m"], "height": hp["height_m"]},
         },

@@ -9,9 +9,11 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from ..core.context import AssetOutputs, BuildContext
-from . import nav_buoy, raider_fighter, sfx_combat, sky_default, starfury_aurora
+from . import b5_station, capital_hulls, nav_buoy, raider_fighter, sfx_combat, sky_default, starfury_aurora
 
 ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
+    "b5_station": b5_station.build,
+    "capital_hulls": capital_hulls.build,
     "nav_buoy": nav_buoy.build,
     "raider_fighter": raider_fighter.build,
     "sfx_combat": sfx_combat.build,

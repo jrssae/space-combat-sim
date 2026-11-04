@@ -11,6 +11,9 @@ extends Node
 ## node, its proxy, plumes and markers, and the world's `FarDots` draws it; a tenth back inside it shows its level again. A forced
 ## level and the player's ship are never dots.
 ##
+## With `settings.ship_render` hybrid (M4-T27, §17.16), past `settings.ship_mesh_beyond_m` from the camera a ship draws its painted mesh
+## instead of splats (`Ship.set_mesh_far`), back a tenth inside it.
+##
 ## The player's Starfury has one level finer than LOD0, the hero (M3-T24), as level -1 at the front of its chain: the other levels
 ## and their thresholds keep their numbers, and a chain that does not start at -1 never sees it.
 ##
@@ -29,6 +32,8 @@ var wanted: int = LodSwitcherMath.NONE
 var budget_extra: int = 0
 ## Whether the ship is far enough from the camera to be drawn as a dot (M4-T11).
 var far: bool = false
+## Whether the hybrid render path draws the ship's painted mesh instead of its splats (M4-T27): past `settings.ship_mesh_beyond_m`.
+var mesh_far: bool = false
 
 var _ship: Ship = null
 var _splat_counts: PackedInt32Array = PackedInt32Array()
@@ -91,12 +96,14 @@ func _pick() -> void:
 	if _is_forced():
 		wanted = clampi(forced, levels[0], levels[levels.size() - 1])
 		far = false
+		mesh_far = false
 		return
 	var camera: Camera3D = get_viewport().get_camera_3d() if get_viewport() != null else null
 	if camera == null:
 		return
 	var distance: float = camera.global_position.distance_to(_ship.global_position)
 	far = not _ship.console_owner and LodSwitcherMath.far_dot(distance, far, float(Settings.get_value(&"far_ship_dot_m")))
+	mesh_far = LodSwitcherMath.far_dot(distance, mesh_far, float(Settings.get_value(&"ship_mesh_beyond_m")))
 	var px: float = LodSwitcherMath.projected_px(_ship.bounding_radius(), distance, camera.fov,
 			get_viewport().get_visible_rect().size.y)
 	unbiased = LodSwitcherMath.next_level(px, unbiased, mini(levels[0], 0))
@@ -114,6 +121,7 @@ func _apply() -> void:
 	if level != _ship.lod_level():
 		_ship.set_lod_level(level)
 	_ship.set_far_dot(far)
+	_ship.set_mesh_far(mesh_far)
 
 
 # --- budget ----------------------------------------------------------------------------------------------------------

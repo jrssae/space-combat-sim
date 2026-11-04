@@ -116,6 +116,11 @@ const ENTRIES: Dictionary = {
 	# M4-T11
 	&"far_ship_dot_m": {"type": TYPE_FLOAT, "default": 3000.0, "min": 500.0, "max": 50000.0,
 		"doc": "Past this distance from the camera an AI ship is drawn as a dot: no splats, proxy, plumes or markers (M4-T11); it shows its detail again a tenth inside"},
+	# M4-T27
+	&"ship_render": {"type": TYPE_ENUM, "default": &"splat", "choices": [&"splat", &"mesh", &"hybrid"],
+		"doc": "How hulls are drawn (M4-T27 render comparison): splat = Gaussian splats, mesh = the painted mesh of the same surface, hybrid = splats near and the mesh past ship_mesh_beyond_m; far dots stay either way"},
+	&"ship_mesh_beyond_m": {"type": TYPE_FLOAT, "default": 400.0, "min": 50.0, "max": 3000.0,
+		"doc": "With ship_render hybrid, an AI ship farther than this from the camera draws its painted mesh instead of splats (M4-T27); it goes back to splats a tenth inside"},
 }
 
 ## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current
