@@ -41,6 +41,8 @@ var hulls_last_tick: int = 0
 var static_pairs_visited: int = 0
 ## Finds the pairs that pass the bounding-sphere test (M4-T08); a test may swap in its own.
 var broad_phase: HitBroadPhase = HitBroadPhase.new()
+## False keeps the resolver on its own gather of the tree even when the native core is on (M4-T15), for pairing the two.
+var use_core: bool = true
 
 # This tick's hulls (parallel arrays, index j) and projectiles (index i), refilled every tick.
 var _damageables: Array[Damageable] = []
@@ -148,6 +150,19 @@ func resolve(delta: float) -> void:
 	for beam: Projectile in _beams:
 		beam.spend()
 	resolve_us = Time.get_ticks_usec() - started_us
+
+
+## Where the last gather came from: &"tree" (the resolver's own walk) or &"core" (the native core's rows, M4-T15).
+func source() -> StringName:
+	return &"tree"
+
+
+## The broad phase alone, for the parity tests (M4-T15): `[keys, visited]`, the keys as `resolve` sees them.
+func broad_phase_pairs(delta: float) -> Array:
+	_gather_targets(delta)
+	_gather_bolts()
+	var keys: PackedInt64Array = broad_phase.pairs(_bolt_mids, _bolt_reach, _mids, _reach)
+	return [keys, broad_phase.visited]
 
 
 # Everything about the active hulls that does not depend on the bolt, as of this tick's start.

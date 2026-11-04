@@ -60,6 +60,8 @@ var static_pairs_visited: int = 0
 var enabled: bool = true
 ## Throws the sparks of a ram (`Main` sets it); none without it.
 var fx: FxPool = null
+## False keeps the resolver on its own gather of the tree even when the native core is on (M4-T15), for pairing the two.
+var use_core: bool = true
 ## Contacts, windows and one ram per pair per collision, between ticks.
 var tracker: RamTracker = RamTracker.new()
 ## The World whose rebases the contact points follow (see the class notes).
@@ -133,6 +135,28 @@ func resolve(delta: float) -> void:
 		tracker.reset()  # a contact that began while off is never rammed when it is switched back on
 	_shift_since_step = Vector3.ZERO  # Jolt steps after this tick's scripts: its next contacts are in the frame of now
 	resolve_us = Time.get_ticks_usec() - started_us
+
+
+## Where the last gather came from: &"tree" (the resolver's own walk) or &"core" (the native core's rows, M4-T15).
+func source() -> StringName:
+	return &"tree"
+
+
+## The broad phase alone, for the parity tests (M4-T15): the keys `_resolve_swept` walks, with `always` added.
+func broad_phase_pairs(delta: float, always: PackedInt64Array) -> PackedInt64Array:
+	var hulls: Array[Dictionary] = _gather(delta)
+	var count: int = hulls.size()
+	var starts := PackedVector3Array()
+	var ends := PackedVector3Array()
+	var radii := PackedFloat32Array()
+	starts.resize(count)
+	ends.resize(count)
+	radii.resize(count)
+	for i: int in count:
+		starts[i] = hulls[i]["start"]
+		ends[i] = hulls[i]["end"]
+		radii[i] = (hulls[i]["damageable"] as Damageable).bounding_radius
+	return RamBroadPhase.pairs(starts, ends, radii, always)
 
 
 # Everything about the active hulls this tick needs, read before any ram is applied (a ram can park a ship mid-loop).

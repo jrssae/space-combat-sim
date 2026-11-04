@@ -123,6 +123,12 @@ func reset_assist(ship: Ship) -> void:
 		_step.reset_assist(_slots[ship])
 
 
+## Where the last step read the ships' poses and motion: &"server" (the physics server by RID, M4-T10), &"core" (the
+## native core's rows, M4-T15) or &"none" (nothing stepped).
+func source() -> StringName:
+	return &"server" if not rows.is_empty() else &"none"
+
+
 ## Which path flew the last tick: `native` when the batch stepped any ship, else `gdscript`.
 func path() -> StringName:
 	return &"native" if not rows.is_empty() else &"gdscript"

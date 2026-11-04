@@ -1,0 +1,529 @@
+extends GutTest
+## The native simulation core (M4-T15, architecture §17.13): one store of rows in the crate, filled once per tick from the
+## engine (`sync_in`) and read by every native class, so the contact field, the hit sweep, the flight step and the ram broad
+## phase stop loading their own copies. Rows survive a pool release and acquire with a new handle; a rebase shifts every row
+## once; the four classes answer from the core exactly as they do from their own loads (bit for bit, on seeded worlds); a
+## row of each kind round-trips its state; and the sync points are the only places the core touches the engine. Light
+## bodies made here (a rigid body with a `Targetable` and a `Damageable`, props, a hull without a marker, bolts), real ships
+## only for the flight step. Skips, saying why, when the native library is not built at all.
+
+const ROWS_COMPARED: Array[String] = ["_body_ids", "_ids", "_names", "_factions", "_positions", "_velocities", "_forwards",
+		"_ups", "_radii", "_is_ship", "_kinds"]
+const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
+const PROJECTILE_SCENE: PackedScene = preload("res://src/weapons/projectile.tscn")
+const SIDES: Array[StringName] = [Factions.RAIDERS, Factions.EARTH_ALLIANCE, Factions.NEUTRAL, &"drifters"]
+const KINDS_ROUND_TRIPPED: Array[int] = [SimCore.KIND_SHIP, SimCore.KIND_CAPITAL, SimCore.KIND_TURRET, SimCore.KIND_MISSILE,
+		SimCore.KIND_BEAM, SimCore.KIND_BOLT, SimCore.KIND_MINE, SimCore.KIND_STATIC]
+const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_flight", &"fuel_unlimited"]
+
+var world: WorldFrame
+var projectiles: Node3D
+var _saved: Dictionary = {}
+
+
+func before_each() -> void:
+	for key: StringName in SETTINGS:
+		_saved[key] = Settings.get_value(key)
+	Settings.set_value(&"perf_native", true)
+	Settings.set_value(&"perf_native_core", true)
+	Settings.set_value(&"perf_native_flight", true)
+	Settings.set_value(&"fuel_unlimited", true)
+	Factions.reset()
+	ContactScan.invalidate()
+	ContactScan.clear_statics()
+	world = WorldFrame.new()
+	world.name = "World"
+	add_child_autofree(world)
+	projectiles = Node3D.new()
+	projectiles.name = "Projectiles"
+	world.add_child(projectiles)
+
+
+func after_each() -> void:
+	ContactScan.clear_statics()
+	ContactScan.invalidate()
+	for key: StringName in SETTINGS:
+		Settings.set_value(key, _saved[key])
+	Factions.reset()
+
+
+func _skipped() -> bool:
+	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
+		return false
+	pending("the native library is not built (scripts/build_native.sh), so there is no core to test")
+	return true
+
+
+# --- the world ---------------------------------------------------------------------------------------------------------
+
+
+# A rigid body with a marker and a hull, as `ShipAssembly` builds them (without the rest of a ship).
+func _body(at: Vector3, faction: StringName, label: String, radius: float = 12.0, marker: Targetable = null) -> RigidBody3D:
+	var body := RigidBody3D.new()
+	body.freeze = true
+	world.add_child(body)
+	body.add_to_group(WorldFrame.SHIFTABLE_GROUP)
+	body.global_transform = Transform3D(Basis.from_euler(Vector3(at.x * 0.001, at.y * 0.002, at.z * 0.003)), at)
+	body.linear_velocity = Vector3(at.z * 0.01, -at.x * 0.01, 3.0)
+	body.angular_velocity = Vector3(at.y * 0.0001, 0.01, -at.x * 0.0001)
+	var hull := Damageable.new()
+	hull.faction = faction
+	hull.bounding_radius = radius
+	body.add_child(hull)
+	var t: Targetable = marker if marker != null else Targetable.new()
+	t.name = "Targetable"
+	t.display_name = label
+	t.faction = faction
+	body.add_child(t)
+	return body
+
+
+# A prop: a plain node with a marker that drifts (its velocity on the marker) and a hull.
+func _prop(at: Vector3, label: String) -> Node3D:
+	var prop := Node3D.new()
+	world.add_child(prop)
+	prop.add_to_group(WorldFrame.SHIFTABLE_GROUP)
+	prop.global_position = at
+	var hull := Damageable.new()
+	hull.bounding_radius = 3.0
+	prop.add_child(hull)
+	var t := Targetable.new()
+	t.display_name = label
+	t.velocity = Vector3(0.5, 0.0, -0.25)
+	prop.add_child(t)
+	return prop
+
+
+# A rigid body with a hull and no marker (a drone).
+func _drone(at: Vector3) -> RigidBody3D:
+	var body := RigidBody3D.new()
+	body.freeze = true
+	world.add_child(body)
+	body.add_to_group(WorldFrame.SHIFTABLE_GROUP)
+	body.global_position = at
+	body.linear_velocity = Vector3(1.0, 2.0, 3.0)
+	var hull := Damageable.new()
+	hull.faction = Factions.RAIDERS
+	hull.bounding_radius = 4.0
+	body.add_child(hull)
+	return body
+
+
+# A bolt in flight: launched at `at` along `velocity`, with one tick of flight behind it (`last_step`).
+func _bolt(at: Vector3, velocity: Vector3, faction: StringName, shooter_id: int, kind: StringName = Projectile.KIND_BOLT) -> Projectile:
+	var bolt := PROJECTILE_SCENE.instantiate() as Projectile
+	bolt.faction = faction
+	bolt.shooter_id = shooter_id
+	bolt.damage = 5.0
+	projectiles.add_child(bolt)
+	bolt.set_kind(kind)
+	bolt.launch(at, velocity, 0.0)
+	bolt.last_step = velocity * (1.0 / 60.0)
+	return bolt
+
+
+func _park(body: Node3D) -> void:
+	body.visible = false
+	body.process_mode = Node.PROCESS_MODE_DISABLED
+
+
+func _unpark(body: Node3D) -> void:
+	body.process_mode = Node.PROCESS_MODE_INHERIT
+	body.visible = true
+
+
+# A seeded crowd of every sort of body, some of them parked, some rocks and mines as static rows, and bolts among them.
+func _crowd(rng: RandomNumberGenerator, n: int, bolts: int = 0, statics: int = 0) -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	for i: int in n:
+		var at := Vector3(rng.randf_range(-6000.0, 6000.0), rng.randf_range(-2000.0, 2000.0), rng.randf_range(-6000.0, 6000.0))
+		var roll: float = rng.randf()
+		var body: Node3D
+		if roll < 0.08:
+			body = _prop(at, "BUOY %d" % i)
+		elif roll < 0.14:
+			body = _drone(at)
+		elif roll < 0.22:
+			var marker := Targetable.new()
+			marker.kind = [Targetable.Kind.CAPITAL, Targetable.Kind.PROP, Targetable.Kind.TURRET,
+					Targetable.Kind.SHIP][rng.randi_range(0, 3)]
+			body = _body(at, SIDES[rng.randi_range(0, 3)], "KIND %d" % i, rng.randf_range(5.0, 600.0), marker)
+		else:
+			body = _body(at, SIDES[rng.randi_range(0, 3)], "SHIP %d" % i, rng.randf_range(5.0, 30.0))
+		if rng.randf() < 0.15:
+			_park(body)
+		out.append(body)
+	for s: int in statics:
+		var at := Vector3(rng.randf_range(-6000.0, 6000.0), rng.randf_range(-2000.0, 2000.0), rng.randf_range(-6000.0, 6000.0))
+		var mine: bool = rng.randf() < 0.3
+		ContactScan.register_static(900000 + s, at, 50.0 if mine else rng.randf_range(20.0, 200.0),
+				BodyKind.MINE if mine else BodyKind.STATIC, SIDES[rng.randi_range(0, 3)] if mine else Factions.NEUTRAL, world)
+	for b: int in bolts:
+		var near: Node3D = out[rng.randi_range(0, out.size() - 1)]
+		var at: Vector3 = near.global_position + Vector3(rng.randf_range(-200.0, 200.0), rng.randf_range(-200.0, 200.0),
+				rng.randf_range(-200.0, 200.0))
+		var velocity: Vector3 = (near.global_position - at).normalized() * rng.randf_range(300.0, 900.0)
+		var kind: StringName = Projectile.KIND_MISSILE if rng.randf() < 0.1 else Projectile.KIND_BOLT
+		_bolt(at, velocity, SIDES[rng.randi_range(0, 3)], out[rng.randi_range(0, out.size() - 1)].get_instance_id(), kind)
+	return out
+
+
+func _core() -> SimCore:
+	var core: SimCore = SimCore.attach(world)
+	assert_not_null(core, "a core attaches to the world (%s)" % NativeLib.version(SimCore.NATIVE_CLASS))
+	return core
+
+
+# Fails, naming the first difference, unless both scans hold the same rows bit for bit.
+func _assert_same_rows(a_scan: ContactScan, b_scan: ContactScan, label: String) -> void:
+	for field: String in ROWS_COMPARED:
+		var a: Variant = a_scan.get(field)
+		var b: Variant = b_scan.get(field)
+		if a == b:
+			continue
+		var first: int = -1
+		for i: int in mini(a.size(), b.size()):
+			if a[i] != b[i]:
+				first = i
+				break
+		fail_test("%s: %s differs (sizes %d and %d, first at row %d: %s against %s)" % [label, field, a.size(), b.size(),
+				first, str(a[first]) if first >= 0 else "", str(b[first]) if first >= 0 else ""])
+		return
+	pass_test("%s: the same rows" % label)
+
+
+static func _ids(contacts: Array[Contact]) -> PackedInt64Array:
+	var out := PackedInt64Array()
+	for c: Contact in contacts:
+		out.append(c.id)
+	return out
+
+
+# --- lifecycle ---------------------------------------------------------------------------------------------------------
+
+
+func test_rows_survive_a_pool_release_and_acquire_with_a_new_handle() -> void:
+	if _skipped():
+		return
+	var ship: RigidBody3D = _body(Vector3(100.0, 0.0, -50.0), Factions.EARTH_ALLIANCE, "KILO 1")
+	_body(Vector3(-300.0, 20.0, 400.0), Factions.RAIDERS, "R 1")
+	var core: SimCore = _core()
+	core.sync_now()
+	var first: int = core.handle_of(ship.get_instance_id())
+	assert_gt(first, 0, "an active body has a row handle")
+	assert_eq(core.row_name(first), "KILO 1", "the row carries the ship's name")
+	assert_eq(core.rows(), 2, "two bodies, two rows")
+	# Released to the pool: hidden, not processing, its name taken away (ShipPool.release).
+	_park(ship)
+	(ship.get_node("Targetable") as Targetable).display_name = ""
+	core.sync_now()
+	assert_eq(core.rows(), 1, "a parked ship has no row")
+	assert_eq(core.row_of(first), -1, "its old handle points at no row")
+	# Acquired again, under a new name, at a new place.
+	_unpark(ship)
+	(ship.get_node("Targetable") as Targetable).display_name = "KILO 2"
+	ship.global_position = Vector3(5.0, 6.0, 7.0)
+	core.sync_now()
+	var second: int = core.handle_of(ship.get_instance_id())
+	assert_eq(core.rows(), 2, "the ship is a row again")
+	assert_ne(second, first, "a ship back from the pool gets a new handle")
+	assert_eq(core.row_of(first), -1, "the old handle stays dead")
+	assert_eq(core.row_name(second), "KILO 2", "the row carries the new name")
+	assert_eq(core.row_position(second), Vector3(5.0, 6.0, 7.0), "and the new place")
+	_assert_same_rows(ContactScan.shared(get_tree()), ContactScan.from_tree(get_tree()), "the scan after the reuse")
+
+
+func test_a_rebase_shifts_every_row_once() -> void:
+	if _skipped():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 15
+	var bodies: Array[Node3D] = _crowd(rng, 40, 30, 20)
+	var core: SimCore = _core()
+	core.sync_now()
+	var before: PackedVector3Array = core.body_positions()
+	var bolts_before: PackedVector3Array = core.bolt_positions()
+	var offset := Vector3(4321.5, -17.25, 2000.125)
+	world.rebase(offset)
+	var after: PackedVector3Array = core.body_positions()
+	assert_eq(after.size(), before.size(), "the same rows")
+	var ids: PackedInt64Array = core.body_ids()
+	var wrong: int = 0
+	for i: int in after.size():
+		var node := instance_from_id(ids[i]) as Node3D
+		if after[i] != before[i] - offset or (node != null and after[i] != node.global_position):
+			wrong += 1
+	assert_eq(wrong, 0, "every body row moved by the shift, once, to where its node is")
+	var bolts_after: PackedVector3Array = core.bolt_positions()
+	wrong = 0
+	for i: int in bolts_after.size():
+		if bolts_after[i] != bolts_before[i] - offset:
+			wrong += 1
+	assert_eq(wrong, 0, "every bolt row moved by the shift, once")
+	core.sync_now()
+	var next: PackedVector3Array = core.body_positions()
+	assert_eq(next, after, "the next sync reads the nodes where the shift left them: no second move")
+	assert_eq(core.static_positions(), StaticRows.positions, "the static rows follow StaticRows' own shift")
+	_assert_same_rows(ContactScan.shared(get_tree()), ContactScan.from_tree(get_tree()), "the scan after the rebase")
+	assert_true(bodies.size() > 0, "a crowd was made")
+
+
+func test_a_row_of_each_kind_round_trips_its_state() -> void:
+	if _skipped():
+		return
+	var core: SimCore = _core()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3
+	var handles: PackedInt64Array = PackedInt64Array()
+	var given: Array[Dictionary] = []
+	for kind: int in KINDS_ROUND_TRIPPED:
+		var row: Dictionary = {
+			"kind": kind,
+			"id": 70000 + kind,
+			"faction": SIDES[kind % SIDES.size()],
+			"radius": rng.randf_range(0.25, 1200.0),
+			"flags": rng.randi_range(0, 255),
+			"position": Vector3(rng.randf_range(-1e5, 1e5), rng.randf_range(-1e5, 1e5), rng.randf_range(-1e5, 1e5)),
+			"velocity": Vector3(rng.randf_range(-900.0, 900.0), rng.randf_range(-900.0, 900.0), rng.randf_range(-900.0, 900.0)),
+			"basis": Basis.from_euler(Vector3(rng.randf_range(-PI, PI), rng.randf_range(-PI, PI), rng.randf_range(-PI, PI))),
+			"angular": Vector3(rng.randf_range(-3.0, 3.0), rng.randf_range(-3.0, 3.0), rng.randf_range(-3.0, 3.0)),
+			"command": PackedFloat64Array([rng.randf(), rng.randf(), rng.randf(), rng.randf(), rng.randf_range(-1.0, 1.0),
+					rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), 1.0, 0.0, 1.0]),
+			"state": PackedFloat64Array([rng.randf_range(0.0, 100.0), rng.randf_range(0.0, 100.0), rng.randf_range(0.0, 100.0)]),
+		}
+		var handle: int = core.add_row(row)
+		assert_gt(handle, 0, "kind %d gets a handle" % kind)
+		handles.append(handle)
+		given.append(row)
+	for i: int in handles.size():
+		var back: Dictionary = core.row(handles[i])
+		for key: String in given[i]:
+			assert_eq(back.get(key), given[i][key], "kind %d: %s round-trips" % [given[i]["kind"], key])
+	# A changed command and state come back changed; a removed row answers nothing.
+	var moved: PackedFloat64Array = PackedFloat64Array([0.5, 0.25, 0.0, 0.0, 0.1, -0.2, 0.3, 0.0, 1.0, 0.0])
+	core.set_row_command(handles[0], moved)
+	assert_eq((core.row(handles[0]) as Dictionary)["command"], moved, "the command changes in place")
+	core.remove_row(handles[1])
+	assert_true((core.row(handles[1]) as Dictionary).is_empty(), "a removed row is gone")
+	assert_eq((core.row(handles[2]) as Dictionary)["id"], 70000 + KINDS_ROUND_TRIPPED[2], "its neighbours stay")
+
+
+# --- the four classes, from the core and from their own loads -------------------------------------------------------
+
+
+func test_the_contact_scan_answers_from_the_core_as_from_its_own_load() -> void:
+	if _skipped():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 150
+	for round: int in 6:
+		for node: Node in world.get_children():
+			if node != projectiles:
+				node.free()
+		for node: Node in projectiles.get_children():
+			node.free()
+		ContactScan.clear_statics()
+		ContactScan.invalidate()
+		var n: int = [1, 3, 12, 40, 120, 200][round]
+		var bodies: Array[Node3D] = _crowd(rng, n, 25 if n > 2 else 0, 30 if n > 10 else 0)
+		var core: SimCore = _core()
+		core.sync_now()
+		var shared: ContactScan = ContactScan.shared(get_tree())
+		assert_eq(shared.source(), &"core", "round %d: the shared scan comes from the core" % round)
+		var script: ContactScan = ContactScan.from_tree(get_tree())
+		script.use_native = false
+		_assert_same_rows(shared, script, "round %d" % round)
+		var differences: PackedStringArray = PackedStringArray()
+		for q: int in mini(bodies.size(), 60):
+			var own: Node3D = bodies[rng.randi_range(0, bodies.size() - 1)]
+			var faction: StringName = SIDES[rng.randi_range(0, 3)]
+			var at: Vector3 = own.global_position + Vector3(rng.randf_range(-500.0, 500.0), 0.0, rng.randf_range(-500.0, 500.0))
+			var own_id: int = own.get_instance_id()
+			var k: int = [0, 3, 12][q % 3]
+			var range_m: float = [ContactScan.SENSOR_RANGE_M, 900.0, 20000.0][q % 3]
+			var a: Array = [_ids(shared.contacts_for(own_id, at, faction, range_m)),
+					_ids(shared.nearest_for(own_id, at, faction, k, Callable(), range_m)),
+					_ids(shared.statics_for(own_id, at, faction, 4, range_m)),
+					shared.incoming_fire(own_id, at, Vector3(1.0, 0.0, 0.0), faction)]
+			var b: Array = [_ids(script.contacts_for(own_id, at, faction, range_m)),
+					_ids(script.nearest_for(own_id, at, faction, k, Callable(), range_m)),
+					_ids(script.statics_for(own_id, at, faction, 4, range_m)),
+					script.incoming_fire(own_id, at, Vector3(1.0, 0.0, 0.0), faction)]
+			if a != b:
+				differences.append("round %d query %d: %s against %s" % [round, q, a, b])
+		assert_eq(differences.size(), 0, "round %d: the same answers from the core as from the scan's own load: %s" % [round,
+				differences.slice(0, 3)])
+		assert_eq(shared.path(), &"native", "round %d: the queries ran natively" % round)
+
+
+func test_the_hit_sweep_pairs_from_the_core_as_from_its_own_load() -> void:
+	if _skipped():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 808
+	var resolver := HitResolver.new()
+	resolver.name = "HitResolver"
+	add_child_autofree(resolver)
+	for round: int in 4:
+		for node: Node in world.get_children():
+			if node != projectiles:
+				node.free()
+		for node: Node in projectiles.get_children():
+			node.free()
+		ContactScan.invalidate()
+		var n: int = [2, 10, 60, 150][round]
+		_crowd(rng, n, 40 * (round + 1), 0)
+		var core: SimCore = _core()
+		core.sync_now()
+		var delta: float = 1.0 / 60.0
+		# The resolver's own load: hulls and bolts gathered from the tree, paired by the broad phase.
+		resolver.use_core = false
+		var own: Array = resolver.broad_phase_pairs(delta)
+		# From the core: the same pairs, named by body and bolt instance id, and the same work.
+		resolver.use_core = true
+		var from_core: Array = resolver.broad_phase_pairs(delta)
+		assert_eq(from_core[0], own[0], "round %d: the same bolt and hull pairs" % round)
+		assert_eq(from_core[1], own[1], "round %d: the same pairs visited" % round)
+		assert_true((own[0] as Array).size() > 0 or round == 0, "round %d: there were pairs to compare" % round)
+		assert_eq(resolver.source(), &"core", "round %d: the resolver read the core" % round)
+
+
+func test_the_ram_broad_phase_pairs_from_the_core_as_from_its_own_load() -> void:
+	if _skipped():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2101
+	var rams := RamResolver.new()
+	rams.name = "RamResolver"
+	rams.world = world
+	add_child_autofree(rams)
+	for round: int in 4:
+		for node: Node in world.get_children():
+			if node != projectiles:
+				node.free()
+		ContactScan.invalidate()
+		var n: int = [2, 10, 60, 150][round]
+		var bodies: Array[Node3D] = _crowd(rng, n, 0, 0)
+		# Crowd a few of them so the tick's swept boxes overlap.
+		for i: int in mini(bodies.size(), 12):
+			var body := bodies[i] as RigidBody3D
+			if body != null:
+				body.global_position = Vector3(rng.randf_range(-40.0, 40.0), rng.randf_range(-10.0, 10.0), rng.randf_range(-40.0, 40.0))
+				body.linear_velocity = Vector3(rng.randf_range(-600.0, 600.0), 0.0, rng.randf_range(-600.0, 600.0))
+		var core: SimCore = _core()
+		core.sync_now()
+		var delta: float = 1.0 / 60.0
+		var always := PackedInt64Array([0, 1])
+		rams.use_core = false
+		var own: Array = rams.broad_phase_pairs(delta, always)
+		rams.use_core = true
+		var from_core: Array = rams.broad_phase_pairs(delta, always)
+		assert_eq(from_core, own, "round %d: the same hull pairs from the core as from the resolver's own gather" % round)
+		assert_true((own as Array).size() > 1 or round == 0, "round %d: there were pairs to compare" % round)
+		assert_eq(rams.source(), &"core", "round %d: the resolver read the core" % round)
+
+
+func test_the_flight_step_flies_the_same_from_the_core_as_from_the_physics_server() -> void:
+	if _skipped():
+		return
+	var spec: ShipSpec = load(SPEC_PATH) as ShipSpec
+	var digests: Array[Array] = []
+	for use_core: bool in [true, false]:
+		Settings.set_value(&"perf_native_core", use_core)
+		var ships: Array[Ship] = []
+		for i: int in 3:
+			var ship: Ship = Ship.create(spec, world)
+			world.spawn(ship, world.to_universe(Vector3(300.0 * i, 0.0, -200.0 * i)))
+			assert_true(ship.get_layout().valid, "ship has a valid thruster layout (run scripts/gen_assets.sh)")
+			ships.append(ship)
+		await get_tree().physics_frame
+		await get_tree().physics_frame
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 44
+		var lines: Array = []
+		for tick: int in 90:
+			for ship: Ship in ships:
+				var cmd := FlightCommand.new()
+				cmd.main_left = rng.randf()
+				cmd.main_right = rng.randf()
+				cmd.retro_left = 1.0 if rng.randf() < 0.2 else 0.0
+				cmd.retro_right = 1.0 if rng.randf() < 0.2 else 0.0
+				cmd.rot = Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
+				cmd.strafe = Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
+				cmd.brake = rng.randf() < 0.1
+				ship.set_flight_command(cmd)
+			await get_tree().physics_frame
+			var batch: FlightBatch = FlightBatch.attach(world)
+			if tick == 10:
+				assert_eq(batch.source(), &"core" if use_core else &"server", "the batch reads the %s" % ("core" if use_core else "server"))
+			for ship: Ship in ships:
+				var o: FlightOutput = ship.get_flight_output()
+				# Exact values, compared as such: a formatted float would hide a difference in the last bits.
+				lines.append([tick, ship.global_position, ship.linear_velocity, ship.angular_velocity, ship.applied_force(),
+						o.rcs_torque_b, o.group_levels[0], o.mass_flow_kg_s, o.face_error_rad])
+		digests.append(lines)
+		for ship: Ship in ships:
+			ship.free()
+		var batch: FlightBatch = world.get_node_or_null(NodePath(FlightBatch.NODE_NAME))
+		if batch != null:
+			batch.free()
+		var core: Node = world.get_node_or_null(NodePath(SimCore.NODE_NAME))
+		if core != null:
+			core.free()
+		await get_tree().physics_frame
+	assert_eq(digests[0].size(), digests[1].size(), "both runs logged every tick")
+	var first_difference: int = -1
+	for i: int in mini(digests[0].size(), digests[1].size()):
+		if digests[0][i] != digests[1][i]:
+			first_difference = i
+			break
+	assert_eq(first_difference, -1, "the batch flies the same from the core as from the physics server (first difference: %s | %s)" % [
+			str(digests[0][first_difference]) if first_difference >= 0 else "", str(digests[1][first_difference]) if first_difference >= 0 else ""])
+
+
+# --- the engine seam ---------------------------------------------------------------------------------------------------
+
+
+func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine() -> void:
+	if _skipped():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 9
+	var resolver := HitResolver.new()
+	resolver.name = "HitResolver"
+	add_child_autofree(resolver)
+	var rams := RamResolver.new()
+	rams.name = "RamResolver"
+	rams.world = world
+	add_child_autofree(rams)
+	var sync_reads := PackedInt64Array()
+	var kernel_reads := PackedInt64Array()
+	for size: int in [10, 100]:
+		for node: Node in world.get_children():
+			if node != projectiles:
+				node.free()
+		for node: Node in projectiles.get_children():
+			node.free()
+		ContactScan.invalidate()
+		var bodies: Array[Node3D] = _crowd(rng, size, size * 3, size)
+		var core: SimCore = _core()
+		core.sync_now()
+		# A tick's worth of queries over the rows: the scan's, the hit sweep's and the ram broad phase's.
+		var scan: ContactScan = ContactScan.shared(get_tree())
+		for body: Node3D in bodies:
+			var id: int = body.get_instance_id()
+			scan.nearest_for(id, body.global_position, Factions.RAIDERS, 12)
+			scan.statics_for(id, body.global_position, Factions.RAIDERS, 4)
+			scan.incoming_fire(id, body.global_position, Vector3.ZERO, Factions.RAIDERS)
+		resolver.use_core = true
+		resolver.broad_phase_pairs(1.0 / 60.0)
+		rams.use_core = true
+		rams.broad_phase_pairs(1.0 / 60.0, PackedInt64Array())
+		core.sync_out_now()
+		var calls: PackedInt64Array = core.engine_calls()
+		sync_reads.append(calls[0])
+		kernel_reads.append(calls[1])
+	assert_eq(kernel_reads[0], 0, "no engine call outside the sync at 10 bodies")
+	assert_eq(kernel_reads[1], 0, "none at 100 bodies either: the queries read rows, never the engine")
+	assert_gt(sync_reads[1], sync_reads[0], "the sync reads once per body and bolt, so it grows with them")
+	assert_lt(sync_reads[1], sync_reads[0] * 20, "and only with them")

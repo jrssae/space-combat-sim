@@ -283,6 +283,11 @@ static func clear_statics() -> void:
 	StaticRows.clear()
 
 
+## Where this scan's rows came from: &"tree" (the GDScript gather), &"registry" (M4-T09) or &"core" (M4-T15).
+func source() -> StringName:
+	return &"registry" if _from_registry else &"tree"
+
+
 ## Which code answers this scan's queries now: &"native" or &"gdscript".
 func path() -> StringName:
 	return &"native" if _native() != null else &"gdscript"
