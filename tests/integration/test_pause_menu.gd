@@ -242,6 +242,14 @@ func test_settings_and_controls_open_in_the_frame_and_start_steps_back() -> void
 	assert_true(get_tree().paused)
 
 
+func test_the_settings_entry_opens_a_settings_page() -> void:
+	await _open()
+	await _pad(&"ui_down")
+	await _pad(&"ui_down")
+	await _pad(&"ui_accept")
+	assert_true(_menu().frame().current_page() is SettingsScreen)
+
+
 func test_the_escape_key_is_the_pause_action_and_does_not_count_twice() -> void:
 	await _open()
 	await _pad(&"ui_down")
