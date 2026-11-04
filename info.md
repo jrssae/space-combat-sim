@@ -87,7 +87,7 @@ Source: `src/autoload/debug_console.gd`
 |---|---|---|---|
 | `camera` | `[cockpit\|chase]` | Switches to the cockpit or chase camera; with no argument, toggles. | `src/camera/camera_rig.gd` |
 | `look` | `<yaw> [pitch]` | Holds the view at yaw and pitch degrees off the nose, for captures; L3 and the mouse do nothing until `look off`. | `src/camera/camera_rig.gd` |
-| `lod` | `<ship\|all> <hero\|0-3\|auto>` | Forces a ship's splat level; `hero` is the player's finest, `auto` lets its size on screen decide. | `src/rendering/lod_switcher.gd` |
+| `lod` | `<ship\|all> <hero\|0-3\|auto>` | Forces a ship's splat level; `hero` is the player's finest, `auto` lets its size on screen decide. A forced ship is never drawn as a far dot (M4-T11). | `src/rendering/lod_switcher.gd` |
 | `fallback` | `[on\|off]` | Shows the fallback meshes and panorama sky instead of splats; with no argument, toggles. | `src/rendering/splat_status.gd` |
 | `relight` | `[on\|off]` | Toggles or sets scene lighting on hulls, chunks and buoys (off draws their flat paint; meshes stay lit). | `src/rendering/splat_light_rig.gd` |
 | `flare` | `[on\|off]` | Toggles or sets the star's lens flare. | `src/rendering/post_effects.gd` |
@@ -131,7 +131,7 @@ Source: `src/autoload/debug_console.gd`
 | `hull` | `src/combat/damageable.gd` |
 | `input` | `src/autoload/debug_console.gd` |
 | `lights` | `src/rendering/splat_light_rig.gd` |
-| `lod` | `src/rendering/lod_switcher.gd` |
+| `lod` | `src/rendering/lod_switcher.gd` (M4-T11: `far_dots`, the ships in play drawn as far dots past `settings.far_ship_dot_m`) |
 | `perf` | `src/perf/perf_probe.gd` |
 | `post` | `src/rendering/post_effects.gd` |
 | `raiders` | `src/game/ship_pool.gd` |

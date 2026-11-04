@@ -2336,3 +2336,51 @@ src/combat/hit_resolver.gd             + a beam is retired after the resolve tha
   a hostile, never a friend, hurts every hull in its blast and is gone, checks every third tick and is laid again, a rebase moves
   the mines), `test_bench_layout` (the belts hold the mix per side, on their arcs, clear of every ship, seeded) and `test_bench`
   (a battle run counts beams, missiles and mines).
+### 17.10 Far-ship dots and the node diet for AI ships (T11)
+
+```
+src/ship/ship.gd                 `lean` (AI ships): no cockpit, anchor or fallback node; collision shapes as shape owners;
+                                 `set_far_dot` hides the ship's visuals and hands it to the world's FarDots
+src/ship/thruster_visuals.gd     `instanced`: every plume of a ship is an instance of one multimesh (cone and core in one surface)
+src/ship/running_lights.gd       `instanced`: the three markers are instances of one multimesh (the colour in the custom data)
+src/ship/hull_depth_proxy.gd     the proxy draws the fallback mesh merged into one surface; on a lean ship it also draws the
+                                 fallback mesh itself
+src/rendering/lod_switcher.gd    the far level: past settings.far_ship_dot_m from the camera an AI ship is a dot
+src/rendering/far_dots.gd        FarDots: one MultiMeshInstance3D under World, a point per far ship, updated each frame
+assets/shaders/far_ship_dot.gdshader   the dot: the hull's angular size with a 1 px floor, dimmed by the inverse square under it
+```
+
+- **Why.** A pooled AI Starfury was 112 nodes and a raider 74 (the player's 123): a `CollisionShape3D` per hit volume (14 and
+  13), a `Node3D` and two mesh instances per plume (24 and 4 plumes), three marker meshes, the cockpit interior and anchor, a
+  fallback mesh node. The rebase shifts and resets every one of them, the body sync propagates every transform, and each
+  visible surface is a draw call: the depth proxy alone drew the hull's 13 material surfaces (9 on a raider). Measured on the
+  GPU, an idle AI ship in view cost about 15 draw calls.
+- **The lean set** (`ShipAssembly` option `lean`, on for every pool ship, never the player's): the body; the collision shapes as
+  shape owners of the body (`create_shape_owner`, the same shapes, contacts and ray hits, no node); the splat levels and their
+  `SplatPoseSync`; one `HullDepthProxy` node that draws the proxy while the splats are drawn and the fallback mesh with its own
+  materials when the fallback is on; `ThrusterVisuals` on the body as one multimesh; `RunningLights` as one multimesh; the guns
+  (a marker and a flash per muzzle, the weapons' own) and the gameplay components (`Targeting`, `AiPilotDriver`, `Damageable`,
+  `Targetable`, `LodSwitcher`). A Starfury ally is 19 nodes (112 before) and a raider 24 (74): 16 and 16 besides
+  their guns' muzzles and flashes, the plan's bound. The player's Starfury stays at 123.
+- **One surface per part.** The proxy is the fallback mesh merged into one surface of positions and normals (all its shader
+  reads), made once per mesh and shared, for every ship (the player's too: the picture is the same). The instanced plume is the
+  unit cone and the core disc in one surface with one material: the core texture's radial falloff is baked into the disc's
+  vertex colours, the disc sits at a share of the length, and the level is the instance colour's alpha (the nodes used the mesh
+  `transparency`). The markers share the quad and the shader of §7.3, the colour read from the instance's custom data
+  (`use_instance_tint`). So a near AI ship draws three surfaces; measured on the GPU, 20 idle raiders in view add 45 draw calls
+  (2.25 a ship: the renderer batches some of them), against about 15 a ship before.
+- **Far dots** (§14.4's last level). Each frame the `LodSwitcher` measures the camera's distance; past
+  `settings.far_ship_dot_m` (3 000 m) an AI ship is a dot: `Ship.set_far_dot` hides its splat levels, proxy, plumes, markers
+  and guns, and `FarDots` (one `MultiMeshInstance3D` under `World`, never culled) draws it as one instance, so every
+  far ship together is one draw call. It shows its level again at 90 % of the distance (`LodSwitcherMath.far_dot`), never
+  flapping on the line. The dot is the hull's opacity-weighted mean paint from its coarsest level's splats, lit as §7.3's
+  lit side (1.2, applied before the sRGB to linear step as GDGS applies it), at the hull's angular size with a 1 px floor
+  and dimmed by the inverse square under it, like a running light; alpha-blended and depth-tested, so a nearer hull's proxy
+  hides it. Each frame it writes every shown ship's drawn pose in World-local metres. It is shiftable, so a rebase moves the
+  dots with everything else (no frame shows one at its old place); on `rebased` it goes back to the World's origin and moves
+  the dots instead, so its own offset never grows. A parked ship draws none, a forced level (`lod`) and the player's ship never become dots, and a ship back from the
+  pool starts drawn in full. Headless there is a camera too, so dots are taken there as well; it costs the frame, not the tick.
+- **What it does not change.** Ships, physics, contacts and the gameplay components are the same; the player's ship keeps
+  every node. The plumes' lights stay emitters on the plume positions (the ship's `ThrusterVisuals` is their anchor), and a
+  hidden instanced ship's lights go dark. The look of the plumes, markers and dots is the maintainer's (H).
+- **Console**: the `lod` provider's `far_dots` counts the ships drawn as dots; setting `far_ship_dot_m`.

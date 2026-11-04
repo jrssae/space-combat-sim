@@ -156,7 +156,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T08 | Bolt broad phase in native code (`ScsHitSweep`), projectile kinds | T06 | Opus | Hits grow with bolts times ships; the windowed spikes | G, N | done |
 | T09 | Native body registry: the scan built from RIDs, entity kinds, nearest-k per kind | T06 | Opus | The per-tick gather cycle 4 left; rocks must not fill a fighter's contacts | G, N | done |
 | T10 | N4: the flight force step in native code for AI ships (`ScsFlightStep`) | T06 | Fable | The riskiest parity maths (`FlightModel`, the assist's state) | G, N | done (2026-11-03, in a worktree on `f134e00`; Cycle log, M4-T10) |
-| T11 | Far-ship render proxies and the node diet for AI ships | T10 | Opus | 108 nodes and 27 draw calls a ship; GPU numbers by the agent, the look (H) | R | not started |
+| T11 | Far-ship render proxies and the node diet for AI ships | T10 | Opus | 108 nodes and 27 draw calls a ship; GPU numbers by the agent, the look (H) | R | done (2026-11-03, in a worktree on `441a3b4`; Cycle log, M4-T11) |
 | T12 | Missile, beam, interceptor and mine stand-ins | T07, T08 | Opus | The weapon kinds Q19 and Q21 name, measured | A, G | done (2026-11-03, in a worktree on `441a3b4`; Cycle log, M4-T12) |
 | T13 | Phase 1 measurements and report P1 (checkpoint 1) | T11, T12, T14 | Sonnet | Measurement, no code | M | not started |
 | T14 | Jolt collision layers; interpolation off for far ships | T11 | Sonnet | Mechanical; matters from 300 ships | G | not started |
@@ -711,6 +711,24 @@ No question is open.
   GPU or the main thread binds (the trigger for T26).
 - **Expected gain:** render CPU at 500 from about 15 ms to under 3 ms (75 %); the sync and the rebase cut with the nodes (70 %).
 - **Architecture:** §17.10.
+- **Done (2026-11-03, worktree on `441a3b4`):** pool ships are built lean (`ShipAssembly` option `lean`): collision shapes as
+  shape owners of the body, no cockpit interior, anchor or separate fallback node (the depth proxy draws the fallback mesh when
+  it is wanted), the plumes as one multimesh with cone and core in one surface, the markers as one multimesh with the colour per
+  instance; the depth proxy draws the hull merged into one surface (the player's too); past `far_ship_dot_m` (3 000 m) an AI
+  ship is a point in the world's one `FarDots` multimesh. A Starfury ally is 19 nodes (112), a raider 24 (74), the player's
+  123 as before. Numbers in the Cycle log, "M4-T11".
+- **As built, where it differs from the plan:**
+  - The node bound is 16 besides the guns: each muzzle keeps its marker and flash (two per muzzle, the weapons' nodes), and the
+    gameplay components (`Targeting`, `AiPilotDriver`, `Damageable`, `Targetable`, `LodSwitcher`) stay; the plan's "about 12"
+    counted neither. The running lights stay on AI ships (T28, Q26), drawn as one multimesh.
+  - Draw calls: the lean set's own meshes cost about 1.3 a near ship (20 idle raiders in view add 45 calls with everything on,
+    19 of them gone when the proxy, markers and plumes are hidden); the rest of a near ship's calls come with its visible GDGS
+    splat node (about 2 a ship, gone when the node is hidden, as a far dot does). A mixed fleet of 100 idle ships in view: 5.0
+    calls a ship (14.8 before). So under 3 a ship holds for the diet's own meshes and for a battle as a whole (battle 100: 367
+    calls for 85 AI ships, 1 423 before), not for a near ship's splat node; listed for T27.
+  - The rebase shift at battle 300 fell from 6.44 to 3.44 ms (median), not under 2 ms: the ships' part is about 1.3 ms
+    (5 us a ship, shift and interpolation reset); the rest is 1 568 bolts (0.9 ms, a node each until T15's rows) and the
+    capitals.
 
 ##### M4-T12 Missile, beam, interceptor and mine stand-ins
 
