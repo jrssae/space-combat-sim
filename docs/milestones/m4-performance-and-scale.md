@@ -170,7 +170,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T10 | N4: the flight force step in native code for AI ships (`ScsFlightStep`) | T06 | Fable | The riskiest parity maths (`FlightModel`, the assist's state) | G, N | done (2026-11-03, in a worktree on `f134e00`; Cycle log, M4-T10) |
 | T11 | Far-ship render proxies and the node diet for AI ships | T10 | Opus | 108 nodes and 27 draw calls a ship; GPU numbers by the agent, the look (H) | R | done, two Done-when numbers missed and accepted: about 5 draw calls a near AI ship (target under 3; splat nodes, carried to T27) and a 3.44 ms rebase shift at 300 (target 2 ms; bolts and capitals, carried to T15 and T20) |
 | T12 | Missile, beam, interceptor and mine stand-ins | T07, T08 | Opus | The weapon kinds Q19 and Q21 name, measured | A, G | done (2026-11-03, in a worktree on `441a3b4`; Cycle log, M4-T12) |
-| T13 | Phase 1 measurements and report P1 (checkpoint 1) | T11, T12, T14 | Sonnet | Measurement, no code | M | not started |
+| T13 | Phase 1 measurements and report P1 (checkpoint 1) | T11, T12, T14 | Sonnet | Measurement, no code | M | done (2026-11-04, in a worktree on `b3c3fbb`; Cycle log, Phase 1; `typical` held, `battle` ceiling 47 against the target of 100; report P1 waits for the maintainer) |
 | T14 | Jolt collision layers; interpolation off for far ships | T11 | Sonnet | Mechanical; matters from 300 ships | G | done, the physics stage did not fall (2.1 ms at 300, 3.5 at 500, as before); the rebase shift fell by 1.5 to 2 ms; fighters collide with fighters again (Q33) (2026-11-04, in a worktree on `ce35406`; Cycle log, M4-T14) |
 | T15 | The native simulation core: entity rows, one call in and out (`ScsSimCore`) | T13 | Fable | Architecture: every native class moves onto it; serial | N | not started |
 | T16 | N2: avoidance, the fire lane and the context lists on the core | T15 | Opus | Per-contact loops, bit for bit | N, G | not started |
@@ -924,6 +924,12 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
 - **Added 2026-11-04 (Q29):** the fullscreen checks run on both render paths (`ship_render` `splat`, the default until T30b, and
   `mesh`); T26's trigger reads the mesh rows, since the mesh-only renderer is where M4 ends. T30a's look sheet is shown at this
   checkpoint when it is ready (checkpoint 1b).
+- **Done (2026-11-04, worktree on `b3c3fbb`; Cycle log, "Phase 1 (T07 to T14)" and its "Report P1"):** the full sweep on
+  `battle`, `typical`, furball, spread and transit with below-sweep counts, the stage and per-entity breakdown at typical, battle
+  47, 100, 300 and 500, the fullscreen check on both render paths at typical, battle 47 and battle 100, the release export's quick
+  check once (with `native_loaded = true`) and the focused files of every phase 1 task with AC13's (47 files, 567 passing). No
+  code changed. `scripts/fullscreen_check.sh` has no render switch, so the fullscreen runs used a copy with `render=` added to its
+  `measure_fight.gd` call; a `FULLSCREEN_RENDER` variable in the script itself is a one-line change for whoever owns it next.
 
 ##### M4-T14 Jolt collision layers and far-ship physics interpolation off
 
@@ -3055,6 +3061,265 @@ glow, the dark side under `ambient_level` 0.3, and how it holds up at 150 and 60
 (5), `test_uv_atlas.py` (8), `test_textures.py` (10), `test_textured_mesh.py` (5); and GUT files run alone, each 0 failing and 0
 pending: `test_mesh_assets` 4, `test_textured_hull` 3, `test_paint_meshes` 7, `test_render_path` 7, `test_ship_scene` 27, `test_ship_nodes`
 11, `test_environment` 22, `test_far_dots` 12, and AC13's `test_ai_think_time` 1.
+
+### Phase 1 (T07 to T14, M4-T13, 2026-11-04)
+
+Taken on `b3c3fbb` (T07 to T12, T14, T27 to T29 merged on `m4`; T13 changes no game code), in a worktree with its own native
+build, the debug editor build with the library loaded (`perf.native_loaded = true`), default settings, on the maintainer's
+desktop (load 1.1 to 2.2 at the start of each run; the M5 and bench locks held for every run of the sweep, the GPU lock too for the
+fullscreen runs; runs pinned to cores 0-11). T30a ran beside it and was kept off every measured run by the locks. Reports are in
+`reports/perf/m4_p1*` (not committed): `m4_p1` (the sweep), `m4_p1_below`, `m4_p1_stages`, `m4_p1_fs_<path>_<layout>_<n>`,
+`m4_p1_release_quick*`.
+
+**The sweep** (`scripts/bench.sh m4_p1`, `battle`, `typical`, `furball`, `spread` and `transit`, seeds 1 to 3, 5 s + 30 s, a layout
+stopping after two failing counts in a row; N is the sweep's ladder plus the below-sweep counts listed after it, run the same way
+under the label `m4_p1_below`). The worst rebase tick is the median over the three runs of each run's worst tick holding a rebase.
+
+| layout | N | runs passed | tick median ms (runs) | p99 ms | behind real time | worst rebase tick ms |
+|---|---|---|---|---|---|---|
+| battle | 25 | 3/3 | 4.69 (4.60, 4.69, 5.04) | 6.16 | 0.00 % | 6.70 |
+| battle | 30 | 3/3 | 5.83 (5.83, 5.84, 5.40) | 7.07 | 0.00 % | 7.33 |
+| battle | 35 | 3/3 | 6.34 (6.84, 6.34, 5.63) | 7.51 | 0.00 % | 7.74 |
+| battle | 40 | 3/3 | 7.15 (7.15, 7.20, 6.76) | 9.81 | 0.00 % | 9.14 |
+| battle | 45 | 3/3 | 7.38 (7.15, 7.54, 7.38) | 8.92 | 0.00 % | 9.07 |
+| battle | 47 | 3/3 | 7.65 (7.82, 7.48, 7.65) | 9.06 | 0.00 % | 9.22 |
+| battle | 50 | 0/3 | 8.53 (8.47, 8.64, 8.53) | 10.45 | 0.00 % | 10.78 |
+| battle | 100 | 0/3 | 14.58 (14.41, 14.58, 14.84) | 18.32 | 0.14 % | 19.27 |
+| typical | 25 | 3/3 | 4.30 (4.19, 4.30, 4.48) | 5.55 | 0.00 % | 6.15 |
+| typical | 58 | 3/3 | 7.68 (7.63, 7.72, 7.68) | 9.45 | 0.02 % | 9.99 |
+| typical | 100 | 0/3 | 12.55 (12.55, 12.60, 12.51) | 15.54 | 0.02 % | 16.50 |
+| typical | 150 | 0/3 | 18.29 (18.39, 18.29, 18.10) | 21.32 | 12.19 % | 22.12 |
+| furball | 25 | 3/3 | 3.14 (3.02, 3.14, 3.46) | 3.87 | 0.00 % | 3.77 |
+| furball | 50 | 3/3 | 5.37 (5.37, 5.74, 5.33) | 6.79 | 0.00 % | 6.57 |
+| furball | 70 | 2/3 | 7.53 (7.52, 7.53, 8.20) | 9.04 | 0.00 % | 9.89 |
+| furball | 80 | 0/3 | 8.16 (8.16, 9.87, 8.09) | 10.93 | 0.00 % | 9.56 |
+| furball | 90 | 0/3 | 9.44 (9.44, 9.40, 10.02) | 11.68 | 0.06 % | 11.54 |
+| furball | 100 | 0/3 | 10.05 (10.05, 10.04, 11.45) | 12.14 | 0.00 % | 13.19 |
+| furball | 150 | 0/3 | 15.63 (15.64, 14.86, 15.63) | 21.08 | 3.95 % | 20.56 |
+| spread | 25 | 3/3 | 3.14 (3.58, 3.14, 3.12) | 3.76 | 0.00 % | 3.83 |
+| spread | 50 | 3/3 | 5.01 (5.01, 5.07, 4.89) | 5.76 | 0.00 % | 5.69 |
+| spread | 70 | 3/3 | 6.67 (6.60, 6.74, 6.67) | 7.99 | 0.00 % | 7.90 |
+| spread | 80 | 3/3 | 7.47 (7.37, 7.49, 7.47) | 9.05 | 0.00 % | 8.99 |
+| spread | 90 | 0/3 | 8.41 (8.41, 8.47, 8.40) | 10.83 | 0.00 % | 10.60 |
+| spread | 100 | 0/3 | 9.35 (9.35, 9.37, 9.31) | 11.58 | 0.00 % | 12.83 |
+| spread | 150 | 0/3 | 13.76 (13.73, 13.92, 13.76) | 16.98 | 0.00 % | 17.17 |
+| transit | 25 | 3/3 | 2.17 (2.17, 2.16, 2.17) | 2.59 | 0.00 % | 2.44 |
+| transit | 50 | 3/3 | 3.70 (3.70, 3.70, 3.73) | 4.36 | 0.00 % | 4.69 |
+| transit | 100 | 3/3 | 7.13 (7.13, 7.18, 7.09) | 8.32 | 0.00 % | 8.48 |
+| transit | 125 | 0/3 | 8.90 (8.90, 8.90, 8.92) | 10.42 | 0.01 % | 10.56 |
+| transit | 150 | 0/3 | 10.86 (10.86, 10.86, 10.84) | 13.19 | 0.00 % | 12.35 |
+| transit | 200 | 0/3 | 14.92 (14.82, 15.04, 14.92) | 17.57 | 0.00 % | 17.52 |
+
+**Max N, against the final measurements of T06m** (editor build): the sweep's ladder steps from 25 to 50, so the ceilings are read with the below-sweep counts (two runs of three, as T06m did).
+`typical` is one mix, read at its own size of 58:
+
+| layout | T06m ceiling | now | the first failing count now (median ms) |
+|---|---|---|---|
+| `battle` (the headline, T07) | n/a (no layout) | **47** (sweep: 25) | 50 (8.53) |
+| `typical` | n/a | **58 passes** (3/3, 7.68 ms); 100 fails | 100 (12.55) |
+| furball | 45 | **70** (2 of 3, 7.53 ms; sweep: 50) | 80 (8.16) |
+| spread | 50 (sweep), under 75 | **80** (3 of 3, 7.47 ms; sweep: 50) | 90 (8.41) |
+| transit | 50, under 75 | **100** (sweep and below) | 125 (8.90) |
+
+The headline in the T06 sense (the lower of furball and spread) is **70**, against 45 at T06m. The headline as the milestone now
+defines it (`battle`'s) is **47** by the below-sweep counts and 25 by the sweep alone. The plan's phase 1 target was `battle` 100.
+
+**Phase 1 targets against the measurements:**
+
+| target (the plan's, with its confidence) | measured | met |
+|---|---|---|
+| `typical` under 8 ms (65 %) | 7.68 ms median over three runs (p99 9.45, 0.02 % behind real time); 3.9 ms of it is the AI stage | yes, by 0.3 ms |
+| `typical` 60 FPS fullscreen (65 %) | splat 71.6 FPS, mesh 74.9 FPS; frame mean 13.98 and 13.35 ms, over the 12 ms headroom line | 60 FPS yes, headroom no |
+| furball 100 under 8 ms (65 %) | 10.05 ms (10.05, 10.04, 11.45) | no; the ceiling is 70 |
+| `battle` 100 under 8 ms (50 %) | 14.58 ms (14.41, 14.58, 14.84) | no; the ceiling is 47 |
+| `battle` 100 at 60 FPS fullscreen with far proxies and the node diet | 12.0 FPS (splat), 11.8 FPS (mesh) | no, the floor of 30 is missed too |
+
+**Stage and per-entity breakdown** (single runs, seed 1, 5 s + 30 s; `typical 58` is the sweep's seed-1 run, `battle 47` the
+below-sweep's; means in ms per tick, `(standins)` is inside `flight`):
+
+| run | tick median | p99 | ai | (scan) | flight | (standins) | targeting | (hit) | (ram) | physics | behind real time | worst rebase tick | rebase shift median |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| typical 58 | 7.63 | 9.45 | 3.89 | 2.20 | 1.35 | 0.56 | 0.50 | 0.46 | 0.77 | 0.56 | 0.02 % | 9.38 | 0.69 |
+| battle 47 | 7.82 | 9.52 | 4.26 | 2.49 | 1.34 | 0.63 | 0.40 | 0.48 | 0.71 | 0.52 | 0.00 % | 11.58 | 0.67 |
+| battle 100 | 14.40 | 22.26 | 7.63 | 4.43 | 3.03 | 1.56 | 0.95 | 1.06 | 1.27 | 0.96 | 2.9 % | 23.66 | 1.10 |
+| battle 300 | 43.31 | 51.32 | 21.37 | 12.87 | 9.58 | 5.61 | 3.00 | 3.34 | 3.47 | 2.10 | 62.6 % | 48.50 | 2.66 |
+| battle 500 | 77.93 | 86.12 | 39.16 | 24.59 | 17.27 | 10.45 | 5.16 | 5.77 | 6.31 | 3.34 | 79.1 % | 86.12 | 4.30 |
+
+Entities (means per tick): typical 58 holds 50 fighters (all near), 8 capitals, 78 turrets, 32 interceptors, 16 beam emitters, 20
+missiles, 100 mines, 216 bolts, 1 000 rocks; battle 100 80 near and 5 far fighters, 15 capitals, 142 turrets, 60 interceptors, 34
+missiles, 502 bolts; battle 300 162 near and 93 far, 45 capitals, 426 turrets, 180 interceptors, 102 missiles, 300 mines, 1 469
+bolts; battle 500 183 near and 242 far, 75 capitals, 710 turrets, 300 interceptors, 150 emitters, 170 missiles, 500 mines, 2 398
+bolts, 4 sides. Over the 30 s at 500: 1 001 missiles launched and 247 shot down, 1 242 beam shots, 2 mines set off.
+
+**Phase 1 against its before.** T07's phase 1 before (editor build, 10 s runs): typical 58 33.45 ms, battle 100 67.70 ms, battle 300
+215.6 ms. Now 7.63, 14.40 and 43.31 ms: **4.4, 4.7 and 5.0 times faster**. Most of the gain at the battle layouts is the rocks (T29): they
+cost 24 ms at typical 58, 49 ms at battle 100 and 129 ms at battle 300 on the T07 base and 0.8 to 2.5 ms now. On the furball and
+spread the ruler did not change since T06m: furball 100 15.88 to 10.05 ms (-37 %), spread 100 15.03 to 9.35 ms (-38 %), transit 100
+11.26 to 7.13 ms (-37 %).
+
+**Gains per task against their predictions.** Each task measured in its own worktree on its own base (the entries above), so
+the gains are not additive; where the wave's combined gain is less than the sum of its parts, the parts are what is credited.
+
+| task | predicted (confidence) | measured | read |
+|---|---|---|---|
+| T07, the layouts and stand-ins | none (it is the ruler); at battle 100 the statics and turrets add 2 to 3 ms (60 %) | the stand-ins cost 0.3 ms at typical 58 and 1.1 ms at battle 100; the 1 000 rocks added 24, 49 and 129 ms at typical 58, battle 100 and 300 | the stand-ins as expected, the rocks off by a factor of ten or more; fixed by T09 and T29 |
+| T08, bolt broad phase | hit stage 2.5 to about 0.6 ms at furball 100 (75 %) | 3.70 to 0.59 ms on its base, p99 6.27 to 1.13; the windowed hit spike removed by shared impact flashes | met |
+| T10, native flight step | flight 3.6 to about 1.2 ms at furball 100 (60 %) | 3.6 to 1.4 ms single, 4.2 to 1.5 paired; bit for bit | met, 0.2 ms short |
+| T09, native body registry | scan 2.6 to about 1.2 ms at furball 100 (60 %) | about 0.3 ms off the scan (2.4 to 2.1 native); the prediction priced a 1.1 ms gather bucket, of which the body gather was 0.37 ms | missed; the per-query cost remains for T15 |
+| T11, far dots and the node diet | draw calls per AI ship 27 to under 3; rebase shift at 300 under 2 ms; typical at 60 FPS (no confidence); render CPU 15 to under 3 ms at 500 (75 %); sync and rebase cut (70 %) | nodes 112 to 19; physics stage -55 to -62 %; 14.8 to 5.0 calls a ship in view (splat nodes remain); shift at 300 3.44 ms; render CPU halved (1.2 to 0.6 ms, it was never 15 ms); typical without rocks 92 FPS | met on nodes, sync and typical; two targets missed and accepted |
+| T12, missile, beam, interceptor and mine stand-ins | about 0.1 ms per 20 missiles and 0.1 ms per 100 mines at 100 ships (60 %) | 20 missiles 0.03 ms, 100 mines 0.035 ms; interceptors' one grid query cut the stage at battle 300 | under the prediction |
+| T29, rocks and mines as static rows | not in the plan (added after T27) | 1 000 rocks 8.5 to 0.84 ms at typical 58, 10.1 to 1.09 at battle 100, 17.7 to 2.51 at battle 300; typical 58 tick 15.34 to 7.89 ms | the largest single gain of the phase at the battle layouts |
+| T14, Jolt layers, far ships not interpolated | physics stage about 1 ms off from 300 ships (30 %) | physics stage unchanged (2.0 ms at 300, 3.4 ms at 500); the rebase shift 1.5 to 2.0 ms shorter; fighters collide again (Q33) | missed on physics; a small win on the rebase |
+| T27, render comparison | none (a measurement) | meshes 2 to 3 times cheaper on the GPU, neither path decides the battles' frame rate; Q29 dropped splats | settled by Q29 |
+| T28, running lights by distance | none | point-sized past 70 m, inverse-square dimming (Q26) | done |
+
+The phase's tick gain came from four tasks: T29 (the rocks), T10 (flight), T08 (hits) and T11 (the sync and the rebase through the
+node diet), in that order at the battle layouts; T09 and T14 are small in the tick. The prediction that missed most was T09's, and
+it missed in the cost model: a whole bucket was priced as the saving, and the part the registry removes was a third of it.
+
+**Cost per entity type against the budget table** (battle 500, headless, editor build, single 30 s run, seed 1; the budget is the
+plan's target for the end of phase 3 and counts near entities, so the rows show how far phase 1 leaves each from it). Microseconds
+per entity per tick are the stage's mean divided by the count; the stand-ins' parts come from the director's own timers.
+
+| entity | count | measured us each | budget us each | measured ms | budget ms | where it sits |
+|---|---|---|---|---|---|---|
+| fighter (brain and flight), near and far together | 425 (183 near, 242 far) | about 108 | 8 near, 0.3 in the tier | 46.0 | 1.5 | the AI stage 39.2 (the scan 24.6), fighters' flight 6.8; targeting adds 5.2 for all ships |
+| capital | 75 | not separable (no brain; Jolt, scan, hit and ram) | 5 near, 2 tier | in physics, hit and ram | 0.2 | |
+| turret | 710 | 7.7 | 2 | 5.4 | 0.38 (190 near) | `engines_guns` timer, GDScript until T20 |
+| interceptor | 300 | 6.2 | 3 | 1.8 | 0.24 (80 near) | one grid query each plus the picks |
+| beam emitter | 150 | 0.5 | 1 a shot | 0.07 | 0.02 | 1 242 shots in 30 s, each swept in the hit stage |
+| missile | 170 | 1.1 steering, 0.7 launches and strikes | 3 | 0.30 | 0.24 | guidance in GDScript |
+| mine | 500 | 0.29 | 0.2 | 0.15 | 0.1 | a third of the belts per tick |
+| bolt | 2 398 | 2.4 (the hit stage) | 0.3 (1 100 near) | 5.8 | 0.33 | the broad phase, native since T08 |
+| asteroid | 1 000 | not separable | 0.02 | in hit, ram and scan | 0.02 | static rows since T29 |
+| the stand-ins' shared gathers (projectiles, flying hulls) | | | | 2.8 | | ends with T20's rows |
+| Jolt step and body sync | | | | 3.3 | 1.3 | |
+| rebase shift | | | | 4.3 per rebase | 0.5 | |
+| **tick** | | | | **77.9** | **4.6** | |
+
+The budget table assumes the native core and the tier, so most rows are not yet expected to meet it. The rows that decide phase 2
+are the fighters (92 us of AI each), the turrets and interceptors in GDScript (7.2 ms together at 500, 0.8 ms at typical), and the
+resolvers (hit 5.8 and ram 6.3 ms at 500).
+
+**The fullscreen check** (`scripts/fullscreen_check.sh`; a copy of the script with `render=` added to its `measure_fight.gd`
+call, since the script has no render switch; the window is the screen's 6144x3456, the 3D at 1 080 lines (3d scale 0.31), vsync
+off, chase camera, 8 s warm-up and 20 s measured, seed 1, under the GPU and bench locks; RADV NAVI21 compute backend, Vulkan,
+splat budget 2 000 000). `ship_render splat` is the default today, `mesh` the painted meshes (T27):
+
+| run | path | FPS | frame mean / p99 / max ms | frames over 16.7 ms | GPU ms mean (max) | render CPU ms | draw calls | triangles (mean) | VRAM added MB | verdict |
+|---|---|---|---|---|---|---|---|---|---|---|
+| typical 58 | splat | 71.6 | 13.98 / 25.35 / 32.53 | 10.8 % | 5.96 (7.24) | 0.64 | 283 | 676 365 | 1 616 | 60 FPS, no headroom (over 12 ms) |
+| typical 58 | mesh | 74.9 | 13.35 / 24.18 / 32.48 | 9.8 % | 2.99 (3.78) | 0.63 | 277 | 362 414 | 1 353 | 60 FPS, no headroom (over 12 ms) |
+| battle 47 (the ceiling) | splat | 76.1 | 13.15 / 22.31 / 32.57 | 7.0 % | 5.70 (7.29) | 0.61 | 241 | 523 219 | 1 435 | floor and 60 FPS target held |
+| battle 47 | mesh | 76.8 | 13.02 / 23.17 / 36.15 | 6.1 % | 2.99 (3.74) | 0.61 | 237 | 317 179 | 1 429 | floor and 60 FPS target held |
+| battle 100 | splat | 12.0 | 83.49 / 140.58 / 143.75 | 100 % | 5.51 (5.77) | 0.70 | 391 | 597 013 | 1 530 | misses the floor of 30 |
+| battle 100 | mesh | 11.8 | 84.62 / 141.53 / 147.65 | 100 % | 3.04 (3.74) | 0.70 | 389 | 345 524 | 1 489 | misses the floor of 30 |
+
+VRAM before each run was 3.7 to 4.0 GB of 17.2 GB (the desktop's), so about 1.4 to 1.6 GB is the game's, 1.2 GB of it the splat
+budget's buffers on both paths. Screenshots are `reports/perf/m4_p1_fs_<path>_<layout>_<n>/fullscreen.png`.
+
+- **The main thread binds, not the GPU.** The GPU takes 3.0 ms (mesh) or 5.5 to 6.0 ms (splat) a frame on all three scenes; T26's
+  trigger (the GPU over 12 ms a frame) is not seen on either path, the mesh rows it reads included. Render CPU time is 0.6 to 0.7
+  ms. The paths differ by 2.5 to 3 ms of GPU and by 0.7 to 3 FPS, no more.
+- **`typical`** holds 60 FPS (71 to 75) but not the 12 ms frame mean: the headless 7.7 ms tick (worst tick of a second 13 to 14
+  ms in the window) and the frame's own process work (up to 11.5 to 12.4 ms in a second) fill the frame. Phase 2's target for
+  `typical` (under 4 ms) is what gives the headroom.
+- **`battle` 47** holds the 60 FPS target (76 FPS) on both paths. **`battle` 100 falls to 12 FPS** while its headless tick is 14.4
+  ms: with a tick over 16.7 ms in the window (the worst tick of a second is 18.7 to 19.2 ms) the frame runs several ticks to catch
+  up on top of its 12 ms of process work and the simulation runs behind real time, so the frame time is a multiple of the tick,
+  not the sum of the tick and the GPU. T07's and T11's battle 100 windows ran the same way. Not investigated beyond that.
+
+**The release export, once** (a snapshot of `b3c3fbb` by `git archive`, the generated assets and the library copied in, imported
+and exported with the script header's preset to `scs_release.x86_64`, embedded pack, release template 4.7.2, 1.8 GB). The
+export carries the native library: `libscs_native.so` written beside the binary is byte for byte equal to the built one, and
+`state perf` in the export says `native_loaded = true`, `native_version = 0.1.0`. `scripts/bench_quick.sh` with the export, under
+both locks, seed 1, 2 s + 6 s per count (`m4_p1_release_quick`, `m4_p1_release_quick_bt`; load 1.2 to 2.1):
+
+| N | 25 | 40 | 50 | 75 | 100 | 150 | 200 | 300 | 400 |
+|---|---|---|---|---|---|---|---|---|---|
+| furball tick median ms | 2.17 | 3.64 | 6.18 | 7.36 | 10.73 | 12.77 | 17.73 | 27.33 | 40.28 |
+| spread tick median ms | 2.58 | 3.86 | 4.23 | 7.17 | 9.22 | 12.20 | 18.06 | 27.48 | 42.52 |
+| typical tick median ms | 4.04 | 4.64 | 5.75 | 8.48 | 11.65 | 16.51 | 21.06 | 33.25 | |
+| battle tick median ms | 3.51 | 4.36 | 5.38 | 7.28 | 9.74 | 14.46 | 19.09 | 29.56 | 41.81 |
+
+The release export holds the budget to **75 ships in the furball** (7.36 ms; T06m's release quick check held 50), to 50 in spread
+(75 misses on p99 by 0.4 ms, 7.17 ms median) and in `typical` (75 misses at 8.48 ms), and to **75 in `battle`** (7.28 ms), against 47
+for the editor build's sweep. 30 FPS holds to 300 in the furball, spread and `battle` (T06m: 150) and to 200 in `typical`. Release quick-check
+numbers are one run each and are indicative; the editor build's seeded sweep is the gate.
+
+**Behaviour changes in phase 1** (all tests green; the ones for the maintainer's eye are marked (H)):
+- Fighters are unchanged in the seeded outcomes (T08, T09, T10, T11 and T14 each ran the furball 25, spread 50 and a 35 s fight
+  with `perf_native` on and off in fresh processes and got the same `state ai`, hits, ram and behaviour lines as their base; T10's
+  flight step is bit for bit, a 20 000-sample differential test).
+- New in play: rocks and mines are avoided (T09, T29; mines by faction, Q27, allies share their minefields, Q28); a rock hit has no
+  impact flash; the stand-ins (capitals, turrets, interceptors, beams, missiles, mines, launches) exist in the bench layouts only.
+- Look (H): AI ships' plumes are drawn as instances and their proxy is one merged surface (T11); past 3 km an AI ship is a dot (T11);
+  a far ship's dot moves at the tick rate, by at most one tick of travel (T14); running lights are point-sized past about 70 m,
+  dimmed by the inverse square, and gone past about 500 m (T28, Q26); the splat level choice follows the 3D's rendered height, so a
+  4K window with the 3D at 1 080 lines asks for coarser levels than before (T27); impact flashes share their quad and materials
+  (T08).
+- Fighters collide with each other in Jolt again (Q33); T14's first build had removed that and was reverted.
+
+**Focused tests** (Q10; the new and changed files of T07 to T14 and T27 to T29, every file that covers the scan, the resolvers, the
+stand-ins, the pools, the rebase and the bench, and AC13's files; each run alone under the bench lock, with the library):
+**47 files, 567 tests, 567 passing, 0 failing, 0 pending**, no script errors. AC13's paired budget: `test_ai_think_time` 1 of 1,
+`test_m3_run` 2 of 2, `test_control_profiles` 32 of 32, `test_control_profile` 34 of 34, `test_control_profile_store` 15 of 15.
+The files: test_ai_ram 3, test_ai_think_time 1, test_ally_pool 21, test_avoidance_math 18, test_battle_mix 6, test_bench 8,
+test_bench_layout 23, test_body_registry 10, test_collision_layers 17, test_contact_field 18, test_contact_registry 3,
+test_control_profile 34, test_control_profile_store 15, test_control_profiles 32, test_far_dots 12, test_fighter_melee 1,
+test_flight_batch 7, test_flight_parity_fight 1, test_flight_step 4, test_hit_broad_phase 9, test_hit_resolver 16,
+test_hit_scale 10, test_hull_depth_proxy 12, test_impact_flash 3, test_lod_switcher_math 13, test_m3_run 2, test_main_scene 11,
+test_mine_trigger 6, test_missile_guidance 7, test_paint_meshes 7, test_perf_stats 25, test_ram_broad_phase 8, test_ram_damage 15,
+test_ram_scale 7, test_ram_tracker 19, test_rebase_in_play 8, test_render_path 7, test_rocks_and_mines 7,
+test_running_light_dimming 7, test_running_lights_in_play 21, test_settings_schema 15, test_ship_nodes 11, test_ship_pool 21,
+test_ship_scene 27, test_standins 19, test_static_rows 4, test_world_frame 16. No Python or Rust changed in this task. The full
+suite runs on CI after the push and locally once, at the milestone's close.
+
+#### Report P1
+
+**For the maintainer, checkpoint 1.** Phase 1 (T07 to T14, with T27 to T29) is built and measured. It reached `typical` and
+missed `battle`.
+
+**Headlines** (editor build, headless, the budget of 8 ms median and 12 ms p99):
+- `typical` (about 50 fighters, 8 capitals, every weapon, 1 000 rocks, a moon): **7.68 ms** median, p99 9.45, held; **60 FPS
+  fullscreen** at 71.6 (splat) and 74.9 (mesh) FPS with a frame mean of 14.0 and 13.4 ms, which is over the 12 ms headroom line.
+- `battle` (the grand multi-side battle, the headline layout): **47 ships**, against the plan's 100. At battle 100 the tick is
+  14.6 ms and the window runs at 12 FPS; at 300 it is 43 ms and at 500 78 ms. At 47 ships the window holds 76 FPS on both paths.
+- furball **70** (T06m: 45), spread **80** (50), transit **100** (50); the furball at 100 ships is 10.05 ms (T06m: 15.88).
+- release export: 75 ships in the furball and in `battle` by the quick check, 50 in `typical` and spread; `native_loaded = true`.
+- the GPU is not what binds: 3.0 ms (mesh) or 5.5 to 6.0 ms (splat) a frame at every scene; T26 is not triggered.
+
+**What phase 1 did.** The tick at the three phase 1 baselines fell 4.4 to 5 times (typical 58 33.5 to 7.6 ms, battle 100 67.7 to
+14.4, battle 300 215.6 to 43.3), most of it from keeping the rocks out of the GDScript paths (T29), then the native flight step
+(T10), the bolt broad phase (T08) and the node diet's cut to the sync and the rebase (T11). On the old layouts the same code is
+37 % faster at 100 ships.
+
+**What is left, and why battle 100 is not at 8 ms.** At battle 100 the tick of 14.4 ms is the AI stage 7.6 (the scan 4.4), flight
+3.0 (the stand-ins 1.6), the resolvers 2.3, targeting 0.95 and physics 0.96. At 500 it is the AI stage at 50 % (39 ms), the
+stand-ins' GDScript at 13 %, the resolvers at 15 % and the rebase at 4 to 5 ms a shift. These are exactly what phase 2 moves
+(the core and the brains in native code, T15 to T17; turrets, missiles, beams and mines as rows, T20); phase 1 had no task aimed
+at the brains.
+
+**Where the plan's numbers were wrong.** Two of the phase's predictions were wrong in the cost model, not in the work: the rocks
+cost ten times or more what T07 expected (24, 49 and 129 ms against 2 to 3), and T09's registry saved 0.3 ms of the 1.4 predicted because the gather it
+removed was a third of the bucket it was priced from. T14's physics gain (1 ms at 300) is not there: Jolt's cost with these layouts is the
+bodies and the step, not fighter pairs. My estimate of phase 2's `battle 300` target (under 8 ms) is lower than the plan's 45 %:
+at 300 ships the tick is 43 ms, AI 21.4, flight 9.6, resolvers 6.8, targeting 3.0, physics 2.1; taking the brains to a quarter,
+the stand-ins to a fifth and the resolvers in half still leaves about 15 ms. T24 (the simulation on its own thread) and the tier
+(T21 to T23) are then what decide 300 and 500, not T15 to T20 alone.
+
+**Open questions for the maintainer** (none blocks T15, the next task):
+1. **Phase 2's targets.** Keep `typical` under 4 ms and `battle` 300 under 8 ms as written, or restate them given 43 ms at 300?
+   I recommend keeping `typical` and restating `battle` 300 to "the floor of 30 FPS fullscreen" until T19's Jolt numbers and T21's
+   tier are in.
+2. **The `typical` frame budget.** The 12 ms frame-mean headroom line is missed by 1.4 to 2.0 ms while the FPS is 72 to 75. Keep the line for
+   phase 2, or take the FPS and the 1 % lows (p99 frame 24 to 25 ms here) as the bar?
+3. **Battle 100 in the window.** The window runs several ticks a frame once the tick passes 16.7 ms and falls to 12 FPS well
+   before the headless budget says it should; the sweep and the window agree only below that tick. T24's trigger (the floor at 500)
+   is likely to be seen unless phases 2 and 3 cut the 78 ms tick at 500 by more than 5 times; whether to plan T24 now rather
+   than at checkpoint 4 is the maintainer's.
+4. **Checkpoint 1b (T30a's Starfury look sheet)** is not part of this report: it is T30a's, from the other worktree, and is shown
+   when it is ready. T26's trigger reads the mesh rows above and is not seen.
 
 ## Definition of done (M4)
 
