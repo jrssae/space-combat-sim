@@ -180,6 +180,16 @@ class StarfuryAuroraTests(unittest.TestCase):
                     "starfury_aurora_lod2.light",
                     "starfury_aurora_lod3.light",
                     "starfury_aurora_mesh.glb",  # M4-T27: the painted mesh
+                    # M4-T30a: the textured mesh, its four maps and their import sidecars
+                    "starfury_aurora.glb",
+                    "starfury_aurora_albedo.png",
+                    "starfury_aurora_albedo.png.import",
+                    "starfury_aurora_normal.png",
+                    "starfury_aurora_normal.png.import",
+                    "starfury_aurora_orm.png",
+                    "starfury_aurora_orm.png.import",
+                    "starfury_aurora_emissive.png",
+                    "starfury_aurora_emissive.png.import",
                 ]
                 + chunk_files
             ),
@@ -191,6 +201,7 @@ class StarfuryAuroraTests(unittest.TestCase):
             {
                 "fallback_mesh": "starfury_aurora.obj",
                 "paint_mesh": "starfury_aurora_mesh.glb",
+                "mesh": "starfury_aurora.glb",
                 "cockpit_mesh": "cockpit_interior.obj",
                 "hardpoints": "hardpoints.json",
             },
@@ -727,9 +738,9 @@ class StarfuryAuroraTests(unittest.TestCase):
             self.assertLess(screen["center"][2], eye[2], f"{name}: ahead of the pilot")
 
     def test_a_new_interior_leaves_the_hull_alone(self) -> None:
-        # No new generator version for the hull (T29 changes no splat): the pinned LOD0 records below still hold, and the hull's OBJ
-        # has none of the interior's materials.
-        self.assertEqual(ship.GENERATOR_VERSION, 5)
+        # No new generator version for the hull's splats (T29 changes no splat; M4-T30a's version 6 adds the textured mesh beside them):
+        # the pinned LOD0 records below still hold, and the hull's OBJ has none of the interior's materials.
+        self.assertEqual(ship.GENERATOR_VERSION, 6)
         hull = read_obj(self.dir_a / ship.OBJ_NAME)
         self.assertFalse([m for m in hull.materials if "ef_cockpit" in m])
         self.assertEqual(self.manifest["counts"], LOD0_COUNTS)
@@ -961,7 +972,7 @@ class StarfuryAuroraTests(unittest.TestCase):
 
     def test_hardpoints_and_manifest_only_gain_the_new_keys_at_the_end(self) -> None:
         self.assertEqual(list(self.hp)[-1], "chunks")
-        self.assertEqual(list(self.manifest)[-4:], ["chunks", "chunk_lod", "paint_mesh", "hero"])
+        self.assertEqual(list(self.manifest)[-5:], ["chunks", "chunk_lod", "paint_mesh", "mesh", "hero"])
         self.assertEqual(self.out_a.warnings, ())  # the LOD1 share is inside AC6
 
     # --- determinism ------------------------------------------------------------------------

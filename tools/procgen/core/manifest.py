@@ -175,6 +175,8 @@ def validate_manifest(manifest: Mapping[str, Any]) -> None:
 
     if "hero" in manifest:
         _validate_hero(manifest["hero"])
+    if "mesh" in manifest:
+        validate_mesh_section(manifest["mesh"])
 
     for key in ("aabb_min", "aabb_max", "centroid_offset"):
         _check_vec3(manifest, key)
@@ -201,6 +203,54 @@ def _validate_hero(entry: Any) -> None:
         raise ValueError("manifest hero.spacing_m must be a positive number")
     if "lighting" in entry and not (isinstance(entry["lighting"], str) and entry["lighting"].endswith(".light")):
         raise ValueError("manifest hero.lighting must be a .light file name")
+
+
+MESH_SURFACE_KEYS = ("name", "blend", "albedo", "normal", "orm", "emissive", "transmittance")
+
+
+def validate_mesh_section(entry: Any) -> None:
+    """The textured mesh contract (M4-T30a, the milestone's "The contract M5 builds against"): the ``.glb``, its counts and box,
+    the atlas's texel and size, the mean albedo, one surface entry per primitive naming the four maps, and the lods list."""
+    if not isinstance(entry, dict):
+        raise ValueError("manifest 'mesh' must be an object")  # noqa: TRY004
+    if not isinstance(entry.get("file"), str) or not entry["file"].endswith(".glb"):
+        raise ValueError("manifest mesh.file must be a .glb file name")
+    for key in ("triangles", "vertices", "atlas_px"):
+        value = entry.get(key)
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ValueError(f"manifest mesh.{key} must be a positive integer")
+    if not _is_number(entry.get("texel_m")) or entry["texel_m"] <= 0:
+        raise ValueError("manifest mesh.texel_m must be a positive number")
+    for key in ("aabb_min", "aabb_max", "mean_albedo"):
+        _check_vec3(entry, key)
+    if any(lo > hi for lo, hi in zip(entry["aabb_min"], entry["aabb_max"])):
+        raise ValueError("manifest mesh.aabb_min must not exceed aabb_max")
+    surfaces = entry.get("surfaces")
+    if not isinstance(surfaces, list) or not surfaces:
+        raise ValueError("manifest mesh.surfaces must be a non-empty list")
+    for index, surface in enumerate(surfaces):
+        if not isinstance(surface, dict):
+            raise ValueError(f"manifest mesh.surfaces[{index}] must be an object")  # noqa: TRY004
+        missing = [key for key in MESH_SURFACE_KEYS if key not in surface]
+        if missing:
+            raise ValueError(f"manifest mesh.surfaces[{index}] lacks {missing}")
+        for key in ("albedo", "normal", "orm", "emissive"):
+            if not isinstance(surface[key], str) or not surface[key].endswith(".png"):
+                raise ValueError(f"manifest mesh.surfaces[{index}].{key} must be a .png file name")
+        if not isinstance(surface["name"], str) or not surface["name"]:
+            raise ValueError(f"manifest mesh.surfaces[{index}].name must be a non-empty string")
+        if not isinstance(surface["blend"], bool):
+            raise ValueError(f"manifest mesh.surfaces[{index}].blend must be a bool")
+        if not _is_number(surface["transmittance"]) or not 0.0 <= surface["transmittance"] < 1.0:
+            raise ValueError(f"manifest mesh.surfaces[{index}].transmittance must be in [0, 1)")
+    lods = entry.get("lods")
+    if not isinstance(lods, list):
+        raise ValueError("manifest mesh.lods must be a list")
+    for index, lod in enumerate(lods):
+        if not isinstance(lod, dict) or not isinstance(lod.get("file"), str) or not _is_number(lod.get("from_m")):
+            raise ValueError(f"manifest mesh.lods[{index}] must name a file, triangles and from_m")
+        if not isinstance(lod.get("triangles"), int) or lod["triangles"] <= 0:
+            raise ValueError(f"manifest mesh.lods[{index}].triangles must be a positive integer")
 
 
 def _validate_sounds(manifest: Mapping[str, Any]) -> None:

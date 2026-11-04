@@ -38,6 +38,13 @@ core/geometry.py   Mesh + Material, primitives (box, tapered box, lathe, loft, s
 core/sampling.py   mesh -> surface samples (area-weighted, stratified, R2 low-discrepancy) -> flat splats
 core/lighting.py   per-splat lighting records for GDGS relighting (octahedral normal, AO, confidence; one `.light` per PLY)
 core/obj.py        OBJ/MTL writer and a small reader for tests
+core/glb.py        binary glTF writer (and a reader for tests): positions, normals, one UV set, a material a primitive
+core/paint_mesh.py the painted mesh (M4-T27): the hull as one glb with the paint codes in the UVs (T31 removes it)
+core/uv_atlas.py   charts (the primitives' own UVs or the unwrapper's regions) and the shelf packer (M4-T30a)
+core/raster.py     atlas buffers: world position, normal, part, material, chart and sharp-edge distance per texel
+core/textures.py   the texture maps: paint, markings (bands, a stroke font, decals, soot), wear, grooves, occlusion, emissive
+core/image.py      8-bit PNG writer and reader with zlib alone
+core/textured_mesh.py  write_textured_mesh: the textured glb, its four maps with .import sidecars, the manifest's mesh section
 parts/             reusable parametric parts: hull (fuselage, canopy, cockpit interior/tub,
                    upright cylinder hull with painted bands, faceted wedge fuselage with a framed
                    cockpit window and its first-person frame mesh), propulsion (nozzle, RCS cone,

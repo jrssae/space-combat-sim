@@ -2,7 +2,8 @@
 
 A :class:`Style` names materials by *role* (``hull``, ``stripe``, ``canopy_glass`` ...) so parts
 never hard-code a colour, and carries the surface-detail parameters (panel grid, line width,
-per-panel tint jitter) that ``shade_panels`` bakes into the albedo of ``paneled`` materials.
+per-panel tint jitter) that ``shade_panels`` bakes into the albedo of ``paneled`` materials, plus
+the wear, groove and hatch parameters the texture maps use (M4-T30a, ``core/textures.py``).
 """
 
 from __future__ import annotations
@@ -53,6 +54,16 @@ class Style:
     panel_tint_jitter: float = 0.05  # +- relative albedo per panel
     stripe_fraction: float = 0.68  # along a pod, 0 = front, 1 = rear
     stripe_width_m: float = 0.3
+    # The texture maps (M4-T30a): panel grooves and hatches in the normal map, chipped edges, streaks and grime in the colour.
+    groove_depth_m: float = 0.012
+    hatch_fraction: float = 0.18  # share of panels that carry an inset hatch
+    hatch_depth_m: float = 0.004
+    edge_wear: float = 0.55  # how much of the sharp edges show bare metal, 0..1
+    edge_wear_width_m: float = 0.035
+    streaks: float = 0.12  # darkening of the streaks trailing aft from the panel lines, 0..1
+    grime: float = 0.04  # +- relative albedo of the low-frequency grime
+    grime_scale_m: float = 0.9
+    soot: float = 0.85  # how black the soot behind a nozzle gets, 0..1
     extra: Mapping[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -82,17 +93,39 @@ class Style:
         mask = np.asarray(paneled, dtype=bool)
         if not mask.any():
             return albedo
-        p = np.asarray(positions, dtype=float)[mask] + np.asarray(phase, dtype=float)
-        n = np.abs(np.asarray(normals, dtype=float)[mask])
+        lattice = self.panel_lattice(np.asarray(positions, dtype=float)[mask], np.asarray(normals, dtype=float)[mask], phase)
+        factor = np.where(lattice["on_line"], self.panel_line_darkness, lattice["tint"])
+        albedo[mask] *= factor[:, None]
+        return albedo
+
+    def panel_lattice(
+        self, positions: np.ndarray, normals: np.ndarray, phase: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    ) -> dict[str, np.ndarray]:
+        """Where each point falls in the panel lattice ``shade_panels`` paints: its cell (``cu``, ``cv``, ``drop``), its
+        place in the cell (``fu``, ``fv`` in 0..1, ``edge_m`` the distance to the nearest line centre), the line and tint
+        ``shade_panels`` applies, and the hatch some cells carry (``hatch``, ``hatch_edge_m`` the distance to its border)."""
+        p = np.asarray(positions, dtype=float) + np.asarray(phase, dtype=float)
+        n = np.abs(np.asarray(normals, dtype=float))
         drop = np.argmax(n, axis=1)  # axis closest to the normal
         axes = np.array([[1, 2], [0, 2], [0, 1]])[drop]  # the two tangent-ish axes
         u = np.take_along_axis(p, axes[:, 0:1], axis=1)[:, 0] / self.panel_size_m
         v = np.take_along_axis(p, axes[:, 1:2], axis=1)[:, 0] / self.panel_size_m
         cu, cv = np.floor(u), np.floor(v)
-        du = np.minimum(u - cu, 1.0 - (u - cu)) * self.panel_size_m
-        dv = np.minimum(v - cv, 1.0 - (v - cv)) * self.panel_size_m
-        on_line = np.minimum(du, dv) < 0.5 * self.panel_line_width_m
-        tint = 1.0 + self.panel_tint_jitter * (2.0 * _hash01(cu.astype(np.int64), cv.astype(np.int64), drop) - 1.0)
-        factor = np.where(on_line, self.panel_line_darkness, tint)
-        albedo[mask] *= factor[:, None]
-        return albedo
+        fu, fv = u - cu, v - cv
+        du = np.minimum(fu, 1.0 - fu) * self.panel_size_m
+        dv = np.minimum(fv, 1.0 - fv) * self.panel_size_m
+        edge_m = np.minimum(du, dv)
+        on_line = edge_m < 0.5 * self.panel_line_width_m
+        cell_u, cell_v = cu.astype(np.int64), cv.astype(np.int64)
+        tint = 1.0 + self.panel_tint_jitter * (2.0 * _hash01(cell_u, cell_v, drop) - 1.0)
+        # An inset hatch in some cells: a rounded-off rectangle well inside the lines.
+        has_hatch = _hash01(cell_u + 977, cell_v - 331, drop + 7) < self.hatch_fraction
+        hx = (np.abs(fu - 0.5) - 0.3) * self.panel_size_m
+        hy = (np.abs(fv - 0.5) - 0.2) * self.panel_size_m
+        outside = np.hypot(np.maximum(hx, 0.0), np.maximum(hy, 0.0)) + np.minimum(np.maximum(hx, hy), 0.0)
+        hatch = has_hatch & (outside < 0.0)
+        return {
+            "drop": drop, "cu": cell_u, "cv": cell_v, "fu": fu, "fv": fv, "u": u, "v": v,
+            "edge_m": edge_m, "on_line": on_line, "tint": tint,
+            "hatch": hatch, "hatch_edge_m": np.where(has_hatch, np.abs(outside), np.inf),
+        }

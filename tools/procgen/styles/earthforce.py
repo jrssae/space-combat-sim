@@ -1,6 +1,7 @@
 """Earthforce design language: light grey panelled hull, mid-grey inset panels and ribbing, dark
 gunmetal detail, yellow/black hazard stripes on structural members, green-tinted cockpit glass in a
-grey frame, a muted orange-red marker stripe (buoys), dark nozzles.
+grey frame, a muted orange-red marker stripe (buoys), dark nozzles. The nozzle throats glow hot and
+the glass carries a faint cabin glow in the textured mesh's emissive map (M4-T30a).
 
 Albedos are linear RGB (the sRGB look is roughly: hull #CACACE, panels #8C8E92, dark #5A5C60,
 hazard #D8B21E / #2A2A2C, marker stripe #C0522E, glass #0E2A18, frame #7A7C80).
@@ -21,11 +22,14 @@ EARTHFORCE = Style(
         "hazard": Material("ef_hazard", (0.69, 0.45, 0.012), paneled=True),
         "hazard_dark": Material("ef_hazard_dark", (0.023, 0.023, 0.025)),
         "canopy_glass": Material(
-            "ef_canopy_glass", (0.012, 0.06, 0.027), transmittance=0.7
+            "ef_canopy_glass", (0.012, 0.06, 0.027), transmittance=0.7, roughness=0.08,
+            emissive=(0.06, 0.45, 0.24), emissive_strength=0.12
         ),
         "canopy_frame": Material("ef_canopy_frame", (0.19, 0.195, 0.21), metallic=0.5),
         "nozzle": Material("ef_nozzle", (0.14, 0.13, 0.125), metallic=0.8),
-        "nozzle_throat": Material("ef_nozzle_throat", (0.03, 0.03, 0.03), metallic=0.8),
+        "nozzle_throat": Material(
+            "ef_nozzle_throat", (0.03, 0.03, 0.03), metallic=0.8, roughness=0.45, emissive=(1.0, 0.42, 0.12), emissive_strength=4.0
+        ),
         "barrel": Material("ef_barrel", (0.17, 0.17, 0.18), metallic=0.7),
         "bore": Material("ef_bore", (0.02, 0.02, 0.02)),
         "interior": Material("ef_interior", (0.035, 0.035, 0.04)),
