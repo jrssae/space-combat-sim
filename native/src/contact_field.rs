@@ -1,4 +1,8 @@
 // What each AI ship perceives this tick, answered natively behind ContactScan (M4-T05b, docs/architecture.md 17.5).
+// gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
+#![allow(clippy::redundant_field_names)]
+use std::cmp::Ordering;
+
 use godot::obj::InstanceId;
 use godot::prelude::*;
 
@@ -100,10 +104,16 @@ impl ScsContactField {
         self.reach = reach.as_slice().to_vec();
         self.factions.clear();
         self.hostile_rows.clear();
-        self.body_faction = factions.iter_shared().map(|f| self.faction_index(f)).collect();
+        self.body_faction = factions
+            .iter_shared()
+            .map(|f| self.faction_index(f))
+            .collect();
         self.bolt_positions = bolt_positions.as_slice().to_vec();
         self.bolt_velocities = bolt_velocities.as_slice().to_vec();
-        self.bolt_faction = bolt_factions.iter_shared().map(|f| self.faction_index(f)).collect();
+        self.bolt_faction = bolt_factions
+            .iter_shared()
+            .map(|f| self.faction_index(f))
+            .collect();
         self.bolt_shooters = bolt_shooters.as_slice().to_vec();
         self.is_static = vec![false; n];
         self.radii.clear();
@@ -115,7 +125,11 @@ impl ScsContactField {
             .iter()
             .enumerate()
             .map(|(i, p)| {
-                let key = (cell_of(f64::from(p.x), cell), cell_of(f64::from(p.y), cell), cell_of(f64::from(p.z), cell));
+                let key = (
+                    cell_of(f64::from(p.x), cell),
+                    cell_of(f64::from(p.y), cell),
+                    cell_of(f64::from(p.z), cell),
+                );
                 (key, i as u32)
             })
             .collect();
@@ -139,7 +153,11 @@ impl ScsContactField {
             self.clear();
             return false;
         }
-        self.is_static = kinds.as_slice().iter().map(|&k| k == KIND_MINE || k == KIND_STATIC).collect();
+        self.is_static = kinds
+            .as_slice()
+            .iter()
+            .map(|&k| k == KIND_MINE || k == KIND_STATIC)
+            .collect();
         self.radii = radii.as_slice().to_vec();
         self.max_static_radius = (0..n)
             .filter(|&i| self.is_static[i])
@@ -180,7 +198,9 @@ impl ScsContactField {
     #[func]
     fn contacts(&mut self, own_body_id: i64, at: Vector3, range: f64) -> PackedInt32Array {
         let range_sq = range * range;
-        self.gather(own_body_id, at, range, |_, d_sq| f64::from(d_sq) <= range_sq);
+        self.gather(own_body_id, at, range, |_, d_sq| {
+            f64::from(d_sq) <= range_sq
+        });
         let out: Vec<i32> = self.in_range.iter().map(|&(_, i)| i as i32).collect();
         PackedInt32Array::from(out.as_slice())
     }
@@ -189,10 +209,19 @@ impl ScsContactField {
     /// the nearest `k` (equal ranges to the earlier body) plus the nearest hostile ship, in any order, then -1 to say
     /// the cut left something out.
     #[func]
-    fn nearest(&mut self, own_body_id: i64, at: Vector3, faction: StringName, k: i64, range: f64) -> PackedInt32Array {
+    fn nearest(
+        &mut self,
+        own_body_id: i64,
+        at: Vector3,
+        faction: StringName,
+        k: i64,
+        range: f64,
+    ) -> PackedInt32Array {
         let range_sq = range * range;
         // GDScript's nearest loop skips only what is beyond the range, so its test is "not greater".
-        self.gather(own_body_id, at, range, |_, d_sq| !(f64::from(d_sq) > range_sq));
+        self.gather(own_body_id, at, range, |_, d_sq| {
+            f64::from(d_sq).partial_cmp(&range_sq) != Some(Ordering::Greater)
+        });
         // k of 0 or less means no cut: every contact in range, as `ContactScan.nearest_for` defines it.
         if k <= 0 || self.in_range.len() <= k as usize {
             let out: Vec<i32> = self.in_range.iter().map(|&(_, i)| i as i32).collect();
@@ -202,7 +231,8 @@ impl ScsContactField {
         let mut nearest_hostile: Option<(f32, u32)> = None;
         for &(d_sq, i) in &self.in_range {
             let j = i as usize;
-            let is_hostile = self.is_ship[j] && hostile.is_some_and(|row| hostile_at(row, self.body_faction[j]));
+            let is_hostile =
+                self.is_ship[j] && hostile.is_some_and(|row| hostile_at(row, self.body_faction[j]));
             if is_hostile && nearest_hostile.is_none_or(|(best, _)| d_sq < best) {
                 nearest_hostile = Some((d_sq, i));
             }
@@ -244,7 +274,8 @@ impl ScsContactField {
         }
         let k = k as usize;
         if self.in_reach.len() > k {
-            self.in_reach.select_nth_unstable_by(k - 1, |a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+            self.in_reach
+                .select_nth_unstable_by(k - 1, |a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
             self.in_reach.truncate(k);
             self.in_reach.sort_unstable_by_key(|e| e.1);
         }
@@ -272,7 +303,13 @@ impl ScsContactField {
 
     /// `ContactScan.incoming_fire`: hostile bolts, not this ship's own, that pass within 15 m in the next 2 s.
     #[func]
-    fn incoming(&self, own_body_id: i64, at: Vector3, velocity: Vector3, faction: StringName) -> i64 {
+    fn incoming(
+        &self,
+        own_body_id: i64,
+        at: Vector3,
+        velocity: Vector3,
+        faction: StringName,
+    ) -> i64 {
         let Some(hostile) = self.hostile_row(&faction) else {
             return 0;
         };
@@ -328,12 +365,21 @@ impl ScsContactField {
     }
 
     fn hostile_row(&self, faction: &StringName) -> Option<&[bool]> {
-        self.hostile_rows.iter().find(|(f, _)| f == faction).map(|(_, row)| row.as_slice())
+        self.hostile_rows
+            .iter()
+            .find(|(f, _)| f == faction)
+            .map(|(_, row)| row.as_slice())
     }
 
     // Fills `in_range` with the bodies near `at` that `accept` takes by squared distance, but not `own_body_id` and never a
     // rock or mine, in scan order.
-    fn gather(&mut self, own_body_id: i64, at: Vector3, range: f64, accept: impl Fn(usize, f32) -> bool) {
+    fn gather(
+        &mut self,
+        own_body_id: i64,
+        at: Vector3,
+        range: f64,
+        accept: impl Fn(usize, f32) -> bool,
+    ) {
         self.in_range.clear();
         self.collect_candidates(at, range.abs(), range.is_finite());
         for &i in &self.candidates {
@@ -360,13 +406,15 @@ impl ScsContactField {
         // A huge range saturates the cell indices, so the box can hold more cells than a 64-bit count: too many to walk.
         let span = |l: i32, h: i32| i64::from(h) - i64::from(l) + 1;
         let columns = span(lx, hx).checked_mul(span(ly, hy));
-        let grid_usable = self.cell_m > 0.0 && finite && columns.is_some_and(|c| c <= self.cells.len() as i64);
+        let grid_usable =
+            self.cell_m > 0.0 && finite && columns.is_some_and(|c| c <= self.cells.len() as i64);
         if grid_usable {
             for cx in lx..=hx {
                 for cy in ly..=hy {
                     let start = self.cells.partition_point(|e| e.0 < (cx, cy, lz));
                     let end = self.cells.partition_point(|e| e.0 <= (cx, cy, hz));
-                    self.candidates.extend(self.cells[start..end].iter().map(|e| e.1));
+                    self.candidates
+                        .extend(self.cells[start..end].iter().map(|e| e.1));
                 }
             }
             self.candidates.sort_unstable();
@@ -384,7 +432,11 @@ fn hostile_at(row: &[bool], index: usize) -> bool {
 
 // The grid cell holding coordinate `v`.
 fn cell_of(v: f64, cell_m: f64) -> i32 {
-    if cell_m > 0.0 { (v / cell_m).floor() as i32 } else { 0 }
+    if cell_m > 0.0 {
+        (v / cell_m).floor() as i32
+    } else {
+        0
+    }
 }
 
 // Godot's Vector3 maths in 32 bits, in the engine's order of operations.
@@ -428,6 +480,10 @@ fn closest_approach(rel_pos: Vector3, rel_vel: Vector3, horizon_s: f64) -> f64 {
     };
     // A Vector3 times a float rounds the float to 32 bits first.
     let t32 = t as f32;
-    let at = Vector3::new(rel_pos.x + rel_vel.x * t32, rel_pos.y + rel_vel.y * t32, rel_pos.z + rel_vel.z * t32);
+    let at = Vector3::new(
+        rel_pos.x + rel_vel.x * t32,
+        rel_pos.y + rel_vel.y * t32,
+        rel_pos.z + rel_vel.z * t32,
+    );
     f64::from(length(at))
 }

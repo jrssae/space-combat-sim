@@ -1,11 +1,15 @@
 // The bodies the AI's contact scan sees, known once and read natively each tick (M4-T09, docs/architecture.md 17.8).
+// gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
+#![allow(clippy::redundant_field_names)]
 use std::collections::{HashMap, HashSet};
 
 use godot::classes::{Node, Node3D, Object, RigidBody3D};
 use godot::prelude::*;
 
 // `BodyKind` (src/ai/body_kind.gd): the names in value order.
-const KIND_NAMES: [&str; 7] = ["ship", "capital", "turret", "missile", "mine", "static", "prop"];
+const KIND_NAMES: [&str; 7] = [
+    "ship", "capital", "turret", "missile", "mine", "static", "prop",
+];
 const KIND_SHIP: u8 = 0;
 
 // What a body's components say about it, read when it turns active (or is touched), not every tick.
@@ -85,12 +89,21 @@ impl ScsBodyRegistry {
         let mut first_hull: HashMap<i64, Gd<Node>> = HashMap::new();
         for hull in damageables.iter_shared() {
             if let Some(parent) = hull.get_parent() {
-                first_hull.entry(parent.instance_id().to_i64()).or_insert(hull);
+                first_hull
+                    .entry(parent.instance_id().to_i64())
+                    .or_insert(hull);
             }
         }
         for node in targetables.iter_shared() {
-            let Ok(marker) = node.try_cast::<Node3D>() else { continue };
-            let Some(body) = marker.get_parent().and_then(|p| p.try_cast::<Node3D>().ok()) else { continue };
+            let Ok(marker) = node.try_cast::<Node3D>() else {
+                continue;
+            };
+            let Some(body) = marker
+                .get_parent()
+                .and_then(|p| p.try_cast::<Node3D>().ok())
+            else {
+                continue;
+            };
             let body_id = body.instance_id().to_i64();
             let key = marker.instance_id().to_i64();
             let (attrs, active_at) = known.remove(&key).unwrap_or((None, 0));
@@ -106,7 +119,9 @@ impl ScsBodyRegistry {
             });
         }
         for hull in damageables.iter_shared() {
-            let Some(body) = hull.get_parent().and_then(|p| p.try_cast::<Node3D>().ok()) else { continue };
+            let Some(body) = hull.get_parent().and_then(|p| p.try_cast::<Node3D>().ok()) else {
+                continue;
+            };
             let key = hull.instance_id().to_i64();
             let (attrs, active_at) = known.remove(&key).unwrap_or((None, 0));
             self.hulls.push(Member {
@@ -194,7 +209,9 @@ impl ScsBodyRegistry {
         self.seen.clear();
         let mut markers = std::mem::take(&mut self.markers);
         for m in markers.iter_mut() {
-            let Some(marker) = m.marker.as_ref() else { continue };
+            let Some(marker) = m.marker.as_ref() else {
+                continue;
+            };
             if !marker.is_instance_valid() || !m.body.is_instance_valid() {
                 continue;
             }
@@ -213,12 +230,16 @@ impl ScsBodyRegistry {
             if self.seen.contains(&m.body_id) || !m.body.is_instance_valid() {
                 continue;
             }
-            let Some(hull) = m.hull.as_ref() else { continue };
+            let Some(hull) = m.hull.as_ref() else {
+                continue;
+            };
             if !hull.is_instance_valid() {
                 continue;
             }
             // `Damageable.is_active()`, the destroyed flag last since it is a script read.
-            if !(hull.is_inside_tree() && m.body.is_visible_in_tree() && m.body.can_process()) || destroyed(hull) {
+            if !(hull.is_inside_tree() && m.body.is_visible_in_tree() && m.body.can_process())
+                || destroyed(hull)
+            {
                 continue;
             }
             self.seen.insert(m.body_id);
@@ -256,7 +277,11 @@ impl ScsBodyRegistry {
     /// them, plus a last entry: the positions in `ids` that were found.
     #[func]
     fn select(&self, ids: PackedInt64Array) -> VarArray {
-        let at: HashMap<i64, usize> = self.ids[..self.node_count].iter().enumerate().map(|(i, &id)| (id, i)).collect();
+        let at: HashMap<i64, usize> = self.ids[..self.node_count]
+            .iter()
+            .enumerate()
+            .map(|(i, &id)| (id, i))
+            .collect();
         let mut rows: Vec<usize> = Vec::new();
         let mut found: Vec<i32> = Vec::new();
         for (j, id) in ids.as_slice().iter().enumerate() {
@@ -299,11 +324,15 @@ impl ScsBodyRegistry {
         let xf = m.body.get_global_transform();
         let velocity = match (&m.rigid, &m.marker) {
             (Some(rigid), _) => rigid.get_linear_velocity(),
-            (None, Some(marker)) => marker.get("velocity").try_to::<Vector3>().unwrap_or(Vector3::ZERO),
+            (None, Some(marker)) => marker
+                .get("velocity")
+                .try_to::<Vector3>()
+                .unwrap_or(Vector3::ZERO),
             (None, None) => Vector3::ZERO,
         };
         self.body_ids.push(m.body_id);
-        self.ids.push(if m.marker.is_some() { m.key } else { m.body_id });
+        self.ids
+            .push(if m.marker.is_some() { m.key } else { m.body_id });
         self.factions.push(attrs.faction.clone());
         self.positions.push(xf.origin);
         self.velocities.push(velocity);
@@ -313,7 +342,8 @@ impl ScsBodyRegistry {
         self.is_ship.push(u8::from(m.rigid.is_some()));
         self.kinds.push(attrs.kind);
         self.names.push(attrs.name.clone());
-        self.hull_ids.push(m.hull.as_ref().map_or(0, |h| h.instance_id().to_i64()));
+        self.hull_ids
+            .push(m.hull.as_ref().map_or(0, |h| h.instance_id().to_i64()));
     }
 
     // The scan's arrays, all rows or the given ones in that order.
@@ -326,14 +356,33 @@ impl ScsBodyRegistry {
                 &all
             }
         };
-        let pick_i64 = |v: &Vec<i64>| PackedInt64Array::from(rows.iter().map(|&i| v[i]).collect::<Vec<_>>().as_slice());
-        let pick_v3 = |v: &Vec<Vector3>| PackedVector3Array::from(rows.iter().map(|&i| v[i]).collect::<Vec<_>>().as_slice());
-        let pick_u8 = |v: &Vec<u8>| PackedByteArray::from(rows.iter().map(|&i| v[i]).collect::<Vec<_>>().as_slice());
+        let pick_i64 = |v: &Vec<i64>| {
+            PackedInt64Array::from(rows.iter().map(|&i| v[i]).collect::<Vec<_>>().as_slice())
+        };
+        let pick_v3 = |v: &Vec<Vector3>| {
+            PackedVector3Array::from(rows.iter().map(|&i| v[i]).collect::<Vec<_>>().as_slice())
+        };
+        let pick_u8 = |v: &Vec<u8>| {
+            PackedByteArray::from(rows.iter().map(|&i| v[i]).collect::<Vec<_>>().as_slice())
+        };
         let factions: Array<StringName> = rows.iter().map(|&i| self.factions[i].clone()).collect();
-        let names = PackedStringArray::from(rows.iter().map(|&i| self.names[i].clone()).collect::<Vec<_>>().as_slice());
-        let radii = PackedFloat64Array::from(rows.iter().map(|&i| self.radii[i]).collect::<Vec<_>>().as_slice());
+        let names = PackedStringArray::from(
+            rows.iter()
+                .map(|&i| self.names[i].clone())
+                .collect::<Vec<_>>()
+                .as_slice(),
+        );
+        let radii = PackedFloat64Array::from(
+            rows.iter()
+                .map(|&i| self.radii[i])
+                .collect::<Vec<_>>()
+                .as_slice(),
+        );
         let node_count = rows.iter().filter(|&&i| i < self.node_count).count() as i64;
-        let statics = rows.iter().filter(|&&i| is_static_kind(self.kinds[i])).count() as i64;
+        let statics = rows
+            .iter()
+            .filter(|&&i| is_static_kind(self.kinds[i]))
+            .count() as i64;
         let mut out = VarArray::new();
         out.push(&pick_i64(&self.body_ids).to_variant());
         out.push(&pick_i64(&self.ids).to_variant());
@@ -355,16 +404,32 @@ impl ScsBodyRegistry {
 
 // Faction, name, kind and radius as the tree gather reads them: from the marker, or from the hull when there is none.
 fn read_attrs(m: &Member) -> Attrs {
-    let radius = m.hull.as_ref().filter(|h| h.is_instance_valid()).map_or(0.0, |h| h.get("bounding_radius").try_to::<f64>().unwrap_or(0.0));
+    let radius = m
+        .hull
+        .as_ref()
+        .filter(|h| h.is_instance_valid())
+        .map_or(0.0, |h| {
+            h.get("bounding_radius").try_to::<f64>().unwrap_or(0.0)
+        });
     match &m.marker {
         Some(marker) => Attrs {
-            faction: marker.get("faction").try_to::<StringName>().unwrap_or_default(),
-            name: marker.get("display_name").try_to::<GString>().unwrap_or_default(),
+            faction: marker
+                .get("faction")
+                .try_to::<StringName>()
+                .unwrap_or_default(),
+            name: marker
+                .get("display_name")
+                .try_to::<GString>()
+                .unwrap_or_default(),
             kind: kind_of(&marker.get("kind")),
             radius,
         },
         None => Attrs {
-            faction: m.hull.as_ref().map(|h| h.get("faction").try_to::<StringName>().unwrap_or_default()).unwrap_or_default(),
+            faction: m
+                .hull
+                .as_ref()
+                .map(|h| h.get("faction").try_to::<StringName>().unwrap_or_default())
+                .unwrap_or_default(),
             name: GString::new(),
             kind: KIND_SHIP,
             radius,
@@ -377,11 +442,18 @@ fn kind_of(value: &Variant) -> u8 {
     match value.get_type() {
         VariantType::INT => {
             let v = value.to::<i64>();
-            if (0..KIND_NAMES.len() as i64).contains(&v) { v as u8 } else { KIND_SHIP }
+            if (0..KIND_NAMES.len() as i64).contains(&v) {
+                v as u8
+            } else {
+                KIND_SHIP
+            }
         }
         VariantType::STRING | VariantType::STRING_NAME => {
             let name = value.stringify().to_string().to_lowercase();
-            KIND_NAMES.iter().position(|k| *k == name).map_or(KIND_SHIP, |p| p as u8)
+            KIND_NAMES
+                .iter()
+                .position(|k| *k == name)
+                .map_or(KIND_SHIP, |p| p as u8)
         }
         _ => KIND_SHIP,
     }
