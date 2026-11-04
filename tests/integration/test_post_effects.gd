@@ -43,8 +43,8 @@ func test_the_post_node_finds_both_effects() -> void:
 
 func test_both_run_after_the_transparent_pass() -> void:
 	# Hulls, glass, plumes and the star points are all drawn by then, so the blur smears them together and the flare goes on top.
-	assert_true(post.blur_effect().effect_callback_type >= CompositorEffect.EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT)
-	assert_true(post.flare_effect().effect_callback_type >= CompositorEffect.EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT)
+	assert_eq(post.blur_effect().effect_callback_type, CompositorEffect.EFFECT_CALLBACK_TYPE_POST_TRANSPARENT)
+	assert_eq(post.flare_effect().effect_callback_type, CompositorEffect.EFFECT_CALLBACK_TYPE_POST_TRANSPARENT)
 
 
 func test_the_flare_is_the_vendored_effect_through_our_thin_subclass() -> void:

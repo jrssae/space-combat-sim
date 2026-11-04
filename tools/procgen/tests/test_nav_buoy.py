@@ -119,10 +119,10 @@ class NavBuoyTests(unittest.TestCase):
         pos = np.array(beacon["position"])
         self.assertEqual((pos[0], pos[2]), (0.0, 0.0))
         self.assertEqual(beacon["radius"], 0.1)
-        # The highest point of the buoy: every sample is below it, the mast's are just below.
+        # The mast tip: the mesh's highest vertex, every surface sample below it.
         self.assertGreater(pos[1], float(self.godot_xyz[:, 1].max()))
-        mast = self.samples["mast"].positions
-        self.assertLess(float(np.linalg.norm(mast - pos, axis=1).min()), 2.0 * beacon["radius"])
+        self.assertAlmostEqual(float(self.obj.vertices[:, 1].max()), pos[1], places=4)
+        self.assertLess(float(np.linalg.norm(self.obj.vertices - pos, axis=1).min()), 1e-4)
         self.assertGreater(pos[1] - float(self.samples["hull"].positions[:, 1].max()), 0.8)
 
     def test_collision_is_one_capsule_along_the_spin_axis(self) -> None:

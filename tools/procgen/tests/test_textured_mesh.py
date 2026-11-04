@@ -17,12 +17,38 @@ from tools.procgen.core.context import BuildContext
 from tools.procgen.core.glb import read_glb
 from tools.procgen.core.image import read_png
 from tools.procgen.core.obj import read_obj
-from tools.procgen.core.textured_mesh import TexturedPart, write_textured_mesh
+from tools.procgen.core.textured_mesh import TexturedPart, phase_of, phase_steps, write_textured_mesh
 from tools.procgen.core.uv_atlas import uv_area
 from tools.procgen.styles.earthforce import EARTHFORCE
+from tools.procgen.styles.raider import RAIDER
 
 GREY = EARTHFORCE.material("hull")
 GLASS = EARTHFORCE.material("canopy_glass")
+
+
+class PhaseTests(unittest.TestCase):
+    """Each part's panel phase: pinned, since a change moves every panel line on every hull."""
+
+    def test_pinned_steps(self) -> None:
+        self.assertEqual(phase_steps("fuselage", True), (59, 65, 68))
+        self.assertEqual(phase_steps("wing_l", False), (32, 78, 4))
+        self.assertEqual(phase_steps("hump", False), (31, 21, 16))
+        self.assertEqual(phase_steps("cruiser", False), (5, 91, 37))
+        self.assertEqual(phase_steps("drum", False), (45, 43, 42))
+
+    def test_the_starfury_shares_a_phase_per_part_kind(self) -> None:
+        self.assertEqual(phase_steps("pod_ur", True), (73, 87, 94))
+        self.assertEqual(phase_steps("pod_ur", True), phase_steps("pod_ll", True))
+        self.assertNotEqual(phase_steps("pod_ur", False), phase_steps("pod_ll", False))
+
+    def test_steps_stay_in_range(self) -> None:
+        for name in ("fuselage", "pod_ur", "strut_lr", "cockpit", "wing_l", "hump", "nacelle_r", "frame", "carrier"):
+            for base_only in (True, False):
+                self.assertTrue(all(0 <= s < 97 for s in phase_steps(name, base_only)), name)
+
+    def test_phase_in_metres(self) -> None:
+        np.testing.assert_allclose(phase_of((59, 65, 68), EARTHFORCE), (59 / 97 * 0.6, 65 / 97 * 0.6, 68 / 97 * 0.6))
+        np.testing.assert_allclose(phase_of((0, 48, 96), RAIDER), (0.0, 48 / 97 * 0.5, 96 / 97 * 0.5))
 
 
 class WriterTests(unittest.TestCase):

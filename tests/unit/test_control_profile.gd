@@ -262,6 +262,28 @@ func test_unknown_actions_and_duplicates_and_bad_deadzones() -> void:
 	assert_eq(errors.size(), 5, text)
 
 
+func test_a_saved_profile_naming_a_removed_action_still_loads_without_it() -> void:
+	# A profile saved before M4-T31 holds F4's `debug_toggle_fallback_mesh`; the action is gone, the layout must still load.
+	var cfg: ConfigFile = _default.to_config()
+	cfg.set_value(ControlProfile.SECTION_BINDINGS, "debug_toggle_fallback_mesh", ["key:F4"])
+	cfg.set_value(ControlProfile.SECTION_DEADZONES, "debug_toggle_fallback_mesh", 0.5)
+	var parsed: Dictionary = ControlProfile.from_config_text(cfg.encode_to_text(), "old_layout")
+	assert_true(parsed["ok"], "\n".join(parsed["errors"]))
+	var profile: ControlProfile = parsed["profile"]
+	assert_false(profile.bindings.has(&"debug_toggle_fallback_mesh"))
+	assert_false(profile.deadzones.has(&"debug_toggle_fallback_mesh"))
+	assert_eq(parsed["dropped"], PackedStringArray(["debug_toggle_fallback_mesh"]))
+	assert_true(profile.same_bindings(_default), "every other binding kept")
+
+
+func test_a_misspelt_action_is_still_an_error() -> void:
+	var cfg: ConfigFile = _default.to_config()
+	cfg.set_value(ControlProfile.SECTION_BINDINGS, "fier", ["key:Y"])
+	var parsed: Dictionary = ControlProfile.from_config_text(cfg.encode_to_text(), "typo")
+	assert_false(parsed["ok"])
+	assert_string_contains("\n".join(parsed["errors"]), "bindings.fier: unknown action (did you mean fire?)")
+
+
 func test_an_input_map_event_the_grammar_cannot_save_makes_the_profile_invalid() -> void:
 	var shifted := InputEventKey.new()
 	shifted.physical_keycode = KEY_R
