@@ -90,6 +90,7 @@ var _bases := PackedVector3Array()  # three columns (the x, y and z axes) a hull
 var _hulls: Array = []  # Dictionary or null per hull
 var _delta: float = 0.0
 var _source: StringName = &"tree"
+var _gather_frame: int = -1
 var _phase: Object = null  # the native ram phase (`PHASE_CLASS`), made on first use
 var _phase_class_known: int = -1
 # The rocks (M4-T29): their grid, kept until a rock changes, and a hull for each rock a ship came near (row id -> Damageable,
@@ -182,7 +183,7 @@ func _gather(delta: float) -> SimCore:
 	_delta = delta
 	_hulls.clear()
 	var sim: SimCore = SimCore.for_tree(get_tree()) if use_core and _phase_available() else null
-	if sim != null and sim.ensure_bolts_synced():
+	if sim != null and _synced(sim):
 		_source = &"core"
 		var hulls: Array = sim.core.hull_columns()
 		_ids = hulls[0]
@@ -199,6 +200,17 @@ func _gather(delta: float) -> SimCore:
 		_gather_tree()
 	_hulls.resize(_count)
 	return sim
+
+
+# The core's rows as of now: the tick's sync points in play; a second gather inside one physics frame (a test stepping
+# the resolver by hand) reads everything again, since anything may have moved between.
+func _synced(sim: SimCore) -> bool:
+	var frame: int = Engine.get_physics_frames()
+	var again: bool = _gather_frame == frame
+	_gather_frame = frame
+	if again:
+		return sim.sync_now() and sim.sync_bolts_now()
+	return sim.ensure_bolts_synced()
 
 
 # The own walk of the tree into the same columns.

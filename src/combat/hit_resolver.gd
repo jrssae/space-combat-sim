@@ -70,6 +70,7 @@ var _bolt_reach := PackedFloat64Array()
 var _beams := PackedInt32Array()
 var _delta: float = 0.0
 var _source: StringName = &"tree"
+var _gather_frame: int = -1
 # The rocks (M4-T29): their grid, kept until a rock changes, and the earliest rock hit `_earliest_rock` found.
 var _rocks: HitBroadPhase = HitBroadPhase.new()
 var _solid: StaticRows.Solid = null
@@ -193,7 +194,7 @@ func _gather(delta: float) -> SimCore:
 	_damageables.clear()
 	_to_body.clear()
 	var sim: SimCore = SimCore.for_tree(get_tree()) if use_core and broad_phase.native_available() else null
-	if sim != null and sim.ensure_bolts_synced():
+	if sim != null and _synced(sim):
 		_source = &"core"
 		var hulls: Array = sim.core.hull_columns()
 		_body_ids = hulls[0]
@@ -219,6 +220,17 @@ func _gather(delta: float) -> SimCore:
 		sim = null
 	_damageables.resize(_hull_count)
 	return sim
+
+
+# The core's rows as of now: the tick's sync points in play; a second gather inside one physics frame (a test stepping
+# the resolver by hand) reads everything again, since anything may have moved between.
+func _synced(sim: SimCore) -> bool:
+	var frame: int = Engine.get_physics_frames()
+	var again: bool = _gather_frame == frame
+	_gather_frame = frame
+	if again:
+		return sim.sync_now() and sim.sync_bolts_now()
+	return sim.ensure_bolts_synced()
 
 
 # The own walk: everything about the active hulls that does not depend on the bolt, as of this tick's start, and the
