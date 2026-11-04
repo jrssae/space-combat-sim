@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import functools
 import json
-import math
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -188,7 +187,7 @@ def lead_ship(v: Variant, style: Style) -> list[Piece]:
         pieces += _place(sp.truss(aft, style, "truss_aft"), "engine")
         pieces += _place([sp.truss_end_plate(style, v.engine_front_z - 0.2)], "engine")
     else:
-        pieces += _place(sp.aft_frame(style, v.section_start(0) + sp.CYLINDER_Z[0]), "bow")
+        pieces += _place(sp.aft_frame(style), "bow")
     pieces += _place(sp.engine_section(style, v.engine_scale), "engine", (0.0, 0.0, v.engine_front_z))
     return pieces
 
