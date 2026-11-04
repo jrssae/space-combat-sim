@@ -18,6 +18,7 @@ import numpy as np
 
 from tools.procgen.assets import ASSETS
 from tools.procgen.assets import saturn_family as saturn
+from tools.procgen.parts import saturn as sp
 from tools.procgen.core import frames, lighting
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
@@ -277,6 +278,22 @@ class SaturnVariantChecks:
             expected = sum(p.mesh.face_count for p in parts if p.group == entry["name"])
             self.assertEqual(len(read_obj(self.dir / entry["obj"]).faces), expected, entry["name"])
 
+    def test_the_drawn_mesh_is_mirror_symmetric_in_x(self) -> None:
+        # The game draws the mesh, not the symmetrised splats: its vertices must mirror too.
+        v = read_obj(self.dir / f"{self.ASSET_ID}.obj").vertices
+        np.testing.assert_allclose(sorted_rows(np.round(v, 4)), sorted_rows(np.round(v * np.array([-1.0, 1.0, 1.0]), 4)), atol=2e-4)
+
+    def test_the_frames_lower_bars_meet_the_truss_drum_at_both_ends(self) -> None:
+        if saturn.VARIANTS[self.ASSET_ID].cargo == "stack":
+            self.skipTest("the Saturn 3 has its truss behind the drum frame, no aft frame")
+        pieces = {p.name: p for p in saturn.with_twins(saturn.assemble(saturn.VARIANTS[self.ASSET_ID], saturn.EA_CIVILIAN))}
+        v = pieces["drum_truss_neck"].part.mesh.vertices
+        (x, y, end) = sp.FWD_LOWER_BAR[1]
+        mid = 0.5 * sum(sp.DRUM_FRAME_Z)
+        for z, half in ((end, v[v[:, 2] < mid]), (sp.FRAME_MIRROR_Z - end, v[v[:, 2] > mid])):
+            self.assertTrue(float(half[:, 2].min()) <= z <= float(half[:, 2].max()), f"a neck reaches the bar's end at z {z:.1f}")
+            self.assertLessEqual(float(np.hypot(x - sp.TRUSS_DRUM[0], y - sp.TRUSS_DRUM[1])), sp.TRUSS_DRUM_NECK_R, z)
+
     def test_the_painted_mesh_is_the_fallback_mesh(self) -> None:
         # The ship as the game draws it (ships are meshes, the 2026-11-04 directive): the fallback mesh's triangles and paint.
         assert_painted_mesh(self, self.dir, self.manifest["paint_mesh"], f"{self.ASSET_ID}.obj", "hull")
@@ -354,7 +371,7 @@ class SaturnVariantChecks:
 
     def test_rcs_ports_carry_pilot_terms(self) -> None:
         rcs = self.hp["rcs"]
-        self.assertEqual(len(rcs), 12, "six drum ends, two disc flanks, four on the engine collar")
+        self.assertEqual(len(rcs), 11, "five drum ends (not the top drum's front, behind the plates), two disc flanks, four on the collar")
         self.assertEqual(len({r["name"] for r in rcs}), len(rcs))
         for port in rcs:
             self.assertTrue(set(port["tags"]) <= PILOT_TERMS, port)
@@ -500,7 +517,7 @@ class SaturnFamilyTests(unittest.TestCase):
             return np.array(points) + off
 
         reference = lead_points("saturn_4_transport")
-        self.assertEqual(len(reference), 1 + 2 + 8 + 1)
+        self.assertEqual(len(reference), 1 + 2 + 7 + 1)  # camera, retros, the lead ship's seven RCS ports, dorsal_fwd
         for asset_id in DESIGN:
             np.testing.assert_allclose(lead_points(asset_id), reference, atol=POS_TOL, err_msg=asset_id)
 

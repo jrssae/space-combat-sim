@@ -62,7 +62,7 @@ TURRET_ARC_DEG = 200.0  # a hemisphere plus 10 degrees below the mount's base
 TURRET_PAD_RADIUS = 1.6
 UP = (0.0, 1.0, 0.0)
 BANDS = ("band_light", "stripe", "band_light", "stripe", "band_light")
-TANK_MASS_KG = 6_000_000.0  # a loaded tank; informational, ShipSpec (T16) sets the flight mass  # domes off-white, barrel red-white-red
+TANK_MASS_KG = 6_000_000.0  # a loaded tank; informational, ShipSpec (T16) sets the flight mass
 
 
 @dataclass(frozen=True)
@@ -298,13 +298,14 @@ def with_twins(pieces: Sequence[Piece]) -> list[Piece]:
 
 
 def chunk_joints(v: Variant) -> dict[str, np.ndarray]:
-    """Where each chunk breaks away from the rest (authored frame): the truss's landing, a cylinder's middle, the arms'
-    tips, the braces' middle, a pod block's front, the engine collar."""
+    """Where each chunk breaks away from the rest (authored frame): the drum frame's back or the first dome, a cylinder's
+    middle, the pods' inboard faces midway between their two arms, the braces' middle, a Saturn 3 pod's front face, the
+    engine collar."""
     joints: dict[str, np.ndarray] = {"engine": np.array([0.0, 0.0, v.engine_front_z])}
     if v.cargo == "stack":
-        joints["bow"] = np.array([0.0, 0.0, 50.1])
-        joints["pod_top"] = np.array([0.0, sp.TOP_POD_CENTRE[1], sp.POD_BLOCK_Z[0]])
-        joints["pod_r"] = np.array([sp.LOWER_POD_CENTRE[0], sp.LOWER_POD_CENTRE[1], sp.POD_BLOCK_Z[0]])
+        joints["bow"] = np.array([0.0, 0.0, sp.DRUM_FRAME_Z[1]])
+        joints["pod_top"] = np.array([0.0, sp.TOP_POD_CENTRE[1], sp.STACK_FRONT_Z])
+        joints["pod_r"] = np.array([sp.LOWER_POD_CENTRE[0], sp.LOWER_POD_CENTRE[1], sp.STACK_FRONT_Z])
     else:
         joints["bow"] = np.array([0.0, 0.0, v.section_start(0) + sp.CYLINDER_Z[0]])
         n = v.sections
@@ -406,12 +407,13 @@ def _r(v: Any) -> list[float]:
 
 
 def rcs_ports(v: Variant) -> list[tuple[str, np.ndarray, np.ndarray]]:
-    """Cosmetic RCS (authored frame): both ends of the drum frame's three outer drums, the disc's flanks, four on the
-    engine collar."""
+    """Cosmetic RCS (authored frame): both ends of the two lower drums and the top drum's aft end (its front is behind the
+    crossed plates), the disc's flanks, four on the engine collar."""
     z0, z1 = sp.DRUM_FRAME_Z
     ports = []
     for name, (x, y) in (("drum_top", sp.TOP_DRUM), ("drum_low_r", sp.LOWER_DRUM), ("drum_low_l", (-sp.LOWER_DRUM[0], sp.LOWER_DRUM[1]))):
-        ports.append((f"{name}_fwd", np.array([x, y, z0]), np.array([0.0, 0.0, -1.0])))
+        if name != "drum_top":
+            ports.append((f"{name}_fwd", np.array([x, y, z0]), np.array([0.0, 0.0, -1.0])))
         ports.append((f"{name}_aft", np.array([x, y, z1]), np.array([0.0, 0.0, 1.0])))
     for name, sx in (("disc_r", 1.0), ("disc_l", -1.0)):
         ports.append((name, np.array([sx * sp.DISC_RADIUS, 0.0, 19.06]), np.array([sx, 0.0, 0.0])))

@@ -59,7 +59,7 @@ RUST_RING_RADII = (2.5, 11.0)
 WINDOW_HALF_HEIGHT = 0.3
 # Aft of z 22 the disc's edge is straight, not round (the reference's top silhouette): half-widths at these z.
 DISC_CHAMFER = ((22.0, 13.75), (23.77, 12.0), (28.53, 10.2), (DISC_CUT_Z, 9.8))
-# A wedge in each cut corner (plan x, z), 4.3 m tall: its outer face runs from the disc's edge in to the neck.
+# A wedge in each cut corner (plan x, z), 2.8 m tall: its outer face runs from the disc's edge in to the neck.
 CORNER_WEDGE = ((5.97, 22.6), (12.63, 22.6), (6.6, 30.39), (5.97, 30.39))
 CORNER_WEDGE_HEIGHT = 2.8  # the cut corners read 2.8 m thick on the reference's sections (T12 fix)
 # The neck behind the cut, a box measured off the reference's sections: (z, half-width, half-height).
@@ -71,7 +71,6 @@ RETRO_RADIUS = 0.95
 COCKPIT_EYE = (0.0, 0.8, 8.0)
 ANTENNA_Y = -4.4
 DISH_RADIUS = 3.6
-TRUSS_START_Z = 33.6  # inside the plate behind the neck (33.2)
 TRUSS_SIDE = 6.3
 LONGERON_RADIUS = 0.3
 BRACE_RADIUS = 0.2
@@ -134,8 +133,6 @@ class Piece:
         solid = None if self.solid is None else self.solid.mirrored("x")
         return Piece(self.part.mirrored("x").renamed(name, group=group), solid, self.side, self.fine)
 
-    def regrouped(self, group: str, name: str | None = None) -> Piece:
-        return Piece(self.part.renamed(name or self.part.name, group=group), self.solid, self.side, self.fine)
 
 
 def _piece(
@@ -529,7 +526,7 @@ def side_boxes(style: Style, k: int, name: str) -> list[Piece]:
     return [_piece(f"side_box_{name}", Mesh.concatenate(meshes), solid, side=RIGHT, mass_kg=6_000.0, collision=[hit])]
 
 
-FRAME_MIRROR_Z = 92.6  # twice the drum frame's middle: the aft frame is the forward one reflected about it
+FRAME_MIRROR_Z = 92.1  # the plane the reference reflects its frames in (branches, posts, lower bar): about the drum frame's middle
 
 
 def aft_frame(style: Style) -> list[Piece]:
@@ -574,9 +571,11 @@ def drum_frame(style: Style) -> list[Piece]:
         posts.append(box((DRUM_POST_WIDTH, TOP_DRUM[1] - TRUSS_DRUM[1], t), hull, center=(0.0, 0.5 * (TOP_DRUM[1] + TRUSS_DRUM[1]), z)))
         spokes.append(bar([(sx0, sy0, z), (sx1, sy1, z)], (0.0, 0.0, 1.0), t, sw, hull))
     pieces.append(_piece("drum_posts", Mesh.concatenate(posts), mass_kg=12_000.0))
-    # The truss drum's narrower neck reaches forward to meet the lower bar (the reference's sections, z 41.1 to 43).
-    neck = lathe([(41.1, 0.0), (41.1, TRUSS_DRUM_NECK_R), (z0 + 0.4, TRUSS_DRUM_NECK_R), (z0 + 0.4, 0.0)], 20, hull, creases={1, 2})
-    pieces.append(_piece("drum_truss_neck", neck.translated((TRUSS_DRUM[0], TRUSS_DRUM[1], 0.0)), mass_kg=3_000.0))
+    # The truss drum's narrower necks reach out to meet the lower bars, ahead of the drum and (mirrored) behind it.
+    necks = []
+    for a, b in ((41.1, z0 + 0.4), (z1 - 0.4, FRAME_MIRROR_Z - 41.1)):
+        necks.append(lathe([(a, 0.0), (a, TRUSS_DRUM_NECK_R), (b, TRUSS_DRUM_NECK_R), (b, 0.0)], 20, hull, creases={1, 2}))
+    pieces.append(_piece("drum_truss_neck", Mesh.concatenate(necks).translated((TRUSS_DRUM[0], TRUSS_DRUM[1], 0.0)), mass_kg=3_000.0))
     pieces.append(_piece("drum_spokes", Mesh.concatenate(spokes), side=RIGHT, mass_kg=12_000.0))
     lo_y = LOWER_DRUM[1] - DRUM_RADIUS
     hi_y = TOP_DRUM[1] + DRUM_RADIUS
@@ -723,10 +722,10 @@ class PodSpec:
     band_step: float = 0.8
     rail_uv: tuple[float, float] = (-1.78, -0.63)
     rail_radius: float = 1.37
-    rail_w: tuple[float, float] = (0.85, 42.23)
+    rail_w: tuple[float, float] = (0.82, 42.21)  # centred along the pod (0.82 m from each end)
     rail_block: tuple[float, float, float] = (4.47, 5.75, 2.38)
     rail_block_uv: tuple[float, float] = (-1.93, 0.04)
-    rail_block_w: tuple[float, float] = (0.35, 42.81)
+    rail_block_w: tuple[float, float] = (0.29, 42.74)  # centred too
     mass_kg: float = 2_500_000.0
 
     def outline(self) -> np.ndarray:

@@ -220,9 +220,9 @@ of the nose tip.
 | Part | Size and place |
 |---|---|
 | Nose antenna | a 3.8 m spike in front of a 7.2 m dish that faces forward, z 0 to 5.5, on a short boom 4.4 m below the axis |
-| Command disc (the control section) | a lens 28.3 m across, 6.0 m thick at the centre and about 1.9 m at the rim (T12, from the compare tool; first read as 1.6 m), centred on the axis at z 19.1 (z 4.9 to 33.2). Its aft quarter is cut square at z 29.6, leaving a neck 12.7 m wide that reaches the truss at z 33.2. A ring of 12 radial fins stands on each face between 2.5 m and 7.3 m from the centre (T12; first read as 8.7 m), round a hub. A block of 6.7 x 4.3 x 7.8 m sits in each cut corner. |
-| Forward truss | from z 33.2: three longerons in a triangle 6.3 m across, with V braces. It ends at the first cylinder's front dome (z 61.7) on the transports and tankers, and runs on to the engine on the Saturn 3. |
-| Drum frame | at z 41.9 to 50.1, a triangular frame round the truss holding drums 8.2 m long, axes along z: one 3.2 m across, 5.55 m above the axis; two 3.2 m across at x ±9.27, 10.55 m below; and a 4.0 m drum on the truss 5.18 m below the axis |
+| Command disc (the control section) | a lens 28.3 m across with an elliptic section, 6.0 m thick at the centre, 4.6 m at 9 m out, 3.7 m at 11 m and about 1.3 m 0.3 m in from the rim (T12 fix round, off the sections), centred on the axis at z 19.1 (z 4.9 to 32.6). Its aft quarter is cut square at z 29.6, leaving a neck 11.5 m wide and 4.6 to 3.0 m deep that tapers in its last 0.8 m and ends at z 32.6, with a 1.3 m keel block under its end. A ring of 12 radial fins stands on each face between 2.5 m and 7.3 m from the centre, the top ones about 1.4 m proud near the hub and 1.0 m further out, the bottom ones 1.0 m. A wedge 2.8 m thick sits in each cut corner. The antenna's dish hangs from a steep strut, a wider shallow bar and a plate under the disc (z 6 to 12). |
+| Forward and aft frames | (T12 fix round, member by member off the sections; x from the centre line, y from the spine axis) from the neck's end to the drum frame: an upper tube a side (x ±2.95) rising from y 2.9 to 5.35; an upper beam a side (0.95 x 1.15 m, x ±3.06) that forks at z 37 into two bars (x ±2.1 and ±4.2) falling to y 0.1 at z 42.2; a centre beam (y -2.1 to -2.45) forking into two bars (x ±1.0) rising to y 0.1 at z 42.2; a lower bar falling from y -3.05 to -4.75 into the truss drum's narrower neck. A cross of thin plates stands ahead of the top drum, and beside it a box (2.6 x 2.0 x 2.7 m at x ±3.46, y 5.16) and an upright plate. The aft frame, from the drum frame to the first cylinder's front dome (z 61.7), is the forward one's mirror image about z 46.05 (z' = 92.1 - z). On the Saturn 3 a truss of three longerons runs on from the drum frame to its engine instead. |
+| Drum frame | at z 41.9 to 50.1, drums 8.2 m long, axes along z: one 3.2 m across, 5.55 m above the axis; two 3.2 m across at x ±9.27, 10.55 m below; and a 4.0 m drum 5.18 m below the axis with a 2.4 m neck at each end. Two frames, 1.0 m thick at z 43.9 and 48.25, hold them: a plate 3.2 m wide from the lower drum up to the top drum, and a band 1.4 m wide out to each lower drum (a Y seen from ahead). |
 | Engine section | 22.6 m long: a 9.6 m collar, four propellant tanks 3.8 m across round a 5.1 m central tank, U-shaped feed pipes to the throat, and a bell with a 6.3 m exit on the axis. On the transports and tankers its collar starts 1.3 m inside the last cylinder's aft dome. |
 
 **Transport section** (100 m; z here is from the section's start):
@@ -230,7 +230,7 @@ of the nose tip.
 | Part | Size and place |
 |---|---|
 | Hull cylinder | 17.53 m across, z 12.35 to 87.83 (75.5 m), shallow domes 5.9 m deep at both ends, a ring of radial brackets on the front dome where a truss lands |
-| Transport pods | four, two pairs at z 3.49 to 46.51 and 53.49 to 96.51 (a 6.97 m gap; half a gap at each end of the section), x ±22.03 to ±53.09, 15.93 m below to 1.33 m above the axis (centre 7.29 m below). Each pod is a flat hexagonal prism 31.06 m wide, 17.27 m tall and 43.03 m long. Its section is a kite pointed inboard and outboard: tallest 9.67 m from the inboard tip, with flat end faces 6.02 m tall inboard and 3.80 m tall outboard. Both end faces are recessed behind a 1.58 m frame with ladder ribs inside, and a raised band 3.65 m long wraps each end. |
+| Transport pods | four, two pairs at z 3.49 to 46.51 and 53.49 to 96.51 (a 6.97 m gap; half a gap at each end of the section), x ±22.03 to ±53.09, 15.93 m below to 1.33 m above the axis (centre 7.29 m below). Each pod is a flat hexagonal prism 31.06 m wide, 17.22 m tall and 43.03 m long at its end bands. Its section is a kite pointed inboard and outboard: tallest 9.84 m from the inboard face, with flat end faces 7.74 m tall inboard and 4.73 m tall outboard; between the bands the body is the same kite 0.8 m smaller (6.1 / 15.6 / 3.8 m; T12 fix round, off the sections). Both end faces are recessed behind a 1.58 m frame with ladder ribs inside, and the raised band is 3.65 m long at each end. |
 | Cargo arms | one under each pod's middle, at z 22.06 to 28.02 and 72.06 to 78.02: 13.0 m long (x ±9.52 to ±22.52), 6.0 m wide along z and 4.5 m deep (5.96 to 10.43 m below the axis), from the cylinder's lower flank, each with a diagonal brace from higher up the cylinder's flank to the arm's tip |
 | Pod rails | a rod 2.74 m across along each pod's inboard edge, at x ±20.25 and 7.92 m below the axis, z 4.34 to 45.72 and 54.34 to 95.72, with a 4.5 x 5.8 x 2.4 m block at each end |
 
@@ -273,8 +273,9 @@ cylinders and docking clamps), not the Saturn pod; it was rendered and set aside
 | Part | z | Place |
 |---|---|---|
 | Antenna | 0 to 5.5 | |
-| Command disc | 4.9 to 33.2 | centre 19.1 |
-| Forward truss | 33.2 to 61.7 | |
+| Command disc | 4.9 to 32.6 | centre 19.1 |
+| Forward frame | 31.4 to 42.2 | |
+| Aft frame | 49.9 to 60.7 | to the first cylinder's front dome (61.7) |
 | Drum frame | 41.9 to 50.1 | |
 | Transport section | 49.3 to 149.3 | |
 | Hull cylinder | 61.7 to 137.2 | |
