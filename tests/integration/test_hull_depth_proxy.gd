@@ -40,15 +40,30 @@ func test_the_ship_has_a_depth_proxy_that_is_a_mesh_instance() -> void:
 
 func test_the_proxy_reuses_the_loaded_fallback_mesh() -> void:
 	assert_not_null(ship.hull_mesh_fallback.mesh, "precondition: the fallback mesh is loaded (run scripts/gen_assets.sh)")
-	assert_eq(ship.hull_depth_proxy.mesh, ship.hull_mesh_fallback.mesh, "the very same Mesh resource")
+	assert_eq(ship.hull_depth_proxy.source_mesh(), ship.hull_mesh_fallback.mesh, "the very same Mesh resource")
 	assert_eq(ship.hull_depth_proxy.transform, ship.hull_mesh_fallback.transform)
+
+
+func test_the_proxy_draws_the_fallback_mesh_as_one_surface() -> void:
+	# M4-T11: one draw call per pass instead of one per hull material, the same triangles.
+	var source: Mesh = ship.hull_mesh_fallback.mesh
+	assert_gt(source.get_surface_count(), 1, "precondition: the hull has several materials")
+	var merged: Mesh = ship.hull_depth_proxy.mesh
+	assert_eq(merged.get_surface_count(), 1)
+	var triangles: int = 0
+	for s: int in source.get_surface_count():
+		var indices: PackedInt32Array = source.surface_get_arrays(s)[Mesh.ARRAY_INDEX]
+		triangles += indices.size() / 3 if not indices.is_empty() else (source.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
+	assert_eq((merged.surface_get_arrays(0)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3, triangles, "every triangle")
+	assert_true(merged.get_aabb().is_equal_approx(source.get_aabb()), "the same bounds")
+	assert_eq(HullDepthProxy.merged(source), merged, "made once per mesh, shared")
 
 
 func test_the_proxy_follows_the_fallback_mesh_when_the_ship_is_rebuilt() -> void:
 	ship.hull_mesh_fallback.mesh = null
 	ship.setup(load(SPEC_PATH) as ShipSpec, world)
 	assert_not_null(ship.hull_mesh_fallback.mesh)
-	assert_eq(ship.hull_depth_proxy.mesh, ship.hull_mesh_fallback.mesh, "a rebuild re-reads the mesh for both")
+	assert_eq(ship.hull_depth_proxy.source_mesh(), ship.hull_mesh_fallback.mesh, "a rebuild re-reads the mesh for both")
 
 
 func test_the_proxy_is_visible_while_the_splats_are_and_hidden_with_the_fallback() -> void:

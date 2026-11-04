@@ -38,6 +38,12 @@ extends RigidBody3D
 ## path `get_flight_output()` fills its `FlightOutput` from the batch's row on demand (levels, RCS shares, forces, flags; the
 ## per-nozzle `nozzle_forces` stay empty) and `applied_force()` reads the batch's sum.
 ##
+## AI ships are built lean (M4-T11, architecture §17.10, `lean`): no cockpit interior, no cockpit anchor and no fallback node of
+## their own (the depth proxy draws the fallback mesh when it is wanted), their collision shapes as shape owners of the body instead
+## of a node each, and their plumes and markers as one multimesh each. Past `settings.far_ship_dot_m` from the camera an AI ship is
+## a far dot (`set_far_dot`): its splats, proxy, plumes, markers and guns are hidden and the world's `FarDots` draws it. The player's
+## ship is built as before.
+##
 ## Rebase-safe: nothing here caches a World position between ticks. Console (§6.4, §15.1 D27): only the player's ship
 ## registers (`console_owner`, set before the ship enters the tree, `ShipAssembly` does it): provider `ship` and commands
 ## `assist [on|off]` and `refuel [kg]`, and it passes the flag on to its `TargetingController`. Other ships stay out of
@@ -84,7 +90,8 @@ var force_assist: bool = false:
 var running_lights: bool = true:
 	set = set_running_lights
 
-## Built lean (M4-T11). Stub: not built yet.
+## Built lean (M4-T11): the AI ship's set of nodes, see the class notes. Set before the ship enters the tree (`ShipAssembly` does
+## it for AI ships); the player's ship never is.
 var lean: bool = false
 
 var _assist_on: bool = true
@@ -127,6 +134,11 @@ var _hull_lod: Dictionary = {}
 var _hull_lod_spec: ShipSpec = null
 var _muzzles: Array[Node3D] = []
 var _collision_nodes: Array[CollisionShape3D] = []
+# A lean ship's collision shapes: one shape owner of the body per hit volume (M4-T11).
+var _shape_owners: PackedInt32Array = PackedInt32Array()
+# The fallback mesh as loaded (a lean ship has no node of its own for it), and whether the ship is drawn as a far dot.
+var _fallback_mesh: Mesh = null
+var _far_dot: bool = false
 var _applied_force: Vector3 = Vector3.ZERO
 # The flight batch (M4-T10): the batch this ship joined, its row and the physics frame of the last gather, whether the last
 # path flown was the batch's (the assist state follows a change of path), and the frame `_output` was last filled from a row.
@@ -181,9 +193,12 @@ func _ready() -> void:
 	if console_owner:
 		batched = false
 	_apply_newtonian_body()
+	if lean:
+		_strip_for_lean()
 	targeting.setup(self, console_owner)
 	_build()
-	_build_cabin_emitter()
+	if not lean:
+		_build_cabin_emitter()
 	if get_node_or_null(^"LodSwitcher") == null:
 		var switcher := LodSwitcher.new()
 		switcher.name = "LodSwitcher"
@@ -436,9 +451,10 @@ func get_chase_offset() -> Vector3:
 
 ## The camera rig's interior callback: the cockpit interior is drawn in first person only.
 func set_cockpit_interior_visible(shown: bool) -> void:
-	_interior_visible = shown
+	_interior_visible = shown and cockpit_interior != null
 	if is_node_ready():
-		cockpit_interior.visible = shown
+		if cockpit_interior != null:
+			cockpit_interior.visible = _interior_visible
 		_apply_hull_visuals()
 		_apply_cabin_emitter()
 		if cockpit_screens != null:
@@ -464,11 +480,18 @@ func _apply_hull_visuals() -> void:
 	if not is_node_ready():
 		return
 	var mesh_mode: bool = _fallback_active or _interior_visible
-	hull_mesh_fallback.visible = mesh_mode
-	_apply_canopy_glass()
-	hull_depth_proxy.visible = (_interior_visible or not _fallback_active) and bool(Settings.get_value(&"hull_depth_proxy"))
+	var proxy_on: bool = bool(Settings.get_value(&"hull_depth_proxy"))
+	if hull_mesh_fallback != null:
+		hull_mesh_fallback.visible = mesh_mode and not _far_dot
+		_apply_canopy_glass()
+		hull_depth_proxy.use_mesh(_fallback_mesh)
+		hull_depth_proxy.visible = (_interior_visible or not _fallback_active) and proxy_on and not _far_dot
+	else:
+		# Lean: the one node draws the fallback mesh, or the proxy while the splats are drawn.
+		hull_depth_proxy.use_mesh(_fallback_mesh, mesh_mode)
+		hull_depth_proxy.visible = (mesh_mode or proxy_on) and not _far_dot
 	for i: int in _lod_nodes.size():
-		_lod_nodes[i].visible = not mesh_mode and _lod_levels[i] == _lod_level
+		_lod_nodes[i].visible = not mesh_mode and not _far_dot and _lod_levels[i] == _lod_level
 	var sync := get_node_or_null(^"HullSplatSync") as SplatPoseSync
 	if sync != null:
 		sync.sync()  # a level just shown is placed at once
@@ -478,19 +501,33 @@ func is_fallback_mesh_active() -> bool:
 	return _fallback_active
 
 
-## Stub (M4-T11).
+## The hull's fallback mesh as loaded (null before the assets are generated), whichever node draws it.
 func fallback_mesh() -> Mesh:
-	return hull_mesh_fallback.mesh
+	return _fallback_mesh
 
 
-## Stub (M4-T11).
-func set_far_dot(_on: bool) -> void:
-	pass
+## Draws the ship as a far dot (M4-T11): its splat levels, proxy, fallback, plumes, markers and guns hidden, and a point in the
+## world's `FarDots` instead; off shows them again. Its `LodSwitcher` decides from the camera's distance.
+func set_far_dot(on: bool) -> void:
+	if on == _far_dot:
+		return
+	_far_dot = on
+	_apply_hull_visuals()
+	for path: NodePath in [^"ThrusterVisuals", ^"Thrusters", ^"RunningLights", ^"Guns"]:
+		var node := get_node_or_null(path) as Node3D
+		if node != null:
+			node.visible = not on
+	var dots: FarDots = FarDots.attach(world) if on else FarDots.of(world)
+	if dots != null:
+		if on:
+			dots.add(self)
+		else:
+			dots.remove(self)
 
 
-## Stub (M4-T11).
+## Whether the ship is drawn as a far dot now.
 func is_far_dot() -> bool:
-	return false
+	return _far_dot
 
 
 ## The splat levels this ship can draw, finest first (M3-T19).
@@ -567,6 +604,22 @@ func _apply_newtonian_body() -> void:
 	max_contacts_reported = CONTACTS_REPORTED
 
 
+# A lean ship (M4-T11) needs no first-person interior, no camera anchor and no fallback node of its own; the empty plume holder
+# goes too (`ShipAssembly` puts its plumes on the body).
+func _strip_for_lean() -> void:
+	var unused: Array[Node] = [cockpit_interior, cockpit_anchor, hull_mesh_fallback]
+	if thrusters != null and thrusters.get_child_count() == 0:
+		unused.append(thrusters)
+		thrusters = null
+	for node: Node in unused:
+		if node != null:
+			remove_child(node)
+			node.free()
+	cockpit_interior = null
+	cockpit_anchor = null
+	hull_mesh_fallback = null
+
+
 func _build() -> void:
 	_clear_built()
 	if spec == null:
@@ -592,7 +645,8 @@ func _build() -> void:
 	if _hardpoints.valid:
 		center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 		center_of_mass = _hardpoints.center_of_mass
-		cockpit_anchor.transform = _hardpoints.cockpit_camera
+		if cockpit_anchor != null:
+			cockpit_anchor.transform = _hardpoints.cockpit_camera
 		_place_cabin_emitter()
 		_build_collision()
 		_build_muzzles()
@@ -610,14 +664,24 @@ func _clear_built() -> void:
 		remove_child(node)
 		node.free()
 	_collision_nodes.clear()
+	for owner_id: int in _shape_owners:
+		remove_shape_owner(owner_id)
+	_shape_owners.clear()
 	for marker: Node3D in _muzzles:
 		marker.get_parent().remove_child(marker)
 		marker.free()
 	_muzzles.clear()
 
 
+# A node per hit volume, or on a lean ship a shape owner of the body each: the same shapes and contacts without the nodes.
 func _build_collision() -> void:
 	for entry: Dictionary in _hardpoints.collision:
+		if lean:
+			var owner_id: int = create_shape_owner(self)
+			shape_owner_add_shape(owner_id, entry["shape"])
+			shape_owner_set_transform(owner_id, entry["transform"])
+			_shape_owners.append(owner_id)
+			continue
 		var node := CollisionShape3D.new()
 		node.name = ("Collision_" + str(entry["name"])).to_pascal_case().validate_node_name()
 		node.shape = entry["shape"]
@@ -637,7 +701,7 @@ func _build_muzzles() -> void:
 
 # On the ship the player flies, when its hardpoints have a console: a rebuild only places what exists.
 func _build_cockpit_screens() -> void:
-	if not console_owner or cockpit_interior.mesh == null:
+	if not console_owner or cockpit_interior == null or cockpit_interior.mesh == null:
 		return
 	if _hardpoints.screens.is_empty():
 		if _hardpoints.valid and not _warned_no_screens:
@@ -658,22 +722,26 @@ func _build_running_lights() -> void:
 	if lights == null:
 		lights = RunningLights.new()
 		lights.name = "RunningLights"
+		lights.instanced = lean
 		add_child(lights)
 	lights.setup(self)
 
 
+# The meshes first, so the levels' first `_apply_hull_visuals` hands the proxy the mesh just loaded.
 func _load_visuals() -> void:
 	var dir: String = asset_dir(spec)
+	_fallback_mesh = _load_mesh(dir.path_join(spec.asset_id + ".obj"))
+	if hull_mesh_fallback != null:
+		hull_mesh_fallback.mesh = _fallback_mesh
+	MeshMaterials.matte(_fallback_mesh)
+	_make_double_sided(_fallback_mesh)
+	if cockpit_interior != null:
+		cockpit_interior.mesh = _load_mesh(dir.path_join(COCKPIT_MESH_FILE)) if spec.has_cockpit_interior else null
+		MeshMaterials.matte(cockpit_interior.mesh)
+		_make_double_sided(cockpit_interior.mesh)
+		MeshMaterials.cockpit(cockpit_interior.mesh)
 	_assign_hull_splats(hull_splats)
-	_load_far_levels(_hull_lod)
-	hull_mesh_fallback.mesh = _load_mesh(dir.path_join(spec.asset_id + ".obj"))
-	hull_depth_proxy.mesh = hull_mesh_fallback.mesh  # whatever is loaded, so a regenerated hull needs no changes here
-	cockpit_interior.mesh = _load_mesh(dir.path_join(COCKPIT_MESH_FILE)) if spec.has_cockpit_interior else null
-	MeshMaterials.matte(hull_mesh_fallback.mesh)
-	MeshMaterials.matte(cockpit_interior.mesh)
-	_make_double_sided(hull_mesh_fallback.mesh)
-	_make_double_sided(cockpit_interior.mesh)
-	MeshMaterials.cockpit(cockpit_interior.mesh)
+	_load_far_levels(_hull_lod)  # the proxy takes whatever mesh is loaded, so a regenerated hull needs no changes here
 
 
 # The spec's finest level and its lighting records on `node`, once per spec.
@@ -776,7 +844,7 @@ func _build_cabin_emitter() -> void:
 
 
 func _place_cabin_emitter() -> void:
-	if _cabin_emitter != null:
+	if _cabin_emitter != null and cockpit_anchor != null:
 		_cabin_emitter.offset = cockpit_anchor.position + Vector3(0.0, 0.45, 0.5)
 
 
@@ -795,7 +863,7 @@ func _apply_cabin_emitter() -> void:
 # From inside, the interior is the whole cabin: the hull's canopy glass would tint the view green and its window frames would cross the
 # side panes, so while the interior is shown those surfaces get an override that draws nothing (from outside they are the real thing).
 func _apply_canopy_glass() -> void:
-	var mesh: Mesh = hull_mesh_fallback.mesh
+	var mesh: Mesh = hull_mesh_fallback.mesh if hull_mesh_fallback != null else null
 	if mesh == null:
 		return
 	for i: int in mesh.get_surface_count():

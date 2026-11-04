@@ -7,6 +7,10 @@ extends Node
 ## ships in view draw coarser levels until the sum fits (`SplatBudgetMath`), and one warning says so when even the coarsest
 ## everywhere does not fit. That is applied on top of the level the ship's size calls for, like the tester's bias.
 ##
+## Past `settings.far_ship_dot_m` from the camera an AI ship is a far dot (M4-T11, §17.10): `Ship.set_far_dot` hides every splat
+## node, its proxy, plumes and markers, and the world's `FarDots` draws it; a tenth back inside it shows its level again. A forced
+## level and the player's ship are never dots.
+##
 ## The player's Starfury has one level finer than LOD0, the hero (M3-T24), as level -1 at the front of its chain: the other levels
 ## and their thresholds keep their numbers, and a chain that does not start at -1 never sees it.
 ##
@@ -23,6 +27,8 @@ var unbiased: int = LodSwitcherMath.NONE
 var wanted: int = LodSwitcherMath.NONE
 ## Levels the budget steps this ship down, on top of `wanted`.
 var budget_extra: int = 0
+## Whether the ship is far enough from the camera to be drawn as a dot (M4-T11).
+var far: bool = false
 
 var _ship: Ship = null
 var _splat_counts: PackedInt32Array = PackedInt32Array()
@@ -84,12 +90,15 @@ func _pick() -> void:
 		return
 	if _is_forced():
 		wanted = clampi(forced, levels[0], levels[levels.size() - 1])
+		far = false
 		return
 	var camera: Camera3D = get_viewport().get_camera_3d() if get_viewport() != null else null
 	if camera == null:
 		return
-	var px: float = LodSwitcherMath.projected_px(_ship.bounding_radius(), camera.global_position.distance_to(
-			_ship.global_position), camera.fov, get_viewport().get_visible_rect().size.y)
+	var distance: float = camera.global_position.distance_to(_ship.global_position)
+	far = not _ship.console_owner and LodSwitcherMath.far_dot(distance, far, float(Settings.get_value(&"far_ship_dot_m")))
+	var px: float = LodSwitcherMath.projected_px(_ship.bounding_radius(), distance, camera.fov,
+			get_viewport().get_visible_rect().size.y)
 	unbiased = LodSwitcherMath.next_level(px, unbiased, mini(levels[0], 0))
 	wanted = LodSwitcherMath.applied(unbiased, float(Settings.get_value(&"splat_lod_bias")), levels[0], levels[levels.size() - 1])
 
@@ -104,6 +113,7 @@ func _apply() -> void:
 	var level: int = levels[mini(at + (budget_extra if not _is_forced() else 0), levels.size() - 1)]
 	if level != _ship.lod_level():
 		_ship.set_lod_level(level)
+	_ship.set_far_dot(far)
 
 
 # --- budget ----------------------------------------------------------------------------------------------------------
@@ -198,6 +208,7 @@ static func _register(registry: ConsoleRegistry, owner: Object) -> void:
 	registry.register_provider(&"lod", ConsoleVars.new({
 		&"levels": {"get": _levels, "doc": "Each ship in play: name and splat level (* when forced)"},
 		&"visible_splats": {"get": _visible_splats, "doc": "Splats drawn by every ship in play at its current level"},
+		&"far_dots": {"get": _far_dots, "doc": "Ships in play drawn as far dots, past settings.far_ship_dot_m (M4-T11)"},
 	}), owner)
 	registry.register_command(ConsoleCommand.new(&"lod",
 			"Force a ship's splat level (lod <ship|all> <hero|0-3|auto>; hero is the player's finest; auto lets its size on screen decide)",
@@ -224,6 +235,13 @@ static func _levels() -> PackedStringArray:
 	for s: LodSwitcher in _in_play():
 		out.append("%s %s%s" % [s._ship.display_name(), level_name(s._ship.lod_level()), "*" if s._is_forced() else ""])
 	return out
+
+
+static func _far_dots() -> int:
+	var n: int = 0
+	for s: LodSwitcher in _in_play():
+		n += 1 if s._ship.is_far_dot() else 0
+	return n
 
 
 static func _visible_splats() -> int:

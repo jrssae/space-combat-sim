@@ -147,7 +147,7 @@ func test_a_reused_ship_shows_nothing_of_its_last_pilot() -> void:
 		var light: LightEmitter = again.thrusters.nozzle_light(i)
 		if light != null:
 			assert_eq(light.energy, 0.0, "its nozzle light %d too" % i)
-		assert_false(again.thrusters.glow(i).visible, "plume %d hidden" % i)
+		assert_false(again.thrusters.glow_shown(i), "plume %d hidden" % i)
 	assert_false(flash.is_active(), "no rest of the last flash")
 	assert_false(flash.visible)
 	assert_eq(flash.light_emitter().energy, 0.0)

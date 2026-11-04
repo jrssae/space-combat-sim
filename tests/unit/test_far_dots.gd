@@ -154,7 +154,7 @@ func test_the_dot_tracks_the_ship_each_frame() -> void:
 	for step: int in 3:
 		var at := Vector3(100.0 * step, 50.0, -(_far_m() + 800.0 + 200.0 * step))
 		_move(raider.ship, at)
-		await _frames(1)
+		await _frames(2)  # `process_frame` fires before the nodes' `_process`: the second wait sees the first frame's dots
 		assert_almost_eq(_dots().dot_position(0), raider.ship.get_global_transform_interpolated().origin, Vector3.ONE * 1e-3,
 				"frame %d" % step)
 

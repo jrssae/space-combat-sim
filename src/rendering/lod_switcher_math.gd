@@ -14,11 +14,8 @@ const HERO_THRESHOLD_PX: float = 400.0
 const NONE: int = -2
 const HYSTERESIS: float = 1.25
 const COARSEST: int = 3
-
-
-## Stub (M4-T11).
-static func far_dot(_distance_m: float, _was_far: bool, _far_m: float) -> bool:
-	return false
+## A far dot (M4-T11) shows its levels again only this far inside the dot distance, so a ship on the line never flaps.
+const FAR_RETURN: float = 0.9
 
 
 ## The ship's diameter on screen in pixels (INF when the camera is inside it).
@@ -53,3 +50,9 @@ static func next_level(px: float, current: int, finest: int = 0) -> int:
 ## The level to draw: `level` moved by the tester's bias (whole levels, + is coarser) and kept inside the ship's chain.
 static func applied(level: int, bias: float, lowest: int, highest: int) -> int:
 	return clampi(level + roundi(bias), lowest, highest)
+
+
+## Whether a ship `distance_m` from the camera is drawn as a far dot (M4-T11), given whether it is one now: past `far_m`, and
+## once a dot until it comes `FAR_RETURN` of the way back in.
+static func far_dot(distance_m: float, was_far: bool, far_m: float) -> bool:
+	return distance_m >= far_m * FAR_RETURN if was_far else distance_m > far_m

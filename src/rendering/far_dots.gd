@@ -5,15 +5,18 @@ extends MultiMeshInstance3D
 ## instead: one instance of the world's one multimesh, so every far ship together is one draw call. A dot is the hull's mean paint
 ## at the hull's angular size, never under a pixel, and dims below that like a running light (`far_ship_dot.gdshader`).
 ##
-## A child of `World` (`attach`), drawn in global space (`top_level`). Each frame it writes each shown ship's drawn pose; a
-## rebase moves the written dots at once, so no frame draws one at its old place. A parked or freed ship draws none. Visual only.
+## A child of `World` (`attach`) at the World's origin, its dots in World-local metres. Each frame it writes each shown ship's
+## drawn pose. It is shiftable, so a rebase moves the written dots with everything else at once (no frame draws one at its old
+## place); it then goes back to the origin and moves the dots instead, so its own offset never grows. A parked or freed ship draws
+## none. Visual only.
 
 const NODE_NAME: String = "FarDots"
 const SHADER: Shader = preload("res://assets/shaders/far_ship_dot.gdshader")
 ## The paint of a ship with no splats to read.
 const DEFAULT_PAINT: Color = Color(0.5, 0.5, 0.5)
-## How much of its paint a far hull shows on average, between its lit side and its dark side (§7.3: about 1.2 and 0.3).
-const LIGHT_LEVEL: float = 0.75
+## The light a far hull's lit side gets (§7.3: about 1.2 facing the key star), applied to the paint before the sRGB to linear
+## step as GDGS applies it: what the eye picks out of a far hull is its lit side.
+const LIGHT_LEVEL: float = 1.2
 ## Floats per instance: a 3x4 transform, then the custom data (paint, radius).
 const STRIDE: int = 16
 const SPLAT_FLOATS: int = 60
@@ -64,7 +67,7 @@ static func paint_color(gaussian: GaussianResource) -> Color:
 
 func _init() -> void:
 	name = NODE_NAME
-	top_level = true
+	add_to_group(WorldFrame.SHIFTABLE_GROUP)
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	gi_mode = GeometryInstance3D.GI_MODE_DISABLED
@@ -113,7 +116,7 @@ func dot_count() -> int:
 ## The global position of dot `index`.
 func dot_position(index: int) -> Vector3:
 	var base: int = index * STRIDE
-	return Vector3(_buffer[base + 3], _buffer[base + 7], _buffer[base + 11])
+	return global_transform * Vector3(_buffer[base + 3], _buffer[base + 7], _buffer[base + 11])
 
 
 ## The hull radius dot `index` is sized by, m.
@@ -130,10 +133,11 @@ func refresh() -> void:
 	if _ships.size() > multimesh.instance_count:
 		multimesh.instance_count = maxi(_ships.size(), multimesh.instance_count * 2)  # grows rarely, never shrinks
 		_buffer.resize(multimesh.instance_count * STRIDE)
+	var to_local: Transform3D = global_transform.affine_inverse()
 	for ship: Ship in _ships:
 		if not ship.is_visible_in_tree():
 			continue  # parked
-		var at: Vector3 = ship.get_global_transform_interpolated().origin
+		var at: Vector3 = to_local * ship.get_global_transform_interpolated().origin
 		var paint: Color = _paint_of(ship)
 		var base: int = n * STRIDE
 		_buffer[base + 0] = 1.0
@@ -163,8 +167,9 @@ func _upload() -> void:
 	multimesh.visible_instance_count = _shown
 
 
-# The world moved under every dot: they move with it now, not at the next frame.
+# The rebase moved this node with the world; back to the origin, with the dots moved instead.
 func _on_rebased(offset: Vector3) -> void:
+	position += offset
 	for i: int in _shown:
 		var base: int = i * STRIDE
 		_buffer[base + 3] -= offset.x
@@ -173,11 +178,11 @@ func _on_rebased(offset: Vector3) -> void:
 	_upload()
 
 
-# The ship's coarsest level's mean paint, lit to a far hull's average and in linear light.
+# The ship's coarsest level's mean paint, lit as a hull's lit side, in linear light.
 func _paint_of(ship: Ship) -> Color:
 	var nodes: Array[GaussianSplatNode] = ship.splat_nodes()
 	var gaussian: GaussianResource = nodes.back().gaussian if not nodes.is_empty() else null
 	if not _paint_cache.has(gaussian):
-		var paint: Color = paint_color(gaussian).srgb_to_linear()
-		_paint_cache[gaussian] = Color(paint.r * LIGHT_LEVEL, paint.g * LIGHT_LEVEL, paint.b * LIGHT_LEVEL)
+		var paint: Color = paint_color(gaussian)
+		_paint_cache[gaussian] = Color(paint.r * LIGHT_LEVEL, paint.g * LIGHT_LEVEL, paint.b * LIGHT_LEVEL).srgb_to_linear()
 	return _paint_cache[gaussian]

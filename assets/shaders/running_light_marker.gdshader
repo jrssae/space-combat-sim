@@ -8,14 +8,18 @@ render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabl
 
 // HDR colour.
 uniform vec3 tint = vec3(1.0);
+// AI ships draw their three markers as one multimesh (M4-T11): each instance's colour is its custom data, not `tint`.
+uniform bool use_instance_tint = false;
 uniform float radius_m = 0.1;
 // The on-screen floor, radius in pixels (settings.running_light_min_px).
 uniform float min_radius_px = 1.0;
 
 // 1 while the real disc is at least the floor, else (real / floor)^2. The tested copy is RunningLightDimming.brightness_factor.
 varying float dim;
+varying vec3 colour;
 
 void vertex() {
+	colour = use_instance_tint ? INSTANCE_CUSTOM.rgb : tint;
 	vec4 clip = PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(0.0, 0.0, 0.0, 1.0);
 	float real_px = radius_m * abs(PROJECTION_MATRIX[1][1]) * 0.5 * VIEWPORT_SIZE.y / max(clip.w, 0.001);
 	float ratio = min(real_px / max(min_radius_px, 0.001), 1.0);
@@ -27,6 +31,6 @@ void vertex() {
 void fragment() {
 	float r = length(UV * 2.0 - vec2(1.0));
 	float falloff = max(1.0 - r * r, 0.0);
-	ALBEDO = tint * dim;
+	ALBEDO = colour * dim;
 	ALPHA = falloff * falloff;
 }

@@ -89,22 +89,21 @@ func test_every_ship_type_has_red_green_and_white_at_its_generated_hardpoints() 
 		ship.reset_physics_interpolation()
 		var nav: Dictionary = ship.get_hardpoints().nav_lights
 		assert_false(nav.is_empty(), "%s names its lights" % ship.spec.asset_id)
-		var markers: Array[MeshInstance3D] = _lights_of(ship).markers()
-		assert_eq(markers.size(), 3, ship.spec.asset_id)
-		for marker: MeshInstance3D in markers:
-			assert_true(marker.visible, "on at spawn")
-			assert_true(marker.is_visible_in_tree())
-		var port: MeshInstance3D = markers[0]
-		var starboard: MeshInstance3D = markers[1]
-		var top: MeshInstance3D = markers[2]
-		assert_almost_eq(ship.to_local(port.global_position), nav["port"] as Vector3, Vector3.ONE * 1e-3)
-		assert_almost_eq(ship.to_local(starboard.global_position), nav["starboard"] as Vector3, Vector3.ONE * 1e-3)
-		assert_almost_eq(ship.to_local(top.global_position), nav["top"] as Vector3, Vector3.ONE * 1e-3)
-		assert_lt(ship.to_local(port.global_position).x, 0.0, "%s: port is its left, -X" % ship.spec.asset_id)
-		var red: Vector3 = (port.material_override as ShaderMaterial).get_shader_parameter(&"tint")
-		var green: Vector3 = (starboard.material_override as ShaderMaterial).get_shader_parameter(&"tint")
-		assert_gt(red.x, 3.0 * red.y, "port is red")
-		assert_gt(green.y, 3.0 * green.x, "starboard is green")
+		var lights: RunningLights = _lights_of(ship)
+		assert_eq(lights.marker_count(), 3, ship.spec.asset_id)
+		assert_true(lights.markers_shown(), "on at spawn")
+		# The player's markers are nodes; an AI ship's are instances of its lights' multimesh (M4-T11), in the same frame.
+		assert_eq(lights.instanced, ship.lean)
+		for i: int in lights.marker_count():
+			var world_at: Vector3 = lights.global_transform * lights.marker_position(i)
+			if not lights.instanced:
+				world_at = lights.markers()[i].global_position
+			assert_almost_eq(ship.to_local(world_at), nav[["port", "starboard", "top"][i]] as Vector3, Vector3.ONE * 1e-3)
+		assert_lt(lights.marker_position(0).x, 0.0, "%s: port is its left, -X" % ship.spec.asset_id)
+		var red: Color = lights.marker_tint(0)
+		var green: Color = lights.marker_tint(1)
+		assert_gt(red.r, 3.0 * red.g, "port is red")
+		assert_gt(green.g, 3.0 * green.r, "starboard is green")
 		assert_true(ship.running_lights)
 
 
@@ -113,7 +112,7 @@ func test_the_marker_count_never_changes_and_no_marker_is_a_light() -> void:
 	var markers_before: int = _collect(main, RunningLights).size()
 	var quads_before: int = 0
 	for lights: Variant in _collect(main, RunningLights):
-		quads_before += (lights as RunningLights).markers().size()
+		quads_before += (lights as RunningLights).marker_count()
 	assert_eq(quads_before, 3 * (1 + main.ships.pool_size()), "three per ship, the pool's included")
 	var lamps_before: int = _collect(main, Light3D).size()
 	assert_eq(lamps_before, 8, "AC30's 8 hold")
@@ -127,7 +126,7 @@ func test_the_marker_count_never_changes_and_no_marker_is_a_light() -> void:
 	assert_eq(_collect(main, RunningLights).size(), markers_before)
 	var quads_after: int = 0
 	for lights: Variant in _collect(main, RunningLights):
-		quads_after += (lights as RunningLights).markers().size()
+		quads_after += (lights as RunningLights).marker_count()
 	assert_eq(quads_after, quads_before)
 	assert_eq(_collect(main, Light3D).size(), lamps_before)
 
@@ -135,9 +134,9 @@ func test_the_marker_count_never_changes_and_no_marker_is_a_light() -> void:
 func test_a_parked_ship_shows_none() -> void:
 	await _start()
 	var raider: Combatant = _acquire({"type": "idle"}, Vector3(0.0, 0.0, -200.0))
-	assert_true(_lights_of(raider.ship).markers()[0].is_visible_in_tree())
+	assert_true(_lights_of(raider.ship).markers_shown())
 	main.ships.release(raider)
-	assert_false(_lights_of(raider.ship).markers()[0].is_visible_in_tree())
+	assert_false(_lights_of(raider.ship).markers_shown())
 
 
 # --- the dark rule -------------------------------------------------------------------------------------------------------------
@@ -152,7 +151,7 @@ func test_a_patrolling_raider_stays_dark_on_its_run_in_and_lights_up_with_its_fi
 	var pilot := raider.driver.brain as AiPilot
 	assert_eq(pilot.current.id, &"follow_path", "nobody in sensor range: it patrols")
 	assert_false(raider.ship.running_lights, "and hides")
-	assert_false(_lights_of(raider.ship).markers()[0].visible, "no markers")
+	assert_false(_lights_of(raider.ship).markers_shown(), "no markers")
 	# The player flies into its sensor range.
 	main.ship.global_position = raider.ship.global_position + Vector3(0.0, 0.0, -1500.0)
 	main.ship.reset_physics_interpolation()
@@ -171,7 +170,7 @@ func test_a_patrolling_raider_stays_dark_on_its_run_in_and_lights_up_with_its_fi
 	assert_true(closed_in_dark, "it attacks with its lights off")
 	assert_gt(fired_tick, -1, "it fires")
 	assert_eq(lit_tick, fired_tick, "its lights come on with the first shot")
-	assert_true(_lights_of(raider.ship).markers()[0].visible)
+	assert_true(_lights_of(raider.ship).markers_shown())
 
 
 func test_a_raider_spawned_to_attack_is_lit_from_the_start() -> void:
@@ -205,7 +204,7 @@ func test_a_reacquired_pool_ship_does_not_keep_the_last_pilots_lights() -> void:
 	var again: Combatant = _acquire({"type": "idle"}, Vector3(0.0, 0.0, -200.0))
 	assert_eq(again, first, "the same ship")
 	assert_true(again.ship.running_lights, "a dark ship reacquired by a lit pilot is lit")
-	assert_true(_lights_of(again.ship).markers()[0].visible)
+	assert_true(_lights_of(again.ship).markers_shown())
 	main.ships.release(again)
 	var third: Combatant = _acquire(_patrol(Vector3(9000.0, 0.0, 0.0)), Vector3(9000.0, 0.0, 0.0))
 	assert_false(third.ship.running_lights, "and the other way round")

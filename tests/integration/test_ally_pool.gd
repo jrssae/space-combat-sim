@@ -98,9 +98,9 @@ func test_an_ally_draws_the_lod1_hull_without_a_cockpit_interior() -> void:
 	assert_eq(hull.point_count, int(manifest.lods[1]["splats"]))
 	assert_lt(hull.point_count, int(manifest.lods[0]["splats"]) / 3, "well under half the player's splats")
 	assert_eq(player.ship.hull_splats.gaussian.point_count, int(manifest.lods[0]["splats"]), "the player keeps LOD0")
-	assert_null(ally.cockpit_interior.mesh, "no first-person interior for an ally")
+	assert_null(ally.cockpit_interior, "no first-person interior for an ally (built lean, M4-T11)")
 	assert_not_null(player.ship.cockpit_interior.mesh)
-	assert_eq(ally.hull_mesh_fallback.mesh.get_surface_count(), player.ship.hull_mesh_fallback.mesh.get_surface_count(),
+	assert_eq(ally.fallback_mesh().get_surface_count(), player.ship.hull_mesh_fallback.mesh.get_surface_count(),
 			"the same hull mesh as the fallback")
 
 

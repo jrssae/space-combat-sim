@@ -20,6 +20,8 @@ extends RefCounted
 ## - `force_assist` (bool, default false): AI ships fly with flight assist always on.
 ## - `ai` (bool, default false): adds an `AiPilotDriver` (priority -10) that flies the ship with whatever `PilotBrain` it
 ##   is given (`combatant.driver.brain`); with no brain it does nothing.
+## - `lean` (bool, default `ai`): builds the AI ship's lean set of nodes (M4-T11, architecture §17.10, `Ship.lean`): its plumes
+##   as one multimesh on the body, its markers as another, its collision shapes without nodes, no cockpit.
 
 const OPT_FACTION: StringName = &"faction"
 const OPT_DISPLAY_NAME: StringName = &"display_name"
@@ -40,6 +42,7 @@ static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D,
 
 	var ship: Ship = Ship.create(spec, world)
 	ship.console_owner = console_owner
+	ship.lean = bool(opts.get(OPT_LEAN, opts.get(OPT_AI, false))) and not console_owner
 	ship.force_assist = bool(opts.get(OPT_FORCE_ASSIST, false))
 	combatant.ship = ship
 	var targeting := ship.get_node("Targeting") as TargetingController
@@ -52,7 +55,11 @@ static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D,
 	thrusters.name = "ThrusterVisuals"
 	thrusters.glow_color = spec.engine_glow_color
 	thrusters.own_ship = combatant.is_player
-	ship.get_node("Thrusters").add_child(thrusters)
+	thrusters.instanced = ship.lean
+	if ship.lean:
+		ship.add_child(thrusters)  # on the body: the lean ship drops the empty holder
+	else:
+		ship.get_node("Thrusters").add_child(thrusters)
 	combatant.thrusters = thrusters
 
 	var cannon := PulseCannon.new()

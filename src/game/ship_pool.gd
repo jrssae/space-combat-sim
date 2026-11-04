@@ -80,6 +80,7 @@ func prepare(type: StringName, count: int) -> int:
 			ShipAssembly.OPT_DISPLAY_NAME: "",
 			ShipAssembly.OPT_FORCE_ASSIST: true,
 			ShipAssembly.OPT_AI: true,
+			ShipAssembly.OPT_LEAN: true,  # the AI ship's lean set of nodes (M4-T11)
 		})
 		world.spawn(combatant.ship, _park_position(), Basis.IDENTITY, self)
 		if type == ALLY_TYPE:
@@ -116,6 +117,8 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	var switcher := ship.get_node_or_null(^"LodSwitcher") as LodSwitcher
 	if switcher != null:
 		switcher.forced = LodSwitcherMath.NONE
+		switcher.far = false
+	ship.set_far_dot(false)  # drawn in full until its switcher next looks (M4-T11)
 	combatant.damageable.restore()
 	combatant.damageable.invulnerable = false  # per spawn (M3-T09); the caller sets it
 	combatant.display_name = display_name
