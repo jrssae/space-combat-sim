@@ -73,6 +73,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q39 | Checkpoint 1, the `typical` frame bar | **60 FPS held and the 1 % lows** are the bar from phase 2 on, not the 12 ms frame-mean line |
 | Q40 | Checkpoint 1, T24 (the simulation on a worker thread) | **Decide at checkpoint 4** as planned. Checkpoint 1 is signed off; phase 2 starts (T15, with T30c beside it) |
 | Q41 | Checkpoint 1c, T30b's Starfury look sheet (2026-11-04) | **Approved with small fixes**: the hull one step darker; remove the yellow and black hazard striping on the lower wings' leading edges (an artifact), and the base Starfury with no livery is all grey, no hazard striping anywhere; the fallback livery (KILO on the sheet) must not look like Zeta's, so fallback wings get patterns of their own |
+| Q42 | T30c's sky (2026-11-04) | **Approved apart from two fixes**: the stars keep their colours (they rendered white), and the nebula is translucent but slightly more opaque than now: it dims the stars behind it so only the brighter stars shine through. The nebula's colours are right |
 
 ## The budget ("good game performance", Q5)
 
