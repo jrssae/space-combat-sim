@@ -2260,6 +2260,96 @@ anything else is a ship. If T07's `kind` is an enum in another order, map it in 
 `body_registry.rs` (`kind_of`). T07's asteroid field registers its rocks with `ContactScan.register_static(id, position,
 radius, BodyKind.STATIC, Factions.NEUTRAL, world)` (ids unique, not instance ids); that world's `rebase` already shifts them. A body whose kind or
 faction changes while it stays shown calls `ContactScan.touch(body)`.
+### M4-T11 (2026-11-03): far-ship dots and the node diet for AI ships
+
+**How it measured.** In its own worktree (base `441a3b4`, T07, T08, T10 and T28 merged), so the numbers see only this change:
+single seeded runs (`bench <layout> <n> 10 warmup=5 seed=1`, headless, editor build, both bench locks, pinned to cores 0-11)
+before on the base and after on the change (`m4_t11_before`, `m4_t11_after`, load 1.1 to 1.9), and the fullscreen check
+(`scripts/fullscreen_check.sh`: a 4K fullscreen window, the 3D at 1 080 lines, vsync off, 20 s after 8 s, under the GPU lock and
+both bench locks; `m4_t11_before_fs_*`, `m4_t11_after_fs_*`). Per-ship draw calls from `scripts/measure_fight.gd`'s `quiet` (the
+player alone), `hundred_view` (100 idle AI ships, 150 m to 1.5 km, all in view) and `hundred` (100 from 200 m to 6 km all round),
+fullscreen the same way, and a throwaway probe that hid one part at a time on 20 idle raiders in view.
+
+**Candidates** (the plan chose this task; ranked against the before):
+
+1. **The lean AI ship and far dots** (built). A pooled Starfury was 112 nodes and a raider 74; an idle AI ship in view cost
+   about 15 draw calls (the depth proxy's 13 or 9 material surfaces, three markers, the plumes). Predicted: render CPU and the
+   physics sync and rebase cut with the nodes (70 %).
+2. **Far dots alone.** Takes the far ships' calls but leaves every near ship's 15 and every ship's nodes in the sync and the
+   rebase.
+3. **One fleet-wide multimesh for every AI plume.** One call for all plumes, but each frame a GDScript loop over every nozzle
+   of every ship in World space (12 000 at 500 ships); per-ship multimeshes need no per-frame transform at all.
+
+**Tests first** (`a699fca`): `tests/integration/test_ship_nodes.gd` (a pooled AI ship at most 16 nodes besides its guns' muzzles
+and flashes, no `CollisionShape3D` yet every hit volume a shape of the body and hit by a ray, no cockpit or separate fallback
+node, the proxy node draws the fallback, plumes as one multimesh whose instance follows the level, the nozzle lights where the
+plume nodes put them, one plume material per colour, markers as one multimesh of three in port red, starboard green and top
+white that go dark and park, at most three surfaces drawn near; the player's ship keeps every node), `tests/unit/test_far_dots.gd`
+(the paint, past the distance no splat node and one dot, back a tenth inside its level again and no dot, the hysteresis, the dot
+tracks the ship, a rebase moves it at once, a parked ship leaves none, two ships one multimesh, the player never a dot, the
+setting, no render state) and `LodSwitcherMath.far_dot`. Committed with surface stubs: 9 of 11, 9 of 12 and 1 of 13 failing.
+
+**Change** (`9e135f7`): §17.10. **Nodes:** Starfury ally 112 to 19, raider 74 to 24 (16 each besides the guns), the player's
+123 unchanged.
+
+**Headless** (means and medians in ms; "shift" is the rebase's shift and interpolation reset, median and max of 4):
+
+| run | tick median before | after | p99 before | after | physics before | after | shift before | after |
+|---|---|---|---|---|---|---|---|---|
+| typical 58 | 15.56 | 14.84 | 18.24 | 17.45 | | | 1.91 max | 1.21 max |
+| typical 58, no rocks | 6.55 | 5.66 | 8.52 | 6.51 | 1.17 | 0.53 | 1.08 max | 0.53 max |
+| battle 100 | 22.60 | 21.89 | 27.03 | 24.62 | | | 2.87 max | 1.79 max |
+| battle 100, no rocks | 12.84 | 10.70 | 16.00 | 12.86 | 2.25 | 0.84 | 1.85 / 1.91 | 0.88 / 0.94 |
+| battle 300, no rocks | 39.38 | 36.97 | 56.02 | 40.80 | 5.11 | 1.96 | 6.44 / 6.77 | 3.44 / 3.56 |
+| furball 100 | 11.65 | 9.68 | 15.16 | 11.96 | 2.53 | 0.95 | 1.92 max | 1.06 max |
+
+The physics stage (Jolt's step and the body sync, which propagates each body's transform down its nodes) falls by 55 to 62 %;
+that is most of the tick's gain. The rebase at battle 300 split by a probe (a 1 mm shift, three times, and a reset of every
+visible interpolated node): ships 0.18 ms of shift and 1.14 ms of reset (5 us a ship), 1 568 bolts 0.40 and 0.54 ms, 45 capitals
+0.02 and 0.12 ms. So the ships' share meets the plan's 2 ms; the bolts are T15's rows.
+
+**Fullscreen** (verdicts as the script gives them):
+
+| run | FPS before | after | frame mean ms before | after | GPU ms | render CPU ms before | after | draw calls before | after |
+|---|---|---|---|---|---|---|---|---|---|
+| typical 58 | 7.0 | 8.7 | 141.97 | 114.68 | 7.1 / 7.0 | 1.22 | 0.63 | 850 | 274 |
+| typical 58, no rocks | 55.5 | **92.0** | 18.01 | **10.87** | 5.9 / 5.7 | 1.24 | 0.57 | 855 | 277 |
+| battle 100 | 4.7 | 5.1 | 212.33 | 196.57 | 6.2 / 5.9 | 1.64 | 0.69 | 1 506 | 388 |
+| battle 100, no rocks | 12.2 | 27.1 | 81.73 | 36.88 | 6.5 / 6.2 | 1.69 | 0.75 | 1 423 | 367 |
+| furball 45 | 67.6 | 86.6 | 14.79 | 11.54 | 6.6 / 6.4 | 1.24 | 0.60 | 1 202 | 297 |
+| quiet (the player alone) | 243.8 | 258.7 | 4.10 | 3.87 | 3.7 / 3.6 | 0.32 | 0.30 | 95 | 83 |
+| hundred_view (100 idle in view) | 31.2 | 37.3 | 32.09 | 26.79 | 12.0 / 12.3 | 0.86 | 0.70 | 1 575 | 583 |
+| hundred (100, 200 m to 6 km) | 47.1 | 67.1 | 21.22 | 14.91 | 5.4 / 5.4 | 0.56 | 0.47 | 489 | 299 |
+
+- **`typical` without rocks now passes Q20's bar** (60 FPS with a frame mean of 12 ms or under: 92 FPS, 10.87 ms). With the
+  rocks it is still the T07 rocks cost on the tick (T09's registry). **`battle` 100 misses the 30 FPS floor**, 27.1 without
+  rocks and 5.1 with: the main thread binds, not the GPU (6 ms a frame), so T26's trigger is not seen. The tick (10.7 ms
+  headless, 17.9 ms at worst a second in the window) and the frame's own process work (12.9 ms at worst a second) are what is
+  left; the wave's other tasks (T09's registry, T12, T14) and phase 2 are where they go.
+- **Draw calls per AI ship**: 100 idle ships in view cost 5.0 calls a ship (14.8 before). The probe on 20 idle raiders in view:
+  45 calls with everything on, 2.25 a ship; hiding the proxies took 10 calls, the markers none (why the count does not
+  show them was not found; they draw, the screenshots show them), the plumes 9; hiding the splat nodes took the rest, about 2 a ship. So the diet's own meshes cost about
+  1.3 calls a near ship and the far ships one call together; what is left of a near ship is its visible GDGS splat node,
+  which T27 measures against meshes. In the battle as a whole, 367 calls for 85 AI ships (4.3, bolts included) against 1 423.
+- **Render CPU** halved everywhere (1.2 to 1.7 ms down to 0.6 to 0.75 ms); it was never the 15 ms the research feared at 45 to
+  100 ships. VRAM added is unchanged within noise (1.3 to 1.5 GB, the splat budget's buffers).
+- **GDGS** kept one render state in every run.
+
+**Quick check** (furball and spread, `m4_t11_after_quick` against the base `m4_t11_before_quick`): both layouts held the budget to 75 ships after, to 50 before
+(load 0.9 and 1.1). Tick medians at 50 / 75 / 100: furball 5.75 / 8.97 / 11.77 ms before, 4.88 / 7.61 / 9.80 after; spread 5.97 /
+9.53 / 12.03 before, 5.01 / 7.70 / 10.08 after. Both still fall under 30 FPS at 300 (24.8 and 24.1 FPS before, 28.8 and 29.1
+after).
+
+**Behaviour changes:** none in the simulation (ships, physics, contacts, gameplay components are the same; the player's ship is
+unchanged). Visual changes for (H): AI ships' plumes are drawn as instances (the core disc's falloff baked into vertex colours,
+its offset a share of the plume's length), the proxy is one merged surface, and past 3 km an AI ship is a dot of its hull's mean
+paint lit as a lit side. Screenshots for the maintainer: `/tmp/m4_t11_before_battle_far.png` and `_near`,
+`/tmp/m4_t11_after_battle_far.png` and `_near` (the `battle` 100 layout without rocks, 2 s and 28 s in, windowed 1080p),
+`/tmp/m4_t11_before_hundred_near.png`, `_far` and the same `after` (the 100-ship scenes, 4K), `/tmp/m4_t11_after_plumes_near.png`
+(a raider and a Starfury burning broadside at 45 and 60 m, three raiders as dots at 3.5 to 6.5 km) and
+`/tmp/m4_t11_after_held_markers.png` (the 13-ship fight from the cockpit, the markers per instance).
+
+**Tests** (focused, Q10): 41 GUT files run alone on `50d8b43`, each with 0 failing and 0 pending: `test_ship_nodes` 11, `test_far_dots` 12, `test_lod_switcher_math` 13, `test_hull_depth_proxy` 12, `test_ally_pool` 21, `test_ship_pool` 21, `test_running_lights_in_play` 21, `test_running_lights` 24, `test_running_light_dimming` 7, `test_lod_in_play` 5, `test_hero_lod` 11, `test_splat_budget_in_play` 8, `test_thruster_visuals` 28, `test_ship_lights` 14, `test_multi_ship` 17, `test_ship_scene` 27, `test_rebase_in_play` 8, `test_world_frame` 16, `test_flight_batch` 7, `test_flight_parity_fight` 1, `test_relight` 26, `test_cockpit_screens` 20, `test_camera_rig` 36, `test_destruction` 11, `test_respawn_in_play` 6, `test_main_scene` 11, `test_splat_pose_sync` 6, `test_last_hit_breakup` 14, `test_starfury_breakup` 11, `test_debris_pool` 13, `test_ram_damage` 15, `test_hit_resolver` 16, `test_standins` 8, `test_bench` 8, `test_ship_physics` 17, `test_wing_replenish` 13, `test_ai_think_time` 1, `test_m3_run` 2, `test_control_profiles` 32, `test_control_profile` 34, `test_control_profile_store` 15; 599 passing in all. They are the new and changed files, every file that covers the ship, its lights, plumes, proxy, levels, the pool, the rebase, the flight batch and its parity fight, destruction and the bench, and AC13's files (`test_ai_think_time`, `test_m3_run`, the control profiles). No Python or Rust changed. The full suite runs on CI after the push.
 
 ## Definition of done (M4)
 
