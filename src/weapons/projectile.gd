@@ -14,6 +14,9 @@ extends Node3D
 ##
 ## The capsule is built along the node's -Z axis, and `launch` points -Z along the velocity.
 ##
+## Guided and one-tick kinds (M4-T12): a projectile with `steering` asks it for its velocity every tick (a missile), and
+## `fire_beam` makes a beam whose segment is its one tick of flight; the hit resolver retires a beam after sweeping it.
+##
 ## `configure(weapon)` (the cannon calls it before `launch`) takes the lifetime and the bolt's look from a
 ## `WeaponSpec`. Capsule meshes are shared between all bolts of one look.
 
@@ -53,6 +56,11 @@ var damage: float = 0.0
 var hit_radius_m: float = 0.25
 ## What this projectile is, one of `KINDS`.
 var kind: StringName = KIND_BOLT
+## Steers a guided projectile (M4-T12): `func(projectile: Projectile, delta: float) -> Vector3`, the velocity for this tick,
+## called before it moves. Empty for a bolt, which flies straight.
+var steering: Callable = Callable()
+## The object behind `steering`, held here because a Callable does not keep a RefCounted alive.
+var guidance: RefCounted = null
 ## Impact flash tint.
 var color: Color = Color(0.9, 1.5, 3.0, 1.0)
 ## World-frame displacement of the latest physics tick (velocity × delta); zero until the first tick. A displacement,
@@ -60,6 +68,7 @@ var color: Color = Color(0.9, 1.5, 3.0, 1.0)
 var last_step: Vector3 = Vector3.ZERO
 
 var _spent: bool = false
+var _laid_beam: bool = false
 
 @onready var _bolt: MeshInstance3D = $Bolt
 
@@ -74,6 +83,11 @@ func _physics_process(delta: float) -> void:
 	if is_expired(SimClock.now()):
 		queue_free()
 		return
+	if _laid_beam:
+		return  # its segment was laid when it fired; the hit resolver retires it
+	if steering.is_valid():
+		velocity = steering.call(self, delta)
+		_face(velocity)
 	last_step = velocity * delta
 	global_position += last_step
 
@@ -117,13 +131,34 @@ func launch(at: Vector3, launch_velocity: Vector3, now_s: float) -> void:
 	velocity = launch_velocity
 	expires_at_s = now_s + lifetime_s
 	global_position = at
-	if launch_velocity.length_squared() > 1e-6:
-		var direction: Vector3 = launch_velocity.normalized()
-		# looking_at needs an up vector that is not parallel to the direction; the capsule is round, so any will do.
-		var up: Vector3 = Vector3.UP if absf(direction.dot(Vector3.UP)) < 0.99 else Vector3.RIGHT
-		global_basis = Basis.looking_at(direction, up)
+	_face(launch_velocity)
 	# Appear here, not smeared from wherever the node was a tick ago (project-wide physics interpolation is on).
 	reset_physics_interpolation()
+
+
+## Fires a beam (M4-T12): the whole segment from `from` to `to` is this tick's flight, swept by the hit resolver in this tick,
+## which then retires it. The node must be in the tree; call it before the resolver's tick.
+func fire_beam(from: Vector3, to: Vector3, now_s: float) -> void:
+	set_kind(KIND_BEAM)
+	_laid_beam = true
+	velocity = Vector3.ZERO
+	expires_at_s = now_s + lifetime_s
+	global_position = to
+	last_step = to - from
+	_face(last_step)
+	if _bolt != null:
+		_bolt.visible = false  # one tick long; the stand-in draws nothing
+	reset_physics_interpolation()
+
+
+# Points the capsule along `direction`; left alone for a near-zero one.
+func _face(direction: Vector3) -> void:
+	if direction.length_squared() <= 1e-6:
+		return
+	var unit: Vector3 = direction.normalized()
+	# looking_at needs an up vector that is not parallel to the direction; the capsule is round, so any will do.
+	var up: Vector3 = Vector3.UP if absf(unit.dot(Vector3.UP)) < 0.99 else Vector3.RIGHT
+	global_basis = Basis.looking_at(unit, up)
 
 
 ## Makes this projectile a `p_kind`, with that kind's hit radius.

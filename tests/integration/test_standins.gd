@@ -29,7 +29,7 @@ func before_each() -> void:
 	standins.projectiles = projectiles
 	world.add_child(standins)
 	standins.set_physics_process(false)  # stepped by hand
-	now_s = 100.0
+	now_s = SimClock.now() + 100.0  # ahead of the clock projectiles expire by, however long the suite has run
 
 
 func after_each() -> void:
@@ -336,10 +336,15 @@ func test_beams_fire_at_half_a_hertz_each_only_at_a_hostile_within_three_km() ->
 		shots += emitter.shots
 	assert_eq(shots, 0, "nothing hostile within 3 km")
 	_drone(Vector3(0.0, 400.0, -2000.0))
+	for i: int in StandinDirector.STRIKE_RETARGET_TICKS:
+		_step()  # the capital takes the new hostile as its strike target
+	var before: Dictionary = {}
+	for emitter: BeamStandin in cap.beams():
+		before[emitter] = emitter.shots
 	for i: int in 240:
 		_step()
 	for emitter: BeamStandin in cap.beams():
-		assert_eq(emitter.shots, 2, "one shot every 2 s")
+		assert_eq(emitter.shots - int(before[emitter]), 2, "one shot every 2 s")
 
 
 func test_an_interceptor_removes_a_missile_inside_one_and_a_half_km_first_and_never_a_bolt_outside() -> void:
@@ -366,7 +371,7 @@ func test_an_interceptor_removes_a_missile_inside_one_and_a_half_km_first_and_ne
 
 
 func test_a_missile_launched_at_a_crossing_fighter_hits_it_through_the_resolver() -> void:
-	_quiet_capital(Vector3.ZERO)
+	_quiet_capital(Vector3.ZERO).beams().clear()
 	var target: TargetDrone = _drone(Vector3(0.0, 500.0, -2500.0))
 	var crossing := Vector3(120.0, 0.0, 0.0)
 	target.linear_velocity = crossing

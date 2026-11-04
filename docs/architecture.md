@@ -2234,3 +2234,53 @@ src/ship/ship.gd                a ship is `batched` (every ship but the player's
 - **Bad input never panics.** `register` checks the arrays line up and returns -1 after one error; `step` checks the per-ship
   array sizes and that every slot is known, and on a mismatch logs one error, applies nothing and returns false, so the batch
   leaves every ship to its own model that tick. A body not in a space (a parked pool ship) gives a row of zeros and no force.
+
+### 17.11 Missile, beam, interceptor and mine stand-ins (T12)
+
+```
+src/perf/standins/missile_standin.gd   MissileStandin (RefCounted): a missile's steering, proportional navigation, the launch
+src/perf/standins/beam_standin.gd      BeamStandin (Node3D under a capital): fires a 3 km hitscan beam as a one-tick projectile
+src/perf/standins/mine_standin.gd      MineStandin (Node3D): every mine of the battle as rows, the trigger cadence and the blast
+src/weapons/projectile.gd              + `steering` (a guided projectile's hook), `fire_beam` (a beam's one tick)
+src/combat/hit_resolver.gd             + a beam is retired after the resolve that swept it
+```
+
+- **What they are for.** The rest of Q19's and Q21's weapons, so the hit sweep, the interceptors and the per-entity counters are
+  measured with every kind: guided missiles, beam lasers, interceptors that also hunt missiles, and proximity mines. Bench-only
+  like T07's stand-ins, built by code with no assets, replaced by M12's weapons.
+- **Missiles** are `Projectile`s of kind missile (hit radius 2 m) whose `steering` hook gives the tick's velocity before the
+  projectile moves: proportional navigation (gain 4) at a constant 350 m/s, the turn limited to 0.6 rad/s (about 21 g), for 20 s.
+  The hook's object rides on the projectile (`guidance`), because a `Callable` does not keep a `RefCounted` alive. The director
+  keeps the mix's count in flight (`missile_target`, 0.4 per fighter): at most two launches a tick, from the capitals in turn, each
+  at its capital's strike target, the nearest hostile fighter within 6 km (looked up again every 30 ticks), aimed at the lead.
+  Without its target a missile flies straight on until its lifetime ends. The hit resolver sweeps it like any projectile.
+- **Beams** are two emitters per capital (`BeamStandin`), each firing every 2 s at its capital's strike target when that is within
+  3 km. A beam is a `Projectile` of kind beam laid by `fire_beam`: its whole 3 km segment is its one tick of flight (it does not
+  move in its own tick), so the resolver sweeps it through the hit broad phase in the tick it fires and the earliest hit along the
+  segment, the first hull, takes it. The resolver retires every beam after its resolve, hit or not; beams are fired after the
+  scan is built, so they never reach the scan's incoming fire. A 3 km look covers more cells than the grid holds hulls, so the
+  broad phase tests a beam against every hull (§17.7); at 0.5 Hz per emitter that is about one beam a tick at battle 300.
+- **Interceptors** now take candidates from the hit broad phase: once a tick the director gathers every projectile in flight but
+  beams and asks the grid which lie within 1.5 km of each interceptor due (the interceptors as hulls of 1.5 km reach, the
+  projectiles as points), then each interceptor shoots down the nearest hostile missile in reach, else the nearest hostile bolt.
+- **Mines** are rows in one `MineStandin` node (no node per mine, one `MultiMeshInstance3D` draws them): 50 m trigger, 100 m blast,
+  200 hull points. The layout lays the mix's mines (`max(100, N)`) in belts, each fight's share split between its sides, each side's
+  on a 90 degree arc 1.5 km out toward its own direction (between its fighters' start and its capitals), 150 m deep and high either
+  way, none inside a trigger of a starting hull. Each tick a third of the mines (by index) ask the grid for a hull hostile to
+  their layer whose sphere comes inside the trigger; one that finds one goes off, applies a `HitInfo` with cause `mine` to every
+  hull whose sphere lies within the blast (friend or foe) and is removed. It is laid again in its place after 10 s, so the belts
+  hold the mix over a run. The hulls are the director's per-tick list of what flies (the pool's fighters, the capitals, the
+  player). Mines are not in today's contact scan: they have no `Targetable`, and T09's body registry takes them as rows of kind
+  `Targetable.Kind.MINE` (`position_of`, `faction_of`, `kind`, `TRIGGER_RADIUS_M`, and the `laid` and `detonated` signals).
+- **Counters**: `beams` (emitters), `missiles` (in flight) and `mines` (in play) per tick, beside T07's; a run's summary has
+  `weapons` (launches, missiles shot down, beam shots, mines set off over the window) and the director's cost by part
+  (`parts_us`: gather, engines and guns, interceptors, beams, missiles, mines, launches) with the missiles' steering, which runs
+  in the projectiles' own tick.
+- **Tests**: `test_missile_guidance` (a crossing fighter hit within the lifetime at the turn rate and missed at a tenth of it, the
+  turn per tick limited, the speed held), `test_mine_trigger` (hostile only, the trigger from a hull's surface, the native and
+  GDScript grids agree with the plain definition, the blast's reach) and `test_standins` (a beam hits the first hull and none
+  behind it and is gone after its tick, beams at 0.5 Hz within 3 km, an interceptor takes a missile in reach first and never
+  anything outside 1.5 km, a missile hits a crossing fighter through the resolver, the count in flight holds, a mine goes off on
+  a hostile, never a friend, hurts every hull in its blast and is gone, checks every third tick and is laid again, a rebase moves
+  the mines), `test_bench_layout` (the belts hold the mix per side, on their arcs, clear of every ship, seeded) and `test_bench`
+  (a battle run counts beams, missiles and mines).

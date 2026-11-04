@@ -3,8 +3,9 @@ extends Node3D
 ## A capital's turret stand-in (M4-T07, Q19): bench-only, replaced by M12's turrets, AI gunners and defence grid. A `GUN`
 ## takes the nearest hostile fighter within `RANGE_M` from the contact scan, turns its gun axis toward the lead point at a
 ## limited rate and fires pulse-cannon bolts through a `PulseCannonGate` only while the aim is inside `GATE_RAD`. An
-## `INTERCEPTOR` shoots down the nearest hostile bolt within `INTERCEPT_RANGE_M` at its own rate (no bolt of its own; M4-T12
-## adds missiles to what it hunts). `StandinDirector` steps every turret once per tick; a turret has no process of its own.
+## `INTERCEPTOR` shoots down a hostile projectile within `INTERCEPT_RANGE_M` at its own rate (no bolt of its own): the nearest
+## missile first, else the nearest bolt (M4-T12), from the candidates the director found for it through the hit broad phase's
+## grid. `StandinDirector` steps every turret once per tick; a turret has no process of its own.
 
 enum Role { GUN, INTERCEPTOR }
 
@@ -32,8 +33,10 @@ var capital: CapitalStandin = null
 var axis: Vector3 = Vector3.FORWARD
 ## The body it is shooting at (instance id), 0 for none.
 var target_id: int = 0
-## Bolts fired (a gun) or shot down (an interceptor).
+## Bolts fired (a gun) or projectiles shot down (an interceptor).
 var shots: int = 0
+## Missiles an interceptor shot down.
+var missile_shots: int = 0
 var gate: PulseCannonGate = PulseCannonGate.new(1, SHOT_INTERVAL_S)
 
 var _aim_error: float = PI
@@ -111,23 +114,33 @@ func step_gun(delta: float, now_s: float, projectiles: Node3D) -> void:
 	shots += 1
 
 
-## An interceptor's shot (on its tick, every `INTERCEPT_INTERVAL_S`): shoots down the nearest bolt in `bolts` whose faction
-## `hostile` marks, within reach. Returns whether it did.
-func step_interceptor(bolts: Array[Projectile], hostile: Dictionary) -> bool:
+## An interceptor's shot (on its tick, every `INTERCEPT_INTERVAL_S`): among `candidates` (indices into `shots_in_flight`, at
+## `positions`), shoots down the nearest missile within reach whose faction `hostile` marks, else the nearest such bolt. Beams
+## are never candidates. Returns whether it shot.
+func step_interceptor(candidates: Array, shots_in_flight: Array[Projectile], positions: PackedVector3Array,
+		hostile: Dictionary) -> bool:
 	var at: Vector3 = global_position
+	var reach_sq: float = INTERCEPT_RANGE_M * INTERCEPT_RANGE_M
 	var best: Projectile = null
-	var best_sq: float = INTERCEPT_RANGE_M * INTERCEPT_RANGE_M
-	for bolt: Projectile in bolts:
-		if bolt.is_spent() or not bool(hostile.get(bolt.faction, false)):
+	var best_sq: float = INF
+	var best_missile: bool = false
+	for p: int in candidates:
+		var shot: Projectile = shots_in_flight[p]
+		if shot.is_spent() or not bool(hostile.get(shot.faction, false)):
 			continue
-		var d_sq: float = bolt.global_position.distance_squared_to(at)
-		if d_sq <= best_sq:
+		var d_sq: float = positions[p].distance_squared_to(at)
+		if d_sq > reach_sq:
+			continue
+		var missile: bool = shot.kind == Projectile.KIND_MISSILE
+		if (missile and not best_missile) or (missile == best_missile and d_sq <= best_sq):
+			best = shot
 			best_sq = d_sq
-			best = bolt
+			best_missile = missile
 	if best == null:
 		return false
 	best.spend()
 	shots += 1
+	missile_shots += 1 if best_missile else 0
 	return true
 
 

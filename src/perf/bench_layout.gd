@@ -16,6 +16,7 @@ extends RefCounted
 ## - `battle` (M4-T07, Q15, Q19, Q21): the grand multi-side battle, `BattleMix.GRAND`. Fights of 24 on an 8 km lattice, the
 ##   player's fight first, four sides every pair hostile, each side's fighters coming in from its own direction (+Z, -Z, +X,
 ##   -X) and its capitals 5 km behind its fights, cruising into them. An asteroid slab over the player's fight and a moon below.
+##   Mine belts (M4-T12) 1.5 km out from each fight, each side's toward its own direction (`mines`).
 ## - `typical` (M4-T07, Q21): most missions, `BattleMix.TYPICAL`: two fights of about 25 on two sides, the capitals behind.
 ##   N counts fighters and capitals; the mix fixes how many of each.
 ##
@@ -75,6 +76,12 @@ const ROCK_RADIUS_MIN_M: float = 20.0
 const ROCK_RADIUS_MAX_M: float = 200.0
 const ROCK_CLEARANCE_M: float = 100.0
 ## The moon (Q22): a point source this far below the player, pulling this hard at that distance.
+## Mine belts (M4-T12): each side's share of a fight's mines on an arc 90 degrees wide toward its own direction, this far out
+## from the fight's centre (between its fighters' start and its capitals), this deep and this high either way, m.
+const MINE_BELT_RADIUS_M: float = 1500.0
+const MINE_BELT_DEPTH_M: float = 150.0
+const MINE_BELT_HEIGHT_M: float = 150.0
+const MINE_BELT_ARC_RAD: float = PI / 2.0
 const MOON_OFFSET_M: Vector3 = Vector3(0.0, -400000.0, 0.0)
 const MOON_ACCEL_MPS2: float = 0.03
 
@@ -396,6 +403,44 @@ static func _rock_clear(at: Vector3, radius: float, ships: Array[Dictionary]) ->
 	for e: Dictionary in ships:
 		var reach: float = radius + float(e["radius"]) + ROCK_CLEARANCE_M
 		if at.distance_squared_to(e["offset"] as Vector3) < reach * reach:
+			return false
+	return true
+
+
+## The mine belts of `layout` for `seed` (M4-T12): the mix's mines shared out over the fights and, in each, over the sides in
+## turn, each on its side's arc. Each: `offset` (m, from the player), `faction`, `side`, `fight_centre`. None inside a trigger
+## radius of a ship's starting hull. Empty for a layout without a mix.
+static func mines(layout: StringName, n: int, seed_value: int) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var count: int = int(mix(layout, n).get("mines", 0))
+	var centres: Array[Vector3] = fight_centres(layout, n)
+	if count <= 0 or centres.is_empty():
+		return out
+	var ships: Array[Dictionary] = plan(layout, n, seed_value)
+	var side_list: Array[StringName] = sides(layout)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([String(layout), n, seed_value, "mines"])
+	for g: int in centres.size():
+		var size: int = count / centres.size() + (1 if g < count % centres.size() else 0)
+		for k: int in size:
+			var side: int = k % side_list.size()
+			var heading: float = atan2(side_direction(side).x, side_direction(side).z)
+			var at: Vector3 = centres[g]
+			for attempt: int in 50:
+				var angle: float = heading + (rng.randf() - 0.5) * MINE_BELT_ARC_RAD
+				var radius: float = MINE_BELT_RADIUS_M + rng.randf_range(-MINE_BELT_DEPTH_M, MINE_BELT_DEPTH_M)
+				at = centres[g] + Vector3(sin(angle) * radius, rng.randf_range(-MINE_BELT_HEIGHT_M, MINE_BELT_HEIGHT_M),
+						cos(angle) * radius)
+				if _mine_clear(at, ships):
+					break
+			out.append({"offset": at, "faction": side_list[side], "side": side, "fight_centre": centres[g]})
+	return out
+
+
+static func _mine_clear(at: Vector3, ships: Array[Dictionary]) -> bool:
+	for e: Dictionary in ships:
+		var reach: float = float(e["radius"]) + MineStandin.TRIGGER_RADIUS_M
+		if at.distance_squared_to(e["offset"] as Vector3) <= reach * reach:
 			return false
 	return true
 

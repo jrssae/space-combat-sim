@@ -9,7 +9,8 @@ extends Node
 ## stepped yet). A bounding-sphere test comes first, then each hit volume inflated by the bolt's hit radius; the earliest
 ## hit wins. The sphere test runs in `HitBroadPhase` (M4-T08, §17.7), which finds the pairs that pass it without testing every
 ## pair, natively when the library is loaded; the resolver sweeps only those, in the same order, so the hits are the same.
-## Every projectile kind (bolt, beam, missile, mine) is swept alike, with its own hit radius. The bolt is spent,
+## Every projectile kind (bolt, beam, missile, mine) is swept alike, with its own hit radius; a beam (M4-T12) lives for one
+## resolve, so its first hull along the segment takes the hit and it is retired whether it hit or not. The bolt is spent,
 ## `Damageable.apply_hit` runs, an `ImpactFlash` is added and `hit_resolved` is emitted for the HUD and sound. Nothing is cached
 ## between ticks, so a `World.rebase()` changes nothing. The target's rotation during one
 ## tick is ignored.
@@ -51,6 +52,7 @@ var _bolt_starts := PackedVector3Array()
 var _bolt_ends := PackedVector3Array()
 var _bolt_mids := PackedVector3Array()
 var _bolt_reach := PackedFloat64Array()
+var _beams: Array[Projectile] = []
 # The earliest hit `_earliest_hit` found: the hull, the time along the tick and the segment in the hull's frame.
 var _best: int = -1
 var _best_t: float = INF
@@ -121,6 +123,8 @@ func resolve(delta: float) -> void:
 		projectiles_last_tick += 1
 		if next > first and _earliest_hit(bolt, i, keys, first, next, hull_count):
 			_land(bolt, delta)
+	for beam: Projectile in _beams:
+		beam.spend()
 	resolve_us = Time.get_ticks_usec() - started_us
 
 
@@ -162,10 +166,13 @@ func _gather_bolts() -> void:
 	_bolt_ends.clear()
 	_bolt_mids.clear()
 	_bolt_reach.clear()
+	_beams.clear()
 	for node: Node in get_tree().get_nodes_in_group(Projectile.GROUP):
 		var bolt := node as Projectile
 		if bolt == null or bolt.is_spent() or bolt.is_queued_for_deletion() or not bolt.is_inside_tree():
 			continue
+		if bolt.kind == Projectile.KIND_BEAM:
+			_beams.append(bolt)
 		var p1: Vector3 = bolt.global_position
 		var start: Vector3 = p1 - bolt.last_step
 		_bolts.append(bolt)

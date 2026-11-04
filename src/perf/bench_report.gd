@@ -94,6 +94,13 @@ static func run_markdown(s: Dictionary) -> String:
 	if int(entities.get("capitals", 0)) > 0 or int(entities.get("asteroids", 0)) > 0:
 		lines.append("")
 		lines.append("Entities (mean per tick; launches in the window): %s" % entity_line(entities))
+	var weapons: Dictionary = s.get("weapons", {})
+	if not weapons.is_empty():
+		lines.append("")
+		lines.append("Weapons over the measured window (M4-T12): %d missiles launched, %d shot down, %d beam shots, %d mines set off; stand-in parts per tick: %s; missile steering %.1f us." % [
+				int(weapons.get("missile_launches", 0)), int(weapons.get("missile_intercepts", 0)), int(weapons.get("beam_shots", 0)),
+				int(weapons.get("detonations", 0)), _parts_line(weapons.get("parts_us", {}) as Dictionary),
+				float(weapons.get("missile_steer_us", 0.0))])
 	lines.append("")
 	lines.append_array(_breakdown_table(s.get("stages", {}) as Dictionary, float(s.get("sync_timed_share", 0.0))))
 	var engine: Dictionary = s.get("engine_check", {})
@@ -143,6 +150,13 @@ static func entity_counts(series: Array[PackedInt64Array]) -> Dictionary:
 
 
 ## The entity counts as one line, in `PerfProbe.ENTITY_FIELDS` order.
+static func _parts_line(parts: Dictionary) -> String:
+	var out := PackedStringArray()
+	for key: String in parts:
+		out.append("%s %.0f us" % [key.replace("_", " "), float(parts[key])])
+	return ", ".join(out)
+
+
 static func entity_line(entities: Dictionary) -> String:
 	var parts := PackedStringArray()
 	for field: StringName in PerfProbe.ENTITY_FIELDS:

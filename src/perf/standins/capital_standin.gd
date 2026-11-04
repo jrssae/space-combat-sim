@@ -3,7 +3,7 @@ extends RigidBody3D
 ## A capital ship stand-in for the battle benchmark (M4-T07, Q19, Q22): bench-only, built by code with no assets, replaced by
 ## M12's capital ships. A box hull 300 m (cruiser), 600 m (destroyer) or 1 200 m (carrier) long with a `Targetable` of kind
 ## capital and a `Damageable` (hull points only), cruising on a fixed heading, with its gun turrets and interceptors as
-## `TurretStandin` children. It costs the tick what a big body costs Jolt, the scan and every broad phase; `StandinDirector`
+## `TurretStandin` children and its two beam lasers as `BeamStandin` children (M4-T12). It costs the tick what a big body costs Jolt, the scan and every broad phase; `StandinDirector`
 ## steps its engines and turrets.
 ##
 ## Newtonian like every body (§15.16): no damping, and the engines hold the cruise velocity with a force each tick that also
@@ -14,6 +14,7 @@ const CRUISE_MPS: float = 30.0
 const CRUISE_RESPONSE_S: float = 5.0
 const MAX_ACCEL_MPS2: float = 2.0
 const INTERCEPTORS_PER_CAPITAL: int = 4
+const BEAMS_PER_CAPITAL: int = 2
 ## Where a carrier's launches leave from: this far below its keel, m.
 const BAY_DROP_M: float = 40.0
 ## Per class: the hull box (m), mass (kg), hull points and gun turrets (the milestone's table).
@@ -35,6 +36,7 @@ var damageable: Damageable = null
 
 var _guns: Array[TurretStandin] = []
 var _interceptors: Array[TurretStandin] = []
+var _beams: Array[BeamStandin] = []
 
 static var _materials: Dictionary = {}
 
@@ -76,6 +78,10 @@ func guns() -> Array[TurretStandin]:
 
 func interceptors() -> Array[TurretStandin]:
 	return _interceptors
+
+
+func beams() -> Array[BeamStandin]:
+	return _beams
 
 
 ## Whether it launches fighters (a carrier).
@@ -133,7 +139,7 @@ func _build(display_name: String) -> void:
 
 
 # Guns along the spine, alternately on top and underneath so the two halves cover the whole sphere; interceptors at the
-# four corners of the beam.
+# four corners of the beam; the beam lasers at the bow.
 func _add_turrets(size: Vector3, count: int) -> void:
 	var rows: int = maxi(1, ceili(count / 2.0))
 	for i: int in count:
@@ -146,6 +152,14 @@ func _add_turrets(size: Vector3, count: int) -> void:
 		var end: float = 0.35 if i < 2 else -0.35
 		_interceptors.append(_turret(TurretStandin.Role.INTERCEPTOR, Vector3(side * (size.x * 0.5 + 3.0), 0.0, end * size.z),
 				"Interceptor%d" % i))
+	# Beam lasers either side of the bow, on top.
+	for i: int in BEAMS_PER_CAPITAL:
+		var beam := BeamStandin.new()
+		beam.name = "Beam%d" % i
+		beam.capital = self
+		beam.position = Vector3((0.25 if i % 2 == 0 else -0.25) * size.x, size.y * 0.5 + 2.0, -0.45 * size.z)
+		add_child(beam)
+		_beams.append(beam)
 
 
 func _turret(role: TurretStandin.Role, at: Vector3, turret_name: String) -> TurretStandin:

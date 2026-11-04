@@ -6,8 +6,9 @@ extends Node
 ## play.
 ##
 ## `battle` and `typical` (M4-T07, §17.6) also bring the battle's stand-ins through `standins` (`World/Standins`): the
-## capitals with their turrets, the asteroid field (`rocks=` overrides the mix's count; 0 for none), the moon, the carriers'
-## launch cycle, and for four sides a session faction table and the bench factions on the fighters of sides three and four.
+## capitals with their turrets and beam lasers, the asteroid field (`rocks=` overrides the mix's count; 0 for none), the mine
+## belts and the missiles the mix holds in flight (M4-T12), the moon, the carriers' launch cycle, and for four sides a session
+## faction table and the bench factions on the fighters of sides three and four.
 ## All of it goes when the run ends.
 
 ## The report is written; the run's summary.
@@ -253,6 +254,12 @@ func _set_up_standins(plan: Array[Dictionary], anchor: UniversePos) -> void:
 	if not rocks.is_empty():
 		standins.add_asteroids(rocks, anchor)
 	_rocks_placed = rocks.size()
+	var belts: Array[Dictionary] = BenchLayout.mines(_layout, _n, int(_options["seed"]))
+	if not belts.is_empty():
+		standins.add_mines(belts, anchor)
+	standins.missile_target = int(_mix.get("missiles", 0))
+	MissileStandin.steers = 0
+	MissileStandin.steer_us = 0
 	var moon: Dictionary = BenchLayout.gravity_source(_layout)
 	if not moon.is_empty():
 		standins.add_gravity(anchor.plus_local(moon["offset"]), float(moon["gm"]))
@@ -312,6 +319,10 @@ func _physics_process(_delta: float) -> void:
 		probe.clear_series()
 		probe.recording = true
 		_wall_start_us = now
+		if standins != null:
+			standins.restart_weapon_counters()
+		MissileStandin.steers = 0
+		MissileStandin.steer_us = 0
 	elif _tick == last + 1:
 		_finish(now, "")
 		return
@@ -353,6 +364,7 @@ func _finish(now: int, aborted: String) -> void:
 		"rocks_placed": _rocks_placed,
 		"fights_in_slab": BenchLayout.fights_in_slab(_layout, _n),
 		"intercepts": standins.intercepts if standins != null else 0,
+		"weapons": _weapons(),
 		"rebase_threshold_m": float(_options["rebase_m"]),
 		"sync_timed": probe.time_sync,
 		"sleep_usec_during_run": OS.low_processor_usage_mode_sleep_usec,
@@ -363,7 +375,7 @@ func _finish(now: int, aborted: String) -> void:
 	if bool(_options["paired"]):
 		meta["probe_cost"] = _probe_cost(series[PerfProbe.Field.TICK])
 	if _mix.is_empty():
-		for key: String in ["mix", "mix_line", "rocks_placed", "fights_in_slab", "intercepts"]:
+		for key: String in ["mix", "mix_line", "rocks_placed", "fights_in_slab", "intercepts", "weapons"]:
 			meta.erase(key)
 	var summary: Dictionary = BenchReport.run_summary(meta, series)
 	var dir: String = report_root.path_join(String(_options["label"]))
@@ -402,6 +414,17 @@ func _put_back() -> void:
 	Factions.table().set_relation(Factions.EARTH_ALLIANCE, Factions.RAIDERS, int(_restore["relation"]) as Factions.Relation)
 	_mix = {}
 	_restore = {}
+
+
+# What the battle's weapons did over the measured window (M4-T12) and what each stand-in part cost per tick, us.
+func _weapons() -> Dictionary:
+	if standins == null:
+		return {}
+	var ticks: int = maxi(standins.ticks, 1)
+	return {"missile_launches": standins.missile_launches, "missile_intercepts": standins.missile_intercepts,
+			"beam_shots": standins.beam_shots, "detonations": standins.detonations, "ticks": standins.ticks,
+			"parts_us": standins.part_means_us(), "missile_steer_us": float(MissileStandin.steer_us) / float(ticks),
+			"missile_steers_per_tick": float(MissileStandin.steers) / float(ticks)}
 
 
 # The mix for summary.json: the area as a plain list.
