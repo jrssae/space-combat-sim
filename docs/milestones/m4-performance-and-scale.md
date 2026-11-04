@@ -1379,6 +1379,13 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
   40 s (T30a 29.5), `build all` 44 s. The look sheet (H, checkpoint 1c): `/tmp/m4_t30b_starfury_sheet.png` (Alpha, Delta, Zeta, KILO and
   T30a's textured shots; 8, 30, 150 and 600 m lit and dark; the cockpit lit and dark), every shot at
   `/tmp/m4_t30b_starfury_aurora_<wing>_<m>m_<lit|dark>.png`.
+- **Fix round 1 (2026-11-04, Q41 and the review):** checkpoint 1c approved with fixes. The hull one step darker (renders about sRGB 136
+  lit at 8 m, was 163); every hazard stripe removed from the base hull, so a plain Starfury is all grey and colour comes only from the
+  livery; the fallback wings get their own pattern family (sash, tips, two-tone) and palettes without red, magenta or maroon; joining a
+  wing or taking its lead repaints a Starfury with the wing's livery and slot number; tests on the real Starfury for the patterns' and
+  number fields' placement, the zone surviving the import, the coarse build tracking its target; the shader's derivatives out of
+  per-pixel branches; no livery values on raiders; the cabin glow's default read from `SettingsSchema`. The sheet gained a plain
+  column, a top view per wing at 8 m and the plain hull's side.
 
 ##### M4-T30d Every other hull textured, mesh LODs measured, the mesh path the default
 

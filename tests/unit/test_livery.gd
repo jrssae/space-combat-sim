@@ -40,10 +40,10 @@ func test_a_named_wing_gets_its_own_livery_and_number() -> void:
 func test_another_wing_gets_procgens_fallback() -> void:
 	var section: Dictionary = _section()
 	var kilo: Livery = Livery.for_wing("Kilo", 4, section)
-	# procgen: livery_for("kilo") is palette 2 (maroon and sand) with the pinstripe pattern.
+	# procgen: livery_for("kilo") is palette 2 (black and white) with the two_tone pattern (Q41: the fallback family).
 	var palette: Array = section["fallback"]["palettes"][2]["primary"]
 	assert_true(kilo.primary.is_equal_approx(Color(palette[0], palette[1], palette[2])), str(kilo.primary))
-	assert_eq(kilo.pattern, "pinstripe")
+	assert_eq(kilo.pattern, "two_tone")
 	assert_eq(kilo.number, 4)
 	var again: Livery = Livery.for_wing("KILO", 4, section)
 	assert_eq(again.primary, kilo.primary, "stable for a name in any case")

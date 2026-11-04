@@ -14,7 +14,8 @@ in ``docs/design-references.md``:
   along the facet edges; the pilot's eye 1 m behind the front pane
 * ventral gun pod under the chin, twin barrels at x = +-0.45
 * four trussed struts from the fuselage flanks to the pods, 18 deg above/below horizontal,
-  leading edge swept 57 deg from the centre line, hazard stripes, ladder webs with cut-outs
+  leading edge swept 57 deg from the centre line, ladder webs with cut-outs (no hazard stripes: the base hull is plain grey and
+  any colour is the wing's livery, M4-T30b Q41)
 * four ring-faced pods (5 m x 1.64 m) centred at (+-5.5, +-2.2, 5.0): retro bell in the front
   ring, main bell at the rear
 * a claw behind each pod: two outboard prongs and one inboard vane splaying aft, rooted in
@@ -213,7 +214,6 @@ STARFURY_POD = FuryPodSpec(
     mass_kg=5_000.0,
 )  # fmt: skip
 # Hazard stripes on the deck just behind its leading edge, between the hull and the pod.
-HAZARD = tuple((2.3 + 0.3 * k, 2.6 + 0.3 * k, "hazard" if k % 2 == 0 else "hazard_dark") for k in range(6))
 STARFURY_STRUT = FuryStrutSpec(
     # (x, centre y, thickness, leading edge z, trailing edge z). The deck spans the fuselage's top from the centre line
     # (a notch over the canopy, cheeks either side of it, a tooth in its trailing edge at x = 2-2.8) and climbs out to
@@ -234,7 +234,6 @@ STARFURY_STRUT = FuryStrutSpec(
         (3.25, 1.285, 0.43, -1.7, 0.57), (3.75, 1.54, 0.42, -1.42, 0.86), (4.25, 1.68, 0.46, -1.3, 1.05),
         (4.95, 1.72, 0.5, -1.2, 1.3),
     )),
-    bands=HAZARD,
     mass_kg=1_500.0,
 )  # fmt: skip
 # The lower arms are not quite the upper ones mirrored: their deck runs under the keel, and their brace stays close under
@@ -253,7 +252,6 @@ STARFURY_LOWER_STRUT = FuryStrutSpec(
         (2.0, 0.905, 0.31, -2.58, -0.25), (2.5, 1.1, 0.32, -2.32, 0.02), (3.25, 1.4, 0.32, -1.92, 0.39),
         (3.75, 1.6, 0.32, -1.66, 0.64), (4.25, 1.67, 0.46, -1.45, 1.0), (4.95, 1.72, 0.5, -1.3, 1.3),
     )),
-    bands=HAZARD,
     mass_kg=1_500.0,
 )  # fmt: skip
 STARFURY_CLAW = FuryClawSpec(

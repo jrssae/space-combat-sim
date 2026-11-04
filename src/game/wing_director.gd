@@ -168,8 +168,19 @@ func _lead(wing: Wing, ship: Combatant) -> void:
 		pilot.context.clear_wing()
 		_give_rally(pilot)
 	wing.leader = ship
+	_paint(wing, ship, 1)
 	if old != null and old != ship and not old.is_player and old.damageable != null and old.damageable.is_active():
 		add_member(wing, old)
+
+
+# A Starfury that takes a place in a wing wears the wing's livery and the place's number (`Wing.callsign`'s: the leader 01, slot n
+# n + 1), whatever name the pool gave it (M4-T30b). Hulls without a livery table are left alone.
+func _paint(wing: Wing, member: Combatant, number: int) -> void:
+	if member == null or member.ship == null or member.ship.spec == null:
+		return
+	var section: Dictionary = MeshAssets.livery_section(member.ship.spec.asset_id)
+	if not section.is_empty() and (pool == null or pool.type_of(member) == ShipPool.ALLY_TYPE):
+		member.ship.set_livery(Livery.for_wing(wing.name, number, section))
 
 
 # A wing's AI ships rally on an engaged wingmate when they have nothing to attack (`BehaviourRally`).
@@ -195,6 +206,7 @@ func add_member(wing: Wing, member: Combatant, slot: int = -1) -> int:
 	var at: int = wing.add_member(member, slot)
 	if at < 0:
 		return -1
+	_paint(wing, member, at + 1)
 	if pilot.behaviour(&"formation") == null:
 		pilot.add_behaviour(BehaviourFormation.new(pilot.profile))
 	_give_rally(pilot)

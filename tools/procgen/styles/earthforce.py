@@ -3,7 +3,7 @@ gunmetal detail, yellow/black hazard stripes on structural members, dark neutral
 marker stripe (buoys), dark nozzles. The nozzle throats glow hot; the cabin is grey, lit by a dark red glow that shows through the
 glass (Q36, M4-T30b), and the wing's livery is painted over the hull by the shader (``core/livery.py``).
 
-Albedos are linear RGB (the sRGB look is roughly: hull #707989, panels #565C6A, dark #5A5C60,
+Albedos are linear RGB (the sRGB look is roughly: hull #5A616F (Q41: a medium weathered blue-grey), panels #464C5A, dark #5A5C60,
 hazard #D8B21E / #2A2A2C, marker stripe #C0522E, glass #191A1C, frame #7A7C80, cabin grey #4A4A4C).
 """
 
@@ -15,9 +15,9 @@ from . import Style
 EARTHFORCE = Style(
     name="earthforce",
     materials={
-        "hull": Material("ef_hull", (0.162, 0.1912, 0.2519), paneled=True),
+        "hull": Material("ef_hull", (0.1022, 0.1195, 0.159), paneled=True),
         "hull_dark": Material("ef_hull_dark", (0.10, 0.105, 0.115), paneled=True),
-        "hull_panel": Material("ef_hull_panel", (0.093, 0.107, 0.1441), paneled=True),
+        "hull_panel": Material("ef_hull_panel", (0.0612, 0.0723, 0.1022), paneled=True),
         "stripe": Material("ef_stripe", (0.52, 0.085, 0.03), paneled=True),
         "hazard": Material("ef_hazard", (0.69, 0.45, 0.012), paneled=True),
         "hazard_dark": Material("ef_hazard_dark", (0.023, 0.023, 0.025)),

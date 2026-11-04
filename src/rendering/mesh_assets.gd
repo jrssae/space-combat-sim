@@ -13,10 +13,9 @@ const LIVERY_SHADER: Shader = preload("res://assets/shaders/hull_livery.gdshader
 const HULL_GLASS_SHADER: Shader = preload("res://assets/shaders/hull_glass.gdshader")
 ## The shader's table sizes (`hull_livery.gdshader`).
 const MAX_STRIPES: int = 48
-const MAX_PATTERNS: int = 8
+const MAX_PATTERNS: int = 12
 const MAX_FIELDS: int = 8
-## `settings.cabin_glow_level`'s default: at it the glass glows at the strength the manifest gives.
-const CABIN_GLOW_DEFAULT: float = 0.3
+
 const MAX_MATERIALS: int = 32
 const GLASS_SURFACE: String = "glass"
 const MAP_KEYS: Array[String] = ["albedo", "normal", "orm", "emissive"]
@@ -236,7 +235,9 @@ static func glass_material(dir: String, surface: Dictionary) -> ShaderMaterial:
 
 static func _apply_cabin_glow(index: int) -> void:
 	var level: float = float(Settings.get_value(&"cabin_glow_level"))
-	_glass[index].set_shader_parameter(&"glow_energy", _glass_strength[index] * level / CABIN_GLOW_DEFAULT)
+	# At `settings.cabin_glow_level`'s default the glass glows at the strength the manifest gives.
+	var default_level: float = float(SettingsSchema.ENTRIES[&"cabin_glow_level"]["default"])
+	_glass[index].set_shader_parameter(&"glow_energy", _glass_strength[index] * level / maxf(default_level, 1e-6))
 	_glass[index].set_shader_parameter(&"glow_view_m", float(Settings.get_value(&"cabin_glow_view_m")))
 
 

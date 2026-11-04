@@ -2645,9 +2645,13 @@ src/rendering/look_scene.gd           the `livery` command and provider; the `sh
   fields' bits and the number. 20 Starfuries of four wings draw in the same 3 extra calls as 20 of one wing.
 - **The table.** Alpha: yellow-green and dark blue-grey bands across all four struts; Beta: a blue band round each pod's front and a
   blue nose; Delta: a dark green arrowhead over the back and the upper struts, edged in sand; Zeta: thin red pinstripes and a magenta
-  chevron; any other wing a stable pick (FNV-1a of the lower-case name, which `Livery.fnv1a` repeats) of six palette pairs and the four
-  patterns; no wing the plain field grey with no number (enemies, unnamed ships). Every wing numbers the dorsal deck large and the upper
-  left wing small (Q37). The number is the callsign's: the slot in its wing from 1, two digits.
+  chevron; any other wing a stable pick (FNV-1a of the lower-case name, which `Livery.fnv1a` repeats) of six palette pairs (none red,
+  magenta or maroon) and a pattern family no named wing uses (a diagonal sash, solid strut tips, two-tone struts; Q41); no wing the
+  plain field grey with no number (enemies, unnamed ships). The base hull carries no colour of its own: T30a's hazard stripes are gone
+  (Q41), so any colour is the livery's. Every wing numbers the dorsal deck large and the upper
+  left wing small (Q37). The number is the callsign's: the slot in its wing from 1, two digits. A Starfury is painted when the pool
+  hands it out (from its callsign) and again when it takes a place in a wing (`WingDirector`: the leader 01, slot n as n + 1), so a
+  scenario wing's unnamed members fly their wing's livery. Hulls without a livery table (raiders) get no livery values.
 - **The seam for a paint scheme.** A livery is data a ship is handed (`Ship.set_livery`); the player's is `Livery.player` (Alpha 01)
   until a setting or a front-end pick hands it another.
 - **Plating and weathering (Q34, Q37).** The uniform world grid is gone from the textured mesh: each part gets a `Plating` from its name
@@ -2655,7 +2659,10 @@ src/rendering/look_scene.gd           the `livery` command and provider; the `sh
   The grid is still projected along the axis nearest the normal, but measured on the surface with the chart's mean slope, so a slope keeps
   its panel size and a curved chart stays smooth. Rivet rows run beside every seam. Weathering comes from `Style.extra`: streaks trailing
   aft from the seams, smudges stretched fore and aft, speckle, worn edges that show dark primer (`bare_metal` 0: no metal), matte paint.
-  The Earthforce hull is a medium blue-grey (sRGB about 112, 121, 137) so it renders medium grey under the key star.
+  The Earthforce hull is a medium weathered blue-grey (sRGB about 90, 97, 111, Q41) so it renders a medium grey under the key star.
+- **The shader's derivatives.** Only per-instance values (the pattern, the fields, the number) choose the paths in
+  `hull_livery.gdshader`; the zone, the facing and the paint mask are multiplied in, and the digits are sampled with explicit
+  gradients, so no derivative or mip choice is taken inside a per-pixel branch.
 - **The maps.** The normal map is baked at twice the atlas (4 096 px for the Starfury: the grooves, hatches and rivets at 1 cm a texel),
   from positions interpolated inside each chart; the albedo (RGBA, the paint mask), ORM and emissive stay at 2 048. Gutters are four
   texels of the 2 048 maps. The Starfury's textures take 32.0 MB of VRAM (bar 40 MB): albedo 5.6, normal 22.4, ORM 2.8, emissive 2.8,

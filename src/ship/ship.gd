@@ -796,8 +796,8 @@ func _load_visuals() -> void:
 	var dir: String = asset_dir(spec)
 	_fallback_mesh = _load_mesh(dir.path_join(spec.asset_id + ".obj"))
 	_paint_mesh = PaintMeshes.for_asset(spec.asset_id)
-	if livery == null:
-		var section: Dictionary = MeshAssets.livery_section(spec.asset_id)
+	var section: Dictionary = MeshAssets.livery_section(spec.asset_id)
+	if livery == null and not section.is_empty():
 		livery = Livery.player(section) if console_owner else Livery.for_wing("", 0, section)
 	_apply_livery()
 	if hull_mesh_fallback != null:
@@ -813,9 +813,11 @@ func _load_visuals() -> void:
 	_load_far_levels(_hull_lod)  # the proxy takes whatever mesh is loaded, so a regenerated hull needs no changes here
 
 
-## Paints the hull in `p_livery` (its wing's colours and pattern and its number); null gives back the plain livery.
+## Paints the hull in `p_livery` (its wing's colours and pattern and its number); null gives back the plain livery, or none for a
+## hull without a livery table.
 func set_livery(p_livery: Livery) -> void:
-	livery = p_livery if p_livery != null else Livery.for_wing("", 0, MeshAssets.livery_section(spec.asset_id) if spec != null else {})
+	var section: Dictionary = MeshAssets.livery_section(spec.asset_id) if spec != null else {}
+	livery = p_livery if p_livery != null else (Livery.for_wing("", 0, section) if not section.is_empty() else null)
 	_apply_livery()
 
 

@@ -10,6 +10,8 @@ extends Node
 
 const LIGHTS: Array[StringName] = [&"lit", &"dark", &"off"]
 const LOOKS: Array[StringName] = [&"splat", &"painted", &"textured"]
+## How the parked ship faces the camera: three-quarters on (the sheets' rows), its back (the dorsal number), or its left side.
+const VIEWS: Array[StringName] = [&"three_quarter", &"top", &"side"]
 const POOL_TYPES: Dictionary = {"starfury_aurora": ShipPool.ALLY_TYPE, "raider_fighter": ShipPool.DEFAULT_TYPE}
 ## How the parked ship faces the camera: turned this much off nose-on, seen a little from above.
 const YAW_DEG: float = 38.0
@@ -35,7 +37,7 @@ func _ready() -> void:
 			"Park one idle ship of an asset ahead of the camera for a look sheet, lit from behind the camera or from behind the ship, as splats, the painted or the textured mesh; `sheet off` clears it",
 			[ConsoleArg.string_required(&"asset_id"), ConsoleArg.float_optional(&"distance_m", 30.0, 0.0, 20000.0),
 			ConsoleArg.enum_optional(&"light", LIGHTS, &"lit"), ConsoleArg.enum_optional(&"look", LOOKS, &"textured"),
-			ConsoleArg.string_optional(&"livery", "")]), _cmd_sheet, self)
+			ConsoleArg.string_optional(&"livery", "-"), ConsoleArg.enum_optional(&"view", VIEWS, &"three_quarter")]), _cmd_sheet, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"livery",
 			"Paint a ship in a wing's livery with a number (plain for none), for looking at it: the player's ship, `sheet` for the parked one, or a ship by name",
 			[ConsoleArg.string_required(&"wing"), ConsoleArg.int_optional(&"number", 1, 0, 99), ConsoleArg.string_rest(&"ship").make_optional("player")]), _cmd_livery, self)
@@ -61,7 +63,7 @@ func parked() -> Combatant:
 
 
 ## Parks a ship of `asset_id` `distance_m` ahead of the current camera with the given light and look; "" on success, else why not.
-func show(asset_id: String, distance_m: float, light: StringName, look: StringName) -> String:
+func show(asset_id: String, distance_m: float, light: StringName, look: StringName, view: StringName = &"three_quarter") -> String:
 	if not _resolve():
 		return "sheet needs the world, the ship pool, the player's ship and the key star"
 	if not POOL_TYPES.has(asset_id):
@@ -82,6 +84,10 @@ func show(asset_id: String, distance_m: float, light: StringName, look: StringNa
 	var at: Vector3 = cam.origin - cam.basis.z * distance_m
 	var to_camera: Vector3 = (cam.origin - at).normalized()
 	var basis := Basis.looking_at(to_camera, cam.basis.y).rotated(cam.basis.y, deg_to_rad(YAW_DEG)).rotated(cam.basis.x, deg_to_rad(-PITCH_DEG))
+	if view == &"top":
+		basis = Basis.looking_at(cam.basis.y, to_camera)  # the nose up the picture, the back to the camera
+	elif view == &"side":
+		basis = Basis.looking_at(-cam.basis.x, cam.basis.y)  # the nose to the left, the left side to the camera
 	_parked = pool.acquire("SHEET", world.to_universe(at), basis.orthonormalized(), Vector3.ZERO, IdleBrain.new(true), type)
 	if _parked == null:
 		return "the %s pool gave no ship" % type
@@ -168,11 +174,11 @@ func _cmd_sheet(args: Dictionary) -> ConsoleResult:
 		clear()
 		return ConsoleResult.line("sheet cleared")
 	var look: StringName = StringName(args[&"look"])
-	var error: String = show(asset_id, float(args[&"distance_m"]), light, look)
+	var error: String = show(asset_id, float(args[&"distance_m"]), light, look, StringName(args[&"view"]))
 	if not error.is_empty():
 		return ConsoleResult.failure(error)
 	var livery_arg: String = String(args[&"livery"])
-	if not livery_arg.is_empty():
+	if not livery_arg.is_empty() and livery_arg != "-":
 		var pair: PackedStringArray = livery_arg.split(":")
 		_parked.ship.set_livery(Livery.for_wing(pair[0] if pair[0] != "plain" else "", int(pair[1]) if pair.size() > 1 else 1,
 				MeshAssets.livery_section(asset_id)))

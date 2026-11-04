@@ -33,6 +33,7 @@ ANY_FACING = -2.0  # a stripe's min_facing that every face passes
 DIGIT_CELL_PX = (96, 128)  # one digit's cell in the atlas: 6 by 8 glyph units at 16 px a unit (the 4 by 6 glyph centred)
 DIGIT_PX_PER_UNIT = 16.0
 DIGIT_RANGE_UNITS = 1.5  # the atlas stores 1 - distance / range: 255 on a stroke's centre line, 0 this far from it
+DIGIT_ADVANCE = 5.4  # glyph units from one digit's left edge to the next's (the stroke font's)
 PLAIN_PATTERN = "plain"
 
 
@@ -131,6 +132,22 @@ PATTERNS: dict[str, tuple[Stripe, ...]] = {
         Stripe(STRUTS, (1.0, 0.0, 0.0), 4.1, 4.18, 1),
         Stripe(BODY + _zones("strut_upper"), (-0.9, 0.0, 1.0), -2.35, -2.05, 2, facing=UP, min_facing=0.3),
     ),
+    # The fallback family (Q41): patterns no named wing uses, so a wing without its own livery never looks like one that has it.
+    # A diagonal sash over the back from one upper strut to the other, edged in the second colour.
+    "sash": (
+        Stripe(BODY + _zones("strut_upper"), (1.0, 0.0, 0.9), -0.68, 0.68, 2, mirror=False, facing=UP, min_facing=0.3),
+        Stripe(BODY + _zones("strut_upper"), (1.0, 0.0, 0.9), -0.58, 0.58, 1, mirror=False, facing=UP, min_facing=0.3),
+    ),
+    # Solid strut tips by the pods, with a thin line inboard.
+    "tips": (
+        Stripe(STRUTS, (1.0, 0.0, 0.0), 3.42, 3.55, 2),
+        Stripe(STRUTS, (1.0, 0.0, 0.0), 3.55, 4.9, 1),
+    ),
+    # The upper struts in one colour and the lower in the other.
+    "two_tone": (
+        Stripe(_zones("strut_upper"), (1.0, 0.0, 0.0), 1.15, 4.9, 1),
+        Stripe(_zones("strut_lower"), (1.0, 0.0, 0.0), 1.15, 4.9, 2),
+    ),
 }
 
 NUMBER_FIELDS: dict[str, NumberField] = {
@@ -150,16 +167,17 @@ LIVERIES: dict[str, Livery] = {
 }
 PLAIN = Livery("plain", (150.0, 152.0, 156.0), (150.0, 152.0, 156.0), PLAIN_PATTERN, numbers=())
 
-# What a wing without its own livery is given: a palette pair and a pattern picked by its name's hash.
+# What a wing without its own livery is given: a palette pair and a pattern of the fallback family, picked by its name's hash.
+# No red, magenta or maroon (Zeta's), no Alpha yellow-green, Beta blue or Delta green (Q41).
 FALLBACK_PALETTES: tuple[tuple[Vec3, Vec3, Vec3], ...] = (
-    ((214.0, 112.0, 32.0), (40.0, 40.0, 44.0), (40.0, 40.0, 44.0)),  # orange and black
+    ((214.0, 112.0, 32.0), (40.0, 40.0, 44.0), (40.0, 40.0, 44.0)),  # orange and charcoal
     ((40.0, 150.0, 150.0), (230.0, 232.0, 228.0), (230.0, 232.0, 228.0)),  # teal and white
-    ((120.0, 34.0, 40.0), (208.0, 190.0, 140.0), (208.0, 190.0, 140.0)),  # maroon and sand
-    ((226.0, 196.0, 40.0), (36.0, 52.0, 110.0), (36.0, 52.0, 110.0)),  # yellow and navy
-    ((96.0, 104.0, 60.0), (30.0, 32.0, 28.0), (230.0, 230.0, 220.0)),  # olive and black
-    ((70.0, 120.0, 190.0), (196.0, 60.0, 40.0), (236.0, 238.0, 236.0)),  # sky blue and red
+    ((36.0, 38.0, 42.0), (232.0, 232.0, 226.0), (232.0, 232.0, 226.0)),  # black and white
+    ((120.0, 170.0, 214.0), (236.0, 238.0, 236.0), (30.0, 40.0, 60.0)),  # sky blue and white
+    ((230.0, 230.0, 222.0), (44.0, 46.0, 50.0), (44.0, 46.0, 50.0)),  # white and charcoal
+    ((200.0, 176.0, 120.0), (74.0, 54.0, 36.0), (74.0, 54.0, 36.0)),  # sand and brown
 )
-FALLBACK_PATTERNS: tuple[str, ...] = ("bands", "nose_band", "chevron", "pinstripe")
+FALLBACK_PATTERNS: tuple[str, ...] = ("sash", "tips", "two_tone")
 FALLBACK_NUMBERS: tuple[str, ...] = ("dorsal", "wing")
 
 
@@ -285,10 +303,10 @@ def livery_section(digit_file: str, hull_paint: Sequence[float]) -> dict[str, An
             "numbers": list(FALLBACK_NUMBERS),
         },
         "digits": {"file": digit_file, "cell_px": list(DIGIT_CELL_PX), "px_per_unit": DIGIT_PX_PER_UNIT,
-                   "range_units": DIGIT_RANGE_UNITS, "glyph": [GLYPH_W, GLYPH_H], "advance": 5.4},
+                   "range_units": DIGIT_RANGE_UNITS, "glyph": [GLYPH_W, GLYPH_H], "advance": DIGIT_ADVANCE},
     }
 
 
-__all__ = ["DIGIT_CELL_PX", "LIVERIES", "Livery", "NUMBER_FIELDS", "NumberField", "PATTERNS", "PLAIN", "PLAIN_PATTERN", "Stripe",
+__all__ = ["DIGIT_ADVANCE", "DIGIT_CELL_PX", "LIVERIES", "Livery", "NUMBER_FIELDS", "NumberField", "PATTERNS", "PLAIN", "PLAIN_PATTERN", "Stripe",
            "ZONES", "digit_atlas", "digit_import_sidecar", "fnv1a32", "livery_for", "livery_section", "number_text", "paint_slots",
            "zone_of"]

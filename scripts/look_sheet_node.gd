@@ -63,6 +63,11 @@ func _start() -> void:
 	if liveries.is_empty():
 		shots.append({"cockpit": true})
 	else:
+		# Fix round 1: each wing from above at 8 m (the dorsal number), and the plain hull from the side.
+		for livery: String in liveries.split(","):
+			shots.append({"distance": 8.0, "light": "lit", "look": "textured", "livery": livery, "view": "top"})
+			if livery.begins_with("plain"):
+				shots.append({"distance": 8.0, "light": "lit", "look": "textured", "livery": livery, "view": "side"})
 		for light: String in String(options["lights"]).split(","):
 			shots.append({"cockpit": true, "light": light})
 	get_tree().process_frame.connect(_on_frame)
@@ -79,7 +84,8 @@ func _key(shot: Dictionary) -> String:
 	if shot.has("cockpit"):
 		return "cockpit_%s" % shot["light"] if shot.has("light") else "cockpit"
 	if shot.has("livery"):
-		return "%s_%dm_%s" % [String(shot["livery"]).split(":")[0], int(shot["distance"]), shot["light"]]
+		var view: String = "" if String(shot.get("view", "three_quarter")) == "three_quarter" else "_" + String(shot["view"])
+		return "%s_%dm_%s%s" % [String(shot["livery"]).split(":")[0], int(shot["distance"]), shot["light"], view]
 	return "%s_%dm_%s" % [shot["look"], int(shot["distance"]), shot["light"]]
 
 
@@ -98,7 +104,8 @@ func _next() -> void:
 		if shot.has("light") and look_scene != null and look_scene.key_star != null:
 			look_scene.set_light(StringName(shot["light"]))
 	else:
-		_run("sheet %s %d %s %s %s" % [options["asset"], int(shot["distance"]), shot["light"], shot["look"], shot.get("livery", "")])
+		_run("sheet %s %d %s %s %s %s" % [options["asset"], int(shot["distance"]), shot["light"], shot["look"], shot.get("livery", "-"),
+				shot.get("view", "three_quarter")])
 
 
 func _on_frame() -> void:
@@ -191,7 +198,7 @@ func _finish_liveries() -> void:
 	var distances: PackedStringArray = String(options["distances"]).split(",")
 	var tile_w: int = int(options["tile"])
 	var tile_h: int = (_tiles.values()[0] as Image).get_height()
-	var rows: int = lights.size() * distances.size() + 1
+	var rows: int = lights.size() * distances.size() + 2
 	var sheet: Image = Image.create(columns.size() * tile_w, rows * (tile_h + LABEL_H) + LABEL_H, false, Image.FORMAT_RGB8)
 	sheet.fill(Color(0.08, 0.08, 0.09))
 	for c: int in columns.size():
@@ -217,6 +224,20 @@ func _finish_liveries() -> void:
 					sheet.blit_rect(tile, Rect2i(0, 0, tile_w, tile_h), Vector2i(x, y))
 				_label(sheet, x + 8, y + tile_h + 6, label)
 			row += 1
+	# The top views (each wing's dorsal number) and, under the comparison column, the plain hull's side.
+	var y_top: int = LABEL_H + row * (tile_h + LABEL_H)
+	for c: int in columns.size():
+		var key: String = "%s_8m_lit_top" % columns[c]
+		var label: String = "8 M LIT FROM ABOVE"
+		if columns[c] == "compare":
+			for wing: String in wings:
+				if _tiles.has("%s_8m_lit_side" % wing):
+					key = "%s_8m_lit_side" % wing
+					label = "%s 8 M LIT SIDE" % wing.to_upper()
+		if _tiles.has(key):
+			sheet.blit_rect(_tiles[key], Rect2i(0, 0, tile_w, tile_h), Vector2i(c * tile_w, y_top))
+			_label(sheet, c * tile_w + 8, y_top + tile_h + 6, "%s GPU %.2f MS" % [label, float(_gpu.get(key, 0.0))])
+	row += 1
 	var y0: int = LABEL_H + row * (tile_h + LABEL_H)
 	var k: int = 0
 	for light: String in lights:

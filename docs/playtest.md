@@ -89,7 +89,7 @@ mesh hull does not): `throttle 1` holds both main pods, then flip these while it
 (the mouse speed that commands the full turn rate; lower = more sensitive) and `set settings.mouse_look_deg_per_px 0.12`
 (free look). Sizes: `set settings.debug_text_size 22` (overlay text) and `set settings.chase_bolt_scale 3` (how much larger bolts
 are drawn in the chase view) and `set settings.hud_chase_opacity 0.7` (how solid the HUD is in the chase view; in the cockpit view the
-radar, speed and bars are on the console's screens) and `set settings.cockpit_light_energy 1.6` (the cabin lamp that lights the cockpit frame; takes effect on the next spawn). Hull lighting: `relight off` compares with the flat paint; `set settings.relight_light_gain 0.6` (how strongly light brightens a hull), `set settings.relight_ambient 0.3` and `set settings.relight_unlit_level 0.12` (together, how dark the dark side gets) change it live. Add `save` to keep a setting.
+radar, speed and bars are on the console's screens) and `set settings.cockpit_light_energy 1.0` (the cabin lamp that lights the grey cockpit a dark red, 1.0 by default since M4-T30b; takes effect on the next spawn). Hull lighting: `relight off` compares with the flat paint; `set settings.relight_light_gain 0.6` (how strongly light brightens a hull), `set settings.relight_ambient 0.3` and `set settings.relight_unlit_level 0.12` (together, how dark the dark side gets) change it live. Add `save` to keep a setting.
 
 Changed after the first play test: yaw and roll swapped (the right stick used to yaw and the D-pad to roll), and
 target-ahead moved to a D-pad Up hold because the pad had no stick clicks. Changed after the M2 play test: X is auto-track and
@@ -414,7 +414,7 @@ top_lamp_energy 2.5            how brightly the top lamp lights the ship's own h
 cabin_glow_level 0.3           how much red the cockpit glow adds in the canopy, seen from outside
 cabin_glow_view_m 150          how far off the glow can be seen
 running_light_min_px 1         a running light is never smaller than this on screen; farther out it dims instead
-cockpit_light_energy 1.6       the cabin lamp that lights the cockpit frame (takes effect on the next spawn)
+cockpit_light_energy 1.0       the cabin lamp that lights the cockpit frame a dark red (takes effect on the next spawn; 1.6 before M4-T30b)
 target_hold_s 0.35             how long a press on B is a hold
 hud_targeting_grid false       the targeting grid in the chase view too (in the cockpit it is on the octagon)
 hud_velocity_marker false      the prograde marker in the world

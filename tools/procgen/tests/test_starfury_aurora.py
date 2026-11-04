@@ -57,7 +57,7 @@ LOD0_RECORDS = {
         -1.7370047569274902, -1.7352323532104492, -1.7334598302841187, -2.840289831161499, -3.057607650756836,
         -3.057607650756836, -5.583336353302002, 0.3237166702747345, -0.9461540579795837, 0.0, 0.0],
     121864: [-2.5370795726776123, -1.4283372163772583, 0.449472576379776, -0.4129202961921692, 0.910767138004303, 0.0,
-             -1.1700621843338013, -1.0614829063415527, -0.835771918296814, 3.891820192337036, -3.057607650756836,
+             -1.3924264907836914, -1.3280969858169556, -1.1812175512313843, 3.891820192337036, -3.057607650756836,
              -3.057607650756836, -5.583336353302002, 0.38310563564300537, -0.5943316221237183, 0.38310563564300537,
              0.5943316221237183],
     243727: [4.949801921844482, 1.0193599462509155, 2.168424606323242, -0.0, -1.0, 0.0, -1.6661065816879272,
@@ -336,15 +336,7 @@ class StarfuryAuroraTests(unittest.TestCase):
             & (rgb[:, 1] > 0.4 * rgb[:, 0])
             & (rgb[:, 0] > 0.1)
         )
-        self.assertTrue(0.003 < yellow.mean() < 0.09, yellow.mean())  # hazard stripes
-        start, end = self.slices["strut_ur"][0], self.slices["strut_ll"][1]
-        self.assertFalse(
-            yellow[:start].any() or yellow[end:].any()
-        )  # on the struts only
-        span = np.abs(xyz[yellow, 0])
-        self.assertTrue(
-            np.all((span > 1.5) & (span < SPEC.pod_center[0] - SPEC.pod.radius))
-        )  # between hull and pods
+        self.assertFalse(yellow.any())  # Q41: no hazard stripes; the base hull is plain grey, colour is the livery's
         chroma = (rgb.max(axis=1) - rgb.min(axis=1)) / np.maximum(rgb.max(axis=1), 1e-9)
         grey = (chroma < 0.45) & (rgb[:, 2] >= rgb[:, 0]) & (rgb.max(axis=1) > 0.06)
         self.assertGreater(
@@ -664,8 +656,9 @@ class StarfuryAuroraTests(unittest.TestCase):
         mtl = (self.dir_a / "starfury_aurora.mtl").read_text(encoding="ascii")
         for name in obj.materials:
             self.assertIn(f"newmtl {name}", mtl)
-        for name in ("ef_hazard", "ef_canopy_glass", "ef_canopy_frame", "ef_nozzle"):
+        for name in ("ef_canopy_glass", "ef_canopy_frame", "ef_nozzle"):
             self.assertIn(name, obj.materials)
+        self.assertNotIn("ef_hazard", obj.materials)  # Q41: no hazard stripes on the base hull
         np.testing.assert_allclose(
             obj.vertices.min(axis=0), self.manifest["aabb_min"], atol=0.05
         )
@@ -969,7 +962,7 @@ class StarfuryAuroraTests(unittest.TestCase):
         cabin = read_obj(self.dir_a / "starfury_aurora_chunk_cabin.obj")
         self.assertIn("ef_canopy_glass", cabin.materials)
         arm = read_obj(self.dir_a / "starfury_aurora_chunk_arm_ur.obj")
-        self.assertIn("ef_hazard", arm.materials)
+        self.assertIn("ef_nozzle", arm.materials)
         self.assertNotIn("ef_canopy_glass", arm.materials)
 
     def test_hardpoints_and_manifest_only_gain_the_new_keys_at_the_end(self) -> None:

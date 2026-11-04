@@ -141,7 +141,7 @@ class NavBuoyTests(unittest.TestCase):
         # The wings are dark panels; the rest of the hull is neutral grey.
         hull = self.part_slice("hull")
         wings = rgb[self.part_slice("wing_r")]
-        self.assertLess(float(wings.mean()), 0.65 * float(rgb[hull].mean()))  # 0.65 since the hull went darker (M4-T30b, Q37)
+        self.assertLess(float(wings.mean()), 0.9 * float(rgb[hull].mean()))  # darker; 0.9 since the hull went darker (M4-T30b, Q37, Q41)
         chroma = (rgb.max(axis=1) - rgb.min(axis=1)) / np.maximum(rgb.max(axis=1), 1e-9)
         # (The cool fill light tints the shadow side a little; since M4-T30b, Q37, the Earthforce hull is a blue-grey.)
         lit_grey = (chroma[hull] < 0.45)[~orange[hull] & (rgb[hull].max(axis=1) > 0.05)]
