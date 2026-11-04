@@ -186,6 +186,16 @@ func test_the_console_pause_command_still_pauses_without_the_menu() -> void:
 	assert_false(get_tree().paused)
 
 
+func test_the_console_cannot_resume_behind_the_open_menu() -> void:
+	await _open()
+	var result: ConsoleResult = DebugConsole.registry.execute("pause off")[0]
+	assert_false(result.ok, "the menu owns the pause while it is open")
+	assert_true(get_tree().paused, "the world stays paused behind the menu")
+	assert_true(_menu().is_open())
+	await _pad(&"ui_accept")  # Resume
+	assert_false(get_tree().paused)
+
+
 # --- Entries -----------------------------------------------------------------------------------------------------
 
 

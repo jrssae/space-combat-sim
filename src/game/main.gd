@@ -645,10 +645,13 @@ func _cmd_scenario(args: Dictionary) -> ConsoleResult:
 	return ConsoleResult.line("loading %s" % wanted)
 
 
-func _cmd_pause(args: Dictionary) -> String:
+func _cmd_pause(args: Dictionary) -> ConsoleResult:
+	# The pause menu owns the pause while it is open; resuming behind it would leave the ship uncommanded.
+	if pause_menu != null and pause_menu.is_open():
+		return ConsoleResult.failure("the pause menu is open: resume from it")
 	var requested: Variant = args.get(&"state")
 	set_paused(not get_tree().paused if requested == null else bool(requested))
-	return "paused" if get_tree().paused else "running"
+	return ConsoleResult.line("paused" if get_tree().paused else "running")
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
