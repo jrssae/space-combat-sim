@@ -66,6 +66,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q32 | If the textured Starfury look sheet is refused (T30a, checkpoint 1b) | **Keep iterating in M4**: no cap on look rounds; texturing stays in M4 until the maintainer approves, even if that delays M4's close |
 | Q33 | Do AI fighters collide with each other in Jolt (2026-11-04, on T14's review) | **Yes**: restore their physical collisions (any two fighters, allies included). Passing through each other with only an inelastic ram breaks Newtonian honesty and saved no measured time. T14 keeps its layers and the far ships' interpolation off |
 | Q34 | Checkpoint 1b: the textured Starfury look sheet (T30a, 2026-11-04) | **Approved; refine in T30b**: even out the panel stretching on curved parts, sharper markings (a 4096 px hull map or better packing), less gloss, fine normal detail and rivets, `render_triangles`, plus T30a's review tests (normal-map handedness; texel density and zero overlaps on the real Starfury) and a wider gutter |
+| Q35 | Starfury liveries (maintainer, 2026-11-04) | **Per-wing liveries, numbered.** Better Starfury textures from show screenshots and the reference images (guidance only, measured and described, never copied). In the show each pilot's Starfury differs; here every ship of a wing shares its wing's livery and carries its own number, in the manner of the Sinclair "fancy" sheet's dorsal "02" and wing stripes. Alpha, Delta, Zeta (and further wings) each have a different common style. The player flies the Alpha livery for now; choosing a paint scheme comes later, so the livery is data the ship is given, not baked into the asset |
 
 ## The budget ("good game performance", Q5)
 
@@ -185,9 +186,10 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T28 | Running lights stay point-sized and dim by the inverse square (maintainer, 2026-11-03) | none | Sonnet | Lights in vacuum do not scatter into globes | R | done |
 | T29 | Rocks and mines as static rows: T07's asteroids registered as statics, T12's mines as faction-owned mine rows; avoidance sees rocks and its own side's mines only (Q27) | T09, T12 | Opus | Takes the rocks' 24 to 49 ms per tick out of the GDScript paths | G, N | done (2026-11-03, in a worktree on `9a3f525`; Cycle log, M4-T29) |
 | T30a | Textured mesh pipeline: the procedural UV atlas, the texture maps (colour, normal, roughness and metal, emissive), the PNG writer, the textured `.glb` contract, the Starfury as the look gate (H, checkpoint 1b) | T27 | Fable | The unwrap, the bake and the paint are the look of the game from here on, and the contract M5 builds against (Q29, Q31) | X, R | done (the look gate, checkpoint 1b, is open) |
-| T30b | Every other hull textured (raider, buoy, chunks, capital and station pieces), mesh LODs measured, the mesh path the default | T30a, checkpoint 1b | Opus | Mechanical once the generator is fixed; each asset's markings and emissives need judgement, the look (H) | X, R | not started |
+| T30b | The Starfury refined (Q34) and wing liveries with per-ship numbers (Q35); the look gate again (H, checkpoint 1c) | T30a, checkpoint 1b | Opus | The livery is a shader-side layer so every wing still instances; the colours and patterns are the maintainer's call | X, R | not started |
+| T30d | Every other hull textured (raider, buoy, chunks, capital and station pieces), mesh LODs measured, the mesh path the default (split from T30b, 2026-11-04) | T30b | Opus | Mechanical once the generator is fixed; each asset's markings and emissives need judgement, the look (H) | X, R | not started |
 | T30c | The sky without splats: a star point field and the nebula as a generated panorama | T30a | Opus | The sky is the last splat node; stars must stay crisp points at any resolution | X, R | not started |
-| T31 | Remove Gaussian splats: `addons/gdgs_scs` and every splat path in code, procgen, settings, console commands, tests, scripts, CI and docs (Q29, Q30) | T30b, T30c | Opus | About 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only deletion | X, R, G | not started |
+| T31 | Remove Gaussian splats: `addons/gdgs_scs` and every splat path in code, procgen, settings, console commands, tests, scripts, CI and docs (Q29, Q30) | T30d, T30c | Opus | About 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only deletion | X, R, G | not started |
 
 ### M4-T01 Benchmark harness, budget and baseline
 
@@ -1335,9 +1337,25 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
   rewrites the sky with `core/image.py` (`assets/sky_default.py` is T30c's file). The look sheet (H) is at
   `/tmp/m4_t30_starfury_aurora_sheet.png`, the shots at `/tmp/m4_t30a_starfury_aurora_<look>_<m>m_<lit|dark>.png`.
 
-##### M4-T30b Every other hull textured, mesh LODs measured, the mesh path the default
+##### M4-T30b The Starfury refined and wing liveries (Q34, Q35)
 
-- **Added 2026-11-04 (Q34, checkpoint 1b approved):** fold in the Starfury refinements first: even out the panel stretching on curved parts (the `auto_charts` regions), sharper markings (a 4096 px hull map within the VRAM bar, or better packing), less gloss, the fine-mesh normal transfer and rivet rows, `render_triangles`, a 4-texel gutter, and T30a's review tests (a groove's normal-map handedness; per-part texel density spread and zero overlaps on the real Starfury atlas). Then convert the rest.
+- **Added 2026-11-04.** T30b was split: this task is the Starfury; the other hulls moved to T30d (below, unchanged otherwise).
+- **Track:** X and R. **Agent:** Opus. **Depends on:** T30a and checkpoint 1b. Brief: `.superpowers/sdd/m4-performance-and-scale/task-t30b-brief.md`.
+- **Goal:** Q34's refinements (even stretching on curved parts, sharper markings, less gloss, fine-mesh normal detail and rivets,
+  `render_triangles`, a 4-texel gutter, T30a's review tests) and Q35's liveries: a livery table (Alpha, Beta, Delta, Zeta and a
+  derived fallback for any other wing name), each a wing colour pair and a stripe pattern, plus the ship's number, drawn as a
+  layer over the shared hull maps so all Starfuries of every wing stay one material and instance. The ship gets its livery from
+  its wing and slot (`Wing`, the scenario's wings, `ShipPool`'s ally names); the player is Alpha 1.
+- **Stops:** a livery concept sheet for the maintainer before the generator is committed (colours and patterns, Q19's practice),
+  then the look sheet as checkpoint 1c.
+- **Done when:** checkpoint 1c is approved, 20 Starfuries of four wings draw in no more calls than 20 of one wing, the VRAM
+  stays under T30a's 40 MB bar, and the focused tests are green.
+- **Architecture:** §17.18 (paragraphs under T30b).
+
+##### M4-T30d Every other hull textured, mesh LODs measured, the mesh path the default
+
+- **Split from T30b (2026-11-04):** the Starfury's refinements moved to T30b; read "T30b" below as this task where it means the other hulls. **Depends on:** T30b.
+
 - **Track:** X and R. **Agent:** Opus (mechanical once the generator is fixed; each asset's markings and emissives need
   judgement, the look (H)). **Depends on:** T30a and checkpoint 1b. Runs in wave 5.
 - **Goal:** every asset that is a splat today besides the sky is a textured mesh: the raider (`raider` style's wear and the
@@ -1405,7 +1423,7 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
 ##### M4-T31 Remove Gaussian splats
 
 - **Track:** X, R and G. **Agent:** Opus (about 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only
-  deletion). **Depends on:** T30b, T30c. Runs in wave 6 and merges last in it.
+  deletion). **Depends on:** T30d, T30c. Runs in wave 6 and merges last in it.
 - **Goal:** no Gaussian splat code, asset, setting, command, test, script, dependency or doc sentence remains, except as history
   (milestone files, the Cycle log, the handoff docs, `docs/research-notes.md` under a heading that says so). The game draws every
   hull as its textured mesh, the sky as T30c's, and the suite is green.
