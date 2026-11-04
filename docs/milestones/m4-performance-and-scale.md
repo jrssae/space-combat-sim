@@ -197,7 +197,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T29 | Rocks and mines as static rows: T07's asteroids registered as statics, T12's mines as faction-owned mine rows; avoidance sees rocks and its own side's mines only (Q27) | T09, T12 | Opus | Takes the rocks' 24 to 49 ms per tick out of the GDScript paths | G, N | done (2026-11-03, in a worktree on `9a3f525`; Cycle log, M4-T29) |
 | T30a | Textured mesh pipeline: the procedural UV atlas, the texture maps (colour, normal, roughness and metal, emissive), the PNG writer, the textured `.glb` contract, the Starfury as the look gate (H, checkpoint 1b) | T27 | Fable | The unwrap, the bake and the paint are the look of the game from here on, and the contract M5 builds against (Q29, Q31) | X, R | done (the look gate, checkpoint 1b, is open) |
 | T30b | The Starfury refined (Q34) and wing liveries with per-ship numbers (Q35); the look gate again (H, checkpoint 1c) | T30a, checkpoint 1b | Opus | The livery is a shader-side layer so every wing still instances; the colours and patterns are the maintainer's call | X, R | done (the look gate, checkpoint 1c, is open) |
-| T30d | Every other hull textured (raider, buoy, chunks, capital and station pieces), mesh LODs measured, the mesh path the default (split from T30b, 2026-11-04) | T30b | Opus | Mechanical once the generator is fixed; each asset's markings and emissives need judgement, the look (H) | X, R | not started |
+| T30d | Every other hull textured (raider, buoy, chunks, capital and station pieces), mesh LODs measured, the mesh path the default (split from T30b, 2026-11-04) | T30b | Opus | Mechanical once the generator is fixed; each asset's markings and emissives need judgement, the look (H) | X, R | done (2026-11-04, in a worktree on `c0a0b81`; Cycle log, M4-T30d; the fine Starfury stays, the sheets wait for (H)) |
 | T30c | The sky without splats: a star point field and the nebula as a generated panorama | T30a | Opus | The sky is the last splat node; stars must stay crisp points at any resolution | X, R | done |
 | T31 | Remove Gaussian splats: `addons/gdgs_scs` and every splat path in code, procgen, settings, console commands, tests, scripts, CI and docs (Q29, Q30) | T30d, T30c | Opus | About 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only deletion | X, R, G | not started |
 
@@ -1428,6 +1428,19 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
 - **Expected gain:** `battle` 500 frozen at or under 3.5 ms GPU (70 %); the station near under 2.5 ms (70 %); if the coarse
   build is taken, triangles drawn at 500 down by half (60 %).
 - **Architecture:** §17.18 (paragraphs under T30b).
+- **Done (2026-11-04, in its own worktree on `c0a0b81`; the Cycle log entry "M4-T30d" holds the numbers; report
+  `.superpowers/sdd/m4-performance-and-scale/task-t30d-report.md`):** built as planned, with these differences. The raider's textured maps
+  take a darker paint of their own (its splat hull rendered near white under the renderer's lighting) and its nose intakes a dark
+  material (they share the throats' on the splats); only the main nozzles glow. The buoy's lens is an amber glass collar under the beacon.
+  The capital boxes have window rows on both flanks, the station's command sphere five rings of windows; window rows are new markings, and
+  `wear_scale` sizes the fighters' fine detail for big hulls. The stand-ins' splat look is gone: their pieces are built without splat
+  levels (`RenderPiece.build`'s `with_splats`), so T31 does not edit the stand-ins; `station_scene.gd` lost its `ship_render` listener. A
+  Starfury's chunks wear the dying ship's livery (`destruction_director.gd` passes it, two words). `build all` with every textured hull
+  takes about 110 s one asset at a time, so `--jobs` runs assets in worker processes and `gen_assets.sh` builds four at once (63 s).
+  **LOD decision (Q45): the fine Starfury stays and `mesh.lods` stays empty.** The coarse build floors at 17 892 triangles (not 8 000);
+  at `battle` 500 frozen it cuts the triangles drawn by 15 % (422 783 against 496 047) and the GPU time not at all (2.06 against 2.05 ms),
+  and at 8 m its struts show facets. No generated far level either: the importer's levels already hold the 500 battle at 2.05 ms
+  (bar 3.5), so a far level has nothing to win. The sheets (H) are listed in the Cycle log entry.
 
 ##### M4-T30c The sky without splats
 
@@ -3427,6 +3440,50 @@ the stand-ins to a fifth and the resolvers in half still leaves about 15 ms. T24
    than at checkpoint 4 is the maintainer's.
 4. **Checkpoint 1b (T30a's Starfury look sheet)** is not part of this report: it is T30a's, from the other worktree, and is shown
    when it is ready. T26's trigger reads the mesh rows above and is not seen.
+
+### M4-T30d (2026-11-04): every other hull textured, mesh LODs measured, the mesh path the default
+
+**How it measured.** In its own worktree (base `c0a0b81`, then this task's commits), every run fullscreen with the 3D at 1 080 lines as
+T27 measured (`scripts/render_compare.sh`, `scripts/fullscreen_check.sh`), 8 s of warm-up and 20 s measured, vsync off, under the GPU
+lock and both bench locks, one at a time; load 1.3 to 1.9 on 20 threads. `ship_render` at its new default, `mesh`. The comparison is
+T27's mesh rows (the painted mesh then; the station and capitals as painted meshes). Reports in `reports/perf/m4_t30d_fine_*` and
+`m4_t30d_coarse_*`.
+
+| run | FPS | frame mean / p99 ms | GPU ms mean (max) | draw calls | triangles | VRAM added MB | T27 mesh row: GPU ms, triangles |
+|---|---|---|---|---|---|---|---|
+| `typical` 58, live | 76.5 | 13.08 / 23.24 | 1.84 (1.98) | 274 | 432 825 | 1 577 | not measured |
+| `battle` 500, live | 1.6 | 638.1 / 712.2 | 2.09 (2.11) | 1 271 | 468 330 | 1 345 | 3.27, 412 882 |
+| `battle` 500, frozen | 44.6 | 22.41 / 28.87 | 2.05 (2.07) | 1 170 | 496 047 | 1 358 | 3.22, 420 319 |
+| station near, live | 8.1 | 123.1 / 156.7 | 2.05 (2.27) | 493 | 707 671 | 1 374 | 2.14, 535 563 |
+| station near, frozen | 190.2 | 5.26 / 8.78 | 2.11 (2.13) | 619 | 863 832 | 1 726 | 2.17, 636 888 |
+| station far, live | 54.8 | 18.25 / 31.68 | 1.75 (1.80) | 354 | 159 910 | 1 344 | 1.72, 133 424 |
+| station far, frozen | 197.6 | 5.06 / 8.07 | 1.78 (1.93) | 457 | 166 560 | 1 562 | 1.74, 131 006 |
+| `hundred_view` | 40.7 | 24.59 / 37.79 | 2.08 (2.22) | 508 | 941 176 | 1 431 | 3.10, 697 830 |
+| `battle` 500 frozen, coarse Starfury and raider | 48.3 | 20.72 / 29.09 | 2.06 (2.17) | 1 174 | 422 783 | | |
+| `hundred_view`, coarse | 42.6 | 23.45 / 37.31 | 2.05 (2.17) | 508 | 805 984 | | |
+
+**Reading.** The 500 battle frozen draws in 2.05 ms of GPU time (the plan's bar 3.5 ms, T27's painted mesh 3.2): the textured hulls are
+cheaper than T27's painted meshes, whose shader did the panel lattice and eight relight sums per pixel. The station near is 2.1 ms (bar 2.5).
+Draw calls are T27's within a few percent: every copy of a hull and its chunks share one material per surface. Triangles drawn rose by 10 to 35 % over T27's rows (not traced to a cause in this task); the GPU does not notice. The live battle is bound by the tick
+as before. The textured hulls' maps (imported): Starfury 32 MB, raider 13, nav buoy 4, capital hulls 24, station 32.
+
+**The LOD decision (Q45): the fine Starfury stays, `mesh.lods` empty.** `render_triangles` 8 000 gives 17 892 triangles (the strut plates
+and fittings have no segments; the raider's 2 500 gives 2 496 of 5 700). Both coarse together cut the triangles drawn at `battle` 500
+frozen by 15 % and leave the GPU time where it was (2.06 against 2.05 ms; `hundred_view` 2.05 against 2.08). At 30 m the coarse and the fine
+Starfury look the same; at 8 m the coarse struts show facets through the livery's bands. No gain to take, a visible loss up close, so the
+fine build stays. The generated far level the plan names for this case is not built: the importer's levels already carry the battle at
+2 ms, so it has nothing to win. Dots take over at 3 km as before.
+
+**Build.** `build all` 62.8 s with `--jobs 4` (`scripts/gen_assets.sh`); one at a time about 110 s (Starfury 37 to 44 s, station 28 s,
+capital hulls 17 s, raider 13 s, sky 7 s, buoy 2 s).
+
+**The sheets for the maintainer (H)**, each made with `scripts/look_sheet.sh` (`SHEET_COCKPIT=0` for the props), every shot full size beside
+them as `/tmp/m4_t30d_<asset>_<look>_<m>m_<lit|dark>.png`:
+`/tmp/m4_t30d_raider_fighter_sheet.png` (splat and textured, 8 to 600 m), `/tmp/m4_t30d_nav_buoy_sheet.png` (4 to 150 m),
+`/tmp/m4_t30d_raider_fighter_chunks_sheet.png` and `/tmp/m4_t30d_starfury_aurora_chunks_sheet.png` (the chunks spread apart, 20 to 150 m),
+`/tmp/m4_t30d_capital_cruiser_sheet.png`, `_capital_destroyer_sheet.png`, `_capital_carrier_sheet.png` (300 m to 8 km),
+`/tmp/m4_t30d_b5_station_sheet.png` (3, 8 and 20 km), and the LOD comparison `/tmp/m4_t30d_starfury_fine_sheet.png` against
+`/tmp/m4_t30d_starfury_coarse_sheet.png` (Alpha and plain, 8 and 30 m) and `/tmp/m4_t30d_raider_coarse_sheet.png`.
 
 ## Definition of done (M4)
 

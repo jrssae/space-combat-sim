@@ -2679,6 +2679,56 @@ src/rendering/look_scene.gd           the `livery` command and provider; the `sh
   section's validation, the real Starfury atlas without overlaps and with even texel density, render_triangles), `test_cockpit.py`
   (Q36); GUT `test_livery`, `test_livery_hull` (Alpha 02 from a callsign, the player Alpha 01, plain without a wing, four wings on one
   material, the command and provider, the glass glow live, the grey cockpit lit red), `test_mesh_assets`.
+#### T30d: every other hull textured, the mesh path the default
+
+```
+tools/procgen/assets/raider_fighter.py  the raider's textured mesh: its own darker paint, soot, the two engine glows, render_triangles
+tools/procgen/assets/nav_buoy.py      the buoy's textured mesh and the beacon's lens (an amber glass collar under the beacon)
+tools/procgen/assets/capital_hulls.py the capital boxes textured: plating sized to the hull, window rows on both flanks
+tools/procgen/assets/b5_station.py    the station's drum and frame textured: bands, cargo modules, the command sphere's window rings
+tools/procgen/core/textures.py        window markings (rows on a face, rings round an axis) that glow; wear_scale for big hulls
+tools/procgen/core/textured_mesh.py   chunk cuts (a chunk's faces on the parent's atlas), the normal map's scale
+tools/procgen/core/chunks.py          ChunkCut and the chunks' mesh entry; core/pieces.py the pieces' textured meshes
+tools/procgen/build.py, __main__.py   one checked build, importable, so build --jobs N runs assets in worker processes
+src/rendering/mesh_assets.gd          chunk_mesh: a chunk's glb drawn with its parent's materials
+src/rendering/render_piece.gd         a piece's textured mesh, and pieces built without splat levels
+src/props/nav_buoy.gd, src/combat/debris_chunk.gd   the textured body on the mesh path, the splats on the splat path
+src/rendering/far_dots.gd             the dot's paint from the manifest's mean_albedo
+src/rendering/look_scene.gd           the sheet parks the props too: the buoy, a ship's chunks, the capitals, the station
+```
+
+- **The mesh path is the default.** `settings.ship_render` defaults to `mesh`; `splat` and `hybrid` stay for comparison until T31. Every
+  hull the game draws has a textured mesh: the Starfury and its liveries (T30a, T30b), the raider, the nav buoy, both ships' break-up
+  chunks, the capital stand-ins' boxes and the station's two pieces.
+- **Chunks share their parent's maps.** A chunk's glb is the parent's faces of the chunk's parts, cut after the atlas is packed, so its
+  UVs are a subset of the parent's and its surfaces carry the parent's surface names; `MeshAssets.chunk_mesh` gives them the parent's
+  materials, so chunks and hulls instance together. Each chunk is moved by its offset (for the Starfury, the LOD1 frame's chunk centroid
+  plus the shift between LOD1's centring and LOD0's) so it sits where its OBJ sits. `hardpoints.json` `chunks[]` gain `mesh`. A Starfury's
+  chunks wear the dying ship's livery (`DebrisPool.stage_wreck` and `burst` take it); raiders' chunks take none.
+- **Big hulls.** The fighters' fine detail (rivet pitch, noise scales, edge softness) is sized for a texel of about a centimetre; a capital
+  or the station is texelled at tens of centimetres to two metres, where that detail turns to speckle. `Style.extra["wear_scale"]` scales
+  it, `extra["rivets"]` 0 drops the rivets, and the styles scale the grooves, hatches and edge wear themselves. Pieces bake the normal map
+  at the atlas's size and without occlusion. Window rows are markings (`Marking.windows`, `Marking.window_rings`): dark glass in the
+  albedo, a lit share of them in the emissive map at their own strength, which the surface's `emissive_strength` covers.
+- **Paint for PBR.** The raider's splat hull (sRGB #A89F96) was chosen bright so the splats read; lit by the renderer it reads near
+  white, so its maps take a darker worn grey-brown of their own (`styles/raider.py` `TEXTURED_ALBEDO`), and the station's and capitals'
+  tones were darkened into the Starfury's range. The two engine glows are the main nozzles' throats; the nose intakes, which share the
+  throat material on the splats, get a dark one of their own.
+- **The stand-ins.** `CapitalStandin.set_look` takes the box or the textured hull, and `StationStandin` draws its pieces textured; both
+  build their pieces without splat levels, so no splat node is made for them. The station scene's fighters still follow
+  `settings.ship_render`.
+- **Far dots.** A dot's colour is the asset's manifest `mesh.mean_albedo` (linear) lit as a hull's lit side, read once per asset; the
+  splats' mean paint only for an asset without a textured mesh.
+- **Levels of detail (Q45).** The fine Starfury stays the render mesh and `mesh.lods` stays empty: the coarse build (17 892 triangles,
+  its floor) cut the triangles drawn at the 500 battle by 15 % and not the GPU time, and showed facets at 8 m; the importer's levels hold
+  the battle at about 2 ms (the milestone's Cycle log, M4-T30d).
+- **Building.** `build all` with every textured hull takes about 110 s one asset at a time; `scripts/gen_assets.sh` builds four at once
+  (`--jobs 4`, about 63 s). The outputs do not depend on it.
+- **Tests**: `test_textured_hulls.py` (window rows and rings, the normal map's scale, wear_scale, a chunk on its parent's atlas, the raider,
+  the buoy, the station and the capitals, the Starfury's chunk meshes), GUT `test_textured_hulls` (the default, the buoy, a raider chunk,
+  a capital and the station drawn textured with no splat node shown, the far dot's colour), `test_render_path` (the capital and station
+  looks), `test_debris_pool` (a chunk on the mesh path).
+
 ### 17.19 The sky without splats (T30c)
 
 ```
