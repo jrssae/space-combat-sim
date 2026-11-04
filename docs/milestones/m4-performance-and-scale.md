@@ -69,6 +69,9 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q35 | Starfury liveries (maintainer, 2026-11-04) | **Per-wing liveries, numbered.** Better Starfury textures from show screenshots and the reference images (guidance only, measured and described, never copied). In the show each pilot's Starfury differs; here every ship of a wing shares its wing's livery and carries its own number, in the manner of the Sinclair "fancy" sheet's dorsal "02" and wing stripes. Alpha, Delta, Zeta (and further wings) each have a different common style. The player flies the Alpha livery for now; choosing a paint scheme comes later, so the livery is data the ship is given, not baked into the asset |
 | Q36 | Starfury cabin glow (maintainer, 2026-11-04) | **Dark red.** Starfuries are shown with a dark red interior glow although the interior is grey: the canopy glass glows dark red from outside (strength from `cabin_glow_level` on the mesh path too) and the first-person cockpit keeps grey surfaces lit by a dark red glow. In T30b |
 | Q37 | T30b's livery concept sheet (2026-11-04) | **Approved with changes**: the base hull a darker, weathered medium blue-grey (it rendered near white); all four wing liveries and the hashed fallback as drawn; the small number repeat on the upper left wing for every wing (the large one on the dorsal deck); the red cabin glow weaker, through the glass and in the cockpit |
+| Q38 | Checkpoint 1, phase 2's targets (2026-11-04, Report P1) | **Keep as written**: `typical` under 4 ms and `battle` 300 under 8 ms |
+| Q39 | Checkpoint 1, the `typical` frame bar | **60 FPS held and the 1 % lows** are the bar from phase 2 on, not the 12 ms frame-mean line |
+| Q40 | Checkpoint 1, T24 (the simulation on a worker thread) | **Decide at checkpoint 4** as planned. Checkpoint 1 is signed off; phase 2 starts (T15, with T30c beside it) |
 
 ## The budget ("good game performance", Q5)
 
