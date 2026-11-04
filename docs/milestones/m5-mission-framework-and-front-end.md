@@ -427,7 +427,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T01 | A | `Game` flow, boot routing and loading | - | Opus | Changes how every run starts; must not break a single script or test | done |
 | T02 | A | Menu kit, front end and pause menu | T01 | Sonnet | Godot UI work on a clear spec | done |
 | T03 | A | Settings menu and audio buses | T02 | Sonnet | Schema-driven screen | done |
-| T04 | A | Controls menu | T02 | Sonnet | Wraps the existing profile API | in progress |
+| T04 | A | Controls menu | T02 | Sonnet | Wraps the existing profile API | done |
 | T05 | B | Mission core: runner, script API, triggers, objectives, console | T01 | Opus | The framework M8 stands on; coroutine skipping is subtle | done |
 | T24 | A | Console command list in `info.md` and its guard test (`CLAUDE.md` rule of 2026-11-03; numbered last because it was added during the build) | T01, T02, T05 | Sonnet | A doc and one test | done |
 | T06 | B | Dialog, subtitles and the comms panel | T05 | Sonnet | Data and HUD | done |
@@ -547,6 +547,19 @@ whose trigger never arose). Update the column with each task's commit.
 - **Notes:** while waiting for a press to bind, the screen must not let that press also act on the menu. A refusal from
   `bind` shows its errors.
 - **Done when:** AC4.
+- **Done (as built, 2026-11-04):** `ControlsScreen` in the `MenuFrame`: a profile picker (built-in and saved), the action
+  list with its bindings, and add, replace or unbind by pressing a pad button, stick direction, key or mouse button
+  (the pure `BindingCapture`; the press is swallowed while waiting, holding B or Esc or 6 s cancels). Save as cleans the
+  name and refuses built-in or invalid names with the reason; every refusal from `ControlProfiles` is shown. The pure
+  `ControlsModel` feeds the page; the diagram lights the focused action's buttons and the legend follows a rebind and
+  back (a test, restored from the T02 review). Only `InputAdapter.ACTIONS` are listed, so the `ui_*` actions survive
+  every change the page makes (a test); `control_profiles.gd` is unchanged. B steps back inside the page
+  (`MenuScreen.back_step`), with a 0.35 s grace after a bind so the pause action from the same press does not close it.
+  Both hosts open it (a test each).
+  - **Review.** Approved (sonnet), no fixes needed. Open (minor): the controls tests report orphans because `after_each`
+    rebuilds the list before teardown (not a leak); a stick that jumps from rest to full in one event is ignored until it
+    returns to rest; one focus assertion checks only "Profile: default"; the success colour is a literal; a mouse click
+    cannot cancel a wait.
 
 ### M5-T05 Mission core
 
