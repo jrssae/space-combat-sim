@@ -336,7 +336,7 @@ pub mod contact {
 pub mod sweep {
     use godot::builtin::Vector3;
 
-    use crate::sim_core::{Bolts, FLAG_RIGID, Rows};
+    use crate::rows::{Bolts, FLAG_RIGID, Rows};
 
     // The grid's levels, as `HitBroadPhase` defines them.
     const BASE_CELL_M: f64 = 64.0;
@@ -592,7 +592,7 @@ pub mod ram {
 
     use godot::builtin::Vector3;
 
-    use crate::sim_core::{FLAG_RIGID, Rows};
+    use crate::rows::{FLAG_RIGID, Rows};
 
     // `RamBroadPhase.MARGIN_M`: room round every box, metres.
     const MARGIN_M: f64 = 1.0;
@@ -721,11 +721,10 @@ pub mod flight {
         pub retro_total: f64,
     }
 
-    /// What one tick gives the step to apply and to hand back: the nozzle forces at their world positions, the RCS force,
-    /// the torque, the assist's cap, the environment force, the velocity after the hard ceiling (when it clamps), and the
-    /// output rows.
+    /// What one tick gives the step to apply and to hand back: the RCS force, the torque, the assist's cap, the environment
+    /// force, the velocity after the hard ceiling (when it clamps), and the output rows. The nozzle forces at their world
+    /// positions go into the buffer the caller passes `tick` (its own scratch, so a thread owns one).
     pub struct Applied {
-        pub nozzle_forces: Vec<(Vector3, Vector3)>,
         pub rcs_w: Vector3,
         pub torque_w: Vector3,
         pub cap: Option<Vector3>,
@@ -736,7 +735,8 @@ pub mod flight {
     }
 
     /// One tick for one ship: the model in the body frame, then the ship's force application in the world frame
-    /// (`Ship._physics_process`), with the pod-yaw assist state carried in `pod_yaw`.
+    /// (`Ship._physics_process`), with the pod-yaw assist state carried in `pod_yaw` and the nozzle forces (force, world
+    /// position) written into `nozzle_forces`, the caller's buffer.
     pub fn tick(
         body: &Body,
         pod_yaw: &mut f64,
@@ -748,6 +748,7 @@ pub mod flight {
         assist_on: bool,
         dt: f64,
         has_propellant: bool,
+        nozzle_forces: &mut Vec<(Vector3, Vector3)>,
     ) -> Applied {
         let v_b = xform_inv(basis, v_w);
         let w_b = xform_inv(basis, w_w);
@@ -770,7 +771,7 @@ pub mod flight {
         let env_force = scale(env_w, mass_f);
         let mut applied = env_force;
         let gain = thrust_gain(f64::from(length(v_w)), spec.speed_limit_mps) as f32;
-        let mut nozzle_forces = Vec::with_capacity(body.nozzle_groups.len());
+        nozzle_forces.clear();
         for k in 0..body.nozzle_groups.len() {
             let level = out.levels[body.nozzle_groups[k]];
             let magnitude = level * group_thrust(spec, body.nozzle_groups[k]);
@@ -798,7 +799,6 @@ pub mod flight {
             clamped = Some(v_after);
         }
         Applied {
-            nozzle_forces,
             rcs_w,
             torque_w,
             cap,

@@ -3151,7 +3151,8 @@ In its own worktree on `c0a0b81` (tests `19d0459`, the core `110ceb3`, the launc
 syncs `c1606ed`, docs `9997200`, a second gather in one frame reads again `8fefb68`; fix round 1 after review: tests `2d800c7`,
 fixes `979a0b4`: a bolt's launch-tick step is its node's, a hull destroyed between the resolvers leaves the ram rows, a
 one-tick pool reuse is a new handle, the sync's engine calls are counted one by one; fix round 2: tests `b5ebed0`, the kernels
-moved into `native/src/kernels.rs` with no engine type, guarded by a test that reads the file), so only this change. `ScsSimCore` holds every simulated entity as a row and the four native
+moved into `native/src/kernels.rs` with no engine type, guarded by a test that reads the file; fix round 3: tests `c95e468`, the row
+tables in `native/src/rows.rs`, the guard an allow-list over imports and paths), so only this change. `ScsSimCore` holds every simulated entity as a row and the four native
 classes read it (§17.13); each class's own load stays behind `perf_native_core` off, so the two paths were paired in one build.
 
 - **Parity.** `test_sim_core` (8): the scan, the hit sweep's pairs, the ram broad phase's pairs and the flight step's flight

@@ -8,6 +8,7 @@ mod hit_sweep;
 mod kernels;
 mod native_probe;
 mod ram_phase;
+mod rows;
 mod sim_core;
 
 struct ScsNative;

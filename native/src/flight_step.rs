@@ -7,7 +7,8 @@ use godot::classes::physics_server_3d::BodyState;
 use godot::prelude::*;
 
 use crate::kernels::flight::{self, Applied, Body, Cmd, Spec};
-use crate::sim_core::{FLAG_RIGID, ScsSimCore};
+use crate::rows::FLAG_RIGID;
+use crate::sim_core::ScsSimCore;
 
 /// Per ship per tick: `main_right, main_left, retro_right, retro_left` (the nozzle groups' order).
 pub const CMD_SCALARS: usize = 4;
@@ -45,6 +46,8 @@ pub struct ScsFlightStep {
     slots: Vec<Option<Slot>>,
     out_vectors: Vec<Vector3>,
     out_scalars: Vec<f64>,
+    // The kernel's nozzle forces for one ship, reused ship after ship (a worker would own one).
+    nozzle_forces: Vec<(Vector3, Vector3)>,
     // Ships the last `step_core` read from the physics server because the core had no row for them (M4-T15).
     fallback_reads: i64,
 }
@@ -387,11 +390,12 @@ impl ScsFlightStep {
                 assist_on,
                 dt,
                 has_propellant,
+                &mut self.nozzle_forces,
             );
             slot.pod_yaw_smoothed = pod_yaw;
             // The one engine write of the tick outside the sync points: the forces, in `Ship._physics_process`'s order.
             if apply {
-                for &(force_w, at_w) in &step.nozzle_forces {
+                for &(force_w, at_w) in &self.nozzle_forces {
                     server
                         .body_apply_force_ex(slot.rid, force_w)
                         .position(at_w)

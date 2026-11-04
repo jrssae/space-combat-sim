@@ -7,6 +7,13 @@ use std::collections::{HashMap, HashSet};
 use godot::classes::{Node, Node3D, Object, RigidBody3D};
 use godot::prelude::*;
 
+pub use crate::rows::{Bolts, FLAG_HULL, FLAG_HULL_ACTIVE, FLAG_LATE, FLAG_RIGID, Rows};
+
+// The snapshot the scan takes of the rows, built here (it crosses the boundary).
+trait RowsSnapshot {
+    fn to_array(&self, count: usize, node_count: usize, factions: &[StringName]) -> VarArray;
+}
+
 // `BodyKind` (src/ai/body_kind.gd) in value order, then the projectile kinds the core adds (`SimCore.KIND_*`).
 const KIND_NAMES: [&str; 9] = [
     "ship", "capital", "turret", "missile", "mine", "static", "prop", "bolt", "beam",
@@ -16,13 +23,6 @@ pub const KIND_MINE: u8 = 4;
 pub const KIND_STATIC: u8 = 5;
 pub const KIND_BOLT: u8 = 7;
 pub const KIND_BEAM: u8 = 8;
-
-/// Row flags: a rigid body (the scan's `is_ship`), an active hull (`Damageable.is_active()`: the sweep and the rams see
-/// it), a hull at all, and a row added after the tick's first sync (a ship back from the pool).
-pub const FLAG_RIGID: u32 = 1;
-pub const FLAG_HULL: u32 = 2;
-pub const FLAG_HULL_ACTIVE: u32 = 4;
-pub const FLAG_LATE: u32 = 8;
 
 // The script properties the core reads, as StringNames made once: a name built per read costs as much as the read.
 struct Names {
@@ -97,43 +97,6 @@ struct Bolt {
     // The tick the core first saw it: on that tick its step is whatever the node holds (zero until its first
     // `_physics_process`, §15.3); from the next tick on a plain bolt's step is `velocity * delta`.
     first_tick: i64,
-}
-
-/// The scan's rows, column by column: the bodies in registry order (active markers, then active hulls with no active
-/// marker), the static rows, then any row added after the tick's first sync. Read by the kernels through `bind()`.
-#[derive(Default)]
-pub struct Rows {
-    pub body_ids: Vec<i64>,
-    pub ids: Vec<i64>,
-    pub faction_ix: Vec<u32>,
-    pub positions: Vec<Vector3>,
-    pub velocities: Vec<Vector3>,
-    pub bases: Vec<Basis>,
-    pub angular: Vec<Vector3>,
-    pub radii: Vec<f64>,
-    pub kinds: Vec<u8>,
-    pub flags: Vec<u32>,
-    pub names: Vec<GString>,
-    pub hull_ids: Vec<i64>,
-    pub handles: Vec<i64>,
-    // Derived per row: a rigid body, a rock or mine, a mine (what the contact field asks per candidate).
-    pub rigid: Vec<bool>,
-    pub is_static: Vec<bool>,
-    pub is_mine: Vec<bool>,
-    pub node_count: usize,
-}
-
-/// The bolts in flight, column by column, in `projectiles` group order.
-#[derive(Default)]
-pub struct Bolts {
-    pub ids: Vec<i64>,
-    pub positions: Vec<Vector3>,
-    pub velocities: Vec<Vector3>,
-    pub last_steps: Vec<Vector3>,
-    pub faction_ix: Vec<u32>,
-    pub shooters: Vec<i64>,
-    pub kinds: Vec<u8>,
-    pub radii: Vec<f64>,
 }
 
 // What one read of a body gives: its pose, motion and flags.
@@ -1177,10 +1140,22 @@ impl ScsSimCore {
     // Faction, name, kind, radius and the destroyed flag as the tree gather reads them: from the marker, or from the hull
     // when there is none.
     fn read_attrs(&mut self, m: &Member) -> Attrs {
-        // The hull's validity, the radius, the two reads of the destroyed flag, then the marker's three (or the hull's one).
-        self.sync_reads += 4 + if m.marker.is_some() { 3 } else { 1 };
+        // With a hull: its validity, then (when valid) the radius and the two reads of the destroyed flag; then the
+        // marker's three reads, or the hull's one.
         let names = self.names.get_or_insert_with(Names::new);
-        let hull = m.hull.as_ref().filter(|h| h.is_instance_valid());
+        let hull = m.hull.as_ref().filter(|h| {
+            self.sync_reads += 1;
+            let valid = h.is_instance_valid();
+            if valid {
+                self.sync_reads += 3;
+            }
+            valid
+        });
+        self.sync_reads += if m.marker.is_some() {
+            3
+        } else {
+            i64::from(hull.is_some())
+        };
         let radius = hull.map_or(0.0, |h| {
             h.get(&names.bounding_radius).try_to::<f64>().unwrap_or(0.0)
         });
@@ -1218,27 +1193,7 @@ impl ScsSimCore {
     }
 }
 
-impl Rows {
-    fn clear(&mut self) {
-        self.body_ids.clear();
-        self.ids.clear();
-        self.faction_ix.clear();
-        self.positions.clear();
-        self.velocities.clear();
-        self.bases.clear();
-        self.angular.clear();
-        self.radii.clear();
-        self.kinds.clear();
-        self.flags.clear();
-        self.names.clear();
-        self.hull_ids.clear();
-        self.handles.clear();
-        self.rigid.clear();
-        self.is_static.clear();
-        self.is_mine.clear();
-        self.node_count = 0;
-    }
-
+impl RowsSnapshot for Rows {
     // The first `count` rows as the `VarArray` `snapshot` documents (forwards and ups from the bases), `node_count` of
     // them nodes.
     fn to_array(&self, count: usize, node_count: usize, factions: &[StringName]) -> VarArray {
@@ -1276,19 +1231,6 @@ impl Rows {
         out.push(&(node_count.min(count) as i64).to_variant());
         out.push(&statics.to_variant());
         out
-    }
-}
-
-impl Bolts {
-    fn clear(&mut self) {
-        self.ids.clear();
-        self.positions.clear();
-        self.velocities.clear();
-        self.last_steps.clear();
-        self.faction_ix.clear();
-        self.shooters.clear();
-        self.kinds.clear();
-        self.radii.clear();
     }
 }
 

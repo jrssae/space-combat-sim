@@ -2347,7 +2347,8 @@ matter). Everything the table does not list is as before: a bolt (a `Node3D` flo
 ```
 native/src/sim_core.rs           ScsSimCore: one store of rows for every simulated entity, filled from the engine at the tick's
                                  sync points and read by every native kernel
-native/src/kernels.rs            the kernels: every query and step over the rows (contact, sweep, ram, flight), no engine type
+native/src/rows.rs               Rows, Bolts and the row flags: the plain row tables, the only thing the kernels import from the crate
+native/src/kernels.rs            the kernels: every query and step over the rows (contact, sweep, ram, flight), no way to the engine
 native/src/ram_phase.rs          ScsRamPhase: the ram resolver's broad phase on the core's rows (RamBroadPhase stays the reference)
 native/src/body_registry.rs      ScsBodyRegistry: the core without its facade, kept for the scan's registry path
 src/perf/sim_core.gd             SimCore: the facade; a node under World at priority -11 (sync_in) with an internal child at
@@ -2389,15 +2390,24 @@ src/ship/flight_batch.gd         the four classes read the core (their own loads
   (`test_sim_core`, `test_fighter_melee`'s digest, the seeded outcome runs in the Cycle log). What differs: a ship
   teleported without a visibility change between -11 and 200 (the console only) is swept at its -11 pose that tick, and the
   flight step reads a launched ship from the physics server on its launch tick (`fallback_reads`), as before.
-- **The kernels hold no engine type.** Every query and step over the rows lives in `native/src/kernels.rs` (`contact`,
-  `sweep`, `ram`, `flight`): functions over the core's row tables, slices and Godot's maths builtins, with no `Gd`, no
-  engine class, no `Variant` and no property read. The four classes are shells that bind the core and hand the results
-  over; the flight step applies what its kernel gives through the physics server, the one engine write outside the sync
-  points. `test_sim_core` reads the module and fails on any engine type, call or import (shown failing with an injected
-  `Gd<Node>` in the task's report), and checks that a tick full of queries and steps costs the sync points the same engine
-  calls as a tick with none. What is counted: the sync points' calls (`core.sync_calls`, one per engine getter, so they
-  grow with the bodies and bolts) and the flight step's fallback reads of the physics server for ships without a row
-  (`core.fallback_calls`, `flight.fallback_reads`, 0 outside launch ticks). T18's threads rest on the same property.
+- **The kernels hold no way to the engine.** Every query and step over the rows lives in `native/src/kernels.rs`
+  (`contact`, `sweep`, `ram`, `flight`), and the row tables they read in `native/src/rows.rs` (`Rows`, `Bolts`, the row
+  flags: plain columns of value types). The four classes are shells that bind the core and hand the results over; the
+  flight step applies what its kernel gives through the physics server, the one engine write outside the sync points.
+  `test_sim_core` reads both files line by line and fails on: a forbidden token (`Gd<`, `Variant`, `InstanceId`,
+  `singleton`, `PhysicsServer`, a `godot_*` macro, `#[func]`, `GodotClass`, a property read `.get(&` or `.call(`, `Node`,
+  `RigidBody`, the `Scs` classes, `pub use`, a block comment, `unsafe`; in rows.rs also `Object`, `Array` and `Packed`), a
+  `use` outside the allow-list (`std::`, `godot::builtin::Vector3` or `{Basis, Vector3}` and `crate::rows::{Bolts,
+  FLAG_RIGID, Rows}` for the kernels; `std::` and `godot::builtin::{Basis, GString, Vector3}` for the rows), and any
+  `crate::`, `super::` or `godot::` path on a line that is not such a `use`. The task's report shows it failing on an
+  injected `Gd<Node>`, an inline `crate::sim_core::ScsSimCore` call, a `super::` path and a `godot::meta::` path. What the
+  test does not do: run the kernels under a call tracer; the claim rests on the source check and on the shells being the
+  only callers. The engine seam test also checks that a tick full of queries and steps costs the sync points the same
+  engine calls as a quiet tick (the sync reads nothing again for them) and that the flight step read no ship from the
+  physics server. What is counted: the sync points' calls (`core.sync_calls`, one per engine getter, so they grow with the
+  bodies and bolts) and the flight step's fallback reads for ships without a row (`core.fallback_calls`,
+  `flight.fallback_reads`, 0 outside launch ticks). T18's threads rest on the same property: a kernel takes its rows and
+  its own scratch (the flight kernel writes its nozzle forces into the buffer the caller passes) and shares nothing.
 - **Settings and console.** `perf_native_core` (default on; off = each class loads its own copy, so a bench pairs the two
   in one process). Provider `core` (`path`, `rows`, `bodies`, `statics`, `bolts`, `syncs`, `sync_us`, `bolts_us`,
   `sync_calls`, `fallback_calls`, `attribute_reads`, `touched`); `combat.source` and `combat.gather_us`, `ram.source` and
