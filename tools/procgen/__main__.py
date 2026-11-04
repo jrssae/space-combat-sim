@@ -12,13 +12,17 @@ import argparse
 import json
 import sys
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
+from multiprocessing.context import BaseContext
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 from .assets import ASSETS
 from .core.context import DEFAULT_OUT_ROOT, DEFAULT_SEED
-from .build import timed_build
+from .build import BuildResult, timed_build
+
+WORKER_DIED = "its worker process died (killed, or out of memory?)"
 
 EXIT_OK = 0
 EXIT_BUILD_FAILED = 1
@@ -133,6 +137,32 @@ def _resolve_ids(requested: Sequence[str]) -> list[str]:
     return list(dict.fromkeys(requested))
 
 
+def _pool_context() -> BaseContext | None:
+    """The process start method for ``--jobs`` workers: the platform's default (tests fork, to carry a patched registry)."""
+    return None
+
+
+def _parallel(asset_ids: Sequence[str], jobs: int, seed: int, out_root: Path, options: dict[str, Any]) -> list[BuildResult]:
+    """Build ``asset_ids`` in up to ``jobs`` workers. When a worker dies, every asset that had not finished is built again in a
+    worker of its own, so only the one that kills its worker is reported failed."""
+    results: dict[str, BuildResult] = {}
+    unfinished: list[str] = []
+    with ProcessPoolExecutor(max_workers=min(jobs, len(asset_ids)), mp_context=_pool_context()) as executor:
+        futures = {asset_id: executor.submit(timed_build, asset_id, seed, out_root, options) for asset_id in asset_ids}
+        for asset_id, future in futures.items():
+            try:
+                results[asset_id] = future.result()
+            except BrokenProcessPool:
+                unfinished.append(asset_id)
+    for asset_id in unfinished:
+        with ProcessPoolExecutor(max_workers=1, mp_context=_pool_context()) as alone:
+            try:
+                results[asset_id] = alone.submit(timed_build, asset_id, seed, out_root, options).result()
+            except BrokenProcessPool:
+                results[asset_id] = (None, WORKER_DIED, 0.0)
+    return [results[asset_id] for asset_id in asset_ids]
+
+
 def _display(path: Path) -> str:
     try:
         return str(Path(path).resolve().relative_to(Path.cwd().resolve()))
@@ -163,9 +193,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         options["spacing"] = args.spacing
 
     if args.jobs > 1 and len(asset_ids) > 1:
-        with ProcessPoolExecutor(max_workers=min(args.jobs, len(asset_ids))) as executor:
-            futures = [executor.submit(timed_build, asset_id, args.seed, args.out, options) for asset_id in asset_ids]
-            results = [future.result() for future in futures]
+        results = _parallel(asset_ids, args.jobs, args.seed, args.out, options)
     else:
         results = (timed_build(asset_id, args.seed, args.out, options) for asset_id in asset_ids)
 

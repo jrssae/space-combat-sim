@@ -1436,11 +1436,13 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
   `wear_scale` sizes the fighters' fine detail for big hulls. The stand-ins' splat look is gone: their pieces are built without splat
   levels (`RenderPiece.build`'s `with_splats`), so T31 does not edit the stand-ins; `station_scene.gd` lost its `ship_render` listener. A
   Starfury's chunks wear the dying ship's livery (`destruction_director.gd` passes it, two words). `build all` with every textured hull
-  takes about 110 s one asset at a time, so `--jobs` runs assets in worker processes and `gen_assets.sh` builds four at once (63 s).
+  takes about 110 s one asset at a time, so `--jobs` runs assets in worker processes and `gen_assets.sh` builds up to four at once.
   **LOD decision (Q45): the fine Starfury stays and `mesh.lods` stays empty.** The coarse build floors at 17 892 triangles (not 8 000);
   at `battle` 500 frozen it cuts the triangles drawn by 15 % (422 783 against 496 047) and the GPU time not at all (2.06 against 2.05 ms),
   and at 8 m its struts show facets. No generated far level either: the importer's levels already hold the 500 battle at 2.05 ms
-  (bar 3.5), so a far level has nothing to win. The sheets (H) are listed in the Cycle log entry.
+  (bar 3.5), so a far level has nothing to win; ruled to stay unbuilt (fix round 1; T23 may add one). `build all` is about 110 s one
+  asset at a time and 62.8 s with `--jobs 4` on this 20-thread machine (machine-dependent); `gen_assets.sh` uses `PROCGEN_JOBS`, else
+  `nproc` capped at four, and the 90 s bar is ruled met with `--jobs`. The sheets (H) are in `reports/perf/m4-t30d_sheets/` (Cycle log).
 
 ##### M4-T30c The sky without splats
 
@@ -3474,16 +3476,19 @@ Starfury look the same; at 8 m the coarse struts show facets through the livery'
 fine build stays. The generated far level the plan names for this case is not built: the importer's levels already carry the battle at
 2 ms, so it has nothing to win. Dots take over at 3 km as before.
 
-**Build.** `build all` 62.8 s with `--jobs 4` (`scripts/gen_assets.sh`); one at a time about 110 s (Starfury 37 to 44 s, station 28 s,
-capital hulls 17 s, raider 13 s, sky 7 s, buoy 2 s).
+**Build.** One asset at a time, `build all` takes about 110 s (Starfury 37 to 44 s, station 28 s, capital hulls 17 s, raider 13 s, sky
+7 s, buoy 2 s), over the 90 s bar. With `--jobs 4` it took 62.8 s on this machine (20 threads); that figure is machine-dependent.
+`scripts/gen_assets.sh` takes its job count from `PROCGEN_JOBS`, else from `nproc` capped at four (each textured hull's bake holds up
+to about 3.5 GB), so a smaller CI runner still builds in parallel. Ruled met with `--jobs` (fix round 1). A worker that dies is reported
+by its asset's name and the other assets are built again on their own (`tools/procgen/tests/test_parallel_build.py`).
 
-**The sheets for the maintainer (H)**, each made with `scripts/look_sheet.sh` (`SHEET_COCKPIT=0` for the props), every shot full size beside
-them as `/tmp/m4_t30d_<asset>_<look>_<m>m_<lit|dark>.png`:
-`/tmp/m4_t30d_raider_fighter_sheet.png` (splat and textured, 8 to 600 m), `/tmp/m4_t30d_nav_buoy_sheet.png` (4 to 150 m),
-`/tmp/m4_t30d_raider_fighter_chunks_sheet.png` and `/tmp/m4_t30d_starfury_aurora_chunks_sheet.png` (the chunks spread apart, 20 to 150 m),
-`/tmp/m4_t30d_capital_cruiser_sheet.png`, `_capital_destroyer_sheet.png`, `_capital_carrier_sheet.png` (300 m to 8 km),
-`/tmp/m4_t30d_b5_station_sheet.png` (3, 8 and 20 km), and the LOD comparison `/tmp/m4_t30d_starfury_fine_sheet.png` against
-`/tmp/m4_t30d_starfury_coarse_sheet.png` (Alpha and plain, 8 and 30 m) and `/tmp/m4_t30d_raider_coarse_sheet.png`.
+**The sheets for the maintainer (H)**, all taken on the final assets (the destroyer's retaken in fix round 1) and kept in
+`reports/perf/m4-t30d_sheets/`: `m4_t30d_raider_fighter_sheet.png` (splat and textured, 8 to 600 m), `m4_t30d_nav_buoy_sheet.png` (4 to
+150 m), `m4_t30d_raider_fighter_chunks_sheet.png` and `m4_t30d_starfury_aurora_chunks_sheet.png` (the chunks spread apart, 20 to 150 m),
+`m4_t30d_capital_cruiser_sheet.png`, `m4_t30d_capital_destroyer_sheet.png`, `m4_t30d_capital_carrier_sheet.png` (300 m to 8 km),
+`m4_t30d_b5_station_sheet.png` (3, 8 and 20 km), and the LOD comparison `m4_t30d_starfury_fine_sheet.png` against
+`m4_t30d_starfury_coarse_sheet.png` (Alpha and plain, 8 and 30 m) and `m4_t30d_raider_coarse_sheet.png`. Made with `scripts/look_sheet.sh`
+(`SHEET_LOOKS`, `SHEET_DISTANCES`, `SHEET_COCKPIT=0` for the props, `SHEET_PREFIX=m4_t30d`); the full-size shots stayed in `/tmp`.
 
 ## Definition of done (M4)
 

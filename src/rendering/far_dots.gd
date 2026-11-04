@@ -72,9 +72,8 @@ static func asset_paint(asset_id: String, gaussian: GaussianResource) -> Color:
 	if _asset_paint.has(asset_id):
 		return _asset_paint[asset_id]
 	var mean: Array = (SplatLod.read_manifest(asset_id).get("mesh", {}) as Dictionary).get("mean_albedo", [])
-	var paint: Color = paint_color(gaussian)
-	if mean.size() == 3:
-		paint = Color(float(mean[0]), float(mean[1]), float(mean[2])).linear_to_srgb()
+	var paint: Color = Color(float(mean[0]), float(mean[1]), float(mean[2])).linear_to_srgb() if mean.size() == 3 \
+			else paint_color(gaussian)
 	var lit := Color(paint.r * LIGHT_LEVEL, paint.g * LIGHT_LEVEL, paint.b * LIGHT_LEVEL).srgb_to_linear()
 	_asset_paint[asset_id] = lit
 	return lit

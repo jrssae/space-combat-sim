@@ -2722,8 +2722,10 @@ src/rendering/look_scene.gd           the sheet parks the props too: the buoy, a
 - **Levels of detail (Q45).** The fine Starfury stays the render mesh and `mesh.lods` stays empty: the coarse build (17 892 triangles,
   its floor) cut the triangles drawn at the 500 battle by 15 % and not the GPU time, and showed facets at 8 m; the importer's levels hold
   the battle at about 2 ms (the milestone's Cycle log, M4-T30d).
-- **Building.** `build all` with every textured hull takes about 110 s one asset at a time; `scripts/gen_assets.sh` builds four at once
-  (`--jobs 4`, about 63 s). The outputs do not depend on it.
+- **Building.** `build all` with every textured hull takes about 110 s one asset at a time; `scripts/gen_assets.sh` builds several at once
+  (`--jobs`: `PROCGEN_JOBS`, else `nproc` capped at four; about 63 s with four on a 20-thread machine). The bytes are the same either
+  way (tested). When a worker dies (an out-of-memory kill, say), the assets it left unfinished are built again in workers of their own,
+  so only the one that kills its worker is reported failed, and the exit is nonzero.
 - **Tests**: `test_textured_hulls.py` (window rows and rings, the normal map's scale, wear_scale, a chunk on its parent's atlas, the raider,
   the buoy, the station and the capitals, the Starfury's chunk meshes), GUT `test_textured_hulls` (the default, the buoy, a raider chunk,
   a capital and the station drawn textured with no splat node shown, the far dot's colour), `test_render_path` (the capital and station

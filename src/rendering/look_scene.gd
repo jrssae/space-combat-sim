@@ -34,6 +34,8 @@ var world: WorldFrame = null
 var pool: ShipPool = null
 var player: Ship = null
 var key_star: DirectionalLight3D = null
+## Where the props' generated files are read from (tests point it elsewhere).
+var asset_root: String = ShipSpec.ASSET_ROOT
 
 var _parked: Combatant = null
 var _prop: Node3D = null
@@ -93,26 +95,39 @@ func show(asset_id: String, distance_m: float, light: StringName, look: StringNa
 		_player_was_visible = player.visible
 	else:
 		_release()
-	if PROP_ASSETS.has(asset_id):
-		return _show_prop(asset_id, camera, distance_m, light, look, view)
+	var error: String = _show_prop(asset_id, camera, distance_m, light, look, view) if PROP_ASSETS.has(asset_id) \
+			else _show_ship(asset_id, camera, distance_m, light, look, view)
+	if not error.is_empty():
+		_release()
+		_restore()  # a sheet that could not park its subject leaves the scene as it found it
+	return error
+
+
+# Parks one idle pooled ship of `asset_id` for the sheet.
+func _show_ship(asset_id: String, camera: Camera3D, distance_m: float, light: StringName, look: StringName, view: StringName) -> String:
 	var type: StringName = POOL_TYPES[asset_id]
 	if pool.prepare(type, 1) < 1:
 		return "the %s pool is empty" % type
-	var cam: Transform3D = camera.global_transform
-	var at: Vector3 = cam.origin - cam.basis.z * distance_m
-	var to_camera: Vector3 = (cam.origin - at).normalized()
-	var basis := Basis.looking_at(to_camera, cam.basis.y).rotated(cam.basis.y, deg_to_rad(YAW_DEG)).rotated(cam.basis.x, deg_to_rad(-PITCH_DEG))
-	if view == &"top":
-		basis = Basis.looking_at(cam.basis.y, to_camera)  # the nose up the picture, the back to the camera
-	elif view == &"side":
-		basis = Basis.looking_at(-cam.basis.x, cam.basis.y)  # the nose to the left, the left side to the camera
-	_parked = pool.acquire("SHEET", world.to_universe(at), basis.orthonormalized(), Vector3.ZERO, IdleBrain.new(true), type)
+	var at: Vector3 = camera.global_position - camera.global_basis.z * distance_m
+	_parked = pool.acquire("SHEET", world.to_universe(at), _sheet_basis(camera, at, view), Vector3.ZERO, IdleBrain.new(true), type)
 	if _parked == null:
 		return "the %s pool gave no ship" % type
 	_asset_id = asset_id
 	player.visible = false
 	set_light(light)
 	return set_look(look)
+
+
+# How the parked subject faces the camera: three-quarters on, its back (the nose up the picture), or its left side (the nose left).
+func _sheet_basis(camera: Camera3D, at: Vector3, view: StringName) -> Basis:
+	var cam: Transform3D = camera.global_transform
+	var to_camera: Vector3 = (cam.origin - at).normalized()
+	var basis := Basis.looking_at(to_camera, cam.basis.y).rotated(cam.basis.y, deg_to_rad(YAW_DEG)).rotated(cam.basis.x, deg_to_rad(-PITCH_DEG))
+	if view == &"top":
+		basis = Basis.looking_at(cam.basis.y, to_camera)
+	elif view == &"side":
+		basis = Basis.looking_at(-cam.basis.x, cam.basis.y)
+	return basis.orthonormalized()
 
 
 ## Turns the key star for `lit` or `dark` (the camera's frame), or back to where it was for `off`.
@@ -153,6 +168,11 @@ func clear() -> void:
 	if not is_active():
 		return
 	_release()
+	_restore()
+
+
+# The player's hull, the key star and the render setting as they were before the sheet.
+func _restore() -> void:
 	player.visible = _player_was_visible
 	key_star.global_transform = _star_transform
 	Settings.set_value(&"ship_render", _render_before)
@@ -170,28 +190,21 @@ func _release() -> void:
 
 # Parks a prop (a buoy, a ship's chunks, a capital, the station) ahead of the camera, three-quarters on or as `view` asks.
 func _show_prop(asset_id: String, camera: Camera3D, distance_m: float, light: StringName, look: StringName, view: StringName) -> String:
-	var cam: Transform3D = camera.global_transform
-	var at: Vector3 = cam.origin - cam.basis.z * distance_m
-	var to_camera: Vector3 = (cam.origin - at).normalized()
-	var basis := Basis.looking_at(to_camera, cam.basis.y).rotated(cam.basis.y, deg_to_rad(YAW_DEG)).rotated(cam.basis.x, deg_to_rad(-PITCH_DEG))
-	if view == &"top":
-		basis = Basis.looking_at(cam.basis.y, to_camera)
-	elif view == &"side":
-		basis = Basis.looking_at(-cam.basis.x, cam.basis.y)
-	basis = basis.orthonormalized()
+	var at: Vector3 = camera.global_position - camera.global_basis.z * distance_m
+	var basis: Basis = _sheet_basis(camera, at, view)
 	if asset_id == "nav_buoy":
 		var buoy: NavBuoy = NavBuoy.create("SHEET BUOY")
 		buoy.spin_dps = 0.0
 		_prop = buoy
 	elif asset_id.ends_with("_chunks"):
 		var ship_asset: String = asset_id.trim_suffix("_chunks")
-		var hardpoints: Hardpoints = Hardpoints.load_file(ShipSpec.ASSET_ROOT.path_join(ship_asset).path_join("hardpoints.json"))
+		var hardpoints: Hardpoints = Hardpoints.load_file(asset_root.path_join(ship_asset).path_join("hardpoints.json"))
 		if not hardpoints.valid or hardpoints.chunks.is_empty():
 			return "%s has no chunks (run scripts/gen_assets.sh, then import)" % ship_asset
 		var group := Node3D.new()
 		group.name = "SheetChunks"
 		for entry: Dictionary in hardpoints.chunks:
-			var chunk: DebrisChunk = DebrisChunk.create(entry, ShipSpec.ASSET_ROOT.path_join(ship_asset), true)
+			var chunk: DebrisChunk = DebrisChunk.create(entry, asset_root.path_join(ship_asset), true)
 			chunk.position = (entry["offset"] as Vector3) * (1.0 + CHUNK_SPREAD)
 			group.add_child(chunk)
 		_prop = group

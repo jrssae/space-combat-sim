@@ -29,7 +29,10 @@ def build_one(asset_id: str, seed: int, out_root: Path, options: dict[str, Any] 
     return outputs
 
 
-def timed_build(asset_id: str, seed: int, out_root: Path, options: dict[str, Any]) -> tuple[AssetOutputs | None, str, float]:
+BuildResult = tuple[AssetOutputs | None, str, float]
+
+
+def timed_build(asset_id: str, seed: int, out_root: Path, options: dict[str, Any]) -> BuildResult:
     """One asset's build: its outputs (or why it failed) and how long it took."""
     started = time.perf_counter()
     try:
