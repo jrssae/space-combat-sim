@@ -517,7 +517,7 @@ hulls, so tune the spacing into the ranges.
 | RCS | the four fin tips (up or down: (±12.92, 15.45, 71.95) and (±12.92, -15.43, 73.33)), the prow (0, 9.2, 0.06) forward, the bow's flanks on the skin at (±1.67, 4.0, 7.0) and the nacelles' outboard flanks at (±15.8, 2.09, 74.0) sideways (as built; 9 ports) |
 | `cockpit_camera` | in the bow behind the window insets, (0, +8.5, 6.5) |
 | `cabin` | the same point, `cabin_range_m` 4 (0.05 L) |
-| Port / starboard lights | the arms' outer faces at mid-length, (±14.0, -0.1, 40.0) |
+| Port / starboard lights | just outside the arms' outer faces at mid-length, (±14.12, -0.15, 40.0) (as built) |
 | `top`, `top_lamp` | just above the spine's crown, (0, +13.45, 15.0); lamp (0, +18.97, 40.0), 6.2 m over the spine there, range 24 m (as built) |
 | Turrets (Q22) | `flank_l` and `flank_r` in the stepped insets high on each flank of the bow, at (±2.04, +8.45, 6.58), the middle of the inset's full-height step (as built, confirmed on the review sheet); up (±1, 0, 0), outboard; `arc_deg` 200, `barrel_m` 3.0. Bolts bright green #7CFF4F (`styles/brakiri.py` `BOLT_SRGB`) |
 | `cargo_pods[]` | `pod_fwd` (0, 1.70, 24.63), `pod_mid` (0, 1.70, 39.07), `pod_aft` (0, 1.70, 53.57); `up` (0, 1, 0), `forward` (0, 0, -1) |
@@ -541,7 +541,8 @@ pod comes off whole as its own debris piece (D59), so a destroyed Bokmai sheds f
 
 | Role | sRGB | Where |
 |---|---|---|
-| `hull` | #5A6B59 | the frame: bow, spine, struts, posts, arms, necks, nacelles, fins; the pods' top plates and saddles |
+| `hull` | #5A6B59 | the frame: bow, spine, struts, posts, arms, necks, nacelles, fins |
+| `frame_plain` (extra) | #5A6B59, no panel grid | the pods' top plates and saddles (the frame's green without the pod's grid) |
 | `hull_dark` | #3A4538 | panel lines, recesses, the spindle and drum, the pods' sleeves and rails |
 | `hull_panel` | #ABAE9A | the pods' plating |
 | `pod_line` (extra) | #868A78 | the pods' panel lines |

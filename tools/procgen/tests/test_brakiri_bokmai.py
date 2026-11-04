@@ -342,6 +342,17 @@ class BrakiriBokmaiTests(unittest.TestCase):
         eye = self.authored(cam["position"])
         self.assertGreater(bp.bow_half_width(float(eye[1]), float(eye[2])), 1.0, "inside the blade")
 
+    def test_the_top_lamp_stands_over_the_spine_and_the_bow_joint_on_the_structure(self) -> None:
+        lamp = self.authored(self.hp["nav_lights"]["top_lamp"])
+        spine = self.authored_xyz[(np.abs(self.authored_xyz[:, 2] - lamp[2]) < 0.5) & (np.abs(self.authored_xyz[:, 0]) < 1.0)]
+        self.assertAlmostEqual(float(lamp[1] - spine[:, 1].max()), 6.2, delta=0.3)
+        joint = self.authored(next(c for c in self.hp["chunks"] if c["name"] == "bow")["joint"])
+        nearest = float(np.linalg.norm(self.authored_xyz - joint, axis=1).min())
+        self.assertLess(nearest, 2.5, "the bow breaks on its own structure")
+        for name, mount in MOUNTS.items():
+            local = joint - np.array(mount)
+            self.assertFalse(abs(local[2]) < 0.5 * POD[2] and abs(local[0]) < 0.5 * POD[0] and abs(local[1]) < 0.5 * POD[1], name)
+
     def test_chase_anchor_and_nav_lights(self) -> None:
         length = self.hp["length_m"]
         np.testing.assert_allclose(self.hp["chase_anchor"]["position"], [0.0, 0.3 * length, 1.2 * length], atol=1e-3)
@@ -364,7 +375,8 @@ class BrakiriBokmaiTests(unittest.TestCase):
         # The seat is on the blade's skin, inside the inset's full-height step.
         x, y, z = FLANK_TURRET
         self.assertAlmostEqual(bp.bow_half_width(y, z), x, delta=0.15)
-        self.assertTrue(5.77 < z < 7.39 and 7.23 < y < 9.67)
+        (_u0, u1, _u2, u3), (l0, _l1, l2, _l3) = bp.INSET_STRIPS
+        self.assertTrue(l0 < z < u1 and l2 < y < u3, "in the inset's full-height step")
 
     def test_the_turret_model_is_the_approved_brakiri_turret(self) -> None:
         turret = self.manifest["turret"]

@@ -65,7 +65,9 @@ BOW_ROWS = (
 # The stepped inset high on each flank (Q22: the turret mounts), in side view: two strips 1.2 m tall, the upper one
 # further forward, (z from, z to, y bottom, y top). The turret's seat is the middle of the full-height step.
 INSET_STRIPS = ((4.1, 7.35, 8.4, 9.6), (5.8, 8.95, 7.25, 8.45))
-INSET_OUTLINE = ((4.1, 9.6), (7.35, 9.6), (7.35, 8.45), (8.95, 8.45), (8.95, 7.25), (5.8, 7.25), (5.8, 8.4), (4.1, 8.4))
+_UP, _LOW = INSET_STRIPS
+INSET_OUTLINE = ((_UP[0], _UP[3]), (_UP[1], _UP[3]), (_UP[1], _LOW[3]), (_LOW[1], _LOW[3]), (_LOW[1], _LOW[2]), (_LOW[0], _LOW[2]),
+                 (_LOW[0], _UP[2]), (_UP[0], _UP[2]))  # fmt: skip
 TURRET_SEAT = (2.04, 8.45, 6.58)  # flank_r on the inset (the maintainer's sheet, 2026-11-03); up +x, outboard
 WINDOW_ROW = (10.9, (4.0, 5.2, 6.4, 7.6, 8.8, 10.0))  # y, window centres z: a row on each flank above the inset
 WINDOW_SIZE = (0.36, 0.5)  # height, length
@@ -622,6 +624,7 @@ __all__ = [
     "ENGINE_STATIONS",
     "EYE",
     "INSET_OUTLINE",
+    "INSET_STRIPS",
     "POD_SIZE",
     "PodModel",
     "SLEEVE_R",
