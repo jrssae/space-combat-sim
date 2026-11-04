@@ -181,7 +181,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T12 | Missile, beam, interceptor and mine stand-ins | T07, T08 | Opus | The weapon kinds Q19 and Q21 name, measured | A, G | done (2026-11-03, in a worktree on `441a3b4`; Cycle log, M4-T12) |
 | T13 | Phase 1 measurements and report P1 (checkpoint 1) | T11, T12, T14 | Sonnet | Measurement, no code | M | done (2026-11-04, in a worktree on `b3c3fbb`; Cycle log, Phase 1; `typical` held, `battle` ceiling 47 against the target of 100; report P1 waits for the maintainer) |
 | T14 | Jolt collision layers; interpolation off for far ships | T11 | Sonnet | Mechanical; matters from 300 ships | G | done, the physics stage did not fall (2.1 ms at 300, 3.5 at 500, as before); the rebase shift fell by 1.5 to 2 ms; fighters collide with fighters again (Q33) (2026-11-04, in a worktree on `ce35406`; Cycle log, M4-T14) |
-| T15 | The native simulation core: entity rows, one call in and out (`ScsSimCore`) | T13 | Fable | Architecture: every native class moves onto it; serial | N | not started |
+| T15 | The native simulation core: entity rows, one call in and out (`ScsSimCore`) | T13 | Fable | Architecture: every native class moves onto it; serial | N | done (2026-11-04, in a worktree on `c0a0b81`; Cycle log, M4-T15; parity bit for bit on both paths, the engine seam counted) |
 | T16 | N2: avoidance, the fire lane and the context lists on the core | T15 | Opus | Per-contact loops, bit for bit | N, G | not started |
 | T17 | The brains in native code under Q16's tolerance (T17a maths, T17b behaviours) | T16 | Fable | 3 000 lines of seeded behaviour with a tolerance to meet | N, G | not started |
 | T18 | N3: threads inside the core (rayon), 1-thread and 6-thread identical | T17 | Opus | Determinism rules, a new crate | N | not started |
@@ -995,6 +995,17 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
   order names the core's two nodes.
 - **Expected gain:** about 0.5 ms at 100 (55 %); the real gain is that T16 to T22 have somewhere to live.
 - **Architecture:** §17.13 (a new subsection head, "The native core", that T16 to T24 add to).
+- **Done (2026-11-04, worktree on `c0a0b81`):** `ScsSimCore` (`native/src/sim_core.rs`) holds the rows: bodies in the
+  registry's order (the registry became the core's face, `body_registry.rs`), the static rows, the bolts in a table of
+  their own, and rows with no node for T20 (`add_row`, `row`). `SimCore` (`src/perf/sim_core.gd`, attached by the flight
+  batch) syncs at -11 and closes the tick at 2 000 000; the hit resolver reads the bolts again at 200 with the bodies
+  touched since. The contact field reads the core's rows through a view (no copy, `attach_core`), the sweep pairs the rows
+  (`pairs_core`, `kept_pairs_core`, `kept_pairs_hulls_core`), `ScsRamPhase` (`ram_phase.rs`) pairs them for the rams and
+  `ScsFlightStep.step_core` reads each ship's pose from its row and applies the forces at -1 as before (the one write per
+  ship; applying after the rebase would change the torque bits). The hit and ram resolvers take their hulls and bolts as
+  columns from the core and look up only the nodes the pairs name. Every old load stays behind `perf_native_core` off.
+  Tests: `test_sim_core` (8), the four classes' files on both paths and `test_fighter_melee`'s digest (byte-identical).
+  The flight step's force application at -1 is the one engine write outside the sync points, by design (§17.13).
 
 ##### M4-T16 N2: avoidance, the fire lane and the context lists in native code
 
@@ -3134,6 +3145,58 @@ settings off against on, alternating (`M4-T14_ab/`). Means in ms per tick unless
 - **Behaviour changes:** none for collisions. A far ship's dot moves at the tick rate (60 Hz) instead of blended to the display
   rate, by at most one tick of travel: 2.5 m at 150 m/s, 10 m at 600 m/s, a few pixels at the 3 km a dot starts at; the look is the
   maintainer's (H).
+### M4-T15 (2026-11-04): the native simulation core
+
+In its own worktree on `c0a0b81` (tests `19d0459`, the core `110ceb3`, the launch-tick fallback `a590acb`, the cheaper bolt
+syncs `c1606ed`, docs after), so only this change. `ScsSimCore` holds every simulated entity as a row and the four native
+classes read it (§17.13); each class's own load stays behind `perf_native_core` off, so the two paths were paired in one build.
+
+- **Parity.** `test_sim_core` (8): the scan, the hit sweep's pairs, the ram broad phase's pairs and the flight step's flight
+  are the same from the core as from each class's own load, bit for bit, on seeded worlds of 1 to 200 bodies with props,
+  drones, kinds, rocks, mines and bolts, after a rebase, after a pool reuse inside a tick. `test_fighter_melee`'s digest is
+  byte-identical with the core on. Seeded runs with the core on and off (`reports/perf/M4-T15_outcome_*`, `M4-T15_outcome2_*`,
+  `M4-T15_diag2_*`): `bench furball 25 10 seed=1`, `spread 50 6 seed=2`, `typical 58 10 seed=1` and `battle 100 10 seed=1` give
+  the same `state ai`, `combat`, `ram` and every ship's position. The first build differed at typical and battle by 0.02 m/s
+  mean speed: a ship released to the pool and taken again at -5 (a carrier launch) kept its row from the first sync while
+  T10's step read the physics server (a stale transform and the velocity the pool had just set). A body touched since the
+  sync now has no row for a kernel and the step reads the server for it, as before (`a590acb`).
+- **The engine seam.** The syncs make 3 engine calls a rigid body (transform, two velocities), 1 a plain bolt (its
+  position; its velocity is read once at its launch and its step is `velocity * delta`), 2 a missile or beam, plus the
+  attribute reads on activation; the kernels make none (`core.kernel_calls` 0 at 10 and 100 bodies in the test and in every
+  run). The flight step's force application stays at -1, the one engine write outside the sync nodes: applying after the
+  World's rebase would change the torque bits on rebase ticks (§17.13).
+- **Numbers** (single `bench <layout> <n> 10 warmup=5 seed=1`, editor build, headless, both locks, cores 0-11). The before
+  on the base (`M4-T15_before`, load 2 to 5: furball 100 median 11.90 ms, typical 58 8.35, battle 300 43.45) was taken on a
+  busier machine than the after, so the gain is read from alternating pairs in the after build, the core off then on, twice
+  each (`M4-T15_ab`, means in ms per tick):
+
+| run | tick off | tick on | scan off | on | ram off | on | hit off | on | ai off | on | flight off | on | sync (other) off | on |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| battle 300, load 4.2 falling to 2.1 | 47.89, 42.03 | 43.63, 39.17 | 13.81, 12.70 | 12.24, 11.34 | 4.76, 3.97 | 2.56, 2.30 | 3.01, 2.59 | 2.56, 2.41 | 23.23, 21.08 | 21.36, 19.53 | 10.47, 9.00 | 9.89, 8.67 | 0.47, 0.38 | 1.60, 1.43 |
+| typical 58, load 1.1 | 7.00, 7.06 | 6.64, 6.60 | 2.04, 2.05 | 1.73, 1.73 | 0.69, 0.69 | 0.43, 0.43 | 0.39, 0.39 | 0.37, 0.37 | 3.55, 3.57 | 3.25, 3.24 | 1.24, 1.26 | 1.24, 1.23 | 0.05, 0.05 | 0.26, 0.26 |
+| furball 100, load 0.5 to 1.1 | 9.70, 9.70 | 9.30, 9.31 | 2.16, 2.16 | 1.92, 1.92 | 0.84, 0.84 | 0.43, 0.43 | 0.44, 0.43 | 0.39, 0.39 | 5.23, 5.21 | 4.98, 4.99 | 1.26, 1.27 | 1.26, 1.26 | 0.09, 0.09 | 0.39, 0.39 |
+
+  The core costs one sync (about 1.1 ms at battle 300, 0.2 at typical, in the probe's "other" stage) and saves more than that
+  in the classes that read it: the scan's build and queries (about 1.5 ms at 300: no registry snapshot copied into the scan
+  and into the field, no static rows copied each tick), the ram resolver's gather (about 2 ms at 300: hull Dictionaries
+  only for the pairs), the hit resolver's gather (about 0.3 ms), the think (the scan's queries inside it) and the flight
+  step's state reads. Net about 4 ms a tick at battle 300 (10 %), 0.4 ms at typical (6 %) and 0.4 ms at furball 100
+  (4 %; the plan's "about 0.5 ms at 100"); typical holds its 8 ms budget with the core on (median 6.5 to 6.6 ms). The
+  quick check (`M4-T15_after2_quick`, core on, load 2.6): furball and spread hold the budget to 50 ships, as the core-off
+  check does (`M4-T15_after_off_quick`); the before (load 4) gave 50 and 25.
+- **The ledger.** The rebase shift (T11's 3.44 ms, 2.34 after T14): 3.19 ms at battle 300 in the after run against 2.61
+  core off (noise of the load; the core adds one `shift` over the rows, measured in the rebase's own microseconds as 0.02
+  ms a tick mean). Not moved: the bolts' and capitals' share of the shift is the nodes', which the core does not touch
+  (T20). The rocks' cost (T29's 0.8 to 2.5 ms): the per-tick copy of the 1 000 static rows into the scan and the field is
+  gone (the scan appends `StaticRows`' cached columns, the field reads the core's rows in place); the statics queries and
+  the rock grids are as T29 left them. Measured with rocks only (the pairs above have them); a no-rocks pair was not taken.
+- **Tests** (focused, Q10; the files below ran on the final library): see the report's table. Rust: `cargo fmt --check`
+  clean; `cargo clippy --release -- -D warnings` clean on this task's files (`native_probe.rs`, T05's, still fails it, so
+  the crate-wide run exits non-zero as before).
+- **Behaviour changes:** none in seeded outcomes. Readouts: `combat.projectiles` now counts the bolts in flight at the
+  gather (not the bolts the per-bolt loop reached); the hit resolver and the ram resolver say where their hulls came from
+  (`source`) and what the gather cost (`gather_us`); `flight.source` and `flight.fallback_reads`; provider `core`.
+
 ### T30a textured mesh pipeline (M4-T30a, 2026-11-04): the Starfury as a textured mesh (Q29, Q31)
 
 **What was built.** `tools/procgen` writes the Starfury as `starfury_aurora.glb` with a 2 048 px atlas and four maps (§17.18), the

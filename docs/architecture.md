@@ -2342,6 +2342,61 @@ matter). Everything the table does not list is as before: a bolt (a `Node3D` flo
   the settle walks only the interpolated nodes, a far ship is left out of it and returns) and `test_fighter_melee` (a seeded melee
   of eight fighters, 2 966 contacts and 11 rams, whose digest equals the base's byte for byte).
 
+### 17.13 The native core (T15)
+
+```
+native/src/sim_core.rs           ScsSimCore: one store of rows for every simulated entity, filled from the engine at the tick's
+                                 sync points and read by every native kernel
+native/src/ram_phase.rs          ScsRamPhase: the ram resolver's broad phase on the core's rows (RamBroadPhase stays the reference)
+native/src/body_registry.rs      ScsBodyRegistry: the core without its facade, kept for the scan's registry path
+src/perf/sim_core.gd             SimCore: the facade; a node under World at priority -11 (sync_in) with an internal child at
+                                 2 000 000 (sync_out); the `core` console provider
+src/ai/contact_scan.gd, src/combat/hit_broad_phase.gd, src/combat/hit_resolver.gd, src/combat/ram_resolver.gd,
+src/ship/flight_batch.gd         the four classes read the core (their own loads stay behind `perf_native_core` off)
+```
+
+- **What it is.** Phase 1 left four native classes, each loading its own copy of the world every tick: the registry's
+  snapshot copied into the scan (1 000 rock rows included) and then into the contact field, the hit resolver's two gathers
+  (hulls and bolts) packed and handed to the sweep, the flight step's direct-state read per ship, and the ram resolver's
+  Dictionary per hull. The core is one struct-of-arrays store in the crate: a row per body (kind, radius, faction, flags,
+  position, velocity, basis, angular velocity, name, hull, a handle), the static rows after them, the bolts in a table of
+  their own (position, velocity, last step, faction, shooter, kind, hit radius), and rows with no node for what T20 adds
+  (`add_row`, `row`: kind, id, faction, radius, flags, position, velocity, basis, angular, command, state). The kernels
+  (`ScsContactField` queries, `ScsHitSweep.pairs_core` and `kept_pairs_core`, `ScsRamPhase.pairs`, `ScsFlightStep.step_core`)
+  read the rows through `bind()` and never call the engine; T16 to T18 and T20 put their kernels beside them.
+- **The tick's sync points** (§15.3's order with the core): `SimCore` at -11 does `sync_in` before the first driver (-10)
+  builds the scan: every member body read once through the nodes' own getters (the registry's reads, M4-T09, plus the
+  angular velocity), the static rows taken again from `StaticRows` when its version changed, the bolts read. The flight
+  batch (-1) reads each ship's basis and velocities from its row (nothing moves a body between -11 and -1) and applies the
+  forces through the physics server as before: the one write per ship per tick, kept at -1 because Jolt rounds the torque
+  of a force at a point against the body's world position, so applying after the World's rebase (0) would change the bits
+  on a rebase tick. The hit resolver (200) asks for the bolts again (`ensure_bolts_synced`), since they moved at 0, and the
+  bodies touched since the first sync are read again then: a ship back from the pool gets its row (flagged late, at the
+  end, so the scan's indices hold), a parked or destroyed one loses its hull flag. The ram resolver (210) reads the same
+  rows. `SimCoreOut` at 2 000 000 does `sync_out`: it closes the tick's engine-call count and is the seam where T17's
+  commands and T21's tier rows write back. A rebase shifts the node and bolt rows once (`rebased`, the same 32-bit add
+  `global_translate` does); the static rows follow `StaticRows`' own shift at the next sync.
+- **Lifecycle.** Members are registered once (`set_members`, when the `targetable` or `damageable` group changes) and keep
+  a slot; a row's handle is its slot and a generation that grows each time the body turns active, so a ship back from the
+  pool is a new row to anything holding the old handle (`row_of` answers -1 for it). Faction, name, kind, radius and the
+  destroyed flag are read on activation and on `touch` (the facade touches a body when it is hidden or shown and when its
+  hull emits `destroyed`); a hull-only body reads its destroyed flag every tick, as the tree gather does.
+- **Parity is bit for bit** with each class's own load: the scan's rows equal `from_tree`'s (the registry's rule), the
+  field reads the same values from the rows, the sweep and the ram phase build the same spheres and boxes from the rows
+  in GDScript's precision and order (the hull rows in the `damageable` group's order, so ties fall the same way), the
+  flight step reads the basis Jolt wrote back to the node after its last step, which is what the direct state holds too
+  (`test_sim_core`, `test_fighter_melee`'s digest, the seeded outcome runs in the Cycle log). What differs: a ship
+  teleported without a visibility change between -11 and 200 (the console only) is swept at its -11 pose that tick, and the
+  flight step reads a launched ship from the physics server on its launch tick (`fallback_reads`), as before.
+- **Engine calls** are counted: the syncs' grow with the bodies and bolts, the kernels' stay 0 (`core.sync_calls`,
+  `core.kernel_calls`; `test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine`).
+- **Settings and console.** `perf_native_core` (default on; off = each class loads its own copy, so a bench pairs the two
+  in one process). Provider `core` (`path`, `rows`, `bodies`, `statics`, `bolts`, `syncs`, `sync_us`, `bolts_us`,
+  `sync_calls`, `kernel_calls`, `attribute_reads`); `combat.source` and `combat.gather_us`, `ram.source` and
+  `ram.gather_us`, `flight.source` and `flight.fallback_reads` say what each class read.
+- **Tests**: `test_sim_core` (the lifecycle, the rebase, the round trip, the four classes' parity, the engine seam) and the
+  files of the four classes on both paths.
+
 ### 17.16 Rocks and mines as static rows (T29)
 
 ```

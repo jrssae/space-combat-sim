@@ -121,12 +121,13 @@ Source: `src/autoload/debug_console.gd`
 | `allies` | `src/game/ship_pool.gd` |
 | `audio` | `src/audio/audio_director.gd` |
 | `camera` | `src/camera/camera_rig.gd` |
-| `combat` | `src/combat/hit_resolver.gd` |
+| `combat` | `src/combat/hit_resolver.gd` (M4-T15 adds `source` and `gather_us`) |
 | `controls` | `src/autoload/control_profiles.gd` |
 | `debris` | `src/combat/debris_pool.gd` |
 | `debug` | `src/autoload/debug_console.gd` |
 | `factions` | `src/combat/faction_console.gd` (registered by `src/combat/hit_resolver.gd`) |
-| `flight` | `src/ship/flight_batch.gd` (M4-T10: the native flight batch: `path`, `ships`, `stepped`, `gather_us`, `step_us`, `positions`) |
+| `core` | `src/perf/sim_core.gd` (M4-T15: the native simulation core: `path`, `rows`, `bodies`, `statics`, `bolts`, `syncs`, `sync_us`, `bolts_us`, `sync_calls`, `kernel_calls`, `attribute_reads`) |
+| `flight` | `src/ship/flight_batch.gd` (M4-T10: the native flight batch: `path`, `ships`, `stepped`, `gather_us`, `step_us`, `positions`; M4-T15: `source`, `fallback_reads`) |
 | `fx` | `src/combat/fx_pool.gd` |
 | `hud` | `src/hud/hud.gd` |
 | `hull` | `src/combat/damageable.gd` |
@@ -136,7 +137,7 @@ Source: `src/autoload/debug_console.gd`
 | `perf` | `src/perf/perf_probe.gd` |
 | `post` | `src/rendering/post_effects.gd` |
 | `raiders` | `src/game/ship_pool.gd` |
-| `ram` | `src/combat/ram_resolver.gd` |
+| `ram` | `src/combat/ram_resolver.gd` (M4-T15 adds `source` and `gather_us`) |
 | `render` | `src/rendering/render_status.gd` (M4-T31: `renderer` (`forward_plus`, or `headless`), `fps`, `frame_ms`, `draw_calls`, `triangles`, `vram_mb`, `far_dots` (the ships in play drawn as far dots past `settings.far_ship_dot_m`, M4-T11), `gpu`, `gpu_ms`) |
 | `screens` | `src/hud/cockpit_screens.gd` |
 | `settings` | `src/autoload/debug_console.gd` (one key per settings entry) |
