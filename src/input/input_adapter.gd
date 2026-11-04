@@ -17,7 +17,9 @@ extends RefCounted
 ## of actions at once (W = both main pods, S = both retro pods), which needs nothing here: each pod reads its own action.
 ## The mouse side buttons are bound like any other (Mouse 4 `autotrack`, Mouse 5 `weapon_next`). Keys 1-4 are the wing orders
 ## (attack my target, form on me, engage at will, cover me; M3-T07), press edges in `UiCommand` for `Main` to pass on. D-pad Left
-## and key 5 switch the running lights (M3-T27).
+## and key 5 switch the running lights (M3-T27). D-pad Right and Ctrl open the comms menu (M5-T07); while it is open (`comms_open`,
+## set by `Main`) the D-pad's four directions pick its entries and the target button closes it, so assist, next weapon, lights
+## and target cycling do not fire.
 
 const MAIN_RIGHT := &"main_right"
 const MAIN_LEFT := &"main_left"
@@ -55,6 +57,7 @@ const WING_FORM := &"wing_form"
 const WING_ENGAGE := &"wing_engage"
 const WING_COVER := &"wing_cover"
 const TOGGLE_RUNNING_LIGHTS := &"toggle_running_lights"
+const COMMS_MENU := &"comms_menu"
 
 ## Every action the game reads; project.godot must declare each one (tests/unit/test_input_map.gd).
 const ACTIONS: Array[StringName] = [
@@ -62,7 +65,7 @@ const ACTIONS: Array[StringName] = [
 	STRAFE_LEFT, STRAFE_RIGHT, STRAFE_DOWN, STRAFE_UP, ROLL_LEFT, ROLL_RIGHT, TARGET_NEXT, WEAPON_NEXT,
 	TARGET_AHEAD, FIRE, TOGGLE_ASSIST, BRAKE, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY, TOGGLE_FALLBACK,
 	TARGET_PREV, AUTOTRACK, CAMERA_LOOK, SCREENSHOT, WING_ATTACK, WING_FORM, WING_ENGAGE, WING_COVER, TARGET_CYCLE,
-	TOGGLE_RUNNING_LIGHTS,
+	TOGGLE_RUNNING_LIGHTS, COMMS_MENU,
 ]
 
 ## Actions reported as one-tick edges on press rather than held state. `TARGET_NEXT` and `TARGET_CYCLE` are not among
@@ -70,7 +73,11 @@ const ACTIONS: Array[StringName] = [
 const EDGE_ACTIONS: Array[StringName] = [
 	TOGGLE_ASSIST, WEAPON_NEXT, TARGET_AHEAD, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY, TOGGLE_FALLBACK,
 	TARGET_PREV, SCREENSHOT, AUTOTRACK, WING_ATTACK, WING_FORM, WING_ENGAGE, WING_COVER, TOGGLE_RUNNING_LIGHTS,
+	COMMS_MENU,
 ]
+
+## The actions on the D-pad's up, right, down and left, which pick the comms menu's entries 0-3 while it is open.
+const COMMS_PICKS: Array[StringName] = [TOGGLE_ASSIST, COMMS_MENU, WEAPON_NEXT, TOGGLE_RUNNING_LIGHTS]
 
 const AIM_EXPO := 1.5
 ## Default for `mouse_full_rate_px_s` (`Settings.mouse_full_rate_px_s`).
@@ -102,6 +109,9 @@ var last: PilotCommand = PilotCommand.new()
 
 ## Auto-track is switched on (toggled by the `autotrack` action). Main clears it when the target is gone.
 var autotrack_on: bool = false
+
+## The comms menu is open (set by `Main` from its `CommsMenu`): see `UiCommand.comms_pick`.
+var comms_open: bool = false
 
 var _prev_pressed: Dictionary = {}
 ## The mouse's turn command, -1..1 per axis (x yaw right, y pitch up), after smoothing.
@@ -160,16 +170,26 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	flight.brake = source.is_pressed(BRAKE)
 
 	var edges: Dictionary = _sample_edges(source)
-	flight.toggle_assist = edges[TOGGLE_ASSIST]
+	var menu: bool = comms_open
+	flight.toggle_assist = edges[TOGGLE_ASSIST] and not menu
 	# Auto-track is a toggle: one press switches it on, the next switches it off.
 	if edges[AUTOTRACK]:
 		autotrack_on = not autotrack_on
 	flight.autotrack = autotrack_on
 
 	cmd.combat.fire = source.is_pressed(FIRE)
-	cmd.combat.weapon_next = edges[WEAPON_NEXT]
-	var select: Dictionary = _step_tap_hold(source, TARGET_NEXT, dt)
-	var cycle: Dictionary = _step_tap_hold(source, TARGET_CYCLE, dt)
+	cmd.combat.weapon_next = edges[WEAPON_NEXT] and not menu
+	var select: Dictionary = {TARGET_NEXT: false, TARGET_AHEAD: false}
+	var cycle: Dictionary = {TARGET_NEXT: false, TARGET_PREV: false}
+	var closing: bool = false
+	if menu:
+		# B belongs to the menu: it closes it instead of cycling, and a hold never reaches "nearest the nose".
+		var key_b: bool = _swallow_press(source, TARGET_NEXT)
+		var pad_b: bool = _swallow_press(source, TARGET_CYCLE)
+		closing = key_b or pad_b
+	else:
+		select = _step_tap_hold(source, TARGET_NEXT, dt)
+		cycle = _step_tap_hold(source, TARGET_CYCLE, dt)
 	var wheel: int = source.take_wheel_steps()
 	cmd.combat.target_next = select[TARGET_NEXT] or cycle[TARGET_NEXT] or wheel > 0
 	cmd.combat.target_prev = edges[TARGET_PREV] or cycle[TARGET_PREV] or wheel < 0
@@ -185,7 +205,15 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	cmd.ui.wing_form = edges[WING_FORM]
 	cmd.ui.wing_engage = edges[WING_ENGAGE]
 	cmd.ui.wing_cover = edges[WING_COVER]
-	cmd.ui.toggle_running_lights = edges[TOGGLE_RUNNING_LIGHTS]
+	cmd.ui.toggle_running_lights = edges[TOGGLE_RUNNING_LIGHTS] and not menu
+	if menu:
+		for i: int in COMMS_PICKS.size():
+			if edges[COMMS_PICKS[i]]:
+				cmd.ui.comms_pick = i
+				break
+		cmd.ui.comms_close = closing and cmd.ui.comms_pick < 0
+	else:
+		cmd.ui.comms_open = edges[COMMS_MENU]
 	cmd.ui.look_active = looking
 	if looking:
 		var look_y: float = -aim.y if not invert_y else aim.y
@@ -275,6 +303,15 @@ func _step_tap_hold(source: InputSource, button: StringName, dt: float) -> Dicti
 		out[tap] = true
 		_disarm(button)
 	return out
+
+
+# A tap-or-hold button read as a plain press edge while a menu has it; its tap-or-hold press is dropped.
+func _swallow_press(source: InputSource, button: StringName) -> bool:
+	var pressed: bool = source.is_pressed(button)
+	var edge: bool = pressed and not bool(_prev_pressed.get(button, false))
+	_prev_pressed[button] = pressed
+	_disarm(button)
+	return edge
 
 
 func _disarm(button: StringName) -> void:

@@ -33,7 +33,7 @@ const ACTION_LABELS: Dictionary = {
 	&"pause": "Pause", &"debug_toggle_overlay": "Debug overlay", &"debug_toggle_fallback_mesh": "Debug mesh",
 	&"autotrack": "Auto-track", &"camera_look": "Free look", &"screenshot": "Screenshot",
 	&"wing_attack": "Wing: attack", &"wing_form": "Wing: form on me", &"wing_engage": "Wing: engage", &"wing_cover": "Wing: cover me",
-	&"toggle_running_lights": "Running lights",
+	&"toggle_running_lights": "Running lights", &"comms_menu": "Comms menu",
 }
 
 var _actions: Dictionary = {}  # widget -> Array[StringName], in the order of InputAdapter.ACTIONS

@@ -17,7 +17,7 @@ const NAMES: Array[StringName] = [
 	InputAdapter.AUTOTRACK, InputAdapter.WEAPON_NEXT, InputAdapter.TARGET_NEXT, InputAdapter.TARGET_PREV,
 	InputAdapter.TARGET_AHEAD, InputAdapter.TOGGLE_CAMERA, InputAdapter.CAMERA_LOOK, InputAdapter.RESET_SHIP,
 	InputAdapter.PAUSE, InputAdapter.WING_ATTACK, InputAdapter.WING_FORM, InputAdapter.WING_ENGAGE, InputAdapter.WING_COVER,
-	InputAdapter.TOGGLE_RUNNING_LIGHTS,
+	InputAdapter.TOGGLE_RUNNING_LIGHTS, InputAdapter.COMMS_MENU,
 ]
 
 
@@ -55,6 +55,7 @@ static func from_command(pc: PilotCommand) -> Dictionary:
 	_flag(out, u.wing_engage, InputAdapter.WING_ENGAGE)
 	_flag(out, u.wing_cover, InputAdapter.WING_COVER)
 	_flag(out, u.toggle_running_lights, InputAdapter.TOGGLE_RUNNING_LIGHTS)
+	_flag(out, u.comms_open, InputAdapter.COMMS_MENU)
 	return out
 
 

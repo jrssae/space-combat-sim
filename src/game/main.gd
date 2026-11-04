@@ -53,6 +53,9 @@ var instructor: Combatant = null
 var instructor_path: BehaviourFollowPath = null
 ## The pause menu (M5-T02): Start opens it and the world pauses behind it.
 var pause_menu: PauseMenu = null
+## The comms menu on D-pad Right (M5-T07): its model, and the view that draws it.
+var comms_menu: CommsMenu = CommsMenu.new()
+var comms_menu_view: CommsMenuView = null
 
 var _spawn_position: UniversePos = UniversePos.new()
 var _spawn_basis: Basis = Basis.IDENTITY
@@ -156,6 +159,10 @@ func _ready() -> void:
 	# The button that closed the menu may still be down: it must not also tap a target or toggle something.
 	pause_menu.resumed.connect(func() -> void: adapter.resync_edges(input_source))
 	add_child(pause_menu)
+	comms_menu.set_root_page("WING ORDERS", CommsMenu.wing_orders())
+	comms_menu_view = CommsMenuView.new()
+	comms_menu_view.menu = comms_menu
+	add_child(comms_menu_view)
 	_register_console()
 
 
@@ -190,6 +197,7 @@ func _physics_process(delta: float) -> void:
 	if not get_tree().paused:
 		camera_rig.set_look(delta, pc.ui.look_active, pc.ui.look_stick, pc.ui.look_mouse_px)
 	_handle_ui(pc.ui)
+	_step_comms_menu(pc.ui, delta)
 
 
 # Auto-track needs a target: with none selected the nearest hostile is taken; with none in range it switches itself off.
@@ -530,6 +538,23 @@ func _handle_ui(ui: UiCommand) -> void:
 		var result: ConsoleResult = DebugConsole.registry.execute_tokens(PackedStringArray(["screenshot"]))
 		print("[screenshot] ", result.lines[0] if result.ok and not result.lines.is_empty() else result.error)
 	_give_wing_orders(ui)
+
+
+# D-pad Right opens the comms menu, its four directions give the wing orders through the same call as keys 1-4, B or 4 s close it.
+# The timer runs here, so it stops while the pause menu has the game.
+func _step_comms_menu(ui: UiCommand, delta: float) -> void:
+	if ui.pause or not player_alive:
+		comms_menu.close()
+	elif ui.comms_open:
+		comms_menu.open()
+	elif ui.comms_close:
+		comms_menu.close()
+	elif ui.comms_pick >= 0:
+		var entry: Dictionary = comms_menu.pick(ui.comms_pick)
+		if not entry.is_empty() and entry["payload"] is int:
+			wings.give_order(entry["payload"] as AiContext.Order)
+	comms_menu.tick(delta)
+	adapter.comms_open = comms_menu.is_open()
 
 
 # Keys 1-4 (UiCommand edges, never `Input`): orders for the player's wing (architecture §16.3).

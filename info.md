@@ -156,6 +156,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `hud` | Whether the HUD shows, and where the lead, prograde and target marks are | in flight |
 | `screens` | The cockpit screens: shown, powered, paint counts and the lamps lit | in flight |
 | `pause_menu` | Whether the pause menu is open, the page on top and how many pages are open | in flight |
+| `comms_menu` | The comms menu (D-pad Right): whether it is open, the page, time left, entries picked and why it last closed | in flight |
 | `render` | The splat backend, fallback switch, fps, GPU name, splat budget and GDGS counters | in flight |
 | `lights` | Which emitters light the scene this frame and what that costs | front end, flight |
 | `lod` | Each ship's splat level and the splats drawn | in flight |

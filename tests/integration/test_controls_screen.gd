@@ -193,7 +193,7 @@ func test_the_diagram_lights_the_buttons_of_the_action_in_focus() -> void:
 
 func test_picking_a_profile_applies_it_and_the_diagram_follows() -> void:
 	await _open_controls()
-	assert_eq(frame.pad_diagram().legend.label_for(&"dpad_right"), "", "the default leaves D-pad right free")
+	assert_eq(frame.pad_diagram().legend.label_for(&"dpad_right"), "Comms menu", "the default opens the comms menu on D-pad right")
 	await _pad(&"ui_accept")
 	assert_eq(screen.current_view(), ControlsScreen.View.PROFILES)
 	assert_string_contains(_focused_text(), "* default", "the profile in use has the focus")
