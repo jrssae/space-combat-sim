@@ -437,7 +437,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T10 | B | Mission: Buoy defence with a cinematic intro | T06, T07, T08, T09 | Opus | Pacing, writing and the first real use of the API | not started |
 | T11 | C | Civilian references: measurements and descriptions | - | Opus | Reading shapes off renders; sizes from Q8 | done |
 | T23 | C | Fidelity check: silhouettes and size against the STL, `refview` compare (Q18; numbered last because it was added during the build) | T11 | Sonnet | A small measuring tool that every civilian generator must pass | done |
-| T12 | C | `saturn_family` generator (five variants, Q16) | T11, T23 | Opus | Large shared part library | in progress |
+| T12 | C | `saturn_family` generator (five variants, Q16) | T11, T23 | Opus | Large shared part library | done |
 | T13 | C | `skylark_transport` generator | T11, T23 | Opus | Geometry | done |
 | T14 | C | `narn_transport` generator and the `narn` style | T11, T23 | Opus | Geometry and a new style | done |
 | T15 | C | `centauri_brezebel` generator and the `centauri` style | T11, T23 | Opus | Geometry and a new style | done |
@@ -778,6 +778,39 @@ whose trigger never arose). Update the column with each task's commit.
 - **Notes:** one generator, a variant per asset id, so `python3 -m tools.procgen build saturn_4_transport` builds one hull.
   The variant data holds the length (Q8) and the module layout.
 - **Done when:** AC12 and AC20 for the five variants; `tests/integration/test_splat_import.gd` covers them.
+- **Done (as built, 2026-11-04):** `saturn_family` (`tools/procgen/assets/saturn_family.py`, parts in
+  `tools/procgen/parts/saturn.py`, style `tools/procgen/styles/ea_civilian.py`), five ids from one lead ship plus cargo
+  (Q16): `saturn_3_freighter` 96.8 m, `saturn_4_transport` and `saturn_4_tanker` 158.48 m, `saturn_8_transport` and
+  `saturn_8_tanker` 258.48 m.
+  - **Shape (fix round, off the Saturn 4 and tanker models' sections):** the lead ship traced member by member: an elliptic
+    disc with its fins, neck box, keel block and 2.8 m corner wedges; the antenna on a strut, a bar and a plate; the
+    forward frame (upper tubes, upper beams forking at z 37, a centre beam forking, a lower bar into the truss drum's
+    neck), the crossed plates, side boxes and plates; the aft frame as its mirror about z 92.1, landing in the first
+    dome's brackets; the drum frame's posts as one 3.2 m plate and a spoke band a side. Transport pods with the end band's
+    outline (7.74 / 17.22 / 4.73 m) and the body 0.8 m in; the tank sections' A-frames at the model's two stations. The
+    Saturn 3 keeps T11's wider pod stack, its slim engine and the truss through the stack (Q20, Q23).
+  - **Outputs:** LOD0 74 894 / 136 626 / 74 852 / 218 216 / 127 220 splats (Saturn 3, 4 transport, 4 tanker, 8
+    transport, 8 tanker), LOD1-3 at 25 / 6 / 1.5 %, chunks from LOD1, the fallback mesh and the painted mesh
+    `<id>_mesh.glb` (41 518 to 54 998 triangles; ships are meshes from 2026-11-04), the EA turret (2 363 splats) with its
+    own mesh.
+  - **Hardpoints:** two pods (mains at the bell, retros on the disc's rim), the centre of mass on the spine axis, 11 RCS
+    ports (the top drum's front port dropped: it sat in the crossed plates), collision over at least 97 % of the splats,
+    turrets per Q19 (`dorsal_fwd` and `dorsal_aft` or `dorsal_mid`; the Saturn 3 `dorsal_fwd` only), chunks with joints on
+    their chunks.
+  - **Fidelity (Q18), mesh against the STL, part by part with crops that match on both sides:** every lead ship 0.960 /
+    0.919 / 0.916 (the Saturn 3's, z 0-41.5, 0.964 / 0.905 / 0.946); transport sections lowest view 0.917 to 0.923; tank
+    sections 0.916 to 0.938; the whole Saturn 4 transport 0.958 / 0.966 / 0.931; lengths, widths and heights within 3.2 %.
+    The Saturn 3's pod group reads 0.768 / 0.644 / 0.927, the expected exemption (Q23). Splats cover at least 0.957 of
+    their mesh, precision 1.000. All rows in `docs/assets-civilian.md`.
+  - **Tests:** 165 Python tests (each variant's contract, mirror symmetry of every splat level and of the drawn mesh, the
+    fallback and chunk meshes hold every piece, the painted mesh is the fallback mesh, the frames' lower bars meet the
+    truss drum and the aft frame lands in the brackets, collision, turrets, determinism); `test_splat_import.gd` 17/17.
+  - **Review.** Built in eab08b1 and c80eace. Fix round (ae98f72, 45ecd75): the lead ship traced member by member, the
+    pod bands, the tank A-frames, crops and Fidelity rows. Full review: the aft frame's mirror plane and floating lower
+    bar, an RCS port inside a plate, two crops not matching, a mesh off mirror (the Saturn 3's top pod rail), docs (90bcd8b);
+    a re-check found the aft frame's dome end short of the brackets and the pod joints between pods (cb0a565). Approved.
+    Open (H): the Saturn 3's wider pod stack and added engine (Q20, Q23), soft close-ups at 0.48 to 0.55 m splat spacing
+    until the meshes are textured (M4-T30a).
 
 ### M5-T13 `skylark_transport` generator
 
