@@ -126,6 +126,8 @@ class ResizeAndWriteTests(unittest.TestCase):
         self.assertIn("compress/mode=2", sidecar)
         self.assertIn("mipmaps/generate=true", sidecar)
         self.assertIn("compress/high_quality=true", sidecar)
+        # The alpha is the nebula's opacity: the importer must not bleed colour into it.
+        self.assertIn("process/fix_alpha_border=false", sidecar)
 
 
 if __name__ == "__main__":

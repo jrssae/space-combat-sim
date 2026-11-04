@@ -138,14 +138,15 @@ def quantize8(levels: np.ndarray, rng: np.random.Generator | None = None) -> np.
 
 
 def import_sidecar() -> str:
-    """Godot's ``.import`` for a panorama: VRAM compressed (BPTC, so the dark gradients do not band) with mipmaps."""
+    """Godot's ``.import`` for a panorama: VRAM compressed (BPTC, so the dark gradients do not band) with mipmaps. The alpha is the
+    nebula's opacity, so the importer must not bleed colour into transparent texels (``fix_alpha_border`` off)."""
     return (
         "[remap]\n\nimporter=\"texture\"\ntype=\"CompressedTexture2D\"\n\n[params]\n\n"
         "compress/mode=2\ncompress/high_quality=true\ncompress/lossy_quality=0.7\ncompress/uastc_level=0\n"
         "compress/rdo_quality_loss=0.0\ncompress/hdr_compression=1\ncompress/normal_map=2\ncompress/channel_pack=0\n"
         "mipmaps/generate=true\nmipmaps/limit=-1\nroughness/mode=0\nroughness/src_normal=\"\"\n"
         "process/channel_remap/red=0\nprocess/channel_remap/green=1\nprocess/channel_remap/blue=2\nprocess/channel_remap/alpha=3\n"
-        "process/fix_alpha_border=true\nprocess/premult_alpha=false\nprocess/normal_map_invert_y=false\nprocess/hdr_as_srgb=false\n"
+        "process/fix_alpha_border=false\nprocess/premult_alpha=false\nprocess/normal_map_invert_y=false\nprocess/hdr_as_srgb=false\n"
         "process/hdr_clamp_exposure=false\nprocess/size_limit=0\ndetect_3d/compress_to=0\n"
     )
 
