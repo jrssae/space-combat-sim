@@ -433,7 +433,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T06 | B | Dialog, subtitles and the comms panel | T05 | Sonnet | Data and HUD | done |
 | T07 | B | Comms menu on D-pad Right | T06 | Sonnet | Input routing with clear rules | not started |
 | T08 | B | `CINEMATIC` camera and locked controls | T05 | Opus | Rebase-safe camera paths | not started |
-| T09 | B | Debrief | T05, T02 | Sonnet | Model and screen | in progress |
+| T09 | B | Debrief | T05, T02 | Sonnet | Model and screen | done |
 | T10 | B | Mission: Buoy defence with a cinematic intro | T06, T07, T08, T09 | Opus | Pacing, writing and the first real use of the API | not started |
 | T11 | C | Civilian references: measurements and descriptions | - | Opus | Reading shapes off renders; sizes from Q8 | done |
 | T23 | C | Fidelity check: silhouettes and size against the STL, `refview` compare (Q18; numbered last because it was added during the build) | T11 | Sonnet | A small measuring tool that every civilian generator must pass | done |
@@ -663,6 +663,18 @@ whose trigger never arose). Update the column with each task's commit.
   `DEBRIEF` state and retry), a shots-and-hits counter for the player (from `projectile_fired` and `HitResolver`'s
   results, without touching M4's files), `tests/unit/test_debrief_model.gd`, `tests/integration/test_debrief.gd`.
 - **Done when:** AC9 with the test mission.
+- **Done (as built, 2026-11-04):** the pure `DebriefModel` holds the result and reason (a failed objective's id becomes
+  its text), every objective with its state, sim time, kills and assists, wing losses, shots fired and hit and accuracy;
+  `panel()` fills the right panel, `summary()` the console. The pure `MissionTally` counts the player's bolts fired and
+  hit and the wing's losses (never the player), fed by the `DebriefRecorder` node from `projectile_fired`,
+  `HitResolver.hit_resolved`, `ship_destroyed` and `KillCredit`, with no M4 file touched. On mission end the runner builds
+  the report, `Game.end_mission` moves the flow to `DEBRIEF` (missions only), and 3 s of sim time later
+  `Game.show_debrief` swaps `Main` for the debrief screen (pausing holds the beat). Retry replays the same scenario,
+  encounters and seed through loading (no leaked nodes over repeated retries, a test); Front end returns to the menu; a
+  0.7 s input guard stops a fire-button tap from picking Retry. Console `retry`, provider `debrief`. D56 in §18.
+  - **Review.** One fix round (sonnet): the player's own death no longer counts as a wing loss (test). Open (minor):
+    accuracy is computed in both `DebriefModel` and `MissionTally`; the recorder keys the player by `main.ship` for shots
+    and `main.combatant` for losses.
 
 ### M5-T10 Mission: Buoy defence with a cinematic intro
 
