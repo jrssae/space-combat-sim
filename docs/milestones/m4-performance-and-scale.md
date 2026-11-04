@@ -3148,7 +3148,7 @@ settings off against on, alternating (`M4-T14_ab/`). Means in ms per tick unless
 ### M4-T15 (2026-11-04): the native simulation core
 
 In its own worktree on `c0a0b81` (tests `19d0459`, the core `110ceb3`, the launch-tick fallback `a590acb`, the cheaper bolt
-syncs `c1606ed`, docs after), so only this change. `ScsSimCore` holds every simulated entity as a row and the four native
+syncs `c1606ed`, docs `9997200`, a second gather in one frame reads again `8fefb68`), so only this change. `ScsSimCore` holds every simulated entity as a row and the four native
 classes read it (§17.13); each class's own load stays behind `perf_native_core` off, so the two paths were paired in one build.
 
 - **Parity.** `test_sim_core` (8): the scan, the hit sweep's pairs, the ram broad phase's pairs and the flight step's flight
