@@ -1,4 +1,4 @@
-"""Wavefront OBJ/MTL writer (fallback meshes) and a small reader for tests.
+"""Wavefront OBJ/MTL writer (the hull and chunk OBJs, `files.obj`) and a small reader for tests.
 
 Godot's OBJ importer reads vertices as-is (Y up, right handed, -Z forward), so meshes are
 written in the Godot frame exactly like the hardpoints. Output is deterministic: fixed

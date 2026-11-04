@@ -33,7 +33,7 @@ V_HALF_DEG = {"octagon": 11.2, "horizon": 15.9, "bar": 29.3}
 V_ELEVATION_DEG = (-13.3, 36.7)
 CROSSHAIR_CLEAR_PX = 60.0
 COCKPIT = ship.STARFURY_COCKPIT
-# The hull's own window, for the fallback mesh seen from outside: below this elevation the chin hides the guns.
+# The hull's own window, for the hull seen from outside: below this elevation the chin hides the guns.
 CHIN_ELEVATION_DEG = -12.0
 CHUNK_NAMES = ("cabin", "arm_ur", "arm_lr", "arm_ul", "arm_ll")
 def sha256(path: Path) -> str:
@@ -630,8 +630,9 @@ class StarfuryAuroraTests(unittest.TestCase):
             self.assertLess(screen["center"][2], eye[2], f"{name}: ahead of the pilot")
 
     def test_a_new_interior_leaves_the_hull_alone(self) -> None:
-        # M4-T30a's version 6 added the textured mesh, M4-T30b's 7 the liveries, M4-T30d's 8 the chunk meshes and M4-T31's 9 left the
-        # textured mesh alone. The hull's OBJ has none of the interior's materials.
+        # M4-T30a's version 6 added the textured mesh, M4-T30b's 7 the liveries, M4-T30d's 8 the chunk meshes and M4-T31's 9 dropped the
+        # point-cloud outputs and renamed the sample stream, which moves the centring by 1.5 mm; the design is unchanged. The hull's OBJ
+        # has none of the interior's materials.
         self.assertEqual(ship.GENERATOR_VERSION, 9)
         hull = read_obj(self.dir_a / ship.OBJ_NAME)
         self.assertFalse([m for m in hull.materials if "ef_cockpit" in m])

@@ -132,14 +132,12 @@ class Placed:
 
     part: Part
     samples: SurfaceSamples | None
-    spacing: float = 0.0
     hull: bool = True
 
     def translated(self, offset: np.ndarray) -> Placed:
         return Placed(
             self.part.translated(offset),
             None if self.samples is None else self.samples.translated(offset),
-            self.spacing,
             self.hull,
         )
 
@@ -147,7 +145,6 @@ class Placed:
         return Placed(
             self.part.mirrored("x").renamed(name, group=group),
             None if self.samples is None else self.samples.mirrored("x"),
-            self.spacing,
             self.hull,
         )
 
@@ -202,12 +199,12 @@ def build_parts(
     wing = delta_wing(wing_spec, style).renamed("wing_r", group="wing_r")
     s_wing = sample(wing.mesh, "wing")
     s_wing = _unburied(s_wing, in_hump(s_wing.positions), in_nac(s_wing.positions))
-    right: list[Placed] = [Placed(wing, s_wing, spacing)]
+    right: list[Placed] = [Placed(wing, s_wing)]
 
     def on_wing(x: float, z: float, mesh: Mesh, name: str, stream: str) -> Placed:
         top = 0.5 * float(wing_spec.thickness(x))
         part = Part(name, mesh.translated((x, top - 0.002, z)), group="wing_r", mass_kg=0.0)
-        return Placed(part, sample(part.mesh, stream), spacing)
+        return Placed(part, sample(part.mesh, stream))
 
     right.append(on_wing(3.7, 4.4, vent_grille(1.4, 1.6, 7, style), "wing_vent_a", "wing_vent_a"))
     right.append(on_wing(5.9, 5.2, vent_grille(1.0, 0.8, 4, style), "wing_vent_b", "wing_vent_b"))
@@ -223,8 +220,8 @@ def build_parts(
             center=(spec.root_gun_x, 0.5 * (pylon_top + spec.root_gun_y), spec.root_gun_muzzle_z + spec.barrel.length + 0.1)),
         group="wing_r",
     )
-    right.append(Placed(root_gun, sample(root_gun.mesh, "root_gun"), spacing))
-    right.append(Placed(pylon, sample(pylon.mesh, "root_pylon"), spacing))
+    right.append(Placed(root_gun, sample(root_gun.mesh, "root_gun")))
+    right.append(Placed(pylon, sample(pylon.mesh, "root_pylon")))
     placed += right
     for p in right:
         placed.append(p.mirrored(p.part.name[:-2] + "_l" if p.part.name.endswith("_r") else p.part.name + "_l", "wing_l"))
@@ -233,22 +230,22 @@ def build_parts(
     body = hump(hump_spec, style)
     s_body = sample(body.mesh, "hump")
     s_body = _unburied(s_body, in_wing(s_body.positions), in_nac(s_body.positions)).symmetrized("x")
-    placed.append(Placed(body, s_body, spacing))
+    placed.append(Placed(body, s_body))
     canopy = Part(
         "canopy",
         canopy_panel(hump_spec, style, *spec.canopy_z, *spec.canopy_widths),
         group="hump",
     )
-    placed.append(Placed(canopy, sample(canopy.mesh, "canopy").symmetrized("x"), spacing))
+    placed.append(Placed(canopy, sample(canopy.mesh, "canopy").symmetrized("x")))
     grille_y = hump_spec.bottom_y + hump_spec.section(4.0)[1] - 0.012
     grille = Part("hump_vent", vent_grille(0.9, 1.8, 8, style).translated((0.0, grille_y, 4.2)), group="hump")
-    placed.append(Placed(grille, sample(grille.mesh, "hump_vent").symmetrized("x"), spacing))
+    placed.append(Placed(grille, sample(grille.mesh, "hump_vent").symmetrized("x")))
 
     # --- right nacelle group: drum, nozzle, flank gun ---------------------------------------------------
     drum = nacelle(spec.nacelle, style).translated(nac_origin).renamed("nacelle_r", group="nacelle_r")
     s_drum = sample(drum.mesh, "nacelle")
     s_drum = _unburied(s_drum, in_wing(s_drum.positions), in_hump(s_drum.positions))
-    n_right: list[Placed] = [Placed(drum, s_drum, spacing)]
+    n_right: list[Placed] = [Placed(drum, s_drum)]
     n_gun = gun_barrel(spec.barrel, style).translated(
         (spec.nacelle_gun_x, spec.nacelle_gun_y, spec.nacelle_gun_muzzle_z + spec.barrel.length)
     ).renamed("nacelle_gun_r", group="nacelle_r")
@@ -259,8 +256,8 @@ def build_parts(
             center=(0.5 * (spec.nacelle_gun_x + n_pylon_x), spec.nacelle_gun_y, spec.nacelle_gun_muzzle_z + spec.barrel.length + 0.1)),
         group="nacelle_r",
     )
-    n_right.append(Placed(n_gun, sample(n_gun.mesh, "nacelle_gun"), spacing))
-    n_right.append(Placed(n_pylon, sample(n_pylon.mesh, "nacelle_pylon"), spacing))
+    n_right.append(Placed(n_gun, sample(n_gun.mesh, "nacelle_gun")))
+    n_right.append(Placed(n_pylon, sample(n_pylon.mesh, "nacelle_pylon")))
     placed += n_right
     for p in n_right:
         placed.append(p.mirrored(p.part.name[:-2] + "_l", "nacelle_l"))

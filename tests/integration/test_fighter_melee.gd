@@ -1,9 +1,9 @@
 extends GutTest
 ## A seeded melee (M4-T14 fix round 1, Q33): eight AI fighters flung at each other for 4 s, every one of them in Jolt contacts and
-## rams. The digest of every ship's pose, spin and hull every 20 ticks plus each ram is the base's byte for byte (taken from the
-## tree before the collision layers, `ce35406`), so Jolt's contact response and the ram damage between fighters are unchanged.
-## If a later change moves the flight maths on purpose, take a new digest and say so in the Cycle log. M4-T31 took a new one: the
-## Starfury's re-centring moved its collision boxes and centre of mass by under 2 mm (Cycle log, M4-T31).
+## rams. The digest of every ship's pose, spin and hull every 20 ticks plus each ram is pinned, so Jolt's contact response and the
+## ram damage between fighters stay as they are. T14 pinned the tree before the collision layers (`ce35406`); M4-T31 re-took it
+## after the generators' sample stream was renamed (`surface`), which moved the Starfury's collision boxes and centre of mass by
+## under 2 mm (Cycle log, M4-T31). If a later change moves the flight maths or the hull on purpose, take a new digest and say so.
 
 const BASE_CONTACTS: int = 2959
 const BASE_RAMS: int = 11

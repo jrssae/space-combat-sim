@@ -37,15 +37,15 @@ PHASE_STEPS = 97
 
 
 def phase_steps(name: str, base_only: bool) -> tuple[int, int, int]:
-    """A part's panel phase in 97ths of the panel size: the integers the assets' ``_phase`` scales, so each part's panels are offset
-    from its neighbours'."""
+    """A part's panel phase in 97ths of the panel size, so each part's panels are offset from its neighbours'. With ``base_only``
+    a part shares its kind's phase (``pod_ur`` and ``pod_ll`` are both ``pod``)."""
     key = name.split("_")[0] if base_only else name
     h = sum((i + 1) * ord(c) for i, c in enumerate(key))
     return tuple((h * k) % PHASE_STEPS for k in (7, 11, 13))
 
 
 def phase_of(steps: Sequence[int], style: Style) -> tuple[float, float, float]:
-    """The panel phase in metres, exactly as ``_phase`` computes it."""
+    """The panel phase in metres: ``steps`` 97ths of the style's panel size."""
     return tuple(int(s) / float(PHASE_STEPS) * style.panel_size_m for s in steps)
 
 

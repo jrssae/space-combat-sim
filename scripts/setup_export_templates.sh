@@ -7,7 +7,7 @@
 #   1. Snapshot the commit so working-tree edits never reach the numbers: git archive <commit> | tar -x -C <snap>, copy
 #      assets/generated/ into it, then .tools/godot/godot --headless --path <snap> --import.
 #   2. In <snap>, an export_presets.cfg with one preset, name="Linux release", platform="Linux", export_filter="all_resources",
-#      include_filter="*.json,*.ply,*.light,*.txt,*.cfg,*.obj,*.mtl",
+#      include_filter="*.json,*.f32,*.txt,*.cfg,*.obj,*.mtl",
 #      exclude_filter="tests/*, docs/*, tools/*, scripts/*, addons/gut/*, reports/*", binary_format/embed_pck=true, and
 #      custom_template/release set to this script's linux_release.x86_64 as an absolute path.
 #   3. .tools/godot/godot --headless --path <snap> --export-release "Linux release" <build>/scs_release.x86_64

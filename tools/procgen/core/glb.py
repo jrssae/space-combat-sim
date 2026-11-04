@@ -1,7 +1,7 @@
-"""Binary glTF 2.0 (``.glb``) writer for painted meshes, and a small reader for tests (M4-T27).
+"""Binary glTF 2.0 (``.glb``) writer for the textured meshes, and a small reader for tests (M4-T27).
 
 Godot imports a ``.glb`` as a scene and builds the mesh's levels of detail at import, so a mesh written here gets the engine's
-own LOD chain. Only what the painted meshes need: one mesh of indexed triangle primitives, each with positions, normals and
+own LOD chain. Only what the textured meshes need: one mesh of indexed triangle primitives, each with positions, normals and
 one UV set, and a named material per primitive. Output is deterministic: no timestamps, fixed key order, 4-byte alignment.
 """
 

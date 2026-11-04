@@ -300,14 +300,12 @@ class Placed:
     part: Part
     samples: SurfaceSamples | None
     hull: bool = True  # part of the hull mesh, the mass and the collision shapes
-    spacing: float = 0.0  # sample spacing of ``samples`` (m)
 
     def translated(self, offset: np.ndarray) -> Placed:
         return Placed(
             self.part.translated(offset),
             None if self.samples is None else self.samples.translated(offset),
             self.hull,
-            self.spacing,
         )
 
 
@@ -327,7 +325,6 @@ def _mirrors(base: Placed, prefix: str, lower: Placed | None = None) -> list[Pla
                 part.renamed(f"{prefix}_{pod}", group=base.part.group),
                 samples,
                 base.hull,
-                base.spacing,
             )
         )
     return out
@@ -390,10 +387,10 @@ def build_parts(
         group="body",
     )
     body = [
-        Placed(fus, fus_samples, spacing=spacing),
-        Placed(cockpit, cockpit_samples, hull=False, spacing=cockpit_spacing),
-        Placed(gun, gun_samples, spacing=spacing),
-        Placed(fittings, fit_samples, spacing=spacing),
+        Placed(fus, fus_samples),
+        Placed(cockpit, cockpit_samples, hull=False),
+        Placed(gun, gun_samples),
+        Placed(fittings, fit_samples),
         Placed(interior, None, hull=False),
     ]
 
@@ -436,9 +433,9 @@ def build_parts(
     s_claw = sample(claw.mesh, "claw")
     s_claw = _unburied(s_claw, in_pod(s_claw.positions), _facing_into(s_claw, in_pod))
     cross = (
-        _mirrors(Placed(pod, s_pod, spacing=spacing), "pod")
-        + _mirrors(Placed(strut, s_strut, spacing=spacing), "strut", lower=Placed(lower, s_lower, spacing=spacing))
-        + _mirrors(Placed(claw, s_claw, spacing=spacing), "claw")
+        _mirrors(Placed(pod, s_pod), "pod")
+        + _mirrors(Placed(strut, s_strut), "strut", lower=Placed(lower, s_lower))
+        + _mirrors(Placed(claw, s_claw), "claw")
     )
     return body + cross
 
@@ -546,7 +543,7 @@ def coarse_placed(spec: StarfurySpec, style: Style, ctx: BuildContext, triangles
     flat parts allow), moved by the fine build's centring ``offset`` so both share one frame."""
     def build_at(factor: float) -> list[Placed]:
         placed = build_parts(coarse_spec(spec, factor), style, ctx, 0.25, 0.25, (COARSE_STREAM,))
-        return [Placed(p.part.translated(-offset), None, p.hull, p.spacing) for p in placed]
+        return [Placed(p.part.translated(-offset), None, p.hull) for p in placed]
 
     def count(placed: list[Placed]) -> int:
         return sum(p.part.mesh.face_count for p in placed if p.hull)

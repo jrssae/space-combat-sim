@@ -456,7 +456,7 @@ the hand that holds the mouse. Layout B puts every flight key under the left han
 keys, US positions. Pods are by position: Q / E drive the left / right main pod and W both, A / D the left / right retro and S
 both. R / F strafe up / down, Z / C strafe left / right, Caps Lock / G roll left / right, X brake (hold), Shift auto-track
 (toggle), Space fire, V fire mode, T flight assist, B the tap-or-hold target button (as mouse 2: tap next, hold nearest the nose), Tab camera. The
-housekeeping keys stay where they were (Esc, Backspace, N and Print, F3, F4). There are no keys for pitch, yaw, `target_prev`
+housekeeping keys stay where they were (Esc, Backspace, N and Print, F3). There are no keys for pitch, yaw, `target_prev`
 or `target_ahead`: the mouse flies, the wheel steps targets both ways, and a hold of B or mouse 2 is target-ahead. Mouse 4 / 5
 (the side buttons, `mouse:8` / `mouse:9`) are auto-track and fire mode. Ctrl, Alt (frees the mouse), the number row (keys 1-4
 are the wing orders of M3-T07) and ` (console) are not bound to flight. Caps Lock is read as a held key by polling
@@ -504,7 +504,6 @@ use for the standard layout; any pad SDL3 recognises, generic XInput clones incl
 | `pause` | Start `JOY_BUTTON_START` (6) | Esc | edge | - | - |
 | `debug_toggle_overlay` | none | F3 | edge (toggles `settings.show_overlay`) | - | - |
 | `screenshot` | none | N, Print | edge (saves `user://screenshots/shot_<time>.png`) | - | - |
-| `debug_toggle_fallback_mesh` | none (debug, keyboard only) | F4 | edge | - | - |
 | *(console toggle, not an action)* | none | ` (physical `KEY_QUOTELEFT`, 96) | handled in `DebugConsole._input` | - | - |
 
 Notes:
@@ -592,7 +591,6 @@ var toggle_camera: bool # edges, all of them
 var reset: bool
 var pause: bool
 var toggle_overlay: bool
-var toggle_fallback_mesh: bool
 
 class_name PilotCommand extends RefCounted
 var flight: FlightCommand
@@ -1630,7 +1628,7 @@ closing speeds up to 1 400 m/s, near misses, no self-hit, rebase mid-flight, god
 tick, pooling (no pooled ship or chunk enters or leaves the tree during a run), brains in Jolt (patrol
 reaches its waypoints, attack hits a drone), a three-wave run, the console smoke runs. Python: `raider_fighter`
 (contract, chunks, collision coverage) and `sfx_combat`. (H) with pre-checks through
-`scripts/capture.sh` (llvmpipe, Raster backend): asset silhouette, HUD layout, effect compositing.
+`scripts/capture.sh` (llvmpipe in xvfb): asset silhouette, HUD layout, effect compositing.
 
 ### 15.14b As built (M2 deviations from §15.1-§15.13)
 
@@ -2517,8 +2515,9 @@ scripts/look_sheet.sh, look_sheet.gd  the look sheet: every shot and the compose
   one minus the transmittance), else T27's painted mesh, cached per file so every copy of a hull shares its materials and the renderer
   instances them (20 textured Starfuries are one draw call per surface per pass; the probe's "painted meshes" phase with `asset=`). The
   hulls are lit by the Forward+ renderer: the rig's lights and `settings.ambient_level` (0.3 of white) on the environment, live. `Ship`
-  is unchanged: it draws whatever `PaintMeshes.for_asset` returns when `ship_render` is `mesh`.
-- **The look sheet.** `sheet <asset> <m> [lit|dark|off] [splat|painted|textured]` parks one idle pooled ship ahead of the chase camera
+  drew whatever `PaintMeshes.for_asset` returned when `ship_render` was `mesh`; since T31 its `Hull` node always draws
+  `MeshAssets.for_asset`.
+- **The look sheet.** `sheet <asset> <m> [lit|dark|off] [livery] [view]` (until T31 it also took a look: `splat`, `painted` or `textured`) parks one idle pooled ship ahead of the chase camera
   three-quarters on, hides the player's hull and turns the key star to light the ship from over the camera's shoulder or from behind it;
   `scripts/look_sheet.sh` photographs every look at 8, 30, 150 and 600 m, lit and dark, and the cockpit view, fullscreen with the 3D at
   1 080 lines, and composes `/tmp/m4_t30_<asset>_sheet.png` with each tile's GPU time.
@@ -2736,7 +2735,8 @@ added    tools/procgen/core/rotations.py (the sky's quaternions); MeshAssets.rea
 - **Generators.** The manifest lost `lods`, `hero`, `paint_mesh`, `sampling` and `counts`; `files.fallback_mesh` is `files.obj`;
   `kind` defaults to `asset`; the top-level box bounds the hull mesh. Surface samples stay: they centre each hull, keep the markers
   clear of it, place the chunks (now on the full-detail samples, millimetres from where M3's coarser level put them) and feed the
-  occlusion and normal bakes. The sample streams are named `surface` (the centroids move by sampling noise, up to 2 mm).
+  occlusion and normal bakes. The sample streams are named `surface` (by sampling noise the hull centroids move 1.5 to 4 mm and
+  the chunk centres up to 27 mm, each a pure translation).
   `--spacing` left the CLI (`--option spacing=...` still works). The sky's star file and panorama are byte-identical to T30c's.
 - **What stays history:** the milestone files, the Cycle log, the handoff docs, `docs/research-notes.md` under its "Gaussian splats
   (historical)" heading, and the History lines of §17.10, §17.17 to §17.20 here.

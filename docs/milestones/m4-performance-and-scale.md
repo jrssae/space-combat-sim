@@ -1571,8 +1571,8 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
   windows (T26 may replace it), reworded. The `sheet` command and `scripts/look_sheet.sh` lost their look argument;
   `scripts/render_compare.sh <scene> [label]` lost its render argument. `RenderPiece` lost its levels, so `LodSwitcherMath` keeps only
   `far_dot`. The generators keep surface samples (centring, markers, chunk offsets, bakes) on streams renamed `surface`, so hull
-  centroids move by sampling noise (up to 2 mm) and the Starfury's chunks are placed on the full-detail samples (millimetres
-  from M3's coarser level); the manifest's box bounds the hull mesh. The sky's star file and panorama are byte-identical to T30c's.
+  centroids move by sampling noise (1.5 to 4 mm, the chunk centres up to 27 mm; a pure translation) and the Starfury's chunks are
+  placed on the full-detail samples (millimetres from M3's coarser level); the manifest's box bounds the hull mesh. The sky's star file and panorama are byte-identical to T30c's.
   The "no splat node enters or leaves the tree" tests became "no pooled ship or chunk enters or leaves the tree" (D22's reason is now
   node churn). The guard test is `tests/integration/test_mesh_only_scene.gd` (no node or compositor effect from an addon but GUT and
   the lens flare; only those two addons installed or naming classes) and `tools/procgen/tests/test_mesh_only.py`. A lean AI ship has 11
@@ -3554,6 +3554,13 @@ T31 removed or rewrote the splat tests and fixed the smoke lines. The melee's di
 depends on every body its space has held, so the tests before it moved it (2 092 contacts at the base). It now runs in its own
 `World3D`, where the base gives the old pin exactly; T31's re-centring moved the Starfury's collision boxes and centre of mass by
 under 2 mm, so it holds a new digest (2 959 contacts, the same 11 rams), the same alone and after `test_dogfight`.
+
+**Fix round 1.** `build all` on the base and on T31, file by file: the sky (star file and panorama), the station's and the
+capitals' meshes and maps, every emissive map and the sounds are byte-identical; their manifests lost the point-cloud keys. The
+Starfury's, the raider's and the buoy's meshes, OBJs and chunks moved by a pure translation (hull centroids 1.5, 1.9 and 4.0 mm,
+chunk centres up to 27 mm; same vertices, UVs, indices and materials), and their albedo, normal and ORM maps changed in 0.4 to 15 %
+of texels (mean under 0.2 of 255), since the panel lattice and wear sit in the re-centred frame and the occlusion reads the surface
+samples. A saved control profile that still binds F4's removed action now loads without it (a warning) instead of failing.
 
 **Tests removed** (whole files): GUT `test_splat_import`, `test_splat_pose_sync`, `test_splat_budget_in_play`, `test_splat_budget`,
 `test_splat_budget_math`, `test_splat_lighting_loader`, `test_splat_lod`, `test_gaussian_scene_registry`, `test_hull_depth_proxy`,

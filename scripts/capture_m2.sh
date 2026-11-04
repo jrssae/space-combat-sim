@@ -23,7 +23,7 @@ run() {  # run "<console commands>"
 PRE='wave stop'
 
 echo "== P1 raider turntable (AC15)"
-run "${PRE}; god on; camera cockpit; spawn raider idle 30 0 0; wait 30; screenshot reports/m2/p1_front.png; despawn all; spawn raider idle 30 90 0; wait 30; screenshot reports/m2/p1_side.png; despawn all; spawn raider idle 30 0 90; wait 30; screenshot reports/m2/p1_top.png; despawn all; spawn raider idle 30 35 20; wait 30; screenshot reports/m2/p1_three_quarter.png; fallback on; wait 10; screenshot reports/m2/p1_fallback.png"
+run "${PRE}; god on; camera cockpit; spawn raider idle 30 0 0; wait 30; screenshot reports/m2/p1_front.png; despawn all; spawn raider idle 30 90 0; wait 30; screenshot reports/m2/p1_side.png; despawn all; spawn raider idle 30 0 90; wait 30; screenshot reports/m2/p1_top.png; despawn all; spawn raider idle 30 35 20; wait 30; screenshot reports/m2/p1_three_quarter.png"
 
 echo "== P2 HUD (AC10, AC17)"
 run "${PRE}; god on; spawn raider patrol 1500; wait 60; set targeting.selected \"RAIDER 1\"; wait 30; screenshot reports/m2/p2_chase.png; camera cockpit; wait 10; screenshot reports/m2/p2_cockpit.png; spawn raider idle 800 0 0; set targeting.selected \"RAIDER 2\"; wait 10; screenshot reports/m2/p2_box.png"
