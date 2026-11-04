@@ -156,7 +156,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T08 | Bolt broad phase in native code (`ScsHitSweep`), projectile kinds | T06 | Opus | Hits grow with bolts times ships; the windowed spikes | G, N | done |
 | T09 | Native body registry: the scan built from RIDs, entity kinds, nearest-k per kind | T06 | Opus | The per-tick gather cycle 4 left; rocks must not fill a fighter's contacts | G, N | done |
 | T10 | N4: the flight force step in native code for AI ships (`ScsFlightStep`) | T06 | Fable | The riskiest parity maths (`FlightModel`, the assist's state) | G, N | done (2026-11-03, in a worktree on `f134e00`; Cycle log, M4-T10) |
-| T11 | Far-ship render proxies and the node diet for AI ships | T10 | Opus | 108 nodes and 27 draw calls a ship; GPU numbers by the agent, the look (H) | R | done (2026-11-03, in a worktree on `441a3b4`; Cycle log, M4-T11) |
+| T11 | Far-ship render proxies and the node diet for AI ships | T10 | Opus | 108 nodes and 27 draw calls a ship; GPU numbers by the agent, the look (H) | R | done, two Done-when numbers missed and accepted: about 5 draw calls a near AI ship (target under 3; splat nodes, carried to T27) and a 3.44 ms rebase shift at 300 (target 2 ms; bolts and capitals, carried to T15 and T20) |
 | T12 | Missile, beam, interceptor and mine stand-ins | T07, T08 | Opus | The weapon kinds Q19 and Q21 name, measured | A, G | done (2026-11-03, in a worktree on `441a3b4`; Cycle log, M4-T12) |
 | T13 | Phase 1 measurements and report P1 (checkpoint 1) | T11, T12, T14 | Sonnet | Measurement, no code | M | not started |
 | T14 | Jolt collision layers; interpolation off for far ships | T11 | Sonnet | Mechanical; matters from 300 ships | G | not started |
