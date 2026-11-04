@@ -2073,7 +2073,10 @@ operations each failed the edge test, a look without the level's largest reach o
 | spread 100 before | 16.76 | 23.32 | 4.57 | 3.78 | 7.29 | 9.80 | 321 |
 | spread 100 after | 13.40 | 17.76 | 1.36 | 0.61 | 1.16 | 1.33 | 321 |
 
-(The GDScript-path run has `perf_native` off, so its contact scan is GDScript too: only its hit stage compares.) In the tests'
+(The GDScript-path run has `perf_native` off, so its contact scan is GDScript too: only its hit stage compares.) Taken again on a
+library built in the worktree's own cargo target directory (`cc047f9`, load 0.93; `m4_t08_rerun`), after the shared target
+directory once handed another worktree its library: furball 100 tick median 12.99 ms, hit 0.55 ms (p99 0.94); spread 100 13.33
+and 0.55 ms (p99 1.01); the seeded outcome runs identical to the base, with `perf_native` on and off. In the tests'
 fleet of 24 the resolver now tests 0.51 pairs a bolt at worst against 24 before.
 
 **Gain against the prediction:** the hit stage at furball 100 fell from 3.70 to 0.59 ms (predicted about 0.6), its p99 from
