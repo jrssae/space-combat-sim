@@ -121,6 +121,11 @@ const ENTRIES: Dictionary = {
 		"doc": "How hulls are drawn (M4-T27 render comparison): splat = Gaussian splats, mesh = the painted mesh of the same surface, hybrid = splats near and the mesh past ship_mesh_beyond_m; far dots stay either way"},
 	&"ship_mesh_beyond_m": {"type": TYPE_FLOAT, "default": 400.0, "min": 50.0, "max": 3000.0,
 		"doc": "With ship_render hybrid, an AI ship farther than this from the camera draws its painted mesh instead of splats (M4-T27); it goes back to splats a tenth inside"},
+	# M4-T14
+	&"collision_layers": {"type": TYPE_BOOL, "default": true,
+		"doc": "Jolt layers by kind (M4-T14): AI fighters do not pair with each other (the ram resolver's swept test does), capitals and rocks pair with what can hit them; off puts every body on the one default layer. Ships follow it at once, capitals and rocks as they are built"},
+	&"far_ship_interpolation_off": {"type": TYPE_BOOL, "default": true,
+		"doc": "A far-dot AI ship's body is not interpolated, so a rebase leaves its nodes out of the interpolation reset (M4-T14)"},
 }
 
 ## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current

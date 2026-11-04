@@ -76,6 +76,9 @@ func _init() -> void:
 	linear_damp = 0.0
 	angular_damp = 0.0
 	can_sleep = false
+	if bool(Settings.get_value(&"collision_layers")):
+		collision_layer = CollisionLayers.layer_of(&"capital")
+		collision_mask = CollisionLayers.mask_of(&"capital")
 
 
 func length_m() -> float:

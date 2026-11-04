@@ -12,7 +12,8 @@ extends Node
 ##   measures a new contact's Δv over a short window: the change of the hull's velocity its own forces (`Ship.applied_force`)
 ##   do not explain, so thrust is never a ram. The lighter body changes more and suffers more.
 ## - **Swept** (two rigid bodies whose relative motion in one tick is more than half the smaller `core_radius`, where Jolt's
-##   discrete step could miss the hit or push one through the other; or a prop without a physics body, a nav buoy, at any
+##   discrete step could miss the hit or push one through the other, or whose layers do not pair in Jolt at all (two AI fighters,
+##   M4-T14, which then pass through each other and take only this); or a prop without a physics body, a nav buoy, at any
 ##   speed): shape by shape, `ConvexSweep` sweeps each of one body's hit volumes, relative to the other body over the coming
 ##   step, against each of the other's. Two ships ram when a point of either is at least `RamMath.RAM_DEPTH_M` (0.3 m) deep
 ##   inside the other: a pass 0.3 m clear is never a ram, and shallower clips are Jolt's. A prop rams at any touch, since
@@ -222,6 +223,14 @@ static func _read_contacts(rigid: RigidBody3D, sample: RamTracker.Sample, shift:
 # --- swept: tunnelling speeds and props -------------------------------------------------------------------------
 
 
+# Whether Jolt can report a contact between two rigid hulls. Where it cannot (AI fighters, M4-T14) the swept test decides at any
+# speed, since no contact would follow it.
+static func _jolt_can_touch(first: Dictionary, second: Dictionary) -> bool:
+	var a := first["body"] as RigidBody3D
+	var b := second["body"] as RigidBody3D
+	return CollisionLayers.collide(a.collision_layer, a.collision_mask, b.collision_layer, b.collision_mask)
+
+
 # The pairs near enough to meet this tick, and those in contact, in the order of a pass over every pair (a ram earlier in the
 # pass can destroy a hull a later pair holds).
 func _resolve_swept(hulls: Array[Dictionary], in_contact: PackedInt64Array, delta: float) -> void:
@@ -249,7 +258,8 @@ func _resolve_swept(hulls: Array[Dictionary], in_contact: PackedInt64Array, delt
 			continue  # a hull that went earlier this tick
 		var both_rigid: bool = first["rigid"] and second["rigid"]
 		var relative_speed: float = ((first["velocity"] as Vector3) - (second["velocity"] as Vector3)).length()
-		if both_rigid and not RamMath.is_tunnelling(relative_speed, delta, first_hull.core_radius, second_hull.core_radius):
+		if both_rigid and _jolt_can_touch(first, second) \
+				and not RamMath.is_tunnelling(relative_speed, delta, first_hull.core_radius, second_hull.core_radius):
 			tracker.keep_touching(first["id"], second["id"])  # Jolt's speed: its contacts decide
 			continue
 		# A ship's Jolt contacts handle shallow clips; a prop has no body, so any touch is a ram.

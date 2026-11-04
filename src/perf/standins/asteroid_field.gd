@@ -50,6 +50,9 @@ func build(rocks: Array[Dictionary], space: RID, world: Node = null) -> void:
 		PhysicsServer3D.body_set_mode(body, PhysicsServer3D.BODY_MODE_STATIC)
 		PhysicsServer3D.body_add_shape(body, shape)
 		PhysicsServer3D.body_set_space(body, space)
+		if bool(Settings.get_value(&"collision_layers")):
+			PhysicsServer3D.body_set_collision_layer(body, CollisionLayers.layer_of(&"rock"))
+			PhysicsServer3D.body_set_collision_mask(body, CollisionLayers.mask_of(&"rock"))
 		PhysicsServer3D.body_set_state(body, PhysicsServer3D.BODY_STATE_TRANSFORM, global_transform * local)
 		_shapes.append(shape)
 		_bodies.append(body)

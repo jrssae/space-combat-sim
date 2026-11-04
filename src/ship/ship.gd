@@ -548,6 +548,7 @@ func set_far_dot(on: bool) -> void:
 	if on == _far_dot:
 		return
 	_far_dot = on
+	_apply_far_interpolation()
 	_apply_hull_visuals()
 	for path: NodePath in [^"ThrusterVisuals", ^"Thrusters", ^"RunningLights", ^"Guns"]:
 		var node := get_node_or_null(path) as Node3D
@@ -559,6 +560,17 @@ func set_far_dot(on: bool) -> void:
 			dots.add(self)
 		else:
 			dots.remove(self)
+
+
+# A far dot's ship is not interpolated: nothing of it is drawn but a dot, so a rebase has no history to reset on its nodes
+# (M4-T14). Back near, it blends again from where it is.
+func _apply_far_interpolation() -> void:
+	var off: bool = _far_dot and bool(Settings.get_value(&"far_ship_interpolation_off"))
+	var mode: Node.PhysicsInterpolationMode = Node.PHYSICS_INTERPOLATION_MODE_OFF if off else Node.PHYSICS_INTERPOLATION_MODE_INHERIT
+	if physics_interpolation_mode == mode:
+		return
+	physics_interpolation_mode = mode
+	reset_physics_interpolation()
 
 
 ## Whether the ship is drawn as a far dot now.
@@ -638,6 +650,20 @@ func _apply_newtonian_body() -> void:
 	continuous_cd = false
 	contact_monitor = true
 	max_contacts_reported = CONTACTS_REPORTED
+	if collision_layer == 1 and collision_mask == 1:  # layers a caller already chose before the ship entered the tree stay
+		_apply_collision_layers()
+
+
+# AI ships (the lean ones) sit on the fighter layer, which does not pair with other fighters in Jolt (M4-T14); every other ship
+# keeps the default layer and collides with everything.
+func _apply_collision_layers() -> void:
+	if bool(Settings.get_value(&"collision_layers")):
+		var kind: StringName = &"fighter" if lean else &"player"
+		collision_layer = CollisionLayers.layer_of(kind)
+		collision_mask = CollisionLayers.mask_of(kind)
+	else:
+		collision_layer = 1
+		collision_mask = 1
 
 
 # A lean ship (M4-T11) needs no first-person interior, no camera anchor and no fallback node of its own; the empty plume holder
@@ -854,6 +880,11 @@ func _level_node(node_name: String, path: String, lighting: String) -> GaussianS
 
 func _on_hull_setting_changed(key: StringName, _value: Variant) -> void:
 	if key == &"hull_depth_proxy" or key == &"ship_render":
+	if key == &"collision_layers":
+		_apply_collision_layers()
+	elif key == &"far_ship_interpolation_off":
+		_apply_far_interpolation()
+	elif key == &"hull_depth_proxy":
 		_apply_hull_visuals()
 	elif key == &"hull_splat_sync":
 		_apply_hull_sync_setting()

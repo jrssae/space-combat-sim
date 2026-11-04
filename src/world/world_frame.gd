@@ -29,7 +29,8 @@ extends Node3D
 ## resetting at all would draw every node sweeping by the offset over that tick: smooth on screen, but anything that mixes
 ## drawn and tick positions (the HUD's markers through the chase camera, the sky in the cockpit, nodes spawned in that tick) is
 ## kilometres off for that tick. Hidden (parked) nodes and silent voices are skipped: they are re-placed and reset when they
-## come back. A rebase outside a tick (the console between frames) resets at once. The velocity rebase (§14.1) is roadmap
+## come back; so are the nodes that are not interpolated (a far dot's ship, M4-T14). A rebase outside a tick (the console
+## between frames) resets at once. The velocity rebase (§14.1) is roadmap
 ## M6: `origin_velocity` stays zero.
 
 signal rebased(offset: Vector3)
@@ -56,6 +57,8 @@ var focus: Node3D = null
 ## interpolation reset.
 var rebases: int = 0
 var last_rebase_us: int = 0
+## Nodes the last interpolation reset reached (M4-T14): a node that is not interpolated, such as a far dot's ship, is left out.
+var last_settle_resets: int = 0
 
 var _settler: Settler = null
 var _settle_pending: bool = false
@@ -168,6 +171,7 @@ func rebase(offset: Vector3) -> void:
 func _settle() -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only
 	_settle_pending = false
+	last_settle_resets = 0
 	for member: Node in get_tree().get_nodes_in_group(SHIFTABLE_GROUP):
 		var node := member as Node3D
 		if node == null or not node.is_visible_in_tree() or not node.is_physics_interpolated_and_enabled() \
@@ -176,6 +180,7 @@ func _settle() -> void:
 		var voice := node as AudioStreamPlayer3D
 		if voice == null or voice.playing:
 			node.reset_physics_interpolation()
+			last_settle_resets += 1
 	last_rebase_us += Time.get_ticks_usec() - started_us
 
 
