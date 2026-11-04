@@ -210,8 +210,8 @@ Things the Godot side must know:
 - `hardpoints.json` has `cargo_pods[]`: `pod_fwd`, `pod_mid`, `pod_aft` on the spindle's axis, each `{name, position, up,
   forward}` in the body frame. A Bokmai flies with 0-3 pods (T16); each is the pod model at its mount, and comes off whole
   as debris. The chunks leave the pods out.
-- The pod files keep the pod's frame (origin at the mount); GDGS centres an import on its mean, which sits at the
-  manifest's `pod.offset` in that frame. `pod` also carries `lods`, `mass_kg`, `size_m` and one collision box.
+- The pod files keep the pod's frame (origin at the mount); GDGS centres an import on its mean, which sits at each
+  level's `pod.lods[].offset` in that frame. `pod` also carries `mass_kg`, `size_m` and one collision box.
 - Two turrets, `flank_l` and `flank_r`, in the bow's flank insets facing outboard (`up` ±x, Q22), `arc_deg` 200,
   `barrel_m` 3.0; the bolts are bright green #7CFF4F (`styles/brakiri.py` `BOLT_SRGB`).
 - The thrust line and centre of mass are on the nacelles' axis (y 2.09); mass and inertia are the hull's without pods.

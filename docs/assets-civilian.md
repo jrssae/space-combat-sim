@@ -288,7 +288,7 @@ rows.
 | `saturn_3_freighter` | lead ship (z 0-41.5) (splats vs STL) | 0.660 | 0.499 | 0.665 | 1.007 | 1.023 | 0.812 | - | 2026-11-03 |
 | `saturn_3_freighter` | pod group (model 41.5-91.1 scaled 1.244, 1.093, 1; asset 41.5-96.8) (splats vs STL) | 0.772 | 0.383 | 0.655 | 1.130 | 0.996 | 1.038 | - | 2026-11-03 |
 | `narn_transport` | whole ship (no shift) | 0.991 | 0.985 | 0.974 | 1.000 | 1.000 | 0.997 | 0.976 (side) / 1.000 | 2026-11-03 |
-| `brakiri_bokmai` | whole ship with its three pods (`--pods-from-hardpoints`, no shift) | 0.966 | 0.976 | 0.954 | 0.999 | 0.999 | 0.999 | 0.972 (side) / 1.000 | 2026-11-03 |
+| `brakiri_bokmai` | whole ship with its three pods (`--pods-from-hardpoints`, no shift) | 0.966 | 0.977 | 0.954 | 0.999 | 0.999 | 0.999 | 0.972 (side) / 1.000 | 2026-11-03 |
 | `centauri_brezebel` | whole ship (best shift x -0.15 m, the model's fins sit 0.2 m to port; unshifted 0.972, 0.984, 0.945) | 0.966 | 0.984 | 0.970 | 1.000 | 1.000 | 0.999 | 0.992 (side) / 1.000 | 2026-11-03 |
 | `skylark_transport` | whole ship (no shift) | 0.979 | 0.980 | 0.956 | 1.001 | 1.000 | 0.998 | 0.983 (side) / 1.000 | 2026-11-03 |
 
@@ -448,22 +448,23 @@ colour on the review sheet (Q19, Q22; `reports/refs/brakiri_bokmai/sheet/`).
 
 | Level | Spacing | Hull | Pod (each) |
 |---|---|---|---|
-| LOD0 | 0.30 m | 41 912 (`bow` 16 494, each arm 3 999, each engine 8 710; budget 32 000 to 49 000) | 11 644 (9 000 to 14 000) |
-| LOD1 (the chunks) | 0.60 m | 10 496 (25.0 %) | 2 906 |
-| LOD2 | 1.20 m | 2 620 (6.3 %) | 726 |
+| LOD0 | 0.30 m | 41 924 (`bow` 16 506, each arm 3 999, each engine 8 710; budget 32 000 to 49 000) | 11 644 (9 000 to 14 000) |
+| LOD1 (the chunks) | 0.60 m | 10 498 (25.0 %) | 2 906 |
+| LOD2 | 1.20 m | 2 622 (6.3 %) | 726 |
 | LOD3 | 2.40 m | 644 (1.5 %) | 180 |
 
-Hull and three pods at LOD0: 76 844, under the planned 75 000 by 2.5 %. Every piece is sampled at the hull's spacing
+Hull and three pods at LOD0: 76 856, over the planned 75 000 by 2.5 % (the new totals are below the plan table). Every piece is sampled at the hull's spacing
 (the arms, struts and fins too: the splat check shows the loss, 0.972 side coverage); the inset, windows and domes finer.
 
 The pod files (`brakiri_bokmai_pod.ply`, `_lod1` to `_lod3`, a `.light` each, one `brakiri_bokmai_pod.obj`) keep the
-pod's own frame, origin at the mount, +y up, -z forward; GDGS centres an imported PLY on its mean, so the manifest's
-`pod.offset` (0, 0.47, 0) is where that mean sits in the pod's frame. `pod` also has `lods` (file, lighting, splats,
-spacing), `mass_kg` 120 000, `size_m` and one collision box (18.29 x 12.24 x 14.09 m, with the side plates and sleeve).
+pod's own frame, origin at the mount, +y up, -z forward; GDGS centres an imported PLY on its mean, so each of
+`pod.lods[]` carries its `offset`, where that level's mean sits in the pod's frame (LOD0 (0, 0.47, 0); LOD3 (0, 0.68,
+-0.14)). Each entry also has its file, lighting record, splats and spacing; `pod` has `mass_kg` 120 000, `size_m` and one
+collision box, `body` (18.29 x 12.42 x 14.09 m about (0, 0.16, 0), with the side plates, sleeve and top blocks).
 
 The plan this was built from, from the survey of 2026-11-03 ("Brakiri Bokmai transport" in
-`docs/design-references.md`). The maintainer confirmed the bow, the pale green pods and the turrets in the bow's flank insets (Q22); the
-turret seats and the rest of the scheme go on a review sheet before the generator commits them. Authored frame as in the design references: y from the model's box centre, z from the prow, so the
+`docs/design-references.md`). The maintainer confirmed the bow, the pale green pods and the turrets in the bow's flank insets (Q22), then the
+turret seats and the rest of the scheme on the review sheet (as built above). Authored frame as in the design references: y from the model's box centre, z from the prow, so the
 fidelity check needs no model offset. The generator writes the hull without its pods and one pod model,
 `brakiri_bokmai_pod.*`, LOD0 to LOD3 at the hull's spacings so it switches with the hull (D59).
 
@@ -501,8 +502,8 @@ Bokmai is LOD0 inside about 280 m, LOD1 to 930 m and LOD2 to 3.5 km.
 | Hull and three pods | about 6 600 m² | 75 000 | | 18 800 | 4 660 | 1 170 |
 
 All nine hulls at LOD0, the Bokmai with its three pods: the eight planned in "Splat budgets" make 810 000 and the
-Bokmai 75 000, 885 000 in all. With the hero (975 058), the sky (16 000) and five buoys (38 000) that is 1 914 058,
-95.7 % of `settings.splat_budget` (2 000 000). All nine at LOD1 make 221 300, at LOD2 55 360, at LOD3 13 870. The
+Bokmai as built 76 856, 886 856 in all. With the hero (975 058), the sky (16 000) and five buoys (38 000) that is
+1 915 914, 95.8 % of `settings.splat_budget` (2 000 000) (the plan said 75 000 and 95.7 %). All nine at LOD1 make 221 300, at LOD2 55 360, at LOD3 13 870. The
 Bokmai keeps about 80 000 splats resident (LOD0 to LOD3, its chunks and the pod's levels), about 19 MB at M3-T24's
 240 bytes a splat. The generated surfaces will come out 10 to 30 % smaller than the reference's, as on the other
 hulls, so tune the spacing into the ranges.
@@ -511,13 +512,13 @@ hulls, so tune the spacing into the ranges.
 
 | Hardpoint | Position (authored frame) |
 |---|---|
-| Mains (`l`, `r`) | the cups' rims on the nacelle axis, (±13.16, 2.09, 79.3), exhaust (0, 0, 1), radius 1.0; the dome glows inside the cup |
-| Retros (`l`, `r`) | the nacelles' front shoulders beside the necks, (±14.8, 2.09, 68.5), exhaust (0, 0, -1), radius 0.6 |
-| RCS | the four fin tips (up or down), the prow (0, 8.8, 0) forward, the bow's flanks at (±2.8, 4.0, 7.0) and the nacelles' outboard flanks at (±15.8, 2.09, 74.0) sideways |
+| Mains (`l`, `r`) | on the nacelle axis just behind the engine dome, (±13.16, 2.09, 80.06) as built (the plan's cup rim at z 79.3 was inside the dome, where the depth proxy hides the plume), exhaust (0, 0, 1), radius 1.0 |
+| Retros (`l`, `r`) | the nacelles' front shoulders beside the necks, on the skin at (±14.5, 2.09, 67.1) as built (the plan's (±14.8, 2.09, 68.5) was 0.7 m inside), exhaust (0, 0, -1), radius 0.6 |
+| RCS | the four fin tips (up or down: (±12.92, 15.45, 71.95) and (±12.92, -15.43, 73.33)), the prow (0, 9.2, 0.06) forward, the bow's flanks on the skin at (±1.67, 4.0, 7.0) and the nacelles' outboard flanks at (±15.8, 2.09, 74.0) sideways (as built; 9 ports) |
 | `cockpit_camera` | in the bow behind the window insets, (0, +8.5, 6.5) |
 | `cabin` | the same point, `cabin_range_m` 4 (0.05 L) |
 | Port / starboard lights | the arms' outer faces at mid-length, (±14.0, -0.1, 40.0) |
-| `top`, `top_lamp` | the spine's crown (0, +13.3, 15.0); lamp (0, +19.5, 40.0), range 24 m |
+| `top`, `top_lamp` | just above the spine's crown, (0, +13.45, 15.0); lamp (0, +18.97, 40.0), 6.2 m over the spine there, range 24 m (as built) |
 | Turrets (Q22) | `flank_l` and `flank_r` in the stepped insets high on each flank of the bow, at (±2.04, +8.45, 6.58), the middle of the inset's full-height step (as built, confirmed on the review sheet); up (±1, 0, 0), outboard; `arc_deg` 200, `barrel_m` 3.0. Bolts bright green #7CFF4F (`styles/brakiri.py` `BOLT_SRGB`) |
 | `cargo_pods[]` | `pod_fwd` (0, 1.70, 24.63), `pod_mid` (0, 1.70, 39.07), `pod_aft` (0, 1.70, 53.57); `up` (0, 1, 0), `forward` (0, 0, -1) |
 

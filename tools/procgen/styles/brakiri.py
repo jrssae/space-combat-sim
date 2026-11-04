@@ -45,6 +45,7 @@ BRAKIRI = Style(
         "hull": Material("bk_hull", _lin(HULL_SRGB), paneled=True),  # the frame
         "hull_dark": Material("bk_hull_dark", _lin(HULL_DARK_SRGB)),  # recesses, the spindle, sleeves, rails, insets
         "hull_panel": Material("bk_hull_panel", _lin(HULL_SRGB), paneled=True),
+        "frame_plain": Material("bk_frame_plain", _lin(HULL_SRGB)),  # the frame's green on the pods (top plate, saddles)
         "pod": Material("bk_pod", _lin(POD_SRGB), paneled=True),  # the cargo pods' plating
         "stripe": Material("bk_stripe", _lin(YELLOW_SRGB)),  # the yellow
         "window": Material("bk_window", _lin(0xE8F0DC)),

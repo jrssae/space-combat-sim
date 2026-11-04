@@ -11,7 +11,7 @@ centroid (``offset``); the PLY stores the body frame turned by Rz(180) (the GDGS
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -95,11 +95,9 @@ def sample_pieces(
     spacing: float,
     suffix: tuple[str, ...] = (),
     buried_margin: float = 0.03,
-    extra_hidden: Callable[[Piece, SurfaceSamples], np.ndarray] | None = None,
 ) -> list[Sampled]:
     """Every piece sampled, samples buried in another piece dropped, centre pieces symmetrised and right pieces mirrored,
-    in placement order. ``suffix`` keeps another level's random draws apart from LOD0's; ``extra_hidden`` may drop more
-    samples of a piece (a mask over its samples)."""
+    in placement order. ``suffix`` keeps another level's random draws apart from LOD0's."""
     solids = [(p.name, p.solid, p.solid.bounds()) for p in with_twins(pieces) if p.solid is not None]
     out: list[Sampled] = []
     for p in pieces:
@@ -113,8 +111,6 @@ def sample_pieces(
                 if name == p.name or np.any(shi < lo) or np.any(slo > hi):
                     continue
                 hidden |= solid.contains(s.positions, buried_margin)
-            if extra_hidden is not None:
-                hidden |= extra_hidden(p, s)
             s = s.subset(~hidden)
         if p.side == CENTRE:
             out.append(Sampled(p, s.symmetrized("x"), step, p.name))

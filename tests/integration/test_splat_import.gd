@@ -206,8 +206,9 @@ func test_turret_plys_import_with_their_counts() -> void:
 	assert_gt(turrets, 0, "a civilian with a turret exists (narn_transport): %s" % GEN_ASSETS_HINT)
 
 
-## Q17: the Bokmai's cargo pod levels import with their manifest counts; GDGS centres them on their mean, so each
-## imported box, put back at the manifest's `offset`, holds the pod's measured size about its mount.
+## Q17: the Bokmai's cargo pod levels import with their manifest counts. GDGS centres each on its mean, so each imported
+## box, back in the Godot frame and moved by its level's `offset`, lies in the pod's collision box about the mount and
+## reaches its faces (a coarse level within 1.25 of its spacing, as a hull's).
 func test_cargo_pod_plys_import_with_their_counts() -> void:
 	var pods: int = 0
 	for reader: ManifestReader in _valid_readers():
@@ -215,16 +216,21 @@ func test_cargo_pod_plys_import_with_their_counts() -> void:
 		if pod.is_empty():
 			continue
 		pods += 1
-		var size := Vector3(float(pod["size_m"][0]), float(pod["size_m"][1]), float(pod["size_m"][2]))
+		var shape: Dictionary = (pod["collision"] as Array)[0]
+		var centre := Vector3(float(shape["position"][0]), float(shape["position"][1]), float(shape["position"][2]))
+		var size := Vector3(float(shape["size"][0]), float(shape["size"][1]), float(shape["size"][2]))
+		var expected := AABB(centre - 0.5 * size, size)
 		for level: Dictionary in pod.get("lods", []):
 			var gaussian: GaussianResource = _gaussian("%s/%s" % [reader.directory, level.get("file", "")])
 			if gaussian == null:
 				continue
 			var label: String = "%s pod lod %d" % [reader.asset_id, int(level.get("level", -1))]
 			assert_eq(gaussian.point_count, int(level.get("splats", -1)), "%s: point_count vs manifest splats" % label)
-			var slack: float = 2.0 * float(level.get("spacing_m", 0.0)) + 1.0
-			assert_almost_eq(gaussian.aabb.size.x, size.x, slack, "%s: width" % label)
-			assert_almost_eq(gaussian.aabb.size.z, size.z, slack, "%s: length" % label)
+			var offset := Vector3(float(level["offset"][0]), float(level["offset"][1]), float(level["offset"][2]))
+			var placed: AABB = ManifestReader.godot_to_imported_aabb(gaussian.aabb)
+			placed.position += offset
+			var short: float = maxf(LOD_AABB_TOLERANCE_M, LOD_AABB_SPACINGS * float(level.get("spacing_m", 0.0)))
+			_assert_box_within(placed, expected, LOD_AABB_TOLERANCE_M, short, "%s: the box about the mount" % label)
 	assert_gt(pods, 0, "a civilian with cargo pods exists (brakiri_bokmai): %s" % GEN_ASSETS_HINT)
 
 

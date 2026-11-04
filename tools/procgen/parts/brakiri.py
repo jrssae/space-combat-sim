@@ -20,11 +20,11 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..core.civilian import CENTRE, RIGHT, Piece
-from ..core.geometry import Material, Mesh, assign_material_by_predicate, box, ellipsoid_cap, lathe, rotation_x, sweep_rect
+from ..core.geometry import Mesh, assign_material_by_predicate, box, ellipsoid_cap, lathe, rotation_x, sweep_rect
 from ..styles import Style
 from . import Anchor, Collision, Part
 from .narn import LoftSolid
-from .solids import Solid, box_solid, lathe_solid
+from .solids import Solid, lathe_solid
 from .starfury import section_loft
 from .weapons import BarrelSpec, gun_barrel
 
@@ -62,9 +62,10 @@ BOW_ROWS = (
     (13.15, 9.46, 16.00, 2.22, 2.27, 2.32, 2.38, 2.41, 2.41, 2.41),
 )  # fmt: skip
 
-# The stepped inset high on each flank (Q22: the turret mounts), outline (z, y) in side view: two strips 1.2 m tall, the
-# upper one further forward. The turret's seat is the middle of the full-height step.
-INSET_OUTLINE = ((4.07, 9.43), (7.35, 9.67), (7.39, 8.52), (8.94, 8.55), (8.97, 7.33), (5.89, 7.23), (5.77, 8.44), (4.20, 8.33))
+# The stepped inset high on each flank (Q22: the turret mounts), in side view: two strips 1.2 m tall, the upper one
+# further forward, (z from, z to, y bottom, y top). The turret's seat is the middle of the full-height step.
+INSET_STRIPS = ((4.1, 7.35, 8.4, 9.6), (5.8, 8.95, 7.25, 8.45))
+INSET_OUTLINE = ((4.1, 9.6), (7.35, 9.6), (7.35, 8.45), (8.95, 8.45), (8.95, 7.25), (5.8, 7.25), (5.8, 8.4), (4.1, 8.4))
 TURRET_SEAT = (2.04, 8.45, 6.58)  # flank_r on the inset (the maintainer's sheet, 2026-11-03); up +x, outboard
 WINDOW_ROW = (10.9, (4.0, 5.2, 6.4, 7.6, 8.8, 10.0))  # y, window centres z: a row on each flank above the inset
 WINDOW_SIZE = (0.36, 0.5)  # height, length
@@ -152,16 +153,9 @@ def flank_inset(style: Style) -> Piece:
     """The stepped inset on the right flank, a dark panel on the blade's skin; the turret sits in its middle. Anchors:
     ``turret`` (the seat, up outboard)."""
     dark = style.material("hull_dark")
-    outline = [_on_flank(z, y, 0.03) for z, y in INSET_OUTLINE]
-    # Two quads per strip, as the outline's two steps: the top strip (points 0, 1, 2, 6, 7) and the bottom one (2, 3, 4, 5, 6).
-    quads = [(0, 1, 2, 6), (0, 6, 7, 7), (6, 2, 3, 5), (3, 4, 5, 5)]
-    faces = []
-    for a, b, c, d in quads:
-        faces.append((a, b, c))
-        if d != c:
-            faces.append((a, c, d))
-    verts = np.array(outline)
-    faces_arr = np.array([f for f in faces if len(set(f)) == 3])
+    verts = np.array([_on_flank(z, y, 0.03) for z, y in INSET_OUTLINE])
+    # The outline's two steps as triangles: the upper strip (points 0, 1, 2, 6, 7) and the lower one (2, 3, 4, 5, 6).
+    faces_arr = np.array([(0, 1, 2), (0, 2, 6), (0, 6, 7), (6, 2, 3), (6, 3, 5), (3, 4, 5)])
     normals = np.cross(verts[faces_arr[:, 1]] - verts[faces_arr[:, 0]], verts[faces_arr[:, 2]] - verts[faces_arr[:, 0]])
     faces_arr[normals[:, 0] < 0.0] = faces_arr[normals[:, 0] < 0.0][:, ::-1]  # facing outboard
     mesh = Mesh(verts, faces_arr, np.zeros(len(faces_arr), dtype=np.int64), (dark,))
@@ -337,6 +331,7 @@ ENGINE_STATIONS = (
 CUP = (13.16, 2.09, 2.0, 4.0, 78.9, 76.0)  # axis x, y; opening width, height; rim z, floor z
 NECK_BAND = (63.5, 65.5)
 DOME = (13.16, 2.09, 78.06, 1.70, 2.83, 3.89)  # centre x, y, z; width, height, length
+RETRO = (14.5, 2.09, 67.1)  # on the nacelle's front shoulder, outboard of the neck, firing forward clear of the skin
 
 
 def _engine_ring(st: Sequence[float], points: int = 20) -> np.ndarray:
@@ -365,8 +360,8 @@ def engine(style: Style) -> list[Piece]:
         Collision("capsule", (13.3, 2.1, 0.5 * (60.5 + 80.3)), radius=2.3, height=80.3 - 60.5, name="nacelle"),
         _box_of(np.concatenate(rings[12:]), name="body"),
     ]
-    main = Anchor((cx, cy, rim_z + 0.4), (0.0, 0.0, 1.0))
-    retro = Anchor((14.8, cy, 68.5), (0.0, 0.0, -1.0))
+    main = Anchor((cx, cy, DOME[2] + 0.5 * DOME[5] + 0.05), (0.0, 0.0, 1.0))  # just behind the dome, so the plume shows
+    retro = Anchor(RETRO, (0.0, 0.0, -1.0))
     nacelle = Part("nacelle_r", mesh, {"main": main, "retro": retro, "centre": Anchor((cx, cy, 72.0))}, collision, 90_000.0, "engine_r")
     dx, dy, dz, dw, dh, dl = DOME
     dome_mesh = ellipsoid_cap((0.5 * dw, 0.5 * dh, 0.5 * dl), -0.5 * dl + 0.02, style.material("engine_dome"), rings=10,
@@ -549,7 +544,8 @@ def cargo_pod(style: Style) -> PodModel:
         meshes.append(sweep_rect(loop, (1.0, 0.0, 0.0), np.full(len(loop), sw), np.full(len(loop), proud + 0.12), yellow))
     pw, ph, pl = POD_TOP_PLATE
     top = pod_half_height(0.0, 0.0)
-    meshes.append(box((pw, ph + 0.1, pl), hull, center=(0.0, top + 0.5 * ph - 0.05, 0.0)))
+    trim = style.material("frame_plain")  # the frame's green without the pod's panel grid
+    meshes.append(box((pw, ph + 0.1, pl), trim, center=(0.0, top + 0.5 * ph - 0.05, 0.0)))
     for z in (-0.9, 0.9):
         meshes.append(box((0.7, 0.3, 0.8), dark, center=(0.0, top + ph + 0.1, z)))
     tw, th, tl = POD_SIDE_PLATE
@@ -560,13 +556,13 @@ def cargo_pod(style: Style) -> PodModel:
         meshes.append(rod.translated((sgn * rx, ry, 0.0)))
     for sgn in (1.0, -1.0):
         cx, cy = 0.5 * (POD_RAILS[0][0] + POD_RAILS[1][0]), 0.5 * (POD_RAILS[0][1] + POD_RAILS[1][1])
-        saddle = ellipsoid_cap((0.75, 0.75, 1.45), -0.74, hull, rings=6, segments=16, axis_up=1)
+        saddle = ellipsoid_cap((0.75, 0.75, 1.45), -0.74, trim, rings=6, segments=16, axis_up=1)
         meshes.append(saddle.translated((sgn * cx, cy, 0.0)))
     mesh = Mesh.concatenate(meshes)
     body_solid = _loft_solid(2, [float(r[0, 2]) for r in rings], rings)
     sleeve_solid = lathe_solid([(-half - out, sr), (half + out, sr)])
-    w, h, length = POD_SIZE
-    collision = [Collision("box", (0.0, 0.0, 0.0), size=(w + 2 * tw, h + 2 * ph, length + 2 * out), name="")]
+    lo, hi = mesh.bounds()
+    collision = [Collision("box", 0.5 * (lo + hi), size=tuple(hi - lo), name="body")]
     anchors = {"mount": Anchor((0.0, 0.0, 0.0), (0.0, 1.0, 0.0))}
     return PodModel(Part("pod", mesh, anchors, collision, POD_MASS_KG, "pod"), (body_solid, sleeve_solid))
 

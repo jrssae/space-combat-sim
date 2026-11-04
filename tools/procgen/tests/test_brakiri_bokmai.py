@@ -72,6 +72,23 @@ def inside_primitive(points: np.ndarray, c: dict, inflate: float) -> np.ndarray:
     return np.linalg.norm(local - axis_point, axis=1) <= c["radius"] + inflate
 
 
+def ray_hits(origin: np.ndarray, direction: np.ndarray, vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
+    """Distances along the ray to every triangle it crosses (Moller-Trumbore), ahead of the origin only."""
+    a, b, c = vertices[faces[:, 0]], vertices[faces[:, 1]], vertices[faces[:, 2]]
+    e1, e2 = b - a, c - a
+    p = np.cross(direction, e2)
+    det = np.einsum("ij,ij->i", e1, p)
+    ok = np.abs(det) > 1e-12
+    inv = np.where(ok, 1.0 / np.where(ok, det, 1.0), 0.0)
+    s = origin - a
+    u = np.einsum("ij,ij->i", s, p) * inv
+    q = np.cross(s, e1)
+    v = (q @ direction) * inv
+    t = np.einsum("ij,ij->i", e2, q) * inv
+    hit = ok & (u >= 0.0) & (v >= 0.0) & (u + v <= 1.0) & (t > 0.0)
+    return t[hit]
+
+
 def mirrored(v: list[float]) -> list[float]:
     return [-v[0], v[1], v[2]]
 
@@ -175,7 +192,8 @@ class BrakiriBokmaiTests(unittest.TestCase):
         self.assertAlmostEqual(float(0.5 * (lo[0] + hi[0])), 0.0, delta=1e-6)
 
     def test_every_level_is_exactly_mirror_symmetric_in_x(self) -> None:
-        levels = [self.xyz] + [godot_xyz(self.dir_a / bok.LODS[k][0]) for k in (1, 2, 3)] + [self.pod_xyz]
+        levels = [self.xyz] + [godot_xyz(self.dir_a / bok.LODS[k][0]) for k in (1, 2, 3)]
+        levels += [godot_xyz(self.dir_a / e["file"]) for e in self.manifest["pod"]["lods"]]
         for k, xyz in enumerate(levels):
             np.testing.assert_allclose(sorted_rows(xyz), sorted_rows(xyz * np.array([-1.0, 1.0, 1.0])), atol=SYM_TOL, err_msg=str(k))
 
@@ -280,6 +298,25 @@ class BrakiriBokmaiTests(unittest.TestCase):
         self.assertEqual(pods["r"]["retro"]["exhaust"], [0.0, 0.0, -1.0])
         np.testing.assert_allclose(pods["l"]["main"]["position"], mirrored(pods["r"]["main"]["position"]), atol=1e-4)
 
+    def test_each_retro_fires_clear_of_the_hull(self) -> None:
+        # The depth proxy (the fallback mesh) hides a plume inside the hull: the retro's forward ray meets nothing within
+        # the hull, and the skin is right behind the nozzle.
+        v, f = self.obj.vertices, self.obj.faces
+        for p in self.hp["pods"]:
+            nozzle, exhaust = np.array(p["retro"]["position"]), np.array(p["retro"]["exhaust"])
+            ahead = ray_hits(nozzle, exhaust, v, f)
+            self.assertTrue(np.all(ahead <= 0.5), (p["name"], ahead[ahead > 0.5][:5]))
+            behind = ray_hits(nozzle + 0.5 * exhaust, -exhaust, v, f)
+            self.assertGreater(len(behind), 0, p["name"])
+            self.assertLess(float(behind.min()), 1.0, "the nozzle sits on the skin")
+
+    def test_the_main_exits_are_the_rearmost_points_at_their_axes(self) -> None:
+        for p in self.hp["pods"]:
+            d = self.xyz - np.array(p["main"]["position"])
+            near_axis = np.hypot(d[:, 0], d[:, 1]) < p["main"]["radius"] + 0.2
+            self.assertLess(float(self.xyz[near_axis, 2].max()), p["main"]["position"][2], "behind the engine dome")
+            self.assertAlmostEqual(float(self.xyz[near_axis, 2].max()), p["main"]["position"][2], delta=0.25)
+
     def test_the_centre_of_mass_is_on_the_thrust_line(self) -> None:
         com = self.authored(self.hp["center_of_mass"])
         self.assertAlmostEqual(float(com[0]), 0.0, places=4)
@@ -356,13 +393,16 @@ class BrakiriBokmaiTests(unittest.TestCase):
 
     def test_the_pod_model_is_inside_its_budget_and_its_levels_follow_the_hull(self) -> None:
         pod = self.manifest["pod"]
-        self.assertEqual(set(pod), {"obj", "lods", "offset", "mass_kg", "collision", "size_m"})
+        self.assertEqual(set(pod), {"obj", "lods", "mass_kg", "collision", "size_m"})
         self.assertEqual(pod["obj"], "brakiri_bokmai_pod.obj")
         self.assertEqual([e["level"] for e in pod["lods"]], [0, 1, 2, 3])
         self.assertTrue(POD_BUDGET[0] <= pod["lods"][0]["splats"] <= POD_BUDGET[1], pod["lods"][0]["splats"])
         for entry, hull in zip(pod["lods"], self.manifest["lods"]):
             self.assertAlmostEqual(entry["spacing_m"], hull["spacing_m"], msg="it switches with the hull")
-            self.assertEqual(len(read_ply(self.dir_a / entry["file"]).to_splats()), entry["splats"])
+            xyz = godot_xyz(self.dir_a / entry["file"])
+            self.assertEqual(len(xyz), entry["splats"])
+            # Each level keeps the pod's frame; GDGS centres an import on its mean, recorded per level.
+            np.testing.assert_allclose(xyz.mean(axis=0), entry["offset"], atol=1e-3, err_msg=str(entry["level"]))
         self.assertGreater(pod["mass_kg"], 0.0)
 
     def test_the_pods_origin_is_its_mount_and_it_has_the_measured_size(self) -> None:
@@ -371,7 +411,7 @@ class BrakiriBokmaiTests(unittest.TestCase):
         np.testing.assert_allclose(hi[2] - lo[2], POD[2] + 0.7, atol=0.3, err_msg="length, with the sleeve's ends")
         self.assertAlmostEqual(float(0.5 * (lo[2] + hi[2])), 0.0, delta=0.05)
         self.assertAlmostEqual(float(-lo[1]), 0.5 * POD[1], delta=0.35, msg="centred on the spindle's axis")
-        np.testing.assert_allclose(self.pod_xyz.mean(axis=0), self.manifest["pod"]["offset"], atol=1e-3)
+        self.assertAlmostEqual(float(hi[1]), 0.5 * POD[1] + 0.5, delta=0.35, msg="the top plate's blocks above the crown")
 
     def test_mounted_pods_sit_where_the_reference_has_them_and_clear_the_frame(self) -> None:
         for name, mount in MOUNTS.items():
@@ -389,8 +429,8 @@ class BrakiriBokmaiTests(unittest.TestCase):
 
     def test_the_pod_collision_box_covers_its_splats(self) -> None:
         box = self.manifest["pod"]["collision"][0]
-        self.assertEqual(box["type"], "box")
-        inside = inside_primitive(self.pod_xyz, box, self.spacing)
+        self.assertEqual((box["type"], box["name"]), ("box", "body"))
+        inside = inside_primitive(self.pod_xyz, box, 0.05)
         self.assertTrue(bool(inside.all()))
 
     # --- collision -----------------------------------------------------------------------------------------------------

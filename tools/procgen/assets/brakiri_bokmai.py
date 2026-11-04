@@ -97,13 +97,11 @@ def rcs_ports(by_name: dict[str, Any]) -> list[tuple[str, np.ndarray, np.ndarray
 
 def chunk_joints() -> dict[str, np.ndarray]:
     """Where each chunk breaks away (authored frame): an arm at its root on the keel, an engine where its strut leaves
-    the spine, the bow between them."""
+    the spine, the bow where the spine leaves the crown (on the structure, not in a pod's space)."""
     arm = np.array(bp.ARM_PATH[2])
     engine = np.array([3.0, 11.0, 48.0])
     flip = np.array([-1.0, 1.0, 1.0])
-    joints = {"arm_r": arm, "arm_l": arm * flip, "engine_r": engine, "engine_l": engine * flip}
-    joints["bow"] = np.mean(list(joints.values()), axis=0) * np.array([0.0, 1.0, 1.0])
-    return joints
+    return {"bow": np.array([0.0, 11.0, 15.0]), "arm_r": arm, "arm_l": arm * flip, "engine_r": engine, "engine_l": engine * flip}
 
 
 def nav_lights(by_name: dict[str, Any], offset: np.ndarray, length: float) -> dict[str, Any]:
@@ -113,7 +111,8 @@ def nav_lights(by_name: dict[str, Any], offset: np.ndarray, length: float) -> di
     k = int(np.argmin(np.abs(path[:, 2] - NAV_SIDE_Z)))
     arm = path[k] + np.array([0.5 * bp.ARM_WIDTH + NAV_CLEARANCE_M, 0.0, 0.0])
     top = np.array(by_name["spine"].anchor("top").position) + np.array([0.0, NAV_CLEARANCE_M, 0.0])
-    lamp = np.array([0.0, float(bp.SPINE_ROWS[-4][2]) + NAV_LAMP_HEIGHT_M, NAV_LAMP_Z])
+    spine_top = float(np.interp(NAV_LAMP_Z, [row[0] for row in bp.SPINE_ROWS], [row[2] for row in bp.SPINE_ROWS]))
+    lamp = np.array([0.0, spine_top + NAV_LAMP_HEIGHT_M, NAV_LAMP_Z])
     return {
         "port": cv.r(arm * np.array([-1.0, 1.0, 1.0]) - offset),
         "starboard": cv.r(arm - offset),
@@ -242,7 +241,6 @@ def build(ctx: BuildContext) -> AssetOutputs:
     # The pod: one model, its origin the mount, at the hull's spacings so it switches with the hull.
     pod = bp.cargo_pod(style)
     pod_levels: list[dict[str, Any]] = []
-    pod_offset = np.zeros(3)
     for level in (0, *LODS):
         factor = 1.0 if level == 0 else LODS[level][1]
         stream = "pod" if level == 0 else f"pod_lod{level}"
@@ -251,14 +249,12 @@ def build(ctx: BuildContext) -> AssetOutputs:
         level_files, mean = cv.write_model(out_dir, stem, pod.part, splats, comments + ("pod", f"lod {level}"), centred=False,
                                            with_obj=level == 0)  # fmt: skip
         files += level_files
-        if level == 0:
-            pod_offset = mean
+        # GDGS centres each import on its own mean: ``offset`` is where that mean sits in the pod's frame, per level.
         pod_levels.append({"level": level, "file": pod_level_name(level), "lighting": f"{stem}{lighting.SUFFIX}",
-                           "splats": len(splats), "spacing_m": factor * spacing})  # fmt: skip
+                           "splats": len(splats), "spacing_m": factor * spacing, "offset": cv.r(mean)})  # fmt: skip
     pod_entry = {
         "obj": f"{POD_STEM}.obj",
         "lods": pod_levels,
-        "offset": cv.r(pod_offset),
         "mass_kg": pod.part.mass_kg,
         "collision": [c.to_json(digits=cv.JSON_DIGITS) for c in pod.part.collision],
         "size_m": cv.r(bp.POD_SIZE),
