@@ -436,7 +436,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T24 | A | Console command list in `info.md` and its guard test (`CLAUDE.md` rule of 2026-11-03; numbered last because it was added during the build) | T01, T02, T05 | Sonnet | A doc and one test | done |
 | T06 | B | Dialog, subtitles and the comms panel | T05 | Sonnet | Data and HUD | done |
 | T07 | B | Comms menu on D-pad Right | T06 | Sonnet | Input routing with clear rules | done |
-| T08 | B | `CINEMATIC` camera and locked controls | T05 | Opus | Rebase-safe camera paths | not started |
+| T08 | B | `CINEMATIC` camera and locked controls | T05 | Opus | Rebase-safe camera paths | done |
 | T09 | B | Debrief | T05, T02 | Sonnet | Model and screen | done |
 | T10 | B | Mission: Buoy defence with a cinematic intro | T06, T07, T08, T09 | Opus | Pacing, writing and the first real use of the API | not started |
 | T11 | C | Civilian references: measurements and descriptions | - | Opus | Reading shapes off renders; sizes from Q8 | done |
@@ -685,6 +685,23 @@ whose trigger never arose). Update the column with each task's commit.
   `lock_controls`), `src/autoload/settings_schema.gd` (`camera_default` keeps chase and cockpit only),
   `tests/unit/test_cinematic_shot.gd`, `tests/integration/test_cinematic_camera.gd` (with a forced rebase mid-shot).
 - **Done when:** AC8.
+- **Done (as built, 2026-11-04):** the pure `CinematicShot` reads a scenario's
+  `cinematics: {<id>: {keys: [{t, position, look_at, fov?}]}}`; a point is `{actor, offset?}` (in the actor's frame) or
+  `{origin}` (a 64-bit universe offset). Positions follow a Catmull-Rom curve through the key times; the look-at point and
+  fov ease. The shot keeps no state between frames and `CameraRig`'s `CinematicCamera` is `top_level` in `world_shiftable`,
+  so a rebase mid-shot moves nothing on screen (a test forces one). `CameraRig.Mode.CINEMATIC` comes only with
+  `play_shot`; the shot's clock runs on physics ticks and the rig returns to the mode it left; `camera_default` stays
+  chase or cockpit. While a shot plays the HUD hides and a `Letterbox` (layer 39) slides in under the subtitles. The pure
+  `ControlLock` (`src/input/control_lock.gd`, added to keep `Main` thin) zeroes the player's `FlightCommand` and
+  `CombatCommand` while the ship keeps its physics; wing keys and the comms menu wait and an open menu closes. Start or a
+  new A press skips a shot; the A that skipped neither fires nor skips the next shot until released. `m.cinematic` resolves
+  at the shot's end, on a skip, on `mission skip` or at the mission's end; `m.lock_controls(true)` alone zeroes the
+  commands without a camera change. A bad shot stops the mission from starting. The `camera` provider gains `shot` and
+  `shot_time_s`. D55 and §18.8 in the architecture.
+  - **Review.** One fix round (opus review, sonnet re-review): one held A skipped every chained shot. Open (minor): the
+    console `throttle` still pushes during a lock; `camera cockpit` during a shot echoes `cinematic`; a shot naming an
+    actor not yet in play parks the camera; no runner-level test of a bad shot; the auto-track latch is not reset by a
+    lock. Found on the way: T06's dialog broke two T05 tests (fixed in aee57f2).
 
 ### M5-T09 Debrief
 
