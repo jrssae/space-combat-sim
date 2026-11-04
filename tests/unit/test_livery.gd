@@ -26,7 +26,7 @@ func test_a_named_wing_gets_its_own_livery_and_number() -> void:
 	assert_eq(alpha.number, 2)
 	assert_eq(alpha.number_text(), "02")
 	var row: Array = section["liveries"]["alpha"]["primary"]
-	assert_almost_eq(alpha.primary, Color(row[0], row[1], row[2]), Color(1e-6, 1e-6, 1e-6, 0.0))
+	assert_true(alpha.primary.is_equal_approx(Color(row[0], row[1], row[2])), str(alpha.primary))
 	var dorsal: int = (section["number_fields"] as Dictionary).keys().find("dorsal")
 	assert_true(alpha.field_bits & (1 << dorsal) != 0, "the dorsal number")
 	for wing: String in ["beta", "delta", "zeta"]:
@@ -40,7 +40,7 @@ func test_another_wing_gets_procgens_fallback() -> void:
 	var kilo: Livery = Livery.for_wing("Kilo", 4, section)
 	# procgen: livery_for("kilo") is palette 2 (maroon and sand) with the pinstripe pattern.
 	var palette: Array = section["fallback"]["palettes"][2]["primary"]
-	assert_almost_eq(kilo.primary, Color(palette[0], palette[1], palette[2]), Color(1e-6, 1e-6, 1e-6, 0.0))
+	assert_true(kilo.primary.is_equal_approx(Color(palette[0], palette[1], palette[2])), str(kilo.primary))
 	assert_eq(kilo.pattern, "pinstripe")
 	assert_eq(kilo.number, 4)
 	var again: Livery = Livery.for_wing("KILO", 4, section)

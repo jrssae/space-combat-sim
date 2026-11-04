@@ -66,7 +66,8 @@ func test_an_ally_named_alpha_2_draws_the_alpha_livery_and_02() -> void:
 	assert_eq(node.get_instance_shader_parameter(&"livery_pattern"), _pattern("bands"))
 	assert_eq(node.get_instance_shader_parameter(&"livery_number"), 2)
 	var row: Array = section["liveries"]["alpha"]["primary"]
-	assert_almost_eq(node.get_instance_shader_parameter(&"livery_primary") as Color, Color(row[0], row[1], row[2]), Color(1e-6, 1e-6, 1e-6, 0.0))
+	var primary: Color = node.get_instance_shader_parameter(&"livery_primary")
+	assert_true(primary.is_equal_approx(Color(row[0], row[1], row[2])), str(primary))
 	assert_eq(ally.ship.livery.describe(), "alpha 02 (bands)")
 
 
