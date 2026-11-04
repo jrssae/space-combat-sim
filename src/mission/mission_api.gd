@@ -10,18 +10,22 @@ extends RefCounted
 ##     await m.until(trigger)          a `Trigger` (TriggerSpec builders) or its JSON dictionary
 ##     await m.until_objective(id)     until the objective is done or failed
 ##     await m.player_did(action)      an `input_performed` trigger (`PlayerActions.NAMES`), for M8's tutorial
-##     await m.cinematic(shot_id)      a camera shot (T08 plays it; for now it ends at once)
+##     await m.cinematic(shot_id)      a camera shot from the scenario's `cinematics` (D55): until it ends or the player skips it
 ##     m.spawn(spawn)                  a ship from a pool, by the scenario's spawn rules; `arrival: "jump"` opens a jump point
 ##     m.send(ship, target)            the ship's pilot objective (D39)
 ##     m.objective_add(id [, text, primary]) / m.objective_complete(id) / m.objective_fail(id)
 ##     m.waypoint(name or null)        the HUD's waypoint marker on an actor
-##     m.lock_controls(on)             the player's controls held (T08 does the zeroing; the flag is kept here)
+##     m.lock_controls(on)             the player's flight and combat commands held at zero; the ship flies on (D55)
 ##     m.end(success [, reason])
 ##     m.time_s(), m.alive(name), m.objective_state(id)
 ##
 ## Lines (D53): `dialog_book` holds the mission's dialog file and `dialog` is the queue the comms panel shows; a line is recorded
 ## in the `MissionWorld` as finished when it ends, shown out or cut (an interrupt, a skip, the mission's end). Without a book
 ## (a mission with no dialog file) `say` is logged and finished at once; a line the book lacks is an error and also finishes.
+##
+## Cinematics (D55): the stage plays a shot on the camera rig, which hides the HUD and zeroes the player's commands; `cinematic`
+## resolves when the shot ends, when the player skips it (A or Start), and at once in a skipped step. Without a stage a shot lasts
+## its length of sim time. A mission that ends during a shot cuts it.
 ##
 ## Skipping (D51): in a skipped step every wait returns at once; `until` first makes its trigger true (`Trigger.make_true`),
 ## `until_objective` completes the objective through its forced success trigger, and the objectives are evaluated right after,
@@ -55,14 +59,18 @@ var result: Dictionary = {}
 var tick_work: int = 0
 ## The actor the HUD's waypoint marks ("" for none).
 var waypoint_name: String = ""
-## `lock_controls` asked for the player's controls to be held (T08 zeroes the commands while it is set).
+## `lock_controls` asked for the player's controls to be held: `Main` zeroes their commands while it is set.
 var controls_locked: bool = false
+## The scenario's camera shots by id (`load_cinematics`).
+var cinematics: Dictionary = {}  # StringName -> CinematicShot
 ## The mission's dialog file (the runner loads it), or null: `say` then resolves at once.
 var dialog_book: DialogBook = null
 ## The comms lines in play: the comms panel reads and draws it, `tick` moves it on sim time.
 var dialog: DialogQueue = DialogQueue.new()
 
 var _seq: MissionSequencer = MissionSequencer.new()
+# The shot `cinematic` is waiting on, or null.
+var _shot: CinematicShot = null
 var _live: Array[Trigger] = []
 var _started: bool = false
 
@@ -167,12 +175,31 @@ func player_did(action: StringName) -> void:
 	await until(TriggerSpec.input_performed(action))
 
 
-## Plays a camera shot and waits for its end. T08's seam: for now it ends at once.
+## Plays the scenario's shot `shot_id` and waits until it ends or the player skips it. In a skipped step it is logged, not shown.
 func cinematic(shot_id: StringName) -> void:
 	if has_ended():
 		return
 	journal.append("cinematic %s" % shot_id)
-	print("[mission] cinematic %s (not played yet)" % shot_id)
+	var shot: CinematicShot = cinematics.get(shot_id)
+	if shot == null:
+		push_error("Mission: cinematic: no shot '%s' in the scenario's cinematics" % shot_id)
+		return
+	if _seq.skipping and not _seq.stopped and _spinning():
+		await _seq.wake
+	if _seq.skipping:
+		print("[mission] (skipped) cinematic %s" % shot_id)
+		return
+	if stage == null:
+		await wait(shot.duration_s)
+		return
+	_shot = shot
+	stage.play_cinematic(shot)
+	while not _seq.stopped and not _seq.skipping and stage.cinematic_playing(shot):
+		await _seq.wake
+	stage.stop_cinematic(shot)  # a skip cuts it
+	_shot = null
+	while _seq.stopped:
+		await _seq.wake
 
 
 # --- world changes -----------------------------------------------------------------------------------------------------
@@ -253,7 +280,7 @@ func waypoint(target: Variant) -> void:
 	journal.append("waypoint %s" % (waypoint_name if not waypoint_name.is_empty() else "none"))
 
 
-## Holds or frees the player's controls. T08's seam: the flag is kept; T08 zeroes the commands while it is set.
+## Holds or frees the player's controls: while held, `Main` zeroes their flight and combat commands and the ship flies on.
 func lock_controls(on: bool) -> void:
 	if has_ended():
 		return
@@ -270,10 +297,25 @@ func end(success: bool, reason: String = "") -> void:
 	_seq.stop()
 	_live.clear()
 	dialog.clear()  # nothing keeps talking over the debrief
+	if _shot != null and stage != null:
+		stage.stop_cinematic(_shot)  # the result shows on the HUD, not under a shot
+	_shot = null
 	_record_finished_lines()
 	journal.append("end %s%s" % ["success" if success else "failure", ": " + reason if not reason.is_empty() else ""])
 	print("[mission] ended: %s" % GameFlow.describe_result(result))
 	ended.emit(result)
+
+
+## Reads the scenario's `cinematics` (shot id -> shot). Returns "" or why a shot is not one.
+func load_cinematics(raw: Dictionary) -> String:
+	cinematics.clear()
+	for shot_id: Variant in raw:
+		var made: Dictionary = CinematicShot.from_dict(StringName(str(shot_id)), raw[shot_id])
+		if not bool(made["ok"]):
+			cinematics.clear()
+			return String(made["error"])
+		cinematics[StringName(str(shot_id))] = made["shot"]
+	return ""
 
 
 # --- reads -------------------------------------------------------------------------------------------------------------

@@ -2,8 +2,8 @@ class_name Hud
 extends CanvasLayer
 ## The combat HUD (architecture §15.9, D26): a green-line display drawn from the `HudFrame` that the pure `HudLayout` computes
 ## every frame. Layer 40, below the debug overlay (50). This node only runs it: `Main` sets `input_provider`, a Callable
-## returning this frame's `HudInput`; `settings.show_hud` shows or hides it. `HudPainter` does the drawing, on this layer and, in the cockpit
-## view, on the console's `screens` (M3-T29). Console provider `hud`.
+## returning this frame's `HudInput`; `settings.show_hud` shows or hides it, and a cinematic hides it while it plays (`cinematic`).
+## `HudPainter` does the drawing, on this layer and, in the cockpit view, on the console's `screens` (M3-T29). Console provider `hud`.
 
 ## A Callable returning a `HudInput`; unset = nothing drawn.
 var input_provider: Callable = Callable()
@@ -18,6 +18,11 @@ var screens: CockpitScreens = null:
 		screens = value
 		if screens != null:
 			screens.set_powered(visible)
+## A cinematic is playing (M5-T08): the HUD is hidden whatever `show_hud` says, and comes back as the setting has it.
+var cinematic: bool = false:
+	set(value):
+		cinematic = value
+		_apply_visibility()
 
 var _canvas: HudCanvas = null
 
@@ -30,10 +35,10 @@ func _ready() -> void:
 	_canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_canvas.hud = self
 	add_child(_canvas)
-	visible = bool(Settings.get_value(&"show_hud"))
+	_apply_visibility()
 	Settings.changed.connect(_on_setting_changed)
 	DebugConsole.registry.register_provider(&"hud", ConsoleVars.new({
-		&"visible": {"get": func() -> bool: return visible, "doc": "The HUD is shown (settings.show_hud)"},
+		&"visible": {"get": func() -> bool: return visible, "doc": "The HUD is shown (settings.show_hud, and no cinematic playing)"},
 		&"lead_tof_s": {"get": func() -> Variant: return frame.lead_tof_s if frame.lead_visible else null, "unit": "s",
 				"doc": "Time of flight to the lead point, while the lead reticle shows"},
 		&"lead_on_screen": {"get": func() -> bool: return frame.lead_visible, "doc": "The lead reticle is on screen"},
@@ -77,11 +82,15 @@ func painted_items() -> Array[StringName]:
 	return _canvas.painter.painted
 
 
-func _on_setting_changed(key: StringName, value: Variant) -> void:
+func _on_setting_changed(key: StringName, _value: Variant) -> void:
 	if key == &"show_hud":
-		visible = bool(value)
-		if screens != null:
-			screens.set_powered(visible)
+		_apply_visibility()
+
+
+func _apply_visibility() -> void:
+	visible = bool(Settings.get_value(&"show_hud")) and not cinematic
+	if screens != null:
+		screens.set_powered(visible)
 
 
 ## The control that holds the 2D layer's painter; it paints the HUD's last frame.

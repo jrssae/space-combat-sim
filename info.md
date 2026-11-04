@@ -81,7 +81,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | `assist` | `[on\|off]` | Toggle or set flight assist | in flight |
 | `running_lights` | `[on\|off]` | Toggle or set the running lights (the wing follows) | in flight |
 | `refuel` | `[kg]` | Refill the reaction-mass tank, or add kg | in flight |
-| `camera` | `[cockpit\|chase]` | Switch camera; no argument toggles | in flight |
+| `camera` | `[cockpit\|chase]` | Switch camera; no argument toggles; during a cinematic, the camera to go back to after the shot | in flight |
 | `look` | `<yaw> [pitch]` or `off` | Hold the view at an angle off the nose, for captures | in flight |
 | `rebase` | `<dx> <dy> <dz>` | Shift the local origin by an offset in metres; nothing moves in universe terms | in flight |
 
@@ -143,7 +143,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `ship` | The player's ship: position, velocity, speed, angular rate, assist, pods, mass flow, fuel | in flight |
 | `hull` | The player's hull points, fraction and destroyed state | in flight |
 | `world` | The local origin, rebases and the automatic rebase distance | in flight |
-| `camera` | The active camera mode (writable) and field of view | in flight |
+| `camera` | The active camera mode (cockpit, chase or cinematic; writable) and field of view, the cinematic shot playing and its time | in flight |
 | `weapons` | Pulse cannon fire mode (writable), cooldown and capacitor charge | in flight |
 | `targeting` | The selected target (writable), its range and closing speed, and the targets in sensor range | in flight |
 | `combat` | Bolts swept, hits resolved, the last hit and the cost of resolving them | in flight |
@@ -165,6 +165,6 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `debris` | The break-up chunk pool: sets, free sets, active chunks and held wrecks | in flight |
 | `audio` | Sounds loaded, voices playing, engine voices and the SFX volume (writable) | front end, flight |
 | `ai` | The AI ships and their behaviours, a count per behaviour and the AI's cost per tick | AI ships |
-| `mission` | The running mission: id, title, state, result, step, objectives, time, trigger counts, waypoint and jump points | mission |
+| `mission` | The running mission: id, title, state, result, step, objectives, time, trigger counts, waypoint, controls locked and jump points | mission |
 | `dialog` | The comms panel: whether a line shows, its id, speaker callsign and text, lines queued, time left and lines shown | mission |
 | `route` | The instructor's route: waypoint, count, lag, state and demo | route |

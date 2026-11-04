@@ -438,7 +438,7 @@ func test_console_provider_and_command_are_registered() -> void:
 	assert_not_null(DebugConsole.registry.get_provider(&"camera"), "camera provider")
 	assert_true(DebugConsole.registry.has_command(&"camera"), "camera command")
 	var provider: ConsoleStateProvider = DebugConsole.registry.get_provider(&"camera")
-	assert_eq(Array(provider.keys()), [&"mode", &"fov"])
+	assert_eq(Array(provider.keys()), [&"mode", &"fov", &"shot", &"shot_time_s"])
 	assert_true(provider.is_writable(&"mode"))
 	assert_false(provider.is_writable(&"fov"))
 

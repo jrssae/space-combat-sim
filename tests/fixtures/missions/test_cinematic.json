@@ -1,0 +1,21 @@
+{
+	"scenario_id": "test_cinematic",
+	"system_id": "local",
+	"player": {"position": [0, 0, 0], "forward": [0, 0, -1]},
+	"props": [
+		{"type": "nav_buoy", "name": "NAV ALPHA", "position": [0, 0, -2000]}
+	],
+	"cinematics": {
+		"intro": {"keys": [
+			{"t": 0, "position": {"actor": "player", "offset": [30, 10, -60]}, "look_at": {"actor": "player"}, "fov": 55},
+			{"t": 1.5, "position": {"actor": "player", "offset": [-30, 15, 40]}, "look_at": {"actor": "player"}},
+			{"t": 3, "position": {"origin": [0, 200, -1500]}, "look_at": {"actor": "NAV ALPHA"}, "fov": 40}
+		]}
+	},
+	"mission": {
+		"title": "Cinematic Test",
+		"briefing": "Watch the intro, then fly.",
+		"script": "res://tests/fixtures/missions/test_cinematic.gd",
+		"objectives": []
+	}
+}

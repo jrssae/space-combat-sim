@@ -10,7 +10,8 @@ extends Node
 ## stays in space for `DEBRIEF_DELAY_S` of sim time, with the result on the HUD, and then `Game` shows the debrief (D56).
 ## It hands the HUD the active objectives, the mission's waypoint and the result line (`Hud.extra_input`), and the pause menu
 ## the whole book (`objectives()`). The mission's dialog file is loaded into the API's `dialog_book` and a `CommsPanel` shows the
-## lines the script says (D53); a dialog file that does not validate stops the mission from starting.
+## lines the script says (D53); a dialog file that does not validate stops the mission from starting, and so does a camera shot in
+## the scenario's `cinematics` that does not (D55).
 ##
 ## Console (`MissionConsole`): provider `mission`, `mission [status|skip|goto <step>|objectives|journal]`.
 
@@ -77,6 +78,9 @@ func _ready() -> void:
 	api.scenario_id = _scenario.get("scenario_id", &"")
 	api.title = String(block.get("title", ""))
 	_load_dialog(String(block.get("dialog", "")))
+	var shots_problem: String = api.load_cinematics(_scenario.get("cinematics", {}))
+	if not shots_problem.is_empty() and error.is_empty():
+		error = shots_problem
 	comms = CommsPanel.new()
 	add_child(comms)
 	comms.bind(api.dialog, api.dialog_book, main.audio)

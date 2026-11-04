@@ -41,6 +41,9 @@ var debug_throttle: float = 0.0
 var player_alive: bool = true
 ## The running mission (M5-T05), or null: free flight and the sandbox have none.
 var mission: MissionRunner = null
+## The bars of a cinematic, and the filter that takes the ship out of the player's hands during one (M5-T08, D55).
+var letterbox: Letterbox = null
+var control_lock: ControlLock = ControlLock.new()
 var combatant: Combatant = null
 var ship: Ship = null
 var thrusters: ThrusterVisuals = null
@@ -148,6 +151,9 @@ func _ready() -> void:
 	world.focus = ship
 	# The cockpit camera follows a RemoteTransform3D, so reset its interpolation on a rebase or the jump smears.
 	world.rebased.connect(func(_offset: Vector3) -> void: camera_rig.cockpit_pivot.reset_physics_interpolation())
+	letterbox = Letterbox.new()
+	add_child(letterbox)
+	camera_rig.mode_changed.connect(_on_camera_mode_changed)
 	# Ram contact points outlive a tick; they move with the rebase.
 	rams.world = world
 	# The motion blur skips the frames around a rebase (M3-T25).
@@ -186,6 +192,8 @@ func _physics_process(delta: float) -> void:
 		_handle_ui(adapter.sample_menu(input_source, delta))
 		return
 	var pc: PilotCommand = adapter.sample(input_source, delta)
+	if control_lock.apply(pc, controls_locked(), camera_rig.is_playing_shot()):
+		camera_rig.stop_shot()
 	if debug_throttle > 0.0:
 		pc.flight.main_left = maxf(pc.flight.main_left, debug_throttle)
 		pc.flight.main_right = maxf(pc.flight.main_right, debug_throttle)
@@ -319,6 +327,18 @@ func reference_point() -> UniversePos:
 ## Every objective of the running mission (`ObjectiveBook.snapshot`), empty outside one: the pause menu's objectives source.
 func objectives() -> Array[Dictionary]:
 	return mission.objectives() if mission != null else ([] as Array[Dictionary])
+
+
+## The running mission holds the player's controls (`MissionApi.lock_controls`): the ship flies on without them.
+func controls_locked() -> bool:
+	return mission != null and mission.api != null and mission.api.controls_locked
+
+
+# A cinematic hides the HUD and brings the letterbox in; the comms panel keeps its subtitles (D55).
+func _on_camera_mode_changed(new_mode: CameraRig.Mode) -> void:
+	var cinematic: bool = new_mode == CameraRig.Mode.CINEMATIC
+	hud.cinematic = cinematic
+	letterbox.shown = cinematic
 
 
 ## This frame's `HudInput`, read from the live nodes (the HUD never caches anything).
@@ -541,9 +561,9 @@ func _handle_ui(ui: UiCommand) -> void:
 
 
 # D-pad Right opens the comms menu, its four directions give the wing orders through the same call as keys 1-4, B or 4 s close it.
-# The timer runs here, so it stops while the pause menu has the game.
+# The timer runs here, so it stops while the pause menu has the game. A cinematic or locked controls close it (D55).
 func _step_comms_menu(ui: UiCommand, delta: float) -> void:
-	if ui.pause or not player_alive:
+	if ui.pause or not player_alive or controls_locked() or camera_rig.is_playing_shot():
 		comms_menu.close()
 	elif ui.comms_open:
 		comms_menu.open()

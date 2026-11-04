@@ -19,6 +19,8 @@ var ships: ShipPool = null
 var wings: WingDirector = null
 var player: Combatant = null
 var jumps: JumpArrivalPool = null
+## Plays the mission's cinematics (D55).
+var camera_rig: CameraRig = null
 var system_id: StringName = &"local"
 ## Mixed into spawned pilots' brain seeds (the scenario's seed: the same seed flies the same mission).
 var seed_value: int = 0
@@ -33,6 +35,7 @@ func setup(main: Main, p_jumps: JumpArrivalPool) -> void:
 	wings = main.wings
 	player = main.combatant
 	jumps = p_jumps
+	camera_rig = main.camera_rig
 	system_id = main.world.origin.system_id
 	seed_value = main.scenario_seed
 	if player != null:
@@ -50,6 +53,7 @@ func teardown() -> void:
 	if ships != null and is_instance_valid(ships) and ships.acquired.is_connected(register):
 		ships.acquired.disconnect(register)
 	_actors.clear()
+	camera_rig = null
 
 
 ## Knows `combatant` by the name it flies under now.
@@ -179,6 +183,34 @@ func send(ship_name: String, target_name: String) -> bool:
 	var target: String = target_name.strip_edges()
 	pilot.context.objective_name = "" if target.to_lower() == "none" else target
 	return true
+
+
+## Plays `shot` on the camera rig (D55): its actors are found by name every frame, its origin points from the scenario's origin.
+func play_cinematic(shot: CinematicShot) -> void:
+	if camera_rig != null and is_instance_valid(camera_rig):
+		camera_rig.play_shot(shot, actor_pose, origin_to_local)
+
+
+## `shot` is still on screen.
+func cinematic_playing(shot: CinematicShot) -> bool:
+	return camera_rig != null and is_instance_valid(camera_rig) and camera_rig.playing_shot() == shot
+
+
+## Cuts `shot` if it is still on screen.
+func stop_cinematic(shot: CinematicShot) -> void:
+	if cinematic_playing(shot):
+		camera_rig.stop_shot()
+
+
+## The pose the renderer draws `actor` at this frame, World-local, or null when it is not in play (a shot's actor points).
+func actor_pose(actor: String) -> Variant:
+	var node: Node3D = _node_of(MissionWorld.key(actor))
+	return node.get_global_transform_interpolated() if node != null else null
+
+
+## The World-local position of a point `offset` metres (64-bit) from the scenario's origin (a shot's origin points).
+func origin_to_local(offset: PackedFloat64Array) -> Vector3:
+	return world.universe_to_local(UniversePos.new(offset[0], offset[1], offset[2], system_id))
 
 
 ## The World-local position of the actor `actor` this frame, or null when it is not in play (the HUD's waypoint).

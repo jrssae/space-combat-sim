@@ -1,6 +1,6 @@
 class_name CameraRig
 extends Node3D
-## Owns the two cameras and the mode between them (architecture §3, §8).
+## Owns the cockpit, chase and cinematic cameras and the mode between them (architecture §3, §8, §18 D55).
 ##
 ## - `CockpitPivot` is glued to the ship's `CockpitAnchor` by a `RemoteTransform3D` that `setup` adds under it. The
 ##   `CockpitCamera` sits under the pivot and only carries the free-look rotation (set every rendered frame).
@@ -9,16 +9,23 @@ extends Node3D
 ##   rigidly locked to the ship with no lag. Setting `camera_chase_smoothing_s` > 0 lags its orientation only. It is in
 ##   group `world_shiftable` so `WorldFrame.rebase` moves it together with the ship.
 ##
+## - `CinematicCamera` (M5-T08) is `top_level`, in `world_shiftable`, with physics interpolation off. `play_shot` switches to it
+##   and every rendered frame puts it on the shot's pose (`CinematicShot.pose_at`) for the shot's time, read from the live actors,
+##   so a rebase mid-shot moves nothing on screen. The shot's clock runs on physics ticks; at its end, or on `stop_shot`, the
+##   rig goes back to the mode it left. While a shot plays, `set_mode` only changes the mode it will go back to.
+##
 ## The rig does not know the ship's class: `setup` takes the pieces it needs (a body to follow, an anchor, an offset,
 ## a visibility callback), which keeps it testable with plain nodes. Rebase-safe: the only pose kept between frames is
 ## the chase camera node's own transform, which the rebase shifts; nothing is cached in this script.
 ##
 ## Registers the `camera` console provider and command (architecture §6.4).
 
-enum Mode { COCKPIT, CHASE }
+enum Mode { COCKPIT, CHASE, CINEMATIC }
 
 ## Emitted after the active camera has changed (not for a `set_mode` to the mode already active).
 signal mode_changed(new_mode: Mode)
+## A shot has ended: it ran out, or `stop_shot` cut it.
+signal shot_finished(shot_id: StringName)
 
 ## How fast the drawn look angles close on the goal, per second (exponential).
 const SHOWN_LOOK_RATE_PER_S: float = 30.0
@@ -43,10 +50,19 @@ var _remote: RemoteTransform3D = null
 var _set_interior_visible: Callable = Callable()
 # The console's `look` is holding the view.
 var _look_held: bool = false
+# The shot playing (null when none), how it finds its actors and the origin, its clock (this tick and the one before, for the
+# frames between ticks) and the mode to go back to.
+var _shot: CinematicShot = null
+var _shot_actor_pose: Callable = Callable()
+var _shot_origin_to_local: Callable = Callable()
+var _shot_time_s: float = 0.0
+var _shot_prev_time_s: float = 0.0
+var _return_mode: Mode = Mode.CHASE
 
 @onready var cockpit_pivot: Node3D = $CockpitPivot
 @onready var cockpit_camera: Camera3D = $CockpitPivot/CockpitCamera
 @onready var chase_camera: Camera3D = $ChaseCamera
+@onready var cinematic_camera: Camera3D = $CinematicCamera
 
 
 func _ready() -> void:
@@ -58,9 +74,14 @@ func _ready() -> void:
 	DebugConsole.registry.register_provider(&"camera", ConsoleVars.new({
 		&"mode": {"get": func() -> StringName: return mode_name(_mode),
 				"set": func(value: Variant) -> void: set_mode(mode_from_name(StringName(str(value)))),
-				"type": TYPE_STRING_NAME, "choices": MODE_CHOICES, "doc": "Active camera: cockpit or chase"},
+				"type": TYPE_STRING_NAME, "choices": MODE_CHOICES,
+				"doc": "Active camera: cockpit, chase or cinematic (a shot playing; set it to cockpit or chase for after the shot)"},
 		&"fov": {"get": func() -> float: return active_camera().fov, "unit": "deg",
 				"doc": "Field of view of the active camera"},
+		&"shot": {"get": func() -> String: return String(_shot.id) if _shot != null else "none",
+				"doc": "The cinematic shot playing, or none"},
+		&"shot_time_s": {"get": func() -> float: return _shot_time_s if _shot != null else 0.0, "unit": "s",
+				"doc": "Sim time into the shot playing"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"camera",
 			"Switch to the cockpit or chase camera; with no argument, toggle",
@@ -79,10 +100,21 @@ func _exit_tree() -> void:
 	_remote = null
 
 
+func _physics_process(delta: float) -> void:
+	if _shot == null:
+		return
+	_shot_prev_time_s = _shot_time_s
+	_shot_time_s += delta
+	if _shot_time_s >= _shot.duration_s:
+		stop_shot()
+
+
 func _process(delta: float) -> void:
 	_ease_shown_look(delta)
 	update_chase(delta)
 	cockpit_camera.transform = Transform3D(_shown_basis(), Vector3.ZERO)
+	if _shot != null:
+		update_cinematic(Engine.get_physics_interpolation_fraction())
 
 
 ## Called by Main (M1-T15) with the ship's CockpitAnchor, hardpoints chase_anchor and set_cockpit_interior_visible
@@ -125,7 +157,7 @@ func setup(target: Node3D, cockpit_anchor: Node3D, chase_offset_local: Vector3, 
 ## stick (absolute, x right, y up) or the mouse travel (pixels, x right, y up) and the ship does not; released, it eases back
 ## to centre. In the cockpit the pilot turns their head; in the chase view the camera pans around the ship.
 func set_look(dt: float, active: bool, stick: Vector2, mouse_px: Vector2) -> void:
-	if _look_held:
+	if _look_held or _shot != null:
 		return
 	_look.step(dt, active, stick, mouse_px, float(Settings.get_value(&"mouse_look_deg_per_px")))
 
@@ -140,15 +172,24 @@ func look_goal() -> Vector2:
 	return Vector2(_look.yaw_deg, _look.pitch_deg)
 
 
+## Switches between the cockpit and chase views; during a shot, the view to go back to.
 func toggle() -> void:
-	set_mode(Mode.CHASE if _mode == Mode.COCKPIT else Mode.COCKPIT)
+	var current: Mode = _return_mode if _shot != null else _mode
+	set_mode(Mode.CHASE if current == Mode.COCKPIT else Mode.COCKPIT)
 
 
 func get_mode() -> Mode:
 	return _mode
 
 
+## The cinematic mode comes only with a shot (`play_shot`); while one plays, any other mode is the one to go back to.
 func set_mode(new_mode: Mode) -> void:
+	if new_mode == Mode.CINEMATIC and _shot == null:
+		push_warning("CameraRig: the cinematic camera needs a shot (play_shot)")
+		return
+	if _shot != null and new_mode != Mode.CINEMATIC:
+		_return_mode = new_mode
+		return
 	if new_mode == _mode:
 		return
 	_mode = new_mode
@@ -161,7 +202,69 @@ func set_mode(new_mode: Mode) -> void:
 
 
 func active_camera() -> Camera3D:
-	return cockpit_camera if _mode == Mode.COCKPIT else chase_camera
+	match _mode:
+		Mode.COCKPIT:
+			return cockpit_camera
+		Mode.CINEMATIC:
+			return cinematic_camera
+	return chase_camera
+
+
+## Plays `shot` on the cinematic camera from its start, replacing any shot playing. `actor_pose(name)` and `origin_to_local(offset)`
+## place its points every frame (`CinematicShot.pose_at`).
+func play_shot(shot: CinematicShot, actor_pose: Callable, origin_to_local: Callable) -> void:
+	if _shot == null:
+		_return_mode = _mode
+	_shot = shot
+	_shot_actor_pose = actor_pose
+	_shot_origin_to_local = origin_to_local
+	_shot_time_s = 0.0
+	_shot_prev_time_s = 0.0
+	update_cinematic(1.0)
+	cinematic_camera.reset_physics_interpolation()
+	set_mode(Mode.CINEMATIC)
+
+
+## Ends the shot playing now and goes back to the mode it left. Nothing happens with no shot.
+func stop_shot() -> void:
+	if _shot == null:
+		return
+	var ended: StringName = _shot.id
+	_shot = null
+	_shot_actor_pose = Callable()
+	_shot_origin_to_local = Callable()
+	set_mode(_return_mode)
+	if _mode == Mode.CHASE:
+		snap_chase()
+	shot_finished.emit(ended)
+
+
+## The shot playing, or null.
+func playing_shot() -> CinematicShot:
+	return _shot
+
+
+func is_playing_shot() -> bool:
+	return _shot != null
+
+
+## Sim seconds into the shot playing.
+func shot_time_s() -> float:
+	return _shot_time_s
+
+
+## Puts the cinematic camera on the shot's pose, `fraction` of the way from the last tick's time to this one's (the frames between
+## ticks). `_process` calls it every frame; public so tests can look right after a rebase. Where the shot cannot be placed (an
+## actor is gone) the camera stays where it is.
+func update_cinematic(fraction: float) -> void:
+	if _shot == null:
+		return
+	var t: float = lerpf(_shot_prev_time_s, _shot_time_s, clampf(fraction, 0.0, 1.0))
+	var pose: CinematicShot.Pose = _shot.pose_at(t, _shot_actor_pose, _shot_origin_to_local)
+	if pose == null:
+		return
+	cinematic_camera.global_transform = pose.transform
+	cinematic_camera.fov = pose.fov
 
 
 ## Puts the chase camera on the ship's pose for this frame. `_process` calls it every frame; public so tests (and a
@@ -184,10 +287,16 @@ func snap_chase() -> void:
 
 
 static func mode_name(m: Mode) -> StringName:
-	return &"cockpit" if m == Mode.COCKPIT else &"chase"
+	match m:
+		Mode.COCKPIT:
+			return &"cockpit"
+		Mode.CINEMATIC:
+			return &"cinematic"
+	return &"chase"
 
 
-## `cockpit` is the cockpit; anything else (including an unknown setting) is the chase camera.
+## `cockpit` is the cockpit; anything else (including an unknown setting) is the chase camera. The cinematic camera is never
+## chosen by name: it comes with a shot.
 static func mode_from_name(mode_text: StringName) -> Mode:
 	return Mode.COCKPIT if mode_text == &"cockpit" else Mode.CHASE
 
@@ -226,9 +335,9 @@ func _notify_interior() -> void:
 		_set_interior_visible.call(_mode == Mode.COCKPIT)
 
 
-# Bolts look small from the chase camera, which sits further back than the cockpit: draw them larger there.
+# Bolts look small from the chase camera, which sits further back than the cockpit: draw them larger there, and in a shot.
 func _apply_bolt_scale() -> void:
-	Projectile.visual_scale = float(Settings.get_value(&"chase_bolt_scale")) if _mode == Mode.CHASE else 1.0
+	Projectile.visual_scale = float(Settings.get_value(&"chase_bolt_scale")) if _mode != Mode.COCKPIT else 1.0
 	if is_inside_tree():
 		get_tree().call_group(Projectile.GROUP, "set_visual_scale", Projectile.visual_scale)
 
