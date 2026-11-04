@@ -2,7 +2,7 @@ class_name ManifestReader
 extends RefCounted
 ## Test helper: reads and validates a generator `manifest.json` (tools/procgen/README.md, "Manifest") so the asset
 ## tests can iterate over whatever assets exist. Pure: parses text or reads a file, never touches the scene tree.
-## `SkyManifest` only extracts the sky's `centroid_offset`; this covers the rest (lods, aabb, files) and is
+## `SkyManifest` only extracts the star field and the panorama; this covers the rest (lods, aabb, files) and is
 ## deliberately independent of it, so a parser bug cannot hide in both.
 ##
 ## Frames. The manifest is in the Godot frame (+X right, +Y up, -Z forward). The generator writes the PLY pre-rotated

@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://src/environment/space_environment.gd" id="1_env"]
 [ext_resource type="Environment" path="res://assets/environment/environment_default.tres" id="2_default"]
 [ext_resource type="Script" path="res://addons/gdgs_scs/runtime/compositor/gaussian_compositor_effect.gd" id="3_effect"]
-[ext_resource type="Script" path="res://addons/gdgs_scs/runtime/nodes/gaussian_splat_node.gd" id="4_splats"]
+[ext_resource type="Script" path="res://src/environment/star_field.gd" id="4_stars"]
 [ext_resource type="Script" path="res://src/environment/sky_follower.gd" id="5_follower"]
 [ext_resource type="Script" path="res://src/rendering/splat_light_rig.gd" id="6_rig"]
 [ext_resource type="Script" path="res://src/rendering/lens_flare_effect.gd" id="7_flare"]
@@ -38,14 +38,14 @@ transform = Transform3D(-0.851658, 0.339815, -0.399004, 0, 0.761316, 0.648381, 0
 light_color = Color(1, 0.94, 0.84, 1)
 light_energy = 1.5
 
-[node name="SkySplats" type="VisualInstance3D" parent="."]
+[node name="StarField" type="MultiMeshInstance3D" parent="."]
 top_level = true
 physics_interpolation_mode = 2
-script = ExtResource("4_splats")
+script = ExtResource("4_stars")
 
 [node name="SkyFollower" type="Node" parent="." node_paths=PackedStringArray("sky")]
 script = ExtResource("5_follower")
-sky = NodePath("../SkySplats")
+sky = NodePath("../StarField")
 
 [node name="PostEffects" type="Node" parent="." node_paths=PackedStringArray("world_environment", "sun")]
 script = ExtResource("9_post")

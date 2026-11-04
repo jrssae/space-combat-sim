@@ -249,7 +249,7 @@ class BuildTests(unittest.TestCase):
         self.assertIn("built sky_default: 300 splats", out)
         self.assertEqual(
             sorted(p.name for p in (self.out / "sky_default").iterdir()),
-            ["manifest.json", "sky_default.ply"],
+            ["manifest.json", "sky_default.ply", "sky_default_stars.f32"],
         )
 
 

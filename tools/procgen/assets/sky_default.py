@@ -16,30 +16,37 @@ one-sided, the centroid is kilometres from the origin: ``manifest.centroid_offse
 and the sky node must sit at ``camera_position + centroid_offset`` to place the star sphere exactly
 around the camera.
 
-The optional ``sky_default_panorama.png`` (equirectangular, the Godot ``PanoramaSkyMaterial`` convention: the
-centre of the image looks toward +Z, so -Z is at the left and right edges, and +u turns toward -X; checked on a GPU
-by rolling the image by half a turn, which put the nebula where the splat sky has it) is a CPU render of the same catalogue for the mesh fallback
-path. It needs Pillow and is skipped with a warning without it.
+Since M4-T30c the game draws the sky without splats, from two more files (the PLY stays until T31 removes it):
+
+* ``sky_default_stars.f32``: the same stars as point records, little-endian float32, seven per star: the unit direction
+  (Godot frame), the linear colour tint (largest channel 1) and the brightness, the linear radiance of a disc of
+  ``star_field.radius_mrad`` that delivers the light its splat did at 1 080 lines (``REFERENCE_FOCAL_PX``). ``StarField``
+  draws them as camera-facing points with a 1 px floor.
+* ``sky_default_panorama.png``: the nebula alone, its 4 000 Gaussians composited analytically into a 4 096 by 2 048 sRGB
+  equirectangular image (``core.panorama``, Godot's ``PanoramaSkyMaterial`` convention: the image centre looks toward
+  +Z, +u turns toward -X), with a ``.import`` sidecar.
 """
 
 from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 
 from ..core import frames
-from ..core.color import blackbody_rgb, lerp, linear_to_srgb
+from ..core import panorama
+from ..core.color import blackbody_rgb, lerp
 from ..core.context import AssetOutputs, BuildContext
 from ..core.manifest import build_manifest, lod_entry, write_manifest
 from ..core.ply import SplatData, write_ply
 
 ASSET_ID = "sky_default"
-GENERATOR_VERSION = 2
+GENERATOR_VERSION = 3
 PLY_NAME = "sky_default.ply"
 PANORAMA_NAME = "sky_default_panorama.png"
+STARS_NAME = "sky_default_stars.f32"
+STAR_RECORD = ("dir_x", "dir_y", "dir_z", "red", "green", "blue", "brightness")
 
 DEFAULT_STARS = 12_000
 DEFAULT_NEBULA = 4_000
@@ -294,168 +301,56 @@ def generate_nebula(rng: np.random.Generator, count: int, radius: float) -> Spla
     )
 
 
+# --- star points (M4-T30c) ------------------------------------------------------------------
+# A star point is a disc this wide; on any screen up to about 2 600 lines at 70 degrees it is under the 1 px floor, so only
+# its delivered light shows (StarPointMath).
+STAR_RADIUS_MRAD = 0.5
+STAR_FLOOR_PX = 1.0
+# The height the splat sky was tuned at: 1 080 lines through the chase camera's 70 degree vertical field of view.
+REFERENCE_FOCAL_PX = 540.0 / math.tan(math.radians(35.0))
+# GDGS widens every splat's screen covariance by this many square pixels (its anti-aliasing), which the splat stars' look includes.
+GDGS_DILATION_PX2 = 0.3
+# The light the point sprite's (1 - r^2)^2 profile delivers per unit brightness, over a disc of radius 1.
+SPRITE_PROFILE_AREA = math.pi / 3.0
+
+
+def star_points(stars: SplatData, radius: float) -> np.ndarray:
+    """The star file's records, ``(N, 7)`` float32: direction, colour tint and the brightness that matches each splat's light."""
+    directions = _unit(stars.xyz)
+    radiance = stars.rgb.max(axis=1)
+    tint = stars.rgb / radiance[:, None]
+    sigma = stars.scale[:, 0] / radius
+    splat_light = radiance * 2.0 * math.pi * (sigma**2 + GDGS_DILATION_PX2 / REFERENCE_FOCAL_PX**2)
+    rho = STAR_RADIUS_MRAD * 1e-3
+    brightness = splat_light / (SPRITE_PROFILE_AREA * rho * rho)
+    return np.concatenate([directions, tint, brightness[:, None]], axis=1).astype("<f4")
+
+
 # --- panorama --------------------------------------------------------------------------------
 # The panorama's tone curve is not the splat renderer's: at gain 1 its nebula came out about twice as bright as the splat sky on
 # the same view (2026-10-21 play test), so toggling the splats swapped a dim nebula for a glaring one.
 PANORAMA_NEBULA_GAIN = 0.4
-def _load_pillow() -> Any | None:
-    try:
-        from PIL import Image
-    except ImportError:
-        return None
-    return Image
+# The gas is smooth, so it is composited at half size and enlarged.
+PANORAMA_NEBULA_SCALE = 2
 
 
-def _direction_grid(width: int, height: int) -> np.ndarray:
-    """Unit direction of every pixel centre of an equirectangular image (centre = +Z, +u = -X: Godot's panorama sky)."""
-    lon = ((np.arange(width) + 0.5) / width - 0.5) * 2.0 * math.pi
-    lat = (0.5 - (np.arange(height) + 0.5) / height) * math.pi
-    cos_lat = np.cos(lat)[:, None]
-    return np.stack(
-        [
-            -np.sin(lon)[None, :] * cos_lat,
-            np.broadcast_to(np.sin(lat)[:, None], (height, width)),
-            np.cos(lon)[None, :] * cos_lat,
-        ],
-        axis=-1,
-    ).astype(np.float32)
-
-
-def _lonlat(directions: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    lon = np.arctan2(-directions[..., 0], directions[..., 2])
-    lat = np.arcsin(np.clip(directions[..., 1], -1.0, 1.0))
-    return lon, lat
-
-
-def _render_stars(
-    stars: SplatData, width: int, height: int, channel: int
-) -> np.ndarray:
-    """One channel of the star layer: each star is a small Gaussian sprite on the pixel grid."""
-    lon, lat = _lonlat(_unit(stars.xyz))
-    px = (lon / (2.0 * math.pi) + 0.5) * width - 0.5
-    py = (0.5 - lat / math.pi) * height - 0.5
-    sigma_rel = stars.scale[:, 0] / stars.scale[:, 0].max()
-    sigma_px = (0.35 + 0.8 * sigma_rel**2) * (width / 4096.0) ** 0.5
-
-    offsets = np.arange(-3, 4)
-    cx = np.round(px).astype(np.int64)[:, None, None] + offsets[None, None, :]
-    cy = np.round(py).astype(np.int64)[:, None, None] + offsets[None, :, None]
-    d2 = (cx - px[:, None, None]) ** 2 + (cy - py[:, None, None]) ** 2
-    amp = stars.rgb[:, channel, None, None] * np.exp(
-        -0.5 * d2 / sigma_px[:, None, None] ** 2
+def render_panorama(nebula: SplatData, width: int, height: int) -> np.ndarray:
+    """Equirectangular ``(height, width, 3)`` uint8 sRGB render of the nebula as seen from the origin (authoring frame)."""
+    low_w = max(width // PANORAMA_NEBULA_SCALE, 8)
+    low_h = max(height // PANORAMA_NEBULA_SCALE, 4)
+    colour, _ = panorama.composite_gaussians(
+        nebula.xyz, frames.quat_to_matrix(nebula.rot), nebula.scale, nebula.rgb, nebula.alpha, low_w, low_h
     )
-    amp = np.where((cy >= 0) & (cy < height), amp, 0.0)
-    index = np.clip(cy, 0, height - 1) * width + (cx % width)
-    layer = np.bincount(index.ravel(), weights=amp.ravel(), minlength=width * height)
-    return layer.reshape(height, width).astype(np.float32)
-
-
-def _render_nebula(
-    nebula: SplatData, width: int, height: int
-) -> tuple[np.ndarray, np.ndarray]:
-    """Alpha-composite the nebula far to near. Returns premultiplied linear RGB and coverage."""
-    grid = _direction_grid(width, height)
-    colour = np.zeros((height, width, 3), dtype=np.float32)
-    coverage = np.zeros((height, width), dtype=np.float32)
-
-    dist = np.linalg.norm(nebula.xyz, axis=1)
-    n = nebula.xyz / dist[:, None]
-    e1, e2 = tangent_basis(n)
-    rot = frames.quat_to_matrix(nebula.rot)
-    cov3 = np.einsum("nij,nj,nkj->nik", rot, nebula.scale**2, rot)
-    basis = np.stack([e1, e2], axis=-1)  # (N, 3, 2)
-    cov2 = np.einsum("nia,nij,njb->nab", basis, cov3, basis) / (dist**2)[:, None, None]
-    det = cov2[:, 0, 0] * cov2[:, 1, 1] - cov2[:, 0, 1] ** 2
-    inv = (
-        np.stack([cov2[:, 1, 1], -cov2[:, 0, 1], cov2[:, 0, 0]], axis=1) / det[:, None]
-    )
-    trace = cov2[:, 0, 0] + cov2[:, 1, 1]
-    sigma_max = np.sqrt(0.5 * (trace + np.sqrt(np.maximum(trace**2 - 4.0 * det, 0.0))))
-    reach = 3.0 * sigma_max  # radians
-    lon0, lat0 = _lonlat(n)
-
-    for i in np.argsort(-dist, kind="stable"):
-        lat_hi, lat_lo = lat0[i] + reach[i], lat0[i] - reach[i]
-        row0 = max(0, math.floor((0.5 - lat_hi / math.pi) * height - 0.5))
-        row1 = min(height - 1, math.ceil((0.5 - lat_lo / math.pi) * height - 0.5))
-        cos_edge = math.cos(min(max(abs(lat_hi), abs(lat_lo)), math.pi / 2))
-        if (
-            lat_hi >= math.pi / 2
-            or lat_lo <= -math.pi / 2
-            or reach[i] >= cos_edge * math.pi
-        ):
-            cols = np.arange(width)
-        else:
-            half = reach[i] / cos_edge
-            col0 = math.floor(
-                (lon0[i] - half) / (2.0 * math.pi) * width + width / 2 - 0.5
-            )
-            col1 = math.ceil(
-                (lon0[i] + half) / (2.0 * math.pi) * width + width / 2 - 0.5
-            )
-            cols = (
-                np.arange(col0, col1 + 1) % width
-                if col1 - col0 + 1 < width
-                else np.arange(width)
-            )
-        window = np.ix_(np.arange(row0, row1 + 1), cols)
-        d = grid[window]
-        facing = d @ n[i].astype(np.float32)
-        safe = np.maximum(facing, 0.05)
-        u = (d @ e1[i].astype(np.float32)) / safe
-        v = (d @ e2[i].astype(np.float32)) / safe
-        m = inv[i, 0] * u * u + 2.0 * inv[i, 1] * u * v + inv[i, 2] * v * v
-        a = np.where(facing > 0.05, nebula.alpha[i] * np.exp(-0.5 * m), 0.0).astype(
-            np.float32
-        )
-        colour[window] = (
-            colour[window] * (1.0 - a)[..., None]
-            + nebula.rgb[i].astype(np.float32) * a[..., None]
-        )
-        coverage[window] = coverage[window] * (1.0 - a) + a
-    return colour, coverage
-
-
-def _resize_bilinear(layer: np.ndarray, out_h: int, out_w: int) -> np.ndarray:
-    """Bilinear resize of a 2D float layer, wrapping horizontally (it is a panorama)."""
-    h, w = layer.shape
-    xs = (np.arange(out_w) + 0.5) * w / out_w - 0.5
-    x0 = np.floor(xs).astype(np.int64)
-    fx = (xs - x0).astype(np.float32)
-    wide = layer[:, x0 % w] * (1.0 - fx) + layer[:, (x0 + 1) % w] * fx
-    ys = (np.arange(out_h) + 0.5) * h / out_h - 0.5
-    y0 = np.floor(ys).astype(np.int64)
-    fy = (ys - y0).astype(np.float32)[:, None]
-    return (
-        wide[np.clip(y0, 0, h - 1)] * (1.0 - fy) + wide[np.clip(y0 + 1, 0, h - 1)] * fy
-    )
-
-
-def render_panorama(
-    stars: SplatData, nebula: SplatData, width: int, height: int
-) -> np.ndarray:
-    """Equirectangular ``(height, width, 3)`` uint8 sRGB render of the sky, as seen from the origin.
-
-    ``stars`` and ``nebula`` are in the authoring frame (not re-centred). The nebula is composited
-    at quarter resolution (it is smooth) and upsampled; stars are drawn at full resolution.
-    """
-    low_w, low_h = max(width // 4, 8), max(height // 4, 4)
-    neb_colour, neb_cover = _render_nebula(nebula, low_w, low_h)
-    cover = _resize_bilinear(neb_cover, height, width)
     image = np.empty((height, width, 3), dtype=np.uint8)
     for channel in range(3):
-        starlight = _render_stars(stars, width, height, channel)
-        layer = _resize_bilinear(neb_colour[..., channel], height, width) * PANORAMA_NEBULA_GAIN
-        # Half the stars sit behind the gas (they are spread through its depth), half in front.
-        linear = layer + starlight * (1.0 - 0.5 * cover)
-        display = 1.0 - np.exp(-1.5 * linear)
-        image[..., channel] = np.round(linear_to_srgb(display) * 255.0).astype(np.uint8)
+        linear = panorama.resize_bilinear(colour[..., channel], height, width) * PANORAMA_NEBULA_GAIN
+        image[..., channel] = panorama.to_srgb8(1.0 - np.exp(-1.5 * linear))
     return image
 
 
 # --- build -----------------------------------------------------------------------------------
 def build(ctx: BuildContext) -> AssetOutputs:
-    """Generate ``sky_default.ply`` (+ optional panorama) and ``manifest.json`` into ``ctx.out_dir``.
+    """Generate ``sky_default.ply``, the star file, the panorama (optional) and ``manifest.json`` into ``ctx.out_dir``.
 
     Options: ``stars``, ``nebula`` (counts), ``radius_m``, ``panorama`` (bool),
     ``panorama_size`` ((width, height)).
@@ -506,27 +401,21 @@ def build(ctx: BuildContext) -> AssetOutputs:
         )
     ]
 
-    warnings: list[str] = []
     manifest_files: dict[str, str] = {}
+    stars_path = out_dir / STARS_NAME
+    stars_path.write_bytes(star_points(stars, radius).tobytes())
+    files.append(stars_path)
+    manifest_files["stars"] = STARS_NAME
+
     panorama_path = out_dir / PANORAMA_NAME
+    sidecar_path = Path(str(panorama_path) + ".import")
     if want_panorama:
-        image_module = _load_pillow()
-        if image_module is None:
-            warnings.append(
-                f"Pillow is not installed: skipped {PANORAMA_NAME} (the PLY is unaffected; "
-                "pip install pillow to build the mesh-fallback panorama)"
-            )
-        else:
-            pixels = render_panorama(stars, nebula, pano_w, pano_h)
-            image_module.fromarray(pixels).save(
-                panorama_path, format="PNG", compress_level=6
-            )
-            files.append(panorama_path)
-            manifest_files["panorama"] = PANORAMA_NAME
-    if PANORAMA_NAME not in manifest_files.values():
-        panorama_path.unlink(
-            missing_ok=True
-        )  # never leave a stale panorama the manifest does not list
+        files.extend(panorama.write_panorama(panorama_path, render_panorama(nebula, pano_w, pano_h)))
+        manifest_files["panorama"] = PANORAMA_NAME
+    else:
+        # Never leave a stale panorama the manifest does not list.
+        panorama_path.unlink(missing_ok=True)
+        sidecar_path.unlink(missing_ok=True)
 
     total = len(authored)
     manifest = build_manifest(
@@ -546,7 +435,15 @@ def build(ctx: BuildContext) -> AssetOutputs:
         extra={
             "sky_radius_m": radius,
             "counts": {"stars": n_stars, "nebula": n_nebula},
+            "star_field": {
+                "file": STARS_NAME,
+                "count": n_stars,
+                "format": "float32 little-endian",
+                "record": list(STAR_RECORD),
+                "radius_mrad": STAR_RADIUS_MRAD,
+                "floor_px": STAR_FLOOR_PX,
+            },
         },
     )
     files.append(write_manifest(out_dir, manifest))
-    return AssetOutputs(ASSET_ID, out_dir, manifest, tuple(files), tuple(warnings))
+    return AssetOutputs(ASSET_ID, out_dir, manifest, tuple(files), ())

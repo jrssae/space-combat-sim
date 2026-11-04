@@ -1,27 +1,22 @@
-"""``sky_default``: counts, PLY content, nebula opacity, frames, manifest, panorama, determinism."""
+"""``sky_default``: counts, PLY content, nebula opacity, frames, manifest, star file, panorama, determinism."""
 
 from __future__ import annotations
 
 import hashlib
 import math
-import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 import numpy as np
 
 from tools.procgen.assets import sky_default
 from tools.procgen.core import frames
 from tools.procgen.core import manifest as manifest_io
+from tools.procgen.core import panorama as panorama_io
 from tools.procgen.core.context import BuildContext
+from tools.procgen.core.image import read_png
 from tools.procgen.core.ply import PROPERTY_NAMES, SplatData, read_ply
-
-try:
-    from PIL import Image
-except ImportError:  # the panorama is optional
-    Image = None
 
 N_STARS = sky_default.DEFAULT_STARS
 N_NEBULA = sky_default.DEFAULT_NEBULA
@@ -215,20 +210,64 @@ class SkyDefaultTests(unittest.TestCase):
         )
         self.assertAlmostEqual(float(np.degrees(np.arcsin(centre[1]))), 12.0, places=3)
 
+    # --- star file (M4-T30c) ------------------------------------------------------------------
+    def _star_records(self, directory: Path) -> np.ndarray:
+        raw = np.fromfile(directory / "sky_default_stars.f32", dtype="<f4")
+        return raw.reshape(-1, len(self.manifest["star_field"]["record"]))
+
+    def test_star_file_is_listed_with_its_layout(self) -> None:
+        field = self.manifest["star_field"]
+        self.assertEqual(self.manifest["files"]["stars"], "sky_default_stars.f32")
+        self.assertEqual(field["file"], "sky_default_stars.f32")
+        self.assertEqual(field["count"], N_STARS)
+        self.assertEqual(field["format"], "float32 little-endian")
+        self.assertEqual(
+            field["record"],
+            ["dir_x", "dir_y", "dir_z", "red", "green", "blue", "brightness"],
+        )
+        self.assertGreater(field["radius_mrad"], 0.0)
+        self.assertEqual(field["floor_px"], 1.0)
+        self.assertIn(self.dir_a / "sky_default_stars.f32", self.out_a.files)
+
+    def test_star_file_parses_to_one_unit_direction_per_star(self) -> None:
+        records = self._star_records(self.dir_a)
+        self.assertEqual(records.shape, (self.manifest["counts"]["stars"], 7))
+        np.testing.assert_allclose(np.linalg.norm(records[:, :3], axis=1), 1.0, atol=1e-5)
+        self.assertTrue(np.all(records[:, 3:6] > 0.0))
+        np.testing.assert_allclose(records[:, 3:6].max(axis=1), 1.0, atol=1e-5)  # the colour is a tint
+        self.assertTrue(np.all(records[:, 6] > 0.0))
+
+    def test_star_file_holds_the_same_stars_as_the_splat_sky(self) -> None:
+        records = self._star_records(self.dir_a)
+        splat_dirs = self.godot_xyz[:N_STARS] / R
+        np.testing.assert_allclose(records[:, :3], splat_dirs, atol=1e-4)
+        # Brighter splats give brighter points, in the same order.
+        splat_light = self.splats.rgb[:N_STARS].max(axis=1)
+        order = np.argsort(splat_light)
+        self.assertGreater(float(records[order[-1], 6]), 5.0 * float(records[order[0], 6]))
+
+    def test_a_point_delivers_the_light_its_splat_did_at_the_reference_height(self) -> None:
+        # The sprite's (1 - r^2)^2 profile over a disc of radius rho gives pi / 3 rho^2 of light per unit brightness;
+        # the splat gave its colour times 2 pi (sigma^2 + GDGS's 0.3 px^2 dilation), at 1 080 lines and 70 degrees.
+        field = self.manifest["star_field"]
+        rho = field["radius_mrad"] * 1e-3
+        focal = sky_default.REFERENCE_FOCAL_PX
+        self.assertAlmostEqual(focal, 540.0 / math.tan(math.radians(35.0)), places=3)
+        sigma = self.splats.scale[:N_STARS, 0] / R
+        radiance = self.splats.rgb[:N_STARS].max(axis=1)
+        splat_light = radiance * 2.0 * math.pi * (sigma**2 + 0.3 / focal**2)
+        point_light = self._star_records(self.dir_a)[:, 6] * math.pi / 3.0 * rho**2
+        np.testing.assert_allclose(point_light, splat_light, rtol=1e-4)
+
     # --- panorama ------------------------------------------------------------------------------
-    @unittest.skipIf(Image is None, "Pillow not installed")
     def test_panorama_is_a_4096_by_2048_png_listed_in_the_manifest(self) -> None:
         path = self.dir_a / "sky_default_panorama.png"
-        self.assertEqual(
-            self.manifest["files"], {"panorama": "sky_default_panorama.png"}
-        )
+        self.assertEqual(self.manifest["files"]["panorama"], "sky_default_panorama.png")
         self.assertIn(path, self.out_a.files)
-        with Image.open(path) as img:
-            self.assertEqual(
-                (img.size, img.mode, img.format), ((4096, 2048), "RGB", "PNG")
-            )
-            pixels = np.asarray(img, dtype=float) / 255.0
-        self.assertGreater(float(pixels.mean()), 0.005)  # not black
+        self.assertIn(Path(str(path) + ".import"), self.out_a.files)
+        pixels = read_png(path).astype(float) / 255.0
+        self.assertEqual(pixels.shape, (2048, 4096, 3))
+        self.assertGreater(float(pixels.mean()), 0.003)  # not black
         self.assertLess(float(pixels.mean()), 0.2)  # but a night sky
 
         def patch(lon_deg: float, lat_deg: float) -> float:
@@ -239,13 +278,29 @@ class SkyDefaultTests(unittest.TestCase):
         # Godot's panorama convention: centre = +Z, so the nebula (35 degrees right of -Z, 12 up) sits at lon -145, lat +12.
         self.assertGreater(patch(-145.0, 12.0), 3.0 * patch(35.0, -12.0))
 
-    @unittest.skipIf(Image is None, "Pillow not installed")
-    def test_nebula_pixels_are_coloured_and_stars_are_visible(self) -> None:
-        with Image.open(self.dir_a / "sky_default_panorama.png") as img:
-            pixels = np.asarray(img, dtype=float)
-        bright = (pixels.max(axis=2) > 160).mean()
-        self.assertGreater(float(bright), 1e-4)  # star pixels
-        self.assertLess(float(bright), 0.02)  # on a mostly dark sky
+    def test_panorama_brightest_region_lies_toward_the_splat_nebulas_centroid(self) -> None:
+        # The centre of the panorama's light (each texel weighted by its brightness and its solid angle) against the splat
+        # sky's centroid, which the nebula dominates; the gas spreads over about 40 degrees.
+        light = read_png(self.dir_a / "sky_default_panorama.png").astype(float).max(axis=2)
+        grid = panorama_io.direction_grid(4096, 2048).astype(float)
+        weight = light * np.sqrt(np.maximum(1.0 - grid[..., 1] ** 2, 0.0))
+        centre = (grid * weight[..., None]).sum(axis=(0, 1))
+        centre /= np.linalg.norm(centre)
+        centroid = np.array(self.manifest["centroid_offset"], dtype=float)
+        centroid /= np.linalg.norm(centroid)
+        self.assertLess(float(angle_deg(centre[None, :], centroid)[0]), 10.0)
+
+    def test_panorama_holds_the_gas_and_leaves_the_stars_to_the_point_field(self) -> None:
+        pixels = read_png(self.dir_a / "sky_default_panorama.png")
+        # No star pixels: the brightest texel is gas, and the gas is smooth (no single-pixel spikes).
+        lum = pixels.astype(float).max(axis=2)
+        spikes = lum[1:-1, 1:-1] - np.maximum.reduce(
+            [lum[:-2, 1:-1], lum[2:, 1:-1], lum[1:-1, :-2], lum[1:-1, 2:]]
+        )
+        self.assertLess(float(spikes.max()), 12.0)
+        # Coloured: teal and magenta, never grey starlight.
+        bright = pixels[lum > np.percentile(lum, 99.5)].astype(float)
+        self.assertGreater(float(np.mean(bright.max(axis=1) - bright.min(axis=1))), 10.0)
 
     # --- determinism ---------------------------------------------------------------------------
     def test_same_seed_gives_byte_identical_output(self) -> None:
@@ -293,38 +348,32 @@ class SkyDefaultOptionTests(unittest.TestCase):
                 self.build(**bad)
 
     def test_panorama_can_be_switched_off(self) -> None:
-        out = self.build(panorama=False)
-        self.assertEqual(out.manifest["files"], {})
-        self.assertEqual(out.warnings, ())
-        self.assertFalse((self.dir / "sky_default_panorama.png").exists())
-
-    def test_missing_pillow_skips_the_panorama_with_a_warning_but_builds_the_ply(
-        self,
-    ) -> None:
         self.dir.mkdir()
         stale = self.dir / "sky_default_panorama.png"
         stale.write_bytes(b"stale")
-        with mock.patch.dict(sys.modules, {"PIL": None, "PIL.Image": None}):
-            out = self.build()
-        self.assertEqual(len(out.warnings), 1)
-        self.assertIn("Pillow", out.warnings[0])
-        self.assertIn("sky_default_panorama.png", out.warnings[0])
-        self.assertEqual(out.manifest["files"], {})
-        self.assertFalse(
-            stale.exists()
-        )  # the directory never lists a panorama the manifest omits
-        self.assertTrue((self.dir / "sky_default.ply").is_file())
-        self.assertEqual(
-            [p.name for p in out.files], ["sky_default.ply", "manifest.json"]
-        )
-        self.assertEqual(manifest_io.read_manifest(self.dir)["lods"][0]["splats"], 420)
+        out = self.build(panorama=False)
+        self.assertEqual(out.manifest["files"], {"stars": "sky_default_stars.f32"})
+        self.assertEqual(out.warnings, ())
+        self.assertFalse(stale.exists())  # the directory never holds a panorama the manifest omits
+        self.assertFalse((self.dir / "sky_default_panorama.png.import").exists())
 
-    def test_the_ply_is_unaffected_by_pillow_or_the_panorama_switch(self) -> None:
+    def test_the_panorama_needs_no_pillow(self) -> None:
+        source = Path(sky_default.__file__).read_text() + Path(panorama_io.__file__).read_text()
+        self.assertNotIn("PIL", source)
+        out = self.build(panorama_size=(256, 128))
+        self.assertEqual(out.warnings, ())
+        self.assertEqual(read_png(self.dir / "sky_default_panorama.png").shape, (128, 256, 3))
+
+    def test_the_ply_is_unaffected_by_the_panorama_switch(self) -> None:
         self.build(panorama=False)
         plain = sha256(self.dir / "sky_default.ply")
-        with mock.patch.dict(sys.modules, {"PIL": None, "PIL.Image": None}):
-            self.build()
+        self.build(panorama_size=(256, 128))
         self.assertEqual(sha256(self.dir / "sky_default.ply"), plain)
+
+    def test_star_count_option_reaches_the_star_file(self) -> None:
+        out = self.build(panorama=False)
+        self.assertEqual(out.manifest["star_field"]["count"], 300)
+        self.assertEqual((self.dir / "sky_default_stars.f32").stat().st_size, 300 * 7 * 4)
 
     def test_options_scale_the_sky_radius(self) -> None:
         out = self.build(panorama=False, radius_m=1000.0)
@@ -363,9 +412,9 @@ class SkyHelperTests(unittest.TestCase):
             BuildContext(Path("."), 1).rng("stars"),
             BuildContext(Path("."), 1).rng("nebula"),
         )
-        stars = sky_default.generate_stars(rng_s, 400, R)
+        sky_default.generate_stars(rng_s, 400, R)
         nebula = sky_default.generate_nebula(rng_n, 200, R)
-        image = sky_default.render_panorama(stars, nebula, 256, 128)
+        image = sky_default.render_panorama(nebula, 256, 128)
         self.assertEqual((image.shape, image.dtype), ((128, 256, 3), np.uint8))
         # 35 degrees right of -Z: with the image centre on +Z that is longitude -145 degrees (Godot's panorama convention)
         x, y = int((-145 / 360 + 0.5) * 256), int((0.5 - 12 / 180) * 128)

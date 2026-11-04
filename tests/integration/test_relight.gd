@@ -223,7 +223,7 @@ func test_a_dead_players_cabin_light_goes_with_the_ship_and_comes_back_on_respaw
 # --- who is lit ----------------------------------------------------------------------------------------------------
 
 
-func test_every_ship_level_chunk_and_buoy_is_lit_and_the_sky_is_not() -> void:
+func test_every_ship_level_chunk_and_buoy_is_lit() -> void:
 	main.debris.prepare(&"raider_fighter")
 	main.debris.prepare(&"starfury_aurora")
 	var nodes: Array = _collect(main, GaussianSplatNode, [])
@@ -231,16 +231,13 @@ func test_every_ship_level_chunk_and_buoy_is_lit_and_the_sky_is_not() -> void:
 	var lit: int = 0
 	for value: Variant in nodes:
 		var node: GaussianSplatNode = value
-		if node == main.space_environment.sky_splats:
-			continue
 		assert_true(node.relight_enabled, "%s is lit" % node.get_path())
 		assert_false(node.relight_cast_shadows, "%s casts no shadow" % node.get_path())
 		assert_not_null(node.lighting, "%s has records" % node.get_path())
 		assert_true(node.lighting.matches_source(node.gaussian), "%s: records for its splats" % node.get_path())
 		lit += 1
 	assert_gt(lit, 20)
-	assert_false(main.space_environment.sky_splats.relight_enabled, "stars are emitters")
-	assert_null(main.space_environment.sky_splats.lighting)
+	assert_true(main.space_environment.star_field is StarField, "the stars are unlit points, not splats (M4-T30c)")
 
 
 func test_every_buoy_is_lit() -> void:
@@ -374,7 +371,6 @@ func test_relight_switches_every_lit_node_and_never_the_sky() -> void:
 	assert_true(_exec("relight on").ok)
 	for node: Variant in lit:
 		assert_true((node as GaussianSplatNode).relight_enabled)
-	assert_false(main.space_environment.sky_splats.relight_enabled)
 	assert_true(_exec("relight").ok, "no argument toggles")
 	assert_eq(Settings.get_value(&"splat_relight"), false)
 

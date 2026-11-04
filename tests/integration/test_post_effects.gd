@@ -215,3 +215,18 @@ func test_the_shader_patches_still_apply_to_the_vendored_shader() -> void:
 	assert_string_contains(patched, "vec3 always_on_flare = vec3(0.0);", "no veil over the picture")
 	assert_false(patched.contains("col *= godrays"), "no shafts of light in empty space")
 	assert_string_contains(patched, "for (int i = 0; i < 0; i++) {", "and no depth reads marching them")
+
+
+func test_the_star_field_leaves_the_flare_open_on_the_sky_and_a_hull_still_hides_it() -> void:
+	# M4-T30c: the flare reads the star's pixel as open sky where the depth is still the clear value; the star points write no
+	# depth, so the sky stays open through them, while a hull writes its depth and still closes it. The stars are drawn after
+	# the opaque pass and depth-tested, so the same hull hides them.
+	var material: ShaderMaterial = env.star_field.material_override as ShaderMaterial
+	assert_not_null(material)
+	var code: String = material.shader.code
+	assert_string_contains(code, "depth_draw_never", "no depth from the stars: the sky stays open for the flare")
+	assert_false(code.contains("depth_test_disabled"), "depth-tested: a hull hides a star")
+	assert_string_contains(code, "blend_add", "drawn in the transparent pass, after the hulls' depth")
+	var lens_shader: String = FileAccess.get_file_as_string("res://addons/lens_effects/lens_flares.glsl")
+	assert_string_contains(lens_shader, "get_raw_depth(ivec2(sun_position)) <= 0.0", "the flare's open-sky rule is the clear depth")
+

@@ -2679,3 +2679,46 @@ src/rendering/look_scene.gd           the `livery` command and provider; the `sh
   section's validation, the real Starfury atlas without overlaps and with even texel density, render_triangles), `test_cockpit.py`
   (Q36); GUT `test_livery`, `test_livery_hull` (Alpha 02 from a callsign, the player Alpha 01, plain without a wing, four wings on one
   material, the command and provider, the glass glow live, the grey cockpit lit red), `test_mesh_assets`.
+### 17.19 The sky without splats (T30c)
+
+```
+tools/procgen/core/panorama.py        equirectangular helpers: pixel directions, Gaussians composited on the sphere, sRGB, the PNG and its .import
+tools/procgen/assets/sky_default.py   the star file (sky_default_stars.f32) and the nebula panorama; the PLY stays until T31
+src/environment/star_point_math.gd    StarPointMath: a star's footprint and dimming, the running lights' rule with the radius an angle
+src/environment/star_field.gd         StarField: one MultiMeshInstance3D, one instance per star, under SpaceEnvironment
+src/environment/sky_manifest.gd       SkyManifest: the star file's name, count, layout, disc radius and floor, and the panorama's name
+src/environment/sky_follower.gd       SkyFollower: keeps the star field on the camera (no centroid offset any more)
+src/environment/space_environment.gd  the panorama on the environment's sky; the `sky` command and provider
+assets/shaders/star_point.gdshader    a star as a camera-facing point with a 1 px floor
+```
+
+- **What it is for.** Q29: the sky was the last splat node in the scene (12 000 star splats and 4 000 nebula splats). The stars are now
+  points, crisp at any resolution, and the nebula is a picture on the environment's sky, so the sky costs one draw call plus the sky pass.
+- **The star file.** `sky_default_stars.f32` holds one record of seven little-endian float32 per star: the unit direction in the Godot
+  frame, the colour tint (largest channel 1) and the brightness. The manifest's `star_field` names the file, the count, the layout, the
+  disc's angular radius (`radius_mrad`, 0.5) and the floor (`floor_px`, 1). The stars are the splat sky's own, drawn from the same seed.
+  The brightness is chosen so a point delivers the light its splat did at the reference height (1 080 lines at 70 degrees, GDGS's
+  0.3 px² dilation included): `L * pi/3 * rho^2 = radiance * 2 pi (sigma^2 + 0.3 / f^2)`.
+- **Drawing a star.** Each instance's basis Z is its star's direction and its origin is the node's, so the shader reads only rotations
+  (`mat3(MODELVIEW_MATRIX) * Z`): the camera turns inside a fixed sky and no camera offset can shift a star. (`NODE_POSITION_WORLD` and
+  `MODEL_MATRIX` include the instance transform in a multimesh, so a position-based direction comes out zero.) The point is placed just
+  in front of the far plane (reversed depth 1e-9), unshaded and additive, depth-tested so a hull hides it, writing no depth so the lens
+  flare (open where the depth is still 0) and the motion blur still read the pixel as sky. Its footprint is the disc's, never under the
+  floor; under the floor it is dimmed by (disc / floor)^2, so its light is the same at every render height (`StarPointMath`, the running
+  lights' rule of Q26). The node carries a `custom_aabb` round the camera so it is never culled, and its material draws first among the
+  transparent surfaces.
+- **The panorama.** The nebula's Gaussians are composited far to near at half size (2 048 by 1 024, each projected to its angular
+  covariance on the tangent plane) and enlarged to 4 096 by 2 048, with the old tone curve and gain (0.4), in Godot's
+  `PanoramaSkyMaterial` convention (the centre looks toward +Z, +u turns toward -X). The stars are not painted into it. It is written by
+  `core/image.py` (no Pillow) with a `.import` sidecar: VRAM compressed as BPTC (so the dark gradients do not band) with mipmaps.
+- **Godot.** `SpaceEnvironment` reads the manifest, loads the star file into `StarField` and puts the panorama on the default environment
+  (`background_mode` sky, a `PanoramaSkyMaterial`, radiance 32 px). Reflections from the sky are off, so the hulls keep the look they were
+  approved with on the black sky; the ambient is still `settings.ambient_level`. Without the generated asset it warns and the sky stays
+  black with no stars. `use_fallback_sky` keeps its group and flag for `SplatStatus`, but the sky is the same either way; T31 removes it
+  with `environment_fallback.tres`. `sky <stars|nebula> [on|off]` hides a part for measures; the `sky` provider says what is loaded.
+- **Tests**: `test_panorama.py` (directions, compositing, the seam, resize, the PNG and sidecar), `test_sky_default.py` (the star file's
+  layout and records, the same stars as the splats, the light matched at the reference height, the panorama's size, its light centred
+  within 10 degrees of the splat sky's centroid, no star pixels in it, no Pillow), `test_star_point_math` (the floor, the dimming, equal
+  light at 1 080 and 2 160 lines, parity with `RunningLightDimming` and the shader), `test_sky_manifest`, `test_environment` (one instance
+  per star, the material, no splat node, the panorama, no generated asset, the follower, the command), `test_post_effects` (the flare
+  still open on the sky and closed by a hull).
