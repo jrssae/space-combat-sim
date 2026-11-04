@@ -48,6 +48,8 @@ func _start() -> void:
 	var hud: Node = main.get_node_or_null(^"Hud")
 	if hud is CanvasLayer:
 		(hud as CanvasLayer).visible = false  # the pictures are of the ship, not the HUD
+	if main.overlay != null:
+		main.overlay.visible = false
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 	var liveries: String = String(options["liveries"])
 	for light: String in String(options["lights"]).split(","):

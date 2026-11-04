@@ -2615,3 +2615,60 @@ scripts/look_sheet.sh, look_sheet.gd  the look sheet: every shot and the compose
   `test_mesh_assets` (the imported surfaces and materials, the import flags, the painted path for the raider), `test_textured_hull` (the
   player's and a lean ship's hull node, the far dot, `ambient_level` live, the `sheet` command).
 
+
+#### T30b: the Starfury refined and wing liveries (Q34 to Q37)
+
+```
+tools/procgen/core/livery.py          the livery table (Alpha, Beta, Delta, Zeta, the FNV-1a fallback, plain), stripe patterns and number
+                                      fields as data, the digit distance-field atlas, the manifest's mesh.livery section
+tools/procgen/core/textures.py        Plating per part (rows of varied height, panels of varied length, staggered seams, rivet rows),
+                                      weathering from Style.extra, the normal map at twice the atlas, the fine-mesh normal transfer
+tools/procgen/core/textured_mesh.py   4-texel gutters, zones in COLOR_0, the paint mask in the albedo's alpha, map_px, fine_mesh
+tools/procgen/assets/starfury_aurora.py  render_triangles (a coarse rebuild of the round parts), textured_parts
+assets/shaders/hull_livery.gdshader   the textured hull plus the wing's stripes and the ship's number from instance uniforms
+assets/shaders/hull_glass.gdshader    the canopy glass: dark, see-through, the cabin's red glow at settings.cabin_glow_level
+src/rendering/livery.gd               Livery: a ship's livery from the table (the player is Alpha 01), applied to a hull node
+src/rendering/mesh_assets.gd          the livery and glass ShaderMaterials, the table as uniform arrays, the glow setting live
+src/ship/ship.gd, src/game/ship_pool.gd  Ship.set_livery; ShipPool.acquire paints a Starfury from its callsign (ALPHA 2: Alpha 02)
+src/rendering/look_scene.gd           the `livery` command and provider; the `sheet` command's livery argument
+```
+
+- **Why a shader layer.** Every Starfury must stay one material so copies instance (Q35); a texture set per wing would also blow the
+  40 MB VRAM bar at 4 096 px. The maps stay livery-free. The glb carries each vertex's zone (fuselage, fittings, upper and lower struts,
+  pods, claws, gun mount) in `COLOR_0`'s red, the albedo's alpha marks where paint may go (the hull paint materials, less worn edges and
+  markings), and `hull_livery.gdshader` paints a pattern: a short list of stripes, each a band where a linear coordinate of the object-space
+  position (`|x|` for a mirror-symmetric one) falls in a range, on some zones, on faces turned one way (the face normal from the position's
+  derivatives). The two digits come from a 960 by 128 distance-field atlas of the stroke font, drawn inside number fields (a plane on
+  some zones; the centre's y on the point's side, so one field serves an upper and a lower part). The paint is darkened as the base map
+  is darker than the hull paint, so panel lines, grime and streaks show through it. The pattern table and the fields are material
+  uniforms (from the manifest); a ship sets six instance uniforms: two colours, the number's colour, the pattern's index, the number
+  fields' bits and the number. 20 Starfuries of four wings draw in the same 3 extra calls as 20 of one wing.
+- **The table.** Alpha: yellow-green and dark blue-grey bands across all four struts; Beta: a blue band round each pod's front and a
+  blue nose; Delta: a dark green arrowhead over the back and the upper struts, edged in sand; Zeta: thin red pinstripes and a magenta
+  chevron; any other wing a stable pick (FNV-1a of the lower-case name, which `Livery.fnv1a` repeats) of six palette pairs and the four
+  patterns; no wing the plain field grey with no number (enemies, unnamed ships). Every wing numbers the dorsal deck large and the upper
+  left wing small (Q37). The number is the callsign's: the slot in its wing from 1, two digits.
+- **The seam for a paint scheme.** A livery is data a ship is handed (`Ship.set_livery`); the player's is `Livery.player` (Alpha 01)
+  until a setting or a front-end pick hands it another.
+- **Plating and weathering (Q34, Q37).** The uniform world grid is gone from the textured mesh: each part gets a `Plating` from its name
+  (mirror images share it) with rows along its longest side; rows vary in height, panels in length, and each row's seams are staggered.
+  The grid is still projected along the axis nearest the normal, but measured on the surface with the chart's mean slope, so a slope keeps
+  its panel size and a curved chart stays smooth. Rivet rows run beside every seam. Weathering comes from `Style.extra`: streaks trailing
+  aft from the seams, smudges stretched fore and aft, speckle, worn edges that show dark primer (`bare_metal` 0: no metal), matte paint.
+  The Earthforce hull is a medium blue-grey (sRGB about 112, 121, 137) so it renders medium grey under the key star.
+- **The maps.** The normal map is baked at twice the atlas (4 096 px for the Starfury: the grooves, hatches and rivets at 1 cm a texel),
+  from positions interpolated inside each chart; the albedo (RGBA, the paint mask), ORM and emissive stay at 2 048. Gutters are four
+  texels of the 2 048 maps. The Starfury's textures take 32.0 MB of VRAM (bar 40 MB): albedo 5.6, normal 22.4, ORM 2.8, emissive 2.8,
+  digits 0.02.
+- **render_triangles.** The option rebuilds the Starfury's round parts with fewer segments (a binary search on a segment scale) and
+  bakes the fine hull's smooth normals into the coarse mesh's normal map (inverse-distance weights of the fine vertices within 12 cm,
+  same side of a plate), in the texel's tangent frame. The strut plates and fittings have no segments, so the Starfury floors at about
+  18 000 triangles; T30d decides whether the coarse build becomes the default.
+- **The cabin (Q36, Q37).** The canopy glass is dark and neutral; its emissive is a dark red cabin glow whose energy is the manifest's at
+  `settings.cabin_glow_level` 0.3 and scales with it, fading out by `settings.cabin_glow_view_m`. The cockpit interior's surfaces are grey,
+  lit by `MeshMaterials.COCKPIT_GLOW`'s subtle red and the red cabin lamp (`cockpit_light_energy` 1.0).
+- **Tests**: `test_livery.py`, `test_textures.py` (plating, rivets, a tilted plate, the groove's handedness decoded with +Y up,
+  weathering), `test_uv_atlas.py` (the 4-texel gutter), `test_textured_mesh.py` (zones, the paint mask, the digit atlas, the livery
+  section's validation, the real Starfury atlas without overlaps and with even texel density, render_triangles), `test_cockpit.py`
+  (Q36); GUT `test_livery`, `test_livery_hull` (Alpha 02 from a callsign, the player Alpha 01, plain without a wing, four wings on one
+  material, the command and provider, the glass glow live, the grey cockpit lit red), `test_mesh_assets`.

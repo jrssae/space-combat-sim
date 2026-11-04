@@ -193,7 +193,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T28 | Running lights stay point-sized and dim by the inverse square (maintainer, 2026-11-03) | none | Sonnet | Lights in vacuum do not scatter into globes | R | done |
 | T29 | Rocks and mines as static rows: T07's asteroids registered as statics, T12's mines as faction-owned mine rows; avoidance sees rocks and its own side's mines only (Q27) | T09, T12 | Opus | Takes the rocks' 24 to 49 ms per tick out of the GDScript paths | G, N | done (2026-11-03, in a worktree on `9a3f525`; Cycle log, M4-T29) |
 | T30a | Textured mesh pipeline: the procedural UV atlas, the texture maps (colour, normal, roughness and metal, emissive), the PNG writer, the textured `.glb` contract, the Starfury as the look gate (H, checkpoint 1b) | T27 | Fable | The unwrap, the bake and the paint are the look of the game from here on, and the contract M5 builds against (Q29, Q31) | X, R | done (the look gate, checkpoint 1b, is open) |
-| T30b | The Starfury refined (Q34) and wing liveries with per-ship numbers (Q35); the look gate again (H, checkpoint 1c) | T30a, checkpoint 1b | Opus | The livery is a shader-side layer so every wing still instances; the colours and patterns are the maintainer's call | X, R | not started |
+| T30b | The Starfury refined (Q34) and wing liveries with per-ship numbers (Q35); the look gate again (H, checkpoint 1c) | T30a, checkpoint 1b | Opus | The livery is a shader-side layer so every wing still instances; the colours and patterns are the maintainer's call | X, R | done (the look gate, checkpoint 1c, is open) |
 | T30d | Every other hull textured (raider, buoy, chunks, capital and station pieces), mesh LODs measured, the mesh path the default (split from T30b, 2026-11-04) | T30b | Opus | Mechanical once the generator is fixed; each asset's markings and emissives need judgement, the look (H) | X, R | not started |
 | T30c | The sky without splats: a star point field and the nebula as a generated panorama | T30a | Opus | The sky is the last splat node; stars must stay crisp points at any resolution | X, R | not started |
 | T31 | Remove Gaussian splats: `addons/gdgs_scs` and every splat path in code, procgen, settings, console commands, tests, scripts, CI and docs (Q29, Q30) | T30d, T30c | Opus | About 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only deletion | X, R, G | not started |
@@ -1364,6 +1364,21 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
 - **Done when:** checkpoint 1c is approved, 20 Starfuries of four wings draw in no more calls than 20 of one wing, the VRAM
   stays under T30a's 40 MB bar, and the focused tests are green.
 - **Architecture:** §17.18 (paragraphs under T30b).
+- **Done (2026-11-04, in its own worktree on `bcf6e06`; report `.superpowers/sdd/m4-performance-and-scale/task-t30b-report.md`):**
+  the concept stop's sheet went to the maintainer (Q37: every livery approved as drawn; a darker weathered blue-grey hull; the small
+  number on the upper left wing for every wing; a subtler cabin glow; plating instead of a uniform grid). Built: the livery as a shader
+  layer (`core/livery.py`, `hull_livery.gdshader`, `Livery`; zones in the glb's `COLOR_0`, the paint mask in the albedo's alpha, the
+  stripe patterns and number fields as manifest data, a digit distance-field atlas), so 20 Starfuries of four wings draw in 86 calls
+  like 20 of one wing (the player alone 83); `Ship.set_livery`, `ShipPool.acquire` paints a Starfury from its callsign, the player is
+  Alpha 01, enemies and unnamed ships plain; the `livery` command and provider, the `sheet` command's livery argument. Q34: plating per
+  part with rivet rows, the normal map at 4 096 px (the albedo, ORM and emissive at 2 048), 4-texel gutters, matte paint,
+  `render_triangles` (a coarse rebuild of the round parts; the Starfury floors at about 18 000 triangles because its strut plates and
+  fittings have no segments), the review's tests. Q36 and Q37: a dark neutral canopy with a subtle red cabin glow at
+  `cabin_glow_level`, a grey cockpit lit red, `cockpit_light_energy` 1.0. Measures: textures 32.0 MB of VRAM (bar 40); `hundred_view`
+  fullscreen 3.22 ms GPU against 3.20 on the base, 518 draw calls both, 822 356 triangles against 805 180; `build starfury_aurora`
+  40 s (T30a 29.5), `build all` 44 s. The look sheet (H, checkpoint 1c): `/tmp/m4_t30b_starfury_sheet.png` (Alpha, Delta, Zeta, KILO and
+  T30a's textured shots; 8, 30, 150 and 600 m lit and dark; the cockpit lit and dark), every shot at
+  `/tmp/m4_t30b_starfury_aurora_<wing>_<m>m_<lit|dark>.png`.
 
 ##### M4-T30d Every other hull textured, mesh LODs measured, the mesh path the default
 
