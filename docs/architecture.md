@@ -2697,29 +2697,42 @@ assets/shaders/star_point.gdshader    a star as a camera-facing point with a 1 p
 - **The star file.** `sky_default_stars.f32` holds one record of seven little-endian float32 per star: the unit direction in the Godot
   frame, the colour tint (largest channel 1) and the brightness. The manifest's `star_field` names the file, the count, the layout, the
   disc's angular radius (`radius_mrad`, 0.5) and the floor (`floor_px`, 1). The stars are the splat sky's own, drawn from the same seed.
-  The brightness is chosen so a point delivers the light its splat did at the reference height (1 080 lines at 70 degrees, GDGS's
-  0.3 px² dilation included): `L * pi/3 * rho^2 = radiance * 2 pi (sigma^2 + 0.3 / f^2)`.
+  GDGS decodes a splat's colour from sRGB before it composites (`gaussian_composite.glsl`), so the tint and the brightness come from
+  the decoded colour `c = srgb_to_linear(rgb)`: the tint is `c / max(c)` and the brightness is chosen so a point delivers the light its
+  splat did at the reference height (1 080 lines at 70 degrees, GDGS's 0.3 px² dilation included):
+  `L * pi/3 * rho^2 = max(c) * 2 pi (sigma^2 + 0.3 / f^2)`. Measured on the GPU (a bare scene, linear tone map, 2 621 stars in view)
+  the points deliver 0.85 of the splats' light; the rest is GDGS's halo beyond the model.
 - **Drawing a star.** Each instance's basis Z is its star's direction and its origin is the node's, so the shader reads only rotations
   (`mat3(MODELVIEW_MATRIX) * Z`): the camera turns inside a fixed sky and no camera offset can shift a star. (`NODE_POSITION_WORLD` and
   `MODEL_MATRIX` include the instance transform in a multimesh, so a position-based direction comes out zero.) The point is placed just
   in front of the far plane (reversed depth 1e-9), unshaded and additive, depth-tested so a hull hides it, writing no depth so the lens
   flare (open where the depth is still 0) and the motion blur still read the pixel as sky. Its footprint is the disc's, never under the
   floor; under the floor it is dimmed by (disc / floor)^2, so its light is the same at every render height (`StarPointMath`, the running
-  lights' rule of Q26). The node carries a `custom_aabb` round the camera so it is never culled, and its material draws first among the
+  lights' rule of Q26). It is drawn as a soft round point, a Gaussian 0.7 of its footprint wide cut at three widths (2.1 px for a
+  floor-sized star), so its summed light holds within 2 % and its brightest pixel varies under 2x as it crosses pixel centres and
+  corners (a 2 by 2 px square's varied 4x, and shimmered). The nebula dims the stars behind it (Q42): the vertex shader samples the
+  panorama's alpha in the star's direction (`StarPointMath.panorama_uv`, mip 3) and multiplies the star's light by one minus it. The node carries a `custom_aabb` round the camera so it is never culled, and its material draws first among the
   transparent surfaces.
 - **The panorama.** The nebula's Gaussians are composited far to near at half size (2 048 by 1 024, each projected to its angular
-  covariance on the tangent plane) and enlarged to 4 096 by 2 048, with the old tone curve and a gain of 0.13 (matched to the splat
-  nebula on the GPU), in Godot's `PanoramaSkyMaterial` convention (the centre looks toward +Z, +u turns toward -X). The stars are not
-  painted into it. It is written by `core/image.py` (no Pillow) with a `.import` sidecar: VRAM compressed as BPTC (so the dark gradients
-  do not band) with mipmaps, 11.2 MB.
+  covariance on the tangent plane) and enlarged to 4 096 by 2 048, in Godot's `PanoramaSkyMaterial` convention (the centre looks
+  toward +Z, +u turns toward -X; checked on a GPU by rolling the image half a turn). Its RGB is the gas as GDGS showed it: the raw
+  colours composited, then decoded from sRGB per texel (`decode(C / a) * a`), with no gain and no tone curve. Its alpha is the gas's
+  opacity over the stars: 0.8 (`NEBULA_STAR_OPACITY`) times the gas's brightness over its 99.9th percentile, so the densest-looking gas
+  passes a fifth of a star's light and only the brighter stars shine through. Both are dithered by one level (seeded, empty sky left
+  black) so the dark gradients do not band. The stars are not painted into it. It is written by `core/image.py` (no Pillow) with a
+  `.import` sidecar: VRAM compressed as BPTC with mipmaps, 11.2 MB.
 - **Godot.** `SpaceEnvironment` reads the manifest, loads the star file into `StarField` and puts the panorama on the default environment
   (`background_mode` sky, a `PanoramaSkyMaterial`, radiance 32 px). Reflections from the sky are off, so the hulls keep the look they were
   approved with on the black sky; the ambient is still `settings.ambient_level`. Without the generated asset it warns and the sky stays
   black with no stars. `use_fallback_sky` keeps its group and flag for `SplatStatus`, but the sky is the same either way; T31 removes it
-  with `environment_fallback.tres`. `sky <stars|nebula> [on|off]` hides a part for measures; the `sky` provider says what is loaded.
-- **Tests**: `test_panorama.py` (directions, compositing, the seam, resize, the PNG and sidecar), `test_sky_default.py` (the star file's
-  layout and records, the same stars as the splats, the light matched at the reference height, the panorama's size, its light centred
-  within 10 degrees of the splat sky's centroid, no star pixels in it, no Pillow), `test_star_point_math` (the floor, the dimming, equal
-  light at 1 080 and 2 160 lines, parity with `RunningLightDimming` and the shader), `test_sky_manifest`, `test_environment` (one instance
-  per star, the material, no splat node, the panorama, no generated asset, the follower, the command), `test_post_effects` (the flare
-  still open on the sky and closed by a hull).
+  with `environment_fallback.tres`. `sky <stars|nebula> [on|off]` hides a part for measures (a hidden nebula dims no stars; with no panorama, `sky nebula` answers
+  "missing"); the `sky` provider says what is loaded.
+- **Tests**: `test_panorama.py` (directions, compositing, the seam, resize, the dither, the PNG and sidecar), `test_sky_default.py` (the
+  star file's layout and records, the same stars as the splats, each star's decoded colour and light against an independent decode,
+  blue and orange stars kept, a lone gas splat shown as GDGS shows it, the panorama's size, its alpha rising with the gas, its light
+  centred within 10 degrees of the splat sky's centroid, no star pixels in it, no Pillow), `test_star_point_math` (the floor, the dimming,
+  equal light at 1 080 and 2 160 lines, the soft point's light and flicker across pixel offsets, the panorama mapping, parity with
+  `RunningLightDimming` and the shader's constants), `test_sky_manifest`, `test_environment` (one instance per star, the material, the
+  nebula's occlusion wired and switched, no splat node, the panorama, no generated asset, the follower, the command), `test_post_effects`
+  (the flare's open-sky rule against the star shader's depth modes). That a hull hides a star, and that the flare and blur see open sky
+  through the stars, is (H): no pixel test runs headless.

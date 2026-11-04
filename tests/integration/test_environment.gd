@@ -120,13 +120,18 @@ func test_the_field_is_one_draw_of_unshaded_additive_points() -> void:
 		assert_almost_eq(float(material.get_shader_parameter(&"min_radius_px")), float(manifest["star_field"]["floor_px"]), 1e-6)
 
 
-func test_a_hull_hides_a_star_but_the_sky_stays_open() -> void:
-	# Depth-tested (a hull in front hides it), but no depth written (the flare and the blur still read the pixel as sky).
-	var code: String = (env.star_field.material_override as ShaderMaterial).shader.code
-	assert_string_contains(code, "depth_draw_never")
-	assert_string_contains(code, "blend_add")
-	assert_string_contains(code, "unshaded")
-	assert_false(code.contains("depth_test_disabled"))
+func test_the_nebula_dims_the_stars_behind_it() -> void:
+	# Q42: the star points sample the panorama's alpha (the gas's opacity) in each star's direction.
+	var material: ShaderMaterial = env.star_field.material_override as ShaderMaterial
+	if not env.has_panorama():
+		assert_false(bool(material.get_shader_parameter(&"nebula_occludes")), "no panorama, nothing to dim the stars")
+		return
+	assert_eq(material.get_shader_parameter(&"nebula"), (env.world_environment.environment.sky.sky_material as PanoramaSkyMaterial).panorama)
+	assert_true(bool(material.get_shader_parameter(&"nebula_occludes")))
+	env.show_sky_part(&"nebula", false)
+	assert_false(bool(material.get_shader_parameter(&"nebula_occludes")), "a hidden nebula hides no stars")
+	env.show_sky_part(&"nebula", true)
+	assert_true(bool(material.get_shader_parameter(&"nebula_occludes")))
 
 
 func test_the_field_loads_without_the_generated_asset() -> void:
@@ -193,6 +198,12 @@ func test_the_environment_loads_with_no_generated_sky() -> void:
 	assert_eq(e.background_mode, Environment.BG_COLOR, "a black sky instead")
 	assert_eq(e.background_color, Color.BLACK)
 	assert_push_warning("gen_assets.sh")
+	assert_false(bool((bare.star_field.material_override as ShaderMaterial).get_shader_parameter(&"nebula_occludes")))
+	var result: ConsoleResult = _exec("sky nebula on")
+	assert_true(result.ok)
+	assert_string_contains("\n".join(result.lines), "missing", "the command says there is no nebula to show")
+	var state: String = "\n".join(_exec("state sky").lines)
+	assert_string_contains(state, "nebula_shown = false")
 	# The shared resource is the real environment's too: give it its panorama back.
 	env._load_sky()
 

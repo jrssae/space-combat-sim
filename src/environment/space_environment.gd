@@ -159,6 +159,7 @@ func _apply_background() -> void:
 	if environment == null:
 		return
 	environment.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+	star_field.set_nebula(_panorama if _nebula_shown else null)
 	if _panorama == null or not _nebula_shown:
 		environment.background_mode = Environment.BG_COLOR
 		environment.background_color = Color.BLACK
@@ -189,4 +190,6 @@ func _cmd_sky(args: Dictionary) -> ConsoleResult:
 	var current: bool = star_field.visible if part == &"stars" else _nebula_shown
 	var shown: bool = not current if args[&"state"] == null else bool(args[&"state"])
 	show_sky_part(part, shown)
+	if part == &"nebula" and not has_panorama():
+		return ConsoleResult.line("sky nebula missing (no panorama loaded; run scripts/gen_assets.sh)")
 	return ConsoleResult.line("sky %s %s" % [part, "on" if shown else "off"])

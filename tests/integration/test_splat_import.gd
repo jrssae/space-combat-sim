@@ -208,7 +208,10 @@ func test_sky_manifest_parser_reads_the_real_sky_manifest() -> void:
 		return  # reported by the tests above
 	var sky: SkyManifest = SkyManifest.load_file(reader.directory + "/manifest.json")
 	assert_true(sky.valid, "SkyManifest accepts the generated manifest: %s" % sky.error)
-	assert_eq(sky.centroid_offset, reader.centroid_offset, "SkyManifest and the reader agree on centroid_offset")
+	# Since M4-T30c SkyManifest reads the star field and the panorama, not the splats' centroid.
+	assert_eq(sky.star_count, int(reader.data["counts"]["stars"]), "SkyManifest and the reader agree on the star count")
+	assert_eq(sky.star_file, String(reader.files["stars"]), "and on the star file")
+	assert_eq(sky.panorama_file, String(reader.files.get("panorama", "")), "and on the panorama")
 
 
 # --- fallback meshes, textures, hardpoints -----------------------------------------------------------------------

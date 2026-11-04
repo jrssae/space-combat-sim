@@ -246,18 +246,37 @@ class SkyDefaultTests(unittest.TestCase):
         order = np.argsort(splat_light)
         self.assertGreater(float(records[order[-1], 6]), 5.0 * float(records[order[0], 6]))
 
-    def test_a_point_delivers_the_light_its_splat_did_at_the_reference_height(self) -> None:
-        # The sprite's (1 - r^2)^2 profile over a disc of radius rho gives pi / 3 rho^2 of light per unit brightness;
-        # the splat gave its colour times 2 pi (sigma^2 + GDGS's 0.3 px^2 dilation), at 1 080 lines and 70 degrees.
-        field = self.manifest["star_field"]
-        rho = field["radius_mrad"] * 1e-3
-        focal = sky_default.REFERENCE_FOCAL_PX
-        self.assertAlmostEqual(focal, 540.0 / math.tan(math.radians(35.0)), places=3)
+    def test_a_point_shows_the_colour_and_light_gdgs_gave_its_splat(self) -> None:
+        # GDGS decodes a splat's colour from sRGB before compositing (gaussian_composite.glsl), so a star of raw colour c
+        # shows decode(c); its splat spreads that over 2 pi (sigma^2 + 0.3 px^2 of dilation) at 1 080 lines and 70 degrees.
+        # The point's disc of radius rho delivers pi / 3 rho^2 per unit brightness.
+        def decode(c: np.ndarray) -> np.ndarray:
+            return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+
+        self.assertAlmostEqual(float(decode(np.array(0.5))), 0.21404, places=4)
+        records = self._star_records(self.dir_a)
+        rho = self.manifest["star_field"]["radius_mrad"] * 1e-3
+        focal = 540.0 / math.tan(math.radians(35.0))
+        raw = self.splats.rgb[:N_STARS].astype(float)
+        shown = decode(raw)
         sigma = self.splats.scale[:N_STARS, 0] / R
-        radiance = self.splats.rgb[:N_STARS].max(axis=1)
-        splat_light = radiance * 2.0 * math.pi * (sigma**2 + 0.3 / focal**2)
-        point_light = self._star_records(self.dir_a)[:, 6] * math.pi / 3.0 * rho**2
-        np.testing.assert_allclose(point_light, splat_light, rtol=1e-4)
+        expected_light = shown.max(axis=1) * 2.0 * math.pi * (sigma**2 + 0.3 / focal**2)
+        np.testing.assert_allclose(records[:, 6] * math.pi / 3.0 * rho**2, expected_light, rtol=1e-3)
+        np.testing.assert_allclose(records[:, 3:6], shown / shown.max(axis=1, keepdims=True), atol=1e-4)
+
+    def test_blue_and_orange_stars_keep_their_tints(self) -> None:
+        records = self._star_records(self.dir_a)
+        tint = records[:, 3:6]
+        bright = records[:, 6] > np.percentile(records[:, 6], 80)
+        bluest = int(np.argmin(np.where(bright, tint[:, 0], 9.0)))
+        reddest = int(np.argmin(np.where(bright, tint[:, 2], 9.0)))
+        self.assertEqual(float(tint[bluest, 2]), 1.0)
+        self.assertLess(float(tint[bluest, 0]), 0.55)  # a hot star: blue, little red
+        self.assertEqual(float(tint[reddest, 0]), 1.0)
+        self.assertLess(float(tint[reddest, 2]), 0.35)  # a cool star: orange, little blue
+        # And the sky as a whole is coloured, not white: half the stars at least 30 % from grey.
+        saturation = (tint.max(axis=1) - tint.min(axis=1)) / tint.max(axis=1)
+        self.assertGreater(float(np.median(saturation)), 0.3)
 
     # --- panorama ------------------------------------------------------------------------------
     def test_panorama_is_a_4096_by_2048_png_listed_in_the_manifest(self) -> None:
@@ -265,8 +284,8 @@ class SkyDefaultTests(unittest.TestCase):
         self.assertEqual(self.manifest["files"]["panorama"], "sky_default_panorama.png")
         self.assertIn(path, self.out_a.files)
         self.assertIn(Path(str(path) + ".import"), self.out_a.files)
-        pixels = read_png(path).astype(float) / 255.0
-        self.assertEqual(pixels.shape, (2048, 4096, 3))
+        pixels = read_png(path).astype(float)[..., :3] / 255.0
+        self.assertEqual(read_png(path).shape, (2048, 4096, 4))
         self.assertGreater(float(pixels.mean()), 0.003)  # not black
         self.assertLess(float(pixels.mean()), 0.2)  # but a night sky
 
@@ -281,7 +300,7 @@ class SkyDefaultTests(unittest.TestCase):
     def test_panorama_brightest_region_lies_toward_the_splat_nebulas_centroid(self) -> None:
         # The centre of the panorama's light (each texel weighted by its brightness and its solid angle) against the splat
         # sky's centroid, which the nebula dominates; the gas spreads over about 40 degrees.
-        light = read_png(self.dir_a / "sky_default_panorama.png").astype(float).max(axis=2)
+        light = read_png(self.dir_a / "sky_default_panorama.png")[..., :3].astype(float).max(axis=2)
         grid = panorama_io.direction_grid(4096, 2048).astype(float)
         weight = light * np.sqrt(np.maximum(1.0 - grid[..., 1] ** 2, 0.0))
         centre = (grid * weight[..., None]).sum(axis=(0, 1))
@@ -291,8 +310,8 @@ class SkyDefaultTests(unittest.TestCase):
         self.assertLess(float(angle_deg(centre[None, :], centroid)[0]), 10.0)
 
     def test_panorama_holds_the_gas_and_leaves_the_stars_to_the_point_field(self) -> None:
-        pixels = read_png(self.dir_a / "sky_default_panorama.png")
-        # No star pixels: the brightest texel is gas, and the gas is smooth (no single-pixel spikes).
+        pixels = read_png(self.dir_a / "sky_default_panorama.png")[..., :3]
+        # No star pixels: the gas is smooth, so no texel stands far above its four neighbours (the dither is one level).
         lum = pixels.astype(float).max(axis=2)
         spikes = lum[1:-1, 1:-1] - np.maximum.reduce(
             [lum[:-2, 1:-1], lum[2:, 1:-1], lum[1:-1, :-2], lum[1:-1, 2:]]
@@ -301,6 +320,21 @@ class SkyDefaultTests(unittest.TestCase):
         # Coloured: teal and magenta, never grey starlight.
         bright = pixels[lum > np.percentile(lum, 99.5)].astype(float)
         self.assertGreater(float(np.mean(bright.max(axis=1) - bright.min(axis=1))), 10.0)
+
+    def test_panorama_alpha_is_the_nebulas_opacity_over_the_stars(self) -> None:
+        image = read_png(self.dir_a / "sky_default_panorama.png").astype(float)
+        light = image[..., :3].max(axis=2)
+        alpha = image[..., 3] / 255.0
+        # Opaque where the gas is brightest (up to the generator's limit), clear where there is no gas.
+        dense = light >= np.percentile(light, 99.9)
+        self.assertGreater(float(alpha[dense].mean()), 0.7)
+        self.assertLessEqual(float(alpha.max()), sky_default.NEBULA_STAR_OPACITY + 1.5 / 255.0)
+        self.assertLess(float(alpha[light <= 1.0].max()), 0.02)
+        # Denser-looking gas hides more: the opacity rises with the gas's brightness.
+        order = np.argsort(light.ravel())
+        quartiles = [float(alpha.ravel()[part].mean()) for part in np.array_split(order[-200000:], 4)]
+        self.assertEqual(quartiles, sorted(quartiles))
+        self.assertEqual(self.manifest["star_field"]["occlusion"], "panorama alpha")
 
     # --- determinism ---------------------------------------------------------------------------
     def test_same_seed_gives_byte_identical_output(self) -> None:
@@ -362,7 +396,7 @@ class SkyDefaultOptionTests(unittest.TestCase):
         self.assertNotIn("PIL", source)
         out = self.build(panorama_size=(256, 128))
         self.assertEqual(out.warnings, ())
-        self.assertEqual(read_png(self.dir / "sky_default_panorama.png").shape, (128, 256, 3))
+        self.assertEqual(read_png(self.dir / "sky_default_panorama.png").shape, (128, 256, 4))
 
     def test_the_ply_is_unaffected_by_the_panorama_switch(self) -> None:
         self.build(panorama=False)
@@ -414,8 +448,8 @@ class SkyHelperTests(unittest.TestCase):
         )
         sky_default.generate_stars(rng_s, 400, R)
         nebula = sky_default.generate_nebula(rng_n, 200, R)
-        image = sky_default.render_panorama(nebula, 256, 128)
-        self.assertEqual((image.shape, image.dtype), ((128, 256, 3), np.uint8))
+        image = sky_default.render_panorama(nebula, 256, 128)[..., :3]
+        self.assertEqual(image.dtype, np.uint8)
         # 35 degrees right of -Z: with the image centre on +Z that is longitude -145 degrees (Godot's panorama convention)
         x, y = int((-145 / 360 + 0.5) * 256), int((0.5 - 12 / 180) * 128)
         near = image[y - 8 : y + 8, x - 8 : x + 8].astype(float).mean()
@@ -425,6 +459,26 @@ class SkyHelperTests(unittest.TestCase):
             .mean()
         )
         self.assertGreater(near, 2.0 * far)
+
+
+    def test_the_panorama_shows_a_gas_splat_as_gdgs_does(self) -> None:
+        # GDGS composites the raw colours and decodes the result from sRGB (gaussian_composite.glsl): a lone splat of colour c
+        # and peak opacity a shows decode(c) * a at its centre. The texel holds that radiance, sRGB-encoded, with no extra gain.
+        def decode(c: np.ndarray) -> np.ndarray:
+            return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+
+        raw = np.array([[0.5, 0.25, 0.75]])
+        one = SplatData(
+            xyz=np.array([[0.0, 0.0, R]]),
+            rgb=raw,
+            alpha=np.array([0.5]),
+            scale=np.full((1, 3), 0.15 * R),
+            rot=frames.quat_identity(1),
+            normals=np.array([[0.0, 0.0, -1.0]]),
+        )
+        image = sky_default.render_panorama(one, 256, 128)
+        centre = image[63:65, 127:129, :3].astype(float).mean(axis=(0, 1)) / 255.0
+        np.testing.assert_allclose(decode(centre), decode(raw[0]) * 0.5, rtol=0.03)
 
 
 if __name__ == "__main__":

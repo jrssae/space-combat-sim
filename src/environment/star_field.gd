@@ -34,6 +34,7 @@ func _init() -> void:
 	material.shader = load(SHADER_PATH) as Shader
 	# Drawn first among the transparent surfaces: the sky is behind everything.
 	material.render_priority = Material.RENDER_PRIORITY_MIN
+	material.set_shader_parameter(&"nebula_occludes", false)
 	material_override = material
 
 
@@ -53,6 +54,13 @@ func load_file(path: String, count: int, radius_mrad: float, floor_px: float) ->
 	material.set_shader_parameter(&"min_radius_px", floor_px)
 	_set_stars(floats, count)
 	return true
+
+
+## Lets the nebula panorama's alpha (the gas's opacity) dim the stars behind it (Q42); null draws every star at full light.
+func set_nebula(panorama: Texture2D) -> void:
+	var material: ShaderMaterial = material_override as ShaderMaterial
+	material.set_shader_parameter(&"nebula", panorama)
+	material.set_shader_parameter(&"nebula_occludes", panorama != null)
 
 
 ## Draws no stars, for a sky with no generated asset.

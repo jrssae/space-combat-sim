@@ -237,7 +237,6 @@ func test_every_ship_level_chunk_and_buoy_is_lit() -> void:
 		assert_true(node.lighting.matches_source(node.gaussian), "%s: records for its splats" % node.get_path())
 		lit += 1
 	assert_gt(lit, 20)
-	assert_true(main.space_environment.star_field is StarField, "the stars are unlit points, not splats (M4-T30c)")
 
 
 func test_every_buoy_is_lit() -> void:

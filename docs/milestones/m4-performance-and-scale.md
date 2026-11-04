@@ -1467,6 +1467,16 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
   `/tmp/m4_t30c_sky_compare.png` (splat left, points and panorama right; the nebula view, a 2x crop of the star view, the star view), from
   `/tmp/m4_t30c_sky_splat.png`, `_splat_b.png`, `_stars.png` and `_stars_b.png`. For (H): the points read whiter than the soft splat stars,
   whose colour showed in their spread; a wider floor (`floor_px` in the manifest) keeps the light and softens them if wanted.
+- **Fix round 1 (2026-11-04, Q42 and the review):** the stars and the gas now use the colour GDGS showed, decoded from sRGB
+  (`gaussian_composite.glsl` decodes before compositing; round 0 read the raw colours as linear, so the points were about 5 times too
+  bright, their tints washed out and the bright ones clipped to white, and the nebula needed the 0.13 gain). The gain and the tone curve
+  are gone. The nebula dims the stars behind it (Q42): the panorama's alpha is the gas's opacity, 0.8 at the densest-looking gas and
+  rising with its brightness, and the star shader samples it in each star's direction. A star is a soft round point (a Gaussian 0.7 of its
+  footprint wide), so it no longer shimmers as it crosses pixels; the panorama is dithered; `sky nebula` answers "missing" with no
+  panorama. Round 0's parity claims were wrong: its star-view "0.0036 against 0.0039" and nebula figures compared frames with other
+  ships in them and a stale hull, and the undecoded points only looked right by that accident. The corrected figures are in the Cycle
+  log's "Fix round 1". `test_splat_import`'s `test_sky_manifest_parser_reads_the_real_sky_manifest` had been broken by round 0 (it read
+  the removed `centroid_offset`); it now checks the star field. Its 3 other failures happen on `13d0256` with freshly built assets too.
 
 ##### M4-T31 Remove Gaussian splats
 
@@ -3133,6 +3143,28 @@ all, and the whole procgen suite (431, OK); GUT files alone: `test_star_point_ma
 `test_ship_lights` 14, `test_ship_scene` 27, `test_textured_hull` 3, AC13's `test_ai_think_time` 1, each 0 failing and 0 pending.
 `test_splat_import` 11 of 15: its four failures are the station's and the capitals' PLYs and imported boxes in the shared
 `assets/generated` (not the sky), which another task's build changed under the import cache.
+
+**Fix round 1 (Q42 and the review).** Round 0 read the generator's colours as linear; GDGS decodes them from sRGB before it
+composites. The star file and the panorama now use the decoded colour, the nebula's gain (0.13) and tone curve are gone, the panorama's
+alpha carries the gas's opacity over the stars (up to 0.8), the points are soft Gaussians and the panorama is dithered. Round 0's look
+figures above are withdrawn: they compared views with different ships and a hull another task had rebuilt, and that comparison made the
+undecoded points look right.
+
+| measure (same build of the shared assets, same views) | splat sky | points and panorama |
+|---|---|---|
+| total star light in a bare scene, linear tone map, 2 621 stars in view (RGB) | 444, 359, 377 | 378, 306, 321 (0.85) |
+| the same under Filmic and glow | 641, 508, 538 | 534, 423, 447 (0.83) |
+| nebula view, mean sky light (RGB, linear) | 0.0077, 0.0055, 0.0109 | 0.0082, 0.0057, 0.0115 |
+| star view: visible stars, median colour saturation, blue and orange shares | 523, 0.44, 0.45 / 0.44 | 520, 0.44, 0.44 / 0.44 |
+| star view: median peak pixel | 0.061 | 0.048 |
+| dense gas (2x crop): star pixels 0.02 over the gas, 0.05 over | 208, 55 | 384, 86 (706, 203 with the gas hidden) |
+
+The points match the model exactly (378 against 378 expected); the splats' extra 17 % is GDGS's halo beyond the 2 pi (sigma^2 + 0.3)
+model. In the densest gas about half the stars' light is held back and only the brighter stars stand out; the splat sky held back more
+(the gas fully covered the half of the stars behind it). The fullscreen check at `typical` 58 after the fix (`M4-T30c_fix1_typical`, load
+1.5): GPU 5.19 ms mean, 284 draw calls, frame 13.74 ms, 73 FPS, the same as round 0. The side-by-side for (H) is
+`/tmp/m4_t30c_sky_compare.png`. Tests: Python `test_panorama` 10, `test_sky_default` 41, the whole procgen suite 435, OK; GUT as above,
+with `test_star_point_math` 10 and `test_splat_import` 12 of 15 (the same 3 failures as `13d0256` with freshly built assets).
 
 ### Phase 1 (T07 to T14, M4-T13, 2026-11-04)
 

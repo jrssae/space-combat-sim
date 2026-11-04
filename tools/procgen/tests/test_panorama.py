@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from tools.procgen.core import panorama
+from tools.procgen.core.color import linear_to_srgb
 from tools.procgen.core.image import read_png
 
 
@@ -97,6 +98,22 @@ class ResizeAndWriteTests(unittest.TestCase):
         self.assertEqual(encoded.dtype, np.uint8)
         self.assertEqual((int(encoded[0]), int(encoded[1]), int(encoded[-1])), (0, 0, 255))
         self.assertTrue(np.all(np.diff(encoded.astype(int)) >= 0))
+
+    def test_dither_keeps_a_dark_ramp_from_banding(self) -> None:
+        # A ramp over two 8-bit levels: rounding gives two flat bands; the dither keeps each column's mean on the ramp.
+        ramp = np.tile(np.linspace(0.0040, 0.00427, 64), (256, 1))
+        plain = panorama.to_srgb8(ramp).astype(float)
+        dithered = panorama.to_srgb8(ramp, np.random.default_rng(3)).astype(float)
+        target = linear_to_srgb(ramp) * 255.0  # the exact sRGB value in levels
+        self.assertLessEqual(len(np.unique(plain[0])), 2)
+        plain_error = float(np.abs(plain.mean(axis=0) - target[0]).max())
+        dithered_error = float(np.abs(dithered.mean(axis=0) - target[0]).max())
+        self.assertGreater(plain_error, 0.25)
+        self.assertLess(dithered_error, 0.12)
+        black = panorama.to_srgb8(np.zeros((64, 64)), np.random.default_rng(3))
+        self.assertEqual(int(black.max()), 0)  # empty sky stays black: no noise floor
+        again = panorama.to_srgb8(ramp, np.random.default_rng(3))
+        np.testing.assert_array_equal(again, dithered.astype(np.uint8))  # seeded: the same bytes every build
 
     def test_write_gives_a_png_and_a_vram_compressed_mipmapped_sidecar(self) -> None:
         image = (np.arange(16 * 32 * 3) % 251).astype(np.uint8).reshape(16, 32, 3)

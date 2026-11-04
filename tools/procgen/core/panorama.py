@@ -1,7 +1,8 @@
 """Equirectangular sky panoramas (M4-T30c): pixel directions, soft Gaussians composited onto the sphere, sRGB and the PNG.
 
 The convention is Godot's ``PanoramaSkyMaterial``: the image centre looks toward +Z, so -Z sits at the left and right edges,
-+u turns toward -X and the top row is +Y. The PNG goes through ``core.image`` (no Pillow), with a Godot ``.import`` sidecar so
++u turns toward -X and the top row is +Y (checked on a GPU by rolling the image half a turn, which put the nebula where the splat
+sky had it). The PNG goes through ``core.image`` (no Pillow), with a Godot ``.import`` sidecar so
 the texture is always imported VRAM compressed with mipmaps.
 """
 
@@ -120,9 +121,20 @@ def resize_bilinear(layer: np.ndarray, out_h: int, out_w: int) -> np.ndarray:
     return wide[np.clip(y0, 0, h - 1)] * (1.0 - fy) + wide[np.clip(y0 + 1, 0, h - 1)] * fy
 
 
-def to_srgb8(display: np.ndarray) -> np.ndarray:
-    """Display values in 0..1 (clamped) as 8-bit sRGB."""
-    return np.round(linear_to_srgb(np.clip(display, 0.0, 1.0)) * 255.0).astype(np.uint8)
+def to_srgb8(display: np.ndarray, rng: np.random.Generator | None = None) -> np.ndarray:
+    """Display values in 0..1 (clamped) as 8-bit sRGB; with ``rng``, a seeded triangular dither of one level so dark gradients do
+    not band."""
+    levels = linear_to_srgb(np.clip(display, 0.0, 1.0)) * 255.0
+    return quantize8(levels, rng)
+
+
+def quantize8(levels: np.ndarray, rng: np.random.Generator | None = None) -> np.ndarray:
+    """Values in 0..255 rounded to bytes, dithered by one level when ``rng`` is given; zero stays zero, so empty sky has no
+    noise floor."""
+    if rng is not None:
+        noise = rng.random(np.shape(levels)) - rng.random(np.shape(levels))
+        levels = np.where(levels > 0.0, levels + noise, 0.0)
+    return np.clip(np.round(levels), 0.0, 255.0).astype(np.uint8)
 
 
 def import_sidecar() -> str:
@@ -148,6 +160,7 @@ def write_panorama(path: Path, image: np.ndarray) -> list[Path]:
 
 __all__ = [
     "composite_gaussians",
+    "quantize8",
     "direction_grid",
     "import_sidecar",
     "lonlat",

@@ -20,11 +20,12 @@ Since M4-T30c the game draws the sky without splats, from two more files (the PL
 
 * ``sky_default_stars.f32``: the same stars as point records, little-endian float32, seven per star: the unit direction
   (Godot frame), the linear colour tint (largest channel 1) and the brightness, the linear radiance of a disc of
-  ``star_field.radius_mrad`` that delivers the light its splat did at 1 080 lines (``REFERENCE_FOCAL_PX``). ``StarField``
-  draws them as camera-facing points with a 1 px floor.
-* ``sky_default_panorama.png``: the nebula alone, its 4 000 Gaussians composited analytically into a 4 096 by 2 048 sRGB
-  equirectangular image (``core.panorama``, Godot's ``PanoramaSkyMaterial`` convention: the image centre looks toward
-  +Z, +u turns toward -X), with a ``.import`` sidecar.
+  ``star_field.radius_mrad`` that delivers the light its splat did at 1 080 lines (``REFERENCE_FOCAL_PX``). Both use the colour
+  as GDGS showed it, decoded from sRGB. ``StarField`` draws them as camera-facing points with a 1 px floor.
+* ``sky_default_panorama.png``: the nebula alone, its 4 000 Gaussians composited analytically into a 4 096 by 2 048 RGBA image
+  (``core.panorama``, Godot's ``PanoramaSkyMaterial`` convention: the image centre looks toward +Z, +u turns toward -X; checked
+  on a GPU by rolling the image half a turn). RGB is the gas's light as GDGS showed it; alpha is its opacity over the stars,
+  which the star points sample (Q42). A ``.import`` sidecar comes with it.
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ import numpy as np
 
 from ..core import frames
 from ..core import panorama
-from ..core.color import blackbody_rgb, lerp
+from ..core.color import blackbody_rgb, lerp, srgb_to_linear
 from ..core.context import AssetOutputs, BuildContext
 from ..core.manifest import build_manifest, lod_entry, write_manifest
 from ..core.ply import SplatData, write_ply
@@ -315,10 +316,15 @@ SPRITE_PROFILE_AREA = math.pi / 3.0
 
 
 def star_points(stars: SplatData, radius: float) -> np.ndarray:
-    """The star file's records, ``(N, 7)`` float32: direction, colour tint and the brightness that matches each splat's light."""
+    """The star file's records, ``(N, 7)`` float32: direction, colour tint and the brightness that matches each splat's light.
+
+    GDGS decodes a splat's colour from sRGB before it composites (``gaussian_composite.glsl``), so the light a splat star showed
+    is the decoded colour, and so are the tint and the brightness here.
+    """
     directions = _unit(stars.xyz)
-    radiance = stars.rgb.max(axis=1)
-    tint = stars.rgb / radiance[:, None]
+    shown = srgb_to_linear(stars.rgb)
+    radiance = shown.max(axis=1)
+    tint = shown / radiance[:, None]
     sigma = stars.scale[:, 0] / radius
     splat_light = radiance * 2.0 * math.pi * (sigma**2 + GDGS_DILATION_PX2 / REFERENCE_FOCAL_PX**2)
     rho = STAR_RADIUS_MRAD * 1e-3
@@ -327,24 +333,41 @@ def star_points(stars: SplatData, radius: float) -> np.ndarray:
 
 
 # --- panorama --------------------------------------------------------------------------------
-# The panorama's tone curve is not the splat renderer's. Matched to the splat sky on the same view on the GPU: 0.4 (2026-10-21,
-# as the fallback) came out about three times as bright as the splat nebula once the panorama became the default sky (M4-T30c).
-PANORAMA_NEBULA_GAIN = 0.13
 # The gas is smooth, so it is composited at half size and enlarged.
 PANORAMA_NEBULA_SCALE = 2
+# How much of a star's light the densest-looking gas holds back (Q42): the opacity follows the gas's brightness up to this, so
+# the nebula dims the stars behind it and only the brighter ones shine through. Written as the panorama's alpha.
+NEBULA_STAR_OPACITY = 0.8
+# The gas brightness (a percentile of the texels with gas) that counts as fully dense.
+NEBULA_DENSE_PERCENTILE = 99.9
 
 
-def render_panorama(nebula: SplatData, width: int, height: int) -> np.ndarray:
-    """Equirectangular ``(height, width, 3)`` uint8 sRGB render of the nebula as seen from the origin (authoring frame)."""
+def render_panorama(
+    nebula: SplatData, width: int, height: int, rng: np.random.Generator | None = None
+) -> np.ndarray:
+    """Equirectangular ``(height, width, 4)`` uint8 render of the nebula as seen from the origin (authoring frame).
+
+    RGB is the gas's light as GDGS showed it: the raw colours composited, then decoded from sRGB, then sRGB-encoded for the
+    texture. Alpha is the gas's opacity over the stars. ``rng`` dithers both.
+    """
     low_w = max(width // PANORAMA_NEBULA_SCALE, 8)
     low_h = max(height // PANORAMA_NEBULA_SCALE, 4)
-    colour, _ = panorama.composite_gaussians(
+    colour, coverage = panorama.composite_gaussians(
         nebula.xyz, frames.quat_to_matrix(nebula.rot), nebula.scale, nebula.rgb, nebula.alpha, low_w, low_h
     )
-    image = np.empty((height, width, 3), dtype=np.uint8)
-    for channel in range(3):
-        linear = panorama.resize_bilinear(colour[..., channel], height, width) * PANORAMA_NEBULA_GAIN
-        image[..., channel] = panorama.to_srgb8(1.0 - np.exp(-1.5 * linear))
+    cover = panorama.resize_bilinear(coverage, height, width)
+    premultiplied = np.stack(
+        [panorama.resize_bilinear(colour[..., c], height, width) for c in range(3)], axis=-1
+    )
+    straight = premultiplied / np.maximum(cover, 1e-6)[..., None]
+    light = srgb_to_linear(np.clip(straight, 0.0, None)) * cover[..., None]
+    image = np.empty((height, width, 4), dtype=np.uint8)
+    image[..., :3] = panorama.to_srgb8(light, rng)
+    brightness = light.max(axis=2)
+    gas = brightness[cover > 0.01]
+    dense = float(np.percentile(gas, NEBULA_DENSE_PERCENTILE)) if gas.size else 1.0
+    opacity = NEBULA_STAR_OPACITY * np.clip(brightness / max(dense, 1e-9), 0.0, 1.0)
+    image[..., 3] = panorama.quantize8(opacity * 255.0, rng)
     return image
 
 
@@ -410,7 +433,8 @@ def build(ctx: BuildContext) -> AssetOutputs:
     panorama_path = out_dir / PANORAMA_NAME
     sidecar_path = Path(str(panorama_path) + ".import")
     if want_panorama:
-        files.extend(panorama.write_panorama(panorama_path, render_panorama(nebula, pano_w, pano_h)))
+        pixels = render_panorama(nebula, pano_w, pano_h, ctx.rng("panorama_dither"))
+        files.extend(panorama.write_panorama(panorama_path, pixels))
         manifest_files["panorama"] = PANORAMA_NAME
     else:
         # Never leave a stale panorama the manifest does not list.
@@ -442,6 +466,8 @@ def build(ctx: BuildContext) -> AssetOutputs:
                 "record": list(STAR_RECORD),
                 "radius_mrad": STAR_RADIUS_MRAD,
                 "floor_px": STAR_FLOOR_PX,
+                "occlusion": "panorama alpha",
+                "nebula_opacity": NEBULA_STAR_OPACITY,
             },
         },
     )
