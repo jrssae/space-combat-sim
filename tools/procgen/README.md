@@ -49,6 +49,8 @@ parts/             reusable parametric parts: hull (fuselage, canopy, cockpit in
                    Spec dataclass + Style in, Part out (mesh, named anchors, collision primitives,
                    mass)
 core/chunks.py     break-up chunks: splats and mesh partitioned by part group, re-centred per chunk
+core/civilian.py   the civilian ships' shared pipeline (M5-T22): Piece, mirroring with twins, sampling with burial,
+                   paint, chunk sources, the GDGS flip, level writer, standalone models (turrets, cargo pods)
 styles/            design languages: Style (material roles + panel-shading parameters); earthforce.py, raider.py
 parts/saturn.py    the Saturn family (M5-T12): lead ship, frames, drum frame, engine section, banded cylinders and
                    tanks, transport pods with recessed ribbed ends and rails, arms, junctions, turret pads; each
@@ -62,6 +64,10 @@ parts/skylark.py   the Skylark transport (M5-T13): capsule with nose vanes, brid
                    collar, side tanks, the faceted body with corner fins, dorsal fin, centre engine and the turret's
                    seat on its ridge, nacelles with pods, ribbed rings, forked claws and their pylons; burial solids and sides
 styles/centauri.py the Centauri palette (violet, gold, lavender trim), painted as written
+parts/brakiri.py   the Brakiri Bokmai (M5-T22): bow blade lofted up through measured sections, flank insets, windows,
+                   spine, keel web, swept arms and fork struts, posts, engine lofts with cups and domes, fins, spindle;
+                   the cargo pod model and the Brakiri turret
+styles/brakiri.py  the Brakiri palette (olive frame, pale pods with their own grid, yellow), BOLT_SRGB, GLOW_SRGB
 assets/__init__.py registry: ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]]
 assets/<id>.py     one module per asset, exposing build(ctx)
 tests/             unittest: core, parts, CLI, and every asset
@@ -187,6 +193,29 @@ Things the Godot side must know:
   centre of mass on the hull's centre plane, 16 RCS ports, `muzzles` empty, and one turret (`dorsal`, Q19) on the dorsal
   fitting's ring. The manifest's `turret` entry has the keys of `parts/turret.py`'s.
 - The engine and fin-tip glow is pink-white #FFB8E0 (`styles/centauri.py` `GLOW_SRGB`), a `ShipSpec` tint, not paint.
+
+## `brakiri_bokmai`
+
+The Brakiri Bokmai transport (M5-T22, docs/assets-civilian.md): 80 m, a tall bow blade, a dorsal spine to a fork, lower
+arms from the keel, nacelles with cups and engine domes between tall fins at the stern, a spindle the cargo pods ride on;
+`brakiri` style, through `core/civilian.py`. Outputs the hull without its pods, `brakiri_bokmai.ply` (about 42k splats at
+0.30 m; budget 32k-49k), `_lod1` to `_lod3` (25 %, 6 %, 1.5 %), a `.light` per level, `brakiri_bokmai.obj/.mtl`, five
+chunks cut from LOD1 (`bow`, `arm_l`, `arm_r`, `engine_l`, `engine_r`), the pod model `brakiri_bokmai_pod.ply` and
+`_pod_lod1` to `_pod_lod3` with their `.light` files and one `brakiri_bokmai_pod.obj/.mtl` (about 11.6k splats at LOD0),
+the turret model `brakiri_bokmai_turret.ply/.light/.obj/.mtl` (about 1.6k splats at 0.11 m), `hardpoints.json` and
+`manifest.json`. Options: `spacing`, `overlap`, `thickness`, `turret_spacing`.
+
+Things the Godot side must know:
+
+- `hardpoints.json` has `cargo_pods[]`: `pod_fwd`, `pod_mid`, `pod_aft` on the spindle's axis, each `{name, position, up,
+  forward}` in the body frame. A Bokmai flies with 0-3 pods (T16); each is the pod model at its mount, and comes off whole
+  as debris. The chunks leave the pods out.
+- The pod files keep the pod's frame (origin at the mount); GDGS centres an import on its mean, which sits at the
+  manifest's `pod.offset` in that frame. `pod` also carries `lods`, `mass_kg`, `size_m` and one collision box.
+- Two turrets, `flank_l` and `flank_r`, in the bow's flank insets facing outboard (`up` ±x, Q22), `arc_deg` 200,
+  `barrel_m` 3.0; the bolts are bright green #7CFF4F (`styles/brakiri.py` `BOLT_SRGB`).
+- The thrust line and centre of mass are on the nacelles' axis (y 2.09); mass and inertia are the hull's without pods.
+- The engine glow is yellow-white #FFF0B0 (`GLOW_SRGB`), a `ShipSpec` tint, not paint.
 
 ## `saturn_family`
 

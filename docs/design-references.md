@@ -591,11 +591,15 @@ green so they read as cargo against it, and yellow marks the fins, the necks and
 | Nacelle cups | dark metal #2E3530 | our choice |
 | Engine domes and glow | the domes #F2EDC4, the glow yellow-white #FFF0B0 | no capture shows the drive lit; our choice |
 
-The cruiser's yellow tip panel carries the Brakiri emblem, a franchise mark, which is not reproduced. The scheme is a
-proposal: the maintainer confirms it before the generator paints with it (Q19).
+The cruiser's yellow tip panel carries the Brakiri emblem, a franchise mark, which is not reproduced. The maintainer
+confirmed the scheme as written on the review sheet (Q19, 2026-11-03), windows included.
 
 **Turrets (Q22).** The maintainer placed them in the stepped Z-shaped insets on both flanks of the bow (x ±2.3, y 7.2
-to 9.7, z 4.1 to 8.9), one a side, facing outboard. They fire a bright green pulse. The survey's dorsal proposal,
+to 9.7, z 4.1 to 8.9), one a side, facing outboard. They fire a bright green pulse, #7CFF4F (the maintainer's pick). Each
+inset is two strips 1.2 m tall, the upper one (z 4.07 to 7.35) further forward than the lower (z 5.77 to 8.97), recessed
+about 0.3 m into the flank, which leans 9 degrees; only its middle (z 5.77 to 7.39) is the full 2.44 m tall. The review
+sheet put each turret there, `flank_l` and `flank_r` at (±2.04, 8.45, 6.58), up (±1, 0, 0), on a turning ring 1.6 m
+across with a lens housing 2.0 x 0.9 x 2.4 m, and the maintainer approved it as drawn (2026-11-03). The survey's dorsal proposal,
 replaced:
 
 - `dorsal_fwd` (0, +13.3, 17.0) on the spine's top just behind the bow's crown, up +y, `arc_deg` 200: forward and

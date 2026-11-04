@@ -55,6 +55,7 @@ const REQUIRED_ROLES: Dictionary = {
 	"saturn_8_tanker": ["fallback_mesh", "hardpoints"],
 	"skylark_transport": ["fallback_mesh", "hardpoints"],
 	"centauri_brezebel": ["fallback_mesh", "hardpoints"],
+	"brakiri_bokmai": ["fallback_mesh", "hardpoints"],
 }
 
 var _readers: Array[ManifestReader] = []
@@ -125,9 +126,17 @@ func test_every_listed_file_exists_and_every_ply_is_a_lod() -> void:
 			chunk_files.append(String(turret.get("ply", "")))
 			for key: String in ["ply", "lighting", "obj"]:
 				assert_true(FileAccess.file_exists("%s/%s" % [reader.directory, turret.get(key, "")]), "%s turret %s is missing: %s" % [reader.asset_id, key, GEN_ASSETS_HINT])
+		# The Bokmai's cargo pod (manifest `pod`, Q17): its own levels, each with its records, and one mesh.
+		var pod: Dictionary = _pod_entry(reader)
+		if not pod.is_empty():
+			assert_true(FileAccess.file_exists("%s/%s" % [reader.directory, pod.get("obj", "")]), "%s pod mesh is missing: %s" % [reader.asset_id, GEN_ASSETS_HINT])
+			for level: Dictionary in pod.get("lods", []):
+				chunk_files.append(String(level.get("file", "")))
+				for key: String in ["file", "lighting"]:
+					assert_true(FileAccess.file_exists("%s/%s" % [reader.directory, level.get(key, "")]), "%s pod %s is missing: %s" % [reader.asset_id, key, GEN_ASSETS_HINT])
 		for file_name: String in DirAccess.get_files_at(reader.directory):
 			if file_name.ends_with(".ply"):
-				assert_true(lod_files.has(file_name) or chunk_files.has(file_name), "%s/%s is a PLY that no manifest lod, hardpoints chunk or turret lists" % [reader.asset_id, file_name])
+				assert_true(lod_files.has(file_name) or chunk_files.has(file_name), "%s/%s is a PLY that no manifest lod, hardpoints chunk, turret or pod lists" % [reader.asset_id, file_name])
 
 
 # --- splats ------------------------------------------------------------------------------------------------------
@@ -195,6 +204,28 @@ func test_turret_plys_import_with_their_counts() -> void:
 		assert_eq(gaussian.point_count, int(entry.get("splats", -1)), "%s: point_count vs manifest splats" % label)
 		assert_true(gaussian.aabb.grow(0.1).has_point(Vector3.ZERO), "%s: the imported box %s contains its own origin" % [label, gaussian.aabb])
 	assert_gt(turrets, 0, "a civilian with a turret exists (narn_transport): %s" % GEN_ASSETS_HINT)
+
+
+## Q17: the Bokmai's cargo pod levels import with their manifest counts; GDGS centres them on their mean, so each
+## imported box, put back at the manifest's `offset`, holds the pod's measured size about its mount.
+func test_cargo_pod_plys_import_with_their_counts() -> void:
+	var pods: int = 0
+	for reader: ManifestReader in _valid_readers():
+		var pod: Dictionary = _pod_entry(reader)
+		if pod.is_empty():
+			continue
+		pods += 1
+		var size := Vector3(float(pod["size_m"][0]), float(pod["size_m"][1]), float(pod["size_m"][2]))
+		for level: Dictionary in pod.get("lods", []):
+			var gaussian: GaussianResource = _gaussian("%s/%s" % [reader.directory, level.get("file", "")])
+			if gaussian == null:
+				continue
+			var label: String = "%s pod lod %d" % [reader.asset_id, int(level.get("level", -1))]
+			assert_eq(gaussian.point_count, int(level.get("splats", -1)), "%s: point_count vs manifest splats" % label)
+			var slack: float = 2.0 * float(level.get("spacing_m", 0.0)) + 1.0
+			assert_almost_eq(gaussian.aabb.size.x, size.x, slack, "%s: width" % label)
+			assert_almost_eq(gaussian.aabb.size.z, size.z, slack, "%s: length" % label)
+	assert_gt(pods, 0, "a civilian with cargo pods exists (brakiri_bokmai): %s" % GEN_ASSETS_HINT)
 
 
 func test_lower_lods_keep_the_lod0_box() -> void:
@@ -354,6 +385,11 @@ func _chunk_entries(reader: ManifestReader) -> Array[Dictionary]:
 ## The manifest's `turret` entry (D61: a civilian's turret model), empty when it has none.
 func _turret_entry(reader: ManifestReader) -> Dictionary:
 	var entry: Variant = reader.data.get("turret")
+	return entry as Dictionary if entry is Dictionary else {}
+
+
+func _pod_entry(reader: ManifestReader) -> Dictionary:
+	var entry: Variant = reader.data.get("pod")
 	return entry as Dictionary if entry is Dictionary else {}
 
 

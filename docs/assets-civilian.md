@@ -216,7 +216,7 @@ its file mapping from the reference:
 
 ```
 .venv/bin/python3 -I tools/refview/compare.py references/Brakiri_Bokmai_transport_80m.STL brakiri_bokmai --length 80 \
-    --right=<axis> --up=<axis> --aft=<axis> --pods-from-hardpoints
+    --right=+x --up=+z --aft=-y --pods-from-hardpoints
 ```
 
 `--pods-from-hardpoints` draws the pod's mesh and splats, `<id>_pod.obj` and `<id>_pod.ply` beside the asset (`--pod-obj
@@ -288,6 +288,7 @@ rows.
 | `saturn_3_freighter` | lead ship (z 0-41.5) (splats vs STL) | 0.660 | 0.499 | 0.665 | 1.007 | 1.023 | 0.812 | - | 2026-11-03 |
 | `saturn_3_freighter` | pod group (model 41.5-91.1 scaled 1.244, 1.093, 1; asset 41.5-96.8) (splats vs STL) | 0.772 | 0.383 | 0.655 | 1.130 | 0.996 | 1.038 | - | 2026-11-03 |
 | `narn_transport` | whole ship (no shift) | 0.991 | 0.985 | 0.974 | 1.000 | 1.000 | 0.997 | 0.976 (side) / 1.000 | 2026-11-03 |
+| `brakiri_bokmai` | whole ship with its three pods (`--pods-from-hardpoints`, no shift) | 0.966 | 0.976 | 0.954 | 0.999 | 0.999 | 0.999 | 0.972 (side) / 1.000 | 2026-11-03 |
 | `centauri_brezebel` | whole ship (best shift x -0.15 m, the model's fins sit 0.2 m to port; unshifted 0.972, 0.984, 0.945) | 0.966 | 0.984 | 0.970 | 1.000 | 1.000 | 0.999 | 0.992 (side) / 1.000 | 2026-11-03 |
 | `skylark_transport` | whole ship (no shift) | 0.979 | 0.980 | 0.956 | 1.001 | 1.000 | 0.998 | 0.983 (side) / 1.000 | 2026-11-03 |
 
@@ -422,10 +423,45 @@ The turret model: a `hull_dark` flange 1.5 m across and 0.15 m tall, a stalk 0.6
 z 1.9), twin barrels at x ±0.45 on the pod's axis with the muzzles 2.6 m ahead of the turning axis, and two gold collars
 on each barrel (where it leaves the pod, and near the muzzle); 2 080 splats at 0.11 m.
 
-## `brakiri_bokmai` and the `brakiri` style (T22, plan)
+## `brakiri_bokmai` and the `brakiri` style (T22)
 
-`tools/procgen/assets/brakiri_bokmai.py`, `tools/procgen/styles/brakiri.py`, parts in a new
-`tools/procgen/parts/brakiri.py`. This is T22's plan from the survey of 2026-11-03 ("Brakiri Bokmai transport" in
+`tools/procgen/assets/brakiri_bokmai.py`, `tools/procgen/styles/brakiri.py`, parts in `tools/procgen/parts/brakiri.py`,
+built through the shared civilian pipeline `tools/procgen/core/civilian.py` (pieces, mirroring, sampling with burial,
+paint, chunk sources, the GDGS flip, level and model writers; the four older generators keep their own copies for now).
+
+**As built (2026-11-03).** 79.95 x 31.60 x 30.88 m. The maintainer confirmed the turret seats, the colours and the bolt
+colour on the review sheet (Q19, Q22; `reports/refs/brakiri_bokmai/sheet/`).
+
+| Part | As built |
+|---|---|
+| Bow | a `section_loft` stacked up y through 24 horizontal sections of the blade (front and rear z, half-widths at 2 to 98 % of the way aft), measured off the STL; the rear is concave in side view; from y 9.9 up it runs on into the spine |
+| Flank insets | a `hull_dark` stepped panel on each flank's skin in the inset's measured outline (two strips 1.2 m tall, the upper one further forward); the inset's 0.3 m recess is not cut (under a spacing). The turret's seat is the middle of the full-height step, (±2.04, 8.45, 6.58) |
+| Windows | a dark strip at y 10.9 from z 3.5 to 10.5 on each flank with six small windows (0.36 x 0.5 m) |
+| Spine | a `section_loft` along z through 11 measured sections (bottom, top and half-widths at nine heights) from inside the crown (z 12) to the fork (z 48) |
+| Keel web | the fillet from the keel into each arm's root (lofted out along x through seven sections, z 9 to 15.6), as the keel flares into the arms |
+| Lower arms | a rounded section (2.0 x 1.3 m; 2.6 x 1.4 at the root) swept along the measured centre line from inside the keel out to x 12.6 by z 22 and straight aft, rising from y -1.45 to +2.3, into the joint |
+| Fork struts, posts | swept rounded sections (2.4 x 2.5 m at the fork to 1.9 x 2.0 at the post); posts 1.6 x 2.5 m at x 12.9, y 3.4 to 11.2 |
+| Joints, necks, nacelles | one loft per side through 22 stations (centre, width, height, roundness): the joint, the 2.0 x 4.0 m neck with its yellow band (z 63.5 to 65.5), the nacelle (4.6 x 6.6 m) and its tail closing to the cup's rim at z 78.9; the cup's dark inner wall runs back to its floor at z 76 |
+| Engine domes | an ellipsoid 1.70 x 2.83 x 3.89 m in each cup, its aft end at z 80 |
+| Fins | `section_loft`s of chamfered plates stacked along y every 0.5 m (measured leading and trailing edges and thickness); yellow top (bottom) 1.5 m and the upper fins' insets |
+| Spindle | a `lathe` rod 1.93 m across on (0, 1.70), z 12.5 to 58, with its coupling drum |
+
+| Level | Spacing | Hull | Pod (each) |
+|---|---|---|---|
+| LOD0 | 0.30 m | 41 912 (`bow` 16 494, each arm 3 999, each engine 8 710; budget 32 000 to 49 000) | 11 644 (9 000 to 14 000) |
+| LOD1 (the chunks) | 0.60 m | 10 496 (25.0 %) | 2 906 |
+| LOD2 | 1.20 m | 2 620 (6.3 %) | 726 |
+| LOD3 | 2.40 m | 644 (1.5 %) | 180 |
+
+Hull and three pods at LOD0: 76 844, under the planned 75 000 by 2.5 %. Every piece is sampled at the hull's spacing
+(the arms, struts and fins too: the splat check shows the loss, 0.972 side coverage); the inset, windows and domes finer.
+
+The pod files (`brakiri_bokmai_pod.ply`, `_lod1` to `_lod3`, a `.light` each, one `brakiri_bokmai_pod.obj`) keep the
+pod's own frame, origin at the mount, +y up, -z forward; GDGS centres an imported PLY on its mean, so the manifest's
+`pod.offset` (0, 0.47, 0) is where that mean sits in the pod's frame. `pod` also has `lods` (file, lighting, splats,
+spacing), `mass_kg` 120 000, `size_m` and one collision box (18.29 x 12.24 x 14.09 m, with the side plates and sleeve).
+
+The plan this was built from, from the survey of 2026-11-03 ("Brakiri Bokmai transport" in
 `docs/design-references.md`). The maintainer confirmed the bow, the pale green pods and the turrets in the bow's flank insets (Q22); the
 turret seats and the rest of the scheme go on a review sheet before the generator commits them. Authored frame as in the design references: y from the model's box centre, z from the prow, so the
 fidelity check needs no model offset. The generator writes the hull without its pods and one pod model,
@@ -482,7 +518,7 @@ hulls, so tune the spacing into the ranges.
 | `cabin` | the same point, `cabin_range_m` 4 (0.05 L) |
 | Port / starboard lights | the arms' outer faces at mid-length, (±14.0, -0.1, 40.0) |
 | `top`, `top_lamp` | the spine's crown (0, +13.3, 15.0); lamp (0, +19.5, 40.0), range 24 m |
-| Turrets (Q22) | `flank_l` and `flank_r` in the stepped insets high on each flank of the bow, at about (±2.3, +8.45, 6.5), the insets' middle; up (±1, 0, 0), outboard; `arc_deg` 200, `barrel_m` 3.0. Bolts bright green. Exact seats go on the review sheet |
+| Turrets (Q22) | `flank_l` and `flank_r` in the stepped insets high on each flank of the bow, at (±2.04, +8.45, 6.58), the middle of the inset's full-height step (as built, confirmed on the review sheet); up (±1, 0, 0), outboard; `arc_deg` 200, `barrel_m` 3.0. Bolts bright green #7CFF4F (`styles/brakiri.py` `BOLT_SRGB`) |
 | `cargo_pods[]` | `pod_fwd` (0, 1.70, 24.63), `pod_mid` (0, 1.70, 39.07), `pod_aft` (0, 1.70, 53.57); `up` (0, 1, 0), `forward` (0, 0, -1) |
 
 The thrust line is the nacelle axis (y 2.09), so the centre of mass is trimmed onto it, as on the Saturns. The pods'
@@ -520,7 +556,11 @@ Panel grid 2.4 m with 0.25 m lines on the frame, 2.0 m on the pods; tint jitter 
 #FFF0B0 (`GLOW_SRGB` for T16's `ShipSpec`). Turret bolts bright green (the maintainer, Q22). The frame green is lighter than the Narn's #2E4A3B, but the raider's warning about dark albedo
 still applies: T16's GPU check decides whether it needs a lift.
 
-**The turret model** (proposed): a round base 2.4 m across and 0.4 m tall in `hull_dark`; on it a flattened lens-shaped
+**The turret model** (as built, the maintainer's sheet): the inset's full-height step is only 1.6 m long, so a turning
+ring 1.6 m across from 0.05 m below the seat to 0.35 m above it in `hull_dark`; on it a lens-shaped housing 2.0 m wide,
+0.9 m tall and 2.4 m long (centre 0.8 m up) with a yellow band round its rim; twin barrels 0.24 m across at x ±0.3 with
+yellow muzzle rings, the muzzles 3.0 m ahead (`barrel_m` 3.0); 1 602 splats at 0.11 m. The plan was: a round base 2.4 m
+across and 0.4 m tall in `hull_dark`; on it a flattened lens-shaped
 housing 2.2 m wide, 1.0 m tall and 2.6 m long in `hull`, with a yellow band round its rim; twin barrels 0.24 m across and
 0.7 m apart with yellow muzzle rings, the muzzles 3.0 m ahead of the turning axis (`barrel_m` 3.0). About 2 000 splats
 at 0.11 m, like the others. The lens shape follows the frame's rounded, organic lines.
@@ -605,6 +645,7 @@ in T16's GPU check, lift the value and keep the hue, and record the change here.
 | `ea_civilian` | a round base 3.6 m across and 0.9 m tall, a dome 3.0 m across, twin barrels 0.8 m apart; plating grey, barrels dark. The Skylark uses it at two thirds of that size (`TurretSpec.scaled`), in the Skylark's paint. | 4.5 (Skylark 3.0) |
 | `narn` | a six-sided base 2.6 m across, a wedge-shaped housing, twin barrels; dark green with the red band | 3.0 |
 | `centauri` | a teardrop pod 2.2 m across on a short stalk, twin barrels with gold collars (as built: see `centauri_brezebel` above) | 2.6 |
+| `brakiri` | a 1.6 m turning ring, a lens housing 2.0 x 0.9 x 2.4 m with a yellow band, twin barrels with yellow muzzle rings (as built: see `brakiri_bokmai` above) | 3.0 |
 
 ## Turret positions
 
@@ -620,6 +661,7 @@ From the design references, authored frame; `up` is (0, 1, 0) for dorsal mounts 
 | Skylark (1) | `dorsal` (0, +2.766, 37.5), seated on the body's ridge; no ventral (Q19) |
 | Narn (2) | `tower_l` (-14.85, +9.0, 41.7), `tower_r` (14.85, +9.0, 41.7), on the slotted crowns |
 | Brezebel (1) | `dorsal` (0, +4.3, 7.0), on the dorsal fitting's turret ring |
+| Bokmai (2) | `flank_l` (-2.04, +8.45, 6.58), `flank_r` (2.04, +8.45, 6.58), in the bow's flank insets, up (∓1, 0, 0) outboard (Q22) |
 
 ## Open for the human tester `(H)`
 
@@ -634,3 +676,5 @@ From the design references, authored frame; `up` is (0, 1, 0) for dorsal mounts 
 - The Brezebel's retros fire forward from the bow's rim at (±14.6, 0, 5.7), on the fairings' axis, rather than from the
   fairings' fronts the design first named (inside the arm, where the depth proxy hid the plume); judge where the retro
   plumes show.
+- The Bokmai's flank turrets stand about 1.25 m out of the bow's insets, facing straight outboard (the insets lean 9
+  degrees); the insets are painted dark rather than recessed; the olive frame (#5A6B59) against its pale pods on the GPU.
