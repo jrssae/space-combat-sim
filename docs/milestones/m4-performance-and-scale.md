@@ -2,7 +2,7 @@
 
 > "Many ships at once." (`docs/roadmap.md`)
 
-**Status:** resumed 2026-11-03 (Q14 to Q18): the research's phases 1 to 3 toward 500 ships in one battle. Planned as T07 to T26 on 2026-11-03 and revised the same day for Q20 to Q23 (the plan section below the T06 report; Q19 and Q21 add capital ships, turrets, missiles, mines, asteroids and a typical mission's load; Q20 sets the fullscreen render bar). Paused earlier the same day after the T06 report (45 ships; Q11 to Q13). Earlier: planned 2026-10-28 at the maintainer's request, inserted after M3; the later milestones moved up one (the mission
+**Status:** 2026-11-04 (Q29 to Q31): Gaussian splats are dropped; T30a to T30c build the textured mesh pipeline and T31 removes the splat code (the plan subsection "Textured meshes and the end of splats"). Resumed 2026-11-03 (Q14 to Q18): the research's phases 1 to 3 toward 500 ships in one battle. Planned as T07 to T26 on 2026-11-03 and revised the same day for Q20 to Q23 (the plan section below the T06 report; Q19 and Q21 add capital ships, turrets, missiles, mines, asteroids and a typical mission's load; Q20 sets the fullscreen render bar). Paused earlier the same day after the T06 report (45 ships; Q11 to Q13). Earlier: planned 2026-10-28 at the maintainer's request, inserted after M3; the later milestones moved up one (the mission
 framework is now M5, Epsilon space M6, and so on to voiced dialog, M15). M4 starts when M3 is accepted and merged into `main`,
 on branch `m4`, unless the maintainer pulls it forward.
 
@@ -15,8 +15,9 @@ far. Tasks are ordered; each is one PR-sized unit and names a recommended agent 
 Find how many ships can fly at once while the game still performs well, then raise that number: **at least 100 ships (the
 minimum), up to 500 (the target)**. The work is test-driven and aimed at the **ship AI and location tracking**: the contact scan
 and perception, the AI's behaviours and avoidance, targeting and the radar, `UniversePos` conversions and the position rebase.
-Rendering, splat budgets and LOD are not in scope (they are M3-T19's `LodSwitcher` and M3-T20's resident splat budget); their
-cost is only recorded.
+Rendering, splat budgets and LOD were not in scope (they are M3-T19's `LodSwitcher` and M3-T20's resident splat budget); their
+cost was only recorded. Since Q29 (2026-11-04) the renderer is in scope too: T30a to T30c make every hull a textured mesh and T31
+removes the splat renderer (the plan subsection "Textured meshes and the end of splats").
 
 Ship counts in the setting (maintainer, 2026-11-02): The standard “full” squadron of starfuries is 12. 6 and 4 are very common patrol sizes. Solo, 2, or 3 ships are common for scout missions. Babylon 5 has 3 full squadrons in addition to the station itself with it’s defense system.
 
@@ -143,6 +144,7 @@ are M5's mission work).
 | AC4 | No regressions: after each cycle the focused runs (the touched code and AC13's paired budget) are green locally and CI's full suite is green on the push (Q10); `scripts/run_tests.sh` green locally once, before M4 closes; every behaviour change listed | A | M4-T06m, 2026-11-03: full suite 2 257 of 2 259 passing, 0 failing, 2 pending (AC12); CI green on every cycle's push; behaviour changes in the T06 report |
 | AC5 | Goal: the headline max N is at least 100, and toward 500. Not reached after cycle 4: the report says so and asks for guidance (T06) | A | **Not met**: headline 25 by the sweep, 45 with the below-sweep runs (release build: 50 in the quick check). T06 asks for guidance, 2026-11-03 |
 | AC6 | Render check at the headline max N on the maintainer's GPU: FPS, frame time, VRAM, GPU and driver recorded (by the agent, 2026-11-01) | A | M4-T06m, 2026-11-03 (Cycle log, Final measurements) |
+| AC7 | Textured meshes, no splats (Q29): every ship, station, capital, prop and the sky draws without Gaussian splats, the hulls as procedurally textured meshes from `tools/procgen` (T30a to T30c); `addons/gdgs_scs` and every splat path in code, procgen, settings, console, tests, scripts and docs are gone (T31); the maintainer has accepted the Starfury look sheet (checkpoint 1b) | A, H | not started |
 
 ## Task breakdown (ordered)
 
@@ -179,6 +181,10 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T27 | Render comparison: Gaussian splats against meshes, in the 500 battle and a Babylon 5 station scene (Q24) | T07, T11, T12 | Opus | Measures whether splats or meshes carry the big battles; GPU numbers by the agent, the look (H) | R, M | done |
 | T28 | Running lights stay point-sized and dim by the inverse square (maintainer, 2026-11-03) | none | Sonnet | Lights in vacuum do not scatter into globes | R | done |
 | T29 | Rocks and mines as static rows: T07's asteroids registered as statics, T12's mines as faction-owned mine rows; avoidance sees rocks and its own side's mines only (Q27) | T09, T12 | Opus | Takes the rocks' 24 to 49 ms per tick out of the GDScript paths | G, N | done (2026-11-03, in a worktree on `9a3f525`; Cycle log, M4-T29) |
+| T30a | Textured mesh pipeline: the procedural UV atlas, the texture maps (colour, normal, roughness and metal, emissive), the PNG writer, the textured `.glb` contract, the Starfury as the look gate (H, checkpoint 1b) | T27 | Fable | The unwrap, the bake and the paint are the look of the game from here on, and the contract M5 builds against (Q29, Q31) | X, R | not started |
+| T30b | Every other hull textured (raider, buoy, chunks, capital and station pieces), mesh LODs measured, the mesh path the default | T30a, checkpoint 1b | Opus | Mechanical once the generator is fixed; each asset's markings and emissives need judgement, the look (H) | X, R | not started |
+| T30c | The sky without splats: a star point field and the nebula as a generated panorama | T30a | Opus | The sky is the last splat node; stars must stay crisp points at any resolution | X, R | not started |
+| T31 | Remove Gaussian splats: `addons/gdgs_scs` and every splat path in code, procgen, settings, console commands, tests, scripts, CI and docs (Q29, Q30) | T30b, T30c | Opus | About 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only deletion | X, R, G | not started |
 
 ### M4-T01 Benchmark harness, budget and baseline
 
@@ -458,6 +464,7 @@ ends the per-tick gather (T09) instead.
 | R, render | far proxies, the node diet, the LOD switcher, resolution scaling | `src/ship/ship.gd` (T11 only), `src/ship/thruster_visuals.gd`, `src/ship/running_lights.gd`, `src/ship/nav_lights.gd`, `src/rendering/lod_switcher.gd`, `src/rendering/render_scale.gd` (T26), `src/game/ship_pool.gd` |
 | T, tier | the low-attention tier | `native/src/tier.rs`, `src/ai/tier_director.gd`, `src/game/ship_pool.gd` (T21 only) |
 | M, measurement | sweeps, headlines, the fullscreen check, reports | the Cycle log entries, `reports/` (not committed) |
+| X, assets (added 2026-11-04, Q29) | the procgen package and the mesh loader: the textured mesh contract, the texture maps, the sky asset, the splat removal | `tools/procgen/**` (T30a: `core/`, `styles/`, `assets/starfury_aurora.py`; T30b: the other asset modules, `core/chunks.py`, `core/pieces.py`; T30c: `assets/sky_default.py`; T31: the splat modules' removal), `src/rendering/paint_meshes.gd` (becomes `mesh_assets.gd`), `assets/shaders/*mesh*`, `assets/shaders/star_point.gdshader`, `src/environment/*` (T30a the ambient setting, T30c the sky, T31 the removal) |
 
 Rules for files two tasks might touch, so that tasks in one wave never edit the same file:
 
@@ -469,11 +476,24 @@ Rules for files two tasks might touch, so that tasks in one wave never edit the 
 - `docs/architecture.md`: a task appends only the §17 subsection this plan assigns it (below); nobody reflows another's.
 - `docs/milestones/m4-performance-and-scale.md`: a task edits its own section, its own Cycle log entry (headed with its task id)
   and its own status row.
-- `src/ship/ship.gd`: T10 in wave 1, T11 in wave 2, T14 in wave 3, T21 in wave 7; never two in one wave.
+- `src/ship/ship.gd`: T10 in wave 1, T11 in wave 2, T14 in wave 3, T31 in wave 6, T21 in wave 7; never two in one wave. T30a and
+  T30b do not edit it: the textured mesh is drawn through the node that draws the painted mesh today.
 - `src/combat/hit_resolver.gd` and `src/weapons/projectile.gd`: T08 in wave 1, T12 in wave 2.
 - `src/ai/contact_scan.gd`, `native/src/contact_field.rs`: T09 in wave 1, T15 in wave 4.
 - `src/targeting/targetable.gd`: T07 adds `kind`; nobody else.
-- `src/game/main.gd`: T07 only (the stand-in spawning hook); later tasks reach `Main` through what T07 adds.
+- `src/game/main.gd`: T07 only (the stand-in spawning hook); later tasks reach `Main` through what T07 adds. The one exception is
+  T31, which removes the splat nodes and references from `main.gd` and `main.tscn` (`PaintMeshLights`, `SplatStatus`) in wave 6.
+- `tools/procgen/`: T30a edits `core/`, `styles/` and the Starfury generator; T30b the other asset modules plus `core/chunks.py` and
+  `core/pieces.py`; T30c `assets/sky_default.py` only; T31 removes the splat modules. No phase 2 or phase 3 task touches procgen.
+- `src/game/ship_pool.gd`: T31 in wave 6 (the splat levels leave the lean build), T21 in wave 7.
+- `src/environment/space_environment.gd` and `.tscn`: T30a (the ambient setting) in wave 3, T30c (the star field and the panorama)
+  in wave 4, T31 (the compositor effect and `SkySplats`) in wave 6.
+- `src/perf/standins/capital_standin.gd` and `station_standin.gd`: T30b replaces the splat look in `set_look` in wave 5, T20 edits
+  the turret rows in wave 6, and T31 has nothing left there.
+- `tests/`: T31 removes and edits the render tests its section lists; the other wave 6 tasks add files of their own and do not edit
+  those.
+- `docs/architecture.md`: T31 also rewrites §7, §9, §14.4 and §14.8 (the splat contract), the one exception to the §17-only rule.
+- `src/autoload/settings_schema.gd`: T31 removes the splat entries and changes nothing else, the one exception to append-only.
 - `src/rendering/render_scale.gd`: T26 only.
 - A worktree task that needs a file another wave-mate owns writes what it needs in its report and the controller adds it.
 
@@ -500,26 +520,30 @@ wave's combined gain that is less than the sum of its parts is written down as s
 |---|---|---|---|---|
 | 1 | T07 (A), T08 (G+N), T09 (G+N), T10 (G+N) | T07, T08, T09, T10 | each task's own; then the wave's combined quick check, typical, battle 100 and 300, fullscreen at typical and the ceiling | 4 |
 | 2 | T11 (R), T12 (A+G) | T11, T12 | the same; T11's own GPU numbers | 2 |
-| 3 | T13 (M), T14 (G), T27 (R+M) | T14, T13, T27 (T13 and T27 share the GPU lock; T27 measures after T14) | **phase 1 end: the sweep, typical and battle headlines, fullscreen, release once; report P1** | 2 |
-| 4 | T15 (N, serial: it touches every native class) | T15 | its own before and after at typical, 100 and 300 | 1 |
-| 5 | T16 (N+G), T17 (N+G), T19 (M) | T16, T17, T19 | combined; T19's Jolt numbers at 300 and 500 feed **checkpoint Q17** | 3 |
-| 6 | T18 (N), T20 (N+A) | T18, T20 | **phase 2 end: sweep, headlines, fullscreen, release once; report P2** | 2 |
+| 3 | T13 (M), T14 (G), T27 (R+M, done), T30a (X+R, added 2026-11-04) | T14, T27, T30a, T13 (T13 and T30a share the GPU lock; T13 measures last and on both render paths) | **phase 1 end: the sweep, typical and battle headlines, fullscreen on both render paths, release once; report P1**; the Starfury look sheet (H, **checkpoint 1b**) | 3 |
+| 4 | T15 (N, serial: it touches every native class), T30c (X+R) | T15, T30c | T15's own before and after at typical, 100 and 300; T30c's sky on the GPU | 2 |
+| 5 | T16 (N+G), T17 (N+G), T19 (M), T30b (X+R, after checkpoint 1b) | T16, T17, T19, T30b | combined; T19's Jolt numbers at 300 and 500 feed **checkpoint Q17**; the fullscreen check on the mesh default | 4 |
+| 6 | T18 (N), T20 (N+A), T31 (X+R+G) | T18, T20, T31 (T31 last: it edits the render tests) | **phase 2 end: sweep, headlines, fullscreen and VRAM on the mesh-only renderer, release once; report P2** | 3 |
 | 7 | T21 (T, serial: pool and ship adapter) | T21 | its own at 500 | 1 |
 | 8 | T22 (T+N), T23 (R), T26 (R, only if the GPU binds at the fullscreen check after T11) | T22, T23, T26 | combined at 500; fullscreen at 500 | 2 or 3 |
 | 9 | T24 (N, only if the fullscreen check at 500 misses the floor after T23), T25 (M) | T24, T25 | **phase 3 end: sweep, battle 500 and 1 000, fullscreen, release, the full local suite; report P3** | 1 or 2 |
 
 Wall clock: waves 1, 5 and 8 are the parallel ones; the serial waves (4 and 7) are the two architecture changes that touch every
-native class and the pool. The order inside a wave's merge puts the harness first so the others' Cycle log entries can cite
+native class and the pool. T30a to T30c and T31 ride beside the native waves and share no file with them (the rules above). The order inside a wave's merge puts the harness first so the others' Cycle log entries can cite
 `battle` numbers taken after the merge.
 
 #### Checkpoints for the maintainer
 
 1. **After wave 3 (report P1).** Phase 1's numbers, the fullscreen check at `typical` and at the battle's headline, the cost per
    entity type against the budget table. The controller stops until the maintainer answers.
+   - **1b. After T30a, the Starfury look sheet (H).** `/tmp/m4_t30_starfury_aurora_sheet.png`, splats beside the textured mesh at
+     8, 30, 150 and 600 m, lit and dark, and the cockpit view, with T30a's GPU numbers. Shown with report P1 when both are ready,
+     else at its own stop. T30b waits for the answer; T30c and phase 2 do not. A refusal names what to change (T30a's second round).
 2. **After T19 (wave 5), Q17.** Jolt's and the sync's measured share at 300 and 500 in the battle, with the proposal: keep Jolt for
    every ship, or take AI ships out of Jolt (a change to D4 and §5.6). The controller stops; T20 and later do not assume either.
 3. **After wave 6 (report P2).** Phase 2's numbers; the tier's physics rule (Q22) is already accepted, so the checkpoint is the
-   numbers and whether `typical` holds its headroom.
+   numbers and whether `typical` holds its headroom; with T31 merged, the VRAM and GPU time of the mesh-only renderer against T27's
+   mesh rows.
 4. **Before T24.** Only if the fullscreen check at 500 misses the 30 FPS floor after T23 and T26: the simulation thread changes
    §15.3's tick order and is a design-contract change; the controller asks before dispatching it.
 5. **After T25 (report P3).** M4's definition of done; the maintainer confirms the milestone before `m4` merges into `main`.
@@ -531,6 +555,103 @@ battle, upscaling allowed, no tick-share rule). Q21 sets the three loads (typica
 with 100 to 200 capitals) and adds proximity mines. Q22 accepts the stand-in fidelity, the tier's physics rule, parity for
 entities without a GDScript twin and the gravity stand-in as recommended. Q23 makes the 1 000 stretch a measurement, not a gate.
 No question is open.
+
+#### Textured meshes and the end of splats: T30a to T30c and T31 (2026-11-04, Q29 to Q31)
+
+Planned on `33bc8f2` from T27's comparison (the Cycle log entry "T27 render comparison", §17.17) and the maintainer's answers
+Q29 to Q31. Nothing below is built. Q29 makes the conversion part of M4 as performance work: on the GPU the painted meshes cost 2
+to 3 times less than the splats wherever hulls are on screen, the splat budget's sort buffers hold about 1.2 GB of VRAM however
+little is drawn, and every splat ship carries a depth proxy, a pose sync and a level switcher that the frame pays for.
+
+**What exists and what is missing.** T27 built the painted mesh path: `tools/procgen/core/glb.py` writes a binary glTF with
+positions, normals, one UV set and a named material per primitive; `core/paint_mesh.py` merges a hull's parts into one opaque and
+one glass primitive with the paint codes in the UVs; `PaintMeshes` loads it and puts one shared `ShaderMaterial` per surface on
+it, and `settings.ship_render` switches a scene between splats, meshes and a hybrid. The paint is computed in the shader from
+the codes (panel lines and per-panel tint), lit by GDGS's relight sums over the rig's 8 lights. What is missing for Q29: a real
+UV unwrap (the UVs are codes, not an atlas), texture maps (colour with panel lines, markings and wear; normals; roughness and
+metal; emissive windows, lights and engines), materials that use Godot's own lighting instead of the splat sums, the raider,
+buoy, chunk, capital and station assets on that path, the sky (stars and nebula are splats), and the removal of everything
+splat. The hull depth proxy, the splat pose sync, the splat budget and the LOD levels of splat nodes have no mesh counterpart
+and go: a mesh writes its own depth, follows the body's interpolated pose like any `MeshInstance3D`, and has the importer's LODs.
+
+**Lighting without GDGS.** The textured meshes are lit by Godot's Forward+ renderer as PBR surfaces: the rig's `KeyStar`
+and its 7 omni slots stay the scene's lights (the rig and `LightPicker` are a light budget, which the clustered renderer still
+wants at 500 ships), ambient comes from the environment's ambient light under a new setting `ambient_level` (the role
+`relight_ambient` played), and the dark side stays legible through it. The own lights (cabin glow, top lamp) were a GDGS feature
+and become emissive texels: the window glass and the lamp glow in the emissive map, which costs nothing per ship. Shadows stay
+off. The lens flare's occlusion and the motion blur's depth rule work unchanged on real depth.
+
+**The contract M5 builds against** (Q31; M5's civilian ships are built with this exporter, never a second one). The files a
+textured asset writes to `assets/generated/<asset_id>/`, from T30a on:
+
+```
+<asset_id>.glb              one mesh in the Godot frame (+X right, +Y up, -Z forward), metres, centred as hardpoints.json is;
+                            positions, normals, one UV set into the atlas (0..1), uint32 indices;
+                            primitive 0 the opaque hull, primitive 1 the glass (blend), each with its material's name
+<asset_id>_albedo.png       sRGB colour (panel lines, markings, wear painted in), alpha unused
+<asset_id>_normal.png       tangent-space normals in Godot's convention (+Y up), linear
+<asset_id>_orm.png          R occlusion, G roughness, B metal (Godot's ORM layout), linear
+<asset_id>_emissive.png     linear; black where nothing glows; windows, lights, engine glow
+<asset_id>_chunk_<n>.glb    a break-up chunk: the parent's faces re-centred, the parent's UVs, so it shares the parent's maps
+hardpoints.json             unchanged (the frame, muzzles, pods, collision, chunks[] gain "mesh")
+manifest.json               "mesh": {"file", "triangles", "vertices", "aabb_min", "aabb_max", "texel_m", "atlas_px",
+                                     "mean_albedo", "surfaces": [{"name", "blend", "albedo", "normal", "orm", "emissive",
+                                     "transmittance"}], "lods": [{"file", "triangles", "from_m"}]}   (lods empty: the importer's)
+```
+
+In Python the generator composes `parts/` into `Mesh` and `Material` values (`core/geometry.py`, unchanged in shape; `Material`
+gains `roughness`, `emissive` and `emissive_strength`; `Style` gains the wear and marking parameters) and calls one writer:
+`core.textured_mesh.write_textured_mesh(out_dir, asset_id, parts: Sequence[TexturedPart], style, atlas_px) -> (paths, section)`,
+where `TexturedPart(mesh, phase, markings=())` is T27's `PaintPart` with markings. Until T30a lands, M5 builds against
+`core.paint_mesh.write_paint_mesh(out_dir, asset_id, parts: Sequence[PaintPart], style)` and swaps the call's name at the
+rebase; the parts, the frame and `hardpoints.json` do not change. On the Godot side `MeshAssets.load(asset_id)` (today
+`PaintMeshes.load`) returns the mesh with its materials set, and `Ship` draws it when `settings.ship_render` is `mesh` (the
+default from T30b, the only path from T31). M5's STL fidelity rule and its look gates are its own.
+
+**Sizing the removal** (grep for `gdgs`, `splat`, `gaussian` on `33bc8f2`, case-insensitive): `src` 45 files and 469 lines,
+`tests` 44 files and 880 lines, `tools` 38 files and 584 lines, `docs` 13 files and 727 lines (`architecture.md` 186 lines),
+`scripts` 8 files, `addons/gdgs_scs` 144 files (892 KB), `project.godot` 2 lines, `CLAUDE.md` 8, `info.md` 6, `docs/playtest.md`
+16. About 150 files in all; T31's section lists them by fate.
+
+**Sequencing.** T14 (Jolt layers) runs now in wave 3 and T13 (report P1, checkpoint 1) follows it. The new tasks touch the
+renderer and procgen, not the tick, so they ride beside the native waves and never wait for them:
+
+- **T30a joins wave 3 now**, in its own worktree: it edits `tools/procgen` (`core/`, `styles/`, the Starfury generator), the
+  mesh loader, the shaders and the environment's ambient setting, none of which T13 or T14 touch. It shares the GPU lock with
+  T13 for its look sheet. Its (H) gate is **checkpoint 1b**: the controller shows the Starfury sheet with report P1 when both
+  are ready, else at its own stop.
+- **T30c joins wave 4** beside T15 (the serial native core): the sky is procgen plus `src/environment`, and T15 is `native/`
+  and the native facades. It needs T30a's PNG writer, not the look gate.
+- **T30b joins wave 5** after the look gate: every other hull, the standins' looks (`set_look`), the chunks and the buoy, and the
+  default `ship_render` flips to `mesh`. It never edits `ship.gd`: the textured mesh is drawn through the node that draws the
+  painted mesh today.
+- **T31 joins wave 6 and merges last** in it, so report P2's fullscreen numbers and VRAM are the mesh-only renderer's. It edits
+  `ship.gd` (T14 edited it in wave 3, T21 edits it in wave 7), `ship_pool.gd` (before T21), `main.tscn` and `main.gd` (the
+  splat nodes and references), the environment, the props and effects, every render test, procgen, scripts, CI, the docs and
+  `CLAUDE.md`. T18 and T20 in the same wave are native and standin rows; T30b has already taken the splat look out of the
+  standins, so T31 has nothing left there.
+- Phase 3 (T21 on) starts on a renderer without splats; T23, T24 and T26 change as below.
+
+If the look gate is refused twice, T30b stops and the controller asks whether to keep the painted mesh (T27's, no textures) as
+the look for M4 and move the texture work to a later milestone; T31 still runs, since it does not depend on the textures.
+
+**What T23, T24 and T26 become.** T26 (resolution scaling) kept its trigger, GPU time over about 12 ms a frame at the headline;
+T27 found only the splat path near it (10 to 12 ms with 100 ships close) and the mesh path at 3 ms, so on the mesh-only renderer
+T26 is expected `not needed` (80 %). To decide that on the right path, T13 runs its fullscreen checks on both render paths and
+T26's trigger reads the mesh rows. T23 (far proxies for tier rows) gains a second proxy: a dot is wrong for a far capital (a 1 200
+m carrier at 10 km is about 130 px tall at 1 080 lines), so tier capitals draw as instances of their class's mesh in one
+`MultiMesh` per class, the dot stays for fighters; both are cheap because the meshes exist. T24's interpolation for tier rows'
+proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
+
+**Expected gains** (estimates with a confidence; the tick does not move):
+
+| task | what it changes on the maintainer's GPU at the fullscreen check | confidence |
+|---|---|---|
+| T30a | the textured Starfury within 1.3 times T27's painted mesh GPU time at `hundred_view` (3.1 ms, so under 4 ms); its four maps under 40 MB of VRAM | 70 % |
+| T30b | `battle` 500 frozen at or under 3.5 ms GPU (T27's mesh row 3.2); `build all` under 90 s | 70 % |
+| T30c | the sky under 0.3 ms GPU, one draw call for the stars; the panorama about 11 MB | 80 % |
+| T31 | VRAM down about 1.2 GB (the sort buffers), the frame's process work down 0.5 to 1.5 ms at 500 ships (the pose syncs, the splat levels, the paint lights), the import of `assets/generated` faster | 85 % on the VRAM, 50 % on the frame |
+
 
 #### Task sections
 
@@ -785,6 +906,9 @@ No question is open.
 - **Done when:** the entry holds every number in the form of the final measurements above, the gains per task against their
   predictions, the cost per entity type against the budget table, and the behaviour changes.
 - **Expected:** `typical` under 8 ms and 60 FPS (65 %); furball 100 under 8 ms (65 %); battle headline 100 (50 %).
+- **Added 2026-11-04 (Q29):** the fullscreen checks run on both render paths (`ship_render` `splat`, the default until T30b, and
+  `mesh`); T26's trigger reads the mesh rows, since the mesh-only renderer is where M4 ends. T30a's look sheet is shown at this
+  checkpoint when it is ready (checkpoint 1b).
 
 ##### M4-T14 Jolt collision layers and far-ship physics interpolation off
 
@@ -976,6 +1100,10 @@ No question is open.
 - **Done when:** the window at 500 shows every ship and the renderer's CPU time at 500 is under 3 ms or the entry says why not.
 - **Expected:** 70 %.
 - **Architecture:** §17.14.
+- **Without splats (2026-11-04, Q29):** a dot is wrong for a far capital (a 1 200 m carrier at 10 km is about 130 px tall at 1 080
+  lines), so tier capitals draw as instances of their class's textured mesh in one `MultiMesh` per class (`far_dots.gd` gains the
+  second proxy, or a sibling `FarHulls`), the dot stays for fighters; both are cheap because the meshes exist (T30b). "Visible
+  splats" in the measures reads triangles drawn.
 
 ##### M4-T24 The simulation step on a worker thread (conditional)
 
@@ -993,6 +1121,8 @@ No question is open.
   binds.
 - **Expected:** 50 % that it is needed; 70 % that it holds the floor at 500 when it is, 45 % the target.
 - **Architecture:** §17.13 and §15.3 (the tick order; a design-contract change, checkpoint 4).
+- **Without splats (2026-11-04, Q29):** `splat_pose_sync.gd` is removed by T31; the interpolation from snapshots for tier rows'
+  proxies goes in `far_dots.gd`.
 
 ##### M4-T25 Phase 3 measurements, the 1 000 stretch, the full suite and report P3
 
@@ -1030,6 +1160,10 @@ No question is open.
   floor; the maintainer judges the look.
 - **Expected:** GPU time roughly proportional to the pixels drawn for the splat passes (65 %).
 - **Architecture:** §17.15.
+- **Without splats (2026-11-04, Q29):** T27 found only the splat path near the trigger (10 to 12 ms GPU with 100 ships close) and
+  the mesh path at 3 ms, so on the mesh-only renderer this task is expected `not needed` (80 %). The trigger is read from T13's
+  mesh rows and from the fullscreen check after T31; "visible splats" in the measures reads triangles drawn. The maintainer may
+  still ask for the manual `render_scale_3d` setting as a feature; that is not performance work and would be a later milestone's.
 
 ##### M4-T27 Render comparison: Gaussian splats against meshes (Q24)
 
@@ -1088,13 +1222,215 @@ No question is open.
     stay.
   - The mines' rows are as big as the trigger (50 m), so a side steers clear of the trigger, not of the 3 m body.
 
+##### M4-T30a Textured mesh pipeline and the Starfury look gate
+
+- **Track:** X and R. **Agent:** Fable (the unwrap, the bake and the paint decide the look of every asset from here on; the
+  look itself stays (H)). **Depends on:** T27. Runs in wave 3 beside T13 and T14 (shares the GPU lock with T13).
+- **Goal:** `tools/procgen` writes a textured mesh for the Starfury under the contract above (the plan subsection "The contract
+  M5 builds against"): a procedural UV atlas, colour, normal, roughness and metal and emissive maps, a `.glb` with one UV set;
+  Godot draws it as a PBR surface lit by the rig and an ambient term; the maintainer judges a sheet of it against the splats.
+- **How the maps are made:**
+  - **UVs.** Every primitive in `core/geometry.py` knows its parametrisation, so it writes natural UVs as it tessellates: a box
+    one chart per face, a lathe or loft angle by station, caps planar; `Mesh` carries a UV per corner through `transformed`,
+    `mirrored` and `concatenate`. A part is a set of charts; a mirrored part gets charts of its own, so markings read right on
+    both sides. An atlas packer (shelf packing by chart height, a texel density set by the asset's `texel_m`, a two-texel gutter)
+    places every chart in one 0..1 atlas; the Starfury's is 2 048 px at about 1 cm a texel.
+  - **Rasterising.** Each chart's triangles are rasterised into atlas-space buffers of world position, normal and part id
+    (NumPy, no third-party library). Every map is then a function of those buffers.
+  - **Colour.** `Style.shade_panels` evaluated per texel (the same panel lattice, line darkness and tint jitter the splats and
+    the painted mesh had, so the paint is the paint the maintainer accepted), plus markings (stripes along the pods and
+    squadron numbers from a stroke font written in code, placed by the generator's `markings`) and wear (edge wear from the
+    normal buffer's curvature, streaks from the panel lines along the airflow of a spin, soot behind nozzles, all seeded).
+  - **Normals.** Tangent-space normals from two sources summed: a height field in atlas space (panel grooves, rivet rows, hatch
+    bevels) and the fine parts mesh's normals baked onto the render mesh (nearest sample of `core/sampling.py`'s oriented
+    surface samples, the sampler the splats were drawn from), so a coarser render mesh keeps the fine curvature. The Starfury
+    keeps T27's 34 428 triangles in T30a; a `render_triangles` option decimates lathes and lofts for T30b to measure.
+  - **Roughness and metal.** From the material (`Material.roughness`, `metallic`), the panel lines rougher, worn edges more
+    metallic; occlusion in R from a cheap hemisphere sample against the parts mesh (16 rays a texel, or 1.0 if it does not earn
+    its seconds).
+  - **Emissive.** The canopy glass (a faint cabin glow, the role the red own glow played), the top lamp's lens, the main pods'
+    nozzle interiors; black elsewhere.
+  - **PNG.** `core/image.py` writes 8-bit RGB and RGBA PNGs with `zlib` at a fixed level, byte-identical per seed; the Pillow
+    dependency goes (T30c uses the same writer for the panorama).
+- **Godot side:** `MeshAssets` (`src/rendering/paint_meshes.gd` renamed, class `PaintMeshes` kept as an alias until T31) loads
+  `<asset_id>.glb` and sets a `StandardMaterial3D` per surface from the manifest's `surfaces` (albedo, normal, ORM, emission,
+  glass as a transparent material with the transmittance), one material per asset so the renderer instances every copy. The
+  imported textures' flags are what 3D wants (VRAM compressed, mipmaps, sRGB on the albedo only), set by an import preset for
+  `assets/generated/`. `settings.ambient_level` (0.3) sets the environment's ambient light (`space_environment.gd`). A `look`
+  console command (`look <asset_id> <distance_m> [lit|dark|off]`) parks one idle ship of the asset ahead of the player at that
+  distance with the key star behind or ahead of the camera, for the sheets; `scripts/look_sheet.sh <asset_id>` runs the game
+  with `ship_render` at `splat` and at `mesh`, takes the chase view at 8, 30, 150 and 600 m lit and dark and the cockpit view,
+  and composes `/tmp/m4_t30_<asset_id>_sheet.png` (splat left, textured right) with `core/image.py`.
+- **Files:** `tools/procgen/core/geometry.py` (UVs), `core/uv_atlas.py` (new: charts, the packer), `core/raster.py` (new: the
+  atlas buffers), `core/textures.py` (new: the maps), `core/image.py` (new: PNG), `core/textured_mesh.py` (new: the writer;
+  `core/paint_mesh.py` becomes a thin wrapper that T31 removes), `core/manifest.py` (the `mesh` section's validation),
+  `styles/__init__.py`, `styles/earthforce.py` (wear and markings), `assets/starfury_aurora.py`; `src/rendering/paint_meshes.gd`
+  (`MeshAssets`), `src/environment/space_environment.gd` (ambient), `src/rendering/look_scene.gd` (new, the `look` command),
+  `assets/generated/.import-preset` or the project's `importer_defaults` (named in the report), `scripts/look_sheet.sh`,
+  settings `ambient_level`, `info.md` (one row), `tests/unit/test_mesh_assets.gd`, `tests/integration/test_textured_hull.gd`,
+  `tools/procgen/tests/test_uv_atlas.py`, `test_textures.py`, `test_image.py`, `test_textured_mesh.py`.
+- **Tests first (Python):** every UV in [0, 1] and every triangle's UV area non-zero; no two charts overlap (rasterised
+  occupancy); texel density within 20 % across parts; a mirrored part has its own chart; the PNG round trip is exact and two
+  builds with one seed are byte-identical; the maps are the atlas's size; the normal map is unit length and (0.5, 0.5, 1) on a
+  flat panel centre; the emissive map is black outside the glass, lamp and nozzle charts; the albedo at a panel centre matches
+  the material's albedo within the jitter; the mesh's triangles and bounds are T27's painted mesh's; the manifest section
+  validates; `build starfury_aurora` under 30 s on the development desktop (recorded, not asserted).
+- **Tests first (GUT):** the imported glb has two surfaces with `StandardMaterial3D`s carrying the four textures and the
+  glass's transparency; the albedo imports as sRGB and the others linear, all VRAM compressed with mipmaps; the player's ship
+  and a lean ship draw it with `ship_render` at `mesh` and the far dot still applies; `ambient_level` applies live; the `look`
+  command spawns and removes its ship; `test_paint_meshes`, `test_render_path`, `test_ship_scene`, `test_ship_nodes` green.
+- **Measures:** the look sheet (H); the draw-call probe with 20 textured Starfuries (one call expected, by the agent); the
+  fullscreen check at `hundred_view` with `ship_render` at `mesh`, before (T27's painted mesh) and after (GPU time, VRAM, draw
+  calls, triangles); the generator's time and the atlas's fill.
+- **Done when:** the sheet is in front of the maintainer with the numbers, the Python and GUT tests pass, 20 copies instance to
+  one draw call, and the contract above is what the files hold. **Checkpoint 1b** is the maintainer's verdict on the sheet (H),
+  the gate for T30b; a refusal names what to change and T30a takes a second round in the same worktree.
+- **Expected gain:** GPU time at `hundred_view` within 1.3 times T27's painted mesh row (70 %); the maps under 40 MB of VRAM
+  (85 %); the look accepted in two rounds (60 %).
+- **Architecture:** §17.18 (T30b adds its paragraphs under its own task id).
+
+##### M4-T30b Every other hull textured, mesh LODs measured, the mesh path the default
+
+- **Track:** X and R. **Agent:** Opus (mechanical once the generator is fixed; each asset's markings and emissives need
+  judgement, the look (H)). **Depends on:** T30a and checkpoint 1b. Runs in wave 5.
+- **Goal:** every asset that is a splat today besides the sky is a textured mesh: the raider (`raider` style's wear and the
+  two engine glows of the reference), the nav buoy (hazard stripes, the beacon's lens emissive), the Starfury's and the raider's
+  break-up chunks (the parent's UVs and maps), the capital stand-ins' `capital_hulls` boxes (plating, window rows emissive) and
+  the station's two pieces (`b5_station`: the drum's bands, the cargo modules, the command sphere's windows); the far dot's
+  colour comes from the manifest's `mean_albedo`; `settings.ship_render` defaults to `mesh`, so the game runs on meshes from this
+  task on while the splat path still exists for comparison.
+- **Mesh LODs:** Godot's importer builds the levels (T27); this task measures whether they carry the battle. With the
+  `render_triangles` option the Starfury and the raider are also built coarser (about 8 000 and 2 500 triangles) with the fine
+  mesh baked into the normal map; if the coarse build looks the same on the sheet at 30 m (H) and cuts the triangles drawn at
+  `battle` 500, it becomes the default and the manifest's `mesh.lods` stays empty; otherwise the fine build stays and a
+  generated far level (a few hundred triangles, `from_m` about 600) goes into `mesh.lods` and `MeshAssets` adds it to the
+  imported mesh's LOD chain. Either way the dots take over at 3 km as now.
+- **Files:** `tools/procgen/assets/raider_fighter.py`, `nav_buoy.py`, `capital_hulls.py`, `b5_station.py`, `core/chunks.py`
+  (chunk meshes with the parent's UVs), `core/pieces.py` (a piece's textured mesh), `styles/raider.py`; `src/rendering/far_dots.gd`
+  (the colour source), `src/rendering/render_piece.gd` (the textured piece), `src/props/nav_buoy.gd` (draws its mesh when
+  `ship_render` is `mesh`), `src/combat/debris_chunk.gd` and `debris_pool.gd` (the chunk mesh), `src/perf/standins/capital_standin.gd`
+  and `station_standin.gd` (`set_look` draws the textured look; the splat look goes here, so T31 does not edit these),
+  `src/autoload/settings_schema.gd` (the default of `ship_render`, under its own comment), `tests/integration/test_textured_hulls.gd`,
+  the Python tests of each asset (a `mesh` section, the chunks' UV reuse, the pieces).
+- **Tests first:** each asset's manifest has a valid `mesh` section and its maps; a chunk's UVs are a subset of its parent's
+  and it names no map of its own; the station's pieces keep their 8 km and their drum axis; `build all` under 90 s (recorded);
+  a buoy, a chunk, a capital and the station draw their textured mesh with no splat node visible; the far dot's colour is the
+  manifest's; the default `ship_render` is `mesh` and `test_render_path` still switches both ways; `test_standins`,
+  `test_destruction`, `test_buoy_destruction`, `test_debris_pool` green.
+- **Measures:** sheets of each asset (`scripts/look_sheet.sh`, (H)); the fullscreen check at `typical`, `battle` 500 (live and
+  frozen), `station near` and `far` on the default path against T27's mesh rows (GPU time, triangles, draw calls, VRAM); the
+  coarse against the fine Starfury.
+- **Done when:** every asset is textured and the game runs on the mesh default with every focused test green, the LOD decision is
+  in the entry with its numbers, and the sheets are listed for (H).
+- **Expected gain:** `battle` 500 frozen at or under 3.5 ms GPU (70 %); the station near under 2.5 ms (70 %); if the coarse
+  build is taken, triangles drawn at 500 down by half (60 %).
+- **Architecture:** §17.18 (paragraphs under T30b).
+
+##### M4-T30c The sky without splats
+
+- **Track:** X and R. **Agent:** Opus. **Depends on:** T30a (its PNG writer). Runs in wave 4 beside T15.
+- **Goal:** the stars and the nebula are drawn without GDGS and look the same (H): the stars as a point field, crisp at any
+  resolution, the nebula as a generated panorama on the environment's sky.
+- **Stars.** `sky_default` writes `sky_default_stars.f32` (12 000 records of direction, linear colour and brightness, little-endian
+  float32, the layout in the manifest) and `StarField` (one `MultiMeshInstance3D` under `SpaceEnvironment`, following the camera
+  as `SkyFollower` does) draws each as a camera-facing quad with a 1 px floor, unshaded and additive, depth-tested but writing no
+  depth, so a hull hides it, the flare's occlusion still reads the sky as open and the motion blur still smears it by the camera's
+  turn. A star's light is the same at every render height (the running lights' rule, `StarPointMath`, pure).
+- **Nebula.** The 4 000 soft Gaussians are rendered analytically into an equirectangular panorama (4 096 by 2 048, sRGB,
+  `core/image.py`, no Pillow) on a `PanoramaSkyMaterial`; the stars below the point field's threshold may go into it too. The
+  environment resource is the one environment from here on; `environment_fallback.tres` and the `fallback` command's sky half go
+  in T31.
+- **Files:** `tools/procgen/assets/sky_default.py`, `tools/procgen/core/panorama.py` (new), `src/environment/star_field.gd` (new),
+  `src/environment/star_point_math.gd` (new), `src/environment/space_environment.gd` and `.tscn`, `src/environment/sky_follower.gd`,
+  `src/environment/sky_manifest.gd`, `assets/shaders/star_point.gdshader`, `tests/unit/test_star_point_math.gd`,
+  `tests/integration/test_environment.gd`, `tools/procgen/tests/test_sky_default.py`, `test_panorama.py`.
+- **Tests first:** the star file parses to `counts.stars` records with unit directions; the panorama is deterministic and its
+  brightest region lies in the direction the splat nebula's centroid did (the manifest's `centroid_offset` tells it); the field has
+  one instance per star and follows the camera; the environment loads with no generated asset (as today); `test_post_effects`
+  shows the flare still hidden by a hull and open on the sky; a star's delivered light is equal at 1 080 and 2 160 lines.
+- **Measures:** the fullscreen check at `typical` with the splat sky and with the star field (GPU time, draw calls, VRAM); a
+  side-by-side screenshot for (H).
+- **Done when:** the sky is drawn with no splat node in the scene, the tests pass and the screenshot is listed for (H).
+- **Expected gain:** the sky under 0.3 ms GPU in one draw call plus the panorama (80 %); about 11 MB of VRAM for the panorama,
+  against the sky's 16 000 splats in the budget.
+- **Architecture:** §17.19.
+
+##### M4-T31 Remove Gaussian splats
+
+- **Track:** X, R and G. **Agent:** Opus (about 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only
+  deletion). **Depends on:** T30b, T30c. Runs in wave 6 and merges last in it.
+- **Goal:** no Gaussian splat code, asset, setting, command, test, script, dependency or doc sentence remains, except as history
+  (milestone files, the Cycle log, the handoff docs, `docs/research-notes.md` under a heading that says so). The game draws every
+  hull as its textured mesh, the sky as T30c's, and the suite is green.
+- **Removed:** `addons/gdgs_scs/` (144 files, its `LICENSE` and `PATCHES.md` with it; the editor plugin line and the `[gdgs]`
+  section in `project.godot`); `src/rendering/splat_budget_math.gd`, `splat_lighting_loader.gd`, `splat_pose_sync.gd`,
+  `paint_mesh_lights.gd`, `src/ship/splat_lod.gd`, `src/ship/hull_depth_proxy.gd`, `assets/shaders/hull_depth_proxy.gdshader`,
+  `paint_mesh.gdshader`, `paint_mesh_glass.gdshader`, `assets/environment/environment_fallback.tres`; `tools/procgen/core/ply.py`,
+  `lighting.py`, `frames.py`, `paint_mesh.py`, the splat halves of `sampling.py` (the oriented samples stay as the normal bake's
+  source), `chunks.py` and `pieces.py`, `manifest.lod_entry` and the `lods`, `hero` and `lighting` validation; `scripts/sync_gdgs_fork.sh`;
+  the GDGS row and the fork paragraph in `docs/third-party.md` (Brush and OpenSplat leave the considered table too).
+- **Renamed or rewritten:** `splat_status.gd` becomes `render_status.gd` (`RenderStatus`: the `render` provider with fps, frame
+  time, draw calls, triangles, VRAM, `renderer` `forward_plus` or `headless`, the `far_dots` count from the `lod` provider; the F4
+  toggle and the `fallback` command go); `splat_light_rig.gd` becomes `light_rig.gd` (`LightRig`, the same 8 lights and
+  `LightPicker`); `lod_switcher.gd` and `lod_switcher_math.gd` keep the far dot and `RenderPiece`'s level and lose the splat
+  levels, the budget step and the hybrid; `paint_meshes.gd` is `mesh_assets.gd` for good; `ship.tscn`'s `HullSplats`, `HullSplatSync`,
+  `HullMeshFallback` and `HullDepthProxy` become one `Hull` `MeshInstance3D`, and `ship.gd` loses the levels, the fallback and the
+  proxy (the cockpit view keeps the interior OBJ); `nav_buoy.tscn`, `main.tscn` (`PaintMeshLights`), `space_environment.tscn`
+  (`SkySplats`, the compositor effect) likewise.
+- **Edited:** `ship_spec.gd` and `ship_catalog.gd` (`splat_lod`, the hero), `hardpoints.gd` (chunk `.light`), `nav_lights.gd`
+  (own lights), `running_lights.gd`, `thruster_visuals.gd`, `ship_pool.gd` (the lean build's levels), `main.gd`, `overlay_text.gd`
+  (`SPLATS COMPUTE`), `space_environment.gd`, `sky_follower.gd`, `sky_manifest.gd`, `nav_buoy.gd`, `debris_chunk.gd`, `debris_pool.gd`,
+  `explosion.gd`, `fx_pool.gd`, `impact_flash.gd`, `muzzle_flash.gd`, `emitter_curves.gd`, `light_picker.gd`, `far_dots.gd`,
+  `motion_blur_effect.gd`, `render_scale.gd`, `render_piece.gd`, `station_scene.gd`, `settings_schema.gd`; the settings
+  `splat_lod_bias`, `splat_relight`, `relight_ambient`, `relight_unlit_level`, `relight_light_gain`, `splat_hero`, `splat_budget`,
+  `own_lights`, `hull_splat_sync`, `hull_depth_proxy`, `ship_render` and `ship_mesh_beyond_m` go (`far_ship_dot_m` and
+  `ambient_level` stay); the commands `lod`, `fallback` and `relight` go and `info.md` loses their rows and gains `render`'s new
+  fields; `scripts/vendor_addons.sh` (the row), `capture.sh` and `capture_m2.sh` (the Raster notes), `run_tests.sh` (the smoke
+  run expects `render.renderer = headless`), `render_compare.sh` (the render argument goes; the script stays as the scene
+  measurer), `probe_draw_calls.gd`; `.github/workflows/ci.yml` (the Pillow install and the comment; no step is GDGS's);
+  `tools/procgen/README.md` and `__main__.py` (`--spacing` goes); `docs/architecture.md` §1 (the stack table), §2, §3, §7 (rewritten
+  as the mesh pipeline: what is drawn how, the lighting with the rig and the ambient term, real depth for the flare and the blur),
+  §9 (the manifest contract is the `mesh` section), §14.4 and §14.8 (LOD and the asset framework without splats), §17.10 and
+  §17.17 (a line each saying what T31 removed), and §17.20; `docs/playtest.md` (AC12, AC15, AC18, the hunting paragraph, the
+  settings list); `docs/roadmap.md` (M1, M1.5, M3, M6 and M12's splat phrases marked historical or reworded); `docs/assets-starfury.md`
+  and `assets-raider.md` (the splat-quality sections become the texture sections); `docs/research-notes.md` (the GDGS findings
+  under a historical heading); `CLAUDE.md` ("What this is", the GDGS fork rule, the GPU work bullet's `splat_backend` and the
+  llvmpipe Raster note).
+- **Tests removed** (whole files, listed again in the Cycle log entry): `test_splat_import`, `test_splat_pose_sync`,
+  `test_splat_budget_in_play`, `test_splat_budget`, `test_splat_budget_math`, `test_splat_lighting_loader`, `test_splat_lod`,
+  `test_gaussian_scene_registry`, `test_hull_depth_proxy`, `test_hero_lod`, `test_relight`, `test_lod_in_play`, `test_render_path`
+  (its mesh and far-dot cases move into `test_ship_scene` and `test_far_dots`), `test_paint_meshes` (replaced by T30a's
+  `test_mesh_assets`); in Python `test_ply`, `test_lighting`, `test_frames`, `test_relit_assets`, `test_paint_mesh`, and the splat
+  cases of `test_sampling`, `test_chunks`, `test_render_pieces` and every asset test. **Tests edited:** the other 30 files that
+  name `HullSplats`, `GaussianSplatNode`, `SplatStatus`, the splat settings or the `.light` files (`tests/fixtures/manifest_reader.gd`
+  and `rebase_fight.gd` among them); `test_ship_nodes`' node counts fall with the nodes and the new numbers are recorded.
+- **Tests first:** a guard test that the scene tree of `Main` with the player, a buoy, a chunk, a capital and the station holds no
+  `GaussianSplatNode` and no compositor effect of GDGS's (written while the class still exists, then it becomes a check that the
+  class name resolves to nothing); the smoke run's `render.renderer`; `test_ship_scene` and `test_ship_nodes` with the `Hull`
+  node; the Python suite without the PLY modules.
+- **Measures:** the fullscreen check at `typical`, `battle` 500 and the station before and after (VRAM is the headline: the sort
+  buffers go), the frame's process time at 500 (`SplatPoseSync`, the levels and `PaintMeshLights` were per ship per frame), the
+  headless import time of `assets/generated`, `scripts/run_tests.sh`'s wall time. The tick before and after at `battle` 300, to
+  show it did not move.
+- **Done when:** `grep -ri -E 'gdgs|splat|gaussian'` over `src`, `tests`, `tools`, `scripts`, `assets/shaders`, `project.godot`,
+  `CLAUDE.md`, `info.md`, `docs/architecture.md`, `docs/playtest.md`, `docs/third-party.md`, `docs/roadmap.md` and
+  `tools/procgen/README.md` finds nothing but the history markers named above; `addons/gdgs_scs` is gone; the focused files and
+  CI are green and, as the exception to Q10 that a 150-file removal earns, `scripts/run_tests.sh` has run green locally once
+  for this task; the Cycle log entry holds the numbers and the list of removed tests; `docs/third-party.md` notes the removal with
+  the date.
+- **Expected gain:** VRAM down about 1.2 GB at the default budget (85 %); the frame's process work at 500 down 0.5 to 1.5 ms
+  (50 %); the tick unchanged (95 %).
+- **Architecture:** §17.20, and the rewrite of §7, §9, §14.4 and §14.8 (the one exception to the §17-only rule).
+
 #### Architecture subsections this plan assigns
 
 §17.6 the battle and typical layouts and the stand-ins (T07); §17.7 the hit broad phase and projectile kinds (T08); §17.8 the body
 registry and kinds (T09); §17.9 the native flight step (T10); §17.10 far proxies and the node diet (T11); §17.11 missile, beam,
 interceptor and mine stand-ins (T12); §17.12 collision layers (T14); §17.13 the native core (T15, with T16, T17, T18, T20 and T24
 adding paragraphs under their own task ids); §17.14 the low-attention tier (T21, with T22 and T23 adding paragraphs); §17.15
-resolution scaling (T26). T13, T19 and T25 write only in this file.
+resolution scaling (T26). T13, T19 and T25 write only in this file. Added 2026-11-04 (Q29): §17.16 is T29's and §17.17 T27's (as
+built); §17.18 the textured mesh pipeline (T30a, with T30b adding paragraphs under its own task id); §17.19 the sky without splats
+(T30c); §17.20 removing Gaussian splats (T31, which also rewrites §7, §9, §14.4 and §14.8).
 
 
 ## Cycle log
