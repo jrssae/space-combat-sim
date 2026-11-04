@@ -77,6 +77,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q43 | Resuming M4 (2026-11-04) | **Phase 2 resumes beside the phase 1 leftovers:** T15 runs in its own worktree beside T30d, T31 follows T30d, and phase 2 continues by the plan's waves |
 | Q44 | T30d's look | **Merge on the agent's judgement**, the sheets listed for (H) later; fixes come as a later round if the maintainer wants them |
 | Q45 | T30d's coarse or fine Starfury | **The agent decides** from the 30 m sheet and the triangle numbers at `battle` 500; the maintainer may reverse it later |
+| Q46 | Wing-level AI (2026-11-04) | **Research it as the next task after phase 2** (T32): how wing-level decisions (the wing picks targets and tactics a few times a second, members steer, avoid and aim every tick) would cut the AI's cost at 300 to 500 ships, as RTS games, Total War and X4 do, and what it does to the dogfights' feel. Research and a proposal only; the maintainer decides at checkpoint 3 |
 
 ## The budget ("good game performance", Q5)
 
@@ -200,6 +201,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T30d | Every other hull textured (raider, buoy, chunks, capital and station pieces), mesh LODs measured, the mesh path the default (split from T30b, 2026-11-04) | T30b | Opus | Mechanical once the generator is fixed; each asset's markings and emissives need judgement, the look (H) | X, R | done (2026-11-04, in a worktree on `c0a0b81`; Cycle log, M4-T30d; the fine Starfury stays, the sheets wait for (H)) |
 | T30c | The sky without splats: a star point field and the nebula as a generated panorama | T30a | Opus | The sky is the last splat node; stars must stay crisp points at any resolution | X, R | done |
 | T31 | Remove Gaussian splats: `addons/gdgs_scs` and every splat path in code, procgen, settings, console commands, tests, scripts, CI and docs (Q29, Q30) | T30d, T30c | Opus | About 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only deletion | X, R, G | done (2026-11-04, in a worktree on `8329f16`; Cycle log, M4-T31) |
+| T32 | Wing-level AI research: what deciding per wing instead of per fighter would save at 300 and 500 ships, how other games do it, and a proposal (Q46) | phase 2 (T18, T20), report P2 | Fable | Research and a design judgement over the measured think stage; no game code | M | not started |
 
 ### M4-T01 Benchmark harness, budget and baseline
 
@@ -539,6 +541,7 @@ wave's combined gain that is less than the sum of its parts is written down as s
 | 4 | T15 (N, serial: it touches every native class), T30c (X+R) | T15, T30c | T15's own before and after at typical, 100 and 300; T30c's sky on the GPU | 2 |
 | 5 | T16 (N+G), T17 (N+G), T19 (M), T30b (X+R, after checkpoint 1b) | T16, T17, T19, T30b | combined; T19's Jolt numbers at 300 and 500 feed **checkpoint Q17**; the fullscreen check on the mesh default | 4 |
 | 6 | T18 (N), T20 (N+A), T31 (X+R+G) | T18, T20, T31 (T31 last: it edits the render tests) | **phase 2 end: sweep, headlines, fullscreen and VRAM on the mesh-only renderer, release once; report P2** | 3 |
+| 6b | T32 (M, research, Q46) | none (doc only) | uses report P2's think-stage numbers; its proposal goes to the maintainer with **checkpoint 3** | 1 |
 | 7 | T21 (T, serial: pool and ship adapter) | T21 | its own at 500 | 1 |
 | 8 | T22 (T+N), T23 (R), T26 (R, only if the GPU binds at the fullscreen check after T11) | T22, T23, T26 | combined at 500; fullscreen at 500 | 2 or 3 |
 | 9 | T24 (N, only if the fullscreen check at 500 misses the floor after T23), T25 (M) | T24, T25 | **phase 3 end: sweep, battle 500 and 1 000, fullscreen, release, the full local suite; report P3** | 1 or 2 |
@@ -558,7 +561,7 @@ native class and the pool. T30a to T30c and T31 ride beside the native waves and
    every ship, or take AI ships out of Jolt (a change to D4 and §5.6). The controller stops; T20 and later do not assume either.
 3. **After wave 6 (report P2).** Phase 2's numbers; the tier's physics rule (Q22) is already accepted, so the checkpoint is the
    numbers and whether `typical` holds its headroom; with T31 merged, the VRAM and GPU time of the mesh-only renderer against T27's
-   mesh rows.
+   mesh rows. T32's wing-level AI proposal (Q46) is decided here too, before T21.
 4. **Before T24.** Only if the fullscreen check at 500 misses the 30 FPS floor after T23 and T26: the simulation thread changes
    §15.3's tick order and is a design-contract change; the controller asks before dispatching it.
 5. **After T25 (report P3).** M4's definition of done; the maintainer confirms the milestone before `m4` merges into `main`.
@@ -1578,6 +1581,30 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
   the lens flare; only those two addons installed or naming classes) and `tools/procgen/tests/test_mesh_only.py`. A lean AI ship has 11
   nodes of its own besides its guns (was 16). `test_fighter_melee` (T14) runs in its own physics space, since in the shared one
   the tests before it changed its result (it failed in the base's full suite), and holds a new digest for the moved hull.
+
+##### M4-T32 Wing-level AI research (Q46)
+
+- **Track:** M. **Agent:** Fable (research and a design judgement). **Depends on:** phase 2's end (T18 and T20 merged) and report
+  P2, whose think-stage numbers it starts from. Runs as wave 6b, before T21.
+- **Goal:** the maintainer decides at checkpoint 3 whether M4 (or a later milestone) moves part of each fighter's thinking up to its
+  wing: the wing picks targets, tactics and engagements a few times a second, and each member only steers, avoids and aims every
+  tick, as RTS squads, Total War's regiments and X4's out-of-sector fleets do. The question is what that saves at 300 and 500 ships
+  after T17's native brains and T18's threads, and what it costs in the feel of a dogfight.
+- **Sources:** how StarCraft II, Age of Empires, Supreme Commander, Planetary Annihilation, Total War, Ashes of the Singularity,
+  X4: Foundations, EVE Online, Homeworld and Freespace 2 split decisions between commander, group and unit (talks, postmortems,
+  papers and engine documentation, cited); the game's own M3 wings, orders and objectives (`src/ai/wing.gd`, `WingDirector`,
+  `AiPilot`'s behaviours) and phase 2's Cycle log entries.
+- **Measures:** from report P2 and `bench battle 300` and `500`: the think stage split into what a wing could decide once (target
+  scoring, behaviour choice, threat reading) and what each fighter must still do every tick (steering, avoidance, aim, fire);
+  the projected saving at each wing size. No game code; a throwaway timing hook at most, not committed.
+- **Files:** `docs/research/wing-level-ai.md` (new: the survey with sources, the cost split, the design options, the risks), a
+  proposal subsection under this section, the T32 row.
+- **Done when:** the research doc and the proposal give the measured split, two or three design options (for example the wing
+  decides targets only; the wing decides targets and tactics; full squad behaviours), each with its projected saving, what changes
+  in `AiPilot`, `Wing` and T21's tier, the risk to the dogfights' feel and to the seeded tests, and a recommendation; the controller
+  then stops for the maintainer's answer at checkpoint 3.
+- **Expected:** a saving worth a task only where target scoring and behaviour choice are still a large share of the think stage
+  after T17 and T18 (50 %); either way T22's tier brains can reuse the wing-level split.
 
 #### Architecture subsections this plan assigns
 
