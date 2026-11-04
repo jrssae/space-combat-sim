@@ -29,8 +29,11 @@ func _on_fired(_muzzle_index: int, _projectile: Projectile) -> void:
 	tally.note_fired()
 
 
-# The ship is still in its wing's slot here: the wings drop it at their next tick.
+# The ship is still in its wing's slot here: the wings drop it at their next tick. The player leads their own wing but is
+# not a loss of it.
 func _on_ship_destroyed(combatant: Combatant, _info: HitInfo) -> void:
+	if combatant == main.combatant:
+		return
 	var wing: Wing = main.wings.player_wing()
 	if wing != null and (wing.slot_of(combatant) > 0 or wing.leader == combatant):
 		tally.note_wing_loss()

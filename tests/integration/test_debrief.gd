@@ -267,6 +267,7 @@ func test_a_lost_mission_opens_a_failure_debrief() -> void:
 	assert_eq(screen.frame().current_page().title, "MISSION FAILED")
 	var lines: PackedStringArray = _shown_lines(screen)
 	assert_has(lines, "Failure - Player destroyed")
+	assert_has(lines, "Wing losses: 0", "the player's own death is not a wing loss")
 	assert_has(lines, "[ ] Fly to NAV ALPHA - not finished", "an objective still open reads as open")
 	assert_has(lines, "[-] Destroy the raiders - not reached", "and one never shown as not reached")
 	assert_false(lines.has("[x] Fly to NAV ALPHA"))
