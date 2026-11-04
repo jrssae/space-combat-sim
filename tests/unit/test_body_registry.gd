@@ -12,11 +12,6 @@ var root: Node3D
 var _native_backup: bool
 
 
-## A marker that says what kind of body it marks, as `Targetable.kind` will (M4-T07).
-class KindedMarker extends Targetable:
-	var kind: Variant = &"ship"
-
-
 func before_each() -> void:
 	_native_backup = bool(Settings.get_value(&"perf_native"))
 	Settings.set_value(&"perf_native", true)
@@ -111,8 +106,9 @@ func _crowd(rng: RandomNumberGenerator, n: int) -> Array[Node3D]:
 		elif roll < 0.14:
 			body = _drone(at)
 		elif roll < 0.22:
-			var marker := KindedMarker.new()
-			marker.kind = [&"capital", &"static", 4, "Prop", 9, null][rng.randi_range(0, 5)]
+			var marker := Targetable.new()
+			marker.kind = [Targetable.Kind.CAPITAL, Targetable.Kind.STATIC, Targetable.Kind.MINE, Targetable.Kind.PROP, Targetable.Kind.TURRET,
+					Targetable.Kind.SHIP][rng.randi_range(0, 5)]
 			body = _body(at, sides[rng.randi_range(0, 2)], "KIND %d" % i, rng.randf_range(5.0, 600.0), marker)
 		else:
 			body = _body(at, sides[rng.randi_range(0, 2)], "SHIP %d" % i, rng.randf_range(5.0, 30.0))
