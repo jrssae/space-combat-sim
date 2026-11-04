@@ -236,7 +236,7 @@ func test_settings_and_controls_open_in_the_frame_and_start_steps_back() -> void
 	assert_eq(_menu().frame().depth(), 1)
 	await _pad(&"ui_down")
 	await _pad(&"ui_accept")
-	assert_eq(_menu().frame().current_page().title, "Controls")
+	assert_true(_menu().frame().current_page() is ControlsScreen)
 	await _pad(&"ui_cancel")
 	assert_eq(_menu().frame().depth(), 1, "B steps back too")
 	assert_true(get_tree().paused)
@@ -323,6 +323,8 @@ func test_the_legend_follows_a_rebind_made_while_paused() -> void:
 	assert_eq(_menu().frame().pad_diagram().legend.label_for(&"x"), "Auto-track")
 	assert_true(ControlProfiles.bind(&"fire", "pad:button:2")["ok"])
 	assert_string_contains(_menu().frame().pad_diagram().legend.label_for(&"x"), "Fire")
+	assert_true(ControlProfiles.use(ControlProfile.DEFAULT_NAME)["ok"])  # and back
+	assert_eq(_menu().frame().pad_diagram().legend.label_for(&"x"), "Auto-track")
 
 
 # --- Sound and housekeeping --------------------------------------------------------------------------------------

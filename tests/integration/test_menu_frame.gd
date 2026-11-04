@@ -62,6 +62,9 @@ func test_the_legend_follows_the_live_input_map_without_a_source() -> void:
 	assert_eq(frame.pad_diagram().legend.label_for(&"a"), "Fire", "the project's own map")
 	assert_true(ControlProfiles.bind(&"fire", "pad:button:2")["ok"])
 	assert_string_contains(frame.pad_diagram().legend.label_for(&"x"), "Fire")
+	assert_true(ControlProfiles.use(ControlProfile.DEFAULT_NAME)["ok"])  # and back
+	assert_eq(frame.pad_diagram().legend.label_for(&"a"), "Fire")
+	assert_eq(frame.pad_diagram().legend.label_for(&"x"), "Auto-track")
 
 
 func test_highlighting_an_action_lights_its_buttons() -> void:

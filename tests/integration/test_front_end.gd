@@ -235,6 +235,14 @@ func test_settings_and_controls_open_in_the_frame_and_go_back() -> void:
 			await _pad(&"ui_up")
 
 
+func test_the_controls_entry_opens_a_controls_page() -> void:
+	var front: FrontEnd = await _front_end()
+	for i: int in 4:
+		await _pad(&"ui_down")
+	await _pad(&"ui_accept")
+	assert_true(front.frame().current_page() is ControlsScreen)
+
+
 func test_the_settings_entry_opens_a_settings_page() -> void:
 	var front: FrontEnd = await _front_end()
 	for i: int in 3:

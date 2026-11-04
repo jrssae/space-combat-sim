@@ -458,6 +458,7 @@ func test_ui_actions_survive_every_change_the_page_makes() -> void:
 	await _press_button(JOY_BUTTON_A)
 	assert_eq(_ui_snapshot(), before, "after A was bound to an action")
 	await _pad(&"ui_down")  # off Add a binding
+	screen.advance(ControlsScreen.GRACE_S + 0.1)
 	await _walk_to("Unbind A")
 	await _pad(&"ui_accept")
 	assert_eq(_ui_snapshot(), before, "after it was unbound")
@@ -477,6 +478,7 @@ func test_save_as_writes_the_layout_and_uses_it() -> void:
 	await _open_controls()
 	await _start_capture_on("Brake")
 	await _press_button(JOY_BUTTON_X)
+	screen.advance(ControlsScreen.GRACE_S + 0.1)
 	await _pad(&"ui_cancel")
 	await _walk_to("Save as a new profile")
 	await _pad(&"ui_accept")
@@ -564,9 +566,9 @@ func test_the_frame_holds_still_for_a_moment_after_the_press_then_steps_back_nor
 	screen.advance(ControlsScreen.GRACE_S + 0.1)
 	assert_true(frame.go_back())
 	assert_eq(screen.current_view(), ControlsScreen.View.LIST, "afterwards Back steps out of the view")
-	assert_false(frame.go_back() and false)
 	assert_eq(frame.depth(), 2)
-	assert_false(frame.go_back() and frame.depth() == 2, "then out of the page")
+	assert_true(frame.go_back())
+	assert_eq(frame.depth(), 1, "then out of the page")
 
 
 # --- Reachable from both menus -----------------------------------------------------------------------------------
