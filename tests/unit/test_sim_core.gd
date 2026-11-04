@@ -637,7 +637,7 @@ func test_the_flight_step_flies_the_same_from_the_core_as_from_the_physics_serve
 const KERNEL_FILE: String = "res://native/src/kernels.rs"
 const ROWS_FILE: String = "res://native/src/rows.rs"
 const KERNEL_USERS: Array[String] = ["res://native/src/contact_field.rs", "res://native/src/hit_sweep.rs",
-		"res://native/src/ram_phase.rs", "res://native/src/flight_step.rs"]
+		"res://native/src/ram_phase.rs", "res://native/src/flight_step.rs", "res://native/src/pilot_kernels.rs"]
 const KERNEL_FORBIDDEN: Array[String] = ["Gd<", "Variant", "InstanceId", "instance_id", "singleton", "PhysicsServer",
 		"godot_error", "godot_print", "godot_warn", "#[func]", "#[godot_api]", "GodotClass", ".get(&", ".call(", "Node",
 		"RigidBody", "StringName", "GString", "Scs", "pub use", "/*", "unsafe"]
@@ -646,7 +646,7 @@ const ROWS_FORBIDDEN: Array[String] = ["Gd<", "Variant", "InstanceId", "instance
 		"RigidBody", "Scs", "pub use", "/*", "unsafe", "Object", "Array", "Packed"]
 ## The only `use` lines the kernels may hold: the standard library, two maths builtins, and the row tables' plain data.
 const KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
-		"use crate::rows::{Bolts, FLAG_RIGID, Rows};", "use crate::rows::{FLAG_RIGID, Rows};"]
+		"use crate::rows::{Bolts, FLAG_RIGID, Rows};", "use crate::rows::{FLAG_RIGID, Rows};", "use crate::rows::Rows;"]
 ## The only `use` lines the row tables may hold: the standard library and the value types the columns are made of.
 const ROWS_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, GString, Vector3};"]
 
