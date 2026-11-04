@@ -163,7 +163,7 @@ class Watch extends Node:
 		world = p_main.world
 		name = "RebaseFightWatch"
 		process_physics_priority = -1000  # the start of every tick: Jolt's last step is in, nothing of this tick has run
-		process_priority = 2000  # every frame after the cameras, the HUD and the splat sync
+		process_priority = 2000  # every frame after the cameras and the HUD
 
 	func _ready() -> void:
 		world.rebased.connect(_on_rebased)
@@ -333,8 +333,8 @@ class Watch extends Node:
 			fight._fail("the HUD's reference range is %.2f m, the universe distance %.2f m" % [frame.reference_range_m, expected])
 
 	# The frame after a rebase: every interpolated node of World is drawn at its tick pose (the world stalls together for the
-	# rebase tick, WorldFrame's class notes). Nodes with interpolation off (the chase camera, the splat nodes the pose sync
-	# drives) are placed every frame; the camera has its own check. Silent voices are skipped (the rebase skips them too).
+	# rebase tick, WorldFrame's class notes). Nodes with interpolation off (the chase camera) are placed every frame; the camera
+	# has its own check. Silent voices are skipped (the rebase skips them too).
 	func _check_snap() -> void:
 		fight.snaps_checked += 1
 		var nodes: Array[Node] = get_tree().get_nodes_in_group(WorldFrame.SHIFTABLE_GROUP)

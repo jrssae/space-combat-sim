@@ -1,7 +1,7 @@
 class_name ImpactFlash
 extends Node3D
 ## A bolt hit (architecture §15.5): a short additive flash and a handful of spark streaks, a child of the ship that was
-## hit so it rides with it. Meshes, never splats (D22), tinted with the bolt's colour. It frees itself.
+## hit so it rides with it. Meshes only (D22), tinted with the bolt's colour. It frees itself.
 ##
 ## Add it as a child of the hit ship with `position` set in the ship's body frame. Timing is visual (`_process` delta), so
 ## a paused game freezes it.

@@ -5,7 +5,7 @@ extends MeshInstance3D
 ## full size while fading out, then hides itself.
 ##
 ## A shot also lights the nose (M3-T22): the flash owns one `LightEmitter`, made once with the node and reused for every shot, so a
-## shot allocates nothing. It enters the `SplatLightRig`'s candidates for `EmitterCurves.FLASH_S` (60 ms) and leaves them when
+## shot allocates nothing. It enters the `LightRig`'s candidates for `EmitterCurves.FLASH_S` (60 ms) and leaves them when
 ## the flash ends, the ship is parked or the node leaves the tree.
 ##
 ## A visual, so it animates in `_process` from the frame `delta` (and `advance` for tests); how it looks is (H).
@@ -19,7 +19,7 @@ const START_SCALE: float = 0.3
 
 var _age_s: float = INF
 var _light: LightEmitter = null
-var _rig: SplatLightRig = null
+var _rig: LightRig = null
 
 
 ## A hidden flash with its quad mesh, ready to be added under a muzzle.
@@ -109,7 +109,7 @@ func _start_light() -> void:
 	if muzzle == null:
 		return
 	if _rig == null or not is_instance_valid(_rig):
-		_rig = SplatLightRig.of(self)
+		_rig = LightRig.of(self)
 	if _rig == null:
 		return
 	_light.anchor = muzzle

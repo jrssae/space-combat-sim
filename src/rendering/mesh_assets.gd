@@ -1,15 +1,10 @@
 class_name MeshAssets
 extends RefCounted
-## Loads a hull's mesh (M4-T30a, architecture §17.18): the textured mesh the generator wrote under the manifest's `mesh` section
-## (`<asset>.glb` with its UV atlas and the four maps, one `StandardMaterial3D` per surface lit by the scene's lights), or, for an
-## asset without one, T27's painted mesh (`paint_mesh`, the paint shader). Every hull has one from M4-T30d, the break-up chunks
-## too (`chunk_mesh`, on their parent's materials). One material per surface per asset, so the
-## renderer instances every copy of a hull. Godot's scene importer builds each mesh's levels of detail.
-##
-## The paint materials are kept in `materials` so `PaintMeshLights` can give them the scene's 8 lights each frame.
+## Loads a hull's mesh (M4-T30a, architecture §7, §17.18): the textured mesh the generator wrote under the manifest's `mesh` section
+## (`<asset>.glb` with its UV atlas and the four maps, one material per surface lit by the scene's lights). Every hull has one from
+## M4-T30d, the break-up chunks too (`chunk_mesh`, on their parent's materials). One material per surface per asset, so the renderer
+## instances every copy of a hull. Godot's scene importer builds each mesh's levels of detail.
 
-const OPAQUE_SHADER: Shader = preload("res://assets/shaders/paint_mesh.gdshader")
-const GLASS_SHADER: Shader = preload("res://assets/shaders/paint_mesh_glass.gdshader")
 const LIVERY_SHADER: Shader = preload("res://assets/shaders/hull_livery.gdshader")
 const HULL_GLASS_SHADER: Shader = preload("res://assets/shaders/hull_glass.gdshader")
 ## The shader's table sizes (`hull_livery.gdshader`).
@@ -17,12 +12,9 @@ const MAX_STRIPES: int = 48
 const MAX_PATTERNS: int = 12
 const MAX_FIELDS: int = 8
 
-const MAX_MATERIALS: int = 32
 const GLASS_SURFACE: String = "glass"
 const MAP_KEYS: Array[String] = ["albedo", "normal", "orm", "emissive"]
 
-## Every paint material made so far (shared by every user of its mesh), for the lights.
-static var materials: Array[ShaderMaterial] = []
 static var _cache: Dictionary = {}
 ## The textured meshes' glass materials and their manifest strengths, for `settings.cabin_glow_level` (Q36).
 static var _glass: Array[ShaderMaterial] = []
@@ -30,17 +22,21 @@ static var _glass_strength: Array[float] = []
 static var _livery_sections: Dictionary = {}
 
 
-## The mesh of a ship asset: textured when its manifest has `mesh`, else painted (`paint_mesh`); null when nothing was generated.
+## The parsed `manifest.json` of `asset_id`, or {} when it is missing or unreadable.
+static func read_manifest(asset_id: String, asset_root: String = ShipSpec.ASSET_ROOT) -> Dictionary:
+	var file := FileAccess.open(asset_root.path_join(asset_id).path_join("manifest.json"), FileAccess.READ)
+	if file == null:
+		return {}
+	var data: Variant = JSON.parse_string(file.get_as_text())
+	return data if data is Dictionary else {}
+
+
+## The textured mesh of a ship asset (its manifest's `mesh`), null when nothing was generated.
 static func for_asset(asset_id: String, asset_root: String = ShipSpec.ASSET_ROOT) -> Mesh:
-	var manifest: Dictionary = SplatLod.read_manifest(asset_id, asset_root)
-	var dir: String = asset_root.path_join(asset_id)
-	var textured: Dictionary = manifest.get("mesh", {})
-	if not textured.is_empty():
-		return load_textured(dir, textured)
-	var entry: Dictionary = manifest.get("paint_mesh", {})
-	if entry.is_empty():
+	var textured: Dictionary = read_manifest(asset_id, asset_root).get("mesh", {})
+	if textured.is_empty():
 		return null
-	return load_entry(dir, entry)
+	return load_textured(asset_root.path_join(asset_id), textured)
 
 
 ## A break-up chunk's textured mesh (M4-T30d): `file` (the chunk's glb, under `dir`) drawn with its parent's materials, so it shares
@@ -69,7 +65,7 @@ static func chunk_mesh(dir: String, file: String) -> Mesh:
 
 ## Whether an asset's manifest names a textured mesh.
 static func is_textured(asset_id: String, asset_root: String = ShipSpec.ASSET_ROOT) -> bool:
-	return not (SplatLod.read_manifest(asset_id, asset_root).get("mesh", {}) as Dictionary).is_empty()
+	return not (read_manifest(asset_id, asset_root).get("mesh", {}) as Dictionary).is_empty()
 
 
 ## The textured mesh a manifest `mesh` section names, under `dir`, each surface with its own `StandardMaterial3D` from the maps;
@@ -152,7 +148,7 @@ static func textured_material(dir: String, surface: Dictionary) -> StandardMater
 static func livery_section(asset_id: String, asset_root: String = ShipSpec.ASSET_ROOT) -> Dictionary:
 	var key: String = asset_root.path_join(asset_id)
 	if not _livery_sections.has(key):
-		_livery_sections[key] = (SplatLod.read_manifest(asset_id, asset_root).get("mesh", {}) as Dictionary).get("livery", {})
+		_livery_sections[key] = (read_manifest(asset_id, asset_root).get("mesh", {}) as Dictionary).get("livery", {})
 	return _livery_sections[key]
 
 
@@ -276,52 +272,6 @@ static func _texture(path: String) -> Texture2D:
 	if not ResourceLoader.exists(path):
 		return null
 	return load(path) as Texture2D
-
-
-## The painted mesh an entry names (M4-T27), under `dir`, with its paint materials; cached per file. Null when the file is missing.
-static func load_entry(dir: String, entry: Dictionary) -> Mesh:
-	var path: String = dir.path_join(String(entry.get("file", "")))
-	if _cache.has(path):
-		return _cache[path]
-	var mesh: Mesh = _imported_mesh(path)
-	if mesh == null:
-		push_warning("MeshAssets: %s is missing or not imported (run scripts/gen_assets.sh, then import)" % path)
-		return null
-	for i: int in mesh.get_surface_count():
-		var current: Material = mesh.surface_get_material(i)
-		var glass: bool = current != null and String(current.resource_name) == GLASS_SURFACE
-		mesh.surface_set_material(i, make_material(entry, glass))
-	_cache[path] = mesh
-	return mesh
-
-
-## A paint material for `entry`: the material table, the panel grid and, for glass, how much it stops.
-static func make_material(entry: Dictionary, glass: bool) -> ShaderMaterial:
-	var material := ShaderMaterial.new()
-	material.shader = GLASS_SHADER if glass else OPAQUE_SHADER
-	var albedo := PackedVector3Array()
-	var paneled := PackedFloat32Array()
-	albedo.resize(MAX_MATERIALS)
-	paneled.resize(MAX_MATERIALS)
-	var transmittance: float = 0.0
-	var table: Array = entry.get("materials", [])
-	for k: int in mini(table.size(), MAX_MATERIALS):
-		var row: Dictionary = table[k]
-		var c: Array = row.get("albedo", [0.5, 0.5, 0.5])
-		albedo[k] = Vector3(float(c[0]), float(c[1]), float(c[2]))
-		paneled[k] = 1.0 if bool(row.get("paneled", false)) else 0.0
-		transmittance = maxf(transmittance, float(row.get("transmittance", 0.0)))
-	material.set_shader_parameter(&"paint_albedo", albedo)
-	material.set_shader_parameter(&"paint_paneled", paneled)
-	var panel: Dictionary = entry.get("panel", {})
-	material.set_shader_parameter(&"panel_size_m", float(panel.get("size_m", 0.6)))
-	material.set_shader_parameter(&"panel_line_width_m", float(panel.get("line_width_m", 0.04)))
-	material.set_shader_parameter(&"panel_line_darkness", float(panel.get("line_darkness", 0.55)))
-	material.set_shader_parameter(&"panel_tint_jitter", float(panel.get("tint_jitter", 0.05)))
-	if glass:
-		material.set_shader_parameter(&"glass_alpha", 1.0 - transmittance)
-	materials.append(material)
-	return material
 
 
 # The first mesh of an imported glb scene.

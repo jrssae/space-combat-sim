@@ -1,7 +1,7 @@
 // A star of the sky (architecture §17.19, M4-T30c): a point that faces the camera, crisp at any resolution. Its disc is
 // `radius_rad` across; once that is under `min_radius_px` (1 px, so a star still covers a pixel and does not alias) the footprint
 // stays at the floor and the brightness falls by (disc / floor)^2, so a star delivers the same light at every render height (the
-// running lights' rule, Q26). It is drawn as a soft round point, a Gaussian SOFTNESS of its footprint wide, so its light holds
+// running lights' rule, Q26). It is drawn as a soft round point, a bell-shaped (normal) falloff SOFTNESS of its footprint wide, so its light holds
 // and its brightest pixel barely changes as it crosses pixels (the tested copy is StarPointMath). Each instance's basis Z is its
 // direction, so only the camera's rotation moves it; its light (colour times brightness) is the instance's custom data.
 // The nebula dims the stars behind it (Q42): the panorama's alpha in the star's direction is the gas's opacity.

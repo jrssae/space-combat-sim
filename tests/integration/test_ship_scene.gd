@@ -355,20 +355,20 @@ func test_camera_rig_wiring_shows_the_interior_only_in_the_cockpit() -> void:
 	assert_eq(rig.chase_config.offset_local, ship.get_chase_offset())
 
 
-func test_the_cockpit_view_keeps_the_hull_and_clears_its_canopy_glass() -> void:
-	var glass: int = -1
-	for i: int in ship.hull.mesh.get_surface_count():
-		if String(ship.hull.mesh.surface_get_material(i).resource_name) == MeshAssets.GLASS_SURFACE:
-			glass = i
-	assert_gt(glass, -1, "the hull has a glass surface (%s)" % GEN_ASSETS_HINT)
-	if glass < 0:
-		return
-	assert_null(ship.hull.get_surface_override_material(glass), "from outside the glass is the real thing")
+func test_the_cockpit_view_draws_the_hull_it_was_built_around_with_the_canopy_cleared() -> void:
 	ship.set_cockpit_interior_visible(true)
-	assert_true(ship.hull.visible, "the textured hull stays drawn from inside")
-	assert_not_null(ship.hull.get_surface_override_material(glass), "from inside the glass draws nothing")
+	assert_true(ship.hull.visible, "the hull stays drawn from inside")
+	assert_ne(ship.hull.mesh, ship.hull_mesh(), "the hull's OBJ, as the cockpit was approved with")
+	var cleared: int = 0
+	for i: int in ship.hull.mesh.get_surface_count():
+		var canopy: bool = String(ship.hull.mesh.surface_get_material(i).resource_name).contains("canopy")
+		assert_eq(ship.hull.get_surface_override_material(i) != null, canopy, "surface %d" % i)
+		cleared += 1 if canopy else 0
+	assert_eq(cleared, 2, "the glass and the window frames")
 	ship.set_cockpit_interior_visible(false)
-	assert_null(ship.hull.get_surface_override_material(glass))
+	assert_same(ship.hull.mesh, ship.hull_mesh(), "outside: the textured mesh again")
+	for i: int in ship.hull.get_surface_override_material_count():
+		assert_null(ship.hull.get_surface_override_material(i))
 
 
 # --- console: ship -----------------------------------------------------------------------------------------------

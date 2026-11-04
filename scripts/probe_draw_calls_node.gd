@@ -1,12 +1,12 @@
 extends Node
-## What one hull costs in Godot's draw calls, by kind (M4-T27, the question T11 left: why a splat node seemed to add about 2). The game's
-## main scene with the player alone, then 40 copies of one kind 100 to 400 m ahead, 90 frames each, the mean draw calls, triangles and
-## objects of the last 60: bare splat nodes in view, the same hidden, the same behind the camera, the painted mesh, the fallback OBJ,
-## the merged depth proxy. One line per phase. Run it on the real renderer: the counts are the renderer's.
+## What one hull costs in Godot's draw calls, by kind (M4-T27, the question T11 left). The game's main scene with the player alone,
+## then 40 copies of one kind 100 to 400 m ahead, 90 frames each, the mean draw calls, triangles and objects of the last 60: the
+## textured mesh in view, the same hidden, the same behind the camera, and the OBJ. One line per phase. Run it on the real renderer:
+## the counts are the renderer's.
 ##
 ## Arguments after `--`: count=<n> (40), from=<phase> (0: the phases before it are skipped, the player alone always runs),
-## asset=<id> (raider_fighter; M4-T30a: starfury_aurora draws its textured mesh in the "painted meshes" phase), wings=<a,b,...>
-## (M4-T30b: the copies in that phase take these wings' liveries in turn, each with its own number), to=<phase> (the last phase run).
+## asset=<id> (raider_fighter), wings=<a,b,...> (M4-T30b: the textured copies take these wings' liveries in turn, each with its own
+## number), to=<phase> (the last phase run).
 
 const FRAMES: int = 60
 const SETTLE: int = 20
@@ -23,8 +23,8 @@ var _frame: int = 0
 var _draws := PackedFloat64Array()
 var _tris := PackedFloat64Array()
 var _objects := PackedFloat64Array()
-var _phases: Array[String] = ["player alone", "splat nodes in view", "splat nodes hidden", "splat nodes behind the camera",
-		"painted meshes", "fallback OBJs", "depth proxies", "proxy and splat node each (a splat ship)"]
+var _phases: Array[String] = ["player alone", "textured meshes in view", "textured meshes hidden", "textured meshes behind the camera",
+		"OBJs"]
 
 
 func _ready() -> void:
@@ -72,33 +72,15 @@ func _clear() -> void:
 func _build(phase: int) -> void:
 	_clear()
 	var dir: String = ShipSpec.ASSET_ROOT.path_join(asset)
-	var fallback := load(dir.path_join(asset + ".obj")) as Mesh
+	var obj_mesh := load(dir.path_join(asset + ".obj")) as Mesh
 	for i: int in (0 if phase == 0 else count):
-		var node: Node3D = null
-		match phase:
-			1, 2, 3, 7:
-				var splat := GaussianSplatNode.new()
-				splat.gaussian = load(dir.path_join(asset + ".ply")) as GaussianResource
-				SplatLightingLoader.attach(splat, SplatLod.lighting_path(asset, 0))
-				node = splat
-				if phase == 7:
-					var proxy := HullDepthProxy.new()
-					proxy.use_mesh(fallback)
-					splat.add_child(proxy)
-			4:
-				var painted := MeshInstance3D.new()
-				painted.mesh = MeshAssets.for_asset(asset)
-				if not wings.is_empty():
-					Livery.for_wing(wings[i % wings.size()], i / wings.size() + 1, MeshAssets.livery_section(asset)).apply(painted)
-				node = painted
-			5:
-				var obj := MeshInstance3D.new()
-				obj.mesh = fallback
-				node = obj
-			6:
-				var proxy := HullDepthProxy.new()
-				proxy.use_mesh(fallback)
-				node = proxy
+		var node := MeshInstance3D.new()
+		if phase == 4:
+			node.mesh = obj_mesh
+		else:
+			node.mesh = MeshAssets.for_asset(asset)
+			if not wings.is_empty():
+				Livery.for_wing(wings[i % wings.size()], i / wings.size() + 1, MeshAssets.livery_section(asset)).apply(node)
 		node.visible = phase != 2
 		main.world.add_child(node)
 		node.global_transform = _place(i, phase == 3)

@@ -89,7 +89,7 @@ func _burn(ship: Ship) -> void:
 # --- the lean set --------------------------------------------------------------------------------------------------------
 
 
-func test_a_pooled_ai_ship_has_at_most_sixteen_nodes_besides_its_guns() -> void:
+func test_a_pooled_ai_ship_has_at_most_eleven_nodes_besides_its_guns() -> void:
 	for c: Combatant in pool.all_ships():
 		assert_true(c.ship.lean, "%s is built lean" % c.ship.spec.asset_id)
 		var muzzles: int = c.ship.get_muzzles().size()
@@ -135,7 +135,10 @@ func test_a_lean_ship_drops_the_cockpit_and_draws_its_hull_on_one_node() -> void
 		assert_null(c.ship.cockpit_anchor)
 		assert_not_null(c.ship.hull)
 		assert_same(c.ship.hull.mesh, MeshAssets.for_asset(c.ship.spec.asset_id), "%s: the shared textured mesh" % c.ship.spec.asset_id)
-		assert_eq(_collect(c.ship, MeshInstance3D).size(), 1, "%s: the hull is its one mesh node" % c.ship.spec.asset_id)
+		var own: int = 0
+		for child: Node in c.ship.get_children():
+			own += 1 if child is MeshInstance3D else 0
+		assert_eq(own, 1, "%s: the hull is its one mesh node (the muzzle flashes are the guns')" % c.ship.spec.asset_id)
 
 
 # --- plumes ---------------------------------------------------------------------------------------------------------------

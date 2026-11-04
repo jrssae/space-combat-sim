@@ -2,16 +2,12 @@
 
 [ext_resource type="Script" path="res://src/environment/space_environment.gd" id="1_env"]
 [ext_resource type="Environment" path="res://assets/environment/environment_default.tres" id="2_default"]
-[ext_resource type="Script" path="res://addons/gdgs_scs/runtime/compositor/gaussian_compositor_effect.gd" id="3_effect"]
 [ext_resource type="Script" path="res://src/environment/star_field.gd" id="4_stars"]
 [ext_resource type="Script" path="res://src/environment/sky_follower.gd" id="5_follower"]
-[ext_resource type="Script" path="res://src/rendering/splat_light_rig.gd" id="6_rig"]
+[ext_resource type="Script" path="res://src/rendering/light_rig.gd" id="6_rig"]
 [ext_resource type="Script" path="res://src/rendering/lens_flare_effect.gd" id="7_flare"]
 [ext_resource type="Script" path="res://src/rendering/motion_blur_effect.gd" id="8_blur"]
 [ext_resource type="Script" path="res://src/rendering/post_effects.gd" id="9_post"]
-
-[sub_resource type="CompositorEffect" id="CompositorEffect_gdgs"]
-script = ExtResource("3_effect")
 
 [sub_resource type="CompositorEffect" id="CompositorEffect_blur"]
 script = ExtResource("8_blur")
@@ -21,7 +17,7 @@ effect_callback_type = 4
 script = ExtResource("7_flare")
 
 [sub_resource type="Compositor" id="Compositor_main"]
-compositor_effects = Array[CompositorEffect]([SubResource("CompositorEffect_gdgs"), SubResource("CompositorEffect_blur"), SubResource("CompositorEffect_flare")])
+compositor_effects = Array[CompositorEffect]([SubResource("CompositorEffect_blur"), SubResource("CompositorEffect_flare")])
 
 [node name="SpaceEnvironment" type="Node3D"]
 script = ExtResource("1_env")
@@ -30,10 +26,10 @@ script = ExtResource("1_env")
 environment = ExtResource("2_default")
 compositor = SubResource("Compositor_main")
 
-[node name="SplatLightRig" type="Node3D" parent="."]
+[node name="LightRig" type="Node3D" parent="."]
 script = ExtResource("6_rig")
 
-[node name="KeyStar" type="DirectionalLight3D" parent="SplatLightRig"]
+[node name="KeyStar" type="DirectionalLight3D" parent="LightRig"]
 transform = Transform3D(-0.851658, 0.339815, -0.399004, 0, 0.761316, 0.648381, 0.524097, 0.552199, -0.648381, 0, 0, 0)
 light_color = Color(1, 0.94, 0.84, 1)
 light_energy = 1.5
@@ -50,4 +46,4 @@ sky = NodePath("../StarField")
 [node name="PostEffects" type="Node" parent="." node_paths=PackedStringArray("world_environment", "sun")]
 script = ExtResource("9_post")
 world_environment = NodePath("../WorldEnvironment")
-sun = NodePath("../SplatLightRig/KeyStar")
+sun = NodePath("../LightRig/KeyStar")

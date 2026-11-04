@@ -106,9 +106,9 @@ func test_overlay_toggle_and_snapshot() -> void:
 	assert_eq(main.overlay.visible, not shown)
 	Settings.set_value(&"show_overlay", shown)
 	var snap: Dictionary = main.snapshot()
-	for key: String in ["speed_mps", "assist_on", "camera_mode", "weapon_mode", "splat_backend", "universe_position"]:
+	for key: String in ["speed_mps", "assist_on", "camera_mode", "weapon_mode", "renderer", "universe_position"]:
 		assert_true(snap.has(key), key)
-	assert_eq(snap["splat_backend"], "headless")
+	assert_eq(snap["renderer"], "headless")
 
 
 func test_console_commands() -> void:

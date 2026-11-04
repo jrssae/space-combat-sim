@@ -3,7 +3,7 @@ extends RefCounted
 ## A ship's `hardpoints.json` (architecture §9.1, schema in docs/assets-starfury.md): the centre of mass, cockpit
 ## camera, chase anchor, gun muzzles and collision primitives, parsed into Godot types. Pure: reads a file, text or
 ## Dictionary and never touches the scene tree. Body frame, metres, relative to the body origin (which the generator
-## puts on the splat centroid, so this frame is also the rendered frame).
+## puts on the hull's surface centroid, so this frame is also the rendered frame).
 ##
 ## The pod nozzles are the flight model's business: `thruster_layout()` hands the same parsed document to
 ## `ThrusterLayout`, so the file is read once.
@@ -33,10 +33,10 @@ var muzzles: Array[Dictionary] = []
 ## BoxShape3D or CapsuleShape3D) and `transform` (Transform3D: the primitive's `basis` and `position`; for a capsule
 ## also the turn that lays Godot's capsule axis, local Y, along the named `axis`).
 var collision: Array[Dictionary] = []
-## Break-up chunks (optional; M2-T04), one entry per group in file order: `name` (String), `ply`, `lighting` ("" when it has none)
-## and `obj` (file names in the asset directory), `offset` (Vector3: the chunk's centroid in the body frame), `joint` (Vector3:
-## where it detaches from the body, M3-T28; the offset when the file has none), `splats` (int) and `mesh` (its textured mesh, a glb cut
-## from the hull's on the hull's maps, M4-T30d; "" when it has none).
+## Break-up chunks (optional; M2-T04), one entry per group in file order: `name` (String), `obj` (a file name in the asset
+## directory), `offset` (Vector3: the chunk's centroid in the body frame), `joint` (Vector3: where it detaches from the body, M3-T28;
+## the offset when the file has none) and `mesh` (its textured mesh, a glb cut from the hull's on the hull's maps, M4-T30d; "" when
+## it has none).
 var chunks: Array[Dictionary] = []
 ## Running lights (optional; M3-T27), ship frame: `port`, `starboard` and `top` (markers), `top_lamp` (where the light on the top of the
 ## hull comes from), `cabin` (the cockpit glow) as Vector3, `top_lamp_range_m` and `cabin_range_m` as floats. Empty when the file has none.
@@ -236,18 +236,15 @@ func _parse_chunk(value: Variant) -> String:
 	if not (value is Dictionary):
 		return "chunk %d is not an object" % index
 	var entry: Dictionary = value
-	if not (entry.get("name") is String) or not (entry.get("ply") is String) or not (entry.get("obj") is String):
-		return "chunk %d needs string name, ply and obj" % index
+	if not (entry.get("name") is String) or not (entry.get("obj") is String):
+		return "chunk %d needs string name and obj" % index
 	if not _is_vec3(entry.get("offset")):
 		return "chunk %d needs offset [x, y, z]" % index
 	chunks.append({
 		"name": String(entry["name"]),
-		"ply": String(entry["ply"]),
-		"lighting": String(entry.get("lighting", "")),
 		"obj": String(entry["obj"]),
 		"offset": _to_vec3(entry["offset"]),
 		"joint": _to_vec3(entry["joint"]) if _is_vec3(entry.get("joint")) else _to_vec3(entry["offset"]),
-		"splats": int(_number_or(entry.get("splats"), 0.0)),
 		"mesh": String(entry.get("mesh", "")) if entry.get("mesh") is String else "",
 	})
 	return ""

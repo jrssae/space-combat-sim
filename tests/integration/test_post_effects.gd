@@ -41,11 +41,10 @@ func test_the_post_node_finds_both_effects() -> void:
 	assert_not_null(post.blur_effect(), "our MotionBlurEffect")
 
 
-func test_both_run_after_gdgs_has_composited_the_splats() -> void:
-	# Callback types: PRE_TRANSPARENT 3 is GDGS's; the effects after it must not run earlier.
-	var gdgs: GaussianCompositorEffect = env.get_gaussian_effect()
-	assert_true(post.blur_effect().effect_callback_type >= gdgs.effect_callback_type)
-	assert_true(post.flare_effect().effect_callback_type >= gdgs.effect_callback_type)
+func test_both_run_after_the_transparent_pass() -> void:
+	# Hulls, glass, plumes and the star points are all drawn by then, so the blur smears them together and the flare goes on top.
+	assert_true(post.blur_effect().effect_callback_type >= CompositorEffect.EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT)
+	assert_true(post.flare_effect().effect_callback_type >= CompositorEffect.EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT)
 
 
 func test_the_flare_is_the_vendored_effect_through_our_thin_subclass() -> void:

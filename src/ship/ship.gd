@@ -11,15 +11,13 @@ extends RigidBody3D
 ## so a command that is not refreshed never repeats them.
 ##
 ## Built from data in `_ready` (or again on a later `setup`): mass and inertia from the `ShipSpec`; centre of mass,
-## collision primitives, gun muzzles and the cockpit eye point from the ship's `hardpoints.json`; the hull splats (at the spec's
-## `splat_lod`, §16 D35), their lighting records (§7.3) and meshes from `assets/generated/<asset_id>/`, loaded guarded so the scene
-## loads (with warnings) before `scripts/gen_assets.sh` has run. Without hardpoints the ship cannot fly and only coasts.
+## collision primitives, gun muzzles and the cockpit eye point from the ship's `hardpoints.json`; the hull's textured mesh
+## (`MeshAssets`, §7, §9) and the cockpit's meshes from `assets/generated/<asset_id>/`, loaded guarded so the scene loads (with
+## warnings) before `scripts/gen_assets.sh` has run. Without hardpoints the ship cannot fly and only coasts.
 ##
-## Children: `HullSplats` (GaussianSplatNode, identity in the scene: GDGS applies its own Rz(180°) on entering the
-## tree, §9.1; `HullSplatSync` draws it at the interpolated pose), `HullMeshFallback` (shown when `SplatStatus` finds
-## no splat backend, or forced), `HullDepthProxy` (the fallback mesh inset by a few centimetres, opaque black, shown
-## exactly when the splats are: it writes the depth splats do not, so effects behind the hull are hidden, §7.2), `CockpitInterior`
-## (first person only), `Thrusters` and `Guns` (attach points for M1-T13; `Guns` holds one Marker3D per muzzle),
+## Children: `Hull` (MeshInstance3D: the asset's one shared textured mesh, so every copy instances; it writes its own depth, so
+## effects behind the hull are hidden, §7.2; while the cockpit interior is shown it draws the hull's OBJ with the canopy cleared),
+## `CockpitInterior` (first person only), `Thrusters` and `Guns` (attach points for M1-T13; `Guns` holds one Marker3D per muzzle),
 ## `Targeting` (`TargetingController`), `CockpitAnchor` (Marker3D at the hardpoints' `cockpit_camera`), `RunningLights` (M3-T27), and on the
 ## player's ship `CockpitScreens` (M3-T29).
 ##
@@ -38,11 +36,10 @@ extends RigidBody3D
 ## path `get_flight_output()` fills its `FlightOutput` from the batch's row on demand (levels, RCS shares, forces, flags; the
 ## per-nozzle `nozzle_forces` stay empty) and `applied_force()` reads the batch's sum.
 ##
-## AI ships are built lean (M4-T11, architecture §17.10, `lean`): no cockpit interior, no cockpit anchor and no fallback node of
-## their own (the depth proxy draws the fallback mesh when it is wanted), their collision shapes as shape owners of the body instead
-## of a node each, and their plumes and markers as one multimesh each. Past `settings.far_ship_dot_m` from the camera an AI ship is
-## a far dot (`set_far_dot`): its splats, proxy, plumes, markers and guns are hidden and the world's `FarDots` draws it. The player's
-## ship is built as before.
+## AI ships are built lean (M4-T11, architecture §17.10, `lean`): no cockpit interior and no cockpit anchor, their collision shapes as
+## shape owners of the body instead of a node each, and their plumes and markers as one multimesh each. Past
+## `settings.far_ship_dot_m` from the camera an AI ship is a far dot (`set_far_dot`): its hull, plumes, markers and guns are hidden and
+## the world's `FarDots` draws it. The player's ship is built as before.
 ##
 ## Rebase-safe: nothing here caches a World position between ticks. Console (§6.4, §15.1 D27): only the player's ship
 ## registers (`console_owner`, set before the ship enters the tree, `ShipAssembly` does it): provider `ship` and commands
@@ -125,27 +122,16 @@ var _flight_fresh: bool = false
 var _combat: CombatCommand = CombatCommand.new()
 static var _warned_no_screens: bool = false
 var _combat_fresh: bool = false
-var _fallback_active: bool = false
 var _interior_visible: bool = false
-# Levels of detail (M3-T19): the splat node per level, the levels in order (`HullSplats` is `spec.splat_lod`; the player's hero
-# level, -1, comes before it, M3-T24), and the one drawn.
-var _lod_nodes: Array[GaussianSplatNode] = []
-var _lod_levels: PackedInt32Array = PackedInt32Array()
-var _lod_level: int = 0
-# The hull's finest level as `SplatLod.resolve` gave it, and the spec it was resolved for.
-var _hull_lod: Dictionary = {}
-var _hull_lod_spec: ShipSpec = null
 var _muzzles: Array[Node3D] = []
 var _collision_nodes: Array[CollisionShape3D] = []
 # A lean ship's collision shapes: one shape owner of the body per hit volume (M4-T11).
 var _shape_owners: PackedInt32Array = PackedInt32Array()
-# The fallback mesh as loaded (a lean ship has no node of its own for it), and whether the ship is drawn as a far dot.
-var _fallback_mesh: Mesh = null
+# The hull's textured mesh (null before it is generated), the OBJ the cockpit view draws instead (the player's ship only), and
+# whether the ship is drawn as a far dot.
+var _hull_mesh: Mesh = null
+var _cockpit_hull: Mesh = null
 var _far_dot: bool = false
-# The painted mesh of the same surface (M4-T27, `settings.ship_render`), null before it is generated, and whether the ship is far
-# enough for the hybrid path to draw it.
-var _paint_mesh: Mesh = null
-var _mesh_far: bool = false
 var _applied_force: Vector3 = Vector3.ZERO
 # The flight batch (M4-T10): the batch this ship joined, its row and the physics frame of the last gather, whether the last
 # path flown was the batch's (the assist state follows a change of path), and the frame `_output` was last filled from a row.
@@ -159,9 +145,7 @@ var _output_tick: int = -1
 var _flown_tick: int = -1
 var _prepared_tick: int = -1
 
-@onready var hull_splats: GaussianSplatNode = $HullSplats
-@onready var hull_mesh_fallback: MeshInstance3D = $HullMeshFallback
-@onready var hull_depth_proxy: HullDepthProxy = $HullDepthProxy
+@onready var hull: MeshInstance3D = $Hull
 @onready var cockpit_interior: MeshInstance3D = $CockpitInterior
 @onready var thrusters: Node3D = $Thrusters
 @onready var guns: Node3D = $Guns
@@ -186,14 +170,7 @@ static func asset_dir(p_spec: ShipSpec) -> String:
 func _init() -> void:
 	# The world rebases its direct children through this group; `World.spawn` adds it too.
 	add_to_group(WorldFrame.SHIFTABLE_GROUP)
-	add_to_group(SplatStatus.MESH_GROUP)
 	_assist_on = bool(Settings.get_value(&"assist_default"))
-
-
-# The child's splats and lighting records go on here, before it enters the tree: assigned later, each makes GDGS re-merge every
-# splat in the scene, once per ship.
-func _enter_tree() -> void:
-	_assign_hull_splats(get_node_or_null(^"HullSplats") as GaussianSplatNode)
 
 
 func _ready() -> void:
@@ -211,8 +188,6 @@ func _ready() -> void:
 		switcher.name = "LodSwitcher"
 		add_child(switcher)
 	Settings.changed.connect(_on_hull_setting_changed)
-	_apply_hull_sync_setting()
-	use_fallback_mesh(_fallback_active or SplatStatus.needs_fallback(SplatStatus.active_backend()))
 	set_cockpit_interior_visible(_interior_visible)
 	if console_owner:
 		_register_console()
@@ -227,7 +202,7 @@ func _notification(what: int) -> void:
 func _exit_tree() -> void:
 	_leave_batch()
 	DebugConsole.registry.unregister_owner(self)
-	var rig: SplatLightRig = SplatLightRig.of(self)
+	var rig: LightRig = LightRig.of(self)
 	if rig != null and _cabin_emitter != null:
 		rig.remove_emitter(_cabin_emitter)
 	if Settings.changed.is_connected(_on_hull_setting_changed):
@@ -472,81 +447,24 @@ func is_cockpit_interior_visible() -> bool:
 	return _interior_visible
 
 
-## Draws the hull with the fallback mesh instead of the splats (`SplatStatus` group `splat_fallback_mesh`). The depth
-## proxy is only wanted while the splats are drawn: the fallback mesh writes depth itself.
-func use_fallback_mesh(enabled: bool) -> void:
-	_fallback_active = enabled
-	_apply_hull_visuals()
-
-
-# Splats or mesh for the hull. The mesh is drawn when the fallback is on, and also while the cockpit interior is shown: from
-# inside, the hull's splats are seen from a few tens of centimetres, where each one is a huge flat disc that turns into a
-# serrated, flickering sliver at a grazing angle (the 2026-10-21 play test). The mesh has none of that. The depth proxy stays on
-# in the cockpit, so effects behind the hull stay hidden.
+# The hull for what the camera sees: the textured mesh, or from inside the cockpit the hull's OBJ (the view the cockpit was built
+# around) with its canopy glass and window frames cleared; nothing while the ship is a far dot.
 func _apply_hull_visuals() -> void:
 	if not is_node_ready():
 		return
-	var paint: bool = is_drawing_paint_mesh()
-	var mesh_mode: bool = _fallback_active or _interior_visible or paint
-	var proxy_on: bool = bool(Settings.get_value(&"hull_depth_proxy"))
-	if hull_mesh_fallback != null:
-		hull_mesh_fallback.mesh = _paint_mesh if paint else _fallback_mesh
-		hull_mesh_fallback.visible = mesh_mode and not _far_dot
-		_apply_canopy_glass()
-		hull_depth_proxy.use_mesh(_fallback_mesh)
-		hull_depth_proxy.visible = (_interior_visible or not _fallback_active) and not paint and proxy_on and not _far_dot
-	else:
-		# Lean: the one node draws the fallback or painted mesh, or the proxy while the splats are drawn.
-		hull_depth_proxy.use_mesh(_paint_mesh if paint else _fallback_mesh, mesh_mode)
-		hull_depth_proxy.visible = (mesh_mode or proxy_on) and not _far_dot
-	for i: int in _lod_nodes.size():
-		_lod_nodes[i].visible = not mesh_mode and not _far_dot and _lod_levels[i] == _lod_level
-	var sync := get_node_or_null(^"HullSplatSync") as SplatPoseSync
-	if sync != null:
-		sync.sync()  # a level just shown is placed at once
+	var inside: bool = _interior_visible and _cockpit_hull != null
+	hull.mesh = _cockpit_hull if inside else _hull_mesh
+	hull.visible = not _far_dot
+	_apply_canopy_glass(inside)
 
 
-func is_fallback_mesh_active() -> bool:
-	return _fallback_active
+## The hull's textured mesh as loaded (null before the assets are generated).
+func hull_mesh() -> Mesh:
+	return _hull_mesh
 
 
-## Whether the hull is drawn as its painted mesh now (M4-T27): `settings.ship_render` is mesh, or hybrid and the ship is far
-## (`set_mesh_far`); never while the fallback or the cockpit interior is shown, nor before the mesh is generated.
-func is_drawing_paint_mesh() -> bool:
-	if _paint_mesh == null or _fallback_active or _interior_visible:
-		return false
-	match StringName(Settings.get_value(&"ship_render")):
-		&"mesh":
-			return true
-		&"hybrid":
-			return _mesh_far
-	return false
-
-
-## The painted mesh as loaded (null before the assets are generated).
-func paint_mesh() -> Mesh:
-	return _paint_mesh
-
-
-## The hybrid path's switch (M4-T27): far enough from the camera to draw the painted mesh. Its `LodSwitcher` decides.
-func set_mesh_far(on: bool) -> void:
-	if on == _mesh_far:
-		return
-	_mesh_far = on
-	_apply_hull_visuals()
-
-
-func is_mesh_far() -> bool:
-	return _mesh_far
-
-
-## The hull's fallback mesh as loaded (null before the assets are generated), whichever node draws it.
-func fallback_mesh() -> Mesh:
-	return _fallback_mesh
-
-
-## Draws the ship as a far dot (M4-T11): its splat levels, proxy, fallback, plumes, markers and guns hidden, and a point in the
-## world's `FarDots` instead; off shows them again. Its `LodSwitcher` decides from the camera's distance.
+## Draws the ship as a far dot (M4-T11): its hull, plumes, markers and guns hidden, and a point in the world's `FarDots` instead; off
+## shows them again. Its `LodSwitcher` decides from the camera's distance.
 func set_far_dot(on: bool) -> void:
 	if on == _far_dot:
 		return
@@ -579,50 +497,6 @@ func _apply_far_interpolation() -> void:
 ## Whether the ship is drawn as a far dot now.
 func is_far_dot() -> bool:
 	return _far_dot
-
-
-## The splat levels this ship can draw, finest first (M3-T19).
-func lod_levels() -> PackedInt32Array:
-	return _lod_levels
-
-
-func lod_level() -> int:
-	return _lod_level
-
-
-## Draws `level` (one of `lod_levels()`, the nearest one otherwise), by visibility only.
-func set_lod_level(level: int) -> void:
-	if _lod_levels.is_empty():
-		return
-	var pick: int = _lod_levels[0]
-	for l: int in _lod_levels:
-		if l <= level:
-			pick = l
-	if pick == _lod_level:
-		return
-	_lod_level = pick
-	_apply_hull_visuals()
-
-
-## Splats in the level drawn now (0 while the mesh is drawn instead).
-func visible_splat_count() -> int:
-	for i: int in _lod_nodes.size():
-		if _lod_nodes[i].visible and _lod_nodes[i].gaussian != null:
-			return _lod_nodes[i].gaussian.point_count
-	return 0
-
-
-## Splats in each of `lod_levels()`, same order (M3-T20).
-func lod_splat_counts() -> PackedInt32Array:
-	var out := PackedInt32Array()
-	for node: GaussianSplatNode in _lod_nodes:
-		out.append(node.gaussian.point_count if node.gaussian != null else 0)
-	return out
-
-
-## The splat node of every level of detail: each carries the same own lights (M3-T27).
-func splat_nodes() -> Array[GaussianSplatNode]:
-	return _lod_nodes
 
 
 ## The radius of a sphere that holds the hull, m (its hit volumes' bound, 10 m before the hull is built).
@@ -668,10 +542,10 @@ func _apply_collision_layers() -> void:
 		collision_mask = 1
 
 
-# A lean ship (M4-T11) needs no first-person interior, no camera anchor and no fallback node of its own; the empty plume holder
-# goes too (`ShipAssembly` puts its plumes on the body).
+# A lean ship (M4-T11) needs no first-person interior and no camera anchor; the empty plume holder goes too (`ShipAssembly` puts its
+# plumes on the body).
 func _strip_for_lean() -> void:
-	var unused: Array[Node] = [cockpit_interior, cockpit_anchor, hull_mesh_fallback]
+	var unused: Array[Node] = [cockpit_interior, cockpit_anchor]
 	if thrusters != null and thrusters.get_child_count() == 0:
 		unused.append(thrusters)
 		thrusters = null
@@ -681,7 +555,6 @@ func _strip_for_lean() -> void:
 			node.free()
 	cockpit_interior = null
 	cockpit_anchor = null
-	hull_mesh_fallback = null
 
 
 func _build() -> void:
@@ -791,26 +664,28 @@ func _build_running_lights() -> void:
 	lights.setup(self)
 
 
-# The meshes first, so the levels' first `_apply_hull_visuals` hands the proxy the mesh just loaded.
+# The hull's textured mesh, and on a ship with a cockpit the interior and the hull's OBJ its view was built around.
 func _load_visuals() -> void:
 	var dir: String = asset_dir(spec)
-	_fallback_mesh = _load_mesh(dir.path_join(spec.asset_id + ".obj"))
-	_paint_mesh = PaintMeshes.for_asset(spec.asset_id)
+	_hull_mesh = MeshAssets.for_asset(spec.asset_id)
+	if _hull_mesh == null:
+		push_warning("Ship: %s has no textured mesh (run scripts/gen_assets.sh, then import); the hull is not drawn" % spec.asset_id)
 	var section: Dictionary = MeshAssets.livery_section(spec.asset_id)
 	if livery == null and not section.is_empty():
 		livery = Livery.player(section) if console_owner else Livery.for_wing("", 0, section)
 	_apply_livery()
-	if hull_mesh_fallback != null:
-		hull_mesh_fallback.mesh = _fallback_mesh
-	MeshMaterials.matte(_fallback_mesh)
-	_make_double_sided(_fallback_mesh)
+	_cockpit_hull = null
 	if cockpit_interior != null:
-		cockpit_interior.mesh = _load_mesh(dir.path_join(COCKPIT_MESH_FILE)) if spec.has_cockpit_interior else null
+		var with_interior: bool = spec.has_cockpit_interior
+		cockpit_interior.mesh = _load_mesh(dir.path_join(COCKPIT_MESH_FILE)) if with_interior else null
 		MeshMaterials.matte(cockpit_interior.mesh)
 		_make_double_sided(cockpit_interior.mesh)
 		MeshMaterials.cockpit(cockpit_interior.mesh)
-	_assign_hull_splats(hull_splats)
-	_load_far_levels(_hull_lod)  # the proxy takes whatever mesh is loaded, so a regenerated hull needs no changes here
+		if with_interior:
+			_cockpit_hull = _load_mesh(dir.path_join(spec.asset_id + ".obj"))
+			MeshMaterials.matte(_cockpit_hull)
+			_make_double_sided(_cockpit_hull)
+	_apply_hull_visuals()
 
 
 ## Paints the hull in `p_livery` (its wing's colours and pattern and its number); null gives back the plain livery, or none for a
@@ -821,84 +696,10 @@ func set_livery(p_livery: Livery) -> void:
 	_apply_livery()
 
 
-# The hull nodes carry the livery as instance values, whichever mesh they draw.
+# The hull node carries the livery as instance values.
 func _apply_livery() -> void:
-	if livery == null:
-		return
-	for node: GeometryInstance3D in [hull_mesh_fallback, hull_depth_proxy]:
-		if node != null:
-			livery.apply(node)
-
-
-# The spec's finest level and its lighting records on `node`, once per spec.
-func _assign_hull_splats(node: GaussianSplatNode) -> void:
-	if node == null or spec == null or _hull_lod_spec == spec:
-		return
-	_hull_lod_spec = spec
-	_hull_lod = SplatLod.resolve(spec.asset_id, spec.splat_lod)
-	var splat_path: String = _hull_lod["path"]
-	if not String(_hull_lod["warning"]).is_empty():
-		push_warning("Ship: %s" % _hull_lod["warning"])  # one message per problem: a manifest that cannot be read draws nothing, below
-	var gaussian: GaussianResource = null
-	if not splat_path.is_empty() and ResourceLoader.exists(splat_path):
-		gaussian = load(splat_path) as GaussianResource
-	if gaussian == null and not splat_path.is_empty():
-		push_warning("Ship: %s is missing or not imported (run scripts/gen_assets.sh, then import); no hull splats" % splat_path)
-	node.gaussian = gaussian
-	SplatLightingLoader.attach(node, SplatLod.lighting_path(spec.asset_id, int(_hull_lod["level"])) if gaussian != null else "")
-
-
-# One splat node per coarser level the asset has (M3-T19), built once: the switcher shows one at a time, so GDGS never
-# rebuilds its buffers while the ship flies. A new node gets its splats and lighting records before it enters the tree.
-func _load_far_levels(base: Dictionary) -> void:
-	_lod_nodes = [hull_splats]
-	_lod_levels = PackedInt32Array([maxi(int(base["level"]), 0)])
-	var manifest: Dictionary = SplatLod.read_manifest(spec.asset_id)
-	for level: int in range(_lod_levels[0] + 1, LodSwitcherMath.COARSEST + 1):
-		var path: String = SplatLod.file_path_in(manifest, spec.asset_id, level)
-		if path.is_empty() or not ResourceLoader.exists(path):
-			continue
-		var lighting: String = SplatLod.lighting_path_in(manifest, spec.asset_id, level)
-		_lod_nodes.append(_level_node("HullSplatsLod%d" % level, path, lighting))
-		_lod_levels.append(level)
-	_lod_level = _lod_levels[0]
-	_add_hero_level()  # drawn once the switcher asks for it, never as the first frame's guess
-	_apply_hull_visuals()
-
-
-# The finest level of all, in front of the chain, for a ship whose spec asks for it and while `settings.splat_hero` is on
-# (read here, once, when the ship is built: its node and splats are fixed from then on, like the other levels).
-func _add_hero_level() -> void:
-	if not spec.splat_hero or not bool(Settings.get_value(&"splat_hero")):
-		return
-	var hero: Dictionary = SplatLod.hero_paths(spec.asset_id)
-	var path: String = hero["path"]
-	if path.is_empty() or not ResourceLoader.exists(path):
-		push_warning("Ship: %s has no imported hero level (run scripts/gen_assets.sh, then import); drawing LOD0 at the closest" % spec.asset_id)
-		return
-	_lod_nodes.push_front(_level_node("HullSplatsHero", path, hero["lighting"]))
-	_lod_levels.insert(0, LodSwitcherMath.HERO)
-
-
-# The hidden splat node of one level: built once, kept in step with the hull, and given a new resource only if it changed.
-func _level_node(node_name: String, path: String, lighting: String) -> GaussianSplatNode:
-	var node := get_node_or_null(NodePath(node_name)) as GaussianSplatNode
-	var resource := load(path) as GaussianResource
-	if node == null:
-		node = GaussianSplatNode.new()
-		node.name = node_name
-		node.transform = hull_splats.transform
-		node.visible = false
-		node.gaussian = resource
-		SplatLightingLoader.attach(node, lighting)
-		add_child(node)
-		var sync := get_node_or_null(^"HullSplatSync") as SplatPoseSync
-		if sync != null:
-			sync.add_splats(node)
-	elif node.gaussian != resource:
-		node.gaussian = resource
-		SplatLightingLoader.attach(node, lighting)
-	return node
+	if livery != null and hull != null:
+		livery.apply(hull)
 
 
 func _on_hull_setting_changed(key: StringName, _value: Variant) -> void:
@@ -906,22 +707,6 @@ func _on_hull_setting_changed(key: StringName, _value: Variant) -> void:
 		_apply_collision_layers()
 	elif key == &"far_ship_interpolation_off":
 		_apply_far_interpolation()
-	elif key == &"hull_depth_proxy" or key == &"ship_render":
-		_apply_hull_visuals()
-	elif key == &"hull_splat_sync":
-		_apply_hull_sync_setting()
-
-
-# Debug switch: with the sync off the splat node is a plain interpolated child of the body again.
-func _apply_hull_sync_setting() -> void:
-	var sync := get_node_or_null(^"HullSplatSync") as Node
-	var on: bool = bool(Settings.get_value(&"hull_splat_sync"))
-	if sync != null:
-		sync.set_process(on)
-	hull_splats.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF if on else Node.PHYSICS_INTERPOLATION_MODE_INHERIT
-	if not on and sync is SplatPoseSync:
-		hull_splats.transform = (sync as SplatPoseSync).local_pose()  # back to the body-relative pose
-		hull_splats.reset_physics_interpolation()
 
 
 # A soft red lamp just behind and above the pilot's eyes. Its range stops short of the wings, so it lights only the cockpit frame.
@@ -941,7 +726,7 @@ func _place_cabin_emitter() -> void:
 # The cabin lamp competes for a slot only in the cockpit camera; no other ship's interior is ever shown, so the pool adds no candidates.
 # A disabled ship (the player dead, a parked ship) gives none.
 func _apply_cabin_emitter() -> void:
-	var rig: SplatLightRig = SplatLightRig.of(self)
+	var rig: LightRig = LightRig.of(self)
 	if rig == null or _cabin_emitter == null:
 		return
 	if _interior_visible and process_mode != Node.PROCESS_MODE_DISABLED:
@@ -950,17 +735,18 @@ func _apply_cabin_emitter() -> void:
 		rig.remove_emitter(_cabin_emitter)
 
 
-# From inside, the interior is the whole cabin: the hull's canopy glass would tint the view green and its window frames would cross the
-# side panes, so while the interior is shown those surfaces get an override that draws nothing (from outside they are the real thing).
-func _apply_canopy_glass() -> void:
-	var mesh: Mesh = hull_mesh_fallback.mesh if hull_mesh_fallback != null else null
-	if mesh == null:
+# From inside, the interior is the whole cabin: the hull's canopy glass would tint the view and its window frames would cross the
+# side panes, so while the interior is shown those surfaces of the cockpit hull get an override that draws nothing.
+func _apply_canopy_glass(inside: bool) -> void:
+	var mesh: Mesh = hull.mesh
+	for i: int in hull.get_surface_override_material_count():
+		hull.set_surface_override_material(i, null)
+	if mesh == null or not inside:
 		return
 	for i: int in mesh.get_surface_count():
 		var material: Material = mesh.surface_get_material(i)
-		if material == null or not String(material.resource_name).contains("canopy"):
-			continue
-		hull_mesh_fallback.set_surface_override_material(i, _clear_glass() if _interior_visible else null)
+		if material != null and String(material.resource_name).contains("canopy"):
+			hull.set_surface_override_material(i, _clear_glass())
 
 
 static var _clear_material: StandardMaterial3D = null
@@ -977,7 +763,7 @@ static func _clear_glass() -> StandardMaterial3D:
 
 
 # The cockpit bars are mirrored copies, whose faces wind the other way and vanish from inside with back-face culling on;
-# the hull mesh is seen from inside the cockpit too. Both draw both sides.
+# the cockpit hull is seen from inside too. Both draw both sides.
 static func _make_double_sided(mesh: Mesh) -> void:
 	if mesh == null:
 		return

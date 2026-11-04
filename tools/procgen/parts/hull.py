@@ -871,7 +871,7 @@ def wedge_cockpit_faces(
 ) -> np.ndarray:
     """Per-face mask of what the pilot sees up close: every non-glass face of the window
     segment (frames, chin, lining), but not the bulkhead behind the eye. Assets sample these
-    finer, because a splat's soft edge (2.5 sigma) that close to the eye spans degrees."""
+    finer, because that close to the eye their samples must be dense."""
     if not spec.window_end:
         return np.zeros(mesh.face_count, dtype=bool)
     glass = mesh.face_material == mesh.material_index(

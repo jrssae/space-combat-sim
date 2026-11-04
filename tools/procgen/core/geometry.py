@@ -26,9 +26,9 @@ class Material:
     """A surface finish: linear-RGB albedo plus how the sampler should treat it.
 
     ``transmittance`` is the fraction of light that should pass through the whole surface
-    (0 = opaque hull, 0.7 = tinted glass); the sampler turns it into per-splat alpha.
+    (0 = opaque hull, 0.7 = tinted glass); the textured mesh draws it as glass.
     ``paneled`` surfaces get the style's panel lines. ``metallic``, ``roughness`` (``None``: a default from the
-    metalness) and the emissive colour and strength reach the textured mesh's maps (M4-T30a); splats have no specular.
+    metalness) and the emissive colour and strength reach the textured mesh's maps (M4-T30a).
     """
 
     name: str

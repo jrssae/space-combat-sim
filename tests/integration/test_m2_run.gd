@@ -1,7 +1,7 @@
 extends GutTest
 ## M2 end to end (M2-T10, AC6, AC11): the real main scene runs the three waves headless, driven by `FakeInputSource` (the trigger
-## held, so bolts fly) and `kill all`. The number of `GaussianSplatNode`s in the tree is the same at the end as at scenario load
-## (no splat node enters or leaves the tree during play); the counters add up; the hit resolver's worst tick is recorded.
+## held, so bolts fly) and `kill all`. The pooled ships and chunks in the tree are the same at the end as at scenario load
+## (none enters or leaves the tree during play, D22); the counters add up; the hit resolver's worst tick is recorded.
 
 const SPEED_UP: float = 5.0
 
@@ -29,16 +29,16 @@ func after_each() -> void:
 	get_tree().paused = false
 
 
-func _splat_nodes(node: Node) -> int:
-	var n: int = 1 if node is GaussianSplatNode else 0
+func _pooled_nodes(node: Node) -> int:
+	var n: int = 1 if _pooled(node) else 0
 	for child: Node in node.get_children():
-		n += _splat_nodes(child)
+		n += _pooled_nodes(child)
 	return n
 
 
-func test_three_waves_headless_keep_the_splat_node_count_and_the_counters() -> void:
-	var splat_nodes_at_load: int = _splat_nodes(get_tree().root)
-	assert_gt(splat_nodes_at_load, 0)
+func test_three_waves_headless_keep_the_pooled_node_count_and_the_counters() -> void:
+	var pooled_at_load: int = _pooled_nodes(get_tree().root)
+	assert_gt(pooled_at_load, 0)
 	var resolver: HitResolver = main.get_node("Combat/HitResolver") as HitResolver
 	assert_true(DebugConsole.registry.execute("wave start 1")[0].ok)
 	source.hold(InputAdapter.FIRE)  # the player keeps firing, so bolts, hits and flashes happen
@@ -70,7 +70,7 @@ func test_three_waves_headless_keep_the_splat_node_count_and_the_counters() -> v
 		killed += spawned
 		played.append(spawned)
 		assert_true(DebugConsole.registry.execute("kill all")[0].ok)
-		assert_eq(_splat_nodes(get_tree().root), splat_nodes_at_load, "wave %d: splat nodes unchanged" % (wave + 1))
+		assert_eq(_pooled_nodes(get_tree().root), pooled_at_load, "wave %d: pooled nodes unchanged" % (wave + 1))
 		t0 = SimClock.now()
 		while main.waves.plan.wave_number <= wave + 1 and SimClock.now() - t0 < 30.0:
 			await get_tree().physics_frame
@@ -86,9 +86,14 @@ func test_three_waves_headless_keep_the_splat_node_count_and_the_counters() -> v
 	assert_eq(main.waves.losses, 0)
 	assert_eq(main.waves.plan.wave_number, 4, "and it moved on to the first looped wave")
 	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 0)
-	assert_eq(_splat_nodes(get_tree().root), splat_nodes_at_load, "at the end of the run too")
+	assert_eq(_pooled_nodes(get_tree().root), pooled_at_load, "at the end of the run too")
 	assert_gt(max_bolts, 0, "bolts flew")
 	# Wall clock: the worst single tick is a kill (the destruction's effects run inside the resolve) and doubles on a busy
 	# machine (M3-T18: 4 ms alone, 8 ms during the full suite), so the 99th percentile is asserted and the worst recorded.
 	WallClockBudget.assert_under(self, p99_us, 5000, "the hit resolver's 99th-percentile tick stayed under 5 ms (the slack is for a busy machine)")
 	assert_eq(main.debris.active_chunk_count() >= 0, true)
+
+
+# A node the pools build once at load and only switch afterwards (D22): a pooled ship or a pooled break-up chunk.
+static func _pooled(node: Node) -> bool:
+	return (node is DebrisChunk and not (node as DebrisChunk).one_shot) or (node is Ship and node.get_parent() is ShipPool)

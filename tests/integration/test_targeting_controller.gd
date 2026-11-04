@@ -3,7 +3,7 @@ extends GutTest
 ## §6.3, §9.3, AC8): the five buoys are neutral candidates, `target_next` cycles by range and wraps, `target_ahead`
 ## picks the buoy nearest the nose, the readout matches the geometry, the selection clears beyond sensor range and
 ## survives a rebase, and the `targeting` console provider reads and writes the selection. Also the NavBuoy scene
-## itself: shared splat resource (checked against the manifest, AC4), beacon, spin, drift, no collision.
+## itself: one shared textured mesh (checked against the manifest, AC4), beacon, spin, drift, no collision.
 ##
 ## Expected values come from the scenario file and the live node positions, never from literals.
 
@@ -295,29 +295,26 @@ func test_console_provider_leaves_with_the_controller() -> void:
 # --- the NavBuoy scene -------------------------------------------------------------------------------------------
 
 
-func test_buoys_share_one_splat_resource_that_matches_the_manifest() -> void:
+func test_buoys_share_one_textured_mesh_that_matches_the_manifest() -> void:
 	var alpha: NavBuoy = buoys["NAV ALPHA"]
 	var bravo: NavBuoy = buoys["NAV BRAVO"]
-	var gaussian: GaussianResource = alpha.splats.gaussian
-	assert_not_null(gaussian, "nav_buoy.ply imported as a GaussianResource (%s)" % GEN_ASSETS_HINT)
-	if gaussian == null:
+	var mesh: Mesh = alpha.body.mesh
+	assert_not_null(mesh, "nav_buoy.glb imported (%s)" % GEN_ASSETS_HINT)
+	if mesh == null:
 		return
-	assert_same(bravo.splats.gaussian, gaussian, "one shared resource")
+	assert_same(bravo.body.mesh, mesh, "one shared mesh, so every buoy instances")
 	var manifest: Dictionary = _read_json(MANIFEST_PATH)
-	var lods: Array = manifest.get("lods", [])
-	assert_false(lods.is_empty(), "manifest lists lods")
-	if lods.is_empty():
+	var section: Dictionary = manifest.get("mesh", {})
+	assert_false(section.is_empty(), "manifest names the textured mesh")
+	if section.is_empty():
 		return
-	assert_eq(gaussian.point_count, int((lods[0] as Dictionary)["splats"]), "splat count matches manifest.lods[0]")
-	# AC4: the manifest AABB is in the Godot frame; the resource is in the 3DGS frame (Rz 180: x and y negated).
-	var lo: Array = manifest["aabb_min"]
-	var hi: Array = manifest["aabb_max"]
-	var expected_min := Vector3(-float(hi[0]), -float(hi[1]), float(lo[2]))
-	var expected_max := Vector3(-float(lo[0]), -float(lo[1]), float(hi[2]))
-	assert_almost_eq(gaussian.aabb.position, expected_min, Vector3.ONE * 0.01, "AABB min within 1 cm")
-	assert_almost_eq(gaussian.aabb.end, expected_max, Vector3.ONE * 0.01, "AABB max within 1 cm")
-	assert_eq(alpha.splats.transform, Transform3D(Basis.from_euler(Vector3(0.0, 0.0, -PI)), Vector3.ZERO),
-			"identity in the scene; GDGS applies its own Rz(180) correction on entering the tree")
+	# AC4: the mesh is in the Godot frame, as the manifest's box is.
+	var lo: Array = section["aabb_min"]
+	var hi: Array = section["aabb_max"]
+	var box: AABB = mesh.get_aabb()
+	assert_almost_eq(box.position, Vector3(float(lo[0]), float(lo[1]), float(lo[2])), Vector3.ONE * 0.01, "AABB min within 1 cm")
+	assert_almost_eq(box.end, Vector3(float(hi[0]), float(hi[1]), float(hi[2])), Vector3.ONE * 0.01, "AABB max within 1 cm")
+	assert_eq(alpha.body.transform, Transform3D.IDENTITY, "the body is the buoy's own frame")
 
 
 func test_beacon_sits_at_the_hardpoint_steady_with_a_slow_fade_from_sim_clock() -> void:
@@ -373,17 +370,9 @@ func test_buoy_scene_structure_and_groups() -> void:
 	assert_false(alpha.targetable.is_in_group(WorldFrame.SHIFTABLE_GROUP), "moves with its parent, not on its own")
 	assert_eq(alpha.targetable.display_name, "NAV ALPHA")
 	assert_eq(alpha.targetable.faction, &"neutral")
-	assert_true(alpha.splats is GaussianSplatNode)
+	assert_true(alpha.body is MeshInstance3D)
 	assert_true(alpha.beacon is MeshInstance3D)
 	var nodes: Array[Node] = alpha.find_children("*", "", true, false)
 	for node: Node in nodes:
 		assert_false(node is CollisionObject3D or node is CollisionShape3D, "no collision: %s" % node.name)
-	assert_not_null(alpha.mesh_fallback.mesh, "fallback mesh loaded (%s)" % GEN_ASSETS_HINT)
-	assert_false(alpha.mesh_fallback.visible, "fallback hidden by default")
-	assert_true(alpha.splats.visible)
-	alpha.use_fallback_mesh(true)
-	assert_true(alpha.mesh_fallback.visible)
-	assert_false(alpha.splats.visible)
-	assert_true(alpha.is_fallback_mesh_active())
-	alpha.use_fallback_mesh(false)
-	assert_true(alpha.splats.visible)
+	assert_true(alpha.body.visible, "the textured body is drawn")

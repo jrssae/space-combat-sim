@@ -7,7 +7,7 @@ walls carry a darker ``hull_panel`` band (the leading-edge plating of the refere
 
 Local frame = the authored Godot frame: +X right, +Y up, -Z forward, the apex (nose) at the origin and the wing
 spreading back along +Z. :func:`delta_wing` builds the **right half** (x >= 0); the asset mirrors it. Detail meshes
-(vent grilles, accent plates) are separate boxes so they carry real depth in the splats.
+(vent grilles, accent plates) are separate boxes so they carry real depth in the mesh.
 """
 
 from __future__ import annotations

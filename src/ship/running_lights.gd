@@ -1,9 +1,9 @@
 class_name RunningLights
 extends MultiMeshInstance3D
-## A ship's running lights in the scene (architecture §7.3, M3-T27): three markers built once, and the ship's own lights handed to its
-## splat nodes. A thin adapter over `NavLights`. It holds no `Light3D` (the scene's 8 hold) and does nothing per frame: it changes only
-## when the state or a setting does. The markers ride with the interpolated hull as children of the ship, hide with it when it is
-## parked or destroyed, and the hull depth proxy hides them behind hulls. Radar and AI never read any of this.
+## A ship's running lights in the scene (architecture §7.3, M3-T27): three markers built once. A thin adapter over `NavLights`. It holds
+## no `Light3D` (the scene's 8 hold) and does nothing per frame: it changes only when the state or a setting does. The markers ride
+## with the interpolated hull as children of the ship, hide with it when it is parked or destroyed, and hulls hide them by their
+## depth. Radar and AI never read any of this.
 ##
 ## Two ways to draw the markers, chosen before `setup` by `instanced`: a `MeshInstance3D` each (the player's ship), or, on AI ships
 ## (M4-T11, §17.10), three instances of this node's own multimesh with the colour in each instance's custom data, one draw call
@@ -83,7 +83,7 @@ func markers_shown() -> bool:
 	return _markers[0].visible
 
 
-## Brings the markers and the splat nodes' own lights to the ship's state and the settings.
+## Brings the markers to the ship's state.
 func apply() -> void:
 	if _ship == null:
 		return
@@ -92,13 +92,6 @@ func apply() -> void:
 		marker.visible = lit
 	if instanced and multimesh != null:
 		multimesh.visible_instance_count = -1 if lit else 0
-	var lights := PackedFloat32Array()
-	if bool(Settings.get_value(&"own_lights")):
-		lights = NavLights.own_lights(_ship.get_hardpoints().nav_lights, lit, float(Settings.get_value(&"top_lamp_energy")),
-				float(Settings.get_value(&"cabin_glow_level")), float(Settings.get_value(&"cabin_glow_view_m")),
-				GaussianSplatNode.get_model_orientation_correction())
-	for node: GaussianSplatNode in _ship.splat_nodes():
-		node.set_own_lights(lights)
 
 
 func _enter_tree() -> void:
@@ -113,8 +106,6 @@ func _exit_tree() -> void:
 
 func _on_setting_changed(key: StringName, value: Variant) -> void:
 	match key:
-		&"own_lights", &"top_lamp_energy", &"cabin_glow_level", &"cabin_glow_view_m":
-			apply()
 		&"running_light_min_px":
 			for material: ShaderMaterial in _materials.values():
 				material.set_shader_parameter(&"min_radius_px", float(value))

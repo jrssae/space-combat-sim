@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs the M2 capture set P1-P4 (docs/milestones/m2-combat-sandbox.md, "Capture pre-checks") and writes PNGs to reports/m2/.
-# By default it renders with software Vulkan through scripts/capture.sh (llvmpipe in xvfb; GDGS falls back to Raster there).
-# On a desktop with a real GPU use CAPTURE_REAL_GPU=1 to open a window on it instead (GDGS Compute, real frame rate).
+# By default it renders with software Vulkan through scripts/capture.sh (llvmpipe in xvfb).
+# On a desktop with a real GPU use CAPTURE_REAL_GPU=1 to open a window on it instead (real frame rate).
 # Usage: scripts/capture_m2.sh [WxH]          e.g.  CAPTURE_REAL_GPU=1 scripts/capture_m2.sh 1920x1080
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

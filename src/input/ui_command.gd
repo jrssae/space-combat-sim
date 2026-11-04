@@ -6,7 +6,6 @@ var toggle_camera: bool = false
 var reset: bool = false
 var pause: bool = false
 var toggle_overlay: bool = false
-var toggle_fallback_mesh: bool = false
 var screenshot: bool = false
 ## Wing orders (keys 1-4, M3-T07): `Main` hands them to the `WingDirector`.
 var wing_attack: bool = false
@@ -26,7 +25,7 @@ var look_mouse_px: Vector2 = Vector2.ZERO
 func to_dict() -> Dictionary:
 	return {
 		"toggle_camera": toggle_camera, "reset": reset, "pause": pause,
-		"toggle_overlay": toggle_overlay, "toggle_fallback_mesh": toggle_fallback_mesh, "screenshot": screenshot,
+		"toggle_overlay": toggle_overlay, "screenshot": screenshot,
 		"wing_attack": wing_attack, "wing_form": wing_form, "wing_engage": wing_engage, "wing_cover": wing_cover,
 		"toggle_running_lights": toggle_running_lights,
 		"look_active": look_active, "look_stick": look_stick, "look_mouse_px": look_mouse_px,

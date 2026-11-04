@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # The look sheet (M4-T30a, checkpoint 1b): one ship photographed on this machine's GPU, fullscreen with the 3D at 1 080 lines, as
-# splats, as T27's painted mesh and as the textured mesh, at 8, 30, 150 and 600 m, lit from behind the camera and from behind the
-# ship, plus the cockpit view; every shot at /tmp/m4_t30a_<asset>_<look>_<m>m_<light>.png and the sheet at /tmp/m4_t30_<asset>_sheet.png,
+# its textured mesh, at 8, 30, 150 and 600 m, lit from behind the camera and from behind the ship, plus the cockpit view; every
+# shot at /tmp/m4_t30a_<asset>_textured_<m>m_<light>.png and the sheet at /tmp/m4_t30_<asset>_sheet.png,
 # each tile labelled with its GPU time (scripts/look_sheet_node.gd).
 #
 # Usage: scripts/look_sheet.sh [asset_id] [label]        (starfury_aurora by default)
-# Environment: SHEET_OUT (/tmp), SHEET_DISTANCES (8,30,150,600), SHEET_LOOKS (splat,painted,textured), SHEET_LIGHTS (lit,dark),
+# Environment: SHEET_OUT (/tmp), SHEET_DISTANCES (8,30,150,600), SHEET_LIGHTS (lit,dark),
 #              SHEET_SETTLE (40 frames a shot), SHEET_RES (1920x1080), GODOT_BIN.
-#              M4-T30b (checkpoint 1c): SHEET_LIVERIES (wing:number,... a column each instead of the looks), SHEET_COMPARE (a pattern of
+#              M4-T30b (checkpoint 1c): SHEET_LIVERIES (wing:number,... a column each), SHEET_COMPARE (a pattern of
 #              earlier shots, %d metres and %s lit or dark, as one more column), SHEET_COMPARE_LABEL, SHEET_PREFIX (m4_t30a), SHEET_PATH.
 #              M4-T30d: SHEET_COCKPIT (1; 0 leaves the cockpit view out, for the props: nav_buoy, raider_fighter_chunks,
 #              starfury_aurora_chunks, capital_cruiser, capital_destroyer, capital_carrier, b5_station).
@@ -32,7 +32,7 @@ touch reports/.gdignore
 status=0
 flock /tmp/scs-gpu.lock timeout 900 "${GODOT}" --path . --resolution "${RES}" --fullscreen --disable-vsync \
     -s res://scripts/look_sheet.gd -- asset="${ASSET}" out="${OUT_DIR}" distances="${SHEET_DISTANCES:-8,30,150,600}" \
-    looks="${SHEET_LOOKS:-splat,painted,textured}" lights="${SHEET_LIGHTS:-lit,dark}" settle="${SHEET_SETTLE:-40}" scale3d=1080p \
+    lights="${SHEET_LIGHTS:-lit,dark}" settle="${SHEET_SETTLE:-40}" scale3d=1080p \
     liveries="${SHEET_LIVERIES:-}" compare="${SHEET_COMPARE:-}" compare_label="${SHEET_COMPARE_LABEL:-T30A}" prefix="${SHEET_PREFIX:-m4_t30a}" \
     sheet="${SHEET_PATH:-}" cockpit="${SHEET_COCKPIT:-1}" \
     > "${LOG}" 2>&1 || status=$?

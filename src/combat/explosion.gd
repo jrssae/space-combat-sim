@@ -1,11 +1,11 @@
 class_name Explosion
 extends Node3D
-## The explosion of a destroyed ship (architecture §15.7), made entirely in code (no textures, no splats): a light
+## The explosion of a destroyed ship (architecture §15.7), made entirely in code (no textures): a light
 ## emitter, an additive billboard flash, a noisy fireball sphere, and sparks, fragments and a gas shell thrown from the `FxPool`
-## (M3-T23). Transparent meshes and particles draw after the splats and are hidden behind hulls in front of them by the hull
-## depth proxy.
+## (M3-T23). Transparent meshes and particles draw after the opaque hulls and are hidden behind hulls in front of them by their
+## depth.
 ##
-## - light: a `LightEmitter` (M3-T22), never a `Light3D` of its own. It competes through the `SplatLightRig`'s `LightPicker`
+## - light: a `LightEmitter` (M3-T22), never a `Light3D` of its own. It competes through the `LightRig`'s `LightPicker`
 ##   for a slot, so nearby hulls are lit, and sits in the rig's candidate list only while it shines. Energy 0 -> 8 -> 0 over
 ##   0.25 s, range 4 x radius.
 ## - billboard flash: an additive quad, 0.15 s.
@@ -40,7 +40,7 @@ var fireball: MeshInstance3D = null
 var fx: FxPool = null
 
 var _age_s: float = 0.0
-var _rig: SplatLightRig = null
+var _rig: LightRig = null
 var _fireball_material: ShaderMaterial = null
 
 
@@ -61,7 +61,7 @@ func _init() -> void:
 func _ready() -> void:
 	if emitter == null:
 		_build()  # instanced from the scene instead of `create`
-	_rig = SplatLightRig.of(self)
+	_rig = LightRig.of(self)
 	if _rig != null:
 		_rig.add_emitter(emitter)
 	if fx != null:

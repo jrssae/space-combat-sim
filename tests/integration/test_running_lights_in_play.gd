@@ -1,8 +1,8 @@
 extends GutTest
 ## Running lights in play (M3-T27, AC36, AC37): on the real main scene. Every ship has its three markers at its generated hardpoints,
 ## built once; a patrol hides until it attacks, an attack wave does not; a pool ship starts as its new pilot wants; the player's toggle
-## (a `UiCommand` edge), the HUD, the console and the wing; radar and AI lists are unmoved; the own lights go to every level of a
-## ship and to nothing else. How they look is the GPU's and the maintainer's (P11, AC39).
+## (a `UiCommand` edge), the HUD, the console and the wing; radar and AI lists are unmoved; the cockpit's red lamp stays on when the
+## ship goes dark. How they look is the GPU's and the maintainer's (P11, AC39).
 
 const DT: float = 1.0 / 60.0
 
@@ -331,69 +331,12 @@ func test_radar_and_ai_contact_lists_do_not_change() -> void:
 	assert_eq(main.hud.frame.radar_dots.size(), dots_lit, "radar")
 
 
-# --- own lights ------------------------------------------------------------------------------------------------------------------
-
-
-func test_every_level_of_a_ship_carries_the_same_own_lights_and_nothing_else_does() -> void:
-	await _start()
-	var levels: int = main.ship.splat_nodes().size()
-	assert_gt(levels, 1, "a ship has its levels of detail")
-	var first: PackedFloat32Array = main.ship.splat_nodes()[0].get_own_lights()
-	assert_eq(first.size(), 2 * GaussianOwnLights.FLOATS_PER_LIGHT, "the top lamp and the cabin glow")
-	for node: GaussianSplatNode in main.ship.splat_nodes():
-		assert_eq(node.get_own_lights(), first)
-	main.debris.prepare(ShipPool.DEFAULT_TYPE)
-	var carriers: int = 0
-	for node: Variant in _collect(main, GaussianSplatNode):
-		carriers += 1 if (node as GaussianSplatNode).own_light_count() > 0 else 0
-	var ship_levels: int = 0
-	for ship: Variant in _collect(main, Ship):
-		ship_levels += (ship as Ship).splat_nodes().size()
-	assert_eq(carriers, ship_levels, "ships only: no buoy, chunk or sky")
-
-
-func test_a_dark_ship_keeps_only_the_cabin_glow() -> void:
-	await _start()
-	main.ship.running_lights = false
-	for node: GaussianSplatNode in main.ship.splat_nodes():
-		assert_eq(node.own_light_count(), 1, "the glow")
-		assert_gt(node.get_own_lights()[GaussianOwnLights.FLOATS_PER_LIGHT - 1], 0.0, "it has a view range: it is the glow")
-	main.ship.running_lights = true
-	assert_eq(main.ship.splat_nodes()[0].own_light_count(), 2)
-
-
-func test_the_settings_switch_them_off_and_retune_them() -> void:
-	await _start()
-	Settings.set_value(&"own_lights", false)
-	assert_eq(main.ship.splat_nodes()[0].own_light_count(), 0, "off for comparison")
-	Settings.set_value(&"own_lights", true)
-	assert_eq(main.ship.splat_nodes()[0].own_light_count(), 2)
-	var before: float = main.ship.splat_nodes()[0].get_own_lights()[4]
-	Settings.set_value(&"top_lamp_energy", 5.0)
-	assert_gt(main.ship.splat_nodes()[0].get_own_lights()[4], before)
-	Settings.set_value(&"top_lamp_energy", before / NavLights.TOP_LAMP_COLOR.r)
-
-
-func test_the_top_lamp_lands_over_the_ship_whichever_way_it_is_turned() -> void:
-	# The sign the shader relies on: instance frame -> world through the node's real pose comes back to the hardpoint's place.
-	await _start()
-	var ship: Ship = main.ship
-	ship.global_transform = Transform3D(Basis(Vector3(1.0, 1.0, 0.0).normalized(), 0.8), ship.global_position)
-	ship.reset_physics_interpolation()
-	await get_tree().process_frame
-	var lamp_hardpoint: Vector3 = ship.get_hardpoints().nav_lights["top_lamp"]
-	for node: GaussianSplatNode in ship.splat_nodes():
-		var relative: Transform3D = ship.global_transform.affine_inverse() * node.global_transform
-		assert_almost_eq(relative.basis.x, GaussianSplatNode.get_model_orientation_correction().basis.x, Vector3.ONE * 1e-3)
-		assert_almost_eq(relative.basis.y, GaussianSplatNode.get_model_orientation_correction().basis.y, Vector3.ONE * 1e-3)
-		var lights: PackedFloat32Array = node.get_own_lights()
-		var world: Vector3 = node.global_transform * Vector3(lights[0], lights[1], lights[2])
-		assert_almost_eq(world, ship.global_transform * lamp_hardpoint, Vector3.ONE * 0.01, "the lamp stands over the ship's top")
+# --- the cabin lamp --------------------------------------------------------------------------------------------------------------
 
 
 func test_the_cabin_light_is_red_and_a_dark_ship_keeps_it() -> void:
 	await _start()
-	var rig: SplatLightRig = SplatLightRig.of(main.ship)
+	var rig: LightRig = LightRig.of(main.ship)
 	main.camera_rig.set_mode(CameraRig.Mode.COCKPIT)
 	main.ship.running_lights = false
 	rig.update(main.camera_rig.cockpit_camera.global_position)

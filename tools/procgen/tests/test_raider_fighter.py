@@ -1,4 +1,4 @@
-"""``raider_fighter`` (AC4): files, budget, frames, chunk partition, hardpoints contract, collision coverage, determinism."""
+"""``raider_fighter`` (AC4): files, frames, chunks, hardpoints contract, collision coverage, determinism."""
 
 from __future__ import annotations
 
@@ -11,11 +11,10 @@ from pathlib import Path
 import numpy as np
 
 from tools.procgen.assets import raider_fighter as raider
-from tools.procgen.core import frames
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.obj import read_obj
-from tools.procgen.core.ply import read_ply
+from tools.procgen.styles.raider import RAIDER
 
 SPEC = raider.DEFAULT_SPEC
 PILOT_TERMS = {
@@ -49,9 +48,8 @@ class RaiderFighterTests(unittest.TestCase):
         cls.out_a = raider.build(BuildContext(cls.dir_a, seed=42))
         cls.out_b = raider.build(BuildContext(cls.dir_b, seed=42))
         cls.manifest = manifest_io.read_manifest(cls.dir_a)
-        cls.ply = read_ply(cls.dir_a / raider.PLY_NAME)
-        cls.splats = cls.ply.to_splats()
-        cls.godot_xyz = frames.flip_xy(cls.splats.xyz)
+        cls.placed, _ = raider.centre(raider.build_parts(SPEC, RAIDER, BuildContext(cls.dir_a, seed=42), raider.DEFAULT_SPACING_M))
+        cls.godot_xyz = np.concatenate([p.samples.positions for p in cls.placed if p.samples is not None])  # the hardpoints frame
         cls.hp = json.loads((cls.dir_a / raider.HARDPOINTS_NAME).read_text(encoding="utf-8"))
         cls.obj = read_obj(cls.dir_a / raider.OBJ_NAME)
 
@@ -59,51 +57,20 @@ class RaiderFighterTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls._tmp.cleanup()
 
-    # --- files, manifest, budget --------------------------------------------------------------------
+    # --- files, manifest --------------------------------------------------------------------------------
     def test_all_files_are_written_and_listed(self) -> None:
-        expected = {raider.PLY_NAME, raider.OBJ_NAME, "raider_fighter.mtl", raider.HARDPOINTS_NAME, "manifest.json", "raider_fighter_mesh.glb",
-                    raider.MESH_NAME}
+        expected = {raider.OBJ_NAME, "raider_fighter.mtl", raider.HARDPOINTS_NAME, "manifest.json", raider.MESH_NAME}
         expected |= {f"raider_fighter_{k}.png{ext}" for k in ("albedo", "emissive", "normal", "orm") for ext in ("", ".import")}  # M4-T30d
-        expected |= {entry[0] for entry in raider.FAR_LODS.values()}
-        expected |= {lod["lighting"] for lod in self.manifest["lods"]}
         for entry in self.hp["chunks"]:
-            expected |= {entry["ply"], entry["lighting"], entry["obj"], entry["obj"].replace(".obj", ".mtl"), entry["mesh"]}
+            expected |= {entry["obj"], entry["obj"].replace(".obj", ".mtl"), entry["mesh"]}
         self.assertEqual({p.name for p in self.dir_a.iterdir()}, expected)
         self.assertEqual({p.name for p in self.out_a.files}, expected)
 
-    def test_lods_one_to_three_share_bounds_and_determinism(self) -> None:
-        # M3-T19 (AC28): coarser levels for the LOD switcher, with LOD0's box, centred, deterministic.
-        lod0 = self.manifest["lods"][0]
-        self.assertEqual([e["level"] for e in self.manifest["lods"]], [0, 1, 2, 3])
-        for level, (name, factor, _stream, bounds) in raider.FAR_LODS.items():
-            entry = self.manifest["lods"][level]
-            self.assertEqual(entry["file"], name)
-            self.assertAlmostEqual(entry["spacing_m"], factor * raider.DEFAULT_SPACING_M)
-            share = entry["splats"] / lod0["splats"]
-            self.assertTrue(bounds[0] <= share <= bounds[1], (level, share))
-            xyz = frames.flip_xy(read_ply(self.dir_a / name).to_splats().xyz)
-            self.assertLess(float(np.abs(xyz.mean(axis=0)).max()), 1e-3, "centred like LOD0")
-            np.testing.assert_allclose(xyz.min(axis=0), self.manifest["aabb_min"], atol=0.3)
-            np.testing.assert_allclose(xyz.max(axis=0), self.manifest["aabb_max"], atol=0.3)
-            self.assertEqual((self.dir_a / name).read_bytes(), (self.dir_b / name).read_bytes(), "deterministic")
-        self.assertEqual(self.out_a.warnings, (), "every share inside its range")
-
-    def test_manifest_lods_zero_and_the_budget(self) -> None:
-        lod = self.manifest["lods"][0]
-        self.assertEqual(lod["file"], raider.PLY_NAME)
-        self.assertEqual(lod["splats"], len(self.splats))
-        self.assertTrue(raider.SPLAT_BUDGET[0] <= lod["splats"] <= raider.SPLAT_BUDGET[1], lod["splats"])
+    def test_the_manifest_names_the_textured_mesh(self) -> None:
         self.assertEqual(self.out_a.warnings, ())
-        self.assertEqual(
-            self.manifest["files"],
-            {"fallback_mesh": raider.OBJ_NAME, "paint_mesh": "raider_fighter_mesh.glb", "mesh": raider.MESH_NAME, "hardpoints": raider.HARDPOINTS_NAME},
-        )
-        self.assertEqual(sum(self.manifest["counts"].values()), len(self.splats))
-        self.assertEqual(list(self.manifest["counts"]), list(raider.CHUNK_ORDER))
-
-    def test_the_depth_proxy_source_is_the_fallback_mesh_like_the_starfury(self) -> None:
-        # The game reuses the fallback mesh as the hull depth proxy, so the manifest key is all the asset owes it.
-        self.assertIn("fallback_mesh", self.manifest["files"])
+        self.assertEqual(self.manifest["files"], {"obj": raider.OBJ_NAME, "mesh": raider.MESH_NAME, "hardpoints": raider.HARDPOINTS_NAME})
+        self.assertEqual(self.manifest["chunks"], list(raider.CHUNK_ORDER))
+        self.assertEqual(self.out_a.triangle_count, self.manifest["mesh"]["triangles"])
 
     def test_dimensions_match_the_design(self) -> None:
         self.assertAlmostEqual(self.hp["span_m"], 2.0 * SPEC.wing.half_span, places=3)
@@ -112,46 +79,24 @@ class RaiderFighterTests(unittest.TestCase):
         self.assertGreater(self.hp["span_m"] / self.hp["length_m"], 2.0, "a flying wing: the span is more than twice the length")
 
     # --- frames, symmetry --------------------------------------------------------------------------------
-    def test_ply_is_centred_and_the_aabb_matches_after_the_flip(self) -> None:
+    def test_the_samples_are_centred_and_the_aabb_is_the_hulls(self) -> None:
         np.testing.assert_allclose(self.godot_xyz.mean(axis=0), [0.0, 0.0, 0.0], atol=1e-3)
-        lo, hi = self.godot_xyz.min(axis=0), self.godot_xyz.max(axis=0)
-        np.testing.assert_allclose(lo, self.manifest["aabb_min"], atol=2e-4)
-        np.testing.assert_allclose(hi, self.manifest["aabb_max"], atol=2e-4)
+        np.testing.assert_allclose(self.obj.vertices.min(axis=0), self.manifest["aabb_min"], atol=2e-4)
+        np.testing.assert_allclose(self.obj.vertices.max(axis=0), self.manifest["aabb_max"], atol=2e-4)
 
-    def test_splat_positions_are_exactly_mirror_symmetric_in_x(self) -> None:
+    def test_sample_positions_are_exactly_mirror_symmetric_in_x(self) -> None:
         xyz = self.godot_xyz
         mirrored = xyz * np.array([-1.0, 1.0, 1.0])
         key = lambda a: a[np.lexsort((a[:, 2], a[:, 1], a[:, 0]))]  # noqa: E731
         np.testing.assert_allclose(key(xyz), key(mirrored), atol=SYM_TOL)
 
-    def test_splats_are_flat_oriented_discs(self) -> None:
-        scale = self.splats.scale
-        self.assertTrue(np.all(scale[:, 2] < scale[:, 0]))
-        self.assertTrue(np.all(np.isfinite(self.splats.rgb)))
-        self.assertTrue(np.all((self.splats.alpha > 0.0) & (self.splats.alpha < 1.0)))
-
-    def test_opaque_everywhere_the_canopy_is_dark(self) -> None:
-        self.assertGreater(float(np.median(self.splats.alpha)), 0.5)
-        lum = self.splats.rgb.mean(axis=1)
-        self.assertLess(float(lum.min()), 0.02, "the near-black canopy and nozzle throats")
-        self.assertGreater(float(np.percentile(lum, 90)), 0.25, "worn grey hull plating, bright enough to read against the sky")
-
     # --- chunks ----------------------------------------------------------------------------------------------
-    def test_chunks_partition_the_hull_splats_exactly(self) -> None:
+    def test_each_chunk_sits_at_its_groups_samples_centroid(self) -> None:
         names = [c["name"] for c in self.hp["chunks"]]
         self.assertEqual(names, list(raider.CHUNK_ORDER))
-        start = 0
         for entry in self.hp["chunks"]:
-            n = entry["splats"]
-            self.assertEqual(n, self.manifest["counts"][entry["name"]])
-            chunk = read_ply(self.dir_a / entry["ply"]).to_splats()
-            self.assertEqual(len(chunk), n)
-            body = frames.flip_xy(chunk.xyz) + np.array(entry["offset"])
-            np.testing.assert_allclose(body, self.godot_xyz[start : start + n], atol=1e-5)
-            np.testing.assert_allclose(chunk.rgb, self.splats.rgb[start : start + n], atol=1e-4)
-            np.testing.assert_allclose(chunk.xyz.mean(axis=0), [0.0, 0.0, 0.0], atol=1e-4)
-            start += n
-        self.assertEqual(start, len(self.splats))
+            members = [p.samples.positions for p in self.placed if p.part.group == entry["name"] and p.samples is not None]
+            np.testing.assert_allclose(entry["offset"], np.concatenate(members).mean(axis=0), atol=1e-4)
 
     def test_chunks_sit_where_they_belong(self) -> None:
         offsets = {c["name"]: np.array(c["offset"]) for c in self.hp["chunks"]}
@@ -167,9 +112,8 @@ class RaiderFighterTests(unittest.TestCase):
             obj = read_obj(self.dir_a / entry["obj"])
             self.assertGreater(len(obj.vertices), 0, entry["name"])
             self.assertTrue(np.all(np.isfinite(obj.vertices)))
-            chunk = frames.flip_xy(read_ply(self.dir_a / entry["ply"]).to_splats().xyz)
-            lo, hi = obj.vertices.min(axis=0), obj.vertices.max(axis=0)
-            self.assertTrue(np.all(chunk.min(axis=0) >= lo - 0.2) and np.all(chunk.max(axis=0) <= hi + 0.2), entry["name"])
+            centre = 0.5 * (obj.vertices.min(axis=0) + obj.vertices.max(axis=0))
+            self.assertLess(float(np.linalg.norm(centre)), 3.0, "%s: centred near its samples' centroid" % entry["name"])
 
     # --- hardpoints contract -----------------------------------------------------------------------------------
     def test_hardpoints_schema(self) -> None:
@@ -228,7 +172,7 @@ class RaiderFighterTests(unittest.TestCase):
             self.assertAlmostEqual(float(np.linalg.norm(port["exhaust"])), 1.0, places=4)
 
     # --- collision -----------------------------------------------------------------------------------------
-    def test_collision_primitives_cover_the_splats_and_stay_close(self) -> None:
+    def test_collision_primitives_cover_the_surface_and_stay_close(self) -> None:
         shapes = self.hp["collision"]
         names = [c["name"] for c in shapes]
         self.assertEqual(len(names), len(set(names)), "unique names")
@@ -237,7 +181,7 @@ class RaiderFighterTests(unittest.TestCase):
         inside = np.zeros(len(self.godot_xyz), dtype=bool)
         for c in shapes:
             inside |= inside_primitive(self.godot_xyz, c, inflate=0.15)
-        self.assertGreaterEqual(float(inside.mean()), 0.97, "AC4: at least 97 % of the splat centres")
+        self.assertGreaterEqual(float(inside.mean()), 0.97, "AC4: at least 97 % of the surface samples")
         lo, hi = self.godot_xyz.min(axis=0), self.godot_xyz.max(axis=0)
         for c in shapes:
             basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T
@@ -261,7 +205,7 @@ class RaiderFighterTests(unittest.TestCase):
         self.assertGreater(float(tip[0, 0]), 8.0)
 
     # --- meshes ----------------------------------------------------------------------------------------------
-    def test_fallback_obj_is_valid_and_matches_the_splat_bounds(self) -> None:
+    def test_the_obj_is_valid_and_bounds_the_samples(self) -> None:
         v = self.obj.vertices
         self.assertGreater(len(v), 0)
         self.assertTrue(np.all(np.isfinite(v)))
@@ -273,27 +217,20 @@ class RaiderFighterTests(unittest.TestCase):
         for out in self.out_a.files:
             self.assertEqual(sha256(out), sha256(self.dir_b / out.name), out.name)
 
-    def test_a_different_seed_changes_the_splats_but_not_the_design(self) -> None:
+    def test_a_different_seed_changes_the_wear_but_not_the_design(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            other = raider.build(BuildContext(Path(tmp), seed=7))
-            self.assertNotEqual(sha256(next(p for p in other.files if p.name == raider.PLY_NAME)), sha256(self.dir_a / raider.PLY_NAME))
+            raider.build(BuildContext(Path(tmp), seed=7))
+            albedo = "raider_fighter_albedo.png"
+            self.assertNotEqual(sha256(Path(tmp) / albedo), sha256(self.dir_a / albedo))
             hp = json.loads((Path(tmp) / raider.HARDPOINTS_NAME).read_text(encoding="utf-8"))
             self.assertEqual([m["name"] for m in hp["muzzles"]], [m["name"] for m in self.hp["muzzles"]])
             # The centroid (the frame's origin) moves a little with the random samples; the design does not.
             np.testing.assert_allclose([m["position"] for m in hp["muzzles"]], [m["position"] for m in self.hp["muzzles"]], atol=0.05)
             self.assertEqual([c["name"] for c in hp["collision"]], [c["name"] for c in self.hp["collision"]])
 
-    def test_spacing_option_scales_the_count_and_is_recorded(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            out = raider.build(BuildContext(Path(tmp), seed=42, options={"spacing": 0.18}))
-            count = out.manifest["lods"][0]["splats"]
-            self.assertLess(count, 0.4 * len(self.splats))
-            self.assertEqual(out.manifest["sampling"]["spacing_m"], 0.18)
-            self.assertEqual(out.warnings, (), "the budget warning only applies at the default spacing")
-
     def test_invalid_options_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            for bad in ({"spacing": 0.0}, {"overlap": -1.0}, {"thickness": 0}):
+            for bad in ({"spacing": 0.0}, {"spacing": -1.0}):
                 with self.assertRaises(ValueError):
                     raider.build(BuildContext(Path(tmp), seed=1, options=bad))
 

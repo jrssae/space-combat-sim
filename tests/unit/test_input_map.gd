@@ -31,7 +31,7 @@ const PAD_BINDINGS: Dictionary = {
 # The pad reaches roll through the right stick's diagonals (the roll actions are the keys), and targets with B
 # (target_cycle) instead of target_next (M3-T15).
 const KEYBOARD_ONLY: Array[StringName] = [
-	&"debug_toggle_fallback_mesh", &"debug_toggle_overlay", &"target_ahead", &"target_prev", &"screenshot",
+	&"debug_toggle_overlay", &"target_ahead", &"target_prev", &"screenshot",
 	&"wing_attack", &"wing_form", &"wing_engage", &"wing_cover", &"roll_left", &"roll_right", &"target_next",
 ]
 
@@ -61,7 +61,6 @@ const KEYS_B: Dictionary = {
 	&"reset_ship": [KEY_BACKSPACE],
 	&"screenshot": [KEY_N, KEY_PRINT],
 	&"debug_toggle_overlay": [KEY_F3],
-	&"debug_toggle_fallback_mesh": [KEY_F4],
 	&"wing_attack": [KEY_1],
 	&"wing_form": [KEY_2],
 	&"wing_engage": [KEY_3],
@@ -93,7 +92,6 @@ const OUTSIDE_THE_BLOCK: Dictionary = {
 	KEY_N: [&"screenshot"],
 	KEY_PRINT: [&"screenshot"],
 	KEY_F3: [&"debug_toggle_overlay"],
-	KEY_F4: [&"debug_toggle_fallback_mesh"],
 }
 
 

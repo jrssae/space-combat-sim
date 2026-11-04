@@ -1,4 +1,4 @@
-"""``b5_station``: a stand-in of the Babylon 5 station for the render comparison (M4-T27, Q24).
+"""``b5_station``: a stand-in of the Babylon 5 station (M4-T27, Q24; textured in M4-T30d).
 
 Shape only, built from primitives and the written proportions in ``docs/design-references.md``: no franchise asset is used. About
 8 km along Z (bow at -Z), in two pieces so the game can turn one:
@@ -9,9 +9,8 @@ Shape only, built from primitives and the written proportions in ``docs/design-r
   vanes, the top bar over the drum with its row of red cargo modules, the command sphere with its ring, Cobra-bay arms and masts, and
   the forked bow spike.
 
-Each piece is written as a chain of splat levels (4, 8, 16 and 32 m spacing) with lighting records, as a painted mesh and, from
-M4-T30d, as a textured mesh on a 2 048 px atlas of its own (``core/pieces.py``): the drum's bands, the frame's plating, the cargo
-modules' red, the command sphere's rows of lit windows. The drum's frame is centred on its axis, so turning its node about local Z
+Each piece is written as a textured mesh on a 2 048 px atlas of its own (``core/pieces.py``): the drum's bands, the frame's plating,
+the cargo modules' red, the command sphere's rows of lit windows. The drum's frame is centred on its axis, so turning its node about local Z
 turns the drum in place.
 """
 
@@ -25,23 +24,19 @@ import numpy as np
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Material, Mesh, box, lathe, rotation_x, tapered_box
 from ..core.manifest import build_manifest, write_manifest
-from ..core.paint_mesh import phase_steps
 from ..core.pieces import PieceTexture, write_piece
-from ..core.textured_mesh import TexturedPart
+from ..core.textured_mesh import TexturedPart, phase_steps
 from ..core.textures import Marking
 from ..styles import Style
 
 ASSET_ID = "b5_station"
-GENERATOR_VERSION = 2  # 2: the textured pieces (M4-T30d)
-LOD_SPACINGS_M = (4.0, 8.0, 16.0, 32.0)
+GENERATOR_VERSION = 3  # 3: the textured pieces only (M4-T31); 2: the textured pieces (M4-T30d)
 LENGTH_M = 8000.0
 DRUM_RADIUS_M = LENGTH_M / 18.0  # diameter 1/9 of the length
 DRUM_FRONT_Z = -2450.0
 DRUM_BACK_Z = 895.0
 DRUM_BANDS = 12
 TOP_BAR_Y = DRUM_RADIUS_M + 65.0
-# Every level's splats over these is the budget the game can draw at once with a dozen capitals (`splat_budget` 2 000 000).
-LOD0_BUDGET = (600_000, 1_400_000)
 SEGMENTS = 96
 COMMAND_Z = -2900.0
 COMMAND_RADIUS_M = 420.0
@@ -195,41 +190,30 @@ def frame_parts() -> list[TexturedPart]:
 
 
 def build(ctx: BuildContext) -> AssetOutputs:
-    """Generate both pieces into ``ctx.out_dir``. Option: ``spacing`` (LOD0 spacing, m; each coarser level doubles it)."""
-    lod0 = float(ctx.option("spacing", LOD_SPACINGS_M[0]))
-    if lod0 <= 0.0:
-        raise ValueError("spacing must be positive")
-    spacings = tuple(lod0 * 2.0**k for k in range(len(LOD_SPACINGS_M)))
+    """Generate both pieces into ``ctx.out_dir``."""
     out_dir: Path = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
-    comments = (f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}", "frame: 3dgs (Rz180 of godot), centred on its own splats")
     texture = PieceTexture(ATLAS_PX, TEXEL_M, ctx.seed)
-    files, drum = write_piece(out_dir, f"{ASSET_ID}_drum", drum_parts(), STATION, spacings, ctx.rng, comments, texture)
+    files, drum = write_piece(out_dir, f"{ASSET_ID}_drum", drum_parts(), STATION, texture)
     drum["pivot"] = drum_centre()
     drum["axis"] = [0.0, 0.0, 1.0]
-    frame_files, frame = write_piece(out_dir, f"{ASSET_ID}_frame", frame_parts(), STATION, spacings, ctx.rng, comments, texture)
+    frame_files, frame = write_piece(out_dir, f"{ASSET_ID}_frame", frame_parts(), STATION, texture)
     files += frame_files
-    warnings: list[str] = []
-    total = drum["lods"][0]["splats"] + frame["lods"][0]["splats"]
-    if abs(lod0 - LOD_SPACINGS_M[0]) < 1e-9 and not LOD0_BUDGET[0] <= total <= LOD0_BUDGET[1]:
-        warnings.append(f"{total} LOD0 splats is outside {LOD0_BUDGET}")
     lo = np.minimum(np.array(frame["aabb_min"]), np.array(drum["aabb_min"]) + drum["pivot"])
     hi = np.maximum(np.array(frame["aabb_max"]), np.array(drum["aabb_max"]) + drum["pivot"])
     manifest = build_manifest(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,
         seed=ctx.seed,
-        lods=[{k: v for k, v in e.items() if k != "centroid"} for e in frame["lods"]],
         aabb_min=lo,
         aabb_max=hi,
         centroid_offset=(0.0, 0.0, 0.0),
-        files={"drum_mesh": drum["paint_mesh"]["file"], "frame_mesh": frame["paint_mesh"]["file"]},
+        files={"drum_mesh": drum["mesh"]["file"], "frame_mesh": frame["mesh"]["file"]},
         extra={
             "kind_note": "stand-in, shape only (M4-T27)",
             "length_m": LENGTH_M,
             "pieces": {"drum": drum, "frame": frame},
-            "lod0_splats": total,
         },
     )
     files.append(write_manifest(out_dir, manifest))
-    return AssetOutputs(ASSET_ID, out_dir, manifest, tuple(files), tuple(warnings))
+    return AssetOutputs(ASSET_ID, out_dir, manifest, tuple(files), ())

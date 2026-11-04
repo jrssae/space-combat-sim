@@ -1,9 +1,9 @@
 class_name RenderScale
 extends RefCounted
-## The 3D scale that keeps the splat renderer inside its tile budget, pure. GDGS's compute backend sorts splats by a 32-bit key whose top 16
-## bits are the 16 x 16 px tile index, so a frame of more than 65 535 tiles (about 16.7 million pixels: 6144 x 3382 on a maximized
-## 6K desktop is 81 000 tiles) wraps the index and the bottom fifth of the picture renders black. Above the budget the 3D scene is
-## rendered at a lower internal resolution and scaled up; the HUD and the text stay at the window's resolution.
+## The 3D scale that keeps a very large window's 3D under a pixel budget, pure: a frame of more than `MAX_TILES` tiles of 16 x 16 px
+## (about 16 million pixels; 6144 x 3382 on a maximized 6K desktop is 81 000 tiles) is rendered at a lower internal resolution and
+## scaled up, so the GPU never pays for 20 million pixels; the HUD and the text stay at the window's resolution. The budget was the
+## M3 renderer's hard limit (its sort key held 65 535 tiles); it stays as the cap until T26's resolution scaling replaces it.
 
 const TILE_PX: int = 16
 ## A little under 65 535, so rounding up to whole tiles never crosses it.

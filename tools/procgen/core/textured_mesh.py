@@ -3,8 +3,8 @@
 
 ``write_textured_mesh(out_dir, asset_id, parts, style, atlas_px)`` writes ``<asset_id>.glb`` (primitive 0 the opaque hull, primitive 1 the
 glass), ``<asset_id>_albedo/_normal/_orm/_emissive.png`` with a Godot ``.import`` sidecar each (VRAM compressed, mipmaps, the normal
-map flagged), and returns the manifest's ``mesh`` section. The parts are T27's painted-mesh parts with markings: the same triangles
-and bounds as the painted mesh and the fallback OBJ.
+map flagged), and returns the manifest's ``mesh`` section. The parts are the hull's meshes with their panel phase and markings: the
+same triangles and bounds as the OBJ.
 """
 
 from __future__ import annotations
@@ -22,7 +22,6 @@ from .glb import GlbPrimitive, write_glb
 from .image import write_png
 from .chunks import ChunkCut, chunk_mesh_name
 from .livery import digit_atlas, digit_import_sidecar, livery_section
-from .paint_mesh import PHASE_STEPS, phase_of
 from .raster import dilate, rasterize, sharp_edges
 from .textures import NORMAL_SCALE, Atlas, Marking, bake_maps, plating_for, surface_emissive_strength
 from .uv_atlas import Packed, charts_of, pack
@@ -34,11 +33,25 @@ MAP_KEYS = ("albedo", "normal", "orm", "emissive")
 DIGITS_KEY = "digits"
 OPAQUE_SURFACE = "hull"
 GLASS_SURFACE = "glass"
+PHASE_STEPS = 97
+
+
+def phase_steps(name: str, base_only: bool) -> tuple[int, int, int]:
+    """A part's panel phase in 97ths of the panel size: the integers the assets' ``_phase`` scales, so each part's panels are offset
+    from its neighbours'."""
+    key = name.split("_")[0] if base_only else name
+    h = sum((i + 1) * ord(c) for i, c in enumerate(key))
+    return tuple((h * k) % PHASE_STEPS for k in (7, 11, 13))
+
+
+def phase_of(steps: Sequence[int], style: Style) -> tuple[float, float, float]:
+    """The panel phase in metres, exactly as ``_phase`` computes it."""
+    return tuple(int(s) / float(PHASE_STEPS) * style.panel_size_m for s in steps)
 
 
 @dataclass(frozen=True)
 class TexturedPart:
-    """A hull part's mesh, its panel phase (in 97ths, as ``PaintPart``) and the markings painted on it."""
+    """A hull part's mesh, its panel phase (in 97ths, ``phase_steps``) and the markings painted on it."""
 
     mesh: Mesh
     phase: tuple[int, int, int]

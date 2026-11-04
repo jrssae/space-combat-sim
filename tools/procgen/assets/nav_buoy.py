@@ -1,8 +1,8 @@
 """``nav_buoy``: an inert navigation buoy, the M1 target marker (docs/architecture.md section 9.3).
 
 Composition only, like ``starfury_aurora``: parts from ``parts/`` with the ``earthforce`` style;
-the splats (``.ply``), the fallback mesh (``.obj``) and ``hardpoints.json`` are all derived from
-the same placed parts, so they agree by construction.
+the textured mesh, the OBJ and ``hardpoints.json`` are all derived from the same placed parts, so
+they agree by construction.
 
 Layout (authored Godot frame, metres, before re-centring; +Y is the long axis the buoy spins
 about in game):
@@ -18,8 +18,8 @@ The textured mesh (M4-T30d, ``core/textured_mesh.py``) is the same parts plus th
 whose glass glows amber like the beacon itself; the orange hazard bands are the hull's own ``stripe`` material.
 
 About 4.4 m tall overall. Every sampled part is made exactly mirror-symmetric in x and z and the y
-centroid is subtracted, so the splat centroid is the origin and lies on the spin axis: GDGS's
-import centring is a no-op and the buoy spins about its own axis without wobbling.
+centroid of the surface samples is subtracted, so the origin lies on the spin axis and the buoy
+spins about its own axis without wobbling.
 """
 
 from __future__ import annotations
@@ -32,21 +32,12 @@ from typing import Any
 
 import numpy as np
 
-from ..core import frames, lighting
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Material, Mesh, lathe, rotation_x
-from ..core.manifest import build_manifest, lod_entry, write_manifest
+from ..core.manifest import build_manifest, write_manifest
 from ..core.obj import write_obj
-from ..core.paint_mesh import phase_steps
-from ..core.textured_mesh import TexturedPart, write_textured_mesh
-from ..core.ply import SplatData, write_ply
-from ..core.sampling import (
-    DEFAULT_OVERLAP,
-    DEFAULT_THICKNESS,
-    SurfaceSamples,
-    sample_mesh,
-    to_splats,
-)
+from ..core.textured_mesh import TexturedPart, phase_steps, write_textured_mesh
+from ..core.sampling import SurfaceSamples, sample_mesh
 from ..parts import Part, total_mass
 from ..parts.hull import CylinderHullSpec, cylinder_hull
 from ..parts.structure import MastSpec, PanelSpec, mast, panel
@@ -54,8 +45,7 @@ from ..styles import Style
 from ..styles.earthforce import EARTHFORCE
 
 ASSET_ID = "nav_buoy"
-GENERATOR_VERSION = 3  # 3: the textured mesh (M4-T30d); 2: flat paint and lighting records (M3-T21)
-PLY_NAME = "nav_buoy.ply"
+GENERATOR_VERSION = 4  # 4: the textured mesh only (M4-T31); 3: the textured mesh (M4-T30d)
 OBJ_NAME = "nav_buoy.obj"
 HARDPOINTS_NAME = "hardpoints.json"
 MESH_NAME = "nav_buoy.glb"
@@ -67,8 +57,7 @@ LENS = Material("ef_lens", (0.05, 0.035, 0.015), roughness=0.1, emissive=(1.0, 0
 LENS_RADIUS_M = 0.06
 LENS_SPAN_M = (0.17, 0.09)  # from below the mast tip: where the collar starts and ends
 
-DEFAULT_SPACING_M = 0.04  # architecture section 9.3
-SPLAT_BUDGET = (5_000, 15_000)  # AC3, at the default spacing
+DEFAULT_SPACING_M = 0.04  # the surface samples' spacing, which centres the buoy
 SPIN_AXIS = (0.0, 1.0, 0.0)
 JSON_DIGITS = 5
 
@@ -106,7 +95,7 @@ def build_parts(spec: NavBuoySpec, style: Style, ctx: BuildContext, spacing: flo
     """Place and sample every part in the authored frame, exactly symmetric in x and z."""
 
     def sample(part: Part, stream: str) -> SurfaceSamples:
-        return sample_mesh(part.mesh, spacing, ctx.rng("splats", stream))
+        return sample_mesh(part.mesh, spacing, ctx.rng("surface", stream))
 
     placed: list[tuple[Part, SurfaceSamples]] = []
     hull = cylinder_hull(spec.hull, style).renamed("hull")
@@ -132,24 +121,12 @@ def build_parts(spec: NavBuoySpec, style: Style, ctx: BuildContext, spacing: flo
 
 
 def centre(placed: list[tuple[Part, SurfaceSamples]]) -> tuple[list[tuple[Part, SurfaceSamples]], np.ndarray]:
-    """Subtract the splat centroid from everything. x and z are already exactly zero (symmetry),
+    """Subtract the samples' centroid from everything. x and z are already exactly zero (symmetry),
     so only y moves; returns the placements and the subtracted offset (``centroid_offset``)."""
     total = sum(len(s) for _, s in placed)
     y_mean = sum(float(s.positions[:, 1].sum()) for _, s in placed) / total
     offset = np.array([0.0, y_mean, 0.0])
     return [(p.translated(-offset), s.translated(-offset)) for p, s in placed], offset
-
-
-def _phase(name: str, style: Style) -> tuple[float, float, float]:
-    """Per-part shift of the panel grid, so neighbouring parts' panel lines do not line up."""
-    h = sum((i + 1) * ord(c) for i, c in enumerate(name.split("_")[0]))
-    return tuple(((h * k) % 97) / 97.0 * style.panel_size_m for k in (7, 11, 13))
-
-
-def colour_samples(part: Part, samples: SurfaceSamples, style: Style) -> np.ndarray:
-    """Paint only (paint, panel lines): the scene's lights do the shading in the game."""
-    paneled = samples.material_flag("paneled") > 0.5
-    return style.shade_panels(samples.albedo(), samples.positions, samples.normals, paneled, _phase(part.name, style))
 
 
 def lens_mesh(tip: np.ndarray) -> Mesh:
@@ -194,38 +171,21 @@ def hardpoints(placed: list[tuple[Part, SurfaceSamples]], spec: NavBuoySpec) -> 
 def build(ctx: BuildContext) -> AssetOutputs:
     """Generate the buoy into ``ctx.out_dir``.
 
-    Options: ``spacing`` (m, default 0.04; the CLI's ``--spacing``), ``overlap`` (sigma /
-    spacing, default 1.0), ``thickness`` (normal sigma / spacing, default 0.08).
+    Option: ``spacing`` (m, default 0.04), the surface samples' spacing.
     """
     spacing = float(ctx.option("spacing", DEFAULT_SPACING_M))
-    overlap = float(ctx.option("overlap", DEFAULT_OVERLAP))
-    thickness = float(ctx.option("thickness", DEFAULT_THICKNESS))
-    if spacing <= 0.0 or overlap <= 0.0 or thickness <= 0.0:
-        raise ValueError("spacing, overlap and thickness must be positive")
+    if spacing <= 0.0:
+        raise ValueError("spacing must be positive")
     spec, style = DEFAULT_SPEC, EARTHFORCE
 
     out_dir = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
     placed, offset = centre(build_parts(spec, style, ctx, spacing))
-    samples = SurfaceSamples.concatenate([s for _, s in placed])
-    rgb = np.concatenate([colour_samples(p, s, style) for p, s in placed])
-    authored = to_splats(samples, rgb, spacing, overlap, thickness)
-
-    xyz32 = authored.xyz.astype(np.float32)
-    aabb_min, aabb_max = xyz32.min(axis=0), xyz32.max(axis=0)
-    written = SplatData(
-        xyz=frames.godot_to_3dgs_positions(authored.xyz),
-        rgb=authored.rgb,
-        alpha=authored.alpha,
-        scale=authored.scale,
-        rot=frames.godot_to_3dgs_quats(authored.rot),
-        normals=frames.flip_xy(authored.normals),
-    )
-    comments = (f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}", "frame: 3dgs (Rz180 of godot)")
-    light_name = lighting.lod_file_name(ASSET_ID, 0)
-    files: list[Path] = [write_ply(out_dir / PLY_NAME, written, comments), lighting.write_lighting(out_dir / light_name, written)]
-    files += write_obj(out_dir / OBJ_NAME, Mesh.concatenate(p.mesh for p, _ in placed), ASSET_ID, comments[:1])
+    body = Mesh.concatenate(p.mesh for p, _ in placed)
+    aabb_min, aabb_max = body.bounds()
+    comments = (f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}",)
+    files: list[Path] = write_obj(out_dir / OBJ_NAME, body, ASSET_ID, comments)
 
     textured_paths, mesh_entry = write_textured_mesh(out_dir, ASSET_ID, textured_parts(placed), style, atlas_px=ATLAS_PX, texel_m=TEXEL_M,
                                                      seed=ctx.seed, occlusion=True, normal_scale=1)
@@ -236,25 +196,18 @@ def build(ctx: BuildContext) -> AssetOutputs:
     hp_path.write_text(json.dumps(hp, indent=2) + "\n", encoding="utf-8", newline="\n")
     files.append(hp_path)
 
-    total = len(authored)
-    warnings: list[str] = []
-    if abs(spacing - DEFAULT_SPACING_M) < 1e-12 and not SPLAT_BUDGET[0] <= total <= SPLAT_BUDGET[1]:
-        warnings.append(f"{total} splats is outside the AC3 budget {SPLAT_BUDGET} at the default spacing")
     manifest = build_manifest(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,
         seed=ctx.seed,
-        lods=[lod_entry(0, PLY_NAME, total, spacing, light_name)],
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,
-        files={"fallback_mesh": OBJ_NAME, "mesh": mesh_entry["file"], "hardpoints": HARDPOINTS_NAME},
+        files={"obj": OBJ_NAME, "mesh": mesh_entry["file"], "hardpoints": HARDPOINTS_NAME},
         extra={
-            "counts": {p.name: len(s) for p, s in placed},
-            "sampling": {"spacing_m": spacing, "overlap": overlap, "thickness": thickness},
             "dimensions_m": {"height": hp["height_m"], "span": hp["span_m"], "depth": hp["depth_m"]},
             "mesh": mesh_entry,
         },
     )
     files.append(write_manifest(out_dir, manifest))
-    return AssetOutputs(ASSET_ID, out_dir, manifest, tuple(files), tuple(warnings))
+    return AssetOutputs(ASSET_ID, out_dir, manifest, tuple(files), ())

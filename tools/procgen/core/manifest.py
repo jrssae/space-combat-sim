@@ -9,23 +9,10 @@ from pathlib import Path
 from typing import Any
 
 MANIFEST_NAME = "manifest.json"
-KIND_SPLAT = "splat"  # the default: a splat asset (``lods``, ``aabb_*``, ``centroid_offset``)
-KIND_AUDIO = "audio"  # a sound set: ``sounds`` and no ``lods``
+KIND_ASSET = "asset"  # the default: a generated model (``aabb_*``, ``centroid_offset``, usually a textured ``mesh``)
+KIND_AUDIO = "audio"  # a sound set: ``sounds`` and no bounds
 FRAME = "godot"
 UNITS = "m"
-
-
-def lod_entry(level: int, file: str, splats: int, spacing_m: float, lighting: str | None = None) -> dict[str, Any]:
-    """One level of detail. ``lighting`` names its ``.light`` records when the level is lit in the game (the sky is not)."""
-    entry: dict[str, Any] = {
-        "level": int(level),
-        "file": file,
-        "splats": int(splats),
-        "spacing_m": float(spacing_m),
-    }
-    if lighting is not None:
-        entry["lighting"] = lighting
-    return entry
 
 
 def sound_entry(
@@ -78,7 +65,6 @@ def build_manifest(
     asset_id: str,
     generator_version: int,
     seed: int,
-    lods: Sequence[Mapping[str, Any]],
     aabb_min: Sequence[float],
     aabb_max: Sequence[float],
     centroid_offset: Sequence[float],
@@ -87,11 +73,10 @@ def build_manifest(
 ) -> dict[str, Any]:
     """Assemble and validate a manifest dict.
 
-    ``aabb_*`` bound the written splat centres in the Godot frame after re-centring (the
-    box GDGS reports for the imported resource, up to the Rz(180) flip).
+    ``aabb_*`` bound the asset in the Godot frame after re-centring.
     ``centroid_offset`` is the Godot-frame vector that was subtracted from the authored
     positions: placing the node at ``anchor + centroid_offset`` restores the authored frame.
-    ``extra`` adds asset-specific keys (e.g. per-population splat counts).
+    ``extra`` adds asset-specific keys (the textured ``mesh`` section, counts, chunks).
     """
     manifest: dict[str, Any] = {
         "asset_id": asset_id,
@@ -99,7 +84,6 @@ def build_manifest(
         "seed": int(seed),
         "frame": FRAME,
         "units": UNITS,
-        "lods": [dict(entry) for entry in lods],
         "aabb_min": _vec3(aabb_min),
         "aabb_max": _vec3(aabb_max),
         "centroid_offset": _vec3(centroid_offset),
@@ -144,37 +128,13 @@ def validate_manifest(manifest: Mapping[str, Any]) -> None:
     if manifest.get("units") != UNITS:
         raise ValueError(f"manifest 'units' must be {UNITS!r}")
 
-    kind = manifest.get("kind", KIND_SPLAT)
-    if kind not in (KIND_SPLAT, KIND_AUDIO):
-        raise ValueError(f"manifest 'kind' must be {KIND_SPLAT!r} or {KIND_AUDIO!r}, got {kind!r}")
+    kind = manifest.get("kind", KIND_ASSET)
+    if kind not in (KIND_ASSET, KIND_AUDIO):
+        raise ValueError(f"manifest 'kind' must be {KIND_ASSET!r} or {KIND_AUDIO!r}, got {kind!r}")
     if kind == KIND_AUDIO:
         _validate_sounds(manifest)
         return
 
-    lods = manifest.get("lods")
-    if not isinstance(lods, list) or not lods:
-        raise ValueError("manifest 'lods' must be a non-empty list (lods[0] is LOD 0)")
-    for index, entry in enumerate(lods):
-        if not isinstance(entry, dict):
-            raise ValueError(f"manifest lods[{index}] must be an object")  # noqa: TRY004
-        if entry.get("level") != index:
-            raise ValueError(f"manifest lods[{index}].level must equal {index}")
-        if not isinstance(entry.get("file"), str) or not entry["file"]:
-            raise ValueError(f"manifest lods[{index}].file must be a non-empty string")
-        splats = entry.get("splats")
-        if not isinstance(splats, int) or isinstance(splats, bool) or splats <= 0:
-            raise ValueError(
-                f"manifest lods[{index}].splats must be a positive integer"
-            )
-        if not _is_number(entry.get("spacing_m")) or entry["spacing_m"] <= 0:
-            raise ValueError(
-                f"manifest lods[{index}].spacing_m must be a positive number"
-            )
-        if "lighting" in entry and not (isinstance(entry["lighting"], str) and entry["lighting"].endswith(".light")):
-            raise ValueError(f"manifest lods[{index}].lighting must be a .light file name")
-
-    if "hero" in manifest:
-        _validate_hero(manifest["hero"])
     if "mesh" in manifest:
         validate_mesh_section(manifest["mesh"])
 
@@ -188,21 +148,6 @@ def validate_manifest(manifest: Mapping[str, Any]) -> None:
         isinstance(k, str) and isinstance(v, str) for k, v in files.items()
     ):
         raise ValueError("manifest 'files' must map names to file names")
-
-
-def _validate_hero(entry: Any) -> None:
-    """The optional ``hero`` entry: a level's file, splat count, spacing and lighting, but outside the ``lods`` ladder."""
-    if not isinstance(entry, dict):
-        raise ValueError("manifest 'hero' must be an object")  # noqa: TRY004
-    if not isinstance(entry.get("file"), str) or not entry["file"]:
-        raise ValueError("manifest hero.file must be a non-empty string")
-    splats = entry.get("splats")
-    if not isinstance(splats, int) or isinstance(splats, bool) or splats <= 0:
-        raise ValueError("manifest hero.splats must be a positive integer")
-    if not _is_number(entry.get("spacing_m")) or entry["spacing_m"] <= 0:
-        raise ValueError("manifest hero.spacing_m must be a positive number")
-    if "lighting" in entry and not (isinstance(entry["lighting"], str) and entry["lighting"].endswith(".light")):
-        raise ValueError("manifest hero.lighting must be a .light file name")
 
 
 MESH_SURFACE_KEYS = ("name", "blend", "albedo", "normal", "orm", "emissive", "transmittance")
@@ -282,9 +227,7 @@ def _validate_livery(livery: Any) -> None:
 
 
 def _validate_sounds(manifest: Mapping[str, Any]) -> None:
-    """An audio manifest has ``sounds`` and no ``lods``; every sound names a file and has positive length and rate."""
-    if "lods" in manifest:
-        raise ValueError("an audio manifest must not have 'lods'")
+    """An audio manifest has ``sounds``; every sound names a file and has positive length and rate."""
     sounds = manifest.get("sounds")
     if not isinstance(sounds, dict) or not sounds:
         raise ValueError("an audio manifest needs a non-empty 'sounds' object")

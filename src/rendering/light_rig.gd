@@ -1,16 +1,13 @@
-class_name SplatLightRig
+class_name LightRig
 extends Node3D
 ## The scene's only lights (architecture §7.3): the key star (slot 0) and 7 omni slots, created once and never freed. Every frame
-## `LightPicker` chooses which emitters fill the omni slots and this node copies their position, colour, energy and range across;
-## GDGS re-reads the lights every frame, so a moved slot shows at once. An unused slot sits at energy 0, which GDGS skips. Meshes are
-## lit by the same 8, so meshes and splats agree.
+## `LightPicker` chooses which emitters fill the omni slots and this node copies their position, colour, energy and range across.
+## An unused slot sits at energy 0, so the renderer skips it. A budget of 8 lights keeps the clustered renderer cheap at 500 ships
+## (M4-T31: the light budget outlived the renderer it was made for).
 ##
-## It sits before `World` in the tree: GDGS's walk for lights stops after 20 000 nodes, and must find the slots when there are 500
-## ships. It also keeps every lit splat node in line with the relight settings, live.
-##
-## Console (§6.4): provider `lights` (`picked`, `candidates`, `active`, `cost_us`) and `relight [on|off]`.
+## Console (§6.4): provider `lights` (`picked`, `candidates`, `active`, `cost_us`).
 
-const GROUP: StringName = &"splat_light_rig"
+const GROUP: StringName = &"light_rig"
 
 var _picker: LightPicker = LightPicker.new()
 var _emitters: Array[LightEmitter] = []
@@ -22,10 +19,10 @@ var _cost_us: int = 0
 
 
 ## The rig of the scene `node` is in, or null when it has none.
-static func of(node: Node) -> SplatLightRig:
+static func of(node: Node) -> LightRig:
 	if node == null or not node.is_inside_tree():
 		return null
-	return node.get_tree().get_first_node_in_group(GROUP) as SplatLightRig
+	return node.get_tree().get_first_node_in_group(GROUP) as LightRig
 
 
 func _init() -> void:
@@ -43,22 +40,16 @@ func _ready() -> void:
 		slot.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF  # moved once per frame, from drawn poses
 		add_child(slot)
 		_slots.append(slot)
-	Settings.changed.connect(_on_setting_changed)
 	DebugConsole.registry.register_provider(&"lights", ConsoleVars.new({
 		&"picked": {"get": _picked_labels, "doc": "The emitters in the 7 omni slots this frame"},
 		&"candidates": {"get": candidate_count, "doc": "Emitters competing for the slots, lit or not"},
 		&"active": {"get": active_count, "doc": "Lights shining this frame, the key star included (8 at most)"},
 		&"cost_us": {"get": func() -> int: return _cost_us, "unit": "us", "doc": "CPU cost of the last pick and copy"},
 	}), self)
-	DebugConsole.registry.register_command(ConsoleCommand.new(&"relight",
-			"Toggle or set scene lighting on hulls, chunks and buoys (off draws their flat paint; meshes stay lit)",
-			[ConsoleArg.bool_optional(&"state")]), _cmd_relight, self)
 
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
-	if Settings.changed.is_connected(_on_setting_changed):
-		Settings.changed.disconnect(_on_setting_changed)
 
 
 func _process(_delta: float) -> void:
@@ -127,12 +118,6 @@ static func _fill(slot: OmniLight3D, emitter: LightEmitter) -> void:
 	slot.omni_attenuation = emitter.attenuation
 
 
-func _on_setting_changed(key: StringName, _value: Variant) -> void:
-	if key in SplatLightingLoader.SETTINGS:
-		for node: Node in get_tree().get_nodes_in_group(SplatLightingLoader.GROUP):
-			SplatLightingLoader.apply_settings(node as GaussianSplatNode)
-
-
 func _picked_labels() -> PackedStringArray:
 	var out := PackedStringArray()
 	for emitter: LightEmitter in _picked:
@@ -140,6 +125,3 @@ func _picked_labels() -> PackedStringArray:
 			out.append(emitter.label)
 	return out
 
-
-func _cmd_relight(args: Dictionary) -> ConsoleResult:
-	return DebugConsole.registry.toggle("settings.splat_relight", args[&"state"])

@@ -1,6 +1,6 @@
 extends Node
-## Measures AC19's fight and the 100-ship scene on the real renderer (run by scripts/measure_m3.sh): frame time, GPU time, visible
-## splats and VRAM over a sustained window, with one summary line for the record and a picture of the scene it measured.
+## Measures AC19's fight and the 100-ship scene on the real renderer (run by scripts/measure_m3.sh): frame time, GPU time, draw
+## calls and VRAM over a sustained window, with one summary line for the record and a picture of the scene it measured.
 ##
 ## Scenes: `held` keeps four Starfuries and nine raiders in view, all firing, so the worst case can be held for as long as it is
 ## measured. `fight` is a real AI fight with the player's nose kept on it. `hundred` and `hundred_view` are 100 ships, around the player
@@ -8,10 +8,9 @@ extends Node
 ## the 13-ship scenes, so one is always live.
 ##
 ## Arguments after `--`: scene=<name> camera=<chase|cockpit> warmup=<s> window=<s> near=<m> far=<m> steps=<n> label=<text>
-## exec="<console statements>" shot=<png path> hero=off scale3d=<1080p|factor> (M4-T07: the 3D scale, held every frame;
+## exec="<console statements>" shot=<png path> scale3d=<1080p|factor> (M4-T07: the 3D scale, held every frame;
 ## 1080p renders the 3D at 1 080 lines whatever the window's size, for the fullscreen check on a larger screen)
-## render=<splat|mesh|hybrid> pause_at=<s> (M4-T27: `settings.ship_render` before the scene is built, and the game paused at that
-## many seconds after the start, so a window can measure the drawing alone)
+## pause_at=<s> (M4-T27: the game paused at that many seconds after the start, so a window can measure the drawing alone)
 
 const WARMUP_S: float = 6.0
 const WINDOW_S: float = 20.0
@@ -33,14 +32,13 @@ const MAX_SPIKES_PRINTED: int = 40
 
 var main: Main
 var options: Dictionary = {"scene": "held", "camera": "chase", "warmup": str(WARMUP_S), "window": str(WINDOW_S), "near": "120", "far": "500",
-		"steps": "0", "label": "", "exec": "", "shot": "", "hero": "on", "scale3d": "", "render": "", "pause_at": ""}
+		"steps": "0", "label": "", "exec": "", "shot": "", "scale3d": "", "pause_at": ""}
 var measuring: bool = false
 var frame_ms := PackedFloat64Array()
 var gpu_ms := PackedFloat64Array()
 var render_cpu_ms := PackedFloat64Array()
 var physics_ms := PackedFloat64Array()
 var process_ms := PackedFloat64Array()
-var visible_splats := PackedFloat64Array()
 var ships_in_view := PackedFloat64Array()
 var nearest_m := PackedFloat64Array()
 var bolts := PackedFloat64Array()
@@ -56,7 +54,6 @@ var hit_us := PackedFloat64Array()
 var ram_us := PackedFloat64Array()
 var fps_samples := PackedFloat64Array()
 var spikes := PackedStringArray()
-var clipped_frames: int = 0
 var explosions: int = 0
 var vram_before_mb: float = 0.0
 var gtt_before_mb: float = 0.0
@@ -85,10 +82,6 @@ func _ready() -> void:
 	_vram_dir = _find_vram_dir()
 	vram_before_mb = _read_mb("mem_info_vram_used")
 	gtt_before_mb = _read_mb("mem_info_gtt_used")
-	if options["hero"] == "off":
-		Settings.set_value(&"splat_hero", false)  # read when the ship is built
-	if not String(options["render"]).is_empty():
-		Settings.set_value(&"ship_render", StringName(options["render"]))
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.waves_auto_start = false
 	var source := FakeInputSource.new()
@@ -327,9 +320,6 @@ func _sample(now: int) -> void:
 			+ RenderingServer.get_frame_setup_time_cpu())
 	physics_ms.append(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1e3)
 	process_ms.append(Performance.get_monitor(Performance.TIME_PROCESS) * 1e3)
-	visible_splats.append(float(_read("render.splat_visible")))
-	if bool(_read("render.splat_clipped")):
-		clipped_frames += 1
 	bolts.append(float(_read("combat.projectiles")))
 	particles_busy.append(float(_read("fx.busy")))
 	debris_chunks.append(float(_read("debris.active_chunks")))
@@ -381,20 +371,20 @@ func _finish() -> void:
 	print("[measure] %s: frames %d, fps %.0f (render.fps min %.0f), frame ms mean %.2f p50 %.2f p99 %.2f max %.2f, over 16.67 ms %d (%.2f%%), over 25 ms %d, gpu ms mean %.2f max %.2f, render cpu ms %.2f, worst tick each second ms %.2f, worst process each second ms %.2f" % [
 			label, frame_ms.size(), 1000.0 / _mean(frame_ms), _min(fps_samples), _mean(frame_ms), _percentile(frame_ms, 0.5), _percentile(frame_ms, 0.99), _max(frame_ms), over,
 			100.0 * float(over) / maxf(1.0, float(frame_ms.size())), missed, _mean(gpu_ms), _max(gpu_ms), _mean(render_cpu_ms), _mean(physics_ms), _mean(process_ms)])
-	print("[measure] %s: splat_visible min %d mean %d max %d, clipped frames %d, ships in view min %d mean %.1f max %d of %d, nearest other ship mean %.0f m" % [
-			label, _min(visible_splats), _mean(visible_splats), _max(visible_splats), clipped_frames, _min(ships_in_view), _mean(ships_in_view), _max(ships_in_view),
-			main.ships.alive().size() + 1, _mean(nearest_m)])
-	print("[measure] %s: bolts mean %.0f max %d, particle emitters busy mean %.1f max %d, debris chunks mean %.1f max %d, lights mean %.1f max %d, draw calls mean %.0f, explosions %d, rebuilds %d, render states %d" % [
+	print("[measure] %s: ships in view min %d mean %.1f max %d of %d, nearest other ship mean %.0f m, far dots %d" % [
+			label, _min(ships_in_view), _mean(ships_in_view), _max(ships_in_view), main.ships.alive().size() + 1, _mean(nearest_m),
+			int(_read("render.far_dots"))])
+	print("[measure] %s: bolts mean %.0f max %d, particle emitters busy mean %.1f max %d, debris chunks mean %.1f max %d, lights mean %.1f max %d, draw calls mean %.0f, explosions %d" % [
 			label, _mean(bolts), _max(bolts), _mean(particles_busy), _max(particles_busy), _mean(debris_chunks), _max(debris_chunks), _mean(lights_on), _max(lights_on), _mean(draw_calls),
-			explosions, int(_read("render.gdgs_rebuilds")), int(_read("render.gdgs_render_states"))])
+			explosions])
 	print("[measure] %s: last tick's ai.think_us mean %.0f p99 %.0f, combat.resolve_us mean %.0f p99 %.0f, ram.resolve_us mean %.0f p99 %.0f" % [
 			label, _mean(ai_us), _percentile(ai_us, 0.99), _mean(hit_us), _percentile(hit_us, 0.99), _mean(ram_us), _percentile(ram_us, 0.99)])
-	print("[measure] %s: backend %s, gpu %s, %dx%d, vsync %d, relight %s, particle_density %.2f, lens_flare %s, motion_blur %s, splat_hero %s, running_lights %s, budget %d" % [
-			label, _read("render.splat_backend"), _read("render.gpu"), get_window().size.x, get_window().size.y, DisplayServer.window_get_vsync_mode(), Settings.get_value(&"splat_relight"),
-			Settings.get_value(&"particle_density"), Settings.get_value(&"lens_flare"), Settings.get_value(&"motion_blur"), Settings.get_value(&"splat_hero"), _read("ship.running_lights"),
-			Settings.get_value(&"splat_budget")])
-	print("[measure] %s: render %s, paused %s, triangles mean %.0f max %d, objects mean %.0f, draw calls mean %.0f max %d, frame ms p99 %.2f max %.2f" % [
-			label, Settings.get_value(&"ship_render"), _paused, _mean(primitives), _max(primitives), _mean(objects), _mean(draw_calls), _max(draw_calls),
+	print("[measure] %s: renderer %s, gpu %s, %dx%d, vsync %d, ambient %.2f, particle_density %.2f, lens_flare %s, motion_blur %s, running_lights %s" % [
+			label, _read("render.renderer"), _read("render.gpu"), get_window().size.x, get_window().size.y, DisplayServer.window_get_vsync_mode(),
+			float(Settings.get_value(&"ambient_level")), Settings.get_value(&"particle_density"), Settings.get_value(&"lens_flare"), Settings.get_value(&"motion_blur"),
+			_read("ship.running_lights")])
+	print("[measure] %s: paused %s, triangles mean %.0f max %d, objects mean %.0f, draw calls mean %.0f max %d, frame ms p99 %.2f max %.2f" % [
+			label, _paused, _mean(primitives), _max(primitives), _mean(objects), _mean(draw_calls), _max(draw_calls),
 			_percentile(frame_ms, 0.99), _max(frame_ms)])  # M4-T27: the render comparison
 	var root: Window = get_tree().root
 	print("[measure] %s: window %dx%d %s, 3d scale %.2f, 3d scaling mode %d, frame mean ms %.2f, fps mean %.1f" % [label,

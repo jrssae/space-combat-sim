@@ -219,7 +219,7 @@ if grep -E "${SCRIPT_ERRORS}" "${log}"; then
     echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lights, perf, post, raiders, ram, render, screens, settings, ship, targeting, time, waves, weapons, wing, world" \
+expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, flight, fx, hud, hull, input, lights, livery, perf, post, raiders, ram, render, screens, settings, ship, sky, targeting, time, waves, weapons, wing, world" \
     || smoke_status=1
 expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
 expect_line "${log}" "[console] render.renderer = headless" || smoke_status=1
@@ -550,7 +550,7 @@ if (( route_status != 0 )); then
     echo "run_tests.sh: instructor route smoke run exited ${route_status}, expected 0 (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lights, perf, post, raiders, ram, render, route, screens, settings, ship, targeting, time, waves, weapons, wing, world" \
+expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, flight, fx, hud, hull, input, lights, livery, perf, post, raiders, ram, render, route, screens, settings, ship, sky, targeting, time, waves, weapons, wing, world" \
     || smoke_status=1
 expect_line "${log}" "[console] route.index = 1" || smoke_status=1
 expect_line "${log}" "[console] route.count = 6" || smoke_status=1
@@ -566,7 +566,7 @@ echo "== Console smoke run: the visual pass's commands and settings on the real 
 log="${REPORTS}/console_visual.log"
 visual_status=0
 timeout 180 "${GODOT}" --headless --path . -- --console-strict \
-    --console-exec='wait 30; wave stop; relight off; relight on; flare off; flare on; blur on; blur off; lod all 3; lod all auto; set settings.particle_density 0.5; get fx.density; running_lights off; get ship.running_lights; running_lights on; look 170 10; look off; state lights; state lod; state post; state screens; quit' \
+    --console-exec='wait 30; wave stop; flare off; flare on; blur on; blur off; set settings.particle_density 0.5; get fx.density; running_lights off; get ship.running_lights; running_lights on; look 170 10; look off; state lights; state render; state post; state screens; quit' \
     > "${log}" 2>&1 || visual_status=$?
 cat "${log}"
 if (( visual_status != 0 )); then
@@ -578,7 +578,7 @@ expect_line "${log}" "[console] ship.running_lights = false" || smoke_status=1
 expect_line "${log}" "[console] the view held at yaw 170, pitch 10" || smoke_status=1
 expect_line "${log}" "[console] the view is free again" || smoke_status=1
 expect_text "${log}" "[console] lights.active = " || smoke_status=1
-expect_text "${log}" "[console] lod.levels = " || smoke_status=1
+expect_text "${log}" "[console] render.far_dots = " || smoke_status=1
 expect_text "${log}" "[console] screens.shown = " || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 reject_text "${log}" "ERROR:" || smoke_status=1

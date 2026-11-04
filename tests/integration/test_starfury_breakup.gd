@@ -1,8 +1,8 @@
 extends GutTest
 ## The Starfury's break-up (M3-T08, AC7, architecture §15.7, §16 D35): a destroyed ally and the dead player both explode into the
-## five Starfury chunks (the cabin and four arms, cut from LOD1) as pooled chunk splats. The pool prepares two Starfury sets in
-## every scenario, shared by allies and the player; a third simultaneous break-up gets mesh chunks; an ally goes straight back
-## to the ship pool; and no `GaussianSplatNode` enters or leaves the tree through any of it (D22). Runs the real main scene.
+## five Starfury chunks (the cabin and four arms) as pooled chunks drawing their textured meshes. The pool prepares two Starfury sets
+## in every scenario, shared by allies and the player; a third simultaneous break-up gets one-shot chunks; an ally goes straight
+## back to the ship pool; and no pooled ship or chunk enters or leaves the tree through any of it (D22). Runs the real main scene.
 
 const DT: float = 1.0 / 60.0
 const STARFURY: StringName = &"starfury_aurora"
@@ -56,12 +56,12 @@ func _exec(line: String) -> ConsoleResult:
 	return DebugConsole.registry.execute(line)[0]
 
 
-func _splat_nodes() -> int:
+func _pooled_nodes() -> int:
 	return _count(get_tree().root)
 
 
 func _count(node: Node) -> int:
-	var n: int = 1 if node is GaussianSplatNode else 0
+	var n: int = 1 if _pooled(node) else 0
 	for child: Node in node.get_children():
 		n += _count(child)
 	return n
@@ -99,23 +99,18 @@ func _run_chunks_out() -> void:
 			chunk.advance(DT)
 
 
-func _assert_starfury_splat_chunks(chunks: Array[DebrisChunk], label: String) -> void:
+func _assert_starfury_chunks(chunks: Array[DebrisChunk], label: String) -> void:
 	assert_eq(chunks.size(), 5, "%s: five chunks" % label)
 	var names: PackedStringArray = PackedStringArray()
-	var total: int = 0
 	var dir: String = "res://assets/generated/starfury_aurora"
 	for chunk: DebrisChunk in chunks:
 		names.append(chunk.chunk_name)
-		assert_not_null(chunk.splats, "%s: %s is a splat chunk, not a mesh-only one" % [label, chunk.chunk_name])
 		assert_false(chunk.one_shot, "%s: %s is pooled" % [label, chunk.chunk_name])
-		if chunk.splats == null or chunk.splats.gaussian == null:
-			continue
-		total += chunk.splats.gaussian.point_count
 		var entry: Dictionary = _entry(chunk.chunk_name)
-		assert_eq(chunk.splats.gaussian.resource_path, dir.path_join(String(entry["ply"])), "%s: %s" % [label, chunk.chunk_name])
+		assert_same(chunk.textured_mesh, MeshAssets.chunk_mesh(dir, String(entry["mesh"])), "%s: %s" % [label, chunk.chunk_name])
+		assert_same(chunk.mesh_instance.mesh, chunk.textured_mesh, "%s: %s draws its textured mesh" % [label, chunk.chunk_name])
 	names.sort()
 	assert_eq(names, PackedStringArray(["arm_ll", "arm_lr", "arm_ul", "arm_ur", "cabin"]))
-	assert_eq(total, int(manifest.lods[1]["splats"]), "%s: the chunks hold exactly the LOD1 hull" % label)
 
 
 func _entry(chunk_name: String) -> Dictionary:
@@ -137,11 +132,11 @@ func test_two_starfury_sets_are_prepared_beside_the_raiders() -> void:
 
 
 func test_preparing_the_starfury_again_for_the_ally_type_builds_nothing_more() -> void:
-	var before: int = _splat_nodes()
+	var before: int = _pooled_nodes()
 	assert_eq(main.debris.prepare(ShipPool.ALLY_TYPE), DebrisPool.SETS_PER_TYPE, "the ally shares the Starfury's sets")
 	assert_eq(main.debris.prepare(&"starfury_aurora"), DebrisPool.SETS_PER_TYPE)
 	assert_eq(main.debris.set_count(STARFURY), DebrisPool.SETS_PER_TYPE)
-	assert_eq(_splat_nodes(), before)
+	assert_eq(_pooled_nodes(), before)
 
 
 func test_every_scenario_prepares_the_starfury_sets_not_only_the_sandbox() -> void:
@@ -158,10 +153,10 @@ func test_every_scenario_prepares_the_starfury_sets_not_only_the_sandbox() -> vo
 # --- the player --------------------------------------------------------------------------------------------------
 
 
-func test_the_players_death_is_five_starfury_chunk_splats() -> void:
+func test_the_players_death_is_five_pooled_starfury_chunks() -> void:
 	assert_true(_exec("kill player").ok)
 	var chunks: Array[DebrisChunk] = _active_chunks()
-	_assert_starfury_splat_chunks(chunks, "player")
+	_assert_starfury_chunks(chunks, "player")
 	assert_eq(main.debris.mesh_chunks_in_flight(), 0)
 	assert_eq(main.debris.free_set_count(STARFURY), DebrisPool.SETS_PER_TYPE - 1)
 	assert_eq(shipped.size(), 0, "the player has its own signal")
@@ -190,7 +185,7 @@ func test_a_destroyed_ally_explodes_into_starfury_chunks_and_returns_to_the_pool
 	assert_eq(explosions[0].velocity, Vector3(5.0, 0.0, -40.0))
 	assert_almost_eq(explosions[0].radius_m, ally.damageable.bounding_radius, 1e-5)
 	var chunks: Array[DebrisChunk] = _active_chunks()
-	_assert_starfury_splat_chunks(chunks, "ally")
+	_assert_starfury_chunks(chunks, "ally")
 	for chunk: DebrisChunk in chunks:
 		assert_lt((chunk.velocity - Vector3(5.0, 0.0, -40.0)).length(), 15.0 + 0.5 + 1e-3, "the ship's velocity plus a separation speed")
 	_run_chunks_out()
@@ -264,44 +259,49 @@ func test_a_relation_change_does_not_change_which_ships_are_raiders_and_which_ar
 # --- the sets are shared -----------------------------------------------------------------------------------------
 
 
-func test_allies_and_the_player_share_two_sets_and_a_third_break_up_is_mesh_only() -> void:
+func test_allies_and_the_player_share_two_sets_and_a_third_break_up_is_one_shot() -> void:
 	var first: Combatant = _spawn_ally(100.0)
 	var second: Combatant = _spawn_ally(160.0)
 	var third: Combatant = _spawn_ally(220.0)
-	var before: int = _splat_nodes()
+	var before: int = _pooled_nodes()
 	first.damageable.kill()
 	second.damageable.kill()
 	assert_eq(main.debris.free_set_count(STARFURY), 0, "two allies used both sets")
 	assert_eq(main.debris.mesh_chunks_in_flight(), 0)
 	third.damageable.kill()
-	assert_eq(main.debris.mesh_chunks_in_flight(), 5, "the third ally's chunks are mesh only")
+	assert_eq(main.debris.mesh_chunks_in_flight(), 5, "the third ally's chunks are one-shot")
 	assert_eq(main.debris.free_set_count(&"raider_fighter"), DebrisPool.SETS_PER_TYPE, "the raiders' sets are untouched")
 	main.combatant.damageable.kill()
 	assert_eq(main.debris.mesh_chunks_in_flight(), 10, "and so are the player's, with both sets busy")
-	assert_eq(_splat_nodes(), before, "no splat node was created for them")
+	assert_eq(_pooled_nodes(), before, "no pooled chunk was made for them")
 
 
 # --- D22 ---------------------------------------------------------------------------------------------------------
 
 
-func test_splat_nodes_never_enter_or_leave_the_tree_through_launch_destroy_and_respawn() -> void:
-	var before: int = _splat_nodes()
+func test_pooled_nodes_never_enter_or_leave_the_tree_through_launch_destroy_and_respawn() -> void:
+	var before: int = _pooled_nodes()
 	assert_gt(before, 0)
 	for round: int in 3:
 		var launched: Array[Combatant] = []
 		for i: int in 3:
 			launched.append(_spawn_ally(100.0 + 60.0 * float(i)))
 		assert_true(_exec("spawn raider idle 400").ok)
-		assert_eq(_splat_nodes(), before, "round %d: launched" % round)
+		assert_eq(_pooled_nodes(), before, "round %d: launched" % round)
 		for combatant: Combatant in launched:
 			combatant.damageable.kill()
-		assert_eq(_splat_nodes(), before, "round %d: allies destroyed (two sets, a mesh third)" % round)
+		assert_eq(_pooled_nodes(), before, "round %d: allies destroyed (two sets, a one-shot third)" % round)
 		assert_true(_exec("kill player").ok)
-		assert_eq(_splat_nodes(), before, "round %d: the player destroyed" % round)
+		assert_eq(_pooled_nodes(), before, "round %d: the player destroyed" % round)
 		_run_chunks_out()
 		await get_tree().process_frame
-		assert_eq(_splat_nodes(), before, "round %d: debris gone" % round)
+		assert_eq(_pooled_nodes(), before, "round %d: debris gone" % round)
 		main.respawn()
 		_exec("despawn all")
-		assert_eq(_splat_nodes(), before, "round %d: respawned and parked" % round)
+		assert_eq(_pooled_nodes(), before, "round %d: respawned and parked" % round)
 		assert_eq(main.debris.free_set_count(STARFURY), DebrisPool.SETS_PER_TYPE, "round %d: both sets are back" % round)
+
+
+# A node the pools build once at load and only switch afterwards (D22): a pooled ship or a pooled break-up chunk.
+static func _pooled(node: Node) -> bool:
+	return (node is DebrisChunk and not (node as DebrisChunk).one_shot) or (node is Ship and node.get_parent() is ShipPool)

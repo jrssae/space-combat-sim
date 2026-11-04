@@ -1,7 +1,7 @@
-"""Equirectangular sky panoramas (M4-T30c): pixel directions, soft Gaussians composited onto the sphere, sRGB and the PNG.
+"""Equirectangular sky panoramas (M4-T30c): pixel directions, soft blobs composited onto the sphere, sRGB and the PNG.
 
 The convention is Godot's ``PanoramaSkyMaterial``: the image centre looks toward +Z, so -Z sits at the left and right edges,
-+u turns toward -X and the top row is +Y (checked on a GPU by rolling the image half a turn, which put the nebula where the splat
++u turns toward -X and the top row is +Y (checked on a GPU by rolling the image half a turn, which put the nebula where the M3
 sky had it). The PNG goes through ``core.image`` (no Pillow), with a Godot ``.import`` sidecar so
 the texture is always imported VRAM compressed with mipmaps.
 """
@@ -16,7 +16,7 @@ import numpy as np
 from .color import linear_to_srgb
 from .image import write_png
 
-# Splats facing the viewer at less than this cosine are skipped: their tangent-plane projection breaks down.
+# Blobs facing the viewer at less than this cosine are skipped: their tangent-plane projection breaks down.
 _MIN_FACING = 0.05
 
 
@@ -55,7 +55,7 @@ def _columns(lon0: float, half: float, width: int) -> np.ndarray:
     return np.arange(col0, col1 + 1) % width if col1 - col0 + 1 < width else np.arange(width)
 
 
-def composite_gaussians(
+def composite_blobs(
     centres: np.ndarray,
     rotations: np.ndarray,
     scales: np.ndarray,
@@ -64,7 +64,7 @@ def composite_gaussians(
     width: int,
     height: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Alpha-composites 3D Gaussians seen from the origin, far to near, onto the panorama.
+    """Alpha-composites soft 3D blobs (each a normal distribution) seen from the origin, far to near, onto the panorama.
 
     ``centres`` ``(N, 3)``, ``rotations`` ``(N, 3, 3)`` (columns are the local axes), ``scales`` ``(N, 3)`` sigmas, ``rgb``
     ``(N, 3)`` linear, ``alpha`` ``(N,)`` peak opacity. Each is projected to its 2D angular covariance on the tangent plane.
@@ -160,7 +160,7 @@ def write_panorama(path: Path, image: np.ndarray) -> list[Path]:
 
 
 __all__ = [
-    "composite_gaussians",
+    "composite_blobs",
     "quantize8",
     "direction_grid",
     "import_sidecar",

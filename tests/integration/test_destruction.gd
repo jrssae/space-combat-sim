@@ -220,11 +220,11 @@ func test_the_players_death_hides_the_ship_ignores_input_and_respawns_after_thre
 	assert_eq(main.ship.process_mode, Node.PROCESS_MODE_DISABLED)
 	assert_eq(_effects().size(), 1, "an explosion at the ship")
 	assert_almost_eq(_effects()[0].global_position, death_position, Vector3.ONE * 1.0)
-	# The Starfury's chunks (M3-T03: cabin and four arms), flown as the pooled Starfury splat set (M3-T08).
+	# The Starfury's chunks (M3-T03: cabin and four arms), flown as the pooled Starfury set (M3-T08).
 	var starfury_chunks: int = Hardpoints.load_file(main.ship.spec.hardpoints_path()).chunks.size()
 	assert_eq(starfury_chunks, 5, "the Starfury has its cabin and four arms")
 	assert_eq(main.debris.active_chunk_count(), starfury_chunks, "the player breaks into the Starfury's chunks")
-	assert_eq(main.debris.mesh_chunks_in_flight(), 0, "pooled splat chunks, not mesh-only ones")
+	assert_eq(main.debris.mesh_chunks_in_flight(), 0, "pooled chunks, not one-shot ones")
 	assert_eq(main.debris.free_set_count(STARFURY_ASSET), 1, "one of the two Starfury sets is flying")
 	# Input is ignored while dead.
 	source.hold(InputAdapter.FIRE)

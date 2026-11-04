@@ -40,10 +40,10 @@ func test_target_line_format() -> void:
 func test_render_and_pads() -> void:
 	var text: String = OverlayText.format({
 		"universe_position": PackedFloat64Array([1.0e11, 0.5, -2.0]), "system_id": "local",
-		"splat_backend": "compute", "fps": 60, "gpu": "Test GPU",
+		"renderer": "forward_plus", "fps": 60, "gpu": "Test GPU",
 		"pads": [{"name": "Generic Pad", "guid": "abc", "trigger_rest": -1.0, "axes": [0.0, 0.5, 0.0, 0.0, -1.0, -1.0]}],
 	})
 	assert_string_contains(text, "100000000000.000")
-	assert_string_contains(text, "SPLATS COMPUTE   FPS 60")
+	assert_string_contains(text, "RENDER FORWARD_PLUS   FPS 60")
 	assert_string_contains(text, "GPU   Test GPU")
 	assert_string_contains(text, "PAD   Generic Pad  abc  rest -1  axes +0.00 +0.50")

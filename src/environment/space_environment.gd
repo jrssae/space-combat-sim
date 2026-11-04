@@ -1,16 +1,15 @@
 class_name SpaceEnvironment
 extends Node3D
-## The sky and the light, outside `World` (architecture §3, §7, §17.19): the WorldEnvironment with the GDGS compositor effect (the
-## hulls are still splats until T31), then the motion blur and the lens flare (`PostEffects` drives both), the `SplatLightRig`
-## (the warm `KeyStar` and the 7 omni slots: the scene's only lights), and the sky without splats (M4-T30c): `StarField`, the
-## stars as points pinned to the camera by `SkyFollower`, and the nebula as a panorama on the environment's sky. Camera-relative,
-## so it is never rebased and holds nothing a gameplay system needs.
+## The sky and the light, outside `World` (architecture §3, §7, §17.19): the WorldEnvironment with the motion blur and the lens flare
+## (`PostEffects` drives both), the `LightRig` (the warm `KeyStar` and the 7 omni slots: the scene's only lights), and the sky
+## (M4-T30c): `StarField`, the stars as points pinned to the camera by `SkyFollower`, and the nebula as a panorama on the
+## environment's sky. Camera-relative, so it is never rebased and holds nothing a gameplay system needs.
 ##
 ## It loads without any generated asset: the manifest, the star file and the panorama are loaded here, guarded, so the scene (and
 ## the headless tests) work before `scripts/gen_assets.sh` has run, with a warning and a black sky instead of a load error.
 ##
 ## `settings.ambient_level` (M4-T30a) is the environment's ambient light: what the textured meshes and every other PBR surface get
-## on every side, the role `relight_ambient` plays for the splats. It applies live.
+## on every side, so the dark side of a hull stays legible. It applies live.
 ##
 ## Anything visual here is (H): it cannot be seen without a GPU.
 
@@ -18,40 +17,22 @@ const SKY_DIR: String = "res://assets/generated/sky_default"
 ## The parts of the sky the `sky` command shows and hides.
 const SKY_PARTS: Array[StringName] = [&"stars", &"nebula"]
 
-## GDGS compositor tunables (`GaussianCompositorEffect`), pushed into the effect in `_ready` and on every change.
-## How far in front of scene depth a splat may sit before the mesh occludes it.
-@export_range(0.0, 1.0, 0.001) var depth_bias: float = 0.05:
-	set(value):
-		depth_bias = value
-		_apply_compositor_tuning()
-## Splats fainter than this do not take part in the depth test.
-@export_range(0.0, 1.0, 0.001) var depth_test_min_alpha: float = 0.05:
-	set(value):
-		depth_test_min_alpha = value
-		_apply_compositor_tuning()
-
 ## Where the generated sky is read from. A variable so that a test can point it at a directory that does not exist.
 var sky_dir: String = SKY_DIR
 
 var _panorama: Texture2D
 var _nebula_shown: bool = true
-var _fallback_active: bool = false
 
 @onready var world_environment: WorldEnvironment = $WorldEnvironment
-@onready var light_rig: SplatLightRig = $SplatLightRig
-@onready var key_star: DirectionalLight3D = $SplatLightRig/KeyStar
+@onready var light_rig: LightRig = $LightRig
+@onready var key_star: DirectionalLight3D = $LightRig/KeyStar
 @onready var star_field: StarField = $StarField
 @onready var sky_follower: SkyFollower = $SkyFollower
 @onready var post_effects: PostEffects = $PostEffects
 
 
-func _init() -> void:
-	add_to_group(SplatStatus.SKY_GROUP)  # SplatStatus calls use_fallback_sky (no backend, console, F4)
-
-
 func _ready() -> void:
 	_load_sky()
-	_apply_compositor_tuning()
 	_apply_ambient()
 	Settings.changed.connect(_on_setting_changed)
 	use_star_of(&"local")
@@ -99,15 +80,6 @@ func set_star(temperature_k: float) -> void:
 	post_effects.set_star_color(color)
 
 
-## The splat fallback's sky half. The sky has no splats since M4-T30c, so both states show the same sky; T31 removes it.
-func use_fallback_sky(enabled: bool) -> void:
-	_fallback_active = enabled
-
-
-func is_fallback_sky_active() -> bool:
-	return _fallback_active
-
-
 func has_panorama() -> bool:
 	return _panorama != null
 
@@ -119,17 +91,6 @@ func show_sky_part(part: StringName, shown: bool) -> void:
 	elif part == &"nebula":
 		_nebula_shown = shown
 		_apply_background()
-
-
-## The Gaussian compositor effect on the WorldEnvironment's Compositor, or null if there is none.
-func get_gaussian_effect() -> GaussianCompositorEffect:
-	var compositor: Compositor = world_environment.compositor
-	if compositor == null:
-		return null
-	for effect: CompositorEffect in compositor.compositor_effects:
-		if effect is GaussianCompositorEffect:
-			return effect as GaussianCompositorEffect
-	return null
 
 
 ## Reads the generated sky: the star points and the nebula panorama. What is missing stays dark, with a warning.
@@ -172,17 +133,6 @@ func _apply_background() -> void:
 		environment.sky = sky
 	(environment.sky.sky_material as PanoramaSkyMaterial).panorama = _panorama
 	environment.background_mode = Environment.BG_SKY
-
-
-func _apply_compositor_tuning() -> void:
-	# Exported setters run before the node tree exists when the scene is instantiated.
-	if not is_node_ready():
-		return
-	var effect: GaussianCompositorEffect = get_gaussian_effect()
-	if effect == null:
-		return
-	effect.depth_bias = depth_bias
-	effect.depth_test_min_alpha = depth_test_min_alpha
 
 
 func _cmd_sky(args: Dictionary) -> ConsoleResult:

@@ -28,7 +28,7 @@ const NAME_PATTERN: String = "^[a-z0-9_]{1,32}$"
 ## the pad a route (architecture §16 D36). The running lights are D-pad Left in the default, but a layout that rolls on the
 ## D-pad (m1_classic) has no button left for them.
 const KEYBOARD_ONLY: Array[StringName] = [
-	InputAdapter.TOGGLE_FALLBACK, InputAdapter.TOGGLE_OVERLAY, InputAdapter.TARGET_AHEAD, InputAdapter.TARGET_PREV,
+	InputAdapter.TOGGLE_OVERLAY, InputAdapter.TARGET_AHEAD, InputAdapter.TARGET_PREV,
 	InputAdapter.SCREENSHOT, InputAdapter.WING_ATTACK, InputAdapter.WING_FORM, InputAdapter.WING_ENGAGE,
 	InputAdapter.WING_COVER, InputAdapter.ROLL_LEFT, InputAdapter.ROLL_RIGHT, InputAdapter.TARGET_NEXT,
 	InputAdapter.TARGET_CYCLE, InputAdapter.TOGGLE_RUNNING_LIGHTS,

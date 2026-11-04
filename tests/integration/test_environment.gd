@@ -1,14 +1,11 @@
 extends GutTest
-## SpaceEnvironment against the real scene, headless (architecture §3, §7.2, §17.19). There is no GPU here: GDGS finds
-## no RenderingDevice and skips backend selection quietly, so these tests cover wiring and values, not pixels. What
-## the sky and the compositor look like is (H).
+## SpaceEnvironment against the real scene, headless (architecture §3, §7.2, §17.19). There is no GPU here, so these tests cover
+## wiring and values, not pixels. What the sky and the compositor look like is (H).
 ##
-## Since M4-T30c the sky has no splats: `StarField` draws the stars as points and the nebula is a panorama on the
-## environment's sky.
+## `StarField` draws the stars as points and the nebula is a panorama on the environment's sky (M4-T30c).
 
 const SCENE_PATH: String = "res://src/environment/space_environment.tscn"
 const ENVIRONMENT_DEFAULT_PATH: String = "res://assets/environment/environment_default.tres"
-const GDGS_EFFECT_SCRIPT_PATH: String = "res://addons/gdgs_scs/runtime/compositor/gaussian_compositor_effect.gd"
 const MANIFEST_PATH: String = "res://assets/generated/sky_default/manifest.json"
 const STARS_PATH: String = "res://assets/generated/sky_default/sky_default_stars.f32"
 const PANORAMA_PATH: String = "res://assets/generated/sky_default/sky_default_panorama.png"
@@ -72,11 +69,6 @@ func test_scene_instantiates_with_every_part() -> void:
 	assert_eq(env.sky_follower.sky, env.star_field, "the follower is wired to StarField (node_paths in the .tscn)")
 	assert_true(env.star_field.top_level, "the sky ignores its parent's transform")
 	assert_null(env.get_parent() as WorldFrame, "the environment is not under World: it is camera-relative")
-
-
-func test_the_sky_has_no_splat_node() -> void:
-	for node: Variant in _collect(env, []):
-		assert_false(node is GaussianSplatNode, "%s is a splat node" % (node as Node).get_path())
 
 
 # --- the star field ----------------------------------------------------------------------------------------------
@@ -208,58 +200,15 @@ func test_the_environment_loads_with_no_generated_sky() -> void:
 	env._load_sky()
 
 
-# --- GDGS compositor ---------------------------------------------------------------------------------------------
+# --- the compositor -----------------------------------------------------------------------------------------------
 
 
-func test_compositor_holds_the_gdgs_effect_first_then_blur_and_flare() -> void:
+func test_compositor_holds_the_blur_then_the_flare() -> void:
 	var compositor: Compositor = env.world_environment.compositor
 	assert_not_null(compositor)
-	assert_eq(compositor.compositor_effects.size(), 3, "GDGS, motion blur, lens flare (M3-T25)")
-	assert_true(compositor.compositor_effects[0] is GaussianCompositorEffect, "GDGS composites the splats first")
-	assert_true(compositor.compositor_effects[1] is MotionBlurEffect, "then the blur smears stars and hulls together")
-	assert_true(compositor.compositor_effects[2] is LensFlareEffect, "the flare goes on last, so it is never smeared")
-	var effect: GaussianCompositorEffect = env.get_gaussian_effect()
-	assert_not_null(effect, "the effect is a GaussianCompositorEffect")
-	assert_eq((effect.get_script() as Script).resource_path, GDGS_EFFECT_SCRIPT_PATH)
-	assert_eq(effect.effect_callback_type, CompositorEffect.EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT, "splats go before transparent meshes (§7.2)")
-	assert_true(effect.access_resolved_depth, "the depth test needs resolved scene depth")
-	assert_true(effect.enabled)
-
-
-func test_defaults_match_the_gdgs_defaults() -> void:
-	var effect: GaussianCompositorEffect = env.get_gaussian_effect()
-	assert_almost_eq(env.depth_bias, 0.05, 0.0001)
-	assert_almost_eq(env.depth_test_min_alpha, 0.05, 0.0001)
-	assert_almost_eq(effect.depth_bias, env.depth_bias, 0.0001)
-	assert_almost_eq(effect.depth_test_min_alpha, env.depth_test_min_alpha, 0.0001)
-
-
-func test_root_exports_drive_the_effect() -> void:
-	var effect: GaussianCompositorEffect = env.get_gaussian_effect()
-	env.depth_bias = 0.2
-	assert_almost_eq(effect.depth_bias, 0.2, 0.0001)
-	env.depth_test_min_alpha = 0.125
-	assert_almost_eq(effect.depth_test_min_alpha, 0.125, 0.0001)
-	assert_almost_eq(effect.depth_bias, 0.2, 0.0001, "the other tunable is untouched")
-
-
-func test_exports_set_before_entering_the_tree_are_applied_at_ready() -> void:
-	var tuned: SpaceEnvironment = _instantiate()
-	tuned.depth_bias = 0.3
-	tuned.depth_test_min_alpha = 0.4
-	add_child_autofree(tuned)
-	var effect: GaussianCompositorEffect = tuned.get_gaussian_effect()
-	assert_almost_eq(effect.depth_bias, 0.3, 0.0001)
-	assert_almost_eq(effect.depth_test_min_alpha, 0.4, 0.0001)
-
-
-func test_a_new_instance_reapplies_its_own_values_to_the_shared_effect() -> void:
-	# The Compositor sub-resource lives in the cached PackedScene, so instances share it; each instance's _ready
-	# must therefore push its own exports rather than trust what it finds on the effect.
-	env.depth_bias = 0.9
-	var fresh: SpaceEnvironment = _instantiate()
-	add_child_autofree(fresh)
-	assert_almost_eq(fresh.get_gaussian_effect().depth_bias, 0.05, 0.0001)
+	assert_eq(compositor.compositor_effects.size(), 2, "motion blur, lens flare (M3-T25)")
+	assert_true(compositor.compositor_effects[0] is MotionBlurEffect, "the blur smears stars and hulls together")
+	assert_true(compositor.compositor_effects[1] is LensFlareEffect, "the flare goes on last, so it is never smeared")
 
 
 # --- key light ---------------------------------------------------------------------------------------------------
@@ -338,7 +287,7 @@ func test_without_a_camera_the_sky_stays_put() -> void:
 	assert_eq(env.star_field.global_position, placed)
 
 
-# --- the sky console and the fallback switch ---------------------------------------------------------------------
+# --- the sky console ---------------------------------------------------------------------------------
 
 
 func test_the_sky_parts_can_be_hidden_and_shown() -> void:
@@ -368,17 +317,3 @@ func test_the_sky_command_and_provider() -> void:
 	var text: String = "\n".join(result.lines)
 	assert_string_contains(text, "stars = %d" % env.star_field.star_count())
 	assert_string_contains(text, "panorama")
-
-
-func test_the_fallback_switch_keeps_the_same_sky() -> void:
-	# The sky needs no splat backend any more: the fallback only changes the hulls (T31 removes it).
-	var before: Environment = env.world_environment.environment
-	var mode: int = before.background_mode
-	env.use_fallback_sky(true)
-	assert_true(env.is_fallback_sky_active())
-	assert_eq(env.world_environment.environment, before)
-	assert_eq(env.world_environment.environment.background_mode, mode)
-	assert_true(env.star_field.visible)
-	env.use_fallback_sky(false)
-	assert_false(env.is_fallback_sky_active())
-	assert_eq(env.world_environment.environment, before)

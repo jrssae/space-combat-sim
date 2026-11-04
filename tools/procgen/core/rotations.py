@@ -1,39 +1,8 @@
-"""Coordinate frames and quaternions: Godot <-> 3DGS (GDGS) conventions.
-
-Godot frame: +X right, +Y up, -Z forward, metres. Splat PLYs are written in the
-GDGS/3DGS orientation, which differs by a rotation of 180 degrees about Z, because GDGS rotates
-every identity-basis ``GaussianSplatNode`` by Rz(180) on entering the tree. Writing the data
-pre-rotated therefore lets the node stay at identity (docs/research-notes.md).
-
-Rz(180) is its own inverse, so one function serves both directions.
-
-Quaternions are ``(w, x, y, z)`` (the PLY ``rot_0..rot_3`` order), Hamilton product, and act on
-column vectors: the rotation matrix of ``q`` maps local axes to world axes, which is the matrix
-3DGS uses in ``Sigma = R S S^T R^T``.
-"""
+"""Rotations as quaternions ``(w, x, y, z)`` and matrices, for the sky's nebula blobs (their orientation field)."""
 
 from __future__ import annotations
 
 import numpy as np
-
-# Rotation of 180 degrees about +Z: (w, x, y, z) = (cos 90, 0, 0, sin 90).
-RZ180_QUAT = np.array([0.0, 0.0, 0.0, 1.0])
-
-
-def flip_xy(xyz: np.ndarray) -> np.ndarray:
-    """Apply Rz(180) to positions or vectors: negate x and y."""
-    out = np.array(xyz, copy=True)
-    out[..., 0] *= -1
-    out[..., 1] *= -1
-    return out
-
-
-def godot_to_3dgs_positions(xyz: np.ndarray) -> np.ndarray:
-    return flip_xy(xyz)
-
-
-def gdgs_to_godot_positions(xyz: np.ndarray) -> np.ndarray:
-    return flip_xy(xyz)
 
 
 def quat_identity(count: int) -> np.ndarray:
@@ -44,30 +13,6 @@ def quat_identity(count: int) -> np.ndarray:
 
 def quat_normalize(q: np.ndarray) -> np.ndarray:
     return q / np.linalg.norm(q, axis=-1, keepdims=True)
-
-
-def quat_multiply(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Hamilton product ``a * b`` (apply ``b`` first, then ``a``); broadcasts over leading axes."""
-    aw, ax, ay, az = np.moveaxis(np.asarray(a, dtype=float), -1, 0)
-    bw, bx, by, bz = np.moveaxis(np.asarray(b, dtype=float), -1, 0)
-    return np.stack(
-        [
-            aw * bw - ax * bx - ay * by - az * bz,
-            aw * bx + ax * bw + ay * bz - az * by,
-            aw * by - ax * bz + ay * bw + az * bx,
-            aw * bz + ax * by - ay * bx + az * bw,
-        ],
-        axis=-1,
-    )
-
-
-def godot_to_3dgs_quats(q: np.ndarray) -> np.ndarray:
-    """Re-express orientations after Rz(180) of the whole scene: ``q' = qz * q``."""
-    return quat_multiply(RZ180_QUAT, q)
-
-
-def gdgs_to_godot_quats(q: np.ndarray) -> np.ndarray:
-    return quat_multiply(RZ180_QUAT, q)
 
 
 def quat_to_matrix(q: np.ndarray) -> np.ndarray:
@@ -154,12 +99,3 @@ def matrix_to_quat(m: np.ndarray) -> np.ndarray:
     q = np.take_along_axis(candidates, best[..., None], axis=-2)[..., 0, :]
     q = quat_normalize(q)
     return np.where(q[..., :1] < 0.0, -q, q)
-
-
-def aabb_godot_to_3dgs(
-    aabb_min: np.ndarray | list[float], aabb_max: np.ndarray | list[float]
-) -> tuple[np.ndarray, np.ndarray]:
-    """AABB after Rz(180): negate x and y, then re-sort min/max (what the importer reports)."""
-    lo = flip_xy(np.asarray(aabb_min, dtype=float))
-    hi = flip_xy(np.asarray(aabb_max, dtype=float))
-    return np.minimum(lo, hi), np.maximum(lo, hi)

@@ -1,31 +1,28 @@
-"""``sky_default``: the starfield and nebula backdrop as Gaussian splats (docs/architecture.md section 9.2).
+"""``sky_default``: the starfield and nebula backdrop (docs/architecture.md section 9.2, M4-T30c).
 
-Contents of ``sky_default.ply`` (stars first, then nebula):
+Both are authored as soft blobs in the Godot frame (each a normal distribution in 3D: a centre, three sigmas, an orientation, a
+colour and a peak opacity), the M3 sky's own data and seed, so the look the maintainer approved stays:
 
-* **Stars**: ~12 000 isotropic Gaussians on a sphere of radius R = 20 km around the origin. Direction
+* **Stars**: ~12 000 round blobs on a sphere of radius R = 20 km around the origin. Direction
   density is uniform plus a Milky Way band (a great circle through the nebula); magnitudes follow
   ``dN/dm ~ 10^(0.5 m)``; colour is a blackbody tint from a spectral-class temperature table;
   bright stars are bigger (sigma 12 m = 0.6 mrad at R) and brighter than dim ones; opacity ~1.
-* **Nebula**: ~4 000 large (300-2 000 m), soft, slightly elongated Gaussians in one ~40 degree
-  region, clustered by a few blobs and weighted by 3D fBm noise; two-tone teal/magenta; opacity
+* **Nebula**: ~4 000 large (300-2 000 m), soft, slightly elongated blobs in one ~40 degree
+  region, clustered by a few groups and weighted by 3D fBm noise; two-tone teal/magenta; opacity
   0.021-0.079; filaments follow a smooth orientation field.
 
-Frames: authored in the Godot frame, re-centred on the splat centroid (GDGS subtracts the mean at
-import, so this makes that a no-op), then written pre-rotated by Rz(180) for GDGS. Because the sky is
-one-sided, the centroid is kilometres from the origin: ``manifest.centroid_offset`` is that offset,
-and the sky node must sit at ``camera_position + centroid_offset`` to place the star sphere exactly
-around the camera.
+The game draws them from two files:
 
-Since M4-T30c the game draws the sky without splats, from two more files (the PLY stays until T31 removes it):
-
-* ``sky_default_stars.f32``: the same stars as point records, little-endian float32, seven per star: the unit direction
+* ``sky_default_stars.f32``: the stars as point records, little-endian float32, seven per star: the unit direction
   (Godot frame), the linear colour tint (largest channel 1) and the brightness, the linear radiance of a disc of
-  ``star_field.radius_mrad`` that delivers the light its splat did at 1 080 lines (``REFERENCE_FOCAL_PX``). Both use the colour
-  as GDGS showed it, decoded from sRGB. ``StarField`` draws them as camera-facing points with a 1 px floor.
-* ``sky_default_panorama.png``: the nebula alone, its 4 000 Gaussians composited analytically into a 4 096 by 2 048 RGBA image
+  ``star_field.radius_mrad`` that delivers the light the M3 sky's star did at 1 080 lines (``REFERENCE_FOCAL_PX``), its colour
+  decoded from sRGB. ``StarField`` draws them as camera-facing points with a 1 px floor.
+* ``sky_default_panorama.png``: the nebula alone, its 4 000 blobs composited analytically into a 4 096 by 2 048 RGBA image
   (``core.panorama``, Godot's ``PanoramaSkyMaterial`` convention: the image centre looks toward +Z, +u turns toward -X; checked
-  on a GPU by rolling the image half a turn). RGB is the gas's light as GDGS showed it; alpha is its opacity over the stars,
+  on a GPU by rolling the image half a turn). RGB is the gas's light, decoded from sRGB; alpha is its opacity over the stars,
   which the star points sample (Q42). A ``.import`` sidecar comes with it.
+
+``manifest.centroid_offset`` and the bounds are the authored blobs' centroid and box about it.
 """
 
 from __future__ import annotations
@@ -35,16 +32,15 @@ from pathlib import Path
 
 import numpy as np
 
-from ..core import frames
-from ..core import panorama
+from dataclasses import dataclass
+
+from ..core import panorama, rotations
 from ..core.color import blackbody_rgb, lerp, srgb_to_linear
 from ..core.context import AssetOutputs, BuildContext
-from ..core.manifest import build_manifest, lod_entry, write_manifest
-from ..core.ply import SplatData, write_ply
+from ..core.manifest import build_manifest, write_manifest
 
 ASSET_ID = "sky_default"
-GENERATOR_VERSION = 3
-PLY_NAME = "sky_default.ply"
+GENERATOR_VERSION = 4  # 4: the star file and the panorama only (M4-T31)
 PANORAMA_NAME = "sky_default_panorama.png"
 STARS_NAME = "sky_default_stars.f32"
 STAR_RECORD = ("dir_x", "dir_y", "dir_z", "red", "green", "blue", "brightness")
@@ -101,7 +97,22 @@ NEBULA_MAGENTA = np.array([0.70, 0.14, 0.48])
 NEBULA_BRIGHTNESS = (
     0.04,
     0.50,
-)  # linear radiance of a splat's colour, before alpha blending
+)  # linear radiance of a blob's colour, before alpha blending
+
+
+@dataclass(frozen=True)
+class Blobs:
+    """Soft blobs: centres ``(N, 3)``, linear colours ``(N, 3)``, peak opacities ``(N,)``, sigmas ``(N, 3)`` and orientations as
+    quaternions ``(N, 4)``."""
+
+    xyz: np.ndarray
+    rgb: np.ndarray
+    alpha: np.ndarray
+    scale: np.ndarray
+    rot: np.ndarray
+
+    def __len__(self) -> int:
+        return len(self.xyz)
 
 
 def _unit(v: np.ndarray) -> np.ndarray:
@@ -194,8 +205,8 @@ def _band_directions(rng: np.random.Generator, n: int) -> np.ndarray:
     return np.cos(b)[:, None] * around + np.sin(b)[:, None] * GALACTIC_NORMAL
 
 
-def generate_stars(rng: np.random.Generator, count: int, radius: float) -> SplatData:
-    """Star catalogue as splats in the authoring (Godot) frame."""
+def generate_stars(rng: np.random.Generator, count: int, radius: float) -> Blobs:
+    """Star catalogue as round blobs in the authoring (Godot) frame."""
     n_band = round(count * BAND_FRACTION)
     dirs = np.concatenate(
         [_band_directions(rng, n_band), _uniform_directions(rng, count - n_band)]
@@ -224,19 +235,18 @@ def generate_stars(rng: np.random.Generator, count: int, radius: float) -> Splat
     )
     tint = lerp(1.0, blackbody_rgb(temperature), STAR_TINT_STRENGTH)
 
-    return SplatData(
+    return Blobs(
         xyz=dirs * radius,
         rgb=tint * radiance[:, None],
         alpha=np.ones(count),
         scale=np.repeat(sigma[:, None], 3, axis=1),
-        rot=frames.quat_identity(count),
-        normals=-dirs,
+        rot=rotations.quat_identity(count),
     )
 
 
 # --- nebula ----------------------------------------------------------------------------------
-def generate_nebula(rng: np.random.Generator, count: int, radius: float) -> SplatData:
-    """Nebula gas as large soft splats in the authoring (Godot) frame."""
+def generate_nebula(rng: np.random.Generator, count: int, radius: float) -> Blobs:
+    """Nebula gas as large soft blobs in the authoring (Godot) frame."""
     noise = _ValueNoise(rng)
     east, north = tangent_basis(NEBULA_CENTER)
 
@@ -262,7 +272,7 @@ def generate_nebula(rng: np.random.Generator, count: int, radius: float) -> Spla
 
     r = radius * rng.uniform(*NEBULA_RADIUS_SPREAD, count)
 
-    # Orientation: the long axis follows a smooth field over the sky, so splats line up into filaments.
+    # Orientation: the long axis follows a smooth field over the sky, so blobs line up into filaments.
     t1, t2 = tangent_basis(d)
     theta = 2.0 * math.pi * noise.fbm(d * 3.0 + 11.7, octaves=2) + rng.normal(
         0.0, 0.25, count
@@ -292,13 +302,12 @@ def generate_nebula(rng: np.random.Generator, count: int, radius: float) -> Spla
         0.6 * density + 0.4 * rng.random(count), 0.0, 1.0
     )
 
-    return SplatData(
+    return Blobs(
         xyz=d * r[:, None],
         rgb=rgb,
         alpha=alpha,
         scale=scale,
-        rot=frames.matrix_to_quat(rotation),
-        normals=-d,
+        rot=rotations.matrix_to_quat(rotation),
     )
 
 
@@ -307,28 +316,28 @@ def generate_nebula(rng: np.random.Generator, count: int, radius: float) -> Spla
 # its delivered light shows (StarPointMath).
 STAR_RADIUS_MRAD = 0.5
 STAR_FLOOR_PX = 1.0
-# The height the splat sky was tuned at: 1 080 lines through the chase camera's 70 degree vertical field of view.
+# The height the M3 sky was tuned at: 1 080 lines through the chase camera's 70 degree vertical field of view.
 REFERENCE_FOCAL_PX = 540.0 / math.tan(math.radians(35.0))
-# GDGS widens every splat's screen covariance by this many square pixels (its anti-aliasing), which the splat stars' look includes.
-GDGS_DILATION_PX2 = 0.3
+# The M3 renderer widened every star's footprint by this many square pixels (its anti-aliasing); the approved look includes it.
+STAR_SPREAD_PX2 = 0.3
 # The light the point sprite's (1 - r^2)^2 profile delivers per unit brightness, over a disc of radius 1.
 SPRITE_PROFILE_AREA = math.pi / 3.0
 
 
-def star_points(stars: SplatData, radius: float) -> np.ndarray:
-    """The star file's records, ``(N, 7)`` float32: direction, colour tint and the brightness that matches each splat's light.
+def star_points(stars: Blobs, radius: float) -> np.ndarray:
+    """The star file's records, ``(N, 7)`` float32: direction, colour tint and the brightness that matches each M3 star's light.
 
-    GDGS decodes a splat's colour from sRGB before it composites (``gaussian_composite.glsl``), so the light a splat star showed
-    is the decoded colour, and so are the tint and the brightness here.
+    The M3 renderer decoded a star's colour from sRGB before it composited, so the light a star showed is the decoded colour, and
+    so are the tint and the brightness here.
     """
     directions = _unit(stars.xyz)
     shown = srgb_to_linear(stars.rgb)
     radiance = shown.max(axis=1)
     tint = shown / radiance[:, None]
     sigma = stars.scale[:, 0] / radius
-    splat_light = radiance * 2.0 * math.pi * (sigma**2 + GDGS_DILATION_PX2 / REFERENCE_FOCAL_PX**2)
+    star_light = radiance * 2.0 * math.pi * (sigma**2 + STAR_SPREAD_PX2 / REFERENCE_FOCAL_PX**2)
     rho = STAR_RADIUS_MRAD * 1e-3
-    brightness = splat_light / (SPRITE_PROFILE_AREA * rho * rho)
+    brightness = star_light / (SPRITE_PROFILE_AREA * rho * rho)
     return np.concatenate([directions, tint, brightness[:, None]], axis=1).astype("<f4")
 
 
@@ -343,17 +352,17 @@ NEBULA_DENSE_PERCENTILE = 99.9
 
 
 def render_panorama(
-    nebula: SplatData, width: int, height: int, rng: np.random.Generator | None = None
+    nebula: Blobs, width: int, height: int, rng: np.random.Generator | None = None
 ) -> np.ndarray:
     """Equirectangular ``(height, width, 4)`` uint8 render of the nebula as seen from the origin (authoring frame).
 
-    RGB is the gas's light as GDGS showed it: the raw colours composited, then decoded from sRGB, then sRGB-encoded for the
+    RGB is the gas's light as the M3 sky showed it: the raw colours composited, then decoded from sRGB, then sRGB-encoded for the
     texture. Alpha is the gas's opacity over the stars. ``rng`` dithers both.
     """
     low_w = max(width // PANORAMA_NEBULA_SCALE, 8)
     low_h = max(height // PANORAMA_NEBULA_SCALE, 4)
-    colour, coverage = panorama.composite_gaussians(
-        nebula.xyz, frames.quat_to_matrix(nebula.rot), nebula.scale, nebula.rgb, nebula.alpha, low_w, low_h
+    colour, coverage = panorama.composite_blobs(
+        nebula.xyz, rotations.quat_to_matrix(nebula.rot), nebula.scale, nebula.rgb, nebula.alpha, low_w, low_h
     )
     cover = panorama.resize_bilinear(coverage, height, width)
     premultiplied = np.stack(
@@ -373,7 +382,7 @@ def render_panorama(
 
 # --- build -----------------------------------------------------------------------------------
 def build(ctx: BuildContext) -> AssetOutputs:
-    """Generate ``sky_default.ply``, the star file, the panorama (optional) and ``manifest.json`` into ``ctx.out_dir``.
+    """Generate the star file, the panorama (optional) and ``manifest.json`` into ``ctx.out_dir``.
 
     Options: ``stars``, ``nebula`` (counts), ``radius_m``, ``panorama`` (bool),
     ``panorama_size`` ((width, height)).
@@ -387,7 +396,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
     )
     if n_stars < 1 or n_nebula < 1 or radius <= 0:
         raise ValueError(
-            "sky_default needs at least one star, one nebula splat and radius > 0"
+            "sky_default needs at least one star, one nebula blob and radius > 0"
         )
 
     out_dir = ctx.out_dir
@@ -395,35 +404,12 @@ def build(ctx: BuildContext) -> AssetOutputs:
 
     stars = generate_stars(ctx.rng("stars"), n_stars, radius)
     nebula = generate_nebula(ctx.rng("nebula"), n_nebula, radius)
-    authored = SplatData.concatenate([stars, nebula])
+    authored = np.concatenate([stars.xyz, nebula.xyz])
+    centroid = authored.mean(axis=0)
+    centred = (authored - centroid).astype(np.float32)
+    aabb_min, aabb_max = centred.min(axis=0), centred.max(axis=0)  # Godot frame, about the centroid
 
-    # Re-centre on the centroid (what GDGS does on import anyway); keep the offset for the node.
-    centroid = authored.xyz.mean(axis=0)
-    centred = (authored.xyz - centroid).astype(np.float32)
-    aabb_min, aabb_max = (
-        centred.min(axis=0),
-        centred.max(axis=0),
-    )  # Godot frame, as in the manifest
-
-    written = SplatData(
-        xyz=frames.godot_to_3dgs_positions(centred.astype(np.float64)),
-        rgb=authored.rgb,
-        alpha=authored.alpha,
-        scale=authored.scale,
-        rot=frames.godot_to_3dgs_quats(authored.rot),
-        normals=frames.flip_xy(authored.normals),
-    )
-    files: list[Path] = [
-        write_ply(
-            out_dir / PLY_NAME,
-            written,
-            comments=(
-                f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}",
-                "frame: 3dgs (Rz180 of godot)",
-            ),
-        )
-    ]
-
+    files: list[Path] = []
     manifest_files: dict[str, str] = {}
     stars_path = out_dir / STARS_NAME
     stars_path.write_bytes(star_points(stars, radius).tobytes())
@@ -441,17 +427,10 @@ def build(ctx: BuildContext) -> AssetOutputs:
         panorama_path.unlink(missing_ok=True)
         sidecar_path.unlink(missing_ok=True)
 
-    total = len(authored)
     manifest = build_manifest(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,
         seed=ctx.seed,
-        # For a sky "spacing" is the mean gap between splats on the sphere: sqrt(area per splat).
-        lods=[
-            lod_entry(
-                0, PLY_NAME, total, round(radius * math.sqrt(4.0 * math.pi / total), 2)
-            )
-        ],
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=centroid,

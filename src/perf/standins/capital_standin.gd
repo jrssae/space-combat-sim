@@ -176,19 +176,19 @@ func _add_turrets(size: Vector3, count: int) -> void:
 
 
 ## Draws the hull as the plain box (the bench's) or as the generated class's textured hull (M4-T30d; any other look is the hull).
-## The hull piece is built the first time it is asked for, without splats; without the generated asset the box stays.
+## The hull piece is built the first time it is asked for; without the generated asset the box stays.
 func set_look(value: StringName) -> void:
 	if value != LOOK_BOX:
 		value = LOOK_MESH
 	if value != LOOK_BOX and _piece == null:
-		var manifest: Dictionary = SplatLod.read_manifest(HULLS_ASSET)
+		var manifest: Dictionary = MeshAssets.read_manifest(HULLS_ASSET)
 		var entry: Dictionary = (manifest.get("classes", {}) as Dictionary).get(String(ship_class), {})
 		if entry.is_empty():
 			value = LOOK_BOX
 		else:
 			_piece = RenderPiece.new()
 			_piece.name = "HullPiece"
-			_piece.build(ShipSpec.ASSET_ROOT.path_join(HULLS_ASSET), entry, false)
+			_piece.build(ShipSpec.ASSET_ROOT.path_join(HULLS_ASSET), entry)
 			add_child(_piece)
 	look = value
 	if _hull_mesh != null:

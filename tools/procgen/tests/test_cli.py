@@ -14,7 +14,7 @@ from unittest import mock
 from tools.procgen.__main__ import main
 from tools.procgen.assets import ASSETS, sky_default, starfury_aurora
 from tools.procgen.core.context import REPO_ROOT, AssetOutputs, BuildContext
-from tools.procgen.core.manifest import build_manifest, lod_entry, write_manifest
+from tools.procgen.core.manifest import build_manifest, write_manifest
 
 
 def run(*argv: str) -> tuple[int, str, str]:
@@ -39,7 +39,6 @@ def make_fake(
             asset_id,
             1,
             ctx.seed,
-            [lod_entry(0, f"{asset_id}.ply", 10, 1.0)],
             [0, 0, 0],
             [1, 1, 1],
             [0, 0, 0],
@@ -127,7 +126,7 @@ class BuildTests(unittest.TestCase):
             run("build", "alpha", "--seed", "7", "--out", str(self.out))
         self.assertEqual(self.calls[0][1], 7)
 
-    def test_spacing_and_options_land_in_the_build_context(self) -> None:
+    def test_options_land_in_the_build_context(self) -> None:
         seen: list[dict] = []
 
         def spy(ctx: BuildContext) -> AssetOutputs:
@@ -136,7 +135,7 @@ class BuildTests(unittest.TestCase):
 
         with mock.patch.dict(ASSETS, {"spy": spy}, clear=True):
             code, _, _ = run(
-                "build", "spy", "--out", str(self.out), "--spacing", "0.05",
+                "build", "spy", "--out", str(self.out), "--option", "spacing=0.05",
                 "--option", "overlap=1.2", "--option", "label=fine", "--option", "flags=[1,2]",
             )  # fmt: skip
             self.assertEqual(code, 0)
@@ -144,10 +143,9 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(seen[0], {"spacing": 0.05, "overlap": 1.2, "label": "fine", "flags": [1, 2]})
         self.assertEqual(seen[1], {})
 
-    def test_bad_spacing_and_options_are_argparse_errors(self) -> None:
+    def test_bad_options_are_argparse_errors(self) -> None:
         for argv in (
-            ["build", "alpha", "--spacing", "0"],
-            ["build", "alpha", "--spacing", "x"],
+            ["build", "alpha", "--spacing", "0.05"],
             ["build", "alpha", "--option", "novalue"],
         ):
             with (
@@ -194,13 +192,13 @@ class BuildTests(unittest.TestCase):
                 "liar",
                 ctx.out_dir,
                 outputs.manifest,
-                (*outputs.files, ctx.out_dir / "ghost.ply"),
+                (*outputs.files, ctx.out_dir / "ghost.glb"),
             )
 
         with mock.patch.dict(ASSETS, {"liar": liar}, clear=True):
             code, _, err = run("build", "liar", "--out", str(self.out))
         self.assertEqual(code, 1)
-        self.assertIn("ghost.ply", err)
+        self.assertIn("ghost.glb", err)
 
     def test_an_asset_without_a_manifest_fails(self) -> None:
         with mock.patch.dict(
@@ -246,10 +244,10 @@ class BuildTests(unittest.TestCase):
         with mock.patch.dict(ASSETS, {"sky_default": small_sky}, clear=True):
             code, out, _ = run("build", "all", "--out", str(self.out))
         self.assertEqual(code, 0)
-        self.assertIn("built sky_default: 300 splats", out)
+        self.assertIn("built sky_default: 200 stars", out)
         self.assertEqual(
             sorted(p.name for p in (self.out / "sky_default").iterdir()),
-            ["manifest.json", "sky_default.ply", "sky_default_stars.f32"],
+            ["manifest.json", "sky_default_stars.f32"],
         )
 
 

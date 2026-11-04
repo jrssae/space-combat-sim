@@ -283,7 +283,7 @@ class StarfuryChunkMeshTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls._tmp = tempfile.TemporaryDirectory()
         cls.out = Path(cls._tmp.name) / "starfury"
-        starfury.build(BuildContext(cls.out, seed=42, options={"hero": False, "occlusion": False}))
+        starfury.build(BuildContext(cls.out, seed=42, options={"occlusion": False}))
         cls.manifest = manifest_io.read_manifest(cls.out)
         cls.hp = json.loads((cls.out / starfury.HARDPOINTS_NAME).read_text(encoding="utf-8"))
 

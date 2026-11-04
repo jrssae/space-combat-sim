@@ -1,5 +1,5 @@
 extends GutTest
-## RenderScale: a window whose frame would exceed the splat renderer's 65 535-tile sort key is rendered smaller.
+## RenderScale: a window whose frame would exceed the pixel budget (62 000 tiles of 16 px) is rendered smaller.
 
 
 func test_common_sizes_are_untouched() -> void:

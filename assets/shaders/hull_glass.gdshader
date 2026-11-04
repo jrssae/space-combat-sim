@@ -1,5 +1,5 @@
 // A textured hull's canopy glass (M4-T30b, Q36): dark, neutral and see-through, with the cabin's dark red glow showing through it
-// from outside. The glow follows `settings.cabin_glow_level` and fades out by `settings.cabin_glow_view_m`, as the splats' did.
+// from outside. The glow follows `settings.cabin_glow_level` and fades out by `settings.cabin_glow_view_m`.
 shader_type spatial;
 render_mode blend_mix, depth_draw_opaque, cull_disabled, diffuse_burley, specular_schlick_ggx;
 

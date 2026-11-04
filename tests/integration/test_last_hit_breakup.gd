@@ -117,10 +117,10 @@ func _step() -> void:
 		chunk.advance(DT)
 
 
-func _splat_nodes(node: Node) -> int:
-	var n: int = 1 if node is GaussianSplatNode else 0
+func _pooled_nodes(node: Node) -> int:
+	var n: int = 1 if _pooled(node) else 0
 	for child: Node in node.get_children():
-		n += _splat_nodes(child)
+		n += _pooled_nodes(child)
 	return n
 
 
@@ -355,7 +355,7 @@ func test_a_pooled_ally_taken_again_during_the_staged_second_does_not_disturb_th
 
 func test_the_blasts_add_no_nodes_no_lights_and_do_not_reuse_particle_emitters() -> void:
 	var ally: Combatant = _spawn_ally()
-	var splats: int = _splat_nodes(get_tree().root)
+	var pooled: int = _pooled_nodes(get_tree().root)
 	var lights: int = _lights(get_tree().root)
 	var emitters: int = main.fx.get_child_count()
 	var reused: int = main.fx.reused
@@ -365,7 +365,7 @@ func test_the_blasts_add_no_nodes_no_lights_and_do_not_reuse_particle_emitters()
 		_step()
 		most_hit_bursts = maxi(most_hit_bursts, main.fx.busy_count(FxSpecs.HIT))
 	assert_gt(most_hit_bursts, 0, "the smaller blasts did happen")
-	assert_eq(_splat_nodes(get_tree().root), splats, "AC32: no splat node enters or leaves")
+	assert_eq(_pooled_nodes(get_tree().root), pooled, "AC32: no pooled ship or chunk enters or leaves")
 	assert_eq(_lights(get_tree().root), lights, "the smaller blasts add no Light3D")
 	assert_eq(main.fx.get_child_count(), emitters, "and no particle emitter")
 	assert_eq(main.fx.reused, reused, "one death takes free emitters only")
@@ -393,3 +393,8 @@ func test_raiders_and_buoys_break_up_as_before() -> void:
 	assert_eq(main.debris.held_wreck_count(), 0, "a raider's chunks all fly in the death tick")
 	assert_eq(_held_chunks().size(), 0)
 	assert_eq(main.debris.active_chunk_count(), 5)
+
+
+# A node the pools build once at load and only switch afterwards (D22): a pooled ship or a pooled break-up chunk.
+static func _pooled(node: Node) -> bool:
+	return (node is DebrisChunk and not (node as DebrisChunk).one_shot) or (node is Ship and node.get_parent() is ShipPool)

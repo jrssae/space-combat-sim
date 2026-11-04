@@ -4,8 +4,7 @@ extends Node
 ## 80 fighters in a fight beside it (40 Earth Alliance Starfuries, 40 raiders, invulnerable like the bench's) and a planet 40 km off
 ## with its pull (Q6's harness-only point source). Bench-only: nothing in a scenario builds it.
 ##
-## The fighters' hulls follow `settings.ship_render`; the station and the capitals are drawn textured (M4-T30d took their splat look
-## out). The player's ship is moved to a viewpoint near the station or 11 km off it, nose on the station, at rest.
+## Every hull is drawn as its textured mesh. The player's ship is moved to a viewpoint near the station or 11 km off it, nose on the station, at rest.
 ##
 ## Console: `station <near|far|off>`.
 
@@ -48,7 +47,7 @@ var centre: UniversePos = null
 
 func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"station",
-			"Open the render comparison's station scene and put the player near it or far from it, or close it (fighters follow settings.ship_render)",
+			"Open the render comparison's station scene and put the player near it or far from it, or close it",
 			[ConsoleArg.enum_required(&"view", [&"near", &"far", &"off"])]), _cmd_station, self)
 
 
@@ -187,5 +186,5 @@ func _cmd_station(args: Dictionary) -> ConsoleResult:
 		return ConsoleResult.line("station scene closed")
 	if not open(view):
 		return ConsoleResult.failure("the b5_station asset is not generated (run scripts/gen_assets.sh, then import)")
-	return ConsoleResult.line("station scene: %s view, %d fighters, %d capitals, fighters %s" % [view, fighters.size(),
-			main.bench.standins.capitals().size(), Settings.get_value(&"ship_render")])
+	return ConsoleResult.line("station scene: %s view, %d fighters, %d capitals" % [view, fighters.size(),
+			main.bench.standins.capitals().size()])

@@ -2,8 +2,7 @@ class_name StationStandin
 extends Node3D
 ## The Babylon 5 station stand-in for the render comparison (M4-T27, Q24): bench-only, the generated `b5_station` asset's shape (no
 ## franchise asset), about 8 km long. The habitat drum turns about the station's long axis; the frame around it (reactor, spine,
-## vanes, top bar, command section, bow) stands still. Each is a `RenderPiece` drawn as its textured mesh (M4-T30d: the splat look
-## went from the stand-ins).
+## vanes, top bar, command section, bow) stands still. Each is a `RenderPiece` drawn as its textured mesh (M4-T30d).
 ##
 ## The drum's turn is a visual: it has no body, so it turns each frame by the frame's own time.
 
@@ -23,7 +22,7 @@ func _init() -> void:
 
 ## Builds both pieces from the generated asset; false (and nothing built) when it was not generated.
 func build() -> bool:
-	var manifest: Dictionary = SplatLod.read_manifest(ASSET_ID)
+	var manifest: Dictionary = MeshAssets.read_manifest(ASSET_ID)
 	var pieces: Dictionary = manifest.get("pieces", {})
 	if not pieces.has("drum") or not pieces.has("frame"):
 		push_warning("StationStandin: %s is not generated (run scripts/gen_assets.sh, then import)" % ASSET_ID)
@@ -32,7 +31,7 @@ func build() -> bool:
 	var dir: String = ShipSpec.ASSET_ROOT.path_join(ASSET_ID)
 	frame_piece = RenderPiece.new()
 	frame_piece.name = "Frame"
-	frame_piece.build(dir, pieces["frame"], false)
+	frame_piece.build(dir, pieces["frame"])
 	add_child(frame_piece)
 	drum_pivot = Node3D.new()
 	drum_pivot.name = "DrumPivot"
@@ -42,18 +41,9 @@ func build() -> bool:
 	add_child(drum_pivot)
 	drum_piece = RenderPiece.new()
 	drum_piece.name = "Drum"
-	drum_piece.build(dir, pieces["drum"], false)
+	drum_piece.build(dir, pieces["drum"])
 	drum_pivot.add_child(drum_piece)
 	return true
-
-
-## Splats drawn now, both pieces.
-func visible_splats() -> int:
-	var total: int = 0
-	for piece: RenderPiece in [frame_piece, drum_piece]:
-		if piece != null:
-			total += piece.visible_splats()
-	return total
 
 
 func _process(delta: float) -> void:

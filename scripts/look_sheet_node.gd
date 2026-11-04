@@ -1,24 +1,23 @@
 extends Node
 ## Photographs one ship for the maintainer's look sheet (M4-T30a, checkpoint 1b): the game's main scene, the player alone and
 ## hidden, the `sheet` command parking the ship ahead of the chase camera at each distance, lit from behind the camera and from
-## behind the ship, drawn as splats, as T27's painted mesh and as the textured mesh, each shot held for a few frames and saved;
-## then the cockpit view; then one sheet of every shot side by side with its GPU time. Run by scripts/look_sheet.sh on the real
-## renderer, fullscreen with the 3D at 1 080 lines.
+## behind the ship, each shot held for a few frames and saved; then the cockpit view; then one sheet of every shot with its GPU
+## time. Run by scripts/look_sheet.sh on the real renderer, fullscreen with the 3D at 1 080 lines.
 ##
-## Arguments after `--`: asset=<id> out=<dir> distances=<m,m,...> looks=<splat,painted,textured> lights=<lit,dark>
-## settle=<frames> tile=<width> scale3d=<1080p|factor>
+## Arguments after `--`: asset=<id> out=<dir> distances=<m,m,...> lights=<lit,dark> settle=<frames> tile=<width>
+## scale3d=<1080p|factor>
 ##
-## With `liveries=<wing:number,...>` (M4-T30b, checkpoint 1c) the columns are the textured mesh in each wing's livery instead of the
-## looks, plus one column of earlier shots read from disk (`compare=<path pattern with %d for metres and %s for lit or dark>`,
+## With `liveries=<wing:number,...>` (M4-T30b, checkpoint 1c) the columns are the textured mesh in each wing's livery, plus one column of earlier shots read from disk (`compare=<path pattern with %d for metres and %s for lit or dark>`,
 ## headed `compare_label`), and the cockpit view is taken lit and dark; `prefix` names the shots and `sheet` the sheet's path.
 ##
 ## M4-T30d: `cockpit=0` leaves the cockpit view out (the props: a buoy, chunks, capitals, the station; see `LookScene.PROP_ASSETS`).
 
-const DEFAULT_LOOKS: Array[String] = ["splat", "painted", "textured"]
+## The sheet's one column without liveries.
+const LOOKS: PackedStringArray = ["textured"]
 const LABEL_H: int = 28
 
 var main: Main
-var options: Dictionary = {"asset": "starfury_aurora", "out": "/tmp", "distances": "8,30,150,600", "looks": "splat,painted,textured",
+var options: Dictionary = {"asset": "starfury_aurora", "out": "/tmp", "distances": "8,30,150,600",
 		"lights": "lit,dark", "settle": "40", "tile": "960", "scale3d": "1080p", "liveries": "", "compare": "", "compare_label": "T30A",
 		"prefix": "m4_t30a", "sheet": "", "cockpit": "1"}
 var shots: Array[Dictionary] = []  # queued: {distance, light, look} or {cockpit: true}
@@ -57,7 +56,7 @@ func _start() -> void:
 	for light: String in String(options["lights"]).split(","):
 		for distance: String in String(options["distances"]).split(","):
 			if liveries.is_empty():
-				for look: String in String(options["looks"]).split(","):
+				for look: String in LOOKS:
 					shots.append({"distance": float(distance), "light": light, "look": look})
 			else:
 				for livery: String in liveries.split(","):
@@ -101,13 +100,12 @@ func _next() -> void:
 	var shot: Dictionary = shots[_index]
 	if shot.has("cockpit"):
 		_run("sheet off")
-		_run("set settings.ship_render mesh")
 		_run("camera cockpit")
 		var look_scene := main.get_node_or_null(^"LookScene") as LookScene
 		if shot.has("light") and look_scene != null and look_scene.key_star != null:
 			look_scene.set_light(StringName(shot["light"]))
 	else:
-		_run("sheet %s %d %s %s %s %s" % [options["asset"], int(shot["distance"]), shot["light"], shot["look"], shot.get("livery", "-"),
+		_run("sheet %s %d %s %s %s" % [options["asset"], int(shot["distance"]), shot["light"], shot.get("livery", "-"),
 				shot.get("view", "three_quarter")])
 
 
@@ -145,10 +143,10 @@ func _hold_3d_scale() -> void:
 		root.scaling_3d_scale = scale
 
 
-# One sheet: a column per look (or per livery, plus the earlier shots), a row per light and distance, the cockpit view last; each
+# One sheet: the textured column (or a column per livery, plus the earlier shots), a row per light and distance, the cockpit view last; each
 # tile labelled with its GPU time.
 func _finish() -> void:
-	var looks: PackedStringArray = String(options["looks"]).split(",")
+	var looks: PackedStringArray = LOOKS
 	if not String(options["liveries"]).is_empty():
 		_finish_liveries()
 		return

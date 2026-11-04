@@ -1,11 +1,9 @@
-"""``capital_hulls``: the capital ship stand-ins' box hulls drawn both ways, for the render comparison (M4-T27, Q24).
+"""``capital_hulls``: the capital ship stand-ins' box hulls as textured meshes (M4-T27, Q24; textured in M4-T30d).
 
-The bench's capitals (``src/perf/standins/capital_standin.gd``) are plain boxes; the station scene draws them as splats or as a painted
-mesh instead. One box per class, the sizes the stand-in uses, panelled in grey with a darker keel. Splats at a spacing of 1/300 of the
-length (1, 2 and 4 m), so each class is about the same count, and two coarser levels at 2x and 4x that (``core/pieces.py``).
-
-Each class is also a textured box (M4-T30d): plating sized to the hull, worn paint, the keel dark, and rows of lit windows along both
-flanks (the bow and stern ends left plain), on an atlas of their own each (1 024 or 2 048 px, under a metre a texel). The game draws these; the splats stay for T31 to remove.
+The bench's capitals (``src/perf/standins/capital_standin.gd``) are plain boxes; the station scene and the look sheets draw these
+instead. One box per class, the sizes the stand-in uses, panelled in grey with a darker keel, its detail sized to 1/300 of the length
+(1, 2 and 4 m). Each is plated to the hull, worn, its keel dark, with rows of lit windows along both flanks (the bow and stern ends
+left plain), on an atlas of its own (1 024 or 2 048 px, under a metre a texel; ``core/pieces.py``).
 """
 
 from __future__ import annotations
@@ -17,22 +15,21 @@ import numpy as np
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Material, tapered_box
 from ..core.manifest import build_manifest, write_manifest
-from ..core.paint_mesh import phase_steps
 from ..core.pieces import PieceTexture, write_piece
-from ..core.textured_mesh import TexturedPart
+from ..core.textured_mesh import TexturedPart, phase_steps
 from ..core.textures import Marking
 from ..styles import Style
 
 ASSET_ID = "capital_hulls"
-GENERATOR_VERSION = 2  # 2: the textured boxes with window rows (M4-T30d)
+GENERATOR_VERSION = 3  # 3: the textured boxes only (M4-T31); 2: the textured boxes with window rows (M4-T30d)
 # Width, height, length (m): CapitalStandin.CLASSES.
 CLASSES: dict[str, tuple[float, float, float]] = {
     "cruiser": (60.0, 40.0, 300.0),
     "destroyer": (110.0, 70.0, 600.0),
     "carrier": (220.0, 140.0, 1200.0),
 }
-SPACING_PER_LENGTH = 1.0 / 300.0
-LOD_FACTORS = (1.0, 2.0, 4.0)
+# The detail unit the style's panels and wear are sized by, per metre of length.
+UNIT_PER_LENGTH = 1.0 / 300.0
 # The textured boxes (M4-T30d): the atlas per class, so each lands at under a metre a texel, and the texel the packer starts from (it
 # grows it until the box fits).
 ATLAS_PX = {"cruiser": 1024, "destroyer": 1024, "carrier": 2048}
@@ -46,17 +43,17 @@ WINDOW_GLOW = (1.0, 0.86, 0.62)
 WINDOW_STRENGTH = 2.5
 
 
-def _style(spacing: float) -> Style:
+def _style(unit: float) -> Style:
     grey = Material("cap_hull", (0.105, 0.11, 0.125), paneled=True)  # a medium blue-grey, the Starfury's range (M4-T30d)
     dark = Material("cap_keel", (0.08, 0.085, 0.09), paneled=True)
     roles = {r: grey for r in ("hull", "hull_panel", "stripe", "hazard", "canopy_frame", "nozzle", "barrel", "rcs")}
     roles.update({r: dark for r in ("hull_dark", "hazard_dark", "canopy_glass", "nozzle_throat", "bore", "interior")})
-    k = 20.0 * spacing  # the fighters' wear is sized for a centimetre texel; these hulls are texelled at tens of centimetres
+    k = 20.0 * unit  # the fighters' wear is sized for a centimetre texel; these hulls are texelled at tens of centimetres
     return Style(
         name="capital",
         materials=roles,
-        panel_size_m=12.0 * spacing,
-        panel_line_width_m=1.5 * spacing,
+        panel_size_m=12.0 * unit,
+        panel_line_width_m=1.5 * unit,
         panel_line_darkness=0.6,
         panel_tint_jitter=0.1,
         groove_depth_m=0.012 * k,
@@ -89,30 +86,24 @@ def hull_parts(cls: str, style: Style) -> list[TexturedPart]:
 def build(ctx: BuildContext) -> AssetOutputs:
     out_dir: Path = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
-    comments = (f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}", "frame: 3dgs (Rz180 of godot), centred on its own splats")
     files: list[Path] = []
     classes: dict[str, dict] = {}
     for cls, size in CLASSES.items():
-        spacing = size[2] * SPACING_PER_LENGTH
-        style = _style(spacing)
+        style = _style(size[2] * UNIT_PER_LENGTH)
         texture = PieceTexture(ATLAS_PX[cls], size[2] * TEXEL_PER_LENGTH, ctx.seed)
-        piece_files, entry = write_piece(
-            out_dir, f"{ASSET_ID}_{cls}", hull_parts(cls, style), style, [spacing * f for f in LOD_FACTORS], ctx.rng, comments, texture
-        )
+        piece_files, entry = write_piece(out_dir, f"{ASSET_ID}_{cls}", hull_parts(cls, style), style, texture)
         entry["size"] = list(size)
         files += piece_files
         classes[cls] = entry
-    first = classes["cruiser"]
     biggest = classes["carrier"]
     manifest = build_manifest(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,
         seed=ctx.seed,
-        lods=[{k: v for k, v in e.items() if k != "centroid"} for e in first["lods"]],
         aabb_min=np.array(biggest["aabb_min"]),
         aabb_max=np.array(biggest["aabb_max"]),
         centroid_offset=(0.0, 0.0, 0.0),
-        files={f"{cls}_mesh": classes[cls]["paint_mesh"]["file"] for cls in CLASSES},
+        files={f"{cls}_mesh": classes[cls]["mesh"]["file"] for cls in CLASSES},
         extra={"classes": classes},
     )
     files.append(write_manifest(out_dir, manifest))

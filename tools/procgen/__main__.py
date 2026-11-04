@@ -1,7 +1,7 @@
 """Command line: ``python3 -m tools.procgen list | build <asset_id>... | build all``.
 
-``--spacing`` and ``--option key=value`` land in ``BuildContext.options``; assets read what
-they understand (``starfury_aurora``: ``spacing``, ``overlap``, ``thickness``) and ignore the rest.
+``--option key=value`` lands in ``BuildContext.options``; assets read what they understand
+(``starfury_aurora``: ``render_triangles``, ``atlas_px``, ``texel_m``) and ignore the rest.
 ``--jobs N`` builds up to N assets at once in worker processes (M4-T30d: the textured hulls made a
 one-at-a-time ``build all`` too slow); every asset's output is the same either way.
 """
@@ -51,16 +51,6 @@ def _jobs(text: str) -> int:
     return value
 
 
-def _spacing(text: str) -> float:
-    try:
-        value = float(text)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(f"invalid spacing {text!r}: expected a number") from exc
-    if not value > 0.0:
-        raise argparse.ArgumentTypeError(f"invalid spacing {text!r}: must be > 0")
-    return value
-
-
 def _option(text: str) -> tuple[str, Any]:
     """``key=value`` with the value parsed as JSON when possible (so ``overlap=1.2`` is a number)."""
     key, sep, raw = text.partition("=")
@@ -100,13 +90,6 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=DEFAULT_OUT_ROOT,
         help="output root (default: <repo>/assets/generated)",
-    )
-    build.add_argument(
-        "--spacing",
-        type=_spacing,
-        default=None,
-        metavar="M",
-        help="splat spacing in metres for surface-sampled assets (starfury_aurora default 0.06)",
     )
     build.add_argument(
         "--jobs",
@@ -189,8 +172,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_USAGE
 
     options: dict[str, Any] = dict(args.option)
-    if args.spacing is not None:
-        options["spacing"] = args.spacing
 
     if args.jobs > 1 and len(asset_ids) > 1:
         results = _parallel(asset_ids, args.jobs, args.seed, args.out, options)

@@ -1,4 +1,4 @@
-"""``core.panorama``: the equirectangular sky helpers (M4-T30c): directions, Gaussian compositing, resize, PNG and sidecar."""
+"""``core.panorama``: the equirectangular sky helpers (M4-T30c): directions, blob compositing, resize, PNG and sidecar."""
 
 from __future__ import annotations
 
@@ -47,9 +47,9 @@ class CompositeTests(unittest.TestCase):
         rotation = np.eye(3)[None, :, :]
         scale = np.full((1, 3), sigma_rad * 1000.0)
         rgb = np.array([[1.0, 0.5, 0.25]])
-        return panorama.composite_gaussians(centre, rotation, scale, rgb, np.array([alpha]), 256, 128)
+        return panorama.composite_blobs(centre, rotation, scale, rgb, np.array([alpha]), 256, 128)
 
-    def test_a_gaussian_lands_on_its_direction(self) -> None:
+    def test_a_blob_lands_on_its_direction(self) -> None:
         direction = np.array([0.5, 0.3, -0.8])
         direction /= np.linalg.norm(direction)
         colour, coverage = self._one(direction, 0.05)
@@ -59,7 +59,7 @@ class CompositeTests(unittest.TestCase):
         self.assertLessEqual(abs(int(x) - ex), 1)
         self.assertLessEqual(abs(int(y) - ey), 1)
         self.assertAlmostEqual(float(coverage.max()), 0.5, delta=0.02)
-        # Premultiplied: the colour is the splat's colour times its coverage.
+        # Premultiplied: the colour is the blob's colour times its coverage.
         np.testing.assert_allclose(colour[y, x], np.array([1.0, 0.5, 0.25]) * coverage[y, x], rtol=1e-5)
 
     def test_its_footprint_scales_with_its_angular_size(self) -> None:
@@ -67,18 +67,18 @@ class CompositeTests(unittest.TestCase):
         large = self._one(np.array([0.0, 0.0, 1.0]), 0.06)[1]
         self.assertGreater(float(large.sum()), 3.0 * float(small.sum()))
 
-    def test_a_gaussian_on_the_seam_wraps_round(self) -> None:
+    def test_a_blob_on_the_seam_wraps_round(self) -> None:
         coverage = self._one(np.array([0.0, 0.0, -1.0]), 0.05)[1]
         self.assertGreater(float(coverage[:, :3].sum()), 0.1)
         self.assertGreater(float(coverage[:, -3:].sum()), 0.1)
 
-    def test_nearer_gaussians_cover_farther_ones(self) -> None:
+    def test_nearer_blobs_cover_farther_ones(self) -> None:
         d = np.array([0.0, 0.0, 1.0])
         centres = np.stack([d * 1000.0, d * 900.0])  # the second is nearer
         rotation = np.repeat(np.eye(3)[None], 2, axis=0)
         scale = np.stack([np.full(3, 50.0), np.full(3, 45.0)])
         rgb = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
-        colour, _ = panorama.composite_gaussians(centres, rotation, scale, rgb, np.array([0.9, 0.9]), 128, 64)
+        colour, _ = panorama.composite_blobs(centres, rotation, scale, rgb, np.array([0.9, 0.9]), 128, 64)
         y, x = _pixel_of(d, 128, 64)[::-1]
         self.assertGreater(float(colour[y, x, 2]), float(colour[y, x, 0]))
 

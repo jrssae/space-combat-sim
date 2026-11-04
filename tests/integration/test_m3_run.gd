@@ -64,9 +64,9 @@ static func _percentile(values: PackedInt64Array, share: float) -> int:
 
 func test_the_sandbox_plays_a_whole_fight_with_every_system_on() -> void:
 	await _start()
-	var splat_nodes: int = _count(get_tree().root, GaussianSplatNode)
+	var ships: int = _count(get_tree().root, Ship)
 	var particles: int = _count(get_tree().root, GPUParticles3D)
-	assert_gt(splat_nodes, 0)
+	assert_gt(ships, 0)
 	assert_gt(particles, 0)
 	assert_eq(main.wings.player_wing().members().size(), 3, "the wing is on the player at load")
 	source.hold(InputAdapter.FIRE)
@@ -109,10 +109,10 @@ func test_the_sandbox_plays_a_whole_fight_with_every_system_on() -> void:
 		lights_most = maxi(lights_most, int(DebugConsole.registry.read("lights.active")["value"]))
 	source.release(InputAdapter.FIRE)
 	Engine.time_scale = 1.0
-	assert_eq(_count(get_tree().root, GaussianSplatNode), splat_nodes, "no splat node entered or left the tree")
+	assert_eq(_count(get_tree().root, Ship), ships, "no ship entered or left the tree (the pools only switch them)")
 	assert_eq(_count(get_tree().root, GPUParticles3D), particles, "no particle node entered or left the tree")
 	assert_between(lights_most, 1, MAX_LIGHTS, "the picker lit something and never more than its slots")
-	gut.p("M3 run: %d splat nodes, %d particle nodes, %d kills, %d hits, %d lights at most" % [splat_nodes, particles, main.waves.kills,
+	gut.p("M3 run: %d ships, %d particle nodes, %d kills, %d hits, %d lights at most" % [ships, particles, main.waves.kills,
 			resolver.hits_total, lights_most])
 
 

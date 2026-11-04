@@ -12,7 +12,6 @@ var section: Dictionary
 
 
 func before_each() -> void:
-	Settings.set_value(&"ship_render", &"mesh")
 	world = WorldFrame.new()
 	world.name = "World"
 	add_child_autofree(world)
@@ -38,15 +37,11 @@ func before_each() -> void:
 
 
 func after_each() -> void:
-	Settings.set_value(&"ship_render", &"splat")
 	Settings.set_value(&"cabin_glow_level", 0.3)
 
 
-func _hull_node(ship: Ship) -> HullDepthProxy:
-	for child: Node in ship.get_children():
-		if child is HullDepthProxy:
-			return child as HullDepthProxy
-	return null
+func _hull_node(ship: Ship) -> MeshInstance3D:
+	return ship.hull
 
 
 func _ally(callsign: String, z: float = -100.0) -> Combatant:
@@ -62,7 +57,7 @@ func test_an_ally_named_alpha_2_draws_the_alpha_livery_and_02() -> void:
 	assert_false(section.is_empty(), "run scripts/gen_assets.sh first")
 	var ally: Combatant = _ally("ALPHA 2")
 	assert_not_null(ally)
-	var node: HullDepthProxy = _hull_node(ally.ship)
+	var node: MeshInstance3D = _hull_node(ally.ship)
 	assert_eq(node.get_instance_shader_parameter(&"livery_pattern"), _pattern("bands"))
 	assert_eq(node.get_instance_shader_parameter(&"livery_number"), 2)
 	var row: Array = section["liveries"]["alpha"]["primary"]
@@ -106,7 +101,7 @@ func test_an_unnamed_member_of_a_delta_scenario_wing_flies_delta_with_its_slot()
 
 
 func test_the_players_ship_is_alpha_01() -> void:
-	var node := player.ship.get_node(^"HullMeshFallback") as MeshInstance3D
+	var node := player.ship.get_node(^"Hull") as MeshInstance3D
 	assert_eq(node.get_instance_shader_parameter(&"livery_pattern"), _pattern("bands"))
 	assert_eq(node.get_instance_shader_parameter(&"livery_number"), 1)
 	assert_eq(player.ship.livery.number_text(), "01")
@@ -114,14 +109,14 @@ func test_the_players_ship_is_alpha_01() -> void:
 
 func test_a_starfury_without_a_wing_is_plain() -> void:
 	var stray: Combatant = _ally("SHEET")
-	var node: HullDepthProxy = _hull_node(stray.ship)
+	var node: MeshInstance3D = _hull_node(stray.ship)
 	assert_eq(node.get_instance_shader_parameter(&"livery_pattern"), 0)
 	assert_eq(node.get_instance_shader_parameter(&"livery_number"), 0)
 	assert_eq(stray.ship.livery.pattern, "plain")
 
 
 func test_four_wings_share_one_hull_material() -> void:
-	var nodes: Array[HullDepthProxy] = []
+	var nodes: Array[MeshInstance3D] = []
 	var z: float = -100.0
 	for callsign: String in ["ALPHA 2", "BETA 2", "DELTA 3", "ZETA 4"]:
 		nodes.append(_hull_node(_ally(callsign, z).ship))
@@ -129,11 +124,11 @@ func test_four_wings_share_one_hull_material() -> void:
 	var mesh: Mesh = nodes[0].mesh
 	var material: Material = mesh.surface_get_material(0)
 	assert_true(material is ShaderMaterial, "the livery shader")
-	for node: HullDepthProxy in nodes:
+	for node: MeshInstance3D in nodes:
 		assert_same(node.mesh, mesh)
 		assert_same(node.mesh.surface_get_material(0), material)
 		assert_null(node.material_override)
-	var patterns: Array = nodes.map(func(n: HullDepthProxy) -> int: return int(n.get_instance_shader_parameter(&"livery_pattern")))
+	var patterns: Array = nodes.map(func(n: MeshInstance3D) -> int: return int(n.get_instance_shader_parameter(&"livery_pattern")))
 	assert_eq(patterns, [_pattern("bands"), _pattern("nose_band"), _pattern("chevron"), _pattern("pinstripe")])
 
 
@@ -164,7 +159,7 @@ func test_the_glass_glows_red_at_the_cabin_glow_level() -> void:
 	var mesh: Mesh = MeshAssets.for_asset("starfury_aurora")
 	var glass := mesh.surface_get_material(1) as ShaderMaterial
 	assert_not_null(glass, "the glass is the hull glass shader")
-	var strength: float = float((SplatLod.read_manifest("starfury_aurora")["mesh"]["surfaces"][1] as Dictionary)["emissive_strength"])
+	var strength: float = float((MeshAssets.read_manifest("starfury_aurora")["mesh"]["surfaces"][1] as Dictionary)["emissive_strength"])
 	var default_level: float = float(SettingsSchema.ENTRIES[&"cabin_glow_level"]["default"])
 	Settings.set_value(&"cabin_glow_level", default_level)
 	assert_almost_eq(float(glass.get_shader_parameter(&"glow_energy")), strength, 1e-6, "the manifest's strength at the default")

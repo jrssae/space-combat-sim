@@ -4,7 +4,7 @@ A part function takes a spec (plain dataclass of dimensions) and a :class:`Style
 a :class:`Part`: tessellated geometry, named :class:`Anchor` points (with an optional
 direction, e.g. a nozzle's exhaust), collision primitives and a mass. Parts are built in their
 own local frame; the asset module places them with ``transformed`` / ``mirrored`` and only then
-reads the anchors, so hardpoints, meshes and splats can never disagree.
+reads the anchors, so hardpoints and meshes can never disagree.
 """
 
 from __future__ import annotations

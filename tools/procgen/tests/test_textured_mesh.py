@@ -72,7 +72,7 @@ class WriterTests(unittest.TestCase):
             np.testing.assert_allclose(section["aabb_min"], [-1.0, -0.5, -1.5], atol=1e-4)
             np.testing.assert_allclose(section["aabb_max"], [1.0, 0.75, 1.5], atol=1e-4)
             # The section validates inside a manifest, and a broken one does not.
-            manifest = manifest_io.build_manifest("thing", 1, 3, [manifest_io.lod_entry(0, "x.ply", 1, 0.1)], [0, 0, 0], [1, 1, 1],
+            manifest = manifest_io.build_manifest("thing", 1, 3, [0, 0, 0], [1, 1, 1],
                                                   [0, 0, 0], extra={"mesh": section})
             manifest_io.validate_manifest(manifest)
             broken = dict(manifest, mesh=dict(section, surfaces=[]))
@@ -101,7 +101,7 @@ class StarfuryTests(unittest.TestCase):
         cls._tmp = tempfile.TemporaryDirectory()
         cls.out = Path(cls._tmp.name)
         started = time.perf_counter()
-        starfury.build(BuildContext(cls.out, seed=42, options={"hero": False}))
+        starfury.build(BuildContext(cls.out, seed=42, options={}))
         cls.seconds = time.perf_counter() - started
         cls.manifest = manifest_io.read_manifest(cls.out)
 
@@ -109,14 +109,12 @@ class StarfuryTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls._tmp.cleanup()
 
-    def test_the_textured_mesh_is_the_painted_meshs_triangles_and_box(self) -> None:
+    def test_the_textured_mesh_is_the_objs_triangles_and_box(self) -> None:
         section = self.manifest["mesh"]
-        paint = self.manifest["paint_mesh"]
         self.assertEqual(self.manifest["files"]["mesh"], "starfury_aurora.glb")
-        self.assertEqual(section["triangles"], paint["triangles"])
         self.assertEqual(section["triangles"], len(read_obj(self.out / starfury.OBJ_NAME).faces))
-        np.testing.assert_allclose(section["aabb_min"], paint["aabb_min"], atol=1e-4)
-        np.testing.assert_allclose(section["aabb_max"], paint["aabb_max"], atol=1e-4)
+        np.testing.assert_allclose(section["aabb_min"], self.manifest["aabb_min"], atol=1e-4)
+        np.testing.assert_allclose(section["aabb_max"], self.manifest["aabb_max"], atol=1e-4)
         mesh = read_glb(self.out / section["file"])
         self.assertEqual([p.material for p in mesh.primitives], ["hull", "glass"])
         self.assertEqual(sum(len(p.indices) for p in mesh.primitives) // 3, section["triangles"])
@@ -195,7 +193,7 @@ class LiveryOutputTests(unittest.TestCase):
             self.assertIn("livery", section)
             self.assertEqual(section["livery"]["digits"]["file"], "thing_digits.png")
             self.assertEqual(len(section["livery"]["hull_paint"]), 3)
-            manifest = manifest_io.build_manifest("thing", 1, 3, [manifest_io.lod_entry(0, "x.ply", 1, 0.1)], [0, 0, 0], [1, 1, 1],
+            manifest = manifest_io.build_manifest("thing", 1, 3, [0, 0, 0], [1, 1, 1],
                                                   [0, 0, 0], extra={"mesh": section})
             manifest_io.validate_manifest(manifest)
             broken = dict(manifest, mesh=dict(section, livery=dict(section["livery"], digits={})))
@@ -274,7 +272,7 @@ class RenderTrianglesTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls._tmp = tempfile.TemporaryDirectory()
         cls.out = Path(cls._tmp.name)
-        starfury.build(BuildContext(cls.out, seed=42, options={"hero": False, "occlusion": False, "render_triangles": 20000}))
+        starfury.build(BuildContext(cls.out, seed=42, options={"occlusion": False, "render_triangles": 20000}))
         cls.manifest = manifest_io.read_manifest(cls.out)
 
     @classmethod
@@ -286,7 +284,7 @@ class RenderTrianglesTests(unittest.TestCase):
         # 20 000: the round parts' segments scale down; the strut plates and fittings floor the Starfury at about 18 000.
         self.assertLess(abs(section["triangles"] - 20000) / 20000.0, 0.15, section["triangles"])
         self.assertEqual(section["render_triangles"], 20000)
-        self.assertEqual(section["fine_triangles"], self.manifest["paint_mesh"]["triangles"])
+        self.assertEqual(section["fine_triangles"], len(read_obj(self.out / starfury.OBJ_NAME).faces))
         mesh = read_glb(self.out / section["file"])
         self.assertEqual(sum(len(p.indices) for p in mesh.primitives) // 3, section["triangles"])
         manifest_io.validate_manifest(self.manifest)

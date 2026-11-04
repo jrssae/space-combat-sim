@@ -1,20 +1,17 @@
 class_name LookScene
 extends Node
-## The look sheets' scene (M4-T30a, checkpoint 1b): `sheet <asset_id> <distance_m> [lit|dark|off] [splat|painted|textured]` parks one idle
-## ship of the asset ahead of the camera at that distance, three-quarters on, hides the player's own hull and turns the key star to light
-## the ship from over the camera's shoulder (`lit`) or from behind it (`dark`), so `scripts/look_sheet.sh` can photograph the same ship
-## as splats, as T27's painted mesh and as the textured mesh. `sheet off` (or `sheet <asset> 0 off`) puts everything back. The sheet's
-## optional livery (`<wing>:<number>`, M4-T30b) paints the parked ship. `livery <wing> [number] [ship]` repaints any ship for a look
-## (the player's by default), and the `livery` provider reports what the player's ship and the others wear.
-## Bench-only: nothing in a scenario uses it.
+## The look sheets' scene (M4-T30a, checkpoint 1b): `sheet <asset_id> <distance_m> [lit|dark|off]` parks one idle ship of the asset
+## ahead of the camera at that distance, three-quarters on, hides the player's own hull and turns the key star to light the ship from
+## over the camera's shoulder (`lit`) or from behind it (`dark`), so `scripts/look_sheet.sh` can photograph it. `sheet off` (or
+## `sheet <asset> 0 off`) puts everything back. The sheet's optional livery (`<wing>:<number>`, M4-T30b) paints the parked ship.
+## `livery <wing> [number] [ship]` repaints any ship for a look (the player's by default), and the `livery` provider reports what the
+## player's ship and the others wear. Bench-only: nothing in a scenario uses it.
 ##
 ## M4-T30d: the sheet also parks the hulls that are not pooled ships (`PROP_ASSETS`): a nav buoy, a ship's break-up chunks spread
 ## apart (`raider_fighter_chunks`, `starfury_aurora_chunks`), a capital stand-in of each class (`capital_cruiser`, `capital_destroyer`,
-## `capital_carrier`) and the station stand-in (`b5_station`). The buoy and the chunks take the splat or the textured look; the
-## capitals and the station are textured only.
+## `capital_carrier`) and the station stand-in (`b5_station`).
 
 const LIGHTS: Array[StringName] = [&"lit", &"dark", &"off"]
-const LOOKS: Array[StringName] = [&"splat", &"painted", &"textured"]
 ## How the parked ship faces the camera: three-quarters on (the sheets' rows), its back (the dorsal number), or its left side.
 const VIEWS: Array[StringName] = [&"three_quarter", &"top", &"side"]
 const POOL_TYPES: Dictionary = {"starfury_aurora": ShipPool.ALLY_TYPE, "raider_fighter": ShipPool.DEFAULT_TYPE}
@@ -41,16 +38,14 @@ var _parked: Combatant = null
 var _prop: Node3D = null
 var _asset_id: String = ""
 var _star_transform: Transform3D = Transform3D.IDENTITY
-var _render_before: StringName = &""
 var _player_was_visible: bool = true
 
 
 func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"sheet",
-			"Park one idle ship of an asset ahead of the camera for a look sheet, lit from behind the camera or from behind the ship, as splats, the painted or the textured mesh; `sheet off` clears it",
+			"Park one idle ship of an asset ahead of the camera for a look sheet, lit from behind the camera or from behind the ship; `sheet off` clears it",
 			[ConsoleArg.string_required(&"asset_id"), ConsoleArg.float_optional(&"distance_m", 30.0, 0.0, 20000.0),
-			ConsoleArg.enum_optional(&"light", LIGHTS, &"lit"), ConsoleArg.enum_optional(&"look", LOOKS, &"textured"),
-			ConsoleArg.string_optional(&"livery", "-"), ConsoleArg.enum_optional(&"view", VIEWS, &"three_quarter")]), _cmd_sheet, self)
+			ConsoleArg.enum_optional(&"light", LIGHTS, &"lit"), ConsoleArg.string_optional(&"livery", "-"), ConsoleArg.enum_optional(&"view", VIEWS, &"three_quarter")]), _cmd_sheet, self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"livery",
 			"Paint a ship in a wing's livery with a number (plain for none), for looking at it: the player's ship, `sheet` for the parked one, or a ship by name",
 			[ConsoleArg.string_required(&"wing"), ConsoleArg.int_optional(&"number", 1, 0, 99), ConsoleArg.string_rest(&"ship").make_optional("player")]), _cmd_livery, self)
@@ -80,8 +75,8 @@ func parked() -> Combatant:
 	return _parked
 
 
-## Parks a ship of `asset_id` `distance_m` ahead of the current camera with the given light and look; "" on success, else why not.
-func show(asset_id: String, distance_m: float, light: StringName, look: StringName, view: StringName = &"three_quarter") -> String:
+## Parks a ship of `asset_id` `distance_m` ahead of the current camera with the given light; "" on success, else why not.
+func show(asset_id: String, distance_m: float, light: StringName, view: StringName = &"three_quarter") -> String:
 	if not _resolve():
 		return "sheet needs the world, the ship pool, the player's ship and the key star"
 	if not POOL_TYPES.has(asset_id) and not PROP_ASSETS.has(asset_id):
@@ -91,12 +86,11 @@ func show(asset_id: String, distance_m: float, light: StringName, look: StringNa
 		return "no current camera"
 	if not is_active():
 		_star_transform = key_star.global_transform
-		_render_before = StringName(Settings.get_value(&"ship_render"))
 		_player_was_visible = player.visible
 	else:
 		_release()
-	var error: String = _show_prop(asset_id, camera, distance_m, light, look, view) if PROP_ASSETS.has(asset_id) \
-			else _show_ship(asset_id, camera, distance_m, light, look, view)
+	var error: String = _show_prop(asset_id, camera, distance_m, light, view) if PROP_ASSETS.has(asset_id) \
+			else _show_ship(asset_id, camera, distance_m, light, view)
 	if not error.is_empty():
 		_release()
 		_restore()  # a sheet that could not park its subject leaves the scene as it found it
@@ -104,7 +98,7 @@ func show(asset_id: String, distance_m: float, light: StringName, look: StringNa
 
 
 # Parks one idle pooled ship of `asset_id` for the sheet.
-func _show_ship(asset_id: String, camera: Camera3D, distance_m: float, light: StringName, look: StringName, view: StringName) -> String:
+func _show_ship(asset_id: String, camera: Camera3D, distance_m: float, light: StringName, view: StringName) -> String:
 	var type: StringName = POOL_TYPES[asset_id]
 	if pool.prepare(type, 1) < 1:
 		return "the %s pool is empty" % type
@@ -115,7 +109,7 @@ func _show_ship(asset_id: String, camera: Camera3D, distance_m: float, light: St
 	_asset_id = asset_id
 	player.visible = false
 	set_light(light)
-	return set_look(look)
+	return ""
 
 
 # How the parked subject faces the camera: three-quarters on, its back (the nose up the picture), or its left side (the nose left).
@@ -141,29 +135,7 @@ func set_light(light: StringName) -> void:
 	key_star.global_transform = Transform3D(Basis.looking_at(direction, up), key_star.global_position)
 
 
-## Draws the parked ship as splats, as T27's painted mesh or as the textured mesh (`settings.ship_render` follows); "" or why not.
-func set_look(look: StringName) -> String:
-	if _prop != null:
-		Settings.set_value(&"ship_render", &"splat" if look == &"splat" else &"mesh")
-		return "" if look != &"painted" else "the props have no painted look on the sheet"
-	if _parked == null:
-		return "no ship is parked"
-	Settings.set_value(&"ship_render", &"splat" if look == &"splat" else &"mesh")
-	if look != &"painted":
-		return ""
-	var manifest: Dictionary = SplatLod.read_manifest(_asset_id)
-	var entry: Dictionary = manifest.get("paint_mesh", {})
-	var painted: Mesh = MeshAssets.load_entry(ShipSpec.ASSET_ROOT.path_join(_asset_id), entry) if not entry.is_empty() else null
-	if painted == null:
-		return "%s has no painted mesh" % _asset_id
-	var proxy: HullDepthProxy = _hull_node(_parked.ship)
-	if proxy == null:
-		return "the parked ship has no hull node to swap"
-	proxy.use_mesh(painted, true)
-	return ""
-
-
-## Returns the parked ship to the pool and restores the player's hull, the key star and the render setting.
+## Returns the parked ship to the pool and restores the player's hull and the key star.
 func clear() -> void:
 	if not is_active():
 		return
@@ -171,11 +143,10 @@ func clear() -> void:
 	_restore()
 
 
-# The player's hull, the key star and the render setting as they were before the sheet.
+# The player's hull and the key star as they were before the sheet.
 func _restore() -> void:
 	player.visible = _player_was_visible
 	key_star.global_transform = _star_transform
-	Settings.set_value(&"ship_render", _render_before)
 
 
 func _release() -> void:
@@ -189,7 +160,7 @@ func _release() -> void:
 
 
 # Parks a prop (a buoy, a ship's chunks, a capital, the station) ahead of the camera, three-quarters on or as `view` asks.
-func _show_prop(asset_id: String, camera: Camera3D, distance_m: float, light: StringName, look: StringName, view: StringName) -> String:
+func _show_prop(asset_id: String, camera: Camera3D, distance_m: float, light: StringName, view: StringName) -> String:
 	var at: Vector3 = camera.global_position - camera.global_basis.z * distance_m
 	var basis: Basis = _sheet_basis(camera, at, view)
 	if asset_id == "nav_buoy":
@@ -204,7 +175,7 @@ func _show_prop(asset_id: String, camera: Camera3D, distance_m: float, light: St
 		var group := Node3D.new()
 		group.name = "SheetChunks"
 		for entry: Dictionary in hardpoints.chunks:
-			var chunk: DebrisChunk = DebrisChunk.create(entry, asset_root.path_join(ship_asset), true)
+			var chunk: DebrisChunk = DebrisChunk.create(entry, asset_root.path_join(ship_asset))
 			chunk.position = (entry["offset"] as Vector3) * (1.0 + CHUNK_SPREAD)
 			group.add_child(chunk)
 		_prop = group
@@ -229,15 +200,7 @@ func _show_prop(asset_id: String, camera: Camera3D, distance_m: float, light: St
 	_asset_id = asset_id
 	player.visible = false
 	set_light(light)
-	return set_look(look)
-
-
-# A lean ship's one hull node, the depth proxy that draws its mesh.
-func _hull_node(ship: Ship) -> HullDepthProxy:
-	for child: Node in ship.get_children():
-		if child is HullDepthProxy:
-			return child as HullDepthProxy
-	return null
+	return ""
 
 
 # From `Main` (the parent) when a test did not wire the nodes itself.
@@ -261,8 +224,7 @@ func _cmd_sheet(args: Dictionary) -> ConsoleResult:
 	if light == &"off" or asset_id == "off":
 		clear()
 		return ConsoleResult.line("sheet cleared")
-	var look: StringName = StringName(args[&"look"])
-	var error: String = show(asset_id, float(args[&"distance_m"]), light, look, StringName(args[&"view"]))
+	var error: String = show(asset_id, float(args[&"distance_m"]), light, StringName(args[&"view"]))
 	if not error.is_empty():
 		return ConsoleResult.failure(error)
 	var livery_arg: String = String(args[&"livery"])
@@ -270,7 +232,7 @@ func _cmd_sheet(args: Dictionary) -> ConsoleResult:
 		var pair: PackedStringArray = livery_arg.split(":")
 		_parked.ship.set_livery(Livery.for_wing(pair[0] if pair[0] != "plain" else "", int(pair[1]) if pair.size() > 1 else 1,
 				MeshAssets.livery_section(asset_id)))
-	return ConsoleResult.line("sheet: %s at %.0f m, %s, %s" % [asset_id, float(args[&"distance_m"]), light, look])
+	return ConsoleResult.line("sheet: %s at %.0f m, %s" % [asset_id, float(args[&"distance_m"]), light])
 
 
 func _cmd_livery(args: Dictionary) -> ConsoleResult:

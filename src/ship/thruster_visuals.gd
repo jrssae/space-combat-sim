@@ -16,8 +16,7 @@ extends MultiMeshInstance3D
 ## - Instanced (AI ships, M4-T11, §17.10): this node is one multimesh with an instance per plume, cone and core baked into one
 ##   surface with one material; the level is the instance colour's alpha. One draw call for every plume of the ship, no node.
 ##
-## Meshes rather than splats because the intensity changes every frame; they are transparent, so they draw after the
-## splats and are hidden behind the hull by the hull depth proxy (§7.2).
+## The plumes are transparent meshes, so they draw after the opaque hulls and are hidden behind the hull by its depth (§7.2).
 ##
 ## Wiring (Main, M1-T15, does this; the node does not know the Ship class). Add the node as a child of the ship body
 ## so node-local is ship-local, then:
@@ -35,7 +34,7 @@ extends MultiMeshInstance3D
 ##
 ## Lights (M3-T22): each main pod nozzle also owns a `LightEmitter`, `EmitterCurves.NOZZLE_OFFSET_M` out along the exhaust, so
 ## the plume lights its pod and strut. Its energy follows the smoothed level (0 at idle), its colour is the plume's, and
-## it competes through the `SplatLightRig`'s `LightPicker` for a slot. RCS and retro nozzles give no light (too many). The
+## it competes through the `LightRig`'s `LightPicker` for a slot. RCS and retro nozzles give no light (too many). The
 ## emitters are in the rig's candidates only while the ship is in play: a parked or freed ship takes them out, and
 ## `_process` puts them back when it is back. `own_ship` (the player's) gives them the picker's top priority.
 ##
@@ -112,7 +111,7 @@ var _bases: Array[Transform3D] = []
 var _buffer: PackedFloat32Array = PackedFloat32Array()
 # One entry per plume: the nozzle's light, or null for retro and RCS nozzles.
 var _lights: Array[LightEmitter] = []
-var _rig: SplatLightRig = null
+var _rig: LightRig = null
 var _lights_in_rig: bool = false
 
 
@@ -490,7 +489,7 @@ func _go_dark() -> void:
 func _enter_rig() -> void:
 	if _lights_in_rig:
 		return
-	_rig = SplatLightRig.of(self)
+	_rig = LightRig.of(self)
 	if _rig == null:
 		return
 	for emitter: LightEmitter in _lights:

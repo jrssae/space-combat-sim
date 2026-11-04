@@ -39,10 +39,8 @@ ac19() {
 costs() {
     local base=(scene=held near=60 far=110 camera=chase window=10)
     one 60 --disable-vsync "${base[@]}" label=cost_everything_on
-    one 60 --disable-vsync "${base[@]}" label=cost_relight_off exec="relight off"
     one 60 --disable-vsync "${base[@]}" label=cost_flare_off exec="flare off"
     one 60 --disable-vsync "${base[@]}" label=cost_particles_off exec="set settings.particle_density 0"
-    one 60 --disable-vsync "${base[@]}" label=cost_hero_off hero=off
     one 60 --disable-vsync "${base[@]}" label=cost_lights_off exec="running_lights off"
     one 60 --disable-vsync "${base[@]}" label=cost_blur_on exec="blur on"
     one 60 --disable-vsync "${base[@]}" label=cost_everything_on_again

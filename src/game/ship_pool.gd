@@ -1,10 +1,8 @@
 class_name ShipPool
 extends Node3D
-## Pooled AI ships (architecture §15.6, D22). GDGS re-merges the splat data of every node in the scene each time a
-## `GaussianSplatNode` enters or leaves the tree, so a spawn mid-fight would hitch. Raiders and allied Starfuries are built
-## once at scenario load (`prepare`) and only switched afterwards: parked ships are hidden, not processing, not targetable
-## and not hittable. `acquire` brings one back at a universe position, `release` parks it again. The splat node count never
-## changes.
+## Pooled AI ships (architecture §15.6, D22): building a ship mid-fight (its nodes, its body, its hardpoints read) would hitch, so
+## raiders and allied Starfuries are built once at scenario load (`prepare`) and only switched afterwards: parked ships are hidden,
+## not processing, not targetable and not hittable. `acquire` brings one back at a universe position, `release` parks it again.
 ##
 ## Each type is built with its `ShipCatalog` faction (`raiders`, `earth_alliance`). Whoever acquires a ship names it;
 ## `next_name(prefix, first)` finds the next free callsign.
@@ -110,13 +108,12 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	ship.set_combat_command(CombatCommand.new())
 	ship.targeting.clear_selection()
 	combatant.cannon.gate.reset()
-	# Nothing of the last pilot shows: no plume or flash fading out, no level the console forced.
+	# Nothing of the last pilot shows: no plume or flash fading out.
 	combatant.cannon.reset_flashes()
 	if combatant.thrusters != null:
 		combatant.thrusters.reset()
 	var switcher := ship.get_node_or_null(^"LodSwitcher") as LodSwitcher
 	if switcher != null:
-		switcher.forced = LodSwitcherMath.NONE
 		switcher.far = false
 	ship.set_far_dot(false)  # drawn in full until its switcher next looks (M4-T11)
 	combatant.damageable.restore()

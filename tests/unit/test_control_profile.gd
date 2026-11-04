@@ -190,7 +190,7 @@ func test_text_is_one_list_per_action_and_one_number_per_action() -> void:
 	assert_string_contains(text, "format=1")
 	assert_string_contains(text, "[bindings]")
 	assert_string_contains(text, "fire=[\"pad:button:0\", \"key:Space\", \"mouse:1\"]")
-	assert_string_contains(text, "debug_toggle_fallback_mesh=[\"key:F4\"]")
+	assert_string_contains(text, "debug_toggle_overlay=[\"key:F3\"]")
 	assert_string_contains(text, "[deadzones]")
 	assert_string_contains(text, "main_right=0.05")
 
@@ -239,9 +239,9 @@ func test_every_action_but_the_keyboard_only_one_needs_a_pad_binding() -> void:
 	assert_eq(errors.size(), 1)
 	assert_string_contains(errors[0], "bindings.fire: needs a pad binding")
 	profile = _default.duplicate_profile()
-	profile.bindings[InputAdapter.TOGGLE_FALLBACK] = []
+	profile.bindings[InputAdapter.TOGGLE_OVERLAY] = []
 	assert_eq(profile.validate(), PackedStringArray(), "the keyboard-only debug action may be empty")
-	profile.bindings[InputAdapter.TOGGLE_FALLBACK] = ["pad:button:7"]
+	profile.bindings[InputAdapter.TOGGLE_OVERLAY] = ["pad:button:7"]
 	assert_eq(profile.validate(), PackedStringArray(), "or have a pad button")
 
 

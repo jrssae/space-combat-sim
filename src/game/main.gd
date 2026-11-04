@@ -80,7 +80,7 @@ var _scenario_entries: Array[Dictionary] = []
 @onready var waves: WaveDirector = $Combat/WaveDirector
 @onready var wings: WingDirector = $Combat/WingDirector
 @onready var hud: Hud = $Hud
-@onready var splat_status: SplatStatus = $SplatStatus
+@onready var render_status: RenderStatus = $RenderStatus
 @onready var overlay: DebugOverlay = $DebugOverlay
 
 
@@ -159,7 +159,7 @@ func _exit_tree() -> void:
 		get_tree().root.size_changed.disconnect(_update_render_scale)
 
 
-# The splat renderer cannot draw more than 65 535 tiles of 16 x 16 px; a very large window is rendered at a lower 3D scale (RenderScale).
+# A very large window's 3D is rendered at a lower scale and scaled up (RenderScale's pixel budget).
 func _update_render_scale() -> void:
 	var root: Window = get_tree().root
 	var scale: float = RenderScale.scale_for(root.size.x, root.size.y)
@@ -240,7 +240,7 @@ func snapshot() -> Dictionary:
 	if cannon != null:
 		s["weapon_mode"] = String(PulseCannonGate.mode_name(cannon.gate.mode))
 	s["timescale"] = Engine.time_scale
-	s["splat_backend"] = String(SplatStatus.active_backend())
+	s["renderer"] = String(RenderStatus.renderer())
 	s["fps"] = Engine.get_frames_per_second()
 	s["gpu"] = RenderingServer.get_video_adapter_name()
 	s["pads"] = input_source.pad_info()
@@ -293,10 +293,7 @@ func _setup_perf() -> void:
 	bench.probe = perf_probe
 	bench.standins = standins
 	add_child(bench)
-	# M4-T27: the painted meshes' lights and the render comparison's station scene.
-	var paint_lights := PaintMeshLights.new()
-	paint_lights.name = "PaintMeshLights"
-	add_child(paint_lights)
+	# M4-T30a: the look sheets' scene.
 	var look_scene := LookScene.new()
 	look_scene.name = "LookScene"
 	add_child(look_scene)
@@ -560,8 +557,6 @@ func _handle_ui(ui: UiCommand) -> void:
 		respawn()
 	if ui.toggle_overlay:
 		Settings.set_value(&"show_overlay", not bool(Settings.get_value(&"show_overlay")))
-	if ui.toggle_fallback_mesh:
-		splat_status.toggle_fallback()
 	if ui.toggle_running_lights and player_alive:
 		ship.running_lights = not ship.running_lights
 	if ui.screenshot:

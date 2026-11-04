@@ -1,7 +1,7 @@
 """``raider_fighter``: the raiders' Delta-V flying wing (docs/architecture.md section 15.11).
 
 Composition only, like ``starfury_aurora``: parts from ``parts/`` placed with the ``raider`` style, and every output
-(splats, fallback mesh, hardpoints, chunks) derived from the placed parts so they agree by construction.
+(the textured mesh, the OBJ, hardpoints, chunks) derived from the placed parts so they agree by construction.
 
 Layout (authored Godot frame, metres, before re-centring; -Z is forward, the nose at z = 0, the nacelle nozzles at
 z = 9). Proportions follow ``docs/design-references.md`` and the maintainer's reference sheet:
@@ -14,16 +14,15 @@ z = 9). Proportions follow ``docs/design-references.md`` and the maintainer's re
   in its nose (the retro) and a bell nozzle 0.9 m across at its rear (the main);
 * four spike guns 1.5 m long: two hung under the wing roots, two on the nacelle flanks.
 
-Every part belongs to a *group* (``wing_l``, ``wing_r``, ``hump``, ``nacelle_l``, ``nacelle_r``); the hull splats are
-written group by group (the manifest ``counts`` order) and each group is also written as a break-up chunk
-(``core/chunks.py``), with a textured mesh cut from the hull's (M4-T30d).
+Every part belongs to a *group* (``wing_l``, ``wing_r``, ``hump``, ``nacelle_l``, ``nacelle_r``); each group is written
+as a break-up chunk (``core/chunks.py``), with a textured mesh cut from the hull's (M4-T30d).
 
 The textured mesh (M4-T30d, the contract of ``core/textured_mesh.py``): the same hull parts on one atlas, the ``raider`` style's
 wear (chipped edges down to bare metal, streaks, grime), soot behind the nozzles and the two yellow-white engine glows of the
 reference in the main nozzles' throats; the nose intakes stay dark. No insignia. ``render_triangles`` rebuilds the round parts
 coarser with the fine hull baked into the normal map, as the Starfury's option does. The sample set is exactly mirror-symmetric in x (the right-hand groups are sampled once and
-mirrored, the centre-line hump is symmetrised); the splat centroid is moved to the origin, so GDGS's import centring is
-a no-op and the hardpoints frame equals the rendered frame. Samples buried inside another part are dropped.
+mirrored, the centre-line hump is symmetrised); the samples' centroid is moved to the origin, so the hardpoints frame equals
+the rendered frame. Samples buried inside another part are dropped.
 """
 
 from __future__ import annotations
@@ -37,23 +36,14 @@ from typing import Any
 
 import numpy as np
 
-from ..core import frames, lighting
 from ..core.chunks import ChunkCut, ChunkSource, chunk_offsets, write_chunks
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Material, Mesh, box
-from ..core.manifest import build_manifest, lod_entry, write_manifest
+from ..core.manifest import build_manifest, write_manifest
 from ..core.obj import write_obj
-from ..core.paint_mesh import PaintPart, phase_steps, write_paint_mesh
-from ..core.ply import SplatData, write_ply
-from ..core.textured_mesh import TexturedPart, write_textured_mesh
+from ..core.textured_mesh import TexturedPart, phase_steps, write_textured_mesh
 from ..core.textures import Marking
-from ..core.sampling import (
-    DEFAULT_OVERLAP,
-    DEFAULT_THICKNESS,
-    SurfaceSamples,
-    sample_mesh,
-    to_splats,
-)
+from ..core.sampling import SurfaceSamples, sample_mesh
 from ..parts import Anchor, Part, mass_centroid, total_mass
 from ..parts.hull import HumpSpec, HumpStation, canopy_panel, hump
 from ..parts.propulsion import NacelleSpec, NozzleSpec, nacelle, pilot_tags
@@ -63,8 +53,7 @@ from ..styles import Style
 from ..styles.raider import RAIDER, TEXTURED_ALBEDO
 
 ASSET_ID = "raider_fighter"
-GENERATOR_VERSION = 3  # 3: the textured mesh and chunk meshes (M4-T30d); 2: flat paint and lighting records (M3-T21)
-PLY_NAME = "raider_fighter.ply"
+GENERATOR_VERSION = 4  # 4: the textured mesh only (M4-T31); 3: the textured mesh and chunk meshes (M4-T30d)
 OBJ_NAME = "raider_fighter.obj"
 HARDPOINTS_NAME = "hardpoints.json"
 MESH_NAME = "raider_fighter.glb"
@@ -74,14 +63,7 @@ TEXEL_M = 0.01
 NORMAL_SCALE = 1
 COARSE_STREAM = "coarse"
 
-DEFAULT_SPACING_M = 0.09
-SPLAT_BUDGET = (15_000, 40_000)  # AC4, at the default spacing
-# M3-T19: the coarser levels for the LOD switcher, at 2x, 4x and 8x the spacing.
-FAR_LODS = {
-    1: ("raider_fighter_lod1.ply", 2.0, "lod1", (0.20, 0.30)),  # level: file, spacing factor, stream, share of LOD0
-    2: ("raider_fighter_lod2.ply", 4.0, "lod2", (0.04, 0.09)),
-    3: ("raider_fighter_lod3.ply", 8.0, "lod3", (0.01, 0.025)),
-}
+DEFAULT_SPACING_M = 0.09  # the surface samples' spacing: the centroid, the buried faces, the chunks' offsets
 CHASE_ANCHOR = (0.0, 3.5, 14.0)  # authored frame: behind and above, frames the 17 m span at 70 degrees
 EYE = (0.0, 0.95, 1.5)  # the pilot's eye under the canopy panel (authored frame); looks down -Z
 JSON_DIGITS = 5
@@ -146,7 +128,7 @@ DEFAULT_SPEC = RaiderSpec()
 
 @dataclass
 class Placed:
-    """A placed part with its surface samples (``None`` for meshes that are not splatted)."""
+    """A placed part with its surface samples (``None`` for meshes that are not sampled)."""
 
     part: Part
     samples: SurfaceSamples | None
@@ -197,10 +179,10 @@ def build_parts(
     spec: RaiderSpec, style: Style, ctx: BuildContext, spacing: float, stream_suffix: tuple[str, ...] = ()
 ) -> list[Placed]:
     """Every part in the authored frame, sampled, mirrored to the left side where it has one. ``stream_suffix``
-    keeps another LOD's random draws apart from LOD0's."""
+    keeps another build's random draws (the coarse one) apart from the fine one's."""
 
     def sample(mesh: Mesh, stream: str) -> SurfaceSamples:
-        return sample_mesh(mesh, spacing, ctx.rng("splats", stream, *stream_suffix))
+        return sample_mesh(mesh, spacing, ctx.rng("surface", stream, *stream_suffix))
 
     wing_spec, hump_spec = spec.wing, spec.hump
     nac_origin = np.array([spec.nacelle_x, spec.nacelle_y, spec.nacelle_z])
@@ -287,27 +269,13 @@ def build_parts(
 
 # --- centring ------------------------------------------------------------------------------------------
 def centre(placed: list[Placed]) -> tuple[list[Placed], np.ndarray]:
-    """Moves the splat centroid to the origin. x is zero by symmetry; the offset (Godot frame) is the authored
+    """Moves the samples' centroid to the origin. x is zero by symmetry; the offset (Godot frame) is the authored
     position of the new origin (``manifest.centroid_offset``)."""
     sampled = [p.samples for p in placed if p.samples is not None]
     total = sum(len(s) for s in sampled)
     mean = sum(s.positions.sum(axis=0) for s in sampled) / total
     offset = np.array([0.0, float(mean[1]), float(mean[2])])
     return [p.translated(-offset) for p in placed], offset
-
-
-# --- colour ----------------------------------------------------------------------------------------------
-def _phase(name: str, style: Style) -> tuple[float, float, float]:
-    h = sum((i + 1) * ord(c) for i, c in enumerate(name))
-    return tuple(((h * k) % 97) / 97.0 * style.panel_size_m for k in (7, 11, 13))
-
-
-def colour_samples(placed: Placed, style: Style) -> np.ndarray:
-    """Paint only (paint, panel lines, weathering): the scene's lights do the shading in the game."""
-    s = placed.samples
-    return style.shade_panels(
-        s.albedo(), s.positions, s.normals, s.material_flag("paneled") > 0.5, _phase(placed.part.name, style)
-    )
 
 
 # --- hardpoints ------------------------------------------------------------------------------------------
@@ -430,7 +398,7 @@ def _cold_intakes(mesh: Mesh, main_z: float) -> Mesh:
 
 
 def _textured_paint(mesh: Mesh) -> Mesh:
-    """The mesh with the textured mesh's darker paint (``TEXTURED_ALBEDO``) in place of the splats'."""
+    """The mesh with the textured mesh's darker paint (``TEXTURED_ALBEDO``) in place of the parts' own (the M3 hull's)."""
     materials = tuple(dataclasses.replace(m, albedo=TEXTURED_ALBEDO[m.name]) if m.name in TEXTURED_ALBEDO else m for m in mesh.materials)
     return Mesh(mesh.vertices, mesh.faces, mesh.face_material, materials, mesh.face_chart, mesh.face_uv)
 
@@ -480,15 +448,13 @@ def coarse_placed(spec: RaiderSpec, style: Style, ctx: BuildContext, triangles: 
 def build(ctx: BuildContext) -> AssetOutputs:
     """Generate the ship into ``ctx.out_dir``.
 
-    Options: ``spacing`` (m, default 0.09; the CLI's ``--spacing``), ``overlap`` (sigma / spacing, default 1.0),
-    ``thickness`` (normal sigma / spacing, default 0.08); for the textured mesh (M4-T30d) ``render_triangles`` (0, the default, draws
-    the full hull; otherwise the round parts are rebuilt for about this many triangles), ``atlas_px``, ``texel_m``, ``occlusion``.
+    Options: ``spacing`` (m, default 0.09), the surface samples' spacing; for the textured mesh (M4-T30d) ``render_triangles`` (0, the
+    default, draws the full hull; otherwise the round parts are rebuilt for about this many triangles), ``atlas_px``, ``texel_m``,
+    ``occlusion``.
     """
     spacing = float(ctx.option("spacing", DEFAULT_SPACING_M))
-    overlap = float(ctx.option("overlap", DEFAULT_OVERLAP))
-    thickness = float(ctx.option("thickness", DEFAULT_THICKNESS))
-    if min(spacing, overlap, thickness) <= 0.0:
-        raise ValueError("spacing, overlap and thickness must be positive")
+    if spacing <= 0.0:
+        raise ValueError("spacing must be positive")
     spec, style = DEFAULT_SPEC, RAIDER
 
     out_dir = ctx.out_dir
@@ -497,38 +463,16 @@ def build(ctx: BuildContext) -> AssetOutputs:
     placed, offset = centre(build_parts(spec, style, ctx, spacing))
 
     chunk_sources: list[ChunkSource] = []
-    counts: dict[str, int] = {}
     for group in CHUNK_ORDER:
         members = [p for p in placed if p.part.group == group]
-        sampled = [p for p in members if p.samples is not None]
-        splats = SplatData.concatenate(
-            [to_splats(p.samples, colour_samples(p, style), p.spacing, overlap, thickness) for p in sampled]
-        )
+        points = np.concatenate([p.samples.positions for p in members if p.samples is not None])
         mesh = Mesh.concatenate(p.part.mesh for p in members if p.hull)
-        chunk_sources.append(ChunkSource(group, splats, mesh))
-        counts[group] = len(splats)
+        chunk_sources.append(ChunkSource(group, points, mesh))
 
-    authored = SplatData.concatenate([c.splats for c in chunk_sources])
-    xyz32 = authored.xyz.astype(np.float32)
-    aabb_min, aabb_max = xyz32.min(axis=0), xyz32.max(axis=0)
-    written = SplatData(
-        xyz=frames.godot_to_3dgs_positions(authored.xyz),
-        rgb=authored.rgb,
-        alpha=authored.alpha,
-        scale=authored.scale,
-        rot=frames.godot_to_3dgs_quats(authored.rot),
-        normals=frames.flip_xy(authored.normals),
-    )
-    comments = (f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}", "frame: 3dgs (Rz180 of godot)")
-    light_names = {0: lighting.lod_file_name(ASSET_ID, 0)}
-    files: list[Path] = [write_ply(out_dir / PLY_NAME, written, comments), lighting.write_lighting(out_dir / light_names[0], written)]
+    comments = (f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}",)
     hull_mesh = Mesh.concatenate(p.part.mesh for p in placed if p.hull)
-    files += write_obj(out_dir / OBJ_NAME, hull_mesh, ASSET_ID, comments[:1])
-    # The painted mesh (M4-T27): the hull parts the OBJ holds, painted on the GPU like the splats.
-    paint_path, paint_entry = write_paint_mesh(
-        out_dir, ASSET_ID, [PaintPart(p.part.mesh, phase_steps(p.part.name, False)) for p in placed if p.hull], style
-    )
-    files.append(paint_path)
+    aabb_min, aabb_max = hull_mesh.bounds()
+    files: list[Path] = write_obj(out_dir / OBJ_NAME, hull_mesh, ASSET_ID, comments)
 
     chunk_files, chunk_entries = write_chunks(out_dir, ASSET_ID, chunk_sources, comments, with_meshes=True)
     files += chunk_files
@@ -549,54 +493,24 @@ def build(ctx: BuildContext) -> AssetOutputs:
         mesh_entry["fine_triangles"] = int(hull_mesh.face_count)
     files += textured_paths
 
-    # LOD1-LOD3: whole-ship files for distant ships, resampled from their own streams.
-    far: dict[int, int] = {}
-    for level, (name, factor, stream, _share) in FAR_LODS.items():
-        lod_placed, _ = centre(build_parts(spec, style, ctx, factor * spacing, (stream,)))
-        lod = SplatData.concatenate(
-            [to_splats(p.samples, colour_samples(p, style), p.spacing, overlap, thickness)
-             for p in lod_placed if p.samples is not None]
-        )
-        far[level] = len(lod)
-        lod_written = SplatData(
-            xyz=frames.godot_to_3dgs_positions(lod.xyz), rgb=lod.rgb, alpha=lod.alpha, scale=lod.scale,
-            rot=frames.godot_to_3dgs_quats(lod.rot), normals=frames.flip_xy(lod.normals),
-        )
-        files.append(write_ply(out_dir / name, lod_written, comments + (f"lod {level}",)))
-        light_names[level] = lighting.lod_file_name(ASSET_ID, level)
-        files.append(lighting.write_lighting(out_dir / light_names[level], lod_written))
-
     hp = hardpoints(placed, spec, chunk_entries, offset)
     hp_path = out_dir / HARDPOINTS_NAME
     hp_path.write_text(json.dumps(hp, indent=2) + "\n", encoding="utf-8", newline="\n")
     files.append(hp_path)
 
-    total = len(authored)
-    warnings: list[str] = []
-    if abs(spacing - DEFAULT_SPACING_M) < 1e-12 and not SPLAT_BUDGET[0] <= total <= SPLAT_BUDGET[1]:
-        warnings.append(f"{total} splats is outside the AC4 budget {SPLAT_BUDGET} at the default spacing")
-    if abs(spacing - DEFAULT_SPACING_M) < 1e-12:
-        for level, (_name, _factor, _stream, bounds) in FAR_LODS.items():
-            if not bounds[0] <= far[level] / total <= bounds[1]:
-                warnings.append(f"LOD{level} has {far[level] / total:.1%} of LOD0's splats, outside {bounds}")
     manifest = build_manifest(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,
         seed=ctx.seed,
-        lods=[lod_entry(0, PLY_NAME, total, spacing, light_names[0])]
-        + [lod_entry(level, FAR_LODS[level][0], far[level], FAR_LODS[level][1] * spacing, light_names[level]) for level in FAR_LODS],
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,
-        files={"fallback_mesh": OBJ_NAME, "paint_mesh": paint_entry["file"], "mesh": mesh_entry["file"], "hardpoints": HARDPOINTS_NAME},
+        files={"obj": OBJ_NAME, "mesh": mesh_entry["file"], "hardpoints": HARDPOINTS_NAME},
         extra={
-            "counts": counts,
             "chunks": [c["name"] for c in chunk_entries],
-            "paint_mesh": paint_entry,
             "mesh": mesh_entry,
-            "sampling": {"spacing_m": spacing, "overlap": overlap, "thickness": thickness},
             "dimensions_m": {"length": hp["length_m"], "span": hp["span_m"], "height": hp["height_m"]},
         },
     )
     files.append(write_manifest(out_dir, manifest))
-    return AssetOutputs(ASSET_ID, out_dir, manifest, tuple(files), tuple(warnings))
+    return AssetOutputs(ASSET_ID, out_dir, manifest, tuple(files), ())

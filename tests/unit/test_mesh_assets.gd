@@ -1,7 +1,7 @@
 extends GutTest
 ## The textured meshes (M4-T30a, architecture §17.18): the Starfury's glb imported with a material per surface carrying the four
 ## maps (since M4-T30b the livery shader and the hull glass shader), the glass see-through, the maps imported as 3D wants them (VRAM compressed with mipmaps, the normal map flagged, the
-## albedo and emissive packed for colour and the others for data), and the painted path still there for an asset without textures.
+## albedo and emissive packed for colour and the others for data), every hull textured, and the manifest read guarded.
 
 const STARFURY: String = "starfury_aurora"
 const RAIDER: String = "raider_fighter"
@@ -9,7 +9,7 @@ const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tes
 
 
 func _manifest(asset_id: String) -> Dictionary:
-	return SplatLod.read_manifest(asset_id)
+	return MeshAssets.read_manifest(asset_id)
 
 
 func _dir(asset_id: String) -> String:
@@ -58,7 +58,6 @@ func test_the_starfury_gives_two_surfaces_with_a_textured_material_each() -> voi
 	var patterns: Dictionary = entry["livery"]["patterns"]
 	assert_eq(int(spans[patterns.keys().find("bands")].y), (patterns["bands"] as Array).size(), "the table in the section's order")
 	assert_same(MeshAssets.for_asset(STARFURY), mesh, "loaded once and shared, so every copy instances")
-	assert_same(PaintMeshes.for_asset(STARFURY), mesh, "the old name gives the same mesh")
 
 
 func test_the_maps_import_compressed_with_mipmaps_the_normal_flagged() -> void:
@@ -88,18 +87,12 @@ func test_the_maps_import_compressed_with_mipmaps_the_normal_flagged() -> void:
 		assert_eq(int(sidecar.get_value("params", "compress/channel_pack", -1)), int(expected_pack[key]), "%s: colour or data" % key)
 
 
-func test_a_painted_entry_keeps_the_paint_shader() -> void:
-	# Every hull is textured from M4-T30d; T27's painted mesh is still loaded by its own entry (the sheet's painted look).
-	assert_true(MeshAssets.is_textured(RAIDER), "the raider is textured from M4-T30d")
-	var entry: Dictionary = SplatLod.read_manifest(RAIDER).get("paint_mesh", {})
-	var mesh: Mesh = MeshAssets.load_entry(_dir(RAIDER), entry) if not entry.is_empty() else null
-	assert_not_null(mesh, GEN_ASSETS_HINT)
-	if mesh == null:
-		return
-	var material := mesh.surface_get_material(0) as ShaderMaterial
-	assert_not_null(material)
-	assert_eq(material.shader, MeshAssets.OPAQUE_SHADER)
-	assert_true(MeshAssets.materials.has(material), "kept for the lights")
+func test_every_hull_is_textured_and_a_missing_asset_is_nothing() -> void:
+	for asset: String in [STARFURY, RAIDER, "nav_buoy"]:
+		assert_true(MeshAssets.is_textured(asset), "%s is textured (%s)" % [asset, GEN_ASSETS_HINT])
+	assert_null(MeshAssets.for_asset("no_such_asset"))
+	assert_eq(MeshAssets.read_manifest("no_such_asset"), {})
+	assert_eq(MeshAssets.read_manifest("nothing_here", "res://no/such/root"), {})
 
 
 func test_a_textured_material_without_files_is_still_a_material() -> void:

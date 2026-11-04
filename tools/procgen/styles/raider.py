@@ -27,7 +27,7 @@ def _lin(hex_rgb: int) -> tuple[float, float, float]:
     return (r, g, b)
 
 
-# The textured mesh's paint (M4-T30d): lit by the renderer's PBR and ambient, the splats' brighter hull reads near white, so the maps
+# The textured mesh's paint (M4-T30d): lit by the renderer's PBR and ambient, the M3 hull's brighter paint reads near white, so the maps
 # take a darker worn grey-brown (sRGB about #6B635A, panels #4A443E, dark #2C2724, ochre #8C6A32), in the Starfury's range.
 TEXTURED_ALBEDO: dict[str, tuple[float, float, float]] = {
     "rd_hull": _lin(0x6B635A),

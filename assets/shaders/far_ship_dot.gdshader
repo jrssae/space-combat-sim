@@ -1,8 +1,8 @@
 // A far ship as a point (architecture §17.10, M4-T11): one instance of the world's `FarDots` multimesh, facing the camera. Its
 // footprint is the hull's real angular size, never under `min_radius_px` (1 px); under that it keeps the floor and dims by the
 // inverse square, as a running light does (§7.3), so a far hull fades instead of staying a fixed blob. The instance's custom
-// data holds its paint (rgb, linear) and its hull radius in metres (a). Alpha-blended like the splats it replaces; it keeps
-// the depth of its centre, so nearer hulls' depth proxies hide it.
+// data holds its paint (rgb, linear) and its hull radius in metres (a). Alpha-blended; it keeps the depth of its centre, so
+// nearer hulls hide it.
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled, ambient_light_disabled;
 

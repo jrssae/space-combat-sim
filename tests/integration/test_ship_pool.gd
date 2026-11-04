@@ -1,6 +1,6 @@
 extends GutTest
-## ShipPool (M2-T05, AC6, architecture §15.6): raiders are built once and then only switched. The number of
-## `GaussianSplatNode`s in the tree never changes; parked ships are hidden, not processing, not targetable and not
+## ShipPool (M2-T05, AC6, architecture §15.6): raiders are built once and then only switched. No pooled ship enters or leaves
+## the tree; parked ships are hidden, not processing, not targetable and not
 ## hittable; `acquire` places a ship within 1 mm of its `UniversePos` at the requested velocity; an empty pool returns
 ## null with one warning; and the `raiders` console surface works.
 
@@ -35,14 +35,14 @@ func before_each() -> void:
 	assert_eq(pool.prepare(ShipPool.DEFAULT_TYPE, POOL_SIZE), POOL_SIZE)
 
 
-func _splat_nodes() -> int:
-	return _count_splat_nodes(get_tree().root)
+func _pooled_nodes() -> int:
+	return _count_pooled_nodes(get_tree().root)
 
 
-func _count_splat_nodes(node: Node) -> int:
-	var n: int = 1 if node is GaussianSplatNode else 0
+func _count_pooled_nodes(node: Node) -> int:
+	var n: int = 1 if _pooled(node) else 0
 	for child: Node in node.get_children():
-		n += _count_splat_nodes(child)
+		n += _count_pooled_nodes(child)
 	return n
 
 
@@ -134,9 +134,9 @@ func test_a_reused_ship_shows_nothing_of_its_last_pilot() -> void:
 	flash.trigger()
 	flash.advance(0.01)
 	assert_true(flash.is_active(), "a flash at the gun")
-	assert_true(_console('lod "RAIDER 1" 3').ok)
 	var switcher := raider.ship.get_node("LodSwitcher") as LodSwitcher
-	assert_eq(switcher.forced, 3, "the console forced a level")
+	switcher.far = true
+	raider.ship.set_far_dot(true)
 	for i: int in POOL_SIZE - 1:  # the others in use, so the next acquire takes this one again
 		pool.acquire("RAIDER %d" % (i + 2), UniversePos.new(float(i + 1) * 50.0, 0.0, -100.0))
 	pool.release(raider)
@@ -151,7 +151,8 @@ func test_a_reused_ship_shows_nothing_of_its_last_pilot() -> void:
 	assert_false(flash.is_active(), "no rest of the last flash")
 	assert_false(flash.visible)
 	assert_eq(flash.light_emitter().energy, 0.0)
-	assert_eq(switcher.forced, LodSwitcherMath.NONE, "the size on screen picks the level again")
+	assert_false(switcher.far, "drawn in full until its switcher next looks")
+	assert_false(again.ship.is_far_dot())
 
 
 func test_release_parks_the_ship_again() -> void:
@@ -173,17 +174,17 @@ func test_an_empty_pool_returns_null_with_one_warning() -> void:
 	assert_push_warning_count(1)
 
 
-func test_splat_nodes_never_enter_or_leave_the_tree() -> void:
-	var before: int = _splat_nodes()
+func test_pooled_nodes_never_enter_or_leave_the_tree() -> void:
+	var before: int = _pooled_nodes()
 	assert_gt(before, 0)
 	for cycle: int in 20:
 		var raiders: Array[Combatant] = []
 		for i: int in POOL_SIZE:
 			raiders.append(pool.acquire("R%d" % i, UniversePos.new(float(i) * 60.0, 0.0, -200.0 - float(cycle))))
-		assert_eq(_splat_nodes(), before, "cycle %d: all acquired" % cycle)
+		assert_eq(_pooled_nodes(), before, "cycle %d: all acquired" % cycle)
 		for raider: Combatant in raiders:
 			pool.release(raider)
-		assert_eq(_splat_nodes(), before, "cycle %d: all released" % cycle)
+		assert_eq(_pooled_nodes(), before, "cycle %d: all released" % cycle)
 
 
 func test_a_rebase_moves_parked_and_active_ships_alike() -> void:
@@ -328,3 +329,8 @@ func test_patrol_spawn_waypoints_are_around_the_spawn_point() -> void:
 	var spawn_at: Vector3 = pool.alive()[0].ship.global_position
 	for waypoint: UniversePos in brain.waypoints:
 		assert_lt(world.universe_to_local(waypoint).distance_to(spawn_at), 1000.0)
+
+
+# A node the pools build once at load and only switch afterwards (D22): a pooled ship or a pooled break-up chunk.
+static func _pooled(node: Node) -> bool:
+	return (node is DebrisChunk and not (node as DebrisChunk).one_shot) or (node is Ship and node.get_parent() is ShipPool)
