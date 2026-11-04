@@ -7,13 +7,18 @@ extends Node
 ##
 ## Arguments after `--`: asset=<id> out=<dir> distances=<m,m,...> looks=<splat,painted,textured> lights=<lit,dark>
 ## settle=<frames> tile=<width> scale3d=<1080p|factor>
+##
+## With `liveries=<wing:number,...>` (M4-T30b, checkpoint 1c) the columns are the textured mesh in each wing's livery instead of the
+## looks, plus one column of earlier shots read from disk (`compare=<path pattern with %d for metres and %s for lit or dark>`,
+## headed `compare_label`), and the cockpit view is taken lit and dark; `prefix` names the shots and `sheet` the sheet's path.
 
 const DEFAULT_LOOKS: Array[String] = ["splat", "painted", "textured"]
 const LABEL_H: int = 28
 
 var main: Main
 var options: Dictionary = {"asset": "starfury_aurora", "out": "/tmp", "distances": "8,30,150,600", "looks": "splat,painted,textured",
-		"lights": "lit,dark", "settle": "40", "tile": "960", "scale3d": "1080p"}
+		"lights": "lit,dark", "settle": "40", "tile": "960", "scale3d": "1080p", "liveries": "", "compare": "", "compare_label": "T30A",
+		"prefix": "m4_t30a", "sheet": ""}
 var shots: Array[Dictionary] = []  # queued: {distance, light, look} or {cockpit: true}
 var _index: int = -1
 var _frame: int = 0
@@ -44,11 +49,20 @@ func _start() -> void:
 	if hud is CanvasLayer:
 		(hud as CanvasLayer).visible = false  # the pictures are of the ship, not the HUD
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
+	var liveries: String = String(options["liveries"])
 	for light: String in String(options["lights"]).split(","):
 		for distance: String in String(options["distances"]).split(","):
-			for look: String in String(options["looks"]).split(","):
-				shots.append({"distance": float(distance), "light": light, "look": look})
-	shots.append({"cockpit": true})
+			if liveries.is_empty():
+				for look: String in String(options["looks"]).split(","):
+					shots.append({"distance": float(distance), "light": light, "look": look})
+			else:
+				for livery: String in liveries.split(","):
+					shots.append({"distance": float(distance), "light": light, "look": "textured", "livery": livery})
+	if liveries.is_empty():
+		shots.append({"cockpit": true})
+	else:
+		for light: String in String(options["lights"]).split(","):
+			shots.append({"cockpit": true, "light": light})
 	get_tree().process_frame.connect(_on_frame)
 	_next()
 
@@ -61,7 +75,9 @@ func _run(line: String) -> void:
 
 func _key(shot: Dictionary) -> String:
 	if shot.has("cockpit"):
-		return "cockpit"
+		return "cockpit_%s" % shot["light"] if shot.has("light") else "cockpit"
+	if shot.has("livery"):
+		return "%s_%dm_%s" % [String(shot["livery"]).split(":")[0], int(shot["distance"]), shot["light"]]
 	return "%s_%dm_%s" % [shot["look"], int(shot["distance"]), shot["light"]]
 
 
@@ -76,8 +92,11 @@ func _next() -> void:
 		_run("sheet off")
 		_run("set settings.ship_render mesh")
 		_run("camera cockpit")
+		var look_scene := main.get_node_or_null(^"LookScene") as LookScene
+		if shot.has("light") and look_scene != null and look_scene.key_star != null:
+			look_scene.set_light(StringName(shot["light"]))
 	else:
-		_run("sheet %s %d %s %s" % [options["asset"], int(shot["distance"]), shot["light"], shot["look"]])
+		_run("sheet %s %d %s %s %s" % [options["asset"], int(shot["distance"]), shot["light"], shot["look"], shot.get("livery", "")])
 
 
 func _on_frame() -> void:
@@ -94,7 +113,7 @@ func _on_frame() -> void:
 	var vram: float = Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0
 	_gpu[key] = gpu
 	_vram[key] = vram
-	var path: String = "%s/m4_t30a_%s_%s.png" % [options["out"], options["asset"], key]
+	var path: String = "%s/%s_%s_%s.png" % [options["out"], options["prefix"], options["asset"], key]
 	image.save_png(path)
 	print("[sheet] %s: gpu ms %.2f, video memory %.0f MB, %dx%d -> %s" % [key, gpu, vram, image.get_width(), image.get_height(), path])
 	var tile_w: int = int(options["tile"])
@@ -114,9 +133,13 @@ func _hold_3d_scale() -> void:
 		root.scaling_3d_scale = scale
 
 
-# One sheet: a column per look, a row per light and distance, the cockpit view last; each tile labelled with its GPU time.
+# One sheet: a column per look (or per livery, plus the earlier shots), a row per light and distance, the cockpit view last; each
+# tile labelled with its GPU time.
 func _finish() -> void:
 	var looks: PackedStringArray = String(options["looks"]).split(",")
+	if not String(options["liveries"]).is_empty():
+		_finish_liveries()
+		return
 	var lights: PackedStringArray = String(options["lights"]).split(",")
 	var distances: PackedStringArray = String(options["distances"]).split(",")
 	var tile_w: int = int(options["tile"])
@@ -148,6 +171,61 @@ func _finish() -> void:
 		sheet.blit_rect(_tiles["cockpit"], Rect2i(0, 0, tile_w, tile_h), Vector2i(x, y))
 		_label(sheet, x + 8, y + tile_h + 6, "COCKPIT VIEW GPU %.2f MS" % _gpu["cockpit"])
 	var path: String = "%s/m4_t30_%s_sheet.png" % [options["out"], options["asset"]]
+	sheet.save_png(path)
+	print("[sheet] sheet %dx%d -> %s" % [sheet.get_width(), sheet.get_height(), path])
+	get_tree().quit(0)
+
+
+# The livery sheet (checkpoint 1c): a column per wing, then the earlier shots from disk; the cockpit lit and dark last.
+func _finish_liveries() -> void:
+	var wings: Array[String] = []
+	for livery: String in String(options["liveries"]).split(","):
+		wings.append(livery.split(":")[0])
+	var compare: String = String(options["compare"])
+	var columns: Array[String] = wings.duplicate()
+	if not compare.is_empty():
+		columns.append("compare")
+	var lights: PackedStringArray = String(options["lights"]).split(",")
+	var distances: PackedStringArray = String(options["distances"]).split(",")
+	var tile_w: int = int(options["tile"])
+	var tile_h: int = (_tiles.values()[0] as Image).get_height()
+	var rows: int = lights.size() * distances.size() + 1
+	var sheet: Image = Image.create(columns.size() * tile_w, rows * (tile_h + LABEL_H) + LABEL_H, false, Image.FORMAT_RGB8)
+	sheet.fill(Color(0.08, 0.08, 0.09))
+	for c: int in columns.size():
+		_label(sheet, c * tile_w + 8, 6, String(options["compare_label"]) if columns[c] == "compare" else columns[c].to_upper())
+	var row: int = 0
+	for light: String in lights:
+		for distance: String in distances:
+			var y: int = LABEL_H + row * (tile_h + LABEL_H)
+			for c: int in columns.size():
+				var x: int = c * tile_w
+				var tile: Image = null
+				var label: String = "%s M %s" % [distance, light.to_upper()]
+				if columns[c] == "compare":
+					var path: String = compare % [int(distance), light]
+					tile = Image.load_from_file(path) if FileAccess.file_exists(path) else null
+					if tile != null:
+						tile.resize(tile_w, tile_h, Image.INTERPOLATE_LANCZOS)
+				else:
+					var key: String = "%s_%dm_%s" % [columns[c], int(distance), light]
+					tile = _tiles.get(key)
+					label += " GPU %.2f MS" % float(_gpu.get(key, 0.0))
+				if tile != null:
+					sheet.blit_rect(tile, Rect2i(0, 0, tile_w, tile_h), Vector2i(x, y))
+				_label(sheet, x + 8, y + tile_h + 6, label)
+			row += 1
+	var y0: int = LABEL_H + row * (tile_h + LABEL_H)
+	var k: int = 0
+	for light: String in lights:
+		var key: String = "cockpit_%s" % light
+		if _tiles.has(key):
+			sheet.blit_rect(_tiles[key], Rect2i(0, 0, tile_w, tile_h), Vector2i(k * tile_w, y0))
+			_label(sheet, k * tile_w + 8, y0 + tile_h + 6, "COCKPIT %s GPU %.2f MS" % [light.to_upper(), _gpu[key]])
+		k += 1
+	var path: String = String(options["sheet"])
+	if path.is_empty():
+		path = "%s/%s_%s_sheet.png" % [options["out"], options["prefix"], options["asset"]]
 	sheet.save_png(path)
 	print("[sheet] sheet %dx%d -> %s" % [sheet.get_width(), sheet.get_height(), path])
 	get_tree().quit(0)

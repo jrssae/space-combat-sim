@@ -52,11 +52,12 @@ LOD0_COUNTS = {
     "claw_ur": 6692, "claw_lr": 6692, "claw_ul": 6692, "claw_ll": 6692,
 }  # fmt: skip
 LOD0_RECORDS = {
+    # M4-T30b (Q36, Q37): the colours follow the style's blue-grey hull and dark neutral glass; positions and shapes are T29's.
     0: [-0.052700337022542953, 0.33757004141807556, -4.241723537445068, -0.0, 0.612571656703949, -0.7904150485992432,
-        -1.729914903640747, -1.5597593784332275, -1.676741361618042, -2.840289831161499, -3.057607650756836,
+        -1.7370047569274902, -1.7352323532104492, -1.7334598302841187, -2.840289831161499, -3.057607650756836,
         -3.057607650756836, -5.583336353302002, 0.3237166702747345, -0.9461540579795837, 0.0, 0.0],
     121864: [-2.5370795726776123, -1.4283372163772583, 0.449472576379776, -0.4129202961921692, 0.910767138004303, 0.0,
-             0.45862656831741333, 0.45862656831741333, 0.5701805949211121, 3.891820192337036, -3.057607650756836,
+             -1.0228108167648315, -0.8859712481498718, -0.6383212804794312, 3.891820192337036, -3.057607650756836,
              -3.057607650756836, -5.583336353302002, 0.38310563564300537, -0.5943316221237183, 0.38310563564300537,
              0.5943316221237183],
     243727: [4.949801921844482, 1.0193599462509155, 2.168424606323242, -0.0, -1.0, 0.0, -1.6661065816879272,
@@ -190,6 +191,9 @@ class StarfuryAuroraTests(unittest.TestCase):
                     "starfury_aurora_orm.png.import",
                     "starfury_aurora_emissive.png",
                     "starfury_aurora_emissive.png.import",
+                    # M4-T30b: the livery's digit atlas
+                    "starfury_aurora_digits.png",
+                    "starfury_aurora_digits.png.import",
                 ]
                 + chunk_files
             ),
@@ -302,16 +306,14 @@ class StarfuryAuroraTests(unittest.TestCase):
         self.assertGreater(float(agreement.min()), 0.999)
         np.testing.assert_allclose(np.linalg.norm(s.rot, axis=1), 1.0, atol=1e-5)
 
-    def test_opacity_is_opaque_except_for_the_green_canopy_glass(self) -> None:
+    def test_opacity_is_opaque_except_for_the_dark_canopy_glass(self) -> None:
         alpha = self.splats.alpha
         glass = alpha < 0.5
         self.assertTrue(np.all(alpha[~glass] > 0.979))
         self.assertTrue(np.all(alpha[glass] < 0.07))  # 1 - 0.7^(1 / (2 pi k^2)) is 0.056 at k = 1
         self.assertTrue(0.002 < glass.mean() < 0.03, glass.mean())
         rgb = self.splats.rgb[glass]
-        self.assertTrue(
-            np.all((rgb[:, 1] > rgb[:, 0]) & (rgb[:, 1] > rgb[:, 2]))
-        )  # green tint
+        self.assertLess(float(rgb.max()), 0.05)  # dark and neutral since Q36 (the red is the cabin's glow, not the glass)
         # The panes are the window at the nose: the fuselage's slice, ahead of its rear edge.
         a, b = self.slices["fuselage"]
         self.assertFalse(glass[:a].any() or glass[b:].any())
@@ -344,10 +346,10 @@ class StarfuryAuroraTests(unittest.TestCase):
             np.all((span > 1.5) & (span < SPEC.pod_center[0] - SPEC.pod.radius))
         )  # between hull and pods
         chroma = (rgb.max(axis=1) - rgb.min(axis=1)) / np.maximum(rgb.max(axis=1), 1e-9)
-        grey = (chroma < 0.15) & (rgb.max(axis=1) > 0.12)
+        grey = (chroma < 0.45) & (rgb[:, 2] >= rgb[:, 0]) & (rgb.max(axis=1) > 0.06)
         self.assertGreater(
             float(grey.mean()), 0.3
-        )  # most of the hull is neutral grey
+        )  # most of the hull is the blue-grey of Q37
 
     # --- hardpoints -------------------------------------------------------------------------
     def test_hardpoints_schema(self) -> None:
@@ -738,9 +740,9 @@ class StarfuryAuroraTests(unittest.TestCase):
             self.assertLess(screen["center"][2], eye[2], f"{name}: ahead of the pilot")
 
     def test_a_new_interior_leaves_the_hull_alone(self) -> None:
-        # No new generator version for the hull's splats (T29 changes no splat; M4-T30a's version 6 adds the textured mesh beside them):
-        # the pinned LOD0 records below still hold, and the hull's OBJ has none of the interior's materials.
-        self.assertEqual(ship.GENERATOR_VERSION, 6)
+        # T29 changed no splat; M4-T30a's version 6 added the textured mesh and M4-T30b's 7 the liveries and the new colours (the
+        # pinned LOD0 records' colours moved with them). The hull's OBJ has none of the interior's materials.
+        self.assertEqual(ship.GENERATOR_VERSION, 7)
         hull = read_obj(self.dir_a / ship.OBJ_NAME)
         self.assertFalse([m for m in hull.materials if "ef_cockpit" in m])
         self.assertEqual(self.manifest["counts"], LOD0_COUNTS)

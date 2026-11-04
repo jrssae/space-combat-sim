@@ -562,7 +562,8 @@ class StyleTests(unittest.TestCase):
         r, gg, b = S.material("stripe").albedo
         self.assertTrue(r > gg > b)
         hull_rgb = S.material("hull").albedo
-        self.assertLess(max(hull_rgb) - min(hull_rgb), 0.05)  # grey
+        self.assertLess(max(hull_rgb) - min(hull_rgb), 0.12)  # blue-grey (Q37)
+        self.assertGreater(hull_rgb[2], hull_rgb[0])
         self.assertGreater(S.material("canopy_glass").transmittance, 0.0)
         self.assertTrue(S.material("hull").paneled)
         self.assertFalse(S.material("canopy_glass").paneled)

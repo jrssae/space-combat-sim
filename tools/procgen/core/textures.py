@@ -1,15 +1,17 @@
 """The texture maps of a hull (M4-T30a): colour, normal, occlusion/roughness/metal and emissive, baked from the atlas buffers.
 
 Every map is a function of what ``core/raster.py`` knows per texel (world position, normal, part, material, distance to a sharp
-edge), so the paint never depends on how a chart was unwrapped. The colour is ``Style.shade_panels`` per texel (the paint the
-splats and the painted mesh had), then the generator's markings (bands, stencilled text from a stroke font, decals, soot) and
-seeded wear (chipped edges, streaks trailing aft from the panel lines, grime). The normal map carries the panel grooves and
-hatch bevels as a height field; occlusion is a disk-to-point estimate against surface samples of the whole hull.
+edge), so the paint never depends on how a chart was unwrapped. The colour is the part's plating (rows of panels of varied length
+with staggered seams, sized per part, M4-T30b), then the generator's markings (bands, stencilled text from a stroke font, decals,
+soot) and seeded weathering (worn edges, streaks trailing aft from the seams, smudges and grime). The normal map carries the seams'
+grooves, the hatch bevels and the rivet rows as a height field at twice the atlas's resolution, plus, for a coarse render mesh, the
+fine mesh's own shape; occlusion is a disk-to-point estimate against surface samples of the whole hull.
 """
 
 from __future__ import annotations
 
 import math
+import zlib
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -27,6 +29,12 @@ OCCLUSION_STEP = 4  # texels between occlusion queries; the result is spread ove
 OCCLUSION_RADIUS_M = 0.7
 OCCLUSION_SAMPLE_M = 0.12
 GLASS_ALBEDO_LIFT = 1.0
+NORMAL_SCALE = 2  # the normal map's resolution over the atlas's (Q34: the fine detail)
+RIVET_PITCH_M = 0.075
+RIVET_RADIUS_M = 0.0075
+RIVET_HEIGHT_M = 0.0018
+RIVET_OFFSET_M = 0.022  # from the edge of a seam's line
+TRANSFER_RADIUS_M = 0.12  # how far the fine mesh's vertices reach a coarse texel
 
 
 # --- the stroke font --------------------------------------------------------------------------
@@ -151,6 +159,116 @@ def text_coverage(uv_m: np.ndarray, text: str, height_m: float, stroke_m: float)
     return np.clip((half + 0.004 - best) / 0.008, 0.0, 1.0)
 
 
+# --- the plating (M4-T30b, Q34 and Q37) ---------------------------------------------------------
+@dataclass(frozen=True)
+class Plating:
+    """How a part is plated: rows of panels ``width_m`` wide running along world axis ``row_axis``, each panel about
+    ``length_m`` long (varied by ``jitter``), each row's seams moved on by ``stagger`` of a panel; ``seed`` varies the rest."""
+
+    length_m: float
+    width_m: float
+    stagger: float
+    jitter: float
+    row_axis: int
+    seed: int
+
+
+def plating_for(part_name: str, mesh: Mesh, style: Style) -> Plating:
+    """A part's plating: sized and staggered from its name (mirror images share it), its rows along its longest side."""
+    base = part_name.split("_")[0] or "part"
+    h = zlib.crc32(base.encode("utf-8"))
+    r = [((h >> shift) & 0xFF) / 255.0 for shift in (0, 8, 16, 24)]
+    size = style.panel_size_m
+    extent = np.ptp(mesh.vertices, axis=0) if mesh.vertex_count else np.ones(3)
+    return Plating(round(size * (2.2 + 1.6 * r[0]), 4), round(size * (0.8 + 0.6 * r[1]), 4), round(0.2 + 0.25 * r[2], 4), 0.6,
+                   int(np.argmax(extent)), int(h & 0xFFFF))
+
+
+def _partition(x: np.ndarray, jitter: float, *keys: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Cut a line into pieces about one unit long, each cut moved by up to ``jitter`` / 2 (hashed on ``keys``): per point, its
+    piece and the piece's left and right cut."""
+    k0 = np.floor(x).astype(np.int64)
+
+    def cut(k: np.ndarray) -> np.ndarray:
+        return k + jitter * (_hash01(k, *keys) - 0.5)
+
+    c_prev, c0, c1, c2 = cut(k0 - 1), cut(k0), cut(k0 + 1), cut(k0 + 2)
+    before, after = x < c0, x >= c1
+    left = np.where(before, c_prev, np.where(after, c1, c0))
+    right = np.where(before, c0, np.where(after, c2, c1))
+    piece = np.where(before, k0 - 1, np.where(after, k0 + 1, k0))
+    return piece, left, right
+
+
+def plating_lattice(style: Style, positions: np.ndarray, normals: np.ndarray, plating: Plating,
+                    phase: Sequence[float] = (0.0, 0.0, 0.0), slope_normals: np.ndarray | None = None) -> dict[str, np.ndarray]:
+    """Where each point falls in its part's plating: its panel (``cu`` along the row, ``cv`` the row, ``drop`` the projection),
+    its place in the panel (``fu``, ``fv`` in 0..1, ``edge_m`` the distance to the nearest seam's centre line), the seam's line
+    and the panel's tint, the hatch some panels carry, the distance to the nearest rivet (``rivet_m``), the panel's length, its
+    row and left seam (``seam_u``), and how far aft of the panel's front edge it is (``aft_m``, where a row or a panel runs along z).
+    Projected along the axis nearest the normal like the old grid, but measured on the surface, so a slope keeps its panel size:
+    ``slope_normals`` (the chart's mean normal, say) sets that scale, so it stays constant across a curved chart."""
+    p = np.asarray(positions, dtype=float) + np.asarray(phase, dtype=float)
+    n = np.abs(np.asarray(normals, dtype=float))
+    count = len(p)
+    index = np.arange(count)
+    drop = np.argmax(n, axis=1)
+    axes = np.array([[1, 2], [0, 2], [0, 1]])[drop]
+    along_second = axes[:, 1] == plating.row_axis
+    ua = np.where(along_second, axes[:, 1], axes[:, 0])
+    va = np.where(along_second, axes[:, 0], axes[:, 1])
+    ns = n if slope_normals is None else np.abs(np.asarray(slope_normals, dtype=float))
+    nd = np.maximum(ns[index, drop], 1e-6)
+    su = np.clip(np.sqrt(1.0 + (ns[index, ua] / nd) ** 2), 1.0, 1.6)
+    sv = np.clip(np.sqrt(1.0 + (ns[index, va] / nd) ** 2), 1.0, 1.6)
+    um = p[index, ua] * su
+    vm = p[index, va] * sv
+    seed = np.full(count, plating.seed, dtype=np.int64)
+    rv = vm / plating.width_m
+    row, bottom, top = _partition(rv, 0.5, drop + 29, seed)  # rows of varied height
+    fv = (rv - bottom) / (top - bottom)
+    offset = plating.stagger * row + 0.37 * _hash01(row, drop, seed)
+    uu = um / plating.length_m + offset
+    cell, left, right = _partition(uu, plating.jitter, row, drop + 11, seed)
+    fu = (uu - left) / (right - left)
+    panel_length = (right - left) * plating.length_m
+    du = np.minimum(uu - left, right - uu) * plating.length_m
+    dv = np.minimum(rv - bottom, top - rv) * plating.width_m
+    edge_m = np.minimum(du, dv)
+    line = style.panel_line_width_m
+    on_line = edge_m < 0.5 * line
+    tint = 1.0 + style.panel_tint_jitter * (2.0 * _hash01(cell, row, drop, seed) - 1.0)
+    has_hatch = _hash01(cell + 977, row - 331, drop + 7, seed) < style.hatch_fraction
+    hx = (np.abs(fu - 0.5) - 0.3) * panel_length
+    hy = (np.abs(fv - 0.5) - 0.22) * (top - bottom) * plating.width_m
+    outside = np.hypot(np.maximum(hx, 0.0), np.maximum(hy, 0.0)) + np.minimum(np.maximum(hx, hy), 0.0)
+    hatch = has_hatch & (outside < 0.0)
+    # Rivets in a row beside every seam: along the row seams at a pitch along u, along the panel ends at a pitch along v.
+    off = 0.5 * line + RIVET_OFFSET_M
+    along_u = (np.mod(um / RIVET_PITCH_M, 1.0) - 0.5) * RIVET_PITCH_M
+    along_v = (np.mod(vm / RIVET_PITCH_M, 1.0) - 0.5) * RIVET_PITCH_M
+    rivet_m = np.minimum(np.hypot(dv - off, along_u), np.hypot(du - off, along_v))
+    rivet_m = np.where(edge_m > 0.5 * line + RIVET_RADIUS_M, rivet_m, np.inf)  # none in a seam's groove, where two seams cross
+    is_z_u, is_z_v = ua == 2, va == 2
+    aft_m = np.where(is_z_u, (uu - left) * plating.length_m, np.where(is_z_v, (rv - bottom) * plating.width_m, np.inf))
+    return {
+        "drop": drop, "cu": cell, "cv": row, "row": row, "fu": fu, "fv": fv, "edge_m": edge_m, "on_line": on_line, "tint": tint,
+        "hatch": hatch, "hatch_edge_m": np.where(has_hatch, np.abs(outside), np.inf), "rivet_m": rivet_m,
+        "panel_length_m": panel_length, "seam_u": (left - offset) * plating.length_m, "aft_m": aft_m, "has_aft": is_z_u | is_z_v,
+    }
+
+
+def _surface_height(style: Style, lattice: dict[str, np.ndarray]) -> np.ndarray:
+    """The plating's relief: the seams' grooves, the hatches' bevels and the rivets' domes (metres, 0 the plate)."""
+    line = style.panel_line_width_m
+    groove = 1.0 - np.clip((lattice["edge_m"] - 0.5 * line) / (0.5 * line) + 1.0, 0.0, 1.0)
+    h = -style.groove_depth_m * groove * groove * (3.0 - 2.0 * groove)
+    bevel = np.clip(lattice["hatch_edge_m"] / 0.03, 0.0, 1.0)
+    h -= np.where(lattice["hatch"], style.hatch_depth_m * bevel, 0.0)
+    dome = np.clip(1.0 - (lattice["rivet_m"] / RIVET_RADIUS_M) ** 2, 0.0, 1.0)
+    return h + RIVET_HEIGHT_M * np.sqrt(dome)
+
+
 # --- noise ------------------------------------------------------------------------------------
 def value_noise(points: np.ndarray, scale_m: float, seed: int) -> np.ndarray:
     """Smooth seeded noise in [0, 1) over world ``points``: trilinear between hashed lattice corners ``scale_m`` apart."""
@@ -180,6 +298,8 @@ class Atlas:
     markings: tuple[Marking, ...]
     texel_m: float
     hull_mesh: Mesh
+    part_platings: tuple[Plating, ...] = ()
+    fine_mesh: Mesh | None = None  # the full-detail mesh whose shape a coarse render mesh's normal map carries (render_triangles)
 
 
 def srgb_to_linear8(rgb8: np.ndarray) -> np.ndarray:
@@ -196,10 +316,8 @@ def _to8(values: np.ndarray) -> np.ndarray:
     return np.clip(np.rint(np.asarray(values) * 255.0), 0, 255).astype(np.uint8)
 
 
-def _texel_metric(buffers: AtlasBuffers) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def _texel_metric(filled: np.ndarray, pos: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Per texel: the world step along +u and +v (metres per texel), finite differences inside the filled region."""
-    filled = buffers.filled
-    pos = buffers.position
 
     def step(axis: int) -> np.ndarray:
         forward = np.roll(pos, -1, axis=axis) - pos
@@ -296,6 +414,136 @@ def _occlusion(atlas: Atlas, seed: int) -> np.ndarray:
     return np.where(norm > 0.0, blurred / np.maximum(norm, 1e-9), 1.0)
 
 
+def _fine_normals(atlas: Atlas, du: np.ndarray, dv: np.ndarray) -> np.ndarray | None:
+    """For a coarse render mesh: the fine mesh's smooth normal near each texel, in the texel's tangent frame (u right, -v up),
+    so the normal map carries the shape the coarse mesh lost; None when the atlas has no fine mesh."""
+    fine = atlas.fine_mesh
+    if fine is None or fine.vertex_count == 0:
+        return None
+    b = atlas.buffers
+    size = b.size
+    out = np.zeros((size, size, 3))
+    out[..., 2] = 1.0
+    rows, cols = np.nonzero(b.filled)
+    q_pos, q_nrm = b.position[rows, cols], unit(b.normal[rows, cols])
+    v_pos, v_nrm = fine.vertices, unit(fine.vertex_normals())
+    cell = TRANSFER_RADIUS_M
+    v_cell = np.floor(v_pos / cell).astype(np.int64)
+    base = np.minimum(v_cell.min(axis=0), np.floor(q_pos.min(axis=0) / cell).astype(np.int64)) - 1
+    span = np.maximum(v_cell.max(axis=0), np.floor(q_pos.max(axis=0) / cell).astype(np.int64)) - base + 2
+
+    def key_of(cells: np.ndarray) -> np.ndarray:
+        c = cells - base
+        return (c[:, 0] * span[1] + c[:, 1]) * span[2] + c[:, 2]
+
+    v_key = key_of(v_cell)
+    order = np.argsort(v_key, kind="stable")
+    v_key, v_pos, v_nrm = v_key[order], v_pos[order], v_nrm[order]
+    offsets = np.array([[dx, dy, dz] for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1)])
+    total = np.zeros((len(q_pos), 3))
+    weight = np.zeros(len(q_pos))
+    chunk = 40000
+    for start in range(0, len(q_pos), chunk):
+        qp, qn = q_pos[start : start + chunk], q_nrm[start : start + chunk]
+        q_cell = np.floor(qp / cell).astype(np.int64)
+        acc, acc_w = np.zeros((len(qp), 3)), np.zeros(len(qp))
+        for offset in offsets:
+            keys = key_of(q_cell + offset)
+            lo = np.searchsorted(v_key, keys, side="left")
+            hi = np.searchsorted(v_key, keys, side="right")
+            counts = hi - lo
+            if not counts.any():
+                continue
+            q_index = np.repeat(np.arange(len(qp)), counts)
+            v_index = np.concatenate([np.arange(a, c) for a, c in zip(lo, hi, strict=True) if c > a])
+            d2 = np.einsum("ij,ij->i", v_pos[v_index] - qp[q_index], v_pos[v_index] - qp[q_index])
+            agree = np.einsum("ij,ij->i", v_nrm[v_index], qn[q_index])
+            keep = (d2 < cell * cell) & (agree > 0.3)  # the same side of a thin plate
+            w = 1.0 / (d2[keep] + 1e-4)
+            np.add.at(acc, q_index[keep], v_nrm[v_index[keep]] * w[:, None])
+            np.add.at(acc_w, q_index[keep], w)
+        total[start : start + chunk] = acc
+        weight[start : start + chunk] = acc_w
+    found = weight > 0.0
+    f = np.where(found[:, None], unit(total), q_nrm)
+    tangent = du[rows, cols]
+    bitangent = -dv[rows, cols]
+    tangent = unit(tangent - np.einsum("ij,ij->i", tangent, q_nrm)[:, None] * q_nrm)
+    bitangent = unit(bitangent - np.einsum("ij,ij->i", bitangent, q_nrm)[:, None] * q_nrm)
+    ts = np.stack([np.einsum("ij,ij->i", f, tangent), np.einsum("ij,ij->i", f, bitangent), np.einsum("ij,ij->i", f, q_nrm)], axis=1)
+    ts[:, 2] = np.maximum(ts[:, 2], 0.05)
+    out[rows, cols] = unit(ts)
+    return out
+
+
+def _chart_normals(buffers: AtlasBuffers) -> np.ndarray:
+    """Each chart's mean normal, by chart id (the last row for texels of no chart): the plating's slope scale per chart."""
+    charts = int(buffers.chart.max()) + 2 if buffers.filled.any() else 1
+    ids = np.where(buffers.filled, buffers.chart, -1)
+    total = np.zeros((charts, 3))
+    np.add.at(total, ids[buffers.filled], buffers.normal[buffers.filled])
+    out = unit(total)
+    out[-1] = (0.0, 0.0, 1.0)
+    return out
+
+
+def _normal_map(atlas: Atlas, style: Style, platings: Sequence[Plating]) -> np.ndarray:
+    """The tangent-space normal map at ``NORMAL_SCALE`` times the atlas: the plating's relief (grooves, hatches, rivets) from a
+    height field sampled at the finer texels, over the fine mesh's shape for a coarse render mesh."""
+    b = atlas.buffers
+    size = b.size
+    scale = NORMAL_SCALE
+    big = size * scale
+    du, dv, step_u, step_v = _texel_metric(b.filled, b.position)
+    paneled_table = np.array([m.paneled for m in atlas.materials], dtype=bool)
+    chart_normal = _chart_normals(b)
+    # Where each fine texel falls in the atlas: its nearest atlas texel, and a bilinear position inside one chart.
+    src = (np.arange(big) + 0.5) / scale - 0.5
+    near = np.clip(np.rint(src).astype(np.int64), 0, size - 1)
+    lo = np.clip(np.floor(src).astype(np.int64), 0, size - 1)
+    hi = np.clip(lo + 1, 0, size - 1)
+    t = np.clip(src - lo, 0.0, 1.0)
+    height = np.zeros((big, big))
+    filled_big = b.filled[np.ix_(near, near)]
+    strip = 256
+    for r0 in range(0, big, strip):
+        rr = np.arange(r0, min(r0 + strip, big))
+        rn, rl, rh, rt = near[rr], lo[rr], hi[rr], t[rr]
+        f_near = b.filled[np.ix_(rn, near)]
+        if not f_near.any():
+            continue
+        chart = b.chart[np.ix_(rn, near)]
+        same = np.ones_like(f_near)
+        corners = []
+        for rows_, cols_ in ((rl, lo), (rl, hi), (rh, lo), (rh, hi)):
+            same &= b.filled[np.ix_(rows_, cols_)] & (b.chart[np.ix_(rows_, cols_)] == chart)
+            corners.append(b.position[np.ix_(rows_, cols_)])
+        wr, wc = rt[:, None, None], t[None, :, None]
+        bilinear = (corners[0] * (1 - wr) * (1 - wc) + corners[1] * (1 - wr) * wc + corners[2] * wr * (1 - wc) + corners[3] * wr * wc)
+        position = np.where(same[..., None], bilinear, b.position[np.ix_(rn, near)])
+        normal = b.normal[np.ix_(rn, near)]
+        part = b.part[np.ix_(rn, near)]
+        material = b.material[np.ix_(rn, near)]
+        strip_h = np.zeros(f_near.shape)
+        for p_index, phase in enumerate(atlas.part_phases):
+            sel = f_near & (part == p_index)
+            if not sel.any():
+                continue
+            lattice = plating_lattice(style, position[sel], normal[sel], platings[p_index], phase, chart_normal[chart[sel]])
+            strip_h[sel] = np.where(paneled_table[material[sel]], _surface_height(style, lattice), 0.0)
+        height[rr] = strip_h
+    hu, hv = _gradient(height, filled_big)
+    su = np.maximum(step_u[np.ix_(near, near)] / scale, 1e-6)
+    sv = np.maximum(step_v[np.ix_(near, near)] / scale, 1e-6)
+    relief = unit(np.stack([-hu / su, hv / sv, np.ones((big, big))], axis=-1))
+    fine = _fine_normals(atlas, du, dv)
+    if fine is not None:
+        shape = fine[np.ix_(near, near)]
+        relief = unit(np.stack([relief[..., 0] + shape[..., 0], relief[..., 1] + shape[..., 1], relief[..., 2] * shape[..., 2]], axis=-1))
+    relief[~filled_big] = (0.0, 0.0, 1.0)
+    return relief
+
+
 def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, paintable: Sequence[str] = ()) -> dict[str, np.ndarray]:
     """The four maps as 8-bit RGB arrays: ``albedo`` (sRGB), ``normal`` (tangent space, +Y up), ``orm`` and ``emissive`` (sRGB).
     With ``paintable`` material names the albedo is RGBA, its alpha where a livery may paint (M4-T30b): those materials, less the
@@ -318,48 +566,57 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     strength = np.array([m.emissive_strength for m in table], dtype=float)[mat]
     glass = transmittance > 0.0
 
-    # The paint: panel lines and tint per part, with the part's own phase, exactly as the splats were painted.
-    height = np.zeros(n)
+    # The paint: each part's plating (panel lines and tint) with the part's own phase.
     on_line = np.zeros(n, dtype=bool)
-    hatch = np.zeros(n, dtype=bool)
-    lattice_fv = np.zeros(n)
+    lattice_aft = np.full(n, np.inf)
     lattice_cell = np.zeros((n, 3), dtype=np.int64)
-    aft_axis = np.zeros(n, dtype=bool)
+    platings = atlas.part_platings or tuple(plating_for(name, atlas.hull_mesh, style) for name in atlas.part_names)
+    chart_normal = _chart_normals(b)
     for p_index, phase in enumerate(atlas.part_phases):
         sel = part == p_index
         if not sel.any():
             continue
-        lattice = style.panel_lattice(pos[sel], nrm[sel], phase)
+        lattice = plating_lattice(style, pos[sel], nrm[sel], platings[p_index], phase, chart_normal[b.chart[idx][sel]])
         painted = paneled[sel]
         factor = np.where(lattice["on_line"], style.panel_line_darkness, lattice["tint"])
         factor = np.where(lattice["hatch"], factor * 0.93, factor)
         albedo[sel] *= np.where(painted, factor, 1.0)[:, None]
         on_line[sel] = lattice["on_line"] & painted
-        hatch[sel] = lattice["hatch"] & painted
-        groove = 1.0 - np.clip((lattice["edge_m"] - 0.5 * style.panel_line_width_m) / (0.5 * style.panel_line_width_m) + 1.0, 0.0, 1.0)
-        h = -style.groove_depth_m * groove * groove * (3.0 - 2.0 * groove)
-        bevel = np.clip(lattice["hatch_edge_m"] / 0.03, 0.0, 1.0)
-        h -= np.where(lattice["hatch"], style.hatch_depth_m * bevel, 0.0)
-        height[sel] = np.where(painted, h, 0.0)
-        lattice_fv[sel] = lattice["fv"]
+        lattice_aft[sel] = np.where(painted, lattice["aft_m"], np.inf)
         lattice_cell[sel] = np.stack([lattice["cu"], lattice["cv"], lattice["drop"]], axis=1)
-        aft_axis[sel] = lattice["drop"] != 2  # the lattice's v is world z: streaks can run aft along it
 
-    # Wear, seeded: chipped sharp edges show bare metal, streaks trail aft from the panel lines, grime varies the paint.
+    # Weathering, seeded: worn sharp edges, streaks trailing aft from the seams, smudges and grime over the paint (Q37: no bare metal
+    # unless the style asks for it).
+    extra = dict(style.extra)
+    bare_metal = float(extra.get("bare_metal", 1.0))
+    seeds = np.full(n, seed, dtype=np.int64)
     noise_fine = value_noise(pos, 0.11, seed + 1)
     noise_coarse = value_noise(pos, style.grime_scale_m, seed + 2)
     edge = np.clip(1.0 - b.edge_distance[idx] / style.edge_wear_width_m, 0.0, 1.0)
     chips = np.clip((edge * (0.35 + noise_fine) - (1.0 - style.edge_wear)) * 3.0, 0.0, 1.0) * ~glass
-    streak_seed = _hash01(lattice_cell[:, 0], lattice_cell[:, 1], lattice_cell[:, 2] + 17, np.full(n, seed, dtype=np.int64))
-    streak_on = np.clip((streak_seed - 0.55) / 0.45, 0.0, 1.0)
-    across = _hash01(lattice_cell[:, 0], lattice_cell[:, 1], np.floor(noise_fine * 6.0).astype(np.int64), np.full(n, seed + 3, dtype=np.int64))
-    streak = style.streaks * streak_on * np.exp(-lattice_fv * style.panel_size_m / 0.2) * (across > 0.5) * aft_axis * paneled
-    grime = 1.0 + style.grime * (2.0 * noise_coarse - 1.0)
-    albedo *= (grime * (1.0 - streak))[:, None]
-    bare = np.array([0.42, 0.42, 0.44])
-    albedo = albedo * (1.0 - chips)[:, None] + bare * chips[:, None]
-    roughness = roughness + 0.25 * on_line - 0.25 * chips
-    metallic = metallic * (1.0 - chips) + 0.85 * chips
+    streak_seed = _hash01(lattice_cell[:, 0], lattice_cell[:, 1], lattice_cell[:, 2] + 17, seeds)
+    streak_on = np.clip((streak_seed - 0.45) / 0.55, 0.0, 1.0)
+    across = _hash01(lattice_cell[:, 0], lattice_cell[:, 1], np.floor(noise_fine * 7.0).astype(np.int64), seeds + 3)
+    fade = np.exp(-np.where(np.isfinite(lattice_aft), lattice_aft, 1e3) / float(extra.get("streak_length_m", 0.2)))
+    streak = style.streaks * streak_on * fade * (across > 0.45) * paneled
+    smudge_noise = value_noise(pos * np.array([1.0, 1.0, 0.35]), float(extra.get("smudge_scale_m", 0.45)), seed + 5)  # long fore and aft
+    smudge = float(extra.get("smudge", 0.0)) * np.clip((smudge_noise - 0.55) / 0.25, 0.0, 1.0) ** 1.5 * paneled
+    speckle = float(extra.get("speckle", 0.0)) * (2.0 * value_noise(pos, 0.035, seed + 6) - 1.0) * paneled
+    grime = 1.0 + style.grime * (2.0 * noise_coarse - 1.0) + speckle
+    albedo *= (grime * (1.0 - streak) * (1.0 - smudge))[:, None]
+    if bare_metal > 0.0:
+        bare = np.array([0.42, 0.42, 0.44])
+        worn = chips * bare_metal
+        albedo = albedo * (1.0 - worn)[:, None] + bare * worn[:, None]
+        roughness = roughness - 0.25 * worn
+        metallic = metallic * (1.0 - worn) + 0.85 * worn
+    else:
+        albedo *= (1.0 - 0.3 * chips)[:, None]  # worn edges show dark primer, not metal
+    paint_roughness = extra.get("paint_roughness")
+    if paint_roughness is not None:
+        matte = paneled & (metallic < 0.3) & ~glass
+        roughness = np.where(matte, float(paint_roughness), roughness)
+    roughness = roughness + 0.25 * on_line + 0.1 * smudge
 
     # The markings, in world space, on their parts; what they cover is kept from the livery's paint.
     names = list(atlas.part_names)
@@ -403,16 +660,8 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
             metallic[sel] *= 1.0 - 0.6 * cover
             marked[np.flatnonzero(sel)] = np.maximum(marked[np.flatnonzero(sel)], cover)
 
-    # The normal map: the height field's slope per metre, in the texel's tangent frame (u right, v down; Godot's +Y up).
-    height_map = np.zeros((size, size))
-    height_map[idx] = height
-    hu, hv = _gradient(height_map, filled)
-    _, _, step_u, step_v = _texel_metric(b)
-    slope_u = hu / np.maximum(step_u, 1e-6)
-    slope_v = hv / np.maximum(step_v, 1e-6)
-    normal_ts = np.stack([-slope_u, slope_v, np.ones((size, size))], axis=-1)
-    normal_ts = unit(normal_ts)
-    normal_ts[~filled] = (0.0, 0.0, 1.0)
+    # The normal map: the plating's relief at twice the atlas's resolution, Godot's +Y up (Q34).
+    normal_ts = _normal_map(atlas, style, platings)
 
     # Occlusion, roughness and metal; emissive scaled per surface so one map serves both.
     occ = _occlusion(atlas, seed) if occlusion else np.ones((size, size))
@@ -455,5 +704,5 @@ def surface_emissive_strength(materials: Sequence[Material], glass: bool) -> flo
     return max(strengths) if strengths else 0.0
 
 
-__all__ = ["Atlas", "Marking", "bake_maps", "decode_normal", "glyph_strokes", "srgb_to_linear8", "surface_emissive_strength",
-           "text_coverage", "value_noise"]
+__all__ = ["Atlas", "Marking", "NORMAL_SCALE", "Plating", "bake_maps", "decode_normal", "glyph_strokes", "plating_for", "plating_lattice",
+           "srgb_to_linear8", "surface_emissive_strength", "text_coverage", "value_noise"]

@@ -49,7 +49,8 @@ class WriterTests(unittest.TestCase):
             self.assertEqual(sum(len(p.indices) for p in mesh.primitives) // 3, hull.face_count + pane.face_count)
             for key in ("albedo", "normal", "orm", "emissive"):
                 image = read_png(out / f"thing_{key}.png")
-                self.assertEqual(image.shape, (256, 256, 3), key)
+                px = 512 if key == "normal" else 256  # M4-T30b: the normal map at twice the atlas
+                self.assertEqual(image.shape, (px, px, 3), key)
                 sidecar = (out / f"thing_{key}.png.import").read_text()
                 self.assertIn('importer="texture"', sidecar)
                 self.assertIn("compress/mode=2", sidecar)
@@ -236,7 +237,7 @@ class RenderTrianglesTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls._tmp = tempfile.TemporaryDirectory()
         cls.out = Path(cls._tmp.name)
-        starfury.build(BuildContext(cls.out, seed=42, options={"hero": False, "occlusion": False, "render_triangles": 12000}))
+        starfury.build(BuildContext(cls.out, seed=42, options={"hero": False, "occlusion": False, "render_triangles": 20000}))
         cls.manifest = manifest_io.read_manifest(cls.out)
 
     @classmethod
@@ -245,8 +246,9 @@ class RenderTrianglesTests(unittest.TestCase):
 
     def test_the_coarse_build_has_about_the_asked_triangles(self) -> None:
         section = self.manifest["mesh"]
-        self.assertLess(abs(section["triangles"] - 12000) / 12000.0, 0.15, section["triangles"])
-        self.assertEqual(section["render_triangles"], 12000)
+        # 20 000: the round parts' segments scale down; the strut plates and fittings floor the Starfury at about 18 000.
+        self.assertLess(abs(section["triangles"] - 20000) / 20000.0, 0.15, section["triangles"])
+        self.assertEqual(section["render_triangles"], 20000)
         self.assertEqual(section["fine_triangles"], self.manifest["paint_mesh"]["triangles"])
         mesh = read_glb(self.out / section["file"])
         self.assertEqual(sum(len(p.indices) for p in mesh.primitives) // 3, section["triangles"])

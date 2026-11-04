@@ -39,6 +39,7 @@ The hero level (``starfury_aurora_hero.ply``, M3-T24) is the same build at ``HER
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import math
 from dataclasses import dataclass
@@ -565,6 +566,67 @@ def markings_for(placed: list[Placed], style: Style) -> dict[str, tuple[Marking,
     return out
 
 
+# --- the textured mesh's parts and the coarse render mesh (M4-T30b) -------------------------------
+COARSE_STREAM = "coarse"
+MIN_SEGMENTS = 6
+
+
+def _textured(placed: list[Placed], style: Style) -> list[TexturedPart]:
+    """The hull parts as the textured mesh takes them: mesh, panel phase, markings and livery zone."""
+    marks = markings_for(placed, style)
+    return [TexturedPart(p.part.mesh, phase_steps(p.part.name, True), marks.get(p.part.name, ()), p.part.name, zone_of(p.part.name))
+            for p in placed if p.hull]
+
+
+def textured_parts(spec: StarfurySpec, ctx: BuildContext, style: Style = EARTHFORCE) -> list[TexturedPart]:
+    """The textured mesh's parts of ``spec``, centred as the build centres them (for tests and tools)."""
+    placed, _ = centre(build_parts(spec, style, ctx, DEFAULT_SPACING_M, COCKPIT_SPACING_FACTOR * DEFAULT_SPACING_M))
+    return _textured(placed, style)
+
+
+def coarse_spec(spec: Any, factor: float) -> Any:
+    """``spec`` with every round part's ``segments`` scaled by ``factor`` (at least ``MIN_SEGMENTS``): the coarse render mesh."""
+    if dataclasses.is_dataclass(spec) and not isinstance(spec, type):
+        changes = {}
+        for f in dataclasses.fields(spec):
+            value = getattr(spec, f.name)
+            if f.name == "segments" and isinstance(value, int) and not isinstance(value, bool):
+                changes[f.name] = max(MIN_SEGMENTS, int(round(value * factor)))
+            elif dataclasses.is_dataclass(value) or isinstance(value, tuple):
+                scaled = coarse_spec(value, factor)
+                if scaled is not value:
+                    changes[f.name] = scaled
+        return dataclasses.replace(spec, **changes) if changes else spec
+    if isinstance(spec, tuple) and any(dataclasses.is_dataclass(x) for x in spec):
+        return tuple(coarse_spec(x, factor) for x in spec)
+    return spec
+
+
+def coarse_placed(spec: StarfurySpec, style: Style, ctx: BuildContext, triangles: int, offset: np.ndarray) -> list[Placed]:
+    """The parts rebuilt with fewer segments, the scale chosen so the hull has about ``triangles`` (never fewer than the
+    flat parts allow), moved by the fine build's centring ``offset`` so both share one frame."""
+    def build_at(factor: float) -> list[Placed]:
+        placed = build_parts(coarse_spec(spec, factor), style, ctx, 0.25, 0.25, (COARSE_STREAM,))
+        return [Placed(p.part.translated(-offset), None, p.hull, p.spacing) for p in placed]
+
+    def count(placed: list[Placed]) -> int:
+        return sum(p.part.mesh.face_count for p in placed if p.hull)
+
+    lo, hi = 0.02, 1.0
+    best = build_at(hi)
+    for _ in range(10):
+        mid = 0.5 * (lo + hi)
+        placed = build_at(mid)
+        if count(placed) > triangles:
+            hi = mid
+        else:
+            lo = mid
+            best = placed
+    if count(best) > triangles:  # the floor: plates and fittings have no segments to drop
+        best = build_at(lo)
+    return best
+
+
 # --- hardpoints -------------------------------------------------------------------------------
 def _r(v: Any) -> list[float]:
     return [
@@ -786,7 +848,8 @@ def build_chunks(
 def build(ctx: BuildContext) -> AssetOutputs:
     """Generate the ship into ``ctx.out_dir``.
 
-    Options: ``spacing`` (m, default 0.04; the CLI's ``--spacing``), ``cockpit_spacing`` (m,
+    Options: ``render_triangles`` (M4-T30b; 0, the default, draws the full hull; otherwise the textured mesh is rebuilt with about
+    this many triangles and the fine hull's shape baked into its normal map), ``spacing`` (m, default 0.04; the CLI's ``--spacing``), ``cockpit_spacing`` (m,
     default 0.55 x the spacing: the window segment's frames, chin and lining), ``overlap``
     (sigma / spacing, default 1.0), ``thickness`` (normal sigma / spacing, default 0.08),
     ``lod1_factor`` (LOD1 spacing / LOD0 spacing, default 2.0), ``hero`` (write the hero level, default true).
@@ -836,20 +899,25 @@ def build(ctx: BuildContext) -> AssetOutputs:
         style,
     )
     files.append(paint_path)
-    # The textured mesh (M4-T30a): the same parts with a UV atlas and the four maps, the contract M5 builds against.
-    marks = markings_for(placed, style)
+    # The textured mesh (M4-T30a): the same parts with a UV atlas and the four maps, the contract M5 builds against. With
+    # ``render_triangles`` (M4-T30b) the parts are rebuilt coarser and the normal map carries the fine hull's shape.
+    render_triangles = int(ctx.option("render_triangles", 0))
+    textured_source = placed if render_triangles <= 0 else coarse_placed(spec, style, ctx, render_triangles, offset)
     textured_paths, mesh_entry = write_textured_mesh(
         out_dir,
         ASSET_ID,
-        [TexturedPart(p.part.mesh, phase_steps(p.part.name, True), marks.get(p.part.name, ()), p.part.name, zone_of(p.part.name))
-         for p in placed if p.hull],
+        _textured(textured_source, style),
         style,
         atlas_px=int(ctx.option("atlas_px", ATLAS_PX)),
         texel_m=float(ctx.option("texel_m", TEXEL_M)),
         seed=ctx.seed,
         occlusion=bool(ctx.option("occlusion", True)),
         paintable=PAINTABLE,
+        fine_mesh=hull_mesh if render_triangles > 0 else None,
     )
+    if render_triangles > 0:
+        mesh_entry["render_triangles"] = render_triangles
+        mesh_entry["fine_triangles"] = int(hull_mesh.face_count)
     files += textured_paths
 
     # LOD1: the same parts resampled coarser from their own streams, balanced and centred

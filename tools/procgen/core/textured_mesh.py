@@ -23,12 +23,12 @@ from .image import write_png
 from .livery import digit_atlas, digit_import_sidecar, livery_section
 from .paint_mesh import PHASE_STEPS, phase_of
 from .raster import dilate, rasterize, sharp_edges
-from .textures import Atlas, Marking, bake_maps, surface_emissive_strength
+from .textures import NORMAL_SCALE, Atlas, Marking, bake_maps, plating_for, surface_emissive_strength
 from .uv_atlas import Packed, charts_of, pack
 
 DEFAULT_ATLAS_PX = 2048
 DEFAULT_TEXEL_M = 0.01
-GUTTER_PX = 2
+GUTTER_PX = 4  # texels of the coarsest map between charts (Q34)
 MAP_KEYS = ("albedo", "normal", "orm", "emissive")
 DIGITS_KEY = "digits"
 OPAQUE_SURFACE = "hull"
@@ -89,8 +89,11 @@ def pack_parts(parts: Sequence[TexturedPart], atlas_px: int, texel_m: float, gut
 
 
 def atlas_of(parts: Sequence[TexturedPart], atlas_px: int = DEFAULT_ATLAS_PX, texel_m: float = DEFAULT_TEXEL_M,
-             style_phase_m: float | None = None) -> Atlas:
-    """Pack ``parts`` and rasterise the atlas buffers: what ``bake_maps`` paints from."""
+             style_phase_m: float | None = None, style: Style | None = None) -> Atlas:
+    """Pack ``parts`` and rasterise the atlas buffers: what ``bake_maps`` paints from (each part's plating in ``style``, the
+    Earthforce one by default)."""
+    if style is None:
+        from ..styles.earthforce import EARTHFORCE as style
     packed = pack_parts(parts, atlas_px, texel_m)
     mesh = packed.mesh
     corners = mesh.vertices[mesh.faces]
@@ -101,7 +104,8 @@ def atlas_of(parts: Sequence[TexturedPart], atlas_px: int = DEFAULT_ATLAS_PX, te
     panel = style_phase_m if style_phase_m is not None else 0.6
     phases = tuple(tuple(int(s) / float(PHASE_STEPS) * panel for s in p.phase) for p in parts)
     markings = tuple(m for p in parts for m in p.markings)
-    return Atlas(buffers, mesh.materials, tuple(p.name for p in parts), phases, markings, packed.packed.texel_m, mesh)
+    platings = tuple(plating_for(p.name, p.mesh, style) for p in parts)
+    return Atlas(buffers, mesh.materials, tuple(p.name for p in parts), phases, markings, packed.packed.texel_m, mesh, platings)
 
 
 def _primitives(parts: Sequence[TexturedPart], packed: PackedParts, zones: bool = False) -> tuple[GlbPrimitive, GlbPrimitive]:
@@ -175,6 +179,7 @@ def manifest_section(asset_id: str, parts: Sequence[TexturedPart], packed: Packe
         "texel_m": round(float(atlas.texel_m), 6),
         "atlas_px": int(atlas.buffers.size),
         "atlas_fill": round(float(packed.packed.fill), 4),
+        "map_px": {key: int(maps[key].shape[0]) for key in MAP_KEYS},
         "mean_albedo": [round(float(c), 6) for c in maps["mean_albedo"]],
         "surfaces": surfaces,
         "lods": [],
@@ -183,10 +188,11 @@ def manifest_section(asset_id: str, parts: Sequence[TexturedPart], packed: Packe
 
 def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPart], style: Style, atlas_px: int = DEFAULT_ATLAS_PX,
                         texel_m: float = DEFAULT_TEXEL_M, seed: int = 0, occlusion: bool = True,
-                        paintable: Sequence[str] = ()) -> tuple[list[Path], dict[str, Any]]:
+                        paintable: Sequence[str] = (), fine_mesh: Mesh | None = None) -> tuple[list[Path], dict[str, Any]]:
     """Write the textured mesh of ``parts`` into ``out_dir`` and return its files and the manifest's ``mesh`` section. With
     ``paintable`` material names the hull takes wing liveries (M4-T30b): the vertices carry their parts' zones, the albedo's alpha
-    says where paint may go, and the digit atlas and the ``livery`` section are written too."""
+    says where paint may go, and the digit atlas and the ``livery`` section are written too. With ``fine_mesh`` the parts are a
+    coarse render mesh (``render_triangles``) and the normal map carries the fine mesh's shape."""
     out_dir = Path(out_dir)
     packed = pack_parts(parts, atlas_px, texel_m)
     mesh = packed.mesh
@@ -195,7 +201,7 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
     dilate(buffers, GUTTER_PX)
     phases = tuple(phase_of(p.phase, style) for p in parts)
     atlas = Atlas(buffers, mesh.materials, tuple(p.name for p in parts), phases, tuple(m for p in parts for m in p.markings),
-                  packed.packed.texel_m, mesh)
+                  packed.packed.texel_m, mesh, tuple(plating_for(p.name, p.mesh, style) for p in parts), fine_mesh)
     maps = bake_maps(atlas, style, seed, occlusion, paintable)
     opaque, glass = _primitives(parts, packed, zones=bool(paintable))
     paths = [write_glb(out_dir / f"{asset_id}.glb", [opaque, glass], asset_id)]

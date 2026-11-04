@@ -47,7 +47,7 @@ class RasterTests(unittest.TestCase):
         atlas = atlas_of(parts, atlas_px=128, texel_m=0.02)
         buffers = atlas.buffers
         covered = buffers.mask
-        self.assertGreater(covered.mean(), 0.5, "six 1 m faces at 2 cm fill most of a 128 px atlas")
+        self.assertGreater(covered.mean(), 0.4, "six 1 m faces at 2 cm fill much of a 128 px atlas (4-texel gutters since M4-T30b)")
         self.assertEqual(int(buffers.overlaps), 0)
         pos = buffers.position[covered]
         self.assertTrue(np.all(np.abs(pos).max(axis=1) <= 0.5 + 1e-3), "every texel's position is on the box")
@@ -116,7 +116,8 @@ class MapTests(unittest.TestCase):
         ratio = albedo / expected
         # Q37: weathered, so the paint varies (grime, smudges, streaks) but stays the paint on average and never brightens much.
         self.assertGreater(float(np.median(ratio)), 0.75)
-        self.assertTrue(np.all(ratio < 1.0 + EARTHFORCE.panel_tint_jitter + 0.12), float(ratio.max()))
+        brightest = 1.0 + EARTHFORCE.panel_tint_jitter + EARTHFORCE.grime + float(EARTHFORCE.extra.get("speckle", 0.0)) + 0.02
+        self.assertTrue(np.all(ratio < brightest), float(ratio.max()))
         # A panel line is darker than the paint around it.
         on_line = lattice["on_line"] & (b.part[covered] == 0)
         self.assertLess(float(srgb_to_linear8(self.maps["albedo"][covered][on_line][:, :3]).mean()), 0.8 * float(albedo.mean()))

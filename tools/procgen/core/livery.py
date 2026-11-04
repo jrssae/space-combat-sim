@@ -85,7 +85,7 @@ class Livery:
     secondary: Vec3
     pattern: str
     number_colour: Vec3 = (236.0, 238.0, 236.0)
-    numbers: tuple[str, ...] = ("dorsal",)
+    numbers: tuple[str, ...] = ("dorsal", "wing")  # Q37: large on the deck, small on the upper left wing
 
     @property
     def numbered(self) -> bool:
@@ -139,16 +139,14 @@ NUMBER_FIELDS: dict[str, NumberField] = {
                           0.8, 1.15),
     # Small on the upper left strut, behind its hazard stripes, as the show's ID numbers.
     "wing": NumberField(_zones("strut_upper"), (-2.6, 1.7, 0.3), (1.0, 0.0, 0.0), (0.0, 0.0, -1.0), UP, 0.42, 0.9),
-    # On each pod's outboard flank, read from beside the ship (left to right is nose to tail on the right side, tail to nose on the left).
-    "pod_right": NumberField(_zones("pod"), (6.9, 2.5, 0.9), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0), (1.0, 0.0, 0.0), 0.5, 0.9),
-    "pod_left": NumberField(_zones("pod"), (-6.9, 2.5, 0.9), (0.0, 0.0, 1.0), (0.0, 1.0, 0.0), (-1.0, 0.0, 0.0), 0.5, 0.9),
 }
 
 LIVERIES: dict[str, Livery] = {
-    "alpha": Livery("alpha", (182.0, 194.0, 82.0), (54.0, 62.0, 74.0), "bands", numbers=("dorsal", "pod_right", "pod_left")),
-    "beta": Livery("beta", (36.0, 82.0, 156.0), (226.0, 228.0, 230.0), "nose_band", (30.0, 44.0, 84.0), ("dorsal", "wing")),
-    "delta": Livery("delta", (42.0, 96.0, 54.0), (216.0, 206.0, 168.0), "chevron", (236.0, 238.0, 236.0), ("dorsal", "wing")),
-    "zeta": Livery("zeta", (176.0, 30.0, 34.0), (134.0, 46.0, 146.0), "pinstripe", (176.0, 30.0, 34.0), ("dorsal", "pod_right", "pod_left")),
+    "alpha": Livery("alpha", (182.0, 194.0, 82.0), (54.0, 62.0, 74.0), "bands"),
+    "beta": Livery("beta", (36.0, 82.0, 156.0), (226.0, 228.0, 230.0), "nose_band", (30.0, 44.0, 84.0)),
+    # Delta's number in its dark green, so it reads inside the V on the grey (Q37 left the contrast to us).
+    "delta": Livery("delta", (42.0, 96.0, 54.0), (216.0, 206.0, 168.0), "chevron", (28.0, 64.0, 36.0)),
+    "zeta": Livery("zeta", (176.0, 30.0, 34.0), (134.0, 46.0, 146.0), "pinstripe", (176.0, 30.0, 34.0)),
 }
 PLAIN = Livery("plain", (150.0, 152.0, 156.0), (150.0, 152.0, 156.0), PLAIN_PATTERN, numbers=())
 

@@ -143,10 +143,10 @@ class NavBuoyTests(unittest.TestCase):
         wings = rgb[self.part_slice("wing_r")]
         self.assertLess(float(wings.mean()), 0.5 * float(rgb[hull].mean()))
         chroma = (rgb.max(axis=1) - rgb.min(axis=1)) / np.maximum(rgb.max(axis=1), 1e-9)
-        # (The cool fill light tints the shadow side a little, hence 0.2 rather than the ship's 0.15.)
-        lit_grey = (chroma[hull] < 0.2)[~orange[hull] & (rgb[hull].max(axis=1) > 0.05)]
+        # (The cool fill light tints the shadow side a little; since M4-T30b, Q37, the Earthforce hull is a blue-grey.)
+        lit_grey = (chroma[hull] < 0.45)[~orange[hull] & (rgb[hull].max(axis=1) > 0.05)]
         self.assertGreater(float(lit_grey.mean()), 0.95)
-        self.assertGreater(float(rgb[hull][~orange[hull]].mean()), 0.15)
+        self.assertGreater(float(rgb[hull][~orange[hull]].mean()), 0.08)
 
     # --- hardpoints -------------------------------------------------------------------------
     def test_hardpoints_schema(self) -> None:

@@ -7,6 +7,8 @@
 # Usage: scripts/look_sheet.sh [asset_id] [label]        (starfury_aurora by default)
 # Environment: SHEET_OUT (/tmp), SHEET_DISTANCES (8,30,150,600), SHEET_LOOKS (splat,painted,textured), SHEET_LIGHTS (lit,dark),
 #              SHEET_SETTLE (40 frames a shot), SHEET_RES (1920x1080), GODOT_BIN.
+#              M4-T30b (checkpoint 1c): SHEET_LIVERIES (wing:number,... a column each instead of the looks), SHEET_COMPARE (a pattern of
+#              earlier shots, %d metres and %s lit or dark, as one more column), SHEET_COMPARE_LABEL, SHEET_PREFIX (m4_t30a), SHEET_PATH.
 # Run it under the bench locks: flock /tmp/m5-godot.lock flock /tmp/scs-bench.lock scripts/look_sheet.sh ...
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -29,6 +31,8 @@ status=0
 flock /tmp/scs-gpu.lock timeout 900 "${GODOT}" --path . --resolution "${RES}" --fullscreen --disable-vsync \
     -s res://scripts/look_sheet.gd -- asset="${ASSET}" out="${OUT_DIR}" distances="${SHEET_DISTANCES:-8,30,150,600}" \
     looks="${SHEET_LOOKS:-splat,painted,textured}" lights="${SHEET_LIGHTS:-lit,dark}" settle="${SHEET_SETTLE:-40}" scale3d=1080p \
+    liveries="${SHEET_LIVERIES:-}" compare="${SHEET_COMPARE:-}" compare_label="${SHEET_COMPARE_LABEL:-T30A}" prefix="${SHEET_PREFIX:-m4_t30a}" \
+    sheet="${SHEET_PATH:-}" \
     > "${LOG}" 2>&1 || status=$?
 grep -E '^\[sheet\]|SCRIPT ERROR|console error' "${LOG}" || true
 if (( status != 0 )); then

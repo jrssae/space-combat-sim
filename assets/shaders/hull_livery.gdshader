@@ -131,5 +131,6 @@ void fragment() {
 	AO = orm.r;
 	ROUGHNESS = orm.g;
 	METALLIC = orm.b;
+	SPECULAR = 0.35;  // matte paint (Q34: less gloss)
 	EMISSION = texture(emissive_map, UV).rgb * emission_energy;
 }
