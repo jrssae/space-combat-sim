@@ -117,3 +117,26 @@ func test_the_sheet_parks_a_ship_and_clears_it() -> void:
 	assert_true(player.ship.visible)
 	assert_eq(star.global_transform, before)
 	assert_eq(StringName(Settings.get_value(&"ship_render")), &"mesh", "the setting from before the sheet")
+
+
+func test_a_prop_that_cannot_be_parked_puts_everything_back() -> void:
+	# M4-T30d fix round 1: a ship is parked, then a prop the sheet cannot build (no chunks under this root) ends the sheet cleanly.
+	var star := DirectionalLight3D.new()
+	add_child_autofree(star)
+	var before: Transform3D = star.global_transform
+	var look := LookScene.new()
+	look.world = world
+	look.pool = pool
+	look.player = player.ship
+	look.key_star = star
+	add_child_autofree(look)
+	Settings.set_value(&"ship_render", &"mesh")
+	assert_eq(look.show("starfury_aurora", 30.0, &"lit", &"splat"), "")
+	assert_false(player.ship.visible)
+	look.asset_root = "res://no_such_root"
+	assert_ne(look.show("raider_fighter_chunks", 30.0, &"dark", &"textured"), "", "no chunks to park")
+	assert_false(look.is_active())
+	assert_eq(pool.alive(ShipPool.ALLY_TYPE).size(), 0, "the parked ship went back to the pool")
+	assert_true(player.ship.visible, "the player's hull is shown again")
+	assert_eq(star.global_transform, before, "the key star is back")
+	assert_eq(StringName(Settings.get_value(&"ship_render")), &"mesh", "the setting from before the sheet")
