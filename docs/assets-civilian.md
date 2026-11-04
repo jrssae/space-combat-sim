@@ -270,6 +270,8 @@ NAME` writes the result to `compare/<name>/`. Take the model's ranges from the p
     --right=-x --up=+z --aft=+y --part transport_2 --model-zrange 49.3 149.3 --asset-zrange 149.3 249.3
 .venv/bin/python3 -I tools/refview/compare.py references/EA_Saturn_Fuel_tanker.stl saturn_8_tanker --length 255.1 \
     --right=-x --up=+z --aft=+y --part tanks_1 --model-zrange 49.3 146.2 --asset-zrange 49.3 149.3
+.venv/bin/python3 -I tools/refview/compare.py references/EA_Saturn_Fuel_tanker.stl saturn_4_tanker --length 255.1 \
+    --right=-x --up=+z --aft=+y --part tanks --model-zrange 49.3 136.0 --asset-zrange 49.3 136.0
 .venv/bin/python3 -I tools/refview/compare.py references/EA_Saturn_3_Freighter.stl saturn_3_freighter --length 91.13 \
     --right=-x --up=+z --aft=+y --part pod_group --model-zrange 41.5 91.13 --asset-zrange 41.5 96.8 \
     --model-scale 1.2436,1.093,1
@@ -296,23 +298,36 @@ rows.
 
 | Ship | Part | Top IoU | Side IoU | Front IoU | Length | Width | Height | Splats: min coverage / min precision | Date |
 |---|---|---|---|---|---|---|---|---|---|
-| `saturn_4_transport` | whole ship (splats vs STL) | 0.926 | 0.904 | 0.908 | 1.002 | 1.007 | 1.050 | - | 2026-11-03 |
-| `saturn_4_tanker` | lead ship (vs Saturn 4 model, z 0-49.3) (splats vs STL) | 0.895 | 0.764 | 0.795 | 1.007 | 1.024 | 1.028 | - | 2026-11-03 |
-| `saturn_4_tanker` | tank section (vs tanker model's first) (splats vs STL) | 0.880 | 0.856 | 0.905 | 1.039 | 0.980 | 1.030 | - | 2026-11-03 |
-| `saturn_8_transport` | lead ship (z 0-49.3) (splats vs STL) | 0.873 | 0.715 | 0.808 | 1.008 | 1.019 | 1.030 | - | 2026-11-03 |
-| `saturn_8_transport` | cargo 1 (model 49.3-152.8, asset 49.3-149.3) (splats vs STL) | 0.901 | 0.882 | 0.842 | 0.973 | 1.004 | 1.002 | - | 2026-11-03 |
-| `saturn_8_transport` | cargo 2 and engine (model 152.8-266.2, asset 149.3-258.5) (splats vs STL) | 0.905 | 0.906 | 0.837 | 0.969 | 1.004 | 1.003 | - | 2026-11-03 |
-| `saturn_8_tanker` | lead ship (z 0-49.3) (splats vs STL) | 0.894 | 0.762 | 0.792 | 1.008 | 1.023 | 1.036 | - | 2026-11-03 |
-| `saturn_8_tanker` | cargo 1 (model 49.3-146.2, asset 49.3-149.3) (splats vs STL) | 0.926 | 0.887 | 0.889 | 1.040 | 1.001 | 1.020 | - | 2026-11-03 |
-| `saturn_8_tanker` | cargo 2 and engine (model 146.2-255.1, asset 149.3-258.5) (splats vs STL) | 0.970 | 0.929 | 0.888 | 1.010 | 1.001 | 1.021 | - | 2026-11-03 |
-| `saturn_3_freighter` | lead ship (z 0-41.5) (splats vs STL) | 0.660 | 0.499 | 0.665 | 1.007 | 1.023 | 0.812 | - | 2026-11-03 |
-| `saturn_3_freighter` | pod group (model 41.5-91.1 scaled 1.244, 1.093, 1; asset 41.5-96.8) (splats vs STL) | 0.772 | 0.383 | 0.655 | 1.130 | 0.996 | 1.038 | - | 2026-11-03 |
+| `saturn_4_transport` | whole ship (`--model-offset 0,-3.643,0`) | 0.958 | 0.964 | 0.931 | 1.000 | 1.000 | 1.026 | 0.972 (side) / 1.000 | 2026-11-04 |
+| `saturn_4_transport` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 0.967 (side) / 1.000 | 2026-11-04 |
+| `saturn_4_transport` | transport section (model 49.3-149.3, asset 49.3-149.3) | 0.955 | 0.982 | 0.917 | 1.000 | 1.000 | 1.026 | 0.972 (side) / 1.000 | 2026-11-04 |
+| `saturn_4_tanker` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 0.961 (side) / 1.000 | 2026-11-04 |
+| `saturn_4_tanker` | tank group (tanker model 49.3-136.0, asset 49.3-136.0: the tanks on both sides, the model's junction and the asset's engine left out) | 0.986 | 0.974 | 0.938 | 1.000 | 1.000 | 1.026 | 0.960 (side) / 1.000 | 2026-11-04 |
+| `saturn_8_transport` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 0.967 (side) / 1.000 | 2026-11-04 |
+| `saturn_8_transport` | transport section 1 (Saturn 4 model 49.3-149.3, asset 49.3-149.3) | 0.945 | 0.968 | 0.923 | 1.000 | 1.000 | 1.005 | 0.971 (side) / 1.000 | 2026-11-04 |
+| `saturn_8_transport` | transport section 2 and engine (Saturn 4 model 49.3-149.3, asset 149.3-249.3) | 0.951 | 0.972 | 0.913 | 1.000 | 1.000 | 1.005 | 0.974 (side) / 1.000 | 2026-11-04 |
+| `saturn_8_tanker` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 0.963 (side) / 1.000 | 2026-11-04 |
+| `saturn_8_tanker` | tank section 1 (tanker model 49.3-146.2, asset 49.3-149.3; the model's sections are 96.96 m apart, Q16's 100 m) | 0.947 | 0.934 | 0.917 | 1.032 | 0.993 | 1.012 | 0.959 (side) / 1.000 | 2026-11-04 |
+| `saturn_8_tanker` | tank section 2 and engine (tanker model 146.2-255.1, asset 149.3-258.5) | 0.980 | 0.971 | 0.916 | 1.003 | 0.993 | 1.012 | 0.957 (side) / 1.000 | 2026-11-04 |
+| `saturn_3_freighter` | lead ship (Saturn 4 model z 0-41.5, asset 0-41.5) | 0.964 | 0.905 | 0.946 | 1.000 | 1.000 | 0.990 | 0.975 (side) / 1.000 | 2026-11-04 |
+| `saturn_3_freighter` | pod group (Saturn 3 model 41.5-91.1 scaled 1.244, 1.093, 1; asset 41.5-96.8): expected exemption (Q23) | 0.768 | 0.643 | 0.927 | 1.114 | 0.988 | 1.022 | 0.975 (side) / 1.000 | 2026-11-04 |
 | `narn_transport` | whole ship (no shift) | 0.991 | 0.985 | 0.974 | 1.000 | 1.000 | 0.997 | 0.976 (side) / 1.000 | 2026-11-03 |
 | `brakiri_bokmai` | whole ship with its three pods (`--pods-from-hardpoints`, no shift) | 0.966 | 0.977 | 0.954 | 0.999 | 0.999 | 0.999 | 0.972 (side) / 1.000 | 2026-11-03 |
 | `centauri_brezebel` | whole ship (best shift x -0.15 m, the model's fins sit 0.2 m to port; unshifted 0.972, 0.984, 0.945) | 0.966 | 0.984 | 0.970 | 1.000 | 1.000 | 0.999 | 0.992 (side) / 1.000 | 2026-11-03 |
 | `skylark_transport` | whole ship (no shift) | 0.979 | 0.980 | 0.956 | 1.001 | 1.000 | 0.998 | 0.983 (side) / 1.000 | 2026-11-03 |
 
 ## `saturn_family` (T12)
+
+**Fix round (2026-11-04).** The lead ship is traced member by member off the Saturn 4 model's sections rather than the
+planned truss: the forward frame is an upper tube and an upper beam a side (the beam forking at z 37 into two bars falling
+to the drum frame's middle), a centre beam forking into two bars rising to it, and a lower bar falling to the truss drum,
+with a cross of thin plates ahead of the top drum and a box and an upright plate beside it; the aft frame is the forward
+frame's mirror about the drum frame's middle (z' = 92.6 - z). The drum frame's posts are one 3.2 m plate at z 43.9 and
+48.25 with one spoke band a side to the lower drums. The disc's section is elliptic (6.0 x sqrt(1 - (r/R)^2), at least
+1.0 m), the corner wedges 2.8 m thick, the neck a box ending at z 32.6 with a 1.3 m keel block. The transport pod's
+outline is the end band's (7.74 / 17.22 / 4.73 m at the inboard face, ridge and outboard face), the body 0.8 m in. The
+tank sections' A-frames stand at the model's two stations (section z 25.7 and 74.2). Scores in "Fidelity" above. The
+tables below are the T11 plan; where they differ, the code and this note are the build.
 
 One module, `tools/procgen/assets/saturn_family.py`, registering the five ids; each id is a variant record. The shared
 parts go into a new `tools/procgen/parts/saturn.py`. Every part has one size on every variant (Q16); the variants differ

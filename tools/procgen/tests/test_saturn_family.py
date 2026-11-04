@@ -268,6 +268,15 @@ class SaturnVariantChecks:
             self.assertTrue(np.all(chunk.min(axis=0) >= lo - 0.3) and np.all(chunk.max(axis=0) <= hi + 0.3), entry["name"])
 
     # --- fallback mesh -----------------------------------------------------------------------------------
+    def test_the_fallback_mesh_and_chunk_meshes_hold_every_piece(self) -> None:
+        parts = [p.part for p in saturn.with_twins(saturn.assemble(saturn.VARIANTS[self.ASSET_ID], saturn.EA_CIVILIAN))]
+        self.assertTrue(all(p.mesh.face_count > 0 for p in parts))
+        obj = read_obj(self.dir / f"{self.ASSET_ID}.obj")
+        self.assertEqual(len(obj.faces), sum(p.mesh.face_count for p in parts), "the hull OBJ is every piece")
+        for entry in self.hp["chunks"]:
+            expected = sum(p.mesh.face_count for p in parts if p.group == entry["name"])
+            self.assertEqual(len(read_obj(self.dir / entry["obj"]).faces), expected, entry["name"])
+
     def test_the_painted_mesh_is_the_fallback_mesh(self) -> None:
         # The ship as the game draws it (ships are meshes, the 2026-11-04 directive): the fallback mesh's triangles and paint.
         assert_painted_mesh(self, self.dir, self.manifest["paint_mesh"], f"{self.ASSET_ID}.obj", "hull")
