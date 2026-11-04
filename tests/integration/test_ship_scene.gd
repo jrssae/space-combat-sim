@@ -1,8 +1,8 @@
 extends GutTest
-## The ship scene headless (architecture §3, §6.4, §7.4; M1-T10 done-when): every part present, the GDGS hull node
-## loaded and the fallback mesh hidden under `--headless`, body settings from the ShipSpec and the hardpoints,
-## collision primitives, muzzles and cockpit anchor, the API Main (M1-T15) calls (commands and their edges, assist,
-## reset, the camera rig wiring), `SplatStatus`, and the `ship` / `render` console entries.
+## The ship scene headless (architecture §3, §6.4, §7; M1-T10 done-when): every part present, the hull drawn as its textured mesh
+## (one `Hull` node, M4-T31), body settings from the ShipSpec and the hardpoints, collision primitives, muzzles and cockpit anchor,
+## the API Main (M1-T15) calls (commands and their edges, assist, reset, the camera rig wiring), `RenderStatus`, and the `ship` /
+## `render` console entries.
 ##
 ## Hardpoints and manifest values are read from the generated files here, independently of `Hardpoints`, so a parser
 ## bug cannot hide in both. What the hull looks like is (H).
@@ -85,8 +85,9 @@ func test_scene_instantiates_with_every_part() -> void:
 	assert_eq(ship.name, &"PlayerShip")
 	assert_eq(ship.get_parent(), world, "spawned under World")
 	assert_true(ship.is_in_group(WorldFrame.SHIFTABLE_GROUP), "rebased with the world")
-	assert_true(ship.get_node(^"HullSplats") is GaussianSplatNode, "HullSplats is a GDGS node")
-	assert_true(ship.get_node(^"HullMeshFallback") is MeshInstance3D)
+	assert_true(ship.get_node(^"Hull") is MeshInstance3D, "one node draws the hull")
+	for gone: NodePath in [^"HullMeshFallback", ^"HullDepthProxy"]:
+		assert_null(ship.get_node_or_null(gone), "%s is gone (M4-T31)" % gone)
 	assert_true(ship.get_node(^"CockpitInterior") is MeshInstance3D)
 	assert_true(ship.get_node(^"Thrusters") is Node3D, "attach point for thruster visuals (M1-T13)")
 	assert_true(ship.get_node(^"Guns") is Node3D, "attach point for the cannons (M1-T13)")
@@ -95,21 +96,16 @@ func test_scene_instantiates_with_every_part() -> void:
 	assert_eq(ship.thrusters.get_child_count(), 0, "no thruster visuals yet")
 
 
-func test_splat_hull_is_present_and_the_fallback_hidden_headless() -> void:
-	assert_eq(DisplayServer.get_name(), "headless", "precondition: running headless")
-	assert_eq(SplatStatus.active_backend(), SplatStatus.BACKEND_HEADLESS, "headless is not 'no backend'")
+func test_the_hull_draws_its_textured_mesh() -> void:
 	var manifest: Dictionary = _read_json(MANIFEST_PATH)
 	assert_false(manifest.is_empty(), "manifest exists (%s)" % GEN_ASSETS_HINT)
-	var gaussian: GaussianResource = ship.hull_splats.gaussian
-	assert_not_null(gaussian, "hull splats loaded (%s)" % GEN_ASSETS_HINT)
-	if gaussian != null:
-		assert_eq(gaussian.point_count, int(manifest["lods"][0]["splats"]), "the starfury_aurora PLY")
-	assert_true(ship.hull_splats.visible, "splats visible")
-	assert_false(ship.hull_mesh_fallback.visible, "fallback hidden")
-	assert_false(ship.is_fallback_mesh_active())
-	assert_eq(ship.hull_splats.transform, GaussianSplatNode.get_model_orientation_correction(),
-			"identity in the scene; GDGS applies its own Rz(180) on entering the tree (§9.1)")
-	assert_not_null(ship.hull_mesh_fallback.mesh, "fallback mesh loaded")
+	var textured: Mesh = MeshAssets.for_asset(spec.asset_id)
+	assert_not_null(textured, "the textured mesh (%s)" % GEN_ASSETS_HINT)
+	assert_same(ship.hull.mesh, textured, "the asset's one shared mesh, so every copy instances")
+	assert_same(ship.hull_mesh(), textured)
+	assert_true(ship.hull.visible)
+	assert_eq(ship.hull.transform, Transform3D.IDENTITY, "the mesh is in the body frame")
+	assert_eq(textured.get_surface_count(), (manifest["mesh"]["surfaces"] as Array).size(), "the hull and its glass")
 	assert_not_null(ship.cockpit_interior.mesh, "cockpit interior mesh loaded")
 
 
@@ -207,7 +203,7 @@ func test_missing_generated_assets_only_warn_and_the_ship_coasts() -> void:
 	var ghost: Ship = _spawn_ship(ghost_spec, Vector3(0.0, 300.0, 0.0))
 	assert_false(ghost.get_layout().valid, "no hardpoints, no layout")
 	assert_false(ghost.get_hardpoints().valid)
-	assert_null(ghost.hull_splats.gaussian, "no splats")
+	assert_null(ghost.hull.mesh, "nothing to draw")
 	assert_eq(_collision_nodes(ghost).size(), 0)
 	assert_eq(ghost.get_muzzles().size(), 0)
 	assert_eq(ghost.get_chase_offset(), Ship.DEFAULT_CHASE_OFFSET)
@@ -359,14 +355,20 @@ func test_camera_rig_wiring_shows_the_interior_only_in_the_cockpit() -> void:
 	assert_eq(rig.chase_config.offset_local, ship.get_chase_offset())
 
 
-func test_use_fallback_mesh_swaps_the_hull() -> void:
-	ship.use_fallback_mesh(true)
-	assert_true(ship.hull_mesh_fallback.visible)
-	assert_false(ship.hull_splats.visible)
-	assert_true(ship.is_fallback_mesh_active())
-	ship.use_fallback_mesh(false)
-	assert_false(ship.hull_mesh_fallback.visible)
-	assert_true(ship.hull_splats.visible)
+func test_the_cockpit_view_keeps_the_hull_and_clears_its_canopy_glass() -> void:
+	var glass: int = -1
+	for i: int in ship.hull.mesh.get_surface_count():
+		if String(ship.hull.mesh.surface_get_material(i).resource_name) == MeshAssets.GLASS_SURFACE:
+			glass = i
+	assert_gt(glass, -1, "the hull has a glass surface (%s)" % GEN_ASSETS_HINT)
+	if glass < 0:
+		return
+	assert_null(ship.hull.get_surface_override_material(glass), "from outside the glass is the real thing")
+	ship.set_cockpit_interior_visible(true)
+	assert_true(ship.hull.visible, "the textured hull stays drawn from inside")
+	assert_not_null(ship.hull.get_surface_override_material(glass), "from inside the glass draws nothing")
+	ship.set_cockpit_interior_visible(false)
+	assert_null(ship.hull.get_surface_override_material(glass))
 
 
 # --- console: ship -----------------------------------------------------------------------------------------------
@@ -440,98 +442,37 @@ func test_console_entries_leave_with_the_ship() -> void:
 	ship = null
 
 
-# --- SplatStatus -------------------------------------------------------------------------------------------------
+# --- RenderStatus ------------------------------------------------------------------------------------------------
 
 
-func _add_splat_status() -> SplatStatus:
-	var status := SplatStatus.new()
-	status.name = "SplatStatus"
+func _add_render_status() -> RenderStatus:
+	var status := RenderStatus.new()
+	status.name = "RenderStatus"
 	add_child_autofree(status)
 	return status
 
 
-func test_splat_status_backend_ids() -> void:
-	assert_eq(SplatStatus.backend_id("Compute"), SplatStatus.BACKEND_COMPUTE)
-	assert_eq(SplatStatus.backend_id("Raster"), SplatStatus.BACKEND_RASTER)
-	assert_false(SplatStatus.needs_fallback(SplatStatus.BACKEND_COMPUTE))
-	assert_false(SplatStatus.needs_fallback(SplatStatus.BACKEND_RASTER))
-	assert_false(SplatStatus.needs_fallback(SplatStatus.BACKEND_HEADLESS), "headless keeps the splat path")
-	assert_true(SplatStatus.needs_fallback(SplatStatus.BACKEND_NONE), "a screen and no backend: meshes")
-
-
-func test_splat_status_starts_with_splats_headless() -> void:
-	var status: SplatStatus = _add_splat_status()
-	assert_false(status.is_fallback_active())
-	assert_false(status.is_fallback_forced())
-	assert_false(ship.is_fallback_mesh_active(), "the ship keeps its splats")
-
-
-func test_fallback_command_switches_ship_buoy_and_sky() -> void:
-	var camera := Camera3D.new()
-	add_child_autofree(camera)
-	camera.current = true
-	var env: SpaceEnvironment = (load(ENVIRONMENT_PATH) as PackedScene).instantiate() as SpaceEnvironment
-	add_child_autofree(env)
-	var buoy: NavBuoy = NavBuoy.create("NAV ALPHA")
-	world.spawn(buoy, world.to_universe(Vector3(0.0, 0.0, -500.0)))
-	var status: SplatStatus = _add_splat_status()
-	watch_signals(status)
-
-	var result: ConsoleResult = _console("fallback on")
-	assert_true(result.ok, result.text())
-	assert_eq(result.lines, PackedStringArray(["render.fallback = true"]))
-	assert_true(status.is_fallback_active())
-	assert_true(ship.is_fallback_mesh_active(), "ship hull on the mesh")
-	assert_true(ship.hull_mesh_fallback.visible)
-	assert_false(ship.hull_splats.visible)
-	assert_true(buoy.is_fallback_mesh_active(), "buoy on the mesh")
-	assert_true(env.is_fallback_sky_active(), "panorama sky")
-	assert_signal_emitted_with_parameters(status, "fallback_changed", [true])
-
-	result = _console("fallback off")
-	assert_true(result.ok, result.text())
-	assert_false(ship.is_fallback_mesh_active())
-	assert_true(ship.hull_splats.visible)
-	assert_false(buoy.is_fallback_mesh_active())
-	assert_false(env.is_fallback_sky_active())
-
-	assert_eq(_console("fallback").lines, PackedStringArray(["render.fallback = true"]), "no argument toggles")
-	assert_true(ship.is_fallback_mesh_active())
-	assert_eq(status.toggle_fallback(), "", "Main's F4 toggle")
-	assert_false(ship.is_fallback_mesh_active())
-	assert_signal_emit_count(status, "fallback_changed", 4)
-
-
-func test_forced_fallback_reaches_nodes_spawned_later() -> void:
-	var status: SplatStatus = _add_splat_status()
-	assert_eq(status.set_fallback(true), "")
-	var late: Ship = _spawn_ship(spec, Vector3(0.0, 500.0, 0.0))
-	var buoy: NavBuoy = NavBuoy.create("NAV LATE")
-	world.spawn(buoy, world.to_universe(Vector3(0.0, 0.0, -800.0)))
-	assert_true(late.is_fallback_mesh_active(), "a ship spawned after the switch uses the mesh")
-	assert_true(late.hull_mesh_fallback.visible)
-	assert_true(buoy.is_fallback_mesh_active(), "so does a buoy")
-	status.set_fallback(false)
-	assert_false(late.is_fallback_mesh_active())
+func test_render_status_names_the_renderer() -> void:
+	assert_eq(DisplayServer.get_name(), "headless", "precondition: running headless")
+	assert_eq(RenderStatus.renderer(), RenderStatus.RENDERER_HEADLESS)
 
 
 func test_render_provider_and_entries_leave_with_the_status() -> void:
-	var status: SplatStatus = _add_splat_status()
+	var status: RenderStatus = _add_render_status()
 	var registry: ConsoleRegistry = DebugConsole.registry
 	var provider: ConsoleStateProvider = registry.get_provider(&"render")
-	assert_not_null(provider, "SplatStatus registers provider 'render'")
-	var expected_keys: Array[StringName] = [&"splat_backend", &"fallback", &"fps", &"gpu", &"gdgs_rebuilds", &"gdgs_splat_uploads",
-			&"gdgs_render_states", &"splat_visible", &"splat_clipped", &"splat_budget_mb", &"gpu_ms"]
+	assert_not_null(provider, "RenderStatus registers provider 'render'")
+	var expected_keys: Array[StringName] = [&"renderer", &"fps", &"frame_ms", &"draw_calls", &"triangles", &"vram_mb", &"far_dots",
+			&"gpu", &"gpu_ms"]
 	assert_eq(provider.keys(), expected_keys, "the §6.4 keys")
-	assert_true(provider.is_writable(&"fallback"))
-	assert_false(provider.is_writable(&"splat_backend"))
-	assert_true(registry.has_command(&"fallback"))
-	assert_string_contains(registry.help(&"fallback")[0], "fallback [on|off]")
-	assert_eq(registry.format_path("render.splat_backend"), "render.splat_backend = headless")
-	assert_eq(registry.format_path("render.fallback"), "render.fallback = false")
-	assert_true(registry.read("render.fps")["ok"])
-	assert_true(registry.read("render.gpu")["ok"])
+	for key: StringName in expected_keys:
+		assert_false(provider.is_writable(key), "%s is read-only" % key)
+		assert_true(registry.read("render." + String(key))["ok"], String(key))
+	assert_eq(registry.format_path("render.renderer"), "render.renderer = headless")
+	assert_eq(int(registry.read("render.far_dots")["value"]), 0, "no ship is far")
+	for gone: StringName in [&"fallback", &"lod", &"relight"]:
+		assert_false(registry.has_command(gone), "the %s command is gone (M4-T31)" % gone)
+	assert_false(registry.has_provider(&"lod"), "the far dot count moved to render")
 	remove_child(status)
 	assert_false(registry.has_provider(&"render"), "provider unregistered on exit")
-	assert_false(registry.has_command(&"fallback"), "command unregistered on exit")
 	status.free()

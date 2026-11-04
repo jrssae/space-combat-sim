@@ -1,15 +1,17 @@
 extends GutTest
 ## The node diet for AI ships (M4-T11, architecture §17.10). A pooled AI ship is built lean: its body, the collision shapes as
-## shape owners of the body (no node each), its splat levels, the depth proxy (which also draws the fallback mesh), its plumes as
-## one multimesh, its running lights as one multimesh, and the gameplay components. The player's ship keeps every node it had.
-## A near lean ship draws at most three surfaces (the proxy, the plumes, the markers); what that is in draw calls on the GPU is
-## measured by the fullscreen check, not here.
+## shape owners of the body (no node each), one `Hull` node drawing its textured mesh (M4-T31), its plumes as one multimesh, its
+## running lights as one multimesh, and the gameplay components. The player's ship keeps every node it had. A near lean ship draws
+## its hull's surfaces (the hull and its glass) plus the plumes and the markers; what that is in draw calls on the GPU is measured by
+## the fullscreen check, not here.
 
 const DT: float = 1.0 / 60.0
 ## Nodes of a lean AI ship's own, besides its guns: each muzzle adds a marker and a flash (the weapons' nodes, not changed here).
-const OWN_NODES_MAX: int = 16
-## Surfaces a near lean ship draws while its plumes burn and its lights are on (the muzzle flashes only while it fires).
-const SURFACES_MAX: int = 3
+## It was 16 before M4-T31, which left one `Hull` node where five hull nodes had been.
+const OWN_NODES_MAX: int = 11
+## Surfaces a near lean ship draws while its plumes burn and its lights are on (the muzzle flashes only while it fires): the hull's
+## two (hull and glass; a raider's one), the plumes, the markers.
+const SURFACES_MAX: int = 4
 
 var world: WorldFrame
 var projectiles: Node3D
@@ -105,7 +107,7 @@ func test_the_players_ship_keeps_every_node() -> void:
 	assert_eq((ship.get_node(^"RunningLights") as RunningLights).markers().size(), 3, "three marker meshes")
 	assert_not_null(ship.cockpit_interior)
 	assert_not_null(ship.cockpit_anchor)
-	assert_not_null(ship.hull_mesh_fallback)
+	assert_not_null(ship.hull)
 	gut.p("player: %d nodes" % _count(ship))
 
 
@@ -127,28 +129,13 @@ func test_a_lean_ship_is_hit_by_a_ray_through_its_hull() -> void:
 	assert_eq(hit.get("collider"), raider.ship)
 
 
-func test_a_lean_ship_drops_the_cockpit_and_the_extra_fallback_node() -> void:
+func test_a_lean_ship_drops_the_cockpit_and_draws_its_hull_on_one_node() -> void:
 	for c: Combatant in pool.all_ships():
 		assert_null(c.ship.cockpit_interior, "no interior on an AI ship")
 		assert_null(c.ship.cockpit_anchor)
-		assert_null(c.ship.hull_mesh_fallback, "the proxy node draws the fallback mesh")
-		assert_not_null(c.ship.fallback_mesh(), "the fallback mesh is still loaded")
-
-
-func test_a_lean_ship_shows_its_fallback_mesh_on_the_proxy_node() -> void:
-	var raider: Combatant = _acquire(ShipPool.DEFAULT_TYPE, Vector3(0.0, 0.0, -200.0))
-	var proxy: HullDepthProxy = raider.ship.hull_depth_proxy
-	assert_eq(proxy.mesh.get_surface_count(), 1, "the proxy is one surface")
-	assert_not_null(proxy.material_override, "drawn black")
-	raider.ship.use_fallback_mesh(true)
-	assert_true(proxy.visible)
-	assert_eq(proxy.mesh, raider.ship.fallback_mesh(), "the fallback mesh with its own materials")
-	assert_null(proxy.material_override)
-	for node: GaussianSplatNode in raider.ship.splat_nodes():
-		assert_false(node.visible)
-	raider.ship.use_fallback_mesh(false)
-	assert_eq(proxy.mesh.get_surface_count(), 1)
-	assert_not_null(proxy.material_override)
+		assert_not_null(c.ship.hull)
+		assert_same(c.ship.hull.mesh, MeshAssets.for_asset(c.ship.spec.asset_id), "%s: the shared textured mesh" % c.ship.spec.asset_id)
+		assert_eq(_collect(c.ship, MeshInstance3D).size(), 1, "%s: the hull is its one mesh node" % c.ship.spec.asset_id)
 
 
 # --- plumes ---------------------------------------------------------------------------------------------------------------

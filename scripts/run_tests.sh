@@ -209,7 +209,7 @@ echo "== Console smoke run: the real main scene"
 log="${REPORTS}/console_main.log"
 main_status=0
 timeout 180 "${GODOT}" --headless --path . -- --console-strict \
-    --console-exec="wait 30; state; state ship; get render.splat_backend; quit" > "${log}" 2>&1 || main_status=$?
+    --console-exec="wait 30; state; state ship; get render.renderer; quit" > "${log}" 2>&1 || main_status=$?
 cat "${log}"
 if (( main_status != 0 )); then
     echo "run_tests.sh: main scene smoke run exited ${main_status}, expected 0 (see ${log})." >&2
@@ -219,10 +219,10 @@ if grep -E "${SCRIPT_ERRORS}" "${log}"; then
     echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lights, lod, perf, post, raiders, ram, render, screens, settings, ship, targeting, time, waves, weapons, wing, world" \
+expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lights, perf, post, raiders, ram, render, screens, settings, ship, targeting, time, waves, weapons, wing, world" \
     || smoke_status=1
 expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
-expect_line "${log}" "[console] render.splat_backend = headless" || smoke_status=1
+expect_line "${log}" "[console] render.renderer = headless" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 reject_text "${log}" "ERROR:" || smoke_status=1
 
@@ -550,7 +550,7 @@ if (( route_status != 0 )); then
     echo "run_tests.sh: instructor route smoke run exited ${route_status}, expected 0 (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lights, lod, perf, post, raiders, ram, render, route, screens, settings, ship, targeting, time, waves, weapons, wing, world" \
+expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lights, perf, post, raiders, ram, render, route, screens, settings, ship, targeting, time, waves, weapons, wing, world" \
     || smoke_status=1
 expect_line "${log}" "[console] route.index = 1" || smoke_status=1
 expect_line "${log}" "[console] route.count = 6" || smoke_status=1
