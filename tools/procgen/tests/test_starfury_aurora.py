@@ -179,6 +179,7 @@ class StarfuryAuroraTests(unittest.TestCase):
                     "starfury_aurora_lod1.light",
                     "starfury_aurora_lod2.light",
                     "starfury_aurora_lod3.light",
+                    "starfury_aurora_mesh.glb",  # M4-T27: the painted mesh
                 ]
                 + chunk_files
             ),
@@ -189,6 +190,7 @@ class StarfuryAuroraTests(unittest.TestCase):
             self.manifest["files"],
             {
                 "fallback_mesh": "starfury_aurora.obj",
+                "paint_mesh": "starfury_aurora_mesh.glb",
                 "cockpit_mesh": "cockpit_interior.obj",
                 "hardpoints": "hardpoints.json",
             },
@@ -959,7 +961,7 @@ class StarfuryAuroraTests(unittest.TestCase):
 
     def test_hardpoints_and_manifest_only_gain_the_new_keys_at_the_end(self) -> None:
         self.assertEqual(list(self.hp)[-1], "chunks")
-        self.assertEqual(list(self.manifest)[-3:], ["chunks", "chunk_lod", "hero"])
+        self.assertEqual(list(self.manifest)[-4:], ["chunks", "chunk_lod", "paint_mesh", "hero"])
         self.assertEqual(self.out_a.warnings, ())  # the LOD1 share is inside AC6
 
     # --- determinism ------------------------------------------------------------------------
