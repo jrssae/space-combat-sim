@@ -19,18 +19,12 @@ resolve the shader's `#include "godot/scene_data_inc.glsl"` and caches an empty 
 Vendored addons are upstream code: do not edit them in place. If a patch is unavoidable, put it in
 `addons/<name>/PATCHES.md`, keep it minimal, and upstream it.
 
-## Our fork (`addons/`)
+## Removed (history)
 
-| Component | Forked from | Location | Licence | Upstream |
-|---|---|---|---|---|
-| GDGS (Godot Gaussian Splatting plugin), by ReconWorldLab | v3.3.0, commit `d9de8db` | `addons/gdgs_scs/` (+ `addons/gdgs_scs/LICENSE`); fork: https://github.com/jrssae/godot-gaussian-splatting, branch `space-combat-sim` | MIT, unchanged (copyright ReconWorldLab) | https://github.com/ReconWorldLab/godot-gaussian-splatting |
-
-The project owns this fork (maintainer, 2026-11-01) because the game needs renderer changes upstream may never take. Edit it in
-this repo, where the game needs it, then run `scripts/sync_gdgs_fork.sh "<subject>"`, which commits the same tree to the fork, pushes
-it and updates the pin in `scripts/vendor_addons.sh`. `addons/gdgs_scs/PATCHES.md` lists every change and how to revert it; the general fixes
-are still upstream candidates. The fork keeps upstream's licence, so the rest of the project stays GPL-3.0 and this directory
-stays MIT. The fork's description says it is vibe coded for this project and not intended or optimized for anyone else's use, though
-everyone is welcome to it.
+| Component | Removed | Why |
+|---|---|---|
+| GDGS (Godot Gaussian Splatting plugin, MIT, by ReconWorldLab), the project's fork `addons/gdgs_scs/` (from v3.3.0) | 2026-11-04, M4-T31 | Q29: every hull is a textured polygon mesh now. The GitHub fork `jrssae/godot-gaussian-splatting` was archived on 2026-11-04 (Q30) and the maintainer deletes it; `scripts/sync_gdgs_fork.sh` went with it |
+| Pillow | 2026-11-04, M4-T31 (unused since M4-T30c) | `tools/procgen/core/image.py` writes every PNG; CI no longer installs it |
 
 ## Used but not vendored
 
@@ -42,7 +36,6 @@ everyone is welcome to it.
 | SDL3 | bundled in Godot 4.7 | Zlib | Gamepad input backend |
 | Python | 3.11+ | PSF-2.0 | Asset generators in `tools/` |
 | NumPy | 2.x | BSD-3-Clause | Asset generators |
-| Pillow | 10+ (optional) | MIT-CMU | Only for the fallback panorama sky PNG |
 
 ## Built from source, not vendored (`native/`, M4-T05)
 
@@ -72,8 +65,6 @@ Re-check this table against `cargo metadata` whenever `Cargo.lock` changes.
 
 | Component | Licence | Why not now |
 |---|---|---|
-| Brush (splat trainer) | Apache-2.0 | Needs a GPU; optional M2+ polish path |
-| OpenSplat | AGPL-3.0 | CPU path too slow for CI; AGPL is fine for an external tool but adds nothing over sampling |
 | gdUnit4 | MIT | Fine framework; GUT chosen for its simpler headless CLI |
 | Piper TTS (`OHF-Voice/piper1-gpl`; the original `rhasspy/piper` was MIT and is archived) | GPL-3.0 (voice models: per-voice `MODEL_CARD` licence) | Candidate for voiced dialog (roadmap M15), run offline on the user's machine; adopt only voices whose licence permits it |
 | Kokoro TTS | Apache-2.0 (code and weights) | Alternative TTS candidate for M15 |

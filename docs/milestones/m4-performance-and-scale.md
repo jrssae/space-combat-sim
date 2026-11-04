@@ -158,7 +158,7 @@ are M5's mission work).
 | AC4 | No regressions: after each cycle the focused runs (the touched code and AC13's paired budget) are green locally and CI's full suite is green on the push (Q10); `scripts/run_tests.sh` green locally once, before M4 closes; every behaviour change listed | A | M4-T06m, 2026-11-03: full suite 2 257 of 2 259 passing, 0 failing, 2 pending (AC12); CI green on every cycle's push; behaviour changes in the T06 report |
 | AC5 | Goal: the headline max N is at least 100, and toward 500. Not reached after cycle 4: the report says so and asks for guidance (T06) | A | **Not met**: headline 25 by the sweep, 45 with the below-sweep runs (release build: 50 in the quick check). T06 asks for guidance, 2026-11-03 |
 | AC6 | Render check at the headline max N on the maintainer's GPU: FPS, frame time, VRAM, GPU and driver recorded (by the agent, 2026-11-01) | A | M4-T06m, 2026-11-03 (Cycle log, Final measurements) |
-| AC7 | Textured meshes, no splats (Q29): every ship, station, capital, prop and the sky draws without Gaussian splats, the hulls as procedurally textured meshes from `tools/procgen` (T30a to T30c); `addons/gdgs_scs` and every splat path in code, procgen, settings, console, tests, scripts and docs are gone (T31); the maintainer has accepted the Starfury look sheet (checkpoint 1b) | A, H | not started |
+| AC7 | Textured meshes, no splats (Q29): every ship, station, capital, prop and the sky draws without Gaussian splats, the hulls as procedurally textured meshes from `tools/procgen` (T30a to T30c); `addons/gdgs_scs` and every splat path in code, procgen, settings, console, tests, scripts and docs are gone (T31); the maintainer has accepted the Starfury look sheet (checkpoint 1b) | A, H | met (A, T31 2026-11-04: no splat code, asset or setting left; checkpoint 1b approved, Q34); the T30d sheets wait for (H) |
 
 ## Task breakdown (ordered)
 
@@ -199,7 +199,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T30b | The Starfury refined (Q34) and wing liveries with per-ship numbers (Q35); the look gate again (H, checkpoint 1c) | T30a, checkpoint 1b | Opus | The livery is a shader-side layer so every wing still instances; the colours and patterns are the maintainer's call | X, R | done (the look gate, checkpoint 1c, is open) |
 | T30d | Every other hull textured (raider, buoy, chunks, capital and station pieces), mesh LODs measured, the mesh path the default (split from T30b, 2026-11-04) | T30b | Opus | Mechanical once the generator is fixed; each asset's markings and emissives need judgement, the look (H) | X, R | done (2026-11-04, in a worktree on `c0a0b81`; Cycle log, M4-T30d; the fine Starfury stays, the sheets wait for (H)) |
 | T30c | The sky without splats: a star point field and the nebula as a generated panorama | T30a | Opus | The sky is the last splat node; stars must stay crisp points at any resolution | X, R | done |
-| T31 | Remove Gaussian splats: `addons/gdgs_scs` and every splat path in code, procgen, settings, console commands, tests, scripts, CI and docs (Q29, Q30) | T30d, T30c | Opus | About 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only deletion | X, R, G | not started |
+| T31 | Remove Gaussian splats: `addons/gdgs_scs` and every splat path in code, procgen, settings, console commands, tests, scripts, CI and docs (Q29, Q30) | T30d, T30c | Opus | About 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only deletion | X, R, G | done (2026-11-04, in a worktree on `8329f16`; Cycle log, M4-T31) |
 
 ### M4-T01 Benchmark harness, budget and baseline
 
@@ -1562,6 +1562,22 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
 - **Expected gain:** VRAM down about 1.2 GB at the default budget (85 %); the frame's process work at 500 down 0.5 to 1.5 ms
   (50 %); the tick unchanged (95 %).
 - **Architecture:** §17.20, and the rewrite of §7, §9, §14.4 and §14.8 (the one exception to the §17-only rule).
+- **Done (2026-11-04, in its own worktree on `8329f16`; the Cycle log entry "M4-T31" holds the numbers; report
+  `.superpowers/sdd/m4-performance-and-scale/task-t31-report.md`):** built as planned, with these differences. `ship.tscn`'s one `Hull`
+  draws the textured mesh, and while the cockpit interior is shown it draws the hull's OBJ with the canopy glass and frames cleared,
+  as before T31 (the cockpit view the maintainer approved); the OBJ stays a generator output for that and for the chunks. The F4
+  action (`debug_toggle_fallback_mesh`) left the input map, the profiles and `UiCommand`. `top_lamp_energy` went too (it fed only the
+  splat own lights; the lamp's glow is the lens's emissive texels). `RenderScale` keeps its cap as a pixel budget for very large
+  windows (T26 may replace it), reworded. The `sheet` command and `scripts/look_sheet.sh` lost their look argument;
+  `scripts/render_compare.sh <scene> [label]` lost its render argument. `RenderPiece` lost its levels, so `LodSwitcherMath` keeps only
+  `far_dot`. The generators keep surface samples (centring, markers, chunk offsets, bakes) on streams renamed `surface`, so hull
+  centroids move by sampling noise (up to 2 mm) and the Starfury's chunks are placed on the full-detail samples (millimetres
+  from M3's coarser level); the manifest's box bounds the hull mesh. The sky's star file and panorama are byte-identical to T30c's.
+  The "no splat node enters or leaves the tree" tests became "no pooled ship or chunk enters or leaves the tree" (D22's reason is now
+  node churn). The guard test is `tests/integration/test_mesh_only_scene.gd` (no node or compositor effect from an addon but GUT and
+  the lens flare; only those two addons installed or naming classes) and `tools/procgen/tests/test_mesh_only.py`. A lean AI ship has 11
+  nodes of its own besides its guns (was 16). `test_fighter_melee` (T14) runs in its own physics space, since in the shared one
+  the tests before it changed its result (it failed in the base's full suite), and holds a new digest for the moved hull.
 
 #### Architecture subsections this plan assigns
 
@@ -3489,6 +3505,68 @@ by its asset's name and the other assets are built again on their own (`tools/pr
 `m4_t30d_b5_station_sheet.png` (3, 8 and 20 km), and the LOD comparison `m4_t30d_starfury_fine_sheet.png` against
 `m4_t30d_starfury_coarse_sheet.png` (Alpha and plain, 8 and 30 m) and `m4_t30d_raider_coarse_sheet.png`. Made with `scripts/look_sheet.sh`
 (`SHEET_LOOKS`, `SHEET_DISTANCES`, `SHEET_COCKPIT=0` for the props, `SHEET_PREFIX=m4_t30d`); the full-size shots stayed in `/tmp`.
+
+### M4-T31 (2026-11-04): Gaussian splats removed
+
+**How it measured.** In its own worktree, the before on the base `8329f16` before anything was deleted, the after on the removal
+(`c4dd310`), the same scripts both times: the fullscreen check (`scripts/fullscreen_check.sh typical 58`) and the scene measurer
+(`scripts/render_compare.sh`, `battle` 500 live and frozen, `station_near` frozen and live; 8 s warm-up, 20 s measured, vsync off,
+the 3D at 1 080 lines), under the GPU lock and both bench locks, one at a time; a headless `bench battle 300 10 warmup=5 seed=1`
+pinned to cores 0-11; a fresh headless import (no `.godot`) and `scripts/run_tests.sh`, each in a copy of the tree so the shared
+`reports/` stayed untouched. Load 1.2 to 2.4 on 20 threads. Reports in `reports/perf/m4_t31_before_*` and `m4_t31_after_*`.
+"process" is the mean of the frame's `TIME_PROCESS`; VRAM is from `mem_info_vram_used` (before the scene, its peak, and the
+difference).
+
+| run | frame mean / p99 ms before | after | GPU ms before | after | process ms before | after | VRAM peak MB before | after | VRAM added MB before | after |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `typical` 58, live | 12.90 / 21.16 | 7.85 / 20.46 | 1.82 | 1.60 | 10.45 | 8.12 | 5 196 | 3 077 | 1 252 | -163 |
+| `battle` 500, live | 637.7 / 689.8 | 589.4 / 646.5 | 2.12 | 1.88 | 34.74 | 21.78 | 5 179 | 3 257 | 1 155 | -51 |
+| `battle` 500, frozen | 20.75 / 24.23 | 10.84 / 14.71 | 2.08 | 1.86 | 23.54 | 12.90 | 5 276 | 3 261 | 1 062 | -58 |
+| station near, frozen | 5.11 / 8.23 | 3.24 / 5.48 | 2.13 | 1.74 | 8.85 | 5.46 | 5 175 | 3 416 | 982 | 102 |
+| station near, live | 129.95 / 156.77 | 45.57 / 68.96 | 2.03 | 1.79 | 13.74 | 11.67 | 5 275 | 3 516 | 1 307 | 199 |
+
+Draw calls and triangles moved by under 5 % (`battle` 500 frozen: 1 174 against 1 196 calls, 484 459 against 474 145 triangles).
+
+| headless | before | after |
+|---|---|---|
+| `battle` 300 tick median / p99 ms | 42.18 / 47.82 | 39.71 / 43.19 |
+| its AI, flight, resolvers, physics, stand-ins stages (median ms) | 21.13, 9.06, 6.44, 1.83, 5.05 | 20.42, 8.54, 6.20, 1.33, 4.78 |
+| fresh import of the project, s | 133.6 (1.8 GB in `.godot/imported`) | 5.2 (124 MB in `.godot/imported`) |
+| `scripts/run_tests.sh` wall time | 2 626 s, exit 1 | 2 065 s, exit 0 (after `c2a442f`; 2 066 s and exit 1 on `c4dd310`, the melee alone failing) |
+| Python tests | 498, OK | 400, OK |
+| GUT tests: total, passing, failing, pending | 2 486, 2 457, 27, 2 | 2 272, 2 270, 0, 2 |
+| `build all` (`PROCGEN_JOBS` 2) | not measured | 81.4 s |
+
+**Reading.** VRAM: the expected 1.2 GB went. The splat budget's sort buffers were allocated at start-up, so they sat in the base's
+"before" figure (3.9 to 4.2 GB at the start of a run against 3.2 to 3.3 GB after) and its peak (about 5.2 GB against 3.1 to 3.5 GB):
+about 1.9 GB less at the peak, and a scene now adds 0 to 0.2 GB instead of 1.0 to 1.3 GB. The frame: with the hulls already meshes
+(T30d), the splat machinery still ran every frame (the pose syncs, the level switchers, the budget step, the painted mesh lights,
+the compositor pass), and it cost far more than the plan's 0.5 to 1.5 ms: the frozen 500 battle's process time fell from 23.5 to
+12.9 ms and its frame from 20.8 to 10.8 ms (48 to 92 FPS), `typical` from 12.9 to 7.9 ms (now 127 FPS, inside the 12 ms headroom
+line), the live station from 130 to 46 ms. GPU time fell 0.2 to 0.4 ms (no compositor pass). The tick did not move (the 300 battle's
+stages are within the machine's run-to-run spread). The live 500 battle is still bound by the tick, as before.
+
+**The base's suite was red.** `scripts/run_tests.sh` on `8329f16` failed: 27 GUT failures in splat-path tests that T30d's mesh
+default had already broken (`test_hero_lod`, `test_hull_depth_proxy`, `test_splat_budget_in_play`, `test_splat_import`, splat cases
+of `test_ship_scene`, `test_ship_nodes`, `test_ally_pool`, `test_targeting_controller`, `test_speed_and_autotrack`) and
+`test_fighter_melee`'s seeded digest; and the console smoke runs expected a providers line without `flight`, `livery` and `sky`.
+T31 removed or rewrote the splat tests and fixed the smoke lines. The melee's digest failed only in the full suite: Jolt's result
+depends on every body its space has held, so the tests before it moved it (2 092 contacts at the base). It now runs in its own
+`World3D`, where the base gives the old pin exactly; T31's re-centring moved the Starfury's collision boxes and centre of mass by
+under 2 mm, so it holds a new digest (2 959 contacts, the same 11 rams), the same alone and after `test_dogfight`.
+
+**Tests removed** (whole files): GUT `test_splat_import`, `test_splat_pose_sync`, `test_splat_budget_in_play`, `test_splat_budget`,
+`test_splat_budget_math`, `test_splat_lighting_loader`, `test_splat_lod`, `test_gaussian_scene_registry`, `test_hull_depth_proxy`,
+`test_hero_lod`, `test_relight`, `test_lod_in_play`, `test_render_path` (its capital, station and far-dot cases moved into
+`test_textured_hulls` and `test_far_dots`), `test_paint_meshes`; Python `test_ply`, `test_lighting`, `test_frames`, `test_relit_assets`,
+`test_paint_mesh`. Cases removed from other files: the splat halves of `test_sampling`, `test_chunks` (rewritten for sample-placed
+chunks), `test_render_pieces` (now the textured pieces), `test_manifest` (no `lods` or `hero`), every asset test's PLY, splat-count,
+LOD, hero and option (`overlap`, `thickness`, `lod1_factor`) cases, `StarfuryHeroTests` and `StarfuryLod1FrameAndCoverageTests`,
+the own-light cases of `test_running_lights` and `test_running_lights_in_play`, the splat-level cases of `test_far_dots`, the GDGS
+compositor cases of `test_environment` and `test_post_effects`, the fallback cases of `test_ship_scene`, `test_debris_pool`,
+`test_targeting_controller` and `test_textured_hulls`, and `test_lod_switcher_math`'s level cases. Added: `test_mesh_only_scene`,
+`test_mesh_only`. `test_ship_nodes`: a lean AI ship has 11 nodes of its own besides its guns (raider 19 with its 4 muzzles and
+flashes, Starfury 15 with its 2; the limit was 16) and draws 3 (raider) or 4 (Starfury: hull, glass, plumes, markers) surfaces.
 
 ## Definition of done (M4)
 
