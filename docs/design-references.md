@@ -170,6 +170,9 @@ Colours come from screen captures on the fan wiki The Babylon Project (babylon5.
 sit in `reports/refs/<ship>/web/` beside the renders and are never committed. The wiki's HTML pages refuse plain
 clients; its API (`/api.php`) and the image host answer.
 
+The Saturn, Skylark and Narn colours below were revised on 2026-11-04 after the maintainer compared approval shots with
+the captures (`docs/assets-civilian.md`, "Colour round"); no ship carries a painted panel grid.
+
 Frame in this section: x to starboard, y up, z aft from the nose tip (z = 0), metres. These are Godot's axes (-Z
 forward, so +Z is aft) with the origin at the nose, the raider's authored frame. Rerun any ship with
 `.venv/bin/python3 -I tools/refview/refview.py references/<file>.stl --name <ship> --length <m> --right=<axis>
@@ -245,10 +248,10 @@ the spine tank; from behind they form an inverted triangle 50.5 m wide and 30.8 
 
 | Where | sRGB | Read from |
 |---|---|---|
-| Plating: disc, truss, drums, arms, rails, engine section | #A7A49E, panel lines and recesses #55534F | Achilles.jpg (the disc's face), Epsilon.JPG (the disc's rim) |
-| Hull cylinders and tanks: bands about one diameter wide, alternating | red #A33A2E and off-white #D9D5CC; the red reads maroon #6B2B24 in shadow | Achilles.jpg, Red Star 9.jpg, Raiders01.jpg |
-| Pods | grey #8C8B86 with panel patches #75736E; end frames and ribs #55534F | Red Star 9.jpg, Dionysus.JPG, Valjean.JPG |
-| Disc's top face | a rust-red ring #9C4A3C between the rim and the hub, dark radial fins #3B3735, a white hub #E2DED6 | Epsilon.JPG |
+| Plating: disc, truss, drums, arms, rails, engine section | cool grey #A4A7AA, recesses #4F5256 | Achilles.jpg (the disc's face), Epsilon.JPG (the disc's rim) |
+| Hull cylinders and tanks: bands about one diameter wide, alternating | red #A8322C and off-white #DADCDE; the red reads maroon #6B2B24 in shadow | Achilles.jpg, Red Star 9.jpg, Raiders01.jpg |
+| Pods | grey #8A8D90 with panel patches #72757A; end frames and ribs #4F5256 | Red Star 9.jpg, Dionysus.JPG, Valjean.JPG |
+| Disc's top face | a rust-red ring #9A5248 between the rim and the hub, dark radial fins #3B3735, a white hub #E2E3E4 | Epsilon.JPG |
 | Windows | small warm-white windows #F2E6C8 in a band round the disc's rim | not readable in any capture; our choice |
 | Engine glow | blue-white #DCE8FF | Valjean.JPG |
 
@@ -283,7 +286,7 @@ cylinders and docking clamps), not the Saturn pod; it was rendered and set aside
 | Pod pair 2 | 102.8 to 145.8 | arms 121.4 to 127.4 |
 | Engine section | 135.9 to 158.5 | bell exit at z 158.5 |
 
-- Pod trim: a red stripe (#A33A2E) along each pod's top edge and a yellow and black hazard band (#D6AE2A, #262626)
+- Pod trim: a red stripe (#A8322C) along each pod's top edge and a yellow and black hazard band (#D6AE2A, #262626)
   along its flank, as on Red Star 9 and Dionysus.
 - Turrets (2, Q19): `dorsal_fwd`, and `dorsal_aft` on the cylinder's top over the aft arm pair at (0, +9.3, 124.4), up
   +y, for the rear and the flanks above the pods.
@@ -341,7 +344,7 @@ long, 50.5 m wide, 30.8 m tall. In the model each junction module has two recess
 | Tank section 2 | 149.3 to 249.3 | tanks at 161.7 to 237.2 |
 | Engine section | 235.9 to 258.5 | |
 
-- Colours: tanks banded as on the Saturn 4 tanker, junction modules in the plating grey with #55534F recesses.
+- Colours: tanks banded as on the Saturn 4 tanker, junction modules in the plating grey with #4F5256 recesses.
 - Turrets (2, Q19): `dorsal_fwd`, and `dorsal_mid` on the top junction module (0, +9.0, 149.4), up +y.
 
 #### Saturn 3 freighter (96.8 m)
@@ -407,7 +410,7 @@ flanks, and the short pylons carry the claws (T13).
 
 | Where | sRGB | Read from |
 |---|---|---|
-| Plating | sand khaki #B3A982, panel patches olive brown #7E7552, recesses #4A4536 | Transport 1.png (the monitor shot, the clearest), Skylark class.jpg (the same paint reads olive #8F8A4E in its dim light) |
+| Plating | grey khaki #A9A68E, panel patches olive brown #7A7659, recesses #4A4839 | Transport 1.png (the monitor shot, the clearest), Skylark class.jpg (the same paint reads olive #8F8A4E in its dim light) |
 | Bands | red-orange #B8452B: two on the forward capsule, one on each side tank | 7Tango7.JPG, Mothak'cha.jpg |
 | Nacelle bells and ribs | dark metal #4A4A46 | 7Tango7.JPG |
 | Engine glow | warm white #FFE9C2 | 7Tango7.JPG |
@@ -454,7 +457,7 @@ nozzles on the towers' aft faces (z 43.9; a 0.9 m bell, its exit at z 44.72).
 
 | Where | sRGB | Read from |
 |---|---|---|
-| Crescent, cockpit, fins, towers | dark green #2E4A3B, panel lines #1E2E25 (lit faces read #4F6E5A) | Tal'Quith.JPG, Tal'Quith's collision.JPG, Na'Tan.JPG |
+| Crescent, cockpit, fins, towers | green #3A5A48, recesses #26392F (lit faces read #4F6E5A) | Tal'Quith.JPG, Tal'Quith's collision.JPG, Na'Tan.JPG |
 | Red marking | a red band #A3241C on each side of the crescent, where Tal'Quith.JPG has the Narn emblem. The emblem is a franchise mark and is not reproduced. | Tal'Quith.JPG |
 | Cargo box | light grey #B7BAB5, one green panel #4E7552 on each side, yellow and black hazard marks (#D2B032, #262626) at its corners | Tal'Quith's collision.JPG |
 | Canopy | dark green glass #10201A | not readable in the captures; our choice |

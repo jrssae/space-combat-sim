@@ -215,7 +215,7 @@ class SkylarkTransportTests(unittest.TestCase):
         x, y, z = authored[:, 0], authored[:, 1], authored[:, 2]
         top = (np.abs(x) > 4.0) & (np.abs(x) < 9.0) & (z > 40.0) & (z < 48.0) & (y > -0.5)
         sand = linear_to_srgb(np.median(rgb[top], axis=0))
-        self.assertGreater(sand[0], sand[2] + 0.1, "sand khaki: warm, not grey")
+        self.assertGreater(sand[0], sand[2] + 0.1, "khaki: warm, not neutral grey")
         self.assertGreater(float(sand.mean()), 0.45, "a light plating")
         band = (rgb[:, 0] > 2.0 * rgb[:, 1]) & (rgb[:, 0] > 0.2)
         self.assertGreater(int(band.sum()), 400, "two bands on the capsule, one on each side tank")
@@ -229,7 +229,7 @@ class SkylarkTransportTests(unittest.TestCase):
 
     def test_the_skylark_style_carries_the_written_scheme(self) -> None:
         style = sky.STYLE
-        for role, value in (("hull", 0xB3A982), ("hull_panel", 0x7E7552), ("hull_dark", 0x4A4536), ("stripe", 0xB8452B),
+        for role, value in (("hull", 0xA9A68E), ("hull_panel", 0x7A7659), ("hull_dark", 0x4A4839), ("stripe", 0xB8452B),
                             ("nozzle", 0x4A4A46)):  # fmt: skip
             got = srgb_hex(style.material(role).albedo)
             for shift in (16, 8, 0):
@@ -237,7 +237,8 @@ class SkylarkTransportTests(unittest.TestCase):
         self.assertEqual(style.name, "ea_civilian")
         self.assertAlmostEqual(style.panel_size_m, 2.4)
         self.assertAlmostEqual(style.panel_line_width_m, 0.25)
-        self.assertAlmostEqual(style.panel_tint_jitter, 0.06)
+        # No painted grid (the maintainer, 2026-11-04).
+        self.assertEqual((style.panel_line_darkness, style.panel_tint_jitter), (1.0, 0.0))
         self.assertEqual(sky.ENGINE_GLOW_SRGB, 0xFFE9C2)
 
     # --- lighting records ----------------------------------------------------------------------------------------------
@@ -494,7 +495,7 @@ class SkylarkTransportTests(unittest.TestCase):
         slack = 2.0 * self.spacing  # the import test's frame slack
         np.testing.assert_allclose(v.min(axis=0), self.xyz.min(axis=0), atol=slack)
         np.testing.assert_allclose(v.max(axis=0), self.xyz.max(axis=0), atol=slack)
-        self.assertIn("eac_hull_b3a982", self.obj.materials, "the Skylark's sand plating, its own material name")
+        self.assertIn("eac_hull_a9a68e", self.obj.materials, "the Skylark's sand plating, its own material name")
         self.assertIn("eac_stripe_b8452b", self.obj.materials, "the bands reach the fallback mesh")
 
     # --- determinism, options --------------------------------------------------------------------------------------------

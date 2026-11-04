@@ -861,7 +861,8 @@ whose trigger never arose). Update the column with each task's commit.
   - **Turrets (Q19):** `tower_l` and `tower_r` on the slotted crowns, `arc_deg` 220, `barrel_m` 3.0; the Narn turret
     model (six-sided base, wedge housing, red band, twin barrels) 1 894 splats on its own 0.65 m panel grid.
   - **Colours** as confirmed (Q19): hull #2E4A3B, panel lines #1E2E25, cargo panels #4E7552, the red band; the green is
-    not lifted, T16's GPU check decides that with the maintainer.
+    not lifted, T16's GPU check decides that with the maintainer. (Superseded 2026-11-04: lifted to #3A5A48, no
+    painted grid; `docs/assets-civilian.md`, "Colour round".)
   - **Fidelity (Q18), mesh against the STL:** 0.991 / 0.985 / 0.974; length, width, height 1.000 / 1.000 / 0.997; the
     splats cover at least 0.976 of their mesh (side), precision 1.000.
   - **LOD box rule (follow-up):** `test_splat_import.gd` checks a coarse level's box against LOD0's per side: past it by

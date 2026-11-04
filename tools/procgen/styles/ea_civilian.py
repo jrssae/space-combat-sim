@@ -1,9 +1,9 @@
 """Earth Alliance civilian design language (docs/assets-civilian.md "Styles", docs/design-references.md "Saturn family"):
-warm grey plating, grey cargo pods with darker patches, red and off-white bands on the tubular sections, a rust-red ring
+cool grey plating, grey cargo pods with darker patches, red and off-white bands on the tubular sections, a rust-red ring
 and dark fins on the command disc's top, warm-white rim windows, dark nozzles.
 
 Hex values are the sRGB colours read off the screen captures; materials store them as linear albedo. A hull that wears
-the same language in other paint (the Skylark's sand plating) builds its own copy with :func:`ea_civilian`.
+the same language in other paint (the Skylark's khaki plating) builds its own copy with :func:`ea_civilian`.
 """
 
 from __future__ import annotations
@@ -20,20 +20,20 @@ PREFIX = "eac"
 
 # role: (sRGB, paneled, metallic, transmittance)
 SCHEME: dict[str, tuple[int, bool, float, float]] = {
-    "hull": (0xA7A49E, True, 0.0, 0.0),
-    "hull_panel": (0x8C8B86, True, 0.0, 0.0),
-    "hull_patch": (0x75736E, True, 0.0, 0.0),
-    "hull_dark": (0x55534F, True, 0.0, 0.0),
-    "stripe": (0xA33A2E, True, 0.0, 0.0),
-    "band_light": (0xD9D5CC, True, 0.0, 0.0),
+    "hull": (0xA4A7AA, True, 0.0, 0.0),
+    "hull_panel": (0x8A8D90, True, 0.0, 0.0),
+    "hull_patch": (0x72757A, True, 0.0, 0.0),
+    "hull_dark": (0x4F5256, True, 0.0, 0.0),
+    "stripe": (0xA8322C, True, 0.0, 0.0),
+    "band_light": (0xDADCDE, True, 0.0, 0.0),
     "hazard": (0xD6AE2A, False, 0.0, 0.0),
     "hazard_dark": (0x262626, False, 0.0, 0.0),
-    "disc_ring": (0x9C4A3C, True, 0.0, 0.0),
+    "disc_ring": (0x9A5248, True, 0.0, 0.0),
     "disc_fin": (0x3B3735, False, 0.0, 0.0),
-    "disc_hub": (0xE2DED6, True, 0.0, 0.0),
+    "disc_hub": (0xE2E3E4, True, 0.0, 0.0),
     "window": (0xF2E6C8, False, 0.0, 0.0),
     "canopy_glass": (0x10161C, False, 0.0, 0.0),
-    "canopy_frame": (0x55534F, False, 0.5, 0.0),
+    "canopy_frame": (0x4F5256, False, 0.5, 0.0),
     "nozzle": (0x4A4946, False, 0.8, 0.0),
     "nozzle_throat": (0x1C1B1A, False, 0.8, 0.0),
     "rcs": (0x6E6C68, False, 0.6, 0.0),
@@ -67,8 +67,8 @@ def ea_civilian(overrides: Mapping[str, int] | None = None) -> Style:
         materials=materials,
         panel_size_m=3.6,
         panel_line_width_m=0.4,
-        panel_line_darkness=0.6,
-        panel_tint_jitter=0.06,
+        panel_line_darkness=1.0,  # no painted grid (the maintainer, 2026-11-04): panels come with the texture pack
+        panel_tint_jitter=0.0,
     )
 
 

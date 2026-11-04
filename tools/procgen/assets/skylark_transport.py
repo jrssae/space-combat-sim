@@ -67,8 +67,8 @@ LOD_SHARES = {1: (0.20, 0.30), 2: (0.04, 0.09), 3: (0.01, 0.025)}
 CHUNK_LOD = 1
 CHUNK_ORDER = ("capsule", "body", "nacelle_l", "nacelle_r")
 
-# Q19, colours confirmed: the ea_civilian style with the Skylark's sand plating, red-orange bands and dark bells.
-SKYLARK_PAINT = {"hull": 0xB3A982, "hull_panel": 0x7E7552, "hull_dark": 0x4A4536, "stripe": 0xB8452B, "nozzle": 0x4A4A46}
+# Q19's scheme on the ea_civilian style: grey khaki plating (to the captures, 2026-11-04), red-orange bands, dark bells.
+SKYLARK_PAINT = {"hull": 0xA9A68E, "hull_panel": 0x7A7659, "hull_dark": 0x4A4839, "stripe": 0xB8452B, "nozzle": 0x4A4A46}
 STYLE = replace(ea_civilian(SKYLARK_PAINT), panel_size_m=2.4, panel_line_width_m=0.25)
 ENGINE_GLOW_SRGB = 0xFFE9C2  # warm white; a ShipSpec tint (T16), not in the splats
 

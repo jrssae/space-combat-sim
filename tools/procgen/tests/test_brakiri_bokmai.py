@@ -27,7 +27,7 @@ from tools.procgen.core.obj import read_obj
 from tools.procgen.core.ply import read_ply
 from tools.procgen.parts import Part
 from tools.procgen.parts import brakiri as bp
-from tools.procgen.styles.brakiri import BOLT_SRGB, BRAKIRI, GLOW_SRGB
+from tools.procgen.styles.brakiri import BOLT_SRGB, BRAKIRI, BRAKIRI_POD, GLOW_SRGB
 from tools.procgen.tests.mesh_checks import assert_painted_mesh
 
 PILOT_TERMS = {
@@ -237,6 +237,8 @@ class BrakiriBokmaiTests(unittest.TestCase):
         for role, value in written.items():
             self.assertEqual(srgb_hex(m[role].albedo), value, role)
         self.assertEqual((GLOW_SRGB, BOLT_SRGB), (0xFFF0B0, 0x7CFF4F), "the glow and the bright green bolts (Q22)")
+        for style in (BRAKIRI, BRAKIRI_POD):  # no painted grid (the maintainer, 2026-11-04)
+            self.assertEqual((style.panel_line_darkness, style.panel_tint_jitter), (1.0, 0.0), style.name)
 
     def test_the_paint_reaches_the_splats(self) -> None:
         rgb = self.splats.rgb

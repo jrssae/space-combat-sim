@@ -1,10 +1,10 @@
 """Centauri design language (docs/design-references.md, "Centauri Brezebel transport"; docs/assets-civilian.md,
-"centauri"): deep violet plating with darker violet panel lines, gold caps on the tip fins and gold turret collars, a
+"centauri"): deep violet plating, gold caps on the tip fins and gold turret collars, a
 pale lavender band round the bow's rim, white windows, dark violet-grey nozzles.
 
-Albedos are linear RGB from the written sRGB scheme, painted as written (Q19). The panel lines are the written hull_dark
-(#2B2257): ``panel_line_darkness`` is that colour's share of the hull violet. If the violet reads black in T16's GPU
-check, a lift goes to the maintainer first. Roles the design does not name (canopy, barrels, interior) are our choice.
+Albedos are linear RGB from the written sRGB scheme, painted as written (Q19). No panel grid is painted (the maintainer,
+2026-11-04): panel layout comes with the texture pack at the rebase. Roles the design does not name (canopy, barrels,
+interior) are our choice.
 """
 
 from __future__ import annotations
@@ -26,8 +26,6 @@ def _lin(hex_rgb: int) -> tuple[float, float, float]:
 
 
 HULL_SRGB, HULL_DARK_SRGB = 0x4C3C8E, 0x2B2257
-# The panel lines' albedo over the hull's, averaged over the channels: lines on the violet read as the written dark violet.
-LINE_DARKNESS = float(np.mean(np.array(_lin(HULL_DARK_SRGB)) / np.array(_lin(HULL_SRGB))))
 
 CENTAURI = Style(
     name="centauri",
@@ -51,6 +49,6 @@ CENTAURI = Style(
     },
     panel_size_m=2.4,
     panel_line_width_m=0.25,
-    panel_line_darkness=LINE_DARKNESS,
-    panel_tint_jitter=0.04,
+    panel_line_darkness=1.0,  # no painted grid (the maintainer, 2026-11-04): panels come with the texture pack
+    panel_tint_jitter=0.0,
 )

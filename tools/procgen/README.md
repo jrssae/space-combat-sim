@@ -250,7 +250,7 @@ The Earth Alliance "Delta Gamma 9" type transport (M5-T13, docs/assets-civilian.
 glazed bridge plate, two red-orange bands, belly fins), the spine and collar, two banded side tanks with dumbbell tanks
 ahead of them, a faceted body with corner fins and a dorsal fin, the centre engine, and two nacelles against the body's
 flanks with two pods each, ribbed intakes and bells and forked claws on short pylons. Style `ea_civilian` with the
-Skylark's sand paint (`STYLE`: plating #B3A982, patches #7E7552, recesses #4A4536, bands #B8452B, bells #4A4A46; 2.4 m
+Skylark's sand paint (`STYLE`: plating #A9A68E, patches #7A7659, recesses #4A4839, bands #B8452B, bells #4A4A46; 2.4 m
 panels). Outputs `skylark_transport.ply` (about 61k splats at 0.26 m; budget 48k-72k), `_lod1` to `_lod3` (25 %, 6 %,
 1.6 %), a `.light` per level, `skylark_transport.obj/.mtl` (fallback mesh and depth proxy), four chunks cut from LOD1
 (`capsule`, `body`, `nacelle_l`, `nacelle_r`), the turret model `skylark_transport_turret.ply/.light/.obj/.mtl` (the EA

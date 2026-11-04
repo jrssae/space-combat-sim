@@ -580,11 +580,11 @@ class EaCivilianStyleTests(unittest.TestCase):
         for role in REQUIRED_ROLES:
             self.assertIn(role, EA_CIVILIAN.materials)
         scheme = {
-            "hull": 0xA7A49E, "hull_panel": 0x8C8B86, "hull_patch": 0x75736E, "hull_dark": 0x55534F,
-            "stripe": 0xA33A2E, "band_light": 0xD9D5CC, "hazard": 0xD6AE2A, "hazard_dark": 0x262626,
-            "disc_ring": 0x9C4A3C, "disc_fin": 0x3B3735, "disc_hub": 0xE2DED6, "window": 0xF2E6C8,
+            "hull": 0xA4A7AA, "hull_panel": 0x8A8D90, "hull_patch": 0x72757A, "hull_dark": 0x4F5256,
+            "stripe": 0xA8322C, "band_light": 0xDADCDE, "hazard": 0xD6AE2A, "hazard_dark": 0x262626,
+            "disc_ring": 0x9A5248, "disc_fin": 0x3B3735, "disc_hub": 0xE2E3E4, "window": 0xF2E6C8,
             "nozzle": 0x4A4946, "nozzle_throat": 0x1C1B1A, "rcs": 0x6E6C68, "barrel": 0x5A5955, "bore": 0x101010,
-            "canopy_frame": 0x55534F,
+            "canopy_frame": 0x4F5256,
         }  # fmt: skip
         for role, hex_rgb in scheme.items():
             srgb = linear_to_srgb(np.array(EA_CIVILIAN.material(role).albedo)) * 255.0
@@ -592,7 +592,8 @@ class EaCivilianStyleTests(unittest.TestCase):
             np.testing.assert_allclose(srgb, expected, atol=1.0, err_msg=role)
         self.assertAlmostEqual(EA_CIVILIAN.panel_size_m, 3.6)
         self.assertAlmostEqual(EA_CIVILIAN.panel_line_width_m, 0.4)
-        self.assertAlmostEqual(EA_CIVILIAN.panel_tint_jitter, 0.06)
+        # No painted grid (the maintainer, 2026-11-04).
+        self.assertEqual((EA_CIVILIAN.panel_line_darkness, EA_CIVILIAN.panel_tint_jitter), (1.0, 0.0))
 
     def test_a_hull_can_repaint_roles_without_clashing_names(self) -> None:
         from tools.procgen.styles.ea_civilian import EA_CIVILIAN, ea_civilian

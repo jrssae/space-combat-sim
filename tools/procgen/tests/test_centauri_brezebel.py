@@ -241,8 +241,8 @@ class CentauriBrezebelTests(unittest.TestCase):
             lum.append(brez.colour_samples(p, brez.CENTAURI)[paint].mean(axis=1))
         normals, lum = np.concatenate(normals), np.concatenate(lum)
         self.assertGreater(len(lum), 1000)
-        for axis in range(3):
-            self.assertLess(abs(float(np.corrcoef(normals[:, axis], lum)[0, 1])), 0.05, axis)
+        # No painted grid: the hull is one flat paint, so no baked light can follow the normal.
+        self.assertLess(float(np.ptp(lum)), 1e-9)
 
     # --- lighting records ----------------------------------------------------------------------------------------------
     def test_every_level_chunk_and_the_turret_has_matching_lighting_records(self) -> None:
@@ -563,7 +563,8 @@ class CentauriStyleTests(unittest.TestCase):
         self.assertEqual(CENTAURI.name, "centauri")
         self.assertAlmostEqual(CENTAURI.panel_size_m, 2.4)
         self.assertAlmostEqual(CENTAURI.panel_line_width_m, 0.25)
-        self.assertAlmostEqual(CENTAURI.panel_tint_jitter, 0.04, msg="the liner reads smooth")
+        # No painted grid (the maintainer, 2026-11-04).
+        self.assertEqual((CENTAURI.panel_line_darkness, CENTAURI.panel_tint_jitter), (1.0, 0.0))
 
     def test_the_confirmed_scheme_is_painted_as_written(self) -> None:
         # Q19: the maintainer confirmed the written scheme; any lift waits for T16's GPU check and the maintainer's OK.
@@ -575,16 +576,6 @@ class CentauriStyleTests(unittest.TestCase):
             for shift in (16, 8, 0):
                 self.assertAlmostEqual((got >> shift) & 255, (value >> shift) & 255, delta=1, msg=role)
         self.assertEqual(centauri.GLOW_SRGB, 0xFFB8E0, "engine and fin-tip glow, a ShipSpec tint for T16")
-
-    def test_panel_lines_are_the_written_dark_violet(self) -> None:
-        # docs/assets-civilian.md: the panel lines are hull_dark (#2B2257) on the hull violet.
-        from tools.procgen.styles.centauri import CENTAURI
-
-        hull = np.array(CENTAURI.material("hull").albedo)
-        line = hull * CENTAURI.panel_line_darkness
-        got = srgb_hex(tuple(line))
-        for shift, value in ((16, 0x2B), (8, 0x22), (0, 0x57)):
-            self.assertAlmostEqual((got >> shift) & 255, value, delta=4)
 
 
 if __name__ == "__main__":

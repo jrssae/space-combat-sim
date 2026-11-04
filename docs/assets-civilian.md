@@ -31,6 +31,17 @@ stay consistent: base plating, panel layout, markings, wear, windows and engine 
 sources are already in each ship's section of `docs/design-references.md` (Q11); the texture work adds panel, marking and
 wear references from the same images. The images stay references (`reports/refs/<ship>/web/`, gitignored).
 
+**Colour round (the maintainer, 2026-11-04).** From approval shots of every ship from five sides: no ship carries the
+painted panel grid any more (every civilian style paints its lines at 1.0 and its tint jitter at 0; panel layout comes
+with the texture pack); the Saturns' greys are cooler and their whites and reds closer to the captures (Achilles.jpg,
+Red Star 9.jpg, Epsilon.JPG); the Skylark's plating is a greyer khaki, as Transport 1.png shows it; the Narn green is
+lifted (#2E4A3B to #3A5A48, its recesses #1E2E25 to #26392F). The Centauri and Brakiri colours stand as approved.
+The shots exposed a colour step in M4-T27's paint shader (`paint_mesh.gdshaderinc`, `paint_colour`): it runs
+`srgb_to_linear` on an albedo that is already linear, so a painted mesh reads darker and more saturated than its
+written colour (the old Narn green came out #0C180C, nearly black). M4's textured path encodes its albedo map with
+`linear_to_srgb` and shows the written colours, so the shots were taken with that step removed, as the textured meshes
+will look after the rebase. Anyone who draws the painted meshes before then should drop the step too.
+
 ## Output contract
 
 The same as `starfury_aurora` and `raider_fighter` (`docs/architecture.md` §9 and §15.11), per asset id in
@@ -81,8 +92,8 @@ all eight).
 - Start spacing is `sqrt(surface / target)`. Splat sigma is one spacing (overlap 1.0). At 0.52 m a splat seen from
   100 m is about 3.7 px across on a 1080p screen, from 50 m about 7 px, so a close fly-by of a Saturn looks soft. That
   is the price of eight big hulls in the budget; judging it is `(H)`.
-- Panel detail has to suit the spacing: a panel grid of 3.6 m with lines 0.4 m wide on the Saturns, 2.4 m and 0.25 m
-  on the three smaller ships, survives LOD0 sampling; the Starfury's 4 cm lines would not.
+- Panel detail has to suit the spacing (a splat-era rule). The painted grid has since been dropped (the colour round,
+  2026-11-04); panel layout comes with each style's texture pack at the rebase.
 - Turret models are small and sampled finer (about 0.1 m, about 2 000 splats each); with 2 to 4 per hull they add under
   1 % to the totals.
 - VRAM, an estimate for T16 to measure: each hull type keeps LOD0 to LOD3 (1.33 times LOD0) and its chunks (0.25 times)
@@ -579,10 +590,9 @@ pod comes off whole as its own debris piece (D59), so a destroyed Bokmai sheds f
 | Role | sRGB | Where |
 |---|---|---|
 | `hull` | #5A6B59 | the frame: bow, spine, struts, posts, arms, necks, nacelles, fins |
-| `frame_plain` (extra) | #5A6B59, no panel grid | the pods' top plates and saddles (the frame's green without the pod's grid) |
-| `hull_dark` | #3A4538 | panel lines, recesses, the spindle and drum, the pods' sleeves and rails |
+| `frame_plain` (extra) | #5A6B59 | the pods' top plates and saddles |
+| `hull_dark` | #3A4538 | recesses, the spindle and drum, the pods' sleeves and rails |
 | `hull_panel` | #ABAE9A | the pods' plating |
-| `pod_line` (extra) | #868A78 | the pods' panel lines |
 | `stripe` | #D8B840 | the yellow: the upper fins' insets, every fin's top 1.5 m, a band round each neck (z 63.5 to 65.5), the pods' straps, the turret's band and muzzle rings |
 | `hazard`, `hazard_dark` | #D8B840, #3A4538 | the pods' side plates (our choice) |
 | `canopy_glass`, `canopy_frame` | #1E2620, #3A4538 | any bridge glazing on the bow (our choice; the flank insets are turret mounts) |
@@ -591,8 +601,8 @@ pod comes off whole as its own debris piece (D59), so a destroyed Bokmai sheds f
 | `engine_dome` (extra) | #F2EDC4 | the domes |
 | `barrel`, `bore`, `interior`, `rcs` | #2E3530, #101210, #101210, #3A4538 | our choice |
 
-Panel grid 2.4 m with 0.25 m lines on the frame, 2.0 m on the pods; tint jitter 0.06. Engine glow yellow-white
-#FFF0B0 (`GLOW_SRGB` for T16's `ShipSpec`). Turret bolts bright green (the maintainer, Q22). The frame green is lighter than the Narn's #2E4A3B, but the raider's warning about dark albedo
+No painted panel grid (the colour round below). Engine glow yellow-white
+#FFF0B0 (`GLOW_SRGB` for T16's `ShipSpec`). Turret bolts bright green (the maintainer, Q22). The frame green is lighter than the Narn's #3A5A48, but the raider's warning about dark albedo
 still applies: T16's GPU check decides whether it needs a lift.
 
 **The turret model** (as built, the maintainer's sheet): the inset's full-height step is only 1.6 m long, so a turning
@@ -623,28 +633,28 @@ Three styles, each a `Style` with the required roles plus extras. Hex values are
 
 | Role | sRGB | Where |
 |---|---|---|
-| `hull` | #A7A49E | plating: disc, truss, drums, arms, rails, engine section, junction modules |
-| `hull_panel` | #8C8B86, patches #75736E | pods |
-| `hull_dark` | #55534F | panel lines, recesses, pod end frames and ribs |
-| `stripe` | #A33A2E | the red bands on cylinders and tanks, the pods' top stripe |
-| `band_light` (extra) | #D9D5CC | the off-white bands |
+| `hull` | #A4A7AA | plating: disc, truss, drums, arms, rails, engine section, junction modules |
+| `hull_panel` | #8A8D90, patches #72757A | pods |
+| `hull_dark` | #4F5256 | recesses, pod end frames and ribs |
+| `stripe` | #A8322C | the red bands on cylinders and tanks, the pods' top stripe |
+| `band_light` (extra) | #DADCDE | the off-white bands |
 | `hazard`, `hazard_dark` | #D6AE2A, #262626 | the pods' hazard band, turret bases |
-| `disc_ring`, `disc_fin`, `disc_hub` (extras) | #9C4A3C, #3B3735, #E2DED6 | the disc's top face |
+| `disc_ring`, `disc_fin`, `disc_hub` (extras) | #9A5248, #3B3735, #E2E3E4 | the disc's top face |
 | `window` (extra) | #F2E6C8 | the disc rim's windows |
-| `canopy_glass`, `canopy_frame` | dark glass, #55534F | bridge glazing |
+| `canopy_glass`, `canopy_frame` | dark glass, #4F5256 | bridge glazing |
 | `nozzle`, `nozzle_throat`, `rcs` | #4A4946, #1C1B1A, #6E6C68 | bells and RCS ports |
 | `barrel`, `bore` | #5A5955, #101010 | turret barrels |
-| Skylark override | `hull` #B3A982, `hull_panel` #7E7552, `hull_dark` #4A4536, `stripe` #B8452B, `nozzle` #4A4A46 | its sand plating, red-orange bands and dark nacelle bells and ribs (`skylark_transport.STYLE`) |
+| Skylark override | `hull` #A9A68E, `hull_panel` #7A7659, `hull_dark` #4A4839, `stripe` #B8452B, `nozzle` #4A4A46 | its grey khaki plating, red-orange bands and dark nacelle bells and ribs (`skylark_transport.STYLE`) |
 
-Panel grid 3.6 m with 0.4 m lines on the Saturns, 2.4 m with 0.25 m lines on the Skylark; tint jitter 0.06. Engine glow
+No painted panel grid (the colour round below). Engine glow
 (a `ShipSpec` tint): Saturns blue-white #DCE8FF, Skylark warm white #FFE9C2.
 
 **`narn`**
 
 | Role | sRGB | Where |
 |---|---|---|
-| `hull` | #2E4A3B | crescent, cockpit, fins, towers |
-| `hull_dark` | #1E2E25 | panel lines, recesses |
+| `hull` | #3A5A48 | crescent, cockpit, fins, towers |
+| `hull_dark` | #26392F | recesses |
 | `hull_panel` | #B7BAB5 | the cargo box |
 | `stripe` | #A3241C | the red band on each side of the crescent (no emblem) |
 | `cargo_panel` (extra) | #4E7552 | the green panel on each side of the box |
@@ -652,7 +662,7 @@ Panel grid 3.6 m with 0.4 m lines on the Saturns, 2.4 m with 0.25 m lines on the
 | `canopy_glass` | #10201A | the canopy |
 | `nozzle`, `nozzle_throat` | #3A3A36, #141413 | tower nozzles |
 
-Panel grid 2.4 m, 0.25 m lines, tint jitter 0.08. Engine glow orange-white #FFB070; turret bolts green (D61's
+No painted panel grid (the colour round below). Engine glow orange-white #FFB070; turret bolts green (D61's
 `WeaponSpec`, per the wiki).
 
 **`centauri`**
@@ -660,21 +670,20 @@ Panel grid 2.4 m, 0.25 m lines, tint jitter 0.08. Engine glow orange-white #FFB0
 | Role | sRGB | Where |
 |---|---|---|
 | `hull` | #4C3C8E | everything but the trim |
-| `hull_dark` | #2B2257 | panel lines, the engine bay's walls |
+| `hull_dark` | #2B2257 | the engine bay's walls |
 | `stripe` | #D9B23A | the gold caps on the tip fins, turret collars |
 | `trim_light` (extra) | #D7D2E6 | the edge band round the bow's rim |
 | `window` (extra) | #F3F1FF | the five windows |
 | `nozzle`, `nozzle_throat` | #3A3448, #141218 | main engine and arm-tip nozzles |
 
-Panel grid 2.4 m, 0.25 m lines, tint jitter 0.04 (the liner reads smooth). Engine and fin-tip glow pink-white #FFB8E0;
-turret bolts orange. As built (T15): every value as written (Q19); the panel lines are `hull_dark` on the violet, so
-the style's line darkness is #2B2257's share of #4C3C8E's albedo (0.35). Roles the design leaves open are our choice:
+No painted panel grid (the colour round below). Engine and fin-tip glow pink-white #FFB8E0; turret bolts orange. As
+built (T15): every value as written (Q19). Roles the design leaves open are our choice:
 `hull_panel` the hull violet, `hazard` and `hazard_dark` the gold and the dark violet, `canopy_glass` #1A1530 (unused),
 `barrel` and `rcs` #3A3448, `bore` and `interior` #141218. `styles/centauri.py` keeps the glow as `GLOW_SRGB` for
 T16's `ShipSpec`.
 
 Two warnings from the raider (`docs/assets-raider.md`): on the RX 6950 XT a dark albedo read as a black silhouette, and
-civilians are often seen on their dark side. If the Narn green (#2E4A3B) or the Centauri violet (#4C3C8E) reads black
+civilians are often seen on their dark side. If the Narn green (#3A5A48) or the Centauri violet (#4C3C8E) reads black
 in T16's GPU check, lift the value and keep the hue, and record the change here.
 
 ### Turret models (one per style, D61)
@@ -709,9 +718,8 @@ From the design references, authored frame; `up` is (0, 1, 0) for dorsal mounts 
 - The Saturn 3's engine section and its raised, wider pod stack are not in its reference; Q16's shared lead ship needs
   them.
 - Close fly-bys look soft: about 0.52 m spacing on the Saturns, 0.33 to 0.35 m on the others.
-- The Brezebel's violet (#4C3C8E) with its #2B2257 panel lines (35 % of the hull's albedo, about a fifth of the
-  surface) is painted as written and may read dark on its shadow side; T16's GPU check decides, and a lift goes to the
-  maintainer first.
+- The Brezebel's violet (#4C3C8E) is painted as written and may read dark on its shadow side; T16's GPU check decides,
+  and a lift goes to the maintainer first.
 - The Brezebel's retros fire forward from the bow's rim at (±14.6, 0, 5.7), on the fairings' axis, rather than from the
   fairings' fronts the design first named (inside the arm, where the depth proxy hid the plume); judge where the retro
   plumes show.

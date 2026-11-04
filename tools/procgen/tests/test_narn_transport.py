@@ -216,8 +216,8 @@ class NarnTransportTests(unittest.TestCase):
             lum.append(narn.colour_samples(p, narn.NARN)[paint].mean(axis=1))
         normals, lum = np.concatenate(normals), np.concatenate(lum)
         self.assertGreater(len(lum), 1000)
-        for axis in range(3):
-            self.assertLess(abs(float(np.corrcoef(normals[:, axis], lum)[0, 1])), 0.05, axis)
+        # No painted grid: the hull is one flat paint, so no baked light can follow the normal.
+        self.assertLess(float(np.ptp(lum)), 1e-9)
 
     # --- lighting records ----------------------------------------------------------------------------------------------
     def test_every_level_chunk_and_the_turret_has_matching_lighting_records(self) -> None:
@@ -532,20 +532,21 @@ class NarnStyleTests(unittest.TestCase):
         self.assertEqual(NARN.name, "narn")
         self.assertAlmostEqual(NARN.panel_size_m, 2.4)
         self.assertAlmostEqual(NARN.panel_line_width_m, 0.25)
-        self.assertAlmostEqual(NARN.panel_tint_jitter, 0.08)
+        # No painted grid (the maintainer, 2026-11-04).
+        self.assertEqual((NARN.panel_line_darkness, NARN.panel_tint_jitter), (1.0, 0.0))
         self.assertEqual(NARN.material("canopy_glass").transmittance, 0.0, "dark opaque glass: there is no cockpit inside")
 
     def test_the_confirmed_scheme_is_painted_as_written(self) -> None:
-        # Q19: the maintainer confirmed the written scheme; a lift waits for T16's GPU check and the maintainer's OK.
+        # Q19's scheme with the green lifted (the maintainer, 2026-11-04).
         from tools.procgen.styles.narn import NARN
 
         def srgb_hex(role: str) -> int:
             r, g, b = (round(float(c) * 255) for c in linear_to_srgb(np.array(NARN.material(role).albedo)))
             return (r << 16) | (g << 8) | b
 
-        for role, value in (("hull", 0x2E4A3B), ("hull_dark", 0x1E2E25), ("cargo_panel", 0x4E7552), ("hull_panel", 0xB7BAB5),
+        for role, value in (("hull", 0x3A5A48), ("hull_dark", 0x26392F), ("cargo_panel", 0x4E7552), ("hull_panel", 0xB7BAB5),
                             ("stripe", 0xA3241C), ("hazard", 0xD2B032), ("hazard_dark", 0x262626), ("canopy_glass", 0x10201A),
-                            ("canopy_frame", 0x1E2E25), ("nozzle", 0x3A3A36), ("nozzle_throat", 0x141413)):  # fmt: skip
+                            ("canopy_frame", 0x26392F), ("nozzle", 0x3A3A36), ("nozzle_throat", 0x141413)):  # fmt: skip
             got = srgb_hex(role)
             for shift in (16, 8, 0):
                 self.assertAlmostEqual((got >> shift) & 255, (value >> shift) & 255, delta=1, msg=role)

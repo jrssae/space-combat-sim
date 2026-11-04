@@ -51,7 +51,8 @@ the milestone file). Known close calls are the Saturn 4 lead ship's side coverag
   1.3 m thick 3 m in from the rim". Confirm it on the STL's sections and fix the figure.
 - Make the LOD box tolerance asymmetric (overshoot at most max(0.3 m, 0.25 spacing), undershoot 1.25) and key the
   big-hull rule on a box extent of 30 m or more instead of spacing 0.25 m.
-- Keep the Narn green #2E4A3B. The maintainer confirmed it. Do not lift it; T16's GPU check decides that with them.
+- The Narn green was lifted to #3A5A48 when the maintainer judged it too dark (2026-11-04, `docs/assets-civilian.md`,
+  "Colour round").
 
 ### T22: Brakiri Bokmai
 
