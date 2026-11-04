@@ -915,11 +915,10 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
 ##### M4-T14 Jolt collision layers and far-ship physics interpolation off
 
 - **Track:** G. **Agent:** Sonnet. **Depends on:** T11.
-- **Goal:** Jolt's broad phase stops pairing fighters with fighters (the ram resolver does the exact work), capitals, rocks and
-  mines pair only with what can hit them, and far AI ships skip the per-node interpolation reset at a rebase.
+- **Goal:** capitals, rocks and mines pair in Jolt only with what can hit them (fighters keep colliding with fighters, Q33), and far AI ships skip the per-node interpolation reset at a rebase.
 - **Files:** `src/ship/ship.gd` (layers and masks by kind), `src/perf/standins/*` (the capitals', rocks' and mines' layers),
   `src/world/world_frame.gd` (the settle skips nodes flagged uninterpolated), `tests/integration/test_collision_layers.gd`.
-- **Tests first:** two fighters crossing report no Jolt contact and still take the swept ram; a fighter into a rock stops; a bolt
+- **Tests first:** two fighters crossing report a Jolt contact and bounce (Q33); a fighter into a rock stops; a bolt
   never has a body; the rebase settle walks only the interpolated nodes (a count).
 - **Measures:** `battle 300` and `500` before and after (the physics stage, `sync`, the rebase tick).
 - **Done when:** the counts pass and the physics stage at 300 is lower or the entry says it was not.

@@ -123,7 +123,7 @@ const ENTRIES: Dictionary = {
 		"doc": "With ship_render hybrid, an AI ship farther than this from the camera draws its painted mesh instead of splats (M4-T27); it goes back to splats a tenth inside"},
 	# M4-T14
 	&"collision_layers": {"type": TYPE_BOOL, "default": true,
-		"doc": "Jolt layers by kind (M4-T14): AI fighters do not pair with each other (the ram resolver's swept test does), capitals and rocks pair with what can hit them; off puts every body on the one default layer. Ships follow it at once, capitals and rocks as they are built"},
+		"doc": "Jolt layers by kind (M4-T14): fighters, the player, capitals and rocks each pair only with what can hit them (fighters with fighters too, Q33); off puts every body on the one default layer. Ships follow it at once, capitals and rocks as they are built"},
 	&"far_ship_interpolation_off": {"type": TYPE_BOOL, "default": true,
 		"doc": "A far-dot AI ship's body is not interpolated, so a rebase leaves its nodes out of the interpolation reset (M4-T14)"},
 }

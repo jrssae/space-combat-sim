@@ -878,12 +878,11 @@ func _level_node(node_name: String, path: String, lighting: String) -> GaussianS
 
 
 func _on_hull_setting_changed(key: StringName, _value: Variant) -> void:
-	if key == &"hull_depth_proxy" or key == &"ship_render":
 	if key == &"collision_layers":
 		_apply_collision_layers()
 	elif key == &"far_ship_interpolation_off":
 		_apply_far_interpolation()
-	elif key == &"hull_depth_proxy":
+	elif key == &"hull_depth_proxy" or key == &"ship_render":
 		_apply_hull_visuals()
 	elif key == &"hull_splat_sync":
 		_apply_hull_sync_setting()
