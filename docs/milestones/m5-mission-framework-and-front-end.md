@@ -430,7 +430,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T04 | A | Controls menu | T02 | Sonnet | Wraps the existing profile API | in progress |
 | T05 | B | Mission core: runner, script API, triggers, objectives, console | T01 | Opus | The framework M8 stands on; coroutine skipping is subtle | done |
 | T24 | A | Console command list in `info.md` and its guard test (`CLAUDE.md` rule of 2026-11-03; numbered last because it was added during the build) | T01, T02, T05 | Sonnet | A doc and one test | done |
-| T06 | B | Dialog, subtitles and the comms panel | T05 | Sonnet | Data and HUD | in progress |
+| T06 | B | Dialog, subtitles and the comms panel | T05 | Sonnet | Data and HUD | done |
 | T07 | B | Comms menu on D-pad Right | T06 | Sonnet | Input routing with clear rules | not started |
 | T08 | B | `CINEMATIC` camera and locked controls | T05 | Opus | Rebase-safe camera paths | not started |
 | T09 | B | Debrief | T05, T02 | Sonnet | Model and screen | in progress |
@@ -613,6 +613,18 @@ whose trigger never arose). Update the column with each task's commit.
   `radio_close`), `src/mission/mission_api.gd` (`say` for real), `tests/unit/test_dialog_queue.gd`,
   `tests/unit/test_dialog_book.gd`, `tests/integration/test_comms_panel.gd`.
 - **Done when:** AC6.
+- **Done (as built, 2026-11-04):** lines are data, `{id, speaker, text, voice, hold_s?}`, with speakers in
+  `data/dialog/speakers.json` (`{id, name, callsign, faction}`); `DialogBook` loads and validates them and refuses a bad file
+  whole, naming the file and entry, which stops the mission starting. A line holds `hold_s` or 2.5 words a second, at least
+  2 s. The pure `DialogQueue` plays one line at a time with a 0.4 s gap on sim-time deltas; `m.say(id, interrupt=false)`
+  resolves when the line has shown out, an interrupt cuts the line showing (no closing squelch), and skipped or cut lines are
+  logged and count as finished for `dialog_finished`. `CommsPanel` is a CanvasLayer at 41 (above the HUD, below the pause
+  menu), so subtitles show in cockpit and chase views and with the HUD off; callsigns in the faction colour; `radio_open`
+  and `radio_close` (`sfx_ui`, generator version 2) at -6 dB on the Comms bus. `test_dialog_ids` checks every line id and
+  speaker a script uses. `dialog` state provider (no new commands). D53 in architecture §18.
+  - **Review.** Approved (sonnet), no fixes needed. Open (minor): `CommsLayout.compute` ignores its cockpit argument; the
+    panel's `drawn_*` test fields are not marked test-only; `add_speakers`/`add_lines` repeat one validation loop; D53
+    could say plainly that a cut line still completes `dialog_finished`.
 
 ### M5-T07 Comms menu on D-pad Right
 
