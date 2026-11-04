@@ -19,6 +19,14 @@ const FAR_RETURN: float = 0.9
 
 
 ## The ship's diameter on screen in pixels (INF when the camera is inside it).
+## The lines the 3D is drawn at in `viewport` (M4-T27): its height times its 3D scale, so a 4K window drawing the 3D at 1 080 lines
+## picks levels for 1 080 lines.
+static func render_height(viewport: Viewport) -> float:
+	if viewport == null:
+		return 0.0
+	return viewport.get_visible_rect().size.y * maxf(viewport.scaling_3d_scale, 0.01)
+
+
 static func projected_px(radius_m: float, distance_m: float, fov_deg: float, viewport_height_px: float) -> float:
 	if distance_m <= radius_m:
 		return INF

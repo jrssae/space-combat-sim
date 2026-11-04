@@ -100,7 +100,7 @@ func _process(_delta: float) -> void:
 	var camera: Camera3D = get_viewport().get_camera_3d() if get_viewport() != null else null
 	if camera == null:
 		return
-	var height: float = get_viewport().get_visible_rect().size.y
+	var height: float = LodSwitcherMath.render_height(get_viewport())
 	var px_per_m: float = height / (2.0 * tan(deg_to_rad(camera.fov) * 0.5))
 	var pick: int = level_for(spacings, camera.global_position.distance_to(global_position), radius_m, px_per_m)
 	if pick != _level:

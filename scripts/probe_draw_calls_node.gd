@@ -4,14 +4,15 @@ extends Node
 ## objects of the last 60: bare splat nodes in view, the same hidden, the same behind the camera, the painted mesh, the fallback OBJ,
 ## the merged depth proxy. One line per phase. Run it on the real renderer: the counts are the renderer's.
 ##
-## Arguments after `--`: count=<n> (40).
+## Arguments after `--`: count=<n> (40), from=<phase> (0: the phases before it are skipped, the player alone always runs).
 
-const FRAMES: int = 90
-const SETTLE: int = 30
+const FRAMES: int = 60
+const SETTLE: int = 20
 const ASSET: String = "raider_fighter"
 
 var main: Main
 var count: int = 40
+var from: int = 0
 var _nodes: Array[Node3D] = []
 var _phase: int = -1
 var _frame: int = 0
@@ -27,6 +28,8 @@ func _ready() -> void:
 		var pair: PackedStringArray = arg.split("=", true, 1)
 		if pair.size() == 2 and pair[0] == "count":
 			count = int(pair[1])
+		elif pair.size() == 2 and pair[0] == "from":
+			from = int(pair[1])
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.waves_auto_start = false
 	main.input_source = FakeInputSource.new()
@@ -92,9 +95,11 @@ func _build(phase: int) -> void:
 
 func _next_phase() -> void:
 	if _phase >= 0:
-		print("[probe] %d %s: %d copies, draw calls mean %.1f, triangles mean %.0f, objects mean %.1f" % [_phase, _phases[_phase],
-				0 if _phase == 0 else count, _mean(_draws), _mean(_tris), _mean(_objects)])
+		print("[probe] %d %s: %d copies, draw calls mean %.1f, triangles mean %.0f, objects mean %.1f, at %.0f s" % [_phase, _phases[_phase],
+				0 if _phase == 0 else count, _mean(_draws), _mean(_tris), _mean(_objects), Time.get_ticks_msec() * 1e-3])
 	_phase += 1
+	if _phase > 0 and _phase < from:
+		_phase = from
 	_frame = 0
 	_draws.clear()
 	_tris.clear()

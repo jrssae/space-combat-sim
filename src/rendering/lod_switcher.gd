@@ -105,7 +105,7 @@ func _pick() -> void:
 	far = not _ship.console_owner and LodSwitcherMath.far_dot(distance, far, float(Settings.get_value(&"far_ship_dot_m")))
 	mesh_far = LodSwitcherMath.far_dot(distance, mesh_far, float(Settings.get_value(&"ship_mesh_beyond_m")))
 	var px: float = LodSwitcherMath.projected_px(_ship.bounding_radius(), distance, camera.fov,
-			get_viewport().get_visible_rect().size.y)
+			LodSwitcherMath.render_height(get_viewport()))
 	unbiased = LodSwitcherMath.next_level(px, unbiased, mini(levels[0], 0))
 	wanted = LodSwitcherMath.applied(unbiased, float(Settings.get_value(&"splat_lod_bias")), levels[0], levels[levels.size() - 1])
 

@@ -155,3 +155,14 @@ func test_the_station_builds_both_ways_with_a_turning_drum() -> void:
 	var drum_box: AABB = station.drum_piece.mesh().get_aabb()
 	assert_almost_eq(drum_box.size.x, 8000.0 / 9.0, 5.0, "the drum is a ninth of the length across")
 	assert_almost_eq(station.length_m, 8000.0, 1.0)
+
+
+func test_levels_are_picked_for_the_lines_the_3d_is_drawn_at() -> void:
+	# A 4K window drawing the 3D at 1 080 lines is a 1 080-line picture for the levels of detail.
+	var view := SubViewport.new()
+	view.size = Vector2i(3840, 2160)
+	add_child_autofree(view)
+	assert_almost_eq(LodSwitcherMath.render_height(view), 2160.0, 0.5)
+	view.scaling_3d_scale = 0.5
+	assert_almost_eq(LodSwitcherMath.render_height(view), 1080.0, 0.5)
+	assert_eq(LodSwitcherMath.render_height(null), 0.0)
