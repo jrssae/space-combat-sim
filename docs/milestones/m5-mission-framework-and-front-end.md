@@ -431,7 +431,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T05 | B | Mission core: runner, script API, triggers, objectives, console | T01 | Opus | The framework M8 stands on; coroutine skipping is subtle | done |
 | T24 | A | Console command list in `info.md` and its guard test (`CLAUDE.md` rule of 2026-11-03; numbered last because it was added during the build) | T01, T02, T05 | Sonnet | A doc and one test | done |
 | T06 | B | Dialog, subtitles and the comms panel | T05 | Sonnet | Data and HUD | done |
-| T07 | B | Comms menu on D-pad Right | T06 | Sonnet | Input routing with clear rules | not started |
+| T07 | B | Comms menu on D-pad Right | T06 | Sonnet | Input routing with clear rules | done |
 | T08 | B | `CINEMATIC` camera and locked controls | T05 | Opus | Rebase-safe camera paths | not started |
 | T09 | B | Debrief | T05, T02 | Sonnet | Model and screen | done |
 | T10 | B | Mission: Buoy defence with a cinematic intro | T06, T07, T08, T09 | Opus | Pacing, writing and the first real use of the API | not started |
@@ -659,6 +659,19 @@ whose trigger never arose). Update the column with each task's commit.
 - **Notes:** add the key binding to the keyboard layout and `docs/architecture.md` §6.1's diagram. A test loads a profile
   file written before the action existed.
 - **Done when:** AC7.
+- **Done (as built, 2026-11-04):** the `comms_menu` action is D-pad Right and, on the keyboard, Ctrl (every other
+  left-hand key was taken; with the menu open Ctrl picks the right-hand entry). The pure `CommsMenu` model and the
+  `CommsMenuView` (layer 42, a plate at the left middle, clear of the subtitles and the cockpit roster): up, right, down
+  and left pick attack my target, form on me, engage at will and cover me through `WingDirector.give_order` (the call keys
+  1 to 4 make; `wing_director.gd` unchanged); a pick closes the menu; B or 4 s of physics time closes it; the pause edge
+  or the player's death closes it, and the pause menu freezes its timer. While it is open the adapter swallows assist,
+  next weapon, lights and the target button, and a B held through the close does not tap a target. A profile saved before
+  M5 gets `comms_menu` filled from the default; one that rolls on D-pad Right keeps its roll and gets Ctrl alone (tests).
+  The menu takes pages (`push_page`/`pop_page`); M5 builds no reply page. Provider `comms_menu`; §6.1 and D54 updated.
+  - **Review.** Approved (sonnet), no fixes needed. Open (minor): the input test's comment says a hostile is selectable
+    but the test asserts slot 0 is refused, so the attack pick's happy path is not run end to end; keys 1 to 4 and the
+    mouse wheel still act while the menu is open (D54 promises only the target button is quiet); one weapon assertion is
+    skipped when the cannon has no `mode`.
 
 ### M5-T08 `CINEMATIC` camera and locked controls
 
