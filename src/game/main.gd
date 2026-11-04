@@ -297,6 +297,9 @@ func _setup_perf() -> void:
 	var paint_lights := PaintMeshLights.new()
 	paint_lights.name = "PaintMeshLights"
 	add_child(paint_lights)
+	var look_scene := LookScene.new()
+	look_scene.name = "LookScene"
+	add_child(look_scene)
 	station_scene = StationScene.new()
 	station_scene.name = "StationScene"
 	station_scene.process_mode = Node.PROCESS_MODE_PAUSABLE

@@ -183,7 +183,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T27 | Render comparison: Gaussian splats against meshes, in the 500 battle and a Babylon 5 station scene (Q24) | T07, T11, T12 | Opus | Measures whether splats or meshes carry the big battles; GPU numbers by the agent, the look (H) | R, M | done |
 | T28 | Running lights stay point-sized and dim by the inverse square (maintainer, 2026-11-03) | none | Sonnet | Lights in vacuum do not scatter into globes | R | done |
 | T29 | Rocks and mines as static rows: T07's asteroids registered as statics, T12's mines as faction-owned mine rows; avoidance sees rocks and its own side's mines only (Q27) | T09, T12 | Opus | Takes the rocks' 24 to 49 ms per tick out of the GDScript paths | G, N | done (2026-11-03, in a worktree on `9a3f525`; Cycle log, M4-T29) |
-| T30a | Textured mesh pipeline: the procedural UV atlas, the texture maps (colour, normal, roughness and metal, emissive), the PNG writer, the textured `.glb` contract, the Starfury as the look gate (H, checkpoint 1b) | T27 | Fable | The unwrap, the bake and the paint are the look of the game from here on, and the contract M5 builds against (Q29, Q31) | X, R | not started |
+| T30a | Textured mesh pipeline: the procedural UV atlas, the texture maps (colour, normal, roughness and metal, emissive), the PNG writer, the textured `.glb` contract, the Starfury as the look gate (H, checkpoint 1b) | T27 | Fable | The unwrap, the bake and the paint are the look of the game from here on, and the contract M5 builds against (Q29, Q31) | X, R | done (the look gate, checkpoint 1b, is open) |
 | T30b | Every other hull textured (raider, buoy, chunks, capital and station pieces), mesh LODs measured, the mesh path the default | T30a, checkpoint 1b | Opus | Mechanical once the generator is fixed; each asset's markings and emissives need judgement, the look (H) | X, R | not started |
 | T30c | The sky without splats: a star point field and the nebula as a generated panorama | T30a | Opus | The sky is the last splat node; stars must stay crisp points at any resolution | X, R | not started |
 | T31 | Remove Gaussian splats: `addons/gdgs_scs` and every splat path in code, procgen, settings, console commands, tests, scripts, CI and docs (Q29, Q30) | T30b, T30c | Opus | About 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only deletion | X, R, G | not started |
@@ -593,22 +593,30 @@ textured asset writes to `assets/generated/<asset_id>/`, from T30a on:
 <asset_id>_albedo.png       sRGB colour (panel lines, markings, wear painted in), alpha unused
 <asset_id>_normal.png       tangent-space normals in Godot's convention (+Y up), linear
 <asset_id>_orm.png          R occlusion, G roughness, B metal (Godot's ORM layout), linear
-<asset_id>_emissive.png     linear; black where nothing glows; windows, lights, engine glow
+<asset_id>_emissive.png     sRGB (Godot's standard material reads the emission map as colour; T30a changed this from
+                            "linear"); black where nothing glows; windows, lights, engine glow, each at its share of the
+                            surface's "emissive_strength"
+<asset_id>_<map>.png.import a Godot import sidecar per map, written by the generator (VRAM compressed, mipmaps, the normal map
+                            flagged, colour or data packing), so a fresh import never lands at the lossless default
 <asset_id>_chunk_<n>.glb    a break-up chunk: the parent's faces re-centred, the parent's UVs, so it shares the parent's maps
 hardpoints.json             unchanged (the frame, muzzles, pods, collision, chunks[] gain "mesh")
-manifest.json               "mesh": {"file", "triangles", "vertices", "aabb_min", "aabb_max", "texel_m", "atlas_px",
+manifest.json               "mesh": {"file", "triangles", "vertices", "aabb_min", "aabb_max", "texel_m", "atlas_px", "atlas_fill",
                                      "mean_albedo", "surfaces": [{"name", "blend", "albedo", "normal", "orm", "emissive",
-                                     "transmittance"}], "lods": [{"file", "triangles", "from_m"}]}   (lods empty: the importer's)
+                                     "transmittance", "emissive_strength"}], "lods": [{"file", "triangles", "from_m"}]}
+                            (lods empty: the importer's; "atlas_fill" and "emissive_strength" were added by T30a)
 ```
 
 In Python the generator composes `parts/` into `Mesh` and `Material` values (`core/geometry.py`, unchanged in shape; `Material`
 gains `roughness`, `emissive` and `emissive_strength`; `Style` gains the wear and marking parameters) and calls one writer:
-`core.textured_mesh.write_textured_mesh(out_dir, asset_id, parts: Sequence[TexturedPart], style, atlas_px) -> (paths, section)`,
-where `TexturedPart(mesh, phase, markings=())` is T27's `PaintPart` with markings. Until T30a lands, M5 builds against
-`core.paint_mesh.write_paint_mesh(out_dir, asset_id, parts: Sequence[PaintPart], style)` and swaps the call's name at the
-rebase; the parts, the frame and `hardpoints.json` do not change. On the Godot side `MeshAssets.load(asset_id)` (today
-`PaintMeshes.load`) returns the mesh with its materials set, and `Ship` draws it when `settings.ship_render` is `mesh` (the
-default from T30b, the only path from T31). M5's STL fidelity rule and its look gates are its own.
+`core.textured_mesh.write_textured_mesh(out_dir, asset_id, parts: Sequence[TexturedPart], style, atlas_px=2048, texel_m=0.01,
+seed=ctx.seed, occlusion=True) -> (paths, section)`, where `TexturedPart(mesh, phase, markings=(), name="")` is T27's `PaintPart`
+with markings (`core.textures.Marking`: `band`, `text`, `rect`, `soot`, in world space) and the part's name. Built by T30a as stated
+(the keyword arguments after `atlas_px` were added; `paths` is the list of every file written, the sidecars included). Until T30a lands,
+M5 builds against `core.paint_mesh.write_paint_mesh(out_dir, asset_id, parts: Sequence[PaintPart], style)` and swaps the call's
+name at the rebase; the parts, the frame and `hardpoints.json` do not change. On the Godot side `MeshAssets.for_asset(asset_id)`
+(the name `load` would shadow GDScript's own; `PaintMeshes.for_asset` is the same call until T31) returns the mesh with its
+materials set, and `Ship` draws it when `settings.ship_render` is `mesh` (the default from T30b, the only path from T31). M5's STL
+fidelity rule and its look gates are its own.
 
 **Sizing the removal** (grep for `gdgs`, `splat`, `gaussian` on `33bc8f2`, case-insensitive): `src` 45 files and 469 lines,
 `tests` 44 files and 880 lines, `tools` 38 files and 584 lines, `docs` 13 files and 727 lines (`architecture.md` 186 lines),
@@ -1307,6 +1315,24 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
 - **Expected gain:** GPU time at `hundred_view` within 1.3 times T27's painted mesh row (70 %); the maps under 40 MB of VRAM
   (85 %); the look accepted in two rounds (60 %).
 - **Architecture:** §17.18 (T30b adds its paragraphs under its own task id).
+- **Done (2026-11-04, in its own worktree on `6ccf191`; the Cycle log entry "T30a textured mesh pipeline" holds the numbers):**
+  built as planned, with these differences. The `look` console name was taken by the camera's `look <yaw> [pitch]`, so the
+  command is `sheet <asset_id> <distance_m> [lit|dark|off] [splat|painted|textured]` (`src/rendering/look_scene.gd`, `LookScene`
+  under `Main`); it also takes the look, so one run photographs all three. The sheet is composed by `scripts/look_sheet_node.gd`
+  inside the same Godot run (one process, `ship_render` switched live), not by `core/image.py`, which reads PNGs but has no fast path
+  for Godot's row filters. Natural UVs are written by `lathe` and `box`/`tapered_box`; `loft`, `ellipsoid_cap`, `prism`, `sweep_rect`
+  and the hand-built lofts of the Starfury are unwrapped by `uv_atlas.auto_charts` (regions within 40 degrees, projected on their mean
+  plane); every map is painted from world-space buffers, so the unwrap only sets resolution. The emissive map is sRGB, not linear,
+  because Godot's standard material reads the emission texture as colour (the contract says so now). The import preset is a
+  `.import` sidecar the generator writes beside each map (not `importer_defaults`, which would touch every texture in the project).
+  The fine-mesh normal transfer and the `render_triangles` decimation are not built: the render mesh is the parts mesh in T30a, so the
+  transfer would be the identity and could not be checked; T30b builds both when it decimates. The occlusion is a disk-to-point sum over
+  surface samples (not 16 rays a texel): 8 s of the 29 s build. The rivet rows are not drawn (at 1.8 cm a texel they would be one
+  texel). `MeshAssets.for_asset` is the loader (`load` would shadow GDScript's); `PaintMeshes` is a subclass kept for `Ship` and the
+  tests until T31. The Starfury's atlas packs at 1.83 cm a texel, not 1 cm: 578 m² of hull and 1 705 charts with gutters do not fit
+  2 048 px finer, and 4 096 px would cost about 56 MB of VRAM against the 40 MB bar. Pillow stays for the sky's panorama until T30c
+  rewrites the sky with `core/image.py` (`assets/sky_default.py` is T30c's file). The look sheet (H) is at
+  `/tmp/m4_t30_starfury_aurora_sheet.png`, the shots at `/tmp/m4_t30a_starfury_aurora_<look>_<m>m_<lit|dark>.png`.
 
 ##### M4-T30b Every other hull textured, mesh LODs measured, the mesh path the default
 
@@ -2969,6 +2995,44 @@ settings off against on, alternating (`M4-T14_ab/`). Means in ms per tick unless
 - **Behaviour changes:** none for collisions. A far ship's dot moves at the tick rate (60 Hz) instead of blended to the display
   rate, by at most one tick of travel: 2.5 m at 150 m/s, 10 m at 600 m/s, a few pixels at the 3 km a dot starts at; the look is the
   maintainer's (H).
+### T30a textured mesh pipeline (M4-T30a, 2026-11-04): the Starfury as a textured mesh (Q29, Q31)
+
+**What was built.** `tools/procgen` writes the Starfury as `starfury_aurora.glb` with a 2 048 px atlas and four maps (§17.18), the
+contract M5 builds against; `MeshAssets` draws it as a PBR surface lit by the rig and `settings.ambient_level`; `Ship` is untouched
+(it draws whatever `PaintMeshes.for_asset` returns on the `mesh` path). The painted mesh and the splats are still written beside it.
+
+**The pipeline on the Starfury** (`python3 -m tools.procgen build starfury_aurora`, 29.5 s on the development desktop against 2.9 s
+before; the stages: parts 0.3 s, charts and packing 0.2 s, rasterising 2.7 s, dilation 0.5 s, the maps 7.1 s, occlusion 7.9 s, the
+PNGs and the glb under 1 s, the splat levels the rest): 578.7 m² of hull in 1 705 charts (1 078 of them two-triangle box sides), the
+packer settles at 1.83 cm a texel with 76 % of the atlas filled and 44 % covered by triangles before dilation, no two charts overlapping;
+34 428 triangles and 32 370 glb vertices, the painted mesh's triangles and box exactly. The maps import as s3tc with mipmaps:
+albedo 2.8 MB, normal 5.6 MB (two-channel), ORM 2.8 MB, emissive 2.8 MB, 14 MB in all (bar: 40 MB).
+
+**GPU, textured against painted** (`scripts/render_compare.sh hundred_view mesh`, 100 idle ships in view, fullscreen on the
+maintainer's screen with the 3D at 1 080 lines, 5 s warm-up and 10 s measured, vsync off, under the locks; load 1.9 to 2.2):
+
+| run | GPU ms mean / max | draw calls | triangles | VRAM added MB | FPS (tick-bound) |
+|---|---|---|---|---|---|
+| before: T27's painted mesh (`m4_t30a_before_hundred_view_painted`) | 3.09 / 3.12 | 519 | 697 830 | 1 348 | 39 |
+| after: the textured mesh (`m4_t30a_after_hundred_view_textured`) | 3.20 / 3.26 | 518 | 805 180 | 1 373 | 33 |
+
+The textured mesh costs 1.04 times the painted mesh's GPU time (bar: 1.3). The triangle count differs because the importer's LODs
+are built from a mesh with more vertices (one per vertex and UV). The FPS difference is the tick, not the renderer (load was higher).
+**Draw calls** (`scripts/probe_draw_calls.gd count=20 from=4 asset=starfury_aurora`): the player alone 83, with 20 textured Starfuries
+86: the copies share one material per surface and instance into 3 calls (the hull, its depth pre-pass, the glass), not 20 each.
+
+**The look sheet (H, checkpoint 1b)**: `scripts/look_sheet.sh starfury_aurora`, one run, `/tmp/m4_t30_starfury_aurora_sheet.png`
+(2 880 by 5 140: splat, painted and textured columns; 8, 30, 150 and 600 m lit then dark; the cockpit view, which is the interior OBJ on
+every path), every shot full size at `/tmp/m4_t30a_starfury_aurora_<look>_<m>m_<lit|dark>.png` and `_cockpit.png`. GPU time per tile
+is on the sheet (textured 2.9 ms at 8 m lit, splats 3.4; 2.2 against 4.2 at 600 m). The first round's canopy glowed a solid teal; the
+glass's emissive was cut to a faint cabin glow before the sheet in `/tmp` was taken. What to judge: the panel lines and hatches, the
+hazard stripes, the stripe-coloured band and the "42" on each pod, "EA" on the flanks, the chipped edges and streaks, the throats'
+glow, the dark side under `ambient_level` 0.3, and how it holds up at 150 and 600 m against the splats.
+
+**Tests** (focused, Q10): the Python suite (`python3 -m unittest discover -s tools/procgen/tests -t .`) with the new `test_image.py`
+(5), `test_uv_atlas.py` (8), `test_textures.py` (10), `test_textured_mesh.py` (5); and GUT files run alone, each 0 failing and 0
+pending: `test_mesh_assets` 4, `test_textured_hull` 3, `test_paint_meshes` 7, `test_render_path` 7, `test_ship_scene` 27, `test_ship_nodes`
+11, `test_environment` 22, `test_far_dots` 12, and AC13's `test_ai_think_time` 1.
 
 ## Definition of done (M4)
 

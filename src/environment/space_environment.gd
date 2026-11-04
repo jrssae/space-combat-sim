@@ -8,6 +8,9 @@ extends Node3D
 ## It loads without any generated asset: the sky splats and the manifest are loaded here, guarded, so the scene (and
 ## the headless tests) work before `scripts/gen_assets.sh` has run, with a warning instead of a load error.
 ##
+## `settings.ambient_level` (M4-T30a) is the environment's ambient light: what the textured meshes and every other PBR surface get
+## on every side, the role `relight_ambient` plays for the splats. It applies live, to the fallback environment too.
+##
 ## Anything visual here is (H): it cannot be seen without a GPU.
 
 ## Fallback for GPUs where neither GDGS backend starts (architecture §7.4): the panorama render of the same sky.
@@ -52,7 +55,29 @@ func _ready() -> void:
 	_default_environment = world_environment.environment
 	_load_sky()
 	_apply_compositor_tuning()
+	_apply_ambient()
+	Settings.changed.connect(_on_setting_changed)
 	use_star_of(&"local")
+
+
+func _exit_tree() -> void:
+	if Settings.changed.is_connected(_on_setting_changed):
+		Settings.changed.disconnect(_on_setting_changed)
+
+
+func _on_setting_changed(key: StringName, _value: Variant) -> void:
+	if key == &"ambient_level":
+		_apply_ambient()
+
+
+## The ambient light every PBR surface gets, `settings.ambient_level` of white, on whichever environment is current.
+func _apply_ambient() -> void:
+	var environment: Environment = world_environment.environment
+	if environment == null:
+		return
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color.WHITE
+	environment.ambient_light_energy = float(Settings.get_value(&"ambient_level"))
 
 
 ## Shows the star of `system_id`, from `data/star_systems.json`.
@@ -75,12 +100,14 @@ func use_fallback_sky(enabled: bool) -> void:
 	sky_splats.visible = not enabled
 	if not enabled:
 		world_environment.environment = _default_environment
+		_apply_ambient()
 		return
 	var fallback: Environment = _load_fallback_environment()
 	if fallback == null:
 		push_warning("SpaceEnvironment: no panorama at %s (needs Pillow; run scripts/gen_assets.sh); the fallback sky is black" % fallback_panorama_path)
 		return
 	world_environment.environment = fallback
+	_apply_ambient()
 
 
 func is_fallback_sky_active() -> bool:

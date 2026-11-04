@@ -4,15 +4,16 @@ extends Node
 ## objects of the last 60: bare splat nodes in view, the same hidden, the same behind the camera, the painted mesh, the fallback OBJ,
 ## the merged depth proxy. One line per phase. Run it on the real renderer: the counts are the renderer's.
 ##
-## Arguments after `--`: count=<n> (40), from=<phase> (0: the phases before it are skipped, the player alone always runs).
+## Arguments after `--`: count=<n> (40), from=<phase> (0: the phases before it are skipped, the player alone always runs),
+## asset=<id> (raider_fighter; M4-T30a: starfury_aurora draws its textured mesh in the "painted meshes" phase).
 
 const FRAMES: int = 60
 const SETTLE: int = 20
-const ASSET: String = "raider_fighter"
 
 var main: Main
 var count: int = 40
 var from: int = 0
+var asset: String = "raider_fighter"
 var _nodes: Array[Node3D] = []
 var _phase: int = -1
 var _frame: int = 0
@@ -30,6 +31,8 @@ func _ready() -> void:
 			count = int(pair[1])
 		elif pair.size() == 2 and pair[0] == "from":
 			from = int(pair[1])
+		elif pair.size() == 2 and pair[0] == "asset":
+			asset = pair[1]
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.waves_auto_start = false
 	main.input_source = FakeInputSource.new()
@@ -61,15 +64,15 @@ func _clear() -> void:
 
 func _build(phase: int) -> void:
 	_clear()
-	var dir: String = ShipSpec.ASSET_ROOT.path_join(ASSET)
-	var fallback := load(dir.path_join(ASSET + ".obj")) as Mesh
+	var dir: String = ShipSpec.ASSET_ROOT.path_join(asset)
+	var fallback := load(dir.path_join(asset + ".obj")) as Mesh
 	for i: int in (0 if phase == 0 else count):
 		var node: Node3D = null
 		match phase:
 			1, 2, 3, 7:
 				var splat := GaussianSplatNode.new()
-				splat.gaussian = load(dir.path_join(ASSET + ".ply")) as GaussianResource
-				SplatLightingLoader.attach(splat, SplatLod.lighting_path(ASSET, 0))
+				splat.gaussian = load(dir.path_join(asset + ".ply")) as GaussianResource
+				SplatLightingLoader.attach(splat, SplatLod.lighting_path(asset, 0))
 				node = splat
 				if phase == 7:
 					var proxy := HullDepthProxy.new()
@@ -77,7 +80,7 @@ func _build(phase: int) -> void:
 					splat.add_child(proxy)
 			4:
 				var painted := MeshInstance3D.new()
-				painted.mesh = PaintMeshes.for_asset(ASSET)
+				painted.mesh = MeshAssets.for_asset(asset)
 				node = painted
 			5:
 				var obj := MeshInstance3D.new()

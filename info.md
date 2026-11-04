@@ -89,6 +89,7 @@ Source: `src/autoload/debug_console.gd`
 | `look` | `<yaw> [pitch]` | Holds the view at yaw and pitch degrees off the nose, for captures; L3 and the mouse do nothing until `look off`. | `src/camera/camera_rig.gd` |
 | `lod` | `<ship\|all> <hero\|0-3\|auto>` | Forces a ship's splat level; `hero` is the player's finest, `auto` lets its size on screen decide. A forced ship is never drawn as a far dot (M4-T11). | `src/rendering/lod_switcher.gd` |
 | `fallback` | `[on\|off]` | Shows the fallback meshes and panorama sky instead of splats; with no argument, toggles. | `src/rendering/splat_status.gd` |
+| `sheet` | `<asset_id> [distance_m] [lit\|dark\|off] [splat\|painted\|textured]` | Parks one idle ship of the asset (`starfury_aurora`, `raider_fighter`) ahead of the camera at that distance for a look sheet (M4-T30a), hides the player's hull and turns the key star to light it from behind the camera (`lit`) or from behind the ship (`dark`), drawn as splats, T27's painted mesh or the textured mesh; `sheet off` puts everything back. | `src/rendering/look_scene.gd` |
 | `relight` | `[on\|off]` | Toggles or sets scene lighting on hulls, chunks and buoys (off draws their flat paint; meshes stay lit). | `src/rendering/splat_light_rig.gd` |
 | `flare` | `[on\|off]` | Toggles or sets the star's lens flare. | `src/rendering/post_effects.gd` |
 | `blur` | `[on\|off]` | Toggles or sets motion blur on fast turns. | `src/rendering/post_effects.gd` |

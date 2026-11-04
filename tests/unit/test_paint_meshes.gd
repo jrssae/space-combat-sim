@@ -1,6 +1,7 @@
 extends GutTest
 ## The painted meshes (M4-T27, architecture §17.17): each hull's own surface imported as one mesh with the paint shader on it, filled
-## from the manifest; the lights the splats get; and how a big piece picks its splat level.
+## from the manifest; the lights the splats get; and how a big piece picks its splat level. Since M4-T30a the Starfury's manifest
+## also names a textured mesh, which `MeshAssets.for_asset` prefers, so its painted mesh is loaded by its `paint_mesh` entry here.
 
 const RAIDER: String = "raider_fighter"
 const STARFURY: String = "starfury_aurora"
@@ -8,6 +9,12 @@ const STARFURY: String = "starfury_aurora"
 
 func _manifest(asset_id: String) -> Dictionary:
 	return SplatLod.read_manifest(asset_id)
+
+
+# The painted mesh of an asset, whether or not a textured one exists beside it.
+func _painted(asset_id: String) -> Mesh:
+	var entry: Dictionary = _manifest(asset_id).get("paint_mesh", {})
+	return MeshAssets.load_entry(ShipSpec.ASSET_ROOT.path_join(asset_id), entry) if not entry.is_empty() else null
 
 
 func _triangles(mesh: Mesh) -> int:
@@ -27,13 +34,13 @@ func test_a_ship_asset_gives_its_mesh_with_one_paint_material_per_surface() -> v
 	var material := mesh.surface_get_material(0) as ShaderMaterial
 	assert_not_null(material)
 	assert_eq(material.shader, PaintMeshes.OPAQUE_SHADER)
-	assert_true(PaintMeshes.materials.has(material), "kept for the lights")
+	assert_true(MeshAssets.materials.has(material), "kept for the lights")
 	assert_same(PaintMeshes.for_asset(RAIDER), mesh, "loaded once and shared")
 
 
 func test_the_mesh_holds_the_manifests_triangles_and_box() -> void:
 	for asset_id: String in [RAIDER, STARFURY]:
-		var mesh: Mesh = PaintMeshes.for_asset(asset_id)
+		var mesh: Mesh = _painted(asset_id)
 		if mesh == null:
 			fail_test("%s has no painted mesh" % asset_id)
 			continue
@@ -47,7 +54,7 @@ func test_the_mesh_holds_the_manifests_triangles_and_box() -> void:
 
 
 func test_the_starfury_glass_is_its_own_see_through_surface() -> void:
-	var mesh: Mesh = PaintMeshes.for_asset(STARFURY)
+	var mesh: Mesh = _painted(STARFURY)
 	if mesh == null:
 		fail_test("no painted Starfury")
 		return
@@ -75,7 +82,7 @@ func test_the_material_table_and_panel_grid_come_from_the_manifest() -> void:
 
 
 func test_the_uv_codes_decode_to_a_material_in_the_table() -> void:
-	var mesh: Mesh = PaintMeshes.for_asset(STARFURY)
+	var mesh: Mesh = _painted(STARFURY)
 	if mesh == null:
 		fail_test("no painted Starfury")
 		return

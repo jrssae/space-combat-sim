@@ -1,6 +1,6 @@
 class_name PaintMeshLights
 extends Node
-## Gives every painted mesh (M4-T27, `PaintMeshes`) the light the splats get: the light rig's 8 lights packed as GDGS packs them
+## Gives every painted mesh (M4-T27, `MeshAssets`) the light the splats get: the light rig's 8 lights packed as GDGS packs them
 ## (`GaussianLightRig`'s raster uniforms) and the relight settings, once a frame, so a mesh ship and a splat ship side by side are
 ## lit alike. It reads the rig's own slots, so it never walks the scene for lights.
 
@@ -18,14 +18,14 @@ func _init() -> void:
 
 
 func _process(_delta: float) -> void:
-	if PaintMeshes.materials.is_empty():
+	if MeshAssets.materials.is_empty():
 		return
 	var count: int = pack(SplatLightRig.of(self))
 	var relight_on: bool = bool(Settings.get_value(&"splat_relight"))
 	var unlit: float = float(Settings.get_value(&"relight_unlit_level"))
 	var ambient: float = float(Settings.get_value(&"relight_ambient"))
 	var gain: float = float(Settings.get_value(&"relight_light_gain"))
-	for material: ShaderMaterial in PaintMeshes.materials:
+	for material: ShaderMaterial in MeshAssets.materials:
 		material.set_shader_parameter(&"light_count", count)
 		material.set_shader_parameter(&"light_vectors", _vectors)
 		material.set_shader_parameter(&"light_colors", _colors)

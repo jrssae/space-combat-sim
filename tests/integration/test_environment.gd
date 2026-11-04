@@ -87,9 +87,9 @@ func test_default_environment_is_black_dim_filmic_with_modest_glow() -> void:
 	assert_eq(e.background_mode, Environment.BG_COLOR)
 	assert_eq(e.background_color, Color.BLACK)
 	assert_eq(e.ambient_light_source, Environment.AMBIENT_SOURCE_COLOR)
-	assert_almost_eq(e.ambient_light_color.r, 0.02, 0.0001)
-	assert_almost_eq(e.ambient_light_color.g, 0.02, 0.0001)
-	assert_almost_eq(e.ambient_light_color.b, 0.02, 0.0001)
+	# Since M4-T30a the ambient is `settings.ambient_level` of white, applied at ready (the resource's own dim grey is overwritten).
+	assert_eq(e.ambient_light_color, Color.WHITE)
+	assert_almost_eq(e.ambient_light_energy, float(Settings.get_value(&"ambient_level")), 0.0001)
 	assert_eq(e.tonemap_mode, Environment.TONE_MAPPER_FILMIC)
 	assert_true(e.glow_enabled)
 	assert_almost_eq(e.glow_intensity, 0.4, 0.0001)

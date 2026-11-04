@@ -2546,3 +2546,72 @@ scripts/probe_draw_calls.gd            what one hull costs in Godot's draw calls
   (the imported mesh, its materials from the manifest, the codes survive the import, the lights packed as GDGS packs them, a piece's
   level) and `test_render_path` (the switch live on an AI ship and the player's, hybrid with its hysteresis, dots on the mesh path,
   a capital's three looks, the station both ways with its drum turning).
+### 17.18 The textured mesh pipeline (T30a)
+
+```
+tools/procgen/core/geometry.py        Mesh carries a UV per face corner (metres) and a chart id; lathe and box write theirs as they tessellate
+tools/procgen/core/uv_atlas.py        charts: the primitives' own, the rest unwrapped by normal regions; the shelf packer at one texel size
+tools/procgen/core/raster.py          the atlas buffers: world position, normal, part, material, chart and sharp-edge distance per texel
+tools/procgen/core/textures.py        the maps from the buffers: paint, markings (bands, a stroke font, decals, soot), wear, grooves, occlusion
+tools/procgen/core/image.py           8-bit PNG writer and reader with zlib alone (no Pillow for the maps)
+tools/procgen/core/textured_mesh.py   write_textured_mesh: the glb, the four maps with their .import sidecars, the manifest's mesh section
+tools/procgen/core/manifest.py        validate_mesh_section: the contract's keys
+tools/procgen/styles/__init__.py      Style.panel_lattice (what shade_panels paints, per point) and the wear, groove and hatch parameters
+tools/procgen/assets/starfury_aurora.py  markings_for: the pods' bands and squadron numbers, the flanks' letters, the soot
+src/rendering/mesh_assets.gd          MeshAssets: a hull's textured mesh with a StandardMaterial3D per surface (or T27's painted mesh)
+src/rendering/paint_meshes.gd         PaintMeshes: the old name, a subclass of MeshAssets until T31
+src/rendering/look_scene.gd           LookScene: the `sheet` command that parks one ship for the look sheets
+src/environment/space_environment.gd  settings.ambient_level: the environment's ambient light, live
+scripts/look_sheet.sh, look_sheet.gd  the look sheet: every shot and the composed sheet, on the real renderer
+```
+
+- **What it is for.** Q29: the renderer moves from Gaussian splats to procedurally textured meshes, and this is the pipeline every hull
+  goes through from here (T30b converts the other assets, T31 removes the splats). It is also the contract M5's civilian ships are built
+  against: the milestone's plan subsection "The contract M5 builds against" lists the files; this section says how they are made.
+- **Charts and the atlas.** A `Mesh` now carries a UV per face corner in metres and a chart id per face; `lathe` writes the arc around
+  the axis (at each ring's own radius) against the arc along the profile, one chart with its seam at the first vertex, and `tapered_box`
+  (so `box`) one planar chart per side. Both ride through `transformed`, `mirrored` (the corner order flips with the winding) and
+  `concatenate` (chart ids are offset, so a mirrored part gets charts of its own). Every other face (the hand-built lofts of the fuselage,
+  struts and claws) is unwrapped by `uv_atlas.auto_charts`: regions grown over shared edges while a face stays within 40 degrees of the
+  region's seed, each projected onto its mean plane. The packer sorts the charts by height onto shelves at the asked texel size with a
+  two-texel gutter and grows the texel by 4 % a round until everything fits; the Starfury's 2 048 px atlas lands at 1.8 cm a texel
+  (578 m² of hull, 1 705 charts, 76 % filled).
+- **The buffers.** `raster.rasterize` draws every triangle in texture space with 0.6 texel of conservative padding (a sliver still marks
+  the texels it touches; a triangle smaller than a texel marks the one under its centroid) and interpolates the world position and the
+  part's smooth vertex normal, keeping the part, material and chart ids and the distance to the nearest sharp edge (creases over 35
+  degrees and open rims, found by vertex position). `dilate` copies the buffers two texels into the gutters so filtering and the mipmaps
+  read paint. Every map is then a function of these buffers, so the paint never depends on how a chart was unwrapped.
+- **The maps.** Colour: `Style.shade_panels`'s own lattice per part (`panel_lattice`, the same cells, lines and tint the splats and the
+  painted mesh had, with the part's phase), an inset hatch in some cells, the markings in world space (a band round an axis, text from a
+  4 by 6 stroke font stencilled on the side facing a direction, flat decals, soot round a nozzle's mouth) and seeded wear (chips of bare
+  metal along the sharp edges, streaks trailing aft from the panel lines, low-frequency grime), written sRGB. Normal: a height field of
+  panel grooves and hatch bevels differentiated in texture space and scaled by the metres each texel spans (from the position buffer), in
+  the texel's tangent frame with Godot's +Y up; a flat panel centre is (0.5, 0.5, 1). ORM: occlusion from a disk-to-point sum over
+  surface samples of the whole hull (12 cm apart, within 0.7 m, every fourth texel and spread between), roughness from the material (rougher
+  on the lines, smoother where chipped), metal from the material (bare where chipped). Emissive: the materials' glow colours (the nozzle
+  throats, the canopy glass) scaled to the surface's strongest glow, which the manifest carries as `emissive_strength`, black elsewhere,
+  written sRGB because Godot's standard material reads the emission texture as colour.
+- **The files.** `<asset>.glb` holds the opaque hull as primitive 0 and the glass as primitive 1 (a glb vertex per mesh vertex and UV,
+  the parts' smooth normals, no tangents: the importer makes them with `ensure_tangents`), beside `<asset>_albedo.png`, `_normal.png`,
+  `_orm.png`, `_emissive.png`, each with a `.import` sidecar the generator writes (VRAM compressed, mipmaps, the normal map flagged, the
+  albedo and emissive packed for colour and the data maps for data, 3D detection off), so a fresh import never lands at the lossless
+  default. The manifest's `mesh` section (validated by `validate_mesh_section`) names them. The painted mesh (`_mesh.glb`, `paint_mesh`)
+  is still written beside them until T31.
+- **Godot.** `MeshAssets.for_asset` gives the textured mesh when the manifest has `mesh` (one `StandardMaterial3D` per surface: the
+  albedo, the normal map, the ORM map's three channels, the emission map at the surface's strength, glass alpha-blended and two-sided at
+  one minus the transmittance), else T27's painted mesh, cached per file so every copy of a hull shares its materials and the renderer
+  instances them (20 textured Starfuries are one draw call per surface per pass; the probe's "painted meshes" phase with `asset=`). The
+  hulls are lit by the Forward+ renderer: the rig's lights and `settings.ambient_level` (0.3 of white) on the environment, live. `Ship`
+  is unchanged: it draws whatever `PaintMeshes.for_asset` returns when `ship_render` is `mesh`.
+- **The look sheet.** `sheet <asset> <m> [lit|dark|off] [splat|painted|textured]` parks one idle pooled ship ahead of the chase camera
+  three-quarters on, hides the player's hull and turns the key star to light the ship from over the camera's shoulder or from behind it;
+  `scripts/look_sheet.sh` photographs every look at 8, 30, 150 and 600 m, lit and dark, and the cockpit view, fullscreen with the 3D at
+  1 080 lines, and composes `/tmp/m4_t30_<asset>_sheet.png` with each tile's GPU time.
+- **Tests**: `test_image.py` (round trips, byte-identical, the filters), `test_uv_atlas.py` (the lathe's and the box's charts, mirrored
+  charts, the unwrapper, packing without overlap, texel density within 20 %, the texel growing to fit), `test_textures.py` (the sharp
+  edges, the buffers, a sub-texel triangle, the maps' size and depth, the flat normal, the emissive mask, the albedo within the jitter,
+  the ORM channels, determinism per seed, the font, a band and a stencil), `test_textured_mesh.py` (the contract's files and section,
+  identical bytes per seed, the Starfury's mesh against its painted mesh and OBJ, the maps, the sidecars, the build time printed),
+  `test_mesh_assets` (the imported surfaces and materials, the import flags, the painted path for the raider), `test_textured_hull` (the
+  player's and a lean ship's hull node, the far dot, `ambient_level` live, the `sheet` command).
+

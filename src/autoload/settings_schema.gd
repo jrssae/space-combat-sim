@@ -126,6 +126,9 @@ const ENTRIES: Dictionary = {
 		"doc": "Jolt layers by kind (M4-T14): fighters, the player, capitals and rocks each pair only with what can hit them (fighters with fighters too, Q33); off puts every body on the one default layer. Ships follow it at once, capitals and rocks as they are built"},
 	&"far_ship_interpolation_off": {"type": TYPE_BOOL, "default": true,
 		"doc": "A far-dot AI ship's body is not interpolated, so a rebase leaves its nodes out of the interpolation reset (M4-T14)"},
+	# M4-T30a
+	&"ambient_level": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 2.0,
+		"doc": "The environment's ambient light, white at this energy: what the textured meshes and every other lit surface get on every side (M4-T30a, live)"},
 }
 
 ## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current
