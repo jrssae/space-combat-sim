@@ -132,6 +132,10 @@ var _batch_row: int = -1
 var _batch_tick: int = -1
 var _native_last: bool = false
 var _output_tick: int = -1
+# The physics frame the batch applied this ship's forces in (so this node never applies them again that tick), and the frame
+# `_prepare_command` last ran in (so a fallback after a refused step never prepares the command twice).
+var _flown_tick: int = -1
+var _prepared_tick: int = -1
 
 @onready var hull_splats: GaussianSplatNode = $HullSplats
 @onready var hull_mesh_fallback: MeshInstance3D = $HullMeshFallback
@@ -215,13 +219,9 @@ func setup(p_spec: ShipSpec, p_world: WorldFrame) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	var in_batch: bool = _in_batch_this_tick()
-	if not in_batch:
-		if _flight_fresh and _flight.toggle_assist:
-			set_assist(not _assist_on)
-		_flight_fresh = false
+	var frame: int = Engine.get_physics_frames()
 	var combat_fresh: bool = _take_combat_edges()
-	if in_batch:
+	if _flown_tick == frame:
 		# The batch applied this tick's forces before this node ran; only the combat edges are left.
 		if combat_fresh:
 			targeting.apply(_combat)
@@ -232,14 +232,14 @@ func _physics_process(delta: float) -> void:
 			_model.assist.pod_yaw_smoothed = _batch.assist_state(self)
 		_native_last = false
 	_batch_tick = -1  # this node's model flies this tick, so the batch's row is no longer the latest
+	var b: Basis = global_basis
+	var to_body: Basis = b.transposed()
+	if _prepared_tick != frame:
+		_prepare_command(delta, to_body)
 
 	var env_accel: Vector3 = _environment_accel()
 	_applied_force = mass * env_accel
 	if _model != null:
-		var b: Basis = global_basis
-		var to_body: Basis = b.transposed()
-		_flight.face_dir_b = to_body * targeting.selected_offset()  # what the brake faces (§5.5); zero = no target
-		_update_tracking(delta, to_body)
 		var fuel: FuelTank = get_fuel_tank()
 		_output = _model.compute(_flight, to_body * linear_velocity, to_body * angular_velocity, to_body * env_accel,
 				_assist_on, delta, not fuel.is_empty())
@@ -371,19 +371,7 @@ func flight_path() -> StringName:
 ## `_physics_process` would), the command packed at `row`, and the marks that tell `_physics_process` the batch flies this tick.
 func batch_gather(batch: FlightBatch, row: int, frame: int, delta: float, fuel_unlimited: bool,
 		scalars: PackedFloat64Array, vectors: PackedVector3Array, flags: PackedByteArray) -> void:
-	if _flight_fresh and _flight.toggle_assist:
-		set_assist(not _assist_on)
-	_flight_fresh = false
-	if _flight.brake or _flight.autotrack:
-		var to_body: Basis = global_basis.transposed()
-		if _flight.brake:
-			_flight.face_dir_b = to_body * targeting.selected_offset()  # what the brake faces (§5.5); zero = no target
-		_update_tracking(delta, to_body)
-	elif not _track_prev_dir.is_zero_approx() or not _flight.track_dir_b.is_zero_approx():
-		_flight.track_dir_b = Vector3.ZERO
-		_flight.track_rate_b = Vector3.ZERO
-		_track_prev_dir = Vector3.ZERO
-		_track_rate_w = Vector3.ZERO
+	_prepare_command(delta, global_basis.transposed())
 	_fuel.unlimited = fuel_unlimited
 	FlightBatch.pack_command(_flight, _environment_accel(), _assist_on, not _fuel.is_empty(), scalars, vectors, flags, row)
 	if not _native_last:
@@ -394,7 +382,13 @@ func batch_gather(batch: FlightBatch, row: int, frame: int, delta: float, fuel_u
 	_batch = batch
 	_batch_row = row
 	_batch_tick = frame
+	_flown_tick = frame
 	_output_tick = -1
+
+
+## The batch's step refused this tick's arrays after the gather: this node applies the forces itself.
+func batch_refused() -> void:
+	_flown_tick = -1
 
 
 ## The batch draws this tick's reaction mass for a batched ship (only when the tank is finite).
@@ -891,9 +885,16 @@ func _environment_accel() -> Vector3:
 # --- the flight batch (M4-T10) ----------------------------------------------------------------------------------------
 
 
-# Whether the batch gathered this ship in the current physics tick and its step went through.
-func _in_batch_this_tick() -> bool:
-	return _batch != null and _batch_tick == Engine.get_physics_frames() and _batch.tick == _batch_tick
+# The command as the model reads it this tick, on either path: the assist edge taken, the brake's facing and the auto-track's
+# lead written in the body frame `to_body`. Once per tick, whichever path calls first.
+func _prepare_command(delta: float, to_body: Basis) -> void:
+	if _flight_fresh and _flight.toggle_assist:
+		set_assist(not _assist_on)
+	_flight_fresh = false
+	if _model != null:
+		_flight.face_dir_b = to_body * targeting.selected_offset()  # what the brake faces (§5.5); zero = no target
+		_update_tracking(delta, to_body)
+	_prepared_tick = Engine.get_physics_frames()
 
 
 # Whether the batch's outputs hold a row for this ship from its latest step.
@@ -901,10 +902,12 @@ func _in_batch_row() -> bool:
 	return _batch != null and _batch_tick >= 0 and _batch_tick == _batch.tick
 
 
+# Joins the world's batch when this ship can fly in it, re-registering a rebuilt ship; otherwise (or on another world) leaves.
 func _join_batch() -> void:
-	if not batched or _model == null or world == null or not is_instance_valid(world) or not is_inside_tree():
-		return
-	var batch: FlightBatch = FlightBatch.attach(world)
+	var eligible: bool = batched and _model != null and world != null and is_instance_valid(world) and is_inside_tree()
+	var batch: FlightBatch = FlightBatch.attach(world) if eligible else null
+	if batch != _batch:
+		_leave_batch()
 	if batch == null:
 		return
 	_batch = batch

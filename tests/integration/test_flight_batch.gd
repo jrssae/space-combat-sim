@@ -11,13 +11,16 @@ const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tes
 var world: WorldFrame
 var spec: ShipSpec
 var _native_backup: bool
+var _flight_backup: bool
 var _fuel_backup: bool
 
 
 func before_each() -> void:
 	_native_backup = bool(Settings.get_value(&"perf_native"))
+	_flight_backup = bool(Settings.get_value(&"perf_native_flight"))
 	_fuel_backup = bool(Settings.get_value(&"fuel_unlimited"))
 	Settings.set_value(&"perf_native", true)
+	Settings.set_value(&"perf_native_flight", true)
 	Settings.set_value(&"fuel_unlimited", true)
 	world = WorldFrame.new()
 	world.name = "World"
@@ -27,6 +30,7 @@ func before_each() -> void:
 
 func after_each() -> void:
 	Settings.set_value(&"perf_native", _native_backup)
+	Settings.set_value(&"perf_native_flight", _flight_backup)
 	Settings.set_value(&"fuel_unlimited", _fuel_backup)
 
 
@@ -75,12 +79,41 @@ static func _cmd(main_left: float = 0.0, main_right: float = 0.0, retro_left: fl
 	return cmd
 
 
-# A seeded command that changes every tick: triggers, bumpers, sticks and now and then the brake.
+# A seeded command that changes every tick: triggers, bumpers, sticks, strafe, now and then the brake (which faces the selected
+# target) and the auto-track (which holds the nose on its lead point), so the facing and tracking preparation is exercised.
 static func _random_cmd(rng: RandomNumberGenerator) -> FlightCommand:
 	var cmd := _cmd(rng.randf(), rng.randf(), 1.0 if rng.randf() < 0.2 else 0.0, 1.0 if rng.randf() < 0.2 else 0.0,
 			Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)), rng.randf() < 0.1)
 	cmd.strafe = Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
+	cmd.autotrack = rng.randf() < 0.3
 	return cmd
+
+
+# The same command again, as a second pilot would hand it over.
+static func _copy(cmd: FlightCommand) -> FlightCommand:
+	var same := FlightCommand.new()
+	same.main_left = cmd.main_left
+	same.main_right = cmd.main_right
+	same.retro_left = cmd.retro_left
+	same.retro_right = cmd.retro_right
+	same.rot = cmd.rot
+	same.strafe = cmd.strafe
+	same.brake = cmd.brake
+	same.autotrack = cmd.autotrack
+	return same
+
+
+# A target both twins can select: a moving `Targetable` far enough away never to touch them.
+func _spawn_target(at: Vector3, velocity: Vector3) -> Targetable:
+	var body := Node3D.new()
+	body.name = "Target"
+	var target := Targetable.new()
+	target.display_name = "DRONE"
+	target.faction = Factions.RAIDERS
+	target.velocity = velocity
+	body.add_child(target)
+	world.spawn(body, world.to_universe(at))
+	return target
 
 
 func test_every_ship_but_the_players_flies_in_the_batch() -> void:
@@ -106,25 +139,27 @@ func test_a_batched_ship_and_its_gdscript_twin_fly_the_same() -> void:
 	var batched: Ship = _spawn(Vector3.ZERO, false, true)
 	var twin: Ship = _spawn(Vector3.ZERO, false, true)
 	twin.batched = false
+	var target: Targetable = _spawn_target(Vector3(400.0, 150.0, -900.0), Vector3(-30.0, 10.0, 25.0))
+	await _align()
+	assert_true(batched.targeting.select_id(target.get_instance_id()), "the batched ship selects the target")
+	assert_true(twin.targeting.select_id(target.get_instance_id()), "so does its twin")
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
-	await _align()
+	var braked: int = 0
+	var tracked: int = 0
 	for i: int in _ticks(3.0):
 		var cmd: FlightCommand = _random_cmd(rng)
+		braked += 1 if cmd.brake else 0
+		tracked += 1 if cmd.autotrack and not cmd.brake else 0
 		batched.set_flight_command(cmd)
-		var same := FlightCommand.new()
-		same.main_left = cmd.main_left
-		same.main_right = cmd.main_right
-		same.retro_left = cmd.retro_left
-		same.retro_right = cmd.retro_right
-		same.rot = cmd.rot
-		same.strafe = cmd.strafe
-		same.brake = cmd.brake
-		twin.set_flight_command(same)
+		twin.set_flight_command(_copy(cmd))
+		target.get_parent().position += target.velocity / float(Engine.physics_ticks_per_second)
 		await _step(1)
 		if i == 0:
 			assert_eq(batched.flight_path(), &"native")
 			assert_eq(twin.flight_path(), &"gdscript")
+	assert_gt(braked, 5, "the brake faced the target on some ticks")
+	assert_gt(tracked, 30, "the auto-track held the lead on some ticks")
 	assert_eq(batched.flight_path(), &"native")
 	assert_eq(twin.flight_path(), &"gdscript")
 	assert_gt(batched.linear_velocity.length(), 1.0, "the ships flew")

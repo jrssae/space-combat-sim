@@ -662,6 +662,12 @@ No question is open.
   console provider (`path`, `ships`, `stepped`, `gather_us`, `step_us`, `positions`). Parity is bit for bit: the
   differential test finds no mismatch in 20 000 samples, the Jolt twins match, and the seeded fights with the batch on and
   off give the same outcome line for line (the Cycle log entry, M4-T10). The numbers are in the Cycle log.
+- **Fix round 1 (review, 2026-11-03):** one `_prepare_command` for both paths (the assist edge, the brake's facing, the
+  auto-track's lead), the twin test with a selected target, `brake` and `autotrack`, and the Q16 seeded fight as a committed
+  test (`test_flight_parity_fight`, each fight in its own process: a second fight in one process is never the same fight; it
+  finds 0.000 m between twins at 10 s, 135 hits against 135 and the same mix). The frame the batch applied the forces in is
+  recorded apart from the output row, a refused step never prepares a command twice, a ship that can no longer fly leaves the
+  batch, and the spec snapshot (mass included) is documented in §17.9.
 
 ##### M4-T11 Far-ship render proxies and the node diet for AI ships
 

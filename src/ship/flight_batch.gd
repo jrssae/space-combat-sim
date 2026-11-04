@@ -44,7 +44,7 @@ var gather_us: int = 0
 var step_us: int = 0
 
 var _ships: Array[Ship] = []
-var _slots: Dictionary = {}  # Ship -> int, the native slot of every registered ship
+var _slots: Dictionary[Ship, int] = {}  # the native slot of every registered ship
 var _step: Object = null
 var _native_class_known: int = -1  # -1 until first asked; classes never change while the game runs
 var _slot_ids: PackedInt32Array = PackedInt32Array()
@@ -108,19 +108,19 @@ func stepped(ship: Ship) -> bool:
 func assist_state(ship: Ship) -> float:
 	if _step == null or not _slots.has(ship):
 		return 0.0
-	return float(_step.assist_state(int(_slots[ship])))
+	return float(_step.assist_state(_slots[ship]))
 
 
 ## Hands the native step the assist state a ship's GDScript model carried, when the ship changes path.
 func set_assist_state(ship: Ship, value: float) -> void:
 	if _step != null and _slots.has(ship):
-		_step.set_assist_state(int(_slots[ship]), value)
+		_step.set_assist_state(_slots[ship], value)
 
 
 ## Clears a ship's native assist state (an assist toggle or a reset).
 func reset_assist(ship: Ship) -> void:
 	if _step != null and _slots.has(ship):
-		_step.reset_assist(int(_slots[ship]))
+		_step.reset_assist(_slots[ship])
 
 
 ## Which path flew the last tick: `native` when the batch stepped any ship, else `gdscript`.
@@ -188,7 +188,7 @@ func _physics_process(delta: float) -> void:
 		if not ship.can_process() or not ship.is_inside_tree():
 			continue
 		ship.batch_gather(self, row, frame, delta, _fuel_unlimited, _scalars, _vectors, _flags)
-		_slot_ids[row] = int(_slots[ship])
+		_slot_ids[row] = _slots[ship]
 		rows.append(ship)
 		row += 1
 	var slots: PackedInt32Array = _slot_ids.slice(0, row)
@@ -202,6 +202,8 @@ func _physics_process(delta: float) -> void:
 		return
 	if not step.step(slots, scalars, vectors, flags, PackedVector3Array(), delta):
 		# The step refused the arrays (it logged why): every ship flies its own model this tick.
+		for ship: Ship in rows:
+			ship.batch_refused()
 		rows.clear()
 		step_us = 0
 		return
@@ -243,7 +245,7 @@ func _register(ship: Ship) -> void:
 func _unregister(ship: Ship) -> void:
 	if _slots.has(ship):
 		if _step != null:
-			_step.unregister(int(_slots[ship]))
+			_step.unregister(_slots[ship])
 		_slots.erase(ship)
 
 

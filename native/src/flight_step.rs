@@ -31,7 +31,6 @@ const FACE_DECEL_FRACTION: f64 = 0.5;
 const CMP_EPSILON: f32 = 0.00001;
 
 // A ship type as `ShipSpec` holds it, in the units the flight model reads.
-#[derive(Clone)]
 struct Spec {
     mass: f64,
     pod_main_thrust: f64,
@@ -339,7 +338,19 @@ impl ScsFlightStep {
             let v_b = xform_inv(&basis, v_w);
             let w_b = xform_inv(&basis, w_w);
             let env_b = xform_inv(&basis, env_w);
-            let out = compute(slot, &cmd, v_b, w_b, env_b, assist_on, dt, has_propellant);
+            let mut pod_yaw = slot.pod_yaw_smoothed;
+            let out = compute(
+                slot,
+                &mut pod_yaw,
+                &cmd,
+                v_b,
+                w_b,
+                env_b,
+                assist_on,
+                dt,
+                has_propellant,
+            );
+            slot.pod_yaw_smoothed = pod_yaw;
             let spec = &slot.spec;
             // The ship's part: the governor's gain on every thrust, the forces at the nozzles, the assist's speed cap and the
             // environment, then the hard ceiling (`Ship._physics_process`).
@@ -453,7 +464,8 @@ impl ScsFlightStep {
 // `FlightModel.compute`: one tick of architecture 5.2, body frame.
 #[allow(clippy::too_many_arguments)]
 fn compute(
-    slot: &mut Slot,
+    slot: &Slot,
+    pod_yaw: &mut f64,
     cmd: &Cmd,
     v_b: Vector3,
     w_b: Vector3,
@@ -462,7 +474,7 @@ fn compute(
     dt: f64,
     has_propellant: bool,
 ) -> ModelOut {
-    let spec = slot.spec.clone();
+    let spec = &slot.spec;
     // 1. Pilot demand per nozzle group and RCS translation.
     let mut levels = cmd.levels;
     let mut rcs_force = Vector3::new(
@@ -511,14 +523,14 @@ fn compute(
     let mut face_error = 0.0;
     let mut pod_yaw_cmd = 0.0;
     if assist_on {
-        update_pod_yaw(slot, cmd, dt);
+        update_pod_yaw(spec, pod_yaw, cmd, dt);
     }
     let tau_rcs;
     if cmd.brake {
         // 4c. All stop, or the nose onto `face_dir_b`; RCS supplies the whole rate-controller torque.
-        let w_face = face_rate_target(&spec, cmd.face_dir_b);
+        let w_face = face_rate_target(spec, cmd.face_dir_b);
         tau_rcs = clamp_cw(
-            sub(rate_torque(&spec, w_face, w_b), tau_pods),
+            sub(rate_torque(spec, w_face, w_b), tau_pods),
             neg(spec.rcs_torque_max),
             spec.rcs_torque_max,
         );
@@ -528,7 +540,7 @@ fn compute(
     } else if assist_on || tracking {
         let mut w_target;
         if tracking {
-            w_target = track_rate_target(&spec, cmd.track_dir_b, cmd.track_rate_b);
+            w_target = track_rate_target(spec, cmd.track_dir_b, cmd.track_rate_b);
             w_target.z = (f64::from(cmd.rot.z)
                 * f64::from(AXIS_SIGN.z)
                 * f64::from(spec.rate_max_rad.z)) as f32;
@@ -538,7 +550,7 @@ fn compute(
             let rot = Vector3::new(
                 cmd.rot.x,
                 clampf(
-                    f64::from(cmd.rot.y) + pod_yaw_command(&spec, slot.pod_yaw_smoothed),
+                    f64::from(cmd.rot.y) + pod_yaw_command(spec, *pod_yaw),
                     -1.0,
                     1.0,
                 ) as f32,
@@ -547,7 +559,7 @@ fn compute(
             w_target = mul_cw(mul_cw(rot, AXIS_SIGN), spec.rate_max_rad);
         }
         // 4b. Rate controller with the pods' torque as feed-forward; the groups fighting an RCS overflow are trimmed.
-        let tau_des = rate_torque(&spec, w_target, w_b);
+        let tau_des = rate_torque(spec, w_target, w_b);
         let mut residual = sub(tau_des, tau_pods);
         let overflow = sub(
             residual,
@@ -569,7 +581,7 @@ fn compute(
         tau_rcs = clamp_cw(residual, neg(spec.rcs_torque_max), spec.rcs_torque_max);
         rate_target = w_target;
         if assist_on {
-            pod_yaw_cmd = pod_yaw_command(&spec, slot.pod_yaw_smoothed);
+            pod_yaw_cmd = pod_yaw_command(spec, *pod_yaw);
         }
     } else {
         // Raw: the stick commands RCS torque directly.
@@ -580,7 +592,7 @@ fn compute(
     let mut thrust_sum = 0.0;
     for k in 0..slot.nozzle_groups.len() {
         let g = slot.nozzle_groups[k];
-        let magnitude = levels[g] * group_thrust(&spec, g);
+        let magnitude = levels[g] * group_thrust(spec, g);
         pod_force = add(
             pod_force,
             scale(neg(slot.nozzle_exhausts[k]), magnitude as f32),
@@ -632,23 +644,23 @@ fn pod_torque(slot: &Slot, levels: &[f64; GROUPS], group_torque_y: &mut [f64; GR
 }
 
 // `FlightAssist.update_pod_yaw`: the smoothed pod-yaw command, one tick on.
-fn update_pod_yaw(slot: &mut Slot, cmd: &Cmd, dt: f64) {
+fn update_pod_yaw(spec: &Spec, pod_yaw: &mut f64, cmd: &Cmd, dt: f64) {
     let raw = if cmd.brake {
         0.0
     } else {
         (cmd.levels[1] - cmd.levels[0]) + (cmd.levels[2] - cmd.levels[3])
     };
-    let deadzone = clampf(slot.spec.pod_yaw_deadzone, 0.0, 0.999);
+    let deadzone = clampf(spec.pod_yaw_deadzone, 0.0, 0.999);
     let shaped = signf(raw) * maxf(0.0, raw.abs() - deadzone) / (1.0 - deadzone);
     let target = clampf(shaped, -1.0, 1.0);
-    let tau = slot.spec.pod_yaw_smoothing_s;
+    let tau = spec.pod_yaw_smoothing_s;
     let mut alpha = 1.0;
     if tau > 0.0 && dt > 0.0 {
         alpha = 1.0 - (-dt / tau).exp();
     } else if dt <= 0.0 {
         alpha = 0.0;
     }
-    slot.pod_yaw_smoothed += (target - slot.pod_yaw_smoothed) * alpha;
+    (*pod_yaw) += (target - (*pod_yaw)) * alpha;
 }
 
 fn pod_yaw_command(spec: &Spec, smoothed: f64) -> f64 {

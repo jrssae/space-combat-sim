@@ -2197,7 +2197,9 @@ src/ship/ship.gd                a ship is `batched` (every ship but the player's
   twins at different positions can never match bit for bit) and finds the same velocity, spin, track and applied force.
 - **Entity-type-agnostic.** A slot is a spec (mass, thrusts, gains, limits, inertia, maxima) and a layout (any number of
   nozzles in the four groups, their positions and exhausts, the group torque axes), so a capital ship's or any other
-  `ShipSpec` and hardpoints register the same way; nothing in the step is sized for a fighter.
+  `ShipSpec` and hardpoints register the same way; nothing in the step is sized for a fighter. `register` snapshots the spec,
+  mass included: anything that changes a ship's mass or thrust at runtime (burnt fuel, damage, a capital ship's modules) must
+  register the ship again (`FlightBatch.join` on a joined ship does that).
 - **Bad input never panics.** `register` checks the arrays line up and returns -1 after one error; `step` checks the per-ship
   array sizes and that every slot is known, and on a mismatch logs one error, applies nothing and returns false, so the batch
   leaves every ship to its own model that tick. A body not in a space (a parked pool ship) gives a row of zeros and no force.
