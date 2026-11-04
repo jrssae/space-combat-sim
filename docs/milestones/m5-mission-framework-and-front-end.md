@@ -429,7 +429,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T13 | C | `skylark_transport` generator | T11, T23 | Opus | Geometry | done |
 | T14 | C | `narn_transport` generator and the `narn` style | T11, T23 | Opus | Geometry and a new style | done |
 | T15 | C | `centauri_brezebel` generator and the `centauri` style | T11, T23 | Opus | Geometry and a new style | done |
-| T22 | C | Brakiri Bokmai: references, generator with removable pods, the `brakiri` style (placed here in the order; numbered last because it was added during the build, Q17) | T11, T23 | Opus | A new reference read end to end, modular cargo, a new style | in progress |
+| T22 | C | Brakiri Bokmai: references, generator with removable pods, the `brakiri` style (placed here in the order; numbered last because it was added during the build, Q17) | T11, T23 | Opus | A new reference read end to end, modular cargo, a new style | done |
 | T21 | C | Defensive turrets (placed here in the order; numbered last because it was added after the others had numbers) | T12, T13, T14, T15, T22, T19 | Opus | A new gunner seam with a balance test | not started |
 | T16 | C | Civilian ships in the game | T12, T13, T14, T15, T22, T21 | Opus | Specs for heavy hulls, factions, pools, AI, GPU check | not started |
 | T17 | C | Free-flight encounters | T16, T02 | Opus | Seeded director under a CPU cap | not started |
@@ -888,6 +888,41 @@ whose trigger never arose). Update the column with each task's commit.
 - **Done when:** AC11, AC12 and AC20 for the Bokmai; Python tests also cover the pod model (budget, determinism), that the
   hull alone has no splats inside the pod volumes (an empty mount looks empty) and that the pods sit at their
   `cargo_pods[]` mounts; every PLY, the pod's included, imports in Godot with the manifest's count.
+- **Done (as built, 2026-11-03):** `brakiri_bokmai` (`tools/procgen/assets/brakiri_bokmai.py`, parts in
+  `tools/procgen/parts/brakiri.py`, style `tools/procgen/styles/brakiri.py`), through the new shared civilian pipeline
+  `tools/procgen/core/civilian.py` (pieces, mirroring, sampling with burial, paint, chunk sources, the GDGS flip, level
+  and model writers). The four older generators keep their copies: moving them was not cheap enough to do here.
+  - **Maintainer (2026-11-03), on the review sheet** (`reports/refs/brakiri_bokmai/sheet/`): the two turrets as drawn,
+    `flank_l` and `flank_r` at (±2.04, 8.45, 6.58) in the middle of each inset's full-height step, up (±1, 0, 0), a
+    1.6 m turning ring (the step is only 1.6 m long, so the planned 2.4 m base did not fit), a lens housing 2.0 x 0.9 x
+    2.4 m, muzzles 3.0 m ahead; the colour scheme as written (frame #5A6B59, lines #3A4538, pods #ABAE9A with #868A78
+    lines, yellow #D8B840, cups #2E3530, domes #F2EDC4, glow #FFF0B0, small #E8F0DC windows); the bolts #7CFF4F.
+  - **Shape:** 79.95 x 31.60 x 30.88 m. The bow blade lofted up through 24 measured horizontal sections (concave rear),
+    the flank insets as dark panels, a window row, the spine through 11 sections to the fork, the keel web into the
+    arms, swept arms and fork struts, posts, one loft per engine (joint, neck with its yellow band, nacelle, cup),
+    engine domes, chamfered fins with yellow tops and insets, the spindle. Every number is a rounded station measured
+    off the STL's sections.
+  - **Outputs:** the hull without pods, LOD0 41 924 at 0.30 m (budget 32 000 to 49 000), LOD1-3 10 498 / 2 622 / 644,
+    five chunks from LOD1 (`bow`, `arm_l`, `arm_r`, `engine_l`, `engine_r`; the pods are left out). The pod model in its
+    own frame (origin at the mount), LOD0-3 at the hull's spacings, 11 644 splats at LOD0, a manifest `pod` entry with
+    per-level files, counts and offsets (GDGS centres each import on its mean), mass 120 000 kg, size and a collision
+    box. Hull and three pods 76 856 (the plan said 75 000); all nine hulls at LOD0 with the hero, the sky and five buoys
+    1 915 914, 95.8 % of `splat_budget`. The Brakiri turret 1 602 splats.
+  - **Hardpoints:** two pods on the nacelle axis (mains just behind the domes, retros on the nacelles' shoulders, both
+    clear of the hull), the centre of mass on that thrust line, 9 RCS ports, 39 collision primitives that hold every
+    LOD0 splat, `cargo_pods[]` (`pod_fwd`, `pod_mid`, `pod_aft` with `up` and `forward`), two flank turrets.
+  - **Fidelity (Q18), mesh with three pods against the STL:** 0.966 / 0.977 / 0.954; length, width, height 0.999 each;
+    the splats cover at least 0.972 of their mesh (side), precision 1.000. The arms, struts and fins are sampled at the
+    hull's spacing (no thickening).
+  - **Tests:** 42 Python tests (budgets, every hull and pod level mirror-symmetric, no hull splats in the pod volumes
+    outside the 1.48 m bore, pods at their mounts and clear of the frame, nozzles clear of the hull, turrets, collision,
+    the fallback mesh holds every piece, determinism, the shared helper); `test_splat_import.gd` learns the pod
+    (listed PLYs, counts, each level's box at its offset about the mount), 17/17.
+  - **Review.** Two fix rounds. 1 (a9b0bde): the nozzles were inside the nacelle and the dome, the pod had one offset
+    for four levels, the Godot pod check ignored the offset, the budget totals, the pod's collision box and panel grid,
+    the bow chunk's joint in a pod's space, the inset described at a coarser rounding. 2 (2515fe2): the inset built from
+    its two strips, the lamp and joint pinned by tests, docs as built. Approved. Open (H): the turrets standing out of
+    the insets (painted, not recessed), the olive frame against the pale pods on the GPU (T16).
 
 ### M5-T21 Defensive turrets
 
