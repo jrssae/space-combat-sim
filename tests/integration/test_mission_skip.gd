@@ -39,6 +39,15 @@ func _ticks(n: int) -> void:
 		await get_tree().physics_frame
 
 
+# Waits for a mission state (dialog lines hold on sim time), failing clearly if it never comes within `max_ticks`.
+func _wait_for(what: String, reached: Callable, max_ticks: int = 1200) -> void:
+	var waited: int = 0
+	while not bool(reached.call()) and waited < max_ticks:
+		await _ticks(1)
+		waited += 1
+	assert_true(bool(reached.call()), "waited %d ticks for: %s" % [waited, what])
+
+
 func _tap(action: StringName) -> void:
 	source.hold(action)
 	await _ticks(2)
@@ -74,10 +83,12 @@ func _outcome() -> Dictionary:
 
 func test_a_skipped_run_leaves_the_same_spawns_and_objectives_as_a_played_one() -> void:
 	# Played by hand: fly to the buoy, shoot both raiders down, wait, toggle the assist.
+	await _wait_for("the brief to give the objective", func() -> bool: return _api().objective_state(&"reach") == ObjectiveBook.ACTIVE)
 	main.ship.reset_to(Transform3D(main.ship.global_basis, main.world.universe_to_local(UniversePos.new(0.0, 0.0, -1750.0))))
-	await _ticks(2)
+	await _wait_for("both raiders to jump in", func() -> bool: return main.ships.alive(ShipPool.DEFAULT_TYPE).size() == 2)
 	for combatant: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
 		combatant.damageable.kill()
+	await _wait_for("the report step", func() -> bool: return _api().step_name() == &"report")
 	await _ticks(70)
 	await _tap(InputAdapter.TOGGLE_ASSIST)
 	var played: Dictionary = _outcome()

@@ -49,6 +49,15 @@ func _frames(n: int) -> void:
 		await get_tree().process_frame
 
 
+# Waits for a mission state (dialog lines hold on sim time), failing clearly if it never comes within `max_ticks`.
+func _wait_for(what: String, reached: Callable, max_ticks: int = 1200) -> void:
+	var waited: int = 0
+	while not bool(reached.call()) and waited < max_ticks:
+		await _ticks(1)
+		waited += 1
+	assert_true(bool(reached.call()), "waited %d ticks for: %s" % [waited, what])
+
+
 func _tap(action: StringName) -> void:
 	source.hold(action)
 	await _ticks(2)
@@ -328,6 +337,9 @@ func test_console_rejects_bad_arguments() -> void:
 
 func test_twenty_live_triggers_stay_inside_a_counted_bound() -> void:
 	await _reach_the_buoy()
+	# The raid step has finished its dialog line and is awaiting `destroyed` (it is live on top of the objectives' triggers).
+	await _wait_for("the raid step to await the raiders", func() -> bool:
+			return _api().live_trigger_count() > _api().book.live_triggers().size())
 	for i: int in 17:
 		_api().book.add(StringName("extra_%d" % i), "x", false, TriggerSpec.proximity("player", "NAV ALPHA", 10.0),
 				TriggerSpec.destroyed(["RAIDER 1"]))
