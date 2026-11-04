@@ -3150,7 +3150,8 @@ settings off against on, alternating (`M4-T14_ab/`). Means in ms per tick unless
 In its own worktree on `c0a0b81` (tests `19d0459`, the core `110ceb3`, the launch-tick fallback `a590acb`, the cheaper bolt
 syncs `c1606ed`, docs `9997200`, a second gather in one frame reads again `8fefb68`; fix round 1 after review: tests `2d800c7`,
 fixes `979a0b4`: a bolt's launch-tick step is its node's, a hull destroyed between the resolvers leaves the ram rows, a
-one-tick pool reuse is a new handle, the sync's engine calls are counted one by one), so only this change. `ScsSimCore` holds every simulated entity as a row and the four native
+one-tick pool reuse is a new handle, the sync's engine calls are counted one by one; fix round 2: tests `b5ebed0`, the kernels
+moved into `native/src/kernels.rs` with no engine type, guarded by a test that reads the file), so only this change. `ScsSimCore` holds every simulated entity as a row and the four native
 classes read it (§17.13); each class's own load stays behind `perf_native_core` off, so the two paths were paired in one build.
 
 - **Parity.** `test_sim_core` (8): the scan, the hit sweep's pairs, the ram broad phase's pairs and the flight step's flight
@@ -3162,11 +3163,13 @@ classes read it (§17.13); each class's own load stays behind `perf_native_core`
   mean speed: a ship released to the pool and taken again at -5 (a carrier launch) kept its row from the first sync while
   T10's step read the physics server (a stale transform and the velocity the pool had just set). A body touched since the
   sync now has no row for a kernel and the step reads the server for it, as before (`a590acb`).
-- **The engine seam.** The syncs make 3 engine calls a rigid body (transform, two velocities), 1 a plain bolt (its
-  position; its velocity is read once at its launch and its step is `velocity * delta`), 2 a missile or beam, plus the
-  attribute reads on activation; the kernels make none (`core.kernel_calls` 0 at 10 and 100 bodies in the test and in every
-  run). The flight step's force application stays at -1, the one engine write outside the sync nodes: applying after the
-  World's rebase would change the torque bits on rebase ticks (§17.13).
+- **The engine seam.** The syncs make 3 engine calls a rigid body (transform, two velocities) beside the activity checks,
+  1 a plain bolt (its position; its velocity is read once at its launch and its step is `velocity * delta`), 2 a missile or
+  beam, plus the attribute reads on activation. The kernels make none by construction: every query and step over the rows
+  is in `native/src/kernels.rs`, which holds no engine type (`test_sim_core` reads the file and fails on one; a tick of
+  queries costs the sync points the same calls as a quiet tick). The flight step's force application stays at -1, the one
+  engine write outside the sync nodes: applying after the World's rebase would change the torque bits on rebase ticks
+  (§17.13).
 - **Numbers** (single `bench <layout> <n> 10 warmup=5 seed=1`, editor build, headless, both locks, cores 0-11). The before
   on the base (`M4-T15_before`, load 2 to 5: furball 100 median 11.90 ms, typical 58 8.35, battle 300 43.45) was taken on a
   busier machine than the after, so the gain is read from alternating pairs in the after build, the core off then on, twice

@@ -260,7 +260,8 @@ func remove_row(handle: int) -> void:
 		core.remove_row(handle)
 
 
-## Engine calls of the last closed tick: `[sync, kernels]`.
+## Engine calls of the last closed tick: `[sync, fallbacks]` (the sync points' reads, and the flight step's reads of the
+## physics server for ships without a row; the kernels make none by construction, see `native/src/kernels.rs`).
 func engine_calls() -> PackedInt64Array:
 	return core.engine_calls() if core != null else PackedInt64Array([-1, -1])
 
@@ -372,7 +373,7 @@ func _register_console() -> void:
 		&"sync_us": {"get": func() -> int: return sync_us, "unit": "us", "doc": "The last tick's first sync (bodies, statics, bolts); wall clock"},
 		&"bolts_us": {"get": func() -> int: return bolts_us, "unit": "us", "doc": "The last tick's bolt sync (the hit resolver's); wall clock"},
 		&"sync_calls": {"get": func() -> int: return engine_calls()[0], "doc": "Engine calls the last closed tick's syncs made (they grow with the rows)"},
-		&"kernel_calls": {"get": func() -> int: return engine_calls()[1], "doc": "Engine calls the kernels made in the last closed tick (must stay 0)"},
+		&"fallback_calls": {"get": func() -> int: return engine_calls()[1], "doc": "The flight step's reads of the physics server in the last closed tick, for ships the core had no row for (0 outside launch ticks). The kernels themselves hold no engine type: native/src/kernels.rs"},
 		&"attribute_reads": {"get": func() -> int: return int(core.attribute_reads()) if core != null else 0, "doc": "Bodies whose faction, name, kind and radius were read (once per activation, not per tick)"},
 		&"touched": {"get": func() -> int: return int(core.touched_count()) if core != null else 0, "doc": "Bodies touched since the last sync point and not read again yet"},
 	}), self)

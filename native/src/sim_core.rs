@@ -201,7 +201,7 @@ pub struct ScsSimCore {
     data: Vec<DataRow>,
     next_data_handle: i64,
     sync_reads: i64,
-    kernel_reads: i64,
+    fallback_reads: i64,
     last_calls: [i64; 2],
     tick: i64,
     bolt_tick: i64,
@@ -567,23 +567,24 @@ impl ScsSimCore {
         }
     }
 
-    /// Engine calls of the last closed tick: `[sync, kernels]`. The sync's grow with the bodies and bolts; the kernels'
-    /// must stay 0.
+    /// Engine calls of the last closed tick: `[sync, fallbacks]`: the sync points' reads, which grow with the bodies and
+    /// bolts, and the flight step's reads of the physics server for ships without a row. The kernels make none: they live
+    /// in `kernels.rs`, which holds no engine type (`test_sim_core` reads the file).
     #[func]
     pub fn engine_calls(&self) -> PackedInt64Array {
         PackedInt64Array::from(&self.last_calls[..])
     }
 
-    /// Engine calls so far in the open tick: `[sync, kernels]`.
+    /// Engine calls so far in the open tick: `[sync, fallbacks]`.
     #[func]
     fn engine_calls_open(&self) -> PackedInt64Array {
-        PackedInt64Array::from(&[self.sync_reads, self.kernel_reads][..])
+        PackedInt64Array::from(&[self.sync_reads, self.fallback_reads][..])
     }
 
-    /// Counts an engine call a kernel had to make (the flight step's fallback to the physics server).
+    /// Counts the flight step's fallback reads of the physics server (a ship without a row this tick).
     #[func]
-    pub fn note_kernel_read(&mut self, calls: i64) {
-        self.kernel_reads += calls;
+    pub fn note_fallback_read(&mut self, calls: i64) {
+        self.fallback_reads += calls;
     }
 
     /// The physics frame of the last `sync_in`, and of the last bolt sync.
@@ -851,11 +852,20 @@ impl ScsSimCore {
         }
         let handle = self.next_data_handle;
         self.next_data_handle += 1;
-        // A missing or wrongly typed key takes its zero; a kind out of range is a ship.
+        // A missing or wrongly typed key takes its zero; a kind out of range is a ship; a float field takes an int too.
         fn take<T: FromGodot>(row: &VarDictionary, key: &str, zero: T) -> T {
             row.get(key)
                 .and_then(|v| v.try_to::<T>().ok())
                 .unwrap_or(zero)
+        }
+        fn take_f64(row: &VarDictionary, key: &str) -> f64 {
+            row.get(key)
+                .and_then(|v| {
+                    v.try_to::<f64>()
+                        .ok()
+                        .or_else(|| v.try_to::<i64>().ok().map(|i| i as f64))
+                })
+                .unwrap_or(0.0)
         }
         let kind = take::<i64>(&row, "kind", 0);
         self.data.push(DataRow {
@@ -867,7 +877,7 @@ impl ScsSimCore {
             },
             id: take(&row, "id", 0),
             faction: take(&row, "faction", StringName::default()),
-            radius: take(&row, "radius", 0.0),
+            radius: take_f64(&row, "radius"),
             flags: take(&row, "flags", 0),
             position: take(&row, "position", Vector3::ZERO),
             velocity: take(&row, "velocity", Vector3::ZERO),
@@ -1152,9 +1162,9 @@ impl ScsSimCore {
     }
 
     fn close_tick(&mut self) {
-        self.last_calls = [self.sync_reads, self.kernel_reads];
+        self.last_calls = [self.sync_reads, self.fallback_reads];
         self.sync_reads = 0;
-        self.kernel_reads = 0;
+        self.fallback_reads = 0;
         self.open = false;
     }
 
@@ -1167,8 +1177,8 @@ impl ScsSimCore {
     // Faction, name, kind, radius and the destroyed flag as the tree gather reads them: from the marker, or from the hull
     // when there is none.
     fn read_attrs(&mut self, m: &Member) -> Attrs {
-        // The radius, the two reads of the destroyed flag, then the marker's three (or the hull's one).
-        self.sync_reads += 3 + if m.marker.is_some() { 3 } else { 1 };
+        // The hull's validity, the radius, the two reads of the destroyed flag, then the marker's three (or the hull's one).
+        self.sync_reads += 4 + if m.marker.is_some() { 3 } else { 1 };
         let names = self.names.get_or_insert_with(Names::new);
         let hull = m.hull.as_ref().filter(|h| h.is_instance_valid());
         let radius = hull.map_or(0.0, |h| {

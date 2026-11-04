@@ -5,6 +5,7 @@ mod body_registry;
 mod contact_field;
 mod flight_step;
 mod hit_sweep;
+mod kernels;
 mod native_probe;
 mod ram_phase;
 mod sim_core;

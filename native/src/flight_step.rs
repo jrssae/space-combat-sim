@@ -1,10 +1,12 @@
 // The flight force step for every batched ship in one call (M4-T10, N4; docs/architecture.md 17.9).
-// gdext's generated constructor writes `base: base`, which clippy 1.99 flags; the maths below has no struct literals of its own.
+// gdext's generated constructor writes `base: base`, which clippy 1.99 flags. The maths lives in kernels::flight; this class
+// registers ships and applies what the kernel gives through the physics server.
 #![allow(clippy::redundant_field_names)]
 use godot::classes::PhysicsServer3D;
 use godot::classes::physics_server_3d::BodyState;
 use godot::prelude::*;
 
+use crate::kernels::flight::{self, Applied, Body, Cmd, Spec};
 use crate::sim_core::{FLAG_RIGID, ScsSimCore};
 
 /// Per ship per tick: `main_right, main_left, retro_right, retro_left` (the nozzle groups' order).
@@ -24,80 +26,18 @@ pub const OUT_VECTORS: usize = 10;
 pub const OUT_SCALARS: usize = 12;
 const SPEC_SCALARS: usize = 11;
 const SPEC_VECTORS: usize = 4;
-const GROUPS: usize = 4;
-// Pilot axes (pitch up, yaw right, roll right) to body axes, as `FlightModel.AXIS_SIGN`.
-const AXIS_SIGN: Vector3 = Vector3::new(1.0, -1.0, -1.0);
-// `FlightAssist.FACE_DECEL_FRACTION`.
-const FACE_DECEL_FRACTION: f64 = 0.5;
-// Godot's `CMP_EPSILON` as `is_zero_approx` applies it to 32-bit components.
-const CMP_EPSILON: f32 = 0.00001;
 
-// A ship type as `ShipSpec` holds it, in the units the flight model reads.
-struct Spec {
-    mass: f64,
-    pod_main_thrust: f64,
-    pod_retro_thrust: f64,
-    assist_gain_k: f64,
-    pod_yaw_gain: f64,
-    pod_yaw_deadzone: f64,
-    pod_yaw_smoothing_s: f64,
-    brake_gain_k: f64,
-    exhaust_velocity: f64,
-    speed_limit_mps: f64,
-    assist_speed_max_mps: f64,
-    inertia: Vector3,
-    rcs_force_max: Vector3,
-    rcs_torque_max: Vector3,
-    rate_max_rad: Vector3,
-}
-
-// One ship's registration: its body, type, nozzles and the assist's only state.
+// One ship's registration: its body's RID, its type and nozzles (what the kernel reads) and the assist's only state.
 struct Slot {
     rid: Rid,
-    spec: Spec,
-    nozzle_groups: Vec<usize>,
-    nozzle_positions: Vec<Vector3>,
-    nozzle_exhausts: Vec<Vector3>,
-    torque_axes: [Vector3; GROUPS],
-    main_total: f64,
-    retro_total: f64,
+    body: Body,
     pod_yaw_smoothed: f64,
 }
 
-// One tick's command for one ship, in pilot terms as `FlightCommand` carries them.
-struct Cmd {
-    levels: [f64; GROUPS],
-    strafe: Vector3,
-    rot: Vector3,
-    track_dir_b: Vector3,
-    track_rate_b: Vector3,
-    face_dir_b: Vector3,
-    brake: bool,
-    autotrack: bool,
-}
-
-// What `FlightModel.compute` reports, the parts the batch hands back.
-struct ModelOut {
-    levels: [f64; GROUPS],
-    pod_force: Vector3,
-    tau_pods: Vector3,
-    rcs_force: Vector3,
-    tau_rcs: Vector3,
-    rate_target: Vector3,
-    trim: f64,
-    pod_yaw_cmd: f64,
-    mass_flow: f64,
-    face_error: f64,
-    braking: bool,
-    facing: bool,
-    tracking: bool,
-}
-
 /// Flies every registered ship's tick in one call: `FlightModel.compute`, the `SpeedGovernor` and the forces
-/// `Ship._physics_process` applies, by body RID through the physics server. The maths repeats GDScript's: 32-bit
-/// vectors, 64-bit scalars, a scalar rounded to 32 bits before it scales a vector, the engine's order of operations and
-/// no fused multiply-add, so both paths give the same forces bit for bit. Never reads a GDScript object: ships' types
-/// and nozzles come in once (`register`), commands come in per tick as packed arrays, and the outputs go back the same way.
+/// `Ship._physics_process` applies, by body RID through the physics server (`kernels::flight` is the maths, bit for bit
+/// GDScript's). Never reads a GDScript object: ships' types and nozzles come in once (`register`), commands come in per
+/// tick as packed arrays or, with the core, each ship's pose from its row, and the outputs go back the same way.
 #[derive(GodotClass)]
 #[class(base=RefCounted, init)]
 pub struct ScsFlightStep {
@@ -139,11 +79,11 @@ impl ScsFlightStep {
             && spec_vectors.len() == SPEC_VECTORS
             && nozzle_positions.len() == n
             && nozzle_exhausts.len() == n
-            && torque_axes.len() == GROUPS
+            && torque_axes.len() == flight::GROUPS
             && nozzle_groups
                 .as_slice()
                 .iter()
-                .all(|&g| (0..GROUPS as i32).contains(&g));
+                .all(|&g| (0..flight::GROUPS as i32).contains(&g));
         if !lined_up {
             godot_error!(
                 "ScsFlightStep.register: arrays do not line up (spec {}, spec vectors {}, nozzles {}, positions {}, exhausts {}, \
@@ -181,20 +121,22 @@ impl ScsFlightStep {
             .iter()
             .map(|&g| g as usize)
             .collect();
-        let mut counts = [0i64; GROUPS];
+        let mut counts = [0i64; flight::GROUPS];
         for &g in &groups {
             counts[g] += 1;
         }
         let axes = torque_axes.as_slice();
         let slot = Slot {
             rid,
-            main_total: spec.pod_main_thrust * (counts[0] + counts[1]) as f64,
-            retro_total: spec.pod_retro_thrust * (counts[2] + counts[3]) as f64,
-            spec,
-            nozzle_groups: groups,
-            nozzle_positions: nozzle_positions.as_slice().to_vec(),
-            nozzle_exhausts: nozzle_exhausts.as_slice().to_vec(),
-            torque_axes: [axes[0], axes[1], axes[2], axes[3]],
+            body: Body {
+                main_total: spec.pod_main_thrust * (counts[0] + counts[1]) as f64,
+                retro_total: spec.pod_retro_thrust * (counts[2] + counts[3]) as f64,
+                spec,
+                nozzle_groups: groups,
+                nozzle_positions: nozzle_positions.as_slice().to_vec(),
+                nozzle_exhausts: nozzle_exhausts.as_slice().to_vec(),
+                torque_axes: [axes[0], axes[1], axes[2], axes[3]],
+            },
             pod_yaw_smoothed: 0.0,
         };
         if let Some(free) = self.slots.iter().position(Option::is_none) {
@@ -298,7 +240,7 @@ impl ScsFlightStep {
             dt,
         );
         if self.fallback_reads > 0 {
-            core.bind_mut().note_kernel_read(self.fallback_reads);
+            core.bind_mut().note_fallback_read(self.fallback_reads);
         }
         ok
     }
@@ -433,66 +375,35 @@ impl ScsFlightStep {
                     false,
                 )
             };
-            let v_b = xform_inv(&basis, v_w);
-            let w_b = xform_inv(&basis, w_w);
-            let env_b = xform_inv(&basis, env_w);
             let mut pod_yaw = slot.pod_yaw_smoothed;
-            let out = compute(
-                slot,
+            let step: Applied = flight::tick(
+                &slot.body,
                 &mut pod_yaw,
                 &cmd,
-                v_b,
-                w_b,
-                env_b,
+                &basis,
+                v_w,
+                w_w,
+                env_w,
                 assist_on,
                 dt,
                 has_propellant,
             );
             slot.pod_yaw_smoothed = pod_yaw;
-            let spec = &slot.spec;
-            // The ship's part: the governor's gain on every thrust, the forces at the nozzles, the assist's speed cap and the
-            // environment, then the hard ceiling (`Ship._physics_process`).
-            let mass_f = spec.mass as f32;
-            let mut applied = scale(env_w, mass_f);
-            let gain = thrust_gain(f64::from(length(v_w)), spec.speed_limit_mps) as f32;
-            for k in 0..slot.nozzle_groups.len() {
-                let level = out.levels[slot.nozzle_groups[k]];
-                let magnitude = level * group_thrust(spec, slot.nozzle_groups[k]);
-                let force_b = scale(neg(slot.nozzle_exhausts[k]), magnitude as f32);
-                let force_w = scale(xform(&basis, force_b), gain);
-                let at_w = xform(&basis, slot.nozzle_positions[k]);
-                if apply {
+            // The one engine write of the tick outside the sync points: the forces, in `Ship._physics_process`'s order.
+            if apply {
+                for &(force_w, at_w) in &step.nozzle_forces {
                     server
                         .body_apply_force_ex(slot.rid, force_w)
                         .position(at_w)
                         .done();
                 }
-                applied = add(applied, force_w);
-            }
-            let rcs_w = scale(xform(&basis, out.rcs_force), gain);
-            if apply {
-                server.body_apply_central_force(slot.rid, rcs_w);
-            }
-            applied = add(applied, rcs_w);
-            let torque_w = xform(&basis, out.tau_rcs);
-            if apply {
-                server.body_apply_torque(slot.rid, torque_w);
-            }
-            if assist_on {
-                let net = scale(xform(&basis, add(out.pod_force, out.rcs_force)), gain);
-                let cap = assist_cap_correction(net, v_w, spec.assist_speed_max_mps);
-                if apply {
+                server.body_apply_central_force(slot.rid, step.rcs_w);
+                server.body_apply_torque(slot.rid, step.torque_w);
+                if let Some(cap) = step.cap {
                     server.body_apply_central_force(slot.rid, cap);
                 }
-                applied = add(applied, cap);
-            }
-            if apply {
-                server.body_apply_central_force(slot.rid, scale(env_w, mass_f));
-            }
-            let mut v_after = v_w;
-            if spec.speed_limit_mps > 0.0 && f64::from(length(v_w)) > spec.speed_limit_mps {
-                v_after = scale(normalized(v_w), spec.speed_limit_mps as f32);
-                if apply {
+                server.body_apply_central_force(slot.rid, step.env_force);
+                if let Some(v_after) = step.clamped {
                     server.body_set_state(
                         slot.rid,
                         BodyState::LINEAR_VELOCITY,
@@ -500,32 +411,8 @@ impl ScsFlightStep {
                     );
                 }
             }
-            self.out_vectors.extend([
-                applied,
-                torque_w,
-                out.pod_force,
-                out.tau_pods,
-                out.rcs_force,
-                out.tau_rcs,
-                level_of(out.rcs_force, spec.rcs_force_max),
-                level_of(out.tau_rcs, spec.rcs_torque_max),
-                out.rate_target,
-                v_after,
-            ]);
-            self.out_scalars.extend([
-                out.levels[0],
-                out.levels[1],
-                out.levels[2],
-                out.levels[3],
-                out.trim,
-                out.pod_yaw_cmd,
-                out.mass_flow,
-                out.face_error,
-                f64::from(u8::from(out.braking)),
-                f64::from(u8::from(out.facing)),
-                f64::from(u8::from(out.tracking)),
-                f64::from(u8::from(!has_propellant)),
-            ]);
+            self.out_vectors.extend(step.out_vectors);
+            self.out_scalars.extend(step.out_scalars);
         }
         true
     }
@@ -542,458 +429,5 @@ impl ScsFlightStep {
             .ok()
             .and_then(|i| self.slots.get_mut(i))
             .and_then(Option::as_mut)
-    }
-}
-
-// `FlightModel.compute`: one tick of architecture 5.2, body frame.
-#[allow(clippy::too_many_arguments)]
-fn compute(
-    slot: &Slot,
-    pod_yaw: &mut f64,
-    cmd: &Cmd,
-    v_b: Vector3,
-    w_b: Vector3,
-    env_b: Vector3,
-    assist_on: bool,
-    dt: f64,
-    has_propellant: bool,
-) -> ModelOut {
-    let spec = &slot.spec;
-    // 1. Pilot demand per nozzle group and RCS translation.
-    let mut levels = cmd.levels;
-    let mut rcs_force = Vector3::new(
-        (f64::from(cmd.strafe.x) * f64::from(spec.rcs_force_max.x)) as f32,
-        (f64::from(cmd.strafe.y) * f64::from(spec.rcs_force_max.y)) as f32,
-        0.0,
-    );
-    // 2. Brake overrides all translational demand: symmetric sides, so zero pod torque.
-    if cmd.brake {
-        let a_des = sub(scale(v_b, (-spec.brake_gain_k) as f32), env_b);
-        let f_z = clampf(
-            spec.mass * f64::from(a_des.z),
-            -slot.main_total,
-            slot.retro_total,
-        );
-        let main_level = if f_z < 0.0 && slot.main_total > 0.0 {
-            -f_z / slot.main_total
-        } else {
-            0.0
-        };
-        let retro_level = if f_z > 0.0 && slot.retro_total > 0.0 {
-            f_z / slot.retro_total
-        } else {
-            0.0
-        };
-        levels = [main_level, main_level, retro_level, retro_level];
-        rcs_force = clamp_cw(
-            scale(Vector3::new(a_des.x, a_des.y, 0.0), spec.mass as f32),
-            neg(spec.rcs_force_max),
-            spec.rcs_force_max,
-        );
-    }
-    // 2b. No reaction mass: nothing that burns it can fire.
-    if !has_propellant {
-        levels = [0.0; GROUPS];
-        rcs_force = Vector3::ZERO;
-    }
-    // 3. Pod torque about the centre of mass at the demanded levels.
-    let mut group_torque_y = [0.0f64; GROUPS];
-    let mut tau_pods = pod_torque(slot, &levels, &mut group_torque_y);
-    // 4. Rotation.
-    let tracking = cmd.autotrack && !cmd.brake && !is_zero_approx(cmd.track_dir_b);
-    let mut lam = 1.0;
-    let mut rate_target = Vector3::ZERO;
-    let mut facing = false;
-    let mut face_error = 0.0;
-    let mut pod_yaw_cmd = 0.0;
-    if assist_on {
-        update_pod_yaw(spec, pod_yaw, cmd, dt);
-    }
-    let tau_rcs;
-    if cmd.brake {
-        // 4c. All stop, or the nose onto `face_dir_b`; RCS supplies the whole rate-controller torque.
-        let w_face = face_rate_target(spec, cmd.face_dir_b);
-        tau_rcs = clamp_cw(
-            sub(rate_torque(spec, w_face, w_b), tau_pods),
-            neg(spec.rcs_torque_max),
-            spec.rcs_torque_max,
-        );
-        rate_target = w_face;
-        facing = !is_zero_approx(cmd.face_dir_b);
-        face_error = f64::from(length(face_error_vector(cmd.face_dir_b)));
-    } else if assist_on || tracking {
-        let mut w_target;
-        if tracking {
-            w_target = track_rate_target(spec, cmd.track_dir_b, cmd.track_rate_b);
-            w_target.z = (f64::from(cmd.rot.z)
-                * f64::from(AXIS_SIGN.z)
-                * f64::from(spec.rate_max_rad.z)) as f32;
-            facing = true;
-            face_error = f64::from(length(face_error_vector(cmd.track_dir_b)));
-        } else {
-            let rot = Vector3::new(
-                cmd.rot.x,
-                clampf(
-                    f64::from(cmd.rot.y) + pod_yaw_command(spec, *pod_yaw),
-                    -1.0,
-                    1.0,
-                ) as f32,
-                cmd.rot.z,
-            );
-            w_target = mul_cw(mul_cw(rot, AXIS_SIGN), spec.rate_max_rad);
-        }
-        // 4b. Rate controller with the pods' torque as feed-forward; the groups fighting an RCS overflow are trimmed.
-        let tau_des = rate_torque(spec, w_target, w_b);
-        let mut residual = sub(tau_des, tau_pods);
-        let overflow = sub(
-            residual,
-            clamp_cw(residual, neg(spec.rcs_torque_max), spec.rcs_torque_max),
-        );
-        if overflow.y != 0.0 {
-            let overflow_y = f64::from(overflow.y);
-            lam = yaw_trim_factor(overflow_y, &group_torque_y);
-            if lam < 1.0 {
-                for g in 0..GROUPS {
-                    if is_trim_cause(group_torque_y[g], overflow_y) {
-                        levels[g] *= lam;
-                    }
-                }
-                tau_pods = pod_torque(slot, &levels, &mut group_torque_y);
-                residual = sub(tau_des, tau_pods);
-            }
-        }
-        tau_rcs = clamp_cw(residual, neg(spec.rcs_torque_max), spec.rcs_torque_max);
-        rate_target = w_target;
-        if assist_on {
-            pod_yaw_cmd = pod_yaw_command(spec, *pod_yaw);
-        }
-    } else {
-        // Raw: the stick commands RCS torque directly.
-        tau_rcs = mul_cw(mul_cw(cmd.rot, AXIS_SIGN), spec.rcs_torque_max);
-    }
-    // 5. Outputs.
-    let mut pod_force = Vector3::ZERO;
-    let mut thrust_sum = 0.0;
-    for k in 0..slot.nozzle_groups.len() {
-        let g = slot.nozzle_groups[k];
-        let magnitude = levels[g] * group_thrust(spec, g);
-        pod_force = add(
-            pod_force,
-            scale(neg(slot.nozzle_exhausts[k]), magnitude as f32),
-        );
-        thrust_sum += magnitude.abs();
-    }
-    let mass_flow = if spec.exhaust_velocity > 0.0 {
-        (thrust_sum + f64::from(length(rcs_force))) / spec.exhaust_velocity
-    } else {
-        0.0
-    };
-    ModelOut {
-        levels,
-        pod_force,
-        tau_pods,
-        rcs_force,
-        tau_rcs,
-        rate_target,
-        trim: 1.0 - lam,
-        pod_yaw_cmd,
-        mass_flow,
-        face_error,
-        braking: cmd.brake,
-        facing,
-        tracking,
-    }
-}
-
-fn group_thrust(spec: &Spec, group: usize) -> f64 {
-    if group < 2 {
-        spec.pod_main_thrust
-    } else {
-        spec.pod_retro_thrust
-    }
-}
-
-// `FlightModel._pod_torque`: the groups' torque about the centre of mass, and each group's yaw part for the trim.
-fn pod_torque(slot: &Slot, levels: &[f64; GROUPS], group_torque_y: &mut [f64; GROUPS]) -> Vector3 {
-    let mut total = Vector3::ZERO;
-    for g in 0..GROUPS {
-        let tau_g = scale(
-            slot.torque_axes[g],
-            (levels[g] * group_thrust(&slot.spec, g)) as f32,
-        );
-        group_torque_y[g] = f64::from(tau_g.y);
-        total = add(total, tau_g);
-    }
-    total
-}
-
-// `FlightAssist.update_pod_yaw`: the smoothed pod-yaw command, one tick on.
-fn update_pod_yaw(spec: &Spec, pod_yaw: &mut f64, cmd: &Cmd, dt: f64) {
-    let raw = if cmd.brake {
-        0.0
-    } else {
-        (cmd.levels[1] - cmd.levels[0]) + (cmd.levels[2] - cmd.levels[3])
-    };
-    let deadzone = clampf(spec.pod_yaw_deadzone, 0.0, 0.999);
-    let shaped = signf(raw) * maxf(0.0, raw.abs() - deadzone) / (1.0 - deadzone);
-    let target = clampf(shaped, -1.0, 1.0);
-    let tau = spec.pod_yaw_smoothing_s;
-    let mut alpha = 1.0;
-    if tau > 0.0 && dt > 0.0 {
-        alpha = 1.0 - (-dt / tau).exp();
-    } else if dt <= 0.0 {
-        alpha = 0.0;
-    }
-    (*pod_yaw) += (target - (*pod_yaw)) * alpha;
-}
-
-fn pod_yaw_command(spec: &Spec, smoothed: f64) -> f64 {
-    spec.pod_yaw_gain * smoothed
-}
-
-// `FlightAssist.rate_torque`: the P rate controller's torque.
-fn rate_torque(spec: &Spec, w_target: Vector3, w_b: Vector3) -> Vector3 {
-    mul_cw(
-        spec.inertia,
-        scale(sub(w_target, w_b), spec.assist_gain_k as f32),
-    )
-}
-
-fn turn_accel_max(spec: &Spec) -> f64 {
-    let pitch = if spec.inertia.x > 0.0 {
-        f64::from(spec.rcs_torque_max.x) / f64::from(spec.inertia.x)
-    } else {
-        0.0
-    };
-    let yaw = if spec.inertia.y > 0.0 {
-        f64::from(spec.rcs_torque_max.y) / f64::from(spec.inertia.y)
-    } else {
-        0.0
-    };
-    maxf(0.0, minf(pitch, yaw))
-}
-
-// `FlightAssist.face_rate_target`: the rate that swings the nose onto `dir_b`, stoppable within RCS authority.
-fn face_rate_target(spec: &Spec, dir_b: Vector3) -> Vector3 {
-    let error = face_error_vector(dir_b);
-    let angle = f64::from(length(error));
-    if angle == 0.0 {
-        return Vector3::ZERO;
-    }
-    let decel = FACE_DECEL_FRACTION * turn_accel_max(spec);
-    let rate = minf(
-        spec.assist_gain_k / 4.0 * angle,
-        (2.0 * decel * angle).sqrt(),
-    );
-    let w = scale(div_s(error, angle as f32), rate as f32);
-    let cap = spec.rate_max_rad;
-    let mut s = 1.0;
-    if f64::from(w.x.abs()) > f64::from(cap.x) {
-        s = minf(s, f64::from(cap.x) / f64::from(w.x.abs()));
-    }
-    if f64::from(w.y.abs()) > f64::from(cap.y) {
-        s = minf(s, f64::from(cap.y) / f64::from(w.y.abs()));
-    }
-    scale(w, s as f32)
-}
-
-// `FlightAssist.track_rate_target`: the face correction plus the rate the lead direction itself turns at.
-fn track_rate_target(spec: &Spec, dir_b: Vector3, dir_rate_b: Vector3) -> Vector3 {
-    let mut w = face_rate_target(spec, dir_b);
-    w.x = (f64::from(w.x) + f64::from(dir_rate_b.x)) as f32;
-    w.y = (f64::from(w.y) + f64::from(dir_rate_b.y)) as f32;
-    let cap = spec.rate_max_rad;
-    w.x = clampf(f64::from(w.x), -f64::from(cap.x), f64::from(cap.x)) as f32;
-    w.y = clampf(f64::from(w.y), -f64::from(cap.y), f64::from(cap.y)) as f32;
-    w
-}
-
-// `FlightAssist.face_error_vector`: the shortest rotation that puts the nose on `dir_b`; pitch and yaw only.
-fn face_error_vector(dir_b: Vector3) -> Vector3 {
-    if is_zero_approx(dir_b) {
-        return Vector3::ZERO;
-    }
-    let d = normalized(dir_b);
-    let axis = Vector3::new(d.y, -d.x, 0.0);
-    let sine = f64::from(length(axis));
-    let angle = sine.atan2(f64::from(-d.z));
-    if angle == 0.0 {
-        return Vector3::ZERO;
-    }
-    if sine < 1e-9 {
-        return Vector3::new(angle as f32, 0.0, 0.0);
-    }
-    scale(axis, (angle / sine) as f32)
-}
-
-// `FlightAssist.yaw_trim_factor`: how far the groups causing an RCS overflow are scaled down.
-fn yaw_trim_factor(overflow_y: f64, group_torque_y: &[f64; GROUPS]) -> f64 {
-    if overflow_y == 0.0 {
-        return 1.0;
-    }
-    let mut cause_total = 0.0;
-    for &t in group_torque_y {
-        if is_trim_cause(t, overflow_y) {
-            cause_total += t.abs();
-        }
-    }
-    if cause_total <= 0.0 {
-        return 1.0;
-    }
-    maxf(0.0, 1.0 - overflow_y.abs() / cause_total)
-}
-
-fn is_trim_cause(torque_y: f64, overflow_y: f64) -> bool {
-    overflow_y != 0.0 && torque_y != 0.0 && signf(torque_y) == -signf(overflow_y)
-}
-
-// `SpeedGovernor.thrust_gain`: the share of the thrust that reaches the hull at this speed.
-fn thrust_gain(speed: f64, limit: f64) -> f64 {
-    if limit <= 0.0 {
-        return 1.0;
-    }
-    let ratio = clampf(speed / limit, 0.0, 1.0);
-    (1.0 - ratio * ratio).sqrt()
-}
-
-// `SpeedGovernor.assist_cap_correction`: cancels the part of the force that would speed the ship past the cap.
-fn assist_cap_correction(force: Vector3, velocity: Vector3, cap: f64) -> Vector3 {
-    if cap <= 0.0 {
-        return Vector3::ZERO;
-    }
-    let speed = f64::from(length(velocity));
-    if speed < cap {
-        return Vector3::ZERO;
-    }
-    let heading = div_s(velocity, speed as f32);
-    let along = f64::from(dot(force, heading));
-    if along <= 0.0 {
-        return Vector3::ZERO;
-    }
-    scale(neg(heading), along as f32)
-}
-
-// `FlightModel._level_of`: a vector as a share of its per-axis limit.
-fn level_of(value: Vector3, limit: Vector3) -> Vector3 {
-    let part = |v: f32, l: f32| {
-        if l > 0.0 {
-            (f64::from(v) / f64::from(l)) as f32
-        } else {
-            0.0
-        }
-    };
-    Vector3::new(
-        part(value.x, limit.x),
-        part(value.y, limit.y),
-        part(value.z, limit.z),
-    )
-}
-
-// --- Godot's 32-bit vector arithmetic, op for op (gdext's own operators go through glam, so none are used) ---------
-
-fn add(a: Vector3, b: Vector3) -> Vector3 {
-    Vector3::new(a.x + b.x, a.y + b.y, a.z + b.z)
-}
-
-fn sub(a: Vector3, b: Vector3) -> Vector3 {
-    Vector3::new(a.x - b.x, a.y - b.y, a.z - b.z)
-}
-
-fn neg(a: Vector3) -> Vector3 {
-    Vector3::new(-a.x, -a.y, -a.z)
-}
-
-fn mul_cw(a: Vector3, b: Vector3) -> Vector3 {
-    Vector3::new(a.x * b.x, a.y * b.y, a.z * b.z)
-}
-
-fn scale(a: Vector3, s: f32) -> Vector3 {
-    Vector3::new(a.x * s, a.y * s, a.z * s)
-}
-
-fn div_s(a: Vector3, s: f32) -> Vector3 {
-    Vector3::new(a.x / s, a.y / s, a.z / s)
-}
-
-fn dot(a: Vector3, b: Vector3) -> f32 {
-    a.x * b.x + a.y * b.y + a.z * b.z
-}
-
-fn length(a: Vector3) -> f32 {
-    let x2 = a.x * a.x;
-    let y2 = a.y * a.y;
-    let z2 = a.z * a.z;
-    (x2 + y2 + z2).sqrt()
-}
-
-fn normalized(a: Vector3) -> Vector3 {
-    let x2 = a.x * a.x;
-    let y2 = a.y * a.y;
-    let z2 = a.z * a.z;
-    let length_sq = x2 + y2 + z2;
-    if length_sq == 0.0 {
-        return Vector3::ZERO;
-    }
-    let l = length_sq.sqrt();
-    Vector3::new(a.x / l, a.y / l, a.z / l)
-}
-
-fn clamp_cw(a: Vector3, lo: Vector3, hi: Vector3) -> Vector3 {
-    let c = |v: f32, lo: f32, hi: f32| {
-        if v < lo {
-            lo
-        } else if v > hi {
-            hi
-        } else {
-            v
-        }
-    };
-    Vector3::new(c(a.x, lo.x, hi.x), c(a.y, lo.y, hi.y), c(a.z, lo.z, hi.z))
-}
-
-fn is_zero_approx(a: Vector3) -> bool {
-    a.x.abs() < CMP_EPSILON && a.y.abs() < CMP_EPSILON && a.z.abs() < CMP_EPSILON
-}
-
-// `Basis * Vector3`: each row dotted with the vector.
-fn xform(b: &Basis, v: Vector3) -> Vector3 {
-    Vector3::new(dot(b.rows[0], v), dot(b.rows[1], v), dot(b.rows[2], v))
-}
-
-// `Basis.transposed() * Vector3`: each column dotted with the vector.
-fn xform_inv(b: &Basis, v: Vector3) -> Vector3 {
-    let col_x = Vector3::new(b.rows[0].x, b.rows[1].x, b.rows[2].x);
-    let col_y = Vector3::new(b.rows[0].y, b.rows[1].y, b.rows[2].y);
-    let col_z = Vector3::new(b.rows[0].z, b.rows[1].z, b.rows[2].z);
-    Vector3::new(dot(col_x, v), dot(col_y, v), dot(col_z, v))
-}
-
-// --- Godot's 64-bit scalar helpers (`clampf`, `minf`, `maxf`, `signf`) with their exact comparisons ------------------
-
-fn clampf(v: f64, lo: f64, hi: f64) -> f64 {
-    if v < lo {
-        lo
-    } else if v > hi {
-        hi
-    } else {
-        v
-    }
-}
-
-fn minf(a: f64, b: f64) -> f64 {
-    if a < b { a } else { b }
-}
-
-fn maxf(a: f64, b: f64) -> f64 {
-    if a > b { a } else { b }
-}
-
-fn signf(v: f64) -> f64 {
-    if v > 0.0 {
-        1.0
-    } else if v < 0.0 {
-        -1.0
-    } else {
-        0.0
     }
 }

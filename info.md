@@ -126,7 +126,7 @@ Source: `src/autoload/debug_console.gd`
 | `debris` | `src/combat/debris_pool.gd` |
 | `debug` | `src/autoload/debug_console.gd` |
 | `factions` | `src/combat/faction_console.gd` (registered by `src/combat/hit_resolver.gd`) |
-| `core` | `src/perf/sim_core.gd` (M4-T15: the native simulation core: `path`, `rows`, `bodies`, `statics`, `bolts`, `syncs`, `sync_us`, `bolts_us`, `sync_calls`, `kernel_calls`, `attribute_reads`) |
+| `core` | `src/perf/sim_core.gd` (M4-T15: the native simulation core: `path`, `rows`, `bodies`, `statics`, `bolts`, `syncs`, `sync_us`, `bolts_us`, `sync_calls`, `fallback_calls`, `attribute_reads`, `touched`) |
 | `flight` | `src/ship/flight_batch.gd` (M4-T10: the native flight batch: `path`, `ships`, `stepped`, `gather_us`, `step_us`, `positions`; M4-T15: `source`, `fallback_reads`) |
 | `fx` | `src/combat/fx_pool.gd` |
 | `hud` | `src/hud/hud.gd` |
