@@ -2238,7 +2238,7 @@ existed before: rocks and mines are avoided (a fighter at 100 m/s straight at a 
 as a `BodyKind` name (`ship`, `capital`, `turret`, `missile`, `mine`, `static`, `prop`, any case) or as an int in that order;
 anything else is a ship. If T07's `kind` is an enum in another order, map it in `BodyKind.from_variant` and in
 `body_registry.rs` (`kind_of`). T07's asteroid field registers its rocks with `ContactScan.register_static(id, position,
-radius, BodyKind.STATIC)` (ids unique, not instance ids); `WorldFrame.rebase` already shifts them. A body whose kind or
+radius, BodyKind.STATIC, Factions.NEUTRAL, world)` (ids unique, not instance ids); that world's `rebase` already shifts them. A body whose kind or
 faction changes while it stays shown calls `ContactScan.touch(body)`.
 
 ## Definition of done (M4)
