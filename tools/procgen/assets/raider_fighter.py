@@ -28,6 +28,7 @@ a no-op and the hardpoints frame equals the rendered frame. Samples buried insid
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import math
 from dataclasses import dataclass
@@ -59,7 +60,7 @@ from ..parts.propulsion import NacelleSpec, NozzleSpec, nacelle, pilot_tags
 from ..parts.weapons import BarrelSpec, gun_barrel
 from ..parts.wing import WingSpec, delta_wing, vent_grille
 from ..styles import Style
-from ..styles.raider import RAIDER
+from ..styles.raider import RAIDER, TEXTURED_ALBEDO
 
 ASSET_ID = "raider_fighter"
 GENERATOR_VERSION = 3  # 3: the textured mesh and chunk meshes (M4-T30d); 2: flat paint and lighting records (M3-T21)
@@ -428,13 +429,19 @@ def _cold_intakes(mesh: Mesh, main_z: float) -> Mesh:
     return Mesh(mesh.vertices, mesh.faces, face_material, mesh.materials + (INTAKE,), mesh.face_chart, mesh.face_uv)
 
 
+def _textured_paint(mesh: Mesh) -> Mesh:
+    """The mesh with the textured mesh's darker paint (``TEXTURED_ALBEDO``) in place of the splats'."""
+    materials = tuple(dataclasses.replace(m, albedo=TEXTURED_ALBEDO[m.name]) if m.name in TEXTURED_ALBEDO else m for m in mesh.materials)
+    return Mesh(mesh.vertices, mesh.faces, mesh.face_material, materials, mesh.face_chart, mesh.face_uv)
+
+
 def textured_parts(placed: list[Placed], style: Style) -> list[TexturedPart]:
-    """The hull parts as the textured mesh takes them: soot behind each main nozzle, the intakes dark, no livery."""
+    """The hull parts as the textured mesh takes them: the darker paint, soot behind each main nozzle, the intakes dark, no livery."""
     out = []
     for p in placed:
         if not p.hull:
             continue
-        mesh, marks = p.part.mesh, ()
+        mesh, marks = _textured_paint(p.part.mesh), ()
         if p.part.name in ("nacelle_r", "nacelle_l"):
             main = p.part.anchor("main")
             mesh = _cold_intakes(mesh, float(main.position[2]))

@@ -27,6 +27,20 @@ def _lin(hex_rgb: int) -> tuple[float, float, float]:
     return (r, g, b)
 
 
+# The textured mesh's paint (M4-T30d): lit by the renderer's PBR and ambient, the splats' brighter hull reads near white, so the maps
+# take a darker worn grey-brown (sRGB about #6B635A, panels #4A443E, dark #2C2724, ochre #8C6A32), in the Starfury's range.
+TEXTURED_ALBEDO: dict[str, tuple[float, float, float]] = {
+    "rd_hull": _lin(0x6B635A),
+    "rd_hull_panel": _lin(0x4A443E),
+    "rd_hull_dark": _lin(0x2C2724),
+    "rd_stripe": _lin(0x8C6A32),
+    "rd_hazard": _lin(0x8C6A32),
+    "rd_canopy_frame": _lin(0x3A3633),
+    "rd_nozzle": _lin(0x46413D),
+    "rd_barrel": _lin(0x524D48),
+    "rd_rcs": _lin(0x3E3A37),
+}
+
 RAIDER = Style(
     name="raider",
     materials={

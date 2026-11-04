@@ -63,28 +63,29 @@ def _lin(hex_rgb: int) -> tuple[float, float, float]:
     return (float(lin[0]), float(lin[1]), float(lin[2]))
 
 
-# Grey plating, blue-purple bands, dark blue vanes, red cargo modules, a blue-grey command section.
+# Grey plating, blue-purple bands, dark blue vanes, red cargo modules, a blue-grey command section. M4-T30d darkened every tone for the
+# textured pieces' lighting (the earlier ones rendered near white), in the Starfury's range.
 STATION = Style(
     name="station",
     materials={
-        "hull": Material("st_hull", _lin(0x9A9CA2), paneled=True),
-        "hull_dark": Material("st_hull_dark", _lin(0x3A3C42), paneled=True),
-        "hull_panel": Material("st_hull_panel", _lin(0x6E7076), paneled=True),
-        "stripe": Material("st_band", _lin(0x5A5A8C), paneled=True),
-        "hazard": Material("st_cargo", _lin(0x8C3C30), paneled=True),
-        "hazard_dark": Material("st_vane", _lin(0x1E2A5A), paneled=True),
+        "hull": Material("st_hull", _lin(0x60636A), paneled=True),
+        "hull_dark": Material("st_hull_dark", _lin(0x2A2C31), paneled=True),
+        "hull_panel": Material("st_hull_panel", _lin(0x4C4F56), paneled=True),
+        "stripe": Material("st_band", _lin(0x3C3E66), paneled=True),
+        "hazard": Material("st_cargo", _lin(0x70302A), paneled=True),
+        "hazard_dark": Material("st_vane", _lin(0x18214A), paneled=True),
         "canopy_glass": Material("st_glass", (0.01, 0.012, 0.016)),
-        "canopy_frame": Material("st_command", _lin(0x6E7C92), paneled=True),
-        "nozzle": Material("st_reactor", _lin(0x585A60), paneled=True),
+        "canopy_frame": Material("st_command", _lin(0x4C586C), paneled=True),
+        "nozzle": Material("st_reactor", _lin(0x404248), paneled=True),
         "nozzle_throat": Material("st_throat", _lin(0x18181A)),
-        "barrel": Material("st_truss", _lin(0x707276)),
+        "barrel": Material("st_truss", _lin(0x505257)),
         "bore": Material("st_bore", (0.01, 0.01, 0.01)),
         "interior": Material("st_interior", (0.02, 0.02, 0.022)),
-        "rcs": Material("st_mast", _lin(0x84868C)),
+        "rcs": Material("st_mast", _lin(0x5C5E63)),
     },
     panel_size_m=60.0,
     panel_line_width_m=6.0,
-    panel_line_darkness=0.6,
+    panel_line_darkness=0.75,
     panel_tint_jitter=0.08,
     # The fighters' wear is sized for a centimetre texel; the station is texelled at about 2 m (M4-T30d).
     groove_depth_m=0.8,

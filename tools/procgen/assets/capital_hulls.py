@@ -39,15 +39,15 @@ ATLAS_PX = {"cruiser": 1024, "destroyer": 1024, "carrier": 2048}
 TEXEL_PER_LENGTH = 0.0006
 # Window rows: a window's size and pitch, m (along the hull, up), the decks' share of the hull's height, how many are lit.
 WINDOW_M = (2.0, 1.2)
-WINDOW_PITCH_M = (5.0, 4.0)
+WINDOW_PITCH_M = (5.0, 6.0)
 DECKS_SHARE = 0.45
-WINDOWS_LIT = 0.7
+WINDOWS_LIT = 0.55
 WINDOW_GLOW = (1.0, 0.86, 0.62)
 WINDOW_STRENGTH = 2.5
 
 
 def _style(spacing: float) -> Style:
-    grey = Material("cap_hull", (0.18, 0.19, 0.21), paneled=True)
+    grey = Material("cap_hull", (0.105, 0.11, 0.125), paneled=True)  # a medium blue-grey, the Starfury's range (M4-T30d)
     dark = Material("cap_keel", (0.08, 0.085, 0.09), paneled=True)
     roles = {r: grey for r in ("hull", "hull_panel", "stripe", "hazard", "canopy_frame", "nozzle", "barrel", "rcs")}
     roles.update({r: dark for r in ("hull_dark", "hazard_dark", "canopy_glass", "nozzle_throat", "bore", "interior")})
