@@ -109,8 +109,10 @@ func _drone(at: Vector3) -> RigidBody3D:
 	return body
 
 
-# A bolt in flight: launched at `at` along `velocity`, with one tick of flight behind it (`last_step`).
-func _bolt(at: Vector3, velocity: Vector3, faction: StringName, shooter_id: int, kind: StringName = Projectile.KIND_BOLT) -> Projectile:
+# A bolt as the game launches it: at `at` along `velocity`, with no step behind it yet (`last_step` is zero until its first
+# `_physics_process`, §15.3); `flown` gives it one tick of flight, as `_physics_process` would.
+func _bolt(at: Vector3, velocity: Vector3, faction: StringName, shooter_id: int, kind: StringName = Projectile.KIND_BOLT,
+		flown: bool = false) -> Projectile:
 	var bolt := PROJECTILE_SCENE.instantiate() as Projectile
 	bolt.faction = faction
 	bolt.shooter_id = shooter_id
@@ -118,8 +120,21 @@ func _bolt(at: Vector3, velocity: Vector3, faction: StringName, shooter_id: int,
 	projectiles.add_child(bolt)
 	bolt.set_kind(kind)
 	bolt.launch(at, velocity, 0.0)
-	bolt.last_step = velocity * (1.0 / 60.0)
+	if flown:
+		_fly(bolt)
 	return bolt
+
+
+# One tick of a bolt's flight by hand, as `Projectile._physics_process` does it.
+func _fly(bolt: Projectile) -> void:
+	bolt.last_step = bolt.velocity * (1.0 / 60.0)
+	bolt.global_position += bolt.last_step
+
+
+# A hull killed where it stands (the `destroyed` signal fires; nothing hides the body here).
+func _kill(body: Node3D) -> void:
+	var hull: Damageable = Damageable.of(body)
+	hull.apply_hit(HitInfo.new(body.get_instance_id(), 0, &"", hull.hull.max_hp, body.global_position, Vector3.ZERO, 0.0))
 
 
 func _park(body: Node3D) -> void:
@@ -166,7 +181,9 @@ func _crowd(rng: RandomNumberGenerator, n: int, bolts: int = 0, statics: int = 0
 				rng.randf_range(-spread, spread))
 		var velocity: Vector3 = (near.global_position - at).normalized() * rng.randf_range(300.0, 900.0)
 		var kind: StringName = Projectile.KIND_MISSILE if rng.randf() < 0.1 else Projectile.KIND_BOLT
-		_bolt(at, velocity, SIDES[rng.randi_range(0, 3)], out[rng.randi_range(0, out.size() - 1)].get_instance_id(), kind)
+		# Half the bolts have flown a tick, the rest are on their launch tick (no step behind them yet).
+		_bolt(at, velocity, SIDES[rng.randi_range(0, 3)], out[rng.randi_range(0, out.size() - 1)].get_instance_id(), kind,
+				b % 4 < 2)
 	return out
 
 
@@ -393,8 +410,7 @@ func test_the_hit_sweep_pairs_from_the_core_as_from_its_own_load() -> void:
 		# sync point must read them where they are now, not where the first sync saw them.
 		core.sync_now()
 		for node: Node in projectiles.get_children():
-			var bolt := node as Projectile
-			bolt.global_position += bolt.last_step
+			_fly(node as Projectile)
 		resolver.use_core = false
 		var own_moved: Array = resolver.broad_phase_pairs(delta)
 		resolver.use_core = true
@@ -403,6 +419,94 @@ func test_the_hit_sweep_pairs_from_the_core_as_from_its_own_load() -> void:
 		if own_moved[0] != own[0]:
 			bolts_moved_pairs = true
 	assert_true(bolts_moved_pairs, "the moved bolts paired differently in some round, so the second sync was tested")
+
+
+func test_a_bolt_on_its_launch_tick_sweeps_only_its_muzzle_on_both_paths() -> void:
+	if _skipped():
+		return
+	var resolver := HitResolver.new()
+	resolver.name = "HitResolver"
+	add_child_autofree(resolver)
+	# A ship whose hull ends 2 m short of the muzzle, the bolt flying away from it: a launch-tick bolt has no step behind it,
+	# so its sweep is the muzzle alone and misses the ship; a step of `velocity * delta` laid behind the muzzle would reach it.
+	var ship: RigidBody3D = _body(Vector3.ZERO, Factions.RAIDERS, "BEHIND", 12.0)
+	ship.global_transform = Transform3D(Basis.IDENTITY, Vector3.ZERO)
+	_bolt(Vector3(0.0, 0.0, -14.0), Vector3(0.0, 0.0, -400.0), Factions.EARTH_ALLIANCE, 1)
+	var core: SimCore = _core()
+	core.sync_now()
+	var delta: float = 1.0 / 60.0
+	resolver.use_core = false
+	var own: Array = resolver.broad_phase_pairs(delta)
+	resolver.use_core = true
+	var from_core: Array = resolver.broad_phase_pairs(delta)
+	assert_eq((own[0] as PackedInt64Array).size(), 0, "the reference sweeps the muzzle alone and misses the ship")
+	assert_eq(from_core[0], own[0], "launch tick: the same pairs from the core")
+	# The next tick the bolt has flown one step (its own `_physics_process`): both paths see the same segment.
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	resolver.use_core = false
+	var own_next: Array = resolver.broad_phase_pairs(delta)
+	resolver.use_core = true
+	var core_next: Array = resolver.broad_phase_pairs(delta)
+	assert_eq(core_next[0], own_next[0], "the tick after: the same pairs from the core")
+	assert_eq(core_next[1], own_next[1], "the tick after: the same pairs visited")
+
+
+func test_a_hull_destroyed_between_the_resolvers_leaves_the_ram_rows_on_both_paths() -> void:
+	if _skipped():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2102
+	var hits := HitResolver.new()
+	hits.name = "HitResolver"
+	add_child_autofree(hits)
+	var rams := RamResolver.new()
+	rams.name = "RamResolver"
+	rams.world = world
+	add_child_autofree(rams)
+	var bodies: Array[Node3D] = _crowd(rng, 30, 20, 0)
+	# Crowd a few so there are pairs.
+	for i: int in 8:
+		var body := bodies[i] as RigidBody3D
+		if body != null:
+			body.global_position = Vector3(rng.randf_range(-40.0, 40.0), rng.randf_range(-10.0, 10.0), rng.randf_range(-40.0, 40.0))
+			body.linear_velocity = Vector3(rng.randf_range(-600.0, 600.0), 0.0, rng.randf_range(-600.0, 600.0))
+	var core: SimCore = _core()
+	core.sync_now()
+	var delta: float = 1.0 / 60.0
+	# The hit resolver (200) reads the tick's bolts, then one of its hits kills a hull; the ram resolver (210) must not see it.
+	hits.use_core = true
+	hits.broad_phase_pairs(delta)
+	var victim: Node3D = bodies[0] if bodies[0] is RigidBody3D else bodies[1]
+	_kill(victim)
+	assert_false(Damageable.of(victim).is_active(), "the hull is destroyed")
+	rams.use_core = true
+	var from_core: PackedInt64Array = rams.broad_phase_pairs(delta, PackedInt64Array())
+	var core_count: int = rams.hulls_last_tick
+	rams.use_core = false
+	var own: PackedInt64Array = rams.broad_phase_pairs(delta, PackedInt64Array())
+	assert_eq(core_count, rams.hulls_last_tick, "the destroyed hull is out of the core's hull rows, as it is out of the tree walk")
+	assert_eq(from_core, own, "the same pairs from the core after a kill between the resolvers")
+
+
+func test_a_ship_parked_after_the_resync_and_back_the_next_tick_gets_a_new_handle() -> void:
+	if _skipped():
+		return
+	var ship: RigidBody3D = _body(Vector3(100.0, 0.0, -50.0), Factions.EARTH_ALLIANCE, "KILO 1")
+	_body(Vector3(-300.0, 20.0, 400.0), Factions.RAIDERS, "R 1")
+	var core: SimCore = _core()
+	core.sync_now()  # tick N's first sync
+	core.sync_bolts_now()  # tick N's resync (the hit resolver's)
+	var first: int = core.handle_of(ship.get_instance_id())
+	_park(ship)  # released later in tick N (after the resync)
+	core.sync_now()  # tick N+1's first sync: the ship sits it out
+	assert_eq(core.row_of(first), -1, "a parked ship has no row")
+	_unpark(ship)  # acquired again at -5 of tick N+1
+	core.sync_bolts_now()  # tick N+1's resync gives it its row
+	var second: int = core.handle_of(ship.get_instance_id())
+	assert_gt(second, 0, "the ship is a row again")
+	assert_ne(second, first, "a ship that sat out one first sync comes back as a new row")
+	assert_eq(core.row_of(first), -1, "the old handle stays dead")
 
 
 func test_the_ram_broad_phase_pairs_from_the_core_as_from_its_own_load() -> void:
@@ -548,9 +652,15 @@ func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine()
 			node.free()
 		ContactScan.invalidate()
 		var bodies: Array[Node3D] = _crowd(rng, size, size * 3, size)
+		var spec: ShipSpec = load(SPEC_PATH) as ShipSpec
+		for i: int in 2:
+			var ship: Ship = Ship.create(spec, world)
+			world.spawn(ship, world.to_universe(Vector3(20000.0 + 300.0 * i, 0.0, 0.0)))
+			ship.set_flight_command(FlightCommand.new())
+		var batch: FlightBatch = FlightBatch.attach(world)
 		var core: SimCore = _core()
 		core.sync_now()
-		# A tick's worth of queries over the rows: the scan's, the hit sweep's and the ram broad phase's.
+		# A tick's worth of kernels over the rows: the scan's queries, the hit sweep, the ram broad phase and the flight step.
 		var scan: ContactScan = ContactScan.shared(get_tree())
 		for body: Node3D in bodies:
 			var id: int = body.get_instance_id()
@@ -561,10 +671,15 @@ func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine()
 		resolver.broad_phase_pairs(1.0 / 60.0)
 		rams.use_core = true
 		rams.broad_phase_pairs(1.0 / 60.0, PackedInt64Array())
+		# The flight step over the real ships: it reads its rows from the core and applies the forces (the one write).
+		batch._physics_process(1.0 / 60.0)
+		assert_eq(batch.source(), &"core", "the batch stepped the ships from the core")
+		assert_eq(batch.fallback_reads, 0, "no ship had to be read from the physics server")
 		core.sync_out_now()
 		var calls: PackedInt64Array = core.engine_calls()
 		sync_reads.append(calls[0])
 		kernel_reads.append(calls[1])
+		assert_gte(calls[0], 3 * bodies.size(), "the sync made at least three calls a body at %d bodies" % size)
 	assert_eq(kernel_reads[0], 0, "no engine call outside the sync at 10 bodies")
 	assert_eq(kernel_reads[1], 0, "none at 100 bodies either: the queries read rows, never the engine")
 	assert_gt(sync_reads[1], sync_reads[0], "the sync reads once per body and bolt, so it grows with them")
