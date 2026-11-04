@@ -386,7 +386,7 @@ impl ScsFlightStep {
             // The body's pose and motion: from the core's row, from the caller, or from the physics server as
             // `RigidBody3D` reads them.
             let row = core.and_then(|(c, ids)| {
-                let r = c.row_of_id(ids[i]);
+                let r = c.row_for_kernel(ids[i]);
                 usize::try_from(r)
                     .ok()
                     .filter(|&r| c.rows.flags[r] & FLAG_RIGID != 0)

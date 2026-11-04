@@ -440,6 +440,26 @@ func test_the_ram_broad_phase_pairs_from_the_core_as_from_its_own_load() -> void
 		assert_eq(rams.source(), &"core", "round %d: the resolver read the core" % round)
 
 
+## Reuses a ship inside a tick as a carrier launch does (priority -5, after the core's first sync): parked, then taken
+## again at a new place with a new velocity.
+class Launcher extends Node:
+	var ship: Ship = null
+	var at_frame: int = -1
+
+	func _init() -> void:
+		process_physics_priority = -5
+
+	func _physics_process(_delta: float) -> void:
+		if Engine.get_physics_frames() != at_frame or ship == null:
+			return
+		ship.visible = false
+		ship.process_mode = Node.PROCESS_MODE_DISABLED
+		ship.process_mode = Node.PROCESS_MODE_INHERIT
+		ship.visible = true
+		ship.reset_to(Transform3D(Basis.from_euler(Vector3(0.3, 1.1, -0.7)), Vector3(500.0, -20.0, 300.0)))
+		ship.linear_velocity = Vector3(0.0, 0.0, -80.0)
+
+
 func test_the_flight_step_flies_the_same_from_the_core_as_from_the_physics_server() -> void:
 	if _skipped():
 		return
@@ -453,8 +473,12 @@ func test_the_flight_step_flies_the_same_from_the_core_as_from_the_physics_serve
 			world.spawn(ship, world.to_universe(Vector3(300.0 * i, 0.0, -200.0 * i)))
 			assert_true(ship.get_layout().valid, "ship has a valid thruster layout (run scripts/gen_assets.sh)")
 			ships.append(ship)
+		var launcher := Launcher.new()
+		launcher.ship = ships[1]
+		add_child(launcher)
 		await get_tree().physics_frame
 		await get_tree().physics_frame
+		launcher.at_frame = Engine.get_physics_frames() + 30  # the same recorded tick in both runs
 		var rng := RandomNumberGenerator.new()
 		rng.seed = 44
 		var lines: Array = []
@@ -479,6 +503,7 @@ func test_the_flight_step_flies_the_same_from_the_core_as_from_the_physics_serve
 				lines.append([tick, ship.global_position, ship.linear_velocity, ship.angular_velocity, ship.applied_force(),
 						o.rcs_torque_b, o.group_levels[0], o.mass_flow_kg_s, o.face_error_rad])
 		digests.append(lines)
+		launcher.free()
 		for ship: Ship in ships:
 			ship.free()
 		var batch: FlightBatch = world.get_node_or_null(NodePath(FlightBatch.NODE_NAME))

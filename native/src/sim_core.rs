@@ -542,6 +542,15 @@ impl ScsSimCore {
         self.row_of_id.get(&body_id).map_or(-1, |&r| i64::from(r))
     }
 
+    /// The row a kernel may read for body `body_id` between sync points, or -1: none when the body was touched since the
+    /// last sync (hidden, shown, teleported by the pool), since its row is then stale and the engine must be asked.
+    pub fn row_for_kernel(&self, body_id: i64) -> i64 {
+        if self.touched.contains(&body_id) {
+            return -1;
+        }
+        self.row_of_id(body_id)
+    }
+
     #[func]
     fn row_name(&self, row: i64) -> GString {
         self.row_index(row)
