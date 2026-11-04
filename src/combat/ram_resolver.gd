@@ -12,8 +12,8 @@ extends Node
 ##   measures a new contact's Δv over a short window: the change of the hull's velocity its own forces (`Ship.applied_force`)
 ##   do not explain, so thrust is never a ram. The lighter body changes more and suffers more.
 ## - **Swept** (two rigid bodies whose relative motion in one tick is more than half the smaller `core_radius`, where Jolt's
-##   discrete step could miss the hit or push one through the other, or whose layers do not pair in Jolt at all (two AI fighters,
-##   M4-T14, which then pass through each other and take only this); or a prop without a physics body, a nav buoy, at any
+##   discrete step could miss the hit or push one through the other, or whose layers do not pair in Jolt at all (none today,
+##   M4-T14); or a prop without a physics body, a nav buoy, at any
 ##   speed): shape by shape, `ConvexSweep` sweeps each of one body's hit volumes, relative to the other body over the coming
 ##   step, against each of the other's. Two ships ram when a point of either is at least `RamMath.RAM_DEPTH_M` (0.3 m) deep
 ##   inside the other: a pass 0.3 m clear is never a ram, and shallower clips are Jolt's. A prop rams at any touch, since
@@ -223,8 +223,8 @@ static func _read_contacts(rigid: RigidBody3D, sample: RamTracker.Sample, shift:
 # --- swept: tunnelling speeds and props -------------------------------------------------------------------------
 
 
-# Whether Jolt can report a contact between two rigid hulls. Where it cannot (AI fighters, M4-T14) the swept test decides at any
-# speed, since no contact would follow it.
+# Whether Jolt can report a contact between two rigid hulls (M4-T14). Where it cannot, the swept test decides at any speed, since
+# no contact would follow it.
 static func _jolt_can_touch(first: Dictionary, second: Dictionary) -> bool:
 	var a := first["body"] as RigidBody3D
 	var b := second["body"] as RigidBody3D

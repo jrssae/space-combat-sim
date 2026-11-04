@@ -64,6 +64,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q30 | The GDGS fork | Close it: archived on GitHub 2026-11-04 (a public fork cannot be made private and the token cannot delete); the maintainer deletes it |
 | Q31 | M5 and splats | M5 switches its new ship assets to textured meshes now, no new splat work; its splat code goes when it rebases onto `main` (directive committed on `m5`, `3fb15cc`) |
 | Q32 | If the textured Starfury look sheet is refused (T30a, checkpoint 1b) | **Keep iterating in M4**: no cap on look rounds; texturing stays in M4 until the maintainer approves, even if that delays M4's close |
+| Q33 | Do AI fighters collide with each other in Jolt (2026-11-04, on T14's review) | **Yes**: restore their physical collisions (any two fighters, allies included). Passing through each other with only an inelastic ram breaks Newtonian honesty and saved no measured time. T14 keeps its layers and the far ships' interpolation off |
 
 ## The budget ("good game performance", Q5)
 
@@ -166,7 +167,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T11 | Far-ship render proxies and the node diet for AI ships | T10 | Opus | 108 nodes and 27 draw calls a ship; GPU numbers by the agent, the look (H) | R | done, two Done-when numbers missed and accepted: about 5 draw calls a near AI ship (target under 3; splat nodes, carried to T27) and a 3.44 ms rebase shift at 300 (target 2 ms; bolts and capitals, carried to T15 and T20) |
 | T12 | Missile, beam, interceptor and mine stand-ins | T07, T08 | Opus | The weapon kinds Q19 and Q21 name, measured | A, G | done (2026-11-03, in a worktree on `441a3b4`; Cycle log, M4-T12) |
 | T13 | Phase 1 measurements and report P1 (checkpoint 1) | T11, T12, T14 | Sonnet | Measurement, no code | M | not started |
-| T14 | Jolt collision layers; interpolation off for far ships | T11 | Sonnet | Mechanical; matters from 300 ships | G | done, the physics stage did not fall (2.1 ms at 300, 3.5 at 500, as before); the rebase shift fell by 1.5 to 2 ms (2026-11-04, in a worktree on `ce35406`; Cycle log, M4-T14) |
+| T14 | Jolt collision layers; interpolation off for far ships | T11 | Sonnet | Mechanical; matters from 300 ships | G | done, the physics stage did not fall (2.1 ms at 300, 3.5 at 500, as before); the rebase shift fell by 1.5 to 2 ms; fighters collide with fighters again (Q33) (2026-11-04, in a worktree on `ce35406`; Cycle log, M4-T14) |
 | T15 | The native simulation core: entity rows, one call in and out (`ScsSimCore`) | T13 | Fable | Architecture: every native class moves onto it; serial | N | not started |
 | T16 | N2: avoidance, the fire lane and the context lists on the core | T15 | Opus | Per-contact loops, bit for bit | N, G | not started |
 | T17 | The brains in native code under Q16's tolerance (T17a maths, T17b behaviours) | T16 | Fable | 3 000 lines of seeded behaviour with a tolerance to meet | N, G | not started |
@@ -926,20 +927,21 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
 - **Architecture:** §17.12.
 - **Done (2026-11-04, worktree on `ce35406`; Cycle log, "M4-T14"):** `CollisionLayers` (`src/ship/collision_layers.gd`) names
   the layers: the player's kind and any body left on the default layer (1, collides with everything), AI fighters (2: player,
-  capital, rock), capitals (4: everything) and rocks (8: all but rocks). A lean ship takes the fighter layer in `Ship._ready`,
-  `CapitalStandin` and `AsteroidField` take theirs when built. `RamResolver` sends a rigid pair whose layers do not meet in Jolt
-  through the swept test at any speed. `Ship.set_far_dot` switches the body's physics interpolation off (back to inherit with
-  one reset when the ship comes near), so `WorldFrame._settle` leaves a far ship's whole subtree out (`last_settle_resets`
-  counts what it reached). Settings `collision_layers` and `far_ship_interpolation_off` (both on) switch either half off.
+  fighter, capital, rock), capitals (4: everything) and rocks (8: all but rocks). A lean ship takes the fighter layer in
+  `Ship._ready`, `CapitalStandin` and `AsteroidField` take theirs when built. `RamResolver` keeps a guard that sends a rigid pair
+  whose layers do not meet in Jolt through the swept test at any speed (none exist today). `Ship.set_far_dot` switches the
+  body's physics interpolation off (back to inherit with one reset when the ship comes near), so `WorldFrame._settle` leaves a
+  far ship's whole subtree out (`last_settle_resets` counts what it reached). Settings `collision_layers` and
+  `far_ship_interpolation_off` (both on) switch either half off.
 - **As built, where it differs from the plan:**
   - Rocks and mines: T29 made both rows with no node. The rocks are still RID static bodies in Jolt, so they get layer 8 and "a
     fighter into a rock stops" is tested against Jolt's body and the swept prop ram together; the mines have no body at all
     (tested: no `CollisionObject3D` under the mine node), so they have no layer.
   - The player is not on the fighter layer: it keeps the default layer and collides with everything, so the player's bounce and
     every M3 contact test are unchanged. The plan's "fighters stop pairing with fighters" is the AI ships.
-  - Two AI fighters now pass through each other and take only the swept ram, at any closing speed (the plan's "the ram resolver
-    does the exact work"). The swept ram splits the momentum inelastically, so a contact that used to be a bounce ram is a
-    somewhat smaller swept one at the same speed. Seeded fights show no difference (Cycle log).
+  - **Q33 (fix round 1):** the first build took AI fighters out of each other's mask, so they passed through each other and took
+    only the swept ram. The maintainer ruled that out (Newtonian honesty, and it saved no measured time): fighters collide with
+    fighters again, allies included, and their contacts and rams are the base's, byte for byte on a seeded melee.
   - The physics stage did not fall (below).
 
 ##### M4-T15 The native simulation core: entity rows, one call in and one call out
@@ -2907,7 +2909,7 @@ and AC13's `test_ai_think_time` 1, `test_m3_run` 2, `test_control_profiles` 32, 
 
 ### M4-T14 (2026-11-04): Jolt collision layers and far-ship interpolation off
 
-In its own worktree on `ce35406` (tests `063cd8b`, change `fd92f69`), so only this change. Single seeded runs (`bench battle <n> 10
+In its own worktree on `ce35406` (tests `063cd8b`, change `fd92f69`, fix round 1 on `2584555`), so only this change. Single seeded runs (`bench battle <n> 10
 warmup=5 seed=1`, editor build, headless, both bench locks, pinned to cores 0-11, load 1.3 to 1.7): the before on a copy of the base
 tree (`reports/perf/M4-T14_before/`), the after on the change (`M4-T14_after/`), and a paired run in the change's own build with the two
 settings off against on, alternating (`M4-T14_ab/`). Means in ms per tick unless said.
@@ -2921,7 +2923,7 @@ settings off against on, alternating (`M4-T14_ab/`). Means in ms per tick unless
 
 - **The physics stage did not fall.** 2.0 ms at 300 and 3.4 ms at 500 before and after; the plan's "about 1 ms from 300 up" is not
   there. Jolt's cost with this layout is the bodies and the step, not the fighter pairs: fighters are spread over tens of kilometres,
-  so the broad phase had almost no fighter pairs to test. `sync` is the same too (0.23 and 0.41 ms).
+  so the broad phase had almost no fighter pairs to test (the first build, with fighters out of each other's mask, measured the same). `sync` is the same too (0.23 and 0.41 ms).
 - **The tick median is 1.7 to 3.0 ms higher in the after runs, in every stage, including the ones this change does not touch** (the
   AI, the scan and the flight batch all read 3 to 5 % higher). The paired run in one build shows it is the machine and the tree's
   place, not the change: settings off (the base's behaviour) against on, alternating twice at 300 without rocks, once at 500 and
@@ -2947,9 +2949,27 @@ settings off against on, alternating (`M4-T14_ab/`). Means in ms per tick unless
   commit (a ship keeps layers given before it enters the tree) and the file then passes (7), as does `test_collision_layers` (15) after the edit. RED: `test_collision_layers` did not
   parse on `ce35406` (no `CollisionLayers`); with both settings defaulting off it fails 5 of 15 on substance (Jolt contacts 32
   and 178 between fighters that should have none, the bounce, the layer values, the settle count).
-- **Behaviour changes:** two AI fighters pass through each other instead of bouncing, and their collisions are always the swept
-  ram (see §17.12). A far ship's dot moves at the tick rate (60 Hz) instead of blended to the display rate, by at most one tick of
-  travel: 2.5 m at 150 m/s, 10 m at 600 m/s, a few pixels at the 3 km a dot starts at; the look is the maintainer's (H).
+- **Fix round 1 (Q33): fighters collide with fighters again.** The first build (`fd92f69`, measured above) kept AI fighters out of
+  each other's Jolt mask, so they passed through each other with no momentum exchange and took only the swept ram; the maintainer
+  ruled that out as against Newtonian motion, and it had saved no time. The fighter mask now holds the fighter layer, the ram
+  resolver is the base's for fighter pairs, and the far ships' interpolation stays off. Re-measured on the change (`M4-T14_fr1_ab/`,
+  `battle 300` without rocks, settings off against on, alternating twice, load noisier than before: 44.35 and 42.42 ms median): the
+  rebase shift 3.94 against 2.34 ms (-1.6 ms) and the physics stage 2.60 against 2.36 ms (inside the noise: 2.1 in the earlier pairs);
+  nothing else was re-measured. Evidence of parity with the base:
+  - `bench furball 25 10 seed=1`, `spread 50 6 seed=2` (`perf_native` on and off) and `furball 25 35 seed=1`: the `state ai`,
+    `combat` and `ram` lines are identical to the base's, file for file (`M4-T14_fr1_*.outcome` against `M4-T14_outcome_base_*`,
+    timing lines left out).
+  - A forced melee, `test_fighter_melee`: eight lean fighters of both sides placed in a 120 m box, flung inward at 15 to 70 m/s
+    (seed 7), 240 ticks with the real ram resolver: 2 966 Jolt contacts and 11 rams (two lethal, one tunnelling-speed 94.9 m/s
+    pair), and the digest of every ship's pose, velocity, spin and hull every 20 ticks plus every ram line is byte-identical to the
+    base's (sha256 `b5854a28...8aff`; the base run twice gave the same file). The test keeps the digest's hash.
+  - Focused runs (with the library): `test_collision_layers` 17, `test_fighter_melee` 1, `test_ram_damage` 15, `test_ram_scale` 7,
+    `test_ai_ram` 3, `test_ram_tracker` 19, `test_ram_broad_phase` 8, `test_hit_resolver` 16, `test_hit_scale` 10,
+    `test_flight_batch` 7, `test_ship_nodes` 11, `test_rocks_and_mines` 7, `test_rebase_in_play` 8, `test_world_frame` 16,
+    `test_standins` 19, `test_far_dots` 12 and AC13's `test_ai_think_time` 1: all passing, none failing, none pending.
+- **Behaviour changes:** none for collisions. A far ship's dot moves at the tick rate (60 Hz) instead of blended to the display
+  rate, by at most one tick of travel: 2.5 m at 150 m/s, 10 m at 600 m/s, a few pixels at the 3 km a dot starts at; the look is the
+  maintainer's (H).
 
 ## Definition of done (M4)
 

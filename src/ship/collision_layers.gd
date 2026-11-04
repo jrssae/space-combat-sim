@@ -1,8 +1,7 @@
 class_name CollisionLayers
 extends RefCounted
-## Which Jolt bodies can touch which (M4-T14, architecture §17.12). AI fighters do not pair with each other: the ram resolver's
-## swept test already does that work exactly, and Jolt's broad phase would only test every close pair for nothing. Everything
-## else keeps the pairs it can hit.
+## Which Jolt bodies can touch which (M4-T14, architecture §17.12). Every kind keeps the pairs it can hit; what the layers rule out
+## is a rock against a rock, which never moves. Fighters collide with fighters (Q33), so Jolt's contact response stays Newtonian.
 ##
 ## Two bodies collide when either one's mask holds the other's layer, as Godot's physics does.
 
@@ -15,7 +14,7 @@ const ALL: int = 0xFFFFF
 const _LAYERS: Dictionary = {&"player": PLAYER, &"fighter": FIGHTER, &"capital": CAPITAL, &"rock": ROCK}
 const _MASKS: Dictionary = {
 	&"player": ALL,
-	&"fighter": PLAYER | CAPITAL | ROCK,
+	&"fighter": PLAYER | FIGHTER | CAPITAL | ROCK,
 	&"capital": PLAYER | FIGHTER | CAPITAL | ROCK,
 	&"rock": PLAYER | FIGHTER | CAPITAL,
 }

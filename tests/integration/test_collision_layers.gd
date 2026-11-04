@@ -1,8 +1,7 @@
 extends GutTest
-## Jolt collision layers and the far ships' interpolation (M4-T14, architecture §17.12). AI fighters do not pair with each other in
-## Jolt (the ram resolver's swept test does that work); the player, the capitals and the rocks pair with whatever can hit them;
-## a bolt and a mine have no body; a rebase's interpolation reset skips the nodes that are not interpolated, which a far dot's ship
-## is not.
+## Jolt collision layers and the far ships' interpolation (M4-T14, architecture §17.12). Every kind of body pairs with whatever can
+## hit it, AI fighters with each other too (Q33: contacts and rams as on the base); rocks never pair with rocks; a bolt and a mine
+## have no body; a rebase's interpolation reset skips the nodes that are not interpolated, which a far dot's ship is not.
 
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const RAIDER_SPEC_PATH: String = "res://assets/ships/raider_delta_v.tres"
@@ -94,11 +93,11 @@ func _counter(a: Combatant, b: Combatant) -> ContactCounter:
 # --- the table -----------------------------------------------------------------------------------------------------
 
 
-func test_the_table_pairs_everything_but_fighters_with_fighters_and_rocks_with_rocks() -> void:
+func test_the_table_pairs_everything_but_rocks_with_rocks() -> void:
 	var kinds: Array[StringName] = [&"player", &"fighter", &"capital", &"rock"]
 	var expected: Dictionary = {
 		"player player": true, "player fighter": true, "player capital": true, "player rock": true,
-		"fighter fighter": false, "fighter capital": true, "fighter rock": true,
+		"fighter fighter": true, "fighter capital": true, "fighter rock": true,
 		"capital capital": true, "capital rock": true,
 		"rock rock": false,
 	}
@@ -148,47 +147,74 @@ func test_the_setting_off_puts_every_body_back_on_the_default_layer() -> void:
 	assert_eq(ai.ship.collision_layer, CollisionLayers.layer_of(&"fighter"), "a ship follows the setting while it flies")
 
 
-# --- fighters crossing ---------------------------------------------------------------------------------------------
+# --- fighters meeting (Q33: they collide in Jolt, as on the base) ---------------------------------------------------
 
 
-func test_two_fighters_crossing_report_no_jolt_contact_and_still_take_the_swept_ram() -> void:
+func test_two_fighters_meeting_report_a_jolt_contact_and_exchange_momentum() -> void:
 	var a: Combatant = _fighter("A", Factions.EARTH_ALLIANCE, Vector3.ZERO)
 	var b: Combatant = _fighter("B", Factions.RAIDERS, Vector3(0.0, 0.0, -500.0))
 	await _ticks(2)
 	var counter: ContactCounter = _counter(a, b)
-	_head_on(a, b, 600.0, 60.0)  # 10 m a tick: well past tunnelling speed
+	_place(a, Vector3.ZERO, Basis.IDENTITY, Vector3(0.0, 0.0, -30.0))
+	_place(b, Vector3(0.0, 0.0, -SLOW_GAP_M), FACING, Vector3.ZERO)
+	var momentum_before: float = (a.ship.mass * a.ship.linear_velocity.z) + (b.ship.mass * b.ship.linear_velocity.z)
 	await _ticks(20)
-	assert_eq(counter.total, 0, "Jolt never paired them")
+	assert_gt(counter.total, 0, "Jolt paired the two fighters")
+	assert_lt(b.ship.linear_velocity.z, -5.0, "the one at rest was pushed along the way the other flew")
+	assert_gt(a.ship.linear_velocity.z, -25.0, "and the one that hit it slowed")
+	var momentum_after: float = (a.ship.mass * a.ship.linear_velocity.z) + (b.ship.mass * b.ship.linear_velocity.z)
+	assert_almost_eq(momentum_after / momentum_before, 1.0, 0.05, "the momentum was exchanged, not lost")
+	assert_lt(a.ship.linear_velocity.z - b.ship.linear_velocity.z, 2.0, "and they no longer close on each other")
+
+
+func test_allied_fighters_collide_too() -> void:
+	var a: Combatant = _fighter("A", Factions.EARTH_ALLIANCE, Vector3.ZERO)
+	var b: Combatant = _fighter("B", Factions.EARTH_ALLIANCE, Vector3(0.0, 0.0, -500.0))
+	await _ticks(2)
+	var counter: ContactCounter = _counter(a, b)
+	_head_on(a, b, 4.0)
+	await _ticks(60)
+	assert_gt(counter.total, 0)
+	assert_lt(a.ship.linear_velocity.length(), 0.5, "they stopped each other (zero restitution)")
+
+
+func test_a_fighter_head_on_at_thirty_mps_rams_as_on_the_base() -> void:
+	var a: Combatant = _fighter("A", Factions.EARTH_ALLIANCE, Vector3.ZERO)
+	var b: Combatant = _fighter("B", Factions.RAIDERS, Vector3(0.0, 0.0, -500.0))
+	await _ticks(2)
+	_head_on(a, b, 30.0)
+	await _ticks(15)
+	for combatant: Combatant in [a, b]:
+		var hull: HullHealth = combatant.damageable.hull
+		assert_lte(hull.fraction(), 0.5, "%s lost at least half its hull" % combatant.display_name)
+		assert_false(hull.destroyed)
+	assert_eq(infos.size(), 2, "one contact ram per ship")
+	assert_string_contains(rams.last_ram, "contact", false)
+	assert_almost_eq(infos[0].relative_speed_mps, 30.0, 0.5)
+	await _ticks(45)
+	assert_eq(infos.size(), 2, "and no more while they rest against each other")
+
+
+func test_two_fighters_at_six_hundred_mps_still_take_the_swept_ram() -> void:
+	var a: Combatant = _fighter("A", Factions.EARTH_ALLIANCE, Vector3.ZERO)
+	var b: Combatant = _fighter("B", Factions.RAIDERS, Vector3(0.0, 0.0, -500.0))
+	await _ticks(2)
+	_head_on(a, b, 600.0, 60.0)  # 10 m a tick: past tunnelling speed
+	await _ticks(20)
 	assert_true(a.damageable.hull.destroyed and b.damageable.hull.destroyed, "the ram resolver wrecked both")
 	assert_eq(infos.size(), 2, "one ram per ship")
 	assert_string_contains(rams.last_ram, "tunnelling", false)
 
 
-func test_a_slow_fighter_pass_through_is_swept_not_jolts_and_is_hurt_by_the_closing_speed() -> void:
-	var a: Combatant = _fighter("A", Factions.EARTH_ALLIANCE, Vector3.ZERO)
-	var b: Combatant = _fighter("B", Factions.RAIDERS, Vector3(0.0, 0.0, -500.0))
-	await _ticks(2)
-	var counter: ContactCounter = _counter(a, b)
-	_head_on(a, b, 30.0)
-	await _ticks(30)
-	assert_eq(counter.total, 0, "no Jolt contact below tunnelling speed either")
-	assert_almost_eq(a.ship.linear_velocity.z, -15.0, 0.5, "nothing pushed A: no bounce between fighters")
-	assert_almost_eq(b.ship.linear_velocity.z, 15.0, 0.5)
-	assert_eq(infos.size(), 2, "the swept test rammed the pair once, at any speed")
-	for combatant: Combatant in [a, b]:
-		assert_lt(combatant.damageable.hull.fraction(), 1.0, "%s was hurt" % combatant.display_name)
-
-
-func test_a_four_mps_pass_through_hurts_nobody() -> void:
+func test_a_four_mps_bump_between_fighters_hurts_nobody() -> void:
 	var a: Combatant = _fighter("A", Factions.EARTH_ALLIANCE, Vector3.ZERO)
 	var b: Combatant = _fighter("B", Factions.RAIDERS, Vector3(0.0, 0.0, -500.0))
 	await _ticks(2)
 	_head_on(a, b, 4.0)
-	await _ticks(360)
+	await _ticks(60)
 	assert_eq(a.damageable.hull.fraction(), 1.0)
 	assert_eq(b.damageable.hull.fraction(), 1.0)
 	assert_eq(infos.size(), 0, "under the safe velocity change a ram is nothing")
-	assert_true(a.ship.global_position.z < b.ship.global_position.z, "they went through each other")
 
 
 func test_the_player_still_bounces_off_a_fighter() -> void:

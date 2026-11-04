@@ -654,8 +654,7 @@ func _apply_newtonian_body() -> void:
 		_apply_collision_layers()
 
 
-# AI ships (the lean ones) sit on the fighter layer, which does not pair with other fighters in Jolt (M4-T14); every other ship
-# keeps the default layer and collides with everything.
+# AI ships (the lean ones) sit on the fighter layer (M4-T14); every other ship keeps the default layer and collides with everything.
 func _apply_collision_layers() -> void:
 	if bool(Settings.get_value(&"collision_layers")):
 		var kind: StringName = &"fighter" if lean else &"player"

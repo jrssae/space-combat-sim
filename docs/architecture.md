@@ -2393,14 +2393,14 @@ src/ship/collision_layers.gd        CollisionLayers: the layers, the masks by ki
 src/ship/ship.gd                    layers by kind at `_ready` (the lean AI ship is a fighter, any other ship the player's kind);
                                     a far dot's body is not interpolated
 src/perf/standins/capital_standin.gd, asteroid_field.gd   the capitals' and the rocks' layers
-src/combat/ram_resolver.gd          a rigid pair Jolt cannot pair goes through the swept test at any speed
+src/combat/ram_resolver.gd          a rigid pair whose layers do not meet in Jolt (none today) goes through the swept test at any speed
 src/world/world_frame.gd            `last_settle_resets`: the nodes the end-of-tick interpolation reset reached
 ```
 
 | kind | layer | mask (collides with) |
 |---|---|---|
 | player (a ship that is not lean, and any body left on the default layer) | 1 | everything |
-| AI fighter (a lean ship) | 2 | player, capital, rock |
+| AI fighter (a lean ship) | 2 | player, fighter, capital, rock |
 | capital | 4 | player, fighter, capital, rock |
 | rock (the RID body of T07's field) | 8 | player, fighter, capital |
 
@@ -2408,16 +2408,14 @@ Two bodies collide when either mask holds the other's layer (Godot's rule; the m
 matter). Everything the table does not list is as before: a bolt (a `Node3D` flown by hand, §17.7) and a mine (a row of
 `StaticRows`, §17.16) have no Jolt body, so they have no layer.
 
-- **Why fighters skip each other.** The ram resolver's swept test already finds every fighter-against-fighter hit exactly, from
-  the broad phase's near pairs (§17.3), and Jolt's own bounce between two AI fighters was the only other source of one. With the
-  pair out of Jolt's filter the broad phase never builds it.
-- **What changes in a fighter collision.** Two AI fighters now pass through each other: no bounce, no Jolt contact. The ram
-  resolver treats a rigid pair whose layers do not meet like the tunnelling pairs: the swept test decides at any closing speed
-  (`RamResolver._jolt_can_touch`; the 0.3 m depth rule still keeps a scrape from counting), one ram per meeting, with the
-  inelastic momentum split of the swept ram instead of the elastic one a bounce measured. A hit that was a contact ram before is
-  now a slightly smaller swept one at the same closing speed, and below the safe velocity change nothing happens in either. The
-  player keeps the default layer and collides with everything, so the player's bounce, the god-mode behaviour and every
-  contact test with the player are unchanged. A ship that is given layers before it enters the tree keeps them.
+- **Fighters collide with fighters (Q33).** The first build took AI fighters out of each other's mask and let the ram resolver's
+  swept test do their collisions; the maintainer ruled against it: two fighters that pass through each other, with no momentum
+  exchanged and only an inelastic ram, break Newtonian motion, and it bought no measured time (the physics stage did not fall).
+  So any two AI fighters, allies included, get Jolt's contact response as before layers existed, and the ram resolver is the
+  base's for them: Jolt's contacts decide below tunnelling speed, the sweep above it. `_jolt_can_touch` stays as a guard for a
+  rigid pair whose layers do not meet, none of which exist today. The player keeps the default layer and collides with everything.
+  A ship that is given layers before it enters the tree keeps them. What the layers do now is name the kinds, keep a rock from
+  pairing with a rock, and leave room for a later kind (debris, props) to opt out.
 - **Capitals and rocks.** Capitals pair with every kind (a fighter into a capital is a Jolt contact as before). T29 made rocks
   rows with no node; they are still RID static bodies in Jolt (their row id is the body's RID id), so a fighter into a rock still
   bounces off it in Jolt and still takes the prop ram of §17.16 from the rock's row. Their layer only keeps rocks out of pairs
@@ -2430,12 +2428,13 @@ matter). Everything the table does not list is as before: a bolt (a `Node3D` flo
   counts the nodes the last settle reached.
 - **Settings.** `collision_layers` (default on; off puts every body on the one default layer: ships follow it live, capitals and
   rocks as they are built) and `far_ship_interpolation_off` (default on) are the switches for measuring either half alone.
-- **Measured** (battle 300 and 500, Cycle log, M4-T14): the physics stage and the tick median are unchanged (Jolt had almost no
-  fighter pairs to test in a layout spread over kilometres); the rebase shift falls by 1.5 to 2 ms, a third.
-- **Tests**: `test_collision_layers` (the table, the setting, two fighters crossing report no Jolt contact and still take the
-  swept ram at 600 and 30 m/s, a 4 m/s pass hurts nobody, the player still bounces off a fighter, a capital and a rock still
-  pair with a fighter, a bolt and a mine have no body, the settle walks only the interpolated nodes, a far ship is left out of
-  it and returns).
+- **Measured** (battle 300 and 500, Cycle log, M4-T14): the physics stage and the tick median are unchanged within noise; the
+  rebase shift falls by 1.5 to 2 ms, a third, which is the far ships' interpolation alone.
+- **Tests**: `test_collision_layers` (the table, the setting, two fighters meeting report a Jolt contact and exchange momentum,
+  allied fighters collide, 30 m/s costs each at least half its hull once as a contact ram, 600 m/s takes the swept ram, a 4 m/s
+  bump hurts nobody, the player bounces off a fighter, a capital and a rock pair with a fighter, a bolt and a mine have no body,
+  the settle walks only the interpolated nodes, a far ship is left out of it and returns) and `test_fighter_melee` (a seeded melee
+  of eight fighters, 2 966 contacts and 11 rams, whose digest equals the base's byte for byte).
 
 ### 17.16 Rocks and mines as static rows (T29)
 
