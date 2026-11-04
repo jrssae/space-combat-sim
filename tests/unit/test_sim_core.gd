@@ -652,11 +652,13 @@ func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine()
 			node.free()
 		ContactScan.invalidate()
 		var bodies: Array[Node3D] = _crowd(rng, size, size * 3, size)
-		var spec: ShipSpec = load(SPEC_PATH) as ShipSpec
+		# Two assembled ships (a marker and a hull, as the game's ships have), far from the crowd, for the flight step.
 		for i: int in 2:
-			var ship: Ship = Ship.create(spec, world)
-			world.spawn(ship, world.to_universe(Vector3(20000.0 + 300.0 * i, 0.0, 0.0)))
-			ship.set_flight_command(FlightCommand.new())
+			var c: Combatant = ShipAssembly.build(load(SPEC_PATH) as ShipSpec, world, projectiles, {
+				ShipAssembly.OPT_FACTION: Factions.EARTH_ALLIANCE, ShipAssembly.OPT_DISPLAY_NAME: "FLIGHT %d" % i,
+				ShipAssembly.OPT_LEAN: true})
+			world.spawn(c.ship, world.to_universe(Vector3(20000.0 + 300.0 * i, 0.0, 0.0)))
+			c.ship.set_flight_command(FlightCommand.new())
 		var batch: FlightBatch = FlightBatch.attach(world)
 		var core: SimCore = _core()
 		core.sync_now()

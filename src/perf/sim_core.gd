@@ -103,7 +103,8 @@ func _exit_tree() -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	ensure_synced()
+	if enabled():
+		ensure_synced()
 
 
 ## Whether the library provides the core and the settings ask for it (read on every call, so a flip takes effect at once).
@@ -166,6 +167,8 @@ func ensure_bolts_synced() -> bool:
 		return false
 	if not _bolts_fresh:
 		_sync_bolts()
+	else:
+		core.resync_touched_now()  # a hull destroyed since the bolts were read leaves the rows for the next reader
 	return true
 
 
@@ -371,4 +374,5 @@ func _register_console() -> void:
 		&"sync_calls": {"get": func() -> int: return engine_calls()[0], "doc": "Engine calls the last closed tick's syncs made (they grow with the rows)"},
 		&"kernel_calls": {"get": func() -> int: return engine_calls()[1], "doc": "Engine calls the kernels made in the last closed tick (must stay 0)"},
 		&"attribute_reads": {"get": func() -> int: return int(core.attribute_reads()) if core != null else 0, "doc": "Bodies whose faction, name, kind and radius were read (once per activation, not per tick)"},
+		&"touched": {"get": func() -> int: return int(core.touched_count()) if core != null else 0, "doc": "Bodies touched since the last sync point and not read again yet"},
 	}), self)

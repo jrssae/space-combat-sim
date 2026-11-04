@@ -199,6 +199,7 @@ func _gather(delta: float) -> SimCore:
 		sim = null
 		_gather_tree()
 	_hulls.resize(_count)
+	hulls_last_tick = _count
 	return sim
 
 
@@ -340,8 +341,11 @@ func _resolve_contacts(delta: float) -> PackedInt64Array:
 	var pending: Array[Array] = []
 	for ram: RamTracker.ContactRam in tracker.contacts(samples, delta):
 		var damageable: Damageable = _hull(index_of[ram.hull_id])["damageable"]
+		if damageable == null:
+			continue  # its node went since the gather
 		var other_at: int = index_of.get(ram.other_id, -1)
-		var other_faction: StringName = (_hull(other_at)["damageable"] as Damageable).faction if other_at >= 0 else &""
+		var other_hull: Damageable = _hull(other_at)["damageable"] if other_at >= 0 else null
+		var other_faction: StringName = other_hull.faction if other_hull != null else &""
 		var info := HitInfo.new(ram.hull_id, ram.other_id, other_faction, damageable.hull.max_hp * ram.severity, ram.point,
 				ram.normal, ram.relative_speed, HitInfo.CAUSE_RAM)
 		pending.append(_pending(damageable, info, KIND_CONTACT, ram.dv))

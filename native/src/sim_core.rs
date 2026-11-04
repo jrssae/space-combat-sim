@@ -94,6 +94,9 @@ struct Bolt {
     radius: f64,
     velocity: Vector3,
     plain: bool,
+    // The tick the core first saw it: on that tick its step is whatever the node holds (zero until its first
+    // `_physics_process`, §15.3); from the next tick on a plain bolt's step is `velocity * delta`.
+    first_tick: i64,
 }
 
 /// The scan's rows, column by column: the bodies in registry order (active markers, then active hulls with no active
@@ -368,8 +371,11 @@ impl ScsSimCore {
         self.seen.clear();
         let mut markers = std::mem::take(&mut self.markers);
         for m in markers.iter_mut() {
-            self.sync_reads += 1;
-            if !marker_active(m) || !self.seen.insert(m.body_id) {
+            if !marker_active(m, &mut self.sync_reads) {
+                m.active_at = 0; // out of play: when it comes back it is a new row
+                continue;
+            }
+            if !self.seen.insert(m.body_id) {
                 continue;
             }
             self.fresh_attrs(m, now);
@@ -378,12 +384,14 @@ impl ScsSimCore {
         self.markers = markers;
         let mut hulls = std::mem::take(&mut self.hulls);
         for m in hulls.iter_mut() {
-            self.sync_reads += 1;
-            let names = self.names.get_or_insert_with(Names::new);
-            if self.seen.contains(&m.body_id) || !hull_only_active(m, names) {
+            if self.seen.contains(&m.body_id) {
                 continue;
             }
-            self.sync_reads += 1;
+            let names = self.names.get_or_insert_with(Names::new);
+            if !hull_only_active(m, names, &mut self.sync_reads) {
+                m.active_at = 0;
+                continue;
+            }
             self.seen.insert(m.body_id);
             self.fresh_attrs(m, now);
             self.push_member(&mut rows, m);
@@ -416,7 +424,7 @@ impl ScsSimCore {
     }
 
     /// The tick's later sync point (the hit resolver's, after the bolts moved): reads the bolts again (their positions
-    /// and last steps; the velocities are the first sync's, for the scan), and the bodies that were touched since the
+    /// and last steps; the velocity column is left zero, the scan read it at the first sync), and the bodies that were touched since the
     /// first sync (a ship back from the pool gets its row now, a parked one loses its hull).
     #[func]
     pub fn sync_bolts(&mut self, projectiles: Array<Gd<Node>>, delta: f64) -> i64 {
@@ -475,6 +483,7 @@ impl ScsSimCore {
                     radius,
                     velocity: launch_velocity,
                     plain: kind == KIND_BOLT,
+                    first_tick: self.tick,
                 };
                 self.bolt_known.insert(id, bolt);
             }
@@ -499,8 +508,9 @@ impl ScsSimCore {
                 .push(if velocity { v } else { Vector3::ZERO });
             bolts.last_steps.push(if !last_step {
                 Vector3::ZERO
-            } else if bolt.plain {
-                // `Projectile._physics_process`: `last_step = velocity * delta`, the float rounded to 32 bits first.
+            } else if bolt.plain && bolt.first_tick < self.tick {
+                // `Projectile._physics_process`: `last_step = velocity * delta`, the float rounded to 32 bits first. A
+                // bolt first seen this tick may not have stepped yet, so its node says.
                 let dt = delta as f32;
                 Vector3::new(v.x * dt, v.y * dt, v.z * dt)
             } else {
@@ -518,6 +528,23 @@ impl ScsSimCore {
         self.bolt_known.retain(|id, _| live.contains(id));
         self.bolts = bolts;
         self.bolts.ids.len() as i64
+    }
+
+    /// Reads the bodies touched since the last sync point again (a hull destroyed by the hit resolver leaves the ram
+    /// resolver's rows), without reading the bolts. Returns how many were touched.
+    #[func]
+    pub fn resync_touched_now(&mut self) -> i64 {
+        let touched = self.touched.len() as i64;
+        if touched > 0 {
+            self.resync_touched();
+        }
+        touched
+    }
+
+    /// Bodies touched since the last sync point and not read again yet.
+    #[func]
+    fn touched_count(&self) -> i64 {
+        self.touched.len() as i64
     }
 
     /// The tick's last point: closes the tick's engine-call count. The seam where later tasks write rows back.
@@ -714,8 +741,7 @@ impl ScsSimCore {
                 continue;
             };
             let m = &mut markers[at];
-            self.sync_reads += 1;
-            if !marker_active(m) {
+            if !marker_active(m, &mut self.sync_reads) {
                 continue;
             }
             if m.attrs.is_none() || self.touched.contains(&m.body_id) {
@@ -825,24 +851,34 @@ impl ScsSimCore {
         }
         let handle = self.next_data_handle;
         self.next_data_handle += 1;
-        let get = |key: &str| row.get(key);
+        // A missing or wrongly typed key takes its zero; a kind out of range is a ship.
+        fn take<T: FromGodot>(row: &VarDictionary, key: &str, zero: T) -> T {
+            row.get(key)
+                .and_then(|v| v.try_to::<T>().ok())
+                .unwrap_or(zero)
+        }
+        let kind = take::<i64>(&row, "kind", 0);
         self.data.push(DataRow {
             handle,
-            kind: get("kind").map_or(KIND_SHIP, |v| v.to::<i64>() as u8),
-            id: get("id").map_or(0, |v| v.to::<i64>()),
-            faction: get("faction").map_or_else(StringName::default, |v| v.to::<StringName>()),
-            radius: get("radius").map_or(0.0, |v| v.to::<f64>()),
-            flags: get("flags").map_or(0, |v| v.to::<i64>()),
-            position: get("position").map_or(Vector3::ZERO, |v| v.to::<Vector3>()),
-            velocity: get("velocity").map_or(Vector3::ZERO, |v| v.to::<Vector3>()),
-            basis: get("basis").map_or(Basis::IDENTITY, |v| v.to::<Basis>()),
-            angular: get("angular").map_or(Vector3::ZERO, |v| v.to::<Vector3>()),
-            command: get("command").map_or_else(Vec::new, |v| {
-                v.to::<PackedFloat64Array>().as_slice().to_vec()
-            }),
-            state: get("state").map_or_else(Vec::new, |v| {
-                v.to::<PackedFloat64Array>().as_slice().to_vec()
-            }),
+            kind: if (0..KIND_NAMES.len() as i64).contains(&kind) {
+                kind as u8
+            } else {
+                KIND_SHIP
+            },
+            id: take(&row, "id", 0),
+            faction: take(&row, "faction", StringName::default()),
+            radius: take(&row, "radius", 0.0),
+            flags: take(&row, "flags", 0),
+            position: take(&row, "position", Vector3::ZERO),
+            velocity: take(&row, "velocity", Vector3::ZERO),
+            basis: take(&row, "basis", Basis::IDENTITY),
+            angular: take(&row, "angular", Vector3::ZERO),
+            command: take(&row, "command", PackedFloat64Array::new())
+                .as_slice()
+                .to_vec(),
+            state: take(&row, "state", PackedFloat64Array::new())
+                .as_slice()
+                .to_vec(),
         });
         handle
     }
@@ -958,20 +994,23 @@ impl ScsSimCore {
             .attrs
             .as_ref()
             .expect("attributes are read before a row is made");
-        self.sync_reads += 2;
+        self.sync_reads += 1;
         let xf = m.body.get_global_transform();
         let (velocity, angular) = match (&m.rigid, &m.marker) {
             (Some(rigid), _) => {
-                self.sync_reads += 1;
+                self.sync_reads += 2;
                 (rigid.get_linear_velocity(), rigid.get_angular_velocity())
             }
-            (None, Some(marker)) => (
-                marker
-                    .get(&self.names.get_or_insert_with(Names::new).velocity)
-                    .try_to::<Vector3>()
-                    .unwrap_or(Vector3::ZERO),
-                Vector3::ZERO,
-            ),
+            (None, Some(marker)) => {
+                self.sync_reads += 1;
+                (
+                    marker
+                        .get(&self.names.get_or_insert_with(Names::new).velocity)
+                        .try_to::<Vector3>()
+                        .unwrap_or(Vector3::ZERO),
+                    Vector3::ZERO,
+                )
+            }
             (None, None) => (Vector3::ZERO, Vector3::ZERO),
         };
         let has_hull = m.hull.is_some();
@@ -1047,11 +1086,11 @@ impl ScsSimCore {
             if !touched.contains(&m.body_id) {
                 continue;
             }
-            self.sync_reads += 1;
+            let names = self.names.get_or_insert_with(Names::new);
             let active = if m.marker.is_some() {
-                marker_active(m)
+                marker_active(m, &mut self.sync_reads)
             } else {
-                hull_only_active(m, self.names.get_or_insert_with(Names::new))
+                hull_only_active(m, names, &mut self.sync_reads)
             };
             match self.row_of_id.get(&m.body_id).copied() {
                 Some(r) if rows.handles[r as usize] == Self::handle(m) => {
@@ -1089,12 +1128,11 @@ impl ScsSimCore {
         self.row_of_id.clear();
         self.row_of_handle.clear();
         let mut hull_rows: Vec<(i64, u32)> = Vec::new();
-        let ranks: HashMap<i64, i64> = self
-            .markers
-            .iter()
-            .chain(self.hulls.iter())
-            .map(|m| (m.body_id, m.hull_rank))
-            .collect();
+        // A body's rank is its first `Damageable`'s (the marker members carry it; the hull members come in group order).
+        let mut ranks: HashMap<i64, i64> = HashMap::new();
+        for m in self.markers.iter().chain(self.hulls.iter()) {
+            ranks.entry(m.body_id).or_insert(m.hull_rank);
+        }
         for i in 0..self.rows.body_ids.len() {
             if self.rows.handles[i] == 0 {
                 continue;
@@ -1129,7 +1167,8 @@ impl ScsSimCore {
     // Faction, name, kind, radius and the destroyed flag as the tree gather reads them: from the marker, or from the hull
     // when there is none.
     fn read_attrs(&mut self, m: &Member) -> Attrs {
-        self.sync_reads += 4;
+        // The radius, the two reads of the destroyed flag, then the marker's three (or the hull's one).
+        self.sync_reads += 3 + if m.marker.is_some() { 3 } else { 1 };
         let names = self.names.get_or_insert_with(Names::new);
         let hull = m.hull.as_ref().filter(|h| h.is_instance_valid());
         let radius = hull.map_or(0.0, |h| {
@@ -1244,31 +1283,51 @@ impl Bolts {
 }
 
 // `Targetable.is_active()` for member `m`'s marker (in the tree, visible, its body processing), and both still exist.
-fn marker_active(m: &Member) -> bool {
+fn marker_active(m: &Member, calls: &mut i64) -> bool {
     let Some(marker) = m.marker.as_ref() else {
         return false;
     };
-    marker.is_instance_valid()
-        && m.body.is_instance_valid()
-        && marker.is_inside_tree()
-        && marker.is_visible_in_tree()
-        && m.body.can_process()
+    // Each test is one engine call; the chain stops at the first false.
+    let checks: [&dyn Fn() -> bool; 5] = [
+        &|| marker.is_instance_valid(),
+        &|| m.body.is_instance_valid(),
+        &|| marker.is_inside_tree(),
+        &|| marker.is_visible_in_tree(),
+        &|| m.body.can_process(),
+    ];
+    for check in checks {
+        *calls += 1;
+        if !check() {
+            return false;
+        }
+    }
+    true
 }
 
 // `Damageable.is_active()` for a member with no active marker: the hull in the tree, the body visible and processing, the
 // hull not destroyed (a script read, last).
-fn hull_only_active(m: &Member, names: &Names) -> bool {
+fn hull_only_active(m: &Member, names: &Names, calls: &mut i64) -> bool {
+    *calls += 1;
     if !m.body.is_instance_valid() {
         return false;
     }
     let Some(hull) = m.hull.as_ref() else {
         return false;
     };
-    hull.is_instance_valid()
-        && hull.is_inside_tree()
-        && m.body.is_visible_in_tree()
-        && m.body.can_process()
-        && !destroyed(hull, names)
+    let checks: [&dyn Fn() -> bool; 4] = [
+        &|| hull.is_instance_valid(),
+        &|| hull.is_inside_tree(),
+        &|| m.body.is_visible_in_tree(),
+        &|| m.body.can_process(),
+    ];
+    for check in checks {
+        *calls += 1;
+        if !check() {
+            return false;
+        }
+    }
+    *calls += 2;
+    !destroyed(hull, names)
 }
 
 // `BodyKind.from_variant` (plus the core's projectile kinds): a value in range, or a name in any case; else a ship.
