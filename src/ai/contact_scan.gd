@@ -25,7 +25,9 @@ extends RefCounted
 ##
 ## The body registry (M4-T09, architecture §17.8): with the library and `perf_native` on, `shared` comes from the native
 ## `REGISTRY_CLASS`, which knows the tree's bodies (it is told when the groups change) and reads them in one call a tick;
-## `from_tree` stays the reference it equals bit for bit. Hull and selection are read when a contact is first handed out.
+## `from_tree` stays the reference: the same rows bit for bit. On both paths a contact's hull and selection are read when it
+## is first handed out, so the two agree whatever changes between the build and the query (a driver's own selection change
+## after the build is taken as it was, `note_selection`).
 ## Kinds (`BodyKind`): rocks and mines are never contacts; `statics_for` gives a ship its nearest ones as obstacles. Rows
 ## with no node (an asteroid field's rocks) are registered here with `register_static` and shifted on a rebase.
 
@@ -65,6 +67,7 @@ static var _static_positions: PackedVector3Array = PackedVector3Array()
 static var _static_radii: PackedFloat64Array = PackedFloat64Array()
 static var _static_factions: Array[StringName] = []
 static var _static_kinds: PackedByteArray = PackedByteArray()
+static var _static_worlds: PackedInt64Array = PackedInt64Array()  # the owning WorldFrame's instance id, 0 for none
 static var _statics_version: int = 0
 static var _registry_statics_version: int = -1
 
@@ -84,6 +87,7 @@ var _forwards: PackedVector3Array = PackedVector3Array()
 var _ups: PackedVector3Array = PackedVector3Array()
 var _radii: PackedFloat64Array = PackedFloat64Array()
 var _is_ship: PackedByteArray = PackedByteArray()
+# A scan built by hand (tests) gives each row's hull and selection here; a built scan reads them live (`_live`).
 var _hulls: PackedFloat64Array = PackedFloat64Array()
 var _target_ids: PackedInt64Array = PackedInt64Array()
 var _kinds: PackedByteArray = PackedByteArray()  # per body `BodyKind`; empty when every row is a ship
@@ -102,11 +106,13 @@ var _reach: PackedFloat64Array = PackedFloat64Array()  # per body broadcast rang
 var _field: Object = null  # the native field over this scan's arrays, made on the first native query
 var _field_rejected: bool = false  # the field refused this scan's arrays (they differ in length): GDScript answers it
 var _field_rows: Dictionary = {}  # faction -> true once the field has its hostility row
-# A registry scan (M4-T09) reads hull and selection when a contact is first handed out: the hulls' instance ids, the
-# selections drivers changed after this scan was built (body id -> the selection it had), and the removals it has seen.
-var _lazy: bool = false
+# A built scan (M4-T09) reads hull and selection when a contact is first handed out: the hulls' instance ids (0: none)
+# and the selections drivers changed after the scan was built (body id -> the selection it had then).
+var _live: bool = false
 var _hull_ids: PackedInt64Array = PackedInt64Array()
 var _target_before: Dictionary = {}
+# A registry scan, and the members' removals it has seen (its freed-body check).
+var _from_registry: bool = false
 var _removals_at: int = 0
 
 
@@ -149,7 +155,7 @@ static func shared_broadcasts() -> ContactScan:
 	var frame: int = Engine.get_physics_frames()
 	if _shared_broadcasts == null or _shared_broadcasts.physics_frame != frame or not _shared_broadcasts._bodies_alive():
 		var main: ContactScan = _shared
-		if main != null and main._lazy and main.physics_frame == frame and _registry != null:
+		if main != null and main._from_registry and main.physics_frame == frame and _registry != null:
 			_shared_broadcasts = main._broadcast_scan(Targetable.broadcasters())
 		else:
 			_shared_broadcasts = from_broadcasters(Targetable.broadcasters())
@@ -160,6 +166,7 @@ static func shared_broadcasts() -> ContactScan:
 ## A scan of the active targetables in `list` only (no cache), each with its broadcast range.
 static func from_broadcasters(list: Array[Targetable]) -> ContactScan:
 	var scan := ContactScan.new()
+	scan._live = true
 	for targetable: Targetable in list:
 		if not targetable.is_active():
 			continue
@@ -175,6 +182,7 @@ static func from_broadcasters(list: Array[Targetable]) -> ContactScan:
 static func from_tree(tree: SceneTree) -> ContactScan:
 	gathers += 1
 	var scan := ContactScan.new()
+	scan._live = true
 	var seen: Dictionary = {}
 	# Hulls found from the group once, not by walking every body's children (AC13's budget).
 	var damageable_nodes: Array[Node] = tree.get_nodes_in_group(Damageable.GROUP)
@@ -212,8 +220,7 @@ static func from_tree(tree: SceneTree) -> ContactScan:
 		scan._ups.append(Vector3.UP)
 		scan._radii.append(_static_radii[s])
 		scan._is_ship.append(0)
-		scan._hulls.append(-1.0)
-		scan._target_ids.append(-1)
+		scan._hull_ids.append(0)
 		scan._kinds.append(_static_kinds[s])
 	scan._gather_bolts(tree)
 	return scan
@@ -250,15 +257,14 @@ static func touch(body: Node) -> void:
 		_registry.touch(body.get_instance_id())
 
 
-## Called by a ship's driver just before it changes its selection: this frame's registry scan (built before the change)
-## then hands out the selection as it was when the scan was built, as the tree gather does.
+## Called by a ship's driver just before it changes its selection: this frame's scans (built before the change) then hand
+## out the selection as it was when they were built, so the driver's own retargeting never shows in this tick's contacts.
 static func note_selection(body: Node) -> void:
-	var scan: ContactScan = _shared
-	if scan == null or not scan._lazy or scan.physics_frame != Engine.get_physics_frames():
-		return
+	var frame: int = Engine.get_physics_frames()
 	var body_id: int = body.get_instance_id()
-	if not scan._target_before.has(body_id):
-		scan._target_before[body_id] = selection_of(body)
+	for scan: ContactScan in [_shared, _shared_broadcasts]:
+		if scan != null and scan._live and scan.physics_frame == frame and not scan._target_before.has(body_id):
+			scan._target_before[body_id] = selection_of(body)
 
 
 ## The selection a ship's targeting holds as a contact reports it: a `Targetable` id, or -1.
@@ -270,9 +276,11 @@ static func selection_of(body: Node) -> int:
 
 
 ## Adds a body with no node to every scan (an asteroid field's rock by RID, a mine row): `id` must be unique and not an
-## instance id; `kind` is a `BodyKind`. Rows come after the bodies, in the order they were registered.
+## instance id; `kind` is a `BodyKind`. Rows come after the bodies, in the order they were registered. `world` is the
+## `WorldFrame` whose local frame `position` is in: its rebases move the row; with none, nothing moves it.
 static func register_static(id: int, position: Vector3, radius: float, kind: int = BodyKind.STATIC,
-		faction: StringName = Factions.NEUTRAL) -> void:
+		faction: StringName = Factions.NEUTRAL, world: Node = null) -> void:
+	_static_worlds.append(world.get_instance_id() if world != null else 0)
 	_static_ids.append(id)
 	_static_positions.append(position)
 	_static_radii.append(radius)
@@ -287,6 +295,7 @@ static func unregister_static(id: int) -> void:
 	if at < 0:
 		return
 	_static_ids.remove_at(at)
+	_static_worlds.remove_at(at)
 	_static_positions.remove_at(at)
 	_static_radii.remove_at(at)
 	_static_factions.remove_at(at)
@@ -294,18 +303,24 @@ static func unregister_static(id: int) -> void:
 	_statics_version += 1
 
 
-## Moves every static row by `offset` (`WorldFrame.rebase` shifts them with the nodes).
-static func shift_statics(offset: Vector3) -> void:
-	if _static_ids.is_empty():
+## Moves the static rows registered with `world` by `offset` (`WorldFrame.rebase` shifts them with its nodes).
+static func shift_statics(offset: Vector3, world: Node) -> void:
+	if _static_ids.is_empty() or world == null:
 		return
+	var owner: int = world.get_instance_id()
+	var moved: bool = false
 	for s: int in _static_positions.size():
-		_static_positions[s] += offset
-	_statics_version += 1
+		if _static_worlds[s] == owner:
+			_static_positions[s] += offset
+			moved = true
+	if moved:
+		_statics_version += 1
 
 
 ## Removes every static row.
 static func clear_statics() -> void:
 	_static_ids.clear()
+	_static_worlds.clear()
 	_static_positions.clear()
 	_static_radii.clear()
 	_static_factions.clear()
@@ -438,8 +453,8 @@ func statics_for(own_body_id: int, own_position: Vector3, own_faction: StringNam
 		if not BodyKind.is_static(_kinds[i]) or _body_ids[i] == own_body_id:
 			continue
 		var surface: float = _positions[i].distance_to(own_position) - _radii[i]
-		if surface > reach:
-			continue
+		if not (surface <= reach):
+			continue  # beyond the range, or a NaN radius: never an obstacle, as in the field
 		found.append(i)
 		var at: int = best_surface.bsearch(surface, false)
 		if at >= k:
@@ -573,7 +588,8 @@ func _take_rows(rows: Array) -> void:
 	_hull_ids = rows[11]
 	_node_count = rows[12]
 	_statics_n = rows[13]
-	_lazy = true
+	_live = true
+	_from_registry = true
 	_removals_at = _removals
 
 
@@ -587,7 +603,6 @@ func _broadcast_scan(list: Array[Targetable]) -> ContactScan:
 	var rows: Array = _registry.select(marker_ids)
 	var scan := ContactScan.new()
 	scan._take_rows(rows)
-	scan._target_before = _target_before
 	for j: int in rows[14] as PackedInt32Array:
 		scan._reach.append(reaches[j])
 	return scan
@@ -708,8 +723,7 @@ func _add(body: Node3D, targetable: Targetable, damageable: Damageable) -> void:
 	_ups.append(basis.y.normalized())
 	_radii.append(damageable.bounding_radius if damageable != null else 0.0)
 	_is_ship.append(1 if rigid != null else 0)
-	_hulls.append(damageable.hull.fraction() if damageable != null else -1.0)
-	_target_ids.append(selection_of(body))
+	_hull_ids.append(damageable.get_instance_id() if damageable != null else 0)
 	_kinds.append(BodyKind.of(targetable))
 
 
@@ -737,7 +751,7 @@ func _stamp(faction: StringName, i: int) -> Contact:
 	c.up = _ups[i]
 	c.bounding_radius = _radii[i]
 	c.is_ship = _is_ship[i] == 1
-	if _lazy:
+	if _live:
 		_stamp_live(c, i)
 	else:
 		c.hull_fraction = _hulls[i]
@@ -746,10 +760,10 @@ func _stamp(faction: StringName, i: int) -> Contact:
 	return c
 
 
-# A registry scan's hull and selection for body `i`, read now: neither changes while the drivers run, but a selection a
-# driver changed after the scan was built is taken as it was then (`note_selection`).
+# A built scan's hull and selection for body `i`, read now (both paths alike), but a selection a driver changed after the
+# scan was built is taken as it was then (`note_selection`).
 func _stamp_live(c: Contact, i: int) -> void:
-	if i >= _node_count:
+	if _node_count >= 0 and i >= _node_count:
 		return  # a static row: no hull, no selection (the contact's defaults)
 	var hull := instance_from_id(_hull_ids[i]) as Damageable if _hull_ids[i] != 0 else null
 	c.hull_fraction = hull.hull.fraction() if hull != null else -1.0
@@ -821,7 +835,7 @@ func _hostile_bolts_for(faction: StringName) -> PackedInt32Array:
 
 # Whether every node this scan holds still exists. A registry scan looks only when a marker or hull has left the tree.
 func _bodies_alive() -> bool:
-	if _lazy:
+	if _from_registry:
 		if _removals_at == _removals:
 			return true
 		for i: int in _node_count:

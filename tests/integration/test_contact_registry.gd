@@ -213,3 +213,45 @@ func test_a_fighter_flying_at_a_rock_steers_round_it_on_both_paths() -> void:
 		monitor.free()
 		ship.ship.queue_free()
 		await _ticks(1)
+
+
+# The contact `scan` hands a ship of `faction` at `at` for the body with contact id `id`, or null.
+static func _contact_of(scan: ContactScan, at: Vector3, faction: StringName, id: int) -> Contact:
+	for c: Contact in scan.contacts_for(-1, at, faction):
+		if c.id == id:
+			return c
+	return null
+
+
+func test_a_selection_and_a_hull_changed_after_the_build_reach_both_paths_alike() -> void:
+	if _skipped():
+		return
+	var own: Combatant = _ai_ship(RAIDER_SPEC, "RAIDER 1", Factions.RAIDERS, Vector3.ZERO, Vector3.ZERO)
+	var mate: Combatant = _ai_ship(RAIDER_SPEC, "RAIDER 2", Factions.RAIDERS, Vector3(200.0, 0.0, 0.0), Vector3.ZERO)
+	var enemy: Combatant = _ai_ship(STARFURY_SPEC, "ALPHA 1", Factions.EARTH_ALLIANCE, Vector3(0.0, 0.0, -900.0),
+			Vector3.ZERO)
+	var mate_id: int = mate.targetable.get_instance_id()
+	assert_true(mate.ship.targeting.select_nearest_hostile(), "the mate has the enemy selected")
+	# Built first, changed after (a console `set targeting.selected`, the player, a stand-in, a hit), queried last.
+	var native: ContactScan = ContactScan.from_registry(get_tree())
+	var script: ContactScan = ContactScan.from_tree(get_tree())
+	mate.ship.targeting.clear_selection()
+	mate.damageable.hull.apply(0.25 * mate.damageable.hull.max_hp)
+	var a: Contact = _contact_of(native, own.ship.global_position, Factions.RAIDERS, mate_id)
+	var b: Contact = _contact_of(script, own.ship.global_position, Factions.RAIDERS, mate_id)
+	assert_not_null(a, "the registry scan has the mate")
+	assert_not_null(b, "the tree gather has the mate")
+	assert_eq(a.target_id, b.target_id, "the same selection on both paths")
+	assert_eq(a.hull_fraction, b.hull_fraction, "the same hull on both paths")
+	assert_eq(a.target_id, -1, "both read the selection when the contact is handed out")
+	assert_almost_eq(a.hull_fraction, 0.75, 1e-6, "and the hull")
+	# A driver's own change after the build is noted, so both paths hand out the selection the scan was built with.
+	for on: bool in [true, false]:
+		mate.ship.targeting.select_nearest_hostile()
+		Settings.set_value(&"perf_native", on)
+		ContactScan.invalidate()
+		var shared: ContactScan = ContactScan.shared(get_tree())
+		ContactScan.note_selection(mate.ship)
+		mate.ship.targeting.clear_selection()
+		var c: Contact = _contact_of(shared, own.ship.global_position, Factions.RAIDERS, mate_id)
+		assert_eq(c.target_id, enemy.targetable.get_instance_id(), "%s: the noted selection" % shared.path())

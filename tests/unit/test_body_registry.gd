@@ -176,14 +176,17 @@ func test_node_less_static_rows_come_after_the_bodies_on_both_paths() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 5
 	_crowd(rng, 40)
+	var world := WorldFrame.new()
+	add_child_autofree(world)
 	for s: int in 1000:
 		ContactScan.register_static(900000 + s, Vector3(rng.randf_range(-10000.0, 10000.0), 0.0, rng.randf_range(-10000.0,
-				10000.0)), rng.randf_range(20.0, 200.0), BodyKind.MINE if s % 10 == 0 else BodyKind.STATIC)
+				10000.0)), rng.randf_range(20.0, 200.0), BodyKind.MINE if s % 10 == 0 else BodyKind.STATIC, Factions.NEUTRAL,
+				world)
 	var script := ContactScan.from_tree(get_tree())
 	_assert_same_rows(_registry_scan(), script, "40 bodies and 1 000 statics")
 	assert_eq(script._body_ids.slice(script._body_ids.size() - 1000), PackedInt64Array(range(900000, 901000)),
 			"the statics follow the bodies in the order they were registered")
-	ContactScan.shift_statics(Vector3(100.0, 0.0, -50.0))
+	ContactScan.shift_statics(Vector3(100.0, 0.0, -50.0), world)
 	ContactScan.unregister_static(900003)
 	script = ContactScan.from_tree(get_tree())
 	_assert_same_rows(_registry_scan(), script, "after a shift and one removal")
@@ -273,3 +276,72 @@ func test_the_shared_scan_gathers_nothing_in_gdscript_on_the_native_path() -> vo
 	before = ContactScan.gathers
 	ContactScan.shared(get_tree())
 	assert_eq(ContactScan.gathers, before + 1, "perf_native off: the GDScript gather")
+
+
+func test_a_rebase_moves_its_own_worlds_static_rows_once_on_both_paths() -> void:
+	if _skipped():
+		return
+	var a := WorldFrame.new()
+	add_child_autofree(a)
+	var b := WorldFrame.new()
+	add_child_autofree(b)
+	var at_a := Vector3(1234.5, -20.25, 987.125)
+	var at_b := Vector3(-40.0, 5.5, 3000.0)
+	var at_none := Vector3(7.0, 8.0, 9.0)
+	ContactScan.register_static(910001, at_a, 50.0, BodyKind.STATIC, Factions.NEUTRAL, a)
+	ContactScan.register_static(910002, at_b, 60.0, BodyKind.MINE, Factions.NEUTRAL, b)
+	ContactScan.register_static(910003, at_none, 70.0)
+	var offset := Vector3(5000.0, -250.0, 12000.5)
+	var expected_a: Vector3 = at_a
+	for rebase: int in 2:
+		a.rebase(offset)
+		expected_a = expected_a - offset
+		for native: bool in [true, false]:
+			Settings.set_value(&"perf_native", native)
+			ContactScan.invalidate()
+			var scan: ContactScan = ContactScan.shared(get_tree())
+			var label: String = "after rebase %d, %s" % [rebase + 1, scan.path() if native else &"gdscript"]
+			assert_eq(scan._positions[scan._body_ids.find(910001)], expected_a, "%s: world A's row moved by -offset once" % label)
+			assert_eq(scan._positions[scan._body_ids.find(910002)], at_b, "%s: world B's row did not move" % label)
+			assert_eq(scan._positions[scan._body_ids.find(910003)], at_none, "%s: a row with no world did not move" % label)
+		Settings.set_value(&"perf_native", true)
+		_assert_same_rows(_registry_scan(), ContactScan.from_tree(get_tree()), "after rebase %d" % (rebase + 1))
+
+
+func test_the_broadcast_scan_equals_from_broadcasters_row_for_row() -> void:
+	if _skipped():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21
+	_crowd(rng, 30)
+	# Buoys, allies with a 100 km reach, a parked broadcaster, and a body whose second marker broadcasts.
+	for i: int in 3:
+		var buoy := _prop(Vector3(float(i) * 9000.0, 0.0, -20000.0), "NAV %d" % i)
+		(buoy.get_child(1) as Targetable).broadcast_range_m = 1.0e6
+	for i: int in 6:
+		var ally := _body(Vector3(float(i) * 300.0, 0.0, 15000.0), Factions.EARTH_ALLIANCE, "ALPHA %d" % i)
+		(ally.get_node(^"Targetable") as Targetable).broadcast_range_m = 1.0e5
+		if i == 4:
+			_park(ally)
+	var twin := _body(Vector3(-6000.0, 100.0, 4000.0), Factions.EARTH_ALLIANCE, "TWIN")
+	var second := Targetable.new()
+	second.display_name = "TWIN BEACON"
+	second.faction = Factions.EARTH_ALLIANCE
+	twin.add_child(second)
+	second.broadcast_range_m = 5.0e4
+	ContactScan.invalidate()
+	ContactScan.shared(get_tree())
+	var native: ContactScan = ContactScan.shared_broadcasts()
+	assert_true(native._from_registry, "the broadcast scan comes from the registry")
+	var script := ContactScan.from_broadcasters(Targetable.broadcasters())
+	_assert_same_rows(native, script, "broadcasters")
+	assert_eq(native._reach, script._reach, "the same reach, row by row")
+	assert_eq(script._body_ids.size(), 9, "three buoys, five shown allies and the twin's beacon")
+	assert_true(native._ids.has(second.get_instance_id()), "a body's second marker broadcasts too")
+	for who: Array in [[Vector3(0.0, 0.0, -60000.0), Factions.RAIDERS], [Vector3(0.0, 0.0, 70000.0), Factions.EARTH_ALLIANCE]]:
+		var heard_native: Array[Contact] = native.broadcasts_for(-1, who[0], who[1])
+		var heard_script: Array[Contact] = script.broadcasts_for(-1, who[0], who[1])
+		assert_eq(heard_native.size(), heard_script.size(), "heard at %s" % who[0])
+		for i: int in mini(heard_native.size(), heard_script.size()):
+			assert_eq(heard_native[i].id, heard_script[i].id)
+			assert_eq(heard_native[i].hull_fraction, heard_script[i].hull_fraction)

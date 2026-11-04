@@ -639,7 +639,9 @@ No question is open.
 - **Expected gain:** scan 2.6 to about 1.2 ms at furball 100 (60 %); the registry is the seed of T15's core.
 - **Architecture:** §17.8.
 - **Done (2026-11-03, as built; Cycle log, "M4-T09").** `ScsBodyRegistry` builds the shared scan in one native refresh a
-  tick, equal to `from_tree` bit for bit (`ContactScan.gathers` stays 0 on the native path); `BodyKind` keeps rocks and mines
+  tick, with the same rows as `from_tree` bit for bit, and on both paths a contact's hull and selection are read when it is
+  first handed out, so the paths agree whatever changes between build and query (`ContactScan.gathers` stays 0 on the
+  native path); `BodyKind` keeps rocks and mines
   out of every contact list, `statics_for` and `Perception.statics` (`ai_nearest_static_k`, 4) hand the nearest to avoidance,
   and node-less rows register through `ContactScan.register_static`. Deviations: the refresh reads the nodes' own getters,
   not `PhysicsServer3D` by RID (the server's basis differs from the node's after a teleport, which would break parity);

@@ -2309,11 +2309,14 @@ src/ai/body_kind.gd             BodyKind: ship, capital, turret, missile, mine, 
   is hidden or shown (each body's `visibility_changed` touches it, which covers the pool's release and acquire in one
   tick), or after `ContactScan.touch(body)` or `invalidate()`. Rows come in group order (markers, then hulls with no
   active marker, deduplicated by body), then the node-less static rows.
-- **Hull and selection** are read when a contact is first handed out (`Contact`s are made lazily since cycle 4), not in
-  the refresh: nothing changes a hull while the drivers run, and a driver that changes its ship's selection first calls
-  `ContactScan.note_selection`, so this frame's scan still hands out the selection it had when the scan was built.
-- **The broadcast scan** is the main snapshot's rows for `Targetable.broadcasters()` in that list's order
-  (`ScsBodyRegistry.select`), with each broadcaster's range read in GDScript.
+- **Hull and selection** are read when a contact is first handed out (`Contact`s are made lazily since cycle 4), on both
+  paths alike (fix round 1: the tree gather no longer reads them at the build), so the paths agree whatever changes between
+  a scan's build and its queries (a hit, the console, the player). A driver that changes its ship's selection first calls
+  `ContactScan.note_selection`, so this frame's scans still hand out the selection they were built with (M3's behaviour).
+- **The broadcast scan** is `ScsBodyRegistry.select`: a row, read now, for each active marker of
+  `Targetable.broadcasters()` in that list's order (a body's second marker gets its own row, as in `from_broadcasters`),
+  with each broadcaster's range read in GDScript. A body's hull is its first `Damageable` in group order, which is child
+  order, so it is the one `Damageable.of(body)` finds.
 - **Kinds** (`BodyKind`). A marker's `kind` property (M4-T07 adds it to `Targetable`) is read as a name or a value; a
   body without one is a ship. `static` and `mine` rows are never contacts: `contacts_for` and `nearest_for` skip them on
   both paths, so a rock field or a mine belt never fills a fighter's twelve. `statics_for(own, at, faction, k)` gives the
@@ -2323,9 +2326,12 @@ src/ai/body_kind.gd             BodyKind: ship, capital, turret, missile, mine, 
   `AvoidanceMath` treats a contact as an obstacle with its radius and velocity; for a rock or mine its horizon is at least
   the time a sideways RCS burn takes to clear the obstacle's reach (plus `URGENT_SETTLE_S`), so a 150 m rock is seen early
   enough to go round, while ship-sized contacts keep M3's horizon. The fire lane does not read statics.
-- **Rows with no node.** `ContactScan.register_static(id, position, radius, kind, faction)` adds a rock (by RID) or a
-  mine row to both paths, after the bodies, in registration order; `unregister_static`, `clear_statics`, and
-  `shift_statics(offset)`, which `WorldFrame.rebase` calls with the nodes' shift. Ids must be unique and not instance ids.
+- **Rows with no node.** `ContactScan.register_static(id, position, radius, kind, faction, world)` adds a rock (by RID) or
+  a mine row to both paths, after the bodies, in registration order; `unregister_static`, `clear_statics`. A row belongs to
+  the `WorldFrame` it was registered with (its position is in that frame): that world's `rebase` calls
+  `shift_statics(shift, self)` and moves only its own rows, once, by the nodes' shift; a row with no world never moves. Ids
+  must be unique and not instance ids.
+- **NaN radii.** A static whose surface distance is NaN (a NaN radius or position) is never an obstacle, on both paths.
 - **Bad input never panics.** `set_statics` and the field's `set_kinds` check their array lengths, log one error and keep
   nothing; the scan then answers from GDScript, as for a rejected `load`.
 - **Still per tick in GDScript:** the bolts' gather for `incoming_fire` (T15 unifies it with the hit sweep's rows).
