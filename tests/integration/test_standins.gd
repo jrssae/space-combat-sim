@@ -239,3 +239,242 @@ func test_a_capital_holds_its_cruise_and_falls_with_the_moon_only_through_its_en
 	assert_almost_eq(force.y / cap.mass, 0.03, 1e-4, "at cruise its engines only hold off the moon's pull")
 	cap.linear_velocity = Vector3.ZERO
 	assert_lt(cap.cruise_force(DT).z, 0.0, "below cruise it thrusts along its nose")
+
+
+# --- missiles, beams, interceptors against missiles, mines (M4-T12) ---------------------------------------------------
+
+
+func _missile(at: Vector3, faction: StringName = Factions.RAIDERS) -> Projectile:
+	var missile := (load(Projectile.SCENE_PATH) as PackedScene).instantiate() as Projectile
+	projectiles.add_child(missile)
+	missile.configure(WeaponSpec.new())
+	missile.set_kind(Projectile.KIND_MISSILE)
+	missile.faction = faction
+	missile.launch(at, Vector3(0.0, 0.0, MissileStandin.SPEED_MPS), now_s)
+	missile.set_physics_process(false)
+	return missile
+
+
+func _missiles() -> Array[Projectile]:
+	var out: Array[Projectile] = []
+	for bolt: Projectile in _bolts():
+		if bolt.kind == Projectile.KIND_MISSILE:
+			out.append(bolt)
+	return out
+
+
+func _resolver(hits: Array[HitInfo]) -> HitResolver:
+	var resolver := HitResolver.new()
+	add_child_autofree(resolver)
+	resolver.set_physics_process(false)
+	resolver.hit_resolved.connect(func(info: HitInfo) -> void: hits.append(info))
+	return resolver
+
+
+# A capital whose guns are taken off, so only the weapon under test fires.
+func _quiet_capital(at: Vector3, faction: StringName = Factions.EARTH_ALLIANCE) -> CapitalStandin:
+	var cap: CapitalStandin = _capital(at, faction)
+	cap.guns().clear()
+	return cap
+
+
+func test_a_capital_carries_two_beam_emitters_and_the_counters_report_every_weapon() -> void:
+	var cap: CapitalStandin = _capital(Vector3.ZERO)
+	assert_eq(cap.beams().size(), CapitalStandin.BEAMS_PER_CAPITAL, "two beam emitters")
+	standins.add_mines([{"offset": Vector3(0.0, 0.0, 3000.0), "faction": Factions.EARTH_ALLIANCE},
+			{"offset": Vector3(0.0, 0.0, 3200.0), "faction": Factions.EARTH_ALLIANCE}], world.to_universe(Vector3.ZERO))
+	_missile(Vector3(0.0, 0.0, 4000.0))
+	_step()
+	assert_eq(standins.counts[StandinDirector.Count.BEAMS], CapitalStandin.BEAMS_PER_CAPITAL)
+	assert_eq(standins.counts[StandinDirector.Count.MINES], 2)
+	assert_eq(standins.counts[StandinDirector.Count.MISSILES], 1, "the missile in flight")
+
+
+func test_a_beam_hits_the_first_hull_along_its_segment_and_none_behind_it() -> void:
+	var cap: CapitalStandin = _quiet_capital(Vector3.ZERO)
+	var emitter: BeamStandin = cap.beams()[0]
+	var from: Vector3 = emitter.global_position
+	var dir: Vector3 = (Vector3(0.0, 300.0, -1200.0) - from).normalized()
+	var front: TargetDrone = _drone(from + dir * 1200.0)
+	var behind: TargetDrone = _drone(from + dir * 2000.0)
+	var beyond: TargetDrone = _drone(from + dir * (BeamStandin.RANGE_M + 200.0))
+	var hits: Array[HitInfo] = []
+	var resolver: HitResolver = _resolver(hits)
+	var beam: Projectile = emitter.fire(front.global_position, now_s, projectiles)
+	assert_eq(beam.kind, Projectile.KIND_BEAM)
+	assert_almost_eq(beam.last_step.length(), BeamStandin.RANGE_M, 1e-2, "the whole segment in its one tick")
+	resolver.resolve(DT)
+	assert_eq(hits.size(), 1, "one hit")
+	if not hits.is_empty():
+		assert_eq(hits[0].target_id, front.get_instance_id(), "on the first hull along it")
+		assert_almost_eq(hits[0].point.distance_to(from), 1200.0, 10.0, "at its face")
+	assert_eq(behind.damageable.hull.hp, behind.damageable.hull.max_hp, "none behind it")
+	assert_eq(beyond.damageable.hull.hp, beyond.damageable.hull.max_hp)
+	assert_true(beam.is_spent(), "a beam lives one tick")
+
+
+func test_a_beam_that_hits_nothing_is_gone_after_its_tick() -> void:
+	var cap: CapitalStandin = _quiet_capital(Vector3.ZERO)
+	var hits: Array[HitInfo] = []
+	var resolver: HitResolver = _resolver(hits)
+	var beam: Projectile = cap.beams()[0].fire(Vector3(0.0, 0.0, -5000.0), now_s, projectiles)
+	beam._physics_process(DT)  # the projectile's own tick leaves a beam where it was fired
+	assert_almost_eq(beam.last_step.length(), BeamStandin.RANGE_M, 1e-2)
+	resolver.resolve(DT)
+	assert_eq(hits.size(), 0)
+	assert_true(beam.is_spent())
+
+
+func test_beams_fire_at_half_a_hertz_each_only_at_a_hostile_within_three_km() -> void:
+	var cap: CapitalStandin = _quiet_capital(Vector3.ZERO)
+	_drone(Vector3(0.0, 0.0, -3500.0))  # hostile, beyond a beam's reach
+	_drone(Vector3(0.0, 0.0, 2000.0), Factions.EARTH_ALLIANCE)
+	for i: int in 240:
+		_step()
+	var shots: int = 0
+	for emitter: BeamStandin in cap.beams():
+		shots += emitter.shots
+	assert_eq(shots, 0, "nothing hostile within 3 km")
+	_drone(Vector3(0.0, 400.0, -2000.0))
+	for i: int in 240:
+		_step()
+	for emitter: BeamStandin in cap.beams():
+		assert_eq(emitter.shots, 2, "one shot every 2 s")
+
+
+func test_an_interceptor_removes_a_missile_inside_one_and_a_half_km_first_and_never_a_bolt_outside() -> void:
+	_quiet_capital(Vector3.ZERO)
+	var bolt_near: Projectile = _hostile_bolt(Vector3(0.0, 100.0, 600.0))
+	var missile: Projectile = _missile(Vector3(0.0, 200.0, 1200.0))
+	var missile_far: Projectile = _missile(Vector3(0.0, 0.0, 2400.0))
+	var bolt_far: Projectile = _hostile_bolt(Vector3(0.0, 2000.0, 2200.0))
+	var friendly: Projectile = _missile(Vector3(0.0, 100.0, 500.0), Factions.EARTH_ALLIANCE)
+	for i: int in 60:
+		_step()
+		if standins.intercepts > 0:
+			break
+	assert_eq(standins.intercepts, 1, "one shot so far")
+	assert_true(missile.is_spent(), "the missile inside 1.5 km went first")
+	assert_false(bolt_near.is_spent(), "before the nearer bolt")
+	for i: int in roundi(2.0 * TurretStandin.INTERCEPT_INTERVAL_S / DT) + 2:
+		_step()
+	assert_true(bolt_near.is_spent(), "then the bolt")
+	assert_false(missile_far.is_spent(), "never a missile beyond 1.5 km")
+	assert_false(bolt_far.is_spent(), "nor a bolt")
+	assert_false(friendly.is_spent(), "nor a friendly missile")
+	assert_eq(standins.missile_intercepts, 1)
+
+
+func test_a_missile_launched_at_a_crossing_fighter_hits_it_through_the_resolver() -> void:
+	_quiet_capital(Vector3.ZERO)
+	var target: TargetDrone = _drone(Vector3(0.0, 500.0, -2500.0))
+	var crossing := Vector3(120.0, 0.0, 0.0)
+	target.linear_velocity = crossing
+	standins.missile_target = 1
+	var hits: Array[HitInfo] = []
+	var resolver: HitResolver = _resolver(hits)
+	_step()
+	var flying: Array[Projectile] = _missiles()
+	assert_eq(flying.size(), 1, "one missile launched")
+	if flying.is_empty():
+		return
+	var missile: Projectile = flying[0]
+	assert_eq(missile.faction, Factions.EARTH_ALLIANCE)
+	assert_eq(standins.missile_target_of(missile), target.get_instance_id(), "at the fighter")
+	standins.missile_target = 0  # no more launches
+	var ticks: int = 0
+	while not missile.is_spent() and ticks < roundi(MissileStandin.LIFETIME_S / DT):
+		missile._physics_process(DT)
+		resolver.resolve(DT)
+		target.global_position += crossing * DT
+		_step()
+		ticks += 1
+	assert_eq(hits.size(), 1, "it hit")
+	if not hits.is_empty():
+		assert_eq(hits[0].target_id, target.get_instance_id(), "the fighter")
+	assert_lt(float(ticks) * DT, MissileStandin.LIFETIME_S, "within its lifetime (%.1f s)" % (float(ticks) * DT))
+
+
+func test_the_missiles_in_flight_hold_the_count_asked() -> void:
+	_quiet_capital(Vector3.ZERO)
+	for i: int in 4:
+		_drone(Vector3(float(i) * 200.0, 300.0, -3000.0))
+	_drone(Vector3(0.0, 0.0, -MissileStandin.RANGE_M - 500.0))
+	standins.missile_target = 5
+	for i: int in 10:
+		_step()
+	assert_eq(standins.counts[StandinDirector.Count.MISSILES], 5, "five in flight")
+	assert_eq(_missiles().size(), 5)
+	_missiles()[0].spend()
+	_step()
+	assert_eq(standins.counts[StandinDirector.Count.MISSILES], 5, "a spent one is replaced")
+	assert_eq(standins.missile_launches, 6)
+
+
+func test_no_missile_without_a_hostile_fighter_in_range() -> void:
+	_quiet_capital(Vector3.ZERO)
+	_drone(Vector3(0.0, 0.0, -MissileStandin.RANGE_M - 500.0))
+	_drone(Vector3(0.0, 0.0, -1000.0), Factions.EARTH_ALLIANCE)
+	_capital(Vector3(0.0, 0.0, -2000.0), Factions.RAIDERS)  # a hostile capital is not a missile's target
+	standins.missile_target = 3
+	for i: int in 60:
+		_step()
+	for m: Projectile in _missiles():
+		assert_ne(m.faction, Factions.EARTH_ALLIANCE, "no launch at what is not a hostile fighter in range")
+
+
+func test_a_mine_detonates_on_a_hostile_never_a_friend_hurts_every_hull_in_its_blast_and_is_gone() -> void:
+	var mines: MineStandin = standins.add_mines([{"offset": Vector3(0.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE},
+			{"offset": Vector3(0.0, 0.0, -2000.0), "faction": Factions.EARTH_ALLIANCE}], world.to_universe(Vector3.ZERO))
+	assert_eq(mines.count(), 2)
+	assert_eq(mines.alive_count(), 2)
+	var friend: TargetDrone = _drone(Vector3(30.0, 0.0, -1000.0), Factions.EARTH_ALLIANCE)
+	for i: int in 2 * MineStandin.TRIGGER_TICKS:
+		_step()
+	assert_eq(mines.alive_count(), 2, "a friend inside the trigger sets nothing off")
+	var hostile: TargetDrone = _drone(Vector3(0.0, 40.0, -1000.0))
+	var far: TargetDrone = _drone(Vector3(0.0, 0.0, -1300.0))
+	var ticks: int = 0
+	while mines.is_alive(0) and ticks < 10:
+		_step()
+		ticks += 1
+	assert_false(mines.is_alive(0), "the hostile set it off")
+	assert_lte(ticks, MineStandin.TRIGGER_TICKS, "within one trigger cadence")
+	assert_true(mines.is_alive(1), "the other mine is untouched")
+	assert_lt(hostile.damageable.hull.hp, hostile.damageable.hull.max_hp, "the hostile is hurt")
+	assert_lt(friend.damageable.hull.hp, friend.damageable.hull.max_hp, "and so is the friend in the blast")
+	assert_eq(far.damageable.hull.hp, far.damageable.hull.max_hp, "but not a hull beyond it")
+	assert_eq(standins.detonations, 1)
+	assert_eq(standins.counts[StandinDirector.Count.MINES], 1, "the row is removed")
+	var hp: float = hostile.damageable.hull.hp
+	for i: int in 2 * MineStandin.TRIGGER_TICKS:
+		_step()
+	assert_eq(hostile.damageable.hull.hp, hp, "a mine goes off once")
+
+
+func test_a_mine_checks_every_third_tick_and_is_laid_again_after_a_while() -> void:
+	var rows: Array[Dictionary] = []
+	for i: int in 30:
+		rows.append({"offset": Vector3(float(i) * 300.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE})
+	var mines: MineStandin = standins.add_mines(rows, world.to_universe(Vector3.ZERO))
+	_step()
+	assert_eq(mines.checked_last_tick, 10, "a third of the mines each tick")
+	var hostile: TargetDrone = _drone(Vector3(0.0, 0.0, -1010.0))
+	for i: int in MineStandin.TRIGGER_TICKS:
+		_step()
+	assert_false(mines.is_alive(0))
+	hostile.global_position = Vector3(0.0, 0.0, 5000.0)
+	for i: int in roundi(MineStandin.RELAY_S / DT) + MineStandin.TRIGGER_TICKS:
+		_step()
+	assert_true(mines.is_alive(0), "laid again in its place, so the belt holds the mix")
+	assert_eq(mines.alive_count(), 30)
+
+
+func test_a_rebase_shifts_the_mines() -> void:
+	var mines: MineStandin = standins.add_mines([{"offset": Vector3(100.0, 0.0, -1000.0), "faction": Factions.RAIDERS}],
+			world.to_universe(Vector3.ZERO))
+	var before: Vector3 = mines.position_of(0)
+	var offset := Vector3(1000.0, -200.0, 500.0)
+	world.rebase(offset)
+	assert_almost_eq(mines.position_of(0).distance_to(before - offset), 0.0, 1e-3)
+	assert_eq(mines.kind, Targetable.Kind.MINE, "a row of kind mine for the body registry")

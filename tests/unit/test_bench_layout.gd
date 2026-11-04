@@ -364,3 +364,44 @@ func test_the_gravity_source_is_a_moon_far_below() -> void:
 	var at_centre: float = float(g["gm"]) / (g["offset"] as Vector3).length_squared()
 	assert_almost_eq(at_centre, 0.03, 1e-6, "0.03 m/s^2 at the battle")
 	assert_true(BenchLayout.gravity_source(BenchLayout.SPREAD).is_empty())
+
+
+# --- mine belts (M4-T12) -----------------------------------------------------------------------------------------
+
+
+func test_the_mine_belts_hold_the_mix_split_between_the_sides() -> void:
+	for layout: StringName in [BenchLayout.TYPICAL, BenchLayout.BATTLE]:
+		for n: int in [58, 100, 300]:
+			var mix: Dictionary = BenchLayout.mix(layout, n)
+			var mines: Array[Dictionary] = BenchLayout.mines(layout, n, 1)
+			assert_eq(mines.size(), int(mix["mines"]), "%s %d lays the mix's mines" % [layout, n])
+			var per_side: Dictionary = {}
+			for m: Dictionary in mines:
+				per_side[m["faction"]] = int(per_side.get(m["faction"], 0)) + 1
+			var sides: Array[StringName] = BenchLayout.sides(layout)
+			assert_eq(per_side.size(), sides.size(), "every side lays a belt")
+			for f: StringName in per_side:
+				assert_true(sides.has(f))
+				assert_almost_eq(float(per_side[f]), float(mines.size()) / float(sides.size()), float(mines.size()) * 0.05 + 2.0)
+	assert_eq(BenchLayout.mines(BenchLayout.FURBALL, 50, 1).size(), 0, "a fighter layout lays none")
+
+
+func test_a_belt_lies_between_its_sides_fighters_and_capitals_clear_of_every_ship() -> void:
+	var layout: StringName = BenchLayout.BATTLE
+	var plan: Array[Dictionary] = BenchLayout.plan(layout, 100, 1)
+	var sides: Array[StringName] = BenchLayout.sides(layout)
+	for m: Dictionary in BenchLayout.mines(layout, 100, 1):
+		var side: int = sides.find(m["faction"])
+		var from_centre: Vector3 = (m["offset"] as Vector3) - (m["fight_centre"] as Vector3)
+		var flat := Vector3(from_centre.x, 0.0, from_centre.z)
+		assert_between(flat.length(), BenchLayout.MINE_BELT_RADIUS_M - BenchLayout.MINE_BELT_DEPTH_M,
+				BenchLayout.MINE_BELT_RADIUS_M + BenchLayout.MINE_BELT_DEPTH_M, "on the belt's ring")
+		assert_gt(flat.normalized().dot(BenchLayout.side_direction(side)), cos(deg_to_rad(46.0)), "on its own side's arc")
+		for e: Dictionary in plan:
+			var clear: float = float(e["radius"]) + MineStandin.TRIGGER_RADIUS_M
+			assert_gt((m["offset"] as Vector3).distance_to(e["offset"]), clear, "no ship starts inside a trigger")
+
+
+func test_mine_belts_are_seeded() -> void:
+	assert_eq(BenchLayout.mines(BenchLayout.TYPICAL, 58, 3), BenchLayout.mines(BenchLayout.TYPICAL, 58, 3))
+	assert_ne(BenchLayout.mines(BenchLayout.TYPICAL, 58, 3), BenchLayout.mines(BenchLayout.TYPICAL, 58, 4))
