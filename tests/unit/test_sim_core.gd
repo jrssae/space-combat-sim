@@ -630,6 +630,45 @@ func test_the_flight_step_flies_the_same_from_the_core_as_from_the_physics_serve
 # --- the engine seam ---------------------------------------------------------------------------------------------------
 
 
+## The engine types a kernel must not name: an engine object handle, the engine's classes, a Variant or a script property
+## read, a singleton, an instance id. Godot's maths builtins (`godot::builtin::{Vector3, Basis}`) are data and allowed.
+const KERNEL_FORBIDDEN: Array[String] = ["Gd<", "godot::classes", "godot::prelude", "godot::obj", "godot::global",
+		"Variant", "InstanceId", "instance_id", "singleton", "PhysicsServer", "godot_error", "godot_print", "#[func]",
+		"#[godot_api]", "GodotClass", ".get(&", ".call(", "Node3D", "RigidBody3D", "StringName", "GString"]
+const KERNEL_FILE: String = "res://native/src/kernels.rs"
+const KERNEL_USERS: Array[String] = ["res://native/src/contact_field.rs", "res://native/src/hit_sweep.rs",
+		"res://native/src/ram_phase.rs", "res://native/src/flight_step.rs"]
+
+
+func test_the_kernels_hold_no_engine_type() -> void:
+	var source: String = FileAccess.get_file_as_string(KERNEL_FILE)
+	assert_true(source.length() > 1000, "the kernels module exists and holds the queries and steps (%s)" % KERNEL_FILE)
+	var found := PackedStringArray()
+	var lines: PackedStringArray = source.split("\n")
+	for i: int in lines.size():
+		var line: String = lines[i]
+		var code: String = line.strip_edges()
+		if code.begins_with("//") or code.begins_with("///") or code.begins_with("//!"):
+			continue  # comments may name what the code must not
+		for token: String in KERNEL_FORBIDDEN:
+			if line.contains(token):
+				found.append("line %d: %s (%s)" % [i + 1, code, token])
+	assert_eq(found.size(), 0, "no engine type or call in the kernels: %s" % found)
+	# The only things a kernel may import: Godot's maths builtins, the standard library and the core's plain row tables.
+	var imports := PackedStringArray()
+	for line: String in lines:
+		var code: String = line.strip_edges()
+		if code.begins_with("use ") and not (code.begins_with("use godot::builtin::") or code.begins_with("use std::")
+				or code.begins_with("use crate::sim_core::{")):
+			imports.append(code)
+	assert_eq(imports.size(), 0, "the kernels import only maths builtins, std and the core's row tables: %s" % imports)
+	# And the four classes take their maths from there, so a query or step cannot grow an engine call outside the module.
+	for user: String in KERNEL_USERS:
+		assert_true(FileAccess.get_file_as_string(user).contains("use crate::kernels::"), "%s reads the kernels" % user)
+	assert_true(source.contains("pub mod contact") and source.contains("pub mod sweep") and source.contains("pub mod ram")
+			and source.contains("pub mod flight"), "the four kernels are there")
+
+
 func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine() -> void:
 	if _skipped():
 		return
@@ -643,7 +682,7 @@ func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine()
 	rams.world = world
 	add_child_autofree(rams)
 	var sync_reads := PackedInt64Array()
-	var kernel_reads := PackedInt64Array()
+	var fallback_reads := PackedInt64Array()
 	for size: int in [10, 100]:
 		for node: Node in world.get_children():
 			if node != projectiles:
@@ -661,6 +700,13 @@ func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine()
 			c.ship.set_flight_command(FlightCommand.new())
 		var batch: FlightBatch = FlightBatch.attach(world)
 		var core: SimCore = _core()
+		# Two ticks with no kernel at all: the first reads every body's attributes once, the second is what the sync points
+		# cost by themselves from then on.
+		for i: int in 2:
+			core.sync_now()
+			core.sync_bolts_now()
+			core.sync_out_now()
+		var quiet: int = core.engine_calls()[0]
 		core.sync_now()
 		# A tick's worth of kernels over the rows: the scan's queries, the hit sweep, the ram broad phase and the flight step.
 		var scan: ContactScan = ContactScan.shared(get_tree())
@@ -680,9 +726,10 @@ func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine()
 		core.sync_out_now()
 		var calls: PackedInt64Array = core.engine_calls()
 		sync_reads.append(calls[0])
-		kernel_reads.append(calls[1])
+		fallback_reads.append(calls[1])
 		assert_gte(calls[0], 3 * bodies.size(), "the sync made at least three calls a body at %d bodies" % size)
-	assert_eq(kernel_reads[0], 0, "no engine call outside the sync at 10 bodies")
-	assert_eq(kernel_reads[1], 0, "none at 100 bodies either: the queries read rows, never the engine")
+		assert_eq(calls[0], quiet, "a tick full of queries and steps made the same engine calls as a tick with none at %d bodies" % size)
+	assert_eq(fallback_reads[0], 0, "no ship read from the physics server at 10 bodies")
+	assert_eq(fallback_reads[1], 0, "none at 100 bodies either")
 	assert_gt(sync_reads[1], sync_reads[0], "the sync reads once per body and bolt, so it grows with them")
 	assert_lt(sync_reads[1], sync_reads[0] * 20, "and only with them")
