@@ -16,6 +16,11 @@ const HYSTERESIS: float = 1.25
 const COARSEST: int = 3
 
 
+## Stub (M4-T11).
+static func far_dot(_distance_m: float, _was_far: bool, _far_m: float) -> bool:
+	return false
+
+
 ## The ship's diameter on screen in pixels (INF when the camera is inside it).
 static func projected_px(radius_m: float, distance_m: float, fov_deg: float, viewport_height_px: float) -> float:
 	if distance_m <= radius_m:

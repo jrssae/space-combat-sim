@@ -84,6 +84,9 @@ var force_assist: bool = false:
 var running_lights: bool = true:
 	set = set_running_lights
 
+## Built lean (M4-T11). Stub: not built yet.
+var lean: bool = false
+
 var _assist_on: bool = true
 ## Whether this ship flies in the native flight batch when it can (M4-T10): on for every ship but the player's, whose
 ## `_ready` switches it off. Changing it joins or leaves the batch at once.
@@ -473,6 +476,21 @@ func _apply_hull_visuals() -> void:
 
 func is_fallback_mesh_active() -> bool:
 	return _fallback_active
+
+
+## Stub (M4-T11).
+func fallback_mesh() -> Mesh:
+	return hull_mesh_fallback.mesh
+
+
+## Stub (M4-T11).
+func set_far_dot(_on: bool) -> void:
+	pass
+
+
+## Stub (M4-T11).
+func is_far_dot() -> bool:
+	return false
 
 
 ## The splat levels this ship can draw, finest first (M3-T19).

@@ -128,3 +128,13 @@ func test_the_bias_can_reach_and_leave_the_hero_inside_its_chain() -> void:
 	assert_eq(LodSwitcherMath.applied(0, -1.0, 0, 3), 0, "and still LOD0 for the rest")
 	assert_eq(LodSwitcherMath.applied(-1, 1.0, -1, 3), 0)
 	assert_eq(LodSwitcherMath.applied(-1, -1.0, -1, 3), -1)
+
+
+func test_a_far_dot_starts_past_the_distance_and_ends_a_tenth_inside() -> void:
+	# M4-T11: past far_m a ship is a dot; once a dot, it shows its levels again only at 90 % of far_m, so it never flaps.
+	assert_false(LodSwitcherMath.far_dot(3000.0, false, 3000.0), "on the line it is not a dot yet")
+	assert_true(LodSwitcherMath.far_dot(3000.1, false, 3000.0))
+	assert_true(LodSwitcherMath.far_dot(2900.0, true, 3000.0), "a dot stays one just inside")
+	assert_true(LodSwitcherMath.far_dot(2700.0, true, 3000.0), "down to 90 %")
+	assert_false(LodSwitcherMath.far_dot(2699.0, true, 3000.0))
+	assert_false(LodSwitcherMath.far_dot(2900.0, false, 3000.0), "and no dot inside from the near side")

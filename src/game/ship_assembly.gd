@@ -27,6 +27,7 @@ const OPT_CONSOLE_OWNER: StringName = &"console_owner"
 const OPT_IS_PLAYER: StringName = &"is_player"
 const OPT_FORCE_ASSIST: StringName = &"force_assist"
 const OPT_AI: StringName = &"ai"
+const OPT_LEAN: StringName = &"lean"
 
 
 static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D, opts: Dictionary = {}) -> Combatant:

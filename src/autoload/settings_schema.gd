@@ -113,6 +113,9 @@ const ENTRIES: Dictionary = {
 	# M4-T09
 	&"ai_nearest_static_k": {"type": TYPE_INT, "default": 4, "min": 0, "max": 32,
 		"doc": "An AI ship avoids its nearest this many rocks and mines within 5 km (M4-T09); they are never among its contacts; 0 = none"},
+	# M4-T11
+	&"far_ship_dot_m": {"type": TYPE_FLOAT, "default": 3000.0, "min": 500.0, "max": 50000.0,
+		"doc": "Past this distance from the camera an AI ship is drawn as a dot: no splats, proxy, plumes or markers (M4-T11); it shows its detail again a tenth inside"},
 }
 
 ## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current

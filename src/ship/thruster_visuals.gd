@@ -1,5 +1,5 @@
 class_name ThrusterVisuals
-extends Node3D
+extends MultiMeshInstance3D
 ## Thruster exhaust plumes (architecture §7.1): one per pod main nozzle, per pod retro nozzle and per cosmetic RCS
 ## nozzle. A plume is a `Node3D` at the nozzle's hardpoint position whose local +Y axis is the nozzle's `exhaust`
 ## direction, so it comes out of the nozzle and points the way the gas goes whatever the camera does (the glows used to
@@ -76,6 +76,8 @@ const MIN_RADIUS_FRACTION: float = 0.6
 @export var smoothing_s: float = 0.08
 ## Plumes with a smoothed level under this are hidden.
 @export var hide_below: float = 0.01
+## Stub (M4-T11).
+var instanced: bool = false
 
 static var _cone_mesh: ArrayMesh = null
 static var _core_mesh: QuadMesh = null
@@ -145,6 +147,26 @@ func cone(index: int) -> MeshInstance3D:
 ## The core disc node of the plume at `index`.
 func core(index: int) -> MeshInstance3D:
 	return _cores[index]
+
+
+## Stub (M4-T11).
+func glow_shown(index: int) -> bool:
+	return _plumes[index].visible
+
+
+## Stub (M4-T11).
+func plume_material() -> Material:
+	return null
+
+
+## Stub (M4-T11).
+func instance_transform(_index: int) -> Transform3D:
+	return Transform3D()
+
+
+## Stub (M4-T11).
+func instance_color(_index: int) -> Color:
+	return Color()
 
 
 ## Smoothed level 0..1 of the plume at `index`; what its length, radius and alpha are drawn from.

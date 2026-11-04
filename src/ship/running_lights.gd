@@ -1,5 +1,5 @@
 class_name RunningLights
-extends Node3D
+extends MultiMeshInstance3D
 ## A ship's running lights in the scene (architecture §7.3, M3-T27): three markers built once, and the ship's own lights handed to its
 ## splat nodes. A thin adapter over `NavLights`. It holds no `Light3D` (the scene's 8 hold) and does nothing per frame: it changes only
 ## when the state or a setting does. The markers ride with the interpolated hull as children of the ship, hide with it when it is
@@ -10,6 +10,9 @@ const MARKER_SHADER: Shader = preload("res://assets/shaders/running_light_marker
 # Every ship shares one quad and one material per colour, so markers batch.
 static var _quad: QuadMesh = null
 static var _materials: Dictionary[Color, ShaderMaterial] = {}
+
+## Stub (M4-T11).
+var instanced: bool = false
 
 var _ship: Ship = null
 var _markers: Array[MeshInstance3D] = []
@@ -36,6 +39,27 @@ func setup(ship: Ship) -> void:
 ## The marker nodes: port, starboard, top.
 func markers() -> Array[MeshInstance3D]:
 	return _markers
+
+
+## Stub (M4-T11).
+func marker_count() -> int:
+	return _markers.size()
+
+
+## Stub (M4-T11).
+func marker_position(index: int) -> Vector3:
+	return _markers[index].position
+
+
+## Stub (M4-T11).
+func marker_tint(index: int) -> Color:
+	var t: Vector3 = (_markers[index].material_override as ShaderMaterial).get_shader_parameter(&"tint")
+	return Color(t.x, t.y, t.z)
+
+
+## Stub (M4-T11).
+func markers_shown() -> bool:
+	return is_visible_in_tree() and not _markers.is_empty() and _markers[0].visible
 
 
 ## Brings the markers and the splat nodes' own lights to the ship's state and the settings.
