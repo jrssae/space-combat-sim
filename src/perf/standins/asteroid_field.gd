@@ -3,7 +3,7 @@ extends Node3D
 ## An asteroid field stand-in (M4-T07, Q19): bench-only, built by code with no assets, replaced by M14's fields. One
 ## `MultiMeshInstance3D` draws every rock and each rock's collision is a static sphere body made through `PhysicsServer3D` by
 ## RID, so no mesh or physics node exists per rock. The contact scan and the hit and ram resolvers see each rock as a row of
-## `StaticRows` (M4-T29, §17.12), registered once when the field is built (kind `STATIC`, neutral, the body's RID id) and
+## `StaticRows` (M4-T29, §17.16), registered once when the field is built (kind `STATIC`, neutral, the body's RID id) and
 ## removed with the bodies: an obstacle for every side, hit by bolts and rammed by ships, never walked a tick.
 ##
 ## Spawn it with `WorldFrame.spawn` (it is shiftable, so its multimesh follows a rebase) and pass that world to `build`, so

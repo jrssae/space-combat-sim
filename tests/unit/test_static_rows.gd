@@ -1,5 +1,5 @@
 extends GutTest
-## The store of rows with no node (M4-T29, architecture §17.12): rocks by RID and mines, registered once, moved only by their
+## The store of rows with no node (M4-T29, architecture §17.16): rocks by RID and mines, registered once, moved only by their
 ## own world's rebase, and read by the contact scan, the hit resolver and the ram resolver without a walk a tick. The solid
 ## rows (rocks: bolts hit them, ships ram them) are kept apart from the mines and rebuilt only when a solid row changes.
 

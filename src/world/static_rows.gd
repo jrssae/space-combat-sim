@@ -1,6 +1,6 @@
 class_name StaticRows
 extends RefCounted
-## Things in the world with no node of their own (M4-T29, architecture §17.12): an asteroid field's rocks (by RID) and a mine
+## Things in the world with no node of their own (M4-T29, architecture §17.16): an asteroid field's rocks (by RID) and a mine
 ## belt's mines. Each is registered once and removed once, and no tick walks them: the contact scan appends them as rows, and
 ## the hit and ram resolvers keep the solid ones (rocks: bolts hit them, ships ram them) in a grid built only when one changes.
 ## A row belongs to the `WorldFrame` it was registered with (its position is in that frame) and moves only on that world's

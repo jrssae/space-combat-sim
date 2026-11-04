@@ -24,7 +24,7 @@ extends Node
 ## Only the pairs `RamBroadPhase` finds near each other this tick, and the pairs Jolt holds in contact, are looked at (M4-T03,
 ## §17.3): any other pair could neither sweep into each other nor be kept touching, so skipping it changes nothing.
 ##
-## Rocks (M4-T29, §17.12) are `StaticRows` with no node: a grid of them is kept between ticks (built again only when a rock
+## Rocks (M4-T29, §17.16) are `StaticRows` with no node: a grid of them is kept between ticks (built again only when a rock
 ## changes) and each ship asks it for the rocks it could reach this tick. A rock is a prop to the swept test (any touch rams,
 ## a sphere of its radius, a mass nothing moves), so a ship that flies into one takes the whole closing speed.
 ##

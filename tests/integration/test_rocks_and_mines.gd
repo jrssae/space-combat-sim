@@ -1,5 +1,5 @@
 extends GutTest
-## Rocks and mines as static rows (M4-T29, architecture §17.12, Q27). T07's asteroids and T12's mines are rows with no node:
+## Rocks and mines as static rows (M4-T29, architecture §17.16, Q27). T07's asteroids and T12's mines are rows with no node:
 ## each is registered once (`StaticRows`), moved only by its own world's rebase, and no per-tick path walks them. Bolts still
 ## hit rocks and ships still ram them, through a kept grid in the hit and ram resolvers; a mine leaves the rows when it goes
 ## off and comes back when it is laid again. A side knows its own mines and steers clear of them; an enemy's are hidden from

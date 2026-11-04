@@ -2385,3 +2385,57 @@ src/combat/hit_resolver.gd             + a beam is retired after the resolve tha
   a hostile, never a friend, hurts every hull in its blast and is gone, checks every third tick and is laid again, a rebase moves
   the mines), `test_bench_layout` (the belts hold the mix per side, on their arcs, clear of every ship, seeded) and `test_bench`
   (a battle run counts beams, missiles and mines).
+
+### 17.16 Rocks and mines as static rows (T29)
+
+```
+src/world/static_rows.gd            StaticRows: the rows with no node (rocks by RID, mines), registered once, moved by their world's rebase
+src/combat/hit_broad_phase.gd       + keep / kept_pairs: hulls that stay put kept in a grid of their own between calls
+native/src/hit_sweep.rs             + ScsHitSweep.keep / kept_pairs, the same grid natively
+native/src/contact_field.rs         + set_friendly_row; statics(..., faction, ...) hides other sides' mines (Q27)
+```
+
+- **What it ends.** T07 gave each rock a bare marker node with a `Damageable`, so the contact scan's members, the hit resolver's
+  gather and the ram resolver's gather walked 1 000 rock hulls every tick (the ram resolver built a Dictionary for each), and the
+  rocks were contacts that filled turrets' and fighters' lists. Measured on T29's base: about 8.5 ms a tick at `typical` 58 and
+  10 ms at `battle` 100. Now no rock and no mine has a node, and no per-tick path walks them.
+- **The store.** `StaticRows` (static, like `ContactScan`'s caches) keeps id, position, radius, faction, `BodyKind` and owning
+  world per row, in registration order. `register` and `unregister` (or `unregister_many`, one pass) are the only ways in and
+  out; `ContactScan.register_static` and its siblings now call them, so T09's API is unchanged. `version` changes with any row;
+  `solid_version` only when a solid row (kind `STATIC`) does, so a mine coming and going never rebuilds the rocks' grids. A row
+  belongs to the `WorldFrame` it was registered with: `WorldFrame.rebase` calls `ContactScan.shift_statics(shift, self)` (T09's
+  line), which moves only that world's rows, once. Ids are unique and never instance ids: a rock's is its body's RID id, a mine's
+  comes from `StaticRows.new_id` (`rid_allocate_id`, so no RID shares it either). `registrations` and `solid_builds` are the work
+  counts the tests read.
+- **Rocks.** `AsteroidField.build(rocks, space, world)` registers each rock (kind `STATIC`, neutral, its radius) as it makes the
+  RID body, and `free_bodies` removes the rows with the bodies. The field keeps only its multimesh node; `on_rebased` still moves
+  the RID bodies (a node rebase does not reach them), the rows move with the world.
+- **Mines.** `MineStandin` registers every mine in play (kind `MINE`, its layer's faction, the trigger's 50 m as its radius, the
+  director's world) when the belts are laid; a mine that goes off is unregistered at once, and laid again 10 s later it is
+  registered again with the same id at its place. Leaving the tree (`remove_mines`, the director's `clear`) unregisters the
+  rest. Mines are not solid: bolts and rams pass them, as before; the mine's own trigger is what sets it off.
+- **The scan.** Both paths append the static rows whole after the node rows (`append_array` of `StaticRows`' columns and of
+  constant columns cached per `version`), so the GDScript reference does not walk them either; the registry gets
+  `set_statics` only when `version` changes. Rows of kind `STATIC` and `MINE` stay out of every contact list (T09); turrets'
+  retargeting and the fighters' nearest-k no longer see rocks at all.
+- **Mines by faction (Q27).** `statics_for(own, at, faction, k)` keeps a rock for everyone and a mine only when its faction is
+  friendly to the asking one (its own included, `Factions.relation` FRIENDLY): a side steers round its own and its friends'
+  mines and never knows where an enemy's are until they go off (and then they are gone from the rows). The GDScript path builds
+  a per-faction flag row once per scan; the native field gets the same flags per faction (`set_friendly_row`, built from the
+  same relations, like T05's hostile rows) and filters inside `statics`, so the two give the same statics bit for bit
+  (`test_contact_field`, four sides with one friendly pair).
+- **Bolts on rocks.** `HitBroadPhase.keep(mids, reach)` holds hulls that do not move; `kept_pairs(bolt_mids, bolt_reach)` gives
+  exactly what `pairs` would with those hulls, in the same `bolt * hulls + hull` order, from the same five-level grid built once
+  (on each path when first asked after a `keep`). The hit resolver keeps `StaticRows.solid()` there and calls `keep` again only
+  when that changes (a rock added, removed or rebased). Per bolt it takes the earliest of its node-hull hit and its rock hit
+  (a node hull on a tie). A rock is a sphere of its radius swept by the bolt's hit radius (`SweepMath.segment_sphere`, which is
+  what the old marker's capsule of zero length did); any bolt of another faction stops on it (the marker's `hit_by_anyone`),
+  is spent, throws sparks and emits `hit_resolved` with the rock's row id as the target; nothing breaks. The impact flash that
+  hung on the marker is gone (there is no node to hang it on). `hulls_last_tick` and `static_pairs_visited` are the work counts.
+- **Ships into rocks.** The ram resolver keeps its own kept grid of the solid rows. Each tick every rigid hull asks it for the
+  rocks within half its move plus its bounding radius plus `RamBroadPhase.MARGIN_M`; each candidate goes through the same swept
+  test as a prop (any touch rams), with a hull per rock made on first contact and kept (a sphere of the rock's radius,
+  invulnerable, `SOLID_MASS_KG`), so the outcome is the old marker's: the ship takes the whole closing speed, the rock nothing.
+  Jolt's own bounce off the RID body is unchanged (its contacts never named a rock: the RID body has no object id).
+- **Why nothing changes for fighters.** Furball, spread and transit have no rocks and no mines, so the rows are empty, the kept
+  grids answer nothing and every contact list is what it was; the seeded outcomes match the base with `perf_native` on and off.

@@ -174,7 +174,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T26 | Resolution scaling for the big battle (only if the GPU binds at the fullscreen check; Q20) | T11 | Sonnet | One setting and an automatic step on `RenderScale`; the look (H) | R | not started |
 | T27 | Render comparison: Gaussian splats against meshes, in the 500 battle and a Babylon 5 station scene (Q24) | T07, T11, T12 | Opus | Measures whether splats or meshes carry the big battles; GPU numbers by the agent, the look (H) | R, M | not started |
 | T28 | Running lights stay point-sized and dim by the inverse square (maintainer, 2026-11-03) | none | Sonnet | Lights in vacuum do not scatter into globes | R | done |
-| T29 | Rocks and mines as static rows: T07's asteroids registered as statics, T12's mines as faction-owned mine rows; avoidance sees rocks and its own side's mines only (Q27) | T09, T12 | Opus | Takes the rocks' 24 to 49 ms per tick out of the GDScript paths | G, N | not started |
+| T29 | Rocks and mines as static rows: T07's asteroids registered as statics, T12's mines as faction-owned mine rows; avoidance sees rocks and its own side's mines only (Q27) | T09, T12 | Opus | Takes the rocks' 24 to 49 ms per tick out of the GDScript paths | G, N | done (2026-11-03, in a worktree on `9a3f525`; Cycle log, M4-T29) |
 
 ### M4-T01 Benchmark harness, budget and baseline
 
@@ -1053,6 +1053,30 @@ No question is open.
 - **Done when:** the Cycle log entry "T27 render comparison" holds both scenes' tables, a short reading (which path is cheaper,
   where each binds, what a hybrid of near splats and far meshes would cost), and a recommendation for the maintainer; the
   screenshots are listed for (H).
+
+##### M4-T29 Rocks and mines as static rows
+
+- **Track:** G and N. **Agent:** Opus. **Depends on:** T09, T12.
+- **Goal:** T07's 1 000 asteroids and T12's mines leave the per-tick GDScript paths: each registered once as a row with no node,
+  moved only by its world's rebase; bolts still stop on rocks and ships still ram them; avoidance sees rocks and its own side's
+  mines only (Q27).
+- **Architecture:** §17.16 (§17.12 to §17.15 are assigned to T14, T15, T21 and T26).
+- **Done (2026-11-03, worktree on `9a3f525`; Cycle log, "M4-T29"):** `StaticRows` (`src/world/static_rows.gd`) holds the rows
+  (rocks by RID id, kind `STATIC`, neutral; mines from `StaticRows.new_id`, kind `MINE`, their layer's faction, the trigger's
+  50 m) with `register`, `unregister`, `unregister_many` and `shift`; `ContactScan.register_static` and its siblings call it.
+  `AsteroidField` registers each rock as it makes the RID body and keeps no marker node; `MineStandin` registers its mines when
+  laid, unregisters one when it goes off and registers it again when it is laid again. Both scan paths append the rows whole.
+  `statics_for` hides another side's mines on both paths (`ScsContactField.set_friendly_row`, bit for bit). The hit and ram
+  resolvers keep the rocks in a grid of their own (`HitBroadPhase.keep` and `kept_pairs`, native `ScsHitSweep.keep` and
+  `kept_pairs`), built again only when a rock changes: a bolt stops on the first rock or hull it reaches, a ship that touches a
+  rock is rammed as by a prop. Work counts: `StaticRows.registrations` and `solid_builds`, the resolvers' `hulls_last_tick` and
+  `static_pairs_visited`.
+- **As built, where it differs from the plan:**
+  - A friendly side's mines count as known too (`Factions.relation` FRIENDLY, which includes the side itself), so allies share
+    their minefields. Q27 says "its own"; with today's tables only a side itself is friendly to it.
+  - A rock hit no longer adds an impact flash (there is no node to hang it on); sparks and `hit_resolved` (with the rock's row id)
+    stay.
+  - The mines' rows are as big as the trigger (50 m), so a side steers clear of the trigger, not of the 3 m body.
 
 #### Architecture subsections this plan assigns
 
@@ -2350,6 +2374,42 @@ paint lit as a lit side. Screenshots for the maintainer: `/tmp/m4_t11_before_bat
 `/tmp/m4_t11_after_held_markers.png` (the 13-ship fight from the cockpit, the markers per instance).
 
 **Tests** (focused, Q10): 41 GUT files run alone on `50d8b43`, each with 0 failing and 0 pending: `test_ship_nodes` 11, `test_far_dots` 12, `test_lod_switcher_math` 13, `test_hull_depth_proxy` 12, `test_ally_pool` 21, `test_ship_pool` 21, `test_running_lights_in_play` 21, `test_running_lights` 24, `test_running_light_dimming` 7, `test_lod_in_play` 5, `test_hero_lod` 11, `test_splat_budget_in_play` 8, `test_thruster_visuals` 28, `test_ship_lights` 14, `test_multi_ship` 17, `test_ship_scene` 27, `test_rebase_in_play` 8, `test_world_frame` 16, `test_flight_batch` 7, `test_flight_parity_fight` 1, `test_relight` 26, `test_cockpit_screens` 20, `test_camera_rig` 36, `test_destruction` 11, `test_respawn_in_play` 6, `test_main_scene` 11, `test_splat_pose_sync` 6, `test_last_hit_breakup` 14, `test_starfury_breakup` 11, `test_debris_pool` 13, `test_ram_damage` 15, `test_hit_resolver` 16, `test_standins` 8, `test_bench` 8, `test_ship_physics` 17, `test_wing_replenish` 13, `test_ai_think_time` 1, `test_m3_run` 2, `test_control_profiles` 32, `test_control_profile` 34, `test_control_profile_store` 15; 599 passing in all. They are the new and changed files, every file that covers the ship, its lights, plumes, proxy, levels, the pool, the rebase, the flight batch and its parity fight, destruction and the bench, and AC13's files (`test_ai_think_time`, `test_m3_run`, the control profiles). No Python or Rust changed. The full suite runs on CI after the push.
+
+### M4-T29 (2026-11-03): rocks and mines as static rows
+
+In its own worktree on `9a3f525` (so only this change), single seeded runs (`seed=1`, 5 s warm-up, 10 s measured, editor build,
+headless, both bench locks, pinned to cores 0-11, load 1.0 to 1.4), the before on an export of the base with its own library,
+the after on `801d895`. Reports under `reports/perf/M4-T29_before/` and `M4-T29_after/`. Means in ms per tick; the tick's
+median and p99.
+
+| run | tick median before | after | p99 before | after | scan before | after | standins before | after | hit before | after | ram before | after |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| typical 58 | 15.34 | 7.89 | 18.57 | 9.77 | 3.39 | 2.12 | 2.41 | 0.45 | 1.53 | 0.45 | 4.09 | 0.62 |
+| typical 58, no rocks | 6.86 | 7.05 | 8.08 | 8.40 | 1.37 | 1.60 | 0.41 | 0.42 | 0.34 | 0.35 | 0.55 | 0.55 |
+| battle 100 | 23.03 | 14.16 | 27.31 | 17.93 | 5.64 | 4.17 | 4.45 | 1.22 | 1.96 | 0.90 | 4.53 | 1.14 |
+| battle 100, no rocks | 12.93 | 13.07 | 16.37 | 17.00 | 3.16 | 3.54 | 1.18 | 1.17 | 0.66 | 0.69 | 0.92 | 0.92 |
+| battle 300 | 56.38 | 43.14 | 72.99 | 61.09 | 14.88 | 12.65 | 12.56 | 4.94 | 4.09 | 3.03 | 6.54 | 3.35 |
+| battle 300, no rocks | 38.72 | 40.63 | 55.35 | 57.18 | 10.50 | 11.57 | 4.73 | 4.78 | 2.27 | 2.33 | 2.92 | 2.94 |
+
+- **What the rocks cost now.** The 1 000 rocks added 8.5 ms a tick at typical 58, 10.1 ms at battle 100 and 17.7 ms at battle
+  300 on the base (the ram resolver's Dictionary per rock, the hit resolver's and the registry's walk of the rock hulls, and
+  turrets' retargeting through contact lists full of rocks, 2 ms of the stand-ins' stage). After: 0.84, 1.09 and 2.51 ms. What
+  is left is native and per query, not a walk: the registry's snapshot copies the 1 000 rows into the scan every tick, the
+  fighters' `statics_for` look through the field's 5 km cells near the slab, and bolts and ships near rocks are swept against
+  them (hit +0.1 to 0.7 ms, ram +0.1 to 0.4 ms). T15's core, which keeps rows between ticks, removes the copy.
+- **The no-rocks runs are 0.14 to 1.9 ms slower** (scan 0.23, 0.38 and 1.07 ms): the mines (100, 100 and 300) are now static
+  rows of the scan, and fighters near their own belts get them as statics and steer round them (Q27). That is new behaviour
+  in the battle layouts, as Q27 asks; without it the mines cost the scan nothing because nobody knew about them.
+- **The quick check** (furball and spread, no rocks, no mines) is unchanged: the budget held to 50 ships in both, before
+  (`M4-T29_before_quick`, load 1.27) and after (`M4-T29_after_quick`, load 1.14); furball 50 5.69 against 5.79 ms, spread 50
+  6.13 against 6.02 ms; both under 30 FPS at 300.
+- **Seeded outcomes** (`M4-T29_outcome_base_*`, `M4-T29_outcome_after_*`, fresh processes, `perf_native` on and off):
+  `bench furball 25 10 seed=1` and `bench spread 50 6 seed=2` give the same `state ai` ship lines, behaviour mix (16 attack and
+  9 evade; 31 and 19), mean speed (70.06 and 65.11 m/s), projectiles, hits (50 and 156), last hit and ram line on the base
+  and on the change, on both paths: identical files.
+- **Work counts** (`test_rocks_and_mines`): 1 000 rocks registered once when the field is built and never again; the hit and
+  ram resolvers gather the 6 ships' hulls a tick and no rock; the solid rows gathered once over 30 ticks; at most 52 rock pairs
+  tested in a tick for 40 bolts falling onto rocks; a bolt 30 km from the slab tests no rock, one inside it 1 of 1 000.
 
 ## Definition of done (M4)
 

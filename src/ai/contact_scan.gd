@@ -102,7 +102,7 @@ var _field: Object = null  # the native field over this scan's arrays, made on t
 var _field_rejected: bool = false  # the field refused this scan's arrays (they differ in length): GDScript answers it
 var _field_rows: Dictionary = {}  # faction -> true once the field has its hostility row
 var _friend_rows: Dictionary = {}  # faction -> true once the field knows whose mines it sees (Q27)
-var _friends: Dictionary = {}  # faction -> PackedByteArray, 1 for each row it treats as friendly (GDScript statics)
+var _friends: Dictionary = {}  # faction -> PackedByteArray, 1 for each mine it knows (GDScript statics)
 # A built scan (M4-T09) reads hull and selection when a contact is first handed out: the hulls' instance ids (0: none)
 # and the selections drivers changed after the scan was built (body id -> the selection it had then).
 var _live: bool = false
@@ -758,7 +758,7 @@ func _relation(faction: StringName, other: StringName) -> Factions.Relation:
 	return known[other]
 
 
-# 1 for each body whose faction is friendly to `faction` (its own included): whose mines it knows (GDScript statics).
+# 1 for each mine whose side is friendly to `faction` (its own included): the mines it knows (GDScript statics).
 func _friends_for(faction: StringName) -> PackedByteArray:
 	if _friends.has(faction):
 		return _friends[faction]

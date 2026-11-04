@@ -7,7 +7,7 @@ extends Node3D
 ## in its place after `RELAY_S`, so a belt holds the mix's count over a run.
 ##
 ## Spawn it with `WorldFrame.spawn` (identity basis) after setting `world`: it is shiftable, so its mines follow a rebase with
-## it. Every mine in play is also a row of `StaticRows` (M4-T29, §17.12) of kind `MINE`, owned by its layer's faction, as big
+## it. Every mine in play is also a row of `StaticRows` (M4-T29, §17.16) of kind `MINE`, owned by its layer's faction, as big
 ## as its trigger and registered with `world`, so that world's rebase moves it: its own side's ships steer round it, other
 ## sides never see it (Q27). A mine leaves the rows when it goes off and comes back when it is laid again.
 
