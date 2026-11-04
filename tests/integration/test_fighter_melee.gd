@@ -2,11 +2,12 @@ extends GutTest
 ## A seeded melee (M4-T14 fix round 1, Q33): eight AI fighters flung at each other for 4 s, every one of them in Jolt contacts and
 ## rams. The digest of every ship's pose, spin and hull every 20 ticks plus each ram is the base's byte for byte (taken from the
 ## tree before the collision layers, `ce35406`), so Jolt's contact response and the ram damage between fighters are unchanged.
-## If a later change moves the flight maths on purpose, take a new digest and say so in the Cycle log.
+## If a later change moves the flight maths on purpose, take a new digest and say so in the Cycle log. M4-T31 took a new one: the
+## Starfury's re-centring moved its collision boxes and centre of mass by under 2 mm (Cycle log, M4-T31).
 
-const BASE_CONTACTS: int = 2966
+const BASE_CONTACTS: int = 2959
 const BASE_RAMS: int = 11
-const BASE_DIGEST_SHA256: String = "b5854a2824cceafd933ae01846283ab495afe25b88084042201a07f5b8338aff"
+const BASE_DIGEST_SHA256: String = "505025d712ae53672e5a12d61eba19171e2edd41310cd02fce368a991bc7329d"
 
 
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
@@ -18,9 +19,14 @@ var ram_lines: PackedStringArray = []
 
 func test_digest() -> void:
 	Settings.set_value(&"ram_damage", true)
+	# Its own physics space: Jolt's result depends on every body the space has held, so a shared space after other tests drifts.
+	var own_space := SubViewport.new()
+	own_space.own_world_3d = true
+	own_space.world_3d = World3D.new()
+	add_child_autofree(own_space)
 	world = WorldFrame.new()
 	world.name = "World"
-	add_child_autofree(world)
+	own_space.add_child(world)
 	projectiles = Node3D.new()
 	projectiles.name = "Projectiles"
 	world.add_child(projectiles)
