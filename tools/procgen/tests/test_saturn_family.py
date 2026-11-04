@@ -291,8 +291,18 @@ class SaturnVariantChecks:
         (x, y, end) = sp.FWD_LOWER_BAR[1]
         mid = 0.5 * sum(sp.DRUM_FRAME_Z)
         for z, half in ((end, v[v[:, 2] < mid]), (sp.FRAME_MIRROR_Z - end, v[v[:, 2] > mid])):
+            self.assertGreater(len(half), 0, f"a truss drum neck on that side of the drum frame (z {z:.1f})")
             self.assertTrue(float(half[:, 2].min()) <= z <= float(half[:, 2].max()), f"a neck reaches the bar's end at z {z:.1f}")
             self.assertLessEqual(float(np.hypot(x - sp.TRUSS_DRUM[0], y - sp.TRUSS_DRUM[1])), sp.TRUSS_DRUM_NECK_R, z)
+
+    def test_the_aft_frame_lands_in_the_first_domes_brackets(self) -> None:
+        if saturn.VARIANTS[self.ASSET_ID].cargo == "stack":
+            self.skipTest("the Saturn 3 has its truss behind the drum frame, no aft frame")
+        pieces = {p.name: p for p in saturn.with_twins(saturn.assemble(saturn.VARIANTS[self.ASSET_ID], saturn.EA_CIVILIAN))}
+        brackets = next(p for name, p in pieces.items() if name.endswith("front_dome_brackets") and name.startswith("s1_"))
+        start = float(brackets.part.mesh.bounds()[0][2])
+        for name in ("frame_aft_centre", "frame_aft_upper_r"):
+            self.assertGreater(float(pieces[name].part.mesh.bounds()[1][2]), start, f"{name} reaches the brackets at z {start:.2f}")
 
     def test_the_painted_mesh_is_the_fallback_mesh(self) -> None:
         # The ship as the game draws it (ships are meshes, the 2026-11-04 directive): the fallback mesh's triangles and paint.

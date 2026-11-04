@@ -477,11 +477,15 @@ def _beam(points: Sequence[Sequence[float]], section: tuple[float, float], mater
 
 def _frame_members(style: Style, name: str, mirror_z: float | None = None) -> list[Piece]:
     """The forward frame's members; with ``mirror_z`` the same members reflected to z' = mirror_z - z (the aft frame, which
-    the reference builds as the forward one's mirror image about the drum frame's middle)."""
+    the reference builds as the forward one's mirror image about the drum frame's middle), their neck ends carried on to
+    the first cylinder's dome brackets (``AFT_FRAME_END_Z``), where the reference's aft members land."""
     hull = style.material("hull")
 
+    def mirrored(z: float) -> float:
+        return AFT_FRAME_END_Z if z < NECK_END_Z else mirror_z - z
+
     def at(points: Sequence[Sequence[float]]) -> list[tuple[float, float, float]]:
-        out = [(float(x), float(y), float(z) if mirror_z is None else mirror_z - float(z)) for x, y, z in points]
+        out = [(float(x), float(y), float(z) if mirror_z is None else mirrored(float(z))) for x, y, z in points]
         return out if mirror_z is None else out[::-1]
 
     a, b, r = FWD_TUBE
@@ -526,6 +530,7 @@ def side_boxes(style: Style, k: int, name: str) -> list[Piece]:
     return [_piece(f"side_box_{name}", Mesh.concatenate(meshes), solid, side=RIGHT, mass_kg=6_000.0, collision=[hit])]
 
 
+AFT_FRAME_END_Z = 61.3  # inside the first dome's bracket ring (z 61.05 on): the aft members' landing
 FRAME_MIRROR_Z = 92.1  # the plane the reference reflects its frames in (branches, posts, lower bar): about the drum frame's middle
 
 

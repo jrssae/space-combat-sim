@@ -140,12 +140,12 @@ Per variant:
 | `saturn_8_tanker` | 258.5 | 258.48 | `dorsal_mid` (0, +9.0, 149.4) | (±25.6, -13.53, 99.4) | (0, +8.9, 75.0), lamp (0, +21.5, 149.4), range 78 m | `bow`, `spine_1`, `junction`, `spine_2`, `engine`, `tanks_1l`, `tanks_1r`, `tanks_2l`, `tanks_2r` |
 | `saturn_3_freighter` | 96.8 | 96.80 | none (Q19, Q20) | the lower pods' outboard ends (±46.8, -5.46, 79.7) | the top pod's ridge (0, +21.03, 74.08), lamp (0, +27.8, 79.7), range 36 m | `bow` (with the cross-beam and blocks), `pod_top`, `pod_l`, `pod_r`, `engine` (with the truss behind the drum frame) |
 
-Collision, per part (as built after T12's fix round): the disc a box 28.26 x 7.6 x 27.63 m with the antenna inside it; each
+Collision, per part (the main shapes; `hardpoints.json` has every primitive): the disc a box 28.26 x 7.6 x 27.63 m with the antenna inside it; each
 frame (forward and aft) a box 9.56 x 11.3 x 12.0 m round its members and a box round each side box and plate; the drum
 frame a box 21.7 x 19.3 x 8.2 m; each hull cylinder or tank a capsule of radius 8.77 m (it covers the 17.53 x 17.27 m polygon) and
-height 75.5 m along z; each pod a box 35.2 x 17.22 x 44.8 m (turned for the Saturn 3) that also wraps its rail and blocks; each arm
+height 81.21 m along z (with its domes); each pod a box 35.2 x 17.22 x 44.8 m (turned for the Saturn 3) that also wraps its rail and blocks; each arm
 a box 13.0 x 4.5 x 6.0 m; the engine section a capsule of radius 4.8 m and height 22.6 m; the Saturn 8 transport's
-junction a box 13.3 x 13.3 x 24.5 m; the Saturn 8 tanker's three junction modules boxes of 18.3 x 16.8 x 19.1 m.
+junction a box 15.36 x 13.3 x 24.52 m; the Saturn 8 tanker's three junction modules boxes of 18.3 x 16.8 x 19.1 m.
 
 The Saturns' thrust line is the spine axis, so their centre of mass is trimmed onto it although the cargo hangs below.
 
@@ -299,16 +299,16 @@ rows.
 
 | Ship | Part | Top IoU | Side IoU | Front IoU | Length | Width | Height | Splats: min coverage / min precision | Date |
 |---|---|---|---|---|---|---|---|---|---|
-| `saturn_4_transport` | whole ship (`--model-offset 0,-3.643,0`) | 0.958 | 0.967 | 0.931 | 1.000 | 1.000 | 1.026 | 0.972 (side) / 1.000 | 2026-11-04 |
+| `saturn_4_transport` | whole ship (`--model-offset 0,-3.643,0`) | 0.958 | 0.966 | 0.931 | 1.000 | 1.000 | 1.026 | 0.972 (side) / 1.000 | 2026-11-04 |
 | `saturn_4_transport` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 0.967 (side) / 1.000 | 2026-11-04 |
-| `saturn_4_transport` | transport section (model 49.3-149.3, asset 49.3-149.3) | 0.955 | 0.983 | 0.917 | 1.000 | 1.000 | 1.026 | 0.972 (side) / 1.000 | 2026-11-04 |
+| `saturn_4_transport` | transport section (model 49.3-149.3, asset 49.3-149.3) | 0.955 | 0.984 | 0.917 | 1.000 | 1.000 | 1.026 | 0.972 (side) / 1.000 | 2026-11-04 |
 | `saturn_4_tanker` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 0.961 (side) / 1.000 | 2026-11-04 |
-| `saturn_4_tanker` | tank group (tanker model 49.3-136.0, asset 49.3-136.0: the tanks on both sides, the model's junction and the asset's engine left out) | 0.986 | 0.976 | 0.938 | 1.000 | 1.000 | 1.026 | 0.960 (side) / 1.000 | 2026-11-04 |
+| `saturn_4_tanker` | tank group (tanker model 49.3-136.0, asset 49.3-136.0: the tanks on both sides, the model's junction and the asset's engine left out) | 0.987 | 0.976 | 0.938 | 1.000 | 1.000 | 1.026 | 0.960 (side) / 1.000 | 2026-11-04 |
 | `saturn_8_transport` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 0.967 (side) / 1.000 | 2026-11-04 |
-| `saturn_8_transport` | transport section 1 (Saturn 4 model 49.3-137.1, asset 49.3-137.1: the aft frame to the cylinder's end on both sides) | 0.955 | 0.989 | 0.923 | 1.000 | 1.000 | 1.005 | 0.969 (side) / 1.000 | 2026-11-04 |
+| `saturn_8_transport` | transport section 1 (Saturn 4 model 49.3-137.1, asset 49.3-137.1: the aft frame to the cylinder's end on both sides) | 0.955 | 0.990 | 0.923 | 1.000 | 1.000 | 1.005 | 0.969 (side) / 1.000 | 2026-11-04 |
 | `saturn_8_transport` | transport section 2 and engine (Saturn 4 model 61.65-149.3, asset 161.65-249.3: the cylinder's front to the engine on both sides) | 0.967 | 0.991 | 0.923 | 1.000 | 1.000 | 1.005 | 0.972 (side) / 1.000 | 2026-11-04 |
 | `saturn_8_tanker` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 0.963 (side) / 1.000 | 2026-11-04 |
-| `saturn_8_tanker` | tank section 1 (tanker model 49.3-146.2, asset 49.3-149.3; the model's sections are 96.96 m apart, Q16's 100 m) | 0.946 | 0.935 | 0.917 | 1.032 | 0.993 | 1.012 | 0.959 (side) / 1.000 | 2026-11-04 |
+| `saturn_8_tanker` | tank section 1 (tanker model 49.3-146.2, asset 49.3-149.3; the model's sections are 96.96 m apart, Q16's 100 m) | 0.947 | 0.935 | 0.917 | 1.032 | 0.993 | 1.012 | 0.959 (side) / 1.000 | 2026-11-04 |
 | `saturn_8_tanker` | tank section 2 and engine (tanker model 146.2-255.1, asset 149.3-258.5) | 0.980 | 0.971 | 0.916 | 1.003 | 0.993 | 1.012 | 0.957 (side) / 1.000 | 2026-11-04 |
 | `saturn_3_freighter` | lead ship (Saturn 4 model z 0-41.5, asset 0-41.5) | 0.964 | 0.905 | 0.946 | 1.000 | 1.000 | 0.990 | 0.975 (side) / 1.000 | 2026-11-04 |
 | `saturn_3_freighter` | pod group (Saturn 3 model 41.5-91.1 scaled 1.244, 1.093, 1; asset 41.5-96.8): expected exemption (Q23) | 0.768 | 0.644 | 0.927 | 1.114 | 0.989 | 1.022 | 0.975 (side) / 1.000 | 2026-11-04 |
@@ -323,7 +323,8 @@ rows.
 planned truss: the forward frame is an upper tube and an upper beam a side (the beam forking at z 37 into two bars falling
 to the drum frame's middle), a centre beam forking into two bars rising to it, and a lower bar falling to the truss drum,
 with a cross of thin plates ahead of the top drum and a box and an upright plate beside it; the aft frame is the forward
-frame's mirror about the plane the reference reflects its frames in (z' = 92.1 - z), the truss drum's neck too. The drum frame's posts are one 3.2 m plate at z 43.9 and
+frame's mirror about the plane the reference reflects its frames in (z' = 92.1 - z), the truss drum's neck too, its
+neck ends carried on to land in the first dome's bracket ring at z 61.3. The drum frame's posts are one 3.2 m plate at z 43.9 and
 48.25 with one spoke band a side to the lower drums. The disc's section is elliptic (6.0 x sqrt(1 - (r/R)^2), at least
 1.0 m), the corner wedges 2.8 m thick, the neck a box ending at z 32.6 with a 1.3 m keel block. The transport pod's
 outline is the end band's (7.74 / 17.22 / 4.73 m at the inboard face, ridge and outboard face), the body 0.8 m in. The

@@ -230,9 +230,9 @@ of the nose tip.
 | Part | Size and place |
 |---|---|
 | Hull cylinder | 17.53 m across, z 12.35 to 87.83 (75.5 m), shallow domes 5.9 m deep at both ends, a ring of radial brackets on the front dome where a truss lands |
-| Transport pods | four, two pairs at z 3.49 to 46.51 and 53.49 to 96.51 (a 6.97 m gap; half a gap at each end of the section), x ±22.03 to ±53.09, 15.93 m below to 1.33 m above the axis (centre 7.29 m below). Each pod is a flat hexagonal prism 31.06 m wide, 17.22 m tall and 43.03 m long at its end bands. Its section is a kite pointed inboard and outboard: tallest 9.84 m from the inboard face, with flat end faces 7.74 m tall inboard and 4.73 m tall outboard; between the bands the body is the same kite 0.8 m smaller (6.1 / 15.6 / 3.8 m; T12 fix round, off the sections). Both end faces are recessed behind a 1.58 m frame with ladder ribs inside, and the raised band is 3.65 m long at each end. |
+| Transport pods | four, two pairs at z 3.49 to 46.51 and 53.49 to 96.51 (a 6.97 m gap; half a gap at each end of the section), x ±22.03 to ±53.09, 15.90 m below to 1.32 m above the axis (centre 7.29 m below). Each pod is a flat hexagonal prism 31.06 m wide, 17.22 m tall and 43.03 m long at its end bands. Its section is a kite pointed inboard and outboard: tallest 9.84 m from the inboard face, with flat end faces 7.74 m tall inboard and 4.73 m tall outboard; between the bands the body is the same kite 0.8 m smaller (6.1 / 15.6 / 3.8 m; T12 fix round, off the sections). Both end faces are recessed behind a 1.58 m frame with ladder ribs inside, and the raised band is 3.65 m long at each end. |
 | Cargo arms | one under each pod's middle, at z 22.06 to 28.02 and 72.06 to 78.02: 13.0 m long (x ±9.52 to ±22.52), 6.0 m wide along z and 4.5 m deep (5.96 to 10.43 m below the axis), from the cylinder's lower flank, each with a diagonal brace from higher up the cylinder's flank to the arm's tip |
-| Pod rails | a rod 2.74 m across along each pod's inboard edge, at x ±20.25 and 7.92 m below the axis, z 4.34 to 45.72 and 54.34 to 95.72, with a 4.5 x 5.8 x 2.4 m block at each end |
+| Pod rails | a rod 2.74 m across along each pod's inboard edge, at x ±20.25 and 7.92 m below the axis, z 4.31 to 45.70 and 54.31 to 95.70 (centred on the pod), with a 4.5 x 5.8 x 2.4 m block at each end |
 
 From behind the transport is a shallow W, the cylinder on top (8.6 m above the axis) and a pod slung on each side;
 106.2 m across the pods and 24.6 m tall.
@@ -275,7 +275,7 @@ cylinders and docking clamps), not the Saturn pod; it was rendered and set aside
 | Antenna | 0 to 5.5 | |
 | Command disc | 4.9 to 32.6 | centre 19.1 |
 | Forward frame | 31.4 to 42.2 | |
-| Aft frame | 49.9 to 60.7 | to the first cylinder's front dome (61.7) |
+| Aft frame | 49.9 to 61.3 | into the first cylinder's front dome brackets (61.05 on) |
 | Drum frame | 41.9 to 50.1 | |
 | Transport section | 49.3 to 149.3 | |
 | Hull cylinder | 61.7 to 137.2 | |

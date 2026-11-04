@@ -299,7 +299,7 @@ def with_twins(pieces: Sequence[Piece]) -> list[Piece]:
 
 def chunk_joints(v: Variant) -> dict[str, np.ndarray]:
     """Where each chunk breaks away from the rest (authored frame): the drum frame's back or the first dome, a cylinder's
-    middle, the pods' inboard faces midway between their two arms, the braces' middle, a Saturn 3 pod's front face, the
+    middle, the first pod's inboard face, the braces' middle, a Saturn 3 pod's front face, the
     engine collar."""
     joints: dict[str, np.ndarray] = {"engine": np.array([0.0, 0.0, v.engine_front_z])}
     if v.cargo == "stack":
@@ -313,7 +313,8 @@ def chunk_joints(v: Variant) -> dict[str, np.ndarray]:
             mid = v.section_start(k) + 0.5 * sp.SECTION_LENGTH
             if v.cargo == "transport":
                 joints[_chunk_name("hull", k, n)] = np.array([0.0, 0.0, mid])
-                joints[_chunk_name("pods", k, n, True)] = np.array([sp.POD_INBOARD_X, 0.5 * sum(sp.ARM_Y), mid])
+                first_pod = v.section_start(k) + 0.5 * sum(sp.POD_Z[0])  # on the first pod's inboard face, by its arm
+                joints[_chunk_name("pods", k, n, True)] = np.array([sp.POD_INBOARD_X, sp.POD_CENTRE_Y, first_pod])
             else:
                 joints[_chunk_name("spine", k, n)] = np.array([0.0, 0.0, mid])
                 joints[_chunk_name("tank", k, n, True)] = np.array([0.5 * sp.LOWER_TANK[0], 0.5 * sp.LOWER_TANK[1], mid])
