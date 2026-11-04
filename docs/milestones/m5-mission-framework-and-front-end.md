@@ -426,7 +426,7 @@ whose trigger never arose). Update the column with each task's commit.
 |---|---|---|---|---|---|---|
 | T01 | A | `Game` flow, boot routing and loading | - | Opus | Changes how every run starts; must not break a single script or test | done |
 | T02 | A | Menu kit, front end and pause menu | T01 | Sonnet | Godot UI work on a clear spec | done |
-| T03 | A | Settings menu and audio buses | T02 | Sonnet | Schema-driven screen | in progress |
+| T03 | A | Settings menu and audio buses | T02 | Sonnet | Schema-driven screen | done |
 | T04 | A | Controls menu | T02 | Sonnet | Wraps the existing profile API | in progress |
 | T05 | B | Mission core: runner, script API, triggers, objectives, console | T01 | Opus | The framework M8 stands on; coroutine skipping is subtle | done |
 | T24 | A | Console command list in `info.md` and its guard test (`CLAUDE.md` rule of 2026-11-03; numbered last because it was added during the build) | T01, T02, T05 | Sonnet | A doc and one test | done |
@@ -527,6 +527,17 @@ whose trigger never arose). Update the column with each task's commit.
   and comms players on their buses; volumes from settings), `tests/unit/test_settings_schema.gd` (every entry has a known
   category), `tests/integration/test_settings_screen.gd`.
 - **Done when:** AC3; the pause menu and the front end both open it.
+- **Done (as built, 2026-11-04):** every `SettingsSchema` entry has a `category`; debug and tuning switches carry
+  `menu: false` and stay hidden (a test fails on an entry without a known category). The settings page
+  (`src/frontend/settings_screen.gd`) is built from the schema through the pure `SettingsMenuModel`: a toggle, slider or
+  option list per entry, unsaved rows marked `*`, the right panel shows the entry's description, and Apply, Revert,
+  Defaults and Back map to `Settings.save`, `revert` and `reset`. `MenuScreens.settings()` opens it from the pause menu and
+  the front end (a test each). `default_bus_layout.tres` holds Master with SFX, UI and Comms; `AudioBuses` and
+  `AudioDirector` route menu sounds to UI and radio to Comms and apply `master_volume`, `sfx_volume`, `ui_volume` and
+  `comms_volume` live. From the T02 review: the console `pause` is refused while the pause menu is open.
+  - **Review.** One fix round (sonnet): tests that both hosts open a `SettingsScreen`. Open (minor):
+    `test_changes_drive_the_audio_bus_volume` drives no bus; console `audio.volume` still sets only `sfx_volume`; Revert
+    reverts every key, not only the listed ones.
 
 ### M5-T04 Controls menu
 
