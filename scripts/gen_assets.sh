@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Generate every procedural asset into assets/generated/ (gitignored): python3 -m tools.procgen build all.
+# Generate every procedural asset into assets/generated/ (gitignored): python3 -m tools.procgen build all, four at a time
+# (M4-T30d: the textured hulls; each asset's output is the same either way).
 # Needs Python 3.11+ and NumPy; Pillow is optional (only for the fallback sky panorama PNG).
 # Extra arguments pass through, e.g. scripts/gen_assets.sh --seed 7 --out /tmp/assets.
 set -euo pipefail
@@ -15,4 +16,4 @@ if ! python3 -c 'import numpy' 2>/dev/null; then
     exit 1
 fi
 
-exec python3 -m tools.procgen build all "$@"
+exec python3 -m tools.procgen build all --jobs "${PROCGEN_JOBS:-4}" "$@"

@@ -4,7 +4,7 @@ extends Node3D
 ## (`prepare`): `SETS_PER_TYPE` complete sets (one `DebrisChunk` per chunk of the asset) per chunked asset, parked. The raider's
 ## sets serve raiders; the Starfury's (cut from its LOD1 hull, §16 D35) serve the allies and the player.
 ## `burst` takes a free set and flies it; with every set busy it makes mesh-only chunks instead (a mesh is cheap to create
-## and free, a splat node is not). Assets without chunks get generic dark shards. So the number of `GaussianSplatNode`s in
+## and free, a splat node is not). On the mesh path (M4-T30d's default) every chunk draws its textured mesh. Assets without chunks get generic dark shards. So the number of `GaussianSplatNode`s in
 ## the tree never changes while playing.
 ##
 ## This node is `World/Debris`, at the World origin, so a chunk's local position is its World position.
@@ -94,9 +94,10 @@ func prepare_chunks(asset_id: StringName, entries: Array[Dictionary], with_splat
 
 
 ## Breaks a ship up at `xform` (World-local body pose) moving at `velocity` and spinning at `angular_velocity` (World
-## frame, rad/s). `chunks` are the ship's `Hardpoints.chunks`; empty means generic shards. Returns the chunks launched.
+## frame, rad/s). `chunks` are the ship's `Hardpoints.chunks`; empty means generic shards. The textured chunks wear `livery` (null:
+## plain). Returns the chunks launched.
 func burst(asset_id: StringName, chunks: Array[Dictionary], xform: Transform3D, velocity: Vector3,
-		angular_velocity: Vector3, seed_value: int) -> Array[DebrisChunk]:
+		angular_velocity: Vector3, seed_value: int, livery: Livery = null) -> Array[DebrisChunk]:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
 	var launched: Array[DebrisChunk] = []
@@ -117,6 +118,7 @@ func burst(asset_id: StringName, chunks: Array[Dictionary], xform: Transform3D, 
 			chunk.one_shot = true
 			_track_one_shot(chunk)
 			add_child(chunk)
+		chunk.set_livery(livery)
 		_fly(chunk, chunks[i]["offset"], xform, velocity, angular_velocity, rng)
 		launched.append(chunk)
 	return launched
@@ -124,10 +126,10 @@ func burst(asset_id: StringName, chunks: Array[Dictionary], xform: Transform3D, 
 
 ## Breaks a Starfury up in stages (see the class doc): the chunks of `chunks` (with their `joint`s) are held as one wreck at
 ## `xform` (World-local body pose) moving at `velocity` and spinning at `angular_velocity` (world frame, rad/s). `first` is the
-## chunk index that leaves at once (-1: the order comes from `seed_value` alone). Returns the wreck, whose first chunk is
-## already away.
+## chunk index that leaves at once (-1: the order comes from `seed_value` alone). The textured chunks wear `livery`, the ship's
+## (M4-T30d; null: plain). Returns the wreck, whose first chunk is already away.
 func stage_wreck(asset_id: StringName, chunks: Array[Dictionary], xform: Transform3D, velocity: Vector3,
-		angular_velocity: Vector3, seed_value: int, first: int = -1) -> StagedWreck:
+		angular_velocity: Vector3, seed_value: int, first: int = -1, livery: Livery = null) -> StagedWreck:
 	var offsets: Array[Vector3] = []
 	var joints: Array[Vector3] = []
 	for entry: Dictionary in chunks:
@@ -144,6 +146,7 @@ func stage_wreck(asset_id: StringName, chunks: Array[Dictionary], xform: Transfo
 			chunk.one_shot = true
 			_track_one_shot(chunk)
 			add_child(chunk)
+		chunk.set_livery(livery)
 		chunk.hold(wreck.chunk_transform(i), wreck.point_velocity(offsets[i]), angular_velocity)
 		nodes.append(chunk)
 	last_wreck = wreck

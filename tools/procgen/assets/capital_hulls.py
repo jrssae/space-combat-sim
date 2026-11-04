@@ -3,6 +3,9 @@
 The bench's capitals (``src/perf/standins/capital_standin.gd``) are plain boxes; the station scene draws them as splats or as a painted
 mesh instead. One box per class, the sizes the stand-in uses, panelled in grey with a darker keel. Splats at a spacing of 1/300 of the
 length (1, 2 and 4 m), so each class is about the same count, and two coarser levels at 2x and 4x that (``core/pieces.py``).
+
+Each class is also a textured box (M4-T30d): plating sized to the hull, worn paint, the keel dark, and rows of lit windows along both
+flanks (the bow and stern ends left plain), on an atlas of their own each (1 024 or 2 048 px, under a metre a texel). The game draws these; the splats stay for T31 to remove.
 """
 
 from __future__ import annotations
@@ -14,12 +17,14 @@ import numpy as np
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Material, tapered_box
 from ..core.manifest import build_manifest, write_manifest
-from ..core.paint_mesh import PaintPart, phase_steps
-from ..core.pieces import write_piece
+from ..core.paint_mesh import phase_steps
+from ..core.pieces import PieceTexture, write_piece
+from ..core.textured_mesh import TexturedPart
+from ..core.textures import Marking
 from ..styles import Style
 
 ASSET_ID = "capital_hulls"
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2  # 2: the textured boxes with window rows (M4-T30d)
 # Width, height, length (m): CapitalStandin.CLASSES.
 CLASSES: dict[str, tuple[float, float, float]] = {
     "cruiser": (60.0, 40.0, 300.0),
@@ -28,13 +33,25 @@ CLASSES: dict[str, tuple[float, float, float]] = {
 }
 SPACING_PER_LENGTH = 1.0 / 300.0
 LOD_FACTORS = (1.0, 2.0, 4.0)
+# The textured boxes (M4-T30d): the atlas per class, so each lands at under a metre a texel, and the texel the packer starts from (it
+# grows it until the box fits).
+ATLAS_PX = {"cruiser": 1024, "destroyer": 1024, "carrier": 2048}
+TEXEL_PER_LENGTH = 0.0006
+# Window rows: a window's size and pitch, m (along the hull, up), the decks' share of the hull's height, how many are lit.
+WINDOW_M = (2.0, 1.2)
+WINDOW_PITCH_M = (5.0, 4.0)
+DECKS_SHARE = 0.45
+WINDOWS_LIT = 0.7
+WINDOW_GLOW = (1.0, 0.86, 0.62)
+WINDOW_STRENGTH = 2.5
 
 
 def _style(spacing: float) -> Style:
-    grey = Material("cap_hull", (0.22, 0.23, 0.25), paneled=True)
+    grey = Material("cap_hull", (0.18, 0.19, 0.21), paneled=True)
     dark = Material("cap_keel", (0.08, 0.085, 0.09), paneled=True)
     roles = {r: grey for r in ("hull", "hull_panel", "stripe", "hazard", "canopy_frame", "nozzle", "barrel", "rcs")}
     roles.update({r: dark for r in ("hull_dark", "hazard_dark", "canopy_glass", "nozzle_throat", "bore", "interior")})
+    k = 20.0 * spacing  # the fighters' wear is sized for a centimetre texel; these hulls are texelled at tens of centimetres
     return Style(
         name="capital",
         materials=roles,
@@ -42,14 +59,31 @@ def _style(spacing: float) -> Style:
         panel_line_width_m=1.5 * spacing,
         panel_line_darkness=0.6,
         panel_tint_jitter=0.1,
+        groove_depth_m=0.012 * k,
+        hatch_depth_m=0.004 * k,
+        edge_wear_width_m=0.035 * k,
+        grime_scale_m=0.9 * k,
+        streaks=0.25,
+        grime=0.1,
+        extra={"wear_scale": k, "rivets": 0.0, "bare_metal": 0.0, "smudge": 0.25, "speckle": 0.05, "paint_roughness": 0.8},
     )
 
 
-def hull_parts(cls: str, style: Style) -> list[PaintPart]:
-    """The class's box, its keel face dark, centred on the origin like the stand-in's mesh."""
+def window_rows(cls: str) -> tuple[Marking, ...]:
+    """Lit windows along both flanks: decks round the middle of the hull's height, the bow and stern ends plain."""
+    w, h, length = CLASSES[cls]
+    rows = []
+    for side in (1.0, -1.0):
+        rows.append(Marking.windows(cls, (side * 0.5 * w, 0.0, 0.0), (0.0, 0.0, -side), (0.0, 1.0, 0.0), (side, 0.0, 0.0),
+                                    (0.8 * length, DECKS_SHARE * h), WINDOW_PITCH_M, WINDOW_M, WINDOW_GLOW, WINDOW_STRENGTH, WINDOWS_LIT))
+    return tuple(rows)
+
+
+def hull_parts(cls: str, style: Style) -> list[TexturedPart]:
+    """The class's box, its keel face dark, centred on the origin like the stand-in's mesh, with its window rows."""
     w, h, length = CLASSES[cls]
     mesh = tapered_box(length, (w, h), (w, h), style.material("hull"), materials_by_face={"bottom": style.material("hull_dark")})
-    return [PaintPart(mesh, phase_steps(cls, False))]
+    return [TexturedPart(mesh, phase_steps(cls, False), window_rows(cls), cls)]
 
 
 def build(ctx: BuildContext) -> AssetOutputs:
@@ -61,8 +95,9 @@ def build(ctx: BuildContext) -> AssetOutputs:
     for cls, size in CLASSES.items():
         spacing = size[2] * SPACING_PER_LENGTH
         style = _style(spacing)
+        texture = PieceTexture(ATLAS_PX[cls], size[2] * TEXEL_PER_LENGTH, ctx.seed)
         piece_files, entry = write_piece(
-            out_dir, f"{ASSET_ID}_{cls}", hull_parts(cls, style), style, [spacing * f for f in LOD_FACTORS], ctx.rng, comments
+            out_dir, f"{ASSET_ID}_{cls}", hull_parts(cls, style), style, [spacing * f for f in LOD_FACTORS], ctx.rng, comments, texture
         )
         entry["size"] = list(size)
         files += piece_files

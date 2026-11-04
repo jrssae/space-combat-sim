@@ -24,10 +24,9 @@ const CLASSES: Dictionary = {
 	&"carrier": {"length": 1200.0, "width": 220.0, "height": 140.0, "mass": 8.0e7, "hull": 1.2e5, "turrets": 12},
 }
 const HULL_COLOR: Color = Color(0.42, 0.44, 0.47)
-## The render comparison's hulls (M4-T27): the generated asset and the looks a capital can take.
+## The generated hulls (M4-T27) and the looks a capital can take: the bench's plain box or the class's textured hull (M4-T30d).
 const HULLS_ASSET: String = "capital_hulls"
 const LOOK_BOX: StringName = &"box"
-const LOOK_SPLAT: StringName = &"splat"
 const LOOK_MESH: StringName = &"mesh"
 
 var ship_class: StringName = &"cruiser"
@@ -39,7 +38,7 @@ var world: WorldFrame = null
 var targetable: Targetable = null
 var damageable: Damageable = null
 
-## How the hull is drawn (M4-T27): the plain box, or the render comparison's splats or painted mesh (`set_look`).
+## How the hull is drawn: the plain box, or the generated class's textured hull (`set_look`).
 var look: StringName = LOOK_BOX
 
 var _guns: Array[TurretStandin] = []
@@ -176,9 +175,11 @@ func _add_turrets(size: Vector3, count: int) -> void:
 		_beams.append(beam)
 
 
-## Draws the hull as the plain box (the bench's), or as the generated capital hull's splats or painted mesh (the render comparison,
-## M4-T27). The splat and mesh piece is built the first time it is asked for; without the generated asset the box stays.
+## Draws the hull as the plain box (the bench's) or as the generated class's textured hull (M4-T30d; any other look is the hull).
+## The hull piece is built the first time it is asked for, without splats; without the generated asset the box stays.
 func set_look(value: StringName) -> void:
+	if value != LOOK_BOX:
+		value = LOOK_MESH
 	if value != LOOK_BOX and _piece == null:
 		var manifest: Dictionary = SplatLod.read_manifest(HULLS_ASSET)
 		var entry: Dictionary = (manifest.get("classes", {}) as Dictionary).get(String(ship_class), {})
@@ -187,17 +188,16 @@ func set_look(value: StringName) -> void:
 		else:
 			_piece = RenderPiece.new()
 			_piece.name = "HullPiece"
-			_piece.build(ShipSpec.ASSET_ROOT.path_join(HULLS_ASSET), entry)
+			_piece.build(ShipSpec.ASSET_ROOT.path_join(HULLS_ASSET), entry, false)
 			add_child(_piece)
 	look = value
 	if _hull_mesh != null:
 		_hull_mesh.visible = look == LOOK_BOX
 	if _piece != null:
 		_piece.visible = look != LOOK_BOX
-		_piece.set_look(RenderPiece.Look.MESH if look == LOOK_MESH else RenderPiece.Look.SPLAT)
 
 
-## The splat and mesh piece, once a look other than the box was asked for.
+## The hull piece, once a look other than the box was asked for.
 func hull_piece() -> RenderPiece:
 	return _piece
 

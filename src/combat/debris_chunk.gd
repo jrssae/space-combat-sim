@@ -10,6 +10,10 @@ extends Node3D
 ##
 ## Frames: the chunk's PLY and OBJ are centred on the chunk's own centroid, so the node's origin is that centroid;
 ## `offset` (from `hardpoints.json` `chunks[]`) is where it sat in the ship's body frame.
+##
+## With `settings.ship_render` at `mesh` or `hybrid` (the default from M4-T30d) the mesh node draws the chunk's textured mesh instead
+## (its `mesh` entry, cut from the hull on the hull's maps, so chunks instance with the hulls) and the splats stay hidden; a Starfury's
+## chunk wears its ship's livery (`set_livery`).
 
 ## The chunk finished its life and is parked.
 signal parked(chunk: DebrisChunk)
@@ -29,6 +33,8 @@ var velocity: Vector3 = Vector3.ZERO
 var angular_velocity: Vector3 = Vector3.ZERO
 var splats: GaussianSplatNode = null
 var mesh_instance: MeshInstance3D = null
+## The chunk's textured mesh (M4-T30d), null for a shard or before the assets are generated.
+var textured_mesh: Mesh = null
 
 var _age_s: float = 0.0
 var _vent: FxPool = null
@@ -38,6 +44,7 @@ var _active: bool = false
 var _fallback: bool = false
 var _placed_this_tick: bool = false
 var _held: bool = false
+var _obj_mesh: Mesh = null
 
 
 ## A parked chunk from a `hardpoints.json` `chunks[]` entry (`name`, `ply`, `obj`, `offset`) in `asset_dir`. With
@@ -52,10 +59,14 @@ static func create(entry: Dictionary, asset_dir: String, with_splats: bool) -> D
 	chunk.mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var obj_path: String = asset_dir.path_join(String(entry.get("obj", "")))
 	if ResourceLoader.exists(obj_path):
-		chunk.mesh_instance.mesh = load(obj_path) as Mesh
-		MeshMaterials.matte(chunk.mesh_instance.mesh)
+		chunk._obj_mesh = load(obj_path) as Mesh
+		MeshMaterials.matte(chunk._obj_mesh)
+		chunk.mesh_instance.mesh = chunk._obj_mesh
 	else:
 		push_warning("DebrisChunk: %s is missing or not imported (run scripts/gen_assets.sh, then import)" % obj_path)
+	var textured: String = String(entry.get("mesh", ""))
+	if not textured.is_empty():
+		chunk.textured_mesh = MeshAssets.chunk_mesh(asset_dir, textured)
 	chunk.add_child(chunk.mesh_instance)
 	if with_splats:
 		chunk.splats = GaussianSplatNode.new()
@@ -112,8 +123,15 @@ func _ready() -> void:
 	_apply_visibility()
 
 
+func _enter_tree() -> void:
+	if textured_mesh != null and not Settings.changed.is_connected(_on_setting_changed):
+		Settings.changed.connect(_on_setting_changed)
+
+
 func _exit_tree() -> void:
 	_stop_vent()
+	if Settings.changed.is_connected(_on_setting_changed):
+		Settings.changed.disconnect(_on_setting_changed)
 
 
 func _physics_process(delta: float) -> void:
@@ -127,6 +145,18 @@ func _physics_process(delta: float) -> void:
 func use_fallback_mesh(enabled: bool) -> void:
 	_fallback = enabled
 	_apply_visibility()
+
+
+## Whether the chunk is drawn as its textured mesh now (M4-T30d).
+func is_drawing_textured() -> bool:
+	return textured_mesh != null and StringName(Settings.get_value(&"ship_render")) != &"splat"
+
+
+## Paints the textured chunk in its ship's livery (null: plain). Pooled chunks are repainted for every wreck.
+func set_livery(livery: Livery) -> void:
+	if mesh_instance == null or textured_mesh == null or not (textured_mesh.surface_get_material(0) is ShaderMaterial):
+		return  # a hull without a livery table (a raider's) takes no livery values
+	(livery if livery != null else Livery.new()).apply(mesh_instance)
 
 
 ## True from `launch` until the chunk parks.
@@ -250,7 +280,15 @@ func _park_state() -> void:
 
 
 func _apply_visibility() -> void:
+	var textured: bool = is_drawing_textured()
 	if mesh_instance != null:
-		mesh_instance.visible = _fallback or splats == null
+		if textured_mesh != null:
+			mesh_instance.mesh = textured_mesh if textured else _obj_mesh
+		mesh_instance.visible = textured or _fallback or splats == null
 	if splats != null:
-		splats.visible = not _fallback
+		splats.visible = not textured and not _fallback
+
+
+func _on_setting_changed(key: StringName, _value: Variant) -> void:
+	if key == &"ship_render":
+		_apply_visibility()

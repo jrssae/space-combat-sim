@@ -96,7 +96,7 @@ func test_the_sheet_parks_a_ship_and_clears_it() -> void:
 	look.player = player.ship
 	look.key_star = star
 	add_child_autofree(look)
-	assert_eq(look.show("nav_buoy", 30.0, &"lit", &"textured").is_empty(), false, "only pooled ship assets")
+	assert_eq(look.show("no_such_asset", 30.0, &"lit", &"textured").is_empty(), false, "only pooled ship assets and the props")
 	assert_eq(look.show("starfury_aurora", 30.0, &"lit", &"textured"), "")
 	assert_true(look.is_active())
 	assert_eq(pool.alive(ShipPool.ALLY_TYPE).size(), 1)

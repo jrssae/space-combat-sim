@@ -16,7 +16,12 @@ z = 9). Proportions follow ``docs/design-references.md`` and the maintainer's re
 
 Every part belongs to a *group* (``wing_l``, ``wing_r``, ``hump``, ``nacelle_l``, ``nacelle_r``); the hull splats are
 written group by group (the manifest ``counts`` order) and each group is also written as a break-up chunk
-(``core/chunks.py``). The sample set is exactly mirror-symmetric in x (the right-hand groups are sampled once and
+(``core/chunks.py``), with a textured mesh cut from the hull's (M4-T30d).
+
+The textured mesh (M4-T30d, the contract of ``core/textured_mesh.py``): the same hull parts on one atlas, the ``raider`` style's
+wear (chipped edges down to bare metal, streaks, grime), soot behind the nozzles and the two yellow-white engine glows of the
+reference in the main nozzles' throats; the nose intakes stay dark. No insignia. ``render_triangles`` rebuilds the round parts
+coarser with the fine hull baked into the normal map, as the Starfury's option does. The sample set is exactly mirror-symmetric in x (the right-hand groups are sampled once and
 mirrored, the centre-line hump is symmetrised); the splat centroid is moved to the origin, so GDGS's import centring is
 a no-op and the hardpoints frame equals the rendered frame. Samples buried inside another part are dropped.
 """
@@ -32,13 +37,15 @@ from typing import Any
 import numpy as np
 
 from ..core import frames, lighting
-from ..core.chunks import ChunkSource, write_chunks
+from ..core.chunks import ChunkCut, ChunkSource, chunk_offsets, write_chunks
 from ..core.context import AssetOutputs, BuildContext
-from ..core.geometry import Mesh, box
+from ..core.geometry import Material, Mesh, box
 from ..core.manifest import build_manifest, lod_entry, write_manifest
 from ..core.obj import write_obj
 from ..core.paint_mesh import PaintPart, phase_steps, write_paint_mesh
 from ..core.ply import SplatData, write_ply
+from ..core.textured_mesh import TexturedPart, write_textured_mesh
+from ..core.textures import Marking
 from ..core.sampling import (
     DEFAULT_OVERLAP,
     DEFAULT_THICKNESS,
@@ -55,10 +62,16 @@ from ..styles import Style
 from ..styles.raider import RAIDER
 
 ASSET_ID = "raider_fighter"
-GENERATOR_VERSION = 2  # 2: flat paint and lighting records (M3-T21)
+GENERATOR_VERSION = 3  # 3: the textured mesh and chunk meshes (M4-T30d); 2: flat paint and lighting records (M3-T21)
 PLY_NAME = "raider_fighter.ply"
 OBJ_NAME = "raider_fighter.obj"
 HARDPOINTS_NAME = "hardpoints.json"
+MESH_NAME = "raider_fighter.glb"
+# The textured mesh (M4-T30d): about 190 m² of hull at a centimetre a texel in a 2 048 px atlas, the normal map at the atlas's size.
+ATLAS_PX = 2048
+TEXEL_M = 0.01
+NORMAL_SCALE = 1
+COARSE_STREAM = "coarse"
 
 DEFAULT_SPACING_M = 0.09
 SPLAT_BUDGET = (15_000, 40_000)  # AC4, at the default spacing
@@ -399,12 +412,70 @@ def hardpoints(placed: list[Placed], spec: RaiderSpec, chunks: list[dict[str, An
     }
 
 
+# --- the textured mesh (M4-T30d) --------------------------------------------------------------------------
+INTAKE = Material("rd_intake", (0.012, 0.011, 0.01), metallic=0.6, roughness=0.6)  # the nose intakes: dark, never lit
+
+
+def _cold_intakes(mesh: Mesh, main_z: float) -> Mesh:
+    """Only the main nozzles glow (the reference's two engine glows): the nose intake shares the throats' material, so it gets a dark
+    one of its own."""
+    throat = RAIDER.material("nozzle_throat").name
+    hot = np.array([m.name == throat for m in mesh.materials], dtype=bool)[mesh.face_material]
+    cold = hot & (mesh.vertices[mesh.faces].mean(axis=1)[:, 2] < main_z - 1.5)
+    if not cold.any():
+        return mesh
+    face_material = np.where(cold, len(mesh.materials), mesh.face_material)
+    return Mesh(mesh.vertices, mesh.faces, face_material, mesh.materials + (INTAKE,), mesh.face_chart, mesh.face_uv)
+
+
+def textured_parts(placed: list[Placed], style: Style) -> list[TexturedPart]:
+    """The hull parts as the textured mesh takes them: soot behind each main nozzle, the intakes dark, no livery."""
+    out = []
+    for p in placed:
+        if not p.hull:
+            continue
+        mesh, marks = p.part.mesh, ()
+        if p.part.name in ("nacelle_r", "nacelle_l"):
+            main = p.part.anchor("main")
+            mesh = _cold_intakes(mesh, float(main.position[2]))
+            marks = (Marking.soot(p.part.name, main.position, main.direction, 0.6, 0.45, 0.9),)
+        out.append(TexturedPart(mesh, phase_steps(p.part.name, False), marks, p.part.name))
+    return out
+
+
+def coarse_placed(spec: RaiderSpec, style: Style, ctx: BuildContext, triangles: int, offset: np.ndarray) -> list[Placed]:
+    """The parts rebuilt with fewer segments, about ``triangles`` in all (never fewer than the flat parts allow), in the fine
+    build's frame (moved by its centring ``offset``)."""
+    from .starfury_aurora import coarse_spec
+
+    def build_at(factor: float) -> list[Placed]:
+        return [p.translated(-offset) for p in build_parts(coarse_spec(spec, factor), style, ctx, 0.3, (COARSE_STREAM,))]
+
+    def count(placed: list[Placed]) -> int:
+        return sum(p.part.mesh.face_count for p in placed if p.hull)
+
+    lo, hi = 0.02, 1.0
+    best = build_at(hi)
+    for _ in range(8):
+        mid = 0.5 * (lo + hi)
+        placed = build_at(mid)
+        if count(placed) > triangles:
+            hi = mid
+        else:
+            lo = mid
+            best = placed
+    if count(best) > triangles:  # the floor: the wing, the hump and the plates have no segments to drop
+        best = build_at(lo)
+    return best
+
+
 # --- build -----------------------------------------------------------------------------------------------
 def build(ctx: BuildContext) -> AssetOutputs:
     """Generate the ship into ``ctx.out_dir``.
 
     Options: ``spacing`` (m, default 0.09; the CLI's ``--spacing``), ``overlap`` (sigma / spacing, default 1.0),
-    ``thickness`` (normal sigma / spacing, default 0.08).
+    ``thickness`` (normal sigma / spacing, default 0.08); for the textured mesh (M4-T30d) ``render_triangles`` (0, the default, draws
+    the full hull; otherwise the round parts are rebuilt for about this many triangles), ``atlas_px``, ``texel_m``, ``occlusion``.
     """
     spacing = float(ctx.option("spacing", DEFAULT_SPACING_M))
     overlap = float(ctx.option("overlap", DEFAULT_OVERLAP))
@@ -452,8 +523,24 @@ def build(ctx: BuildContext) -> AssetOutputs:
     )
     files.append(paint_path)
 
-    chunk_files, chunk_entries = write_chunks(out_dir, ASSET_ID, chunk_sources, comments)
+    chunk_files, chunk_entries = write_chunks(out_dir, ASSET_ID, chunk_sources, comments, with_meshes=True)
     files += chunk_files
+
+    # The textured mesh (M4-T30d) and each chunk's cut of it, on one atlas.
+    render_triangles = int(ctx.option("render_triangles", 0))
+    textured_source = placed if render_triangles <= 0 else coarse_placed(spec, style, ctx, render_triangles, offset)
+    offsets = chunk_offsets(chunk_sources)
+    cuts = [ChunkCut(group, tuple(p.part.name for p in textured_source if p.hull and p.part.group == group),
+                     tuple(float(v) for v in offsets[group])) for group in CHUNK_ORDER]
+    textured_paths, mesh_entry = write_textured_mesh(
+        out_dir, ASSET_ID, textured_parts(textured_source, style), style, atlas_px=int(ctx.option("atlas_px", ATLAS_PX)),
+        texel_m=float(ctx.option("texel_m", TEXEL_M)), seed=ctx.seed, occlusion=bool(ctx.option("occlusion", True)),
+        fine_mesh=hull_mesh if render_triangles > 0 else None, normal_scale=NORMAL_SCALE, chunks=cuts,
+    )
+    if render_triangles > 0:
+        mesh_entry["render_triangles"] = render_triangles
+        mesh_entry["fine_triangles"] = int(hull_mesh.face_count)
+    files += textured_paths
 
     # LOD1-LOD3: whole-ship files for distant ships, resampled from their own streams.
     far: dict[int, int] = {}
@@ -494,11 +581,12 @@ def build(ctx: BuildContext) -> AssetOutputs:
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,
-        files={"fallback_mesh": OBJ_NAME, "paint_mesh": paint_entry["file"], "hardpoints": HARDPOINTS_NAME},
+        files={"fallback_mesh": OBJ_NAME, "paint_mesh": paint_entry["file"], "mesh": mesh_entry["file"], "hardpoints": HARDPOINTS_NAME},
         extra={
             "counts": counts,
             "chunks": [c["name"] for c in chunk_entries],
             "paint_mesh": paint_entry,
+            "mesh": mesh_entry,
             "sampling": {"spacing_m": spacing, "overlap": overlap, "thickness": thickness},
             "dimensions_m": {"length": hp["length_m"], "span": hp["span_m"], "height": hp["height_m"]},
         },

@@ -2,7 +2,8 @@ class_name StationStandin
 extends Node3D
 ## The Babylon 5 station stand-in for the render comparison (M4-T27, Q24): bench-only, the generated `b5_station` asset's shape (no
 ## franchise asset), about 8 km long. The habitat drum turns about the station's long axis; the frame around it (reactor, spine,
-## vanes, top bar, command section, bow) stands still. Each is a `RenderPiece`, drawn as splats or as its painted mesh.
+## vanes, top bar, command section, bow) stands still. Each is a `RenderPiece` drawn as its textured mesh (M4-T30d: the splat look
+## went from the stand-ins).
 ##
 ## The drum's turn is a visual: it has no body, so it turns each frame by the frame's own time.
 
@@ -31,7 +32,7 @@ func build() -> bool:
 	var dir: String = ShipSpec.ASSET_ROOT.path_join(ASSET_ID)
 	frame_piece = RenderPiece.new()
 	frame_piece.name = "Frame"
-	frame_piece.build(dir, pieces["frame"])
+	frame_piece.build(dir, pieces["frame"], false)
 	add_child(frame_piece)
 	drum_pivot = Node3D.new()
 	drum_pivot.name = "DrumPivot"
@@ -41,16 +42,9 @@ func build() -> bool:
 	add_child(drum_pivot)
 	drum_piece = RenderPiece.new()
 	drum_piece.name = "Drum"
-	drum_piece.build(dir, pieces["drum"])
+	drum_piece.build(dir, pieces["drum"], false)
 	drum_pivot.add_child(drum_piece)
 	return true
-
-
-## Draws both pieces as splats or as their painted meshes.
-func set_look(look: RenderPiece.Look) -> void:
-	for piece: RenderPiece in [frame_piece, drum_piece]:
-		if piece != null:
-			piece.set_look(look)
 
 
 ## Splats drawn now, both pieces.

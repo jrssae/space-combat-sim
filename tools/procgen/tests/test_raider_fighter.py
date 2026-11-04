@@ -61,11 +61,13 @@ class RaiderFighterTests(unittest.TestCase):
 
     # --- files, manifest, budget --------------------------------------------------------------------
     def test_all_files_are_written_and_listed(self) -> None:
-        expected = {raider.PLY_NAME, raider.OBJ_NAME, "raider_fighter.mtl", raider.HARDPOINTS_NAME, "manifest.json", "raider_fighter_mesh.glb"}
+        expected = {raider.PLY_NAME, raider.OBJ_NAME, "raider_fighter.mtl", raider.HARDPOINTS_NAME, "manifest.json", "raider_fighter_mesh.glb",
+                    raider.MESH_NAME}
+        expected |= {f"raider_fighter_{k}.png{ext}" for k in ("albedo", "emissive", "normal", "orm") for ext in ("", ".import")}  # M4-T30d
         expected |= {entry[0] for entry in raider.FAR_LODS.values()}
         expected |= {lod["lighting"] for lod in self.manifest["lods"]}
         for entry in self.hp["chunks"]:
-            expected |= {entry["ply"], entry["lighting"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
+            expected |= {entry["ply"], entry["lighting"], entry["obj"], entry["obj"].replace(".obj", ".mtl"), entry["mesh"]}
         self.assertEqual({p.name for p in self.dir_a.iterdir()}, expected)
         self.assertEqual({p.name for p in self.out_a.files}, expected)
 
@@ -94,7 +96,7 @@ class RaiderFighterTests(unittest.TestCase):
         self.assertEqual(self.out_a.warnings, ())
         self.assertEqual(
             self.manifest["files"],
-            {"fallback_mesh": raider.OBJ_NAME, "paint_mesh": "raider_fighter_mesh.glb", "hardpoints": raider.HARDPOINTS_NAME},
+            {"fallback_mesh": raider.OBJ_NAME, "paint_mesh": "raider_fighter_mesh.glb", "mesh": raider.MESH_NAME, "hardpoints": raider.HARDPOINTS_NAME},
         )
         self.assertEqual(sum(self.manifest["counts"].values()), len(self.splats))
         self.assertEqual(list(self.manifest["counts"]), list(raider.CHUNK_ORDER))

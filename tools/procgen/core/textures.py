@@ -120,6 +120,33 @@ class Marking:
                                                 "size_m": (float(size_m[0]), float(size_m[1]))})
 
     @staticmethod
+    def windows(part: str, centre: Sequence[float], right: Sequence[float], up: Sequence[float], facing: Sequence[float],
+                size_m: Sequence[float], pitch_m: Sequence[float], window_m: Sequence[float], colour: Vec3, strength: float,
+                lit: float = 0.75) -> Marking:
+        """Rows of lit windows (M4-T30d) in a ``size_m`` region round ``centre`` on the side facing ``facing``: one window of
+        ``window_m`` every ``pitch_m`` along ``right`` and ``up``, about ``lit`` of them glowing ``colour`` at ``strength``."""
+        return Marking("windows", part, tuple(colour), {"mode": "plane", "centre": tuple(centre),
+                                                        "right": tuple(unit(np.asarray(right, dtype=float))),
+                                                        "up": tuple(unit(np.asarray(up, dtype=float))),
+                                                        "facing": tuple(unit(np.asarray(facing, dtype=float))),
+                                                        "size_m": (float(size_m[0]), float(size_m[1])),
+                                                        "pitch_m": (float(pitch_m[0]), float(pitch_m[1])),
+                                                        "window_m": (float(window_m[0]), float(window_m[1])),
+                                                        "strength": float(strength), "lit": float(lit)})
+
+    @staticmethod
+    def window_rings(part: str, centre: Sequence[float], axis: Sequence[float], at_m: float, height_m: float, pitch_m: Sequence[float],
+                     window_m: Sequence[float], colour: Vec3, strength: float, lit: float = 0.75) -> Marking:
+        """Rows of lit windows (M4-T30d) all the way round ``axis`` through ``centre``, in a band ``height_m`` wide centred ``at_m``
+        along it: one window of ``window_m`` every ``pitch_m`` (round the axis, along it), about ``lit`` of them glowing."""
+        return Marking("windows", part, tuple(colour), {"mode": "ring", "centre": tuple(centre),
+                                                        "axis": tuple(unit(np.asarray(axis, dtype=float))), "at_m": float(at_m),
+                                                        "height_m": float(height_m),
+                                                        "pitch_m": (float(pitch_m[0]), float(pitch_m[1])),
+                                                        "window_m": (float(window_m[0]), float(window_m[1])),
+                                                        "strength": float(strength), "lit": float(lit)})
+
+    @staticmethod
     def soot(part: str, exit_point: Sequence[float], direction: Sequence[float], radius_m: float, length_m: float, strength: float = 1.0) -> Marking:
         """Soot behind a nozzle exit: a cone of darkening from ``exit_point`` along ``direction``."""
         return Marking("soot", part, (0.0, 0.0, 0.0), {"exit": tuple(exit_point), "direction": tuple(unit(np.asarray(direction, dtype=float))),
@@ -244,11 +271,13 @@ def plating_lattice(style: Style, positions: np.ndarray, normals: np.ndarray, pl
     outside = np.hypot(np.maximum(hx, 0.0), np.maximum(hy, 0.0)) + np.minimum(np.maximum(hx, hy), 0.0)
     hatch = has_hatch & (outside < 0.0)
     # Rivets in a row beside every seam: along the row seams at a pitch along u, along the panel ends at a pitch along v.
-    off = 0.5 * line + RIVET_OFFSET_M
-    along_u = (np.mod(um / RIVET_PITCH_M, 1.0) - 0.5) * RIVET_PITCH_M
-    along_v = (np.mod(vm / RIVET_PITCH_M, 1.0) - 0.5) * RIVET_PITCH_M
+    k = wear_scale(style)
+    pitch = RIVET_PITCH_M * k
+    off = 0.5 * line + RIVET_OFFSET_M * k
+    along_u = (np.mod(um / pitch, 1.0) - 0.5) * pitch
+    along_v = (np.mod(vm / pitch, 1.0) - 0.5) * pitch
     rivet_m = np.minimum(np.hypot(dv - off, along_u), np.hypot(du - off, along_v))
-    rivet_m = np.where(edge_m > 0.5 * line + RIVET_RADIUS_M, rivet_m, np.inf)  # none in a seam's groove, where two seams cross
+    rivet_m = np.where(edge_m > 0.5 * line + RIVET_RADIUS_M * k, rivet_m, np.inf)  # none in a seam's groove, where two seams cross
     is_z_u, is_z_v = ua == 2, va == 2
     aft_m = np.where(is_z_u, (uu - left) * plating.length_m, np.where(is_z_v, (rv - bottom) * plating.width_m, np.inf))
     return {
@@ -258,15 +287,22 @@ def plating_lattice(style: Style, positions: np.ndarray, normals: np.ndarray, pl
     }
 
 
+def wear_scale(style: Style) -> float:
+    """How much bigger than a fighter's the style's fine detail is (M4-T30d): rivets, noise and edge softness are sized for a fighter
+    texelled at a centimetre, so a capital or a station scales them up (``Style.extra["wear_scale"]``, 1 for fighters)."""
+    return float(style.extra.get("wear_scale", 1.0))
+
+
 def _surface_height(style: Style, lattice: dict[str, np.ndarray]) -> np.ndarray:
     """The plating's relief: the seams' grooves, the hatches' bevels and the rivets' domes (metres, 0 the plate)."""
+    k = wear_scale(style)
     line = style.panel_line_width_m
     groove = 1.0 - np.clip((lattice["edge_m"] - 0.5 * line) / (0.5 * line) + 1.0, 0.0, 1.0)
     h = -style.groove_depth_m * groove * groove * (3.0 - 2.0 * groove)
-    bevel = np.clip(lattice["hatch_edge_m"] / 0.03, 0.0, 1.0)
+    bevel = np.clip(lattice["hatch_edge_m"] / (0.03 * k), 0.0, 1.0)
     h -= np.where(lattice["hatch"], style.hatch_depth_m * bevel, 0.0)
-    dome = np.clip(1.0 - (lattice["rivet_m"] / RIVET_RADIUS_M) ** 2, 0.0, 1.0)
-    return h + RIVET_HEIGHT_M * np.sqrt(dome)
+    dome = np.clip(1.0 - (lattice["rivet_m"] / (RIVET_RADIUS_M * k)) ** 2, 0.0, 1.0)
+    return h + RIVET_HEIGHT_M * k * float(style.extra.get("rivets", 1.0)) * np.sqrt(dome)
 
 
 # --- noise ------------------------------------------------------------------------------------
@@ -487,12 +523,11 @@ def _chart_normals(buffers: AtlasBuffers) -> np.ndarray:
     return out
 
 
-def _normal_map(atlas: Atlas, style: Style, platings: Sequence[Plating]) -> np.ndarray:
-    """The tangent-space normal map at ``NORMAL_SCALE`` times the atlas: the plating's relief (grooves, hatches, rivets) from a
+def _normal_map(atlas: Atlas, style: Style, platings: Sequence[Plating], scale: int = NORMAL_SCALE) -> np.ndarray:
+    """The tangent-space normal map at ``scale`` times the atlas: the plating's relief (grooves, hatches, rivets) from a
     height field sampled at the finer texels, over the fine mesh's shape for a coarse render mesh."""
     b = atlas.buffers
     size = b.size
-    scale = NORMAL_SCALE
     big = size * scale
     du, dv, step_u, step_v = _texel_metric(b.filled, b.position)
     paneled_table = np.array([m.paneled for m in atlas.materials], dtype=bool)
@@ -544,10 +579,11 @@ def _normal_map(atlas: Atlas, style: Style, platings: Sequence[Plating]) -> np.n
     return relief
 
 
-def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, paintable: Sequence[str] = ()) -> dict[str, np.ndarray]:
-    """The four maps as 8-bit RGB arrays: ``albedo`` (sRGB), ``normal`` (tangent space, +Y up), ``orm`` and ``emissive`` (sRGB).
-    With ``paintable`` material names the albedo is RGBA, its alpha where a livery may paint (M4-T30b): those materials, less the
-    chipped edges and the markings."""
+def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, paintable: Sequence[str] = (),
+              normal_scale: int = NORMAL_SCALE) -> dict[str, np.ndarray]:
+    """The four maps as 8-bit RGB arrays: ``albedo`` (sRGB), ``normal`` (tangent space, +Y up, ``normal_scale`` times the atlas),
+    ``orm`` and ``emissive`` (sRGB). With ``paintable`` material names the albedo is RGBA, its alpha where a livery may paint (M4-T30b):
+    those materials, less the chipped edges and the markings."""
     b = atlas.buffers
     size = b.size
     filled = b.filled
@@ -590,18 +626,20 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     extra = dict(style.extra)
     bare_metal = float(extra.get("bare_metal", 1.0))
     seeds = np.full(n, seed, dtype=np.int64)
-    noise_fine = value_noise(pos, 0.11, seed + 1)
+    k = wear_scale(style)
+    soft = 0.01 * k  # a marking's edge, a texel or so wide
+    noise_fine = value_noise(pos, 0.11 * k, seed + 1)
     noise_coarse = value_noise(pos, style.grime_scale_m, seed + 2)
     edge = np.clip(1.0 - b.edge_distance[idx] / style.edge_wear_width_m, 0.0, 1.0)
     chips = np.clip((edge * (0.35 + noise_fine) - (1.0 - style.edge_wear)) * 3.0, 0.0, 1.0) * ~glass
     streak_seed = _hash01(lattice_cell[:, 0], lattice_cell[:, 1], lattice_cell[:, 2] + 17, seeds)
     streak_on = np.clip((streak_seed - 0.45) / 0.55, 0.0, 1.0)
     across = _hash01(lattice_cell[:, 0], lattice_cell[:, 1], np.floor(noise_fine * 7.0).astype(np.int64), seeds + 3)
-    fade = np.exp(-np.where(np.isfinite(lattice_aft), lattice_aft, 1e3) / float(extra.get("streak_length_m", 0.2)))
+    fade = np.exp(-np.where(np.isfinite(lattice_aft), lattice_aft, 1e3) / (float(extra.get("streak_length_m", 0.2)) * k))
     streak = style.streaks * streak_on * fade * (across > 0.45) * paneled
-    smudge_noise = value_noise(pos * np.array([1.0, 1.0, 0.35]), float(extra.get("smudge_scale_m", 0.45)), seed + 5)  # long fore and aft
+    smudge_noise = value_noise(pos * np.array([1.0, 1.0, 0.35]), float(extra.get("smudge_scale_m", 0.45)) * k, seed + 5)  # long fore and aft
     smudge = float(extra.get("smudge", 0.0)) * np.clip((smudge_noise - 0.55) / 0.25, 0.0, 1.0) ** 1.5 * paneled
-    speckle = float(extra.get("speckle", 0.0)) * (2.0 * value_noise(pos, 0.035, seed + 6) - 1.0) * paneled
+    speckle = float(extra.get("speckle", 0.0)) * (2.0 * value_noise(pos, 0.035 * k, seed + 6) - 1.0) * paneled
     grime = 1.0 + style.grime * (2.0 * noise_coarse - 1.0) + speckle
     albedo *= (grime * (1.0 - streak) * (1.0 - smudge))[:, None]
     if bare_metal > 0.0:
@@ -621,6 +659,8 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     # The markings, in world space, on their parts; what they cover is kept from the livery's paint.
     names = list(atlas.part_names)
     marked = np.zeros(n)
+    window_glow = np.zeros((n, 3))
+    window_strength = np.zeros(n)
     for marking in atlas.markings:
         sel = np.ones(n, dtype=bool) if not marking.part else part == names.index(marking.part)
         sel &= ~glass
@@ -633,7 +673,7 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
         if marking.kind == "band":
             axis = np.asarray(q["axis"])
             along = (p - np.asarray(q["centre"])) @ axis
-            cover = np.clip((0.5 * q["width_m"] - np.abs(along - q["at_m"])) / 0.01 + 0.5, 0.0, 1.0)
+            cover = np.clip((0.5 * q["width_m"] - np.abs(along - q["at_m"])) / soft + 0.5, 0.0, 1.0)
         elif marking.kind in ("text", "rect"):
             facing = np.asarray(q["facing"])
             face = np.clip((nrm[sel] @ facing - 0.3) / 0.2, 0.0, 1.0)
@@ -643,8 +683,15 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
                 cover = text_coverage(uv, q["text"], q["height_m"], q["stroke_m"]) * face
             else:
                 half = 0.5 * np.asarray(q["size_m"])
-                inside = np.clip((half - np.abs(uv)) / 0.01 + 0.5, 0.0, 1.0)
+                inside = np.clip((half - np.abs(uv)) / soft + 0.5, 0.0, 1.0)
                 cover = inside[:, 0] * inside[:, 1] * face
+        elif marking.kind == "windows":
+            cover, glow = _window_cover(q, p, nrm[sel], max(atlas.texel_m, soft), seed)
+            rows = np.flatnonzero(sel)
+            window_glow[rows] = np.maximum(window_glow[rows], glow[:, None] * colour)
+            window_strength[rows] = np.where(glow > 0.0, q["strength"], window_strength[rows])
+            colour = np.array([0.018, 0.02, 0.024])  # dark glass where a window is unlit, and round the glow where it is
+            roughness[sel] = roughness[sel] * (1.0 - cover) + 0.15 * cover
         elif marking.kind == "soot":
             direction = np.asarray(q["direction"])
             d = p - np.asarray(q["exit"])
@@ -661,7 +708,7 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
             marked[np.flatnonzero(sel)] = np.maximum(marked[np.flatnonzero(sel)], cover)
 
     # The normal map: the plating's relief at twice the atlas's resolution, Godot's +Y up (Q34).
-    normal_ts = _normal_map(atlas, style, platings)
+    normal_ts = _normal_map(atlas, style, platings, normal_scale)
 
     # Occlusion, roughness and metal; emissive scaled per surface so one map serves both.
     occ = _occlusion(atlas, seed) if occlusion else np.ones((size, size))
@@ -673,9 +720,10 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     orm_metal = np.zeros((size, size))
     orm_metal[idx] = np.clip(metallic, 0.0, 1.0)
     orm[..., 2] = orm_metal
-    surface_strength = np.where(glass, surface_emissive_strength(table, True), surface_emissive_strength(table, False))
+    surface_strength = np.where(glass, surface_emissive_strength(table, True), surface_emissive_strength(table, False, atlas.markings))
     scale = np.where(surface_strength > 0.0, strength / np.maximum(surface_strength, 1e-9), 0.0)
-    glow = np.clip(emissive * scale[:, None], 0.0, 1.0)
+    window_scale = np.where(surface_strength > 0.0, window_strength / np.maximum(surface_strength, 1e-9), 0.0)
+    glow = np.clip(np.maximum(emissive * scale[:, None], window_glow * window_scale[:, None]), 0.0, 1.0)
     emissive_map = np.zeros((size, size, 3))
     emissive_map[idx] = glow
 
@@ -698,11 +746,45 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     }
 
 
-def surface_emissive_strength(materials: Sequence[Material], glass: bool) -> float:
-    """The emission energy of one surface: the strongest glow among its materials (the map holds each glow's share of it)."""
+def surface_emissive_strength(materials: Sequence[Material], glass: bool, markings: Sequence[Marking] = ()) -> float:
+    """The emission energy of one surface: the strongest glow among its materials and, on the opaque surface, its window rows (the map
+    holds each glow's share of it)."""
     strengths = [m.emissive_strength for m in materials if (m.transmittance > 0.0) == glass]
+    if not glass:
+        strengths += [float(m.params["strength"]) for m in markings if m.kind == "windows"]
     return max(strengths) if strengths else 0.0
 
 
-__all__ = ["Atlas", "Marking", "NORMAL_SCALE", "Plating", "bake_maps", "decode_normal", "glyph_strokes", "plating_for", "plating_lattice",
+def _window_cover(q: dict[str, Any], p: np.ndarray, normals: np.ndarray, soft: float, seed: int) -> tuple[np.ndarray, np.ndarray]:
+    """Where a window-rows marking paints glass (``cover``, 0..1) and where that glass glows (``glow``, 0..1), per point."""
+    d = p - np.asarray(q["centre"], dtype=float)
+    if q["mode"] == "ring":
+        axis = np.asarray(q["axis"], dtype=float)
+        along = d @ axis
+        radial = d - along[:, None] * axis
+        radius = np.linalg.norm(radial, axis=1)
+        e1 = unit(np.cross(axis, (1.0, 0.0, 0.0) if abs(axis[0]) < 0.9 else (0.0, 1.0, 0.0)))
+        e2 = np.cross(axis, e1)
+        a = np.arctan2(radial @ e2, radial @ e1) * radius
+        b = along - q["at_m"]
+        face = np.clip((np.einsum("ij,ij->i", normals, radial / np.maximum(radius, 1e-9)[:, None]) - 0.4) / 0.2, 0.0, 1.0)
+        region = np.clip((0.5 * q["height_m"] - np.abs(b)) / soft + 0.5, 0.0, 1.0)
+    else:
+        a = d @ np.asarray(q["right"], dtype=float)
+        b = d @ np.asarray(q["up"], dtype=float)
+        face = np.clip((normals @ np.asarray(q["facing"], dtype=float) - 0.5) / 0.2, 0.0, 1.0)
+        half = 0.5 * np.asarray(q["size_m"], dtype=float)
+        region = np.clip((half[0] - np.abs(a)) / soft + 0.5, 0.0, 1.0) * np.clip((half[1] - np.abs(b)) / soft + 0.5, 0.0, 1.0)
+    pitch = np.asarray(q["pitch_m"], dtype=float)
+    window = np.asarray(q["window_m"], dtype=float)
+    i, j = np.floor(a / pitch[0]), np.floor(b / pitch[1])
+    fa, fb = a - (i + 0.5) * pitch[0], b - (j + 0.5) * pitch[1]
+    inside = np.clip((0.5 * window[0] - np.abs(fa)) / soft + 0.5, 0.0, 1.0) * np.clip((0.5 * window[1] - np.abs(fb)) / soft + 0.5, 0.0, 1.0)
+    cover = inside * face * region
+    seeds = np.full(len(p), seed, dtype=np.int64)
+    lit = _hash01(i.astype(np.int64), j.astype(np.int64), seeds + 71) < q["lit"]
+    return cover, cover * lit
+
+
+__all__ = ["Atlas", "Marking", "NORMAL_SCALE", "wear_scale", "Plating", "bake_maps", "decode_normal", "glyph_strokes", "plating_for", "plating_lattice",
            "srgb_to_linear8", "surface_emissive_strength", "text_coverage", "value_noise"]

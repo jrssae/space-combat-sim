@@ -7,12 +7,22 @@ extends Node
 ## optional livery (`<wing>:<number>`, M4-T30b) paints the parked ship. `livery <wing> [number] [ship]` repaints any ship for a look
 ## (the player's by default), and the `livery` provider reports what the player's ship and the others wear.
 ## Bench-only: nothing in a scenario uses it.
+##
+## M4-T30d: the sheet also parks the hulls that are not pooled ships (`PROP_ASSETS`): a nav buoy, a ship's break-up chunks spread
+## apart (`raider_fighter_chunks`, `starfury_aurora_chunks`), a capital stand-in of each class (`capital_cruiser`, `capital_destroyer`,
+## `capital_carrier`) and the station stand-in (`b5_station`). The buoy and the chunks take the splat or the textured look; the
+## capitals and the station are textured only.
 
 const LIGHTS: Array[StringName] = [&"lit", &"dark", &"off"]
 const LOOKS: Array[StringName] = [&"splat", &"painted", &"textured"]
 ## How the parked ship faces the camera: three-quarters on (the sheets' rows), its back (the dorsal number), or its left side.
 const VIEWS: Array[StringName] = [&"three_quarter", &"top", &"side"]
 const POOL_TYPES: Dictionary = {"starfury_aurora": ShipPool.ALLY_TYPE, "raider_fighter": ShipPool.DEFAULT_TYPE}
+## The hulls that are not pooled ships, for the sheets (M4-T30d).
+const PROP_ASSETS: Array[String] = ["nav_buoy", "raider_fighter_chunks", "starfury_aurora_chunks", "capital_cruiser", "capital_destroyer",
+		"capital_carrier", "b5_station"]
+## How far apart a ship's chunks are spread for their sheet, as a share of their distance from the ship's centre.
+const CHUNK_SPREAD: float = 0.8
 ## How the parked ship faces the camera: turned this much off nose-on, seen a little from above.
 const YAW_DEG: float = 38.0
 const PITCH_DEG: float = 16.0
@@ -26,6 +36,7 @@ var player: Ship = null
 var key_star: DirectionalLight3D = null
 
 var _parked: Combatant = null
+var _prop: Node3D = null
 var _asset_id: String = ""
 var _star_transform: Transform3D = Transform3D.IDENTITY
 var _render_before: StringName = &""
@@ -52,9 +63,14 @@ func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
 
 
-## Whether a ship is parked now.
+## Whether a ship or a prop is parked now.
 func is_active() -> bool:
-	return _parked != null
+	return _parked != null or _prop != null
+
+
+## The parked prop (M4-T30d), or null.
+func prop() -> Node3D:
+	return _prop
 
 
 ## The parked ship, or null.
@@ -66,17 +82,19 @@ func parked() -> Combatant:
 func show(asset_id: String, distance_m: float, light: StringName, look: StringName, view: StringName = &"three_quarter") -> String:
 	if not _resolve():
 		return "sheet needs the world, the ship pool, the player's ship and the key star"
-	if not POOL_TYPES.has(asset_id):
-		return "no pooled ship draws %s (one of %s)" % [asset_id, ", ".join(POOL_TYPES.keys())]
+	if not POOL_TYPES.has(asset_id) and not PROP_ASSETS.has(asset_id):
+		return "no pooled ship or prop draws %s (one of %s, %s)" % [asset_id, ", ".join(POOL_TYPES.keys()), ", ".join(PROP_ASSETS)]
 	var camera: Camera3D = get_viewport().get_camera_3d()
 	if camera == null:
 		return "no current camera"
-	if _parked == null:
+	if not is_active():
 		_star_transform = key_star.global_transform
 		_render_before = StringName(Settings.get_value(&"ship_render"))
 		_player_was_visible = player.visible
 	else:
 		_release()
+	if PROP_ASSETS.has(asset_id):
+		return _show_prop(asset_id, camera, distance_m, light, look, view)
 	var type: StringName = POOL_TYPES[asset_id]
 	if pool.prepare(type, 1) < 1:
 		return "the %s pool is empty" % type
@@ -110,6 +128,9 @@ func set_light(light: StringName) -> void:
 
 ## Draws the parked ship as splats, as T27's painted mesh or as the textured mesh (`settings.ship_render` follows); "" or why not.
 func set_look(look: StringName) -> String:
+	if _prop != null:
+		Settings.set_value(&"ship_render", &"splat" if look == &"splat" else &"mesh")
+		return "" if look != &"painted" else "the props have no painted look on the sheet"
 	if _parked == null:
 		return "no ship is parked"
 	Settings.set_value(&"ship_render", &"splat" if look == &"splat" else &"mesh")
@@ -129,7 +150,7 @@ func set_look(look: StringName) -> String:
 
 ## Returns the parked ship to the pool and restores the player's hull, the key star and the render setting.
 func clear() -> void:
-	if _parked == null:
+	if not is_active():
 		return
 	_release()
 	player.visible = _player_was_visible
@@ -140,8 +161,62 @@ func clear() -> void:
 func _release() -> void:
 	if _parked != null:
 		pool.release(_parked)
+	if _prop != null and is_instance_valid(_prop):
+		_prop.queue_free()
 	_parked = null
+	_prop = null
 	_asset_id = ""
+
+
+# Parks a prop (a buoy, a ship's chunks, a capital, the station) ahead of the camera, three-quarters on or as `view` asks.
+func _show_prop(asset_id: String, camera: Camera3D, distance_m: float, light: StringName, look: StringName, view: StringName) -> String:
+	var cam: Transform3D = camera.global_transform
+	var at: Vector3 = cam.origin - cam.basis.z * distance_m
+	var to_camera: Vector3 = (cam.origin - at).normalized()
+	var basis := Basis.looking_at(to_camera, cam.basis.y).rotated(cam.basis.y, deg_to_rad(YAW_DEG)).rotated(cam.basis.x, deg_to_rad(-PITCH_DEG))
+	if view == &"top":
+		basis = Basis.looking_at(cam.basis.y, to_camera)
+	elif view == &"side":
+		basis = Basis.looking_at(-cam.basis.x, cam.basis.y)
+	basis = basis.orthonormalized()
+	if asset_id == "nav_buoy":
+		var buoy: NavBuoy = NavBuoy.create("SHEET BUOY")
+		buoy.spin_dps = 0.0
+		_prop = buoy
+	elif asset_id.ends_with("_chunks"):
+		var ship_asset: String = asset_id.trim_suffix("_chunks")
+		var hardpoints: Hardpoints = Hardpoints.load_file(ShipSpec.ASSET_ROOT.path_join(ship_asset).path_join("hardpoints.json"))
+		if not hardpoints.valid or hardpoints.chunks.is_empty():
+			return "%s has no chunks (run scripts/gen_assets.sh, then import)" % ship_asset
+		var group := Node3D.new()
+		group.name = "SheetChunks"
+		for entry: Dictionary in hardpoints.chunks:
+			var chunk: DebrisChunk = DebrisChunk.create(entry, ShipSpec.ASSET_ROOT.path_join(ship_asset), true)
+			chunk.position = (entry["offset"] as Vector3) * (1.0 + CHUNK_SPREAD)
+			group.add_child(chunk)
+		_prop = group
+	elif asset_id.begins_with("capital_"):
+		var cap: CapitalStandin = CapitalStandin.create(StringName(asset_id.trim_prefix("capital_")), Factions.NEUTRAL, "SHEET CAPITAL", Vector3.ZERO)
+		cap.freeze = true
+		_prop = cap
+	else:
+		var station := StationStandin.new()
+		if not station.build():
+			station.free()
+			return "the b5_station asset is not generated (run scripts/gen_assets.sh, then import)"
+		_prop = station
+	_prop.name = "Sheet" + asset_id.to_pascal_case()
+	world.add_child(_prop)
+	_prop.global_transform = Transform3D(basis, at)
+	if _prop is CapitalStandin:
+		(_prop as CapitalStandin).set_look(CapitalStandin.LOOK_MESH)
+	for chunk: Node in _prop.get_children():
+		if chunk is DebrisChunk:
+			(chunk as DebrisChunk).launch(chunk.global_transform, Vector3.ZERO, Vector3.ZERO)
+	_asset_id = asset_id
+	player.visible = false
+	set_light(light)
+	return set_look(look)
 
 
 # A lean ship's one hull node, the depth proxy that draws its mesh.

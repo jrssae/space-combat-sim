@@ -8,6 +8,10 @@ frame. Written generically: any asset whose parts carry a group can give chunks.
 
 The caller builds the hull PLY as the chunks' splats concatenated in the same order, so the chunks together hold
 exactly the hull's splats.
+
+A chunk's textured mesh (M4-T30d) is cut from the parent's textured mesh (``ChunkCut``, written by
+``textured_mesh.write_textured_mesh``): the parent's faces of the chunk's parts, re-centred on the same offset, on the parent's
+UVs, so it is drawn with the parent's maps and materials and names no map of its own. ``hardpoints.chunks[]`` gain its ``mesh``.
 """
 
 from __future__ import annotations
@@ -25,6 +29,20 @@ from .obj import write_obj
 from .ply import SplatData, write_ply
 
 
+@dataclass(frozen=True)
+class ChunkCut:
+    """A chunk's textured mesh: the parent's faces of ``parts`` (part names), moved so ``offset`` (in the textured mesh's frame) is
+    the chunk's origin."""
+
+    name: str
+    parts: tuple[str, ...]
+    offset: tuple[float, float, float]
+
+
+def chunk_mesh_name(asset_id: str, name: str) -> str:
+    return f"{asset_id}_chunk_{name}.glb"
+
+
 @dataclass
 class ChunkSource:
     """One group's splats (body frame, Godot axes) and fallback mesh (same frame)."""
@@ -39,10 +57,11 @@ def chunk_file_names(asset_id: str, name: str) -> tuple[str, str]:
 
 
 def write_chunks(
-    out_dir: Path, asset_id: str, sources: Sequence[ChunkSource], comments: Sequence[str] = ()
+    out_dir: Path, asset_id: str, sources: Sequence[ChunkSource], comments: Sequence[str] = (), with_meshes: bool = False
 ) -> tuple[list[Path], list[dict[str, Any]]]:
     """Writes ``<id>_chunk_<name>.ply``, ``.light`` and ``.obj`` for every source; returns the files and the
-    ``hardpoints.chunks[]`` entries ``{name, ply, lighting, obj, offset, splats}``."""
+    ``hardpoints.chunks[]`` entries ``{name, ply, lighting, obj, offset, splats}``, plus ``mesh`` (the chunk's textured mesh, which
+    the caller writes from its cuts) when ``with_meshes``."""
     files: list[Path] = []
     entries: list[dict[str, Any]] = []
     for source in sources:
@@ -70,6 +89,12 @@ def write_chunks(
                 "obj": obj_name,
                 "offset": [round(float(v), 5) + 0.0 for v in centroid],
                 "splats": len(source.splats),
+                **({"mesh": chunk_mesh_name(asset_id, source.name)} if with_meshes else {}),
             }
         )
     return files, entries
+
+
+def chunk_offsets(sources: Sequence[ChunkSource]) -> dict[str, np.ndarray]:
+    """Each chunk's offset as ``write_chunks`` records it: its splats' centroid, in the chunks' frame."""
+    return {source.name: source.splats.xyz.mean(axis=0) for source in sources}

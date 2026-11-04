@@ -50,7 +50,7 @@ from typing import Any
 import numpy as np
 
 from ..core import frames, lighting
-from ..core.chunks import ChunkSource, write_chunks
+from ..core.chunks import ChunkCut, ChunkSource, chunk_offsets, write_chunks
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Mesh
 from ..core.manifest import build_manifest, lod_entry, write_manifest
@@ -96,7 +96,7 @@ from ..styles import Style
 from ..styles.earthforce import EARTHFORCE
 
 ASSET_ID = "starfury_aurora"
-GENERATOR_VERSION = 7  # 7: wing liveries, Q36 cabin glow (M4-T30b); 6: the textured mesh (M4-T30a); 5: flat paint and lighting records (M3-T21)
+GENERATOR_VERSION = 8  # 8: chunk meshes (M4-T30d); 7: wing liveries, Q36 cabin glow (M4-T30b); 6: the textured mesh (M4-T30a); 5: flat paint and lighting records (M3-T21)
 PLY_NAME = "starfury_aurora.ply"
 OBJ_NAME = "starfury_aurora.obj"
 MESH_NAME = "starfury_aurora.glb"
@@ -897,31 +897,10 @@ def build(ctx: BuildContext) -> AssetOutputs:
         style,
     )
     files.append(paint_path)
-    # The textured mesh (M4-T30a): the same parts with a UV atlas and the four maps, the contract M5 builds against. With
-    # ``render_triangles`` (M4-T30b) the parts are rebuilt coarser and the normal map carries the fine hull's shape.
-    render_triangles = int(ctx.option("render_triangles", 0))
-    textured_source = placed if render_triangles <= 0 else coarse_placed(spec, style, ctx, render_triangles, offset)
-    textured_paths, mesh_entry = write_textured_mesh(
-        out_dir,
-        ASSET_ID,
-        _textured(textured_source, style),
-        style,
-        atlas_px=int(ctx.option("atlas_px", ATLAS_PX)),
-        texel_m=float(ctx.option("texel_m", TEXEL_M)),
-        seed=ctx.seed,
-        occlusion=bool(ctx.option("occlusion", True)),
-        paintable=PAINTABLE,
-        fine_mesh=hull_mesh if render_triangles > 0 else None,
-    )
-    if render_triangles > 0:
-        mesh_entry["render_triangles"] = render_triangles
-        mesh_entry["fine_triangles"] = int(hull_mesh.face_count)
-    files += textured_paths
-
     # LOD1: the same parts resampled coarser from their own streams, balanced and centred
     # like LOD0 (its splat centroid is the origin too), written chunk by chunk.
     lod1_spacing = lod1_factor * spacing
-    lod1_placed, _ = centre(
+    lod1_placed, lod1_offset = centre(
         build_parts(
             spec,
             style,
@@ -936,9 +915,38 @@ def build(ctx: BuildContext) -> AssetOutputs:
     lod1_comments = comments + (f"lod {CHUNK_LOD}",)
     files += _write_level(out_dir, _level_light(CHUNK_LOD), LOD1_PLY_NAME, lod1, lod1_comments)
     chunk_files, chunk_entries = write_chunks(
-        out_dir, ASSET_ID, chunk_sources, lod1_comments
+        out_dir, ASSET_ID, chunk_sources, lod1_comments, with_meshes=True
     )
     files += chunk_files
+
+    # The textured mesh (M4-T30a): the same parts with a UV atlas and the four maps, the contract M5 builds against. With
+    # ``render_triangles`` (M4-T30b) the parts are rebuilt coarser and the normal map carries the fine hull's shape. Each chunk's
+    # mesh (M4-T30d) is cut from it where the chunk's OBJ is: the chunks are LOD1's, centred a little apart from LOD0.
+    render_triangles = int(ctx.option("render_triangles", 0))
+    textured_source = placed if render_triangles <= 0 else coarse_placed(spec, style, ctx, render_triangles, offset)
+    shift = lod1_offset - offset
+    cuts = [
+        ChunkCut(name, tuple(p.part.name for p in textured_source if p.hull and chunk_of(p.part.name) == name),
+                 tuple(float(v) for v in centroid + shift))
+        for name, centroid in chunk_offsets(chunk_sources).items()
+    ]
+    textured_paths, mesh_entry = write_textured_mesh(
+        out_dir,
+        ASSET_ID,
+        _textured(textured_source, style),
+        style,
+        atlas_px=int(ctx.option("atlas_px", ATLAS_PX)),
+        texel_m=float(ctx.option("texel_m", TEXEL_M)),
+        seed=ctx.seed,
+        occlusion=bool(ctx.option("occlusion", True)),
+        paintable=PAINTABLE,
+        fine_mesh=hull_mesh if render_triangles > 0 else None,
+        chunks=cuts,
+    )
+    if render_triangles > 0:
+        mesh_entry["render_triangles"] = render_triangles
+        mesh_entry["fine_triangles"] = int(hull_mesh.face_count)
+    files += textured_paths
 
     # LOD2 and LOD3: whole-ship files for distant ships, resampled from their own streams.
     far: dict[int, int] = {}

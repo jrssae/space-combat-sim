@@ -10,8 +10,12 @@ extends Node3D
 ## `world_shiftable` itself as well, so a rebase moves it whichever way it was added.
 ##
 ## Assets are loaded at run time, guarded like `SpaceEnvironment`, so the buoy works as a target before
-## `scripts/gen_assets.sh` has run, with a warning. All buoys share one `GaussianResource`, fallback mesh and hardpoints
-## read. Without a GPU GDGS is a silent no-op, so how it looks is (H).
+## `scripts/gen_assets.sh` has run, with a warning. All buoys share one `GaussianResource`, fallback mesh, textured mesh and
+## hardpoints read. Without a GPU GDGS is a silent no-op, so how it looks is (H).
+##
+## With `settings.ship_render` at `mesh` or `hybrid` (the default from M4-T30d) the body is the textured mesh (`MeshAssets`, the
+## beacon's lens glowing in its emissive map), drawn by the fallback node with the splats and their depth proxy hidden; at `splat`
+## it is the splats again, for the comparison.
 ##
 ## Motion (spin, drift) is physics state and runs in `_physics_process` from `delta`; the fade is a visual and breathes in
 ## `_process` from `SimClock`, never the wall clock.
@@ -59,6 +63,7 @@ static var _shared_loaded: bool = false
 static var _shared_gaussian: GaussianResource = null
 static var _shared_lighting_path: String = ""
 static var _shared_mesh: Mesh = null
+static var _shared_textured: Mesh = null
 static var _shared_beacon_position: Vector3 = DEFAULT_BEACON_POSITION
 static var _shared_beacon_radius: float = DEFAULT_BEACON_RADIUS
 
@@ -109,6 +114,9 @@ func _enter_tree() -> void:
 	var body := get_node(^"BuoySplats") as GaussianSplatNode
 	body.gaussian = _shared_gaussian
 	SplatLightingLoader.attach(body, _shared_lighting_path)
+	if not Settings.changed.is_connected(_on_setting_changed):
+		Settings.changed.connect(_on_setting_changed)
+	_apply_body()
 
 
 func _ready() -> void:
@@ -168,11 +176,33 @@ func _build_hull() -> void:
 ## Shows the fallback mesh instead of the splats (splats unavailable, or the F4 comparison toggle).
 func use_fallback_mesh(enabled: bool) -> void:
 	_fallback_active = enabled
+	_apply_body()
+
+
+## Whether the body is drawn as the textured mesh now (M4-T30d).
+func is_drawing_textured() -> bool:
+	return _shared_textured != null and StringName(Settings.get_value(&"ship_render")) != &"splat"
+
+
+func _exit_tree() -> void:
+	if Settings.changed.is_connected(_on_setting_changed):
+		Settings.changed.disconnect(_on_setting_changed)
+
+
+# The body as the textured mesh, the splats, or the fallback OBJ when the splats cannot be drawn.
+func _apply_body() -> void:
 	if not is_node_ready():
 		return
-	mesh_fallback.visible = enabled
-	depth_proxy.visible = not enabled
-	splats.visible = not enabled
+	var textured: bool = is_drawing_textured()
+	mesh_fallback.mesh = _shared_textured if textured else _shared_mesh
+	mesh_fallback.visible = textured or _fallback_active
+	depth_proxy.visible = not textured and not _fallback_active
+	splats.visible = not textured and not _fallback_active
+
+
+func _on_setting_changed(key: StringName, _value: Variant) -> void:
+	if key == &"ship_render":
+		_apply_body()
 
 
 func is_fallback_mesh_active() -> bool:
@@ -204,6 +234,8 @@ static func _load_shared_assets() -> void:
 	_shared_lighting_path = SplatLod.lighting_path(ASSET_ID, 0)
 	if ResourceLoader.exists(MESH_PATH):
 		_shared_mesh = load(MESH_PATH) as Mesh
+	if MeshAssets.is_textured(ASSET_ID):
+		_shared_textured = MeshAssets.for_asset(ASSET_ID)
 	var file := FileAccess.open(HARDPOINTS_PATH, FileAccess.READ)
 	if file == null:
 		push_warning("NavBuoy: no %s; the beacon goes at the default position" % HARDPOINTS_PATH)

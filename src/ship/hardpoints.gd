@@ -35,7 +35,8 @@ var muzzles: Array[Dictionary] = []
 var collision: Array[Dictionary] = []
 ## Break-up chunks (optional; M2-T04), one entry per group in file order: `name` (String), `ply`, `lighting` ("" when it has none)
 ## and `obj` (file names in the asset directory), `offset` (Vector3: the chunk's centroid in the body frame), `joint` (Vector3:
-## where it detaches from the body, M3-T28; the offset when the file has none) and `splats` (int).
+## where it detaches from the body, M3-T28; the offset when the file has none), `splats` (int) and `mesh` (its textured mesh, a glb cut
+## from the hull's on the hull's maps, M4-T30d; "" when it has none).
 var chunks: Array[Dictionary] = []
 ## Running lights (optional; M3-T27), ship frame: `port`, `starboard` and `top` (markers), `top_lamp` (where the light on the top of the
 ## hull comes from), `cabin` (the cockpit glow) as Vector3, `top_lamp_range_m` and `cabin_range_m` as floats. Empty when the file has none.
@@ -247,6 +248,7 @@ func _parse_chunk(value: Variant) -> String:
 		"offset": _to_vec3(entry["offset"]),
 		"joint": _to_vec3(entry["joint"]) if _is_vec3(entry.get("joint")) else _to_vec3(entry["offset"]),
 		"splats": int(_number_or(entry.get("splats"), 0.0)),
+		"mesh": String(entry.get("mesh", "")) if entry.get("mesh") is String else "",
 	})
 	return ""
 

@@ -95,18 +95,19 @@ class ScaleTests(unittest.TestCase):
         self.assertEqual(section["map_px"]["normal"], 128)
         self.assertEqual(section["map_px"]["albedo"], 128)
 
-    def test_a_big_hull_with_wear_scaled_keeps_its_plates_flat_between_the_seams(self) -> None:
-        # Rivets and fine wear sized for a fighter alias into speckle on a hull texelled at half a metre; a station-sized style scales
-        # them with ``wear_scale`` so the plates stay flat.
-        materials = dict(EARTHFORCE.materials)
-        big = Style("big", materials, panel_size_m=12.0, panel_line_width_m=0.8, extra={"wear_scale": 40.0, "bare_metal": 0.0})
-        box = g.box((60.0, 60.0, 60.0), materials["hull"])
-        atlas = atlas_of([TexturedPart(box, (0, 0, 0), name="box")], atlas_px=512, texel_m=0.5, style=big)
-        maps = bake_maps(atlas, big, seed=1, occlusion=False, normal_scale=1)
-        n = maps["normal"].astype(float) / 127.5 - 1.0
-        filled = atlas.buffers.filled
-        tilted = np.hypot(n[..., 0], n[..., 1]) > 0.08
-        self.assertLess(tilted[filled].mean(), 0.25, "only the seams tilt the normals")
+    def test_a_big_hull_with_wear_scaled_has_no_texel_speckle(self) -> None:
+        # The weathering's noise is sized for a fighter texelled at a centimetre; on a hull texelled at half a metre it turns to
+        # texel-to-texel speckle unless ``wear_scale`` scales it with the hull.
+        def speckle(scale: float) -> float:
+            big = Style("big", dict(EARTHFORCE.materials), panel_size_m=12.0, panel_line_width_m=0.8, streaks=0.38, grime=0.1,
+                        extra={"wear_scale": scale, "bare_metal": 0.0, "speckle": 0.07, "smudge": 0.38})
+            box = g.box((60.0, 60.0, 60.0), EARTHFORCE.material("hull"))
+            atlas = atlas_of([TexturedPart(box, (0, 0, 0), name="box")], atlas_px=512, texel_m=0.5, style=big)
+            grey = bake_maps(atlas, big, seed=1, occlusion=False, normal_scale=1)["albedo"][..., :3].astype(float).mean(axis=2)
+            both = atlas.buffers.filled[:, 1:] & atlas.buffers.filled[:, :-1]
+            return float(np.abs(grey[:, 1:] - grey[:, :-1])[both].mean())
+
+        self.assertLess(speckle(40.0), 0.5 * speckle(1.0))
 
 
 class ChunkMeshTests(unittest.TestCase):

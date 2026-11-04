@@ -1,8 +1,9 @@
 class_name RenderPiece
 extends Node3D
-## One big stand-in piece drawn either way (M4-T27, Q24, architecture §17.17): a chain of splat levels or the painted mesh of the same
-## surface, from a generator's piece entry (`tools/procgen/core/pieces.py`: `lods` with their centroids, `paint_mesh`). The station's
-## drum and frame and the capital hulls of the render comparison are pieces.
+## One big stand-in piece drawn either way (M4-T27, Q24, architecture §17.17): a chain of splat levels or the mesh of the same
+## surface, from a generator's piece entry (`tools/procgen/core/pieces.py`: `lods` with their centroids, `paint_mesh`, and from M4-T30d
+## the textured `mesh`, which is drawn when the entry has one). The station's drum and frame and the capital hulls are pieces; from
+## M4-T30d they are built without their splat levels (`build`'s `with_splats`) and drawn textured.
 ##
 ## While splats are drawn it shows one level, the coarsest whose spacing still projects to at most `MAX_SPACING_PX` at the piece's
 ## nearest point, so a station seen from 15 km draws a few thousand splats and from 1 km its full detail. The mesh's own levels are
@@ -24,9 +25,12 @@ var _mesh_node: MeshInstance3D = null
 var _level: int = -1
 
 
-## Builds the levels and the mesh from `entry`, files under `dir`. The splat nodes get their records before they enter the tree.
-func build(dir: String, entry: Dictionary) -> void:
-	for lod: Variant in entry.get("lods", []):
+## Builds the levels and the mesh from `entry`, files under `dir`. The splat nodes get their records before they enter the tree; without
+## `with_splats` there are none and the piece is drawn as its mesh.
+func build(dir: String, entry: Dictionary, with_splats: bool = true) -> void:
+	if not with_splats:
+		look = Look.MESH
+	for lod: Variant in entry.get("lods", []) if with_splats else []:
 		var row: Dictionary = lod
 		var node := GaussianSplatNode.new()
 		node.name = "Lod%d" % int(row["level"])
@@ -42,8 +46,11 @@ func build(dir: String, entry: Dictionary) -> void:
 		_levels.append(node)
 		spacings.append(float(row["spacing_m"]))
 	_mesh_node = MeshInstance3D.new()
-	_mesh_node.name = "PaintMesh"
-	_mesh_node.mesh = PaintMeshes.load_entry(dir, entry.get("paint_mesh", {})) if entry.has("paint_mesh") else null
+	_mesh_node.name = "HullMesh"
+	if entry.has("mesh"):
+		_mesh_node.mesh = MeshAssets.load_textured(dir, entry["mesh"])
+	elif entry.has("paint_mesh"):
+		_mesh_node.mesh = PaintMeshes.load_entry(dir, entry["paint_mesh"])
 	_mesh_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_mesh_node.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	_mesh_node.visible = false
@@ -75,7 +82,7 @@ func visible_splats() -> int:
 	return _levels[_level].gaussian.point_count
 
 
-## The painted mesh (null before it is generated).
+## The textured mesh, or the painted one for an entry without it (null before it is generated).
 func mesh() -> Mesh:
 	return _mesh_node.mesh if _mesh_node != null else null
 

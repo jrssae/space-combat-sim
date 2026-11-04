@@ -20,6 +20,7 @@ from ..styles import Style
 from .geometry import Material, Mesh
 from .glb import GlbPrimitive, write_glb
 from .image import write_png
+from .chunks import ChunkCut, chunk_mesh_name
 from .livery import digit_atlas, digit_import_sidecar, livery_section
 from .paint_mesh import PHASE_STEPS, phase_of
 from .raster import dilate, rasterize, sharp_edges
@@ -108,16 +109,19 @@ def atlas_of(parts: Sequence[TexturedPart], atlas_px: int = DEFAULT_ATLAS_PX, te
     return Atlas(buffers, mesh.materials, tuple(p.name for p in parts), phases, markings, packed.packed.texel_m, mesh, platings)
 
 
-def _primitives(parts: Sequence[TexturedPart], packed: PackedParts, zones: bool = False) -> tuple[GlbPrimitive, GlbPrimitive]:
+def _primitives(parts: Sequence[TexturedPart], packed: PackedParts, zones: bool = False, face_mask: np.ndarray | None = None,
+                offset: Sequence[float] = (0.0, 0.0, 0.0)) -> tuple[GlbPrimitive, GlbPrimitive]:
     """The opaque and glass primitives: a glb vertex per (mesh vertex, UV), normals the parts' smooth vertex normals; with ``zones``
-    each vertex's livery zone in COLOR_0's red (zone / 255)."""
+    each vertex's livery zone in COLOR_0's red (zone / 255). ``face_mask`` keeps only some faces (a chunk's) and ``offset`` is
+    subtracted from the positions."""
     mesh = packed.mesh
     normals = mesh.vertex_normals()
     transmittance = np.array([m.transmittance for m in mesh.materials], dtype=float)[mesh.face_material]
     glass_face = transmittance > 0.0
+    keep = np.ones(mesh.face_count, dtype=bool) if face_mask is None else face_mask
     out = []
     for glass in (False, True):
-        faces = np.flatnonzero(glass_face == glass)
+        faces = np.flatnonzero((glass_face == glass) & keep)
         if len(faces) == 0:
             out.append(GlbPrimitive(np.zeros((0, 3)), np.zeros((0, 3)), np.zeros((0, 2)), [], GLASS_SURFACE if glass else OPAQUE_SURFACE,
                                     (0.0, 0.0, 0.0, 0.3) if glass else (1.0, 1.0, 1.0, 1.0), glass))
@@ -133,8 +137,8 @@ def _primitives(parts: Sequence[TexturedPart], packed: PackedParts, zones: bool 
             colors = np.zeros((len(source), 4))
             colors[:, 0] = packed.vertex_zone[source] / 255.0
             colors[:, 3] = 1.0
-        out.append(GlbPrimitive(mesh.vertices[source], normals[source], unique[:, 1:3], inverse.reshape(-1), GLASS_SURFACE if glass else OPAQUE_SURFACE,
-                                base, glass, colors=colors))
+        out.append(GlbPrimitive(mesh.vertices[source] - np.asarray(offset, dtype=float), normals[source], unique[:, 1:3], inverse.reshape(-1),
+                                GLASS_SURFACE if glass else OPAQUE_SURFACE, base, glass, colors=colors))
     return out[0], out[1]
 
 
@@ -168,7 +172,7 @@ def manifest_section(asset_id: str, parts: Sequence[TexturedPart], packed: Packe
             "blend": bool(glass),
             **files,
             "transmittance": round(float(transmittance), 6),
-            "emissive_strength": round(float(surface_emissive_strength(mesh.materials, glass)), 6),
+            "emissive_strength": round(float(surface_emissive_strength(mesh.materials, glass, atlas.markings)), 6),
         })
     return {
         "file": f"{asset_id}.glb",
@@ -188,11 +192,14 @@ def manifest_section(asset_id: str, parts: Sequence[TexturedPart], packed: Packe
 
 def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPart], style: Style, atlas_px: int = DEFAULT_ATLAS_PX,
                         texel_m: float = DEFAULT_TEXEL_M, seed: int = 0, occlusion: bool = True,
-                        paintable: Sequence[str] = (), fine_mesh: Mesh | None = None) -> tuple[list[Path], dict[str, Any]]:
+                        paintable: Sequence[str] = (), fine_mesh: Mesh | None = None, normal_scale: int = NORMAL_SCALE,
+                        chunks: Sequence[ChunkCut] = ()) -> tuple[list[Path], dict[str, Any]]:
     """Write the textured mesh of ``parts`` into ``out_dir`` and return its files and the manifest's ``mesh`` section. With
     ``paintable`` material names the hull takes wing liveries (M4-T30b): the vertices carry their parts' zones, the albedo's alpha
     says where paint may go, and the digit atlas and the ``livery`` section are written too. With ``fine_mesh`` the parts are a
-    coarse render mesh (``render_triangles``) and the normal map carries the fine mesh's shape."""
+    coarse render mesh (``render_triangles``) and the normal map carries the fine mesh's shape. ``normal_scale`` is the normal map's
+    size over the atlas's (big hulls take 1). Each of ``chunks`` (M4-T30d) is written as ``<asset_id>_chunk_<name>.glb``: its parts'
+    faces on the same atlas, so it draws with these maps."""
     out_dir = Path(out_dir)
     packed = pack_parts(parts, atlas_px, texel_m)
     mesh = packed.mesh
@@ -202,9 +209,20 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
     phases = tuple(phase_of(p.phase, style) for p in parts)
     atlas = Atlas(buffers, mesh.materials, tuple(p.name for p in parts), phases, tuple(m for p in parts for m in p.markings),
                   packed.packed.texel_m, mesh, tuple(plating_for(p.name, p.mesh, style) for p in parts), fine_mesh)
-    maps = bake_maps(atlas, style, seed, occlusion, paintable)
+    maps = bake_maps(atlas, style, seed, occlusion, paintable, normal_scale)
     opaque, glass = _primitives(parts, packed, zones=bool(paintable))
     paths = [write_glb(out_dir / f"{asset_id}.glb", [opaque, glass], asset_id)]
+    names = [p.name for p in parts if p.mesh.face_count > 0]
+    for cut in chunks:
+        unknown = [name for name in cut.parts if name not in names]
+        if unknown:
+            raise ValueError(f"chunk {cut.name!r} names parts that are not in the mesh: {unknown}")
+        members = np.array([k for k, p in enumerate(parts) if p.name in cut.parts], dtype=np.int64)
+        mask = np.isin(packed.face_part, members)
+        if not mask.any():
+            raise ValueError(f"chunk {cut.name!r} has no faces")
+        piece = _primitives(parts, packed, zones=bool(paintable), face_mask=mask, offset=cut.offset)
+        paths.append(write_glb(out_dir / chunk_mesh_name(asset_id, cut.name), list(piece), f"{asset_id}_chunk_{cut.name}"))
     for key in MAP_KEYS:
         png = out_dir / f"{asset_id}_{key}.png"
         paths.append(write_png(png, maps[key]))
@@ -223,5 +241,5 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
     return paths, section
 
 
-__all__ = ["DEFAULT_ATLAS_PX", "DEFAULT_TEXEL_M", "PackedParts", "TexturedPart", "atlas_of", "import_sidecar", "pack_parts",
+__all__ = ["DEFAULT_ATLAS_PX", "DEFAULT_TEXEL_M", "ChunkCut", "PackedParts", "TexturedPart", "atlas_of", "import_sidecar", "pack_parts",
            "write_textured_mesh"]

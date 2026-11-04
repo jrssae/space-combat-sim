@@ -26,7 +26,7 @@ func _triangles(mesh: Mesh) -> int:
 
 
 func test_a_ship_asset_gives_its_mesh_with_one_paint_material_per_surface() -> void:
-	var mesh: Mesh = PaintMeshes.for_asset(RAIDER)
+	var mesh: Mesh = _painted(RAIDER)  # the raider's for_asset is its textured mesh from M4-T30d
 	assert_not_null(mesh, "run scripts/gen_assets.sh and import first")
 	if mesh == null:
 		return
@@ -35,7 +35,7 @@ func test_a_ship_asset_gives_its_mesh_with_one_paint_material_per_surface() -> v
 	assert_not_null(material)
 	assert_eq(material.shader, PaintMeshes.OPAQUE_SHADER)
 	assert_true(MeshAssets.materials.has(material), "kept for the lights")
-	assert_same(PaintMeshes.for_asset(RAIDER), mesh, "loaded once and shared")
+	assert_same(_painted(RAIDER), mesh, "loaded once and shared")
 
 
 func test_the_mesh_holds_the_manifests_triangles_and_box() -> void:

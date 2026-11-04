@@ -158,7 +158,7 @@ class StarfuryAuroraTests(unittest.TestCase):
         chunk_files = [
             f"starfury_aurora_chunk_{c}.{ext}"
             for c in CHUNK_NAMES
-            for ext in ("light", "mtl", "obj", "ply")
+            for ext in ("light", "mtl", "obj", "ply", "glb")  # glb: the chunk's textured mesh (M4-T30d)
         ]
         self.assertEqual(
             names,
@@ -734,8 +734,8 @@ class StarfuryAuroraTests(unittest.TestCase):
 
     def test_a_new_interior_leaves_the_hull_alone(self) -> None:
         # T29 changed no splat; M4-T30a's version 6 added the textured mesh and M4-T30b's 7 the liveries and the new colours (the
-        # pinned LOD0 records' colours moved with them). The hull's OBJ has none of the interior's materials.
-        self.assertEqual(ship.GENERATOR_VERSION, 7)
+        # pinned LOD0 records' colours moved with them); M4-T30d's 8 the chunk meshes. The hull's OBJ has none of the interior's materials.
+        self.assertEqual(ship.GENERATOR_VERSION, 8)
         hull = read_obj(self.dir_a / ship.OBJ_NAME)
         self.assertFalse([m for m in hull.materials if "ef_cockpit" in m])
         self.assertEqual(self.manifest["counts"], LOD0_COUNTS)

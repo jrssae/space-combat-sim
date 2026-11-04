@@ -9,8 +9,10 @@ Shape only, built from primitives and the written proportions in ``docs/design-r
   vanes, the top bar over the drum with its row of red cargo modules, the command sphere with its ring, Cobra-bay arms and masts, and
   the forked bow spike.
 
-Each piece is written as a chain of splat levels (4, 8, 16 and 32 m spacing) with lighting records, and as a painted mesh
-(``core/pieces.py``). The drum's frame is centred on its axis, so turning its node about local Z turns the drum in place.
+Each piece is written as a chain of splat levels (4, 8, 16 and 32 m spacing) with lighting records, as a painted mesh and, from
+M4-T30d, as a textured mesh on a 2 048 px atlas of its own (``core/pieces.py``): the drum's bands, the frame's plating, the cargo
+modules' red, the command sphere's rows of lit windows. The drum's frame is centred on its axis, so turning its node about local Z
+turns the drum in place.
 """
 
 from __future__ import annotations
@@ -23,12 +25,14 @@ import numpy as np
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Material, Mesh, box, lathe, rotation_x, tapered_box
 from ..core.manifest import build_manifest, write_manifest
-from ..core.paint_mesh import PaintPart, phase_steps
-from ..core.pieces import write_piece
+from ..core.paint_mesh import phase_steps
+from ..core.pieces import PieceTexture, write_piece
+from ..core.textured_mesh import TexturedPart
+from ..core.textures import Marking
 from ..styles import Style
 
 ASSET_ID = "b5_station"
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2  # 2: the textured pieces (M4-T30d)
 LOD_SPACINGS_M = (4.0, 8.0, 16.0, 32.0)
 LENGTH_M = 8000.0
 DRUM_RADIUS_M = LENGTH_M / 18.0  # diameter 1/9 of the length
@@ -39,6 +43,18 @@ TOP_BAR_Y = DRUM_RADIUS_M + 65.0
 # Every level's splats over these is the budget the game can draw at once with a dozen capitals (`splat_budget` 2 000 000).
 LOD0_BUDGET = (600_000, 1_400_000)
 SEGMENTS = 96
+COMMAND_Z = -2900.0
+COMMAND_RADIUS_M = 420.0
+# The textured pieces (M4-T30d): a 2 048 px atlas each (about 2 m a texel) and the texel the packer starts from.
+ATLAS_PX = 2048
+TEXEL_M = 1.4
+# The command sphere's windows: rows round it at these heights along the axis (from its centre), each this tall, m.
+WINDOW_ROWS_AT_M = (-260.0, -150.0, -40.0, 70.0, 180.0)
+WINDOW_ROW_M = 40.0
+WINDOW_PITCH_M = (24.0, 12.0)
+WINDOW_M = (12.0, 6.0)
+WINDOW_GLOW = (1.0, 0.88, 0.66)
+WINDOW_STRENGTH = 2.5
 
 
 def _lin(hex_rgb: int) -> tuple[float, float, float]:
@@ -70,6 +86,15 @@ STATION = Style(
     panel_line_width_m=6.0,
     panel_line_darkness=0.6,
     panel_tint_jitter=0.08,
+    # The fighters' wear is sized for a centimetre texel; the station is texelled at about 2 m (M4-T30d).
+    groove_depth_m=0.8,
+    hatch_depth_m=0.3,
+    edge_wear_width_m=4.0,
+    grime_scale_m=120.0,
+    streaks=0.2,
+    grime=0.1,
+    extra={"wear_scale": 120.0, "rivets": 0.0, "bare_metal": 0.0, "smudge": 0.2, "speckle": 0.04, "paint_roughness": 0.8,
+           "streak_length_m": 0.25},
 )
 
 
@@ -77,11 +102,17 @@ def _m(role: str) -> Material:
     return STATION.material(role)
 
 
-def _part(name: str, mesh: Mesh) -> PaintPart:
-    return PaintPart(mesh, phase_steps(name, False))
+def _part(name: str, mesh: Mesh, markings: tuple[Marking, ...] = ()) -> TexturedPart:
+    return TexturedPart(mesh, phase_steps(name, False), markings, name)
 
 
-def drum_parts() -> list[PaintPart]:
+def command_windows() -> tuple[Marking, ...]:
+    """Rows of lit windows round the command sphere."""
+    return tuple(Marking.window_rings("command", (0.0, 0.0, COMMAND_Z), (0.0, 0.0, 1.0), at, WINDOW_ROW_M, WINDOW_PITCH_M, WINDOW_M,
+                                      WINDOW_GLOW, WINDOW_STRENGTH, lit=0.6) for at in WINDOW_ROWS_AT_M)
+
+
+def drum_parts() -> list[TexturedPart]:
     """The habitat drum, centred on its own axis (z from the drum's middle)."""
     mid = 0.5 * (DRUM_FRONT_Z + DRUM_BACK_Z)
     zs = np.linspace(DRUM_FRONT_Z, DRUM_BACK_Z, DRUM_BANDS + 1) - mid
@@ -102,9 +133,9 @@ def _upright(mesh: Mesh, at: tuple[float, float, float], down: bool = False) -> 
     return mesh.transformed(rotation_x(math.pi / 2.0 if down else -math.pi / 2.0), at)
 
 
-def frame_parts() -> list[PaintPart]:
+def frame_parts() -> list[TexturedPart]:
     """Every stationary part, in the station frame."""
-    parts: list[PaintPart] = []
+    parts: list[TexturedPart] = []
     # Reactor drum and flared cap at the stern.
     reactor = lathe(
         [(3400.0, 0.0), (3400.0, 300.0), (3480.0, 350.0), (3880.0, 350.0), (3960.0, 420.0), (4000.0, 470.0), (4000.0, 0.0)],
@@ -144,12 +175,12 @@ def frame_parts() -> list[PaintPart]:
         bar.append(box((34.0, 24.0, 60.0), _m("hazard"), (0.0, TOP_BAR_Y + 42.0, float(z))))
     parts.append(_part("topbar", Mesh.concatenate(bar)))
     # Command section: sphere, ring, Cobra-bay arms and masts.
-    centre_z, radius = -2900.0, 420.0
+    centre_z, radius = COMMAND_Z, COMMAND_RADIUS_M
     angles = np.linspace(0.0, math.pi, 25)
     sphere_profile = [(centre_z - radius * math.cos(a), radius * math.sin(a)) for a in angles]
     sphere_profile[0] = (sphere_profile[0][0], 0.0)
     sphere_profile[-1] = (sphere_profile[-1][0], 0.0)
-    parts.append(_part("command", lathe(sphere_profile, SEGMENTS, _m("canopy_frame"))))
+    parts.append(_part("command", lathe(sphere_profile, SEGMENTS, _m("canopy_frame")), command_windows()))
     ring = lathe([(centre_z - 60.0, 470.0), (centre_z - 60.0, 560.0), (centre_z + 60.0, 560.0), (centre_z + 60.0, 470.0)], SEGMENTS,
             _m("hull"), creases=(1, 2))
     ring_inner = lathe([(centre_z - 60.0, 470.0), (centre_z + 60.0, 470.0)], SEGMENTS, _m("hull_dark")).flipped()
@@ -171,10 +202,11 @@ def build(ctx: BuildContext) -> AssetOutputs:
     out_dir: Path = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     comments = (f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}", "frame: 3dgs (Rz180 of godot), centred on its own splats")
-    files, drum = write_piece(out_dir, f"{ASSET_ID}_drum", drum_parts(), STATION, spacings, ctx.rng, comments)
+    texture = PieceTexture(ATLAS_PX, TEXEL_M, ctx.seed)
+    files, drum = write_piece(out_dir, f"{ASSET_ID}_drum", drum_parts(), STATION, spacings, ctx.rng, comments, texture)
     drum["pivot"] = drum_centre()
     drum["axis"] = [0.0, 0.0, 1.0]
-    frame_files, frame = write_piece(out_dir, f"{ASSET_ID}_frame", frame_parts(), STATION, spacings, ctx.rng, comments)
+    frame_files, frame = write_piece(out_dir, f"{ASSET_ID}_frame", frame_parts(), STATION, spacings, ctx.rng, comments, texture)
     files += frame_files
     warnings: list[str] = []
     total = drum["lods"][0]["splats"] + frame["lods"][0]["splats"]

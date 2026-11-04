@@ -4,8 +4,8 @@ extends Node
 ## 80 fighters in a fight beside it (40 Earth Alliance Starfuries, 40 raiders, invulnerable like the bench's) and a planet 40 km off
 ## with its pull (Q6's harness-only point source). Bench-only: nothing in a scenario builds it.
 ##
-## Hulls follow `settings.ship_render`: the fighters through their own ships, the station and the capitals here (hybrid draws them as
-## splats). The player's ship is moved to a viewpoint near the station or 11 km off it, nose on the station, at rest.
+## The fighters' hulls follow `settings.ship_render`; the station and the capitals are drawn textured (M4-T30d took their splat look
+## out). The player's ship is moved to a viewpoint near the station or 11 km off it, nose on the station, at rest.
 ##
 ## Console: `station <near|far|off>`.
 
@@ -48,15 +48,12 @@ var centre: UniversePos = null
 
 func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"station",
-			"Open the render comparison's station scene and put the player near it or far from it, or close it (hulls follow settings.ship_render)",
+			"Open the render comparison's station scene and put the player near it or far from it, or close it (fighters follow settings.ship_render)",
 			[ConsoleArg.enum_required(&"view", [&"near", &"far", &"off"])]), _cmd_station, self)
-	Settings.changed.connect(_on_setting_changed)
 
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
-	if Settings.changed.is_connected(_on_setting_changed):
-		Settings.changed.disconnect(_on_setting_changed)
 
 
 func is_open() -> bool:
@@ -99,11 +96,6 @@ func place_player(view: StringName) -> void:
 	main.ship.reset_to(Transform3D(Basis.looking_at((target - at).normalized(), Vector3.UP), at))
 	main.ship.linear_velocity = Vector3.ZERO
 	main.ship.angular_velocity = Vector3.ZERO
-
-
-## The look `settings.ship_render` asks the station and the capitals for.
-static func look_for(render: StringName) -> RenderPiece.Look:
-	return RenderPiece.Look.MESH if render == &"mesh" else RenderPiece.Look.SPLAT
 
 
 func _build() -> bool:
@@ -179,19 +171,13 @@ func _make_planet() -> MeshInstance3D:
 	return node
 
 
+# The capitals draw their textured hulls (the station's pieces always do).
 func _apply_look() -> void:
 	if not is_open():
 		return
-	var render: StringName = StringName(Settings.get_value(&"ship_render"))
-	station.set_look(look_for(render))
 	for cap: CapitalStandin in main.bench.standins.capitals():
 		if is_instance_valid(cap):
-			cap.set_look(CapitalStandin.LOOK_MESH if render == &"mesh" else CapitalStandin.LOOK_SPLAT)
-
-
-func _on_setting_changed(key: StringName, _value: Variant) -> void:
-	if key == &"ship_render":
-		_apply_look()
+			cap.set_look(CapitalStandin.LOOK_MESH)
 
 
 func _cmd_station(args: Dictionary) -> ConsoleResult:
@@ -201,5 +187,5 @@ func _cmd_station(args: Dictionary) -> ConsoleResult:
 		return ConsoleResult.line("station scene closed")
 	if not open(view):
 		return ConsoleResult.failure("the b5_station asset is not generated (run scripts/gen_assets.sh, then import)")
-	return ConsoleResult.line("station scene: %s view, %d fighters, %d capitals, hulls %s" % [view, fighters.size(),
+	return ConsoleResult.line("station scene: %s view, %d fighters, %d capitals, fighters %s" % [view, fighters.size(),
 			main.bench.standins.capitals().size(), Settings.get_value(&"ship_render")])

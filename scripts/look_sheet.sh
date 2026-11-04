@@ -9,6 +9,8 @@
 #              SHEET_SETTLE (40 frames a shot), SHEET_RES (1920x1080), GODOT_BIN.
 #              M4-T30b (checkpoint 1c): SHEET_LIVERIES (wing:number,... a column each instead of the looks), SHEET_COMPARE (a pattern of
 #              earlier shots, %d metres and %s lit or dark, as one more column), SHEET_COMPARE_LABEL, SHEET_PREFIX (m4_t30a), SHEET_PATH.
+#              M4-T30d: SHEET_COCKPIT (1; 0 leaves the cockpit view out, for the props: nav_buoy, raider_fighter_chunks,
+#              starfury_aurora_chunks, capital_cruiser, capital_destroyer, capital_carrier, b5_station).
 # Run it under the bench locks: flock /tmp/m5-godot.lock flock /tmp/scs-bench.lock scripts/look_sheet.sh ...
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -32,7 +34,7 @@ flock /tmp/scs-gpu.lock timeout 900 "${GODOT}" --path . --resolution "${RES}" --
     -s res://scripts/look_sheet.gd -- asset="${ASSET}" out="${OUT_DIR}" distances="${SHEET_DISTANCES:-8,30,150,600}" \
     looks="${SHEET_LOOKS:-splat,painted,textured}" lights="${SHEET_LIGHTS:-lit,dark}" settle="${SHEET_SETTLE:-40}" scale3d=1080p \
     liveries="${SHEET_LIVERIES:-}" compare="${SHEET_COMPARE:-}" compare_label="${SHEET_COMPARE_LABEL:-T30A}" prefix="${SHEET_PREFIX:-m4_t30a}" \
-    sheet="${SHEET_PATH:-}" \
+    sheet="${SHEET_PATH:-}" cockpit="${SHEET_COCKPIT:-1}" \
     > "${LOG}" 2>&1 || status=$?
 grep -E '^\[sheet\]|SCRIPT ERROR|console error' "${LOG}" || true
 if (( status != 0 )); then

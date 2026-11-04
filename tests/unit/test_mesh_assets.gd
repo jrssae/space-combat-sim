@@ -88,12 +88,14 @@ func test_the_maps_import_compressed_with_mipmaps_the_normal_flagged() -> void:
 		assert_eq(int(sidecar.get_value("params", "compress/channel_pack", -1)), int(expected_pack[key]), "%s: colour or data" % key)
 
 
-func test_an_asset_without_textures_keeps_the_painted_path() -> void:
-	var mesh: Mesh = MeshAssets.for_asset(RAIDER)
+func test_a_painted_entry_keeps_the_paint_shader() -> void:
+	# Every hull is textured from M4-T30d; T27's painted mesh is still loaded by its own entry (the sheet's painted look).
+	assert_true(MeshAssets.is_textured(RAIDER), "the raider is textured from M4-T30d")
+	var entry: Dictionary = SplatLod.read_manifest(RAIDER).get("paint_mesh", {})
+	var mesh: Mesh = MeshAssets.load_entry(_dir(RAIDER), entry) if not entry.is_empty() else null
 	assert_not_null(mesh, GEN_ASSETS_HINT)
 	if mesh == null:
 		return
-	assert_false(MeshAssets.is_textured(RAIDER), "the raider is T30b's")
 	var material := mesh.surface_get_material(0) as ShaderMaterial
 	assert_not_null(material)
 	assert_eq(material.shader, MeshAssets.OPAQUE_SHADER)

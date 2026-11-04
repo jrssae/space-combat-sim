@@ -3,7 +3,8 @@ extends MultiMeshInstance3D
 ## Every far AI ship as a point (M4-T11, architecture §17.10 and §14.4's last level). A ship past `settings.far_ship_dot_m` from
 ## the camera hides its splats, proxy, plumes and markers (its `LodSwitcher` decides, `Ship.set_far_dot`) and is drawn here
 ## instead: one instance of the world's one multimesh, so every far ship together is one draw call. A dot is the hull's mean paint
-## at the hull's angular size, never under a pixel, and dims below that like a running light (`far_ship_dot.gdshader`).
+## at the hull's angular size, never under a pixel, and dims below that like a running light (`far_ship_dot.gdshader`). The paint is
+## the textured mesh's mean albedo from the manifest (M4-T30d), or the splats' mean for an asset without one.
 ##
 ## A child of `World` (`attach`) at the World's origin, its dots in World-local metres. Each frame it writes each shown ship's
 ## drawn pose. It is shiftable, so a rebase moves the written dots with everything else at once (no frame draws one at its old
@@ -22,8 +23,8 @@ const STRIDE: int = 16
 const SPLAT_FLOATS: int = 60
 const SH_C0: float = 0.28209479177387814
 
-# The mean paint of each splat resource, read once.
-static var _paint_cache: Dictionary = {}
+# Each asset's lit paint, read once.
+static var _asset_paint: Dictionary = {}
 
 var _ships: Array[Ship] = []
 var _buffer: PackedFloat32Array = PackedFloat32Array()
@@ -63,6 +64,20 @@ static func paint_color(gaussian: GaussianResource) -> Color:
 		return DEFAULT_PAINT
 	var dc: Vector3 = sum / weight
 	return Color(clampf(0.5 + SH_C0 * dc.x, 0.0, 1.0), clampf(0.5 + SH_C0 * dc.y, 0.0, 1.0), clampf(0.5 + SH_C0 * dc.z, 0.0, 1.0))
+
+
+## The dot colour of `asset_id` in linear light: its manifest's `mesh.mean_albedo` (linear) lit as a hull's lit side, else the mean
+## paint of `gaussian`, else `DEFAULT_PAINT`; read once per asset.
+static func asset_paint(asset_id: String, gaussian: GaussianResource) -> Color:
+	if _asset_paint.has(asset_id):
+		return _asset_paint[asset_id]
+	var mean: Array = (SplatLod.read_manifest(asset_id).get("mesh", {}) as Dictionary).get("mean_albedo", [])
+	var paint: Color = paint_color(gaussian)
+	if mean.size() == 3:
+		paint = Color(float(mean[0]), float(mean[1]), float(mean[2])).linear_to_srgb()
+	var lit := Color(paint.r * LIGHT_LEVEL, paint.g * LIGHT_LEVEL, paint.b * LIGHT_LEVEL).srgb_to_linear()
+	_asset_paint[asset_id] = lit
+	return lit
 
 
 func _init() -> void:
@@ -178,11 +193,10 @@ func _on_rebased(offset: Vector3) -> void:
 	_upload()
 
 
-# The ship's coarsest level's mean paint, lit as a hull's lit side, in linear light.
+# The ship's hull paint (its asset's manifest, else its coarsest splat level's), lit as a hull's lit side, in linear light.
 func _paint_of(ship: Ship) -> Color:
+	var asset_id: String = ship.spec.asset_id if ship.spec != null else ""
+	if _asset_paint.has(asset_id):
+		return _asset_paint[asset_id]
 	var nodes: Array[GaussianSplatNode] = ship.splat_nodes()
-	var gaussian: GaussianResource = nodes.back().gaussian if not nodes.is_empty() else null
-	if not _paint_cache.has(gaussian):
-		var paint: Color = paint_color(gaussian)
-		_paint_cache[gaussian] = Color(paint.r * LIGHT_LEVEL, paint.g * LIGHT_LEVEL, paint.b * LIGHT_LEVEL).srgb_to_linear()
-	return _paint_cache[gaussian]
+	return asset_paint(asset_id, nodes.back().gaussian if not nodes.is_empty() else null)

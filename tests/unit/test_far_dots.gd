@@ -15,6 +15,8 @@ var _far_backup: Variant = null
 
 
 func before_each() -> void:
+	# These cases count splat levels: the splat path (the default is the mesh from M4-T30d; test_render_path has dots on the mesh path).
+	Settings.set_value(&"ship_render", &"splat")
 	# Headless windows are 64 x 64 px; the level of detail is about a real screen.
 	_size_backup = get_tree().root.size
 	get_tree().root.size = Vector2i(1920, 1080)
@@ -41,6 +43,7 @@ func before_each() -> void:
 func after_each() -> void:
 	get_tree().root.size = _size_backup
 	Settings.set_value(&"far_ship_dot_m", _far_backup)
+	Settings.set_value(&"ship_render", SettingsSchema.ENTRIES[&"ship_render"]["default"])
 
 
 func _far_m() -> float:

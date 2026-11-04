@@ -169,9 +169,9 @@ func _spawn_effects(ship: Ship, xform: Transform3D, velocity: Vector3, spin: Vec
 		explosion.reset_physics_interpolation()
 	if debris != null and is_instance_valid(debris):
 		if staged:
-			debris.stage_wreck(StringName(ship.spec.asset_id), chunks, xform, velocity, spin, seed_value, first)
+			debris.stage_wreck(StringName(ship.spec.asset_id), chunks, xform, velocity, spin, seed_value, first, ship.livery)
 		else:
-			debris.burst(StringName(ship.spec.asset_id), chunks, xform, velocity, spin, seed_value)
+			debris.burst(StringName(ship.spec.asset_id), chunks, xform, velocity, spin, seed_value, ship.livery)
 
 
 ## The index in `chunks` of the part the killing hit landed on (`info.point` is World-local, put into the ship's frame by

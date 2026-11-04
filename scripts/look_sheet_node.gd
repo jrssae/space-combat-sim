@@ -11,6 +11,8 @@ extends Node
 ## With `liveries=<wing:number,...>` (M4-T30b, checkpoint 1c) the columns are the textured mesh in each wing's livery instead of the
 ## looks, plus one column of earlier shots read from disk (`compare=<path pattern with %d for metres and %s for lit or dark>`,
 ## headed `compare_label`), and the cockpit view is taken lit and dark; `prefix` names the shots and `sheet` the sheet's path.
+##
+## M4-T30d: `cockpit=0` leaves the cockpit view out (the props: a buoy, chunks, capitals, the station; see `LookScene.PROP_ASSETS`).
 
 const DEFAULT_LOOKS: Array[String] = ["splat", "painted", "textured"]
 const LABEL_H: int = 28
@@ -18,7 +20,7 @@ const LABEL_H: int = 28
 var main: Main
 var options: Dictionary = {"asset": "starfury_aurora", "out": "/tmp", "distances": "8,30,150,600", "looks": "splat,painted,textured",
 		"lights": "lit,dark", "settle": "40", "tile": "960", "scale3d": "1080p", "liveries": "", "compare": "", "compare_label": "T30A",
-		"prefix": "m4_t30a", "sheet": ""}
+		"prefix": "m4_t30a", "sheet": "", "cockpit": "1"}
 var shots: Array[Dictionary] = []  # queued: {distance, light, look} or {cockpit: true}
 var _index: int = -1
 var _frame: int = 0
@@ -61,7 +63,8 @@ func _start() -> void:
 				for livery: String in liveries.split(","):
 					shots.append({"distance": float(distance), "light": light, "look": "textured", "livery": livery})
 	if liveries.is_empty():
-		shots.append({"cockpit": true})
+		if String(options["cockpit"]) != "0":
+			shots.append({"cockpit": true})
 	else:
 		# Fix round 1: each wing from above at 8 m (the dorsal number), and the plain hull from the side.
 		for livery: String in liveries.split(","):
@@ -158,7 +161,7 @@ func _finish() -> void:
 		get_tree().quit(1)
 		return
 	var tile_h: int = first.get_height()
-	var rows: int = lights.size() * distances.size() + 1
+	var rows: int = lights.size() * distances.size() + (1 if _tiles.has("cockpit") else 0)
 	var sheet: Image = Image.create(looks.size() * tile_w, rows * (tile_h + LABEL_H) + LABEL_H, false, Image.FORMAT_RGB8)
 	sheet.fill(Color(0.08, 0.08, 0.09))
 	for c: int in looks.size():
@@ -179,7 +182,9 @@ func _finish() -> void:
 		var y: int = LABEL_H + row * (tile_h + LABEL_H)
 		sheet.blit_rect(_tiles["cockpit"], Rect2i(0, 0, tile_w, tile_h), Vector2i(x, y))
 		_label(sheet, x + 8, y + tile_h + 6, "COCKPIT VIEW GPU %.2f MS" % _gpu["cockpit"])
-	var path: String = "%s/m4_t30_%s_sheet.png" % [options["out"], options["asset"]]
+	var path: String = String(options["sheet"])
+	if path.is_empty():
+		path = "%s/m4_t30_%s_sheet.png" % [options["out"], options["asset"]]
 	sheet.save_png(path)
 	print("[sheet] sheet %dx%d -> %s" % [sheet.get_width(), sheet.get_height(), path])
 	get_tree().quit(0)

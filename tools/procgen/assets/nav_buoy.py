@@ -14,6 +14,9 @@ about in game):
 * antenna mast on top (1.0 m) carrying the beacon (a game-side emissive mesh at the ``beacon``
   hardpoint) and a short stub antenna below
 
+The textured mesh (M4-T30d, ``core/textured_mesh.py``) is the same parts plus the beacon's lens, a short collar under the beacon
+whose glass glows amber like the beacon itself; the orange hazard bands are the hull's own ``stripe`` material.
+
 About 4.4 m tall overall. Every sampled part is made exactly mirror-symmetric in x and z and the y
 centroid is subtracted, so the splat centroid is the origin and lies on the spin axis: GDGS's
 import centring is a no-op and the buoy spins about its own axis without wobbling.
@@ -31,9 +34,11 @@ import numpy as np
 
 from ..core import frames, lighting
 from ..core.context import AssetOutputs, BuildContext
-from ..core.geometry import Mesh, rotation_x
+from ..core.geometry import Material, Mesh, lathe, rotation_x
 from ..core.manifest import build_manifest, lod_entry, write_manifest
 from ..core.obj import write_obj
+from ..core.paint_mesh import phase_steps
+from ..core.textured_mesh import TexturedPart, write_textured_mesh
 from ..core.ply import SplatData, write_ply
 from ..core.sampling import (
     DEFAULT_OVERLAP,
@@ -49,10 +54,18 @@ from ..styles import Style
 from ..styles.earthforce import EARTHFORCE
 
 ASSET_ID = "nav_buoy"
-GENERATOR_VERSION = 2  # 2: flat paint and lighting records (M3-T21)
+GENERATOR_VERSION = 3  # 3: the textured mesh (M4-T30d); 2: flat paint and lighting records (M3-T21)
 PLY_NAME = "nav_buoy.ply"
 OBJ_NAME = "nav_buoy.obj"
 HARDPOINTS_NAME = "hardpoints.json"
+MESH_NAME = "nav_buoy.glb"
+# The textured mesh (M4-T30d): about 12 m² of hull in a 1 024 px atlas, the normal map at the atlas's size.
+ATLAS_PX = 1024
+TEXEL_M = 0.006
+# The beacon's lens: a glass collar on the mast just under the beacon, glowing the beacon's amber.
+LENS = Material("ef_lens", (0.05, 0.035, 0.015), roughness=0.1, emissive=(1.0, 0.62, 0.22), emissive_strength=3.0)
+LENS_RADIUS_M = 0.06
+LENS_SPAN_M = (0.17, 0.09)  # from below the mast tip: where the collar starts and ends
 
 DEFAULT_SPACING_M = 0.04  # architecture section 9.3
 SPLAT_BUDGET = (5_000, 15_000)  # AC3, at the default spacing
@@ -139,6 +152,20 @@ def colour_samples(part: Part, samples: SurfaceSamples, style: Style) -> np.ndar
     return style.shade_panels(samples.albedo(), samples.positions, samples.normals, paneled, _phase(part.name, style))
 
 
+def lens_mesh(tip: np.ndarray) -> Mesh:
+    """The beacon's lens collar, round the mast just under its tip (the beacon sits on the tip)."""
+    lo, hi = tip[1] - LENS_SPAN_M[0], tip[1] - LENS_SPAN_M[1]
+    collar = lathe([(0.0, 0.0), (0.0, LENS_RADIUS_M), (hi - lo, LENS_RADIUS_M), (hi - lo, 0.0)], 24, LENS, creases=(1, 2))
+    return collar.transformed(rotation_x(-0.5 * math.pi), (float(tip[0]), float(lo), float(tip[2])))
+
+
+def textured_parts(placed: list[tuple[Part, SurfaceSamples]]) -> list[TexturedPart]:
+    """The hull parts and the lens as the textured mesh takes them."""
+    parts = [TexturedPart(p.mesh, phase_steps(p.name, False), (), p.name) for p, _ in placed]
+    tip = next(p for p, _ in placed if p.name == "mast").anchor("tip").position
+    return parts + [TexturedPart(lens_mesh(np.asarray(tip, dtype=float)), (0, 0, 0), (), "lens")]
+
+
 def _r(v: Any) -> list[float]:
     return [round(float(x), JSON_DIGITS) + 0.0 for x in np.asarray(v, dtype=float).reshape(-1)]
 
@@ -200,6 +227,10 @@ def build(ctx: BuildContext) -> AssetOutputs:
     files: list[Path] = [write_ply(out_dir / PLY_NAME, written, comments), lighting.write_lighting(out_dir / light_name, written)]
     files += write_obj(out_dir / OBJ_NAME, Mesh.concatenate(p.mesh for p, _ in placed), ASSET_ID, comments[:1])
 
+    textured_paths, mesh_entry = write_textured_mesh(out_dir, ASSET_ID, textured_parts(placed), style, atlas_px=ATLAS_PX, texel_m=TEXEL_M,
+                                                     seed=ctx.seed, occlusion=True, normal_scale=1)
+    files += textured_paths
+
     hp = hardpoints(placed, spec)
     hp_path = out_dir / HARDPOINTS_NAME
     hp_path.write_text(json.dumps(hp, indent=2) + "\n", encoding="utf-8", newline="\n")
@@ -217,11 +248,12 @@ def build(ctx: BuildContext) -> AssetOutputs:
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,
-        files={"fallback_mesh": OBJ_NAME, "hardpoints": HARDPOINTS_NAME},
+        files={"fallback_mesh": OBJ_NAME, "mesh": mesh_entry["file"], "hardpoints": HARDPOINTS_NAME},
         extra={
             "counts": {p.name: len(s) for p, s in placed},
             "sampling": {"spacing_m": spacing, "overlap": overlap, "thickness": thickness},
             "dimensions_m": {"height": hp["height_m"], "span": hp["span_m"], "depth": hp["depth_m"]},
+            "mesh": mesh_entry,
         },
     )
     files.append(write_manifest(out_dir, manifest))

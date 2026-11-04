@@ -196,6 +196,7 @@ func test_an_asset_without_chunks_gets_generic_shards() -> void:
 
 
 func test_the_fallback_mesh_is_shown_instead_of_the_splats() -> void:
+	Settings.set_value(&"ship_render", &"splat")  # the splat path's fallback (the default draws the textured chunk, M4-T30d)
 	var chunk: DebrisChunk = _burst()[0]
 	chunk.use_fallback_mesh(false)
 	assert_true(chunk.splats.visible)
@@ -203,6 +204,18 @@ func test_the_fallback_mesh_is_shown_instead_of_the_splats() -> void:
 	chunk.use_fallback_mesh(true)
 	assert_false(chunk.splats.visible)
 	assert_true(chunk.mesh_instance.visible)
+	Settings.set_value(&"ship_render", SettingsSchema.ENTRIES[&"ship_render"]["default"])
+
+
+func test_on_the_mesh_path_a_chunk_draws_its_textured_mesh() -> void:
+	Settings.set_value(&"ship_render", &"mesh")
+	var chunk: DebrisChunk = _burst()[0]
+	assert_not_null(chunk.textured_mesh, GEN_ASSETS_HINT)
+	assert_true(chunk.is_drawing_textured())
+	assert_same(chunk.mesh_instance.mesh, chunk.textured_mesh)
+	assert_true(chunk.mesh_instance.visible)
+	assert_false(chunk.splats.visible)
+	Settings.set_value(&"ship_render", SettingsSchema.ENTRIES[&"ship_render"]["default"])
 
 
 func test_a_rebase_moves_chunks_in_flight() -> void:

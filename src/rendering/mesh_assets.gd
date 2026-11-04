@@ -2,7 +2,8 @@ class_name MeshAssets
 extends RefCounted
 ## Loads a hull's mesh (M4-T30a, architecture §17.18): the textured mesh the generator wrote under the manifest's `mesh` section
 ## (`<asset>.glb` with its UV atlas and the four maps, one `StandardMaterial3D` per surface lit by the scene's lights), or, for an
-## asset T30b has not converted yet, T27's painted mesh (`paint_mesh`, the paint shader). One material per surface per asset, so the
+## asset without one, T27's painted mesh (`paint_mesh`, the paint shader). Every hull has one from M4-T30d, the break-up chunks
+## too (`chunk_mesh`, on their parent's materials). One material per surface per asset, so the
 ## renderer instances every copy of a hull. Godot's scene importer builds each mesh's levels of detail.
 ##
 ## The paint materials are kept in `materials` so `PaintMeshLights` can give them the scene's 8 lights each frame.
@@ -40,6 +41,30 @@ static func for_asset(asset_id: String, asset_root: String = ShipSpec.ASSET_ROOT
 	if entry.is_empty():
 		return null
 	return load_entry(dir, entry)
+
+
+## A break-up chunk's textured mesh (M4-T30d): `file` (the chunk's glb, under `dir`) drawn with its parent's materials, so it shares
+## the parent's maps and instances with the hull. `dir` is the parent asset's directory. Null when either mesh is missing.
+static func chunk_mesh(dir: String, file: String) -> Mesh:
+	var path: String = dir.path_join(file)
+	if _cache.has(path):
+		return _cache[path]
+	var parent: Mesh = for_asset(dir.get_file(), dir.get_base_dir())
+	var mesh: Mesh = _imported_mesh(path) if parent != null else null
+	if mesh == null:
+		push_warning("MeshAssets: %s or its parent's mesh is missing or not imported (run scripts/gen_assets.sh, then import)" % path)
+		return null
+	var by_name: Dictionary = {}
+	for i: int in parent.get_surface_count():
+		var material: Material = parent.surface_get_material(i)
+		if material != null:
+			by_name[String(material.resource_name)] = material
+	for i: int in mesh.get_surface_count():
+		var current: Material = mesh.surface_get_material(i)
+		var name: String = String(current.resource_name) if current != null else ""
+		mesh.surface_set_material(i, by_name.get(name, parent.surface_get_material(mini(i, parent.get_surface_count() - 1))))
+	_cache[path] = mesh
+	return mesh
 
 
 ## Whether an asset's manifest names a textured mesh.
