@@ -327,9 +327,9 @@ def star_points(stars: SplatData, radius: float) -> np.ndarray:
 
 
 # --- panorama --------------------------------------------------------------------------------
-# The panorama's tone curve is not the splat renderer's: at gain 1 its nebula came out about twice as bright as the splat sky on
-# the same view (2026-10-21 play test), so toggling the splats swapped a dim nebula for a glaring one.
-PANORAMA_NEBULA_GAIN = 0.4
+# The panorama's tone curve is not the splat renderer's. Matched to the splat sky on the same view on the GPU: 0.4 (2026-10-21,
+# as the fallback) came out about three times as bright as the splat nebula once the panorama became the default sky (M4-T30c).
+PANORAMA_NEBULA_GAIN = 0.13
 # The gas is smooth, so it is composited at half size and enlarged.
 PANORAMA_NEBULA_SCALE = 2
 

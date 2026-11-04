@@ -195,7 +195,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T30a | Textured mesh pipeline: the procedural UV atlas, the texture maps (colour, normal, roughness and metal, emissive), the PNG writer, the textured `.glb` contract, the Starfury as the look gate (H, checkpoint 1b) | T27 | Fable | The unwrap, the bake and the paint are the look of the game from here on, and the contract M5 builds against (Q29, Q31) | X, R | done (the look gate, checkpoint 1b, is open) |
 | T30b | The Starfury refined (Q34) and wing liveries with per-ship numbers (Q35); the look gate again (H, checkpoint 1c) | T30a, checkpoint 1b | Opus | The livery is a shader-side layer so every wing still instances; the colours and patterns are the maintainer's call | X, R | done (the look gate, checkpoint 1c, is open) |
 | T30d | Every other hull textured (raider, buoy, chunks, capital and station pieces), mesh LODs measured, the mesh path the default (split from T30b, 2026-11-04) | T30b | Opus | Mechanical once the generator is fixed; each asset's markings and emissives need judgement, the look (H) | X, R | not started |
-| T30c | The sky without splats: a star point field and the nebula as a generated panorama | T30a | Opus | The sky is the last splat node; stars must stay crisp points at any resolution | X, R | not started |
+| T30c | The sky without splats: a star point field and the nebula as a generated panorama | T30a | Opus | The sky is the last splat node; stars must stay crisp points at any resolution | X, R | done |
 | T31 | Remove Gaussian splats: `addons/gdgs_scs` and every splat path in code, procgen, settings, console commands, tests, scripts, CI and docs (Q29, Q30) | T30d, T30c | Opus | About 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only deletion | X, R, G | not started |
 
 ### M4-T01 Benchmark harness, budget and baseline
@@ -1454,6 +1454,19 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
 - **Expected gain:** the sky under 0.3 ms GPU in one draw call plus the panorama (80 %); about 11 MB of VRAM for the panorama,
   against the sky's 16 000 splats in the budget.
 - **Architecture:** §17.19.
+- **Done (2026-11-04, in its own worktree on `13d0256`; the Cycle log entry "T30c the sky without splats" holds the numbers):**
+  built as planned, with these differences. The star file holds the splat sky's own stars (same seed); each record's brightness is the
+  linear radiance of a 0.5 mrad disc that delivers the light its splat did at 1 080 lines (GDGS's 0.3 px² dilation included), so the
+  star-only view matches the splat sky's mean light within 10 %. All 12 000 stars are points; none go into the panorama. A star's
+  direction is its instance's basis Z, not its position: in a multimesh `NODE_POSITION_WORLD` and `MODEL_MATRIX` include the instance,
+  so the planned position-based direction came out zero. The field has a `custom_aabb` round the camera. The nebula is composited at
+  half size (2 048 by 1 024, 2.7 s) and enlarged; its gain went from 0.4 to 0.13, measured against the splat nebula on the same view
+  (0.4 came out three times as bright once it was the default sky). Sky reflections are off so the hulls keep their approved look. The
+  PLY is still written (T31 removes it with `test_splat_import`, `test_hero_lod` and `test_splat_lod`'s uses), and `use_fallback_sky`
+  keeps its flag but no longer swaps the environment. New console command and provider `sky` (`info.md`). The side-by-side for (H) is
+  `/tmp/m4_t30c_sky_compare.png` (splat left, points and panorama right; the nebula view, a 2x crop of the star view, the star view), from
+  `/tmp/m4_t30c_sky_splat.png`, `_splat_b.png`, `_stars.png` and `_stars_b.png`. For (H): the points read whiter than the soft splat stars,
+  whose colour showed in their spread; a wider floor (`floor_px` in the manifest) keeps the light and softens them if wanted.
 
 ##### M4-T31 Remove Gaussian splats
 
@@ -3088,6 +3101,38 @@ glow, the dark side under `ambient_level` 0.3, and how it holds up at 150 and 60
 (5), `test_uv_atlas.py` (8), `test_textures.py` (10), `test_textured_mesh.py` (5); and GUT files run alone, each 0 failing and 0
 pending: `test_mesh_assets` 4, `test_textured_hull` 3, `test_paint_meshes` 7, `test_render_path` 7, `test_ship_scene` 27, `test_ship_nodes`
 11, `test_environment` 22, `test_far_dots` 12, and AC13's `test_ai_think_time` 1.
+
+### T30c the sky without splats (M4-T30c, 2026-11-04): star points and a nebula panorama (Q29, Q26)
+
+**What was built.** The sky has no splat node: `StarField` draws the 12 000 stars of `sky_default_stars.f32` as one multimesh of
+camera-facing points with a 1 px floor (`star_point.gdshader`, `StarPointMath`), and the nebula is a 4 096 by 2 048 panorama on the
+environment's sky, written by `core/panorama.py` and `core/image.py` (no Pillow). §17.19.
+
+**The fullscreen check at `typical` 58** (`scripts/fullscreen_check.sh`, fullscreen with the 3D at 1 080 lines, vsync off, seed 1, under
+the locks; load 1.1 to 2.3):
+
+| run | GPU ms mean / max | draw calls | frame ms mean | FPS | VRAM added MB (peak) |
+|---|---|---|---|---|---|
+| before: the splat sky (`M4-T30c_before_typical`) | 5.97 / 7.17 | 283 | 14.26 | 70 | 1 403 (5 279) |
+| after: points and panorama (`M4-T30c_after_typical_2`) | 5.19 / 6.42 | 284 | 14.53 | 69 | 1 292 (5 220) |
+| after, sky hidden (`sky stars off; sky nebula off`, `M4-T30c_after_typical_nosky`) | 5.20 / 6.35 | 283 | 13.46 | 74 | 1 095 (5 088) |
+
+The sky now costs nothing measurable on the GPU (5.19 against 5.20 ms with it hidden) and one draw call; the frame's GPU time fell
+0.78 ms with the 16 000 sky splats gone. A first `after` run (`M4-T30c_after_typical`) gave 5.21 ms GPU but a 17.2 ms frame mean with the
+tick's worst second unchanged; the rerun gave 14.5 ms, so that was the shared machine. The frame is tick-bound either way. The panorama
+imports as BPTC with mipmaps: 11.2 MB on disk in the import cache, the same in VRAM; the VRAM "added" column moves by more than that from
+run to run.
+
+**The look (H)**: `/tmp/m4_t30c_sky_compare.png`. Measured on the same views: the star view's mean sky light 0.0036 linear with points
+against 0.0039 with splats; the nebula view after the gain change 0.0123, 0.0107, 0.0147 (RGB) against 0.0118, 0.0074, 0.0143. The
+points' positions match the splat stars (the commonest offset between peaks is zero).
+
+**Tests** (focused): Python `test_panorama` (9), `test_sky_default` (38), `test_cli` (19), `test_relit_assets` (10), 76 in
+all, and the whole procgen suite (431, OK); GUT files alone: `test_star_point_math` 7, `test_sky_manifest` 7, `test_environment` 25,
+`test_post_effects` 20, `test_manifest_reader` 10, `test_splat_lod` 17, `test_hero_lod` 11, `test_relight` 26, `test_main_scene` 11,
+`test_ship_lights` 14, `test_ship_scene` 27, `test_textured_hull` 3, AC13's `test_ai_think_time` 1, each 0 failing and 0 pending.
+`test_splat_import` 11 of 15: its four failures are the station's and the capitals' PLYs and imported boxes in the shared
+`assets/generated` (not the sky), which another task's build changed under the import cache.
 
 ### Phase 1 (T07 to T14, M4-T13, 2026-11-04)
 

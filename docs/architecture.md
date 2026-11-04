@@ -2708,9 +2708,10 @@ assets/shaders/star_point.gdshader    a star as a camera-facing point with a 1 p
   lights' rule of Q26). The node carries a `custom_aabb` round the camera so it is never culled, and its material draws first among the
   transparent surfaces.
 - **The panorama.** The nebula's Gaussians are composited far to near at half size (2 048 by 1 024, each projected to its angular
-  covariance on the tangent plane) and enlarged to 4 096 by 2 048, with the old tone curve and gain (0.4), in Godot's
-  `PanoramaSkyMaterial` convention (the centre looks toward +Z, +u turns toward -X). The stars are not painted into it. It is written by
-  `core/image.py` (no Pillow) with a `.import` sidecar: VRAM compressed as BPTC (so the dark gradients do not band) with mipmaps.
+  covariance on the tangent plane) and enlarged to 4 096 by 2 048, with the old tone curve and a gain of 0.13 (matched to the splat
+  nebula on the GPU), in Godot's `PanoramaSkyMaterial` convention (the centre looks toward +Z, +u turns toward -X). The stars are not
+  painted into it. It is written by `core/image.py` (no Pillow) with a `.import` sidecar: VRAM compressed as BPTC (so the dark gradients
+  do not band) with mipmaps, 11.2 MB.
 - **Godot.** `SpaceEnvironment` reads the manifest, loads the star file into `StarField` and puts the panorama on the default environment
   (`background_mode` sky, a `PanoramaSkyMaterial`, radiance 32 px). Reflections from the sky are off, so the hulls keep the look they were
   approved with on the black sky; the ambient is still `settings.ambient_level`. Without the generated asset it warns and the sky stays
