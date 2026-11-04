@@ -23,8 +23,9 @@ func apply(pc: PilotCommand, held: bool, shot_playing: bool) -> bool:
 		skip = pc.ui.pause or (fire_down and _skip_armed)
 		if not fire_down:
 			_skip_armed = true
-		if skip and fire_down:
-			_hold_fire = true
+		if skip:
+			_skip_armed = false  # the next shot may start this tick: the same press must not skip it too
+			_hold_fire = fire_down
 		pc.ui.pause = false  # Start skips the shot rather than opening the pause menu
 		pc.ui.toggle_camera = false
 	else:

@@ -104,3 +104,19 @@ func test_a_shot_ended_by_start_leaves_fire_alone() -> void:
 	var pc: PilotCommand = _busy(true)
 	lock.apply(pc, false, false)
 	assert_true(pc.combat.fire)
+
+
+func test_one_held_a_skips_one_shot_even_when_the_next_starts_at_once() -> void:
+	lock.apply(_busy(false), false, true)
+	assert_true(lock.apply(_busy(true), false, true), "A skips shot a")
+	for _i: int in 5:
+		assert_false(lock.apply(_busy(true), false, true), "shot b started in the same tick: the held A does not skip it")
+	assert_false(lock.apply(_busy(false), false, true), "released")
+	assert_true(lock.apply(_busy(true), false, true), "pressed again: b is skipped")
+
+
+func test_start_skips_one_shot_per_press() -> void:
+	lock.apply(_busy(), false, true)
+	assert_true(lock.apply(_busy(false, true), false, true), "Start skips shot a")
+	assert_false(lock.apply(_busy(false, false), false, true), "shot b plays on: Start is an edge")
+	assert_true(lock.apply(_busy(false, true), false, true), "the next press skips b")
