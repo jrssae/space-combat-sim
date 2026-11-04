@@ -114,5 +114,122 @@ class DigitAtlasTests(unittest.TestCase):
             self.assertGreater(int(np.abs(cells[a].astype(int) - cells[b].astype(int)).max()), 64, (a, b))
 
 
+def _hue_deg(rgb) -> tuple[float, float]:
+    """Hue in degrees and saturation of an sRGB 0..255 colour."""
+    import colorsys
+    h, s, _v = colorsys.rgb_to_hsv(*(c / 255.0 for c in rgb))
+    return 360.0 * h, s
+
+
+class FallbackTests(unittest.TestCase):
+    """Q41: a fallback wing never looks like a named one: its own pattern family, and no red, magenta or maroon."""
+
+    NAMES = [f"wing{k}" for k in range(300)] + ["kilo", "lima", "mike", "omega", "sigma", "tango", "gamma", "theta"]
+
+    def test_the_fallback_pattern_is_never_a_named_wings(self) -> None:
+        named = {livery.pattern for livery in lv.LIVERIES.values()}
+        self.assertFalse(set(lv.FALLBACK_PATTERNS) & named, "the fallback patterns are their own family")
+        for name in self.NAMES:
+            self.assertNotIn(lv.livery_for(name).pattern, named, name)
+
+    def test_the_fallback_palettes_are_never_red_magenta_or_maroon(self) -> None:
+        for primary, secondary, _number in lv.FALLBACK_PALETTES:
+            for colour in (primary, secondary):
+                hue, saturation = _hue_deg(colour)
+                if saturation > 0.3:
+                    self.assertFalse(hue < 18.0 or hue > 280.0, f"{colour} is red, magenta or maroon")
+
+    def test_every_fallback_pattern_is_used_and_painted(self) -> None:
+        picked = {lv.livery_for(name).pattern for name in self.NAMES}
+        self.assertEqual(picked, set(lv.FALLBACK_PATTERNS))
+        for pattern in lv.FALLBACK_PATTERNS:
+            self.assertTrue(lv.PATTERNS[pattern], pattern)
+
+
+class StarfuryPlacementTests(unittest.TestCase):
+    """The review's Important 2: on the real generated Starfury, each pattern paints the parts it is meant for, and both number
+    fields lie on upward faces of their zones' paintable plating (the paint mask's material term)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from pathlib import Path
+        import tempfile
+
+        from tools.procgen.assets import starfury_aurora as starfury
+        from tools.procgen.core.context import BuildContext
+        from tools.procgen.core.sampling import sample_mesh
+
+        parts = starfury.textured_parts(starfury.DEFAULT_SPEC, BuildContext(Path(tempfile.gettempdir())))
+        rng = np.random.default_rng(3)
+        positions, normals, zones, paintable, names = [], [], [], [], []
+        for part in parts:
+            samples = sample_mesh(part.mesh, 0.03, rng)
+            if len(samples) == 0:
+                continue
+            positions.append(samples.positions)
+            normals.append(samples.normals)
+            zones.append(np.full(len(samples), part.zone))
+            material_names = np.array([m.name for m in samples.materials])[samples.material]
+            paintable.append(np.isin(material_names, starfury.PAINTABLE))
+            names.append(np.full(len(samples), part.name))
+        cls.p, cls.n = np.concatenate(positions), np.concatenate(normals)
+        cls.zone, cls.paint, cls.name = np.concatenate(zones), np.concatenate(paintable), np.concatenate(names)
+        cls.parts = parts
+
+    def _painted_zones(self, pattern: str) -> dict[int, int]:
+        slots = lv.paint_slots(lv.PATTERNS[pattern], self.p, self.n, self.zone)
+        hit = (slots > 0) & self.paint
+        return {int(z): int((hit & (self.zone == z)).sum()) for z in np.unique(self.zone[hit])}
+
+    def test_each_pattern_paints_its_parts(self) -> None:
+        z = lv.ZONES
+        expected = {
+            "bands": {z["strut_upper"], z["strut_lower"]},
+            "nose_band": {z["pod"], z["fuselage"], z["fittings"]},
+            "chevron": {z["fuselage"], z["fittings"], z["strut_upper"], z["strut_lower"]},
+            "pinstripe": {z["fuselage"], z["fittings"], z["strut_upper"], z["strut_lower"]},
+        }
+        for pattern in lv.FALLBACK_PATTERNS:
+            expected[pattern] = None  # any zones, but something
+        for pattern, zones in expected.items():
+            painted = self._painted_zones(pattern)
+            self.assertGreater(sum(painted.values()), 300, f"{pattern} paints something")
+            if zones is not None:
+                self.assertTrue(set(painted) <= zones, f"{pattern} paints only {zones}: {painted}")
+        bands = self._painted_zones("bands")
+        self.assertGreater(bands[z["strut_upper"]], 1000)
+        self.assertGreater(bands[z["strut_lower"]], 1000)
+        pods = self._painted_zones("nose_band")
+        self.assertGreater(pods[z["pod"]], 500, "Beta's band on every pod")
+
+    def test_both_number_fields_lie_on_paintable_upward_plating(self) -> None:
+        for name in ("dorsal", "wing"):
+            field = lv.NUMBER_FIELDS[name]
+            centre = np.array(field.centre)
+            d = self.p - centre
+            u, v = d @ np.array(field.right), d @ np.array(field.up)
+            half_w = 0.5 * (lv.DIGIT_ADVANCE + 4.0) / 6.0 * field.height_m
+            half_h = 0.5 * field.height_m
+            inside = (np.abs(u) < half_w) & (np.abs(v) < half_h)
+            facing = self.n @ np.array(field.facing) > 0.5
+            # The topmost samples in the rectangle (what is seen from above) belong to the field's zones and are paintable.
+            seen = inside & facing
+            self.assertGreater(int(seen.sum()), 50, name)
+            top = self.p[seen][:, 1].max()
+            upper = seen & (self.p[:, 1] > top - 0.25)
+            ok = np.isin(self.zone[upper], field.zones) & self.paint[upper]
+            self.assertGreater(float(ok.mean()), 0.85, f"{name}: {sorted(set(self.name[upper]))}")
+            area = 4.0 * half_w * half_h
+            self.assertGreater(int(upper.sum()) * 0.03 * 0.03 / area, 0.5, f"{name}: the plating fills its rectangle")
+
+    def test_no_hazard_stripes_on_the_struts(self) -> None:
+        # Q41: T30a's yellow and black leading-edge stripes are gone; the references show none on a standard Starfury's wings.
+        for part in self.parts:
+            if part.name.startswith("strut_"):
+                materials = {m.name for m in part.mesh.materials}
+                used = {part.mesh.materials[i].name for i in np.unique(part.mesh.face_material)}
+                self.assertFalse({"ef_hazard", "ef_hazard_dark"} & used, f"{part.name}: {materials}")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -105,3 +105,24 @@ func test_a_textured_material_without_files_is_still_a_material() -> void:
 	assert_null(material.albedo_texture)
 	assert_eq(material.transparency, BaseMaterial3D.TRANSPARENCY_ALPHA)
 	assert_almost_eq(material.albedo_color.a, 0.5, 1e-6)
+
+
+func test_the_livery_zone_survives_the_import() -> void:
+	# M4-T30b (review, Minor 1): the hull shader reads each vertex's zone as round(COLOR.r * 255); an import that converted the colour
+	# would paint nothing while everything else passed.
+	var mesh: Mesh = MeshAssets.for_asset(STARFURY)
+	if mesh == null:
+		fail_test(GEN_ASSETS_HINT)
+		return
+	var colours: Variant = mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	assert_not_null(colours, "the hull keeps its vertex colours")
+	if colours == null:
+		return
+	var seen: Dictionary = {}
+	for colour: Color in colours as PackedColorArray:
+		var zone: float = colour.r * 255.0
+		assert_almost_eq(zone, roundf(zone), 0.02, "a whole zone number")
+		seen[int(roundf(zone))] = true
+	for zone: int in range(1, 8):
+		assert_true(seen.has(zone), "zone %d is on the hull" % zone)
+	assert_false(seen.keys().any(func(z: int) -> bool: return z > 7), "no zone beyond the table")

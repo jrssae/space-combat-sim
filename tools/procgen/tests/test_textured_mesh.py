@@ -139,6 +139,18 @@ class StarfuryTests(unittest.TestCase):
         print(f"\n[textured_mesh] starfury_aurora built in {self.seconds:.1f} s, texel {section['texel_m'] * 100:.2f} cm, "
               f"fill {section['atlas_fill']:.2f}")
 
+    def test_the_plain_starfury_is_all_grey(self) -> None:
+        # Q41: without a livery the hull is grey, no hazard yellow anywhere; colour comes only from the livery layer.
+        section = self.manifest["mesh"]
+        albedo = read_png(self.out / section["surfaces"][0]["albedo"])[..., :3].astype(float) / 255.0
+        emissive = read_png(self.out / section["surfaces"][0]["emissive"]).max(axis=2)
+        hull = emissive == 0  # the throats and the glass glow; everything else is paint, metal or primer
+        top, low = albedo.max(axis=2), albedo.min(axis=2)
+        saturation = np.where(top > 0.04, (top - low) / np.maximum(top, 1e-6), 0.0)[hull]
+        self.assertLess(float(np.percentile(saturation, 99.9)), 0.3, "no saturated texels on the hull")
+        yellow = (albedo[..., 0] > 0.45) & (albedo[..., 1] > 0.35) & (albedo[..., 2] < 0.2) & hull
+        self.assertEqual(int(yellow.sum()), 0, "no hazard yellow")
+
     def test_the_import_sidecars_sit_beside_the_maps(self) -> None:
         for name in ("albedo", "normal", "orm", "emissive"):
             self.assertTrue((self.out / f"starfury_aurora_{name}.png.import").is_file(), name)
@@ -228,6 +240,31 @@ class StarfuryAtlasTests(unittest.TestCase):
             p5, p95 = np.percentile(d, [5, 95])
             self.assertLess(p95 / p5, 1.25, f"{self.parts[k].name}: {p5:.1f} to {p95:.1f} texels a metre")
         self.assertLess(max(overall) / min(overall), 1.15, overall)
+
+
+class CoarseTrackingTests(unittest.TestCase):
+    """The review's Minor 6: ``coarse_placed`` follows the target above the floor, and gives the floor below it."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.ctx = BuildContext(Path(tempfile.gettempdir()))
+        cls.offset = np.zeros(3)
+
+    def _count(self, target: int) -> int:
+        placed = starfury.coarse_placed(starfury.DEFAULT_SPEC, EARTHFORCE, self.ctx, target, self.offset)
+        return sum(p.part.mesh.face_count for p in placed if p.hull)
+
+    def test_it_tracks_the_target_above_the_floor(self) -> None:
+        low, high = self._count(21000), self._count(28000)
+        self.assertLess(abs(low - 21000) / 21000.0, 0.06, low)
+        self.assertLess(abs(high - 28000) / 28000.0, 0.06, high)
+        self.assertGreater(high - low, 5000, "a higher target gives more triangles")
+
+    def test_below_the_floor_it_gives_the_floor(self) -> None:
+        floor = self._count(5000)
+        self.assertGreater(floor, 15000)
+        self.assertLess(floor, 21000)
+        self.assertEqual(self._count(1000), floor)
 
 
 class RenderTrianglesTests(unittest.TestCase):

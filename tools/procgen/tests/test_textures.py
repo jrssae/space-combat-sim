@@ -268,8 +268,8 @@ class WeatheringTests(unittest.TestCase):
 
     def test_the_hull_is_a_medium_blue_grey(self) -> None:
         srgb = linear_to_srgb(np.asarray(GREY.albedo)) * 255.0
-        # Q37 asked for about (130, 140, 155), tuned darker so the hull renders medium grey under the key star, not white.
-        np.testing.assert_allclose(srgb, [130.0, 140.0, 155.0], atol=22.0)
+        # Q37 asked for about (130, 140, 155); Q41 one step darker, a medium weathered blue-grey under the key star.
+        self.assertTrue(np.all((srgb > 80.0) & (srgb < 112.0)), srgb)
         self.assertGreater(srgb[2], srgb[0])
 
     def test_no_bare_metal_shows(self) -> None:

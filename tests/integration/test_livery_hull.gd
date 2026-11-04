@@ -71,6 +71,40 @@ func test_an_ally_named_alpha_2_draws_the_alpha_livery_and_02() -> void:
 	assert_eq(ally.ship.livery.describe(), "alpha 02 (bands)")
 
 
+func test_a_raider_gets_no_livery_values() -> void:
+	# The review's Minor 3: a hull with no livery material is left alone (no livery, no instance values).
+	pool.prepare(ShipPool.DEFAULT_TYPE, 1)
+	var raider: Combatant = pool.acquire("RAIDER 1", world.to_universe(Vector3(0.0, 0.0, -150.0)), Basis.IDENTITY, Vector3.ZERO, null,
+			ShipPool.DEFAULT_TYPE)
+	assert_not_null(raider)
+	assert_null(raider.ship.livery)
+	assert_null(_hull_node(raider.ship).get_instance_shader_parameter(&"livery_pattern"))
+
+
+func test_an_unnamed_member_of_a_delta_scenario_wing_flies_delta_with_its_slot() -> void:
+	# The review's Important 1: the pool names an unnamed ally ALPHA n; joining the wing DELTA repaints it Delta with its slot's number.
+	var director := WingDirector.new()
+	director.pool = pool
+	director.world = world
+	add_child_autofree(director)
+	var numbers: Array[int] = []
+	for k: int in 3:
+		pool.prepare(ShipPool.ALLY_TYPE, pool.pool_size(ShipPool.ALLY_TYPE) + 1)
+		var made: Dictionary = BrainFactory.from_behaviour({"type": "ai", "profile": "ally_starfury"}, world.to_universe(Vector3.ZERO), k)
+		var ship: Combatant = pool.acquire(pool.next_name(ShipPool.ALLY_NAME_PREFIX, ShipPool.ALLY_FIRST_NUMBER),
+				world.to_universe(Vector3(40.0 * k, 0.0, -200.0)), Basis.IDENTITY, Vector3.ZERO, made["brain"] as PilotBrain, ShipPool.ALLY_TYPE)
+		assert_eq(ship.ship.livery.wing, "alpha", "the pool's name paints it Alpha first")
+		var wing: Wing = director.join("DELTA", ship)
+		assert_not_null(wing)
+		assert_eq(ship.ship.livery.wing, "delta")
+		assert_eq(_hull_node(ship.ship).get_instance_shader_parameter(&"livery_pattern"), _pattern("chevron"))
+		var expected: int = 1 if wing.leader == ship else wing.slot_of(ship) + 1
+		assert_eq(ship.ship.livery.number, expected, "the wing's callsign number")
+		numbers.append(ship.ship.livery.number)
+	numbers.sort()
+	assert_eq(numbers, [1, 2, 3], "the leader 01, the members by slot")
+
+
 func test_the_players_ship_is_alpha_01() -> void:
 	var node := player.ship.get_node(^"HullMeshFallback") as MeshInstance3D
 	assert_eq(node.get_instance_shader_parameter(&"livery_pattern"), _pattern("bands"))
@@ -131,9 +165,10 @@ func test_the_glass_glows_red_at_the_cabin_glow_level() -> void:
 	var glass := mesh.surface_get_material(1) as ShaderMaterial
 	assert_not_null(glass, "the glass is the hull glass shader")
 	var strength: float = float((SplatLod.read_manifest("starfury_aurora")["mesh"]["surfaces"][1] as Dictionary)["emissive_strength"])
-	Settings.set_value(&"cabin_glow_level", 0.3)
-	assert_almost_eq(float(glass.get_shader_parameter(&"glow_energy")), strength, 1e-6)
-	Settings.set_value(&"cabin_glow_level", 0.9)
+	var default_level: float = float(SettingsSchema.ENTRIES[&"cabin_glow_level"]["default"])
+	Settings.set_value(&"cabin_glow_level", default_level)
+	assert_almost_eq(float(glass.get_shader_parameter(&"glow_energy")), strength, 1e-6, "the manifest's strength at the default")
+	Settings.set_value(&"cabin_glow_level", 3.0 * default_level)
 	assert_almost_eq(float(glass.get_shader_parameter(&"glow_energy")), strength * 3.0, 1e-5, "live")
 	Settings.set_value(&"cabin_glow_level", 0.0)
 	assert_almost_eq(float(glass.get_shader_parameter(&"glow_energy")), 0.0, 1e-9)
