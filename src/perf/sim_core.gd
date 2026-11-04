@@ -277,7 +277,7 @@ func _sync_in() -> void:
 		_statics_version = StaticRows.version
 		core.set_statics(StaticRows.ids, StaticRows.positions, StaticRows.radii, StaticRows.factions, StaticRows.kinds)
 	var frame: int = Engine.get_physics_frames()
-	core.sync_in(tree.get_nodes_in_group(Projectile.GROUP), frame)
+	core.sync_in(tree.get_nodes_in_group(Projectile.GROUP), frame, get_physics_process_delta_time())
 	synced_frame = frame
 	bolts_frame = frame
 	_bolts_fresh = false
@@ -286,7 +286,7 @@ func _sync_in() -> void:
 
 func _sync_bolts() -> void:
 	var started: int = Time.get_ticks_usec()  # readout only
-	core.sync_bolts(get_tree().get_nodes_in_group(Projectile.GROUP))
+	core.sync_bolts(get_tree().get_nodes_in_group(Projectile.GROUP), get_physics_process_delta_time())
 	bolts_frame = Engine.get_physics_frames()
 	_bolts_fresh = true
 	bolts_us = Time.get_ticks_usec() - started

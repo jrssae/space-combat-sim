@@ -90,7 +90,7 @@ impl ScsBodyRegistry {
     fn refresh(&mut self) -> i64 {
         let mut core = self.core.bind_mut();
         let tick = core.syncs() + 1;
-        core.sync_in(Array::new(), tick);
+        core.sync_in(Array::new(), tick, 0.0);
         core.sync_out();
         core.row_count()
     }
