@@ -65,6 +65,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q31 | M5 and splats | M5 switches its new ship assets to textured meshes now, no new splat work; its splat code goes when it rebases onto `main` (directive committed on `m5`, `3fb15cc`) |
 | Q32 | If the textured Starfury look sheet is refused (T30a, checkpoint 1b) | **Keep iterating in M4**: no cap on look rounds; texturing stays in M4 until the maintainer approves, even if that delays M4's close |
 | Q33 | Do AI fighters collide with each other in Jolt (2026-11-04, on T14's review) | **Yes**: restore their physical collisions (any two fighters, allies included). Passing through each other with only an inelastic ram breaks Newtonian honesty and saved no measured time. T14 keeps its layers and the far ships' interpolation off |
+| Q34 | Checkpoint 1b: the textured Starfury look sheet (T30a, 2026-11-04) | **Approved; refine in T30b**: even out the panel stretching on curved parts, sharper markings (a 4096 px hull map or better packing), less gloss, fine normal detail and rivets, `render_triangles`, plus T30a's review tests (normal-map handedness; texel density and zero overlaps on the real Starfury) and a wider gutter |
 
 ## The budget ("good game performance", Q5)
 
@@ -1336,6 +1337,7 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
 
 ##### M4-T30b Every other hull textured, mesh LODs measured, the mesh path the default
 
+- **Added 2026-11-04 (Q34, checkpoint 1b approved):** fold in the Starfury refinements first: even out the panel stretching on curved parts (the `auto_charts` regions), sharper markings (a 4096 px hull map within the VRAM bar, or better packing), less gloss, the fine-mesh normal transfer and rivet rows, `render_triangles`, a 4-texel gutter, and T30a's review tests (a groove's normal-map handedness; per-part texel density spread and zero overlaps on the real Starfury atlas). Then convert the rest.
 - **Track:** X and R. **Agent:** Opus (mechanical once the generator is fixed; each asset's markings and emissives need
   judgement, the look (H)). **Depends on:** T30a and checkpoint 1b. Runs in wave 5.
 - **Goal:** every asset that is a splat today besides the sky is a textured mesh: the raider (`raider` style's wear and the
