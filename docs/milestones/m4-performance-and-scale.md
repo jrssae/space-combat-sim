@@ -101,7 +101,8 @@ with the player at cruise along its nose (60 m/s, `RebaseFight`'s default), so r
   faction table) come in from their own directions, and each side's capitals sit 5 km behind its fights, cruising in at 30 m/s
   with their gun turrets (carrier 12, destroyer 10, cruiser 8) and 4 interceptors each. An asteroid slab of 1 000 rocks (20 by
   5 by 20 km) over the player's fight, a moon 400 km below pulling 0.03 m/s^2, and every carrier launching a fighter every 5 s.
-  Missiles, beams and mines are counted in the mix and arrive with T12.
+  T12 adds the mix's missiles in flight (launched by the capitals at hostile fighters), two beam lasers per capital and the
+  mine belts (1.5 km out from each fight, each side's toward its own direction).
 - **`typical`** (T07, Q21): the usual mission's load, `BattleMix.TYPICAL`: at N 58, 50 fighters and 8 capitals (2 carriers, 3
   destroyers, 3 cruisers) on two sides in two fights of 25, 20 by 20 by 10 km, with the same rocks and moon. It must hold the
   budget and 60 FPS fullscreen with headroom.
@@ -155,7 +156,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T09 | Native body registry: the scan built from RIDs, entity kinds, nearest-k per kind | T06 | Opus | The per-tick gather cycle 4 left; rocks must not fill a fighter's contacts | G, N | not started |
 | T10 | N4: the flight force step in native code for AI ships (`ScsFlightStep`) | T06 | Fable | The riskiest parity maths (`FlightModel`, the assist's state) | G, N | done (2026-11-03, in a worktree on `f134e00`; Cycle log, M4-T10) |
 | T11 | Far-ship render proxies and the node diet for AI ships | T10 | Opus | 108 nodes and 27 draw calls a ship; GPU numbers by the agent, the look (H) | R | not started |
-| T12 | Missile, beam, interceptor and mine stand-ins | T07, T08 | Opus | The weapon kinds Q19 and Q21 name, measured | A, G | not started |
+| T12 | Missile, beam, interceptor and mine stand-ins | T07, T08 | Opus | The weapon kinds Q19 and Q21 name, measured | A, G | done (2026-11-03, in a worktree on `441a3b4`; Cycle log, M4-T12) |
 | T13 | Phase 1 measurements and report P1 (checkpoint 1) | T11, T12, T14 | Sonnet | Measurement, no code | M | not started |
 | T14 | Jolt collision layers; interpolation off for far ships | T11 | Sonnet | Mechanical; matters from 300 ships | G | not started |
 | T15 | The native simulation core: entity rows, one call in and out (`ScsSimCore`) | T13 | Fable | Architecture: every native class moves onto it; serial | N | not started |
@@ -719,6 +720,22 @@ No question is open.
 - **Expected cost:** about 0.1 ms per 20 missiles and 0.1 ms per 100 mines in GDScript at 100 ships (60 %); T20 moves guidance
   and the mine trigger native.
 - **Architecture:** §17.11.
+- **Done (2026-11-03, worktree on `441a3b4`):** `MissileStandin` (proportional navigation at 350 m/s, turn limited to 0.6 rad/s,
+  20 s, launched by the capitals to hold the mix's count in flight), `BeamStandin` (two per capital, a 3 km one-tick beam every
+  2 s), interceptors that take missiles first from hit broad phase candidates, `MineStandin` (the belts as rows, a trigger every
+  third tick, the blast through `Damageable`), `BenchLayout.mines`, the counters and the summary's weapons line. Both layouts'
+  mix tables are complete. Numbers in the Cycle log, "M4-T12".
+- **As built, where it differs from the plan:**
+  - Interceptors query "through the field" by the hit broad phase's grid (`HitBroadPhase`, native `ScsHitSweep`): one query a
+    tick for every interceptor due. The contact scan's native field is T09's file in this wave.
+  - A beam is a projectile laid by `Projectile.fire_beam` that does not move in its own tick; the hit resolver retires every
+    beam after the resolve that swept it.
+  - Missiles and beams fire at a capital's strike target, its nearest hostile fighter within 6 km, looked up again after 30
+    ticks; the guns keep T07's 4 km scan query.
+  - Mines are laid again in their place 10 s after going off, so the belts hold the mix over a run. They are not in today's
+    contact scan (no `Targetable`); T09's registry takes them as rows of kind `MINE` (§17.11).
+  - The belts lie 1.5 km out from each fight toward each side's own direction; in the 10 s windows measured no mine went off
+    (the fighters stay inside 1.2 km), so the blast's cost was not on the tick. The trigger queries were.
 
 ##### M4-T13 Phase 1 measurements and report P1
 
@@ -2114,6 +2131,48 @@ projectiles, impact flashes, weapons, damage and destruction, the AI fights, the
 (`test_ai_think_time`, `test_m3_run`), on `298222d`, once with the library and once without: with it 325 passing, 0 failing,
 0 pending; without it 320 passing, 0 failing, 5 pending (`test_hit_broad_phase`'s native cases, saying why). No Python
 changed. The full suite runs on CI after the push.
+
+### M4-T12 (2026-11-03): missile, beam, interceptor and mine stand-ins
+
+In its own worktree on `441a3b4` (so only this change), single seeded runs (`seed=1`, 5 s warm-up, 10 s measured, editor build,
+headless, both locks, pinned to cores 0-11, load 0.9 to 1.5), before on a snapshot of the base and after on the change. Reports
+under `reports/perf/M4-T12_before/` and `M4-T12_after/`. Means in ms per tick; the tick's median and p99.
+
+| run | tick median before | after | p99 before | after | standins before | after | hit before | after | bolts before | after |
+|---|---|---|---|---|---|---|---|---|---|---|
+| typical 58 | 15.37 | 15.66 | 18.29 | 19.04 | 1.72 | 1.86 | 1.51 | 1.63 | 193 | 213 |
+| typical 58, no rocks | 6.54 | 6.74 | 7.88 | 8.40 | 0.28 | 0.39 | 0.31 | 0.34 | 191 | 211 |
+| battle 100 | 22.65 | 23.23 | 28.07 | 28.65 | 3.29 | 3.45 | 1.96 | 2.05 | 381 | 413 |
+| battle 100, no rocks | 13.01 | 12.85 | 15.80 | 16.02 | 0.99 | 1.10 | 0.62 | 0.66 | 390 | 418 |
+| battle 300 | 56.24 | 55.72 | 72.85 | 71.90 | 10.86 | 9.76 | 4.00 | 4.20 | 1 245 | 1 286 |
+| battle 300, no rocks | 39.41 | 38.38 | 55.38 | 55.19 | 5.55 | 4.43 | 2.18 | 2.26 | 1 237 | 1 275 |
+
+Per entity after (means per tick): typical 58 holds 20 missiles in flight, 16 beam emitters, 100 mines; battle 100 34 missiles
+(the mix asks 34), 30 emitters, 100 mines; battle 300 102 missiles, 90 emitters, 300 mines. In the 10 s window battle 300
+launched 182 missiles, its interceptors shot down 80, its beams fired 184 to 189 shots; typical's beams fired none (its capitals
+stay over 3 km from the fighters) and no mine went off in any run.
+
+What each stand-in part costs (the director's own timers, means per tick at battle 300 without rocks, and per entity):
+
+| part | us per tick | per entity |
+|---|---|---|
+| missile steering (in the projectiles' tick) | 105 | 1.0 us a missile |
+| missile launches and strike targets | 18 | |
+| beams (cadence, strike targets, firing) | 41 | 0.5 us an emitter, plus one 3 km sweep a shot in the hit stage |
+| mines (a third of the belts' triggers through the grid) | 93 | 0.3 us a mine |
+| interceptors (one grid query, the picks) | 750 | 4.2 us an interceptor |
+| the gathers (every projectile and every flying hull) | 1 341 | shared by interceptors, missiles and mines |
+
+- **Against the plan's expectation** (0.1 ms per 20 missiles, 0.1 ms per 100 mines at 100 ships): 20 missiles cost about 0.03 ms
+  and 100 mines about 0.035 ms, both under it. The hit stage grew 0.03 to 0.2 ms with the missiles and beams in flight.
+- **The stand-ins' stage fell at battle 300** (5.55 to 4.43 ms without rocks, 10.86 to 9.76 with them) although it now carries
+  missiles, beams and mines: T07's interceptors each looped over every bolt in flight, and one grid query replaces that. At
+  typical and battle 100 the stage rose 0.1 to 0.15 ms, the new weapons' cost.
+- **The gathers** (1.3 ms at battle 300) are the largest new part: a walk of the projectile group (about 1 280) and the flying
+  hulls every tick. T07's interceptors walked the projectiles too; T20's native rows end both walks.
+- **Furball and spread are unchanged:** the quick check held the budget up to 50 ships in both, as on the base (failing at 300
+  at 24.8 and 24.3 FPS against 24.7 and 24.2; load 1.2 against 1.5), and seeded runs give the same outcome on base and change
+  (furball 25: 113 projectiles, 17 hits, the same last hit; spread 24: 115 and 19).
 
 ## Definition of done (M4)
 
