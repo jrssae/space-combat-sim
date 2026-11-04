@@ -49,6 +49,7 @@ voices. M8's tutorial is written on top of all this, so the framework matters mo
 | Q21 | (maintainer, 2026-11-03) The mission's buoys | **Buoy defence is set on a string of nav buoys in a huge circle, as if round a planet: 16 buoys on a ring of 20 000 km radius, about 7 850 km apart.** **Every buoy broadcasts to 10 000 km** (was 1 000 km, M3 Q21), and the spacing is set so that a ship always has **at least two buoys in broadcast range**, on the radar and targetable: anywhere on the ring, and within about 6 000 km of it. There is no planet in the middle yet (M6 brings Epsilon III) |
 | Q22 | (after T22's survey) The Bokmai's frame, colours and turrets | **The tall fins are at the stern**, so the blade is the bow (T22's reading; the STL stands on its tail, its length along file y). **The pods are pale green** (#ABAE9A, as proposed). **Two turrets, in the stepped Z-shaped insets on either side of the bow** (4.9 x 2.4 m, high on each flank; the survey had read them as windows), each facing outboard: an exception to Q19's top-only rule, for the Bokmai. **Brakiri turrets fire a bright green pulse.** (The maintainer first said one on top and one underneath the bow, then corrected it the same day) |
 | Q23 | (same day) The Saturn 3's pod group misses 0.90 because T11 spread its pods wider than the model to let the truss and engine pass. Keep it? | **Keep the wider spread.** The Saturn 3's pod group is an **expected exemption** from Q18's bar: its scores are recorded with that note and do not fail T12. Every other Saturn part must still pass |
+| Q24 | (maintainer, 2026-11-04) How civilians flee | **Every civilian has a faction** (the Saturns and the Skylark are Earth Alliance, the Narn transport Narn, the Brezebel Centauri, the Bokmai Brakiri); "civilian" is its role, not its faction. **Attacked, a civilian runs away from the enemy towards the nearest vessel of its own faction, of any kind** (an Earth Alliance freighter makes for any Earth Alliance ship, military or civilian). **Civilians under attack run together and cover each other** (they close up while fleeing, and their turrets fire for one another, D61). In T16 (the `civilian` profile and the faction data) and T21; T16 and T21 wait for M4's merge, so this lands after the rebase |
 
 ## Scope
 
@@ -66,8 +67,8 @@ In:
 - **One mission**: Buoy defence with a cinematic intro.
 - **Civilian ships**: nine hulls in five generators (the Saturn family with five variants, the Skylark, the Narn
   transport, the Centauri Brezebel, the Brakiri Bokmai with removable cargo pods), measured from the references and
-  rebuilt in `tools/procgen`, coloured after online images of each ship; factions `civilian`, `narn`, `centauri` and
-  `brakiri`.
+  rebuilt in `tools/procgen`, coloured after online images of each ship; each in its people's faction (`earth_alliance`,
+  `narn`, `centauri`, `brakiri`) with the `civilian` role (Q24).
 - **Free-flight encounters**: raider raids, allied patrols and civilian traffic, seeded, spawned from pools beyond sensor
   range, capped in ship count.
 - **Sound pass**: new Starfury and raider gun sounds, new bolt impacts, per-thruster engine bursts placed on the ship.
@@ -253,10 +254,12 @@ removed or converted when M5 rebases onto `main` after M4.
   player or its route has ended.
 - `encounter_max_ships` (default 24, ships alive at once besides the player and their wing) caps it: an event that would
   pass the cap waits. M4's numbers, not M5, decide when the cap can rise.
-- Factions (`data/factions.json`): `civilian` (Earth-registered merchants: the Saturns and the Skylark), `narn` (the Narn
-  transport), `centauri` (the Brezebel) and `brakiri` (the Bokmai, Q17). Raiders are hostile to all four. Earth Alliance
-  and `civilian` are allied; `narn`, `centauri` and `brakiri` are neutral to everyone else (civilian turrets fire only at
-  attackers, D61, so a feud between them would change nothing in M5). Civilians fly the M3 `civilian` AI profile (never attack, evade, run from hostiles within 3 km).
+- Factions (`data/factions.json`, revised by Q24): a civilian ship belongs to its own people's faction and `civilian` is
+  its role: the Saturns and the Skylark are `earth_alliance`, the Narn transport `narn`, the Brezebel `centauri` and the
+  Bokmai `brakiri` (Q17). Raiders are hostile to all four; `narn`, `centauri` and `brakiri` are neutral to everyone else
+  (civilian turrets fire only at attackers, D61, so a feud between them would change nothing in M5). Civilians fly the M3
+  `civilian` AI profile (never attack, evade, run from hostiles within 3 km), and run towards the nearest ship of their
+  own faction, in a group with other attacked civilians (Q24, T16).
 - **Encounters run only when asked for.** The front end's Free flight screen puts `encounters` into `Game`'s request and
   remembers the choice in `Settings.encounters` (bool, true: the menu's default). A run that goes straight to `Main`
   (headless, `--console-exec`, `--scenario=`, the `scenario` command, every test) has encounters off unless the console
@@ -381,7 +384,7 @@ removed or converted when M5 rebases onto `main` after M4.
 | AC10 | Buoy defence: starts from the menu with its cinematic intro, runs to success and to failure (buoy destroyed; player destroyed) in headless tests driven by console commands, and ends in the debrief; it is set on a ring of 16 buoys, 20 000 km in radius, that broadcast to 10 000 km, with at least two buoys in broadcast range anywhere on or near the ring (Q21, test) | A | |
 | AC11 | Civilian references: each of the nine ships described (the Saturn 4 tanker from the Saturn parts, Q16; the Bokmai, Q17) in `docs/design-references.md` with the lengths from Q8, Q11, Q16 and Q17, from orthographic views and cross-sections of its STL; every ship's colour scheme written from online images (Q11) with the sources listed; nothing from the STL files or the images is in git | A | |
 | AC12 | Civilian generators: nine hulls from five generators meet the output contract (LOD0-3 PLYs and lighting records, fallback mesh, hardpoints with pods, RCS, collision, cockpit camera, chase anchor, running lights, chunks; the Bokmai's pod model and `cargo_pods[]`); Python tests for budgets, frames, symmetry where the design has it, chunk partition, collision coverage and determinism; every PLY imports in Godot with the manifest's count | A | |
-| AC13 | Civilian ships in the game: each flies through `FlightModel` with zero damping (the damping guard covers it), turns by torque only, flees raiders on the `civilian` profile, takes hull damage, breaks into its chunks, shows running lights and switches LOD; a Bokmai flies with 0-3 cargo pods and sheds them when destroyed; raiders attack them through faction data; on the maintainer's GPU all nine in view at once run with `splat_backend = compute`, FPS and VRAM recorded by the agent | A | |
+| AC13 | Civilian ships in the game: each flies through `FlightModel` with zero damping (the damping guard covers it), turns by torque only, flees raiders on the `civilian` profile, towards the nearest ship of its own faction and in a group with other attacked civilians (Q24), takes hull damage, breaks into its chunks, shows running lights and switches LOD; a Bokmai flies with 0-3 cargo pods and sheds them when destroyed; raiders attack them through faction data; on the maintainer's GPU all nine in view at once run with `splat_backend = compute`, FPS and VRAM recorded by the agent | A | |
 | AC14 | Encounters: `EncounterPlan` is deterministic per seed (test); raids, patrols and traffic spawn 6-12 km out from pools and are released past 30 km; raiders sent at a civilian attack it and allies engage them; `encounter_max_ships` holds; encounters off leaves free flight empty; `encounters` provider and an `encounter <kind>` command to force one | A | |
 | AC15 | Sounds: generator tests pin the new guns' shape (length, flat hold, constant pitch, energy band after the 0.25 register, inharmonic partials), the impact's length and band, and the engine bursts' band (no energy to speak of below 300 Hz); voices sit at the nozzles; the voice cap holds and the per-frame update is linear in voices (work count); the old loops are gone | A | |
 | AC16 | Cost: M5 adds nothing measurable to AC13 of M3 (the paired 13-ship AI budget still passes, `test_ai_think_time`); the mission runner with 20 triggers and the encounter director stay inside their work counts | A | |
@@ -1046,7 +1049,7 @@ whose trigger never arose). Update the column with each task's commit.
 ### M5-T16 Civilian ships in the game
 
 - **Goal:** AC13 (D58 factions, D59).
-- **Files:** `data/factions.json` (`civilian`, `narn`, `centauri`, `brakiri`, the relations), `src/game/ship_catalog.gd`
+- **Files:** `data/factions.json` (`narn`, `centauri`, `brakiri`, the relations; civilians are a role, Q24), `src/game/ship_catalog.gd`
   (nine types),
   `assets/specs/` or wherever `ShipSpec` resources live (one per hull: mass, thrust, inertia, limits), the pools and
   `LodSwitcher` entries, running lights, `DestructionDirector` chunk sets, `data/scenarios/civilian_showcase.json` (all nine
@@ -1058,6 +1061,13 @@ whose trigger never arose). Update the column with each task's commit.
   count (0-3, default 3), pooled with the ship (D22); a pod adds its mass and collision shape and switches LOD with the
   hull; when the ship breaks up its pods drift off as debris. A test spawns Bokmais with 3 and 0 pods and checks mass,
   collision and the pods' debris.
+- **Flight to friends (Q24):** each civilian hull carries its faction (Earth Alliance, Narn, Centauri, Brakiri) with
+  `civilian` as its role, so relations come from the faction and the profile from the role. Attacked, the `civilian`
+  profile flees the attacker towards the nearest ship of its own faction, of any kind, found through the contact scan's
+  results (not a new scan; M4 owns the scan); with none in range it flees straight away from the threat as before.
+  Civilians fleeing near each other close up and run as a group, so their turrets (D61) cover one another. Tests: an Earth
+  Alliance freighter attacked with a Starfury and a Narn transport in range heads for the Starfury; two attacked
+  freighters end closer together than they started.
 - **Done when:** AC13.
 
 ### M5-T17 Free-flight encounters
