@@ -1,7 +1,7 @@
 extends GutTest
 ## The render comparison's switch (M4-T27, Q24, architecture §17.17): the same scene builds with splat hulls or with the painted mesh
 ## of the same surface, by `settings.ship_render`, live; hybrid draws the mesh past `settings.ship_mesh_beyond_m`; far dots stay.
-## The capitals and the station take the same two looks.
+## The capitals and the station draw their textured meshes only (M4-T30d took their splat look out).
 
 var world: WorldFrame
 var projectiles: Node3D
@@ -37,7 +37,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
-	Settings.set_value(&"ship_render", &"splat")
+	Settings.set_value(&"ship_render", SettingsSchema.ENTRIES[&"ship_render"]["default"])
 	Settings.set_value(&"ship_mesh_beyond_m", 400.0)
 
 
@@ -114,19 +114,16 @@ func test_far_dots_stay_on_the_mesh_path() -> void:
 	assert_false(ship.hull_depth_proxy.visible, "a dot draws no hull")
 
 
-func test_a_capital_takes_the_box_splat_or_mesh_look() -> void:
+func test_a_capital_takes_the_box_or_the_textured_mesh_look() -> void:
 	var cap: CapitalStandin = CapitalStandin.create(&"cruiser", Factions.EARTH_ALLIANCE, "CAP 1", Vector3.ZERO)
 	world.spawn(cap, world.to_universe(Vector3(0.0, 0.0, -800.0)))
 	assert_eq(cap.look, CapitalStandin.LOOK_BOX)
-	cap.set_look(CapitalStandin.LOOK_SPLAT)
+	cap.set_look(CapitalStandin.LOOK_MESH)
 	var piece: RenderPiece = cap.hull_piece()
 	assert_not_null(piece, "run scripts/gen_assets.sh and import first")
 	if piece == null:
 		return
 	assert_false((cap.get_node(^"HullMesh") as Node3D).visible)
-	assert_gt(piece.visible_splats(), 0)
-	assert_false(piece.is_mesh_shown())
-	cap.set_look(CapitalStandin.LOOK_MESH)
 	assert_eq(piece.visible_splats(), 0)
 	assert_true(piece.is_mesh_shown())
 	assert_eq(piece.mesh().get_aabb().size.round(), Vector3(60.0, 40.0, 300.0))
@@ -135,23 +132,19 @@ func test_a_capital_takes_the_box_splat_or_mesh_look() -> void:
 	assert_false(piece.visible)
 
 
-func test_the_station_builds_both_ways_with_a_turning_drum() -> void:
+func test_the_station_draws_its_textured_pieces_with_a_turning_drum() -> void:
 	var station := StationStandin.new()
 	assert_true(station.build(), "run scripts/gen_assets.sh and import first")
 	world.spawn(station, world.to_universe(Vector3(0.0, 0.0, -3000.0)))
-	station.set_look(RenderPiece.Look.SPLAT)
 	await get_tree().process_frame
-	assert_gt(station.visible_splats(), 0)
-	assert_false(station.frame_piece.is_mesh_shown())
+	assert_eq(station.visible_splats(), 0)
+	assert_true(station.frame_piece.is_mesh_shown())
+	assert_true(station.drum_piece.is_mesh_shown())
 	var before: Basis = station.drum_pivot.basis
 	await get_tree().process_frame
 	await get_tree().process_frame
 	assert_gt(before.z.dot(station.drum_pivot.basis.z), 0.999, "turns about its long axis")
 	assert_ne(before.x, station.drum_pivot.basis.x, "the drum turns")
-	station.set_look(RenderPiece.Look.MESH)
-	assert_eq(station.visible_splats(), 0)
-	assert_true(station.frame_piece.is_mesh_shown())
-	assert_true(station.drum_piece.is_mesh_shown())
 	var drum_box: AABB = station.drum_piece.mesh().get_aabb()
 	assert_almost_eq(drum_box.size.x, 8000.0 / 9.0, 5.0, "the drum is a ninth of the length across")
 	assert_almost_eq(station.length_m, 8000.0, 1.0)
