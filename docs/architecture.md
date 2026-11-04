@@ -2439,7 +2439,7 @@ native/src/contact_field.rs         + set_friendly_row; statics(..., faction, ..
   Jolt's own bounce off the RID body is unchanged (its contacts never named a rock: the RID body has no object id).
 - **Why nothing changes for fighters.** Furball, spread and transit have no rocks and no mines, so the rows are empty, the kept
   grids answer nothing and every contact list is what it was; the seeded outcomes match the base with `perf_native` on and off.
-### 17.16 Splats against meshes: the render comparison (T27)
+### 17.17 Splats against meshes: the render comparison (T27)
 
 ```
 tools/procgen/core/glb.py              a binary glTF writer (and a reader for tests): positions, normals, one UV set, a material a primitive

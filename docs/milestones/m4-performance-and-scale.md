@@ -1055,7 +1055,7 @@ No question is open.
   where each binds, what a hybrid of near splats and far meshes would cost), and a recommendation for the maintainer; the
   screenshots are listed for (H).
 - **Done** (2026-11-04): the painted mesh path (`settings.ship_render` splat, mesh or hybrid), the station and capital pieces, the
-  `station` scene, `scripts/render_compare.sh` and the draw-call probe; §17.16. The entry "T27 render comparison" in the Cycle log has
+  `station` scene, `scripts/render_compare.sh` and the draw-call probe; §17.17. The entry "T27 render comparison" in the Cycle log has
   both scenes, the reading, the draw-call finding and the recommendation: meshes are 2 to 3 times cheaper on the GPU, but neither path
   binds the battles today (the tick and the frame's process work do); stations and capitals as meshes, fighters as splats within about
   150 m. Mesh LOD is the importer's; instancing is the renderer's own (20 identical painted meshes are one draw call). Fixed on the way:
@@ -1067,7 +1067,7 @@ No question is open.
 - **Goal:** T07's 1 000 asteroids and T12's mines leave the per-tick GDScript paths: each registered once as a row with no node,
   moved only by its world's rebase; bolts still stop on rocks and ships still ram them; avoidance sees rocks and its own side's
   mines only (Q27).
-- **Architecture:** §17.16 (§17.12 to §17.15 are assigned to T14, T15, T21 and T26).
+- **Architecture:** §17.17 (§17.12 to §17.15 are assigned to T14, T15, T21 and T26; §17.16 is T29's).
 - **Done (2026-11-03, worktree on `9a3f525`; Cycle log, "M4-T29"):** `StaticRows` (`src/world/static_rows.gd`) holds the rows
   (rocks by RID id, kind `STATIC`, neutral; mines from `StaticRows.new_id`, kind `MINE`, their layer's faction, the trigger's
   50 m) with `register`, `unregister`, `unregister_many` and `shift`; `ContactScan.register_static` and its siblings call it.
@@ -2435,7 +2435,7 @@ the station scene, where the buoys are farther and drawn coarser). VRAM added is
 budget's sort buffers, which GDGS sizes from `splat_budget` whatever is drawn (§7.2).
 
 **What was compared.** Splat ships against painted meshes of the same surface (the fallback OBJ's triangles: 5 700 a raider, 34 428 a
-Starfury, LODs by Godot's importer), painted and lit by the same sums (§17.16). Capitals and the planet are meshes in scene 1 on both
+Starfury, LODs by Godot's importer), painted and lit by the same sums (§17.17). Capitals and the planet are meshes in scene 1 on both
 paths, as the plan says; in scene 2 the station (1.38 million splats at LOD0, four levels; 9 896 triangles) and the 10 capitals
 (about 60 000 splats each, three levels; 12 triangles) switch too. Far dots past 3 km are the same on both paths.
 

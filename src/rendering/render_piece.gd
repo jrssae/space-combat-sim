@@ -1,6 +1,6 @@
 class_name RenderPiece
 extends Node3D
-## One big stand-in piece drawn either way (M4-T27, Q24, architecture §17.16): a chain of splat levels or the painted mesh of the same
+## One big stand-in piece drawn either way (M4-T27, Q24, architecture §17.17): a chain of splat levels or the painted mesh of the same
 ## surface, from a generator's piece entry (`tools/procgen/core/pieces.py`: `lods` with their centroids, `paint_mesh`). The station's
 ## drum and frame and the capital hulls of the render comparison are pieces.
 ##

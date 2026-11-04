@@ -1,5 +1,5 @@
 extends GutTest
-## The painted meshes (M4-T27, architecture §17.16): each hull's own surface imported as one mesh with the paint shader on it, filled
+## The painted meshes (M4-T27, architecture §17.17): each hull's own surface imported as one mesh with the paint shader on it, filled
 ## from the manifest; the lights the splats get; and how a big piece picks its splat level.
 
 const RAIDER: String = "raider_fighter"

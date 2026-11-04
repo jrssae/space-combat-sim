@@ -1,6 +1,6 @@
 class_name PaintMeshes
 extends RefCounted
-## Loads the painted meshes (M4-T27, Q24, architecture §17.16): a hull's own surface as triangles, the render comparison's mesh path.
+## Loads the painted meshes (M4-T27, Q24, architecture §17.17): a hull's own surface as triangles, the render comparison's mesh path.
 ## Each generator writes `<name>_mesh.glb` beside its splats and a `paint_mesh` manifest section (the material table and panel
 ## grid); this gives the imported mesh with one shared `ShaderMaterial` per surface, the paint shader filled from that section.
 ## Godot's scene importer builds the mesh's levels of detail, so a far mesh draws fewer triangles on its own.

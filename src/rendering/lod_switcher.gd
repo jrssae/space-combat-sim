@@ -11,7 +11,7 @@ extends Node
 ## node, its proxy, plumes and markers, and the world's `FarDots` draws it; a tenth back inside it shows its level again. A forced
 ## level and the player's ship are never dots.
 ##
-## With `settings.ship_render` hybrid (M4-T27, §17.16), past `settings.ship_mesh_beyond_m` from the camera a ship draws its painted mesh
+## With `settings.ship_render` hybrid (M4-T27, §17.17), past `settings.ship_mesh_beyond_m` from the camera a ship draws its painted mesh
 ## instead of splats (`Ship.set_mesh_far`), back a tenth inside it.
 ##
 ## The player's Starfury has one level finer than LOD0, the hero (M3-T24), as level -1 at the front of its chain: the other levels

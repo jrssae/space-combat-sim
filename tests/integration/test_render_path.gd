@@ -1,5 +1,5 @@
 extends GutTest
-## The render comparison's switch (M4-T27, Q24, architecture §17.16): the same scene builds with splat hulls or with the painted mesh
+## The render comparison's switch (M4-T27, Q24, architecture §17.17): the same scene builds with splat hulls or with the painted mesh
 ## of the same surface, by `settings.ship_render`, live; hybrid draws the mesh past `settings.ship_mesh_beyond_m`; far dots stay.
 ## The capitals and the station take the same two looks.
 
