@@ -75,7 +75,8 @@ func test_the_maps_import_compressed_with_mipmaps_the_normal_flagged() -> void:
 		assert_not_null(texture, path)
 		if texture == null:
 			continue
-		assert_eq(texture.get_width(), int(entry["atlas_px"]), key)  # every map shares the atlas
+		assert_eq(texture.get_width(), int(entry["map_px"][key]), key)  # M4-T30b: the normal map at twice the atlas, the rest at it
+		assert_eq(int(entry["map_px"][key]), int(entry["atlas_px"]) * (2 if key == "normal" else 1), key)
 		var image: Image = texture.get_image()
 		assert_true(image.is_compressed(), "%s is VRAM compressed (%d)" % [key, image.get_format()])
 		assert_true(image.has_mipmaps(), "%s has mipmaps" % key)

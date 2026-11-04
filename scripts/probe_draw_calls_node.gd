@@ -5,7 +5,8 @@ extends Node
 ## the merged depth proxy. One line per phase. Run it on the real renderer: the counts are the renderer's.
 ##
 ## Arguments after `--`: count=<n> (40), from=<phase> (0: the phases before it are skipped, the player alone always runs),
-## asset=<id> (raider_fighter; M4-T30a: starfury_aurora draws its textured mesh in the "painted meshes" phase).
+## asset=<id> (raider_fighter; M4-T30a: starfury_aurora draws its textured mesh in the "painted meshes" phase), wings=<a,b,...>
+## (M4-T30b: the copies in that phase take these wings' liveries in turn, each with its own number), to=<phase> (the last phase run).
 
 const FRAMES: int = 60
 const SETTLE: int = 20
@@ -14,6 +15,8 @@ var main: Main
 var count: int = 40
 var from: int = 0
 var asset: String = "raider_fighter"
+var wings: PackedStringArray = PackedStringArray()
+var to: int = 99
 var _nodes: Array[Node3D] = []
 var _phase: int = -1
 var _frame: int = 0
@@ -33,6 +36,10 @@ func _ready() -> void:
 			from = int(pair[1])
 		elif pair.size() == 2 and pair[0] == "asset":
 			asset = pair[1]
+		elif pair.size() == 2 and pair[0] == "wings":
+			wings = pair[1].split(",")
+		elif pair.size() == 2 and pair[0] == "to":
+			to = int(pair[1])
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.waves_auto_start = false
 	main.input_source = FakeInputSource.new()
@@ -81,6 +88,8 @@ func _build(phase: int) -> void:
 			4:
 				var painted := MeshInstance3D.new()
 				painted.mesh = MeshAssets.for_asset(asset)
+				if not wings.is_empty():
+					Livery.for_wing(wings[i % wings.size()], i / wings.size() + 1, MeshAssets.livery_section(asset)).apply(painted)
 				node = painted
 			5:
 				var obj := MeshInstance3D.new()
@@ -107,7 +116,7 @@ func _next_phase() -> void:
 	_draws.clear()
 	_tris.clear()
 	_objects.clear()
-	if _phase >= _phases.size():
+	if _phase >= _phases.size() or _phase > to:
 		_clear()
 		get_tree().quit(0)
 		return
