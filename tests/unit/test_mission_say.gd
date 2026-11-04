@@ -1,7 +1,8 @@
 extends GutTest
 ## `MissionApi.say` with a dialog book (architecture §18 D51, D53, M5-T06): a line is queued, shown for its hold time and the
 ## call resolves when it has finished; the `dialog_finished` trigger sees it; a skipped step logs lines and shows none; an
-## interrupt cuts the line showing; the mission ending cuts what is left. Without a book it resolves at once (T05's tests).
+## interrupt cuts the line showing; the mission ending cuts what is left, and says its closing line if it has one (T10). Without
+## a book it resolves at once (T05's tests).
 
 const DT: float = 1.0 / 60.0
 
@@ -250,3 +251,39 @@ func test_the_mission_ending_cuts_the_line_showing() -> void:
 	assert_true(api.has_ended())
 	assert_null(api.dialog.current, "nothing keeps talking over the debrief")
 	assert_eq(finished, ["long (cut)"] as Array[String])
+
+
+# --- closing lines (M5-T10) ------------------------------------------------------------------------------------------------
+
+
+func test_the_reason_picks_its_closing_line_before_success_or_failure() -> void:
+	var lines: Dictionary = {"player destroyed": &"two", "failure": &"one"}
+	assert_eq(MissionApi.closing_line_for(lines, {"success": false, "reason": "player destroyed"}), &"two")
+	assert_eq(MissionApi.closing_line_for(lines, {"success": false, "reason": "objective failed: protect"}), &"one")
+	assert_eq(MissionApi.closing_line_for(lines, {"success": true, "reason": "every primary objective done"}), &"",
+			"no line for a success here")
+	assert_eq(MissionApi.closing_line_for({}, {"success": false, "reason": "x"}), &"")
+
+
+func test_a_closing_line_is_said_as_the_mission_ends_and_shows_out() -> void:
+	var script := EndsMidLine.new()
+	api.closing_lines = {"success": &"urgent"}
+	_start(script)
+	_ticks(31)
+	assert_true(api.has_ended())
+	assert_eq(finished, ["long (cut)"] as Array[String], "what was showing is cut")
+	assert_eq(api.dialog.current.id, &"urgent", "the closing line takes its place")
+	assert_has(api.journal, "say urgent")
+	_ticks(61)
+	assert_null(api.dialog.current, "the ended mission still moves its last line on")
+	assert_eq(finished, ["long (cut)", "urgent"] as Array[String])
+
+
+func test_a_closing_line_the_book_lacks_is_an_error_and_says_nothing() -> void:
+	var script := EndsMidLine.new()
+	api.closing_lines = {"success": &"no_such_line"}
+	_start(script)
+	_ticks(31)
+	assert_push_error("no_such_line")
+	assert_true(api.has_ended())
+	assert_null(api.dialog.current)

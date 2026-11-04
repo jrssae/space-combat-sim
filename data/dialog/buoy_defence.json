@@ -1,0 +1,30 @@
+{
+	"lines": [
+		{"id": "control_hail", "speaker": "control", "voice": "bd_control_hail",
+			"text": "Alpha wing, Babylon 5 Control. You're cleared through to NAV ALPHA."},
+		{"id": "control_brief", "speaker": "control", "voice": "bd_control_brief",
+			"text": "A freighter skipper reports raiders headed your way. They want the relay."},
+		{"id": "control_tasking", "speaker": "control", "voice": "bd_control_tasking",
+			"text": "Keep them off NAV ALPHA. Without it, nothing out there finds its way home."},
+		{"id": "alpha_2_copy", "speaker": "alpha_2", "voice": "bd_alpha_2_copy",
+			"text": "Copy, Control. Alpha 2 on your wing, leader."},
+		{"id": "control_handover", "speaker": "control", "voice": "bd_control_handover",
+			"text": "Alpha leader, the flight is yours. Good hunting."},
+		{"id": "control_contacts", "speaker": "control", "voice": "bd_control_contacts",
+			"text": "Jump point opening off your port side. Three raiders, making for the buoy."},
+		{"id": "control_second_group", "speaker": "control", "voice": "bd_control_second_group",
+			"text": "Alpha, second jump signature, starboard and low. Four more inbound."},
+		{"id": "raider_lead_taunt", "speaker": "raider_lead", "voice": "bd_raider_lead_taunt",
+			"text": "Leave us the beacon, Earthers, and you all go home tonight."},
+		{"id": "alpha_3_tally", "speaker": "alpha_3", "voice": "bd_alpha_3_tally",
+			"text": "Tally four. They're going straight for the relay!"},
+		{"id": "control_success", "speaker": "control", "voice": "bd_control_success",
+			"text": "Scope's clean and NAV ALPHA is still talking. Nice flying, Alpha wing."},
+		{"id": "alpha_2_home", "speaker": "alpha_2", "voice": "bd_alpha_2_home",
+			"text": "Forming up on you, leader. Let's go home."},
+		{"id": "control_relay_lost", "speaker": "control", "voice": "bd_control_relay_lost",
+			"text": "We've lost NAV ALPHA. Alpha wing, come home."},
+		{"id": "alpha_2_leader_down", "speaker": "alpha_2", "voice": "bd_alpha_2_leader_down",
+			"text": "Leader's down! Control, Alpha leader is down!"}
+	]
+}

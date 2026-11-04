@@ -9,9 +9,12 @@ extends RefCounted
 ## Result (also on failure, so callers can read it without checking every key):
 ##     {"ok": bool, "error": String,               # error is "" when ok, else "<source>: <what is wrong>"
 ##      "scenario_id": StringName, "system_id": StringName,
-##      "player": {"position": UniversePos, "forward": Vector3, "basis": Basis},
+##      "player": {"position": UniversePos, "forward": Vector3, "basis": Basis,
+##                 "velocity": Vector3},            # the start velocity (M5-T10), zero unless given
 ##      "props": Array[Dictionary],                 # each {"type": StringName, "name": String,
-##                                                  #       "position": UniversePos, "velocity": Vector3}
+##                                                  #       "position": UniversePos, "velocity": Vector3}; the buoys of
+##                                                  #       `buoy_rings[]` (M5-T10: {centre, radius_m, count, normal, first,
+##                                                  #       prefix ("NAV ")}, placed by `BuoyRing`) follow the hand-placed ones
 ##      "pools": Dictionary,                        # ship type (StringName) -> how many to build (int); may be empty.
 ##                                                  # `Main` builds `raider_fighter` and `starfury_ally` (M3-T08) from it
 ##      "waves": Array[Dictionary],                 # each {"name", "delay_s", "spawns": Array[{type, name, anchor, offset,
@@ -29,7 +32,8 @@ extends RefCounted
 ##      "mission": Dictionary,                      # (M5-T05, D51) {} for none, else {title, briefing, script (a res://
 ##                                                  #       MissionScript path, loaded by the runner), dialog (a dialog file
 ##                                                  #       path), objectives: the raw `objectives[]`, already checked by
-##                                                  #       `ObjectiveBook.declare`}; strings may be ""
+##                                                  #       `ObjectiveBook.declare`, closing_lines: {reason, "success" or
+##                                                  #       "failure" -> line id (StringName)} (M5-T10)}; strings may be ""
 ##      "cinematics": Dictionary}                   # (M5-T05, D55) shot id -> shot, passed through for T08; may be empty
 ## Every spawn (wave or load) carries "wing" (a wing's name, "" for none; it needs an "ai" behaviour). A wing named by a spawn
 ## but not declared in `wings[]` is a group led by its first ship, engaging at will, in a finger-four.
@@ -82,6 +86,9 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	if forward == null or (forward as Vector3).is_zero_approx():
 		return _failure("%s: player.forward must be a non-zero [x, y, z]" % source)
 	var forward_unit: Vector3 = (forward as Vector3).normalized()
+	var start_velocity: Variant = _vector3(player_dict.get("velocity", [0.0, 0.0, 0.0]))
+	if start_velocity == null:
+		return _failure("%s: player.velocity must be [x, y, z] (numbers)" % source)
 
 	var props_raw: Variant = root.get("props", [])
 	if not (props_raw is Array):
@@ -113,6 +120,9 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 			return _failure("%s: velocity must be [x, y, z] (numbers)" % where)
 		props.append({"type": StringName(prop_type as String), "name": prop_name as String,
 				"position": position as UniversePos, "velocity": velocity as Vector3})
+	var ring_problem: String = _buoy_rings(root.get("buoy_rings", []), props, names, system, source)
+	if not ring_problem.is_empty():
+		return _failure(ring_problem)
 
 	var pools: Variant = _pools(root.get("pools", {}), source)
 	if pools is String:
@@ -152,7 +162,7 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	result["scenario_id"] = StringName(scenario_id as String)
 	result["system_id"] = system
 	result["player"] = {"position": player_pos as UniversePos, "forward": forward_unit,
-			"basis": basis_facing(forward_unit)}
+			"basis": basis_facing(forward_unit), "velocity": start_velocity as Vector3}
 	result["props"] = props
 	result["pools"] = pools
 	result["waves"] = wave_list
@@ -184,7 +194,64 @@ static func _mission(raw: Variant, system: StringName, source: String) -> Varian
 	if not problem.is_empty():
 		return "%s: mission.%s" % [source, problem]
 	out["objectives"] = objectives
+	var closing: Variant = _closing_lines(block.get("closing_lines", {}), source)
+	if closing is String:
+		return closing
+	out["closing_lines"] = closing
 	return out
+
+
+## A mission's closing lines (M5-T10): the line to say as it ends, by the result's reason or by "success" / "failure"; or an
+## error string. The dialog file is checked by `tests/unit/test_dialog_ids.gd`, not here.
+static func _closing_lines(raw: Variant, source: String) -> Variant:
+	if not (raw is Dictionary):
+		return "%s: mission.closing_lines must be an object (reason, success or failure -> line id)" % source
+	var out: Dictionary = {}
+	for key: Variant in raw as Dictionary:
+		var line_id: Variant = (raw as Dictionary)[key]
+		if not (line_id is String) or (line_id as String).strip_edges().is_empty():
+			return "%s: mission.closing_lines.%s must be a line id" % [source, key]
+		out[str(key)] = StringName((line_id as String).strip_edges())
+	return out
+
+
+## `buoy_rings[]` (M5-T10, Q21): each ring's buoys, from `BuoyRing`, appended to `props` as nav buoys at rest. Returns "" or
+## an error naming the JSON path. `names` holds the lower-case names taken so far.
+static func _buoy_rings(raw: Variant, props: Array[Dictionary], names: Dictionary, system: StringName, source: String) -> String:
+	if not (raw is Array):
+		return "%s: buoy_rings must be an array" % source
+	for r: int in (raw as Array).size():
+		var where: String = "%s: buoy_rings[%d]" % [source, r]
+		if not ((raw as Array)[r] is Dictionary):
+			return "%s must be an object" % where
+		var ring: Dictionary = (raw as Array)[r]
+		var centre: Variant = _universe_pos(ring.get("centre"), system)
+		if centre == null:
+			return "%s.centre must be [x, y, z] (numbers)" % where
+		var radius: Variant = ring.get("radius_m")
+		var count: Variant = ring.get("count")
+		var normal: Variant = _vector3(ring.get("normal", [0.0, 1.0, 0.0]))
+		var first: Variant = _vector3(ring.get("first", [0.0, 0.0, -1.0]))
+		if not _is_number(radius) or not _is_number(count) or float(count) != floorf(float(count)):
+			return "%s: radius_m and count must be numbers (count whole)" % where
+		if normal == null or first == null:
+			return "%s: normal and first must be [x, y, z] (numbers)" % where
+		var problem: String = BuoyRing.problem(float(radius), int(count), normal as Vector3, first as Vector3)
+		if not problem.is_empty():
+			return "%s: %s" % [where, problem]
+		var prefix: Variant = ring.get("prefix", "NAV ")
+		if not (prefix is String):
+			return "%s.prefix must be a string" % where
+		var at: Array[UniversePos] = BuoyRing.positions(centre as UniversePos, float(radius), int(count), normal as Vector3,
+				first as Vector3)
+		var ring_names: PackedStringArray = BuoyRing.names(int(count), prefix as String)
+		for i: int in at.size():
+			var key: String = ring_names[i].to_lower()
+			if names.has(key):
+				return "%s: duplicate name '%s' (targets are selected by name)" % [where, ring_names[i]]
+			names[key] = true
+			props.append({"type": &"nav_buoy", "name": ring_names[i], "position": at[i], "velocity": Vector3.ZERO})
+	return ""
 
 
 ## One spawn by the scenario's rules (a mission's `m.spawn`, M5-T05), or an error string naming `where`.
@@ -529,7 +596,8 @@ static func _numbers3(value: Variant) -> Variant:
 
 static func _empty() -> Dictionary:
 	return {"ok": false, "error": "", "scenario_id": &"", "system_id": &"local",
-			"player": {"position": UniversePos.new(), "forward": Vector3.FORWARD, "basis": Basis.IDENTITY},
+			"player": {"position": UniversePos.new(), "forward": Vector3.FORWARD, "basis": Basis.IDENTITY,
+					"velocity": Vector3.ZERO},
 			"props": [] as Array[Dictionary], "pools": {}, "waves": [] as Array[Dictionary],
 			"loop": {"from_wave": 0, "add_per_loop": 1}, "routes": [] as Array[Route], "spawns": [] as Array[Dictionary],
 			"wings": [] as Array[Dictionary], "mission": {}, "cinematics": {}}

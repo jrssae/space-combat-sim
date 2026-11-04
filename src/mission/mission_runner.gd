@@ -78,6 +78,7 @@ func _ready() -> void:
 	api.scenario_id = _scenario.get("scenario_id", &"")
 	api.title = String(block.get("title", ""))
 	_load_dialog(String(block.get("dialog", "")))
+	api.closing_lines = block.get("closing_lines", {})
 	var shots_problem: String = api.load_cinematics(_scenario.get("cinematics", {}))
 	if not shots_problem.is_empty() and error.is_empty():
 		error = shots_problem
@@ -203,7 +204,7 @@ func _on_ended(result: Dictionary) -> void:
 	var report: Dictionary = recorder.report(result) if recorder != null else result
 	var game: Node = get_node_or_null(^"/root/Game")
 	if game != null and game.has_method(&"end_mission") and bool(game.call(&"end_mission", report)):
-		_debrief_in_s = debrief_delay_s
+		_debrief_in_s = maxf(debrief_delay_s, api.dialog.remaining_s())  # the closing line is heard out
 	mission_ended.emit(report)
 
 

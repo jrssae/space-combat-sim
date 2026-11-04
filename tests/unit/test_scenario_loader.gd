@@ -558,3 +558,109 @@ func test_the_test_mission_fixture_loads() -> void:
 	assert_true(result["ok"], str(result["error"]))
 	assert_eq(result["mission"]["title"], "Test Mission")
 	assert_eq((result["mission"]["objectives"] as Array).size(), 4)
+
+
+# --- Buoy defence's additions (M5-T10): buoy rings, a start velocity, closing lines -----------------------------------------
+
+
+func _ring(extra: Dictionary = {}) -> Dictionary:
+	var base: Dictionary = {"centre": [0, 0, 20000000], "radius_m": 20000000, "count": 16, "normal": [0, 1, 0],
+			"first": [0, 0, -1]}
+	base.merge(extra, true)
+	return base
+
+
+func test_a_buoy_ring_becomes_nav_buoy_props_from_the_ring_helper() -> void:
+	var data: Dictionary = _minimal([_buoy("BEACON")])
+	data["buoy_rings"] = [_ring()]
+	var result: Dictionary = ScenarioLoader.from_data(data, "case")
+	assert_true(result["ok"], str(result["error"]))
+	var props: Array = result["props"]
+	assert_eq(props.size(), 17, "the hand-placed buoy and the ring's sixteen")
+	var expected: Array[UniversePos] = BuoyRing.positions(UniversePos.new(0.0, 0.0, 2.0e7), 2.0e7, 16, Vector3.UP, Vector3.FORWARD)
+	var names: PackedStringArray = BuoyRing.names(16)
+	for i: int in 16:
+		var entry: Dictionary = props[i + 1]
+		assert_eq(entry["type"], &"nav_buoy")
+		assert_eq(entry["name"], names[i])
+		assert_almost_eq((entry["position"] as UniversePos).distance_to(expected[i]), 0.0, 1e-6)
+		assert_eq(entry["velocity"], Vector3.ZERO)
+	assert_eq(props[1]["name"], "NAV ALPHA")
+	assert_almost_eq((props[1]["position"] as UniversePos).z, 0.0, 1e-6, "NAV ALPHA at the scenario origin")
+
+
+func test_a_ring_takes_a_name_prefix() -> void:
+	var data: Dictionary = _minimal()
+	data["buoy_rings"] = [_ring({"count": 3, "prefix": "RELAY "})]
+	var result: Dictionary = ScenarioLoader.from_data(data, "case")
+	assert_true(result["ok"], str(result["error"]))
+	assert_eq(result["props"][2]["name"], "RELAY CHARLIE")
+
+
+func test_buoy_ring_errors_name_the_json_path() -> void:
+	var data: Dictionary = _minimal()
+	data["buoy_rings"] = {}
+	_assert_fails(data, "case: buoy_rings must be an array")
+	data["buoy_rings"] = [_ring({"centre": [0, 0]})]
+	_assert_fails(data, "case: buoy_rings[0].centre must be [x, y, z]")
+	data["buoy_rings"] = [_ring({"radius_m": -5})]
+	_assert_fails(data, "case: buoy_rings[0]: radius")
+	data["buoy_rings"] = [_ring({"count": 1})]
+	_assert_fails(data, "case: buoy_rings[0]: count")
+	data["buoy_rings"] = [_ring({"normal": [0, 0, 0]})]
+	_assert_fails(data, "case: buoy_rings[0]: normal")
+	data["buoy_rings"] = [_ring({"prefix": 3})]
+	_assert_fails(data, "case: buoy_rings[0].prefix must be a string")
+	data = _minimal([_buoy("NAV ALPHA")])
+	data["buoy_rings"] = [_ring()]
+	_assert_fails(data, "duplicate name 'NAV ALPHA'")
+
+
+func test_the_player_may_start_moving() -> void:
+	var data: Dictionary = _minimal()
+	assert_eq(ScenarioLoader.from_data(data, "case")["player"]["velocity"], Vector3.ZERO, "at rest by default")
+	data["player"]["velocity"] = [0, 0, -40]
+	var result: Dictionary = ScenarioLoader.from_data(data, "case")
+	assert_true(result["ok"], str(result["error"]))
+	assert_eq(result["player"]["velocity"], Vector3(0.0, 0.0, -40.0))
+	data["player"]["velocity"] = [0, "fast", 0]
+	_assert_fails(data, "case: player.velocity must be [x, y, z]")
+
+
+func test_closing_lines_pass_through_and_are_checked() -> void:
+	var data: Dictionary = _minimal()
+	data["mission"] = {"title": "T", "closing_lines": {"player destroyed": "down", "failure": "lost"}}
+	var result: Dictionary = ScenarioLoader.from_data(data, "case")
+	assert_true(result["ok"], str(result["error"]))
+	assert_eq_deep(result["mission"]["closing_lines"], {"player destroyed": &"down", "failure": &"lost"})
+	data["mission"] = {"title": "T"}
+	assert_eq(ScenarioLoader.from_data(data, "case")["mission"]["closing_lines"], {}, "none by default")
+	data["mission"] = {"closing_lines": ["lost"]}
+	_assert_fails(data, "case: mission.closing_lines must be an object")
+	data["mission"] = {"closing_lines": {"failure": 5}}
+	_assert_fails(data, "case: mission.closing_lines.failure must be a line id")
+
+
+func test_the_buoy_defence_file_validates() -> void:
+	var result: Dictionary = ScenarioLoader.load("res://data/scenarios/buoy_defence.json")
+	assert_true(result["ok"], str(result["error"]))
+	var props: Array = result["props"]
+	assert_eq(props.size(), 16, "the ring of sixteen, nothing hand-placed")
+	assert_eq(props[0]["name"], "NAV ALPHA")
+	var centre := UniversePos.new(0.0, 0.0, 2.0e7)
+	for entry: Dictionary in props:
+		assert_almost_eq((entry["position"] as UniversePos).distance_to(centre), 2.0e7, 1.0, "%s on the ring" % entry["name"])
+	assert_eq_deep(result["pools"], {&"raider_fighter": 7, &"starfury_ally": 3})
+	assert_eq((result["wings"] as Array).size(), 1)
+	assert_eq(result["wings"][0]["leader"], "player")
+	assert_eq((result["spawns"] as Array).size(), 3, "ALPHA 2, 3 and 4")
+	var mission: Dictionary = result["mission"]
+	assert_eq(mission["title"], "Buoy defence")
+	assert_eq(mission["script"], "res://data/missions/buoy_defence.gd")
+	assert_eq(mission["dialog"], "res://data/dialog/buoy_defence.json")
+	var ids: Array = []
+	for objective: Dictionary in mission["objectives"]:
+		ids.append(objective["id"])
+	assert_eq(ids, ["protect", "raiders", "home"])
+	assert_true((result["cinematics"] as Dictionary).has("relay"))
+	assert_true((result["cinematics"] as Dictionary).has("wing"))

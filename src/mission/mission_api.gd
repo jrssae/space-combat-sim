@@ -22,6 +22,8 @@ extends RefCounted
 ## Lines (D53): `dialog_book` holds the mission's dialog file and `dialog` is the queue the comms panel shows; a line is recorded
 ## in the `MissionWorld` as finished when it ends, shown out or cut (an interrupt, a skip, the mission's end). Without a book
 ## (a mission with no dialog file) `say` is logged and finished at once; a line the book lacks is an error and also finishes.
+## Ending cuts what is showing; a closing line for the result (`closing_lines`, T10) is then said and runs out its hold while the
+## runner holds the debrief for it, so a mission lost at a stroke (the buoy, the player) still gets its last word.
 ##
 ## Cinematics (D55): the stage plays a shot on the camera rig, which hides the HUD and zeroes the player's commands; `cinematic`
 ## resolves when the shot ends, when the player skips it (A or Start), and at once in a skipped step. Without a stage a shot lasts
@@ -67,6 +69,9 @@ var cinematics: Dictionary = {}  # StringName -> CinematicShot
 var dialog_book: DialogBook = null
 ## The comms lines in play: the comms panel reads and draws it, `tick` moves it on sim time.
 var dialog: DialogQueue = DialogQueue.new()
+## The line said as the mission ends: by the result's reason ("player destroyed", "objective failed: protect"), else by
+## "success" or "failure" (the scenario's `mission.closing_lines`).
+var closing_lines: Dictionary = {}  # String -> StringName
 
 var _seq: MissionSequencer = MissionSequencer.new()
 # The shot `cinematic` is waiting on, or null.
@@ -296,14 +301,24 @@ func end(success: bool, reason: String = "") -> void:
 			"objectives": book.snapshot(), "time_s": world.time_s}
 	_seq.stop()
 	_live.clear()
-	dialog.clear()  # nothing keeps talking over the debrief
+	dialog.clear()  # nothing keeps talking over the debrief but the closing line
 	if _shot != null and stage != null:
 		stage.stop_cinematic(_shot)  # the result shows on the HUD, not under a shot
 	_shot = null
 	_record_finished_lines()
 	journal.append("end %s%s" % ["success" if success else "failure", ": " + reason if not reason.is_empty() else ""])
 	print("[mission] ended: %s" % GameFlow.describe_result(result))
+	_say_closing_line()
 	ended.emit(result)
+
+
+## The closing line for `result` in `lines`: its reason's, else its outcome's ("success" or "failure"), else none. Pure.
+static func closing_line_for(lines: Dictionary, result: Dictionary) -> StringName:
+	var reason: String = str(result.get("reason", ""))
+	if lines.has(reason):
+		return StringName(lines[reason])
+	var outcome: String = "success" if bool(result.get("success", false)) else "failure"
+	return StringName(lines.get(outcome, &""))
 
 
 ## Reads the scenario's `cinematics` (shot id -> shot). Returns "" or why a shot is not one.
@@ -356,7 +371,11 @@ func begin(script: MissionScript) -> String:
 ## One physics tick, after the world moved: time, the player's actions, the snapshot, the objectives, the result, then the
 ## waiting step looks at its trigger.
 func tick(delta: float, actions: Dictionary) -> void:
-	if not _started or has_ended():
+	if _started and has_ended():
+		dialog.tick(delta)  # the closing line runs out
+		_record_finished_lines()
+		return
+	if not _started:
 		return
 	world.work = 0
 	world.time_s += delta
@@ -454,6 +473,19 @@ func watched() -> PackedStringArray:
 
 
 # --- internals ---------------------------------------------------------------------------------------------------------
+
+
+# The mission's last word: its closing line for the result, if it has one.
+func _say_closing_line() -> void:
+	var line_id: StringName = closing_line_for(closing_lines, result)
+	if line_id == &"":
+		return
+	var line: DialogBook.Line = dialog_book.line(line_id) if dialog_book != null else null
+	if line == null:
+		push_error("Mission: closing line '%s' is not in the dialog" % line_id)
+		return
+	journal.append("say %s" % line_id)
+	dialog.say(line)
 
 
 # The lines that ended since the last look are finished in the world, so `dialog_finished` triggers see them this tick.

@@ -62,6 +62,8 @@ var comms_menu_view: CommsMenuView = null
 
 var _spawn_position: UniversePos = UniversePos.new()
 var _spawn_basis: Basis = Basis.IDENTITY
+# The player's velocity at the first spawn (a mission that opens in flight); a respawn starts at rest.
+var _start_velocity: Vector3 = Vector3.ZERO
 var _system_id: StringName = &"local"
 var _scenario_spawns: Array[Dictionary] = []
 var _scenario_routes: Array[Route] = []
@@ -102,6 +104,7 @@ func _ready() -> void:
 		var player: Dictionary = scenario["player"]
 		_spawn_position = player["position"]
 		_spawn_basis = player["basis"]
+		_start_velocity = player["velocity"]
 		_system_id = scenario["system_id"]
 		_scenario_spawns = scenario["spawns"]
 		_scenario_routes = scenario["routes"]
@@ -523,6 +526,7 @@ func _spawn_ship() -> void:
 		ShipAssembly.OPT_CONSOLE_OWNER: true,
 	})
 	world.spawn(combatant.ship, _spawn_position, _spawn_basis)
+	combatant.ship.linear_velocity = _start_velocity
 	# The player is part of the wing the allies broadcast for (M3-T10): heard like an allied Starfury, to 100 km.
 	combatant.targetable.broadcast_range_m = ShipPool.ALLY_BROADCAST_RANGE_M
 	ship = combatant.ship

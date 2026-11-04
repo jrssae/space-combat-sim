@@ -1965,6 +1965,9 @@ src/input/control_lock.gd   zeroes the player's commands during a shot or a lock
 src/hud/letterbox.gd   the cinematic's black bars (T08)
 tests/unit/test_cinematic_shot.gd, test_control_lock.gd, test_mission_cinematic.gd, tests/integration/test_cinematic_camera.gd, tests/fixtures/missions/test_cinematic.json|.gd   (T08)
 tests/unit/test_triggers.gd, test_objective_book.gd, test_mission_sequencer.gd, tests/integration/test_mission_runner.gd, test_mission_skip.gd   (T05)
+src/world/buoy_ring.gd   nav buoys evenly on a ring: positions, names, how many a point hears, pure (T10)
+data/scenarios/buoy_defence.json, data/missions/buoy_defence.gd, data/dialog/buoy_defence.json   the Buoy defence mission (T10)
+tests/unit/test_buoy_ring.gd, tests/integration/test_buoy_defence.gd   (T10)
 ```
 
 ### 18.3 Boot, scene changes and the console's startup scripts
@@ -2037,6 +2040,10 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
 - **Game.** `GameFlow.kind_for` reads the scenario file: one with a `mission` block is a `mission` (so `play <id>` and boot ask
   for it). `Game.end_mission` moves the flow to `DEBRIEF`, or, for a Main the flow did not start (tests), keeps the result
   through `GameFlow.keep_result`. The console's `respawn` is refused in a mission, as Back is.
+- **Wingmen's names.** A replacement from `WingDirector.replenish` flies under the lost wingman's callsign, so a `destroyed` on
+  wing names is only safe as an objective's `fail` with `all` false (Buoy defence's `home`): it fails at the loss, before any
+  replacement, and failure is final. A success trigger or an `until` on wing names could be satisfied, or undone, by a
+  replacement. Buoy defence also pools exactly its three wingmen and runs no waves (which replenish), so no replacement comes.
 - **Left for later.** `cinematic` and the control lock are T08's (§18.8); the debrief screen is T09's (§18.7).
 
 ### 18.6 Front end and pause menu as built (T02)
@@ -2114,3 +2121,42 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
   during a lock does not count (M8's tutorial unlocks before it asks). The adapter's own latches (auto-track) are not reset.
 - **Console.** `camera.shot`, `camera.shot_time_s`; `camera <mode>` during a shot picks the view after it. No new command: a shot is
   played by a mission script, and `mission skip` cuts it.
+
+### 18.9 Buoy defence as built (T10)
+
+- **The ring (Q21).** A scenario may declare `buoy_rings: [{centre, radius_m, count, normal, first, prefix}]`; `ScenarioLoader`
+  turns each into nav buoy props (after the hand-placed ones, names checked for duplicates) from `BuoyRing` (pure): the ring in the
+  plane square to `normal`, the first buoy along `first` from the centre, the rest at equal angles, named `prefix` + ALPHA, BRAVO,
+  ... (3 to 26 buoys), sums in 64 bits. Buoy defence has 16 on a ring of 20 000 km radius centred 20 000 km behind the scenario
+  origin, so NAV ALPHA sits at the origin and its neighbours are 7 804 km away (7 854 km along the arc). No planet yet (M6).
+- **Broadcast range: 10 000 km (changes M3's Q21).** `NavBuoy.BROADCAST_RANGE_M` is 1.0e7 m for every buoy in the game (M3-T17 had
+  1.0e6 m, 1 000 km). On the ring every point hears at least two buoys. Off it the rule holds in every direction to about 4 900 km
+  (`test_buoy_ring.gd`); straight out of the plane and inward it holds to 6 000 km and more, but straight outward beside a buoy the
+  second buoy drops out at 4 913 km, because both neighbours draw away. The maintainer's "within about 6 000 km" is therefore true
+  except on the ring's outer side near a buoy (about 10 750 km of range, or more buoys, would close that). From NAV ALPHA the radar
+  shows NAV BRAVO and NAV PAPA on its rim; NAV CHARLIE and NAV OSCAR, 15 300 km out, are not heard. In the AI's `ContactScan`
+  each buoy is one broadcast entry: 16 here against the sandbox's five, a list it already walks for allies; M5 leaves the scan
+  (M4's) alone and measured nothing there.
+  Comments in `perception.gd`, `targeting_system.gd` and `targetable.gd` still say 1 000 km: they are M4's files and are
+  corrected on the rebase.
+- **Far buoys and drawing.** The ring's far buoys stay in the tree (D22) thousands of km out, beyond every camera's far plane. M4
+  replaces the buoy's splats with a mesh, so T10 adds no splat hiding; whether 15 far meshes cost anything to cull is checked after
+  the rebase (T20).
+- **Starting in flight.** A scenario's `player` may carry `velocity` (m/s, zero by default); Main gives it to the ship at the first
+  spawn only (a respawn still starts at rest). Buoy defence starts the wing coasting at 40 m/s toward the buoy, the wingmen spawned
+  on their finger-four slots at the same velocity, on a line that passes the buoy 110 m or more to one side, so a hands-off
+  player does not ram it.
+- **The intro.** Two shots, every actor in play from load (the player and NAV ALPHA; `test_buoy_defence.gd` checks): `relay`
+  (6 s, origin points round the buoy on the far side from the key star, so it stands against the star and its flare) and `wing`
+  (7 s, points in the player's frame moving back at 40 m/s, so the camera holds still in space while the finger-four flies past it
+  on its left). Control's hail is said, not awaited, as the second shot starts and plays over it. The controls stay locked
+  (`lock_controls`) through the brief and hand over with the objectives.
+- **Closing lines.** `mission.closing_lines` maps a result's reason (`player destroyed`, `objective failed: protect`) or `success` /
+  `failure` to a line id (`MissionApi.closing_line_for`: the reason first). When the mission ends the queue is cleared as before,
+  then the closing line is said; the API keeps ticking the queue after the end, and the runner's debrief beat is the longer of
+  `DEBRIEF_DELAY_S` and what is left of the line. Why: a mission lost at a stroke (the buoy, the player) has no step left to speak
+  in, and "nothing keeps talking over the debrief" still holds. `test_dialog_ids.gd` checks closing lines like spoken ones.
+- **The script.** Steps `intro`, `brief`, `wave_one` (three raiders jump in about 9.5 km off the wing's port side, beyond the AI's
+  5 km sensors, each sent at NAV ALPHA with `m.send`), `wave_two` (Control's warning, 4 s, then four from starboard and below) and
+  `wrap` (the optional objective completes if no wingman was lost, the success lines, then `protect` completes and, as the last
+  primary, ends the mission). Pools: 7 raiders and 3 allied Starfuries, every ship the script and the scenario place.

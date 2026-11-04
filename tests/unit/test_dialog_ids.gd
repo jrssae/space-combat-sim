@@ -27,13 +27,17 @@ func _line_ids(source: String) -> Array[String]:
 	return ids
 
 
-# The ids a scenario's own objectives wait for (`{"kind": "dialog_finished", "line": id}`), anywhere in its mission block.
+# The ids a scenario's own objectives wait for (`{"kind": "dialog_finished", "line": id}`), anywhere in its mission block, and
+# its closing lines (T10).
 func _scenario_ids(node: Variant) -> Array[String]:
 	var ids: Array[String] = []
 	if node is Dictionary:
 		var d: Dictionary = node
 		if d.get("kind") == "dialog_finished" and d.get("line") is String:
 			ids.append(d["line"])
+		if d.get("closing_lines") is Dictionary:
+			for line_id: Variant in (d["closing_lines"] as Dictionary).values():
+				ids.append(str(line_id))
 		for value: Variant in d.values():
 			ids.append_array(_scenario_ids(value))
 	elif node is Array:
@@ -119,6 +123,18 @@ func test_the_scan_covers_the_test_missions() -> void:
 	var ids: Array[String] = _line_ids(FileAccess.get_file_as_string("res://tests/fixtures/missions/test_mission.gd"))
 	assert_has(ids, "control_brief")
 	assert_has(ids, "control_raiders")
+
+
+func test_the_scan_covers_buoy_defence_and_its_closing_lines() -> void:
+	var data: Variant = _json("res://data/scenarios/buoy_defence.json")
+	assert_true(data is Dictionary and (data as Dictionary).get("mission") is Dictionary, "Buoy defence is a mission")
+	var block: Dictionary = (data as Dictionary)["mission"]
+	var closing: Array[String] = _scenario_ids(block)
+	assert_has(closing, "control_relay_lost")
+	assert_has(closing, "alpha_2_leader_down")
+	var said: Array[String] = _line_ids(FileAccess.get_file_as_string(String(block["script"])))
+	assert_gt(said.size(), 5, "the script's lines are read")
+	assert_has(said, "control_brief")
 
 
 # --- the scanner itself (a check that cannot find a missing id would pass for nothing) -----------------------------------

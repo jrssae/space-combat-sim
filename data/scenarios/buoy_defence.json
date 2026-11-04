@@ -1,0 +1,56 @@
+{
+	"scenario_id": "buoy_defence",
+	"system_id": "local",
+	"player": {"position": [150, 30, 2500], "forward": [0, 0, -1], "velocity": [0, 0, -40]},
+	"buoy_rings": [
+		{"centre": [0, 0, 20000000], "radius_m": 20000000, "count": 16, "normal": [0, 1, 0], "first": [0, 0, -1],
+			"prefix": "NAV "}
+	],
+	"pools": {"raider_fighter": 7, "starfury_ally": 3},
+	"wings": [
+		{"name": "ALPHA", "faction": "earth_alliance", "leader": "player", "order": "cover", "formation": "finger_four",
+			"members": [
+				{"type": "starfury_ally", "name": "ALPHA 2", "anchor": "player", "offset": [-40, 0, 40], "velocity": [0, 0, -40],
+					"behaviour": {"type": "ai", "profile": "ally_starfury"}},
+				{"type": "starfury_ally", "name": "ALPHA 3", "anchor": "player", "offset": [40, 0, 40], "velocity": [0, 0, -40],
+					"behaviour": {"type": "ai", "profile": "ally_starfury"}},
+				{"type": "starfury_ally", "name": "ALPHA 4", "anchor": "player", "offset": [80, 0, 80], "velocity": [0, 0, -40],
+					"behaviour": {"type": "ai", "profile": "ally_starfury"}}
+			]}
+	],
+	"cinematics": {
+		"relay": {"keys": [
+			{"t": 0, "position": {"origin": [-7.37, -11.04, 15.48]}, "look_at": {"actor": "NAV ALPHA", "offset": [0, 1.2, 0]},
+				"fov": 50},
+			{"t": 3, "position": {"origin": [-6.56, -7.73, 9.71]}, "look_at": {"actor": "NAV ALPHA", "offset": [0, 1.2, 0]}},
+			{"t": 6, "position": {"origin": [-7.84, -6.63, 6.52]}, "look_at": {"actor": "NAV ALPHA", "offset": [0, 1.2, 0]},
+				"fov": 42}
+		]},
+		"wing": {"keys": [
+			{"t": 0, "position": {"actor": "player", "offset": [-110, 12, -200]}, "look_at": {"actor": "player"}, "fov": 45},
+			{"t": 3.5, "position": {"actor": "player", "offset": [-110, 12, -60]},
+				"look_at": {"actor": "player", "offset": [20, 0, 30]}},
+			{"t": 7, "position": {"actor": "player", "offset": [-110, 12, 80]},
+				"look_at": {"actor": "player", "offset": [0, 0, -600]}, "fov": 55}
+		]}
+	},
+	"mission": {
+		"title": "Buoy defence",
+		"briefing": "NAV ALPHA is one of sixteen relay buoys strung round a ring 40 000 km across. Babylon 5 Control has word of raiders heading for it.\n\nLead Alpha wing out to the relay and keep it alive. Destroy every raider that comes for it, and bring your wingmen home.",
+		"script": "res://data/missions/buoy_defence.gd",
+		"dialog": "res://data/dialog/buoy_defence.json",
+		"closing_lines": {
+			"objective failed: protect": "control_relay_lost",
+			"player destroyed": "alpha_2_leader_down"
+		},
+		"objectives": [
+			{"id": "protect", "text": "Protect NAV ALPHA", "primary": true,
+				"fail": {"kind": "destroyed", "name": "NAV ALPHA"}},
+			{"id": "raiders", "text": "Destroy the raiders", "primary": true,
+				"success": {"kind": "destroyed",
+					"names": ["RAIDER 1", "RAIDER 2", "RAIDER 3", "RAIDER 4", "RAIDER 5", "RAIDER 6", "RAIDER 7"]}},
+			{"id": "home", "text": "Bring Alpha wing home", "primary": false,
+				"fail": {"kind": "destroyed", "names": ["ALPHA 2", "ALPHA 3", "ALPHA 4"], "all": false}}
+		]
+	}
+}

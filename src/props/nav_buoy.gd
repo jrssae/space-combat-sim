@@ -30,8 +30,8 @@ const FADE_PERIOD_S: float = 6.0
 const DEFAULT_BEACON_POSITION: Vector3 = Vector3(0.0, 2.46, 0.0)
 const DEFAULT_BEACON_RADIUS: float = 0.1
 
-## Every buoy broadcasts its position this far (M3-T17, Q21): 1 000 km.
-const BROADCAST_RANGE_M: float = 1.0e6
+## Every buoy broadcasts its position this far: 10 000 km (M5 Q21, was 1 000 km in M3), so a ring of 16 always has two in range.
+const BROADCAST_RANGE_M: float = 1.0e7
 ## Hull points of a buoy: six pulse-cannon hits.
 const HULL_MAX: float = 60.0
 ## kg, for the ram maths (§16 D32; the generator's estimate is 1.94 t). A Starfury at 40 m/s changes a buoy's velocity by

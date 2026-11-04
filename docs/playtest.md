@@ -479,3 +479,33 @@ ran the capture, and the milestone's as-built notes say what each one shows.
       plain facets (free look), and the four lamps have no labels (assist, guns, lights, track).
 
 Record your GPU, driver, FPS and VRAM in the acceptance record at the end of the milestone doc.
+
+
+# Play-testing M5 (Missions and Front End)
+
+## Buoy defence (M5-T10)
+
+Start the game windowed (`.tools/godot/godot --path .`), choose **Missions**, then **Buoy defence**. The briefing shows on the right
+while it is focused. From the console, `play buoy_defence` does the same (add a seed: `play buoy_defence 7`).
+
+- **The intro.** The mission opens on the relay buoy NAV ALPHA with the star behind it, then cuts to Alpha wing (you leading, three
+  wingmen in a finger-four) coasting past the camera at 40 m/s. Babylon 5 Control hails you over the fly-past and briefs you once the
+  camera is back behind your ship. Your controls are held until Control says "the flight is yours"; the ship keeps coasting. **A** or
+  **Start** skips one shot (one press, one shot).
+- **The fight.** Three raiders jump in about 9.5 km off your left (port) side and go for the buoy. When they are down, Control warns
+  of a second group: four more jump in from the right (starboard) and below, a few seconds later. The buoy dies to six hits, so stay
+  between it and the raiders. The waypoint diamond marks NAV ALPHA; objectives show top right.
+- **Objectives.** Protect NAV ALPHA (lost if it is destroyed), destroy the raiders (all seven), and, optional, bring Alpha wing home
+  (failed the moment a wingman is lost). The mission ends on a last line from Control or Alpha 2, then the debrief.
+- **The ring.** NAV ALPHA is one of 16 buoys on a ring of 20 000 km radius; every buoy broadcasts to 10 000 km. From the start the
+  radar's rim shows NAV BRAVO and NAV PAPA, the two neighbours about 7 800 km away (`state targeting` lists them).
+- **Console shortcuts.** `mission goto wave_one` skips the intro and the brief; `kill all` destroys every raider in play;
+  `set targeting.selected "NAV ALPHA"; damage 100 target` loses the buoy; `kill player` loses you; `mission skip` fast-forwards the
+  step; `mission journal` lists what happened.
+
+Check (AC18, this mission's part):
+
+- [ ] The intro reads well: the buoy against the star, the wing passing close, the lines readable in their time on screen.
+- [ ] The pacing: the brief is not too long before you fly, and the second group arrives soon enough after the first.
+- [ ] The lines: Control, Alpha 2 and 3 and the raider leader sound like people; the last line before the debrief is heard out.
+- [ ] Losing the buoy, losing yourself and winning each end where you expect, with the right debrief.
