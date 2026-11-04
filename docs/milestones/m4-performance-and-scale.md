@@ -150,7 +150,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T04 | Cycle 3 | T03 | Opus | Same | - | done |
 | T05 | Cycle 4: native contact scan (Rust `gdext`, N0 then N1, Q9) | T04 | Opus or Fable | A new toolchain and bit-identical parity | - | done |
 | T06 | Report to the maintainer | T05 | controller | A summary and a question, no code | - | done (waiting for the maintainer's answer) |
-| T07 | The `battle` and `typical` layouts, the mix (`BattleMix`), capital, turret, asteroid and gravity stand-ins, per-entity counters, the fullscreen check script | T06 | Opus | The ruler every later task measures against; what the stand-ins cost needs judgement | A | in progress |
+| T07 | The `battle` and `typical` layouts, the mix (`BattleMix`), capital, turret, asteroid and gravity stand-ins, per-entity counters, the fullscreen check script | T06 | Opus | The ruler every later task measures against; what the stand-ins cost needs judgement | A | done |
 | T08 | Bolt broad phase in native code (`ScsHitSweep`), projectile kinds | T06 | Opus | Hits grow with bolts times ships; the windowed spikes | G, N | done |
 | T09 | Native body registry: the scan built from RIDs, entity kinds, nearest-k per kind | T06 | Opus | The per-tick gather cycle 4 left; rocks must not fill a fighter's contacts | G, N | not started |
 | T10 | N4: the flight force step in native code for AI ships (`ScsFlightStep`) | T06 | Fable | The riskiest parity maths (`FlightModel`, the assist's state) | G, N | done (2026-11-03, in a worktree on `f134e00`; Cycle log, M4-T10) |
