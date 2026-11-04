@@ -2386,6 +2386,57 @@ src/combat/hit_resolver.gd             + a beam is retired after the resolve tha
   the mines), `test_bench_layout` (the belts hold the mix per side, on their arcs, clear of every ship, seeded) and `test_bench`
   (a battle run counts beams, missiles and mines).
 
+### 17.12 Jolt collision layers and far-ship interpolation (T14)
+
+```
+src/ship/collision_layers.gd        CollisionLayers: the layers, the masks by kind, and `collide` (the either-way rule)
+src/ship/ship.gd                    layers by kind at `_ready` (the lean AI ship is a fighter, any other ship the player's kind);
+                                    a far dot's body is not interpolated
+src/perf/standins/capital_standin.gd, asteroid_field.gd   the capitals' and the rocks' layers
+src/combat/ram_resolver.gd          a rigid pair Jolt cannot pair goes through the swept test at any speed
+src/world/world_frame.gd            `last_settle_resets`: the nodes the end-of-tick interpolation reset reached
+```
+
+| kind | layer | mask (collides with) |
+|---|---|---|
+| player (a ship that is not lean, and any body left on the default layer) | 1 | everything |
+| AI fighter (a lean ship) | 2 | player, capital, rock |
+| capital | 4 | player, fighter, capital, rock |
+| rock (the RID body of T07's field) | 8 | player, fighter, capital |
+
+Two bodies collide when either mask holds the other's layer (Godot's rule; the masks above are symmetric, so it does not
+matter). Everything the table does not list is as before: a bolt (a `Node3D` flown by hand, §17.7) and a mine (a row of
+`StaticRows`, §17.16) have no Jolt body, so they have no layer.
+
+- **Why fighters skip each other.** The ram resolver's swept test already finds every fighter-against-fighter hit exactly, from
+  the broad phase's near pairs (§17.3), and Jolt's own bounce between two AI fighters was the only other source of one. With the
+  pair out of Jolt's filter the broad phase never builds it.
+- **What changes in a fighter collision.** Two AI fighters now pass through each other: no bounce, no Jolt contact. The ram
+  resolver treats a rigid pair whose layers do not meet like the tunnelling pairs: the swept test decides at any closing speed
+  (`RamResolver._jolt_can_touch`; the 0.3 m depth rule still keeps a scrape from counting), one ram per meeting, with the
+  inelastic momentum split of the swept ram instead of the elastic one a bounce measured. A hit that was a contact ram before is
+  now a slightly smaller swept one at the same closing speed, and below the safe velocity change nothing happens in either. The
+  player keeps the default layer and collides with everything, so the player's bounce, the god-mode behaviour and every
+  contact test with the player are unchanged. A ship that is given layers before it enters the tree keeps them.
+- **Capitals and rocks.** Capitals pair with every kind (a fighter into a capital is a Jolt contact as before). T29 made rocks
+  rows with no node; they are still RID static bodies in Jolt (their row id is the body's RID id), so a fighter into a rock still
+  bounces off it in Jolt and still takes the prop ram of §17.16 from the rock's row. Their layer only keeps rocks out of pairs
+  with each other.
+- **The settle.** A rebase inside a tick resets the interpolation of every visible, interpolated shiftable node at the end of the
+  tick (§10, `WorldFrame._settle`), and `reset_physics_interpolation` walks the node's whole subtree. A far dot's ship
+  (`Ship.set_far_dot`, §17.10) is drawn by `FarDots` from its tick pose, so its body is set to `PHYSICS_INTERPOLATION_MODE_OFF` and
+  the settle skips it, subtree and all; back near, the mode returns to inherit and the interpolation is reset once. A dot moves
+  at the tick rate, by one tick of travel at most (2.5 m at 150 m/s, 10 m at 600 m/s; a few pixels at the 3 km a dot starts at, (H)). `WorldFrame.last_settle_resets`
+  counts the nodes the last settle reached.
+- **Settings.** `collision_layers` (default on; off puts every body on the one default layer: ships follow it live, capitals and
+  rocks as they are built) and `far_ship_interpolation_off` (default on) are the switches for measuring either half alone.
+- **Measured** (battle 300 and 500, Cycle log, M4-T14): the physics stage and the tick median are unchanged (Jolt had almost no
+  fighter pairs to test in a layout spread over kilometres); the rebase shift falls by 1.5 to 2 ms, a third.
+- **Tests**: `test_collision_layers` (the table, the setting, two fighters crossing report no Jolt contact and still take the
+  swept ram at 600 and 30 m/s, a 4 m/s pass hurts nobody, the player still bounces off a fighter, a capital and a rock still
+  pair with a fighter, a bolt and a mine have no body, the settle walks only the interpolated nodes, a far ship is left out of
+  it and returns).
+
 ### 17.16 Rocks and mines as static rows (T29)
 
 ```
