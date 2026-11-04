@@ -58,6 +58,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q25 | The fullscreen check on 4K screens | A native 4K fullscreen window with the 3D rendered at 1 080 lines and upscaled, as T07 built it |
 | Q26 | Running lights at distance (T28) | Point-sized past about 70 m and dimmed by the inverse square, no halo; at today's brightness they fade out past about 500 m, and that is accepted: far ships are found by radar and the HUD |
 | Q27 | Do AI ships know where mines are (2026-11-03) | **Depends on faction**: a side knows its own mines and steers clear of them; enemy mines are hidden from it (no avoidance) until they go off. Asteroids are obstacles for everyone |
+| Q28 | Allies and mines (2026-11-04) | Allied sides share minefield knowledge: a side knows and avoids its own and its allies' mines (as T29 built it) |
 
 ## The budget ("good game performance", Q5)
 
