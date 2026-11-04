@@ -32,6 +32,7 @@ from typing import Any
 import numpy as np
 
 from ..core import frames, lighting
+from ..core import civilian as cv
 from ..core.chunks import ChunkSource, write_chunks
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Mesh
@@ -428,6 +429,9 @@ def build(ctx: BuildContext) -> AssetOutputs:
     aabb_min, aabb_max = xyz32.min(axis=0), xyz32.max(axis=0)
     files: list[Path] = _write_level(out_dir, PLY_NAME, light[0], authored, comments)
     files += write_obj(out_dir / OBJ_NAME, Mesh.concatenate(p.part.mesh for p in placed if p.hull), ASSET_ID, comments[:1])
+    # The painted mesh: the ship as the game draws it from the 2026-11-04 directive (meshes, not splats).
+    mesh_path, mesh_entry = cv.write_mesh(out_dir, ASSET_ID, [(p.part.name, p.part.mesh) for p in placed if p.hull], style)
+    files.append(mesh_path)
 
     # LOD1 to LOD3: resampled coarser from their own streams, each centred on its own centroid; LOD1's groups are the chunks.
     counts: dict[int, int] = {}
@@ -446,6 +450,10 @@ def build(ctx: BuildContext) -> AssetOutputs:
     turret_part, turret = turret_splats(spec.turret, style, ctx, turret_spacing, overlap, thickness)
     turret_files, turret_entry = write_turret(out_dir, turret_part, turret, turret_spacing, spec.turret.barrel_m, comments)
     files += turret_files
+    fine = replace(style, panel_size_m=TURRET_PANEL_M[0], panel_line_width_m=TURRET_PANEL_M[1])
+    named = [(turret_part.name, turret_part.mesh.translated(-turret.xyz.mean(axis=0)))]  # the turret files' frame
+    mesh_path, turret_entry["paint_mesh"] = cv.write_mesh(out_dir, f"{ASSET_ID}_turret", named, fine)
+    files.append(mesh_path)
 
     hp = hardpoints(placed, spec, chunk_entries, offset)
     hp_path = out_dir / HARDPOINTS_NAME
@@ -471,8 +479,9 @@ def build(ctx: BuildContext) -> AssetOutputs:
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,
-        files={"fallback_mesh": OBJ_NAME, "hardpoints": HARDPOINTS_NAME},
+        files={"fallback_mesh": OBJ_NAME, "paint_mesh": mesh_entry["file"], "hardpoints": HARDPOINTS_NAME},
         extra={
+            "paint_mesh": mesh_entry,
             "counts": {g.name: len(g.splats) for g in groups},
             "chunks": [c["name"] for c in chunk_entries],
             "chunk_lod": CHUNK_LOD,

@@ -223,6 +223,9 @@ def build(ctx: BuildContext) -> AssetOutputs:
     aabb_min, aabb_max = xyz32.min(axis=0), xyz32.max(axis=0)
     files: list[Path] = cv.write_level(out_dir, PLY_NAME, light[0], authored, comments)
     files += write_obj(out_dir / OBJ_NAME, Mesh.concatenate(g.mesh for g in groups), ASSET_ID, comments[:1])
+    # The painted mesh: the ship as the game draws it from the 2026-11-04 directive (meshes, not splats).
+    mesh_path, mesh_entry = cv.write_mesh(out_dir, ASSET_ID, [(s.paint_name, s.piece.part.mesh.translated(-offset)) for s in lod0], style)
+    files.append(mesh_path)
 
     # LOD1 to LOD3, each centred on its own centroid; LOD1's groups are the break-up chunks.
     counts: dict[int, int] = {}
@@ -252,8 +255,11 @@ def build(ctx: BuildContext) -> AssetOutputs:
         # GDGS centres each import on its own mean: ``offset`` is where that mean sits in the pod's frame, per level.
         pod_levels.append({"level": level, "file": pod_level_name(level), "lighting": f"{stem}{lighting.SUFFIX}",
                            "splats": len(splats), "spacing_m": factor * spacing, "offset": cv.r(mean)})  # fmt: skip
+    pod_mesh_path, pod_mesh = cv.write_mesh(out_dir, POD_STEM, [("pod", pod.part.mesh)], BRAKIRI_POD)  # the pod's frame, origin at the mount
+    files.append(pod_mesh_path)
     pod_entry = {
         "obj": f"{POD_STEM}.obj",
+        "paint_mesh": pod_mesh,
         "lods": pod_levels,
         "mass_kg": pod.part.mass_kg,
         "collision": [c.to_json(digits=cv.JSON_DIGITS) for c in pod.part.collision],
@@ -265,6 +271,8 @@ def build(ctx: BuildContext) -> AssetOutputs:
     turret_files, turret_centroid = cv.write_model(out_dir, TURRET_STEM, turret_part, turret, comments + ("turret",))
     files += turret_files
     turret_entry = cv.turret_entry(TURRET_STEM, turret_part, turret, turret_spacing, TURRET.barrel_m, turret_centroid)
+    mesh_path, turret_entry["paint_mesh"] = cv.write_mesh(out_dir, TURRET_STEM, [("turret", turret_part.mesh.translated(-turret_centroid))], style)
+    files.append(mesh_path)
 
     hp = hardpoints(pieces, chunk_entries, offset)
     hp_path = out_dir / HARDPOINTS_NAME
@@ -292,8 +300,9 @@ def build(ctx: BuildContext) -> AssetOutputs:
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,
-        files={"fallback_mesh": OBJ_NAME, "hardpoints": HARDPOINTS_NAME},
+        files={"fallback_mesh": OBJ_NAME, "paint_mesh": mesh_entry["file"], "hardpoints": HARDPOINTS_NAME},
         extra={
+            "paint_mesh": mesh_entry,
             "counts": {g.name: len(g.splats) for g in groups},
             "chunks": [c["name"] for c in chunk_entries],
             "chunk_lod": CHUNK_LOD,

@@ -32,6 +32,7 @@ from typing import Any
 import numpy as np
 
 from ..core import frames, lighting
+from ..core import civilian as cv
 from ..core.chunks import ChunkSource, write_chunks
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Mesh
@@ -356,6 +357,9 @@ def build(ctx: BuildContext) -> AssetOutputs:
     aabb_min, aabb_max = xyz32.min(axis=0), xyz32.max(axis=0)
     files: list[Path] = _write_level(out_dir, PLY_NAME, light[0], authored, comments)
     files += write_obj(out_dir / OBJ_NAME, Mesh.concatenate(p.part.mesh.translated(-offset) for p in everything), ASSET_ID, comments[:1])
+    # The painted mesh: the ship as the game draws it from the 2026-11-04 directive (meshes, not splats).
+    mesh_path, mesh_entry = cv.write_mesh(out_dir, ASSET_ID, [(s.paint_name, s.piece.part.mesh.translated(-offset)) for s in lod0], style)
+    files.append(mesh_path)
 
     # LOD1 to LOD3: resampled coarser from their own streams, each centred on its own centroid; LOD1's groups are the chunks.
     counts: dict[int, int] = {}
@@ -398,8 +402,9 @@ def build(ctx: BuildContext) -> AssetOutputs:
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,
-        files={"fallback_mesh": OBJ_NAME, "hardpoints": HARDPOINTS_NAME},
+        files={"fallback_mesh": OBJ_NAME, "paint_mesh": mesh_entry["file"], "hardpoints": HARDPOINTS_NAME},
         extra={
+            "paint_mesh": mesh_entry,
             "counts": {g.name: len(g.splats) for g in groups},
             "chunks": [c["name"] for c in chunk_entries],
             "chunk_lod": CHUNK_LOD,

@@ -38,6 +38,8 @@ core/geometry.py   Mesh + Material, primitives (box, tapered box, lathe, loft, s
 core/sampling.py   mesh -> surface samples (area-weighted, stratified, R2 low-discrepancy) -> flat splats
 core/lighting.py   per-splat lighting records for GDGS relighting (octahedral normal, AO, confidence; one `.light` per PLY)
 core/obj.py        OBJ/MTL writer and a small reader for tests
+core/glb.py        binary glTF writer and test reader (M4-T27, copied unchanged from m4): the ships' meshes
+core/paint_mesh.py the painted mesh, <id>_mesh.glb (M4-T27, copied unchanged): ships are meshes from 2026-11-04
 parts/             reusable parametric parts: hull (fuselage, canopy, cockpit interior/tub,
                    upright cylinder hull with painted bands, faceted wedge fuselage with a framed
                    cockpit window and its first-person frame mesh), propulsion (nozzle, RCS cone,

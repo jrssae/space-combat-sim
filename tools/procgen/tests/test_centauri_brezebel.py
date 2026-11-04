@@ -18,6 +18,7 @@ from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.color import linear_to_srgb
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.obj import read_obj
+from tools.procgen.tests.mesh_checks import assert_painted_mesh
 from tools.procgen.core.ply import read_ply
 
 PILOT_TERMS = {
@@ -118,6 +119,7 @@ class CentauriBrezebelTests(unittest.TestCase):
             expected |= {entry["ply"], entry["lighting"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
         turret = self.manifest["turret"]
         expected |= {turret["ply"], turret["lighting"], turret["obj"], turret["obj"].replace(".obj", ".mtl")}
+        expected |= {"centauri_brezebel_mesh.glb", "centauri_brezebel_turret_mesh.glb"}
         self.assertEqual({p.name for p in self.dir_a.iterdir()}, expected)
         self.assertEqual({p.name for p in self.out_a.files}, expected)
 
@@ -131,7 +133,7 @@ class CentauriBrezebelTests(unittest.TestCase):
         self.assertEqual(brez.CHUNK_ORDER, ("bow", "arm_l", "arm_r"), "docs/assets-civilian.md: bow and the two arms")
         self.assertEqual(list(self.manifest["counts"]), list(brez.CHUNK_ORDER))
         self.assertEqual(sum(self.manifest["counts"].values()), len(self.splats))
-        self.assertEqual(self.manifest["files"], {"fallback_mesh": brez.OBJ_NAME, "hardpoints": brez.HARDPOINTS_NAME})
+        self.assertEqual(self.manifest["files"], {"fallback_mesh": brez.OBJ_NAME, "paint_mesh": "centauri_brezebel_mesh.glb", "hardpoints": brez.HARDPOINTS_NAME})
         self.assertEqual(self.manifest["chunk_lod"], 1)
 
     def test_lods_one_to_three_are_coarser_centred_and_keep_the_box(self) -> None:
@@ -433,7 +435,7 @@ class CentauriBrezebelTests(unittest.TestCase):
         self.assertEqual(turret["splats"], len(splats))
         self.assertTrue(brez.TURRET_SPLATS[0] <= len(splats) <= brez.TURRET_SPLATS[1], f"about 2 000 splats: {len(splats)}")
         self.assertAlmostEqual(turret["spacing_m"], brez.TURRET_SPACING_M)
-        self.assertEqual(set(turret), {"ply", "lighting", "obj", "splats", "spacing_m", "offset", "barrel_m", "trunnion", "muzzles"})
+        self.assertEqual(set(turret), {"ply", "lighting", "obj", "splats", "spacing_m", "offset", "barrel_m", "trunnion", "muzzles", "paint_mesh"})
         self.assertEqual(turret["barrel_m"], 2.6)
         left, right = turret["muzzles"]
         self.assertLess(left[0], 0.0)
@@ -501,6 +503,12 @@ class CentauriBrezebelTests(unittest.TestCase):
         for entry in self.hp["chunks"]:
             expected = sum(p.mesh.face_count for p in parts if p.group == entry["name"])
             self.assertEqual(len(read_obj(self.dir_a / entry["obj"]).faces), expected, entry["name"])
+
+    def test_the_painted_mesh_is_the_fallback_mesh(self) -> None:
+        # The ship as the game draws it (ships are meshes, the 2026-11-04 directive): the fallback mesh's triangles and paint.
+        assert_painted_mesh(self, self.dir_a, self.manifest["paint_mesh"], brez.OBJ_NAME, "hull")
+        turret = self.manifest["turret"]
+        assert_painted_mesh(self, self.dir_a, turret["paint_mesh"], turret["obj"], "turret")
 
     def test_fallback_obj_is_valid_and_matches_the_splat_bounds(self) -> None:
         v = self.obj.vertices

@@ -17,6 +17,7 @@ from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.color import linear_to_srgb
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.obj import read_obj
+from tools.procgen.tests.mesh_checks import assert_painted_mesh
 from tools.procgen.core.ply import read_ply
 
 PILOT_TERMS = {
@@ -101,6 +102,7 @@ class NarnTransportTests(unittest.TestCase):
             expected |= {entry["ply"], entry["lighting"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
         turret = self.manifest["turret"]
         expected |= {turret["ply"], turret["lighting"], turret["obj"], turret["obj"].replace(".obj", ".mtl")}
+        expected |= {"narn_transport_mesh.glb", "narn_transport_turret_mesh.glb"}
         self.assertEqual({p.name for p in self.dir_a.iterdir()}, expected)
         self.assertEqual({p.name for p in self.out_a.files}, expected)
 
@@ -113,7 +115,7 @@ class NarnTransportTests(unittest.TestCase):
         self.assertEqual(self.out_a.warnings, ())
         self.assertEqual(list(self.manifest["counts"]), list(narn.CHUNK_ORDER))
         self.assertEqual(sum(self.manifest["counts"].values()), len(self.splats))
-        self.assertEqual(self.manifest["files"], {"fallback_mesh": narn.OBJ_NAME, "hardpoints": narn.HARDPOINTS_NAME})
+        self.assertEqual(self.manifest["files"], {"fallback_mesh": narn.OBJ_NAME, "paint_mesh": "narn_transport_mesh.glb", "hardpoints": narn.HARDPOINTS_NAME})
         self.assertEqual(self.manifest["chunk_lod"], 1)
 
     def test_lods_one_to_three_are_coarser_centred_and_keep_the_box(self) -> None:
@@ -402,7 +404,7 @@ class NarnTransportTests(unittest.TestCase):
         self.assertTrue(1_500 <= len(splats) <= 2_600, f"about 2 000 splats: {len(splats)}")
         self.assertAlmostEqual(turret["spacing_m"], narn.TURRET_SPACING_M)
         # The same keys as parts/turret.py's entry (T12), so the game reads every civilian's turret one way.
-        self.assertEqual(set(turret), {"ply", "lighting", "obj", "splats", "spacing_m", "offset", "barrel_m", "trunnion", "muzzles"})
+        self.assertEqual(set(turret), {"ply", "lighting", "obj", "splats", "spacing_m", "offset", "barrel_m", "trunnion", "muzzles", "paint_mesh"})
         self.assertEqual(turret["barrel_m"], 3.0)
         left, right = turret["muzzles"]
         self.assertLess(left[0], 0.0)
@@ -470,6 +472,12 @@ class NarnTransportTests(unittest.TestCase):
             self.assertEqual(twin.get("size"), c.get("size"), name)
 
     # --- meshes ----------------------------------------------------------------------------------------------------------
+    def test_the_painted_mesh_is_the_fallback_mesh(self) -> None:
+        # The ship as the game draws it (ships are meshes, the 2026-11-04 directive): the fallback mesh's triangles and paint.
+        assert_painted_mesh(self, self.dir_a, self.manifest["paint_mesh"], narn.OBJ_NAME, "hull")
+        turret = self.manifest["turret"]
+        assert_painted_mesh(self, self.dir_a, turret["paint_mesh"], turret["obj"], "turret")
+
     def test_fallback_obj_is_valid_and_matches_the_splat_bounds(self) -> None:
         v = self.obj.vertices
         self.assertGreater(len(v), 0)

@@ -12,6 +12,25 @@ metres, Godot's axes. As with every asset, the generator then centres splats, me
 centroid and records the shift as `manifest.centroid_offset`. For the Saturns y is measured from the spine axis; for
 the others from the hull's box centre or centre plane, as the design references say.
 
+## Ships are meshes (the maintainer, 2026-11-04)
+
+Gaussian splats are dropped from the project (M4 Q29 to Q31; the M5 directive in the milestone file, `3fb15cc`). Every
+civilian ship is drawn as a mesh: each generator writes `<id>_mesh.glb` (and `<id>_turret_mesh.glb`, and for the Bokmai
+`brakiri_bokmai_pod_mesh.glb`) through M4's exporter, `core/glb.py` and `core/paint_mesh.py`, copied unchanged from `m4`
+(M4-T27, `394aba6`) so the rebase meets identical files. The mesh is the fallback mesh's parts, triangle for triangle, in
+the same frame and with the same panel phases as the splats (a test per ship), so the 90 % check (Q18), which scores the
+fallback mesh, scores what the game draws. Until M4-T30a lands, the paint is M4-T27's (panel codes in the UVs, painted by the
+shader); at the rebase the call becomes `write_textured_mesh` and the paint becomes texture maps (colour, normal,
+roughness and metal, emissive), with the parts, frame and `hardpoints.json` unchanged. No new splat work: the PLY and
+lighting files below stay only until M5 rebases onto `main`, where M4-T31's removal takes them.
+
+**Textures (the maintainer, 2026-11-04).** Every model's textures come from images from the show of that ship, or of
+similar ships where it has none (the Bokmai's from the Brakiri cruiser), so a faction's colour scheme and texture pack
+stay consistent: base plating, panel layout, markings, wear, windows and engine glow. One texture pack per style
+(`ea_civilian`, `narn`, `centauri`, `brakiri`), each ship's colours and markings on top. The colour schemes and their
+sources are already in each ship's section of `docs/design-references.md` (Q11); the texture work adds panel, marking and
+wear references from the same images. The images stay references (`reports/refs/<ship>/web/`, gitignored).
+
 ## Output contract
 
 The same as `starfury_aurora` and `raider_fighter` (`docs/architecture.md` §9 and §15.11), per asset id in
@@ -21,9 +40,10 @@ The same as `starfury_aurora` and `raider_fighter` (`docs/architecture.md` §9 a
 |---|---|
 | `<id>.ply`, `<id>_lod1.ply`, `<id>_lod2.ply`, `<id>_lod3.ply` | LOD0 at the default spacing, LOD1 to LOD3 resampled at 2, 4 and 8 times it from their own RNG streams (as the raider's `FAR_LODS`), GDGS orientation, splats of the chunk groups concatenated in `manifest.counts` order |
 | `<id>_lod<0-3>.light` | lighting records, one per level (`core/lighting.py`) |
+| `<id>_mesh.glb` | the painted mesh, what the game draws (above): the fallback mesh's triangles, one opaque and one glass primitive; manifest `files.paint_mesh` and a `paint_mesh` section (M4-T27's) |
 | `<id>.obj` + `.mtl` | fallback mesh; also the hull depth proxy |
 | `<id>_chunk_<name>.ply/.light/.obj/.mtl` | break-up chunks cut from LOD1 (`core/chunks.py`; manifest `chunk_lod` 1, as the Starfury) |
-| `<id>_turret.ply/.light/.obj/.mtl` | the style's turret model, written like a chunk (D61, T12 brief) |
+| `<id>_turret.ply/.light/.obj/.mtl`, `<id>_turret_mesh.glb` | the style's turret model, written like a chunk (D61, T12 brief); the turret entry's `paint_mesh` names its mesh |
 | `hardpoints.json` | below |
 | `manifest.json` | `lods[0..3]`, AABB, `centroid_offset`, `files`, `counts`, `chunks`, `chunk_lod`, `sampling`, `dimensions_m`; a `turret` entry naming the turret files and their splat count |
 

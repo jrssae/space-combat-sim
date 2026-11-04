@@ -26,6 +26,7 @@ from typing import Any
 import numpy as np
 
 from ..core import frames, lighting
+from ..core import civilian as cv
 from ..core.chunks import ChunkSource, write_chunks
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Mesh, mirror_matrix
@@ -561,6 +562,9 @@ def build_variant(asset_id: str, ctx: BuildContext) -> AssetOutputs:
     levels[0] = (len(authored), spacing)
     hull_mesh = Mesh.concatenate(p.part.mesh.translated(-offset) for p in everything)
     files += write_obj(out_dir / f"{asset_id}.obj", hull_mesh, asset_id, comments[:1])
+    # The painted mesh: the ship as the game draws it from the 2026-11-04 directive (meshes, not splats).
+    mesh_path, mesh_entry = cv.write_mesh(out_dir, asset_id, [(s.paint_name, s.piece.part.mesh.translated(-offset)) for s in lod0], style)
+    files.append(mesh_path)
 
     # LOD1-3 from their own streams, each centred on its own centroid; the chunks are LOD1's, written chunk by chunk.
     chunk_entries: list[dict[str, Any]] = []
@@ -607,8 +611,9 @@ def build_variant(asset_id: str, ctx: BuildContext) -> AssetOutputs:
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,
-        files={"fallback_mesh": f"{asset_id}.obj", "hardpoints": HARDPOINTS_NAME},
+        files={"fallback_mesh": f"{asset_id}.obj", "paint_mesh": mesh_entry["file"], "hardpoints": HARDPOINTS_NAME},
         extra={
+            "paint_mesh": mesh_entry,
             "counts": counts,
             "chunks": [c["name"] for c in chunk_entries],
             "chunk_lod": CHUNK_LOD,

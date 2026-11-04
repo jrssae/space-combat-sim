@@ -28,6 +28,7 @@ from tools.procgen.core.ply import read_ply
 from tools.procgen.parts import Part
 from tools.procgen.parts import brakiri as bp
 from tools.procgen.styles.brakiri import BOLT_SRGB, BRAKIRI, GLOW_SRGB
+from tools.procgen.tests.mesh_checks import assert_painted_mesh
 
 PILOT_TERMS = {
     "sway_left", "sway_right", "heave_up", "heave_down", "pitch_up", "pitch_down",
@@ -147,6 +148,7 @@ class BrakiriBokmaiTests(unittest.TestCase):
                     "brakiri_bokmai_turret.obj", "brakiri_bokmai_pod.ply", "brakiri_bokmai_pod.obj"}  # fmt: skip
         expected |= {f"brakiri_bokmai_lod{k}.ply" for k in (1, 2, 3)} | {f"brakiri_bokmai_pod_lod{k}.ply" for k in (1, 2, 3)}
         expected |= {f"brakiri_bokmai_chunk_{c}.ply" for c in CHUNKS}
+        expected |= {"brakiri_bokmai_mesh.glb", "brakiri_bokmai_turret_mesh.glb", "brakiri_bokmai_pod_mesh.glb"}
         self.assertTrue(expected <= names, sorted(expected - names))
         self.assertFalse(any(n.startswith("brakiri_bokmai_pod_lod") and n.endswith(".obj") for n in names), "one pod mesh")
         for p in self.out_a.files:
@@ -381,7 +383,7 @@ class BrakiriBokmaiTests(unittest.TestCase):
     def test_the_turret_model_is_the_approved_brakiri_turret(self) -> None:
         turret = self.manifest["turret"]
         self.assertEqual(turret["ply"], "brakiri_bokmai_turret.ply")
-        self.assertEqual(set(turret), {"ply", "lighting", "obj", "splats", "spacing_m", "offset", "barrel_m", "trunnion", "muzzles"})
+        self.assertEqual(set(turret), {"ply", "lighting", "obj", "splats", "spacing_m", "offset", "barrel_m", "trunnion", "muzzles", "paint_mesh"})
         splats = read_ply(self.dir_a / turret["ply"]).to_splats()
         self.assertEqual(turret["splats"], len(splats))
         self.assertTrue(1_500 <= len(splats) <= 3_000, len(splats))
@@ -405,7 +407,7 @@ class BrakiriBokmaiTests(unittest.TestCase):
 
     def test_the_pod_model_is_inside_its_budget_and_its_levels_follow_the_hull(self) -> None:
         pod = self.manifest["pod"]
-        self.assertEqual(set(pod), {"obj", "lods", "mass_kg", "collision", "size_m"})
+        self.assertEqual(set(pod), {"obj", "paint_mesh", "lods", "mass_kg", "collision", "size_m"})
         self.assertEqual(pod["obj"], "brakiri_bokmai_pod.obj")
         self.assertEqual([e["level"] for e in pod["lods"]], [0, 1, 2, 3])
         self.assertTrue(POD_BUDGET[0] <= pod["lods"][0]["splats"] <= POD_BUDGET[1], pod["lods"][0]["splats"])
@@ -493,6 +495,13 @@ class BrakiriBokmaiTests(unittest.TestCase):
             expected = sum(p.mesh.face_count for p in parts if p.group == entry["name"])
             self.assertEqual(len(read_obj(self.dir_a / entry["obj"]).faces), expected, entry["name"])
         self.assertEqual(len(read_obj(self.dir_a / "brakiri_bokmai_pod.obj").faces), bp.cargo_pod(BRAKIRI).part.mesh.face_count)
+
+    def test_the_painted_mesh_is_the_fallback_mesh(self) -> None:
+        # The ship as the game draws it (ships are meshes, the 2026-11-04 directive): the fallback mesh's triangles and paint.
+        assert_painted_mesh(self, self.dir_a, self.manifest["paint_mesh"], bok.OBJ_NAME, "hull")
+        turret = self.manifest["turret"]
+        assert_painted_mesh(self, self.dir_a, turret["paint_mesh"], turret["obj"], "turret")
+        assert_painted_mesh(self, self.dir_a, self.manifest["pod"]["paint_mesh"], self.manifest["pod"]["obj"], "pod")
 
     def test_fallback_obj_matches_the_splat_bounds(self) -> None:
         v = self.obj.vertices

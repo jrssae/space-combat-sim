@@ -19,6 +19,7 @@ from ..core import frames, lighting
 from ..core.context import BuildContext
 from ..core.geometry import Mesh, assign_material_by_predicate, box, ellipsoid_cap, lathe, rotation_x
 from ..core.obj import write_obj
+from ..core.paint_mesh import PaintPart, write_paint_mesh
 from ..core.ply import SplatData, write_ply
 from ..core.sampling import SurfaceSamples, sample_mesh, to_splats
 from ..styles import Style
@@ -156,7 +157,8 @@ def write_turret(
     thickness: float,
     comments: tuple[str, ...] = (),
 ) -> tuple[list[Path], dict[str, Any]]:
-    """Writes the turret's PLY, lighting records and fallback OBJ; returns the files and the manifest ``turret`` entry."""
+    """Writes the turret's PLY, lighting records, fallback OBJ and painted mesh (``<id>_turret_mesh.glb``, the ships-as-meshes
+    directive of 2026-11-04); returns the files and the manifest ``turret`` entry."""
     part = turret(spec, style)
     pieces = turret_pieces(spec, style)
     kept = []
@@ -186,6 +188,8 @@ def write_turret(
         lighting.write_lighting(out_dir / light_name, written),
     ]
     files += write_obj(out_dir / obj_name, part.mesh.translated(-centroid), f"{asset_id}_turret", comments[:1])
+    mesh_path, mesh_entry = write_paint_mesh(out_dir, f"{asset_id}_turret", [PaintPart(part.mesh.translated(-centroid), (0, 0, 0))], fine)
+    files.append(mesh_path)
 
     def r(v: Any) -> list[float]:
         return [round(float(x), 5) + 0.0 for x in np.asarray(v, dtype=float).reshape(-1)]
@@ -200,5 +204,6 @@ def write_turret(
         "barrel_m": round(spec.barrel_m, 5),
         "trunnion": r(part.anchor("trunnion").position),
         "muzzles": [r(part.anchor("muzzle_l").position), r(part.anchor("muzzle_r").position)],
+        "paint_mesh": mesh_entry,
     }
     return files, entry

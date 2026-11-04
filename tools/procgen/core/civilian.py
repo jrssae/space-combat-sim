@@ -26,6 +26,7 @@ from .chunks import ChunkSource
 from .context import BuildContext
 from .geometry import Mesh
 from .obj import write_obj
+from .paint_mesh import PaintPart, phase_steps, write_paint_mesh
 from .ply import SplatData, write_ply
 from .sampling import SurfaceSamples, sample_mesh, to_splats
 
@@ -172,6 +173,13 @@ def write_level(out_dir: Path, ply_name: str, light_name: str, splats: SplatData
     return [write_ply(out_dir / ply_name, written, comments), lighting.write_lighting(out_dir / light_name, written)]
 
 
+def write_mesh(out_dir: Path, stem: str, named: Sequence[tuple[str, Mesh]], style: Style) -> tuple[Path, dict[str, Any]]:
+    """The model as one painted mesh, ``<stem>_mesh.glb``, through M4's exporter (the 2026-11-04 directive: ships are meshes,
+    not splats; M4-T30a turns the paint into texture maps). ``named`` pairs each part's mesh, in the files' frame, with the
+    name its panel phase comes from, as the splats are painted. Returns the file and its manifest section."""
+    return write_paint_mesh(out_dir, stem, [PaintPart(mesh, phase_steps(name, False)) for name, mesh in named], style)
+
+
 def r(v: Any, digits: int = JSON_DIGITS) -> list[float]:
     """A vector for the JSON files: rounded, no negative zeros."""
     return [round(float(x), digits) + 0.0 for x in np.asarray(v, dtype=float).reshape(-1)]
@@ -263,5 +271,6 @@ __all__ = [
     "turret_entry",
     "with_twins",
     "write_level",
+    "write_mesh",
     "write_model",
 ]

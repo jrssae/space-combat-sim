@@ -22,6 +22,7 @@ from tools.procgen.core import frames, lighting
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.obj import read_obj
+from tools.procgen.tests.mesh_checks import assert_painted_mesh
 from tools.procgen.core.ply import read_ply
 
 PILOT_TERMS = {
@@ -161,6 +162,7 @@ class SaturnVariantChecks:
             expected |= {entry["ply"], entry["lighting"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
         turret = self.manifest["turret"]
         expected |= {turret["ply"], turret["lighting"], turret["obj"], turret["obj"].replace(".obj", ".mtl")}
+        expected |= {f"{aid}_mesh.glb", f"{aid}_turret_mesh.glb"}
         self.assertEqual(turret["ply"], f"{aid}_turret.ply")
         self.assertEqual({p.name for p in self.dir.iterdir()}, expected)
         self.assertEqual({p.name for p in self.out.files}, expected)
@@ -186,7 +188,7 @@ class SaturnVariantChecks:
         self.assertEqual(sum(m["counts"].values()), m["lods"][0]["splats"], "LOD0 is the chunk groups concatenated")
         self.assertEqual(m["chunks"], list(self.design["chunks"]))
         self.assertEqual(m["chunk_lod"], 1)
-        self.assertEqual(m["files"], {"fallback_mesh": f"{self.ASSET_ID}.obj", "hardpoints": saturn.HARDPOINTS_NAME})
+        self.assertEqual(m["files"], {"fallback_mesh": f"{self.ASSET_ID}.obj", "paint_mesh": f"{self.ASSET_ID}_mesh.glb", "hardpoints": saturn.HARDPOINTS_NAME})
         self.assertEqual(m["dimensions_m"]["length"], self.hp["length_m"])
 
     def test_every_ply_has_matching_lighting_records(self) -> None:
@@ -266,6 +268,12 @@ class SaturnVariantChecks:
             self.assertTrue(np.all(chunk.min(axis=0) >= lo - 0.3) and np.all(chunk.max(axis=0) <= hi + 0.3), entry["name"])
 
     # --- fallback mesh -----------------------------------------------------------------------------------
+    def test_the_painted_mesh_is_the_fallback_mesh(self) -> None:
+        # The ship as the game draws it (ships are meshes, the 2026-11-04 directive): the fallback mesh's triangles and paint.
+        assert_painted_mesh(self, self.dir, self.manifest["paint_mesh"], f"{self.ASSET_ID}.obj", "hull")
+        turret = self.manifest["turret"]
+        assert_painted_mesh(self, self.dir, turret["paint_mesh"], turret["obj"], "turret")
+
     def test_fallback_mesh_matches_the_splat_bounds(self) -> None:
         v = read_obj(self.dir / f"{self.ASSET_ID}.obj").vertices
         np.testing.assert_allclose(v.min(axis=0), self.xyz.min(axis=0), atol=2.0 * self.spacing)
