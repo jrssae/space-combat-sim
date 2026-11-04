@@ -165,4 +165,5 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `audio` | Sounds loaded, voices playing, engine voices and the SFX volume (writable) | front end, flight |
 | `ai` | The AI ships and their behaviours, a count per behaviour and the AI's cost per tick | AI ships |
 | `mission` | The running mission: id, title, state, result, step, objectives, time, trigger counts, waypoint and jump points | mission |
+| `dialog` | The comms panel: whether a line shows, its id, speaker callsign and text, lines queued, time left and lines shown | mission |
 | `route` | The instructor's route: waypoint, count, lag, state and demo | route |
