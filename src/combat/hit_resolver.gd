@@ -10,7 +10,9 @@ extends Node
 ## hit wins. The sphere test runs in `HitBroadPhase` (M4-T08, §17.7), which finds the pairs that pass it without testing every
 ## pair, natively when the library is loaded; the resolver sweeps only those, in the same order, so the hits are the same.
 ## Every projectile kind (bolt, beam, missile, mine) is swept alike, with its own hit radius; a beam (M4-T12) lives for one
-## resolve, so its first hull along the segment takes the hit and it is retired whether it hit or not. The bolt is spent,
+## resolve, so its first hull along the segment takes the hit and it is retired whether it hit or not. Rocks (M4-T29, §17.12)
+## are `StaticRows` with no node: they stay in a grid of their own between ticks, rebuilt only when a rock changes, and a bolt
+## that reaches one first is spent there (rocks never break; any bolt of another faction stops on one). The bolt is spent,
 ## `Damageable.apply_hit` runs, an `ImpactFlash` is added and `hit_resolved` is emitted for the HUD and sound. Nothing is cached
 ## between ticks, so a `World.rebase()` changes nothing. The target's rotation during one
 ## tick is ignored.
@@ -34,9 +36,9 @@ var last_hit: String = "none"
 var resolve_us: int = 0
 ## Projectile and hull pairs the broad phase put to the bounding-sphere test on the last tick (the work count).
 var pairs_visited: int = 0
-## Stub (M4-T29, tests first).
-var hulls_last_tick: int = -1
-var static_pairs_visited: int = -1
+## Hulls gathered from the tree on the last tick, and projectile and rock pairs the rocks' grid tested (work counts, M4-T29).
+var hulls_last_tick: int = 0
+var static_pairs_visited: int = 0
 ## Finds the pairs that pass the bounding-sphere test (M4-T08); a test may swap in its own.
 var broad_phase: HitBroadPhase = HitBroadPhase.new()
 
@@ -56,6 +58,12 @@ var _bolt_ends := PackedVector3Array()
 var _bolt_mids := PackedVector3Array()
 var _bolt_reach := PackedFloat64Array()
 var _beams: Array[Projectile] = []
+# The rocks (M4-T29): their grid, kept until a rock changes, and the earliest rock hit `_earliest_rock` found.
+var _rocks: HitBroadPhase = HitBroadPhase.new()
+var _solid: StaticRows.Solid = null
+var _rock_t: float = INF
+var _rock_a := Vector3.ZERO
+var _rock_b := Vector3.ZERO
 # The earliest hit `_earliest_hit` found: the hull, the time along the tick and the segment in the hull's frame.
 var _best: int = -1
 var _best_t: float = INF
@@ -111,20 +119,31 @@ func resolve(delta: float) -> void:
 	friendly_fire = bool(Settings.get_value(&"friendly_fire"))
 	_gather_targets(delta)
 	_gather_bolts()
+	hulls_last_tick = _damageables.size()
 	var hull_count: int = _damageables.size()
 	var keys: PackedInt64Array = broad_phase.pairs(_bolt_mids, _bolt_reach, _mids, _reach)
 	pairs_visited = broad_phase.visited
+	var rock_keys: PackedInt64Array = _rock_pairs()
+	var rock_count: int = _solid.ids.size()
 	var next: int = 0  # the first pair not yet taken; pairs come in bolt order
+	var rock_next: int = 0
 	for i: int in _bolts.size():
 		var first: int = next
 		while next < keys.size() and keys[next] / hull_count == i:
 			next += 1
+		var rock_first: int = rock_next
+		while rock_next < rock_keys.size() and rock_keys[rock_next] / rock_count == i:
+			rock_next += 1
 		var bolt: Projectile = _bolts[i]
 		# A hit handler may have retired a bolt later in the list, as the per-bolt checks before the broad phase allowed.
 		if bolt.is_spent() or bolt.is_queued_for_deletion() or not bolt.is_inside_tree():
 			continue
 		projectiles_last_tick += 1
-		if next > first and _earliest_hit(bolt, i, keys, first, next, hull_count):
+		var hull_hit: bool = next > first and _earliest_hit(bolt, i, keys, first, next, hull_count)
+		var rock: int = _earliest_rock(bolt, i, rock_keys, rock_first, rock_next, rock_count) if rock_next > rock_first else -1
+		if rock >= 0 and (not hull_hit or _rock_t < _best_t):
+			_land_on_rock(bolt, rock, delta)
+		elif hull_hit:
 			_land(bolt, delta)
 	for beam: Projectile in _beams:
 		beam.spend()
@@ -160,6 +179,60 @@ func _gather_targets(delta: float) -> void:
 		_moves.append(velocity * delta)
 		_mids.append(body.global_position + velocity * (0.5 * delta))
 		_reach.append(damageable.bounding_radius + velocity.length() * delta * 0.5)
+
+
+# This tick's projectile and rock pairs that pass the sphere test, as `bolt * rocks + rock`, ascending; the rocks' grid is
+# built again only when a rock changed.
+func _rock_pairs() -> PackedInt64Array:
+	var solid: StaticRows.Solid = StaticRows.solid()
+	if solid != _solid:
+		_solid = solid
+		_rocks.keep(solid.positions, solid.radii)
+	_rocks.use_native = broad_phase.use_native
+	static_pairs_visited = 0
+	if solid.ids.is_empty():
+		return PackedInt64Array()
+	var keys: PackedInt64Array = _rocks.kept_pairs(_bolt_mids, _bolt_reach)
+	static_pairs_visited = _rocks.visited
+	return keys
+
+
+# The earliest rock bolt `i` reaches among its pairs `keys[first..next)` (its index in `_solid`, with `_rock_*` set), or -1.
+func _earliest_rock(bolt: Projectile, i: int, keys: PackedInt64Array, first: int, next: int, rock_count: int) -> int:
+	var best: int = -1
+	_rock_t = INF
+	var start: Vector3 = _bolt_starts[i]
+	var p1: Vector3 = _bolt_ends[i]
+	for k: int in range(first, next):
+		var s: int = keys[k] - i * rock_count
+		if not friendly_fire and bolt.faction == _solid.factions[s]:
+			continue  # a rock's own faction passes it, as a buoy's does
+		var centre: Vector3 = _solid.positions[s]
+		var a: Vector3 = start - centre
+		var b: Vector3 = p1 - centre
+		var t: float = SweepMath.segment_sphere(a, b, Vector3.ZERO, _solid.radii[s] + bolt.hit_radius_m)
+		if t >= 0.0 and t < _rock_t:
+			_rock_t = t
+			_rock_a = a
+			_rock_b = b
+			best = s
+	return best
+
+
+# A bolt stopped by rock `s`: spent, sparks, and `hit_resolved` with the rock's row id as the target (nothing breaks).
+func _land_on_rock(bolt: Projectile, s: int, delta: float) -> void:
+	var centre: Vector3 = _solid.positions[s]
+	var local_point: Vector3 = _rock_a + _rock_t * (_rock_b - _rock_a)
+	var relative: Vector3 = _rock_b - _rock_a
+	var info := HitInfo.new(_solid.ids[s], bolt.shooter_id, bolt.faction, bolt.damage, centre + local_point,
+			-relative.normalized() if relative.length_squared() > 1e-12 else Vector3.ZERO,
+			relative.length() / maxf(delta, 1e-6))
+	bolt.spend()
+	hits_total += 1
+	last_hit = "%s -> %s, 0.0 of %.1f applied" % [name_of(info.shooter_id), name_of(info.target_id), info.damage]
+	if fx != null:
+		_throw_sparks(info, centre, Vector3.ZERO)
+	hit_resolved.emit(info)
 
 
 # Every live projectile and the sphere round the segment it flew this tick.
@@ -259,10 +332,11 @@ func _apply(damageable: Damageable, info: HitInfo) -> void:
 			info.damage]
 
 
-## The display name of the body with this instance id (its `Targetable`'s, else the node name), or "nobody".
+## The display name of the body with this instance id (its `Targetable`'s, else the node name), "static <id>" for a row with
+## no node (a rock), or "nobody".
 static func name_of(body_id: int) -> String:
 	if body_id == 0 or not is_instance_id_valid(body_id):
-		return "nobody"
+		return "static %d" % body_id if body_id != 0 and StaticRows.has(body_id) else "nobody"
 	var body := instance_from_id(body_id) as Node
 	if body == null:
 		return "nobody"

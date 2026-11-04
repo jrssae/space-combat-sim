@@ -24,6 +24,10 @@ extends Node
 ## Only the pairs `RamBroadPhase` finds near each other this tick, and the pairs Jolt holds in contact, are looked at (M4-T03,
 ## §17.3): any other pair could neither sweep into each other nor be kept touching, so skipping it changes nothing.
 ##
+## Rocks (M4-T29, §17.12) are `StaticRows` with no node: a grid of them is kept between ticks (built again only when a rock
+## changes) and each ship asks it for the rocks it could reach this tick. A rock is a prop to the swept test (any touch rams,
+## a sphere of its radius, a mass nothing moves), so a ship that flies into one takes the whole closing speed.
+##
 ## God mode protects the player's hull (`Damageable.apply_hit`); the bounce is Jolt's and still happens. `HitInfo.shooter_id` is
 ## the other body and `faction` its faction: relations and friendly fire do not matter, a collision hurts whoever it hits.
 ## `settings.ram_damage` (read every tick) switches it off; ships still bounce.
@@ -48,9 +52,9 @@ const KIND_PROP: String = "prop"
 var events: int = 0
 var last_ram: String = "none"
 var resolve_us: int = 0
-## Stub (M4-T29, tests first).
-var hulls_last_tick: int = -1
-var static_pairs_visited: int = -1
+## Hulls gathered from the tree on the last tick, and ship and rock pairs the rocks' grid tested (work counts, M4-T29).
+var hulls_last_tick: int = 0
+var static_pairs_visited: int = 0
 ## `settings.ram_damage` as of the last tick.
 var enabled: bool = true
 ## Throws the sparks of a ram (`Main` sets it); none without it.
@@ -63,6 +67,11 @@ var world: WorldFrame = null:
 
 # The rebases since Jolt's last step: this tick's contact points are still in the frame before them.
 var _shift_since_step := Vector3.ZERO
+# The rocks (M4-T29): their grid, kept until a rock changes, and a hull for each rock a ship came near (row id -> Damageable,
+# never in the tree, freed with this node).
+var _rocks: HitBroadPhase = HitBroadPhase.new()
+var _solid: StaticRows.Solid = null
+var _rock_hulls: Dictionary = {}
 
 
 func _init() -> void:
@@ -81,6 +90,13 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		for hull: Variant in _rock_hulls.values():
+			(hull as Damageable).free()
+		_rock_hulls.clear()
 
 
 func _physics_process(delta: float) -> void:
@@ -107,8 +123,10 @@ func resolve(delta: float) -> void:
 	enabled = bool(Settings.get_value(&"ram_damage"))
 	if enabled:
 		var hulls: Array[Dictionary] = _gather(delta)
+		hulls_last_tick = hulls.size()
 		var in_contact: PackedInt64Array = _resolve_contacts(hulls, delta)
 		_resolve_swept(hulls, in_contact, delta)
+		_resolve_rocks(hulls)
 		tracker.end_tick()
 	else:
 		tracker.reset()  # a contact that began while off is never rammed when it is switched back on
@@ -238,6 +256,80 @@ func _resolve_swept(hulls: Array[Dictionary], in_contact: PackedInt64Array, delt
 		var hit: Dictionary = _sweep_pair(first, second, both_rigid)
 		if not hit.is_empty() and tracker.swept_meeting(first["id"], second["id"]):
 			_ram_swept(first, second, hit["point"], KIND_TUNNEL if both_rigid else KIND_PROP)
+
+
+# The ships that fly into a rock this tick, through the rocks' grid: each rigid hull asks for the rocks its swept sphere
+# could reach, and those go through the swept test as props.
+func _resolve_rocks(hulls: Array[Dictionary]) -> void:
+	var solid: StaticRows.Solid = StaticRows.solid()
+	if solid != _solid:
+		_solid = solid
+		_rocks.keep(solid.positions, solid.radii)
+	static_pairs_visited = 0
+	if solid.ids.is_empty():
+		return
+	var ships := PackedInt32Array()
+	var mids := PackedVector3Array()
+	var reach := PackedFloat64Array()
+	for i: int in hulls.size():
+		var hull: Dictionary = hulls[i]
+		if not hull["rigid"]:
+			continue  # props never ram each other
+		var start: Vector3 = hull["start"]
+		var end: Vector3 = hull["end"]
+		ships.append(i)
+		mids.append((start + end) * 0.5)
+		reach.append(start.distance_to(end) * 0.5 + (hull["damageable"] as Damageable).bounding_radius
+				+ RamBroadPhase.MARGIN_M)
+	if ships.is_empty():
+		return
+	var rock_count: int = solid.ids.size()
+	var keys: PackedInt64Array = _rocks.kept_pairs(mids, reach)
+	static_pairs_visited = _rocks.visited
+	for key: int in keys:
+		@warning_ignore("integer_division")
+		var k: int = key / rock_count
+		var ship: Dictionary = hulls[ships[k]]
+		if (ship["damageable"] as Damageable).hull.destroyed:
+			continue  # a hull that went earlier this tick
+		var rock: Dictionary = _rock(solid, key - k * rock_count)
+		var hit: Dictionary = _sweep_pair(ship, rock, false)
+		if not hit.is_empty() and tracker.swept_meeting(ship["id"], rock["id"]):
+			_ram_swept(ship, rock, hit["point"], KIND_PROP)
+
+
+# Rock `s` as the swept test sees a hull: a sphere at rest that nothing moves or breaks.
+func _rock(solid: StaticRows.Solid, s: int) -> Dictionary:
+	var id: int = solid.ids[s]
+	var radius: float = solid.radii[s]
+	var hull: Damageable = _rock_hulls.get(id)
+	if hull == null or hull.bounding_radius != radius or hull.faction != solid.factions[s]:
+		if hull != null:
+			hull.free()
+		hull = Damageable.new()
+		var sphere := CapsuleShape3D.new()
+		sphere.radius = radius
+		sphere.height = 2.0 * radius
+		var collision: Array[Dictionary] = [{"name": "rock", "shape": sphere, "transform": Transform3D.IDENTITY}]
+		hull.setup(collision, StaticRows.SOLID_HULL, solid.factions[s])
+		hull.hit_by_anyone = true
+		hull.invulnerable = true
+		hull.ram_mass_kg = StaticRows.SOLID_MASS_KG
+		_rock_hulls[id] = hull
+	var at: Vector3 = solid.positions[s]
+	return {
+		"damageable": hull,
+		"body": null,
+		"id": id,
+		"rigid": false,
+		"basis": Basis.IDENTITY,
+		"to_body": Basis.IDENTITY,
+		"mass": StaticRows.SOLID_MASS_KG,
+		"velocity": Vector3.ZERO,
+		"start": at,
+		"end": at,
+		"accel": Vector3.ZERO,
+	}
 
 
 # Shape by shape, whether some point of one body comes at least `RamMath.RAM_DEPTH_M` deep inside the other over this tick,

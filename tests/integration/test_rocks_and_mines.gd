@@ -134,15 +134,18 @@ func test_a_thousand_rocks_are_registered_once_and_no_tick_walks_them() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 29
 	var registrations: int = StaticRows.registrations
-	var field: AsteroidField = standins.add_asteroids(_slab(rng, 1000), world.to_universe(Vector3.ZERO))
+	var rocks: Array[Dictionary] = _slab(rng, 1000)
+	var field: AsteroidField = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
 	assert_eq(StaticRows.registrations - registrations, 1000, "each rock registered once, when the field is built")
 	assert_eq(StaticRows.solid().ids.size(), 1000, "every rock is a solid row")
 	assert_eq(field.get_child_count(), 1, "one multimesh and no node per rock")
 	var drones: Array[TargetDrone] = []
 	for i: int in 6:
 		drones.append(_drone(Vector3(float(i) * 300.0, 4000.0, 0.0), Factions.RAIDERS, Vector3(0.0, -20.0, 0.0)))
-	for i: int in 40:
-		_bolt(Vector3(float(i) * 40.0, 2700.0, 0.0), Vector3(0.0, -1000.0, 0.0), Factions.EARTH_ALLIANCE)
+	for i: int in 40:  # each falling onto a rock of the slab
+		var rock: Vector3 = rocks[i * 20]["offset"]
+		_bolt(rock + Vector3(0.0, float(rocks[i * 20]["radius"]) + 300.0, 0.0), Vector3(0.0, -1000.0, 0.0),
+				Factions.EARTH_ALLIANCE)
 	var resolvers: Array = _resolvers()
 	var hits: HitResolver = resolvers[0]
 	var rams: RamResolver = resolvers[1]
@@ -161,6 +164,7 @@ func test_a_thousand_rocks_are_registered_once_and_no_tick_walks_them() -> void:
 	assert_eq(StaticRows.registrations - registrations, 1000, "no rock registered again")
 	assert_eq(StaticRows.solid_builds, builds, "the solid rows were not rebuilt tick by tick")
 	gut.p("worst rock pairs the hit resolver tested in a tick: %d (40 bolts, 1 000 rocks)" % worst_static_pairs)
+	assert_gt(worst_static_pairs, 0, "bolts in the slab were put to the rocks near them")
 	assert_lt(worst_static_pairs, 40 * 20, "the kept grid hands a bolt its neighbouring rocks only")
 	for native: bool in _paths():
 		Settings.set_value(&"perf_native", native)

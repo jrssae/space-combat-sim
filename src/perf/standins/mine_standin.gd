@@ -6,9 +6,10 @@ extends Node3D
 ## off, hurts every hull within the blast radius through its `Damageable` (friend or foe) and is removed. It is laid again
 ## in its place after `RELAY_S`, so a belt holds the mix's count over a run.
 ##
-## Spawn it with `WorldFrame.spawn` (identity basis): it is shiftable, so its rows follow a rebase with it. The body registry
-## (M4-T09) takes the rows as they are: `position_of`, `faction_of`, `kind`, `TRIGGER_RADIUS_M`, and `laid` and `detonated`
-## for when a row comes and goes.
+## Spawn it with `WorldFrame.spawn` (identity basis) after setting `world`: it is shiftable, so its mines follow a rebase with
+## it. Every mine in play is also a row of `StaticRows` (M4-T29, §17.12) of kind `MINE`, owned by its layer's faction, as big
+## as its trigger and registered with `world`, so that world's rebase moves it: its own side's ships steer round it, other
+## sides never see it (Q27). A mine leaves the rows when it goes off and comes back when it is laid again.
 
 ## A row went off (`index`) and is no longer in play.
 signal detonated(index: int)
@@ -33,6 +34,8 @@ var kind: Targetable.Kind = Targetable.Kind.MINE
 var checked_last_tick: int = 0
 ## Finds the hulls inside a trigger; a test may force its path.
 var broad_phase: HitBroadPhase = HitBroadPhase.new()
+## The frame the mines' rows are in (the one that spawned this node); set before `build`.
+var world: Node = null
 
 var _local := PackedVector3Array()
 var _factions: Array[StringName] = []
@@ -41,6 +44,11 @@ var _relay_at := PackedFloat64Array()
 var _dead := PackedInt32Array()
 var _alive_count: int = 0
 var _mesh: MultiMeshInstance3D = null
+var _row_ids := PackedInt64Array()  # each mine's id in `StaticRows`, kept while it is out of play
+
+
+func _exit_tree() -> void:
+	unregister_rows()
 
 
 ## Lays the rows (`offset` m from this node, `faction` the layer's). Call it once, after the node is in the tree.
@@ -63,7 +71,9 @@ func build(rows: Array[Dictionary]) -> void:
 		_factions.append(StringName(rows[i]["faction"]))
 		_alive.append(1)
 		_relay_at.append(INF)
+		_row_ids.append(StaticRows.new_id())
 		multimesh.set_instance_transform(i, Transform3D(Basis.IDENTITY, at))
+		_register(i)
 	_alive_count = rows.size()
 	_mesh = MultiMeshInstance3D.new()
 	_mesh.name = "Mines"
@@ -71,9 +81,18 @@ func build(rows: Array[Dictionary]) -> void:
 	add_child(_mesh)
 
 
-## Stub (M4-T29, tests first).
-func row_id(_i: int) -> int:
-	return 0
+## Mine `i`'s row id in `StaticRows` (the same whenever it is in play).
+func row_id(i: int) -> int:
+	return _row_ids[i]
+
+
+## Takes every mine in play out of `StaticRows` (the belts are going).
+func unregister_rows() -> void:
+	var gone := PackedInt64Array()
+	for i: int in _row_ids.size():
+		if _alive[i] == 1:
+			gone.append(_row_ids[i])
+	StaticRows.unregister_many(gone)
 
 
 func count() -> int:
@@ -167,6 +186,7 @@ func _go_off(i: int, at: Vector3, now_s: float, hulls: Array[Damageable], hull_a
 	_alive_count -= 1
 	_relay_at[i] = now_s + RELAY_S
 	_dead.append(i)
+	StaticRows.unregister(_row_ids[i])
 	_mesh.multimesh.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3.ONE * 1e-4), _local[i]))
 	for j: int in blast(at, hull_at, hull_reach):
 		var damageable: Damageable = hulls[j]
@@ -191,5 +211,11 @@ func _lay_again(now_s: float) -> void:
 		_alive_count += 1
 		_relay_at[i] = INF
 		_mesh.multimesh.set_instance_transform(i, Transform3D(Basis.IDENTITY, _local[i]))
+		_register(i)
 		laid.emit(i)
 	_dead = still
+
+
+# Mine `i` in play as a row: where it is now, its side's, the trigger's size.
+func _register(i: int) -> void:
+	StaticRows.register(_row_ids[i], position_of(i), TRIGGER_RADIUS_M, BodyKind.MINE, _factions[i], world)

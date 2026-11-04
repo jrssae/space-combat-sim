@@ -11,6 +11,9 @@ extends RefCounted
 ##
 ## When the native library provides `NATIVE_CLASS` and `perf_native` is on, `ScsHitSweep` answers with the same grid and the same
 ## maths; the GDScript code here is the reference, and both give the same pairs and the same work count.
+##
+## Kept hulls (M4-T29): hulls that do not move between ticks (an asteroid field's rocks) are handed over once with `keep` and
+## stay in their own grid; `kept_pairs` then finds a tick's pairs against them without handing them over again.
 
 ## The native class that answers when the library is loaded and `perf_native` is on.
 const NATIVE_CLASS: StringName = &"ScsHitSweep"
@@ -33,19 +36,50 @@ var use_native: bool = true
 var visited: int = 0
 
 var _sweep: Object = null
+# The kept hulls, and each path's grid of them (built on first use after `keep`).
+var _kept_mids := PackedVector3Array()
+var _kept_reach := PackedFloat64Array()
+var _kept_grid: Dictionary = {}
+var _kept_native: bool = false
 
 
-## Stub (M4-T29, tests first): keeps hulls between calls.
-func keep(_hull_mids: PackedVector3Array, _hull_reach: PackedFloat64Array) -> void:
-	pass
+## Holds hulls that stay put (centres `hull_mids`, reaches `hull_reach`) for `kept_pairs` until the next `keep`.
+func keep(hull_mids: PackedVector3Array, hull_reach: PackedFloat64Array) -> void:
+	if hull_reach.size() != hull_mids.size():
+		push_error("HitBroadPhase.keep: array lengths differ (hulls %d and %d); nothing kept" % [hull_mids.size(),
+				hull_reach.size()])
+		hull_mids = PackedVector3Array()
+		hull_reach = PackedFloat64Array()
+	_kept_mids = hull_mids
+	_kept_reach = hull_reach
+	_kept_grid = {}
+	_kept_native = false
 
 
+## How many hulls `keep` holds.
 func kept_count() -> int:
-	return 0
+	return _kept_mids.size()
 
 
-func kept_pairs(_bolt_mids: PackedVector3Array, _bolt_reach: PackedFloat64Array) -> PackedInt64Array:
-	return PackedInt64Array()
+## `pairs` against the kept hulls: the same pairs, as `bolt * kept_count() + hull`, ascending, with `visited` set.
+func kept_pairs(bolt_mids: PackedVector3Array, bolt_reach: PackedFloat64Array) -> PackedInt64Array:
+	visited = 0
+	if bolt_reach.size() != bolt_mids.size():
+		push_error("HitBroadPhase.kept_pairs: array lengths differ (bolts %d and %d)" % [bolt_mids.size(), bolt_reach.size()])
+		return PackedInt64Array()
+	if _kept_mids.is_empty() or bolt_mids.is_empty():
+		return PackedInt64Array()
+	var sweep: Object = _native()
+	if sweep != null:
+		if not _kept_native:
+			sweep.keep(_kept_mids, _kept_reach)
+			_kept_native = true
+		var out: PackedInt64Array = sweep.kept_pairs(bolt_mids, bolt_reach)
+		visited = sweep.visited()
+		return out
+	if _kept_grid.is_empty():
+		_kept_grid = _place(_kept_mids, _kept_reach)
+	return _sweep_grid(_kept_grid, bolt_mids, bolt_reach, _kept_mids, _kept_reach)
 
 
 ## Which code answers now: &"native" or &"gdscript".
@@ -86,10 +120,13 @@ func _native() -> Object:
 # The reference: the same grid as the native code, step for step, so both visit the same pairs.
 func _pairs_gdscript(bolt_mids: PackedVector3Array, bolt_reach: PackedFloat64Array, hull_mids: PackedVector3Array,
 		hull_reach: PackedFloat64Array) -> PackedInt64Array:
-	var hull_count: int = hull_mids.size()
-	var out := PackedInt64Array()
-	if hull_count == 0 or bolt_mids.is_empty():
-		return out
+	if hull_mids.is_empty() or bolt_mids.is_empty():
+		return PackedInt64Array()
+	return _sweep_grid(_place(hull_mids, hull_reach), bolt_mids, bolt_reach, hull_mids, hull_reach)
+
+
+# The hulls placed in their levels: {cells (per level, Vector3i -> hulls), members (per level, ascending), level_reach, loose}.
+static func _place(hull_mids: PackedVector3Array, hull_reach: PackedFloat64Array) -> Dictionary:
 	var cells: Array[Dictionary] = []  # per level: Vector3i -> PackedInt32Array of hulls
 	var members: Array[PackedInt32Array] = []  # per level: its hulls, ascending
 	var level_reach := PackedFloat64Array()  # per level: its largest hull reach
@@ -98,7 +135,7 @@ func _pairs_gdscript(bolt_mids: PackedVector3Array, bolt_reach: PackedFloat64Arr
 		members.append(PackedInt32Array())
 		level_reach.append(0.0)
 	var loose := PackedInt32Array()
-	for j: int in hull_count:
+	for j: int in hull_mids.size():
 		var reach: float = absf(hull_reach[j])
 		var mid: Vector3 = hull_mids[j]
 		var level: int = level_for(reach)
@@ -116,6 +153,18 @@ func _pairs_gdscript(bolt_mids: PackedVector3Array, bolt_reach: PackedFloat64Arr
 		cells[level][cell] = held
 		members[level].append(j)
 		level_reach[level] = maxf(level_reach[level], reach)
+	return {"cells": cells, "members": members, "level_reach": level_reach, "loose": loose}
+
+
+# Each projectile against the placed hulls: its candidates from the cells it can reach, then the sphere test.
+func _sweep_grid(grid: Dictionary, bolt_mids: PackedVector3Array, bolt_reach: PackedFloat64Array,
+		hull_mids: PackedVector3Array, hull_reach: PackedFloat64Array) -> PackedInt64Array:
+	var cells: Array[Dictionary] = grid["cells"]
+	var members: Array[PackedInt32Array] = grid["members"]
+	var level_reach: PackedFloat64Array = grid["level_reach"]
+	var loose: PackedInt32Array = grid["loose"]
+	var hull_count: int = hull_mids.size()
+	var out := PackedInt64Array()
 	var candidates := PackedInt32Array()
 	for i: int in bolt_mids.size():
 		candidates.clear()

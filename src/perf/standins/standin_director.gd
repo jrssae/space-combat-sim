@@ -156,6 +156,7 @@ func add_mines(rows: Array[Dictionary], anchor: UniversePos) -> MineStandin:
 	remove_mines()
 	_mines = MineStandin.new()
 	_mines.name = "Mines"
+	_mines.world = world
 	world.spawn(_mines, anchor, Basis.IDENTITY, self)
 	_mines.build(rows)
 	return _mines
@@ -163,7 +164,7 @@ func add_mines(rows: Array[Dictionary], anchor: UniversePos) -> MineStandin:
 
 func remove_mines() -> void:
 	if _mines != null and is_instance_valid(_mines):
-		remove_child(_mines)
+		remove_child(_mines)  # its rows leave `StaticRows` as it leaves the tree
 		_mines.queue_free()
 	_mines = null
 
@@ -184,7 +185,7 @@ func add_asteroids(rocks: Array[Dictionary], anchor: UniversePos) -> AsteroidFie
 	_field = AsteroidField.new()
 	_field.name = "Asteroids"
 	world.spawn(_field, anchor, Basis.IDENTITY, self)
-	_field.build(rocks, world.get_world_3d().space)
+	_field.build(rocks, world.get_world_3d().space, world)
 	world.rebased.connect(_field.on_rebased)
 	return _field
 

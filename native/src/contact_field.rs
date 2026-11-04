@@ -31,12 +31,15 @@ pub struct ScsContactField {
     reach: Vec<f64>,
     factions: Vec<StringName>,
     hostile_rows: Vec<(StringName, Vec<bool>)>,
+    // Per querying faction, the factions whose mines it knows: its own and its friends' (M4-T29, Q27).
+    friendly_rows: Vec<(StringName, Vec<bool>)>,
     bolt_positions: Vec<Vector3>,
     bolt_velocities: Vec<Vector3>,
     bolt_faction: Vec<usize>,
     bolt_shooters: Vec<i64>,
     // Rocks and mines (M4-T09): never contacts, found by `statics` by their surface distance.
     is_static: Vec<bool>,
+    is_mine: Vec<bool>,
     radii: Vec<f64>,
     max_static_radius: f64,
     cell_m: f64,
@@ -104,6 +107,7 @@ impl ScsContactField {
         self.reach = reach.as_slice().to_vec();
         self.factions.clear();
         self.hostile_rows.clear();
+        self.friendly_rows.clear();
         self.body_faction = factions
             .iter_shared()
             .map(|f| self.faction_index(f))
@@ -116,6 +120,7 @@ impl ScsContactField {
             .collect();
         self.bolt_shooters = bolt_shooters.as_slice().to_vec();
         self.is_static = vec![false; n];
+        self.is_mine = vec![false; n];
         self.radii.clear();
         self.max_static_radius = 0.0;
         self.cell_m = cell_m;
@@ -158,6 +163,7 @@ impl ScsContactField {
             .iter()
             .map(|&k| k == KIND_MINE || k == KIND_STATIC)
             .collect();
+        self.is_mine = kinds.as_slice().iter().map(|&k| k == KIND_MINE).collect();
         self.radii = radii.as_slice().to_vec();
         self.max_static_radius = (0..n)
             .filter(|&i| self.is_static[i])
@@ -178,6 +184,14 @@ impl ScsContactField {
         let flags: Vec<bool> = row.as_slice().iter().map(|&b| b == 1).collect();
         self.hostile_rows.retain(|(f, _)| *f != faction);
         self.hostile_rows.push((faction, flags));
+    }
+
+    /// Which factions (in `factions()` order) are friendly to `faction`, its own included: whose mines it knows (Q27).
+    #[func]
+    fn set_friendly_row(&mut self, faction: StringName, row: PackedByteArray) {
+        let flags: Vec<bool> = row.as_slice().iter().map(|&b| b == 1).collect();
+        self.friendly_rows.retain(|(f, _)| *f != faction);
+        self.friendly_rows.push((faction, flags));
     }
 
     /// Whether every body in the scan still exists.
@@ -253,18 +267,35 @@ impl ScsContactField {
 
     /// `ContactScan.statics_for`: the rocks and mines whose surface is within `range` of `at`, not `own_body_id`; with `k`
     /// or fewer, all of them, otherwise the `k` nearest by surface distance (equal ones to the earlier row); in scan order.
+    /// A mine counts only when `faction`'s friendly row (`set_friendly_row`) holds its faction (Q27); with no row, none do.
     #[func]
-    fn statics(&mut self, own_body_id: i64, at: Vector3, k: i64, range: f64) -> PackedInt32Array {
+    fn statics(
+        &mut self,
+        own_body_id: i64,
+        at: Vector3,
+        faction: StringName,
+        k: i64,
+        range: f64,
+    ) -> PackedInt32Array {
         if k <= 0 {
             return PackedInt32Array::new();
         }
         let reach = range.abs();
         self.in_reach.clear();
         self.collect_candidates(at, reach + self.max_static_radius, reach.is_finite());
+        let friendly: Vec<bool> = self
+            .friendly_rows
+            .iter()
+            .find(|(f, _)| *f == faction)
+            .map(|(_, row)| row.clone())
+            .unwrap_or_default();
         for &i in &self.candidates {
             let j = i as usize;
             if !self.is_static[j] || self.body_ids[j] == own_body_id {
                 continue;
+            }
+            if self.is_mine[j] && !hostile_at(&friendly, self.body_faction[j]) {
+                continue; // another side's mine: unknown to this one
             }
             // `position.distance_to(at) - radius`, with GDScript's 32-bit length.
             let surface = f64::from(length(sub(at, self.positions[j]))) - self.radii[j];
@@ -342,11 +373,13 @@ impl ScsContactField {
         self.reach.clear();
         self.factions.clear();
         self.hostile_rows.clear();
+        self.friendly_rows.clear();
         self.bolt_positions.clear();
         self.bolt_velocities.clear();
         self.bolt_faction.clear();
         self.bolt_shooters.clear();
         self.is_static.clear();
+        self.is_mine.clear();
         self.radii.clear();
         self.max_static_radius = 0.0;
         self.cells.clear();
@@ -425,7 +458,7 @@ impl ScsContactField {
     }
 }
 
-// Whether faction `index` is hostile in `row`; a row too short to hold it says no.
+// Whether faction `index` is flagged in `row` (hostile, or friendly for a friendly row); a row too short to hold it says no.
 fn hostile_at(row: &[bool], index: usize) -> bool {
     row.get(index).copied().unwrap_or(false)
 }

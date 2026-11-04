@@ -29,7 +29,8 @@ extends RefCounted
 ## is first handed out, so the two agree whatever changes between the build and the query (a driver's own selection change
 ## after the build is taken as it was, `note_selection`).
 ## Kinds (`BodyKind`): rocks and mines are never contacts; `statics_for` gives a ship its nearest ones as obstacles. Rows
-## with no node (an asteroid field's rocks) are registered here with `register_static` and shifted on a rebase.
+## with no node (an asteroid field's rocks, a belt's mines) live in `StaticRows` (M4-T29): `register_static` adds one, a
+## rebase moves them, and both paths append them whole. A side knows only its own and its friends' mines (Q27).
 
 const SENSOR_RANGE_M: float = 5000.0
 ## A hostile bolt is incoming when its closest approach is under this distance within this time.
@@ -61,14 +62,7 @@ static var _registry: Object = null
 static var _registry_tree: SceneTree = null
 static var _members_dirty: bool = true
 static var _removals: int = 0  # members that left the tree, so a registry scan knows to look for freed bodies
-# Rows with no node, in the order they were registered (both paths).
-static var _static_ids: PackedInt64Array = PackedInt64Array()
-static var _static_positions: PackedVector3Array = PackedVector3Array()
-static var _static_radii: PackedFloat64Array = PackedFloat64Array()
-static var _static_factions: Array[StringName] = []
-static var _static_kinds: PackedByteArray = PackedByteArray()
-static var _static_worlds: PackedInt64Array = PackedInt64Array()  # the owning WorldFrame's instance id, 0 for none
-static var _statics_version: int = 0
+# `StaticRows.version` the registry was last given.
 static var _registry_statics_version: int = -1
 
 ## The physics frame this scan is of (-1 for one built by hand).
@@ -97,6 +91,7 @@ var _relations: Dictionary = {}  # faction -> {other faction -> relation}, looke
 var _hostile_ships: Dictionary = {}  # faction -> PackedByteArray, 1 for a ship hostile to it (nearest-k, M4-T04)
 var _extent_m: float = -1.0  # computed on first use
 var _statics_n: int = -1  # rock and mine rows, counted on first use
+var _node_statics: int = 0  # node rows of a static kind, counted as the tree gather adds them
 var _bolt_positions: PackedVector3Array = PackedVector3Array()
 var _bolt_velocities: PackedVector3Array = PackedVector3Array()
 var _bolt_factions: Array[StringName] = []
@@ -106,6 +101,8 @@ var _reach: PackedFloat64Array = PackedFloat64Array()  # per body broadcast rang
 var _field: Object = null  # the native field over this scan's arrays, made on the first native query
 var _field_rejected: bool = false  # the field refused this scan's arrays (they differ in length): GDScript answers it
 var _field_rows: Dictionary = {}  # faction -> true once the field has its hostility row
+var _friend_rows: Dictionary = {}  # faction -> true once the field knows whose mines it sees (Q27)
+var _friends: Dictionary = {}  # faction -> PackedByteArray, 1 for each row it treats as friendly (GDScript statics)
 # A built scan (M4-T09) reads hull and selection when a contact is first handed out: the hulls' instance ids (0: none)
 # and the selections drivers changed after the scan was built (body id -> the selection it had then).
 var _live: bool = false
@@ -209,19 +206,7 @@ static func from_tree(tree: SceneTree) -> ContactScan:
 			seen[body.get_instance_id()] = true
 			scan._add(body, null, damageable)
 	scan._node_count = scan._body_ids.size()
-	for s: int in _static_ids.size():
-		scan._body_ids.append(_static_ids[s])
-		scan._ids.append(_static_ids[s])
-		scan._names.append("")
-		scan._factions.append(_static_factions[s])
-		scan._positions.append(_static_positions[s])
-		scan._velocities.append(Vector3.ZERO)
-		scan._forwards.append(Vector3.FORWARD)
-		scan._ups.append(Vector3.UP)
-		scan._radii.append(_static_radii[s])
-		scan._is_ship.append(0)
-		scan._hull_ids.append(0)
-		scan._kinds.append(_static_kinds[s])
+	scan._append_static_rows()
 	scan._gather_bolts(tree)
 	return scan
 
@@ -235,9 +220,9 @@ static func from_registry(tree: SceneTree) -> ContactScan:
 	if _members_dirty:
 		_members_dirty = false
 		registry.set_members(tree.get_nodes_in_group(Targetable.GROUP), tree.get_nodes_in_group(Damageable.GROUP))
-	if _registry_statics_version != _statics_version:
-		_registry_statics_version = _statics_version
-		registry.set_statics(_static_ids, _static_positions, _static_radii, _static_factions, _static_kinds)
+	if _registry_statics_version != StaticRows.version:
+		_registry_statics_version = StaticRows.version
+		registry.set_statics(StaticRows.ids, StaticRows.positions, StaticRows.radii, StaticRows.factions, StaticRows.kinds)
 	registry.refresh()
 	var scan := ContactScan.new()
 	scan._take_rows(registry.snapshot())
@@ -277,55 +262,25 @@ static func selection_of(body: Node) -> int:
 
 ## Adds a body with no node to every scan (an asteroid field's rock by RID, a mine row): `id` must be unique and not an
 ## instance id; `kind` is a `BodyKind`. Rows come after the bodies, in the order they were registered. `world` is the
-## `WorldFrame` whose local frame `position` is in: its rebases move the row; with none, nothing moves it.
+## `WorldFrame` whose local frame `position` is in: its rebases move the row; with none, nothing moves it. (`StaticRows`.)
 static func register_static(id: int, position: Vector3, radius: float, kind: int = BodyKind.STATIC,
 		faction: StringName = Factions.NEUTRAL, world: Node = null) -> void:
-	_static_worlds.append(world.get_instance_id() if world != null else 0)
-	_static_ids.append(id)
-	_static_positions.append(position)
-	_static_radii.append(radius)
-	_static_factions.append(faction)
-	_static_kinds.append(kind)
-	_statics_version += 1
+	StaticRows.register(id, position, radius, kind, faction, world)
 
 
 ## Removes the static row `id`.
 static func unregister_static(id: int) -> void:
-	var at: int = _static_ids.find(id)
-	if at < 0:
-		return
-	_static_ids.remove_at(at)
-	_static_worlds.remove_at(at)
-	_static_positions.remove_at(at)
-	_static_radii.remove_at(at)
-	_static_factions.remove_at(at)
-	_static_kinds.remove_at(at)
-	_statics_version += 1
+	StaticRows.unregister(id)
 
 
 ## Moves the static rows registered with `world` by `offset` (`WorldFrame.rebase` shifts them with its nodes).
 static func shift_statics(offset: Vector3, world: Node) -> void:
-	if _static_ids.is_empty() or world == null:
-		return
-	var owner: int = world.get_instance_id()
-	var moved: bool = false
-	for s: int in _static_positions.size():
-		if _static_worlds[s] == owner:
-			_static_positions[s] += offset
-			moved = true
-	if moved:
-		_statics_version += 1
+	StaticRows.shift(offset, world)
 
 
 ## Removes every static row.
 static func clear_statics() -> void:
-	_static_ids.clear()
-	_static_worlds.clear()
-	_static_positions.clear()
-	_static_radii.clear()
-	_static_factions.clear()
-	_static_kinds.clear()
-	_statics_version += 1
+	StaticRows.clear()
 
 
 ## Which code answers this scan's queries now: &"native" or &"gdscript".
@@ -437,14 +392,16 @@ func nearest_for(own_body_id: int, own_position: Vector3, own_faction: StringNam
 
 ## The rocks and mines a ship should steer round (M4-T09): those whose surface is within `range_m`, never its own body;
 ## with more than `k`, the `k` nearest by surface distance (equal ones to the earlier row). In scan order. None for `k` 0.
+## A mine counts only for its own side and that side's friends; an enemy's stays hidden until it goes off (Q27).
 func statics_for(own_body_id: int, own_position: Vector3, own_faction: StringName, k: int,
 		range_m: float = SENSOR_RANGE_M) -> Array[Contact]:
 	if k <= 0 or _statics_count() == 0:
 		return _no_contacts
 	var stamped: Array[Contact] = _stamped_for(own_faction)
-	var field: Object = _native()
+	var field: Object = _native_with_friends(own_faction)
 	if field != null:
-		return _pick(own_faction, stamped, field.statics(own_body_id, own_position, k, range_m))
+		return _pick(own_faction, stamped, field.statics(own_body_id, own_position, own_faction, k, range_m))
+	var friendly: PackedByteArray = _friends_for(own_faction)
 	var reach: float = absf(range_m)
 	var found := PackedInt32Array()
 	var best_surface := PackedFloat64Array()
@@ -452,6 +409,8 @@ func statics_for(own_body_id: int, own_position: Vector3, own_faction: StringNam
 	for i: int in _body_ids.size():
 		if not BodyKind.is_static(_kinds[i]) or _body_ids[i] == own_body_id:
 			continue
+		if _kinds[i] == BodyKind.MINE and friendly[i] == 0:
+			continue  # another side's mine: unknown to this one
 		var surface: float = _positions[i].distance_to(own_position) - _radii[i]
 		if not (surface <= reach):
 			continue  # beyond the range, or a NaN radius: never an obstacle, as in the field
@@ -688,6 +647,18 @@ func _native() -> Object:
 	return _field
 
 
+# The native field, once it knows which factions' mines `faction` knows about: its own and its friends' (Q27).
+func _native_with_friends(faction: StringName) -> Object:
+	var field: Object = _native()
+	if field != null and not _friend_rows.has(faction):
+		var row := PackedByteArray()
+		for other: StringName in field.factions():
+			row.append(1 if _relation(faction, other) == Factions.Relation.FRIENDLY else 0)
+		field.set_friendly_row(faction, row)
+		_friend_rows[faction] = true
+	return field
+
+
 # The native field, once it knows which factions are hostile to `faction` (from `Factions`, which it never calls itself).
 func _native_with_row(faction: StringName) -> Object:
 	var field: Object = _native()
@@ -724,7 +695,10 @@ func _add(body: Node3D, targetable: Targetable, damageable: Damageable) -> void:
 	_radii.append(damageable.bounding_radius if damageable != null else 0.0)
 	_is_ship.append(1 if rigid != null else 0)
 	_hull_ids.append(damageable.get_instance_id() if damageable != null else 0)
-	_kinds.append(BodyKind.of(targetable))
+	var kind: int = BodyKind.of(targetable)
+	_kinds.append(kind)
+	if BodyKind.is_static(kind):
+		_node_statics += 1
 
 
 # The contacts as a ship of `faction` sees them: one list per faction, shared, each contact made when first handed out
@@ -782,6 +756,37 @@ func _relation(faction: StringName, other: StringName) -> Factions.Relation:
 	if not known.has(other):
 		known[other] = Factions.relation(faction, other)
 	return known[other]
+
+
+# 1 for each body whose faction is friendly to `faction` (its own included): whose mines it knows (GDScript statics).
+func _friends_for(faction: StringName) -> PackedByteArray:
+	if _friends.has(faction):
+		return _friends[faction]
+	var friendly := PackedByteArray()
+	friendly.resize(_body_ids.size())
+	for i: int in _body_ids.size():
+		if _kinds[i] == BodyKind.MINE and _relation(faction, _factions[i]) == Factions.Relation.FRIENDLY:
+			friendly[i] = 1
+	_friends[faction] = friendly
+	return friendly
+
+
+# Appends the rows with no node (`StaticRows`) whole, column by column: no walk over them a tick.
+func _append_static_rows() -> void:
+	var columns: Dictionary = StaticRows.scan_columns()
+	_body_ids.append_array(StaticRows.ids)
+	_ids.append_array(StaticRows.ids)
+	_names.append_array(columns["names"])
+	_factions.append_array(StaticRows.factions)
+	_positions.append_array(StaticRows.positions)
+	_velocities.append_array(columns["zeros"])
+	_forwards.append_array(columns["forwards"])
+	_ups.append_array(columns["ups"])
+	_radii.append_array(StaticRows.radii)
+	_is_ship.append_array(columns["not_ship"])
+	_hull_ids.append_array(columns["no_hull"])
+	_kinds.append_array(StaticRows.kinds)
+	_statics_n = _node_statics + int(columns["statics"])
 
 
 # 1 for each body that is a ship hostile to `faction` (the GDScript nearest-k path).

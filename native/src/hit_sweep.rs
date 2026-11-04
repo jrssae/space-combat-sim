@@ -14,20 +14,28 @@ const MAX_CELL_INDEX: f64 = 1_073_741_824.0;
 // A hull in the grid: its cell and its index.
 type CellEntry = ((i32, i32, i32), u32);
 
+// Hulls placed in a grid of levels: per level, (cell, hull) sorted, the level's hulls ascending, and its largest reach.
+#[derive(Default)]
+struct Grid {
+    cells: Vec<Vec<CellEntry>>,
+    members: Vec<Vec<u32>>,
+    level_reach: Vec<f64>,
+    loose: Vec<u32>,
+}
+
 /// Which projectile and hull pairs pass the hit resolver's bounding-sphere test this tick, found through a grid of levels so
 /// a 10 m fighter and a 1 km hull are both found cheaply. Repeats `HitBroadPhase`'s GDScript step for step: the same levels,
 /// the same cells, the same fallbacks, the sphere test in 32-bit vectors and 64-bit scalars, so both paths give the same pairs
-/// and the same work count.
+/// and the same work count. Hulls that stay put (rocks, M4-T29) can be kept in a grid of their own between calls (`keep`).
 #[derive(GodotClass)]
 #[class(base=RefCounted, init)]
 pub struct ScsHitSweep {
     base: Base<RefCounted>,
     visited: i64,
-    // Per level: (cell, hull) sorted, the level's hulls ascending, and its largest reach.
-    cells: Vec<Vec<CellEntry>>,
-    members: Vec<Vec<u32>>,
-    level_reach: Vec<f64>,
-    loose: Vec<u32>,
+    grid: Grid,
+    kept: Grid,
+    kept_mids: Vec<Vector3>,
+    kept_reach: Vec<f64>,
     candidates: Vec<u32>,
 }
 
@@ -67,33 +75,106 @@ impl ScsHitSweep {
             self.visited = -1;
             return PackedInt64Array::new();
         }
-        let bolts = bolt_mids.as_slice();
-        let bolt_reach = bolt_reach.as_slice();
         let hulls = hull_mids.as_slice();
         let hull_reach = hull_reach.as_slice();
-        let mut out: Vec<i64> = Vec::new();
-        if hulls.is_empty() || bolts.is_empty() {
+        if hulls.is_empty() || bolt_mids.is_empty() {
             return PackedInt64Array::new();
         }
-        self.place(hulls, hull_reach);
-        let hull_count = hulls.len() as i64;
-        for (i, &at) in bolts.iter().enumerate() {
-            self.look(at, bolt_reach[i].abs());
-            self.visited += self.candidates.len() as i64;
-            for &j in &self.candidates {
-                let j = j as usize;
-                let reach = bolt_reach[i] + hull_reach[j];
-                if f64::from(dist_sq(at, hulls[j])) > reach * reach {
-                    continue;
-                }
-                out.push(i as i64 * hull_count + j as i64);
-            }
+        self.grid.place(hulls, hull_reach);
+        let out = sweep(
+            &self.grid,
+            bolt_mids.as_slice(),
+            bolt_reach.as_slice(),
+            hulls,
+            hull_reach,
+            &mut self.candidates,
+            &mut self.visited,
+        );
+        PackedInt64Array::from(out.as_slice())
+    }
+
+    /// `HitBroadPhase.keep`: holds hulls that stay put, in their own grid, for `kept_pairs`. Returns false, after logging
+    /// why, when the arrays do not line up; nothing is kept then.
+    #[func]
+    fn keep(&mut self, hull_mids: PackedVector3Array, hull_reach: PackedFloat64Array) -> bool {
+        self.kept_mids.clear();
+        self.kept_reach.clear();
+        if hull_reach.len() != hull_mids.len() {
+            godot_error!(
+                "ScsHitSweep.keep: array lengths differ (hulls {} and {}); nothing kept",
+                hull_mids.len(),
+                hull_reach.len()
+            );
+            self.kept.place(&[], &[]);
+            return false;
         }
+        self.kept_mids = hull_mids.as_slice().to_vec();
+        self.kept_reach = hull_reach.as_slice().to_vec();
+        self.kept.place(&self.kept_mids, &self.kept_reach);
+        true
+    }
+
+    /// `HitBroadPhase.kept_pairs`: `pairs` against the kept hulls, as `bolt * kept + hull`, ascending.
+    #[func]
+    fn kept_pairs(
+        &mut self,
+        bolt_mids: PackedVector3Array,
+        bolt_reach: PackedFloat64Array,
+    ) -> PackedInt64Array {
+        self.visited = 0;
+        if bolt_reach.len() != bolt_mids.len() {
+            godot_error!(
+                "ScsHitSweep.kept_pairs: array lengths differ (bolts {} and {}); no pairs",
+                bolt_mids.len(),
+                bolt_reach.len()
+            );
+            self.visited = -1;
+            return PackedInt64Array::new();
+        }
+        if self.kept_mids.is_empty() || bolt_mids.is_empty() {
+            return PackedInt64Array::new();
+        }
+        let out = sweep(
+            &self.kept,
+            bolt_mids.as_slice(),
+            bolt_reach.as_slice(),
+            &self.kept_mids,
+            &self.kept_reach,
+            &mut self.candidates,
+            &mut self.visited,
+        );
         PackedInt64Array::from(out.as_slice())
     }
 }
 
-impl ScsHitSweep {
+// Each projectile against the placed hulls: its candidates from the cells it can reach, then the sphere test.
+fn sweep(
+    grid: &Grid,
+    bolts: &[Vector3],
+    bolt_reach: &[f64],
+    hulls: &[Vector3],
+    hull_reach: &[f64],
+    candidates: &mut Vec<u32>,
+    visited: &mut i64,
+) -> Vec<i64> {
+    let mut out: Vec<i64> = Vec::new();
+    let hull_count = hulls.len() as i64;
+    for (i, &at) in bolts.iter().enumerate() {
+        grid.look(at, bolt_reach[i].abs(), candidates);
+        *visited += candidates.len() as i64;
+        for &j in candidates.iter() {
+            let j = j as usize;
+            let reach = bolt_reach[i] + hull_reach[j];
+            if f64::from(dist_sq(at, hulls[j])) > reach * reach {
+                continue;
+            }
+            out.push(i as i64 * hull_count + j as i64);
+        }
+    }
+    out
+}
+
+impl Grid {
     // Puts every hull into its level's cell, or into the loose list when it fits no cell.
     fn place(&mut self, hulls: &[Vector3], hull_reach: &[f64]) {
         self.cells.resize_with(LEVELS, Vec::new);
@@ -133,8 +214,8 @@ impl ScsHitSweep {
     }
 
     // Fills `candidates` with the hulls a projectile at `at` with reach `own` must test, ascending.
-    fn look(&mut self, at: Vector3, own: f64) {
-        self.candidates.clear();
+    fn look(&self, at: Vector3, own: f64, candidates: &mut Vec<u32>) {
+        candidates.clear();
         for level in 0..LEVELS {
             let count = self.members[level].len();
             if count == 0 {
@@ -159,7 +240,7 @@ impl ScsHitSweep {
             let walk_every_hull =
                 !(span <= count as f64) || !within_grid(lx, ly, lz) || !within_grid(hx, hy, hz);
             if walk_every_hull {
-                self.candidates.extend_from_slice(&self.members[level]);
+                candidates.extend_from_slice(&self.members[level]);
                 continue;
             }
             let cells = &self.cells[level];
@@ -168,13 +249,12 @@ impl ScsHitSweep {
                 for cy in ly as i32..=hy as i32 {
                     let start = cells.partition_point(|e| e.0 < (cx, cy, lz));
                     let end = cells.partition_point(|e| e.0 <= (cx, cy, hz));
-                    self.candidates
-                        .extend(cells[start..end].iter().map(|e| e.1));
+                    candidates.extend(cells[start..end].iter().map(|e| e.1));
                 }
             }
         }
-        self.candidates.extend_from_slice(&self.loose);
-        self.candidates.sort_unstable();
+        candidates.extend_from_slice(&self.loose);
+        candidates.sort_unstable();
     }
 }
 
