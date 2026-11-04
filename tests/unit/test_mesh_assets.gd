@@ -1,6 +1,6 @@
 extends GutTest
-## The textured meshes (M4-T30a, architecture §17.18): the Starfury's glb imported with a `StandardMaterial3D` per surface carrying
-## the four maps, the glass see-through, the maps imported as 3D wants them (VRAM compressed with mipmaps, the normal map flagged, the
+## The textured meshes (M4-T30a, architecture §17.18): the Starfury's glb imported with a material per surface carrying the four
+## maps (since M4-T30b the livery shader and the hull glass shader), the glass see-through, the maps imported as 3D wants them (VRAM compressed with mipmaps, the normal map flagged, the
 ## albedo and emissive packed for colour and the others for data), and the painted path still there for an asset without textures.
 
 const STARFURY: String = "starfury_aurora"
@@ -38,29 +38,25 @@ func test_the_starfury_gives_two_surfaces_with_a_textured_material_each() -> voi
 	var hi: Array = entry["aabb_max"]
 	assert_almost_eq(box.position, Vector3(lo[0], lo[1], lo[2]), Vector3.ONE * 0.01)
 	assert_almost_eq(box.end, Vector3(hi[0], hi[1], hi[2]), Vector3.ONE * 0.01)
-	var hull := mesh.surface_get_material(0) as StandardMaterial3D
-	var glass := mesh.surface_get_material(1) as StandardMaterial3D
+	# M4-T30b: the Starfury takes liveries, so its hull is the livery shader and its glass the hull glass shader (Q36).
+	var hull := mesh.surface_get_material(0) as ShaderMaterial
+	var glass := mesh.surface_get_material(1) as ShaderMaterial
 	assert_not_null(hull)
 	assert_not_null(glass)
+	assert_eq(hull.shader, MeshAssets.LIVERY_SHADER)
+	assert_eq(glass.shader, MeshAssets.HULL_GLASS_SHADER)
 	assert_eq(hull.resource_name, "hull")
 	assert_eq(glass.resource_name, "glass")
-	for material: StandardMaterial3D in [hull, glass]:
-		assert_not_null(material.albedo_texture, "albedo")
-		assert_true(material.normal_enabled)
-		assert_not_null(material.normal_texture, "normal")
-		assert_true(material.ao_enabled)
-		assert_same(material.ao_texture, material.roughness_texture, "one ORM map")
-		assert_same(material.ao_texture, material.metallic_texture)
-		assert_eq(material.ao_texture_channel, BaseMaterial3D.TEXTURE_CHANNEL_RED)
-		assert_eq(material.roughness_texture_channel, BaseMaterial3D.TEXTURE_CHANNEL_GREEN)
-		assert_eq(material.metallic_texture_channel, BaseMaterial3D.TEXTURE_CHANNEL_BLUE)
-		assert_true(material.emission_enabled)
-		assert_not_null(material.emission_texture, "emissive")
-	assert_eq(hull.transparency, BaseMaterial3D.TRANSPARENCY_DISABLED)
-	assert_almost_eq(hull.emission_energy_multiplier, float(entry["surfaces"][0]["emissive_strength"]), 1e-6)
-	assert_eq(glass.transparency, BaseMaterial3D.TRANSPARENCY_ALPHA)
-	assert_almost_eq(glass.albedo_color.a, 1.0 - float(entry["surfaces"][1]["transmittance"]), 1e-6)
-	assert_eq(glass.cull_mode, BaseMaterial3D.CULL_DISABLED)
+	for key: StringName in [&"albedo_map", &"normal_map", &"orm_map", &"emissive_map", &"digit_map"]:
+		assert_not_null(hull.get_shader_parameter(key), String(key))
+	for key: StringName in [&"albedo_map", &"orm_map", &"emissive_map"]:
+		assert_not_null(glass.get_shader_parameter(key), String(key))
+	assert_almost_eq(float(hull.get_shader_parameter(&"emission_energy")), float(entry["surfaces"][0]["emissive_strength"]), 1e-6)
+	assert_almost_eq(float(glass.get_shader_parameter(&"glass_alpha")), 1.0 - float(entry["surfaces"][1]["transmittance"]), 1e-6)
+	var spans: PackedVector2Array = hull.get_shader_parameter(&"pattern_span")
+	assert_eq(spans.size(), MeshAssets.MAX_PATTERNS)
+	var patterns: Dictionary = entry["livery"]["patterns"]
+	assert_eq(int(spans[patterns.keys().find("bands")].y), (patterns["bands"] as Array).size(), "the table in the section's order")
 	assert_same(MeshAssets.for_asset(STARFURY), mesh, "loaded once and shared, so every copy instances")
 	assert_same(PaintMeshes.for_asset(STARFURY), mesh, "the old name gives the same mesh")
 
@@ -79,7 +75,7 @@ func test_the_maps_import_compressed_with_mipmaps_the_normal_flagged() -> void:
 		assert_not_null(texture, path)
 		if texture == null:
 			continue
-		assert_eq(texture.get_width(), int(entry["atlas_px"]), key)
+		assert_eq(texture.get_width(), int(entry["atlas_px"]), key)  # every map shares the atlas
 		var image: Image = texture.get_image()
 		assert_true(image.is_compressed(), "%s is VRAM compressed (%d)" % [key, image.get_format()])
 		assert_true(image.has_mipmaps(), "%s has mipmaps" % key)

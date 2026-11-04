@@ -370,5 +370,35 @@ class CockpitScreenTests(unittest.TestCase):
             self.assertGreater(float(distance[0]), length, name)
 
 
+def saturation(rgb) -> float:
+    """How far a linear colour is from grey: (max - min) / max, 0 for black."""
+    c = np.asarray(rgb, dtype=float)
+    return 0.0 if c.max() <= 0.0 else float((c.max() - c.min()) / c.max())
+
+
+class CabinGlowTests(unittest.TestCase):
+    """Q36 (maintainer, 2026-11-04): the cabin is grey, lit by a dark red glow, from inside and through the canopy."""
+
+    COCKPIT_SURFACES = ("cockpit_red", "cockpit_red_dim", "cockpit_dark", "cockpit_sill", "cockpit_metal")
+
+    def test_the_cockpit_surfaces_are_neutral_grey(self) -> None:
+        for key in self.COCKPIT_SURFACES:
+            self.assertLess(saturation(S.material(key).albedo), 0.08, key)
+
+    def test_the_hulls_interior_lining_is_grey_and_glows_red(self) -> None:
+        interior = S.material("interior")
+        self.assertLess(saturation(interior.albedo), 0.08)
+        self.assertGreater(interior.emissive_strength, 0.0)
+        r, g, b = interior.emissive
+        self.assertGreater(r, 3.0 * max(g, b))
+
+    def test_the_canopy_glass_glows_red_and_its_tint_is_neutral(self) -> None:
+        glass = S.material("canopy_glass")
+        r, g, b = glass.emissive
+        self.assertGreater(glass.emissive_strength, 0.0)
+        self.assertGreater(r, 3.0 * max(g, b))
+        self.assertLess(saturation(glass.albedo), 0.15)
+
+
 if __name__ == "__main__":
     unittest.main()
