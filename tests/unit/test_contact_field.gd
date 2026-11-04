@@ -534,7 +534,7 @@ static func _add_statics(rng: RandomNumberGenerator, scan: ContactScan, count: i
 		scan._body_ids.append(100000 + s)
 		scan._ids.append(200000 + s)
 		scan._names.append("")
-		scan._factions.append(Factions.NEUTRAL)
+		scan._factions.append(FACTIONS[s % FACTIONS.size()] if s % 4 == 3 else Factions.NEUTRAL)  # a mine has a side
 		scan._positions.append(near + Vector3(rng.randf_range(-4000.0, 4000.0), rng.randf_range(-4000.0, 4000.0),
 				rng.randf_range(-1500.0, 1500.0)))
 		scan._velocities.append(Vector3.ZERO)
@@ -548,10 +548,15 @@ static func _add_statics(rng: RandomNumberGenerator, scan: ContactScan, count: i
 
 
 # The nearest `k` statics by surface distance (ties to the earlier row), in scan order: the reference `statics_for` meets.
-static func _expected_statics(scan: ContactScan, own_id: int, at: Vector3, k: int, range_m: float) -> Array[int]:
+# A mine counts only for its own side (its faction, or one friendly to it; Q27); rocks count for everyone.
+static func _expected_statics(scan: ContactScan, own_id: int, at: Vector3, k: int, range_m: float,
+		own_faction: StringName) -> Array[int]:
 	var found: Array = []
 	for i: int in scan._body_ids.size():
 		if not BodyKind.is_static(scan._kinds[i]) or scan._body_ids[i] == own_id:
+			continue
+		if scan._kinds[i] == BodyKind.MINE and scan._factions[i] != own_faction \
+				and Factions.relation(own_faction, scan._factions[i]) != Factions.Relation.FRIENDLY:
 			continue
 		var surface: float = scan._positions[i].distance_to(at) - scan._radii[i]
 		if surface <= absf(range_m):
@@ -605,7 +610,7 @@ func test_statics_stay_out_of_the_contacts_and_the_nearest_k_static_come_beside_
 			assert_true(_same(answers[0][1], answers[1][1]), "%s: nearest_for" % label)
 			assert_true(_same(answers[0][2], answers[1][2]), "%s: statics_for %s against %s" % [label, _ids(answers[0][2]),
 					_ids(answers[1][2])])
-			assert_eq(_ids(answers[1][2]), _expected_statics(scan, own_id, own_at, k_static, range_m),
+			assert_eq(_ids(answers[1][2]), _expected_statics(scan, own_id, own_at, k_static, range_m, faction),
 					"%s: the nearest k_static by surface distance, in scan order" % label)
 			compared += 1
 			if not (answers[1][2] as Array).is_empty():
@@ -692,3 +697,60 @@ func test_a_kinds_array_of_the_wrong_length_is_rejected_and_the_scan_answers_fro
 	assert_eq(scan.path(), &"gdscript", "the scan answers from GDScript")
 	scan.use_native = false
 	assert_true(_same(found, scan.statics_for(1002, own_at, scan._factions[2], 4)), "the same as the GDScript path")
+
+
+func test_a_side_sees_its_own_mines_and_never_an_enemys_on_both_paths() -> void:
+	# Q27 (maintainer, 2026-11-03): a side knows its own mines (and its friends') and steers clear of them; enemy mines are
+	# hidden from it until they go off. Rocks are obstacles for every side. Four sides, two of them friends, every other
+	# pair hostile; mines of every side and rocks round every ship; the same statics on both paths, and the reference's.
+	if _skipped():
+		return
+	var sides: Array[StringName] = [Factions.EARTH_ALLIANCE, Factions.RAIDERS, &"bench_a", &"bench_b"]
+	var table_ids: Array = []
+	for side: StringName in sides:
+		table_ids.append({"id": String(side), "name": String(side).capitalize()})
+	var parsed: Dictionary = FactionTable.from_dict({"factions": table_ids,
+			"relations": [{"a": "earth_alliance", "b": "bench_a", "relation": "friendly"}], "default": "hostile"})
+	assert_true(parsed["ok"], "the four-side table is valid: %s" % parsed["error"])
+	Factions.use_table(parsed["table"])
+	assert_eq(Factions.relation(Factions.EARTH_ALLIANCE, &"bench_a"), Factions.Relation.FRIENDLY, "two sides are friends")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2026_11_27
+	var own_mines: int = 0
+	var friend_mines: int = 0
+	var rocks: int = 0
+	for world: int in 6:
+		var n: int = rng.randi_range(20, 120)
+		var scan := _world(rng, n, world % 4)
+		for i: int in n:
+			scan._factions[i] = sides[rng.randi_range(0, 3)]
+		_add_statics(rng, scan, 600)
+		for s: int in range(n, scan._body_ids.size()):
+			if scan._kinds[s] == BodyKind.MINE:
+				scan._factions[s] = sides[rng.randi_range(0, 3)]
+		for q: int in 40:
+			var at_index: int = rng.randi_range(0, n - 1)
+			var faction: StringName = scan._factions[at_index]
+			var own_at: Vector3 = scan._positions[at_index]
+			var answers: Array = []
+			for native: bool in [true, false]:
+				scan.use_native = native
+				answers.append(scan.statics_for(1000 + at_index, own_at, faction, 8))
+			var label: String = "world %d query %d (%s)" % [world, q, faction]
+			assert_true(_same(answers[0], answers[1]), "%s: the same statics on both paths %s against %s" % [label,
+					_ids(answers[0]), _ids(answers[1])])
+			assert_eq(_ids(answers[1]), _expected_statics(scan, 1000 + at_index, own_at, 8, ContactScan.SENSOR_RANGE_M, faction),
+					"%s: the reference's" % label)
+			for c: Contact in answers[1] as Array[Contact]:
+				if c.kind == BodyKind.STATIC:
+					rocks += 1
+					continue
+				assert_ne(c.relation, Factions.Relation.HOSTILE, "%s: never an enemy mine" % label)
+				if c.faction == faction:
+					own_mines += 1
+				else:
+					friend_mines += 1
+	gut.p("statics handed out: %d own mines, %d friends' mines, %d rocks" % [own_mines, friend_mines, rocks])
+	assert_gt(own_mines, 20, "a side's own mines are among its statics")
+	assert_gt(friend_mines, 0, "and its friends'")
+	assert_gt(rocks, 100, "rocks for everyone")

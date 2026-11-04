@@ -63,6 +63,11 @@ func build(rocks: Array[Dictionary], space: RID) -> void:
 	move_child(_mesh, 0)
 
 
+## Stub (M4-T29, tests first).
+func row_id(_i: int) -> int:
+	return 0
+
+
 func count() -> int:
 	return _bodies.size()
 

@@ -34,6 +34,9 @@ var last_hit: String = "none"
 var resolve_us: int = 0
 ## Projectile and hull pairs the broad phase put to the bounding-sphere test on the last tick (the work count).
 var pairs_visited: int = 0
+## Stub (M4-T29, tests first).
+var hulls_last_tick: int = -1
+var static_pairs_visited: int = -1
 ## Finds the pairs that pass the bounding-sphere test (M4-T08); a test may swap in its own.
 var broad_phase: HitBroadPhase = HitBroadPhase.new()
 

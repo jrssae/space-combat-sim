@@ -241,3 +241,56 @@ func test_a_capital_hull_is_found_from_anywhere_it_reaches_without_testing_the_f
 		assert_eq(capital_hits, 300, "%s: every bolt finds the capital" % phase.path())
 		gut.p("%s: %d pairs tested for 300 bolts (every pair: %d)" % [phase.path(), phase.visited, 300 * hull_mids.size()])
 		assert_lte(phase.visited, 300 * 3, "%s: at most 3 pairs a bolt" % phase.path())
+
+
+# --- kept hulls: the static rows (M4-T29) -------------------------------------------------------------------------
+
+
+func test_kept_hulls_give_the_same_pairs_as_handing_them_over_every_call_on_both_paths() -> void:
+	# Rocks do not move, so the resolvers keep them in the grid between ticks: the pairs must be exactly what `pairs` gives
+	# with the same hulls, on either path, and the native and GDScript paths must agree pair for pair and count for count.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2026_11_29
+	var reference := HitBroadPhase.new()
+	reference.use_native = false
+	for index: int in CROWDS:
+		var crowd: Dictionary = _crowd(rng, index)
+		var expected: PackedInt64Array = _pairs(reference, crowd)
+		var answers: Array = []
+		for use_native: bool in [false, true]:
+			if use_native and not NativeLib.has_class(HitBroadPhase.NATIVE_CLASS):
+				continue
+			var phase := HitBroadPhase.new()
+			phase.use_native = use_native
+			phase.keep(crowd["hull_mids"], crowd["hull_reach"])
+			assert_eq(phase.kept_count(), (crowd["hull_mids"] as PackedVector3Array).size())
+			var got: PackedInt64Array = phase.kept_pairs(crowd["bolt_mids"], crowd["bolt_reach"])
+			assert_eq(got, expected, "crowd %d, %s: the kept grid gives the same pairs" % [index, phase.path()])
+			# Asked again without keeping again: the grid was not rebuilt and answers the same.
+			assert_eq(phase.kept_pairs(crowd["bolt_mids"], crowd["bolt_reach"]), expected, "crowd %d: and again" % index)
+			answers.append(phase.visited)
+		if answers.size() == 2:
+			assert_eq(answers[0], answers[1], "crowd %d: the same work on both paths" % index)
+
+
+func test_a_bolt_far_from_a_thousand_kept_rocks_visits_none() -> void:
+	# A rock slab kept once: a bolt among the ships 30 km away tests no rock, one inside the slab only its neighbours.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var rock_mids := PackedVector3Array()
+	var rock_reach := PackedFloat64Array()
+	for s: int in 1000:
+		rock_mids.append(Vector3(rng.randf_range(-10000.0, 10000.0), rng.randf_range(-2500.0, 2500.0),
+				rng.randf_range(-10000.0, 10000.0)))
+		rock_reach.append(exp(rng.randf_range(log(20.0), log(200.0))))
+	for use_native: bool in [false, true]:
+		if use_native and _skipped():
+			return
+		var phase := HitBroadPhase.new()
+		phase.use_native = use_native
+		phase.keep(rock_mids, rock_reach)
+		phase.kept_pairs(PackedVector3Array([Vector3(30000.0, 0.0, 0.0)]), PackedFloat64Array([10.0]))
+		assert_eq(phase.visited, 0, "%s: no rock tested for a bolt 30 km away" % phase.path())
+		phase.kept_pairs(PackedVector3Array([Vector3(0.0, 0.0, 0.0)]), PackedFloat64Array([10.0]))
+		gut.p("%s: %d of 1 000 rocks tested for a bolt in the slab" % [phase.path(), phase.visited])
+		assert_lt(phase.visited, 40, "%s: a bolt in the slab tests its neighbours, not the slab" % phase.path())

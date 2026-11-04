@@ -71,6 +71,11 @@ func build(rows: Array[Dictionary]) -> void:
 	add_child(_mesh)
 
 
+## Stub (M4-T29, tests first).
+func row_id(_i: int) -> int:
+	return 0
+
+
 func count() -> int:
 	return _local.size()
 

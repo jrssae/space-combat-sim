@@ -35,6 +35,19 @@ var visited: int = 0
 var _sweep: Object = null
 
 
+## Stub (M4-T29, tests first): keeps hulls between calls.
+func keep(_hull_mids: PackedVector3Array, _hull_reach: PackedFloat64Array) -> void:
+	pass
+
+
+func kept_count() -> int:
+	return 0
+
+
+func kept_pairs(_bolt_mids: PackedVector3Array, _bolt_reach: PackedFloat64Array) -> PackedInt64Array:
+	return PackedInt64Array()
+
+
 ## Which code answers now: &"native" or &"gdscript".
 func path() -> StringName:
 	return &"native" if _native() != null else &"gdscript"

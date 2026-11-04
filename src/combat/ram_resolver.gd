@@ -48,6 +48,9 @@ const KIND_PROP: String = "prop"
 var events: int = 0
 var last_ram: String = "none"
 var resolve_us: int = 0
+## Stub (M4-T29, tests first).
+var hulls_last_tick: int = -1
+var static_pairs_visited: int = -1
 ## `settings.ram_damage` as of the last tick.
 var enabled: bool = true
 ## Throws the sparks of a ram (`Main` sets it); none without it.

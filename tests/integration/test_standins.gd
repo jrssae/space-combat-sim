@@ -17,6 +17,7 @@ var now_s: float = 0.0
 
 func before_each() -> void:
 	ContactScan.invalidate()
+	StaticRows.clear()
 	world = WorldFrame.new()
 	world.name = "World"
 	add_child_autofree(world)
@@ -33,6 +34,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	StaticRows.clear()
 	ContactScan.invalidate()
 	Factions.reset()
 
@@ -162,12 +164,14 @@ func test_the_asteroid_field_is_static_rows_in_the_scan_and_bolts_hit_it() -> vo
 	var field: AsteroidField = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
 	assert_eq(field.count(), 2)
 	assert_eq(field.body_rids().size(), 2, "one static physics body per rock, by RID")
-	assert_eq(field.get_child_count(), 3, "one multimesh and one marker a rock: no mesh or physics node per rock")
+	assert_eq(field.get_child_count(), 1, "one multimesh: no mesh, physics or marker node per rock (M4-T29)")
 	var scan := ContactScan.from_tree(get_tree())
-	var seen: Array[Contact] = scan.contacts_for(-1, Vector3.ZERO, Factions.RAIDERS)
-	assert_eq(seen.size(), 2, "every rock is a contact")
+	assert_eq(scan.contacts_for(-1, Vector3.ZERO, Factions.RAIDERS).size(), 0, "a rock is never a contact (M4-T29)")
+	var seen: Array[Contact] = scan.statics_for(-1, Vector3.ZERO, Factions.RAIDERS, 4)
+	assert_eq(seen.size(), 2, "every rock is a static row, an obstacle for every side")
 	for c: Contact in seen:
 		assert_false(c.is_ship, "a rock is a static row, not a ship")
+		assert_eq(c.kind, BodyKind.STATIC)
 		assert_eq(c.velocity, Vector3.ZERO)
 		assert_true(c.bounding_radius == 50.0 or c.bounding_radius == 120.0, "with its own size")
 	var resolver := HitResolver.new()
@@ -184,9 +188,9 @@ func test_the_asteroid_field_is_static_rows_in_the_scan_and_bolts_hit_it() -> vo
 		resolver.resolve(DT)
 	assert_eq(hits.size(), 1, "the bolt hit the rock in its path")
 	if not hits.is_empty():
-		assert_eq(hits[0].target_id, field.marker(0).get_instance_id())
+		assert_eq(hits[0].target_id, field.row_id(0))
 		assert_almost_eq(hits[0].point.z, -950.0, 1.0, "on the rock's face")
-	assert_false(Damageable.of(field.marker(0)).hull.destroyed, "rocks do not break")
+		assert_eq(hits[0].applied, 0.0, "rocks do not break")
 
 
 func test_a_rebase_shifts_every_rock_and_the_capitals() -> void:
@@ -195,10 +199,10 @@ func test_a_rebase_shifts_every_rock_and_the_capitals() -> void:
 	var field: AsteroidField = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
 	var cap: CapitalStandin = _capital(Vector3(0.0, 0.0, 3000.0))
 	var offset := Vector3(1000.0, -200.0, 500.0)
-	var marker_before: Vector3 = field.marker(1).global_position
+	var row_before: Vector3 = StaticRows.position_of(field.row_id(1))
 	var cap_before: Vector3 = cap.global_position
 	world.rebase(offset)
-	assert_almost_eq(field.marker(1).global_position.distance_to(marker_before - offset), 0.0, 1e-3, "the marker moved")
+	assert_almost_eq(StaticRows.position_of(field.row_id(1)).distance_to(row_before - offset), 0.0, 1e-3, "the row moved")
 	assert_almost_eq(cap.global_position.distance_to(cap_before - offset), 0.0, 1e-3, "the capital moved")
 	for i: int in rocks.size():
 		var xform: Transform3D = PhysicsServer3D.body_get_state(field.body_rids()[i], PhysicsServer3D.BODY_STATE_TRANSFORM)
