@@ -1330,6 +1330,7 @@ done and T20 proceeds.
   and 2 us a tier capital (70 %).
 - **Q54 (maintainer away):** every test of this task passes on both T24's threaded step and the single-thread step, so undoing T24 never strands it; its look and feel checks go into the "M4 return checklist" in `docs/playtest.md`.
 - **From the refactor review (2026-11-05, finding 11):** `WorldFrame.rebase` and `_settle` walk every shiftable node twice (the shift is 4.01 ms at 500); with the tier removing far ships' nodes, keep the shiftable set as a list kept up to date rather than a walk.
+- **M12 groundwork (maintainer, 2026-11-05; `docs/roadmap.md`, "Required: blast damage and disabled hulks"):** a ship or station that is disabled rather than destroyed becomes a drifting hulk; the tier must be able to hold a hulk as a row that keeps its last motion (Newtonian, no damping, no brain) and is never removed for being idle, and promotion must bring it back as a hulk, not a live ship. Today nothing disables without destroying, so this is a row state and a test (a hulk row drifts, survives demotion and promotion, and stays out of the brains and the fire), not gameplay.
 - **Architecture:** §17.14 (a new subsection head, "The low-attention tier", that T22 to T24 add to).
 - **Checkpoint 2 (Q47):** after this task, re-measure the physics stage at `battle` 500 as T19 did (near set's sync, node propagation, Jolt's step); if the near set still costs more than about 1 ms a tick, the controller brings T19's ships-out-of-Jolt proposal back to the maintainer. If AI ships are then taken out of Jolt, test the Rapier physics library (the `rapier3d` Rust crate, used directly inside the native core, not the Godot plugin) as the first option for their collisions with rocks and capital ships, against writing that collision code by hand; measure it on the same `battle` 500 rows (maintainer, 2026-11-05: a Godot-level swap of Jolt for Rapier was considered and not taken, since Jolt's own step is 0.27 ms of the 2.17 ms physics stage at 500).
 
@@ -2049,6 +2050,7 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
 - **Measures:** lines and settings removed; the tick at `typical`, `battle` 300 and 500 unchanged or better.
 - **Expected gain:** 1 500 to 2 500 lines and eight settings removed; parity surfaces halved.
 - **Doc drift (2026-11-05):** fix `motion_blur.glsl`'s splat-era comment about the depth proxy (after T36's check).
+- **Keep for M12 (maintainer, 2026-11-05):** `DamageZones` and the hardpoints are the start of M12's section model for disabled hulks and section blasts (`docs/roadmap.md`, "Required: blast damage and disabled hulks"); the cleanup must not remove or flatten them, and the explosion level of detail's per-death blast energy and radius (T23) stay on the event.
 - **Architecture:** §17.13, §5 and §15.3 where they still describe optional native code.
 
 ##### M4-T38 Anti-aliasing (Q59, Q60)
