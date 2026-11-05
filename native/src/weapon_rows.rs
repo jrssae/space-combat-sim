@@ -82,6 +82,17 @@ impl ScsWeaponRows {
             );
             return false;
         }
+        let bound = self.capitals.body_ids.len();
+        if let Some(bad) = capitals
+            .as_slice()
+            .iter()
+            .find(|&&c| c < 0 || c as usize >= bound)
+        {
+            godot_error!(
+                "ScsWeaponRows.set_turrets: a turret of capital {bad}, but {bound} capitals are bound (set_capitals first)"
+            );
+            return false;
+        }
         self.turrets = Turrets {
             capital: capitals
                 .as_slice()

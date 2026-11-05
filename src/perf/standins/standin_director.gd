@@ -204,9 +204,15 @@ func _step_native(native: NativeWeapons, delta: float, now_s: float, started_us:
 	_missiles_flying = out[9]
 	mark_us = _mark(Part.MISSILES, mark_us)
 	if native.mines != null and is_instance_valid(native.mines):
-		detonations += native.mines.step_native(_tick, now_s)
+		detonations += native.mines.step_native(_tick, now_s, _walked_hulls)
 	mark_us = _mark(Part.MINES, mark_us)
 	_finish(now_s, mark_us, started_us)
+
+
+# The hulls the GDScript's mines would walk this tick, in its order (gathered only when a mine goes off).
+func _walked_hulls() -> Array:
+	_gather_hulls()
+	return _hulls
 
 
 ## Which code stepped the weapons in the latest tick: &"native" (the rows) or &"gdscript" (the stand-ins).

@@ -22,6 +22,7 @@ var mines: MineStandin = null
 
 var _relations_count: int = -1
 var _relations_table: FactionTable = null
+var _relations_revision: int = -1
 
 
 ## Whether the library has the native rows.
@@ -134,15 +135,16 @@ func unbind_mines() -> void:
 	mines = null
 
 
-## Builds the hostility table again when the core knows a new faction or the faction table changed (the bench installs
-## its own for a battle).
+## Builds the hostility table again when the core knows a new faction, another faction table is active (the bench
+## installs its own for a battle) or the active one changed a relation (the console's `relation`).
 func refresh_relations() -> void:
 	var count: int = rows.faction_count()
 	var table: FactionTable = Factions.table()
-	if count == _relations_count and table == _relations_table:
+	if count == _relations_count and table == _relations_table and table.revision == _relations_revision:
 		return
 	_relations_count = count
 	_relations_table = table
+	_relations_revision = table.revision
 	var names: Array = sim.core.factions()
 	var matrix := PackedByteArray()
 	matrix.resize(count * count)

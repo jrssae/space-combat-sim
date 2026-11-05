@@ -157,21 +157,34 @@ func bind_native(rows: Object) -> void:
 
 
 ## `step` with the native rows answering the triggers and the blasts over the core's rows (`bind_native` first). Returns
-## how many went off.
-func step_native(tick: int, now_s: float) -> int:
+## how many went off. `hull_order` (asked only when one goes off) gives the hulls `step` would walk, in its order: a blast
+## hurts those of its hulls, in that order.
+func step_native(tick: int, now_s: float, hull_order: Callable) -> int:
 	_lay_again(now_s)
 	var origin: Vector3 = global_position
 	var out: Array = native_rows.mine_step(tick, origin)
 	checked_last_tick = out[0]
 	var set_off: PackedInt32Array = out[1]
+	if set_off.is_empty():
+		return 0
+	var rank: Dictionary = {}  # Damageable -> its place in the walk
+	var walk: Array = hull_order.call()
+	for j: int in walk.size():
+		rank[walk[j]] = j
 	for i: int in set_off:
 		var at: Vector3 = origin + _local[i]
 		_retire(i, now_s)
 		var in_blast: Array = native_rows.blast(at)
 		var hull_ids: PackedInt64Array = in_blast[0]
 		var places: PackedVector3Array = in_blast[1]
+		var hurt: Array = []  # [place in the walk, hull, its body's place]
 		for k: int in hull_ids.size():
-			_hurt(i, at, instance_from_id(hull_ids[k]) as Damageable, places[k])
+			var damageable := instance_from_id(hull_ids[k]) as Damageable
+			if rank.has(damageable):
+				hurt.append([rank[damageable], damageable, places[k]])
+		hurt.sort_custom(func(a: Array, b: Array) -> bool: return int(a[0]) < int(b[0]))
+		for h: Array in hurt:
+			_hurt(i, at, h[1], h[2])
 		detonated.emit(i)
 	return set_off.size()
 

@@ -30,6 +30,9 @@ var _matrix: Dictionary = {}
 # The listed pairs in the order they were set: {"a": StringName, "b": StringName, "relation": int}.
 var _pairs: Array[Dictionary] = []
 var _default: int = Factions.Relation.NEUTRAL
+## Grows whenever a faction or a relation is added or changed, so a copy of the table (the native weapon rows', M4-T20)
+## knows to build itself again.
+var revision: int = 0
 
 
 ## The M2 rule as a table: `earth_alliance`, `raiders` and `neutral`, the one hostile pair, default neutral. What
@@ -199,11 +202,13 @@ func set_relation(a: StringName, b: StringName, rel: Factions.Relation) -> Strin
 
 
 func _add_faction(id: StringName, display: String) -> void:
+	revision += 1
 	_names[id] = display
 	_matrix[id] = {}
 
 
 func _store_pair(a: StringName, b: StringName, rel: int) -> void:
+	revision += 1
 	(_matrix[a] as Dictionary)[b] = rel
 	(_matrix[b] as Dictionary)[a] = rel
 	for pair: Dictionary in _pairs:
