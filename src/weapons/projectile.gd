@@ -108,6 +108,15 @@ func configure(weapon: WeaponSpec) -> void:
 	_bolt.mesh = bolt_mesh(weapon.bolt_length_m, weapon.bolt_radius_m, weapon.bolt_material)
 
 
+## Every bolt material in use: the default and those of the meshes built so far (M4-T38 switches them for TAA).
+static func bolt_materials() -> Array[Material]:
+	var out: Array[Material] = [DEFAULT_MATERIAL]
+	for mesh: CapsuleMesh in _meshes.values():
+		if mesh.material != null and not out.has(mesh.material):
+			out.append(mesh.material)
+	return out
+
+
 ## The shared capsule mesh for a bolt of this look; a null `material` is the pulse bolt material.
 static func bolt_mesh(length_m: float, radius_m: float, material: Material = null) -> CapsuleMesh:
 	var mat: Material = material if material != null else DEFAULT_MATERIAL
@@ -122,6 +131,8 @@ static func bolt_mesh(length_m: float, radius_m: float, material: Material = nul
 	mesh.rings = 2
 	mesh.material = mat
 	_meshes[key] = mesh
+	if BoltMesh.motion_vectors():
+		BoltMesh.set_motion_vectors(true)  # a new material joins the opaque ones under TAA
 	return mesh
 
 

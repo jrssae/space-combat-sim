@@ -9,12 +9,20 @@ extends Node3D
 ## its instance slot for life (a freed slot is drawn empty until a new bolt takes it), so instance k follows one bolt tick to
 ## tick, as T38's motion vectors need.
 ##
+## Under TAA (`set_motion_vectors`, M4-T38) every bolt material draws opaque, so a bolt writes its own motion vector instead
+## of the sky's behind it (an additive bolt keeps about 3 % of its light under TAA, an opaque one most of it), and a bolt new
+## to its slot is drawn collapsed for its first frame (`BoltSlotQuarantine`), so no slot's last frame belongs to another bolt.
+##
 ## Looks are registered once per weapon spec (`look_for`), shared by the cannon kernel and the stand-ins; a bolt a node
 ## draws (a beam, a missile) has `SimCore.LOOK_NONE`.
 
 ## The looks seen so far: `[length_m, radius_m, material]` by index.
 static var _looks: Array[Array] = []
 static var _look_index: Dictionary = {}
+## Bolts write motion vectors (opaque materials, quarantined slots): on under TAA.
+static var _motion_vectors: bool = false
+## The bolt materials' own transparency and blend, kept while they are made opaque: `[transparency, blend_mode]` by material.
+static var _additive_looks: Dictionary = {}
 
 ## Instances drawn in the last frame, over every look (a readout).
 var instances_drawn: int = 0
@@ -24,6 +32,7 @@ var _instances: Array[MultiMeshInstance3D] = []
 var _capacity: PackedInt32Array = PackedInt32Array()
 var _child_basis: Basis = Basis.IDENTITY
 var _child_known: bool = false
+var _quarantine: BoltSlotQuarantine = null
 
 
 func _init(p_sim: SimCore = null) -> void:
@@ -43,7 +52,48 @@ static func look_for(weapon: WeaponSpec) -> int:
 		return SimCore.LOOK_NONE  # more looks than a byte holds: drawn by nothing
 	_looks.append([weapon.bolt_length_m, weapon.bolt_radius_m, material])
 	_look_index[key] = index
+	if _motion_vectors:
+		_make_opaque(material)
 	return index
+
+
+## Whether bolts write motion vectors now.
+static func motion_vectors() -> bool:
+	return _motion_vectors
+
+
+## Bolts write their motion vectors (`on`, for TAA) or draw as they were approved, additive. Covers every bolt material:
+## the default, each registered look's and the node bolts' (`Projectile.bolt_materials`).
+static func set_motion_vectors(on: bool) -> void:
+	_motion_vectors = on
+	var materials: Array[Material] = Projectile.bolt_materials()
+	for look: Array in _looks:
+		if not materials.has(look[2]):
+			materials.append(look[2])
+	for material: Material in materials:
+		if on:
+			_make_opaque(material)
+		else:
+			_restore(material)
+
+
+static func _make_opaque(material: Material) -> void:
+	var base := material as BaseMaterial3D
+	if base == null or _additive_looks.has(base):
+		return
+	_additive_looks[base] = [base.transparency, base.blend_mode]
+	base.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+	base.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
+
+
+static func _restore(material: Material) -> void:
+	var base := material as BaseMaterial3D
+	if base == null or not _additive_looks.has(base):
+		return
+	var kept: Array = _additive_looks[base]
+	base.transparency = kept[0]
+	base.blend_mode = kept[1]
+	_additive_looks.erase(base)
 
 
 ## Looks registered so far.
@@ -66,6 +116,8 @@ func _exit_tree() -> void:
 ## Fills the multimeshes for this frame (the frame's bolt pass, `FramePasses.update_bolts`; M4-T36's rule: no `_process`).
 func update() -> void:
 	instances_drawn = 0
+	if not _motion_vectors:
+		_quarantine = null
 	if _sim == null or _sim.core == null or not _sim.bolt_rows_on():
 		_hide_all()
 		return
@@ -79,6 +131,8 @@ func update() -> void:
 		var instance: MultiMeshInstance3D = _instance(look, count)
 		var buffer: PackedFloat32Array = _sim.core.bolt_transforms(look, fraction, Projectile.visual_scale, _child(),
 				_capacity[look])
+		if _motion_vectors:
+			buffer = _quarantined().filter(look, buffer)
 		RenderingServer.multimesh_set_buffer(instance.multimesh.get_rid(), buffer)
 		instance.multimesh.visible_instance_count = count
 		instances_drawn += count
@@ -108,6 +162,14 @@ func _instance(look: int, count: int) -> MultiMeshInstance3D:
 		instance.multimesh.instance_count = capacity
 		_capacity[look] = capacity
 	return instance
+
+
+# The slot check for the frames bolts write motion vectors; forgotten while they do not, so a later switch starts afresh.
+func _quarantined() -> BoltSlotQuarantine:
+	if _quarantine == null:
+		# The bolt flies along its node's -Z; in the instance's own frame that is the capsule's basis turned back.
+		_quarantine = BoltSlotQuarantine.new(_child().inverse() * Vector3(0, 0, -1))
+	return _quarantine
 
 
 func _hide_all() -> void:

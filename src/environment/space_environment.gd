@@ -29,6 +29,7 @@ var _nebula_shown: bool = true
 @onready var star_field: StarField = $StarField
 @onready var sky_follower: SkyFollower = $SkyFollower
 @onready var post_effects: PostEffects = $PostEffects
+@onready var anti_aliasing: AntiAliasing = $AntiAliasing
 
 
 func _ready() -> void:

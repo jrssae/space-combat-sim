@@ -146,6 +146,9 @@ const ENTRIES: Dictionary = {
 		"doc": "RigidBody3D.contact_monitor on every ship (M4-T35): off by default, since nothing connects body_entered and the direct state's contact list, which the ram resolver reads, needs only max_contacts_reported; applies to ships built after the change"},
 	&"perf_native_bolt_rows": {"type": TYPE_BOOL, "default": true,
 		"doc": "The core owns the bolts (M4-T35): the AI cannons' gates and shots run as one kernel over the rows, each bolt is a row stepped natively, swept and spent from the rows by the hit resolver and drawn by one multimesh a look; the player's cannon and the beams and missiles keep their nodes; off = a Projectile node per bolt and a GDScript tick per cannon, the reference, for pairing the two in one process (a switch mid-run drops the bolts in flight); live"},
+	# M4-T38
+	&"anti_aliasing": {"type": TYPE_ENUM, "default": &"smaa", "choices": [&"off", &"fxaa", &"smaa", &"msaa_2x", &"msaa_4x", &"taa"],
+		"doc": "Anti-aliasing of the 3D view (M4-T38): off, fxaa, smaa (edge detection, the default), msaa_2x or msaa_4x (geometry edges only), taa (temporal: the smoothest edges, but thin moving things soften and the bolts draw opaque so they carry their motion); live"},
 }
 
 ## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current

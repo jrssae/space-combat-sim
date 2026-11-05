@@ -8,6 +8,11 @@
 [ext_resource type="Script" path="res://src/rendering/lens_flare_effect.gd" id="7_flare"]
 [ext_resource type="Script" path="res://src/rendering/motion_blur_effect.gd" id="8_blur"]
 [ext_resource type="Script" path="res://src/rendering/post_effects.gd" id="9_post"]
+[ext_resource type="Script" path="res://src/rendering/sky_velocity_effect.gd" id="10_skyvel"]
+[ext_resource type="Script" path="res://src/rendering/anti_aliasing.gd" id="11_aa"]
+
+[sub_resource type="CompositorEffect" id="CompositorEffect_skyvel"]
+script = ExtResource("10_skyvel")
 
 [sub_resource type="CompositorEffect" id="CompositorEffect_blur"]
 script = ExtResource("8_blur")
@@ -17,7 +22,7 @@ effect_callback_type = 4
 script = ExtResource("7_flare")
 
 [sub_resource type="Compositor" id="Compositor_main"]
-compositor_effects = Array[CompositorEffect]([SubResource("CompositorEffect_blur"), SubResource("CompositorEffect_flare")])
+compositor_effects = Array[CompositorEffect]([SubResource("CompositorEffect_skyvel"), SubResource("CompositorEffect_blur"), SubResource("CompositorEffect_flare")])
 
 [node name="SpaceEnvironment" type="Node3D"]
 script = ExtResource("1_env")
@@ -47,3 +52,7 @@ sky = NodePath("../StarField")
 script = ExtResource("9_post")
 world_environment = NodePath("../WorldEnvironment")
 sun = NodePath("../LightRig/KeyStar")
+
+[node name="AntiAliasing" type="Node" parent="." node_paths=PackedStringArray("world_environment")]
+script = ExtResource("11_aa")
+world_environment = NodePath("../WorldEnvironment")
