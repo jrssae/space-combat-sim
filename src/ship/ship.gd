@@ -36,6 +36,10 @@ extends RigidBody3D
 ## path `get_flight_output()` fills its `FlightOutput` from the batch's row on demand (levels, RCS shares, forces, flags; the
 ## per-nozzle `nozzle_forces` stay empty) and `applied_force()` reads the batch's sum.
 ##
+## Commands from the core's rows (M4-T33): a native AI pilot's command is written into the core and the flight batch flies
+## it from there (`use_row_command`), so the driver does not hand the ship a command every think. Any command set from
+## GDScript (`set_flight_command`) takes the ship back; a ship on its own model reads the row's command into `_flight`.
+##
 ## AI ships are built lean (M4-T11, architecture §17.10, `lean`): no cockpit interior and no cockpit anchor, their collision shapes as
 ## shape owners of the body instead of a node each, and their plumes and markers as one multimesh each. Past
 ## `settings.far_ship_dot_m` from the camera an AI ship is a far dot (`set_far_dot`): its hull, plumes, markers and guns are hidden and
@@ -144,6 +148,8 @@ var _output_tick: int = -1
 # `_prepare_command` last ran in (so a fallback after a refused step never prepares the command twice).
 var _flown_tick: int = -1
 var _prepared_tick: int = -1
+# The ship flies its command from the core's row (M4-T33).
+var _row_command: bool = false
 
 @onready var hull: MeshInstance3D = $Hull
 @onready var cockpit_interior: MeshInstance3D = $CockpitInterior
@@ -200,6 +206,7 @@ func _notification(what: int) -> void:
 
 
 func _exit_tree() -> void:
+	release_row_command()
 	_leave_batch()
 	DebugConsole.registry.unregister_owner(self)
 	var rig: LightRig = LightRig.of(self)
@@ -232,6 +239,8 @@ func _physics_process(delta: float) -> void:
 			_model.assist.pod_yaw_smoothed = _batch.assist_state(self)
 		_native_last = false
 	_batch_tick = -1  # this node's model flies this tick, so the batch's row is no longer the latest
+	if _row_command:
+		pull_row_command()
 	var b: Basis = global_basis
 	var to_body: Basis = b.transposed()
 	if _prepared_tick != frame:
@@ -275,8 +284,49 @@ func _physics_process(delta: float) -> void:
 ## This tick's flight demand (pilot terms). Held until replaced; `toggle_assist` acts once. The ship overwrites its
 ## `face_dir_b` every tick with the line of sight to its selected target.
 func set_flight_command(cmd: FlightCommand) -> void:
+	if _row_command:
+		release_row_command()
 	_flight = cmd if cmd != null else FlightCommand.new()
 	_flight_fresh = true
+
+
+## From now on the ship flies the command its native pilot keeps in the core's row (M4-T33): the driver calls it once,
+## right after handing the ship that pilot's first command.
+func use_row_command() -> void:
+	_row_command = true
+
+
+## Whether the ship flies its command from the core's row.
+func is_row_commanded() -> bool:
+	return _row_command
+
+
+## Takes the ship off its row's command (a new pilot, or a command set from GDScript): the core forgets it.
+func release_row_command() -> void:
+	if not _row_command:
+		return
+	_row_command = false
+	var sim: SimCore = SimCore.current()
+	if sim != null and sim.core != null:
+		sim.core.release_command(get_instance_id())
+
+
+## Copies the row's command into `_flight`, for a tick the flight batch does not fly from the row (this node's own model,
+## or the batch's step without the core).
+func pull_row_command() -> void:
+	var sim: SimCore = SimCore.current()
+	if sim == null or sim.core == null:
+		return
+	var row: PackedFloat64Array = sim.core.row_command(get_instance_id())
+	if row.size() < 12:
+		return
+	_flight.main_left = row[1]
+	_flight.main_right = row[2]
+	_flight.retro_left = row[3]
+	_flight.retro_right = row[4]
+	_flight.strafe = Vector2(row[5], row[6])
+	_flight.rot = Vector3(row[7], row[8], row[9])
+	_flight.brake = row[10] != 0.0
 
 
 ## This tick's combat demand. `fire` is held until replaced; the edges act once (targeting here, weapons in M1-T13).

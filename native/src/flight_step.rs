@@ -382,6 +382,10 @@ impl ScsFlightStep {
                 brake: fl[i * CMD_FLAGS] != 0,
                 autotrack: fl[i * CMD_FLAGS + 1] != 0,
             });
+            // A native pilot's command comes from its row (M4-T33), not from the gathered arrays.
+            if let Some(rc) = core.and_then(|(c, ids)| c.live_command(ids[i])) {
+                rc.apply_to(item.cmd.as_mut().expect("set above"));
+            }
             item.env_w = vc[i * CMD_VECTORS + 5];
             item.assist_on = fl[i * CMD_FLAGS + 2] != 0;
             item.has_propellant = fl[i * CMD_FLAGS + 3] != 0;

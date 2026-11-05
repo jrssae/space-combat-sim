@@ -15,6 +15,7 @@ use crate::brain_maths::{
     self, Capability, FlightCmd, Manoeuvre, Pcg, Pose, Temperament, deg_to_rad_lerp,
 };
 use crate::kernels::contact::{self, Grid, Query, Work};
+use crate::row_commands::{CMD_LEN, EVENT_SELECT};
 use crate::rows::{Bolts, Rows};
 use crate::sim_core::ScsSimCore;
 use crate::threads::{self, Pass, Threads};
@@ -47,6 +48,14 @@ pub const BATCH_OUT: usize = OUT_LEN + 1;
 /// selection and the latest attacker (ints); dt, the hull, the latest hit and the latest bolt hit (floats).
 pub const BATCH_INTS: usize = 5;
 pub const BATCH_FLOATS: usize = 4;
+/// A rows batch's inputs per ship (M4-T33): the slot, the relation row's offset and length, the latest attacker and
+/// whether the ship is near the player (ints); dt, the latest hit and the latest bolt hit (floats). The hull and the
+/// selection come from the ship's row.
+pub const ROWS_INTS: usize = 5;
+pub const ROWS_FLOATS: usize = 3;
+/// `rows_events`' head: thinks near the player, thinks far, thinks declined, the most contacts a think saw; then a pair
+/// (the ship's place in the batch, its events) for every ship whose driver has something to do.
+pub const EVENTS_HEAD: usize = 4;
 /// `set_fault`'s injected bug for the determinism test: a think adds to its main thrust what the worker's previous think
 /// left behind, so it reads another row's output.
 pub const FAULT_CARRY: i64 = 1;
@@ -78,6 +87,7 @@ struct Item {
     last_bolt_hit_s: f64,
     out: Vec<f64>,
     ok: bool,
+    near: bool,
 }
 
 // What every think of a batch shares, read-only.
@@ -123,6 +133,8 @@ pub struct ScsBrains {
     serial: Threads,
     fault: i64,
     pass_failures: i64,
+    // The last rows batch's counts and events (M4-T33).
+    events: Vec<i64>,
 }
 
 #[godot_api]
@@ -692,76 +704,90 @@ impl ScsBrains {
             item.last_hit_s = f[2];
             item.last_bolt_hit_s = f[3];
             item.ok = false;
+            item.near = false;
         }
-        let guard = self.core.as_ref().map(|c| c.bind());
-        let (rows, bolts, threads): (&Rows, &Bolts, &Threads) = match &guard {
-            Some(c) => (&c.rows, &c.bolts, c.worker_threads()),
-            None => (&self.own, &self.own_bolts, &self.serial),
-        };
-        for item in &mut self.items[..n] {
-            item.own_row = match (&item.brain, &guard) {
-                (None, _) => -1,
-                (Some(b), Some(c)) => c.row_for_kernel(b.ship.own_body_id),
-                (Some(b), None) => rows
-                    .body_ids
-                    .iter()
-                    .position(|&id| id == b.ship.own_body_id)
-                    .map_or(-1, |r| r as i64),
-            };
-        }
-        threads::ensure_workers(&mut self.workers, threads);
-        let shared = Shared {
-            rows,
-            bolts,
-            grid: &self.grid,
-            field: &self.field,
-            relations: rel,
+        self.run_batch(
+            n,
+            rel,
             now_s,
             friendly_fire,
-            origin: [origin_x, origin_y, origin_z],
-            nearest_k: self.nearest_k,
-            static_k: self.static_k,
-            fault: self.fault,
-        };
-        let moved = guard
-            .as_ref()
-            .is_some_and(|c| c.rows_version_now() != rows_version);
-        let items = &mut self.items[..n];
-        let workers = &self.workers;
-        let passed = moved
-            || std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                threads.run(Pass::Brains, items, workers, |item, worker| {
-                    think_item(&shared, item, worker);
-                });
-            }))
-            .is_ok();
-        drop(guard);
-        if moved || !passed {
-            for item in &mut self.items[..n] {
-                item.ok = false;
-            }
+            [origin_x, origin_y, origin_z],
+            rows_version,
+            false,
+        )
+    }
+
+    /// The rows path of `think_batch` (M4-T33): per ship `ROWS_INTS` ints and `ROWS_FLOATS` floats, the hull and the
+    /// selection read from its row; returns the same output. Each think's command (its flight numbers and trigger) is
+    /// written into the core's commands, which the flight step flies the same tick, and `rows_events` then holds the
+    /// counts and the ships whose drivers have something to do: a first command from the row, a changed trigger, or a
+    /// wanted target the ship has not selected. A declined think writes nothing, so its ship flies the row's command on.
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn think_batch_rows(
+        &mut self,
+        ints: PackedInt64Array,
+        floats: PackedFloat64Array,
+        relations: PackedByteArray,
+        now_s: f64,
+        friendly_fire: bool,
+        origin_x: f64,
+        origin_y: f64,
+        origin_z: f64,
+        rows_version: i64,
+    ) -> PackedFloat64Array {
+        let n = ints.len() / ROWS_INTS;
+        self.events.clear();
+        self.events.resize(EVENTS_HEAD, 0);
+        if ints.len() != n * ROWS_INTS || floats.len() != n * ROWS_FLOATS {
+            godot_error!(
+                "ScsBrains.think_batch_rows: {} ints and {} floats do not make whole ships; nothing thought",
+                ints.len(),
+                floats.len()
+            );
+            return PackedFloat64Array::new();
         }
-        if !passed {
-            if self.pass_failures == 0 {
-                godot_warn!(
-                    "ScsBrains.think_batch: a think panicked; the tick's {n} thinks are held, their brains kept"
-                );
-            }
-            self.pass_failures += 1;
+        self.refresh_grid();
+        let iv = ints.as_slice();
+        let fv = floats.as_slice();
+        let rel = relations.as_slice();
+        if self.items.len() < n {
+            self.items.resize_with(n, Item::default);
         }
-        self.batch_out.clear();
-        self.batch_out.resize(n * BATCH_OUT, 0.0);
         for (k, item) in self.items[..n].iter_mut().enumerate() {
-            if let Some(brain) = item.brain.take() {
-                self.slots[item.slot] = Some(brain);
-            }
-            if item.ok {
-                let at = k * BATCH_OUT;
-                self.batch_out[at] = 1.0;
-                self.batch_out[at + 1..at + BATCH_OUT].copy_from_slice(&item.out);
-            }
+            let i = &iv[k * ROWS_INTS..(k + 1) * ROWS_INTS];
+            let f = &fv[k * ROWS_FLOATS..(k + 1) * ROWS_FLOATS];
+            let start = usize::try_from(i[1]).unwrap_or(0).min(rel.len());
+            let len = usize::try_from(i[2]).unwrap_or(0).min(rel.len() - start);
+            item.slot = usize::try_from(i[0]).unwrap_or(usize::MAX);
+            item.brain = self.slots.get_mut(item.slot).and_then(Option::take);
+            item.relations = (start, start + len);
+            item.selected_id = 0;
+            item.last_attacker_id = i[3];
+            item.near = i[4] != 0;
+            item.dt = f[0];
+            item.hull_fraction = 1.0;
+            item.last_hit_s = f[1];
+            item.last_bolt_hit_s = f[2];
+            item.ok = false;
         }
-        PackedFloat64Array::from(self.batch_out.as_slice())
+        let out = self.run_batch(
+            n,
+            rel,
+            now_s,
+            friendly_fire,
+            [origin_x, origin_y, origin_z],
+            rows_version,
+            true,
+        );
+        self.write_commands(n);
+        out
+    }
+
+    /// The last `think_batch_rows`' counts and events (`EVENTS_HEAD`, then pairs).
+    #[func]
+    fn rows_events(&self) -> PackedInt64Array {
+        PackedInt64Array::from(self.events.as_slice())
     }
 
     /// Batches a panic declined (each holding its brains and its ships' last commands).
@@ -1287,6 +1313,129 @@ fn profile_of(profile: &PackedFloat64Array, tactics: &PackedFloat64Array) -> Opt
 }
 
 impl ScsBrains {
+    // Thinks the batch's first `n` items (inputs filled, brains taken from their slots) across the pool and packs their
+    // outputs in order; with `from_rows` each ship's hull and selection are read from its own row first.
+    #[allow(clippy::too_many_arguments)]
+    fn run_batch(
+        &mut self,
+        n: usize,
+        rel: &[u8],
+        now_s: f64,
+        friendly_fire: bool,
+        origin: [f64; 3],
+        rows_version: i64,
+        from_rows: bool,
+    ) -> PackedFloat64Array {
+        let guard = self.core.as_ref().map(|c| c.bind());
+        let (rows, bolts, threads): (&Rows, &Bolts, &Threads) = match &guard {
+            Some(c) => (&c.rows, &c.bolts, c.worker_threads()),
+            None => (&self.own, &self.own_bolts, &self.serial),
+        };
+        for item in &mut self.items[..n] {
+            item.own_row = match (&item.brain, &guard) {
+                (None, _) => -1,
+                (Some(b), Some(c)) => c.row_for_kernel(b.ship.own_body_id),
+                (Some(b), None) => rows
+                    .body_ids
+                    .iter()
+                    .position(|&id| id == b.ship.own_body_id)
+                    .map_or(-1, |r| r as i64),
+            };
+            if let (true, Ok(r)) = (from_rows, usize::try_from(item.own_row)) {
+                // What the driver read from the ship's hull and targeting, as the sync stamped them (-1: none).
+                let hull = rows.hull_fraction[r];
+                item.hull_fraction = if hull < 0.0 { 1.0 } else { hull };
+                item.selected_id = rows.target_ids[r].max(0);
+            }
+        }
+        threads::ensure_workers(&mut self.workers, threads);
+        let shared = Shared {
+            rows,
+            bolts,
+            grid: &self.grid,
+            field: &self.field,
+            relations: rel,
+            now_s,
+            friendly_fire,
+            origin,
+            nearest_k: self.nearest_k,
+            static_k: self.static_k,
+            fault: self.fault,
+        };
+        let moved = guard
+            .as_ref()
+            .is_some_and(|c| c.rows_version_now() != rows_version);
+        let items = &mut self.items[..n];
+        let workers = &self.workers;
+        let passed = moved
+            || std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                threads.run(Pass::Brains, items, workers, |item, worker| {
+                    think_item(&shared, item, worker);
+                });
+            }))
+            .is_ok();
+        drop(guard);
+        if moved || !passed {
+            for item in &mut self.items[..n] {
+                item.ok = false;
+            }
+        }
+        if !passed {
+            if self.pass_failures == 0 {
+                godot_warn!(
+                    "ScsBrains.think_batch: a think panicked; the tick's {n} thinks are held, their brains kept"
+                );
+            }
+            self.pass_failures += 1;
+        }
+        self.batch_out.clear();
+        self.batch_out.resize(n * BATCH_OUT, 0.0);
+        for (k, item) in self.items[..n].iter_mut().enumerate() {
+            if let Some(brain) = item.brain.take() {
+                self.slots[item.slot] = Some(brain);
+            }
+            if item.ok {
+                let at = k * BATCH_OUT;
+                self.batch_out[at] = 1.0;
+                self.batch_out[at + 1..at + BATCH_OUT].copy_from_slice(&item.out);
+            }
+        }
+        PackedFloat64Array::from(self.batch_out.as_slice())
+    }
+
+    // After a rows batch, on the main thread: every think's command into the core, the counts, and the events of the
+    // ships whose drivers have something to do (see `think_batch_rows`).
+    fn write_commands(&mut self, n: usize) {
+        let mut core = self.core.clone();
+        let mut guard = core.as_mut().map(|c| c.bind_mut());
+        for k in 0..n {
+            let item = &self.items[k];
+            if !item.ok {
+                self.events[2] += 1;
+                continue;
+            }
+            self.events[if item.near { 0 } else { 1 }] += 1;
+            self.events[3] = self.events[3].max(item.out[23] as i64);
+            let (Some(c), Some(brain)) = (
+                guard.as_mut(),
+                self.slots.get(item.slot).and_then(Option::as_ref),
+            ) else {
+                continue;
+            };
+            let mut events = c.write_command(brain.ship.own_body_id, &item.out[..=CMD_LEN]);
+            let wanted = brain.wanted_target_id;
+            let selected = usize::try_from(item.own_row).map_or(-1, |r| c.rows.target_ids[r]);
+            // The driver follows the brain's target: it clears a selection for none and selects anything else it wants.
+            if wanted == 0 || (wanted < 0 && selected > 0) || (wanted > 0 && wanted != selected) {
+                events |= EVENT_SELECT;
+            }
+            if events != 0 {
+                self.events.push(k as i64);
+                self.events.push(i64::from(events));
+            }
+        }
+    }
+
     // Rebuilds the contact grid when the core's rows changed under it.
     fn refresh_grid(&mut self) {
         let Some(core) = &self.core else {

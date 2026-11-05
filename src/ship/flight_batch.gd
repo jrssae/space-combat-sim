@@ -15,6 +15,9 @@ extends Node
 ## With the native core on (M4-T15, `SimCore`), the step reads each ship's basis and velocities from the core's rows (synced
 ## at -11; nothing moves a body between) instead of the physics server; a ship the core has no row for (back from the
 ## pool this tick) is read from the server as before. The batch attaches the core to the world when it attaches itself.
+##
+## Commands from rows (M4-T33): on the core a native pilot's ship flies the command its row holds (the step reads it there,
+## whatever was gathered); without the core the batch reads that command into the ship first (`Ship.pull_row_command`).
 
 ## The native class that flies the batch when the library is loaded and the settings are on.
 const NATIVE_CLASS: StringName = &"ScsFlightStep"
@@ -225,6 +228,11 @@ func _physics_process(delta: float) -> void:
 		fallback_reads = int(step.fallback_reads())
 	else:
 		_source = &"server"
+		for i: int in row:
+			if rows[i].is_row_commanded():
+				rows[i].pull_row_command()
+				pack_command(rows[i]._flight, vectors[i * CMD_VECTORS + 5], flags[i * CMD_FLAGS + 2] != 0,
+						flags[i * CMD_FLAGS + 3] != 0, scalars, vectors, flags, i)
 		stepped = step.step(slots, scalars, vectors, flags, PackedVector3Array(), delta)
 		fallback_reads = 0
 	if not stepped:

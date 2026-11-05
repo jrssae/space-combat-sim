@@ -13,6 +13,8 @@ const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf
 		&"perf_threads", &"perf_native_commands"]
 
 var _saved: Dictionary = {}
+# The battle's ships by their `Targetable` id, so selections compare across runs (each run has its own instance ids).
+var _index_of: Dictionary = {}
 
 
 func before_each() -> void:
@@ -201,6 +203,9 @@ func _battle(rows_on: bool, threads: int, parallel: bool, ticks: int = TICKS) ->
 		var made: Dictionary = BrainFactory.from_behaviour(e["behaviour"], anchor, int(e["seed"]))
 		c.driver.brain = made["brain"] as PilotBrain
 		ships.append(c)
+	_index_of.clear()
+	for i: int in ships.size():
+		_index_of[ships[i].targetable.get_instance_id()] = i
 	var sim: SimCore = SimCore.attach(world)
 	if parallel:
 		sim.core.set_parallel_min(2)
@@ -255,8 +260,13 @@ func _commands_digest(sim: SimCore, ships: Array[Combatant]) -> int:
 					f.rot.z, 1.0 if f.brake else 0.0])
 		var combat: CombatCommand = c.cannon._command
 		all.append(1.0 if combat != null and combat.fire else 0.0)
-		all.append(float(c.ship.targeting.selected_id()))
+		all.append(float(_stable(c.ship.targeting.selected_id())))
 	return hash(all)
+
+
+# A target id as the ship's place in the battle (-1 none, -2 not one of the battle's ships).
+func _stable(id: int) -> int:
+	return int(_index_of.get(id, -2)) if id > 0 else -1
 
 
 # What the game reads of a pilot: the behaviour in control, the wanted target, the dodge, dwell, switches and the scores.
@@ -269,9 +279,10 @@ func _pilot_digest(c: Combatant) -> int:
 	for id: StringName in AiPilot.TIE_ORDER:
 		scores.append(pilot.score_of(id))
 		scores.append(pilot.raw_score_of(id))
-	return hash([String(pilot.current.id) if pilot.current != null else "none", pilot.wanted_target_id, pilot.dwell_s,
-			pilot.switches, c.driver.avoiding, c.driver.avoiding_urgent, scores, var_to_str(d), pilot.desired_velocity,
-			pilot.has_desired_velocity, pilot.context.attack_target_id, pilot.context.current_target_id])
+	return hash([String(pilot.current.id) if pilot.current != null else "none", _stable(pilot.wanted_target_id),
+			pilot.dwell_s, pilot.switches, c.driver.avoiding, c.driver.avoiding_urgent, scores, var_to_str(d),
+			pilot.desired_velocity, pilot.has_desired_velocity, _stable(pilot.context.attack_target_id),
+			_stable(pilot.context.current_target_id)])
 
 
 # Every ship's command in the core (live flag first, then the numbers), in ship order.

@@ -41,6 +41,14 @@ extends Node
 ## the host declines (the ship has no row this tick, the rows moved under the scan), the driver perceives and thinks in
 ## GDScript as before.
 ##
+## Commands as rows (M4-T33, `perf_native_commands`): a native think in a rows batch hands in only what the rows do not
+## hold (the core reads the hull and the selection at the sync), and the host writes the command into the core, where the
+## flight batch flies it the same tick. The driver does nothing for that think at -9 unless the batch names it: the ship's
+## first command from its row (the ship and the cannon are handed their commands once, and fly the row's from then on), a
+## changed trigger (the cannon's command), a target to select. The rest it reads when it next needs it: whether the think
+## landed (the think rate's clock and wake), and the pilot's state (`AiPilot.set_pending`). A new pilot, or a command set
+## from GDScript, releases the ship from its row.
+##
 ## Console (§16.4, M3-T06): `AiConsole` is registered while any driver is in the tree, owned by the newest. `think_us()` is
 ## wall-clock time, a profiling readout (AC13), never gameplay time.
 
@@ -101,12 +109,21 @@ var brain: PilotBrain = null:
 		_ordinal = maxi(_live.find(self), 0)
 		if combatant != null:
 			_tie_hash = hash(combatant.display_name)
+		_landing = null
+		_avoid_from_pilot = false
+		if combatant != null and is_instance_valid(combatant.ship):
+			combatant.ship.release_row_command()  # a new pilot takes the ship from its row afresh
 		if value != null:
 			value.reset()
 		_start_lights(value)
-## Whether the avoidance filter changed this tick's command (the ship is dodging), and whether it was urgent.
-var avoiding: bool = false
-var avoiding_urgent: bool = false
+## Whether the avoidance filter changed this tick's command (the ship is dodging), and whether it was urgent. Read from
+## the pilot after a rows think (M4-T33).
+var avoiding: bool = false:
+	get:
+		return _pilot_avoiding(false) if _avoid_from_pilot else avoiding
+var avoiding_urgent: bool = false:
+	get:
+		return _pilot_avoiding(true) if _avoid_from_pilot else avoiding_urgent
 ## Sim time of this hull's latest hit (`Damageable.hit_taken`), and of its latest bolt hit, -INF since the brain was set.
 var last_hit_s: float = -INF
 var last_bolt_hit_s: float = -INF
@@ -137,6 +154,17 @@ var _since_think_s: float = 0.0
 var _woken: bool = true
 # `_keep_lists`, made once: the scan calls it only when the nearest-k cut leaves something out.
 var _keeper: Callable = _keep_lists
+# A rows think waiting to be read (M4-T33): the tick's answer, this ship's place in it, and the think rate's clock and wake
+# as they stood before it (put back if the host declined it); whether `avoiding` reads the pilot; the combat command the
+# ship and the cannon hold while the ship flies from its row.
+var _landing: BrainAnswer = null
+var _landing_index: int = 0
+var _landing_since_s: float = 0.0
+var _landing_woken: bool = false
+var _avoid_from_pilot: bool = false
+var _row_combat: CombatCommand = null
+static var _frame_rows: bool = false
+static var _no_origin: UniversePos = UniversePos.new()
 
 
 func _init() -> void:
@@ -177,6 +205,8 @@ func step(delta: float, batched: bool = false) -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
 	if not _settings_read:
 		_read_settings()
+	if _landing != null:
+		_settle_landing()
 	near_player = _is_near_player()
 	_steps += 1
 	_since_think_s += delta
@@ -190,6 +220,9 @@ func step(delta: float, batched: bool = false) -> void:
 	if pilot != null and pilot.native_capable():
 		var host: Object = _frame_host() if batched else NativeBrains.host(get_tree())
 		if host != null:
+			if batched and _frame_rows and _step_rows(pilot, host, dt):
+				_add_think_time(Time.get_ticks_usec() - started_us)
+				return  # the rows batch thinks it; the core flies its command
 			# The scan stage on the native path: the shared scan's build and the perception (the lists are picked inside the
 			# think, which the think stage counts).
 			var timed: bool = ContactScan.timing
@@ -229,6 +262,104 @@ func finish_native(out: PackedFloat64Array, base: int, dt: float) -> void:
 	_add_think_time(Time.get_ticks_usec() - started_us)
 
 
+# A native think into this tick's rows batch (M4-T33): the slot readied, the inputs handed in, the answer kept. The think
+# rate's clock and wake are reset now as a landed think resets them, and put back if the host declines it. False when the
+# think cannot go that way (stale rows, no slot, another batch): the caller then takes today's path.
+func _step_rows(pilot: AiPilot, host: Object, dt: float) -> bool:
+	var batch: BrainBatch = _frame_batch
+	if batch == null:
+		return false
+	var timed: bool = ContactScan.timing
+	var scan_started_us: int = Time.get_ticks_usec() if timed else 0  # profiling readout only
+	var scan: ContactScan = ContactScan.shared(get_tree())
+	var fresh: bool = scan.rows_fresh()
+	if timed:
+		ContactScan.add_time(Time.get_ticks_usec() - scan_started_us)
+	if not fresh:
+		return false
+	var slot: int = pilot.prepare_rows(host, self, scan)
+	if slot < 0:
+		return false
+	if _friendly_fire < 0:
+		_friendly_fire = 1 if bool(Settings.get_value(&"friendly_fire")) else 0
+	var index: int = batch.add_rows(self, host, slot, dt, combatant.faction, scan, near_player, last_attacker_id, last_hit_s,
+			last_bolt_hit_s, scan.rows_version_taken(), SimClock.now(), _friendly_fire == 1,
+			world.origin if world != null else _no_origin)
+	if index < 0:
+		return false
+	_landing = batch.answer()
+	_landing_index = index
+	_landing_since_s = _since_think_s
+	_landing_woken = _woken
+	_since_think_s = 0.0
+	_woken = false
+	pilot.set_pending(_landing, index)
+	_avoid_from_pilot = true
+	return true
+
+
+# Reads whether the last rows think landed: a declined one leaves the think rate's clock and wake as they would be.
+func _settle_landing() -> void:
+	var answer: BrainAnswer = _landing
+	_landing = null
+	if not answer.thought(_landing_index):
+		_since_think_s += _landing_since_s
+		_woken = _woken or _landing_woken
+
+
+## What a rows batch names this driver for (M4-T33): `events` (`BrainBatch.EVENT_*`) from the think at `base` of the
+## answer `out`. The ship's first command from its row hands the ship and the cannon their commands, as a think did; a
+## changed trigger reaches the cannon; the first shot ends the hiding; a wanted target is selected.
+func rows_event(events: int, out: PackedFloat64Array, base: int) -> void:
+	if combatant == null or not is_instance_valid(combatant.ship):
+		return
+	var fire: bool = out[base + AiPilot.NATIVE_FIRE] != 0.0
+	var trigger: bool = events & (BrainBatch.EVENT_ENTER | BrainBatch.EVENT_FIRE) != 0
+	if events & BrainBatch.EVENT_ENTER != 0 or (trigger and _row_combat == null):
+		_row_combat = CombatCommand.new()
+		_row_combat.fire = fire
+		combatant.apply_commands(AiPilot.native_flight(out, base), _row_combat)
+		combatant.ship.use_row_command()
+	elif trigger:
+		_row_combat.fire = fire
+	if trigger and fire and _hiding:  # the first shot ends the hiding (Q27)
+		_hiding = false
+		combatant.ship.running_lights = true
+	if events & BrainBatch.EVENT_SELECT != 0:
+		_follow_target(AiPilot.native_target_id(out, base))
+
+
+## Adds a rows batch's counts to the tick's (M4-T33): thinks near and far, declined thinks (each held, as a far-rate tick
+## is), and the most contacts a think saw.
+static func add_rows_counts(near: int, far: int, declined: int, contacts: int) -> void:
+	_roll_counts()
+	_thinks_near += near
+	_thinks_far += far
+	_thinks_native += near + far
+	_thinks_fallback += declined
+	_held += declined
+	_contacts_max = maxi(_contacts_max, contacts)
+
+
+## The ship's body id (the native slot's bound body).
+func own_body_id() -> int:
+	return combatant.ship.get_instance_id()
+
+
+## The perception a native slot is bound from (`AiPilot.prepare_rows`, when the slot or the ship is new).
+func lite_perception(scan: ContactScan, host: Object) -> Perception:
+	return _perceive_lite(scan, host)
+
+
+# The dodge as the pilot's last landed native think left it.
+func _pilot_avoiding(urgent: bool) -> bool:
+	var pilot := brain as AiPilot
+	if pilot == null:
+		return false
+	pilot.settle_native()
+	return pilot.native_avoiding_urgent if urgent else pilot.native_avoiding
+
+
 # Declined with a brain in the slot: the GDScript objects hold only a mirror, so this tick is held, as a far-rate tick
 # is, and the think waits for the next one.
 func _hold_declined() -> void:
@@ -240,6 +371,7 @@ func _hold_declined() -> void:
 # What a think ends with: the GDScript brain when no native command came (`pc` null), avoidance, the selection and the
 # command handed to the ship.
 func _act(pc: PilotCommand, pilot: AiPilot, dt: float) -> void:
+	_avoid_from_pilot = false
 	_since_think_s = 0.0
 	_woken = false
 	_count_think(near_player)
@@ -258,7 +390,7 @@ func _act(pc: PilotCommand, pilot: AiPilot, dt: float) -> void:
 	if _hiding and pc.combat != null and pc.combat.fire:  # the first shot ends the hiding (Q27)
 		_hiding = false
 		combatant.ship.running_lights = true
-	_follow_brain_target()
+	_follow_target(brain.wanted_target_id)
 	combatant.apply_commands(pc.flight, pc.combat)
 
 
@@ -480,9 +612,8 @@ func _retarget(delta: float) -> void:
 		targeting.select_nearest_hostile()
 
 
-# Keeps the selection on what the brain wants. A target it cannot select is not retried until it wants another.
-func _follow_brain_target() -> void:
-	var wanted: int = brain.wanted_target_id
+# Keeps the selection on what the brain wants (`wanted`). A target it cannot select is not retried until it wants another.
+func _follow_target(wanted: int) -> void:
 	if wanted == PilotBrain.TARGET_NEAREST_HOSTILE:
 		return
 	var targeting: TargetingController = combatant.ship.targeting
@@ -568,6 +699,7 @@ static func _frame_host() -> Object:
 		var tree := Engine.get_main_loop() as SceneTree
 		_frame_host_cached = NativeBrains.host(tree)
 		_frame_batch = BrainBatch.for_tree(tree)
+		_frame_rows = _frame_batch != null and BrainBatch.rows_mode()
 	return _frame_host_cached
 
 

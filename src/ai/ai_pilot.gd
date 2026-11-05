@@ -27,6 +27,11 @@ extends PilotBrain
 ## `current`, the scores, `wanted_target_id`, the wish, and the behaviour in control's own state (an evade's jinks, an
 ## attack's run, a route's progress), so wings, orders, the console and the tests see one pilot. The GDScript behaviours stay
 ## the reference and fly whenever the perception is not on the rows (a pilot with a scripted behaviour never goes native).
+##
+## Rows batches (M4-T33): when the think went through a rows batch, its output is not read at once. The pilot keeps the
+## tick's `BrainAnswer` and its place in it (`set_pending`) and reads it the first time anything asks: `current`, the
+## scores, `describe`, `behaviour`, the wanted target, the wish, dwell and switches. What a newer think replaces unread
+## is skipped as the lazy mirror skips it, except a rammer's and a route's state and the attack's target in the context.
 
 const TIE_ORDER: Array[StringName] = [&"ram", &"retreat", &"evade", &"attack", &"guard", &"formation", &"rally", &"follow_path",
 		&"idle"]
@@ -70,12 +75,22 @@ var behaviours: Array[AiBehaviour] = []
 ## The behaviour in control (null before the first tick), and seconds since it took over.
 var current: AiBehaviour = null:
 	get:
+		if _native_pending:
+			settle_native()
 		if _mirror_kind >= 0:
 			_sync_mirror()
 		return current
-var dwell_s: float = 0.0
+var dwell_s: float = 0.0:
+	get:
+		if _native_pending:
+			settle_native()
+		return dwell_s
 ## How many times control changed hands.
-var switches: int = 0
+var switches: int = 0:
+	get:
+		if _native_pending:
+			settle_native()
+		return switches
 
 # Scores by behaviour index, in packed arrays: selection runs for every AI ship every tick (AC13's budget).
 var _weights: PackedFloat64Array = PackedFloat64Array()
@@ -133,6 +148,9 @@ var _pushed_route_loop: bool = false
 var _pushed_route_yield: bool = false
 ## The attack's target as the GDScript behaviour shows it on the native path: its id, nothing else.
 var _mirror_target: Contact = Contact.new()
+# A rows batch's answer this pilot has not read yet, and its place in it (M4-T33).
+var _pending: BrainAnswer = null
+var _pending_index: int = 0
 
 
 ## No behaviours given: the standard set (ram, retreat, evade, attack, idle). No temperament: the profile's own.
@@ -154,6 +172,8 @@ func _init(p_profile: AiProfile = null, p_seed: int = 0, p_behaviours: Array[AiB
 
 ## Adds a behaviour at its `TIE_ORDER` place, weighted by the profile's weight for its id as of now.
 func add_behaviour(b: AiBehaviour) -> void:
+	if _native_pending:
+		settle_native()
 	if _mirror_kind >= 0:
 		_sync_mirror()  # what a think left is written before anything changes the behaviours
 	var rank: int = _rank(b.id)
@@ -184,6 +204,8 @@ func add_behaviour(b: AiBehaviour) -> void:
 
 ## Changes skill and aggression live and retunes every behaviour.
 func set_temperament(t: AiTemperament) -> void:
+	if _native_pending:
+		settle_native()
 	if _mirror_kind >= 0:
 		_sync_mirror()  # what a think left is written before anything changes the behaviours
 	temperament = t
@@ -199,6 +221,8 @@ func set_temperament(t: AiTemperament) -> void:
 
 ## The behaviour with this id, or null.
 func behaviour(behaviour_id: StringName) -> AiBehaviour:
+	if _native_pending:
+		settle_native()
 	if _mirror_kind >= 0:
 		_sync_mirror()
 	for b: AiBehaviour in behaviours:
@@ -209,6 +233,8 @@ func behaviour(behaviour_id: StringName) -> AiBehaviour:
 
 ## This tick's weighted score of a behaviour (0 for an id it does not have).
 func score_of(behaviour_id: StringName) -> float:
+	if _native_pending:
+		settle_native()
 	if native_last:
 		var k: int = TIE_ORDER.find(behaviour_id)
 		return _out[_out_base + NATIVE_WEIGHTED + k] if k >= 0 and _index_of(behaviour_id) >= 0 else 0.0
@@ -218,6 +244,8 @@ func score_of(behaviour_id: StringName) -> float:
 
 ## This tick's score of a behaviour as the behaviour gave it, before the weight.
 func raw_score_of(behaviour_id: StringName) -> float:
+	if _native_pending:
+		settle_native()
 	if native_last:
 		var k: int = TIE_ORDER.find(behaviour_id)
 		return _out[_out_base + NATIVE_RAW + k] if k >= 0 and _index_of(behaviour_id) >= 0 else 0.0
@@ -226,6 +254,8 @@ func raw_score_of(behaviour_id: StringName) -> float:
 
 
 func think(p: Perception, dt: float) -> PilotCommand:
+	if _native_pending:
+		settle_native()
 	if p.brains != null:
 		var native: PilotCommand = try_think_native(p, dt)
 		if native != null:
@@ -259,6 +289,8 @@ func reads_target() -> bool:
 
 ## Its wing, leader, targets and route pace ship stay in its contacts beyond the nearest k (`AiContext.keep_ids`).
 func keep_ids() -> PackedInt64Array:
+	if _native_pending:
+		settle_native()
 	var ids: PackedInt64Array = context.keep_ids()
 	if wanted_target_id > 0:
 		ids.append(wanted_target_id)
@@ -318,6 +350,8 @@ func select(dt: float) -> AiBehaviour:
 ## `behaviour`, `state` (the current behaviour's), `for_s` (seconds in control), `scores` (weighted, by id in tie order),
 ## `objective` (when it has one, M3-T17), and the current behaviour's other fields (attack: `target`, `range_m`, `firing`).
 func describe() -> Dictionary:
+	if _native_pending:
+		settle_native()
 	if _mirror_kind >= 0:
 		_sync_mirror()
 	var out: Dictionary
@@ -342,6 +376,8 @@ func describe() -> Dictionary:
 
 
 func reset() -> void:
+	if _native_pending:
+		settle_native()
 	if _mirror_kind >= 0:
 		_sync_mirror()  # what a think left is written before anything changes the behaviours
 	current = null
@@ -491,19 +527,37 @@ func prepare_native(p: Perception) -> int:
 func apply_native(out: PackedFloat64Array, base: int = 0) -> PilotCommand:
 	if base < 0 or out.size() < base + NATIVE_OUT_LEN:
 		return null
+	if _pending != null:
+		if _pending.ready:
+			settle_native()  # an older rows think is read first, as it would have been
+		else:
+			set_pending(null, 0)  # a rows think not flushed yet (a hand-driven test): this one replaces it
+	var cmd := PilotCommand.new()
+	cmd.flight = native_flight(out, base)
+	cmd.combat.fire = out[base + NATIVE_FIRE] != 0.0
+	_apply_state(out, base)
+	return cmd
+
+
+## The flight command of a native think's output at `base` (`NATIVE_OUT_LEN` numbers).
+static func native_flight(out: PackedFloat64Array, base: int) -> FlightCommand:
+	var flight := FlightCommand.new()
+	flight.main_left = out[base + NATIVE_MAIN_LEFT]
+	flight.main_right = out[base + NATIVE_MAIN_LEFT + 1]
+	flight.retro_left = out[base + NATIVE_MAIN_LEFT + 2]
+	flight.retro_right = out[base + NATIVE_MAIN_LEFT + 3]
+	flight.strafe = Vector2(out[base + NATIVE_STRAFE], out[base + NATIVE_STRAFE + 1])
+	flight.rot = Vector3(out[base + NATIVE_ROT], out[base + NATIVE_ROT + 1], out[base + NATIVE_ROT + 2])
+	flight.brake = out[base + NATIVE_BRAKE] != 0.0
+	return flight
+
+
+# This pilot's state from a native think's output at `base`, mirrored where the game reads it.
+func _apply_state(out: PackedFloat64Array, base: int) -> void:
 	var ram := _behaviour_of(&"ram") as BehaviourRam
 	_out = out
 	_out_base = base
 	native_last = true
-	var cmd := PilotCommand.new()
-	cmd.flight.main_left = out[base + NATIVE_MAIN_LEFT]
-	cmd.flight.main_right = out[base + NATIVE_MAIN_LEFT + 1]
-	cmd.flight.retro_left = out[base + NATIVE_MAIN_LEFT + 2]
-	cmd.flight.retro_right = out[base + NATIVE_MAIN_LEFT + 3]
-	cmd.flight.strafe = Vector2(out[base + NATIVE_STRAFE], out[base + NATIVE_STRAFE + 1])
-	cmd.flight.rot = Vector3(out[base + NATIVE_ROT], out[base + NATIVE_ROT + 1], out[base + NATIVE_ROT + 2])
-	cmd.flight.brake = out[base + NATIVE_BRAKE] != 0.0
-	cmd.combat.fire = out[base + NATIVE_FIRE] != 0.0
 	wanted_target_id = native_target_id(out, base)
 	context.current_target_id = maxi(wanted_target_id, 0)
 	native_avoiding = out[base + NATIVE_AVOIDING] != 0.0
@@ -529,7 +583,66 @@ func apply_native(out: PackedFloat64Array, base: int = 0) -> PilotCommand:
 	if ram != null:
 		ram.committed = out[base + NATIVE_RAM_COMMITTED] != 0.0  # the slot's commitment, whatever is in control
 		_ram_pushed = ram.committed
-	return cmd
+
+
+## Keeps a rows batch's answer and this pilot's place in it, to be read when something first asks (M4-T33). An answer
+## still unread is retired first: only what a newer think does not overwrite is taken from it.
+func set_pending(answer: BrainAnswer, index: int) -> void:
+	if _pending != null:
+		_retire_pending()
+	_pending = answer
+	_pending_index = index
+	_native_pending = answer != null
+
+
+## Reads the pending rows answer into this pilot, if it has come (a declined think leaves everything as it was).
+func settle_native() -> void:
+	var answer: BrainAnswer = _pending
+	if answer == null:
+		_native_pending = false
+		return
+	if not answer.ready:
+		return  # the batch has not flushed yet: read it later
+	_pending = null
+	_native_pending = false
+	if answer.thought(_pending_index):
+		_apply_state(answer.out, _pending_index * BrainBatch.STRIDE + 1)
+
+
+func _settle_native() -> void:
+	settle_native()
+
+
+# An unread answer a newer think replaces: what the newer one leaves as it was still lands (a rammer's and a route's
+# state, eagerly mirrored, and the attack's target in the context); the rest it overwrites.
+func _retire_pending() -> void:
+	var answer: BrainAnswer = _pending
+	_pending = null
+	_native_pending = false
+	if not answer.thought(_pending_index):
+		return
+	var base: int = _pending_index * BrainBatch.STRIDE + 1
+	var kind: int = int(answer.out[base + NATIVE_CURRENT])
+	if kind == 0 or kind == 7:
+		_apply_state(answer.out, base)
+	elif kind == 3:
+		var target: int = native_target_id(answer.out, base)
+		if target > 0:
+			context.attack_target_id = target
+
+
+## Readies this pilot's slot for a rows think by `driver` on `host` (M4-T33): the context pushed when it changed; the
+## full `prepare_native` (with a perception) only when the slot or the bound ship is new. Returns the slot, or -1.
+func prepare_rows(host: Object, driver: AiPilotDriver, scan: ContactScan) -> int:
+	if host != _native or _slot < 0 or _bound_body != driver.own_body_id() or not native_capable():
+		return prepare_native(driver.lite_perception(scan, host))
+	_sync_context(host)
+	var at: int = _kind_index[0] if not _kind_index.is_empty() else -1
+	var ram := behaviours[at] as BehaviourRam if at >= 0 else null
+	if ram != null and ram.committed and not _ram_pushed:
+		host.ram_commit(_slot, ram.target_id_value)
+		_ram_pushed = true
+	return _slot
 
 
 # Writes the behaviour in control's native state into its GDScript object, so what the game reads of it is current.

@@ -206,6 +206,8 @@ pub struct ScsSimCore {
     column_read_failures: i64,
     // The worker threads the kernels' per-ship passes run on (M4-T18).
     threads: Threads,
+    // The native pilots' last commands by body, written by the brains' batch and flown by the flight step (M4-T33).
+    pub row_commands: HashMap<i64, crate::row_commands::RowCommand>,
 }
 
 #[godot_api]

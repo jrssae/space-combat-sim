@@ -111,6 +111,9 @@ const ENTRIES: Dictionary = {
 	# M4-T18
 	&"perf_threads": {"type": TYPE_INT, "default": 0, "min": 0, "max": 64,
 		"doc": "Worker threads for the native core's per-ship passes, the brains and the flight step (M4-T18): 0 = as many threads as the machine has performance cores, 1 = the main thread alone; outputs are the same bits whatever the count; live"},
+	# M4-T33
+	&"perf_native_commands": {"type": TYPE_BOOL, "default": true,
+		"doc": "The native pilots' flight and combat commands go into the core's rows and the flight step flies them the same tick (M4-T33) when the native brains are on; the drivers then touch only ships whose trigger, selection or command source changed; off = each driver hands its ship the command as before, for pairing the two in one process; live"},
 	# M4-T30a
 	&"ambient_level": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 2.0,
 		"doc": "The environment's ambient light, white at this energy: what the textured meshes and every other lit surface get on every side (M4-T30a, live)"},

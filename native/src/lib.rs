@@ -12,6 +12,7 @@ mod kernels;
 mod native_probe;
 mod pilot_kernels;
 mod ram_phase;
+mod row_commands;
 mod rows;
 mod sim_core;
 mod threads;

@@ -14,12 +14,27 @@ extends RefCounted
 ## three fields back (`AggroBrain`). `desired_all_axes` says how the thrust was allocated (`PilotSteering.seek`'s
 ## `all_axes`, for a ship whose nose is held elsewhere: formation keeping, M3-T07), so the driver's avoidance re-seek
 ## allocates its filtered wish the same way.
+##
+## A brain whose think landed elsewhere and is read later (`AiPilot` on the core's rows, M4-T33) sets `_native_pending`;
+## reading any of the fields below first brings the brain up to date (`_settle_native`).
 
 ## World frame, m/s: the velocity this tick's thrust steers toward. Valid while `has_desired_velocity`.
-var desired_velocity: Vector3 = Vector3.ZERO
-var has_desired_velocity: bool = false
+var desired_velocity: Vector3 = Vector3.ZERO:
+	get:
+		if _native_pending:
+			_settle_native()
+		return desired_velocity
+var has_desired_velocity: bool = false:
+	get:
+		if _native_pending:
+			_settle_native()
+		return has_desired_velocity
 ## The wish was sought with `all_axes` (valid while `has_desired_velocity`).
-var desired_all_axes: bool = false
+var desired_all_axes: bool = false:
+	get:
+		if _native_pending:
+			_settle_native()
+		return desired_all_axes
 ## `wanted_target_id`: the driver keeps the nearest hostile selected (M2's rule; every M2 brain leaves it at this).
 const TARGET_NEAREST_HOSTILE: int = 0
 ## `wanted_target_id`: nothing selected (the brain is not attacking anything).
@@ -28,12 +43,27 @@ const TARGET_NONE: int = -1
 ## What the brain wants its ship's targeting computer to select: a `Targetable` id (`Contact.id`), or one of the two
 ## `TARGET_*` values. The selection is what other ships read as this ship's target (`Contact.target_id`). `AiPilot` sets
 ## its attack's target, or `TARGET_NONE` while it does something else (M3-T06).
-var wanted_target_id: int = TARGET_NEAREST_HOSTILE
+var wanted_target_id: int = TARGET_NEAREST_HOSTILE:
+	get:
+		if _native_pending:
+			_settle_native()
+		return wanted_target_id
 ## A `Contact.id` the driver's avoidance filter leaves out this tick (a committed rammer's target, M3-T13), 0 for none.
-var avoid_exempt_id: int = 0
+var avoid_exempt_id: int = 0:
+	get:
+		if _native_pending:
+			_settle_native()
+		return avoid_exempt_id
 ## Hides with its running lights off until it attacks (M3-T27, Q27; `BrainFactory` sets it). Once it attacks it has stopped hiding,
 ## for the rest of this life.
 var flies_dark: bool = false
+## A think that landed elsewhere is still to be read into this brain (M4-T33; see the fields above).
+var _native_pending: bool = false
+
+
+## Brings the fields up to date with a think that landed elsewhere (`AiPilot` overrides it; nothing to do here).
+func _settle_native() -> void:
+	_native_pending = false
 
 
 ## One tick. `dt` is the physics step. Returns a command the caller owns (a fresh one each call).
