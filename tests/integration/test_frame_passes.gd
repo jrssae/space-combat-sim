@@ -231,3 +231,43 @@ func test_a_hidden_lean_ship_leaves_the_plumes_pass_and_comes_back_when_shown() 
 	assert_true(_passes().has_plumes(visuals))
 	pool.release(ships[0])
 	assert_false(_passes().has_plumes(visuals), "parked")
+
+
+# --- the muzzle flashes ------------------------------------------------------------------------------------------------------
+
+
+func test_a_flash_animates_in_the_pass_exactly_as_its_own_advance_did_and_leaves_when_over() -> void:
+	var holder := Node3D.new()
+	world.add_child(holder)
+	var in_pass: MuzzleFlash = MuzzleFlash.create()
+	var by_hand: MuzzleFlash = MuzzleFlash.create()
+	holder.add_child(in_pass)
+	holder.add_child(by_hand)
+	assert_false(_passes().has_flash(in_pass), "an idle flash is not in the pass")
+	in_pass.trigger()
+	by_hand.trigger()
+	_passes().remove_flash(by_hand)  # this one is stepped by hand, the reference
+	assert_true(_passes().has_flash(in_pass), "a triggered flash joins the pass")
+	var off: int = 0
+	for frame: int in 8:
+		_passes().advance_flashes(DT)
+		by_hand.advance(DT)
+		if in_pass.visible != by_hand.visible or in_pass.scale != by_hand.scale or in_pass.transparency != by_hand.transparency \
+				or in_pass.light_emitter().energy != by_hand.light_emitter().energy:
+			off += 1
+	assert_eq(off, 0, "the same size, fade and light every frame")
+	assert_true(in_pass.is_idle())
+	assert_false(_passes().has_flash(in_pass), "over: it left the pass")
+
+
+func test_no_lean_ship_runs_a_process_callback_of_its_own() -> void:
+	var ships: Array[Combatant] = _ships(2)
+	ships += _ships(1, ShipPool.ALLY_TYPE)
+	await get_tree().process_frame
+	for c: Combatant in ships:
+		assert_true(c.ship.lean)
+		var processing: PackedStringArray = PackedStringArray()
+		for node: Node in [c.ship] + c.ship.find_children("*", "", true, false):
+			if node.is_processing():
+				processing.append(String(c.ship.get_path_to(node)))
+		assert_eq(processing, PackedStringArray(), "%s: no node of the ship processes each frame (M4-T36)" % c.ship.spec.asset_id)

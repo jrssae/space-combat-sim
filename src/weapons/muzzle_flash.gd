@@ -8,7 +8,8 @@ extends MeshInstance3D
 ## shot allocates nothing. It enters the `LightRig`'s candidates for `EmitterCurves.FLASH_S` (60 ms) and leaves them when
 ## the flash ends, the ship is parked or the node leaves the tree.
 ##
-## A visual, so it animates in `_process` from the frame `delta` (and `advance` for tests); how it looks is (H).
+## A visual, so it animates from the frame `delta`: only while it shows, in the `FramePasses` flashes pass (M4-T36; `advance` for
+## tests), so the 2 to 4 idle flashes on every ship cost the frame nothing. How it looks is (H).
 
 const MATERIAL: Material = preload("res://assets/materials/muzzle_flash.tres")
 const DURATION_S: float = 0.05
@@ -47,15 +48,14 @@ func _notification(what: int) -> void:
 		_end_light()
 
 
-func _process(delta: float) -> void:
-	advance(delta)
-
-
 ## Starts (or restarts) the 50 ms flash.
 func trigger() -> void:
 	_age_s = 0.0
 	_apply()
 	_start_light()
+	var passes: FramePasses = FramePasses.of(self)
+	if passes != null:
+		passes.add_flash(self)
 
 
 ## Ends the flash at once: a ship back in play shows nothing of its last shot.
@@ -73,6 +73,11 @@ func light_emitter() -> LightEmitter:
 ## True while the flash is showing.
 func is_active() -> bool:
 	return _age_s < DURATION_S
+
+
+## True when neither the flash nor its light is left to animate: the flashes pass lets it go.
+func is_idle() -> bool:
+	return _age_s == INF
 
 
 ## Ages the flash by `delta` seconds; the quad hides after `DURATION_S` and the light after `EmitterCurves.FLASH_S`.
