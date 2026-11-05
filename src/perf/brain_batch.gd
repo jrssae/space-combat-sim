@@ -227,7 +227,9 @@ func flush() -> void:
 	if _drivers.is_empty():
 		if _hosted.is_empty() or not driver_step_mode():
 			return
-		_begin_hosted_tick()
+		if not _begin_hosted_tick():
+			unhost_all()  # no core or host to step them (the native path switched off): the drivers step themselves
+			return
 	if _rows:
 		_flush_rows()
 		return
@@ -301,14 +303,16 @@ func _flush_rows() -> void:
 
 
 # A tick no driver queued a think in: the hosted drivers still step, so the batch opens the tick itself from the core.
-func _begin_hosted_tick() -> void:
+# False when there is no core or host to step them.
+func _begin_hosted_tick() -> bool:
 	var sim: SimCore = SimCore.for_tree(get_tree())
 	var host: Object = NativeBrains.host(get_tree())
 	if sim == null or host == null:
-		return
+		return false
 	var origin: UniversePos = sim.world.origin if sim.world != null else UniversePos.new()
 	_begin(Engine.get_physics_frames(), host, SimClock.now(), bool(Settings.get_value(&"friendly_fire")), origin,
 			int(sim.core.rows_version()), true)
+	return true
 
 
 # What the hosted drivers' step reads this tick (M4-T35): the frame, the contexts that changed, the relation matrix.
@@ -365,4 +369,8 @@ static func _on_setting_changed(key: StringName, _value: Variant) -> void:
 	elif key == &"perf_native_driver_step":
 		_driver_step_setting = -1
 		if _current != null and is_instance_valid(_current) and not driver_step_mode():
+			_current.unhost_all()
+	elif key == &"perf_native" or key == &"perf_native_core" or key == &"perf_native_brains":
+		# The host or the core may be gone: the drivers step themselves and host again when they can.
+		if _current != null and is_instance_valid(_current):
 			_current.unhost_all()

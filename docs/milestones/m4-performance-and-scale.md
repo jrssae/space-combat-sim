@@ -2017,7 +2017,10 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   same-tick kill goes to the bolt fired first, not to the owned row); a nav buoy's drift touches its row
   (`SimCore.touch_moved`), read again before the native selection check and at the resolvers' sync, so every late read of a
   script-moved target is this tick's (fix round 2: the buoy keeps the default priority, after the World's rebase at 0, which
-  `test_rebase_in_play` pins; that test now snapshots the owned bolt rows too). **For M5's rebase:** lean AI
+  `test_rebase_in_play` pins; that test now snapshots the owned bolt rows too). Fix round 3: `perf_native`, `perf_native_core`
+  or `perf_native_brains` switched off mid-fight unhosts every driver (they step themselves again), and a hosted tick the batch
+  cannot begin unhosts instead of erroring; the bench's `scan` stage reads 0 while every driver is hosted (its perception runs
+  inside `think`), which `test_bench` accepts. **For M5's rebase:** lean AI
   ships no longer have muzzle `Marker3D` nodes; M5 code that reads them (`m5:src/ai/ai_pilot_driver.gd`'s mean muzzle, any
   `get_muzzles()` on an AI ship) must use the hardpoints' muzzle transforms (`Ship.get_muzzle_transforms`,
   `PulseCannon.setup_transforms`); and M5's own `src/audio/audio_director.gd` (m5 branch, around line 307) connects

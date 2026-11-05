@@ -277,7 +277,7 @@ func _register_console() -> void:
 	var docs: Dictionary = {
 		&"tick": "The whole tick: the body sync, every script and Jolt's step",
 		&"ai": "The AI drivers (-10)",
-		&"scan": "The part of ai spent building and querying the contact scans",
+		&"scan": "The part of ai spent building and querying the contact scans (0 when every driver is hosted natively, M4-T35: their perception runs inside think)",
 		&"think": "The AI drivers' own timer (ai.think_us for this tick)",
 		&"flight": "Priority 0: the console, Main, the rebase's shift, ships' flight model, bolts and props",
 		&"rebase": "The rebase in this tick (shift, handlers and reset), 0 without one",
