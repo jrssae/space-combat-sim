@@ -644,6 +644,10 @@ func settle_native() -> void:
 				var out: PackedFloat64Array = _native.slot_output(_slot)
 				if out.size() >= NATIVE_OUT_LEN:
 					_apply_state(out, 0)
+					# The thinks between reads that attacked: their target lands as `_retire_pending` landed it.
+					var attacked: int = int(_native.slot_attack_target(_slot))
+					if attacked > 0 and (current == null or current.id != &"attack"):
+						context.attack_target_id = attacked
 			return  # `_native_pending` stays: the next read asks again
 		_native_pending = false
 		return

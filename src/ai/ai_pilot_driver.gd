@@ -682,9 +682,10 @@ func _ensure_muzzle(ship: Ship) -> void:
 		return
 	_muzzle_known = true
 	var mean := Vector3.ZERO
-	var muzzles: Array[Node3D] = ship.get_muzzles()
-	for muzzle: Node3D in muzzles:
-		mean += ship.to_local(muzzle.global_position)
+	var muzzles: Array[Transform3D] = ship.get_muzzle_transforms()
+	var xf: Transform3D = ship.global_transform
+	for muzzle: Transform3D in muzzles:
+		mean += ship.to_local(xf * muzzle.origin)  # the marker's global position round-tripped, as before (M4-T35: no marker)
 	_muzzle_local = mean / float(muzzles.size()) if not muzzles.is_empty() else Vector3.ZERO
 
 

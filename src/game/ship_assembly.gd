@@ -99,6 +99,15 @@ static func _wire(combatant: Combatant, projectiles_parent: Node3D, console_owne
 			combatant.is_player, console_owner, ship.spec.damage_layout)
 	combatant.damageable.ram_safe_dv_mps = ship.spec.ram_safe_dv_mps
 	combatant.damageable.ram_lethal_dv_mps = ship.spec.ram_lethal_dv_mps
+	if ship.lean:
+		# No marker per muzzle (M4-T35): the cannon fires from the hardpoints' transforms, the World's pool flashes them.
+		var transforms: Array[Transform3D] = ship.get_muzzle_transforms()
+		if transforms.is_empty():
+			push_warning("ShipAssembly: %s has no muzzles; its cannon cannot fire" % ship.spec.asset_id)
+			return
+		combatant.cannon.setup_transforms(ship, transforms, projectiles_parent, ship.spec.weapon, combatant.faction,
+				MuzzleFlashPool.attach(ship.world))
+		return
 	var muzzles: Array[Node3D] = ship.get_muzzles()
 	if muzzles.is_empty():
 		push_warning("ShipAssembly: %s has no muzzles; its cannon cannot fire" % ship.spec.asset_id)

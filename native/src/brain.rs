@@ -38,7 +38,8 @@ pub const TACTICS_LEN: usize = 14;
 /// A think's output: the four levels, strafe, rot, brake, fire, the wanted target in two halves, the dodge flags, the wish
 /// (has, all axes, velocity), the behaviour in control, dwell, switches, the contacts seen, the raw and weighted scores by
 /// kind, and the mirrored state.
-/// Where a think's output holds the behaviour in control and the contacts it saw.
+/// Where a think's output holds the wanted target (two halves), the behaviour in control and the contacts it saw.
+pub const OUT_TARGET: usize = 11;
 pub const OUT_CURRENT: usize = 20;
 pub const OUT_CONTACTS: usize = 23;
 pub const OUT_RAW: usize = 24;
@@ -111,6 +112,8 @@ struct Hosted {
     thinks: i64,
     dt: f64,
     out: Vec<f64>,
+    // The target of the last think that attacked (the context's `attack_target_id`, which every think's mirror kept).
+    attack_target: i64,
 }
 
 // What the drivers' step reads once a tick (M4-T35): the tick, the player and the think rate's settings.
@@ -871,6 +874,7 @@ impl ScsBrains {
             thinks: 0,
             dt: 0.0,
             out: Vec::new(),
+            attack_target: 0,
         });
     }
 
@@ -979,6 +983,14 @@ impl ScsBrains {
     #[func]
     fn driver_dt(&self, slot: i64) -> f64 {
         self.hosted_index(slot).map_or(0.0, |at| self.hosted[at].dt)
+    }
+
+    /// The target of the hosted driver's last think that attacked (0 for none yet): what the pilot's context keeps as
+    /// `attack_target_id` across thinks its mirror never read.
+    #[func]
+    fn slot_attack_target(&self, slot: i64) -> i64 {
+        self.hosted_index(slot)
+            .map_or(0, |at| self.hosted[at].attack_target)
     }
 
     /// A hosted driver's think rate state, `[steps, since_think_s, woken, near]` (the console and tests).
@@ -1734,6 +1746,13 @@ impl ScsBrains {
                 h.thinks += 1;
                 h.out.clear();
                 h.out.extend_from_slice(&item.out);
+                // Attack (3) in control: its target, as `AiPilot._apply_state` and `_retire_pending` keep it in the context.
+                if item.out[OUT_CURRENT] as i64 == 3 {
+                    let hi = item.out[OUT_TARGET];
+                    if hi >= 0.0 {
+                        h.attack_target = ((hi as i64) << 32) | (item.out[OUT_TARGET + 1] as i64);
+                    }
+                }
             }
         }
     }

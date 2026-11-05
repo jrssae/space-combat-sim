@@ -725,6 +725,8 @@ func _build_collision() -> void:
 
 
 func _build_muzzles() -> void:
+	if lean:
+		return  # the muzzles are data (M4-T35): the cannon fires from the transforms, the pool flashes them
 	for entry: Dictionary in _hardpoints.muzzles:
 		var marker := Marker3D.new()
 		marker.name = ("Muzzle_" + str(entry["name"])).to_pascal_case().validate_node_name()
@@ -930,6 +932,12 @@ func _lead_offset() -> Vector3:
 		for muzzle: Node3D in _muzzles:
 			muzzle_centre += muzzle.global_position
 		muzzle_centre /= float(_muzzles.size())
+	elif not _hardpoints.muzzles.is_empty():
+		muzzle_centre = Vector3.ZERO
+		var xf: Transform3D = global_transform
+		for entry: Dictionary in _hardpoints.muzzles:
+			muzzle_centre += xf * (entry["transform"] as Transform3D).origin  # a marker's global position, without the marker
+		muzzle_centre /= float(_hardpoints.muzzles.size())
 	var lead: Dictionary = InterceptMath.solve(muzzle_centre, linear_velocity, readout.position, readout.velocity,
 			weapon.muzzle_speed_mps, weapon.lifetime_s)
 	return (lead["lead_point"] as Vector3) - global_position

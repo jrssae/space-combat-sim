@@ -62,6 +62,9 @@ static var _live: Array[PulseCannon] = []
 var _body: RigidBody3D = null
 var _muzzles: Array[Node3D] = []
 var _muzzle_locals := PackedVector3Array()
+# The muzzles' transforms in the body's frame (M4-T35, a lean ship: no marker nodes), and the pool its flashes go to.
+var _muzzle_transforms: Array[Transform3D] = []
+var _pool: MuzzleFlashPool = null
 var _flashes: Array[MuzzleFlash] = []
 var _projectiles_parent: Node3D = null
 var _command: CombatCommand = null
@@ -90,9 +93,12 @@ func _exit_tree() -> void:
 
 
 func _notification(what: int) -> void:
-	# A parked ship's cannon neither fires nor recharges, on the kernel as on this node.
+	# A parked ship's cannon neither fires nor recharges, on the kernel as on this node; its pooled flashes end at once, as a
+	# flash node's light did.
 	if _slot >= 0 and (what == NOTIFICATION_DISABLED or what == NOTIFICATION_ENABLED):
 		_kernel.set_live(_slot, what == NOTIFICATION_ENABLED)
+	if what == NOTIFICATION_DISABLED and _pool != null and is_instance_valid(_pool) and _body != null:
+		_pool.clear_for(_body)
 
 
 func _register_console() -> void:
@@ -136,6 +142,8 @@ func setup(body: RigidBody3D, muzzles: Array[Node3D], projectiles_parent: Node3D
 	_body = body
 	_muzzles = muzzles.duplicate()
 	_muzzle_locals = muzzle_locals_of(body, _muzzles)
+	_muzzle_transforms.clear()
+	_pool = null
 	_projectiles_parent = projectiles_parent
 	_console_owner = register_console
 	for muzzle: Node3D in _muzzles:
@@ -145,6 +153,38 @@ func setup(body: RigidBody3D, muzzles: Array[Node3D], projectiles_parent: Node3D
 	DebugConsole.registry.unregister_owner(self)
 	if register_console:
 		_register_console()
+	_bind()
+
+
+## `setup` for a lean ship (M4-T35, finding 12): the muzzles as transforms in the body's frame (the hardpoints' data, no
+## marker node each) and the World's `MuzzleFlashPool` for the flashes (null: no flashes). Shots leave from
+## `body.global_transform * muzzle.origin`, as the markers' positions were.
+func setup_transforms(body: RigidBody3D, muzzle_transforms: Array[Transform3D], projectiles_parent: Node3D,
+		weapon_spec: WeaponSpec = null, p_faction: StringName = Factions.NEUTRAL, pool: MuzzleFlashPool = null) -> void:
+	assert(body != null and projectiles_parent != null, "PulseCannon.setup_transforms: body and projectiles_parent are required")
+	assert(not muzzle_transforms.is_empty(), "PulseCannon.setup_transforms: at least one muzzle is required")
+	_unbind()
+	faction = p_faction
+	weapon = weapon_spec if weapon_spec != null else WeaponSpec.new()
+	muzzle_speed_mps = weapon.muzzle_speed_mps
+	gate.configure(muzzle_transforms.size(), weapon.shot_interval_s)
+	gate.capacitor = weapon.make_capacitor()
+	for flash: MuzzleFlash in _flashes:
+		if is_instance_valid(flash):
+			if flash.get_parent() != null:
+				flash.get_parent().remove_child(flash)
+			flash.free()
+	_flashes.clear()
+	_body = body
+	_muzzles.clear()
+	_muzzle_transforms = muzzle_transforms.duplicate()
+	_muzzle_locals.clear()
+	for xf: Transform3D in _muzzle_transforms:
+		_muzzle_locals.append(xf.origin)
+	_pool = pool
+	_projectiles_parent = projectiles_parent
+	_console_owner = false
+	DebugConsole.registry.unregister_owner(self)
 	_bind()
 
 
@@ -174,6 +214,29 @@ func reset_flashes() -> void:
 	for flash: MuzzleFlash in _flashes:
 		if is_instance_valid(flash):
 			flash.reset()
+	if _pool != null and is_instance_valid(_pool) and _body != null:
+		_pool.clear_for(_body)
+
+
+## Whether this cannon's flashes come from the World's pool (a lean ship) rather than a node per muzzle.
+func flashes_pooled() -> bool:
+	return _pool != null
+
+
+# Flashes muzzle `index`: the pool's flash on a lean ship, else the node under the marker.
+func _flash(index: int) -> void:
+	if _pool != null:
+		if is_instance_valid(_pool) and index < _muzzle_transforms.size():
+			_pool.trigger(_body, _muzzle_transforms[index])
+	elif index < _flashes.size():
+		_flashes[index].trigger()
+
+
+# Muzzle `index`'s World position now: the marker's, or the transform's origin composed with the body's transform.
+func _muzzle_position(index: int) -> Vector3:
+	if index < _muzzles.size():
+		return _muzzles[index].global_position
+	return _body.global_transform * _muzzle_transforms[index].origin
 
 
 ## Forgets the cooldown and the muzzle turn and refills the capacitor (a respawn), on this node's gate and the kernel's.
@@ -247,7 +310,7 @@ func step(now_s: float) -> void:
 	for index: int in muzzle_indices:
 		var direction: Vector3 = forward
 		if weapon.convergence_range_m > 0.0:
-			direction = (converge_at - _muzzles[index].global_position).normalized()
+			direction = (converge_at - _muzzle_position(index)).normalized()
 		_spawn(index, _body.linear_velocity + direction * muzzle_speed_mps, now_s)
 
 
@@ -269,8 +332,7 @@ func step_without_row(now_s: float) -> Array:
 
 ## The kernel fired muzzle `muzzle_index` of this cannon: the flash and the signal.
 func on_kernel_fired(muzzle_index: int, at: Vector3) -> void:
-	if muzzle_index < _flashes.size():
-		_flashes[muzzle_index].trigger()
+	_flash(muzzle_index)
 	shot_fired.emit(muzzle_index, at)
 
 
@@ -337,14 +399,13 @@ func _is_wired() -> bool:
 
 
 func _spawn(muzzle_index: int, launch_velocity: Vector3, now_s: float) -> void:
-	var muzzle: Node3D = _muzzles[muzzle_index]
 	var projectile: Projectile = PROJECTILE_SCENE.instantiate() as Projectile
 	_projectiles_parent.add_child(projectile)
 	projectile.configure(weapon)
 	projectile.shooter_id = _body.get_instance_id()
 	projectile.faction = faction
-	var at: Vector3 = muzzle.global_position
+	var at: Vector3 = _muzzle_position(muzzle_index)
 	projectile.launch(at, launch_velocity, now_s)
-	_flashes[muzzle_index].trigger()
+	_flash(muzzle_index)
 	projectile_fired.emit(muzzle_index, projectile)
 	shot_fired.emit(muzzle_index, at)
