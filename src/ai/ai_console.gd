@@ -29,6 +29,8 @@ static func provider() -> ConsoleVars:
 		&"held": {"get": AiPilotDriver.held, "doc": "AI ships that held their last command in the last tick"},
 		&"contacts_max": {"get": AiPilotDriver.contacts_max,
 				"doc": "The most contacts one AI ship scored and avoided in the last tick (ai_nearest_k plus what it keeps)"},
+		&"thinks_native": {"get": AiPilotDriver.thinks_native,
+				"doc": "AI ships whose think ran in the native brains over the core's rows in the last tick (M4-T17)"},
 	})
 
 

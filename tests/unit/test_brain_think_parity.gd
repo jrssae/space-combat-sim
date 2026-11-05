@@ -251,7 +251,9 @@ static func _perceive(t: Twin, rows: Rows, scan: ContactScan, broadcasts: Contac
 			ids.append(t.last_attacker_id)
 		return [ids, t.pilot.keep_names()]
 	p.contacts = scan.nearest_for(own_id, p.position, p.faction, NEAREST_K, keeper)
+	p.contact_rows = scan.picked_rows
 	p.statics = scan.statics_for(own_id, p.position, p.faction, STATIC_K)
+	p.static_rows = scan.picked_rows
 	p.incoming_fire = scan.incoming_fire(own_id, p.position, p.velocity, p.faction)
 	p.broadcasts = broadcasts.broadcasts_for(own_id, p.position, p.faction)
 	p.last_hit_s = t.last_hit_s
@@ -300,9 +302,8 @@ static func _digest(flight: FlightCommand, fire: bool, wanted: int, avoiding: bo
 
 ## The native think as the same digest (`AiPilot.NATIVE_*` give the output's layout).
 static func _think_native(brains: Object, t: Twin, rows: Rows, relations: PackedByteArray) -> PackedStringArray:
-	var own_id: int = rows.ids[t.row]
-	var out: PackedFloat64Array = brains.think(t.slot, relations, own_id, t.now_s, DT, rows.hulls[t.row], own_id, t.selected_id,
-			t.last_hit_s, t.last_bolt_hit_s, t.last_attacker_id, t.friendly_fire, t.origin.x, t.origin.y, t.origin.z, NEAREST_K, STATIC_K)
+	var out: PackedFloat64Array = brains.think(t.slot, relations, t.now_s, DT, rows.hulls[t.row], t.selected_id,
+			t.last_hit_s, t.last_bolt_hit_s, t.last_attacker_id, t.friendly_fire, t.origin.x, t.origin.y, t.origin.z)
 	assert(not out.is_empty(), "the native think answered")
 	var flight := FlightCommand.new()
 	flight.main_left = out[AiPilot.NATIVE_MAIN_LEFT]
@@ -326,12 +327,14 @@ static func _think_native(brains: Object, t: Twin, rows: Rows, relations: Packed
 
 
 ## Makes the twin's native slot as the facade does, from its GDScript pilot.
-static func _make_slot(brains: Object, t: Twin) -> void:
+static func _make_slot(brains: Object, t: Twin, rows: Rows) -> void:
 	var pilot: AiPilot = t.pilot
 	t.slot = brains.create(pilot.seed_value, AiPilot.native_profile(pilot.base_profile), AiPilot.native_tactics(pilot.base_profile.tactics),
 			AiPilot.native_kinds(pilot.behaviours), pilot.temperament.skill, pilot.temperament.aggression)
 	assert(t.slot >= 0, "a slot was made")
-	brains.bind_ship(t.slot, AiPilot.native_capability(t.cap), t.muzzle_local, 650.0, 3.0, t.radius, t.tie_hash)
+	brains.set_settings(NEAREST_K, STATIC_K)
+	brains.bind_ship(t.slot, AiPilot.native_capability(t.cap), t.muzzle_local, 650.0, 3.0, t.radius, t.tie_hash, rows.ids[t.row],
+			rows.ids[t.row])
 
 
 ## Pushes the GDScript context's wing, objective, guard and route to the slot, as the facade does.
@@ -367,17 +370,34 @@ func _run(brains: Object, rows: Rows, twins: Array[Twin], rng: RandomNumberGener
 			var p: Perception = _perceive(t, rows, scan, broadcasts)
 			var a: PackedStringArray = _think_gdscript(t, p)
 			var b: PackedStringArray = _think_native(brains, t, rows, _relations(rows.factions[t.row]))
-			for k: int in a.size():
-				if a[k] != b[k]:
-					differences.append("%s: twin %d tick %d: %s | %s" % [label, i, tick, b[k], a[k]])
-					break
-			if differences.size() > 6:
+			if a != b:
+				var lists: Array = brains.last_lists()
+				var wish: Vector3 = t.pilot.desired_velocity if t.pilot.has_desired_velocity else p.velocity
+				var filtered: Dictionary = AvoidanceMath.filter_seen(p, t.radius, wish, t.pilot.avoid_exempt_id, t.tie_hash)
+				var kernels: Object = NativeLib.instantiate(ContactScan.PILOT_CLASS)
+				kernels.load(rows.ids, rows.positions, rows.velocities, rows.radii, rows.kinds, rows.factions, rows.is_ship)
+				var avoided: Vector4 = kernels.avoid(p.contact_rows, p.static_rows, t.pilot.avoid_exempt_id, p.position, p.velocity,
+						t.radius, wish, t.cap.a_retro, t.cap.rate_max_rad, t.cap.a_rcs, hash(t.tie_hash))
+				differences.append("%s: twin %d tick %d (%d contacts, %d statics, incoming %d): native %s | gdscript %s | rows native %s %s gdscript %s %s | wish %s gd filtered %s %s kernel %s" % [
+						label, i, tick, p.contacts.size(), p.statics.size(), p.incoming_fire, _differing(b, a), _differing(a, b),
+						lists[0], lists[1], p.contact_rows, p.static_rows, _bytes(wish), _bytes(filtered["v_des"]), filtered["urgent"],
+						_bytes(Vector3(avoided.x, avoided.y, avoided.z))])
+			if differences.size() > 2:
 				return differences
 		rows.walk(rng, DT)
 		scan = rows.scan()
 		broadcasts = rows.broadcast_scan()
 		rows.load_into(brains)
 	return differences
+
+
+## The fields of `a` that differ from `b`, for the message.
+static func _differing(a: PackedStringArray, b: PackedStringArray) -> String:
+	var out := PackedStringArray()
+	for k: int in a.size():
+		if a[k] != b[k]:
+			out.append(a[k])
+	return " ; ".join(out)
 
 
 func _twin(rows: Rows, row: int, profile: StringName, seed_value: int, rng: RandomNumberGenerator, skill: float = -1.0,
@@ -407,7 +427,7 @@ func test_a_plain_crowd_thinks_the_same_natively_tick_by_tick() -> void:
 	for i: int in 6:
 		var t: Twin = _twin(rows, i, [&"ally_starfury", &"raider"][i % 2], 100 + i, rng)
 		t.friendly_fire = i % 3 == 0
-		_make_slot(brains, t)
+		_make_slot(brains, t, rows)
 		t.pilot.reset()
 		brains.reset(t.slot)
 		twins.append(t)
@@ -426,7 +446,7 @@ func test_wings_under_each_order_and_a_leaderless_wing_think_the_same() -> void:
 	var formation := Formation.new()
 	for i: int in 8:
 		var t: Twin = _twin(rows, i, &"ally_starfury", 200 + i, rng)
-		_make_slot(brains, t)
+		_make_slot(brains, t, rows)
 		var ctx: AiContext = t.pilot.context
 		var leader_row: int = (i + 4) % rows.ids.size()
 		ctx.order = [AiContext.Order.COVER_ME, AiContext.Order.FORM_ON_ME, AiContext.Order.ATTACK_MY_TARGET,
@@ -463,7 +483,7 @@ func test_objectives_guards_temperaments_and_live_retunes_think_the_same() -> vo
 		var skill: float = [0.2, 0.45, 0.7, 0.95][i % 4]
 		var aggression: float = [0.0, 0.25, 0.75, 1.0][i % 4]
 		var t: Twin = _twin(rows, i, [&"raider", &"civilian", &"ally_starfury", &"instructor"][i % 4], 300 + i, rng, skill, aggression)
-		_make_slot(brains, t)
+		_make_slot(brains, t, rows)
 		match i % 4:
 			0:
 				t.pilot.context.objective_name = rows.names[(i + 7) % 28].to_lower()
@@ -498,7 +518,7 @@ func test_a_patrol_route_with_demos_flies_the_same() -> void:
 	var twins: Array[Twin] = []
 	for i: int in 3:
 		var t: Twin = _twin(rows, i, &"instructor", 400 + i, rng)
-		_make_slot(brains, t)
+		_make_slot(brains, t, rows)
 		var route := Route.new()
 		route.name = "LESSON"
 		route.cruise_mps = 60.0

@@ -105,6 +105,9 @@ func test_the_seed_hash_is_godots_array_hash_bit_for_bit() -> void:
 		var attack: int = hash([seed_value, "attack"])
 		if brains.hash_seed(attack, "runs") != hash([attack, "runs"]):
 			differences.append("nested hash for %d" % seed_value)
+		# The avoidance tie-break: `hash(seed)` of an int, as `AvoidanceMath.tie_direction` takes it.
+		if brains.hash_int(seed_value) != hash(seed_value):
+			differences.append("hash(%d): %d against %d" % [seed_value, brains.hash_int(seed_value), hash(seed_value)])
 	assert_eq(differences.size(), 0, "every seed hash matches Godot's: %s" % differences.slice(0, 5))
 
 

@@ -105,6 +105,9 @@ const ENTRIES: Dictionary = {
 	# M4-T20
 	&"perf_native_weapons": {"type": TYPE_BOOL, "default": true,
 		"doc": "The stand-ins' turrets, interceptors, beams, missiles and mines step as native kernels over the core's rows (M4-T20) when the core is on; off = the GDScript stand-ins, the reference, for pairing the two in one process"},
+	# M4-T17
+	&"perf_native_brains": {"type": TYPE_BOOL, "default": true,
+		"doc": "Every AiPilot thinks in the native brains over the core's rows (M4-T17) when perf_native and perf_native_core are on and the library is built; off = the GDScript brains, for pairing the two in one process"},
 	# M4-T30a
 	&"ambient_level": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 2.0,
 		"doc": "The environment's ambient light, white at this energy: what the textured meshes and every other lit surface get on every side (M4-T30a, live)"},

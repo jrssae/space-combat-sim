@@ -28,6 +28,11 @@ pub fn hash_seed(seed: i64, label: &str) -> i64 {
     i64::from(fmix32(h))
 }
 
+/// `hash(value)` of an int as GDScript computes it.
+pub fn hash_int(value: i64) -> i64 {
+    i64::from(hash_one_uint64(value as u64))
+}
+
 // `hash_one_uint64`.
 fn hash_one_uint64(p_int: u64) -> u32 {
     let mut v = p_int;
@@ -949,4 +954,9 @@ pub fn deg_to_rad_lerp(x: f64, b: f64, t: f64) -> [f64; 3] {
 /// `clampf(v, 0, 1)`.
 pub fn clamp01(v: f64) -> f64 {
     clampf(v, 0.0, 1.0)
+}
+
+/// `snappedf`, for the shell's console numbers.
+pub fn snapped(value: f64, step: f64) -> f64 {
+    snappedf(value, step)
 }

@@ -85,6 +85,7 @@ func _fight(layout: StringName, seed_value: int, native: bool) -> Dictionary:
 	ContactScan.invalidate()
 	await get_tree().process_frame
 	await get_tree().physics_frame
+	SimClock.reset()  # the same clock for both fights: a hit's reaction edge rounds with the absolute time
 	var space := SubViewport.new()
 	space.own_world_3d = true
 	space.world_3d = World3D.new()

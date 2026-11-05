@@ -555,6 +555,12 @@ func pilot_kernels() -> Object:
 	return _pilot
 
 
+## Whether this is a core scan whose rows are still the ones it was taken from (M4-T17): the core's rows version has not
+## moved since, so a native brain reading the live rows reads what this scan saw.
+func rows_fresh() -> bool:
+	return _sim != null and is_instance_valid(_sim) and _sim.core != null and int(_sim.core.rows_version()) == _rows_version
+
+
 ## How a ship of `faction` regards each faction of the core's table, as `Factions.Relation` values in that table's order
 ## (what the pilot kernels read); empty off the core.
 func relation_row(faction: StringName) -> PackedByteArray:

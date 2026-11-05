@@ -36,6 +36,12 @@ struct Names {
     display_name: StringName,
     hull: StringName,
     destroyed: StringName,
+    hp: StringName,
+    max_hp: StringName,
+    targeting: StringName,
+    system: StringName,
+    selected_id: StringName,
+    broadcast_range_m: StringName,
 }
 
 impl Names {
@@ -51,6 +57,12 @@ impl Names {
             display_name: StringName::from("display_name"),
             hull: StringName::from("hull"),
             destroyed: StringName::from("destroyed"),
+            hp: StringName::from("hp"),
+            max_hp: StringName::from("max_hp"),
+            targeting: StringName::from("targeting"),
+            system: StringName::from("system"),
+            selected_id: StringName::from("_selected_id"),
+            broadcast_range_m: StringName::from("broadcast_range_m"),
         }
     }
 }
@@ -60,9 +72,15 @@ impl Names {
 struct Attrs {
     faction_ix: u32,
     name: GString,
+    name_key: String,
     kind: u8,
     radius: f64,
     destroyed: bool,
+    reach: f64,
+    // The hull's health object and the ship's targeting system, read every tick for the brains' contacts (M4-T17); none
+    // for a body without them.
+    health: Option<Gd<Object>>,
+    targeting: Option<Gd<Object>>,
 }
 
 // One `Targetable` (or, for a body without one, one `Damageable`) of the tree, with the body it marks.
@@ -106,6 +124,8 @@ struct Read {
     velocity: Vector3,
     angular: Vector3,
     flags: u32,
+    hull_fraction: f64,
+    target_id: i64,
 }
 
 // A row with no node (T20's turrets, missiles and mines to come): what `add_row` keeps and `row` gives back.
@@ -381,6 +401,10 @@ impl ScsSimCore {
             rows.rigid.push(false);
             rows.is_static.push(is_static_kind(self.static_kinds[s]));
             rows.is_mine.push(self.static_kinds[s] == KIND_MINE);
+            rows.hull_fraction.push(-1.0);
+            rows.target_ids.push(-1);
+            rows.reach.push(0.0);
+            rows.name_keys.push(String::new());
         }
         self.rows = rows;
         self.touched.clear();
@@ -1013,12 +1037,34 @@ impl ScsSimCore {
         if has_hull && !attrs.destroyed {
             flags |= FLAG_HULL_ACTIVE;
         }
+        // The brains' two live reads of a contact (M4-T17): `Damageable.hull.fraction()` and the ship's selection, as the
+        // scan stamped them. Two property reads for the hull, one for the selection.
+        let names = self.names.get_or_insert_with(Names::new);
+        let hull_fraction = match &attrs.health {
+            Some(health) => {
+                self.sync_reads += 2;
+                let hp = health.get(&names.hp).try_to::<f64>().unwrap_or(0.0);
+                let max_hp = health.get(&names.max_hp).try_to::<f64>().unwrap_or(1.0);
+                clamp01(hp / max_hp)
+            }
+            None => -1.0,
+        };
+        let target_id = match &attrs.targeting {
+            Some(system) => {
+                self.sync_reads += 1;
+                let selected = system.get(&names.selected_id).try_to::<i64>().unwrap_or(0);
+                if selected != 0 { selected } else { -1 }
+            }
+            None => -1,
+        };
         Read {
             position: xf.origin,
             basis: xf.basis,
             velocity,
             angular,
             flags,
+            hull_fraction,
+            target_id,
         }
     }
 
@@ -1044,6 +1090,10 @@ impl ScsSimCore {
         rows.rigid.push(m.rigid.is_some());
         rows.is_static.push(is_static_kind(attrs.kind));
         rows.is_mine.push(attrs.kind == KIND_MINE);
+        rows.hull_fraction.push(read.hull_fraction);
+        rows.target_ids.push(read.target_id);
+        rows.reach.push(attrs.reach);
+        rows.name_keys.push(attrs.name_key.clone());
     }
 
     // Reads member `m` again into its row `r` (the row keeps its place, handle and lateness).
@@ -1061,6 +1111,10 @@ impl ScsSimCore {
         rows.names[r] = attrs.name.clone();
         rows.is_static[r] = is_static_kind(attrs.kind);
         rows.is_mine[r] = attrs.kind == KIND_MINE;
+        rows.hull_fraction[r] = read.hull_fraction;
+        rows.target_ids[r] = read.target_id;
+        rows.reach[r] = attrs.reach;
+        rows.name_keys[r] = attrs.name_key.clone();
     }
 
     // Reads the bodies touched since the first sync again: a row in place, or a new row at the end for a body that turned
@@ -1200,13 +1254,55 @@ impl ScsSimCore {
                 KIND_SHIP,
             ),
         };
+        // The brains' handles (M4-T17): the hull's health object, the ship's targeting system and the marker's broadcast
+        // range, read once here with the other attributes.
+        let health = hull.and_then(|h| {
+            self.sync_reads += 1;
+            h.get(&names.hull).try_to::<Gd<Object>>().ok()
+        });
+        let targeting = {
+            self.sync_reads += 1;
+            m.body
+                .get(&names.targeting)
+                .try_to::<Gd<Object>>()
+                .ok()
+                .and_then(|t| {
+                    self.sync_reads += 1;
+                    t.get(&names.system).try_to::<Gd<Object>>().ok()
+                })
+        };
+        let reach = match &m.marker {
+            Some(marker) => {
+                self.sync_reads += 1;
+                marker
+                    .get(&names.broadcast_range_m)
+                    .try_to::<f64>()
+                    .unwrap_or(0.0)
+            }
+            None => 0.0,
+        };
         Attrs {
             faction_ix: self.faction_index(faction),
+            name_key: name.to_string().to_lowercase(),
             name,
             kind,
             radius,
             destroyed,
+            reach,
+            health,
+            targeting,
         }
+    }
+}
+
+// `HullHealth.fraction`'s clamp.
+fn clamp01(v: f64) -> f64 {
+    if v < 0.0 {
+        0.0
+    } else if v > 1.0 {
+        1.0
+    } else {
+        v
     }
 }
 

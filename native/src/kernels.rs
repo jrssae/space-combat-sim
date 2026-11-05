@@ -47,6 +47,7 @@ pub mod contact {
         pub candidates: Vec<u32>,
         pub in_range: Vec<(f32, u32)>,
         pub in_reach: Vec<(f64, u32)>,
+        pub ranked: Vec<(f32, u32)>,
     }
 
     /// Every body by its grid cell, sorted by cell then by scan index.
@@ -75,11 +76,26 @@ pub mod contact {
         at: Vector3,
         range: f64,
     ) -> Vec<i32> {
+        let mut out = Vec::new();
+        contacts_into(view, work, own_body_id, at, range, &mut out);
+        out
+    }
+
+    /// `contacts` into the caller's list (no allocation per call, M4-T17).
+    pub fn contacts_into(
+        view: &View,
+        work: &mut Work,
+        own_body_id: i64,
+        at: Vector3,
+        range: f64,
+        out: &mut Vec<i32>,
+    ) {
         let range_sq = range * range;
         gather(view, work, own_body_id, at, range, |_, d_sq| {
             f64::from(d_sq) <= range_sq
         });
-        work.in_range.iter().map(|&(_, i)| i as i32).collect()
+        out.clear();
+        out.extend(work.in_range.iter().map(|&(_, i)| i as i32));
     }
 
     /// `ContactScan.nearest_for` before its keeper: with `k` or fewer in range (or `k` 0 or less), all of them in scan
@@ -94,15 +110,33 @@ pub mod contact {
         k: i64,
         range: f64,
     ) -> Vec<i32> {
+        let mut out = Vec::new();
+        nearest_into(view, work, hostile, own_body_id, at, k, range, &mut out);
+        out
+    }
+
+    /// `nearest` into the caller's list (no allocation per call, M4-T17).
+    pub fn nearest_into(
+        view: &View,
+        work: &mut Work,
+        hostile: Option<&[bool]>,
+        own_body_id: i64,
+        at: Vector3,
+        k: i64,
+        range: f64,
+        out: &mut Vec<i32>,
+    ) {
         let range_sq = range * range;
         // GDScript's nearest loop skips only what is beyond the range, so its test is "not greater".
         gather(view, work, own_body_id, at, range, |_, d_sq| {
             f64::from(d_sq).partial_cmp(&range_sq) != Some(Ordering::Greater)
         });
+        out.clear();
         let in_range = &work.in_range;
         // k of 0 or less means no cut: every contact in range, as `ContactScan.nearest_for` defines it.
         if k <= 0 || in_range.len() <= k as usize {
-            return in_range.iter().map(|&(_, i)| i as i32).collect();
+            out.extend(in_range.iter().map(|&(_, i)| i as i32));
+            return;
         }
         let mut nearest_hostile: Option<(f32, u32)> = None;
         for &(d_sq, i) in in_range {
@@ -115,16 +149,17 @@ pub mod contact {
         }
         // Ranked by range, then by scan index (in_range is in scan order, so a stable sort keeps that).
         let k = k as usize;
-        let mut ranked = in_range.clone();
-        ranked.select_nth_unstable_by(k - 1, |a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-        let mut out: Vec<i32> = ranked[..k].iter().map(|&(_, i)| i as i32).collect();
+        work.ranked.clear();
+        work.ranked.extend_from_slice(in_range);
+        work.ranked
+            .select_nth_unstable_by(k - 1, |a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        out.extend(work.ranked[..k].iter().map(|&(_, i)| i as i32));
         if let Some((_, h)) = nearest_hostile
             && !out.contains(&(h as i32))
         {
             out.push(h as i32);
         }
         out.push(-1);
-        out
     }
 
     /// `ContactScan.statics_for`: the rocks and mines whose surface is within `range` of `at`, not `own_body_id`; with
@@ -139,8 +174,25 @@ pub mod contact {
         k: i64,
         range: f64,
     ) -> Vec<i32> {
+        let mut out = Vec::new();
+        statics_into(view, work, friendly, own_body_id, at, k, range, &mut out);
+        out
+    }
+
+    /// `statics` into the caller's list (no allocation per call, M4-T17).
+    pub fn statics_into(
+        view: &View,
+        work: &mut Work,
+        friendly: &[bool],
+        own_body_id: i64,
+        at: Vector3,
+        k: i64,
+        range: f64,
+        out: &mut Vec<i32>,
+    ) {
+        out.clear();
         if k <= 0 {
-            return Vec::new();
+            return;
         }
         let reach = range.abs();
         work.in_reach.clear();
@@ -167,13 +219,26 @@ pub mod contact {
             work.in_reach.truncate(k);
             work.in_reach.sort_unstable_by_key(|e| e.1);
         }
-        work.in_reach.iter().map(|&(_, i)| i as i32).collect()
+        out.extend(work.in_reach.iter().map(|&(_, i)| i as i32));
     }
 
     /// `ContactScan.broadcasts_for`: the bodies beyond `near` and within their own reach, not `own_body_id`, in scan order.
     pub fn broadcasts(view: &View, own_body_id: i64, at: Vector3, near: f64) -> Vec<i32> {
+        let mut out = Vec::new();
+        broadcasts_into(view, own_body_id, at, near, &mut out);
+        out
+    }
+
+    /// `broadcasts` into the caller's list (no allocation per call, M4-T17).
+    pub fn broadcasts_into(
+        view: &View,
+        own_body_id: i64,
+        at: Vector3,
+        near: f64,
+        out: &mut Vec<i32>,
+    ) {
         let near_sq = near * near;
-        let mut out: Vec<i32> = Vec::new();
+        out.clear();
         for (i, p) in view.positions.iter().enumerate() {
             if view.body_ids[i] == own_body_id {
                 continue;
@@ -184,7 +249,6 @@ pub mod contact {
                 out.push(i as i32);
             }
         }
-        out
     }
 
     /// `ContactScan.incoming_fire`: hostile bolts, not this ship's own, that pass within 15 m in the next 2 s.

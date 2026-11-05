@@ -35,6 +35,12 @@ extends Node
 ## each run in one native call (`AvoidanceMath.filter_seen`, `FireLane.clear_seen`, `AiContext.refresh`), bit for bit
 ## with the GDScript, which answers off the core. The tie-break seed is passed in as before.
 ##
+## Native brains (M4-T17, §17.13): with the native host on (`NativeBrains.host`), an `AiPilot` thinks in one native call
+## over the core's rows: the driver hands it a perception without contact lists (the host picks them from the rows as the
+## scan would) and takes the finished command, the dodge flags and the wanted target back; the avoidance ran inside. When
+## the host declines (the ship has no row this tick, the rows moved under the scan), the driver perceives and thinks in
+## GDScript as before.
+##
 ## Console (§16.4, M3-T06): `AiConsole` is registered while any driver is in the tree, owned by the newest. `think_us()` is
 ## wall-clock time, a profiling readout (AC13), never gameplay time.
 
@@ -61,6 +67,7 @@ static var _thinks_near: int = 0
 static var _thinks_far: int = 0
 static var _held: int = 0
 static var _contacts_max: int = 0
+static var _thinks_native: int = 0
 # The think-rate and nearest-k settings, read on first use and again after any of them changes.
 static var _settings_read: bool = false
 static var _rate_on: bool = true
@@ -87,6 +94,8 @@ var brain: PilotBrain = null:
 		_since_think_s = 0.0
 		_steps = 0
 		_ordinal = maxi(_live.find(self), 0)
+		if combatant != null:
+			_tie_hash = hash(combatant.display_name)
 		if value != null:
 			value.reset()
 		_start_lights(value)
@@ -105,6 +114,8 @@ var _capability: ShipCapability = null
 ## The mean of the ship's muzzles, ship-local (muzzles never move on the hull, so computed once).
 var _muzzle_local: Vector3 = Vector3.ZERO
 var _muzzle_known: bool = false
+# The avoidance tie-break, `hash(display_name)`, taken when the pilot is set (M4-T17's native path passes it in).
+var _tie_hash: int = 0
 var _retarget_in_s: float = 0.0
 var _unselectable_id: int = 0
 # This ship is hiding: its lights are off until the brain attacks (M3-T27).
@@ -168,15 +179,29 @@ func step(delta: float) -> void:
 	_woken = false
 	_count_think(near_player)
 	_retarget(dt)
-	var p: Perception = perceive()
-	_contacts_max = maxi(_contacts_max, p.contacts.size())
-	brain.has_desired_velocity = false
-	var pc: PilotCommand = brain.think(p, dt)
+	var pc: PilotCommand = null
+	var pilot := brain as AiPilot
+	if pilot != null and pilot.native_capable():
+		var host: Object = NativeBrains.host(get_tree())
+		if host != null:
+			var scan: ContactScan = ContactScan.shared(get_tree())
+			if scan.rows_fresh():
+				pc = pilot.try_think_native(_perceive_lite(scan, host), dt)
+	if pc != null:
+		_thinks_native += 1
+		_contacts_max = maxi(_contacts_max, pilot.native_contacts)
+		avoiding = pilot.native_avoiding
+		avoiding_urgent = pilot.native_avoiding_urgent
+	else:
+		var p: Perception = perceive()
+		_contacts_max = maxi(_contacts_max, p.contacts.size())
+		brain.has_desired_velocity = false
+		pc = brain.think(p, dt)
+		_avoid(p, pc.flight)
 	if _hiding and pc.combat != null and pc.combat.fire:  # the first shot ends the hiding (Q27)
 		_hiding = false
 		combatant.ship.running_lights = true
 	_follow_brain_target()
-	_avoid(p, pc.flight)
 	combatant.apply_commands(pc.flight, pc.combat)
 	_add_think_time(Time.get_ticks_usec() - started_us)
 
@@ -221,6 +246,11 @@ static func held() -> int:
 	return _held
 
 
+## How many AI ships thought in the native brains in the latest tick the drivers ran (M4-T17).
+static func thinks_native() -> int:
+	return _thinks_native
+
+
 ## The most contacts any AI ship scored and avoided in the latest tick the drivers ran.
 static func contacts_max() -> int:
 	return _contacts_max
@@ -241,13 +271,7 @@ func perceive() -> Perception:
 	if _capability == null:
 		_capability = ShipCapability.from_spec(ship.spec, ship.get_layout())
 	p.capability = _capability
-	if not _muzzle_known:
-		_muzzle_known = true
-		var mean := Vector3.ZERO
-		var muzzles: Array[Node3D] = ship.get_muzzles()
-		for muzzle: Node3D in muzzles:
-			mean += ship.to_local(muzzle.global_position)
-		_muzzle_local = mean / float(muzzles.size()) if not muzzles.is_empty() else Vector3.ZERO
+	_ensure_muzzle(ship)
 	p.muzzle_offset = ship.global_basis * _muzzle_local
 	var weapon: WeaponSpec = combatant.cannon.weapon
 	p.muzzle_speed_mps = weapon.muzzle_speed_mps
@@ -288,6 +312,54 @@ func perceive() -> Perception:
 	p.last_attacker_id = last_attacker_id
 	p.friendly_fire = bool(Settings.get_value(&"friendly_fire"))
 	return p
+
+
+## The perception of a native think (M4-T17): the ship's own state and what the host cannot read from the rows, with no
+## contact lists (the host picks them from the rows as `perceive` would).
+func _perceive_lite(scan: ContactScan, host: Object) -> Perception:
+	var ship: Ship = combatant.ship
+	var p := Perception.new()
+	p.now_s = SimClock.now()
+	p.position = ship.global_position
+	p.basis = ship.global_basis
+	p.velocity = ship.linear_velocity
+	p.angular_velocity = ship.angular_velocity
+	p.self_id = combatant.targetable.get_instance_id() if combatant.targetable != null else 0
+	p.hull_fraction = combatant.damageable.hull.fraction() if combatant.damageable != null else 1.0
+	p.faction = combatant.faction
+	if _capability == null:
+		_capability = ShipCapability.from_spec(ship.spec, ship.get_layout())
+	p.capability = _capability
+	_ensure_muzzle(ship)
+	p.muzzle_local = _muzzle_local
+	var weapon: WeaponSpec = combatant.cannon.weapon
+	p.muzzle_speed_mps = weapon.muzzle_speed_mps
+	p.weapon_lifetime_s = weapon.lifetime_s
+	if world != null:
+		p.frame_origin = world.origin
+	p.brains = host
+	p.own_body_id = ship.get_instance_id()
+	p.selected_id = ship.targeting.selected_id()
+	p.bounding_radius = combatant.damageable.bounding_radius if combatant.damageable != null else 0.0
+	p.tie_hash = _tie_hash
+	p.relation_row = scan.relation_row(p.faction)
+	p.last_hit_s = last_hit_s
+	p.last_bolt_hit_s = last_bolt_hit_s
+	p.last_attacker_id = last_attacker_id
+	p.friendly_fire = bool(Settings.get_value(&"friendly_fire"))
+	return p
+
+
+# The mean of the ship's muzzles in its frame, found once.
+func _ensure_muzzle(ship: Ship) -> void:
+	if _muzzle_known:
+		return
+	_muzzle_known = true
+	var mean := Vector3.ZERO
+	var muzzles: Array[Node3D] = ship.get_muzzles()
+	for muzzle: Node3D in muzzles:
+		mean += ship.to_local(muzzle.global_position)
+	_muzzle_local = mean / float(muzzles.size()) if not muzzles.is_empty() else Vector3.ZERO
 
 
 # Applies the avoidance filter (D33) to the brain's wish.
@@ -372,6 +444,7 @@ static func _roll_counts() -> void:
 		_thinks_far = 0
 		_held = 0
 		_contacts_max = 0
+		_thinks_native = 0
 
 
 static func _count_think(near: bool) -> void:
@@ -408,6 +481,7 @@ static func _read_settings() -> void:
 	_period = AiThinkRate.period_ticks(float(Settings.get_value(&"ai_think_far_hz")), Engine.physics_ticks_per_second)
 	_nearest_k = int(Settings.get_value(&"ai_nearest_k"))
 	_nearest_static_k = int(Settings.get_value(&"ai_nearest_static_k"))
+	NativeBrains.set_settings(_nearest_k, _nearest_static_k)
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:

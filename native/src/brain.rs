@@ -1,28 +1,59 @@
 // The native brain host (M4-T17, docs/architecture.md 17.13): the AI pilots' brains on the core's rows. The maths lives in
 // `brain_maths.rs` and the behaviours in `brain_behaviours.rs` (both engine-free); this class binds the core, keeps one
-// slot per pilot and hands answers over. T17a: the maths behind `test_brain_parity`; T17b adds the brains.
-// gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
+// slot per pilot, picks nothing itself and hands answers over as packed numbers. The GDScript `AiPilot` is the facade and
+// stays the reference. gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
 #![allow(clippy::redundant_field_names)]
 use godot::prelude::*;
 
+use crate::brain_behaviours::{
+    self, Brain, Context, Inputs, KIND_NAMES, KINDS, MIRROR, Profile, Route, Scratch, Ship, Tactics,
+};
 use crate::brain_maths::{
     self, Capability, FlightCmd, Manoeuvre, Pcg, Pose, Temperament, deg_to_rad_lerp,
 };
 use crate::kernels::contact::{self, Work};
+use crate::rows::{Bolts, Rows};
 use crate::sim_core::ScsSimCore;
 
 // `test_brain_parity`'s per-step layouts for a manoeuvre run.
 const STEP_IN: usize = 23;
 const STEP_OUT: usize = 16;
+// `BodyKind` values of the rows that are obstacles (src/ai/body_kind.gd).
+const KIND_MINE: u8 = 4;
+const KIND_STATIC: u8 = 5;
+// `ContactScan.SENSOR_RANGE_M`: the grid's cell size.
+const SENSOR_RANGE_M: f64 = 5000.0;
 
-/// The AI pilots' native brains over the core's rows.
+/// `AiProfile` as the facade packs it: the nine weights in tie order, then stickiness, emergency_margin, min_dwell_s,
+/// retreat_below, retreat_within_m, cruise_mps, aim_error_deg, fires, slashing, idle_hold.
+pub const PROFILE_LEN: usize = KINDS + 10;
+/// `RaiderTactics` as the facade packs it, in its field order.
+pub const TACTICS_LEN: usize = 14;
+/// A think's output: the four levels, strafe, rot, brake, fire, the wanted target in two halves, the dodge flags, the wish
+/// (has, all axes, velocity), the behaviour in control, dwell, switches, the contacts seen, the raw and weighted scores by
+/// kind, and the mirrored state.
+pub const OUT_RAW: usize = 24;
+pub const OUT_WEIGHTED: usize = OUT_RAW + KINDS;
+pub const OUT_MIRROR: usize = OUT_WEIGHTED + KINDS;
+pub const OUT_LEN: usize = OUT_MIRROR + MIRROR;
+
+/// The AI pilots' native brains over the core's rows (or rows loaded from arrays, for the tests).
 #[derive(GodotClass)]
 #[class(base=RefCounted, init)]
 pub struct ScsBrains {
     base: Base<RefCounted>,
     core: Option<Gd<ScsSimCore>>,
+    own: Rows,
+    own_bolts: Bolts,
+    own_loaded: bool,
     grid: Work,
     grid_version: i64,
+    slots: Vec<Option<Brain>>,
+    scratch: Scratch,
+    keep_scratch: Vec<i64>,
+    out: Vec<f64>,
+    nearest_k: i64,
+    static_k: i64,
 }
 
 #[godot_api]
@@ -33,14 +64,16 @@ impl ScsBrains {
         GString::from(env!("CARGO_PKG_VERSION"))
     }
 
-    /// Reads the core's rows from now on.
+    /// Reads the core's rows from now on (their grid is rebuilt whenever the core's rows change).
     #[func]
-    fn attach_core(&mut self, core: Gd<ScsSimCore>, cell_m: f64) -> bool {
+    fn attach_core(&mut self, core: Gd<ScsSimCore>) -> bool {
+        self.own = Rows::default();
+        self.own_bolts = Bolts::default();
+        self.own_loaded = false;
         self.grid = Work::default();
-        self.grid.cell_m = cell_m;
+        self.grid.cell_m = SENSOR_RANGE_M;
         self.grid_version = -1;
         self.core = Some(core);
-        self.refresh_grid();
         true
     }
 
@@ -50,12 +83,570 @@ impl ScsBrains {
         self.core.is_some()
     }
 
+    /// The nearest-k settings every think picks with (`ai_nearest_k`, `ai_nearest_static_k`).
+    #[func]
+    fn set_settings(&mut self, nearest_k: i64, static_k: i64) {
+        self.nearest_k = nearest_k;
+        self.static_k = static_k;
+    }
+
+    /// Takes rows from arrays instead of the core (the differential tests): one entry per row, the bases as three
+    /// columns a row. Returns false, after logging why, when the arrays do not line up; the host then holds no rows.
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn load_rows(
+        &mut self,
+        ids: PackedInt64Array,
+        positions: PackedVector3Array,
+        velocities: PackedVector3Array,
+        bases: PackedVector3Array,
+        radii: PackedFloat64Array,
+        kinds: PackedByteArray,
+        factions: PackedInt32Array,
+        is_ship: PackedByteArray,
+        hulls: PackedFloat64Array,
+        target_ids: PackedInt64Array,
+        reaches: PackedFloat64Array,
+        names: PackedStringArray,
+    ) -> bool {
+        self.core = None;
+        self.own = Rows::default();
+        self.own_loaded = false;
+        let n = ids.len();
+        let lined_up = positions.len() == n
+            && velocities.len() == n
+            && bases.len() == n * 3
+            && radii.len() == n
+            && kinds.len() == n
+            && factions.len() == n
+            && is_ship.len() == n
+            && hulls.len() == n
+            && target_ids.len() == n
+            && reaches.len() == n
+            && names.len() == n;
+        if !lined_up {
+            godot_error!("ScsBrains.load_rows: array lengths differ ({n} ids); no rows are kept");
+            return false;
+        }
+        let own = &mut self.own;
+        own.ids = ids.as_slice().to_vec();
+        own.body_ids = own.ids.clone();
+        own.positions = positions.as_slice().to_vec();
+        own.velocities = velocities.as_slice().to_vec();
+        let b = bases.as_slice();
+        own.bases = (0..n)
+            .map(|i| {
+                let (cx, cy, cz) = (b[i * 3], b[i * 3 + 1], b[i * 3 + 2]);
+                Basis {
+                    rows: [
+                        Vector3::new(cx.x, cy.x, cz.x),
+                        Vector3::new(cx.y, cy.y, cz.y),
+                        Vector3::new(cx.z, cy.z, cz.z),
+                    ],
+                }
+            })
+            .collect();
+        own.angular = vec![Vector3::ZERO; n];
+        own.radii = radii.as_slice().to_vec();
+        own.kinds = kinds.as_slice().to_vec();
+        own.faction_ix = factions
+            .as_slice()
+            .iter()
+            .map(|&f| u32::try_from(f).unwrap_or(u32::MAX))
+            .collect();
+        own.flags = vec![0; n];
+        own.names = names.as_slice().to_vec();
+        own.hull_ids = vec![0; n];
+        own.handles = (1..=n as i64).collect();
+        own.rigid = is_ship.as_slice().iter().map(|&b| b == 1).collect();
+        own.is_static = own
+            .kinds
+            .iter()
+            .map(|&k| k == KIND_MINE || k == KIND_STATIC)
+            .collect();
+        own.is_mine = own.kinds.iter().map(|&k| k == KIND_MINE).collect();
+        own.hull_fraction = hulls.as_slice().to_vec();
+        own.target_ids = target_ids.as_slice().to_vec();
+        own.reach = reaches.as_slice().to_vec();
+        own.name_keys = names
+            .as_slice()
+            .iter()
+            .map(|s| s.to_string().to_lowercase())
+            .collect();
+        own.node_count = n;
+        self.grid = Work::default();
+        self.grid.cell_m = SENSOR_RANGE_M;
+        self.grid.cells = contact::sorted_cells(&self.own.positions, SENSOR_RANGE_M);
+        self.grid.max_static_radius = (0..n)
+            .filter(|&i| self.own.is_static[i])
+            .map(|i| self.own.radii[i].abs())
+            .fold(0.0, f64::max);
+        self.own_loaded = true;
+        true
+    }
+
+    /// The bolts in flight for loaded rows (the differential tests).
+    #[func]
+    fn load_bolts(
+        &mut self,
+        positions: PackedVector3Array,
+        velocities: PackedVector3Array,
+        factions: PackedInt32Array,
+        shooters: PackedInt64Array,
+    ) -> bool {
+        let n = positions.len();
+        if velocities.len() != n || factions.len() != n || shooters.len() != n {
+            godot_error!(
+                "ScsBrains.load_bolts: array lengths differ ({n} bolts); no bolts are kept"
+            );
+            self.own_bolts = Bolts::default();
+            return false;
+        }
+        let b = &mut self.own_bolts;
+        b.clear();
+        b.ids = (0..n as i64).collect();
+        b.positions = positions.as_slice().to_vec();
+        b.velocities = velocities.as_slice().to_vec();
+        b.last_steps = vec![Vector3::ZERO; n];
+        b.faction_ix = factions
+            .as_slice()
+            .iter()
+            .map(|&f| u32::try_from(f).unwrap_or(u32::MAX))
+            .collect();
+        b.shooters = shooters.as_slice().to_vec();
+        b.kinds = vec![7; n];
+        b.radii = vec![0.0; n];
+        true
+    }
+
+    // --- the slots -------------------------------------------------------------------------------------------------
+
+    /// A brain for an `AiPilot`: its seed, its base profile and tactics (`PROFILE_LEN`, `TACTICS_LEN` numbers), the
+    /// behaviours it has (kinds in tie order) and its temperament. Returns the slot, or -1 after logging why.
+    #[func]
+    fn create(
+        &mut self,
+        seed: i64,
+        profile: PackedFloat64Array,
+        tactics: PackedFloat64Array,
+        kinds: PackedByteArray,
+        skill: f64,
+        aggression: f64,
+    ) -> i64 {
+        let Some(base) = profile_of(&profile, &tactics) else {
+            godot_error!(
+                "ScsBrains.create: a profile of {} and tactics of {} numbers do not line up; no slot",
+                profile.len(),
+                tactics.len()
+            );
+            return -1;
+        };
+        let brain = Brain::new(
+            base,
+            Temperament::new(skill, aggression),
+            seed,
+            kinds.as_slice(),
+        );
+        if let Some(free) = self.slots.iter().position(Option::is_none) {
+            self.slots[free] = Some(brain);
+            free as i64
+        } else {
+            self.slots.push(Some(brain));
+            (self.slots.len() - 1) as i64
+        }
+    }
+
+    /// Forgets a brain; its slot number may be reused.
+    #[func]
+    fn free_slot(&mut self, slot: i64) {
+        if let Some(entry) = usize::try_from(slot)
+            .ok()
+            .and_then(|i| self.slots.get_mut(i))
+        {
+            *entry = None;
+        }
+    }
+
+    /// Brains held now.
+    #[func]
+    fn count(&self) -> i64 {
+        self.slots.iter().filter(|s| s.is_some()).count() as i64
+    }
+
+    /// `AiPilot.reset`.
+    #[func]
+    fn reset(&mut self, slot: i64) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.reset();
+        }
+    }
+
+    /// `AiPilot.set_temperament`.
+    #[func]
+    fn set_temperament(&mut self, slot: i64, skill: f64, aggression: f64) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.set_temperament(Temperament::new(skill, aggression));
+        }
+    }
+
+    /// `AiPilot.add_behaviour` by kind (`KIND_NAMES` index); false for an unknown kind or one it has.
+    #[func]
+    fn add_behaviour(&mut self, slot: i64, kind: i64) -> bool {
+        let Some(b) = self.brain_mut(slot) else {
+            return false;
+        };
+        u8::try_from(kind).is_ok_and(|k| b.add_behaviour(k))
+    }
+
+    /// The ship this brain flies: its capability (as `test_brain_parity` packs it), where the bolts leave (ship frame), the
+    /// weapon's muzzle speed and lifetime, the hull's bounding radius, the avoidance tie-break seed as the driver gives
+    /// `AvoidanceMath.filter_seen` (`hash(display_name)`; the kernel takes its hash, made here), the body's instance id
+    /// and the marker's (`Perception.self_id`).
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn bind_ship(
+        &mut self,
+        slot: i64,
+        cap: PackedFloat64Array,
+        muzzle_local: Vector3,
+        muzzle_speed_mps: f64,
+        weapon_lifetime_s: f64,
+        radius: f64,
+        tie_hash: i64,
+        own_body_id: i64,
+        self_id: i64,
+    ) {
+        let capability = capability_of(&cap);
+        if let Some(b) = self.brain_mut(slot) {
+            b.ship = Ship {
+                capability,
+                muzzle_local,
+                muzzle_speed_mps,
+                weapon_lifetime_s,
+                radius,
+                tie_hash: brain_maths::hash_int(tie_hash),
+                own_body_id,
+                self_id,
+            };
+        }
+    }
+
+    /// The wing's view (`WingDirector.refresh` writes it every tick): the order, the leader and its target, the engage
+    /// radius, the slot, the wingmates' ids, and the link to a leader out of sight (`link_valid` with its universe
+    /// position in three doubles and its velocity).
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn set_wing(
+        &mut self,
+        slot: i64,
+        order: i64,
+        leader_id: i64,
+        leader_target_id: i64,
+        engage_radius_m: f64,
+        has_slot: bool,
+        slot_offset: Vector3,
+        wing_ids: PackedInt64Array,
+        link_valid: bool,
+        link_x: f64,
+        link_y: f64,
+        link_z: f64,
+        link_velocity: Vector3,
+    ) {
+        if let Some(b) = self.brain_mut(slot) {
+            let ctx: &mut Context = &mut b.ctx;
+            ctx.order = u8::try_from(order).unwrap_or(0);
+            ctx.leader_id = leader_id;
+            ctx.leader_target_id = leader_target_id;
+            ctx.engage_radius_m = engage_radius_m;
+            ctx.has_slot = has_slot;
+            ctx.slot_offset = slot_offset;
+            ctx.wing_ids.clear();
+            ctx.wing_ids.extend_from_slice(wing_ids.as_slice());
+            ctx.link = if link_valid {
+                Some([link_x, link_y, link_z])
+            } else {
+                None
+            };
+            ctx.link_velocity = link_velocity;
+        }
+    }
+
+    /// `AiContext.clear_wing`.
+    #[func]
+    fn clear_wing(&mut self, slot: i64) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.ctx.clear_wing();
+        }
+    }
+
+    /// `AiContext.objective_name` ("" for none; matched case-insensitively).
+    #[func]
+    fn set_objective(&mut self, slot: i64, name: GString) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.ctx.objective_key = name.to_string().to_lowercase();
+        }
+    }
+
+    /// The guard post (`BehaviourGuard.attach`): a fixed universe point (`has_post`, three doubles) or a ship by name with
+    /// an offset in its body frame, and the radius. An empty name and no post clear it.
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn set_guard(
+        &mut self,
+        slot: i64,
+        has_post: bool,
+        post_x: f64,
+        post_y: f64,
+        post_z: f64,
+        name: GString,
+        offset: Vector3,
+        radius_m: f64,
+    ) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.ctx.guard_post = if has_post {
+                Some([post_x, post_y, post_z])
+            } else {
+                None
+            };
+            b.ctx.guard_key = name.to_string().to_lowercase();
+            b.ctx.guard_offset = offset;
+            b.ctx.guard_radius_m = radius_m;
+        }
+    }
+
+    /// The route the pilot leads (`BehaviourFollowPath.attach`): four numbers a waypoint (its universe position and its
+    /// hold), each waypoint's demo (`Manoeuvres.NAMES` index plus one, 0 for none), the cruise speed, the pace ship's id,
+    /// whether it loops and whether it yields to an attack.
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn set_route(
+        &mut self,
+        slot: i64,
+        points: PackedFloat64Array,
+        demos: PackedByteArray,
+        cruise_mps: f64,
+        pace_id: i64,
+        loops: bool,
+        yield_to_attack: bool,
+    ) -> bool {
+        let p = points.as_slice();
+        let d = demos.as_slice();
+        if !p.len().is_multiple_of(4) || d.len() != p.len() / 4 {
+            godot_error!(
+                "ScsBrains.set_route: {} numbers and {} demos do not line up; no route",
+                p.len(),
+                d.len()
+            );
+            return false;
+        }
+        let Some(b) = self.brain_mut(slot) else {
+            return false;
+        };
+        let mut route = Route {
+            cruise_mps,
+            pace_id,
+            loops,
+            yield_to_attack,
+            ..Default::default()
+        };
+        for (i, w) in p.as_chunks::<4>().0.iter().enumerate() {
+            route.points.push([w[0], w[1], w[2]]);
+            route.holds.push(w[3]);
+            route.demos.push(d[i]);
+        }
+        b.ctx.route = Some(route);
+        true
+    }
+
+    #[func]
+    fn clear_route(&mut self, slot: i64) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.ctx.route = None;
+        }
+    }
+
+    /// `BehaviourRam.commit` from outside (the tests call it on the GDScript object; the facade mirrors it).
+    #[func]
+    fn ram_commit(&mut self, slot: i64, target_id: i64) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.ram_commit(target_id);
+        }
+    }
+
+    /// One think for `slot`: `relations` is the ship's `Factions.Relation` to each faction of the table; then the sim
+    /// time, the time since its last think, its hull 0..1, its selection (0 for none), its latest hit and bolt hit (sim
+    /// time, -INF for none), its latest attacker, `settings.friendly_fire`, and the frame origin as three doubles. The
+    /// perception is picked from the rows inside. Returns `OUT_LEN` numbers, or none when the ship has no row this tick.
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn think(
+        &mut self,
+        slot: i64,
+        relations: PackedByteArray,
+        now_s: f64,
+        dt: f64,
+        hull_fraction: f64,
+        selected_id: i64,
+        last_hit_s: f64,
+        last_bolt_hit_s: f64,
+        last_attacker_id: i64,
+        friendly_fire: bool,
+        origin_x: f64,
+        origin_y: f64,
+        origin_z: f64,
+    ) -> PackedFloat64Array {
+        let Some(index) = usize::try_from(slot).ok().filter(|&i| i < self.slots.len()) else {
+            return PackedFloat64Array::new();
+        };
+        let Some(mut brain) = self.slots[index].take() else {
+            return PackedFloat64Array::new();
+        };
+        let inputs = Inputs {
+            relations: relations.as_slice(),
+            own_body_id: brain.ship.own_body_id,
+            now_s,
+            dt,
+            hull_fraction,
+            self_id: brain.ship.self_id,
+            selected_id,
+            last_hit_s,
+            last_bolt_hit_s,
+            last_attacker_id,
+            friendly_fire,
+            origin: [origin_x, origin_y, origin_z],
+            nearest_k: self.nearest_k,
+            static_k: self.static_k,
+        };
+        self.refresh_grid();
+        let guard = self.core.as_ref().map(|c| c.bind());
+        let (rows, bolts, own_row): (&Rows, &Bolts, i64) = match &guard {
+            Some(c) => (&c.rows, &c.bolts, c.row_for_kernel(brain.ship.own_body_id)),
+            None => (
+                &self.own,
+                &self.own_bolts,
+                self.own
+                    .body_ids
+                    .iter()
+                    .position(|&b| b == brain.ship.own_body_id)
+                    .map_or(-1, |r| r as i64),
+            ),
+        };
+        let mut out = PackedFloat64Array::new();
+        if own_row >= 0 {
+            let result = brain.think(
+                rows,
+                bolts,
+                &mut self.grid,
+                own_row as usize,
+                &mut self.scratch,
+                &mut self.keep_scratch,
+                &inputs,
+            );
+            pack_output(&brain, &result, &mut self.out);
+            out = PackedFloat64Array::from(self.out.as_slice());
+        }
+        drop(guard);
+        self.slots[index] = Some(brain);
+        out
+    }
+
+    /// The rows the last think picked: `[contacts, statics, broadcasts]` (the tests compare them with the scan's).
+    #[func]
+    fn last_lists(&self) -> VarArray {
+        let mut out = VarArray::new();
+        out.push(&PackedInt32Array::from(self.scratch.contacts.as_slice()).to_variant());
+        out.push(&PackedInt32Array::from(self.scratch.statics.as_slice()).to_variant());
+        out.push(&PackedInt32Array::from(self.scratch.broadcasts.as_slice()).to_variant());
+        out
+    }
+
+    /// `AiPilot.describe` for the behaviour in control: `behaviour`, `state`, `for_s`, its own fields and the `scores`
+    /// (weighted, by id). Names of contacts are looked up in the rows by id.
+    #[func]
+    fn describe(&self, slot: i64) -> VarDictionary {
+        let mut dict = VarDictionary::new();
+        let Some(brain) = self.brain(slot) else {
+            return dict;
+        };
+        let d = brain.describe();
+        dict.set("behaviour", &GString::from(d.behaviour.as_str()));
+        dict.set("state", &GString::from(d.state.as_str()));
+        dict.set("for_s", d.for_s);
+        for (key, value) in &d.numbers {
+            dict.set(*key, *value);
+        }
+        for (key, value) in &d.flags {
+            dict.set(*key, *value);
+        }
+        for (key, value) in &d.ints {
+            dict.set(*key, *value);
+        }
+        for (key, value) in &d.texts {
+            dict.set(*key, &GString::from(value.as_str()));
+        }
+        let guard = self.core.as_ref().map(|c| c.bind());
+        let rows: &Rows = match &guard {
+            Some(c) => &c.rows,
+            None => &self.own,
+        };
+        for (key, id) in &d.names {
+            let name = name_of(rows, *id);
+            if *key == "state" {
+                dict.set("state", &GString::from(format!("to {name}").as_str()));
+            } else {
+                dict.set(*key, &GString::from(name.as_str()));
+            }
+        }
+        let mut scores = VarDictionary::new();
+        for (i, kind) in brain.behaviours.iter().enumerate() {
+            scores.set(
+                KIND_NAMES[usize::from(*kind)],
+                brain_maths::snapped(brain.weighted[i], 0.01),
+            );
+        }
+        dict.set("scores", &scores);
+        dict
+    }
+
+    /// `BehaviourFollowPath.visited`: the waypoints reached, in order.
+    #[func]
+    fn path_visited(&self, slot: i64) -> PackedInt32Array {
+        self.brain(slot).map_or_else(PackedInt32Array::new, |b| {
+            PackedInt32Array::from(b.path_visited())
+        })
+    }
+
+    /// `BehaviourFollowPath.results`: each finished demo's result with `demo` and `index`.
+    #[func]
+    fn path_results(&self, slot: i64) -> VarArray {
+        let mut out = VarArray::new();
+        let Some(brain) = self.brain(slot) else {
+            return out;
+        };
+        for r in brain.path_results() {
+            let mut dict = outcome_dict(&r.outcome);
+            dict.set(
+                "demo",
+                &GString::from(brain_maths::MANOEUVRE_NAMES[usize::from(r.demo)]),
+            );
+            dict.set("index", r.index);
+            out.push(&dict.to_variant());
+        }
+        out
+    }
+
     // --- the maths, for the differential tests ---------------------------------------------------------------------
 
     /// `hash([seed, label])`.
     #[func]
     fn hash_seed(seed: i64, label: GString) -> i64 {
         brain_maths::hash_seed(seed, &label.to_string())
+    }
+
+    /// `hash(value)` of an int.
+    #[func]
+    fn hash_int(value: i64) -> i64 {
+        brain_maths::hash_int(value)
     }
 
     /// The first `count` `randi()` draws of a generator seeded with `seed`.
@@ -287,27 +878,121 @@ impl ScsBrains {
             ]);
         }
         out.push(&PackedFloat64Array::from(commands.as_slice()).to_variant());
-        let result = m.result();
-        let mut dict = VarDictionary::new();
-        for (key, value) in result.keys.iter().zip(result.values.iter()) {
-            dict.set(*key, *value);
-        }
-        for (key, flag) in &result.flags {
-            dict.set(*key, *flag);
-        }
-        for (key, count) in &result.ints {
-            dict.set(*key, *count);
-        }
-        if let Some(legs) = &result.legs_m {
-            let mut list = VarArray::new();
-            for leg in legs {
-                list.push(&leg.to_variant());
-            }
-            dict.set("legs_m", &list);
-        }
-        out.push(&dict.to_variant());
+        out.push(&outcome_dict(&m.result()).to_variant());
         out
     }
+}
+
+// A manoeuvre's `result()` as the Dictionary GDScript reports.
+fn outcome_dict(result: &brain_maths::Outcome) -> VarDictionary {
+    let mut dict = VarDictionary::new();
+    for (key, value) in result.keys.iter().zip(result.values.iter()) {
+        dict.set(*key, *value);
+    }
+    for (key, flag) in &result.flags {
+        dict.set(*key, *flag);
+    }
+    for (key, count) in &result.ints {
+        dict.set(*key, *count);
+    }
+    if let Some(legs) = &result.legs_m {
+        let mut list = VarArray::new();
+        for leg in legs {
+            list.push(&leg.to_variant());
+        }
+        dict.set("legs_m", &list);
+    }
+    dict
+}
+
+// The output of a think, `OUT_LEN` numbers.
+fn pack_output(brain: &Brain, result: &brain_behaviours::Output, out: &mut Vec<f64>) {
+    out.clear();
+    out.resize(OUT_LEN, 0.0);
+    let f = &result.flight;
+    out[0] = f.main_left;
+    out[1] = f.main_right;
+    out[2] = f.retro_left;
+    out[3] = f.retro_right;
+    out[4] = f64::from(f.strafe_x);
+    out[5] = f64::from(f.strafe_y);
+    out[6] = f64::from(f.rot.x);
+    out[7] = f64::from(f.rot.y);
+    out[8] = f64::from(f.rot.z);
+    out[9] = f64::from(u8::from(f.brake));
+    out[10] = f64::from(u8::from(result.fire));
+    let (hi, lo) = brain_behaviours::split_id(brain.wanted_target_id);
+    out[11] = hi;
+    out[12] = lo;
+    out[13] = f64::from(u8::from(brain.avoiding));
+    out[14] = f64::from(u8::from(brain.avoiding_urgent));
+    out[15] = f64::from(u8::from(brain.has_desired_velocity));
+    out[16] = f64::from(u8::from(brain.desired_all_axes));
+    out[17] = f64::from(brain.desired_velocity.x);
+    out[18] = f64::from(brain.desired_velocity.y);
+    out[19] = f64::from(brain.desired_velocity.z);
+    out[20] = f64::from(brain.current_kind());
+    out[21] = brain.dwell_s;
+    out[22] = brain.switches as f64;
+    out[23] = brain.contacts_seen as f64;
+    for (i, kind) in brain.behaviours.iter().enumerate() {
+        out[OUT_RAW + usize::from(*kind)] = brain.raw[i];
+        out[OUT_WEIGHTED + usize::from(*kind)] = brain.weighted[i];
+    }
+    let mut mirror = [0.0; MIRROR];
+    brain.mirror(&mut mirror);
+    out[OUT_MIRROR..OUT_LEN].copy_from_slice(&mirror);
+}
+
+// The display name of the row whose marker id is `id`, "" when none.
+fn name_of(rows: &Rows, id: i64) -> String {
+    if id == 0 {
+        return String::new();
+    }
+    rows.ids
+        .iter()
+        .position(|&r| r == id)
+        .map_or_else(String::new, |r| rows.names[r].to_string())
+}
+
+// `AiProfile` and `RaiderTactics` from the facade's numbers.
+fn profile_of(profile: &PackedFloat64Array, tactics: &PackedFloat64Array) -> Option<Profile> {
+    let p = profile.as_slice();
+    let t = tactics.as_slice();
+    if p.len() != PROFILE_LEN || t.len() != TACTICS_LEN {
+        return None;
+    }
+    let mut weights = [1.0; KINDS];
+    weights.copy_from_slice(&p[..KINDS]);
+    Some(Profile {
+        weights,
+        stickiness: p[KINDS],
+        emergency_margin: p[KINDS + 1],
+        min_dwell_s: p[KINDS + 2],
+        retreat_below: p[KINDS + 3],
+        retreat_within_m: p[KINDS + 4],
+        cruise_mps: p[KINDS + 5],
+        aim_error_deg: p[KINDS + 6],
+        fires: p[KINDS + 7] != 0.0,
+        slashing: p[KINDS + 8] != 0.0,
+        idle_hold: p[KINDS + 9] != 0.0,
+        tactics: Tactics {
+            closing_far_mps: t[0],
+            closing_near_mps: t[1],
+            near_range_m: t[2],
+            face_lead_delta_v_mps: t[3],
+            fire_range_m: t[4],
+            fire_cone_deg: t[5],
+            fire_miss_m: t[6],
+            break_range_m: t[7],
+            max_time_on_target_s: t[8],
+            break_speed_mps: t[9],
+            break_duration_s: t[10],
+            extend_min_s: t[11],
+            extend_range_m: t[12],
+            max_speed_mps: t[13],
+        },
+    })
 }
 
 impl ScsBrains {
@@ -326,6 +1011,20 @@ impl ScsBrains {
             .filter(|&i| c.rows.is_static[i])
             .map(|i| c.rows.radii[i].abs())
             .fold(0.0, f64::max);
+    }
+
+    fn brain(&self, slot: i64) -> Option<&Brain> {
+        usize::try_from(slot)
+            .ok()
+            .and_then(|i| self.slots.get(i))
+            .and_then(Option::as_ref)
+    }
+
+    fn brain_mut(&mut self, slot: i64) -> Option<&mut Brain> {
+        usize::try_from(slot)
+            .ok()
+            .and_then(|i| self.slots.get_mut(i))
+            .and_then(Option::as_mut)
     }
 }
 

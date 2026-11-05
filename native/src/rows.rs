@@ -30,6 +30,12 @@ pub struct Rows {
     pub rigid: Vec<bool>,
     pub is_static: Vec<bool>,
     pub is_mine: Vec<bool>,
+    // What the brains read of a contact (M4-T17): the hull 0..1 (-1 without a hull), the selection (`Contact.target_id`,
+    // -1 for none), the broadcast range, and the name lowered once for the brains' name matching.
+    pub hull_fraction: Vec<f64>,
+    pub target_ids: Vec<i64>,
+    pub reach: Vec<f64>,
+    pub name_keys: Vec<String>,
     pub node_count: usize,
 }
 
@@ -64,6 +70,10 @@ impl Rows {
         self.rigid.clear();
         self.is_static.clear();
         self.is_mine.clear();
+        self.hull_fraction.clear();
+        self.target_ids.clear();
+        self.reach.clear();
+        self.name_keys.clear();
         self.node_count = 0;
     }
 }
