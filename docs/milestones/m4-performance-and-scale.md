@@ -185,7 +185,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T14 | Jolt collision layers; interpolation off for far ships | T11 | Sonnet | Mechanical; matters from 300 ships | G | done, the physics stage did not fall (2.1 ms at 300, 3.5 at 500, as before); the rebase shift fell by 1.5 to 2 ms; fighters collide with fighters again (Q33) (2026-11-04, in a worktree on `ce35406`; Cycle log, M4-T14) |
 | T15 | The native simulation core: entity rows, one call in and out (`ScsSimCore`) | T13 | Fable | Architecture: every native class moves onto it; serial | N | done (2026-11-04, in a worktree on `c0a0b81`; Cycle log, M4-T15; parity bit for bit on both paths, the engine seam counted) |
 | T16 | N2: avoidance, the fire lane and the context lists on the core | T15 | Opus | Per-contact loops, bit for bit | N, G | done, bit for bit; no measurable change in the think stage, an accepted miss (the loops cost 3 to 4 us a think, the plan assumed 25) (2026-11-04, in a worktree on `41fc088`; Cycle log, M4-T16) |
-| T17 | The brains in native code under Q16's tolerance (T17a maths, T17b behaviours) | T16 | Fable | 3 000 lines of seeded behaviour with a tolerance to meet | N, G | done, bit for bit on every Q16 seed; the think stage at 300 fell from 19.3 to 4.6 ms, the Done-when's 2 ms missed (the per-ship call and its glue, for T18's batch) (2026-11-05, in a worktree on `67d5cda`; Cycle log, M4-T17) |
+| T17 | The brains in native code under Q16's tolerance (T17a maths, T17b behaviours) | T16 | Fable | 3 000 lines of seeded behaviour with a tolerance to meet | N, G | done, bit for bit on every Q16 seed; the think stage at 300 fell from 19.4 to 4.6 ms, the Done-when's 2 ms missed and what remains attributed (the native calls, the facade's glue, the scan's snapshot; Cycle log) (2026-11-05, in a worktree on `67d5cda`; fix round 1 the same day) |
 | T18 | N3: threads inside the core (rayon), 1-thread and 6-thread identical | T17 | Opus | Determinism rules, a new crate | N | not started |
 | T19 | Jolt measured at 300 and 500, the ships-out-of-Jolt proposal (Q17, checkpoint 2) | T15 | Sonnet | Measurement and a proposal, no game code | M | done (2026-11-04, in a worktree on `41fc088`; Cycle log, M4-T19; the proposal waits for the maintainer at checkpoint 2) |
 | T20 | Turrets, missiles, beams and mines as native rows | T16, T12 | Opus | The non-fighter rows' budget (710 turrets at 500); M12 inherits the path | N, A | done, bit for bit; the stand-ins' stage at `battle` 500 from 9.50 to 0.68 ms; every row in budget but a beam shot's spawn (about 20 us a shot against 1) (2026-11-04, in a worktree on `67d5cda`; Cycle log, M4-T20) |
@@ -1063,7 +1063,7 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
   If the tolerance cannot be met in two attempts the controller stops: the tier (phase 3) then carries more and the near count
   falls (the research's fallback).
 - **Architecture:** §17.13.
-- **Done (2026-11-04, worktree on `67d5cda`; Cycle log, "M4-T17"):** T17a `native/src/brain_maths.rs` (`PilotSteering`,
+- **Done (2026-11-05, worktree on `67d5cda`; Cycle log, "M4-T17"):** T17a `native/src/brain_maths.rs` (`PilotSteering`,
   `InterceptMath`, the `AiTemperament` tables, the five `Manoeuvres`, Godot's `hash([seed, label])` and its random numbers)
   and `native/src/v3.rs` (the kernels' shared vector maths), each bit for bit (`test_brain_parity`); T17b
   `native/src/brain_behaviours.rs` and the host `ScsBrains` (`brain.rs`): the whole think of an `AiPilot` in one native call
@@ -4005,9 +4005,13 @@ stay the reference behind `perf_native_brains`.
   match by name could differ); a body with two markers is one broadcast row where the scan gave it two; name matching
   lowers ASCII where `nocasecmp_to` lowers Unicode; the hull fraction and the selection are read at the first sync where the
   scan stamped them on the first hand-out of the tick (the same values in the tick's order).
-- **Thread-ready** (maintainer, 2026-11-04): `Brain::think` is a function of the frozen rows, the bolts, the grid and one ship's
-  state, writing only that brain and the caller's scratch, no allocation per tick after warm-up, every roll from the brain's
-  own generators, the tie-break passed in. The host's one scratch and grid are per host; T18 gives each worker its own.
+- **Thread-ready** (maintainer, 2026-11-04): `Brain::think` is a function of the frozen rows, the bolts, the grid, the tick's
+  field and one ship's state, writing only that brain and the caller's scratch; no allocation per ship per tick after warm-up
+  (the field's bolt grid and broadcaster list are rebuilt once a tick into reused vectors); every roll from the brain's own
+  generators, the tie-break passed in. Left for T18: `contact::Work` bundles the shared per-tick cells with the per-query
+  scratch and must be split so workers share the cells; the host's one `Scratch` and `keep_scratch` go per worker; and the
+  per-ship `Inputs` (the hull, the selection, the hits, the clock, the frame origin) still come from GDScript per ship, so a
+  batch pass needs them as rows or one packed array a tick.
 - **Numbers** (single `bench <layout> <n> 10 warmup=5 seed=1`, editor build, headless, both locks, cores 0-11, one process a
   run, paired by `perf_native_brains` on the final build, load 0.9 to 1.1; means in ms per tick; `reports/perf/M4-T17b_*`):
 
@@ -4024,19 +4028,49 @@ stay the reference behind `perf_native_brains`.
 
   The GDScript arm matches T16's numbers on the base (think 4.84, 3.18 and 18.97 ms at furball 100, typical and battle
   300), so it stands in for the before. **The think stage at 300 falls from 19.3 to 4.6 ms, at 500 from 36.0 to 7.7; the
-  tick at 300 from 38.4 to 24.2 ms and typical from 6.5 to 4.4.** The Done-when's 2 ms at 300 is missed by about 2.3 times:
-  what remains is about 35 us a thinking ship (the one native call with its list picking from the rows and the GDScript
-  glue around it: the lite perception, the command and mirror writes, the target follow, `apply_commands`) plus the scan
-  stage's 1.3 ms (the shared scan's snapshot of 1 345 rows a tick, which the targeting and the stand-ins read too). The plan's
-  5 us a fighter needs the per-ship call gone: one native pass over every thinking ship a tick (T18's shape), with the
-  commands handed to the flight step inside the core. On the native path the probe's `scan` stage is the scan's build and
-  the lite perceptions; the native list picking sits in the think.
+  tick at 300 from 38.4 to 24.2 ms and typical from 6.5 to 4.4.** The Done-when's 2 ms at 300 is missed by about 2.3 times.
+  What the 4.6 ms holds, from one instrumented run (below): about 1.3 ms the scan stage (the shared scan's snapshot of
+  1 345 rows a tick, which the targeting and the stand-ins read too, plus the lite perceptions), about 1.6 ms the 94 native
+  calls (16.9 us each: the list picking from the rows, the scoring, the behaviour, the avoidance, the call's 13 arguments
+  and 54 numbers back), about 0.9 ms the facade's GDScript around them (9.4 us each), and the rest the driver's step with
+  the 206 held ships' early returns and the command application. What T18's batch pass can take: the facade and the
+  driver's per-ship glue (about 1.5 ms) and, with the brains' commands written into the core's rows and applied by the
+  flight step, `apply_commands`; it does not shorten the native call itself, which also needs the id index and the
+  names resolved once (fix round 1, re-measured below). What moving the snapshot out of the think stage can take: about
+  1.3 ms, by building the shared scan's arrays only for what still reads them (the targeting, the stand-ins), so that
+  single-threaded 2 ms at 300 needs all three. On the native path the probe's `scan` stage is the scan's build and the
+  lite perceptions; the native list picking sits in the think.
 - **Where a native think's time goes** (one instrumented battle 300 run, not committed): the native call itself 16.9 us a
   think (80 236 calls; the list picking over the rows, the scoring, the behaviour, the avoidance, the 13 arguments and the
   54-number result), the facade's GDScript around it 9.4 us (the slot and context checks, the command and mirror writes),
-  and the driver's step, the 206 held ships' early returns and the scan build the rest of about 48 us a thinking ship.
+  and the driver's step, the 206 held ships' early returns and the scan build the rest: 4.6 ms over 94 thinks is about
+  48 us a thinking ship all in, of which about 35 us outside the scan stage.
 - **The quick check** (`reports/perf/M4-T17_quick`, load 0.9): furball and spread hold the budget up to **100 ships** (T16's
   check on the base: 75), furball falls under 30 FPS at 500 (27.3), spread never does (34.5 at 500).
+- **Fix round 1 (2026-11-05, review `task-t17-review.md`).** A native pilot whose think the host declines (the rows moved
+  under the frame's scan: a rebase or a resolver's resync in the same frame, or no row for its ship) now holds its last
+  command for that tick, as a held far-rate tick does, counted in `ai.thinks_fallback`; before, its GDScript objects ran on
+  a stale mirror and a hit they never reacted to gave a spurious evade (`test_brain_in_play`; the Q16 test asserts no
+  fallback and every think native: none in 60 000 thinks). The rows carry an id-to-row index and the objective's and
+  guard's names are resolved to ids once (re-resolved only when that row is gone or renamed); the ram's commitment rides on
+  every think's output; `native_capable` checks each behaviour's construction; a hull, selection or reach read that finds no
+  value is counted (`core.column_read_failures`) and warned about once. Re-measured (`M4-T17c_*`, load 0.1 to 1.2, means in
+  ms per tick): battle 300 think **4.64** native against 19.42 GDScript (tick median 24.38 against 38.55), battle 500 think
+  **7.65** against 36.23 (42.38 against 70.54): the index and the resolved names changed nothing measurable (4.61 before), so
+  the 16.9 us native call is the scoring, the behaviour, the avoidance and the list queries themselves, plus the call. What
+  remains of the 4.6 ms and who can take it: about 1.3 ms the shared scan's snapshot and the lite perceptions (the scan
+  stage; moving the snapshot to its remaining readers, the targeting and the stand-ins, takes it), about 0.9 ms the facade's
+  GDScript per think and part of the driver's per-ship step (T18's batch pass, one native call a tick with the commands
+  written into the core's rows, takes those), about 1.6 ms the native calls themselves (T18's threads divide them by the
+  cores; single-threaded they stay). So single-threaded 2 ms at 300 is not reached by the batch alone; with the snapshot
+  moved as well it comes to about 2 ms, and the threads take it under.
+- **The flight and stand-in stages on the native arm are real, not load** (an ABBA run at battle 300, native, GDScript,
+  GDScript, native, load 1.2 to 2.3): flight 9.58, 8.54, 8.70, 9.82 ms; stand-ins 6.16, 4.85, 4.97, 6.32; targeting and
+  resolvers a little lower on native (2.29 against 2.46, 4.44 against 4.69). The stand-ins' rise is work moved, not added:
+  the GDScript drivers stamped most `Contact`s of the shared scan in their perceive, and the turret stand-ins found them
+  stamped; with the native brains picking from the rows, the stand-ins stamp them. Flight's rise (about 1.0 ms at 300, 1.8 at
+  500) has no mechanism found: the batch reads the same rows and applies the same commands on both arms; it is noted for
+  the wave's combined measurement and T18. The tick medians (24.2 against 38.5 at 300) are the honest gain.
 - **Behaviour changes:** none in seeded outcomes.
 
 ## Definition of done (M4)

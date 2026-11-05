@@ -2559,8 +2559,11 @@ src/ai/ai_pilot_driver.gd        the native path: a perception without contact l
   and scores; `test_brain_tolerance` flies the bench's furball and spread at 50 for seeds 1 to 3 on both paths (Q16).
 - **The rows the brains need.** Three columns joined the rows: `hull_fraction` (`Damageable.hull.fraction()`, -1 without a
   hull), `target_ids` (the ship's selection, -1 for none) and `reach` (the marker's broadcast range), plus a lowered copy of
-  the name for the objective's and the guard's name matching. The first two are read at the sync points (two property
-  reads of the hull's health and one of the targeting system a body, the handles taken once with the attributes), where
+  the name for the objective's and the guard's name matching, and an id-to-row index rebuilt with the rows, so a brain finds
+  a kept contact, its objective or its guarded ship by id in a binary search (the names are resolved to ids once, and again
+  only when that row is gone or renamed). The first two are read at the sync points (two property
+  reads of the hull's health and one of the targeting system a body, the handles taken once with the attributes; a read that finds no value is counted in
+  `core.column_read_failures` and warned about once), where
   the GDScript scan stamped them live on the first hand-out; in the tick's order both read the same values, since
   selections change at the drivers (behind `note_selection`) and hulls at the resolvers. The broadcast list comes from the
   rows with a reach beyond the near range, in row order, where the GDScript scan listed `Targetable.broadcasters()` in
@@ -2572,13 +2575,18 @@ src/ai/ai_pilot_driver.gd        the native path: a perception without contact l
   the game reads of a pilot is mirrored back after each think: `current`, the scores, `wanted_target_id`, the wish, an
   evade's jinks, an attack's run and gate, a rammer's commitment, a route's waypoint, phase, lag, visited list and results.
   A rammer committed from outside (a test) is pushed forward.
-- **Thread-ready (for T18).** `brain_behaviours::Brain::think` takes the rows, the bolts, the grid, the ship's own row, the
-  caller's scratch (the picked lists, the context split, the keep ids) and the inputs, mutates only its own `Brain` and that
-  scratch, and allocates nothing per tick after warm-up; the contact queries fill the caller's lists (`*_into`). No statics,
-  no caches written during a pass, every roll from the brain's own generators. The host keeps one `Scratch` and one grid
-  `Work` (the grid's cells plus the query scratch); T18 gives each worker its own and shares the cells.
+- **Thread-ready (for T18).** `brain_behaviours::Brain::think` takes the rows, the bolts, the grid, the tick's field (the bolts
+  by cell, the broadcasters), the ship's own row, the caller's scratch (the picked lists, the context split, the keep ids)
+  and the inputs, mutates only its own `Brain` and that scratch, and allocates nothing per ship per tick after warm-up; the
+  contact queries fill the caller's lists (`*_into`). No statics, no caches written during a pass, every roll from the
+  brain's own generators. Not yet in place for a batch: `contact::Work` bundles the shared cells with the per-query scratch
+  (to split), the host's one `Scratch` (one per worker), and the per-ship `Inputs` that still arrive from GDScript per call.
+- **The fallback.** A pilot with a brain in the slot whose think the host declines (the rows moved under the frame's scan,
+  or its ship has no row this tick) holds its last command for that tick, as a held far-rate tick does, and is counted in
+  `ai.thinks_fallback`; its GDScript objects, which hold only the mirror, never run. A pilot without a slot yet thinks in
+  GDScript as before.
 - **Console and settings.** `perf_native_brains` (default on; off = the GDScript brains, so a bench pairs the two in one
-  process). Provider `ai` gains `thinks_native` (AI ships whose think ran natively in the last tick); `ai <name>` reads a
+  process). Provider `ai` gains `thinks_native` (AI ships whose think ran natively in the last tick) and `thinks_fallback` (native pilots the host declined, each holding its last command); `ai <name>` reads a
   native pilot's `describe()` from its slot (the behaviour in control, its state and fields, the scores).
 
 ### 17.16 Rocks and mines as static rows (T29)
