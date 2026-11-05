@@ -960,10 +960,10 @@ impl ScsSimCore {
         out
     }
 
-    /// The bolts as `[ids, starts, ends, radii, kinds, beams, shooters, factions, damage, colors, spent, owned, velocities]`:
-    /// a bolt's segment this tick (`end - last_step` to `end`), its hit radius, its kind (`SimCore.KIND_*`), which bolts
-    /// are beams, and (M4-T35) what a hit lands with, which rows a hit already spent, how many rows at the front the
-    /// core owns, and the velocities.
+    /// The bolts as `[ids, starts, ends, radii, kinds, beams, shooters, factions, damage, colors, spent, owned, velocities,
+    /// last_steps]`: a bolt's segment this tick (`end - last_step` to `end`), its hit radius, its kind (`SimCore.KIND_*`),
+    /// which bolts are beams, and (M4-T35) what a hit lands with, which rows a hit already spent, how many rows at the
+    /// front the core owns, the velocities and the steps themselves.
     #[func]
     fn bolt_columns(&self) -> VarArray {
         let b = &self.bolts;
@@ -999,6 +999,7 @@ impl ScsSimCore {
         out.push(&PackedByteArray::from(spent.as_slice()).to_variant());
         out.push(&(b.owned as i64).to_variant());
         out.push(&PackedVector3Array::from(b.velocities.as_slice()).to_variant());
+        out.push(&PackedVector3Array::from(b.last_steps.as_slice()).to_variant());
         out
     }
 

@@ -287,19 +287,19 @@ class Watch extends Node:
 		var sim: SimCore = SimCore.current()
 		if sim != null and sim.bolt_rows_on():
 			var columns: Array = sim.core.bolt_columns()
-			var starts: PackedVector3Array = columns[1]
 			var ends: PackedVector3Array = columns[2]
 			var radii: PackedFloat64Array = columns[3]
 			var shooters: PackedInt64Array = columns[6]
 			var spent: PackedByteArray = columns[10]
 			var velocities: PackedVector3Array = columns[12]
+			var steps: PackedVector3Array = columns[13]
 			for i: int in int(columns[11]):
 				if spent[i] == 0 or shooters[i] != info.shooter_id:
 					continue
 				var d: float = ends[i].distance_to(info.point)
 				if d < nearest:
 					nearest = d
-					var step_m: float = (ends[i] - starts[i]).length()
+					var step_m: float = steps[i].length()
 					reach = step_m + radii[i] + JUMP_SLACK_M
 					if step_m > velocities[i].length() * _dt + 1e-3:
 						fight._fail("a bolt row's step was %.1f m, its velocity gives %.1f m" % [step_m, velocities[i].length() * _dt])
