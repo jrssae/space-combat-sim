@@ -118,11 +118,11 @@ const ENTRIES: Dictionary = {
 	&"perf_native_bolt_sync": {"type": TYPE_BOOL, "default": true,
 		"doc": "The core's two bolt reads a tick go through the cheaper native reader (M4-T34) when the core is on; off = the core's own read, the reference, for pairing the two in one process"},
 	&"perf_ram_contact_columns": {"type": TYPE_BOOL, "default": true,
-		"doc": "The ram resolver hands its contact tracker columns and builds contact lists only for the hulls Jolt reports touching (M4-T34); off = a sample per hull every tick, the reference, for pairing the two in one process"},
+		"doc": "The ram resolver hands its contact tracker columns and builds contact lists only for the hulls Jolt reports touching (M4-T34); off = a sample per hull every tick, the reference, for pairing the two between runs (a switch mid-run resets the tracker's open windows)"},
 	&"perf_ram_sweep_cull": {"type": TYPE_BOOL, "default": true,
 		"doc": "The ram resolver's swept test first checks a hull's bounding sphere, then each volume's, against the other hull's box and places only the volumes that can reach it (M4-T34; the same answers); off = every volume placed, the reference"},
 	&"perf_targeting_on_read": {"type": TYPE_BOOL, "default": true,
-		"doc": "The player's targeting computer checks its selection every tick and builds its list of every target only when it is read, the HUD's and the radar's once a frame (M4-T34; the same selection); off = the list built every tick, the reference"},
+		"doc": "The player's targeting computer checks its selection every tick and notes each target's place, reach and name, and builds its full list of every target only when it is read, the HUD's and the radar's once a frame (M4-T34; the same selection, its name and select_id answers; the list itself as of the read); off = the list built every tick, the reference"},
 	&"perf_native_sweep_cells": {"type": TYPE_BOOL, "default": true,
 		"doc": "The native hit broad phase keeps its grid's cells in hash maps (M4-T34; the same pairs and work); off = the sorted cells, the reference"},
 }

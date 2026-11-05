@@ -32,6 +32,13 @@ var keeps_candidates: bool = true
 var _body: RigidBody3D = null
 # The list was not built since the last refresh (M4-T34, `perf_targeting_on_read`): the next reader builds it.
 var _stale: bool = false
+# What the last refresh's list held, light (M4-T34, on read): each target's id, position, broadcast range and name, so the
+# selection, its name and `select_id` answer as from the list the refresh used to build. Valid until a command gathers anew.
+var _snap_ids := PackedInt64Array()
+var _snap_positions := PackedVector3Array()
+var _snap_reach := PackedFloat64Array()
+var _snap_names := PackedStringArray()
+var _snap_valid: bool = false
 
 
 func _init() -> void:
@@ -70,11 +77,12 @@ func _physics_process(_delta: float) -> void:
 ## controller keeps them.
 func refresh() -> void:
 	var before: int = system.selected_id()
-	if keeps_candidates and not bool(Settings.get_value(&"perf_targeting_on_read")):
-		_gather()
-	else:
+	if not keeps_candidates:
 		_check_selection()
-		_stale = keeps_candidates
+	elif bool(Settings.get_value(&"perf_targeting_on_read")):
+		_snapshot()
+	else:
+		_gather()
 	_emit_if_changed(before)
 
 
@@ -124,7 +132,9 @@ func selected_id() -> int:
 
 ## Display name of the selection, or "" when nothing is selected.
 func selected_name() -> String:
-	_ensure_list()
+	if keeps_candidates and _snap_valid:
+		var k: int = _snap_ids.find(system.selected_id())
+		return _snap_names[k] if k >= 0 else ""
 	var target: TargetInfo = system.selected()
 	return target.display_name if target != null else ""
 
@@ -183,8 +193,8 @@ func select_by_name(display_name: String) -> bool:
 
 
 ## Selects the in-range target with this id (a `Targetable` instance id: an AI brain's choice), from the candidates of the
-## last refresh, gathering them again only when it is not among them; a controller that does not keep its candidates checks
-## that one target alone. Returns whether it is selected.
+## last refresh (on read, from what that refresh's list held), gathering them again only when it is not among them; a
+## controller that does not keep its candidates checks that one target alone. Returns whether it is selected.
 func select_id(target_id: int) -> bool:
 	if not _has_body():
 		return false
@@ -196,11 +206,9 @@ func select_id(target_id: int) -> bool:
 				_select_alone(target)
 			else:
 				_check_selection()
-		else:
-			var fresh: bool = _ensure_list()
-			if not system.select_id(target_id, _ship_position()) and not fresh:
-				_gather()
-				system.select_id(target_id, _ship_position())
+		elif not (_snap_select(target_id) if _snap_valid else system.select_id(target_id, _ship_position())):
+			_gather()
+			system.select_id(target_id, _ship_position())
 	_emit_if_changed(before)
 	return system.selected_id() == target_id
 
@@ -215,6 +223,7 @@ func _gather() -> void:
 	if not _has_body() or not is_inside_tree():
 		return
 	_stale = false
+	_snap_valid = false
 	system.update(_infos(), _ship_position())
 
 
@@ -227,6 +236,43 @@ func _infos() -> Array[TargetInfo]:
 			continue
 		infos.append(targetable.to_target_info())
 	return infos
+
+
+# The refresh on read (M4-T34): notes what the list would hold (in play, not its own, at its position now) and clears the
+# selection as `TargetingSystem.update` would over that list; the full list waits for its first reader.
+func _snapshot() -> void:
+	if not _has_body() or not is_inside_tree():
+		return
+	_snap_ids.clear()
+	_snap_positions.clear()
+	_snap_reach.clear()
+	_snap_names.clear()
+	for node: Node in get_tree().get_nodes_in_group(Targetable.GROUP):
+		var targetable := node as Targetable
+		if targetable == null or _body.is_ancestor_of(targetable) or not targetable.is_active():
+			continue
+		_snap_ids.append(targetable.get_instance_id())
+		_snap_positions.append(targetable.global_position)
+		_snap_reach.append(targetable.broadcast_range_m)
+		_snap_names.append(targetable.display_name)
+	_snap_valid = true
+	_stale = true
+	if system.has_selection() and not _snap_in_reach(_snap_ids.find(system.selected_id())):
+		system.clear()
+
+
+# Whether snapshot entry `k` is listed and within reach of the ship now (`TargetingSystem.in_range`'s test).
+func _snap_in_reach(k: int) -> bool:
+	return k >= 0 and TargetingSystem.range_between(_ship_position(), _snap_positions[k]) \
+			<= maxf(system.sensor_range_m, _snap_reach[k])
+
+
+# `TargetingSystem.select_id` over what the last refresh's list held; true when the target was there and within reach.
+func _snap_select(target_id: int) -> bool:
+	if not _snap_in_reach(_snap_ids.find(target_id)):
+		return false
+	system.select_listed(target_id)
+	return true
 
 
 # Builds the kept list now if no one has since the last refresh (M4-T34), leaving the selection as the refresh left it;

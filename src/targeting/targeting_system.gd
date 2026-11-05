@@ -54,6 +54,12 @@ func set_candidates(candidates: Array[TargetInfo]) -> void:
 	_candidates = candidates.duplicate()
 
 
+## Selects `target_id`, which the caller found within reach in its own copy of the list (M4-T34). Returns true if the
+## selection changed.
+func select_listed(target_id: int) -> bool:
+	return _select(target_id)
+
+
 ## How far away `info` can be and still be selected: the sensor range, or its broadcast range when that is farther.
 func reach_m(info: TargetInfo) -> float:
 	return maxf(sensor_range_m, info.broadcast_range_m)

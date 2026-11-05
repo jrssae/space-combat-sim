@@ -40,6 +40,7 @@ var use_native: bool = true
 var visited: int = 0
 
 var _sweep: Object = null
+var _cells_set: int = -1  # what the native sweep was last told (M4-T34)
 # The kept hulls, and each path's grid of them (built on first use after `keep`).
 var _kept_mids := PackedVector3Array()
 var _kept_reach := PackedFloat64Array()
@@ -166,8 +167,10 @@ func _native() -> Object:
 		return null
 	if _sweep == null:
 		_sweep = NativeLib.instantiate(NATIVE_CLASS)
-	if _sweep != null and _sweep.has_method(&"set_cells"):
-		_sweep.set_cells(bool(Settings.get_value(&"perf_native_sweep_cells")))  # M4-T34: the same pairs, found faster
+	var cells: int = int(bool(Settings.get_value(&"perf_native_sweep_cells")))
+	if _sweep != null and cells != _cells_set and _sweep.has_method(&"set_cells"):
+		_cells_set = cells
+		_sweep.set_cells(cells == 1)  # M4-T34: the same pairs, found faster
 	return _sweep
 
 

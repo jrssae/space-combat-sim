@@ -215,7 +215,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T31 | Remove Gaussian splats: `addons/gdgs_scs` and every splat path in code, procgen, settings, console commands, tests, scripts, CI and docs (Q29, Q30) | T30d, T30c | Opus | About 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only deletion | X, R, G | done (2026-11-04, in a worktree on `8329f16`; Cycle log, M4-T31) |
 | T32 | Wing-level AI research: what deciding per wing instead of per fighter would save at 300 and 500 ships, how other games do it, and a proposal (Q46) | phase 2 (T18, T20), report P2 | Fable | Research and a design judgement over the measured think stage; no game code | M | done (2026-11-05, in a worktree on `08228cc`, fix round 1 the same day; `docs/research/wing-level-ai.md`; the proposal below waits for the maintainer at checkpoint 3: wing-level decisions are 2 % of a thinking ship's cost, so the proposal is to build the rows-based command path (1.3 to 2.0 ms at 300), fold a cluster perception into T22 and keep wing tactics as a later feel feature) |
 | T33 | The native pilots' inputs and commands as core rows (T32's L1, Q50): the batch writes each pilot's flight and combat command into its row and `FlightBatch` applies it the same tick | checkpoint 3 | Opus | Removes most of the 23 to 27 us of GDScript a thinking ship; owns T18's two missed numbers | N, G | not started |
-| T34 | The cheap pass on the per-ship stages (Q50): the ram stage's loop, the hit stage's gather, targeting and the core's sync, into native code or out of the per-tick path | checkpoint 3 | Opus | 13.3 of 17.85 ms at `battle` 300 sits in four stages phase 2 did not take (report P2) | N, G | done, bit for bit behind six settings; the four stages at `battle` 300 from 9.12 to 4.00 ms and the tick from 17.72 to 12.70 (8 ms missed, the rest named in the entry); at 500 15.81 to 7.13 and 30.42 to 21.30 (2026-11-05, in a worktree on `9cd88d5`; Cycle log, M4-T34) |
+| T34 | The cheap pass on the per-ship stages (Q50): the ram stage's loop, the hit stage's gather, targeting and the core's sync, into native code or out of the per-tick path | checkpoint 3 | Opus | 13.3 of 17.85 ms at `battle` 300 sits in four stages phase 2 did not take (report P2) | N, G | done, bit for bit, five of the six changes behind a setting; the four stages at `battle` 300 from 9.12 to 4.16 ms and the tick from 17.72 to 12.86 (8 ms missed, the rest named in the entry); at 500 15.81 to 7.47 and 30.42 to 21.74 (2026-11-05, in a worktree on `9cd88d5`, fix round 1 the same day; Cycle log, M4-T34) |
 | T35 | The core owns the simulated state (Q55): bolts as rows drawn by one multimesh, Jolt bodies read once a tick by RID in one native call, activity, hull and selection as event-driven columns, the ram stage's contact read native | T33, T34 | Fable | Refactor review findings 1, 4, 6 and part of 5: 5 to 8 ms at 500 for the bolts alone; T24's precondition | N, G | not started |
 | T36 | The frame's per-ship work in one pass per subsystem (Q56, Q58): plumes, muzzle flashes, LOD switching, audio, far dots, the HUD radar, hit flashes; the splat-era render scale cap; the slow test switch | T33 | Opus | Refactor review findings 2, 3, 7, 9, 12, 13, 14: 3 to 5 ms a frame at 500 | R, G | not started |
 | T37 | M4's cleanup (Q57): the native library required, the GDScript paths test-only, the runtime fallbacks and their settings removed, one hull-reading path, the documentation drift | T23 | Opus | Refactor review findings 8, 16, 17: 1 500 to 2 500 lines and eight settings; parity surfaces halved | X, G | not started |
@@ -1948,8 +1948,9 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   points (`ScsBoltSync`, `perf_native_bolt_sync`); the ram contact phase in columns (`perf_ram_contact_columns`); early
   rejects in the ram sweep (`perf_ram_sweep_cull`); the hit broad phase's grid with hashed cells (`sweep_cells.rs`,
   `perf_native_sweep_cells`). The four stages at `battle` 300 fell from 9.12 to 4.00 ms (the guess was half of 13.3 ms) and
-  the tick from 17.72 to 12.70 ms, still over Q49's 8 ms; what remains is named in the Cycle log entry. Flight's GDScript
-  stays T33's.
+  the tick from 17.72 to 12.70 ms, still over Q49's 8 ms; after fix round 1 (the refresh notes the list it would have built,
+  so `select_id` and the selection's name answer as before) 4.16 and 12.86 ms; what remains is named in the Cycle log
+  entry. Flight's GDScript stays T33's.
 
 ##### M4-T35 The core owns the simulated state (Q55)
 
@@ -4883,6 +4884,22 @@ pending**, every run exit 0, no script errors (`reports/perf/M4-T34_focused_fina
 (`test_ai_think_time`, `test_m3_run`, `test_control_profiles`, `test_control_profile`, `test_control_profile_store`). `cargo fmt --check` clean on the new
 and changed files; `cargo clippy --release -- -D warnings` clean on them (one pre-existing `redundant_field_names` in the
 untouched `native_probe.rs`, which the clean run with that lint allowed confirms is the only one).
+
+**Fix round 1 (2026-11-05).** The review found that `test_targeting_on_read` read the selection's name right after every
+refresh, which built the on-read list at refresh time, so it never tested a read or a command meeting an older list; and
+that `select_id` then picked from a list built when the command ran, which can drop a target that left reach after the
+refresh (the reference selected it and cleared it at the next refresh). Now the on-read refresh notes what the list would
+hold (each target's id, position, broadcast range and name) and clears the selection over that note as
+`TargetingSystem.update` would; `select_id` and the selection's name answer from it, and only `candidates()` builds the full
+list at its read. The test (RED: step 61, the selection's name empty against "T9") now refreshes every step, moves, hides
+and frees targets before anything reads, issues commands and reads only sometimes, and compares 600 steps both ways: alike,
+with 2 commands that took a target already out of reach and 103 late reads (late list reads are built at the read by design
+and not compared). The note costs targeting 0.52 ms at `battle` 300 (0.36 without it), 0.93 at 500 (0.60) and 0.11 at
+`typical` (0.08); the ticks 12.86, 21.74 and 3.19 ms (single runs, load 1.2 to 1.4, `M4-T34_fix1_*`). Also: the T34 row
+counts five settings, the contact-columns setting says to switch it between runs, and `HitBroadPhase` tells the native sweep
+the cells setting only when it changes. Focused runs after the fix: 21 files, 298 tests, all passing (the targeting files,
+`test_targeting_on_read`, `test_targetable_hull`, `test_hud`, `test_ai_pilot_selection`, `test_ai_driver`, the hit and grid
+files, the settings files, `test_main_scene` and AC13's five).
 
 ## Definition of done (M4)
 

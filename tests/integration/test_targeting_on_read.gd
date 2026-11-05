@@ -6,7 +6,7 @@ extends GutTest
 ## right after a refresh is the same list.
 
 const STARFURY_PATH: String = "res://assets/ships/starfury_aurora.tres"
-const STEPS: int = 400
+const STEPS: int = 600
 
 var world: WorldFrame
 var projectiles: Node3D
@@ -64,8 +64,12 @@ func _list(infos: Array[TargetInfo]) -> String:
 	return ", ".join(parts)
 
 
-# A seeded run of selection commands and moves, stepped by hand: per step the selection, the signals and the list read.
-func _run(on: bool) -> PackedStringArray:
+# A seeded run stepped by hand, as ticks go: a refresh, then things move, hide or go before anything reads the list (Jolt's
+# step, a hit), then sometimes a selection command, and only sometimes a read, so a read or a command often meets a list
+# several refreshes old or targets that left since. Per step: the selection, its signals, the selection's name when read, and
+# the list when read with nothing changed since the refresh. Returns [log, commands that selected a target already out of
+# reach when they ran, late list reads].
+func _run(on: bool) -> Array:
 	Settings.set_value(&"perf_targeting_on_read", on)
 	_world()
 	var player: Combatant = _player()
@@ -77,7 +81,7 @@ func _run(on: bool) -> PackedStringArray:
 	var markers: Array[Targetable] = []
 	for i: int in 16:
 		var faction: StringName = [Factions.RAIDERS, Factions.EARTH_ALLIANCE, Factions.NEUTRAL][i % 3]
-		var at := Vector3(rng.randf_range(-30000.0, 30000.0), rng.randf_range(-3000.0, 3000.0), rng.randf_range(-30000.0, 30000.0))
+		var at := Vector3(rng.randf_range(-24000.0, 24000.0), rng.randf_range(-3000.0, 3000.0), rng.randf_range(-24000.0, 24000.0))
 		markers.append(_marker("T%d" % i, faction, at, 40000.0 if i % 7 == 0 else 0.0))
 	var names: Dictionary = {0: "none"}
 	for m: Targetable in markers:
@@ -85,47 +89,74 @@ func _run(on: bool) -> PackedStringArray:
 	var signals: Array[String] = []
 	targeting.target_changed.connect(func(id: int) -> void: signals.append(names.get(id, "?")))
 	var log := PackedStringArray()
+	var stale_selects: int = 0
+	var late_reads: int = 0
 	for step: int in STEPS:
-		var m: Targetable = markers[rng.randi_range(0, markers.size() - 1)]
-		var holder := m.get_parent() as Node3D
-		var roll: float = rng.randf()
-		if rng.randf() < 0.5:
-			# Something moves between the refresh and the command, as Jolt's step moves ships between two ticks.
-			var mover := markers[rng.randi_range(0, markers.size() - 1)].get_parent() as Node3D
-			mover.position += Vector3(rng.randf_range(-8000.0, 8000.0), 0.0, rng.randf_range(-8000.0, 8000.0))
-		if roll < 0.35:
-			holder.position += Vector3(rng.randf_range(-8000.0, 8000.0), 0.0, rng.randf_range(-8000.0, 8000.0))
-		elif roll < 0.45:
-			holder.visible = not holder.visible
-		elif roll < 0.6:
-			targeting.select_id(markers[rng.randi_range(0, markers.size() - 1)].get_instance_id())
-		elif roll < 0.68:
-			targeting.select_nearest_hostile()
-		elif roll < 0.72 and markers.size() > 6:
-			markers.erase(m)
-			holder.free()
-		elif roll < 0.76:
-			targeting.clear_selection()
 		targeting.refresh()
-		var line: String = "%d sel %s name %s signals %s" % [step, names.get(targeting.selected_id(), "none"),
-				targeting.selected_name(), str(signals)]
+		var line: String = "%d refresh sel %s signals %s" % [step, names.get(targeting.selected_id(), "none"), str(signals)]
 		signals.clear()
-		if step % 3 == 0:
-			line += " list " + _list(targeting.candidates())
+		# After the refresh, before anything reads: moves (some across the 25 km reach), hides, a target gone.
+		var changed: bool = false
+		for e: int in rng.randi_range(0, 3):
+			var m: Targetable = markers[rng.randi_range(0, markers.size() - 1)]
+			var holder := m.get_parent() as Node3D
+			var roll: float = rng.randf()
+			if roll < 0.6:
+				holder.position += Vector3(rng.randf_range(-9000.0, 9000.0), 0.0, rng.randf_range(-9000.0, 9000.0))
+			elif roll < 0.85:
+				holder.visible = not holder.visible
+			elif markers.size() > 6:
+				markers.erase(m)
+				holder.free()
+			changed = true
+		# Sometimes a command.
+		var command: float = rng.randf()
+		if command < 0.35:
+			var wanted: Targetable = markers[rng.randi_range(0, markers.size() - 1)]
+			var reach: float = maxf(TargetingSystem.SENSOR_RANGE_M, wanted.broadcast_range_m)
+			var out_now: bool = not wanted.is_active() or TargetingSystem.range_between(player.ship.global_position,
+					wanted.global_position) > reach
+			var took: bool = targeting.select_id(wanted.get_instance_id())
+			stale_selects += 1 if took and out_now else 0
+			line += " | select %s %s" % [wanted.display_name, took]
+		elif command < 0.45:
+			line += " | nearest %s" % targeting.select_nearest_hostile()
+		elif command < 0.5:
+			targeting.clear_selection()
+			line += " | clear"
+		line += " sel %s signals %s" % [names.get(targeting.selected_id(), "none"), str(signals)]
+		signals.clear()
+		# Only sometimes a read.
+		if rng.randf() < 0.3:
+			line += " | name %s" % targeting.selected_name()
+		if rng.randf() < 0.2:
+			var listed: Array[TargetInfo] = targeting.candidates()
+			if changed or command < 0.5:
+				late_reads += 1  # read after things changed since the refresh: built now on read, so not compared
+			else:
+				line += " | list " + _list(listed)
+			line += " sel %s signals %s" % [names.get(targeting.selected_id(), "none"), str(signals)]
+			signals.clear()
 		log.append(line)
 	world.free()
-	return log
+	return [log, stale_selects, late_reads]
 
 
 func test_the_selection_and_the_list_read_are_the_same_either_way() -> void:
-	var every_tick: PackedStringArray = _run(false)
-	var on_read: PackedStringArray = _run(true)
-	assert_eq(on_read.size(), every_tick.size())
-	for i: int in every_tick.size():
-		if on_read[i] != every_tick[i]:
-			fail_test("step %d differs:\n%s\nagainst\n%s" % [i, on_read[i], every_tick[i]])
+	var every_tick: Array = _run(false)
+	var on_read: Array = _run(true)
+	var a: PackedStringArray = every_tick[0]
+	var b: PackedStringArray = on_read[0]
+	assert_eq(b.size(), a.size())
+	for i: int in a.size():
+		if b[i] != a[i]:
+			fail_test("step %d differs:\n%s\nagainst\n%s" % [i, b[i], a[i]])
 			return
-	pass_test("%d steps alike" % every_tick.size())
+	gut.p("%d steps alike; %d commands took a target already out of reach (the refresh's list decides, both ways); %d late reads" % [
+			a.size(), every_tick[1], every_tick[2]])
+	assert_eq(on_read[1], every_tick[1])
+	assert_gt(every_tick[1], 0, "some commands met a list older than the target's move, so that case was compared")
+	assert_gt(every_tick[2], 10, "some reads came late")
 
 
 func test_no_list_is_built_while_nothing_reads_it() -> void:

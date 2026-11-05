@@ -2685,10 +2685,15 @@ src/targeting/targeting_controller.gd  the player's candidate list built when re
   binary searches a column, so the candidates, the pairs and the work count stay the same. With no setting, a targetable
   keeps its owner's hull until the owner's children change (`child_order_changed`), so every value stays what
   `Damageable.of` gives.
-- **What a reader sees.** Everything the simulation decides is the same bit for bit (the tests below). One thing moved in
-  time: the player's candidate list a window's HUD reads is now built at that read, after the tick, so its positions and
-  hulls are a physics step fresher than the list the last refresh used to leave. In a window the HUD still builds it once a
-  frame: the gain is the ticks a frame carries beyond the first, and all of it headless.
+- **What a reader sees.** Everything the simulation decides is the same bit for bit (the tests below). On read, the
+  player's refresh still notes each listed target's id, position, broadcast range and name (fix round 1), so the selection
+  check, the selection's name and `select_id` answer from what the refresh's list held, as before; a target that left reach
+  after the refresh can still be selected by a command until the next refresh clears it, both ways. One thing moved in
+  time: the full candidate list a window's HUD reads (`candidates()`) is now built at that read, after the tick, so its
+  positions and hulls are a physics step fresher than the list the last refresh used to leave. In a window the HUD still
+  builds it once a frame: the gain is the ticks a frame carries beyond the first, and all of it headless. The note costs
+  0.52 ms of targeting at `battle` 300 (0.36 without it, 2.43 on the base). The list is changed from the HUD's `_process`,
+  so `refresh` and the commands must stay on the main thread (a note for T24).
 - **Tests.** `test_bolt_sync` (a seeded crowd of bolts, missiles and beams, spent, freed and new each round: the same bolt
   rows at both sync points; the engine calls counted alike), `test_ram_tracker_columns` (400 random ticks of two trackers
   side by side: the same rams field for field), `test_ram_contact_columns` (T14's melee both ways: the same rams and
