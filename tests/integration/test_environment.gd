@@ -203,12 +203,13 @@ func test_the_environment_loads_with_no_generated_sky() -> void:
 # --- the compositor -----------------------------------------------------------------------------------------------
 
 
-func test_compositor_holds_the_blur_then_the_flare() -> void:
+func test_compositor_holds_the_sky_vectors_the_blur_then_the_flare() -> void:
 	var compositor: Compositor = env.world_environment.compositor
 	assert_not_null(compositor)
-	assert_eq(compositor.compositor_effects.size(), 2, "motion blur, lens flare (M3-T25)")
-	assert_true(compositor.compositor_effects[0] is MotionBlurEffect, "the blur smears stars and hulls together")
-	assert_true(compositor.compositor_effects[1] is LensFlareEffect, "the flare goes on last, so it is never smeared")
+	assert_eq(compositor.compositor_effects.size(), 3, "sky motion vectors (M4-T38), motion blur, lens flare (M3-T25)")
+	assert_true(compositor.compositor_effects[0] is SkyVelocityEffect, "the sky's vectors are written before TAA reads them")
+	assert_true(compositor.compositor_effects[1] is MotionBlurEffect, "the blur smears stars and hulls together")
+	assert_true(compositor.compositor_effects[2] is LensFlareEffect, "the flare goes on last, so it is never smeared")
 
 
 # --- key light ---------------------------------------------------------------------------------------------------
