@@ -7,7 +7,8 @@ extends MultiMeshInstance3D
 ## mesh's mean albedo from the manifest (M4-T30d).
 ##
 ## A child of `World` (`attach`) at the World's origin, its dots in World-local metres. Each frame it writes each shown ship's
-## drawn pose. It is shiftable, so a rebase moves the written dots with everything else at once (no frame draws one at its old
+## drawn pose; a ship's paint and size are read once, when it turns into a dot, and the dots' identity rotations once per slot,
+## so a frame writes a dot's place, paint and size only, and ships turning together cost one refresh (M4-T36). It is shiftable, so a rebase moves the written dots with everything else at once (no frame draws one at its old
 ## place); it then goes back to the origin and moves the dots instead, so its own offset never grows. A parked or freed ship draws
 ## none. Visual only.
 
@@ -25,8 +26,13 @@ const STRIDE: int = 16
 static var _asset_paint: Dictionary = {}
 
 var _ships: Array[Ship] = []
+# Per ship in `_ships`: its paint and its hull's radius, read when it turned into a dot.
+var _paints: Array[Color] = []
+var _radii: PackedFloat64Array = PackedFloat64Array()
 var _buffer: PackedFloat32Array = PackedFloat32Array()
 var _shown: int = 0
+## Refreshes so far (tests: ships that turn together cost one).
+var refresh_count: int = 0
 
 
 ## The world's dots, or null before any ship went far.
@@ -88,18 +94,19 @@ func _process(_delta: float) -> void:
 	refresh()
 
 
-## Draws `ship` as a dot from the next refresh on.
+## Draws `ship` as a dot from the next refresh on (this frame's: the dots refresh after the LOD pass).
 func add(ship: Ship) -> void:
 	if ship != null and not _ships.has(ship):
 		_ships.append(ship)
-		refresh()
+		_paints.append(_paint_of(ship))
+		_radii.append(ship.bounding_radius())
 
 
-## Stops drawing `ship` as a dot.
+## Stops drawing `ship` as a dot from the next refresh on.
 func remove(ship: Ship) -> void:
-	if _ships.has(ship):
-		_ships.erase(ship)
-		refresh()
+	var at: int = _ships.find(ship)
+	if at >= 0:
+		_forget(at)
 
 
 ## Dots drawn since the last refresh.
@@ -118,41 +125,59 @@ func dot_radius(index: int) -> float:
 	return _buffer[index * STRIDE + 15]
 
 
+## The paint dot `index` is drawn in.
+func dot_paint(index: int) -> Color:
+	var base: int = index * STRIDE
+	return Color(_buffer[base + 12], _buffer[base + 13], _buffer[base + 14])
+
+
+## The pose instance `index` is drawn with, in this node's frame.
+func instance_transform(index: int) -> Transform3D:
+	var b: int = index * STRIDE
+	return Transform3D(Vector3(_buffer[b], _buffer[b + 4], _buffer[b + 8]), Vector3(_buffer[b + 1], _buffer[b + 5], _buffer[b + 9]),
+			Vector3(_buffer[b + 2], _buffer[b + 6], _buffer[b + 10]), Vector3(_buffer[b + 3], _buffer[b + 7], _buffer[b + 11]))
+
+
 ## Writes every shown far ship at its drawn pose. `_process` calls it each frame; public for the tests.
 func refresh() -> void:
+	refresh_count += 1
 	var n: int = 0
 	for i: int in range(_ships.size() - 1, -1, -1):
 		if not is_instance_valid(_ships[i]) or not _ships[i].is_inside_tree():
-			_ships.remove_at(i)
+			_forget(i)
 	if _ships.size() > multimesh.instance_count:
+		var first_new: int = multimesh.instance_count
 		multimesh.instance_count = maxi(_ships.size(), multimesh.instance_count * 2)  # grows rarely, never shrinks
 		_buffer.resize(multimesh.instance_count * STRIDE)
+		for slot: int in range(first_new, multimesh.instance_count):
+			var b: int = slot * STRIDE  # the dots never turn: each slot's rotation is the identity, written once
+			_buffer[b] = 1.0
+			_buffer[b + 5] = 1.0
+			_buffer[b + 10] = 1.0
 	var to_local: Transform3D = global_transform.affine_inverse()
-	for ship: Ship in _ships:
+	for i: int in _ships.size():
+		var ship: Ship = _ships[i]
 		if not ship.is_visible_in_tree():
 			continue  # parked
 		var at: Vector3 = to_local * ship.get_global_transform_interpolated().origin
-		var paint: Color = _paint_of(ship)
+		var paint: Color = _paints[i]
 		var base: int = n * STRIDE
-		_buffer[base + 0] = 1.0
-		_buffer[base + 1] = 0.0
-		_buffer[base + 2] = 0.0
 		_buffer[base + 3] = at.x
-		_buffer[base + 4] = 0.0
-		_buffer[base + 5] = 1.0
-		_buffer[base + 6] = 0.0
 		_buffer[base + 7] = at.y
-		_buffer[base + 8] = 0.0
-		_buffer[base + 9] = 0.0
-		_buffer[base + 10] = 1.0
 		_buffer[base + 11] = at.z
 		_buffer[base + 12] = paint.r
 		_buffer[base + 13] = paint.g
 		_buffer[base + 14] = paint.b
-		_buffer[base + 15] = ship.bounding_radius()
+		_buffer[base + 15] = _radii[i]
 		n += 1
 	_shown = n
 	_upload()
+
+
+func _forget(at: int) -> void:
+	_ships.remove_at(at)
+	_paints.remove_at(at)
+	_radii.remove_at(at)
 
 
 func _upload() -> void:

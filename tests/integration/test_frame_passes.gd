@@ -105,3 +105,49 @@ func test_the_lod_pass_runs_each_frame_and_the_switchers_have_no_process_of_thei
 		var switcher := c.ship.get_node(^"LodSwitcher") as LodSwitcher
 		assert_true(_passes().has_switcher(switcher), "registered with the pass")
 		assert_false(switcher.is_processing(), "no _process of its own")
+
+
+# --- the far dots -----------------------------------------------------------------------------------------------------------
+
+
+func test_the_far_dots_write_each_ships_drawn_place_paint_and_size_each_frame() -> void:
+	Settings.set_value(&"far_ship_dot_m", 500.0)
+	var ships: Array[Combatant] = _ships(6)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for step: int in 4:
+		for c: Combatant in ships:
+			c.ship.global_position = camera.global_position + Vector3(rng.randfn(), rng.randfn(), rng.randfn()).normalized() \
+					* rng.randf_range(800.0, 3000.0)
+			c.ship.reset_physics_interpolation()
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var dots: FarDots = FarDots.of(world)
+		assert_eq(dots.dot_count(), ships.size(), "step %d: every ship a dot" % step)
+		var off: int = 0
+		for i: int in dots.dot_count():
+			var ship: Ship = null
+			for c: Combatant in ships:
+				if c.ship.get_global_transform_interpolated().origin.distance_to(dots.dot_position(i)) < 1e-3:
+					ship = c.ship
+			if ship == null or not is_equal_approx(dots.dot_radius(i), ship.bounding_radius()) \
+					or dots.dot_paint(i) != FarDots.asset_paint(ship.spec.asset_id):
+				off += 1
+			else:
+				var t: Transform3D = dots.instance_transform(i)
+				off += 0 if t.basis == Basis.IDENTITY else 1
+		assert_eq(off, 0, "step %d: each dot at its ship, with its paint and its hull's size" % step)
+
+
+func test_ships_turning_into_dots_together_cost_one_refresh_a_frame() -> void:
+	Settings.set_value(&"far_ship_dot_m", 500.0)
+	var ships: Array[Combatant] = _ships(10)
+	var dots: FarDots = FarDots.attach(world)
+	await get_tree().process_frame
+	for c: Combatant in ships:
+		c.ship.global_position = camera.global_position + Vector3(0.0, 0.0, -2000.0)
+	var before: int = dots.refresh_count
+	for i: int in 3:
+		await get_tree().process_frame
+	assert_eq(dots.dot_count(), 10)
+	assert_lte(dots.refresh_count - before, 3, "one refresh a frame, not one per ship that turned (the T11 minor)")
