@@ -86,8 +86,16 @@ func score(ctx: AiContext) -> float:
 	return 1.0 if committed else 0.0
 
 
-## Commits to a ram now (tests call it directly): the attack's target, else the nearest hostile ship.
+## Commits to a ram now (tests call it directly): the attack's target, else the nearest hostile ship. A pilot thinking in
+## the native brains (M4-T17) commits there, to the same pick, and the pilot mirrors the rest back after its next think.
 func commit(ctx: AiContext) -> bool:
+	if ctx.native_host != null and is_instance_valid(ctx.native_host) and ctx.native_slot >= 0:
+		var picked: int = ctx.native_host.ram_commit_now(ctx.native_slot)
+		if picked <= 0:
+			return false
+		committed = true
+		target_id_value = picked
+		return true
 	var pick: Contact = _hostile(ctx, ctx.current_target_id)
 	if pick == null:
 		var best: float = INF

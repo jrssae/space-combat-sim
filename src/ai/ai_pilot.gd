@@ -98,6 +98,8 @@ var _pushed_wing: Array = []
 var _pushed_objective: String = ""
 var _pushed_guard: Array = []
 var _pushed_route: Array = []
+## The attack's target as the GDScript behaviour shows it on the native path: its id, nothing else.
+var _mirror_target: Contact = Contact.new()
 
 
 ## No behaviours given: the standard set (ram, retreat, evade, attack, idle). No temperament: the profile's own.
@@ -385,6 +387,8 @@ func try_think_native(p: Perception, dt: float) -> PilotCommand:
 		_pushed_route = []
 		_had_wing = false
 		_ram_pushed = false
+		context.native_host = host
+		context.native_slot = _slot
 		native_push_context(host, _slot, context)
 	if _bound_body != p.own_body_id:
 		host.bind_ship(_slot, native_capability(p.capability), p.muzzle_local, p.muzzle_speed_mps, p.weapon_lifetime_s,
@@ -393,7 +397,7 @@ func try_think_native(p: Perception, dt: float) -> PilotCommand:
 	_sync_context(host)
 	var ram := _behaviour_of(&"ram") as BehaviourRam
 	if ram != null and ram.committed and not _ram_pushed:
-		host.ram_commit(_slot, ram.target_id_value)  # committed from outside (a test): the slot follows
+		host.ram_commit(_slot, ram.target_id_value)  # committed from outside with no slot yet: the slot follows
 	var out: PackedFloat64Array = host.think(_slot, p.relation_row, p.now_s, dt, p.hull_fraction, p.selected_id, p.last_hit_s,
 			p.last_bolt_hit_s, p.last_attacker_id, p.friendly_fire, p.frame_origin.x, p.frame_origin.y, p.frame_origin.z)
 	if out.size() != NATIVE_OUT_LEN:
@@ -434,6 +438,11 @@ func _mirror(kind: int, out: PackedFloat64Array) -> void:
 	match kind:
 		3:
 			var a := current as BehaviourAttack
+			if wanted_target_id > 0:
+				_mirror_target.id = wanted_target_id
+				a._target = _mirror_target
+			else:
+				a._target = null
 			a.uses_slash = out[m] != 0.0
 			a.brain.state = int(out[m + 1]) as AttackBrain.State
 			a.brain.firing = out[m + 2] != 0.0
@@ -515,6 +524,9 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_PREDELETE and _slot >= 0 and is_instance_valid(_native):
 		_native.free_slot(_slot)
 		_slot = -1
+		if context != null:
+			context.native_host = null
+			context.native_slot = -1
 
 
 ## `AiProfile` as the host takes it: the nine weights by `TIE_ORDER`, then stickiness, emergency_margin, min_dwell_s,

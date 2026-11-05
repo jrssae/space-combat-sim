@@ -557,6 +557,16 @@ impl Brain {
         self.ram.target_id_value = target_id;
     }
 
+    /// `BehaviourRam.commit` called between thinks: commits to the target the last think would have picked (the attack's
+    /// target, else the nearest hostile) and returns its id, 0 when there was none.
+    pub fn ram_commit_now(&mut self) -> i64 {
+        if self.ram.pick != 0 {
+            self.ram.committed = true;
+            self.ram.target_id_value = self.ram.pick;
+        }
+        self.ram.pick
+    }
+
     /// `AiPilot.keep_ids`: the contacts kept beyond the nearest k.
     fn keep_ids(&self, out: &mut Vec<i64>) {
         out.clear();
@@ -839,6 +849,7 @@ impl Brain {
             out.flight = cmd;
             out.fire = fire;
         }
+        self.ram.remember_pick(&tick, &self.ctx);
         // `AiPilotDriver._avoid`: the brain's wish through the avoidance filter, re-sought when it changed.
         self.avoiding = false;
         self.avoiding_urgent = false;
@@ -1226,6 +1237,9 @@ struct RamState {
     max_friends_seen: i64,
     eligible_since_s: f64,
     target: i32,
+    // The target `commit` would take as of the last think (the attack's target, else the nearest hostile), for a commit
+    // from outside between thinks; 0 for none.
+    pick: i64,
 }
 
 impl RamState {
@@ -1246,9 +1260,29 @@ impl RamState {
             max_friends_seen: 0,
             eligible_since_s: f64::NEG_INFINITY,
             target: -1,
+            pick: 0,
         };
         s.reset();
         s
+    }
+
+    // Remembers the target a commit from outside would take now.
+    fn remember_pick(&mut self, tick: &Tick, ctx: &Context) {
+        let mut pick = Self::hostile(tick, ctx.current_target_id);
+        if pick < 0 {
+            let mut best = f64::INFINITY;
+            for h in 0..tick.lists.hostiles.len() {
+                if tick.lists.ranges[h] < best {
+                    best = tick.lists.ranges[h];
+                    pick = tick.hostile_row(h) as i32;
+                }
+            }
+        }
+        self.pick = if pick >= 0 {
+            tick.rows.ids[pick as usize]
+        } else {
+            0
+        };
     }
 
     fn retune(&mut self, t: &Temperament) {

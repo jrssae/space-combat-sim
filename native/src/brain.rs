@@ -473,6 +473,13 @@ impl ScsBrains {
         }
     }
 
+    /// `BehaviourRam.commit` between thinks: the id committed to (the last think's attack target, else its nearest
+    /// hostile), 0 when there was none.
+    #[func]
+    fn ram_commit_now(&mut self, slot: i64) -> i64 {
+        self.brain_mut(slot).map_or(0, Brain::ram_commit_now)
+    }
+
     /// One think for `slot`: `relations` is the ship's `Factions.Relation` to each faction of the table; then the sim
     /// time, the time since its last think, its hull 0..1, its selection (0 for none), its latest hit and bolt hit (sim
     /// time, -INF for none), its latest attacker, `settings.friendly_fire`, and the frame origin as three doubles. The

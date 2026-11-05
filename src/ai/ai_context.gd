@@ -74,6 +74,10 @@ var friendly_ids: PackedInt64Array = PackedInt64Array()
 ## The objective's contact this tick (near first, then broadcast), null while it is not seen or heard; and its range, m.
 var objective: Contact = null
 var objective_range_m: float = INF
+## The native brain this pilot thinks in (M4-T17), null on the GDScript path: a behaviour asked from outside between thinks
+## (`BehaviourRam.commit`) goes through it, since the lists below are not refreshed on the native path.
+var native_host: Object = null
+var native_slot: int = -1
 ## The guard post this tick: where (World), how fast it moves, and the guarded ship's contact (null for a fixed post).
 var guarding: bool = false
 var guard_point: Vector3 = Vector3.ZERO
