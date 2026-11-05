@@ -2,6 +2,9 @@
 use godot::prelude::*;
 
 mod body_registry;
+mod brain;
+mod brain_behaviours;
+mod brain_maths;
 mod contact_field;
 mod flight_step;
 mod hit_sweep;
@@ -11,6 +14,7 @@ mod pilot_kernels;
 mod ram_phase;
 mod rows;
 mod sim_core;
+mod v3;
 mod weapon_kernels;
 mod weapon_rows;
 

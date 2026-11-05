@@ -622,6 +622,11 @@ impl ScsSimCore {
         self.row_of_id.get(&body_id).map_or(-1, |&r| i64::from(r))
     }
 
+    /// `rows_version` for the crate's own readers (the brain host's grid, M4-T17).
+    pub fn rows_version_now(&self) -> i64 {
+        self.rows_version
+    }
+
     /// The row a kernel may read for body `body_id` between sync points, or -1: none when the body was touched since the
     /// last sync (hidden, shown, teleported by the pool), since its row is then stale and the engine must be asked.
     pub fn row_for_kernel(&self, body_id: i64) -> i64 {

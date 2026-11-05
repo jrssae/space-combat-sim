@@ -44,6 +44,18 @@ static func _bytes(value: Variant) -> String:
 	return var_to_bytes(value).hex_encode()
 
 
+## The same bits; an array element by element (a typed array and a plain one encode differently).
+static func _same_value(a: Variant, b: Variant) -> bool:
+	if a is Array and b is Array:
+		if (a as Array).size() != (b as Array).size():
+			return false
+		for i: int in (a as Array).size():
+			if _bytes((a as Array)[i]) != _bytes((b as Array)[i]):
+				return false
+		return true
+	return _bytes(a) == _bytes(b)
+
+
 static func _v3(rng: RandomNumberGenerator, scale: float) -> Vector3:
 	return Vector3(rng.randf_range(-scale, scale), rng.randf_range(-scale, scale), rng.randf_range(-scale, scale))
 
@@ -369,7 +381,7 @@ func test_the_five_manoeuvres_fly_the_same_bits() -> void:
 			var result: Dictionary = reference.result()
 			var got_result: Dictionary = got[1]
 			for key: String in result:
-				if not got_result.has(key) or _bytes(got_result[key]) != _bytes(result[key]):
+				if not got_result.has(key) or not _same_value(got_result[key], result[key]):
 					differences.append("%s round %d: result %s is %s against %s" % [Manoeuvres.NAMES[kind], round, key,
 							got_result.get(key), result[key]])
 			if got_result.size() != result.size():

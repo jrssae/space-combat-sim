@@ -11,6 +11,8 @@ pub mod contact {
 
     use godot::builtin::Vector3;
 
+    use crate::v3::{dist_sq, dot, length, length_squared, sub};
+
     // The closest-approach test of incoming fire, as `ContactScan` defines it.
     const INCOMING_MISS_M: f64 = 15.0;
     const INCOMING_HORIZON_S: f64 = 2.0;
@@ -282,31 +284,6 @@ pub mod contact {
         }
     }
 
-    // Godot's Vector3 maths in 32 bits, in the engine's order of operations.
-    fn sub(a: Vector3, b: Vector3) -> Vector3 {
-        Vector3::new(a.x - b.x, a.y - b.y, a.z - b.z)
-    }
-
-    fn length_squared(v: Vector3) -> f32 {
-        let x2 = v.x * v.x;
-        let y2 = v.y * v.y;
-        let z2 = v.z * v.z;
-        x2 + y2 + z2
-    }
-
-    fn length(v: Vector3) -> f32 {
-        length_squared(v).sqrt()
-    }
-
-    fn dot(a: Vector3, b: Vector3) -> f32 {
-        a.x * b.x + a.y * b.y + a.z * b.z
-    }
-
-    // `a.distance_squared_to(b)`.
-    fn dist_sq(a: Vector3, b: Vector3) -> f32 {
-        length_squared(sub(b, a))
-    }
-
     // `AvoidanceMath.closest_approach`: 64-bit scalars around 32-bit vectors, as GDScript evaluates it.
     fn closest_approach(rel_pos: Vector3, rel_vel: Vector3, horizon_s: f64) -> f64 {
         let speed_sq = f64::from(length_squared(rel_vel));
@@ -337,6 +314,7 @@ pub mod sweep {
     use godot::builtin::Vector3;
 
     use crate::rows::{Bolts, FLAG_RIGID, Rows};
+    use crate::v3::{dist_sq, length};
 
     // The grid's levels, as `HitBroadPhase` defines them.
     const BASE_CELL_M: f64 = 64.0;
@@ -567,23 +545,6 @@ pub mod sweep {
     fn within_grid(x: f64, y: f64, z: f64) -> bool {
         x.abs() <= MAX_CELL_INDEX && y.abs() <= MAX_CELL_INDEX && z.abs() <= MAX_CELL_INDEX
     }
-
-    // `v.length()` in 32 bits, in the engine's order of operations.
-    fn length(v: Vector3) -> f32 {
-        let x2 = v.x * v.x;
-        let y2 = v.y * v.y;
-        let z2 = v.z * v.z;
-        (x2 + y2 + z2).sqrt()
-    }
-
-    // `a.distance_squared_to(b)` in 32 bits, in the engine's order of operations.
-    fn dist_sq(a: Vector3, b: Vector3) -> f32 {
-        let (x, y, z) = (b.x - a.x, b.y - a.y, b.z - a.z);
-        let x2 = x * x;
-        let y2 = y * y;
-        let z2 = z * z;
-        x2 + y2 + z2
-    }
 }
 
 /// The ram resolver's broad phase on the rows (`ScsRamPhase`; `RamBroadPhase` in GDScript is the reference).
@@ -593,6 +554,7 @@ pub mod ram {
     use godot::builtin::Vector3;
 
     use crate::rows::{FLAG_RIGID, Rows};
+    use crate::v3::{add, max_cw as max, min_cw as min, scale, sub};
 
     // `RamBroadPhase.MARGIN_M`: room round every box, metres.
     const MARGIN_M: f64 = 1.0;
@@ -673,28 +635,6 @@ pub mod ram {
         s.keys.dedup();
         &s.keys
     }
-
-    // Godot's Vector3 maths in 32 bits, in the engine's order of operations.
-    fn add(a: Vector3, b: Vector3) -> Vector3 {
-        Vector3::new(a.x + b.x, a.y + b.y, a.z + b.z)
-    }
-
-    fn sub(a: Vector3, b: Vector3) -> Vector3 {
-        Vector3::new(a.x - b.x, a.y - b.y, a.z - b.z)
-    }
-
-    fn scale(a: Vector3, s: f32) -> Vector3 {
-        Vector3::new(a.x * s, a.y * s, a.z * s)
-    }
-
-    // `Vector3.min` and `max`, component by component.
-    fn min(a: Vector3, b: Vector3) -> Vector3 {
-        Vector3::new(a.x.min(b.x), a.y.min(b.y), a.z.min(b.z))
-    }
-
-    fn max(a: Vector3, b: Vector3) -> Vector3 {
-        Vector3::new(a.x.max(b.x), a.y.max(b.y), a.z.max(b.z))
-    }
 }
 
 /// The flight force step's maths (`ScsFlightStep`, M4-T10, N4): `FlightModel.compute`, the `SpeedGovernor` and the forces
@@ -702,13 +642,14 @@ pub mod ram {
 pub mod flight {
     use godot::builtin::{Basis, Vector3};
 
+    use crate::v3::{
+        AXIS_SIGN, add, clamp_cw, clampf, div_s, dot, is_zero_approx, length, maxf, minf, mul_cw,
+        neg, normalized, scale, signf, sub, xform, xform_inv,
+    };
+
     pub const GROUPS: usize = 4;
-    // Pilot axes (pitch up, yaw right, roll right) to body axes, as `FlightModel.AXIS_SIGN`.
-    const AXIS_SIGN: Vector3 = Vector3::new(1.0, -1.0, -1.0);
     // `FlightAssist.FACE_DECEL_FRACTION`.
     const FACE_DECEL_FRACTION: f64 = 0.5;
-    // Godot's `CMP_EPSILON` as `is_zero_approx` applies it to 32-bit components.
-    const CMP_EPSILON: f32 = 0.00001;
 
     /// A ship's type and nozzles, as `register` snapshots them: what the maths reads.
     pub struct Body {
@@ -1230,115 +1171,6 @@ pub mod flight {
             part(value.z, limit.z),
         )
     }
-
-    // --- Godot's 32-bit vector arithmetic, op for op (gdext's own operators go through glam, so none are used) ---------
-
-    fn add(a: Vector3, b: Vector3) -> Vector3 {
-        Vector3::new(a.x + b.x, a.y + b.y, a.z + b.z)
-    }
-
-    fn sub(a: Vector3, b: Vector3) -> Vector3 {
-        Vector3::new(a.x - b.x, a.y - b.y, a.z - b.z)
-    }
-
-    fn neg(a: Vector3) -> Vector3 {
-        Vector3::new(-a.x, -a.y, -a.z)
-    }
-
-    fn mul_cw(a: Vector3, b: Vector3) -> Vector3 {
-        Vector3::new(a.x * b.x, a.y * b.y, a.z * b.z)
-    }
-
-    fn scale(a: Vector3, s: f32) -> Vector3 {
-        Vector3::new(a.x * s, a.y * s, a.z * s)
-    }
-
-    fn div_s(a: Vector3, s: f32) -> Vector3 {
-        Vector3::new(a.x / s, a.y / s, a.z / s)
-    }
-
-    fn dot(a: Vector3, b: Vector3) -> f32 {
-        a.x * b.x + a.y * b.y + a.z * b.z
-    }
-
-    fn length(a: Vector3) -> f32 {
-        let x2 = a.x * a.x;
-        let y2 = a.y * a.y;
-        let z2 = a.z * a.z;
-        (x2 + y2 + z2).sqrt()
-    }
-
-    fn normalized(a: Vector3) -> Vector3 {
-        let x2 = a.x * a.x;
-        let y2 = a.y * a.y;
-        let z2 = a.z * a.z;
-        let length_sq = x2 + y2 + z2;
-        if length_sq == 0.0 {
-            return Vector3::ZERO;
-        }
-        let l = length_sq.sqrt();
-        Vector3::new(a.x / l, a.y / l, a.z / l)
-    }
-
-    fn clamp_cw(a: Vector3, lo: Vector3, hi: Vector3) -> Vector3 {
-        let c = |v: f32, lo: f32, hi: f32| {
-            if v < lo {
-                lo
-            } else if v > hi {
-                hi
-            } else {
-                v
-            }
-        };
-        Vector3::new(c(a.x, lo.x, hi.x), c(a.y, lo.y, hi.y), c(a.z, lo.z, hi.z))
-    }
-
-    fn is_zero_approx(a: Vector3) -> bool {
-        a.x.abs() < CMP_EPSILON && a.y.abs() < CMP_EPSILON && a.z.abs() < CMP_EPSILON
-    }
-
-    // `Basis * Vector3`: each row dotted with the vector.
-    pub fn xform(b: &Basis, v: Vector3) -> Vector3 {
-        Vector3::new(dot(b.rows[0], v), dot(b.rows[1], v), dot(b.rows[2], v))
-    }
-
-    // `Basis.transposed() * Vector3`: each column dotted with the vector.
-    pub fn xform_inv(b: &Basis, v: Vector3) -> Vector3 {
-        let col_x = Vector3::new(b.rows[0].x, b.rows[1].x, b.rows[2].x);
-        let col_y = Vector3::new(b.rows[0].y, b.rows[1].y, b.rows[2].y);
-        let col_z = Vector3::new(b.rows[0].z, b.rows[1].z, b.rows[2].z);
-        Vector3::new(dot(col_x, v), dot(col_y, v), dot(col_z, v))
-    }
-
-    // --- Godot's 64-bit scalar helpers (`clampf`, `minf`, `maxf`, `signf`) with their exact comparisons ------------------
-
-    fn clampf(v: f64, lo: f64, hi: f64) -> f64 {
-        if v < lo {
-            lo
-        } else if v > hi {
-            hi
-        } else {
-            v
-        }
-    }
-
-    fn minf(a: f64, b: f64) -> f64 {
-        if a < b { a } else { b }
-    }
-
-    fn maxf(a: f64, b: f64) -> f64 {
-        if a > b { a } else { b }
-    }
-
-    fn signf(v: f64) -> f64 {
-        if v > 0.0 {
-            1.0
-        } else if v < 0.0 {
-            -1.0
-        } else {
-            0.0
-        }
-    }
 }
 
 /// The AI pilot's per-contact loops (`ScsPilotKernels`, M4-T16): avoidance over the contacts and statics, the fire lane,
@@ -1352,6 +1184,10 @@ pub mod pilot {
     use godot::builtin::Vector3;
 
     use crate::rows::Rows;
+    use crate::v3::{
+        FORWARD, RIGHT, UP, add, clampf, cross, div_s, dot, length, length_squared, maxf, minf,
+        normalized, rotated, scale, sub,
+    };
 
     // `AvoidanceMath`'s constants.
     const MARGIN_M: f64 = 15.0;
@@ -1370,10 +1206,6 @@ pub mod pilot {
     pub const FRIENDLY: u8 = 0;
     pub const NEUTRAL: u8 = 1;
     pub const HOSTILE: u8 = 2;
-
-    const UP: Vector3 = Vector3::new(0.0, 1.0, 0.0);
-    const RIGHT: Vector3 = Vector3::new(1.0, 0.0, 0.0);
-    const FORWARD: Vector3 = Vector3::new(0.0, 0.0, -1.0);
 
     /// The thinking ship as avoidance sees it: its pose, size, what it can do, and its tie-break (`hash(seed)`, passed in
     /// so the kernel holds no hash of its own).
@@ -1613,96 +1445,5 @@ pub mod pilot {
             (target - miss) / maxf(t_star, MIN_TIME_S)
         };
         clampf(x, 0.0, speed)
-    }
-
-    // `Vector3.rotated(axis, angle)`: the engine's axis-angle basis applied to `v`, in 32 bits.
-    fn rotated(v: Vector3, axis: Vector3, angle: f32) -> Vector3 {
-        let (x, y, z) = (axis.x, axis.y, axis.z);
-        let sq = Vector3::new(x * x, y * y, z * z);
-        let cosine = angle.cos();
-        let r00 = sq.x + cosine * (1.0 - sq.x);
-        let r11 = sq.y + cosine * (1.0 - sq.y);
-        let r22 = sq.z + cosine * (1.0 - sq.z);
-        let sine = angle.sin();
-        let t = 1.0 - cosine;
-        let (xyzt, zyxs) = (x * y * t, z * sine);
-        let (r01, r10) = (xyzt - zyxs, xyzt + zyxs);
-        let (xyzt, zyxs) = (x * z * t, y * sine);
-        let (r02, r20) = (xyzt + zyxs, xyzt - zyxs);
-        let (xyzt, zyxs) = (y * z * t, x * sine);
-        let (r12, r21) = (xyzt - zyxs, xyzt + zyxs);
-        Vector3::new(
-            dot(Vector3::new(r00, r01, r02), v),
-            dot(Vector3::new(r10, r11, r12), v),
-            dot(Vector3::new(r20, r21, r22), v),
-        )
-    }
-
-    // Godot's Vector3 maths in 32 bits, in the engine's order of operations.
-    fn add(a: Vector3, b: Vector3) -> Vector3 {
-        Vector3::new(a.x + b.x, a.y + b.y, a.z + b.z)
-    }
-
-    fn sub(a: Vector3, b: Vector3) -> Vector3 {
-        Vector3::new(a.x - b.x, a.y - b.y, a.z - b.z)
-    }
-
-    fn scale(a: Vector3, s: f32) -> Vector3 {
-        Vector3::new(a.x * s, a.y * s, a.z * s)
-    }
-
-    fn div_s(a: Vector3, s: f32) -> Vector3 {
-        Vector3::new(a.x / s, a.y / s, a.z / s)
-    }
-
-    fn dot(a: Vector3, b: Vector3) -> f32 {
-        a.x * b.x + a.y * b.y + a.z * b.z
-    }
-
-    fn cross(a: Vector3, b: Vector3) -> Vector3 {
-        Vector3::new(
-            a.y * b.z - a.z * b.y,
-            a.z * b.x - a.x * b.z,
-            a.x * b.y - a.y * b.x,
-        )
-    }
-
-    fn length_squared(a: Vector3) -> f32 {
-        let x2 = a.x * a.x;
-        let y2 = a.y * a.y;
-        let z2 = a.z * a.z;
-        x2 + y2 + z2
-    }
-
-    fn length(a: Vector3) -> f32 {
-        length_squared(a).sqrt()
-    }
-
-    fn normalized(a: Vector3) -> Vector3 {
-        let length_sq = length_squared(a);
-        if length_sq == 0.0 {
-            return Vector3::new(0.0, 0.0, 0.0);
-        }
-        let l = length_sq.sqrt();
-        Vector3::new(a.x / l, a.y / l, a.z / l)
-    }
-
-    // Godot's 64-bit scalar helpers with their exact comparisons.
-    fn clampf(v: f64, lo: f64, hi: f64) -> f64 {
-        if v < lo {
-            lo
-        } else if v > hi {
-            hi
-        } else {
-            v
-        }
-    }
-
-    fn minf(a: f64, b: f64) -> f64 {
-        if a < b { a } else { b }
-    }
-
-    fn maxf(a: f64, b: f64) -> f64 {
-        if a > b { a } else { b }
     }
 }
