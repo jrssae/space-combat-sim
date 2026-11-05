@@ -2415,6 +2415,40 @@ src/ship/flight_batch.gd         the four classes read the core (their own loads
 - **Tests**: `test_sim_core` (the lifecycle, the rebase, the round trip, the four classes' parity, the engine seam) and the
   files of the four classes on both paths.
 
+**The pilot kernels (T16, N2).**
+
+```
+native/src/kernels.rs (pub mod pilot)   avoid, fire_lane, context_lists: AvoidanceMath, FireLane and AiContext.refresh's split
+native/src/pilot_kernels.rs              ScsPilotKernels: binds the core's rows (or rows loaded from arrays) and hands answers over
+```
+
+- **What moved.** The three loops over a thinking ship's contacts: the avoidance filter over its contacts and statics,
+  the fire lane, and the hostile and friendly split of `AiContext.refresh`. Each is one native call per question, over the
+  core's rows; the GDScript stays the reference and answers whenever a perception is not on the rows.
+- **How a ship reaches its rows.** A core scan's rows are the core's, in the same order, so the indices the scan picked a
+  list from name the core rows of its contacts: `ContactScan.picked_rows` holds those of the latest list handed out. The
+  driver puts them in the perception beside `contacts` and `statics` (`contact_rows`, `static_rows`), with the scan's
+  `pilot_kernels()` and the ship's `relation_row` (its `Factions.Relation` to each faction of the core's table, made once
+  per faction per scan, since the kernels never call `Factions`). `Perception.on_rows()` is true when the kernels are there
+  and both row lists line up with their lists. A scan whose row count differs from the core's (rows added after the
+  sync) gives no kernels.
+- **The facades.** `AvoidanceMath.filter_seen(p, radius, v_des, exempt_id, seed)` (the driver), `FireLane.clear_seen(p,
+  aim, range, target)` (the attack brain and the slash) and `AiContext.refresh` ask the kernels when the perception is on
+  the rows, and otherwise list the contacts and run `filter`, `clear` or the loop as before. Off the core (`perf_native`
+  or `perf_native_core` off, no library) nothing changes.
+- **Bit for bit.** The kernels repeat the GDScript's arithmetic: 32-bit vectors, 64-bit scalars, a scalar rounded to 32
+  bits before it scales a vector, division where the engine divides, the engine's `Basis(axis, angle)` for the tie's turn
+  (`cosf` and `sinf`, as the engine calls them). The tie-break is passed in as `hash(seed)` from GDScript, so the kernel
+  holds no hash of its own. `test_pilot_kernels` compares both on seeded contacts (ties on top of the ship and on a dead
+  centre course, the margin, matched velocities, rocks and mines, lanes grazed at their edge), and
+  `test_pilot_kernels_in_play` on the core's rows and through the driver.
+- **Thread-ready (for T18).** Each kernel is a pure function of the frozen rows and one ship's inputs: no statics, no
+  caches written during a pass, any tie-break passed in; `context_lists` writes only the output struct its caller owns.
+  The module sits in `kernels.rs`, under the same engine-free guard as the other kernels.
+- **What it costs.** Per call on a 13-contact perception: avoidance 1.35 us native against 4.0 in GDScript, a lane check
+  0.83 against 3.0, the context split 3.8 against 3.4 (its five result arrays cost more than the short loop). The think
+  stage moved by noise only (Cycle log, M4-T16): the brains and the scan queries are what a think pays for.
+
 ### 17.16 Rocks and mines as static rows (T29)
 
 ```

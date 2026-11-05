@@ -183,7 +183,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T13 | Phase 1 measurements and report P1 (checkpoint 1) | T11, T12, T14 | Sonnet | Measurement, no code | M | done (2026-11-04, in a worktree on `b3c3fbb`; Cycle log, Phase 1; `typical` held, `battle` ceiling 47 against the target of 100; report P1 waits for the maintainer) |
 | T14 | Jolt collision layers; interpolation off for far ships | T11 | Sonnet | Mechanical; matters from 300 ships | G | done, the physics stage did not fall (2.1 ms at 300, 3.5 at 500, as before); the rebase shift fell by 1.5 to 2 ms; fighters collide with fighters again (Q33) (2026-11-04, in a worktree on `ce35406`; Cycle log, M4-T14) |
 | T15 | The native simulation core: entity rows, one call in and out (`ScsSimCore`) | T13 | Fable | Architecture: every native class moves onto it; serial | N | done (2026-11-04, in a worktree on `c0a0b81`; Cycle log, M4-T15; parity bit for bit on both paths, the engine seam counted) |
-| T16 | N2: avoidance, the fire lane and the context lists on the core | T15 | Opus | Per-contact loops, bit for bit | N, G | not started |
+| T16 | N2: avoidance, the fire lane and the context lists on the core | T15 | Opus | Per-contact loops, bit for bit | N, G | done, bit for bit; the think stage did not measurably fall (the loops cost 3 to 4 us a think, not the plan's estimate) (2026-11-04, in a worktree on `41fc088`; Cycle log, M4-T16) |
 | T17 | The brains in native code under Q16's tolerance (T17a maths, T17b behaviours) | T16 | Fable | 3 000 lines of seeded behaviour with a tolerance to meet | N, G | not started |
 | T18 | N3: threads inside the core (rayon), 1-thread and 6-thread identical | T17 | Opus | Determinism rules, a new crate | N | not started |
 | T19 | Jolt measured at 300 and 500, the ships-out-of-Jolt proposal (Q17, checkpoint 2) | T15 | Sonnet | Measurement and a proposal, no game code | M | done (2026-11-04, in a worktree on `41fc088`; Cycle log, M4-T19; the proposal waits for the maintainer at checkpoint 2) |
@@ -1023,6 +1023,17 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
 - **Done when:** bit for bit, the think stage falls.
 - **Expected gain:** about 1 ms at furball 100, 3 ms at 300 (55 %).
 - **Architecture:** §17.13.
+- **Done (2026-11-04, worktree on `41fc088`):** the three loops are `kernels::pilot` (`avoid`, `fire_lane`, `context_lists`,
+  in `native/src/kernels.rs` under T15's engine-free guard, not a file of their own) behind `ScsPilotKernels`
+  (`native/src/pilot_kernels.rs`), which binds the core's rows. A core scan's picked rows ride in the perception with the
+  kernels and the ship's relation row (`ContactScan.picked_rows`, `pilot_kernels`, `relation_row`; `Perception.on_rows`);
+  `AvoidanceMath.filter_seen`, `FireLane.clear_seen` and `AiContext.refresh` take one native call each on the rows and run
+  the GDScript otherwise. The tie-break goes in as `hash(seed)`. Bit for bit: `test_pilot_kernels` (6, seeded contacts),
+  `test_pilot_kernels_in_play` (2, the core's rows and the driver), `test_fighter_melee`'s digest unchanged, the seeded
+  bench outcomes identical to the base and to the core off. The think stage did not fall beyond noise: per call the
+  kernels save 2.6 us (avoidance) and 2.2 us (a lane check) and the native split costs 0.4 us more than the GDScript loop
+  (its five result arrays), so 0.1 to 0.3 ms a tick at furball 100 and battle 300. The think's cost is the brains and
+  the scan queries (T17).
 
 ##### M4-T17 The brains in native code, under Q16's tolerance
 
@@ -3848,6 +3859,46 @@ compositor cases of `test_environment` and `test_post_effects`, the fallback cas
 `test_targeting_controller` and `test_textured_hulls`, and `test_lod_switcher_math`'s level cases. Added: `test_mesh_only_scene`,
 `test_mesh_only`. `test_ship_nodes`: a lean AI ship has 11 nodes of its own besides its guns (raider 19 with its 4 muzzles and
 flashes, Starfury 15 with its 2; the limit was 16) and draws 3 (raider) or 4 (Starfury: hull, glass, plumes, markers) surfaces.
+
+### M4-T16 (2026-11-04): avoidance, the fire lane and the context lists on the core's rows
+
+In its own worktree on `41fc088` (tests `ecda486`, the kernels `925e06e`), so only this change. The three per-contact loops
+of a think run as native kernels over the core's rows, one call per question (§17.13, T16).
+
+- **Parity.** Bit for bit. `test_pilot_kernels`: 600 seeded avoidance cases (head-on, dead-centre courses, ties on top of
+  the ship, inside the margin, matched velocities, near misses, rocks and mines, a rammer's exempt target), 400 tie cases
+  over seeds and axes (the engine's axis-angle turn reproduced with `cosf` and `sinf`), 1 200 lanes grazed at their edge in
+  both friendly-fire settings, 600 context splits with and without a leader; every one the same bits as the GDScript.
+  `test_pilot_kernels_in_play`: the facades on the core's rows of seeded crowds (ships, capitals, props, rocks, mines of
+  four sides) answer as the GDScript on the same contacts, and the driver's perception is on the rows with the core and
+  off them without. `test_fighter_melee`'s digest is unchanged. Seeded bench outcomes (`state ai`, `combat`, `ram`) of
+  `furball 25 seed=1`, `spread 50 6 seed=2`, `typical 58 seed=1` and `battle 100 seed=1` are identical to the base
+  (`M4-T16_outcome_base` against `_after`), and `typical` and `battle 100` identical with the core off (the GDScript
+  facades, `_after_coreoff`). With `perf_native` off, `battle 100` differs in two pilots' behaviour (attack 56 against
+  58): that switch also turns off the other native classes, and the core-off pairing, which isolates this task, is
+  identical.
+- **Numbers** (single `bench <layout> <n> 10 warmup=5 seed=1`, editor build, headless, both locks, cores 0-11, load
+  under 1.4 for both; means in ms per tick):
+
+| run | tick before | after | think before | after | scan before | after |
+|---|---|---|---|---|---|---|
+| furball 100 | 8.99 | 9.08 | 4.82 | 4.84 | 1.90 | 1.99 |
+| typical 58 | 6.50 | 6.53 | 3.18 | 3.18 | 1.73 | 1.78 |
+| battle 300 | 38.08 | 38.04 | 19.05 | 18.97 | 11.25 | 11.38 |
+
+  The think stage did not fall beyond noise. Per call on a 13-contact perception (a throwaway timing test, not
+  committed): avoidance 4.0 us in GDScript against 1.35 native, a lane check 3.0 against 0.83, the context split 3.4
+  against 3.8 (the bare kernel call is 1.4 us, most of it the five result arrays; the rest is taking them apart in
+  GDScript). At 33 thinks a tick (furball 100, no player: every ship at 20 Hz) to about 100 (battle 300) that is 0.1 to
+  0.3 ms a tick. The plan expected 1 ms at furball 100 and 3 ms at 300 from loops it took for 25 us a think; with
+  nearest-k (12 contacts) and most contacts leaving avoidance at the first test, they cost 3 to 4 us each. What the
+  think pays for is the brains themselves and the scan queries, which T17 and T18 take.
+- **The quick check** (`M4-T16_after_quick`, load 1.2): furball and spread hold the budget to 75 ships, both fall under
+  30 FPS at 400. No quick check was taken on the base; T15's (50 and 50) ran at load 2.6, so the two are not compared.
+- **Thread-ready** (maintainer, 2026-11-04): each kernel is a pure function of the frozen rows and one ship's inputs,
+  with no statics or caches written during a pass and the tie-break passed in; `context_lists` writes only the output
+  its caller owns. T18 can swap the per-ship loop for a parallel one.
+- **Behaviour changes:** none.
 
 ## Definition of done (M4)
 
