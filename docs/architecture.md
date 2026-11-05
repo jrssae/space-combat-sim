@@ -2589,6 +2589,55 @@ src/ai/ai_pilot_driver.gd        the native path: a perception without contact l
   process). Provider `ai` gains `thinks_native` (AI ships whose think ran natively in the last tick) and `thinks_fallback` (native pilots the host declined, each holding its last command); `ai <name>` reads a
   native pilot's `describe()` from its slot (the behaviour in control, its state and fields, the scores).
 
+
+**Threads inside the core (T18, N3).**
+
+```
+native/src/threads.rs            Threads: the core's rayon pool (none for one thread), a threshold per pass, the per-item pass,
+                                 the performance-core count; engine-free (std and rayon only), under test_sim_core's guard
+native/src/sim_core.rs           the pool on the core (set_threads, threads, parallel_passes, the thresholds), rows_digest
+native/src/brain.rs              ScsBrains.think_batch: every native think of a tick in one call, across the pool
+native/src/flight_step.rs        ScsFlightStep: read on the main thread, the kernel on the pool, the forces applied in row order
+src/perf/brain_batch.gd          BrainBatch: an internal child of SimCore at -9 that carries the drivers' native thinks
+```
+
+- **What runs in parallel.** Two passes. The brains: the drivers (-10) hand each native pilot's inputs to `BrainBatch`
+  (its slot, its relation row, selection, latest attacker, dt, hull and hits), and at -9 one `think_batch` call thinks
+  every ship across the pool (the perception queries, the context split, the scoring, the behaviour and the avoidance all
+  run inside a think); each driver then gets its output in the order it came and does what it did before (the selection,
+  the hiding lights, `apply_commands`). The flight step: the ships' commands and poses are read on the main thread (a ship
+  with no row from the physics server, as before), the kernel runs on the pool, and the forces go to the physics server on
+  the main thread in row order. A driver stepped by hand (the tests) thinks alone as before. The probe's AI stage now ends
+  at -8, so it holds the batch.
+- **How the bits stay the same.** Every item reads only frozen, shared data (the rows, the bolts, the grid, the tick's
+  field, the ship's own slot) and writes only itself (its brain, taken out of its slot for the pass, and its output; a
+  flying ship's assist state and forces), with one scratch per worker thread that the item clears before it reads it. The
+  merge (brains back into their slots, outputs packed, forces applied) is on the main thread in the given order. Nothing a
+  worker runs touches the engine: the brains and the flight kernel are the engine-free files of T15 and T17. To make that
+  hold, T17's two open gaps closed: `contact::Work` is now the shared `Grid` (cells, cell size, largest static) plus a
+  `Query` per worker, and the host keeps one `Scratch`, keep list and query per worker; and the display names left `Rows`
+  for `ScsSimCore.row_names`, because Godot's string type cannot be shared between threads (the guard now refuses an
+  engine string in `rows.rs`). The rows version, the counters and every cache are written only on the main thread.
+- **The thread count.** `perf_threads` (0, the default: the machine's performance cores, read from
+  `/sys/devices/cpu_core/cpus` and the CPU topology, at most the CPUs the process may use, so 6 on the i5-13600KF; 1: the
+  main thread alone, no pool). `SimCore` hands it to the core when it is made and whenever the setting changes, and the
+  next pass uses it. The benches pin the process to cores 0 to 11 and the pool's threads inherit that.
+- **When a pass stays on the main thread.** Below its threshold, where waking the workers costs more than they save:
+  the brains run in parallel from 48 thinks a tick, the flight step from 1 024 ships (Cycle log, M4-T18: at `typical`, 19
+  to 28 thinks, the threads took 0.1 ms off the think and added about 0.5 ms to the 1 % slowest ticks; at `battle` 100, 34
+  thinks, 0.3 ms off and 0.6 to 0.9 ms on the slow ticks; the flight kernel is a few microseconds a ship and gained at no
+  measured count). `core.parallel_min` and `core.flight_parallel_min` set them for a bench or a test.
+- **Tests.** `test_core_threads`: a seeded battle (the `battle` layout's 102 fighters at 120, four sides, no player, in a
+  space of its own with the clock reset) stepped 600 ticks with one thread and with six, every pass forced parallel,
+  gives the same `rows_digest` every tick (positions, velocities, bases, spins, flags, hulls and selections of every row,
+  every bolt); with an injected fault (`ScsBrains.set_fault`: a think adds what the worker's previous think left in its
+  scratch, so it reads another row's output) the two differ within 30 ticks; the thread count follows `perf_threads` at
+  once. `test_sim_core`'s guard covers `threads.rs`.
+- **Also fixed.** A duplicate name no longer hides the live ship: the objective and the guarded ship are matched among
+  the think's contacts (then the broadcasts for the objective) every think, as `AiContext._named` does, and every row
+  with the name is kept beyond the nearest k, as `ContactScan._keep_named` does (T17 had kept the first row with the
+  name anywhere, so a far or parked row earlier in the rows could hide it; `test_brain_think_parity`).
+
 ### 17.16 Rocks and mines as static rows (T29)
 
 ```

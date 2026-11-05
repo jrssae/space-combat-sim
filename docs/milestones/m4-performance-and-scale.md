@@ -186,7 +186,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T15 | The native simulation core: entity rows, one call in and out (`ScsSimCore`) | T13 | Fable | Architecture: every native class moves onto it; serial | N | done (2026-11-04, in a worktree on `c0a0b81`; Cycle log, M4-T15; parity bit for bit on both paths, the engine seam counted) |
 | T16 | N2: avoidance, the fire lane and the context lists on the core | T15 | Opus | Per-contact loops, bit for bit | N, G | done, bit for bit; no measurable change in the think stage, an accepted miss (the loops cost 3 to 4 us a think, the plan assumed 25) (2026-11-04, in a worktree on `41fc088`; Cycle log, M4-T16) |
 | T17 | The brains in native code under Q16's tolerance (T17a maths, T17b behaviours) | T16 | Fable | 3 000 lines of seeded behaviour with a tolerance to meet | N, G | done, bit for bit on every Q16 seed; the think stage at 300 fell from 19.4 to 4.6 ms, the Done-when's 2 ms missed and what remains attributed (the native calls, the facade's glue, the scan's snapshot; Cycle log) (2026-11-05, in a worktree on `67d5cda`; fix round 1 the same day) |
-| T18 | N3: threads inside the core (rayon), 1-thread and 6-thread identical | T17 | Opus | Determinism rules, a new crate | N | not started |
+| T18 | N3: threads inside the core (rayon), 1-thread and 6-thread identical | T17 | Opus | Determinism rules, a new crate | N | done, one thread and six identical byte for byte over a seeded 600-tick battle; the brains in one batch a tick, threaded from 48 thinks; the AI stage at `battle` 500 from 6.96 to 5.51 ms with six threads (divided by 1.26, not the Done-when's 3) and the think at 300 3.01 ms against the 2 ms target, both missed and attributed to the drivers' GDScript per ship; no p99 loss at `typical` (2026-11-05, in a worktree on `df6db96`; Cycle log, M4-T18) |
 | T19 | Jolt measured at 300 and 500, the ships-out-of-Jolt proposal (Q17, checkpoint 2) | T15 | Sonnet | Measurement and a proposal, no game code | M | done (2026-11-04, in a worktree on `41fc088`; Cycle log, M4-T19; the proposal waits for the maintainer at checkpoint 2) |
 | T20 | Turrets, missiles, beams and mines as native rows | T16, T12 | Opus | The non-fighter rows' budget (710 turrets at 500); M12 inherits the path | N, A | done, bit for bit; the stand-ins' stage at `battle` 500 from 9.50 to 0.68 ms; every row in budget but a beam shot's spawn (about 20 us a shot against 1) (2026-11-04, in a worktree on `67d5cda`; Cycle log, M4-T20) |
 | T21 | The low-attention tier: state, 20 Hz integration, promotion and demotion of fighters and capitals | T20, checkpoint 3 | Fable | The pool and ship adapter handover must never pop; serial | T | not started |
@@ -1070,6 +1070,7 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
   over the core's rows, with three columns added to the rows (hull fraction, selection, broadcast range). `test_brain_think_parity`
   (a native slot against a GDScript twin, tick by tick, bit for bit) and `test_brain_tolerance` (Q16: furball and spread at 50,
   seeds 1 to 3) pass, every seeded fight identical to the bit on both paths. Tolerated differences and the measures in the Cycle log.
+  The Done-when's 2 ms think at 300 was missed (4.6 ms) and carried to T18, which measured what is left and why (Cycle log, M4-T18).
 
 ##### M4-T18 N3: threads inside the core
 
@@ -1087,6 +1088,26 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
 - **Done when:** identical outputs, the AI stage at 500 divided by about 3, no p99 loss at `typical`.
 - **Expected gain:** the native per-ship work divided by 3 to 4 above about 100 ships (60 %).
 - **Architecture:** §17.13.
+- **Done (2026-11-05, worktree on `df6db96`; Cycle log, "M4-T18"):** `rayon` 1.12.0 (pinned, its crates in
+  `docs/third-party.md`) and `native/src/threads.rs` (the pool, a threshold per pass, the per-item pass, the
+  performance-core count; engine-free, under `test_sim_core`'s guard). Two passes run across the pool: the brains, which
+  `BrainBatch` (`src/perf/brain_batch.gd`, an internal child of `SimCore` at -9) now asks in one `ScsBrains.think_batch`
+  call a tick instead of one call per ship, and the flight step's kernel, with the forces applied on the main thread in row
+  order. Each item writes only itself with a scratch per worker; T17's two thread-ready gaps closed (`contact::Work` split
+  into a shared `Grid` and a `Query` per worker; the host's scratch per worker) and the display names left the rows (an
+  engine string cannot be shared between threads). Setting `perf_threads` (0 = the performance cores, followed at once).
+  `test_core_threads`: a seeded battle stepped 600 ticks with one thread and with six gives the same rows every tick, an
+  injected cross-row read is caught at tick 30, the count follows the setting. T17's duplicate-name finding fixed test
+  first. **Misses, measured:** the AI stage at `battle` 500 fell from 6.96 ms on the base to 5.51 with six threads (the
+  Done-when asked for a third) and the think at 300 to 3.01 ms (2 ms asked): the native thinks are now about 6 us a ship
+  (0.55 ms a tick at 300, 0.33 with six threads), and what remains is the drivers' GDScript, about 27 us a thinking ship,
+  which no thread inside the crate reaches. No p99 loss at `typical` (it stays under the brains' threshold).
+- **As built, where it differs from the plan:**
+  - Missile guidance, the weapon rows and the perception queries outside the brains stay on the main thread: the weapon
+    rows' native step is under 0.5 ms at 500 with its interceptor and launch walks sequential by nature, a missile's
+    steering is one call per missile from GDScript (0.14 ms at 500), and the brains' perception queries run inside each
+    threaded think. The flight kernel is threaded but its threshold (1 024 ships) keeps it serial at every measured count.
+  - The probe's AI stage ends at -8 (was -9), so it holds the batch.
 
 ##### M4-T19 Jolt measured at 300 and 500: the ships-out-of-Jolt proposal (Q17)
 
@@ -4072,6 +4093,57 @@ stay the reference behind `perf_native_brains`.
   500) has no mechanism found: the batch reads the same rows and applies the same commands on both arms; it is noted for
   the wave's combined measurement and T18. The tick medians (24.2 against 38.5 at 300) are the honest gain.
 - **Behaviour changes:** none in seeded outcomes.
+
+### M4-T18 (2026-11-05): threads inside the native core
+
+In its own worktree on `df6db96` (tests `4759d6e`, the name fix `d99501e`, rayon `6236168`, the threads `4652a67`, the
+thresholds `f2b83ac`), so only this change. Single seeded runs (`bench <layout> <n> 10 warmup=5 seed=1`, editor build,
+headless, both bench locks, pinned to cores 0-11, load 0.4 to 1.5). The before is the base built in this worktree
+(`reports/perf/M4-T18_base/`); the after runs one thread and six in one process in the order 1, 6, 6, 1
+(`M4-T18_final/`). Means in ms per tick, both runs of each arm:
+
+| run | tick median | p99 | ai | think | scan | flight |
+|---|---|---|---|---|---|---|
+| battle 300, base | 18.26, 18.26 | 21.18, 21.55 | 4.28, 4.29 | 4.01, 4.03 | 0.68, 0.68 | 3.97, 4.00 |
+| battle 300, 1 thread | 17.86, 18.06 | 20.61, 20.95 | 4.14, 4.19 | 3.82, 3.86 | 0.54, 0.55 | 3.91, 3.93 |
+| battle 300, 6 threads | 17.23, 17.33 | 20.79, 21.62 | 3.33, 3.33 | 3.01, 3.01 | 0.54, 0.54 | 3.93, 3.97 |
+| battle 500, base | 30.87, 31.63 | 35.23, 35.92 | 6.92, 7.00 | 6.44, 6.52 | 1.06, 1.07 | 6.84, 6.95 |
+| battle 500, 1 thread | 30.68, 31.65 | 35.05, 35.78 | 6.79, 6.87 | 6.22, 6.30 | 0.87, 0.88 | 6.83, 6.93 |
+| battle 500, 6 threads | 30.17, 30.22 | 35.58, 35.37 | 5.51, 5.51 | 4.94, 4.94 | 0.87, 0.88 | 7.01, 6.95 |
+| typical 58, base | 3.94, 3.97 | 4.78, 4.88 | 1.13, 1.15 | 1.08, 1.10 | 0.21, 0.21 | 0.82, 0.81 |
+| typical 58, 1 thread | 3.97, 3.94 | 4.83, 4.70 | 1.10, 1.12 | 1.04, 1.06 | 0.18, 0.19 | 0.82, 0.80 |
+| typical 58, 6 threads | 3.97, 3.98 | 4.91, 4.74 | 1.12, 1.12 | 1.05, 1.06 | 0.18, 0.19 | 0.81, 0.81 |
+
+- **The AI stage at 500**: 6.96 ms on the base, 6.83 with the batch on one thread, **5.51 with six** (divided by 1.26;
+  the Done-when's third is missed). **The think at 300**: 4.02, 3.84, **3.01 ms** against the 2 ms target (missed).
+  `typical` holds its p99 (4.70 to 4.91 against 4.78 and 4.88): its 19 to 28 thinks a tick stay under the threshold.
+- **Where the think goes now.** The batch's native call (`core.batch_us`) is 0.52 to 0.55 ms for 89 to 94 thinks at 300
+  on one thread (about 6 us a think, all of the perception queries, scoring, behaviour and avoidance) and 0.33 to 0.38
+  with six; at 500, 0.93 to 0.95 ms for 144 to 146 thinks and 0.50 to 0.54 with six. Its serial part is the grid and
+  the tick's field rebuilt over 1 345 to 2 300 rows before the pass, which is why six threads give about 1.8 times, not 6.
+  A throwaway timing of the drivers (battle 300, one thread, not committed) puts the GDScript around a native think at
+  about 27 us: the lite perception 4.7, the slot's preparation 2.7, joining the batch 1.3, the rest of the step 5.7
+  (the think rate, the host, the scan and the batch looked up), the output unpacked and mirrored 7.8, and the command,
+  selection and lights 5.1; plus the held ships' early returns. That is about 2.6 ms of the 3.0 ms at 300, and no thread
+  inside the crate reaches it: the next step is to keep the native pilots' inputs and commands as rows (the hits, the
+  selection and the commands written into the core and applied by the flight step), so a held or thinking native ship
+  costs the driver nothing in GDScript. T17's 16.9 us a call was measured before T19 and T20 merged; on this base the
+  per-ship calls cost about 2 us a think more than the batch (the batch alone took 0.18 ms off the think at 300 and 0.22
+  at 500), and the threads took the rest of the measured gain.
+- **The threshold** (`core.parallel_min`, from `4652a67`'s runs, `M4-T18_th/`): at `typical` (19 to 28 thinks) six
+  threads with every pass parallel gave a think of 0.92 to 0.97 ms against 1.04 to 1.12 on one thread but a p99 of 5.29
+  to 5.76 against 4.85 to 5.06, and with the threshold at 64 (serial) 1.07 and 4.78; at `battle` 100 (31 to 36 thinks)
+  1.29 to 1.32 against 1.59, p99 8.59 to 8.88 against 7.56 to 8.00. At 300 (89 to 94) the mean gain is 0.8 ms and the
+  p99 within the runs' spread. So the brains go parallel from 48 thinks. The flight kernel never gained: at `battle` 300
+  parallel 4.00 ms against 3.92 serial, at `typical` 0.86 to 0.91 against 0.81 to 0.83; its threshold is 1 024 ships.
+- **Determinism.** `test_core_threads`: the `battle` layout's 102 fighters (N 120, seed 1, four sides) stepped 600 ticks
+  with one thread and with six, both passes forced parallel (1 200 parallel passes, 20 653 native thinks), give the same
+  rows digest every tick; with the injected fault (a think adds what the worker's previous think left in its scratch)
+  the digests part at tick 30 of 120.
+- **The quick check** (`M4-T18_quick`, load 0.9 to 1.1): furball and spread hold the budget up to 100 ships, as T17's;
+  neither falls under 30 FPS by 500 (furball 30.0, spread 34.5; T17's furball fell to 27.3 at 500).
+- **Behaviour changes:** none in seeded outcomes (the batch thinks with the same inputs in the same order; the parity
+  and tolerance files pass bit for bit). A duplicate name now follows the listed row, as the GDScript does.
 
 ## Definition of done (M4)
 

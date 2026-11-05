@@ -126,7 +126,7 @@ Source: `src/autoload/debug_console.gd`
 | `debris` | `src/combat/debris_pool.gd` |
 | `debug` | `src/autoload/debug_console.gd` |
 | `factions` | `src/combat/faction_console.gd` (registered by `src/combat/hit_resolver.gd`) |
-| `core` | `src/perf/sim_core.gd` (M4-T15: the native simulation core: `path`, `rows`, `bodies`, `statics`, `bolts`, `syncs`, `sync_us`, `bolts_us`, `sync_calls`, `fallback_calls`, `attribute_reads`, `touched`) |
+| `core` | `src/perf/sim_core.gd` (M4-T15: the native simulation core: `path`, `rows`, `bodies`, `statics`, `bolts`, `syncs`, `sync_us`, `bolts_us`, `sync_calls`, `fallback_calls`, `attribute_reads`, `touched`; M4-T18: `threads`, `parallel_passes`, `parallel_min` and `flight_parallel_min` (both settable with `set core.<key> <n>`), `batch_us`, `batch_ships`; the thread count itself is the setting `perf_threads`, `set settings.perf_threads <n>`) |
 | `flight` | `src/ship/flight_batch.gd` (M4-T10: the native flight batch: `path`, `ships`, `stepped`, `gather_us`, `step_us`, `positions`; M4-T15: `source`, `fallback_reads`) |
 | `fx` | `src/combat/fx_pool.gd` |
 | `hud` | `src/hud/hud.gd` |
