@@ -4174,6 +4174,10 @@ headless, both bench locks, pinned to cores 0-11, load 0.4 to 1.5). The before i
   rows, their commands written into the core and applied by the flight step) takes it under 2 ms; threads do not reach
   it. `typical`'s p99 runs spread 4.58 to 5.00 ms on both arms (its 19 to 28 thinks stay serial), within the base's
   4.78 and 4.88 and the runs' spread.
+  AC13's file then found the lazy mirror writing into a behaviour no longer in control after a pool reuse; fixed
+  (`3d3fb91`: the write goes to the behaviour that was in control, and happens before a reset, a new behaviour or a
+  retune). A confirming pair on that build (`M4-T18_fix1b/`, load 1.3 to 1.4): think at 300 3.62 and 2.82 ms, AI stage at
+  500 6.41 and 5.19 ms, on one thread and six.
 
 ## Definition of done (M4)
 
