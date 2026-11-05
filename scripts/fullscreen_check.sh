@@ -9,7 +9,8 @@
 # Usage: scripts/fullscreen_check.sh <layout> <n> [label]      e.g. scripts/fullscreen_check.sh typical 58
 # Environment: FULLSCREEN_WARMUP (8), FULLSCREEN_WINDOW (20), FULLSCREEN_SEED (1), FULLSCREEN_RES (1920x1080),
 #              FULLSCREEN_EXEC (more console statements after the bench starts), FULLSCREEN_SCALE (1080p),
-#              FULLSCREEN_BENCH_OPTS (more bench options, e.g. "rocks=0"), GODOT_BIN.
+#              FULLSCREEN_BENCH_OPTS (more bench options, e.g. "rocks=0"), FULLSCREEN_PAUSE_AT (seconds after the start at which the
+#              game is paused, so the window measures the drawing alone, as render_compare.sh's frozen runs do), GODOT_BIN.
 # Writes reports/perf/<label>/fullscreen.md (a verdict and, since M4-P2, Q48's row: average FPS, the 1 % low, the p99 frame time) and
 # fullscreen.log, and a screenshot. Opens a window for about a minute.
 set -euo pipefail
@@ -25,6 +26,7 @@ WINDOW="${FULLSCREEN_WINDOW:-20}"
 SEED="${FULLSCREEN_SEED:-1}"
 RES="${FULLSCREEN_RES:-1920x1080}"
 EXTRA="${FULLSCREEN_EXEC:-}"
+PAUSE_AT="${FULLSCREEN_PAUSE_AT:-}"
 SCALE="${FULLSCREEN_SCALE:-1080p}"
 OUT="reports/perf/${LABEL}"
 LOG="${OUT}/fullscreen.log"
@@ -43,7 +45,7 @@ EXEC="bench ${LAYOUT} ${N} ${BENCH_S} warmup=0 seed=${SEED} label=${LABEL}/bench
 status=0
 flock /tmp/scs-gpu.lock timeout $(( WARMUP + WINDOW + 240 )) "${GODOT}" --path . --resolution "${RES}" --fullscreen --disable-vsync \
     -s res://scripts/measure_fight.gd -- scene=quiet camera=chase warmup="${WARMUP}" window="${WINDOW}" label="${LAYOUT}_${N}" \
-    exec="${EXEC}" scale3d="${SCALE}" shot="${OUT}/fullscreen.png" > "${LOG}" 2>&1 || status=$?
+    exec="${EXEC}" scale3d="${SCALE}" pause_at="${PAUSE_AT}" shot="${OUT}/fullscreen.png" > "${LOG}" 2>&1 || status=$?
 grep -E '^\[measure\]|^\[bench\]|SCRIPT ERROR' "${LOG}" || true
 if (( status != 0 )); then
     echo "fullscreen_check.sh: the run exited ${status} (124 is the timeout); see ${LOG}" >&2
