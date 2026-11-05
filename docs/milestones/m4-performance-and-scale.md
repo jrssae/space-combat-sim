@@ -4292,7 +4292,8 @@ wall time rises to 15 to 16 us on the shared memory bus and the grid stays seria
 - **Behaviour changes:** none (docs only).
 ### Phase 2 (T15 to T20, T31, M4-P2, 2026-11-05)
 
-Taken on `08228cc` (T15 to T20 and T31 merged on `m4`; this task changes no game code), in a detached worktree with its own native
+Taken on `08228cc` (T15 to T20 and T31 merged on `m4`; this task changes no game code; the runs after the first fullscreen pair
+used the measuring scripts of `b6e7ab9`, which differ from the base in output only), in a detached worktree with its own native
 build (its own cargo target directory, rayon included; `bin/libscs_native.so` is byte for byte the one the release export carries),
 the debug editor build with the library loaded (`perf.native_loaded = true`), default settings (the core's six threads), on the
 maintainer's desktop (load 0.6 to 2.2 at the start of each run; the M5 and bench locks held for every number, the GPU lock too for the
@@ -4311,7 +4312,10 @@ output only. `FULLSCREEN_RENDER` was not needed (the mesh path is the only path)
 **The FPS table (Q48).** `scripts/fullscreen_check.sh`: a native 6144x3456 fullscreen window, the 3D at 1 080 lines (3d scale 0.31),
 vsync off, chase camera, seed 1, 8 s of warm-up and 20 s measured, RADV NAVI21 on Forward+, GPU and bench locks. Four runs per row, the
 second pair (runs 3 and 4) with the new readouts. Average FPS is 1000 over the frame mean. The 1 % low is the slowest 1 % of the
-window's frames (36 of 3 600 at `typical`, 1 of 77 at battle 500) taken together: their count over their total time. The p99 frame
+window's frames (36 of 3 600 at `typical`, 1 of 77 at battle 500) taken together: their count over their total time. Q48 words it
+"the mean FPS of the slowest 1 % of frames"; I read it time-weighted (the harmonic mean of their rates, the usual 1 % low average), a
+choice of mine. The arithmetic mean of the per-frame rates reads higher, since a 35 ms frame counts for as much as a 12 ms one in it;
+the log keeps the frame times, so either can be computed. The p99 frame
 time is beside it. Sim speed is the window's physics ticks per second over 60. The warm-up check: the first 60 frames of the windows at 50 and 100 ships and at `typical`
 average within 0.0 to 1.9 ms of the whole window's mean, and at 200 to 500 they are the same or faster (33 to 40 ms against 45 to 48
 at 200, within 3 % at 300 and 500), so no window opens on loading frames and the 8 s warm-up stays; two runs open with one 25 to 30 ms frame (`typical` run 1 at 0.15 s, battle 100 run 3).
@@ -4325,8 +4329,9 @@ at 200, within 3 % at 300 and 500), so no window opens on loading frames and the
 | battle | 500 | 3.8, 3.7, 3.7, 3.8 | 3.5, 3.5, 3.3, 3.4 | 285.7, 288.0, 302.3, 289.9 | 0.50, 0.50 | 7.9 | 1.87 | 1 296 |
 | typical | 58 | 179.2, 165.5, 182.8, 187.4 | 59.8, 43.5, 65.0, 72.3 | 12.9, 18.5, 12.1, 10.6 | 1.00 | 0.33 | 1.60 | 274 |
 
-Load at the start of each run 0.8 to 2.2 (`M4-P2_fs_matrix.log`, `_matrix2.log`). The game's own VRAM peaked at 601 to 602 MB at every
-count (567 MB when the measuring script starts, before the scene loads), so ship counts add almost nothing; the card-wide peak was 3.1
+Load at the start of each run 0.8 to 2.2 (`M4-P2_fs_matrix.log`, `_matrix2.log`). The game's own VRAM read 601 to 602 MB at every
+count (one reading at the end of the window, not a sampled peak; 567 MB when the measuring script starts, before the scene loads, and 347
+MB in one run, battle 50 run 4), so ship counts add almost nothing; the card-wide peak was 3.1
 to 3.3 GB with the desktop in it. Draw calls and triangles (about 390 000 to 430 000 at every count) are those of the ships in view,
 not of the battle.
 
@@ -4339,11 +4344,21 @@ not of the battle.
   ms, the simulation at 0.82 of real time; at 500 (30.9 ms) 0.50 of real time. So the table is a cliff, not a slope, between 100 and
   300 ships, and it is the tick, not the renderer, that draws it. A simulation on its own thread (T24) is the structural answer to the
   coupling, the tick (T21 to T23, and the stages below) the answer to the cost; the maintainer decides T24 at checkpoint 4 (Q40).
-- **W, the frame's work besides the ticks**, from frozen runs of the same window (`M4-P2_frozen_*`, the game paused 6 s after the
-  start, so no ship moves; a lower bound for the live frame): 2.45 ms at `typical` (408 FPS, 1 % low 164), 7.4 ms at battle 300
-  (136 FPS, 1 % low 62.6) and 10.9 to 11.0 ms at battle 500 (91 to 92 FPS, 1 % low 55.8 and 56.8; 1 322 draw calls, 465 000
-  triangles). From the formula the tick would have to fall under about 13 ms at 300 and 11 ms at 500 for the 30 FPS floor, and under
-  about 9 ms at 300 and 6 ms at 500 for 60 FPS; the live W is larger than the frozen one, so these are upper limits.
+- **W, the frame's work besides the ticks.** Frozen runs of the same window (`M4-P2_frozen_*`, the game paused 6 s after the start,
+  so no ship moves) give 2.45 ms at `typical` (408 FPS, 1 % low 164), 7.4 ms at battle 300 (136 FPS, 1 % low 62.6) and 10.9 to 11.0 ms at
+  battle 500 (91 to 92 FPS, 1 % low 55.8 and 56.8; 1 322 draw calls, 465 000 triangles). A frozen frame is a lower bound of the live one
+  (ships do not move, bolts and particles do not update), so the floors are worked from a live W estimated from the live rows, F = W +
+  ticks a frame x T, with T the headless median:
+  `typical` 5.4 - 0.33 x 4.06 = 4.1 ms (frozen 2.45, 1.7 times); battle 50 5.1 - 0.31 x 4.04 = 3.9; battle 100 9.7 - 0.59 x 6.95 = 5.6;
+  battle 200 45.2 - 2.7 x 12.98 = 10.2. The frozen runs are only at 58, 300 and 500, so at 200 the interpolated frozen W is about 6.4
+  and the live one 1.6 times that; `typical` and 100 give 1.5 to 1.7. At 300 and 500 the live W is then 1.5 to 1.7 times the frozen:
+  **11.1 to 12.6 ms at 300 and 16.4 to 18.5 ms at 500**. (The window's tick is probably a little above the headless median, which would
+  make W a little smaller and the floors a little higher; the `typical` row, with few ticks a frame, is the least sensitive to it.)
+  With a frame F = W / (1 - T / 16.7 ms) the tick for 30 FPS (F 33.3 ms) is T = 16.7 x (1 - W / 33.3): **10.4 to 11.1 ms at 300**
+  (W 12.6 and 11.1) and **7.4 to 8.5 ms at 500** (W 18.5 and 16.4). For 60 FPS (F 16.7 ms) it is 4 to 6 ms at 300, and not reachable by
+  the tick at 500, where W alone is 16.4 to 18.5 ms. From now that means a tick 6.8 to 7.5 ms (38 to 42 %) lower at 300 and 22.4 to 23.5 ms
+  (72 to 76 %) lower at 500. The reviewer's independent estimate (10.5 and 8.7 ms) sits inside the ranges. This is a model fitted to these
+  rows, not a measurement of a live floor.
 - **`typical`** holds 60 FPS with room: 165 to 187 FPS, frame mean 5.3 to 6.0 ms (T13: 74.9 FPS and 13.4 ms; the frame mean is now under half
   the 12 ms line). The 1 % low is 43.5 to 72.3 FPS over four runs, mean 60: Q39's second bar is met on two of four runs (65.0 and 72.3), a
   hair short on one (59.8) and missed on one (43.5, a run with p99 18.5 ms and ten frames over 25 ms). The slow frames are the ones
@@ -4372,7 +4387,7 @@ The worst rebase tick is the median over the runs of each run's worst tick holdi
 | battle | 150 | 0/3 | 10.21 (10.21, 9.98, 10.22) | 14.60 | 0.00 % | 14.34 |
 | battle | 200 | 0/3 | 12.98 (12.84, 12.98, 13.07) | 17.85 | 0.06 % | 17.76 |
 | typical | 25 | 3/3 | 2.33 (2.25, 2.33, 2.54) | 3.12 | 0.00 % | 3.66 |
-| typical | 50 | 3/3 | 3.72 (3.72, 3.66, 3.79) | 4.68 | 0.00 % | 5.56 |
+| typical | 50 | 3/3 | 3.72 (3.72, 3.66, 3.79) | 4.69 | 0.00 % | 5.56 |
 | typical | 58 | 3/3 | 4.06 (4.04, 4.06, 4.13) | 5.03 | 0.00 % | 5.65 |
 | typical | 100 | 3/3 | 6.44 (6.44, 6.52, 6.34) | 7.90 | 0.00 % | 8.94 |
 | typical | 110 | 3/3 | 7.01 (7.19, 7.01, 6.86) | 8.66 | 0.00 % | 9.49 |
@@ -4382,7 +4397,7 @@ The worst rebase tick is the median over the runs of each run's worst tick holdi
 | typical | 150 | 0/3 | 9.31 (9.43, 9.31, 9.15) | 13.38 | 0.00 % | 13.22 |
 | typical | 200 | 0/3 | 12.29 (12.29, 12.02, 12.41) | 18.22 | 0.00 % | 17.17 |
 | furball | 25 | 3/3 | 1.74 (1.72, 1.74, 1.79) | 2.23 | 0.00 % | 2.34 |
-| furball | 50 | 3/3 | 2.92 (2.92, 2.96, 2.86) | 3.76 | 0.00 % | 3.78 |
+| furball | 50 | 3/3 | 2.93 (2.92, 2.96, 2.86) | 3.76 | 0.00 % | 3.78 |
 | furball | 100 | 3/3 | 5.30 (5.21, 5.30, 5.70) | 7.29 | 0.00 % | 7.16 |
 | furball | 110 | 3/3 | 5.78 (5.78, 5.68, 6.06) | 7.89 | 0.02 % | 7.29 |
 | furball | 120 | 3/3 | 6.50 (6.72, 6.50, 6.48) | 9.16 | 0.01 % | 8.39 |
@@ -4477,9 +4492,9 @@ single next stage to take. What each holds, from `M4-P2_probe300` and `_probe500
 
 - **The resolvers (28 %).** The hit stage at 500 is 4.4 ms, of which 1.9 ms is the gather of the bolts out of the core (2 548 of
   them); the sweep visits 1 197 candidate pairs a tick and tests 8. The ram stage is 4.2 ms though the whole 17 s run resolved **five
-  rams**: its gather is 0.07 ms, so the cost is `RamResolver._resolve_contacts`, a GDScript loop over every rigid hull (about 500)
-  that makes two `instance_from_id` calls, a `RamTracker.Sample` and a direct body state read each, about 8 us a hull, whether or not
-  anything touches. Both are per-hull work that only
+  rams**: its gather is 0.07 ms, so the cost is `RamResolver._resolve_contacts`, a GDScript loop over every rigid hull
+  that makes two `instance_from_id` calls, a `RamTracker.Sample` and a direct body state read each (from the code, not split by a
+  measurement; the core holds 430 rows, so about 10 us a row, whether or not anything touches; the loop's own hull count was not read). Both are per-hull work that only
   the tier (T21) removes for far ships or a native contact read would remove for all.
 - **Flight (23 %).** The native step is 0.64 ms and its gather 1.73 ms for 425 ships at 500 (0.37 and 0.94 at 300); the rest of the
   7.14 ms, about 4.8 ms with the stand-ins' 0.6 inside it, is GDScript per ship, about 10 us a fighter. I did not separate it
@@ -4494,7 +4509,7 @@ single next stage to take. What each holds, from `M4-P2_probe300` and `_probe500
   T21) is not yet testable.
 
 For T32 and T21: the **AI is 17 to 18 % of the tick at both sizes**. A wing-level AI that took the whole AI stage to nothing would
-leave 25.8 ms at 500 and 14.7 ms at 300, still over the floor's limits (about 11 and 13 ms). The cost is spread over the resolvers,
+leave 25.8 ms at 500 and 14.7 ms at 300, still over the floor's limits (about 10.4 to 11.1 ms at 300 and 7.4 to 8.5 ms at 500). The cost is spread over the resolvers,
 flight, targeting and the sync, each a per-ship loop in GDScript or a per-ship engine call; the tier (T21) lifts those for far ships
 and the wing-level AI lifts the thinks, which are only a sixth. A native contact read for the ram stage, the hit stage's gather and
 flight's GDScript per ship are per-ship work that T21 does not remove for near ships.
@@ -4529,7 +4544,7 @@ entities, so a row is within it when the per-entity cost is; microseconds are th
 | missile | 170 | 0.77 steering; launches 87 us a tick (missiles and carriers' fighters) | 3 | 0.13 steering, 0.09 launches | 0.24 | native steering, one call each |
 | mine | 500 | 0.15 | 0.2 | 0.075 | 0.1 | |
 | bolt | 2 400 | 1.8 (the hit stage) | 0.3 (1 100 near) | 4.4 | 0.33 | the gather 1.9 ms and the pairs |
-| ram resolver | 500 hulls | 8.7 | not in the table | 4.35 | | a GDScript loop over every rigid hull |
+| ram resolver | 430 core rows | about 10 | not in the table | 4.35 | | a GDScript loop over every rigid hull (from the code) |
 | capital, asteroid | 75, 1 000 | not separable | 5 near, 2 tier; 0.02 | in physics, hit, ram | 0.2; 0.02 | |
 | Jolt step and body sync | | | | 2.1 | 1.3 | |
 | core sync | | | | 3.2 | in the rows above | one sync, 3.5 ms last tick |
@@ -4550,9 +4565,13 @@ tier (P1: 108). The rows that decide the rest are the resolvers (bolts 1.8 us ag
 | render CPU ms | 1.40 | 0.78 | 1.2 | 0.64 to 0.66 |
 | draw calls | 1 276 | 1 181 | 1 296 | 1 322 |
 | triangles | 412 882 | 420 319 | 422 028 | 464 973 |
-| VRAM | +1 525 MB card-wide, 5.2 GB peak | +1 504 MB | the game's own 602 MB peak (567 MB before the scene); card-wide peak 3.2 to 3.3 GB | the same |
+| VRAM | +1 525 MB card-wide, 5.2 GB peak | +1 504 MB | the game's own 602 MB (one reading at the window's end; 567 MB before the scene); card-wide peak 3.2 to 3.3 GB | the same |
 
-The GPU takes 43 % less than T27's mesh rows (1.87 against 3.27 ms; no compositor pass, T31 saw 0.2 to 0.4 ms of it), draw calls and
+T30d measured the textured hulls on the same window, with the splat renderer still present, and is the nearer baseline: `battle` 500
+live 2.09 ms of GPU, 1 271 draw calls, 468 330 triangles, +1 345 MB card-wide; frozen 2.05 ms, 22.41 ms a frame (44.6 FPS), 1 170 calls,
+496 047 triangles, +1 358 MB. Against it the GPU is 10 % lower (1.87 against 2.09 live, 1.86 against 2.05 frozen), the frozen frame 2.0
+times shorter (11.0 against 22.4 ms), and the card-wide VRAM figures are not like for like (a delta over the desktop against the game's
+own count). The GPU takes 43 % less than T27's older painted-mesh rows (1.87 against 3.27 ms; no compositor pass, T31 saw 0.2 to 0.4 ms of it), draw calls and
 triangles are the same, and the game holds 602 MB, of which the scene's contents add about 35 MB: the splat budget's 1.2 GB and its
 share of the desktop's peak are gone, T31's 1.9 GB lower peak confirmed. The frozen frame is 1.8 times shorter than T27's (11.0
 against 19.6 ms), T31's gain, and its GPU time is 17 % of it; the drawing alone holds 90 FPS at 500 ships.
@@ -4590,10 +4609,13 @@ shorter and raised the `battle` ceiling from 47 to 110 ships, and it met neither
 against 4) and `battle` 300 is at 17.85 ms against 8.
 
 **Headlines** (editor build, headless, the budget of 8 ms median and 12 ms p99; fullscreen on the RX 6950 XT):
-- **The FPS table (Q48)**, average FPS and 1 % low FPS, mean of the second pair of runs (all four in the table above): `battle` 50
-  196 and 95; 100 103 and 49; 200 22.2 and 10; 300 6.2 and 5.4; 500 3.8 and 3.4; `typical` 58 185 and 69. The 60 FPS target
-  holds to 100 ships, the 30 FPS floor is lost between 100 and 200, and from 300 the simulation falls behind real time (0.82, then
-  0.50 at 500).
+- **The FPS table (Q48)**, average FPS and 1 % low FPS as the mean of all four runs, with the range of the four in brackets: `battle` 50
+  188 (178.6 to 196.5) and 74 (52.8 to 97.1); 100 103 (101.8 to 104.2) and 52 (46.5 to 54.9); 200 21.8 (20.9 to 22.3) and 10.3 (8.9 to 11.7);
+  300 6.2 (6.1 to 6.2) and 5.4 (5.2 to 5.4); 500 3.8 (3.7 to 3.8) and 3.4 (3.3 to 3.5); `typical` 58 179 (165.5 to 187.4) and 60 (43.5 to
+  72.3). The 1 % low spreads by up to 1.8 times between runs. The 60 FPS target holds on average to 100 ships (the 1 % low at 100 is
+  under 60 on every run), the 30 FPS floor is lost between 100 and 200, and from 300 the simulation falls behind real time (0.82, then
+  0.50 at 500). These are editor-build numbers; the release export is faster (the same tick is 13.3 ms against 17.85 at 300), so
+  a player's build has the cliff further right.
 - `typical` (50 fighters, 8 capitals, every weapon, 1 000 rocks, a moon): **4.06 ms** median over three runs (4.04, 4.06, 4.13), p99 5.0;
   165 to 187 FPS fullscreen with a frame mean of 5.3 to 6.0 ms; its 1 % low 43.5 to 72.3 FPS.
 - `battle`, the headline layout: **110 ships** (P1: 47); the tick is 6.90 ms at 100, 17.85 at 300 and 30.91 at 500.
@@ -4621,12 +4643,14 @@ part (by 1.8), so the AI stage at 500 fell by 1.26 times, not 3. P1's estimate f
 (17.85); its hope that the resolvers would halve was not met, because nothing aimed at them.
 
 **Open questions for the maintainer** (none blocks T32; T21 waits for them, as the plan says):
-1. **Battle 300's target.** Keep "under 8 ms", or restate it to the floor? By the catch-up formula above, the 30 FPS floor at 300
-   needs a tick under about 13 ms (4.9 ms less than now) and 60 FPS about 9 ms; at 500 about 11 and 6 ms. The 8 ms line remains the gate
-   for max N. I recommend restating the 300 target to the 30 FPS floor (a tick under 13 ms) and keeping 8 ms as the ceiling's gate.
+1. **Battle 300's target.** Keep "under 8 ms", or restate it to the floor? By the catch-up formula above, with the live frame work W
+   estimated from the live rows (11.1 to 12.6 ms at 300, 16.4 to 18.5 at 500), the 30 FPS floor needs a tick under about 10.4 to 11.1 ms
+   at 300 (6.8 to 7.5 ms less than now) and 7.4 to 8.5 ms at 500; 60 FPS needs 4 to 6 ms at 300 and is out of the tick's reach at 500. So
+   at 500 the floor is about the 8 ms line itself. I recommend restating the 300 target to the 30 FPS floor (a tick under about 10.5 ms) and
+   keeping 8 ms as the ceiling's gate and as the 500 target. The thresholds are a fitted model; the live floor is measured at T25.
 2. **A cheap pass before T21?** The four per-ship stages that phase 2 did not take (the ram stage's loop, the hit stage's gather,
    flight's GDScript, targeting, with the core's sync) are 13.3 ms of the 17.85 at 300 and 23.3 ms of 30.9 at 500. Halving them is a
-   guess (low confidence) of 6.6 ms off 300 and 11.7 off 500, which would put 300 at 11.2 ms, under the floor's 13, without the tier. The tier (T21 to T23, serial,
+   guess (low confidence) of 6.6 ms off 300 and 11.7 off 500, which would put 300 at 11.2 ms, at the floor's limit (10.4 to 11.1) but not under it, and 500 at 19.2 ms, far over its 7.4 to 8.5; the tier is needed at 500 either way. The tier (T21 to T23, serial,
    Fable) takes the far share of the same work (94 of 255 fighters at 300, 242 of 425 at 500) and more, but it is the larger and later
    change. Do the cheap pass first, or go to T21 directly?
 3. **T32's yardstick.** The AI stage is 17 to 18 % of the tick at 300 and 500: a wing-level AI that removed all of it leaves 14.7 ms
