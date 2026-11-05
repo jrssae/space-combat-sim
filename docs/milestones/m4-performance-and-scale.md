@@ -563,7 +563,7 @@ native class and the pool. T30a to T30c and T31 ride beside the native waves and
    every ship, or take AI ships out of Jolt (a change to D4 and §5.6). The controller stops; T20 and later do not assume either.
 3. **After wave 6 (report P2).** Phase 2's numbers; the tier's physics rule (Q22) is already accepted, so the checkpoint is the
    numbers and whether `typical` holds its headroom; with T31 merged, the VRAM and GPU time of the mesh-only renderer against T27's
-   mesh rows. T32's wing-level AI proposal (Q46) is decided here too, before T21. Report P2 carries Q48's table: average and 1 % low FPS at `battle` 50, 100, 200, 300 and 500 and `typical` 58.
+   mesh rows. T32's wing-level AI proposal (Q46) is decided here too, before T21. Report P2 carries Q48's table: average and 1 % low FPS at `battle` 50, 100, 200, 300 and 500 and `typical` 58 (done, 2026-11-05: the Cycle log entry "Phase 2 (T15 to T20, T31, M4-P2)", with Report P2 at its end; the open questions there are what the maintainer answers here, T32's proposal included).
 4. **Before T24.** Only if the fullscreen check at 500 misses the 30 FPS floor after T23 and T26: the simulation thread changes
    §15.3's tick order and is a design-contract change; the controller asks before dispatching it.
 5. **After T25 (report P3).** M4's definition of done; the maintainer confirms the milestone before `m4` merges into `main`.
@@ -4290,6 +4290,354 @@ wall time rises to 15 to 16 us on the shared memory bus and the grid stays seria
   the glue stay: the cannon hand-off, the selection, the lights); a cluster perception with cached statics 0.35 to 0.7 and 0.6
   to 1.1 ms on one thread (ceiling 0.8 and 1.3), the cluster pass costed at 8 us a fight.
 - **Behaviour changes:** none (docs only).
+### Phase 2 (T15 to T20, T31, M4-P2, 2026-11-05)
+
+Taken on `08228cc` (T15 to T20 and T31 merged on `m4`; this task changes no game code), in a detached worktree with its own native
+build (its own cargo target directory, rayon included; `bin/libscs_native.so` is byte for byte the one the release export carries),
+the debug editor build with the library loaded (`perf.native_loaded = true`), default settings (the core's six threads), on the
+maintainer's desktop (load 0.6 to 2.2 at the start of each run; the M5 and bench locks held for every number, the GPU lock too for the
+window runs; headless runs pinned to cores 0-11). T32 ran beside it and was kept off every measured run by the locks. Reports are in
+`reports/perf/` (not committed): `m4_p2` (the sweep), `m4_p2_below`, `m4_p2_stages`, `M4-P2_fs_<layout>_<n>_<a to d>` (the fullscreen
+runs), `M4-P2_frozen_*`, `M4-P2_probe300` and `_probe500` (the console state after a bench), `m4_p2_release_quick*`, `M4-P2_focused*`.
+
+**The only code changed** is the measuring: `PerfStats.low_fps` (the 1 % low, test first: `test_perf_stats` 31 of 31, RED on a parse
+error before it), `scripts/measure_fight_node.gd` prints it beside the p99, plus the simulation's speed against real time, the
+window's first 60 frames against the whole window (the warm-up check), and the game's own video memory (the kernel's per-process count
+from `/proc/self/fdinfo`, since the card-wide figure moves with the desktop and read -170 to +140 MB here), and
+`scripts/fullscreen_check.sh` writes Q48's row into `fullscreen.md` and takes `FULLSCREEN_PAUSE_AT` (a window that measures the drawing
+alone, as T27's frozen runs did). The brief allowed one small change to the script; these are four, all in the same two files and all
+output only. `FULLSCREEN_RENDER` was not needed (the mesh path is the only path).
+
+**The FPS table (Q48).** `scripts/fullscreen_check.sh`: a native 6144x3456 fullscreen window, the 3D at 1 080 lines (3d scale 0.31),
+vsync off, chase camera, seed 1, 8 s of warm-up and 20 s measured, RADV NAVI21 on Forward+, GPU and bench locks. Four runs per row, the
+second pair (runs 3 and 4) with the new readouts. Average FPS is 1000 over the frame mean. The 1 % low is the slowest 1 % of the
+window's frames (36 of 3 600 at `typical`, 1 of 77 at battle 500) taken together: their count over their total time. The p99 frame
+time is beside it. Sim speed is the window's physics ticks per second over 60. The warm-up check: the first 60 frames of the windows at 50 and 100 ships and at `typical`
+average within 0.0 to 1.9 ms of the whole window's mean, and at 200 to 500 they are the same or faster (33 to 40 ms against 45 to 48
+at 200, within 3 % at 300 and 500), so no window opens on loading frames and the 8 s warm-up stays; two runs open with one 25 to 30 ms frame (`typical` run 1 at 0.15 s, battle 100 run 3).
+
+| layout | N | average FPS, runs 1 to 4 | 1 % low FPS, runs 1 to 4 | p99 frame ms, runs 1 to 4 | sim speed (runs 3, 4) | ticks a frame | GPU ms | draw calls |
+|---|---|---|---|---|---|---|---|---|
+| battle | 50 | 178.6, 179.4, 196.2, 196.5 | 52.8, 54.0, 92.7, 97.1 | 14.4, 14.9, 8.8, 8.7 | 1.00 | 0.31 | 1.61 | 265 |
+| battle | 100 | 103.4, 103.5, 101.8, 104.2 | 54.9, 53.8, 46.5, 52.4 | 16.3, 16.6, 17.8, 17.1 | 1.00 | 0.59 | 1.63 | 382 |
+| battle | 200 | 20.9, 22.0, 22.3, 22.0 | 9.6, 11.7, 8.9, 11.0 | 92.9, 80.4, 107.2, 88.4 | 1.00 | 2.7 | 1.67 | 579 |
+| battle | 300 | 6.1, 6.1, 6.2, 6.2 | 5.4, 5.2, 5.4, 5.4 | 184.5, 192.0, 183.4, 179.2 | 0.82, 0.83 | 7.9 | 1.75 | 814 |
+| battle | 500 | 3.8, 3.7, 3.7, 3.8 | 3.5, 3.5, 3.3, 3.4 | 285.7, 288.0, 302.3, 289.9 | 0.50, 0.50 | 7.9 | 1.87 | 1 296 |
+| typical | 58 | 179.2, 165.5, 182.8, 187.4 | 59.8, 43.5, 65.0, 72.3 | 12.9, 18.5, 12.1, 10.6 | 1.00 | 0.33 | 1.60 | 274 |
+
+Load at the start of each run 0.8 to 2.2 (`M4-P2_fs_matrix.log`, `_matrix2.log`). The game's own VRAM peaked at 601 to 602 MB at every
+count (567 MB when the measuring script starts, before the scene loads), so ship counts add almost nothing; the card-wide peak was 3.1
+to 3.3 GB with the desktop in it. Draw calls and triangles (about 390 000 to 430 000 at every count) are those of the ships in view,
+not of the battle.
+
+- **The GPU binds nowhere:** 1.6 to 1.9 ms a frame at every count, render CPU 0.4 to 1.2 ms. T26's trigger (the GPU over 12 ms) is not
+  near.
+- **The frame rate is the tick, through the engine's catch-up rule.** Godot runs as many 60 Hz ticks as the frame's length owes the
+  simulation, up to `max_physics_steps_per_frame` (8). A frame of length F carries F/16.7 ticks, so F = W / (1 - T/16.7), with T the
+  tick and W the rest of the frame's work: at battle 100 (tick 6.95 ms headless) F measured 9.7 ms; at 200 (13.0 ms, 78 % of a step) it is 45 ms
+  with 2.7 ticks in each frame, while the simulation still keeps real time; at 300 (17.9 ms) the cap binds, 7.9 ticks a frame at 163
+  ms, the simulation at 0.82 of real time; at 500 (30.9 ms) 0.50 of real time. So the table is a cliff, not a slope, between 100 and
+  300 ships, and it is the tick, not the renderer, that draws it. A simulation on its own thread (T24) is the structural answer to the
+  coupling, the tick (T21 to T23, and the stages below) the answer to the cost; the maintainer decides T24 at checkpoint 4 (Q40).
+- **W, the frame's work besides the ticks**, from frozen runs of the same window (`M4-P2_frozen_*`, the game paused 6 s after the
+  start, so no ship moves; a lower bound for the live frame): 2.45 ms at `typical` (408 FPS, 1 % low 164), 7.4 ms at battle 300
+  (136 FPS, 1 % low 62.6) and 10.9 to 11.0 ms at battle 500 (91 to 92 FPS, 1 % low 55.8 and 56.8; 1 322 draw calls, 465 000
+  triangles). From the formula the tick would have to fall under about 13 ms at 300 and 11 ms at 500 for the 30 FPS floor, and under
+  about 9 ms at 300 and 6 ms at 500 for 60 FPS; the live W is larger than the frozen one, so these are upper limits.
+- **`typical`** holds 60 FPS with room: 165 to 187 FPS, frame mean 5.3 to 6.0 ms (T13: 74.9 FPS and 13.4 ms; the frame mean is now under half
+  the 12 ms line). The 1 % low is 43.5 to 72.3 FPS over four runs, mean 60: Q39's second bar is met on two of four runs (65.0 and 72.3), a
+  hair short on one (59.8) and missed on one (43.5, a run with p99 18.5 ms and ten frames over 25 ms). The slow frames are the ones
+  that carry a tick: two frames in three carry none (p50 4.4 ms against a mean of 5.6), a tick frame costs the tick (4 ms, up to 5.7
+  with a rebase) plus the frame's work (2.5 ms frozen, more live), and the occasional 25 to 35 ms frame carries one or two ticks whose
+  stages sum to 4 to 8 ms, so most of such a frame lies outside the stages (the compositor or the driver on a 4K window with vsync
+  off, I did not find which); vsync on at the screen was not measured (H).
+- **Battle 50 and 100** hold the 60 FPS target (196 FPS and 102 FPS on the second pair); the 1 % low at 100 is 46.5 to 54.9 FPS, under
+  60, with p99 16.3 to 17.8 ms: probably the frames that carry a rebase tick (worst 9.2 ms headless) or two ticks.
+- **The 1 % low is noisy**: battle 50's two pairs differ by 1.8 times (52.8 and 54.0, then 92.7 and 97.1) while the averages differ
+  by 10 %, and `typical`'s four runs span 43.5 to 72.3. Load at the start was 0.8 to 1.8 for the first pair and 1.1 to 2.2
+  for the second, so it does not explain the gap, and I cannot attribute it. Read the 1 % low as plus or minus 30 %.
+
+**The sweep** (`scripts/bench.sh m4_p2 battle typical furball spread transit`, one layout per locked call, seeds 1 to 3, 5 s + 30 s, a
+layout stopping after two failing counts in a row; N is the ladder plus the below-sweep counts under `m4_p2_below`, run the same way).
+The worst rebase tick is the median over the runs of each run's worst tick holding a rebase.
+
+| layout | N | runs passed | tick median ms (runs) | p99 ms | behind real time | worst rebase tick ms |
+|---|---|---|---|---|---|---|
+| battle | 25 | 3/3 | 2.48 (2.39, 2.48, 2.52) | 3.25 | 0.00 % | 3.87 |
+| battle | 50 | 3/3 | 4.04 (4.02, 4.05, 4.04) | 4.82 | 0.00 % | 5.59 |
+| battle | 100 | 3/3 | 6.95 (6.90, 6.95, 7.18) | 8.27 | 0.00 % | 9.21 |
+| battle | 110 | 3/3 | 7.79 (7.95, 7.79, 7.60) | 9.17 | 0.00 % | 9.66 |
+| battle | 120 | 0/3 | 8.32 (8.32, 8.28, 8.45) | 10.39 | 0.01 % | 10.78 |
+| battle | 130 | 0/3 | 9.07 (9.00, 9.33, 9.07) | 10.89 | 0.00 % | 11.88 |
+| battle | 150 | 0/3 | 10.21 (10.21, 9.98, 10.22) | 14.60 | 0.00 % | 14.34 |
+| battle | 200 | 0/3 | 12.98 (12.84, 12.98, 13.07) | 17.85 | 0.06 % | 17.76 |
+| typical | 25 | 3/3 | 2.33 (2.25, 2.33, 2.54) | 3.12 | 0.00 % | 3.66 |
+| typical | 50 | 3/3 | 3.72 (3.72, 3.66, 3.79) | 4.68 | 0.00 % | 5.56 |
+| typical | 58 | 3/3 | 4.06 (4.04, 4.06, 4.13) | 5.03 | 0.00 % | 5.65 |
+| typical | 100 | 3/3 | 6.44 (6.44, 6.52, 6.34) | 7.90 | 0.00 % | 8.94 |
+| typical | 110 | 3/3 | 7.01 (7.19, 7.01, 6.86) | 8.66 | 0.00 % | 9.49 |
+| typical | 120 | 3/3 | 7.66 (7.49, 7.66, 7.67) | 10.01 | 0.00 % | 10.54 |
+| typical | 130 | 0/3 | 8.31 (8.31, 8.40, 8.19) | 11.94 | 0.00 % | 13.63 |
+| typical | 140 | 0/3 | 8.77 (9.05, 8.74, 8.77) | 11.65 | 0.00 % | 12.06 |
+| typical | 150 | 0/3 | 9.31 (9.43, 9.31, 9.15) | 13.38 | 0.00 % | 13.22 |
+| typical | 200 | 0/3 | 12.29 (12.29, 12.02, 12.41) | 18.22 | 0.00 % | 17.17 |
+| furball | 25 | 3/3 | 1.74 (1.72, 1.74, 1.79) | 2.23 | 0.00 % | 2.34 |
+| furball | 50 | 3/3 | 2.92 (2.92, 2.96, 2.86) | 3.76 | 0.00 % | 3.78 |
+| furball | 100 | 3/3 | 5.30 (5.21, 5.30, 5.70) | 7.29 | 0.00 % | 7.16 |
+| furball | 110 | 3/3 | 5.78 (5.78, 5.68, 6.06) | 7.89 | 0.02 % | 7.29 |
+| furball | 120 | 3/3 | 6.50 (6.72, 6.50, 6.48) | 9.16 | 0.01 % | 8.39 |
+| furball | 130 | 3/3 | 7.12 (7.00, 7.53, 7.12) | 9.89 | 0.02 % | 9.30 |
+| furball | 140 | 3/3 | 7.64 (7.64, 7.32, 7.79) | 9.93 | 0.01 % | 9.73 |
+| furball | 150 | 1/3 | 8.05 (8.10, 7.93, 8.05) | 10.84 | 0.00 % | 11.37 |
+| furball | 200 | 0/3 | 10.33 (10.75, 10.25, 10.33) | 13.84 | 0.00 % | 13.70 |
+| spread | 25 | 3/3 | 1.69 (1.69, 1.70, 1.67) | 2.12 | 0.00 % | 2.08 |
+| spread | 50 | 3/3 | 2.60 (2.60, 2.62, 2.56) | 3.38 | 0.00 % | 3.56 |
+| spread | 100 | 3/3 | 4.60 (4.60, 4.60, 4.57) | 6.42 | 0.00 % | 6.70 |
+| spread | 150 | 3/3 | 6.69 (6.69, 6.84, 6.69) | 9.82 | 0.02 % | 8.97 |
+| spread | 160 | 3/3 | 7.22 (7.05, 7.28, 7.22) | 11.13 | 0.01 % | 10.26 |
+| spread | 175 | 1/3 | 7.84 (7.77, 7.84, 7.88) | 12.07 | 0.01 % | 11.57 |
+| spread | 190 | 0/3 | 8.53 (8.32, 8.53, 8.55) | 13.66 | 0.00 % | 12.03 |
+| spread | 200 | 0/3 | 9.03 (9.22, 9.03, 8.97) | 13.37 | 0.00 % | 13.08 |
+| spread | 300 | 0/3 | 13.32 (13.31, 13.32, 13.47) | 18.85 | 0.00 % | 18.75 |
+| transit | 25 | 3/3 | 1.41 (1.42, 1.41, 1.41) | 1.78 | 0.00 % | 1.71 |
+| transit | 50 | 3/3 | 2.21 (2.21, 2.21, 2.20) | 2.66 | 0.00 % | 2.50 |
+| transit | 100 | 3/3 | 3.92 (3.92, 3.91, 3.93) | 4.56 | 0.01 % | 4.74 |
+| transit | 150 | 3/3 | 5.85 (5.87, 5.85, 5.85) | 7.89 | 0.00 % | 6.60 |
+| transit | 200 | 3/3 | 7.73 (7.72, 7.73, 7.76) | 11.49 | 0.00 % | 10.93 |
+| transit | 220 | 0/3 | 8.52 (8.52, 8.57, 8.51) | 12.58 | 0.02 % | 12.37 |
+| transit | 240 | 0/3 | 9.35 (9.31, 9.35, 9.35) | 14.45 | 0.00 % | 11.55 |
+| transit | 300 | 0/3 | 11.68 (11.68, 11.74, 11.68) | 17.26 | 0.03 % | 16.18 |
+| transit | 400 | 0/3 | 15.36 (15.32, 15.36, 15.37) | 19.67 | 0.38 % | 17.62 |
+
+**Max N, against report P1** (editor build; the ceilings are read with the below-sweep counts, two runs of three; `typical` is one mix,
+read at its own size of 58 and at its ceiling):
+
+| layout | P1 ceiling | now | the first failing count now (median ms) |
+|---|---|---|---|
+| `battle` (the headline) | 47 (sweep: 25) | **110** (3 of 3, 7.79 ms; sweep: 100) | 120 (8.32) |
+| `typical` | 58 passes, 100 fails | **58 passes** (3 of 3, 4.06 ms); **120** (3 of 3, 7.66 ms); sweep: 100 | 130 (8.31) |
+| furball | 70 (sweep: 50) | **140** (3 of 3, 7.64 ms; sweep: 100) | 150 (8.05, 1 of 3) |
+| spread | 80 (sweep: 50) | **160** (3 of 3, 7.22 ms; sweep: 150) | 175 (7.84, 1 of 3) |
+| transit | 100 | **200** (3 of 3, 7.73 ms) | 220 (8.52) |
+
+The headline as the milestone defines it (`battle`'s) is **110** by the below-sweep counts and **100** by the sweep, against 47 and 25
+in P1 and the plan's phase 1 target of 100. The headline in the T06 sense (the lower of furball and spread) is **140**, against 70.
+Transit passed 200 and was not run between 200 and 220 (260 and 280 were skipped by the stop rule).
+
+**Phase 2's targets against the measurements:**
+
+| target | measured | met |
+|---|---|---|
+| Q38: `typical` under 4 ms | 4.06 ms median over three runs (4.04, 4.06, 4.13; p99 5.03; T18's single 10 s runs read 3.82 to 3.97 on a quieter window) | no, by 0.06 ms; at the line, inside the runs' spread |
+| Q38: `battle` 300 under 8 ms | 17.85 ms (p99 21.66; 11.6 % behind real time; release export, one short run: 13.29 ms) | no, by 2.2 times |
+| Q39: `typical` 60 FPS held and the 1 % lows | 165 to 187 FPS; 1 % low 43.5, 59.8, 65.0 and 72.3 FPS | 60 FPS yes; the 1 % lows on two runs of four |
+| P1's estimate for battle 300 ("about 15 ms after the brains to a quarter, the stand-ins to a fifth and the resolvers in half") | 17.85 ms | the estimate was right about where it would land; the resolvers did not halve (below) |
+
+**Phase 2 against its before.** Report P1's tick medians (editor build): typical 58 7.63 ms, battle 100 14.40, 300 43.31 and 500
+77.93. Now 4.04, 6.90, 17.85 and 30.91 (single seed-1 runs, 5 s + 30 s): **1.9, 2.1, 2.4 and 2.5 times faster**. P1's ceilings went
+from 47 to 110 (`battle`), 70 to 140 (furball), 80 to 160 (spread) and 100 to 200 (transit).
+
+**Stage and per-entity breakdown** (seed 1, 5 s + 30 s; medians in ms per tick, means within 0.15 ms except where noted; `typical 58`
+from `m4_p2_below`, `battle 100` the sweep's, `battle 300` and `500` from `m4_p2_stages`; `(scan)` and `(think)` are inside `ai`,
+`(standins)` inside `flight`; `other` is the core's sync of its rows and bolts, in the tick and outside the stages that precede it):
+
+| run | tick | p99 | ai | (scan) | (think) | flight | (standins) | targeting | hit | ram | physics | other | behind real time | worst rebase tick | shift median |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| typical 58 | 4.04 | 4.92 | 1.06 | 0.18 | 1.00 | 0.80 | 0.06 | 0.44 | 0.38 | 0.54 | 0.43 | 0.32 | 0.00 % | 5.65 | 0.63 |
+| battle 100 | 6.90 | 8.21 | 1.65 | 0.26 | 1.56 | 1.39 | 0.14 | 0.76 | 0.85 | 0.83 | 0.70 | 0.64 | 0.00 % | 12.40 | 0.90 |
+| battle 300 | 17.85 | 21.66 | 3.13 | 0.55 | 2.82 | 4.04 | 0.35 | 2.45 | 2.67 | 2.32 | 1.21 | 1.81 | 11.64 % | 21.46 | 2.33 |
+| battle 500 | 30.91 | 35.16 | 5.10 | 0.87 | 4.55 | 7.14 | 0.61 | 4.26 | 4.41 | 4.35 | 2.12 | 3.16 | 48.39 % | 37.76 | 4.01 |
+
+Against P1 at battle 500 (ms): the AI stage 39.16 to 5.10, the scan 24.59 to 0.87, the stand-ins 10.45 to 0.61, flight 17.27 to 7.14,
+targeting 5.16 to 4.26, hit 5.77 to 4.41, ram 6.31 to 4.35, physics 3.34 to 2.12, the rebase shift 4.30 to 4.01. At 300: AI 21.37 to
+3.13, scan 12.87 to 0.55, stand-ins 5.61 to 0.35, flight 9.58 to 4.04, targeting 3.00 to 2.45, hit 3.34 to 2.67, ram 3.47 to 2.32,
+physics 2.10 to 1.21, shift 2.66 to 2.33. The phase moved the AI stage and the stand-ins by 7 to 17 times; it moved targeting, the
+resolvers and the rebase shift by 1.2 to 1.5 times, and they now rank above the AI.
+
+Entities (seed 1, means per tick): typical 58 holds 50 fighters (all near), 8 capitals, 78 turrets, 32 interceptors, 16 beam emitters,
+20 missiles, 100 mines, 216 bolts, 1 000 rocks; battle 100 81 near and 4 far fighters, 15 capitals, 142 turrets, 501 bolts; battle 300
+161 near and 94 far, 45 capitals, 426 turrets, 180 interceptors, 102 missiles, 300 mines, 1 462 bolts; battle 500 183 near and 242 far,
+75 capitals, 710 turrets, 300 interceptors, 150 emitters, 170 missiles, 500 mines, 2 400 bolts. Over the 30 s at 500: 1 011 missiles
+launched and 249 shot down, 1 257 beam shots, 1 mine set off.
+
+**What binds now** (the stages ranked by their share of the tick; medians):
+
+| rank | at battle 300 (17.85 ms) | at battle 500 (30.91 ms) |
+|---|---|---|
+| 1 | the resolvers, hit 2.67 and ram 2.32: 4.99 ms, 28 % | the resolvers, hit 4.41 and ram 4.35: 8.76 ms, 28 % |
+| 2 | flight 4.04 ms, 23 % | flight 7.14 ms, 23 % |
+| 3 | the AI stage 3.13 ms, 18 % (the think 2.82) | the AI stage 5.10 ms, 17 % (the think 4.55) |
+| 4 | targeting 2.45 ms, 14 % | targeting 4.26 ms, 14 % |
+| 5 | other (the core's sync) 1.81 ms, 10 % | other 3.16 ms, 10 % |
+| 6 | physics (Jolt, the body sync) 1.21 ms, 7 % | physics 2.12 ms, 7 % |
+| 7 | the stand-ins' own work 0.35 ms (inside flight), 2 % | 0.61 ms, 2 % |
+
+The shares are the same at 300 and 500, so the tick scales with the ship count and no stage is the one that breaks; there is no
+single next stage to take. What each holds, from `M4-P2_probe300` and `_probe500` (the console after a bench, one tick) and the code:
+
+- **The resolvers (28 %).** The hit stage at 500 is 4.4 ms, of which 1.9 ms is the gather of the bolts out of the core (2 548 of
+  them); the sweep visits 1 197 candidate pairs a tick and tests 8. The ram stage is 4.2 ms though the whole 17 s run resolved **five
+  rams**: its gather is 0.07 ms, so the cost is `RamResolver._resolve_contacts`, a GDScript loop over every rigid hull (about 500)
+  that makes two `instance_from_id` calls, a `RamTracker.Sample` and a direct body state read each, about 8 us a hull, whether or not
+  anything touches. Both are per-hull work that only
+  the tier (T21) removes for far ships or a native contact read would remove for all.
+- **Flight (23 %).** The native step is 0.64 ms and its gather 1.73 ms for 425 ships at 500 (0.37 and 0.94 at 300); the rest of the
+  7.14 ms, about 4.8 ms with the stand-ins' 0.6 inside it, is GDScript per ship, about 10 us a fighter. I did not separate it
+  further; it holds the ships' physics process, the force application and the guns.
+- **The AI stage (17 %).** The think at 500 is 4.55 ms for 143 thinks a tick (4 near, 139 at the far rate; 282 held): the native batch
+  is 0.55 ms (3.8 us a think), so about 4.0 ms, **28 us a thinking ship**, is GDScript around it. At 300: 94 thinks, 2.82 ms, batch
+  0.30 ms, about 27 us a think. **T18's figure of about 27 us a thinking ship of driver glue is confirmed** (27 us at 300, 28 at
+  500), and the think at 300 stays 2.82 ms against the 2 ms target.
+- **Targeting (14 %)**, 4.26 ms at 500: phase 2 did not touch it (5.16 to 4.26 ms) and I did not look inside. **Other (10 %)** is
+  mostly the core's sync, 3.5 ms in the last tick at 500 for 430 rows (the bolts' 1.9 ms of it).
+- **Physics (7 %)** is T19's: 2.12 ms at 500 against T19's 2.17, nothing new. Q47's trigger (the near set over 1 ms at 500, after
+  T21) is not yet testable.
+
+For T32 and T21: the **AI is 17 to 18 % of the tick at both sizes**. A wing-level AI that took the whole AI stage to nothing would
+leave 25.8 ms at 500 and 14.7 ms at 300, still over the floor's limits (about 11 and 13 ms). The cost is spread over the resolvers,
+flight, targeting and the sync, each a per-ship loop in GDScript or a per-ship engine call; the tier (T21) lifts those for far ships
+and the wing-level AI lifts the thinks, which are only a sixth. A native contact read for the ram stage, the hit stage's gather and
+flight's GDScript per ship are per-ship work that T21 does not remove for near ships.
+
+**Gains per task against their predictions** (each measured in its own worktree on its own base, in its entry; the gains are not
+additive):
+
+| task | predicted (confidence) | measured | read |
+|---|---|---|---|
+| T15, the native core | about 0.5 ms at 100 (55 %); somewhere for T16 to T22 to live | 0.4 ms at furball 100 and typical, about 4 ms at battle 300 (10 %) | met |
+| T16, avoidance, the lane, the context lists | 1 ms at furball 100, 3 ms at 300 (55 %) | no measurable change (the loops cost 3 to 4 us a think, the plan took 25) | missed, accepted |
+| T17, the brains in native code | think 3.4 to 0.8 ms at furball 100 (50 %); under 2 ms at 300 | 4.88 to 1.57 at furball 100; 19.3 to 4.6 at 300; 36.0 to 7.7 at 500 | a large gain, the target missed by 2 times; the drivers' GDScript remains |
+| T18, threads in the core | the AI stage at 500 divided by 3 (60 %) | divided by 1.26 (6.96 to 5.51; 6.4 to 5.1 after fix round 1); think at 300 3.0 to 2.8 | missed; the native part is divided by 1.8, the rest is serial GDScript |
+| T19, Jolt measured | the sync and node propagation, not Jolt's solver, bind at 500 (60 %) | the sync 1.19 of the stage's 2.17 ms at 500, Jolt's step 0.15; propagation 60 to 95 % of the sync | confirmed; Q47 keeps Jolt |
+| T20, turrets, missiles, beams, mines as rows | stand-ins 8 to under 2 ms at 500, 1.5 to 0.3 ms at typical (60 %) | 9.5 to 0.68 ms at 500, 0.43 to 0.06 at typical (here 0.61 and 0.06) | beaten, except a beam shot's spawn |
+| T31, splats removed | VRAM down about 1.2 GB (85 %), the frame's work down 0.5 to 1.5 ms at 500 (50 %) | VRAM 1.9 GB lower at the peak; the frozen 500 frame 20.8 to 10.8 ms | the frame gain 7 times the prediction |
+
+The phase's tick gain came from the brains (T17: the AI stage 39 to 5 ms at 500), the stand-ins (T20: 10.5 to 0.6) and the core (T15),
+in that order at the battle layouts; T16 and T18 are small in the tick, T19 is a measurement. The predictions that missed (T16, T17's
+2 ms, T18) all missed the same way: they priced the native work and not the GDScript around it, 27 us a thinking ship that no thread
+reaches.
+
+**Cost per entity type against the budget table** (battle 500, headless, editor build, one 30 s run, seed 1; the budget counts near
+entities, so a row is within it when the per-entity cost is; microseconds are the stage's mean over the count):
+
+| entity | count | measured us each | budget us each | measured ms | budget ms | where it sits |
+|---|---|---|---|---|---|---|
+| fighter (brain and flight), near and far | 425 (183 near, 242 far) | about 27 | 8 near, 0.3 in the tier | 11.6 | 1.5 | the AI stage 5.1 and the fighters' flight 6.5; targeting 4.3 and the sync 3.2 are for all ships |
+| turret | 710 | 0.66 | 2 | 0.47 | 0.38 | `engines_guns` 468 us (the one native step, guns, interceptors, beams, launches, and the capitals' engines) |
+| interceptor | 300 | 0.01 | 3 | 0.004 | 0.24 | inside the same step |
+| beam emitter | 150 | 19 a shot (1 257 shots) | 1 a shot | 0.013 | 0.02 | the `Projectile` node a shot spawns (T20's miss) |
+| missile | 170 | 0.77 steering; launches 87 us a tick (missiles and carriers' fighters) | 3 | 0.13 steering, 0.09 launches | 0.24 | native steering, one call each |
+| mine | 500 | 0.15 | 0.2 | 0.075 | 0.1 | |
+| bolt | 2 400 | 1.8 (the hit stage) | 0.3 (1 100 near) | 4.4 | 0.33 | the gather 1.9 ms and the pairs |
+| ram resolver | 500 hulls | 8.7 | not in the table | 4.35 | | a GDScript loop over every rigid hull |
+| capital, asteroid | 75, 1 000 | not separable | 5 near, 2 tier; 0.02 | in physics, hit, ram | 0.2; 0.02 | |
+| Jolt step and body sync | | | | 2.1 | 1.3 | |
+| core sync | | | | 3.2 | in the rows above | one sync, 3.5 ms last tick |
+| rebase shift | | | | 4.0 per rebase | 0.5 | |
+| **tick** | | | | **30.9** | **4.6** | |
+
+Every weapon row but the beam shot and the bolt is within its budget (T20); the fighter row is at 27 us against 8 near and 0.3 in the
+tier (P1: 108). The rows that decide the rest are the resolvers (bolts 1.8 us against 0.3, the ram loop), the fighters' GDScript
+(27 us), and targeting and the sync, which the budget table has no row for.
+
+**The mesh-only renderer's VRAM and GPU time against T27's mesh rows** (checkpoint 3). The 500 battle, the same window as T27
+(fullscreen, the 3D at 1 080 lines, vsync off, 8 s + 20 s):
+
+| | T27 mesh, live | T27 mesh, frozen | now, live | now, frozen |
+|---|---|---|---|---|
+| GPU ms | 3.27 | 3.22 | 1.87 | 1.86 to 1.87 |
+| frame mean ms | 711 | 19.63 (51 FPS) | 266 to 269 | 10.85 to 11.01 (91 to 92 FPS, 1 % low 55.8 and 56.8) |
+| render CPU ms | 1.40 | 0.78 | 1.2 | 0.64 to 0.66 |
+| draw calls | 1 276 | 1 181 | 1 296 | 1 322 |
+| triangles | 412 882 | 420 319 | 422 028 | 464 973 |
+| VRAM | +1 525 MB card-wide, 5.2 GB peak | +1 504 MB | the game's own 602 MB peak (567 MB before the scene); card-wide peak 3.2 to 3.3 GB | the same |
+
+The GPU takes 43 % less than T27's mesh rows (1.87 against 3.27 ms; no compositor pass, T31 saw 0.2 to 0.4 ms of it), draw calls and
+triangles are the same, and the game holds 602 MB, of which the scene's contents add about 35 MB: the splat budget's 1.2 GB and its
+share of the desktop's peak are gone, T31's 1.9 GB lower peak confirmed. The frozen frame is 1.8 times shorter than T27's (11.0
+against 19.6 ms), T31's gain, and its GPU time is 17 % of it; the drawing alone holds 90 FPS at 500 ships.
+
+**The release export, once** (a snapshot of `08228cc` by `git archive`, the generated assets and the library copied in, imported and
+exported with the script header's preset to `scs_release.x86_64`, embedded pack, release template 4.7.2, **176 MB** against 1.8 GB
+in P1; `libscs_native.so` is byte for byte the built one and `state perf` in the export says `native_loaded = true`).
+`scripts/bench_quick.sh` with the export, under both locks, seed 1, 2 s + 6 s per count (`m4_p2_release_quick`, `_bt`; load 0.6 to
+1.9):
+
+| N | 25 | 50 | 75 | 100 | 150 | 200 | 300 | 400 | 500 |
+|---|---|---|---|---|---|---|---|---|---|
+| furball tick median ms | 1.40 | 2.35 | 3.48 | 4.58 | 6.91 | 9.31 | 13.51 | 18.75 | 23.61 |
+| typical tick median ms | 2.04 | 2.92 | 4.20 | 5.56 | 8.14 | 11.09 | 15.77 | 21.18 | 26.86 |
+| battle tick median ms | 1.78 | 2.94 | 3.86 | 5.09 | 7.35 | 9.55 | 13.29 | 17.71 | 22.90 |
+
+The export holds the budget to **150 in the furball, the spread and `battle`** (7.35 ms), to 100 in `typical` and to 200 in transit
+(P1: 75, 50, 75, 50). No count fell under 30 FPS in the sim: battle 500 runs at 42.6 ticks a second (22.9 ms), furball 500 at 37.6.
+Release numbers are one run each and indicative; the editor build's seeded sweep is the gate.
+
+**Behaviour changes in phase 2** (all tests green): none in seeded outcomes in T15 to T20 (bit for bit, Q16's tolerance never needed:
+the tolerated construction differences are listed in T17's entry); the stand-ins' weapons did what they did on the base (T20); T18 adds
+that a duplicate name follows the listed row, as the GDScript does; T31 removes the splat renderer, a look change for the maintainer
+(H), checkpoint 1b's textured meshes in its place.
+
+**Focused tests** (Q10; the new and changed files of T15 to T20, T31 and this task, every file that covers the core, the kernels, the
+brains, the threads, the stand-ins, the pools, the rebase and the bench, and AC13's paired-budget files; each run alone under the bench
+lock, with the library): **108 files, 1125 tests, 1123 passing, 0 failing, 2 pending** (AC12's two: `test_dogfight` and `test_m3_sandbox`), no script errors, every run exit 0. AC13's paired budget: `test_ai_think_time` 1 of 1, `test_m3_run` 2 of 2, `test_control_profiles` 32 of 32, `test_control_profile` 36 of 36, `test_control_profile_store` 15 of 15. The files: test_ai_attack 2, test_ai_avoidance 2, test_ai_driver 22, test_ai_evade 2, test_ai_formation 1, test_ai_guard 2, test_ai_keep_contacts 7, test_ai_objective 4, test_ai_patrol 2, test_ai_pilot_selection 34, test_ai_profile 8, test_ai_ram 3, test_ai_retreat 1, test_ai_skill 5, test_ai_slash 2, test_ai_temperament 6, test_ai_think_rate 14, test_ai_think_rate_math 4, test_ai_think_time 1, test_ally_pool 19, test_attack_brain_states 23, test_attack_slash 6, test_avoidance_math 18, test_battle_mix 6, test_behaviour_ram 5, test_bench 8, test_bench_layout 23, test_body_registry 10, test_brain_facade 3, test_brain_factory 10, test_brain_in_play 2, test_brain_parity 7, test_brain_think_parity 5, test_brain_tolerance 1, test_broadcast 6, test_buoy_destruction 3, test_collision_layers 17, test_console_completer 10, test_console_registry 26, test_contact_field 18, test_contact_registry 3, test_contact_scan 9, test_control_profile 36, test_control_profile_store 15, test_control_profiles 32, test_core_threads 7, test_debug_console 28, test_debug_flags 5, test_destruction 11, test_dogfight 5, test_fighter_melee 1, test_fire_lane 9, test_flight_batch 7, test_flight_parity_fight 1, test_flight_step 4, test_formation 20, test_friendly_fire 19, test_fx_pool 25, test_hit_broad_phase 9, test_hit_resolver 16, test_hit_scale 10, test_instructor_route 4, test_kill_credit_in_play 6, test_m2_run 1, test_m3_run 2, test_m3_sandbox 2, test_main_scene 11, test_manoeuvres 15, test_manoeuvres_jolt 1, test_mesh_only_scene 3, test_mine_kernel 4, test_mine_trigger 6, test_missile_guidance 7, test_missile_kernel 4, test_multi_ship 17, test_nearest_contacts 7, test_perf_probe 3, test_perf_stats 31, test_pilot_kernels 7, test_pilot_kernels_in_play 5, test_ram_broad_phase 8, test_ram_damage 15, test_ram_scale 7, test_rebase_in_play 8, test_respawn_in_play 6, test_rocks_and_mines 7, test_route 20, test_running_lights_in_play 17, test_scenario_loader 25, test_settings 13, test_settings_schema 15, test_ship_lights 14, test_ship_pool 21, test_sim_core 13, test_smoke 2, test_standins 19, test_static_rows 4, test_targeting_controller 18, test_targeting_scale 9, test_textured_hulls 7, test_turret_kernel 7, test_wave_director 15, test_weapon_rows_battle 1, test_weapons 48, test_wing 13, test_wing_orders 8, test_wing_replenish 13, test_world_frame 16. No Python or Rust changed in this task (`cargo fmt` and `clippy` were not needed). The full suite runs on CI after the push and locally once, at the milestone's close.
+
+
+#### Report P2
+
+**For the maintainer, checkpoint 3.** Phase 2 (T15 to T20, with T31) is built and measured. It made the tick 1.9 to 2.5 times
+shorter and raised the `battle` ceiling from 47 to 110 ships, and it met neither of its two targets: `typical` is at the line (4.06 ms
+against 4) and `battle` 300 is at 17.85 ms against 8.
+
+**Headlines** (editor build, headless, the budget of 8 ms median and 12 ms p99; fullscreen on the RX 6950 XT):
+- **The FPS table (Q48)**, average FPS and 1 % low FPS, mean of the second pair of runs (all four in the table above): `battle` 50
+  196 and 95; 100 103 and 49; 200 22.2 and 10; 300 6.2 and 5.4; 500 3.8 and 3.4; `typical` 58 185 and 69. The 60 FPS target
+  holds to 100 ships, the 30 FPS floor is lost between 100 and 200, and from 300 the simulation falls behind real time (0.82, then
+  0.50 at 500).
+- `typical` (50 fighters, 8 capitals, every weapon, 1 000 rocks, a moon): **4.06 ms** median over three runs (4.04, 4.06, 4.13), p99 5.0;
+  165 to 187 FPS fullscreen with a frame mean of 5.3 to 6.0 ms; its 1 % low 43.5 to 72.3 FPS.
+- `battle`, the headline layout: **110 ships** (P1: 47); the tick is 6.90 ms at 100, 17.85 at 300 and 30.91 at 500.
+- furball **140** (P1: 70), spread **160** (80), transit **200** (100).
+- release export (176 MB, native loaded): 150 ships in the furball, spread and `battle` by the quick check, 100 in `typical`, 200 in
+  transit; `battle` 500 at 22.9 ms.
+- the GPU is not what binds: 1.6 to 1.9 ms a frame at every count; the game holds 602 MB of VRAM (T27's mesh rows: 3.27 ms and
+  +1.5 GB card-wide).
+
+**What phase 2 did.** The AI stage fell from 39.2 to 5.1 ms at 500 (the brains in native code, T17, and their batch, T18), the
+stand-ins from 10.5 to 0.6 (T20), the scan from 24.6 to 0.9 (T15 and T17), and the frame's own work by half at 500 ships when
+the splat renderer went (T31: the frozen 500 frame 20.8 to 10.8 ms). T16 (avoidance) and T18's threads moved the tick by little.
+Fighters, the weapons and the seeded outcomes are unchanged.
+
+**What is left, and why `battle` 300 is not at 8 ms.** At 300 the tick of 17.85 ms is the resolvers 5.0, flight 4.0, the AI 3.1,
+targeting 2.5, the core's sync 1.8 and physics 1.2. They are the same shares at 500. Phase 2 had no task aimed at the resolvers, flight
+or targeting; with the sync they are now 74 % of the tick: the ram stage loops over every rigid hull in GDScript for a handful of rams, the hit
+stage spends 1.9 ms gathering bolts, flight is about 10 us a fighter of GDScript around a 1.5 us native step, targeting is 4.3 ms at 500
+and untouched. The AI is 17 to 18 % of the tick.
+
+**Where the plan's numbers were wrong.** The predictions that missed all priced the native work and left out the GDScript around it:
+T16's loops cost 3 to 4 us a think against the 25 the plan took, and T17 and T18 left the think at 2.8 ms at 300 (2 ms asked) with
+27 us a thinking ship of driver glue (confirmed here: 27 at 300, 28 at 500) that threads cannot reach; T18 divided only the native
+part (by 1.8), so the AI stage at 500 fell by 1.26 times, not 3. P1's estimate for `battle` 300 (about 15 ms) was close
+(17.85); its hope that the resolvers would halve was not met, because nothing aimed at them.
+
+**Open questions for the maintainer** (none blocks T32; T21 waits for them, as the plan says):
+1. **Battle 300's target.** Keep "under 8 ms", or restate it to the floor? By the catch-up formula above, the 30 FPS floor at 300
+   needs a tick under about 13 ms (4.9 ms less than now) and 60 FPS about 9 ms; at 500 about 11 and 6 ms. The 8 ms line remains the gate
+   for max N. I recommend restating the 300 target to the 30 FPS floor (a tick under 13 ms) and keeping 8 ms as the ceiling's gate.
+2. **A cheap pass before T21?** The four per-ship stages that phase 2 did not take (the ram stage's loop, the hit stage's gather,
+   flight's GDScript, targeting, with the core's sync) are 13.3 ms of the 17.85 at 300 and 23.3 ms of 30.9 at 500. Halving them is a
+   guess (low confidence) of 6.6 ms off 300 and 11.7 off 500, which would put 300 at 11.2 ms, under the floor's 13, without the tier. The tier (T21 to T23, serial,
+   Fable) takes the far share of the same work (94 of 255 fighters at 300, 242 of 425 at 500) and more, but it is the larger and later
+   change. Do the cheap pass first, or go to T21 directly?
+3. **T32's yardstick.** The AI stage is 17 to 18 % of the tick at 300 and 500: a wing-level AI that removed all of it leaves 14.7 ms
+   at 300 and 25.8 at 500. Judge T32's proposal on what it does to the dogfights' feel and to the thinks' GDScript glue (27 us a
+   think), not on being the way to the floor.
+4. **Q39's second bar.** The 1 % low at `typical` is 43.5 to 72.3 FPS over four runs, vsync off, a 4K window, and moves by 30 % between
+   runs; as measured it is met on two runs of four. Is the bar the vsync-off window as measured here, or 60 FPS at the screen with vsync
+   on (H, the maintainer's eyes)? I could not find what makes the occasional 25 to 35 ms frame at `typical`; it is outside the stages.
+5. **T24 (the simulation on a worker thread).** The table shows its case: at 200 ships the simulation keeps real time (tick 13 ms) and the
+   frame is already 45 ms, 22 FPS, because each frame carries 2.7 ticks; at 100 it is 103 FPS. Q40 leaves the decision to checkpoint 4; the
+   numbers are here for it.
 
 ## Definition of done (M4)
 
