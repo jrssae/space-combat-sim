@@ -438,7 +438,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T07 | B | Comms menu on D-pad Right | T06 | Sonnet | Input routing with clear rules | done |
 | T08 | B | `CINEMATIC` camera and locked controls | T05 | Opus | Rebase-safe camera paths | done |
 | T09 | B | Debrief | T05, T02 | Sonnet | Model and screen | done |
-| T10 | B | Mission: Buoy defence with a cinematic intro | T06, T07, T08, T09 | Opus | Pacing, writing and the first real use of the API | not started |
+| T10 | B | Mission: Buoy defence with a cinematic intro | T06, T07, T08, T09 | Opus | Pacing, writing and the first real use of the API | done |
 | T11 | C | Civilian references: measurements and descriptions | - | Opus | Reading shapes off renders; sizes from Q8 | done |
 | T23 | C | Fidelity check: silhouettes and size against the STL, `refview` compare (Q18; numbered last because it was added during the build) | T11 | Sonnet | A small measuring tool that every civilian generator must pass | done |
 | T12 | C | `saturn_family` generator (five variants, Q16) | T11, T23 | Opus | Large shared part library | done |
@@ -747,6 +747,25 @@ whose trigger never arose). Update the column with each task's commit.
   nothing measurable to M4's scan.
 - **Done when:** AC10; the cinematic and dialog read well in a windowed run (captured frames for the maintainer); the
   ring and the two-buoy rule hold (test), and the radar shows the two nearest ring buoys on its rim from `NAV ALPHA`.
+- **Done (as built, 2026-11-04):** `data/scenarios/buoy_defence.json`, `data/missions/buoy_defence.gd` and
+  `data/dialog/buoy_defence.json`: five steps (intro, brief, wave_one, wave_two, wrap), 13 original lines, objectives
+  protect `NAV ALPHA` and destroy the raiders (primary) and bring Alpha wing home (optional), pools of 7 raiders and 3
+  allies. The intro is two shots, `relay` (NAV ALPHA against the star) and `wing` (Alpha wing coasting past a camera
+  that holds still in space); Control briefs with the controls held, then hands over. Wave one (three raiders) and wave
+  two (four, from another bearing after a warning) jump in about 9.5 km out and are sent at the buoy. The ring comes from
+  the pure `BuoyRing` through the scenario's `buoy_rings[]`: 16 buoys on a 20 000 km ring, NAV ALPHA among them.
+  `NavBuoy.BROADCAST_RANGE_M` is 10 000 km for every buoy (M3 Q21 had 1 000 km; §18.9). With those numbers the
+  two-buoy rule holds on the ring and within about 4 900 km of it outward beside a buoy (6 000 km out of the plane and
+  inward), tested at the real edges; the radar from NAV ALPHA shows NAV BRAVO and NAV PAPA on its rim (test). New in the
+  framework: a scenario's `player.velocity` (first spawn only) and `mission.closing_lines` (a last line for a loss that
+  ends the mission before a step can speak; the debrief waits for it). Missions start from the menu or `play`;
+  `--scenario=buoy_defence` is refused. By ruling, no far-buoy splat hiding (splats leave with M4); the far buoys' draw
+  and scan cost is checked after the rebase (T20). `docs/playtest.md` says how to play it. Frames of the intro are in
+  `reports/m5-t10/` for the maintainer (H).
+  - **Review.** Approved (opus), no fixes needed. Open (minor): a closing line ignores the skip flag; the optional `home`
+    failure is untested; the raider names live in both the script and the objective; `TriggerDestroyed`'s header is long
+    and mission-specific; closing lines are keyed by free-text reasons; the debug overlay (on by default) draws over
+    cinematics.
 
 ### M5-T11 Civilian references: measurements and descriptions
 
