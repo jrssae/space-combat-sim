@@ -190,3 +190,52 @@ func test_paired_difference_cancels_a_steady_drift() -> void:
 func test_paired_difference_needs_one_more_on_block_than_off_blocks() -> void:
 	assert_eq(PerfStats.paired_difference(_values([10.0, 10.0]), _values([8.0, 8.0])), 0.0)
 	assert_eq(PerfStats.paired_difference(PackedFloat64Array(), PackedFloat64Array()), 0.0)
+
+
+# --- the 1 % low (M4-P2, Q48) ---------------------------------------------------------------------------------------
+
+
+func _frames(count: int, ms: float) -> PackedFloat64Array:
+	var out := PackedFloat64Array()
+	for i: int in count:
+		out.append(ms)
+	return out
+
+
+func test_low_fps_is_the_frame_rate_of_the_slowest_one_percent() -> void:
+	# 99 frames of 10 ms and one of 50 ms: the slowest 1 % of 100 frames is the one 50 ms frame, 20 FPS.
+	var samples: PackedFloat64Array = _frames(99, 10.0)
+	samples.append(50.0)
+	assert_almost_eq(PerfStats.low_fps(samples, 0.01), 20.0, 1e-9)
+
+
+func test_low_fps_averages_the_slow_frames_by_time_not_by_rate() -> void:
+	# Two slowest frames (20 and 40 ms) of 200: the mean frame is 30 ms, so 33.3 FPS (the mean of 50 and 25 would say 37.5).
+	var samples: PackedFloat64Array = _frames(198, 5.0)
+	samples.append(20.0)
+	samples.append(40.0)
+	assert_almost_eq(PerfStats.low_fps(samples, 0.01), 1000.0 / 30.0, 1e-9)
+
+
+func test_low_fps_takes_at_least_one_frame_and_rounds_the_count_up() -> void:
+	assert_almost_eq(PerfStats.low_fps(_values([8.0, 16.0, 40.0]), 0.01), 25.0, 1e-9, "few frames: the worst one")
+	# 150 frames: 1 % is 1.5, so two frames (the 40 ms and the 20 ms).
+	var samples: PackedFloat64Array = _frames(148, 5.0)
+	samples.append(40.0)
+	samples.append(20.0)
+	assert_almost_eq(PerfStats.low_fps(samples, 0.01), 1000.0 / 30.0, 1e-9)
+
+
+func test_low_fps_is_not_affected_by_the_order_and_leaves_the_samples_alone() -> void:
+	var samples: PackedFloat64Array = _values([40.0, 5.0, 5.0, 5.0])
+	assert_almost_eq(PerfStats.low_fps(samples, 0.25), 25.0, 1e-9)
+	assert_eq(samples, _values([40.0, 5.0, 5.0, 5.0]))
+
+
+func test_low_fps_of_no_samples_or_no_time_is_zero() -> void:
+	assert_eq(PerfStats.low_fps(PackedFloat64Array(), 0.01), 0.0)
+	assert_eq(PerfStats.low_fps(_values([0.0, 0.0]), 0.01), 0.0)
+
+
+func test_low_fps_of_a_steady_run_is_its_frame_rate() -> void:
+	assert_almost_eq(PerfStats.low_fps(_frames(1200, 8.0), 0.01), 125.0, 1e-9)

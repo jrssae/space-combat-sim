@@ -29,6 +29,9 @@ const ALLY_RANGE_M: Array[float] = [90.0, 140.0, 190.0]
 const NOSE_TURN_DEG_S: float = 40.0
 const VRAM_CARDS: Array[String] = ["card0", "card1", "card2"]
 const MAX_SPIKES_PRINTED: int = 40
+## The slowest share of frames the "1 % low" averages, and how many frames open the window for the warm-up check (M4-P2, Q48).
+const LOW_SHARE: float = 0.01
+const START_FRAMES: int = 60
 
 var main: Main
 var options: Dictionary = {"scene": "held", "camera": "chase", "warmup": str(WARMUP_S), "window": str(WINDOW_S), "near": "120", "far": "500",
@@ -387,10 +390,15 @@ func _finish() -> void:
 			label, _paused, _mean(primitives), _max(primitives), _mean(objects), _mean(draw_calls), _max(draw_calls),
 			_percentile(frame_ms, 0.99), _max(frame_ms)])  # M4-T27: the render comparison
 	var root: Window = get_tree().root
-	print("[measure] %s: window %dx%d %s, 3d scale %.2f, 3d scaling mode %d, frame mean ms %.2f, fps mean %.1f" % [label,
+	print("[measure] %s: window %dx%d %s, 3d scale %.2f, 3d scaling mode %d, frame mean ms %.2f, fps mean %.1f, frame p99 ms %.2f, fps 1%% low %.1f" % [label,
 			root.size.x, root.size.y,
 			"fullscreen" if DisplayServer.window_get_mode() in [DisplayServer.WINDOW_MODE_FULLSCREEN, DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN] else "windowed",
-			root.scaling_3d_scale, root.scaling_3d_mode, _mean(frame_ms), 1000.0 / maxf(_mean(frame_ms), 1e-6)])  # M4-T07: the fullscreen check
+			root.scaling_3d_scale, root.scaling_3d_mode, _mean(frame_ms), 1000.0 / maxf(_mean(frame_ms), 1e-6),
+			_percentile(frame_ms, 0.99), PerfStats.low_fps(frame_ms, LOW_SHARE)])  # M4-T07: the fullscreen check; M4-P2: the 1 % low (Q48)
+	# The window's first frames beside the rest: a loading frame at the start shows here as a first-frames mean far above the window's.
+	var first_ms := frame_ms.slice(0, mini(START_FRAMES, frame_ms.size()))
+	print("[measure] %s: window start: first %d frames mean ms %.2f max %.2f, the whole window mean ms %.2f max %.2f" % [
+			label, first_ms.size(), _mean(first_ms), _max(first_ms), _mean(frame_ms), _max(frame_ms)])
 	print("[measure] %s: VRAM before %.0f MB, peak %.0f MB, added %.0f MB; GTT before %.0f MB, peak %.0f MB, added %.0f MB" % [
 			label, vram_before_mb, vram_peak_mb, vram_peak_mb - vram_before_mb, gtt_before_mb, gtt_peak_mb, gtt_peak_mb - gtt_before_mb])
 	for spike: String in spikes:

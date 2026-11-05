@@ -10,7 +10,8 @@
 # Environment: FULLSCREEN_WARMUP (8), FULLSCREEN_WINDOW (20), FULLSCREEN_SEED (1), FULLSCREEN_RES (1920x1080),
 #              FULLSCREEN_EXEC (more console statements after the bench starts), FULLSCREEN_SCALE (1080p),
 #              FULLSCREEN_BENCH_OPTS (more bench options, e.g. "rocks=0"), GODOT_BIN.
-# Writes reports/perf/<label>/fullscreen.md and fullscreen.log, and a screenshot. Opens a window for about a minute.
+# Writes reports/perf/<label>/fullscreen.md (a verdict and, since M4-P2, Q48's row: average FPS, the 1 % low, the p99 frame time) and
+# fullscreen.log, and a screenshot. Opens a window for about a minute.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GODOT="${GODOT_BIN:-${ROOT}/.tools/godot/godot}"
@@ -59,6 +60,8 @@ def num(pattern, line):
     return float(m.group(1)) if m else None
 fps = num(r"fps mean ([0-9.]+)", scale)
 frame = num(r"frame mean ms ([0-9.]+)", scale)
+p99 = num(r"frame p99 ms ([0-9.]+)", scale)
+low = num(r"fps 1% low ([0-9.]+)", scale)
 if fps is None:
     verdict = "no measurement: the run printed no summary (see fullscreen.log)"
 elif layout == "typical":
@@ -70,6 +73,15 @@ else:
     verdict = "%s: the 30 FPS floor %s, the 60 FPS target %s (%.1f FPS, frame mean %.2f ms)" % (layout, floor, target, fps, frame)
 with open(report, "w") as f:
     f.write("# Fullscreen check: %s %s\n\nCommit %s. Fullscreen, the 3D at 1 080 lines unless the log says otherwise, vsync off, chase camera, the bench's own layout.\n\n" % (layout, n, commit))
-    f.write("**Verdict:** %s\n\n```\n%s\n```\n" % (verdict, "\n".join(lines)))
+    f.write("**Verdict:** %s\n\n" % verdict)
+    if fps is not None and low is not None:
+        # Q48's row: the average FPS, the 1 % low (the slowest 1 % of the window's frames) and the p99 frame time.
+        gpu = num(r"gpu ms mean ([0-9.]+)", next((l for l in lines if "gpu ms mean" in l), ""))
+        calls = next((num(r"draw calls mean ([0-9.]+)", l) for l in lines if "draw calls mean" in l), None)
+        vram = num(r"added ([0-9.]+) MB;", next((l for l in lines if "VRAM before" in l), ""))
+        f.write("| layout | N | average FPS | 1 % low FPS | p99 frame ms | frame mean ms | GPU ms mean | draw calls | VRAM added MB |\n|---|---|---|---|---|---|---|---|---|\n")
+        f.write("| %s | %s | %.1f | %.1f | %.2f | %.2f | %s | %s | %s |\n\n" % (layout, n, fps, low, p99 if p99 is not None else float("nan"), frame,
+                "%.2f" % gpu if gpu is not None else "?", "%.0f" % calls if calls is not None else "?", "%.0f" % vram if vram is not None else "?"))
+    f.write("```\n%s\n```\n" % "\n".join(lines))
 print("[fullscreen] %s -> %s" % (verdict, report))
 PY

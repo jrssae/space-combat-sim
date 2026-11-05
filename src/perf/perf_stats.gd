@@ -43,6 +43,20 @@ static func percentile(values: PackedFloat64Array, share: float) -> float:
 	return sorted[clampi(rank - 1, 0, sorted.size() - 1)]
 
 
+## The frame rate of the slowest `share` of the frames (the "1 % low", M4-P2, Q48): the frames-per-second over those frames taken
+## together (their count over their total time), from frame times in milliseconds. At least one frame; 0 for no samples.
+static func low_fps(frame_ms: PackedFloat64Array, share: float) -> float:
+	if frame_ms.is_empty():
+		return 0.0
+	var sorted: PackedFloat64Array = frame_ms.duplicate()
+	sorted.sort()
+	var count: int = clampi(ceili(clampf(share, 0.0, 1.0) * float(sorted.size()) - 1e-9), 1, sorted.size())
+	var total_ms: float = 0.0
+	for i: int in count:
+		total_ms += sorted[sorted.size() - 1 - i]
+	return 1000.0 * float(count) / total_ms if total_ms > 0.0 else 0.0
+
+
 static func mean(values: PackedFloat64Array) -> float:
 	if values.is_empty():
 		return 0.0
