@@ -1,8 +1,7 @@
 extends GutTest
 ## AudioDirector (M2-T12, AC14): the generated sounds load and play headless without errors; a hit, a shot and an explosion
 ## each make a sound; the 3D voice pool never exceeds 16 (the oldest voice is stolen); the engine hum follows thrust and
-## distance, through a budget of engine voices handed to the nearest audible ships (M4-T36); the hull warning repeats below 25 %;
-## `sfx_volume` sets the SFX bus; the console surface works.
+## distance; the hull warning repeats below 25 %; `sfx_volume` sets the SFX bus; the console surface works.
 
 var main: Main
 var source: FakeInputSource
@@ -170,13 +169,13 @@ func test_thruster_level_is_the_strongest_rcs_demand() -> void:
 func test_the_players_hum_plays_and_parked_raiders_are_silent() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
-	var hum: AudioStreamPlayer3D = main.audio.engine_voice_of(main.ship)
+	var hum := main.ship.get_node("EngineHum") as AudioStreamPlayer3D
 	assert_not_null(hum)
 	assert_true(hum.playing, "the player's own engine")
 	assert_true((hum.stream as AudioStreamWAV).loop_mode == AudioStreamWAV.LOOP_FORWARD, "it loops")
 	for pooled: Combatant in main.ships.all_ships():
 		if not main.ships.alive().has(pooled):  # the sandbox's wingmen fly from the start (M3-T10)
-			assert_null(main.audio.engine_voice_of(pooled.ship), "parked: no voice")
+			assert_false((pooled.ship.get_node("EngineHum") as AudioStreamPlayer3D).playing, "parked")
 	var hum_off_pitch: float = hum.pitch_scale
 	source.hold(InputAdapter.MAIN_LEFT)
 	source.hold(InputAdapter.MAIN_RIGHT)
@@ -190,62 +189,12 @@ func test_a_distant_ship_hum_stops() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
-	var hum: AudioStreamPlayer3D = main.audio.engine_voice_of(raider.ship)
-	assert_not_null(hum, "400 m away: a voice")
+	var hum := raider.ship.get_node("EngineHum") as AudioStreamPlayer3D
 	assert_true(hum.playing, "400 m away")
 	raider.ship.global_position = main.ship.global_position + Vector3(0.0, 0.0, -AudioDirector.ENGINE_RANGE_M - 500.0)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	assert_null(main.audio.engine_voice_of(raider.ship), "out of range: its voice is free again")
-	assert_false(hum.playing and main.audio.engine_voices_used() < 2, "the freed voice is silent unless another ship took it")
-
-
-func test_no_ship_carries_an_audio_player_of_its_own() -> void:
-	var players: int = 0
-	for c: Combatant in main.ships.all_ships() + [main.combatant]:
-		for node: Node in c.ship.find_children("*", "AudioStreamPlayer3D", true, false):
-			players += 1
-	assert_eq(players, 0, "the engines are heard through the director's voices (M4-T36)")
-
-
-func test_every_audible_ship_has_a_voice_when_they_fit_the_budget_and_the_nearest_when_not() -> void:
-	main.ensure_pool(ShipPool.DEFAULT_TYPE, 6 + AudioDirector.ENGINE_VOICES + 2)
-	DebugConsole.registry.execute("despawn all")
-	for i: int in 6:
-		DebugConsole.registry.execute("spawn raider %d" % (200 + 150 * i))
-	await get_tree().process_frame
-	await get_tree().process_frame
-	var audible: Array[Ship] = [main.ship]
-	for c: Combatant in main.ships.alive():
-		if c.ship.global_position.distance_to(main.camera_rig.active_camera().global_position) <= AudioDirector.ENGINE_RANGE_M:
-			audible.append(c.ship)
-	assert_lte(audible.size(), AudioDirector.ENGINE_VOICES)
-	for ship: Ship in audible:
-		var hum: AudioStreamPlayer3D = main.audio.engine_voice_of(ship)
-		assert_not_null(hum, "%s is heard, as its own hum was" % ship.name)
-		if hum != null:
-			assert_true(hum.playing)
-			assert_almost_eq(hum.global_position, ship.global_position, Vector3.ONE * 0.5, "the voice sits on its ship (as of the frame)")
-			assert_almost_eq(hum.volume_db, lerpf(AudioDirector.HUM_DB.x, AudioDirector.HUM_DB.y, main.audio.engine_level_of(ship)), 1e-4)
-	# More audible ships than voices: the nearest are heard.
-	for i: int in AudioDirector.ENGINE_VOICES + 2:
-		DebugConsole.registry.execute("spawn raider %d" % (100 + 60 * i))
-	for i: int in 4:
-		await get_tree().process_frame
-	var listener: Vector3 = main.camera_rig.active_camera().global_position
-	var ranked: Array[Ship] = [main.ship]
-	for c: Combatant in main.ships.alive():
-		if c.ship.global_position.distance_to(listener) <= AudioDirector.ENGINE_RANGE_M:
-			ranked.append(c.ship)
-	ranked.sort_custom(func(a: Ship, b: Ship) -> bool: return a.global_position.distance_to(listener) < b.global_position.distance_to(listener))
-	assert_gt(ranked.size(), AudioDirector.ENGINE_VOICES)
-	assert_eq(main.audio.engine_voices_used(), AudioDirector.ENGINE_VOICES, "every voice in use")
-	var left_out: int = 0
-	for k: int in ranked.size():
-		var heard: bool = main.audio.engine_voice_of(ranked[k]) != null
-		if k < AudioDirector.ENGINE_VOICES - 1 and not heard:
-			left_out += 1  # one of the nearest left out
-	assert_eq(left_out, 0, "the nearest ships hold the voices")
+	assert_false(hum.playing, "out of range")
 
 
 func test_sfx_volume_sets_the_bus_gain() -> void:
