@@ -84,6 +84,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q50 | Checkpoint 3, before T21 | **Two tasks first, then T21:** T33 (T32's L1: the native pilots' inputs and commands as core rows) and T34 (a cheap pass on the per-ship stages phase 2 did not take: the ram loop, the hit gather, targeting, the core's sync). T18's two missed numbers (the AI stage at 500 divided by 1.37, not 3; the think at 300 2.8 ms, not 2) are accepted with T33 as their owner |
 | Q51 | Checkpoint 3, wing-level AI (T32) | **No wing-level AI in M4.** "The wing picks targets and tactics" (T32's option B) goes on the roadmap as a feel feature the maintainer judges in the dogfight scenario (H); T32's L2 (perception per cluster, statics cached) is folded into T22's tier perception |
 | Q52 | Checkpoint 3, Q39's second bar | **The bar is 60 FPS at the screen with vsync on, judged by the maintainer (H)**, not the vsync-off 1 % low the fullscreen check measures (which stays recorded as data) |
+| Q53 | T24, the simulation on a worker thread (2026-11-05) | **A firm task, no longer conditional**: the AI and the simulation step leave the main thread so the frame rate and the player's input never wait on them. It runs right after T33 and T34 (once the per-ship GDScript is out of the AI path) and before T21, so the tier is built once on the threaded tick. The maintainer accepts the one-tick (16.7 ms) delay on AI commands and new seeded reference outcomes; checkpoint 4 becomes a playtest of that build (H) |
 
 ## The budget ("good game performance", Q5)
 
@@ -193,11 +194,11 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T18 | N3: threads inside the core (rayon), 1-thread and 6-thread identical | T17 | Opus | Determinism rules, a new crate | N | done, one thread and six identical byte for byte over a seeded 600-tick battle; the brains in one batch a tick, threaded from 48 thinks; the AI stage at `battle` 500 from 6.96 to 5.09 ms with six threads after fix round 1 (divided by 1.37, not the Done-when's 3) and the think at 300 2.79 ms against the 2 ms target, both missed and attributed to the drivers' GDScript per ship, for the maintainer at checkpoint 3; no p99 loss at `typical` (2026-11-05, in a worktree on `df6db96`; fix round 1 the same day; Cycle log, M4-T18) |
 | T19 | Jolt measured at 300 and 500, the ships-out-of-Jolt proposal (Q17, checkpoint 2) | T15 | Sonnet | Measurement and a proposal, no game code | M | done (2026-11-04, in a worktree on `41fc088`; Cycle log, M4-T19; the proposal waits for the maintainer at checkpoint 2) |
 | T20 | Turrets, missiles, beams and mines as native rows | T16, T12 | Opus | The non-fighter rows' budget (710 turrets at 500); M12 inherits the path | N, A | done, bit for bit; the stand-ins' stage at `battle` 500 from 9.50 to 0.68 ms; every row in budget but a beam shot's spawn (about 20 us a shot against 1) (2026-11-04, in a worktree on `67d5cda`; Cycle log, M4-T20) |
-| T21 | The low-attention tier: state, 20 Hz integration, promotion and demotion of fighters and capitals | T20, checkpoint 3 | Fable | The pool and ship adapter handover must never pop; serial | T | not started |
+| T21 | The low-attention tier: state, 20 Hz integration, promotion and demotion of fighters and capitals | T20, checkpoint 3, T24 | Fable | The pool and ship adapter handover must never pop; serial | T | not started |
 | T22 | Tier brains at 2 to 5 Hz, statistical fire, far capitals' aggregated fire | T21 | Opus | Far fights must stay fair | T, N | not started |
 | T23 | Far proxies for tier rows (dots, radar, targeting) | T21, T11 | Opus | GPU numbers by the agent, the look (H) | R | not started |
-| T24 | The simulation step on a worker thread (only if the fullscreen check misses the floor at 500; checkpoint 4) | T23, T26 | Fable | A tick-order change, double-buffered snapshots | N | not started |
-| T25 | Phase 3 measurements, the 1 000 stretch, the full suite, report P3 | T23 (T24, T26) | Sonnet | Measurement, no code | M | not started |
+| T24 | The simulation step on a worker thread (firm, Q53): the AI and every native kernel step off the main thread into a double-buffered snapshot | T33, T34 | Fable | A tick-order change, double-buffered snapshots; the frame and input stop waiting on the simulation | N | not started |
+| T25 | Phase 3 measurements, the 1 000 stretch, the full suite, report P3 | T23, T24 (T26) | Sonnet | Measurement, no code | M | not started |
 | T26 | Resolution scaling for the big battle (only if the GPU binds at the fullscreen check; Q20) | T11 | Sonnet | One setting and an automatic step on `RenderScale`; the look (H) | R | not started |
 | T27 | Render comparison: Gaussian splats against meshes, in the 500 battle and a Babylon 5 station scene (Q24) | T07, T11, T12 | Opus | Measures whether splats or meshes carry the big battles; GPU numbers by the agent, the look (H) | R, M | done |
 | T28 | Running lights stay point-sized and dim by the inverse square (maintainer, 2026-11-03) | none | Sonnet | Lights in vacuum do not scatter into globes | R | done |
@@ -551,9 +552,10 @@ wave's combined gain that is less than the sum of its parts is written down as s
 | 6 | T18 (N), T20 (N+A), T31 (X+R+G) | T18, T20, T31 (T31 last: it edits the render tests) | **phase 2 end: sweep, headlines, fullscreen and VRAM on the mesh-only renderer, release once; report P2** | 3 |
 | 6b | T32 (M, research, Q46) | none (doc only) | uses report P2's think-stage numbers; its proposal goes to the maintainer with **checkpoint 3** | 1 |
 | 6c | T33 (N+G), T34 (N+G), in parallel (Q50) | T33, T34 | each its own before and after at `typical`, `battle` 300 and 500; the combined tick against Q49's 8 ms | 2 |
+| 6d | T24 (N, serial: the tick order, Q53) | T24 | the fullscreen check at `battle` 200, 300 and 500 and `typical` before and after (Q48's table); **checkpoint 4: the maintainer plays the build (H)** | 1 |
 | 7 | T21 (T, serial: pool and ship adapter) | T21 | its own at 500 | 1 |
 | 8 | T22 (T+N), T23 (R), T26 (R, only if the GPU binds at the fullscreen check after T11) | T22, T23, T26 | combined at 500; fullscreen at 500 | 2 or 3 |
-| 9 | T24 (N, only if the fullscreen check at 500 misses the floor after T23), T25 (M) | T24, T25 | **phase 3 end: sweep, battle 500 and 1 000, fullscreen, release, the full local suite; report P3** | 1 or 2 |
+| 9 | T25 (M) | T25 | **phase 3 end: sweep, battle 500 and 1 000, fullscreen, release, the full local suite; report P3** | 1 |
 
 Wall clock: waves 1, 5 and 8 are the parallel ones; the serial waves (4 and 7) are the two architecture changes that touch every
 native class and the pool. T30a to T30c and T31 ride beside the native waves and share no file with them (the rules above). The order inside a wave's merge puts the harness first so the others' Cycle log entries can cite
@@ -571,8 +573,8 @@ native class and the pool. T30a to T30c and T31 ride beside the native waves and
 3. **After wave 6 (report P2).** Phase 2's numbers; the tier's physics rule (Q22) is already accepted, so the checkpoint is the
    numbers and whether `typical` holds its headroom; with T31 merged, the VRAM and GPU time of the mesh-only renderer against T27's
    mesh rows. T32's wing-level AI proposal (Q46) is decided here too, before T21. Report P2 carries Q48's table: average and 1 % low FPS at `battle` 50, 100, 200, 300 and 500 and `typical` 58 (done, 2026-11-05: the Cycle log entry "Phase 2 (T15 to T20, T31, M4-P2)", with Report P2 at its end; the open questions there are what the maintainer answers here, T32's proposal included).
-4. **Before T24.** Only if the fullscreen check at 500 misses the 30 FPS floor after T23 and T26: the simulation thread changes
-   §15.3's tick order and is a design-contract change; the controller asks before dispatching it.
+4. **After T24 (Q53).** T24 is firm, so the checkpoint is no longer whether to build it: the maintainer plays the threaded build
+   (H) and judges the input feel and the AI's one-tick delay, with T24's before and after FPS table; T21 starts after the answer.
 5. **After T25 (report P3).** M4's definition of done; the maintainer confirms the milestone before `m4` merges into `main`.
 
 #### The maintainer's answers to the plan's questions (Q20 to Q23)
@@ -1352,10 +1354,10 @@ done and T20 proceeds.
   second proxy, or a sibling `FarHulls`), the dot stays for fighters; both are cheap because the meshes exist (T30b). "Visible
   splats" in the measures reads triangles drawn.
 
-##### M4-T24 The simulation step on a worker thread (conditional)
+##### M4-T24 The simulation step on a worker thread (firm, Q53)
 
-- **Track:** N. **Agent:** Fable. **Depends on:** T23, T26 if built, and checkpoint 4. **Status `not needed`** if the fullscreen
-  check at `battle` 500 holds the 30 FPS floor after T23 and T26.
+- **Track:** N. **Agent:** Fable. **Depends on:** T33 and T34 (the per-ship GDScript out of the AI path, the per-ship stages on
+  the core). Runs as wave 6d, alone, before T21 (Q53: firm since 2026-11-05; the conditional text below is history).
 - **Goal:** the whole native step (every kernel over the core) runs at a fixed 60 Hz on a worker thread into a double-buffered
   snapshot; the main thread's physics tick does only `sync_in`, the handover of commands and `sync_out`, and the visuals
   interpolate between the last two snapshots, so the tick no longer competes with rendering for the frame.
@@ -1367,6 +1369,13 @@ done and T20 proceeds.
 - **Done when:** identical rows, the floor held and the target approached in the window at 500, or the entry says what still
   binds.
 - **Expected:** 50 % that it is needed; 70 % that it holds the floor at 500 when it is, 45 % the target.
+- **Firm since Q53 (2026-11-05):** the maintainer asked that the AI always run on a different thread from the game loop and
+  the player's input. Commands decided on the worker reach the ships one tick later (16.7 ms); the seeded tests and Q16's twins
+  take new reference outcomes recorded in the entry, and the inline step stays behind a setting as the reference that the
+  threaded step must equal tick for tick given the same one-tick handover. Whatever per-ship GDScript T33 leaves (the cannon
+  hand-off, the selection, the lights) stays on the main thread and reads the snapshot. The tier (T21 to T23) is built after this
+  task on the threaded tick, so its rows join the worker's pass from the start. Measures add Q48's table (average and 1 % low
+  FPS at `battle` 50 to 500 and `typical`) before and after; checkpoint 4 is the maintainer playing the build (H).
 - **Architecture:** §17.13 and §15.3 (the tick order; a design-contract change, checkpoint 4).
 - **Without splats (2026-11-04, Q29):** `splat_pose_sync.gd` is removed by T31; the interpolation from snapshots for tier rows'
   proxies goes in `far_dots.gd`.
