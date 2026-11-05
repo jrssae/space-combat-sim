@@ -121,6 +121,8 @@ const ENTRIES: Dictionary = {
 		"doc": "The ram resolver hands its contact tracker columns and builds contact lists only for the hulls Jolt reports touching (M4-T34); off = a sample per hull every tick, the reference, for pairing the two in one process"},
 	&"perf_ram_sweep_cull": {"type": TYPE_BOOL, "default": true,
 		"doc": "The ram resolver's swept test first checks a hull's bounding sphere, then each volume's, against the other hull's box and places only the volumes that can reach it (M4-T34; the same answers); off = every volume placed, the reference"},
+	&"perf_targeting_on_read": {"type": TYPE_BOOL, "default": true,
+		"doc": "The player's targeting computer checks its selection every tick and builds its list of every target only when it is read, the HUD's and the radar's once a frame (M4-T34; the same selection); off = the list built every tick, the reference"},
 }
 
 ## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current

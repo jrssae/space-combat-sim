@@ -48,6 +48,12 @@ func update(candidates: Array[TargetInfo], ship_pos: Vector3) -> bool:
 	return false
 
 
+## Replaces the candidate list and leaves the selection alone (M4-T34): a list built between refreshes, when it is read; the
+## refresh that checked the selection already ran.
+func set_candidates(candidates: Array[TargetInfo]) -> void:
+	_candidates = candidates.duplicate()
+
+
 ## How far away `info` can be and still be selected: the sensor range, or its broadcast range when that is farther.
 func reach_m(info: TargetInfo) -> float:
 	return maxf(sensor_range_m, info.broadcast_range_m)

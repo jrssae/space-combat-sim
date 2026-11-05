@@ -30,6 +30,8 @@ var system: TargetingSystem = TargetingSystem.new()
 var keeps_candidates: bool = true
 
 var _body: RigidBody3D = null
+# The list was not built since the last refresh (M4-T34, `perf_targeting_on_read`): the next reader builds it.
+var _stale: bool = false
 
 
 func _init() -> void:
@@ -68,10 +70,11 @@ func _physics_process(_delta: float) -> void:
 ## controller keeps them.
 func refresh() -> void:
 	var before: int = system.selected_id()
-	if keeps_candidates:
+	if keeps_candidates and not bool(Settings.get_value(&"perf_targeting_on_read")):
 		_gather()
 	else:
 		_check_selection()
+		_stale = keeps_candidates
 	_emit_if_changed(before)
 
 
@@ -121,6 +124,7 @@ func selected_id() -> int:
 
 ## Display name of the selection, or "" when nothing is selected.
 func selected_name() -> String:
+	_ensure_list()
 	var target: TargetInfo = system.selected()
 	return target.display_name if target != null else ""
 
@@ -134,6 +138,8 @@ func candidates() -> Array[TargetInfo]:
 		var before: int = system.selected_id()
 		_gather()
 		_emit_if_changed(before)
+	else:
+		_ensure_list()
 	return system.in_range(_ship_position())
 
 
@@ -190,9 +196,11 @@ func select_id(target_id: int) -> bool:
 				_select_alone(target)
 			else:
 				_check_selection()
-		elif not system.select_id(target_id, _ship_position()):
-			_gather()
-			system.select_id(target_id, _ship_position())
+		else:
+			var fresh: bool = _ensure_list()
+			if not system.select_id(target_id, _ship_position()) and not fresh:
+				_gather()
+				system.select_id(target_id, _ship_position())
 	_emit_if_changed(before)
 	return system.selected_id() == target_id
 
@@ -206,13 +214,29 @@ func clear_selection() -> void:
 func _gather() -> void:
 	if not _has_body() or not is_inside_tree():
 		return
+	_stale = false
+	system.update(_infos(), _ship_position())
+
+
+# A `TargetInfo` for every targetable this ship could list now (in play, not its own).
+func _infos() -> Array[TargetInfo]:
 	var infos: Array[TargetInfo] = []
 	for node: Node in get_tree().get_nodes_in_group(Targetable.GROUP):
 		var targetable := node as Targetable
 		if targetable == null or _body.is_ancestor_of(targetable) or not targetable.is_active():
 			continue
 		infos.append(targetable.to_target_info())
-	system.update(infos, _ship_position())
+	return infos
+
+
+# Builds the kept list now if no one has since the last refresh (M4-T34), leaving the selection as the refresh left it;
+# true when it did.
+func _ensure_list() -> bool:
+	if not (keeps_candidates and _stale) or not _has_body() or not is_inside_tree():
+		return false
+	_stale = false
+	system.set_candidates(_infos())
+	return true
 
 
 # Clears a selection this ship could no longer select, without gathering anything.
