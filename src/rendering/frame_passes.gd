@@ -1,10 +1,11 @@
 class_name FramePasses
 extends Node
-## The frame's per-ship visual work, one pass per subsystem (M4-T36, architecture §17.21). Thruster plumes, muzzle flashes and
-## the far-dot decision used to be a `_process` on every ship (or every flash, idle or not); at 500 ships those callbacks had no
-## owner and cost the frame several milliseconds. Each subsystem now registers its nodes here and this one node walks each list
-## once a frame: the plumes of the ships in play and shown, only the flashes that are showing, every LOD switcher with the camera
-## and the dot distance read once.
+## The frame's per-ship visual work, one pass per subsystem (M4-T36, architecture §17.21). Thruster plumes, muzzle flashes, hit
+## flashes and the far-dot decision used to be a `_process` on every ship (or every flash, idle or not); at 500 ships those
+## callbacks had no owner and cost the frame several milliseconds. Each subsystem now registers its nodes here and this one node
+## walks each list once a frame: the plumes of the ships in play and shown, only the muzzle and hit flashes that are showing,
+## every LOD switcher with the camera and the dot distance read once. It also keeps the finished hit flashes for the next hits
+## (hidden children of this node), so a hit no longer builds and frees nodes.
 ##
 ## One per scene tree, made on first use (`of`) under the root, so tests and scenes without `Main` keep working. It runs before
 ## the default priority, as the per-node callbacks it replaces ran before the nodes that read what they set. A node takes part
@@ -20,8 +21,11 @@ static var _instance: FramePasses = null
 
 var _plumes: Array[ThrusterVisuals] = []
 var _flashes: Array[MuzzleFlash] = []
+var _impacts: Array[ImpactFlash] = []
+# Finished hit flashes kept for the next hits.
+var _impact_pool: Array[ImpactFlash] = []
 var _switchers: Array[LodSwitcher] = []
-var _cost_us: Dictionary[StringName, int] = {&"plumes": 0, &"flashes": 0, &"lod": 0}
+var _cost_us: Dictionary[StringName, int] = {&"plumes": 0, &"flashes": 0, &"impacts": 0, &"lod": 0}
 
 
 ## The tree's passes, made under its root on first use; null outside a tree.
@@ -51,6 +55,9 @@ func _ready() -> void:
 		&"plumes": {"get": func() -> int: return _plumes.size(), "doc": "Ships' plume sets in the pass (in play and shown)"},
 		&"flashes_us": {"get": func() -> int: return _cost_us[&"flashes"], "unit": "us", "doc": "Muzzle flashes pass, last frame"},
 		&"flashes": {"get": func() -> int: return _flashes.size(), "doc": "Muzzle flashes showing"},
+		&"impacts_us": {"get": func() -> int: return _cost_us[&"impacts"], "unit": "us", "doc": "Hit flashes pass, last frame"},
+		&"impacts": {"get": func() -> int: return _impacts.size(), "doc": "Hit flashes showing"},
+		&"impact_pool": {"get": impact_pool_size, "doc": "Spare hit flashes kept for the next hits"},
 		&"lod_us": {"get": func() -> int: return _cost_us[&"lod"], "unit": "us", "doc": "Far-dot decision pass, last frame"},
 		&"switchers": {"get": func() -> int: return _switchers.size(), "doc": "LOD switchers registered"},
 	}), self)
@@ -70,10 +77,13 @@ func _process(delta: float) -> void:
 	var plumes_done: int = Time.get_ticks_usec()
 	advance_flashes(delta)
 	var flashes_done: int = Time.get_ticks_usec()
+	advance_impacts(delta)
+	var impacts_done: int = Time.get_ticks_usec()
 	update_lod()
 	_cost_us[&"plumes"] = plumes_done - started
 	_cost_us[&"flashes"] = flashes_done - plumes_done
-	_cost_us[&"lod"] = Time.get_ticks_usec() - flashes_done
+	_cost_us[&"impacts"] = impacts_done - flashes_done
+	_cost_us[&"lod"] = Time.get_ticks_usec() - impacts_done
 
 
 ## The far-dot decision for every registered ship: the camera and the dot distance read once (M4-T11's rule per ship). Public
@@ -107,6 +117,22 @@ func advance_flashes(delta: float) -> void:
 		i += 1
 
 
+## Ages every showing hit flash by `delta`; one that is over has gone back to the pool and leaves the list. Public for the tests.
+func advance_impacts(delta: float) -> void:
+	var i: int = 0
+	while i < _impacts.size():
+		var impact: ImpactFlash = _impacts[i]
+		if not is_instance_valid(impact) or not impact.is_inside_tree():
+			_impacts.remove_at(i)  # freed with its ship, or taken off it
+			continue
+		if impact.can_process():
+			impact.advance(delta)
+		if not impact.is_playing():
+			_impacts.remove_at(i)
+			continue
+		i += 1
+
+
 # --- registration --------------------------------------------------------------------------------------------------------
 
 
@@ -135,6 +161,37 @@ func remove_flash(flash: MuzzleFlash) -> void:
 
 func has_flash(flash: MuzzleFlash) -> bool:
 	return _flashes.has(flash)
+
+
+## A hit flash that started showing on a ship: advanced each frame until it is over.
+func add_impact(impact: ImpactFlash) -> void:
+	if not _impacts.has(impact):
+		_impacts.append(impact)
+
+
+func has_impact(impact: ImpactFlash) -> bool:
+	return _impacts.has(impact)
+
+
+## Keeps a finished hit flash, hidden under this node, for a later hit.
+func keep_impact(impact: ImpactFlash) -> void:
+	if is_instance_valid(impact) and impact.get_parent() == null:
+		add_child(impact)
+		_impact_pool.append(impact)
+
+
+## A spare hit flash out of the pool (with no parent), or null when there is none.
+func take_impact() -> ImpactFlash:
+	while not _impact_pool.is_empty():
+		var impact: ImpactFlash = _impact_pool.pop_back()
+		if is_instance_valid(impact):
+			remove_child(impact)
+			return impact
+	return null
+
+
+func impact_pool_size() -> int:
+	return _impact_pool.size()
 
 
 func add_switcher(switcher: LodSwitcher) -> void:

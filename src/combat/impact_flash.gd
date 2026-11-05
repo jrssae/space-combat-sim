@@ -1,63 +1,66 @@
 class_name ImpactFlash
-extends Node3D
-## A bolt hit (architecture §15.5): a short additive flash and a handful of spark streaks, a child of the ship that was
-## hit so it rides with it. Meshes only (D22), tinted with the bolt's colour. It frees itself.
+extends MeshInstance3D
+## A bolt hit (architecture §15.5): a short additive flash, a child of the ship that was hit so it rides with it, tinted with the
+## bolt's colour. The sparks are the `FxPool`'s hit burst, thrown by the hit resolver beside it (M3-T23).
 ##
-## Add it as a child of the hit ship with `position` set in the ship's body frame. Timing is visual (`_process` delta), so
-## a paused game freezes it.
+## Add it as a child of the hit ship with `position` set in the ship's body frame. Timing is visual (the frame's delta, in the
+## `FramePasses` hit flashes pass), so a paused game freezes it.
 ##
-## Flashes of one colour share their quad and materials (M4-T08): making them per hit stalled a windowed tick by about 7 ms
-## on many hits. The fade is per flash (`transparency` on the instance), so sharing changes nothing on screen.
+## One node per hit, from a pool (M4-T36, §17.21): it used to be the flash and 6 to 10 mesh sparks, about ten nodes built and
+## freed per hit beside the particle sparks. When it is over it leaves the ship for the pool, kept under the tree's
+## `FramePasses`, and `create` hands it out again; with no pool (a scene without the passes yet) it frees itself. Flashes of one
+## colour share their quad and material (M4-T08); the fade is per flash (`transparency` on the instance).
 
 const FLASH_S: float = 0.08
-const SPARK_S: float = 0.18
-const MIN_SPARKS: int = 6
-const MAX_SPARKS: int = 10
 const FLASH_SIZE_M: float = 1.6
-const SPARK_SPEED_MPS: Vector2 = Vector2(8.0, 22.0)
-const SPARK_LENGTH_M: float = 0.7
 const GLOW_MATERIAL: StandardMaterial3D = preload("res://assets/materials/thruster_glow.tres")
 
 ## Colours whose resources are kept; past this a flash makes its own (bolt colours come from a few weapon specs).
 const MAX_SHARED_COLOURS: int = 64
+## Spare flashes the pool keeps; past this a finished one is freed.
+const POOL_MAX: int = 256
 
-static var _spark_mesh: BoxMesh = null
-# Colour -> [the flash quad with its glow material, the spark material].
+# Colour -> the flash quad with its glow material.
 static var _shared: Dictionary = {}
+## Flashes built in this process (tests and profiling, never gameplay).
+static var built_count: int = 0
 
 var _age_s: float = 0.0
-var _flash: MeshInstance3D = null
-var _sparks: Array[MeshInstance3D] = []
-var _spark_velocities: Array[Vector3] = []
 
 
-## A flash for a hit tinted `color`. `seed_value` fixes the spark directions (same hit, same sparks).
-static func create(color: Color, seed_value: int = 0) -> ImpactFlash:
-	var flash := ImpactFlash.new()
-	flash.name = "ImpactFlash"
-	flash._build(color, seed_value)
+## A flash for a hit tinted `color`, from the pool when it has one. `seed_value` is kept for the callers' signature (the sparks it
+## seeded are the particle burst's now).
+static func create(color: Color, _seed_value: int = 0) -> ImpactFlash:
+	var flash: ImpactFlash = _from_pool()
+	if flash == null:
+		flash = ImpactFlash.new()
+		flash.name = "ImpactFlash"
+		flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		built_count += 1
+	flash.mesh = _quad_for(color)
+	flash._age_s = 0.0
+	flash.visible = true
+	flash.scale = Vector3.ONE * (FLASH_SIZE_M * 0.6)
+	flash.transparency = 0.0
 	return flash
 
 
-func _process(delta: float) -> void:
-	advance(delta)
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_ENTER_TREE and is_playing() and not _in_pool():
+		var passes: FramePasses = FramePasses.of(self)
+		if passes != null:
+			passes.add_impact(self)
 
 
-## Moves the effect `delta` seconds on; frees it when over. Public for tests.
+## Moves the effect `delta` seconds on; when it is over it goes back to the pool (or is freed). Public for tests.
 func advance(delta: float) -> void:
 	_age_s += delta
-	if _age_s >= SPARK_S:
-		queue_free()
+	if not is_playing():
+		_finish()
 		return
-	_flash.visible = _age_s < FLASH_S
-	if _flash.visible:
-		var life: float = _age_s / FLASH_S
-		_flash.scale = Vector3.ONE * (FLASH_SIZE_M * lerpf(0.6, 1.0, life))
-		_flash.transparency = life
-	var fade: float = 1.0 - _age_s / SPARK_S
-	for i: int in _sparks.size():
-		_sparks[i].position += _spark_velocities[i] * delta
-		_sparks[i].scale = Vector3(1.0, 1.0, maxf(fade, 0.01))
+	var life: float = _age_s / FLASH_S
+	scale = Vector3.ONE * (FLASH_SIZE_M * lerpf(0.6, 1.0, life))
+	transparency = life
 
 
 ## Seconds since it appeared.
@@ -65,46 +68,41 @@ func age_s() -> float:
 	return _age_s
 
 
-func spark_count() -> int:
-	return _sparks.size()
+## True until the flash is over.
+func is_playing() -> bool:
+	return _age_s < FLASH_S
 
 
 func is_flash_visible() -> bool:
-	return _flash != null and _flash.visible
+	return visible and is_playing()
 
 
-func _build(color: Color, seed_value: int) -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_value
-	var resources: Array = _resources_for(color)
-	_flash = MeshInstance3D.new()
-	_flash.name = "Flash"
-	_flash.mesh = resources[0]
-	_flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(_flash)
-
-	var spark_material: Material = resources[1]
-	for i: int in rng.randi_range(MIN_SPARKS, MAX_SPARKS):
-		var direction := Vector3(rng.randfn(), rng.randfn(), rng.randfn()).normalized()
-		if direction.is_zero_approx():
-			direction = Vector3.UP
-		var spark := MeshInstance3D.new()
-		spark.name = "Spark%d" % i
-		spark.mesh = _shared_spark_mesh()
-		spark.material_override = spark_material
-		spark.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var up: Vector3 = Vector3.UP if absf(direction.dot(Vector3.UP)) < 0.99 else Vector3.RIGHT
-		spark.basis = Basis.looking_at(direction, up)  # the box's long side is its -Z
-		add_child(spark)
-		_sparks.append(spark)
-		_spark_velocities.append(direction * rng.randf_range(SPARK_SPEED_MPS.x, SPARK_SPEED_MPS.y))
+# Off the ship and into the pool, hidden; freed when there is no pool or it is full.
+func _finish() -> void:
+	visible = false
+	var passes: FramePasses = FramePasses.of(self) if is_inside_tree() else null
+	if passes == null or passes.impact_pool_size() >= POOL_MAX:
+		queue_free()
+		return
+	get_parent().remove_child(self)
+	passes.keep_impact(self)
 
 
-# The flash quad and spark material for `color`, made once per colour.
-static func _resources_for(color: Color) -> Array:
+func _in_pool() -> bool:
+	return get_parent() is FramePasses
+
+
+static func _from_pool() -> ImpactFlash:
+	var passes: FramePasses = FramePasses._instance if FramePasses._instance != null and is_instance_valid(FramePasses._instance) \
+			else null
+	return passes.take_impact() if passes != null else null
+
+
+# The flash quad for `color`, made once per colour.
+static func _quad_for(color: Color) -> QuadMesh:
 	var kept: Variant = _shared.get(color)
 	if kept != null:
-		return kept as Array
+		return kept as QuadMesh
 	var glow := GLOW_MATERIAL.duplicate() as StandardMaterial3D
 	glow.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	glow.albedo_color = color
@@ -112,19 +110,6 @@ static func _resources_for(color: Color) -> Array:
 	var quad := QuadMesh.new()
 	quad.size = Vector2.ONE
 	quad.material = glow
-	var spark_material := StandardMaterial3D.new()
-	spark_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	spark_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	spark_material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	spark_material.albedo_color = color
-	var made: Array = [quad, spark_material]
 	if _shared.size() < MAX_SHARED_COLOURS:
-		_shared[color] = made
-	return made
-
-
-static func _shared_spark_mesh() -> BoxMesh:
-	if _spark_mesh == null:
-		_spark_mesh = BoxMesh.new()
-		_spark_mesh.size = Vector3(0.025, 0.025, SPARK_LENGTH_M)
-	return _spark_mesh
+		_shared[color] = quad
+	return quad

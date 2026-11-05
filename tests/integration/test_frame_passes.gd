@@ -271,3 +271,30 @@ func test_no_lean_ship_runs_a_process_callback_of_its_own() -> void:
 			if node.is_processing():
 				processing.append(String(c.ship.get_path_to(node)))
 		assert_eq(processing, PackedStringArray(), "%s: no node of the ship processes each frame (M4-T36)" % c.ship.spec.asset_id)
+
+
+# --- the hit flashes ---------------------------------------------------------------------------------------------------------
+
+
+func test_a_hit_flash_animates_in_the_pass_and_goes_back_to_the_pool() -> void:
+	var ships: Array[Combatant] = _ships(1)
+	var flash: ImpactFlash = ImpactFlash.create(Color(3.0, 1.0, 0.5), 1)
+	flash.position = Vector3(0.0, 1.0, -2.0)
+	ships[0].ship.add_child(flash)
+	assert_true(_passes().has_impact(flash), "a showing flash is in the pass")
+	var off: int = 0
+	var age: float = 0.0
+	while age + DT < ImpactFlash.FLASH_S:
+		_passes().advance_impacts(DT)
+		age += DT
+		var life: float = age / ImpactFlash.FLASH_S
+		if not flash.visible or not flash.scale.is_equal_approx(Vector3.ONE * (ImpactFlash.FLASH_SIZE_M * lerpf(0.6, 1.0, life))) \
+				or not is_equal_approx(flash.transparency, life):
+			off += 1
+	assert_eq(off, 0, "it grows and fades as its own _process made it")
+	_passes().advance_impacts(DT)
+	assert_false(_passes().has_impact(flash), "over: out of the pass")
+	assert_false(ships[0].ship.is_ancestor_of(flash), "off the ship")
+	assert_eq(flash.get_parent(), _passes(), "kept in the pool")
+	assert_same(ImpactFlash.create(Color.WHITE, 2), flash, "and handed out for the next hit")
+	flash.free()
