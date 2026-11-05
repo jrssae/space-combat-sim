@@ -6,8 +6,10 @@ extends Node3D
 ##
 ## Hooks (`connect_combat`, `watch_ship`): cannon fire (`pulse_fire` for the Starfury's side, `raider_fire` for the others),
 ## hits (`hit_hull`), destruction (`explosion`), the player's hull below 25 % (`warning_beep`, repeating) and a new selection
-## (`target_blip`). Each ship gets a looping `engine_loop` child, so it follows the ship and a rebase, that plays while the
-## ship is in play within `ENGINE_RANGE_M` of the listener. Pitch and volume follow the thrust levels.
+## (`target_blip`). The engines are heard through `ENGINE_VOICES` pairs of looping voices (`engine_loop` and `thruster_loop`), handed to
+## the nearest ships in play within `ENGINE_RANGE_M` of the listener and moved to them every frame (M4-T36, §17.21): a voice
+## budget instead of two players on every ship, so 500 ships cost the audio server and the frame no more than a dozen do. Pitch and
+## volume follow the thrust levels; a ship that gets a voice starts from idle, as it did when it came into range.
 ##
 ## `settings.sfx_volume` (0..1) is the gain of the `SFX` bus (`default_bus_layout.tres`; created at run time if it is missing).
 ## The Dummy audio driver of a headless run plays silently, and nothing here errors without sound files.
@@ -20,6 +22,11 @@ const BUS: StringName = &"SFX"
 const VOICES: int = 16
 const UI_VOICES: int = 4
 const ENGINE_RANGE_M: float = 1500.0
+## Engine voice pairs (M4-T36): at most this many ships are heard at once, the nearest. A 13th ship at 1.5 km would be at the
+## hum's idle gain less its distance, below hearing next to the near ones.
+const ENGINE_VOICES: int = 12
+## Ships looked at each frame for a voice: every ship, up to this many, else this many in turn (a full round in a few frames).
+const ENGINE_SCAN_PER_FRAME: int = 32
 const WARNING_HULL: float = 0.25
 const WARNING_INTERVAL_S: float = 1.5
 ## Engine hum: gain (dB) and pitch at idle and at full thrust. The pitch stays low: a rumble, not a whine.
@@ -43,7 +50,16 @@ var _voices: Array[AudioStreamPlayer3D] = []
 var _voice_serial: Array[int] = []
 var _serial: int = 0
 var _ui_voices: Array[AudioStreamPlayer] = []
-var _engines: Array[Dictionary] = []  # {combatant, player}
+# The watched ships and, per ship, its heard hum and hiss levels and its voice (-1 for none).
+var _engine_ships: Array[Combatant] = []
+var _engine_levels := PackedFloat64Array()
+var _thruster_levels := PackedFloat64Array()
+var _voice_of := PackedInt32Array()
+# The engine voice pairs and the ship each serves (-1 for none).
+var _hums: Array[AudioStreamPlayer3D] = []
+var _hisses: Array[AudioStreamPlayer3D] = []
+var _voice_ship := PackedInt32Array()
+var _scan_at: int = 0
 var _warn_in_s: float = 0.0
 var _played: Dictionary = {}  # StringName -> times played (tests and the console)
 
@@ -63,6 +79,10 @@ func _ready() -> void:
 		add_child(voice)
 		_voices.append(voice)
 		_voice_serial.append(0)
+	for i: int in ENGINE_VOICES:
+		_hums.append(_engine_voice("EngineHum%d" % i, &"engine_loop", 30.0, HUM_DB.x))
+		_hisses.append(_engine_voice("ThrusterHiss%d" % i, &"thruster_loop", 20.0, THRUSTER_DB.x))
+		_voice_ship.append(-1)
 	for i: int in UI_VOICES:
 		var ui := AudioStreamPlayer.new()
 		ui.name = "UiVoice%d" % i
@@ -89,6 +109,9 @@ func _exit_tree() -> void:
 	for ui: AudioStreamPlayer in _ui_voices:
 		ui.stop()
 		ui.stream = null
+	for voice: AudioStreamPlayer3D in _hums + _hisses:
+		voice.stop()
+		voice.stream = null
 
 
 func _process(delta: float) -> void:
@@ -239,32 +262,41 @@ func watch_ship(combatant: Combatant) -> void:
 	var shot: StringName = &"pulse_fire" if combatant.faction == Factions.EARTH_ALLIANCE else &"raider_fire"
 	combatant.cannon.projectile_fired.connect(func(_index: int, projectile: Projectile) -> void:
 		play(shot, projectile.global_position, -3.0, randf_range(0.96, 1.04)))
-	if not _streams.has(&"engine_loop"):
-		return
-	var hum := AudioStreamPlayer3D.new()
-	hum.name = "EngineHum"
-	hum.stream = _streams[&"engine_loop"]
-	hum.bus = BUS
-	hum.unit_size = 30.0
-	hum.max_distance = ENGINE_RANGE_M
-	hum.volume_db = HUM_DB.x
-	combatant.ship.add_child(hum)
-	var thrusters: AudioStreamPlayer3D = null
-	if _streams.has(&"thruster_loop"):
-		thrusters = AudioStreamPlayer3D.new()
-		thrusters.name = "ThrusterHiss"
-		thrusters.stream = _streams[&"thruster_loop"]
-		thrusters.bus = BUS
-		thrusters.unit_size = 20.0
-		thrusters.max_distance = ENGINE_RANGE_M
-		thrusters.volume_db = THRUSTER_DB.x
-		combatant.ship.add_child(thrusters)
-	_engines.append({"combatant": combatant, "player": hum, "thrusters": thrusters,
-			"level": HUM_IDLE_LEVEL, "thruster_level": 0.0})
+	_engine_ships.append(combatant)
+	_engine_levels.append(HUM_IDLE_LEVEL)
+	_thruster_levels.append(0.0)
+	_voice_of.append(-1)
 
 
+## Ships whose engines can be heard (every watched ship).
 func engine_count() -> int:
-	return _engines.size()
+	return _engine_ships.size()
+
+
+## The engine hum playing for `ship`, or null when it has no voice (parked, out of range, or beyond the nearest `ENGINE_VOICES`).
+func engine_voice_of(ship: Ship) -> AudioStreamPlayer3D:
+	var e: int = _engine_index(ship)
+	return _hums[_voice_of[e]] if e >= 0 and _voice_of[e] >= 0 else null
+
+
+## The thruster hiss voice paired with `ship`'s hum, or null.
+func thruster_voice_of(ship: Ship) -> AudioStreamPlayer3D:
+	var e: int = _engine_index(ship)
+	return _hisses[_voice_of[e]] if e >= 0 and _voice_of[e] >= 0 else null
+
+
+## The heard hum level of `ship` (0..1; the idle floor while it has no voice).
+func engine_level_of(ship: Ship) -> float:
+	var e: int = _engine_index(ship)
+	return _engine_levels[e] if e >= 0 else 0.0
+
+
+## Engine voices serving a ship now.
+func engine_voices_used() -> int:
+	var n: int = 0
+	for e: int in _voice_ship:
+		n += 1 if e >= 0 else 0
+	return n
 
 
 # --- engines and warnings --------------------------------------------------------------------------------------------
@@ -277,41 +309,119 @@ func _listener_position() -> Vector3:
 	return player.ship.global_position if player != null and is_instance_valid(player.ship) else Vector3.ZERO
 
 
+# Hands the voices to the nearest audible ships, then plays each served ship's engines at its drawn place.
 func _update_engines(delta: float) -> void:
 	var listener: Vector3 = _listener_position()
-	for entry: Dictionary in _engines:
-		var combatant: Combatant = entry["combatant"]
-		var hum: AudioStreamPlayer3D = entry["player"]
-		var thrusters: AudioStreamPlayer3D = entry["thrusters"]
-		if not is_instance_valid(combatant.ship) or not is_instance_valid(hum):
+	_scan_engines(listener)
+	for v: int in _hums.size():
+		var e: int = _voice_ship[v]
+		if e < 0:
 			continue
-		var ship: Ship = combatant.ship
-		var live: bool = ship.is_visible_in_tree() and ship.can_process() and ship.global_position.distance_to(listener) <= ENGINE_RANGE_M
-		if not live:
-			# A ship out of play restarts cold.
-			entry["level"] = HUM_IDLE_LEVEL
-			entry["thruster_level"] = 0.0
-			if hum.playing:
-				hum.stop()
-			if thrusters != null and is_instance_valid(thrusters) and thrusters.playing:
-				thrusters.stop()
+		if _audible_distance(e, listener) < 0.0:
+			_release_voice(v)  # out of play or range: it restarts cold
 			continue
+		var ship: Ship = _engine_ships[e].ship
 		var output: FlightOutput = ship.get_flight_output()
-		var level: float = ramp(float(entry["level"]), engine_level(output), delta, HUM_RISE_PER_S, HUM_FALL_PER_S)
-		entry["level"] = level
+		var level: float = ramp(_engine_levels[e], engine_level(output), delta, HUM_RISE_PER_S, HUM_FALL_PER_S)
+		_engine_levels[e] = level
+		var hum: AudioStreamPlayer3D = _hums[v]
+		hum.global_position = ship.global_position
 		hum.volume_db = lerpf(HUM_DB.x, HUM_DB.y, level)
 		hum.pitch_scale = lerpf(HUM_PITCH.x, HUM_PITCH.y, level)
-		if not hum.playing:
+		if not hum.playing and hum.stream != null:
 			hum.play()
-		if thrusters != null and is_instance_valid(thrusters):
-			var heard: float = ramp(float(entry["thruster_level"]), thruster_level(output), delta, THRUSTER_RISE_PER_S, THRUSTER_FALL_PER_S)
-			entry["thruster_level"] = heard
-			thrusters.volume_db = lerpf(THRUSTER_DB.x, THRUSTER_DB.y, heard)
-			thrusters.pitch_scale = lerpf(THRUSTER_PITCH.x, THRUSTER_PITCH.y, heard)
-			if heard > 0.001 and not thrusters.playing:
-				thrusters.play()
-			elif heard <= 0.001 and thrusters.playing:
-				thrusters.stop()
+		var hiss: AudioStreamPlayer3D = _hisses[v]
+		var heard: float = ramp(_thruster_levels[e], thruster_level(output), delta, THRUSTER_RISE_PER_S, THRUSTER_FALL_PER_S)
+		_thruster_levels[e] = heard
+		hiss.global_position = ship.global_position
+		hiss.volume_db = lerpf(THRUSTER_DB.x, THRUSTER_DB.y, heard)
+		hiss.pitch_scale = lerpf(THRUSTER_PITCH.x, THRUSTER_PITCH.y, heard)
+		if heard > 0.001 and not hiss.playing and hiss.stream != null:
+			hiss.play()
+		elif heard <= 0.001 and hiss.playing:
+			hiss.stop()
+
+
+# Looks at the next ships in turn: an audible one without a voice takes a free voice, or the voice of the farthest served ship
+# when it is nearer than that one.
+func _scan_engines(listener: Vector3) -> void:
+	var n: int = _engine_ships.size()
+	if n == 0 or _hums.is_empty():
+		return
+	for k: int in mini(n, ENGINE_SCAN_PER_FRAME):
+		var e: int = _scan_at % n
+		_scan_at = (_scan_at + 1) % n
+		if _voice_of[e] >= 0:
+			continue
+		var distance: float = _audible_distance(e, listener)
+		if distance < 0.0:
+			continue
+		var v: int = _voice_ship.find(-1)
+		if v < 0:
+			v = _farthest_voice(listener)
+			if _audible_distance(_voice_ship[v], listener) <= distance:
+				continue
+			_release_voice(v)
+		_voice_ship[v] = e
+		_voice_of[e] = v
+
+
+# The ship's distance from the listener when it can be heard (in play, within range), else -1.
+func _audible_distance(e: int, listener: Vector3) -> float:
+	var combatant: Combatant = _engine_ships[e]
+	if not is_instance_valid(combatant.ship):
+		return -1.0
+	var ship: Ship = combatant.ship
+	if not ship.is_visible_in_tree() or not ship.can_process():
+		return -1.0
+	var distance: float = ship.global_position.distance_to(listener)
+	return distance if distance <= ENGINE_RANGE_M else -1.0
+
+
+func _farthest_voice(listener: Vector3) -> int:
+	var far: int = 0
+	var far_m: float = -INF
+	for v: int in _voice_ship.size():
+		var d: float = _audible_distance(_voice_ship[v], listener)
+		if d < 0.0:
+			return v  # serving a ship no longer heard: free to take
+		if d > far_m:
+			far = v
+			far_m = d
+	return far
+
+
+# Frees a voice; its ship is heard again from idle when it next gets one.
+func _release_voice(v: int) -> void:
+	var e: int = _voice_ship[v]
+	if e >= 0:
+		_voice_of[e] = -1
+		_engine_levels[e] = HUM_IDLE_LEVEL
+		_thruster_levels[e] = 0.0
+	_voice_ship[v] = -1
+	_hums[v].stop()
+	_hisses[v].stop()
+
+
+func _engine_index(ship: Ship) -> int:
+	for e: int in _engine_ships.size():
+		if _engine_ships[e].ship == ship:
+			return e
+	return -1
+
+
+func _engine_voice(voice_name: String, sound: StringName, unit_size: float, volume_db: float) -> AudioStreamPlayer3D:
+	var voice := AudioStreamPlayer3D.new()
+	voice.name = voice_name
+	voice.stream = _streams.get(sound)
+	voice.bus = BUS
+	voice.unit_size = unit_size
+	voice.max_distance = ENGINE_RANGE_M
+	voice.volume_db = volume_db
+	voice.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF  # placed on its ship every frame
+	voice.add_to_group(WorldFrame.SHIFTABLE_GROUP)
+	add_child(voice)
+	return voice
 
 
 ## `current` moved toward `target` by at most `rise_per_s` (going up) or `fall_per_s` (going down) times `delta`.
