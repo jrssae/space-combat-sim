@@ -143,6 +143,26 @@ expect_line() {
 expect_text() {
     grep -qF -- "$2" "$1" || { echo "run_tests.sh: missing text in $1: $2" >&2; return 1; }
 }
+# The providers line lists every registered state provider. New subsystems add providers, so the check is that the ones named
+# here are all present, not that the list is exactly this one (an exact list failed CI every time a task added a provider).
+expect_providers() {
+    local line
+    line="$(grep -m1 -F -- "[console] providers: " "$1" || true)"
+    if [[ -z "${line}" ]]; then
+        echo "run_tests.sh: missing providers line in $1" >&2
+        return 1
+    fi
+    local have=",${line#*providers: },"
+    have="${have// /}"
+    local missing=0 name
+    for name in ${2//,/ }; do
+        if [[ "${have}" != *",${name},"* ]]; then
+            echo "run_tests.sh: provider ${name} missing in $1" >&2
+            missing=1
+        fi
+    done
+    return "${missing}"
+}
 reject_text() {
     # No -q on the second grep: stopping early could kill the first with SIGPIPE, and pipefail would hide the match.
     if grep -F -- "$2" "$1" | grep -vE -- "${NATIVE_ABSENT_ERRORS}" > /dev/null; then
@@ -222,7 +242,7 @@ if grep -E "${SCRIPT_ERRORS}" "${log}"; then
     echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, flight, fx, hud, hull, input, lights, livery, perf, post, raiders, ram, render, screens, settings, ship, sky, targeting, time, waves, weapons, wing, world" \
+expect_providers "${log}" "ai, allies, audio, camera, combat, controls, debris, debug, factions, flight, fx, hud, hull, input, lights, livery, perf, post, raiders, ram, render, screens, settings, ship, sky, targeting, time, waves, weapons, wing, world" \
     || smoke_status=1
 expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
 expect_line "${log}" "[console] render.renderer = headless" || smoke_status=1
@@ -553,7 +573,7 @@ if (( route_status != 0 )); then
     echo "run_tests.sh: instructor route smoke run exited ${route_status}, expected 0 (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, flight, fx, hud, hull, input, lights, livery, perf, post, raiders, ram, render, route, screens, settings, ship, sky, targeting, time, waves, weapons, wing, world" \
+expect_providers "${log}" "ai, allies, audio, camera, combat, controls, debris, debug, factions, flight, fx, hud, hull, input, lights, livery, perf, post, raiders, ram, render, route, screens, settings, ship, sky, targeting, time, waves, weapons, wing, world" \
     || smoke_status=1
 expect_line "${log}" "[console] route.index = 1" || smoke_status=1
 expect_line "${log}" "[console] route.count = 6" || smoke_status=1
