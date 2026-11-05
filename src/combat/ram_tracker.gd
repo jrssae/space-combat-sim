@@ -96,6 +96,12 @@ var _touching: Dictionary[String, bool] = {}
 var _touching_now: Dictionary[String, bool] = {}
 # Pair key -> the tick of its last swept ram.
 var _swept_at: Dictionary[String, int] = {}
+# The last tick in columns (M4-T34, `contacts_columns`): each body's index by id, its velocity and accel, and the contacts of
+# the bodies that touched something.
+var _prev_at: Dictionary[int, int] = {}
+var _prev_velocities := PackedVector3Array()
+var _prev_accels := PackedVector3Array()
+var _prev_touches: Dictionary[int, Dictionary] = {}
 
 
 ## The key of an unordered pair of instance ids.
@@ -141,6 +147,56 @@ func contacts(samples: Array[Sample], delta: float) -> Array[ContactRam]:
 			landed.append(window.ram)
 	_windows = still_open
 	_previous = current
+	return landed
+
+
+## Phase 1 in columns (M4-T34): the rams `contacts` lands for samples made of these, in the same order, without a sample per
+## body. `ids`, `velocities` and `accels`: every rigid body read this tick, in order. `touches`: id -> (other id -> `Touch`)
+## for the bodies Jolt reported touching something, in the same order. `limits`: id -> `[safe_dv_mps, lethal_dv_mps]`, asked
+## only for a hull with an open window. A tracker takes one phase 1 or the other from tick to tick; `reset` between.
+func contacts_columns(ids: PackedInt64Array, velocities: PackedVector3Array, accels: PackedVector3Array,
+		touches: Dictionary[int, Dictionary], limits: Callable, delta: float) -> Array[ContactRam]:
+	_tick += 1
+	_in_contact.clear()
+	_touching_now.clear()
+	var current_at: Dictionary[int, int] = {}
+	for k: int in ids.size():
+		current_at[ids[k]] = k
+	for id: int in touches:
+		var contacts: Dictionary = touches[id]
+		for other_id: int in contacts:
+			_in_contact[pair_key(id, other_id)] = true
+		var p: int = _prev_at.get(id, -1)
+		if p < 0:
+			continue
+		var before: Dictionary = _prev_touches.get(id, {})
+		for other_id: int in contacts:
+			var key: String = _directed(id, other_id)
+			if before.has(other_id) or _windows.has(key) or _swept_recently(pair_key(id, other_id)):
+				continue
+			_windows[key] = _open_at(id, other_id, contacts[other_id], _prev_velocities[p])
+	var landed: Array[ContactRam] = []
+	var still_open: Dictionary[String, _Window] = {}
+	for key: String in _windows:
+		var window: _Window = _windows[key]
+		var c: int = current_at.get(window.ram.hull_id, -1)
+		var p: int = _prev_at.get(window.ram.hull_id, -1)
+		if c < 0 or p < 0:
+			continue  # the body left play (or was away a tick): its windows go
+		window.own_dv += _prev_accels[p] * delta
+		window.ram.dv = maxf(window.ram.dv, RamMath.contact_dv(velocities[c], window.v_before, window.own_dv))
+		window.ticks_left -= 1
+		var limit: PackedFloat64Array = limits.call(window.ram.hull_id)
+		window.ram.severity = RamMath.severity(window.ram.dv, limit[0], limit[1])
+		if window.ticks_left > 0 and window.ram.severity < 1.0:
+			still_open[key] = window
+		elif window.ram.severity > 0.0:
+			landed.append(window.ram)
+	_windows = still_open
+	_prev_at = current_at
+	_prev_velocities = velocities
+	_prev_accels = accels
+	_prev_touches = touches
 	return landed
 
 
@@ -196,6 +252,10 @@ func reset() -> void:
 	_touching.clear()
 	_touching_now.clear()
 	_swept_at.clear()
+	_prev_at.clear()
+	_prev_velocities = PackedVector3Array()
+	_prev_accels = PackedVector3Array()
+	_prev_touches.clear()
 
 
 func _swept_recently(key: String) -> bool:
@@ -212,6 +272,19 @@ func _open(sample: Sample, other_id: int, previous: Sample) -> _Window:
 	window.ram.point = touch.point
 	window.ram.normal = touch.normal
 	window.ram.relative_speed = (previous.velocity - (other_previous.velocity if other_previous != null else Vector3.ZERO)).length()
+	return window
+
+
+# `_open` from columns: the hull's velocity on the last tick and the other's, if it was there.
+func _open_at(id: int, other_id: int, touch: Touch, v_previous: Vector3) -> _Window:
+	var window := _Window.new()
+	var o: int = _prev_at.get(other_id, -1)
+	window.v_before = v_previous
+	window.ram.hull_id = id
+	window.ram.other_id = other_id
+	window.ram.point = touch.point
+	window.ram.normal = touch.normal
+	window.ram.relative_speed = (v_previous - (_prev_velocities[o] if o >= 0 else Vector3.ZERO)).length()
 	return window
 
 

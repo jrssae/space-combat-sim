@@ -98,6 +98,11 @@ var _phase_class_known: int = -1
 var _rocks: HitBroadPhase = HitBroadPhase.new()
 var _solid: StaticRows.Solid = null
 var _rock_hulls: Dictionary = {}
+# The contact phase's form (M4-T34): columns (`perf_ram_contact_columns`) or a sample per hull, the reference; the tracker is
+# reset when it changes. And each hull's index by body id, built when first needed in a tick.
+var _contact_columns: bool = false
+var _index_of: Dictionary[int, int] = {}
+var _index_built: bool = false
 
 
 func _init() -> void:
@@ -155,7 +160,11 @@ func resolve(delta: float) -> void:
 		var sim: SimCore = _gather(delta)
 		gather_us = Time.get_ticks_usec() - started_us
 		hulls_last_tick = _count
-		var in_contact: PackedInt64Array = _resolve_contacts(delta)
+		var columns: bool = bool(Settings.get_value(&"perf_ram_contact_columns"))
+		if columns != _contact_columns:
+			_contact_columns = columns
+			tracker.reset()  # the tracker keeps the last tick in the form it was given
+		var in_contact: PackedInt64Array = _resolve_contacts_columns(delta) if columns else _resolve_contacts(delta)
 		_resolve_swept(sim, in_contact, delta)
 		_resolve_rocks(sim, delta)
 		tracker.end_tick()
@@ -170,6 +179,11 @@ func source() -> StringName:
 	return _source
 
 
+## How the last tick's contacts reached the tracker: &"columns" (M4-T34) or &"samples" (a sample per hull, the reference).
+func contact_path() -> StringName:
+	return &"columns" if _contact_columns else &"samples"
+
+
 ## The broad phase alone, for the parity tests (M4-T15): the keys `_resolve_swept` walks, with `always` added.
 func broad_phase_pairs(delta: float, always: PackedInt64Array) -> PackedInt64Array:
 	var sim: SimCore = _gather(delta)
@@ -182,6 +196,7 @@ func broad_phase_pairs(delta: float, always: PackedInt64Array) -> PackedInt64Arr
 func _gather(delta: float) -> SimCore:
 	_delta = delta
 	_hulls.clear()
+	_index_built = false
 	var sim: SimCore = SimCore.for_tree(get_tree()) if use_core and _phase_available() else null
 	if sim != null and _synced(sim):
 		_source = &"core"
@@ -351,6 +366,82 @@ func _resolve_contacts(delta: float) -> PackedInt64Array:
 		pending.append(_pending(damageable, info, KIND_CONTACT, ram.dv))
 	_apply_all(pending)
 	return in_contact
+
+
+# `_resolve_contacts` with the tracker fed columns (M4-T34): every rigid hull's id, velocity and accel, and contact lists only
+# for the hulls Jolt reports touching something, so a tick with no contact builds no object per hull. The same rams, the
+# same pairs.
+func _resolve_contacts_columns(delta: float) -> PackedInt64Array:
+	var ids := PackedInt64Array()
+	var velocities := PackedVector3Array()
+	var accels := PackedVector3Array()
+	var touches: Dictionary[int, Dictionary] = {}
+	var touch_rows := PackedInt32Array()
+	for i: int in _rigid_rows:
+		var body := instance_from_id(_ids[i]) as RigidBody3D
+		if body == null or not is_instance_id_valid(_hull_ids[i]):
+			continue
+		var id: int = _ids[i]
+		ids.append(id)
+		velocities.append(_velocities[i])
+		accels.append(_accel_of(body))
+		var state: PhysicsDirectBodyState3D = PhysicsServer3D.body_get_direct_state(body.get_rid())
+		if state == null or state.get_contact_count() == 0:
+			continue
+		var contacts: Dictionary[int, RamTracker.Touch] = {}
+		for c: int in state.get_contact_count():
+			var other_id: int = state.get_contact_collider_id(c)
+			if not contacts.has(other_id):
+				contacts[other_id] = RamTracker.Touch.new(state.get_contact_local_position(c) - _shift_since_step,
+						-state.get_contact_local_normal(c))
+		touches[id] = contacts
+		touch_rows.append(i)
+	var in_contact := PackedInt64Array()
+	var t: int = 0
+	for id: int in touches:
+		var i: int = touch_rows[t]
+		t += 1
+		for other_id: int in touches[id]:
+			var k: int = _index().get(other_id, -1)
+			if k >= 0:
+				in_contact.append(mini(i, k) * _count + maxi(i, k))
+	var pending: Array[Array] = []
+	for ram: RamTracker.ContactRam in tracker.contacts_columns(ids, velocities, accels, touches, _limits, delta):
+		var damageable: Damageable = _hull(_index()[ram.hull_id])["damageable"]
+		if damageable == null:
+			continue  # its node went since the gather
+		var other_at: int = _index().get(ram.other_id, -1)
+		var other_hull: Damageable = _hull(other_at)["damageable"] if other_at >= 0 else null
+		var other_faction: StringName = other_hull.faction if other_hull != null else &""
+		var info := HitInfo.new(ram.hull_id, ram.other_id, other_faction, damageable.hull.max_hp * ram.severity, ram.point,
+				ram.normal, ram.relative_speed, HitInfo.CAUSE_RAM)
+		pending.append(_pending(damageable, info, KIND_CONTACT, ram.dv))
+	_apply_all(pending)
+	return in_contact
+
+
+# Each hull's index by body id this tick, built on first ask.
+func _index() -> Dictionary[int, int]:
+	if not _index_built:
+		_index_built = true
+		_index_of.clear()
+		for i: int in _count:
+			_index_of[_ids[i]] = i
+	return _index_of
+
+
+# A rigid hull's ram limits, `[safe_dv_mps, lethal_dv_mps]`, by body id (the tracker asks for a hull with an open window).
+func _limits(body_id: int) -> PackedFloat64Array:
+	var damageable := instance_from_id(_hull_ids[_index()[body_id]]) as Damageable
+	return PackedFloat64Array([damageable.ram_safe_dv_mps, damageable.ram_lethal_dv_mps])
+
+
+# `_accel` for a body already looked up.
+static func _accel_of(body: RigidBody3D) -> Vector3:
+	var ship := body as Ship
+	if ship == null or ship.mass <= 0.0:
+		return Vector3.ZERO
+	return ship.applied_force() / ship.mass
 
 
 # Every body Jolt reported touching `rigid` in its last step, with the first contact point and `rigid`'s surface normal there

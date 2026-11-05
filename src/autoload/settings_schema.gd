@@ -117,6 +117,8 @@ const ENTRIES: Dictionary = {
 	# M4-T34
 	&"perf_native_bolt_sync": {"type": TYPE_BOOL, "default": true,
 		"doc": "The core's two bolt reads a tick go through the cheaper native reader (M4-T34) when the core is on; off = the core's own read, the reference, for pairing the two in one process"},
+	&"perf_ram_contact_columns": {"type": TYPE_BOOL, "default": true,
+		"doc": "The ram resolver hands its contact tracker columns and builds contact lists only for the hulls Jolt reports touching (M4-T34); off = a sample per hull every tick, the reference, for pairing the two in one process"},
 }
 
 ## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current
