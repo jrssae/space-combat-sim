@@ -99,6 +99,17 @@ func _snapshot() -> Dictionary:
 		var bolt := node as Projectile
 		if bolt != null and not bolt.is_spent() and not bolt.is_queued_for_deletion():
 			out[bolt.get_instance_id()] = {"name": "bolt", "u": main.world.to_universe(bolt.global_position), "v": bolt.velocity}
+	# The AI ships' bolts are rows the core owns (M4-T35): shifted by `core.shift`, read here as the nodes are.
+	var sim: SimCore = SimCore.current()
+	if sim != null and sim.core != null:
+		var columns: Array = sim.core.bolt_columns()
+		var ids: PackedInt64Array = columns[0]
+		var ends: PackedVector3Array = columns[2]
+		var spent: PackedByteArray = columns[10]
+		var velocities: PackedVector3Array = columns[12]
+		for i: int in int(columns[11]):
+			if spent[i] == 0:
+				out[ids[i]] = {"name": "bolt row", "u": main.world.to_universe(ends[i]), "v": velocities[i]}
 	return out
 
 
@@ -125,6 +136,14 @@ func test_rebase_900_km_out_comes_back_on_the_next_tick_with_every_universe_posi
 	source.hold(InputAdapter.FIRE)
 	await _ticks(30)
 	source.release(InputAdapter.FIRE)
+	# Two bolts the core owns (M4-T35: the AI cannons' bolts are rows), astern of the player so nothing is hit.
+	var sim: SimCore = SimCore.current()
+	var rows_expected: int = 0
+	if sim != null and sim.bolt_rows_on():
+		for k: int in 2:
+			var at: Vector3 = main.ship.global_position + Vector3(0.0, 20.0 * float(k + 1), 300.0)
+			if sim.add_bolt(at, Vector3(0.0, 0.0, 400.0), Factions.RAIDERS, 0, main.combatant.cannon.weapon, SimClock.now()) != 0:
+				rows_expected += 1
 	var at_rebase: Array[Dictionary] = []
 	var snapshot_us: PackedInt64Array = PackedInt64Array([0])  # this handler's own time, which the rebase cost counts
 	main.world.rebased.connect(func(_offset: Vector3) -> void:
@@ -148,12 +167,15 @@ func test_rebase_900_km_out_comes_back_on_the_next_tick_with_every_universe_posi
 	var change: Dictionary = _largest_change(after_command, back["snapshot"])
 	var rounding: Dictionary = _largest_change(before_command, after_command)
 	var bolts: int = 0
+	var rows: int = 0
 	for id: int in after_command:
 		bolts += 1 if after_command[id]["name"] == "bolt" else 0
-	gut.p("rebase -900000 0 0: %d ships, props and bolts (%d bolts); the automatic rebase back moved them by at most %.6f mm and %.6f mm/s; the console's own shift to 900 km rounded them by up to %.1f mm (float32 at 900 km); rebase cost %d us (without this test's snapshot in its handler)" % [
-			change["count"], bolts, float(change["du"]) * 1000.0, float(change["dv"]) * 1000.0, float(rounding["du"]) * 1000.0,
+		rows += 1 if after_command[id]["name"] == "bolt row" else 0
+	gut.p("rebase -900000 0 0: %d ships, props and bolts (%d bolt nodes, %d bolt rows); the automatic rebase back moved them by at most %.6f mm and %.6f mm/s; the console's own shift to 900 km rounded them by up to %.1f mm (float32 at 900 km); rebase cost %d us (without this test's snapshot in its handler)" % [
+			change["count"], bolts, rows, float(change["du"]) * 1000.0, float(change["dv"]) * 1000.0, float(rounding["du"]) * 1000.0,
 			main.world.last_rebase_us - snapshot_us[0]])
 	assert_gt(bolts, 0, "bolts in flight")
+	assert_eq(rows, rows_expected, "the core's owned bolt rows are in the snapshot (M4-T35)")
 	assert_eq(int(change["count"]), after_command.size(), "the same things before and after")
 	assert_gt(int(change["count"]), 10, "the player, three wingmen, two raiders, five buoys and the bolts")
 	assert_lt(float(change["du"]), 1e-3, "every universe position kept to 1 mm")

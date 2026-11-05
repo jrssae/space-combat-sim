@@ -273,9 +273,30 @@ func test_the_native_selection_check_clears_as_the_controllers_did() -> void:
 # --- the batch owns its ships' ticks ------------------------------------------------------------------------------------
 
 
+## Reads a row's position at `priority`, each tick (a probe for the late systems' view of the rows).
+class RowProbe extends Node:
+	var sim: SimCore
+	var body: Node3D
+	var row_position: Vector3 = Vector3.INF
+	var body_position: Vector3 = Vector3.INF
+
+	func _init(p_sim: SimCore, p_body: Node3D, priority: int) -> void:
+		sim = p_sim
+		body = p_body
+		process_physics_priority = priority
+
+	func _physics_process(_delta: float) -> void:
+		var hulls: Array = sim.core.hull_columns()
+		var i: int = (hulls[0] as PackedInt64Array).find(body.get_instance_id())
+		row_position = (hulls[3] as PackedVector3Array)[i] if i >= 0 else Vector3.INF
+		body_position = body.global_position
+
+
 func test_a_drifting_buoy_is_read_where_this_ticks_move_put_it() -> void:
-	# Fix round 1: a script-moved target (a nav buoy's drift) moves before the core's first sync, so the rows, the native
-	# selection check and the hit sweep see this tick's place, as the tree reads at 0 and later did.
+	# Fix rounds 1 and 2: a script-moved target (a nav buoy's drift at the default priority, after the core's first sync)
+	# touches its row, which the core reads again before the native selection check (100) and the hit sweep (200), so
+	# they see this tick's place as the tree reads did. The buoy keeps the default priority: the World's rebase at 0
+	# runs before every prop (test_rebase_in_play).
 	if _skipped():
 		return
 	var parts: Array = _space()
@@ -284,16 +305,19 @@ func test_a_drifting_buoy_is_read_where_this_ticks_move_put_it() -> void:
 	var buoy: NavBuoy = NavBuoy.create("BUOY", Vector3(600.0, 0.0, 0.0))
 	world.spawn(buoy, world.to_universe(Vector3(0.0, 0.0, -500.0)))
 	var sim: SimCore = SimCore.attach(world)
+	var resolver := HitResolver.new()  # the resolvers' sync at 200 reads the touched rows again
+	resolver.name = "HitResolver"
+	space.add_child(resolver)
+	var at_check := RowProbe.new(sim, buoy, TargetingController.LATE_PRIORITY + 1)
+	var at_sweep := RowProbe.new(sim, buoy, HitResolver.LATE_PRIORITY + 1)
+	space.add_child(at_check)
+	space.add_child(at_sweep)
 	for i: int in 3:
 		await get_tree().physics_frame
-	assert_lt(buoy.process_physics_priority, SimCore.PRIORITY, "the buoy moves before the core's first sync")
-	var hulls: Array = sim.core.hull_columns()
-	var ids: PackedInt64Array = hulls[0]
-	var positions: PackedVector3Array = hulls[3]
-	var i: int = ids.find(buoy.get_instance_id())
-	assert_gt(i, -1, "the buoy's hull is a row")
-	if i >= 0:
-		assert_eq(positions[i], buoy.global_position, "the row holds the place this tick's drift put it, bit for bit")
+	assert_eq(buoy.process_physics_priority, 0, "the buoy moves at the default priority, after the World's rebase")
+	assert_ne(at_check.row_position, Vector3.INF, "the buoy's hull is a row")
+	assert_eq(at_check.row_position, at_check.body_position, "after the selection check: the row is where this tick's drift put the buoy, bit for bit")
+	assert_eq(at_sweep.row_position, at_sweep.body_position, "after the hit sweep: the same")
 	space.queue_free()
 	await get_tree().physics_frame
 
