@@ -7,13 +7,15 @@ extends Node
 ## every LOD switcher with the camera and the dot distance read once. It also keeps the finished hit flashes for the next hits
 ## (hidden children of this node), so a hit no longer builds and frees nodes.
 ##
-## One per scene tree, made on first use (`of`) under the root, so tests and scenes without `Main` keep working. It runs before
-## the default priority, as the per-node callbacks it replaces ran before the nodes that read what they set. A node takes part
+## One per game: the autoload `FramePassesNode`, so it runs from the first frame in every scene, tests and scenes without `Main`
+## included (`of` finds it; without the autoload it is made under the root on first use). It runs before the default priority, as
+## the per-node callbacks it replaces ran before the nodes that read what they set. A node takes part
 ## only while it could process (`can_process()`), as its own `_process` did, so a parked ship or a paused game freezes.
 ##
 ## Console (§6.4): provider `frame` (each pass's cost in the last frame and what it walks).
 
-const NODE_NAME: StringName = &"FramePasses"
+## The autoload's name (project.godot): a class name cannot also name an autoload.
+const NODE_NAME: StringName = &"FramePassesNode"
 ## Before the default priority (0).
 const PRIORITY: int = -10
 
@@ -28,7 +30,12 @@ var _switchers: Array[LodSwitcher] = []
 var _cost_us: Dictionary[StringName, int] = {&"plumes": 0, &"flashes": 0, &"impacts": 0, &"lod": 0}
 
 
-## The tree's passes, made under its root on first use; null outside a tree.
+## The game's passes when they exist, else null (never makes them).
+static func current() -> FramePasses:
+	return _instance if _instance != null and is_instance_valid(_instance) else null
+
+
+## The game's passes (the autoload), or made under the root on first use without it; null outside a tree.
 static func of(node: Node) -> FramePasses:
 	if _instance != null and is_instance_valid(_instance):
 		return _instance  # in the tree, or about to be
@@ -45,6 +52,7 @@ static func of(node: Node) -> FramePasses:
 
 func _init() -> void:
 	name = NODE_NAME
+	_instance = self
 	process_priority = PRIORITY
 	process_mode = Node.PROCESS_MODE_ALWAYS  # each node's own `can_process()` decides, as its `_process` did
 

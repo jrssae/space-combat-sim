@@ -21,6 +21,7 @@ Settings="*res://src/autoload/settings.gd"
 SimClock="*res://src/autoload/sim_clock.gd"
 DebugConsole="*res://src/autoload/debug_console.gd"
 ControlProfiles="*res://src/autoload/control_profiles.gd"
+FramePassesNode="*res://src/rendering/frame_passes.gd"
 
 [debug]
 

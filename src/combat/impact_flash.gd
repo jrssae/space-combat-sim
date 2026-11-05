@@ -93,8 +93,7 @@ func _in_pool() -> bool:
 
 
 static func _from_pool() -> ImpactFlash:
-	var passes: FramePasses = FramePasses._instance if FramePasses._instance != null and is_instance_valid(FramePasses._instance) \
-			else null
+	var passes: FramePasses = FramePasses.current()
 	return passes.take_impact() if passes != null else null
 
 

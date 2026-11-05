@@ -8,9 +8,9 @@ extends MultiMeshInstance3D
 ##
 ## A child of `World` (`attach`) at the World's origin, its dots in World-local metres. Each frame it writes each shown ship's
 ## drawn pose; a ship's paint and size are read once, when it turns into a dot, and the dots' identity rotations once per slot,
-## so a frame writes a dot's place, paint and size only, and ships turning together cost one refresh (M4-T36). It is shiftable,
-## so a rebase moves the written dots with everything else at once (no frame draws one at its old place); it then goes back to the
-## origin and moves the dots instead, so its own offset never grows. A parked or freed ship draws none. Visual only.
+## so a frame writes a dot's place, paint and size only, and ships turning together cost one refresh, at the frame's end (M4-T36).
+## It is shiftable, so a rebase moves the written dots with everything else at once (no frame draws one at its old place); it then
+## goes back to the origin and moves the dots instead, so its own offset never grows. A parked or freed ship draws none. Visual only.
 
 const NODE_NAME: String = "FarDots"
 const SHADER: Shader = preload("res://assets/shaders/far_ship_dot.gdshader")
@@ -33,6 +33,8 @@ var _buffer: PackedFloat32Array = PackedFloat32Array()
 var _shown: int = 0
 ## Refreshes so far (tests: ships that turn together cost one).
 var refresh_count: int = 0
+# A ship turned this frame: one refresh at the frame's end draws it (the frame's own may have run, or this node may be new).
+var _refresh_queued: bool = false
 
 
 ## The world's dots, or null before any ship went far.
@@ -91,22 +93,25 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	refresh()
+	if not _refresh_queued:
+		refresh()
 
 
-## Draws `ship` as a dot from the next refresh on (this frame's: the dots refresh after the LOD pass).
+## Draws `ship` as a dot from this frame on (one refresh at the frame's end however many ships turn).
 func add(ship: Ship) -> void:
 	if ship != null and not _ships.has(ship):
 		_ships.append(ship)
 		_paints.append(_paint_of(ship))
 		_radii.append(ship.bounding_radius())
+		_queue_refresh()
 
 
-## Stops drawing `ship` as a dot from the next refresh on.
+## Stops drawing `ship` as a dot from this frame on.
 func remove(ship: Ship) -> void:
 	var at: int = _ships.find(ship)
 	if at >= 0:
 		_forget(at)
+		_queue_refresh()
 
 
 ## Dots drawn since the last refresh.
@@ -172,6 +177,17 @@ func refresh() -> void:
 		n += 1
 	_shown = n
 	_upload()
+
+
+func _queue_refresh() -> void:
+	if not _refresh_queued:
+		_refresh_queued = true
+		_refresh_now.call_deferred()
+
+
+func _refresh_now() -> void:
+	_refresh_queued = false
+	refresh()
 
 
 func _forget(at: int) -> void:
