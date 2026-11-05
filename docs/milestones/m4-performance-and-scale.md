@@ -1362,6 +1362,7 @@ done and T20 proceeds.
 - **Done when:** the window at 500 shows every ship and the renderer's CPU time at 500 is under 3 ms or the entry says why not.
 - **Expected:** 70 %.
 - **Q54 (maintainer away):** every test of this task passes on both T24's threaded step and the single-thread step, so undoing T24 never strands it; its look and feel checks go into the "M4 return checklist" in `docs/playtest.md`.
+- **Option to measure (maintainer, 2026-11-05):** for the 1 000 stretch, GPU-driven culling and drawing of the far dots and proxies (a compute pass that culls and writes the instance buffer) instead of CPU-side multimesh updates; take it only if the CPU update of the far proxies measures above about 0.5 ms a frame at 1 000.
 - **Architecture:** §17.14.
 - **Without splats (2026-11-04, Q29):** a dot is wrong for a far capital (a 1 200 m carrier at 10 km is about 130 px tall at 1 080
   lines), so tier capitals draw as instances of their class's textured mesh in one `MultiMesh` per class (`far_dots.gd` gains the
@@ -1986,6 +1987,7 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   render objects a frame); the fullscreen FPS table at 300 and 500.
 - **Expected gain:** 5 to 8 ms a tick at 500 and 3 to 5 at 300 for the bolts (60 %, 1.9 ms of it measured), 1 to 2 ms more for the
   Jolt read and event columns, up to 3 to 4 ms for the ram read at 500 (some of it taken by T34 already).
+- **Option to measure (maintainer, 2026-11-05):** once bolts are rows, stepping them on the GPU with a compute shader (positions written straight into the multimesh's buffer) is an alternative to the CPU kernel. Take it only if the measured bolt step on the CPU kernel still costs more than about 0.5 ms at `battle` 500; the hit sweep stays on the CPU rows either way, so a GPU step needs a readback or a mirrored CPU step, which the entry must cost.
 - **Architecture:** §17.13 (paragraphs under T35).
 
 ##### M4-T36 The frame's per-ship work in one pass per subsystem (Q56, Q58)
@@ -2007,6 +2009,7 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
 - **Measures:** the fullscreen check's process time and FPS table (Q48) at `typical`, `battle` 300 and 500 before and after each step.
 - **Expected gain:** 3 to 5 ms a frame at 500 and 2 to 3 at 300 (55 %); about 10 minutes off focused runs that touch the slow files.
 - **Q54:** the look and sound changes go on the return checklist.
+- **Check (2026-11-05):** `src/rendering/motion_blur.glsl` still says the sky, the stars "and anything without a depth proxy (depth 0)" blur by the camera's turn; T31 removed the hull depth proxy and the hulls now write real depth. Confirm the blur still treats hulls by the velocity buffer and the sky by the camera's turn (a screenshot pair for the return checklist), and fix the logic if it still depends on the proxy.
 - **Architecture:** §17.13 or a new §17 subsection for the frame passes.
 
 ##### M4-T37 M4's cleanup: the native library required (Q57)
@@ -2022,6 +2025,7 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   reference; the full focused set of every M4 task green on the native-only build.
 - **Measures:** lines and settings removed; the tick at `typical`, `battle` 300 and 500 unchanged or better.
 - **Expected gain:** 1 500 to 2 500 lines and eight settings removed; parity surfaces halved.
+- **Doc drift (2026-11-05):** fix `motion_blur.glsl`'s splat-era comment about the depth proxy (after T36's check).
 - **Architecture:** §17.13, §5 and §15.3 where they still describe optional native code.
 
 #### Architecture subsections this plan assigns
