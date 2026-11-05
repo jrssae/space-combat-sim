@@ -17,7 +17,7 @@ use crate::brain_maths::{
 use crate::kernels::contact::{self, Grid, Query, Work};
 use crate::rows::{Bolts, Rows};
 use crate::sim_core::ScsSimCore;
-use crate::threads::{self, Threads};
+use crate::threads::{self, Pass, Threads};
 
 // `test_brain_parity`'s per-step layouts for a manoeuvre run.
 const STEP_IN: usize = 23;
@@ -714,9 +714,14 @@ impl ScsBrains {
             static_k: self.static_k,
             fault: self.fault,
         };
-        threads.run(&mut self.items[..n], &self.workers, |item, worker| {
-            think_item(&shared, item, worker);
-        });
+        threads.run(
+            Pass::Brains,
+            &mut self.items[..n],
+            &self.workers,
+            |item, worker| {
+                think_item(&shared, item, worker);
+            },
+        );
         drop(guard);
         self.batch_out.clear();
         self.batch_out.resize(n * BATCH_OUT, 0.0);

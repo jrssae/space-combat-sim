@@ -8,9 +8,16 @@ use rayon::prelude::*;
 
 /// The most threads a pass may use.
 pub const MAX_THREADS: usize = 64;
-/// Below this many items a pass stays on the calling thread: waking the workers costs more than they save (the
-/// numbers that chose it are in the milestone's Cycle log, M4-T18).
-pub const DEFAULT_MIN_ITEMS: usize = 16;
+/// The passes, each with its own threshold below which it stays on the calling thread.
+#[derive(Clone, Copy)]
+pub enum Pass {
+    Brains = 0,
+    Flight = 1,
+}
+/// The thresholds by pass: below them waking the workers costs more than they save, in the mean or in the slow ticks
+/// (the numbers that chose them are in the milestone's Cycle log, M4-T18). The brains gain from about 90 thinks a tick
+/// and cost the 1 % slowest ticks at 20 to 35; the flight kernel is too short to gain at any measured count.
+pub const DEFAULT_MIN_ITEMS: [usize; 2] = [48, 1024];
 // Chunks per thread in a parallel pass: enough for the idle workers to steal from the busy ones.
 const CHUNKS_PER_THREAD: usize = 4;
 
@@ -18,7 +25,7 @@ const CHUNKS_PER_THREAD: usize = 4;
 pub struct Threads {
     count: usize,
     pool: Option<rayon::ThreadPool>,
-    min_items: usize,
+    min_items: [usize; 2],
     parallel_passes: AtomicI64,
 }
 
@@ -58,14 +65,14 @@ impl Threads {
         self.count
     }
 
-    /// The fewest items a pass runs in parallel with.
-    pub fn min_items(&self) -> usize {
-        self.min_items
+    /// The fewest items `pass` runs in parallel with.
+    pub fn min_items(&self, pass: Pass) -> usize {
+        self.min_items[pass as usize]
     }
 
-    /// Sets the fewest items a pass runs in parallel with (the benches choose it; at least 2).
-    pub fn set_min_items(&mut self, min_items: usize) {
-        self.min_items = min_items.max(2);
+    /// Sets the fewest items `pass` runs in parallel with (the benches and the tests choose it; at least 2).
+    pub fn set_min_items(&mut self, pass: Pass, min_items: usize) {
+        self.min_items[pass as usize] = min_items.max(2);
     }
 
     /// Passes that ran in parallel since the core was made.
@@ -76,7 +83,7 @@ impl Threads {
     /// Calls `each` on every item, with the scratch of the worker thread that runs it. With one thread, or fewer items
     /// than the threshold, every item runs on the calling thread with the first scratch. `each` must read only shared,
     /// frozen data and write only its item and the scratch, clearing what it reads of the scratch first.
-    pub fn run<T, W, F>(&self, items: &mut [T], workers: &[Mutex<W>], each: F)
+    pub fn run<T, W, F>(&self, pass: Pass, items: &mut [T], workers: &[Mutex<W>], each: F)
     where
         T: Send,
         W: Send,
@@ -88,7 +95,7 @@ impl Threads {
         let pool = self
             .pool
             .as_ref()
-            .filter(|_| items.len() >= self.min_items && workers.len() >= self.count);
+            .filter(|_| items.len() >= self.min_items(pass) && workers.len() >= self.count);
         let Some(pool) = pool else {
             let mut worker = lock(&workers[0]);
             for item in items.iter_mut() {

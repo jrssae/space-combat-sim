@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use godot::classes::{Node, Node3D, Object, RigidBody3D};
 use godot::prelude::*;
 
-use crate::threads::{self, Threads};
+use crate::threads::{self, Pass, Threads};
 
 pub use crate::rows::{Bolts, FLAG_HULL, FLAG_HULL_ACTIVE, FLAG_LATE, FLAG_RIGID, Rows};
 
@@ -638,15 +638,28 @@ impl ScsSimCore {
         self.threads.parallel_passes()
     }
 
-    /// The fewest items a pass runs in parallel with, and setting it (the benches that chose the default).
+    /// The fewest thinks the brains' pass runs in parallel with, and setting it (the benches that chose the default).
     #[func]
     fn parallel_min(&self) -> i64 {
-        self.threads.min_items() as i64
+        self.threads.min_items(Pass::Brains) as i64
     }
 
     #[func]
     fn set_parallel_min(&mut self, items: i64) {
-        self.threads.set_min_items(items.max(0) as usize);
+        self.threads
+            .set_min_items(Pass::Brains, items.max(0) as usize);
+    }
+
+    /// The same for the flight step's pass.
+    #[func]
+    fn flight_parallel_min(&self) -> i64 {
+        self.threads.min_items(Pass::Flight) as i64
+    }
+
+    #[func]
+    fn set_flight_parallel_min(&mut self, items: i64) {
+        self.threads
+            .set_min_items(Pass::Flight, items.max(0) as usize);
     }
 
     /// A 64-bit digest of every row's state and every bolt (positions, velocities, bases, spins, flags, hulls, the

@@ -379,11 +379,7 @@ func _perceive_lite(scan: ContactScan, host: Object) -> Perception:
 	if _lite == null:
 		_lite = Perception.new()
 	var p: Perception = _lite
-	p.now_s = SimClock.now()
-	p.position = ship.global_position
-	p.basis = ship.global_basis
-	p.velocity = ship.linear_velocity
-	p.angular_velocity = ship.angular_velocity
+	p.now_s = SimClock.now()  # the pose and motion come from the ship's row, so they are not read here (M4-T18)
 	p.self_id = combatant.targetable.get_instance_id() if combatant.targetable != null else 0
 	p.hull_fraction = combatant.damageable.hull.fraction() if combatant.damageable != null else 1.0
 	p.faction = combatant.faction

@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use crate::kernels::flight::{self, Applied, Body, Cmd, Spec};
 use crate::rows::FLAG_RIGID;
 use crate::sim_core::ScsSimCore;
-use crate::threads::{self, Threads};
+use crate::threads::{self, Pass, Threads};
 
 /// Per ship per tick: `main_right, main_left, retro_right, retro_left` (the nozzle groups' order).
 pub const CMD_SCALARS: usize = 4;
@@ -408,30 +408,35 @@ impl ScsFlightStep {
         let threads = core.map_or(&self.serial, |(c, _)| c.worker_threads());
         threads::ensure_workers(&mut self.workers, threads);
         let registered = &self.slots;
-        threads.run(&mut self.items[..n], &self.workers, |item, _| {
-            if !item.fly {
-                return;
-            }
-            let (Some(slot), Some(cmd)) = (registered[item.slot].as_ref(), item.cmd.as_ref())
-            else {
-                return;
-            };
-            let mut pod_yaw = item.pod_yaw;
-            item.applied = Some(flight::tick(
-                &slot.body,
-                &mut pod_yaw,
-                cmd,
-                &item.basis,
-                item.v_w,
-                item.w_w,
-                item.env_w,
-                item.assist_on,
-                dt,
-                item.has_propellant,
-                &mut item.forces,
-            ));
-            item.pod_yaw = pod_yaw;
-        });
+        threads.run(
+            Pass::Flight,
+            &mut self.items[..n],
+            &self.workers,
+            |item, _| {
+                if !item.fly {
+                    return;
+                }
+                let (Some(slot), Some(cmd)) = (registered[item.slot].as_ref(), item.cmd.as_ref())
+                else {
+                    return;
+                };
+                let mut pod_yaw = item.pod_yaw;
+                item.applied = Some(flight::tick(
+                    &slot.body,
+                    &mut pod_yaw,
+                    cmd,
+                    &item.basis,
+                    item.v_w,
+                    item.w_w,
+                    item.env_w,
+                    item.assist_on,
+                    dt,
+                    item.has_propellant,
+                    &mut item.forces,
+                ));
+                item.pod_yaw = pod_yaw;
+            },
+        );
         // On the main thread, in row order: the assist state back, and the one engine write of the tick outside the sync
         // points, the forces, in `Ship._physics_process`'s order.
         for item in &self.items[..n] {

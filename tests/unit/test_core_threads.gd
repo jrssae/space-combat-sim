@@ -143,6 +143,9 @@ func _battle(threads: int, ticks: int, fault: bool) -> Dictionary:
 		c.driver.brain = made["brain"] as PilotBrain
 	var sim: SimCore = SimCore.attach(world)
 	assert_eq(int(sim.core.threads()), threads, "%d threads asked for" % threads)
+	# Every pass in parallel whatever its size, so the comparison covers the brains and the flight step.
+	sim.core.set_parallel_min(2)
+	sim.core.set_flight_parallel_min(2)
 	var digests := PackedInt64Array()
 	var native_thinks: int = 0
 	var fallbacks: int = 0
