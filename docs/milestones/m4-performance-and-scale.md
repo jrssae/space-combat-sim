@@ -85,6 +85,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q51 | Checkpoint 3, wing-level AI (T32) | **No wing-level AI in M4.** "The wing picks targets and tactics" (T32's option B) goes on the roadmap as a feel feature the maintainer judges in the dogfight scenario (H); T32's L2 (perception per cluster, statics cached) is folded into T22's tier perception |
 | Q52 | Checkpoint 3, Q39's second bar | **The bar is 60 FPS at the screen with vsync on, judged by the maintainer (H)**, not the vsync-off 1 % low the fullscreen check measures (which stays recorded as data) |
 | Q53 | T24, the simulation on a worker thread (2026-11-05) | **A firm task, no longer conditional**: the AI and the simulation step leave the main thread so the frame rate and the player's input never wait on them. It runs right after T33 and T34 (once the per-ship GDScript is out of the AI path) and before T21, so the tier is built once on the threaded tick. The maintainer accepts the one-tick (16.7 ms) delay on AI commands and new seeded reference outcomes; checkpoint 4 becomes a playtest of that build (H) |
+| Q54 | The maintainer away for several days (2026-11-05) | **Proceed without checkpoint 4's playtest, with safeguards:** T24 keeps today's single-thread step selectable by a setting and its tests run on both paths, so reverting is one switch; T21, T22 and T23 must pass their tests on both the threaded and the single-thread step; every look and feel item not yet seen by the maintainer goes into one checklist in `docs/playtest.md` ("M4 return checklist") for one session on return; `m4` does not merge into `main` without the maintainer. Work continues through T25 |
 
 ## The budget ("good game performance", Q5)
 
@@ -1312,6 +1313,7 @@ done and T20 proceeds.
   shows it).
 - **Expected gain:** at 500 the tick falls to what about 150 near fighters and 20 near capitals cost plus 0.3 us a tier fighter
   and 2 us a tier capital (70 %).
+- **Q54 (maintainer away):** every test of this task passes on both T24's threaded step and the single-thread step, so undoing T24 never strands it; its look and feel checks go into the "M4 return checklist" in `docs/playtest.md`.
 - **Architecture:** §17.14 (a new subsection head, "The low-attention tier", that T22 to T24 add to).
 - **Checkpoint 2 (Q47):** after this task, re-measure the physics stage at `battle` 500 as T19 did (near set's sync, node propagation, Jolt's step); if the near set still costs more than about 1 ms a tick, the controller brings T19's ships-out-of-Jolt proposal back to the maintainer.
 
@@ -1332,6 +1334,7 @@ done and T20 proceeds.
 - **Measures:** `battle 500` (the tier's cost per row, `fighters_far`, the far capitals).
 - **Done when:** the outcome tests pass and the tier's cost is at or under 0.3 us a fighter and 2 us a capital.
 - **Expected:** the tier's fairness (65 %); its cost (75 %).
+- **Q54 (maintainer away):** every test of this task passes on both T24's threaded step and the single-thread step, so undoing T24 never strands it; its look and feel checks go into the "M4 return checklist" in `docs/playtest.md`.
 - **Architecture:** §17.14.
 
 ##### M4-T23 Far proxies for tier rows
@@ -1348,6 +1351,7 @@ done and T20 proceeds.
 - **Measures:** the fullscreen check at battle 500 (FPS, frame time, GPU time, draw calls, render CPU, visible splats).
 - **Done when:** the window at 500 shows every ship and the renderer's CPU time at 500 is under 3 ms or the entry says why not.
 - **Expected:** 70 %.
+- **Q54 (maintainer away):** every test of this task passes on both T24's threaded step and the single-thread step, so undoing T24 never strands it; its look and feel checks go into the "M4 return checklist" in `docs/playtest.md`.
 - **Architecture:** §17.14.
 - **Without splats (2026-11-04, Q29):** a dot is wrong for a far capital (a 1 200 m carrier at 10 km is about 130 px tall at 1 080
   lines), so tier capitals draw as instances of their class's textured mesh in one `MultiMesh` per class (`far_dots.gd` gains the
@@ -1376,6 +1380,7 @@ done and T20 proceeds.
   hand-off, the selection, the lights) stays on the main thread and reads the snapshot. The tier (T21 to T23) is built after this
   task on the threaded tick, so its rows join the worker's pass from the start. Measures add Q48's table (average and 1 % low
   FPS at `battle` 50 to 500 and `typical`) before and after; checkpoint 4 is the maintainer playing the build (H).
+- **Q54 (maintainer away):** keep the single-thread step selectable by a setting with every test run on both paths, so the threaded step can be switched off in one move; add the input-feel and one-tick-delay checks to the "M4 return checklist" in `docs/playtest.md`.
 - **Architecture:** §17.13 and §15.3 (the tick order; a design-contract change, checkpoint 4).
 - **Without splats (2026-11-04, Q29):** `splat_pose_sync.gd` is removed by T31; the interpolation from snapshots for tier rows'
   proxies goes in `far_dots.gd`.
