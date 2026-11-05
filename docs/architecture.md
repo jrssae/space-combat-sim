@@ -2461,6 +2461,63 @@ native/src/pilot_kernels.rs              ScsPilotKernels: binds the core's rows 
   called). No measurable change in the think stage (Cycle log, M4-T16): the per-ship plumbing costs about what the
   kernels save, and the brains and the scan queries are what a think pays for.
 
+**The weapon kernels (T20).**
+
+```
+native/src/weapon_kernels.rs      the kernels: a gun's pick, aim and gate, an interceptor's pick, a capital's strike target,
+                                  a missile's guidance, a mine's trigger and blast; plain data in and out, no engine type
+native/src/weapon_rows.rs         ScsWeaponRows: the turrets, strike state and mines as rows with no node, stepped over the
+                                  core's rows once a tick (`step`, `mine_step`, `blast`) and per missile (`steer_missile`)
+src/perf/native_weapons.gd        NativeWeapons: binds the stand-ins to the rows, keeps the hostility table, hands state back
+src/perf/standins/                the director, turret, missile and mine stand-ins: the native path beside the reference
+```
+
+- **What moved.** Every per-tick loop of the battle's non-fighter weapons: each gun's pick (every sixth tick, staggered),
+  aim step and fire gate, each interceptor's pick among the projectiles in reach, each capital's strike target and the
+  beams and missile launches that use it, the mines' trigger checks and a blast's hulls, and a missile's proportional
+  navigation. The director's two gathers (every flying hull and every projectile, 2.5 ms at `battle` 500) go too: the
+  kernels read the core's rows and bolts. The GDScript stand-ins stay the reference behind `perf_native_weapons`
+  (default on), and either path carries on from the other's state: switching hands the turrets' axes, targets, aim errors,
+  gate times and counters, the strike targets and the launch turn over.
+- **Who does what.** One `ScsWeaponRows.step` a tick decides, in the GDScript's order, which guns fire (with each bolt's
+  start and velocity), which projectiles the interceptors shoot down, which beams fire at what, and which capitals launch
+  at whom. The director then does it: it spawns the bolts, beams and missiles with the stand-ins' own code, spends the
+  projectiles, and steps the capitals' engines and the carriers' launches as before. `MineStandin.step_native` asks
+  `mine_step` for the mines set off and `blast` for each one's hulls, and still lays, retires and hurts. A missile's
+  steering hook asks `steer_missile` for its velocity from its target's row. Every engine write stays in GDScript.
+- **When the rows step.** Only when the core synced this physics frame and no body was touched since (a body hidden,
+  shown or destroyed after the sync has a stale row): otherwise the director runs the GDScript for that tick. A missile
+  whose target was touched, or with no core to read, steers in GDScript. In the game's tick order the director runs at -5,
+  after the sync and before anything moves or is touched, so the rows step every tick of a battle.
+- **Frozen rows.** The kernels keep no index into the rows between calls and cache nothing across a sync: each call looks
+  its capitals and targets up by body id in the rows as they are, and the mines' grid is over their offsets from the belt's
+  node, which no sync or rebase changes. A resync or a rebase between the sync and a call therefore leaves the answers
+  equal to the GDScript's (the rows move with the nodes, `test_turret_kernel` rebases between the two). `rows_version` is
+  not needed for that; a touched body is what makes a row stale, and the director checks for it.
+- **Bit for bit.** The kernels repeat the stand-ins' arithmetic: `InterceptMath.solve` in 64 bits, the limited turn as the
+  engine's `angle_to` (`atan2f`) and axis-angle `rotated`, the gate as `PulseCannonGate.update` with one muzzle, a turret's
+  place as the engine composes a child's transform (`basis.rows[i].dot(offset) + origin`), proportional navigation with
+  a scalar rounded to 32 bits before it scales a vector, and the same comparisons (`<` and `<=`) and tie-breaks. Hostility
+  comes in as a table by the core's faction indices, built in GDScript from `Factions` when the table or the core's
+  factions change. What differs: a capital's strike target and a blast walk the hulls in the core's `damageable` order
+  where the GDScript walks the pool's, the capitals and the player, which only matters for two hulls at exactly the same
+  distance; a target that leaves the tree (not hidden: removed) between the sync and the missile's step keeps its row for
+  that tick.
+- **Thread-ready (for T18).** Each kernel is a pure function: `retarget`, `aim_gun`, `gate`, `intercept_candidates`,
+  `strike_target`, `steer`, `mine_hits` and `blast` read the frozen rows (or a turret's, mine's or missile's own inputs) and
+  return a value or fill the output their caller passes. No statics, no interior mutability, no caches written during a
+  pass. Two steps are sequential by nature and stay in the shell: the interceptors' resolve (each takes the best candidate
+  not yet shot down this tick, `intercept_pick` over a per-tick spent mask) and the launches' turn round the capitals; T18
+  runs the per-row parts in parallel and those two walks after. The shell's scratch (fighter rows, candidates, the spent
+  mask, the mines' hits) is per shell.
+- **Tests**: `test_turret_kernel` (the aim maths on seeded inputs, a seeded miniature battle logged tick by tick on both
+  paths: picks, axes, aim errors, gate times, bolts, kills, beams and launches byte for byte, also across a rebase between
+  the sync and the step and across native, GDScript, native in one run), `test_missile_kernel` (the guidance on seeded
+  inputs, seeded flights at a weaving target side by side, a target hidden after the sync, no core), `test_mine_kernel`
+  (hulls within a millimetre of a trigger's edge, a belt that goes off and is laid again on the same ticks),
+  `test_weapon_rows_battle` (a seeded 30 s `battle` at 100: hits within 10 %), and `test_sim_core`'s engine-free check
+  of `weapon_kernels.rs`.
+
 ### 17.16 Rocks and mines as static rows (T29)
 
 ```
