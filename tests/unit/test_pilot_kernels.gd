@@ -280,6 +280,28 @@ func test_dead_centre_ties_break_the_same_way_natively_for_every_seed() -> void:
 	assert_gt(sides.size(), 300, "the seeds spread the ties' sides (%d different)" % sides.size())
 
 
+func test_the_tie_angle_is_the_engines_deg_to_rad_bit_for_bit() -> void:
+	if _skipped():
+		return
+	var kernels: Object = _kernels()
+	if kernels == null:
+		return
+	assert_true(kernels.has_method(&"tie_angle"), "the kernels show the tie's angle (a double) for this check")
+	if not kernels.has_method(&"tie_angle"):
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1604
+	var differences: PackedStringArray = []
+	for case: int in 5000:
+		var tie_hash: int = hash(rng.randi() - (1 << 31)) if case > 2 else [0, 65535, 32768][case]
+		var unit: float = float(posmod(tie_hash, 65536)) / 65535.0
+		var reference: float = deg_to_rad(AvoidanceMath.TIE_SPREAD_DEG) * (2.0 * unit - 1.0)
+		var native: float = kernels.tie_angle(tie_hash)
+		if var_to_bytes(native) != var_to_bytes(reference):
+			differences.append("hash %d: native %s, GDScript %s" % [tie_hash, native, reference])
+	assert_eq(differences.size(), 0, "the native tie angle is the engine's double: %s" % differences.slice(0, 4))
+
+
 # --- the fire lane -----------------------------------------------------------------------------------------------------
 
 
