@@ -43,6 +43,15 @@ needed` (a conditional task whose trigger never arose). A new milestone file sta
 Update the row in the same commit as the task's work, and when you pick the next task, trust the code and the git log
 over the column (planning commits, `M3-T10: plan: ...`, are not the work) and fix the column if they disagree.
 
+The table must always match reality:
+- A new task goes into the table (with its section) in the same commit that plans it, even if it is added mid-milestone.
+- Set `in progress` when the task starts (its first commit, or a planning commit when an agent is dispatched).
+- Set `done` only when the work is merged into the milestone branch, its post-merge tests pass and it is pushed. A row
+  never says `done` while a review finding or fix round is still open; it stays `in progress` until then.
+- A task that is dropped or replaced becomes `not needed` with the reason (for example "superseded by T38"), never deleted.
+- The current table lives on the milestone branch (`m4` for M4). `main` and other milestone branches carry older copies
+  until the milestone merges, so read and edit the one on the milestone branch.
+
 Why: before the column existed, status was only implied by "Done" bullets, as-built notes and commit subjects, so
 neither the maintainer nor an agent could see at a glance which tasks were finished, and two M3 tasks that had only
 been planned were taken for done.
