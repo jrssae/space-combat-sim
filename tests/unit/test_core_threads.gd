@@ -10,7 +10,8 @@ const SHIPS: int = 120
 const SEED: int = 1
 const TICKS: int = 600
 const FAULT_TICKS: int = 120
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_threads"]
+const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_threads",
+		&"perf_native_commands"]
 
 var _saved: Dictionary = {}
 
@@ -200,6 +201,7 @@ func test_the_pool_is_joined_when_the_thread_count_changes() -> void:
 func test_rows_that_moved_before_the_batch_hold_and_count_every_queued_think() -> void:
 	if _skipped():
 		return
+	Settings.set_value(&"perf_native_commands", false)  # T18's path, where the ship holds its command (T33's rows: test_row_commands)
 	var fight: Dictionary = await _small_fight()
 	var batch: BrainBatch = BrainBatch.for_tree(get_tree())
 	var queued: int = _queue_thinks(fight["ships"])

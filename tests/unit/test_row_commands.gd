@@ -139,7 +139,7 @@ func test_a_command_set_from_gdscript_takes_over_from_the_row() -> void:
 	assert_not_null(c, "a ship flies a command from the rows, without the brake")
 	if c == null:
 		return
-	c.driver.brain = null  # nothing replaces what is set below
+	c.driver.set_physics_process(false)  # its pilot stays, but thinks no more: only the command below releases the row
 	var cmd := FlightCommand.new()
 	cmd.brake = true
 	c.apply_commands(cmd, CombatCommand.new())
@@ -342,3 +342,52 @@ func _queue_thinks(ships: Array) -> int:
 		c.driver.step(1.0 / 60.0, true)
 		queued += batch.queued() - before
 	return queued
+
+
+# --- fix round 1 ---------------------------------------------------------------------------------------------------------
+
+
+func test_a_ship_whose_row_the_core_lost_is_handed_its_command_once_and_flies_from_the_row_again() -> void:
+	if _skipped():
+		return
+	Settings.set_value(&"perf_native_commands", true)
+	var fight: Dictionary = await _small_fight()
+	var sim: SimCore = fight["sim"]
+	var lost: Array[Combatant] = []
+	for c: Combatant in fight["ships"]:
+		if c.ship.is_row_commanded():
+			sim.core.release_command(c.ship.get_instance_id())  # as a core made again under the ships would hold nothing
+			lost.append(c)
+	assert_gt(lost.size(), 0, "ships flew from their rows")
+	for i: int in 8:  # every ship thinks at least once at the far rate
+		await get_tree().physics_frame
+	var back: int = 0
+	for c: Combatant in lost:
+		if c.ship.is_row_commanded() and not sim.core.row_command(c.ship.get_instance_id()).is_empty():
+			back += 1
+	assert_eq(back, lost.size(), "every ship is handed its command once and flies from its row again (%d of %d)" % [back, lost.size()])
+	var events: int = 0
+	for i: int in 6:
+		await get_tree().physics_frame
+		events += AiPilotDriver.rows_events()
+	var thinks: int = 0
+	for i: int in 6:
+		await get_tree().physics_frame
+		thinks += AiPilotDriver.thinks_native()
+	assert_lt(events, thinks, "the drivers are no longer handed every think (%d events, %d thinks)" % [events, thinks])
+
+
+func test_a_native_pilot_that_wants_the_nearest_hostile_has_it_selected_as_today() -> void:
+	if _skipped():
+		return
+	Settings.set_value(&"perf_native_commands", true)
+	var fight: Dictionary = await _small_fight()
+	var c: Combatant = fight["ships"][0]
+	c.driver.set_physics_process(false)
+	c.ship.targeting.clear_selection()
+	c.driver._retarget_in_s = 0.0
+	var out := PackedFloat64Array()
+	out.resize(BrainBatch.STRIDE)
+	out[0] = 1.0  # thought; the wanted target's two halves stay 0: TARGET_NEAREST_HOSTILE
+	c.driver.rows_event(BrainBatch.EVENT_SELECT, out, 1)
+	assert_true(c.ship.targeting.system.has_selection(), "the driver selected the nearest hostile, as T18's path's retarget does")
