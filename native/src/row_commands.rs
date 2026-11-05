@@ -11,8 +11,10 @@ use crate::sim_core::ScsSimCore;
 /// and the cannon their commands once), or its trigger changed (the driver tells the cannon).
 pub const EVENT_ENTER: u8 = 1;
 pub const EVENT_FIRE: u8 = 2;
-/// Raised by the batch, not here: the brain wants another target than the ship has selected.
+/// Raised by the batch, not here: the brain wants another target than the ship has selected; and its pilot is read at
+/// once (a rammer or a route follower in control, or the ram's commitment changed: what the game reads every tick).
 pub const EVENT_SELECT: u8 = 4;
+pub const EVENT_SETTLE: u8 = 8;
 /// The flight numbers of a think's output a command keeps: the four levels (main left, main right, retro left, retro
 /// right), strafe x and y, rot x, y and z, and the brake.
 pub const CMD_LEN: usize = 10;
@@ -22,6 +24,7 @@ pub const CMD_LEN: usize = 10;
 pub struct RowCommand {
     pub cmd: [f64; CMD_LEN],
     pub fire: bool,
+    pub ram: bool,
 }
 
 impl RowCommand {
@@ -60,6 +63,13 @@ impl ScsSimCore {
             }
         }
         events
+    }
+
+    /// Notes whether `body_id`'s pilot is committed to a ram (after `write_command`); true when that changed.
+    pub fn note_ram(&mut self, body_id: i64, committed: bool) -> bool {
+        self.row_commands
+            .get_mut(&body_id)
+            .is_some_and(|rc| std::mem::replace(&mut rc.ram, committed) != committed)
     }
 
     /// The command `body_id` flies from its row, if it flies one.

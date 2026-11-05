@@ -15,7 +15,7 @@ use crate::brain_maths::{
     self, Capability, FlightCmd, Manoeuvre, Pcg, Pose, Temperament, deg_to_rad_lerp,
 };
 use crate::kernels::contact::{self, Grid, Query, Work};
-use crate::row_commands::{CMD_LEN, EVENT_SELECT};
+use crate::row_commands::{CMD_LEN, EVENT_SELECT, EVENT_SETTLE};
 use crate::rows::{Bolts, Rows};
 use crate::sim_core::ScsSimCore;
 use crate::threads::{self, Pass, Threads};
@@ -1428,6 +1428,14 @@ impl ScsBrains {
             // The driver follows the brain's target: it clears a selection for none and selects anything else it wants.
             if wanted == 0 || (wanted < 0 && selected > 0) || (wanted > 0 && wanted != selected) {
                 events |= EVENT_SELECT;
+            }
+            // Ram (0) and follow path (7) in control are mirrored at once, as the facade does, and so is a new commitment.
+            let kind = item.out[20] as i64;
+            if c.note_ram(brain.ship.own_body_id, item.out[OUT_RAM] != 0.0)
+                || kind == 0
+                || kind == 7
+            {
+                events |= EVENT_SETTLE;
             }
             if events != 0 {
                 self.events.push(k as i64);

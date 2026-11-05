@@ -77,6 +77,7 @@ static var _held: int = 0
 static var _contacts_max: int = 0
 static var _thinks_native: int = 0
 static var _thinks_fallback: int = 0
+static var _rows_events: int = 0
 # The host and batch of this physics frame (`_frame_host`).
 static var _lookup_frame: int = -1
 static var _frame_host_cached: Object = null
@@ -322,7 +323,8 @@ func _settle_landing() -> void:
 
 ## What a rows batch names this driver for (M4-T33): `events` (`BrainBatch.EVENT_*`) from the think at `base` of the
 ## answer `out`. The ship's first command from its row hands the ship and the cannon their commands, as a think did; a
-## changed trigger reaches the cannon; the first shot ends the hiding; a wanted target is selected.
+## changed trigger reaches the cannon; the first shot ends the hiding; a wanted target is selected; a rammer's or a route
+## follower's pilot is read at once.
 func rows_event(events: int, out: PackedFloat64Array, base: int) -> void:
 	if combatant == null or not is_instance_valid(combatant.ship):
 		return
@@ -340,12 +342,15 @@ func rows_event(events: int, out: PackedFloat64Array, base: int) -> void:
 		combatant.ship.running_lights = true
 	if events & BrainBatch.EVENT_SELECT != 0:
 		_follow_target(AiPilot.native_target_id(out, base))
+	if events & BrainBatch.EVENT_SETTLE != 0 and brain is AiPilot:
+		(brain as AiPilot).settle_native()  # a rammer's or a route's state is read every tick, as the facade mirrors it
 
 
 ## Adds a rows batch's counts to the tick's (M4-T33): thinks near and far, declined thinks (each held, as a far-rate tick
-## is), and the most contacts a think saw.
-static func add_rows_counts(near: int, far: int, declined: int, contacts: int) -> void:
+## is), the most contacts a think saw, and the drivers it handed an event.
+static func add_rows_counts(near: int, far: int, declined: int, contacts: int, events: int) -> void:
 	_roll_counts()
+	_rows_events += events
 	_thinks_near += near
 	_thinks_far += far
 	_thinks_native += near + far
@@ -454,6 +459,17 @@ static func thinks_native() -> int:
 ## row): each held its last command for that tick, as a held think does, so its brain never ran on a stale mirror (M4-T17).
 static func thinks_fallback() -> int:
 	return _thinks_fallback
+
+
+## How many drivers the latest tick's rows batch handed an event (M4-T33).
+static func rows_events() -> int:
+	return _rows_events
+
+
+## How many AI ships fly their native pilot's command from the core's row (M4-T33).
+static func row_commands() -> int:
+	var sim: SimCore = SimCore.current()
+	return int(sim.core.live_commands()) if sim != null and sim.core != null else 0
 
 
 ## The most contacts any AI ship scored and avoided in the latest tick the drivers ran.
@@ -650,6 +666,7 @@ static func _roll_counts() -> void:
 		_contacts_max = 0
 		_thinks_native = 0
 		_thinks_fallback = 0
+		_rows_events = 0
 
 
 static func _count_think(near: bool) -> void:

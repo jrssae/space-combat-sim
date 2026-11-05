@@ -20,6 +20,7 @@ const STRIDE: int = AiPilot.NATIVE_OUT_LEN + 1
 const EVENT_ENTER: int = 1
 const EVENT_FIRE: int = 2
 const EVENT_SELECT: int = 4
+const EVENT_SETTLE: int = 8
 const EVENTS_HEAD: int = 4
 const NO_RELATION := Vector2i(-1, -1)
 
@@ -213,10 +214,11 @@ func _flush_rows() -> void:
 	_answer = null
 	answered.out = out
 	answered.ready = true
+	var named: int = maxi(head.size() - EVENTS_HEAD, 0) / 2
 	if head.size() >= EVENTS_HEAD:
-		AiPilotDriver.add_rows_counts(head[0], head[1], head[2], head[3])
+		AiPilotDriver.add_rows_counts(head[0], head[1], head[2], head[3], named)
 	else:
-		AiPilotDriver.add_rows_counts(0, 0, drivers.size(), 0)
+		AiPilotDriver.add_rows_counts(0, 0, drivers.size(), 0, 0)
 	var k: int = EVENTS_HEAD
 	while k + 1 < head.size():
 		var i: int = head[k]

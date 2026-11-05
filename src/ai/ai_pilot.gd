@@ -104,10 +104,26 @@ var _reacted_hit_s: float = -INF
 ## The seed the behaviours roll from (M4-T17: the native slot rolls from the same).
 var seed_value: int = 0
 ## Whether the last think ran in the native brains, and what the driver reads of it: the dodge and the contacts seen.
-var native_last: bool = false
-var native_avoiding: bool = false
-var native_avoiding_urgent: bool = false
-var native_contacts: int = 0
+var native_last: bool = false:
+	get:
+		if _native_pending:
+			settle_native()
+		return native_last
+var native_avoiding: bool = false:
+	get:
+		if _native_pending:
+			settle_native()
+		return native_avoiding
+var native_avoiding_urgent: bool = false:
+	get:
+		if _native_pending:
+			settle_native()
+		return native_avoiding_urgent
+var native_contacts: int = 0:
+	get:
+		if _native_pending:
+			settle_native()
+		return native_contacts
 var _native: Object = null
 var _slot: int = -1
 var _native_ok: int = -1

@@ -33,6 +33,10 @@ static func provider() -> ConsoleVars:
 				"doc": "AI ships whose think ran in the native brains over the core's rows in the last tick (M4-T17)"},
 		&"thinks_fallback": {"get": AiPilotDriver.thinks_fallback,
 				"doc": "Native pilots the host declined in the last tick (the rows moved under the scan): each held its last command, as a held think does (M4-T17)"},
+		&"rows_events": {"get": AiPilotDriver.rows_events,
+				"doc": "Drivers the last rows batch handed something to do: a first command from the row, a changed trigger or a target to select (M4-T33); every other native think needed no driver"},
+		&"row_commands": {"get": AiPilotDriver.row_commands,
+				"doc": "AI ships flying their native pilot's command from the core's row (M4-T33)"},
 	})
 
 
