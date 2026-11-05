@@ -75,8 +75,12 @@ var fire_mode: String = ""
 var running_lights_text: String = ""
 var running_lights_dark: bool = false
 
-## The radar's dots (far to near, the selected one last).
-var radar_dots: Array[RadarModel.Dot] = []
+## The radar's contacts on the sphere (far to near, the selected one last), packed for the painter (M4-T36).
+var radar_plot: RadarPlot = RadarPlot.new()
+## The same as `RadarModel.Dot`s, built when read (tests and readouts).
+var radar_dots: Array[RadarModel.Dot]:
+	get:
+		return radar_plot.to_dots()
 
 var status_line: String = ""
 ## The order acknowledgement under the status line ("" for none).

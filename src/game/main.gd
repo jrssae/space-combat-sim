@@ -389,7 +389,8 @@ func _build_hud_input() -> HudInput:
 	input.charge_fraction = cannon.charge_fraction()
 	input.fire_mode = String(PulseCannonGate.mode_name(cannon.gate.mode))
 	input.target = ship.targeting.selected_readout()
-	input.contacts = ship.targeting.candidates()
+	# The radar's contacts straight from the targetables (M4-T36): the candidate list is built only when something cycles it.
+	input.radar_contacts = RadarContacts.gather(get_tree(), ship, ship.targeting.system.sensor_range_m)
 	input.selected_id = ship.targeting.selected_id()
 	input.status_line = status_line
 	input.roster = wings.hud_roster()

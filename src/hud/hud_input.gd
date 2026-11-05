@@ -55,6 +55,9 @@ var fire_mode: String = "alternating"
 var target: TargetReadout = null
 ## Every targetable in sensor range as of this tick, and which one is selected (0 = none).
 var contacts: Array[TargetInfo] = []
+## The radar's contacts as packed arrays (M4-T36): `Main` gathers them each frame without building a `TargetInfo` each; when null
+## the layout takes `contacts` instead.
+var radar_contacts: RadarContacts = null
 var selected_id: int = 0
 ## One line at the top centre (wave, raiders left, kills; on a route the instructor's `FOLLOW INSTRUCTOR — NAV 2/6 — NEXT: ROLL`);
 ## empty until something feeds it.
