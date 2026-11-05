@@ -2016,7 +2016,7 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   at `battle` 500 the HUD was 11 of the frame's 25.7 ms of process work (the radar's candidate list 4.8, its layout 2.7, its paint
   3.1), then the LOD switchers 0.84, the far dots 0.80, the plumes 0.70, the engine sounds 0.64, the muzzle flashes 0.45, the hit
   flashes 0.15, the lights 0.10 and the overlay 0.08 ms. Each became one pass (§17.21): the radar from packed contacts drawn in a
-  few batched calls (bit for bit the old dots), a `FramePasses` node with the plumes (settled plumes left alone), muzzle flashes
+  few batched calls (bit for bit the old dots), a `FramePasses` autoload with the plumes (settled plumes left alone), muzzle flashes
   (only while showing), hit flashes (one pooled node a hit; the mesh sparks gone, the particle sparks stay) and LOD passes, the far
   dots writing only what moves, 12 engine voice pairs for the nearest ships instead of two players on every ship, the overlay at
   10 Hz. No node of a lean ship processes each frame. `RenderScale` is removed; the motion blur was checked (no proxy dependency,

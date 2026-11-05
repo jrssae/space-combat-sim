@@ -3159,9 +3159,9 @@ As built (M4-T36, Q56, refactor findings 2, 3, 7, 9, 12 and 13). The frame's own
 (in-callback timers: the HUD 11 ms, the LOD switchers 0.84, the far dots 0.80, the plumes 0.70, the engine sounds 0.64, the muzzle
 flashes 0.45, the hit flashes 0.15). Each subsystem is now one pass over its ships a frame:
 
-- **`FramePasses`** (`src/rendering/frame_passes.gd`): one node per tree, made under the root on first use and run before the
-  default priority, so tests and scenes without `Main` keep animating and the light rig still picks from this frame's levels. It
-  walks four lists: the plumes of ships in play and shown (`ThrusterVisuals.frame_update`; an instanced ship leaves the list while
+- **`FramePasses`** (`src/rendering/frame_passes.gd`): one node for the game, the autoload `FramePassesNode`, run before the
+  default priority, so tests and scenes without `Main` animate from their first frame and the light rig still picks from this
+  frame's levels. It walks four lists: the plumes of ships in play and shown (`ThrusterVisuals.frame_update`; an instanced ship leaves the list while
   hidden, and once every level is within `SETTLE_LEVEL` of its target the levels are set to the targets and the plumes are left
   alone until the flight output changes), the muzzle flashes that are showing (`trigger` adds one, it leaves when idle), the hit
   flashes that are showing, and every `LodSwitcher` with the camera and `far_ship_dot_m` read once (`decide`). A node takes part
@@ -3171,7 +3171,8 @@ flashes 0.45, the hit flashes 0.15). Each subsystem is now one pass over its shi
   burst is the spark effect). When over it leaves the ship for a pool kept under `FramePasses` (up to 256), from which
   `ImpactFlash.create` hands it out again, so a hit builds no node once the pool has filled.
 - **Far dots** (`FarDots`): a ship's paint and hull radius are read when it turns into a dot and the identity rotations once per
-  slot; a frame writes each dot's place, paint and size; `add` and `remove` leave the work to the frame's refresh (one a frame).
+  slot; a frame writes each dot's place, paint and size; `add` and `remove` queue one refresh at the frame's end, so ships turning
+  together cost one and a ship that turns is drawn as a dot the same frame.
 - **Engine sounds** (`AudioDirector`): `ENGINE_VOICES` (12) hum and hiss pairs, not two players on every ship. Each frame it looks
   at up to 32 ships in turn, gives a free voice to an audible one (in play, within `ENGINE_RANGE_M`) or the farthest served ship's
   voice to a nearer one, and plays the served ships at their places with the M2 ramps. M5's sound pass owns the sounds themselves.
