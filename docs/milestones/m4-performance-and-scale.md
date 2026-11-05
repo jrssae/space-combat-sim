@@ -1325,7 +1325,7 @@ done and T20 proceeds.
 - **Q54 (maintainer away):** every test of this task passes on both T24's threaded step and the single-thread step, so undoing T24 never strands it; its look and feel checks go into the "M4 return checklist" in `docs/playtest.md`.
 - **From the refactor review (2026-11-05, finding 11):** `WorldFrame.rebase` and `_settle` walk every shiftable node twice (the shift is 4.01 ms at 500); with the tier removing far ships' nodes, keep the shiftable set as a list kept up to date rather than a walk.
 - **Architecture:** §17.14 (a new subsection head, "The low-attention tier", that T22 to T24 add to).
-- **Checkpoint 2 (Q47):** after this task, re-measure the physics stage at `battle` 500 as T19 did (near set's sync, node propagation, Jolt's step); if the near set still costs more than about 1 ms a tick, the controller brings T19's ships-out-of-Jolt proposal back to the maintainer.
+- **Checkpoint 2 (Q47):** after this task, re-measure the physics stage at `battle` 500 as T19 did (near set's sync, node propagation, Jolt's step); if the near set still costs more than about 1 ms a tick, the controller brings T19's ships-out-of-Jolt proposal back to the maintainer. If AI ships are then taken out of Jolt, test the Rapier physics library (the `rapier3d` Rust crate, used directly inside the native core, not the Godot plugin) as the first option for their collisions with rocks and capital ships, against writing that collision code by hand; measure it on the same `battle` 500 rows (maintainer, 2026-11-05: a Godot-level swap of Jolt for Rapier was considered and not taken, since Jolt's own step is 0.27 ms of the 2.17 ms physics stage at 500).
 
 ##### M4-T22 Tier brains, statistical fire and far capitals' aggregated fire
 
