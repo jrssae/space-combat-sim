@@ -380,23 +380,25 @@ pub fn mine_hits(
     }
     let (lx, ly, lz) = (cell_of(rx - pad), cell_of(ry - pad), cell_of(rz - pad));
     let (hx, hy, hz) = (cell_of(rx + pad), cell_of(ry + pad), cell_of(rz + pad));
+    // One slab of cells per x, its rows within the box's y, then the box's z: two searches a slab, so a capital's wide box
+    // costs a few slabs rather than a search per column.
     let cells = &mines.cells;
     for cx in lx..=hx {
-        for cy in ly..=hy {
-            let start = cells.partition_point(|e| e.0 < (cx, cy, lz));
-            let end = cells.partition_point(|e| e.0 <= (cx, cy, hz));
-            for e in &cells[start..end] {
-                let i = e.1 as usize;
-                if i % TRIGGER_TICKS as usize != phase
-                    || !mines.alive[i]
-                    || !flagged(hostile, mines.faction_ix[i])
-                {
-                    continue;
-                }
-                let at = add(origin, mines.local[i]);
-                if f64::from(dist_sq(hull_at, at)) <= reach * reach {
-                    out.push(e.1);
-                }
+        let start = cells.partition_point(|e| e.0 < (cx, ly, i32::MIN));
+        let end = cells.partition_point(|e| e.0 <= (cx, hy, i32::MAX));
+        for e in &cells[start..end] {
+            let i = e.1 as usize;
+            if e.0.2 < lz
+                || e.0.2 > hz
+                || i % TRIGGER_TICKS as usize != phase
+                || !mines.alive[i]
+                || !flagged(hostile, mines.faction_ix[i])
+            {
+                continue;
+            }
+            let at = add(origin, mines.local[i]);
+            if f64::from(dist_sq(hull_at, at)) <= reach * reach {
+                out.push(e.1);
             }
         }
     }
