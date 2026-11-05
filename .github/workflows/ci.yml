@@ -4,8 +4,20 @@ name: CI
 # Anything that needs a GPU is verified by a human, never here (docs/architecture.md, section 12).
 
 on:
+  # Doc-only commits (plans, milestones, research notes) change no code or test, so they skip the 40-minute run; info.md stays
+  # in, because a test checks the console command list against it.
   push:
+    paths:
+      - "**"
+      - "!docs/**"
+      - "!**/*.md"
+      - "info.md"
   pull_request:
+    paths:
+      - "**"
+      - "!docs/**"
+      - "!**/*.md"
+      - "info.md"
 
 permissions:
   contents: read
