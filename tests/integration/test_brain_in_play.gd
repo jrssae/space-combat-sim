@@ -95,22 +95,21 @@ func test_a_declined_think_holds_the_last_command_and_is_counted_never_a_stale_g
 	assert_eq(String(pilot.current.id), "attack", "back to attacking after the reaction")
 	var sim: SimCore = SimCore.for_tree(get_tree())
 	assert_not_null(sim, "the core is on")
-	var fallbacks_before: int = AiPilotDriver.thinks_fallback()
 	# The scan of this frame, then the rows move under it (a rebase in the same frame): the host must decline this think.
 	await get_tree().physics_frame
 	var scan: ContactScan = ContactScan.shared(get_tree())
 	assert_true(scan.rows_fresh(), "the frame's scan is fresh")
 	world.rebase(Vector3(300.0, 0.0, -150.0))
 	assert_false(scan.rows_fresh(), "after the rebase the rows moved under the scan")
-	var cmd_before: Dictionary = a.ship.flight_command().to_dict()
+	var cmd_before: Dictionary = a.ship._flight.to_dict()
 	var switches_before: int = pilot.switches
 	a.driver._woken = true
 	a.driver.step(1.0 / 60.0)
-	assert_eq(AiPilotDriver.thinks_fallback() - fallbacks_before, 1, "the declined think is counted as a fallback")
+	assert_eq(AiPilotDriver.thinks_fallback(), 1, "the declined think is counted as a fallback (the count is per tick)")
 	assert_eq(String(pilot.current.id), "attack", "no spurious evade from the stale GDScript hit reaction")
 	assert_eq(pilot.switches, switches_before, "nothing switched")
 	assert_true(pilot.native_last, "the pilot still counts as native")
-	assert_eq(a.ship.flight_command().to_dict(), cmd_before, "the ship holds its last command for that tick")
+	assert_eq(a.ship._flight.to_dict(), cmd_before, "the ship holds its last command for that tick")
 	# The same with a resolver's resync of a touched body in the same frame.
 	await get_tree().physics_frame
 	scan = ContactScan.shared(get_tree())
@@ -119,7 +118,7 @@ func test_a_declined_think_holds_the_last_command_and_is_counted_never_a_stale_g
 	assert_false(scan.rows_fresh(), "after the resync the rows changed under the scan")
 	a.driver._woken = true
 	a.driver.step(1.0 / 60.0)
-	assert_eq(AiPilotDriver.thinks_fallback() - fallbacks_before, 2, "counted again")
+	assert_eq(AiPilotDriver.thinks_fallback(), 1, "counted again in this tick")
 	assert_eq(String(pilot.current.id), "attack", "and still no spurious evade")
 	# The next frame thinks natively again.
 	await get_tree().physics_frame
@@ -140,8 +139,10 @@ func test_a_ram_committed_from_outside_is_uncommitted_once_when_its_target_leave
 	var ram := pilot.behaviour(&"ram") as BehaviourRam
 	assert_true(ram.commit(pilot.context), "committed from outside, through the native slot")
 	assert_eq(ram.target_id_value, target.targetable.get_instance_id(), "to the only hostile")
-	for i: int in 3:
-		await get_tree().physics_frame
+	var waited: int = 0
+	while waited < 120 and (pilot.current == null or pilot.current.id != &"ram"):
+		await get_tree().physics_frame  # the attack keeps control through its dwell, as the GDScript rule says
+		waited += 1
 	assert_eq(String(pilot.current.id), "ram", "the pilot flies the ram")
 	# The target leaves play: the native ram lets go; the GDScript object must read that, and stay uncommitted.
 	target.ship.visible = false

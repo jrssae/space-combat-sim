@@ -117,7 +117,7 @@ Source: `src/autoload/debug_console.gd`
 
 | Provider | Source |
 |---|---|
-| `ai` | `src/ai/ai_console.gd` (M4-T17 adds `thinks_native`: AI ships whose think ran in the native brains in the last tick) |
+| `ai` | `src/ai/ai_console.gd` (M4-T17 adds `thinks_native`: AI ships whose think ran in the native brains in the last tick, and `thinks_fallback`: native pilots the host declined, each holding its last command) |
 | `allies` | `src/game/ship_pool.gd` |
 | `audio` | `src/audio/audio_director.gd` |
 | `camera` | `src/camera/camera_rig.gd` |

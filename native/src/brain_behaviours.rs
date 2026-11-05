@@ -170,7 +170,7 @@ pub struct Field {
 impl Field {
     /// Builds the field for this tick's rows and bolts.
     pub fn build(&mut self, rows: &Rows, bolts: &Bolts, cell_m: f64) {
-        self.bolt_cells = contact::sorted_cells(&bolts.positions, cell_m);
+        contact::sorted_cells_into(&bolts.positions, cell_m, &mut self.bolt_cells);
         self.max_bolt_speed = bolts
             .velocities
             .iter()
@@ -239,8 +239,12 @@ pub struct Context {
     pub link: Option<[f64; 3]>,
     pub link_velocity: Vector3,
     pub objective_key: String,
+    /// The marker id the objective's name resolved to (0 while unresolved): the name is matched again only when that row
+    /// is gone or renamed, so a think costs one id lookup instead of a name compare per row.
+    pub objective_id: i64,
     pub guard_post: Option<[f64; 3]>,
     pub guard_key: String,
+    pub guard_id: i64,
     pub guard_offset: Vector3,
     pub guard_radius_m: f64,
     pub route: Option<Route>,
@@ -357,17 +361,17 @@ impl Tick<'_> {
         normalized(col_b(&self.rows.bases[row]))
     }
 
-    // `AiContext._named`: the first row of `list` whose name is `key` (lowered), or -1.
-    fn named(&self, list: &[i32], key: &str) -> i32 {
-        if key.is_empty() {
+    // `AiContext._named` with the name already resolved to a marker id: that row when `list` holds it, or -1.
+    fn listed(&self, list: &[i32], id: i64) -> i32 {
+        if id == 0 {
             return -1;
         }
-        for &r in list {
-            if self.rows.name_keys[r as usize] == key {
-                return r;
-            }
+        let row = self.rows.row_of_id(id);
+        if row >= 0 && list.contains(&row) {
+            row
+        } else {
+            -1
         }
-        -1
     }
 
     // Hostile `h` (a place in the hostile list) as a row.
@@ -586,6 +590,11 @@ impl Brain {
         self.ram.target_id_value = target_id;
     }
 
+    /// Whether the ram is committed now (the facade's GDScript flag follows it every think).
+    pub fn ram_committed(&self) -> bool {
+        self.ram.committed
+    }
+
     /// `BehaviourRam.commit` called between thinks: commits to the target the last think would have picked (the attack's
     /// target, else the nearest hostile) and returns its id, 0 when there was none.
     pub fn ram_commit_now(&mut self) -> i64 {
@@ -675,6 +684,8 @@ impl Brain {
             scratch.hostile_row.push(r == pilot::HOSTILE);
             scratch.friendly_row.push(r == pilot::FRIENDLY);
         }
+        self.ctx.objective_id = resolve_name(rows, &self.ctx.objective_key, self.ctx.objective_id);
+        self.ctx.guard_id = resolve_name(rows, &self.ctx.guard_key, self.ctx.guard_id);
         contact::nearest_into(
             &view,
             work,
@@ -700,28 +711,23 @@ impl Brain {
                     keep(
                         rows,
                         &mut scratch.contacts,
-                        row_of_id(rows, id),
+                        rows.row_of_id(id),
                         inputs.own_body_id,
                         p.position,
                         range_sq,
                     );
                 }
             }
-            for key in [&self.ctx.objective_key, &self.ctx.guard_key] {
-                if key.is_empty() {
-                    continue;
-                }
-                for r in 0..rows.name_keys.len() {
-                    if rows.name_keys[r] == *key {
-                        keep(
-                            rows,
-                            &mut scratch.contacts,
-                            r as i32,
-                            inputs.own_body_id,
-                            p.position,
-                            range_sq,
-                        );
-                    }
+            for id in [self.ctx.objective_id, self.ctx.guard_id] {
+                if id != 0 {
+                    keep(
+                        rows,
+                        &mut scratch.contacts,
+                        rows.row_of_id(id),
+                        inputs.own_body_id,
+                        p.position,
+                        range_sq,
+                    );
                 }
             }
             scratch.contacts.sort_unstable();
@@ -793,7 +799,7 @@ impl Brain {
             d.leader = scratch.contacts[scratch.lists.leader as usize];
         }
         if !self.ctx.guard_key.is_empty() {
-            let guarded = tick.named(&scratch.contacts, &self.ctx.guard_key);
+            let guarded = tick.listed(&scratch.contacts, self.ctx.guard_id);
             if guarded >= 0 {
                 let g = guarded as usize;
                 let forward = tick.forward_of(g);
@@ -814,9 +820,9 @@ impl Brain {
             d.guarding = true;
         }
         if !self.ctx.objective_key.is_empty() {
-            let mut objective = tick.named(&scratch.contacts, &self.ctx.objective_key);
+            let mut objective = tick.listed(&scratch.contacts, self.ctx.objective_id);
             if objective < 0 {
-                objective = tick.named(&scratch.broadcasts, &self.ctx.objective_key);
+                objective = tick.listed(&scratch.broadcasts, self.ctx.objective_id);
             }
             if objective >= 0 {
                 d.objective = objective;
@@ -1200,12 +1206,22 @@ fn seek_velocity(
     );
 }
 
-// The row whose marker id is `id`, or -1.
-fn row_of_id(rows: &Rows, id: i64) -> i32 {
-    rows.ids
+// The marker id of the first row named `key` (lowered), as `AiContext._named` finds it: the one already resolved while
+// its row still carries the name, else a scan of the names; 0 for no name or no such row.
+fn resolve_name(rows: &Rows, key: &str, resolved: i64) -> i64 {
+    if key.is_empty() {
+        return 0;
+    }
+    if resolved != 0 {
+        let row = rows.row_of_id(resolved);
+        if row >= 0 && rows.name_keys[row as usize] == key {
+            return resolved;
+        }
+    }
+    rows.name_keys
         .iter()
-        .position(|&r| r == id)
-        .map_or(-1, |r| r as i32)
+        .position(|n| n == key)
+        .map_or(0, |r| rows.ids[r])
 }
 
 // `ContactScan._keep`: adds row `i` to a nearest-k selection when it is in range, not the ship's own and not in it yet.

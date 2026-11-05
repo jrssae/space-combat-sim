@@ -36,7 +36,8 @@ pub const TACTICS_LEN: usize = 14;
 pub const OUT_RAW: usize = 24;
 pub const OUT_WEIGHTED: usize = OUT_RAW + KINDS;
 pub const OUT_MIRROR: usize = OUT_WEIGHTED + KINDS;
-pub const OUT_LEN: usize = OUT_MIRROR + MIRROR;
+pub const OUT_RAM: usize = OUT_MIRROR + MIRROR;
+pub const OUT_LEN: usize = OUT_RAM + 1;
 
 /// The AI pilots' native brains over the core's rows (or rows loaded from arrays, for the tests).
 #[derive(GodotClass)]
@@ -176,6 +177,7 @@ impl ScsBrains {
             .map(|s| s.to_string().to_lowercase())
             .collect();
         own.node_count = n;
+        own.index_ids();
         self.grid = Work::default();
         self.grid.cell_m = SENSOR_RANGE_M;
         self.grid.cells = contact::sorted_cells(&self.own.positions, SENSOR_RANGE_M);
@@ -390,6 +392,7 @@ impl ScsBrains {
     fn set_objective(&mut self, slot: i64, name: GString) {
         if let Some(b) = self.brain_mut(slot) {
             b.ctx.objective_key = name.to_string().to_lowercase();
+            b.ctx.objective_id = 0;
         }
     }
 
@@ -415,6 +418,7 @@ impl ScsBrains {
                 None
             };
             b.ctx.guard_key = name.to_string().to_lowercase();
+            b.ctx.guard_id = 0;
             b.ctx.guard_offset = offset;
             b.ctx.guard_radius_m = radius_m;
         }
@@ -955,7 +959,8 @@ fn pack_output(brain: &Brain, result: &brain_behaviours::Output, out: &mut Vec<f
     }
     let mut mirror = [0.0; MIRROR];
     brain.mirror(&mut mirror);
-    out[OUT_MIRROR..OUT_LEN].copy_from_slice(&mirror);
+    out[OUT_MIRROR..OUT_RAM].copy_from_slice(&mirror);
+    out[OUT_RAM] = f64::from(u8::from(brain.ram_committed()));
 }
 
 // The display name of the row whose marker id is `id`, "" when none.

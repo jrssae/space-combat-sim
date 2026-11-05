@@ -53,7 +53,8 @@ const NATIVE_CONTACTS: int = 23
 const NATIVE_RAW: int = 24
 const NATIVE_WEIGHTED: int = 33
 const NATIVE_MIRROR: int = 42
-const NATIVE_OUT_LEN: int = 54
+const NATIVE_RAM_COMMITTED: int = 54
+const NATIVE_OUT_LEN: int = 55
 
 ## `profile` is what it flies: `base_profile` scaled by `temperament`.
 var profile: AiProfile = null
@@ -94,7 +95,18 @@ var _was_reset: bool = false
 var _temperaments_since_reset: Array[Vector2] = []
 var _ram_pushed: bool = false
 var _had_wing: bool = false
-var _pushed_wing: Array = []
+var _pushed_order: int = -1
+var _pushed_leader: int = 0
+var _pushed_leader_target: int = 0
+var _pushed_radius: float = 0.0
+var _pushed_has_slot: bool = false
+var _pushed_slot_offset: Vector3 = Vector3.ZERO
+var _pushed_wing_ids: PackedInt64Array = PackedInt64Array()
+var _pushed_link: bool = false
+var _pushed_link_x: float = 0.0
+var _pushed_link_y: float = 0.0
+var _pushed_link_z: float = 0.0
+var _pushed_link_velocity: Vector3 = Vector3.ZERO
 var _pushed_objective: String = ""
 var _pushed_guard_post: UniversePos = null
 var _pushed_guard_name: String = ""
@@ -351,14 +363,42 @@ static func _rank(behaviour_id: StringName) -> int:
 # --- the native brains (M4-T17) ------------------------------------------------------------------------------------------
 
 
-## Whether a native brain can stand in for this pilot: every behaviour is one of the nine, unsubclassed.
+## Whether a native brain can stand in for this pilot: every behaviour is one of the nine, unsubclassed, and built as the
+## pilot builds it (its seed from the pilot's seed and the behaviour's label, its numbers from the profile), since the slot
+## rebuilds them that way.
 func native_capable() -> bool:
 	if _native_ok < 0:
 		_native_ok = 1
 		for b: AiBehaviour in behaviours:
-			if native_kind_of(b) < 0:
+			if native_kind_of(b) < 0 or not _built_as_default(b):
 				_native_ok = 0
 	return _native_ok == 1
+
+
+## Whether this pilot has a brain in the native host (a declined think then holds rather than runs the GDScript objects).
+func has_native_slot() -> bool:
+	return _slot >= 0 and is_instance_valid(_native)
+
+
+# Whether `b` holds what `_init`, `attach` and the wing give a behaviour of its kind: the seeded ones carry the pilot's
+# seed under their label, idle the profile's hold, the station keepers the profile's cruise.
+func _built_as_default(b: AiBehaviour) -> bool:
+	match b.id:
+		&"ram":
+			return (b as BehaviourRam)._seed == hash([seed_value, "ram"])
+		&"evade":
+			return (b as BehaviourEvade)._seed == hash([seed_value, "evade"])
+		&"attack":
+			return (b as BehaviourAttack)._seed == hash([seed_value, "attack"])
+		&"idle":
+			return (b as BehaviourIdle).hold == profile.idle_hold
+		&"guard":
+			return (b as BehaviourGuard).cruise_mps == profile.cruise_mps
+		&"formation":
+			return (b as BehaviourFormation).far_closure_mps == profile.cruise_mps + BehaviourFormation.FAR_EXTRA_MPS
+		&"rally":
+			return (b as BehaviourRally).closure_mps == profile.cruise_mps + BehaviourRally.EXTRA_MPS
+	return true
 
 
 ## The `TIE_ORDER` place of a behaviour a native brain stands in for, by its class, or -1 for any other.
@@ -375,6 +415,8 @@ func try_think_native(p: Perception, dt: float) -> PilotCommand:
 	if host == null or not native_capable():
 		return null
 	if host != _native:
+		if _slot >= 0 and is_instance_valid(_native):
+			_native.free_slot(_slot)
 		_native = host
 		_slot = -1
 	if _slot < 0:
@@ -389,7 +431,7 @@ func try_think_native(p: Perception, dt: float) -> PilotCommand:
 			for t: Vector2 in _temperaments_since_reset:
 				host.set_temperament(_slot, t.x, t.y)
 		_bound_body = 0
-		_pushed_wing = []
+		_pushed_order = -1
 		_pushed_objective = ""
 		_pushed_guard_radius = -1.0
 		_pushed_route_count = -1
@@ -405,7 +447,8 @@ func try_think_native(p: Perception, dt: float) -> PilotCommand:
 	_sync_context(host)
 	var ram := _behaviour_of(&"ram") as BehaviourRam
 	if ram != null and ram.committed and not _ram_pushed:
-		host.ram_commit(_slot, ram.target_id_value)  # committed from outside with no slot yet: the slot follows
+		host.ram_commit(_slot, ram.target_id_value)  # committed from outside with no slot yet: the slot follows, once
+		_ram_pushed = true
 	var out: PackedFloat64Array = host.think(_slot, p.relation_row, p.now_s, dt, p.hull_fraction, p.selected_id, p.last_hit_s,
 			p.last_bolt_hit_s, p.last_attacker_id, p.friendly_fire, p.frame_origin.x, p.frame_origin.y, p.frame_origin.z)
 	if out.size() != NATIVE_OUT_LEN:
@@ -437,6 +480,9 @@ func try_think_native(p: Perception, dt: float) -> PilotCommand:
 	if current != null and current.id == &"attack" and wanted_target_id > 0:
 		context.attack_target_id = wanted_target_id
 	_mirror(kind, out)
+	if ram != null:
+		ram.committed = out[NATIVE_RAM_COMMITTED] != 0.0  # the slot's commitment, whatever is in control
+		_ram_pushed = ram.committed
 	return cmd
 
 
@@ -473,7 +519,6 @@ func _mirror(kind: int, out: PackedFloat64Array) -> void:
 			r.rolls = int(out[m + 1])
 			r.max_friends_seen = int(out[m + 2])
 			r.target_id_value = _join_id(out[m + 3], out[m + 4])
-			_ram_pushed = r.committed
 			avoid_exempt_id = r.target_id_value if r.committed else 0
 		5:
 			(current as BehaviourFormation).slot_error_m = out[m]
@@ -499,14 +544,27 @@ func _sync_context(host: Object) -> void:
 	var in_wing: bool = c.has_slot or c.leader_id != 0 or not c.wing_ids.is_empty() or c.order != AiContext.Order.ENGAGE_AT_WILL
 	if in_wing or _had_wing:
 		var link: UniversePos = c.leader_link_position
-		var now: Array = [c.order, c.leader_id, c.leader_target_id, c.engage_radius_m, c.has_slot, c.slot_offset, c.wing_ids,
-				link != null, link.x if link != null else 0.0, link.y if link != null else 0.0, link.z if link != null else 0.0,
-				c.leader_link_velocity]
-		if now != _pushed_wing:
-			_pushed_wing = now.duplicate()
-			_pushed_wing[6] = c.wing_ids.duplicate()
+		var lx: float = link.x if link != null else 0.0
+		var ly: float = link.y if link != null else 0.0
+		var lz: float = link.z if link != null else 0.0
+		if c.order != _pushed_order or c.leader_id != _pushed_leader or c.leader_target_id != _pushed_leader_target \
+				or c.engage_radius_m != _pushed_radius or c.has_slot != _pushed_has_slot or c.slot_offset != _pushed_slot_offset \
+				or c.wing_ids != _pushed_wing_ids or (link != null) != _pushed_link or lx != _pushed_link_x or ly != _pushed_link_y \
+				or lz != _pushed_link_z or c.leader_link_velocity != _pushed_link_velocity:
+			_pushed_order = c.order
+			_pushed_leader = c.leader_id
+			_pushed_leader_target = c.leader_target_id
+			_pushed_radius = c.engage_radius_m
+			_pushed_has_slot = c.has_slot
+			_pushed_slot_offset = c.slot_offset
+			_pushed_wing_ids = c.wing_ids.duplicate()
+			_pushed_link = link != null
+			_pushed_link_x = lx
+			_pushed_link_y = ly
+			_pushed_link_z = lz
+			_pushed_link_velocity = c.leader_link_velocity
 			host.set_wing(_slot, c.order, c.leader_id, c.leader_target_id, c.engage_radius_m, c.has_slot, c.slot_offset, c.wing_ids,
-					link != null, now[8], now[9], now[10], c.leader_link_velocity)
+					link != null, lx, ly, lz, c.leader_link_velocity)
 		_had_wing = in_wing
 	if c.objective_name != _pushed_objective:
 		_pushed_objective = c.objective_name

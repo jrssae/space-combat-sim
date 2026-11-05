@@ -191,6 +191,9 @@ pub struct ScsSimCore {
     open: bool,
     // Grows whenever the rows change under a scan taken from them: each sync, resync and shift (M4-T16).
     rows_version: i64,
+    // Reads of the brains' columns that found no value where a body had the object (a renamed property): counted and
+    // warned about once (M4-T17).
+    column_read_failures: i64,
 }
 
 #[godot_api]
@@ -583,6 +586,13 @@ impl ScsSimCore {
     #[func]
     fn rows_version(&self) -> i64 {
         self.rows_version
+    }
+
+    /// Reads of the brains' columns (a hull's `hp` and `max_hp`, a targeting system's `_selected_id`) that found no value
+    /// where the body had the object (M4-T17); 0 unless a property was renamed. The first one is also warned about.
+    #[func]
+    fn column_read_failures(&self) -> i64 {
+        self.column_read_failures
     }
 
     /// The physics frame of the last `sync_in`, and of the last bolt sync.
@@ -1040,23 +1050,45 @@ impl ScsSimCore {
         // The brains' two live reads of a contact (M4-T17): `Damageable.hull.fraction()` and the ship's selection, as the
         // scan stamped them. Two property reads for the hull, one for the selection.
         let names = self.names.get_or_insert_with(Names::new);
+        let mut failed = 0;
         let hull_fraction = match &attrs.health {
             Some(health) => {
                 self.sync_reads += 2;
-                let hp = health.get(&names.hp).try_to::<f64>().unwrap_or(0.0);
-                let max_hp = health.get(&names.max_hp).try_to::<f64>().unwrap_or(1.0);
-                clamp01(hp / max_hp)
+                let hp = health.get(&names.hp).try_to::<f64>();
+                let max_hp = health.get(&names.max_hp).try_to::<f64>();
+                match (hp, max_hp) {
+                    (Ok(hp), Ok(max_hp)) => clamp01(hp / max_hp),
+                    _ => {
+                        failed += 1;
+                        -1.0
+                    }
+                }
             }
             None => -1.0,
         };
         let target_id = match &attrs.targeting {
             Some(system) => {
                 self.sync_reads += 1;
-                let selected = system.get(&names.selected_id).try_to::<i64>().unwrap_or(0);
-                if selected != 0 { selected } else { -1 }
+                match system.get(&names.selected_id).try_to::<i64>() {
+                    Ok(selected) if selected != 0 => selected,
+                    Ok(_) => -1,
+                    Err(_) => {
+                        failed += 1;
+                        -1
+                    }
+                }
             }
             None => -1,
         };
+        if failed > 0 {
+            if self.column_read_failures == 0 {
+                godot_warn!(
+                    "ScsSimCore: a hull's hp and max_hp or a targeting system's _selected_id did not read; the brains see no \
+                     hull or no selection for that body (a renamed property?)"
+                );
+            }
+            self.column_read_failures += failed;
+        }
         Read {
             position: xf.origin,
             basis: xf.basis,
@@ -1167,8 +1199,10 @@ impl ScsSimCore {
         self.index_rows();
     }
 
-    // Rebuilds the lookups over the rows: by body id, by handle, and the hull rows in the resolvers' order.
+    // Rebuilds the lookups over the rows: by body id, by handle, by marker id (the kernels'), and the hull rows in the
+    // resolvers' order.
     fn index_rows(&mut self) {
+        self.rows.index_ids();
         self.row_of_id.clear();
         self.row_of_handle.clear();
         let mut hull_rows: Vec<(i64, u32)> = Vec::new();
@@ -1274,10 +1308,19 @@ impl ScsSimCore {
         let reach = match &m.marker {
             Some(marker) => {
                 self.sync_reads += 1;
-                marker
-                    .get(&names.broadcast_range_m)
-                    .try_to::<f64>()
-                    .unwrap_or(0.0)
+                match marker.get(&names.broadcast_range_m).try_to::<f64>() {
+                    Ok(reach) => reach,
+                    Err(_) => {
+                        if self.column_read_failures == 0 {
+                            godot_warn!(
+                                "ScsSimCore: a marker's broadcast_range_m did not read; the brains hear no broadcast from \
+                                 it (a renamed property?)"
+                            );
+                        }
+                        self.column_read_failures += 1;
+                        0.0
+                    }
+                }
             }
             None => 0.0,
         };

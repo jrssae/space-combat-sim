@@ -36,6 +36,9 @@ pub struct Rows {
     pub target_ids: Vec<i64>,
     pub reach: Vec<f64>,
     pub name_keys: Vec<String>,
+    // The rows by marker id, sorted by id, rebuilt with the rows (M4-T17): a kernel finds a contact by its id in a binary
+    // search instead of a scan.
+    pub id_rows: Vec<(i64, u32)>,
     pub node_count: usize,
 }
 
@@ -74,7 +77,24 @@ impl Rows {
         self.target_ids.clear();
         self.reach.clear();
         self.name_keys.clear();
+        self.id_rows.clear();
         self.node_count = 0;
+    }
+
+    /// Rebuilds `id_rows` from `ids`.
+    pub fn index_ids(&mut self) {
+        self.id_rows.clear();
+        self.id_rows
+            .extend(self.ids.iter().enumerate().map(|(r, &id)| (id, r as u32)));
+        self.id_rows.sort_unstable();
+    }
+
+    /// The row whose marker id is `id`, or -1.
+    pub fn row_of_id(&self, id: i64) -> i32 {
+        match self.id_rows.binary_search_by_key(&id, |e| e.0) {
+            Ok(k) => self.id_rows[k].1 as i32,
+            Err(_) => -1,
+        }
     }
 }
 

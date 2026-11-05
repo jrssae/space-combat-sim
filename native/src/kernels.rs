@@ -52,20 +52,27 @@ pub mod contact {
 
     /// Every body by its grid cell, sorted by cell then by scan index.
     pub fn sorted_cells(positions: &[Vector3], cell_m: f64) -> Vec<((i32, i32, i32), u32)> {
-        let mut cells: Vec<((i32, i32, i32), u32)> = positions
-            .iter()
-            .enumerate()
-            .map(|(i, p)| {
-                let key = (
-                    cell_of(f64::from(p.x), cell_m),
-                    cell_of(f64::from(p.y), cell_m),
-                    cell_of(f64::from(p.z), cell_m),
-                );
-                (key, i as u32)
-            })
-            .collect();
-        cells.sort_unstable();
+        let mut cells = Vec::new();
+        sorted_cells_into(positions, cell_m, &mut cells);
         cells
+    }
+
+    /// `sorted_cells` into the caller's list (no allocation once it has grown, M4-T17).
+    pub fn sorted_cells_into(
+        positions: &[Vector3],
+        cell_m: f64,
+        cells: &mut Vec<((i32, i32, i32), u32)>,
+    ) {
+        cells.clear();
+        cells.extend(positions.iter().enumerate().map(|(i, p)| {
+            let key = (
+                cell_of(f64::from(p.x), cell_m),
+                cell_of(f64::from(p.y), cell_m),
+                cell_of(f64::from(p.z), cell_m),
+            );
+            (key, i as u32)
+        }));
+        cells.sort_unstable();
     }
 
     /// `ContactScan.contacts_for`: the bodies within `range` of `at`, not `own_body_id`, in scan order.

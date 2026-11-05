@@ -68,6 +68,7 @@ static var _thinks_far: int = 0
 static var _held: int = 0
 static var _contacts_max: int = 0
 static var _thinks_native: int = 0
+static var _thinks_fallback: int = 0
 # The think-rate and nearest-k settings, read on first use and again after any of them changes.
 static var _settings_read: bool = false
 static var _rate_on: bool = true
@@ -179,10 +180,6 @@ func step(delta: float) -> void:
 		_add_think_time(Time.get_ticks_usec() - started_us)
 		return  # the ship flies the last command on
 	var dt: float = _since_think_s  # one tick when it thinks every tick
-	_since_think_s = 0.0
-	_woken = false
-	_count_think(near_player)
-	_retarget(dt)
 	var pc: PilotCommand = null
 	var pilot := brain as AiPilot
 	if pilot != null and pilot.native_capable():
@@ -198,6 +195,18 @@ func step(delta: float) -> void:
 				ContactScan.add_time(Time.get_ticks_usec() - scan_started_us)
 			if p != null:
 				pc = pilot.try_think_native(p, dt)
+			if pc == null and pilot.has_native_slot():
+				# Declined with a brain in the slot: the GDScript objects hold only a mirror, so this tick is held, as a
+				# far-rate tick is, and the think waits for the next one.
+				_roll_counts()
+				_thinks_fallback += 1
+				_count_held()
+				_add_think_time(Time.get_ticks_usec() - started_us)
+				return
+	_since_think_s = 0.0
+	_woken = false
+	_count_think(near_player)
+	_retarget(dt)
 	if pc != null:
 		_thinks_native += 1
 		_contacts_max = maxi(_contacts_max, pilot.native_contacts)
@@ -260,6 +269,12 @@ static func held() -> int:
 ## How many AI ships thought in the native brains in the latest tick the drivers ran (M4-T17).
 static func thinks_native() -> int:
 	return _thinks_native
+
+
+## How many native pilots the host declined in the latest tick (the rows moved under the frame's scan, or the ship had no
+## row): each held its last command for that tick, as a held think does, so its brain never ran on a stale mirror (M4-T17).
+static func thinks_fallback() -> int:
+	return _thinks_fallback
 
 
 ## The most contacts any AI ship scored and avoided in the latest tick the drivers ran.
@@ -460,6 +475,7 @@ static func _roll_counts() -> void:
 		_held = 0
 		_contacts_max = 0
 		_thinks_native = 0
+		_thinks_fallback = 0
 
 
 static func _count_think(near: bool) -> void:
