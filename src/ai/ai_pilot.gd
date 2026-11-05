@@ -102,6 +102,7 @@ var _out: PackedFloat64Array = PackedFloat64Array()
 # state is still to be written into its GDScript object (-1: none): written when something reads the behaviours.
 var _out_base: int = 0
 var _mirror_kind: int = -1
+var _mirror_behaviour: AiBehaviour = null
 var _kind_index: PackedInt32Array = PackedInt32Array()
 var _was_reset: bool = false
 var _temperaments_since_reset: Array[Vector2] = []
@@ -153,6 +154,8 @@ func _init(p_profile: AiProfile = null, p_seed: int = 0, p_behaviours: Array[AiB
 
 ## Adds a behaviour at its `TIE_ORDER` place, weighted by the profile's weight for its id as of now.
 func add_behaviour(b: AiBehaviour) -> void:
+	if _mirror_kind >= 0:
+		_sync_mirror()  # what a think left is written before anything changes the behaviours
 	var rank: int = _rank(b.id)
 	var at: int = behaviours.size()
 	for i: int in behaviours.size():
@@ -181,6 +184,8 @@ func add_behaviour(b: AiBehaviour) -> void:
 
 ## Changes skill and aggression live and retunes every behaviour.
 func set_temperament(t: AiTemperament) -> void:
+	if _mirror_kind >= 0:
+		_sync_mirror()  # what a think left is written before anything changes the behaviours
 	temperament = t
 	profile = t.apply(base_profile)
 	context.profile = profile
@@ -337,6 +342,8 @@ func describe() -> Dictionary:
 
 
 func reset() -> void:
+	if _mirror_kind >= 0:
+		_sync_mirror()  # what a think left is written before anything changes the behaviours
 	current = null
 	dwell_s = 0.0
 	switches = 0
@@ -514,10 +521,11 @@ func apply_native(out: PackedFloat64Array, base: int = 0) -> PilotCommand:
 	if current != null and current.id == &"attack" and wanted_target_id > 0:
 		context.attack_target_id = wanted_target_id
 	if kind in LAZY_MIRROR:
+		_mirror_behaviour = current  # read before the kind is pending: `current`'s getter writes a pending mirror
 		_mirror_kind = kind  # nothing in the game reads these between thinks: written when read
 		avoid_exempt_id = 0
 	else:
-		_mirror(kind, out, base)
+		_mirror(kind, out, base, current)
 	if ram != null:
 		ram.committed = out[base + NATIVE_RAM_COMMITTED] != 0.0  # the slot's commitment, whatever is in control
 		_ram_pushed = ram.committed
@@ -525,11 +533,11 @@ func apply_native(out: PackedFloat64Array, base: int = 0) -> PilotCommand:
 
 
 # Writes the behaviour in control's native state into its GDScript object, so what the game reads of it is current.
-func _mirror(kind: int, out: PackedFloat64Array, base: int) -> void:
+func _mirror(kind: int, out: PackedFloat64Array, base: int, b: AiBehaviour) -> void:
 	var m: int = base + NATIVE_MIRROR
 	match kind:
 		3:
-			var a := current as BehaviourAttack
+			var a := b as BehaviourAttack
 			if wanted_target_id > 0:
 				_mirror_target.id = wanted_target_id
 				a._target = _mirror_target
@@ -547,23 +555,23 @@ func _mirror(kind: int, out: PackedFloat64Array, base: int) -> void:
 			a.slash.time_on_target_s = out[m + 9]
 			a.slash.state_time_s = out[m + 10]
 		2:
-			var e := current as BehaviourEvade
+			var e := b as BehaviourEvade
 			e.jinks = int(out[m])
 			e.jink_left_s = out[m + 1]
 			e._lock_until_jinks = int(out[m + 2])
 		0:
-			var r := current as BehaviourRam
+			var r := b as BehaviourRam
 			r.committed = out[m] != 0.0
 			r.rolls = int(out[m + 1])
 			r.max_friends_seen = int(out[m + 2])
 			r.target_id_value = _join_id(out[m + 3], out[m + 4])
 			avoid_exempt_id = r.target_id_value if r.committed else 0
 		5:
-			(current as BehaviourFormation).slot_error_m = out[m]
+			(b as BehaviourFormation).slot_error_m = out[m]
 		4:
-			(current as BehaviourGuard).post_error_m = out[m]
+			(b as BehaviourGuard).post_error_m = out[m]
 		7:
-			var f := current as BehaviourFollowPath
+			var f := b as BehaviourFollowPath
 			f.index = int(out[m])
 			f.phase = int(out[m + 1]) as BehaviourFollowPath.Phase
 			f.lag_m = out[m + 2]
@@ -580,7 +588,8 @@ func _mirror(kind: int, out: PackedFloat64Array, base: int) -> void:
 func _sync_mirror() -> void:
 	var kind: int = _mirror_kind
 	_mirror_kind = -1
-	_mirror(kind, _out, _out_base)
+	_mirror(kind, _out, _out_base, _mirror_behaviour)
+	_mirror_behaviour = null
 
 
 # Pushes the context's wing, objective, guard and route to the slot when any of them changed since the last push.
