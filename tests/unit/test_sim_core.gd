@@ -637,7 +637,14 @@ func test_the_flight_step_flies_the_same_from_the_core_as_from_the_physics_serve
 const KERNEL_FILE: String = "res://native/src/kernels.rs"
 const ROWS_FILE: String = "res://native/src/rows.rs"
 const KERNEL_USERS: Array[String] = ["res://native/src/contact_field.rs", "res://native/src/hit_sweep.rs",
-		"res://native/src/ram_phase.rs", "res://native/src/flight_step.rs", "res://native/src/pilot_kernels.rs"]
+		"res://native/src/ram_phase.rs", "res://native/src/flight_step.rs", "res://native/src/pilot_kernels.rs",
+		"res://native/src/brain.rs"]
+## The brains' engine-free files (M4-T17): the shared vector maths, the brain maths and the behaviours, held to the kernels'
+## rules; they may import each other and the kernels, nothing else.
+const BRAIN_FILES: Array[String] = ["res://native/src/v3.rs", "res://native/src/brain_maths.rs",
+		"res://native/src/brain_behaviours.rs"]
+const BRAIN_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
+		"use crate::rows::", "use crate::v3::", "use crate::brain_maths::", "use crate::kernels::"]
 const KERNEL_FORBIDDEN: Array[String] = ["Gd<", "Variant", "InstanceId", "instance_id", "singleton", "PhysicsServer",
 		"godot_error", "godot_print", "godot_warn", "#[func]", "#[godot_api]", "GodotClass", ".get(&", ".call(", "Node",
 		"RigidBody", "StringName", "GString", "Scs", "pub use", "/*", "unsafe"]
@@ -646,7 +653,8 @@ const ROWS_FORBIDDEN: Array[String] = ["Gd<", "Variant", "InstanceId", "instance
 		"RigidBody", "Scs", "pub use", "/*", "unsafe", "Object", "Array", "Packed"]
 ## The only `use` lines the kernels may hold: the standard library, two maths builtins, and the row tables' plain data.
 const KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
-		"use crate::rows::{Bolts, FLAG_RIGID, Rows};", "use crate::rows::{FLAG_RIGID, Rows};", "use crate::rows::Rows;"]
+		"use crate::rows::{Bolts, FLAG_RIGID, Rows};", "use crate::rows::{FLAG_RIGID, Rows};", "use crate::rows::Rows;",
+		"use crate::v3::"]
 ## The only `use` lines the row tables may hold: the standard library and the value types the columns are made of.
 const ROWS_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, GString, Vector3};"]
 
@@ -686,7 +694,9 @@ static func _engine_free_violations(path: String, forbidden: Array[String], use_
 func test_the_kernels_hold_no_engine_type() -> void:
 	var violations: PackedStringArray = _engine_free_violations(KERNEL_FILE, KERNEL_FORBIDDEN, KERNEL_USE_ALLOWED)
 	violations.append_array(_engine_free_violations(ROWS_FILE, ROWS_FORBIDDEN, ROWS_USE_ALLOWED))
-	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the kernels or the row tables: %s" % violations)
+	for brain_file: String in BRAIN_FILES:
+		violations.append_array(_engine_free_violations(brain_file, KERNEL_FORBIDDEN, BRAIN_USE_ALLOWED))
+	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the kernels, the row tables or the brains: %s" % violations)
 	var source: String = FileAccess.get_file_as_string(KERNEL_FILE)
 	assert_true(source.contains("pub mod contact") and source.contains("pub mod sweep") and source.contains("pub mod ram")
 			and source.contains("pub mod flight"), "the four kernels are there")
