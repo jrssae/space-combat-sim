@@ -28,7 +28,7 @@ order and scope will change. Long-term design: `docs/architecture.md` §14.
 | M9 Time warp and the solar system | go anywhere | `SimClock` warp, KSP-style: physics warp 2-4× (thrust allowed), on-rails warp 10× up to ≈ 100 000× while coasting (no thrust, no hostiles near), altitude-banded limits near bodies, automatic predictive drop-back when anything happens (contact, comms, trigger, alarm, arrival); trajectory preview, nav computer, `warp` console command; fly to the sun or other planets (1 AU in ≈ 50 s at the cap); honest gravity assists and Oberth burns | `SimClock` rule (no wall clock), `UniversePos`, M6 gravity |
 | M10 Jumpgate travel | other star systems | system generator (star, planets, moons, belts, gates, per-system sky; a star's colour is one entry in `data/star_systems.json`, Q30, and the Narn system's star is red), gate network, transitions | `UniversePos.system_id`, sky as a generated asset, scenario data |
 | M11 Hyperspace | the other space | separate space with gravitational incline, currents, beacons and lock; full-control flight; later combat in hyperspace; the destination jumpgate broadcasts with unlimited range (M3-T17's `broadcast_range_m = INF`, for the player and the AI) | `environment_accel`, one `WorldFrame` per space |
-| M12 Factions and capital ships | the setting's fleets | raider carrier and Raider Battle Wagon (launch tubes as Delta-V spawn points; moved out of M2 because they need M6's LOD chains; earlier only if the M8 raiders launch from one), raider control ship, Earthforce renegades, Narn, Centauri, Minbari, Drazi and other non-aligned worlds, Shadow scouts and large Shadow ships, Vorlon ships of several sizes; turrets, subsystems; organic part library with SH sheen; capital-ship destruction as a staged break-up with secondary blasts, visible from tens of km through M4-T23's far explosion flashes | `faction`, procgen `styles/` and `parts/`, `AiPilot` |
+| M12 Factions and capital ships | the setting's fleets | raider carrier and Raider Battle Wagon (launch tubes as Delta-V spawn points; moved out of M2 because they need M6's LOD chains; earlier only if the M8 raiders launch from one), raider control ship, Earthforce renegades, Narn, Centauri, Minbari, Drazi and other non-aligned worlds, Shadow scouts and large Shadow ships, Vorlon ships of several sizes; turrets, subsystems; organic part library with SH sheen; capital-ship destruction as a staged break-up with secondary blasts, visible from tens of km through M4-T23's far explosion flashes; blast damage with distance falloff for every explosion and ship death scaled by size, and ships and stations disabled without exploding (see "Required: blast damage and disabled hulks") | `faction`, procgen `styles/` and `parts/`, `AiPilot` |
 | M13 Starfury Thunderbolt | second player ship | new `ShipSpec` + generator family member with its own pod/wing layout | `ShipSpec` per class with `asset_id`, `ThrusterLayout` from hardpoints |
 | M14 Mission types | variety | rescue with towing (tether force), escort, asteroid fields, comets, random encounters in free flight | tether design (§14.7), procgen asteroid/comet assets, mission framework |
 | M15 Voiced dialog | the instructor speaks | offline TTS generator (`tools/procgen` asset kind `voice`): renders every dialog line from mission data on the user's machine with one voice per speaker plus a radio filter; output cached and gitignored. Candidate engine: Piper (`OHF-Voice/piper1-gpl`, GPL-3.0); only voice models whose licence permits it. Being produced by code, voices satisfy the procedural-only rule. Can be pulled forward any time after M8 | dialog lines as data (speaker, text, voice id) from M5; subtitles stay as the fallback |
@@ -49,6 +49,29 @@ burns for the time-warp work; **M11** gives hyperspace its own incline field thr
 - The HUD's reference point (now the launch point) becomes the dominant body, bay or jump gate of the mission.
 
 Finite reaction mass can be switched on in any milestone after M9: `FlightOutput.mass_flow_kg_s` already exists.
+
+## Required: blast damage and disabled hulks (M12)
+
+Maintainer requirement (2026-11-05). Today no explosion hurts anything except M4's mine stand-ins, which deal a flat 200 hull
+points to every hull within 100 m with no falloff (`mine_standin.gd`, a benchmark placeholder). M12 replaces that with one blast
+model and adds disabling without explosion:
+
+- **Damage falls off with distance.** Every blast (mines, missiles, torpedoes and ship deaths) has an energy and a radius;
+  damage to a hull falls with the distance from the blast centre to the hull's nearest surface (a smooth falloff to zero at the
+  radius, not a flat value inside it), so a ship at the edge of a blast is scratched and one beside it is wrecked. The same falloff
+  feeds the push a blast gives to nearby bodies.
+- **Every ship's death is a blast scaled by its size.** A fighter's death is a small blast that can hurt a wingman flying close; a
+  capital ship's reactor going up is a large and very dangerous one that can destroy fighters and damage other capitals nearby.
+  The blast's energy and radius come from the ship's class and what is aboard (reactor size, magazines), not from a fixed number.
+  M4-T23's far explosion flashes already scale their brightness and reach with the blast's energy; this uses the same energy.
+- **Large ships and stations can be destroyed without exploding.** Capital ships and stations are built of sections; only
+  sections holding a reactor, fuel or weapons and magazines can blow up. Terminal damage to other sections (bridge, hangar decks,
+  engines, habitat) incapacitates the ship or station instead: it loses power, control or thrust in stages, stops fighting, and the
+  hulk keeps drifting on its last motion (Newtonian, no damping), a navigational hazard and a possible later mission object
+  (boarding, salvage, rescue). A disabled hulk can still explode later if a reactor or magazine section is hit.
+- **Seams to keep before M12:** M4's damage zones (`DamageZones`) and hardpoints are the start of the section model; the explosion
+  level of detail (M4-T23) keeps each death's energy and radius as data; the low-attention tier (M4-T21) must carry a disabled
+  hulk as a drifting row, not remove it.
 
 ## Required: alternate control profiles
 
