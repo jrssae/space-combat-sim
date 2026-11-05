@@ -30,6 +30,11 @@ extends Node
 ## Statics (M4-T09): the perception's `statics` are the nearest `ai_nearest_static_k` rocks and mines (`ContactScan.statics_for`),
 ## never among the contacts; avoidance steers round them with the contacts.
 ##
+## Native kernels (M4-T16, §17.13): on a core scan the perception also carries the scan's pilot kernels, the core rows its
+## contacts and statics were picked from and the ship's relation row, so avoidance, the fire lane and the context lists
+## each run in one native call (`AvoidanceMath.filter_seen`, `FireLane.clear_seen`, `AiContext.refresh`), bit for bit
+## with the GDScript, which answers off the core. The tie-break seed is passed in as before.
+##
 ## Console (§16.4, M3-T06): `AiConsole` is registered while any driver is in the tree, owned by the newest. `think_us()` is
 ## wall-clock time, a profiling readout (AC13), never gameplay time.
 
@@ -266,7 +271,14 @@ func perceive() -> Perception:
 		p.contacts = scan.nearest_for(own_id, p.position, p.faction, _nearest_k, _keeper)
 	else:
 		p.contacts = scan.contacts_for(own_id, p.position, p.faction)
+	var contact_rows: PackedInt32Array = scan.picked_rows
 	p.statics = scan.statics_for(own_id, p.position, p.faction, _nearest_static_k)
+	var kernels: Object = scan.pilot_kernels()
+	if kernels != null:
+		p.kernels = kernels
+		p.contact_rows = contact_rows
+		p.static_rows = scan.picked_rows
+		p.relation_row = scan.relation_row(p.faction)
 	p.incoming_fire = scan.incoming_fire(own_id, p.position, p.velocity, p.faction)
 	p.broadcasts = ContactScan.shared_broadcasts().broadcasts_for(own_id, p.position, p.faction)
 	if timed:
@@ -286,16 +298,8 @@ func _avoid(p: Perception, flight: FlightCommand) -> void:
 		return
 	var wish: Vector3 = brain.desired_velocity if brain.has_desired_velocity else p.velocity
 	var radius: float = combatant.damageable.bounding_radius if combatant.damageable != null else 0.0
-	var contacts: Array[Contact] = p.contacts
-	if brain.avoid_exempt_id != 0:  # a committed rammer flies into its target (M3-T13); everything else is still avoided
-		contacts = []
-		for c: Contact in p.contacts:
-			if c.id != brain.avoid_exempt_id:
-				contacts.append(c)
-	if not p.statics.is_empty():  # rocks and mines are obstacles too (M4-T09)
-		contacts = contacts + p.statics
-	var result: Dictionary = AvoidanceMath.filter(p.position, p.velocity, radius, contacts, wish, p.capability,
-			hash(combatant.display_name))
+	# A committed rammer flies into its target (M3-T13), everything else is still avoided; rocks and mines too (M4-T09).
+	var result: Dictionary = AvoidanceMath.filter_seen(p, radius, wish, brain.avoid_exempt_id, hash(combatant.display_name))
 	var filtered: Vector3 = result["v_des"]
 	if filtered == wish:
 		return

@@ -158,13 +158,13 @@ func test_the_facades_answer_from_the_core_as_the_gdscript_reference_does() -> v
 			for i: int in p.statics.size():
 				if sim.core.row_position(p.static_rows[i]) != p.statics[i].position:
 					differences.append("round %d query %d: static %d is not at its row" % [round, q, i])
-			_compare(p, rng, "round %d query %d" % [round, q], differences)
+			_ask_both(p, rng, "round %d query %d" % [round, q], differences)
 	assert_eq(differences.size(), 0, "the kernels on the core answer as the GDScript does: %s" % differences.slice(0, 4))
 	assert_eq(on_rows, queries, "every perception of a core scan is on the rows")
 
 
 # Asks each facade through the kernels and the GDScript reference on the same perception.
-func _compare(p: Perception, rng: RandomNumberGenerator, label: String, differences: PackedStringArray) -> void:
+func _ask_both(p: Perception, rng: RandomNumberGenerator, label: String, differences: PackedStringArray) -> void:
 	var radius: float = rng.randf_range(5.0, 20.0)
 	var v_des: Vector3 = p.velocity + Vector3(rng.randf_range(-80.0, 80.0), rng.randf_range(-30.0, 30.0), rng.randf_range(-80.0, 80.0))
 	var exempt_id: int = p.contacts[rng.randi_range(0, p.contacts.size() - 1)].id if not p.contacts.is_empty() \

@@ -1340,3 +1340,364 @@ pub mod flight {
         }
     }
 }
+
+/// The AI pilot's per-contact loops (`ScsPilotKernels`, M4-T16): avoidance over the contacts and statics, the fire lane,
+/// and the context lists. Each is a pure function of the rows and one ship's inputs and writes only that ship's result,
+/// so T18 can run the ships of a tick on worker threads. The maths repeats `AvoidanceMath`, `FireLane` and
+/// `AiContext.refresh` step for step: 32-bit vectors, 64-bit scalars, a scalar rounded to 32 bits before it scales a
+/// vector, the engine's order of operations, so both paths give the same bits.
+pub mod pilot {
+    use std::f64::consts::PI;
+
+    use godot::builtin::Vector3;
+
+    use crate::rows::Rows;
+
+    // `AvoidanceMath`'s constants.
+    const MARGIN_M: f64 = 15.0;
+    const HORIZON_MIN_S: f64 = 4.0;
+    const MATCHED_MPS: f64 = 3.0;
+    const PUSH_S: f64 = 2.0;
+    const AIM_PAST_M: f64 = 1.0;
+    const TIE_M: f64 = 0.1;
+    const TIE_SPREAD_DEG: f64 = 40.0;
+    const URGENT_SETTLE_S: f64 = 1.0;
+    const MIN_TIME_S: f64 = 0.25;
+    // `FireLane.CLEARANCE_M`.
+    const CLEARANCE_M: f64 = 5.0;
+
+    /// `Factions.Relation` values, as the relation rows hold them (one per faction of the core's table).
+    pub const FRIENDLY: u8 = 0;
+    pub const NEUTRAL: u8 = 1;
+    pub const HOSTILE: u8 = 2;
+
+    const UP: Vector3 = Vector3::new(0.0, 1.0, 0.0);
+    const RIGHT: Vector3 = Vector3::new(1.0, 0.0, 0.0);
+    const FORWARD: Vector3 = Vector3::new(0.0, 0.0, -1.0);
+
+    /// The thinking ship as avoidance sees it: its pose, size, what it can do, and its tie-break (`hash(seed)`, passed in
+    /// so the kernel holds no hash of its own).
+    pub struct Ship {
+        pub position: Vector3,
+        pub velocity: Vector3,
+        pub radius: f64,
+        pub a_retro: f64,
+        pub rate_max_x: f64,
+        pub rate_max_y: f64,
+        pub a_rcs_x: f64,
+        pub a_rcs_y: f64,
+        pub tie_hash: i64,
+    }
+
+    /// `AvoidanceMath.filter`'s answer: the wish with every threat's dodge added, and whether a dodge is urgent.
+    pub struct Avoided {
+        pub v_des: Vector3,
+        pub urgent: bool,
+    }
+
+    /// `AiContext.refresh`'s lists for one ship: the hostile ships (their places in the contact list), their offsets and
+    /// ranges, the friendly ids (the ship's own first), and the leader's place, or -1. The caller owns it and reuses it.
+    #[derive(Default)]
+    pub struct Lists {
+        pub hostiles: Vec<i32>,
+        pub offsets: Vec<Vector3>,
+        pub ranges: Vec<f64>,
+        pub friendly_ids: Vec<i64>,
+        pub leader: i32,
+    }
+
+    /// `AvoidanceMath.filter` over the rows `contacts` (but the one whose id is `exempt_id`, a rammer's target) and then
+    /// the rows `statics`. A row the table does not hold is no threat.
+    pub fn avoid(
+        rows: &Rows,
+        ship: &Ship,
+        contacts: &[i32],
+        statics: &[i32],
+        exempt_id: i64,
+        v_des: Vector3,
+    ) -> Avoided {
+        let mut dodge = Vector3::new(0.0, 0.0, 0.0);
+        let mut urgent = false;
+        let a_stop = maxf(ship.a_retro, 0.01);
+        let turn_rate = maxf(minf(ship.rate_max_x, ship.rate_max_y), 0.01);
+        let urgent_s = 0.5 * PI / turn_rate + URGENT_SETTLE_S;
+        let a_side = maxf(minf(ship.a_rcs_x, ship.a_rcs_y), 0.01);
+        let listed = contacts
+            .iter()
+            .filter_map(|&r| row(rows, r))
+            .filter(|&j| exempt_id == 0 || rows.ids[j] != exempt_id)
+            .chain(statics.iter().filter_map(|&r| row(rows, r)));
+        for j in listed {
+            let c_position = rows.positions[j];
+            let c_velocity = rows.velocities[j];
+            let reach = ship.radius + rows.radii[j] + MARGIN_M;
+            let s = sub(ship.position, c_position);
+            let w = sub(v_des, c_velocity);
+            let d = f64::from(length(s));
+            if d < reach {
+                let out_dir = if d > TIE_M {
+                    div_s(s, d as f32)
+                } else {
+                    tie_direction(w, ship.tie_hash)
+                };
+                let closing = -f64::from(dot(w, out_dir));
+                let push = (reach - d) / PUSH_S + maxf(closing, 0.0);
+                dodge = add(dodge, scale(out_dir, push as f32));
+                urgent = urgent || closing > MATCHED_MPS;
+                continue;
+            }
+            let speed_sq = f64::from(length_squared(w));
+            if speed_sq < MATCHED_MPS * MATCHED_MPS {
+                continue;
+            }
+            let t_star = -f64::from(dot(s, w)) / speed_sq;
+            if t_star <= 0.0 {
+                continue; // opening
+            }
+            let speed = speed_sq.sqrt();
+            let relative = f64::from(length(sub(ship.velocity, c_velocity)));
+            let mut horizon = maxf(HORIZON_MIN_S, maxf(speed, relative) / a_stop);
+            if rows.is_static[j] {
+                horizon = maxf(horizon, (2.0 * reach / a_side).sqrt() + URGENT_SETTLE_S);
+            }
+            if t_star > horizon {
+                continue;
+            }
+            let offset = add(s, scale(w, t_star as f32));
+            let miss = f64::from(length(offset));
+            if miss >= reach {
+                continue;
+            }
+            let side = if miss > TIE_M {
+                div_s(offset, miss as f32)
+            } else {
+                tie_direction(w, ship.tie_hash)
+            };
+            let x = sideways_speed(miss, speed * t_star, reach + AIM_PAST_M, speed, t_star);
+            dodge = add(dodge, scale(side, x as f32));
+            urgent = urgent || t_star < urgent_s;
+        }
+        Avoided {
+            v_des: add(v_des, dodge),
+            urgent,
+        }
+    }
+
+    /// `FireLane.clear` over the rows `contacts`: true when nothing that must not be hit sits in the lane from `position`
+    /// along `aim_dir`, short of `range_m`. `relations` is the shooter's relation to each faction of the table.
+    pub fn fire_lane(
+        rows: &Rows,
+        relations: &[u8],
+        contacts: &[i32],
+        position: Vector3,
+        aim_dir: Vector3,
+        range_m: f64,
+        target_id: i64,
+        friendly_fire: bool,
+    ) -> bool {
+        if f64::from(length_squared(aim_dir)) < 1e-12 || range_m <= 0.0 {
+            return true;
+        }
+        let dir = normalized(aim_dir);
+        for j in contacts.iter().filter_map(|&r| row(rows, r)) {
+            if rows.ids[j] == target_id
+                || !protected(relation(rows, relations, j), rows.rigid[j], friendly_fire)
+            {
+                continue;
+            }
+            let rel = sub(rows.positions[j], position);
+            let along = f64::from(dot(rel, dir));
+            if along <= 0.0 || along >= range_m {
+                continue;
+            }
+            let width = rows.radii[j] + CLEARANCE_M;
+            if f64::from(length_squared(sub(rel, scale(dir, along as f32)))) < width * width {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// `AiContext.refresh`'s split of the rows `contacts` into `out`: hostile ships with their offsets and ranges from
+    /// `position`, the friendly ids after `self_id` (when not 0), and the place of the friendly whose id is `leader_id`.
+    pub fn context_lists(
+        rows: &Rows,
+        relations: &[u8],
+        contacts: &[i32],
+        position: Vector3,
+        self_id: i64,
+        leader_id: i64,
+        out: &mut Lists,
+    ) {
+        out.hostiles.clear();
+        out.offsets.clear();
+        out.ranges.clear();
+        out.friendly_ids.clear();
+        out.leader = -1;
+        if self_id != 0 {
+            out.friendly_ids.push(self_id);
+        }
+        for (k, &r) in contacts.iter().enumerate() {
+            let Some(j) = row(rows, r) else {
+                continue;
+            };
+            match relation(rows, relations, j) {
+                HOSTILE => {
+                    if rows.rigid[j] {
+                        let offset = sub(rows.positions[j], position);
+                        out.hostiles.push(k as i32);
+                        out.offsets.push(offset);
+                        out.ranges.push(f64::from(length(offset)));
+                    }
+                }
+                FRIENDLY => {
+                    out.friendly_ids.push(rows.ids[j]);
+                    if rows.ids[j] == leader_id {
+                        out.leader = k as i32;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // The row index `r` names, when the table holds it.
+    fn row(rows: &Rows, r: i32) -> Option<usize> {
+        usize::try_from(r).ok().filter(|&j| j < rows.ids.len())
+    }
+
+    // How the asking ship regards row `j`'s faction; a faction its row does not reach is neutral.
+    fn relation(rows: &Rows, relations: &[u8], j: usize) -> u8 {
+        relations
+            .get(rows.faction_ix[j] as usize)
+            .copied()
+            .unwrap_or(NEUTRAL)
+    }
+
+    // `FireLane._protected`: a friendly always, any ship but a hostile with friendly fire on.
+    fn protected(relation: u8, is_ship: bool, friendly_fire: bool) -> bool {
+        relation == FRIENDLY || (friendly_fire && is_ship && relation != HOSTILE)
+    }
+
+    // `AvoidanceMath.tie_direction`: "right" of the relative velocity with world up (world right when it is nearly
+    // vertical), turned about it by the seeded angle, so two ships dead on dodge apart for any pair of seeds.
+    fn tie_direction(rel_vel: Vector3, tie_hash: i64) -> Vector3 {
+        let axis = if f64::from(length_squared(rel_vel)) > 1e-12 {
+            normalized(rel_vel)
+        } else {
+            FORWARD
+        };
+        let reference = if f64::from(dot(axis, UP)).abs() < 0.9 {
+            UP
+        } else {
+            RIGHT
+        };
+        let base = normalized(cross(axis, reference));
+        let unit = tie_hash.rem_euclid(65536) as f64 / 65535.0;
+        let angle = TIE_SPREAD_DEG * (PI / 180.0) * (2.0 * unit - 1.0);
+        rotated(base, axis, angle as f32)
+    }
+
+    // `AvoidanceMath._sideways_speed`: the sideways speed that lifts the straight-line miss to `target`, at most `speed`.
+    fn sideways_speed(miss: f64, along: f64, target: f64, speed: f64, t_star: f64) -> f64 {
+        let x = if along > target + 1e-3 {
+            let distance_sq = along * along + miss * miss;
+            speed * (target * (distance_sq - target * target).sqrt() - miss * along)
+                / (along * along - target * target)
+        } else {
+            (target - miss) / maxf(t_star, MIN_TIME_S)
+        };
+        clampf(x, 0.0, speed)
+    }
+
+    // `Vector3.rotated(axis, angle)`: the engine's axis-angle basis applied to `v`, in 32 bits.
+    fn rotated(v: Vector3, axis: Vector3, angle: f32) -> Vector3 {
+        let (x, y, z) = (axis.x, axis.y, axis.z);
+        let sq = Vector3::new(x * x, y * y, z * z);
+        let cosine = angle.cos();
+        let r00 = sq.x + cosine * (1.0 - sq.x);
+        let r11 = sq.y + cosine * (1.0 - sq.y);
+        let r22 = sq.z + cosine * (1.0 - sq.z);
+        let sine = angle.sin();
+        let t = 1.0 - cosine;
+        let (xyzt, zyxs) = (x * y * t, z * sine);
+        let (r01, r10) = (xyzt - zyxs, xyzt + zyxs);
+        let (xyzt, zyxs) = (x * z * t, y * sine);
+        let (r02, r20) = (xyzt + zyxs, xyzt - zyxs);
+        let (xyzt, zyxs) = (y * z * t, x * sine);
+        let (r12, r21) = (xyzt - zyxs, xyzt + zyxs);
+        Vector3::new(
+            dot(Vector3::new(r00, r01, r02), v),
+            dot(Vector3::new(r10, r11, r12), v),
+            dot(Vector3::new(r20, r21, r22), v),
+        )
+    }
+
+    // Godot's Vector3 maths in 32 bits, in the engine's order of operations.
+    fn add(a: Vector3, b: Vector3) -> Vector3 {
+        Vector3::new(a.x + b.x, a.y + b.y, a.z + b.z)
+    }
+
+    fn sub(a: Vector3, b: Vector3) -> Vector3 {
+        Vector3::new(a.x - b.x, a.y - b.y, a.z - b.z)
+    }
+
+    fn scale(a: Vector3, s: f32) -> Vector3 {
+        Vector3::new(a.x * s, a.y * s, a.z * s)
+    }
+
+    fn div_s(a: Vector3, s: f32) -> Vector3 {
+        Vector3::new(a.x / s, a.y / s, a.z / s)
+    }
+
+    fn dot(a: Vector3, b: Vector3) -> f32 {
+        a.x * b.x + a.y * b.y + a.z * b.z
+    }
+
+    fn cross(a: Vector3, b: Vector3) -> Vector3 {
+        Vector3::new(
+            a.y * b.z - a.z * b.y,
+            a.z * b.x - a.x * b.z,
+            a.x * b.y - a.y * b.x,
+        )
+    }
+
+    fn length_squared(a: Vector3) -> f32 {
+        let x2 = a.x * a.x;
+        let y2 = a.y * a.y;
+        let z2 = a.z * a.z;
+        x2 + y2 + z2
+    }
+
+    fn length(a: Vector3) -> f32 {
+        length_squared(a).sqrt()
+    }
+
+    fn normalized(a: Vector3) -> Vector3 {
+        let length_sq = length_squared(a);
+        if length_sq == 0.0 {
+            return Vector3::new(0.0, 0.0, 0.0);
+        }
+        let l = length_sq.sqrt();
+        Vector3::new(a.x / l, a.y / l, a.z / l)
+    }
+
+    // Godot's 64-bit scalar helpers with their exact comparisons.
+    fn clampf(v: f64, lo: f64, hi: f64) -> f64 {
+        if v < lo {
+            lo
+        } else if v > hi {
+            hi
+        } else {
+            v
+        }
+    }
+
+    fn minf(a: f64, b: f64) -> f64 {
+        if a < b { a } else { b }
+    }
+
+    fn maxf(a: f64, b: f64) -> f64 {
+        if a > b { a } else { b }
+    }
+}

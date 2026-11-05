@@ -59,6 +59,18 @@ var last_bolt_hit_s: float = -INF
 var last_attacker_id: int = 0
 ## `settings.friendly_fire` this tick: bolts then hurt every hull but the shooter's (`FireLane`).
 var friendly_fire: bool = false
+## The native pilot kernels over the core's rows (M4-T16), null off the core: then `AvoidanceMath`, `FireLane` and
+## `AiContext` answer in GDScript. With them, the core row of each of `contacts` and `statics` (in the lists' order) and
+## this ship's `Factions.Relation` to each faction of the core's table.
+var kernels: Object = null
+var contact_rows: PackedInt32Array = PackedInt32Array()
+var static_rows: PackedInt32Array = PackedInt32Array()
+var relation_row: PackedByteArray = PackedByteArray()
+
+
+## Whether the kernels can answer for this perception: they are there and the rows line up with the lists.
+func on_rows() -> bool:
+	return kernels != null and contact_rows.size() == contacts.size() and static_rows.size() == statics.size()
 
 
 ## Forward unit vector (the nose, -Z).

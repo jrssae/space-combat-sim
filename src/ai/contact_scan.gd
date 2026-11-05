@@ -35,6 +35,11 @@ extends RefCounted
 ## The native core (M4-T15, architecture §17.13): with a `SimCore` attached to the world, `shared` comes from the core's
 ## rows (`from_core`, the same rows as the registry's and the tree gather's, bit for bit) and the field reads the core
 ## directly (bodies, statics and bolts) instead of taking a copy; the registry path stays for `perf_native_core` off.
+##
+## The pilot kernels (M4-T16, architecture §17.13): a core scan's rows are the core's, in its order, so the indices a list
+## was picked from (`picked_rows`) name the core rows of its contacts. `pilot_kernels` gives the native kernels that answer
+## avoidance, the fire lane and the context lists from those rows, and `relation_row` a faction's relations in the core's
+## faction order; both null or empty off the core.
 
 const SENSOR_RANGE_M: float = 5000.0
 ## A hostile bolt is incoming when its closest approach is under this distance within this time.
@@ -44,6 +49,8 @@ const INCOMING_HORIZON_S: float = 2.0
 const NATIVE_CLASS: StringName = &"ScsContactField"
 ## The native body registry the shared scan is built from (M4-T09).
 const REGISTRY_CLASS: StringName = &"ScsBodyRegistry"
+## The native pilot kernels a core scan hands its ships (M4-T16).
+const PILOT_CLASS: StringName = &"ScsPilotKernels"
 
 ## How many scans were gathered from the tree in GDScript (`from_tree`): a work count, 0 a tick on the native path.
 static var gathers: int = 0
@@ -62,6 +69,7 @@ static var _no_contacts: Array[Contact] = []
 static var _native_class_known: int = -1
 # The registry (M4-T09): made on the first native `shared`, told when the tree's groups change.
 static var _registry_class_known: int = -1
+static var _pilot_class_known: int = -1
 static var _registry: Object = null
 static var _registry_tree: SceneTree = null
 static var _members_dirty: bool = true
@@ -71,6 +79,9 @@ static var _registry_statics_version: int = -1
 
 ## The physics frame this scan is of (-1 for one built by hand).
 var physics_frame: int = -1
+## The scan rows of the latest list `contacts_for`, `nearest_for` or `statics_for` handed out, in its order (M4-T16): on a
+## core scan, the core rows the pilot kernels read. Empty when a list was not picked by row (the GDScript fast path).
+var picked_rows: PackedInt32Array = PackedInt32Array()
 ## False forces the GDScript path for this scan, so a test or a bench can pair it with the native one.
 var use_native: bool = true
 
@@ -118,6 +129,9 @@ var _removals_at: int = 0
 # A core scan (M4-T15): the core its field reads; its bolts come over only when the GDScript path needs them.
 var _sim: SimCore = null
 var _bolts_pending: bool = false
+var _pilot: Object = null  # the pilot kernels over this scan's core rows, made on first ask (M4-T16)
+var _pilot_known: bool = false
+var _relation_rows: Dictionary = {}  # faction -> PackedByteArray of relations in the core's faction order
 
 
 ## The scan of the current physics frame, built on the first call of the frame.
@@ -343,11 +357,13 @@ func contacts_for(own_body_id: int, own_position: Vector3, own_faction: StringNa
 	if field != null:
 		var found: PackedInt32Array = field.contacts(own_body_id, own_position, range_m)
 		if own_index >= 0 and found.size() == stamped.size() - 1:
+			picked_rows = found
 			return _all_but(own_faction, stamped, own_index)
 		return _pick(own_faction, stamped, found)
 	var has_statics: bool = _statics_count() > 0
 	# Fast path: everything is in range for sure, so the faction list without this ship is what the loop would build.
 	if not has_statics and own_index >= 0 and _extent() + own_position.distance_to(_positions[own_index]) < range_m * 0.999:
+		picked_rows = PackedInt32Array()
 		return _all_but(own_faction, stamped, own_index)
 	var range_sq: float = range_m * range_m
 	var found := PackedInt32Array()
@@ -436,6 +452,7 @@ func nearest_for(own_body_id: int, own_position: Vector3, own_faction: StringNam
 func statics_for(own_body_id: int, own_position: Vector3, own_faction: StringName, k: int,
 		range_m: float = SENSOR_RANGE_M) -> Array[Contact]:
 	if k <= 0 or _statics_count() == 0:
+		picked_rows = PackedInt32Array()
 		return _no_contacts
 	var stamped: Array[Contact] = _stamped_for(own_faction)
 	var field: Object = _native_with_friends(own_faction)
@@ -511,6 +528,37 @@ func incoming_fire(own_body_id: int, own_position: Vector3, own_velocity: Vector
 		if AvoidanceMath.closest_approach(rel_pos, rel_vel, INCOMING_HORIZON_S) < INCOMING_MISS_M:
 			count += 1
 	return count
+
+
+## The native pilot kernels over this scan's core rows (M4-T16), or null: not a core scan, native code off, the library
+## without the class, or rows changed since the scan was taken (the GDScript reference then answers).
+func pilot_kernels() -> Object:
+	if _pilot_known:
+		return _pilot
+	_pilot_known = true
+	if _sim == null or not is_instance_valid(_sim) or _sim.core == null or not use_native or not NativeLib.enabled():
+		return null
+	if _pilot_class_known < 0:
+		_pilot_class_known = 1 if NativeLib.has_class(PILOT_CLASS) else 0
+	if _pilot_class_known == 0 or int(_sim.core.row_count()) != _body_ids.size():
+		return null
+	_pilot = NativeLib.instantiate(PILOT_CLASS)
+	if _pilot != null:
+		_pilot.attach_core(_sim.core)
+	return _pilot
+
+
+## How a ship of `faction` regards each faction of the core's table, as `Factions.Relation` values in that table's order
+## (what the pilot kernels read); empty off the core.
+func relation_row(faction: StringName) -> PackedByteArray:
+	if _relation_rows.has(faction):
+		return _relation_rows[faction]
+	var row := PackedByteArray()
+	if _sim != null and is_instance_valid(_sim) and _sim.core != null:
+		for other: StringName in _sim.core.factions():
+			row.append(_relation(faction, other))
+	_relation_rows[faction] = row
+	return row
 
 
 # The registry for a native scan of `tree`, made (and told of the tree's changes) on first use; null when not available.
@@ -668,6 +716,7 @@ func _keep_named(chosen: PackedInt32Array, keeper: Callable, own_body_id: int, o
 
 # The contacts at `indices` of `faction`'s list, in that order, each made the first time it is handed out.
 func _pick(faction: StringName, stamped: Array[Contact], indices: PackedInt32Array) -> Array[Contact]:
+	picked_rows = indices
 	var out: Array[Contact] = []
 	for i: int in indices:
 		var c: Contact = stamped[i]

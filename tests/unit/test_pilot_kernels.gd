@@ -388,7 +388,7 @@ func test_rows_that_do_not_line_up_or_out_of_range_never_panic() -> void:
 	var ok: bool = kernels.load(PackedInt64Array([1, 2]), PackedVector3Array([Vector3.ZERO]), PackedVector3Array(),
 			PackedFloat64Array(), PackedByteArray(), PackedInt32Array(), PackedByteArray())
 	assert_false(ok, "arrays that do not line up are refused")
-	assert_push_error("array lengths differ")
+	assert_engine_error("lengths", "the kernels say why they refused")
 	var v := Vector3(10.0, 0.0, 0.0)
 	var out: Vector4 = kernels.avoid(PackedInt32Array([0, 5, -1]), PackedInt32Array([9]), 0, Vector3.ZERO, v, 5.0, v, 5.0,
 			Vector3.ONE, Vector2.ONE, 0)

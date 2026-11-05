@@ -138,7 +138,7 @@ func engage(p: Perception, target_id: int, target_position: Vector3, target_velo
 			all_axes = true
 	if tactics.max_speed_mps > 0.0 and v_des.length() > cap:
 		v_des = v_des.normalized() * cap
-	firing = in_gate and FireLane.clear(p.position, p.forward(), range_m, p.contacts, target_id, p.friendly_fire)
+	firing = in_gate and FireLane.clear_seen(p, p.forward(), range_m, target_id)
 	if tracking:
 		cmd.flight.rot = PilotSteering.face_tracking(p.basis, face_dir, lead_omega, p.capability.rate_max_rad)
 	else:

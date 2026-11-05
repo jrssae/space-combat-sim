@@ -94,7 +94,7 @@ func engage(p: Perception, target_id: int, target_position: Vector3, target_velo
 				lead_error_deg = rad_to_deg(PilotSteering.angle_to(p.basis, lead_dir))
 				var cone_deg: float = minf(tactics.fire_cone_deg, rad_to_deg(atan(tactics.fire_miss_m / range_m)))
 				firing = range_m < tactics.fire_range_m and lead_error_deg < cone_deg \
-						and FireLane.clear(p.position, p.forward(), range_m, p.contacts, target_id, p.friendly_fire)
+						and FireLane.clear_seen(p, p.forward(), range_m, target_id)
 		State.BREAK:
 			if state_time_s >= tactics.break_duration_s:
 				_enter(State.EXTEND)

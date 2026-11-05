@@ -7,6 +7,8 @@ extends RefCounted
 ## closes it like a friendly ship. The target itself never closes the lane, nor do hostiles (hitting one is fine) or
 ## other props (buoys: every bolt hits them whatever the setting, so the setting changes nothing about them).
 ## `AttackBrain` asks before it holds the trigger; the check runs in both settings.
+## Native kernels (M4-T16, architecture §17.13): `clear_seen` is what the brains call. On the core's rows
+## (`Perception.on_rows`) one native call answers it bit for bit; otherwise `clear`, which stays the reference.
 
 ## Clearance around a contact's bounding sphere, m: the muzzles sit a few metres off the ship's centre line.
 const CLEARANCE_M: float = 5.0
@@ -29,6 +31,14 @@ static func clear(own_pos: Vector3, aim_dir: Vector3, range_m: float, contacts: 
 		if (rel - dir * along).length_squared() < width * width:
 			return false
 	return true
+
+
+## `clear` for a perception: from its position, against its contacts, with its friendly-fire setting. Through the native
+## kernels when the perception is on the core's rows.
+static func clear_seen(p: Perception, aim_dir: Vector3, range_m: float, target_id: int = 0) -> bool:
+	if p.on_rows():
+		return p.kernels.fire_lane(p.contact_rows, p.relation_row, p.position, aim_dir, range_m, target_id, p.friendly_fire)
+	return clear(p.position, aim_dir, range_m, p.contacts, target_id, p.friendly_fire)
 
 
 static func _protected(c: Contact, friendly_fire: bool) -> bool:
