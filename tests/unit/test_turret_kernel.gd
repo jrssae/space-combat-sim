@@ -82,6 +82,7 @@ func test_a_seeded_battle_gives_the_same_picks_aims_fire_ticks_and_kills_on_both
 	var reference: WeaponRowsScene = WeaponRowsScene.build(self, 7, false)
 	reference.run(600)
 	assert_eq(reference.director.weapons_path(), &"gdscript", "the reference ran on the GDScript stand-ins")
+	reference.dispose()
 	var native: WeaponRowsScene = WeaponRowsScene.build(self, 7, true)
 	native.run(600)
 	assert_eq(native.director.weapons_path(), &"native", "the other run on the native rows")
@@ -106,6 +107,7 @@ func test_a_rebase_between_the_sync_and_the_step_changes_nothing() -> void:
 	var reference: WeaponRowsScene = WeaponRowsScene.build(self, 11, false)
 	reference.rebase_at = 90
 	reference.run(240)
+	reference.dispose()
 	var native: WeaponRowsScene = WeaponRowsScene.build(self, 11, true)
 	native.rebase_at = 90
 	native.run(240)
@@ -118,6 +120,7 @@ func test_switching_paths_mid_run_carries_every_turrets_state() -> void:
 		return
 	var reference: WeaponRowsScene = WeaponRowsScene.build(self, 5, false)
 	reference.run(450)
+	reference.dispose()
 	var mixed: WeaponRowsScene = WeaponRowsScene.build(self, 5, true)
 	mixed.run(150)
 	Settings.set_value(&"perf_native_weapons", false)

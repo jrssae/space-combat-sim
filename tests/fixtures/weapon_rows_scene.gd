@@ -93,13 +93,18 @@ func _build(test: Node, seed_value: int, native: bool) -> void:
 			drone.add_child(marker)
 		drone.damageable.hit_taken.connect(_on_hit.bind(i))
 		fighters.append(drone)
-	# A belt across the first fighters' loops, each side's mines on its own arc.
+	# A belt along the first fighters' loops, laid by the side hostile to each loop's fighter (a neutral's loop by Earth
+	# Alliance, which never sets them off); the first mine of each loop where its fighter is half a second in.
 	var mines: Array[Dictionary] = []
 	for i: int in 90:
-		var loop: Dictionary = _loops[i % 12]
-		var angle: float = _rng.randf_range(0.0, TAU)
-		var offset := Vector3(cos(angle), 0.0, sin(angle)) * float(loop["radius"]) + Vector3(0.0, _rng.randf_range(-40.0, 40.0), 0.0)
-		mines.append({"offset": (loop["centre"] as Vector3) + offset, "faction": SIDES[(i + 1) % 2]})
+		var k: int = i % 12
+		var loop: Dictionary = _loops[k]
+		var angle: float = float(loop["phase"]) + float(loop["rate"]) * 0.5 if i < 12 else _rng.randf_range(0.0, TAU)
+		var r: float = float(loop["radius"])
+		var offset := Vector3(cos(angle) * r, sin(angle) * r * float(loop["tilt"]), sin(angle) * r) \
+				+ Vector3(_rng.randf_range(-30.0, 30.0), _rng.randf_range(-30.0, 30.0), _rng.randf_range(-30.0, 30.0))
+		var layer: StringName = Factions.RAIDERS if k % 3 == 0 else Factions.EARTH_ALLIANCE
+		mines.append({"offset": (loop["centre"] as Vector3) + offset, "faction": layer})
 	director.add_mines(mines, world.to_universe(Vector3.ZERO))
 	director.missile_target = 5
 	core = SimCore.attach(world)
@@ -124,6 +129,13 @@ func step() -> void:
 	director.step(DT, now_s, ContactScan.from_tree(world.get_tree()))
 	director.pull_native_state()
 	log.append(_entry())
+
+
+## Takes the scene out of the tree and frees it (the log stays), so the next scene's core and scan see only their own.
+func dispose() -> void:
+	if is_instance_valid(world):
+		world.get_parent().remove_child(world)
+		world.free()
 
 
 ## Runs `ticks` ticks.
@@ -176,7 +188,7 @@ func _lay_quarry() -> void:
 
 
 func _on_hit(info: HitInfo, fighter: int) -> void:
-	_hits.append([fighter, String(info.cause), info.damage, info.position])
+	_hits.append([fighter, String(info.cause), info.damage, info.point, info.normal])
 
 
 # Names a body by its place in the scene: "f<i>" a fighter, "c<i>" a capital, "" none, "?" anything else.

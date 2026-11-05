@@ -11,6 +11,8 @@ mod pilot_kernels;
 mod ram_phase;
 mod rows;
 mod sim_core;
+mod weapon_kernels;
+mod weapon_rows;
 
 struct ScsNative;
 

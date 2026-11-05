@@ -1360,3 +1360,11 @@ pub fn add(a: Vector3, b: Vector3) -> Vector3 {
 pub fn sub(a: Vector3, b: Vector3) -> Vector3 {
     Vector3::new(a.x - b.x, a.y - b.y, a.z - b.z)
 }
+
+// M4-T20: what the weapon rows ask the core beyond its columns.
+impl ScsSimCore {
+    /// Whether `body_id` was hidden, shown or lost its hull since its row was last read (its row may be stale).
+    pub fn is_touched(&self, body_id: i64) -> bool {
+        self.touched.contains(&body_id)
+    }
+}

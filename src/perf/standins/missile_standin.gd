@@ -20,6 +20,11 @@ const PROJECTILE_SCENE: PackedScene = preload("res://src/weapons/projectile.tscn
 ## Steering calls and their cost since the counters were cleared (profiling only, wall clock).
 static var steers: int = 0
 static var steer_us: int = 0
+## The native weapon rows (`ScsWeaponRows`) that steer missiles from their targets' rows this tick (M4-T20), set by the
+## director while the rows step the weapons; null for the GDScript.
+static var native_rows: Object = null
+## Steering calls the native rows answered since the counters were cleared.
+static var native_steers: int = 0
 static var _weapon: WeaponSpec = null
 
 ## The body it flies at (instance id); 0 once that is gone.
@@ -93,16 +98,29 @@ static func steer(position: Vector3, velocity: Vector3, target_position: Vector3
 	return TurretStandin.turned_toward(velocity / speed, wanted.normalized(), max_turn_rate * delta) * speed
 
 
-## The projectile's steering hook: this tick's velocity toward the target, or straight on without it.
+## The projectile's steering hook: this tick's velocity toward the target, or straight on without it. The native rows
+## answer when they can (the target's row is current); otherwise the GDScript, the reference.
 func step(missile: Projectile, delta: float) -> Vector3:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only
 	var velocity: Vector3 = missile.velocity
-	var target := instance_from_id(target_id) as Node3D if target_id != 0 and is_instance_id_valid(target_id) else null
-	if target == null or not target.is_inside_tree() or not target.is_visible_in_tree():
-		target_id = 0
-	else:
-		velocity = steer(missile.global_position, velocity, target.global_position, _velocity_of(target), NAV_GAIN,
-				turn_rate_rad_s, delta)
+	var answered: bool = false
+	if native_rows != null and target_id != 0:
+		var out: Vector4 = native_rows.steer_missile(target_id, missile.global_position, velocity, NAV_GAIN, turn_rate_rad_s,
+				delta)
+		if out.w >= 0.0:
+			answered = true
+			native_steers += 1
+			if out.w > 0.0:
+				velocity = Vector3(out.x, out.y, out.z)
+			else:
+				target_id = 0
+	if not answered:
+		var target := instance_from_id(target_id) as Node3D if target_id != 0 and is_instance_id_valid(target_id) else null
+		if target == null or not target.is_inside_tree() or not target.is_visible_in_tree():
+			target_id = 0
+		else:
+			velocity = steer(missile.global_position, velocity, target.global_position, _velocity_of(target), NAV_GAIN,
+					turn_rate_rad_s, delta)
 	steers += 1
 	steer_us += Time.get_ticks_usec() - started_us
 	return velocity

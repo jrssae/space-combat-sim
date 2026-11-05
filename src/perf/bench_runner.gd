@@ -260,6 +260,7 @@ func _set_up_standins(plan: Array[Dictionary], anchor: UniversePos) -> void:
 	standins.missile_target = int(_mix.get("missiles", 0))
 	MissileStandin.steers = 0
 	MissileStandin.steer_us = 0
+	MissileStandin.native_steers = 0
 	var moon: Dictionary = BenchLayout.gravity_source(_layout)
 	if not moon.is_empty():
 		standins.add_gravity(anchor.plus_local(moon["offset"]), float(moon["gm"]))
@@ -323,6 +324,7 @@ func _physics_process(_delta: float) -> void:
 			standins.restart_weapon_counters()
 		MissileStandin.steers = 0
 		MissileStandin.steer_us = 0
+		MissileStandin.native_steers = 0
 	elif _tick == last + 1:
 		_finish(now, "")
 		return
@@ -424,7 +426,8 @@ func _weapons() -> Dictionary:
 	return {"missile_launches": standins.missile_launches, "missile_intercepts": standins.missile_intercepts,
 			"beam_shots": standins.beam_shots, "detonations": standins.detonations, "ticks": standins.ticks,
 			"parts_us": standins.part_means_us(), "missile_steer_us": float(MissileStandin.steer_us) / float(ticks),
-			"missile_steers_per_tick": float(MissileStandin.steers) / float(ticks)}
+			"missile_steers_per_tick": float(MissileStandin.steers) / float(ticks),
+			"path": String(standins.weapons_path()), "missile_native_steers_per_tick": float(MissileStandin.native_steers) / float(ticks)}
 
 
 # The mix for summary.json: the area as a plain list.

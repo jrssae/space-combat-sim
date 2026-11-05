@@ -10,6 +10,11 @@ extends Node3D
 ## do the mines. Missiles and beams fire at each capital's strike target: its nearest hostile fighter within the missile's
 ## reach, looked up again when older than `STRIKE_RETARGET_TICKS`.
 ##
+## With the core on and `perf_native_weapons` set (M4-T20, §17.13), the guns, interceptors, beams, strike targets, missile
+## launches and mine triggers are decided by `NativeWeapons` over the core's rows in one call a tick, and this node does
+## what they decide (bolts, kills, beams, launches, blasts); the GDScript below is the reference, and either path carries
+## on from the other's state.
+##
 ## `last_us` is the stand-ins' own cost in the latest tick (wall clock, profiling only); it sits inside the `flight` stage.
 ## `part_us` splits it by part (`PART_NAMES`), summed since `restart_weapon_counters`, with `ticks` the ticks it covers.
 
@@ -57,6 +62,8 @@ var last_us: int = 0
 ## Each part's cost summed over `ticks` active ticks since `clear`, by `Part` (profiling only).
 var part_us: PackedInt64Array = PackedInt64Array()
 var ticks: int = 0
+## False forces the GDScript stand-ins (a test pairing them with the native rows).
+var use_native_weapons: bool = true
 
 var _capitals: Array[CapitalStandin] = []
 var _field: AsteroidField = null
@@ -77,6 +84,9 @@ var _gravity: GravityStandin = null
 var _tick: int = 0
 var _next_launch: Dictionary = {}  # carrier -> sim time of its next launch
 var _last_frame: int = -1
+var _native: NativeWeapons = null  # bound while the native rows step the weapons
+var _native_dirty: bool = true  # the capitals or mines changed since the rows were bound
+var _path: StringName = &"gdscript"
 
 
 func _init() -> void:
@@ -85,8 +95,13 @@ func _init() -> void:
 	part_us.resize(PART_NAMES.size())
 
 
+func _exit_tree() -> void:
+	_leave_native()
+
+
 func _physics_process(delta: float) -> void:
 	if not active:
+		_leave_native()
 		return
 	step(delta, SimClock.now(), ContactScan.shared(get_tree()))
 
@@ -96,10 +111,14 @@ func step(delta: float, now_s: float, scan: ContactScan) -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only
 	_tick += 1
 	ticks += 1
+	var native: NativeWeapons = _native_weapons()
+	_path = &"native" if native != null else &"gdscript"
+	if native != null:
+		_step_native(native, delta, now_s, started_us)
+		return
 	_gather_hulls()
 	_gather_shots()
 	var mark_us: int = _mark(Part.GATHER, started_us)
-	var launched: int = 0
 	var gun_index: int = 0
 	_plan_launches(now_s)
 	for cap: CapitalStandin in _capitals:
@@ -121,6 +140,12 @@ func step(delta: float, now_s: float, scan: ContactScan) -> void:
 	if _mines != null and is_instance_valid(_mines):
 		detonations += _mines.step(_tick, now_s, _hulls, _hull_at, _hull_reach, _hull_factions)
 	mark_us = _mark(Part.MINES, mark_us)
+	_finish(now_s, mark_us, started_us)
+
+
+# The carriers' launches, the cost and the counts: the end of a tick on either path.
+func _finish(now_s: float, mark_us: int, started_us: int) -> void:
+	var launched: int = 0
 	for cap: CapitalStandin in _capitals:
 		if is_instance_valid(cap) and cap.is_carrier() and launcher.is_valid() and now_s >= float(_next_launch.get(cap, INF)):
 			_next_launch[cap] = float(_next_launch[cap]) + LAUNCH_PERIOD_S
@@ -131,6 +156,102 @@ func step(delta: float, now_s: float, scan: ContactScan) -> void:
 	last_us = Time.get_ticks_usec() - started_us
 	_last_frame = Engine.get_physics_frames()
 	_count(launched)
+
+
+# One tick on the native rows: they decide the guns' shots, the interceptors' kills, the beams, the launches and the
+# mines' triggers in one call; this does what they decided, in the GDScript's order.
+func _step_native(native: NativeWeapons, delta: float, now_s: float, started_us: int) -> void:
+	native.refresh_relations()
+	var mark_us: int = _mark(Part.GATHER, started_us)
+	_plan_launches(now_s)
+	for cap: CapitalStandin in _capitals:
+		if is_instance_valid(cap) and cap.is_inside_tree():
+			cap.step_engines(delta)
+	var intercept_ticks: int = maxi(1, roundi(TurretStandin.INTERCEPT_INTERVAL_S * Engine.physics_ticks_per_second))
+	var beam_ticks: int = maxi(1, roundi(BeamStandin.INTERVAL_S * Engine.physics_ticks_per_second))
+	var out: Array = native.rows.step(_tick, now_s, delta, intercept_ticks, beam_ticks, missile_target,
+			MAX_MISSILE_LAUNCHES_PER_TICK)
+	var gun_rows: PackedInt32Array = out[0]
+	var bolt_at: PackedVector3Array = out[1]
+	var bolt_velocity: PackedVector3Array = out[2]
+	for k: int in gun_rows.size():
+		var gun := native.turrets[gun_rows[k]] as TurretStandin
+		TurretStandin.launch_bolt(gun.capital, bolt_at[k], bolt_velocity[k], now_s, projectiles)
+	mark_us = _mark(Part.ENGINES_GUNS, mark_us)
+	var spent: PackedInt64Array = out[3]
+	var spent_missile: PackedByteArray = out[4]
+	for k: int in spent.size():
+		var shot := instance_from_id(spent[k]) as Projectile
+		if shot != null:
+			shot.spend()
+		intercepts += 1
+		missile_intercepts += spent_missile[k]
+	mark_us = _mark(Part.INTERCEPTORS, mark_us)
+	var beam_rows: PackedInt32Array = out[5]
+	var beam_targets: PackedVector3Array = out[6]
+	for k: int in beam_rows.size():
+		(native.turrets[beam_rows[k]] as BeamStandin).fire(beam_targets[k], now_s, projectiles)
+		beam_shots += 1
+	mark_us = _mark(Part.BEAMS, mark_us)
+	var launch_caps: PackedInt32Array = out[7]
+	var launch_targets: PackedInt64Array = out[8]
+	for k: int in launch_caps.size():
+		var cap: CapitalStandin = native.capitals[launch_caps[k]]
+		var target := instance_from_id(launch_targets[k]) as Node3D
+		var bow: Vector3 = cap.global_position - cap.global_basis.z * (cap.length_m() * 0.5 + 10.0)
+		MissileStandin.launch(projectiles, bow, target, cap.get_instance_id(), cap.faction, now_s)
+		missile_launches += 1
+	_missiles_flying = out[9]
+	mark_us = _mark(Part.MISSILES, mark_us)
+	if native.mines != null and is_instance_valid(native.mines):
+		detonations += native.mines.step_native(_tick, now_s)
+	mark_us = _mark(Part.MINES, mark_us)
+	_finish(now_s, mark_us, started_us)
+
+
+## Which code stepped the weapons in the latest tick: &"native" (the rows) or &"gdscript" (the stand-ins).
+func weapons_path() -> StringName:
+	return _path
+
+
+## Copies the native rows' state into the stand-ins' nodes (turrets, strike targets, the launch turn), so a reader of the
+## nodes sees the rows' state; the rows keep stepping. Nothing without the rows.
+func pull_native_state() -> void:
+	if _native == null:
+		return
+	_native.pull_turrets()
+	_capital_turn = _native.pull_strike(_strike)
+
+
+# The native rows when they may step this tick (the setting, the library, a core synced this frame with no body touched
+# since), bound afresh when the capitals or mines changed; else null, with any state they held handed back to the nodes.
+func _native_weapons() -> NativeWeapons:
+	var sim: SimCore = null
+	if use_native_weapons and bool(Settings.get_value(&"perf_native_weapons")) and NativeWeapons.available():
+		sim = SimCore.for_tree(get_tree())
+	var ready: bool = sim != null and sim.synced_frame == Engine.get_physics_frames() and int(sim.core.touched_count()) == 0
+	if not ready or (_native != null and (_native_dirty or _native.sim != sim)):
+		_leave_native()
+	if not ready:
+		MissileStandin.native_rows = null
+		return null
+	if _native == null:
+		_native = NativeWeapons.bind(sim, _capitals, mines())
+		_native.push_strike(_strike, _capital_turn)
+		_native_dirty = false
+	MissileStandin.native_rows = _native.rows
+	return _native
+
+
+# Hands the rows' state back to the nodes and lets go of them.
+func _leave_native() -> void:
+	if _native == null:
+		return
+	pull_native_state()
+	_native.unbind_mines()
+	_native = null
+	if MissileStandin.native_rows != null:
+		MissileStandin.native_rows = null
 
 
 ## The stand-ins' cost in the current tick, us (0 when they did not run in it).
@@ -148,12 +269,14 @@ func add_capital(cls: StringName, faction: StringName, display_name: String, at:
 	for gun: TurretStandin in cap.guns():
 		gun.axis = -cap.global_basis.z
 	_capitals.append(cap)
+	_native_dirty = true
 	return cap
 
 
 ## The mine belts: `rows` (`offset` m from `anchor`, `faction` the layer's).
 func add_mines(rows: Array[Dictionary], anchor: UniversePos) -> MineStandin:
 	remove_mines()
+	_native_dirty = true
 	_mines = MineStandin.new()
 	_mines.name = "Mines"
 	_mines.world = world
@@ -163,6 +286,7 @@ func add_mines(rows: Array[Dictionary], anchor: UniversePos) -> MineStandin:
 
 
 func remove_mines() -> void:
+	_native_dirty = true
 	if _mines != null and is_instance_valid(_mines):
 		remove_child(_mines)  # its rows leave `StaticRows` as it leaves the tree
 		_mines.queue_free()
@@ -221,6 +345,7 @@ func remove_asteroids() -> void:
 ## Removes every stand-in and stops; the counters start over.
 func clear() -> void:
 	active = false
+	_leave_native()
 	for cap: CapitalStandin in _capitals:
 		if is_instance_valid(cap):
 			remove_child(cap)

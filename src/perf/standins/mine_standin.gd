@@ -10,6 +10,9 @@ extends Node3D
 ## it. Every mine in play is also a row of `StaticRows` (M4-T29, §17.16) of kind `MINE`, owned by its layer's faction, as big
 ## as its trigger and registered with `world`, so that world's rebase moves it: its own side's ships steer round it, other
 ## sides never see it (Q27). A mine leaves the rows when it goes off and comes back when it is laid again.
+##
+## With the native rows on (M4-T20) the director binds the belt to its `ScsWeaponRows` and calls `step_native`: the trigger
+## and blast queries run over the core's rows, and this node still lays, retires and hurts; `step` is the reference.
 
 ## A row went off (`index`) and is no longer in play.
 signal detonated(index: int)
@@ -36,6 +39,9 @@ var checked_last_tick: int = 0
 var broad_phase: HitBroadPhase = HitBroadPhase.new()
 ## The frame the mines' rows are in (the one that spawned this node); set before `build`.
 var world: Node = null
+## The native weapon rows (`ScsWeaponRows`) holding these mines while they answer the triggers and blasts (M4-T20), or
+## null for the GDScript (`bind_native`).
+var native_rows: Object = null
 
 var _local := PackedVector3Array()
 var _factions: Array[StringName] = []
@@ -143,6 +149,33 @@ func step(tick: int, now_s: float, hulls: Array[Damageable], hull_at: PackedVect
 	return fired
 
 
+## Hands the mines to the native rows (`rows`, an `ScsWeaponRows` on the core), or takes them back with null.
+func bind_native(rows: Object) -> void:
+	native_rows = rows
+	if rows != null:
+		rows.set_mines(_local, _factions, _alive)
+
+
+## `step` with the native rows answering the triggers and the blasts over the core's rows (`bind_native` first). Returns
+## how many went off.
+func step_native(tick: int, now_s: float) -> int:
+	_lay_again(now_s)
+	var origin: Vector3 = global_position
+	var out: Array = native_rows.mine_step(tick, origin)
+	checked_last_tick = out[0]
+	var set_off: PackedInt32Array = out[1]
+	for i: int in set_off:
+		var at: Vector3 = origin + _local[i]
+		_retire(i, now_s)
+		var in_blast: Array = native_rows.blast(at)
+		var hull_ids: PackedInt64Array = in_blast[0]
+		var places: PackedVector3Array = in_blast[1]
+		for k: int in hull_ids.size():
+			_hurt(i, at, instance_from_id(hull_ids[k]) as Damageable, places[k])
+		detonated.emit(i)
+	return set_off.size()
+
+
 ## For each mine (centre `mine_at`, layer `mine_factions`), the first hull in order hostile to its layer whose sphere (centre
 ## `hull_at`, radius `hull_reach`) comes within `TRIGGER_RADIUS_M`, or -1.
 static func triggers(mine_at: PackedVector3Array, mine_factions: Array[StringName], hull_at: PackedVector3Array,
@@ -182,21 +215,32 @@ static func blast(at: Vector3, hull_at: PackedVector3Array, hull_reach: PackedFl
 
 func _go_off(i: int, at: Vector3, now_s: float, hulls: Array[Damageable], hull_at: PackedVector3Array,
 		hull_reach: PackedFloat64Array) -> void:
+	_retire(i, now_s)
+	for j: int in blast(at, hull_at, hull_reach):
+		_hurt(i, at, hulls[j], hull_at[j])
+	detonated.emit(i)
+
+
+# Mine `i` leaves play until it is laid again.
+func _retire(i: int, now_s: float) -> void:
 	_alive[i] = 0
 	_alive_count -= 1
 	_relay_at[i] = now_s + RELAY_S
 	_dead.append(i)
 	StaticRows.unregister(_row_ids[i])
 	_mesh.multimesh.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3.ONE * 1e-4), _local[i]))
-	for j: int in blast(at, hull_at, hull_reach):
-		var damageable: Damageable = hulls[j]
-		if not is_instance_valid(damageable) or not damageable.is_active():
-			continue
-		var away: Vector3 = hull_at[j] - at
-		var info := HitInfo.new(damageable.body().get_instance_id(), 0, _factions[i], DAMAGE, at,
-				-away.normalized() if away.length_squared() > 1e-12 else Vector3.ZERO, 0.0, CAUSE)
-		damageable.apply_hit(info)
-	detonated.emit(i)
+	if native_rows != null:
+		native_rows.set_mine_alive(i, false)
+
+
+# Mine `i`'s blast at `at` on one hull whose body is at `hull_at`, if it can still be hurt.
+func _hurt(i: int, at: Vector3, damageable: Damageable, hull_at: Vector3) -> void:
+	if not is_instance_valid(damageable) or not damageable.is_active():
+		return
+	var away: Vector3 = hull_at - at
+	var info := HitInfo.new(damageable.body().get_instance_id(), 0, _factions[i], DAMAGE, at,
+			-away.normalized() if away.length_squared() > 1e-12 else Vector3.ZERO, 0.0, CAUSE)
+	damageable.apply_hit(info)
 
 
 func _lay_again(now_s: float) -> void:
@@ -212,6 +256,8 @@ func _lay_again(now_s: float) -> void:
 		_relay_at[i] = INF
 		_mesh.multimesh.set_instance_transform(i, Transform3D(Basis.IDENTITY, _local[i]))
 		_register(i)
+		if native_rows != null:
+			native_rows.set_mine_alive(i, true)
 		laid.emit(i)
 	_dead = still
 

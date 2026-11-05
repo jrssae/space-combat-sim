@@ -102,6 +102,9 @@ const ENTRIES: Dictionary = {
 	# M4-T15
 	&"perf_native_core": {"type": TYPE_BOOL, "default": true,
 		"doc": "The native simulation core feeds the contact scan, the hit sweep, the flight step and the ram broad phase from one sync a tick (M4-T15) when perf_native is on and the library is built; off = each class loads its own copy, for pairing the two in one process"},
+	# M4-T20
+	&"perf_native_weapons": {"type": TYPE_BOOL, "default": true,
+		"doc": "The stand-ins' turrets, interceptors, beams, missiles and mines step as native kernels over the core's rows (M4-T20) when the core is on; off = the GDScript stand-ins, the reference, for pairing the two in one process"},
 	# M4-T30a
 	&"ambient_level": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 2.0,
 		"doc": "The environment's ambient light, white at this energy: what the textured meshes and every other lit surface get on every side (M4-T30a, live)"},

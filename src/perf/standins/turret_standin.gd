@@ -5,7 +5,8 @@ extends Node3D
 ## limited rate and fires pulse-cannon bolts through a `PulseCannonGate` only while the aim is inside `GATE_RAD`. An
 ## `INTERCEPTOR` shoots down a hostile projectile within `INTERCEPT_RANGE_M` at its own rate (no bolt of its own): the nearest
 ## missile first, else the nearest bolt (M4-T12), from the candidates the director found for it through the hit broad phase's
-## grid. `StandinDirector` steps every turret once per tick; a turret has no process of its own.
+## grid. `StandinDirector` steps every turret once per tick; a turret has no process of its own. With the native rows on
+## (M4-T20) the director's `NativeWeapons` steps them instead and keeps their state; this code is then the reference.
 
 enum Role { GUN, INTERCEPTOR }
 
@@ -105,13 +106,37 @@ func step_gun(delta: float, now_s: float, projectiles: Node3D) -> void:
 	_aim_error = axis.angle_to(wanted)
 	if gate.update(now_s, _aim_error <= GATE_RAD).is_empty():
 		return
+	launch_bolt(capital, at + axis * 4.0, capital.linear_velocity + axis * MUZZLE_SPEED_MPS, now_s, projectiles)
+	shots += 1
+
+
+## Spawns one of `cap`'s gun bolts under `projectiles`, leaving from `at` at `velocity` (World frame): the gun's shot, also
+## for the native rows' fire decisions (M4-T20).
+static func launch_bolt(cap: CapitalStandin, at: Vector3, velocity: Vector3, now_s: float, projectiles: Node3D) -> Projectile:
 	var bolt := PROJECTILE_SCENE.instantiate() as Projectile
 	projectiles.add_child(bolt)
 	bolt.configure(weapon())
-	bolt.shooter_id = capital.get_instance_id()
-	bolt.faction = capital.faction
-	bolt.launch(at + axis * 4.0, capital.linear_velocity + axis * MUZZLE_SPEED_MPS, now_s)
-	shots += 1
+	bolt.shooter_id = cap.get_instance_id()
+	bolt.faction = cap.faction
+	bolt.launch(at, velocity, now_s)
+	return bolt
+
+
+## What the native rows keep for this turret while they step it (M4-T20): `[axis, target_id, aim error, the gate's ready
+## time, shots, missile_shots]`.
+func native_state() -> Array:
+	return [axis, target_id, _aim_error, gate._ready_at_s, shots, missile_shots]
+
+
+## Takes back the state the native rows kept (`native_state`'s order), so the GDScript carries on where they left off.
+func take_native_state(p_axis: Vector3, p_target_id: int, aim_error: float, ready_at_s: float, p_shots: int,
+		p_missile_shots: int) -> void:
+	axis = p_axis
+	target_id = p_target_id
+	_aim_error = aim_error
+	gate._ready_at_s = ready_at_s
+	shots = p_shots
+	missile_shots = p_missile_shots
 
 
 ## An interceptor's shot (on its tick, every `INTERCEPT_INTERVAL_S`): among `candidates` (indices into `shots_in_flight`, at

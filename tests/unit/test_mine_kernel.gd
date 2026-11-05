@@ -87,7 +87,7 @@ func _edge_scene(native: bool) -> Dictionary:
 		drones[i].global_position = at
 	var hits: Array = []
 	for i: int in drones.size():
-		drones[i].damageable.hit_taken.connect(func(info: HitInfo) -> void: hits.append([i, info.damage, info.position]))
+		drones[i].damageable.hit_taken.connect(func(info: HitInfo) -> void: hits.append([i, info.damage, info.point, info.normal]))
 	var core: SimCore = SimCore.attach(world)
 	return {"director": director, "mines": mines, "core": core, "hits": hits}
 
@@ -114,6 +114,9 @@ func test_hulls_on_the_edge_of_a_trigger_set_off_the_same_mines_on_both_paths() 
 			entries.append([alive, mines.checked_last_tick, var_to_bytes(hits)])
 		assert_eq(director.weapons_path(), &"native" if native else &"gdscript")
 		logs.append(entries)
+		var world: Node = director.get_parent()
+		remove_child(world)
+		world.free()  # the next scene's core and scan see only their own bodies
 	for tick: int in 6:
 		assert_eq(var_to_bytes(logs[1][tick]), var_to_bytes(logs[0][tick]), "tick %d: the same mines alive, checked and hurting the same hulls" % tick)
 	var gone: int = 0
@@ -126,9 +129,10 @@ func test_a_seeded_belt_goes_off_and_is_laid_again_on_the_same_ticks_on_both_pat
 	if _skipped():
 		return
 	var reference: WeaponRowsScene = WeaponRowsScene.build(self, 23, false)
-	reference.run(720)
+	reference.run(840)
+	reference.dispose()
 	var native: WeaponRowsScene = WeaponRowsScene.build(self, 23, true)
-	native.run(720)
+	native.run(840)
 	assert_eq(native.director.weapons_path(), &"native")
 	var detonated: int = 0
 	var laid_again: int = 0
