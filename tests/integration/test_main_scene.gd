@@ -111,6 +111,18 @@ func test_overlay_toggle_and_snapshot() -> void:
 	assert_eq(snap["renderer"], "headless")
 
 
+func test_the_overlay_text_refreshes_ten_times_a_second() -> void:
+	Settings.set_value(&"show_overlay", true)
+	main.update_overlay(1.0)  # due at once
+	var before: int = main.overlay_refreshes
+	for i: int in 10:
+		main.update_overlay(0.03)
+	assert_between(main.overlay_refreshes - before, 2, 3, "0.3 s of frames: every 0.1 s, not every frame (M4-T36)")
+	main.ship.linear_velocity = Vector3(0.0, 0.0, -77.0)
+	main.update_overlay(Main.OVERLAY_INTERVAL_S)
+	assert_string_contains(main.overlay.get_text(), "77", "a tenth of a second later it shows the new speed")
+
+
 func test_console_commands() -> void:
 	DebugConsole.registry.execute("pause on")
 	assert_true(get_tree().paused)

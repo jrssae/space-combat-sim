@@ -9,6 +9,8 @@ extends Node3D
 ## the lesson restarts; wing ships and fighting ships stay in play (maintainer Q8: a downed wingman is replaced at the next wave).
 
 const SCENARIO_DIR := "res://data/scenarios/"
+## The debug overlay's text is rebuilt this often while it shows (M4-T36): a readout, not an animation.
+const OVERLAY_INTERVAL_S: float = 0.1
 const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
@@ -54,8 +56,11 @@ var perf_probe: PerfProbe = null
 var bench: BenchRunner = null
 ## The render comparison's station scene (M4-T27), closed until `station near|far`.
 var station_scene: StationScene = null
+## Times the overlay's text was rebuilt (tests).
+var overlay_refreshes: int = 0
 
 var _spawn_position: UniversePos = UniversePos.new()
+var _overlay_in_s: float = 0.0
 var _spawn_basis: Basis = Basis.IDENTITY
 var _system_id: StringName = &"local"
 var _scenario_spawns: Array[Dictionary] = []
@@ -205,11 +210,21 @@ func _input(event: InputEvent) -> void:
 			source.add_wheel(-1)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_update_mouse_capture()
-	if overlay.visible:
-		overlay.show_snapshot(snapshot())
+	update_overlay(delta)
 	_update_bracket()
+
+
+## Rebuilds the overlay's text when it is due, `OVERLAY_INTERVAL_S` apart while it shows (at once when it appears). Public for the
+## tests.
+func update_overlay(delta: float) -> void:
+	_overlay_in_s -= delta
+	if not overlay.visible or _overlay_in_s > 0.0:
+		return
+	_overlay_in_s = OVERLAY_INTERVAL_S
+	overlay_refreshes += 1
+	overlay.show_snapshot(snapshot())
 
 
 ## Everything the overlay shows, gathered from the subsystems' typed getters.
