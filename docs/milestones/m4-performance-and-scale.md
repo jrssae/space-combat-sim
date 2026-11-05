@@ -90,6 +90,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q56 | Refactor review, the frame's per-ship work | **Do the work and measure each step** (T36): per-ship frame callbacks, the HUD radar, audio nodes, hit flashes and muzzle nodes become one pass per subsystem; no separate measurement task first |
 | Q57 | Refactor review, the native library | **The native library becomes required at M4's close**; the GDScript paths stay only as test references (T37 removes the runtime fallbacks and their settings) |
 | Q58 | Refactor review, slow tests | **The two pending balance files (`test_dogfight`, `test_m3_sandbox`) and the long seeded parity fights move behind a slow switch** that CI and the milestone's full run set (T36) |
+| Q59 | Anti-aliasing, FSR 4 and upscaling (2026-11-05) | **Add tasks for anti-aliasing and FSR 4, and review FSR upscaling from below 1080 lines to as much as 4K, without frame generation** (it adds a sense of lag). The review (controller, the same day) found a benefit, so T38 builds anti-aliasing and FSR upscaling with Godot's built-in FSR 2.2 and FSR 1.0 and supersedes T26; T39 studies FSR 4, which Godot 4.7 does not ship |
 
 ## The budget ("good game performance", Q5)
 
@@ -204,7 +205,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T23 | Far proxies for tier rows (dots, radar, targeting) | T21, T11 | Opus | GPU numbers by the agent, the look (H) | R | not started |
 | T24 | The simulation step on a worker thread (firm, Q53): the AI and every native kernel step off the main thread into a double-buffered snapshot | T35, T36 | Fable | A tick-order change, double-buffered snapshots; the frame and input stop waiting on the simulation | N | not started |
 | T25 | Phase 3 measurements, the 1 000 stretch, the full suite, report P3 | T23, T24, T37 (T26) | Sonnet | Measurement, no code | M | not started |
-| T26 | Resolution scaling for the big battle (only if the GPU binds at the fullscreen check; Q20) | T11 | Sonnet | One setting and an automatic step on `RenderScale`; the look (H) | R | not started |
+| T26 | Resolution scaling for the big battle (only if the GPU binds at the fullscreen check; Q20) | T11 | Sonnet | One setting and an automatic step on `RenderScale`; the look (H) | R | not needed (superseded by T38, Q59; `RenderScale` was removed by T36) |
 | T27 | Render comparison: Gaussian splats against meshes, in the 500 battle and a Babylon 5 station scene (Q24) | T07, T11, T12 | Opus | Measures whether splats or meshes carry the big battles; GPU numbers by the agent, the look (H) | R, M | done |
 | T28 | Running lights stay point-sized and dim by the inverse square (maintainer, 2026-11-03) | none | Sonnet | Lights in vacuum do not scatter into globes | R | done |
 | T29 | Rocks and mines as static rows: T07's asteroids registered as statics, T12's mines as faction-owned mine rows; avoidance sees rocks and its own side's mines only (Q27) | T09, T12 | Opus | Takes the rocks' 24 to 49 ms per tick out of the GDScript paths | G, N | done (2026-11-03, in a worktree on `9a3f525`; Cycle log, M4-T29) |
@@ -219,6 +220,8 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T35 | The core owns the simulated state (Q55): bolts as rows drawn by one multimesh, Jolt bodies read once a tick by RID in one native call, activity, hull and selection as event-driven columns, the ram stage's contact read native | T33, T34 | Fable | Refactor review findings 1, 4, 5 and 6: 5 to 8 ms at 500 for the bolts alone; T24's precondition | N, G | not started |
 | T36 | The frame's per-ship work in one pass per subsystem (Q56, Q58): plumes, muzzle flashes, LOD switching, audio, far dots, the HUD radar, hit flashes; the splat-era render scale cap; the slow test switch | T33 | Opus | Refactor review findings 2, 3, 7, 9, 12, 13, 14: 3 to 5 ms a frame at 500 | R, G | done (2026-11-05, in a worktree on `f414cf4`; Cycle log, M4-T36): the worst second's process work at `battle` 500 from 25.7 to 10.2 to 10.8 ms and at 300 from 20.2 to 11.3 ms after fix round 1; `battle` 300 from 16.7 to 37.1 FPS; engine audio left to M5-T19 (finding 7) and the lean ships' muzzle flash pool with muzzle transforms as data moved to T35 (finding 12) |
 | T37 | M4's cleanup (Q57): the native library required, the GDScript paths test-only, the runtime fallbacks and their settings removed, one hull-reading path, the documentation drift | T23 | Opus | Refactor review findings 8, 16, 17: 1 500 to 2 500 lines and eight settings; parity surfaces halved | X, G | not started |
+| T38 | Anti-aliasing and upscaling (Q59): Godot's MSAA, TAA, FXAA and SMAA as a setting; FSR 2.2 (temporal, its own anti-aliasing) and FSR 1.0 (spatial) upscaling with quality presets from about a third of the output's height up to native, no frame generation; motion vectors for everything FSR 2.2 and TAA need; defaults chosen by measurement | T36 | Opus | The game now renders the 3D at the window's full size (T36 removed the splat-era cap), so a 4K window draws 4K; FSR 2.2 from 1 080 or 1 440 lines looks better than a bilinear stretch and costs less than native; supersedes T26 | R | not started |
+| T39 | FSR 4 study (Q59): whether AMD's FSR 4 can run in this game on Linux, Vulkan and Godot 4.7 through the native library, on the maintainer's RDNA 2 card, under the GPL-3.0 licence; a go or no-go with a plan | T38 | Sonnet | FSR 4 is not in Godot 4.7; AMD's support for RDNA 2 and for Vulkan is new or announced, so it needs facts before code | M | not started |
 
 ### M4-T01 Benchmark harness, budget and baseline
 
@@ -562,6 +565,7 @@ wave's combined gain that is less than the sum of its parts is written down as s
 | 6c | T33 (N+G), T34 (N+G), in parallel (Q50) | T33, T34 | each its own before and after at `typical`, `battle` 300 and 500; the combined tick against Q49's 8 ms | 2 |
 | 6c2 | T35 (N+G), T36 (R+G), in parallel (Q55, Q56) | T35, T36 | each its own before and after at `typical`, `battle` 300 and 500; T36 also the fullscreen FPS table (Q48) | 2 |
 | 6d | T24 (N, serial: the tick order, Q53) | T24 | the fullscreen check at `battle` 200, 300 and 500 and `typical` before and after (Q48's table); **checkpoint 4: the maintainer plays the build (H)** | 1 |
+| 6e | T38 (R) beside T24, then T39 (M) | T38, T39 | T38: the fullscreen check at `typical`, `battle` 300 and 500 per anti-aliasing mode and upscaling preset (GPU time, FPS, 1 % lows) | 1 or 2 |
 | 7 | T21 (T, serial: pool and ship adapter) | T21 | its own at 500 | 1 |
 | 8 | T22 (T+N), T23 (R), T26 (R, only if the GPU binds at the fullscreen check after T11) | T22, T23, T26 | combined at 500; fullscreen at 500 | 2 or 3 |
 | 8b | T37 (cleanup, Q57) | T37 | the focused files of every M4 task on the native-only build | 1 |
@@ -2044,6 +2048,56 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
 - **Expected gain:** 1 500 to 2 500 lines and eight settings removed; parity surfaces halved.
 - **Doc drift (2026-11-05):** fix `motion_blur.glsl`'s splat-era comment about the depth proxy (after T36's check).
 - **Architecture:** §17.13, §5 and §15.3 where they still describe optional native code.
+
+##### M4-T38 Anti-aliasing and upscaling (Q59)
+
+- **Track:** R. **Agent:** Opus (GPU numbers by the agent, the look (H) on the return checklist). **Depends on:** T36. Runs as wave
+  6e beside T24 (render settings only; no simulation files). Supersedes T26.
+- **Why (the controller's review, 2026-11-05):** `project.godot` sets no anti-aliasing and no upscaling, so the game draws
+  aliased edges, and since T36 removed `RenderScale`'s splat-era cap a 4K window renders the 3D at full 4K (T36's minor: that GPU
+  cost was never measured). Godot 4.7.2 offers `scaling_3d_mode` bilinear, FSR 1.0 and FSR 2.2 (MetalFX is Apple only) and
+  anti-aliasing by MSAA, TAA, FXAA and SMAA. FSR 2.2 is a temporal upscaler with its own anti-aliasing and no frame generation, so
+  it adds no frames and no input lag beyond its own compute time; FSR 1.0 is spatial and cheaper. Rendering at 1 080 or 1 440
+  lines and upscaling with FSR 2.2 to a 4K window should look better than today's bilinear stretch of 1 080 (the fullscreen check's
+  setup) and cost less than native 4K. Below 1 080 lines (FSR's "Performance" and "Ultra Performance" ratios, down to a third of
+  the output's height) the gain is GPU headroom this machine does not need now (the GPU is 1.6 to 1.9 ms at 1 080 internal), but it
+  is the setting a weaker GPU will want, so it is offered, not defaulted.
+- **Goal:** settings (with M5's settings menu able to show them): anti-aliasing mode (off, FXAA, SMAA, MSAA 2x and 4x, TAA);
+  upscaler (native, bilinear, FSR 1.0 with sharpness, FSR 2.2); an internal-resolution preset (Native 1.0, Quality 0.67, Balanced
+  0.59, Performance 0.5, Ultra Performance 0.33 of the output height, plus a custom scale), applied live to the root viewport; the
+  HUD and text stay at the window's resolution. No frame generation of any kind.
+- **Motion vectors:** FSR 2.2 and TAA need correct motion vectors, or moving points ghost. Check and fix the things drawn outside
+  ordinary meshes: the star field and the far dots (multimeshes, `star_point.gdshader`, `far_ship_dot.gdshader`), the running
+  lights, the plumes, the particles, the explosion flash, T35's bolt multimesh, and the custom motion blur (it reads the velocity
+  buffer and must not double-blur with FSR 2.2). Stars must stay crisp single points, as T30c and T28 require.
+- **Tests first:** the settings apply to the viewport and survive a restart; the preset scales are the ones listed; the HUD's size
+  does not change with the 3D scale; the shaders that write motion vectors are covered by a test scene where a point moves and its
+  vector matches.
+- **Measures:** the fullscreen check (native 4K window) at `typical`, `battle` 300 and 500 for each anti-aliasing mode at native
+  1 080 and for each upscaler and preset to 4K: GPU time, FPS and 1 % lows (Q48's table), VRAM. Screenshot pairs for the return
+  checklist (edges, stars, far dots, thin hull detail, a fast-moving fighter for ghosting).
+- **Done when:** every mode and preset works and is measured, the defaults are chosen from the numbers (recommended starting point:
+  FSR 2.2 at Quality for a 4K window, SMAA or TAA at native for a 1 080 window) and written in the entry, and the look items are on
+  the return checklist.
+- **Architecture:** §7 (the rendering pipeline) and a §17 paragraph.
+
+##### M4-T39 FSR 4 study (Q59)
+
+- **Track:** M. **Agent:** Sonnet (research, no game code). **Depends on:** T38 (its upscaler setting is where FSR 4 would plug in).
+- **Why:** the maintainer asked for FSR 4 support. Godot 4.7.2 does not ship it (its modes stop at FSR 2.2). As of late 2026, AMD's
+  FSR SDK 2.4 reportedly adds Vulkan support for FSR 4.1 upscaling, and AMD has announced FSR 4.1 for RDNA 3 and RDNA 2 (the
+  maintainer's RX 6950 XT is RDNA 2), with RDNA 2 dates reported between early 2027 and later; on Linux FSR 4 has so far reached
+  games mostly through Proton's DirectX 12 path or OptiScaler. These are secondary reports and need checking.
+- **Goal:** a go or no-go with facts: (1) is there an FSR 4 build usable natively on Linux with Vulkan (the SDK's platforms, its
+  binaries or sources, the ML model's form); (2) does it run on RDNA 2, at what cost (FP8 against INT8 paths), and when; (3) can the
+  native library (Rust gdext) call it from a Godot `CompositorEffect` with the inputs it needs (colour, depth, motion vectors,
+  exposure, jitter) that T38 already provides; (4) is its licence (the SDK's and the model's) compatible with GPL-3.0 and with
+  `docs/third-party.md`'s rules, and can CI build without the binary; (5) is there an upstream Godot plan for FSR 3.1 or 4 that
+  would make this unnecessary. No frame generation in any plan (Q59).
+- **Files:** `docs/research/fsr4.md` (new, sources cited and marked verified or unverified), a proposal under this section, the T39
+  row. No game code; a throwaway spike only if the facts say it could work, kept out of commits.
+- **Done when:** the doc answers the five questions with sources and gives a recommendation: build it now (with a task outline and
+  effort), wait for a named trigger (an SDK release, RDNA 2 support, a Godot release), or drop it.
 
 #### Architecture subsections this plan assigns
 
