@@ -2522,6 +2522,64 @@ src/perf/standins/                the director, turret, missile and mine stand-i
   `test_weapon_rows_battle` (a seeded 30 s `battle` at 100: hits within 10 %; in one process the numbers follow the run's
   place, not the path: the first run gives the same counts on either path, and so does the second), and `test_sim_core`'s engine-free check
   of `weapon_kernels.rs`.
+**The brains in native code (T17).**
+
+```
+native/src/brain_maths.rs        PilotSteering, InterceptMath, the AiTemperament tables, the five Manoeuvres, Godot's hash([seed, label])
+                                 and its RandomNumberGenerator, op for op (engine-free)
+native/src/brain_behaviours.rs   AiContext.refresh, AiPilot's scoring and selection, the nine behaviours with AttackBrain and
+                                 AttackSlash, the driver's avoidance and re-seek: one think as a pure function of the rows (engine-free)
+native/src/v3.rs                 the one home of the 32-bit vector and basis maths the kernels and the brains share (engine-free)
+native/src/brain.rs              ScsBrains: the host; one slot per AiPilot over the core's rows, the think's packed output
+src/perf/native_brains.gd        NativeBrains: the host's facade, one host per core; the nearest-k settings pushed to it
+src/ai/ai_pilot.gd               the facade: with the perception on the rows, try_think_native; else today's code (the reference)
+src/ai/ai_pilot_driver.gd        the native path: a perception without contact lists, the finished command back, no own avoidance
+```
+
+- **What moved.** The whole think of an `AiPilot`: the lists the driver picked (the nearest k with the keeps, the nearest
+  statics, the incoming fire and the broadcasts, through the contact kernels over the brain host's own grid of the rows),
+  `AiContext.refresh`, the scoring and the selection with the hit reaction, the behaviour in control (ram, retreat, evade,
+  attack with the standard run and the slashing pass, guard, formation, rally, follow path with the five manoeuvres, idle),
+  and the driver's avoidance filter with its re-seek. One native call per thinking ship (`ScsBrains.think`, thirteen
+  arguments: the relation row, the clock, the hull, the selection, the hits, the friendly-fire setting and the frame origin
+  as three doubles) gives back a `PackedFloat64Array` of 54 numbers: the flight command, the trigger, the wanted target in
+  two halves, the dodge flags, the wish, the behaviour in control, dwell and switches, the contacts seen, the raw and
+  weighted scores by tie order, and twelve numbers of the behaviour in control's state. The GDScript brains stay the
+  reference and fly whenever a perception is not on the rows (`perf_native_brains` off, no core, a pilot with a scripted or
+  subclassed behaviour, a ship with no row this tick).
+- **Bit for bit, with the seeds.** The maths repeats the GDScript op for op (32-bit vectors, 64-bit scalars, a scalar rounded
+  to 32 bits before it scales a vector, the engine's `atan2`, `sin`, `cos`, `tan`, `acos`, `exp` through the same libm).
+  The seeded rolls are Godot's own: `hash([seed, "label"])` is the Array hash (murmur3 over `hash_one_uint64` of the int and
+  djb2 of the String, `hash_fmix32` at the end), and `RandomNumberGenerator` is PCG32 with the engine's increment, `randf`
+  from `ldexp` of a draw whose top and bottom bits are set (the bottom bit breaks the u32-to-f32 rounding ties upward). The
+  avoidance tie-break reaches the kernel as `hash(seed)`, as `AvoidanceMath.tie_direction` takes it. `test_brain_parity`
+  checks each piece against the GDScript on seeded inputs; `test_brain_think_parity` drives a native slot and a GDScript
+  twin tick by tick on hand-built rows (crowds of four sides, wings under each order, objectives, guard posts, every
+  temperament, live retunes, a patrol route with its demos, hits) and asks for the same command, target, dodge, behaviour
+  and scores; `test_brain_tolerance` flies the bench's furball and spread at 50 for seeds 1 to 3 on both paths (Q16).
+- **The rows the brains need.** Three columns joined the rows: `hull_fraction` (`Damageable.hull.fraction()`, -1 without a
+  hull), `target_ids` (the ship's selection, -1 for none) and `reach` (the marker's broadcast range), plus a lowered copy of
+  the name for the objective's and the guard's name matching. The first two are read at the sync points (two property
+  reads of the hull's health and one of the targeting system a body, the handles taken once with the attributes), where
+  the GDScript scan stamped them live on the first hand-out; in the tick's order both read the same values, since
+  selections change at the drivers (behind `note_selection`) and hulls at the resolvers. The broadcast list comes from the
+  rows with a reach beyond the near range, in row order, where the GDScript scan listed `Targetable.broadcasters()` in
+  theirs: a tolerated difference (it only orders ties in a rally's pick and the objective's first match).
+- **The slot's life.** `AiPilot` makes its slot at its first native think from the base profile, the temperament and the
+  behaviours it has, then replays the driver's `reset` and every `set_temperament` since, so the seeded generators stand
+  where the GDScript objects' do; `add_behaviour`, `set_temperament` and `reset` reach the slot from then on, and the slot is
+  freed when the pilot is. The wing's view, the objective, the guard post and the route are pushed when they change. What
+  the game reads of a pilot is mirrored back after each think: `current`, the scores, `wanted_target_id`, the wish, an
+  evade's jinks, an attack's run and gate, a rammer's commitment, a route's waypoint, phase, lag, visited list and results.
+  A rammer committed from outside (a test) is pushed forward.
+- **Thread-ready (for T18).** `brain_behaviours::Brain::think` takes the rows, the bolts, the grid, the ship's own row, the
+  caller's scratch (the picked lists, the context split, the keep ids) and the inputs, mutates only its own `Brain` and that
+  scratch, and allocates nothing per tick after warm-up; the contact queries fill the caller's lists (`*_into`). No statics,
+  no caches written during a pass, every roll from the brain's own generators. The host keeps one `Scratch` and one grid
+  `Work` (the grid's cells plus the query scratch); T18 gives each worker its own and shares the cells.
+- **Console and settings.** `perf_native_brains` (default on; off = the GDScript brains, so a bench pairs the two in one
+  process). Provider `ai` gains `thinks_native` (AI ships whose think ran natively in the last tick); `ai <name>` reads a
+  native pilot's `describe()` from its slot (the behaviour in control, its state and fields, the scores).
 
 ### 17.16 Rocks and mines as static rows (T29)
 

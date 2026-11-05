@@ -185,7 +185,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T14 | Jolt collision layers; interpolation off for far ships | T11 | Sonnet | Mechanical; matters from 300 ships | G | done, the physics stage did not fall (2.1 ms at 300, 3.5 at 500, as before); the rebase shift fell by 1.5 to 2 ms; fighters collide with fighters again (Q33) (2026-11-04, in a worktree on `ce35406`; Cycle log, M4-T14) |
 | T15 | The native simulation core: entity rows, one call in and out (`ScsSimCore`) | T13 | Fable | Architecture: every native class moves onto it; serial | N | done (2026-11-04, in a worktree on `c0a0b81`; Cycle log, M4-T15; parity bit for bit on both paths, the engine seam counted) |
 | T16 | N2: avoidance, the fire lane and the context lists on the core | T15 | Opus | Per-contact loops, bit for bit | N, G | done, bit for bit; no measurable change in the think stage, an accepted miss (the loops cost 3 to 4 us a think, the plan assumed 25) (2026-11-04, in a worktree on `41fc088`; Cycle log, M4-T16) |
-| T17 | The brains in native code under Q16's tolerance (T17a maths, T17b behaviours) | T16 | Fable | 3 000 lines of seeded behaviour with a tolerance to meet | N, G | not started |
+| T17 | The brains in native code under Q16's tolerance (T17a maths, T17b behaviours) | T16 | Fable | 3 000 lines of seeded behaviour with a tolerance to meet | N, G | in progress (2026-11-04, in a worktree on `67d5cda`; bit for bit on every Q16 seed; Cycle log, M4-T17) |
 | T18 | N3: threads inside the core (rayon), 1-thread and 6-thread identical | T17 | Opus | Determinism rules, a new crate | N | not started |
 | T19 | Jolt measured at 300 and 500, the ships-out-of-Jolt proposal (Q17, checkpoint 2) | T15 | Sonnet | Measurement and a proposal, no game code | M | done (2026-11-04, in a worktree on `41fc088`; Cycle log, M4-T19; the proposal waits for the maintainer at checkpoint 2) |
 | T20 | Turrets, missiles, beams and mines as native rows | T16, T12 | Opus | The non-fighter rows' budget (710 turrets at 500); M12 inherits the path | N, A | done, bit for bit; the stand-ins' stage at `battle` 500 from 9.50 to 0.68 ms; every row in budget but a beam shot's spawn (about 20 us a shot against 1) (2026-11-04, in a worktree on `67d5cda`; Cycle log, M4-T20) |
@@ -1063,6 +1063,13 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
   If the tolerance cannot be met in two attempts the controller stops: the tier (phase 3) then carries more and the near count
   falls (the research's fallback).
 - **Architecture:** §17.13.
+- **Done (2026-11-04, worktree on `67d5cda`; Cycle log, "M4-T17"):** T17a `native/src/brain_maths.rs` (`PilotSteering`,
+  `InterceptMath`, the `AiTemperament` tables, the five `Manoeuvres`, Godot's `hash([seed, label])` and its random numbers)
+  and `native/src/v3.rs` (the kernels' shared vector maths), each bit for bit (`test_brain_parity`); T17b
+  `native/src/brain_behaviours.rs` and the host `ScsBrains` (`brain.rs`): the whole think of an `AiPilot` in one native call
+  over the core's rows, with three columns added to the rows (hull fraction, selection, broadcast range). `test_brain_think_parity`
+  (a native slot against a GDScript twin, tick by tick, bit for bit) and `test_brain_tolerance` (Q16: furball and spread at 50,
+  seeds 1 to 3) pass, every seeded fight identical to the bit on both paths. Tolerated differences and the measures in the Cycle log.
 
 ##### M4-T18 N3: threads inside the core
 
@@ -3963,6 +3970,46 @@ in ms per tick; the stand-ins' parts in us per tick.
   in both, as T16's; both under 30 FPS at 400.
 - **Tests** (focused, each file alone): the 23 files of the report, every one green; RED on `d5badbd` (the three kernel files
   did not load, the engine-free check failed).
+### M4-T17 (2026-11-04): the brains in native code
+
+In its own worktree on `67d5cda` (tests `cc56a44` and `4f0fe85`, the maths `a56d35e`, the brains in the T17b commit after
+them), so only this change. Every `AiPilot` thinks in one native call over the core's rows (§17.13, T17); the GDScript brains
+stay the reference behind `perf_native_brains`.
+
+- **The parity drift T16 found** (one ulp in a fighter's spin at tick 19, core on against off) does not reproduce on the base:
+  T16's own harness with the core toggled, run twice, and a second harness aligned on a process frame, are identical over 480
+  ticks. The one node-against-server difference found: on the launch tick the node's basis of a ship spawned with
+  `Basis.looking_at` holds `-0.0` where the physics server holds `+0.0` (Jolt rebuilds the matrix from its quaternion); the
+  core's row equals the node, T10's server path reads the server; from tick 2 on both agree. Nothing to fix in the core path.
+- **Parity.** Bit for bit on both paths. `test_brain_parity`: 400 steering cases, 400 lead solutions, 400 temperaments, 30
+  manoeuvre runs of 300 steps, 135 seeds by six labels of `hash`, 9 seeds by 320 rolls. `test_brain_think_parity`: four
+  scenarios of 6 to 8 twins over 240 to 480 ticks (a crowd of four sides with props, rocks, mines and bolts; wings under each
+  order with and without a leader and on the link; objectives, guard posts and ships, every temperament, live retunes; a
+  patrol route with every demo, a pace ship, a hold and a loop; hits), the same command, target, dodge, behaviour and scores
+  every tick. `test_brain_tolerance` (Q16): furball 50 and spread 50, seeds 1 to 3, 30 s each, native against GDScript:
+
+| fight | hits native | hits GDScript | mix native (attack, evade) | mix GDScript | farthest twin at 10 s |
+|---|---|---|---|---|---|
+| furball 50 seed 1 | 264 | 264 | 0.785, 0.215 | the same | 0.00 m |
+| furball 50 seed 2 | 291 | 291 | 0.762, 0.238 | the same | 0.00 m |
+| furball 50 seed 3 | 291 | 291 | 0.744, 0.256 | the same | 0.00 m |
+| spread 50 seed 1 | 399 | 399 | 0.694, 0.307 | the same | 0.00 m |
+| spread 50 seed 2 | 359 | 359 | 0.725, 0.276 | the same | 0.00 m |
+| spread 50 seed 3 | 301 | 301 | 0.732, 0.268 | the same | 0.00 m |
+
+  The first version of the test left the sim clock running from one fight into the next; with the clock 30 s on, a hit's
+  reaction edge (`now + dt - hit_s >= reaction_s - 1e-6`) rounded differently and three fights drifted by up to 11 m at 10 s
+  and 5 % in hits, within Q16 but not a native difference. The test resets the clock per fight.
+- **Tolerated differences** (none seen in the tests; by construction): the broadcast list comes from the rows in row order
+  where the GDScript scan listed the broadcasters in registration order (only ties in a rally's pick and an objective's first
+  match by name could differ); a body with two markers is one broadcast row where the scan gave it two; name matching
+  lowers ASCII where `nocasecmp_to` lowers Unicode; the hull fraction and the selection are read at the first sync where the
+  scan stamped them on the first hand-out of the tick (the same values in the tick's order).
+- **Thread-ready** (maintainer, 2026-11-04): `Brain::think` is a function of the frozen rows, the bolts, the grid and one ship's
+  state, writing only that brain and the caller's scratch, no allocation per tick after warm-up, every roll from the brain's
+  own generators, the tie-break passed in. The host's one scratch and grid are per host; T18 gives each worker its own.
+- **Numbers:** below, when taken.
+- **Behaviour changes:** none in seeded outcomes.
 
 ## Definition of done (M4)
 
