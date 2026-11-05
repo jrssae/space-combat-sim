@@ -759,3 +759,27 @@ func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine()
 	assert_eq(fallback_reads[1], 0, "none at 100 bodies either")
 	assert_gt(sync_reads[1], sync_reads[0], "the sync reads once per body and bolt, so it grows with them")
 	assert_lt(sync_reads[1], sync_reads[0] * 20, "and only with them")
+
+
+# --- the weapon kernels (M4-T20) ----------------------------------------------------------------------------------------
+
+
+## The weapon kernels (`native/src/weapon_kernels.rs`: turrets, interceptors, strike targets, missiles, mines) hold no way to
+## the engine either, under the same tokens as the core's kernels; their shell reads them through the crate path.
+const WEAPON_KERNEL_FILE: String = "res://native/src/weapon_kernels.rs"
+const WEAPON_KERNEL_USERS: Array[String] = ["res://native/src/weapon_rows.rs"]
+const WEAPON_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};",
+		"use crate::rows::{Bolts, FLAG_HULL_ACTIVE, FLAG_RIGID, Rows};"]
+
+
+func test_the_weapon_kernels_hold_no_engine_type() -> void:
+	var violations: PackedStringArray = _engine_free_violations(WEAPON_KERNEL_FILE, KERNEL_FORBIDDEN, WEAPON_KERNEL_USE_ALLOWED)
+	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the weapon kernels: %s" % violations)
+	var source: String = FileAccess.get_file_as_string(WEAPON_KERNEL_FILE)
+	for kernel: String in ["pub fn retarget", "pub fn aim_gun", "pub fn gate", "pub fn intercept_candidates", "pub fn strike_target",
+			"pub fn steer", "pub fn mine_hits", "pub fn blast"]:
+		assert_true(source.contains(kernel), "the weapon kernels hold %s" % kernel)
+	assert_false(source.contains("static mut") or source.contains("thread_local") or source.contains("Cell<"),
+			"no shared mutable state in the weapon kernels (T18's threads)")
+	for user: String in WEAPON_KERNEL_USERS:
+		assert_true(FileAccess.get_file_as_string(user).contains("use crate::weapon_kernels::"), "%s reads the weapon kernels" % user)
