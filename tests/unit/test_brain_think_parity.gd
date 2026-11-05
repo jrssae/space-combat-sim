@@ -579,3 +579,35 @@ func test_a_patrol_route_with_demos_flies_the_same() -> void:
 	var path := twins[2].pilot.behaviour(&"follow_path") as BehaviourFollowPath
 	assert_gt(path.visited.size(), 0, "the looping route reached a waypoint in the run")
 	assert_eq(differences.size(), 0, "the routes and demos fly the same bits natively: %s" % differences.slice(0, 4))
+
+
+func test_a_duplicate_name_follows_the_first_listed_row_as_the_gdscript_does() -> void:
+	# M4-T18: a row earlier in the row order (out of sensor range: a parked or far body) carries the same name as a live ship
+	# in range. The GDScript matches the name among the contacts every tick, so the objective and the guarded ship are the
+	# live one; the native brains must not stick to the first row with the name.
+	if _skipped():
+		return
+	var brains: Object = NativeLib.instantiate(BRAINS_CLASS)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1711
+	var rows := Rows.new(rng, 28, 6, 10, 2000.0)
+	var live: int = 15
+	var stale: int = 9
+	rows.names[stale] = rows.names[live]
+	rows.positions[stale] = Vector3(40000.0, 0.0, 0.0)
+	rows.velocities[stale] = Vector3.ZERO
+	var twins: Array[Twin] = []
+	for i: int in 6:
+		var t: Twin = _twin(rows, i, [&"raider", &"ally_starfury", &"civilian"][i % 3], 500 + i, rng)
+		_make_slot(brains, t, rows)
+		if i % 2 == 0:
+			t.pilot.context.objective_name = rows.names[live].to_lower()
+		else:
+			BehaviourGuard.attach(t.pilot, null, rows.names[live], Vector3(30.0, 0.0, 50.0), 900.0)
+			brains.add_behaviour(t.slot, AiPilot.TIE_ORDER.find(&"guard"))
+		t.pilot.reset()
+		brains.reset(t.slot)
+		_push_context(brains, t)
+		twins.append(t)
+	var differences: PackedStringArray = _run(brains, rows, twins, rng, TICKS / 2, {25: 1}, "duplicate name")
+	assert_eq(differences.size(), 0, "a duplicate name follows the listed row, bit for bit: %s" % differences.slice(0, 4))
