@@ -203,7 +203,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T30d | Every other hull textured (raider, buoy, chunks, capital and station pieces), mesh LODs measured, the mesh path the default (split from T30b, 2026-11-04) | T30b | Opus | Mechanical once the generator is fixed; each asset's markings and emissives need judgement, the look (H) | X, R | done (2026-11-04, in a worktree on `c0a0b81`; Cycle log, M4-T30d; the fine Starfury stays, the sheets wait for (H)) |
 | T30c | The sky without splats: a star point field and the nebula as a generated panorama | T30a | Opus | The sky is the last splat node; stars must stay crisp points at any resolution | X, R | done |
 | T31 | Remove Gaussian splats: `addons/gdgs_scs` and every splat path in code, procgen, settings, console commands, tests, scripts, CI and docs (Q29, Q30) | T30d, T30c | Opus | About 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only deletion | X, R, G | done (2026-11-04, in a worktree on `8329f16`; Cycle log, M4-T31) |
-| T32 | Wing-level AI research: what deciding per wing instead of per fighter would save at 300 and 500 ships, how other games do it, and a proposal (Q46) | phase 2 (T18, T20), report P2 | Fable | Research and a design judgement over the measured think stage; no game code | M | not started |
+| T32 | Wing-level AI research: what deciding per wing instead of per fighter would save at 300 and 500 ships, how other games do it, and a proposal (Q46) | phase 2 (T18, T20), report P2 | Fable | Research and a design judgement over the measured think stage; no game code | M | done (2026-11-05, in a worktree on `08228cc`; `docs/research/wing-level-ai.md`; the proposal below waits for the maintainer at checkpoint 3: wing-level decisions are 2 % of a thinking ship's cost, so the proposal is to build the rows-based command path and a cluster perception instead and keep wing tactics as a later feel feature) |
 
 ### M4-T01 Benchmark harness, budget and baseline
 
@@ -1796,6 +1796,56 @@ done and T20 proceeds.
   then stops for the maintainer's answer at checkpoint 3.
 - **Expected:** a saving worth a task only where target scoring and behaviour choice are still a large share of the think stage
   after T17 and T18 (50 %); either way T22's tier brains can reuse the wing-level split.
+- **Done (2026-11-05, worktree on `08228cc`; Cycle log, "M4-T32"):** `docs/research/wing-level-ai.md`: the survey of
+  fourteen games and papers with sources, the measured split of a native think (a throwaway timing hook, not committed), three
+  design options with their projected savings at 300 and 500, the two levers the split points at instead, the risks to the
+  dogfights' feel and to the seeded tests, and the recommendation below. The expectation did not hold: target scoring and
+  behaviour choice are 0.5 us of a 13 us native think and of about 36 us all in per thinking ship, so no wing-level option saves
+  a task's worth; T22 can still reuse the cluster perception (lever L2).
+
+##### Proposal for checkpoint 3 (Q46): wing-level AI, T32, 2026-11-05
+
+**What was measured** (`bench battle 300` and `500`, `typical`, `furball 100`, one thread, editor build, headless, both bench
+locks, cores 0 to 11; `reports/perf/M4-T32_split*`). A native think costs about 13 us at `battle` 300 and 500: the nearest-k
+contacts 4.4 us, the nearest rocks and mines 5.7 us, the incoming fire 1.5 us, the broadcasts 0.3 us, the context split 0.1 us,
+the scoring and selection (where the target and the behaviour are chosen) 0.4 us, the behaviour in control (steering, aim, the
+trigger) 0.3 us, the avoidance 0.3 us. Around it the driver, the facade and the command path cost about 23 us of GDScript per
+thinking ship (the think stage minus the batch call and the held ships' early returns, the same at 300, 500 and `typical`).
+The batch call itself is 1.4 ms at 300 and 2.2 ms at 500 on one thread (0.55 and 0.9 with six), of which the grid and the tick's
+field are 0.2 and 0.3 ms serial. This corrects T18's attribution (6 us native, 30 us GDScript): the think stage totals agree, the
+share moves.
+
+**What a wing could decide once** is the context split and the scoring: 0.5 us of about 36 us a thinking ship (2 %). With the
+wing's candidate list standing in for each member's nearest-k hostiles (the member keeps a nearest few for avoidance and the
+fire lane), about 3 us (8 %). Every member must still run its own incoming-fire query, its statics, its steering, aim, trigger
+and avoidance, and pays the 23 us of GDScript whatever decided its command.
+
+**The options and their projected savings** (per tick, one thread; six threads divide only the native part by about 1.8):
+
+| option | what the wing decides | saving at 300 | at 500 | feel |
+|---|---|---|---|---|
+| A: targets per wing | a target per member at about 4 Hz, two members per target, kept while it lives | 0.03 ms | 0.04 ms | wingmates stop piling on one raider; a wing of twelve focusing the player needs a cap |
+| B: targets and tactics per wing | A plus a stance (engage, press, disengage and regroup, cover, form) and a pass type per member at 2 to 4 Hz; the members keep ram, retreat, evade and the hit reaction above it | 0.05 ms, up to 0.3 with the shared candidate list | 0.07 ms, up to 0.5 | wings regroup and break off together; stance flapping and members pulled off kills are the risks; AC12's balance retuned |
+| C: full squad behaviours | plays (pincer, drag, high and low pass) with members as slots; the members keep avoidance, the hit reaction and the fire gate | 0 (possibly +0.1) | 0 | the largest change and risk; a design milestone, not a performance task |
+
+**The levers the split points at instead:** L1, the native pilots' inputs and commands as rows (the hits, the selection and the
+clock read at the sync, the command written into the row and applied by the flight step, the driver doing nothing for a native
+ship): about 2.0 ms at 300 and 3.4 ms at 500 (55 % of the think stage, 11 % of the tick), the same on one thread and six, no
+behaviour change. L2, one perception per cluster of thinking ships (a wing or a fight) with the statics cached per ship (rocks
+do not move): about 8 us a think, 0.7 ms at 300 and 1.2 ms at 500 on one thread, 0.4 and 0.65 with six, bit for bit when the
+member ranks the cluster's superset the same way; T22's tier brains need this form of perception anyway. L3, the grid built once
+a tick for the scan, the stand-ins and the brains: 0.2 and 0.3 ms.
+
+**Recommendation.** Do not build wing-level AI in M4 as a performance task (confidence 80 %). Take L1 and L2 as M4 tasks (a
+T18 follow-up, or in T21's wave: together they bring the think at 300 to about 1 ms on one thread, under T17's 2 ms target;
+confidence 75 % in the projections) and L3 if convenient. Keep option B as the design for wing tactics in a later milestone,
+judged on feel (H) in the dogfight scenario, built as a seeded wing brain with hysteresis above the members' reflexes, never
+overriding the hit reaction, avoidance, ram or retreat; option A is its first step and rides on `WingDirector` alone. Note for
+any later measurement: `battle` and `typical` spawn no wings, so the layouts need wings of four or twelve before a wing-level
+saving can show on the headline numbers, and that changes the fights' shape first.
+
+**What the maintainer decides at checkpoint 3:** whether to add L1 and L2 (and L3) to M4, and whether option B goes on the
+roadmap as a feel feature for M5 or the AI milestone.
 
 #### Architecture subsections this plan assigns
 
@@ -4178,6 +4228,40 @@ headless, both bench locks, pinned to cores 0-11, load 0.4 to 1.5). The before i
   (`3d3fb91`: the write goes to the behaviour that was in control, and happens before a reset, a new behaviour or a
   retune). A confirming pair on that build (`M4-T18_fix1b/`, load 1.3 to 1.4): think at 300 3.62 and 2.82 ms, AI stage at
   500 6.41 and 5.19 ms, on one thread and six.
+
+### M4-T32 (2026-11-05): the think stage split for the wing-level question (Q46)
+
+In its own worktree on `08228cc`, docs only; the numbers from a throwaway timing hook in `Brain::think` and `think_batch`
+(nine clock reads a think, about 0.2 us; the patch kept beside the logs under `reports/perf/M4-T32_split/`, not committed).
+Single runs of `bench <layout> <n> 15 warmup=5 seed=1`, editor build, headless, both bench locks, cores 0 to 11, load 1.1 to
+1.4; means over the three five-second windows. Microseconds per native think, one thread:
+
+| run | thinks a tick | native think | nearest k | statics | incoming fire | broadcasts | context | scoring and selection | behaviour (steer, aim, fire) | avoidance | batch call, ms | grid in it, ms | think stage, ms |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| battle 300 | 88 to 90 | 12.9 to 13.3 | 4.4 to 4.5 | 5.7 to 5.8 | 1.5 to 1.6 | 0.26 | 0.10 | 0.41 to 0.43 | 0.34 to 0.35 | 0.27 to 0.28 | 1.37 to 1.44 | 0.18 to 0.21 | 3.64 |
+| battle 500 | 145 to 146 | 12.4 to 13.0 | 4.2 to 4.4 | 5.1 to 5.4 | 1.5 to 1.7 | 0.34 to 0.36 | 0.10 | 0.40 to 0.43 | 0.31 to 0.32 | 0.27 | 2.15 to 2.28 | 0.27 to 0.29 | 5.95 |
+| typical 58 | 20 to 23 | 15.2 to 15.6 | 5.0 to 5.1 | 8.0 to 8.3 | 0.7 to 1.1 | 0.13 to 0.14 | 0.10 | 0.25 to 0.38 | 0.44 to 0.48 | 0.28 to 0.32 | 0.39 to 0.45 | 0.08 to 0.09 | 0.98 |
+| furball 100 (no rocks) | 47 to 54 | 4.4 to 6.0 | 1.7 | 0.7 | 0.9 to 2.5 | 0.09 | 0.09 | 0.27 to 0.33 | 0.40 to 0.44 | 0.21 | 0.27 to 0.33 | 0.02 to 0.03 | |
+
+With six threads the batch call is 0.54 to 0.59 ms at 300 (think stage 2.82) and 0.87 to 0.93 at 500 (4.55); each think's own
+wall time rises to 15 to 16 us on the shared memory bus and the grid stays serial. The tick medians (18.3 ms at 300, 31.6 at
+500 on one thread) match T18's fix round 1 within noise.
+
+- **The decisions are 0.5 us of a 13 us think.** The context split and the scoring (the target choice is the attack score's
+  loop over the hostiles) cost 0.5 us; steering, aim, the trigger and avoidance 0.6 us; the rest is perception a member runs for
+  itself: the statics query is 5 to 8 us wherever the asteroid slab is within 5 km (it pads its search by the largest rock and
+  ranks every rock whose surface is in range) and 0.7 us without rocks; the nearest-k query 4 to 5 us in the battle's balls of
+  24 and 1.7 us in the furball. The cost per think does not grow from 300 to 500; the stage grows with the thinks a tick.
+- **The GDScript around a native think is about 23 us a thinking ship** at every size (the think stage minus the batch call and
+  T18's estimate of the held ships' early returns: 2.0 ms at 300, 3.4 at 500, 0.5 at `typical`). T18 read the batch as 0.55 ms at
+  300 from the console's last-tick `core.batch_us` (read after the bench) and the glue as 27 to 30 us from GDScript section
+  timers; inside the window the hook's batches run 1.25 ms at the least and 1.34 to 1.39 at the median, none declined, while the
+  same run's console readout after the bench says 0.57 ms (`verify2.log`), so the think stage's split is about 40 % native call, 55 % GDScript, the rest the held ships. The
+  totals are T18's.
+- **What this means for Q46** is in the proposal under T32 and in `docs/research/wing-level-ai.md`: a wing deciding targets
+  and tactics saves 0.05 to 0.3 ms at 300 and 0.07 to 0.5 at 500; commands as rows about 2.0 and 3.4 ms; a cluster perception
+  with cached statics about 0.7 and 1.2 ms on one thread.
+- **Behaviour changes:** none (docs only).
 
 ## Definition of done (M4)
 
