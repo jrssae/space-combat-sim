@@ -120,6 +120,7 @@ var brain: PilotBrain = null:
 		if combatant != null:
 			_tie_hash = hash(combatant.display_name)
 		_landing = null
+		_landing_prev = null
 		_avoid_from_pilot = false
 		if combatant != null and is_instance_valid(combatant.ship):
 			combatant.ship.release_row_command()  # a new pilot takes the ship from its row afresh
@@ -173,6 +174,11 @@ var _landing_index: int = 0
 var _landing_since_s: float = 0.0
 var _landing_woken: bool = false
 var _landing_dt: float = 0.0
+# The answer before `_landing`, still to come when a new think queued (the step one tick behind, M4-T24).
+var _landing_prev: BrainAnswer = null
+var _prev_index: int = 0
+var _prev_since_s: float = 0.0
+var _prev_woken: bool = false
 var _avoid_from_pilot: bool = false
 var _row_combat: CombatCommand = null
 static var _frame_rows: bool = false
@@ -235,8 +241,12 @@ func step(delta: float, batched: bool = false) -> void:
 		unhost()  # stepped by hand (a test): this driver decides for itself again
 	if not _settings_read:
 		_read_settings()
-	if _landing != null:
-		_settle_landing()
+	if _landing_prev != null and _landing_prev.ready:
+		_settle_landing(_landing_prev, _prev_index, _prev_since_s, _prev_woken)
+		_landing_prev = null
+	if _landing != null and _landing.ready:  # an answer still to come (the step one tick behind, M4-T24) settles later
+		_settle_landing(_landing, _landing_index, _landing_since_s, _landing_woken)
+		_landing = null
 	if batched and _frame_rows and _driver_step_on and _try_host():
 		_add_think_time(Time.get_ticks_usec() - started_us)
 		return  # the host steps this driver from this tick on
@@ -329,6 +339,11 @@ func _step_rows(pilot: AiPilot, host: Object, dt: float) -> bool:
 			world.origin if world != null else _no_origin)
 	if index < 0:
 		return false
+	if _landing != null and not _landing.ready:
+		_landing_prev = _landing  # settled when it comes, before the next decision
+		_prev_index = _landing_index
+		_prev_since_s = _landing_since_s
+		_prev_woken = _landing_woken
 	_landing = batch.answer()
 	_landing_index = index
 	_landing_since_s = _since_think_s
@@ -412,13 +427,11 @@ static func hosted() -> int:
 	return batch.hosted_count() if batch != null else 0
 
 
-# Reads whether the last rows think landed: a declined one leaves the think rate's clock and wake as they would be.
-func _settle_landing() -> void:
-	var answer: BrainAnswer = _landing
-	_landing = null
-	if not answer.thought(_landing_index):
-		_since_think_s += _landing_since_s
-		_woken = _woken or _landing_woken
+# Reads whether a rows think landed: a declined one leaves the think rate's clock and wake as they would be.
+func _settle_landing(answer: BrainAnswer, index: int, since_s: float, woken: bool) -> void:
+	if not answer.thought(index):
+		_since_think_s += since_s
+		_woken = _woken or woken
 
 
 ## What a rows batch names this driver for (M4-T33): `events` (`BrainBatch.EVENT_*`) from the think at `base` of the
@@ -429,7 +442,9 @@ func rows_event(events: int, out: PackedFloat64Array, base: int) -> void:
 	if combatant == null or not is_instance_valid(combatant.ship):
 		return
 	if _hosted and is_instance_valid(_hosted_host):
-		_landing_dt = float(_hosted_host.driver_dt(_hosted_slot))  # the think's dt, for the retarget's clock
+		var dt: float = float(_hosted_host.driver_dt(_hosted_slot))  # the think's dt, for the retarget's clock
+		if dt > 0.0:
+			_landing_dt = dt  # 0 before the host's first think: the queued think's dt stands
 	var fire: bool = out[base + AiPilot.NATIVE_FIRE] != 0.0
 	var trigger: bool = events & (BrainBatch.EVENT_ENTER | BrainBatch.EVENT_FIRE) != 0
 	if events & BrainBatch.EVENT_ENTER != 0 or (trigger and _row_combat == null):

@@ -51,6 +51,17 @@ const STEP_THREAD: &str = "scs-sim-step";
 // A change to a hosted driver that arrived while the brains were away (M4-T24): applied at the join, before the next
 // launch, which is when today's hits reach the next think too.
 enum Pending {
+    Host {
+        slot: usize,
+        body_id: i64,
+        ordinal: i64,
+        steps: i64,
+        since_think_s: f64,
+        woken: bool,
+        attacker_id: i64,
+        hit_s: f64,
+        bolt_hit_s: f64,
+    },
     Hits {
         slot: i64,
         attacker_id: i64,
@@ -108,6 +119,8 @@ pub struct ScsBrains {
     // Readouts: panicked passes, the last job's run time and the time the main thread waited for it, the deadlines
     // missed (a join that had to wait), the joins forced early by a reader, and whether the last job ran off the main thread.
     pass_failures: i64,
+    // The last joined job's output, until `join_step` (or the inline wrappers) hand it over: a join forced early keeps it.
+    last_out: Option<Vec<f64>>,
     step_us: i64,
     wait_us: i64,
     misses: i64,
@@ -588,7 +601,8 @@ impl ScsBrains {
         ) {
             return PackedFloat64Array::new();
         }
-        let out = self.join();
+        self.join();
+        let out = self.last_out.take().unwrap_or_default();
         if out.first().copied().unwrap_or(0.0) != 0.0 {
             PackedFloat64Array::from(&out[1..])
         } else {
@@ -633,7 +647,8 @@ impl ScsBrains {
         ) {
             return PackedFloat64Array::new();
         }
-        PackedFloat64Array::from(self.join().as_slice())
+        self.join();
+        PackedFloat64Array::from(self.last_out.take().unwrap_or_default().as_slice())
     }
 
     /// The rows path of `think_batch` (M4-T33): per ship `ROWS_INTS` ints and `ROWS_FLOATS` floats, the hull and the
@@ -670,7 +685,8 @@ impl ScsBrains {
         ) {
             return PackedFloat64Array::new();
         }
-        PackedFloat64Array::from(self.join().as_slice())
+        self.join();
+        PackedFloat64Array::from(self.last_out.take().unwrap_or_default().as_slice())
     }
 
     // --- the step as a job (M4-T24) ----------------------------------------------------------------------------------
@@ -810,7 +826,8 @@ impl ScsBrains {
     /// when no job was out). `rows_events` and `hosted_item_slots` then describe it.
     #[func]
     fn join_step(&mut self) -> PackedFloat64Array {
-        PackedFloat64Array::from(self.join().as_slice())
+        self.join();
+        PackedFloat64Array::from(self.last_out.take().unwrap_or_default().as_slice())
     }
 
     /// Whether a job is out (launched and not joined).
@@ -874,9 +891,7 @@ impl ScsBrains {
         let Ok(slot) = usize::try_from(slot) else {
             return;
         };
-        let hosted = &mut self.work().hosted;
-        hosted.retain(|h| h.slot != slot);
-        hosted.push(Hosted {
+        self.mutate(Pending::Host {
             slot,
             body_id,
             ordinal,
@@ -886,12 +901,6 @@ impl ScsBrains {
             attacker_id,
             hit_s,
             bolt_hit_s,
-            live: true,
-            near: false,
-            thinks: 0,
-            dt: 0.0,
-            out: Vec::new(),
-            attack_target: 0,
         });
     }
 
@@ -1451,6 +1460,36 @@ impl ScsBrains {
     fn apply(work: &mut Work, change: &Pending) {
         let find = Self::hosted_of;
         match *change {
+            Pending::Host {
+                slot,
+                body_id,
+                ordinal,
+                steps,
+                since_think_s,
+                woken,
+                attacker_id,
+                hit_s,
+                bolt_hit_s,
+            } => {
+                work.hosted.retain(|h| h.slot != slot);
+                work.hosted.push(Hosted {
+                    slot,
+                    body_id,
+                    ordinal,
+                    steps,
+                    since_think_s,
+                    woken,
+                    attacker_id,
+                    hit_s,
+                    bolt_hit_s,
+                    live: true,
+                    near: false,
+                    thinks: 0,
+                    dt: 0.0,
+                    out: Vec::new(),
+                    attack_target: 0,
+                });
+            }
             Pending::Hits {
                 slot,
                 attacker_id,
@@ -1562,7 +1601,7 @@ impl ScsBrains {
 
     // The join: the job's result taken (waited for when it still runs), the state back, what arrived meanwhile applied,
     // the commands into the core, the snapshot kept as the next spare. The output, or nothing when no job was out.
-    fn join(&mut self) -> Vec<f64> {
+    fn join(&mut self) {
         let waited = Instant::now();
         let done = match self.done.take() {
             Some(done) => Some(done),
@@ -1581,7 +1620,7 @@ impl ScsBrains {
         };
         self.wait_us = waited.elapsed().as_micros() as i64;
         let Some(mut done) = done else {
-            return Vec::new();
+            return;
         };
         self.step_us = done.run_us;
         self.off_main = self.main_thread.is_some_and(|main| done.thread != main);
@@ -1605,7 +1644,7 @@ impl ScsBrains {
             core.bind_mut().take_commands(&mut done.snapshot.commands);
         }
         self.spare = Some(done.snapshot);
-        done.out
+        self.last_out = Some(done.out);
     }
 
     // What the frame's readers see while the brains are away: every hosted driver's state, and the description and

@@ -459,6 +459,11 @@ func has_native_slot() -> bool:
 	return _slot >= 0 and is_instance_valid(_native)
 
 
+## The slot itself (-1 for none): the step's tests ask the host about it (M4-T24).
+func native_slot_index() -> int:
+	return _slot
+
+
 # Whether `b` holds what `_init`, `attach` and the wing give a behaviour of its kind: the seeded ones carry the pilot's
 # seed under their label, idle the profile's hold, the station keepers the profile's cruise.
 func _built_as_default(b: AiBehaviour) -> bool:
@@ -620,7 +625,8 @@ func set_pending(answer: BrainAnswer, index: int) -> void:
 func set_hosted(on: bool) -> void:
 	if on and _pending != null:
 		settle_native()  # the answer of the think just before hosting lands first; the host's outputs follow
-		_pending = null
+		if _pending != null and _pending.ready:
+			_pending = null  # an answer still to come (the step one tick behind, M4-T24) lands at the next read
 	_hosted = on
 	if on:
 		_hosted_seen = int(_native.slot_think_count(_slot)) if _slot >= 0 and is_instance_valid(_native) else 0

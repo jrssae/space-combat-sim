@@ -17,6 +17,12 @@ extends Node
 ## frame first (the tick length, the player, the think rate's settings), pushes the contexts that changed since the last
 ## tick (`AiContext.take_changed`) and the relation matrix over the core's factions when the factions or the table change,
 ## and hands the hosted drivers their events as it hands the queued ones theirs.
+##
+## The step as a job (M4-T24, `sim_step`): with `delayed` or `threaded` the batch is launched at -9 (`ScsBrains.launch_rows`,
+## a snapshot of the rows, on the step's worker thread when threaded) and joined at the next tick's -9, when its commands
+## reach the core (the flight batch flies them at -1) and its events the drivers that joined the tick before, so every
+## command lands one tick later than on `inline`, today's step, which thinks and applies in the same call. A join that finds
+## the job still running waits for it (a counted miss); nothing is skipped.
 
 const NODE_NAME: StringName = &"BrainBatch"
 const PRIORITY: int = -9
@@ -30,6 +36,11 @@ const EVENT_SELECT: int = 4
 const EVENT_SETTLE: int = 8
 const EVENTS_HEAD: int = 5
 const NO_RELATION := Vector2i(-1, -1)
+## The step's schedules (`sim_step`, M4-T24): today's same-tick step, the one-tick handover on the main thread, the
+## one-tick handover with the job on the step's worker thread.
+const STEP_INLINE: int = 0
+const STEP_DELAYED: int = 1
+const STEP_THREADED: int = 2
 
 # The batch of the latest core.
 static var _current: BrainBatch = null
@@ -68,6 +79,20 @@ var _matrix_revision: int = -1
 static var _driver_step_setting: int = -1
 ## Hosted drivers the last flush stepped (a readout).
 var hosted_stepped: int = 0
+## Wall-clock microseconds the last flush spent joining the previous tick's job (M4-T24; a readout).
+var join_us: int = 0
+# The tick launched and not yet joined (M4-T24), and `sim_step` as last read (-1: read again).
+var _launched: Launched = null
+static var _step_setting: int = -1
+
+
+## A tick's batch launched as a job and waiting for its results (M4-T24): who joined it and the answer they keep.
+class Launched extends RefCounted:
+	var host: Object = null
+	var rows: bool = false
+	var drivers: Array[AiPilotDriver] = []
+	var dts := PackedFloat64Array()
+	var answer: BrainAnswer = null
 
 
 func _init() -> void:
@@ -177,6 +202,37 @@ static func rows_mode() -> bool:
 	return _rows_setting == 1
 
 
+## The step's schedule now (`sim_step`): `STEP_INLINE`, `STEP_DELAYED` or `STEP_THREADED`.
+static func step_mode() -> int:
+	if _step_setting < 0:
+		_step_setting = step_mode_of(StringName(Settings.get_value(&"sim_step")))
+		if not Settings.changed.is_connected(_on_setting_changed):
+			Settings.changed.connect(_on_setting_changed)
+	return _step_setting
+
+
+static func step_mode_of(name: StringName) -> int:
+	match name:
+		&"inline":
+			return STEP_INLINE
+		&"delayed":
+			return STEP_DELAYED
+		_:
+			return STEP_THREADED
+
+
+## Whether a launched tick waits for its join.
+func step_launched() -> bool:
+	return _launched != null
+
+
+## The brain host of the launched tick, or of this one (the console's readouts).
+func host() -> Object:
+	if _launched != null and is_instance_valid(_launched.host):
+		return _launched.host
+	return _host if _host != null and is_instance_valid(_host) else null
+
+
 ## Takes `driver`'s native think into this tick's rows batch (M4-T33): its pilot's ready `slot` on `host`, the time since
 ## its last think, its faction's relation row from `scan`, whether it is near the player and its latest hits; the clock,
 ## the friendly-fire setting, the frame origin and the scan's rows version as the whole batch shares them. Returns the
@@ -219,11 +275,15 @@ func queued() -> int:
 
 
 ## Thinks every ship taken this tick in one native call and hands each driver its result, in the order they came. When
-## the rows moved since the drivers took them, the host declines every ship and each holds its last command.
+## the rows moved since the drivers took them, the host declines every ship and each holds its last command. With the
+## step delayed or threaded (M4-T24) the previous tick's job is joined and applied first, and this tick's is launched.
 func flush() -> void:
 	finishes = 0
 	events = 0
 	hosted_stepped = 0
+	join_us = 0
+	if _launched != null:
+		_join_launched()
 	if _drivers.is_empty():
 		if _hosted.is_empty() or not driver_step_mode():
 			return
@@ -232,20 +292,47 @@ func flush() -> void:
 			return
 	if _rows:
 		_flush_rows()
-		return
+	else:
+		_flush_plain()
+
+
+# T18's batch (`perf_native_commands` off): the thinks in one call, each driver finishing its own (`finish_native`).
+func _flush_plain() -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
-	var out := PackedFloat64Array()
-	if is_instance_valid(_host):
-		out = _host.think_batch(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y, _origin_z,
-				_rows_version)
-	call_us = Time.get_ticks_usec() - started_us
-	ships = _drivers.size()
+	var mode: int = step_mode()
 	var drivers: Array[AiPilotDriver] = _drivers
 	var dts: PackedFloat64Array = _dts
+	var host: Object = _host
 	_drivers = []
 	_dts = PackedFloat64Array()
 	_frame = -1
+	if not is_instance_valid(host):
+		_apply_plain(drivers, dts, PackedFloat64Array())
+		return
+	if mode == STEP_INLINE:
+		var out: PackedFloat64Array = host.think_batch(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y,
+				_origin_z, _rows_version)
+		call_us = Time.get_ticks_usec() - started_us
+		AiPilotDriver.add_think_time(call_us)
+		_apply_plain(drivers, dts, out)
+		return
+	if host.launch_batch(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y, _origin_z, _rows_version,
+			mode == STEP_THREADED):
+		var launched := Launched.new()
+		launched.host = host
+		launched.rows = false
+		launched.drivers = drivers
+		launched.dts = dts
+		_launched = launched
+	else:
+		_apply_plain(drivers, dts, PackedFloat64Array())
+	call_us = Time.get_ticks_usec() - started_us
 	AiPilotDriver.add_think_time(call_us)
+
+
+# Each driver of a plain batch finishes its think from `out` (empty: every think declined).
+func _apply_plain(drivers: Array[AiPilotDriver], dts: PackedFloat64Array, out: PackedFloat64Array) -> void:
+	ships = drivers.size()
 	for i: int in drivers.size():
 		var driver: AiPilotDriver = drivers[i]
 		if is_instance_valid(driver):
@@ -257,30 +344,53 @@ func flush() -> void:
 
 # A rows batch's flush (M4-T33): one native call that thinks every ship and writes the commands into the core, the
 # answer handed to everyone who joined, the tick's counts, and the few drivers with an event told in the order they came.
-# The hosted drivers (M4-T35) are stepped in the same call, after the queued ships.
+# The hosted drivers (M4-T35) are stepped in the same call, after the queued ships. Delayed or threaded (M4-T24): the
+# call is launched now and all of that happens at the next tick's join.
 func _flush_rows() -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
-	var out := PackedFloat64Array()
-	var head := PackedInt64Array()
-	var hosted_slots := PackedInt64Array()
-	if is_instance_valid(_host):
-		if not _hosted.is_empty() and driver_step_mode():
-			_prepare_hosted()
-		out = _host.think_batch_rows(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y, _origin_z,
-				_rows_version)
-		head = _host.rows_events()
-		hosted_slots = _host.hosted_item_slots()
-	call_us = Time.get_ticks_usec() - started_us
-	ships = _drivers.size() + hosted_slots.size()
-	hosted_stepped = hosted_slots.size()
+	var mode: int = step_mode()
 	var drivers: Array[AiPilotDriver] = _drivers
 	var answered: BrainAnswer = _answer
+	var host: Object = _host
 	_drivers = []
 	_dts = PackedFloat64Array()
 	_frame = -1
 	_answer = null
-	answered.out = out
-	answered.ready = true
+	if not is_instance_valid(host):
+		_apply_rows(drivers, answered, PackedFloat64Array(), PackedInt64Array(), PackedInt64Array())
+		return
+	if not _hosted.is_empty() and driver_step_mode():
+		_prepare_hosted()
+	if mode == STEP_INLINE:
+		var out: PackedFloat64Array = host.think_batch_rows(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y,
+				_origin_z, _rows_version)
+		call_us = Time.get_ticks_usec() - started_us
+		_apply_rows(drivers, answered, out, host.rows_events(), host.hosted_item_slots())
+		AiPilotDriver.add_think_time(Time.get_ticks_usec() - started_us)
+		return
+	if host.launch_rows(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y, _origin_z, _rows_version,
+			mode == STEP_THREADED):
+		var launched := Launched.new()
+		launched.host = host
+		launched.rows = true
+		launched.drivers = drivers
+		launched.answer = answered
+		_launched = launched
+	else:
+		_apply_rows(drivers, answered, PackedFloat64Array(), PackedInt64Array(), PackedInt64Array())
+	call_us = Time.get_ticks_usec() - started_us
+	AiPilotDriver.add_think_time(call_us)
+
+
+# A rows batch's results: the answer filled for everyone who joined, the tick's counts, and the drivers with an event
+# told in the order they came (`out` empty: every think declined).
+func _apply_rows(drivers: Array[AiPilotDriver], answered: BrainAnswer, out: PackedFloat64Array, head: PackedInt64Array,
+		hosted_slots: PackedInt64Array) -> void:
+	ships = drivers.size() + hosted_slots.size()
+	hosted_stepped = hosted_slots.size()
+	if answered != null:
+		answered.out = out
+		answered.ready = true
 	var named: int = maxi(head.size() - EVENTS_HEAD, 0) / 2
 	if head.size() >= EVENTS_HEAD:
 		AiPilotDriver.add_rows_counts(head[0], head[1], head[2], head[3], named, head[4])
@@ -299,7 +409,27 @@ func _flush_rows() -> void:
 			driver.rows_event(int(head[k + 1]), out, i * STRIDE + 1)
 			events += 1
 		k += 2
-	AiPilotDriver.add_think_time(Time.get_ticks_usec() - started_us)
+
+
+# The previous tick's job joined (waited for when it still runs) and its results applied (M4-T24).
+func _join_launched() -> void:
+	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
+	var launched: Launched = _launched
+	_launched = null
+	var out := PackedFloat64Array()
+	var head := PackedInt64Array()
+	var hosted_slots := PackedInt64Array()
+	if is_instance_valid(launched.host):
+		out = launched.host.join_step()
+		if launched.rows:
+			head = launched.host.rows_events()
+			hosted_slots = launched.host.hosted_item_slots()
+	if launched.rows:
+		_apply_rows(launched.drivers, launched.answer, out, head, hosted_slots)
+	else:
+		_apply_plain(launched.drivers, launched.dts, out)
+	join_us = Time.get_ticks_usec() - started_us
+	AiPilotDriver.add_think_time(join_us)
 
 
 # A tick no driver queued a think in: the hosted drivers still step, so the batch opens the tick itself from the core.
@@ -362,7 +492,9 @@ func _begin(frame: int, host: Object, now_s: float, friendly_fire: bool, origin:
 
 
 static func _on_setting_changed(key: StringName, _value: Variant) -> void:
-	if key == &"perf_native_commands":
+	if key == &"sim_step":
+		_step_setting = -1  # a launched tick is still joined at the next flush, whatever the new schedule
+	elif key == &"perf_native_commands":
 		_rows_setting = -1
 		if _current != null and is_instance_valid(_current) and not rows_mode():
 			_current.unhost_all()
