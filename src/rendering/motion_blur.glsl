@@ -1,7 +1,7 @@
 #[compute]
 #version 450
-// Motion blur for fast turns. Hulls blur by the velocity buffer; the sky, the stars and anything without a depth proxy
-// (depth 0) blur by how far the camera turned since the last frame, which the buffer does not hold for them.
+// Motion blur for fast turns. Hulls write depth and blur by the velocity buffer; the sky, the star points and anything else
+// that writes no depth (depth 0) blur by how far the camera turned since the last frame, which the buffer does not hold for them.
 
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 

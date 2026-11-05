@@ -1058,6 +1058,11 @@ python3 -m unittest discover -s tools/procgen/tests -t . -v
 .tools/godot/godot --headless --path . -- --console-strict --console-exec="wait 30; state ship; get render.renderer; quit"
 ```
 
+The slow files (M4-T36, Q58: `test_dogfight`, `test_m3_sandbox`, `test_brain_tolerance`, `test_flight_parity_fight`,
+`test_weapon_rows_battle`) skip themselves unless `GUT_SLOW=1` (`tests/fixtures/slow_tests.gd`). `scripts/run_tests.sh` sets it
+unless told otherwise and CI sets it, so the full run includes them; a direct GUT run as above leaves them out (GUT logs "Script
+skipped"), so put `GUT_SLOW=1` in front of it for a complete run.
+
 ## 13. Coding conventions
 
 - GDScript 4, **statically typed everywhere** (`var x: float`, typed arrays, return types). Enable
@@ -1352,7 +1357,7 @@ src/input/control_profile.gd      RefCounted, pure: bindings <-> InputMap <-> co
 src/input/control_profile_store.gd RefCounted: built-in and user profiles; list, load, save, delete
 src/autoload/control_profiles.gd  Node (autoload): applies the selected profile at start-up; console `controls`, `bind`, `unbind`
 data/controls/m1_classic.cfg      built-in profile: the original M1 pad layout (stick yaw, D-pad roll, D-pad Up targets, B assist)
-src/audio/audio_director.gd       Node: pooled 3D players, engine voices for the nearest ships (§17.21), volume (T12)
+src/audio/audio_director.gd       Node: pooled 3D players, engine hum, volume (T12)
 assets/ships/raider_delta_v.tres, assets/weapons/{pulse_cannon_ef,raider_plasma}.tres
 data/scenarios/combat_sandbox.json
 tools/procgen/assets/raider_fighter.py, styles/raider.py, parts/wing.py, core/chunks.py   (T04)
@@ -1644,7 +1649,7 @@ Details per task are in the as-built notes of `docs/milestones/m2-combat-sandbox
 - `ShipPool` keeps the `spawn` command; `AudioDirector` is `World/Audio` (a `Node3D`); the debris pool and the explosion are built in
   code (no `.tscn` for the chunk); the `scenario` command reloads the scene and the console queue survives it.
 - `HudLayout` is pure and agrees with `Camera3D.unproject_position`; the radar sphere is tilted (`RadarModel.TILT_RAD`).
-- Sound: manifest `kind` `audio`; engine hum through the director's engine voices, given to the nearest ships (M4-T36, §17.21).
+- Sound: manifest `kind` `audio`; engine hum is a child of each ship.
 
 ### 15.15 Seams M2 leaves for later
 
@@ -3173,9 +3178,9 @@ flashes 0.45, the hit flashes 0.15). Each subsystem is now one pass over its shi
 - **Far dots** (`FarDots`): a ship's paint and hull radius are read when it turns into a dot and the identity rotations once per
   slot; a frame writes each dot's place, paint and size; `add` and `remove` queue one refresh at the frame's end, so ships turning
   together cost one and a ship that turns is drawn as a dot the same frame.
-- **Engine sounds** (`AudioDirector`): `ENGINE_VOICES` (12) hum and hiss pairs, not two players on every ship. Each frame it looks
-  at up to 32 ships in turn, gives a free voice to an audible one (in play, within `ENGINE_RANGE_M`) or the farthest served ship's
-  voice to a nearer one, and plays the served ships at their places with the M2 ramps. M5's sound pass owns the sounds themselves.
+- **Engine sounds** stay as they were (two players on every watched ship, `_update_engines` walking them all, 0.64 ms a frame at
+  500): refactor finding 7 is M5-T19's engine voices (`EngineVoices`, a cap with the player's ship first and the nearest next),
+  taken at M5's rebase onto M4; T37 checks the per-ship audio node count after it.
 - **The HUD radar**: `Main` gathers the radar's contacts straight from the targetables (`RadarContacts`, the same set as
   `TargetingController.candidates()`, without a `TargetInfo` each or the range sort), `RadarModel.plot` places them on the sphere
   into packed arrays (`RadarPlot`) ordered by a native int64 sort key (bit for bit `RadarModel.dots`, but for two ranges equal to a
@@ -3186,7 +3191,7 @@ flashes 0.45, the hit flashes 0.15). Each subsystem is now one pass over its shi
 - **`RenderScale` is gone**: the splat sorter's tile cap rendered a 6K window's 3D at 0.86; the 3D is now at the window's full
   resolution (a manual scale stays T26's).
 - **Motion blur** (checked, unchanged): hulls write depth (`depth_draw_opaque`) and blur by the velocity buffer; the sky, the star
-  points and the additive markers write none (`depth_draw_never`) and blur by the camera's turn. Nothing depends on the removed
-  hull depth proxy; only `motion_blur.glsl`'s header comment still names it (T37's doc drift).
+  points and the additive markers write none (`depth_draw_never`) and blur by the camera's turn. Nothing depended on the removed
+  hull depth proxy; `motion_blur.glsl`'s header comment no longer names it (fix round 1, so T37's doc-drift item is done).
 
-The worst second's process work at `battle` 500 fell from 25.7 to 9.4 ms, at 300 from 20.2 to 10.7 ms (the M4 Cycle log, M4-T36).
+The worst second's process work at `battle` 500 fell from 25.7 to about 10.5 ms, at 300 from 20.2 to 11.3 ms (the M4 Cycle log, M4-T36).

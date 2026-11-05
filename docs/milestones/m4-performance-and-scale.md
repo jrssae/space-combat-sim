@@ -217,7 +217,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T33 | The native pilots' inputs and commands as core rows (T32's L1, Q50): the batch writes each pilot's flight and combat command into its row and `FlightBatch` applies it the same tick | checkpoint 3 | Opus | Removes most of the 23 to 27 us of GDScript a thinking ship; owns T18's two missed numbers | N, G | done, bit for bit; the think at `battle` 300 from 2.79 to 1.60 ms with six threads (under 2 ms); the AI stage at 500 from 5.07 to 2.86 ms with six threads, 6.96 to 2.86 against T18's base (divided by 2.4, T18's 3 still missed by 0.5 ms: the drivers' per-ship step at -10 is left) (2026-11-05, in a worktree on `9cd88d5`; Cycle log, M4-T33) |
 | T34 | The cheap pass on the per-ship stages (Q50): the ram stage's loop, the hit stage's gather, targeting and the core's sync, into native code or out of the per-tick path | checkpoint 3 | Opus | 13.3 of 17.85 ms at `battle` 300 sits in four stages phase 2 did not take (report P2) | N, G | done, bit for bit, five of the six changes behind a setting; the four stages at `battle` 300 from 9.12 to 4.16 ms and the tick from 17.72 to 12.86 (8 ms missed, the rest named in the entry); at 500 15.81 to 7.47 and 30.42 to 21.74 (2026-11-05, in a worktree on `9cd88d5`, fix round 1 the same day; Cycle log, M4-T34) |
 | T35 | The core owns the simulated state (Q55): bolts as rows drawn by one multimesh, Jolt bodies read once a tick by RID in one native call, activity, hull and selection as event-driven columns, the ram stage's contact read native | T33, T34 | Fable | Refactor review findings 1, 4, 5 and 6: 5 to 8 ms at 500 for the bolts alone; T24's precondition | N, G | not started |
-| T36 | The frame's per-ship work in one pass per subsystem (Q56, Q58): plumes, muzzle flashes, LOD switching, audio, far dots, the HUD radar, hit flashes; the splat-era render scale cap; the slow test switch | T33 | Opus | Refactor review findings 2, 3, 7, 9, 12, 13, 14: 3 to 5 ms a frame at 500 | R, G | done (2026-11-05, in a worktree on `f414cf4`; Cycle log, M4-T36): the worst second's process work at `battle` 500 from 25.7 to 9.4 ms and at 300 from 20.2 to 10.7 ms; `battle` 300 from 16.7 to 38.9 FPS; the lean ships' muzzle nodes stay for T35's muzzle data |
+| T36 | The frame's per-ship work in one pass per subsystem (Q56, Q58): plumes, muzzle flashes, LOD switching, audio, far dots, the HUD radar, hit flashes; the splat-era render scale cap; the slow test switch | T33 | Opus | Refactor review findings 2, 3, 7, 9, 12, 13, 14: 3 to 5 ms a frame at 500 | R, G | done (2026-11-05, in a worktree on `f414cf4`; Cycle log, M4-T36): the worst second's process work at `battle` 500 from 25.7 to 10.2 to 10.8 ms and at 300 from 20.2 to 11.3 ms after fix round 1; `battle` 300 from 16.7 to 37.1 FPS; engine audio left to M5-T19 (finding 7) and the lean ships' muzzle flash pool with muzzle transforms as data moved to T35 (finding 12) |
 | T37 | M4's cleanup (Q57): the native library required, the GDScript paths test-only, the runtime fallbacks and their settings removed, one hull-reading path, the documentation drift | T23 | Opus | Refactor review findings 8, 16, 17: 1 500 to 2 500 lines and eight settings; parity surfaces halved | X, G | not started |
 
 ### M4-T01 Benchmark harness, budget and baseline
@@ -2018,14 +2018,17 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   flashes 0.15, the lights 0.10 and the overlay 0.08 ms. Each became one pass (§17.21): the radar from packed contacts drawn in a
   few batched calls (bit for bit the old dots), a `FramePasses` autoload with the plumes (settled plumes left alone), muzzle flashes
   (only while showing), hit flashes (one pooled node a hit; the mesh sparks gone, the particle sparks stay) and LOD passes, the far
-  dots writing only what moves, 12 engine voice pairs for the nearest ships instead of two players on every ship, the overlay at
-  10 Hz. No node of a lean ship processes each frame. `RenderScale` is removed; the motion blur was checked (no proxy dependency,
+  dots writing only what moves, the overlay at 10 Hz. No node of a lean ship processes each frame. `RenderScale` is removed; the motion blur was checked (no proxy dependency,
   a screenshot pair on the return checklist). The slow switch: `GUT_SLOW=1` (set by `run_tests.sh` and CI) runs `test_dogfight`,
   `test_m3_sandbox`, `test_brain_tolerance`, `test_flight_parity_fight` and `test_weapon_rows_battle`; focused runs skip them. The
   worst second's process work at `battle` 500 fell from 25.7 to 9.4 ms and at 300 from 20.2 to 10.7; `battle` 300 went from 16.7 to
-  38.9 FPS (fewer catch-up ticks in a shorter frame) and 500 from 5.4 to 6.0 (still the tick). Not done: the lean ships' muzzle
-  flashes from a shared pool with the muzzle transforms as data (finding 12); their nodes stay, idle and unprocessed, until T35's
-  muzzle data replaces the `Marker3D`s.
+  38.9 FPS (fewer catch-up ticks in a shorter frame) and 500 from 5.4 to 6.0 (still the tick); those numbers include an engine
+  voice budget reverted in fix round 1, after which 500 reads 10.2 to 10.8 ms and 300 11.3 ms and 37.1 FPS (the Cycle log). Fix
+  round 1 also brings a settled ship's pod lights back after a far-dot trip and fixes `motion_blur.glsl`'s header comment (T37's
+  doc-drift item for it is done). Not T36's: the engine audio (finding 7) is M5-T19's engine voices,
+  taken at M5's rebase onto M4, with the per-ship audio node count left for T37 to check after it; the lean ships' muzzle flashes
+  from a shared pool with the muzzle transforms as data (finding 12) moved to T35, which creates the muzzle data. Their flash nodes
+  stay meanwhile, idle and unprocessed.
 
 ##### M4-T37 M4's cleanup: the native library required (Q57)
 
@@ -5037,9 +5040,15 @@ to 272 FPS. What remains of the frame at 500: the HUD 2.8 ms (the radar's gather
 0.43, the LOD pass 0.37, the hit flashes 0.13, the far dots 0.12, the muzzle flashes 0.07, the engines 0.05; the rest of the 9.4 ms is outside these subsystems (the engine's own frame work,
 the camera, the explosions, the console).
 
-**Not done here:** the lean ships' muzzle flashes from a shared pool with the muzzle transforms as data (finding 12). T35 replaces
-the muzzle `Marker3D`s with data in the cannon it is turning into a kernel; until then each lean ship keeps its 2 to 4 flash nodes,
-idle and unprocessed. The slow switch takes the five slow files out of focused runs (`test_brain_tolerance` alone was 361 s in
+**Not done here:** the lean ships' muzzle flashes from a shared pool with the muzzle transforms as data (finding 12) moved to T35,
+which creates the muzzle data; until then each lean ship keeps its 2 to 4 flash nodes, idle and unprocessed. The engine voice budget
+(`cea0095`, engines 0.64 to 0.05 ms) was reverted in fix round 1 (`2f11c7b`): finding 7 is M5-T19's engine voices, taken at M5's
+rebase onto M4, and T37 checks the per-ship audio node count after it.
+
+**Fix round 1** (`2f11c7b` to the round's last commit): the engine voice revert puts the engines' 0.64 ms back. Re-measured on the
+round's code (`M4-T36_fix1_*`, load 0.8 to 1.0): `battle` 500 10.83 and 10.17 ms of worst-second process work, 6.0 FPS both (1 %
+low 5.2 and 4.9); `battle` 300 11.33 ms, 37.1 FPS (1 % low 13.0). So T36's frame at 500 is 25.7 to about 10.5 ms, at 300 20.2 to
+11.3 ms. A settled ship's pod lights now shine again after a far-dot trip (they stayed at 0 until its output changed). The slow switch takes the five slow files out of focused runs (`test_brain_tolerance` alone was 361 s in
 report P2's focused runs).
 
 ## Definition of done (M4)

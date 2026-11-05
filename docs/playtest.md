@@ -475,9 +475,6 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       the selected contact ringed and on top, broadcast contacts hollow on the rim.
 - [ ] **M4-T36 Hit sparks.** A bolt hit shows the flash and the particle sparks only; the 6 to 10 mesh spark streaks that flew off each
       hit are gone. Shoot a raider at 100 to 300 m: say if hits read too thin.
-- [ ] **M4-T36 Engine sounds.** Engines are heard through 12 voices given to the nearest ships within 1.5 km (before, every ship in
-      range hummed). In a big fight (`bench battle 300` or the sandbox's waves), listen for a hum dropping or starting as ships swap in
-      and out of the nearest twelve.
 - [ ] **M4-T36 Plumes.** A ship holding one command stops updating its plumes once they reach their levels (within a ten-thousandth).
       Watch AI plumes at combat range: nothing should freeze or step.
 - [ ] **M4-T36 The 3D at full resolution on the 6K desktop.** `RenderScale` no longer renders a 6144 x 3456 window's 3D at 0.86.
