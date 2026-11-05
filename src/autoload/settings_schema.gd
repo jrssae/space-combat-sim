@@ -128,6 +128,9 @@ const ENTRIES: Dictionary = {
 		"doc": "The player's targeting computer checks its selection every tick and notes each target's place, reach and name, and builds its full list of every target only when it is read, the HUD's and the radar's once a frame (M4-T34; the same selection, its name and select_id answers; the list itself as of the read); off = the list built every tick, the reference"},
 	&"perf_native_sweep_cells": {"type": TYPE_BOOL, "default": true,
 		"doc": "The native hit broad phase keeps its grid's cells in hash maps (M4-T34; the same pairs and work); off = the sorted cells, the reference"},
+	# M4-T35
+	&"perf_native_bolt_rows": {"type": TYPE_BOOL, "default": true,
+		"doc": "The core owns the bolts (M4-T35): the AI cannons' gates and shots run as one kernel over the rows, each bolt is a row stepped natively, swept and spent from the rows by the hit resolver and drawn by one multimesh a look; the player's cannon and the beams and missiles keep their nodes; off = a Projectile node per bolt and a GDScript tick per cannon, the reference, for pairing the two in one process (a switch mid-run drops the bolts in flight); live"},
 }
 
 ## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current

@@ -325,7 +325,7 @@ func respawn() -> void:
 		buoy.restore()
 	director.cancel_respawn()  # Back while dead: the death's own respawn must not follow
 	_restart_lessons()
-	combatant.cannon.gate.reset()
+	combatant.cannon.reset_gate()
 	combatant.cannon.reset_flashes()
 	thrusters.reset()  # the dead ship's last burn does not fade out at the start
 	ship.set_flight_command(FlightCommand.new())

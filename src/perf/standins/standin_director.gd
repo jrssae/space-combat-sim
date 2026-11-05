@@ -181,9 +181,12 @@ func _step_native(native: NativeWeapons, delta: float, now_s: float, started_us:
 	var spent: PackedInt64Array = out[3]
 	var spent_missile: PackedByteArray = out[4]
 	for k: int in spent.size():
-		var shot := instance_from_id(spent[k]) as Projectile
-		if shot != null:
-			shot.spend()
+		if spent[k] < 0:
+			native.sim.spend_bolt(spent[k])  # an owned bolt row (M4-T35)
+		else:
+			var shot := instance_from_id(spent[k]) as Projectile
+			if shot != null:
+				shot.spend()
 		intercepts += 1
 		missile_intercepts += spent_missile[k]
 	mark_us = _mark(Part.INTERCEPTORS, mark_us)

@@ -487,6 +487,15 @@ func get_muzzles() -> Array[Node3D]:
 	return _muzzles.duplicate()
 
 
+## The muzzles' transforms in the ship's frame, in hardpoints order, as data (M4-T35): what the cannon kernel fires from
+## and the frame's flashes can be placed by (`global_transform * local`), without a marker node per muzzle.
+func get_muzzle_transforms() -> Array[Transform3D]:
+	var out: Array[Transform3D] = []
+	for entry: Dictionary in _hardpoints.muzzles:
+		out.append(entry["transform"])
+	return out
+
+
 ## Ship-local chase camera offset, for `CameraRig.setup` (the hardpoints' `chase_anchor`).
 func get_chase_offset() -> Vector3:
 	return _hardpoints.chase_anchor if _hardpoints.valid else DEFAULT_CHASE_OFFSET

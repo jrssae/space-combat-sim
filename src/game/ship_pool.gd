@@ -107,7 +107,7 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	ship.set_flight_command(FlightCommand.new())
 	ship.set_combat_command(CombatCommand.new())
 	ship.targeting.clear_selection()
-	combatant.cannon.gate.reset()
+	combatant.cannon.reset_gate()
 	# Nothing of the last pilot shows: no plume or flash fading out.
 	combatant.cannon.reset_flashes()
 	if combatant.thrusters != null:

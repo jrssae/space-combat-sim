@@ -40,6 +40,8 @@ struct Names {
     shooter_id: StringName,
     kind: StringName,
     hit_radius_m: StringName,
+    damage: StringName,
+    color: StringName,
     bounding_radius: StringName,
     display_name: StringName,
     hull: StringName,
@@ -61,6 +63,8 @@ impl Names {
             shooter_id: StringName::from("shooter_id"),
             kind: StringName::from("kind"),
             hit_radius_m: StringName::from("hit_radius_m"),
+            damage: StringName::from("damage"),
+            color: StringName::from("color"),
             bounding_radius: StringName::from("bounding_radius"),
             display_name: StringName::from("display_name"),
             hull: StringName::from("hull"),
@@ -123,6 +127,9 @@ struct Bolt {
     // The tick the core first saw it: on that tick its step is whatever the node holds (zero until its first
     // `_physics_process`, §15.3); from the next tick on a plain bolt's step is `velocity * delta`.
     first_tick: i64,
+    // What a hit lands with (M4-T35): read once with the rest.
+    damage: f64,
+    color: [f32; 4],
 }
 
 // What one read of a body gives: its pose, motion and flags.
@@ -193,10 +200,10 @@ pub struct ScsSimCore {
     row_of_handle: HashMap<i64, u32>,
     data: Vec<DataRow>,
     next_data_handle: i64,
-    sync_reads: i64,
+    pub(crate) sync_reads: i64,
     fallback_reads: i64,
     last_calls: [i64; 2],
-    tick: i64,
+    pub(crate) tick: i64,
     bolt_tick: i64,
     open: bool,
     // Grows whenever the rows change under a scan taken from them: each sync, resync and shift (M4-T16).
@@ -208,6 +215,10 @@ pub struct ScsSimCore {
     threads: Threads,
     // The native pilots' last commands by body, written by the brains' batch and flown by the flight step (M4-T33).
     pub row_commands: HashMap<i64, crate::row_commands::RowCommand>,
+    // The core owns its bolts (M4-T35): the owned rows stay across the sync points and the kernels step them; the ids it
+    // hands out count down from -1, so no instance id is ever one.
+    pub(crate) bolt_rows: bool,
+    pub(crate) next_bolt_id: i64,
 }
 
 #[godot_api]
@@ -364,6 +375,8 @@ impl ScsSimCore {
         if self.open {
             self.close_tick();
         }
+        // The owned bolts a hit spent last tick go now, as a spent node is gone by its next tick (M4-T35).
+        crate::bolt_kernels::drop_spent(&mut self.bolts);
         self.open = true;
         self.tick = tick;
         self.syncs += 1;
@@ -457,7 +470,7 @@ impl ScsSimCore {
             self.names = Some(Names::new());
         }
         let mut bolts = std::mem::take(&mut self.bolts);
-        bolts.clear();
+        bolts.truncate_to_owned();
         let mut live: HashSet<i64> = HashSet::new();
         for node in projectiles.iter_shared() {
             let id = node.instance_id().to_i64();
@@ -470,7 +483,7 @@ impl ScsSimCore {
                 let Ok(node3d) = node.clone().try_cast::<Node3D>() else {
                     continue;
                 };
-                self.sync_reads += 4;
+                self.sync_reads += 6;
                 let names = self.names.as_ref().expect("made above");
                 let faction = node
                     .get(&names.faction)
@@ -483,6 +496,8 @@ impl ScsSimCore {
                     .get(&names.velocity)
                     .try_to::<Vector3>()
                     .unwrap_or(Vector3::ZERO);
+                let damage = node.get(&names.damage).try_to::<f64>().unwrap_or(0.0);
+                let color = color_of(&node.get(&names.color));
                 let bolt = Bolt {
                     node: node3d,
                     faction_ix: self.faction_index(faction),
@@ -492,6 +507,8 @@ impl ScsSimCore {
                     velocity: launch_velocity,
                     plain: kind == KIND_BOLT,
                     first_tick: self.tick,
+                    damage,
+                    color,
                 };
                 self.bolt_known.insert(id, bolt);
             }
@@ -532,6 +549,12 @@ impl ScsSimCore {
             bolts.shooters.push(bolt.shooter);
             bolts.kinds.push(bolt.kind);
             bolts.radii.push(bolt.radius);
+            bolts.damage.push(bolt.damage);
+            bolts.colors.push(bolt.color);
+            bolts.looks.push(crate::rows::LOOK_NONE);
+            bolts.expires_at.push(f64::INFINITY);
+            bolts.launched.push(bolt.first_tick);
+            bolts.spent.push(false);
         }
         self.bolt_known.retain(|id, _| live.contains(id));
         self.bolts = bolts;
@@ -937,8 +960,10 @@ impl ScsSimCore {
         out
     }
 
-    /// The bolts as `[ids, starts, ends, radii, kinds, beams]`: a bolt's segment this tick (`end - last_step` to `end`),
-    /// its hit radius, its kind (`SimCore.KIND_*`) and which bolts are beams.
+    /// The bolts as `[ids, starts, ends, radii, kinds, beams, shooters, factions, damage, colors, spent, owned, velocities]`:
+    /// a bolt's segment this tick (`end - last_step` to `end`), its hit radius, its kind (`SimCore.KIND_*`), which bolts
+    /// are beams, and (M4-T35) what a hit lands with, which rows a hit already spent, how many rows at the front the
+    /// core owns, and the velocities.
     #[func]
     fn bolt_columns(&self) -> VarArray {
         let b = &self.bolts;
@@ -949,6 +974,17 @@ impl ScsSimCore {
             .filter(|&i| b.kinds[i] == KIND_BEAM)
             .map(|i| i as i32)
             .collect();
+        let factions: Array<StringName> = b
+            .faction_ix
+            .iter()
+            .map(|&f| self.factions[f as usize].clone())
+            .collect();
+        let colors: Vec<Color> = b
+            .colors
+            .iter()
+            .map(|c| Color::from_rgba(c[0], c[1], c[2], c[3]))
+            .collect();
+        let spent: Vec<u8> = b.spent.iter().map(|&s| u8::from(s)).collect();
         let mut out = VarArray::new();
         out.push(&PackedInt64Array::from(b.ids.as_slice()).to_variant());
         out.push(&PackedVector3Array::from(starts.as_slice()).to_variant());
@@ -956,6 +992,13 @@ impl ScsSimCore {
         out.push(&PackedFloat64Array::from(b.radii.as_slice()).to_variant());
         out.push(&PackedByteArray::from(b.kinds.as_slice()).to_variant());
         out.push(&PackedInt32Array::from(beams.as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(b.shooters.as_slice()).to_variant());
+        out.push(&factions.to_variant());
+        out.push(&PackedFloat64Array::from(b.damage.as_slice()).to_variant());
+        out.push(&PackedColorArray::from(colors.as_slice()).to_variant());
+        out.push(&PackedByteArray::from(spent.as_slice()).to_variant());
+        out.push(&(b.owned as i64).to_variant());
+        out.push(&PackedVector3Array::from(b.velocities.as_slice()).to_variant());
         out
     }
 
@@ -1579,6 +1622,14 @@ pub fn kind_of(value: &Variant) -> u8 {
                 .map_or(KIND_SHIP, |p| p as u8)
         }
         _ => KIND_SHIP,
+    }
+}
+
+// A `Color` property as four floats; opaque white when the property is not a colour.
+pub fn color_of(value: &Variant) -> [f32; 4] {
+    match value.try_to::<Color>() {
+        Ok(c) => [c.r, c.g, c.b, c.a],
+        Err(_) => [1.0, 1.0, 1.0, 1.0],
     }
 }
 

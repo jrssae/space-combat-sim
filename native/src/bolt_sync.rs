@@ -9,7 +9,8 @@ use std::hash::{BuildHasherDefault, Hasher};
 use godot::classes::{Node, Node3D};
 use godot::prelude::*;
 
-use crate::sim_core::{KIND_BOLT, ScsSimCore, kind_of};
+use crate::rows::LOOK_NONE;
+use crate::sim_core::{KIND_BOLT, ScsSimCore, color_of, kind_of};
 
 // Instance ids hash by one multiply: the default hasher costs more than the read it guards.
 #[derive(Default)]
@@ -42,6 +43,8 @@ struct Names {
     shooter_id: StringName,
     kind: StringName,
     hit_radius_m: StringName,
+    damage: StringName,
+    color: StringName,
 }
 
 impl Names {
@@ -53,6 +56,8 @@ impl Names {
             shooter_id: StringName::from("shooter_id"),
             kind: StringName::from("kind"),
             hit_radius_m: StringName::from("hit_radius_m"),
+            damage: StringName::from("damage"),
+            color: StringName::from("color"),
         }
     }
 }
@@ -68,6 +73,8 @@ struct Bolt {
     plain: bool,
     first_tick: i64,
     seen: u64,
+    damage: f64,
+    color: [f32; 4],
 }
 
 /// Reads the live bolts into the core's bolt table exactly as `ScsSimCore` does at its sync points (the position always,
@@ -112,7 +119,7 @@ impl ScsBoltSync {
         let pass = self.reads_done;
         let mut core = core.bind_mut();
         let mut bolts = std::mem::take(&mut core.bolts);
-        bolts.clear();
+        bolts.truncate_to_owned();
         let slots = projectiles.upcast_any_array();
         for i in 0..slots.len() {
             let Some(slot) = slots.get(i) else {
@@ -140,7 +147,7 @@ impl ScsBoltSync {
                     let Ok(node3d) = node.clone().try_cast::<Node3D>() else {
                         continue;
                     };
-                    self.reads += 4;
+                    self.reads += 6;
                     let faction = node
                         .get(&names.faction)
                         .try_to::<StringName>()
@@ -152,6 +159,8 @@ impl ScsBoltSync {
                         .get(&names.velocity)
                         .try_to::<Vector3>()
                         .unwrap_or(Vector3::ZERO);
+                    let damage = node.get(&names.damage).try_to::<f64>().unwrap_or(0.0);
+                    let color = color_of(&node.get(&names.color));
                     let bolt = Bolt {
                         node: node3d,
                         faction_ix: core.faction_index(faction),
@@ -162,6 +171,8 @@ impl ScsBoltSync {
                         plain: kind == KIND_BOLT,
                         first_tick: tick,
                         seen: pass,
+                        damage,
+                        color,
                     };
                     slot_entry.insert(bolt)
                 }
@@ -201,6 +212,12 @@ impl ScsBoltSync {
             bolts.shooters.push(bolt.shooter);
             bolts.kinds.push(bolt.kind);
             bolts.radii.push(bolt.radius);
+            bolts.damage.push(bolt.damage);
+            bolts.colors.push(bolt.color);
+            bolts.looks.push(LOOK_NONE);
+            bolts.expires_at.push(f64::INFINITY);
+            bolts.launched.push(bolt.first_tick);
+            bolts.spent.push(false);
         }
         self.known.retain(|_, bolt| bolt.seen == pass);
         let count = bolts.ids.len() as i64;

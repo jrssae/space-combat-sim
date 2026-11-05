@@ -12,6 +12,9 @@ extends Node
 ## With the native core on (M4-T15, `SimCore`), the hulls and bolts come as columns from the core's rows (the bolts read
 ## again at this priority, since they moved at 0) and the broad phase pairs them natively from the same rows; the resolver
 ## then looks up only the nodes the pairs name. Without it, the resolver walks the tree as before (the reference).
+## With the core owning the bolts (M4-T35, `perf_native_bolt_rows`), a bolt's shooter, faction, damage and tint are columns
+## of the table and a hit spends the row in the core; a projectile that still has a node (a beam, a missile, the player's
+## bolts) is spent through its node as before.
 ## Every projectile kind (bolt, beam, missile, mine) is swept alike, with its own hit radius; a beam (M4-T12) lives for one
 ## resolve, so its first hull along the segment takes the hit and it is retired whether it hit or not. Rocks (M4-T29, §17.16)
 ## are `StaticRows` with no node: they stay in a grid of their own between ticks, rebuilt only when a rock changes, and a bolt
@@ -68,6 +71,13 @@ var _bolt_radii := PackedFloat64Array()
 var _bolt_mids := PackedVector3Array()  # the own walk only
 var _bolt_reach := PackedFloat64Array()
 var _beams := PackedInt32Array()
+# What a hit lands with, per bolt (M4-T35): from the core's columns, or from the nodes on the own walk.
+var _bolt_shooters := PackedInt64Array()
+var _bolt_factions: Array = []
+var _bolt_damage := PackedFloat64Array()
+var _bolt_colors := PackedColorArray()
+var _bolt_owned: int = 0  # rows at the front the core owns (spent in the core, not through a node)
+var _sim: SimCore = null
 var _delta: float = 0.0
 var _source: StringName = &"tree"
 var _gather_frame: int = -1
@@ -158,20 +168,17 @@ func resolve(delta: float) -> void:
 		var rock_first: int = rock_next
 		while rock_next < rock_keys.size() and rock_keys[rock_next] / rock_count == i:
 			rock_next += 1
-		var bolt: Projectile = _bolt(i)
 		# A hit handler may have retired a bolt later in the list, as the per-bolt checks before the broad phase allowed.
-		if bolt == null or bolt.is_spent() or bolt.is_queued_for_deletion() or not bolt.is_inside_tree():
+		if not _bolt_live(i):
 			continue
-		var hull_hit: bool = next > first and _earliest_hit(bolt, i, keys, first, next, hull_count)
-		var rock: int = _earliest_rock(bolt, i, rock_keys, rock_first, rock_next, rock_count) if rock_next > rock_first else -1
+		var hull_hit: bool = next > first and _earliest_hit(i, keys, first, next, hull_count)
+		var rock: int = _earliest_rock(i, rock_keys, rock_first, rock_next, rock_count) if rock_next > rock_first else -1
 		if rock >= 0 and (not hull_hit or _rock_t < _best_t):
-			_land_on_rock(bolt, rock, delta)
+			_land_on_rock(i, rock, delta)
 		elif hull_hit:
-			_land(bolt, delta)
+			_land(i, delta)
 	for i: int in _beams:
-		var beam: Projectile = _bolt(i)
-		if beam != null:
-			beam.spend()
+		_spend(i)
 	resolve_us = Time.get_ticks_usec() - started_us
 
 
@@ -210,6 +217,11 @@ func _gather(delta: float) -> SimCore:
 		_bolt_ends = bolts[2]
 		_bolt_radii = bolts[3]
 		_beams = bolts[5]
+		_bolt_shooters = bolts[6]
+		_bolt_factions = bolts[7]
+		_bolt_damage = bolts[8]
+		_bolt_colors = bolts[9]
+		_bolt_owned = int(bolts[11])
 		_mids.clear()
 		_bolt_mids.clear()
 		_bolt_reach.clear()
@@ -218,6 +230,7 @@ func _gather(delta: float) -> SimCore:
 		_gather_targets(delta)
 		_gather_bolts()
 		sim = null
+	_sim = sim
 	_damageables.resize(_hull_count)
 	return sim
 
@@ -273,6 +286,11 @@ func _gather_bolts() -> void:
 	_bolt_mids.clear()
 	_bolt_reach.clear()
 	_beams.clear()
+	_bolt_shooters.clear()
+	_bolt_factions.clear()
+	_bolt_damage.clear()
+	_bolt_colors.clear()
+	_bolt_owned = 0
 	for node: Node in get_tree().get_nodes_in_group(Projectile.GROUP):
 		var bolt := node as Projectile
 		if bolt == null or bolt.is_spent() or bolt.is_queued_for_deletion() or not bolt.is_inside_tree():
@@ -287,11 +305,36 @@ func _gather_bolts() -> void:
 		_bolt_radii.append(bolt.hit_radius_m)
 		_bolt_mids.append(start + bolt.last_step * 0.5)
 		_bolt_reach.append(bolt.last_step.length() * 0.5 + bolt.hit_radius_m)
+		_bolt_shooters.append(bolt.shooter_id)
+		_bolt_factions.append(bolt.faction)
+		_bolt_damage.append(bolt.damage)
+		_bolt_colors.append(bolt.color)
 
 
-# Bolt `i`'s node, or null when it is gone.
+# Bolt `i`'s node, or null when it is gone or the bolt is a row the core owns.
 func _bolt(i: int) -> Projectile:
+	if i < _bolt_owned:
+		return null
 	return instance_from_id(_bolt_ids[i]) as Projectile if is_instance_id_valid(_bolt_ids[i]) else null
+
+
+# Whether bolt `i` can still hit: an owned row not spent, or a node still live in the tree.
+func _bolt_live(i: int) -> bool:
+	if i < _bolt_owned:
+		return _sim != null and bool(_sim.core.bolt_live(i))
+	var bolt: Projectile = _bolt(i)
+	return bolt != null and not bolt.is_spent() and not bolt.is_queued_for_deletion() and bolt.is_inside_tree()
+
+
+# Retires bolt `i` after a hit: the row in the core, or the node.
+func _spend(i: int) -> void:
+	if i < _bolt_owned:
+		if _sim != null:
+			_sim.core.spend_bolt_row(i)
+		return
+	var bolt: Projectile = _bolt(i)
+	if bolt != null:
+		bolt.spend()
 
 
 # Hull `j`'s `Damageable`, looked up when first needed.
@@ -334,19 +377,21 @@ func _rock_pairs(sim: SimCore) -> PackedInt64Array:
 
 
 # The earliest rock bolt `i` reaches among its pairs `keys[first..next)` (its index in `_solid`, with `_rock_*` set), or -1.
-func _earliest_rock(bolt: Projectile, i: int, keys: PackedInt64Array, first: int, next: int, rock_count: int) -> int:
+func _earliest_rock(i: int, keys: PackedInt64Array, first: int, next: int, rock_count: int) -> int:
 	var best: int = -1
 	_rock_t = INF
 	var start: Vector3 = _bolt_starts[i]
 	var p1: Vector3 = _bolt_ends[i]
+	var bolt_faction: StringName = _bolt_factions[i]
+	var hit_radius: float = _bolt_radii[i]
 	for k: int in range(first, next):
 		var s: int = keys[k] - i * rock_count
-		if not friendly_fire and bolt.faction == _solid.factions[s]:
+		if not friendly_fire and bolt_faction == _solid.factions[s]:
 			continue  # a rock's own faction passes it, as a buoy's does
 		var centre: Vector3 = _solid.positions[s]
 		var a: Vector3 = start - centre
 		var b: Vector3 = p1 - centre
-		var t: float = SweepMath.segment_sphere(a, b, Vector3.ZERO, _solid.radii[s] + bolt.hit_radius_m)
+		var t: float = SweepMath.segment_sphere(a, b, Vector3.ZERO, _solid.radii[s] + hit_radius)
 		if t >= 0.0 and t < _rock_t:
 			_rock_t = t
 			_rock_a = a
@@ -356,14 +401,14 @@ func _earliest_rock(bolt: Projectile, i: int, keys: PackedInt64Array, first: int
 
 
 # A bolt stopped by rock `s`: spent, sparks, and `hit_resolved` with the rock's row id as the target (nothing breaks).
-func _land_on_rock(bolt: Projectile, s: int, delta: float) -> void:
+func _land_on_rock(i: int, s: int, delta: float) -> void:
 	var centre: Vector3 = _solid.positions[s]
 	var local_point: Vector3 = _rock_a + _rock_t * (_rock_b - _rock_a)
 	var relative: Vector3 = _rock_b - _rock_a
-	var info := HitInfo.new(_solid.ids[s], bolt.shooter_id, bolt.faction, bolt.damage, centre + local_point,
+	var info := HitInfo.new(_solid.ids[s], _bolt_shooters[i], _bolt_factions[i], _bolt_damage[i], centre + local_point,
 			-relative.normalized() if relative.length_squared() > 1e-12 else Vector3.ZERO,
 			relative.length() / maxf(delta, 1e-6))
-	bolt.spend()
+	_spend(i)
 	hits_total += 1
 	last_hit = "%s -> %s, 0.0 of %.1f applied" % [name_of(info.shooter_id), name_of(info.target_id), info.damage]
 	if fx != null:
@@ -372,28 +417,31 @@ func _land_on_rock(bolt: Projectile, s: int, delta: float) -> void:
 
 
 # The earliest hit of bolt `i` among its pairs `keys[first..next)`, kept in `_best_*`; false when it hits nothing.
-func _earliest_hit(bolt: Projectile, i: int, keys: PackedInt64Array, first: int, next: int, hull_count: int) -> bool:
+func _earliest_hit(i: int, keys: PackedInt64Array, first: int, next: int, hull_count: int) -> bool:
 	var best_t: float = INF
 	_best = -1
 	var start: Vector3 = _bolt_starts[i]
 	var p1: Vector3 = _bolt_ends[i]
+	var shooter_id: int = _bolt_shooters[i]
+	var bolt_faction: StringName = _bolt_factions[i]
+	var hit_radius: float = _bolt_radii[i]
 	for k: int in range(first, next):
 		var j: int = keys[k] - i * hull_count
 		var damageable: Damageable = _damageable(j)
 		# Already destroyed this tick by another bolt (or gone since the gather).
-		if damageable == null or damageable.hull.destroyed or _body_ids[j] == bolt.shooter_id \
-				or not damageable.can_be_hit_by(bolt.faction, friendly_fire):
+		if damageable == null or damageable.hull.destroyed or _body_ids[j] == shooter_id \
+				or not damageable.can_be_hit_by(bolt_faction, friendly_fire):
 			continue
 		pairs_tested += 1
 		var to_body: Basis = _to_body_of(j)
 		var t0: Vector3 = _starts[j]
 		var a: Vector3 = to_body * (start - t0)
 		var b: Vector3 = to_body * (p1 - (t0 + _velocities[j] * _delta))
-		if SweepMath.segment_sphere(a, b, Vector3.ZERO, damageable.bounding_radius + bolt.hit_radius_m) < 0.0:
+		if SweepMath.segment_sphere(a, b, Vector3.ZERO, damageable.bounding_radius + hit_radius) < 0.0:
 			continue
 		var t: float = INF
 		for shape: HitShape in damageable.shapes:
-			var shape_t: float = shape.sweep(a, b, bolt.hit_radius_m)
+			var shape_t: float = shape.sweep(a, b, hit_radius)
 			if shape_t >= 0.0 and shape_t < t:
 				t = shape_t
 		if t < best_t:
@@ -405,7 +453,7 @@ func _earliest_hit(bolt: Projectile, i: int, keys: PackedInt64Array, first: int,
 	return _best >= 0
 
 
-func _land(bolt: Projectile, delta: float) -> void:
+func _land(i: int, delta: float) -> void:
 	var j: int = _best
 	var damageable: Damageable = _damageable(j)
 	var basis: Basis = _basis(j)
@@ -416,16 +464,17 @@ func _land(bolt: Projectile, delta: float) -> void:
 	var t0: Vector3 = _starts[j]
 	var local_point: Vector3 = a + t * (b - a)
 	var relative: Vector3 = basis * (b - a)
-	var info := HitInfo.new(_body_ids[j], bolt.shooter_id, bolt.faction, bolt.damage,
+	var shooter_id: int = _bolt_shooters[i]
+	var info := HitInfo.new(_body_ids[j], shooter_id, _bolt_factions[i], _bolt_damage[i],
 			t0 + move * t + basis * local_point,
 			-relative.normalized() if relative.length_squared() > 1e-12 else Vector3.ZERO,
 			relative.length() / maxf(delta, 1e-6))
-	bolt.spend()
+	_spend(i)
 	_apply(damageable, info)
 	# A destroyed hull is hidden and the explosion replaces the flash; a flash on a parked ship would never be processed.
 	var body := instance_from_id(_body_ids[j]) as Node3D
 	if body != null and body.is_visible_in_tree():
-		var flash := ImpactFlash.create(bolt.color, hash([bolt.shooter_id, info.target_id, Engine.get_physics_frames()]))
+		var flash := ImpactFlash.create(_bolt_colors[i], hash([shooter_id, info.target_id, Engine.get_physics_frames()]))
 		flash.position = local_point
 		body.add_child(flash)
 		flash.reset_physics_interpolation()

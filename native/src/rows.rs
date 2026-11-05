@@ -43,7 +43,8 @@ pub struct Rows {
     pub node_count: usize,
 }
 
-/// The bolts in flight, column by column, in `projectiles` group order.
+/// The bolts in flight, column by column: first the rows the core owns (M4-T35, stepped by `bolt_kernels`, in launch
+/// order), then the projectiles still read from nodes, in `projectiles` group order.
 #[derive(Default)]
 pub struct Bolts {
     pub ids: Vec<i64>,
@@ -54,7 +55,21 @@ pub struct Bolts {
     pub shooters: Vec<i64>,
     pub kinds: Vec<u8>,
     pub radii: Vec<f64>,
+    // What a hit lands with and what the renderer draws (M4-T35): the damage, the flash tint, the look it is drawn with
+    // (`LOOK_NONE` for a projectile a node draws), when it expires, the tick it was launched (no step on that tick),
+    // and whether a hit spent it (gone at the tick's end).
+    pub damage: Vec<f64>,
+    pub colors: Vec<[f32; 4]>,
+    pub looks: Vec<u8>,
+    pub expires_at: Vec<f64>,
+    pub launched: Vec<i64>,
+    pub spent: Vec<bool>,
+    /// How many rows at the front the core owns.
+    pub owned: usize,
 }
+
+/// A bolt row no multimesh draws (a node draws it, or nothing does).
+pub const LOOK_NONE: u8 = 255;
 
 impl Rows {
     pub fn clear(&mut self) {
@@ -108,5 +123,103 @@ impl Bolts {
         self.shooters.clear();
         self.kinds.clear();
         self.radii.clear();
+        self.damage.clear();
+        self.colors.clear();
+        self.looks.clear();
+        self.expires_at.clear();
+        self.launched.clear();
+        self.spent.clear();
+        self.owned = 0;
     }
+
+    /// Drops the rows read from nodes, keeping the core's own (a sync point reads the nodes again after it).
+    pub fn truncate_to_owned(&mut self) {
+        let n = self.owned;
+        self.ids.truncate(n);
+        self.positions.truncate(n);
+        self.velocities.truncate(n);
+        self.last_steps.truncate(n);
+        self.faction_ix.truncate(n);
+        self.shooters.truncate(n);
+        self.kinds.truncate(n);
+        self.radii.truncate(n);
+        self.damage.truncate(n);
+        self.colors.truncate(n);
+        self.looks.truncate(n);
+        self.expires_at.truncate(n);
+        self.launched.truncate(n);
+        self.spent.truncate(n);
+    }
+
+    /// Adds a bolt the core owns, after the owned rows and before the node rows, in launch order.
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_owned(
+        &mut self,
+        id: i64,
+        position: Vector3,
+        velocity: Vector3,
+        faction_ix: u32,
+        shooter: i64,
+        kind: u8,
+        radius: f64,
+        damage: f64,
+        color: [f32; 4],
+        look: u8,
+        expires_at: f64,
+        launched: i64,
+    ) -> usize {
+        let at = self.owned;
+        self.ids.insert(at, id);
+        self.positions.insert(at, position);
+        self.velocities.insert(at, velocity);
+        self.last_steps.insert(at, Vector3::ZERO);
+        self.faction_ix.insert(at, faction_ix);
+        self.shooters.insert(at, shooter);
+        self.kinds.insert(at, kind);
+        self.radii.insert(at, radius);
+        self.damage.insert(at, damage);
+        self.colors.insert(at, color);
+        self.looks.insert(at, look);
+        self.expires_at.insert(at, expires_at);
+        self.launched.insert(at, launched);
+        self.spent.insert(at, false);
+        self.owned += 1;
+        at
+    }
+
+    /// Removes the owned rows `keep` says to drop (one flag per owned row), keeping the order of the rest and the node rows.
+    pub fn retain_owned(&mut self, keep: &[bool]) {
+        let owned = self.owned;
+        let kept = keep.iter().filter(|&&k| k).count();
+        if kept == owned {
+            return;
+        }
+        compact(&mut self.ids, owned, keep);
+        compact(&mut self.positions, owned, keep);
+        compact(&mut self.velocities, owned, keep);
+        compact(&mut self.last_steps, owned, keep);
+        compact(&mut self.faction_ix, owned, keep);
+        compact(&mut self.shooters, owned, keep);
+        compact(&mut self.kinds, owned, keep);
+        compact(&mut self.radii, owned, keep);
+        compact(&mut self.damage, owned, keep);
+        compact(&mut self.colors, owned, keep);
+        compact(&mut self.looks, owned, keep);
+        compact(&mut self.expires_at, owned, keep);
+        compact(&mut self.launched, owned, keep);
+        compact(&mut self.spent, owned, keep);
+        self.owned = kept;
+    }
+}
+
+// Keeps the first `owned` entries `keep` marks and every entry after them, in order.
+fn compact<T: Copy>(column: &mut Vec<T>, owned: usize, keep: &[bool]) {
+    let mut w = 0;
+    for i in 0..column.len() {
+        if i >= owned || keep[i] {
+            column[w] = column[i];
+            w += 1;
+        }
+    }
+    column.truncate(w);
 }

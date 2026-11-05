@@ -113,6 +113,10 @@ func step_gun(delta: float, now_s: float, projectiles: Node3D) -> void:
 ## Spawns one of `cap`'s gun bolts under `projectiles`, leaving from `at` at `velocity` (World frame): the gun's shot, also
 ## for the native rows' fire decisions (M4-T20).
 static func launch_bolt(cap: CapitalStandin, at: Vector3, velocity: Vector3, now_s: float, projectiles: Node3D) -> Projectile:
+	var sim: SimCore = SimCore.current()
+	if sim != null and sim.bolt_rows_on():
+		sim.add_bolt(at, velocity, cap.faction, cap.get_instance_id(), weapon(), now_s)  # an owned row (M4-T35), no node
+		return null
 	var bolt := PROJECTILE_SCENE.instantiate() as Projectile
 	projectiles.add_child(bolt)
 	bolt.configure(weapon())

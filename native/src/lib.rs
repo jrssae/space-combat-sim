@@ -2,9 +2,12 @@
 use godot::prelude::*;
 
 mod body_registry;
+mod bolt_kernels;
+mod bolt_rows;
 mod brain;
 mod brain_behaviours;
 mod brain_maths;
+mod cannons;
 mod contact_field;
 mod flight_step;
 mod hit_sweep;

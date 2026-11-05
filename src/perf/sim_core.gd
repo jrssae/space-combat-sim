@@ -15,6 +15,14 @@ extends Node
 ## Threads (M4-T18): the core's per-ship passes (the brains, which `BrainBatch`, an internal child at -9, hands one batch a
 ## tick, and the flight step) run on `perf_threads` worker threads, set at once whenever the setting changes.
 ##
+## Bolts as rows (M4-T35, `perf_native_bolt_rows`): the core owns its bolts. Every cannon but the player's registers with
+## `ScsCannons` (`register_cannon`), and an internal `SimCoreStep` child at priority 1 (after the drivers, `Main` and the
+## World's rebase at 0, before the targeting at 100 and the resolvers) steps every cannon's gate in one call, spawns each
+## shot as an owned bolt row, hands the shots back to their cannons (the flash, the signal), and then steps every owned
+## bolt (`step_bolts`: expiry, then `velocity * delta`). The hit resolver sweeps and spends the rows; the next tick's first
+## sync drops the spent ones, as a spent node is gone by then. Beams and missiles keep their nodes and follow the owned rows in the table at each sync. A `BoltMesh` child
+## draws the rows, one multimesh a look, interpolated between ticks as the nodes were.
+##
 ## The first consumer attaches it to the world (`attach`, as `FlightBatch` does); `for_tree` gives it to the classes
 ## that read it, or null when the library lacks the class or `perf_native` or `perf_native_core` is off, and then each
 ## class loads its own copy as before, so a bench pairs the two paths in one process by flipping `perf_native_core`.
@@ -23,10 +31,19 @@ extends Node
 const NATIVE_CLASS: StringName = &"ScsSimCore"
 ## The cheaper bolt read at the sync points (M4-T34); the core's own read stays the reference.
 const BOLT_SYNC_CLASS: StringName = &"ScsBoltSync"
+## The cannons as rows and the bolt kernel (M4-T35).
+const CANNONS_CLASS: StringName = &"ScsCannons"
 const NODE_NAME: StringName = &"SimCore"
 const OUT_NODE_NAME: StringName = &"SimCoreOut"
+const STEP_NODE_NAME: StringName = &"SimCoreStep"
 const PRIORITY: int = -11
 const OUT_PRIORITY: int = 2_000_000
+## The cannon and bolt step: after every priority-0 node (the drivers' commands, the player's, the World's rebase), before
+## the targeting (100) and the hit resolver (200).
+const STEP_PRIORITY: int = 1
+## Floats per bolt instance in a multimesh buffer, and the look of a bolt no multimesh draws.
+const BOLT_INSTANCE_FLOATS: int = 12
+const LOOK_NONE: int = 255
 
 ## Row kinds: `BodyKind`'s values, then the projectile kinds the core adds.
 const KIND_SHIP: int = 0
@@ -47,6 +64,7 @@ const FLAG_LATE: int = 8
 # The latest core attached to a tree (-1 for the class check: classes never change while the game runs).
 static var _current: SimCore = null
 static var _native_class_known: int = -1
+static var _cannons_class_known: int = -1
 
 ## The native core (`ScsSimCore`); null until `_ready`.
 var core: Object = null
@@ -61,6 +79,13 @@ var bolts_us: int = 0
 ## Markers and hulls that left the tree since the core was made (a scan built from the core checks its bodies when this
 ## changed).
 var removals: int = 0
+## The cannons as rows (`ScsCannons`, M4-T35); null without the class.
+var cannons: Object = null
+## Wall-clock microseconds of the last tick's cannon step and bolt step (readouts only), and the shots and expiries it made.
+var cannon_us: int = 0
+var bolt_step_us: int = 0
+var shots_last_tick: int = 0
+var expired_last_tick: int = 0
 
 var _tree: SceneTree = null
 var _members_dirty: bool = true
@@ -70,6 +95,8 @@ var _bolts_fresh: bool = false  # the bolts were read again since this tick's fi
 var _bolt_sync: Object = null  # the bolt reader (M4-T34), made on first use
 var _bolt_sync_known: int = -1
 var _tick_open: bool = false  # a sync_in since the last sync_out: the next sync_in closes the tick's count, as the core's does
+var _cannons_by_slot: Dictionary[int, PulseCannon] = {}
+var _bolt_mesh: BoltMesh = null
 const _NO_NODES: Array[Node] = []
 
 
@@ -86,6 +113,19 @@ class Out extends Node:
 		owner_core.sync_out_now()
 
 
+## Steps the cannons and the owned bolts once a tick at `STEP_PRIORITY` (M4-T35; an internal child).
+class Step extends Node:
+	var owner_core: SimCore = null
+
+	func _init(p_owner: SimCore) -> void:
+		owner_core = p_owner
+		name = STEP_NODE_NAME
+		process_physics_priority = STEP_PRIORITY
+
+	func _physics_process(delta: float) -> void:
+		owner_core.step_now(delta)
+
+
 func _init() -> void:
 	name = NODE_NAME
 	process_physics_priority = PRIORITY
@@ -93,10 +133,15 @@ func _init() -> void:
 
 func _ready() -> void:
 	core = NativeLib.instantiate(NATIVE_CLASS)
+	cannons = NativeLib.instantiate(CANNONS_CLASS)
 	_out = Out.new(self)
 	add_child(_out, false, Node.INTERNAL_MODE_BACK)
 	add_child(BrainBatch.new(), false, Node.INTERNAL_MODE_BACK)
+	add_child(Step.new(self), false, Node.INTERNAL_MODE_BACK)
+	_bolt_mesh = BoltMesh.new(self)
+	add_child(_bolt_mesh, false, Node.INTERNAL_MODE_BACK)
 	_apply_threads()
+	_apply_bolt_rows()
 	if not Settings.changed.is_connected(_on_setting_changed):
 		Settings.changed.connect(_on_setting_changed)
 	_hook(get_tree())
@@ -104,6 +149,7 @@ func _ready() -> void:
 		world.rebased.connect(_on_rebased)
 	_current = self
 	_register_console()
+	PulseCannon.rebind_all()
 
 
 func _exit_tree() -> void:
@@ -115,6 +161,7 @@ func _exit_tree() -> void:
 	if _current == self:
 		_current = null
 	DebugConsole.registry.unregister_owner(self)
+	PulseCannon.rebind_all()
 
 
 func _physics_process(_delta: float) -> void:
@@ -158,6 +205,25 @@ static func current() -> SimCore:
 	return _current if _current != null and is_instance_valid(_current) else null
 
 
+## Whether the core owns the bolts when it runs (M4-T35): the core on, `perf_native_bolt_rows` on and the library's cannons.
+static func bolt_rows_enabled() -> bool:
+	if not enabled() or not bool(Settings.get_value(&"perf_native_bolt_rows")):
+		return false
+	if _cannons_class_known < 0:
+		_cannons_class_known = 1 if NativeLib.has_class(CANNONS_CLASS) else 0
+	return _cannons_class_known == 1
+
+
+## Whether this core owns its bolts now.
+func bolt_rows_on() -> bool:
+	return core != null and bool(core.bolt_rows())
+
+
+## Which path the bolts fly now: &"rows" (the core's own rows, M4-T35) or &"nodes" (a `Projectile` node each).
+func bolt_rows_path() -> StringName:
+	return &"rows" if bolt_rows_on() else &"nodes"
+
+
 ## Makes sure this physics frame's first sync ran; true when the core holds this frame's rows.
 func ensure_synced() -> bool:
 	if core == null:
@@ -193,6 +259,33 @@ func sync_bolts_now() -> bool:
 		return false
 	_sync_bolts()
 	return true
+
+
+## The cannon step and the bolt step of this tick (the `SimCoreStep` node does it at `STEP_PRIORITY`): every cannon's gate
+## over the rows, each shot an owned bolt handed back to its cannon, then every owned bolt expired or moved.
+func step_now(delta: float) -> void:
+	if core == null or not bolt_rows_on() or not ensure_synced():
+		return
+	var started: int = Time.get_ticks_usec()  # readout only
+	var now_s: float = SimClock.now()
+	var out: Array = cannons.step(core, now_s, delta)
+	var shots: PackedInt64Array = out[0]
+	var positions: PackedVector3Array = out[1]
+	for slot: int in (out[2] as PackedInt32Array):
+		var cannon: PulseCannon = _cannons_by_slot.get(slot)
+		if cannon != null:
+			var late: Array = cannon.step_without_row(now_s)
+			shots.append_array(late[0])
+			positions.append_array(late[1])
+	shots_last_tick = positions.size()
+	for k: int in positions.size():
+		var cannon: PulseCannon = _cannons_by_slot.get(int(shots[k * 3]))
+		if cannon != null:
+			cannon.on_kernel_fired(int(shots[k * 3 + 1]), positions[k])
+	var fired: int = Time.get_ticks_usec()
+	cannon_us = fired - started
+	expired_last_tick = int(core.step_bolts(now_s, delta))
+	bolt_step_us = Time.get_ticks_usec() - fired
 
 
 ## Closes the tick (the `SimCoreOut` node does it at 2 000 000).
@@ -276,6 +369,59 @@ func set_row_command(handle: int, command: PackedFloat64Array) -> void:
 func remove_row(handle: int) -> void:
 	if core != null:
 		core.remove_row(handle)
+
+
+# --- bolts as rows (M4-T35) ---------------------------------------------------------------------------------------
+
+
+## Registers `cannon` with the kernel: its ship's body, its muzzles in the ship's frame, its weapon and faction. Returns the
+## slot, or -1.
+func register_cannon(cannon: PulseCannon, body_id: int, muzzles: PackedVector3Array, weapon: WeaponSpec,
+		faction: StringName) -> int:
+	if cannons == null:
+		return -1
+	var slot: int = int(cannons.register(body_id, muzzles, weapon.shot_interval_s, weapon.capacitor_capacity,
+			weapon.capacitor_cost_per_shot, weapon.capacitor_recharge_per_s, weapon.muzzle_speed_mps, weapon.convergence_range_m,
+			weapon.lifetime_s, weapon.damage, weapon.hit_radius_m, weapon.bolt_color, BoltMesh.look_for(weapon), faction))
+	if slot >= 0:
+		_cannons_by_slot[slot] = cannon
+	return slot
+
+
+func unregister_cannon(slot: int) -> void:
+	_cannons_by_slot.erase(slot)
+	if cannons != null:
+		cannons.unregister(slot)
+
+
+## Cannons firing through the kernel now.
+func cannon_count() -> int:
+	return _cannons_by_slot.size()
+
+
+## Adds an owned bolt (a stand-in's gun shot) and returns its id (negative); -1 when the core does not own the bolts.
+func add_bolt(at: Vector3, velocity: Vector3, faction: StringName, shooter_id: int, weapon: WeaponSpec, now_s: float,
+		kind: int = KIND_BOLT) -> int:
+	if not bolt_rows_on():
+		return -1
+	return int(core.add_bolt(at, velocity, faction, shooter_id, kind, weapon.hit_radius_m, weapon.damage, weapon.bolt_color,
+			BoltMesh.look_for(weapon), weapon.lifetime_s, now_s))
+
+
+## Spends the owned bolt `id` (an interceptor shot it down); false when there is none.
+func spend_bolt(id: int) -> bool:
+	return core != null and bool(core.spend_bolt(id))
+
+
+## Owned bolt rows now.
+func owned_bolts() -> int:
+	return int(core.owned_bolts()) if core != null else 0
+
+
+# Tells the core whether it owns the bolts, as the setting stands.
+func _apply_bolt_rows() -> void:
+	if core != null:
+		core.set_bolt_rows(bolt_rows_enabled())
 
 
 ## Engine calls of the last closed tick: `[sync, fallbacks]` (the sync points' reads, and the flight step's reads of the
@@ -367,6 +513,9 @@ func _apply_threads() -> void:
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
 	if key == &"perf_threads":
 		_apply_threads()
+	elif key == &"perf_native_bolt_rows" or key == &"perf_native_core" or key == &"perf_native":
+		_apply_bolt_rows()
+		PulseCannon.rebind_all()
 
 
 # --- the tree's changes ------------------------------------------------------------------------------------------
@@ -455,6 +604,14 @@ func _register_console() -> void:
 		&"batch_us": {"get": func() -> int: return _batch().call_us if _batch() != null else 0, "unit": "us", "doc": "The last tick's one native call for every native think (BrainBatch); wall clock"},
 		&"live_workers": {"get": func() -> int: return int(core.live_workers()) if core != null else 0, "doc": "Worker threads running now (0 with one thread: a pool is joined before the next starts)"},
 		&"batch_ships": {"get": func() -> int: return _batch().ships if _batch() != null else 0, "doc": "Ships the last tick's brain batch carried"},
+		&"bolt_path": {"get": func() -> String: return String(bolt_rows_path()), "doc": "rows when the core owns the bolts (M4-T35: the cannon kernel, the bolt step, the multimesh), else nodes (a Projectile node each)"},
+		&"owned_bolts": {"get": owned_bolts, "doc": "Bolt rows the core owns now (M4-T35)"},
+		&"cannons": {"get": cannon_count, "doc": "Cannons firing through the kernel (M4-T35)"},
+		&"cannon_us": {"get": func() -> int: return cannon_us, "unit": "us", "doc": "The last tick's cannon step (every gate, the shots handed back); wall clock"},
+		&"bolt_step_us": {"get": func() -> int: return bolt_step_us, "unit": "us", "doc": "The last tick's bolt step (expiry and the move of every owned bolt); wall clock"},
+		&"shots": {"get": func() -> int: return shots_last_tick, "doc": "Shots the kernel fired in the last tick"},
+		&"expired": {"get": func() -> int: return expired_last_tick, "doc": "Owned bolts that expired in the last tick"},
+		&"bolt_draws": {"get": func() -> int: return _bolt_mesh.instances_drawn if _bolt_mesh != null else 0, "doc": "Bolt instances the multimesh drew in the last frame (M4-T35)"},
 	}), self)
 
 
