@@ -184,9 +184,16 @@ func step(delta: float) -> void:
 	if pilot != null and pilot.native_capable():
 		var host: Object = NativeBrains.host(get_tree())
 		if host != null:
+			# The scan stage on the native path: the shared scan's build and the perception (the lists are picked inside the
+			# think, which the think stage counts).
+			var timed: bool = ContactScan.timing
+			var scan_started_us: int = Time.get_ticks_usec() if timed else 0  # profiling readout only
 			var scan: ContactScan = ContactScan.shared(get_tree())
-			if scan.rows_fresh():
-				pc = pilot.try_think_native(_perceive_lite(scan, host), dt)
+			var p: Perception = _perceive_lite(scan, host) if scan.rows_fresh() else null
+			if timed:
+				ContactScan.add_time(Time.get_ticks_usec() - scan_started_us)
+			if p != null:
+				pc = pilot.try_think_native(p, dt)
 	if pc != null:
 		_thinks_native += 1
 		_contacts_max = maxi(_contacts_max, pilot.native_contacts)
