@@ -1437,6 +1437,12 @@ One physics tick, in order (`process_physics_priority`, then tree order):
 
 1. `AiPilotDriver`s (-10): build a `Perception`, call the brain, `Combatant.apply_commands(flight, combat)`.
    Commands are levels and rates, never positions, so a later rebase in the same tick cannot stale them.
+1b. `BrainBatch` (-9; M4-T24, `sim_step`): on the native path the AI step is a job over a snapshot of the core's rows
+   (`SimCore` synced them at -11). With `threaded` (the default) or `delayed`, the batch first joins the previous tick's
+   job and hands over its results (the commands into the rows, which the flight batch flies at -1; the events to the
+   drivers that joined then), then launches this tick's job, on the step's worker thread when threaded. Every AI
+   command therefore lands one tick after the rows it was decided on; the player's own command (3) is never behind. With
+   `inline` the batch thinks and applies in the same call, today's order (§17.13, "The AI step on a worker thread").
 2. `DebugConsole` statements (autoload, so first among the priority-0 nodes; a `rebase` here moves everything
    together).
 3. `Main` (0): player `PilotCommand` -> `Combatant.apply_commands` (the same call).

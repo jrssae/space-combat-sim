@@ -277,9 +277,13 @@ func step(delta: float, batched: bool = false) -> void:
 			if p != null and batched:
 				var batch: BrainBatch = _frame_batch
 				var slot: int = pilot.prepare_native(p) if batch != null else -1
-				if slot >= 0 and batch.add(self, host, p, slot, dt, scan.rows_version_taken()):
+				if slot >= 0 and batch.add(self, host, p, slot, dt, scan.rows_version_taken(), _since_think_s, _woken):
+					# The clock and the wake reset now as a landed think resets them (put back if the host declines), so the
+					# next tick's decision is right when the answer comes a tick later (M4-T24).
+					_since_think_s = 0.0
+					_woken = false
 					_add_think_time(Time.get_ticks_usec() - started_us)
-					return  # the batch thinks it and calls finish_native this tick
+					return  # the batch thinks it and calls finish_native when its answer comes
 			if p != null:
 				pc = pilot.try_think_native(p, dt)
 			if pc == null and pilot.has_native_slot():
@@ -292,16 +296,18 @@ func step(delta: float, batched: bool = false) -> void:
 
 ## The end of a native think the tick's `BrainBatch` carried (M4-T18): the think's output starts at `base` in the batch's
 ## answer `out` (-1 when the host declined it); `dt` the time the think was given.
-func finish_native(out: PackedFloat64Array, base: int, dt: float) -> void:
+func finish_native(out: PackedFloat64Array, base: int, dt: float, since_s: float = 0.0, woken: bool = false) -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
 	var pilot := brain as AiPilot
 	if pilot == null or combatant == null or not is_instance_valid(combatant.ship):
 		return
 	var pc: PilotCommand = pilot.apply_native(out, base)
 	if pc == null:
+		_since_think_s += since_s  # the clock and the wake as they stood before the queue
+		_woken = _woken or woken
 		_hold_declined()
 	else:
-		_act(pc, pilot, dt)
+		_act(pc, pilot, dt, false)  # the clock was reset when the think queued
 	_add_think_time(Time.get_ticks_usec() - started_us)
 
 
@@ -506,10 +512,11 @@ func _hold_declined() -> void:
 
 # What a think ends with: the GDScript brain when no native command came (`pc` null), avoidance, the selection and the
 # command handed to the ship.
-func _act(pc: PilotCommand, pilot: AiPilot, dt: float) -> void:
+func _act(pc: PilotCommand, pilot: AiPilot, dt: float, reset_clock: bool = true) -> void:
 	_avoid_from_pilot = false
-	_since_think_s = 0.0
-	_woken = false
+	if reset_clock:
+		_since_think_s = 0.0
+		_woken = false
 	_count_think(near_player)
 	_retarget(dt, brain.wanted_target_id)
 	if pc != null:
@@ -776,6 +783,12 @@ func _follow_target(wanted: int) -> void:
 		return
 	ContactScan.note_selection(combatant.ship)
 	_unselectable_id = 0 if targeting.select_id(wanted) else wanted
+
+
+## Starts the tick's work counts afresh (the batch calls it every tick, so a tick with no think reads zero, not the last
+## tick's counts; M4-T24).
+static func roll_counts() -> void:
+	_roll_counts()
 
 
 # Starts the work counts afresh on the first driver of a tick.

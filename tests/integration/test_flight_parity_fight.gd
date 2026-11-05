@@ -5,7 +5,9 @@ extends GutTest
 ## providers), because a second fight in one process is never the same fight: the absolute sim clock, the pooled nodes and the
 ## statics differ from the first, and a 24-ship furball turns that into kilometres by 10 s on one path alone. A fresh process
 ## reproduces a seeded fight to the centimetre the console prints, and the step is bit-identical to the model, so the expected
-## outcome is equality; the test prints how close it came. Skips, saying why, when the native library is not built.
+## outcome is equality; the test prints how close it came. Both fights run on the inline step (the GDScript model is paired
+## in the same tick; the one-tick handover is test_core_snapshot's, M4-T24). Skips, saying why, when the native library is
+## not built.
 
 const SHIPS: int = 25
 const TWIN_AT_S: int = 10
@@ -34,7 +36,7 @@ func _skipped() -> bool:
 
 # Runs one seeded fight in a fresh process and returns the console's lines by key (`ai.ships`, `combat.hits`, ...).
 func _fight(flight_batch_on: bool, measure_s: int, label: String) -> Dictionary:
-	var script: String = "set settings.perf_native_flight %s; scenario combat_sandbox; wait 30; bench furball %d %d seed=1 label=%s/%s; state ai; state combat; state ram; state flight; quit" % [
+	var script: String = "set settings.sim_step inline; set settings.perf_native_flight %s; scenario combat_sandbox; wait 30; bench furball %d %d seed=1 label=%s/%s; state ai; state combat; state ram; state flight; quit" % [
 			"true" if flight_batch_on else "false", SHIPS, measure_s, LABEL_ROOT, label]
 	var args := PackedStringArray(["--headless", "--path", ProjectSettings.globalize_path("res://"), "--", "--console-strict",
 			"--console-exec=" + script])

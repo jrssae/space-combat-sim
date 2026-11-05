@@ -11,7 +11,7 @@ const SEED: int = 1
 const TICKS: int = 600
 const FAULT_TICKS: int = 120
 const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_threads",
-		&"perf_native_commands", &"perf_native_driver_step"]
+		&"perf_native_commands", &"perf_native_driver_step", &"sim_step"]
 
 var _saved: Dictionary = {}
 
@@ -280,6 +280,7 @@ func test_a_slot_listed_twice_in_one_flight_step_flies_as_two_steps_in_a_row() -
 func _small_fight() -> Dictionary:
 	Settings.set_value(&"perf_threads", 6)
 	Settings.set_value(&"perf_native_driver_step", false)  # these fights queue thinks by hand (T18's seam; the host's step: test_driver_step)
+	Settings.set_value(&"sim_step", &"inline")  # and read the flush's result at once (the one-tick handover: test_core_snapshot)
 	Factions.reset()
 	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
 	ContactScan.invalidate()

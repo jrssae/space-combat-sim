@@ -14,7 +14,7 @@ const SAMPLE_EVERY: int = 5
 const HITS_TOLERANCE: float = 0.10
 const MIX_TOLERANCE: float = 0.05
 const TWIN_DISTANCE_M: float = 50.0
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains"]
+const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"sim_step"]
 
 var _saved: Dictionary = {}
 
@@ -30,6 +30,9 @@ func before_each() -> void:
 		_saved[key] = Settings.get_value(key)
 	Settings.set_value(&"perf_native", true)
 	Settings.set_value(&"perf_native_core", true)
+	# The GDScript twin thinks in the same tick, so the native fight is paired on the inline step (the one-tick handover is
+	# test_core_snapshot's; M4-T24).
+	Settings.set_value(&"sim_step", &"inline")
 	Factions.reset()
 	ContactScan.invalidate()
 

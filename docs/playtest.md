@@ -484,6 +484,18 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       their own motion, and no hull paint is dragged across the stars. The pair `reports/perf/M4-T36_motion_blur/turn_blur_{false,true}.png`
       (a one-frame 40 degree look swing) shows what the agent saw.
 - [ ] **M4-T36 The debug overlay** refreshes ten times a second instead of every frame: it should still read as live.
+- [ ] **M4-T24 The AI one tick behind.** The AI step (every native brain's think, the hosted drivers' think rate, the commands into
+      the rows) runs on a worker thread and its commands reach the ships one tick (16.7 ms) after the rows they were decided on
+      (Q53). Fly the sandbox and `battle 300`: AI ships should turn, fire and dodge as before, with no visible hesitation or
+      overshoot; a raider on your tail should still track you. Compare by flipping `set settings.sim_step inline` (today's
+      same-tick step) and back to `threaded` mid-fight; `delayed` is the threaded step's reference on the main thread.
+- [ ] **M4-T24 Input feel.** Your own stick is never behind (the player's command is sampled and applied in the same tick on
+      every schedule), but the frame no longer carries the AI step: at `battle 300` and `500` the stick should feel more
+      immediate than before. Check pitch, yaw and the trigger with vsync on and off; `state core` shows `step_misses` (should
+      stay 0) and `step_wait_us`.
+- [ ] **M4-T24 The catch-up cap.** `physics_max_steps_per_frame` is 3 (Godot's default was 8): when the tick cannot keep up
+      (battle 500) the simulation slows instead of the frame stuttering through catch-up ticks. Judge whether the slow-motion
+      at 500 reads better than the stutter did; `2` is the other candidate (`set settings.physics_max_steps_per_frame 2`).
 - **T35, bolts as rows:** the AI ships' bolts are drawn by one multimesh per look (`core.bolt_draws`), interpolated between ticks as the nodes were. Check in a `battle` run: bolts leave the muzzles, fly straight and smoothly (no stutter against the hulls), hit flashes still appear where bolts land, the chase camera's larger bolts (`Projectile.visual_scale`) still apply, and nothing is drawn where a bolt was spent. Switch `settings.perf_native_bolt_rows` off and on mid-run to compare with the bolt nodes.
 - **T35, the AI ships' muzzle flashes:** the lean ships' flashes come from one pool (a multimesh of billboard quads and pooled lights), not a node per muzzle. Check in a `battle` run: a flash pops at the muzzle of every AI shot for about 50 ms, grows and fades as the player's own flashes do, rides with the ship, and lights the nose; no flash lingers on a parked or dead ship.
 - **T35, the AI ships' shot sounds:** `AudioDirector.watch_ship` listens to `shot_fired`, which both bolt paths emit (fix round 1). Confirm every AI shot in a `battle` run makes its pulse or raider sound at the muzzle, with the bolt rows on and off.

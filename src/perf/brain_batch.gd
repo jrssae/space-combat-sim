@@ -62,6 +62,9 @@ var _origin_y: float = 0.0
 var _origin_z: float = 0.0
 var _drivers: Array[AiPilotDriver] = []
 var _dts := PackedFloat64Array()
+# A plain batch's think rate state per driver as it stood before the queue (put back when the host declines; M4-T24).
+var _sinces := PackedFloat64Array()
+var _wokens := PackedByteArray()
 var _ints := PackedInt64Array()
 var _floats := PackedFloat64Array()
 var _relations := PackedByteArray()
@@ -92,6 +95,8 @@ class Launched extends RefCounted:
 	var rows: bool = false
 	var drivers: Array[AiPilotDriver] = []
 	var dts := PackedFloat64Array()
+	var sinces := PackedFloat64Array()
+	var wokens := PackedByteArray()
 	var answer: BrainAnswer = null
 
 
@@ -124,7 +129,8 @@ static func for_tree(tree: SceneTree) -> BrainBatch:
 ## `rows_version` the core's rows version its scan was taken at. False when it cannot join this tick's batch (another
 ## host, rows version, clock, frame origin or friendly-fire setting than the ships already in it); the driver then
 ## thinks alone.
-func add(driver: AiPilotDriver, host: Object, p: Perception, slot: int, dt: float, rows_version: int) -> bool:
+func add(driver: AiPilotDriver, host: Object, p: Perception, slot: int, dt: float, rows_version: int, since_s: float = 0.0,
+		woken: bool = false) -> bool:
 	var frame: int = Engine.get_physics_frames()
 	var o: UniversePos = p.frame_origin
 	if frame != _frame:
@@ -149,6 +155,8 @@ func add(driver: AiPilotDriver, host: Object, p: Perception, slot: int, dt: floa
 	_floats.append(p.last_hit_s)
 	_floats.append(p.last_bolt_hit_s)
 	_dts.append(dt)
+	_sinces.append(since_s)
+	_wokens.append(1 if woken else 0)
 	_drivers.append(driver)
 	return true
 
@@ -282,6 +290,7 @@ func flush() -> void:
 	events = 0
 	hosted_stepped = 0
 	join_us = 0
+	AiPilotDriver.roll_counts()  # a tick with no think lands reads zero (the counts come at the join, M4-T24)
 	if _launched != null:
 		_join_launched()
 	if _drivers.is_empty():
@@ -302,19 +311,23 @@ func _flush_plain() -> void:
 	var mode: int = step_mode()
 	var drivers: Array[AiPilotDriver] = _drivers
 	var dts: PackedFloat64Array = _dts
+	var sinces: PackedFloat64Array = _sinces
+	var wokens: PackedByteArray = _wokens
 	var host: Object = _host
 	_drivers = []
 	_dts = PackedFloat64Array()
+	_sinces = PackedFloat64Array()
+	_wokens = PackedByteArray()
 	_frame = -1
 	if not is_instance_valid(host):
-		_apply_plain(drivers, dts, PackedFloat64Array())
+		_apply_plain(drivers, dts, sinces, wokens, PackedFloat64Array())
 		return
 	if mode == STEP_INLINE:
 		var out: PackedFloat64Array = host.think_batch(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y,
 				_origin_z, _rows_version)
 		call_us = Time.get_ticks_usec() - started_us
 		AiPilotDriver.add_think_time(call_us)
-		_apply_plain(drivers, dts, out)
+		_apply_plain(drivers, dts, sinces, wokens, out)
 		return
 	if host.launch_batch(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y, _origin_z, _rows_version,
 			mode == STEP_THREADED):
@@ -323,22 +336,26 @@ func _flush_plain() -> void:
 		launched.rows = false
 		launched.drivers = drivers
 		launched.dts = dts
+		launched.sinces = sinces
+		launched.wokens = wokens
 		_launched = launched
 	else:
-		_apply_plain(drivers, dts, PackedFloat64Array())
+		_apply_plain(drivers, dts, sinces, wokens, PackedFloat64Array())
 	call_us = Time.get_ticks_usec() - started_us
 	AiPilotDriver.add_think_time(call_us)
 
 
 # Each driver of a plain batch finishes its think from `out` (empty: every think declined).
-func _apply_plain(drivers: Array[AiPilotDriver], dts: PackedFloat64Array, out: PackedFloat64Array) -> void:
+func _apply_plain(drivers: Array[AiPilotDriver], dts: PackedFloat64Array, sinces: PackedFloat64Array, wokens: PackedByteArray,
+		out: PackedFloat64Array) -> void:
 	ships = drivers.size()
 	for i: int in drivers.size():
 		var driver: AiPilotDriver = drivers[i]
 		if is_instance_valid(driver):
 			var base: int = i * STRIDE
 			var thought: bool = out.size() >= base + STRIDE and out[base] != 0.0
-			driver.finish_native(out, base + 1 if thought else -1, dts[i])
+			driver.finish_native(out, base + 1 if thought else -1, dts[i], sinces[i] if i < sinces.size() else 0.0,
+					i < wokens.size() and wokens[i] != 0)
 			finishes += 1
 
 
@@ -427,7 +444,7 @@ func _join_launched() -> void:
 	if launched.rows:
 		_apply_rows(launched.drivers, launched.answer, out, head, hosted_slots)
 	else:
-		_apply_plain(launched.drivers, launched.dts, out)
+		_apply_plain(launched.drivers, launched.dts, launched.sinces, launched.wokens, out)
 	join_us = Time.get_ticks_usec() - started_us
 	AiPilotDriver.add_think_time(join_us)
 
@@ -485,6 +502,8 @@ func _begin(frame: int, host: Object, now_s: float, friendly_fire: bool, origin:
 	_answer = BrainAnswer.new() if rows else null
 	_drivers.clear()
 	_dts.clear()
+	_sinces.clear()
+	_wokens.clear()
 	_ints.clear()
 	_floats.clear()
 	_relations.clear()

@@ -171,6 +171,11 @@ var _mirror_target: Contact = Contact.new()
 # A rows batch's answer this pilot has not read yet, and its place in it (M4-T33).
 var _pending: BrainAnswer = null
 var _pending_index: int = 0
+# The answer before `_pending`, kept whole while `_pending` has not come (the step one tick behind, M4-T24): a read then
+# lands it in full, as a read before the newer think would have; once `_pending` has come it is retired as an unread
+# answer always was.
+var _pending_prev: BrainAnswer = null
+var _prev_index: int = 0
 
 
 ## No behaviours given: the standard set (ram, retreat, evade, attack, idle). No temperament: the profile's own.
@@ -615,10 +620,19 @@ func _apply_state(out: PackedFloat64Array, base: int) -> void:
 ## still unread is retired first: only what a newer think does not overwrite is taken from it.
 func set_pending(answer: BrainAnswer, index: int) -> void:
 	if _pending != null:
-		_retire_pending()
+		if answer == null:
+			_retire_pending()
+		else:
+			# The newer think's answer comes a tick later (M4-T24): the one before stays whole until then, so a read in between
+			# lands it as a read before the newer think would have; once the newer one has come it is retired as before.
+			if _pending_prev != null:
+				_retire_prev()
+			_pending_prev = _pending
+			_prev_index = _pending_index
+			_pending = null
 	_pending = answer
 	_pending_index = index
-	_native_pending = answer != null
+	_native_pending = answer != null or _pending_prev != null
 
 
 ## The host steps this pilot's driver (M4-T35): the latest think is read from the slot when something asks.
@@ -642,6 +656,27 @@ func is_hosted() -> bool:
 ## Reads the pending rows answer into this pilot, if it has come (a declined think leaves everything as it was).
 func settle_native() -> void:
 	var answer: BrainAnswer = _pending
+	if _hosted and _slot >= 0 and is_instance_valid(_native) and int(_native.slot_think_count(_slot)) != _hosted_seen:
+		# The host has thought for this pilot since the last read (M4-T35): its latest think wins over any answer still kept
+		# from before the hosting (the step one tick behind, M4-T24), which is retired as an unread answer is.
+		if _pending_prev != null:
+			_retire_prev()
+		if answer != null:
+			_retire_pending()
+			answer = null
+	if _pending_prev != null:
+		if answer == null or not answer.ready:
+			# The newer think has not come: the one before lands in full, as a read between the two would have landed it.
+			if _pending_prev.ready:
+				var prev: BrainAnswer = _pending_prev
+				_pending_prev = null
+				if prev.thought(_prev_index):
+					_apply_state(prev.out, _prev_index * BrainBatch.STRIDE + 1)
+			if answer == null:
+				_native_pending = _hosted or _pending_prev != null
+				return
+		else:
+			_retire_prev()
 	if answer == null:
 		if _hosted and _slot >= 0 and is_instance_valid(_native):
 			var count: int = int(_native.slot_think_count(_slot))
@@ -675,9 +710,20 @@ func _retire_pending() -> void:
 	var answer: BrainAnswer = _pending
 	_pending = null
 	_native_pending = _hosted
-	if not answer.thought(_pending_index):
+	_retire_answer(answer, _pending_index)
+
+
+# The answer before the pending one, replaced unread once the newer one has come.
+func _retire_prev() -> void:
+	var prev: BrainAnswer = _pending_prev
+	_pending_prev = null
+	_retire_answer(prev, _prev_index)
+
+
+func _retire_answer(answer: BrainAnswer, index: int) -> void:
+	if not answer.thought(index):
 		return
-	var base: int = _pending_index * BrainBatch.STRIDE + 1
+	var base: int = index * BrainBatch.STRIDE + 1
 	var kind: int = int(answer.out[base + NATIVE_CURRENT])
 	if kind == 0 or kind == 7:
 		_apply_state(answer.out, base)

@@ -125,6 +125,7 @@ func _battle(hosted: bool, threads: int, with_player: bool, ticks: int = TICKS) 
 	var processing_min: int = drivers.size()
 	var native_thinks: int = 0
 	var held: int = 0
+	var held_ticks := PackedInt64Array()
 	for t: int in ticks:
 		tick_hits.clear()
 		await get_tree().physics_frame
@@ -133,6 +134,7 @@ func _battle(hosted: bool, threads: int, with_player: bool, ticks: int = TICKS) 
 		hits.append(hash(tick_hits))
 		native_thinks += AiPilotDriver.thinks_native()
 		held += AiPilotDriver.held()
+		held_ticks.append(AiPilotDriver.held())
 		hosted_max = maxi(hosted_max, AiPilotDriver.hosted())
 		if t % 40 == 39:
 			var processing: int = 0
@@ -145,7 +147,8 @@ func _battle(hosted: bool, threads: int, with_player: bool, ticks: int = TICKS) 
 	for c: Combatant in ships:
 		pilots.append(_pilot_digest(c))
 	var out: Dictionary = {"rows": rows, "commands": commands, "hits": hits, "hits_total": resolver.hits_total, "pilots": pilots,
-			"native_thinks": native_thinks, "held": held, "hosted_max": hosted_max, "processing_min": processing_min, "first": parts}
+			"native_thinks": native_thinks, "held": held, "held_ticks": held_ticks, "hosted_max": hosted_max, "processing_min": processing_min,
+			"first": parts}
 	space.queue_free()
 	await get_tree().physics_frame
 	await get_tree().physics_frame
@@ -194,7 +197,17 @@ func _assert_same(reference: Dictionary, hosted: Dictionary, label: String) -> v
 	assert_lt(int(hosted["processing_min"]), SHIPS / 10, "%s: hosted drivers do not tick (%d still processing at the fewest)" % [label,
 			int(hosted["processing_min"])])
 	assert_eq(int(hosted["native_thinks"]), int(reference["native_thinks"]), "%s: the same number of thinks" % label)
-	assert_eq(int(hosted["held"]), int(reference["held"]), "%s: the same number of held ticks" % label)
+	# A hosted driver's held tick is counted when its job is joined (the step one tick behind, M4-T24), a driver's own at its
+	# step: the same decisions, read one tick later, so the windows are shifted by that tick unless the step is inline.
+	var shift: int = 0 if BrainBatch.step_mode() == BrainBatch.STEP_INLINE else 1
+	var held_reference: PackedInt64Array = reference["held_ticks"]
+	var held_hosted: PackedInt64Array = hosted["held_ticks"]
+	var ref_sum: int = 0
+	var hosted_sum: int = 0
+	for t: int in held_reference.size() - shift:
+		ref_sum += held_reference[t]
+		hosted_sum += held_hosted[t + shift]
+	assert_eq(hosted_sum, ref_sum, "%s: the same number of held ticks (the hosted counts read %d tick later)" % [label, shift])
 	var first: int = _first_difference(reference["rows"], hosted["rows"])
 	assert_eq(first, -1, "%s: the rows are the same bits every tick (first difference at tick %d)" % [label, first])
 	first = _first_difference(reference["commands"], hosted["commands"])

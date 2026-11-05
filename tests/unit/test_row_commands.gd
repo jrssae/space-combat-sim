@@ -10,7 +10,7 @@ const SHIPS: int = 120
 const SEED: int = 1
 const TICKS: int = 240
 const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_threads", &"perf_native_commands", &"perf_native_driver_step"]
+		&"perf_threads", &"perf_native_commands", &"perf_native_driver_step", &"sim_step"]
 
 var _saved: Dictionary = {}
 # The battle's ships by their `Targetable` id, so selections compare across runs (each run has its own instance ids).
@@ -309,6 +309,7 @@ func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
 func _small_fight() -> Dictionary:
 	Settings.set_value(&"perf_threads", 6)
 	Settings.set_value(&"perf_native_driver_step", false)
+	Settings.set_value(&"sim_step", &"inline")  # these fights flush by hand and read the result at once (the one-tick handover: test_core_snapshot)
 	Factions.reset()
 	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
 	ContactScan.invalidate()

@@ -110,6 +110,9 @@ pub struct ScsBrains {
     spare: Option<Snapshot>,
     launched_at: Option<Instant>,
     main_thread: Option<ThreadId>,
+    // False from a launch until `join_step` hands the job's results over: the hosted readers see the launch's view until
+    // then, whatever an early join brought back, so a reader never sees a think before the tick that applies it.
+    handed_over: bool,
     // What arrived for the hosted drivers while the brains were away, and what the frame's readers see meanwhile.
     pending: Vec<Pending>,
     mirror: Vec<HostedView>,
@@ -602,6 +605,7 @@ impl ScsBrains {
             return PackedFloat64Array::new();
         }
         self.join();
+        self.handed_over = true;
         let out = self.last_out.take().unwrap_or_default();
         if out.first().copied().unwrap_or(0.0) != 0.0 {
             PackedFloat64Array::from(&out[1..])
@@ -648,6 +652,7 @@ impl ScsBrains {
             return PackedFloat64Array::new();
         }
         self.join();
+        self.handed_over = true;
         PackedFloat64Array::from(self.last_out.take().unwrap_or_default().as_slice())
     }
 
@@ -686,6 +691,7 @@ impl ScsBrains {
             return PackedFloat64Array::new();
         }
         self.join();
+        self.handed_over = true;
         PackedFloat64Array::from(self.last_out.take().unwrap_or_default().as_slice())
     }
 
@@ -827,6 +833,7 @@ impl ScsBrains {
     #[func]
     fn join_step(&mut self) -> PackedFloat64Array {
         self.join();
+        self.handed_over = true;
         PackedFloat64Array::from(self.last_out.take().unwrap_or_default().as_slice())
     }
 
@@ -983,8 +990,8 @@ impl ScsBrains {
     #[func]
     fn hosted_count(&self) -> i64 {
         match &self.work {
-            Some(w) => w.hosted.len() as i64,
-            None => self.mirror.len() as i64,
+            Some(w) if self.handed_over => w.hosted.len() as i64,
+            _ => self.mirror.len() as i64,
         }
     }
 
@@ -1516,11 +1523,11 @@ impl ScsBrains {
         }
     }
 
-    // A hosted driver as the readers see it: the state itself when the brains are here, else the launch's view.
+    // A hosted driver as the readers see it: the state itself once the tick's job was handed over, else the launch's view.
     fn view<T>(&self, slot: i64, read: impl Fn(&HostedView) -> T) -> Option<T> {
         let slot = usize::try_from(slot).ok()?;
         match &self.work {
-            Some(w) => w.hosted.iter().find(|h| h.slot == slot).map(|h| {
+            Some(w) if self.handed_over => w.hosted.iter().find(|h| h.slot == slot).map(|h| {
                 read(&HostedView {
                     slot: h.slot,
                     thinks: h.thinks,
@@ -1533,7 +1540,7 @@ impl ScsBrains {
                     near: h.near,
                 })
             }),
-            None => self.mirror.iter().find(|v| v.slot == slot).map(read),
+            _ => self.mirror.iter().find(|v| v.slot == slot).map(read),
         }
     }
 
@@ -1587,6 +1594,7 @@ impl ScsBrains {
             runner,
         };
         self.launched_at = Some(Instant::now());
+        self.handed_over = false;
         if threaded {
             let step = self
                 .step
