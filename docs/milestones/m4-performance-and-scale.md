@@ -1207,7 +1207,6 @@ done and T20 proceeds.
 - **Architecture:** §17.13.
 
 ##### M4-T21 The low-attention tier: state, integration, promotion and demotion
-- **Checkpoint 2 (Q47):** after this task, re-measure the physics stage at `battle` 500 as T19 did (near set's sync, node propagation, Jolt's step); if the near set still costs more than about 1 ms a tick, the controller brings T19's ships-out-of-Jolt proposal back to the maintainer.
 
 - **Track:** T. **Agent:** Fable. **Depends on:** T20 and checkpoint 3 (Q17's decision shapes what a tier ship has when
   promoted).
@@ -1232,6 +1231,7 @@ done and T20 proceeds.
 - **Expected gain:** at 500 the tick falls to what about 150 near fighters and 20 near capitals cost plus 0.3 us a tier fighter
   and 2 us a tier capital (70 %).
 - **Architecture:** §17.14 (a new subsection head, "The low-attention tier", that T22 to T24 add to).
+- **Checkpoint 2 (Q47):** after this task, re-measure the physics stage at `battle` 500 as T19 did (near set's sync, node propagation, Jolt's step); if the near set still costs more than about 1 ms a tick, the controller brings T19's ships-out-of-Jolt proposal back to the maintainer.
 
 ##### M4-T22 Tier brains, statistical fire and far capitals' aggregated fire
 
