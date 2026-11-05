@@ -91,7 +91,7 @@ func test_an_ally_has_the_starfurys_body_hardpoints_and_guns() -> void:
 	assert_eq(ally.inertia, starfury.inertia)
 	assert_eq(ally.get_layout().pod_names, player.ship.get_layout().pod_names)
 	assert_eq(ally.get_layout().nozzle_count(), player.ship.get_layout().nozzle_count())
-	assert_eq(ally.get_muzzles().size(), player.ship.get_muzzles().size())
+	assert_eq(ally.get_muzzle_transforms().size(), player.ship.get_muzzles().size())  # the lean ally has no marker nodes (M4-T35)
 	assert_eq(pool.all_ships()[0].cannon.weapon, player.cannon.weapon, "the Starfury's pulse cannon")
 	assert_eq(pool.all_ships()[0].damageable.hull.max_hp, starfury.hull_max)
 	assert_false(pool.all_ships()[0].damageable.respects_god_mode, "god mode protects the player only")

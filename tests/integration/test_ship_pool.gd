@@ -130,10 +130,10 @@ func test_a_reused_ship_shows_nothing_of_its_last_pilot() -> void:
 	for i: int in raider.thrusters.glow_count():
 		lit += 1 if raider.thrusters.glow_level(i) > 0.5 else 0
 	assert_gt(lit, 0, "the plumes burn")
-	var flash := raider.ship.get_muzzles()[0].get_node("MuzzleFlash") as MuzzleFlash
-	flash.trigger()
-	flash.advance(0.01)
-	assert_true(flash.is_active(), "a flash at the gun")
+	var flashes: MuzzleFlashPool = MuzzleFlashPool.attach(world)  # a lean ship's flashes come from the World's pool (M4-T35)
+	raider.cannon.on_kernel_fired(0, raider.ship.global_position)
+	flashes.advance(0.01)
+	assert_gt(flashes.active_for(raider.ship), 0, "a flash at the gun")
 	var switcher := raider.ship.get_node("LodSwitcher") as LodSwitcher
 	switcher.far = true
 	raider.ship.set_far_dot(true)
@@ -148,9 +148,7 @@ func test_a_reused_ship_shows_nothing_of_its_last_pilot() -> void:
 		if light != null:
 			assert_eq(light.energy, 0.0, "its nozzle light %d too" % i)
 		assert_false(again.thrusters.glow_shown(i), "plume %d hidden" % i)
-	assert_false(flash.is_active(), "no rest of the last flash")
-	assert_false(flash.visible)
-	assert_eq(flash.light_emitter().energy, 0.0)
+	assert_eq(flashes.active_for(again.ship), 0, "no rest of the last flash, nor its light")
 	assert_false(switcher.far, "drawn in full until its switcher next looks")
 	assert_false(again.ship.is_far_dot())
 

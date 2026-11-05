@@ -10,7 +10,7 @@ const SHIPS: int = 120
 const SEED: int = 1
 const TICKS: int = 240
 const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_threads", &"perf_native_commands"]
+		&"perf_threads", &"perf_native_commands", &"perf_native_driver_step"]
 
 var _saved: Dictionary = {}
 # The battle's ships by their `Targetable` id, so selections compare across runs (each run has its own instance ids).
@@ -303,9 +303,12 @@ func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
 	return -1 if a.size() == b.size() else mini(a.size(), b.size())
 
 
-# A fight of the battle's first fighters in a space of its own, flown a few ticks so every pilot has its native slot.
+# A fight of the battle's first fighters in a space of its own, flown a few ticks so every pilot has its native slot. The
+# drivers step themselves here (T33's path): these fights queue thinks by hand and move the rows between the drivers and
+# the batch, which the host's step (M4-T35) has no gap for.
 func _small_fight() -> Dictionary:
 	Settings.set_value(&"perf_threads", 6)
+	Settings.set_value(&"perf_native_driver_step", false)
 	Factions.reset()
 	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
 	ContactScan.invalidate()

@@ -64,9 +64,10 @@ func _in_gate(run: Dictionary) -> bool:
 	var drone: Combatant = run["drone"]
 	var tactics: RaiderTactics = (run["pilot"] as AiPilot).profile.tactics
 	var muzzle := Vector3.ZERO
-	for m: Node3D in hunter.ship.get_muzzles():
-		muzzle += m.global_position
-	muzzle /= float(hunter.ship.get_muzzles().size())
+	var muzzles: Array[Transform3D] = hunter.ship.get_muzzle_transforms()  # a lean ship has no marker nodes (M4-T35)
+	for m: Transform3D in muzzles:
+		muzzle += hunter.ship.global_transform * m.origin
+	muzzle /= float(muzzles.size())
 	var lead: Dictionary = InterceptMath.solve(muzzle, hunter.ship.linear_velocity, drone.ship.global_position,
 			drone.ship.linear_velocity, hunter.cannon.weapon.muzzle_speed_mps, hunter.cannon.weapon.lifetime_s)
 	if not bool(lead["ok"]):
@@ -100,7 +101,7 @@ func test_the_slashing_pass_keeps_the_drone_in_the_gate_at_least_25_percent_long
 	var standard: Dictionary = _setup(world, projectiles, Vector3(-APART_M / 2.0, 0.0, 0.0), false, "N")
 	assert_true(((slashing["pilot"] as AiPilot).behaviour(&"attack") as BehaviourAttack).uses_slash, "a veteran slashes")
 	assert_false(((standard["pilot"] as AiPilot).behaviour(&"attack") as BehaviourAttack).uses_slash, "turned off: the standard run")
-	(slashing["hunter"] as Combatant).cannon.projectile_fired.connect(func(_i: int, _p: Projectile) -> void:
+	(slashing["hunter"] as Combatant).cannon.shot_fired.connect(func(_i: int, _at: Vector3) -> void:  # on either bolt path (M4-T35)
 		(slashing["fire_times"] as Array).append(SimClock.now()))  # an Array: a reference, unlike a packed array
 	var t0: float = SimClock.now()
 	var ticker := PhysicsTicker.new()
