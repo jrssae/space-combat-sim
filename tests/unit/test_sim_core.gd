@@ -639,6 +639,12 @@ const ROWS_FILE: String = "res://native/src/rows.rs"
 const KERNEL_USERS: Array[String] = ["res://native/src/contact_field.rs", "res://native/src/hit_sweep.rs",
 		"res://native/src/ram_phase.rs", "res://native/src/flight_step.rs", "res://native/src/pilot_kernels.rs",
 		"res://native/src/brain.rs"]
+## The bolt kernels (M4-T35): the bolt step, the cannon gate and spawn and the multimesh transforms, held to the kernels'
+## rules; they import the row tables and the shared vector maths, nothing else.
+const BOLT_KERNEL_FILE: String = "res://native/src/bolt_kernels.rs"
+const BOLT_KERNEL_USERS: Array[String] = ["res://native/src/bolt_rows.rs", "res://native/src/cannons.rs"]
+const BOLT_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};", "use crate::rows::",
+		"use crate::v3::"]
 ## The brains' engine-free files (M4-T17): the shared vector maths, the brain maths and the behaviours, held to the kernels'
 ## rules; they may import each other and the kernels, nothing else.
 const BRAIN_FILES: Array[String] = ["res://native/src/v3.rs", "res://native/src/brain_maths.rs",
@@ -698,6 +704,9 @@ static func _engine_free_violations(path: String, forbidden: Array[String], use_
 func test_the_kernels_hold_no_engine_type() -> void:
 	var violations: PackedStringArray = _engine_free_violations(KERNEL_FILE, KERNEL_FORBIDDEN, KERNEL_USE_ALLOWED)
 	violations.append_array(_engine_free_violations(ROWS_FILE, ROWS_FORBIDDEN, ROWS_USE_ALLOWED))
+	violations.append_array(_engine_free_violations(BOLT_KERNEL_FILE, KERNEL_FORBIDDEN, BOLT_KERNEL_USE_ALLOWED))
+	for user: String in BOLT_KERNEL_USERS:
+		assert_true(FileAccess.get_file_as_string(user).contains("use crate::bolt_kernels"), "%s reads the bolt kernels" % user)
 	for brain_file: String in BRAIN_FILES:
 		violations.append_array(_engine_free_violations(brain_file, KERNEL_FORBIDDEN, BRAIN_USE_ALLOWED))
 	violations.append_array(_engine_free_violations(THREADS_FILE, KERNEL_FORBIDDEN, THREADS_USE_ALLOWED))

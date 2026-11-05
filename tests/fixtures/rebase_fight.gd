@@ -235,6 +235,17 @@ class Watch extends Node:
 			var bolt := node as Projectile
 			if bolt != null and not bolt.is_spent() and not bolt.is_queued_for_deletion() and bolt.is_inside_tree():
 				out[bolt.get_instance_id()] = [world.to_universe(bolt.global_position), bolt.velocity.length(), "a bolt"]
+		# The core's own bolt rows (M4-T35): their ids are negative, so they never meet a node's.
+		var sim: SimCore = SimCore.current()
+		if sim != null and sim.bolt_rows_on():
+			var columns: Array = sim.core.bolt_columns()
+			var ids: PackedInt64Array = columns[0]
+			var ends: PackedVector3Array = columns[2]
+			var velocities: PackedVector3Array = columns[12]
+			var spent: PackedByteArray = columns[10]
+			for i: int in int(columns[11]):
+				if spent[i] == 0:
+					out[ids[i]] = [world.to_universe(ends[i]), velocities[i].length(), "a bolt row"]
 		return out
 
 	func _on_rebased(_offset: Vector3) -> void:
@@ -272,6 +283,26 @@ class Watch extends Node:
 				if bolt.last_step.length() > bolt.velocity.length() * _dt + 1e-3:
 					fight._fail("a bolt's step was %.1f m, its velocity gives %.1f m" % [bolt.last_step.length(),
 							bolt.velocity.length() * _dt])
+		# The spent rows of the core's own bolts (M4-T35): flagged until the tick ends, so the one that hit is still listed.
+		var sim: SimCore = SimCore.current()
+		if sim != null and sim.bolt_rows_on():
+			var columns: Array = sim.core.bolt_columns()
+			var starts: PackedVector3Array = columns[1]
+			var ends: PackedVector3Array = columns[2]
+			var radii: PackedFloat64Array = columns[3]
+			var shooters: PackedInt64Array = columns[6]
+			var spent: PackedByteArray = columns[10]
+			var velocities: PackedVector3Array = columns[12]
+			for i: int in int(columns[11]):
+				if spent[i] == 0 or shooters[i] != info.shooter_id:
+					continue
+				var d: float = ends[i].distance_to(info.point)
+				if d < nearest:
+					nearest = d
+					var step_m: float = (ends[i] - starts[i]).length()
+					reach = step_m + radii[i] + JUMP_SLACK_M
+					if step_m > velocities[i].length() * _dt + 1e-3:
+						fight._fail("a bolt row's step was %.1f m, its velocity gives %.1f m" % [step_m, velocities[i].length() * _dt])
 		if nearest > reach:
 			fight._fail("a bolt hit landed %.1f m from the bolt that made it (its path this tick reaches %.1f m)" % [nearest, reach])
 

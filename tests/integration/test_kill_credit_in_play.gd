@@ -24,7 +24,7 @@ func before_each() -> void:
 	await _ticks(2)
 	_exec("despawn all")  # the sandbox's wingmen (M3-T10) would shoot these tests' raiders
 	_shots = 0
-	main.cannon.projectile_fired.connect(func(_i: int, _p: Projectile) -> void: _shots += 1)
+	main.cannon.shot_fired.connect(func(_i: int, _at: Vector3) -> void: _shots += 1)
 
 
 func after_each() -> void:

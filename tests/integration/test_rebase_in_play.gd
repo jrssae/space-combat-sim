@@ -249,7 +249,8 @@ func test_through_a_rebase_at_full_speed_the_view_keeps_the_ship_its_bolts_and_t
 	# AC22 at 5 000 m/s, nose up (clear of the buoys): a 5 km rebase every second. Every rendered frame, the rebase ticks
 	# included: the chase camera stays on the drawn ship (1 cm); a bolt flying ahead keeps its motion relative to the ship (its
 	# offset from the ship in the view changes by its relative velocity times the time the ship was drawn to advance, to 1 m);
-	# and the HUD's camera sees NAV ALPHA where it is drawn (1 m).
+	# and the HUD's camera sees NAV ALPHA where it is drawn (1 m). The sampler reads a bolt node's interpolated transform, and
+	# the player's cannon keeps its bolt nodes on either bolt path (M4-T35).
 	await _launch()
 	var speed: float = 5000.0
 	main.ship.reset_to(Transform3D(Basis(Vector3.RIGHT, PI / 2.0), main.ship.position))
