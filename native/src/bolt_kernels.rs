@@ -180,10 +180,10 @@ impl Gate {
             return;
         }
         let projectiles = if self.linked { self.muzzle_count } else { 1 };
-        if let Some(cap) = self.capacitor.as_mut() {
-            if !cap.spend(projectiles as i64, now_s) {
-                return;
-            }
+        if let Some(cap) = self.capacitor.as_mut()
+            && !cap.spend(projectiles as i64, now_s)
+        {
+            return;
         }
         if self.linked {
             fired.extend(0..self.muzzle_count);

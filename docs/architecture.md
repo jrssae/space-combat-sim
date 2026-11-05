@@ -2758,6 +2758,127 @@ src/ship/ship.gd                 use_row_command, release_row_command, pull_row_
 - **Console and settings.** `perf_native_commands` (default on, live; off is T18's path, for pairing). Provider `ai` gains
   `rows_events` (drivers the last rows batch handed something to do) and `row_commands` (ships flying from their rows).
 
+**The core owns the simulated state (T35).**
+
+```
+native/src/bolt_kernels.rs       the bolt step, the cannon gate and capacitor, a shot's start and velocity, the multimesh transforms;
+                                 engine-free, under test_sim_core's guard
+native/src/bolt_rows.rs          ScsSimCore's own bolts: add_bolt, spend, step_bolts, the renderer's buffer
+native/src/cannons.rs            ScsCannons: every AI cannon's gate and muzzles as rows, stepped in one call over the core
+native/src/sim_core.rs           activity, hull and selection from events; the direct-state read by RID; row RIDs; the
+                                 accelerations the flight step wrote; the AI controllers' selection check
+native/src/ram_phase.rs          ScsRamPhase.contacts: the ram stage's contact read in one call over the rigid rows
+native/src/brain.rs              the hosted drivers: the think rate's stagger, wake and hold decided in the batch's call
+src/perf/sim_core.gd             SimCoreStep (priority 1: the cannons, then the bolts), SimCoreTargeting (100), the events into
+                                 the columns, the cannon and selection registries, the settings
+src/weapons/pulse_cannon.gd      the cannon on the kernel (shot_fired), a lean ship's on muzzle transforms; src/weapons/bolt_mesh.gd
+                                 draws the owned bolts; src/weapons/muzzle_flash_pool.gd the lean ships' flashes
+src/perf/brain_batch.gd, src/ai/ai_pilot_driver.gd, src/ai/ai_pilot.gd, src/ai/ai_context.gd   the hosted step
+src/combat/hit_resolver.gd, src/combat/ram_resolver.gd, src/targeting/targeting_controller.gd, src/ship/flight_batch.gd
+```
+
+- **Why.** T15 built the core as a mirror of the engine (every body read through its node's getters each tick, every bolt
+  a node read twice a tick), the right seam for parity but the wrong direction for T24, whose worker thread cannot move
+  nodes. The refactor review (2026-11-05) priced the bolt nodes at 5 to 8 ms a tick at `battle` 500 and the per-ship
+  GDScript left on the batched path (the cannons' ticks, the drivers' steps, the ships' own ticks, the controllers'
+  selection checks) at about 4 ms more. After this task everything simulated is a row the core owns or steps, and the
+  nodes are the mirror: a body's pose and motion are the only columns read from the engine each tick.
+- **Bolts as rows** (`perf_native_bolt_rows`). The `Bolts` table's front rows are the core's own, in launch order (a negative
+  id each, never an instance id), with the columns a hit lands with and the renderer draws (damage, colour, look, expiry,
+  launch tick, spent); the projectiles that still have a node (beams, missiles, the player's bolts) follow them at each
+  sync point, read as before. `bolt_kernels::step` expires the owned bolts whose time is up and moves the rest by
+  `velocity * delta` with the delta rounded to 32 bits, as `Projectile._physics_process` did; a bolt launched this tick
+  stays where it is (its launch tick sweeps only its muzzle). The hit resolver reads shooter, faction, damage and tint from
+  columns on every path, checks liveness and spends an owned row in the core; the spent rows go at the next tick's first
+  sync, as a spent node is gone by then. `BoltMesh` (an internal child of `SimCore`) draws the owned bolts with one
+  `MultiMeshInstance3D` per look, its buffer filled once a frame from `bolt_transforms`: each bolt between its last two
+  ticks as an interpolated node would be, enlarged by `Projectile.visual_scale`, under a custom AABB so nothing culls it.
+- **The cannons as rows.** Every cannon but the player's registers with `ScsCannons` (its ship, its muzzles as origins in the
+  ship's frame composed from the markers' transforms, its gate and capacitor, what its bolts carry) and stops its own
+  `_physics_process`. `SimCoreStep` at priority 1 (after the drivers' commands, `Main` and the World's rebase at 0, before
+  the targeting at 100 and the resolvers) runs the cannon step: the trigger from the ship's row command when it flies one
+  (T33), else the one `set_combat_command` pushed; `bolt_kernels::Gate` and `Capacitor` op for op with `PulseCannonGate` and
+  `WeaponCapacitor`; a bolt row per firing muzzle from the ship's row (the basis, position and velocity the sync read, which
+  nothing moves before priority 1), the muzzle's World position as the engine composes a child's transform
+  (`basis.rows[i].dot(local) + origin`) and the velocity as `PulseCannon.step` aims it. The shots come back to their
+  cannons (`on_kernel_fired`: the muzzle flash and `shot_fired(muzzle_index, position)`), then `step_bolts` moves the owned
+  bolts. A live cannon whose ship has no row this tick is handed back for GDScript to step from the node's pose
+  (`step_one`), so a bare body still fires. The GDScript gate stays the reference (`step`, which the tests drive by hand)
+  and its state is carried over when a cannon joins or leaves the kernel.
+- **The state from events** (`perf_core_event_columns`). A body's activity (`Targetable.is_active`: valid, in the tree,
+  visible, processing) is checked again only when the body was touched (hidden, shown, destroyed: the events the facade
+  already watched, plus a marker hidden on its own) or first seen; its hull column follows `Damageable.damaged` and the new
+  `restored` signal (`note_hull`, `clamp(hp / max_hp)` as the read did), its selection column every change a
+  `TargetingController` makes (`SimCore.note_selection_changed`). The attributes hold the latest values; the rows are
+  written from them at the sync points, so a row holds what a read at the sync would have given, and the brains at -9 read
+  the same columns as before. What the events do not cover: a body that only stops processing (no visibility change) keeps
+  its row until something touches it; a hull changed under `Damageable` (a test poking `HullHealth` directly) is not heard.
+  The reads a body makes each tick fell from eleven to three (the transform and two velocities).
+- **The direct-state read** (`perf_core_body_direct`, off by default). The rigid bodies' pose and motion read from
+  `PhysicsServer3D.body_get_direct_state` by RID instead of the nodes' getters: four calls a body against three, and the
+  bits equal the nodes' after Jolt's first step (the node is set from the same state) but differ between a teleport and the
+  next step (the server rebuilds the basis from its quaternion, T09's finding), which moves T14's melee digest. Measured
+  no faster (Cycle log), so it stays an option.
+- **The ram stage's contact read** (`perf_native_ram_contacts`). `ScsRamPhase.contacts` walks the rigid hull rows once:
+  each body's direct state by the row's RID, the contact count, and for the hulls Jolt reports touching, every contact's
+  collider, point (shifted by what the World was rebased by since Jolt's step) and normal; with them the velocity column and
+  the acceleration the flight step wrote into the core for every ship it flew this tick (`force / mass` in 32 bits, as
+  `Ship.applied_force() / ship.mass`), flagged where it did not (a ship on its own model, which GDScript asks as before). The
+  resolver builds the tracker's columns from that (`RamTracker.contacts_columns`, T34), so the rams are bit for bit the
+  columns path's. `contact_monitor` is off on every ship by default (`ship_contact_monitor`): nothing connects
+  `body_entered`, and the direct state's contact list, which this read takes, needs only `max_contacts_reported` (T14's melee
+  counts the same 2 959 Jolt contacts).
+- **The AI controllers' selection check** (`perf_native_selection_check`, needs the event columns). An AI ship's
+  `TargetingController` (one that does not keep candidates) hands its check to the core (`watch_selection`, with its sensor
+  range) and stops ticking; `SimCoreTargeting` at the controllers' priority asks `selection_clears` once: for every watched
+  ship whose latest selection (the events') is a marker id, no row for it, its own ship, or a 64-bit range beyond the
+  sensor range or the target's own reach, as `_check_selection` tested them, and each named controller clears its selection
+  (the same `target_changed`). A controller whose sensor range changes tells the core (`set_sensor_range_m`).
+- **The batch owns its ships' ticks** (`perf_batch_owns_ships`). A ship the flight batch flew has nothing left to do at 0
+  (its combat edges are taken in the batch's gather, before the World's rebase), so `FlightBatch` switches its
+  `_physics_process` off once and gives it back when it stops flying the ship (no native step this tick, a refused step,
+  the ship leaving, the setting off); a ship given its tick back inside a tick flies its own model at once
+  (`fly_own_tick_now`), since the engine's process list for that tick was made before.
+- **The drivers' step in the host** (`perf_native_driver_step`). Once a native pilot's slot is bound to its ship, its
+  driver hands the host its think rate's state (its place in the stagger, its steps, the time since the last think, the
+  wake, the latest hits) through `BrainBatch.host_driver` and stops ticking. In the batch's call (`think_batch_rows`) the
+  host steps every hosted driver after the queued ships: a step and the tick added, near the player or not from the ship's
+  row and the player's position the batch gave it, `AiThinkRate.thinks`' rule (`posmod(steps + ordinal, period) == 0`),
+  a ship with no row this tick held as a declined think was; the thinking ones become items with the relation row of their
+  faction from a matrix the batch keeps over the core's factions (rebuilt when the factions or the table change). A think
+  that lands starts the ship's clock again; a declined one keeps it, as the driver's settle put it back. The pilot reads
+  its latest think from the host's slot when something asks (`slot_output`, counted by `slot_think_count`), the hits reach
+  the host as they land (`set_driver_hits`, which wakes the ship), a parked ship's driver is marked not live, and a changed
+  context (`AiContext`'s wing, objective, guard and route fields, whose setters list the context) is pushed by the batch
+  before the call. The driver takes its step back when its pilot changes, it leaves the tree, the setting goes off, or a
+  test steps it by hand. `rows_events`' head gained the held count; `ai.hosted` says how many drivers the host steps.
+- **The lean ships' muzzle flashes from one pool** (refactor finding 12). A lean ship builds no `Marker3D` per muzzle: the
+  hardpoints' muzzle transforms are data (`Ship.get_muzzle_transforms`), its cannon fires from them (`PulseCannon.setup_transforms`,
+  a shot leaves at `body.global_transform * muzzle.origin`, the marker's position bit for bit), and its flashes go to the World's
+  `MuzzleFlashPool` (`src/weapons/muzzle_flash_pool.gd`): one `MultiMeshInstance3D` of billboard quads drawn once a frame (each
+  at the muzzle's position on the ship's interpolated transform, grown and faded as `MuzzleFlash` did, the fade in the instance
+  colour's alpha), and a small set of `LightEmitter`s reused across shots, each anchored on the ship at the muzzle plus the
+  flash's offset down the barrel, in the `LightRig`'s competition for `EmitterCurves.FLASH_S`. A ship that parks or leaves ends
+  its flashes at once. The brains' mean muzzle is the marker's position round-tripped from the transform (`ship.to_local(xf *
+  origin)`), the same bits as from the marker. The player's ship keeps its markers and flash nodes (the HUD reads them). The
+  look goes on the return checklist (Q54).
+- **Bit for bit.** Every path keeps its reference behind its setting, and the seeded battle of `test_core_threads` (120
+  fighters, 240 ticks) gives the same rows, commands, hits and hull rows every tick on each pair (`test_bolt_rows`,
+  `test_core_state`, `test_driver_step`), T14's melee the same rams and digest with the native contact read
+  (`test_core_state`), and one thread and six the same bits with everything on. What differs: the bolt table's order
+  (owned rows in launch order, cannons in slot order, then the node projectiles; today's was the `projectiles` group's
+  spawn order across every kind), which only orders two projectiles hitting the same hull in the same tick; the player's
+  cannon keeps its bolt nodes, so its bolts sit after the AI's rows; a live cannon whose ship has no row at the step fires
+  from the node's pose; the direct-state read's last bits after a teleport (off by default).
+- **Thread-ready (for T24).** The cannon step, the bolt step, the selection check and the hosted drivers' step read the
+  frozen rows and write the core's own tables on the main thread; the only engine calls left in the tick are the sync
+  points' pose reads, the ram stage's contact read and the flight step's force application, each in one call over the rows.
+- **Settings and console.** `perf_native_bolt_rows`, `perf_core_event_columns`, `perf_core_body_direct` (off),
+  `perf_native_ram_contacts`, `perf_native_selection_check`, `perf_batch_owns_ships`, `perf_native_driver_step`,
+  `ship_contact_monitor` (off), all live. Provider `core` gains `bolt_path`, `owned_bolts`, `cannons`, `cannon_us`,
+  `bolt_step_us`, `shots`, `expired`, `bolt_draws`, `event_columns`, `body_direct`, `watched_selections`,
+  `selection_clears`; `ai` gains `hosted`.
+
 ### 17.16 Rocks and mines as static rows (T29)
 
 ```

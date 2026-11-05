@@ -218,7 +218,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T32 | Wing-level AI research: what deciding per wing instead of per fighter would save at 300 and 500 ships, how other games do it, and a proposal (Q46) | phase 2 (T18, T20), report P2 | Fable | Research and a design judgement over the measured think stage; no game code | M | done (2026-11-05, in a worktree on `08228cc`, fix round 1 the same day; `docs/research/wing-level-ai.md`; the proposal below waits for the maintainer at checkpoint 3: wing-level decisions are 2 % of a thinking ship's cost, so the proposal is to build the rows-based command path (1.3 to 2.0 ms at 300), fold a cluster perception into T22 and keep wing tactics as a later feel feature) |
 | T33 | The native pilots' inputs and commands as core rows (T32's L1, Q50): the batch writes each pilot's flight and combat command into its row and `FlightBatch` applies it the same tick | checkpoint 3 | Opus | Removes most of the 23 to 27 us of GDScript a thinking ship; owns T18's two missed numbers | N, G | done, bit for bit; the think at `battle` 300 from 2.79 to 1.60 ms with six threads (under 2 ms); the AI stage at 500 from 5.07 to 2.86 ms with six threads, 6.96 to 2.86 against T18's base (divided by 2.4, T18's 3 still missed by 0.5 ms: the drivers' per-ship step at -10 is left) (2026-11-05, in a worktree on `9cd88d5`; Cycle log, M4-T33) |
 | T34 | The cheap pass on the per-ship stages (Q50): the ram stage's loop, the hit stage's gather, targeting and the core's sync, into native code or out of the per-tick path | checkpoint 3 | Opus | 13.3 of 17.85 ms at `battle` 300 sits in four stages phase 2 did not take (report P2) | N, G | done, bit for bit, five of the six changes behind a setting; the four stages at `battle` 300 from 9.12 to 4.16 ms and the tick from 17.72 to 12.86 (8 ms missed, the rest named in the entry); at 500 15.81 to 7.47 and 30.42 to 21.74 (2026-11-05, in a worktree on `9cd88d5`, fix round 1 the same day; Cycle log, M4-T34) |
-| T35 | The core owns the simulated state (Q55): bolts as rows drawn by one multimesh, Jolt bodies read once a tick by RID in one native call, activity, hull and selection as event-driven columns, the ram stage's contact read native | T33, T34 | Fable | Refactor review findings 1, 4, 5 and 6: 5 to 8 ms at 500 for the bolts alone; T24's precondition | N, G | not started |
+| T35 | The core owns the simulated state (Q55): bolts as rows drawn by one multimesh, Jolt bodies read once a tick by RID in one native call, activity, hull and selection as event-driven columns, the ram stage's contact read native | T33, T34 | Fable | Refactor review findings 1, 4, 5 and 6: 5 to 8 ms at 500 for the bolts alone; T24's precondition | N, G | done |
 | T36 | The frame's per-ship work in one pass per subsystem (Q56, Q58): plumes, muzzle flashes, LOD switching, audio, far dots, the HUD radar, hit flashes; the splat-era render scale cap; the slow test switch | T33 | Opus | Refactor review findings 2, 3, 7, 9, 12, 13, 14: 3 to 5 ms a frame at 500 | R, G | done (2026-11-05, in a worktree on `f414cf4`; Cycle log, M4-T36): the worst second's process work at `battle` 500 from 25.7 to 10.2 to 10.8 ms and at 300 from 20.2 to 11.3 ms after fix round 1; `battle` 300 from 16.7 to 37.1 FPS; engine audio left to M5-T19 (finding 7) and the lean ships' muzzle flash pool with muzzle transforms as data moved to T35 (finding 12) |
 | T37 | M4's cleanup (Q57): the native library required, the GDScript paths test-only, the runtime fallbacks and their settings removed, one hull-reading path, the documentation drift | T23 | Opus | Refactor review findings 8, 16, 17: 1 500 to 2 500 lines and eight settings; parity surfaces halved | X, G | not started |
 | T38 | Anti-aliasing (Q59, Q60): Godot's MSAA 2x and 4x, TAA, FXAA and SMAA as a setting, live; motion vectors fixed for everything TAA (and T40's FSR 2.2) needs; defaults chosen by measurement | T36 | Opus | `project.godot` sets no anti-aliasing, so edges and thin hull detail alias; TAA and FSR 2.2 both need correct motion vectors from the multimeshes, particles and bolts | R | not started |
@@ -1996,6 +1996,22 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   Jolt read and event columns, up to 3 to 4 ms for the ram read at 500 (some of it taken by T34 already).
 - **Option to measure (maintainer, 2026-11-05):** once bolts are rows, stepping them on the GPU with a compute shader (positions written straight into the multimesh's buffer) is an alternative to the CPU kernel. Take it only if the measured bolt step on the CPU kernel still costs more than about 0.5 ms at `battle` 500; the hit sweep stays on the CPU rows either way, so a GPU step needs a readback or a mirrored CPU step, which the entry must cost.
 - **Architecture:** §17.13 (paragraphs under T35).
+- **Also owns refactor finding 12 (controller, 2026-11-05, from T36's review):** the lean ships' muzzle flashes from one pool driven by the muzzle transforms, no `Marker3D` per muzzle.
+- **Done (2026-11-05, worktree on `f414cf4`; Cycle log, "M4-T35"):** in two commit sets. T35a (`perf_native_bolt_rows`): the
+  core owns the bolts (owned rows in launch order, the node projectiles after them), `bolt_kernels.rs` steps them as a node
+  stepped itself, `ScsCannons` runs every AI cannon's gate and spawn in one call over the rows at priority 1, the hit resolver
+  sweeps and spends the rows, `BoltMesh` draws them with one multimesh a look. T35b: activity, hull and selection columns from
+  events (`perf_core_event_columns`, eleven engine reads a body down to three), the direct-state read by RID as an option
+  (`perf_core_body_direct`, off: measured no faster, and its last bits differ after a teleport), the ram stage's contacts and
+  the flight step's accelerations in one native call (`perf_native_ram_contacts`; `contact_monitor` off), the AI controllers'
+  selection check over the rows (`perf_native_selection_check`), the flight batch owning its ships' ticks
+  (`perf_batch_owns_ships`), and the drivers' step decided in the brain host (`perf_native_driver_step`). Finding 12: a lean
+  ship has no marker per muzzle; its cannon fires from the hardpoints' transforms and flashes through `MuzzleFlashPool`. Bit
+  for bit on the seeded battle for every path against its reference (`test_bolt_rows`, `test_core_state`, `test_driver_step`),
+  T14's melee digest and contacts unchanged, Q16's fights and T20's weapon parity green. The tick at `battle` 300 fell from
+  11.80 to 6.74 ms (Q49's 8 ms met), at 500 from 19.46 to 10.71, at `typical` from 2.92 to 2.08. The bolt step costs about
+  0.1 ms at 500 (the GPU option is not taken). Left for others: `AudioDirector.watch_ship` must connect `shot_fired` for the
+  AI ships' shot sounds (T36's file, one line); the pool stands on its own `_process` until T36's frame passes land.
 
 ##### M4-T36 The frame's per-ship work in one pass per subsystem (Q56, Q58)
 
@@ -5133,6 +5149,107 @@ round's code (`M4-T36_fix1_*`, load 0.8 to 1.0): `battle` 500 10.83 and 10.17 ms
 low 5.2 and 4.9); `battle` 300 11.33 ms, 37.1 FPS (1 % low 13.0). So T36's frame at 500 is 25.7 to about 10.5 ms, at 300 20.2 to
 11.3 ms. A settled ship's pod lights now shine again after a far-dot trip (they stayed at 0 until its output changed). The slow switch takes the five slow files out of focused runs (`test_brain_tolerance` alone was 361 s in
 report P2's focused runs).
+### M4-T35 (2026-11-05): the core owns the simulated state
+
+Taken on `f414cf4` in a detached worktree with its own native build (`.cache/scs-agents/m4-t35/native-target`), the debug
+editor build with the library loaded, default settings (six core threads), seed 1, 5 s of warm-up and 20 s measured, both
+bench locks held and the runs pinned to cores 0 to 11 (load 0.6 to 1.3 at each start). T36 ran beside it in another
+worktree; the locks kept it off every measured run. Reports in `reports/perf/` (not committed): `M4-T35_before_*` (the
+base, its library built here), `M4-T35_a_*` (after T35a, `e6c681e`), `M4-T35_final_*` (after T35b and finding 12,
+`01f160e`), `M4-T35_direct_b300` (the direct-state read on), `M4-T35_*_fs*` (the fullscreen checks), `M4-T35_quick`,
+`M4-T35_focused_*` (every focused run's log). Report: `.superpowers/sdd/m4-performance-and-scale/task-t35-report.md`.
+
+**What moved** (architecture §17.13, "The core owns the simulated state (T35)"), each test first, each behind a setting
+that keeps the old path as the reference (Q54):
+
+| change | setting (off = the reference) | parity test |
+|---|---|---|
+| bolts as owned rows stepped by `bolt_kernels::step`, swept and spent from the rows, drawn by one multimesh a look; the AI cannons' gates and shots as `ScsCannons` over the rows at priority 1 | `perf_native_bolt_rows` | `test_bolt_rows` 14: the step, the gate, the spawn, the seeded battle's bolt table, hits and hull rows bit for bit, 1 and 6 threads, the engine calls, the renderer |
+| activity, hull and selection columns from events (a body read three times a tick, not eleven) | `perf_core_event_columns` | `test_core_state`: the battle bit for bit; the columns follow the events at the next sync |
+| the rigid bodies read from the direct state by RID | `perf_core_body_direct` (off) | `test_core_state`: the nodes' bits after Jolt's first step |
+| the ram stage's contacts and the flight step's accelerations in one native call; `contact_monitor` off | `perf_native_ram_contacts`, `ship_contact_monitor` | `test_core_state`: T14's melee, the same rams and digest; the contacts still reported |
+| the AI controllers' selection check over the rows | `perf_native_selection_check` | `test_core_state`: the same clears on the same ticks; the battle bit for bit |
+| the flight batch owns its ships' ticks | `perf_batch_owns_ships` | `test_core_state`: the battle bit for bit; the tick given back on a flip |
+| the drivers' step decided in the brain host | `perf_native_driver_step` | `test_driver_step` 5: the battle bit for bit at the far rate and with a player, the same thinks and held ticks, 1 and 6 threads, a changed order reaches a hosted pilot, the setting off |
+| the lean ships' muzzle flashes from one pool, no marker per muzzle (finding 12) | none (a lean ship's build) | `test_muzzle_flash_pool` 3: the pool's quads and lights, a lean cannon's shots leave where the full one's do, the brains' mean muzzle the same bits |
+
+**Tolerated differences** (Q16): the bolt table's order is owned rows (launch order, cannons in slot order) then the node
+projectiles (beams, missiles, the player's bolts), where today's was the `projectiles` group's spawn order across every kind:
+it only orders two projectiles hitting the same hull in the same tick, and with fighters alone the order is today's. A live
+cannon whose ship has no row at the step fires from the node's pose. A body that only stops processing keeps its row until
+touched; a hull changed under `Damageable` (a test poking `HullHealth`) is not heard. The direct-state read's last bits
+differ between a teleport and Jolt's next step (T09), which would move T14's melee digest: off by default. Hosted drivers
+read in-place edits of a `Route` only at the next pushed change (the context's fields list themselves).
+
+**Before and after** (medians in ms, the stages as `PerfProbe` splits them; "sync" is the core's first sync, "other" the
+rest outside every named stage):
+
+| run | tick | p99 | ai | think | targeting | hit | ram | flight | physics | sync | other | stand-ins |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| battle 300 before | 11.96 | 16.42 | 1.83 | 1.64 | 0.55 | 1.59 | 0.73 | 4.10 | 1.74 | 0.47 | 1.35 | 0.38 |
+| battle 300 after T35a | 8.83 | 11.46 | 1.81 | 1.64 | 0.54 | 1.26 | 0.71 | 2.45 | 1.28 | 0.61 | 0.71 | 0.32 |
+| battle 300 after T35 | 6.83 | 9.16 | 0.76 | 0.73 | 0.20 | 1.26 | 0.58 | 2.57 | 1.04 | 0.39 | 0.36 | 0.31 |
+| battle 300, the direct read on | 6.89 | 9.41 | 0.77 | 0.74 | 0.20 | 1.26 | 0.57 | 2.57 | 1.03 | 0.38 | 0.42 | 0.31 |
+| battle 500 before | 19.64 | 24.40 | 2.83 | 2.48 | 0.97 | 2.73 | 1.50 | 6.95 | 2.29 | 0.29 | 2.30 | 0.66 |
+| battle 500 after T35a | 14.13 | 18.56 | 2.72 | 2.41 | 0.97 | 2.11 | 1.44 | 4.01 | 1.67 | 0.30 | 1.14 | 0.57 |
+| battle 500 after T35 | 10.84 | 14.60 | 1.02 | 1.00 | 0.36 | 2.11 | 1.22 | 4.15 | 1.37 | 0.41 | 0.55 | 0.55 |
+| typical 58 before | 2.93 | 3.69 | 0.78 | 0.75 | 0.12 | 0.25 | 0.23 | 0.83 | 0.43 | 0.09 | 0.25 | 0.07 |
+| typical 58 after T35a | 2.49 | 3.19 | 0.76 | 0.73 | 0.11 | 0.22 | 0.23 | 0.61 | 0.35 | 0.08 | 0.17 | 0.06 |
+| typical 58 after T35 | 2.11 | 2.90 | 0.47 | 0.46 | 0.04 | 0.22 | 0.20 | 0.68 | 0.33 | 0.06 | 0.12 | 0.06 |
+
+(The stage means sum to a mean tick a little over the median the `[bench]` line prints: 6.74, 10.71 and 2.08 ms.)
+
+- **The tick:** `battle` 300 from 11.80 to 6.74 ms (the entry expected 3 to 5 ms for the bolts, 1 to 2 for the sync, up to
+  3 to 4 for the ram read; it fell 5.1 ms: **Q49's 8 ms at 300 is met**, with 1.3 ms of headroom); 500 from 19.46 to 10.71
+  (expected 5 to 8 and more; it fell 8.8); `typical` from 2.92 to 2.08. The worst rebase tick at 500 fell from 25.6 to 14.2 ms.
+- **The bolts (T35a):** the flight stage (which held the bolt nodes' ticks) 6.95 to 4.01 ms at 500 and 4.10 to 2.45 at 300;
+  the hit stage's gather went with the node reads (2.73 to 2.11 at 500); "other" (the second bolt read, the rebase's walk)
+  2.30 to 1.14. 2 393 bolts in flight at 500: the bolt step itself costs about 0.02 to 0.03 ms a tick and the cannon step (every gate,
+  the shots) about 0.04 ms (`core.bolt_step_us` 24 us and `core.cannon_us` 40 us read after a short run at 500 with 1 933
+  owned bolts and 425 cannons), far under the 0.5 ms at which the maintainer's GPU option would be taken: not taken.
+- **The core's state (T35b):** the AI stage 2.72 to 1.02 ms at 500 (the drivers' per-ship step gone; the think itself
+  2.41 to 1.00 as the host takes it in one call), targeting 0.97 to 0.36 (the AI controllers' check), the ram stage 1.44 to
+  1.22 (the contact read), the physics stage 1.67 to 1.37 (the batched ships' ticks off), "other" 1.14 to 0.55 (the event
+  columns). T18's AI stage at 500 divided by 3 (2.32 ms), which T33 missed by 0.5, is met with 1.02.
+- **The direct-state read** measures the same tick (6.89 against 6.83 at 300): one state handle and three reads a body
+  against three node getters. It stays an option, off.
+- **The quick check** (`reports/perf/M4-T35_quick/quick.md`, load 1.13): `battle` holds the budget to 300 ships (T34: 150),
+  400 and 500 miss only the tick median (8.23, 9.87 ms) at 60 FPS; `typical` holds throughout; no count under 30 FPS.
+
+**The fullscreen check** (Q48's row; native 4K window, the 3D at 1 080 lines, vsync off, chase camera, 20 s after 8 s
+of warm-up, under the GPU lock):
+
+| run | average FPS | 1 % low FPS | p99 frame ms | frame mean ms | sim speed | ticks a frame | worst tick ms | worst process ms | GPU ms | draw calls | objects |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| battle 300 before (bolt nodes, `perf_native_bolt_rows` switched off once the bench starts) | 34.7 | 21.3 | 44.68 | 28.84 | 1.00 | | | | 1.75 | 719 | |
+| battle 300 after T35a | 35.4 | 20.2 | 42.61 | 28.27 | 1.00 | | | | 1.75 | 719 | |
+| battle 300 after T35 | 47.3 | 26.4 | 34.81 | 21.16 | 1.00 | 1.3 | 10.5 | 18.4 | 1.74 | 720 | 2 244 |
+| battle 500 before (bolt nodes, switched off) | 7.2 | 5.7 | 172.44 | 138.27 | 0.96 | 7.8 | | | 1.88 | 1120 | 2 867 |
+| battle 500 after T35a | 7.3 | 5.9 | 162.99 | 136.83 | 0.96 | 7.8 | 23.1 | 25.0 | 1.87 | 1120 | 2 867 |
+| battle 500 after T35 | 16.3 | 8.6 | 101.72 | 61.32 | 1.00 | 3.7 | 19.1 | 25.5 | 1.88 | 1125 | 2 876 |
+
+The frame is not GPU bound (1.9 ms of GPU) and the bolt form did not move it; what moved it is the tick: at 500 the window
+ran 7.8 ticks a frame before (the catch-up `max_physics_steps_per_frame` allows, finding 15, T24's) and 3.7 after, and the
+simulation keeps real time now (1.00). The frame's own process work (25 ms in its worst second at 500, 18 at 300) is T36's.
+The first "before" fullscreen pair was taken on the T35a build by mistake; the node-path pair was then taken by switching
+`perf_native_bolt_rows` off live (`FULLSCREEN_EXEC`), which the headless check confirms switches the path both ways.
+
+**Tests.** Focused GUT runs, each file alone under the bench lock: the report lists every file's totals (every file green,
+0 failing, 0 pending), among them `test_fighter_melee` (T14's digest and its 2 959 contacts with
+`contact_monitor` off), `test_brain_tolerance` (Q16), `test_weapon_rows_battle` and `test_turret_kernel` (T20), T17's
+parity files, `test_row_commands` (T33), `test_core_threads` (T18), `test_rebase_in_play` (AC21) and AC13's five.
+`cargo fmt --check` and `cargo clippy --release -- -D warnings` clean on the task's files (`native_probe.rs`'s pre-existing
+`redundant_field_names` remains).
+
+**What a reader sees differently.** The AI ships' bolts are drawn by one multimesh a look, interpolated between ticks as
+the nodes were; the lean ships' muzzle flashes come from one pool (both on the return checklist in `docs/playtest.md`).
+The AI ships' shot sounds are silent until `AudioDirector.watch_ship` connects `shot_fired` (T36's file; one line).
+
+**What remains of the tick at 500** (10.7 ms): the flight stage 4.15 ms (the batch's per-ship gather in GDScript, about
+1.7 ms, and the native step), the hit stage 2.11 (the native grids 0.5, the GDScript narrow phase and the hull lookups),
+physics 1.37 (Jolt and its body sync), the ram stage 1.22, the think 1.00. T24 moves the native step off the main thread;
+the gather from rows (`face_dir_b` from the row's selection, the environment field natively) and a native narrow phase are
+the next levers on the main thread.
 
 ## Definition of done (M4)
 

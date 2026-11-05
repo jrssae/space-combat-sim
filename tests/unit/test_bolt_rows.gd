@@ -535,12 +535,12 @@ func test_a_cannon_on_the_kernel_fires_rows_and_signals_each_shot() -> void:
 	assert_gt(shots.size(), 1, "shots were signalled (%d)" % shots.size())
 	assert_gt(int(sim.core.owned_bolts()), 1, "the bolts are owned rows")
 	assert_eq(get_tree().get_nodes_in_group(Projectile.GROUP).size(), 0, "no bolt node was spawned")
-	var muzzles: Array[Node3D] = c.ship.get_muzzles()
+	var muzzles: Array[Transform3D] = c.ship.get_muzzle_transforms()  # a lean ship's muzzles are data (finding 12)
 	var first: Array = shots[0]
 	var at: Vector3 = first[1]
 	var near: bool = false
-	for muzzle: Node3D in muzzles:
-		near = near or at.distance_to(muzzle.global_position) < c.ship.linear_velocity.length() * DELTA * 2.0 + 1.0
+	for muzzle: Transform3D in muzzles:
+		near = near or at.distance_to(c.ship.global_transform * muzzle.origin) < c.ship.linear_velocity.length() * DELTA * 2.0 + 1.0
 	assert_true(near, "a shot is signalled at a muzzle")
 	assert_false(c.cannon.is_physics_processing(), "the cannon's own tick is off on the kernel")
 	Settings.set_value(&"perf_native_bolt_rows", false)

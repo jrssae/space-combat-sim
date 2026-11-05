@@ -1852,12 +1852,11 @@ impl ScsSimCore {
     fn note_hull(&mut self, body_id: i64, hp: f64, max_hp: f64) {
         let fraction = clamp01(hp / max_hp);
         for m in self.markers.iter_mut().chain(self.hulls.iter_mut()) {
-            if m.body_id == body_id {
-                if let Some(a) = m.attrs.as_mut() {
-                    if a.health.is_some() {
-                        a.hull_fraction = fraction;
-                    }
-                }
+            if m.body_id == body_id
+                && let Some(a) = m.attrs.as_mut()
+                && a.health.is_some()
+            {
+                a.hull_fraction = fraction;
             }
         }
     }
@@ -1868,12 +1867,11 @@ impl ScsSimCore {
         let target = if selected_id != 0 { selected_id } else { -1 };
         self.latest_target.insert(body_id, target);
         for m in self.markers.iter_mut().chain(self.hulls.iter_mut()) {
-            if m.body_id == body_id {
-                if let Some(a) = m.attrs.as_mut() {
-                    if a.targeting.is_some() {
-                        a.target_id = target;
-                    }
-                }
+            if m.body_id == body_id
+                && let Some(a) = m.attrs.as_mut()
+                && a.targeting.is_some()
+            {
+                a.target_id = target;
             }
         }
     }
