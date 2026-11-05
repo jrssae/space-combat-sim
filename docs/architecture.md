@@ -2423,31 +2423,43 @@ native/src/pilot_kernels.rs              ScsPilotKernels: binds the core's rows 
 ```
 
 - **What moved.** The three loops over a thinking ship's contacts: the avoidance filter over its contacts and statics,
-  the fire lane, and the hostile and friendly split of `AiContext.refresh`. Each is one native call per question, over the
-  core's rows; the GDScript stays the reference and answers whenever a perception is not on the rows.
+  the fire lane, and the hostile and friendly split of `AiContext.refresh`, each a kernel over the core's rows. The first
+  two answer the game through one native call per question; the GDScript stays the reference and answers whenever a
+  perception is not on the rows. The split (`context_lists`) is not called from GDScript: handing its five lists back
+  costs more than `AiContext.refresh`'s own loop, so it waits for T17's native brains.
 - **How a ship reaches its rows.** A core scan's rows are the core's, in the same order, so the indices the scan picked a
   list from name the core rows of its contacts: `ContactScan.picked_rows` holds those of the latest list handed out. The
   driver puts them in the perception beside `contacts` and `statics` (`contact_rows`, `static_rows`), with the scan's
   `pilot_kernels()` and the ship's `relation_row` (its `Factions.Relation` to each faction of the core's table, made once
   per faction per scan, since the kernels never call `Factions`). `Perception.on_rows()` is true when the kernels are there
-  and both row lists line up with their lists. A scan whose row count differs from the core's (rows added after the
-  sync) gives no kernels.
+  and both row lists line up with their lists.
+- **The rows are frozen from the sync to the last driver** (the contract the kernels, T17 and T18 rest on). The scan's
+  contacts are copies of the rows as of the scan; the kernels read the live rows. `ScsSimCore.rows_version` grows on every
+  sync, resync of touched bodies and rebase shift, the scan notes it when taken, and `pilot_kernels()` gives nothing once
+  it moved (asked on every call), so a resync or rebase later in the same frame (a test, the console, a bench hook) sends
+  that tick's remaining questions to the GDScript. In the game's tick order nothing changes the rows between -11 and the
+  drivers' end. `ContactScan.pilot_kernels_on` (off only in tests) pairs the kernels alone against the GDScript with
+  the core on.
 - **The facades.** `AvoidanceMath.filter_seen(p, radius, v_des, exempt_id, seed)` (the driver), `FireLane.clear_seen(p,
   aim, range, target)` (the attack brain and the slash) and `AiContext.refresh` ask the kernels when the perception is on
   the rows, and otherwise list the contacts and run `filter`, `clear` or the loop as before. Off the core (`perf_native`
   or `perf_native_core` off, no library) nothing changes.
 - **Bit for bit.** The kernels repeat the GDScript's arithmetic: 32-bit vectors, 64-bit scalars, a scalar rounded to 32
   bits before it scales a vector, division where the engine divides, the engine's `Basis(axis, angle)` for the tie's turn
-  (`cosf` and `sinf`, as the engine calls them). The tie-break is passed in as `hash(seed)` from GDScript, so the kernel
+  (`cosf` and `sinf`, as the engine calls them), and the tie angle in the engine's `deg_to_rad` form (`x * (PI / 180)`,
+  checked bit for bit through `ScsPilotKernels.tie_angle`). The tie-break is passed in as `hash(seed)` from GDScript, so the kernel
   holds no hash of its own. `test_pilot_kernels` compares both on seeded contacts (ties on top of the ship and on a dead
   centre course, the margin, matched velocities, rocks and mines, lanes grazed at their edge), and
   `test_pilot_kernels_in_play` on the core's rows and through the driver.
 - **Thread-ready (for T18).** Each kernel is a pure function of the frozen rows and one ship's inputs: no statics, no
   caches written during a pass, any tie-break passed in; `context_lists` writes only the output struct its caller owns.
-  The module sits in `kernels.rs`, under the same engine-free guard as the other kernels.
+  The module sits in `kernels.rs`, under the same engine-free guard as the other kernels. The shell's
+  `ScsPilotKernels.context_lists` shares one scratch per shell (one shell per scan), so T18 calls the kernel with a
+  `Lists` per ship, never that method from several threads.
 - **What it costs.** Per call on a 13-contact perception: avoidance 1.35 us native against 4.0 in GDScript, a lane check
-  0.83 against 3.0, the context split 3.8 against 3.4 (its five result arrays cost more than the short loop). The think
-  stage moved by noise only (Cycle log, M4-T16): the brains and the scan queries are what a think pays for.
+  0.83 against 3.0, the context split 3.8 against 3.4 (its five result arrays cost more than the short loop, hence not
+  called). No measurable change in the think stage (Cycle log, M4-T16): the per-ship plumbing costs about what the
+  kernels save, and the brains and the scan queries are what a think pays for.
 
 ### 17.16 Rocks and mines as static rows (T29)
 
