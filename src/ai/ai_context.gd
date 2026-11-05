@@ -110,8 +110,14 @@ var guard_radius_m: float = 1500.0:
 		guard_radius_m = value
 		_changed()
 ## The pilot whose native slot mirrors this context (M4-T35), set when the slot is made; the batch asks it to push a changed
-## context when the host steps its driver.
-var native_pilot: AiPilot = null
+## context when the host steps its driver. Held weakly: the pilot owns this context, and a strong back-reference kept
+## every pilot and context alive to the end of the process (CI's "instances leaked at exit").
+var native_pilot: AiPilot:
+	set(value):
+		_native_pilot = weakref(value) if value != null else null
+	get:
+		return _native_pilot.get_ref() as AiPilot if _native_pilot != null else null
+var _native_pilot: WeakRef = null
 # The contexts changed since the last batch took them (M4-T35).
 static var _dirty: Array[AiContext] = []
 var _dirty_listed: bool = false
