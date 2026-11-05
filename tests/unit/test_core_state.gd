@@ -273,6 +273,31 @@ func test_the_native_selection_check_clears_as_the_controllers_did() -> void:
 # --- the batch owns its ships' ticks ------------------------------------------------------------------------------------
 
 
+func test_a_drifting_buoy_is_read_where_this_ticks_move_put_it() -> void:
+	# Fix round 1: a script-moved target (a nav buoy's drift) moves before the core's first sync, so the rows, the native
+	# selection check and the hit sweep see this tick's place, as the tree reads at 0 and later did.
+	if _skipped():
+		return
+	var parts: Array = _space()
+	var space: SubViewport = parts[0]
+	var world: WorldFrame = parts[1]
+	var buoy: NavBuoy = NavBuoy.create("BUOY", Vector3(600.0, 0.0, 0.0))
+	world.spawn(buoy, world.to_universe(Vector3(0.0, 0.0, -500.0)))
+	var sim: SimCore = SimCore.attach(world)
+	for i: int in 3:
+		await get_tree().physics_frame
+	assert_lt(buoy.process_physics_priority, SimCore.PRIORITY, "the buoy moves before the core's first sync")
+	var hulls: Array = sim.core.hull_columns()
+	var ids: PackedInt64Array = hulls[0]
+	var positions: PackedVector3Array = hulls[3]
+	var i: int = ids.find(buoy.get_instance_id())
+	assert_gt(i, -1, "the buoy's hull is a row")
+	if i >= 0:
+		assert_eq(positions[i], buoy.global_position, "the row holds the place this tick's drift put it, bit for bit")
+	space.queue_free()
+	await get_tree().physics_frame
+
+
 func test_the_batch_switches_its_ships_own_tick_off_and_back() -> void:
 	if _skipped():
 		return

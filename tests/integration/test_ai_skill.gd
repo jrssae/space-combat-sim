@@ -137,7 +137,7 @@ func test_a_civilian_never_fires_flees_and_evades_when_hit() -> void:
 	var raider: Combatant = main.ships.acquire("RAIDER 8", _at(Vector3(0.0, 0.0, -3500.0)), Basis.IDENTITY, Vector3.ZERO,
 			IdleBrain.new(true), ShipPool.DEFAULT_TYPE)
 	var shots: Array[int] = [0]
-	civ.cannon.projectile_fired.connect(func(_i: int, _p: Projectile) -> void: shots[0] += 1)
+	civ.cannon.shot_fired.connect(func(_i: int, _at: Vector3) -> void: shots[0] += 1)  # both bolt paths signal it (M4-T35)
 	Engine.time_scale = SPEED_UP
 	await _ticks_for(3.0)
 	var pilot := civ.driver.brain as AiPilot
