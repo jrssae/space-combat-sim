@@ -2790,9 +2790,14 @@ src/combat/hit_resolver.gd, src/combat/ram_resolver.gd, src/targeting/targeting_
   `velocity * delta` with the delta rounded to 32 bits, as `Projectile._physics_process` did; a bolt launched this tick
   stays where it is (its launch tick sweeps only its muzzle). The hit resolver reads shooter, faction, damage and tint from
   columns on every path, checks liveness and spends an owned row in the core; the spent rows go at the next tick's first
-  sync, as a spent node is gone by then. `BoltMesh` (an internal child of `SimCore`) draws the owned bolts with one
-  `MultiMeshInstance3D` per look, its buffer filled once a frame from `bolt_transforms`: each bolt between its last two
-  ticks as an interpolated node would be, enlarged by `Projectile.visual_scale`, under a custom AABB so nothing culls it.
+  sync, as a spent node is gone by then. The resolver lands the tick's hits in launch order (`bolt_columns`' order: the
+  owned rows and the node rows merged by launch tick, an owned row first on a tie), the order the bolt nodes' group had, so
+  a same-tick kill goes to the bolt fired first whichever form it has. `BoltMesh` (an internal child of `SimCore`) draws
+  the owned bolts with one `MultiMeshInstance3D` per look, its buffer filled once a frame (one of `FramePasses`' passes,
+  §17.21) from `bolt_transforms`: each bolt between its last two ticks as an interpolated node would be, enlarged by
+  `Projectile.visual_scale`, under a custom AABB so nothing culls it. A bolt keeps its instance slot for life (a freed slot
+  is drawn empty, an all-zero transform, until a new bolt takes it), so instance k follows one bolt from frame to frame, as
+  T38's motion vectors need.
 - **The cannons as rows.** Every cannon but the player's registers with `ScsCannons` (its ship, its muzzles as origins in the
   ship's frame composed from the markers' transforms, its gate and capacitor, what its bolts carry) and stops its own
   `_physics_process`. `SimCoreStep` at priority 1 (after the drivers' commands, `Main` and the World's rebase at 0, before
@@ -2833,7 +2838,10 @@ src/combat/hit_resolver.gd, src/combat/ram_resolver.gd, src/targeting/targeting_
   range) and stops ticking; `SimCoreTargeting` at the controllers' priority asks `selection_clears` once: for every watched
   ship whose latest selection (the events') is a marker id, no row for it, its own ship, or a 64-bit range beyond the
   sensor range or the target's own reach, as `_check_selection` tested them, and each named controller clears its selection
-  (the same `target_changed`). A controller whose sensor range changes tells the core (`set_sensor_range_m`).
+  (the same `target_changed`). A controller whose sensor range changes tells the core (`set_sensor_range_m`). The check
+  ranges on the rows as the first sync read them, so a target that moves by script must move before that sync: `NavBuoy`'s
+  drift runs at `MOVE_PRIORITY` (-12, before `SimCore.PRIORITY`), and every row read of it (this check, the hit sweep, the
+  scan) is this tick's place, as the tree reads at 0 and later were.
 - **The batch owns its ships' ticks** (`perf_batch_owns_ships`). A ship the flight batch flew has nothing left to do at 0
   (its combat edges are taken in the batch's gather, before the World's rebase), so `FlightBatch` switches its
   `_physics_process` off once and gives it back when it stops flying the ship (no native step this tick, a refused step,
@@ -2855,7 +2863,8 @@ src/combat/hit_resolver.gd, src/combat/ram_resolver.gd, src/targeting/targeting_
 - **The lean ships' muzzle flashes from one pool** (refactor finding 12). A lean ship builds no `Marker3D` per muzzle: the
   hardpoints' muzzle transforms are data (`Ship.get_muzzle_transforms`), its cannon fires from them (`PulseCannon.setup_transforms`,
   a shot leaves at `body.global_transform * muzzle.origin`, the marker's position bit for bit), and its flashes go to the World's
-  `MuzzleFlashPool` (`src/weapons/muzzle_flash_pool.gd`): one `MultiMeshInstance3D` of billboard quads drawn once a frame (each
+  `MuzzleFlashPool` (`src/weapons/muzzle_flash_pool.gd`): one `MultiMeshInstance3D` of billboard quads drawn once a frame by
+  `FramePasses` (§17.21; the pool has no `_process` of its own) (each
   at the muzzle's position on the ship's interpolated transform, grown and faded as `MuzzleFlash` did, the fade in the instance
   colour's alpha), and a small set of `LightEmitter`s reused across shots, each anchored on the ship at the muzzle plus the
   flash's offset down the barrel, in the `LightRig`'s competition for `EmitterCurves.FLASH_S`. A ship that parks or leaves ends

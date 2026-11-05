@@ -2010,8 +2010,16 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   for bit on the seeded battle for every path against its reference (`test_bolt_rows`, `test_core_state`, `test_driver_step`),
   T14's melee digest and contacts unchanged, Q16's fights and T20's weapon parity green. The tick at `battle` 300 fell from
   11.80 to 6.74 ms (Q49's 8 ms met), at 500 from 19.46 to 10.71, at `typical` from 2.92 to 2.08. The bolt step costs about
-  0.1 ms at 500 (the GPU option is not taken). Left for others: `AudioDirector.watch_ship` must connect `shot_fired` for the
-  AI ships' shot sounds (T36's file, one line); the pool stands on its own `_process` until T36's frame passes land.
+  0.1 ms at 500 (the GPU option is not taken). Fix round 1 (on `m4` with T36's passes): `AudioDirector.watch_ship` listens
+  to `shot_fired`, so the AI shots sound on both bolt paths (`test_audio_director`); `MuzzleFlashPool` and `BoltMesh` run as
+  two of T36's frame passes (`flash_pool`, `bolts`), with no `_process` of their own; each owned bolt keeps its multimesh
+  instance slot for life (T38's motion vectors); the hit resolver lands hits in launch order over rows and nodes alike (a
+  same-tick kill goes to the bolt fired first, not to the owned row); a nav buoy's drift moves before the core's first sync
+  (`NavBuoy.MOVE_PRIORITY`, -12), so every row read of a script-moved target is this tick's. **For M5's rebase:** lean AI
+  ships no longer have muzzle `Marker3D` nodes; M5 code that reads them (`m5:src/ai/ai_pilot_driver.gd`'s mean muzzle, any
+  `get_muzzles()` on an AI ship) must use the hardpoints' muzzle transforms (`Ship.get_muzzle_transforms`,
+  `PulseCannon.setup_transforms`); and M5's own `src/audio/audio_director.gd` (m5 branch, around line 307) connects
+  `projectile_fired` too: when M5 rebases onto `m4` it must keep the `shot_fired` connection, or AI shots go silent again.
 
 ##### M4-T36 The frame's per-ship work in one pass per subsystem (Q56, Q58)
 
@@ -5174,8 +5182,12 @@ that keeps the old path as the reference (Q54):
 | the lean ships' muzzle flashes from one pool, no marker per muzzle (finding 12) | none (a lean ship's build) | `test_muzzle_flash_pool` 3: the pool's quads and lights, a lean cannon's shots leave where the full one's do, the brains' mean muzzle the same bits |
 
 **Tolerated differences** (Q16): the bolt table's order is owned rows (launch order, cannons in slot order) then the node
-projectiles (beams, missiles, the player's bolts), where today's was the `projectiles` group's spawn order across every kind:
-it only orders two projectiles hitting the same hull in the same tick, and with fighters alone the order is today's. A live
+projectiles (beams, missiles, the player's bolts), where today's was the `projectiles` group's spawn order across every kind;
+the hit resolver sweeps the table in launch order (fix round 1: the owned and the node rows merged by launch tick, an owned
+row first on a tie, as the AI cannons under `Ships` fired before the player's in the tree), so the only order left is two
+projectiles of the same launch tick hitting the same hull in the same tick, and with fighters alone the order is today's.
+Before the fix the owned rows always landed first and took every same-tick kill from the player's bolts (a player-visible
+tie-break, review minor 6). A live
 cannon whose ship has no row at the step fires from the node's pose. A body that only stops processing keeps its row until
 touched; a hull changed under `Damageable` (a test poking `HullHealth`) is not heard. The direct-state read's last bits
 differ between a teleport and Jolt's next step (T09), which would move T14's melee digest: off by default. Hosted drivers

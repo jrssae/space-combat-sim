@@ -66,6 +66,11 @@ pub struct Bolts {
     pub spent: Vec<bool>,
     /// How many rows at the front the core owns.
     pub owned: usize,
+    // The multimesh instance each owned bolt is drawn in (-1 for none): a bolt keeps its slot for life, so instance k
+    // follows the same bolt tick to tick (T38's motion vectors pair a slot's two frames), and a freed slot is reused.
+    pub draw_slots: Vec<i32>,
+    // Per look, which slots are taken; a look's slot count is its instance count.
+    slots_used: Vec<Vec<bool>>,
 }
 
 /// A bolt row no multimesh draws (a node draws it, or nothing does).
@@ -129,7 +134,57 @@ impl Bolts {
         self.expires_at.clear();
         self.launched.clear();
         self.spent.clear();
+        self.draw_slots.clear();
+        self.slots_used.clear();
         self.owned = 0;
+    }
+
+    /// Drops the rows the core owns (the bolt rows switched off), their draw slots with them.
+    pub fn drop_owned(&mut self) {
+        self.owned = 0;
+        self.truncate_to_owned();
+        self.slots_used.clear();
+    }
+
+    /// The instances a look's multimesh draws: its highest taken slot plus one.
+    pub fn slot_count(&self, look: u8) -> usize {
+        self.slots_used
+            .get(usize::from(look))
+            .map_or(0, |used| used.len())
+    }
+
+    // The lowest free slot of `look`, taken (none for a bolt no multimesh draws).
+    fn take_slot(&mut self, look: u8) -> i32 {
+        if look == LOOK_NONE {
+            return -1;
+        }
+        let ix = usize::from(look);
+        if self.slots_used.len() <= ix {
+            self.slots_used.resize(ix + 1, Vec::new());
+        }
+        let used = &mut self.slots_used[ix];
+        if let Some(slot) = used.iter().position(|&taken| !taken) {
+            used[slot] = true;
+            slot as i32
+        } else {
+            used.push(true);
+            (used.len() - 1) as i32
+        }
+    }
+
+    // Gives a bolt's slot back; the look's count shrinks past the free slots at its top.
+    fn free_slot(&mut self, look: u8, slot: i32) {
+        let Ok(slot) = usize::try_from(slot) else {
+            return;
+        };
+        if let Some(used) = self.slots_used.get_mut(usize::from(look)) {
+            if slot < used.len() {
+                used[slot] = false;
+            }
+            while used.last() == Some(&false) {
+                used.pop();
+            }
+        }
     }
 
     /// Drops the rows read from nodes, keeping the core's own (a sync point reads the nodes again after it).
@@ -149,6 +204,7 @@ impl Bolts {
         self.expires_at.truncate(n);
         self.launched.truncate(n);
         self.spent.truncate(n);
+        self.draw_slots.truncate(n);
     }
 
     /// Adds a bolt the core owns, after the owned rows and before the node rows, in launch order.
@@ -169,6 +225,8 @@ impl Bolts {
         launched: i64,
     ) -> usize {
         let at = self.owned;
+        let slot = self.take_slot(look);
+        self.draw_slots.insert(at, slot);
         self.ids.insert(at, id);
         self.positions.insert(at, position);
         self.velocities.insert(at, velocity);
@@ -194,6 +252,13 @@ impl Bolts {
         if kept == owned {
             return;
         }
+        for (i, &kept) in keep.iter().enumerate().take(owned) {
+            if !kept {
+                let (look, slot) = (self.looks[i], self.draw_slots[i]);
+                self.free_slot(look, slot);
+            }
+        }
+        compact(&mut self.draw_slots, owned, keep);
         compact(&mut self.ids, owned, keep);
         compact(&mut self.positions, owned, keep);
         compact(&mut self.velocities, owned, keep);

@@ -65,6 +65,12 @@ var _reach := PackedFloat64Array()
 var _damageables: Array[Damageable] = []  # per hull, looked up when first needed (null until then)
 var _to_body: Dictionary = {}  # hull -> Basis, transposed when first needed
 var _bolt_ids := PackedInt64Array()
+# The bolts in launch order (the core's, M4-T35); empty on the own walk, whose group order is launch order already.
+var _bolt_order := PackedInt32Array()
+var _hull_first := PackedInt32Array()
+var _hull_next := PackedInt32Array()
+var _rock_first := PackedInt32Array()
+var _rock_next := PackedInt32Array()
 var _bolt_starts := PackedVector3Array()
 var _bolt_ends := PackedVector3Array()
 var _bolt_radii := PackedFloat64Array()
@@ -153,21 +159,19 @@ func resolve(delta: float) -> void:
 	pairs_visited = broad_phase.visited
 	var rock_keys: PackedInt64Array = _rock_pairs(sim)
 	var rock_count: int = _solid.ids.size()
-	# Bolts come in order on both lists; each bolt with a pair on either takes the earliest of its hull and rock hits.
-	var next: int = 0
-	var rock_next: int = 0
-	while next < keys.size() or rock_next < rock_keys.size():
-		@warning_ignore("integer_division")
-		var i_hull: int = keys[next] / hull_count if next < keys.size() else _bolt_ids.size()
-		@warning_ignore("integer_division")
-		var i_rock: int = rock_keys[rock_next] / rock_count if rock_next < rock_keys.size() else _bolt_ids.size()
-		var i: int = mini(i_hull, i_rock)
-		var first: int = next
-		while next < keys.size() and keys[next] / hull_count == i:
-			next += 1
-		var rock_first: int = rock_next
-		while rock_next < rock_keys.size() and rock_keys[rock_next] / rock_count == i:
-			rock_next += 1
+	# Bolts come in table order on both lists; each bolt with a pair on either takes the earliest of its hull and rock
+	# hits. The hits land in launch order (`_bolt_order`), the order the bolt nodes' group had, so an owned row and the
+	# player's node bolt reaching one hull in the same tick give the kill to the one fired first.
+	_pair_ranges(keys, hull_count, _hull_first, _hull_next)
+	_pair_ranges(rock_keys, rock_count, _rock_first, _rock_next)
+	for k: int in _bolt_ids.size():
+		var i: int = _bolt_order[k] if k < _bolt_order.size() else k
+		var first: int = _hull_first[i]
+		var next: int = _hull_next[i]
+		var rock_first: int = _rock_first[i]
+		var rock_next: int = _rock_next[i]
+		if next == first and rock_next == rock_first:
+			continue
 		# A hit handler may have retired a bolt later in the list, as the per-bolt checks before the broad phase allowed.
 		if not _bolt_live(i):
 			continue
@@ -180,6 +184,25 @@ func resolve(delta: float) -> void:
 	for i: int in _beams:
 		_spend(i)
 	resolve_us = Time.get_ticks_usec() - started_us
+
+
+# Each bolt's run of pair keys `[first, next)` in `keys` (sorted by bolt index, `key / count` the bolt), empty for a bolt
+# with no pair.
+func _pair_ranges(keys: PackedInt64Array, count: int, first_out: PackedInt32Array, next_out: PackedInt32Array) -> void:
+	var n: int = _bolt_ids.size()
+	first_out.resize(n)
+	next_out.resize(n)
+	first_out.fill(0)
+	next_out.fill(0)
+	var at: int = 0
+	while at < keys.size():
+		@warning_ignore("integer_division")
+		var i: int = keys[at] / count
+		var start: int = at
+		while at < keys.size() and keys[at] / count == i:
+			at += 1
+		first_out[i] = start
+		next_out[i] = at
 
 
 ## Where the last gather came from: &"tree" (the resolver's own walk) or &"core" (the native core's rows, M4-T15).
@@ -222,6 +245,7 @@ func _gather(delta: float) -> SimCore:
 		_bolt_damage = bolts[8]
 		_bolt_colors = bolts[9]
 		_bolt_owned = int(bolts[11])
+		_bolt_order = bolts[14]
 		_mids.clear()
 		_bolt_mids.clear()
 		_bolt_reach.clear()
@@ -291,6 +315,7 @@ func _gather_bolts() -> void:
 	_bolt_damage.clear()
 	_bolt_colors.clear()
 	_bolt_owned = 0
+	_bolt_order.clear()
 	for node: Node in get_tree().get_nodes_in_group(Projectile.GROUP):
 		var bolt := node as Projectile
 		if bolt == null or bolt.is_spent() or bolt.is_queued_for_deletion() or not bolt.is_inside_tree():

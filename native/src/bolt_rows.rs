@@ -41,8 +41,7 @@ impl ScsSimCore {
     #[func]
     fn set_bolt_rows(&mut self, on: bool) {
         if self.bolt_rows && !on {
-            self.bolts.owned = 0;
-            self.bolts.truncate_to_owned();
+            self.bolts.drop_owned();
         }
         self.bolt_rows = on;
     }
@@ -166,13 +165,11 @@ impl ScsSimCore {
         PackedFloat32Array::from(out.as_slice())
     }
 
-    /// How many owned bolts `bolt_transforms(look, ...)` draws now.
+    /// How many instances `bolt_transforms(look, ...)` fills now: the look's highest draw slot plus one (a slot stays
+    /// a bolt's for life, so a freed one in the middle is drawn empty until a new bolt takes it).
     #[func]
     fn bolt_instances(&self, look: i64) -> i64 {
         let look = u8::try_from(look).unwrap_or(crate::rows::LOOK_NONE);
-        let b = &self.bolts;
-        (0..b.owned)
-            .filter(|&i| b.looks[i] == look && !b.spent[i])
-            .count() as i64
+        self.bolts.slot_count(look) as i64
     }
 }

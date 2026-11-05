@@ -131,6 +131,7 @@ const ENTRIES: Dictionary = {
 	# M4-T35
 	&"perf_core_event_columns": {"type": TYPE_BOOL, "default": true,
 		"doc": "The core keeps a body's activity, hull points and selection from the events that change them (hidden, shown, destroyed, damaged, healed, a selection change; M4-T35) and reads only the pose and motion a tick; off = every column read from the nodes every tick, the reference, for pairing the two in one process; live"},
+	# Kept though it gains nothing on the main thread: T24's step on a worker reads the bodies through this seam.
 	&"perf_core_body_direct": {"type": TYPE_BOOL, "default": false,
 		"doc": "The core reads the rigid bodies' pose and motion from the physics server's direct state by RID (M4-T35) instead of the nodes' getters; the bits differ from the nodes' only between a teleport and Jolt's next step; off = the nodes' getters, the reference; live"},
 	&"perf_native_ram_contacts": {"type": TYPE_BOOL, "default": true,

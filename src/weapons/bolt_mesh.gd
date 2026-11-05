@@ -5,7 +5,9 @@ extends Node3D
 ## every live owned bolt of that look, drawn between its last two ticks as an interpolated node would be, enlarged by
 ## `Projectile.visual_scale`). An internal child of `SimCore`, so it comes and goes with the core. Positions are World
 ## local as the rows hold them, so a rebase moves the rows and the next frame draws them there; the node itself stays at
-## the identity and is not shiftable.
+## the identity and is not shiftable. The frame's passes (`FramePasses`, M4-T36) call `update` once a frame. Each bolt keeps
+## its instance slot for life (a freed slot is drawn empty until a new bolt takes it), so instance k follows one bolt tick to
+## tick, as T38's motion vectors need.
 ##
 ## Looks are registered once per weapon spec (`look_for`), shared by the cannon kernel and the stand-ins; a bolt a node
 ## draws (a beam, a missile) has `SimCore.LOOK_NONE`.
@@ -49,7 +51,20 @@ static func look_count() -> int:
 	return _looks.size()
 
 
-func _process(_delta: float) -> void:
+func _enter_tree() -> void:
+	var passes: FramePasses = FramePasses.of(self)
+	if passes != null:
+		passes.add_bolt_mesh(self)
+
+
+func _exit_tree() -> void:
+	var passes: FramePasses = FramePasses.current()
+	if passes != null:
+		passes.remove_bolt_mesh(self)
+
+
+## Fills the multimeshes for this frame (the frame's bolt pass, `FramePasses.update_bolts`; M4-T36's rule: no `_process`).
+func update() -> void:
 	instances_drawn = 0
 	if _sim == null or _sim.core == null or not _sim.bolt_rows_on():
 		_hide_all()

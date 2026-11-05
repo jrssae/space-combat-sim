@@ -9,7 +9,8 @@ extends Node3D
 ## small set reused across shots, so a volley allocates nothing.
 ##
 ## One pool per World (`attach`), made by the first lean cannon that needs it; the player's ship keeps its markers and
-## flash nodes (the HUD reads the markers). A visual, animated in `_process`; how it looks is (H).
+## flash nodes (the HUD reads the markers). A visual, animated once a frame by the frame's passes (`FramePasses`, M4-T36:
+## no `_process` of its own); how it looks is (H).
 
 const NODE_NAME: StringName = &"MuzzleFlashPool"
 ## The most flashes alight at once; older ones are dropped when the pool is full.
@@ -55,7 +56,16 @@ func _ready() -> void:
 	_buffer.resize(CAPACITY * 16)
 
 
+func _enter_tree() -> void:
+	var passes: FramePasses = FramePasses.of(self)
+	if passes != null:
+		passes.add_flash_pool(self)
+
+
 func _exit_tree() -> void:
+	var passes: FramePasses = FramePasses.current()
+	if passes != null:
+		passes.remove_flash_pool(self)
 	for emitter: LightEmitter in _emitters:
 		_end_light(emitter)
 	_emitters.clear()
@@ -108,11 +118,7 @@ func active_for(ship: Node3D) -> int:
 	return count
 
 
-func _process(delta: float) -> void:
-	advance(delta)
-
-
-## Ages every flash by `delta` seconds and draws the live ones (the frame's pass; `_process` calls it).
+## Ages every flash by `delta` seconds and draws the live ones (the frame's pass, `FramePasses.advance_flash_pools`).
 func advance(delta: float) -> void:
 	var i: int = _ships.size() - 1
 	while i >= 0:

@@ -270,29 +270,54 @@ pub fn instance_transforms(
     out: &mut Vec<f32>,
 ) -> usize {
     out.clear();
-    let mut count = 0;
+    let count = bolts.slot_count(look);
+    out.resize(count * INSTANCE_FLOATS, 0.0); // an empty slot is an all-zero transform: nothing drawn
     let behind = 1.0 - fraction;
     for i in 0..bolts.owned {
         if bolts.looks[i] != look || bolts.spent[i] {
             continue;
         }
+        let Ok(slot) = usize::try_from(bolts.draw_slots[i]) else {
+            continue;
+        };
         let origin = sub(bolts.positions[i], scale(bolts.last_steps[i], behind));
         let facing = looking_along(bolts.velocities[i]);
         let basis = mul(&facing, child);
+        let base = slot * INSTANCE_FLOATS;
         for row in 0..3 {
             let r = basis.rows[row];
-            out.push(r.x * visual_scale);
-            out.push(r.y * visual_scale);
-            out.push(r.z * visual_scale);
-            out.push(match row {
+            out[base + row * 4] = r.x * visual_scale;
+            out[base + row * 4 + 1] = r.y * visual_scale;
+            out[base + row * 4 + 2] = r.z * visual_scale;
+            out[base + row * 4 + 3] = match row {
                 0 => origin.x,
                 1 => origin.y,
                 _ => origin.z,
-            });
+            };
         }
-        count += 1;
     }
     count
+}
+
+/// The bolts in launch order for the hit resolver's sweep: the owned rows and the node rows are each in launch order
+/// already, so this merges them by launch tick, an owned row first on a tie (the cannon kernel fires after the node
+/// cannons of its tick but before them in the tree, as the node path had it). Without it the owned rows would always
+/// land first and take every same-tick kill from the player's bolts.
+pub fn launch_order(bolts: &Bolts) -> Vec<i32> {
+    let n = bolts.ids.len();
+    let mut out: Vec<i32> = Vec::with_capacity(n);
+    let (mut a, mut b) = (0, bolts.owned);
+    while a < bolts.owned || b < n {
+        let take_owned = a < bolts.owned && (b >= n || bolts.launched[a] <= bolts.launched[b]);
+        if take_owned {
+            out.push(a as i32);
+            a += 1;
+        } else {
+            out.push(b as i32);
+            b += 1;
+        }
+    }
+    out
 }
 
 // `Basis.looking_at(direction, up)` with `Projectile._face`'s up (UP, or RIGHT when the direction is near vertical); the

@@ -218,6 +218,7 @@ impl ScsBoltSync {
             bolts.expires_at.push(f64::INFINITY);
             bolts.launched.push(bolt.first_tick);
             bolts.spent.push(false);
+            bolts.draw_slots.push(-1);
         }
         self.known.retain(|_, bolt| bolt.seen == pass);
         let count = bolts.ids.len() as i64;

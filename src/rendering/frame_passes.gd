@@ -7,12 +7,15 @@ extends Node
 ## every LOD switcher with the camera and the dot distance read once. It also keeps the finished hit flashes for the next hits
 ## (hidden children of this node), so a hit no longer builds and frees nodes.
 ##
+## The lean ships' pooled muzzle flashes and the core's bolt multimeshes (M4-T35) run here too, one pass each.
+##
 ## One per game: the autoload `FramePassesNode`, so it runs from the first frame in every scene, tests and scenes without `Main`
 ## included (`of` finds it; without the autoload it is made under the root on first use). It runs before the default priority, as
 ## the per-node callbacks it replaces ran before the nodes that read what they set. A node takes part
 ## only while it could process (`can_process()`), as its own `_process` did, so a parked ship or a paused game freezes.
 ##
-## Console (§6.4): provider `frame` (each pass's cost in the last frame and what it walks).
+## Console (§6.4): provider `frame` (each pass's cost in the last frame and what it walks; `flash_pool_us`, `pool_flashes`,
+## `bolts_us` and `bolt_draws` for M4-T35's passes).
 
 ## The autoload's name (project.godot): a class name cannot also name an autoload.
 const NODE_NAME: StringName = &"FramePassesNode"
@@ -27,7 +30,11 @@ var _impacts: Array[ImpactFlash] = []
 # Finished hit flashes kept for the next hits.
 var _impact_pool: Array[ImpactFlash] = []
 var _switchers: Array[LodSwitcher] = []
-var _cost_us: Dictionary[StringName, int] = {&"plumes": 0, &"flashes": 0, &"impacts": 0, &"lod": 0}
+# The lean ships' pooled muzzle flashes and the core's bolt multimeshes (M4-T35): one per World in play, more in the tests.
+var _flash_pools: Array[MuzzleFlashPool] = []
+var _bolt_meshes: Array[BoltMesh] = []
+var _cost_us: Dictionary[StringName, int] = {&"plumes": 0, &"flashes": 0, &"impacts": 0, &"lod": 0, &"flash_pool": 0,
+		&"bolts": 0}
 
 
 ## The game's passes when they exist, else null (never makes them).
@@ -68,6 +75,11 @@ func _ready() -> void:
 		&"impact_pool": {"get": impact_pool_size, "doc": "Spare hit flashes kept for the next hits"},
 		&"lod_us": {"get": func() -> int: return _cost_us[&"lod"], "unit": "us", "doc": "Far-dot decision pass, last frame"},
 		&"switchers": {"get": func() -> int: return _switchers.size(), "doc": "LOD switchers registered"},
+		&"flash_pool_us": {"get": func() -> int: return _cost_us[&"flash_pool"], "unit": "us",
+			"doc": "Pooled muzzle flashes pass (the lean ships), last frame"},
+		&"pool_flashes": {"get": pool_flashes, "doc": "Pooled muzzle flashes alight"},
+		&"bolts_us": {"get": func() -> int: return _cost_us[&"bolts"], "unit": "us", "doc": "Bolt multimesh pass, last frame"},
+		&"bolt_draws": {"get": bolt_draws, "doc": "Bolt instances the pass drew, last frame"},
 	}), self)
 
 
@@ -88,10 +100,16 @@ func _process(delta: float) -> void:
 	advance_impacts(delta)
 	var impacts_done: int = Time.get_ticks_usec()
 	update_lod()
+	var lod_done: int = Time.get_ticks_usec()
+	advance_flash_pools(delta)
+	var pools_done: int = Time.get_ticks_usec()
+	update_bolts()
 	_cost_us[&"plumes"] = plumes_done - started
 	_cost_us[&"flashes"] = flashes_done - plumes_done
 	_cost_us[&"impacts"] = impacts_done - flashes_done
-	_cost_us[&"lod"] = Time.get_ticks_usec() - impacts_done
+	_cost_us[&"lod"] = lod_done - impacts_done
+	_cost_us[&"flash_pool"] = pools_done - lod_done
+	_cost_us[&"bolts"] = Time.get_ticks_usec() - pools_done
 
 
 ## The far-dot decision for every registered ship: the camera and the dot distance read once (M4-T11's rule per ship). Public
@@ -141,7 +159,65 @@ func advance_impacts(delta: float) -> void:
 		i += 1
 
 
+## Ages and draws every pool's flashes by `delta` (M4-T35: the lean ships' flashes in one multimesh a World). Public for the tests.
+func advance_flash_pools(delta: float) -> void:
+	for pool: MuzzleFlashPool in _flash_pools:
+		if pool.can_process():
+			pool.advance(delta)
+
+
+## Fills every bolt multimesh from the core's rows for this frame (M4-T35). Public for the tests.
+func update_bolts() -> void:
+	for mesh: BoltMesh in _bolt_meshes:
+		if mesh.can_process():
+			mesh.update()
+
+
+## Pooled muzzle flashes alight over every pool.
+func pool_flashes() -> int:
+	var count: int = 0
+	for pool: MuzzleFlashPool in _flash_pools:
+		count += pool.active_count()
+	return count
+
+
+## Bolt instances drawn in the last frame over every bolt mesh.
+func bolt_draws() -> int:
+	var count: int = 0
+	for mesh: BoltMesh in _bolt_meshes:
+		count += mesh.instances_drawn
+	return count
+
+
 # --- registration --------------------------------------------------------------------------------------------------------
+
+
+## A World's pool of lean-ship muzzle flashes: advanced each frame while it is in the tree.
+func add_flash_pool(pool: MuzzleFlashPool) -> void:
+	if not _flash_pools.has(pool):
+		_flash_pools.append(pool)
+
+
+func remove_flash_pool(pool: MuzzleFlashPool) -> void:
+	_flash_pools.erase(pool)
+
+
+func has_flash_pool(pool: MuzzleFlashPool) -> bool:
+	return _flash_pools.has(pool)
+
+
+## A core's bolt multimeshes: filled each frame while in the tree.
+func add_bolt_mesh(mesh: BoltMesh) -> void:
+	if not _bolt_meshes.has(mesh):
+		_bolt_meshes.append(mesh)
+
+
+func remove_bolt_mesh(mesh: BoltMesh) -> void:
+	_bolt_meshes.erase(mesh)
+
+
+func has_bolt_mesh(mesh: BoltMesh) -> bool:
+	return _bolt_meshes.has(mesh)
 
 
 func add_plumes(visuals: ThrusterVisuals) -> void:

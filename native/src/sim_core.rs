@@ -599,6 +599,7 @@ impl ScsSimCore {
             bolts.expires_at.push(f64::INFINITY);
             bolts.launched.push(bolt.first_tick);
             bolts.spent.push(false);
+            bolts.draw_slots.push(-1);
         }
         self.bolt_known.retain(|id, _| live.contains(id));
         self.bolts = bolts;
@@ -1005,9 +1006,10 @@ impl ScsSimCore {
     }
 
     /// The bolts as `[ids, starts, ends, radii, kinds, beams, shooters, factions, damage, colors, spent, owned, velocities,
-    /// last_steps]`: a bolt's segment this tick (`end - last_step` to `end`), its hit radius, its kind (`SimCore.KIND_*`),
-    /// which bolts are beams, and (M4-T35) what a hit lands with, which rows a hit already spent, how many rows at the
-    /// front the core owns, the velocities and the steps themselves.
+    /// last_steps, order]`: a bolt's segment this tick (`end - last_step` to `end`), its hit radius, its kind
+    /// (`SimCore.KIND_*`), which bolts are beams, and (M4-T35) what a hit lands with, which rows a hit already spent, how
+    /// many rows at the front the core owns, the velocities and the steps themselves, and the bolts in launch order (the
+    /// order the resolver lands hits in, as the node path's group order was).
     #[func]
     fn bolt_columns(&self) -> VarArray {
         let b = &self.bolts;
@@ -1044,6 +1046,9 @@ impl ScsSimCore {
         out.push(&(b.owned as i64).to_variant());
         out.push(&PackedVector3Array::from(b.velocities.as_slice()).to_variant());
         out.push(&PackedVector3Array::from(b.last_steps.as_slice()).to_variant());
+        out.push(
+            &PackedInt32Array::from(crate::bolt_kernels::launch_order(b).as_slice()).to_variant(),
+        );
         out
     }
 
