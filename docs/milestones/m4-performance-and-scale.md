@@ -2014,8 +2014,10 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   to `shot_fired`, so the AI shots sound on both bolt paths (`test_audio_director`); `MuzzleFlashPool` and `BoltMesh` run as
   two of T36's frame passes (`flash_pool`, `bolts`), with no `_process` of their own; each owned bolt keeps its multimesh
   instance slot for life (T38's motion vectors); the hit resolver lands hits in launch order over rows and nodes alike (a
-  same-tick kill goes to the bolt fired first, not to the owned row); a nav buoy's drift moves before the core's first sync
-  (`NavBuoy.MOVE_PRIORITY`, -12), so every row read of a script-moved target is this tick's. **For M5's rebase:** lean AI
+  same-tick kill goes to the bolt fired first, not to the owned row); a nav buoy's drift touches its row
+  (`SimCore.touch_moved`), read again before the native selection check and at the resolvers' sync, so every late read of a
+  script-moved target is this tick's (fix round 2: the buoy keeps the default priority, after the World's rebase at 0, which
+  `test_rebase_in_play` pins; that test now snapshots the owned bolt rows too). **For M5's rebase:** lean AI
   ships no longer have muzzle `Marker3D` nodes; M5 code that reads them (`m5:src/ai/ai_pilot_driver.gd`'s mean muzzle, any
   `get_muzzles()` on an AI ship) must use the hardpoints' muzzle transforms (`Ship.get_muzzle_transforms`,
   `PulseCannon.setup_transforms`); and M5's own `src/audio/audio_director.gd` (m5 branch, around line 307) connects

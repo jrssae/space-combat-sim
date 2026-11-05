@@ -2839,9 +2839,10 @@ src/combat/hit_resolver.gd, src/combat/ram_resolver.gd, src/targeting/targeting_
   ship whose latest selection (the events') is a marker id, no row for it, its own ship, or a 64-bit range beyond the
   sensor range or the target's own reach, as `_check_selection` tested them, and each named controller clears its selection
   (the same `target_changed`). A controller whose sensor range changes tells the core (`set_sensor_range_m`). The check
-  ranges on the rows as the first sync read them, so a target that moves by script must move before that sync: `NavBuoy`'s
-  drift runs at `MOVE_PRIORITY` (-12, before `SimCore.PRIORITY`), and every row read of it (this check, the hit sweep, the
-  scan) is this tick's place, as the tree reads at 0 and later were.
+  ranges on the rows as the first sync read them, so a target that moves by script after that sync touches its row
+  (`SimCore.touch_moved`; `NavBuoy`'s drift does), and the core reads the touched rows again before the check
+  (`resync_touched_now`) and again at the resolvers' sync, so this check and the hit sweep see this tick's place as the
+  tree reads at 0 and later did. The buoy keeps the default priority: the World's rebase at 0 runs before every prop.
 - **The batch owns its ships' ticks** (`perf_batch_owns_ships`). A ship the flight batch flew has nothing left to do at 0
   (its combat edges are taken in the batch's gather, before the World's rebase), so `FlightBatch` switches its
   `_physics_process` off once and gives it back when it stops flying the ship (no native step this tick, a refused step,

@@ -251,6 +251,13 @@ static func selection_check_enabled() -> bool:
 
 ## A ship's selection changed (`TargetingController` says so on every change): the latest core notes it for its selection
 ## column and its selection check (M4-T35).
+## A body moved by script after the tick's first sync (a nav buoy's drift): its row is read again before the late systems.
+static func touch_moved(body: Node) -> void:
+	var sim: SimCore = current()
+	if sim != null:
+		sim.touch(body)
+
+
 static func note_selection_changed(body_id: int, selected_id: int) -> void:
 	if _current != null and is_instance_valid(_current) and _current.core != null:
 		_current.core.note_selection(body_id, selected_id)
@@ -334,7 +341,10 @@ func step_now(delta: float) -> void:
 ## ships whose selection the controller would clear now, and each clears it (the same signal).
 func check_selections_now() -> void:
 	selection_clears_last_tick = 0
-	if core == null or _selection_controllers.is_empty() or not ensure_synced():
+	if core == null or not ensure_synced():
+		return
+	core.resync_touched_now()  # a target moved by script since the first sync (a drifting buoy) is read where it is now
+	if _selection_controllers.is_empty():
 		return
 	for body_id: int in (core.selection_clears() as PackedInt64Array):
 		var controller: TargetingController = _selection_controllers.get(body_id)

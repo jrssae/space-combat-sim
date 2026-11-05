@@ -48,9 +48,6 @@ var damageable: Damageable = null
 ## Spin about the buoy's own +Y axis, degrees per second.
 @export var spin_dps: float = SPIN_DPS
 ## Constant drift, World frame, m/s (kinematic: the buoy has no body).
-## Before `SimCore.PRIORITY` (-11): a script-moved target is where this tick put it when the core reads it.
-const MOVE_PRIORITY: int = -12
-
 @export var velocity: Vector3 = Vector3.ZERO:
 	set(value):
 		velocity = value
@@ -95,9 +92,6 @@ static func fade_phase_of(p_display_name: String) -> float:
 
 func _init() -> void:
 	add_to_group(WorldFrame.SHIFTABLE_GROUP)
-	# The drift moves before the core's first sync (M4-T35), so the rows, the hit sweep and the native selection check see
-	# this tick's place, as the tree reads at the default priority and later did.
-	process_physics_priority = MOVE_PRIORITY
 
 
 func _ready() -> void:
@@ -115,6 +109,9 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if velocity != Vector3.ZERO:
 		global_position += velocity * delta
+		# A script move after the core's first sync (M4-T35): the core reads this row again before the native selection
+		# check and the hit sweep, so they see this tick's place as the tree reads did.
+		SimCore.touch_moved(self)
 	if spin_dps != 0.0:
 		spin_angle_rad = fposmod(spin_angle_rad + deg_to_rad(spin_dps) * delta, TAU)
 		basis = _base_basis * Basis(Vector3.UP, spin_angle_rad)
