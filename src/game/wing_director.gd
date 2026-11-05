@@ -418,11 +418,12 @@ func refresh(wing: Wing) -> void:
 
 # `ids` without `self_ship`'s own.
 static func _set_wing_ids(ctx: AiContext, ids: PackedInt64Array, self_ship: Combatant) -> void:
-	ctx.wing_ids.clear()
 	var own: int = self_ship.targetable.get_instance_id() if self_ship.targetable != null else 0
+	var mates := PackedInt64Array()
 	for id: int in ids:
 		if id != own:
-			ctx.wing_ids.append(id)
+			mates.append(id)
+	ctx.wing_ids = mates  # assigned whole: the context notes the change for a pilot the host steps (M4-T35)
 
 
 func _post(line: String) -> void:

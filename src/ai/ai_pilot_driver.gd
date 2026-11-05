@@ -49,6 +49,13 @@ extends Node
 ## landed (the think rate's clock and wake), and the pilot's state (`AiPilot.set_pending`). A new pilot, or a command set
 ## from GDScript, releases the ship from its row.
 ##
+## Hosted (M4-T35, `perf_native_driver_step`): once its pilot's slot is bound, the driver hands its step to the host through
+## the batch (`BrainBatch.host_driver`) and stops ticking: the think rate's stagger and wake, the time since the last think
+## and the hold of a declined think are decided natively in the batch's call, the hits reach the host as they land
+## (`_on_hit_taken`), a parked ship's driver is marked not live, and the pilot reads its latest think from the host's slot.
+## The driver takes its step back (`unhost`) when its pilot changes, it leaves the tree, the setting goes off, or a test
+## steps it by hand.
+##
 ## Console (§16.4, M3-T06): `AiConsole` is registered while any driver is in the tree, owned by the newest. `think_us()` is
 ## wall-clock time, a profiling readout (AC13), never gameplay time.
 
@@ -78,6 +85,8 @@ static var _contacts_max: int = 0
 static var _thinks_native: int = 0
 static var _thinks_fallback: int = 0
 static var _rows_events: int = 0
+# The think-rate settings the hosted drivers' frame carries (M4-T35), and the settings read flag for them.
+static var _driver_step_on: bool = true
 # The host and batch of this physics frame (`_frame_host`).
 static var _lookup_frame: int = -1
 static var _frame_host_cached: Object = null
@@ -114,6 +123,7 @@ var brain: PilotBrain = null:
 		_avoid_from_pilot = false
 		if combatant != null and is_instance_valid(combatant.ship):
 			combatant.ship.release_row_command()  # a new pilot takes the ship from its row afresh
+		unhost()  # the new pilot's slot binds afresh; the host steps this driver again once it has
 		if value != null:
 			value.reset()
 		_start_lights(value)
@@ -167,6 +177,11 @@ var _avoid_from_pilot: bool = false
 var _row_combat: CombatCommand = null
 static var _frame_rows: bool = false
 static var _no_origin: UniversePos = UniversePos.new()
+# The host steps this driver (M4-T35): the host and the batch that hold it, and its pilot's slot there.
+var _hosted: bool = false
+var _hosted_host: Object = null
+var _hosted_batch: BrainBatch = null
+var _hosted_slot: int = -1
 # The frame's shared scan as the rows path took it (the first driver of a frame builds it), and the ship's body id.
 static var _scan_frame: int = -1
 static var _frame_scan: ContactScan = null
@@ -186,12 +201,19 @@ func _enter_tree() -> void:
 
 
 func _exit_tree() -> void:
+	unhost()
 	_live.erase(self)
 	if Settings.changed.is_connected(_on_setting_changed):
 		Settings.changed.disconnect(_on_setting_changed)
 	DebugConsole.registry.unregister_owner(self)
 	if not _live.is_empty():
 		AiConsole.register(DebugConsole.registry, _live.back())
+
+
+func _notification(what: int) -> void:
+	# A parked ship's driver does not step; the host must not step it either.
+	if _hosted and (what == NOTIFICATION_DISABLED or what == NOTIFICATION_ENABLED) and is_instance_valid(_hosted_host):
+		_hosted_host.set_driver_live(_hosted_slot, what == NOTIFICATION_ENABLED)
 
 
 func _ready() -> void:
@@ -209,10 +231,15 @@ func step(delta: float, batched: bool = false) -> void:
 	if brain == null or combatant == null or not is_instance_valid(combatant.ship):
 		return
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
+	if _hosted:
+		unhost()  # stepped by hand (a test): this driver decides for itself again
 	if not _settings_read:
 		_read_settings()
 	if _landing != null:
 		_settle_landing()
+	if batched and _frame_rows and _driver_step_on and _try_host():
+		_add_think_time(Time.get_ticks_usec() - started_us)
+		return  # the host steps this driver from this tick on
 	near_player = _is_near_player()
 	_steps += 1
 	_since_think_s += delta
@@ -314,6 +341,77 @@ func _step_rows(pilot: AiPilot, host: Object, dt: float) -> bool:
 	return true
 
 
+# Hands this driver's step to the host when its pilot's slot is bound to its ship (M4-T35): the think rate's state goes
+# with it. False when it cannot be hosted yet (no host, no batch, the slot not bound).
+func _try_host() -> bool:
+	var pilot := brain as AiPilot
+	if pilot == null or not pilot.native_capable():
+		return false
+	var host: Object = _frame_host()
+	var batch: BrainBatch = _frame_batch
+	if host == null or batch == null or not BrainBatch.driver_step_mode() or not pilot.rows_ready(host, own_body_id()):
+		return false
+	var slot: int = pilot.sync_rows(host)
+	if slot < 0:
+		return false
+	batch.host_driver(self, host, slot, own_body_id(), _ordinal, _steps, _since_think_s, _woken, last_attacker_id, last_hit_s,
+			last_bolt_hit_s)
+	_hosted = true
+	_hosted_host = host
+	_hosted_batch = batch
+	_hosted_slot = slot
+	_avoid_from_pilot = true
+	pilot.set_hosted(true)
+	if not can_process():
+		host.set_driver_live(slot, false)
+	set_physics_process(false)
+	return true
+
+
+## Takes the step back from the host (M4-T35): the think rate's state as the host left it; this node ticks itself again.
+func unhost() -> void:
+	if not _hosted:
+		return
+	_hosted = false
+	var state: PackedFloat64Array = PackedFloat64Array()
+	if _hosted_batch != null and is_instance_valid(_hosted_batch):
+		state = _hosted_batch.unhost_driver(_hosted_host, _hosted_slot)
+	elif _hosted_host != null and is_instance_valid(_hosted_host):
+		state = _hosted_host.unhost_driver(_hosted_slot)
+	if state.size() == 3:
+		_steps = int(state[0])
+		_since_think_s = state[1]
+		_woken = state[2] != 0.0
+	var pilot := brain as AiPilot
+	if pilot != null:
+		pilot.set_hosted(false)
+	_hosted_host = null
+	_hosted_batch = null
+	_hosted_slot = -1
+	set_physics_process(true)
+
+
+## Whether the host steps this driver now.
+func is_hosted() -> bool:
+	return _hosted
+
+
+## The tick's frame for the hosted drivers (M4-T35): `[player live, player position, think rate on, near distance squared,
+## far period in ticks]`, as every driver's step reads them.
+static func driver_frame() -> Array:
+	if not _settings_read:
+		_read_settings()
+	var live: bool = player != null and is_instance_valid(player.ship) and player.damageable != null \
+			and player.damageable.is_active()
+	return [live, player.ship.global_position if live else Vector3.ZERO, _rate_on, _near_sq, _period]
+
+
+## Drivers whose step the native host decides now (M4-T35).
+static func hosted() -> int:
+	var batch: BrainBatch = _frame_batch if _frame_batch != null and is_instance_valid(_frame_batch) else null
+	return batch.hosted_count() if batch != null else 0
+
+
 # Reads whether the last rows think landed: a declined one leaves the think rate's clock and wake as they would be.
 func _settle_landing() -> void:
 	var answer: BrainAnswer = _landing
@@ -330,6 +428,8 @@ func _settle_landing() -> void:
 func rows_event(events: int, out: PackedFloat64Array, base: int) -> void:
 	if combatant == null or not is_instance_valid(combatant.ship):
 		return
+	if _hosted and is_instance_valid(_hosted_host):
+		_landing_dt = float(_hosted_host.driver_dt(_hosted_slot))  # the think's dt, for the retarget's clock
 	var fire: bool = out[base + AiPilot.NATIVE_FIRE] != 0.0
 	var trigger: bool = events & (BrainBatch.EVENT_ENTER | BrainBatch.EVENT_FIRE) != 0
 	if events & BrainBatch.EVENT_ENTER != 0 or (trigger and _row_combat == null):
@@ -352,15 +452,15 @@ func rows_event(events: int, out: PackedFloat64Array, base: int) -> void:
 
 
 ## Adds a rows batch's counts to the tick's (M4-T33): thinks near and far, declined thinks (each held, as a far-rate tick
-## is), the most contacts a think saw, and the drivers it handed an event.
-static func add_rows_counts(near: int, far: int, declined: int, contacts: int, events: int) -> void:
+## is), the most contacts a think saw, the drivers it handed an event, and the hosted drivers that held (M4-T35).
+static func add_rows_counts(near: int, far: int, declined: int, contacts: int, events: int, held_hosted: int = 0) -> void:
 	_roll_counts()
 	_rows_events += events
 	_thinks_near += near
 	_thinks_far += far
 	_thinks_native += near + far
 	_thinks_fallback += declined
-	_held += declined
+	_held += declined + held_hosted
 	_contacts_max = maxi(_contacts_max, contacts)
 
 
@@ -630,6 +730,8 @@ func _on_hit_taken(info: HitInfo) -> void:
 		var marker := shooter.get_node_or_null(^"Targetable") as Targetable if shooter != null else null
 		if marker != null:
 			last_attacker_id = marker.get_instance_id()
+	if _hosted and is_instance_valid(_hosted_host):
+		_hosted_host.set_driver_hits(_hosted_slot, last_attacker_id, last_hit_s, last_bolt_hit_s)  # and wakes it
 
 
 # M2's rule for a brain that leaves the choice to the driver (`wanted` is the brain's wanted target).
@@ -708,11 +810,12 @@ static func _read_settings() -> void:
 	_period = AiThinkRate.period_ticks(float(Settings.get_value(&"ai_think_far_hz")), Engine.physics_ticks_per_second)
 	_nearest_k = int(Settings.get_value(&"ai_nearest_k"))
 	_nearest_static_k = int(Settings.get_value(&"ai_nearest_static_k"))
+	_driver_step_on = bool(Settings.get_value(&"perf_native_driver_step"))
 	NativeBrains.set_settings(_nearest_k, _nearest_static_k)
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
-	if key in RATE_SETTINGS:
+	if key in RATE_SETTINGS or key == &"perf_native_driver_step":
 		_settings_read = false
 	elif key == &"friendly_fire":
 		_friendly_fire = -1

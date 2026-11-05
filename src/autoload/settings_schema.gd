@@ -139,6 +139,8 @@ const ENTRIES: Dictionary = {
 		"doc": "The AI ships' targeting controllers' selection check (a target gone, parked or out of reach) runs as one native pass over the core's rows (M4-T35; needs perf_core_event_columns); off = each controller checks its own selection every tick, the reference; live"},
 	&"perf_batch_owns_ships": {"type": TYPE_BOOL, "default": true,
 		"doc": "A ship the flight batch flies does not tick itself (M4-T35): the batch's gather takes its combat edges and the batch gives the tick back when it stops flying the ship; off = every ship's own tick runs and returns early, the reference; live"},
+	&"perf_native_driver_step": {"type": TYPE_BOOL, "default": true,
+		"doc": "The AI drivers' step (the think rate's stagger and wake, the time since the last think, the hold of a declined think) is decided in the native brain host for every bound native pilot (M4-T35), so no driver runs per ship per tick; off = each driver steps itself at -10 and queues its think, the reference (M4-T33); live"},
 	&"ship_contact_monitor": {"type": TYPE_BOOL, "default": false,
 		"doc": "RigidBody3D.contact_monitor on every ship (M4-T35): off by default, since nothing connects body_entered and the direct state's contact list, which the ram resolver reads, needs only max_contacts_reported; applies to ships built after the change"},
 	&"perf_native_bolt_rows": {"type": TYPE_BOOL, "default": true,

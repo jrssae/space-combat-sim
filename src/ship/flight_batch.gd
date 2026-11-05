@@ -102,11 +102,14 @@ func _on_setting_changed(key: StringName, _value: Variant) -> void:
 			_give_back_all()
 
 
-# Every ship ticks itself again (the batch stops flying, or the setting goes off).
-func _give_back_all() -> void:
+# Every ship ticks itself again (the batch stops flying, or the setting goes off). A ship given back inside a physics tick
+# flies its own model now: the engine's process list for this tick was made before, so its own call would not come.
+func _give_back_all(fly_now: bool = false) -> void:
 	for ship: Ship in _ships:
-		if is_instance_valid(ship):
+		if is_instance_valid(ship) and ship.is_batch_owned():
 			ship.set_batch_owned(false)
+			if fly_now:
+				ship.fly_own_tick_now(get_physics_process_delta_time())
 
 
 ## The batch under `world`, made on first ask; null without a world.
@@ -218,7 +221,7 @@ func _physics_process(delta: float) -> void:
 	rows.clear()
 	var step: Object = _native()
 	if step == null:
-		_give_back_all()
+		_give_back_all(true)
 		return
 	var started: int = Time.get_ticks_usec()  # readout only
 	var frame: int = Engine.get_physics_frames()
@@ -270,7 +273,10 @@ func _physics_process(delta: float) -> void:
 	if not stepped:
 		# The step refused the arrays (it logged why): every ship flies its own model this tick.
 		for ship: Ship in rows:
+			var owned: bool = ship.is_batch_owned()
 			ship.batch_refused()
+			if owned:
+				ship.fly_own_tick_now(delta)
 		rows.clear()
 		step_us = 0
 		return

@@ -19,6 +19,7 @@ use crate::row_commands::{CMD_LEN, EVENT_SELECT, EVENT_SETTLE};
 use crate::rows::{Bolts, Rows};
 use crate::sim_core::ScsSimCore;
 use crate::threads::{self, Pass, Threads};
+use crate::v3::dist_sq;
 
 // `test_brain_parity`'s per-step layouts for a manoeuvre run.
 const STEP_IN: usize = 23;
@@ -56,9 +57,10 @@ pub const BATCH_FLOATS: usize = 4;
 /// selection come from the ship's row.
 pub const ROWS_INTS: usize = 5;
 pub const ROWS_FLOATS: usize = 3;
-/// `rows_events`' head: thinks near the player, thinks far, thinks declined, the most contacts a think saw; then a pair
-/// (the ship's place in the batch, its events) for every ship whose driver has something to do.
-pub const EVENTS_HEAD: usize = 4;
+/// `rows_events`' head: thinks near the player, thinks far, thinks declined, the most contacts a think saw, the hosted
+/// drivers that held this tick (M4-T35); then a pair (the ship's place in the batch, its events) for every ship whose
+/// driver has something to do.
+pub const EVENTS_HEAD: usize = 5;
 /// `set_fault`'s injected bug for the determinism test: a think adds to its main thrust what the worker's previous think
 /// left behind, so it reads another row's output.
 pub const FAULT_CARRY: i64 = 1;
@@ -91,6 +93,35 @@ struct Item {
     out: Vec<f64>,
     ok: bool,
     near: bool,
+}
+
+// A driver the host steps (M4-T35): the think rate's state the driver kept, its latest hits, and its last think.
+struct Hosted {
+    slot: usize,
+    body_id: i64,
+    ordinal: i64,
+    steps: i64,
+    since_think_s: f64,
+    woken: bool,
+    attacker_id: i64,
+    hit_s: f64,
+    bolt_hit_s: f64,
+    live: bool,
+    near: bool,
+    thinks: i64,
+    dt: f64,
+    out: Vec<f64>,
+}
+
+// What the drivers' step reads once a tick (M4-T35): the tick, the player and the think rate's settings.
+#[derive(Default)]
+struct DriverFrame {
+    delta: f64,
+    player_live: bool,
+    player_at: Vector3,
+    rate_on: bool,
+    near_sq: f64,
+    period: i64,
 }
 
 // What every think of a batch shares, read-only.
@@ -138,6 +169,14 @@ pub struct ScsBrains {
     pass_failures: i64,
     // The last rows batch's counts and events (M4-T33).
     events: Vec<i64>,
+    // The drivers the host steps (M4-T35), the tick's frame, the relation matrix over the core's factions (a row per
+    // faction, `stride` wide), the batch's relations with the matrix behind them, and this tick's hosted items' slots.
+    hosted: Vec<Hosted>,
+    frame: DriverFrame,
+    matrix: Vec<u8>,
+    stride: usize,
+    rel_scratch: Vec<u8>,
+    hosted_slots: Vec<i64>,
 }
 
 #[godot_api]
@@ -774,17 +813,189 @@ impl ScsBrains {
             item.last_bolt_hit_s = f[2];
             item.ok = false;
         }
+        // The drivers the host steps (M4-T35) join behind the drivers that queued: the think rate decided here.
+        let total = self.queue_hosted(n, rel.len());
+        self.rel_scratch.clear();
+        self.rel_scratch.extend_from_slice(rel);
+        self.rel_scratch.extend_from_slice(&self.matrix);
+        let shared_rel = std::mem::take(&mut self.rel_scratch);
         let out = self.run_batch(
-            n,
-            rel,
+            total,
+            &shared_rel,
             now_s,
             friendly_fire,
             [origin_x, origin_y, origin_z],
             rows_version,
             true,
         );
-        self.write_commands(n);
+        self.rel_scratch = shared_rel;
+        self.write_commands(total);
+        self.settle_hosted(n, total);
         out
+    }
+
+    // --- the drivers' step (M4-T35) ----------------------------------------------------------------------------------
+
+    /// Steps the driver of the pilot in `slot` here from now on (`perf_native_driver_step`): its ship's body, its place
+    /// in the think rate's stagger and the think rate's state and hits as the driver kept them.
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn host_driver(
+        &mut self,
+        slot: i64,
+        body_id: i64,
+        ordinal: i64,
+        steps: i64,
+        since_think_s: f64,
+        woken: bool,
+        attacker_id: i64,
+        hit_s: f64,
+        bolt_hit_s: f64,
+    ) {
+        let Ok(slot) = usize::try_from(slot) else {
+            return;
+        };
+        self.hosted.retain(|h| h.slot != slot);
+        self.hosted.push(Hosted {
+            slot,
+            body_id,
+            ordinal,
+            steps,
+            since_think_s,
+            woken,
+            attacker_id,
+            hit_s,
+            bolt_hit_s,
+            live: true,
+            near: false,
+            thinks: 0,
+            dt: 0.0,
+            out: Vec::new(),
+        });
+    }
+
+    /// Gives the driver its step back: `[steps, since_think_s, woken]` as the host left them (empty when not hosted).
+    #[func]
+    fn unhost_driver(&mut self, slot: i64) -> PackedFloat64Array {
+        let Some(at) = self.hosted_index(slot) else {
+            return PackedFloat64Array::new();
+        };
+        let h = self.hosted.remove(at);
+        PackedFloat64Array::from(
+            &[
+                h.steps as f64,
+                h.since_think_s,
+                f64::from(u8::from(h.woken)),
+            ][..],
+        )
+    }
+
+    /// The driver's latest hits (`AiPilotDriver._on_hit_taken`): the attacker, the hit's time and the bolt hit's; a hit
+    /// wakes the ship for the next tick.
+    #[func]
+    fn set_driver_hits(&mut self, slot: i64, attacker_id: i64, hit_s: f64, bolt_hit_s: f64) {
+        if let Some(h) = self.hosted_mut(slot) {
+            h.attacker_id = attacker_id;
+            h.hit_s = hit_s;
+            h.bolt_hit_s = bolt_hit_s;
+            h.woken = true;
+        }
+    }
+
+    /// Whether the driver's node processes (a parked ship's does not step).
+    #[func]
+    fn set_driver_live(&mut self, slot: i64, live: bool) {
+        if let Some(h) = self.hosted_mut(slot) {
+            h.live = live;
+        }
+    }
+
+    /// Wakes the driver for the next tick (a new pilot would).
+    #[func]
+    fn wake_driver(&mut self, slot: i64) {
+        if let Some(h) = self.hosted_mut(slot) {
+            h.woken = true;
+        }
+    }
+
+    /// The tick's frame for the hosted drivers: the tick length, the player (live, and where) and the think rate's
+    /// settings (`ai_think_rate`, `ai_think_near_m` squared, the far period in ticks).
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn set_driver_frame(
+        &mut self,
+        delta: f64,
+        player_live: bool,
+        player_at: Vector3,
+        rate_on: bool,
+        near_sq: f64,
+        period: i64,
+    ) {
+        self.frame = DriverFrame {
+            delta,
+            player_live,
+            player_at,
+            rate_on,
+            near_sq,
+            period: period.max(1),
+        };
+    }
+
+    /// The relation matrix over the core's factions, a row per faction of `stride` entries (`Factions.Relation` values),
+    /// what a hosted ship's think reads as its relation row.
+    #[func]
+    fn set_relation_matrix(&mut self, matrix: PackedByteArray, stride: i64) {
+        self.matrix = matrix.as_slice().to_vec();
+        self.stride = usize::try_from(stride).unwrap_or(0);
+    }
+
+    #[func]
+    fn hosted_count(&self) -> i64 {
+        self.hosted.len() as i64
+    }
+
+    /// The slots of the hosted items the last rows batch thought, in the order they followed the queued ships.
+    #[func]
+    fn hosted_item_slots(&self) -> PackedInt64Array {
+        PackedInt64Array::from(self.hosted_slots.as_slice())
+    }
+
+    /// A hosted driver's last think: its output (`OUT_LEN` numbers, empty before the first), how many thinks the host
+    /// ran for it, and the time its last think was given.
+    #[func]
+    fn slot_output(&self, slot: i64) -> PackedFloat64Array {
+        self.hosted_index(slot)
+            .map_or_else(PackedFloat64Array::new, |at| {
+                PackedFloat64Array::from(self.hosted[at].out.as_slice())
+            })
+    }
+
+    #[func]
+    fn slot_think_count(&self, slot: i64) -> i64 {
+        self.hosted_index(slot)
+            .map_or(0, |at| self.hosted[at].thinks)
+    }
+
+    #[func]
+    fn driver_dt(&self, slot: i64) -> f64 {
+        self.hosted_index(slot).map_or(0.0, |at| self.hosted[at].dt)
+    }
+
+    /// A hosted driver's think rate state, `[steps, since_think_s, woken, near]` (the console and tests).
+    #[func]
+    fn driver_state(&self, slot: i64) -> PackedFloat64Array {
+        self.hosted_index(slot)
+            .map_or_else(PackedFloat64Array::new, |at| {
+                let h = &self.hosted[at];
+                PackedFloat64Array::from(
+                    &[
+                        h.steps as f64,
+                        h.since_think_s,
+                        f64::from(u8::from(h.woken)),
+                        f64::from(u8::from(h.near)),
+                    ][..],
+                )
+            })
     }
 
     /// The last `think_batch_rows`' counts and events (`EVENTS_HEAD`, then pairs).
@@ -1446,6 +1657,94 @@ impl ScsBrains {
                 self.events.push(i64::from(events));
             }
         }
+    }
+
+    // The hosted drivers' step (M4-T35), as `AiPilotDriver.step` decided it: a step and the time since the last think
+    // added, near the player or not, and the think rate's rule (`AiThinkRate.thinks`); a ship with no row this tick holds
+    // (as a declined think did). The thinking ones become items after the `n` queued; returns the item count.
+    fn queue_hosted(&mut self, n: usize, rel_len: usize) -> usize {
+        self.hosted_slots.clear();
+        let mut total = n;
+        let Some(core) = self.core.clone() else {
+            return total;
+        };
+        let c = core.bind();
+        let frame = &self.frame;
+        for at in 0..self.hosted.len() {
+            let h = &mut self.hosted[at];
+            if !h.live {
+                continue;
+            }
+            let row = c.row_for_kernel(h.body_id);
+            h.steps += 1;
+            h.since_think_s += frame.delta;
+            let Ok(r) = usize::try_from(row) else {
+                self.events[2] += 1; // no row this tick: held, as a declined think is
+                continue;
+            };
+            h.near = frame.player_live
+                && f64::from(dist_sq(c.rows.positions[r], frame.player_at)) <= frame.near_sq;
+            let on_beat = (h.steps + h.ordinal).rem_euclid(frame.period) == 0;
+            if frame.rate_on && !h.woken && !h.near && !on_beat {
+                self.events[4] += 1; // held: the ship flies its last command on
+                continue;
+            }
+            let Some(brain) = self.slots.get_mut(h.slot).and_then(Option::take) else {
+                self.events[2] += 1;
+                continue;
+            };
+            if self.items.len() <= total {
+                self.items.resize_with(total + 1, Item::default);
+            }
+            let fix = c.rows.faction_ix[r] as usize;
+            let item = &mut self.items[total];
+            item.slot = h.slot;
+            item.brain = Some(brain);
+            item.relations = (
+                rel_len + fix * self.stride,
+                rel_len + (fix + 1) * self.stride,
+            );
+            item.selected_id = 0;
+            item.last_attacker_id = h.attacker_id;
+            item.near = h.near;
+            item.dt = h.since_think_s;
+            item.hull_fraction = 1.0;
+            item.last_hit_s = h.hit_s;
+            item.last_bolt_hit_s = h.bolt_hit_s;
+            item.ok = false;
+            self.hosted_slots.push(h.slot as i64);
+            total += 1;
+        }
+        total
+    }
+
+    // After the pass: a hosted driver whose think landed starts its clock again; a declined one keeps it, as the driver's
+    // settle put it back.
+    fn settle_hosted(&mut self, n: usize, total: usize) {
+        for k in n..total {
+            let item = &self.items[k];
+            let Some(at) = self.hosted.iter().position(|h| h.slot == item.slot) else {
+                continue;
+            };
+            let h = &mut self.hosted[at];
+            if item.ok {
+                h.dt = h.since_think_s;
+                h.since_think_s = 0.0;
+                h.woken = false;
+                h.thinks += 1;
+                h.out.clear();
+                h.out.extend_from_slice(&item.out);
+            }
+        }
+    }
+
+    fn hosted_index(&self, slot: i64) -> Option<usize> {
+        let slot = usize::try_from(slot).ok()?;
+        self.hosted.iter().position(|h| h.slot == slot)
+    }
+
+    fn hosted_mut(&mut self, slot: i64) -> Option<&mut Hosted> {
+        self.hosted_index(slot).map(move |at| &mut self.hosted[at])
     }
 
     // Rebuilds the contact grid when the core's rows changed under it.

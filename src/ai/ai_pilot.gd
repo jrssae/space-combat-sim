@@ -162,6 +162,10 @@ var _pushed_route_pace: int = 0
 var _pushed_route_cruise: float = 0.0
 var _pushed_route_loop: bool = false
 var _pushed_route_yield: bool = false
+# The host steps this pilot's driver (M4-T35): the think's output is read from the host's slot when something asks, and
+# this counts the thinks read so far.
+var _hosted: bool = false
+var _hosted_seen: int = 0
 ## The attack's target as the GDScript behaviour shows it on the native path: its id, nothing else.
 var _mirror_target: Contact = Contact.new()
 # A rows batch's answer this pilot has not read yet, and its place in it (M4-T33).
@@ -525,6 +529,7 @@ func prepare_native(p: Perception) -> int:
 		_ram_pushed = false
 		context.native_host = host
 		context.native_slot = _slot
+		context.native_pilot = self
 		native_push_context(host, _slot, context)
 	if _bound_body != p.own_body_id:
 		host.bind_ship(_slot, native_capability(p.capability), p.muzzle_local, p.muzzle_speed_mps, p.weapon_lifetime_s,
@@ -611,16 +616,41 @@ func set_pending(answer: BrainAnswer, index: int) -> void:
 	_native_pending = answer != null
 
 
+## The host steps this pilot's driver (M4-T35): the latest think is read from the slot when something asks.
+func set_hosted(on: bool) -> void:
+	if on and _pending != null:
+		settle_native()  # the answer of the think just before hosting lands first; the host's outputs follow
+		_pending = null
+	_hosted = on
+	if on:
+		_hosted_seen = int(_native.slot_think_count(_slot)) if _slot >= 0 and is_instance_valid(_native) else 0
+		_native_pending = true  # every read asks the host whether a newer think landed
+	elif _pending == null:
+		_native_pending = false
+
+
+func is_hosted() -> bool:
+	return _hosted
+
+
 ## Reads the pending rows answer into this pilot, if it has come (a declined think leaves everything as it was).
 func settle_native() -> void:
 	var answer: BrainAnswer = _pending
 	if answer == null:
+		if _hosted and _slot >= 0 and is_instance_valid(_native):
+			var count: int = int(_native.slot_think_count(_slot))
+			if count != _hosted_seen:
+				_hosted_seen = count
+				var out: PackedFloat64Array = _native.slot_output(_slot)
+				if out.size() >= NATIVE_OUT_LEN:
+					_apply_state(out, 0)
+			return  # `_native_pending` stays: the next read asks again
 		_native_pending = false
 		return
 	if not answer.ready:
 		return  # the batch has not flushed yet: read it later
 	_pending = null
-	_native_pending = false
+	_native_pending = _hosted  # hosted (M4-T35): the next read asks the host again
 	if answer.thought(_pending_index):
 		_apply_state(answer.out, _pending_index * BrainBatch.STRIDE + 1)
 
@@ -634,7 +664,7 @@ func _settle_native() -> void:
 func _retire_pending() -> void:
 	var answer: BrainAnswer = _pending
 	_pending = null
-	_native_pending = false
+	_native_pending = _hosted
 	if not answer.thought(_pending_index):
 		return
 	var base: int = _pending_index * BrainBatch.STRIDE + 1

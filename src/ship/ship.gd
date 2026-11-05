@@ -471,6 +471,13 @@ func is_batch_owned() -> bool:
 	return _batch_owned
 
 
+## Flies this node's own model for this tick at once (the batch gave the tick back inside the tick, after the engine listed
+## what processes this tick).
+func fly_own_tick_now(delta: float) -> void:
+	if is_inside_tree() and can_process() and not _batch_owned:
+		_physics_process(delta)
+
+
 ## The batch draws this tick's reaction mass for a batched ship (only when the tank is finite).
 func batch_draw_fuel(flow_kg_s: float, delta: float) -> void:
 	_fuel.draw(flow_kg_s, delta)
