@@ -56,6 +56,9 @@ run while it compiles (procedural macros, code generation, build scripts).
 | venial | 0.6.1 | MIT | Build: parses Rust items for gdext's macros |
 | heck | 0.5.0 | MIT OR Apache-2.0 | Build: name case conversion in the code generator |
 | nanoserde, nanoserde-derive | 0.2.1 | MIT OR Apache-2.0; MIT | Build: reads the API description |
+| rayon, rayon-core (M4-T18) | 1.12.0, 1.13.0 | MIT OR Apache-2.0 | Linked: the worker threads that run the native core's per-ship passes |
+| crossbeam-deque, crossbeam-epoch, crossbeam-utils (M4-T18, through rayon-core) | 0.8.8, 0.9.21, 0.8.23 | MIT OR Apache-2.0 | Linked: rayon's work-stealing queues |
+| either (M4-T18, through rayon) | 1.19.0 | MIT OR Apache-2.0 | Linked: a two-way enum rayon's iterators use |
 
 MPL-2.0 combines with GPL-3.0 as a "Secondary License" (MPL-2.0 section 3.3) unless a file carries the "Incompatible With
 Secondary Licenses" notice. None of the 325 files in the eight MPL-2.0 crates above carries it (checked with grep on 2026-11-03).

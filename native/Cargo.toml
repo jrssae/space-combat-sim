@@ -13,6 +13,8 @@ crate-type = ["cdylib"]
 [dependencies]
 # Pinned exactly: gdext is 0.x and its minor releases break the API, so upgrades are deliberate.
 godot = { version = "=0.5.5", features = ["api-4-7"] }
+# Worker threads inside the native core (M4-T18): the per-ship passes run across the performance cores.
+rayon = "=1.12.0"
 
 # No target-cpu tuning anywhere (baseline x86-64), so every machine runs the same maths.
 [profile.release]
