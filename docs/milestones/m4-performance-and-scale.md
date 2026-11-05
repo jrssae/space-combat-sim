@@ -79,6 +79,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q45 | T30d's coarse or fine Starfury | **The agent decides** from the 30 m sheet and the triangle numbers at `battle` 500; the maintainer may reverse it later |
 | Q46 | Wing-level AI (2026-11-04) | **Research it as the next task after phase 2** (T32): how wing-level decisions (the wing picks targets and tactics a few times a second, members steer, avoid and aim every tick) would cut the AI's cost at 300 to 500 ships, as RTS games, Total War and X4 do, and what it does to the dogfights' feel. Research and a proposal only; the maintainer decides at checkpoint 3 |
 | Q47 | Checkpoint 2, D4 (T19, 2026-11-04) | **Keep Jolt for every near ship; D4 unchanged.** Re-measure the physics stage after T21; propose AI ships out of Jolt again only if the near set still costs more than about 1 ms a tick at 500 (T19's proposal, 70 %) |
+| Q48 | Report P2's frame rates (2026-11-04) | **Once phase 2 is complete, report average FPS and 1 % low FPS per ship count**: the fullscreen check (`scripts/fullscreen_check.sh`, native 4K window, 3D at 1 080 lines, vsync off) at `battle` 50, 100, 200, 300 and 500 and at `typical` 58, each measured only after the scene has rendered and warmed up, in a table in report P2. The 1 % low is the mean FPS of the slowest 1 % of frames in the window (the p99 frame time beside it) |
 
 ## The budget ("good game performance", Q5)
 
@@ -562,7 +563,7 @@ native class and the pool. T30a to T30c and T31 ride beside the native waves and
    every ship, or take AI ships out of Jolt (a change to D4 and §5.6). The controller stops; T20 and later do not assume either.
 3. **After wave 6 (report P2).** Phase 2's numbers; the tier's physics rule (Q22) is already accepted, so the checkpoint is the
    numbers and whether `typical` holds its headroom; with T31 merged, the VRAM and GPU time of the mesh-only renderer against T27's
-   mesh rows. T32's wing-level AI proposal (Q46) is decided here too, before T21.
+   mesh rows. T32's wing-level AI proposal (Q46) is decided here too, before T21. Report P2 carries Q48's table: average and 1 % low FPS at `battle` 50, 100, 200, 300 and 500 and `typical` 58.
 4. **Before T24.** Only if the fullscreen check at 500 misses the 30 FPS floor after T23 and T26: the simulation thread changes
    §15.3's tick order and is a design-contract change; the controller asks before dispatching it.
 5. **After T25 (report P3).** M4's definition of done; the maintainer confirms the milestone before `m4` merges into `main`.
