@@ -152,8 +152,37 @@ pub struct Scratch {
     pub statics: Vec<i32>,
     pub broadcasts: Vec<i32>,
     pub lists: pilot::Lists,
+    pub bolt_candidates: Vec<u32>,
     hostile_row: Vec<bool>,
     friendly_row: Vec<bool>,
+}
+
+/// What the host builds once per tick over the rows and bolts for every think: the bolts by grid cell with the fastest
+/// bolt's speed (the incoming-fire query then visits the cells a bolt could reach the ship from), and the rows with a
+/// broadcast reach, in row order.
+#[derive(Default)]
+pub struct Field {
+    pub bolt_cells: Vec<((i32, i32, i32), u32)>,
+    pub max_bolt_speed: f64,
+    pub broadcasters: Vec<u32>,
+}
+
+impl Field {
+    /// Builds the field for this tick's rows and bolts.
+    pub fn build(&mut self, rows: &Rows, bolts: &Bolts, cell_m: f64) {
+        self.bolt_cells = contact::sorted_cells(&bolts.positions, cell_m);
+        self.max_bolt_speed = bolts
+            .velocities
+            .iter()
+            .map(|v| f64::from(length(*v)))
+            .fold(0.0, f64::max);
+        self.broadcasters.clear();
+        self.broadcasters.extend(
+            (0..rows.reach.len())
+                .filter(|&i| rows.reach[i] > 0.0)
+                .map(|i| i as u32),
+        );
+    }
 }
 
 /// A route a pilot leads (`Route`): waypoints as universe positions with a demo (kind + 1, 0 for none) and a hold.
@@ -600,6 +629,7 @@ impl Brain {
         rows: &Rows,
         bolts: &Bolts,
         work: &mut contact::Work,
+        field: &Field,
         own_row: usize,
         scratch: &mut Scratch,
         keep_scratch: &mut Vec<i64>,
@@ -707,15 +737,23 @@ impl Brain {
             &mut scratch.statics,
         );
         let mut p = p;
-        p.incoming_fire = contact::incoming(
+        // No bolt can be incoming from farther than the fastest bolt and the ship's own speed carry in the horizon, plus
+        // the miss distance: the grid gives the same count as the loop over every bolt.
+        let reach_max = (field.max_bolt_speed + f64::from(length(p.velocity))) * 2.0 + 15.0 + 1.0;
+        p.incoming_fire = contact::incoming_near(
             &view,
             &scratch.hostile_row,
             inputs.own_body_id,
             p.position,
             p.velocity,
+            &field.bolt_cells,
+            work.cell_m,
+            reach_max,
+            &mut scratch.bolt_candidates,
         );
-        contact::broadcasts_into(
+        contact::broadcasts_among(
             &view,
+            &field.broadcasters,
             inputs.own_body_id,
             p.position,
             SENSOR_RANGE_M,

@@ -6,7 +6,8 @@
 use godot::prelude::*;
 
 use crate::brain_behaviours::{
-    self, Brain, Context, Inputs, KIND_NAMES, KINDS, MIRROR, Profile, Route, Scratch, Ship, Tactics,
+    self, Brain, Context, Field, Inputs, KIND_NAMES, KINDS, MIRROR, Profile, Route, Scratch, Ship,
+    Tactics,
 };
 use crate::brain_maths::{
     self, Capability, FlightCmd, Manoeuvre, Pcg, Pose, Temperament, deg_to_rad_lerp,
@@ -48,6 +49,7 @@ pub struct ScsBrains {
     own_loaded: bool,
     grid: Work,
     grid_version: i64,
+    field: Field,
     slots: Vec<Option<Brain>>,
     scratch: Scratch,
     keep_scratch: Vec<i64>,
@@ -181,6 +183,8 @@ impl ScsBrains {
             .filter(|&i| self.own.is_static[i])
             .map(|i| self.own.radii[i].abs())
             .fold(0.0, f64::max);
+        self.field
+            .build(&self.own, &self.own_bolts, self.grid.cell_m);
         self.own_loaded = true;
         true
     }
@@ -216,6 +220,8 @@ impl ScsBrains {
         b.shooters = shooters.as_slice().to_vec();
         b.kinds = vec![7; n];
         b.radii = vec![0.0; n];
+        self.field
+            .build(&self.own, &self.own_bolts, self.grid.cell_m);
         true
     }
 
@@ -544,6 +550,7 @@ impl ScsBrains {
                 rows,
                 bolts,
                 &mut self.grid,
+                &self.field,
                 own_row as usize,
                 &mut self.scratch,
                 &mut self.keep_scratch,
@@ -1018,6 +1025,7 @@ impl ScsBrains {
             .filter(|&i| c.rows.is_static[i])
             .map(|i| c.rows.radii[i].abs())
             .fold(0.0, f64::max);
+        self.field.build(&c.rows, &c.bolts, self.grid.cell_m);
     }
 
     fn brain(&self, slot: i64) -> Option<&Brain> {

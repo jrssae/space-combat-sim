@@ -96,8 +96,16 @@ var _ram_pushed: bool = false
 var _had_wing: bool = false
 var _pushed_wing: Array = []
 var _pushed_objective: String = ""
-var _pushed_guard: Array = []
-var _pushed_route: Array = []
+var _pushed_guard_post: UniversePos = null
+var _pushed_guard_name: String = ""
+var _pushed_guard_offset: Vector3 = Vector3.ZERO
+var _pushed_guard_radius: float = -1.0
+var _pushed_route: Route = null
+var _pushed_route_count: int = -1
+var _pushed_route_pace: int = 0
+var _pushed_route_cruise: float = 0.0
+var _pushed_route_loop: bool = false
+var _pushed_route_yield: bool = false
 ## The attack's target as the GDScript behaviour shows it on the native path: its id, nothing else.
 var _mirror_target: Contact = Contact.new()
 
@@ -383,8 +391,8 @@ func try_think_native(p: Perception, dt: float) -> PilotCommand:
 		_bound_body = 0
 		_pushed_wing = []
 		_pushed_objective = ""
-		_pushed_guard = []
-		_pushed_route = []
+		_pushed_guard_radius = -1.0
+		_pushed_route_count = -1
 		_had_wing = false
 		_ram_pushed = false
 		context.native_host = host
@@ -503,16 +511,26 @@ func _sync_context(host: Object) -> void:
 	if c.objective_name != _pushed_objective:
 		_pushed_objective = c.objective_name
 		host.set_objective(_slot, c.objective_name)
-	var guard: Array = [c.guard_post, c.guard_name, c.guard_offset, c.guard_radius_m]
-	if guard != _pushed_guard:
-		_pushed_guard = guard
+	if c.guard_post != _pushed_guard_post or c.guard_name != _pushed_guard_name or c.guard_offset != _pushed_guard_offset \
+			or c.guard_radius_m != _pushed_guard_radius:
+		_pushed_guard_post = c.guard_post
+		_pushed_guard_name = c.guard_name
+		_pushed_guard_offset = c.guard_offset
+		_pushed_guard_radius = c.guard_radius_m
 		_push_guard(host, _slot, c)
-	var route: Array = [c.route, c.route.count() if c.route != null else 0, c.route.pace_id if c.route != null else 0,
-			c.route.cruise_mps if c.route != null else 0.0, c.route.loop if c.route != null else false,
-			c.route.yield_to_attack if c.route != null else false]
-	if route != _pushed_route:
+	var route: Route = c.route
+	var count: int = route.count() if route != null else 0
+	if route != _pushed_route or count != _pushed_route_count or (route != null and (route.pace_id != _pushed_route_pace \
+			or route.cruise_mps != _pushed_route_cruise or route.loop != _pushed_route_loop \
+			or route.yield_to_attack != _pushed_route_yield)):
 		_pushed_route = route
-		_push_route(host, _slot, c.route)
+		_pushed_route_count = count
+		if route != null:
+			_pushed_route_pace = route.pace_id
+			_pushed_route_cruise = route.cruise_mps
+			_pushed_route_loop = route.loop
+			_pushed_route_yield = route.yield_to_attack
+		_push_route(host, _slot, route)
 
 
 func _behaviour_of(behaviour_id: StringName) -> AiBehaviour:

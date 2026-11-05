@@ -237,18 +237,40 @@ pub mod contact {
         near: f64,
         out: &mut Vec<i32>,
     ) {
-        let near_sq = near * near;
         out.clear();
-        for (i, p) in view.positions.iter().enumerate() {
-            if view.body_ids[i] == own_body_id {
-                continue;
-            }
-            let d_sq = f64::from(dist_sq(*p, at));
-            let reach = view.reach.get(i).copied().unwrap_or(0.0);
-            if d_sq > near_sq && d_sq <= reach * reach {
+        for i in 0..view.positions.len() {
+            if broadcast_one(view, i, own_body_id, at, near) {
                 out.push(i as i32);
             }
         }
+    }
+
+    /// `broadcasts_into` over the rows `broadcasters` (in row order: the rows with a reach, listed once per tick), the
+    /// same list since a row without a reach is never heard.
+    pub fn broadcasts_among(
+        view: &View,
+        broadcasters: &[u32],
+        own_body_id: i64,
+        at: Vector3,
+        near: f64,
+        out: &mut Vec<i32>,
+    ) {
+        out.clear();
+        for &i in broadcasters {
+            if broadcast_one(view, i as usize, own_body_id, at, near) {
+                out.push(i as i32);
+            }
+        }
+    }
+
+    // Whether row `i` is heard from `at`: beyond `near`, within its own reach, not the ship's own body.
+    fn broadcast_one(view: &View, i: usize, own_body_id: i64, at: Vector3, near: f64) -> bool {
+        if view.body_ids[i] == own_body_id {
+            return false;
+        }
+        let d_sq = f64::from(dist_sq(view.positions[i], at));
+        let reach = view.reach.get(i).copied().unwrap_or(0.0);
+        d_sq > near * near && d_sq <= reach * reach
     }
 
     /// `ContactScan.incoming_fire`: hostile bolts, not this ship's own, that pass within 15 m in the next 2 s.
@@ -259,22 +281,72 @@ pub mod contact {
         at: Vector3,
         velocity: Vector3,
     ) -> i64 {
-        let mut count: i64 = 0;
-        for i in 0..view.bolt_positions.len() {
-            if !flagged(hostile, view.bolt_faction[i]) || view.bolt_shooters[i] == own_body_id {
-                continue;
-            }
-            let rel_pos = sub(view.bolt_positions[i], at);
-            let rel_vel = sub(view.bolt_velocities[i], velocity);
-            let reach = f64::from(length(rel_vel)) * INCOMING_HORIZON_S + INCOMING_MISS_M + 1.0;
-            if f64::from(length_squared(rel_pos)) > reach * reach {
-                continue;
-            }
-            if closest_approach(rel_pos, rel_vel, INCOMING_HORIZON_S) < INCOMING_MISS_M {
-                count += 1;
-            }
+        (0..view.bolt_positions.len())
+            .filter(|&i| incoming_one(view, i, hostile, own_body_id, at, velocity))
+            .count() as i64
+    }
+
+    /// Whether bolt `i` counts as incoming fire for a ship at `at` moving at `velocity` (one bolt of `incoming`).
+    pub fn incoming_one(
+        view: &View,
+        i: usize,
+        hostile: &[bool],
+        own_body_id: i64,
+        at: Vector3,
+        velocity: Vector3,
+    ) -> bool {
+        if !flagged(hostile, view.bolt_faction[i]) || view.bolt_shooters[i] == own_body_id {
+            return false;
         }
-        count
+        let rel_pos = sub(view.bolt_positions[i], at);
+        let rel_vel = sub(view.bolt_velocities[i], velocity);
+        let reach = f64::from(length(rel_vel)) * INCOMING_HORIZON_S + INCOMING_MISS_M + 1.0;
+        if f64::from(length_squared(rel_pos)) > reach * reach {
+            return false;
+        }
+        closest_approach(rel_pos, rel_vel, INCOMING_HORIZON_S) < INCOMING_MISS_M
+    }
+
+    /// `incoming` over the bolts a grid of their cells (`sorted_cells`) puts within `reach_max` of `at`: the same count
+    /// when no bolt can be incoming from farther than `reach_max` (the caller bounds it by the fastest bolt plus the
+    /// ship's own speed, times the horizon, plus the miss distance). `candidates` is the caller's scratch.
+    pub fn incoming_near(
+        view: &View,
+        hostile: &[bool],
+        own_body_id: i64,
+        at: Vector3,
+        velocity: Vector3,
+        bolt_cells: &[((i32, i32, i32), u32)],
+        cell_m: f64,
+        reach_max: f64,
+        candidates: &mut Vec<u32>,
+    ) -> i64 {
+        candidates.clear();
+        let pad = reach_max * (1.0 + PAD_REL) + PAD_M;
+        let lo = |v: f32| cell_of(f64::from(v) - pad, cell_m);
+        let hi = |v: f32| cell_of(f64::from(v) + pad, cell_m);
+        let (lx, ly, lz) = (lo(at.x), lo(at.y), lo(at.z));
+        let (hx, hy, hz) = (hi(at.x), hi(at.y), hi(at.z));
+        let span = |l: i32, h: i32| i64::from(h) - i64::from(l) + 1;
+        let columns = span(lx, hx).checked_mul(span(ly, hy));
+        let grid_usable = cell_m > 0.0
+            && reach_max.is_finite()
+            && columns.is_some_and(|c| c <= bolt_cells.len() as i64);
+        if grid_usable {
+            for cx in lx..=hx {
+                for cy in ly..=hy {
+                    let start = bolt_cells.partition_point(|e| e.0 < (cx, cy, lz));
+                    let end = bolt_cells.partition_point(|e| e.0 <= (cx, cy, hz));
+                    candidates.extend(bolt_cells[start..end].iter().map(|e| e.1));
+                }
+            }
+        } else {
+            candidates.extend(0..view.bolt_positions.len() as u32);
+        }
+        candidates
+            .iter()
+            .filter(|&&i| incoming_one(view, i as usize, hostile, own_body_id, at, velocity))
+            .count() as i64
     }
 
     // Fills `in_range` with the bodies near `at` that `accept` takes by squared distance, but not `own_body_id` and never

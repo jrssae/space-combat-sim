@@ -114,8 +114,12 @@ var _capability: ShipCapability = null
 ## The mean of the ship's muzzles, ship-local (muzzles never move on the hull, so computed once).
 var _muzzle_local: Vector3 = Vector3.ZERO
 var _muzzle_known: bool = false
-# The avoidance tie-break, `hash(display_name)`, taken when the pilot is set (M4-T17's native path passes it in).
+# The avoidance tie-break, `hash(display_name)`, taken when the pilot is set (M4-T17's native path passes it in), and the
+# perception a native think reads, reused tick after tick (the native think consumes it at once; nothing keeps it).
 var _tie_hash: int = 0
+var _lite: Perception = null
+# `settings.friendly_fire` as last read, kept current through `Settings.changed` (read once per think otherwise).
+static var _friendly_fire: int = -1
 var _retarget_in_s: float = 0.0
 var _unselectable_id: int = 0
 # This ship is hiding: its lights are off until the brain attacks (M3-T27).
@@ -325,7 +329,9 @@ func perceive() -> Perception:
 ## contact lists (the host picks them from the rows as `perceive` would).
 func _perceive_lite(scan: ContactScan, host: Object) -> Perception:
 	var ship: Ship = combatant.ship
-	var p := Perception.new()
+	if _lite == null:
+		_lite = Perception.new()
+	var p: Perception = _lite
 	p.now_s = SimClock.now()
 	p.position = ship.global_position
 	p.basis = ship.global_basis
@@ -353,7 +359,9 @@ func _perceive_lite(scan: ContactScan, host: Object) -> Perception:
 	p.last_hit_s = last_hit_s
 	p.last_bolt_hit_s = last_bolt_hit_s
 	p.last_attacker_id = last_attacker_id
-	p.friendly_fire = bool(Settings.get_value(&"friendly_fire"))
+	if _friendly_fire < 0:
+		_friendly_fire = 1 if bool(Settings.get_value(&"friendly_fire")) else 0
+	p.friendly_fire = _friendly_fire == 1
 	return p
 
 
@@ -494,6 +502,8 @@ static func _read_settings() -> void:
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
 	if key in RATE_SETTINGS:
 		_settings_read = false
+	elif key == &"friendly_fire":
+		_friendly_fire = -1
 
 
 static func _add_think_time(us: int) -> void:
