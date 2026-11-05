@@ -2075,6 +2075,7 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
 - **Expected gain:** 1 500 to 2 500 lines and eight settings removed; parity surfaces halved.
 - **Doc drift (2026-11-05):** fix `motion_blur.glsl`'s splat-era comment about the depth proxy (after T36's check).
 - **Keep for M12 (maintainer, 2026-11-05):** `DamageZones` and the hardpoints are the start of M12's section model for disabled hulks and section blasts (`docs/roadmap.md`, "Required: blast damage and disabled hulks"); the cleanup must not remove or flatten them, and the explosion level of detail's per-death blast energy and radius (T23) stay on the event.
+- **From T35's re-review (2026-11-05):** `nav_buoy.gd:50-54`: the new `MOVE_PRIORITY` constant sits between the drift comment and `velocity`, so `velocity` lost its doc comment; put them back in order.
 - **Architecture:** §17.13, §5 and §15.3 where they still describe optional native code.
 
 ##### M4-T38 Anti-aliasing (Q59, Q60)
@@ -2107,6 +2108,7 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
 - **Done when:** every mode and preset works and is measured, the defaults are chosen from the numbers (recommended starting point:
   FSR 2.2 at Quality for a 4K window, SMAA or TAA at native for a 1 080 window) and written in the entry, and the look items are on
   the return checklist.
+- **From T35's re-review (2026-11-05):** a freed bolt draw slot is reused at once, so when two ticks run between rendered frames a new bolt can inherit the old bolt's previous-frame transform for one frame (a motion-vector smear under TAA or FSR 2.2). Quarantine freed slots until one frame has drawn them empty, with a test.
 - **Architecture:** §7 (the rendering pipeline) and a §17 paragraph.
 
 - **Split (Q60, 2026-11-05):** this section was written as one task; the maintainer asked for anti-aliasing and upscaling as
