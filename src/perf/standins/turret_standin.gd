@@ -144,17 +144,17 @@ func take_native_state(p_axis: Vector3, p_target_id: int, aim_error: float, read
 
 
 ## An interceptor's shot (on its tick, every `INTERCEPT_INTERVAL_S`): among `candidates` (indices into `shots_in_flight`, at
-## `positions`), shoots down the nearest missile within reach whose faction `hostile` marks, else the nearest such bolt. Beams
-## are never candidates. Returns whether it shot.
-func step_interceptor(candidates: Array, shots_in_flight: Array[Projectile], positions: PackedVector3Array,
+## `positions`; `Projectile` nodes or the core's `StandinDirector.RowShot`s, M4-T35), shoots down the nearest missile within
+## reach whose faction `hostile` marks, else the nearest such bolt. Beams are never candidates. Returns whether it shot.
+func step_interceptor(candidates: Array, shots_in_flight: Array, positions: PackedVector3Array,
 		hostile: Dictionary) -> bool:
 	var at: Vector3 = global_position
 	var reach_sq: float = INTERCEPT_RANGE_M * INTERCEPT_RANGE_M
-	var best: Projectile = null
+	var best: Variant = null
 	var best_sq: float = INF
 	var best_missile: bool = false
 	for p: int in candidates:
-		var shot: Projectile = shots_in_flight[p]
+		var shot: Variant = shots_in_flight[p]
 		if shot.is_spent() or not bool(hostile.get(shot.faction, false)):
 			continue
 		var d_sq: float = positions[p].distance_squared_to(at)

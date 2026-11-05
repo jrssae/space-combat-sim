@@ -77,8 +77,32 @@ var _hull_at := PackedVector3Array()
 var _hull_reach := PackedFloat64Array()
 var _hull_factions: Array[StringName] = []
 # This tick's projectiles in flight but beams, with their places.
-var _shots: Array[Projectile] = []
+var _shots: Array = []  # `Projectile` nodes and `RowShot`s, the interceptors' quarry
 var _shot_at := PackedVector3Array()
+
+
+## A bolt the core owns (M4-T35), as the GDScript interceptors see it beside the projectile nodes: the same questions a
+## `Projectile` answers, spent through the core.
+class RowShot extends RefCounted:
+	var id: int = 0
+	var kind: StringName = Projectile.KIND_BOLT
+	var faction: StringName = Factions.NEUTRAL
+	var _spent: bool = false
+	var _sim: SimCore = null
+
+	func _init(p_sim: SimCore, p_id: int, p_kind: StringName, p_faction: StringName) -> void:
+		_sim = p_sim
+		id = p_id
+		kind = p_kind
+		faction = p_faction
+
+	func is_spent() -> bool:
+		return _spent
+
+	func spend() -> void:
+		if not _spent:
+			_spent = true
+			_sim.spend_bolt(id)
 var _missiles_flying: int = 0
 var _gravity: GravityStandin = null
 var _tick: int = 0
@@ -460,11 +484,28 @@ func _add_hull(damageable: Damageable) -> void:
 	_hull_factions.append(damageable.faction)
 
 
-# Every projectile in flight but beams (an interceptor's quarry, the missile count).
+# Every projectile in flight but beams (an interceptor's quarry, the missile count): the core's own bolt rows first (M4-T35),
+# in the table's order, then the projectile nodes.
 func _gather_shots() -> void:
 	_shots.clear()
 	_shot_at.clear()
 	_missiles_flying = 0
+	var sim: SimCore = SimCore.for_tree(get_tree())
+	if sim != null and sim.bolt_rows_on():
+		var columns: Array = sim.core.bolt_columns()
+		var ids: PackedInt64Array = columns[0]
+		var ends: PackedVector3Array = columns[2]
+		var kinds: PackedByteArray = columns[4]
+		var factions: Array = columns[7]
+		var spent: PackedByteArray = columns[10]
+		for i: int in int(columns[11]):
+			if spent[i] != 0 or kinds[i] == SimCore.KIND_BEAM:
+				continue
+			var kind: StringName = Projectile.KIND_MISSILE if kinds[i] == SimCore.KIND_MISSILE else Projectile.KIND_BOLT
+			_shots.append(RowShot.new(sim, ids[i], kind, factions[i]))
+			_shot_at.append(ends[i])
+			if kinds[i] == SimCore.KIND_MISSILE:
+				_missiles_flying += 1
 	for node: Node in get_tree().get_nodes_in_group(Projectile.GROUP):
 		var shot := node as Projectile
 		if shot == null or shot.is_spent() or shot.is_queued_for_deletion() or not shot.is_inside_tree() \
@@ -604,11 +645,12 @@ func _plan_launches(now_s: float) -> void:
 		_next_launch[carriers[i]] = now_s + LAUNCH_PERIOD_S * float(i + 1) / float(carriers.size() + 1)
 
 
-static func _hostile_to(faction: StringName, bolts: Array[Projectile]) -> Dictionary:
+static func _hostile_to(faction: StringName, bolts: Array) -> Dictionary:
 	var out: Dictionary = {}
-	for bolt: Projectile in bolts:
-		if not out.has(bolt.faction):
-			out[bolt.faction] = Factions.is_hostile(bolt.faction, faction)
+	for bolt: Variant in bolts:
+		var bolt_faction: StringName = bolt.faction
+		if not out.has(bolt_faction):
+			out[bolt_faction] = Factions.is_hostile(bolt_faction, faction)
 	return out
 
 

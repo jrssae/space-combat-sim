@@ -31,6 +31,7 @@ var _loops: Array[Dictionary] = []  # per fighter: centre, radius, rate, phase, 
 var _cap_motion: Array[Dictionary] = []  # per capital: start, velocity, yaw rate, pitch
 var _laid: Array[Projectile] = []  # bolts and missiles laid for the interceptors, in order
 var _made: int = 0  # projectiles under `projectiles` already logged
+var _made_row: int = 0  # the lowest id of the core's own bolt rows logged (M4-T35; the ids count down)
 var _hits: Array = []  # this tick's hits from the mines
 var _rebased: Vector3 = Vector3.ZERO  # what the rebases moved the World frame by
 
@@ -215,6 +216,27 @@ func _entry() -> Dictionary:
 		for icp: TurretStandin in cap.interceptors():
 			turrets.append([icp.shots, icp.missile_shots])
 	var made: Array = []
+	# The core's own bolt rows made since the last entry (M4-T35), in launch order (their ids count down from -1).
+	var sim: SimCore = SimCore.current()
+	if sim != null and sim.bolt_rows_on():
+		var columns: Array = sim.core.bolt_columns()
+		var ids: PackedInt64Array = columns[0]
+		var fresh: Array[int] = []
+		for i: int in int(columns[11]):
+			if ids[i] < _made_row:
+				fresh.append(i)
+		fresh.sort_custom(func(a: int, b: int) -> bool: return ids[a] > ids[b])
+		var ends: PackedVector3Array = columns[2]
+		var starts: PackedVector3Array = columns[1]
+		var velocities: PackedVector3Array = columns[12]
+		var shooters: PackedInt64Array = columns[6]
+		var factions: Array = columns[7]
+		var kinds: PackedByteArray = columns[4]
+		for i: int in fresh:
+			var kind: String = "missile" if kinds[i] == SimCore.KIND_MISSILE else ("beam" if kinds[i] == SimCore.KIND_BEAM else "bolt")
+			made.append([kind, var_to_bytes(ends[i]), var_to_bytes(velocities[i]), var_to_bytes(ends[i] - starts[i]),
+					_name_of(shooters[i]), String(factions[i]), ""])
+			_made_row = mini(_made_row, ids[i])
 	var children: Array[Node] = projectiles.get_children()
 	for k: int in range(_made, children.size()):
 		var p := children[k] as Projectile
