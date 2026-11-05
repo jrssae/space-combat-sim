@@ -231,7 +231,7 @@ func _physics_process(delta: float) -> void:
 		for i: int in row:
 			if rows[i].is_row_commanded():
 				rows[i].pull_row_command()
-				pack_command(rows[i]._flight, vectors[i * CMD_VECTORS + 5], flags[i * CMD_FLAGS + 2] != 0,
+				pack_command(rows[i].flight_command(), vectors[i * CMD_VECTORS + 5], flags[i * CMD_FLAGS + 2] != 0,
 						flags[i * CMD_FLAGS + 3] != 0, scalars, vectors, flags, i)
 		stepped = step.step(slots, scalars, vectors, flags, PackedVector3Array(), delta)
 		fallback_reads = 0

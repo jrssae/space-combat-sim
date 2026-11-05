@@ -162,6 +162,7 @@ var _landing: BrainAnswer = null
 var _landing_index: int = 0
 var _landing_since_s: float = 0.0
 var _landing_woken: bool = false
+var _landing_dt: float = 0.0
 var _avoid_from_pilot: bool = false
 var _row_combat: CombatCommand = null
 static var _frame_rows: bool = false
@@ -305,6 +306,7 @@ func _step_rows(pilot: AiPilot, host: Object, dt: float) -> bool:
 	_landing_index = index
 	_landing_since_s = _since_think_s
 	_landing_woken = _woken
+	_landing_dt = dt
 	_since_think_s = 0.0
 	_woken = false
 	pilot.set_pending(_landing, index)
@@ -333,6 +335,7 @@ func rows_event(events: int, out: PackedFloat64Array, base: int) -> void:
 	if events & BrainBatch.EVENT_ENTER != 0 or (trigger and _row_combat == null):
 		_row_combat = CombatCommand.new()
 		_row_combat.fire = fire
+		combatant.ship.forget_row_command()  # the row holds this command: handing it over must not release it
 		combatant.apply_commands(AiPilot.native_flight(out, base), _row_combat)
 		combatant.ship.use_row_command()
 	elif trigger:
@@ -341,7 +344,9 @@ func rows_event(events: int, out: PackedFloat64Array, base: int) -> void:
 		_hiding = false
 		combatant.ship.running_lights = true
 	if events & BrainBatch.EVENT_SELECT != 0:
-		_follow_target(AiPilot.native_target_id(out, base))
+		var wanted: int = AiPilot.native_target_id(out, base)
+		_retarget(_landing_dt, wanted)  # the nearest hostile, as a think on today's path keeps it for a brain wanting it
+		_follow_target(wanted)
 	if events & BrainBatch.EVENT_SETTLE != 0 and brain is AiPilot:
 		(brain as AiPilot).settle_native()  # a rammer's or a route's state is read every tick, as the facade mirrors it
 
@@ -391,7 +396,7 @@ func _act(pc: PilotCommand, pilot: AiPilot, dt: float) -> void:
 	_since_think_s = 0.0
 	_woken = false
 	_count_think(near_player)
-	_retarget(dt)
+	_retarget(dt, brain.wanted_target_id)
 	if pc != null:
 		_thinks_native += 1
 		_contacts_max = maxi(_contacts_max, pilot.native_contacts)
@@ -627,9 +632,9 @@ func _on_hit_taken(info: HitInfo) -> void:
 			last_attacker_id = marker.get_instance_id()
 
 
-# M2's rule for a brain that leaves the choice to the driver.
-func _retarget(delta: float) -> void:
-	if brain.wanted_target_id != PilotBrain.TARGET_NEAREST_HOSTILE:
+# M2's rule for a brain that leaves the choice to the driver (`wanted` is the brain's wanted target).
+func _retarget(delta: float, wanted: int) -> void:
+	if wanted != PilotBrain.TARGET_NEAREST_HOSTILE:
 		return  # the brain chooses (`_follow_brain_target`)
 	var targeting: TargetingController = combatant.ship.targeting
 	_retarget_in_s -= delta

@@ -301,6 +301,17 @@ func is_row_commanded() -> bool:
 	return _row_command
 
 
+## Clears the row flag and leaves the core alone: the driver calls it before handing over a command its row already holds,
+## so the hand-over does not release that row (a ship whose flag outlived its row, under a core made again).
+func forget_row_command() -> void:
+	_row_command = false
+
+
+## The flight command the ship holds (what its own model flies, and what the batch gathers).
+func flight_command() -> FlightCommand:
+	return _flight
+
+
 ## Takes the ship off its row's command (a new pilot, or a command set from GDScript): the core forgets it.
 func release_row_command() -> void:
 	if not _row_command:

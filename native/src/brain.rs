@@ -37,6 +37,9 @@ pub const TACTICS_LEN: usize = 14;
 /// A think's output: the four levels, strafe, rot, brake, fire, the wanted target in two halves, the dodge flags, the wish
 /// (has, all axes, velocity), the behaviour in control, dwell, switches, the contacts seen, the raw and weighted scores by
 /// kind, and the mirrored state.
+/// Where a think's output holds the behaviour in control and the contacts it saw.
+pub const OUT_CURRENT: usize = 20;
+pub const OUT_CONTACTS: usize = 23;
 pub const OUT_RAW: usize = 24;
 pub const OUT_WEIGHTED: usize = OUT_RAW + KINDS;
 pub const OUT_MIRROR: usize = OUT_WEIGHTED + KINDS;
@@ -1246,10 +1249,10 @@ fn pack_output(brain: &Brain, result: &brain_behaviours::Output, out: &mut Vec<f
     out[17] = f64::from(brain.desired_velocity.x);
     out[18] = f64::from(brain.desired_velocity.y);
     out[19] = f64::from(brain.desired_velocity.z);
-    out[20] = f64::from(brain.current_kind());
+    out[OUT_CURRENT] = f64::from(brain.current_kind());
     out[21] = brain.dwell_s;
     out[22] = brain.switches as f64;
-    out[23] = brain.contacts_seen as f64;
+    out[OUT_CONTACTS] = brain.contacts_seen as f64;
     for (i, kind) in brain.behaviours.iter().enumerate() {
         out[OUT_RAW + usize::from(*kind)] = brain.raw[i];
         out[OUT_WEIGHTED + usize::from(*kind)] = brain.weighted[i];
@@ -1415,7 +1418,7 @@ impl ScsBrains {
                 continue;
             }
             self.events[if item.near { 0 } else { 1 }] += 1;
-            self.events[3] = self.events[3].max(item.out[23] as i64);
+            self.events[3] = self.events[3].max(item.out[OUT_CONTACTS] as i64);
             let (Some(c), Some(brain)) = (
                 guard.as_mut(),
                 self.slots.get(item.slot).and_then(Option::as_ref),
@@ -1425,12 +1428,13 @@ impl ScsBrains {
             let mut events = c.write_command(brain.ship.own_body_id, &item.out[..=CMD_LEN]);
             let wanted = brain.wanted_target_id;
             let selected = usize::try_from(item.own_row).map_or(-1, |r| c.rows.target_ids[r]);
-            // The driver follows the brain's target: it clears a selection for none and selects anything else it wants.
+            // The driver follows the brain's target: it clears a selection for none, selects anything else it wants, and
+            // for the nearest hostile (0) runs its retarget every think, as T18's path does.
             if wanted == 0 || (wanted < 0 && selected > 0) || (wanted > 0 && wanted != selected) {
                 events |= EVENT_SELECT;
             }
             // Ram (0) and follow path (7) in control are mirrored at once, as the facade does, and so is a new commitment.
-            let kind = item.out[20] as i64;
+            let kind = item.out[OUT_CURRENT] as i64;
             if c.note_ram(brain.ship.own_body_id, item.out[OUT_RAM] != 0.0)
                 || kind == 0
                 || kind == 7
