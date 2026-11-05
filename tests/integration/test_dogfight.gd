@@ -13,6 +13,12 @@ const SEEDS: Array[int] = [1, 2, 3, 4, 5]
 var _scale_backup: float = 1.0
 
 
+# A slow file (M4-T36, Q58): runs with GUT_SLOW=1 (the full run and CI), skipped in focused runs.
+@warning_ignore("untyped_declaration")  # GutTest declares it untyped
+func should_skip_script():
+	return SlowTests.skip_reason()
+
+
 func before_each() -> void:
 	_scale_backup = Engine.time_scale
 	get_tree().paused = false

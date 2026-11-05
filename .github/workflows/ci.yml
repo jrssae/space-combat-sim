@@ -76,6 +76,8 @@ jobs:
         run: scripts/run_tests.sh
         env:
           GUT_SHARD: ${{ matrix.shard }}/2
+          # The slow files (the long seeded parity fights, the pending balance runs) run here (M4-T36, Q58).
+          GUT_SLOW: "1"
 
       - name: Upload reports
         if: always()

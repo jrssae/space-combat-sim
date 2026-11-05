@@ -19,6 +19,12 @@ const FIGHT_MEASURE_S: int = FIGHT_S - 5
 const LABEL_ROOT: String = "test_flight_parity"
 
 
+# A slow file (M4-T36, Q58): runs with GUT_SLOW=1 (the full run and CI), skipped in focused runs.
+@warning_ignore("untyped_declaration")  # GutTest declares it untyped
+func should_skip_script():
+	return SlowTests.skip_reason()
+
+
 func _skipped() -> bool:
 	if NativeLib.has_class(FlightBatch.NATIVE_CLASS):
 		return false

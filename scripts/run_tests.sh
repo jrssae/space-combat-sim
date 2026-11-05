@@ -5,7 +5,10 @@
 # Exits non-zero on any failure. Logs and the GUT JUnit XML land in reports/ (gitignored; CI uploads it).
 # GUT_SHARD=k/n (CI) runs only every n-th GUT script from the k-th, in path order, so n jobs share the GUT run; the Python
 # tests and the console smoke runs then run in shard 1 only. Unset (the default) runs everything.
+# GUT_SLOW=1 (the default here, and CI) runs the slow GUT files too (M4-T36, Q58: the long seeded parity fights and the pending
+# balance runs, `tests/fixtures/slow_tests.gd`); GUT_SLOW=0 leaves them out. A focused GUT run without this script leaves them out.
 set -euo pipefail
+export GUT_SLOW="${GUT_SLOW:-1}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"

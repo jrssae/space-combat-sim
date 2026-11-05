@@ -19,6 +19,12 @@ const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf
 var _saved: Dictionary = {}
 
 
+# A slow file (M4-T36, Q58): runs with GUT_SLOW=1 (the full run and CI), skipped in focused runs.
+@warning_ignore("untyped_declaration")  # GutTest declares it untyped
+func should_skip_script():
+	return SlowTests.skip_reason()
+
+
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
