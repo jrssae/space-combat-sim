@@ -4958,6 +4958,14 @@ parity and in-play files, `test_brain_tolerance` (Q16's fights), `test_fighter_m
 - **What would take the rest:** the think rate decided in the host from the slot's own clock and the row's position, the hits pushed to the
   slot when they land, and the context pushed by whoever changes it, so no driver runs per ship per tick. That is T24's move of the step off
   the main thread in any case.
+- **The refactor review's finding 5 (controller's note, after this task's commits), left for T35 or T36:** switching off
+  `_physics_process` on batched ships and on drivers of batched ships, the batch deciding the think rate and packing commands from rows,
+  and the cannons' combat edges handed from rows with the muzzle transforms as data. A throwaway hook at `battle` 500 (six threads) puts the
+  per-ship GDScript there at about 2.7 ms a tick: a batched ship's own `_physics_process` 0.6 us (about 425 ships, 0.26 ms), the cannon's
+  2.2 us (0.93 ms, the bolt spawns included), the drivers 8 us a thinking ship (146, 1.17 ms) and 1.35 us a held one (279, 0.38 ms), and
+  the engine's call into each node on top. Each piece changes a seam this task's parity rests on (the think rate's stagger and wake, the
+  path switch between the batch and a ship's own model, a cannon kernel that spawns bolts), so each is a task of its own with its own
+  parity test rather than an addition here.
 
 ## Definition of done (M4)
 
