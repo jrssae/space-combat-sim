@@ -14,18 +14,21 @@ make once are already almost free. A native think costs about 13 us on one threa
 (friends, hostiles, leader), 0.4 us is the scoring and selection of the nine behaviours (the attack score's loop over the
 hostiles is the target choice), 0.3 us is the behaviour in control (steering, aim, the trigger) and 0.3 us is the avoidance
 filter. The other 12 us are the perception queries every member must run for itself: the nearest contacts (4.4 us), the
-nearest rocks and mines (5.7 us), the incoming fire (1.5 us) and the broadcasts (0.3 us). Around the native think sits about 23 us
-of GDScript per thinking ship in the driver, the facade and the command path, which no wing-level decision reaches.
+nearest rocks and mines (5.7 us), the incoming fire (1.5 us) and the broadcasts (0.3 us); 7 of those 12 us are the two grid gathers
+over the 27 cells around the ship. Around the native think sits 23 to 27 us of GDScript per thinking ship in the driver, the
+facade and the command path, which no wing-level decision reaches.
 
 So the three wing-level options save between 0.05 and 0.3 ms a tick at 300 ships and 0.07 to 0.5 ms at 500, out of a think
 stage of 3.6 and 5.9 ms and a tick of 18.3 and 31.6 ms (one thread). The two levers the same measurement points at are
-worth ten times more: moving the native pilots' inputs and commands into the core's rows (about 2.0 ms at 300, 3.4 ms at 500)
-and sharing or caching the perception queries per cluster of ships (about 0.7 ms at 300, 1.2 ms at 500 on one thread).
+worth several times more: moving the native pilots' inputs and commands into the core's rows (1.3 to 2.0 ms at 300, 2.2 to 3.4 ms
+at 500) and sharing the perception gathers per cluster of ships with the rocks cached (0.35 to 0.7 ms at 300, 0.6 to 1.1 ms at 500
+on one thread, with a ceiling of 0.8 and 1.3).
 
 Recommendation: do not build wing-level decisions in M4 as a performance task. Build the rows-based command path (a T18
-follow-up) and a cluster-level perception (which T22's tier brains can reuse) instead, and keep wing tactics for a later
-milestone as a feel feature, designed as option B below, with the wing deciding targets and tactics and the members keeping
-the hit reaction, the manoeuvres and the avoidance. Confidence 85 % in the measured split, 80 % in the recommendation.
+follow-up; it alone takes the think at 300 under T17's 2 ms target with six threads) and give T22's tier the cluster-level
+perception, and keep wing tactics for a later milestone as a feel feature, designed as option B below, with the wing deciding
+targets and tactics and the members keeping the hit reaction, the manoeuvres and the avoidance. Confidence 85 % in the measured
+split, 80 % in the recommendation, 70 % in L1's range and 60 % in L2's.
 
 ## 2. What the game's AI does today
 
@@ -72,6 +75,13 @@ Per batch (one native call a tick): `battle` 300 1.37 to 1.44 ms, of which the g
 falls to 0.54 to 0.59 ms at 300 and 0.87 to 0.93 ms at 500, while each think's own wall time rises to 15 to 16 us (the workers
 share the memory bus; the grid stays serial).
 
+Inside the two large queries (a second hook run, `reports/perf/M4-T32_split/s3_*.log`, battle 300 and 500, one thread): the
+nearest-k query spends 3.8 to 3.9 us gathering about 470 candidate rows from the 27 grid cells of 5 km around the ship (the cell
+is the sensor range, so the box is 15 km a side and takes in the neighbouring fights and the capitals) and keeping about 29 in
+range, and 0.4 us ranking them; the statics query spends 3.2 to 3.3 us gathering about 510 candidates the same way and 2.0 to
+2.5 us walking them for the rocks whose surface is in range (4 kept). So 7 of the 10 us are the two gathers, which depend on the
+cell box, not on how many rocks or ships are near.
+
 Reading the table:
 
 - **The decisions are a thirtieth of the native think.** Context plus scoring and selection, which is where a target is chosen
@@ -94,13 +104,17 @@ The think stage is the drivers' steps plus the batch call. Taking the batch out 
 | battle 500 | 5.95 | 2.2 | about 0.35 | about 3.4 | about 23 |
 | typical 58 | 0.98 | 0.42 | about 0.05 | about 0.5 | about 24 |
 
-The same 23 us at every size: the lite perception's property reads, the slot's context check, joining the batch, the command
-objects, the selection and `apply_commands`. T18 put it at about 27 to 30 us from GDScript section timers, which carry their own
-overhead; the batch it put at 0.55 ms at 300 from the console's `core.batch_us`, a last-tick readout taken after the bench, where this
-hook's batches inside the window run 1.25 ms at the least, 1.34 to 1.39 at the median and 1.45 to 1.48 at the 90th percentile
-(none declined), and the same run's console readout after the bench still says 0.57 ms (`reports/perf/M4-T32_split/verify2.log`). The think stage
-totals agree with T18's (3.6 ms at 300 on one thread); only the attribution moves: the native call carries about 40 % of the
-think, the GDScript about 55 %, the held ships the rest.
+The 23 us is a residual, not a measurement: the think stage and the batch are timed, the held ships' cost is T18's estimate,
+and what is left is the GDScript per thinking ship. T18's section timers in the driver gave about 27 us (the lite perception
+4.7, the slot's preparation 2.7, joining the batch 1.3, the rest of the step 5.7, the output unpacked and mirrored 7.8, the
+command, selection and lights 5.1), with the timers' own overhead inside; both agree with the 3.6 ms stage, so the GDScript per
+thinking ship is **23 to 27 us**. T18 put the batch at 0.55 ms at 300 from the console's `core.batch_us`, a last-tick readout taken
+after the bench; inside the window this hook's batches run 1.25 ms at the least, 1.34 to 1.39 at the median and 1.45 to 1.48 at
+the 90th percentile (none with moved rows), and the same run's console readout after the bench still says 0.57 ms
+(`reports/perf/M4-T32_split/verify2.log`). The readout is lower because the bench's scene is gone by then: the same log shows
+`core.rows = 260` and `core.statics = 0` against the 1 345 rows and 1 000 rocks of the window, so the 5.7 us statics query has
+collapsed. The think stage totals agree with T18's (3.6 ms at 300 on one thread); only the attribution moves: the native call
+carries about 40 % of the think, the GDScript 55 to 65 %, the held ships the rest.
 
 ### 3.4 What a wing could compute once, and what each member must still do
 
@@ -115,7 +129,7 @@ think, the GDScript about 55 %, the held ships the rest.
 | broadcasts | 0.26 | yes |
 | behaviour in control (steering, aim, trigger) | 0.34 | no |
 | avoidance and the re-seek | 0.27 | no |
-| GDScript driver, facade, command path | about 23 | no: it is paid per thinking ship whatever decided the command |
+| GDScript driver, facade, command path | 23 to 27 (a residual, see 3.3) | no: it is paid per thinking ship whatever decided the command |
 
 Strictly wing-shareable: about 0.8 us of 36 us all in (2 %). With a shared candidate list for the nearest-k query: about 3 us
 (8 %). Nothing a wing decides removes the GDScript per member; only a member that does not think at all (a held tick, or a
@@ -133,15 +147,15 @@ work (projectiles, pathing, perception), as here.
 | Killzone 2 multiplayer bots (Guerrilla) | one commander per faction picks objectives and divides bots into squads; squad leaders plan regroup, attack and defend with an HTN planner | each bot keeps its own HTN planner, perception and self-preservation; orders carry a priority, and an individual dodging a grenade overrides a squad order | individuals replan five times a second, squads twice a second | Verweij, VU Amsterdam thesis, hosted by Guerrilla (verified from the PDF text) |
 | F.E.A.R. (Monolith) | a global coordinator re-clusters AI into squads by proximity; four simple squad behaviours (get to cover, advance cover, orderly advance, search) find participants, send orders and monitor each tick | every agent plans for itself with GOAP and decides whether to follow an order or flee; no complex squad behaviours existed, the complex look emerges from the two layers | the squad monitors every clock tick; agents plan when goals change | Orkin, GDC 2006 paper (verified from the PDF text) |
 | Halo 3 (Bungie) | an objective tree of prioritised, self-describing tasks; squads trickle down to the highest open task; distribution is O(n) in the tasks | each actor's behaviour tree fights inside the task | tasks re-evaluated on activation and completion | Isla, GDC 2008 slides (verified from the PDF text) |
-| Total War (Creative Assembly) | a battle AI reasons by unit type and group goals; Warhammer's siege AI has a grand tactical analyser handing objectives to detachments and tactics to units | the unit is the agent (Shogun used per-unit neural nets for formation movement and evasion); every soldier's projectile is physically simulated, and that cost is managed en masse | not published | Thompson's series on Game Developer (parts 1, 2, 5); Pitkethly on Warhammer II (interview) |
-| Homeworld 2 (Relic) | squadrons are the command unit (five strike craft built and ordered as one); strike groups are formations of squadrons; tactics settings (aggressive, defensive, evasive) | ships fly the squadron's formation and retaliate by the tactics setting | per order | Well of Souls tech briefing quoting Relic's designers |
+| Total War (Creative Assembly) | a battle AI reasons by unit type and group goals; Warhammer's siege AI has a grand tactical analyser handing objectives to detachments and tactics to units | the unit is the agent (the franchise's unit AI uses pre-defined neural nets per objective: moving in formation, avoiding incoming fire, taking position to attack); every soldier's projectile is physically simulated, and that cost is managed en masse | not published | Thompson's series on Game Developer (parts 1, 2, 5); Pitkethly on Warhammer II (interview) |
+| Homeworld 2 (Relic) | squadrons are the command unit (five strike craft built and ordered as one); strike groups are formations of squadrons; tactics settings (aggressive, defensive, passive; an evasive setting tightens a squadron's formation) | ships fly the squadron's formation and retaliate by the tactics setting | per order | Well of Souls tech briefing quoting Relic's designers |
 | Supreme Commander and Forged Alliance (GPG, FAF) | the AI forms platoons from built units and orders the platoon (attack vector, patrol, retreat); builders and platoon templates in Lua | the engine's unit AI aims, fires and paths on its own | platoon threads on Lua waits of seconds | FAF wiki and forums (community documentation of the shipped Lua) |
 | Planetary Annihilation (Uber, Sorian) | a neural network per platoon decides attack, retreat and target from threat values | units fight with the engine's targeting | not published | Sorian's forum posts, summarised by search results only (the forum refused the fetch; not verified in full) |
-| Ashes of the Singularity (Stardock, Oxide) | meta-units: grouped units aware of each other, short-ranged ones screen long-ranged ones, repair units help the most damaged | every unit keeps its own weapons and ballistics | not published | Stardock's announcement article (verified) |
+| Ashes of the Singularity (Stardock, Oxide) | meta-units: grouped units aware of each other and fighting together under fixed rules (Stardock's article); tanks in a meta-unit prioritise protecting their artillery (Game Informer's preview); repair units helping the most damaged is reported by PC Invasion only (unverified) | every unit keeps its own weapons and ballistics | not published | Stardock's announcement article and Game Informer's preview (verified); PC Invasion (not fetched) |
 | StarCraft II (Blizzard) | the melee AI sends attack waves (a composition, a staging point, a target); the tactical AI data decides per unit when to use abilities | per-unit targeting and movement in the engine | the editor caps the AI's actions per minute (200 by default) | SC2Mapster editor tutorial (community documentation) |
 | Age of Empires II (Ensemble) | attack groups sized by strategic numbers are sent at a target | units retaliate and pick targets themselves | per rule tick | AoE2 AI scripting community (not a primary source) |
-| X4: Foundations (Egosoft) | not a hierarchy but an attention level of detail: high attention near the player (fully simulated), low attention elsewhere with precision and update rate reduced, combat resolved with fewer checks (a developer confirms the terms are the old OOS and IS) | full per-ship AI in high attention | by attention, not by group | Steam discussion with an Egosoft developer; Egosoft 6.00 notes name "low attention combat simulation" |
-| EVE Online (CCP) | the Sleepers' "Level One" AI picks the most threatening targets as a group and switches targets; AI templates derive from it | each NPC flies and fires itself | per server tick | CCP dev blogs 2009 and 2012 (verified) |
+| X4: Foundations (Egosoft) | not a hierarchy but an attention level of detail: high attention in the player's sector, low attention elsewhere; an Egosoft developer confirms the terms are the old OOS and IS; PC Games Hardware describes low attention as reduced simulation precision and update rate (the magazine's own words, not Egosoft's); a player's claim that turrets then check only range is unverified | full per-ship AI in high attention | by attention, not by group | Steam discussion with an Egosoft developer; Egosoft 6.00 notes name "low attention combat simulation" without detail; PC Games Hardware (secondary) |
+| EVE Online (CCP) | the old AI gave a whole NPC squad the first player in range as its focus; the wormhole NPCs' AI ("Level One", the base of later templates) has each NPC evaluate the opponents individually and target by threat, re-evaluates whether some or all should change targets, repairs comrades and jams a player assisting the primary | each NPC flies, fires and picks its target itself | per server tick | CCP dev blogs 2009 (Incognito, "How the AI Pew Pews the Player"; "When Evolution Leaps Forward") and 2012 ("Brains! NOM NOM!") (verified) |
 | FreeSpace 2 (Volition, FS2 Open) | mission and player goals are issued to wings and copied to each ship (`ai_add_wing_goal_*`, `ai_attack_wing` picks one member of the enemy wing per attacker) | each ship's `AIM_CHASE` and its sub-modes; the target is re-evaluated on a per-skill timer of 0.5 to 5 s (`get_enemy_timestamp`), formation slots are flown every frame | per-ship timers; wing goals at mission events | FS2 Open source (`aigoals.h`, `aicode.cpp`, verified) |
 | Craig Reynolds, steering behaviours | action selection | steering, locomotion | not stated | GDC 1999 paper (verified) |
 
@@ -154,11 +168,12 @@ What the survey says for this game:
   seconds by skill (FreeSpace 2), one attack wave at a time (StarCraft II). That cadence is where the feel of "a wing fighting
   together" comes from, not a saving.
 - **Cost, where it is named, is in the units.** Total War simulates every soldier's shot and manages the requests "en masse";
-  Ashes keeps every unit's weapons; X4 saves by lowering the whole simulation's rate and precision away from the player, which is
-  this project's think rate (T04) and tier (T21, T22), not a wing.
-- **Focus fire is the feel change.** EVE's Sleepers switching to the most threatening target as a group is what players
-  remember of that AI; against a lone player, a raider wing of twelve concentrating fire is a different game from twelve pilots
-  each choosing the nearest.
+  Ashes keeps every unit's weapons; X4 saves by an attention level of detail away from the player (the reduced precision and
+  rate are a magazine's description, not Egosoft's), which is this project's think rate (T04) and tier (T21, T22), not a wing.
+- **Target choice is the feel change.** EVE's 2009 blog is the one source that names the change players notice: the old squad
+  all shooting the first player in range against NPCs that each weigh the threats and switch. My inference, not the blog's: for
+  this game the two ends are the same, twelve raiders each choosing the nearest against a wing that spreads or concentrates its
+  fire by a rule; either rule is a wing decision the player feels at once.
 
 ## 5. Design options
 
@@ -177,8 +192,8 @@ tick) and 500 (146), one thread; with six threads the native part divides by abo
   `AiPilot`'s attack score and its native twin take it; the tier (T21, T22) assigns the same way for tier rows and resolves fire
   against the assigned target, which it needs anyway.
 - **Saving:** the attack loop over the hostiles, about 0.3 us a think: **0.03 ms at 300, 0.04 ms at 500** (under 1 % of the
-  think stage). A wing pass costs about 10 to 30 us per wing per decision, so at 64 wings of 4 at 4 Hz about 0.1 ms a tick is
-  added; the net is zero or slightly negative.
+  think stage). A wing pass costs an estimated 10 to 30 us per wing per decision (my estimate from the attack score's loop, not
+  measured), so at 64 wings of 4 at 4 Hz about 0.1 ms a tick is added; the net is zero or slightly negative.
 - **Feel:** better: wingmates stop piling on one raider and leaving the rest free, and ATTACK MY TARGET can spread the wing over
   the target's escorts later. Risk: a wing of twelve raiders focusing the player feels like a gank; the spread rule and the
   profile's aggression should cap how many take the same target.
@@ -226,18 +241,39 @@ tick) and 500 (146), one thread; with six threads the native part divides by abo
 ### The two levers the measurement points at instead
 
 - **L1: the native pilots' inputs and commands as rows** (the next step T18 named). The hits, the selection and the clock are
-  read into the rows at the sync; the batch writes each pilot's flight and combat command into its row; the flight step applies
-  it; the driver does nothing for a native ship but count. **About 2.0 ms at 300 and 3.4 ms at 500** (55 % of the think stage,
-  11 % of the tick), the same on one thread and six. Feel: none (the same commands a tick later in the same tick). Tests: the
-  parity files already pin the commands; the fallback (a declined think) needs a rows-side hold.
-- **L2: perception per cluster, statics cached.** One nearest-k and one statics query per cluster of nearby thinking ships
-  (a wing, or a grid cell's worth of ships: the fight), each member then ranking the cluster's candidates (a few hundred
-  nanoseconds) and running only its own incoming-fire query; the statics list refreshed only when the ship has moved more than
-  a cell or every tenth think, since rocks do not move. **About 8 us a think: 0.7 ms at 300 and 1.2 ms at 500 on one thread,
-  0.4 and 0.65 with six.** Feel: none if the candidate set is a superset of today's (the cluster's range is the sensor range
-  plus the cluster's radius). Tests: `test_nearest_contacts` and the brain parity need the candidate set to contain today's
-  nearest k; bit-for-bit parity holds when the member ranks the superset the same way. This is the one piece of a "wing-level"
-  design that pays, and T22's tier brains need exactly this (one perception per far fight).
+  read into the rows at the sync; the batch writes each pilot's flight and combat command into its row; `FlightBatch` (priority
+  -1, before the ships' own steps) applies the flight command from the row in the same tick, so the ship flies the same command
+  it flies today and seeded outcomes hold. What stays in GDScript per thinking ship: `Combatant.apply_commands` hands the combat
+  command to the `cannon` node (the trigger could move to T20's weapon rows later), the selection follows the brain's target
+  through `TargetingController`, the hiding lights switch on the first shot, and the counters; T18's timers put the command, the
+  selection and the lights at about 5 us, so **5 to 8 us of the 23 to 27 stay**. Saving **1.3 to 2.0 ms at 300 and 2.2 to 3.4 ms
+  at 500** (40 to 55 % of the think stage, 7 to 11 % of the tick), the same on one thread and six; the low end keeps the cannon,
+  the selection and the lights in GDScript, the high end moves the trigger and the selection into rows too. Feel: none when the
+  flight step applies the row's command in the tick it was decided; applying it a tick later would change every seeded outcome
+  and is not proposed. Tests: the parity files already pin the commands; the fallback (a declined think) needs a rows-side hold.
+- **L2: perception per cluster, statics cached.** The two gathers (7 of a think's 13 us) walk the same 27 cells for every
+  member of a fight. A cluster pass before the brains' pass gathers once per cluster (a fight, or the thinking ships of one grid
+  cell) with the sensor range plus the cluster's radius, keeps the rows and rocks in that range as the cluster's candidate list,
+  and each member ranks that list with today's comparator (distance, then row index) instead of gathering. Costed from the
+  hook: the pass is one gather and one collect per cluster plus a distance walk over the 470 candidates, about 8 us a cluster;
+  `battle` 300 has 11 fights and 500 has 18, so 0.09 and 0.15 ms a tick serial, less when the pass runs over the pool. A member's
+  ranking walks the cluster's list, 60 to 300 rows by how wide the cluster's range is (0.5 to 2.5 us), not a few hundred
+  nanoseconds as the first draft said. Amortisation is thin per tick: of the 89 thinks a tick at 300, 24 are the player's fight
+  and about 6.5 each of the other ten fights (the far rate), so a per-tick list is shared by 6 to 24 members; a list kept for the
+  far period (three ticks, the ranking reading the current positions) is shared by a whole fight. The statics list is cached per
+  ship in its slot (rocks do not move): the cluster's rocks ranked by surface every tenth think or after 500 m of travel, about
+  0.3 us a think averaged over the battle (a third of the fights sit under the slab). Per think that leaves about 1.2 us for the
+  nearest contacts (the pass's share plus the member's ranking) and 0.5 us for the statics against 4.4 and 5.7 today: **a ceiling
+  of 9 us a think (0.8 ms at 300, 1.3 ms at 500 on one thread) and a realistic 4 to 8 us: 0.35 to 0.7 ms at 300 and 0.6 to 1.1 ms
+  at 500; with six threads 0.2 to 0.4 and 0.3 to 0.6.** The low end is a wide cluster (a 10 km superset of 300 rows per member);
+  the high end a tight fight (60 rows). Threads under T18's rules: the cluster pass is a pass of its own, each cluster item
+  reading the frozen rows and writing only its own list; the brains' pass then reads the lists as it reads the grid and the
+  field (shared, frozen), and the statics cache is slot state written only by its own think, so one thread and six give the same
+  rows and `test_core_threads` keeps its digest. Parity bit for bit holds when the cluster list is a superset of a member's
+  in-range rows: a member farther from the cluster's centre than the margin allows falls back to its own gather (deterministic,
+  counted). Tests: `test_nearest_contacts` and the brain parity files, plus a test that the cluster path and the own gather
+  pick the same k on seeded crowds. This is the one piece of a "wing-level" design that pays, and T22's tier brains need exactly
+  this (one perception per far fight).
 - **L3: the grid built once a tick** for the scan, the stand-ins and the brains (0.18 ms at 300, 0.27 at 500, serial today in
   the batch; the scan builds its own).
 
@@ -246,8 +282,8 @@ tick) and 500 (146), one thread; with six threads the native part divides by abo
 | A: targets per wing | 0.03, 0.02 | 0.04, 0.03 | under 1 % |
 | B: targets and tactics per wing | 0.05 to 0.3, 0.03 to 0.2 | 0.07 to 0.5, 0.04 to 0.3 | 1 to 8 % |
 | C: full squad behaviours | 0 or worse | 0 or worse | 0 |
-| L1: commands as rows | 2.0, 2.0 | 3.4, 3.4 | 55 % |
-| L2: cluster perception, statics cached | 0.7, 0.4 | 1.2, 0.65 | 20 % |
+| L1: commands as rows | 1.3 to 2.0, the same | 2.2 to 3.4, the same | 40 to 55 % |
+| L2: cluster perception, statics cached (ceiling 0.8 and 1.3) | 0.35 to 0.7, 0.2 to 0.4 | 0.6 to 1.1, 0.3 to 0.6 | 10 to 20 % |
 | L3: one grid a tick | 0.2, 0.2 | 0.3, 0.3 | 5 % |
 
 ## 6. Risks
@@ -273,17 +309,21 @@ tick) and 500 (146), one thread; with six threads the native part divides by abo
    B save 0.05 to 0.5 ms where the think stage is 3.6 to 5.9 ms and the tick 18 to 32 ms. Confidence 80 % (the 20 % is the
    chance that giving the bench wings changes the fights enough to move the near count or the hostile lists in ways this split
    does not show).
-2. **Take L1 and L2 as M4 tasks** in T21's wave or as a T18 follow-up: commands as rows (about 2 ms at 300, 3.4 at 500) and
-   cluster perception with cached statics (0.7 and 1.2 ms on one thread). Together they bring the think at 300 to about 1 ms
-   on one thread, under T17's 2 ms target, and T22's tier brains inherit the cluster perception. Confidence 75 % in the
-   projections (they rest on this split and on T18's held-ship estimate).
+2. **Take L1 as an M4 task** (a T18 follow-up, or in T21's wave): commands as rows saves 1.3 to 2.0 ms at 300 and 2.2 to 3.4 at
+   500, which alone brings the think at 300 from 3.6 to 1.6 to 2.3 ms on one thread and from 2.8 to 0.8 to 1.5 ms with six (the
+   game's configuration): under T17's 2 ms target with six threads in any case, and on one thread at the high end. Confidence
+   70 % in the range (the 23 to 27 us is a residual and T18's section timers, not a direct measurement; the remainder is an
+   estimate). **Take L2 as part of T22's tier perception** rather than for the near think alone: 0.35 to 0.7 ms at 300 and 0.6 to
+   1.1 at 500 on one thread (ceiling 0.8 and 1.3), 0.2 to 0.4 and 0.3 to 0.6 with six, confidence 60 % (the cluster pass is
+   costed from the hook but not built; the superset's size decides where in the range it lands). L1 and L2 together: the think
+   at 300 at 1.0 to 1.9 ms on one thread, 0.4 to 1.3 with six.
 3. **Keep option B as the design for wing tactics in a later milestone** (M5's missions or the roadmap's AI milestone), judged
    on feel at an (H) checkpoint with the dogfight scenario, built as a seeded wing brain with hysteresis above the members'
    reflexes, with the hit reaction, avoidance, ram and retreat never overridden. Option A is its first step and can ride on
    `WingDirector` alone.
-4. **Correct the T18 attribution in the milestone's record:** the native think is about 13 us in the battle (perception 12,
-   decisions 0.5, flying 0.6), not 6, and the GDScript per thinking ship about 23 us, not 30; the two together are what T18
-   measured as the think stage.
+4. **Correct the T18 attribution in the milestone's record** (T18's own section still reads 6 us and 30 us; out of this task's
+   lines, for the controller): the native think is about 13 us in the battle (perception 12, decisions 0.5, flying 0.6), not
+   6, and the GDScript per thinking ship 23 to 27 us; the two together are what T18 measured as the think stage.
 
 ## 8. Sources
 
@@ -313,15 +353,24 @@ Primary and close-to-primary sources (fetched 2026-11-05 unless marked):
   pages refused the fetch; their content is taken from search summaries and is not verified in full).
 - Planetary Annihilation, Sorian's forum posts on the platoon neural network: https://forums.planetaryannihilation.com/goto/post?id=1019120 ,
   https://forums.planetaryannihilation.com/posts/1069219 (refused the fetch; search summaries only, not verified).
-- Ashes of the Singularity, Stardock, "Don't fight a battle, win the war" (meta-units): https://www.stardock.com/games/article/462158/ashes-of-the-singularity-dont-fight-a-battle-win-the-war
+- Ashes of the Singularity, Stardock, "Don't fight a battle, win the war" (meta-units aware of each other, fixed rules):
+  https://www.stardock.com/games/article/462158/ashes-of-the-singularity-dont-fight-a-battle-win-the-war ; Jeff Cork, Game
+  Informer preview, 2015-03-05 (tanks protecting artillery in a meta-unit):
+  https://gameinformer.com/games/ashes_of_the_singularity/b/pc/archive/2015/03/05/changing-the-scope-and-scale-of-rts-battles ;
+  PC Invasion on repair units helping the most damaged: https://www.pcinvasion.com/?p=106318 (search summary only, not fetched)
 - StarCraft II editor AI (attack waves, tactical AI data): https://sc2mapster.wiki.gg/wiki/Tutorials/Artificial_Intelligence ;
   James Anhalt's GDC 2011 navigation session exists but was not reachable (community notes only).
 - Age of Empires II attack groups (community AI scripting reference, not primary): https://airef.github.io/ and
   https://forums.ageofempires.com/t/three-ways-to-get-the-ai-to-attack/205476
-- X4: Foundations attention levels: Steam discussion with an Egosoft developer https://steamcommunity.com/app/392160/discussions/0/6664812048260991709 ;
-  Egosoft 6.00 announcement naming "low attention combat simulation" https://www.egosoft.com/news/archive/2022December_en.php
-- EVE Online, CCP dev blogs: "When Evolution Leaps Forward" (2009) https://www.eveonline.com/news/view/when-evolution-leaps-forward ;
-  "Brains! NOM NOM!" (2012) https://www.eveonline.com/article/brains-nom-nom
+- X4: Foundations attention levels: Steam discussion with an Egosoft developer (the terms are the old OOS and IS)
+  https://steamcommunity.com/app/392160/discussions/0/6664812048260991709 ; Egosoft 6.00 announcement naming "low attention
+  combat simulation" without detail https://www.egosoft.com/news/archive/2022December_en.php ; PC Games Hardware on reduced
+  precision and update rate in low attention (the magazine's description, not Egosoft's):
+  https://www.pcgameshardware.de/X4-Foundations-Spiel-61270/Specials/Timelines-DLC-Update-Vulkan-Tech-Test-Release-1449923/galerie/3896065/
+- EVE Online, CCP dev blogs: CCP Incognito, "How the AI Pew Pews the Player" (2009-02-23; the old squad focus, individual
+  evaluation by threat, remote repair, ECM) https://www.eveonline.com/news/view/how-the-ai-pew-pews-the-player ; "When Evolution
+  Leaps Forward" (2009) https://www.eveonline.com/news/view/when-evolution-leaps-forward ; "Brains! NOM NOM!" (2012, the Level
+  One AI and its templates) https://www.eveonline.com/article/brains-nom-nom
 - FreeSpace 2 Open source: `aigoals.h` https://sources.debian.org/src/freespace2/24.0.2%2Brepack-1/code/ai/aigoals.h ;
   `aicode.cpp` https://raw.githubusercontent.com/scp-fs2open/fs2open.github.com/master/code/ai/aicode.cpp (`find_enemy`,
   `get_enemy_timestamp`, `ai_attack_wing`, `ai_form_on_wing`).
