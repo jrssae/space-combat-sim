@@ -149,6 +149,11 @@ const ENTRIES: Dictionary = {
 	# M4-T38
 	&"anti_aliasing": {"type": TYPE_ENUM, "default": &"smaa", "choices": [&"off", &"fxaa", &"smaa", &"msaa_2x", &"msaa_4x", &"taa"],
 		"doc": "Anti-aliasing of the 3D view (M4-T38): off, fxaa, smaa (edge detection, the default), msaa_2x or msaa_4x (geometry edges only), taa (temporal: the smoothest edges, but thin moving things soften and the bolts draw opaque so they carry their motion); live"},
+	# M4-T24
+	&"sim_step": {"type": TYPE_ENUM, "default": &"threaded", "choices": [&"inline", &"delayed", &"threaded"],
+		"doc": "Where and when the AI step (the native brains' batch: perception, thinks, avoidance, the hosted drivers' think rate, the commands into the rows) runs (M4-T24, Q53): threaded = on a worker thread from -9, its results handed over one tick later, so the frame and the player's input never wait on it; delayed = the same one-tick handover on the main thread (the threaded step's reference, bit for bit); inline = today's single-thread step, the commands flown the same tick (Q54's fallback); live"},
+	&"physics_max_steps_per_frame": {"type": TYPE_INT, "default": 3, "min": 1, "max": 8,
+		"doc": "Physics ticks one frame may run to catch up (Engine.max_physics_steps_per_frame; Godot's default is 8): past the cap a slow tick lowers the simulation rate instead of the frame rate (M4-T24, refactor finding 15); live"},
 }
 
 ## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current

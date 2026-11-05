@@ -521,6 +521,7 @@ func _apply_input_settings() -> void:
 	adapter.target_hold_s = float(Settings.get_value(&"target_hold_s"))
 	adapter.mouse_full_rate_px_s = float(Settings.get_value(&"mouse_full_rate_px_s"))
 	Engine.physics_jitter_fix = float(Settings.get_value(&"physics_jitter_fix"))
+	Engine.max_physics_steps_per_frame = int(Settings.get_value(&"physics_max_steps_per_frame"))  # M4-T24
 	var godot_source := input_source as GodotInputSource
 	if godot_source != null:
 		godot_source.trigger_deadzone = float(Settings.get_value(&"trigger_deadzone"))
@@ -687,5 +688,6 @@ func _cmd_pause(args: Dictionary) -> String:
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
-	if key in [&"stick_deadzone", &"invert_y", &"target_hold_s", &"trigger_deadzone", &"mouse_full_rate_px_s", &"physics_jitter_fix"]:
+	if key in [&"stick_deadzone", &"invert_y", &"target_hold_s", &"trigger_deadzone", &"mouse_full_rate_px_s", &"physics_jitter_fix",
+			&"physics_max_steps_per_frame"]:
 		_apply_input_settings()

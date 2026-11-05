@@ -138,3 +138,23 @@ func test_an_int_setting_validates_parses_and_describes() -> void:
 	assert_eq(schema.parse(&"ai_nearest_k", "20")["value"], 20)
 	assert_false(schema.parse(&"ai_nearest_k", "1.5")["ok"])
 	assert_false(schema.parse(&"ai_nearest_k", "many")["ok"])
+
+
+# --- M4-T24: the simulation step's schedule and the catch-up cap --------------------------------------------------------
+
+
+func test_sim_step_is_an_enum_of_the_three_schedules_and_defaults_to_threaded() -> void:
+	assert_true(schema.has_key(&"sim_step"), "sim_step is a setting")
+	assert_eq(schema.get_type(&"sim_step"), SettingsSchema.TYPE_ENUM)
+	assert_eq(schema.get_choices(&"sim_step"), [&"inline", &"delayed", &"threaded"])
+	assert_eq(schema.get_default(&"sim_step"), &"threaded", "the AI step runs on the worker thread by default (Q53)")
+	assert_true(schema.parse(&"sim_step", "inline")["ok"], "inline is today's single-thread step (Q54)")
+	assert_false(schema.parse(&"sim_step", "parallel")["ok"])
+
+
+func test_the_catch_up_cap_is_an_int_of_at_least_one_tick_a_frame() -> void:
+	assert_true(schema.has_key(&"physics_max_steps_per_frame"), "physics_max_steps_per_frame is a setting")
+	assert_eq(schema.get_type(&"physics_max_steps_per_frame"), TYPE_INT)
+	assert_eq(schema.get_default(&"physics_max_steps_per_frame"), 3)
+	assert_false(schema.validate(&"physics_max_steps_per_frame", 0)["ok"], "a frame runs at least one tick")
+	assert_true(schema.validate(&"physics_max_steps_per_frame", 8)["ok"], "Godot's default of 8 stays allowed")
