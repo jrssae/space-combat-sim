@@ -93,8 +93,6 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	world.process_mode = Node.PROCESS_MODE_PAUSABLE
 	_setup_input()
-	get_tree().root.size_changed.connect(_update_render_scale)
-	_update_render_scale()
 	var scenario: Dictionary = ScenarioLoader.load(resolved_scenario_path())
 	if not bool(scenario.get("ok", false)):
 		push_warning("Main: %s; spawning at the origin with no props" % scenario.get("error", "no scenario"))
@@ -160,16 +158,6 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
-	if get_tree() != null and get_tree().root.size_changed.is_connected(_update_render_scale):
-		get_tree().root.size_changed.disconnect(_update_render_scale)
-
-
-# A very large window's 3D is rendered at a lower scale and scaled up (RenderScale's pixel budget).
-func _update_render_scale() -> void:
-	var root: Window = get_tree().root
-	var scale: float = RenderScale.scale_for(root.size.x, root.size.y)
-	if not is_equal_approx(root.scaling_3d_scale, scale):
-		root.scaling_3d_scale = scale
 
 
 func _physics_process(delta: float) -> void:

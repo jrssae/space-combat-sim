@@ -870,7 +870,7 @@ Console: `state lights` (`picked`, `candidates`, `active`, `cost_us`).
 | Risk | Likelihood | Mitigation |
 |---|---|---|
 | A hull's texture maps blur or shimmer up close (cockpit view of the nose) | low | The Starfury's normal map is at twice its atlas (4 096 px), the maps have mipmaps and anisotropic filtering; the look gates are the maintainer's (H). |
-| GPU time at the 500 battle | low | Every copy of a hull instances; far ships are dots in one multimesh; the importer's levels of detail; `RenderScale` caps a very large window's 3D (§17.15 adds resolution scaling if needed). |
+| GPU time at the 500 battle | low | Every copy of a hull instances; far ships are dots in one multimesh; the importer's levels of detail; the 3D at the window's full resolution (M4-T36 removed the splat-era tile cap; §17.15 adds resolution scaling if needed). |
 | VRAM | low | The maps are VRAM compressed with mipmaps, one set per asset (about 105 MB for every hull together). |
 | A Godot bump changes the importer | low | Versions pinned; CI runs `--import` and the asset tests headless. |
 
