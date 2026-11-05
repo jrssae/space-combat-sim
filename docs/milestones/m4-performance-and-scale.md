@@ -1971,8 +1971,7 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
 - **Source:** the refactor review of 2026-11-05, `.superpowers/sdd/m4-performance-and-scale/refactor-review.md` (not committed; the findings are summarised in each task section), findings 1, 4, 6 and the targeting half of 5.
 - **Goal:** everything simulated is a core row the core owns; the engine is the mirror, not the source. (1) **Bolts as rows:** today
   about 2 400 bolts at `battle` 500 are scene nodes with a GDScript tick each, read twice a tick by the core and spawned one node per
-  shot; they become rows stepped by a kernel, swept by T08's hit sweep from the rows, and drawn by one `MultiMeshInstance3D` (impact
-  and muzzle visuals stay with T36). (2) **One Jolt read a tick:** Jolt-owned bodies are read by RID from the physics server's direct
+  shot; they become rows stepped by a kernel, swept by T08's hit sweep from the rows, and drawn by one `MultiMeshInstance3D` (impact visuals stay with T36; the lean ships' muzzle flash pool with the muzzle transforms as data, refactor finding 12, is this task's). (2) **One Jolt read a tick:** Jolt-owned bodies are read by RID from the physics server's direct
   state inside one native call instead of eleven gdext getters a body (T09's parity concern is met by making the GDScript reference
   read the same state, or by Q16's tolerance, stated in the entry). (3) **Event columns:** activity, hull points and the selection
   become columns updated from the events that already exist (`visibility_changed`, `damaged`, `note_selection`), not read every
