@@ -217,7 +217,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T33 | The native pilots' inputs and commands as core rows (T32's L1, Q50): the batch writes each pilot's flight and combat command into its row and `FlightBatch` applies it the same tick | checkpoint 3 | Opus | Removes most of the 23 to 27 us of GDScript a thinking ship; owns T18's two missed numbers | N, G | done, bit for bit; the think at `battle` 300 from 2.79 to 1.60 ms with six threads (under 2 ms); the AI stage at 500 from 5.07 to 2.86 ms with six threads, 6.96 to 2.86 against T18's base (divided by 2.4, T18's 3 still missed by 0.5 ms: the drivers' per-ship step at -10 is left) (2026-11-05, in a worktree on `9cd88d5`; Cycle log, M4-T33) |
 | T34 | The cheap pass on the per-ship stages (Q50): the ram stage's loop, the hit stage's gather, targeting and the core's sync, into native code or out of the per-tick path | checkpoint 3 | Opus | 13.3 of 17.85 ms at `battle` 300 sits in four stages phase 2 did not take (report P2) | N, G | done, bit for bit, five of the six changes behind a setting; the four stages at `battle` 300 from 9.12 to 4.16 ms and the tick from 17.72 to 12.86 (8 ms missed, the rest named in the entry); at 500 15.81 to 7.47 and 30.42 to 21.74 (2026-11-05, in a worktree on `9cd88d5`, fix round 1 the same day; Cycle log, M4-T34) |
 | T35 | The core owns the simulated state (Q55): bolts as rows drawn by one multimesh, Jolt bodies read once a tick by RID in one native call, activity, hull and selection as event-driven columns, the ram stage's contact read native | T33, T34 | Fable | Refactor review findings 1, 4, 5 and 6: 5 to 8 ms at 500 for the bolts alone; T24's precondition | N, G | not started |
-| T36 | The frame's per-ship work in one pass per subsystem (Q56, Q58): plumes, muzzle flashes, LOD switching, audio, far dots, the HUD radar, hit flashes; the splat-era render scale cap; the slow test switch | T33 | Opus | Refactor review findings 2, 3, 7, 9, 12, 13, 14: 3 to 5 ms a frame at 500 | R, G | not started |
+| T36 | The frame's per-ship work in one pass per subsystem (Q56, Q58): plumes, muzzle flashes, LOD switching, audio, far dots, the HUD radar, hit flashes; the splat-era render scale cap; the slow test switch | T33 | Opus | Refactor review findings 2, 3, 7, 9, 12, 13, 14: 3 to 5 ms a frame at 500 | R, G | done (2026-11-05, in a worktree on `f414cf4`; Cycle log, M4-T36): the worst second's process work at `battle` 500 from 25.7 to 9.4 ms and at 300 from 20.2 to 10.7 ms; `battle` 300 from 16.7 to 38.9 FPS; the lean ships' muzzle nodes stay for T35's muzzle data |
 | T37 | M4's cleanup (Q57): the native library required, the GDScript paths test-only, the runtime fallbacks and their settings removed, one hull-reading path, the documentation drift | T23 | Opus | Refactor review findings 8, 16, 17: 1 500 to 2 500 lines and eight settings; parity surfaces halved | X, G | not started |
 
 ### M4-T01 Benchmark harness, budget and baseline
@@ -2012,6 +2012,20 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
 - **Q54:** the look and sound changes go on the return checklist.
 - **Check (2026-11-05):** `src/rendering/motion_blur.glsl` still says the sky, the stars "and anything without a depth proxy (depth 0)" blur by the camera's turn; T31 removed the hull depth proxy and the hulls now write real depth. Confirm the blur still treats hulls by the velocity buffer and the sky by the camera's turn (a screenshot pair for the return checklist), and fix the logic if it still depends on the proxy.
 - **Architecture:** §17.13 or a new §17 subsection for the frame passes.
+- **Done (2026-11-05, in a worktree on `f414cf4`):** profiled first (switching each subsystem off in turn, then in-callback timers):
+  at `battle` 500 the HUD was 11 of the frame's 25.7 ms of process work (the radar's candidate list 4.8, its layout 2.7, its paint
+  3.1), then the LOD switchers 0.84, the far dots 0.80, the plumes 0.70, the engine sounds 0.64, the muzzle flashes 0.45, the hit
+  flashes 0.15, the lights 0.10 and the overlay 0.08 ms. Each became one pass (§17.21): the radar from packed contacts drawn in a
+  few batched calls (bit for bit the old dots), a `FramePasses` node with the plumes (settled plumes left alone), muzzle flashes
+  (only while showing), hit flashes (one pooled node a hit; the mesh sparks gone, the particle sparks stay) and LOD passes, the far
+  dots writing only what moves, 12 engine voice pairs for the nearest ships instead of two players on every ship, the overlay at
+  10 Hz. No node of a lean ship processes each frame. `RenderScale` is removed; the motion blur was checked (no proxy dependency,
+  a screenshot pair on the return checklist). The slow switch: `GUT_SLOW=1` (set by `run_tests.sh` and CI) runs `test_dogfight`,
+  `test_m3_sandbox`, `test_brain_tolerance`, `test_flight_parity_fight` and `test_weapon_rows_battle`; focused runs skip them. The
+  worst second's process work at `battle` 500 fell from 25.7 to 9.4 ms and at 300 from 20.2 to 10.7; `battle` 300 went from 16.7 to
+  38.9 FPS (fewer catch-up ticks in a shorter frame) and 500 from 5.4 to 6.0 (still the tick). Not done: the lean ships' muzzle
+  flashes from a shared pool with the muzzle transforms as data (finding 12); their nodes stay, idle and unprocessed, until T35's
+  muzzle data replaces the `Marker3D`s.
 
 ##### M4-T37 M4's cleanup: the native library required (Q57)
 
@@ -4971,6 +4985,62 @@ parity and in-play files, `test_brain_tolerance` (Q16's fights), `test_fighter_m
   the engine's call into each node on top. Each piece changes a seam this task's parity rests on (the think rate's stagger and wake, the
   path switch between the batch and a ship's own model, a cannon kernel that spawns bolts), so each is a task of its own with its own
   parity test rather than an addition here.
+
+### M4-T36 (2026-11-05): the frame's per-ship work in one pass per subsystem
+
+Measured with the fullscreen check (`scripts/fullscreen_check.sh`, 4K fullscreen on the 6K desktop, the 3D at 1 080 lines, vsync off,
+seed 1, 8 s warm-up, 20 s window), one run each under both bench locks and the GPU lock; load 0.4 to 2.2 on 20 threads. "Process" is
+the engine's worst `_process` time in each second (`TIME_PROCESS`, the HUD's canvas included), averaged over the window. Reports
+under `reports/perf/M4-T36_*`.
+
+**Before, attributed** (`battle` 500, base `f414cf4`). Switching each subsystem off in turn (a temporary console toggle, not
+committed): all of them off took the worst second from 25.7 to 9.4 ms; the HUD alone took it to 13.9 to 14.3; each of the others
+moved it by less than the runs' spread (about 0.7 ms). In-callback timers (temporary, averaged over 20-frame blocks) then split it:
+
+| subsystem | us a frame at 500 |
+|---|---|
+| HUD: the player's candidate list built for the radar | 4 800 |
+| HUD: the layout (a `RadarModel.Dot` per contact, the sort) | 2 700 |
+| HUD: the paint (two canvas commands per contact) | 3 100 |
+| `LodSwitcher._process` (426) | 840 |
+| `FarDots.refresh` (about 420 dots) | 800 |
+| `ThrusterVisuals._process` (426) | 700 |
+| `AudioDirector._update_engines` | 640 |
+| `MuzzleFlash._process` (1 276, inside the callbacks) | 450 |
+| `ImpactFlash._process` | 150 |
+| `LightRig._process` | 100 |
+| the overlay's snapshot | 80 |
+
+**Each step** (`battle` 500, in-process timers and the worst second's process):
+
+| step | commit | what it cost after | process ms |
+|---|---|---|---|
+| before | `f414cf4` | as above | 25.7 |
+| the HUD radar from packed contacts | `838215e` | input 1.0, layout 0.93, paint 0.87 ms (was 5.1, 2.7, 3.1) | 15.4 |
+| LOD pass, far dots, plumes pass | `c6e9cee`, `c0896e4`, `6aeb37e` | LOD 0.38 ms (0.84), plumes 0.43 ms (0.70) | 14.0 |
+| engine voices, muzzle and hit flashes, overlay | `cea0095`, `2f3b0c9`, `ae37da3`, `e4ed303` | engines 0.05 ms (0.64), far dots 0.12 ms (0.80), muzzle flashes 0.07 ms (0.45), hits 0.13 ms (0.15) | 9.4 (9.6 on a second, timed run) |
+
+**The FPS table (Q48)**, before and after (one run each before; `typical` after three times):
+
+| layout | N | avg FPS before | 1 % low before | process ms before | avg FPS after | 1 % low after | process ms after |
+|---|---|---|---|---|---|---|---|
+| typical | 58 | 197.6 | 69.5 | 9.10 | 243.7, 254.6, 271.9 | 49.4, 52.5, 83.4 | 8.22, 7.62, 6.27 |
+| battle | 300 | 16.7 | 7.9 | 20.17 | 38.9 | 14.6 | 10.65 |
+| battle | 500 | 5.4 | 4.5 | 25.71 | 6.0 | 4.9 | 9.40 |
+
+**Reading.** The expected gain was 3 to 5 ms a frame at 500 and 2 to 3 at 300; the worst second fell by 16.3 ms at 500 and 9.5 at
+300, most of it the HUD (11 ms at 500), which runs while paused too and so was inside the frozen frames' 16.3 ms of report P2. At
+300 the shorter frame carries fewer catch-up ticks (the frame rate is the tick through the engine's catch-up rule, report P2), so
+the average went from 16.7 to 38.9 FPS with the tick unchanged (worst tick each second 21.2 and 23.7 ms); at 500 the tick still binds (8 ticks a frame either way). The
+`typical` 1 % low is as noisy as report P2 found it (43.5 to 72.3 there; 49.4 to 83.4 here); its average rose from about 198 to 244
+to 272 FPS. What remains of the frame at 500: the HUD 2.8 ms (the radar's gather 1.0, its plot 0.9, the paint 0.8), the plumes pass
+0.43, the LOD pass 0.37, the hit flashes 0.13, the far dots 0.12, the muzzle flashes 0.07, the engines 0.05; the rest of the 9.4 ms is outside these subsystems (the engine's own frame work,
+the camera, the explosions, the console).
+
+**Not done here:** the lean ships' muzzle flashes from a shared pool with the muzzle transforms as data (finding 12). T35 replaces
+the muzzle `Marker3D`s with data in the cannon it is turning into a kernel; until then each lean ship keeps its 2 to 4 flash nodes,
+idle and unprocessed. The slow switch takes the five slow files out of focused runs (`test_brain_tolerance` alone was 361 s in
+report P2's focused runs).
 
 ## Definition of done (M4)
 

@@ -6,10 +6,10 @@ extends Node3D
 ##
 ## Hooks (`connect_combat`, `watch_ship`): cannon fire (`pulse_fire` for the Starfury's side, `raider_fire` for the others),
 ## hits (`hit_hull`), destruction (`explosion`), the player's hull below 25 % (`warning_beep`, repeating) and a new selection
-## (`target_blip`). The engines are heard through `ENGINE_VOICES` pairs of looping voices (`engine_loop` and `thruster_loop`), handed to
-## the nearest ships in play within `ENGINE_RANGE_M` of the listener and moved to them every frame (M4-T36, §17.21): a voice
-## budget instead of two players on every ship, so 500 ships cost the audio server and the frame no more than a dozen do. Pitch and
-## volume follow the thrust levels; a ship that gets a voice starts from idle, as it did when it came into range.
+## (`target_blip`). The engines are heard through `ENGINE_VOICES` pairs of looping voices (`engine_loop` and `thruster_loop`),
+## handed to the nearest ships in play within `ENGINE_RANGE_M` of the listener and moved to them every frame (M4-T36, §17.21): a
+## voice budget instead of two players on every ship, so 500 ships cost the audio server and the frame no more than a dozen do.
+## Pitch and volume follow the thrust levels; a ship that gets a voice starts from idle, as it did when it came into range.
 ##
 ## `settings.sfx_volume` (0..1) is the gain of the `SFX` bus (`default_bus_layout.tres`; created at run time if it is missing).
 ## The Dummy audio driver of a headless run plays silently, and nothing here errors without sound files.

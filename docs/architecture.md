@@ -860,8 +860,8 @@ own are class 16. RCS and retro nozzles and bolts give none. A shot (`MuzzleFlas
 the muzzle, in the competition for 60 ms per shot, so a shot allocates nothing. The explosion (`Explosion`): its old `OmniLight3D`
 is now an emitter with the same curve (0 to 8 to 0 over 0.25 s, range 4 x radius), in the competition only while it shines. Emitters
 follow their node's drawn pose each frame, so a rebase moves them with it. A ship that is parked, freed or out of the tree takes its
-emitters out (`ThrusterVisuals` and `MuzzleFlash` watch the node's disable and exit), and `_process` puts them back when it plays
-again. Numbers: `src/rendering/emitter_curves.gd`.
+emitters out (`ThrusterVisuals` and `MuzzleFlash` watch the node's disable and exit), and the frame's pass puts them back when it
+plays again (§17.21). Numbers: `src/rendering/emitter_curves.gd`.
 
 Console: `state lights` (`picked`, `candidates`, `active`, `cost_us`).
 
@@ -1324,7 +1324,7 @@ src/combat/hit_info.gd            RefCounted: one resolved hit (target, shooter,
 src/combat/intercept_math.gd      RefCounted, pure: lead solution for bolts that inherit the shooter's velocity (HUD, AI)
 src/combat/damageable.gd          Node component, group "damageable": HullHealth + HitShapes, signals
 src/combat/hit_resolver.gd        Node: per-tick swept hits, damage, impact flashes; console `combat`, `damage`, `heal`
-src/combat/impact_flash.gd        short additive flash + sparks, child of the hit ship at the hit point
+src/combat/impact_flash.gd        short additive flash, one pooled node on the hit ship at the hit point (sparks: FxPool; §17.21)
 src/combat/explosion.tscn|.gd     generated explosion (fireball shader, light emitter since M3-T22; its sparks come from the FxPool since M3-T23); drifts, self-frees
 src/combat/explosion_fireball.gdshader
 src/combat/debris_chunk.tscn|.gd  one chunk: its textured mesh (the OBJ for an entry without one)
@@ -1352,7 +1352,7 @@ src/input/control_profile.gd      RefCounted, pure: bindings <-> InputMap <-> co
 src/input/control_profile_store.gd RefCounted: built-in and user profiles; list, load, save, delete
 src/autoload/control_profiles.gd  Node (autoload): applies the selected profile at start-up; console `controls`, `bind`, `unbind`
 data/controls/m1_classic.cfg      built-in profile: the original M1 pad layout (stick yaw, D-pad roll, D-pad Up targets, B assist)
-src/audio/audio_director.gd       Node: pooled 3D players, engine hum, volume (T12)
+src/audio/audio_director.gd       Node: pooled 3D players, engine voices for the nearest ships (§17.21), volume (T12)
 assets/ships/raider_delta_v.tres, assets/weapons/{pulse_cannon_ef,raider_plasma}.tres
 data/scenarios/combat_sandbox.json
 tools/procgen/assets/raider_fighter.py, styles/raider.py, parts/wing.py, core/chunks.py   (T04)
@@ -1644,7 +1644,7 @@ Details per task are in the as-built notes of `docs/milestones/m2-combat-sandbox
 - `ShipPool` keeps the `spawn` command; `AudioDirector` is `World/Audio` (a `Node3D`); the debris pool and the explosion are built in
   code (no `.tscn` for the chunk); the `scenario` command reloads the scene and the console queue survives it.
 - `HudLayout` is pure and agrees with `Camera3D.unproject_position`; the radar sphere is tilted (`RadarModel.TILT_RAD`).
-- Sound: manifest `kind` `audio`; engine hum is a child of each ship.
+- Sound: manifest `kind` `audio`; engine hum through the director's engine voices, given to the nearest ships (M4-T36, §17.21).
 
 ### 15.15 Seams M2 leaves for later
 
@@ -3151,3 +3151,41 @@ added    tools/procgen/core/rotations.py (the sky's quaternions); MeshAssets.rea
   `--spacing` left the CLI (`--option spacing=...` still works). The sky's star file and panorama are byte-identical to T30c's.
 - **What stays history:** the milestone files, the Cycle log, the handoff docs, `docs/research-notes.md` under its "Gaussian splats
   (historical)" heading, and the History lines of §17.10, §17.17 to §17.20 here.
+
+### 17.21 The frame's per-ship work in one pass per subsystem (T36)
+
+As built (M4-T36, Q56, refactor findings 2, 3, 7, 9, 12 and 13). The frame's own work (`_process` and the canvas, the engine's
+`TIME_PROCESS`) grew with the ship count while the tick's budget never looked at it: at `battle` 500 its worst second was 25.7 ms
+(in-callback timers: the HUD 11 ms, the LOD switchers 0.84, the far dots 0.80, the plumes 0.70, the engine sounds 0.64, the muzzle
+flashes 0.45, the hit flashes 0.15). Each subsystem is now one pass over its ships a frame:
+
+- **`FramePasses`** (`src/rendering/frame_passes.gd`): one node per tree, made under the root on first use and run before the
+  default priority, so tests and scenes without `Main` keep animating and the light rig still picks from this frame's levels. It
+  walks four lists: the plumes of ships in play and shown (`ThrusterVisuals.frame_update`; an instanced ship leaves the list while
+  hidden, and once every level is within `SETTLE_LEVEL` of its target the levels are set to the targets and the plumes are left
+  alone until the flight output changes), the muzzle flashes that are showing (`trigger` adds one, it leaves when idle), the hit
+  flashes that are showing, and every `LodSwitcher` with the camera and `far_ship_dot_m` read once (`decide`). A node takes part
+  only while `can_process()`, as its own `_process` did. No node of a lean ship processes each frame (`test_frame_passes`).
+  Console provider `frame` (`plumes_us`, `flashes_us`, `impacts_us`, `lod_us` and the lists' sizes).
+- **Hit flashes** (`ImpactFlash`): one `MeshInstance3D` per hit, the flash quad (the 6 to 10 mesh sparks are gone; the `FxPool` hit
+  burst is the spark effect). When over it leaves the ship for a pool kept under `FramePasses` (up to 256), from which
+  `ImpactFlash.create` hands it out again, so a hit builds no node once the pool has filled.
+- **Far dots** (`FarDots`): a ship's paint and hull radius are read when it turns into a dot and the identity rotations once per
+  slot; a frame writes each dot's place, paint and size; `add` and `remove` leave the work to the frame's refresh (one a frame).
+- **Engine sounds** (`AudioDirector`): `ENGINE_VOICES` (12) hum and hiss pairs, not two players on every ship. Each frame it looks
+  at up to 32 ships in turn, gives a free voice to an audible one (in play, within `ENGINE_RANGE_M`) or the farthest served ship's
+  voice to a nearer one, and plays the served ships at their places with the M2 ramps. M5's sound pass owns the sounds themselves.
+- **The HUD radar**: `Main` gathers the radar's contacts straight from the targetables (`RadarContacts`, the same set as
+  `TargetingController.candidates()`, without a `TargetInfo` each or the range sort), `RadarModel.plot` places them on the sphere
+  into packed arrays (`RadarPlot`) ordered by a native int64 sort key (bit for bit `RadarModel.dots`, but for two ranges equal to a
+  millimetre), and `HudPainter` draws every stalk in one `draw_multiline_colors` and every plain dot in one canvas multimesh (the
+  cockpit octagon's dark backings in another); rim and selected dots are drawn one by one. `HudFrame.radar_dots` is built from
+  the plot when read. The player's candidate list is built only when something cycles it (M4-T34's refresh on read).
+- **The debug overlay** text is rebuilt every `Main.OVERLAY_INTERVAL_S` (0.1 s) while it shows.
+- **`RenderScale` is gone**: the splat sorter's tile cap rendered a 6K window's 3D at 0.86; the 3D is now at the window's full
+  resolution (a manual scale stays T26's).
+- **Motion blur** (checked, unchanged): hulls write depth (`depth_draw_opaque`) and blur by the velocity buffer; the sky, the star
+  points and the additive markers write none (`depth_draw_never`) and blur by the camera's turn. Nothing depends on the removed
+  hull depth proxy; only `motion_blur.glsl`'s header comment still names it (T37's doc drift).
+
+The worst second's process work at `battle` 500 fell from 25.7 to 9.4 ms, at 300 from 20.2 to 10.7 ms (the M4 Cycle log, M4-T36).

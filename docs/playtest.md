@@ -464,3 +464,26 @@ ran the capture, and the milestone's as-built notes say what each one shows.
       plain facets (free look), and the four lamps have no labels (assist, guns, lights, track).
 
 Record your GPU, driver, FPS and VRAM in the acceptance record at the end of the milestone doc.
+
+## M4 return checklist
+
+Look and feel items from M4 not yet seen by the maintainer (Q54), for one session on return. Each names the task that changed it.
+
+- [ ] **M4-T36 The radar's dots.** The radar's contacts are drawn in batches now: every stalk first, then every dot over them (before,
+      each contact's stalk and dot were drawn in turn, so a nearer contact's stalk could cross a farther dot), and the dots are 16-sided
+      polygons. Check the chase radar and the cockpit octagon at `battle 300` and in the sandbox: dots read as round, colours as before,
+      the selected contact ringed and on top, broadcast contacts hollow on the rim.
+- [ ] **M4-T36 Hit sparks.** A bolt hit shows the flash and the particle sparks only; the 6 to 10 mesh spark streaks that flew off each
+      hit are gone. Shoot a raider at 100 to 300 m: say if hits read too thin.
+- [ ] **M4-T36 Engine sounds.** Engines are heard through 12 voices given to the nearest ships within 1.5 km (before, every ship in
+      range hummed). In a big fight (`bench battle 300` or the sandbox's waves), listen for a hum dropping or starting as ships swap in
+      and out of the nearest twelve.
+- [ ] **M4-T36 Plumes.** A ship holding one command stops updating its plumes once they reach their levels (within a ten-thousandth).
+      Watch AI plumes at combat range: nothing should freeze or step.
+- [ ] **M4-T36 The 3D at full resolution on the 6K desktop.** `RenderScale` no longer renders a 6144 x 3456 window's 3D at 0.86.
+      Maximize the game on the 6K desktop: the 3D is sharper; check the frame rate holds in the sandbox and at `typical` (GPU time was
+      about 1.9 ms at 1 080 lines; full 6K is about 10 times the pixels).
+- [ ] **M4-T36 Motion blur on turns.** `settings.motion_blur on`, then a hard turn: the stars and the nebula smear by the turn, hulls by
+      their own motion, and no hull paint is dragged across the stars. The pair `reports/perf/M4-T36_motion_blur/turn_blur_{false,true}.png`
+      (a one-frame 40 degree look swing) shows what the agent saw.
+- [ ] **M4-T36 The debug overlay** refreshes ten times a second instead of every frame: it should still read as live.
