@@ -51,6 +51,8 @@ func test_native_brains_stay_within_q16s_tolerance_on_every_seed() -> void:
 			var reference: Dictionary = await _fight(layout, seed_value, false)
 			var label: String = "%s %d seed %d" % [layout, SHIPS, seed_value]
 			assert_gt(int(native["native_thinks"]), 0, "%s: the native brains thought" % label)
+			assert_eq(int(native["native_thinks"]), int(native["thinks"]), "%s: every think of the native fight was native" % label)
+			assert_eq(int(native["fallbacks"]), 0, "%s: the host declined no think" % label)
 			assert_eq(int(reference["native_thinks"]), 0, "%s: the reference never did" % label)
 			var hits_n: int = native["hits"]
 			var hits_g: int = reference["hits"]
@@ -128,9 +130,13 @@ func _fight(layout: StringName, seed_value: int, native: bool) -> Dictionary:
 	var sampled: int = 0
 	var at_10s := PackedVector3Array()
 	var native_thinks: int = 0
+	var thinks: int = 0
+	var fallbacks: int = 0
 	for tick: int in TICKS:
 		await get_tree().physics_frame
 		native_thinks += AiPilotDriver.thinks_native()
+		thinks += AiPilotDriver.thinks_near() + AiPilotDriver.thinks_far()
+		fallbacks += AiPilotDriver.thinks_fallback()
 		if tick % SAMPLE_EVERY == 0:
 			for c: Combatant in ships:
 				var pilot := c.driver.brain as AiPilot
@@ -146,4 +152,4 @@ func _fight(layout: StringName, seed_value: int, native: bool) -> Dictionary:
 	space.queue_free()
 	await get_tree().physics_frame
 	await get_tree().physics_frame
-	return {"hits": hits[0], "mix": mix, "at_10s": at_10s, "native_thinks": native_thinks}
+	return {"hits": hits[0], "mix": mix, "at_10s": at_10s, "native_thinks": native_thinks, "thinks": thinks, "fallbacks": fallbacks}

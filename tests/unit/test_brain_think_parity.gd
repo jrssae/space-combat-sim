@@ -352,12 +352,17 @@ func _relations(own: int) -> PackedByteArray:
 ## Runs `twins` beside their slots for `ticks`, with a seeded walk of the rows and the scripted events `hit_at` (tick ->
 ## twin index hit by a bolt), and lists the first differences.
 func _run(brains: Object, rows: Rows, twins: Array[Twin], rng: RandomNumberGenerator, ticks: int, hit_at: Dictionary,
-		label: String) -> PackedStringArray:
+		label: String, events: Dictionary = {}) -> PackedStringArray:
 	var differences := PackedStringArray()
 	var scan: ContactScan = rows.scan()
 	var broadcasts: ContactScan = rows.broadcast_scan()
 	rows.load_into(brains)
 	for tick: int in ticks:
+		if events.has(tick):
+			(events[tick] as Callable).call()
+			scan = rows.scan()
+			broadcasts = rows.broadcast_scan()
+			rows.load_into(brains)
 		for i: int in twins.size():
 			var t: Twin = twins[i]
 			t.now_s += DT
@@ -497,7 +502,16 @@ func test_objectives_guards_temperaments_and_live_retunes_think_the_same() -> vo
 		brains.reset(t.slot)
 		_push_context(brains, t)
 		twins.append(t)
-	var differences: PackedStringArray = _run(brains, rows, twins, rng, TICKS / 2, {20: 1, 70: 5}, "objectives")
+	# At tick 40 the objective's name moves to another body and the guarded ship is renamed: both twins must follow the
+	# names, as the GDScript matches them every tick.
+	var swap: Callable = func() -> void:
+		var a: int = (0 + 7) % 28
+		var b: int = (a + 11) % 28
+		var name_a: String = rows.names[a]
+		rows.names[a] = rows.names[b]
+		rows.names[b] = name_a
+		rows.names[(2 + 3) % 28] = "ELSEWHERE"
+	var differences: PackedStringArray = _run(brains, rows, twins, rng, TICKS / 2, {20: 1, 70: 5}, "objectives", {40: swap})
 	# A live retune, as the console does it: both sides change together.
 	for i: int in twins.size():
 		var t: Twin = twins[i]
