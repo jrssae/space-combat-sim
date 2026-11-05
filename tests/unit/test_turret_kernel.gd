@@ -132,6 +132,47 @@ func test_switching_paths_mid_run_carries_every_turrets_state() -> void:
 	_assert_same_logs(reference.log, mixed.log, "native, GDScript, native")
 
 
+func test_a_relation_changed_mid_run_is_followed_the_same_tick_on_both_paths() -> void:
+	if _skipped():
+		return
+	var logs: Array = []
+	for native: bool in [false, true]:
+		var scene: WeaponRowsScene = WeaponRowsScene.build(self, 17, native)
+		scene.run(120)
+		# The console's `relation` command changes the live table in place: nobody fights from here on.
+		assert_eq(Factions.table().set_relation(Factions.EARTH_ALLIANCE, Factions.RAIDERS, Factions.Relation.NEUTRAL), "")
+		scene.run(120)
+		assert_eq(scene.director.weapons_path(), &"native" if native else &"gdscript")
+		logs.append(scene.log)
+		scene.dispose()
+	_assert_same_logs(logs[0], logs[1], "a relation changed at tick 120")
+	# Within a retarget (six ticks) every gun has let go: the rows read the new table.
+	var after: Dictionary = logs[1][130]
+	var held: int = 0
+	for turret: Array in after["turrets"]:
+		if turret.size() == 5 and turret[1] != "":
+			held += 1
+	assert_eq(held, 0, "no gun holds a target once no side is hostile")
+
+
+func test_turrets_of_a_capital_that_is_not_bound_are_refused() -> void:
+	if _skipped():
+		return
+	var rows: Object = ClassDB.instantiate(NATIVE_CLASS)
+	rows.set_capitals(PackedInt64Array([0, 0]))
+	var ok: bool = rows.set_turrets(PackedInt32Array([0, 2]), PackedVector3Array([Vector3.ZERO, Vector3.ZERO]),
+			PackedByteArray([0, 0]))
+	assert_engine_error("capital", "a turret of capital 2 of 2 is refused, saying why")
+	assert_false(ok, "refused")
+	ok = rows.set_turrets(PackedInt32Array([0, -1]), PackedVector3Array([Vector3.ZERO, Vector3.ZERO]), PackedByteArray([0, 0]))
+	assert_engine_error("capital", "a negative capital is refused, saying why")
+	assert_false(ok)
+	assert_true(rows.set_turrets(PackedInt32Array([0, 1]), PackedVector3Array([Vector3.ZERO, Vector3.ZERO]),
+			PackedByteArray([0, 1])), "bound capitals are taken")
+	var out: Array = rows.step(1, 100.0, 1.0 / 60.0, 30, 120, 0, 2)
+	assert_eq((out[0] as PackedInt32Array).size(), 0, "no core: nothing fires, nothing breaks")
+
+
 func test_the_stand_ins_answer_without_the_core() -> void:
 	var scene: WeaponRowsScene = WeaponRowsScene.build(self, 3, true)
 	Settings.set_value(&"perf_native_core", false)

@@ -205,7 +205,7 @@ func _name_of(body_id: int) -> String:
 
 
 # This tick's entry: every turret's state, the projectiles the director made, the laid quarry still alive, the counts and
-# the mines' hits (sorted, so the order hulls are walked in does not matter).
+# the mines' hits in the order they landed.
 func _entry() -> Dictionary:
 	var turrets: Array = []
 	for cap: CapitalStandin in capitals:
@@ -227,8 +227,7 @@ func _entry() -> Dictionary:
 	var alive: Array = []
 	for k: int in _laid.size():
 		alive.append(1 if is_instance_valid(_laid[k]) and not _laid[k].is_spent() else 0)
-	var hits: Array = _hits.duplicate()
-	hits.sort_custom(func(a: Array, b: Array) -> bool: return str(a) < str(b))
+	var hits: Array = _hits.duplicate()  # in the order the blasts landed
 	var mines: MineStandin = director.mines()
 	var mine_alive := PackedByteArray()
 	for i: int in mines.count():
