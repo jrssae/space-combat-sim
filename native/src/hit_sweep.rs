@@ -6,6 +6,7 @@ use godot::prelude::*;
 
 use crate::kernels::sweep::{self, Grid};
 use crate::sim_core::ScsSimCore;
+use crate::sweep_cells::{self, CellGrid};
 
 /// Which projectile and hull pairs pass the hit resolver's bounding-sphere test this tick, found through a grid of levels so
 /// a 10 m fighter and a 1 km hull are both found cheaply. Repeats `HitBroadPhase`'s GDScript step for step: the same levels,
@@ -27,6 +28,10 @@ pub struct ScsHitSweep {
     hull_reach: Vec<f64>,
     bolt_mids: Vec<Vector3>,
     bolt_reach: Vec<f64>,
+    // The grids with hashed cells (M4-T34): the same pairs and work, found faster; off keeps the sorted grids, the reference.
+    cells: bool,
+    cell_grid: CellGrid,
+    cell_kept: CellGrid,
 }
 
 #[godot_api]
@@ -41,6 +46,18 @@ impl ScsHitSweep {
     #[func]
     fn visited(&self) -> i64 {
         self.visited
+    }
+
+    /// Whether the grids keep their cells in hash maps (M4-T34, the default from `HitBroadPhase`); off keeps the sorted
+    /// cells, the reference. Both give the same pairs and the same work count.
+    #[func]
+    fn set_cells(&mut self, on: bool) {
+        self.cells = on;
+    }
+
+    #[func]
+    fn cells(&self) -> bool {
+        self.cells
     }
 
     /// `HitBroadPhase.pairs`: the pairs that pass the sphere test, as `bolt * hulls + hull`, ascending. Returns nothing, after
@@ -70,15 +87,11 @@ impl ScsHitSweep {
         if hulls.is_empty() || bolt_mids.is_empty() {
             return PackedInt64Array::new();
         }
-        self.grid.place(hulls, hull_reach);
-        let out = sweep::sweep(
-            &self.grid,
+        let out = self.placed_sweep(
             bolt_mids.as_slice(),
             bolt_reach.as_slice(),
             hulls,
             hull_reach,
-            &mut self.candidates,
-            &mut self.visited,
         );
         PackedInt64Array::from(out.as_slice())
     }
@@ -102,16 +115,15 @@ impl ScsHitSweep {
         if self.hull_mids.is_empty() || self.bolt_mids.is_empty() {
             return PackedInt64Array::new();
         }
-        self.grid.place(&self.hull_mids, &self.hull_reach);
-        let out = sweep::sweep(
-            &self.grid,
-            &self.bolt_mids,
-            &self.bolt_reach,
-            &self.hull_mids,
-            &self.hull_reach,
-            &mut self.candidates,
-            &mut self.visited,
-        );
+        let bolt_mids = std::mem::take(&mut self.bolt_mids);
+        let bolt_reach = std::mem::take(&mut self.bolt_reach);
+        let hull_mids = std::mem::take(&mut self.hull_mids);
+        let hull_reach = std::mem::take(&mut self.hull_reach);
+        let out = self.placed_sweep(&bolt_mids, &bolt_reach, &hull_mids, &hull_reach);
+        self.bolt_mids = bolt_mids;
+        self.bolt_reach = bolt_reach;
+        self.hull_mids = hull_mids;
+        self.hull_reach = hull_reach;
         PackedInt64Array::from(out.as_slice())
     }
 
@@ -164,11 +176,13 @@ impl ScsHitSweep {
                 hull_reach.len()
             );
             self.kept.place(&[], &[]);
+            self.cell_kept.place(&[], &[]);
             return false;
         }
         self.kept_mids = hull_mids.as_slice().to_vec();
         self.kept_reach = hull_reach.as_slice().to_vec();
         self.kept.place(&self.kept_mids, &self.kept_reach);
+        self.cell_kept.place(&self.kept_mids, &self.kept_reach);
         true
     }
 
@@ -201,15 +215,60 @@ impl ScsHitSweep {
         if self.kept_mids.is_empty() || self.bolt_mids.is_empty() {
             return PackedInt64Array::new();
         }
-        let out = sweep::sweep(
-            &self.kept,
-            &self.bolt_mids,
-            &self.bolt_reach,
-            &self.kept_mids,
-            &self.kept_reach,
-            &mut self.candidates,
-            &mut self.visited,
-        );
+        let out = if self.cells {
+            sweep_cells::sweep(
+                &self.cell_kept,
+                &self.bolt_mids,
+                &self.bolt_reach,
+                &self.kept_mids,
+                &self.kept_reach,
+                &mut self.candidates,
+                &mut self.visited,
+            )
+        } else {
+            sweep::sweep(
+                &self.kept,
+                &self.bolt_mids,
+                &self.bolt_reach,
+                &self.kept_mids,
+                &self.kept_reach,
+                &mut self.candidates,
+                &mut self.visited,
+            )
+        };
         PackedInt64Array::from(out.as_slice())
+    }
+
+    // Places the hulls in this call's grid and sweeps the bolts against it, through the hashed cells or the sorted ones.
+    fn placed_sweep(
+        &mut self,
+        bolts: &[Vector3],
+        bolt_reach: &[f64],
+        hulls: &[Vector3],
+        hull_reach: &[f64],
+    ) -> Vec<i64> {
+        if self.cells {
+            self.cell_grid.place(hulls, hull_reach);
+            sweep_cells::sweep(
+                &self.cell_grid,
+                bolts,
+                bolt_reach,
+                hulls,
+                hull_reach,
+                &mut self.candidates,
+                &mut self.visited,
+            )
+        } else {
+            self.grid.place(hulls, hull_reach);
+            sweep::sweep(
+                &self.grid,
+                bolts,
+                bolt_reach,
+                hulls,
+                hull_reach,
+                &mut self.candidates,
+                &mut self.visited,
+            )
+        }
     }
 }

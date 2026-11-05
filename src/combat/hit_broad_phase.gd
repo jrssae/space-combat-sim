@@ -166,6 +166,8 @@ func _native() -> Object:
 		return null
 	if _sweep == null:
 		_sweep = NativeLib.instantiate(NATIVE_CLASS)
+	if _sweep != null and _sweep.has_method(&"set_cells"):
+		_sweep.set_cells(bool(Settings.get_value(&"perf_native_sweep_cells")))  # M4-T34: the same pairs, found faster
 	return _sweep
 
 
