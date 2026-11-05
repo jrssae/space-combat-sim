@@ -27,10 +27,10 @@
 				"fov": 42}
 		]},
 		"wing": {"keys": [
-			{"t": 0, "position": {"actor": "player", "offset": [-110, 12, -200]}, "look_at": {"actor": "player"}, "fov": 45},
-			{"t": 3.5, "position": {"actor": "player", "offset": [-110, 12, -60]},
+			{"t": 0, "position": {"actor": "player", "offset": [-75, 6, -200]}, "look_at": {"actor": "player"}, "fov": 45},
+			{"t": 3.5, "position": {"actor": "player", "offset": [-75, 6, -60]},
 				"look_at": {"actor": "player", "offset": [20, 0, 30]}},
-			{"t": 7, "position": {"actor": "player", "offset": [-110, 12, 80]},
+			{"t": 7, "position": {"actor": "player", "offset": [-75, 6, 80]},
 				"look_at": {"actor": "player", "offset": [0, 0, -600]}, "fov": 55}
 		]}
 	},
