@@ -239,8 +239,7 @@ pub struct Context {
     pub link: Option<[f64; 3]>,
     pub link_velocity: Vector3,
     pub objective_key: String,
-    /// The marker id the objective's name resolved to (0 while unresolved): the name is matched again only when that row
-    /// is gone or renamed, so a think costs one id lookup instead of a name compare per row.
+    /// The marker id of the row the objective's name matched in the latest think (0 for none), a readout.
     pub objective_id: i64,
     pub guard_post: Option<[f64; 3]>,
     pub guard_key: String,
@@ -359,19 +358,6 @@ impl Tick<'_> {
 
     fn up_of(&self, row: usize) -> Vector3 {
         normalized(col_b(&self.rows.bases[row]))
-    }
-
-    // `AiContext._named` with the name already resolved to a marker id: that row when `list` holds it, or -1.
-    fn listed(&self, list: &[i32], id: i64) -> i32 {
-        if id == 0 {
-            return -1;
-        }
-        let row = self.rows.row_of_id(id);
-        if row >= 0 && list.contains(&row) {
-            row
-        } else {
-            -1
-        }
     }
 
     // Hostile `h` (a place in the hostile list) as a row.
@@ -684,8 +670,6 @@ impl Brain {
             scratch.hostile_row.push(r == pilot::HOSTILE);
             scratch.friendly_row.push(r == pilot::FRIENDLY);
         }
-        self.ctx.objective_id = resolve_name(rows, &self.ctx.objective_key, self.ctx.objective_id);
-        self.ctx.guard_id = resolve_name(rows, &self.ctx.guard_key, self.ctx.guard_id);
         contact::nearest_into(
             &view,
             work,
@@ -718,16 +702,19 @@ impl Brain {
                     );
                 }
             }
-            for id in [self.ctx.objective_id, self.ctx.guard_id] {
-                if id != 0 {
-                    keep(
-                        rows,
-                        &mut scratch.contacts,
-                        rows.row_of_id(id),
-                        inputs.own_body_id,
-                        p.position,
-                        range_sq,
-                    );
+            // Every row with the objective's or the guarded ship's name, as `ContactScan._keep_named` keeps them.
+            if !self.ctx.objective_key.is_empty() || !self.ctx.guard_key.is_empty() {
+                for (r, key) in rows.name_keys.iter().enumerate() {
+                    if named(key, &self.ctx.objective_key) || named(key, &self.ctx.guard_key) {
+                        keep(
+                            rows,
+                            &mut scratch.contacts,
+                            r as i32,
+                            inputs.own_body_id,
+                            p.position,
+                            range_sq,
+                        );
+                    }
                 }
             }
             scratch.contacts.sort_unstable();
@@ -799,7 +786,12 @@ impl Brain {
             d.leader = scratch.contacts[scratch.lists.leader as usize];
         }
         if !self.ctx.guard_key.is_empty() {
-            let guarded = tick.listed(&scratch.contacts, self.ctx.guard_id);
+            let guarded = first_named(rows, &scratch.contacts, &self.ctx.guard_key);
+            self.ctx.guard_id = if guarded >= 0 {
+                rows.ids[guarded as usize]
+            } else {
+                0
+            };
             if guarded >= 0 {
                 let g = guarded as usize;
                 let forward = tick.forward_of(g);
@@ -820,10 +812,15 @@ impl Brain {
             d.guarding = true;
         }
         if !self.ctx.objective_key.is_empty() {
-            let mut objective = tick.listed(&scratch.contacts, self.ctx.objective_id);
+            let mut objective = first_named(rows, &scratch.contacts, &self.ctx.objective_key);
             if objective < 0 {
-                objective = tick.listed(&scratch.broadcasts, self.ctx.objective_id);
+                objective = first_named(rows, &scratch.broadcasts, &self.ctx.objective_key);
             }
+            self.ctx.objective_id = if objective >= 0 {
+                rows.ids[objective as usize]
+            } else {
+                0
+            };
             if objective >= 0 {
                 d.objective = objective;
                 d.objective_range_m =
@@ -1206,22 +1203,18 @@ fn seek_velocity(
     );
 }
 
-// The marker id of the first row named `key` (lowered), as `AiContext._named` finds it: the one already resolved while
-// its row still carries the name, else a scan of the names; 0 for no name or no such row.
-fn resolve_name(rows: &Rows, key: &str, resolved: i64) -> i64 {
-    if key.is_empty() {
-        return 0;
-    }
-    if resolved != 0 {
-        let row = rows.row_of_id(resolved);
-        if row >= 0 && rows.name_keys[row as usize] == key {
-            return resolved;
-        }
-    }
-    rows.name_keys
-        .iter()
-        .position(|n| n == key)
-        .map_or(0, |r| rows.ids[r])
+// Whether a row's lowered name is the wanted (lowered) name; an empty wanted name matches nothing.
+fn named(key: &str, wanted: &str) -> bool {
+    !wanted.is_empty() && key == wanted
+}
+
+// The first row of `list` named `wanted`, as `AiContext._named` finds it among the contacts every tick (M4-T18: a parked
+// or far row with the same name earlier in the rows never hides the listed one); -1 for none.
+fn first_named(rows: &Rows, list: &[i32], wanted: &str) -> i32 {
+    list.iter()
+        .copied()
+        .find(|&r| r >= 0 && named(&rows.name_keys[r as usize], wanted))
+        .unwrap_or(-1)
 }
 
 // `ContactScan._keep`: adds row `i` to a nearest-k selection when it is in range, not the ship's own and not in it yet.
