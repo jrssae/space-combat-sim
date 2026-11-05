@@ -298,3 +298,39 @@ func test_a_hit_flash_animates_in_the_pass_and_goes_back_to_the_pool() -> void:
 	assert_eq(flash.get_parent(), _passes(), "kept in the pool")
 	assert_same(ImpactFlash.create(Color.WHITE, 2), flash, "and handed out for the next hit")
 	flash.free()
+
+
+func test_a_settled_ships_pod_lights_come_back_after_a_far_dot_trip() -> void:
+	# A light rig, as the game has, so the pod lights enter and leave its competition.
+	var rig := LightRig.new()
+	var key := DirectionalLight3D.new()
+	key.name = "KeyStar"
+	rig.add_child(key)
+	world.add_child(rig)
+	var ships: Array[Combatant] = _ships(1)
+	var visuals: ThrusterVisuals = ships[0].thrusters
+	visuals.setup(ThrusterLayout.load_file("res://tests/fixtures/hardpoints_nominal.json"), _source)
+	var twin: ThrusterVisuals = _instanced_visuals()  # the same plumes on a ship that never leaves
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21
+	_output = _output_of(rng)
+	for frame: int in 90:
+		visuals.frame_update(DT)
+		twin.frame_update(DT)
+	assert_true(visuals.is_settled(), "a held command has settled")
+	var lit: int = 0
+	for i: int in visuals.glow_count():
+		lit += 1 if visuals.nozzle_light(i) != null and visuals.nozzle_light(i).energy > 0.0 else 0
+	assert_gt(lit, 0, "its pod lights shine")
+	assert_true(rig.candidate_count() > 0, "in the rig's competition")
+	ships[0].ship.set_far_dot(true)
+	visuals.frame_update(DT)  # hidden: the lights go dark
+	twin.frame_update(DT)
+	ships[0].ship.set_far_dot(false)
+	visuals.frame_update(DT)
+	twin.frame_update(DT)
+	var off: int = 0
+	for i: int in visuals.glow_count():
+		if visuals.nozzle_light(i) != null and visuals.nozzle_light(i).energy != twin.nozzle_light(i).energy:
+			off += 1
+	assert_eq(off, 0, "back near, every pod light shines as on the ship that never left")

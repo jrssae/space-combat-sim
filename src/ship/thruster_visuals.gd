@@ -525,8 +525,10 @@ func _tinted(base: Material) -> Material:
 	return copy
 
 
-# Joins the plumes pass of this tree (once).
+# Joins the plumes pass (once); an instanced ship that is hidden joins when it shows.
 func _join_pass() -> void:
+	if instanced and not is_visible_in_tree():
+		return
 	var passes: FramePasses = FramePasses.of(self)
 	if passes != null:
 		passes.add_plumes(self)
@@ -555,16 +557,18 @@ func _go_dark() -> void:
 		_leave_rig()
 
 
-# Puts the nozzle lights in the rig's competition (once, however often it is called).
+# Puts the nozzle lights in the rig's competition (once, however often it is called), shining at their plumes' levels: leaving
+# put them out, and a settled ship does not rewrite them (M4-T36 fix round 1).
 func _enter_rig() -> void:
 	if _lights_in_rig:
 		return
 	_rig = LightRig.of(self)
 	if _rig == null:
 		return
-	for emitter: LightEmitter in _lights:
-		if emitter != null:
-			_rig.add_emitter(emitter)
+	for i: int in _lights.size():
+		if _lights[i] != null:
+			_lights[i].energy = EmitterCurves.nozzle_energy(_levels[i])
+			_rig.add_emitter(_lights[i])
 	_lights_in_rig = true
 
 
