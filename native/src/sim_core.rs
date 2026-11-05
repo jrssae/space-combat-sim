@@ -1918,7 +1918,11 @@ impl ScsSimCore {
             .map_or(-1.0, |(_, s)| *s);
         let r = self.row_of_id.get(&body_id).map_or(-1, |&r| i64::from(r));
         let target = self.latest_target.get(&body_id).copied().unwrap_or(-1);
-        let tr = if target > 0 { i64::from(self.rows.row_of_id(target)) } else { -1 };
+        let tr = if target > 0 {
+            i64::from(self.rows.row_of_id(target))
+        } else {
+            -1
+        };
         let (range, reach) = match (usize::try_from(r), usize::try_from(tr)) {
             (Ok(r), Ok(t)) => {
                 let from = self.rows.positions[r];
