@@ -70,6 +70,9 @@ static var _native_class_known: int = -1
 # The registry (M4-T09): made on the first native `shared`, told when the tree's groups change.
 static var _registry_class_known: int = -1
 static var _pilot_class_known: int = -1
+## Off: no scan hands out the pilot kernels, while the core stays on, so a test pairs the kernels alone against the
+## GDScript (M4-T16). Not a setting: the game always leaves it on.
+static var pilot_kernels_on: bool = true
 static var _registry: Object = null
 static var _registry_tree: SceneTree = null
 static var _members_dirty: bool = true
@@ -131,6 +134,7 @@ var _sim: SimCore = null
 var _bolts_pending: bool = false
 var _pilot: Object = null  # the pilot kernels over this scan's core rows, made on first ask (M4-T16)
 var _pilot_known: bool = false
+var _rows_version: int = -1  # the core's rows version this scan was taken at
 var _relation_rows: Dictionary = {}  # faction -> PackedByteArray of relations in the core's faction order
 
 
@@ -271,6 +275,7 @@ static func from_core(tree: SceneTree) -> ContactScan:
 	scan._append_static_rows()
 	scan._sim = sim
 	scan._removals_at = sim.removals
+	scan._rows_version = int(sim.core.rows_version())
 	return scan
 
 
@@ -531,20 +536,22 @@ func incoming_fire(own_body_id: int, own_position: Vector3, own_velocity: Vector
 
 
 ## The native pilot kernels over this scan's core rows (M4-T16), or null: not a core scan, native code off, the library
-## without the class, or rows changed since the scan was taken (the GDScript reference then answers).
+## without the class, or the core's rows changed since the scan was taken (a resync or a rebase later in the frame: the
+## indices would name other values), asked again on every call. The GDScript reference then answers.
 func pilot_kernels() -> Object:
-	if _pilot_known:
-		return _pilot
-	_pilot_known = true
-	if _sim == null or not is_instance_valid(_sim) or _sim.core == null or not use_native or not NativeLib.enabled():
+	if not _pilot_known:
+		_pilot_known = true
+		if _sim == null or not is_instance_valid(_sim) or _sim.core == null or not use_native:
+			return null
+		if _pilot_class_known < 0:
+			_pilot_class_known = 1 if NativeLib.has_class(PILOT_CLASS) else 0
+		if _pilot_class_known == 1 and int(_sim.core.row_count()) == _body_ids.size():
+			_pilot = NativeLib.instantiate(PILOT_CLASS)
+			if _pilot != null:
+				_pilot.attach_core(_sim.core)
+	if _pilot == null or not pilot_kernels_on or not NativeLib.enabled() or not is_instance_valid(_sim) \
+			or int(_sim.core.rows_version()) != _rows_version:
 		return null
-	if _pilot_class_known < 0:
-		_pilot_class_known = 1 if NativeLib.has_class(PILOT_CLASS) else 0
-	if _pilot_class_known == 0 or int(_sim.core.row_count()) != _body_ids.size():
-		return null
-	_pilot = NativeLib.instantiate(PILOT_CLASS)
-	if _pilot != null:
-		_pilot.attach_core(_sim.core)
 	return _pilot
 
 

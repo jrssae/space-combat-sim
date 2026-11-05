@@ -90,42 +90,13 @@ static func order_word(value: Order) -> StringName:
 	return ORDER_WORDS[value]
 
 
-## Takes this tick's perception and rebuilds the derived lists. On the core's rows (`Perception.on_rows`, M4-T16) the
-## native kernels split the contacts in one call, bit for bit with the loop below, which stays the reference.
+## Takes this tick's perception and rebuilds the derived lists. Always in GDScript: the native split (`kernels::pilot::
+## context_lists`, M4-T16) costs more to hand back than this short loop, so it waits for T17's native brains, which read
+## it without crossing into GDScript.
 func refresh(p: Perception) -> void:
 	perception = p
 	leader = null
 	hostiles.clear()
-	var own_position: Vector3 = p.position
-	if p.on_rows():
-		_take_lists(p, p.kernels.context_lists(p.contact_rows, p.relation_row, own_position, p.self_id, leader_id))
-	else:
-		_split(p)
-	_refresh_guard(p)
-	objective = null
-	objective_range_m = INF
-	if not objective_name.is_empty():
-		objective = _named(p.contacts, objective_name)
-		if objective == null:
-			objective = _named(p.broadcasts, objective_name)
-		if objective != null:
-			objective_range_m = objective.position.distance_to(own_position)
-
-
-# The kernels' lists: hostile places in the contact list, their offsets and ranges, the friendly ids, the leader's place.
-func _take_lists(p: Perception, lists: Array) -> void:
-	for i: int in lists[0] as PackedInt32Array:
-		hostiles.append(p.contacts[i])
-	hostile_offsets = lists[1]
-	hostile_ranges = lists[2]
-	friendly_ids = lists[3]
-	var at: int = lists[4]
-	if at >= 0:
-		leader = p.contacts[at]
-
-
-# The hostile and friendly split in GDScript (the reference).
-func _split(p: Perception) -> void:
 	hostile_offsets.clear()
 	hostile_ranges.clear()
 	friendly_ids.clear()
@@ -144,6 +115,15 @@ func _split(p: Perception) -> void:
 			friendly_ids.append(c.id)
 			if c.id == leader_id:
 				leader = c
+	_refresh_guard(p)
+	objective = null
+	objective_range_m = INF
+	if not objective_name.is_empty():
+		objective = _named(p.contacts, objective_name)
+		if objective == null:
+			objective = _named(p.broadcasts, objective_name)
+		if objective != null:
+			objective_range_m = objective.position.distance_to(own_position)
 
 
 func _refresh_guard(p: Perception) -> void:

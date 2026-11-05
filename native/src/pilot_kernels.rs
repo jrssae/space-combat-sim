@@ -178,8 +178,16 @@ impl ScsPilotKernels {
         )
     }
 
+    /// The tie's seeded turn for `tie_hash` (`hash(seed)`), rad: what the differential test compares with the engine's
+    /// `deg_to_rad`.
+    #[func]
+    fn tie_angle(tie_hash: i64) -> f64 {
+        pilot::tie_angle(tie_hash)
+    }
+
     /// `AiContext.refresh`'s lists over the rows `contacts`, as `[hostiles (places in the contact list), offsets, ranges,
-    /// friendly ids (self_id first unless 0), the leader's place or -1]`.
+    /// friendly ids (self_id first unless 0), the leader's place or -1]`. Kept for T17's native brains and the
+    /// differential test: the GDScript facade stays on its own loop, which is faster than taking these arrays apart.
     #[func]
     fn context_lists(
         &mut self,

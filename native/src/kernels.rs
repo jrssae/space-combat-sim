@@ -1593,9 +1593,14 @@ pub mod pilot {
             RIGHT
         };
         let base = normalized(cross(axis, reference));
+        rotated(base, axis, tie_angle(tie_hash) as f32)
+    }
+
+    /// The tie's seeded turn, rad: `deg_to_rad(TIE_SPREAD_DEG) * (2 * unit - 1)`. The engine's `deg_to_rad` multiplies by
+    /// the factor `PI / 180` (not by `PI`, then divides), so the double is the same bits.
+    pub fn tie_angle(tie_hash: i64) -> f64 {
         let unit = tie_hash.rem_euclid(65536) as f64 / 65535.0;
-        let angle = TIE_SPREAD_DEG * (PI / 180.0) * (2.0 * unit - 1.0);
-        rotated(base, axis, angle as f32)
+        TIE_SPREAD_DEG * (PI / 180.0) * (2.0 * unit - 1.0)
     }
 
     // `AvoidanceMath._sideways_speed`: the sideways speed that lifts the straight-line miss to `target`, at most `speed`.

@@ -169,6 +169,8 @@ pub struct ScsSimCore {
     tick: i64,
     bolt_tick: i64,
     open: bool,
+    // Grows whenever the rows change under a scan taken from them: each sync, resync and shift (M4-T16).
+    rows_version: i64,
 }
 
 #[godot_api]
@@ -328,6 +330,7 @@ impl ScsSimCore {
         self.open = true;
         self.tick = tick;
         self.syncs += 1;
+        self.rows_version += 1;
         let now = self.syncs;
         let mut rows = std::mem::take(&mut self.rows);
         rows.clear();
@@ -520,6 +523,7 @@ impl ScsSimCore {
     /// from `StaticRows` at the next sync.
     #[func]
     pub fn shift(&mut self, offset: Vector3) {
+        self.rows_version += 1;
         for i in 0..self.rows.positions.len() {
             if self.rows.handles[i] != 0 {
                 self.rows.positions[i] = add(self.rows.positions[i], offset);
@@ -548,6 +552,13 @@ impl ScsSimCore {
     #[func]
     pub fn note_fallback_read(&mut self, calls: i64) {
         self.fallback_reads += calls;
+    }
+
+    /// A count that grows whenever the rows change (a sync, a resync of touched bodies, a rebase's shift), so a scan taken
+    /// from them knows when its indices no longer name the same values (the pilot kernels, M4-T16).
+    #[func]
+    fn rows_version(&self) -> i64 {
+        self.rows_version
     }
 
     /// The physics frame of the last `sync_in`, and of the last bolt sync.
@@ -1050,6 +1061,7 @@ impl ScsSimCore {
     // Reads the bodies touched since the first sync again: a row in place, or a new row at the end for a body that turned
     // active since (a ship back from the pool).
     fn resync_touched(&mut self) {
+        self.rows_version += 1;
         let now = self.syncs;
         let touched: Vec<i64> = self.touched.iter().copied().collect();
         let mut markers = std::mem::take(&mut self.markers);
