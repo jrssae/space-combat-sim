@@ -110,7 +110,7 @@ const ENTRIES: Dictionary = {
 		"doc": "Every AiPilot thinks in the native brains over the core's rows (M4-T17) when perf_native and perf_native_core are on and the library is built; off = the GDScript brains, for pairing the two in one process"},
 	# M4-T18
 	&"perf_threads": {"type": TYPE_INT, "default": 0, "min": 0, "max": 64,
-		"doc": "Worker threads for the native core's per-ship passes, the brains and the flight step (M4-T18): 0 = the machine's performance cores, 1 = the main thread alone; outputs are the same bits whatever the count; live"},
+		"doc": "Worker threads for the native core's per-ship passes, the brains and the flight step (M4-T18): 0 = as many threads as the machine has performance cores, 1 = the main thread alone; outputs are the same bits whatever the count; live"},
 	# M4-T30a
 	&"ambient_level": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 2.0,
 		"doc": "The environment's ambient light, white at this energy: what the textured meshes and every other lit surface get on every side (M4-T30a, live)"},

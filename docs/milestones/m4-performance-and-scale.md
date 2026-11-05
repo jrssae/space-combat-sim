@@ -186,7 +186,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T15 | The native simulation core: entity rows, one call in and out (`ScsSimCore`) | T13 | Fable | Architecture: every native class moves onto it; serial | N | done (2026-11-04, in a worktree on `c0a0b81`; Cycle log, M4-T15; parity bit for bit on both paths, the engine seam counted) |
 | T16 | N2: avoidance, the fire lane and the context lists on the core | T15 | Opus | Per-contact loops, bit for bit | N, G | done, bit for bit; no measurable change in the think stage, an accepted miss (the loops cost 3 to 4 us a think, the plan assumed 25) (2026-11-04, in a worktree on `41fc088`; Cycle log, M4-T16) |
 | T17 | The brains in native code under Q16's tolerance (T17a maths, T17b behaviours) | T16 | Fable | 3 000 lines of seeded behaviour with a tolerance to meet | N, G | done, bit for bit on every Q16 seed; the think stage at 300 fell from 19.4 to 4.6 ms, the Done-when's 2 ms missed and what remains attributed (the native calls, the facade's glue, the scan's snapshot; Cycle log) (2026-11-05, in a worktree on `67d5cda`; fix round 1 the same day) |
-| T18 | N3: threads inside the core (rayon), 1-thread and 6-thread identical | T17 | Opus | Determinism rules, a new crate | N | done, one thread and six identical byte for byte over a seeded 600-tick battle; the brains in one batch a tick, threaded from 48 thinks; the AI stage at `battle` 500 from 6.96 to 5.51 ms with six threads (divided by 1.26, not the Done-when's 3) and the think at 300 3.01 ms against the 2 ms target, both missed and attributed to the drivers' GDScript per ship; no p99 loss at `typical` (2026-11-05, in a worktree on `df6db96`; Cycle log, M4-T18) |
+| T18 | N3: threads inside the core (rayon), 1-thread and 6-thread identical | T17 | Opus | Determinism rules, a new crate | N | done, one thread and six identical byte for byte over a seeded 600-tick battle; the brains in one batch a tick, threaded from 48 thinks; the AI stage at `battle` 500 from 6.96 to 5.09 ms with six threads after fix round 1 (divided by 1.37, not the Done-when's 3) and the think at 300 2.79 ms against the 2 ms target, both missed and attributed to the drivers' GDScript per ship, for the maintainer at checkpoint 3; no p99 loss at `typical` (2026-11-05, in a worktree on `df6db96`; fix round 1 the same day; Cycle log, M4-T18) |
 | T19 | Jolt measured at 300 and 500, the ships-out-of-Jolt proposal (Q17, checkpoint 2) | T15 | Sonnet | Measurement and a proposal, no game code | M | done (2026-11-04, in a worktree on `41fc088`; Cycle log, M4-T19; the proposal waits for the maintainer at checkpoint 2) |
 | T20 | Turrets, missiles, beams and mines as native rows | T16, T12 | Opus | The non-fighter rows' budget (710 turrets at 500); M12 inherits the path | N, A | done, bit for bit; the stand-ins' stage at `battle` 500 from 9.50 to 0.68 ms; every row in budget but a beam shot's spawn (about 20 us a shot against 1) (2026-11-04, in a worktree on `67d5cda`; Cycle log, M4-T20) |
 | T21 | The low-attention tier: state, 20 Hz integration, promotion and demotion of fighters and capitals | T20, checkpoint 3 | Fable | The pool and ship adapter handover must never pop; serial | T | not started |
@@ -1102,6 +1102,16 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
   Done-when asked for a third) and the think at 300 to 3.01 ms (2 ms asked): the native thinks are now about 6 us a ship
   (0.55 ms a tick at 300, 0.33 with six threads), and what remains is the drivers' GDScript, about 27 us a thinking ship,
   which no thread inside the crate reaches. No p99 loss at `typical` (it stays under the brains' threshold).
+  Fix round 1 (review `task-t18-review.md`) took the cheap glue first: the mirror into the GDScript behaviours is written
+  only when something reads it (attack, evade, guard, formation; ram and follow-path stay eager), the batch's answer is
+  read in place (no array per driver), and the host and batch are looked up once a physics frame. The think at 300 is
+  **2.79 ms** with six threads (3.60 on one) and the AI stage at 500 **5.09 ms** (6.40 on one): still missed, with about
+  30 us of GDScript per thinking ship left, for the maintainer at checkpoint 3. Also in the round: the names a brain
+  matches are indexed once a tick (T17's resolve-once, with the duplicate-name fix kept); the batch declines and holds
+  every think when the rows moved between the drivers and the batch, counted in `ai.thinks_fallback` as T17's per-ship
+  check did; the pool is joined when the thread count changes or the core goes; a panic inside the pass holds that
+  tick's thinks, keeps every brain and is counted (`ScsBrains.pass_failures`); a slot listed twice in one flight step
+  chains its assist state as before.
 - **As built, where it differs from the plan:**
   - Missile guidance, the weapon rows and the perception queries outside the brains stay on the main thread: the weapon
     rows' native step is under 0.5 ms at 500 with its interceptor and launch walks sequential by nature, a missile's
@@ -4144,6 +4154,26 @@ headless, both bench locks, pinned to cores 0-11, load 0.4 to 1.5). The before i
   neither falls under 30 FPS by 500 (furball 30.0, spread 34.5; T17's furball fell to 27.3 at 500).
 - **Behaviour changes:** none in seeded outcomes (the batch thinks with the same inputs in the same order; the parity
   and tolerance files pass bit for bit). A duplicate name now follows the listed row, as the GDScript does.
+- **Fix round 1** (tests `6b3fa8b`, fixes `68bc641`; review `task-t18-review.md`). The cheap glue first, then measured
+  again in one process a size, threads 1, 6, 6, 1 (`M4-T18_fix1/`, load 0.5 to 1.3), means in ms per tick:
+
+| run | tick median | p99 | ai | think | batch call (last tick) |
+|---|---|---|---|---|---|
+| battle 300, 1 thread | 17.51, 17.76 | 20.95, 21.20 | 3.90, 3.94 | 3.58, 3.62 | 0.53 to 0.57 |
+| battle 300, 6 threads | 17.04, 17.05 | 22.07, 21.86 | 3.11, 3.10 | 2.79, 2.79 | 0.35 to 0.58 |
+| battle 500, 1 thread | 30.07, 31.05 | 34.31, 35.54 | 6.36, 6.43 | 5.80, 5.86 | 0.92 to 0.94 |
+| battle 500, 6 threads | 29.55, 29.74 | 34.30, 34.05 | 5.08, 5.10 | 4.52, 4.54 | 0.55 to 0.61 |
+| typical 58, 1 thread | 3.82, 3.87 | 4.75, 4.58 | 1.03, 1.06 | 0.98, 1.00 | 0.09 to 0.11 |
+| typical 58, 6 threads | 3.92, 3.88 | 4.85, 5.00 | 1.05, 1.07 | 0.99, 1.01 | 0.09 to 0.11 |
+
+  The lazy mirror, the answer read in place and the per-frame lookups took about 0.24 ms off the think at 300 and 0.43
+  off the AI stage at 500 on either thread count. **What is left and why:** at 300 on one thread, 3.60 ms is the batch
+  call (0.55), the held ships' early returns (about 0.2) and about 30 us of GDScript a thinking ship (2.8): the lite
+  perception's property reads, the slot's context check, joining the batch, the command objects and the selection and
+  `apply_commands` after. Only moving those per-ship steps out of GDScript (the native pilots' hits and selection read as
+  rows, their commands written into the core and applied by the flight step) takes it under 2 ms; threads do not reach
+  it. `typical`'s p99 runs spread 4.58 to 5.00 ms on both arms (its 19 to 28 thinks stay serial), within the base's
+  4.78 and 4.88 and the runs' spread.
 
 ## Definition of done (M4)
 

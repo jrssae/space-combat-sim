@@ -408,6 +408,7 @@ func _register_console() -> void:
 				"set": func(value: Variant) -> void: if core != null: core.set_flight_parallel_min(int(value)),
 				"type": TYPE_INT, "doc": "The fewest ships the flight step's pass runs in parallel with"},
 		&"batch_us": {"get": func() -> int: return _batch().call_us if _batch() != null else 0, "unit": "us", "doc": "The last tick's one native call for every native think (BrainBatch); wall clock"},
+		&"live_workers": {"get": func() -> int: return int(core.live_workers()) if core != null else 0, "doc": "Worker threads running now (0 with one thread: a pool is joined before the next starts)"},
 		&"batch_ships": {"get": func() -> int: return _batch().ships if _batch() != null else 0, "doc": "Ships the last tick's brain batch carried"},
 	}), self)
 

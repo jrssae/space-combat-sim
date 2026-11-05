@@ -2618,10 +2618,11 @@ src/perf/brain_batch.gd          BrainBatch: an internal child of SimCore at -9 
   `Query` per worker, and the host keeps one `Scratch`, keep list and query per worker; and the display names left `Rows`
   for `ScsSimCore.row_names`, because Godot's string type cannot be shared between threads (the guard now refuses an
   engine string in `rows.rs`). The rows version, the counters and every cache are written only on the main thread.
-- **The thread count.** `perf_threads` (0, the default: the machine's performance cores, read from
+- **The thread count.** `perf_threads` (0, the default: as many threads as the machine has performance cores, read from
   `/sys/devices/cpu_core/cpus` and the CPU topology, at most the CPUs the process may use, so 6 on the i5-13600KF; 1: the
   main thread alone, no pool). `SimCore` hands it to the core when it is made and whenever the setting changes, and the
-  next pass uses it. The benches pin the process to cores 0 to 11 and the pool's threads inherit that.
+  next pass uses it. The count is not a placement: unpinned, the scheduler may run workers on efficiency cores. The
+  benches pin the process to cores 0 to 11 and the pool's threads inherit that.
 - **When a pass stays on the main thread.** Below its threshold, where waking the workers costs more than they save:
   the brains run in parallel from 48 thinks a tick, the flight step from 1 024 ships (Cycle log, M4-T18: at `typical`, 19
   to 28 thinks, the threads took 0.1 ms off the think and added about 0.5 ms to the 1 % slowest ticks; at `battle` 100, 34
@@ -2633,6 +2634,19 @@ src/perf/brain_batch.gd          BrainBatch: an internal child of SimCore at -9 
   every bolt); with an injected fault (`ScsBrains.set_fault`: a think adds what the worker's previous think left in its
   scratch, so it reads another row's output) the two differ within 30 ticks; the thread count follows `perf_threads` at
   once. `test_sim_core`'s guard covers `threads.rs`.
+- **Holding instead of guessing** (fix round 1). The batch carries the core's rows version the drivers' scan was taken
+  at; if the rows moved before the batch (a resync or a rebase between -10 and -9) every think is declined and each pilot
+  holds its last command, counted in `ai.thinks_fallback`, as T17's per-ship check did. A panic inside the pass is caught:
+  that tick's thinks are declined the same way, every brain goes back to its slot, and `ScsBrains.pass_failures` counts
+  it. The pool is joined (its workers waited for) whenever the thread count changes and when the core goes, so no worker
+  outlives the library (`core.live_workers`). A flight slot listed twice in one step flies its entries one after the
+  other on the main thread, each reading the assist state the last left.
+- **The glue around a native think** (fix round 1). The batch's answer is read in place by each pilot (an offset, no
+  array per ship); the mirror of the behaviour in control into its GDScript object is written only when something reads
+  the behaviours (`current`, `behaviour`, `describe`) for attack, evade, guard and formation, and at once for ram (the
+  avoidance's exemption) and follow-path (the instructor's route, read every frame); the drivers look the host and the
+  batch up once a physics frame. The names the brains match (objectives, guarded ships) are indexed once per rows version
+  in the tick's field, so a think looks its name's rows up instead of walking every row.
 - **Also fixed.** A duplicate name no longer hides the live ship: the objective and the guarded ship are matched among
   the think's contacts (then the broadcasts for the objective) every think, as `AiContext._named` does, and every row
   with the name is kept beyond the nearest k, as `ContactScan._keep_named` does (T17 had kept the first row with the
