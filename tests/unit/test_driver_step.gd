@@ -329,3 +329,16 @@ func test_the_native_path_switched_off_gives_the_hosted_drivers_their_ticks_back
 	Settings.set_value(&"perf_native", true)
 	(fight["space"] as Node).queue_free()
 	await get_tree().physics_frame
+
+
+func test_a_pilot_and_its_context_free_each_other_when_dropped() -> void:
+	# Fix round 4 (CI: "110 ObjectDB instances were leaked at exit"): the context's back-reference to the pilot whose slot
+	# mirrors it must not keep the pair alive once nothing else holds them.
+	var pilot := AiPilot.new()
+	pilot.context.native_pilot = pilot
+	assert_eq(pilot.context.native_pilot, pilot, "the context names its pilot")
+	var pilot_ref: WeakRef = weakref(pilot)
+	var context_ref: WeakRef = weakref(pilot.context)
+	pilot = null
+	assert_null(pilot_ref.get_ref(), "the pilot is freed when dropped: no reference cycle through its context")
+	assert_null(context_ref.get_ref(), "and its context with it")
