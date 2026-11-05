@@ -51,6 +51,7 @@ voices. M8's tutorial is written on top of all this, so the framework matters mo
 | Q23 | (same day) The Saturn 3's pod group misses 0.90 because T11 spread its pods wider than the model to let the truss and engine pass. Keep it? | **Keep the wider spread.** The Saturn 3's pod group is an **expected exemption** from Q18's bar: its scores are recorded with that note and do not fail T12. Every other Saturn part must still pass |
 | Q24 | (maintainer, 2026-11-04) How civilians flee | **Every civilian has a faction** (the Saturns and the Skylark are Earth Alliance, the Narn transport Narn, the Brezebel Centauri, the Bokmai Brakiri); "civilian" is its role, not its faction. **Attacked, a civilian runs away from the enemy towards the nearest vessel of its own faction, of any kind** (an Earth Alliance freighter makes for any Earth Alliance ship, military or civilian). **Civilians under attack run together and cover each other** (they close up while fleeing, and their turrets fire for one another, D61). In T16 (the `civilian` profile and the faction data) and T21; T16 and T21 wait for M4's merge, so this lands after the rebase |
 | Q25 | (maintainer, same day) More on fleeing | **Panic spreads:** a fleeing civilian sets other civilians of the same faction running when they are within about its radar range of it, even if nothing has attacked them. **Shelter behind the military:** when a fleeing civilian has a military ship of its own faction to run to, it aims for the far side of that ship from the threat, so the warship sits between it and the attacker. Read with Q24; T16, after the M4 rebase |
+| Q26 | (maintainer, 2026-11-05, from the M4 session) Targeting with hundreds of ships | **Add a task to turn the target selector into a menu and brainstorm other targeting UX for large battles** (M4 brings battles of 300 to 500 ships, and cycling one ship at a time no longer scales). T25, after the M4 rebase; a concept stop for the maintainer before it is built |
 
 ## Scope
 
@@ -451,6 +452,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T17 | C | Free-flight encounters | T16, T02 | Opus | Seeded director under a CPU cap | not started |
 | T18 | D | New guns and impacts | - | Opus | Synthesis to measured shapes | done |
 | T19 | D | Per-thruster engine bursts | T18 | Opus | Voice placement and a voice budget | done |
+| T25 | A | Targeting at scale: a target menu and other targeting UX for large battles (Q26; placed before T20; numbered last because it was added after the others had numbers) | T02, T07, the M4 rebase | Opus | UX judgement with a concept stop (H); reads M4's on-read candidate list | not started |
 | T20 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 **Progress (2026-11-03).** Done: T01, T02, T05, T11, T15, T18, T19, T24. In progress:
@@ -1179,6 +1181,39 @@ whose trigger never arose). Update the column with each task's commit.
   - **(H):** levels and feel.
   - Review: approved, no Critical or Important findings. Carried to T16/T17: engine voices for ships without a
     `PulseCannon` and a removal path for despawned traffic.
+
+### M5-T25 Targeting at scale: a target menu and other targeting UX (Q26)
+
+- **Track:** A. **Agent:** Opus. **Depends on:** T02 (the menu kit), T07 (the D-pad menu routing), and the M4 rebase (battles of
+  300 to 500 ships, M4-T34's candidate list built when it is read, M4's far-ship dots and tier). Placed before T20.
+- **Why:** today the pilot cycles targets one at a time (`target_next`, `target_prev`, `target_cycle`, `target_ahead`) through a list
+  of every targetable in reach. With hundreds of ships, cycling to the one that matters takes too many presses, and the HUD and radar
+  bracket too much.
+- **First: a concept stop (H).** Before any code, the task writes the options below (and any better ones it finds in other games'
+  targeting UX: flight sims, space sims, RTS selection), builds a mockup sheet of the menu and HUD at 300 ships, and stops with
+  `NEEDS_CONTEXT: targeting concepts ready` for the maintainer to pick. Then it builds the chosen set, tests first.
+- **Options to brainstorm and mock up:**
+  1. **A target menu** on a held button (or the comms menu pattern of D54): categories (hostile fighters, capital ships, ships
+     attacking me, my wing's targets, objectives, navigation and stations), each sorted by threat or distance and paged with the
+     D-pad; picking an entry selects it. A radial layout for the pad is an alternative to a list.
+  2. **Smart target buttons:** "who is shooting me" (the nearest attacker, from the hit log), "my leader's target" and "my wing's
+     targets", "the objective", "the ship in my reticle" (exists as `target_ahead`), "the previous target" toggle.
+  3. **Scoped cycling:** cycle within the current category only (hostiles only, fighters only), ordered by threat instead of
+     distance, with ships beyond weapon or sensor range skipped.
+  4. **HUD and radar decluttering:** bracket only the top few threats and the selection, show off-screen arrows only for the
+     selection and current attackers, fade markers by distance, and merge distant groups into one cluster marker with a count
+     (the far-ship dots of M4-T11 and T23 can carry the group).
+  5. **Target pins:** mark up to a few ships to return to; wing orders from the menu ("attack my target", "cover me from this one").
+  6. **Later, with M12's capitals:** sub-targets on a capital ship (turrets, engines, launch bays) as a second menu level.
+- **Rules:** gameplay never reads `Input` (new `UiCommand` or `CombatCommand` fields through `InputAdapter`, as D54 does); the menu
+  reads the candidate list on demand, never builds per tick (M4-T34); categories come from data already on the rows (faction, kind,
+  attacker); new actions get profile defaults through M3-T07's mechanism; console commands and a state provider per the rules, rows
+  in `info.md`.
+- **Tests first:** the category filters and threat ordering as pure logic (`RefCounted`) with GUT tests on seeded candidate sets of
+  500; the smart buttons pick the right ship in scripted cases; the menu routes the D-pad without firing other actions; the cost of
+  opening the menu at 500 ships measured (no per-tick cost when closed).
+- **Done when:** the maintainer's chosen set works in the dogfight scenario and a 300-ship battle, the tests pass, and the (H) items
+  (readability at 4K and 1080 lines, feel of the menu under fire) are in the playtest list.
 
 ### M5-T20 Integration, full suite, docs and acceptance
 
