@@ -2701,6 +2701,57 @@ src/targeting/targeting_controller.gd  the player's candidate list built when re
   `test_targeting_on_read` (400 steps of moves, parks, frees and selection commands: the same selection, signals and lists
   read; no list built while nothing reads), `test_targetable_hull`, `test_sweep_cells` (twelve seeded mixes against the
   sorted grid and the GDScript reference; the guard holds the new kernel).
+**The native pilots' commands as core rows (T33).**
+
+```
+native/src/row_commands.rs       RowCommand and the core's commands by body: written by the brains' batch, flown by the flight step
+native/src/brain.rs              ScsBrains.think_batch_rows and rows_events: the rows batch, its commands and its events
+native/src/flight_step.rs        the step flies a ship's command from its row when it has one
+src/perf/brain_answer.gd         BrainAnswer: one tick's answer, kept by the drivers and pilots that joined, read when needed
+src/perf/brain_batch.gd          the rows batch (add_rows, the flush that hands out the few events)
+src/ai/ai_pilot_driver.gd        the rows path at -10, the events at -9, the think rate's clock settled lazily
+src/ai/ai_pilot.gd, pilot_brain.gd  the pending answer, read at the first getter or method that needs it
+src/ship/ship.gd                 use_row_command, release_row_command, pull_row_command
+```
+
+- **What moved.** T18 left about 27 us of GDScript around every native think: the lite perception, the slot's checks,
+  joining the batch, then unpacking the answer, mirroring it, building the command objects, the selection, the lights
+  and `apply_commands`. With `perf_native_commands` on (the default) a native think goes into a rows batch: the driver
+  hands in the slot, dt, its faction's relation row, the near flag and the latest hits; the host reads the hull and the
+  selection from the ship's own row (the sync stamped them, T17), thinks as before, and writes each think's flight
+  numbers and trigger into the core's commands by body (`ScsSimCore.row_commands`). The flight batch (-1) flies a ship's
+  command from there, whatever it gathered from the ship, so the ship flies the command its pilot chose in the same tick.
+- **What the drivers still do.** At -10, for every ship: the think rate's decision (near the player, the stagger, the
+  wake), and for a thinking ship the context pushed when it changed and the join (about 8 us, measured with a throwaway
+  hook at `battle` 300); a held ship costs about 1.4 us. At -9, only the ships the batch names (`rows_events`): the
+  first command from the row (the ship and the cannon are handed their commands once, then `Ship.use_row_command`), a
+  changed trigger (the driver's one `CombatCommand`, which the cannon holds), the first shot of a hiding pilot (the
+  lights), a target to select (`TargetingController`, as before), and a rammer or route follower in control or a new ram
+  commitment (the pilot is read at once, as the facade's eager mirror did). At `battle` 300 that is about 40 of 94
+  thinks a tick, most of them trigger changes. Everything else is read when asked: the driver settles the think rate's
+  clock at its next step (a declined think puts back the time since the last think and the wake), and the pilot reads
+  its place in the tick's `BrainAnswer` at the first getter or method that needs it (`current`, the scores, `describe`,
+  `behaviour`, the wanted target, the wish, dwell, switches, the dodge). An answer a newer think replaces unread is
+  skipped as the lazy mirror (T18) skips it, except a rammer's and a route's state and the attack's target in the context.
+- **Holding from the row.** A declined think (the rows moved, a panic in the pass, no row) writes nothing, so its ship
+  flies the command its row already holds, as a far-rate tick does. Anything that commands the ship from GDScript
+  (`set_flight_command`: a GDScript brain, the pool parking a ship, a test) releases the row, and so does a new pilot;
+  its next native think hands the commands over again. A ship on its own GDScript model (the batch off or its step
+  refused) and the batch's step without the core read the row's command into the ship first (`pull_row_command`).
+- **Bit for bit.** The row keeps the think's numbers as they are (the strafe and the spin already 32-bit), and the step
+  packs them as `FlightBatch.pack_command` packs a `FlightCommand`; the selection follows the same rule (`_follow_target`),
+  and the row's selection equals the live one at -9 in the game's order (selections change at the drivers and at the
+  targeting controllers, 100, before the next sync). `test_row_commands` flies the seeded battle of `test_core_threads`
+  (120 ships, 240 ticks) with the rows path off and on: every ship's command, trigger and selection, and the rows, are
+  the same every tick, and every pilot reads the same at the end; one thread and six give the same commands; with the
+  flight batch off the ships fly the same bits on their own models; a declined think keeps every row's command; a
+  command set from GDScript takes over. T17's parity files, Q16's fights and `test_fighter_melee`'s digest are unchanged.
+- **Thread-ready (for T24).** The commands are written on the main thread after the pass, from each item's output, in
+  batch order; the pass itself is T18's. What is left per ship on the main thread is the think rate's decision, the
+  context check and the join at -10, and the events at -9: the next lever (the think rate decided in the host from the
+  slot's own clock, the hits pushed when they land) takes the per-ship step off the main thread with the rest of T24.
+- **Console and settings.** `perf_native_commands` (default on, live; off is T18's path, for pairing). Provider `ai` gains
+  `rows_events` (drivers the last rows batch handed something to do) and `row_commands` (ships flying from their rows).
 
 ### 17.16 Rocks and mines as static rows (T29)
 

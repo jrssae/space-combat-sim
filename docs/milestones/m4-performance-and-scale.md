@@ -214,7 +214,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T30c | The sky without splats: a star point field and the nebula as a generated panorama | T30a | Opus | The sky is the last splat node; stars must stay crisp points at any resolution | X, R | done |
 | T31 | Remove Gaussian splats: `addons/gdgs_scs` and every splat path in code, procgen, settings, console commands, tests, scripts, CI and docs (Q29, Q30) | T30d, T30c | Opus | About 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only deletion | X, R, G | done (2026-11-04, in a worktree on `8329f16`; Cycle log, M4-T31) |
 | T32 | Wing-level AI research: what deciding per wing instead of per fighter would save at 300 and 500 ships, how other games do it, and a proposal (Q46) | phase 2 (T18, T20), report P2 | Fable | Research and a design judgement over the measured think stage; no game code | M | done (2026-11-05, in a worktree on `08228cc`, fix round 1 the same day; `docs/research/wing-level-ai.md`; the proposal below waits for the maintainer at checkpoint 3: wing-level decisions are 2 % of a thinking ship's cost, so the proposal is to build the rows-based command path (1.3 to 2.0 ms at 300), fold a cluster perception into T22 and keep wing tactics as a later feel feature) |
-| T33 | The native pilots' inputs and commands as core rows (T32's L1, Q50): the batch writes each pilot's flight and combat command into its row and `FlightBatch` applies it the same tick | checkpoint 3 | Opus | Removes most of the 23 to 27 us of GDScript a thinking ship; owns T18's two missed numbers | N, G | not started |
+| T33 | The native pilots' inputs and commands as core rows (T32's L1, Q50): the batch writes each pilot's flight and combat command into its row and `FlightBatch` applies it the same tick | checkpoint 3 | Opus | Removes most of the 23 to 27 us of GDScript a thinking ship; owns T18's two missed numbers | N, G | done, bit for bit; the think at `battle` 300 from 2.79 to 1.60 ms with six threads (under 2 ms); the AI stage at 500 from 5.07 to 2.86 ms with six threads, 6.96 to 2.86 against T18's base (divided by 2.4, T18's 3 still missed by 0.5 ms: the drivers' per-ship step at -10 is left) (2026-11-05, in a worktree on `9cd88d5`; Cycle log, M4-T33) |
 | T34 | The cheap pass on the per-ship stages (Q50): the ram stage's loop, the hit stage's gather, targeting and the core's sync, into native code or out of the per-tick path | checkpoint 3 | Opus | 13.3 of 17.85 ms at `battle` 300 sits in four stages phase 2 did not take (report P2) | N, G | done, bit for bit, five of the six changes behind a setting; the four stages at `battle` 300 from 9.12 to 4.16 ms and the tick from 17.72 to 12.86 (8 ms missed, the rest named in the entry); at 500 15.81 to 7.47 and 30.42 to 21.74 (2026-11-05, in a worktree on `9cd88d5`, fix round 1 the same day; Cycle log, M4-T34) |
 | T35 | The core owns the simulated state (Q55): bolts as rows drawn by one multimesh, Jolt bodies read once a tick by RID in one native call, activity, hull and selection as event-driven columns, the ram stage's contact read native | T33, T34 | Fable | Refactor review findings 1, 4, 5 and 6: 5 to 8 ms at 500 for the bolts alone; T24's precondition | N, G | not started |
 | T36 | The frame's per-ship work in one pass per subsystem (Q56, Q58): plumes, muzzle flashes, LOD switching, audio, far dots, the HUD radar, hit flashes; the splat-era render scale cap; the slow test switch | T33 | Opus | Refactor review findings 2, 3, 7, 9, 12, 13, 14: 3 to 5 ms a frame at 500 | R, G | not started |
@@ -1923,6 +1923,17 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
 - **Expected gain:** 1.3 to 2.0 ms at 300 and 2.2 to 3.4 at 500 (T32, 70 % in range).
 - **From the refactor review (2026-11-05, finding 5):** switch off `_physics_process` on batched ships and on drivers whose ship is batched, let the batch decide the think rate and pack commands from rows, and hand the combat edges to the cannons from rows, so a tick enters GDScript once per system rather than once per ship (estimated 1.5 to 2.5 ms at 500 beyond this task's own estimate). Keep the muzzle transforms as data if the cannon hand-off is touched (finding 12).
 - **Architecture:** §17.13 (paragraphs under T33).
+- **Done (2026-11-05, worktree on `9cd88d5`; Cycle log, "M4-T33"):** with `perf_native_commands` (default on) a native think goes into a
+  rows batch: the hull and the selection come from the ship's row, the host writes each think's flight numbers and trigger into the
+  core's commands by body, and the flight batch flies them the same tick. The drivers handle at -9 only the ships the batch names (a
+  first command from the row, a changed trigger, the first shot of a hiding pilot, a target to select, a rammer or route follower in
+  control); the think rate's clock and the pilot's state are read from the tick's `BrainAnswer` when next needed. A declined think
+  holds the row's command; a command set from GDScript or a new pilot releases the row. Parity bit for bit (`test_row_commands`: the
+  seeded battle's commands, triggers, selections, rows and pilots, off against on, one thread against six, the ships on their own
+  models). The think at 300 with six threads is 1.60 ms, under 2 ms; the expected gain fell just under its range (1.2 ms at 300, 2.0
+  at 500). Left per ship: the drivers' step at -10 (the think rate, the context check, the join: about 8 us a thinking ship and 1.4 us
+  a held one) and the events; T18's AI stage at 500 divided by 3 is still missed (2.86 ms against 2.32), and the lever for it is that
+  step, which T24 takes off the main thread anyway.
 
 ##### M4-T34 The cheap pass on the per-ship stages (Q50)
 
@@ -4901,6 +4912,52 @@ counts five settings, the contact-columns setting says to switch it between runs
 the cells setting only when it changes. Focused runs after the fix: 21 files, 298 tests, all passing (the targeting files,
 `test_targeting_on_read`, `test_targetable_hull`, `test_hud`, `test_ai_pilot_selection`, `test_ai_driver`, the hit and grid
 files, the settings files, `test_main_scene` and AC13's five).
+### M4-T33 (2026-11-05): the native pilots' commands as core rows
+
+**What was built.** A rows batch beside T18's batch (`ScsBrains.think_batch_rows`, `BrainBatch.add_rows`): the drivers hand in the slot,
+dt, the relation row, the near flag and the hits; the host reads the hull and the selection from the ship's row, thinks across the pool as
+before, then on the main thread writes each think's command into the core (`ScsSimCore.row_commands`, by body, `native/src/row_commands.rs`)
+and lists the ships whose drivers have something to do. `ScsFlightStep` flies a ship's command from its row. Every driver and pilot that
+joined keeps the tick's `BrainAnswer` and reads its place when needed; the pilot's getters and methods settle it first (`PilotBrain`'s
+wish and wanted target, `AiPilot`'s `current`, scores, dwell, switches, `describe`, `behaviour`). Setting `perf_native_commands` (live;
+off is T18's path). Console `ai.rows_events`, `ai.row_commands`.
+
+**Parity.** `test_row_commands` (6 tests): the seeded battle of 120 fighters, 240 ticks, off and on: the commands, triggers and selections
+every tick, the rows every tick and the pilots at the end are the same (8 265 native thinks, 456 events, none declined, no driver finishing
+a think one by one); one thread and six give the same core commands; with `perf_native_flight` off the ships fly the same bits on their
+own models; a declined think keeps every row's command and live flag; a GDScript command takes over. `test_core_threads`, T17's think
+parity and in-play files, `test_brain_tolerance` (Q16's fights), `test_fighter_melee`'s digest and AC13's `test_ai_think_time` are green.
+
+**Measures** (`bench <layout> <n> 10 warmup=5 seed=1`, editor build, headless, both bench locks, cores 0 to 11, one process a run, threads
+1, 6, 6, 1; load 0.7 to 2.6; `reports/perf/M4-T33_base` on `9cd88d5`, `reports/perf/M4-T33_final` on `e827ee9`):
+
+| run | tick median ms | p99 ms | ai ms | think ms |
+|---|---|---|---|---|
+| battle 300 base, 1 thread | 17.78, 17.57 | 21.13, 20.83 | 3.93, 3.91 | 3.62, 3.60 |
+| battle 300 base, 6 threads | 17.07, 16.91 | 20.76, 21.09 | 3.12, 3.09 | 2.81, 2.78 |
+| battle 300 T33, 1 thread | 16.37, 16.28 | 19.44, 19.68 | 2.60, 2.59 | 2.41, 2.40 |
+| battle 300 T33, 6 threads | 15.69, 15.72 | 19.73, 20.40 | 1.79, 1.78 | 1.60, 1.59 |
+| battle 500 base, 1 thread | 30.32, 30.22 | 34.52, 34.38 | 6.39, 6.40 | 5.83, 5.83 |
+| battle 500 base, 6 threads | 29.21, 29.16 | 33.45, 33.25 | 5.09, 5.06 | 4.52, 4.50 |
+| battle 500 T33, 1 thread | 27.99, 28.37 | 32.45, 32.72 | 4.14, 4.17 | 3.79, 3.81 |
+| battle 500 T33, 6 threads | 26.83, 26.82 | 31.35, 31.65 | 2.88, 2.83 | 2.53, 2.48 |
+| typical 58 base, 1 thread | 3.90, 3.88 | 4.81, 4.85 | 1.04, 1.04 | 0.98, 0.98 |
+| typical 58 base, 6 threads | 3.91, 3.89 | 4.73, 4.61 | 1.05, 1.04 | 0.99, 0.98 |
+| typical 58 T33, 1 thread | 3.68, 3.70 | 4.71, 4.67 | 0.78, 0.77 | 0.74, 0.74 |
+| typical 58 T33, 6 threads | 3.68, 3.64 | 4.41, 4.61 | 0.77, 0.77 | 0.74, 0.73 |
+
+- The think at 300 with six threads: 2.79 to 1.60 ms, under T17's 2 ms. The AI stage at 500 with six threads: 5.07 to 2.86 ms (6.96 on
+  T18's base, divided by 2.4; T18's 3 needs 2.32 ms, missed by 0.5). The tick at 300 falls by 1.2 to 1.4 ms, at 500 by 2.3, at `typical`
+  by 0.2; `typical`'s p99 holds.
+- **The per-ship GDScript left** (a throwaway timing hook, not committed, `battle` 300, six threads): about 10 us a thinking ship at -10 before
+  the scan was taken once a frame, now about 8: the think rate's decision and the host lookup 1.8, the slot's context check 2.6, joining
+  the batch and keeping the answer 3.1, the rest under 1; 1.35 us a held ship (161 a tick); and the events at -9, about 40 of 94 thinks a
+  tick at 300, mostly trigger changes. The batch's native call is unchanged (0.3 to 0.4 ms at 300, 0.5 to 0.8 at 500 with six threads).
+- The quick check (`reports/perf/M4-T33_quick/quick.md`, load 1.18 1.28 1.23): furball and spread hold the budget to 150 ships (T18's held
+  to 100); neither falls under 30 FPS by 500.
+- **What would take the rest:** the think rate decided in the host from the slot's own clock and the row's position, the hits pushed to the
+  slot when they land, and the context pushed by whoever changes it, so no driver runs per ship per tick. That is T24's move of the step off
+  the main thread in any case.
 
 ## Definition of done (M4)
 
