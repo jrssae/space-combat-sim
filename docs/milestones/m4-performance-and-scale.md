@@ -80,6 +80,10 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q46 | Wing-level AI (2026-11-04) | **Research it as the next task after phase 2** (T32): how wing-level decisions (the wing picks targets and tactics a few times a second, members steer, avoid and aim every tick) would cut the AI's cost at 300 to 500 ships, as RTS games, Total War and X4 do, and what it does to the dogfights' feel. Research and a proposal only; the maintainer decides at checkpoint 3 |
 | Q47 | Checkpoint 2, D4 (T19, 2026-11-04) | **Keep Jolt for every near ship; D4 unchanged.** Re-measure the physics stage after T21; propose AI ships out of Jolt again only if the near set still costs more than about 1 ms a tick at 500 (T19's proposal, 70 %) |
 | Q48 | Report P2's frame rates (2026-11-04) | **Once phase 2 is complete, report average FPS and 1 % low FPS per ship count**: the fullscreen check (`scripts/fullscreen_check.sh`, native 4K window, 3D at 1 080 lines, vsync off) at `battle` 50, 100, 200, 300 and 500 and at `typical` 58, each measured only after the scene has rendered and warmed up, in a table in report P2. The 1 % low is the mean FPS of the slowest 1 % of frames in the window (the p99 frame time beside it) |
+| Q49 | Checkpoint 3, battle 300's target (2026-11-05) | **Keep "under 8 ms"** for `battle` 300 (report P2 proposed restating it to the 30 FPS floor, a tick under about 10.5 ms; declined) |
+| Q50 | Checkpoint 3, before T21 | **Two tasks first, then T21:** T33 (T32's L1: the native pilots' inputs and commands as core rows) and T34 (a cheap pass on the per-ship stages phase 2 did not take: the ram loop, the hit gather, targeting, the core's sync). T18's two missed numbers (the AI stage at 500 divided by 1.37, not 3; the think at 300 2.8 ms, not 2) are accepted with T33 as their owner |
+| Q51 | Checkpoint 3, wing-level AI (T32) | **No wing-level AI in M4.** "The wing picks targets and tactics" (T32's option B) goes on the roadmap as a feel feature the maintainer judges in the dogfight scenario (H); T32's L2 (perception per cluster, statics cached) is folded into T22's tier perception |
+| Q52 | Checkpoint 3, Q39's second bar | **The bar is 60 FPS at the screen with vsync on, judged by the maintainer (H)**, not the vsync-off 1 % low the fullscreen check measures (which stays recorded as data) |
 
 ## The budget ("good game performance", Q5)
 
@@ -204,6 +208,8 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T30c | The sky without splats: a star point field and the nebula as a generated panorama | T30a | Opus | The sky is the last splat node; stars must stay crisp points at any resolution | X, R | done |
 | T31 | Remove Gaussian splats: `addons/gdgs_scs` and every splat path in code, procgen, settings, console commands, tests, scripts, CI and docs (Q29, Q30) | T30d, T30c | Opus | About 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only deletion | X, R, G | done (2026-11-04, in a worktree on `8329f16`; Cycle log, M4-T31) |
 | T32 | Wing-level AI research: what deciding per wing instead of per fighter would save at 300 and 500 ships, how other games do it, and a proposal (Q46) | phase 2 (T18, T20), report P2 | Fable | Research and a design judgement over the measured think stage; no game code | M | done (2026-11-05, in a worktree on `08228cc`, fix round 1 the same day; `docs/research/wing-level-ai.md`; the proposal below waits for the maintainer at checkpoint 3: wing-level decisions are 2 % of a thinking ship's cost, so the proposal is to build the rows-based command path (1.3 to 2.0 ms at 300), fold a cluster perception into T22 and keep wing tactics as a later feel feature) |
+| T33 | The native pilots' inputs and commands as core rows (T32's L1, Q50): the batch writes each pilot's flight and combat command into its row and `FlightBatch` applies it the same tick | checkpoint 3 | Opus | Removes most of the 23 to 27 us of GDScript a thinking ship; owns T18's two missed numbers | N, G | not started |
+| T34 | The cheap pass on the per-ship stages (Q50): the ram stage's loop, the hit stage's gather, targeting and the core's sync, into native code or out of the per-tick path | checkpoint 3 | Opus | 13.3 of 17.85 ms at `battle` 300 sits in four stages phase 2 did not take (report P2) | N, G | not started |
 
 ### M4-T01 Benchmark harness, budget and baseline
 
@@ -544,6 +550,7 @@ wave's combined gain that is less than the sum of its parts is written down as s
 | 5 | T16 (N+G), T17 (N+G), T19 (M), T30b (X+R, after checkpoint 1b) | T16, T17, T19, T30b | combined; T19's Jolt numbers at 300 and 500 feed **checkpoint Q17**; the fullscreen check on the mesh default | 4 |
 | 6 | T18 (N), T20 (N+A), T31 (X+R+G) | T18, T20, T31 (T31 last: it edits the render tests) | **phase 2 end: sweep, headlines, fullscreen and VRAM on the mesh-only renderer, release once; report P2** | 3 |
 | 6b | T32 (M, research, Q46) | none (doc only) | uses report P2's think-stage numbers; its proposal goes to the maintainer with **checkpoint 3** | 1 |
+| 6c | T33 (N+G), T34 (N+G), in parallel (Q50) | T33, T34 | each its own before and after at `typical`, `battle` 300 and 500; the combined tick against Q49's 8 ms | 2 |
 | 7 | T21 (T, serial: pool and ship adapter) | T21 | its own at 500 | 1 |
 | 8 | T22 (T+N), T23 (R), T26 (R, only if the GPU binds at the fullscreen check after T11) | T22, T23, T26 | combined at 500; fullscreen at 500 | 2 or 3 |
 | 9 | T24 (N, only if the fullscreen check at 500 misses the floor after T23), T25 (M) | T24, T25 | **phase 3 end: sweep, battle 500 and 1 000, fullscreen, release, the full local suite; report P3** | 1 or 2 |
@@ -1867,6 +1874,47 @@ saving can show on the headline numbers, and that changes the fights' shape firs
 
 **What the maintainer decides at checkpoint 3:** whether to add L1 (and L3) to M4 and fold L2 into T22, and whether option B
 goes on the roadmap as a feel feature for M5 or the AI milestone.
+
+##### M4-T33 The native pilots' inputs and commands as core rows (T32's L1, Q50)
+
+- **Track:** N and G. **Agent:** Opus. **Depends on:** checkpoint 3 (Q49 to Q52). Runs as wave 6c beside T34, before T21.
+- **Goal:** most of the 23 to 27 us of GDScript a thinking ship costs leaves the tick, as T32's L1 describes
+  (`docs/research/wing-level-ai.md`): the hits, the selection and the clock are read into the rows at the sync; the brains' batch
+  writes each pilot's flight and combat command into its row; `FlightBatch` (priority -1, before the ships' own steps) applies the
+  flight command from the row in the same tick, so every ship flies the command it flies today and seeded outcomes hold. What may
+  stay in GDScript per thinking ship: the combat command handed to the cannon, the selection through `TargetingController`, the
+  lights on the first shot and the counters (5 to 8 us); move the trigger and the selection into rows too if it stays bit for bit.
+- **Owns** T18's two missed numbers (Q50): the think stage at `battle` 300 under 2 ms on six threads and the AI stage at 500.
+- **Files:** `native/src/sim_core.rs` and `rows.rs` (command columns, appended), the brain batch (`native/src/brain*.rs`,
+  `src/perf/brain_batch.gd`), `src/ai/ai_pilot_driver.gd`, `src/ai/ai_pilot.gd` (the facade), `src/ship/flight_batch.gd` (reads the
+  row's command), `src/game/combatant.gd` only where the command hand-off needs it; tests beside T17's and T18's parity files.
+- **Tests first:** the commands from rows equal today's commands tick by tick on seeded fights (T17's think parity and Q16's
+  fights stay identical); a declined think holds from the row; 1 and 6 threads identical; the engine-free guard covers any new
+  kernel; T16's to T20's parity files green.
+- **Measures:** the think stage and AI stage at `typical`, `battle` 300 and 500 with 1 and 6 threads, before and after, paired.
+- **Done when:** parity holds, the per-ship GDScript left is measured and named, and the think stage at 300 is under 2 ms on six
+  threads or the entry says by how much it misses and why.
+- **Expected gain:** 1.3 to 2.0 ms at 300 and 2.2 to 3.4 at 500 (T32, 70 % in range).
+- **Architecture:** §17.13 (paragraphs under T33).
+
+##### M4-T34 The cheap pass on the per-ship stages (Q50)
+
+- **Track:** N and G. **Agent:** Opus. **Depends on:** checkpoint 3. Runs as wave 6c beside T33, before T21.
+- **Goal:** the four per-ship stages phase 2 did not take, 13.3 of the 17.85 ms at `battle` 300 and 23.3 of 30.9 at 500 in report
+  P2's breakdown, cost what they must: the ram stage's per-hull loop (about 10 us a core row), the hit stage's gather, targeting
+  (14 % of the tick) and the core's sync, each moved onto the core's rows and kernels or out of the per-tick path, bit for bit with
+  today's GDScript (kept as the reference behind a setting where a native path replaces it). Flight's GDScript is T33's (it applies
+  the row's command), not this task's.
+- **Files:** `src/combat/ram_resolver.gd`, `src/combat/hit_resolver.gd`, `src/targeting/` (the per-tick parts), `src/perf/sim_core.gd`,
+  native kernels in their own new files under T15's guard, appended columns in `rows.rs` and `sim_core.rs` only; tests beside the
+  stages' existing ones.
+- **Tests first:** each stage's outputs equal today's on seeded worlds (ram pairs and damage, hit pairs and order, the selection and
+  lock state, the rows after the sync); the engine-free guard covers the new kernels; 1 and 6 threads identical where a pass is
+  threaded; `test_fighter_melee`, the hit and ram scale files, the targeting files and AC13's file green.
+- **Measures:** each stage at `typical`, `battle` 300 and 500, before and after, paired; the tick against Q49's 8 ms at 300.
+- **Done when:** parity holds and each stage's before and after is in the entry, with what remains of the four stages named.
+- **Expected gain:** a low-confidence guess of half of the 13.3 ms at 300 (report P2); the far share goes to T21 either way.
+- **Architecture:** §17.13 (paragraphs under T34).
 
 #### Architecture subsections this plan assigns
 

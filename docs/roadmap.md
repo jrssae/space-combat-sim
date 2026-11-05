@@ -65,6 +65,10 @@ events plus those settings, applied before the first frame. The tutorial checks 
 
 - **Later** (nice to have): keyboard + mouse flight, HOTAS, VR cockpit (Godot's Mobile and Forward+ renderers support multiview),
   mod support, multiplayer.
+- **Later, a feel feature** (M4-T32, Q51): wing-level AI, where the wing picks targets and tactics a few times a second and its
+  members steer, avoid and aim every tick (T32's option B, `docs/research/wing-level-ai.md`). It saves almost nothing in performance;
+  it is built only if the maintainer judges that it makes the dogfights feel better (H), starting from "the wing picks targets" on
+  `WingDirector`.
 - **Not planned** (deferred indefinitely): Windows, macOS (Apple Silicon), Xbox and other consoles. Release builds
   are Linux x86_64 only.
 
