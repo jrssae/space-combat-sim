@@ -15,6 +15,13 @@ extends Node
 ## Threads (M4-T18): the core's per-ship passes (the brains, which `BrainBatch`, an internal child at -9, hands one batch a
 ## tick, and the flight step) run on `perf_threads` worker threads, set at once whenever the setting changes.
 ##
+## The core's state from events (M4-T35b, `perf_core_event_columns`): a body's activity is checked again only when it is
+## touched (hidden, shown, destroyed: the events this facade already watched), its hull column follows `Damageable.damaged`
+## and `restored`, its selection column every change a `TargetingController` makes (`note_selection_changed`); the columns are written to the rows at the
+## sync points, so the rows hold what a read at the sync would. `perf_core_body_direct` reads the rigid bodies from the
+## physics server's direct state by RID. The AI targeting controllers' selection check runs here at their priority
+## (`SimCoreTargeting`, `perf_native_selection_check`), and the ram resolver's contact read in one native call.
+##
 ## Bolts as rows (M4-T35, `perf_native_bolt_rows`): the core owns its bolts. Every cannon but the player's registers with
 ## `ScsCannons` (`register_cannon`), and an internal `SimCoreStep` child at priority 1 (after the drivers, `Main` and the
 ## World's rebase at 0, before the targeting at 100 and the resolvers) steps every cannon's gate in one call, spawns each
@@ -36,6 +43,7 @@ const CANNONS_CLASS: StringName = &"ScsCannons"
 const NODE_NAME: StringName = &"SimCore"
 const OUT_NODE_NAME: StringName = &"SimCoreOut"
 const STEP_NODE_NAME: StringName = &"SimCoreStep"
+const TARGETING_NODE_NAME: StringName = &"SimCoreTargeting"
 const PRIORITY: int = -11
 const OUT_PRIORITY: int = 2_000_000
 ## The cannon and bolt step: after every priority-0 node (the drivers' commands, the player's, the World's rebase), before
@@ -96,6 +104,9 @@ var _bolt_sync: Object = null  # the bolt reader (M4-T34), made on first use
 var _bolt_sync_known: int = -1
 var _tick_open: bool = false  # a sync_in since the last sync_out: the next sync_in closes the tick's count, as the core's does
 var _cannons_by_slot: Dictionary[int, PulseCannon] = {}
+var _selection_controllers: Dictionary[int, TargetingController] = {}
+## Selections the core's check cleared in the last tick (a readout).
+var selection_clears_last_tick: int = 0
 var _bolt_mesh: BoltMesh = null
 const _NO_NODES: Array[Node] = []
 
@@ -111,6 +122,19 @@ class Out extends Node:
 
 	func _physics_process(_delta: float) -> void:
 		owner_core.sync_out_now()
+
+
+## Runs the watched AI controllers' selection check at their priority (M4-T35; an internal child).
+class Targeting extends Node:
+	var owner_core: SimCore = null
+
+	func _init(p_owner: SimCore) -> void:
+		owner_core = p_owner
+		name = TARGETING_NODE_NAME
+		process_physics_priority = TargetingController.LATE_PRIORITY
+
+	func _physics_process(_delta: float) -> void:
+		owner_core.check_selections_now()
 
 
 ## Steps the cannons and the owned bolts once a tick at `STEP_PRIORITY` (M4-T35; an internal child).
@@ -138,10 +162,12 @@ func _ready() -> void:
 	add_child(_out, false, Node.INTERNAL_MODE_BACK)
 	add_child(BrainBatch.new(), false, Node.INTERNAL_MODE_BACK)
 	add_child(Step.new(self), false, Node.INTERNAL_MODE_BACK)
+	add_child(Targeting.new(self), false, Node.INTERNAL_MODE_BACK)
 	_bolt_mesh = BoltMesh.new(self)
 	add_child(_bolt_mesh, false, Node.INTERNAL_MODE_BACK)
 	_apply_threads()
 	_apply_bolt_rows()
+	_apply_state_settings()
 	if not Settings.changed.is_connected(_on_setting_changed):
 		Settings.changed.connect(_on_setting_changed)
 	_hook(get_tree())
@@ -150,6 +176,7 @@ func _ready() -> void:
 	_current = self
 	_register_console()
 	PulseCannon.rebind_all()
+	TargetingController.rebind_all()
 
 
 func _exit_tree() -> void:
@@ -162,6 +189,7 @@ func _exit_tree() -> void:
 		_current = null
 	DebugConsole.registry.unregister_owner(self)
 	PulseCannon.rebind_all()
+	TargetingController.rebind_all()
 
 
 func _physics_process(_delta: float) -> void:
@@ -212,6 +240,20 @@ static func bolt_rows_enabled() -> bool:
 	if _cannons_class_known < 0:
 		_cannons_class_known = 1 if NativeLib.has_class(CANNONS_CLASS) else 0
 	return _cannons_class_known == 1
+
+
+## Whether the AI targeting controllers' selection check runs on the core (M4-T35): the core on, the setting on, and the
+## event columns (the check reads the selection the events last gave).
+static func selection_check_enabled() -> bool:
+	return enabled() and bool(Settings.get_value(&"perf_native_selection_check")) \
+			and bool(Settings.get_value(&"perf_core_event_columns"))
+
+
+## A ship's selection changed (`TargetingController` says so on every change): the latest core notes it for its selection
+## column and its selection check (M4-T35).
+static func note_selection_changed(body_id: int, selected_id: int) -> void:
+	if _current != null and is_instance_valid(_current) and _current.core != null:
+		_current.core.note_selection(body_id, selected_id)
 
 
 ## Whether this core owns its bolts now.
@@ -286,6 +328,32 @@ func step_now(delta: float) -> void:
 	cannon_us = fired - started
 	expired_last_tick = int(core.step_bolts(now_s, delta))
 	bolt_step_us = Time.get_ticks_usec() - fired
+
+
+## The watched AI controllers' selection check (the `SimCoreTargeting` node does it at their priority): the core names the
+## ships whose selection the controller would clear now, and each clears it (the same signal).
+func check_selections_now() -> void:
+	selection_clears_last_tick = 0
+	if core == null or _selection_controllers.is_empty() or not ensure_synced():
+		return
+	for body_id: int in (core.selection_clears() as PackedInt64Array):
+		var controller: TargetingController = _selection_controllers.get(body_id)
+		if controller != null and is_instance_valid(controller):
+			controller.clear_selection()
+			selection_clears_last_tick += 1
+
+
+## Runs `controller`'s selection check on the core from now on (M4-T35): the ship's body and the controller's sensor range.
+func watch_selection(controller: TargetingController, body_id: int, sensor_range_m: float) -> void:
+	if core != null:
+		_selection_controllers[body_id] = controller
+		core.watch_selection(body_id, sensor_range_m)
+
+
+func unwatch_selection(body_id: int) -> void:
+	_selection_controllers.erase(body_id)
+	if core != null:
+		core.unwatch_selection(body_id)
 
 
 ## Closes the tick (the `SimCoreOut` node does it at 2 000 000).
@@ -424,6 +492,13 @@ func _apply_bolt_rows() -> void:
 		core.set_bolt_rows(bolt_rows_enabled())
 
 
+# Tells the core how it keeps its state (M4-T35b), as the settings stand.
+func _apply_state_settings() -> void:
+	if core != null:
+		core.set_event_columns(bool(Settings.get_value(&"perf_core_event_columns")))
+		core.set_body_direct(bool(Settings.get_value(&"perf_core_body_direct")))
+
+
 ## Engine calls of the last closed tick: `[sync, fallbacks]` (the sync points' reads, and the flight step's reads of the
 ## physics server for ships without a row; the kernels make none by construction, see `native/src/kernels.rs`).
 func engine_calls() -> PackedInt64Array:
@@ -516,6 +591,10 @@ func _on_setting_changed(key: StringName, _value: Variant) -> void:
 	elif key == &"perf_native_bolt_rows" or key == &"perf_native_core" or key == &"perf_native":
 		_apply_bolt_rows()
 		PulseCannon.rebind_all()
+		TargetingController.rebind_all()
+	elif key == &"perf_core_event_columns" or key == &"perf_core_body_direct" or key == &"perf_native_selection_check":
+		_apply_state_settings()
+		TargetingController.rebind_all()
 
 
 # --- the tree's changes ------------------------------------------------------------------------------------------
@@ -554,16 +633,36 @@ func _on_node_removed(node: Node) -> void:
 		removals += 1
 
 
-# Reads a body's row again whenever it is hidden or shown (the pool parks and reuses ships that way) or its hull goes.
+# Reads a body's row again whenever it is hidden or shown (the pool parks and reuses ships that way) or its hull goes; with
+# the event columns (M4-T35) the hull's points and the ship's selection reach the core's columns from their events too.
 func _watch(node: Node) -> void:
 	var body := node.get_parent() as Node3D
 	if body != null and not body.has_meta(&"_scs_core_watch"):
 		body.set_meta(&"_scs_core_watch", true)
 		body.visibility_changed.connect(_on_body_touched.bind(body.get_instance_id()))
+	var marker := node as Node3D
+	if marker != null and body != null and not marker.has_meta(&"_scs_core_watch"):
+		marker.set_meta(&"_scs_core_watch", true)
+		marker.visibility_changed.connect(_on_body_touched.bind(body.get_instance_id()))  # a marker hidden on its own
 	var hull := node as Damageable
 	if hull != null and body != null and not hull.has_meta(&"_scs_core_watch"):
 		hull.set_meta(&"_scs_core_watch", true)
-		hull.destroyed.connect(_on_hull_destroyed.bind(body.get_instance_id()))
+		var body_id: int = body.get_instance_id()
+		hull.destroyed.connect(_on_hull_destroyed.bind(body_id))
+		hull.damaged.connect(_on_hull_damaged.bind(hull, body_id))
+		hull.restored.connect(_on_hull_restored.bind(hull, body_id))
+
+
+func _on_hull_damaged(_info: HitInfo, _applied: float, hull: Damageable, body_id: int) -> void:
+	if core != null:
+		core.note_hull(body_id, hull.hull.hp, hull.hull.max_hp)
+
+
+func _on_hull_restored(hull: Damageable, body_id: int) -> void:
+	if core != null:
+		core.note_hull(body_id, hull.hull.hp, hull.hull.max_hp)
+		core.touch(body_id)  # a restored hull is active again, as the per-tick read of its destroyed flag would find
+
 
 
 func _on_body_touched(body_id: int) -> void:
@@ -612,6 +711,10 @@ func _register_console() -> void:
 		&"shots": {"get": func() -> int: return shots_last_tick, "doc": "Shots the kernel fired in the last tick"},
 		&"expired": {"get": func() -> int: return expired_last_tick, "doc": "Owned bolts that expired in the last tick"},
 		&"bolt_draws": {"get": func() -> int: return _bolt_mesh.instances_drawn if _bolt_mesh != null else 0, "doc": "Bolt instances the multimesh drew in the last frame (M4-T35)"},
+		&"event_columns": {"get": func() -> bool: return core != null and bool(core.event_columns()), "doc": "The activity, hull and selection columns follow the events (M4-T35) instead of a read a body a tick"},
+		&"body_direct": {"get": func() -> bool: return core != null and bool(core.body_direct()), "doc": "The rigid bodies are read from the physics server's direct state by RID (M4-T35)"},
+		&"watched_selections": {"get": func() -> int: return _selection_controllers.size(), "doc": "AI targeting controllers whose selection check runs on the core (M4-T35)"},
+		&"selection_clears": {"get": func() -> int: return selection_clears_last_tick, "doc": "Selections the core's check cleared in the last tick"},
 	}), self)
 
 

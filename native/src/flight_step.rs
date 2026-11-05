@@ -295,8 +295,26 @@ impl ScsFlightStep {
             PackedVector3Array::new(),
             dt,
         );
+        let mut c = core.bind_mut();
         if self.fallback_reads > 0 {
-            core.bind_mut().note_fallback_read(self.fallback_reads);
+            c.note_fallback_read(self.fallback_reads);
+        }
+        // Each flown ship's acceleration from its own forces, as `Ship.applied_force() / ship.mass` gives it (M4-T35: the
+        // ram tracker's accel column, read natively).
+        c.accels.clear();
+        if ok {
+            for (i, item) in self.items[..body_ids.len()].iter().enumerate() {
+                if let (Some(step), Some(slot)) =
+                    (item.applied.as_ref(), self.slots[item.slot].as_ref())
+                {
+                    let mass = slot.body.spec.mass as f32;
+                    let f = step.out_vectors[0];
+                    c.accels.insert(
+                        body_ids.as_slice()[i],
+                        Vector3::new(f.x / mass, f.y / mass, f.z / mass),
+                    );
+                }
+            }
         }
         ok
     }

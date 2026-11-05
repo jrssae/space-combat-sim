@@ -4,7 +4,7 @@
 #![allow(clippy::redundant_field_names)]
 use std::collections::{HashMap, HashSet};
 
-use godot::classes::{Node, Node3D, Object, RigidBody3D};
+use godot::classes::{Node, Node3D, Object, PhysicsServer3D, RigidBody3D};
 use godot::prelude::*;
 
 use crate::threads::{self, Pass, Threads};
@@ -93,6 +93,10 @@ struct Attrs {
     // for a body without them.
     health: Option<Gd<Object>>,
     targeting: Option<Gd<Object>>,
+    // The hull 0..1 and the selection as the events last gave them (M4-T35: `note_hull`, `note_selection`), read live when
+    // the attributes are.
+    hull_fraction: f64,
+    target_id: i64,
 }
 
 // One `Targetable` (or, for a body without one, one `Damageable`) of the tree, with the body it marks.
@@ -111,6 +115,11 @@ struct Member {
     hull_rank: i64,
     // The member's place in `slot_of`, which outlives `set_members`.
     slot: u32,
+    // The body's RID (invalid for a body with no rigid body) and whether it was active at the last check (M4-T35: with the
+    // event columns on, checked again only when touched).
+    rid: Rid,
+    active: bool,
+    active_known: bool,
 }
 
 // A bolt in flight: its node and what is read once, when it is first seen. A plain bolt's velocity never changes after
@@ -219,6 +228,20 @@ pub struct ScsSimCore {
     // hands out count down from -1, so no instance id is ever one.
     pub(crate) bolt_rows: bool,
     pub(crate) next_bolt_id: i64,
+    // The core's state from events (M4-T35b): activity, hull and selection kept in the attributes and written to the rows
+    // at the sync points; `body_direct` reads the rigid bodies from the physics server's direct state by RID.
+    event_columns: bool,
+    body_direct: bool,
+    activity_dirty: bool,
+    /// Each row's body RID (invalid for a body with none), beside the rows (M4-T35: the ram stage's contact read).
+    pub row_rids: Vec<Rid>,
+    /// The ships' accelerations from their own forces this tick, by body, as the flight step wrote them (M4-T35: the ram
+    /// tracker's accel column; `force / mass` in 32 bits, as `Ship.applied_force() / ship.mass`).
+    pub accels: HashMap<i64, Vector3>,
+    // The AI targeting controllers whose selection check runs here (M4-T35): body id and sensor range; and every body's
+    // selection as the events last gave it (or as its attributes read it).
+    selection_watch: Vec<(i64, f64)>,
+    latest_target: HashMap<i64, i64>,
 }
 
 #[godot_api]
@@ -265,9 +288,11 @@ impl ScsSimCore {
                 .get(&body_id)
                 .map_or((None, -1), |(h, r)| (Some(h.clone()), *r));
             self.marker_at.insert(key, self.markers.len());
+            let rigid = body.clone().try_cast::<RigidBody3D>().ok();
+            let rid = rigid.as_ref().map_or(Rid::Invalid, |r| r.get_rid());
             self.markers.push(Member {
                 key,
-                rigid: body.clone().try_cast::<RigidBody3D>().ok(),
+                rigid,
                 hull,
                 body,
                 body_id,
@@ -277,6 +302,9 @@ impl ScsSimCore {
                 generation,
                 hull_rank,
                 slot,
+                rid,
+                active: false,
+                active_known: false,
             });
         }
         for (rank, hull) in damageables.iter_shared().enumerate() {
@@ -286,9 +314,11 @@ impl ScsSimCore {
             let key = hull.instance_id().to_i64();
             let (attrs, active_at) = known.remove(&key).unwrap_or((None, 0));
             let (slot, generation) = self.slot_for(key);
+            let rigid = body.clone().try_cast::<RigidBody3D>().ok();
+            let rid = rigid.as_ref().map_or(Rid::Invalid, |r| r.get_rid());
             self.hulls.push(Member {
                 key,
-                rigid: body.clone().try_cast::<RigidBody3D>().ok(),
+                rigid,
                 body_id: body.instance_id().to_i64(),
                 body,
                 marker: None,
@@ -298,6 +328,9 @@ impl ScsSimCore {
                 generation,
                 hull_rank: rank as i64,
                 slot,
+                rid,
+                active: false,
+                active_known: false,
             });
         }
     }
@@ -354,6 +387,7 @@ impl ScsSimCore {
         for m in self.markers.iter_mut().chain(self.hulls.iter_mut()) {
             m.attrs = None;
         }
+        self.activity_dirty = true;
     }
 
     /// How many times a body's attributes were read (the work count: once per activation, not per tick).
@@ -385,10 +419,18 @@ impl ScsSimCore {
         let mut rows = std::mem::take(&mut self.rows);
         rows.clear();
         self.row_names.clear();
+        self.row_rids.clear();
         self.seen.clear();
+        let cached = self.event_columns && !self.activity_dirty;
         let mut markers = std::mem::take(&mut self.markers);
         for m in markers.iter_mut() {
-            if !marker_active(m, &mut self.sync_reads) {
+            // With the event columns, a body's activity is checked again only when it was touched (hidden, shown,
+            // destroyed) or first seen; the facade's events cover every change the pool and the resolvers make.
+            if !cached || !m.active_known || self.touched.contains(&m.body_id) {
+                m.active = marker_active(m, &mut self.sync_reads);
+                m.active_known = true;
+            }
+            if !m.active {
                 m.active_at = 0; // out of play: when it comes back it is a new row
                 continue;
             }
@@ -399,6 +441,7 @@ impl ScsSimCore {
             self.push_member(&mut rows, m);
         }
         self.markers = markers;
+        self.activity_dirty = false;
         let mut hulls = std::mem::take(&mut self.hulls);
         for m in hulls.iter_mut() {
             if self.seen.contains(&m.body_id) {
@@ -427,6 +470,7 @@ impl ScsSimCore {
             rows.kinds.push(self.static_kinds[s]);
             rows.flags.push(0);
             self.row_names.push(GString::new());
+            self.row_rids.push(Rid::Invalid);
             rows.hull_ids.push(0);
             rows.handles.push(0);
             rows.rigid.push(false);
@@ -1183,24 +1227,45 @@ impl ScsSimCore {
             .attrs
             .as_ref()
             .expect("attributes are read before a row is made");
-        self.sync_reads += 1;
-        let xf = m.body.get_global_transform();
-        let (velocity, angular) = match (&m.rigid, &m.marker) {
-            (Some(rigid), _) => {
-                self.sync_reads += 2;
-                (rigid.get_linear_velocity(), rigid.get_angular_velocity())
-            }
-            (None, Some(marker)) => {
-                self.sync_reads += 1;
+        // The pose and motion: from the physics server's direct state by RID (M4-T35, `perf_core_body_direct`: one state
+        // handle and three reads), else through the node's own getters as the tree gather reads them.
+        let direct = if self.body_direct && m.rigid.is_some() && m.rid.is_valid() {
+            self.sync_reads += 1;
+            PhysicsServer3D::singleton().body_get_direct_state(m.rid)
+        } else {
+            None
+        };
+        let (xf, velocity, angular) = match direct {
+            Some(state) => {
+                self.sync_reads += 3;
                 (
-                    marker
-                        .get(&self.names.get_or_insert_with(Names::new).velocity)
-                        .try_to::<Vector3>()
-                        .unwrap_or(Vector3::ZERO),
-                    Vector3::ZERO,
+                    state.get_transform(),
+                    state.get_linear_velocity(),
+                    state.get_angular_velocity(),
                 )
             }
-            (None, None) => (Vector3::ZERO, Vector3::ZERO),
+            None => {
+                self.sync_reads += 1;
+                let xf = m.body.get_global_transform();
+                let (velocity, angular) = match (&m.rigid, &m.marker) {
+                    (Some(rigid), _) => {
+                        self.sync_reads += 2;
+                        (rigid.get_linear_velocity(), rigid.get_angular_velocity())
+                    }
+                    (None, Some(marker)) => {
+                        self.sync_reads += 1;
+                        (
+                            marker
+                                .get(&self.names.get_or_insert_with(Names::new).velocity)
+                                .try_to::<Vector3>()
+                                .unwrap_or(Vector3::ZERO),
+                            Vector3::ZERO,
+                        )
+                    }
+                    (None, None) => (Vector3::ZERO, Vector3::ZERO),
+                };
+                (xf, velocity, angular)
+            }
         };
         let has_hull = m.hull.is_some();
         let mut flags = 0;
@@ -1214,7 +1279,19 @@ impl ScsSimCore {
             flags |= FLAG_HULL_ACTIVE;
         }
         // The brains' two live reads of a contact (M4-T17): `Damageable.hull.fraction()` and the ship's selection, as the
-        // scan stamped them. Two property reads for the hull, one for the selection.
+        // scan stamped them. Two property reads for the hull, one for the selection; with the event columns (M4-T35) the
+        // values the events last gave, read live only with the attributes.
+        if self.event_columns {
+            return Read {
+                position: xf.origin,
+                basis: xf.basis,
+                velocity,
+                angular,
+                flags,
+                hull_fraction: attrs.hull_fraction,
+                target_id: attrs.target_id,
+            };
+        }
         let names = self.names.get_or_insert_with(Names::new);
         let mut failed = 0;
         let hull_fraction = match &attrs.health {
@@ -1282,6 +1359,7 @@ impl ScsSimCore {
         rows.kinds.push(attrs.kind);
         rows.flags.push(read.flags);
         self.row_names.push(attrs.name.clone());
+        self.row_rids.push(m.rid);
         rows.hull_ids
             .push(m.hull.as_ref().map_or(0, |h| h.instance_id().to_i64()));
         rows.handles.push(Self::handle(m));
@@ -1334,6 +1412,8 @@ impl ScsSimCore {
             } else {
                 hull_only_active(m, names, &mut self.sync_reads)
             };
+            m.active = active;
+            m.active_known = true;
             match self.row_of_id.get(&m.body_id).copied() {
                 Some(r) if rows.handles[r as usize] == Self::handle(m) => {
                     let r = r as usize;
@@ -1490,6 +1570,30 @@ impl ScsSimCore {
             }
             None => 0.0,
         };
+        // The event columns' starting values (M4-T35): the hull and the selection as they are now; the events keep them.
+        let hull_fraction = match &health {
+            Some(h) => {
+                self.sync_reads += 2;
+                let hp = h.get(&names.hp).try_to::<f64>();
+                let max_hp = h.get(&names.max_hp).try_to::<f64>();
+                match (hp, max_hp) {
+                    (Ok(hp), Ok(max_hp)) => clamp01(hp / max_hp),
+                    _ => -1.0,
+                }
+            }
+            None => -1.0,
+        };
+        let target_id = match &targeting {
+            Some(system) => {
+                self.sync_reads += 1;
+                match system.get(&names.selected_id).try_to::<i64>() {
+                    Ok(selected) if selected != 0 => selected,
+                    _ => -1,
+                }
+            }
+            None => -1,
+        };
+        self.latest_target.insert(m.body_id, target_id);
         Attrs {
             faction_ix: self.faction_index(faction),
             name_key: name.to_string().to_lowercase(),
@@ -1500,6 +1604,8 @@ impl ScsSimCore {
             reach,
             health,
             targeting,
+            hull_fraction,
+            target_id,
         }
     }
 }
@@ -1708,5 +1814,163 @@ impl Digest {
         self.word(u64::from(v.x.to_bits()));
         self.word(u64::from(v.y.to_bits()));
         self.word(u64::from(v.z.to_bits()));
+    }
+}
+
+// M4-T35b: the core's state from events, the selection check and what the ram stage reads.
+#[godot_api(secondary)]
+impl ScsSimCore {
+    /// Keeps activity, hull and selection from the facade's events (`perf_core_event_columns`): a body is checked again
+    /// only when touched, and its hull and selection columns carry what `note_hull` and `note_selection` last gave.
+    #[func]
+    fn set_event_columns(&mut self, on: bool) {
+        if on != self.event_columns {
+            self.activity_dirty = true;
+            self.forget_attributes();
+        }
+        self.event_columns = on;
+    }
+
+    #[func]
+    fn event_columns(&self) -> bool {
+        self.event_columns
+    }
+
+    /// Reads the rigid bodies from the physics server's direct state by RID (`perf_core_body_direct`) instead of the nodes.
+    #[func]
+    fn set_body_direct(&mut self, on: bool) {
+        self.body_direct = on;
+    }
+
+    #[func]
+    fn body_direct(&self) -> bool {
+        self.body_direct
+    }
+
+    /// A hull's points changed (`Damageable.damaged`, a heal): its column reads `clamp(hp / max_hp)` from the next sync.
+    #[func]
+    fn note_hull(&mut self, body_id: i64, hp: f64, max_hp: f64) {
+        let fraction = clamp01(hp / max_hp);
+        for m in self.markers.iter_mut().chain(self.hulls.iter_mut()) {
+            if m.body_id == body_id {
+                if let Some(a) = m.attrs.as_mut() {
+                    if a.health.is_some() {
+                        a.hull_fraction = fraction;
+                    }
+                }
+            }
+        }
+    }
+
+    /// A ship's selection changed (`TargetingController.target_changed`): its column reads it from the next sync.
+    #[func]
+    fn note_selection(&mut self, body_id: i64, selected_id: i64) {
+        let target = if selected_id != 0 { selected_id } else { -1 };
+        self.latest_target.insert(body_id, target);
+        for m in self.markers.iter_mut().chain(self.hulls.iter_mut()) {
+            if m.body_id == body_id {
+                if let Some(a) = m.attrs.as_mut() {
+                    if a.targeting.is_some() {
+                        a.target_id = target;
+                    }
+                }
+            }
+        }
+    }
+
+    /// A row's hull column (0..1, -1 without a hull) and selection column (a `Targetable` id, -1 for none).
+    #[func]
+    fn row_hull_fraction(&self, row: i64) -> f64 {
+        self.row_index(row)
+            .map_or(-1.0, |r| self.rows.hull_fraction[r])
+    }
+
+    #[func]
+    fn row_target_id(&self, row: i64) -> i64 {
+        self.row_index(row).map_or(-1, |r| self.rows.target_ids[r])
+    }
+
+    /// Runs the selection check of body `body_id`'s AI targeting controller here (`perf_native_selection_check`): its
+    /// selection must be a row within `sensor_range_m` or the target's own reach, and not its own ship.
+    #[func]
+    fn watch_selection(&mut self, body_id: i64, sensor_range_m: f64) {
+        self.unwatch_selection(body_id);
+        self.selection_watch.push((body_id, sensor_range_m));
+    }
+
+    #[func]
+    fn unwatch_selection(&mut self, body_id: i64) {
+        self.selection_watch.retain(|(b, _)| *b != body_id);
+    }
+
+    #[func]
+    fn watched_selections(&self) -> i64 {
+        self.selection_watch.len() as i64
+    }
+
+    /// A watched body's check, step by step, for the tests: `[row, latest target, target row, range, reach, sensor]`.
+    #[func]
+    fn selection_check_of(&self, body_id: i64) -> PackedFloat64Array {
+        let sensor = self
+            .selection_watch
+            .iter()
+            .find(|(b, _)| *b == body_id)
+            .map_or(-1.0, |(_, s)| *s);
+        let r = self.row_of_id.get(&body_id).map_or(-1, |&r| i64::from(r));
+        let target = self.latest_target.get(&body_id).copied().unwrap_or(-1);
+        let tr = if target > 0 { i64::from(self.rows.row_of_id(target)) } else { -1 };
+        let (range, reach) = match (usize::try_from(r), usize::try_from(tr)) {
+            (Ok(r), Ok(t)) => {
+                let from = self.rows.positions[r];
+                let to = self.rows.positions[t];
+                let dx = f64::from(to.x) - f64::from(from.x);
+                let dy = f64::from(to.y) - f64::from(from.y);
+                let dz = f64::from(to.z) - f64::from(from.z);
+                ((dx * dx + dy * dy + dz * dz).sqrt(), self.rows.reach[t])
+            }
+            _ => (-1.0, -1.0),
+        };
+        PackedFloat64Array::from(&[r as f64, target as f64, tr as f64, range, reach, sensor][..])
+    }
+
+    /// The watched bodies whose selection the controllers would clear now (`TargetingController._check_selection`): no
+    /// row for the target (parked, gone), the ship's own marker, or out of reach, the range in 64 bits as
+    /// `TargetingSystem.range_between` takes it. The selection is the latest the events gave.
+    #[func]
+    fn selection_clears(&self) -> PackedInt64Array {
+        let mut out: Vec<i64> = Vec::new();
+        for &(body_id, sensor_range) in &self.selection_watch {
+            let Some(&r) = self.row_of_id.get(&body_id) else {
+                continue; // no row: a parked ship's controller does not run either
+            };
+            let target = self.latest_target.get(&body_id).copied().unwrap_or(-1);
+            if target <= 0 {
+                continue;
+            }
+            let tr = self.rows.row_of_id(target);
+            let Ok(t) = usize::try_from(tr) else {
+                out.push(body_id);
+                continue;
+            };
+            if self.rows.body_ids[t] == body_id {
+                out.push(body_id);
+                continue;
+            }
+            let from = self.rows.positions[r as usize];
+            let to = self.rows.positions[t];
+            let dx = f64::from(to.x) - f64::from(from.x);
+            let dy = f64::from(to.y) - f64::from(from.y);
+            let dz = f64::from(to.z) - f64::from(from.z);
+            let range = (dx * dx + dy * dy + dz * dz).sqrt();
+            let reach = if sensor_range > self.rows.reach[t] {
+                sensor_range
+            } else {
+                self.rows.reach[t]
+            };
+            if range > reach {
+                out.push(body_id);
+            }
+        }
+        PackedInt64Array::from(out.as_slice())
     }
 }

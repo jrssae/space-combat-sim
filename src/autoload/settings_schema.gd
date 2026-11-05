@@ -129,6 +129,18 @@ const ENTRIES: Dictionary = {
 	&"perf_native_sweep_cells": {"type": TYPE_BOOL, "default": true,
 		"doc": "The native hit broad phase keeps its grid's cells in hash maps (M4-T34; the same pairs and work); off = the sorted cells, the reference"},
 	# M4-T35
+	&"perf_core_event_columns": {"type": TYPE_BOOL, "default": true,
+		"doc": "The core keeps a body's activity, hull points and selection from the events that change them (hidden, shown, destroyed, damaged, healed, a selection change; M4-T35) and reads only the pose and motion a tick; off = every column read from the nodes every tick, the reference, for pairing the two in one process; live"},
+	&"perf_core_body_direct": {"type": TYPE_BOOL, "default": false,
+		"doc": "The core reads the rigid bodies' pose and motion from the physics server's direct state by RID (M4-T35) instead of the nodes' getters; the bits differ from the nodes' only between a teleport and Jolt's next step; off = the nodes' getters, the reference; live"},
+	&"perf_native_ram_contacts": {"type": TYPE_BOOL, "default": true,
+		"doc": "The ram resolver reads every rigid hull's Jolt contacts and its own acceleration in one native call over the core's rows (M4-T35); off = a GDScript direct-state read per hull, the reference (needs perf_ram_contact_columns on); live"},
+	&"perf_native_selection_check": {"type": TYPE_BOOL, "default": true,
+		"doc": "The AI ships' targeting controllers' selection check (a target gone, parked or out of reach) runs as one native pass over the core's rows (M4-T35; needs perf_core_event_columns); off = each controller checks its own selection every tick, the reference; live"},
+	&"perf_batch_owns_ships": {"type": TYPE_BOOL, "default": true,
+		"doc": "A ship the flight batch flies does not tick itself (M4-T35): the batch's gather takes its combat edges and the batch gives the tick back when it stops flying the ship; off = every ship's own tick runs and returns early, the reference; live"},
+	&"ship_contact_monitor": {"type": TYPE_BOOL, "default": false,
+		"doc": "RigidBody3D.contact_monitor on every ship (M4-T35): off by default, since nothing connects body_entered and the direct state's contact list, which the ram resolver reads, needs only max_contacts_reported; applies to ships built after the change"},
 	&"perf_native_bolt_rows": {"type": TYPE_BOOL, "default": true,
 		"doc": "The core owns the bolts (M4-T35): the AI cannons' gates and shots run as one kernel over the rows, each bolt is a row stepped natively, swept and spent from the rows by the hit resolver and drawn by one multimesh a look; the player's cannon and the beams and missiles keep their nodes; off = a Projectile node per bolt and a GDScript tick per cannon, the reference, for pairing the two in one process (a switch mid-run drops the bolts in flight); live"},
 }

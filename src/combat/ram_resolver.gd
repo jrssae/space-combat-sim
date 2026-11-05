@@ -105,6 +105,7 @@ var _rock_hulls: Dictionary = {}
 # The contact phase's form (M4-T34): columns (`perf_ram_contact_columns`) or a sample per hull, the reference; the tracker is
 # reset when it changes. And each hull's index by body id, built when first needed in a tick.
 var _contact_columns: bool = false
+var _contact_native: bool = false  # the contacts read in one native call over the rows (M4-T35)
 var _index_of: Dictionary[int, int] = {}
 var _index_built: bool = false
 
@@ -168,7 +169,12 @@ func resolve(delta: float) -> void:
 		if columns != _contact_columns:
 			_contact_columns = columns
 			tracker.reset()  # the tracker keeps the last tick in the form it was given
-		var in_contact: PackedInt64Array = _resolve_contacts_columns(delta) if columns else _resolve_contacts(delta)
+		_contact_native = columns and sim != null and bool(Settings.get_value(&"perf_native_ram_contacts"))
+		var in_contact: PackedInt64Array
+		if _contact_native:
+			in_contact = _resolve_contacts_native(sim, delta)
+		else:
+			in_contact = _resolve_contacts_columns(delta) if columns else _resolve_contacts(delta)
 		_resolve_swept(sim, in_contact, delta)
 		_resolve_rocks(sim, delta)
 		tracker.end_tick()
@@ -183,8 +189,11 @@ func source() -> StringName:
 	return _source
 
 
-## How the last tick's contacts reached the tracker: &"columns" (M4-T34) or &"samples" (a sample per hull, the reference).
+## How the last tick's contacts reached the tracker: &"native" (one call over the rows, M4-T35), &"columns" (M4-T34) or
+## &"samples" (a sample per hull, the reference).
 func contact_path() -> StringName:
+	if _contact_native:
+		return &"native"
 	return &"columns" if _contact_columns else &"samples"
 
 
@@ -406,6 +415,53 @@ func _resolve_contacts_columns(delta: float) -> PackedInt64Array:
 		var i: int = touch_rows[t]
 		t += 1
 		for other_id: int in touches[id]:
+			var k: int = _index().get(other_id, -1)
+			if k >= 0:
+				in_contact.append(mini(i, k) * _count + maxi(i, k))
+	var pending: Array[Array] = []
+	for ram: RamTracker.ContactRam in tracker.contacts_columns(ids, velocities, accels, touches, _limits, delta):
+		var damageable: Damageable = _hull(_index()[ram.hull_id])["damageable"]
+		if damageable == null:
+			continue  # its node went since the gather
+		var other_at: int = _index().get(ram.other_id, -1)
+		var other_hull: Damageable = _hull(other_at)["damageable"] if other_at >= 0 else null
+		var other_faction: StringName = other_hull.faction if other_hull != null else &""
+		var info := HitInfo.new(ram.hull_id, ram.other_id, other_faction, damageable.hull.max_hp * ram.severity, ram.point,
+				ram.normal, ram.relative_speed, HitInfo.CAUSE_RAM)
+		pending.append(_pending(damageable, info, KIND_CONTACT, ram.dv))
+	_apply_all(pending)
+	return in_contact
+
+
+# `_resolve_contacts_columns` with the contacts, velocities and accelerations read in one native call over the core's rows
+# (M4-T35): the same columns to the tracker, built in GDScript only for the hulls Jolt reports touching; a hull whose
+# acceleration the flight step did not write (a ship on its own model) is asked as before.
+func _resolve_contacts_native(sim: SimCore, delta: float) -> PackedInt64Array:
+	var read: Array = _phase.contacts(sim.core, _shift_since_step)
+	var rows: PackedInt32Array = read[0]
+	var ids: PackedInt64Array = read[1]
+	var velocities: PackedVector3Array = read[2]
+	var accels: PackedVector3Array = read[3]
+	var known: PackedByteArray = read[4]
+	for k: int in ids.size():
+		if known[k] == 0:
+			accels[k] = _accel(rows[k])
+	var touched_rows: PackedInt32Array = read[5]
+	var starts: PackedInt32Array = read[6]
+	var others: PackedInt64Array = read[7]
+	var points: PackedVector3Array = read[8]
+	var normals: PackedVector3Array = read[9]
+	var touches: Dictionary[int, Dictionary] = {}
+	var in_contact := PackedInt64Array()
+	for t: int in touched_rows.size():
+		var i: int = touched_rows[t]
+		var contacts: Dictionary[int, RamTracker.Touch] = {}
+		for c: int in range(starts[t], starts[t + 1]):
+			var other_id: int = others[c]
+			if not contacts.has(other_id):
+				contacts[other_id] = RamTracker.Touch.new(points[c], normals[c])
+		touches[_ids[i]] = contacts
+		for other_id: int in contacts:
 			var k: int = _index().get(other_id, -1)
 			if k >= 0:
 				in_contact.append(mini(i, k) * _count + maxi(i, k))

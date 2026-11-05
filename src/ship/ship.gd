@@ -150,6 +150,8 @@ var _flown_tick: int = -1
 var _prepared_tick: int = -1
 # The ship flies its command from the core's row (M4-T33).
 var _row_command: bool = false
+# The flight batch flies this ship and owns its tick (M4-T35): this node's `_physics_process` is off until the batch gives it back.
+var _batch_owned: bool = false
 
 @onready var hull: MeshInstance3D = $Hull
 @onready var cockpit_interior: MeshInstance3D = $CockpitInterior
@@ -207,6 +209,7 @@ func _notification(what: int) -> void:
 
 func _exit_tree() -> void:
 	release_row_command()
+	set_batch_owned(false)
 	_leave_batch()
 	DebugConsole.registry.unregister_owner(self)
 	var rig: LightRig = LightRig.of(self)
@@ -432,6 +435,8 @@ func flight_path() -> StringName:
 ## `_physics_process` would), the command packed at `row`, and the marks that tell `_physics_process` the batch flies this tick.
 func batch_gather(batch: FlightBatch, row: int, frame: int, delta: float, fuel_unlimited: bool,
 		scalars: PackedFloat64Array, vectors: PackedVector3Array, flags: PackedByteArray) -> void:
+	if _batch_owned and _take_combat_edges():
+		targeting.apply(_combat)  # this node's tick is off (M4-T35): the edges land here, before the World's rebase at 0
 	_prepare_command(delta, global_basis.transposed())
 	_fuel.unlimited = fuel_unlimited
 	FlightBatch.pack_command(_flight, _environment_accel(), _assist_on, not _fuel.is_empty(), scalars, vectors, flags, row)
@@ -450,6 +455,20 @@ func batch_gather(batch: FlightBatch, row: int, frame: int, delta: float, fuel_u
 ## The batch's step refused this tick's arrays after the gather: this node applies the forces itself.
 func batch_refused() -> void:
 	_flown_tick = -1
+	set_batch_owned(false)
+
+
+## Whether the flight batch owns this ship's tick (M4-T35): the batch flies it and this node's `_physics_process` is off
+## until the batch gives the tick back (it stops flying the ship, the ship leaves it, the setting goes off).
+func set_batch_owned(owned: bool) -> void:
+	if owned == _batch_owned:
+		return
+	_batch_owned = owned
+	set_physics_process(not owned)
+
+
+func is_batch_owned() -> bool:
+	return _batch_owned
 
 
 ## The batch draws this tick's reaction mass for a batched ship (only when the tank is finite).
@@ -595,7 +614,8 @@ func _apply_newtonian_body() -> void:
 	angular_damp = 0.0
 	can_sleep = false
 	continuous_cd = false
-	contact_monitor = true
+	# Nothing connects body_entered; the direct state's contact list (the ram resolver's) needs only the count (M4-T35).
+	contact_monitor = bool(Settings.get_value(&"ship_contact_monitor"))
 	max_contacts_reported = CONTACTS_REPORTED
 	if collision_layer == 1 and collision_mask == 1:  # layers a caller already chose before the ship entered the tree stay
 		_apply_collision_layers()
@@ -947,6 +967,7 @@ func _join_batch() -> void:
 
 
 func _leave_batch() -> void:
+	set_batch_owned(false)
 	if _batch == null:
 		return
 	if is_instance_valid(_batch):

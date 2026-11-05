@@ -16,6 +16,10 @@ extends Node
 ##
 ## Inactive targetables (`Targetable.is_active()`: hidden, or their owner not processing) are never candidates, and a
 ## selection that turns inactive is cleared on the next refresh, emitting `target_changed`.
+##
+## On the core (M4-T35, `perf_native_selection_check`): an AI ship's controller (one that does not keep candidates) hands its
+## check to the core, which runs every watched ship's in one pass over the rows at this priority and names the ships whose
+## selection must clear; this node then stops ticking itself and only clears (`clear_selection`, the same signal).
 
 ## The selection changed: a target id (`Targetable` instance id), or `TargetingSystem.NO_TARGET` when it cleared.
 signal target_changed(id: int)
@@ -39,13 +43,25 @@ var _snap_positions := PackedVector3Array()
 var _snap_reach := PackedFloat64Array()
 var _snap_names := PackedStringArray()
 var _snap_valid: bool = false
+# Every controller in a tree, so the core can rebind them when its selection check comes or goes (M4-T35); the core this
+# one's check runs on, or null.
+static var _live: Array[TargetingController] = []
+var _sim: SimCore = null
 
 
 func _init() -> void:
 	process_physics_priority = LATE_PRIORITY
 
 
+func _enter_tree() -> void:
+	_live.append(self)
+	if _body != null:
+		_bind()
+
+
 func _exit_tree() -> void:
+	_live.erase(self)
+	_unbind()
 	DebugConsole.registry.unregister_owner(self)
 
 
@@ -67,6 +83,48 @@ func setup(body: RigidBody3D, register_console: bool = false) -> void:
 	if register_console:
 		_register_console()
 	refresh()
+	_bind()
+
+
+## Whether the core runs this controller's selection check now (M4-T35).
+func on_core() -> bool:
+	return _sim != null
+
+
+## Sets the sensor range (`TargetingSystem.sensor_range_m`) and tells the core's check, which took the range when it bound.
+func set_sensor_range_m(value: float) -> void:
+	system.sensor_range_m = value
+	if _sim != null and _body != null:
+		_sim.watch_selection(self, _body.get_instance_id(), value)
+
+
+## Binds every controller to the core's selection check, or back to its own tick, as the core and the setting stand.
+static func rebind_all() -> void:
+	for controller: TargetingController in _live:
+		if is_instance_valid(controller) and controller._body != null:
+			controller._bind()
+
+
+# Hands the check to the core when it runs them and this controller only checks its selection; else ticks itself.
+func _bind() -> void:
+	var sim: SimCore = SimCore.for_tree(get_tree()) if is_inside_tree() else null
+	var wanted: bool = sim != null and not keeps_candidates and SimCore.selection_check_enabled() and _has_body()
+	if not wanted:
+		_unbind()
+		return
+	if _sim == sim:
+		return
+	_unbind()
+	_sim = sim
+	sim.watch_selection(self, _body.get_instance_id(), system.sensor_range_m)
+	set_physics_process(false)
+
+
+func _unbind() -> void:
+	if _sim != null and is_instance_valid(_sim) and _body != null:
+		_sim.unwatch_selection(_body.get_instance_id())
+	_sim = null
+	set_physics_process(true)
 
 
 func _physics_process(_delta: float) -> void:
@@ -338,6 +396,8 @@ func _select_alone(target: Targetable) -> void:
 
 func _emit_if_changed(before: int) -> void:
 	if system.selected_id() != before:
+		if _body != null:
+			SimCore.note_selection_changed(_body.get_instance_id(), system.selected_id())  # the core's column (M4-T35)
 		target_changed.emit(system.selected_id())
 
 
