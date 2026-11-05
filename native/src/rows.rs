@@ -13,7 +13,7 @@ pub const FLAG_LATE: u32 = 8;
 /// marker), the static rows, then any row added after the tick's first sync. Read by the kernels through `bind()`, from
 /// several threads at once (M4-T18): every column is plain data the threads may share; the display names, an engine
 /// string, live beside the rows in the core.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Rows {
     pub body_ids: Vec<i64>,
     pub ids: Vec<i64>,
@@ -45,7 +45,7 @@ pub struct Rows {
 
 /// The bolts in flight, column by column: first the rows the core owns (M4-T35, stepped by `bolt_kernels`, in launch
 /// order), then the projectiles still read from nodes, in `projectiles` group order.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Bolts {
     pub ids: Vec<i64>,
     pub positions: Vec<Vector3>,

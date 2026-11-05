@@ -2,7 +2,9 @@
 // (a thinking ship, a flying ship) to one call that reads only frozen, shared data and writes only that item, with a
 // scratch of its own per worker thread, so one thread and six give the same bits. Engine-free: no Godot type here.
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use rayon::prelude::*;
@@ -28,9 +30,9 @@ const JOIN_TIMEOUT: Duration = Duration::from_secs(5);
 /// The core's worker threads: none for one thread, else a pool of that many.
 pub struct Threads {
     count: usize,
-    pool: Option<rayon::ThreadPool>,
+    pool: Option<Arc<rayon::ThreadPool>>,
     min_items: [usize; 2],
-    parallel_passes: [AtomicI64; 2],
+    parallel_passes: Arc<[AtomicI64; 2]>,
     // Workers spawned and not yet exited, across every pool this core made (a pool's workers are joined before the next).
     live: Arc<AtomicI64>,
 }
@@ -41,9 +43,25 @@ impl Default for Threads {
             count: 1,
             pool: None,
             min_items: DEFAULT_MIN_ITEMS,
-            parallel_passes: [AtomicI64::new(0), AtomicI64::new(0)],
+            parallel_passes: Arc::new([AtomicI64::new(0), AtomicI64::new(0)]),
             live: Arc::new(AtomicI64::new(0)),
         }
+    }
+}
+
+/// A pass runner any thread may own (M4-T24): the step's job runs the brains' pass through one, on the same pool as
+/// the core's `Threads`, so the thread count and the thresholds hold off the main thread too.
+#[derive(Clone)]
+pub struct Runner {
+    count: usize,
+    pool: Option<Arc<rayon::ThreadPool>>,
+    min_items: [usize; 2],
+    parallel_passes: Arc<[AtomicI64; 2]>,
+}
+
+impl Default for Runner {
+    fn default() -> Self {
+        Threads::default().runner()
     }
 }
 
@@ -71,7 +89,8 @@ impl Threads {
                     exited.fetch_sub(1, Ordering::SeqCst);
                 })
                 .build()
-                .ok();
+                .ok()
+                .map(Arc::new);
             // Counted when spawned, so a worker still starting is waited for too.
             if built.is_some() {
                 self.live.fetch_add(count as i64, Ordering::SeqCst);
@@ -136,6 +155,33 @@ impl Threads {
         }
     }
 
+    /// A runner on this pool, for a pass run off the main thread (M4-T24).
+    pub fn runner(&self) -> Runner {
+        Runner {
+            count: self.count,
+            pool: self.pool.clone(),
+            min_items: self.min_items,
+            parallel_passes: Arc::clone(&self.parallel_passes),
+        }
+    }
+
+    /// Calls `each` on every item, with the scratch of the worker thread that runs it (`Runner::run`).
+    pub fn run<T, W, F>(&self, pass: Pass, items: &mut [T], workers: &[Mutex<W>], each: F)
+    where
+        T: Send,
+        W: Send,
+        F: Fn(&mut T, &mut W) + Sync,
+    {
+        self.runner().run(pass, items, workers, each);
+    }
+}
+
+impl Runner {
+    /// The threads a pass uses.
+    pub fn count(&self) -> usize {
+        self.count
+    }
+
     /// Calls `each` on every item, with the scratch of the worker thread that runs it. With one thread, or fewer items
     /// than the threshold, every item runs on the calling thread with the first scratch. `each` must read only shared,
     /// frozen data and write only its item and the scratch, clearing what it reads of the scratch first.
@@ -148,10 +194,9 @@ impl Threads {
         if workers.is_empty() {
             return;
         }
-        let pool = self
-            .pool
-            .as_ref()
-            .filter(|_| items.len() >= self.min_items(pass) && workers.len() >= self.count);
+        let pool = self.pool.as_ref().filter(|_| {
+            items.len() >= self.min_items[pass as usize] && workers.len() >= self.count
+        });
         let Some(pool) = pool else {
             let mut worker = lock(&workers[0]);
             for item in items.iter_mut() {
@@ -170,6 +215,127 @@ impl Threads {
                 }
             });
         });
+    }
+}
+
+// The step thread's mail: a job to run, or the end.
+enum Mail<J> {
+    Run(J),
+    Stop,
+}
+
+/// The step's worker thread (M4-T24): one thread that runs one job at a time and hands its result back, so the main
+/// thread launches a tick's job, goes on with the tick and the frame, and joins the result when the next tick needs
+/// it. Engine-free: a job is plain data the thread owns while it runs.
+pub struct StepThread<J: Send + 'static, D: Send + 'static> {
+    mail: Option<Sender<Mail<J>>>,
+    done: Receiver<D>,
+    handle: Option<JoinHandle<()>>,
+    live: Arc<AtomicI64>,
+    pending: bool,
+}
+
+impl<J: Send + 'static, D: Send + 'static> StepThread<J, D> {
+    /// Starts the thread, which runs every job it is sent through `run`.
+    pub fn start(name: &str, run: fn(J) -> D) -> Self {
+        let (mail, inbox) = channel::<Mail<J>>();
+        let (outbox, done) = channel::<D>();
+        let live = Arc::new(AtomicI64::new(1));
+        let exited = Arc::clone(&live);
+        let handle = std::thread::Builder::new()
+            .name(name.to_string())
+            .spawn(move || {
+                for item in inbox {
+                    match item {
+                        Mail::Run(job) => {
+                            if outbox.send(run(job)).is_err() {
+                                break;
+                            }
+                        }
+                        Mail::Stop => break,
+                    }
+                }
+                exited.fetch_sub(1, Ordering::SeqCst);
+            })
+            .ok();
+        if handle.is_none() {
+            live.store(0, Ordering::SeqCst);
+        }
+        Self {
+            mail: Some(mail),
+            done,
+            handle,
+            live,
+            pending: false,
+        }
+    }
+
+    /// Whether the thread runs (false when it could not be started).
+    pub fn alive(&self) -> bool {
+        self.handle.is_some() && self.live.load(Ordering::SeqCst) > 0
+    }
+
+    /// Hands the thread a job; false (the job given back) when it has no thread or one is still out.
+    pub fn launch(&mut self, job: J) -> Result<(), J> {
+        if self.pending || !self.alive() {
+            return Err(job);
+        }
+        let Some(mail) = self.mail.as_ref() else {
+            return Err(job);
+        };
+        match mail.send(Mail::Run(job)) {
+            Ok(()) => {
+                self.pending = true;
+                Ok(())
+            }
+            Err(back) => match back.0 {
+                Mail::Run(job) => Err(job),
+                Mail::Stop => unreachable!("a job was sent"),
+            },
+        }
+    }
+
+    /// Whether a job is out.
+    pub fn pending(&self) -> bool {
+        self.pending
+    }
+
+    /// The job's result if it has finished, without waiting.
+    pub fn try_take(&mut self) -> Option<D> {
+        if !self.pending {
+            return None;
+        }
+        let done = self.done.try_recv().ok();
+        if done.is_some() {
+            self.pending = false;
+        }
+        done
+    }
+
+    /// The job's result, waited for (none when no job is out or the thread died under it).
+    pub fn take(&mut self) -> Option<D> {
+        if !self.pending {
+            return None;
+        }
+        self.pending = false;
+        self.done.recv().ok()
+    }
+
+    /// Threads of this kind running now (1 or 0).
+    pub fn live(&self) -> i64 {
+        self.live.load(Ordering::SeqCst)
+    }
+}
+
+// The thread is told to stop and joined (it finishes a job it is running first), so it never outlives the library.
+impl<J: Send + 'static, D: Send + 'static> Drop for StepThread<J, D> {
+    fn drop(&mut self) {
+        if let Some(mail) = self.mail.take() {
+            let _ = mail.send(Mail::Stop);
+        }
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
     }
 }
 

@@ -2,8 +2,11 @@
 // pilot's last flight command and trigger here, by body, and the flight step flies it the same tick. A command stays until
 // the next think replaces it, so a held or declined think flies the one the row has. GDScript releases a ship's command
 // when anything else commands it.
+use std::collections::HashMap;
+
 use godot::prelude::*;
 
+use crate::brain_step::Snapshot;
 use crate::kernels::flight::Cmd;
 use crate::sim_core::ScsSimCore;
 
@@ -39,42 +42,30 @@ impl RowCommand {
 }
 
 impl ScsSimCore {
-    /// Keeps a native think's command for `body_id` (`out` is the think's output, flight numbers then the trigger) and
-    /// returns the events it raises.
-    pub fn write_command(&mut self, body_id: i64, out: &[f64]) -> u8 {
-        let fire = out[CMD_LEN] != 0.0;
-        let mut events = 0;
-        match self.row_commands.get_mut(&body_id) {
-            Some(known) => {
-                if known.fire != fire {
-                    events |= EVENT_FIRE;
-                }
-                known.fire = fire;
-                known.cmd.copy_from_slice(&out[..CMD_LEN]);
-            }
-            None => {
-                events |= EVENT_ENTER;
-                let mut made = RowCommand {
-                    fire,
-                    ..RowCommand::default()
-                };
-                made.cmd.copy_from_slice(&out[..CMD_LEN]);
-                self.row_commands.insert(body_id, made);
-            }
-        }
-        events
-    }
-
-    /// Notes whether `body_id`'s pilot is committed to a ram (after `write_command`); true when that changed.
-    pub fn note_ram(&mut self, body_id: i64, committed: bool) -> bool {
-        self.row_commands
-            .get_mut(&body_id)
-            .is_some_and(|rc| std::mem::replace(&mut rc.ram, committed) != committed)
-    }
-
     /// The command `body_id` flies from its row, if it flies one.
     pub fn live_command(&self, body_id: i64) -> Option<&RowCommand> {
         self.row_commands.get(&body_id)
+    }
+
+    /// Fills a job's snapshot from the tables as they stand (M4-T24): the rows, the bolts, the rows by body, the bodies
+    /// touched since the sync, the commands and the version; and starts counting the commands released from now on.
+    pub(crate) fn snapshot_into(&mut self, snapshot: &mut Snapshot) {
+        snapshot.rows.clone_from(&self.rows);
+        snapshot.bolts.clone_from(&self.bolts);
+        snapshot.body_rows.clone_from(self.body_rows());
+        snapshot.touched.clone_from(self.touched_set());
+        snapshot.commands.clone_from(&self.row_commands);
+        snapshot.rows_version = self.rows_version_now();
+        self.released.clear();
+    }
+
+    /// Takes a joined job's commands as the rows' (M4-T24): the map swapped in whole, less the bodies something else
+    /// commanded since the launch (`release_command`), which fly their own command until their next think.
+    pub(crate) fn take_commands(&mut self, commands: &mut HashMap<i64, RowCommand>) {
+        std::mem::swap(&mut self.row_commands, commands);
+        for body in self.released.drain(..) {
+            self.row_commands.remove(&body);
+        }
     }
 }
 
@@ -84,6 +75,7 @@ impl ScsSimCore {
     #[func]
     fn release_command(&mut self, body_id: i64) {
         self.row_commands.remove(&body_id);
+        self.released.push(body_id);
     }
 
     /// The command `body_id` flies from its row: 1, the flight numbers (`CMD_LEN`) and the trigger; empty when none.

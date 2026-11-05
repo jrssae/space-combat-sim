@@ -638,7 +638,7 @@ const KERNEL_FILE: String = "res://native/src/kernels.rs"
 const ROWS_FILE: String = "res://native/src/rows.rs"
 const KERNEL_USERS: Array[String] = ["res://native/src/contact_field.rs", "res://native/src/hit_sweep.rs",
 		"res://native/src/ram_phase.rs", "res://native/src/flight_step.rs", "res://native/src/pilot_kernels.rs",
-		"res://native/src/brain.rs"]
+		"res://native/src/brain_step.rs"]
 ## The bolt kernels (M4-T35): the bolt step, the cannon gate and spawn and the multimesh transforms, held to the kernels'
 ## rules; they import the row tables and the shared vector maths, nothing else.
 const BOLT_KERNEL_FILE: String = "res://native/src/bolt_kernels.rs"
@@ -807,3 +807,32 @@ func test_the_weapon_kernels_hold_no_engine_type() -> void:
 			"no shared mutable state in the weapon kernels (T18's threads)")
 	for user: String in WEAPON_KERNEL_USERS:
 		assert_true(FileAccess.get_file_as_string(user).contains("use crate::weapon_kernels::"), "%s reads the weapon kernels" % user)
+
+
+# --- the AI step as a job (M4-T24) --------------------------------------------------------------------------------------
+
+
+## The step's job (`native/src/brain_step.rs`: the batch over a snapshot of the rows, the hosted drivers' step, the
+## commands written) runs on the step's worker thread, so it holds no way to the engine: the kernels' tokens are refused
+## and it may import only the engine-free files (the rows, the vector maths, the brains, the kernels, the plain command
+## row and the threads). The thread itself lives in `threads.rs`, under the same rule.
+const BRAIN_STEP_FILE: String = "res://native/src/brain_step.rs"
+const BRAIN_STEP_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
+		"use crate::rows::", "use crate::v3::", "use crate::brain_maths::", "use crate::brain_behaviours::", "use crate::kernels::",
+		"use crate::row_commands::", "use crate::threads::"]
+
+
+func test_the_step_job_holds_no_engine_type() -> void:
+	var violations: PackedStringArray = _engine_free_violations(BRAIN_STEP_FILE, KERNEL_FORBIDDEN, BRAIN_STEP_USE_ALLOWED)
+	violations.append_array(_engine_free_violations(THREADS_FILE, KERNEL_FORBIDDEN, THREADS_USE_ALLOWED))
+	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the step's job or its thread: %s" % violations)
+	var source: String = FileAccess.get_file_as_string(BRAIN_STEP_FILE)
+	for part: String in ["pub fn run(job: Job) -> Done", "fn run_batch", "fn queue_hosted", "fn write_commands", "fn settle_hosted"]:
+		assert_true(source.contains(part), "the job holds %s" % part)
+	assert_false(source.contains("static mut") or source.contains("thread_local") or source.contains("Cell<"),
+			"no shared mutable state in the job")
+	var threads: String = FileAccess.get_file_as_string(THREADS_FILE)
+	assert_true(threads.contains("pub struct StepThread"), "the step's thread lives in threads.rs")
+	# The host hands the job nothing but plain data: it launches through the job's `run`, with no engine handle inside.
+	var host: String = FileAccess.get_file_as_string("res://native/src/brain.rs")
+	assert_true(host.contains("StepThread::start(STEP_THREAD, brain_step::run)"), "the host's thread runs the job's run")

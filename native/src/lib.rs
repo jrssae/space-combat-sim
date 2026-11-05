@@ -7,6 +7,7 @@ mod bolt_rows;
 mod brain;
 mod brain_behaviours;
 mod brain_maths;
+mod brain_step;
 mod cannons;
 mod contact_field;
 mod flight_step;

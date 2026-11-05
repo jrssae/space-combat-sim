@@ -1,25 +1,26 @@
 // The native brain host (M4-T17, docs/architecture.md 17.13): the AI pilots' brains on the core's rows. The maths lives in
 // `brain_maths.rs` and the behaviours in `brain_behaviours.rs` (both engine-free); this class binds the core, keeps one
 // slot per pilot, picks nothing itself and hands answers over as packed numbers. The GDScript `AiPilot` is the facade and
-// stays the reference. gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
+// stays the reference. The batch itself is a job over a snapshot of the rows (`brain_step.rs`, M4-T24) that runs on the
+// main thread or on the step's worker thread; this class launches it, joins it and keeps what GDScript asks for while
+// the brains are away. gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
 #![allow(clippy::redundant_field_names)]
-use std::sync::Mutex;
+use std::collections::{HashMap, HashSet};
+use std::thread::ThreadId;
+use std::time::Instant;
 
 use godot::prelude::*;
 
-use crate::brain_behaviours::{
-    self, Brain, Context, Field, Inputs, KIND_NAMES, KINDS, MIRROR, Profile, Route, Scratch, Ship,
-    Tactics,
-};
+use crate::brain_behaviours::{Brain, Context, KIND_NAMES, KINDS, Profile, Route, Ship, Tactics};
 use crate::brain_maths::{
     self, Capability, FlightCmd, Manoeuvre, Pcg, Pose, Temperament, deg_to_rad_lerp,
 };
-use crate::kernels::contact::{self, Grid, Query, Work};
-use crate::row_commands::{CMD_LEN, EVENT_SELECT, EVENT_SETTLE};
+use crate::brain_step::{
+    self, Done, DriverFrame, EVENTS_HEAD, Hosted, Job, Params, Snapshot, Work,
+};
 use crate::rows::{Bolts, Rows};
 use crate::sim_core::ScsSimCore;
-use crate::threads::{self, Pass, Threads};
-use crate::v3::dist_sq;
+use crate::threads::{Runner, StepThread};
 
 // `test_brain_parity`'s per-step layouts for a manoeuvre run.
 const STEP_IN: usize = 23;
@@ -35,20 +36,6 @@ const SENSOR_RANGE_M: f64 = 5000.0;
 pub const PROFILE_LEN: usize = KINDS + 10;
 /// `RaiderTactics` as the facade packs it, in its field order.
 pub const TACTICS_LEN: usize = 14;
-/// A think's output: the four levels, strafe, rot, brake, fire, the wanted target in two halves, the dodge flags, the wish
-/// (has, all axes, velocity), the behaviour in control, dwell, switches, the contacts seen, the raw and weighted scores by
-/// kind, and the mirrored state.
-/// Where a think's output holds the wanted target (two halves), the behaviour in control and the contacts it saw.
-pub const OUT_TARGET: usize = 11;
-pub const OUT_CURRENT: usize = 20;
-pub const OUT_CONTACTS: usize = 23;
-pub const OUT_RAW: usize = 24;
-pub const OUT_WEIGHTED: usize = OUT_RAW + KINDS;
-pub const OUT_MIRROR: usize = OUT_WEIGHTED + KINDS;
-pub const OUT_RAM: usize = OUT_MIRROR + MIRROR;
-pub const OUT_LEN: usize = OUT_RAM + 1;
-/// A batch think's output per ship (M4-T18): 1 when the host thought it (0: declined, the rest zeros), then `OUT_LEN`.
-pub const BATCH_OUT: usize = OUT_LEN + 1;
 /// A batch think's inputs per ship: the slot, the relation row's offset and length in the batch's relations, the
 /// selection and the latest attacker (ints); dt, the hull, the latest hit and the latest bolt hit (floats).
 pub const BATCH_INTS: usize = 5;
@@ -58,88 +45,39 @@ pub const BATCH_FLOATS: usize = 4;
 /// selection come from the ship's row.
 pub const ROWS_INTS: usize = 5;
 pub const ROWS_FLOATS: usize = 3;
-/// `rows_events`' head: thinks near the player, thinks far, thinks declined, the most contacts a think saw, the hosted
-/// drivers that held this tick (M4-T35); then a pair (the ship's place in the batch, its events) for every ship whose
-/// driver has something to do.
-pub const EVENTS_HEAD: usize = 5;
-/// `set_fault`'s injected bug for the determinism test: a think adds to its main thrust what the worker's previous think
-/// left behind, so it reads another row's output.
-pub const FAULT_CARRY: i64 = 1;
-/// `set_fault`'s injected panic: every think of a batch panics (without the panic hook's report).
-pub const FAULT_PANIC: i64 = 2;
+// The step thread's name.
+const STEP_THREAD: &str = "scs-sim-step";
 
-// What one worker thread fills for the thinks it runs: the query scratch, the picked lists, the keeps, and what the
-// injected fault carries from one think to the next.
-#[derive(Default)]
-struct Worker {
-    query: Query,
-    scratch: Scratch,
-    keep: Vec<i64>,
-    carry: f64,
+// A change to a hosted driver that arrived while the brains were away (M4-T24): applied at the join, before the next
+// launch, which is when today's hits reach the next think too.
+enum Pending {
+    Hits {
+        slot: i64,
+        attacker_id: i64,
+        hit_s: f64,
+        bolt_hit_s: f64,
+    },
+    Live {
+        slot: i64,
+        live: bool,
+    },
+    Wake {
+        slot: i64,
+    },
 }
 
-// One ship of a batch think: its brain (taken from the slot for the pass), its inputs and its packed output.
-#[derive(Default)]
-struct Item {
+// What the frame's readers see of a hosted driver while the brains are away: its state as the launch found it.
+#[derive(Default, Clone)]
+struct HostedView {
     slot: usize,
-    brain: Option<Brain>,
-    own_row: i64,
-    relations: (usize, usize),
-    selected_id: i64,
-    last_attacker_id: i64,
+    thinks: i64,
     dt: f64,
-    hull_fraction: f64,
-    last_hit_s: f64,
-    last_bolt_hit_s: f64,
+    attack_target: i64,
     out: Vec<f64>,
-    ok: bool,
-    near: bool,
-}
-
-// A driver the host steps (M4-T35): the think rate's state the driver kept, its latest hits, and its last think.
-struct Hosted {
-    slot: usize,
-    body_id: i64,
-    ordinal: i64,
     steps: i64,
     since_think_s: f64,
     woken: bool,
-    attacker_id: i64,
-    hit_s: f64,
-    bolt_hit_s: f64,
-    live: bool,
     near: bool,
-    thinks: i64,
-    dt: f64,
-    out: Vec<f64>,
-    // The target of the last think that attacked (the context's `attack_target_id`, which every think's mirror kept).
-    attack_target: i64,
-}
-
-// What the drivers' step reads once a tick (M4-T35): the tick, the player and the think rate's settings.
-#[derive(Default)]
-struct DriverFrame {
-    delta: f64,
-    player_live: bool,
-    player_at: Vector3,
-    rate_on: bool,
-    near_sq: f64,
-    period: i64,
-}
-
-// What every think of a batch shares, read-only.
-struct Shared<'a> {
-    rows: &'a Rows,
-    bolts: &'a Bolts,
-    grid: &'a Grid,
-    field: &'a Field,
-    relations: &'a [u8],
-    now_s: f64,
-    friendly_fire: bool,
-    origin: [f64; 3],
-    nearest_k: i64,
-    static_k: i64,
-    fault: i64,
 }
 
 /// The AI pilots' native brains over the core's rows (or rows loaded from arrays, for the tests).
@@ -152,34 +90,30 @@ pub struct ScsBrains {
     own_names: Vec<GString>,
     own_bolts: Bolts,
     own_loaded: bool,
-    grid: Grid,
-    query: Query,
-    grid_version: i64,
-    field: Field,
-    slots: Vec<Option<Brain>>,
-    scratch: Scratch,
-    keep_scratch: Vec<i64>,
-    out: Vec<f64>,
-    nearest_k: i64,
-    static_k: i64,
-    // The batch think's per-thread scratch, its ships and its output (M4-T18), kept between ticks.
-    workers: Vec<Mutex<Worker>>,
-    items: Vec<Item>,
-    batch_out: Vec<f64>,
-    // One thread for rows loaded from arrays (no core to give its threads).
-    serial: Threads,
-    fault: i64,
+    own_version: i64,
+    // The brains and the batch's state (M4-T24): here between jobs, in the job while one runs (`work` is None then).
+    work: Option<Box<Work>>,
+    // The step's thread, the result of a job run on the main thread (delayed or inline), and the spare snapshot buffer.
+    step: Option<StepThread<Job, Done>>,
+    done: Option<Done>,
+    spare: Option<Snapshot>,
+    launched_at: Option<Instant>,
+    main_thread: Option<ThreadId>,
+    // What arrived for the hosted drivers while the brains were away, and what the frame's readers see meanwhile.
+    pending: Vec<Pending>,
+    mirror: Vec<HostedView>,
+    asked: HashSet<usize>,
+    describe_cache: HashMap<usize, VarDictionary>,
+    path_cache: HashMap<usize, (PackedInt32Array, VarArray)>,
+    // Readouts: panicked passes, the last job's run time and the time the main thread waited for it, the deadlines
+    // missed (a join that had to wait), the joins forced early by a reader, and whether the last job ran off the main thread.
     pass_failures: i64,
-    // The last rows batch's counts and events (M4-T33).
-    events: Vec<i64>,
-    // The drivers the host steps (M4-T35), the tick's frame, the relation matrix over the core's factions (a row per
-    // faction, `stride` wide), the batch's relations with the matrix behind them, and this tick's hosted items' slots.
-    hosted: Vec<Hosted>,
-    frame: DriverFrame,
-    matrix: Vec<u8>,
-    stride: usize,
-    rel_scratch: Vec<u8>,
-    hosted_slots: Vec<i64>,
+    step_us: i64,
+    wait_us: i64,
+    misses: i64,
+    early_joins: i64,
+    off_main: bool,
+    warned: bool,
 }
 
 #[godot_api]
@@ -196,9 +130,8 @@ impl ScsBrains {
         self.own = Rows::default();
         self.own_bolts = Bolts::default();
         self.own_loaded = false;
-        self.grid = Grid::default();
-        self.grid.cell_m = SENSOR_RANGE_M;
-        self.grid_version = -1;
+        let work = self.work();
+        work.grid_version = -1;
         self.core = Some(core);
         true
     }
@@ -212,8 +145,9 @@ impl ScsBrains {
     /// The nearest-k settings every think picks with (`ai_nearest_k`, `ai_nearest_static_k`).
     #[func]
     fn set_settings(&mut self, nearest_k: i64, static_k: i64) {
-        self.nearest_k = nearest_k;
-        self.static_k = static_k;
+        let work = self.work();
+        work.nearest_k = nearest_k;
+        work.static_k = static_k;
     }
 
     /// Takes rows from arrays instead of the core (the differential tests): one entry per row, the bases as three
@@ -301,16 +235,7 @@ impl ScsBrains {
         own.node_count = n;
         own.index_ids();
         self.own_names = names.as_slice().to_vec();
-        self.grid = Grid::default();
-        self.grid.cell_m = SENSOR_RANGE_M;
-        self.grid.cells = contact::sorted_cells(&self.own.positions, SENSOR_RANGE_M);
-        self.grid.max_static_radius = (0..n)
-            .filter(|&i| self.own.is_static[i])
-            .map(|i| self.own.radii[i].abs())
-            .fold(0.0, f64::max);
-        self.field
-            .build(&self.own, &self.own_bolts, self.grid.cell_m);
-        self.field.index_names(&self.own, wanted_names(&self.slots));
+        self.own_version += 1; // the next job rebuilds its grid and field from these rows
         self.own_loaded = true;
         true
     }
@@ -346,9 +271,7 @@ impl ScsBrains {
         b.shooters = shooters.as_slice().to_vec();
         b.kinds = vec![7; n];
         b.radii = vec![0.0; n];
-        self.field
-            .build(&self.own, &self.own_bolts, self.grid.cell_m);
-        self.field.index_names(&self.own, wanted_names(&self.slots));
+        self.own_version += 1;
         true
     }
 
@@ -380,12 +303,13 @@ impl ScsBrains {
             seed,
             kinds.as_slice(),
         );
-        if let Some(free) = self.slots.iter().position(Option::is_none) {
-            self.slots[free] = Some(brain);
+        let slots = &mut self.work().slots;
+        if let Some(free) = slots.iter().position(Option::is_none) {
+            slots[free] = Some(brain);
             free as i64
         } else {
-            self.slots.push(Some(brain));
-            (self.slots.len() - 1) as i64
+            slots.push(Some(brain));
+            (slots.len() - 1) as i64
         }
     }
 
@@ -394,7 +318,7 @@ impl ScsBrains {
     fn free_slot(&mut self, slot: i64) {
         if let Some(entry) = usize::try_from(slot)
             .ok()
-            .and_then(|i| self.slots.get_mut(i))
+            .and_then(|i| self.work().slots.get_mut(i))
         {
             *entry = None;
         }
@@ -402,8 +326,8 @@ impl ScsBrains {
 
     /// Brains held now.
     #[func]
-    fn count(&self) -> i64 {
-        self.slots.iter().filter(|s| s.is_some()).count() as i64
+    fn count(&mut self) -> i64 {
+        self.work().slots.iter().filter(|s| s.is_some()).count() as i64
     }
 
     /// `AiPilot.reset`.
@@ -619,6 +543,7 @@ impl ScsBrains {
     /// time, the time since its last think, its hull 0..1, its selection (0 for none), its latest hit and bolt hit (sim
     /// time, -INF for none), its latest attacker, `settings.friendly_fire`, and the frame origin as three doubles. The
     /// perception is picked from the rows inside. Returns `OUT_LEN` numbers, or none when the ship has no row this tick.
+    /// A batch of one, run at once (M4-T24).
     #[func]
     #[allow(clippy::too_many_arguments)]
     fn think(
@@ -637,63 +562,38 @@ impl ScsBrains {
         origin_y: f64,
         origin_z: f64,
     ) -> PackedFloat64Array {
-        let Some(index) = usize::try_from(slot).ok().filter(|&i| i < self.slots.len()) else {
-            return PackedFloat64Array::new();
-        };
-        let Some(mut brain) = self.slots[index].take() else {
-            return PackedFloat64Array::new();
-        };
-        let inputs = Inputs {
-            relations: relations.as_slice(),
-            own_body_id: brain.ship.own_body_id,
+        let ints = PackedInt64Array::from(
+            &[
+                slot,
+                0,
+                relations.len() as i64,
+                selected_id,
+                last_attacker_id,
+            ][..],
+        );
+        let floats =
+            PackedFloat64Array::from(&[dt, hull_fraction, last_hit_s, last_bolt_hit_s][..]);
+        let version = self.rows_version_now();
+        if !self.launch_batch(
+            ints,
+            floats,
+            relations,
             now_s,
-            dt,
-            hull_fraction,
-            self_id: brain.ship.self_id,
-            selected_id,
-            last_hit_s,
-            last_bolt_hit_s,
-            last_attacker_id,
             friendly_fire,
-            origin: [origin_x, origin_y, origin_z],
-            nearest_k: self.nearest_k,
-            static_k: self.static_k,
-        };
-        self.refresh_grid();
-        let guard = self.core.as_ref().map(|c| c.bind());
-        let (rows, bolts, own_row): (&Rows, &Bolts, i64) = match &guard {
-            Some(c) => (&c.rows, &c.bolts, c.row_for_kernel(brain.ship.own_body_id)),
-            None => (
-                &self.own,
-                &self.own_bolts,
-                self.own
-                    .body_ids
-                    .iter()
-                    .position(|&b| b == brain.ship.own_body_id)
-                    .map_or(-1, |r| r as i64),
-            ),
-        };
-        let mut out = PackedFloat64Array::new();
-        if own_row >= 0 {
-            let result = brain.think(
-                rows,
-                bolts,
-                &mut Work {
-                    grid: &self.grid,
-                    query: &mut self.query,
-                },
-                &self.field,
-                own_row as usize,
-                &mut self.scratch,
-                &mut self.keep_scratch,
-                &inputs,
-            );
-            pack_output(&brain, &result, &mut self.out);
-            out = PackedFloat64Array::from(self.out.as_slice());
+            origin_x,
+            origin_y,
+            origin_z,
+            version,
+            false,
+        ) {
+            return PackedFloat64Array::new();
         }
-        drop(guard);
-        self.slots[index] = Some(brain);
-        out
+        let out = self.join();
+        if out.first().copied().unwrap_or(0.0) != 0.0 {
+            PackedFloat64Array::from(&out[1..])
+        } else {
+            PackedFloat64Array::new()
+        }
     }
 
     /// Every thinking ship of a tick in one call (M4-T18), across the core's worker threads: per ship `BATCH_INTS` ints
@@ -704,6 +604,7 @@ impl ScsBrains {
     /// `rows_version` is the core's version the drivers took their scan at: when the rows moved since (a resync or a
     /// rebase between the drivers and the batch), every ship is declined, so each holds its last command, as T17's
     /// per-ship check did. A think that panics declines the whole batch too, its brains kept (`pass_failures`).
+    /// The inline step (M4-T24): `launch_batch` and `join` in one call.
     #[func]
     #[allow(clippy::too_many_arguments)]
     fn think_batch(
@@ -718,48 +619,21 @@ impl ScsBrains {
         origin_z: f64,
         rows_version: i64,
     ) -> PackedFloat64Array {
-        let n = ints.len() / BATCH_INTS;
-        if ints.len() != n * BATCH_INTS || floats.len() != n * BATCH_FLOATS {
-            godot_error!(
-                "ScsBrains.think_batch: {} ints and {} floats do not make whole ships; nothing thought",
-                ints.len(),
-                floats.len()
-            );
-            return PackedFloat64Array::new();
-        }
-        self.refresh_grid();
-        let iv = ints.as_slice();
-        let fv = floats.as_slice();
-        let rel = relations.as_slice();
-        if self.items.len() < n {
-            self.items.resize_with(n, Item::default);
-        }
-        for (k, item) in self.items[..n].iter_mut().enumerate() {
-            let i = &iv[k * BATCH_INTS..(k + 1) * BATCH_INTS];
-            let f = &fv[k * BATCH_FLOATS..(k + 1) * BATCH_FLOATS];
-            let start = usize::try_from(i[1]).unwrap_or(0).min(rel.len());
-            let len = usize::try_from(i[2]).unwrap_or(0).min(rel.len() - start);
-            item.slot = usize::try_from(i[0]).unwrap_or(usize::MAX);
-            item.brain = self.slots.get_mut(item.slot).and_then(Option::take);
-            item.relations = (start, start + len);
-            item.selected_id = i[3];
-            item.last_attacker_id = i[4];
-            item.dt = f[0];
-            item.hull_fraction = f[1];
-            item.last_hit_s = f[2];
-            item.last_bolt_hit_s = f[3];
-            item.ok = false;
-            item.near = false;
-        }
-        self.run_batch(
-            n,
-            rel,
+        if !self.launch_batch(
+            ints,
+            floats,
+            relations,
             now_s,
             friendly_fire,
-            [origin_x, origin_y, origin_z],
+            origin_x,
+            origin_y,
+            origin_z,
             rows_version,
             false,
-        )
+        ) {
+            return PackedFloat64Array::new();
+        }
+        PackedFloat64Array::from(self.join().as_slice())
     }
 
     /// The rows path of `think_batch` (M4-T33): per ship `ROWS_INTS` ints and `ROWS_FLOATS` floats, the hull and the
@@ -767,6 +641,7 @@ impl ScsBrains {
     /// written into the core's commands, which the flight step flies the same tick, and `rows_events` then holds the
     /// counts and the ships whose drivers have something to do: a first command from the row, a changed trigger, or a
     /// wanted target the ship has not selected. A declined think writes nothing, so its ship flies the row's command on.
+    /// The inline step (M4-T24): `launch_rows` and `join` in one call.
     #[func]
     #[allow(clippy::too_many_arguments)]
     fn think_batch_rows(
@@ -781,31 +656,132 @@ impl ScsBrains {
         origin_z: f64,
         rows_version: i64,
     ) -> PackedFloat64Array {
+        if !self.launch_rows(
+            ints,
+            floats,
+            relations,
+            now_s,
+            friendly_fire,
+            origin_x,
+            origin_y,
+            origin_z,
+            rows_version,
+            false,
+        ) {
+            return PackedFloat64Array::new();
+        }
+        PackedFloat64Array::from(self.join().as_slice())
+    }
+
+    // --- the step as a job (M4-T24) ----------------------------------------------------------------------------------
+
+    /// `think_batch`'s launch: the batch becomes a job over a snapshot of the rows, run on the step's thread when
+    /// `threaded`, else at once on this thread; `join_step` gives its output. False, after logging why, when the
+    /// arrays do not make whole ships.
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn launch_batch(
+        &mut self,
+        ints: PackedInt64Array,
+        floats: PackedFloat64Array,
+        relations: PackedByteArray,
+        now_s: f64,
+        friendly_fire: bool,
+        origin_x: f64,
+        origin_y: f64,
+        origin_z: f64,
+        rows_version: i64,
+        threaded: bool,
+    ) -> bool {
+        let n = ints.len() / BATCH_INTS;
+        if ints.len() != n * BATCH_INTS || floats.len() != n * BATCH_FLOATS {
+            godot_error!(
+                "ScsBrains.think_batch: {} ints and {} floats do not make whole ships; nothing thought",
+                ints.len(),
+                floats.len()
+            );
+            return false;
+        }
+        let iv = ints.as_slice();
+        let fv = floats.as_slice();
+        let rel = relations.as_slice();
+        let work = self.work();
+        if work.items.len() < n {
+            work.items.resize_with(n, brain_step::Item::default);
+        }
+        work.events.clear();
+        for (k, item) in work.items[..n].iter_mut().enumerate() {
+            let i = &iv[k * BATCH_INTS..(k + 1) * BATCH_INTS];
+            let f = &fv[k * BATCH_FLOATS..(k + 1) * BATCH_FLOATS];
+            let start = usize::try_from(i[1]).unwrap_or(0).min(rel.len());
+            let len = usize::try_from(i[2]).unwrap_or(0).min(rel.len() - start);
+            item.slot = usize::try_from(i[0]).unwrap_or(usize::MAX);
+            item.brain = work.slots.get_mut(item.slot).and_then(Option::take);
+            item.relations = (start, start + len);
+            item.selected_id = i[3];
+            item.last_attacker_id = i[4];
+            item.dt = f[0];
+            item.hull_fraction = f[1];
+            item.last_hit_s = f[2];
+            item.last_bolt_hit_s = f[3];
+            item.ok = false;
+            item.near = false;
+        }
+        let params = Params {
+            n,
+            rel: rel.to_vec(),
+            now_s,
+            friendly_fire,
+            origin: [origin_x, origin_y, origin_z],
+            rows_version,
+            from_rows: false,
+        };
+        self.launch(params, threaded);
+        true
+    }
+
+    /// `think_batch_rows`' launch (see `launch_batch`): the hosted drivers are stepped in the job too, and the commands
+    /// its thinks write reach the core's rows at the join.
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn launch_rows(
+        &mut self,
+        ints: PackedInt64Array,
+        floats: PackedFloat64Array,
+        relations: PackedByteArray,
+        now_s: f64,
+        friendly_fire: bool,
+        origin_x: f64,
+        origin_y: f64,
+        origin_z: f64,
+        rows_version: i64,
+        threaded: bool,
+    ) -> bool {
         let n = ints.len() / ROWS_INTS;
-        self.events.clear();
-        self.events.resize(EVENTS_HEAD, 0);
         if ints.len() != n * ROWS_INTS || floats.len() != n * ROWS_FLOATS {
             godot_error!(
                 "ScsBrains.think_batch_rows: {} ints and {} floats do not make whole ships; nothing thought",
                 ints.len(),
                 floats.len()
             );
-            return PackedFloat64Array::new();
+            return false;
         }
-        self.refresh_grid();
         let iv = ints.as_slice();
         let fv = floats.as_slice();
         let rel = relations.as_slice();
-        if self.items.len() < n {
-            self.items.resize_with(n, Item::default);
+        let work = self.work();
+        work.events.clear();
+        work.events.resize(EVENTS_HEAD, 0);
+        if work.items.len() < n {
+            work.items.resize_with(n, brain_step::Item::default);
         }
-        for (k, item) in self.items[..n].iter_mut().enumerate() {
+        for (k, item) in work.items[..n].iter_mut().enumerate() {
             let i = &iv[k * ROWS_INTS..(k + 1) * ROWS_INTS];
             let f = &fv[k * ROWS_FLOATS..(k + 1) * ROWS_FLOATS];
             let start = usize::try_from(i[1]).unwrap_or(0).min(rel.len());
             let len = usize::try_from(i[2]).unwrap_or(0).min(rel.len() - start);
             item.slot = usize::try_from(i[0]).unwrap_or(usize::MAX);
-            item.brain = self.slots.get_mut(item.slot).and_then(Option::take);
+            item.brain = work.slots.get_mut(item.slot).and_then(Option::take);
             item.relations = (start, start + len);
             item.selected_id = 0;
             item.last_attacker_id = i[3];
@@ -816,25 +792,65 @@ impl ScsBrains {
             item.last_bolt_hit_s = f[2];
             item.ok = false;
         }
-        // The drivers the host steps (M4-T35) join behind the drivers that queued: the think rate decided here.
-        let total = self.queue_hosted(n, rel.len());
-        self.rel_scratch.clear();
-        self.rel_scratch.extend_from_slice(rel);
-        self.rel_scratch.extend_from_slice(&self.matrix);
-        let shared_rel = std::mem::take(&mut self.rel_scratch);
-        let out = self.run_batch(
-            total,
-            &shared_rel,
+        let params = Params {
+            n,
+            rel: rel.to_vec(),
             now_s,
             friendly_fire,
-            [origin_x, origin_y, origin_z],
+            origin: [origin_x, origin_y, origin_z],
             rows_version,
-            true,
-        );
-        self.rel_scratch = shared_rel;
-        self.write_commands(total);
-        self.settle_hosted(n, total);
-        out
+            from_rows: true,
+        };
+        self.launch(params, threaded);
+        true
+    }
+
+    /// Joins the job out (waits for it when it has not finished: a deadline missed, counted), takes its state back,
+    /// applies what arrived meanwhile, hands its commands to the core, and returns its output (`BATCH_OUT` a ship; empty
+    /// when no job was out). `rows_events` and `hosted_item_slots` then describe it.
+    #[func]
+    fn join_step(&mut self) -> PackedFloat64Array {
+        PackedFloat64Array::from(self.join().as_slice())
+    }
+
+    /// Whether a job is out (launched and not joined).
+    #[func]
+    fn step_pending(&self) -> bool {
+        self.done.is_some() || self.step.as_ref().is_some_and(StepThread::pending)
+    }
+
+    /// The last job's run time (its own thread's clock) and how long the last join waited for it, microseconds.
+    #[func]
+    fn step_us(&self) -> i64 {
+        self.step_us
+    }
+
+    #[func]
+    fn step_wait_us(&self) -> i64 {
+        self.wait_us
+    }
+
+    /// Joins that found the job still running (waited for, never skipped), and joins a reader forced before the tick's.
+    #[func]
+    fn deadline_misses(&self) -> i64 {
+        self.misses
+    }
+
+    #[func]
+    fn early_joins(&self) -> i64 {
+        self.early_joins
+    }
+
+    /// Whether the last joined job ran off the main thread.
+    #[func]
+    fn step_off_main(&self) -> bool {
+        self.off_main
+    }
+
+    /// Step threads alive (1 once a threaded job has run, 0 before and after the host goes).
+    #[func]
+    fn step_threads(&self) -> i64 {
+        self.step.as_ref().map_or(0, StepThread::live)
     }
 
     // --- the drivers' step (M4-T35) ----------------------------------------------------------------------------------
@@ -858,8 +874,9 @@ impl ScsBrains {
         let Ok(slot) = usize::try_from(slot) else {
             return;
         };
-        self.hosted.retain(|h| h.slot != slot);
-        self.hosted.push(Hosted {
+        let hosted = &mut self.work().hosted;
+        hosted.retain(|h| h.slot != slot);
+        hosted.push(Hosted {
             slot,
             body_id,
             ordinal,
@@ -881,10 +898,14 @@ impl ScsBrains {
     /// Gives the driver its step back: `[steps, since_think_s, woken]` as the host left them (empty when not hosted).
     #[func]
     fn unhost_driver(&mut self, slot: i64) -> PackedFloat64Array {
-        let Some(at) = self.hosted_index(slot) else {
+        let Ok(slot) = usize::try_from(slot) else {
             return PackedFloat64Array::new();
         };
-        let h = self.hosted.remove(at);
+        let hosted = &mut self.work().hosted;
+        let Some(at) = hosted.iter().position(|h| h.slot == slot) else {
+            return PackedFloat64Array::new();
+        };
+        let h = hosted.remove(at);
         PackedFloat64Array::from(
             &[
                 h.steps as f64,
@@ -895,31 +916,27 @@ impl ScsBrains {
     }
 
     /// The driver's latest hits (`AiPilotDriver._on_hit_taken`): the attacker, the hit's time and the bolt hit's; a hit
-    /// wakes the ship for the next tick.
+    /// wakes the ship for the next tick. Queued while the brains are away (M4-T24).
     #[func]
     fn set_driver_hits(&mut self, slot: i64, attacker_id: i64, hit_s: f64, bolt_hit_s: f64) {
-        if let Some(h) = self.hosted_mut(slot) {
-            h.attacker_id = attacker_id;
-            h.hit_s = hit_s;
-            h.bolt_hit_s = bolt_hit_s;
-            h.woken = true;
-        }
+        self.mutate(Pending::Hits {
+            slot,
+            attacker_id,
+            hit_s,
+            bolt_hit_s,
+        });
     }
 
     /// Whether the driver's node processes (a parked ship's does not step).
     #[func]
     fn set_driver_live(&mut self, slot: i64, live: bool) {
-        if let Some(h) = self.hosted_mut(slot) {
-            h.live = live;
-        }
+        self.mutate(Pending::Live { slot, live });
     }
 
     /// Wakes the driver for the next tick (a new pilot would).
     #[func]
     fn wake_driver(&mut self, slot: i64) {
-        if let Some(h) = self.hosted_mut(slot) {
-            h.woken = true;
-        }
+        self.mutate(Pending::Wake { slot });
     }
 
     /// The tick's frame for the hosted drivers: the tick length, the player (live, and where) and the think rate's
@@ -935,7 +952,7 @@ impl ScsBrains {
         near_sq: f64,
         period: i64,
     ) {
-        self.frame = DriverFrame {
+        self.work().frame = DriverFrame {
             delta,
             player_live,
             player_at,
@@ -949,71 +966,71 @@ impl ScsBrains {
     /// what a hosted ship's think reads as its relation row.
     #[func]
     fn set_relation_matrix(&mut self, matrix: PackedByteArray, stride: i64) {
-        self.matrix = matrix.as_slice().to_vec();
-        self.stride = usize::try_from(stride).unwrap_or(0);
+        let work = self.work();
+        work.matrix = matrix.as_slice().to_vec();
+        work.stride = usize::try_from(stride).unwrap_or(0);
     }
 
     #[func]
     fn hosted_count(&self) -> i64 {
-        self.hosted.len() as i64
+        match &self.work {
+            Some(w) => w.hosted.len() as i64,
+            None => self.mirror.len() as i64,
+        }
     }
 
     /// The slots of the hosted items the last rows batch thought, in the order they followed the queued ships.
     #[func]
-    fn hosted_item_slots(&self) -> PackedInt64Array {
-        PackedInt64Array::from(self.hosted_slots.as_slice())
+    fn hosted_item_slots(&mut self) -> PackedInt64Array {
+        PackedInt64Array::from(self.work().hosted_slots.as_slice())
     }
 
     /// A hosted driver's last think: its output (`OUT_LEN` numbers, empty before the first), how many thinks the host
-    /// ran for it, and the time its last think was given.
+    /// ran for it, and the time its last think was given. While the brains are away (M4-T24) these read the state the
+    /// launch found.
     #[func]
     fn slot_output(&self, slot: i64) -> PackedFloat64Array {
-        self.hosted_index(slot)
-            .map_or_else(PackedFloat64Array::new, |at| {
-                PackedFloat64Array::from(self.hosted[at].out.as_slice())
-            })
+        self.view(slot, |v| PackedFloat64Array::from(v.out.as_slice()))
+            .unwrap_or_default()
     }
 
     #[func]
     fn slot_think_count(&self, slot: i64) -> i64 {
-        self.hosted_index(slot)
-            .map_or(0, |at| self.hosted[at].thinks)
+        self.view(slot, |v| v.thinks).unwrap_or(0)
     }
 
     #[func]
     fn driver_dt(&self, slot: i64) -> f64 {
-        self.hosted_index(slot).map_or(0.0, |at| self.hosted[at].dt)
+        self.view(slot, |v| v.dt).unwrap_or(0.0)
     }
 
     /// The target of the hosted driver's last think that attacked (0 for none yet): what the pilot's context keeps as
     /// `attack_target_id` across thinks its mirror never read.
     #[func]
     fn slot_attack_target(&self, slot: i64) -> i64 {
-        self.hosted_index(slot)
-            .map_or(0, |at| self.hosted[at].attack_target)
+        self.view(slot, |v| v.attack_target).unwrap_or(0)
     }
 
     /// A hosted driver's think rate state, `[steps, since_think_s, woken, near]` (the console and tests).
     #[func]
     fn driver_state(&self, slot: i64) -> PackedFloat64Array {
-        self.hosted_index(slot)
-            .map_or_else(PackedFloat64Array::new, |at| {
-                let h = &self.hosted[at];
-                PackedFloat64Array::from(
-                    &[
-                        h.steps as f64,
-                        h.since_think_s,
-                        f64::from(u8::from(h.woken)),
-                        f64::from(u8::from(h.near)),
-                    ][..],
-                )
-            })
+        self.view(slot, |v| {
+            PackedFloat64Array::from(
+                &[
+                    v.steps as f64,
+                    v.since_think_s,
+                    f64::from(u8::from(v.woken)),
+                    f64::from(u8::from(v.near)),
+                ][..],
+            )
+        })
+        .unwrap_or_default()
     }
 
     /// The last `think_batch_rows`' counts and events (`EVENTS_HEAD`, then pairs).
     #[func]
-    fn rows_events(&self) -> PackedInt64Array {
-        PackedInt64Array::from(self.events.as_slice())
+    fn rows_events(&mut self) -> PackedInt64Array {
+        PackedInt64Array::from(self.work().events.as_slice())
     }
 
     /// Batches a panic declined (each holding its brains and its ships' last commands).
@@ -1022,95 +1039,61 @@ impl ScsBrains {
         self.pass_failures
     }
 
-    /// Injects a bug for the determinism or the panic test (`FAULT_CARRY`, `FAULT_PANIC`), or none (0).
+    /// Injects a bug for the determinism or the panic test (`FAULT_CARRY`, `FAULT_PANIC`), a slow job (`FAULT_SLOW`), or
+    /// none (0).
     #[func]
     fn set_fault(&mut self, kind: i64) {
-        self.fault = kind;
+        self.work().fault = kind;
     }
 
     /// The rows the last think picked: `[contacts, statics, broadcasts]` (the tests compare them with the scan's).
     #[func]
-    fn last_lists(&self) -> VarArray {
+    fn last_lists(&mut self) -> VarArray {
         let mut out = VarArray::new();
-        out.push(&PackedInt32Array::from(self.scratch.contacts.as_slice()).to_variant());
-        out.push(&PackedInt32Array::from(self.scratch.statics.as_slice()).to_variant());
-        out.push(&PackedInt32Array::from(self.scratch.broadcasts.as_slice()).to_variant());
+        let work = self.work();
+        let Some(worker) = work.workers.first() else {
+            return out;
+        };
+        let worker = worker
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        out.push(&PackedInt32Array::from(worker.scratch.contacts.as_slice()).to_variant());
+        out.push(&PackedInt32Array::from(worker.scratch.statics.as_slice()).to_variant());
+        out.push(&PackedInt32Array::from(worker.scratch.broadcasts.as_slice()).to_variant());
         out
     }
 
     /// `AiPilot.describe` for the behaviour in control: `behaviour`, `state`, `for_s`, its own fields and the `scores`
-    /// (weighted, by id). Names of contacts are looked up in the rows by id.
+    /// (weighted, by id). Names of contacts are looked up in the rows by id. While the brains are away (M4-T24) a slot
+    /// asked for since the last launch answers from the launch; one not asked for before joins the job first.
     #[func]
-    fn describe(&self, slot: i64) -> VarDictionary {
-        let mut dict = VarDictionary::new();
-        let Some(brain) = self.brain(slot) else {
-            return dict;
+    fn describe(&mut self, slot: i64) -> VarDictionary {
+        let Ok(at) = usize::try_from(slot) else {
+            return VarDictionary::new();
         };
-        let d = brain.describe();
-        dict.set("behaviour", &GString::from(d.behaviour.as_str()));
-        dict.set("state", &GString::from(d.state.as_str()));
-        dict.set("for_s", d.for_s);
-        for (key, value) in &d.numbers {
-            dict.set(*key, *value);
-        }
-        for (key, value) in &d.flags {
-            dict.set(*key, *value);
-        }
-        for (key, value) in &d.ints {
-            dict.set(*key, *value);
-        }
-        for (key, value) in &d.texts {
-            dict.set(*key, &GString::from(value.as_str()));
-        }
-        let guard = self.core.as_ref().map(|c| c.bind());
-        let (rows, names): (&Rows, &[GString]) = match &guard {
-            Some(c) => (&c.rows, &c.row_names),
-            None => (&self.own, &self.own_names),
-        };
-        for (key, id) in &d.names {
-            let name = name_of(rows, names, *id);
-            if *key == "state" {
-                dict.set("state", &GString::from(format!("to {name}").as_str()));
-            } else {
-                dict.set(*key, &GString::from(name.as_str()));
+        self.asked.insert(at);
+        if self.work.is_none() {
+            if let Some(cached) = self.describe_cache.get(&at) {
+                return cached.clone();
             }
+            self.early_joins += 1;
+            self.join();
         }
-        let mut scores = VarDictionary::new();
-        for (i, kind) in brain.behaviours.iter().enumerate() {
-            scores.set(
-                KIND_NAMES[usize::from(*kind)],
-                brain_maths::snapped(brain.weighted[i], 0.01),
-            );
-        }
-        dict.set("scores", &scores);
+        let dict = self.describe_now(at);
+        self.describe_cache.insert(at, dict.clone());
         dict
     }
 
     /// `BehaviourFollowPath.visited`: the waypoints reached, in order.
     #[func]
-    fn path_visited(&self, slot: i64) -> PackedInt32Array {
-        self.brain(slot).map_or_else(PackedInt32Array::new, |b| {
-            PackedInt32Array::from(b.path_visited())
-        })
+    fn path_visited(&mut self, slot: i64) -> PackedInt32Array {
+        self.path(slot).0
     }
 
     /// `BehaviourFollowPath.results`: each finished demo's result with `demo` and `index`.
     #[func]
-    fn path_results(&self, slot: i64) -> VarArray {
-        let mut out = VarArray::new();
-        let Some(brain) = self.brain(slot) else {
-            return out;
-        };
-        for r in brain.path_results() {
-            let mut dict = outcome_dict(&r.outcome);
-            dict.set(
-                "demo",
-                &GString::from(brain_maths::MANOEUVRE_NAMES[usize::from(r.demo)]),
-            );
-            dict.set("index", r.index);
-            out.push(&dict.to_variant());
-        }
-        out
+    fn path_results(&mut self, slot: i64) -> VarArray {
+        self.path(slot).1
     }
 
     // --- the maths, for the differential tests ---------------------------------------------------------------------
@@ -1361,69 +1344,6 @@ impl ScsBrains {
     }
 }
 
-// One ship's think in a batch: its brain over the shared rows with the worker's scratch, its output packed into its item.
-fn think_item(shared: &Shared, item: &mut Item, worker: &mut Worker) {
-    item.ok = false;
-    let Some(brain) = item.brain.as_mut() else {
-        return;
-    };
-    let Ok(own_row) = usize::try_from(item.own_row) else {
-        return;
-    };
-    if shared.fault == FAULT_PANIC {
-        std::panic::resume_unwind(Box::new("the injected panic"));
-    }
-    let inputs = Inputs {
-        relations: &shared.relations[item.relations.0..item.relations.1],
-        own_body_id: brain.ship.own_body_id,
-        now_s: shared.now_s,
-        dt: item.dt,
-        hull_fraction: item.hull_fraction,
-        self_id: brain.ship.self_id,
-        selected_id: item.selected_id,
-        last_hit_s: item.last_hit_s,
-        last_bolt_hit_s: item.last_bolt_hit_s,
-        last_attacker_id: item.last_attacker_id,
-        friendly_fire: shared.friendly_fire,
-        origin: shared.origin,
-        nearest_k: shared.nearest_k,
-        static_k: shared.static_k,
-    };
-    let Worker {
-        query,
-        scratch,
-        keep,
-        carry,
-    } = worker;
-    let mut result = brain.think(
-        shared.rows,
-        shared.bolts,
-        &mut Work {
-            grid: shared.grid,
-            query,
-        },
-        shared.field,
-        own_row,
-        scratch,
-        keep,
-        &inputs,
-    );
-    if shared.fault == FAULT_CARRY {
-        result.flight.main_left = (result.flight.main_left * 0.5 + *carry).min(1.0);
-        *carry = result.flight.main_left * 0.5;
-    }
-    pack_output(brain, &result, &mut item.out);
-    item.ok = true;
-}
-
-// The names the slots' brains look for (objectives and guarded ships), for the tick's name index.
-fn wanted_names(slots: &[Option<Brain>]) -> impl Iterator<Item = &str> {
-    slots
-        .iter()
-        .flatten()
-        .flat_map(|b| [b.ctx.objective_key.as_str(), b.ctx.guard_key.as_str()])
-}
-
 // A manoeuvre's `result()` as the Dictionary GDScript reports.
 fn outcome_dict(result: &brain_maths::Outcome) -> VarDictionary {
     let mut dict = VarDictionary::new();
@@ -1444,46 +1364,6 @@ fn outcome_dict(result: &brain_maths::Outcome) -> VarDictionary {
         dict.set("legs_m", &list);
     }
     dict
-}
-
-// The output of a think, `OUT_LEN` numbers.
-fn pack_output(brain: &Brain, result: &brain_behaviours::Output, out: &mut Vec<f64>) {
-    out.clear();
-    out.resize(OUT_LEN, 0.0);
-    let f = &result.flight;
-    out[0] = f.main_left;
-    out[1] = f.main_right;
-    out[2] = f.retro_left;
-    out[3] = f.retro_right;
-    out[4] = f64::from(f.strafe_x);
-    out[5] = f64::from(f.strafe_y);
-    out[6] = f64::from(f.rot.x);
-    out[7] = f64::from(f.rot.y);
-    out[8] = f64::from(f.rot.z);
-    out[9] = f64::from(u8::from(f.brake));
-    out[10] = f64::from(u8::from(result.fire));
-    let (hi, lo) = brain_behaviours::split_id(brain.wanted_target_id);
-    out[11] = hi;
-    out[12] = lo;
-    out[13] = f64::from(u8::from(brain.avoiding));
-    out[14] = f64::from(u8::from(brain.avoiding_urgent));
-    out[15] = f64::from(u8::from(brain.has_desired_velocity));
-    out[16] = f64::from(u8::from(brain.desired_all_axes));
-    out[17] = f64::from(brain.desired_velocity.x);
-    out[18] = f64::from(brain.desired_velocity.y);
-    out[19] = f64::from(brain.desired_velocity.z);
-    out[OUT_CURRENT] = f64::from(brain.current_kind());
-    out[21] = brain.dwell_s;
-    out[22] = brain.switches as f64;
-    out[OUT_CONTACTS] = brain.contacts_seen as f64;
-    for (i, kind) in brain.behaviours.iter().enumerate() {
-        out[OUT_RAW + usize::from(*kind)] = brain.raw[i];
-        out[OUT_WEIGHTED + usize::from(*kind)] = brain.weighted[i];
-    }
-    let mut mirror = [0.0; MIRROR];
-    brain.mirror(&mut mirror);
-    out[OUT_MIRROR..OUT_RAM].copy_from_slice(&mirror);
-    out[OUT_RAM] = f64::from(u8::from(brain.ram_committed()));
 }
 
 // The display name of the row whose marker id is `id`, "" when none.
@@ -1539,264 +1419,312 @@ fn profile_of(profile: &PackedFloat64Array, tactics: &PackedFloat64Array) -> Opt
 }
 
 impl ScsBrains {
-    // Thinks the batch's first `n` items (inputs filled, brains taken from their slots) across the pool and packs their
-    // outputs in order; with `from_rows` each ship's hull and selection are read from its own row first.
-    #[allow(clippy::too_many_arguments)]
-    fn run_batch(
-        &mut self,
-        n: usize,
-        rel: &[u8],
-        now_s: f64,
-        friendly_fire: bool,
-        origin: [f64; 3],
-        rows_version: i64,
-        from_rows: bool,
-    ) -> PackedFloat64Array {
-        let guard = self.core.as_ref().map(|c| c.bind());
-        let (rows, bolts, threads): (&Rows, &Bolts, &Threads) = match &guard {
-            Some(c) => (&c.rows, &c.bolts, c.worker_threads()),
-            None => (&self.own, &self.own_bolts, &self.serial),
-        };
-        for item in &mut self.items[..n] {
-            item.own_row = match (&item.brain, &guard) {
-                (None, _) => -1,
-                (Some(b), Some(c)) => c.row_for_kernel(b.ship.own_body_id),
-                (Some(b), None) => rows
-                    .body_ids
-                    .iter()
-                    .position(|&id| id == b.ship.own_body_id)
-                    .map_or(-1, |r| r as i64),
-            };
-            if let (true, Ok(r)) = (from_rows, usize::try_from(item.own_row)) {
-                // What the driver read from the ship's hull and targeting, as the sync stamped them (-1: none).
-                let hull = rows.hull_fraction[r];
-                item.hull_fraction = if hull < 0.0 { 1.0 } else { hull };
-                item.selected_id = rows.target_ids[r].max(0);
-            }
+    // The brains and the batch's state, joined first when a job holds them (a reader or writer that cannot wait).
+    fn work(&mut self) -> &mut Work {
+        if self.work.is_none() && self.step_pending() {
+            self.early_joins += 1;
+            self.join();
         }
-        threads::ensure_workers(&mut self.workers, threads);
-        let shared = Shared {
-            rows,
-            bolts,
-            grid: &self.grid,
-            field: &self.field,
-            relations: rel,
-            now_s,
-            friendly_fire,
-            origin,
-            nearest_k: self.nearest_k,
-            static_k: self.static_k,
-            fault: self.fault,
-        };
-        let moved = guard
-            .as_ref()
-            .is_some_and(|c| c.rows_version_now() != rows_version);
-        let items = &mut self.items[..n];
-        let workers = &self.workers;
-        let passed = moved
-            || std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                threads.run(Pass::Brains, items, workers, |item, worker| {
-                    think_item(&shared, item, worker);
-                });
-            }))
-            .is_ok();
-        drop(guard);
-        if moved || !passed {
-            for item in &mut self.items[..n] {
-                item.ok = false;
-            }
-        }
-        if !passed {
-            if self.pass_failures == 0 {
-                godot_warn!(
-                    "ScsBrains.think_batch: a think panicked; the tick's {n} thinks are held, their brains kept"
-                );
-            }
-            self.pass_failures += 1;
-        }
-        self.batch_out.clear();
-        self.batch_out.resize(n * BATCH_OUT, 0.0);
-        for (k, item) in self.items[..n].iter_mut().enumerate() {
-            if let Some(brain) = item.brain.take() {
-                self.slots[item.slot] = Some(brain);
-            }
-            if item.ok {
-                let at = k * BATCH_OUT;
-                self.batch_out[at] = 1.0;
-                self.batch_out[at + 1..at + BATCH_OUT].copy_from_slice(&item.out);
-            }
-        }
-        PackedFloat64Array::from(self.batch_out.as_slice())
+        self.work.get_or_insert_with(|| {
+            let mut work = Box::new(Work::default());
+            work.grid.cell_m = SENSOR_RANGE_M;
+            work.grid_version = -1;
+            work
+        })
     }
 
-    // After a rows batch, on the main thread: every think's command into the core, the counts, and the events of the
-    // ships whose drivers have something to do (see `think_batch_rows`).
-    fn write_commands(&mut self, n: usize) {
-        let mut core = self.core.clone();
-        let mut guard = core.as_mut().map(|c| c.bind_mut());
-        for k in 0..n {
-            let item = &self.items[k];
-            if !item.ok {
-                self.events[2] += 1;
-                continue;
-            }
-            self.events[if item.near { 0 } else { 1 }] += 1;
-            self.events[3] = self.events[3].max(item.out[OUT_CONTACTS] as i64);
-            let (Some(c), Some(brain)) = (
-                guard.as_mut(),
-                self.slots.get(item.slot).and_then(Option::as_ref),
-            ) else {
-                continue;
-            };
-            let mut events = c.write_command(brain.ship.own_body_id, &item.out[..=CMD_LEN]);
-            let wanted = brain.wanted_target_id;
-            let selected = usize::try_from(item.own_row).map_or(-1, |r| c.rows.target_ids[r]);
-            // The driver follows the brain's target: it clears a selection for none, selects anything else it wants, and
-            // for the nearest hostile (0) runs its retarget every think, as T18's path does.
-            if wanted == 0 || (wanted < 0 && selected > 0) || (wanted > 0 && wanted != selected) {
-                events |= EVENT_SELECT;
-            }
-            // Ram (0) and follow path (7) in control are mirrored at once, as the facade does, and so is a new commitment.
-            let kind = item.out[OUT_CURRENT] as i64;
-            if c.note_ram(brain.ship.own_body_id, item.out[OUT_RAM] != 0.0)
-                || kind == 0
-                || kind == 7
-            {
-                events |= EVENT_SETTLE;
-            }
-            if events != 0 {
-                self.events.push(k as i64);
-                self.events.push(i64::from(events));
-            }
+    // A change to a hosted driver: applied now, or queued for the join while the brains are away.
+    fn mutate(&mut self, change: Pending) {
+        if self.work.is_some() || !self.step_pending() {
+            let work = self.work();
+            Self::apply(work, &change);
+        } else {
+            self.pending.push(change);
         }
     }
 
-    // The hosted drivers' step (M4-T35), as `AiPilotDriver.step` decided it: a step and the time since the last think
-    // added, near the player or not, and the think rate's rule (`AiThinkRate.thinks`); a ship with no row this tick holds
-    // (as a declined think did). The thinking ones become items after the `n` queued; returns the item count.
-    fn queue_hosted(&mut self, n: usize, rel_len: usize) -> usize {
-        self.hosted_slots.clear();
-        let mut total = n;
-        let Some(core) = self.core.clone() else {
-            return total;
-        };
-        let c = core.bind();
-        let frame = &self.frame;
-        for at in 0..self.hosted.len() {
-            let h = &mut self.hosted[at];
-            if !h.live {
-                continue;
-            }
-            let row = c.row_for_kernel(h.body_id);
-            h.steps += 1;
-            h.since_think_s += frame.delta;
-            let Ok(r) = usize::try_from(row) else {
-                self.events[2] += 1; // no row this tick: held, as a declined think is
-                continue;
-            };
-            h.near = frame.player_live
-                && f64::from(dist_sq(c.rows.positions[r], frame.player_at)) <= frame.near_sq;
-            let on_beat = (h.steps + h.ordinal).rem_euclid(frame.period) == 0;
-            if frame.rate_on && !h.woken && !h.near && !on_beat {
-                self.events[4] += 1; // held: the ship flies its last command on
-                continue;
-            }
-            let Some(brain) = self.slots.get_mut(h.slot).and_then(Option::take) else {
-                self.events[2] += 1;
-                continue;
-            };
-            if self.items.len() <= total {
-                self.items.resize_with(total + 1, Item::default);
-            }
-            let fix = c.rows.faction_ix[r] as usize;
-            let item = &mut self.items[total];
-            item.slot = h.slot;
-            item.brain = Some(brain);
-            item.relations = (
-                rel_len + fix * self.stride,
-                rel_len + (fix + 1) * self.stride,
-            );
-            item.selected_id = 0;
-            item.last_attacker_id = h.attacker_id;
-            item.near = h.near;
-            item.dt = h.since_think_s;
-            item.hull_fraction = 1.0;
-            item.last_hit_s = h.hit_s;
-            item.last_bolt_hit_s = h.bolt_hit_s;
-            item.ok = false;
-            self.hosted_slots.push(h.slot as i64);
-            total += 1;
-        }
-        total
+    fn hosted_of(work: &mut Work, slot: i64) -> Option<&mut Hosted> {
+        let slot = usize::try_from(slot).ok()?;
+        work.hosted.iter_mut().find(|h| h.slot == slot)
     }
 
-    // After the pass: a hosted driver whose think landed starts its clock again; a declined one keeps it, as the driver's
-    // settle put it back.
-    fn settle_hosted(&mut self, n: usize, total: usize) {
-        for k in n..total {
-            let item = &self.items[k];
-            let Some(at) = self.hosted.iter().position(|h| h.slot == item.slot) else {
-                continue;
-            };
-            let h = &mut self.hosted[at];
-            if item.ok {
-                h.dt = h.since_think_s;
-                h.since_think_s = 0.0;
-                h.woken = false;
-                h.thinks += 1;
-                h.out.clear();
-                h.out.extend_from_slice(&item.out);
-                // Attack (3) in control: its target, as `AiPilot._apply_state` and `_retire_pending` keep it in the context.
-                if item.out[OUT_CURRENT] as i64 == 3 {
-                    let hi = item.out[OUT_TARGET];
-                    if hi >= 0.0 {
-                        h.attack_target = ((hi as i64) << 32) | (item.out[OUT_TARGET + 1] as i64);
-                    }
+    fn apply(work: &mut Work, change: &Pending) {
+        let find = Self::hosted_of;
+        match *change {
+            Pending::Hits {
+                slot,
+                attacker_id,
+                hit_s,
+                bolt_hit_s,
+            } => {
+                if let Some(h) = find(work, slot) {
+                    h.attacker_id = attacker_id;
+                    h.hit_s = hit_s;
+                    h.bolt_hit_s = bolt_hit_s;
+                    h.woken = true;
+                }
+            }
+            Pending::Live { slot, live } => {
+                if let Some(h) = find(work, slot) {
+                    h.live = live;
+                }
+            }
+            Pending::Wake { slot } => {
+                if let Some(h) = find(work, slot) {
+                    h.woken = true;
                 }
             }
         }
     }
 
-    fn hosted_index(&self, slot: i64) -> Option<usize> {
+    // A hosted driver as the readers see it: the state itself when the brains are here, else the launch's view.
+    fn view<T>(&self, slot: i64, read: impl Fn(&HostedView) -> T) -> Option<T> {
         let slot = usize::try_from(slot).ok()?;
-        self.hosted.iter().position(|h| h.slot == slot)
+        match &self.work {
+            Some(w) => w.hosted.iter().find(|h| h.slot == slot).map(|h| {
+                read(&HostedView {
+                    slot: h.slot,
+                    thinks: h.thinks,
+                    dt: h.dt,
+                    attack_target: h.attack_target,
+                    out: h.out.clone(),
+                    steps: h.steps,
+                    since_think_s: h.since_think_s,
+                    woken: h.woken,
+                    near: h.near,
+                })
+            }),
+            None => self.mirror.iter().find(|v| v.slot == slot).map(read),
+        }
     }
 
-    fn hosted_mut(&mut self, slot: i64) -> Option<&mut Hosted> {
-        self.hosted_index(slot).map(move |at| &mut self.hosted[at])
+    // The version the next job's grid is keyed on: the core's rows version, or the loaded rows' own count.
+    fn rows_version_now(&self) -> i64 {
+        match &self.core {
+            Some(core) => core.bind().rows_version_now(),
+            None => self.own_version,
+        }
     }
 
-    // Rebuilds the contact grid when the core's rows changed under it.
-    fn refresh_grid(&mut self) {
-        let Some(core) = &self.core else {
+    // The launch itself: the frame's readers' views taken, the rows copied into the spare snapshot, the brains and the
+    // batch handed to the job, which runs on the step's thread when asked (else here, its result kept for the join).
+    fn launch(&mut self, params: Params, threaded: bool) {
+        if self.step_pending() {
+            self.early_joins += 1;
+            self.join();
+        }
+        self.main_thread
+            .get_or_insert_with(|| std::thread::current().id());
+        self.refresh_views();
+        let work = self.work.take().expect("joined above");
+        let mut snapshot = self.spare.take().unwrap_or_default();
+        let runner = match self.core.clone() {
+            Some(mut core) => {
+                let mut c = core.bind_mut();
+                c.snapshot_into(&mut snapshot);
+                c.worker_threads().runner()
+            }
+            None => {
+                snapshot.rows.clone_from(&self.own);
+                snapshot.bolts.clone_from(&self.own_bolts);
+                snapshot.body_rows.clear();
+                snapshot.body_rows.extend(
+                    self.own
+                        .body_ids
+                        .iter()
+                        .enumerate()
+                        .map(|(r, &b)| (b, r as u32)),
+                );
+                snapshot.touched.clear();
+                snapshot.commands.clear();
+                snapshot.rows_version = self.own_version;
+                Runner::default()
+            }
+        };
+        let job = Job {
+            work,
+            snapshot,
+            params,
+            runner,
+        };
+        self.launched_at = Some(Instant::now());
+        if threaded {
+            let step = self
+                .step
+                .get_or_insert_with(|| StepThread::start(STEP_THREAD, brain_step::run));
+            if let Err(job) = step.launch(job) {
+                self.done = Some(brain_step::run(job));
+            }
+        } else {
+            self.done = Some(brain_step::run(job));
+        }
+    }
+
+    // The join: the job's result taken (waited for when it still runs), the state back, what arrived meanwhile applied,
+    // the commands into the core, the snapshot kept as the next spare. The output, or nothing when no job was out.
+    fn join(&mut self) -> Vec<f64> {
+        let waited = Instant::now();
+        let done = match self.done.take() {
+            Some(done) => Some(done),
+            None => match self.step.as_mut() {
+                Some(step) if step.pending() => {
+                    let ready = step.try_take();
+                    if ready.is_some() {
+                        ready
+                    } else {
+                        self.misses += 1;
+                        step.take()
+                    }
+                }
+                _ => None,
+            },
+        };
+        self.wait_us = waited.elapsed().as_micros() as i64;
+        let Some(mut done) = done else {
+            return Vec::new();
+        };
+        self.step_us = done.run_us;
+        self.off_main = self.main_thread.is_some_and(|main| done.thread != main);
+        if done.work.failed {
+            done.work.failed = false;
+            if !self.warned {
+                self.warned = true;
+                godot_warn!(
+                    "ScsBrains.think_batch: a think panicked; the tick's thinks are held, their brains kept"
+                );
+            }
+            self.pass_failures += 1;
+        }
+        for change in std::mem::take(&mut self.pending) {
+            Self::apply(&mut done.work, &change);
+        }
+        self.work = Some(done.work);
+        if done.from_rows
+            && let Some(core) = self.core.as_mut()
+        {
+            core.bind_mut().take_commands(&mut done.snapshot.commands);
+        }
+        self.spare = Some(done.snapshot);
+        done.out
+    }
+
+    // What the frame's readers see while the brains are away: every hosted driver's state, and the description and
+    // path of every slot asked for since the last launch.
+    fn refresh_views(&mut self) {
+        let asked: Vec<usize> = self.asked.drain().collect();
+        self.describe_cache.clear();
+        self.path_cache.clear();
+        for at in asked {
+            let dict = self.describe_now(at);
+            self.describe_cache.insert(at, dict);
+            let path = self.path_now(at);
+            self.path_cache.insert(at, path);
+        }
+        let Some(work) = self.work.as_ref() else {
             return;
         };
-        let c = core.bind();
-        if c.rows_version_now() == self.grid_version {
-            return;
+        self.mirror
+            .resize_with(work.hosted.len(), HostedView::default);
+        for (v, h) in self.mirror.iter_mut().zip(work.hosted.iter()) {
+            v.slot = h.slot;
+            v.thinks = h.thinks;
+            v.dt = h.dt;
+            v.attack_target = h.attack_target;
+            v.out.clear();
+            v.out.extend_from_slice(&h.out);
+            v.steps = h.steps;
+            v.since_think_s = h.since_think_s;
+            v.woken = h.woken;
+            v.near = h.near;
         }
-        self.grid_version = c.rows_version_now();
-        self.grid.cells = contact::sorted_cells(&c.rows.positions, self.grid.cell_m);
-        self.grid.max_static_radius = (0..c.rows.positions.len())
-            .filter(|&i| c.rows.is_static[i])
-            .map(|i| c.rows.radii[i].abs())
-            .fold(0.0, f64::max);
-        self.field.build(&c.rows, &c.bolts, self.grid.cell_m);
-        self.field.index_names(&c.rows, wanted_names(&self.slots));
     }
 
-    fn brain(&self, slot: i64) -> Option<&Brain> {
-        usize::try_from(slot)
-            .ok()
-            .and_then(|i| self.slots.get(i))
-            .and_then(Option::as_ref)
+    // `describe` from the brains here.
+    fn describe_now(&mut self, at: usize) -> VarDictionary {
+        let mut dict = VarDictionary::new();
+        let Some(brain) = self.work().slots.get(at).and_then(Option::as_ref) else {
+            return dict;
+        };
+        let d = brain.describe();
+        dict.set("behaviour", &GString::from(d.behaviour.as_str()));
+        dict.set("state", &GString::from(d.state.as_str()));
+        dict.set("for_s", d.for_s);
+        for (key, value) in &d.numbers {
+            dict.set(*key, *value);
+        }
+        for (key, value) in &d.flags {
+            dict.set(*key, *value);
+        }
+        for (key, value) in &d.ints {
+            dict.set(*key, *value);
+        }
+        for (key, value) in &d.texts {
+            dict.set(*key, &GString::from(value.as_str()));
+        }
+        let mut scores = VarDictionary::new();
+        for (i, kind) in brain.behaviours.iter().enumerate() {
+            scores.set(
+                KIND_NAMES[usize::from(*kind)],
+                brain_maths::snapped(brain.weighted[i], 0.01),
+            );
+        }
+        let names: Vec<(&str, i64)> = d.names.clone();
+        let guard = self.core.as_ref().map(|c| c.bind());
+        let (rows, row_names): (&Rows, &[GString]) = match &guard {
+            Some(c) => (&c.rows, &c.row_names),
+            None => (&self.own, &self.own_names),
+        };
+        for (key, id) in names {
+            let name = name_of(rows, row_names, id);
+            if key == "state" {
+                dict.set("state", &GString::from(format!("to {name}").as_str()));
+            } else {
+                dict.set(key, &GString::from(name.as_str()));
+            }
+        }
+        dict.set("scores", &scores);
+        dict
+    }
+
+    // `path_visited` and `path_results` together: cached from the launch while the brains are away.
+    fn path(&mut self, slot: i64) -> (PackedInt32Array, VarArray) {
+        let Ok(at) = usize::try_from(slot) else {
+            return (PackedInt32Array::new(), VarArray::new());
+        };
+        self.asked.insert(at);
+        if self.work.is_none() {
+            if let Some(cached) = self.path_cache.get(&at) {
+                return cached.clone();
+            }
+            self.early_joins += 1;
+            self.join();
+        }
+        let path = self.path_now(at);
+        self.path_cache.insert(at, path.clone());
+        path
+    }
+
+    fn path_now(&mut self, at: usize) -> (PackedInt32Array, VarArray) {
+        let mut results = VarArray::new();
+        let Some(brain) = self.work().slots.get(at).and_then(Option::as_ref) else {
+            return (PackedInt32Array::new(), results);
+        };
+        let visited = PackedInt32Array::from(brain.path_visited());
+        for r in brain.path_results() {
+            let mut dict = outcome_dict(&r.outcome);
+            dict.set(
+                "demo",
+                &GString::from(brain_maths::MANOEUVRE_NAMES[usize::from(r.demo)]),
+            );
+            dict.set("index", r.index);
+            results.push(&dict.to_variant());
+        }
+        (visited, results)
     }
 
     fn brain_mut(&mut self, slot: i64) -> Option<&mut Brain> {
-        usize::try_from(slot)
-            .ok()
-            .and_then(|i| self.slots.get_mut(i))
-            .and_then(Option::as_mut)
+        let at = usize::try_from(slot).ok()?;
+        self.work().slots.get_mut(at).and_then(Option::as_mut)
     }
 }
 

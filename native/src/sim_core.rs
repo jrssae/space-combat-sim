@@ -242,6 +242,9 @@ pub struct ScsSimCore {
     // selection as the events last gave it (or as its attributes read it).
     selection_watch: Vec<(i64, f64)>,
     latest_target: HashMap<i64, i64>,
+    // Bodies whose row command GDScript released since the step's last launch (M4-T24): dropped from the job's commands
+    // at the join.
+    pub(crate) released: Vec<i64>,
 }
 
 #[godot_api]
@@ -842,6 +845,15 @@ impl ScsSimCore {
     /// The worker threads for the crate's per-ship passes (M4-T18).
     pub fn worker_threads(&self) -> &Threads {
         &self.threads
+    }
+
+    /// The rows by body id, and the bodies touched since the last sync point (a job's snapshot copies both, M4-T24).
+    pub(crate) fn body_rows(&self) -> &HashMap<i64, u32> {
+        &self.row_of_id
+    }
+
+    pub(crate) fn touched_set(&self) -> &HashSet<i64> {
+        &self.touched
     }
 
     /// The row a kernel may read for body `body_id` between sync points, or -1: none when the body was touched since the
