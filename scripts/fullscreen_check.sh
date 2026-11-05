@@ -78,9 +78,11 @@ with open(report, "w") as f:
         # Q48's row: the average FPS, the 1 % low (the slowest 1 % of the window's frames) and the p99 frame time.
         gpu = num(r"gpu ms mean ([0-9.]+)", next((l for l in lines if "gpu ms mean" in l), ""))
         calls = next((num(r"draw calls mean ([0-9.]+)", l) for l in lines if "draw calls mean" in l), None)
-        vram = num(r"added ([0-9.]+) MB;", next((l for l in lines if "VRAM before" in l), ""))
-        f.write("| layout | N | average FPS | 1 % low FPS | p99 frame ms | frame mean ms | GPU ms mean | draw calls | VRAM added MB |\n|---|---|---|---|---|---|---|---|---|\n")
-        f.write("| %s | %s | %.1f | %.1f | %.2f | %.2f | %s | %s | %s |\n\n" % (layout, n, fps, low, p99 if p99 is not None else float("nan"), frame,
+        speed = next((num(r"\(([0-9.]+) of real time", l) for l in lines if "of real time" in l), None)
+        vram = num(r"process's VRAM before [0-9.]+ MB, peak ([0-9.]+) MB", next((l for l in lines if "process's VRAM" in l), ""))
+        f.write("| layout | N | average FPS | 1 % low FPS | p99 frame ms | frame mean ms | sim speed | GPU ms mean | draw calls | game VRAM peak MB |\n|---|---|---|---|---|---|---|---|---|---|\n")
+        f.write("| %s | %s | %.1f | %.1f | %.2f | %.2f | %s | %s | %s | %s |\n\n" % (layout, n, fps, low, p99 if p99 is not None else float("nan"), frame,
+                "%.2f" % speed if speed is not None else "?",
                 "%.2f" % gpu if gpu is not None else "?", "%.0f" % calls if calls is not None else "?", "%.0f" % vram if vram is not None else "?"))
     f.write("```\n%s\n```\n" % "\n".join(lines))
 print("[fullscreen] %s -> %s" % (verdict, report))

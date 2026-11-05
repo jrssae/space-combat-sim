@@ -61,6 +61,8 @@ var explosions: int = 0
 var vram_before_mb: float = 0.0
 var gtt_before_mb: float = 0.0
 var vram_peak_mb: float = 0.0
+var own_vram_before_mb: float = 0.0
+var own_vram_peak_mb: float = 0.0
 var gtt_peak_mb: float = 0.0
 var _vram_dir: String = ""
 var _started_usec: int = 0
@@ -72,6 +74,8 @@ var _next_restore_s: float = 1.0
 var _kill_round: int = 0
 var _last_kill_usec: int = 0
 var _ticks_in_frame: int = 0
+var _window_ticks: int = 0
+var _window_start_usec: int = 0
 var _places: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
 
@@ -84,6 +88,7 @@ func _ready() -> void:
 	_rng.seed = 19
 	_vram_dir = _find_vram_dir()
 	vram_before_mb = _read_mb("mem_info_vram_used")
+	own_vram_before_mb = _own_vram_mb()
 	gtt_before_mb = _read_mb("mem_info_gtt_used")
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.waves_auto_start = false
@@ -217,6 +222,8 @@ func _place_hundred(in_view: bool) -> void:
 # Keeps the nose on the raiders, as a player chasing the fight would, so the fight stays in the picture.
 func _on_tick() -> void:
 	_ticks_in_frame += 1
+	if measuring:
+		_window_ticks += 1
 	if String(options["scene"]) != "fight" or main == null or not main.player_alive:
 		return
 	var sum := Vector3.ZERO
@@ -250,6 +257,7 @@ func _on_frame() -> void:
 	if elapsed_s >= warmup:
 		if not measuring:
 			measuring = true
+			_window_start_usec = now
 			_last_second_usec = now
 		_sample(now)
 		if elapsed_s >= warmup + float(options["window"]):
@@ -395,12 +403,21 @@ func _finish() -> void:
 			"fullscreen" if DisplayServer.window_get_mode() in [DisplayServer.WINDOW_MODE_FULLSCREEN, DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN] else "windowed",
 			root.scaling_3d_scale, root.scaling_3d_mode, _mean(frame_ms), 1000.0 / maxf(_mean(frame_ms), 1e-6),
 			_percentile(frame_ms, 0.99), PerfStats.low_fps(frame_ms, LOW_SHARE)])  # M4-T07: the fullscreen check; M4-P2: the 1 % low (Q48)
+	# How much of real time the simulation kept: a tick slower than a frame leaves the engine at its step cap, so the frame rate
+	# then reads the tick, not the renderer (60 ticks a second is real time).
+	var window_s: float = float(Time.get_ticks_usec() - _window_start_usec) * 1e-6
+	print("[measure] %s: sim ticks %d in %.1f s = %.1f a second (%.2f of real time), ticks a frame mean %.2f" % [
+			label, _window_ticks, window_s, float(_window_ticks) / maxf(window_s, 1e-6),
+			float(_window_ticks) / maxf(window_s, 1e-6) / float(Engine.physics_ticks_per_second), float(_window_ticks) / maxf(1.0, float(frame_ms.size()))])
 	# The window's first frames beside the rest: a loading frame at the start shows here as a first-frames mean far above the window's.
 	var first_ms := frame_ms.slice(0, mini(START_FRAMES, frame_ms.size()))
 	print("[measure] %s: window start: first %d frames mean ms %.2f max %.2f, the whole window mean ms %.2f max %.2f" % [
 			label, first_ms.size(), _mean(first_ms), _max(first_ms), _mean(frame_ms), _max(frame_ms)])
 	print("[measure] %s: VRAM before %.0f MB, peak %.0f MB, added %.0f MB; GTT before %.0f MB, peak %.0f MB, added %.0f MB" % [
 			label, vram_before_mb, vram_peak_mb, vram_peak_mb - vram_before_mb, gtt_before_mb, gtt_peak_mb, gtt_peak_mb - gtt_before_mb])
+	own_vram_peak_mb = maxf(own_vram_peak_mb, _own_vram_mb())
+	print("[measure] %s: this process's VRAM before %.0f MB, peak %.0f MB (the kernel's per-process count; the card-wide figures above include the desktop)" % [
+			label, own_vram_before_mb, own_vram_peak_mb])
 	for spike: String in spikes:
 		print("[measure] %s: over 25 ms at %s" % [label, spike])
 	var shot: String = String(options["shot"])
@@ -422,6 +439,31 @@ func _read_mb(file_name: String) -> float:
 	if _vram_dir.is_empty():
 		return 0.0
 	return FileAccess.get_file_as_string(_vram_dir + file_name).strip_edges().to_float() / 1048576.0
+
+
+# This process's video memory, from the kernel's per-client counts (each DRM client counted once), so the desktop's own use and
+# other programs' do not move it. 0 where the driver does not report it. Read through `cat` because Godot's file reads stall on
+# some of the pseudo-files in /proc.
+func _own_vram_mb() -> float:
+	var output: Array = []
+	if OS.execute("sh", ["-c", "cat /proc/%d/fdinfo/* 2>/dev/null" % OS.get_process_id()], output) != 0 or output.is_empty():
+		return 0.0
+	var seen: Dictionary = {}
+	var total_kib: float = 0.0
+	var client: String = ""
+	var vram_kib: float = -1.0
+	for line: String in (String(output[0]) + "\npos:").split("\n"):
+		if line.begins_with("pos:"):  # the next descriptor's record starts: close the last one
+			if vram_kib >= 0.0 and not client.is_empty() and not seen.has(client):
+				seen[client] = true
+				total_kib += vram_kib
+			client = ""
+			vram_kib = -1.0
+		elif line.begins_with("drm-client-id:"):
+			client = line.get_slice(":", 1).strip_edges()
+		elif line.begins_with("drm-memory-vram:"):
+			vram_kib = line.get_slice(":", 1).strip_edges().get_slice(" ", 0).to_float()
+	return total_kib / 1024.0
 
 
 static func _mean(values: PackedFloat64Array) -> float:
