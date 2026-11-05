@@ -86,6 +86,10 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q52 | Checkpoint 3, Q39's second bar | **The bar is 60 FPS at the screen with vsync on, judged by the maintainer (H)**, not the vsync-off 1 % low the fullscreen check measures (which stays recorded as data) |
 | Q53 | T24, the simulation on a worker thread (2026-11-05) | **A firm task, no longer conditional**: the AI and the simulation step leave the main thread so the frame rate and the player's input never wait on them. It runs right after T33 and T34 (once the per-ship GDScript is out of the AI path) and before T21, so the tier is built once on the threaded tick. The maintainer accepts the one-tick (16.7 ms) delay on AI commands and new seeded reference outcomes; checkpoint 4 becomes a playtest of that build (H) |
 | Q54 | The maintainer away for several days (2026-11-05) | **Proceed without checkpoint 4's playtest, with safeguards:** T24 keeps today's single-thread step selectable by a setting and its tests run on both paths, so reverting is one switch; T21, T22 and T23 must pass their tests on both the threaded and the single-thread step; every look and feel item not yet seen by the maintainer goes into one checklist in `docs/playtest.md` ("M4 return checklist") for one session on return; `m4` does not merge into `main` without the maintainer. Work continues through T25 |
+| Q55 | Refactor review (2026-11-05), bolts | **Bolts become core rows in their own task before T24** (T35), with the other parts of the core owning the simulated state that T24 needs |
+| Q56 | Refactor review, the frame's per-ship work | **Do the work and measure each step** (T36): per-ship frame callbacks, the HUD radar, audio nodes, hit flashes and muzzle nodes become one pass per subsystem; no separate measurement task first |
+| Q57 | Refactor review, the native library | **The native library becomes required at M4's close**; the GDScript paths stay only as test references (T37 removes the runtime fallbacks and their settings) |
+| Q58 | Refactor review, slow tests | **The two pending balance files (`test_dogfight`, `test_m3_sandbox`) and the long seeded parity fights move behind a slow switch** that CI and the milestone's full run set (T36) |
 
 ## The budget ("good game performance", Q5)
 
@@ -198,8 +202,8 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T21 | The low-attention tier: state, 20 Hz integration, promotion and demotion of fighters and capitals | T20, checkpoint 3, T24 | Fable | The pool and ship adapter handover must never pop; serial | T | not started |
 | T22 | Tier brains at 2 to 5 Hz, statistical fire, far capitals' aggregated fire | T21 | Opus | Far fights must stay fair | T, N | not started |
 | T23 | Far proxies for tier rows (dots, radar, targeting) | T21, T11 | Opus | GPU numbers by the agent, the look (H) | R | not started |
-| T24 | The simulation step on a worker thread (firm, Q53): the AI and every native kernel step off the main thread into a double-buffered snapshot | T33, T34 | Fable | A tick-order change, double-buffered snapshots; the frame and input stop waiting on the simulation | N | not started |
-| T25 | Phase 3 measurements, the 1 000 stretch, the full suite, report P3 | T23, T24 (T26) | Sonnet | Measurement, no code | M | not started |
+| T24 | The simulation step on a worker thread (firm, Q53): the AI and every native kernel step off the main thread into a double-buffered snapshot | T35, T36 | Fable | A tick-order change, double-buffered snapshots; the frame and input stop waiting on the simulation | N | not started |
+| T25 | Phase 3 measurements, the 1 000 stretch, the full suite, report P3 | T23, T24, T37 (T26) | Sonnet | Measurement, no code | M | not started |
 | T26 | Resolution scaling for the big battle (only if the GPU binds at the fullscreen check; Q20) | T11 | Sonnet | One setting and an automatic step on `RenderScale`; the look (H) | R | not started |
 | T27 | Render comparison: Gaussian splats against meshes, in the 500 battle and a Babylon 5 station scene (Q24) | T07, T11, T12 | Opus | Measures whether splats or meshes carry the big battles; GPU numbers by the agent, the look (H) | R, M | done |
 | T28 | Running lights stay point-sized and dim by the inverse square (maintainer, 2026-11-03) | none | Sonnet | Lights in vacuum do not scatter into globes | R | done |
@@ -212,6 +216,9 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T32 | Wing-level AI research: what deciding per wing instead of per fighter would save at 300 and 500 ships, how other games do it, and a proposal (Q46) | phase 2 (T18, T20), report P2 | Fable | Research and a design judgement over the measured think stage; no game code | M | done (2026-11-05, in a worktree on `08228cc`, fix round 1 the same day; `docs/research/wing-level-ai.md`; the proposal below waits for the maintainer at checkpoint 3: wing-level decisions are 2 % of a thinking ship's cost, so the proposal is to build the rows-based command path (1.3 to 2.0 ms at 300), fold a cluster perception into T22 and keep wing tactics as a later feel feature) |
 | T33 | The native pilots' inputs and commands as core rows (T32's L1, Q50): the batch writes each pilot's flight and combat command into its row and `FlightBatch` applies it the same tick | checkpoint 3 | Opus | Removes most of the 23 to 27 us of GDScript a thinking ship; owns T18's two missed numbers | N, G | not started |
 | T34 | The cheap pass on the per-ship stages (Q50): the ram stage's loop, the hit stage's gather, targeting and the core's sync, into native code or out of the per-tick path | checkpoint 3 | Opus | 13.3 of 17.85 ms at `battle` 300 sits in four stages phase 2 did not take (report P2) | N, G | not started |
+| T35 | The core owns the simulated state (Q55): bolts as rows drawn by one multimesh, Jolt bodies read once a tick by RID in one native call, activity, hull and selection as event-driven columns, the ram stage's contact read native | T33, T34 | Fable | Refactor review findings 1, 4, 6 and part of 5: 5 to 8 ms at 500 for the bolts alone; T24's precondition | N, G | not started |
+| T36 | The frame's per-ship work in one pass per subsystem (Q56, Q58): plumes, muzzle flashes, LOD switching, audio, far dots, the HUD radar, hit flashes; the splat-era render scale cap; the slow test switch | T33 | Opus | Refactor review findings 2, 3, 7, 9, 12, 13, 14: 3 to 5 ms a frame at 500 | R, G | not started |
+| T37 | M4's cleanup (Q57): the native library required, the GDScript paths test-only, the runtime fallbacks and their settings removed, one hull-reading path, the documentation drift | T23 | Opus | Refactor review findings 8, 16, 17: 1 500 to 2 500 lines and eight settings; parity surfaces halved | X, G | not started |
 
 ### M4-T01 Benchmark harness, budget and baseline
 
@@ -553,9 +560,11 @@ wave's combined gain that is less than the sum of its parts is written down as s
 | 6 | T18 (N), T20 (N+A), T31 (X+R+G) | T18, T20, T31 (T31 last: it edits the render tests) | **phase 2 end: sweep, headlines, fullscreen and VRAM on the mesh-only renderer, release once; report P2** | 3 |
 | 6b | T32 (M, research, Q46) | none (doc only) | uses report P2's think-stage numbers; its proposal goes to the maintainer with **checkpoint 3** | 1 |
 | 6c | T33 (N+G), T34 (N+G), in parallel (Q50) | T33, T34 | each its own before and after at `typical`, `battle` 300 and 500; the combined tick against Q49's 8 ms | 2 |
+| 6c2 | T35 (N+G), T36 (R+G), in parallel (Q55, Q56) | T35, T36 | each its own before and after at `typical`, `battle` 300 and 500; T36 also the fullscreen FPS table (Q48) | 2 |
 | 6d | T24 (N, serial: the tick order, Q53) | T24 | the fullscreen check at `battle` 200, 300 and 500 and `typical` before and after (Q48's table); **checkpoint 4: the maintainer plays the build (H)** | 1 |
 | 7 | T21 (T, serial: pool and ship adapter) | T21 | its own at 500 | 1 |
 | 8 | T22 (T+N), T23 (R), T26 (R, only if the GPU binds at the fullscreen check after T11) | T22, T23, T26 | combined at 500; fullscreen at 500 | 2 or 3 |
+| 8b | T37 (cleanup, Q57) | T37 | the focused files of every M4 task on the native-only build | 1 |
 | 9 | T25 (M) | T25 | **phase 3 end: sweep, battle 500 and 1 000, fullscreen, release, the full local suite; report P3** | 1 |
 
 Wall clock: waves 1, 5 and 8 are the parallel ones; the serial waves (4 and 7) are the two architecture changes that touch every
@@ -1314,6 +1323,7 @@ done and T20 proceeds.
 - **Expected gain:** at 500 the tick falls to what about 150 near fighters and 20 near capitals cost plus 0.3 us a tier fighter
   and 2 us a tier capital (70 %).
 - **Q54 (maintainer away):** every test of this task passes on both T24's threaded step and the single-thread step, so undoing T24 never strands it; its look and feel checks go into the "M4 return checklist" in `docs/playtest.md`.
+- **From the refactor review (2026-11-05, finding 11):** `WorldFrame.rebase` and `_settle` walk every shiftable node twice (the shift is 4.01 ms at 500); with the tier removing far ships' nodes, keep the shiftable set as a list kept up to date rather than a walk.
 - **Architecture:** §17.14 (a new subsection head, "The low-attention tier", that T22 to T24 add to).
 - **Checkpoint 2 (Q47):** after this task, re-measure the physics stage at `battle` 500 as T19 did (near set's sync, node propagation, Jolt's step); if the near set still costs more than about 1 ms a tick, the controller brings T19's ships-out-of-Jolt proposal back to the maintainer.
 
@@ -1381,6 +1391,7 @@ done and T20 proceeds.
   task on the threaded tick, so its rows join the worker's pass from the start. Measures add Q48's table (average and 1 % low
   FPS at `battle` 50 to 500 and `typical`) before and after; checkpoint 4 is the maintainer playing the build (H).
 - **Q54 (maintainer away):** keep the single-thread step selectable by a setting with every test run on both paths, so the threaded step can be switched off in one move; add the input-feel and one-tick-delay checks to the "M4 return checklist" in `docs/playtest.md`.
+- **From the refactor review (2026-11-05):** T35 makes the core own the state (finding 6), so this task's main-thread tick can stay small. For the single-thread fallback (Q54), cap `physics/common/max_physics_steps_per_frame` at 2 or 3 so a slow tick lowers the simulation rate instead of the frame rate (finding 15; the feel goes on the return checklist).
 - **Architecture:** §17.13 and §15.3 (the tick order; a design-contract change, checkpoint 4).
 - **Without splats (2026-11-04, Q29):** `splat_pose_sync.gd` is removed by T31; the interpolation from snapshots for tier rows'
   proxies goes in `far_dots.gd`.
@@ -1420,6 +1431,7 @@ done and T20 proceeds.
 - **Done when:** the scale moves the GPU time as expected and the entry says which scale the headline needs for the target and the
   floor; the maintainer judges the look.
 - **Expected:** GPU time roughly proportional to the pixels drawn for the splat passes (65 %).
+- **From the refactor review (2026-11-05, open question 5):** run the fullscreen FPS table once on a true 1920 by 1080 window as well as the native 4K window, to separate the window's own present and 2D cost from the game's.
 - **Architecture:** §17.15.
 - **Without splats (2026-11-04, Q29):** T27 found only the splat path near the trigger (10 to 12 ms GPU with 100 ships close) and
   the mesh path at 3 ms, so on the mesh-only renderer this task is expected `not needed` (80 %). The trigger is read from T13's
@@ -1909,6 +1921,7 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
 - **Done when:** parity holds, the per-ship GDScript left is measured and named, and the think stage at 300 is under 2 ms on six
   threads or the entry says by how much it misses and why.
 - **Expected gain:** 1.3 to 2.0 ms at 300 and 2.2 to 3.4 at 500 (T32, 70 % in range).
+- **From the refactor review (2026-11-05, finding 5):** switch off `_physics_process` on batched ships and on drivers whose ship is batched, let the batch decide the think rate and pack commands from rows, and hand the combat edges to the cannons from rows, so a tick enters GDScript once per system rather than once per ship (estimated 1.5 to 2.5 ms at 500 beyond this task's own estimate). Keep the muzzle transforms as data if the cannon hand-off is touched (finding 12).
 - **Architecture:** §17.13 (paragraphs under T33).
 
 ##### M4-T34 The cheap pass on the per-ship stages (Q50)
@@ -1929,6 +1942,66 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
 - **Done when:** parity holds and each stage's before and after is in the entry, with what remains of the four stages named.
 - **Expected gain:** a low-confidence guess of half of the 13.3 ms at 300 (report P2); the far share goes to T21 either way.
 - **Architecture:** §17.13 (paragraphs under T34).
+
+##### M4-T35 The core owns the simulated state (Q55)
+
+- **Track:** N and G. **Agent:** Fable. **Depends on:** T33 and T34. Runs as wave 6c2 beside T36, before T24 (T24's precondition).
+- **Source:** the refactor review of 2026-11-05, `.superpowers/sdd/m4-performance-and-scale/refactor-review.md` (not committed; the findings are summarised in each task section), findings 1, 4, 6 and the targeting half of 5.
+- **Goal:** everything simulated is a core row the core owns; the engine is the mirror, not the source. (1) **Bolts as rows:** today
+  about 2 400 bolts at `battle` 500 are scene nodes with a GDScript tick each, read twice a tick by the core and spawned one node per
+  shot; they become rows stepped by a kernel, swept by T08's hit sweep from the rows, and drawn by one `MultiMeshInstance3D` (impact
+  and muzzle visuals stay with T36). (2) **One Jolt read a tick:** Jolt-owned bodies are read by RID from the physics server's direct
+  state inside one native call instead of eleven gdext getters a body (T09's parity concern is met by making the GDScript reference
+  read the same state, or by Q16's tolerance, stated in the entry). (3) **Event columns:** activity, hull points and the selection
+  become columns updated from the events that already exist (`visibility_changed`, `damaged`, `note_selection`), not read every
+  tick. (4) **The ram stage's contact read** in one native call over the rigid rows, handing the tracker only hulls with a contact;
+  `contact_monitor` off where nothing listens (`max_contacts_reported` stays). (5) **The AI targeting controllers' selection check**
+  (still a GDScript call per AI ship per tick) as a row column checked natively.
+- **Tests first:** seeded fights give the same hits, kills and outcomes with bolts as rows as with bolt nodes (or within Q16's tolerance
+  where the direct-state read changes a last bit, listed); a bolt's launch tick and a rebase handled; the engine-free guard covers the
+  new kernels; 1 and 6 threads identical; the per-tick engine calls counted and shown not to grow with bolts; Q54: the single-thread
+  step and the threaded step (once T24 lands) both pass, so the old bolt node path stays behind a setting until T37.
+- **Measures:** `typical`, `battle` 300 and 500 before and after (the bolt gather, the hit stage, the core's sync, the ram stage, the
+  render objects a frame); the fullscreen FPS table at 300 and 500.
+- **Expected gain:** 5 to 8 ms a tick at 500 and 3 to 5 at 300 for the bolts (60 %, 1.9 ms of it measured), 1 to 2 ms more for the
+  Jolt read and event columns, up to 3 to 4 ms for the ram read at 500 (some of it taken by T34 already).
+- **Architecture:** §17.13 (paragraphs under T35).
+
+##### M4-T36 The frame's per-ship work in one pass per subsystem (Q56, Q58)
+
+- **Track:** R and G. **Agent:** Opus. **Depends on:** T33. Runs as wave 6c2 beside T35, before T24.
+- **Source:** the refactor review of 2026-11-05, `.superpowers/sdd/m4-performance-and-scale/refactor-review.md` (not committed; the findings are summarised in each task section), findings 2, 3 (the frame half), 7, 9, 12, 13 and 14.
+- **Goal:** the live frame at `battle` 500 does 23.0 ms of process work in its worst second against 16.3 ms frozen (measured); the
+  per-ship `_process` callbacks have no owner. Each subsystem becomes one pass over its ships per frame, measured before and after
+  each step: thruster plumes, muzzle flashes (lean ships' as a shared pool; muzzle transforms as data instead of `Marker3D` nodes,
+  finding 12), the LOD switcher, the far dots, the ships' two `AudioStreamPlayer3D` nodes (a pooled voice budget instead of 1 000
+  nodes, finding 7; coordinate with M5's sound pass, which owns the sounds themselves), the HUD radar and the debug overlay built from
+  the core's rows on read (finding 3), hit flashes from a pool instead of 7 to 11 nodes per hit (finding 9). Also: remove
+  `RenderScale`'s splat-era tile cap (finding 13; the 3D at the window's full resolution is a look and GPU check for the return
+  checklist), and put the two pending balance files and the long seeded parity fights behind a `GUT_SLOW` switch that CI's shard and
+  the milestone's full run set (Q58, finding 14).
+- **Tests first:** each pass's output equals the per-ship callbacks' (plume scale, flash timing, LOD level, audio voice choice, radar
+  contacts) on seeded scenes; no per-ship `_process` left on batched or lean ships (a node-count and callback-count test); the slow
+  switch skips the named files and CI still runs them.
+- **Measures:** the fullscreen check's process time and FPS table (Q48) at `typical`, `battle` 300 and 500 before and after each step.
+- **Expected gain:** 3 to 5 ms a frame at 500 and 2 to 3 at 300 (55 %); about 10 minutes off focused runs that touch the slow files.
+- **Q54:** the look and sound changes go on the return checklist.
+- **Architecture:** §17.13 or a new §17 subsection for the frame passes.
+
+##### M4-T37 M4's cleanup: the native library required (Q57)
+
+- **Track:** X and G. **Agent:** Opus. **Depends on:** T23 (every native path in place). Runs as wave 8b, before T25.
+- **Source:** the refactor review of 2026-11-05, `.superpowers/sdd/m4-performance-and-scale/refactor-review.md` (not committed; the findings are summarised in each task section), findings 8, 16 and 17.
+- **Goal:** Q9 made native code optional "during M4"; from M4's close it is required. Remove the runtime GDScript fallbacks and the
+  settings that switch them (about eight, `perf_native*` and the old load paths), keep each GDScript path only as a test reference
+  where a parity test needs it, collapse the five hull-reading paths into one, remove the old bolt node path (T35) and the inline step
+  if the maintainer has kept T24 (otherwise keep it as the single-thread path, Q54), and fix the documentation drift the review lists
+  (status lines, §14.9, §15.3 and §16.3 pointing to §17.13, and the rest of finding 16) and the small items of finding 17.
+- **Tests first:** the game refuses to start without the library with a clear message; every parity test still runs against its
+  reference; the full focused set of every M4 task green on the native-only build.
+- **Measures:** lines and settings removed; the tick at `typical`, `battle` 300 and 500 unchanged or better.
+- **Expected gain:** 1 500 to 2 500 lines and eight settings removed; parity surfaces halved.
+- **Architecture:** §17.13, §5 and §15.3 where they still describe optional native code.
 
 #### Architecture subsections this plan assigns
 
