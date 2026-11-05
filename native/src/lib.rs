@@ -23,3 +23,6 @@ struct ScsNative;
 
 #[gdextension]
 unsafe impl ExtensionLibrary for ScsNative {}
+
+// M4-T34: the cheaper bolt read at the core's sync points.
+mod bolt_sync;

@@ -21,6 +21,8 @@ extends Node
 ## Console: provider `core`.
 
 const NATIVE_CLASS: StringName = &"ScsSimCore"
+## The cheaper bolt read at the sync points (M4-T34); the core's own read stays the reference.
+const BOLT_SYNC_CLASS: StringName = &"ScsBoltSync"
 const NODE_NAME: StringName = &"SimCore"
 const OUT_NODE_NAME: StringName = &"SimCoreOut"
 const PRIORITY: int = -11
@@ -65,6 +67,10 @@ var _members_dirty: bool = true
 var _statics_version: int = -1
 var _out: Node = null
 var _bolts_fresh: bool = false  # the bolts were read again since this tick's first sync
+var _bolt_sync: Object = null  # the bolt reader (M4-T34), made on first use
+var _bolt_sync_known: int = -1
+var _tick_open: bool = false  # a sync_in since the last sync_out: the next sync_in closes the tick's count, as the core's does
+const _NO_NODES: Array[Node] = []
 
 
 ## Runs `sync_out` last in every physics tick (an internal child, so World's children stay its world objects).
@@ -193,6 +199,9 @@ func sync_bolts_now() -> bool:
 func sync_out_now() -> void:
 	if core != null:
 		core.sync_out()
+	if _bolt_sync != null:
+		_bolt_sync.close_tick()
+	_tick_open = false
 
 
 ## Asks the core to read `body`'s row again at the next sync point: for code that changes its faction, name, kind,
@@ -272,7 +281,17 @@ func remove_row(handle: int) -> void:
 ## Engine calls of the last closed tick: `[sync, fallbacks]` (the sync points' reads, and the flight step's reads of the
 ## physics server for ships without a row; the kernels make none by construction, see `native/src/kernels.rs`).
 func engine_calls() -> PackedInt64Array:
-	return core.engine_calls() if core != null else PackedInt64Array([-1, -1])
+	if core == null:
+		return PackedInt64Array([-1, -1])
+	var calls: PackedInt64Array = core.engine_calls()
+	if _bolt_sync != null:
+		calls[0] += int(_bolt_sync.last_reads())
+	return calls
+
+
+## Which code reads the bolts at the sync points now: &"reader" (`BOLT_SYNC_CLASS`, M4-T34) or &"core" (the core's own).
+func bolt_path() -> StringName:
+	return &"reader" if _bolt_reader() != null else &"core"
 
 
 ## Which path the classes take now: &"native" with the core on, else &"gdscript".
@@ -290,7 +309,16 @@ func _sync_in() -> void:
 		_statics_version = StaticRows.version
 		core.set_statics(StaticRows.ids, StaticRows.positions, StaticRows.radii, StaticRows.factions, StaticRows.kinds)
 	var frame: int = Engine.get_physics_frames()
-	core.sync_in(tree.get_nodes_in_group(Projectile.GROUP), frame, get_physics_process_delta_time())
+	var delta: float = get_physics_process_delta_time()
+	var reader: Object = _bolt_reader()
+	if _bolt_sync != null and _tick_open:
+		_bolt_sync.close_tick()
+	_tick_open = true
+	if reader != null:
+		core.sync_in(_NO_NODES, frame, delta)
+		reader.read(core, tree.get_nodes_in_group(Projectile.GROUP), frame, delta, true, false)
+	else:
+		core.sync_in(tree.get_nodes_in_group(Projectile.GROUP), frame, delta)
 	synced_frame = frame
 	bolts_frame = frame
 	_bolts_fresh = false
@@ -299,7 +327,13 @@ func _sync_in() -> void:
 
 func _sync_bolts() -> void:
 	var started: int = Time.get_ticks_usec()  # readout only
-	core.sync_bolts(get_tree().get_nodes_in_group(Projectile.GROUP), get_physics_process_delta_time())
+	var delta: float = get_physics_process_delta_time()
+	var reader: Object = _bolt_reader()
+	if reader != null:
+		core.sync_bolts(_NO_NODES, delta)
+		reader.read(core, get_tree().get_nodes_in_group(Projectile.GROUP), core.tick(), delta, false, true)
+	else:
+		core.sync_bolts(get_tree().get_nodes_in_group(Projectile.GROUP), delta)
 	bolts_frame = Engine.get_physics_frames()
 	_bolts_fresh = true
 	bolts_us = Time.get_ticks_usec() - started
@@ -308,6 +342,17 @@ func _sync_bolts() -> void:
 func _on_rebased(offset: Vector3) -> void:
 	if core != null:
 		core.shift(-offset)
+
+
+# The bolt reader when `perf_native_bolt_sync` asks for it and the library has it (M4-T34), else null.
+func _bolt_reader() -> Object:
+	if core == null or not bool(Settings.get_value(&"perf_native_bolt_sync")):
+		return null
+	if _bolt_sync_known < 0:
+		_bolt_sync_known = 1 if NativeLib.has_class(BOLT_SYNC_CLASS) else 0
+	if _bolt_sync_known == 1 and _bolt_sync == null:
+		_bolt_sync = NativeLib.instantiate(BOLT_SYNC_CLASS)
+	return _bolt_sync
 
 
 # --- threads (M4-T18) --------------------------------------------------------------------------------------------

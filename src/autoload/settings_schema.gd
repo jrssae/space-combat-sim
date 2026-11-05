@@ -114,6 +114,9 @@ const ENTRIES: Dictionary = {
 	# M4-T30a
 	&"ambient_level": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 2.0,
 		"doc": "The environment's ambient light, white at this energy: what the textured meshes and every other lit surface get on every side (M4-T30a, live)"},
+	# M4-T34
+	&"perf_native_bolt_sync": {"type": TYPE_BOOL, "default": true,
+		"doc": "The core's two bolt reads a tick go through the cheaper native reader (M4-T34) when the core is on; off = the core's own read, the reference, for pairing the two in one process"},
 }
 
 ## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current
