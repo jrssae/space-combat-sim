@@ -215,7 +215,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T31 | Remove Gaussian splats: `addons/gdgs_scs` and every splat path in code, procgen, settings, console commands, tests, scripts, CI and docs (Q29, Q30) | T30d, T30c | Opus | About 150 files; §7 and §9 of the architecture are rewritten, so judgement, not only deletion | X, R, G | done (2026-11-04, in a worktree on `8329f16`; Cycle log, M4-T31) |
 | T32 | Wing-level AI research: what deciding per wing instead of per fighter would save at 300 and 500 ships, how other games do it, and a proposal (Q46) | phase 2 (T18, T20), report P2 | Fable | Research and a design judgement over the measured think stage; no game code | M | done (2026-11-05, in a worktree on `08228cc`, fix round 1 the same day; `docs/research/wing-level-ai.md`; the proposal below waits for the maintainer at checkpoint 3: wing-level decisions are 2 % of a thinking ship's cost, so the proposal is to build the rows-based command path (1.3 to 2.0 ms at 300), fold a cluster perception into T22 and keep wing tactics as a later feel feature) |
 | T33 | The native pilots' inputs and commands as core rows (T32's L1, Q50): the batch writes each pilot's flight and combat command into its row and `FlightBatch` applies it the same tick | checkpoint 3 | Opus | Removes most of the 23 to 27 us of GDScript a thinking ship; owns T18's two missed numbers | N, G | not started |
-| T34 | The cheap pass on the per-ship stages (Q50): the ram stage's loop, the hit stage's gather, targeting and the core's sync, into native code or out of the per-tick path | checkpoint 3 | Opus | 13.3 of 17.85 ms at `battle` 300 sits in four stages phase 2 did not take (report P2) | N, G | not started |
+| T34 | The cheap pass on the per-ship stages (Q50): the ram stage's loop, the hit stage's gather, targeting and the core's sync, into native code or out of the per-tick path | checkpoint 3 | Opus | 13.3 of 17.85 ms at `battle` 300 sits in four stages phase 2 did not take (report P2) | N, G | done, bit for bit behind six settings; the four stages at `battle` 300 from 9.12 to 4.00 ms and the tick from 17.72 to 12.70 (8 ms missed, the rest named in the entry); at 500 15.81 to 7.13 and 30.42 to 21.30 (2026-11-05, in a worktree on `9cd88d5`; Cycle log, M4-T34) |
 | T35 | The core owns the simulated state (Q55): bolts as rows drawn by one multimesh, Jolt bodies read once a tick by RID in one native call, activity, hull and selection as event-driven columns, the ram stage's contact read native | T33, T34 | Fable | Refactor review findings 1, 4, 6 and part of 5: 5 to 8 ms at 500 for the bolts alone; T24's precondition | N, G | not started |
 | T36 | The frame's per-ship work in one pass per subsystem (Q56, Q58): plumes, muzzle flashes, LOD switching, audio, far dots, the HUD radar, hit flashes; the splat-era render scale cap; the slow test switch | T33 | Opus | Refactor review findings 2, 3, 7, 9, 12, 13, 14: 3 to 5 ms a frame at 500 | R, G | not started |
 | T37 | M4's cleanup (Q57): the native library required, the GDScript paths test-only, the runtime fallbacks and their settings removed, one hull-reading path, the documentation drift | T23 | Opus | Refactor review findings 8, 16, 17: 1 500 to 2 500 lines and eight settings; parity surfaces halved | X, G | not started |
@@ -1942,6 +1942,14 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
 - **Done when:** parity holds and each stage's before and after is in the entry, with what remains of the four stages named.
 - **Expected gain:** a low-confidence guess of half of the 13.3 ms at 300 (report P2); the far share goes to T21 either way.
 - **Architecture:** §17.13 (paragraphs under T34).
+- **Done (2026-11-05, in a worktree on `9cd88d5`):** each stage profiled line by line, then six changes, ranked by cost, each
+  bit for bit and each but the first behind a setting that keeps the old path as the reference: the player's candidate list
+  built when read (`perf_targeting_on_read`) and a targetable's hull looked up once; a cheaper native bolt read at both sync
+  points (`ScsBoltSync`, `perf_native_bolt_sync`); the ram contact phase in columns (`perf_ram_contact_columns`); early
+  rejects in the ram sweep (`perf_ram_sweep_cull`); the hit broad phase's grid with hashed cells (`sweep_cells.rs`,
+  `perf_native_sweep_cells`). The four stages at `battle` 300 fell from 9.12 to 4.00 ms (the guess was half of 13.3 ms) and
+  the tick from 17.72 to 12.70 ms, still over Q49's 8 ms; what remains is named in the Cycle log entry. Flight's GDScript
+  stays T33's.
 
 ##### M4-T35 The core owns the simulated state (Q55)
 
@@ -4797,6 +4805,84 @@ part (by 1.8), so the AI stage at 500 fell by 1.26 times, not 3. P1's estimate f
 5. **T24 (the simulation on a worker thread).** The table shows its case: at 200 ships the simulation keeps real time (tick 13 ms) and the
    frame is already 45 ms, 22 FPS, because each frame carries 2.7 ticks; at 100 it is 103 FPS. Q40 leaves the decision to checkpoint 4; the
    numbers are here for it.
+
+### M4-T34 (2026-11-05): the cheap pass on the per-ship stages
+
+Taken on `9cd88d5` in a detached worktree with its own native build, the debug editor build with the library loaded,
+default settings (six core threads), seed 1, 5 s of warm-up and 20 s measured, both bench locks held and the runs pinned to
+cores 0-11 (load 0.8 to 1.4 at each start). T33 ran beside it in another worktree and the locks kept it off every measured
+run. Reports in `reports/perf/` (not committed): `M4-T34_before_*` and `M4-T34_after_*` (the paired runs, the base and the
+task's head built and measured in the same worktree one after the other), `M4-T34_prof_*` (the profiles), `M4-T34_after_quick`,
+`M4-T34_focused_*`.
+
+**The profile** (`battle` 300 on the base, the stages' own timers split with temporary clock reads, means over 300 ticks):
+
+- **Targeting, 2.43 ms.** The player's controller rebuilt its list of every targetable each tick: 2.1 ms for 306
+  targetables, 5.5 us each, most of it `to_target_info` walking the ship's children three times for its hull
+  (`Damageable.of`). The 255 AI controllers checked their selections for 0.36 ms (1.4 us each).
+- **The hit stage, 2.61 ms.** The gather 0.93 to 1.16 ms, nearly all of it the core's second bolt read (`sync_bolts`,
+  0.85 to 1.06 ms for 1 200 to 1 600 bolts); the native broad phase 0.39 to 0.49, the rocks' native grid 0.61 to 0.76, the
+  narrow phase in GDScript 0.40 to 0.49. Inside the native bolt read, per bolt: 0.23 us turning the group's array slot into an
+  object handle, 0.17 us for `is_inside_tree` and `is_queued_for_deletion`, 0.11 us for the position, the rest the maps.
+- **The ram stage, 2.29 ms.** The contact phase 1.30 ms: for every one of the 301 rigid hulls two instance lookups, the
+  accel (0.17 ms in all), a `RamTracker.Sample` with its dictionary and the contact read (0.11 ms), then the tracker's 0.40 ms
+  over the samples, though on average no hull touched anything. The swept test 0.53 to 0.68 ms for about ten pairs a tick,
+  all fighters (13 or 14 volumes) against capitals (one box): each placed every fighter volume in the capital's frame before
+  most failed their first box test. The rocks 0.23 to 0.37, the gather 0.05.
+- **The core's first sync ("other"), 1.79 ms.** The bodies 0.44 ms (about 6 000 engine reads), the index 0.04, the first
+  bolt read 0.77 ms (the same costs as the second).
+
+**What moved**, biggest first, each test first (RED on a missing member or class, then GREEN):
+
+| change | setting (off = the reference) | parity test | the stage at `battle` 300 |
+|---|---|---|---|
+| a targetable's hull looked up once while in the tree, forgotten when the owner's children change | none (the same values by construction) | `test_targetable_hull` 3 | targeting 2.43 to 1.82 |
+| `ScsBoltSync` (own file): a known bolt found by the instance id in its slot, no `is_inside_tree` on a group's nodes, a cheaper map; engine calls counted as the core counts them | `perf_native_bolt_sync` | `test_bolt_sync` 2 (8 seeded rounds, both sync points) | hit 2.60 to 2.11, other 1.77 to 1.29 |
+| `RamTracker.contacts_columns`: columns for every rigid hull, contact lists only for hulls Jolt reports touching, limits only for open windows | `perf_ram_contact_columns` | `test_ram_tracker_columns` 2 (400 random ticks, two trackers), `test_ram_contact_columns` 1 (T14's melee both ways, same rams and digest) | ram 2.25 to 1.29 |
+| the ram sweep's early rejects: the body's sphere, then each volume's, swept and padded 5 cm, against the other's box | `perf_ram_sweep_cull` | `test_ram_sweep_cull` 1 (6 000 sweeps, same hits and points; 6 983 volumes placed against 35 936) | ram 1.29 to 0.82 |
+| the player's list built on the first read after a refresh; the selection checked every tick as an AI ship's | `perf_targeting_on_read` | `test_targeting_on_read` 2 (400 steps, same selection, signals and lists read) | targeting 1.75 to 0.36 |
+| the hit broad phase's grid with hashed cells (`sweep_cells.rs`, engine-free, under T15's guard) | `perf_native_sweep_cells` | `test_sweep_cells` 2 (12 mixes against the sorted grid and the GDScript reference) | hit 2.07 to 1.53, ram 0.82 to 0.72 |
+
+(The last column is each step's own single run against the one before, not the paired table below.)
+
+**Before and after** (paired runs, medians in ms; "four" is targeting + hit + ram + other):
+
+| run | tick | targeting | hit | ram | other (sync) | four | ai | flight | physics |
+|---|---|---|---|---|---|---|---|---|---|
+| typical 58 before | 3.91 | 0.44 | 0.35 | 0.52 | 0.30 | 1.60 | 1.04 | 0.79 | 0.42 |
+| typical 58 after | 3.12 | 0.08 | 0.24 | 0.27 | 0.24 | 0.82 | 1.05 | 0.80 | 0.43 |
+| battle 300 before | 17.72 | 2.43 | 2.61 | 2.29 | 1.79 | 9.12 | 3.09 | 4.04 | 1.19 |
+| battle 300 after | 12.70 | 0.36 | 1.57 | 0.75 | 1.32 | 4.00 | 3.11 | 3.96 | 1.45 |
+| battle 500 before | 30.42 | 4.17 | 4.31 | 4.24 | 3.08 | 15.81 | 5.11 | 7.02 | 2.06 |
+| battle 500 after | 21.30 | 0.60 | 2.70 | 1.53 | 2.30 | 7.13 | 5.03 | 6.83 | 1.97 |
+
+Behind real time: battle 300 10.65 % to 0.04 %, battle 500 47.5 % to 28.0 %. **The tick at 300 is 12.70 ms against Q49's
+8 ms: missed by 4.7 ms**; the AI and flight stages (7.1 ms together, T33's) and physics (1.45) alone are over 8. The physics
+stage read 1.45 at 300 against 1.19 before (1.97 against 2.06 at 500); I found no change of mine in it and take it for
+noise in the post-script window. The quick check (`M4-T34_after_quick`, load 0.83): `battle` and `typical` hold the budget
+to 150 ships, no count under 30 FPS (P2's sweep ceiling at `battle` was 110). The expected gain was a low-confidence half of
+13.3 ms at 300; the four stages gave 5.1 ms and the tick 5.0.
+
+**What a reader sees differently.** Nothing the simulation decides. The player's candidate list is built when the HUD
+reads it, after the tick, so its positions and hulls are one physics step fresher than before. In a window the HUD reads it
+once a frame, so the 1.4 ms at 300 moved from every tick to every frame: the gain there is the ticks a frame carries beyond
+the first; headless it is all of it.
+
+**What remains of the four stages** (`battle` 300 after, profile run): the hit stage's bolt read 0.50 ms and the core's
+first sync 0.91 (bodies about 0.45, bolts about 0.40): the engine reads themselves (a bolt's position and deletion flag,
+about 0.3 us a bolt twice a tick); a bolt that pushed its own position into a row, or the core predicting plain bolts'
+positions, would take most of it, but needs the World's transform to stay the identity and a rebase rule. The hit narrow
+phase 0.42 ms (GDScript `HitShape` sweeps for the 13 pairs tested a tick and the node lookups around them): a native narrow
+phase, bit for bit with `HitShape`, is the next step. The hit grids 0.51 (broad 0.24, rocks 0.27), native already. The ram
+contact phase 0.28 (the accel, a GDScript call a hull, and the contact read): the accel could come from the flight batch's
+rows once T33 puts the commands and forces there. The ram rocks 0.13, the swept test 0.13. The AI ships' selection check
+0.35 ms (1.4 us a ship of GDScript): T33's selection in the rows could take it. At 500 the same shares, about 1.8 times.
+
+**Tests.** Focused GUT runs (one file at a time, the bench lock held): **49 files, 486 tests, 486 passing, 0 failing, 0
+pending**, every run exit 0, no script errors (`reports/perf/M4-T34_focused_final_*`): test_targetable_hull 3 of 3, test_bolt_sync 2 of 2, test_ram_tracker_columns 2 of 2, test_ram_contact_columns 1 of 1, test_ram_sweep_cull 1 of 1, test_targeting_on_read 2 of 2, test_sweep_cells 2 of 2, test_ram_tracker 19 of 19, test_ram_damage 15 of 15, test_ram_scale 7 of 7, test_ram_broad_phase 8 of 8, test_ram_math 10 of 10, test_ai_ram 3 of 3, test_behaviour_ram 5 of 5, test_hit_resolver 16 of 16, test_hit_scale 10 of 10, test_hit_broad_phase 9 of 9, test_hit_shape 19 of 19, test_targeting_controller 18 of 18, test_targeting_scale 9 of 9, test_targeting_system 28 of 28, test_hud 13 of 13, test_sim_core 13 of 13, test_core_threads 7 of 7, test_fighter_melee 1 of 1, test_weapon_rows_battle 1 of 1, test_turret_kernel 7 of 7, test_missile_kernel 4 of 4, test_mine_kernel 4 of 4, test_standins 19 of 19, test_rocks_and_mines 7 of 7, test_static_rows 4 of 4, test_friendly_fire 19 of 19, test_last_hit_breakup 14 of 14, test_destruction 11 of 11, test_kill_credit_in_play 6 of 6, test_multi_ship 17 of 17, test_settings 13 of 13, test_settings_schema 15 of 15, test_bench 8 of 8, test_perf_probe 3 of 3, test_ai_think_time 1 of 1, test_m3_run 2 of 2, test_control_profiles 32 of 32, test_control_profile 36 of 36, test_control_profile_store 15 of 15, test_main_scene 11 of 11, test_contact_scan 9 of 9, test_brain_think_parity 5 of 5. AC13's paired budget among them
+(`test_ai_think_time`, `test_m3_run`, `test_control_profiles`, `test_control_profile`, `test_control_profile_store`). `cargo fmt --check` clean on the new
+and changed files; `cargo clippy --release -- -D warnings` clean on them (one pre-existing `redundant_field_names` in the
+untouched `native_probe.rs`, which the clean run with that lint allowed confirms is the only one).
 
 ## Definition of done (M4)
 

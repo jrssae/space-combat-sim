@@ -2652,6 +2652,51 @@ src/perf/brain_batch.gd          BrainBatch: an internal child of SimCore at -9 
   with the name is kept beyond the nearest k, as `ContactScan._keep_named` does (T17 had kept the first row with the
   name anywhere, so a far or parked row earlier in the rows could hide it; `test_brain_think_parity`).
 
+**The cheap pass on the per-ship stages (T34).**
+
+```
+native/src/bolt_sync.rs          ScsBoltSync: the core's two bolt reads a tick, the same rows as the core's own read, cheaper
+native/src/sweep_cells.rs        the hit broad phase's grid with its cells in hash maps; engine-free, under T15's guard
+native/src/hit_sweep.rs          ScsHitSweep.set_cells: the hashed grid or the sorted one (kernels.rs), the same pairs and work
+src/perf/sim_core.gd             the core's sync with no bolts, then the reader (bolt_path); its engine calls counted with the core's
+src/combat/ram_tracker.gd        RamTracker.contacts_columns: the contact phase from columns
+src/combat/ram_resolver.gd       the contact phase in columns; the swept test's early rejects
+src/targeting/targetable.gd      the owner's hull looked up once while in the tree
+src/targeting/targeting_controller.gd  the player's candidate list built when read
+```
+
+- **Why.** After phase 2 four stages of per-ship GDScript and engine calls held 9.1 ms of the 17.7 ms tick at `battle`
+  300 and 15.8 of 30.4 at 500: targeting, the hit resolver, the ram resolver and the core's first sync. Each was profiled
+  line by line first (Cycle log, M4-T34); the costs were the player's per-tick candidate list (2.1 ms at 300, about 5.5 us
+  a target), the bolts read twice a tick (0.8 to 0.9 ms a read), a `RamTracker.Sample` built for every rigid hull every
+  tick though almost none touched anything (1.3 ms), and about ten fighter and capital pairs a tick in the ram sweep, each
+  placing all 13 or 14 fighter volumes before most failed their first box test (0.5 ms).
+- **What changed, each behind a setting that keeps the old path as the reference.** The bolt reader (`perf_native_bolt_sync`)
+  finds a known bolt by the instance id in its array slot instead of making it into an object handle, does not ask the
+  group's nodes whether they are in the tree (a group holds only nodes that are) and keeps its bolts in a cheaper map; it
+  counts its engine calls as the core counts its own, and `SimCore.engine_calls` adds them. The ram contact phase
+  (`perf_ram_contact_columns`) hands the tracker every rigid hull's id, velocity and accel as columns and builds contact
+  lists only for the hulls Jolt reports touching; a hull's ram limits are read only when it has an open window. The swept
+  test (`perf_ram_sweep_cull`) checks the body's bounding sphere, then each volume's, swept and padded by 5 cm, against the
+  other hull's box before it places a volume; the rejects skip only work whose answer is no ram. The player's targeting
+  computer (`perf_targeting_on_read`) checks its selection every tick as an AI ship's does and builds its list on the first
+  read after a refresh (the HUD and the radar once a frame, a selection command), without touching the selection. The hit
+  broad phase's grid (`perf_native_sweep_cells`) finds a projectile's candidates by one hash lookup a cell instead of two
+  binary searches a column, so the candidates, the pairs and the work count stay the same. With no setting, a targetable
+  keeps its owner's hull until the owner's children change (`child_order_changed`), so every value stays what
+  `Damageable.of` gives.
+- **What a reader sees.** Everything the simulation decides is the same bit for bit (the tests below). One thing moved in
+  time: the player's candidate list a window's HUD reads is now built at that read, after the tick, so its positions and
+  hulls are a physics step fresher than the list the last refresh used to leave. In a window the HUD still builds it once a
+  frame: the gain is the ticks a frame carries beyond the first, and all of it headless.
+- **Tests.** `test_bolt_sync` (a seeded crowd of bolts, missiles and beams, spent, freed and new each round: the same bolt
+  rows at both sync points; the engine calls counted alike), `test_ram_tracker_columns` (400 random ticks of two trackers
+  side by side: the same rams field for field), `test_ram_contact_columns` (T14's melee both ways: the same rams and
+  digest), `test_ram_sweep_cull` (6 000 seeded sweeps: the same hits at the same points, a fifth of the volumes placed),
+  `test_targeting_on_read` (400 steps of moves, parks, frees and selection commands: the same selection, signals and lists
+  read; no list built while nothing reads), `test_targetable_hull`, `test_sweep_cells` (twelve seeded mixes against the
+  sorted grid and the GDScript reference; the guard holds the new kernel).
+
 ### 17.16 Rocks and mines as static rows (T29)
 
 ```
