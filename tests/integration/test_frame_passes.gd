@@ -10,6 +10,7 @@ var pool: ShipPool
 var player: Combatant
 var camera: Camera3D
 var _far_backup: Variant
+var _output: FlightOutput = null
 
 
 func before_each() -> void:
@@ -151,3 +152,82 @@ func test_ships_turning_into_dots_together_cost_one_refresh_a_frame() -> void:
 		await get_tree().process_frame
 	assert_eq(dots.dot_count(), 10)
 	assert_lte(dots.refresh_count - before, 3, "one refresh a frame, not one per ship that turned (the T11 minor)")
+
+
+# --- the plumes --------------------------------------------------------------------------------------------------------------
+
+
+
+func _source() -> FlightOutput:
+	return _output
+
+
+func _instanced_visuals() -> ThrusterVisuals:
+	var layout := ThrusterLayout.load_file("res://tests/fixtures/hardpoints_nominal.json")
+	assert_true(layout.valid, layout.error)
+	var made := ThrusterVisuals.new()
+	made.instanced = true
+	world.add_child(made)
+	made.setup(layout, _source)
+	return made
+
+
+func _output_of(rng: RandomNumberGenerator) -> FlightOutput:
+	var made := FlightOutput.new()
+	made.main_levels = PackedFloat64Array([rng.randf(), rng.randf(), rng.randf(), rng.randf()])
+	made.retro_levels = PackedFloat64Array([rng.randf(), 0.0, rng.randf(), 0.0])
+	made.rcs_force_level = Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), 0.0)
+	made.rcs_torque_level = Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
+	return made
+
+
+func test_the_plumes_pass_follows_the_per_frame_smoothing_and_holds_once_settled() -> void:
+	var visuals: ThrusterVisuals = _instanced_visuals()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 12
+	var expected := PackedFloat64Array()
+	expected.resize(visuals.glow_count())
+	var worst: float = 0.0
+	for phase: int in 6:
+		_output = _output_of(rng) if phase % 3 != 2 else null
+		var targets: PackedFloat64Array = ThrusterGlowLevels.targets(ThrusterLayout.load_file("res://tests/fixtures/hardpoints_nominal.json"), _output)
+		for frame: int in 70:  # held for over a second: it settles in each phase
+			visuals.frame_update(DT)
+			for i: int in expected.size():
+				expected[i] = ThrusterGlowLevels.smooth(expected[i], targets[i], DT, visuals.smoothing_s)
+				worst = maxf(worst, absf(visuals.glow_level(i) - expected[i]))
+		assert_true(visuals.is_settled(), "phase %d: held long enough to settle" % phase)
+	assert_lte(worst, ThrusterVisuals.SETTLE_LEVEL, "every plume within a ten-thousandth of the per-frame smoothing")
+
+
+func test_a_settled_ship_leaves_its_buffer_alone_until_the_output_changes() -> void:
+	var visuals: ThrusterVisuals = _instanced_visuals()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3
+	_output = _output_of(rng)
+	for frame: int in 90:
+		visuals.frame_update(DT)
+	assert_true(visuals.is_settled())
+	var held: Transform3D = visuals.instance_transform(0)
+	var level: float = visuals.glow_level(0)
+	for frame: int in 5:
+		visuals.frame_update(DT)
+	assert_eq(visuals.instance_transform(0), held, "nothing moves")
+	_output = _output_of(rng)
+	visuals.frame_update(DT)
+	assert_false(visuals.is_settled(), "a new output wakes it")
+	assert_ne(visuals.glow_level(0), level)
+
+
+func test_a_hidden_lean_ship_leaves_the_plumes_pass_and_comes_back_when_shown() -> void:
+	var ships: Array[Combatant] = _ships(1)
+	var visuals: ThrusterVisuals = ships[0].thrusters
+	assert_true(visuals.instanced)
+	assert_true(_passes().has_plumes(visuals), "a lean ship in play")
+	assert_false(visuals.is_processing(), "no _process of its own")
+	ships[0].ship.set_far_dot(true)
+	assert_false(_passes().has_plumes(visuals), "a far dot draws no plume")
+	ships[0].ship.set_far_dot(false)
+	assert_true(_passes().has_plumes(visuals))
+	pool.release(ships[0])
+	assert_false(_passes().has_plumes(visuals), "parked")

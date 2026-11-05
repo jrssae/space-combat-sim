@@ -23,11 +23,14 @@ extends MultiMeshInstance3D
 ##
 ##     visuals.setup(layout, ship.get_flight_output)    # a Callable returning the latest FlightOutput, or null
 ##
-## Each frame (`_process`) the levels come from the output through `ThrusterGlowLevels` (pod nozzles from the
-## post-trim `main_levels` / `retro_levels`, RCS nozzles from the strongest of their tags), are smoothed with a
-## first-order lag of `smoothing_s` (80 ms), and drive each plume's length and radius (proportional to level) and alpha.
+## Each frame (`frame_update`, from the `FramePasses` plumes pass, M4-T36) the levels come from the output through
+## `ThrusterGlowLevels` (pod nozzles from the post-trim `main_levels` / `retro_levels`, RCS nozzles from the strongest of their
+## tags), are smoothed with a first-order lag of `smoothing_s` (80 ms), and drive each plume's length and radius (proportional
+## to level) and alpha.
 ## A plume below `hide_below` is hidden. With no output (null) every plume fades out. While the node is hidden (a parked
-## ship, a far ship drawn as a dot) the instanced plumes do no work and their lights go dark.
+## ship, a far ship drawn as a dot) the instanced plumes leave the pass and their lights go dark. Once every level has reached
+## its target within `SETTLE_LEVEL` the levels are set to the targets and the plumes are left alone until the output changes:
+## a ship holding one command converges in about half a second and then costs one comparison a frame (M4-T36).
 ##
 ## `glow_color` (the ship's `engine_glow_color`) tints the plumes: the shared materials carry the Starfury's blue-white,
 ## and any other colour gets its own copies of the materials (set it before `setup`); instanced ships share one per colour.
@@ -36,7 +39,7 @@ extends MultiMeshInstance3D
 ## the plume lights its pod and strut. Its energy follows the smoothed level (0 at idle), its colour is the plume's, and
 ## it competes through the `LightRig`'s `LightPicker` for a slot. RCS and retro nozzles give no light (too many). The
 ## emitters are in the rig's candidates only while the ship is in play: a parked or freed ship takes them out, and
-## `_process` puts them back when it is back. `own_ship` (the player's) gives them the picker's top priority.
+## the pass puts them back when it is back. `own_ship` (the player's) gives them the picker's top priority.
 ##
 ## The plumes ride with the interpolated hull (children of the ship, or this node's instances); only their scale and alpha
 ## change per frame, which is invisible next to a 16 ms tick. How it looks is (H).
@@ -70,6 +73,8 @@ const CORE_FALLOFF: Array[Vector2] = [Vector2(0.0, 1.0), Vector2(0.3, 0.55), Vec
 const MIN_RADIUS_FRACTION: float = 0.6
 ## Floats per instance in the multimesh buffer: a 3x4 transform and a colour.
 const STRIDE: int = 16
+## A plume this close to its target level counts as there (M4-T36): about a thousandth of a millimetre on a main plume.
+const SETTLE_LEVEL: float = 1e-4
 
 ## Full-level length of the cone, m, per kind of nozzle.
 @export var main_length_m: float = 2.6
@@ -113,13 +118,21 @@ var _buffer: PackedFloat32Array = PackedFloat32Array()
 var _lights: Array[LightEmitter] = []
 var _rig: LightRig = null
 var _lights_in_rig: bool = false
+# Every level is at its target and the output has not changed since (M4-T36): the plumes need no work.
+var _settled: bool = false
+var _last_main := PackedFloat64Array()
+var _last_retro := PackedFloat64Array()
+var _last_force: Vector3 = Vector3.ZERO
+var _last_torque: Vector3 = Vector3.ZERO
+var _last_had_output: bool = false
 
 
 func _init() -> void:
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
-func _process(delta: float) -> void:
+## One frame of the plumes: the `FramePasses` plumes pass calls it for every ship in play.
+func frame_update(delta: float) -> void:
 	if instanced and not is_visible_in_tree():
 		_go_dark()
 		return
@@ -128,9 +141,26 @@ func _process(delta: float) -> void:
 
 
 func _notification(what: int) -> void:
-	# A ship that leaves play stops processing, so its lights must go from the competition here.
-	if what == NOTIFICATION_EXIT_TREE or what == NOTIFICATION_DISABLED:
-		_leave_rig()
+	match what:
+		NOTIFICATION_ENTER_TREE:
+			_join_pass()
+		NOTIFICATION_EXIT_TREE:
+			_leave_rig()  # a ship that leaves play stops processing, so its lights must go from the competition here
+			var passes: FramePasses = FramePasses.of(self)
+			if passes != null:
+				passes.remove_plumes(self)
+		NOTIFICATION_DISABLED:
+			_leave_rig()
+		NOTIFICATION_VISIBILITY_CHANGED:
+			# A hidden instanced ship (parked, or a far dot) leaves the pass with its lights dark, and joins it again when shown.
+			if instanced and is_inside_tree():
+				if is_visible_in_tree():
+					_join_pass()
+				else:
+					_go_dark()
+					var passes: FramePasses = FramePasses.of(self)
+					if passes != null:
+						passes.remove_plumes(self)
 
 
 ## Called by Main with the ship's thruster layout and a Callable returning the latest `FlightOutput` (or null).
@@ -218,7 +248,7 @@ func light_count() -> int:
 	return n
 
 
-## Reads the output and moves every plume `delta` seconds along its smoothing. `_process` calls it each frame; public
+## Reads the output and moves every plume `delta` seconds along its smoothing. `frame_update` calls it each frame; public
 ## so tests can step it with a chosen `delta`.
 func advance(delta: float) -> void:
 	if _layout == null:
@@ -226,17 +256,33 @@ func advance(delta: float) -> void:
 	var output: FlightOutput = null
 	if _output_source.is_valid():
 		output = _output_source.call() as FlightOutput
+	if _settled and _same_output(output):
+		return  # every plume holds its target: nothing moves
 	var targets: PackedFloat64Array = ThrusterGlowLevels.targets(_layout, output)
+	var settled: bool = true
 	for i: int in _levels.size():
 		_levels[i] = ThrusterGlowLevels.smooth(_levels[i], targets[i], delta, smoothing_s)
+		settled = settled and absf(_levels[i] - targets[i]) <= SETTLE_LEVEL
+	if settled:
+		_levels = targets  # there: the smoothing would only creep the last ten-thousandth
+	for i: int in _levels.size():
 		_apply(i)
 		if _lights[i] != null:
 			_lights[i].energy = EmitterCurves.nozzle_energy(_levels[i])
 	_upload()
+	_settled = settled
+	if settled:
+		_note_output(output)
+
+
+## Whether every plume holds its target and the plumes are left alone until the output changes (M4-T36).
+func is_settled() -> bool:
+	return _settled
 
 
 ## Puts every plume and nozzle light out at once: a ship back in play (a new pilot, a respawn) starts cold.
 func reset() -> void:
+	_settled = false
 	for i: int in _levels.size():
 		_levels[i] = 0.0
 		_apply(i)
@@ -479,6 +525,30 @@ func _tinted(base: Material) -> Material:
 	return copy
 
 
+# Joins the plumes pass of this tree (once).
+func _join_pass() -> void:
+	var passes: FramePasses = FramePasses.of(self)
+	if passes != null:
+		passes.add_plumes(self)
+
+
+# Whether `output` is what the plumes last smoothed toward (the fields the levels are read from).
+func _same_output(output: FlightOutput) -> bool:
+	if output == null:
+		return not _last_had_output
+	return _last_had_output and output.main_levels == _last_main and output.retro_levels == _last_retro \
+			and output.rcs_force_level == _last_force and output.rcs_torque_level == _last_torque
+
+
+func _note_output(output: FlightOutput) -> void:
+	_last_had_output = output != null
+	if output != null:
+		_last_main = output.main_levels.duplicate()
+		_last_retro = output.retro_levels.duplicate()
+		_last_force = output.rcs_force_level
+		_last_torque = output.rcs_torque_level
+
+
 # A hidden instanced ship: its lights stop competing until it shows again.
 func _go_dark() -> void:
 	if _lights_in_rig:
@@ -509,6 +579,7 @@ func _leave_rig() -> void:
 
 func _clear() -> void:
 	_leave_rig()
+	_settled = false
 	for node: Node3D in _plumes:
 		if is_instance_valid(node):
 			remove_child(node)

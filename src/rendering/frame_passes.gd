@@ -1,9 +1,9 @@
 class_name FramePasses
 extends Node
-## The frame's per-ship visual work, one pass per subsystem (M4-T36, architecture §17.21). The far-dot decision used to be a
-## `_process` on every ship; at 500 ships those callbacks had no owner and cost the frame several milliseconds. Each subsystem now
-## registers its nodes here and this one node walks each list once a frame: every LOD switcher with the camera and the dot
-## distance read once.
+## The frame's per-ship visual work, one pass per subsystem (M4-T36, architecture §17.21). Thruster plumes and the far-dot
+## decision used to be a `_process` on every ship; at 500 ships those callbacks had no owner and cost the frame several
+## milliseconds. Each subsystem now registers its nodes here and this one node walks each list once a frame: the plumes of the
+## ships in play and shown, every LOD switcher with the camera and the dot distance read once.
 ##
 ## One per scene tree, made on first use (`of`) under the root, so tests and scenes without `Main` keep working. It runs before
 ## the default priority, as the per-node callbacks it replaces ran before the nodes that read what they set. A node takes part
@@ -17,8 +17,9 @@ const PRIORITY: int = -10
 
 static var _instance: FramePasses = null
 
+var _plumes: Array[ThrusterVisuals] = []
 var _switchers: Array[LodSwitcher] = []
-var _cost_us: Dictionary[StringName, int] = {&"lod": 0}
+var _cost_us: Dictionary[StringName, int] = {&"plumes": 0, &"lod": 0}
 
 
 ## The tree's passes, made under its root on first use; null outside a tree.
@@ -44,6 +45,8 @@ func _init() -> void:
 
 func _ready() -> void:
 	DebugConsole.registry.register_provider(&"frame", ConsoleVars.new({
+		&"plumes_us": {"get": func() -> int: return _cost_us[&"plumes"], "unit": "us", "doc": "Thruster plumes pass, last frame"},
+		&"plumes": {"get": func() -> int: return _plumes.size(), "doc": "Ships' plume sets in the pass (in play and shown)"},
 		&"lod_us": {"get": func() -> int: return _cost_us[&"lod"], "unit": "us", "doc": "Far-dot decision pass, last frame"},
 		&"switchers": {"get": func() -> int: return _switchers.size(), "doc": "LOD switchers registered"},
 	}), self)
@@ -55,10 +58,15 @@ func _exit_tree() -> void:
 		_instance = null
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	var started: int = Time.get_ticks_usec()  # profiling readouts only, never gameplay time
+	for visuals: ThrusterVisuals in _plumes:
+		if visuals.can_process():
+			visuals.frame_update(delta)
+	var plumes_done: int = Time.get_ticks_usec()
 	update_lod()
-	_cost_us[&"lod"] = Time.get_ticks_usec() - started
+	_cost_us[&"plumes"] = plumes_done - started
+	_cost_us[&"lod"] = Time.get_ticks_usec() - plumes_done
 
 
 ## The far-dot decision for every registered ship: the camera and the dot distance read once (M4-T11's rule per ship). Public
@@ -77,6 +85,19 @@ func update_lod() -> void:
 
 
 # --- registration --------------------------------------------------------------------------------------------------------
+
+
+func add_plumes(visuals: ThrusterVisuals) -> void:
+	if not _plumes.has(visuals):
+		_plumes.append(visuals)
+
+
+func remove_plumes(visuals: ThrusterVisuals) -> void:
+	_plumes.erase(visuals)
+
+
+func has_plumes(visuals: ThrusterVisuals) -> bool:
+	return _plumes.has(visuals)
 
 
 func add_switcher(switcher: LodSwitcher) -> void:

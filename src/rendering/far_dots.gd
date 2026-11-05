@@ -8,9 +8,9 @@ extends MultiMeshInstance3D
 ##
 ## A child of `World` (`attach`) at the World's origin, its dots in World-local metres. Each frame it writes each shown ship's
 ## drawn pose; a ship's paint and size are read once, when it turns into a dot, and the dots' identity rotations once per slot,
-## so a frame writes a dot's place, paint and size only, and ships turning together cost one refresh (M4-T36). It is shiftable, so a rebase moves the written dots with everything else at once (no frame draws one at its old
-## place); it then goes back to the origin and moves the dots instead, so its own offset never grows. A parked or freed ship draws
-## none. Visual only.
+## so a frame writes a dot's place, paint and size only, and ships turning together cost one refresh (M4-T36). It is shiftable,
+## so a rebase moves the written dots with everything else at once (no frame draws one at its old place); it then goes back to the
+## origin and moves the dots instead, so its own offset never grows. A parked or freed ship draws none. Visual only.
 
 const NODE_NAME: String = "FarDots"
 const SHADER: Shader = preload("res://assets/shaders/far_ship_dot.gdshader")
