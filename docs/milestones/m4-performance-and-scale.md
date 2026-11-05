@@ -185,7 +185,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T16 | N2: avoidance, the fire lane and the context lists on the core | T15 | Opus | Per-contact loops, bit for bit | N, G | not started |
 | T17 | The brains in native code under Q16's tolerance (T17a maths, T17b behaviours) | T16 | Fable | 3 000 lines of seeded behaviour with a tolerance to meet | N, G | not started |
 | T18 | N3: threads inside the core (rayon), 1-thread and 6-thread identical | T17 | Opus | Determinism rules, a new crate | N | not started |
-| T19 | Jolt measured at 300 and 500, the ships-out-of-Jolt proposal (Q17, checkpoint 2) | T15 | Sonnet | Measurement and a proposal, no game code | M | not started |
+| T19 | Jolt measured at 300 and 500, the ships-out-of-Jolt proposal (Q17, checkpoint 2) | T15 | Sonnet | Measurement and a proposal, no game code | M | done (2026-11-04, in a worktree on `41fc088`; Cycle log, M4-T19; the proposal waits for the maintainer at checkpoint 2) |
 | T20 | Turrets, missiles, beams and mines as native rows | T16, T12 | Opus | The non-fighter rows' budget (710 turrets at 500); M12 inherits the path | N, A | not started |
 | T21 | The low-attention tier: state, 20 Hz integration, promotion and demotion of fighters and capitals | T20, checkpoint 3 | Fable | The pool and ship adapter handover must never pop; serial | T | not started |
 | T22 | Tier brains at 2 to 5 Hz, statistical fire, far capitals' aggregated fire | T21 | Opus | Far fights must stay fair | T, N | not started |
@@ -1078,6 +1078,83 @@ proxies goes in `far_dots.gd`, since `splat_pose_sync.gd` is removed by T31.
   Jolt for the player, capitals and statics, and what the ram resolver then does) and the controller stops for the answer.
 - **Expected:** the sync and node propagation, not Jolt's solver, bind at 500 (60 %, the research); if the maintainer says
   yes, the integrator is a phase 3 task the controller adds (T21 takes it for tier rows either way).
+
+- **Done (2026-11-04, worktree on `41fc088`; Cycle log, "M4-T19"):** the stage costs at 300 and 500, the thread sweep, the integrator's
+  cost and the proposal below. Recommendation: keep Jolt for every near ship; the controller stops for the maintainer's answer.
+
+##### Proposal for checkpoint 2 (Q17): ships out of Jolt, T19, 2026-11-04
+
+**Recommendation: keep Jolt for every ship that is near the player, and do not take AI fighters out of it as a change to D4.** Take the
+cost where the measurement puts it: far ships leave the node tree's per-tick work (T21's tier rows, plus a cheaper step before it),
+and the native flight step stays what it is. Confidence 75 % that this is right for the 500 goal, 60 % that no later measurement
+will reopen the question. If the maintainer wants the option anyway, the cheapest honest form is the one below, "if you say yes".
+
+**What the numbers say** (Cycle log, M4-T19; physics stage, ms a tick, editor build headless):
+
+| | battle 300 | battle 500 | share of an 8 ms tick at 500 |
+|---|---|---|---|
+| Jolt's solver, broad phase and integration for the AI ships | 0.09 | 0.15 | 2 % |
+| the body sync of the AI ships (callback 0.15 and 0.28, node propagation 0.52 and 0.90) | 0.67 | 1.19 | 15 % |
+| capitals in Jolt and their sync | 0.06 | 0.12 | 1.5 % |
+| the rest of the stage (engine flushes of nodes scripts moved) | 0.45 | 0.64 | 8 % |
+| whole stage | 1.32 | 2.17 | 27 % |
+
+The tick is 38 and 69.5 ms on this build, so the stage is 3 % of today's tick and about a quarter of the tick the plan aims for. Jolt's
+thread count moves the stage by 0.1 to 0.15 ms (one worker 2.10 at 500, four to eight 2.01 to 2.04, the default 20 on this CPU 2.17).
+
+**What a native 6DOF integrator would replace.** For each AI fighter: the flight step's force application through the physics
+server (1.46 us a ship today, 0.62 ms at 425 ships, of which the maths is about 0.07 us), Jolt's step (0.35 us), and the body
+callback (0.66 us). It would be semi-implicit Euler on the core's rows (position, velocity, basis, spin; inertia from the ship spec),
+fed by `flight::tick`'s force and torque, in `kernels.rs` with no engine type. Measured on its own: 52 ns a ship, 109 to 117 ns with the
+flight kernel, 0.055 ms for 500 ships on warm caches; 0.1 to 0.3 us with real rows. Parity with Jolt is not bit for bit (Jolt's
+integrator, its max-velocity clamps, its gyroscopic handling), so it falls under Q16's tolerance: no ship more than 50 m from the Jolt
+run at 10 s, to be tested on free-flight cases first and against the damping guard.
+
+**What it would not replace.** The node propagation, 76 % of the sync. A ship drawn from nodes needs its root's transform written every
+tick, and that write reaches the same 14 spatial children. Only a ship with no nodes to move (a far dot, a tier row) escapes it. So
+at 500 with 196 near and 229 far AI ships, today's engine-side cost per tick is about 4.6 us a ship (step 1.46, Jolt 0.35, sync 2.8),
+1.96 ms for the 425. With native integration it would be about 2.6 us for a near ship (the integrator 0.3 and the node write 2.3) and 0.3
+for a far one: 0.58 ms. A saving of about 1.4 ms at 500. But the tier (T21) takes the far ships out of Jolt and out of the tree's
+per-tick work anyway (Q22: no Jolt body for tier rows), and then the near set of about 150 is what is left: 0.69 ms today, 0.39 native,
+so D4 beyond the tier is worth about 0.3 ms at 500, 4 % of an 8 ms tick. Against that stand the risks below.
+
+**What Jolt would still do** if the maintainer says yes: the player's ship, capitals (45 and 75 here, 20 near at 500 once tiered),
+the rocks (static bodies, 1 000, no cost in the step), and any AI ship within a promotion radius of the player (say 300 m), so the
+player's collisions with fighters stay Jolt's contacts and bounces. A ship entering the radius gets a body with the row's pose and
+velocity; leaving it, the body goes back to the pool. This is T21's promotion machinery with a second, smaller radius.
+
+**What the ram resolver does with ships outside Jolt.** Today AI fighters bounce off each other in Jolt (Q33) and the resolver
+measures the contact's change of velocity; the swept test covers tunnelling speeds and props. Outside Jolt the resolver would take the
+pairs from `ScsRamPhase` on the rows (it exists), run the narrow phase (`ConvexSweep`, to be ported to the kernels; sphere pairs from
+the rows' radii first) and apply the impulse itself, a restitution bounce by the two masses and the contact normal, with the spin a
+glancing hit gives from the lever arm. The swept path's momentum split is already the inelastic case. The new work is the bounce and the
+spin, about 300 lines of kernel and a seeded melee test against `test_fighter_melee`'s digest, which would change (a tolerance test
+replaces the byte-identical one).
+
+**Risks.**
+- Newtonian honesty (Q33). Fighters must still collide with exchange of momentum, allies included. A hand-written impulse is
+  acceptable only if the melee test shows the same momentum and energy bookkeeping within a stated bound; stacked contacts and resting
+  contact (a fighter against a capital's hull) are Jolt's strength and ours to rebuild.
+- The player's collisions with AI ships. The promotion radius must exceed the closing distance per tick at the top relative speed
+  (the swept ram already covers 600 m/s closings, 10 m a tick), or a ship can reach the player with no body. A body appearing at the
+  moment of contact is a pop; the radius has to be wide enough that it never is, which costs the saving.
+- Determinism. Jolt is deterministic given the same inputs on one machine; the integrator would be too, but the seeded outcome
+  comparisons (T14, T15) all pass today and would need new references for every seed, then Q16's tolerance.
+- Two code paths for one ship (T21 already adds one for tier rows), against the measured 0.3 ms.
+- D4 and §5.6: "If Jolt ever becomes the obstacle, the fallback is a custom integrator driving a `Node3D`". At 500 Jolt is not the
+  obstacle, and the sync is not Jolt's.
+
+**What to do instead, cheaper and in the plan's order.**
+1. Keep T21 as planned: tier rows have no Jolt body and no nodes, the largest part of the 1.4 ms above.
+2. Before T21, if wanted, a far AI ship's children can stop following its body (about half the ships at 500: 229 of 425, so roughly
+   0.4 to 0.5 ms of the 0.90 ms propagation, an estimate from the per-ship cost, not a measurement). It is a render-proxy change in T11's
+   area, not a physics one.
+3. Cap `threading/worker_pool/max_threads` at 6 to 8 for 0.1 to 0.15 ms, one project setting.
+
+**If you say yes:** a phase 3 task (after T21, which it needs for promotion) adds `integrate` to `kernels.rs`, the rows' mass and inertia
+columns, the impulse resolver and the promotion radius; the controller would schedule it with Fable. The expected gain at 500 is 0.3 ms
+after the tier, up to 1.4 ms if it lands before T21; the cost is the risks above. **If you say no:** nothing changes in the plan; T19 is
+done and T20 proceeds.
 
 ##### M4-T20 Turrets, missiles, beams and mines as native rows
 
@@ -3202,6 +3279,67 @@ classes read it (§17.13); each class's own load stays behind `perf_native_core`
 - **Behaviour changes:** none in seeded outcomes. Readouts: `combat.projectiles` now counts the bolts in flight at the
   gather (not the bolts the per-bolt loop reached); the hit resolver and the ram resolver say where their hulls came from
   (`source`) and what the gather cost (`gather_us`); `flight.source` and `flight.fallback_reads`; provider `core`.
+
+### M4-T19 (2026-11-04): Jolt, the body sync and the node propagation at 300 and 500
+
+In its own worktree on `41fc088` (T15 and T31 merged), measurement only: no game code changed. Single seeded runs (`bench battle <n> 10
+warmup=5 seed=1`, editor build, headless, both bench locks, cores 0-11, load 0.7 to 1.6 at start; the three runs that began at 2.2 to 2.5
+carry the previous run's tail and agree with their pairs). Every figure below is the median of the run's **physics stage** (the engine's
+window after the scripts: Jolt's step, the body sync and the flush of every node a script moved), in ms per tick, with two runs per row
+that differ by 0.03 ms or less (`reports/perf/M4-T19_*`). At these sizes ticks run back to back, so the stage holds no idle frame.
+The tick itself is 38 ms at 300 and 69.5 ms at 500 on this build, so the physics stage is 3.5 % and 3.1 % of it today.
+
+The throwaway hooks (a patch to `bench_runner.gd`, `reports/perf/M4-T19_hooks.patch`, never committed; the report lists the modes) isolate
+the parts by difference: the AI ships' sync callback removed (`nosync`: Jolt still steps them, no node is written), their bodies made
+static (`static`: no ship in Jolt's step), the same with the capitals too (`*_all`), and the ships' child nodes made `top_level`
+(`toplevel`: the body writes its node but nothing propagates down).
+
+| battle | physics stage, whole | AI ships' sync | of it, node propagation | AI ships in Jolt's step | capitals (45, 75) in Jolt and sync | the rest (engine flushes of script-moved nodes, bolts, rocks) |
+|---|---|---|---|---|---|---|
+| 300 (255 fighters, 45 capitals) | 1.32 | 0.67 (2.6 us a ship) | 0.52 (78 %) | 0.09 (0.35 us a ship) | 0.06 | 0.45 |
+| 500 (425 fighters, 75 capitals) | 2.17 (mean 2.49, p99 4.9) | 1.19 (2.8 us a ship) | 0.90 (76 %) | 0.15 (0.35 us a ship) | 0.12 | 0.64 |
+
+The parts are differences between runs whose bolt counts differ (1 012 to 2 816 in flight); the table takes 0.22 us per extra bolt off
+the differences (the slope between the all-static runs), an estimate good to about 0.1 ms. A run with the sync removed or the bodies
+static is not the same fight, so the tick medians (35.6 and 66 ms) are not comparable with the base.
+`fighters_near` and `fighters_far` are 159 and 96 at 300, 196 and 229 at 500. A near AI ship is 19 nodes, 15 of them spatial
+(4 `MeshInstance3D`, 2 `MultiMeshInstance3D`, 2 `AudioStreamPlayer3D`, 3 `Node3D`, 3 `Marker3D`), a capital 20.5.
+
+- **The solver is not what costs.** Jolt's step for the AI ships is 0.35 us a ship (0.09 ms at 300, 0.15 at 500), also in a furball of 300
+  (0.11 ms). A synthetic cluster of 500 bodies in constant overlap (`M4-T19_micro_dense.txt`, no scripts) steps in 0.25 ms on four to
+  eight workers and 0.45 on one (0.16 when the same bodies are spaced apart).
+- **The sync is, and it is the nodes.** The body callback is 0.15 ms at 300 and 0.28 at 500 (0.6 us a ship); the other three quarters
+  is the transform change reaching 14 child nodes each. A synthetic scene (`M4-T19_micro.txt`: bodies with 0, 14 and 28 plain children,
+  nothing else) shows the same shape: 500 bodies cost 0.38 ms with no children, 0.57 with 14 and 0.89 with 28, 0.29 ms of it Jolt's.
+  The real ship's sync costs four to five times the synthetic one (2.8 against 0.55 us: 0.66 against 0.18 for the callback, 2.1 against
+  0.37 for the propagation), its body and its children being heavier.
+- **Jolt's threads.** `threading/worker_pool/max_threads` set through an `override.cfg` (the default pool is 20 workers on this CPU
+  and the runs are pinned to 12 logical cores):
+
+| workers | battle 300 | battle 500 | furball 300 | 500 bodies in overlap (micro) |
+|---|---|---|---|---|
+| 1 | 1.19 | 2.10 | 1.13 | 0.45 |
+| 2 | 1.16 | 2.04 | | |
+| 4 | 1.15 | 2.01 | 1.08 | 0.26 |
+| 8 | 1.17 | 2.02 | | 0.24 |
+| default (20) | 1.32 | 2.17 | 1.28 | 0.36 |
+
+  Threads change the stage by 0.1 to 0.15 ms either way; more workers than cores costs a little. Capping the pool at 4 to 8 would
+  save 0.1 to 0.15 ms and costs one project setting; it is not applied here.
+- **The rebase.** The shift (median of the run's four rebases) is 2.5 ms at 300 and 4.05 at 500; with the AI ships out of Jolt or
+  unsynced it is 2.1 and 3.5, so up to 0.4 to 0.5 ms of it belongs to the ships' bodies (the runs differ in bolts too). The ticks holding a rebase are 42.5 ms at
+  300 and 78 to 85 at 500 (the stages of an ordinary tick plus the shift).
+- **What a native integrator costs.** A throwaway Rust test (`M4-T19_rust_integrator.txt`, one core, 500 rows, no engine): T10's flight
+  kernel (`flight::tick`, the maths and the force assembly) is 65 to 69 ns a ship, a semi-implicit 6DOF step on top (velocity, position,
+  Euler's equation in the body frame with the gyroscopic term, a rotation update with re-orthonormalising) is 52 ns, 109 to 117 ns
+  together, 0.055 ms for 500 ships with warm caches; call it 0.1 to 0.3 us with real rows. Today's engine path for the same ships is
+  1.46 us a ship for the step (`state flight`: 621 us for 425 ships, its force calls through the physics server) plus Jolt's 0.35 and
+  the sync's 2.8. That is the research's "under 1 us" with room to spare.
+- **Verdict on the expected result.** The sync, not Jolt's solver, binds, as expected (60 %). The part that does not follow: most of
+  the sync is node propagation, which an integrator outside Jolt does not remove for a ship that is drawn from nodes. See the proposal
+  under T19: keep Jolt for every near ship; the tier's rows (T21) and a node diet for far ships take the cost where it is.
+- **Not measured:** the release export (the engine side is C++ in both, so these figures hold; the scripts' share shrinks, so the
+  physics stage's share of the tick grows), and the fullscreen frame.
 
 ### T30a textured mesh pipeline (M4-T30a, 2026-11-04): the Starfury as a textured mesh (Q29, Q31)
 
