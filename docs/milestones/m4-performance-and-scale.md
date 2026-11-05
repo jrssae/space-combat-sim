@@ -1233,8 +1233,10 @@ done and T20 proceeds.
   - One kernel file (`weapon_kernels.rs`) and one shell instead of three `*_kernel.rs` files; the facade is
     `src/perf/native_weapons.gd` plus a native path in each stand-in file.
   - The director's two gathers (every flying hull, every projectile) go too: the kernels read the core's rows and bolts.
-  - A capital's strike target and a blast walk the hulls in the core's `damageable` order (the GDScript: the pool's, the
-    capitals, the player), so only two hulls at exactly the same distance could fall differently.
+  - A capital's strike target walks the hulls in the core's `damageable` order (the GDScript: the pool's, the capitals, the
+    player), so only two hostile fighters at exactly the same distance could fall differently. A blast hurts its hulls in
+    the GDScript's order (fix round 1: the order is gathered on a tick a mine goes off).
+  - `FactionTable.revision` (fix round 1): the native hostility table follows a relation changed in place.
   - A beam shot and a gun's bolt still spawn a `Projectile` node in GDScript: about 20 us a beam shot against the budget's
     1 us (0.012 ms a tick at 500, 150 emitters). M12's beams would need a bolt row with no node to meet it.
 
@@ -3952,8 +3954,10 @@ in ms per tick; the stand-ins' parts in us per tick.
 - **The same battle:** at 300 and 500 the weapons did exactly what they did on the base (182 and 286 missiles launched, 80
   and 138 shot down, 186 and 364 beam shots, no mine set off in the window). `test_weapon_rows_battle` (a seeded 30 s
   `battle` at 100, both paths in one process): every hit 847 on the GDScript and 856 on the rows, the capitals' hits 314 and
-  321, beam shots 141 and 140, launches 141 and 143, missiles shot down 26 and 26, mines set off 0 and 0 (the second run in
-  a process does not start from quite the same state; the 10 s benches above, in fresh processes, give the same weapon counts on the base and the change).
+  321, beam shots 141 and 140, launches 141 and 143, missiles shot down 26 and 26, mines set off 0 and 0. The gap is the
+  run's place in the process, not the path (fix round 1 controls, three fresh processes of two runs each): native then
+  GDScript, GDScript twice and native twice all give 847, 314, 141, 141, 26, 0 for the first run and 856, 321, 140, 143,
+  26, 0 for the second. Each path gives exactly the other's counts in the same place.
 - **The quick check** (furball and spread, no stand-ins, `M4-T20_after_quick`, load 0.9): the budget held up to 75 ships
   in both, as T16's; both under 30 FPS at 400.
 - **Tests** (focused, each file alone): the 23 files of the report, every one green; RED on `d5badbd` (the three kernel files

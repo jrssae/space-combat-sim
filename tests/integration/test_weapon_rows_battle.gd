@@ -2,7 +2,9 @@ extends GutTest
 ## The weapon rows in a real battle (M4-T20, Q22): a seeded 30 s `battle` at 100 ships on the real main scene, once with the
 ## turrets, interceptors, beams, missiles and mines on the native rows and once on the GDScript stand-ins: the hits the
 ## stand-ins' weapons land (bolts, beams and missiles shot by capitals), every hit of the battle, and the beams, launches,
-## kills and detonations come out within 10 % of each other. Skips, saying why, without the native library.
+## kills and detonations come out within 10 % of each other. In one process the second run of a battle does not start from
+## the first's state (847 hits against 856 on either path, in either order, fix round 1's controls), so the two runs are
+## compared by Q22's tolerance, not for equality. Skips, saying why, without the native library.
 
 const NATIVE_CLASS: StringName = &"ScsWeaponRows"
 const ROOT: String = "user://test_weapon_rows_battle"

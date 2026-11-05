@@ -2498,9 +2498,12 @@ src/perf/standins/                the director, turret, missile and mine stand-i
   engine's `angle_to` (`atan2f`) and axis-angle `rotated`, the gate as `PulseCannonGate.update` with one muzzle, a turret's
   place as the engine composes a child's transform (`basis.rows[i].dot(offset) + origin`), proportional navigation with
   a scalar rounded to 32 bits before it scales a vector, and the same comparisons (`<` and `<=`) and tie-breaks. Hostility
-  comes in as a table by the core's faction indices, built in GDScript from `Factions` when the table or the core's
-  factions change. What differs: a capital's strike target and a blast walk the hulls in the core's `damageable` order
-  where the GDScript walks the pool's, the capitals and the player, which only matters for two hulls at exactly the same
+  comes in as a table by the core's faction indices, built in GDScript from `Factions` when another table is active, the
+  core knows a new faction or the active table changed a relation (`FactionTable.revision`, which the console's `relation`
+  bumps). A blast's hulls come back in the core's `damageable` order; `MineStandin.step_native` then hurts them in the
+  order the GDScript's mines walk them (the pool's ships, the capitals, the player, gathered only on a tick a mine goes
+  off), and only those, so hit signals and kills fall in the same order on both paths. What differs: a capital's strike
+  target walks the hulls in the core's order, which only matters for two hostile fighters at exactly the same squared
   distance; a target that leaves the tree (not hidden: removed) between the sync and the missile's step keeps its row for
   that tick.
 - **Thread-ready (for T18).** Each kernel is a pure function: `retarget`, `aim_gun`, `gate`, `intercept_candidates`,
@@ -2514,8 +2517,10 @@ src/perf/standins/                the director, turret, missile and mine stand-i
   paths: picks, axes, aim errors, gate times, bolts, kills, beams and launches byte for byte, also across a rebase between
   the sync and the step and across native, GDScript, native in one run), `test_missile_kernel` (the guidance on seeded
   inputs, seeded flights at a weaving target side by side, a target hidden after the sync, no core), `test_mine_kernel`
-  (hulls within a millimetre of a trigger's edge, a belt that goes off and is laid again on the same ticks),
-  `test_weapon_rows_battle` (a seeded 30 s `battle` at 100: hits within 10 %), and `test_sim_core`'s engine-free check
+  (hulls within a millimetre of a trigger's edge, a carrier's reach across the grid's slabs, a blast on pooled ships in
+  the pool's order, a belt that goes off and is laid again on the same ticks, hits compared in the order they land),
+  `test_weapon_rows_battle` (a seeded 30 s `battle` at 100: hits within 10 %; in one process the numbers follow the run's
+  place, not the path: the first run gives the same counts on either path, and so does the second), and `test_sim_core`'s engine-free check
   of `weapon_kernels.rs`.
 
 ### 17.16 Rocks and mines as static rows (T29)
