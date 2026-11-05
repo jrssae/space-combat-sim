@@ -50,6 +50,8 @@ pub const BATCH_FLOATS: usize = 4;
 /// `set_fault`'s injected bug for the determinism test: a think adds to its main thrust what the worker's previous think
 /// left behind, so it reads another row's output.
 pub const FAULT_CARRY: i64 = 1;
+/// `set_fault`'s injected panic: every think of a batch panics (without the panic hook's report).
+pub const FAULT_PANIC: i64 = 2;
 
 // What one worker thread fills for the thinks it runs: the query scratch, the picked lists, the keeps, and what the
 // injected fault carries from one think to the next.
@@ -120,6 +122,7 @@ pub struct ScsBrains {
     // One thread for rows loaded from arrays (no core to give its threads).
     serial: Threads,
     fault: i64,
+    pass_failures: i64,
 }
 
 #[godot_api]
@@ -250,6 +253,7 @@ impl ScsBrains {
             .fold(0.0, f64::max);
         self.field
             .build(&self.own, &self.own_bolts, self.grid.cell_m);
+        self.field.index_names(&self.own, wanted_names(&self.slots));
         self.own_loaded = true;
         true
     }
@@ -287,6 +291,7 @@ impl ScsBrains {
         b.radii = vec![0.0; n];
         self.field
             .build(&self.own, &self.own_bolts, self.grid.cell_m);
+        self.field.index_names(&self.own, wanted_names(&self.slots));
         true
     }
 
@@ -639,6 +644,9 @@ impl ScsBrains {
     /// hull, latest hit, latest bolt hit), the rest as `think` takes it. Returns `BATCH_OUT` numbers per ship in the
     /// order given: 1 and `think`'s output, or 0 and zeros when declined (no slot, a slot twice, no row). Each think reads
     /// the frozen rows and writes only its own brain and its output, so the result does not depend on the threads.
+    /// `rows_version` is the core's version the drivers took their scan at: when the rows moved since (a resync or a
+    /// rebase between the drivers and the batch), every ship is declined, so each holds its last command, as T17's
+    /// per-ship check did. A think that panics declines the whole batch too, its brains kept (`pass_failures`).
     #[func]
     #[allow(clippy::too_many_arguments)]
     fn think_batch(
@@ -651,6 +659,7 @@ impl ScsBrains {
         origin_x: f64,
         origin_y: f64,
         origin_z: f64,
+        rows_version: i64,
     ) -> PackedFloat64Array {
         let n = ints.len() / BATCH_INTS;
         if ints.len() != n * BATCH_INTS || floats.len() != n * BATCH_FLOATS {
@@ -714,15 +723,32 @@ impl ScsBrains {
             static_k: self.static_k,
             fault: self.fault,
         };
-        threads.run(
-            Pass::Brains,
-            &mut self.items[..n],
-            &self.workers,
-            |item, worker| {
-                think_item(&shared, item, worker);
-            },
-        );
+        let moved = guard
+            .as_ref()
+            .is_some_and(|c| c.rows_version_now() != rows_version);
+        let items = &mut self.items[..n];
+        let workers = &self.workers;
+        let passed = moved
+            || std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                threads.run(Pass::Brains, items, workers, |item, worker| {
+                    think_item(&shared, item, worker);
+                });
+            }))
+            .is_ok();
         drop(guard);
+        if moved || !passed {
+            for item in &mut self.items[..n] {
+                item.ok = false;
+            }
+        }
+        if !passed {
+            if self.pass_failures == 0 {
+                godot_warn!(
+                    "ScsBrains.think_batch: a think panicked; the tick's {n} thinks are held, their brains kept"
+                );
+            }
+            self.pass_failures += 1;
+        }
         self.batch_out.clear();
         self.batch_out.resize(n * BATCH_OUT, 0.0);
         for (k, item) in self.items[..n].iter_mut().enumerate() {
@@ -738,7 +764,13 @@ impl ScsBrains {
         PackedFloat64Array::from(self.batch_out.as_slice())
     }
 
-    /// Injects a bug for the determinism test (`FAULT_CARRY`), or none (0).
+    /// Batches a panic declined (each holding its brains and its ships' last commands).
+    #[func]
+    fn pass_failures(&self) -> i64 {
+        self.pass_failures
+    }
+
+    /// Injects a bug for the determinism or the panic test (`FAULT_CARRY`, `FAULT_PANIC`), or none (0).
     #[func]
     fn set_fault(&mut self, kind: i64) {
         self.fault = kind;
@@ -1086,6 +1118,9 @@ fn think_item(shared: &Shared, item: &mut Item, worker: &mut Worker) {
     let Ok(own_row) = usize::try_from(item.own_row) else {
         return;
     };
+    if shared.fault == FAULT_PANIC {
+        std::panic::resume_unwind(Box::new("the injected panic"));
+    }
     let inputs = Inputs {
         relations: &shared.relations[item.relations.0..item.relations.1],
         own_body_id: brain.ship.own_body_id,
@@ -1127,6 +1162,14 @@ fn think_item(shared: &Shared, item: &mut Item, worker: &mut Worker) {
     }
     pack_output(brain, &result, &mut item.out);
     item.ok = true;
+}
+
+// The names the slots' brains look for (objectives and guarded ships), for the tick's name index.
+fn wanted_names(slots: &[Option<Brain>]) -> impl Iterator<Item = &str> {
+    slots
+        .iter()
+        .flatten()
+        .flat_map(|b| [b.ctx.objective_key.as_str(), b.ctx.guard_key.as_str()])
 }
 
 // A manoeuvre's `result()` as the Dictionary GDScript reports.
@@ -1260,6 +1303,7 @@ impl ScsBrains {
             .map(|i| c.rows.radii[i].abs())
             .fold(0.0, f64::max);
         self.field.build(&c.rows, &c.bolts, self.grid.cell_m);
+        self.field.index_names(&c.rows, wanted_names(&self.slots));
     }
 
     fn brain(&self, slot: i64) -> Option<&Brain> {

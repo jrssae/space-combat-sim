@@ -55,6 +55,10 @@ const NATIVE_WEIGHTED: int = 33
 const NATIVE_MIRROR: int = 42
 const NATIVE_RAM_COMMITTED: int = 54
 const NATIVE_OUT_LEN: int = 55
+## The behaviours in control whose mirrored state nothing in the game reads between thinks (evade, attack, guard, formation):
+## written into their GDScript objects only when the behaviours are read (`current`, `behaviour`, `describe`), M4-T18. Ram
+## and follow-path stay eager: the avoidance's exemption and the instructor's route are read every tick.
+const LAZY_MIRROR: Array[int] = [2, 3, 4, 5]
 
 ## `profile` is what it flies: `base_profile` scaled by `temperament`.
 var profile: AiProfile = null
@@ -64,7 +68,11 @@ var context: AiContext = AiContext.new()
 ## In `TIE_ORDER` (ids it does not list go after the listed ones, in the order added).
 var behaviours: Array[AiBehaviour] = []
 ## The behaviour in control (null before the first tick), and seconds since it took over.
-var current: AiBehaviour = null
+var current: AiBehaviour = null:
+	get:
+		if _mirror_kind >= 0:
+			_sync_mirror()
+		return current
 var dwell_s: float = 0.0
 ## How many times control changed hands.
 var switches: int = 0
@@ -90,6 +98,10 @@ var _slot: int = -1
 var _native_ok: int = -1
 var _bound_body: int = 0
 var _out: PackedFloat64Array = PackedFloat64Array()
+# Where the last native think's output starts in `_out` (a batch's whole answer, M4-T18), and the behaviour whose native
+# state is still to be written into its GDScript object (-1: none): written when something reads the behaviours.
+var _out_base: int = 0
+var _mirror_kind: int = -1
 var _kind_index: PackedInt32Array = PackedInt32Array()
 var _was_reset: bool = false
 var _temperaments_since_reset: Array[Vector2] = []
@@ -182,6 +194,8 @@ func set_temperament(t: AiTemperament) -> void:
 
 ## The behaviour with this id, or null.
 func behaviour(behaviour_id: StringName) -> AiBehaviour:
+	if _mirror_kind >= 0:
+		_sync_mirror()
 	for b: AiBehaviour in behaviours:
 		if b.id == behaviour_id:
 			return b
@@ -192,7 +206,7 @@ func behaviour(behaviour_id: StringName) -> AiBehaviour:
 func score_of(behaviour_id: StringName) -> float:
 	if native_last:
 		var k: int = TIE_ORDER.find(behaviour_id)
-		return _out[NATIVE_WEIGHTED + k] if k >= 0 and _index_of(behaviour_id) >= 0 else 0.0
+		return _out[_out_base + NATIVE_WEIGHTED + k] if k >= 0 and _index_of(behaviour_id) >= 0 else 0.0
 	var i: int = _index_of(behaviour_id)
 	return _weighted[i] if i >= 0 else 0.0
 
@@ -201,7 +215,7 @@ func score_of(behaviour_id: StringName) -> float:
 func raw_score_of(behaviour_id: StringName) -> float:
 	if native_last:
 		var k: int = TIE_ORDER.find(behaviour_id)
-		return _out[NATIVE_RAW + k] if k >= 0 and _index_of(behaviour_id) >= 0 else 0.0
+		return _out[_out_base + NATIVE_RAW + k] if k >= 0 and _index_of(behaviour_id) >= 0 else 0.0
 	var i: int = _index_of(behaviour_id)
 	return _raw[i] if i >= 0 else 0.0
 
@@ -299,6 +313,8 @@ func select(dt: float) -> AiBehaviour:
 ## `behaviour`, `state` (the current behaviour's), `for_s` (seconds in control), `scores` (weighted, by id in tie order),
 ## `objective` (when it has one, M3-T17), and the current behaviour's other fields (attack: `target`, `range_m`, `firing`).
 func describe() -> Dictionary:
+	if _mirror_kind >= 0:
+		_sync_mirror()
 	var out: Dictionary
 	if native_last and _slot >= 0 and is_instance_valid(_native):
 		out = _native.describe(_slot)
@@ -463,48 +479,54 @@ func prepare_native(p: Perception) -> int:
 	return _slot
 
 
-## The command of a native think from its output (`NATIVE_OUT_LEN` numbers), with this pilot's state mirrored; null when
-## the output is not a think's (the host declined).
-func apply_native(out: PackedFloat64Array) -> PilotCommand:
-	if out.size() != NATIVE_OUT_LEN:
+## The command of a native think from its output (`NATIVE_OUT_LEN` numbers from `base`: a batch's answer is read in
+## place, M4-T18), with this pilot's state mirrored; null when there is no think's output there (the host declined).
+func apply_native(out: PackedFloat64Array, base: int = 0) -> PilotCommand:
+	if base < 0 or out.size() < base + NATIVE_OUT_LEN:
 		return null
 	var ram := _behaviour_of(&"ram") as BehaviourRam
 	_out = out
+	_out_base = base
 	native_last = true
 	var cmd := PilotCommand.new()
-	cmd.flight.main_left = out[NATIVE_MAIN_LEFT]
-	cmd.flight.main_right = out[NATIVE_MAIN_LEFT + 1]
-	cmd.flight.retro_left = out[NATIVE_MAIN_LEFT + 2]
-	cmd.flight.retro_right = out[NATIVE_MAIN_LEFT + 3]
-	cmd.flight.strafe = Vector2(out[NATIVE_STRAFE], out[NATIVE_STRAFE + 1])
-	cmd.flight.rot = Vector3(out[NATIVE_ROT], out[NATIVE_ROT + 1], out[NATIVE_ROT + 2])
-	cmd.flight.brake = out[NATIVE_BRAKE] != 0.0
-	cmd.combat.fire = out[NATIVE_FIRE] != 0.0
-	wanted_target_id = native_target_id(out)
+	cmd.flight.main_left = out[base + NATIVE_MAIN_LEFT]
+	cmd.flight.main_right = out[base + NATIVE_MAIN_LEFT + 1]
+	cmd.flight.retro_left = out[base + NATIVE_MAIN_LEFT + 2]
+	cmd.flight.retro_right = out[base + NATIVE_MAIN_LEFT + 3]
+	cmd.flight.strafe = Vector2(out[base + NATIVE_STRAFE], out[base + NATIVE_STRAFE + 1])
+	cmd.flight.rot = Vector3(out[base + NATIVE_ROT], out[base + NATIVE_ROT + 1], out[base + NATIVE_ROT + 2])
+	cmd.flight.brake = out[base + NATIVE_BRAKE] != 0.0
+	cmd.combat.fire = out[base + NATIVE_FIRE] != 0.0
+	wanted_target_id = native_target_id(out, base)
 	context.current_target_id = maxi(wanted_target_id, 0)
-	native_avoiding = out[NATIVE_AVOIDING] != 0.0
-	native_avoiding_urgent = out[NATIVE_AVOIDING + 1] != 0.0
-	has_desired_velocity = out[NATIVE_HAS_DESIRED] != 0.0
-	desired_all_axes = out[NATIVE_ALL_AXES] != 0.0
-	desired_velocity = Vector3(out[NATIVE_DESIRED], out[NATIVE_DESIRED + 1], out[NATIVE_DESIRED + 2])
-	dwell_s = out[NATIVE_DWELL]
-	switches = int(out[NATIVE_SWITCHES])
-	native_contacts = int(out[NATIVE_CONTACTS])
-	var kind: int = int(out[NATIVE_CURRENT])
+	native_avoiding = out[base + NATIVE_AVOIDING] != 0.0
+	native_avoiding_urgent = out[base + NATIVE_AVOIDING + 1] != 0.0
+	has_desired_velocity = out[base + NATIVE_HAS_DESIRED] != 0.0
+	desired_all_axes = out[base + NATIVE_ALL_AXES] != 0.0
+	desired_velocity = Vector3(out[base + NATIVE_DESIRED], out[base + NATIVE_DESIRED + 1], out[base + NATIVE_DESIRED + 2])
+	dwell_s = out[base + NATIVE_DWELL]
+	switches = int(out[base + NATIVE_SWITCHES])
+	native_contacts = int(out[base + NATIVE_CONTACTS])
+	var kind: int = int(out[base + NATIVE_CURRENT])
 	_current_index = _kind_index[kind] if kind >= 0 else -1
+	_mirror_kind = -1
 	current = behaviours[_current_index] if _current_index >= 0 else null
 	if current != null and current.id == &"attack" and wanted_target_id > 0:
 		context.attack_target_id = wanted_target_id
-	_mirror(kind, out)
+	if kind in LAZY_MIRROR:
+		_mirror_kind = kind  # nothing in the game reads these between thinks: written when read
+		avoid_exempt_id = 0
+	else:
+		_mirror(kind, out, base)
 	if ram != null:
-		ram.committed = out[NATIVE_RAM_COMMITTED] != 0.0  # the slot's commitment, whatever is in control
+		ram.committed = out[base + NATIVE_RAM_COMMITTED] != 0.0  # the slot's commitment, whatever is in control
 		_ram_pushed = ram.committed
 	return cmd
 
 
 # Writes the behaviour in control's native state into its GDScript object, so what the game reads of it is current.
-func _mirror(kind: int, out: PackedFloat64Array) -> void:
-	var m: int = NATIVE_MIRROR
+func _mirror(kind: int, out: PackedFloat64Array, base: int) -> void:
+	var m: int = base + NATIVE_MIRROR
 	match kind:
 		3:
 			var a := current as BehaviourAttack
@@ -552,6 +574,13 @@ func _mirror(kind: int, out: PackedFloat64Array) -> void:
 			f._hold_left_s = out[m + 5]
 	if kind != 0:
 		avoid_exempt_id = 0
+
+
+# Writes the pending native state of the behaviour in control (M4-T18's lazy mirror).
+func _sync_mirror() -> void:
+	var kind: int = _mirror_kind
+	_mirror_kind = -1
+	_mirror(kind, _out, _out_base)
 
 
 # Pushes the context's wing, objective, guard and route to the slot when any of them changed since the last push.
@@ -654,8 +683,8 @@ static func native_capability(cap: ShipCapability) -> PackedFloat64Array:
 
 
 ## The wanted target out of a native think: `TARGET_NONE`, or the id from its two halves.
-static func native_target_id(out: PackedFloat64Array) -> int:
-	return _join_id(out[NATIVE_TARGET], out[NATIVE_TARGET + 1])
+static func native_target_id(out: PackedFloat64Array, base: int = 0) -> int:
+	return _join_id(out[base + NATIVE_TARGET], out[base + NATIVE_TARGET + 1])
 
 
 static func _join_id(hi: float, lo: float) -> int:

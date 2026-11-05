@@ -638,6 +638,22 @@ impl ScsSimCore {
         self.threads.parallel_passes()
     }
 
+    /// Parallel passes of one kind: 0 the brains, 1 the flight step.
+    #[func]
+    fn parallel_passes_of(&self, pass: i64) -> i64 {
+        self.threads.parallel_passes_of(if pass == 1 {
+            Pass::Flight
+        } else {
+            Pass::Brains
+        })
+    }
+
+    /// Worker threads running now: 0 with one thread, once the last pool's workers have been joined.
+    #[func]
+    fn live_workers(&self) -> i64 {
+        self.threads.live_workers()
+    }
+
     /// The fewest thinks the brains' pass runs in parallel with, and setting it (the benches that chose the default).
     #[func]
     fn parallel_min(&self) -> i64 {

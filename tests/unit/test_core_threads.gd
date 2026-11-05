@@ -232,6 +232,7 @@ func test_a_panic_in_the_pool_keeps_the_brains_and_holds_the_tick() -> void:
 	batch.flush()
 	host.set_fault(0)
 	assert_eq(int(host.pass_failures()), 1, "the failed pass is counted")
+	assert_engine_error("panicked", "and said once")
 	assert_eq(AiPilotDriver.thinks_fallback() - held_before, queued, "every think of that batch held and was counted")
 	assert_eq(_commands(fight["ships"]), before, "every ship keeps its last command")
 	assert_eq(int(host.count()), slots, "no brain was lost")
@@ -322,10 +323,12 @@ func _commands(ships: Array) -> Array:
 	return out
 
 
-# The next ticks think natively again, with nothing declined.
+# The next ticks think natively again, with nothing declined (a tick's counts are read after the next tick starts, so the
+# first read still shows the held tick).
 func _thinks_resume(fight: Dictionary) -> void:
 	var native: int = 0
 	var held: int = 0
+	await get_tree().physics_frame
 	for i: int in 4:
 		await get_tree().physics_frame
 		native += AiPilotDriver.thinks_native()

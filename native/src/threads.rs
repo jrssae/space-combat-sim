@@ -1,8 +1,9 @@
 // Worker threads for the native core's per-ship passes (M4-T18, docs/architecture.md 17.13). A pass hands every item
 // (a thinking ship, a flying ship) to one call that reads only frozen, shared data and writes only that item, with a
 // scratch of its own per worker thread, so one thread and six give the same bits. Engine-free: no Godot type here.
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use rayon::prelude::*;
 
@@ -15,18 +16,23 @@ pub enum Pass {
     Flight = 1,
 }
 /// The thresholds by pass: below them waking the workers costs more than they save, in the mean or in the slow ticks
-/// (the numbers that chose them are in the milestone's Cycle log, M4-T18). The brains gain from about 90 thinks a tick
-/// and cost the 1 % slowest ticks at 20 to 35; the flight kernel is too short to gain at any measured count.
+/// (the numbers that chose them are in the milestone's Cycle log, M4-T18). The brains cost the 1 % slowest ticks at 19 to
+/// 36 thinks and gain at 89 to 146; 48 sits above the measured losses with a margin, the gap between is not measured. The
+/// flight kernel is too short to gain at any measured count.
 pub const DEFAULT_MIN_ITEMS: [usize; 2] = [48, 1024];
 // Chunks per thread in a parallel pass: enough for the idle workers to steal from the busy ones.
 const CHUNKS_PER_THREAD: usize = 4;
+// How long a shut-down pool's workers get to exit before the core stops waiting for them.
+const JOIN_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The core's worker threads: none for one thread, else a pool of that many.
 pub struct Threads {
     count: usize,
     pool: Option<rayon::ThreadPool>,
     min_items: [usize; 2],
-    parallel_passes: AtomicI64,
+    parallel_passes: [AtomicI64; 2],
+    // Workers spawned and not yet exited, across every pool this core made (a pool's workers are joined before the next).
+    live: Arc<AtomicI64>,
 }
 
 impl Default for Threads {
@@ -35,8 +41,16 @@ impl Default for Threads {
             count: 1,
             pool: None,
             min_items: DEFAULT_MIN_ITEMS,
-            parallel_passes: AtomicI64::new(0),
+            parallel_passes: [AtomicI64::new(0), AtomicI64::new(0)],
+            live: Arc::new(AtomicI64::new(0)),
         }
+    }
+}
+
+// The workers are joined before the library can unload under them.
+impl Drop for Threads {
+    fn drop(&mut self) {
+        self.shut_down();
     }
 }
 
@@ -47,12 +61,22 @@ impl Threads {
         if count == self.count && (count == 1 || self.pool.is_some()) {
             return self.count;
         }
+        self.shut_down();
         self.pool = if count > 1 {
-            rayon::ThreadPoolBuilder::new()
+            let exited = Arc::clone(&self.live);
+            let built = rayon::ThreadPoolBuilder::new()
                 .num_threads(count)
                 .thread_name(|i| format!("scs-core-{i}"))
+                .exit_handler(move |_| {
+                    exited.fetch_sub(1, Ordering::SeqCst);
+                })
                 .build()
-                .ok()
+                .ok();
+            // Counted when spawned, so a worker still starting is waited for too.
+            if built.is_some() {
+                self.live.fetch_add(count as i64, Ordering::SeqCst);
+            }
+            built
         } else {
             None
         };
@@ -75,9 +99,41 @@ impl Threads {
         self.min_items[pass as usize] = min_items.max(2);
     }
 
-    /// Passes that ran in parallel since the core was made.
+    /// Passes that ran in parallel since the core was made, every pass together.
     pub fn parallel_passes(&self) -> i64 {
-        self.parallel_passes.load(Ordering::Relaxed)
+        self.parallel_passes
+            .iter()
+            .map(|p| p.load(Ordering::Relaxed))
+            .sum()
+    }
+
+    /// Passes of one kind that ran in parallel since the core was made.
+    pub fn parallel_passes_of(&self, pass: Pass) -> i64 {
+        self.parallel_passes[pass as usize].load(Ordering::Relaxed)
+    }
+
+    /// Worker threads running now (0 with one thread, once the last pool's workers have exited).
+    pub fn live_workers(&self) -> i64 {
+        self.live.load(Ordering::SeqCst)
+    }
+
+    // Drops the pool and waits for its workers to exit (rayon signals them on drop but does not join them), so no worker
+    // outlives the pool's owner. A worker that does not exit in time is left, and said so.
+    fn shut_down(&mut self) {
+        if self.pool.take().is_none() {
+            return;
+        }
+        let deadline = Instant::now() + JOIN_TIMEOUT;
+        while self.live.load(Ordering::SeqCst) > 0 {
+            if Instant::now() > deadline {
+                eprintln!(
+                    "scs threads: {} worker(s) still running after the pool shut down",
+                    self.live.load(Ordering::SeqCst)
+                );
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
     }
 
     /// Calls `each` on every item, with the scratch of the worker thread that runs it. With one thread, or fewer items
@@ -103,7 +159,7 @@ impl Threads {
             }
             return;
         };
-        self.parallel_passes.fetch_add(1, Ordering::Relaxed);
+        self.parallel_passes[pass as usize].fetch_add(1, Ordering::Relaxed);
         let chunk = items.len().div_ceil(self.count * CHUNKS_PER_THREAD).max(1);
         pool.install(|| {
             items.par_chunks_mut(chunk).for_each(|part| {

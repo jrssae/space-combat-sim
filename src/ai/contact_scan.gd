@@ -561,6 +561,11 @@ func rows_fresh() -> bool:
 	return _sim != null and is_instance_valid(_sim) and _sim.core != null and int(_sim.core.rows_version()) == _rows_version
 
 
+## The core's rows version this scan was taken at (M4-T18: the brain batch checks the rows have not moved since).
+func rows_version_taken() -> int:
+	return _rows_version
+
+
 ## How a ship of `faction` regards each faction of the core's table, as `Factions.Relation` values in that table's order
 ## (what the pilot kernels read); empty off the core.
 func relation_row(faction: StringName) -> PackedByteArray:

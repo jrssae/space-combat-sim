@@ -69,6 +69,10 @@ static var _held: int = 0
 static var _contacts_max: int = 0
 static var _thinks_native: int = 0
 static var _thinks_fallback: int = 0
+# The host and batch of this physics frame (`_frame_host`).
+static var _lookup_frame: int = -1
+static var _frame_host_cached: Object = null
+static var _frame_batch: BrainBatch = null
 # The think-rate and nearest-k settings, read on first use and again after any of them changes.
 static var _settings_read: bool = false
 static var _rate_on: bool = true
@@ -184,7 +188,7 @@ func step(delta: float, batched: bool = false) -> void:
 	var pc: PilotCommand = null
 	var pilot := brain as AiPilot
 	if pilot != null and pilot.native_capable():
-		var host: Object = NativeBrains.host(get_tree())
+		var host: Object = _frame_host() if batched else NativeBrains.host(get_tree())
 		if host != null:
 			# The scan stage on the native path: the shared scan's build and the perception (the lists are picked inside the
 			# think, which the think stage counts).
@@ -195,9 +199,9 @@ func step(delta: float, batched: bool = false) -> void:
 			if timed:
 				ContactScan.add_time(Time.get_ticks_usec() - scan_started_us)
 			if p != null and batched:
-				var batch: BrainBatch = BrainBatch.for_tree(get_tree())
+				var batch: BrainBatch = _frame_batch
 				var slot: int = pilot.prepare_native(p) if batch != null else -1
-				if slot >= 0 and batch.add(self, host, p, slot, dt):
+				if slot >= 0 and batch.add(self, host, p, slot, dt, scan.rows_version_taken()):
 					_add_think_time(Time.get_ticks_usec() - started_us)
 					return  # the batch thinks it and calls finish_native this tick
 			if p != null:
@@ -210,14 +214,14 @@ func step(delta: float, batched: bool = false) -> void:
 	_add_think_time(Time.get_ticks_usec() - started_us)
 
 
-## The end of a native think the tick's `BrainBatch` carried (M4-T18): `out` is the think's output, or empty when the host
-## declined it; `dt` the time the think was given.
-func finish_native(out: PackedFloat64Array, dt: float) -> void:
+## The end of a native think the tick's `BrainBatch` carried (M4-T18): the think's output starts at `base` in the batch's
+## answer `out` (-1 when the host declined it); `dt` the time the think was given.
+func finish_native(out: PackedFloat64Array, base: int, dt: float) -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
 	var pilot := brain as AiPilot
 	if pilot == null or combatant == null or not is_instance_valid(combatant.ship):
 		return
-	var pc: PilotCommand = pilot.apply_native(out)
+	var pc: PilotCommand = pilot.apply_native(out, base)
 	if pc == null:
 		_hold_declined()
 	else:
@@ -553,6 +557,18 @@ func _on_setting_changed(key: StringName, _value: Variant) -> void:
 ## Adds wall-clock microseconds to this tick's think time (the `BrainBatch`'s native call, M4-T18); a readout only.
 static func add_think_time(us: int) -> void:
 	_add_think_time(us)
+
+
+# The tick's brain host and batch for the drivers' physics steps, looked up once a physics frame (a hand-driven step
+# looks them up itself).
+static func _frame_host() -> Object:
+	var frame: int = Engine.get_physics_frames()
+	if frame != _lookup_frame:
+		_lookup_frame = frame
+		var tree := Engine.get_main_loop() as SceneTree
+		_frame_host_cached = NativeBrains.host(tree)
+		_frame_batch = BrainBatch.for_tree(tree)
+	return _frame_host_cached
 
 
 static func _add_think_time(us: int) -> void:

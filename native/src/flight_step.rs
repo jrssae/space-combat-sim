@@ -57,6 +57,31 @@ struct Item {
     applied: Option<Applied>,
 }
 
+// One ship's tick by the kernel: its slot's type, its item's command and pose; the result into the item.
+fn fly(slot: &Slot, item: &mut Item, dt: f64) {
+    if !item.fly {
+        return;
+    }
+    let Some(cmd) = item.cmd.as_ref() else {
+        return;
+    };
+    let mut pod_yaw = item.pod_yaw;
+    item.applied = Some(flight::tick(
+        &slot.body,
+        &mut pod_yaw,
+        cmd,
+        &item.basis,
+        item.v_w,
+        item.w_w,
+        item.env_w,
+        item.assist_on,
+        dt,
+        item.has_propellant,
+        &mut item.forces,
+    ));
+    item.pod_yaw = pod_yaw;
+}
+
 /// Flies every registered ship's tick in one call: `FlightModel.compute`, the `SpeedGovernor` and the forces
 /// `Ship._physics_process` applies, by body RID through the physics server (`kernels::flight` is the maths, bit for bit
 /// GDScript's). Never reads a GDScript object: ships' types and nozzles come in once (`register`), commands come in per
@@ -74,6 +99,8 @@ pub struct ScsFlightStep {
     workers: Vec<Mutex<()>>,
     // One thread for a step with no core (the caller's states).
     serial: Threads,
+    // Which slots the step lists, to find one listed twice.
+    listed: Vec<bool>,
     // Ships the last `step_core` read from the physics server because the core had no row for them (M4-T15).
     fallback_reads: i64,
 }
@@ -404,39 +431,38 @@ impl ScsFlightStep {
                 item.apply = false;
             }
         }
-        // The kernel, across the core's worker threads: each ship reads its own slot's type and writes only its item.
+        // The kernel, across the core's worker threads: each ship reads its own slot's type and writes only its item. A
+        // slot listed twice flies its entries one after the other on this thread, each reading the assist state the one
+        // before left, as the step always did.
         let threads = core.map_or(&self.serial, |(c, _)| c.worker_threads());
         threads::ensure_workers(&mut self.workers, threads);
-        let registered = &self.slots;
-        threads.run(
-            Pass::Flight,
-            &mut self.items[..n],
-            &self.workers,
-            |item, _| {
-                if !item.fly {
-                    return;
+        self.listed.clear();
+        self.listed.resize(self.slots.len(), false);
+        let mut repeated = false;
+        for item in &self.items[..n] {
+            repeated |= std::mem::replace(&mut self.listed[item.slot], true);
+        }
+        if repeated {
+            for item in &mut self.items[..n] {
+                if let Some(slot) = self.slots[item.slot].as_mut() {
+                    item.pod_yaw = slot.pod_yaw_smoothed;
+                    fly(slot, item, dt);
+                    slot.pod_yaw_smoothed = item.pod_yaw;
                 }
-                let (Some(slot), Some(cmd)) = (registered[item.slot].as_ref(), item.cmd.as_ref())
-                else {
-                    return;
-                };
-                let mut pod_yaw = item.pod_yaw;
-                item.applied = Some(flight::tick(
-                    &slot.body,
-                    &mut pod_yaw,
-                    cmd,
-                    &item.basis,
-                    item.v_w,
-                    item.w_w,
-                    item.env_w,
-                    item.assist_on,
-                    dt,
-                    item.has_propellant,
-                    &mut item.forces,
-                ));
-                item.pod_yaw = pod_yaw;
-            },
-        );
+            }
+        } else {
+            let registered = &self.slots;
+            threads.run(
+                Pass::Flight,
+                &mut self.items[..n],
+                &self.workers,
+                |item, _| {
+                    if let Some(slot) = registered[item.slot].as_ref() {
+                        fly(slot, item, dt);
+                    }
+                },
+            );
+        }
         // On the main thread, in row order: the assist state back, and the one engine write of the tick outside the sync
         // points, the forces, in `Ship._physics_process`'s order.
         for item in &self.items[..n] {

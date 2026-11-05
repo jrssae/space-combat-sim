@@ -20,6 +20,7 @@ var ships: int = 0
 
 var _frame: int = -1
 var _host: Object = null
+var _rows_version: int = -1
 var _now_s: float = 0.0
 var _friendly_fire: bool = false
 var _origin_x: float = 0.0
@@ -58,16 +59,17 @@ static func for_tree(tree: SceneTree) -> BrainBatch:
 	return _current
 
 
-## Takes `driver`'s native think for this tick: `p` is its lite perception on `host` and `slot` its pilot's ready slot.
-## False when it cannot join this tick's batch (another host, clock, frame origin or friendly-fire setting than the ships
-## already in it); the driver then thinks alone.
-func add(driver: AiPilotDriver, host: Object, p: Perception, slot: int, dt: float) -> bool:
+## Takes `driver`'s native think for this tick: `p` is its lite perception on `host`, `slot` its pilot's ready slot and
+## `rows_version` the core's rows version its scan was taken at. False when it cannot join this tick's batch (another
+## host, rows version, clock, frame origin or friendly-fire setting than the ships already in it); the driver then
+## thinks alone.
+func add(driver: AiPilotDriver, host: Object, p: Perception, slot: int, dt: float, rows_version: int) -> bool:
 	var frame: int = Engine.get_physics_frames()
 	if frame != _frame:
-		_begin(frame, host, p)
+		_begin(frame, host, p, rows_version)
 	var o: UniversePos = p.frame_origin
-	if host != _host or p.now_s != _now_s or o.x != _origin_x or o.y != _origin_y or o.z != _origin_z \
-			or p.friendly_fire != _friendly_fire:
+	if host != _host or rows_version != _rows_version or p.now_s != _now_s or o.x != _origin_x or o.y != _origin_y \
+			or o.z != _origin_z or p.friendly_fire != _friendly_fire:
 		return false
 	var at: Vector2i
 	if _relation_at.has(p.faction):
@@ -90,14 +92,21 @@ func add(driver: AiPilotDriver, host: Object, p: Perception, slot: int, dt: floa
 	return true
 
 
-## Thinks every ship taken this tick in one native call and hands each driver its result, in the order they came.
+## Ships taken into this tick's batch so far.
+func queued() -> int:
+	return _drivers.size() if _frame == Engine.get_physics_frames() else 0
+
+
+## Thinks every ship taken this tick in one native call and hands each driver its result, in the order they came. When
+## the rows moved since the drivers took them, the host declines every ship and each holds its last command.
 func flush() -> void:
 	if _drivers.is_empty():
 		return
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
 	var out := PackedFloat64Array()
 	if is_instance_valid(_host):
-		out = _host.think_batch(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y, _origin_z)
+		out = _host.think_batch(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y, _origin_z,
+				_rows_version)
 	call_us = Time.get_ticks_usec() - started_us
 	ships = _drivers.size()
 	var drivers: Array[AiPilotDriver] = _drivers
@@ -111,13 +120,14 @@ func flush() -> void:
 		if is_instance_valid(driver):
 			var base: int = i * STRIDE
 			var thought: bool = out.size() >= base + STRIDE and out[base] != 0.0
-			driver.finish_native(out.slice(base + 1, base + STRIDE) if thought else PackedFloat64Array(), dts[i])
+			driver.finish_native(out, base + 1 if thought else -1, dts[i])
 
 
 # A new tick's batch: what every ship in it shares.
-func _begin(frame: int, host: Object, p: Perception) -> void:
+func _begin(frame: int, host: Object, p: Perception, rows_version: int) -> void:
 	_frame = frame
 	_host = host
+	_rows_version = rows_version
 	_now_s = p.now_s
 	_friendly_fire = p.friendly_fire
 	_origin_x = p.frame_origin.x

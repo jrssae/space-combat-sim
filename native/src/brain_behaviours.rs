@@ -153,6 +153,7 @@ pub struct Scratch {
     pub broadcasts: Vec<i32>,
     pub lists: pilot::Lists,
     pub bolt_candidates: Vec<u32>,
+    named: Vec<u32>,
     hostile_row: Vec<bool>,
     friendly_row: Vec<bool>,
 }
@@ -165,6 +166,9 @@ pub struct Field {
     pub bolt_cells: Vec<((i32, i32, i32), u32)>,
     pub max_bolt_speed: f64,
     pub broadcasters: Vec<u32>,
+    /// The rows of every name a brain asks for (an objective or a guarded ship, lowered), in row order: matched once per
+    /// rows version, not per think (M4-T18).
+    pub named: Vec<(String, Vec<u32>)>,
 }
 
 impl Field {
@@ -183,6 +187,28 @@ impl Field {
                 .map(|i| i as u32),
         );
     }
+
+    /// Indexes the rows of each wanted name (empty names skipped, each name once).
+    pub fn index_names<'a>(&mut self, rows: &Rows, wanted: impl Iterator<Item = &'a str>) {
+        self.named.clear();
+        for key in wanted {
+            if key.is_empty() || self.named.iter().any(|(k, _)| k == key) {
+                continue;
+            }
+            let list = rows_named(rows, key);
+            self.named.push((key.to_string(), list));
+        }
+    }
+}
+
+// Every row named `key`, in row order.
+fn rows_named(rows: &Rows, key: &str) -> Vec<u32> {
+    rows.name_keys
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| n.as_str() == key)
+        .map(|(r, _)| r as u32)
+        .collect()
 }
 
 /// A route a pilot leads (`Route`): waypoints as universe positions with a demo (kind + 1, 0 for none) and a hold.
@@ -702,19 +728,32 @@ impl Brain {
                     );
                 }
             }
-            // Every row with the objective's or the guarded ship's name, as `ContactScan._keep_named` keeps them.
-            if !self.ctx.objective_key.is_empty() || !self.ctx.guard_key.is_empty() {
-                for (r, key) in rows.name_keys.iter().enumerate() {
-                    if named(key, &self.ctx.objective_key) || named(key, &self.ctx.guard_key) {
-                        keep(
-                            rows,
-                            &mut scratch.contacts,
-                            r as i32,
-                            inputs.own_body_id,
-                            p.position,
-                            range_sq,
-                        );
-                    }
+            // Every row with the objective's or the guarded ship's name, as `ContactScan._keep_named` keeps them: from the
+            // tick's name index, or matched now for a name pushed since it was built.
+            for key in [&self.ctx.objective_key, &self.ctx.guard_key] {
+                if key.is_empty() {
+                    continue;
+                }
+                scratch.named.clear();
+                match field.named.iter().find(|(k, _)| k == key) {
+                    Some((_, list)) => scratch.named.extend_from_slice(list),
+                    None => scratch.named.extend(
+                        rows.name_keys
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, n)| *n == key)
+                            .map(|(r, _)| r as u32),
+                    ),
+                }
+                for i in 0..scratch.named.len() {
+                    keep(
+                        rows,
+                        &mut scratch.contacts,
+                        scratch.named[i] as i32,
+                        inputs.own_body_id,
+                        p.position,
+                        range_sq,
+                    );
                 }
             }
             scratch.contacts.sort_unstable();
