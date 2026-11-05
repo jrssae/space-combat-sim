@@ -78,6 +78,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q44 | T30d's look | **Merge on the agent's judgement**, the sheets listed for (H) later; fixes come as a later round if the maintainer wants them |
 | Q45 | T30d's coarse or fine Starfury | **The agent decides** from the 30 m sheet and the triangle numbers at `battle` 500; the maintainer may reverse it later |
 | Q46 | Wing-level AI (2026-11-04) | **Research it as the next task after phase 2** (T32): how wing-level decisions (the wing picks targets and tactics a few times a second, members steer, avoid and aim every tick) would cut the AI's cost at 300 to 500 ships, as RTS games, Total War and X4 do, and what it does to the dogfights' feel. Research and a proposal only; the maintainer decides at checkpoint 3 |
+| Q47 | Checkpoint 2, D4 (T19, 2026-11-04) | **Keep Jolt for every near ship; D4 unchanged.** Re-measure the physics stage after T21; propose AI ships out of Jolt again only if the near set still costs more than about 1 ms a tick at 500 (T19's proposal, 70 %) |
 
 ## The budget ("good game performance", Q5)
 
@@ -1206,6 +1207,7 @@ done and T20 proceeds.
 - **Architecture:** §17.13.
 
 ##### M4-T21 The low-attention tier: state, integration, promotion and demotion
+- **Checkpoint 2 (Q47):** after this task, re-measure the physics stage at `battle` 500 as T19 did (near set's sync, node propagation, Jolt's step); if the near set still costs more than about 1 ms a tick, the controller brings T19's ships-out-of-Jolt proposal back to the maintainer.
 
 - **Track:** T. **Agent:** Fable. **Depends on:** T20 and checkpoint 3 (Q17's decision shapes what a tier ship has when
   promoted).
