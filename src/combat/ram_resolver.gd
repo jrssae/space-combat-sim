@@ -54,6 +54,8 @@ const KIND_TUNNEL: String = "tunnelling"
 const KIND_PROP: String = "prop"
 ## The native class that pairs the core's hull rows when the core is on (M4-T15).
 const PHASE_CLASS: StringName = &"ScsRamPhase"
+## Room round the swept test's early rejects (M4-T34), far above the rounding of a placed volume's bounds.
+const SWEEP_CULL_PAD_M: float = 0.05
 
 ## Rams resolved this session (one per hull reached), the last one, and the last tick's cost in microseconds.
 var events: int = 0
@@ -66,6 +68,8 @@ var static_pairs_visited: int = 0
 var gather_us: int = 0
 ## `settings.ram_damage` as of the last tick.
 var enabled: bool = true
+## Volumes the swept test has placed in another hull's frame so far (a work count, M4-T34).
+var volumes_placed: int = 0
 ## Throws the sparks of a ram (`Main` sets it); none without it.
 var fx: FxPool = null
 ## False keeps the resolver on its own gather of the tree even when the native core is on (M4-T15), for pairing the two.
@@ -583,9 +587,16 @@ func _sweep_pair(first: Dictionary, second: Dictionary, deep: bool) -> Dictionar
 	var theirs: Damageable = second["damageable"]
 	if SweepMath.segment_sphere(start, start + move, Vector3.ZERO, mine.bounding_radius + theirs.bounding_radius) < 0.0:
 		return {}  # the bodies never come near each other this tick
+	var cull: bool = bool(Settings.get_value(&"perf_ram_sweep_cull"))
+	if cull and not _sphere_reaches(start, mine.bounding_radius, move, theirs.ram_bounds):
+		return {}  # no volume of this body can reach the other's box (M4-T34)
 	var pose := Transform3D(to_second * (first["basis"] as Basis), start)
 	for i: int in mine.ram_volumes.size():
-		var a: ConvexSweep.Convex = mine.ram_volumes[i].placed(pose)
+		var volume: ConvexSweep.Convex = mine.ram_volumes[i]
+		if cull and not _sphere_reaches(pose * volume.centre, volume.reach, move, theirs.ram_bounds):
+			continue  # this volume cannot either
+		volumes_placed += 1
+		var a: ConvexSweep.Convex = volume.placed(pose)
 		var swept: AABB = a.swept_bounds(move)
 		if not swept.intersects(theirs.ram_bounds):
 			continue
@@ -602,6 +613,14 @@ func _sweep_pair(first: Dictionary, second: Dictionary, deep: bool) -> Dictionar
 			var t: float = maxf(ConvexSweep.spheres_meet(a, move, b), 0.0)
 			return {"point": second_start + second_move * t + (second["basis"] as Basis) * ((a.centre + move * t + b.centre) * 0.5)}
 	return {}
+
+
+# Whether a sphere of `radius` round `centre`, swept by `move`, can reach `box` (M4-T34). Padded, so it never says no where a
+# volume inside the sphere would reach the box: it only spares the swept test work whose answer is no ram.
+static func _sphere_reaches(centre: Vector3, radius: float, move: Vector3, box: AABB) -> bool:
+	var r: float = radius + SWEEP_CULL_PAD_M
+	var held := AABB(centre - Vector3(r, r, r), Vector3(r, r, r) * 2.0)
+	return held.merge(AABB(held.position + move, held.size)).intersects(box)
 
 
 # Both sides of a swept hit, each by its own share of the momentum split.
