@@ -165,6 +165,10 @@ var _avoid_from_pilot: bool = false
 var _row_combat: CombatCommand = null
 static var _frame_rows: bool = false
 static var _no_origin: UniversePos = UniversePos.new()
+# The frame's shared scan as the rows path took it (the first driver of a frame builds it), and the ship's body id.
+static var _scan_frame: int = -1
+static var _frame_scan: ContactScan = null
+var _body_id: int = 0
 
 
 func _init() -> void:
@@ -269,15 +273,24 @@ func _step_rows(pilot: AiPilot, host: Object, dt: float) -> bool:
 	var batch: BrainBatch = _frame_batch
 	if batch == null:
 		return false
-	var timed: bool = ContactScan.timing
-	var scan_started_us: int = Time.get_ticks_usec() if timed else 0  # profiling readout only
-	var scan: ContactScan = ContactScan.shared(get_tree())
-	var fresh: bool = scan.rows_fresh()
-	if timed:
-		ContactScan.add_time(Time.get_ticks_usec() - scan_started_us)
-	if not fresh:
+	var frame: int = Engine.get_physics_frames()
+	if frame != _scan_frame or _frame_scan == null:
+		var timed: bool = ContactScan.timing
+		var scan_started_us: int = Time.get_ticks_usec() if timed else 0  # profiling readout only
+		_frame_scan = ContactScan.shared(get_tree())
+		_scan_frame = frame
+		if timed:
+			ContactScan.add_time(Time.get_ticks_usec() - scan_started_us)
+	var scan: ContactScan = _frame_scan
+	# A pilot with its slot bound to this ship joins whatever the rows did since the scan: the batch declines the whole
+	# tick if they moved. One still to be bound needs the rows the scan was taken from, as today's path does.
+	var slot: int
+	if pilot.rows_ready(host, own_body_id()):
+		slot = pilot.sync_rows(host)
+	elif scan.rows_fresh():
+		slot = pilot.prepare_native(_perceive_lite(scan, host))
+	else:
 		return false
-	var slot: int = pilot.prepare_rows(host, self, scan)
 	if slot < 0:
 		return false
 	if _friendly_fire < 0:
@@ -343,12 +356,10 @@ static func add_rows_counts(near: int, far: int, declined: int, contacts: int) -
 
 ## The ship's body id (the native slot's bound body).
 func own_body_id() -> int:
-	return combatant.ship.get_instance_id()
+	if _body_id == 0:
+		_body_id = combatant.ship.get_instance_id()
+	return _body_id
 
-
-## The perception a native slot is bound from (`AiPilot.prepare_rows`, when the slot or the ship is new).
-func lite_perception(scan: ContactScan, host: Object) -> Perception:
-	return _perceive_lite(scan, host)
 
 
 # The dodge as the pilot's last landed native think left it.

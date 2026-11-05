@@ -21,6 +21,7 @@ const EVENT_ENTER: int = 1
 const EVENT_FIRE: int = 2
 const EVENT_SELECT: int = 4
 const EVENTS_HEAD: int = 4
+const NO_RELATION := Vector2i(-1, -1)
 
 # The batch of the latest core.
 static var _current: BrainBatch = null
@@ -132,10 +133,8 @@ func add_rows(driver: AiPilotDriver, host: Object, slot: int, dt: float, faction
 	if not _rows or host != _host or rows_version != _rows_version or now_s != _now_s or origin.x != _origin_x \
 			or origin.y != _origin_y or origin.z != _origin_z or friendly_fire != _friendly_fire:
 		return -1
-	var at: Vector2i
-	if _relation_at.has(faction):
-		at = _relation_at[faction]
-	else:
+	var at: Vector2i = _relation_at.get(faction, NO_RELATION)
+	if at.x < 0:
 		var row: PackedByteArray = scan.relation_row(faction)
 		at = Vector2i(_relations.size(), row.size())
 		_relations.append_array(row)

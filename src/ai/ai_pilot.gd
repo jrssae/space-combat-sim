@@ -631,11 +631,14 @@ func _retire_pending() -> void:
 			context.attack_target_id = target
 
 
-## Readies this pilot's slot for a rows think by `driver` on `host` (M4-T33): the context pushed when it changed; the
-## full `prepare_native` (with a perception) only when the slot or the bound ship is new. Returns the slot, or -1.
-func prepare_rows(host: Object, driver: AiPilotDriver, scan: ContactScan) -> int:
-	if host != _native or _slot < 0 or _bound_body != driver.own_body_id() or not native_capable():
-		return prepare_native(driver.lite_perception(scan, host))
+## Whether this pilot's slot on `host` is made and bound to the ship `body_id` (a rows think then needs no perception).
+func rows_ready(host: Object, body_id: int) -> bool:
+	return host == _native and _slot >= 0 and _bound_body == body_id and _native_ok == 1
+
+
+## Pushes what changed of the context to this pilot's ready slot for a rows think (M4-T33; `rows_ready` said yes), and a
+## rammer committed from outside. Returns the slot.
+func sync_rows(host: Object) -> int:
 	_sync_context(host)
 	var at: int = _kind_index[0] if not _kind_index.is_empty() else -1
 	var ram := behaviours[at] as BehaviourRam if at >= 0 else null
