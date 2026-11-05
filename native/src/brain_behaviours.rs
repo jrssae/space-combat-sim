@@ -623,7 +623,7 @@ impl Brain {
         &mut self,
         rows: &Rows,
         bolts: &Bolts,
-        work: &mut contact::Work,
+        work: &mut contact::Work<'_>,
         field: &Field,
         own_row: usize,
         scratch: &mut Scratch,
@@ -740,7 +740,7 @@ impl Brain {
             p.position,
             p.velocity,
             &field.bolt_cells,
-            work.cell_m,
+            work.grid.cell_m,
             reach_max,
             &mut scratch.bolt_candidates,
         );

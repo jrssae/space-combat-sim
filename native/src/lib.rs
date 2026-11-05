@@ -14,6 +14,7 @@ mod pilot_kernels;
 mod ram_phase;
 mod rows;
 mod sim_core;
+mod threads;
 mod v3;
 mod weapon_kernels;
 mod weapon_rows;

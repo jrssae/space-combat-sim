@@ -6,9 +6,12 @@ use godot::classes::PhysicsServer3D;
 use godot::classes::physics_server_3d::BodyState;
 use godot::prelude::*;
 
+use std::sync::Mutex;
+
 use crate::kernels::flight::{self, Applied, Body, Cmd, Spec};
 use crate::rows::FLAG_RIGID;
 use crate::sim_core::ScsSimCore;
+use crate::threads::{self, Threads};
 
 /// Per ship per tick: `main_right, main_left, retro_right, retro_left` (the nozzle groups' order).
 pub const CMD_SCALARS: usize = 4;
@@ -35,6 +38,25 @@ struct Slot {
     pod_yaw_smoothed: f64,
 }
 
+// One ship of a step: read on the main thread, flown by the kernel on a worker, applied on the main thread (M4-T18).
+#[derive(Default)]
+struct Item {
+    slot: usize,
+    cmd: Option<Cmd>,
+    env_w: Vector3,
+    assist_on: bool,
+    has_propellant: bool,
+    basis: Basis,
+    v_w: Vector3,
+    w_w: Vector3,
+    // Whether the ship flies at all (it has a pose) and whether its forces go to the physics server.
+    fly: bool,
+    apply: bool,
+    pod_yaw: f64,
+    forces: Vec<(Vector3, Vector3)>,
+    applied: Option<Applied>,
+}
+
 /// Flies every registered ship's tick in one call: `FlightModel.compute`, the `SpeedGovernor` and the forces
 /// `Ship._physics_process` applies, by body RID through the physics server (`kernels::flight` is the maths, bit for bit
 /// GDScript's). Never reads a GDScript object: ships' types and nozzles come in once (`register`), commands come in per
@@ -46,8 +68,12 @@ pub struct ScsFlightStep {
     slots: Vec<Option<Slot>>,
     out_vectors: Vec<Vector3>,
     out_scalars: Vec<f64>,
-    // The kernel's nozzle forces for one ship, reused ship after ship (a worker would own one).
-    nozzle_forces: Vec<(Vector3, Vector3)>,
+    // One entry per ship of a step, kept between ticks: its command, its pose and what the kernel gave (M4-T18).
+    items: Vec<Item>,
+    // The kernel needs no scratch of its own (each ship's nozzle forces go into its item), so the workers hold none.
+    workers: Vec<Mutex<()>>,
+    // One thread for a step with no core (the caller's states).
+    serial: Threads,
     // Ships the last `step_core` read from the physics server because the core had no row for them (M4-T15).
     fallback_reads: i64,
 }
@@ -311,8 +337,15 @@ impl ScsFlightStep {
         let fl = flags.as_slice();
         let st = states.as_slice();
         let mut server = PhysicsServer3D::singleton();
+        if self.items.len() < n {
+            self.items.resize_with(n, Item::default);
+        }
+        // On the main thread: each ship's command, and its pose and motion from the core's row, from the caller, or from
+        // the physics server as `RigidBody3D` reads them.
         for (i, &slot_id) in slots.as_slice().iter().enumerate() {
-            let cmd = Cmd {
+            let item = &mut self.items[i];
+            item.slot = slot_id as usize;
+            item.cmd = Some(Cmd {
                 levels: [sc[i * 4], sc[i * 4 + 1], sc[i * 4 + 2], sc[i * 4 + 3]],
                 strafe: vc[i * CMD_VECTORS],
                 rot: vc[i * CMD_VECTORS + 1],
@@ -321,81 +354,96 @@ impl ScsFlightStep {
                 face_dir_b: vc[i * CMD_VECTORS + 4],
                 brake: fl[i * CMD_FLAGS] != 0,
                 autotrack: fl[i * CMD_FLAGS + 1] != 0,
-            };
-            let env_w = vc[i * CMD_VECTORS + 5];
-            let assist_on = fl[i * CMD_FLAGS + 2] != 0;
-            let has_propellant = fl[i * CMD_FLAGS + 3] != 0;
-            let slot = self.slots[slot_id as usize]
-                .as_mut()
-                .expect("checked above");
-            // The body's pose and motion: from the core's row, from the caller, or from the physics server as
-            // `RigidBody3D` reads them.
+            });
+            item.env_w = vc[i * CMD_VECTORS + 5];
+            item.assist_on = fl[i * CMD_FLAGS + 2] != 0;
+            item.has_propellant = fl[i * CMD_FLAGS + 3] != 0;
+            item.applied = None;
+            let slot = self.slots[item.slot].as_ref().expect("checked above");
+            item.pod_yaw = slot.pod_yaw_smoothed;
             let row = core.and_then(|(c, ids)| {
                 let r = c.row_for_kernel(ids[i]);
                 usize::try_from(r)
                     .ok()
                     .filter(|&r| c.rows.flags[r] & FLAG_RIGID != 0)
             });
-            let (basis, v_w, w_w, apply) = if let (Some((c, _)), Some(r)) = (core, row) {
-                (
-                    c.rows.bases[r],
-                    c.rows.velocities[r],
-                    c.rows.angular[r],
-                    true,
-                )
+            item.fly = true;
+            if let (Some((c, _)), Some(r)) = (core, row) {
+                item.basis = c.rows.bases[r];
+                item.v_w = c.rows.velocities[r];
+                item.w_w = c.rows.angular[r];
+                item.apply = true;
             } else if st.is_empty() {
                 if core.is_some() {
                     self.fallback_reads += 1;
                 }
                 let rid = slot.rid;
-                let Some(body) = (rid.is_valid())
+                match (rid.is_valid())
                     .then(|| server.body_get_direct_state(rid))
                     .flatten()
-                else {
+                {
+                    Some(body) => {
+                        item.basis = body.get_transform().basis;
+                        item.v_w = body.get_linear_velocity();
+                        item.w_w = body.get_angular_velocity();
+                        item.apply = true;
+                    }
                     // Not in a space (parked or freed): nothing to fly; the row reads as zeros.
-                    self.out_vectors.extend([Vector3::ZERO; OUT_VECTORS]);
-                    self.out_scalars.extend([0.0; OUT_SCALARS]);
-                    continue;
-                };
-                (
-                    body.get_transform().basis,
-                    body.get_linear_velocity(),
-                    body.get_angular_velocity(),
-                    true,
-                )
+                    None => item.fly = false,
+                }
             } else {
-                let b = Basis {
+                item.basis = Basis {
                     rows: [
                         st[i * STATE_VECTORS],
                         st[i * STATE_VECTORS + 1],
                         st[i * STATE_VECTORS + 2],
                     ],
                 };
-                (
-                    b,
-                    st[i * STATE_VECTORS + 3],
-                    st[i * STATE_VECTORS + 4],
-                    false,
-                )
+                item.v_w = st[i * STATE_VECTORS + 3];
+                item.w_w = st[i * STATE_VECTORS + 4];
+                item.apply = false;
+            }
+        }
+        // The kernel, across the core's worker threads: each ship reads its own slot's type and writes only its item.
+        let threads = core.map_or(&self.serial, |(c, _)| c.worker_threads());
+        threads::ensure_workers(&mut self.workers, threads);
+        let registered = &self.slots;
+        threads.run(&mut self.items[..n], &self.workers, |item, _| {
+            if !item.fly {
+                return;
+            }
+            let (Some(slot), Some(cmd)) = (registered[item.slot].as_ref(), item.cmd.as_ref())
+            else {
+                return;
             };
-            let mut pod_yaw = slot.pod_yaw_smoothed;
-            let step: Applied = flight::tick(
+            let mut pod_yaw = item.pod_yaw;
+            item.applied = Some(flight::tick(
                 &slot.body,
                 &mut pod_yaw,
-                &cmd,
-                &basis,
-                v_w,
-                w_w,
-                env_w,
-                assist_on,
+                cmd,
+                &item.basis,
+                item.v_w,
+                item.w_w,
+                item.env_w,
+                item.assist_on,
                 dt,
-                has_propellant,
-                &mut self.nozzle_forces,
-            );
-            slot.pod_yaw_smoothed = pod_yaw;
-            // The one engine write of the tick outside the sync points: the forces, in `Ship._physics_process`'s order.
-            if apply {
-                for &(force_w, at_w) in &self.nozzle_forces {
+                item.has_propellant,
+                &mut item.forces,
+            ));
+            item.pod_yaw = pod_yaw;
+        });
+        // On the main thread, in row order: the assist state back, and the one engine write of the tick outside the sync
+        // points, the forces, in `Ship._physics_process`'s order.
+        for item in &self.items[..n] {
+            let Some(step) = item.applied.as_ref() else {
+                self.out_vectors.extend([Vector3::ZERO; OUT_VECTORS]);
+                self.out_scalars.extend([0.0; OUT_SCALARS]);
+                continue;
+            };
+            let slot = self.slots[item.slot].as_mut().expect("checked above");
+            slot.pod_yaw_smoothed = item.pod_yaw;
+            if item.apply {
+                for &(force_w, at_w) in &item.forces {
                     server
                         .body_apply_force_ex(slot.rid, force_w)
                         .position(at_w)

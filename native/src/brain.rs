@@ -3,6 +3,8 @@
 // slot per pilot, picks nothing itself and hands answers over as packed numbers. The GDScript `AiPilot` is the facade and
 // stays the reference. gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
 #![allow(clippy::redundant_field_names)]
+use std::sync::Mutex;
+
 use godot::prelude::*;
 
 use crate::brain_behaviours::{
@@ -12,9 +14,10 @@ use crate::brain_behaviours::{
 use crate::brain_maths::{
     self, Capability, FlightCmd, Manoeuvre, Pcg, Pose, Temperament, deg_to_rad_lerp,
 };
-use crate::kernels::contact::{self, Work};
+use crate::kernels::contact::{self, Grid, Query, Work};
 use crate::rows::{Bolts, Rows};
 use crate::sim_core::ScsSimCore;
+use crate::threads::{self, Threads};
 
 // `test_brain_parity`'s per-step layouts for a manoeuvre run.
 const STEP_IN: usize = 23;
@@ -38,6 +41,57 @@ pub const OUT_WEIGHTED: usize = OUT_RAW + KINDS;
 pub const OUT_MIRROR: usize = OUT_WEIGHTED + KINDS;
 pub const OUT_RAM: usize = OUT_MIRROR + MIRROR;
 pub const OUT_LEN: usize = OUT_RAM + 1;
+/// A batch think's output per ship (M4-T18): 1 when the host thought it (0: declined, the rest zeros), then `OUT_LEN`.
+pub const BATCH_OUT: usize = OUT_LEN + 1;
+/// A batch think's inputs per ship: the slot, the relation row's offset and length in the batch's relations, the
+/// selection and the latest attacker (ints); dt, the hull, the latest hit and the latest bolt hit (floats).
+pub const BATCH_INTS: usize = 5;
+pub const BATCH_FLOATS: usize = 4;
+/// `set_fault`'s injected bug for the determinism test: a think adds to its main thrust what the worker's previous think
+/// left behind, so it reads another row's output.
+pub const FAULT_CARRY: i64 = 1;
+
+// What one worker thread fills for the thinks it runs: the query scratch, the picked lists, the keeps, and what the
+// injected fault carries from one think to the next.
+#[derive(Default)]
+struct Worker {
+    query: Query,
+    scratch: Scratch,
+    keep: Vec<i64>,
+    carry: f64,
+}
+
+// One ship of a batch think: its brain (taken from the slot for the pass), its inputs and its packed output.
+#[derive(Default)]
+struct Item {
+    slot: usize,
+    brain: Option<Brain>,
+    own_row: i64,
+    relations: (usize, usize),
+    selected_id: i64,
+    last_attacker_id: i64,
+    dt: f64,
+    hull_fraction: f64,
+    last_hit_s: f64,
+    last_bolt_hit_s: f64,
+    out: Vec<f64>,
+    ok: bool,
+}
+
+// What every think of a batch shares, read-only.
+struct Shared<'a> {
+    rows: &'a Rows,
+    bolts: &'a Bolts,
+    grid: &'a Grid,
+    field: &'a Field,
+    relations: &'a [u8],
+    now_s: f64,
+    friendly_fire: bool,
+    origin: [f64; 3],
+    nearest_k: i64,
+    static_k: i64,
+    fault: i64,
+}
 
 /// The AI pilots' native brains over the core's rows (or rows loaded from arrays, for the tests).
 #[derive(GodotClass)]
@@ -46,9 +100,11 @@ pub struct ScsBrains {
     base: Base<RefCounted>,
     core: Option<Gd<ScsSimCore>>,
     own: Rows,
+    own_names: Vec<GString>,
     own_bolts: Bolts,
     own_loaded: bool,
-    grid: Work,
+    grid: Grid,
+    query: Query,
     grid_version: i64,
     field: Field,
     slots: Vec<Option<Brain>>,
@@ -57,6 +113,13 @@ pub struct ScsBrains {
     out: Vec<f64>,
     nearest_k: i64,
     static_k: i64,
+    // The batch think's per-thread scratch, its ships and its output (M4-T18), kept between ticks.
+    workers: Vec<Mutex<Worker>>,
+    items: Vec<Item>,
+    batch_out: Vec<f64>,
+    // One thread for rows loaded from arrays (no core to give its threads).
+    serial: Threads,
+    fault: i64,
 }
 
 #[godot_api]
@@ -73,7 +136,7 @@ impl ScsBrains {
         self.own = Rows::default();
         self.own_bolts = Bolts::default();
         self.own_loaded = false;
-        self.grid = Work::default();
+        self.grid = Grid::default();
         self.grid.cell_m = SENSOR_RANGE_M;
         self.grid_version = -1;
         self.core = Some(core);
@@ -158,7 +221,6 @@ impl ScsBrains {
             .map(|&f| u32::try_from(f).unwrap_or(u32::MAX))
             .collect();
         own.flags = vec![0; n];
-        own.names = names.as_slice().to_vec();
         own.hull_ids = vec![0; n];
         own.handles = (1..=n as i64).collect();
         own.rigid = is_ship.as_slice().iter().map(|&b| b == 1).collect();
@@ -178,7 +240,8 @@ impl ScsBrains {
             .collect();
         own.node_count = n;
         own.index_ids();
-        self.grid = Work::default();
+        self.own_names = names.as_slice().to_vec();
+        self.grid = Grid::default();
         self.grid.cell_m = SENSOR_RANGE_M;
         self.grid.cells = contact::sorted_cells(&self.own.positions, SENSOR_RANGE_M);
         self.grid.max_static_radius = (0..n)
@@ -553,7 +616,10 @@ impl ScsBrains {
             let result = brain.think(
                 rows,
                 bolts,
-                &mut self.grid,
+                &mut Work {
+                    grid: &self.grid,
+                    query: &mut self.query,
+                },
                 &self.field,
                 own_row as usize,
                 &mut self.scratch,
@@ -566,6 +632,111 @@ impl ScsBrains {
         drop(guard);
         self.slots[index] = Some(brain);
         out
+    }
+
+    /// Every thinking ship of a tick in one call (M4-T18), across the core's worker threads: per ship `BATCH_INTS` ints
+    /// (slot, relation row offset and length in `relations`, selection, latest attacker) and `BATCH_FLOATS` floats (dt,
+    /// hull, latest hit, latest bolt hit), the rest as `think` takes it. Returns `BATCH_OUT` numbers per ship in the
+    /// order given: 1 and `think`'s output, or 0 and zeros when declined (no slot, a slot twice, no row). Each think reads
+    /// the frozen rows and writes only its own brain and its output, so the result does not depend on the threads.
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn think_batch(
+        &mut self,
+        ints: PackedInt64Array,
+        floats: PackedFloat64Array,
+        relations: PackedByteArray,
+        now_s: f64,
+        friendly_fire: bool,
+        origin_x: f64,
+        origin_y: f64,
+        origin_z: f64,
+    ) -> PackedFloat64Array {
+        let n = ints.len() / BATCH_INTS;
+        if ints.len() != n * BATCH_INTS || floats.len() != n * BATCH_FLOATS {
+            godot_error!(
+                "ScsBrains.think_batch: {} ints and {} floats do not make whole ships; nothing thought",
+                ints.len(),
+                floats.len()
+            );
+            return PackedFloat64Array::new();
+        }
+        self.refresh_grid();
+        let iv = ints.as_slice();
+        let fv = floats.as_slice();
+        let rel = relations.as_slice();
+        if self.items.len() < n {
+            self.items.resize_with(n, Item::default);
+        }
+        for (k, item) in self.items[..n].iter_mut().enumerate() {
+            let i = &iv[k * BATCH_INTS..(k + 1) * BATCH_INTS];
+            let f = &fv[k * BATCH_FLOATS..(k + 1) * BATCH_FLOATS];
+            let start = usize::try_from(i[1]).unwrap_or(0).min(rel.len());
+            let len = usize::try_from(i[2]).unwrap_or(0).min(rel.len() - start);
+            item.slot = usize::try_from(i[0]).unwrap_or(usize::MAX);
+            item.brain = self.slots.get_mut(item.slot).and_then(Option::take);
+            item.relations = (start, start + len);
+            item.selected_id = i[3];
+            item.last_attacker_id = i[4];
+            item.dt = f[0];
+            item.hull_fraction = f[1];
+            item.last_hit_s = f[2];
+            item.last_bolt_hit_s = f[3];
+            item.ok = false;
+        }
+        let guard = self.core.as_ref().map(|c| c.bind());
+        let (rows, bolts, threads): (&Rows, &Bolts, &Threads) = match &guard {
+            Some(c) => (&c.rows, &c.bolts, c.worker_threads()),
+            None => (&self.own, &self.own_bolts, &self.serial),
+        };
+        for item in &mut self.items[..n] {
+            item.own_row = match (&item.brain, &guard) {
+                (None, _) => -1,
+                (Some(b), Some(c)) => c.row_for_kernel(b.ship.own_body_id),
+                (Some(b), None) => rows
+                    .body_ids
+                    .iter()
+                    .position(|&id| id == b.ship.own_body_id)
+                    .map_or(-1, |r| r as i64),
+            };
+        }
+        threads::ensure_workers(&mut self.workers, threads);
+        let shared = Shared {
+            rows,
+            bolts,
+            grid: &self.grid,
+            field: &self.field,
+            relations: rel,
+            now_s,
+            friendly_fire,
+            origin: [origin_x, origin_y, origin_z],
+            nearest_k: self.nearest_k,
+            static_k: self.static_k,
+            fault: self.fault,
+        };
+        threads.run(&mut self.items[..n], &self.workers, |item, worker| {
+            think_item(&shared, item, worker);
+        });
+        drop(guard);
+        self.batch_out.clear();
+        self.batch_out.resize(n * BATCH_OUT, 0.0);
+        for (k, item) in self.items[..n].iter_mut().enumerate() {
+            if let Some(brain) = item.brain.take() {
+                self.slots[item.slot] = Some(brain);
+            }
+            if item.ok {
+                let at = k * BATCH_OUT;
+                self.batch_out[at] = 1.0;
+                self.batch_out[at + 1..at + BATCH_OUT].copy_from_slice(&item.out);
+            }
+        }
+        PackedFloat64Array::from(self.batch_out.as_slice())
+    }
+
+    /// Injects a bug for the determinism test (`FAULT_CARRY`), or none (0).
+    #[func]
+    fn set_fault(&mut self, kind: i64) {
+        self.fault = kind;
     }
 
     /// The rows the last think picked: `[contacts, statics, broadcasts]` (the tests compare them with the scan's).
@@ -603,12 +774,12 @@ impl ScsBrains {
             dict.set(*key, &GString::from(value.as_str()));
         }
         let guard = self.core.as_ref().map(|c| c.bind());
-        let rows: &Rows = match &guard {
-            Some(c) => &c.rows,
-            None => &self.own,
+        let (rows, names): (&Rows, &[GString]) = match &guard {
+            Some(c) => (&c.rows, &c.row_names),
+            None => (&self.own, &self.own_names),
         };
         for (key, id) in &d.names {
-            let name = name_of(rows, *id);
+            let name = name_of(rows, names, *id);
             if *key == "state" {
                 dict.set("state", &GString::from(format!("to {name}").as_str()));
             } else {
@@ -901,6 +1072,58 @@ impl ScsBrains {
     }
 }
 
+// One ship's think in a batch: its brain over the shared rows with the worker's scratch, its output packed into its item.
+fn think_item(shared: &Shared, item: &mut Item, worker: &mut Worker) {
+    item.ok = false;
+    let Some(brain) = item.brain.as_mut() else {
+        return;
+    };
+    let Ok(own_row) = usize::try_from(item.own_row) else {
+        return;
+    };
+    let inputs = Inputs {
+        relations: &shared.relations[item.relations.0..item.relations.1],
+        own_body_id: brain.ship.own_body_id,
+        now_s: shared.now_s,
+        dt: item.dt,
+        hull_fraction: item.hull_fraction,
+        self_id: brain.ship.self_id,
+        selected_id: item.selected_id,
+        last_hit_s: item.last_hit_s,
+        last_bolt_hit_s: item.last_bolt_hit_s,
+        last_attacker_id: item.last_attacker_id,
+        friendly_fire: shared.friendly_fire,
+        origin: shared.origin,
+        nearest_k: shared.nearest_k,
+        static_k: shared.static_k,
+    };
+    let Worker {
+        query,
+        scratch,
+        keep,
+        carry,
+    } = worker;
+    let mut result = brain.think(
+        shared.rows,
+        shared.bolts,
+        &mut Work {
+            grid: shared.grid,
+            query,
+        },
+        shared.field,
+        own_row,
+        scratch,
+        keep,
+        &inputs,
+    );
+    if shared.fault == FAULT_CARRY {
+        result.flight.main_left = (result.flight.main_left * 0.5 + *carry).min(1.0);
+        *carry = result.flight.main_left * 0.5;
+    }
+    pack_output(brain, &result, &mut item.out);
+    item.ok = true;
+}
+
 // A manoeuvre's `result()` as the Dictionary GDScript reports.
 fn outcome_dict(result: &brain_maths::Outcome) -> VarDictionary {
     let mut dict = VarDictionary::new();
@@ -964,14 +1187,15 @@ fn pack_output(brain: &Brain, result: &brain_behaviours::Output, out: &mut Vec<f
 }
 
 // The display name of the row whose marker id is `id`, "" when none.
-fn name_of(rows: &Rows, id: i64) -> String {
+fn name_of(rows: &Rows, names: &[GString], id: i64) -> String {
     if id == 0 {
         return String::new();
     }
     rows.ids
         .iter()
         .position(|&r| r == id)
-        .map_or_else(String::new, |r| rows.names[r].to_string())
+        .and_then(|r| names.get(r))
+        .map_or_else(String::new, ToString::to_string)
 }
 
 // `AiProfile` and `RaiderTactics` from the facade's numbers.

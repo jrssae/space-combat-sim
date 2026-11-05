@@ -7,11 +7,19 @@ use std::collections::{HashMap, HashSet};
 use godot::classes::{Node, Node3D, Object, RigidBody3D};
 use godot::prelude::*;
 
+use crate::threads::{self, Threads};
+
 pub use crate::rows::{Bolts, FLAG_HULL, FLAG_HULL_ACTIVE, FLAG_LATE, FLAG_RIGID, Rows};
 
 // The snapshot the scan takes of the rows, built here (it crosses the boundary).
 trait RowsSnapshot {
-    fn to_array(&self, count: usize, node_count: usize, factions: &[StringName]) -> VarArray;
+    fn to_array(
+        &self,
+        names: &[GString],
+        count: usize,
+        node_count: usize,
+        factions: &[StringName],
+    ) -> VarArray;
 }
 
 // `BodyKind` (src/ai/body_kind.gd) in value order, then the projectile kinds the core adds (`SimCore.KIND_*`).
@@ -177,6 +185,8 @@ pub struct ScsSimCore {
     /// The scan's rows and the bolts, as of the last sync point.
     pub rows: Rows,
     pub bolts: Bolts,
+    /// Each row's display name, beside the rows (an engine string the worker threads must not share, M4-T18).
+    pub row_names: Vec<GString>,
     /// The rows with an active hull, in the `damageable` group's order: what the sweep and the ram phase walk.
     pub hull_rows: Vec<u32>,
     row_of_id: HashMap<i64, u32>,
@@ -194,6 +204,8 @@ pub struct ScsSimCore {
     // Reads of the brains' columns that found no value where a body had the object (a renamed property): counted and
     // warned about once (M4-T17).
     column_read_failures: i64,
+    // The worker threads the kernels' per-ship passes run on (M4-T18).
+    threads: Threads,
 }
 
 #[godot_api]
@@ -357,6 +369,7 @@ impl ScsSimCore {
         let now = self.syncs;
         let mut rows = std::mem::take(&mut self.rows);
         rows.clear();
+        self.row_names.clear();
         self.seen.clear();
         let mut markers = std::mem::take(&mut self.markers);
         for m in markers.iter_mut() {
@@ -398,7 +411,7 @@ impl ScsSimCore {
             rows.radii.push(self.static_radii[s]);
             rows.kinds.push(self.static_kinds[s]);
             rows.flags.push(0);
-            rows.names.push(GString::new());
+            self.row_names.push(GString::new());
             rows.hull_ids.push(0);
             rows.handles.push(0);
             rows.rigid.push(false);
@@ -595,6 +608,72 @@ impl ScsSimCore {
         self.column_read_failures
     }
 
+    /// Runs the per-ship passes on `count` threads from the next pass on (`perf_threads`, M4-T18): 0 or less means the
+    /// machine's performance cores, 1 the calling thread alone. Returns the count in use.
+    #[func]
+    fn set_threads(&mut self, count: i64) -> i64 {
+        let wanted = if count <= 0 {
+            threads::performance_cores()
+        } else {
+            count as usize
+        };
+        self.threads.set_count(wanted) as i64
+    }
+
+    /// The threads the per-ship passes use.
+    #[func]
+    fn threads(&self) -> i64 {
+        self.threads.count() as i64
+    }
+
+    /// The machine's performance cores, what `set_threads(0)` uses.
+    #[func]
+    fn performance_cores(&self) -> i64 {
+        threads::performance_cores() as i64
+    }
+
+    /// Passes that ran in parallel since the core was made (a readout; a single-threaded core never adds to it).
+    #[func]
+    fn parallel_passes(&self) -> i64 {
+        self.threads.parallel_passes()
+    }
+
+    /// The fewest items a pass runs in parallel with, and setting it (the benches that chose the default).
+    #[func]
+    fn parallel_min(&self) -> i64 {
+        self.threads.min_items() as i64
+    }
+
+    #[func]
+    fn set_parallel_min(&mut self, items: i64) {
+        self.threads.set_min_items(items.max(0) as usize);
+    }
+
+    /// A 64-bit digest of every row's state and every bolt (positions, velocities, bases, spins, flags, hulls, the
+    /// selections as rows), with no instance id in it, so two runs of one seeded fight compare tick by tick (M4-T18).
+    #[func]
+    fn rows_digest(&self) -> i64 {
+        let mut d = Digest::default();
+        let r = &self.rows;
+        for i in 0..r.body_ids.len() {
+            for v in [r.positions[i], r.velocities[i], r.angular[i]] {
+                d.vector(v);
+            }
+            for row in r.bases[i].rows {
+                d.vector(row);
+            }
+            d.word(u64::from(r.flags[i]));
+            d.word(r.hull_fraction[i].to_bits());
+            let target = r.target_ids.get(i).copied().unwrap_or(-1);
+            d.word(i64::from(if target > 0 { r.row_of_id(target) } else { -1 }) as u64);
+        }
+        for i in 0..self.bolts.positions.len() {
+            d.vector(self.bolts.positions[i]);
+            d.vector(self.bolts.velocities[i]);
+        }
+        d.0 as i64
+    }
+
     /// The physics frame of the last `sync_in`, and of the last bolt sync.
     #[func]
     fn tick(&self) -> i64 {
@@ -661,6 +740,11 @@ impl ScsSimCore {
         self.rows_version
     }
 
+    /// The worker threads for the crate's per-ship passes (M4-T18).
+    pub fn worker_threads(&self) -> &Threads {
+        &self.threads
+    }
+
     /// The row a kernel may read for body `body_id` between sync points, or -1: none when the body was touched since the
     /// last sync (hidden, shown, teleported by the pool), since its row is then stale and the engine must be asked.
     pub fn row_for_kernel(&self, body_id: i64) -> i64 {
@@ -673,7 +757,7 @@ impl ScsSimCore {
     #[func]
     fn row_name(&self, row: i64) -> GString {
         self.row_index(row)
-            .map_or_else(GString::new, |r| self.rows.names[r].clone())
+            .map_or_else(GString::new, |r| self.row_names[r].clone())
     }
 
     #[func]
@@ -730,8 +814,12 @@ impl ScsSimCore {
     /// those from `StaticRows` itself) and without rows added after the first sync.
     #[func]
     fn snapshot(&self) -> VarArray {
-        self.rows
-            .to_array(self.rows.node_count, self.rows.node_count, &self.factions)
+        self.rows.to_array(
+            &self.row_names,
+            self.rows.node_count,
+            self.rows.node_count,
+            &self.factions,
+        )
     }
 
     /// `snapshot` with the static rows too (the registry's face, M4-T09), late rows left out.
@@ -739,7 +827,7 @@ impl ScsSimCore {
     pub fn snapshot_all(&self) -> VarArray {
         let count = self.rows.node_count + self.static_ids.len();
         self.rows
-            .to_array(count, self.rows.node_count, &self.factions)
+            .to_array(&self.row_names, count, self.rows.node_count, &self.factions)
     }
 
     /// The broadcast scan, `ContactScan.from_broadcasters` for the markers `ids` (the broadcasters, in their order): a row
@@ -749,6 +837,8 @@ impl ScsSimCore {
     pub fn select(&mut self, ids: PackedInt64Array) -> VarArray {
         let mut rows = Rows::default();
         let mut found: Vec<i32> = Vec::new();
+        // The selection's names go to a list of its own; the core's rows keep theirs.
+        let core_names = std::mem::take(&mut self.row_names);
         let mut markers = std::mem::take(&mut self.markers);
         for (j, id) in ids.as_slice().iter().enumerate() {
             let Some(&at) = self.marker_at.get(id) else {
@@ -766,8 +856,9 @@ impl ScsSimCore {
             found.push(j as i32);
         }
         self.markers = markers;
+        let names = std::mem::replace(&mut self.row_names, core_names);
         rows.node_count = rows.body_ids.len();
-        let mut out = rows.to_array(rows.node_count, rows.node_count, &self.factions);
+        let mut out = rows.to_array(&names, rows.node_count, rows.node_count, &self.factions);
         out.push(&PackedInt32Array::from(found.as_slice()).to_variant());
         out
     }
@@ -1115,7 +1206,7 @@ impl ScsSimCore {
         rows.radii.push(attrs.radius);
         rows.kinds.push(attrs.kind);
         rows.flags.push(read.flags);
-        rows.names.push(attrs.name.clone());
+        self.row_names.push(attrs.name.clone());
         rows.hull_ids
             .push(m.hull.as_ref().map_or(0, |h| h.instance_id().to_i64()));
         rows.handles.push(Self::handle(m));
@@ -1140,7 +1231,7 @@ impl ScsSimCore {
         rows.radii[r] = attrs.radius;
         rows.kinds[r] = attrs.kind;
         rows.flags[r] = read.flags | (rows.flags[r] & FLAG_LATE);
-        rows.names[r] = attrs.name.clone();
+        self.row_names[r] = attrs.name.clone();
         rows.is_static[r] = is_static_kind(attrs.kind);
         rows.is_mine[r] = attrs.kind == KIND_MINE;
         rows.hull_fraction[r] = read.hull_fraction;
@@ -1346,7 +1437,13 @@ fn clamp01(v: f64) -> f64 {
 impl RowsSnapshot for Rows {
     // The first `count` rows as the `VarArray` `snapshot` documents (forwards and ups from the bases), `node_count` of
     // them nodes.
-    fn to_array(&self, count: usize, node_count: usize, factions: &[StringName]) -> VarArray {
+    fn to_array(
+        &self,
+        names: &[GString],
+        count: usize,
+        node_count: usize,
+        factions: &[StringName],
+    ) -> VarArray {
         let count = count.min(self.body_ids.len());
         let faction_names: Array<StringName> = self.faction_ix[..count]
             .iter()
@@ -1376,7 +1473,7 @@ impl RowsSnapshot for Rows {
         out.push(&PackedFloat64Array::from(&self.radii[..count]).to_variant());
         out.push(&PackedByteArray::from(is_ship.as_slice()).to_variant());
         out.push(&PackedByteArray::from(&self.kinds[..count]).to_variant());
-        out.push(&PackedStringArray::from(&self.names[..count]).to_variant());
+        out.push(&PackedStringArray::from(&names[..count.min(names.len())]).to_variant());
         out.push(&PackedInt64Array::from(&self.hull_ids[..count]).to_variant());
         out.push(&(node_count.min(count) as i64).to_variant());
         out.push(&statics.to_variant());
@@ -1504,5 +1601,29 @@ impl ScsSimCore {
     /// Whether `body_id` was hidden, shown or lost its hull since its row was last read (its row may be stale).
     pub fn is_touched(&self, body_id: i64) -> bool {
         self.touched.contains(&body_id)
+    }
+}
+
+// FNV-1a over 64-bit words: `rows_digest`'s hash.
+struct Digest(u64);
+
+impl Default for Digest {
+    fn default() -> Self {
+        Self(0xcbf2_9ce4_8422_2325)
+    }
+}
+
+impl Digest {
+    fn word(&mut self, w: u64) {
+        for b in w.to_le_bytes() {
+            self.0 ^= u64::from(b);
+            self.0 = self.0.wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+
+    fn vector(&mut self, v: Vector3) {
+        self.word(u64::from(v.x.to_bits()));
+        self.word(u64::from(v.y.to_bits()));
+        self.word(u64::from(v.z.to_bits()));
     }
 }

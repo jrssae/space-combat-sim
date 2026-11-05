@@ -78,6 +78,8 @@ func test_a_seeded_battle_gives_the_same_rows_byte_for_byte_with_one_thread_and_
 	assert_gt(int(six["native_thinks"]), TICKS * 20, "the native brains thought (%d thinks)" % int(six["native_thinks"]))
 	assert_eq(int(one["native_thinks"]), int(six["native_thinks"]), "the same thinks on both")
 	assert_eq(int(six["fallbacks"]), 0, "the host declined no think")
+	gut.p("battle %d seed %d, %d ticks: %d native thinks, %d passes in parallel with six threads" % [SHIPS, SEED, TICKS,
+			int(six["native_thinks"]), int(six["parallel"])])
 	var first: int = _first_difference(a, b)
 	assert_eq(first, -1, "the rows are the same bits every tick with one thread and six (first difference at tick %d)" % first)
 

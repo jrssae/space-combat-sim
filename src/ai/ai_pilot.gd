@@ -411,9 +411,20 @@ static func native_kind_of(b: AiBehaviour) -> int:
 ## The native think: the command from the host (`Perception.brains`), with this pilot's state mirrored; null when the host
 ## declines (no slot, no row for the ship this tick), and then nothing has changed and the GDScript think may run.
 func try_think_native(p: Perception, dt: float) -> PilotCommand:
+	if prepare_native(p) < 0:
+		return null
+	var out: PackedFloat64Array = _native.think(_slot, p.relation_row, p.now_s, dt, p.hull_fraction, p.selected_id,
+			p.last_hit_s, p.last_bolt_hit_s, p.last_attacker_id, p.friendly_fire, p.frame_origin.x, p.frame_origin.y,
+			p.frame_origin.z)
+	return apply_native(out)
+
+
+## Readies this pilot's native slot for a think on `p`'s host (M4-T18 splits the think so a batch can carry it): makes the
+## slot, binds the ship and pushes what changed of the context. Returns the slot, or -1 when the think cannot be native.
+func prepare_native(p: Perception) -> int:
 	var host: Object = p.brains
 	if host == null or not native_capable():
-		return null
+		return -1
 	if host != _native:
 		if _slot >= 0 and is_instance_valid(_native):
 			_native.free_slot(_slot)
@@ -424,7 +435,7 @@ func try_think_native(p: Perception, dt: float) -> PilotCommand:
 				temperament.skill, temperament.aggression)
 		if _slot < 0:
 			_native_ok = 0
-			return null
+			return -1
 		# The slot stands where the GDScript objects stand: the driver's reset and the retunes since, in order.
 		if _was_reset:
 			host.reset(_slot)
@@ -449,10 +460,15 @@ func try_think_native(p: Perception, dt: float) -> PilotCommand:
 	if ram != null and ram.committed and not _ram_pushed:
 		host.ram_commit(_slot, ram.target_id_value)  # committed from outside with no slot yet: the slot follows, once
 		_ram_pushed = true
-	var out: PackedFloat64Array = host.think(_slot, p.relation_row, p.now_s, dt, p.hull_fraction, p.selected_id, p.last_hit_s,
-			p.last_bolt_hit_s, p.last_attacker_id, p.friendly_fire, p.frame_origin.x, p.frame_origin.y, p.frame_origin.z)
+	return _slot
+
+
+## The command of a native think from its output (`NATIVE_OUT_LEN` numbers), with this pilot's state mirrored; null when
+## the output is not a think's (the host declined).
+func apply_native(out: PackedFloat64Array) -> PilotCommand:
 	if out.size() != NATIVE_OUT_LEN:
 		return null
+	var ram := _behaviour_of(&"ram") as BehaviourRam
 	_out = out
 	native_last = true
 	var cmd := PilotCommand.new()

@@ -5,7 +5,7 @@ extends Node
 ## scripts. The stages add up to the tick. Off by default (`perf on`, or a `bench` run); wall clock only, never gameplay.
 
 const AI_BEGIN_PRIORITY: int = -11
-const AI_END_PRIORITY: int = -9
+const AI_END_PRIORITY: int = -8  # after the brain batch at -9 (M4-T18)
 const TARGETING_BEGIN_PRIORITY: int = TargetingController.LATE_PRIORITY - 1
 const TARGETING_END_PRIORITY: int = TargetingController.LATE_PRIORITY + 1
 const RESOLVERS_END_PRIORITY: int = RamResolver.LATE_PRIORITY + 1

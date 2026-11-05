@@ -162,11 +162,12 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	step(delta)
+	step(delta, true)
 
 
-## One tick. `_physics_process` calls it; public so tests can drive it.
-func step(delta: float) -> void:
+## One tick. `_physics_process` calls it with `batched` (a native think joins the tick's `BrainBatch`, M4-T18, and
+## finishes in `finish_native` at -9); public so tests can drive it, by default thinking at once.
+func step(delta: float, batched: bool = false) -> void:
 	if brain == null or combatant == null or not is_instance_valid(combatant.ship):
 		return
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
@@ -193,16 +194,48 @@ func step(delta: float) -> void:
 			var p: Perception = _perceive_lite(scan, host) if scan.rows_fresh() else null
 			if timed:
 				ContactScan.add_time(Time.get_ticks_usec() - scan_started_us)
+			if p != null and batched:
+				var batch: BrainBatch = BrainBatch.for_tree(get_tree())
+				var slot: int = pilot.prepare_native(p) if batch != null else -1
+				if slot >= 0 and batch.add(self, host, p, slot, dt):
+					_add_think_time(Time.get_ticks_usec() - started_us)
+					return  # the batch thinks it and calls finish_native this tick
 			if p != null:
 				pc = pilot.try_think_native(p, dt)
 			if pc == null and pilot.has_native_slot():
-				# Declined with a brain in the slot: the GDScript objects hold only a mirror, so this tick is held, as a
-				# far-rate tick is, and the think waits for the next one.
-				_roll_counts()
-				_thinks_fallback += 1
-				_count_held()
+				_hold_declined()
 				_add_think_time(Time.get_ticks_usec() - started_us)
 				return
+	_act(pc, pilot, dt)
+	_add_think_time(Time.get_ticks_usec() - started_us)
+
+
+## The end of a native think the tick's `BrainBatch` carried (M4-T18): `out` is the think's output, or empty when the host
+## declined it; `dt` the time the think was given.
+func finish_native(out: PackedFloat64Array, dt: float) -> void:
+	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
+	var pilot := brain as AiPilot
+	if pilot == null or combatant == null or not is_instance_valid(combatant.ship):
+		return
+	var pc: PilotCommand = pilot.apply_native(out)
+	if pc == null:
+		_hold_declined()
+	else:
+		_act(pc, pilot, dt)
+	_add_think_time(Time.get_ticks_usec() - started_us)
+
+
+# Declined with a brain in the slot: the GDScript objects hold only a mirror, so this tick is held, as a far-rate tick
+# is, and the think waits for the next one.
+func _hold_declined() -> void:
+	_roll_counts()
+	_thinks_fallback += 1
+	_count_held()
+
+
+# What a think ends with: the GDScript brain when no native command came (`pc` null), avoidance, the selection and the
+# command handed to the ship.
+func _act(pc: PilotCommand, pilot: AiPilot, dt: float) -> void:
 	_since_think_s = 0.0
 	_woken = false
 	_count_think(near_player)
@@ -223,7 +256,6 @@ func step(delta: float) -> void:
 		combatant.ship.running_lights = true
 	_follow_brain_target()
 	combatant.apply_commands(pc.flight, pc.combat)
-	_add_think_time(Time.get_ticks_usec() - started_us)
 
 
 # A pool ship is somebody new each time: its lights start as its new pilot wants them, whatever the last one did.
@@ -520,6 +552,11 @@ func _on_setting_changed(key: StringName, _value: Variant) -> void:
 		_settings_read = false
 	elif key == &"friendly_fire":
 		_friendly_fire = -1
+
+
+## Adds wall-clock microseconds to this tick's think time (the `BrainBatch`'s native call, M4-T18); a readout only.
+static func add_think_time(us: int) -> void:
+	_add_think_time(us)
 
 
 static func _add_think_time(us: int) -> void:

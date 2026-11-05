@@ -4,7 +4,7 @@
 use godot::obj::InstanceId;
 use godot::prelude::*;
 
-use crate::kernels::contact::{self, View, Work};
+use crate::kernels::contact::{self, Grid, Query, View, Work};
 use crate::sim_core::ScsSimCore;
 
 // `BodyKind` values of the rows that are obstacles, not contacts (src/ai/body_kind.gd).
@@ -41,7 +41,8 @@ pub struct ScsContactField {
     // The core this field reads, or none: then `own` holds the field's own load.
     core: Option<Gd<ScsSimCore>>,
     own: Own,
-    work: Work,
+    grid: Grid,
+    query: Query,
     hostile_rows: Vec<(StringName, Vec<bool>)>,
     // Per querying faction, the factions whose mines it knows: its own and its friends' (M4-T29, Q27).
     friendly_rows: Vec<(StringName, Vec<bool>)>,
@@ -116,8 +117,8 @@ impl ScsContactField {
         own.bolt_shooters = bolt_shooters.as_slice().to_vec();
         own.is_static = vec![false; n];
         own.is_mine = vec![false; n];
-        self.work.cell_m = cell_m;
-        self.work.cells = contact::sorted_cells(&own.positions, cell_m);
+        self.grid.cell_m = cell_m;
+        self.grid.cells = contact::sorted_cells(&own.positions, cell_m);
         true
     }
 
@@ -127,11 +128,11 @@ impl ScsContactField {
     #[func]
     fn attach_core(&mut self, core: Gd<ScsSimCore>, cell_m: f64) -> bool {
         self.clear();
-        self.work.cell_m = cell_m;
+        self.grid.cell_m = cell_m;
         {
             let c = core.bind();
-            self.work.cells = contact::sorted_cells(&c.rows.positions, cell_m);
-            self.work.max_static_radius = (0..c.rows.positions.len())
+            self.grid.cells = contact::sorted_cells(&c.rows.positions, cell_m);
+            self.grid.max_static_radius = (0..c.rows.positions.len())
                 .filter(|&i| c.rows.is_static[i])
                 .map(|i| c.rows.radii[i].abs())
                 .fold(0.0, f64::max);
@@ -172,7 +173,7 @@ impl ScsContactField {
             .collect();
         own.is_mine = kinds.as_slice().iter().map(|&k| k == KIND_MINE).collect();
         own.radii = radii.as_slice().to_vec();
-        self.work.max_static_radius = (0..n)
+        self.grid.max_static_radius = (0..n)
             .filter(|&i| own.is_static[i])
             .map(|i| own.radii[i].abs())
             .fold(0.0, f64::max);
@@ -219,7 +220,7 @@ impl ScsContactField {
     /// Bodies the latest contact or nearest query tested against its range (the work count).
     #[func]
     fn visited(&self) -> i64 {
-        self.work.visited
+        self.query.visited
     }
 
     /// `ContactScan.contacts_for`: the bodies within `range` of `at`, not `own_body_id`, in scan order.
@@ -227,7 +228,16 @@ impl ScsContactField {
     fn contacts(&mut self, own_body_id: i64, at: Vector3, range: f64) -> PackedInt32Array {
         let guard = self.core.as_ref().map(|c| c.bind());
         let view = view_of(&guard, &self.own);
-        let out = contact::contacts(&view, &mut self.work, own_body_id, at, range);
+        let out = contact::contacts(
+            &view,
+            &mut Work {
+                grid: &self.grid,
+                query: &mut self.query,
+            },
+            own_body_id,
+            at,
+            range,
+        );
         PackedInt32Array::from(out.as_slice())
     }
 
@@ -250,7 +260,18 @@ impl ScsContactField {
             .map(|(_, row)| row.as_slice());
         let guard = self.core.as_ref().map(|c| c.bind());
         let view = view_of(&guard, &self.own);
-        let out = contact::nearest(&view, &mut self.work, hostile, own_body_id, at, k, range);
+        let out = contact::nearest(
+            &view,
+            &mut Work {
+                grid: &self.grid,
+                query: &mut self.query,
+            },
+            hostile,
+            own_body_id,
+            at,
+            k,
+            range,
+        );
         PackedInt32Array::from(out.as_slice())
     }
 
@@ -273,7 +294,18 @@ impl ScsContactField {
             .map_or(&[], |(_, row)| row.as_slice());
         let guard = self.core.as_ref().map(|c| c.bind());
         let view = view_of(&guard, &self.own);
-        let out = contact::statics(&view, &mut self.work, friendly, own_body_id, at, k, range);
+        let out = contact::statics(
+            &view,
+            &mut Work {
+                grid: &self.grid,
+                query: &mut self.query,
+            },
+            friendly,
+            own_body_id,
+            at,
+            k,
+            range,
+        );
         PackedInt32Array::from(out.as_slice())
     }
 
@@ -316,7 +348,8 @@ impl ScsContactField {
         self.own = Own::default();
         self.hostile_rows.clear();
         self.friendly_rows.clear();
-        self.work = Work::default();
+        self.grid = Grid::default();
+        self.query = Query::default();
     }
 }
 

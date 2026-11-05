@@ -36,18 +36,30 @@ pub mod contact {
         pub bolt_shooters: &'a [i64],
     }
 
-    /// The grid over the scan and the scratch the queries fill.
+    /// The grid over the scan: built once per rows version and only read by the queries, so every worker shares it
+    /// (M4-T18).
     #[derive(Default)]
-    pub struct Work {
+    pub struct Grid {
         pub max_static_radius: f64,
         pub cell_m: f64,
         // Bodies sorted by grid cell, then by scan index.
         pub cells: Vec<((i32, i32, i32), u32)>,
+    }
+
+    /// The scratch one query fills: one per worker, never shared (M4-T18).
+    #[derive(Default)]
+    pub struct Query {
         pub visited: i64,
         pub candidates: Vec<u32>,
         pub in_range: Vec<(f32, u32)>,
         pub in_reach: Vec<(f64, u32)>,
         pub ranked: Vec<(f32, u32)>,
+    }
+
+    /// What a query works with: the shared grid and its caller's own scratch.
+    pub struct Work<'a> {
+        pub grid: &'a Grid,
+        pub query: &'a mut Query,
     }
 
     /// Every body by its grid cell, sorted by cell then by scan index.
@@ -78,7 +90,7 @@ pub mod contact {
     /// `ContactScan.contacts_for`: the bodies within `range` of `at`, not `own_body_id`, in scan order.
     pub fn contacts(
         view: &View,
-        work: &mut Work,
+        work: &mut Work<'_>,
         own_body_id: i64,
         at: Vector3,
         range: f64,
@@ -91,7 +103,7 @@ pub mod contact {
     /// `contacts` into the caller's list (no allocation per call, M4-T17).
     pub fn contacts_into(
         view: &View,
-        work: &mut Work,
+        work: &mut Work<'_>,
         own_body_id: i64,
         at: Vector3,
         range: f64,
@@ -102,7 +114,7 @@ pub mod contact {
             f64::from(d_sq) <= range_sq
         });
         out.clear();
-        out.extend(work.in_range.iter().map(|&(_, i)| i as i32));
+        out.extend(work.query.in_range.iter().map(|&(_, i)| i as i32));
     }
 
     /// `ContactScan.nearest_for` before its keeper: with `k` or fewer in range (or `k` 0 or less), all of them in scan
@@ -110,7 +122,7 @@ pub mod contact {
     /// the cut left something out. `hostile` flags the factions hostile to the asking one, in faction-table order.
     pub fn nearest(
         view: &View,
-        work: &mut Work,
+        work: &mut Work<'_>,
         hostile: Option<&[bool]>,
         own_body_id: i64,
         at: Vector3,
@@ -125,7 +137,7 @@ pub mod contact {
     /// `nearest` into the caller's list (no allocation per call, M4-T17).
     pub fn nearest_into(
         view: &View,
-        work: &mut Work,
+        work: &mut Work<'_>,
         hostile: Option<&[bool]>,
         own_body_id: i64,
         at: Vector3,
@@ -139,7 +151,7 @@ pub mod contact {
             f64::from(d_sq).partial_cmp(&range_sq) != Some(Ordering::Greater)
         });
         out.clear();
-        let in_range = &work.in_range;
+        let in_range = &work.query.in_range;
         // k of 0 or less means no cut: every contact in range, as `ContactScan.nearest_for` defines it.
         if k <= 0 || in_range.len() <= k as usize {
             out.extend(in_range.iter().map(|&(_, i)| i as i32));
@@ -156,11 +168,12 @@ pub mod contact {
         }
         // Ranked by range, then by scan index (in_range is in scan order, so a stable sort keeps that).
         let k = k as usize;
-        work.ranked.clear();
-        work.ranked.extend_from_slice(in_range);
-        work.ranked
+        work.query.ranked.clear();
+        work.query.ranked.extend_from_slice(in_range);
+        work.query
+            .ranked
             .select_nth_unstable_by(k - 1, |a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-        out.extend(work.ranked[..k].iter().map(|&(_, i)| i as i32));
+        out.extend(work.query.ranked[..k].iter().map(|&(_, i)| i as i32));
         if let Some((_, h)) = nearest_hostile
             && !out.contains(&(h as i32))
         {
@@ -174,7 +187,7 @@ pub mod contact {
     /// order. A mine counts only when `friendly` holds its faction (Q27); with no row, none do.
     pub fn statics(
         view: &View,
-        work: &mut Work,
+        work: &mut Work<'_>,
         friendly: &[bool],
         own_body_id: i64,
         at: Vector3,
@@ -189,7 +202,7 @@ pub mod contact {
     /// `statics` into the caller's list (no allocation per call, M4-T17).
     pub fn statics_into(
         view: &View,
-        work: &mut Work,
+        work: &mut Work<'_>,
         friendly: &[bool],
         own_body_id: i64,
         at: Vector3,
@@ -202,10 +215,10 @@ pub mod contact {
             return;
         }
         let reach = range.abs();
-        work.in_reach.clear();
-        let pad = reach + work.max_static_radius;
+        work.query.in_reach.clear();
+        let pad = reach + work.grid.max_static_radius;
         collect_candidates(view, work, at, pad, reach.is_finite());
-        for &i in &work.candidates {
+        for &i in &work.query.candidates {
             let j = i as usize;
             if !view.is_static[j] || view.body_ids[j] == own_body_id {
                 continue;
@@ -216,17 +229,18 @@ pub mod contact {
             // `position.distance_to(at) - radius`, with GDScript's 32-bit length.
             let surface = f64::from(length(sub(at, view.positions[j]))) - view.radii[j];
             if surface <= reach {
-                work.in_reach.push((surface, i));
+                work.query.in_reach.push((surface, i));
             }
         }
         let k = k as usize;
-        if work.in_reach.len() > k {
-            work.in_reach
+        if work.query.in_reach.len() > k {
+            work.query
+                .in_reach
                 .select_nth_unstable_by(k - 1, |a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-            work.in_reach.truncate(k);
-            work.in_reach.sort_unstable_by_key(|e| e.1);
+            work.query.in_reach.truncate(k);
+            work.query.in_reach.sort_unstable_by_key(|e| e.1);
         }
-        out.extend(work.in_reach.iter().map(|&(_, i)| i as i32));
+        out.extend(work.query.in_reach.iter().map(|&(_, i)| i as i32));
     }
 
     /// `ContactScan.broadcasts_for`: the bodies beyond `near` and within their own reach, not `own_body_id`, in scan order.
@@ -360,32 +374,32 @@ pub mod contact {
     // a rock or mine, in scan order.
     fn gather(
         view: &View,
-        work: &mut Work,
+        work: &mut Work<'_>,
         own_body_id: i64,
         at: Vector3,
         range: f64,
         accept: impl Fn(usize, f32) -> bool,
     ) {
-        work.in_range.clear();
+        work.query.in_range.clear();
         collect_candidates(view, work, at, range.abs(), range.is_finite());
-        for &i in &work.candidates {
+        for &i in &work.query.candidates {
             let j = i as usize;
             if view.is_static[j] {
                 continue;
             }
             let d_sq = dist_sq(view.positions[j], at);
             if accept(j, d_sq) && view.body_ids[j] != own_body_id {
-                work.in_range.push((d_sq, i));
+                work.query.in_range.push((d_sq, i));
             }
         }
     }
 
     // Fills `candidates` with the bodies in the grid cells within `reach` of `at`, in scan order, or every body when
     // that box would hold more cells than bodies. Counts them as the latest query's visits.
-    fn collect_candidates(view: &View, work: &mut Work, at: Vector3, reach: f64, finite: bool) {
-        work.candidates.clear();
+    fn collect_candidates(view: &View, work: &mut Work<'_>, at: Vector3, reach: f64, finite: bool) {
+        work.query.candidates.clear();
         let pad = reach * (1.0 + PAD_REL) + PAD_M;
-        let cell_m = work.cell_m;
+        let cell_m = work.grid.cell_m;
         let lo = |v: f32| cell_of(f64::from(v) - pad, cell_m);
         let hi = |v: f32| cell_of(f64::from(v) + pad, cell_m);
         let (lx, ly, lz) = (lo(at.x), lo(at.y), lo(at.z));
@@ -394,11 +408,10 @@ pub mod contact {
         let span = |l: i32, h: i32| i64::from(h) - i64::from(l) + 1;
         let columns = span(lx, hx).checked_mul(span(ly, hy));
         let grid_usable =
-            cell_m > 0.0 && finite && columns.is_some_and(|c| c <= work.cells.len() as i64);
+            cell_m > 0.0 && finite && columns.is_some_and(|c| c <= work.grid.cells.len() as i64);
         if grid_usable {
-            let Work {
-                cells, candidates, ..
-            } = work;
+            let cells = &work.grid.cells;
+            let candidates = &mut work.query.candidates;
             for cx in lx..=hx {
                 for cy in ly..=hy {
                     let start = cells.partition_point(|e| e.0 < (cx, cy, lz));
@@ -408,9 +421,9 @@ pub mod contact {
             }
             candidates.sort_unstable();
         } else {
-            work.candidates.extend(0..view.positions.len() as u32);
+            work.query.candidates.extend(0..view.positions.len() as u32);
         }
-        work.visited = work.candidates.len() as i64;
+        work.query.visited = work.query.candidates.len() as i64;
     }
 
     // Whether faction `index` is flagged in `row` (hostile, or friendly for a friendly row); a row too short says no.

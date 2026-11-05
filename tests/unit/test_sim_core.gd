@@ -650,13 +650,17 @@ const KERNEL_FORBIDDEN: Array[String] = ["Gd<", "Variant", "InstanceId", "instan
 		"RigidBody", "StringName", "GString", "Scs", "pub use", "/*", "unsafe"]
 const ROWS_FORBIDDEN: Array[String] = ["Gd<", "Variant", "InstanceId", "instance_id", "singleton", "PhysicsServer",
 		"godot_error", "godot_print", "godot_warn", "#[func]", "#[godot_api]", "GodotClass", ".get(&", ".call(", "Node",
-		"RigidBody", "Scs", "pub use", "/*", "unsafe", "Object", "Array", "Packed"]
+		"RigidBody", "Scs", "pub use", "/*", "unsafe", "Object", "Array", "Packed", "GString"]
 ## The only `use` lines the kernels may hold: the standard library, two maths builtins, and the row tables' plain data.
 const KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
 		"use crate::rows::{Bolts, FLAG_RIGID, Rows};", "use crate::rows::{FLAG_RIGID, Rows};", "use crate::rows::Rows;",
 		"use crate::v3::"]
-## The only `use` lines the row tables may hold: the standard library and the value types the columns are made of.
-const ROWS_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, GString, Vector3};"]
+## The only `use` lines the row tables may hold: the standard library and the value types the columns are made of. No engine
+## string: the worker threads share the rows (M4-T18), and an engine string cannot be shared between threads.
+const ROWS_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};"]
+## The core's worker threads (M4-T18): engine-free, the standard library and rayon only.
+const THREADS_FILE: String = "res://native/src/threads.rs"
+const THREADS_USE_ALLOWED: Array[String] = ["use std::", "use rayon::"]
 
 
 # Every non-comment line of `path` that names a forbidden token, a path into the crate, or a `godot::` path outside an
@@ -696,6 +700,7 @@ func test_the_kernels_hold_no_engine_type() -> void:
 	violations.append_array(_engine_free_violations(ROWS_FILE, ROWS_FORBIDDEN, ROWS_USE_ALLOWED))
 	for brain_file: String in BRAIN_FILES:
 		violations.append_array(_engine_free_violations(brain_file, KERNEL_FORBIDDEN, BRAIN_USE_ALLOWED))
+	violations.append_array(_engine_free_violations(THREADS_FILE, KERNEL_FORBIDDEN, THREADS_USE_ALLOWED))
 	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the kernels, the row tables or the brains: %s" % violations)
 	var source: String = FileAccess.get_file_as_string(KERNEL_FILE)
 	assert_true(source.contains("pub mod contact") and source.contains("pub mod sweep") and source.contains("pub mod ram")

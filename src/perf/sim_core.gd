@@ -12,6 +12,9 @@ extends Node
 ## (a ship back from the pool, a parked or destroyed one) are read again then. A rebase shifts the node and bolt rows
 ## once (`rebased`); the static rows come again from `StaticRows` at the next sync.
 ##
+## Threads (M4-T18): the core's per-ship passes (the brains, which `BrainBatch`, an internal child at -9, hands one batch a
+## tick, and the flight step) run on `perf_threads` worker threads, set at once whenever the setting changes.
+##
 ## The first consumer attaches it to the world (`attach`, as `FlightBatch` does); `for_tree` gives it to the classes
 ## that read it, or null when the library lacks the class or `perf_native` or `perf_native_core` is off, and then each
 ## class loads its own copy as before, so a bench pairs the two paths in one process by flipping `perf_native_core`.
@@ -86,6 +89,10 @@ func _ready() -> void:
 	core = NativeLib.instantiate(NATIVE_CLASS)
 	_out = Out.new(self)
 	add_child(_out, false, Node.INTERNAL_MODE_BACK)
+	add_child(BrainBatch.new(), false, Node.INTERNAL_MODE_BACK)
+	_apply_threads()
+	if not Settings.changed.is_connected(_on_setting_changed):
+		Settings.changed.connect(_on_setting_changed)
 	_hook(get_tree())
 	if world != null and not world.rebased.is_connected(_on_rebased):
 		world.rebased.connect(_on_rebased)
@@ -95,6 +102,8 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	_unhook()
+	if Settings.changed.is_connected(_on_setting_changed):
+		Settings.changed.disconnect(_on_setting_changed)
 	if world != null and is_instance_valid(world) and world.rebased.is_connected(_on_rebased):
 		world.rebased.disconnect(_on_rebased)
 	if _current == self:
@@ -301,6 +310,20 @@ func _on_rebased(offset: Vector3) -> void:
 		core.shift(-offset)
 
 
+# --- threads (M4-T18) --------------------------------------------------------------------------------------------
+
+
+# Gives the core the thread count `perf_threads` asks for (0: the performance cores).
+func _apply_threads() -> void:
+	if core != null and core.has_method(&"set_threads"):
+		core.set_threads(int(Settings.get_value(&"perf_threads")))
+
+
+func _on_setting_changed(key: StringName, _value: Variant) -> void:
+	if key == &"perf_threads":
+		_apply_threads()
+
+
 # --- the tree's changes ------------------------------------------------------------------------------------------
 
 
@@ -376,4 +399,14 @@ func _register_console() -> void:
 		&"fallback_calls": {"get": func() -> int: return engine_calls()[1], "doc": "The flight step's reads of the physics server in the last closed tick, for ships the core had no row for (0 outside launch ticks). The kernels themselves hold no engine type: native/src/kernels.rs"},
 		&"attribute_reads": {"get": func() -> int: return int(core.attribute_reads()) if core != null else 0, "doc": "Bodies whose faction, name, kind and radius were read (once per activation, not per tick)"},
 		&"touched": {"get": func() -> int: return int(core.touched_count()) if core != null else 0, "doc": "Bodies touched since the last sync point and not read again yet"},
+		&"threads": {"get": func() -> int: return int(core.threads()) if core != null else 0, "doc": "Worker threads the per-ship passes (the brains, the flight step) run on (perf_threads; M4-T18)"},
+		&"parallel_passes": {"get": func() -> int: return int(core.parallel_passes()) if core != null else 0, "doc": "Passes that ran across the threads so far (a pass with fewer ships than parallel_min stays on the main thread)"},
+		&"parallel_min": {"get": func() -> int: return int(core.parallel_min()) if core != null else 0, "doc": "The fewest ships a pass runs in parallel with"},
+		&"batch_us": {"get": func() -> int: return _batch().call_us if _batch() != null else 0, "unit": "us", "doc": "The last tick's one native call for every native think (BrainBatch); wall clock"},
+		&"batch_ships": {"get": func() -> int: return _batch().ships if _batch() != null else 0, "doc": "Ships the last tick's brain batch carried"},
 	}), self)
+
+
+# The brain batch under this core.
+func _batch() -> BrainBatch:
+	return get_node_or_null(NodePath(BrainBatch.NODE_NAME)) as BrainBatch
