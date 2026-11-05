@@ -12,6 +12,6 @@ static func enabled() -> bool:
 	return OS.get_environment(ENV) == "1"
 
 
-## GUT's skip verdict for a slow file: empty (run it) when the switch is on, else why it was left out.
-static func skip_reason() -> String:
-	return "" if enabled() else "slow file, left out of focused runs (set %s=1 to run it)" % ENV
+## GUT's skip verdict for a slow file: false (run it) when the switch is on, else why it was left out (GUT skips on any String).
+static func skip_reason() -> Variant:
+	return false if enabled() else "slow file, left out of focused runs (set %s=1 to run it)" % ENV

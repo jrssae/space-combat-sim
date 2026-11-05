@@ -23,10 +23,10 @@ func after_each() -> void:
 func test_the_switch_reads_the_environment() -> void:
 	OS.set_environment(SlowTests.ENV, "")
 	assert_false(SlowTests.enabled())
-	assert_ne(SlowTests.skip_reason(), "", "off: skipped, with a reason")
+	assert_typeof(SlowTests.skip_reason(), TYPE_STRING, "off: skipped, with a reason (GUT skips on any String)")
 	OS.set_environment(SlowTests.ENV, "1")
 	assert_true(SlowTests.enabled())
-	assert_eq(SlowTests.skip_reason(), "", "on: runs")
+	assert_eq(SlowTests.skip_reason(), false, "on: runs (a String, even empty, would skip it)")
 
 
 func test_every_named_slow_file_skips_itself_when_the_switch_is_off() -> void:
@@ -36,9 +36,9 @@ func test_every_named_slow_file_skips_itself_when_the_switch_is_off() -> void:
 		var instance: Object = script.new()
 		assert_true(instance.has_method("should_skip_script"), "%s asks the switch" % path)
 		OS.set_environment(SlowTests.ENV, "")
-		assert_ne(str(instance.call("should_skip_script")), "", "%s is left out of a focused run" % path)
+		assert_typeof(instance.call("should_skip_script"), TYPE_STRING, "%s is left out of a focused run" % path)
 		OS.set_environment(SlowTests.ENV, "1")
-		assert_eq(str(instance.call("should_skip_script")), "", "%s runs with GUT_SLOW=1" % path)
+		assert_eq(instance.call("should_skip_script"), false, "%s runs with GUT_SLOW=1" % path)
 		instance.free()
 
 
