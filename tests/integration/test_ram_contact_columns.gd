@@ -6,7 +6,7 @@ extends GutTest
 ## digest of every ship's pose, spin and hull.
 
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
-const SETTINGS: Array[StringName] = [&"ram_damage", &"perf_ram_contact_columns"]
+const SETTINGS: Array[StringName] = [&"ram_damage", &"perf_ram_contact_columns", &"perf_native_ram_contacts"]
 
 var _saved: Dictionary = {}
 
@@ -15,6 +15,7 @@ func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
 	Settings.set_value(&"ram_damage", true)
+	Settings.set_value(&"perf_native_ram_contacts", false)  # this file pairs T34's columns against the samples; T35's native read is test_core_state's
 
 
 func after_each() -> void:

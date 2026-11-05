@@ -61,7 +61,9 @@ func test_a_committed_rammer_hits_its_target_in_at_least_8_of_10_runs() -> void:
 				origin, hash(["rammer", run]))
 		var rammer: Combatant = main.ships.acquire("RAIDER 9", origin.plus_local(start), ScenarioLoader.basis_facing(-start),
 				Vector3.ZERO, made["brain"] as PilotBrain, ShipPool.DEFAULT_TYPE)
-		rammer.damageable.hull.apply(rammer.damageable.hull.max_hp * 0.8)  # 20 % left
+		# 20 % left, through the hull's own hit path, so what watches the hull points (the core's columns, M4-T35) hears it.
+		rammer.damageable.apply_hit(HitInfo.new(rammer.ship.get_instance_id(), 0, &"", rammer.damageable.hull.max_hp * 0.8,
+				Vector3.ZERO, Vector3.ZERO, 0.0, HitInfo.CAUSE_CONSOLE))
 		await get_tree().physics_frame
 		await get_tree().physics_frame
 		var pilot := rammer.driver.brain as AiPilot
@@ -113,7 +115,8 @@ func test_in_the_dogfight_a_hurt_reckless_raider_left_alone_rams_at_the_far_rate
 		main.ship.global_position += Vector3(30000.0, 0.0, 0.0)
 		for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
 			if c.display_name == "RAIDER 4":
-				c.damageable.hull.apply(c.damageable.hull.max_hp * 0.8)
+				c.damageable.apply_hit(HitInfo.new(c.ship.get_instance_id(), 0, &"", c.damageable.hull.max_hp * 0.8, Vector3.ZERO,
+						Vector3.ZERO, 0.0, HitInfo.CAUSE_CONSOLE))  # through the hull's hit path: the core's columns hear it (M4-T35)
 				c.damageable.invulnerable = true
 			else:
 				main.ships.release(c)
