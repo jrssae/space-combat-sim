@@ -397,16 +397,7 @@ impl ScsCannons {
             return;
         }
         let command = core.live_command(cannon.body_id).copied();
-        let trigger = command.map_or(cannon.trigger, |rc| rc.fire);
-        cannon.gate.update(now_s, trigger, fired);
-        if fired.is_empty() {
-            return;
-        }
         let rc = command.unwrap_or_default();
-        let ordinal = core
-            .tier
-            .index_of(cannon.body_id)
-            .map_or(0, |i| core.tier.ordinal[i]);
         let target = if rc.target > 0 {
             usize::try_from(core.rows.row_of_id(rc.target))
                 .ok()
@@ -416,11 +407,32 @@ impl ScsCannons {
         } else {
             None
         };
+        let trigger = command.map_or(cannon.trigger, |rc| rc.fire);
+        cannon.gate.update(now_s, trigger, fired);
+        if fired.is_empty() {
+            return;
+        }
+        let ordinal = core
+            .tier
+            .index_of(cannon.body_id)
+            .map_or(0, |i| core.tier.ordinal[i]);
         for &m in fired.iter() {
             core.tier_shots_total += 1;
             let Some(j) = target else {
                 continue;
             };
+            let b = &core.rows.bases[r];
+            let forward = Vector3::new(-b.rows[0].z, -b.rows[1].z, -b.rows[2].z);
+            let excess = tier_fire::gate_excess_m(
+                core.rows.positions[r],
+                core.rows.velocities[r],
+                forward,
+                core.rows.positions[j],
+                core.rows.velocities[j],
+                cannon.muzzle_speed,
+                rc.cone_rad,
+                rc.miss_m,
+            );
             let range = f64::from(crate::v3::distance(
                 core.rows.positions[r],
                 core.rows.positions[j],
@@ -430,9 +442,16 @@ impl ScsCannons {
                 core.rows.radii[j],
                 cannon.hit_radius,
                 cannon.muzzle_speed,
+                tier_fire::closing_speed(
+                    core.rows.positions[r],
+                    core.rows.velocities[r],
+                    core.rows.positions[j],
+                    core.rows.velocities[j],
+                ),
                 rc.aim_error_rad,
                 rc.miss_m,
                 cannon.muzzle_speed * cannon.lifetime_s,
+                excess,
             );
             if tier_fire::roll(core.tier_seed, core.syncs(), ordinal, m as i64) < chance {
                 core.tier_hits_total += 1;

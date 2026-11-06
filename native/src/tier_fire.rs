@@ -6,19 +6,22 @@
 use godot::builtin::Vector3;
 
 use crate::rows::{FLAG_HULK, FLAG_RIGID, FLAG_TIER, Rows};
-use crate::v3::dist_sq;
+use crate::v3::{add, dist_sq, dot, length, scale, sub};
 
-// The fighter shot's model (calibrated against full-fidelity duels, Cycle log M4-T22). A bolt hits when its miss at the
-// target falls inside the disc the hull presents: the miss is spread by the shooter's wandering aim (its skill), by how
-// far off the lead its fire gate lets it shoot, and by the target's unforeseen manoeuvres while the bolt flies.
+// The fighter shot's model (fitted to the shots of six seeded full-fidelity 12 against 12 melees, Cycle log M4-T22). A
+// bolt hits when its miss at the target falls inside the disc the hull presents. The miss is spread by how far off the
+// lead the fire gate lets the pilot shoot (its miss distance), by the nose's wander while the brain steers (an angle, so
+// it grows with range), by the pilot's own aim error (its skill), and by the target's manoeuvres while the bolt flies.
 // How much of a hull's bounding radius a bolt must cross to hit (hulls are thinner than their bounding spheres).
-const SIZE_FACTOR: f64 = 0.6;
+const SIZE_FACTOR: f64 = 0.7;
 // The aim error's spread per axis: the brain's wander is 0.6 and 0.4 of the error on two sines.
 const AIM_SPREAD: f64 = 0.51;
-// The gate's spread per axis: the nose may sit anywhere within the miss distance of the lead.
-const GATE_SPREAD: f64 = 0.5;
+// The gate's spread: the nose may sit anywhere within the miss distance of the lead.
+const GATE_SPREAD: f64 = 1.0;
+// The nose's wander about where the brain points it, rad.
+const NOSE_SPREAD_RAD: f64 = 0.007;
 // What a target's unforeseen manoeuvres add, as a steady acceleration over the bolt's flight, m/s^2.
-const DODGE_ACCEL_MPS2: f64 = 10.0;
+const DODGE_ACCEL_MPS2: f64 = 8.0;
 // A floor on the miss (muzzle offsets, the convergence), m.
 const MISS_FLOOR_M: f64 = 1.0;
 
@@ -44,28 +47,34 @@ const MISSILE_HIT_FALLOFF_M: f64 = 12000.0;
 const GUN_DODGE_ACCEL_MPS2: f64 = 10.0;
 
 /// The chance one fighter shot hits: `range_m` to the target, the target's bounding radius, the bolt's hit radius, speed
-/// and reach (speed times lifetime), the shooter's aim error (radians, its skill) and the miss distance its fire gate
-/// allows. 0 past the bolt's reach.
+/// and reach (speed times lifetime), how fast the two close (m/s, negative opening), the shooter's aim error (radians,
+/// its skill), the miss distance its fire gate allows, and how far outside that gate the shot leaves (`gate_excess_m`).
+/// 0 past the bolt's reach.
 #[allow(clippy::too_many_arguments)]
 pub fn hit_chance(
     range_m: f64,
     target_radius_m: f64,
     hit_radius_m: f64,
     muzzle_speed_mps: f64,
+    closing_mps: f64,
     aim_error_rad: f64,
     miss_m: f64,
     reach_m: f64,
+    excess_m: f64,
 ) -> f64 {
     if !(range_m >= 0.0) || range_m > reach_m || muzzle_speed_mps <= 0.0 {
         return 0.0;
     }
-    let flight_s = range_m / muzzle_speed_mps;
+    // The bolt's flight: it meets a closing target sooner, an opening one later.
+    let flight_s = range_m / (muzzle_speed_mps + closing_mps).max(0.25 * muzzle_speed_mps);
     let aim = range_m * aim_error_rad.max(0.0) * AIM_SPREAD;
     let gate = miss_m.max(0.0) * GATE_SPREAD;
+    let nose = range_m * NOSE_SPREAD_RAD;
     let dodge = 0.5 * DODGE_ACCEL_MPS2 * flight_s * flight_s;
-    disc_chance(
+    offset_disc_chance(
         target_radius_m * SIZE_FACTOR + hit_radius_m,
-        aim * aim + gate * gate + dodge * dodge + MISS_FLOOR_M * MISS_FLOOR_M,
+        aim * aim + gate * gate + nose * nose + dodge * dodge + MISS_FLOOR_M * MISS_FLOOR_M,
+        excess_m.max(0.0),
     )
 }
 
@@ -98,6 +107,71 @@ pub fn missile_chance(range_m: f64) -> f64 {
         return 0.0;
     }
     MISSILE_HIT_NEAR * (1.0 - range_m / MISSILE_HIT_FALLOFF_M)
+}
+
+/// How far outside its pilot's fire gate a tier fighter's shot leaves, m at the target's range: 0 while the row's nose
+/// (`forward`, unit) at `at` moving at `v` is within the gate of the lead on a target at `target_at` moving at
+/// `target_v` (within `cone_rad` of it and within `miss_m` of it at that range), for bolts at `muzzle_speed_mps`. A near
+/// pilot's gate closes when its nose swings off; a tier pilot's 4 Hz brain still holds the trigger, so its shot carries
+/// the excess as a miss.
+#[allow(clippy::too_many_arguments)]
+pub fn gate_excess_m(
+    at: Vector3,
+    v: Vector3,
+    forward: Vector3,
+    target_at: Vector3,
+    target_v: Vector3,
+    muzzle_speed_mps: f64,
+    cone_rad: f64,
+    miss_m: f64,
+) -> f64 {
+    let line = sub(target_at, at);
+    let range = f64::from(length(line));
+    if range <= 1e-3 || muzzle_speed_mps <= 0.0 {
+        return 0.0;
+    }
+    // The lead: where the target will be when a bolt reaches it (two passes of the flight time).
+    let rel = sub(target_v, v);
+    let mut flight_s = range / muzzle_speed_mps;
+    let mut lead = line;
+    for _ in 0..2 {
+        lead = add(line, scale(rel, flight_s as f32));
+        flight_s = f64::from(length(lead)) / muzzle_speed_mps;
+    }
+    let lead_len = f64::from(length(lead));
+    if lead_len <= 1e-3 {
+        return 0.0;
+    }
+    let off = (f64::from(dot(forward, lead)) / lead_len)
+        .clamp(-1.0, 1.0)
+        .acos();
+    let allowed = cone_rad.max(0.0).min((miss_m.max(0.0) / range).atan());
+    if off <= allowed {
+        return 0.0;
+    }
+    // Off by more than a right angle, a shot never comes near.
+    let excess = (off.min(std::f64::consts::FRAC_PI_2) - allowed).tan() * range;
+    excess.min(1.0e6)
+}
+
+/// How fast a target at `target_at` moving at `target_v` closes on a shooter at `at` moving at `v`, m/s (negative when
+/// they open).
+pub fn closing_speed(at: Vector3, v: Vector3, target_at: Vector3, target_v: Vector3) -> f64 {
+    let line = sub(target_at, at);
+    let range = f64::from(length(line));
+    if range <= 0.0 {
+        return 0.0;
+    }
+    -f64::from(dot(sub(target_v, v), line)) / range
+}
+
+// `disc_chance` with the miss's centre `offset` from the target's (the same Gaussian overlap, exact at both ends).
+fn offset_disc_chance(r: f64, sigma2: f64, offset: f64) -> f64 {
+    let spread = r * r + 2.0 * sigma2;
+    if spread <= 0.0 {
+        return 0.0;
+    }
+    disc_chance(r, sigma2) * (-(offset * offset) / spread).exp()
 }
 
 // A circular Gaussian miss of variance `sigma2` per axis against a disc of radius `r`, the disc itself taken as a Gaussian

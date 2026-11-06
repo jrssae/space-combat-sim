@@ -23,7 +23,8 @@ pub const EVENT_SETTLE: u8 = 8;
 pub const CMD_LEN: usize = 10;
 
 /// One ship's last native command, and what the tier's to-hit roll reads with it (M4-T22): the target its pilot wants
-/// (a marker id; 0 or less for none), the pilot's aim error in radians and the miss distance its fire gate allows, m.
+/// (a marker id; 0 or less for none), the pilot's aim error in radians and its fire gate (the miss distance, m, and the
+/// widest angle, rad).
 #[derive(Clone, Copy, Default)]
 pub struct RowCommand {
     pub cmd: [f64; CMD_LEN],
@@ -32,6 +33,8 @@ pub struct RowCommand {
     pub target: i64,
     pub aim_error_rad: f64,
     pub miss_m: f64,
+    /// The widest angle off the lead its fire gate allows, rad (the gate also holds the nose within `miss_m` of it).
+    pub cone_rad: f64,
 }
 
 impl RowCommand {

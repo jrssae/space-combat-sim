@@ -1596,6 +1596,7 @@ impl ScsBrains {
             Pending::Tiered { slot, on } => {
                 if let Some(h) = find(work, slot) {
                     h.tiered = on;
+                    h.woken = h.woken || on; // its first tier think comes at once, not a beat later
                 }
             }
             Pending::Wake { slot } => {
