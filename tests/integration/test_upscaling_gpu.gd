@@ -140,42 +140,74 @@ func test_under_fsr2_the_sky_carries_the_cameras_turn() -> void:
 			assert_lt(got.distance_to(expected), TOLERANCE_PX + 0.1, "frame %d point %s: read %s, turn %s" % [f, points[i], got, expected])
 
 
-# The point flies across black space; once it has passed, the pixels it crossed must be black again, except within its own
-# size and one frame's motion behind it. A guard, not a probe of the vectors: FSR 2.2 clamps its history to the current
-# picture, so measured on the RX 6950 XT the same point with no vectors (transparent) left no trail either.
+# Flies a point along y = 0 under FSR 2.2 at half scale and returns how bright the path it left behind still is against the same
+# view without the point (`worst`), the length of path checked, and the light around where the point is now.
+func _fly(radius: float, step_m: float, frames: int, write_vectors: bool) -> Dictionary:
+	_upscale(Viewport.SCALING_3D_MODE_FSR2, 0.5)
+	sky.enabled = true
+	var from := Vector3(-34, 0, -30)  # the left of the window: GUT's panel covers its right
+	var point: MeshInstance3D = _point(radius)
+	if not write_vectors:
+		var material := point.material_override as StandardMaterial3D
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA  # transparent meshes write no velocity and no depth
+	point.position = from
+	point.visible = false
+	await _settle(24)
+	var reference: Image = get_viewport().get_texture().get_image()
+	point.visible = true
+	await _settle(4)
+	var step := Vector3(step_m, 0.0, 0.0)
+	for f: int in frames:
+		point.position += step
+		await RenderingServer.frame_post_draw
+	var image: Image = get_viewport().get_texture().get_image()
+	var center: Vector2 = camera.unproject_position(point.position)
+	var radius_px: float = camera.unproject_position(point.position + Vector3(radius, 0, 0)).x - center.x
+	var motion_px: float = center.x - camera.unproject_position(point.position - step).x
+	var trail_end: int = floori(center.x - radius_px - motion_px - 2.0)
+	var start: int = roundi(camera.unproject_position(from).x + radius_px + 2.0)
+	var y: int = roundi(center.y)
+	var worst: float = 0.0
+	for x: int in range(maxi(start, 0), trail_end):
+		for dy: int in [-1, 0, 1]:
+			worst = maxf(worst, _lit(image, Vector2i(x, y + dy)) - _lit(reference, Vector2i(x, y + dy)))
+	var light: float = 0.0
+	var box: int = ceili(radius_px * 3.0) + 1
+	for x: int in range(roundi(center.x) - box, roundi(center.x) + box + 1):
+		for yy: int in range(y - box, y + box + 1):
+			light += maxf(_lit(image, Vector2i(x, yy)) - _lit(reference, Vector2i(x, yy)), 0.0)
+	point.visible = false  # out of the next flight's picture
+	return {"worst": worst, "checked_px": trail_end - start, "light": light, "disc": PI * radius_px * radius_px,
+			"peak": _lit(image, Vector2i(center)), "size": image.get_size()}
+
+
+# A guard, not a probe of the vectors (`test_under_fsr2_a_moving_point_writes_its_motion_at_the_internal_size` is that):
+# FSR 2.2 clamps its history to the colours around each pixel, and over black space that clamp alone clears a stale bright point,
+# so the same flight with no vectors (a transparent point) left no trail either. Tried in fix round 1 over a grey checker, where
+# the clamp is wide: neither run left a ghost of the point; the opaque one left a soft band where the checker was uncovered and
+# rebuilt from the half-scale picture, so a no-vector run cannot serve as a control that fails.
 func test_fsr2_leaves_no_trail_behind_a_moving_point() -> void:
 	if not _gpu():
 		return
-	_upscale(Viewport.SCALING_3D_MODE_FSR2, 0.5)
-	sky.enabled = true
-	var point: MeshInstance3D = _point(0.3)
-	point.position = Vector3(-34, 0, -30)  # the left of the window: GUT's panel covers its right
-	await _settle(8)
-	var step := Vector3(0.25, 0.0, 0.0)
-	for f: int in 30:
-		point.position += step
-		await RenderingServer.frame_post_draw
-	await RenderingServer.frame_post_draw
-	var image: Image = get_viewport().get_texture().get_image()
-	var window := Vector2(image.get_size())
-	assert_eq(Vector2i(window), Vector2i(get_viewport().get_visible_rect().size), "the picture is at the window's size")
-	var center: Vector2 = camera.unproject_position(point.position)
-	var radius_px: float = camera.unproject_position(point.position + Vector3(0.3, 0, 0)).x - center.x
-	var motion_px: float = camera.unproject_position(point.position).x - camera.unproject_position(point.position - step).x
-	assert_gt(_lit(image, Vector2i(center)), 0.5, "the point is drawn where it is")
-	var y: int = roundi(center.y)
-	var trail_start: int = floori(center.x - radius_px - motion_px - 2.0)
-	var start: int = roundi(camera.unproject_position(Vector3(-34, 0, -30)).x)
-	var worst: float = 0.0
-	var worst_x: int = -1
-	for x: int in range(maxi(start, 0), trail_start):
-		for dy: int in [-1, 0, 1]:
-			var lit: float = _lit(image, Vector2i(x, y + dy))
-			if lit > worst:
-				worst = lit
-				worst_x = x
-	assert_lt(worst, LIT, "the path behind is black (brightest %.3f at x %d, the point at %.0f, radius %.1f px, step %.1f px)" %
-			[worst, worst_x, center.x, radius_px, motion_px])
+	var run: Dictionary = await _fly(0.3, 0.25, 30, true)
+	assert_eq(run["size"], Vector2i(get_viewport().get_visible_rect().size), "the picture is at the window's size")
+	assert_gt(run["checked_px"], 40, "the path behind the point is long enough to check")
+	assert_gt(run["peak"], 0.5, "the point is drawn where it is")
+	assert_lt(run["worst"], LIT, "the path behind is as dark as before the point came (brightest %.3f)" % run["worst"])
+
+
+# A measure, recorded for the return checklist: how much light a sub-pixel point flying fast keeps under FSR 2.2 at half scale,
+# with vectors (opaque) and without (transparent), as the light summed around it against a fully lit disc of its size.
+func test_a_sub_pixel_fast_point_under_fsr2_measure() -> void:
+	if not _gpu():
+		return
+	var lines := PackedStringArray()
+	for vectors: bool in [true, false]:
+		var run: Dictionary = await _fly(0.06, 0.5, 30, vectors)
+		lines.append("%s: light %.2f of a %.2f-pixel disc (%.0f %%), peak %.2f" % ["vectors" if vectors else "no vectors",
+				run["light"], run["disc"], 100.0 * run["light"] / maxf(run["disc"], 1e-6), run["peak"]])
+	print("[sub-pixel] %s" % "; ".join(lines))
+	pass_test("[sub-pixel] %s" % "; ".join(lines))
 
 
 func test_a_one_pixel_hud_line_stays_one_window_pixel_wide() -> void:
