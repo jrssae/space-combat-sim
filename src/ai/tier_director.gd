@@ -242,8 +242,8 @@ func _demote_ship(sim: SimCore, c: Combatant) -> bool:
 			ship.global_position, ship.linear_velocity, ship.global_basis, ship.angular_velocity))
 	if handle == 0:
 		return false
-	sim.core.tier_set_attrs(body_id, c.faction, c.display_name, c.damageable.bounding_radius, c.targetable.broadcast_range_m,
-			c.damageable.hull.fraction())
+	sim.core.tier_set_attrs(body_id, c.targetable.get_instance_id(), c.faction, c.display_name, c.damageable.bounding_radius,
+			c.targetable.broadcast_range_m, c.damageable.hull.fraction())
 	sim.core.tier_set_control(body_id, Vector3.ZERO, command, ship.assist_state(), ship.assist_on)
 	if ship.hulk:
 		sim.core.tier_set_hulk(body_id, true)
@@ -261,8 +261,8 @@ func _demote_capital(sim: SimCore, cap: CapitalStandin) -> bool:
 			cap.global_position, cap.linear_velocity, cap.global_basis, cap.angular_velocity))
 	if handle == 0:
 		return false
-	sim.core.tier_set_attrs(body_id, cap.faction, cap.targetable.display_name, cap.damageable.bounding_radius,
-			cap.targetable.broadcast_range_m, cap.damageable.hull.fraction())
+	sim.core.tier_set_attrs(body_id, cap.targetable.get_instance_id(), cap.faction, cap.targetable.display_name,
+			cap.damageable.bounding_radius, cap.targetable.broadcast_range_m, cap.damageable.hull.fraction())
 	sim.core.tier_set_control(body_id, cap.cruise_velocity, PackedFloat64Array(), 0.0, false)
 	cap.park_for_tier()
 	_tiered_capitals[body_id] = cap

@@ -1256,13 +1256,15 @@ impl ScsSimCore {
         (slot, generation)
     }
 
-    // Gives the slots of the members that left the groups back, so the map holds only the live members.
+    // Gives the slots of the members that left the groups back, so the map holds only the live members; the lowest slot is
+    // taken first (the map's order is not a stable one).
     fn free_slots_of(&mut self, gone: impl Iterator<Item = i64>) {
         for key in gone {
             if let Some((slot, _)) = self.slot_of.remove(&key) {
                 self.free_slots.push(slot);
             }
         }
+        self.free_slots.sort_unstable_by(|a, b| b.cmp(a));
     }
 
     // Reads member `m`'s attributes again when it has just turned active or was touched, marks it active now, and gives it

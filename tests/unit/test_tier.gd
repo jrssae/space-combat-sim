@@ -81,14 +81,14 @@ func _fighter(sim: SimCore, type_ix: int, body_id: int, at: Vector3, velocity: V
 		command: PackedFloat64Array = PackedFloat64Array(), assist_on: bool = false, basis: Basis = Basis.IDENTITY) -> int:
 	var handle: int = int(sim.core.tier_add(SimCore.KIND_SHIP, body_id, 0, type_ix, at, velocity, basis, angular))
 	assert_lt(handle, 0, "a tier handle is below zero, apart from the bodies' handles")
-	assert_true(sim.core.tier_set_attrs(body_id, Factions.EARTH_ALLIANCE, "TIER %d" % body_id, 12.0, 0.0, 1.0))
+	assert_true(sim.core.tier_set_attrs(body_id, body_id + 500000, Factions.EARTH_ALLIANCE, "TIER %d" % body_id, 12.0, 0.0, 1.0))
 	assert_true(sim.core.tier_set_control(body_id, Vector3.ZERO, command, 0.0, assist_on))
 	return handle
 
 
 func _capital(sim: SimCore, body_id: int, at: Vector3, velocity: Vector3, cruise: Vector3) -> int:
 	var handle: int = int(sim.core.tier_add(SimCore.KIND_CAPITAL, body_id, 0, 0, at, velocity, Basis.IDENTITY, Vector3.ZERO))
-	assert_true(sim.core.tier_set_attrs(body_id, Factions.RAIDERS, "CAP %d" % body_id, 150.0, 0.0, 1.0))
+	assert_true(sim.core.tier_set_attrs(body_id, 0, Factions.RAIDERS, "CAP %d" % body_id, 150.0, 0.0, 1.0))
 	assert_true(sim.core.tier_set_control(body_id, cruise, PackedFloat64Array(), 0.0, false))
 	return handle
 
@@ -269,6 +269,11 @@ func test_tier_rows_join_the_scan_rows_after_the_statics_flagged_tier() -> void:
 	assert_eq(int(sim.core.row_flags(fighter_row)) & SimCore.FLAG_RIGID, 0, "no Jolt body")
 	assert_eq(sim.core.row_name(fighter_row), "TIER 708", "the name rides beside the row")
 	assert_eq(sim.core.row_name(capital_row), "CAP 802")
+	assert_eq(int(sim.core.row_flags(fighter_row)) & SimCore.FLAG_TIER, SimCore.FLAG_TIER)
+	var snapshot_ids: Array = []
+	assert_eq(int(sim.core.rows_digest()) != 0, true)
+	var state_708: Dictionary = sim.core.tier_state(708)
+	assert_eq(int(state_708["marker_id"]), 708 + 500000, "the row carries its marker's id")
 	var handle: int = sim.handle_of(708)
 	assert_lt(handle, 0, "the tier row's handle")
 	assert_eq(sim.row_of(handle), fighter_row, "and it resolves")

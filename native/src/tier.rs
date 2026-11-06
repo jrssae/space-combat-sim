@@ -63,6 +63,8 @@ impl Gravity {
 #[derive(Default)]
 pub struct TierRows {
     pub body_ids: Vec<i64>,
+    /// The marker's id (what a selection names), the body's when it has none.
+    pub marker_ids: Vec<i64>,
     pub hull_ids: Vec<i64>,
     pub handles: Vec<i64>,
     pub kinds: Vec<u8>,
@@ -129,6 +131,7 @@ impl TierRows {
         }
         let at = self.len();
         self.body_ids.push(body_id);
+        self.marker_ids.push(body_id);
         self.hull_ids.push(hull_id);
         self.handles.push(handle);
         self.kinds.push(kind);
@@ -161,6 +164,7 @@ impl TierRows {
         let at = self.by_body.remove(&body_id)?;
         let last = self.len() - 1;
         self.body_ids.swap_remove(at);
+        self.marker_ids.swap_remove(at);
         self.hull_ids.swap_remove(at);
         self.handles.swap_remove(at);
         self.kinds.swap_remove(at);
@@ -198,12 +202,13 @@ impl TierRows {
     }
 
     /// Appends every tier row to the scan's rows: a tier row is a ship to the contacts (not a hulk), has a hull but no
-    /// active one (nothing sweeps or rams it here), and no Jolt body. The shell appends the names and RIDs beside them.
+    /// active one (nothing sweeps or rams it here), and no Jolt body; its id is its marker's, so a selection that names it
+    /// still finds its row. The shell appends the names and RIDs beside them.
     pub fn append_to(&self, rows: &mut Rows) {
         for i in 0..self.len() {
             let hulk = self.hulk[i];
             rows.body_ids.push(self.body_ids[i]);
-            rows.ids.push(self.body_ids[i]);
+            rows.ids.push(self.marker_ids[i]);
             rows.faction_ix.push(self.faction_ix[i]);
             rows.positions.push(self.positions[i]);
             rows.velocities.push(self.velocities[i]);

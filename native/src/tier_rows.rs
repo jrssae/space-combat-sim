@@ -45,6 +45,7 @@ impl ScsSimCore {
         let mut out = VarDictionary::new();
         out.set("kind", i64::from(t.kinds[i]));
         out.set("body_id", t.body_ids[i]);
+        out.set("marker_id", t.marker_ids[i]);
         out.set("handle", t.handles[i]);
         out.set("position", t.positions[i]);
         out.set("velocity", t.velocities[i]);
@@ -163,11 +164,14 @@ impl ScsSimCore {
         handle
     }
 
-    /// A tier row's faction, name, radius, broadcast reach and hull 0..1, as its marker and hull hold them.
+    /// A tier row's marker id (0: none, the body's id stands), faction, name, radius, broadcast reach and hull 0..1, as its
+    /// marker and hull hold them.
     #[func]
+    #[allow(clippy::too_many_arguments)]
     fn tier_set_attrs(
         &mut self,
         body_id: i64,
+        marker_id: i64,
         faction: StringName,
         name: GString,
         radius: f64,
@@ -178,6 +182,9 @@ impl ScsSimCore {
         let Some(i) = self.tier.index_of(body_id) else {
             return false;
         };
+        if marker_id != 0 {
+            self.tier.marker_ids[i] = marker_id;
+        }
         self.tier.faction_ix[i] = faction_ix;
         self.tier.radii[i] = radius;
         self.tier.reach[i] = reach;
