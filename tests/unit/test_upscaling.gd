@@ -1,19 +1,20 @@
 extends GutTest
-## M4-T40: the upscalers and internal-resolution presets `Upscaling` offers, their exact scales, and what `auto` picks for a
-## window. Pure: no viewport needed.
+## M4-T40: the upscalers and internal-resolution presets `Upscaling` offers, their exact scales and the defaults measured.
+## Pure: no viewport needed.
 
 
 func test_the_upscalers_and_presets_are_the_ones_the_task_lists() -> void:
-	assert_eq(Upscaling.UPSCALERS, [&"auto", &"native", &"bilinear", &"fsr1", &"fsr2"])
-	assert_eq(Upscaling.PRESETS, [&"auto", &"native", &"quality", &"balanced", &"performance", &"ultra_performance", &"custom"])
+	assert_eq(Upscaling.UPSCALERS, [&"native", &"bilinear", &"fsr1", &"fsr2"])
+	assert_eq(Upscaling.PRESETS, [&"native", &"quality", &"balanced", &"performance", &"ultra_performance", &"custom"])
 
 
 func test_the_settings_offer_exactly_them() -> void:
 	var schema := SettingsSchema.new()
 	assert_eq(schema.get_choices(&"upscaler"), Upscaling.UPSCALERS)
 	assert_eq(schema.get_choices(&"upscale_preset"), Upscaling.PRESETS)
-	assert_true(Upscaling.UPSCALERS.has(schema.get_default(&"upscaler")))
-	assert_true(Upscaling.PRESETS.has(schema.get_default(&"upscale_preset")))
+	# Measured (the M4 Cycle log, M4-T40): FSR 2.2 costs more GPU than native at every preset on the RX 6950 XT.
+	assert_eq(schema.get_default(&"upscaler"), &"native", "native by default at every window size")
+	assert_eq(schema.get_default(&"upscale_preset"), &"quality", "the preset an upscaler starts at")
 	assert_true(schema.has_key(&"upscale_custom_scale"))
 	assert_true(schema.has_key(&"fsr_sharpness"))
 	assert_eq(schema.get_entry(&"fsr_sharpness")["min"], 0.0, "Godot's own scale: 0 is the sharpest")
@@ -58,42 +59,28 @@ func test_only_fsr2_is_temporal() -> void:
 	assert_true(Upscaling.temporal(&"fsr2"))
 
 
-func test_auto_picks_fsr2_quality_for_a_4k_window_and_native_below() -> void:
-	var big: Dictionary = Upscaling.plan(&"auto", &"auto", 0.75, 2160)
-	assert_eq(big["upscaler"], &"fsr2")
-	assert_eq(big["preset"], &"quality")
-	assert_eq(big["scale"], 1.0 / 1.5)
-	assert_eq(big["mode"], Viewport.SCALING_3D_MODE_FSR2)
-	var six_k: Dictionary = Upscaling.plan(&"auto", &"auto", 0.75, 3456)
-	assert_eq(six_k["upscaler"], &"fsr2")
-	for lines: int in [1080, 1440, 1600]:
-		var small: Dictionary = Upscaling.plan(&"auto", &"auto", 0.75, lines)
-		assert_eq(small["upscaler"], &"native", "%d lines" % lines)
-		assert_eq(small["scale"], 1.0, "%d lines" % lines)
-		assert_eq(small["mode"], Viewport.SCALING_3D_MODE_BILINEAR)
-
-
 func test_native_renders_at_the_windows_size_whatever_the_preset() -> void:
-	var plan: Dictionary = Upscaling.plan(&"native", &"performance", 0.75, 2160)
+	var plan: Dictionary = Upscaling.plan(&"native", &"performance", 0.75)
 	assert_eq(plan["scale"], 1.0)
 	assert_eq(plan["upscaler"], &"native")
 
 
-func test_an_explicit_upscaler_with_the_auto_preset_follows_the_window() -> void:
-	assert_eq(Upscaling.plan(&"fsr1", &"auto", 0.75, 2160)["scale"], 1.0 / 1.5)
-	assert_eq(Upscaling.plan(&"fsr1", &"auto", 0.75, 1080)["scale"], 1.0, "FSR 1.0 at a 1 080 window keeps native lines")
-	assert_eq(Upscaling.plan(&"fsr2", &"auto", 0.75, 1080)["upscaler"], &"fsr2", "FSR 2.2 at 1.0 is its anti-aliasing alone")
+func test_fsr2_at_the_native_preset_is_its_anti_aliasing_alone() -> void:
+	var plan: Dictionary = Upscaling.plan(&"fsr2", &"native", 0.75)
+	assert_eq(plan["upscaler"], &"fsr2")
+	assert_eq(plan["scale"], 1.0)
 
 
 func test_explicit_choices_are_kept() -> void:
-	var plan: Dictionary = Upscaling.plan(&"bilinear", &"balanced", 0.75, 1080)
+	var plan: Dictionary = Upscaling.plan(&"bilinear", &"balanced", 0.75)
 	assert_eq(plan["upscaler"], &"bilinear")
 	assert_eq(plan["preset"], &"balanced")
 	assert_eq(plan["scale"], 1.0 / 1.7)
-	assert_eq(Upscaling.plan(&"fsr2", &"custom", 0.8, 2160)["scale"], 0.8)
+	assert_eq(Upscaling.plan(&"fsr2", &"custom", 0.8)["scale"], 0.8)
 
 
 func test_unknown_values_fall_back_to_native() -> void:
-	var plan: Dictionary = Upscaling.plan(&"dlss", &"silly", 0.75, 2160)
+	var plan: Dictionary = Upscaling.plan(&"dlss", &"silly", 0.75)
 	assert_eq(plan["upscaler"], &"native")
+	assert_eq(Upscaling.plan(&"auto", &"auto", 0.75)["upscaler"], &"native", "auto is gone")
 	assert_eq(plan["scale"], 1.0)

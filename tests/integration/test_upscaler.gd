@@ -68,18 +68,28 @@ func test_the_settings_apply_live_to_the_root_viewport() -> void:
 	assert_eq(root.scaling_3d_mode, Viewport.SCALING_3D_MODE_BILINEAR)
 
 
-func test_auto_follows_the_window() -> void:
+func test_a_resize_keeps_the_presets_share() -> void:
 	var root: Window = get_tree().root
-	Settings.set_value(&"upscaler", &"auto")
-	Settings.set_value(&"upscale_preset", &"auto")
+	Settings.set_value(&"upscaler", &"fsr2")
+	Settings.set_value(&"upscale_preset", &"performance")
 	root.size = Vector2i(3840, 2160)
 	await get_tree().process_frame
-	assert_eq(root.scaling_3d_mode, Viewport.SCALING_3D_MODE_FSR2, "a 4K window gets FSR 2.2")
-	assert_almost_eq(root.scaling_3d_scale, 1.0 / 1.5, 1e-6, "at Quality")
+	assert_eq(root.scaling_3d_scale, 0.5)
+	assert_eq(upscaler.internal_lines(), 1080)
 	root.size = Vector2i(1920, 1080)
 	await get_tree().process_frame
-	assert_eq(root.scaling_3d_scale, 1.0, "a 1 080 window renders native")
+	assert_eq(root.scaling_3d_scale, 0.5)
+	assert_eq(upscaler.internal_lines(), 540)
+
+
+func test_the_default_renders_native() -> void:
+	var schema := SettingsSchema.new()
+	Settings.set_value(&"upscaler", schema.get_default(&"upscaler"))
+	Settings.set_value(&"upscale_preset", schema.get_default(&"upscale_preset"))
+	var root: Window = get_tree().root
+	assert_eq(root.scaling_3d_scale, 1.0)
 	assert_eq(root.scaling_3d_mode, Viewport.SCALING_3D_MODE_BILINEAR)
+	assert_false(env.anti_aliasing.held(), "the anti-aliasing setting applies")
 
 
 func test_the_settings_survive_a_restart() -> void:

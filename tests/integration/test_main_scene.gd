@@ -127,13 +127,10 @@ func test_a_very_large_window_renders_its_3d_at_full_resolution() -> void:
 	var root: Window = get_tree().root
 	var size_backup: Vector2i = root.size
 	var scale_backup: float = root.scaling_3d_scale
-	var upscaler_backup: Variant = Settings.get_value(&"upscaler")
-	Settings.set_value(&"upscaler", &"native")  # M4-T40: auto would pick FSR 2.2 at Quality for this window
 	root.scaling_3d_scale = 1.0
 	root.size = Vector2i(6144, 3456)
 	await get_tree().process_frame
 	assert_eq(root.scaling_3d_scale, 1.0, "no splat-era tile cap on the 3D (M4-T36)")
-	Settings.set_value(&"upscaler", upscaler_backup)
 	root.size = size_backup
 	root.scaling_3d_scale = scale_backup
 
