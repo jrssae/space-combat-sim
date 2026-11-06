@@ -9,7 +9,8 @@ extends Node
 ##
 ## Arguments after `--`: scene=<name> camera=<chase|cockpit> warmup=<s> window=<s> near=<m> far=<m> steps=<n> label=<text>
 ## exec="<console statements>" shot=<png path> scale3d=<1080p|factor> (M4-T07: the 3D scale, held every frame;
-## 1080p renders the 3D at 1 080 lines whatever the window's size, for the fullscreen check on a larger screen)
+## 1080p renders the 3D at 1 080 lines whatever the window's size, for the fullscreen check on a larger screen, bilinear;
+## `setting` leaves it to settings.upscaler and upscale_preset, M4-T40)
 ## pause_at=<s> (M4-T27: the game paused at that many seconds after the start, so a window can measure the drawing alone)
 
 const WARMUP_S: float = 6.0
@@ -266,11 +267,14 @@ func _on_frame() -> void:
 	_last_frame_usec = now
 
 
-# The 3D scale the run asked for, set again whenever something (Main on a resize) changed it.
+# The 3D scale the run asked for, set again whenever something (Main on a resize) changed it. A held scale is a bilinear
+# stretch, as before M4-T40; `setting` leaves the 3D to the upscaler settings.
 func _hold_3d_scale() -> void:
 	var wanted: String = String(options["scale3d"])
-	if wanted.is_empty():
+	if wanted.is_empty() or wanted == "setting":
 		return
+	if Settings.get_value(&"upscaler") != &"bilinear":
+		Settings.set_value(&"upscaler", &"bilinear")
 	var root: Window = get_tree().root
 	var scale: float = minf(1.0, 1080.0 / float(maxi(root.size.y, 1))) if wanted == "1080p" else float(wanted)
 	if scale > 0.0 and not is_equal_approx(root.scaling_3d_scale, scale):

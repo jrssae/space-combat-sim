@@ -156,6 +156,15 @@ const ENTRIES: Dictionary = {
 		"doc": "Threads the AI step's job runs its brains' pass on (M4-T24): 1 = the step's worker thread alone (the default: the job never queues the main thread's passes behind its chunks), n = a pool of its own with n threads, 0 = the core's pool (perf_threads), shared with the main thread's passes; live"},
 	&"physics_max_steps_per_frame": {"type": TYPE_INT, "default": 3, "min": 1, "max": 8,
 		"doc": "Physics ticks one frame may run to catch up (Engine.max_physics_steps_per_frame; Godot's default is 8): past the cap a slow tick lowers the simulation rate instead of the frame rate (M4-T24, refactor finding 15); live"},
+	# M4-T40
+	&"upscaler": {"type": TYPE_ENUM, "default": &"auto", "choices": [&"auto", &"native", &"bilinear", &"fsr1", &"fsr2"],
+		"doc": "How the 3D view is rendered and enlarged to the window (M4-T40): auto (fsr2 for a window 2 160 lines or taller, native below), native (the window's own size), bilinear, fsr1 (FSR 1.0, spatial, with fsr_sharpness) or fsr2 (FSR 2.2, temporal, its own anti-aliasing: anti_aliasing is held off while it is on). The HUD stays at the window's size; no frame generation; live"},
+	&"upscale_preset": {"type": TYPE_ENUM, "default": &"auto", "choices": [&"auto", &"native", &"quality", &"balanced", &"performance", &"ultra_performance", &"custom"],
+		"doc": "The 3D view's internal resolution for the upscaler (M4-T40): native 1.0, quality 0.67, balanced 0.59, performance 0.5, ultra_performance 0.33 of the window's height, custom (upscale_custom_scale), auto (quality for a window 2 160 lines or taller, native below); live"},
+	&"upscale_custom_scale": {"type": TYPE_FLOAT, "default": 0.75, "min": 0.33, "max": 1.0,
+		"doc": "The 3D view's share of the window's height when upscale_preset is custom (M4-T40); live"},
+	&"fsr_sharpness": {"type": TYPE_FLOAT, "default": 0.2, "min": 0.0, "max": 2.0,
+		"doc": "FSR's sharpening, for fsr1 and fsr2 (M4-T40): Godot's scale, 0 the sharpest, 2 the softest; live"},
 }
 
 ## Keys that were renamed: old name -> current name. `Settings.revert` reads a saved file's old key when the current

@@ -6,12 +6,14 @@ extends Node
 ## saves a screenshot per mode from the first round, for the look comparisons (H).
 ##
 ## Arguments after `--`: layout=<name> n=<ships> seed=<k> warmup=<s> pause=<on|off> modes=<a,b,...> rounds=<r> frames=<f>
-## settle=<f> scale3d=<1080p|factor> camera=<chase|cockpit> shots=<dir> exec="<console statements once the scene is set>"
+## settle=<f> scale3d=<1080p|factor|setting> camera=<chase|cockpit> shots=<dir> exec="<console statements once the scene is set>"
 ## glow=<on|off> (a control: the environment's glow switched for the whole run)
+## upscalers=<upscaler:preset,...> (M4-T40: the turns are upscalers instead of anti-aliasing modes, e.g. native,fsr2:quality,
+## fsr1:0.75; a number is a custom scale; give scale3d=setting so the presets set the 3D's size)
 
 var options: Dictionary = {"layout": "battle", "n": "300", "seed": "1", "warmup": "10", "pause": "on",
 		"modes": ",".join(PackedStringArray(AntiAliasingMode.MODES)), "rounds": "4", "frames": "90", "settle": "30",
-		"scale3d": "1080p", "camera": "chase", "shots": "", "exec": "", "glow": "on"}
+		"scale3d": "1080p", "camera": "chase", "shots": "", "exec": "", "glow": "on", "upscalers": ""}
 var main: Main
 var _modes: PackedStringArray
 var _gpu: Dictionary = {}
@@ -30,6 +32,8 @@ func _ready() -> void:
 		if pair.size() == 2:
 			options[pair[0]] = pair[1]
 	_modes = String(options["modes"]).split(",", false)
+	if not String(options["upscalers"]).is_empty():
+		_modes = String(options["upscalers"]).split(",", false)
 	for mode: String in _modes:
 		_gpu[mode] = PackedFloat64Array()
 		_frame[mode] = PackedFloat64Array()
@@ -95,7 +99,10 @@ func _on_frame() -> void:
 
 
 func _begin_mode() -> void:
-	Settings.set_value(&"anti_aliasing", StringName(_modes[_mode_index]))
+	if String(options["upscalers"]).is_empty():
+		Settings.set_value(&"anti_aliasing", StringName(_modes[_mode_index]))
+	else:
+		_run("upscale %s" % _modes[_mode_index].replace(":", " "))
 	_phase = &"settle"
 	_count = 0
 
@@ -115,7 +122,7 @@ func _shot(mode: String) -> void:
 	var dir: String = String(options["shots"])
 	DirAccess.make_dir_recursive_absolute(dir)
 	var image: Image = get_viewport().get_texture().get_image()
-	image.save_png("%s/%s.png" % [dir, mode])
+	image.save_png("%s/%s.png" % [dir, mode.replace(":", "_")])
 
 
 func _finish() -> void:
@@ -134,6 +141,10 @@ func _finish() -> void:
 
 func _hold_3d_scale() -> void:
 	var wanted: String = String(options["scale3d"])
+	if wanted == "setting":
+		return
+	if Settings.get_value(&"upscaler") != &"bilinear":
+		Settings.set_value(&"upscaler", &"bilinear")  # a held scale is a bilinear stretch, as before M4-T40
 	var root: Window = get_tree().root
 	var scale: float = minf(1.0, 1080.0 / float(maxi(root.size.y, 1))) if wanted == "1080p" else float(wanted)
 	if scale > 0.0 and not is_equal_approx(root.scaling_3d_scale, scale):

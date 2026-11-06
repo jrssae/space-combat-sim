@@ -8,7 +8,8 @@
 #
 # Usage: scripts/fullscreen_check.sh <layout> <n> [label]      e.g. scripts/fullscreen_check.sh typical 58
 # Environment: FULLSCREEN_WARMUP (8), FULLSCREEN_WINDOW (20), FULLSCREEN_SEED (1), FULLSCREEN_RES (1920x1080),
-#              FULLSCREEN_EXEC (more console statements after the bench starts), FULLSCREEN_SCALE (1080p),
+#              FULLSCREEN_EXEC (more console statements after the bench starts), FULLSCREEN_SCALE (1080p, a bilinear stretch;
+#              `setting` leaves the 3D to the upscaler settings, M4-T40, e.g. with FULLSCREEN_EXEC="upscale fsr2 quality"),
 #              FULLSCREEN_BENCH_OPTS (more bench options, e.g. "rocks=0"), FULLSCREEN_PAUSE_AT (seconds after the start at which the
 #              game is paused, so the window measures the drawing alone, as render_compare.sh's frozen runs do), GODOT_BIN.
 # Writes reports/perf/<label>/fullscreen.md (a verdict and, since M4-P2, Q48's row: average FPS, the 1 % low, the p99 frame time) and

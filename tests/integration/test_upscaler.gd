@@ -55,9 +55,9 @@ func test_the_settings_apply_live_to_the_root_viewport() -> void:
 	for name: StringName in [&"bilinear", &"fsr1", &"fsr2"]:
 		assert_eq(Settings.set_value(&"upscaler", name), OK)
 		assert_eq(root.scaling_3d_mode, Upscaling.mode(name), String(name))
-		assert_eq(root.scaling_3d_scale, 1.0 / 1.7, String(name))
+		assert_almost_eq(root.scaling_3d_scale, 1.0 / 1.7, 1e-6, String(name))
 	Settings.set_value(&"upscale_preset", &"ultra_performance")
-	assert_eq(root.scaling_3d_scale, 1.0 / 3.0)
+	assert_almost_eq(root.scaling_3d_scale, 1.0 / 3.0, 1e-6)
 	Settings.set_value(&"upscale_preset", &"custom")
 	Settings.set_value(&"upscale_custom_scale", 0.8)
 	assert_almost_eq(root.scaling_3d_scale, 0.8, 1e-6)
@@ -75,7 +75,7 @@ func test_auto_follows_the_window() -> void:
 	root.size = Vector2i(3840, 2160)
 	await get_tree().process_frame
 	assert_eq(root.scaling_3d_mode, Viewport.SCALING_3D_MODE_FSR2, "a 4K window gets FSR 2.2")
-	assert_eq(root.scaling_3d_scale, 1.0 / 1.5, "at Quality")
+	assert_almost_eq(root.scaling_3d_scale, 1.0 / 1.5, 1e-6, "at Quality")
 	root.size = Vector2i(1920, 1080)
 	await get_tree().process_frame
 	assert_eq(root.scaling_3d_scale, 1.0, "a 1 080 window renders native")
@@ -121,7 +121,7 @@ func test_the_hud_stays_at_the_windows_size() -> void:
 	Settings.set_value(&"upscaler", &"fsr2")
 	Settings.set_value(&"upscale_preset", &"ultra_performance")
 	await get_tree().process_frame
-	assert_eq(root.scaling_3d_scale, 1.0 / 3.0)
+	assert_almost_eq(root.scaling_3d_scale, 1.0 / 3.0, 1e-6)
 	assert_eq(root.get_visible_rect(), window_rect, "the 2D canvas keeps the window's size")
 	assert_eq(panel.size, size, "the HUD does not shrink with the 3D")
 	assert_eq(panel.size, window_rect.size)

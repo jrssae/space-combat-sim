@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://src/rendering/post_effects.gd" id="9_post"]
 [ext_resource type="Script" path="res://src/rendering/sky_velocity_effect.gd" id="10_skyvel"]
 [ext_resource type="Script" path="res://src/rendering/anti_aliasing.gd" id="11_aa"]
+[ext_resource type="Script" path="res://src/rendering/upscaler.gd" id="12_up"]
 
 [sub_resource type="CompositorEffect" id="CompositorEffect_skyvel"]
 script = ExtResource("10_skyvel")
@@ -56,3 +57,7 @@ sun = NodePath("../LightRig/KeyStar")
 [node name="AntiAliasing" type="Node" parent="." node_paths=PackedStringArray("world_environment")]
 script = ExtResource("11_aa")
 world_environment = NodePath("../WorldEnvironment")
+
+[node name="Upscaler" type="Node" parent="." node_paths=PackedStringArray("anti_aliasing")]
+script = ExtResource("12_up")
+anti_aliasing = NodePath("../AntiAliasing")

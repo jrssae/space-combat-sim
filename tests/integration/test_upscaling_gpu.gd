@@ -141,14 +141,15 @@ func test_under_fsr2_the_sky_carries_the_cameras_turn() -> void:
 
 
 # The point flies across black space; once it has passed, the pixels it crossed must be black again, except within its own
-# size and one frame's motion behind it.
+# size and one frame's motion behind it. A guard, not a probe of the vectors: FSR 2.2 clamps its history to the current
+# picture, so measured on the RX 6950 XT the same point with no vectors (transparent) left no trail either.
 func test_fsr2_leaves_no_trail_behind_a_moving_point() -> void:
 	if not _gpu():
 		return
 	_upscale(Viewport.SCALING_3D_MODE_FSR2, 0.5)
 	sky.enabled = true
 	var point: MeshInstance3D = _point(0.3)
-	point.position = Vector3(-6, 0, -30)
+	point.position = Vector3(-34, 0, -30)  # the left of the window: GUT's panel covers its right
 	await _settle(8)
 	var step := Vector3(0.25, 0.0, 0.0)
 	for f: int in 30:
@@ -164,7 +165,7 @@ func test_fsr2_leaves_no_trail_behind_a_moving_point() -> void:
 	assert_gt(_lit(image, Vector2i(center)), 0.5, "the point is drawn where it is")
 	var y: int = roundi(center.y)
 	var trail_start: int = floori(center.x - radius_px - motion_px - 2.0)
-	var start: int = roundi(camera.unproject_position(Vector3(-6, 0, -30)).x)
+	var start: int = roundi(camera.unproject_position(Vector3(-34, 0, -30)).x)
 	var worst: float = 0.0
 	var worst_x: int = -1
 	for x: int in range(maxi(start, 0), trail_start):

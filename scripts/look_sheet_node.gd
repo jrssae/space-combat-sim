@@ -137,6 +137,8 @@ func _hold_3d_scale() -> void:
 	var wanted: String = String(options["scale3d"])
 	if wanted.is_empty():
 		return
+	if Settings.get_value(&"upscaler") != &"bilinear":
+		Settings.set_value(&"upscaler", &"bilinear")  # a held scale is a bilinear stretch, as before M4-T40
 	var root: Window = get_tree().root
 	var scale: float = minf(1.0, 1080.0 / float(maxi(root.size.y, 1))) if wanted == "1080p" else float(wanted)
 	if scale > 0.0 and not is_equal_approx(root.scaling_3d_scale, scale):
