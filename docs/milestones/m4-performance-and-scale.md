@@ -225,7 +225,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T38 | Anti-aliasing (Q59, Q60): Godot's MSAA 2x and 4x, TAA, FXAA and SMAA as a setting, live; motion vectors fixed for everything TAA (and T40's FSR 2.2) needs; defaults chosen by measurement | T36 | Opus | `project.godot` sets no anti-aliasing, so edges and thin hull detail alias; TAA and FSR 2.2 both need correct motion vectors from the multimeshes, particles and bolts | R | done (2026-11-05, one fix round, CI green on `d8b73ce`; SMAA the default, a look call the costs allow; at the 6K window's native size `battle` 300 draws in 2.83 ms off, 3.20 ms SMAA, 5.50 ms TAA; Cycle log, M4-T38) |
 | T40 | Upscaling (Q59, Q60): FSR 2.2 (temporal, its own anti-aliasing) and FSR 1.0 (spatial, with sharpness) with internal-resolution presets from a third of the output's height up to native, applied live with the HUD at window size; no frame generation; defaults chosen by measurement | T38 | Opus | Since T36 a 4K window renders 4K; FSR 2.2 from 1 080 or 1 440 lines looks better than a bilinear stretch and costs less than native; below 1 080 is for weaker GPUs; supersedes T26 | R | in progress (dispatched 2026-11-05, Opus, after T38) |
 | T38 | Anti-aliasing (Q59, Q60): Godot's MSAA 2x and 4x, TAA, FXAA and SMAA as a setting, live; motion vectors fixed for everything TAA (and T40's FSR 2.2) needs; defaults chosen by measurement | T36 | Opus | `project.godot` sets no anti-aliasing, so edges and thin hull detail alias; TAA and FSR 2.2 both need correct motion vectors from the multimeshes, particles and bolts | R | in progress (dispatched 2026-11-05, Opus, beside T24; implemented in its worktree, awaiting review) |
-| T40 | Upscaling (Q59, Q60): FSR 2.2 (temporal, its own anti-aliasing) and FSR 1.0 (spatial, with sharpness) with internal-resolution presets from a third of the output's height up to native, applied live with the HUD at window size; no frame generation; defaults chosen by measurement | T38 | Opus | Since T36 a 4K window renders 4K; FSR 2.2 from 1 080 or 1 440 lines looks better than a bilinear stretch and costs less than native; below 1 080 is for weaker GPUs; supersedes T26 | R | in progress (dispatched 2026-11-05, Opus, after T38; implemented in its worktree, awaiting review) |
+| T40 | Upscaling (Q59, Q60): FSR 2.2 (temporal, its own anti-aliasing) and FSR 1.0 (spatial, with sharpness) with internal-resolution presets from a third of the output's height up to native, applied live with the HUD at window size; no frame generation; defaults chosen by measurement | T38 | Opus | Since T36 a 4K window renders 4K; FSR 2.2 from 1 080 or 1 440 lines looks better than a bilinear stretch and costs less than native; below 1 080 is for weaker GPUs; supersedes T26 (measured otherwise: FSR 2.2 costs more GPU than native here, so native is the default) | R | in progress (dispatched 2026-11-05, Opus, after T38; implemented in its worktree, review fix round 1 done, awaiting re-review) |
 | T39 | FSR 4 study (Q59): whether AMD's FSR 4 can run in this game on Linux, Vulkan and Godot 4.7 through the native library, on the maintainer's RDNA 2 card, under the GPL-3.0 licence; a go or no-go with a plan | T38 | Sonnet | FSR 4 is not in Godot 4.7; AMD's support for RDNA 2 and for Vulkan is new or announced, so it needs facts before code | M | not needed (skipped by the maintainer, Q60) |
 
 ### M4-T01 Benchmark harness, budget and baseline
@@ -2205,13 +2205,22 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   more GPU than native at every preset on this card (frozen `battle` 300 in the 6K window: native 3.19 ms, FSR 2.2 Quality 5.86,
   Ultra Performance 4.46; a 3840x2160 window: 1.27 against 2.27), and live it costs 17 to 26 FPS at `battle` 300. So `auto` (FSR 2.2
   Quality for a 4K or larger window) was built, measured and taken out, and native is the default at every window size. FSR 1.0 and
-  bilinear do save GPU (1.4 to 3.8 ms live at 6K) and gain 14 to 24 % FPS at `battle` 300; whether FSR 1.0 Quality looks as good as
-  native in the 6K window is a look call left to the maintainer (return checklist). FSR 2.2's ghosting: none seen on the live
-  screenshots and no trail behind a moving point in the GPU test (which FSR 2.2's history clamp would hide even without vectors);
-  a sub-pixel fast point dims under FSR 2.2 at half scale. So no FSR 3.1 proposal now; it stays the fallback if the maintainer
+  bilinear do save GPU (1.4 to 3.8 ms live at 6K), but the frame is CPU-bound, so the FPS gain was +3 to +5 % in the in-process
+  live round; whether FSR 1.0 Quality looks as good as native in the 6K window is a look call left to the maintainer (return
+  checklist). FSR 2.2's ghosting: none seen on the live screenshots. The GPU trail test is a guard, not evidence (FSR 2.2's history
+  clamp would clear the trail even without vectors); the vector read-back test is the real check. A sub-pixel fast point keeps its
+  light under FSR 2.2 at half scale but spreads it (brightest pixel 0.25 to 0.39 of white). So no FSR 3.1 proposal now; it stays the fallback if the maintainer
   finds the ghosting unacceptable (Q60). The measure tools take `scale3d=setting` (`FULLSCREEN_SCALE=setting`) and `aa_compare`
   takes `upscalers=` turns; their held scale is a bilinear stretch as before. New tests: `test_upscaling`, `test_upscaler`,
   `test_upscaling_gpu` (pending headless; 4 of 4 on the real renderer).
+- **Fix round 1 (2026-11-05, the review):** the FSR 1.0 FPS claim is corrected to the measured +3 to +5 % (the frame is CPU-bound);
+  the sub-pixel figure is now a recorded GPU measure (the light is kept but spread, not lost); the trail test checks the path
+  against the view before the point came and cannot pass on an empty path, and says why it is a guard (a checker backdrop gave no
+  failing no-vector control). The bug the first round found is fixed: `scripts/measure_fight_node.gd` runs every `exec` statement
+  after a holding `bench` (`ConsoleRegistry.execute_all`), so `FULLSCREEN_EXEC` and `RC_EXEC` apply for the first time (proved with
+  TAA through `FULLSCREEN_EXEC`), and the measure log prints the upscaler and anti-aliasing in use. T35's node-path fullscreen pair
+  (and T24's inline rows if switched that way) relied on it and are re-measured by the controller. New tests:
+  `test_console_execute_all`, `test_measure_exec`; `test_upscaling_gpu` 5 of 5 on the real renderer.
 
 ##### M4-T39 FSR 4 study (Q59)
 - **Not needed (Q60, 2026-11-05):** the maintainer skipped FSR 4; the section below is kept as the record of what was asked.
@@ -5707,8 +5716,9 @@ the 6K window, 8 s warm-up, 20 s measured, vsync off, one run each, so the FPS a
 | fsr2 | ultra performance | 1 152 | 38.5 | 13.2 | 60.45 | 25.96 | 6.90 | 1818 |
 
 Native's GPU time (3.1 to 4.7 ms) sits under the frame at `battle` 300 and 500, which are CPU-bound (9.8 and 24 ms), and close to it at
-`typical` (a 4 ms frame). FSR 1.0 and bilinear cut the GPU time by 1.4 to 3.8 ms and gain 14 to 24 % at `battle` 300 and 5 to 23 %
-at `typical`; at 500 the gain is within the noise. FSR 2.2 costs 17 to 26 FPS at `battle` 300 and takes `typical` from 250 to 111
+`typical` (a 4 ms frame). FSR 1.0 and bilinear cut the GPU time by 1.4 to 3.8 ms. Their FPS in these single runs (117 to 127 at
+`battle` 300 against native's 102) does not follow their GPU time and is not a measured gain: the in-process live round below,
+where the turns share one process, gives +3 to +5 %, which is what a CPU-bound frame allows (fix round 1 correction). FSR 2.2 costs 17 to 26 FPS at `battle` 300 and takes `typical` from 250 to 111
 to 186 FPS: its frame is 2 to 5 ms
 longer, of which the GPU is most (its pass) and the rest is the motion-vector work it shares with TAA (the bolt slot check, 0.8 ms at
 2 300 bolts, and Godot's own). VRAM: FSR 2.2 adds 210 MB (Ultra Performance) to 1 770 MB (its native preset) over native's 1 608 MB;
@@ -5722,15 +5732,31 @@ bilinear Quality 2.45 and 123, FSR 1.0 Quality 3.29 and 125, FSR 2.2 Quality 8.2
 `edges`, `hull_detail`, `stars`, `far_dots`, `hud_text` (frozen `battle` 300, twelve turns, crops at the 6K window's pixels) and
 `moving_hull`, `moving_rocks`, `moving_left` (the live round). At Quality, FSR 1.0 and FSR 2.2 stay close to native; at Ultra
 Performance the stars and far dots enlarge into soft blobs. The HUD text is equally sharp in every turn. No ghosting showed on the
-live sheets. In the GPU test a 7-pixel point flying across black left no trail under FSR 2.2, but neither did the same point with
-no motion vectors (transparent), because FSR 2.2 clamps its history to the current picture; a sub-pixel point (1.4 window pixels,
-6 pixels a frame) at half scale kept only about a fifth of its light with vectors, so far bolts may fade at low presets.
+live sheets. The GPU trail test does not test ghosting: a 7-pixel point flying across black left no trail under FSR 2.2, but
+neither did the same point with no motion vectors (transparent), because FSR 2.2 clamps its history to the current picture. Over a
+grey checker (fix round 1) neither left a ghost of the point either; the opaque one left a soft band where the uncovered checker was
+rebuilt from the half-scale picture. A sub-pixel point (1.4 window pixels, 6 pixels a frame) at half scale keeps its light with
+vectors (1.61 to 1.65 summed around it against the 1.56 a fully lit disc of its size gives) but spreads it (its brightest pixel
+0.25 to 0.39 of white), so far bolts may read soft at low presets (`test_a_sub_pixel_fast_point_under_fsr2_measure`, two runs). The
+first report's "a fifth of its light" summed a box too small for the spread point and was wrong.
 
 **Defaults:** `native` at every window size, with the preset at `quality` for when an upscaler is picked. This is a measurement:
 FSR 2.2 Quality for a 4K or larger window (the brief's starting point) was built as `auto`, measured dearer than native at every
 preset on this card, and taken out. FSR 1.0 Quality is the cheaper option worth a look (1.4 ms less GPU at 6K); making it the
 default for large windows would be a look call, so it stays offered. FSR 3.1 is not proposed: no ghosting was found, and its gain
 over FSR 2.2 would not change that FSR 2.2's cost exceeds native's here.
+
+**Fix round 1: `FULLSCREEN_EXEC` and `RC_EXEC` never ran before this round.** `bench` holds the console until its run ends
+(`ConsoleResult.wait_frames`), and `scripts/measure_fight_node.gd` ran its `exec` line through `ConsoleRegistry.execute`, which keeps
+the statements after a hold for later, so every statement after `bench` was dropped. The measure tool now runs them all at set-up
+(`ConsoleRegistry.execute_all`) and its log prints the upscaler, preset, scale and anti-aliasing in use. Proof, `battle` 300 native,
+`FULLSCREEN_EXEC="set settings.anti_aliasing taa"` against `smaa` (`reports/perf/m4-t40_fr1/`): TAA 7.16 ms GPU, 82.0 FPS, 2 025 MB;
+SMAA 4.72 ms, 99.6 FPS, 1 608 MB, which matches T38's TAA row (7.18 ms, 2 025 MB). Earlier rows that relied on the variable: T35's
+"before" pair with the bolt nodes, `reports/perf/M4-T35_before_nodes_fs300` and `_fs500` (`perf_native_bolt_rows` off through
+`FULLSCREEN_EXEC`), so those rows measured the rows path, and "the bolt form did not move the frame" compared the build with itself;
+and T24's fullscreen inline rows if they were switched the same way (its report does not say). The controller re-measures them after
+this merge. T38's and T40's own tables used saved settings files and are not affected; `--console-exec` runs (`bench.sh`,
+`bench_quick.sh`) go through `DebugConsole`, which replays the rest, and are not affected either.
 
 ## Definition of done (M4)
 

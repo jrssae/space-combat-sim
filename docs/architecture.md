@@ -976,20 +976,24 @@ live to the viewport's `scaling_3d_mode`, `scaling_3d_scale` and `fsr_sharpness`
   FSR 2.2's own pass costs more than the pixels it saves: with the 3D at the 6144x3456 window's own size, frozen `battle` 300, native
   with SMAA takes 3.19 ms of GPU, FSR 2.2 Quality 5.86, Ultra Performance 4.46; in a 3840x2160 window native 1.27 and FSR 2.2 Quality
   2.27. Live at `battle` 300 FSR 2.2 lowers the average from 102 to 76 to 85 FPS and adds 210 to 1 770 MB of VRAM. FSR 1.0 and
-  bilinear do save GPU (FSR 1.0 Quality 2.19 ms frozen, 3.28 live against 4.71) and gain 14 to 24 % FPS at `battle` 300, within the
-  sim's run-to-run noise at 500; whether FSR 1.0 Quality looks as good as native in a large window is the maintainer's call (H, on the
-  return checklist). The full tables are in the M4 Cycle log, M4-T40.
+  bilinear do save GPU (FSR 1.0 Quality 2.19 ms frozen, 3.28 live against 4.71), but the FPS gain is small because the frame is
+  CPU-bound: +3 to +5 % in the in-process live round (native 119.0, bilinear Quality 123.1, FSR 1.0 Quality 124.7 FPS), not
+  distinguishable from run-to-run noise in the single fullscreen runs. Whether FSR 1.0 Quality looks as good as native in a large
+  window is the maintainer's call (H, on the return checklist). The full tables are in the M4 Cycle log, M4-T40.
 - **The look.** Stars and far dots are single pixels at the internal resolution, so at Ultra Performance (FSR 1.0 or 2.2) they
   enlarge into soft blobs; at Quality they stay close to native. FSR 2.2 left no trail behind a moving point over black space, but it
   clamps its history so hard that a point without vectors left none either. A sub-pixel point (1.4 window pixels across, 6 pixels a
-  frame) at half scale kept only about a fifth of its light (0.29 of a 1.6-pixel disc), so small fast things such as far bolts may
-  fade under FSR 2.2 at low presets. No ghosting showed on the live screenshots; the look is on the return checklist. If FSR 2.2's
+  frame) at half scale keeps its light under FSR 2.2 but spreads it: the light summed around it is 1.6 to 1.65 against the 1.56 a
+  fully lit disc of its size gives, while its brightest pixel is only 0.25 to 0.39 of white (`test_upscaling_gpu`'s recorded
+  measure, two runs), so small fast things such as far bolts read softer at low presets. No ghosting showed on the live screenshots; the look is on the return checklist. If FSR 2.2's
   ghosting proves unacceptable, FSR 3.1's upscaler (AMD's FidelityFX SDK, open source, Vulkan) in the native library is the fallback
   (Q60), still without frame generation.
 
 `scripts/aa_compare.sh ... scale3d=setting upscalers=native,fsr1:quality,fsr2:quality` takes the same turns over upscalers, and
-`FULLSCREEN_SCALE=setting` lets `scripts/fullscreen_check.sh` measure the upscaler settings (from a saved settings file: the bench
-command defers the rest of `FULLSCREEN_EXEC`). A held scale (`1080p` or a number, the tools' default) is a bilinear stretch, as
+`FULLSCREEN_SCALE=setting` lets `scripts/fullscreen_check.sh` measure the upscaler settings, set through `FULLSCREEN_EXEC` (for
+example `upscale fsr2 quality`) or a saved settings file. Until T40's fix round the measure tool dropped every `FULLSCREEN_EXEC` and
+`RC_EXEC` statement, because `bench` holds the console until its run ends; it now runs them all at set-up
+(`ConsoleRegistry.execute_all`), and its log prints the upscaler and anti-aliasing in use. A held scale (`1080p` or a number, the tools' default) is a bilinear stretch, as
 before T40.
 
 ## 8. Camera
