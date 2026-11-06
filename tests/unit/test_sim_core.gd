@@ -252,6 +252,36 @@ func test_rows_survive_a_pool_release_and_acquire_with_a_new_handle() -> void:
 	_assert_same_rows(ContactScan.shared(get_tree()), ContactScan.from_tree(get_tree()), "the scan after the reuse")
 
 
+func test_the_slot_map_stays_bounded_over_spawn_and_release_cycles_and_refuses_an_old_handle() -> void:
+	if _skipped():
+		return
+	_body(Vector3(-300.0, 20.0, 400.0), Factions.RAIDERS, "ANCHOR")
+	var core: SimCore = _core()
+	core.sync_now()
+	var first: int = 0
+	var most: int = 0
+	for cycle: int in 300:
+		var body: RigidBody3D = _body(Vector3(100.0 + float(cycle), 0.0, -50.0), Factions.EARTH_ALLIANCE, "R %d" % cycle)
+		core.sync_now()
+		var handle: int = core.handle_of(body.get_instance_id())
+		assert_gt(handle, 0, "cycle %d: the new body has a row" % cycle)
+		if cycle == 0:
+			first = handle
+		most = maxi(most, int(core.core.slot_count()))
+		body.get_parent().remove_child(body)
+		body.free()
+		core.sync_now()
+	assert_lte(most, 4, "the slot map never holds more than the live members (a marker and a hull each for the anchor and one body): %d" % most)
+	assert_eq(int(core.core.slot_count()), 2, "only the anchor's two are left after 300 bodies came and went")
+	var reused: RigidBody3D = _body(Vector3(7.0, 8.0, 9.0), Factions.EARTH_ALLIANCE, "REUSED")
+	core.sync_now()
+	var again: int = core.handle_of(reused.get_instance_id())
+	assert_eq(again >> 32, first >> 32, "the new body took the first body's slot")
+	assert_ne(again, first, "with a later generation, so the old handle is not the new row's")
+	assert_eq(core.row_of(first), -1, "the old handle to the reused slot is refused")
+	assert_eq(core.row_name(again), "REUSED", "and the new handle reads the new row")
+
+
 func test_a_rebase_shifts_every_row_once() -> void:
 	if _skipped():
 		return

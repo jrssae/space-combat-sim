@@ -183,9 +183,12 @@ pub struct ScsSimCore {
     markers: Vec<Member>,
     hulls: Vec<Member>,
     marker_at: HashMap<i64, usize>,
-    // A member's slot by its key, kept across `set_members` with its generation.
+    // A member's slot by its key, kept across `set_members` with its generation; a member that left the groups gives its
+    // slot back (M4-T21), and the slot's generation count goes on when another member takes it, so no old handle names
+    // the new row.
     slot_of: HashMap<i64, (u32, u32)>,
-    next_slot: u32,
+    slot_generation: Vec<u32>,
+    free_slots: Vec<u32>,
     touched: HashSet<i64>,
     seen: HashSet<i64>,
     syncs: u64,
@@ -336,6 +339,8 @@ impl ScsSimCore {
                 active_known: false,
             });
         }
+        // Whoever was known and is in neither list has left the groups.
+        self.free_slots_of(known.into_keys());
     }
 
     /// Takes the node-less static rows (rocks by RID, mines): ids, positions, radii, factions and kinds, in order. Returns
@@ -397,6 +402,12 @@ impl ScsSimCore {
     #[func]
     pub fn attribute_reads(&self) -> i64 {
         self.attribute_reads
+    }
+
+    /// Members with a slot now (the live markers and hulls; M4-T21: a member that left gave its slot back).
+    #[func]
+    fn slot_count(&self) -> i64 {
+        self.slot_of.len() as i64
     }
 
     /// How many `sync_in` calls ran.
@@ -1206,15 +1217,27 @@ impl ScsSimCore {
         (self.factions.len() - 1) as u32
     }
 
-    // The slot and generation of member `key`, made on first sight.
+    // The slot and generation of member `key`, made on first sight: a freed slot first, its generation count carried on.
     fn slot_for(&mut self, key: i64) -> (u32, u32) {
         if let Some(&known) = self.slot_of.get(&key) {
             return known;
         }
-        let slot = self.next_slot;
-        self.next_slot += 1;
-        self.slot_of.insert(key, (slot, 0));
-        (slot, 0)
+        let slot = self.free_slots.pop().unwrap_or_else(|| {
+            self.slot_generation.push(0);
+            (self.slot_generation.len() - 1) as u32
+        });
+        let generation = self.slot_generation[slot as usize];
+        self.slot_of.insert(key, (slot, generation));
+        (slot, generation)
+    }
+
+    // Gives the slots of the members that left the groups back, so the map holds only the live members.
+    fn free_slots_of(&mut self, gone: impl Iterator<Item = i64>) {
+        for key in gone {
+            if let Some((slot, _)) = self.slot_of.remove(&key) {
+                self.free_slots.push(slot);
+            }
+        }
     }
 
     // Reads member `m`'s attributes again when it has just turned active or was touched, marks it active now, and gives it
@@ -1228,6 +1251,7 @@ impl ScsSimCore {
         if turned_active {
             m.generation += 1;
             self.slot_of.insert(m.key, (m.slot, m.generation));
+            self.slot_generation[m.slot as usize] = m.generation;
         }
         m.active_at = now;
     }
