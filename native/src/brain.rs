@@ -20,7 +20,7 @@ use crate::brain_step::{
 };
 use crate::rows::{Bolts, Rows};
 use crate::sim_core::ScsSimCore;
-use crate::threads::{Runner, StepThread};
+use crate::threads::{Runner, StepThread, Threads};
 
 // `test_brain_parity`'s per-step layouts for a manoeuvre run.
 const STEP_IN: usize = 23;
@@ -77,6 +77,17 @@ enum Pending {
     },
 }
 
+// A scheduled job's result, parked from its join until `join_step` hands it over: the output, the events, the hosted
+// items' slots and the snapshot with the commands it wrote. An inline call in between (a single `think`, an inline
+// batch) leaves it alone, so no tick's output or event is lost (fix round 1, I2).
+struct Handover {
+    out: Vec<f64>,
+    events: Vec<i64>,
+    hosted_slots: Vec<i64>,
+    snapshot: Snapshot,
+    from_rows: bool,
+}
+
 // What the frame's readers see of a hosted driver while the brains are away: its state as the launch found it.
 #[derive(Default, Clone)]
 struct HostedView {
@@ -108,6 +119,16 @@ pub struct ScsBrains {
     step: Option<StepThread<Job, Done>>,
     done: Option<Done>,
     spare: Option<Snapshot>,
+    // Whether the job out was launched for the tick's handover (`launch_batch`, `launch_rows`) rather than by an inline
+    // wrapper; the parked result of such a job; what `rows_events` and `hosted_item_slots` read (the last handover's).
+    scheduled: bool,
+    handover: Option<Handover>,
+    handed_events: Vec<i64>,
+    handed_slots: Vec<i64>,
+    // The threads a job's pass runs on (`perf_step_threads`, fix round 1, I4): 0 shares the core's pool, 1 is the step's
+    // thread alone, more is a pool of the job's own, so the job never queues the main thread's passes behind its chunks.
+    step_pool: Threads,
+    step_pool_count: i64,
     launched_at: Option<Instant>,
     main_thread: Option<ThreadId>,
     // False from a launch until `join_step` hands the job's results over: the hosted readers see the launch's view until
@@ -123,8 +144,8 @@ pub struct ScsBrains {
     // missed (the tick's join had to wait), the joins forced early by a reader or writer (and how many of those waited),
     // and whether the last job ran off the main thread.
     pass_failures: i64,
-    // The last joined job's output, until `join_step` (or the inline wrappers) hand it over: a join forced early keeps it.
-    last_out: Option<Vec<f64>>,
+    // An inline wrapper's job output (its own channel, apart from the handover).
+    inline_out: Option<Vec<f64>>,
     step_us: i64,
     wait_us: i64,
     misses: i64,
@@ -593,23 +614,19 @@ impl ScsBrains {
         let floats =
             PackedFloat64Array::from(&[dt, hull_fraction, last_hit_s, last_bolt_hit_s][..]);
         let version = self.rows_version_now();
-        if !self.launch_batch(
+        if !self.launch_inline(
             ints,
             floats,
             relations,
             now_s,
             friendly_fire,
-            origin_x,
-            origin_y,
-            origin_z,
+            [origin_x, origin_y, origin_z],
             version,
             false,
         ) {
             return PackedFloat64Array::new();
         }
-        self.join();
-        self.handed_over = true;
-        let out = self.last_out.take().unwrap_or_default();
+        let out = self.finish_inline();
         if out.first().copied().unwrap_or(0.0) != 0.0 {
             PackedFloat64Array::from(&out[1..])
         } else {
@@ -640,23 +657,19 @@ impl ScsBrains {
         origin_z: f64,
         rows_version: i64,
     ) -> PackedFloat64Array {
-        if !self.launch_batch(
+        if !self.launch_inline(
             ints,
             floats,
             relations,
             now_s,
             friendly_fire,
-            origin_x,
-            origin_y,
-            origin_z,
+            [origin_x, origin_y, origin_z],
             rows_version,
             false,
         ) {
             return PackedFloat64Array::new();
         }
-        self.join();
-        self.handed_over = true;
-        PackedFloat64Array::from(self.last_out.take().unwrap_or_default().as_slice())
+        PackedFloat64Array::from(self.finish_inline().as_slice())
     }
 
     /// The rows path of `think_batch` (M4-T33): per ship `ROWS_INTS` ints and `ROWS_FLOATS` floats, the hull and the
@@ -679,23 +692,19 @@ impl ScsBrains {
         origin_z: f64,
         rows_version: i64,
     ) -> PackedFloat64Array {
-        if !self.launch_rows(
+        if !self.launch_inline(
             ints,
             floats,
             relations,
             now_s,
             friendly_fire,
-            origin_x,
-            origin_y,
-            origin_z,
+            [origin_x, origin_y, origin_z],
             rows_version,
-            false,
+            true,
         ) {
             return PackedFloat64Array::new();
         }
-        self.join();
-        self.handed_over = true;
-        PackedFloat64Array::from(self.last_out.take().unwrap_or_default().as_slice())
+        PackedFloat64Array::from(self.finish_inline().as_slice())
     }
 
     // --- the step as a job (M4-T24) ----------------------------------------------------------------------------------
@@ -761,7 +770,7 @@ impl ScsBrains {
             rows_version,
             from_rows: false,
         };
-        self.launch(params, threaded);
+        self.launch(params, threaded, true);
         true
     }
 
@@ -826,7 +835,7 @@ impl ScsBrains {
             rows_version,
             from_rows: true,
         };
-        self.launch(params, threaded);
+        self.launch(params, threaded, true);
         true
     }
 
@@ -839,7 +848,43 @@ impl ScsBrains {
         self.join();
         self.tick_join = false;
         self.handed_over = true;
-        PackedFloat64Array::from(self.last_out.take().unwrap_or_default().as_slice())
+        let Some(mut handover) = self.handover.take() else {
+            return PackedFloat64Array::new();
+        };
+        if handover.from_rows
+            && let Some(core) = self.core.as_mut()
+        {
+            core.bind_mut()
+                .take_commands(&mut handover.snapshot.commands);
+        }
+        self.spare = Some(handover.snapshot);
+        self.handed_events = handover.events;
+        self.handed_slots = handover.hosted_slots;
+        PackedFloat64Array::from(handover.out.as_slice())
+    }
+
+    /// Where a job's pass runs (`perf_step_threads`): 0 the core's pool, 1 the step's thread alone, more a pool of the
+    /// job's own with that many threads. Returns the count in use.
+    #[func]
+    fn set_step_threads(&mut self, count: i64) -> i64 {
+        self.step_pool_count = count.max(0);
+        if count <= 0 {
+            self.step_pool.set_count(1);
+            0
+        } else {
+            self.step_pool.set_count(count as usize) as i64
+        }
+    }
+
+    #[func]
+    fn step_threads_setting(&self) -> i64 {
+        self.step_pool_count
+    }
+
+    /// Worker threads of the job's own pool running now (0 when the job runs on the step's thread or the core's pool).
+    #[func]
+    fn step_pool_workers(&self) -> i64 {
+        self.step_pool.live_workers()
     }
 
     /// Whether a job is out (launched and not joined).
@@ -1006,10 +1051,10 @@ impl ScsBrains {
         }
     }
 
-    /// The slots of the hosted items the last rows batch thought, in the order they followed the queued ships.
+    /// The slots of the hosted items the last handed-over rows batch thought, in the order they followed the queued ships.
     #[func]
-    fn hosted_item_slots(&mut self) -> PackedInt64Array {
-        PackedInt64Array::from(self.work().hosted_slots.as_slice())
+    fn hosted_item_slots(&self) -> PackedInt64Array {
+        PackedInt64Array::from(self.handed_slots.as_slice())
     }
 
     /// A hosted driver's last think: its output (`OUT_LEN` numbers, empty before the first), how many thinks the host
@@ -1054,10 +1099,10 @@ impl ScsBrains {
         .unwrap_or_default()
     }
 
-    /// The last `think_batch_rows`' counts and events (`EVENTS_HEAD`, then pairs).
+    /// The last handed-over rows batch's counts and events (`EVENTS_HEAD`, then pairs).
     #[func]
-    fn rows_events(&mut self) -> PackedInt64Array {
-        PackedInt64Array::from(self.work().events.as_slice())
+    fn rows_events(&self) -> PackedInt64Array {
+        PackedInt64Array::from(self.handed_events.as_slice())
     }
 
     /// Batches a panic declined (each holding its brains and its ships' last commands).
@@ -1565,21 +1610,81 @@ impl ScsBrains {
 
     // The launch itself: the frame's readers' views taken, the rows copied into the spare snapshot, the brains and the
     // batch handed to the job, which runs on the step's thread when asked (else here, its result kept for the join).
-    fn launch(&mut self, params: Params, threaded: bool) {
+    // An inline wrapper's launch (`think`, `think_batch`, `think_batch_rows`): the batch filled as `launch_batch` or
+    // `launch_rows` fill it and run at once, its result kept apart from any scheduled job's.
+    #[allow(clippy::too_many_arguments)]
+    fn launch_inline(
+        &mut self,
+        ints: PackedInt64Array,
+        floats: PackedFloat64Array,
+        relations: PackedByteArray,
+        now_s: f64,
+        friendly_fire: bool,
+        origin: [f64; 3],
+        rows_version: i64,
+        rows: bool,
+    ) -> bool {
+        let ok = if rows {
+            self.launch_rows(
+                ints,
+                floats,
+                relations,
+                now_s,
+                friendly_fire,
+                origin[0],
+                origin[1],
+                origin[2],
+                rows_version,
+                false,
+            )
+        } else {
+            self.launch_batch(
+                ints,
+                floats,
+                relations,
+                now_s,
+                friendly_fire,
+                origin[0],
+                origin[1],
+                origin[2],
+                rows_version,
+                false,
+            )
+        };
+        if ok {
+            self.scheduled = false;
+        }
+        ok
+    }
+
+    // An inline wrapper's join: its output; the readers' view stays the handover's while a scheduled result is parked.
+    fn finish_inline(&mut self) -> Vec<f64> {
+        self.join();
+        self.handed_over = self.handover.is_none();
+        self.inline_out.take().unwrap_or_default()
+    }
+
+    fn launch(&mut self, params: Params, threaded: bool, scheduled: bool) {
         if self.step_pending() {
             self.early_joins += 1;
             self.join();
         }
+        self.scheduled = scheduled;
         self.main_thread
             .get_or_insert_with(|| std::thread::current().id());
         self.refresh_views();
         let work = self.work.take().expect("joined above");
         let mut snapshot = self.spare.take().unwrap_or_default();
+        let own_pool = self.step_pool_count > 0;
         let runner = match self.core.clone() {
             Some(mut core) => {
                 let mut c = core.bind_mut();
                 c.snapshot_into(&mut snapshot);
-                c.worker_threads().runner()
+                if own_pool {
+                    self.step_pool.runner()
+                } else {
+                    c.worker_threads().runner()
+                }
             }
             None => {
                 snapshot.rows.clone_from(&self.own);
@@ -1595,7 +1700,11 @@ impl ScsBrains {
                 snapshot.touched.clear();
                 snapshot.commands.clear();
                 snapshot.rows_version = self.own_version;
-                Runner::default()
+                if own_pool {
+                    self.step_pool.runner()
+                } else {
+                    Runner::default()
+                }
             }
         };
         let job = Job {
@@ -1641,10 +1750,15 @@ impl ScsBrains {
                 _ => None,
             },
         };
-        self.wait_us = waited.elapsed().as_micros() as i64;
         let Some(mut done) = done else {
+            if self.step.as_ref().is_some_and(|s| !s.alive()) && self.work.is_none() {
+                godot_error!(
+                    "ScsBrains: the step thread died under a job; every brain and hosted driver is lost (the pilots rebuild their slots)"
+                );
+            }
             return;
         };
+        self.wait_us = waited.elapsed().as_micros() as i64;
         self.step_us = done.run_us;
         self.off_main = self.main_thread.is_some_and(|main| done.thread != main);
         if done.work.failed {
@@ -1660,14 +1774,29 @@ impl ScsBrains {
         for change in std::mem::take(&mut self.pending) {
             Self::apply(&mut done.work, &change);
         }
+        let events = std::mem::take(&mut done.work.events);
+        let hosted_slots = std::mem::take(&mut done.work.hosted_slots);
         self.work = Some(done.work);
+        if self.scheduled {
+            // Parked until the tick's `join_step`: the commands, the output and the events land together then.
+            self.handover = Some(Handover {
+                out: done.out,
+                events,
+                hosted_slots,
+                snapshot: done.snapshot,
+                from_rows: done.from_rows,
+            });
+            return;
+        }
         if done.from_rows
             && let Some(core) = self.core.as_mut()
         {
             core.bind_mut().take_commands(&mut done.snapshot.commands);
         }
         self.spare = Some(done.snapshot);
-        self.last_out = Some(done.out);
+        self.handed_events = events;
+        self.handed_slots = hosted_slots;
+        self.inline_out = Some(done.out);
     }
 
     // What the frame's readers see while the brains are away: every hosted driver's state, and the description and

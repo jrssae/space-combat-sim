@@ -84,20 +84,34 @@ static var _driver_step_setting: int = -1
 var hosted_stepped: int = 0
 ## Wall-clock microseconds the last flush spent joining the previous tick's job (M4-T24; a readout).
 var join_us: int = 0
+## Results dropped because the ship was parked or re-piloted between the launch and the join (fix round 1, I3): the last
+## flush's and the total.
+var stale: int = 0
+var stale_total: int = 0
+# The hosted drivers' pilots as they were hosted (slot to brain), for the identity check at the join.
+var _hosted_brains: Dictionary[int, PilotBrain] = {}
+# `perf_step_threads` as last given to the host (-1: give it again).
+var _step_threads_given: int = -1
+static var _step_threads_setting: int = -1
 # The tick launched and not yet joined (M4-T24), and `sim_step` as last read (-1: read again).
 var _launched: Launched = null
 static var _step_setting: int = -1
 
 
-## A tick's batch launched as a job and waiting for its results (M4-T24): who joined it and the answer they keep.
+## A tick's batch launched as a job and waiting for its results (M4-T24): who joined it, the answer they keep, and who each
+## of them was (the pilot flying the ship at the launch; fix round 1, I3): a result for a ship parked or re-piloted since is
+## stale and is dropped.
 class Launched extends RefCounted:
 	var host: Object = null
 	var rows: bool = false
 	var drivers: Array[AiPilotDriver] = []
+	var brains: Array[PilotBrain] = []
 	var dts := PackedFloat64Array()
 	var sinces := PackedFloat64Array()
 	var wokens := PackedByteArray()
 	var answer: BrainAnswer = null
+	var hosted_drivers: Dictionary[int, AiPilotDriver] = {}
+	var hosted_brains: Dictionary[int, PilotBrain] = {}
 
 
 func _init() -> void:
@@ -177,11 +191,13 @@ func host_driver(driver: AiPilotDriver, host: Object, slot: int, body_id: int, o
 	_host = host if _host == null or not is_instance_valid(_host) else _host
 	host.host_driver(slot, body_id, ordinal, steps, since_think_s, woken, attacker_id, hit_s, bolt_hit_s)
 	_hosted[slot] = driver
+	_hosted_brains[slot] = driver.brain
 
 
 ## Takes the step back from the host: `[steps, since_think_s, woken]` as the host left them (empty when it was not hosted).
 func unhost_driver(host: Object, slot: int) -> PackedFloat64Array:
 	_hosted.erase(slot)
+	_hosted_brains.erase(slot)
 	if host != null and is_instance_valid(host):
 		return host.unhost_driver(slot)
 	return PackedFloat64Array()
@@ -199,6 +215,7 @@ func unhost_all() -> void:
 		if is_instance_valid(driver):
 			driver.unhost()
 	_hosted.clear()
+	_hosted_brains.clear()
 
 
 ## Whether this tick's native thinks go into the core's rows (`perf_native_commands`, M4-T33).
@@ -290,6 +307,7 @@ func flush() -> void:
 	events = 0
 	hosted_stepped = 0
 	join_us = 0
+	stale = 0
 	AiPilotDriver.roll_counts()  # a tick with no think lands reads zero (the counts come at the join, M4-T24)
 	if _launched != null:
 		_join_launched()
@@ -320,43 +338,56 @@ func _flush_plain() -> void:
 	_wokens = PackedByteArray()
 	_frame = -1
 	if not is_instance_valid(host):
-		_apply_plain(drivers, dts, sinces, wokens, PackedFloat64Array())
+		var gone := Launched.new()
+		gone.drivers = drivers
+		gone.brains = _brains_of(drivers)
+		gone.dts = dts
+		gone.sinces = sinces
+		gone.wokens = wokens
+		_apply_plain(gone, PackedFloat64Array())
 		return
+	var launched := Launched.new()
+	launched.host = host
+	launched.rows = false
+	launched.drivers = drivers
+	launched.brains = _brains_of(drivers)
+	launched.dts = dts
+	launched.sinces = sinces
+	launched.wokens = wokens
+	_apply_step_threads(host)
 	if mode == STEP_INLINE:
 		var out: PackedFloat64Array = host.think_batch(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y,
 				_origin_z, _rows_version)
 		call_us = Time.get_ticks_usec() - started_us
 		AiPilotDriver.add_think_time(call_us)
-		_apply_plain(drivers, dts, sinces, wokens, out)
+		_apply_plain(launched, out)
 		return
 	if host.launch_batch(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y, _origin_z, _rows_version,
 			mode == STEP_THREADED):
-		var launched := Launched.new()
-		launched.host = host
-		launched.rows = false
-		launched.drivers = drivers
-		launched.dts = dts
-		launched.sinces = sinces
-		launched.wokens = wokens
 		_launched = launched
 	else:
-		_apply_plain(drivers, dts, sinces, wokens, PackedFloat64Array())
+		_apply_plain(launched, PackedFloat64Array())
 	call_us = Time.get_ticks_usec() - started_us
 	AiPilotDriver.add_think_time(call_us)
 
 
-# Each driver of a plain batch finishes its think from `out` (empty: every think declined).
-func _apply_plain(drivers: Array[AiPilotDriver], dts: PackedFloat64Array, sinces: PackedFloat64Array, wokens: PackedByteArray,
-		out: PackedFloat64Array) -> void:
+# Each driver of a plain batch finishes its think from `out` (empty: every think declined); a driver whose pilot changed
+# since the launch (parked, re-piloted) gets nothing: the result is stale.
+func _apply_plain(launched: Launched, out: PackedFloat64Array) -> void:
+	var drivers: Array[AiPilotDriver] = launched.drivers
 	ships = drivers.size()
 	for i: int in drivers.size():
 		var driver: AiPilotDriver = drivers[i]
-		if is_instance_valid(driver):
-			var base: int = i * STRIDE
-			var thought: bool = out.size() >= base + STRIDE and out[base] != 0.0
-			driver.finish_native(out, base + 1 if thought else -1, dts[i], sinces[i] if i < sinces.size() else 0.0,
-					i < wokens.size() and wokens[i] != 0)
-			finishes += 1
+		if not is_instance_valid(driver):
+			continue
+		if driver.brain != launched.brains[i] or driver.brain == null:
+			_count_stale()
+			continue
+		var base: int = i * STRIDE
+		var thought: bool = out.size() >= base + STRIDE and out[base] != 0.0
+		driver.finish_native(out, base + 1 if thought else -1, launched.dts[i], launched.sinces[i] if i < launched.sinces.size() else 0.0,
+				i < launched.wokens.size() and launched.wokens[i] != 0)
+		finishes += 1
 
 
 # A rows batch's flush (M4-T33): one native call that thinks every ship and writes the commands into the core, the
@@ -373,41 +404,46 @@ func _flush_rows() -> void:
 	_dts = PackedFloat64Array()
 	_frame = -1
 	_answer = null
+	var launched := Launched.new()
+	launched.host = host
+	launched.rows = true
+	launched.drivers = drivers
+	launched.brains = _brains_of(drivers)
+	launched.answer = answered
+	launched.hosted_drivers = _hosted.duplicate()
+	launched.hosted_brains = _hosted_brains.duplicate()
 	if not is_instance_valid(host):
-		_apply_rows(drivers, answered, PackedFloat64Array(), PackedInt64Array(), PackedInt64Array())
+		_apply_rows(launched, PackedFloat64Array(), PackedInt64Array(), PackedInt64Array())
 		return
 	if not _hosted.is_empty() and driver_step_mode():
 		_prepare_hosted()
+	_apply_step_threads(host)
 	if mode == STEP_INLINE:
 		var out: PackedFloat64Array = host.think_batch_rows(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y,
 				_origin_z, _rows_version)
 		call_us = Time.get_ticks_usec() - started_us
-		_apply_rows(drivers, answered, out, host.rows_events(), host.hosted_item_slots())
+		_apply_rows(launched, out, host.rows_events(), host.hosted_item_slots())
 		AiPilotDriver.add_think_time(Time.get_ticks_usec() - started_us)
 		return
 	if host.launch_rows(_ints, _floats, _relations, _now_s, _friendly_fire, _origin_x, _origin_y, _origin_z, _rows_version,
 			mode == STEP_THREADED):
-		var launched := Launched.new()
-		launched.host = host
-		launched.rows = true
-		launched.drivers = drivers
-		launched.answer = answered
 		_launched = launched
 	else:
-		_apply_rows(drivers, answered, PackedFloat64Array(), PackedInt64Array(), PackedInt64Array())
+		_apply_rows(launched, PackedFloat64Array(), PackedInt64Array(), PackedInt64Array())
 	call_us = Time.get_ticks_usec() - started_us
 	AiPilotDriver.add_think_time(call_us)
 
 
 # A rows batch's results: the answer filled for everyone who joined, the tick's counts, and the drivers with an event
-# told in the order they came (`out` empty: every think declined).
-func _apply_rows(drivers: Array[AiPilotDriver], answered: BrainAnswer, out: PackedFloat64Array, head: PackedInt64Array,
-		hosted_slots: PackedInt64Array) -> void:
+# told in the order they came (`out` empty: every think declined). A driver whose pilot changed since the launch (parked,
+# re-piloted; a hosted slot taken by another pilot) gets no event: the result is stale.
+func _apply_rows(launched: Launched, out: PackedFloat64Array, head: PackedInt64Array, hosted_slots: PackedInt64Array) -> void:
+	var drivers: Array[AiPilotDriver] = launched.drivers
 	ships = drivers.size() + hosted_slots.size()
 	hosted_stepped = hosted_slots.size()
-	if answered != null:
-		answered.out = out
-		answered.ready = true
+	if launched.answer != null:
+		launched.answer.out = out
+		launched.answer.ready = true
 	var named: int = maxi(head.size() - EVENTS_HEAD, 0) / 2
 	if head.size() >= EVENTS_HEAD:
 		AiPilotDriver.add_rows_counts(head[0], head[1], head[2], head[3], named, head[4])
@@ -418,14 +454,22 @@ func _apply_rows(drivers: Array[AiPilotDriver], answered: BrainAnswer, out: Pack
 	while k + 1 < head.size():
 		var i: int = head[k]
 		var driver: AiPilotDriver = null
+		var brain: PilotBrain = null
 		if i < queued:
 			driver = drivers[i]
+			brain = launched.brains[i]
 		elif i - queued < hosted_slots.size():
-			driver = _hosted.get(int(hosted_slots[i - queued]))
-		if driver != null and is_instance_valid(driver):
-			driver.rows_event(int(head[k + 1]), out, i * STRIDE + 1)
-			events += 1
+			var slot: int = int(hosted_slots[i - queued])
+			driver = launched.hosted_drivers.get(slot)
+			brain = launched.hosted_brains.get(slot)
 		k += 2
+		if driver == null or not is_instance_valid(driver):
+			continue
+		if brain == null or driver.brain != brain or not driver.is_inside_tree():
+			_count_stale()
+			continue
+		driver.rows_event(int(head[k - 1]), out, i * STRIDE + 1)
+		events += 1
 
 
 # The previous tick's job joined (waited for when it still runs) and its results applied (M4-T24).
@@ -442,11 +486,34 @@ func _join_launched() -> void:
 			head = launched.host.rows_events()
 			hosted_slots = launched.host.hosted_item_slots()
 	if launched.rows:
-		_apply_rows(launched.drivers, launched.answer, out, head, hosted_slots)
+		_apply_rows(launched, out, head, hosted_slots)
 	else:
-		_apply_plain(launched.drivers, launched.dts, launched.sinces, launched.wokens, out)
+		_apply_plain(launched, out)
 	join_us = Time.get_ticks_usec() - started_us
 	AiPilotDriver.add_think_time(join_us)
+
+
+# Who flies each queued driver's ship at the launch.
+func _brains_of(drivers: Array[AiPilotDriver]) -> Array[PilotBrain]:
+	var out: Array[PilotBrain] = []
+	out.resize(drivers.size())
+	for i: int in drivers.size():
+		out[i] = drivers[i].brain if is_instance_valid(drivers[i]) else null
+	return out
+
+
+func _count_stale() -> void:
+	stale += 1
+	stale_total += 1
+
+
+# Gives the host the job's thread count (`perf_step_threads`) when it changed.
+func _apply_step_threads(host: Object) -> void:
+	if _step_threads_setting < 0:
+		_step_threads_setting = int(Settings.get_value(&"perf_step_threads"))
+	if _step_threads_given != _step_threads_setting or host != _host:
+		_step_threads_given = _step_threads_setting
+		host.set_step_threads(_step_threads_setting)
 
 
 # A tick no driver queued a think in: the hosted drivers still step, so the batch opens the tick itself from the core.
@@ -513,6 +580,10 @@ func _begin(frame: int, host: Object, now_s: float, friendly_fire: bool, origin:
 static func _on_setting_changed(key: StringName, _value: Variant) -> void:
 	if key == &"sim_step":
 		_step_setting = -1  # a launched tick is still joined at the next flush, whatever the new schedule
+	elif key == &"perf_step_threads":
+		_step_threads_setting = -1
+		if _current != null and is_instance_valid(_current):
+			_current._step_threads_given = -1
 	elif key == &"perf_native_commands":
 		_rows_setting = -1
 		if _current != null and is_instance_valid(_current) and not rows_mode():

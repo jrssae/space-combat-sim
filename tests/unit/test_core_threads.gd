@@ -11,7 +11,7 @@ const SEED: int = 1
 const TICKS: int = 600
 const FAULT_TICKS: int = 120
 const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_threads",
-		&"perf_native_commands", &"perf_native_driver_step", &"sim_step"]
+		&"perf_native_commands", &"perf_native_driver_step", &"sim_step", &"perf_step_threads"]
 
 var _saved: Dictionary = {}
 
@@ -117,6 +117,7 @@ func _space() -> SubViewport:
 ## the declined ones.
 func _battle(threads: int, ticks: int, fault: bool) -> Dictionary:
 	Settings.set_value(&"perf_threads", threads)
+	Settings.set_value(&"perf_step_threads", 0)  # the brains' pass on the core's pool, whatever the step's schedule (M4-T24)
 	Factions.reset()
 	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
 	ContactScan.invalidate()

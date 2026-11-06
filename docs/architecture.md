@@ -2992,7 +2992,14 @@ scripts/input_latency.gd         the input latency probe: a pad press on the fak
   events to the drivers that joined the previous tick (the ship's first command from its row, a changed trigger, a target
   to select, a rammer or route follower to read) -> the hits, liveness, wakes and newly hosted drivers that arrived
   meanwhile applied -> the contexts, the frame and the relation matrix pushed -> the snapshot taken and this tick's job
-  launched. The counts (`ai.thinks_*`, `held`) roll every flush and are credited at the join, so a tick with no join reads
+  launched. A scheduled job's result (its output, events, hosted slots and commands) is parked at its join, early or
+  not, until `join_step` hands it over, so a single `think` or an inline batch call while the job is out loses nothing.
+  Each launched driver is stamped with the pilot flying its ship at the launch (and each hosted slot with its driver and
+  pilot): a result for a ship parked or re-piloted meanwhile is stale and dropped, counted (`core.step_stale`).
+- **Where the job's pass runs** (`perf_step_threads`, 1): on the step's thread alone by default, so the job never queues
+  the main thread's passes (flight, the sweeps) behind its chunks on the core's pool; `n` gives it a pool of its own,
+  `0` the core's pool (what `test_core_threads` uses to compare one thread with six). The measured choice is in the
+  Cycle log, M4-T24 (fix round 1). The counts (`ai.thinks_*`, `held`) roll every flush and are credited at the join, so a tick with no join reads
   zero.
 - **While the brains are away.** `set_driver_hits`, `set_driver_live`, `wake_driver` and `host_driver` queue and apply at
   the join (which is when today's hits reach the next think too). The hosted readers (`slot_output`, `slot_think_count`,
@@ -3006,9 +3013,12 @@ scripts/input_latency.gd         the input latency probe: a pad press on the fak
   full, and a hosted pilot's reads prefer the host's newer thinks. The plain batch resets a driver's think clock when the
   think queues, as the rows path does, and puts it back when the host declines.
 - **No engine call from the worker.** gdext without `experimental-threads` does not check the thread of an engine call,
-  so the guard is the source rule: `brain_step.rs` and `threads.rs` are under `test_sim_core`'s engine-free check (no
-  engine type, call, singleton or macro; imports from the allow-list only), the job holds no `Gd` by construction (plain
-  data in, plain data out), and `core.step_off_main` records that the joined job ran off the main thread.
+  so there is no runtime guard; the guard is in two halves. The compiler: `StepThread<J: Send + 'static, ...>` takes only
+  `Send` jobs, and a `Gd<T>` is not `Send` without `experimental-threads`, so no engine handle can ride in a job (the
+  job is plain data in, plain data out, no `unsafe`). The source rule, for the free engine calls the compiler cannot see
+  (singletons, `godot_*!` macros): `brain_step.rs` and `threads.rs` are under `test_sim_core`'s engine-free check (no
+  engine type, call, singleton or macro; imports from the allow-list only, the command row's exact items among them), and
+  `core.step_off_main` records that the joined job ran off the main thread.
 - **Determinism.** The job is a pure function of its snapshot and the brains it carries, so `threaded` equals `delayed`
   tick for tick (rows, commands, hits, thinks; one thread and six) and the order of the results' application is the
   batch's order on the main thread, as before. The delay itself changes outcomes against today: the seeded references

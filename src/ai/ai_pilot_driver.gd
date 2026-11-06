@@ -445,8 +445,8 @@ func _settle_landing(answer: BrainAnswer, index: int, since_s: float, woken: boo
 ## changed trigger reaches the cannon; the first shot ends the hiding; a wanted target is selected; a rammer's or a route
 ## follower's pilot is read at once.
 func rows_event(events: int, out: PackedFloat64Array, base: int) -> void:
-	if combatant == null or not is_instance_valid(combatant.ship):
-		return
+	if combatant == null or brain == null or not is_instance_valid(combatant.ship) or not combatant.ship.can_process():
+		return  # no pilot, or a parked ship (the batch drops stale results first; M4-T24)
 	if _hosted and is_instance_valid(_hosted_host):
 		var dt: float = float(_hosted_host.driver_dt(_hosted_slot))  # the think's dt, for the retarget's clock
 		if dt > 0.0:

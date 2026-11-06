@@ -11,7 +11,7 @@ const SEED: int = 1
 const TICKS: int = 240
 const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
 		&"perf_threads", &"perf_native_commands", &"perf_native_driver_step", &"perf_native_bolt_rows", &"ai_think_rate",
-		&"sim_step"]
+		&"sim_step", &"perf_step_threads"]
 
 var _saved: Dictionary = {}
 
@@ -165,6 +165,83 @@ func test_the_schedule_flips_live_and_a_reader_while_the_brains_are_away_answers
 	Factions.reset()
 
 
+# --- fix round 1 ---------------------------------------------------------------------------------------------------------
+
+
+func test_an_inline_think_while_a_job_is_out_loses_no_result() -> void:
+	if _skipped():
+		return
+	var delayed: Dictionary = await _battle(&"delayed", 6, 120)
+	var poked: Dictionary = await _battle(&"threaded", 6, 120, false, true)
+	assert_gt(int(poked["pokes"]), 3, "inline calls were made while jobs were out (%d)" % int(poked["pokes"]))
+	var first: int = _first_difference(delayed["rows"], poked["rows"])
+	assert_eq(first, -1, "the rows are the same bits with inline calls while the jobs run (first difference at tick %d)" % first)
+	first = _first_difference(delayed["commands"], poked["commands"])
+	assert_eq(first, -1, "and the commands (first difference at tick %d)" % first)
+	first = _first_difference(delayed["thinks"], poked["thinks"])
+	assert_eq(first, -1, "and every tick's thinks were handed over (first difference at tick %d)" % first)
+
+
+func test_a_ship_parked_during_a_job_gets_no_stale_result() -> void:
+	if _skipped():
+		return
+	var fight: Dictionary = await _start(&"threaded", 6)
+	var ships: Array = fight["ships"]
+	var batch: BrainBatch = BrainBatch.for_tree(get_tree())
+	await get_tree().physics_frame  # the first tick's job is out: every ship's first think (an ENTER event each) is in it
+	var host: Object = NativeBrains.host(get_tree())
+	assert_true(bool(host.step_pending()), "a job is out between ticks")
+	# Park a third of the ships as the pool does, while their job runs.
+	var parked: Array[Combatant] = []
+	var selections: Dictionary = {}
+	for i: int in range(0, ships.size(), 3):
+		var c: Combatant = ships[i]
+		selections[c] = c.ship.targeting.selected_id()
+		c.ship.visible = false
+		c.ship.process_mode = Node.PROCESS_MODE_DISABLED
+		c.driver.brain = null
+		parked.append(c)
+	var stale_before: int = batch.stale_total
+	await get_tree().physics_frame
+	assert_gte(batch.stale_total - stale_before, parked.size(), "the parked ships' results were dropped as stale (%d of %d)" % [
+			batch.stale_total - stale_before, parked.size()])
+	for c: Combatant in parked:
+		assert_eq(c.ship.targeting.selected_id(), selections[c], "%s: no selection made on a parked ship" % c.display_name)
+		assert_false(c.ship.is_row_commanded(), "%s: a parked ship flies no row command" % c.display_name)
+		assert_null(c.driver.brain, "%s: still parked" % c.display_name)
+	fight["space"].queue_free()
+	await get_tree().physics_frame
+	Factions.reset()
+
+
+func test_a_ship_repiloted_during_a_job_keeps_the_new_pilots_state() -> void:
+	if _skipped():
+		return
+	var fight: Dictionary = await _start(&"threaded", 6)
+	var ships: Array = fight["ships"]
+	var batch: BrainBatch = BrainBatch.for_tree(get_tree())
+	await get_tree().physics_frame  # the first tick's job is out: every ship's first think (an ENTER event each) is in it
+	var anchor: UniversePos = (fight["sim"] as SimCore).world.to_universe(Vector3.ZERO)
+	var fresh: Array[AiPilot] = []
+	var repiloted: Array[Combatant] = []
+	for i: int in range(1, ships.size(), 3):
+		var c: Combatant = ships[i]
+		var pilot := BrainFactory.from_behaviour({"type": "ai", "profile": "raider"}, anchor, 900 + i)["brain"] as AiPilot
+		c.driver.brain = pilot
+		fresh.append(pilot)
+		repiloted.append(c)
+	var stale_before: int = batch.stale_total
+	await get_tree().physics_frame
+	assert_gte(batch.stale_total - stale_before, fresh.size(), "the old pilots' results were dropped as stale (%d of %d)" % [
+			batch.stale_total - stale_before, fresh.size()])
+	for pilot: AiPilot in fresh:
+		assert_null(pilot.current, "a new pilot has no behaviour in control before its own first think lands")
+		assert_eq(pilot.switches, 0, "and no switch from the old pilot's think")
+	fight["space"].queue_free()
+	await get_tree().physics_frame
+	Factions.reset()
+
+
 # A space of its own with a world and its projectiles.
 func _space() -> SubViewport:
 	var space := SubViewport.new()
@@ -222,8 +299,9 @@ func _start(mode: StringName, threads: int) -> Dictionary:
 ## The seeded battle flown `ticks` ticks with the step `mode` and `threads` threads (`slow`: the job sleeps 40 ms, so every
 ## deadline is missed). Returns per tick the rows' digest, the commands' digest and a digest of the hits; the counts and
 ## the step's readouts.
-func _battle(mode: StringName, threads: int, ticks: int = TICKS, slow: bool = false) -> Dictionary:
+func _battle(mode: StringName, threads: int, ticks: int = TICKS, slow: bool = false, poke: bool = false) -> Dictionary:
 	var fight: Dictionary = await _start(mode, threads)
+	var pokes: int = 0
 	var sim: SimCore = fight["sim"]
 	var resolver: HitResolver = fight["resolver"]
 	var host: Object = NativeBrains.host(get_tree())
@@ -244,6 +322,12 @@ func _battle(mode: StringName, threads: int, ticks: int = TICKS, slow: bool = fa
 	for t: int in ticks:
 		if t == 1 and slow:
 			host.set_fault(3)
+		if poke and t % 7 == 3 and bool(host.step_pending()):
+			# An inline call while the tick's job is out: the path a driver takes when it cannot join the batch and thinks alone
+			# (`ScsBrains.think`, a plain batch of one; here a plain batch of none, which joins the job early the same way).
+			host.think_batch(PackedInt64Array(), PackedFloat64Array(), PackedByteArray(), SimClock.now(), false, 0.0, 0.0, 0.0,
+					int(sim.core.rows_version()))
+			pokes += 1
 		tick_hits.clear()
 		await get_tree().physics_frame
 		rows.append(int(sim.core.rows_digest()))
@@ -260,7 +344,7 @@ func _battle(mode: StringName, threads: int, ticks: int = TICKS, slow: bool = fa
 	host.set_fault(0)
 	var out: Dictionary = {"rows": rows, "commands": commands, "live": live, "hits": hits, "thinks": thinks, "hits_total": resolver.hits_total,
 			"native_thinks": native_thinks, "held": held, "step_us_max": step_us_max, "wait_us_max": wait_us_max,
-			"off_main": off_main, "misses": int(host.deadline_misses()) - misses_before}
+			"off_main": off_main, "misses": int(host.deadline_misses()) - misses_before, "pokes": pokes}
 	fight["space"].queue_free()
 	await get_tree().physics_frame
 	await get_tree().physics_frame

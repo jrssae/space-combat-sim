@@ -5552,11 +5552,42 @@ and one failing case in the first threaded chunk: AC9's rookie reaction (`test_a
 bound, exactly the step's tick (Q53); the bound allows the tick off the inline schedule now and the file is green on both
 (the report lists the chunks' totals and files). `cargo fmt --check` and `cargo clippy --release -- -D warnings` clean on the
 task's files (`native_probe.rs`'s pre-existing `redundant_field_names` remains). The smoke run (`--console-strict`,
-`wait 30; state; quit`) ran clean.
+`wait 30; state; quit`) exited 0 with no script error; its two `ERROR:` lines are the base's exit leak (the same on inline;
+T35's fix round 4, `8934e9b`, after this base).
 
 **What a reader sees differently.** Every AI ship's command lands one tick after the rows it was decided on: the dodge, the
 turn to a target and the trigger all start 16.7 ms later than today (the return checklist). The schedule flips live
 (`set settings.sim_step inline`). Nothing else: the bolts, the hits, the rams and the player's ship are the same code.
+
+**Fix round 1 (2026-11-05, review I2 to I4, M1 to M3, M5, M7, M8).** (I2) A scheduled job's result (its output, events,
+hosted slots and commands) is parked at its join, early or not, until the tick's `join_step` hands it over, apart from any
+inline call's result (`think`, `think_batch`, `think_batch_rows` have their own channel), so a single think while a job is
+out loses nothing; the commands land at the handover with the events (M1). (I3) Each launched driver is stamped with the
+pilot flying its ship at the launch, and each hosted slot with its driver and pilot; a result for a ship parked or
+re-piloted meanwhile is dropped as stale and counted (`core.step_stale`); a parked ship's driver takes no event. (I4) The
+job's pass runs on the step's thread alone by default (`perf_step_threads` 1; `n` a pool of its own, `0` the core's pool
+as before), so it never queues the main thread's passes behind its chunks. Measured three runs a schedule at 300 and two at
+500 (average FPS / 1 % low / p99 frame ms):
+
+| run | inline | threaded, the step's thread (1) | threaded, the core's pool (0) |
+|---|---|---|---|
+| battle 300, run 1 | 129.4 / 31.8 / 22.6 | 134.7 / 41.5 / 16.5 | 127.0 / 33.6 / 22.9 |
+| battle 300, run 2 | 136.0 / 44.4 / 18.0 | 135.8 / 45.6 / 17.1 | 141.4 / 50.4 / 14.2 |
+| battle 300, run 3 | 133.7 / 44.7 / 17.8 | 134.1 / 40.6 / 17.5 | 128.5 / 31.6 / 23.7 |
+| battle 500, run 1 | 54.3 / 24.4 / 36.8 | 50.5 / 20.5 / 44.1 | 57.0 / 29.6 / 31.3 |
+| battle 500, run 2 | 55.9 / 27.9 / 32.9 | 58.6 / 31.4 / 29.7 | 54.6 / 22.4 / 39.9 |
+
+The 1 % low spreads by 1.4 times inside every schedule (inline alone 31.8 to 44.7 at 300), so the review's reading of the
+first table (every threaded run under every inline run at 300) does not reproduce: the schedules are level within that
+spread at both counts, and the job on the step's thread alone is the steadiest at 300 (40.6 to 45.6). It stays the
+default. (M3) The whole job runs under `catch_unwind`: a panic anywhere in it hands the brains back flagged (every brain
+taken into an item goes back to its slot) and the tick is held; a step thread that dies is reported once. (M8)
+`step_wait_us` is set only when a join took a result. (M5) M3's AC9 text records the tick. (M7) The smoke wording above.
+Tests: `test_core_snapshot` gains an inline call while a job is out (the rows, commands and thinks equal the delayed
+reference), a third of the ships parked during the first job (every one dropped as stale, no selection, no row command)
+and a third re-piloted (every old result dropped, the new pilots untouched); `test_sim_core`'s allow-list names the command
+row's exact imports and checks the thread's `Send` bound. The focused files on both schedules and the smoke checks: the
+report.
 
 **What remains of the tick at 500** (10.7 ms, threaded): the flight stage (the batch's per-ship gather in GDScript and the
 native step with its force application), the hit stage (the native grids and the GDScript narrow phase), physics (Jolt and

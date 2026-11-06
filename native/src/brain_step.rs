@@ -11,9 +11,8 @@ use godot::builtin::Vector3;
 
 use crate::brain_behaviours::{self, Brain, Field, Inputs, Scratch};
 use crate::kernels::contact::{self, Grid, Query, Work as QueryWork};
-use crate::row_commands::{
-    CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE, RowCommand,
-};
+use crate::row_commands::RowCommand;
+use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE};
 use crate::rows::{Bolts, Rows};
 use crate::threads::{Pass, Runner};
 use crate::v3::dist_sq;
@@ -208,6 +207,42 @@ pub fn run(job: Job) -> Done {
         params,
         runner,
     } = job;
+    let from_rows = params.from_rows;
+    // A panic anywhere in the job (not only in the pass, which `run_batch` catches itself) must not lose the brains: the
+    // state comes back flagged, every brain taken into an item goes back to its slot, and the tick is held.
+    let out = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_body(&mut work, &mut snapshot, &params, &runner)
+    })) {
+        Ok(out) => out,
+        Err(_) => {
+            for item in work.items.iter_mut() {
+                if let Some(brain) = item.brain.take()
+                    && item.slot < work.slots.len()
+                {
+                    work.slots[item.slot] = Some(brain);
+                }
+            }
+            work.failed = true;
+            Vec::new()
+        }
+    };
+    Done {
+        work,
+        snapshot,
+        out,
+        run_us: started.elapsed().as_micros() as i64,
+        thread: std::thread::current().id(),
+        from_rows,
+    }
+}
+
+// The job itself: the pass, then (on the rows path) the commands and the hosted drivers' clocks; the batch's output.
+fn run_body(
+    work: &mut Work,
+    snapshot: &mut Snapshot,
+    params: &Params,
+    runner: &Runner,
+) -> Vec<f64> {
     if work.fault == FAULT_SLOW {
         std::thread::sleep(std::time::Duration::from_millis(FAULT_SLOW_MS));
     }
@@ -216,27 +251,19 @@ pub fn run(job: Job) -> Done {
     rel.clear();
     rel.extend_from_slice(&params.rel);
     let total = if params.from_rows {
-        let total = queue_hosted(&mut work, &snapshot, params.n, params.rel.len());
+        let total = queue_hosted(work, snapshot, params.n, params.rel.len());
         rel.extend_from_slice(&work.matrix);
         total
     } else {
         params.n
     };
-    run_batch(&mut work, &snapshot, &runner, total, &rel, &params);
+    run_batch(work, snapshot, runner, total, &rel, params);
     work.rel_scratch = rel;
     if params.from_rows {
-        write_commands(&mut work, &mut snapshot, total);
-        settle_hosted(&mut work, params.n, total);
+        write_commands(work, snapshot, total);
+        settle_hosted(work, params.n, total);
     }
-    let out = std::mem::take(&mut work.batch_out);
-    Done {
-        work,
-        snapshot,
-        out,
-        run_us: started.elapsed().as_micros() as i64,
-        thread: std::thread::current().id(),
-        from_rows: params.from_rows,
-    }
+    std::mem::take(&mut work.batch_out)
 }
 
 // Thinks the batch's first `n` items (inputs filled, brains taken from their slots) across the runner's threads and

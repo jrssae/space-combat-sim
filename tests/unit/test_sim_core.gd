@@ -819,7 +819,8 @@ func test_the_weapon_kernels_hold_no_engine_type() -> void:
 const BRAIN_STEP_FILE: String = "res://native/src/brain_step.rs"
 const BRAIN_STEP_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
 		"use crate::rows::", "use crate::v3::", "use crate::brain_maths::", "use crate::brain_behaviours::", "use crate::kernels::",
-		"use crate::row_commands::", "use crate::threads::"]
+		"use crate::row_commands::RowCommand;", "use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE};",
+		"use crate::threads::"]
 
 
 func test_the_step_job_holds_no_engine_type() -> void:
@@ -833,6 +834,9 @@ func test_the_step_job_holds_no_engine_type() -> void:
 			"no shared mutable state in the job")
 	var threads: String = FileAccess.get_file_as_string(THREADS_FILE)
 	assert_true(threads.contains("pub struct StepThread"), "the step's thread lives in threads.rs")
+	# The compiler keeps engine handles out of a job: a Gd<T> is not Send without gdext's experimental-threads, and the
+	# thread takes only Send jobs.
+	assert_true(threads.contains("pub struct StepThread<J: Send + 'static, D: Send + 'static>"), "the thread takes Send jobs only")
 	# The host hands the job nothing but plain data: it launches through the job's `run`, with no engine handle inside.
 	var host: String = FileAccess.get_file_as_string("res://native/src/brain.rs")
 	assert_true(host.contains("StepThread::start(STEP_THREAD, brain_step::run)"), "the host's thread runs the job's run")
