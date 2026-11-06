@@ -465,8 +465,8 @@ func restart_weapon_counters() -> void:
 
 
 ## The far capitals' rolls in the last tick, us (wall clock, a readout; M4-T22).
-func tier_fire_us() -> int:
-	return int(_native.rows.tier_us()) if _native != null and is_instance_valid(_native) and _native.rows != null else 0
+func tier_fire_us() -> float:
+	return float(_native.rows.tier_us()) if _native != null and is_instance_valid(_native) and _native.rows != null else 0.0
 
 
 ## Each part's mean cost per active tick since `clear`, us, by name (profiling only).

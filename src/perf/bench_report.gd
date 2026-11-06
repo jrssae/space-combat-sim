@@ -102,6 +102,13 @@ static func run_markdown(s: Dictionary) -> String:
 				int(weapons.get("missile_launches", 0)), int(weapons.get("missile_intercepts", 0)), int(weapons.get("beam_shots", 0)),
 				int(weapons.get("detonations", 0)), _parts_line(weapons.get("parts_us", {}) as Dictionary),
 				float(weapons.get("missile_steer_us", 0.0))])
+		var tier: Dictionary = weapons.get("tier", {})
+		if not tier.is_empty() and float(tier.get("fighter_rows", 0.0)) + float(tier.get("capital_rows", 0.0)) > 0.0:
+			lines.append("")
+			lines.append("The tier over the measured window (M4-T22): main-thread cost %.1f us a tick for %.0f fighter rows (%.3f us each: the integration, their rolls, the landing) and %.1f us for %.0f capital rows (%.2f us each: their rolls); %d fighter shots rolled, %d hits landed; %d far-capital hits landed." % [
+					float(tier.get("fighters_us", 0.0)), float(tier.get("fighter_rows", 0.0)), float(tier.get("per_fighter_us", 0.0)),
+					float(tier.get("capitals_us", 0.0)), float(tier.get("capital_rows", 0.0)), float(tier.get("per_capital_us", 0.0)),
+					int(tier.get("shots", 0)), int(tier.get("hits", 0)), int(weapons.get("tier_capital_hits", 0))])
 	lines.append("")
 	lines.append_array(_breakdown_table(s.get("stages", {}) as Dictionary, float(s.get("sync_timed_share", 0.0))))
 	var engine: Dictionary = s.get("engine_check", {})

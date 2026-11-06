@@ -62,7 +62,7 @@ pub fn hit_chance(
     reach_m: f64,
     excess_m: f64,
 ) -> f64 {
-    if !(range_m >= 0.0) || range_m > reach_m || muzzle_speed_mps <= 0.0 {
+    if range_m.is_nan() || range_m < 0.0 || range_m > reach_m || muzzle_speed_mps <= 0.0 {
         return 0.0;
     }
     // The bolt's flight: it meets a closing target sooner, an opening one later.
@@ -81,7 +81,7 @@ pub fn hit_chance(
 /// The chance a far capital's gun lands one shot on a fighter of `target_radius_m` at `range_m` (0 past its reach): the
 /// gun fires once its aim is within its gate of the lead, and the fighter manoeuvres while the bolt flies.
 pub fn turret_chance(range_m: f64, target_radius_m: f64) -> f64 {
-    if !(range_m >= 0.0) || range_m > GUN_RANGE_M {
+    if range_m.is_nan() || range_m < 0.0 || range_m > GUN_RANGE_M {
         return 0.0;
     }
     let flight_s = range_m / GUN_MUZZLE_SPEED_MPS;
@@ -95,7 +95,7 @@ pub fn turret_chance(range_m: f64, target_radius_m: f64) -> f64 {
 
 /// The chance a far capital's beam lands on its strike target within reach.
 pub fn beam_chance(range_m: f64) -> f64 {
-    if !(range_m >= 0.0) || range_m > BEAM_RANGE_M {
+    if range_m.is_nan() || range_m < 0.0 || range_m > BEAM_RANGE_M {
         return 0.0;
     }
     BEAM_HIT
@@ -103,7 +103,7 @@ pub fn beam_chance(range_m: f64) -> f64 {
 
 /// The chance a far capital's missile reaches a fighter `range_m` away (0 past the strike reach).
 pub fn missile_chance(range_m: f64) -> f64 {
-    if !(range_m >= 0.0) || range_m > STRIKE_RANGE_M {
+    if range_m.is_nan() || range_m < 0.0 || range_m > STRIKE_RANGE_M {
         return 0.0;
     }
     MISSILE_HIT_NEAR * (1.0 - range_m / MISSILE_HIT_FALLOFF_M)

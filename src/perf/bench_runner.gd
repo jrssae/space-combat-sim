@@ -427,7 +427,9 @@ func _weapons() -> Dictionary:
 			"beam_shots": standins.beam_shots, "detonations": standins.detonations, "ticks": standins.ticks,
 			"parts_us": standins.part_means_us(), "missile_steer_us": float(MissileStandin.steer_us) / float(ticks),
 			"missile_steers_per_tick": float(MissileStandin.steers) / float(ticks),
-			"path": String(standins.weapons_path()), "missile_native_steers_per_tick": float(MissileStandin.native_steers) / float(ticks)}
+			"path": String(standins.weapons_path()), "missile_native_steers_per_tick": float(MissileStandin.native_steers) / float(ticks),
+			"tier": TierDirector.current().window_summary() if TierDirector.current() != null else {},
+			"tier_capital_rolls": standins.tier_group_rolls, "tier_capital_hits": standins.tier_hits_landed}
 
 
 # The mix for summary.json: the area as a plain list.

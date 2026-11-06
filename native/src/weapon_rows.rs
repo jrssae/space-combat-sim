@@ -38,7 +38,7 @@ pub struct ScsWeaponRows {
     // The far capitals' fire (M4-T22): missiles resolved at launch and still flying to their targets, and the rolls run.
     tier_missiles: Vec<TierMissile>,
     tier_rolls: i64,
-    tier_us: i64,
+    tier_us: f64,
 }
 
 // A far capital's missile, its outcome rolled at launch, landing (or missing) when it would have arrived.
@@ -540,7 +540,7 @@ impl ScsWeaponRows {
                 }
                 false
             });
-            *tier_us = tier_started.elapsed().as_micros() as i64;
+            *tier_us = tier_started.elapsed().as_nanos() as f64 / 1000.0;
             // Missiles: top the count in flight up from the capitals in turn that have a strike target.
             flying = (wk::missiles_in_flight(bolts) + tier_missiles.len()) as i64;
             let count = capitals.body_ids.len();
@@ -616,7 +616,7 @@ impl ScsWeaponRows {
 
     /// The last step's far-capital rolls, microseconds (wall clock; a readout, M4-T22).
     #[func]
-    fn tier_us(&self) -> i64 {
+    fn tier_us(&self) -> f64 {
         self.tier_us
     }
 

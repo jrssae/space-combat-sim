@@ -65,11 +65,13 @@ var hits_landed: int = 0
 var land_us: int = 0
 # The tier's main-thread cost summed since `reset_costs` (wall clock, readouts): the fighters' part (the integration, their
 # cannons' rolls, the landing), the far capitals' rolls, the rows, and the ticks summed.
-var _cost_fighters_us: int = 0
-var _cost_capitals_us: int = 0
+var _cost_fighters_us: float = 0.0
+var _cost_capitals_us: float = 0.0
 var _cost_fighter_rows: int = 0
 var _cost_capital_rows: int = 0
 var _cost_ticks: int = 0
+var _shots_at_reset: int = 0
+var _hits_at_reset: int = 0
 
 
 func _init() -> void:
@@ -417,19 +419,32 @@ func _land_fighter_hits(sim: SimCore) -> void:
 
 ## Starts the tier's cost readouts afresh (the bench calls it at its window's start).
 func reset_costs() -> void:
-	_cost_fighters_us = 0
-	_cost_capitals_us = 0
+	_cost_fighters_us = 0.0
+	_cost_capitals_us = 0.0
 	_cost_fighter_rows = 0
 	_cost_capital_rows = 0
 	_cost_ticks = 0
+	_shots_at_reset = int(_sim.core.tier_shots()) if _sim != null and is_instance_valid(_sim) and _sim.core != null else 0
+	_hits_at_reset = hits_landed
+
+
+## What the tier did since `reset_costs` (the bench's window): the cost means (`cost_means`), the fighters' shots rolled and
+## hits landed, and the mean rows.
+func window_summary() -> Dictionary:
+	var means: PackedFloat64Array = cost_means()
+	var ticks: float = float(maxi(_cost_ticks, 1))
+	var shots: int = (int(_sim.core.tier_shots()) if _sim != null and is_instance_valid(_sim) and _sim.core != null else 0) - _shots_at_reset
+	return {"fighters_us": means[0], "capitals_us": means[1], "per_fighter_us": means[2], "per_capital_us": means[3],
+			"fighter_rows": float(_cost_fighter_rows) / ticks, "capital_rows": float(_cost_capital_rows) / ticks,
+			"shots": shots, "hits": hits_landed - _hits_at_reset}
 
 
 ## The tier's main-thread cost per tick since `reset_costs`, us: `[fighters, capitals, per fighter row, per capital row]`
 ## (wall clock, a readout; the fighters' thinks run in the AI step's job, off the main thread, and are not in it).
 func cost_means() -> PackedFloat64Array:
 	var ticks: float = float(maxi(_cost_ticks, 1))
-	var fighters: float = float(_cost_fighters_us) / ticks
-	var capitals: float = float(_cost_capitals_us) / ticks
+	var fighters: float = _cost_fighters_us / ticks
+	var capitals: float = _cost_capitals_us / ticks
 	return PackedFloat64Array([fighters, capitals, fighters / maxf(float(_cost_fighter_rows) / ticks, 1.0),
 			capitals / maxf(float(_cost_capital_rows) / ticks, 1.0)])
 
@@ -441,8 +456,8 @@ func _sum_costs(sim: SimCore) -> void:
 	var capitals: int = int(sim.core.tier_capitals())
 	if fighters + capitals == 0:
 		return
-	var cannons_us: int = int(sim.cannons.tier_us()) if sim.cannons != null else 0
-	_cost_fighters_us += int(sim.core.tier_step_us()) + cannons_us + land_us
+	var cannons_us: float = float(sim.cannons.tier_us()) if sim.cannons != null else 0.0
+	_cost_fighters_us += float(sim.core.tier_step_us()) + cannons_us + float(land_us)
 	_cost_capitals_us += standins.tier_fire_us() if standins != null and is_instance_valid(standins) else 0
 	_cost_fighter_rows += fighters
 	_cost_capital_rows += capitals
@@ -554,6 +569,12 @@ func _register_console() -> void:
 				"doc": "Tier fighters' rolled hits so far (M4-T22)"},
 		&"hits_landed": {"get": func() -> int: return hits_landed, "doc": "Tier fighters' hits landed through a Damageable so far (a target gone takes none)"},
 		&"land_us": {"get": func() -> int: return land_us, "unit": "us", "doc": "The last tick's landing of the tier fighters' hits; wall clock"},
+		&"capital_rolls": {"get": func() -> int: return standins.tier_group_rolls if standins != null and is_instance_valid(standins) else 0,
+				"doc": "Far capitals' group rolls run so far, one a second each (M4-T22)"},
+		&"capital_hits": {"get": func() -> int: return standins.tier_hits_landed if standins != null and is_instance_valid(standins) else 0,
+				"doc": "Far capitals' rolled hits landed since the bench's window began (M4-T22)"},
+		&"capital_fire_us": {"get": func() -> float: return standins.tier_fire_us() if standins != null and is_instance_valid(standins) else 0.0,
+				"unit": "us", "doc": "The last tick's far-capital rolls; wall clock (M4-T22)"},
 		&"cost_us": {"get": func() -> String: return "%.1f fighters, %.1f capitals; %.3f a fighter, %.2f a capital" % Array(cost_means()),
 				"doc": "The tier's main-thread cost per tick since the bench's window began (or the first tier row): the fighters' part (integration, rolls, landing), the far capitals' rolls, and each per row, us; wall clock (M4-T22)"},
 	}), self)

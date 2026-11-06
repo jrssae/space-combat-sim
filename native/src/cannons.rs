@@ -46,7 +46,7 @@ pub struct ScsCannons {
     shots_total: i64,
     // The tier ships' cannons found this step (slot and row), fired after the rest, and that pass's time (M4-T22).
     tier_slots: Vec<(usize, usize)>,
-    tier_us: i64,
+    tier_us: f64,
 }
 
 #[godot_api]
@@ -283,7 +283,7 @@ impl ScsCannons {
                 Self::fire_in_tier(cannon, &mut c, r, now_s, &mut self.fired);
             }
         }
-        self.tier_us = started.elapsed().as_micros() as i64;
+        self.tier_us = started.elapsed().as_nanos() as f64 / 1000.0;
         self.shots_total += self.shot_at.len() as i64;
         let mut out = VarArray::new();
         out.push(&PackedInt64Array::from(self.shots.as_slice()).to_variant());
@@ -334,7 +334,7 @@ impl ScsCannons {
 
     /// The last step's pass over the tier ships' cannons, microseconds (wall clock; a readout, M4-T22).
     #[func]
-    fn tier_us(&self) -> i64 {
+    fn tier_us(&self) -> f64 {
         self.tier_us
     }
 
