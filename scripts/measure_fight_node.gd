@@ -130,7 +130,7 @@ func _set_up_scene() -> void:
 			_run("despawn all")
 	_run("camera %s" % options["camera"])
 	if not String(options["exec"]).is_empty():
-		_run(String(options["exec"]))
+		run_exec(String(options["exec"]))
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 	_started_usec = Time.get_ticks_usec()
 	_last_frame_usec = _started_usec
@@ -139,7 +139,13 @@ func _set_up_scene() -> void:
 
 # Prints what a console statement said, so the log shows the scene was what it claims.
 func _run(line: String) -> void:
-	for result: ConsoleResult in DebugConsole.registry.execute(line):
+	run_exec(line)
+
+
+## Runs a line of console statements at set-up, all of them: a leading `bench` holds the console until its run ends, and the
+## statements after it (the tools' FULLSCREEN_EXEC and RC_EXEC) must apply before the window opens (M4-T40 fix round 1).
+func run_exec(line: String) -> void:
+	for result: ConsoleResult in DebugConsole.registry.execute_all(line):
 		if not result.ok:
 			print("[measure] console error on '%s': %s" % [line, "; ".join(result.lines)])
 
@@ -398,6 +404,10 @@ func _finish() -> void:
 			label, _read("render.renderer"), _read("render.gpu"), get_window().size.x, get_window().size.y, DisplayServer.window_get_vsync_mode(),
 			float(Settings.get_value(&"ambient_level")), Settings.get_value(&"particle_density"), Settings.get_value(&"lens_flare"), Settings.get_value(&"motion_blur"),
 			_read("ship.running_lights")])
+	# M4-T40: what the 3D was drawn with, so a run's settings file or exec is shown to have applied.
+	print("[measure] %s: upscaler %s (%s), scale %.3f, anti_aliasing %s, held %s, sim_step %s" % [label, _read("upscale.applied"),
+			_read("upscale.applied_preset"), get_tree().root.scaling_3d_scale, Settings.get_value(&"anti_aliasing"), _read("aa.held"),
+			Settings.get_value(&"sim_step") if Settings.schema.has_key(&"sim_step") else "-"])
 	print("[measure] %s: paused %s, triangles mean %.0f max %d, objects mean %.0f, draw calls mean %.0f max %d, frame ms p99 %.2f max %.2f" % [
 			label, _paused, _mean(primitives), _max(primitives), _mean(objects), _mean(draw_calls), _max(draw_calls),
 			_percentile(frame_ms, 0.99), _max(frame_ms)])  # M4-T27: the render comparison
