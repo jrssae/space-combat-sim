@@ -543,11 +543,17 @@ impl ScsWeaponRows {
                 }
             }
             // The far capitals' missiles that arrive this tick: shot down when an interceptor hostile to them (near or tier)
-            // is within its reach of the target with a shot to spare this second, as the near interceptors take a missile
+            // came within its reach of the missile's path (its capital to the target) with a shot to spare this second, as the near interceptors take a missile
             // in reach at two shots a second each; else they land if their launch rolled a hit and the target still flies
             // (not a hulk). GDScript drops a landing on a target that was released and taken out again since its launch.
             intercept_used.resize(capitals.body_ids.len(), (-1, 0));
             let second = tick.div_euclid(second_ticks);
+            let mut interceptors_of = vec![0i64; capitals.body_ids.len()];
+            for t in 0..turrets.role.len() {
+                if turrets.role[t] == ROLE_INTERCEPTOR {
+                    interceptors_of[turrets.capital[t] as usize] += 1;
+                }
+            }
             tier_missiles.retain(|m| {
                 if m.arrive_tick > tick {
                     return true;
@@ -560,6 +566,10 @@ impl ScsWeaponRows {
                     return false;
                 };
                 let target_at = rows.positions[j];
+                // The path: from its capital (where it is now; a cruising capital moves little in a missile's flight, and a
+                // rebase moves it with the rows) to the target.
+                let from = usize::try_from(guard.row_of_id(m.shooter))
+                    .map_or(target_at, |s| rows.positions[s]);
                 for (c, &body) in capitals.body_ids.iter().enumerate() {
                     let r = match usize::try_from(cap_rows[c]) {
                         Ok(r) => Some(r),
@@ -568,19 +578,14 @@ impl ScsWeaponRows {
                     let Some(r) = r else {
                         continue;
                     };
-                    let interceptors = turrets
-                        .role
-                        .iter()
-                        .zip(turrets.capital.iter())
-                        .filter(|&(&role, &cap)| role == ROLE_INTERCEPTOR && cap as usize == c)
-                        .count() as i64;
+                    let interceptors = interceptors_of[c];
                     let reach = tier_fire::INTERCEPT_RANGE_M + rows.radii[r];
                     if interceptors == 0
                         || !table_row(hostile, n, rows.faction_ix[r])
                             .get(m.faction_ix as usize)
                             .copied()
                             .unwrap_or(false)
-                        || f64::from(crate::v3::dist_sq(rows.positions[r], target_at))
+                        || tier_fire::segment_dist_sq(from, target_at, rows.positions[r])
                             > reach * reach
                     {
                         continue;

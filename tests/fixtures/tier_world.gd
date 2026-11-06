@@ -103,12 +103,14 @@ func free_world() -> void:
 	space = null
 
 
-## A pooled fighter of `type` at `at` (World-local, m) with an AI brain of `profile` seeded `seed_value`.
+## A pooled fighter of `type` at `at` (World-local, m) with an AI brain of `profile` seeded `seed_value`, its temperament
+## (skill, aggression) as given or the profile's.
 func fighter(type: StringName, display_name: String, at: Vector3, seed_value: int, basis: Basis = Basis.IDENTITY,
-		velocity: Vector3 = Vector3.ZERO, profile: String = "") -> Combatant:
+		velocity: Vector3 = Vector3.ZERO, profile: String = "", temperament: Dictionary = {}) -> Combatant:
 	var chosen: String = profile if profile != "" else ("ally_starfury" if type == ShipPool.ALLY_TYPE else "raider")
-	var brain: PilotBrain = BrainFactory.from_behaviour({"type": "ai", "profile": chosen}, world.to_universe(at),
-			seed_value)["brain"] as PilotBrain
+	var spec: Dictionary = {"type": "ai", "profile": chosen}
+	spec.merge(temperament, true)  # e.g. {"skill": "regular", "aggression": "balanced"}: the same on both sides
+	var brain: PilotBrain = BrainFactory.from_behaviour(spec, world.to_universe(at), seed_value)["brain"] as PilotBrain
 	return pool.acquire(display_name, world.to_universe(at), basis, velocity, brain, type)
 
 

@@ -169,7 +169,7 @@ func test_turrets_of_a_capital_that_is_not_bound_are_refused() -> void:
 	assert_false(ok)
 	assert_true(rows.set_turrets(PackedInt32Array([0, 1]), PackedVector3Array([Vector3.ZERO, Vector3.ZERO]),
 			PackedByteArray([0, 1])), "bound capitals are taken")
-	var out: Array = rows.step(1, 100.0, 1.0 / 60.0, 30, 120, 0, 2)
+	var out: Array = rows.step(1, 100.0, 1.0 / 60.0, 30, 120, 0, 2, 60)  # M4-T22 fix round 1: the ticks per second
 	assert_eq((out[0] as PackedInt32Array).size(), 0, "no core: nothing fires, nothing breaks")
 
 

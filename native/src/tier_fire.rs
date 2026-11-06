@@ -156,6 +156,20 @@ pub fn gate_excess_m(
     excess.min(1.0e6)
 }
 
+/// The squared distance from `p` to the segment from `a` to `b` (a far missile's path and an interceptor's place).
+pub fn segment_dist_sq(a: Vector3, b: Vector3, p: Vector3) -> f64 {
+    let ab = sub(b, a);
+    let len_sq = f64::from(dot(ab, ab));
+    let t = if len_sq > 0.0 {
+        (f64::from(dot(sub(p, a), ab)) / len_sq).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let closest = add(a, scale(ab, t as f32));
+    let d = sub(p, closest);
+    f64::from(dot(d, d))
+}
+
 /// How fast a target at `target_at` moving at `target_v` closes on a shooter at `at` moving at `v`, m/s (negative when
 /// they open).
 pub fn closing_speed(at: Vector3, v: Vector3, target_at: Vector3, target_v: Vector3) -> f64 {

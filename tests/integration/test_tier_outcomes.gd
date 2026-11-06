@@ -2,21 +2,20 @@ extends GutTest
 ## The low-attention tier's fairness (M4-T22, architecture §17.14): a fight out of view wins or loses at the rate one in view
 ## does. Every comparison is the tier against full fidelity on held-out seeds (fix round 1; the Cycle log has the fit): the
 ## hit model's constants by maximum likelihood over full-fidelity melee shots (seeds 11 to 16) and duel rounds (seeds from
-## 50 000), the per-hull terms (`ShipSpec.tier_hit_scale`) from the 6 against 18 fight below on seeds 101 to 106, both
-## schedules; never on the seeds tested here.
+## 50 000), the per-hull terms (`ShipSpec.tier_hit_scale`) from the even fight below on seeds 101 to 103, both schedules;
+## never on the seeds tested here.
 ## - The duel: rounds of head-on engagements (the first build's steady chase, where Starfuries hit 73 % at 450 m, is a known
 ##   limit the model under-scores), 1 000 shots or more: the model's expected to-hit rate over the same shots, with each shot's
 ##   gate excess, within 10 % of full fidelity's (the seeded roll printed beside it). The per-hull term (`ShipSpec.
 ##   tier_hit_scale`) is not in it: it corrects how a tier fight's flight differs (more and closer shots), which a comparison
-##   over the same shots has no part of, and the 6 against 18 holds it.
-## - 6 Starfuries against 18 raiders (a mix sized so neither side walks over the other; 12 against 12 was always the
-##   Starfuries'), 30 s, seeds 1 to 3, every ship invulnerable and its hull loss counted as the damage it took over its hull
-##   (a fight that ends in kills cascades: the same seed at full fidelity differs by 17 to 23 % a side between the two
-##   schedules, against 2 to 4 % with no kills): for each side the hits it lands and the hull loss it takes, pooled over the
-##   three seeds, within 15 %; the ratio of the two sides' hull left, pooled, within 15 %; the same winner on every seed whose
-##   full-fidelity margin is over 20 points; each seed's hits within a factor of two. The per-side and ratio bounds are
-##   measured and reported as pending, not asserted (fix round 1): full fidelity differs from itself by up to 58 % a side
-##   between the two schedules on these seeds, so three fights cannot hold 15 % for the reference itself.
+##   over the same shots has no part of, and the even fight holds it.
+## - An even fight (the maintainer's Q63): 12 Starfuries against 40 raiders at the same skill and temperament (regular,
+##   balanced), the count the full-fidelity sweep found nearest an even fight (seeds 201 to 203: 32 raiders lose every
+##   seed, 40 win one in three, 42 two in three, 44 every one; the Cycle log has the table), 30 s, seeds 1 to 3: for each
+##   side the hits it lands and the mean hull loss it takes, pooled over the three seeds, within 15 % (measured and reported
+##   pending: full fidelity differs from itself by 36 to 38 % a side between the two schedules on these seeds); the tier's win share
+##   (the side with the larger share of its hull left after 30 s) within one seed in three of full fidelity's, the spread the
+##   sweep showed between neighbouring counts; each seed's hits within a factor of two.
 ## - A cruiser with 8 guns and 2 beams against 12 invulnerable fighters, 30 s: their hull loss (damage over hull) within 15 %.
 ## - Far missiles: a cruiser launching at fighters about a hostile guard cruiser with interceptors, 30 s: the share shot
 ##   down within 15 %.
@@ -33,9 +32,11 @@ const DUEL_ROUND_TICKS: int = 600
 const DUEL_TOLERANCE: float = 0.10
 const FIGHT_TOLERANCE: float = 0.15
 const SEED_FACTOR: float = 2.0
-const MARGIN_FOR_WINNER: float = 0.20
-const ALLIES: int = 6
-const RAIDERS: int = 18
+const ALLIES: int = 12
+const RAIDERS: int = 40
+const EVEN: Dictionary = {"skill": "regular", "aggression": "balanced"}
+## How far the tier's win share may sit from full fidelity's over the three seeds: one seed (the sweep's spread).
+const WIN_SHARE_SPREAD: float = 1.0 / 3.0
 const TIER_RADIUS_M: float = 10000.0
 ## Where the fights sit: far enough out that every ship is a tier row with the tier on.
 const FIGHT_AT := Vector3(0.0, 0.0, -20000.0)
@@ -184,40 +185,38 @@ func _on_duel_shot(_muzzle: int, at: Vector3, shooter: Combatant, target: Combat
 			excess])
 
 
-# --- 6 against 18 ------------------------------------------------------------------------------------------------------------
+# --- an even fight: 12 against 40 ---------------------------------------------------------------------------------------
 
 
-func test_a_six_against_eighteen_fight_in_the_tier_ends_as_it_does_at_full_fidelity_for_each_side() -> void:
+func test_an_even_fight_in_the_tier_ends_as_it_does_at_full_fidelity_for_each_side() -> void:
 	if _skipped():
 		return
 	for schedule: StringName in SCHEDULES:
 		var pool: Dictionary = {}
 		for key: String in ["full_hits_a", "tier_hits_a", "full_hits_r", "tier_hits_r", "full_loss_a", "tier_loss_a",
-				"full_loss_r", "tier_loss_r", "full_left_a", "tier_left_a", "full_left_r", "tier_left_r"]:
+				"full_loss_r", "tier_loss_r", "full_wins", "tier_wins"]:
 			pool[key] = 0.0
 		for seed_value: int in SEEDS:
 			var full: Dictionary = await _fight(seed_value, false, schedule)
 			var tier: Dictionary = await _fight(seed_value, true, schedule)
 			var label: String = "%s seed %d" % [schedule, seed_value]
 			gut.p("%s: full fidelity %s; the tier %s" % [label, full, tier])
-			assert_gt(int(tier["tier_rows"]), 20, "%s: the tier fight flew in the tier (%d rows)" % [label, int(tier["tier_rows"])])
+			assert_gt(int(tier["tier_rows"]), ALLIES + RAIDERS - 4, "%s: the tier fight flew in the tier (%d rows)" % [label, int(tier["tier_rows"])])
 			assert_eq(int(full["tier_rows"]), 0, "%s: the full-fidelity fight did not" % label)
 			var full_hits: float = float(full["hits_a"]) + float(full["hits_r"])
 			var tier_hits: float = float(tier["hits_a"]) + float(tier["hits_r"])
 			assert_between(tier_hits, full_hits / SEED_FACTOR, full_hits * SEED_FACTOR,
 					"%s: the seed's hits within a factor of two (%d against %d)" % [label, int(tier_hits), int(full_hits)])
-			if absf(float(full["margin"])) > MARGIN_FOR_WINNER:
-				assert_eq(signf(float(tier["margin"])), signf(float(full["margin"])),
-						"%s: the same side wins a clear fight (margin %.2f against %.2f)" % [label, float(tier["margin"]), float(full["margin"])])
 			for side: String in ["a", "r"]:
-				for what: String in ["hits", "loss", "left"]:
+				for what: String in ["hits", "loss"]:
 					pool["full_%s_%s" % [what, side]] += float(full["%s_%s" % [what, side]])
 					pool["tier_%s_%s" % [what, side]] += float(tier["%s_%s" % [what, side]])
+			pool["full_wins"] += 1.0 if float(full["margin"]) > 0.0 else 0.0
+			pool["tier_wins"] += 1.0 if float(tier["margin"]) > 0.0 else 0.0
 		gut.p("%s seeds 1 to 3, the tier against full fidelity: %s" % [schedule, pool])
-		# The per-side gate (fix round 1's ruling) is measured and reported, not asserted: on these seeds full fidelity
-		# differs from itself by up to 58 % a side between the two schedules (a one-tick command delay), so three pooled
-		# fights cannot hold a 15 % bound for the reference, let alone the tier. Pending with the numbers, for the
-		# controller (task-t22-report.md, fix round 1, I1).
+		# The per-side bound is measured and reported pending, not asserted: on these seeds full fidelity differs from
+		# itself by 36 to 38 % a side between the two schedules, so three pooled fights cannot hold 15 % for the reference
+		# (task-t22-report.md, fix round 1, I1; for the controller).
 		var misses: PackedStringArray = []
 		for side: String in ["a", "r"]:
 			var name: String = "the Starfuries" if side == "a" else "the raiders"
@@ -226,18 +225,19 @@ func test_a_six_against_eighteen_fight_in_the_tier_ends_as_it_does_at_full_fidel
 				var f: float = pool["full_%s_%s" % [what, side]]
 				if absf(t - f) > FIGHT_TOLERANCE * f:
 					misses.append("%s's %s %.3f against %.3f" % [name, "hits landed" if what == "hits" else "hull loss taken", t, f])
-		var ratio_full: float = (pool["full_left_a"] / ALLIES) / maxf(pool["full_left_r"] / RAIDERS, 1e-6)
-		var ratio_tier: float = (pool["tier_left_a"] / ALLIES) / maxf(pool["tier_left_r"] / RAIDERS, 1e-6)
-		if absf(ratio_tier - ratio_full) > FIGHT_TOLERANCE * ratio_full:
-			misses.append("the hull-left ratio %.3f against %.3f" % [ratio_tier, ratio_full])
 		if not misses.is_empty():
-			pending("%s: per side over seeds 1 to 3, outside 15 %%: %s (below the reference's own noise floor; see the report)" % [
+			pending("%s: per side over seeds 1 to 3, outside 15 %%: %s (below the reference's own spread; see the report)" % [
 					schedule, ", ".join(misses)])
+		var share_full: float = pool["full_wins"] / float(SEEDS.size())
+		var share_tier: float = pool["tier_wins"] / float(SEEDS.size())
+		assert_lte(absf(share_tier - share_full), WIN_SHARE_SPREAD + 1e-6,
+				"%s: the Starfuries' win share within one seed in three (%.2f against %.2f)" % [schedule, share_tier, share_full])
 
 
-## One 30 s fight of 6 allied Starfuries against 18 raiders at `FIGHT_AT`, seeded, invulnerable, in the tier or not. Returns
-## per side (`a` the Starfuries, `r` the raiders) the bolt hits it landed, the hull loss it took (damage over its hull) and its
-## hull left, the margin (the Starfuries' share of hull left minus the raiders'), and the tier rows seen after the first second.
+## One 30 s fight of 12 allied Starfuries against 40 raiders at `FIGHT_AT`, the same temperament on both sides, seeded, in
+## the tier or not. Returns per side (`a` the Starfuries, `r` the raiders) the bolt hits it landed, the mean hull loss it
+## took (a ship destroyed counts 1) and its survivors, the margin (the Starfuries' share of hull left minus the raiders'),
+## and the tier rows seen after the first second.
 func _fight(seed_value: int, tier_on: bool, schedule: StringName) -> Dictionary:
 	await _world(RAIDERS, ALLIES, tier_on, schedule)
 	w.tier.seed_value = seed_value
@@ -250,15 +250,13 @@ func _fight(seed_value: int, tier_on: bool, schedule: StringName) -> Dictionary:
 		var lane := Vector3(float(i % 4) * 150.0 - 225.0, float(i / 4) * 120.0 - 120.0, 0.0)
 		if i < ALLIES:
 			allies.append(w.fighter(ShipPool.ALLY_TYPE, "ALPHA %d" % (i + 2), FIGHT_AT + lane + jitter + Vector3(0.0, 0.0, 900.0),
-					seed_value * 100 + i, Basis.IDENTITY, Vector3(0.0, 0.0, -40.0)))
+					seed_value * 100 + i, Basis.IDENTITY, Vector3(0.0, 0.0, -40.0), "", EVEN))
 		if i < RAIDERS:
 			raiders.append(w.fighter(ShipPool.DEFAULT_TYPE, "RAIDER %d" % (i + 1), FIGHT_AT + lane - jitter - Vector3(0.0, 0.0, 900.0),
-					seed_value * 100 + 50 + i, Basis(Vector3.UP, PI), Vector3(0.0, 0.0, 40.0)))
+					seed_value * 100 + 50 + i, Basis(Vector3.UP, PI), Vector3(0.0, 0.0, 40.0), "", EVEN))
 	var ally_ids: Dictionary = {}
 	for c: Combatant in allies:
 		ally_ids[c.ship.get_instance_id()] = true
-	for c: Combatant in allies + raiders:
-		c.damageable.invulnerable = true
 	await _ticks(60)
 	var tier_rows: int = int(w.sim.core.tier_count())
 	await _ticks(FIGHT_TICKS - 60)
@@ -269,19 +267,16 @@ func _fight(seed_value: int, tier_on: bool, schedule: StringName) -> Dictionary:
 			hits_a += 1
 		else:
 			hits_r += 1
-	var damage_a: float = 0.0
-	var damage_r: float = 0.0
-	for h: Array in w.hits:
-		if ally_ids.has(int(h[0])):
-			damage_a += float(h[2])
-		else:
-			damage_r += float(h[2])
-	var loss_a: float = damage_a / (allies[0].damageable.hull.max_hp * ALLIES)
-	var loss_r: float = damage_r / (raiders[0].damageable.hull.max_hp * RAIDERS)
-	var left_a: float = ALLIES * (1.0 - loss_a)
-	var left_r: float = RAIDERS * (1.0 - loss_r)
-	return {"hits_a": hits_a, "hits_r": hits_r, "loss_a": snappedf(loss_a, 0.001), "loss_r": snappedf(loss_r, 0.001), "left_a": snappedf(left_a, 0.01), "left_r": snappedf(left_r, 0.01),
-			"margin": snappedf(left_a / ALLIES - left_r / RAIDERS, 0.001), "tier_rows": tier_rows}
+	var survivors_a: int = 0
+	var survivors_r: int = 0
+	for c: Combatant in allies:
+		survivors_a += 0 if c.damageable.hull.destroyed else 1
+	for c: Combatant in raiders:
+		survivors_r += 0 if c.damageable.hull.destroyed else 1
+	return {"hits_a": hits_a, "hits_r": hits_r, "loss_a": snappedf(TierWorld.mean_hull_loss(allies), 0.001),
+			"loss_r": snappedf(TierWorld.mean_hull_loss(raiders), 0.001), "survivors_a": survivors_a, "survivors_r": survivors_r,
+			"margin": snappedf(TierWorld.hull_left(allies) / ALLIES - TierWorld.hull_left(raiders) / RAIDERS, 0.001),
+			"tier_rows": tier_rows}
 
 
 # --- a cruiser against 12 fighters -------------------------------------------------------------------------------------------
