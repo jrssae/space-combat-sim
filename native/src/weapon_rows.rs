@@ -38,6 +38,7 @@ pub struct ScsWeaponRows {
     // The far capitals' fire (M4-T22): missiles resolved at launch and still flying to their targets, and the rolls run.
     tier_missiles: Vec<TierMissile>,
     tier_rolls: i64,
+    tier_us: i64,
 }
 
 // A far capital's missile, its outcome rolled at launch, landing (or missing) when it would have arrived.
@@ -295,6 +296,7 @@ impl ScsWeaponRows {
                 spent,
                 tier_missiles,
                 tier_rolls,
+                tier_us,
                 ..
             } = self;
             let n = *factions;
@@ -437,6 +439,7 @@ impl ScsWeaponRows {
                 beam_targets.push(target_at);
             }
             // The far capitals (M4-T22): once a second each, the guns and beams as rolls, the interceptors as removals.
+            let tier_started = std::time::Instant::now();
             let second_ticks = (intercept_ticks.max(1) * 2).max(1);
             let seed = guard.tier_seed;
             for (c, &body) in capitals.body_ids.iter().enumerate() {
@@ -537,6 +540,7 @@ impl ScsWeaponRows {
                 }
                 false
             });
+            *tier_us = tier_started.elapsed().as_micros() as i64;
             // Missiles: top the count in flight up from the capitals in turn that have a strike target.
             flying = (wk::missiles_in_flight(bolts) + tier_missiles.len()) as i64;
             let count = capitals.body_ids.len();
@@ -608,6 +612,12 @@ impl ScsWeaponRows {
         out.push(&landed.launches.to_variant());
         out.push(&self.tier_rolls.to_variant());
         out
+    }
+
+    /// The last step's far-capital rolls, microseconds (wall clock; a readout, M4-T22).
+    #[func]
+    fn tier_us(&self) -> i64 {
+        self.tier_us
     }
 
     /// The far capitals' missiles resolved at launch and not yet arrived (M4-T22).

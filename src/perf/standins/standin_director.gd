@@ -453,12 +453,20 @@ func beam_count() -> int:
 ## Starts the weapons' counts and the parts' costs over (a bench's measured window).
 func restart_weapon_counters() -> void:
 	tier_hits_landed = 0
+	var tier: TierDirector = TierDirector.current()
+	if tier != null:
+		tier.reset_costs()
 	missile_intercepts = 0
 	missile_launches = 0
 	beam_shots = 0
 	detonations = 0
 	ticks = 0
 	part_us.fill(0)
+
+
+## The far capitals' rolls in the last tick, us (wall clock, a readout; M4-T22).
+func tier_fire_us() -> int:
+	return int(_native.rows.tier_us()) if _native != null and is_instance_valid(_native) and _native.rows != null else 0
 
 
 ## Each part's mean cost per active tick since `clear`, us, by name (profiling only).

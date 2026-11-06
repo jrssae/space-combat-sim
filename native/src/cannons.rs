@@ -44,6 +44,9 @@ pub struct ScsCannons {
     shot_at: Vec<Vector3>,
     fallback: Vec<i32>,
     shots_total: i64,
+    // The tier ships' cannons found this step (slot and row), fired after the rest, and that pass's time (M4-T22).
+    tier_slots: Vec<(usize, usize)>,
+    tier_us: i64,
 }
 
 #[godot_api]
@@ -233,6 +236,7 @@ impl ScsCannons {
         self.shot_at.clear();
         self.fallback.clear();
         let mut c = core.bind_mut();
+        self.tier_slots.clear();
         for slot in 0..self.slots.len() {
             let Some(cannon) = self.slots[slot].as_mut() else {
                 continue;
@@ -242,8 +246,7 @@ impl ScsCannons {
                 .ok()
                 .filter(|&r| c.rows.flags[r] & FLAG_TIER != 0)
             {
-                // A ship in the low-attention tier (M4-T22): its parked cannon's gate fires, each shot a roll, no bolt.
-                Self::fire_in_tier(cannon, &mut c, r, now_s, &mut self.fired);
+                self.tier_slots.push((slot, r)); // fired below: a tier shot makes no bolt, so the order of the rows holds
                 continue;
             }
             if !cannon.live {
@@ -273,6 +276,14 @@ impl ScsCannons {
                 &mut self.shot_at,
             );
         }
+        // The ships in the low-attention tier (M4-T22): each parked cannon's gate fires, each shot a roll, no bolt.
+        let started = std::time::Instant::now();
+        for &(slot, r) in &self.tier_slots {
+            if let Some(cannon) = self.slots[slot].as_mut() {
+                Self::fire_in_tier(cannon, &mut c, r, now_s, &mut self.fired);
+            }
+        }
+        self.tier_us = started.elapsed().as_micros() as i64;
         self.shots_total += self.shot_at.len() as i64;
         let mut out = VarArray::new();
         out.push(&PackedInt64Array::from(self.shots.as_slice()).to_variant());
@@ -319,6 +330,12 @@ impl ScsCannons {
         out.push(&PackedInt64Array::from(shots.as_slice()).to_variant());
         out.push(&PackedVector3Array::from(shot_at.as_slice()).to_variant());
         out
+    }
+
+    /// The last step's pass over the tier ships' cannons, microseconds (wall clock; a readout, M4-T22).
+    #[func]
+    fn tier_us(&self) -> i64 {
+        self.tier_us
     }
 
     /// Bolts fired by the kernel so far.
