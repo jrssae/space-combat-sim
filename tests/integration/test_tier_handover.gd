@@ -515,6 +515,32 @@ func test_with_the_core_gone_a_tiered_ship_comes_back_where_it_was_parked_in_the
 		await _rebuild()  # a core again for the next pass and the teardown
 
 
+func test_a_gdscript_pilot_beside_a_tier_row_perceives_only_the_bodies_its_scan_holds() -> void:
+	if _skipped():
+		return
+	tier.set_physics_process(false)  # one ship into the tier by hand; its neighbours stay on their bodies
+	for schedule: StringName in SCHEDULES:
+		if schedule != SCHEDULES[0]:
+			await _rebuild()
+			tier.set_physics_process(false)
+		_use_schedule(schedule)
+		var far: Array[Combatant] = []
+		for i: int in 4:
+			far.append(_raider("FAR %d" % i, Vector3(float(i) * 100.0, 0.0, -15000.0), ThrustBrain.new()))
+		await _ticks(3)
+		for i: int in 2:
+			assert_true(tier.demote_body(far[i].ship.get_instance_id()), "%s: FAR %d into the tier" % [schedule, i])
+		var thinks: int = (far[2].driver.brain as ThrustBrain).thinks
+		await _ticks(30)  # the others' GDScript pilots perceive beside the rows every tick
+		assert_gt((far[2].driver.brain as ThrustBrain).thinks, thinks, "%s: the ships on their bodies kept thinking" % schedule)
+		var scan: ContactScan = ContactScan.shared(get_tree())
+		var names: PackedStringArray = []
+		for contact: Contact in scan.contacts_for(far[2].ship.get_instance_id(), far[2].ship.global_position, far[2].faction):
+			names.append(contact.name)
+		assert_false(names.has("FAR 0") or names.has("FAR 1"), "%s: no tier row among a GDScript scan's contacts (%s)" % [schedule, names])
+		assert_true(names.has("FAR 3"), "%s: the neighbour on its body is (%s)" % [schedule, names])
+
+
 func test_one_thread_and_six_give_the_same_rows_with_tier_rows_among_the_contacts() -> void:
 	if _skipped():
 		return

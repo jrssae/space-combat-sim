@@ -46,6 +46,8 @@ pub struct Rows {
     // search instead of a scan.
     pub id_rows: Vec<(i64, u32)>,
     pub node_count: usize,
+    // The low-attention tier's rows at the end (M4-T21): the scan GDScript holds stops before them.
+    pub tier_rows: usize,
 }
 
 /// The bolts in flight, column by column: first the rows the core owns (M4-T35, stepped by `bolt_kernels`, in launch
@@ -104,6 +106,7 @@ impl Rows {
         self.name_keys.clear();
         self.id_rows.clear();
         self.node_count = 0;
+        self.tier_rows = 0;
     }
 
     /// Rebuilds `id_rows` from `ids`.

@@ -228,6 +228,7 @@ impl TierRows {
             rows.reach.push(self.reach[i]);
             rows.name_keys.push(self.name_keys[i].clone());
         }
+        rows.tier_rows = self.len();
     }
 }
 

@@ -131,8 +131,9 @@ impl ScsContactField {
         self.grid.cell_m = cell_m;
         {
             let c = core.bind();
-            self.grid.cells = contact::sorted_cells(&c.rows.positions, cell_m);
-            self.grid.max_static_radius = (0..c.rows.positions.len())
+            let n = scan_len(&c);
+            self.grid.cells = contact::sorted_cells(&c.rows.positions[..n], cell_m);
+            self.grid.max_static_radius = (0..n)
                 .filter(|&i| c.rows.is_static[i])
                 .map(|i| c.rows.radii[i].abs())
                 .fold(0.0, f64::max);
@@ -353,23 +354,31 @@ impl ScsContactField {
     }
 }
 
+// The core's rows the GDScript scan holds (the bodies and statics; M4-T21): its indices never reach a tier row.
+fn scan_len(c: &ScsSimCore) -> usize {
+    c.rows.body_ids.len() - c.rows.tier_rows
+}
+
 // The scan the queries read: the core's rows when attached, else the field's own.
 fn view_of<'a>(core: &'a Option<GdRef<'a, ScsSimCore>>, own: &'a Own) -> View<'a> {
     match core {
-        Some(c) => View {
-            body_ids: &c.rows.body_ids,
-            positions: &c.rows.positions,
-            body_faction: &c.rows.faction_ix,
-            is_ship: &c.rows.rigid,
-            reach: &[],
-            is_static: &c.rows.is_static,
-            is_mine: &c.rows.is_mine,
-            radii: &c.rows.radii,
-            bolt_positions: &c.bolts.positions,
-            bolt_velocities: &c.bolts.velocities,
-            bolt_faction: &c.bolts.faction_ix,
-            bolt_shooters: &c.bolts.shooters,
-        },
+        Some(c) => {
+            let n = scan_len(c);
+            View {
+                body_ids: &c.rows.body_ids[..n],
+                positions: &c.rows.positions[..n],
+                body_faction: &c.rows.faction_ix[..n],
+                is_ship: &c.rows.rigid[..n],
+                reach: &[],
+                is_static: &c.rows.is_static[..n],
+                is_mine: &c.rows.is_mine[..n],
+                radii: &c.rows.radii[..n],
+                bolt_positions: &c.bolts.positions,
+                bolt_velocities: &c.bolts.velocities,
+                bolt_faction: &c.bolts.faction_ix,
+                bolt_shooters: &c.bolts.shooters,
+            }
+        }
         None => View {
             body_ids: &own.body_ids,
             positions: &own.positions,
