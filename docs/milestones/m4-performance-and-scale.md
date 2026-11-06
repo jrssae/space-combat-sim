@@ -99,6 +99,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q65 | T22's cost (2026-11-06) | **Optimise the tier thinks.** 0.3 us a tier fighter is the total, thinks included (0.96 us measured: 0.24 on the main thread, 0.72 in the thinks), on both schedules; T22 cuts the think cost, then re-measures |
 | Q66 | The display driver (2026-11-06) | **Wayland for the game and the measurements** (T41). Every fullscreen number before T41 ran through X11 at 6144x3456 (the panels at GNOME's 1.25 scale) and is not comparable with later rows; T25 re-takes its baselines through Wayland |
 | Q67 | The fallbacks (2026-11-06, asked during T22's fix round 2) | **M4 is the way to go: remove the fallbacks.** T37 removes the `sim_step` inline step (Q54's switch back; `delayed` stays as the threaded step's reference) and every `perf_native*` and `perf_*` switch to an old path with the GDScript paths behind them, not kept as test references (overrides Q57); parity tests compare the native path with recorded reference output in `tests/fixtures/`. Q54's both-schedules rule ends when T37 merges |
+| Q68 | The order after T22 (2026-11-06) | **T37 before T23.** The cleanup (fallbacks, the inline step, the GDScript paths) runs next, so T23 builds on the one threaded path; T25 stays last |
 
 ## The budget ("good game performance", Q5)
 
@@ -210,7 +211,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T20 | Turrets, missiles, beams and mines as native rows | T16, T12 | Opus | The non-fighter rows' budget (710 turrets at 500); M12 inherits the path | N, A | done, bit for bit; the stand-ins' stage at `battle` 500 from 9.50 to 0.68 ms; every row in budget but a beam shot's spawn (about 20 us a shot against 1) (2026-11-04, in a worktree on `67d5cda`; Cycle log, M4-T20) |
 | T21 | The low-attention tier: state, 20 Hz integration, promotion and demotion of fighters and capitals | T20, checkpoint 3, T24 | Fable | The pool and ship adapter handover must never pop; serial | T | done (2026-11-06, Fable then Opus for fix round 1, CI green on `4f360e3`; headless 1 000 20.3 to 9.9 ms, fullscreen 500 55 to 101 FPS and 1 000 14 to 58, partly provisional until T22; the tier off by default until T22 and T23 land (7 far-ship tests); Cycle log, M4-T21) |
 | T22 | Tier brains at 2 to 5 Hz, statistical fire, far capitals' aggregated fire | T21 | Opus | Far fights must stay fair | T, N | in progress (dispatched 2026-11-06, Opus; work done in the worktree on `8aed313`, Cycle log, M4-T22; waiting for review) |
-| T23 | Far proxies for tier rows (dots, radar, targeting) | T21, T11 | Opus | GPU numbers by the agent, the look (H) | R | not started |
+| T23 | Far proxies for tier rows (dots, radar, targeting) | T21, T11, T37 (Q68) | Opus | GPU numbers by the agent, the look (H) | R | not started |
 | T24 | The simulation step on a worker thread (firm, Q53): the AI and every native kernel step off the main thread into a double-buffered snapshot | T35, T36 | Fable | A tick-order change, double-buffered snapshots; the frame and input stop waiting on the simulation | N | done (2026-11-06, two fix rounds, CI green on `798f393`; the AI step on its own worker thread one tick behind, flight and combat on the main thread (Q61); `battle` 500 tick p99 16.8 to 12.9 ms; Cycle log, M4-T24) |
 | T25 | Phase 3 measurements, the 1 000 stretch, the full suite, report P3 | T23, T24, T37 (T26) | Sonnet | Measurement, no code | M | not started |
 | T26 | Resolution scaling for the big battle (only if the GPU binds at the fullscreen check; Q20) | T11 | Sonnet | One setting and an automatic step on `RenderScale`; the look (H) | R | not needed (superseded by T38, Q59; `RenderScale` was removed by T36) |
@@ -227,7 +228,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T34 | The cheap pass on the per-ship stages (Q50): the ram stage's loop, the hit stage's gather, targeting and the core's sync, into native code or out of the per-tick path | checkpoint 3 | Opus | 13.3 of 17.85 ms at `battle` 300 sits in four stages phase 2 did not take (report P2) | N, G | done, bit for bit, five of the six changes behind a setting; the four stages at `battle` 300 from 9.12 to 4.16 ms and the tick from 17.72 to 12.86 (8 ms missed, the rest named in the entry); at 500 15.81 to 7.47 and 30.42 to 21.74 (2026-11-05, in a worktree on `9cd88d5`, fix round 1 the same day; Cycle log, M4-T34) |
 | T35 | The core owns the simulated state (Q55): bolts as rows drawn by one multimesh, Jolt bodies read once a tick by RID in one native call, activity, hull and selection as event-driven columns, the ram stage's contact read native | T33, T34 | Fable | Refactor review findings 1, 4, 5 and 6: 5 to 8 ms at 500 for the bolts alone; T24's precondition | N, G | done (2026-11-05, four fix rounds, CI green on `8934e9b`; the tick at `battle` 300 from 11.80 to 6.74 ms, Q49's 8 ms met; 500 from 19.46 to 10.71 ms; Cycle log, M4-T35) |
 | T36 | The frame's per-ship work in one pass per subsystem (Q56, Q58): plumes, muzzle flashes, LOD switching, audio, far dots, the HUD radar, hit flashes; the splat-era render scale cap; the slow test switch | T33 | Opus | Refactor review findings 2, 3, 7, 9, 12, 13, 14: 3 to 5 ms a frame at 500 | R, G | done (2026-11-05, in a worktree on `f414cf4`; Cycle log, M4-T36): the worst second's process work at `battle` 500 from 25.7 to 10.2 to 10.8 ms and at 300 from 20.2 to 11.3 ms after fix round 1; `battle` 300 from 16.7 to 37.1 FPS; engine audio left to M5-T19 (finding 7) and the lean ships' muzzle flash pool with muzzle transforms as data moved to T35 (finding 12) |
-| T37 | M4's cleanup (Q57; the maintainer, 2026-11-06): the native library required, the old GDScript paths and the inline step removed with their settings (parity tests against recorded references), one hull-reading path, the documentation drift | T23 | Opus | Refactor review findings 8, 16, 17; more lines and settings than planned, since the GDScript references go too; the parity tests must keep their teeth | X, G | not started |
+| T37 | M4's cleanup (Q57; the maintainer, 2026-11-06): the native library required, the old GDScript paths and the inline step removed with their settings (parity tests against recorded references), one hull-reading path, the documentation drift | T22 (before T23, Q68) | Opus | Refactor review findings 8, 16, 17; more lines and settings than planned, since the GDScript references go too; the parity tests must keep their teeth | X, G | not started |
 | T38 | Anti-aliasing (Q59, Q60): Godot's MSAA 2x and 4x, TAA, FXAA and SMAA as a setting, live; motion vectors fixed for everything TAA (and T40's FSR 2.2) needs; defaults chosen by measurement | T36 | Opus | `project.godot` sets no anti-aliasing, so edges and thin hull detail alias; TAA and FSR 2.2 both need correct motion vectors from the multimeshes, particles and bolts | R | done (2026-11-05, one fix round, CI green on `d8b73ce`; SMAA the default, a look call the costs allow; at the 6K window's native size `battle` 300 draws in 2.83 ms off, 3.20 ms SMAA, 5.50 ms TAA; Cycle log, M4-T38) |
 | T40 | Upscaling (Q59, Q60): FSR 2.2 (temporal, its own anti-aliasing) and FSR 1.0 (spatial, with sharpness) with internal-resolution presets from a third of the output's height up to native, applied live with the HUD at window size; no frame generation; defaults chosen by measurement | T38 | Opus | Since T36 a 4K window renders 4K; FSR 2.2 from 1 080 or 1 440 lines looks better than a bilinear stretch and costs less than native; below 1 080 is for weaker GPUs; supersedes T26 (measured otherwise: FSR 2.2 costs more GPU than native here, so native is the default) | R | done (2026-11-05, one fix round, CI green on `d85a314`; native the default: FSR 2.2 costs more GPU than native here and FSR 1.0 gains 3 to 5 % on a CPU-bound frame; the fix round made `FULLSCREEN_EXEC` apply, so T24's and T35's fullscreen comparisons were re-measured; Cycle log, M4-T40) |
 | T41 | The Wayland display driver (Q66): the game and the measurements open through Godot's Wayland driver, so a fullscreen window is the panel's own 3840x2160 under GNOME's 1.25 scale | T40 | Opus (controller) | The X11 path made the fullscreen window 6144x3456 and the compositor scaled it down; Wayland is worth about 8 to 10 FPS at 1 000 ships | R | in progress (2026-11-06, the controller) |
@@ -1449,7 +1450,8 @@ done and T20 proceeds.
 
 ##### M4-T23 Far proxies for tier rows
 
-- **Track:** R. **Agent:** Opus (GPU numbers by the agent, the look (H)). **Depends on:** T21, T11.
+- **Track:** R. **Agent:** Opus (GPU numbers by the agent, the look (H)). **Depends on:** T21, T11, T37 (Q68: after the cleanup, on
+  the threaded step only; Q54's both-schedules bullet below no longer applies).
 - **Goal:** a tier row with no node is still drawn: a point in T11's far dots sized by angular size with a 1 px floor (a capital's
   larger), radar and targeting see it (the player's radar reads rows, not nodes, for tier rows), so 500 ships are on screen for
   the cost of one multimesh.
@@ -2205,7 +2207,8 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
 
 ##### M4-T37 M4's cleanup: the native library required (Q57)
 
-- **Track:** X and G. **Agent:** Opus. **Depends on:** T23 (every native path in place). Runs as wave 8b, before T25.
+- **Track:** X and G. **Agent:** Opus. **Depends on:** T22 (moved before T23 by the maintainer, Q68: T23 then builds on the one
+  path). Runs before T23 and T25.
 - **Source:** the refactor review of 2026-11-05, `.superpowers/sdd/m4-performance-and-scale/refactor-review.md` (not committed; the findings are summarised in each task section), findings 8, 16 and 17.
 - **Goal:** Q9 made native code optional "during M4"; from M4's close it is required. Remove the runtime GDScript fallbacks and the
   settings that switch them (about eight, `perf_native*` and the old load paths), keep each GDScript path only as a test reference
@@ -2224,7 +2227,7 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   above and supersedes Q57's "test references" and Q54's switch back:
   - The inline step goes: `sim_step` loses `inline` (threaded stays the default; `delayed` stays as the threaded step's
     bit-for-bit reference, which the determinism tests use). The rule that T21 to T23 pass on both schedules ends with this task;
-    T23 still runs both until it merges, since T37 depends on it.
+    since T37 now runs before T23 (Q68), T23 builds and tests on the threaded step only.
   - Every `perf_native*` and `perf_*` switch that selects an old path goes (about twenty, T10 to T35, not the eight first
     counted), with the GDScript paths behind them, not kept as test references. Settings that tune the native path (for
     example `perf_threads`, `perf_step_threads`) stay.
