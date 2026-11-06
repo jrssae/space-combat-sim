@@ -105,7 +105,7 @@ impl ScsHitSweep {
             let core = core.bind();
             sweep::hull_spheres(
                 &core.rows,
-                &core.hull_rows,
+                &core.sweep_rows,
                 delta,
                 &mut self.hull_mids,
                 &mut self.hull_reach,

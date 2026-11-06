@@ -9,6 +9,7 @@ use godot::prelude::*;
 
 use crate::rows::{FLAG_RIGID, FLAG_TIER};
 use crate::sim_core::ScsSimCore;
+use crate::tier_fire;
 use crate::weapon_kernels::{
     self as wk, Candidate, Capitals, Mines, ROLE_BEAM, ROLE_GUN, ROLE_INTERCEPTOR, Turrets,
 };
@@ -34,6 +35,36 @@ pub struct ScsWeaponRows {
     spent: Vec<bool>,
     hits: Vec<u32>,
     fired: Vec<bool>,
+    // The far capitals' fire (M4-T22): missiles resolved at launch and still flying to their targets, and the rolls run.
+    tier_missiles: Vec<TierMissile>,
+    tier_rolls: i64,
+}
+
+// A far capital's missile, its outcome rolled at launch, landing (or missing) when it would have arrived.
+struct TierMissile {
+    shooter: i64,
+    target: i64,
+    arrive_tick: i64,
+    hit: bool,
+}
+
+// What a far capital's rolls land this tick, for GDScript to hand to each target's `Damageable`.
+#[derive(Default)]
+struct TierLanded {
+    targets: Vec<i64>,
+    shooters: Vec<i64>,
+    damage: Vec<f64>,
+    points: Vec<Vector3>,
+    launches: i64,
+}
+
+impl TierLanded {
+    fn push(&mut self, target: i64, shooter: i64, damage: f64, at: Vector3) {
+        self.targets.push(target);
+        self.shooters.push(shooter);
+        self.damage.push(damage);
+        self.points.push(at);
+    }
 }
 
 #[godot_api]
@@ -225,7 +256,9 @@ impl ScsWeaponRows {
     /// One tick of the guns, interceptors, beams and missile launches at tick `tick` and sim time `now_s`, over the core's
     /// rows. Returns what the GDScript must do, in its order: `[guns that fired (turret rows), their bolts' starts, their
     /// velocities, projectiles shot down (ids), whether each was a missile (bytes), beams that fired (turret rows), their
-    /// targets' places, launches (capital places), their targets (body ids), missiles in flight after the launches]`.
+    /// targets' places, launches (capital places), their targets (body ids), missiles in flight after the launches]`, then
+    /// the far capitals' fire (M4-T22): `[hits' targets (body ids), their shooters, their damage, their places, missiles
+    /// launched from the tier, group rolls run]`.
     #[func]
     #[allow(clippy::too_many_arguments)]
     fn step(
@@ -248,6 +281,7 @@ impl ScsWeaponRows {
         let mut launch_caps: Vec<i32> = Vec::new();
         let mut launch_targets: Vec<i64> = Vec::new();
         let mut flying: i64 = 0;
+        let mut landed = TierLanded::default();
         if let Some(core) = self.core.clone() {
             let guard = core.bind();
             let Self {
@@ -259,6 +293,8 @@ impl ScsWeaponRows {
                 cap_rows,
                 candidates,
                 spent,
+                tier_missiles,
+                tier_rolls,
                 ..
             } = self;
             let n = *factions;
@@ -400,8 +436,109 @@ impl ScsWeaponRows {
                 beam_rows.push(t as i32);
                 beam_targets.push(target_at);
             }
+            // The far capitals (M4-T22): once a second each, the guns and beams as rolls, the interceptors as removals.
+            let second_ticks = (intercept_ticks.max(1) * 2).max(1);
+            let seed = guard.tier_seed;
+            for (c, &body) in capitals.body_ids.iter().enumerate() {
+                let Some(r) = tier_row_of(&guard, body) else {
+                    continue;
+                };
+                if (tick + c as i64 * 7).rem_euclid(second_ticks) != 0 {
+                    continue;
+                }
+                *tier_rolls += 1;
+                let hostile = row_of(rows.faction_ix[r]);
+                let at = rows.positions[r];
+                let (mut guns, mut beams, mut interceptors) = (0i64, 0i64, 0i64);
+                for t in 0..turrets.role.len() {
+                    if turrets.capital[t] as usize != c {
+                        continue;
+                    }
+                    match turrets.role[t] {
+                        ROLE_GUN => guns += 1,
+                        ROLE_BEAM => beams += 1,
+                        _ => interceptors += 1,
+                    }
+                }
+                let second = tick.div_euclid(second_ticks);
+                let key = c as i64 * 8;
+                if let Some(j) = tier_fire::nearest_hostile_fighter(
+                    rows,
+                    hostile,
+                    at,
+                    tier_fire::GUN_RANGE_M,
+                    body,
+                ) {
+                    let range = f64::from(wk_distance(at, rows.positions[j]));
+                    let chance = tier_fire::turret_chance(range, rows.radii[j]);
+                    let hits = tier_fire::hits_of(seed, tick, key, guns, chance);
+                    for _ in 0..hits {
+                        landed.push(
+                            rows.body_ids[j],
+                            body,
+                            tier_fire::GUN_DAMAGE,
+                            rows.positions[j],
+                        );
+                    }
+                }
+                // Each beam fires every `BEAM_INTERVAL_S` (two seconds), the emitters on alternate seconds.
+                let due = (0..beams)
+                    .filter(|k| (second + k).rem_euclid(2) == 0)
+                    .count() as i64;
+                if due > 0
+                    && let Some(j) = tier_fire::nearest_hostile_fighter(
+                        rows,
+                        hostile,
+                        at,
+                        tier_fire::STRIKE_RANGE_M,
+                        body,
+                    )
+                {
+                    let range = f64::from(wk_distance(at, rows.positions[j]));
+                    let hits =
+                        tier_fire::hits_of(seed, tick, key + 1, due, tier_fire::beam_chance(range));
+                    for _ in 0..hits {
+                        landed.push(
+                            rows.body_ids[j],
+                            body,
+                            tier_fire::BEAM_DAMAGE,
+                            rows.positions[j],
+                        );
+                    }
+                }
+                // The interceptors: two shots each a second at the nearest hostile missiles in reach, as the near ones pick.
+                if interceptors > 0 && shots_in_flight > 0 {
+                    wk::intercept_candidates(bolts, hostile, at, candidates);
+                    candidates.retain(|cand| cand.missile);
+                    for _ in 0..interceptors * 2 {
+                        let Some(best) = wk::intercept_pick(candidates, spent) else {
+                            break;
+                        };
+                        spent[best.bolt as usize] = true;
+                        spent_ids.push(bolts.ids[best.bolt as usize]);
+                        spent_missile.push(1);
+                    }
+                }
+            }
+            // The far capitals' missiles that arrive this tick land if their launch rolled a hit and the target still flies.
+            tier_missiles.retain(|m| {
+                if m.arrive_tick > tick {
+                    return true;
+                }
+                if m.hit
+                    && let Ok(j) = usize::try_from(guard.row_of_id(m.target))
+                {
+                    landed.push(
+                        m.target,
+                        m.shooter,
+                        tier_fire::MISSILE_DAMAGE,
+                        rows.positions[j],
+                    );
+                }
+                false
+            });
             // Missiles: top the count in flight up from the capitals in turn that have a strike target.
-            flying = wk::missiles_in_flight(bolts) as i64;
+            flying = (wk::missiles_in_flight(bolts) + tier_missiles.len()) as i64;
             let count = capitals.body_ids.len();
             if missile_target > 0 && count > 0 {
                 let mut launched: i64 = 0;
@@ -411,6 +548,36 @@ impl ScsWeaponRows {
                     capitals.turn += 1;
                     tried += 1;
                     let Some(r) = usize::try_from(cap_rows[c]).ok() else {
+                        // A far capital's launch is resolved now (M4-T22): the hit rolled, the landing when it arrives.
+                        let body = capitals.body_ids[c];
+                        let Some(t) = tier_row_of(&guard, body) else {
+                            continue;
+                        };
+                        let hostile = row_of(rows.faction_ix[t]);
+                        let at = rows.positions[t];
+                        let Some(j) = tier_fire::nearest_hostile_fighter(
+                            rows,
+                            hostile,
+                            at,
+                            tier_fire::STRIKE_RANGE_M,
+                            body,
+                        ) else {
+                            continue;
+                        };
+                        let range = f64::from(wk_distance(at, rows.positions[j]));
+                        let flight_ticks = (range / tier_fire::MISSILE_SPEED_MPS
+                            * second_ticks as f64)
+                            .ceil() as i64;
+                        let draw = tier_fire::roll(seed, tick, c as i64 * 8 + 2, landed.launches);
+                        tier_missiles.push(TierMissile {
+                            shooter: body,
+                            target: rows.body_ids[j],
+                            arrive_tick: tick + flight_ticks.max(1),
+                            hit: draw < tier_fire::missile_chance(range),
+                        });
+                        landed.launches += 1;
+                        flying += 1;
+                        launched += 1;
                         continue;
                     };
                     if strike(&guard, capitals, c, r, tick, row_of(rows.faction_ix[r])).is_none() {
@@ -434,7 +601,19 @@ impl ScsWeaponRows {
         out.push(&PackedInt32Array::from(launch_caps.as_slice()).to_variant());
         out.push(&PackedInt64Array::from(launch_targets.as_slice()).to_variant());
         out.push(&flying.to_variant());
+        out.push(&PackedInt64Array::from(landed.targets.as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(landed.shooters.as_slice()).to_variant());
+        out.push(&PackedFloat64Array::from(landed.damage.as_slice()).to_variant());
+        out.push(&PackedVector3Array::from(landed.points.as_slice()).to_variant());
+        out.push(&landed.launches.to_variant());
+        out.push(&self.tier_rolls.to_variant());
         out
+    }
+
+    /// The far capitals' missiles resolved at launch and not yet arrived (M4-T22).
+    #[func]
+    fn tier_missiles(&self) -> i64 {
+        self.tier_missiles.len() as i64
     }
 
     /// The mines: offsets from the belt's node, layers (faction names) and which are in play.
@@ -676,6 +855,21 @@ fn strike(
     let j = usize::try_from(core.row_of_id(id)).ok()?;
     let target_at = rows.positions[j];
     wk::in_strike_reach(target_at, rows.positions[r]).then_some(target_at)
+}
+
+// A far capital's tier row (M4-T22), or none for a capital in Jolt (or gone).
+fn tier_row_of(core: &ScsSimCore, body: i64) -> Option<usize> {
+    if body == 0 {
+        return None;
+    }
+    usize::try_from(core.row_of_id(body))
+        .ok()
+        .filter(|&i| core.rows.flags[i] & FLAG_TIER != 0)
+}
+
+// The distance between two places, as the stand-ins measure it.
+fn wk_distance(a: Vector3, b: Vector3) -> f32 {
+    crate::v3::distance(a, b)
 }
 
 // Faction `f`'s row of the hostility table (`n` factions), or none for a faction the table does not cover yet.

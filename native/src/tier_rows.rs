@@ -26,12 +26,14 @@ impl ScsSimCore {
         } else {
             DEFAULT_PERIOD
         };
+        // The core's own sync count, so the beat falls the same way in every run of a seeded fight.
+        let clock = self.syncs();
         self.tier_beats += tier::step(
             &mut self.tier,
             &self.tier_types,
             &self.tier_gravity,
             &self.row_commands,
-            self.tick,
+            clock,
             delta,
             period,
             &mut self.tier_scratch,
@@ -386,6 +388,65 @@ impl ScsSimCore {
             &mut out,
         );
         PackedInt64Array::from(out.as_slice())
+    }
+
+    // --- the tier's fire (M4-T22) -------------------------------------------------------------------------------------
+
+    /// The seed every tier roll draws from (the fighters' shots, the far capitals' guns, beams and missiles).
+    #[func]
+    fn tier_set_seed(&mut self, seed: i64) {
+        self.tier_seed = seed as u64;
+    }
+
+    /// The fighters' hits rolled since the last take, as `[targets (body ids), shooters (body ids), damage, places]`, in
+    /// the order they were rolled; the list starts afresh.
+    #[func]
+    fn tier_take_hits(&mut self) -> VarArray {
+        let h = &self.tier_hits;
+        let mut out = VarArray::new();
+        out.push(&PackedInt64Array::from(h.targets.as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(h.shooters.as_slice()).to_variant());
+        out.push(&PackedFloat64Array::from(h.damage.as_slice()).to_variant());
+        out.push(&PackedVector3Array::from(h.points.as_slice()).to_variant());
+        self.tier_hits.clear();
+        out
+    }
+
+    /// Tier fighters' shots rolled so far, and the hits among them.
+    #[func]
+    fn tier_shots(&self) -> i64 {
+        self.tier_shots_total
+    }
+
+    #[func]
+    fn tier_hits(&self) -> i64 {
+        self.tier_hits_total
+    }
+
+    /// The chance one tier fighter's shot hits (the roll's model, for the tests and the console): the range, the target's
+    /// bounding radius, the bolt's hit radius and speed, the shooter's aim error (rad), its gate's miss distance (m) and
+    /// the bolt's reach (m).
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn tier_hit_chance(
+        &self,
+        range_m: f64,
+        target_radius_m: f64,
+        hit_radius_m: f64,
+        muzzle_speed_mps: f64,
+        aim_error_rad: f64,
+        miss_m: f64,
+        reach_m: f64,
+    ) -> f64 {
+        crate::tier_fire::hit_chance(
+            range_m,
+            target_radius_m,
+            hit_radius_m,
+            muzzle_speed_mps,
+            aim_error_rad,
+            miss_m,
+            reach_m,
+        )
     }
 
     /// The last tick's tier step, microseconds (wall clock; a readout).

@@ -44,7 +44,7 @@ func _skipped() -> bool:
 func _world(raiders: int, allies: int) -> void:
 	if w != null:
 		w.free_world()
-		await get_tree().physics_frame
+	await get_tree().physics_frame  # every world starts a frame after the last settings change, so seeded runs line up
 	ContactScan.invalidate()
 	w = TierWorld.new()
 	w.build(self, raiders, allies)
@@ -144,12 +144,12 @@ func test_a_tier_fighter_rolls_its_shots_and_hurts_its_target_through_its_damage
 		ally.damageable.invulnerable = true
 		await _ticks(6)
 		assert_true(_tiered(raider) and _tiered(ally), "%s: both fight as tier rows" % schedule)
-		var bolts_before: int = int(w.sim.core.owned_bolts())
+		var bolts_before: int = int(w.sim.cannons.shots_total())
 		var shots_before: int = int(w.sim.core.tier_shots())
 		await _ticks(600)
 		var shots: int = int(w.sim.core.tier_shots()) - shots_before
 		assert_gt(shots, 0, "%s: the tier fighters fired (%d shots rolled)" % [schedule, shots])
-		assert_eq(int(w.sim.core.owned_bolts()), bolts_before, "%s: no bolt row from a tier shot" % schedule)
+		assert_eq(int(w.sim.cannons.shots_total()), bolts_before, "%s: no bolt row from a tier shot" % schedule)
 		var landed: int = int(w.hits_by_target.get(raider.ship.get_instance_id(), 0)) \
 				+ int(w.hits_by_target.get(ally.ship.get_instance_id(), 0))
 		assert_gt(landed, 0, "%s: rolled hits landed on the hulls through hit_taken (%d of %d)" % [schedule, landed, shots])
@@ -198,9 +198,9 @@ func test_a_near_ships_bolt_hits_a_tier_row() -> void:
 		var hp: float = target.damageable.hull.hp
 		var at: Vector3 = w.sim.core.tier_state(target.ship.get_instance_id())["position"]
 		var from: Vector3 = at + Vector3(0.0, 0.0, 300.0)
-		var id: int = w.sim.add_bolt(from, Vector3(0.0, 0.0, -1000.0), Factions.EARTH_ALLIANCE, w.player.ship.get_instance_id(),
+		assert_true(w.sim.bolt_rows_on(), "%s: the core owns the bolts" % schedule)
+		w.sim.add_bolt(from, Vector3(0.0, 0.0, -1000.0), Factions.EARTH_ALLIANCE, w.player.ship.get_instance_id(),
 				w.player.cannon.weapon, SimClock.now())
-		assert_ne(id, -1, "%s: a near bolt row is out" % schedule)
 		await _ticks(30)
 		assert_lt(target.damageable.hull.hp, hp, "%s: the tier row took the bolt's damage (%.1f to %.1f)" % [schedule, hp,
 				target.damageable.hull.hp])

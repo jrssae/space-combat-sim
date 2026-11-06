@@ -3,8 +3,8 @@ extends GutTest
 ## Jolt and the processing and flies as a core row; coming back within the radius it is promoted onto its body with its
 ## position, velocity, attitude, command and assist state carried over exactly, and the reverse demotes it, so nothing pops.
 ## A capital goes with its turrets and emitters and fires again when it is back; Jolt holds only the near bodies; the
-## player flying into a far fight finds it promoted at 10 km, long before 5 km; a tier ship does not think (the tier
-## replaces the far rate for it) and thinks again when promoted; a hulk comes back as a hulk; a release while tiered takes
+## player flying into a far fight finds it promoted at 10 km, long before 5 km; a tier ship thinks at the tier's brain
+## rate (M4-T22; the tier replaces the far rate for it) and at its own again when promoted; a hulk comes back as a hulk; a release while tiered takes
 ## the row away; the radius at 0 or the core off promotes everything. Every test runs on both of T24's step schedules
 ## (Q54), each pass reading the live schedule back. Real pooled ships, real physics frames. Skips, saying why, when the
 ## library is not built.
@@ -336,7 +336,7 @@ func test_the_player_flying_into_a_far_fight_sees_it_promoted_at_ten_km_long_bef
 					"%s came back where it was (an idle ship at rest; %s)" % [c.display_name, c.ship.global_position])
 
 
-func test_a_tier_ship_does_not_think_and_thinks_again_when_promoted() -> void:
+func test_a_tier_ship_thinks_at_the_tier_brain_rate_and_at_its_own_again_when_promoted() -> void:
 	if _skipped():
 		return
 	for schedule: StringName in SCHEDULES:
@@ -371,9 +371,12 @@ func test_a_tier_ship_does_not_think_and_thinks_again_when_promoted() -> void:
 					and (events.size() - BrainBatch.EVENTS_HEAD) % 2 == 0))
 		assert_lte(held_most, 1, "%s: the tier ship is not counted held (only the near one can hold)" % schedule)
 		assert_true(head_sizes_ok, "%s: the host's events head is the batch's EVENTS_HEAD long" % schedule)
-		assert_eq(int(host.slot_think_count(slot)), thinks_at_demotion, "%s: a tier ship does not think in a second" % schedule)
+		# M4-T22: a tier ship thinks at tier_brain_hz (4: about four thinks in a second), not every far-rate beat.
+		var tier_thinks: int = int(host.slot_think_count(slot)) - thinks_at_demotion
+		assert_between(tier_thinks, 3, 5, "%s: a tier ship thinks about four times in a second (%d)" % [schedule, tier_thinks])
 		assert_gt(int(host.slot_think_count(near_slot)), near_thinks, "%s: the near one keeps thinking" % schedule)
-		assert_eq(sim.core.row_command(c.ship.get_instance_id()), command_at_demotion, "%s: its row command is held" % schedule)
+		assert_eq(sim.core.row_command(c.ship.get_instance_id()).size(), command_at_demotion.size(),
+				"%s: it still flies a row command" % schedule)
 		Settings.set_value(&"tier_radius_m", 0.0)  # the tier off: promoted
 		await _ticks(12)
 		assert_true(c.ship.visible and _in_jolt(c.ship), "%s: promoted when the tier is off" % schedule)
@@ -420,7 +423,7 @@ func test_a_capital_leaves_with_its_turrets_and_fires_again_when_it_is_back() ->
 		assert_true(_parked(target.ship), "%s: and so is its target" % schedule)
 		var at_demotion: int = _shots(cap)
 		await _ticks(90)
-		assert_eq(_shots(cap), at_demotion, "%s: a tier capital's turrets fire nothing (T22 gives them their aggregated fire)" % schedule)
+		assert_eq(_shots(cap), at_demotion, "%s: a tier capital's turrets fire no bolt (its fire is T22's group rolls)" % schedule)
 		assert_eq(cap.guns().size(), guns, "%s: the turrets are still its children" % schedule)
 		Settings.set_value(&"tier_radius_m", 30000.0)
 		await _ticks(4)

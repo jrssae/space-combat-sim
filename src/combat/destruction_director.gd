@@ -32,6 +32,10 @@ signal player_destroyed(info: HitInfo)
 signal respawn_due
 
 const RESPAWN_DELAY_S: float = 3.0
+## A death's blast (M4-T22): energy per kilogram of the dead hull, J/kg, and its reach in bounding radii (the explosion's
+## light reaches four). Placeholders until M12 sizes a blast by the ship's class and what it carries.
+const BLAST_J_PER_KG: float = 1.0e5
+const BLAST_RADIUS_FACTOR: float = 4.0
 ## DamageZones' X-fighter zones -> the Starfury chunk each one is.
 const ZONE_CHUNKS: Dictionary[int, StringName] = {
 	DamageZones.CABIN: &"cabin", DamageZones.UPPER_LEFT: &"arm_ul", DamageZones.UPPER_RIGHT: &"arm_ur",
@@ -113,6 +117,14 @@ func _on_destroyed(info: HitInfo, combatant: Combatant) -> void:
 	var xform: Transform3D = ship.global_transform
 	var velocity: Vector3 = ship.linear_velocity
 	var spin: Vector3 = ship.angular_velocity
+	# A ship in the low-attention tier (M4-T22) died where its row flew, not where its node was parked.
+	var tiered: bool = ship.is_tier_parked()
+	if tiered:
+		var pose: Array = TierDirector.row_pose(ship)
+		if not pose.is_empty():
+			xform = pose[0]
+			velocity = pose[1]
+			spin = pose[2]
 	var radius: float = combatant.damageable.bounding_radius
 	var hardpoints: Hardpoints = ship.get_hardpoints()
 	var staged: bool = combatant.damageable.zones.layout == DamageZones.Layout.X_FIGHTER and hardpoints.valid and not hardpoints.chunks.is_empty()
@@ -124,7 +136,11 @@ func _on_destroyed(info: HitInfo, combatant: Combatant) -> void:
 		_respawn_at_s = SimClock.now() + RESPAWN_DELAY_S
 	else:
 		pool.release(combatant)
-	_spawn_effects(ship, xform, velocity, spin, radius, hardpoints, staged, first)
+	if tiered:
+		last_blast_position = xform.origin  # nothing draws a far death yet (M4-T23's far flash)
+	else:
+		_spawn_effects(ship, xform, velocity, spin, radius, hardpoints, staged, first)
+	set_blast(info, ship.mass, radius, last_blast_position)
 	if combatant == player:
 		player_destroyed.emit(info)
 	else:
@@ -172,6 +188,15 @@ func _spawn_effects(ship: Ship, xform: Transform3D, velocity: Vector3, spin: Vec
 			debris.stage_wreck(StringName(ship.spec.asset_id), chunks, xform, velocity, spin, seed_value, first, ship.livery)
 		else:
 			debris.burst(StringName(ship.spec.asset_id), chunks, xform, velocity, spin, seed_value, ship.livery)
+
+
+## Writes a death's blast onto its killing hit (M4-T22): energy from the hull's mass, reach from its size, at `at`.
+static func set_blast(info: HitInfo, mass_kg: float, bounding_radius_m: float, at: Vector3) -> void:
+	if info == null:
+		return
+	info.blast_energy_j = maxf(mass_kg, 0.0) * BLAST_J_PER_KG
+	info.blast_radius_m = maxf(bounding_radius_m, 0.5) * BLAST_RADIUS_FACTOR
+	info.blast_point = at
 
 
 ## The index in `chunks` of the part the killing hit landed on (`info.point` is World-local, put into the ship's frame by

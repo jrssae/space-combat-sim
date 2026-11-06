@@ -58,7 +58,7 @@ func _skipped() -> bool:
 func _world(raiders: int, allies: int, tier_on: bool, schedule: StringName) -> void:
 	if w != null:
 		w.free_world()
-		await get_tree().physics_frame
+	await get_tree().physics_frame  # every world starts a frame after the last settings change, so seeded runs line up
 	Settings.set_value(&"sim_step", schedule)
 	Settings.set_value(&"tier_radius_m", TIER_RADIUS_M if tier_on else 0.0)
 	Factions.reset()

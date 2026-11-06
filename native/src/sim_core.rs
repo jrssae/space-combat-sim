@@ -208,6 +208,9 @@ pub struct ScsSimCore {
     pub row_names: Vec<GString>,
     /// The rows with an active hull, in the `damageable` group's order: what the sweep and the ram phase walk.
     pub hull_rows: Vec<u32>,
+    // The rows the hit sweep tests (M4-T22): the hull rows, then every low-attention tier row (a sphere with no body), so a
+    // near ship's bolt hits a tier ship. The ram phase and the weapon kernels keep to the hull rows.
+    pub sweep_rows: Vec<u32>,
     row_of_id: HashMap<i64, u32>,
     row_of_handle: HashMap<i64, u32>,
     data: Vec<DataRow>,
@@ -263,6 +266,12 @@ pub struct ScsSimCore {
     pub(crate) tier_beats: i64,
     pub(crate) tier_promotions: i64,
     pub(crate) tier_demotions: i64,
+    // The tier's fire (M4-T22): the seed every roll draws from, the fighters' hits rolled since GDScript took them, and the
+    // shots and hits rolled so far.
+    pub(crate) tier_seed: u64,
+    pub(crate) tier_hits: crate::tier_fire::Hits,
+    pub(crate) tier_shots_total: i64,
+    pub(crate) tier_hits_total: i64,
 }
 
 #[godot_api]
@@ -1016,8 +1025,20 @@ impl ScsSimCore {
     /// the rigid hulls among them. What the resolvers need beside the pairs.
     #[func]
     fn hull_columns(&self) -> VarArray {
+        self.columns_of(&self.hull_rows)
+    }
+
+    /// `hull_columns` for the hit sweep's rows (M4-T22): the hull rows, then the low-attention tier rows, so the hit
+    /// resolver's indices match `ScsHitSweep.pairs_core`'s.
+    #[func]
+    fn sweep_columns(&self) -> VarArray {
+        self.columns_of(&self.sweep_rows)
+    }
+
+    // The columns of `list`'s rows, in its order (see `hull_columns`).
+    fn columns_of(&self, list: &[u32]) -> VarArray {
         let r = &self.rows;
-        let n = self.hull_rows.len();
+        let n = list.len();
         let mut body_ids = Vec::with_capacity(n);
         let mut hull_ids = Vec::with_capacity(n);
         let mut rigid = Vec::with_capacity(n);
@@ -1026,7 +1047,7 @@ impl ScsSimCore {
         let mut radii = Vec::with_capacity(n);
         let mut bases = Vec::with_capacity(n * 3);
         let mut rigid_rows: Vec<i32> = Vec::new();
-        for (k, &j) in self.hull_rows.iter().enumerate() {
+        for (k, &j) in list.iter().enumerate() {
             let j = j as usize;
             body_ids.push(r.body_ids[j]);
             hull_ids.push(r.hull_ids[j]);
@@ -1542,6 +1563,13 @@ impl ScsSimCore {
         }
         hull_rows.sort_unstable();
         self.hull_rows = hull_rows.into_iter().map(|(_, i)| i).collect();
+        self.sweep_rows.clear();
+        self.sweep_rows.extend_from_slice(&self.hull_rows);
+        self.sweep_rows.extend(
+            (0..self.rows.body_ids.len())
+                .filter(|&i| self.rows.flags[i] & FLAG_TIER != 0)
+                .map(|i| i as u32),
+        );
     }
 
     fn close_tick(&mut self) {

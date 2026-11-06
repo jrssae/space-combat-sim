@@ -13,7 +13,7 @@ use crate::brain_behaviours::{self, Brain, Field, Inputs, Scratch};
 use crate::kernels::contact::{self, Grid, Query, Work as QueryWork};
 use crate::row_commands::RowCommand;
 use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE};
-use crate::rows::{Bolts, FLAG_TIER, Rows};
+use crate::rows::{Bolts, FLAG_HULK, FLAG_TIER, Rows};
 use crate::threads::{Pass, Runner};
 use crate::v3::dist_sq;
 
@@ -70,6 +70,8 @@ pub struct Item {
     pub out: Vec<f64>,
     pub ok: bool,
     pub near: bool,
+    /// A low-attention tier row's think (M4-T22): its command goes to the tier, its driver has nothing to do.
+    pub tier: bool,
 }
 
 /// A driver the host steps (M4-T35): the think rate's state the driver kept, its latest hits, and its last think.
@@ -84,6 +86,8 @@ pub struct Hosted {
     pub hit_s: f64,
     pub bolt_hit_s: f64,
     pub live: bool,
+    /// Its ship flies as a low-attention tier row (M4-T22): the node is parked, the host thinks at the tier's brain rate.
+    pub tiered: bool,
     pub near: bool,
     pub thinks: i64,
     pub dt: f64,
@@ -101,6 +105,8 @@ pub struct DriverFrame {
     pub rate_on: bool,
     pub near_sq: f64,
     pub period: i64,
+    /// Ticks between a tier row's thinks (`tier_brain_hz`, M4-T22).
+    pub tier_period: i64,
 }
 
 // What every think of a batch shares, read-only.
@@ -453,6 +459,10 @@ fn write_commands(work: &mut Work, snap: &mut Snapshot, n: usize) {
         let body = brain.ship.own_body_id;
         let mut events = write_command(&mut snap.commands, body, &item.out[..=CMD_LEN]);
         let wanted = brain.wanted_target_id;
+        note_aim(&mut snap.commands, body, brain);
+        if item.tier {
+            continue; // a tier row's driver is parked: the command is all the tier needs
+        }
         let selected = usize::try_from(item.own_row).map_or(-1, |r| snap.rows.target_ids[r]);
         // The driver follows the brain's target: it clears a selection for none, selects anything else it wants, and
         // for the nearest hostile (0) runs its retarget every think, as T18's path does.
@@ -497,6 +507,16 @@ pub fn write_command(commands: &mut HashMap<i64, RowCommand>, body_id: i64, out:
     events
 }
 
+/// Notes what the tier's to-hit roll reads with `body_id`'s command (M4-T22): the target its pilot wants, the pilot's aim
+/// error (its skill) and the miss distance its fire gate allows.
+pub fn note_aim(commands: &mut HashMap<i64, RowCommand>, body_id: i64, brain: &Brain) {
+    if let Some(rc) = commands.get_mut(&body_id) {
+        rc.target = brain.wanted_target_id;
+        rc.aim_error_rad = brain.profile.aim_error_deg.to_radians();
+        rc.miss_m = brain.profile.tactics.fire_miss_m;
+    }
+}
+
 /// Notes whether `body_id`'s pilot is committed to a ram (after `write_command`); true when that changed.
 pub fn note_ram(commands: &mut HashMap<i64, RowCommand>, body_id: i64, committed: bool) -> bool {
     commands
@@ -513,7 +533,7 @@ fn queue_hosted(work: &mut Work, snap: &Snapshot, n: usize, rel_len: usize) -> u
     let frame = &work.frame;
     for at in 0..work.hosted.len() {
         let h = &mut work.hosted[at];
-        if !h.live {
+        if !h.live && !h.tiered {
             continue;
         }
         let row = snap.row_for_kernel(h.body_id);
@@ -523,16 +543,23 @@ fn queue_hosted(work: &mut Work, snap: &Snapshot, n: usize, rel_len: usize) -> u
             work.events[2] += 1; // no row this tick: held, as a declined think is
             continue;
         };
-        if snap.rows.flags[r] & FLAG_TIER != 0 {
-            work.events[5] += 1; // in the low-attention tier (M4-T21): the tier flies it, no think here
-            continue;
-        }
-        h.near = frame.player_live
-            && f64::from(dist_sq(snap.rows.positions[r], frame.player_at)) <= frame.near_sq;
-        let on_beat = (h.steps + h.ordinal).rem_euclid(frame.period) == 0;
-        if frame.rate_on && !h.woken && !h.near && !on_beat {
-            work.events[4] += 1; // held: the ship flies its last command on
-            continue;
+        let tier = snap.rows.flags[r] & FLAG_TIER != 0;
+        if tier {
+            // A low-attention tier row (M4-T22) thinks on its own beat; a hulk or a driver not handed to the tier never.
+            let on_beat = (h.steps + h.ordinal).rem_euclid(frame.tier_period.max(1)) == 0;
+            if !h.tiered || snap.rows.flags[r] & FLAG_HULK != 0 || !(on_beat || h.woken) {
+                work.events[5] += 1;
+                continue;
+            }
+            h.near = false;
+        } else {
+            h.near = frame.player_live
+                && f64::from(dist_sq(snap.rows.positions[r], frame.player_at)) <= frame.near_sq;
+            let on_beat = (h.steps + h.ordinal).rem_euclid(frame.period) == 0;
+            if frame.rate_on && !h.woken && !h.near && !on_beat {
+                work.events[4] += 1; // held: the ship flies its last command on
+                continue;
+            }
         }
         let Some(brain) = work.slots.get_mut(h.slot).and_then(Option::take) else {
             work.events[2] += 1;
@@ -552,6 +579,7 @@ fn queue_hosted(work: &mut Work, snap: &Snapshot, n: usize, rel_len: usize) -> u
         item.selected_id = 0;
         item.last_attacker_id = h.attacker_id;
         item.near = h.near;
+        item.tier = tier;
         item.dt = h.since_think_s;
         item.hull_fraction = 1.0;
         item.last_hit_s = h.hit_s;

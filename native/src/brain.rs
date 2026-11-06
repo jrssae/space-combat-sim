@@ -72,6 +72,10 @@ enum Pending {
         slot: i64,
         live: bool,
     },
+    Tiered {
+        slot: i64,
+        on: bool,
+    },
     Wake {
         slot: i64,
     },
@@ -1009,6 +1013,13 @@ impl ScsBrains {
         self.mutate(Pending::Live { slot, live });
     }
 
+    /// Whether the driver's ship flies as a low-attention tier row (M4-T22): its node is parked, yet the host thinks for
+    /// it at the tier's brain rate.
+    #[func]
+    fn set_driver_tiered(&mut self, slot: i64, on: bool) {
+        self.mutate(Pending::Tiered { slot, on });
+    }
+
     /// Wakes the driver for the next tick (a new pilot would).
     #[func]
     fn wake_driver(&mut self, slot: i64) {
@@ -1016,7 +1027,8 @@ impl ScsBrains {
     }
 
     /// The tick's frame for the hosted drivers: the tick length, the player (live, and where) and the think rate's
-    /// settings (`ai_think_rate`, `ai_think_near_m` squared, the far period in ticks).
+    /// settings (`ai_think_rate`, `ai_think_near_m` squared, the far period in ticks), and the tier brains' period in
+    /// ticks (`tier_brain_hz`, M4-T22).
     #[func]
     #[allow(clippy::too_many_arguments)]
     fn set_driver_frame(
@@ -1027,6 +1039,7 @@ impl ScsBrains {
         rate_on: bool,
         near_sq: f64,
         period: i64,
+        tier_period: i64,
     ) {
         self.work().frame = DriverFrame {
             delta,
@@ -1035,6 +1048,7 @@ impl ScsBrains {
             rate_on,
             near_sq,
             period: period.max(1),
+            tier_period: tier_period.max(1),
         };
     }
 
@@ -1553,6 +1567,7 @@ impl ScsBrains {
                     hit_s,
                     bolt_hit_s,
                     live: true,
+                    tiered: false,
                     near: false,
                     thinks: 0,
                     dt: 0.0,
@@ -1576,6 +1591,11 @@ impl ScsBrains {
             Pending::Live { slot, live } => {
                 if let Some(h) = find(work, slot) {
                     h.live = live;
+                }
+            }
+            Pending::Tiered { slot, on } => {
+                if let Some(h) = find(work, slot) {
+                    h.tiered = on;
                 }
             }
             Pending::Wake { slot } => {

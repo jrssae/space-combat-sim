@@ -535,7 +535,8 @@ func _begin_hosted_tick() -> bool:
 # What the hosted drivers' step reads this tick (M4-T35): the frame, the contexts that changed, the relation matrix.
 func _prepare_hosted() -> void:
 	var frame: Array = AiPilotDriver.driver_frame()
-	_host.set_driver_frame(get_physics_process_delta_time(), frame[0], frame[1], frame[2], frame[3], frame[4])
+	_host.set_driver_frame(get_physics_process_delta_time(), frame[0], frame[1], frame[2], frame[3], frame[4],
+			TierDirector.brain_period_ticks())
 	for ctx: AiContext in AiContext.take_changed():
 		if ctx.native_pilot != null and ctx.native_pilot.is_hosted():
 			ctx.native_pilot.sync_rows(_host)

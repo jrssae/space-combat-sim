@@ -7,8 +7,9 @@
 use godot::prelude::*;
 
 use crate::bolt_kernels::{self, Capacitor, Gate};
-use crate::rows::{FLAG_RIGID, FLAG_TIER};
+use crate::rows::{FLAG_HULK, FLAG_HULL, FLAG_RIGID, FLAG_TIER};
 use crate::sim_core::{KIND_BOLT, ScsSimCore};
+use crate::tier_fire;
 
 // One registered cannon: its ship, its muzzles in the ship's frame, its gate and what its bolts carry.
 struct Cannon {
@@ -236,17 +237,22 @@ impl ScsCannons {
             let Some(cannon) = self.slots[slot].as_mut() else {
                 continue;
             };
+            let row = c.row_for_kernel(cannon.body_id);
+            if let Some(r) = usize::try_from(row)
+                .ok()
+                .filter(|&r| c.rows.flags[r] & FLAG_TIER != 0)
+            {
+                // A ship in the low-attention tier (M4-T22): its parked cannon's gate fires, each shot a roll, no bolt.
+                Self::fire_in_tier(cannon, &mut c, r, now_s, &mut self.fired);
+                continue;
+            }
             if !cannon.live {
                 continue;
             }
-            let row = c.row_for_kernel(cannon.body_id);
             let Ok(r) = usize::try_from(row) else {
                 self.fallback.push(slot as i32);
                 continue;
             };
-            if c.rows.flags[r] & FLAG_TIER != 0 {
-                continue; // a ship in the low-attention tier (M4-T21) fires nothing from here
-            }
             if c.rows.flags[r] & FLAG_RIGID == 0 {
                 self.fallback.push(slot as i32);
                 continue;
@@ -375,6 +381,64 @@ impl ScsCannons {
             shots.push(m as i64);
             shots.push(id);
             shot_at.push(muzzle);
+        }
+    }
+
+    // A tier ship's shots (M4-T22): the gate as on its body, each shot rolled against the target its pilot wants from the
+    // shot's range and the pilot's skill; a hit is kept for GDScript to land through the target's `Damageable`.
+    fn fire_in_tier(
+        cannon: &mut Cannon,
+        core: &mut ScsSimCore,
+        r: usize,
+        now_s: f64,
+        fired: &mut Vec<usize>,
+    ) {
+        if core.rows.flags[r] & FLAG_HULK != 0 {
+            return;
+        }
+        let command = core.live_command(cannon.body_id).copied();
+        let trigger = command.map_or(cannon.trigger, |rc| rc.fire);
+        cannon.gate.update(now_s, trigger, fired);
+        if fired.is_empty() {
+            return;
+        }
+        let rc = command.unwrap_or_default();
+        let ordinal = core
+            .tier
+            .index_of(cannon.body_id)
+            .map_or(0, |i| core.tier.ordinal[i]);
+        let target = if rc.target > 0 {
+            usize::try_from(core.rows.row_of_id(rc.target))
+                .ok()
+                .filter(|&j| {
+                    core.rows.flags[j] & FLAG_HULL != 0 && core.rows.body_ids[j] != cannon.body_id
+                })
+        } else {
+            None
+        };
+        for &m in fired.iter() {
+            core.tier_shots_total += 1;
+            let Some(j) = target else {
+                continue;
+            };
+            let range = f64::from(crate::v3::distance(
+                core.rows.positions[r],
+                core.rows.positions[j],
+            ));
+            let chance = tier_fire::hit_chance(
+                range,
+                core.rows.radii[j],
+                cannon.hit_radius,
+                cannon.muzzle_speed,
+                rc.aim_error_rad,
+                rc.miss_m,
+                cannon.muzzle_speed * cannon.lifetime_s,
+            );
+            if tier_fire::roll(core.tier_seed, core.syncs(), ordinal, m as i64) < chance {
+                core.tier_hits_total += 1;
+                let (body, at) = (core.rows.body_ids[j], core.rows.positions[j]);
+                core.tier_hits.push(body, cannon.body_id, cannon.damage, at);
+            }
         }
     }
 

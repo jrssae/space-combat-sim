@@ -27,6 +27,11 @@ var relative_speed_mps: float = 0.0
 var cause: StringName = CAUSE_BOLT
 ## Hull points actually removed; 0 until the `Damageable` has applied the hit (and for god mode or a dead hull).
 var applied: float = 0.0
+## On the hit that destroyed a ship (M4-T22, set by `DestructionDirector` before its signals): the death's blast, its energy
+## (J), its radius (m) and its centre (`World`-local), for the far explosions (M4-T23) and blast damage (M12). 0 otherwise.
+var blast_energy_j: float = 0.0
+var blast_radius_m: float = 0.0
+var blast_point: Vector3 = Vector3.ZERO
 
 
 func _init(p_target_id: int = 0, p_shooter_id: int = 0, p_faction: StringName = &"", p_damage: float = 0.0,

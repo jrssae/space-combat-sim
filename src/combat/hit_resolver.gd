@@ -226,7 +226,7 @@ func _gather(delta: float) -> SimCore:
 	var sim: SimCore = SimCore.for_tree(get_tree()) if use_core and broad_phase.native_available() else null
 	if sim != null and _synced(sim):
 		_source = &"core"
-		var hulls: Array = sim.core.hull_columns()
+		var hulls: Array = sim.core.sweep_columns()
 		_body_ids = hulls[0]
 		_hull_ids = hulls[1]
 		_starts = hulls[3]

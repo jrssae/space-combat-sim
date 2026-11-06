@@ -418,6 +418,15 @@ func is_hosted() -> bool:
 	return _hosted
 
 
+## Hands the ship to the low-attention tier or takes it back (M4-T22): while tiered its parked node does not step, and the
+## host thinks for it at the tier's brain rate. False when the host does not step this driver.
+func set_tiered(on: bool) -> bool:
+	if not _hosted or not is_instance_valid(_hosted_host):
+		return false
+	_hosted_host.set_driver_tiered(_hosted_slot, on)
+	return true
+
+
 ## The tick's frame for the hosted drivers (M4-T35): `[player live, player position, think rate on, near distance squared,
 ## far period in ticks]`, as every driver's step reads them.
 static func driver_frame() -> Array:

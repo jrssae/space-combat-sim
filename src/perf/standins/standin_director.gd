@@ -57,6 +57,9 @@ var missile_intercepts: int = 0
 var missile_launches: int = 0
 var beam_shots: int = 0
 var detonations: int = 0
+## The far capitals' fire (M4-T22): group rolls run (one a second per tier capital) and their hits landed since `clear`.
+var tier_group_rolls: int = 0
+var tier_hits_landed: int = 0
 ## The latest tick's counts, by `Count`.
 var counts: PackedInt64Array = PackedInt64Array()
 var last_us: int = 0
@@ -230,6 +233,13 @@ func _step_native(native: NativeWeapons, delta: float, now_s: float, started_us:
 		MissileStandin.launch(projectiles, bow, target, cap.get_instance_id(), cap.faction, now_s)
 		missile_launches += 1
 	_missiles_flying = out[9]
+	# The far capitals (M4-T22): their rolled hits land through each target's Damageable; their launches were resolved.
+	if out.size() >= 16:
+		var targets: PackedInt64Array = out[10]
+		if not targets.is_empty():
+			tier_hits_landed += TierDirector.land_hits(targets, out[11], out[12], out[13])
+		missile_launches += int(out[14])
+		tier_group_rolls = int(out[15])
 	mark_us = _mark(Part.MISSILES, mark_us)
 	if native.mines != null and is_instance_valid(native.mines):
 		detonations += native.mines.step_native(_tick, now_s, _walked_hulls)
@@ -442,6 +452,7 @@ func beam_count() -> int:
 
 ## Starts the weapons' counts and the parts' costs over (a bench's measured window).
 func restart_weapon_counters() -> void:
+	tier_hits_landed = 0
 	missile_intercepts = 0
 	missile_launches = 0
 	beam_shots = 0

@@ -38,3 +38,6 @@ mod sweep_cells;
 // M4-T21: the low-attention tier's rows and integrator, and the core's shell around them.
 mod tier;
 mod tier_rows;
+
+// M4-T22: the low-attention tier's fire, an engine-free kernel.
+mod tier_fire;
