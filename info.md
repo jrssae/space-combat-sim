@@ -92,7 +92,8 @@ Source: `src/autoload/debug_console.gd`
 | `livery` | `<wing\|plain> [number] [ship]` | Paints a ship in a wing's livery with its number, for looking at it (M4-T30b): `player` (the default), `sheet` (the parked ship) or a ship's name such as `ALPHA 2`. Any wing name works: the named wings have their own, any other a stable pick, `plain` the field grey with no number. | `src/rendering/look_scene.gd` |
 | `flare` | `[on\|off]` | Toggles or sets the star's lens flare. | `src/rendering/post_effects.gd` |
 | `blur` | `[on\|off]` | Toggles or sets motion blur on fast turns. | `src/rendering/post_effects.gd` |
-| `aa` | `[off\|fxaa\|smaa\|msaa_2x\|msaa_4x\|taa]` | Shows or sets the 3D view's anti-aliasing (M4-T38, `settings.anti_aliasing`), live. Under `taa` the sky gets motion vectors and the bolts draw opaque so they carry their own. | `src/rendering/anti_aliasing.gd` |
+| `aa` | `[off\|fxaa\|smaa\|msaa_2x\|msaa_4x\|taa]` | Shows or sets the 3D view's anti-aliasing (M4-T38, `settings.anti_aliasing`), live. Under `taa` the sky gets motion vectors and the bolts draw opaque so they carry their own. M4-T40: while FSR 2.2 is on the mode is held off (the line says so) and comes back when FSR 2.2 goes. | `src/rendering/anti_aliasing.gd` |
+| `upscale` | `[native\|bilinear\|fsr1\|fsr2] [native\|quality\|balanced\|performance\|ultra_performance\|custom\|<scale>]` | Shows or sets how the 3D view is rendered and enlarged to the window (M4-T40, `settings.upscaler` and `settings.upscale_preset`), live: a number from 0.33 to 1 is a custom scale (`settings.upscale_custom_scale`). The HUD stays at the window's size; no frame generation. | `src/rendering/upscaler.gd` |
 | `sfx` | `<pulse_fire\|raider_fire\|hit_hull\|explosion\|engine_loop\|thruster_loop\|warning_beep\|target_blip>` | Plays a sound at the player. | `src/audio/audio_director.gd` |
 
 ## Controls
@@ -145,7 +146,8 @@ Source: `src/autoload/debug_console.gd`
 | `settings` | `src/autoload/debug_console.gd` (one key per settings entry) |
 | `ship` | `src/ship/ship.gd` |
 | `sky` | `src/environment/space_environment.gd` (M4-T30c: `stars`, `stars_shown`, `panorama`, `nebula_shown`) |
-| `aa` | `src/rendering/anti_aliasing.gd` (M4-T38: `mode`, `viewport`, `sky_vectors`, `bolts_opaque`, `bolts_collapsed`) |
+| `aa` | `src/rendering/anti_aliasing.gd` (M4-T38: `mode`, `viewport`, `sky_vectors`, `bolts_opaque`, `bolts_collapsed`; M4-T40: `held`) |
+| `upscale` | `src/rendering/upscaler.gd` (M4-T40: `upscaler`, `preset`, `applied`, `applied_preset`, `scale`, `mode`, `sharpness`, `window_lines`, `internal_lines`) |
 | `targeting` | `src/targeting/targeting_controller.gd` |
 | `time` | `src/autoload/debug_console.gd` |
 | `waves` | `src/game/wave_director.gd` |

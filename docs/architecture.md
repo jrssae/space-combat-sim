@@ -953,6 +953,45 @@ with glow off the gap is gone (a control run, the Cycle log).
 `scripts/aa_compare.sh` measures the modes against each other in one process (they take turns on a frozen or a live scene, so the
 GPU's clock changes cancel) and saves a screenshot per mode.
 
+### 7.7 Upscaling: FSR 1.0 and FSR 2.2 (M4-T40, Q59, Q60)
+
+`settings.upscaler` picks how the 3D view is rendered and enlarged to the window: `native` (the window's own size, the default),
+`bilinear`, `fsr1` (FSR 1.0, spatial, sharpened by `settings.fsr_sharpness`, Godot's scale: 0 the sharpest, 2 the softest) or `fsr2`
+(FSR 2.2, temporal, its own anti-aliasing; Godot's built-in one, with no frame generation, so it adds no frames and no lag beyond its
+compute). `settings.upscale_preset` picks the internal resolution as a share of the window's height: `native` 1.0, `quality` 1/1.5
+(0.67, the default), `balanced` 1/1.7 (0.59), `performance` 0.5, `ultra_performance` 1/3 (0.33) or `custom`
+(`settings.upscale_custom_scale`, 0.33 to 1). The ratios are AMD's, so a 2 160-line window renders whole lines (1 440, 1 080, 720).
+The preset is ignored while the upscaler is `native`. `Upscaler` (a node of `SpaceEnvironment`, after `AntiAliasing`) applies them
+live to the viewport's `scaling_3d_mode`, `scaling_3d_scale` and `fsr_sharpness` through `Upscaling` (pure). Console
+`upscale [upscaler] [preset|scale]`, provider `upscale`.
+
+- **The HUD and text** draw at the window's own pixels: the project sets no stretch mode, and the 3D scale changes only the 3D render
+  buffers, so a one-pixel HUD line stays one window pixel wide with the 3D at a third (`test_upscaling_gpu`).
+- **FSR 2.2 and the anti-aliasing setting.** Godot turns TAA off under FSR 2.2. `Upscaler` goes further and holds the whole
+  anti-aliasing mode off while FSR 2.2 is on (FXAA, SMAA and MSAA would only blur or cost on top of its own anti-aliasing), keeps the
+  setting as it was, shows the hold (`aa` says "held off while FSR 2.2 anti-aliases", provider `aa.held`), and gives the mode back
+  when FSR 2.2 goes. Under FSR 2.2 the motion vectors stay on whatever the mode: the sky pass and the opaque bolts with their slot
+  quarantine (§7.6), as under TAA. Bilinear and FSR 1.0 keep the anti-aliasing mode, applied at the internal resolution.
+- **Why native by default (a measurement).** On the maintainer's RX 6950 XT the game draws a cheap scene (mostly black space), so
+  FSR 2.2's own pass costs more than the pixels it saves: with the 3D at the 6144x3456 window's own size, frozen `battle` 300, native
+  with SMAA takes 3.19 ms of GPU, FSR 2.2 Quality 5.86, Ultra Performance 4.46; in a 3840x2160 window native 1.27 and FSR 2.2 Quality
+  2.27. Live at `battle` 300 FSR 2.2 lowers the average from 102 to 76 to 85 FPS and adds 210 to 1 770 MB of VRAM. FSR 1.0 and
+  bilinear do save GPU (FSR 1.0 Quality 2.19 ms frozen, 3.28 live against 4.71) and gain 14 to 24 % FPS at `battle` 300, within the
+  sim's run-to-run noise at 500; whether FSR 1.0 Quality looks as good as native in a large window is the maintainer's call (H, on the
+  return checklist). The full tables are in the M4 Cycle log, M4-T40.
+- **The look.** Stars and far dots are single pixels at the internal resolution, so at Ultra Performance (FSR 1.0 or 2.2) they
+  enlarge into soft blobs; at Quality they stay close to native. FSR 2.2 left no trail behind a moving point over black space, but it
+  clamps its history so hard that a point without vectors left none either. A sub-pixel point (1.4 window pixels across, 6 pixels a
+  frame) at half scale kept only about a fifth of its light (0.29 of a 1.6-pixel disc), so small fast things such as far bolts may
+  fade under FSR 2.2 at low presets. No ghosting showed on the live screenshots; the look is on the return checklist. If FSR 2.2's
+  ghosting proves unacceptable, FSR 3.1's upscaler (AMD's FidelityFX SDK, open source, Vulkan) in the native library is the fallback
+  (Q60), still without frame generation.
+
+`scripts/aa_compare.sh ... scale3d=setting upscalers=native,fsr1:quality,fsr2:quality` takes the same turns over upscalers, and
+`FULLSCREEN_SCALE=setting` lets `scripts/fullscreen_check.sh` measure the upscaler settings (from a saved settings file: the bench
+command defers the rest of `FULLSCREEN_EXEC`). A held scale (`1080p` or a number, the tools' default) is a bilinear stretch, as
+before T40.
+
 ## 8. Camera
 
 - **Cockpit**: `Camera3D` glued to `CockpitAnchor` (hardpoint) via `RemoteTransform3D`; FOV 75°. The pilot looks out of a built cabin (M3-T29, `docs/design-references.md`, the second
@@ -3489,3 +3528,12 @@ native, are in the M4 Cycle log). Under TAA the bolt slot check walks every bolt
 GDScript (measured 0.8 ms a frame at `battle` 500's 2 300 bolts, against 0.09 ms for the bolt pass without it); T37 or a later
 native task can move it into the core's `bolt_transforms`, which knows when a slot changes hands. Under TAA the frame also costs
 about 1 ms more CPU elsewhere (Godot's own motion-vector bookkeeping). FSR 2.2 (T40) reuses the same motion vectors.
+
+### 17.23 Upscaling (T40)
+
+T40 adds the upscaler and preset settings (§7.7). For the performance side: on this GPU upscaling buys little because the GPU is
+not what binds. The frame is CPU-bound at `battle` 300 and 500 at the 6K window's native size (GPU 4.7 ms against a 9.8 and 24 ms
+frame), and only `typical` (a 4 ms frame) is close to GPU-bound. FSR 2.2 costs more than native at every preset (its pass at 6K is
+about 4 ms of GPU and its motion vectors add 2 to 3 ms to the frame), so it is offered for its anti-aliasing and for heavier future
+scenes, not as a saving. FSR 1.0 and bilinear save 1.4 to 3.8 ms of GPU at 6K. The default stays native; a weaker GPU or a heavier
+scene would change that, and the setting is ready for it.

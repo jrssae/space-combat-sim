@@ -514,4 +514,18 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       `reports/perf/m4-t38_compare/pairs/moving_2160.png` (no AA, SMAA, TAA, the live fight) shows what the agent saw.
 - [ ] **M4-T38 TAA with motion blur.** `aa taa` and `blur on`: a hard turn smears the stars once (the blur), not twice; a still
       camera leaves the sky sharp.
-
+- [ ] **M4-T40 Upscaling, the default.** `settings.upscaler` is `native` (the 3D at the window's own size, as since T36), because
+      FSR 2.2 measured dearer than native on this card. Compare the sheets in `reports/perf/m4-t40_compare/pairs/` (each the same
+      frozen `battle` 300 frame in the 6K window, twelve upscaler and preset turns): `edges.png`, `hull_detail.png`, `stars.png`,
+      `far_dots.png` and `hud_text.png` (the HUD must be equally sharp in every turn). Then fly the sandbox with `upscale fsr1 quality`
+      and `upscale native`: FSR 1.0 Quality costs about 1.4 ms less GPU at 6K and gained 14 to 24 % FPS at `battle` 300; say if it
+      looks as good as native, in which case it could be the default for a large window.
+- [ ] **M4-T40 FSR 2.2 in motion.** `upscale fsr2 quality`, then a `battle 300` run with hard turns and fighters crossing close: no
+      ghost behind a fast fighter, the stars steady through a turn, bolts still bright at a distance (a sub-pixel point moving fast
+      at half scale kept only about a fifth of its light in a test, so far bolts may fade at `performance` and below). `aa` must say
+      the anti-aliasing is held off, and `upscale native` must bring it back. If the ghosting is unacceptable, say so: FSR 3.1's
+      upscaler in the native library is the fallback (Q60). The live sheets `moving_hull.png`, `moving_rocks.png` and
+      `moving_left.png` (native, bilinear and FSR 1.0 Quality, FSR 2.2 Quality, Performance and Ultra Performance, each a different
+      moment of the live fight) show what the agent saw: no ghosting, stars soft at Ultra Performance.
+- [ ] **M4-T40 Low presets.** `upscale fsr1 ultra_performance` and `upscale fsr2 ultra_performance` (a third of the lines, for weaker
+      GPUs): the stars and far dots enlarge into soft blobs; say whether that is acceptable for a low setting.
