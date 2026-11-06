@@ -873,6 +873,23 @@ func test_the_tier_kernel_holds_no_engine_type() -> void:
 	assert_true(FileAccess.get_file_as_string(TIER_SHELL_FILE).contains("use crate::tier::"), "the shell reads the tier")
 
 
+## The tier's fire (M4-T22): the to-hit chance, the seeded roll and the far capitals' group rolls, held to the kernels'
+## rules: plain numbers and rows in, plain numbers out.
+const TIER_FIRE_FILE: String = "res://native/src/tier_fire.rs"
+const TIER_FIRE_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
+		"use crate::rows::", "use crate::v3::"]
+
+
+func test_the_tier_fire_kernel_holds_no_engine_type() -> void:
+	var violations: PackedStringArray = _engine_free_violations(TIER_FIRE_FILE, KERNEL_FORBIDDEN, TIER_FIRE_USE_ALLOWED)
+	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the tier's fire: %s" % violations)
+	var source: String = FileAccess.get_file_as_string(TIER_FIRE_FILE)
+	for part: String in ["pub fn hit_chance(", "pub fn roll(", "pub fn turret_chance(", "pub fn nearest_hostile_fighter("]:
+		assert_true(source.contains(part), "the tier's fire holds %s" % part)
+	assert_false(source.contains("static mut") or source.contains("thread_local") or source.contains("Cell<"),
+			"no shared mutable state in the tier's fire")
+
+
 func test_the_step_job_holds_no_engine_type() -> void:
 	var violations: PackedStringArray = _engine_free_violations(BRAIN_STEP_FILE, KERNEL_FORBIDDEN, BRAIN_STEP_USE_ALLOWED)
 	violations.append_array(_engine_free_violations(THREADS_FILE, KERNEL_FORBIDDEN, THREADS_USE_ALLOWED))
