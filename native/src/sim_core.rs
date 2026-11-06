@@ -444,7 +444,8 @@ impl ScsSimCore {
         self.tick = tick;
         self.syncs += 1;
         self.rows_version += 1;
-        // The tier's integration for the tick that just ended, as Jolt stepped the bodies before this read (M4-T21).
+        // The tier's integration for the current tick (M4-T21). The body rows read below are a tick older, so a tier row
+        // leads them by one tick's motion; a demote and promote pair still steps the ship exactly once a tick.
         self.tier_step(delta);
         let now = self.syncs;
         let mut rows = std::mem::take(&mut self.rows);

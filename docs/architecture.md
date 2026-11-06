@@ -3112,8 +3112,10 @@ src/perf/standins/capital_standin.gd   park_for_tier, unpark_from_tier; the dire
   flag, a stagger ordinal and what the last beat left to apply (acceleration, angular acceleration, the speed ceiling). A
   fighter type is the flight kernel's `Body` (T10's maths: the same spec, nozzles and torque axes `ScsFlightStep` flies) plus the
   centre of mass its nozzles turn it about; the director registers each `ShipSpec` once (`FlightBatch.type_arrays`).
-- **The integrator.** Inside every `sync_in`, before the bodies are read, the core steps the tier for the tick that just
-  ended (as Jolt stepped the bodies before the read). Every row advances semi-implicitly as Jolt does: the velocity by the
+- **The integrator.** Inside every `sync_in`, before the bodies are read, the core steps the tier for the current tick, so a
+  tier row in the scan leads the body rows by one tick's motion (a demotion shows two ticks' motion in one scan step, a
+  promotion the same pose twice; the steps per tick stay exact, and `test_tier_handover` checks the scan stays within that
+  tick of its path). Every row advances semi-implicitly as Jolt does: the velocity by the
   held acceleration, then the position by the new velocity, the spin by the held angular acceleration, the attitude by the
   spin (the axis-angle rotation, re-orthonormalised). On its beat (every `tier_hz` ticks, staggered by ordinal) a fighter's
   held command (the row command the brains wrote, `row_commands` by body id, else the command it was demoted with) goes

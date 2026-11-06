@@ -5,8 +5,9 @@ extends GutTest
 ## A capital goes with its turrets and emitters and fires again when it is back; Jolt holds only the near bodies; the
 ## player flying into a far fight finds it promoted at 10 km, long before 5 km; a tier ship does not think (the tier
 ## replaces the far rate for it) and thinks again when promoted; a hulk comes back as a hulk; a release while tiered takes
-## the row away; the radius at 0 or the core off promotes everything. On both of T24's step schedules (Q54). Real pooled
-## ships, real physics frames. Skips, saying why, when the library is not built.
+## the row away; the radius at 0 or the core off promotes everything. Every test runs on both of T24's step schedules
+## (Q54), each pass reading the live schedule back. Real pooled ships, real physics frames. Skips, saying why, when the
+## library is not built.
 
 const POOL: int = 14
 const DT: float = 1.0 / 60.0
@@ -132,6 +133,56 @@ static func _parked(ship: Ship) -> bool:
 	return ship.is_tier_parked() and not ship.visible and not ship.can_process()
 
 
+# Switches T24's step schedule and proves the live step took it (the batch's cached mode and the core's readout).
+func _use_schedule(schedule: StringName) -> void:
+	Settings.set_value(&"sim_step", schedule)
+	assert_eq(BrainBatch.step_mode(), BrainBatch.step_mode_of(schedule), "the batch steps on %s" % schedule)
+	var read: Dictionary = DebugConsole.registry.read("core.step_mode")
+	assert_eq(str(read.get("value", "")), String(schedule), "core.step_mode reads %s back" % schedule)
+
+
+# Proves the native thinks of the last ticks ran where the schedule says: off the main thread only when threaded.
+func _assert_step_ran(schedule: StringName) -> void:
+	var host: Object = NativeBrains.host(get_tree())
+	assert_not_null(host, "%s: a brain host ran" % schedule)
+	if host != null:
+		assert_eq(bool(host.step_off_main()), schedule == &"threaded", "%s: the last job ran %s the main thread" % [
+				schedule, "off" if schedule == &"threaded" else "on"])
+
+
+# Ticks `n` times, recording each tick the ship's row in the core (its scan position) and its velocity then.
+func _scan_ticks(n: int, c: Combatant, scan: Array) -> void:
+	var id: int = c.ship.get_instance_id()
+	for i: int in n:
+		await get_tree().physics_frame
+		var row: int = int(sim.core.row_of_id(id))
+		var vel: Vector3 = (sim.core.tier_state(id)["velocity"] as Vector3) if c.ship.is_tier_parked() else c.ship.linear_velocity
+		scan.append([sim.core.row_position(row) if row >= 0 else Vector3.INF, vel])
+
+
+# The scan never jumps at a handover: each tick's step is the ship's motion over a tick, give or take one tick's motion
+# (a tier row is integrated one tick ahead of the body rows), and never backwards.
+func _assert_scan_continuous(scan: Array, why: String) -> void:
+	var worst: float = 0.0
+	var gaps: int = 0
+	var backwards: int = 0
+	for i: int in range(1, scan.size()):
+		var p0: Vector3 = scan[i - 1][0]
+		var p1: Vector3 = scan[i][0]
+		if not p0.is_finite() or not p1.is_finite():
+			gaps += 1
+			continue
+		var tick_m: float = maxf((scan[i - 1][1] as Vector3).length(), (scan[i][1] as Vector3).length()) * DT
+		var step: Vector3 = p1 - p0
+		worst = maxf(worst, absf(step.length() - tick_m) / maxf(tick_m, 1e-6))
+		if step.dot(scan[i][1] as Vector3) < -0.001:
+			backwards += 1
+	assert_eq(gaps, 0, "%s: the ship had a row in the scan every tick" % why)
+	assert_lte(worst, 1.02, "%s: no scan step strayed from a tick's motion by more than one tick's motion (worst %.3f ticks)" % [why, worst])
+	assert_eq(backwards, 0, "%s: and the scan never stepped backwards" % why)
+	gut.p("%s: %d scan steps, worst %.3f ticks off a tick's motion" % [why, scan.size() - 1, worst])
+
+
 # --- the handover ----------------------------------------------------------------------------------------------------------
 
 
@@ -140,7 +191,7 @@ func test_a_fighter_demoted_and_promoted_a_hundred_times_never_pops_on_either_sc
 		return
 	tier.set_physics_process(false)  # the handovers by hand, at a fixed beat
 	for schedule: StringName in SCHEDULES:
-		Settings.set_value(&"sim_step", schedule)
+		_use_schedule(schedule)
 		var brain := ThrustBrain.new()
 		var c: Combatant = _raider("R %s" % schedule, Vector3(0.0, 0.0, -12000.0), brain, Vector3(0.0, 0.0, -80.0))
 		var id: int = c.ship.get_instance_id()
@@ -148,8 +199,9 @@ func test_a_fighter_demoted_and_promoted_a_hundred_times_never_pops_on_either_sc
 		await _ticks(6)
 		var worst_pos: float = 0.0
 		var worst_vel: float = 0.0
+		var scan: Array = []
 		for cycle: int in 50:
-			await _ticks(12)
+			await _scan_ticks(12, c, scan)
 			var pos: Vector3 = c.ship.global_position
 			var vel: Vector3 = c.ship.linear_velocity
 			var basis: Basis = c.ship.global_basis
@@ -167,7 +219,7 @@ func test_a_fighter_demoted_and_promoted_a_hundred_times_never_pops_on_either_sc
 			assert_eq(row["command"], TierDirector.held_command(sim, c), "cycle %d: the command the ship held" % cycle)
 			assert_true(_parked(c.ship), "cycle %d: the body is parked" % cycle)
 			assert_false(_in_jolt(c.ship), "cycle %d: and out of Jolt" % cycle)
-			await _ticks(12)
+			await _scan_ticks(12, c, scan)
 			row = sim.core.tier_state(id)
 			var row_vel: Vector3 = row["velocity"]
 			assert_ne(row_vel, vel, "cycle %d: the tier flew the held command (%s from %s)" % [cycle, row_vel, vel])
@@ -181,6 +233,8 @@ func test_a_fighter_demoted_and_promoted_a_hundred_times_never_pops_on_either_sc
 			assert_true(c.ship.visible and c.ship.can_process() and not c.ship.is_tier_parked(), "cycle %d: back in play" % cycle)
 			assert_true(_in_jolt(c.ship), "cycle %d: and in Jolt" % cycle)
 			assert_true(sim.core.tier_state(id).is_empty(), "cycle %d: no row left" % cycle)
+		await _scan_ticks(3, c, scan)
+		_assert_scan_continuous(scan, "%s, 100 handovers" % schedule)
 		assert_lt(worst_pos, 0.01, "%s: the position never moved by a centimetre at a handover (%.5f m)" % [schedule, worst_pos])
 		assert_lt(worst_vel, 0.01, "%s: nor the velocity by a centimetre a second (%.5f m/s)" % [schedule, worst_vel])
 		assert_same(c.driver.brain, brain, "the pilot stayed")
@@ -195,7 +249,7 @@ func test_jolt_holds_only_the_near_bodies_and_the_counts_say_so() -> void:
 	if _skipped():
 		return
 	for schedule: StringName in SCHEDULES:
-		Settings.set_value(&"sim_step", schedule)
+		_use_schedule(schedule)
 		var near: Array[Combatant] = []
 		var far: Array[Combatant] = []
 		for i: int in 6:
@@ -238,34 +292,38 @@ func test_jolt_holds_only_the_near_bodies_and_the_counts_say_so() -> void:
 func test_the_player_flying_into_a_far_fight_sees_it_promoted_at_ten_km_long_before_five() -> void:
 	if _skipped():
 		return
-	var fight: Array[Combatant] = []
-	for i: int in 8:
-		fight.append(_raider("FIGHT %d" % i, Vector3(float(i % 4) * 150.0 - 225.0, float(i / 4) * 150.0, -14000.0), IdleBrain.new()))
-	await _ticks(3)
-	assert_eq(int(sim.core.tier_count()), 8, "the fight starts in the tier, 14 km out")
-	player.ship.linear_velocity = Vector3(0.0, 0.0, -1000.0)
-	var promoted_at: float = -1.0
-	for t: int in 12 * 60:
-		await _ticks(1)
-		var distance: float = player.ship.global_position.distance_to(Vector3(0.0, 0.0, -14000.0))
-		if promoted_at < 0.0 and int(sim.core.tier_count()) == 0:
-			promoted_at = distance
-		if distance < 5000.0:
-			break
-	assert_gte(promoted_at, 5000.0, "the fight was promoted before the player was within 5 km (at %.0f m)" % promoted_at)
-	assert_between(promoted_at, RADIUS_M - 150.0, RADIUS_M + 50.0, "and right at the radius (%.0f m)" % promoted_at)
-	assert_eq(int(sim.core.tier_count()), 0, "every ship of the fight is on its body within 5 km")
-	for c: Combatant in fight:
-		assert_true(_in_jolt(c.ship) and c.ship.visible and not c.ship.is_tier_parked(), "%s flies in Jolt" % c.display_name)
-		assert_lt(c.ship.global_position.distance_to(Vector3(c.ship.global_position.x, c.ship.global_position.y, -14000.0)), 50.0,
-				"%s came back where it was (an idle ship at rest; %s)" % [c.display_name, c.ship.global_position])
+	for schedule: StringName in SCHEDULES:
+		if schedule != SCHEDULES[0]:
+			await _rebuild()
+		_use_schedule(schedule)
+		var fight: Array[Combatant] = []
+		for i: int in 8:
+			fight.append(_raider("FIGHT %d" % i, Vector3(float(i % 4) * 150.0 - 225.0, float(i / 4) * 150.0, -14000.0), IdleBrain.new()))
+		await _ticks(3)
+		assert_eq(int(sim.core.tier_count()), 8, "%s: the fight starts in the tier, 14 km out" % schedule)
+		player.ship.linear_velocity = Vector3(0.0, 0.0, -1000.0)
+		var promoted_at: float = -1.0
+		for t: int in 12 * 60:
+			await _ticks(1)
+			var distance: float = player.ship.global_position.distance_to(Vector3(0.0, 0.0, -14000.0))
+			if promoted_at < 0.0 and int(sim.core.tier_count()) == 0:
+				promoted_at = distance
+			if distance < 5000.0:
+				break
+		assert_gte(promoted_at, 5000.0, "%s: the fight was promoted before the player was within 5 km (at %.0f m)" % [schedule, promoted_at])
+		assert_between(promoted_at, RADIUS_M - 150.0, RADIUS_M + 50.0, "%s: and right at the radius (%.0f m)" % [schedule, promoted_at])
+		assert_eq(int(sim.core.tier_count()), 0, "%s: every ship of the fight is on its body within 5 km" % schedule)
+		for c: Combatant in fight:
+			assert_true(_in_jolt(c.ship) and c.ship.visible and not c.ship.is_tier_parked(), "%s flies in Jolt" % c.display_name)
+			assert_lt(c.ship.global_position.distance_to(Vector3(c.ship.global_position.x, c.ship.global_position.y, -14000.0)), 50.0,
+					"%s came back where it was (an idle ship at rest; %s)" % [c.display_name, c.ship.global_position])
 
 
 func test_a_tier_ship_does_not_think_and_thinks_again_when_promoted() -> void:
 	if _skipped():
 		return
 	for schedule: StringName in SCHEDULES:
-		Settings.set_value(&"sim_step", schedule)
+		_use_schedule(schedule)
 		Settings.set_value(&"tier_radius_m", RADIUS_M)
 		var at := Vector3(0.0, 0.0, -15000.0)
 		var c: Combatant = _raider("THINKER", at, _ai_brain(at, 7))
@@ -279,6 +337,7 @@ func test_a_tier_ship_does_not_think_and_thinks_again_when_promoted() -> void:
 		var near_slot: int = near_pilot.native_slot_index()
 		assert_gte(slot, 0, "%s: the far pilot has a native slot" % schedule)
 		assert_gt(int(host.slot_think_count(slot)), 0, "%s: and thought on its body" % schedule)
+		_assert_step_ran(schedule)
 		tier.set_physics_process(true)
 		await _ticks(4)
 		assert_true(_parked(c.ship), "%s: the far ship is a tier row" % schedule)
@@ -301,137 +360,170 @@ func test_a_tier_ship_does_not_think_and_thinks_again_when_promoted() -> void:
 func test_a_capital_leaves_with_its_turrets_and_fires_again_when_it_is_back() -> void:
 	if _skipped():
 		return
-	Settings.set_value(&"sim_step", &"threaded")
-	Settings.set_value(&"tier_radius_m", 30000.0)  # everything near for now
-	var cap: CapitalStandin = standins.add_capital(&"cruiser", Factions.EARTH_ALLIANCE, "CRUISER",
-			world.to_universe(Vector3(0.0, 0.0, -15000.0)), Basis.IDENTITY, Vector3(0.0, 0.0, -30.0))
-	cap.damageable.invulnerable = true
-	var target: Combatant = _raider("TARGET", Vector3(0.0, 0.0, -17000.0), IdleBrain.new())
-	target.damageable.invulnerable = true
-	standins.active = true
-	var guns: int = cap.guns().size()
-	var gun_offsets: Array[Vector3] = []
-	for gun: TurretStandin in cap.guns():
-		gun_offsets.append(cap.to_local(gun.global_position))
-	await _ticks(90)
-	var shots_near: int = _shots(cap)
-	assert_gt(shots_near, 0, "the cruiser's guns fire at the hostile 2 km off")
-	Settings.set_value(&"tier_radius_m", RADIUS_M)
-	await _ticks(4)
-	assert_true(cap.is_tier_parked() and not _in_jolt(cap), "15 km out, the capital is a row")
-	assert_true(_parked(target.ship), "and so is its target")
-	var at_demotion: int = _shots(cap)
-	await _ticks(90)
-	assert_eq(_shots(cap), at_demotion, "a tier capital's turrets fire nothing (T22 gives them their aggregated fire)")
-	assert_eq(cap.guns().size(), guns, "the turrets are still its children")
-	Settings.set_value(&"tier_radius_m", 30000.0)
-	await _ticks(4)
-	assert_true(_in_jolt(cap) and cap.visible, "promoted: back in Jolt")
-	for i: int in guns:
-		assert_lt(cap.to_local(cap.guns()[i].global_position).distance_to(gun_offsets[i]), 0.01, "gun %d rides where it was" % i)
-	var cruise: float = cap.linear_velocity.distance_to(Vector3(0.0, 0.0, -30.0))
-	assert_lt(cruise, 1.0, "it kept its cruise (%s)" % cap.linear_velocity)
-	await _ticks(90)
-	assert_gt(_shots(cap), at_demotion, "and its guns fire again")
-	standins.clear()
+	for schedule: StringName in SCHEDULES:
+		if schedule != SCHEDULES[0]:
+			await _rebuild()
+		_use_schedule(schedule)
+		Settings.set_value(&"tier_radius_m", 30000.0)  # everything near for now
+		var cap: CapitalStandin = standins.add_capital(&"cruiser", Factions.EARTH_ALLIANCE, "CRUISER",
+				world.to_universe(Vector3(0.0, 0.0, -15000.0)), Basis.IDENTITY, Vector3(0.0, 0.0, -30.0))
+		cap.damageable.invulnerable = true
+		var target: Combatant = _raider("TARGET", Vector3(0.0, 0.0, -17000.0), IdleBrain.new())
+		target.damageable.invulnerable = true
+		standins.active = true
+		var guns: int = cap.guns().size()
+		var gun_offsets: Array[Vector3] = []
+		for gun: TurretStandin in cap.guns():
+			gun_offsets.append(cap.to_local(gun.global_position))
+		await _ticks(90)
+		var shots_near: int = _shots(cap)
+		assert_gt(shots_near, 0, "%s: the cruiser's guns fire at the hostile 2 km off" % schedule)
+		Settings.set_value(&"tier_radius_m", RADIUS_M)
+		await _ticks(4)
+		assert_true(cap.is_tier_parked() and not _in_jolt(cap), "%s: 15 km out, the capital is a row" % schedule)
+		assert_true(_parked(target.ship), "%s: and so is its target" % schedule)
+		var at_demotion: int = _shots(cap)
+		await _ticks(90)
+		assert_eq(_shots(cap), at_demotion, "%s: a tier capital's turrets fire nothing (T22 gives them their aggregated fire)" % schedule)
+		assert_eq(cap.guns().size(), guns, "%s: the turrets are still its children" % schedule)
+		Settings.set_value(&"tier_radius_m", 30000.0)
+		await _ticks(4)
+		assert_true(_in_jolt(cap) and cap.visible, "%s: promoted, back in Jolt" % schedule)
+		for i: int in guns:
+			assert_lt(cap.to_local(cap.guns()[i].global_position).distance_to(gun_offsets[i]), 0.01, "%s: gun %d rides where it was" % [schedule, i])
+		var cruise: float = cap.linear_velocity.distance_to(Vector3(0.0, 0.0, -30.0))
+		assert_lt(cruise, 1.0, "%s: it kept its cruise (%s)" % [schedule, cap.linear_velocity])
+		await _ticks(90)
+		assert_gt(_shots(cap), at_demotion, "%s: and its guns fire again" % schedule)
+		standins.clear()
 
 
-func test_a_hulk_row_comes_back_as_a_hulk() -> void:
+func test_a_hulk_row_comes_back_as_a_hulk_and_goes_back_as_one() -> void:
 	if _skipped():
 		return
-	Settings.set_value(&"sim_step", &"threaded")
-	var at := Vector3(0.0, 0.0, -15000.0)
-	var c: Combatant = _raider("HULK", at, _ai_brain(at, 9), Vector3(5.0, 0.0, -60.0))
-	await _ticks(4)
-	var id: int = c.ship.get_instance_id()
-	assert_true(sim.core.tier_has(id), "the far ship is a row")
-	assert_true(sim.core.tier_set_hulk(id, true), "flagged a hulk")
-	var drift: Vector3 = sim.core.tier_state(id)["velocity"]
-	await _ticks(60)
-	assert_eq(sim.core.tier_state(id)["velocity"], drift, "a hulk row drifts on, whatever its pilot said")
-	assert_true(sim.core.tier_has(id), "and is still there after a second idle")
-	Settings.set_value(&"tier_radius_m", 0.0)
-	await _ticks(3)
-	assert_true(c.ship.visible and _in_jolt(c.ship), "promoted")
-	assert_true(c.ship.hulk, "as a hulk")
-	assert_null(c.driver.brain, "with no pilot")
-	assert_lt(c.ship.linear_velocity.distance_to(drift), 0.01, "at its drift (%s)" % c.ship.linear_velocity)
-	await _ticks(60)
-	assert_lt(c.ship.linear_velocity.distance_to(drift), 0.01, "and it coasts under Jolt: no force in a second (%s)" % c.ship.linear_velocity)
-	assert_false(c.ship.get_combat_command().fire, "its trigger is released")
+	for schedule: StringName in SCHEDULES:
+		if schedule != SCHEDULES[0]:
+			await _rebuild()
+		_use_schedule(schedule)
+		Settings.set_value(&"tier_radius_m", RADIUS_M)
+		var at := Vector3(0.0, 0.0, -15000.0)
+		var c: Combatant = _raider("HULK", at, _ai_brain(at, 9), Vector3(5.0, 0.0, -60.0))
+		var near_at := Vector3(0.0, 0.0, -3000.0)
+		_raider("NEAR", near_at, _ai_brain(near_at, 10))  # a near thinker, so the step runs on this schedule
+		await _ticks(4)
+		_assert_step_ran(schedule)
+		var id: int = c.ship.get_instance_id()
+		assert_true(sim.core.tier_has(id), "%s: the far ship is a row" % schedule)
+		assert_true(sim.core.tier_set_hulk(id, true), "%s: flagged a hulk" % schedule)
+		var drift: Vector3 = sim.core.tier_state(id)["velocity"]
+		await _ticks(60)
+		assert_eq(sim.core.tier_state(id)["velocity"], drift, "%s: a hulk row drifts on, whatever its pilot said" % schedule)
+		assert_true(sim.core.tier_has(id), "%s: and is still there after a second idle" % schedule)
+		Settings.set_value(&"tier_radius_m", 0.0)
+		await _ticks(3)
+		assert_true(c.ship.visible and _in_jolt(c.ship), "%s: promoted" % schedule)
+		assert_true(c.ship.hulk, "%s: as a hulk" % schedule)
+		assert_null(c.driver.brain, "%s: with no pilot" % schedule)
+		assert_lt(c.ship.linear_velocity.distance_to(drift), 0.01, "%s: at its drift (%s)" % [schedule, c.ship.linear_velocity])
+		await _ticks(60)
+		assert_lt(c.ship.linear_velocity.distance_to(drift), 0.01, "%s: it coasts under Jolt, no force in a second (%s)" % [schedule, c.ship.linear_velocity])
+		assert_false(c.ship.get_combat_command().fire, "%s: its trigger is released" % schedule)
+		# The hulk's body goes back into a row as a hulk, and comes back as one again.
+		Settings.set_value(&"tier_radius_m", RADIUS_M)
+		await _ticks(3)
+		assert_true(_parked(c.ship) and sim.core.tier_has(id), "%s: demoted again, a row" % schedule)
+		assert_true(bool(sim.core.tier_state(id)["hulk"]), "%s: still a hulk in the tier" % schedule)
+		assert_lt((sim.core.tier_state(id)["velocity"] as Vector3).distance_to(drift), 0.01, "%s: on the same drift" % schedule)
+		await _ticks(30)
+		assert_lt((sim.core.tier_state(id)["velocity"] as Vector3).distance_to(drift), 0.01, "%s: with no force in the tier" % schedule)
+		Settings.set_value(&"tier_radius_m", 0.0)
+		await _ticks(3)
+		assert_true(c.ship.visible and _in_jolt(c.ship) and c.ship.hulk, "%s: and back on its body a hulk" % schedule)
+		assert_null(c.driver.brain, "%s: still with no pilot" % schedule)
 
 
 func test_a_release_while_tiered_takes_the_row_away() -> void:
 	if _skipped():
 		return
-	var c: Combatant = _raider("GONE", Vector3(0.0, 0.0, -15000.0), IdleBrain.new())
-	await _ticks(4)
-	var id: int = c.ship.get_instance_id()
-	assert_true(sim.core.tier_has(id))
-	pool.release(c)
-	assert_false(sim.core.tier_has(id), "released: no row")
-	assert_eq(tier.tier_fighters(), 0)
-	assert_false(c.ship.is_tier_parked(), "parked by the pool, not the tier")
-	var again: Combatant = _raider("AGAIN", Vector3(0.0, 0.0, -2000.0), IdleBrain.new())
-	await _ticks(3)
-	assert_true(again.ship.visible and _in_jolt(again.ship) and not again.ship.is_tier_parked(), "the pool's ship flies again, near")
-	assert_eq(int(sim.core.tier_count()), 0)
+	for schedule: StringName in SCHEDULES:
+		if schedule != SCHEDULES[0]:
+			await _rebuild()
+		_use_schedule(schedule)
+		var c: Combatant = _raider("GONE", Vector3(0.0, 0.0, -15000.0), IdleBrain.new())
+		await _ticks(4)
+		var id: int = c.ship.get_instance_id()
+		assert_true(sim.core.tier_has(id), "%s: a row" % schedule)
+		pool.release(c)
+		assert_false(sim.core.tier_has(id), "%s: released, no row" % schedule)
+		assert_eq(tier.tier_fighters(), 0)
+		assert_false(c.ship.is_tier_parked(), "%s: parked by the pool, not the tier" % schedule)
+		var again: Combatant = _raider("AGAIN", Vector3(0.0, 0.0, -2000.0), IdleBrain.new())
+		await _ticks(3)
+		assert_true(again.ship.visible and _in_jolt(again.ship) and not again.ship.is_tier_parked(), "%s: the pool's ship flies again, near" % schedule)
+		assert_eq(int(sim.core.tier_count()), 0)
 
 
 func test_the_radius_at_zero_or_the_core_off_promotes_every_row() -> void:
 	if _skipped():
 		return
-	var far: Array[Combatant] = []
-	for i: int in 5:
-		far.append(_raider("F%d" % i, Vector3(float(i) * 100.0, 0.0, -15000.0), IdleBrain.new(), Vector3(0.0, 0.0, -50.0)))
-	await _ticks(4)
-	assert_eq(int(sim.core.tier_count()), 5)
-	Settings.set_value(&"tier_radius_m", 0.0)
-	await _ticks(2)
-	assert_eq(int(sim.core.tier_count()), 0, "the radius at 0: the tier is off, every row promoted")
-	for c: Combatant in far:
-		assert_true(c.ship.visible and _in_jolt(c.ship), "%s is back" % c.display_name)
-		assert_lt(c.ship.global_position.z, -15000.0 - 50.0 * 4 * DT * 0.5, "%s came back where the row had flown to (%s)" % [c.display_name, c.ship.global_position])
-	Settings.set_value(&"tier_radius_m", RADIUS_M)
-	await _ticks(3)
-	assert_eq(int(sim.core.tier_count()), 5, "and demoted again when the radius is back")
-	Settings.set_value(&"perf_native_core", false)
-	await _ticks(2)
-	assert_eq(tier.tier_fighters(), 0, "the core off: every row promoted")
-	for c: Combatant in far:
-		assert_true(c.ship.visible and _in_jolt(c.ship), "%s is back on its body" % c.display_name)
-	Settings.set_value(&"perf_native_core", true)
+	for schedule: StringName in SCHEDULES:
+		if schedule != SCHEDULES[0]:
+			await _rebuild()
+		_use_schedule(schedule)
+		Settings.set_value(&"tier_radius_m", RADIUS_M)
+		var far: Array[Combatant] = []
+		for i: int in 5:
+			far.append(_raider("F%d" % i, Vector3(float(i) * 100.0, 0.0, -15000.0), IdleBrain.new(), Vector3(0.0, 0.0, -50.0)))
+		await _ticks(4)
+		assert_eq(int(sim.core.tier_count()), 5, "%s: five rows" % schedule)
+		Settings.set_value(&"tier_radius_m", 0.0)
+		await _ticks(2)
+		assert_eq(int(sim.core.tier_count()), 0, "%s: the radius at 0, the tier is off, every row promoted" % schedule)
+		for c: Combatant in far:
+			assert_true(c.ship.visible and _in_jolt(c.ship), "%s is back" % c.display_name)
+			assert_lt(c.ship.global_position.z, -15000.0 - 50.0 * 4 * DT * 0.5, "%s came back where the row had flown to (%s)" % [c.display_name, c.ship.global_position])
+		Settings.set_value(&"tier_radius_m", RADIUS_M)
+		await _ticks(3)
+		assert_eq(int(sim.core.tier_count()), 5, "%s: and demoted again when the radius is back" % schedule)
+		Settings.set_value(&"perf_native_core", false)
+		await _ticks(2)
+		assert_eq(tier.tier_fighters(), 0, "%s: the core off, every row promoted" % schedule)
+		for c: Combatant in far:
+			assert_true(c.ship.visible and _in_jolt(c.ship), "%s is back on its body" % c.display_name)
+		Settings.set_value(&"perf_native_core", true)
 
 
 func test_one_thread_and_six_give_the_same_rows_with_tier_rows_among_the_contacts() -> void:
 	if _skipped():
 		return
-	var digests: Array[PackedInt64Array] = []
-	for threads: int in [1, 6]:
-		await _rebuild()
-		Settings.set_value(&"perf_threads", threads)
-		Settings.set_value(&"sim_step", &"threaded")
-		SimClock.reset()
-		var fliers: Array[Combatant] = []
-		for i: int in 6:
-			var at := Vector3(float(i) * 200.0 - 500.0, 0.0, -3500.0)
-			fliers.append(_raider("A%d" % i, at, _ai_brain(at, 100 + i)))
-		for i: int in 6:
-			var at := Vector3(float(i) * 200.0 - 500.0, 0.0, -11500.0)
-			fliers.append(_raider("B%d" % i, at, _ai_brain(at, 200 + i), Vector3(0.0, 0.0, 60.0)))
-		sim.core.set_parallel_min(2)
-		var run := PackedInt64Array()
-		for t: int in 180:
-			await _ticks(1)
-			run.append(int(sim.core.rows_digest()))
-		digests.append(run)
-		assert_gt(tier.demotions, 0, "%d threads: some ships went into the tier" % threads)
-	var first: int = -1
-	for i: int in digests[0].size():
-		if digests[0][i] != digests[1][i]:
-			first = i
-			break
-	assert_eq(first, -1, "the rows are the same bits with one thread and six, tier rows included (first difference at tick %d)" % first)
+	for schedule: StringName in SCHEDULES:
+		var digests: Array[PackedInt64Array] = []
+		for threads: int in [1, 6]:
+			await _rebuild()
+			Settings.set_value(&"perf_threads", threads)
+			_use_schedule(schedule)
+			SimClock.reset()
+			var fliers: Array[Combatant] = []
+			for i: int in 6:
+				var at := Vector3(float(i) * 200.0 - 500.0, 0.0, -3500.0)
+				fliers.append(_raider("A%d" % i, at, _ai_brain(at, 100 + i)))
+			for i: int in 6:
+				var at := Vector3(float(i) * 200.0 - 500.0, 0.0, -11500.0)
+				fliers.append(_raider("B%d" % i, at, _ai_brain(at, 200 + i), Vector3(0.0, 0.0, 60.0)))
+			sim.core.set_parallel_min(2)
+			var run := PackedInt64Array()
+			for t: int in 180:
+				await _ticks(1)
+				run.append(int(sim.core.rows_digest()))
+			digests.append(run)
+			_assert_step_ran(schedule)
+			assert_gt(tier.demotions, 0, "%s, %d threads: some ships went into the tier" % [schedule, threads])
+		var first: int = -1
+		for i: int in digests[0].size():
+			if digests[0][i] != digests[1][i]:
+				first = i
+				break
+		assert_eq(first, -1, "%s: the rows are the same bits with one thread and six, tier rows included (first difference at tick %d)" % [schedule, first])
 
 
 # Shots the capital's guns fired so far (the native rows' state pulled into the turrets).
