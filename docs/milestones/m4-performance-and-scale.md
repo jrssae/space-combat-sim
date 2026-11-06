@@ -223,7 +223,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T36 | The frame's per-ship work in one pass per subsystem (Q56, Q58): plumes, muzzle flashes, LOD switching, audio, far dots, the HUD radar, hit flashes; the splat-era render scale cap; the slow test switch | T33 | Opus | Refactor review findings 2, 3, 7, 9, 12, 13, 14: 3 to 5 ms a frame at 500 | R, G | done (2026-11-05, in a worktree on `f414cf4`; Cycle log, M4-T36): the worst second's process work at `battle` 500 from 25.7 to 10.2 to 10.8 ms and at 300 from 20.2 to 11.3 ms after fix round 1; `battle` 300 from 16.7 to 37.1 FPS; engine audio left to M5-T19 (finding 7) and the lean ships' muzzle flash pool with muzzle transforms as data moved to T35 (finding 12) |
 | T37 | M4's cleanup (Q57): the native library required, the GDScript paths test-only, the runtime fallbacks and their settings removed, one hull-reading path, the documentation drift | T23 | Opus | Refactor review findings 8, 16, 17: 1 500 to 2 500 lines and eight settings; parity surfaces halved | X, G | not started |
 | T38 | Anti-aliasing (Q59, Q60): Godot's MSAA 2x and 4x, TAA, FXAA and SMAA as a setting, live; motion vectors fixed for everything TAA (and T40's FSR 2.2) needs; defaults chosen by measurement | T36 | Opus | `project.godot` sets no anti-aliasing, so edges and thin hull detail alias; TAA and FSR 2.2 both need correct motion vectors from the multimeshes, particles and bolts | R | done (2026-11-05, one fix round, CI green on `d8b73ce`; SMAA the default, a look call the costs allow; at the 6K window's native size `battle` 300 draws in 2.83 ms off, 3.20 ms SMAA, 5.50 ms TAA; Cycle log, M4-T38) |
-| T40 | Upscaling (Q59, Q60): FSR 2.2 (temporal, its own anti-aliasing) and FSR 1.0 (spatial, with sharpness) with internal-resolution presets from a third of the output's height up to native, applied live with the HUD at window size; no frame generation; defaults chosen by measurement | T38 | Opus | Since T36 a 4K window renders 4K; FSR 2.2 from 1 080 or 1 440 lines looks better than a bilinear stretch and costs less than native; below 1 080 is for weaker GPUs; supersedes T26 (measured otherwise: FSR 2.2 costs more GPU than native here, so native is the default) | R | in progress (dispatched 2026-11-05, Opus, after T38; implemented in its worktree, review fix round 1 done, awaiting re-review) |
+| T40 | Upscaling (Q59, Q60): FSR 2.2 (temporal, its own anti-aliasing) and FSR 1.0 (spatial, with sharpness) with internal-resolution presets from a third of the output's height up to native, applied live with the HUD at window size; no frame generation; defaults chosen by measurement | T38 | Opus | Since T36 a 4K window renders 4K; FSR 2.2 from 1 080 or 1 440 lines looks better than a bilinear stretch and costs less than native; below 1 080 is for weaker GPUs; supersedes T26 (measured otherwise: FSR 2.2 costs more GPU than native here, so native is the default) | R | done (2026-11-05, one fix round, CI green on `d85a314`; native the default: FSR 2.2 costs more GPU than native here and FSR 1.0 gains 3 to 5 % on a CPU-bound frame; the fix round made `FULLSCREEN_EXEC` apply, so T24's and T35's fullscreen comparisons were re-measured; Cycle log, M4-T40) |
 | T39 | FSR 4 study (Q59): whether AMD's FSR 4 can run in this game on Linux, Vulkan and Godot 4.7 through the native library, on the maintainer's RDNA 2 card, under the GPL-3.0 licence; a go or no-go with a plan | T38 | Sonnet | FSR 4 is not in Godot 4.7; AMD's support for RDNA 2 and for Vulkan is new or announced, so it needs facts before code | M | not needed (skipped by the maintainer, Q60) |
 
 ### M4-T01 Benchmark harness, budget and baseline
@@ -5332,6 +5332,21 @@ simulation keeps real time now (1.00). The frame's own process work (25 ms in it
 The first "before" fullscreen pair was taken on the T35a build by mistake; the node-path pair was then taken by switching
 `perf_native_bolt_rows` off live (`FULLSCREEN_EXEC`), which the headless check confirms switches the path both ways.
 
+**Correction (2026-11-05, re-measured on `d85a314` after T40's fix round).** The "before (bolt nodes, switched off)" rows above
+ran the rows path: `FULLSCREEN_EXEC` was dropped until T40's fix round, so "the bolt form did not move the frame" compared the
+build with itself (the T35 against T35a gains in the table stand; they are different builds). Re-measured on the current build,
+threaded, `perf_native_bolt_rows` switched through the fixed tool (`reports/perf/M4-RM_{nodes,rows}_b{300,500}`):
+
+| run | average FPS | 1 % low FPS | p99 frame ms | frame mean ms | sim speed | draw calls |
+|---|---|---|---|---|---|---|
+| battle 300 bolt nodes | 59.8 | 26.2 | 35.31 | 16.73 | 1.00 | 200 |
+| battle 300 bolt rows | 128.8 | 40.0 | 19.82 | 7.76 | 1.00 | 109 |
+| battle 500 bolt nodes | 17.4 | 14.5 | 67.09 | 57.58 | 0.87 | 278 |
+| battle 500 bolt rows | 55.8 | 26.8 | 33.73 | 17.92 | 1.00 | 109 |
+
+So the bolt form does move the frame: the rows path doubles the frame rate at 300 and triples it at 500, where the node path
+also falls behind real time. T37 removes the node path.
+
 **Tests.** Focused GUT runs, each file alone under the bench lock: the report lists every file's totals (every file green,
 0 failing, 0 pending), among them `test_fighter_melee` (T14's digest and its 2 959 contacts with
 `contact_monitor` off), `test_brain_tolerance` (Q16), `test_weapon_rows_battle` and `test_turret_kernel` (T20), T17's
@@ -5549,6 +5564,25 @@ schedule changes the average FPS by less than the run-to-run noise. The frame at
 ms) plus the frame's own work; the AI step was 5 to 8 % of the tick, and that is what moving it could gain here. What
 the threaded step gives the player is the guarantee Q53 asked for: the frame and the input never wait on a think, whatever
 the AI costs later (T21's tier rows join the worker's pass from the start).
+
+**Correction (2026-11-05, re-measured on `d85a314` after T40's fix round).** The "inline" fullscreen rows above are not inline:
+`FULLSCREEN_EXEC` was dropped before T40's fix round, so every row ran the threaded default, and "the schedule changes the
+average FPS by less than the noise" compared the threaded step with itself. Re-measured with the fixed tool (the log now
+prints `sim_step`), `battle`, the 3D at 1 080 lines, vsync off, two runs each (`reports/perf/M4-RM_{inline,threaded}_b*_r{1,2}`):
+
+| run | average FPS | 1 % low FPS | p99 frame ms | frame mean ms | sim speed |
+|---|---|---|---|---|---|
+| battle 300 inline | 106.6 / 117.6 | 48.6 / 45.8 | 18.62 / 17.14 | 9.38 / 8.50 | 1.00 |
+| battle 300 threaded | 133.0 / 134.5 | 59.6 / 41.1 | 15.58 / 18.86 | 7.52 / 7.43 | 1.00 |
+| battle 500 inline | 32.5 / 33.5 | 21.4 / 20.2 | 44.26 / 46.75 | 30.76 / 29.84 | 1.00 |
+| battle 500 threaded | 55.9 / 56.6 | 26.8 / 30.2 | 33.78 / 30.25 | 17.90 / 17.67 | 1.00 |
+| battle 1 000 inline | 11.9 / 11.9 | 10.3 / 10.7 | 95.96 / 93.05 | 83.81 / 84.05 | 0.60 / 0.59 |
+| battle 1 000 threaded | 13.9 / 13.9 | 11.8 / 11.6 | 81.30 / 84.98 | 72.05 / 71.98 | 0.69 |
+
+The threaded step is the faster frame at every count: +15 to +25 % at 300, +70 % at 500, +17 % at 1 000. At 500 the gap is
+larger than the 0.9 ms of tick it saves headless: the inline frame (about 30 ms) runs two ticks a frame where the threaded one
+(about 18 ms) runs about one, so the saved tick keeps the frame under the catch-up threshold. The latency rows were taken
+with `sim_step` saved in the settings file and stand. `inline` stays the fallback (Q54); its cost is now known.
 
 **The catch-up cap** (`physics_max_steps_per_frame`, threaded): at 300, 2: 139.5 FPS (1 % low 43.2, p99 17.1 ms); 3: 136.8
 (43.9, 17.6); 8: 133.1 (39.0, 19.5). At 500, 2: 54.9 (23.5, 37.4); 3: 57.7 (29.3, 31.1); 8: 52.7 (22.1, 41.6). The
