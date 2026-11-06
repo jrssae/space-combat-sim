@@ -331,7 +331,10 @@ static func _in_play(c: Combatant) -> bool:
 		return false
 	if c.damageable.is_active():
 		return true
-	return is_instance_valid(c.ship) and c.ship.is_tier_parked() and not c.damageable.hull.destroyed
+	return (
+		is_instance_valid(c.ship) and c.ship.is_inside_tree() and c.ship.is_tier_parked()
+		and not c.damageable.hull.destroyed
+	)
 
 
 ## One row per member of `wing` (default: the player's), in slot order: `callsign`, `slot`, `hull` (0..1), `behaviour` and

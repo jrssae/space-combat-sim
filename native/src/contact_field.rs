@@ -355,6 +355,9 @@ impl ScsContactField {
 }
 
 // The core's rows the GDScript scan holds (the bodies and statics; M4-T21): its indices never reach a tier row.
+// A late row (a pool ship returned mid-tick) sits after the tier rows until the next sync, so for that tick the slice
+// runs into the first tier rows by the late rows' count; the grid only holds indices below the scan length, so no query
+// reads them.
 fn scan_len(c: &ScsSimCore) -> usize {
     c.rows.body_ids.len() - c.rows.tier_rows
 }

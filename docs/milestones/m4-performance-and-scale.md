@@ -1357,15 +1357,15 @@ done and T20 proceeds.
   handovers with no handover error at all and the scan within a tick's motion of its path; Jolt holds the near bodies only; a far
   fight promoted at 10 km; a tier ship does not think; a capital leaves and fires again; a hulk, demoted and promoted again; a
   release; the radius at 0 and the core off; the core gone after a rebase; a GDScript pilot beside tier rows; the demotion budget;
-  1 and 6 threads), every one of its 13 tests run on both schedules and reading the live schedule back (fix round 1: the first
-  build looped 3 of its 9), `test_sim_core` (the guard, the slot map), `test_world_frame`, `test_wing_orders` (a tiered wingman
+  1 and 6 threads), 12 of its 13 tests run on both schedules and read the setting back (the 13th, the hold counter's plumbing,
+  runs on the default; fix round 1: the first build looped 3 of its 9), `test_sim_core` (the guard, the slot map), `test_world_frame`, `test_wing_orders` (a tiered wingman
   keeps its slot), `test_ship_pool` (a hulk cleared on reuse). Headless at `battle` 500 the tick fell from 10.77 to
   8.06 ms (p99 13.64 to 10.30) with 174 fighters and 34 capitals in the tier; at 1 000 from 20.27 to 9.93 ms (p99 26.71 to
   12.90) and the simulation keeps real time (it ran 28 % behind); with the radius halved to 5 km, 4.28 ms at 500 and 6.33 at
   1 000: the tick scales with the near count (the Done-when). Fullscreen at 500 the average went from 54.6 to 101 FPS (the 1 %
   low 26.4 to 38.4; the tier-off rows re-measured in fix round 1), at 1 000 from 13.8 FPS at 69 % speed to 58.2 at real time.
   These gains are partly provisional: until T22 a tier ship runs no brain and fires nothing and a tier capital launches no
-  missile (at 1 000 the bolts fell from 4 703 to 1 382 and the missiles from 338 to 147; at 500 the bolts from 2 327 to 1 422),
+  missile (at 1 000 the bolts fell from 4 703 to 1 382 and the missiles in flight from 338 to 147; at 500 the bolts from 2 327 to 1 422; the summary's window launch total rose, 627 to 1 994 at 500, scope unexplained, for T22 to settle),
   so part of the drop is the far battle frozen, T22 will give part of it back, and the 1 000 real-time and fullscreen figures
   are provisional for AC5's row (T25). The Q47 re-measure puts the near set's physics
   cost at about 0.6 ms a tick at 500 (below the 1 ms line, so the ships-out-of-Jolt proposal does not come back). The look of promotion and
@@ -1375,8 +1375,8 @@ done and T20 proceeds.
   "`ship.gd` (a demoted ship parks its body)" is `park_for_tier` and `unpark_from_tier`, with the pool's `park_in_tier` and
   `return_from_tier` around them; the rebase's shiftable set stays a group walk, done once (finding 11 asked for a kept list:
   nodes join the group after entering the tree, so the list would need every site to register; the walk is a pointer copy and
-  the cost was the per-node translate, which the tier removes for parked ships); a tier ship is not hittable, not drawn and not
-  a wing member while parked (T22, T23; the wing's `refresh` frees an inactive member's slot); the parked node keeps its last
+  the cost was the per-node translate, which the tier removes for parked ships); a tier ship is not hittable and not
+  drawn while parked (T22, T23); a parked wingman keeps its wing slot (fix round 1); the parked node keeps its last
   pose, so a reader of a tiered ship's node position (the pool's console list) sees where it was demoted.
 
 ##### M4-T22 Tier brains, statistical fire and far capitals' aggregated fire
@@ -5855,7 +5855,7 @@ from a saved settings file; the `tieroff2` runs are fix round 1's re-measure, ea
 after the bench, which holds the console, so the tier stayed on (their 98.3 and 58.7 FPS are tier-on numbers). Report: `.superpowers/sdd/m4-performance-and-scale/task-t21-report.md`.
 
 **Partly provisional:** part of every gain below is the far battle frozen until T22. A tier ship runs no brain and fires
-nothing and a tier capital launches no missile, so at 1 000 the bolts fall from 4 703 to 1 382 and the missiles from 338 to 147
+nothing and a tier capital launches no missile, so at 1 000 the bolts fall from 4 703 to 1 382 and the missiles in flight from 338 to 147
 (at 500 the bolts from 2 327 to 1 422 and the launches from 60 to 53). T22 adds tier brains, statistical fire and capital fire
 back and will give part of the gain back; the 1 000 real-time and fullscreen figures are provisional for AC5 (T25).
 
