@@ -3,7 +3,8 @@ extends Node
 ## Applies `settings.upscaler`, `upscale_preset`, `upscale_custom_scale` and `fsr_sharpness` to the viewport the game is drawn
 ## in, live (M4-T40, architecture §7.7): the 3D renders at the preset's share of the window's height and is enlarged to it; the
 ## HUD and text draw at the window's own size. While FSR 2.2 is on it holds the anti-aliasing mode off (FSR 2.2 anti-aliases
-## and Godot turns TAA off under it anyway) and keeps the motion vectors on. `auto` follows the window's size.
+## and Godot turns TAA off under it anyway) and keeps the motion vectors on. A preset is a share of the window's height, so a
+## resize keeps it.
 ##
 ## Console (§6.4): `upscale [upscaler] [preset|scale]` and provider `upscale`.
 
@@ -19,24 +20,22 @@ func _ready() -> void:
 	var viewport: Viewport = get_viewport()
 	apply()
 	Settings.changed.connect(_on_setting_changed)
-	viewport.size_changed.connect(apply)
 	DebugConsole.registry.register_provider(&"upscale", ConsoleVars.new({
 		&"upscaler": {"get": func() -> StringName: return StringName(Settings.get_value(&"upscaler")),
 				"doc": "The upscaler setting (settings.upscaler)"},
 		&"preset": {"get": func() -> StringName: return StringName(Settings.get_value(&"upscale_preset")),
 				"doc": "The internal-resolution preset setting (settings.upscale_preset)"},
 		&"applied": {"get": func() -> StringName: return _plan.get("upscaler", &""),
-				"doc": "The upscaler in use (auto resolved for this window)"},
+				"doc": "The upscaler in use"},
 		&"applied_preset": {"get": func() -> StringName: return _plan.get("preset", &""),
-				"doc": "The preset in use (auto resolved for this window)"},
+				"doc": "The preset in use (native whatever the setting when the upscaler is native)"},
 		&"scale": {"get": func() -> float: return snappedf(viewport.scaling_3d_scale, 0.0001),
 				"doc": "The viewport's 3D scale, a share of the window's height"},
 		&"mode": {"get": func() -> int: return viewport.scaling_3d_mode,
 				"doc": "The viewport's scaling_3d_mode (0 bilinear, 1 FSR 1.0, 2 FSR 2.2)"},
 		&"sharpness": {"get": func() -> float: return viewport.fsr_sharpness, "doc": "The viewport's fsr_sharpness"},
 		&"window_lines": {"get": func() -> int: return _window_lines(), "doc": "The window's height in pixels"},
-		&"internal_lines": {"get": func() -> int: return Upscaling.internal_lines(_window_lines(), viewport.scaling_3d_scale),
-				"doc": "The lines the 3D renders"},
+		&"internal_lines": {"get": func() -> int: return internal_lines(), "doc": "The lines the 3D renders"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"upscale",
 			"Show or set the upscaler (%s) and the preset (%s) or a custom scale (%.2f to 1)" % [
@@ -57,10 +56,15 @@ func current_plan() -> Dictionary:
 	return _plan.duplicate()
 
 
-## Sets the viewport up for the settings and this window.
+## The lines the 3D renders in this window.
+func internal_lines() -> int:
+	return Upscaling.internal_lines(_window_lines(), get_viewport().scaling_3d_scale)
+
+
+## Sets the viewport up for the settings.
 func apply() -> void:
 	_plan = Upscaling.plan(StringName(Settings.get_value(&"upscaler")), StringName(Settings.get_value(&"upscale_preset")),
-			float(Settings.get_value(&"upscale_custom_scale")), _window_lines())
+			float(Settings.get_value(&"upscale_custom_scale")))
 	Upscaling.apply(get_viewport(), _plan, float(Settings.get_value(&"fsr_sharpness")))
 	if anti_aliasing != null:
 		anti_aliasing.set_held(Upscaling.temporal(_plan["upscaler"]))
@@ -102,5 +106,4 @@ func _cmd_upscale(args: Dictionary) -> ConsoleResult:
 func _describe() -> String:
 	return "upscaler = %s, preset = %s (applied: %s at %s, scale %.4f, %d of %d lines, sharpness %.2f)" % [
 			Settings.get_value(&"upscaler"), Settings.get_value(&"upscale_preset"), _plan.get("upscaler", &""),
-			_plan.get("preset", &""), get_viewport().scaling_3d_scale,
-			Upscaling.internal_lines(_window_lines(), get_viewport().scaling_3d_scale), _window_lines(), get_viewport().fsr_sharpness]
+			_plan.get("preset", &""), get_viewport().scaling_3d_scale, internal_lines(), _window_lines(), get_viewport().fsr_sharpness]
