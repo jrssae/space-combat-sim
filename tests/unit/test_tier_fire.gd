@@ -586,3 +586,43 @@ func test_a_tier_kill_by_a_roll_frees_its_wing_slot_raises_the_kill_and_the_slot
 	assert_true(wing.empty_slots().has(slot), "its slot is owed")
 	var refilled: Array[Combatant] = main.wings.replenish(wing)
 	assert_eq(refilled.size(), 1, "the slot is refilled by a new pilot")
+
+
+# --- fix round 2: the lean tier think --------------------------------------------------------------------------------------
+
+
+func test_a_tier_think_skips_the_avoidance_a_tier_row_cannot_use() -> void:
+	if _skipped():
+		return
+	for schedule: StringName in SCHEDULES:
+		for tier_on: bool in [false, true]:
+			await _world(2, 0)
+			_use_schedule(schedule)
+			Settings.set_value(&"tier_radius_m", RADIUS_M if tier_on else 0.0)
+			# Two raiders of one side flying head on, 300 m apart: a near pilot swerves; a tier row cannot collide.
+			var a: Combatant = w.fighter(ShipPool.DEFAULT_TYPE, "A", Vector3(0.0, 0.0, -20000.0), 61, Basis.IDENTITY,
+					Vector3(0.0, 0.0, -60.0))
+			var b: Combatant = w.fighter(ShipPool.DEFAULT_TYPE, "B", Vector3(0.0, 0.0, -20600.0), 62, Basis(Vector3.UP, PI),
+					Vector3(0.0, 0.0, 60.0))
+			# Only the thinks after the handover count (both start near enough to think on their bodies for a few ticks).
+			var waited: int = 0
+			while tier_on and not (_tiered(a) and _tiered(b)) and waited < 30:
+				await _ticks(1)
+				waited += 1
+			var thinks_at: Dictionary = {}
+			for c: Combatant in [a, b]:
+				thinks_at[c] = int(_host().slot_think_count((c.driver.brain as AiPilot).native_slot_index()))
+			var avoided: bool = false
+			for t: int in 120:
+				await _ticks(1)
+				for c: Combatant in [a, b]:
+					var slot: int = (c.driver.brain as AiPilot).native_slot_index()
+					if int(_host().slot_think_count(slot)) <= int(thinks_at[c]):
+						continue
+					var out: PackedFloat64Array = _host().slot_output(slot)
+					avoided = avoided or (out.size() > 13 and out[13] != 0.0)
+			if tier_on:
+				assert_true(_tiered(a) and _tiered(b), "%s: both fly as tier rows" % schedule)
+				assert_false(avoided, "%s: a tier think does not steer round what a tier row cannot hit" % schedule)
+			else:
+				assert_true(avoided, "%s: near, the pilots swerve (the check sees avoidance when it runs)" % schedule)

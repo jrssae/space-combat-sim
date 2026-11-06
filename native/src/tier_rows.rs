@@ -501,6 +501,12 @@ impl ScsSimCore {
         )
     }
 
+    /// The fighters' rolled hits waiting to be taken (the director takes them only when there are some).
+    #[func]
+    fn tier_hit_count(&self) -> i64 {
+        self.tier_hits.targets.len() as i64
+    }
+
     /// Tier fighters' shots rolled so far, and the hits among them.
     #[func]
     fn tier_shots(&self) -> i64 {

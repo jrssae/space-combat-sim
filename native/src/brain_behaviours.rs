@@ -143,6 +143,9 @@ pub struct Inputs<'a> {
     pub origin: [f64; 3],
     pub nearest_k: i64,
     pub static_k: i64,
+    /// A low-attention tier row's think (M4-T22 fix round 2): it skips what a tier row cannot use, the rocks and mines, the
+    /// incoming fire and the avoidance (a tier row collides with nothing and no bolt flies in a tier fight).
+    pub lean: bool,
 }
 
 /// The per-ship scratch a think fills: the picked lists and the context's split (owned by the caller, reused).
@@ -166,6 +169,9 @@ pub struct Field {
     pub bolt_cells: Vec<((i32, i32, i32), u32)>,
     pub max_bolt_speed: f64,
     pub broadcasters: Vec<u32>,
+    /// The ships' rows alone (no rocks or mines), in scan order: what the nearest-contacts query walks, the same contacts
+    /// for fewer rows and no sort (M4-T22 fix round 2).
+    pub ship_rows: Vec<u32>,
     /// The rows of every name a brain asks for (an objective or a guarded ship, lowered), in row order: matched once per
     /// rows version, not per think (M4-T18).
     pub named: Vec<(String, Vec<u32>)>,
@@ -175,6 +181,9 @@ impl Field {
     /// Builds the field for this tick's rows and bolts.
     pub fn build(&mut self, rows: &Rows, bolts: &Bolts, cell_m: f64) {
         contact::sorted_cells_into(&bolts.positions, cell_m, &mut self.bolt_cells);
+        self.ship_rows.clear();
+        self.ship_rows
+            .extend((0..rows.positions.len() as u32).filter(|&i| !rows.is_static[i as usize]));
         self.max_bolt_speed = bolts
             .velocities
             .iter()
@@ -696,9 +705,10 @@ impl Brain {
             scratch.hostile_row.push(r == pilot::HOSTILE);
             scratch.friendly_row.push(r == pilot::FRIENDLY);
         }
-        contact::nearest_into(
+        contact::nearest_among(
             &view,
-            work,
+            work.query,
+            &field.ship_rows,
             Some(&scratch.hostile_row),
             inputs.own_body_id,
             p.position,
@@ -758,31 +768,39 @@ impl Brain {
             }
             scratch.contacts.sort_unstable();
         }
-        contact::statics_into(
-            &view,
-            work,
-            &scratch.friendly_row,
-            inputs.own_body_id,
-            p.position,
-            inputs.static_k,
-            SENSOR_RANGE_M,
-            &mut scratch.statics,
-        );
+        if inputs.lean {
+            scratch.statics.clear();
+        } else {
+            contact::statics_into(
+                &view,
+                work,
+                &scratch.friendly_row,
+                inputs.own_body_id,
+                p.position,
+                inputs.static_k,
+                SENSOR_RANGE_M,
+                &mut scratch.statics,
+            );
+        }
         let mut p = p;
         // No bolt can be incoming from farther than the fastest bolt and the ship's own speed carry in the horizon, plus
         // the miss distance: the grid gives the same count as the loop over every bolt.
         let reach_max = (field.max_bolt_speed + f64::from(length(p.velocity))) * 2.0 + 15.0 + 1.0;
-        p.incoming_fire = contact::incoming_near(
-            &view,
-            &scratch.hostile_row,
-            inputs.own_body_id,
-            p.position,
-            p.velocity,
-            &field.bolt_cells,
-            work.grid.cell_m,
-            reach_max,
-            &mut scratch.bolt_candidates,
-        );
+        p.incoming_fire = if inputs.lean {
+            0
+        } else {
+            contact::incoming_near(
+                &view,
+                &scratch.hostile_row,
+                inputs.own_body_id,
+                p.position,
+                p.velocity,
+                &field.bolt_cells,
+                work.grid.cell_m,
+                reach_max,
+                &mut scratch.bolt_candidates,
+            )
+        };
         contact::broadcasts_among(
             &view,
             &field.broadcasters,
@@ -933,7 +951,10 @@ impl Brain {
         // `AiPilotDriver._avoid`: the brain's wish through the avoidance filter, re-sought when it changed.
         self.avoiding = false;
         self.avoiding_urgent = false;
-        if !out.flight.brake && !(scratch.contacts.is_empty() && scratch.statics.is_empty()) {
+        if !inputs.lean
+            && !out.flight.brake
+            && !(scratch.contacts.is_empty() && scratch.statics.is_empty())
+        {
             let wish = if self.has_desired_velocity {
                 self.desired_velocity
             } else {

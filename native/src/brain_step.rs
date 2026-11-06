@@ -11,8 +11,8 @@ use godot::builtin::Vector3;
 
 use crate::brain_behaviours::{self, Brain, Field, Inputs, Scratch};
 use crate::kernels::contact::{self, Grid, Query, Work as QueryWork};
-use crate::row_commands::RowCommand;
 use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE};
+use crate::row_commands::{CommandMap, RowCommand};
 use crate::rows::{Bolts, FLAG_HULK, FLAG_TIER, Rows};
 use crate::threads::{Pass, Runner};
 use crate::v3::dist_sq;
@@ -169,7 +169,7 @@ pub struct Snapshot {
     pub bolts: Bolts,
     pub body_rows: HashMap<i64, u32>,
     pub touched: HashSet<i64>,
-    pub commands: HashMap<i64, RowCommand>,
+    pub commands: CommandMap,
     pub rows_version: i64,
 }
 
@@ -385,6 +385,7 @@ fn think_item(shared: &Shared, item: &mut Item, worker: &mut Worker) {
         origin: shared.origin,
         nearest_k: shared.nearest_k,
         static_k: shared.static_k,
+        lean: item.tier,
     };
     let Worker {
         query,
@@ -500,7 +501,7 @@ fn write_commands(work: &mut Work, snap: &mut Snapshot, n: usize) {
 
 /// Keeps a native think's command for `body_id` in `commands` (`out` is the think's output, flight numbers then the
 /// trigger) and returns the events it raises: the ship starts flying from its row, or its trigger changed.
-pub fn write_command(commands: &mut HashMap<i64, RowCommand>, body_id: i64, out: &[f64]) -> u8 {
+pub fn write_command(commands: &mut CommandMap, body_id: i64, out: &[f64]) -> u8 {
     let fire = out[CMD_LEN] != 0.0;
     let mut events = 0;
     match commands.get_mut(&body_id) {
@@ -526,7 +527,7 @@ pub fn write_command(commands: &mut HashMap<i64, RowCommand>, body_id: i64, out:
 
 /// Notes what the tier's to-hit roll reads with `body_id`'s command (M4-T22): the target its pilot wants, the pilot's aim
 /// error (its skill) and the miss distance its fire gate allows.
-pub fn note_aim(commands: &mut HashMap<i64, RowCommand>, body_id: i64, brain: &Brain) {
+pub fn note_aim(commands: &mut CommandMap, body_id: i64, brain: &Brain) {
     if let Some(rc) = commands.get_mut(&body_id) {
         rc.target = brain.wanted_target_id;
         rc.aim_error_rad = brain.profile.aim_error_deg.to_radians();
@@ -537,7 +538,7 @@ pub fn note_aim(commands: &mut HashMap<i64, RowCommand>, body_id: i64, brain: &B
 }
 
 /// Notes whether `body_id`'s pilot is committed to a ram (after `write_command`); true when that changed.
-pub fn note_ram(commands: &mut HashMap<i64, RowCommand>, body_id: i64, committed: bool) -> bool {
+pub fn note_ram(commands: &mut CommandMap, body_id: i64, committed: bool) -> bool {
     commands
         .get_mut(&body_id)
         .is_some_and(|rc| std::mem::replace(&mut rc.ram, committed) != committed)

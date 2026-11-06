@@ -150,8 +150,52 @@ pub mod contact {
         gather(view, work, own_body_id, at, range, |_, d_sq| {
             f64::from(d_sq).partial_cmp(&range_sq) != Some(Ordering::Greater)
         });
+        rank_nearest(view, work.query, hostile, k, out);
+    }
+
+    /// `nearest_into` over `candidates` (row indices in scan order, a superset of the bodies in range) instead of the
+    /// grid's cells (M4-T22 fix round 2: the brains walk the ships' rows directly when the sensor range spans most of
+    /// the battle, which spares sorting the cells' candidates); the same answer.
+    #[allow(clippy::too_many_arguments)]
+    pub fn nearest_among(
+        view: &View,
+        query: &mut Query,
+        candidates: &[u32],
+        hostile: Option<&[bool]>,
+        own_body_id: i64,
+        at: Vector3,
+        k: i64,
+        range: f64,
+        out: &mut Vec<i32>,
+    ) {
+        let range_sq = range * range;
+        query.in_range.clear();
+        for &i in candidates {
+            let j = i as usize;
+            if view.is_static[j] {
+                continue;
+            }
+            let d_sq = dist_sq(view.positions[j], at);
+            if f64::from(d_sq).partial_cmp(&range_sq) != Some(Ordering::Greater)
+                && view.body_ids[j] != own_body_id
+            {
+                query.in_range.push((d_sq, i));
+            }
+        }
+        query.visited = candidates.len() as i64;
+        rank_nearest(view, query, hostile, k, out);
+    }
+
+    // The nearest `k` of the query's bodies in range, as `nearest_into` describes them.
+    fn rank_nearest(
+        view: &View,
+        query: &mut Query,
+        hostile: Option<&[bool]>,
+        k: i64,
+        out: &mut Vec<i32>,
+    ) {
         out.clear();
-        let in_range = &work.query.in_range;
+        let in_range = &query.in_range;
         // k of 0 or less means no cut: every contact in range, as `ContactScan.nearest_for` defines it.
         if k <= 0 || in_range.len() <= k as usize {
             out.extend(in_range.iter().map(|&(_, i)| i as i32));
@@ -168,12 +212,12 @@ pub mod contact {
         }
         // Ranked by range, then by scan index (in_range is in scan order, so a stable sort keeps that).
         let k = k as usize;
-        work.query.ranked.clear();
-        work.query.ranked.extend_from_slice(in_range);
-        work.query
+        query.ranked.clear();
+        query.ranked.extend_from_slice(&query.in_range);
+        query
             .ranked
             .select_nth_unstable_by(k - 1, |a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-        out.extend(work.query.ranked[..k].iter().map(|&(_, i)| i as i32));
+        out.extend(query.ranked[..k].iter().map(|&(_, i)| i as i32));
         if let Some((_, h)) = nearest_hostile
             && !out.contains(&(h as i32))
         {

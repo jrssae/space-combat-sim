@@ -849,7 +849,8 @@ func test_the_weapon_kernels_hold_no_engine_type() -> void:
 const BRAIN_STEP_FILE: String = "res://native/src/brain_step.rs"
 const BRAIN_STEP_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
 		"use crate::rows::", "use crate::v3::", "use crate::brain_maths::", "use crate::brain_behaviours::", "use crate::kernels::",
-		"use crate::row_commands::RowCommand;", "use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE};",
+		"use crate::row_commands::RowCommand;", "use crate::row_commands::{CommandMap, RowCommand};",
+		"use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE};",
 		"use crate::threads::"]
 
 
@@ -858,7 +859,8 @@ const BRAIN_STEP_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin:
 const TIER_FILE: String = "res://native/src/tier.rs"
 const TIER_SHELL_FILE: String = "res://native/src/tier_rows.rs"
 const TIER_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};", "use crate::rows::",
-		"use crate::v3::", "use crate::kernels::", "use crate::row_commands::RowCommand;"]
+		"use crate::v3::", "use crate::kernels::", "use crate::row_commands::RowCommand;",
+		"use crate::row_commands::{CommandMap, RowCommand};"]
 
 
 func test_the_tier_kernel_holds_no_engine_type() -> void:

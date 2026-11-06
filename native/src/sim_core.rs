@@ -229,7 +229,7 @@ pub struct ScsSimCore {
     // The worker threads the kernels' per-ship passes run on (M4-T18).
     threads: Threads,
     // The native pilots' last commands by body, written by the brains' batch and flown by the flight step (M4-T33).
-    pub row_commands: HashMap<i64, crate::row_commands::RowCommand>,
+    pub row_commands: crate::row_commands::CommandMap,
     // The core owns its bolts (M4-T35): the owned rows stay across the sync points and the kernels step them; the ids it
     // hands out count down from -1, so no instance id is ever one.
     pub(crate) bolt_rows: bool,
@@ -1950,6 +1950,10 @@ impl ScsSimCore {
     #[func]
     fn note_hull(&mut self, body_id: i64, hp: f64, max_hp: f64) {
         let fraction = clamp01(hp / max_hp);
+        // A tier row reads the hull its body's `Damageable` has left (fix round 2: here, not through a watch of its own).
+        if let Some(i) = self.tier.index_of(body_id) {
+            self.tier.hull_fraction[i] = fraction;
+        }
         for m in self.markers.iter_mut().chain(self.hulls.iter_mut()) {
             if m.body_id == body_id
                 && let Some(a) = m.attrs.as_mut()

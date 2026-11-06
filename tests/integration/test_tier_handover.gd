@@ -371,9 +371,11 @@ func test_a_tier_ship_thinks_at_the_tier_brain_rate_and_at_its_own_again_when_pr
 					and (events.size() - BrainBatch.EVENTS_HEAD) % 2 == 0))
 		assert_lte(held_most, 1, "%s: the tier ship is not counted held (only the near one can hold)" % schedule)
 		assert_true(head_sizes_ok, "%s: the host's events head is the batch's EVENTS_HEAD long" % schedule)
-		# M4-T22: a tier ship thinks at tier_brain_hz (4: about four thinks in a second), not every far-rate beat.
+		# M4-T22: a tier ship thinks at tier_brain_hz (its beat's period), not every far-rate beat.
 		var tier_thinks: int = int(host.slot_think_count(slot)) - thinks_at_demotion
-		assert_between(tier_thinks, 3, 5, "%s: a tier ship thinks about four times in a second (%d)" % [schedule, tier_thinks])
+		var expected: int = roundi(60.0 / float(TierDirector.brain_period_ticks()))
+		assert_between(tier_thinks, expected - 1, expected + 1, "%s: a tier ship thinks about %d times in a second (%d)" % [
+				schedule, expected, tier_thinks])
 		assert_gt(int(host.slot_think_count(near_slot)), near_thinks, "%s: the near one keeps thinking" % schedule)
 		assert_eq(sim.core.row_command(c.ship.get_instance_id()).size(), command_at_demotion.size(),
 				"%s: it still flies a row command" % schedule)

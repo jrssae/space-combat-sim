@@ -3,6 +3,7 @@
 // the next think replaces it, so a held or declined think flies the one the row has. GDScript releases a ship's command
 // when anything else commands it.
 use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
 
 use godot::prelude::*;
 
@@ -21,6 +22,31 @@ pub const EVENT_SETTLE: u8 = 8;
 /// The flight numbers of a think's output a command keeps: the four levels (main left, main right, retro left, retro
 /// right), strafe x and y, rot x, y and z, and the brake.
 pub const CMD_LEN: usize = 10;
+
+/// The commands by body id (fix round 2): a plain integer hash, since the tier reads the map for every row every tick and
+/// the default hasher made that a fifth of a tier row's cost. Nothing iterates it in an order that matters.
+pub type CommandMap = HashMap<i64, RowCommand, BuildHasherDefault<IdHasher>>;
+
+/// Hashes a body id (Godot's instance ids differ in their low bits) with one multiply and a fold.
+#[derive(Default)]
+pub struct IdHasher(u64);
+
+impl Hasher for IdHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 = (self.0.rotate_left(8) ^ u64::from(b)).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        }
+    }
+
+    fn write_i64(&mut self, v: i64) {
+        let x = (v as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        self.0 = x ^ (x >> 29);
+    }
+}
 
 /// One ship's last native command, and what the tier's to-hit roll reads with it (M4-T22): the target its pilot wants
 /// (a marker id; 0 or less for none), the pilot's aim error in radians and its fire gate (the miss distance, m, and the
@@ -75,7 +101,7 @@ impl ScsSimCore {
     /// Takes a joined job's commands as the rows' (M4-T24): the map swapped in whole and, when the releases are this
     /// job's (`filter`), less the bodies something else commanded since its launch (`release_command`), which fly their
     /// own command until their next think.
-    pub(crate) fn take_commands(&mut self, commands: &mut HashMap<i64, RowCommand>, filter: bool) {
+    pub(crate) fn take_commands(&mut self, commands: &mut CommandMap, filter: bool) {
         std::mem::swap(&mut self.row_commands, commands);
         if filter {
             for body in self.released.drain(..) {

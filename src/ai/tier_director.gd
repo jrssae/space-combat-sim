@@ -18,8 +18,8 @@ extends Node
 ## Tier brains and fire (M4-T22): a tier fighter's hosted driver is handed to the tier (`AiPilotDriver.set_tiered`), so the
 ## AI step thinks for it at `tier_brain_hz` on the same contact grid as the near brains; its parked cannon's gate fires and
 ## the core rolls each shot against the pilot's target. The director lands those hits at the start of the next tick through
-## each target's `Damageable` (`land_hits`, which the stand-ins' far capitals use too), and keeps each tier row's hull
-## fraction in step with its `Damageable`. A ship whose AI pilot the host does not step yet waits in Jolt until it does.
+## each target's `Damageable` (`land_hits`, which the stand-ins' far capitals use too); the core keeps each tier row's hull
+## fraction in step with its `Damageable` (`note_hull`). A ship whose AI pilot the host does not step yet waits in Jolt until it does.
 ##
 ## Console: provider `tier`.
 
@@ -32,6 +32,7 @@ const HANDOVERS_PER_TICK: int = 64
 const TIER_META: StringName = &"_scs_tier_row"
 
 static var _current: TierDirector = null
+static var _damageables: Dictionary[int, Damageable] = {}
 
 var world: WorldFrame = null
 var ships: ShipPool = null
@@ -63,8 +64,6 @@ var _sim: SimCore = null
 var _period_given: int = -1
 var _gravity_given: GravityStandin = null
 var _gravity_gm_given: float = NAN
-## The hull watch on each tiered body (its `Damageable.damaged` connection), by body id.
-var _hull_watch: Dictionary[int, Callable] = {}
 ## Tier fighters' hits landed so far, and the last tick's landing cost (wall clock, a readout).
 var hits_landed: int = 0
 var land_us: int = 0
@@ -154,16 +153,13 @@ static func land_hits(targets: PackedInt64Array, shooters: PackedInt64Array, dam
 		points: PackedVector3Array) -> int:
 	var landed: int = 0
 	for k: int in targets.size():
-		if not is_instance_id_valid(targets[k]):
-			continue
-		var target: Damageable = Damageable.of(instance_from_id(targets[k]) as Node)
+		var target: Damageable = _damageable_of(targets[k])
 		if target == null or target.hull.destroyed:
 			continue
 		var faction: StringName = &""
-		if is_instance_id_valid(shooters[k]):
-			var shooter: Damageable = Damageable.of(instance_from_id(shooters[k]) as Node)
-			if shooter != null:
-				faction = shooter.faction
+		var shooter: Damageable = _damageable_of(shooters[k])
+		if shooter != null:
+			faction = shooter.faction
 		target.apply_hit(HitInfo.new(targets[k], shooters[k], faction, damage[k], points[k], Vector3.ZERO, 0.0, HitInfo.CAUSE_BOLT))
 		landed += 1
 	return landed
@@ -263,7 +259,6 @@ func forget(c: Combatant) -> void:
 	if not _tiered_ships.erase(body_id):
 		return
 	_park_origins.erase(body_id)
-	_unwatch_hull(c.damageable, body_id)
 	if c.driver != null:
 		c.driver.set_tiered(false)
 	if _sim != null and is_instance_valid(_sim) and _sim.core != null:
@@ -337,7 +332,6 @@ func _demote_ship(sim: SimCore, c: Combatant) -> bool:
 	ships.park_in_tier(c)
 	if c.driver != null:
 		c.driver.set_tiered(true)
-	_watch_hull(c.damageable, body_id)
 	_tiered_ships[body_id] = c
 	_park_origins[body_id] = _origin()
 	demotions += 1
@@ -356,7 +350,6 @@ func _demote_capital(sim: SimCore, cap: CapitalStandin) -> bool:
 			cap.damageable.bounding_radius, cap.targetable.broadcast_range_m, cap.damageable.hull.fraction())
 	sim.core.tier_set_control(body_id, cap.cruise_velocity, PackedFloat64Array(), 0.0, false)
 	cap.park_for_tier()
-	_watch_hull(cap.damageable, body_id)
 	_tiered_capitals[body_id] = cap
 	_park_origins[body_id] = _origin()
 	demotions += 1
@@ -370,7 +363,6 @@ func _restore(body_id: int, state: Dictionary) -> void:
 	var c: Combatant = _tiered_ships.get(body_id)
 	if c != null:
 		_tiered_ships.erase(body_id)
-		_unwatch_hull(c.damageable, body_id)
 		if c.driver != null:
 			c.driver.set_tiered(false)
 		if is_instance_valid(c.ship):
@@ -384,7 +376,6 @@ func _restore(body_id: int, state: Dictionary) -> void:
 	if cap != null:
 		_tiered_capitals.erase(body_id)
 		if is_instance_valid(cap):
-			_unwatch_hull(cap.damageable, body_id)
 			if state.is_empty():
 				_reframe(cap, parked_origin)
 				cap.unpark_from_tier(cap.global_transform, cap.linear_velocity, cap.angular_velocity)
@@ -417,9 +408,27 @@ func _waits_for_host(c: Combatant) -> bool:
 	return pilot != null and pilot.native_capable() and BrainBatch.driver_step_mode() and not c.driver.is_hosted()
 
 
+# Body `body_id`'s `Damageable`, found once and kept (a ship keeps its hull for life; fix round 2: looking it up among
+# the children per hit was most of a far hit's cost).
+static func _damageable_of(body_id: int) -> Damageable:
+	var known: Damageable = _damageables.get(body_id)
+	if known != null and is_instance_valid(known):
+		return known
+	_damageables.erase(body_id)
+	if not is_instance_id_valid(body_id):
+		return null
+	var found: Damageable = Damageable.of(instance_from_id(body_id) as Node)
+	if found != null:
+		_damageables[body_id] = found
+	return found
+
+
 # The tier fighters' hits the core rolled since the last tick, landed now (before any handover, so a kill parks its ship
 # through the pool before the sync).
 func _land_fighter_hits(sim: SimCore) -> void:
+	if int(sim.core.tier_hit_count()) == 0:
+		land_us = 0
+		return
 	var started: int = Time.get_ticks_usec()  # a readout, never gameplay time
 	var hits: Array = sim.core.tier_take_hits()
 	var targets: PackedInt64Array = hits[0]
@@ -528,27 +537,6 @@ func _ram_hull(body_id: int, velocity: Vector3) -> Dictionary:
 	return {"id": body_id, "damageable": damageable, "velocity": velocity, "mass": damageable.ram_mass()}
 
 
-# A tiered body's row reads the hull its `Damageable` has left after every hit (near bolts, tier rolls, the console).
-func _watch_hull(damageable: Damageable, body_id: int) -> void:
-	if damageable == null or _hull_watch.has(body_id):
-		return
-	var watch: Callable = _on_tier_damaged.bind(damageable, body_id)
-	_hull_watch[body_id] = watch
-	damageable.damaged.connect(watch)
-
-
-func _unwatch_hull(damageable: Damageable, body_id: int) -> void:
-	var watch: Callable = _hull_watch.get(body_id, Callable())
-	_hull_watch.erase(body_id)
-	if damageable != null and is_instance_valid(damageable) and watch.is_valid() and damageable.damaged.is_connected(watch):
-		damageable.damaged.disconnect(watch)
-
-
-func _on_tier_damaged(_info: HitInfo, _applied: float, damageable: Damageable, body_id: int) -> void:
-	if _sim != null and is_instance_valid(_sim) and _sim.core != null:
-		_sim.core.tier_set_hull(body_id, damageable.hull.fraction())
-
-
 # --- the frame and the bookkeeping -----------------------------------------------------------------------------------------
 
 
@@ -579,14 +567,12 @@ func _prune(sim: SimCore) -> void:
 		if not is_instance_valid(cap) or not cap.is_inside_tree():
 			_tiered_capitals.erase(body_id)
 			_park_origins.erase(body_id)
-			_unwatch_hull(cap.damageable if is_instance_valid(cap) else null, body_id)
 			sim.core.tier_take(body_id)
 	for body_id: int in _tiered_ships.keys():
 		var c: Combatant = _tiered_ships[body_id]
 		if not is_instance_valid(c.ship) or not c.ship.is_inside_tree():
 			_tiered_ships.erase(body_id)
 			_park_origins.erase(body_id)
-			_unwatch_hull(c.damageable if is_instance_valid(c.damageable) else null, body_id)
 			sim.core.tier_take(body_id)
 
 

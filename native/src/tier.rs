@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use godot::builtin::{Basis, Vector3};
 
 use crate::kernels::flight::{self, Body, Cmd};
-use crate::row_commands::RowCommand;
+use crate::row_commands::{CommandMap, RowCommand};
 use crate::rows::{FLAG_HULK, FLAG_HULL, FLAG_TIER, Rows};
 use crate::v3::{
     add, cross, length, length_squared, limit_length, normalized, scale, sub, xform, xform_inv,
@@ -244,7 +244,7 @@ pub fn step(
     t: &mut TierRows,
     types: &[Type],
     gravity: &Gravity,
-    commands: &HashMap<i64, RowCommand>,
+    commands: &CommandMap,
     tick: i64,
     dt: f64,
     period: i64,
@@ -286,7 +286,7 @@ fn beat(
     i: usize,
     types: &[Type],
     gravity: &Gravity,
-    commands: &HashMap<i64, RowCommand>,
+    commands: &CommandMap,
     dt_beat: f64,
     scratch: &mut Vec<(Vector3, Vector3)>,
 ) {

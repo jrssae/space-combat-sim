@@ -56,7 +56,7 @@ func before_each() -> void:
 	_saved = TierWorld.save_settings()
 	TierWorld.use_native(0.0)
 	Settings.set_value(&"tier_hz", 20.0)
-	Settings.set_value(&"tier_brain_hz", 4.0)
+	Settings.set_value(&"tier_brain_hz", float(SettingsSchema.ENTRIES[&"tier_brain_hz"]["default"]))  # the game's rate
 	Settings.set_value(&"friendly_fire", false)
 	Factions.reset()
 	ContactScan.invalidate()
