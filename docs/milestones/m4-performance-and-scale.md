@@ -6277,6 +6277,23 @@ test_brain_tolerance 6/0/0 (test_tier_outcomes 4/0/0, both schedules inside); te
 `cargo fmt --check` and clippy clean on this task's files (only the pre-existing `native_probe.rs` is flagged); the smoke
 check printed no `ERROR:` line.
 
+**The controller's A/B (2026-11-06, after the re-review).** Fix round 2's fullscreen 1 000 rows and its first 500 row were taken on
+`5bff2ec`, before the Q65 code, so the 1 % low drop they showed (500 about 30 against fix round 1's 48.4; 1 000 22 to 23 against
+T21's 29) could not be pinned on the final code. Re-measured alternating fix round 1 (`77306c8`) and the final code (`ad716a6`), each
+in its own worktree and native build, the tier on (`set settings.tier_radius_m 10000` through `FULLSCREEN_EXEC`), default settings
+otherwise, the 3D at 1 080 lines, vsync off, load 1.4 to 2.5 (`reports/perf/M4-T22ab_*`):
+
+| run | fix round 1 FPS / 1 % low | final FPS / 1 % low |
+|---|---|---|
+| battle 500, run 1 | 110.8 / 43.1 | 112.7 / 44.5 |
+| battle 500, run 2 | 111.2 / 39.1 | 106.2 / 29.8 |
+| battle 500, run 3 | 115.1 / 50.5 | 113.3 / 38.8 |
+| battle 1 000, run 1 | 64.3 / 30.5 | 64.2 / 28.7 |
+| battle 1 000, run 2 | 63.2 / 25.4 | 66.2 / 33.3 |
+
+No regression from the code: the two builds overlap within the 1 % low's known run-to-run spread (up to 1.8 times, report P2), and
+at 1 000 the final code holds T21's 1 % low (29). These rows replace fix round 2's fullscreen rows as T22's final numbers.
+
 ## Definition of done (M4)
 
 - The maintainer has the T06 report and has answered it: more cycles, or M4 closed with the number reached.
