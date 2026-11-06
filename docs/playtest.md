@@ -518,7 +518,10 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       jump in a hull or a position at the moment they appear; your own bolts fired at a ship just beyond 11 km hit it. Say
       whether a fight met this way feels like the same fight you would have watched up close (a 4 Hz brain flies its attack
       runs a little looser). Tier ships are still not drawn and not on the radar (T23), and a far death shows nothing yet
-      (T23's far flash).
+      (T23's far flash). A known limit (fix round 1): a far fight that settles into a steady tail chase scores fewer hits than
+      the same chase up close (a Starfury sitting behind a raider at 450 m lands about 73 % of its shots up close, about 30 %
+      in the tier); say whether you notice far chases ending slower than near ones. Far missiles can now be shot down by the
+      target side's interceptors, and committed rammers ram out of view too.
 - [ ] **M4-T38 Anti-aliasing, the default.** `settings.anti_aliasing` is `smaa` now (it was no anti-aliasing). Compare the sheets in
       `reports/perf/m4-t38_compare/pairs/` (each the same frozen `battle` 300 frame in all six modes): `edges_2160.png` and
       `edges_1080.png` (a wing and a rock edge), `hull_detail_2160.png` and `hull_detail_1080.png` (struts, panel lines, the small

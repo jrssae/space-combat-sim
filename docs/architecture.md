@@ -3208,21 +3208,33 @@ src/combat/destruction_director.gd   a tier death where its row flew; every deat
 - **Brains.** A tier fighter's hosted driver is handed to the tier (`AiPilotDriver.set_tiered`, `ScsBrains.set_driver_tiered`)
   when it is demoted, so the AI step's job (T24, on the worker thread, one tick behind) keeps thinking for it on the same rows
   and contact grid as the near brains, every `tier_brain_hz` (4: every 15 ticks, staggered by the driver's ordinal; at once
-  when it is handed over or hit). Its command goes to the core's row commands, which the tier's integrator flies; its driver
+  when it is handed over). A hit does not wake a tier think (fix round 1): it waits for its beat, so the thinks stay staggered
+  however the far hits fall (every landed hit used to wake one, and a ship hit every tick thought every tick). The job counts
+  and times the tier thinks (`ScsBrains.tier_thinks`, `tier_think_us`, on the job's own clock: the worker thread when threaded,
+  the main thread when inline). Its command goes to the core's row commands, which the tier's integrator flies; its driver
   gets no event (its node is parked). A ship whose native pilot the host does not step yet waits in Jolt until it does, so no
   tier ship is left without a brain. A hulk never thinks. The think also writes what the roll reads with the command: the
   target the pilot wants, its aim error and its fire gate (the miss distance and the cone).
+- **A new command flies at once** (fix round 1). A row whose command a think wrote since its last beat (`RowCommand.seq`)
+  gets its beat in the next tier step rather than at its stagger: waiting for the beat added up to two ticks of steering lag
+  on top of the step's one-tick handover, enough to swing a 4 Hz pilot's nose off its gate, and made the tier's fights
+  differ between the inline and the threaded step (the same seed's raiders held their trigger 62 % more ticks on inline).
 - **A fighter's fire.** Its parked cannon (`ScsCannons`, T35) keeps its gate and capacitor: in a pass after the near cannons
   (a tier shot makes no bolt, so the bolt order holds) the gate fires on the row command's trigger as on the body, and each
   shot is a seeded roll against the pilot's target, with no bolt row. The chance (`tier_fire::hit_chance`) is a circular
   Gaussian miss against the disc the hull presents (0.7 of its bounding radius plus the bolt's hit radius): the miss spread by
   the gate's miss distance, the nose's wander (0.007 rad), the pilot's aim error (its skill) and the target's manoeuvres over
   the bolt's flight (8 m/s^2, the flight time from the range and the closing speed), and offset by how far outside the gate
-  the row's nose points (a 4 Hz brain holds its trigger for a quarter second after a near pilot's gate would have closed).
-  The constants are fitted by maximum likelihood to every shot of six seeded full-fidelity 12 against 12 melees (2 853
-  shots, each hit matched to its shot); the Cycle log has the fit. The draw (`tier_fire::roll`, SplitMix64 over the core's
-  seed, its own sync count, the row's ordinal and the muzzle) is the same on every thread count and every run of a seeded
-  fight; the beat keys on the core's sync count too (T21 keyed it on the engine's frame). The hits wait in the core
+  the row's nose points (a 4 Hz brain holds its trigger for a quarter second after a near pilot's gate would have closed),
+  then scaled by the shooter hull's term (`ShipSpec.tier_hit_scale`: 0.92 for the allied Starfury, 1.25 for the raider; a
+  4 Hz brain flown at 20 Hz changes each hull's shots differently, and the term evens the sides). How the constants were found,
+  never on the seeds the fairness tests use (fix round 1): the model's by maximum likelihood over every full-fidelity shot of
+  six 12 against 12 melees (seeds 11 to 16, 2 853 shots) and of ten rounds of head-on duels (seeds from 50 000, 3 284
+  shots), each hit matched to its shot; the hull terms from the tier against full fidelity in the even fight (12 Starfuries
+  against 40 raiders, the maintainer's Q63, found by a full-fidelity sweep) on seeds 101 to 103, both schedules (the Cycle
+  log has the sweep and the steps). The draw (`tier_fire::roll`, SplitMix64 over the seed (the bench's,
+  `TierDirector.seed_value`), the core's own sync count, the row's ordinal and the muzzle) is the same on every thread count
+  and every run of a seeded fight; the beat keys on the core's sync count too (T21 keyed it on the engine's frame). The hits wait in the core
   (`tier_take_hits`) until the director's next tick (-12), which lands each through the target's `Damageable.apply_hit`
   (a `HitInfo` of cause bolt with the shooter's faction), so the hull, `hit_taken`, `damaged`, `destroyed`, the score, the
   wing's losses, the pool's release and the respawns all run as for a near hit; a kill parks its ship before the sync.
@@ -3235,27 +3247,42 @@ src/combat/destruction_director.gd   a tier death where its row flew; every deat
   nearest hostile fighter within 4 km (near or tier; `tier_fire::turret_chance`: the gun's 1.5 degree gate and the fighter's
   manoeuvres over the bolt's flight), its beams (each every 2 s, alternate seconds) against the nearest within the strike
   reach when it is inside 3 km (0.95), and its interceptors remove up to two hostile missiles each within 1.5 km (the near
-  interceptors' pick, sharing their spent mask). Its launches join the mix's top-up in turn: a far capital's missile is
-  resolved at launch (the hit rolled from the range, `missile_chance`), counts in flight until it would arrive (350 m/s) and
-  then lands if it rolled a hit and the target still flies. The standin director lands the hits through `land_hits`.
+  interceptors' pick, sharing their spent mask; a removal is certain, as a near interceptor's shot is, not a roll). Its
+  launches join the mix's top-up in turn: a far capital's missile is resolved at launch (the hit rolled from the range,
+  `missile_chance`), counts in flight until it would arrive (350 m/s), and then is shot down when an interceptor hostile to
+  it (on a near or a tier capital) came within its reach of the missile's path (from its capital to the target) with a shot
+  to spare that second (two a second each),
+  else lands if it rolled a hit and the target still flies, is not a hulk, and is on the hull life it was launched at
+  (`Damageable.life`, bumped by every restore: a released and re-used pool ship is not the same target). The standin
+  director lands the hits through `land_hits`.
+- **Rams** (fix round 1). A committed rammer (its row command's `ram`, which the tier thinks note too) meeting its target
+  where one of the two is a tier row, tier against tier or near against tier, lands ram damage once on first contact: the
+  core finds the pairs whose straight paths come within 0.7 of their bounding radii summed over the tick
+  (`tier_ram_contacts`), and the director lands them by the near swept rule (`RamResolver.ram_pending`: each hull's share of
+  the velocity change when the two move on together), through the ram resolver when there is one so `ram_resolved` hears
+  them. Two near ships ram through the ram resolver as before.
 - **Deaths.** A tier ship destroyed goes through `DestructionDirector` as a near one does (released to the pool, its row
   with it, `ship_destroyed` and `raider_destroyed`), its pose read from its row (`TierDirector.row_pose`), with no explosion
   or debris (nothing draws a far death until T23's far flash). Every pooled ship's or the player's killing hit carries the
   death's blast (`HitInfo.blast_energy_j`, `blast_radius_m`, `blast_point`; placeholders until M12 sizes a blast by class and
   cargo: 1e5 J a kilogram of hull, four bounding radii), for T23 and M12.
-- **Cost.** The tier's main-thread work (the integration, the cannons' tier pass, the landing; the far capitals' rolls) is
-  timed and its means since the bench window began are `tier.cost_us` and the bench summary's tier line: at `battle` 500
-  0.24 us a fighter row and 0.19 us a capital row; the thinks run in the job, off the main thread.
+- **Cost.** The tier's main-thread work (the integration, the cannons' tier pass, the landing; the far capitals' rolls and
+  launches, with their share of the integration) is timed and its means since the bench window began are `tier.cost_us` and
+  the bench summary's tier line, beside the tier thinks (count, most in a tick, their time on the step's clock): at `battle`
+  500 0.24 us a fighter row on the main thread plus 0.72 us of thinks (on the worker thread when threaded, the main thread
+  when inline), 0.34 us a capital row.
 - **Settings and console.** `tier_brain_hz` (4, live). Provider `tier` gains `brain_period_ticks`, `shots`, `hits`,
   `hits_landed`, `land_us`, `capital_rolls`, `capital_hits`, `capital_fire_us`, `cost_us`.
-- **What a tier ship still is not, after T22:** drawn, on the player's radar or targetable by the player (T23); rammed
-  (no tier ram) or struck by a near capital's missiles; selected on its parked targeting (its pilot's target rides in its
+- **What a tier ship still is not, after T22:** drawn, on the player's radar or targetable by the player (T23); struck
+  by a near capital's missiles or targeted by its turrets; selected on its parked targeting (its pilot's target rides in its
   row command; the driver selects it again when promoted).
 - **Tests.** `test_tier_fire` (the chance's shape, thinks at `tier_brain_hz`, the brain steering, rolled shots through the
   `Damageable` with no bolt row, one thread and six rolling the same hits, a near bolt on a tier row, a tier kill through the
   destruction director with its blast, a near death's blast, a far capital's group rolls, launches resolved at launch and
-  counted in flight, interceptors), `test_tier_outcomes` (slow: the duel, 12 against 12 for seeds 1 to 3, a cruiser against
-  12 fighters, each tier against full fidelity on both schedules), `test_sim_core` (the guard on `tier_fire.rs`),
+  counted in flight, interceptors; fix round 1: thinks timed and kept on their beat, far missiles shot down, the tier's rams,
+  the seed, a far missile on a re-used ship, a kill by a roll through the wing, a pending hit after a promotion, a hit on a
+  hulk), `test_tier_outcomes` (slow: the duel, the even 12 against 40 for seeds 1 to 3 with the per-side bound reported
+  pending, a cruiser against 12 fighters, far missiles' share shot down, each tier against full fidelity on both schedules), `test_sim_core` (the guard on `tier_fire.rs`),
   `test_tier_handover` (a tier ship thinks at the tier's rate).
 
 ### 17.16 Rocks and mines as static rows (T29)

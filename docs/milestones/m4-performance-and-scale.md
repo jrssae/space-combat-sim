@@ -1425,7 +1425,17 @@ done and T20 proceeds.
   kills swings by about 10 % on any change, and the cruiser's fighters fly invulnerable with the loss counted as damage over
   hull (all twelve died either way before, so the measure stopped at 1.0); the duel is rounds of head-on engagements (the
   first build's steady chase was unlike any fight); a ship whose native pilot is not hosted yet waits in Jolt; the far capitals'
-  turret groups are one group per capital.
+  turret groups are one group per capital; a far capital's interceptor removal is certain within reach (as a near
+  interceptor's shot is), not the section's "removal roll".
+- **Fix round 1 (2026-11-06; Cycle log, "M4-T22", fix round 1):** a hit no longer wakes a tier think outside its beat (the
+  1 000 fullscreen 1 % low's cause); the tier thinks are counted and timed; far missiles can be shot down along their path
+  by the target side's interceptors (near or tier); the tier rams (tier against tier, near against tier, by the near swept
+  rule); the rolls follow the bench's seed; a far missile skips a hulk or a re-used pool ship; a new command flies at once
+  (the tier's fights had differed between the step's schedules); the model's constants are fitted on training seeds only and
+  a per-hull term (`ShipSpec.tier_hit_scale`) evens the sides; the 12 against 12 became 12
+  against 40, an even fight found by a full-fidelity sweep (Q63), with each side compared. The per-side 15 % gate on seeds 1 to
+  3 is not met and is reported pending: full fidelity differs from itself by 36 to 38 % a side between the schedules on
+  those seeds.
 
 ##### M4-T23 Far proxies for tier rows
 
@@ -1450,6 +1460,9 @@ done and T20 proceeds.
   frozen 200 km from its objective; `test_ai_ram`: far-rate rammers frozen; `test_broadcast`: the 90 km ally). They are real
   interim gaps (no tier brains until T22, no tier radar or targeting until T23), so the default is 0 (off) until both land. T23
   sets it back to 10 000 m and its Done-when includes these 7 tests passing with the tier on.
+- **From T22's review (2026-11-06, added by T22's fix round 1 on the controller's ruling):** T23 owns `test_ai_objective`'s
+  far-raider test (it reads a tier ship's parked node pose and `can_process`; the row does fly to its objective) and the
+  broadcast and targeting tests of the seven (`test_ai_objective`'s and `test_broadcast`'s 90 km ally). The tier's ram is T22's.
 - **From T21's review (2026-11-06):** T21 took tier ships out of the player's radar and targeting (both read active markers),
   so today a ship between 11 and 25 km and an ally anywhere past 11 km vanish from the radar and drop the player's lock; this
   task owns that fix (the "radar and targeting see it" goal and the selection test above).
@@ -1502,6 +1515,10 @@ done and T20 proceeds.
   proxies goes in `far_dots.gd`.
 
 ##### M4-T25 Phase 3 measurements, the 1 000 stretch, the full suite and report P3
+
+- **Known limit from T22 (fix round 1):** the tier's to-hit model under-scores a fight that settles into a steady tail chase
+  (a Starfury sitting behind a raider at about 450 m hits 73 % of its shots at full fidelity against about 30 % in the tier);
+  report it with the far battle's numbers.
 
 - **Track:** M. **Agent:** Sonnet. **Depends on:** T23 (and T24, T26 if built).
 - **Goal:** M4's definition of done.
@@ -6079,6 +6096,95 @@ test_wing_replenish, test_turret_kernel, test_missile_kernel, test_mine_kernel, 
 test_friendly_fire, test_destruction, test_respawn_in_play, test_standins, test_settings_schema, test_settings, test_main_scene,
 test_fx_pool (256/0/0 each); AC13's files (86/0/0 each); with `GUT_SLOW=1` test_tier_outcomes 3/0/0 (it loops both schedules itself), test_weapon_rows_battle 1/0/0 threaded and inline, test_brain_tolerance 1/0/0 (it pins inline itself), test_flight_parity_fight 1/0/0 threaded and inline. The main-scene smoke check printed no
 `ERROR:` line.
+
+**Fix round 1 (2026-11-06; review `task-t22-review.md`, the controller's rulings).** Reports `reports/perf/M4-T22_fr1_*` (headless
+500 and 1 000 before the path change, `M4-T22_fr1b_battle1000` after it; fullscreen `M4-T22_fr1_fs{,2}_battle1000` and
+`M4-T22_fr1_fs_battle500`), the same set-up as above (load 0.4 to 1.7).
+
+- **The 1 000 fullscreen 1 % low (I3).** Every landed far hit woke the target's tier think on the next tick, outside the
+  stagger (a ship hit every tick thought every tick, `test_tier_fire` showed 60 thinks a second against 3 to 5), so the far
+  capitals' once-a-second rolls and the fighters' hits bunched thinks into single ticks and the AI step's join waited. A hit now
+  waits for the beat. Fullscreen 1 000, two runs: 63.0 and 63.4 FPS, the 1 % low 24.8 and 26.0 (T22's first build 22.2 and 23.4,
+  T21 29.0), the p99 frame 32.4 and 31.2 ms (37.1 and 36.5; T21 30.4), frames over 25 ms 40 and 43 (73 and 65), the AI think's
+  p99 1.08 and 1.07 ms (1.32 and 1.26; T21 0.94). The rest of the gap to T21 is the far battle's own work. Fullscreen 500: 113.2
+  FPS, the 1 % low 48.4 (41.6). Headless: 500 7.43 ms (p99 9.70), 1 000 9.37 ms (p99 12.67), and 9.51 (13.57) after the path
+  change; real time kept.
+- **The thinks' cost (I3).** The bench summary now counts the tier thinks: 11.4 a tick at 500 (at most 16; 171 rows, 4 Hz is
+  11.4) taking 124 us a tick on the step's clock, 0.72 us a fighter row; 38.7 a tick at 1 000 (at most 42) taking 361 us,
+  0.62 us a row (final runs `M4-T22_fr1c_battle{500,1000}`: 7.41 ms, p99 9.73, and 9.26 ms, p99 12.66). With the main-thread
+  work (0.24 and 0.19 us) a tier fighter costs about 0.96 and 0.81 us a tick: the Done-when's
+  0.3 us holds for the main thread on the threaded step only; on the inline step (Q54's fallback) the thinks are main-thread
+  time too. A capital row: 0.45 us at 500 and 0.95 at 1 000 with the first interception, 0.34 at 1 000 once the interceptor
+  counts were taken once a step (under 2 us).
+- **Far missiles (I2).** A far capital's missile is shot down when an interceptor hostile to it, on a near or a tier capital,
+  came within its reach of the missile's path with a shot to spare that second (the near interceptors' rate). `test_tier_outcomes`
+  (a cruiser launching at fighters spread round a hostile guard cruiser): the share shot down 0.75 in the tier against 0.78 at
+  full fidelity on both schedules. At `battle` 500 the share is 41 % (199 of 490) against 39 % with the tier off (242 of 627);
+  at 1 000 58 % (561 of 971) against 50 % with the tier off (847 of 1 679)
+  and 23 % before the fix; the first entry's "the totals are back near the tier-off run's" was wrong at 1 000 (it was the
+  interception immunity).
+- **The tier's ram (I4).** A committed rammer meeting its target where one of the two is a tier row lands ram damage once on
+  first contact by the near swept rule, through the ram resolver (`test_tier_fire`: tier against tier, near against tier).
+  `test_ai_ram` with the tier on (a saved `tier_radius_m` 10 000): still 4 of 10, the same as before: its runs 4 to 9 place
+  the pair beyond 11 km, where both are tier rows, and the test's loop stops at once on the parked rammer's `can_process()`
+  and reads node poses (the class of T23's far-raider test); the tier ram itself is tested in `test_tier_fire`.
+- **Fairness (I1, and the maintainer's Q63).** The model is fitted off the test seeds: by maximum likelihood over
+  full-fidelity melee shots (seeds 11 to 16) and ten rounds of head-on duels (seeds from 50 000, 3 284 shots: 0.117 modelled
+  against 0.116), which picks hull 0.7, nose 0.007 rad and manoeuvres 8 m/s^2 (the split the first build had chosen on the
+  test fights; the joint fit reaches it on its own). A first per-side check (an invulnerable 6 against 18) found the tier's
+  fights differing between the two schedules (on the same seed its raiders held their trigger 62 % more ticks on inline),
+  traced to a new command waiting for the row's 20 Hz beat; with a new command flown at once the schedules agree.
+  **What is an even fight between raiders and Starfuries (Q63)?** 12 Starfuries against N raiders, both sides regular skill
+  and balanced aggression, full fidelity, threaded, 30 s, seeds 201 to 203 (beyond the fit and test seeds); a side wins a
+  seed when its share of its own hull left after 30 s is the larger:
+
+  | raiders | Starfury wins | survivors, Starfuries / raiders (mean) | hits landed, Starfuries / raiders (mean) | mean hull loss, Starfuries / raiders |
+  |---|---|---|---|---|
+  | 20 | 3 of 3 | 12.0 / 9.0 | 95 / 57 | 0.095 / 0.789 |
+  | 24 | 3 of 3 | 11.0 / 14.0 | 91 / 94 | 0.157 / 0.632 |
+  | 28 | 3 of 3 | 11.0 / 18.7 | 80 / 123 | 0.205 / 0.474 |
+  | 32 | 3 of 3 | 11.0 / 23.7 | 84 / 159 | 0.264 / 0.439 |
+  | 36 | 2 of 3 | 9.7 / 29.3 | 84 / 207 | 0.346 / 0.389 |
+  | 40 | 2 of 3 | 10.0 / 32.3 | 81 / 186 | 0.309 / 0.339 |
+  | 42 | 1 of 3 | 8.7 / 34.7 | 82 / 231 | 0.385 / 0.324 |
+  | 44 | 0 of 3 | 9.3 / 36.7 | 75 / 232 | 0.387 / 0.283 |
+
+  So an even fight is about 41 raiders to 12 Starfuries, 3.4 a Starfury (the stats estimate's 2.3 left out the Starfury's
+  hull, 300 points to the raider's 60); 40 and 42 sit one seed either side of half, and 40 has the smaller margin (the
+  Starfuries' share of hull left minus the raiders': +0.03 against -0.06), so the fairness fight is 12 against 40 (52 ships;
+  a 30 s fight takes 30 s of wall time whatever its size, so it is not scaled down). Per-hull terms
+  (`ShipSpec.tier_hit_scale`) from that fight on seeds 101 to 103, both schedules: at 1 the tier landed 1.08 times the
+  Starfuries' hits and 0.79 times the raiders'; the terms are 0.92 (starfury_ally) and 1.25 (raider_delta_v). Held out,
+  seeds 1 to 3: the duel 0.124 and 0.125 against 0.131 and 0.129 (within 10 %); the cruiser's fighters 1.38 and 1.35 against
+  1.51 and 1.49 (within 15 %); the 12 against 40's win share 0 of 3 against 1 of 3 (threaded) and 1 of 3 against 0 of 3
+  (inline), within the sweep's spread of one seed; each seed's hits within a factor of two. Per side, pooled, the bound is not
+  met: threaded the Starfuries' hits 167 against 233, the raiders' 802 against 528, the hull loss 1.336 against 0.879 and
+  0.695 against 0.971; inline 221 against 171, 613 against 727, 1.022 against 1.211, 0.921 against 0.713. Full fidelity
+  itself, on the same seeds and ships, differs between the schedules by 36 % (the Starfuries' hits 233 against 171) and 38 %
+  (the raiders' 528 against 727), and each refit of the terms swung the tier's sides by as much again, so three pooled 30 s
+  fights cannot hold 15 % for the reference itself. The test measures the per-side bound and reports it pending with the
+  numbers; a gate that can hold needs a much larger pool (about 40 fights by the seeds' spread) or a steadier measure. For the
+  controller.
+- **Minors.** The duel compares the model's expected rate (each shot's gate excess included) with a seeded roll printed beside
+  it (M1); the rolls take the bench's seed (M2; scenarios have none); a far missile skips a hulk and a pool ship released and
+  taken out again since its launch, `Damageable.life` (M5); the capitals' launch rolls are timed, the integration shared by row
+  count, the capital rolls windowed (M6); the weapon rows take the ticks per second (M7); tests for a kill by a roll (wing slot
+  freed, `ship_destroyed`, the slot refilled), a pending hit landing after its shooter's promotion and a rolled hit on a hulk
+  (M8). M3 and M4 below and in As built.
+
+**Behaviour changes, fix round 1:** a tier ship hit waits for its beat to react; far missiles are shot down by interceptors
+along their path; tier ships ram and are rammed; a new tier command flies at once; the shot chance is scaled per hull. **A known
+limit (M3), also in T25's section and the return checklist:** a far fight that settles into a steady tail chase scores fewer
+hits than up close (a Starfury behind a raider at about 450 m hits 73 % of its shots at full fidelity, about 30 % in the tier).
+
+**Tests, fix round 1** (both schedules, inline from a saved settings file; Passing / Failing / Pending): test_tier_fire 20,
+test_tier 10, test_tier_handover 13, test_sim_core 17 and the rest of the first batch (155/0/0 each schedule); the second batch
+with test_ram_damage, test_ram_contact_columns, test_ram_scale and test_ai_ram (136/0/0 each); the third (256/0/0 each, after
+test_turret_kernel's call to the weapon rows took the new ticks-per-second argument, 7/0/0 both); AC13's files (86/0/0 each);
+`GUT_SLOW=1`: test_tier_outcomes 4 tests, 0 failing, the even fight's per-side bound reported pending on both schedules;
+test_weapon_rows_battle, test_flight_parity_fight 1/0/0 each schedule, test_brain_tolerance 1/0/0. After the last per-hull
+terms: test_tier_fire, test_turret_kernel and test_tier_handover again on both schedules (40/0/0 inline, 27/0/0 threaded with
+test_tier_outcomes). `cargo fmt --check` and clippy clean on this task's files; the smoke check printed no `ERROR:` line.
 
 ## Definition of done (M4)
 
