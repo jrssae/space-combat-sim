@@ -3192,6 +3192,72 @@ src/perf/standins/capital_standin.gd   park_for_tier, unpark_from_tier; the dire
   take hands the state back exactly), `test_tier_handover` (above), `test_sim_core` (the tier's guard; `slot_of` bounded over
   spawn and release cycles, an old handle to a reused slot refused), `test_world_frame` (the rebase and the parked body).
 
+**Tier brains and fire (T22).**
+
+```
+native/src/tier_fire.rs          the fighter shot's chance, the seeded roll, the soft fire gate, the far capitals' chances and their
+                                 nearest hostile fighter; engine-free, under test_sim_core's guard
+native/src/brain_step.rs         a hosted driver handed to the tier thinks on the tier's beat in the AI step's job
+native/src/cannons.rs            a tier ship's parked cannon fires through its own gate in a pass of its own; each shot a roll
+native/src/weapon_rows.rs        a far capital's guns, beams and interceptors once a second, its launches resolved at launch
+native/src/sim_core.rs           the hit sweep's rows: the hull rows, then the tier rows (sweep_rows, sweep_columns)
+src/ai/tier_director.gd          hands a fighter's driver to the tier, lands the rolled hits, keeps a row's hull, the costs
+src/combat/destruction_director.gd   a tier death where its row flew; every death's blast on its killing hit
+```
+
+- **Brains.** A tier fighter's hosted driver is handed to the tier (`AiPilotDriver.set_tiered`, `ScsBrains.set_driver_tiered`)
+  when it is demoted, so the AI step's job (T24, on the worker thread, one tick behind) keeps thinking for it on the same rows
+  and contact grid as the near brains, every `tier_brain_hz` (4: every 15 ticks, staggered by the driver's ordinal; at once
+  when it is handed over or hit). Its command goes to the core's row commands, which the tier's integrator flies; its driver
+  gets no event (its node is parked). A ship whose native pilot the host does not step yet waits in Jolt until it does, so no
+  tier ship is left without a brain. A hulk never thinks. The think also writes what the roll reads with the command: the
+  target the pilot wants, its aim error and its fire gate (the miss distance and the cone).
+- **A fighter's fire.** Its parked cannon (`ScsCannons`, T35) keeps its gate and capacitor: in a pass after the near cannons
+  (a tier shot makes no bolt, so the bolt order holds) the gate fires on the row command's trigger as on the body, and each
+  shot is a seeded roll against the pilot's target, with no bolt row. The chance (`tier_fire::hit_chance`) is a circular
+  Gaussian miss against the disc the hull presents (0.7 of its bounding radius plus the bolt's hit radius): the miss spread by
+  the gate's miss distance, the nose's wander (0.007 rad), the pilot's aim error (its skill) and the target's manoeuvres over
+  the bolt's flight (8 m/s^2, the flight time from the range and the closing speed), and offset by how far outside the gate
+  the row's nose points (a 4 Hz brain holds its trigger for a quarter second after a near pilot's gate would have closed).
+  The constants are fitted by maximum likelihood to every shot of six seeded full-fidelity 12 against 12 melees (2 853
+  shots, each hit matched to its shot); the Cycle log has the fit. The draw (`tier_fire::roll`, SplitMix64 over the core's
+  seed, its own sync count, the row's ordinal and the muzzle) is the same on every thread count and every run of a seeded
+  fight; the beat keys on the core's sync count too (T21 keyed it on the engine's frame). The hits wait in the core
+  (`tier_take_hits`) until the director's next tick (-12), which lands each through the target's `Damageable.apply_hit`
+  (a `HitInfo` of cause bolt with the shooter's faction), so the hull, `hit_taken`, `damaged`, `destroyed`, the score, the
+  wing's losses, the pool's release and the respawns all run as for a near hit; a kill parks its ship before the sync.
+- **Hits on a tier row.** The hit sweep tests the tier rows after the hull rows (`sweep_rows`; the resolver reads
+  `sweep_columns`, the ram resolver keeps `hull_columns`): a near ship's bolt lands on a tier ship's hit shapes at its row's
+  pose and hurts its `Damageable` (no flash on a parked node). The ram phase, the strike target, the mines' blasts and the
+  near turrets keep to the hull rows (a tier ship is not rammed, struck or turret-targeted by near ships). The director
+  watches each tiered body's `damaged` and writes its hull to the row, which the brains read.
+- **A far capital's fire** (`ScsWeaponRows.step`): once a second each (staggered), its guns roll as one group against the
+  nearest hostile fighter within 4 km (near or tier; `tier_fire::turret_chance`: the gun's 1.5 degree gate and the fighter's
+  manoeuvres over the bolt's flight), its beams (each every 2 s, alternate seconds) against the nearest within the strike
+  reach when it is inside 3 km (0.95), and its interceptors remove up to two hostile missiles each within 1.5 km (the near
+  interceptors' pick, sharing their spent mask). Its launches join the mix's top-up in turn: a far capital's missile is
+  resolved at launch (the hit rolled from the range, `missile_chance`), counts in flight until it would arrive (350 m/s) and
+  then lands if it rolled a hit and the target still flies. The standin director lands the hits through `land_hits`.
+- **Deaths.** A tier ship destroyed goes through `DestructionDirector` as a near one does (released to the pool, its row
+  with it, `ship_destroyed` and `raider_destroyed`), its pose read from its row (`TierDirector.row_pose`), with no explosion
+  or debris (nothing draws a far death until T23's far flash). Every pooled ship's or the player's killing hit carries the
+  death's blast (`HitInfo.blast_energy_j`, `blast_radius_m`, `blast_point`; placeholders until M12 sizes a blast by class and
+  cargo: 1e5 J a kilogram of hull, four bounding radii), for T23 and M12.
+- **Cost.** The tier's main-thread work (the integration, the cannons' tier pass, the landing; the far capitals' rolls) is
+  timed and its means since the bench window began are `tier.cost_us` and the bench summary's tier line: at `battle` 500
+  0.24 us a fighter row and 0.19 us a capital row; the thinks run in the job, off the main thread.
+- **Settings and console.** `tier_brain_hz` (4, live). Provider `tier` gains `brain_period_ticks`, `shots`, `hits`,
+  `hits_landed`, `land_us`, `capital_rolls`, `capital_hits`, `capital_fire_us`, `cost_us`.
+- **What a tier ship still is not, after T22:** drawn, on the player's radar or targetable by the player (T23); rammed
+  (no tier ram) or struck by a near capital's missiles; selected on its parked targeting (its pilot's target rides in its
+  row command; the driver selects it again when promoted).
+- **Tests.** `test_tier_fire` (the chance's shape, thinks at `tier_brain_hz`, the brain steering, rolled shots through the
+  `Damageable` with no bolt row, one thread and six rolling the same hits, a near bolt on a tier row, a tier kill through the
+  destruction director with its blast, a near death's blast, a far capital's group rolls, launches resolved at launch and
+  counted in flight, interceptors), `test_tier_outcomes` (slow: the duel, 12 against 12 for seeds 1 to 3, a cruiser against
+  12 fighters, each tier against full fidelity on both schedules), `test_sim_core` (the guard on `tier_fire.rs`),
+  `test_tier_handover` (a tier ship thinks at the tier's rate).
+
 ### 17.16 Rocks and mines as static rows (T29)
 
 ```

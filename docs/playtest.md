@@ -511,6 +511,14 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
 - [ ] **M4-T21 The battle beyond the radius.** Tier ships do not fight yet (T22 gives them brains and fire): a far fight you
       watch from 10 km out is frozen in its held commands until you come close. Say whether that reads as wrong from the
       player's seat at `battle 500`, where most of the battle is beyond 10 km.
+- [ ] **M4-T22 The battle beyond the radius fights.** With the tier on (`set settings.tier_radius_m 10000`), tier fighters think
+      four times a second (`settings.tier_brain_hz`) and their shots and the far capitals' guns, beams and missiles are rolled,
+      not flown as bolts. In a `battle 500` run, fly into a far fight: the ships you meet at 10 km should be in the middle of a
+      fight that went on without you (hurt hulls, ships missing that died out there, wingmen still in their slots), with no
+      jump in a hull or a position at the moment they appear; your own bolts fired at a ship just beyond 11 km hit it. Say
+      whether a fight met this way feels like the same fight you would have watched up close (a 4 Hz brain flies its attack
+      runs a little looser). Tier ships are still not drawn and not on the radar (T23), and a far death shows nothing yet
+      (T23's far flash).
 - [ ] **M4-T38 Anti-aliasing, the default.** `settings.anti_aliasing` is `smaa` now (it was no anti-aliasing). Compare the sheets in
       `reports/perf/m4-t38_compare/pairs/` (each the same frozen `battle` 300 frame in all six modes): `edges_2160.png` and
       `edges_1080.png` (a wing and a rock edge), `hull_detail_2160.png` and `hull_detail_1080.png` (struts, panel lines, the small

@@ -207,7 +207,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T19 | Jolt measured at 300 and 500, the ships-out-of-Jolt proposal (Q17, checkpoint 2) | T15 | Sonnet | Measurement and a proposal, no game code | M | done (2026-11-04, in a worktree on `41fc088`; Cycle log, M4-T19; the proposal waits for the maintainer at checkpoint 2) |
 | T20 | Turrets, missiles, beams and mines as native rows | T16, T12 | Opus | The non-fighter rows' budget (710 turrets at 500); M12 inherits the path | N, A | done, bit for bit; the stand-ins' stage at `battle` 500 from 9.50 to 0.68 ms; every row in budget but a beam shot's spawn (about 20 us a shot against 1) (2026-11-04, in a worktree on `67d5cda`; Cycle log, M4-T20) |
 | T21 | The low-attention tier: state, 20 Hz integration, promotion and demotion of fighters and capitals | T20, checkpoint 3, T24 | Fable | The pool and ship adapter handover must never pop; serial | T | done (2026-11-06, Fable then Opus for fix round 1, CI green on `4f360e3`; headless 1 000 20.3 to 9.9 ms, fullscreen 500 55 to 101 FPS and 1 000 14 to 58, partly provisional until T22; the tier off by default until T22 and T23 land (7 far-ship tests); Cycle log, M4-T21) |
-| T22 | Tier brains at 2 to 5 Hz, statistical fire, far capitals' aggregated fire | T21 | Opus | Far fights must stay fair | T, N | in progress (dispatched 2026-11-06, Opus) |
+| T22 | Tier brains at 2 to 5 Hz, statistical fire, far capitals' aggregated fire | T21 | Opus | Far fights must stay fair | T, N | in progress (dispatched 2026-11-06, Opus; work done in the worktree on `8aed313`, Cycle log, M4-T22; waiting for review) |
 | T23 | Far proxies for tier rows (dots, radar, targeting) | T21, T11 | Opus | GPU numbers by the agent, the look (H) | R | not started |
 | T24 | The simulation step on a worker thread (firm, Q53): the AI and every native kernel step off the main thread into a double-buffered snapshot | T35, T36 | Fable | A tick-order change, double-buffered snapshots; the frame and input stop waiting on the simulation | N | done (2026-11-06, two fix rounds, CI green on `798f393`; the AI step on its own worker thread one tick behind, flight and combat on the main thread (Q61); `battle` 500 tick p99 16.8 to 12.9 ms; Cycle log, M4-T24) |
 | T25 | Phase 3 measurements, the 1 000 stretch, the full suite, report P3 | T23, T24, T37 (T26) | Sonnet | Measurement, no code | M | not started |
@@ -1401,6 +1401,31 @@ done and T20 proceeds.
 - **Expected:** the tier's fairness (65 %); its cost (75 %).
 - **Q54 (maintainer away):** every test of this task passes on both T24's threaded step and the single-thread step, so undoing T24 never strands it; its look and feel checks go into the "M4 return checklist" in `docs/playtest.md`.
 - **Architecture:** §17.14.
+- **Done (2026-11-06, worktree on `8aed313`; Cycle log, "M4-T22"):** a tier fighter's hosted driver is handed to the tier, so
+  T24's job keeps thinking for it on the same rows and grid as the near brains at `tier_brain_hz` (4; at once when handed
+  over or hit); its parked cannon's gate keeps firing and each shot is a seeded to-hit roll (`native/src/tier_fire.rs`) from
+  the shot's range, the target's size, the bolt, the closing speed, the pilot's aim error and its fire gate, offset by how far
+  outside that gate the row's nose points, with no bolt row; the director lands the hits at the next tick through each
+  target's `Damageable`. The hit sweep tests tier rows after the hull rows, so a near bolt hurts a tier ship. A far capital
+  rolls once a second: its guns as one group and its beams against the nearest hostile fighter in reach, its interceptors
+  removing hostile missiles in reach, its launches resolved at launch, counted in flight and landing on arrival. Tier deaths
+  go through `DestructionDirector` where the row flew (pool, score, wing, events; no effects until T23), and every death's
+  killing hit carries its blast energy, radius and point. Rolls and the tier's beat key on the core's own sync count, so seeded
+  runs line up; one thread and six roll the same hits. Fairness (`test_tier_outcomes`, slow, both schedules): the duel's rolled
+  to-hit rate 0.139 and 0.132 against full fidelity's 0.131 and 0.129; 12 against 12, seeds 1 to 3, the same winner every
+  seed, the three seeds' hits 288 against 267 (threaded) and 273 against 284 (inline), their mean hull loss 0.459 against
+  0.488 and 0.500 against 0.499; a cruiser's 8 turrets against 12 fighters, hull loss 1.44 against 1.51 and 1.42 against
+  1.49. The tier's cost at `battle` 500: 0.24 us a fighter row and 0.19 us a capital row on the main thread (the Done-when's
+  0.3 and 2 us met; the thinks run in the job). Headless `battle` 500 7.37 ms (p99 9.6), 1 000 9.2 ms (p99 12.6), both below
+  T21's tier-on rows; fullscreen 500 115 FPS (1 % low 41.6) and 1 000 62.8 FPS (1 % low 22 to 23, down from 29.0).
+- **As built, where it differs from the plan:** the rolls are in `tier_fire.rs` but run from the shells that own the state
+  (`cannons.rs` for a fighter's shots, `weapon_rows.rs` for a capital's), not from `tier.rs`; a fighter's shots use its own
+  cannon's gate (fire rate, capacitor) rather than a rate of their own; the fairness tests compare 12 against 12 on the winner
+  per seed and on the hits and hull loss pooled over the three seeds (each seed within 30 %), since one 30 s fight that ends in
+  kills swings by about 10 % on any change, and the cruiser's fighters fly invulnerable with the loss counted as damage over
+  hull (all twelve died either way before, so the measure stopped at 1.0); the duel is rounds of head-on engagements (the
+  first build's steady chase was unlike any fight); a ship whose native pilot is not hosted yet waits in Jolt; the far capitals'
+  turret groups are one group per capital.
 
 ##### M4-T23 Far proxies for tier rows
 
@@ -5953,6 +5978,107 @@ slow parity fights with `GUT_SLOW=1` (test_brain_tolerance, test_flight_parity_f
 test_missile_kernel, test_mine_kernel, test_brain_think_parity, test_brain_facade, test_brain_in_play, test_ai_driver,
 test_pilot_kernels, test_pilot_kernels_in_play, test_destruction, test_respawn_in_play (157). The main-scene smoke check
 printed no `ERROR:` line.
+
+### M4-T22 (2026-11-06): tier brains, statistical fire and far capitals' aggregated fire
+
+Taken on `8aed313` in a detached worktree with its own native build (`.cache/scs-agents/m4-t22/native-target`), the debug
+editor build with the library loaded, default settings (`sim_step` threaded, six core threads) with `set
+settings.tier_radius_m 10000` before every run, seed 1, 5 s of warm-up and 20 s measured, both bench locks held and the
+headless runs pinned to cores 0 to 11 (load 0.3 to 1.5). Reports in `reports/perf/` (not committed):
+`M4-T22_after{,2}_battle{500,1000}` (headless, two runs each) and `M4-T22_fs_on_battle{500,1000}`, `M4-T22_fs_on2_battle1000`
+(fullscreen, `FULLSCREEN_EXEC="set settings.tier_radius_m 10000"`, the measure log reading `sim_step threaded`). The before is
+T21's tier-on rows (`M4-T21_after_*`, `M4-T21_fs_on_*`). Report: `.superpowers/sdd/m4-performance-and-scale/task-t22-report.md`.
+
+**What moved** (architecture §17.14): the far battle fights again. A tier fighter thinks at 4 Hz in T24's job on the same rows
+and grid as the near brains; its shots are seeded to-hit rolls through its parked cannon's own gate, landed through each
+target's `Damageable`; a near bolt hits a tier row; a far capital's guns, beams, interceptors and launches roll once a second
+or resolve at launch. Headless tick medians, ms (p99 in brackets), the stages medians; the bench flies every ship
+invulnerable, so there are no kills in either window:
+
+| run | tick | ai | flight | resolvers | physics | sync | tier fighters | tier capitals | bolts | missiles in flight | missiles launched (shot down) | tier fighter hits | far-capital hits | real time |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| battle 500, T21 | 8.06 (10.30) | 0.42 | 3.09 | 2.49 | 1.04 | 0.40 | 174 | 34 | 1 422 | 165 | 1 994 (1 259) | none | none | kept |
+| battle 500, T22 | 7.38 (9.73) | 0.43 | 2.77 | 2.26 | 0.96 | 0.40 | 170 | 34 | 1 195 | 170 | 489 (179) | 756 | 169 | kept |
+| battle 500, T22, again | 7.37 (9.57) | | | | | | 170 | 34 | 1 195 | 170 | 489 (179) | 756 | 169 | kept |
+| battle 1000, T21 | 9.93 (12.90) | 0.66 | 3.78 | 2.44 | 1.19 | 0.46 | 574 | 97 | 1 382 | 147 | 2 400 (1 573) | none | none | kept |
+| battle 1000, T22 | 9.20 (12.58) | 0.69 | 3.44 | 2.26 | 1.08 | 0.45 | 581 | 97 | 1 078 | 340 | 973 (225) | 2 542 | 1 359 | kept |
+| battle 1000, T22, again | 9.26 (12.62) | | | | | | 581 | 97 | 1 078 | 340 | 973 (225) | 2 542 | 1 359 | kept |
+
+T22 gave none of T21's headless gain back: the tick fell a further 0.7 ms at both sizes. The far fire costs the main thread
+41 us a tick at 500 (170 fighter rows: the integration, the cannons' tier pass and the landing, 0.24 us a row; 34 capital
+rows' rolls 6.4 us, 0.19 us a row) and 131 us at 1 000 (0.19 and 0.20 us a row), under the Done-when's 0.3 and 2 us; the
+thinks (about eleven a tick at 500, forty at 1 000) run in the job, and the AI stage's join did not grow (0.42 to 0.43 ms at
+500). What fell is the near work the frozen far battle had made: T21's near bolts aimed at tier rows flew through them for their
+whole lifetime, and now they hit and are spent (bolts 1 422 to 1 195 at 500, 1 382 to 1 078 at 1 000, the resolvers 0.2 ms
+less); a far capital's missiles are resolved at launch with no node (missile steering 123 to 24 us at 500).
+
+**The missile count T21 left open.** The summary's "missiles launched" is the mix's top-up over the window: the director keeps
+`missile_target` missiles in flight (170 at 500, 340 at 1 000) and every missile lost is replaced, so the total counts
+replacements. With T21's tier on, only near capitals launched, and only at near fighters (the strike target reads the hull
+rows), which fly inside the same fights as the hostile near capitals' interceptors: shot down rose from 242 to 1 259 at 500 and
+each loss was relaunched, so the total rose 627 to 1 994 while the count in flight held at the cap (at 1 000 the cap of 340
+could not be held, 147 in flight, since too few near capitals had targets). The entity line's "launches 60 to 53" T21 quoted
+was the carriers' fighter launches, not missiles. With T22 the far capitals launch again, their missiles count in flight until
+they would arrive, and the totals are back near the tier-off run's (489 launched, 179 shot down at 500; 973 and 225 at 1 000,
+340 in flight).
+
+**The fullscreen check** (Q48's row; native 4K window, the 3D at 1 080 lines, vsync off, chase camera, 20 s after 8 s of
+warm-up, under the GPU lock; the window 6144x3456 with a 3D scale of 0.31):
+
+| run | average FPS | 1 % low FPS | p99 frame ms | frame mean ms | sim speed | GPU ms | draw calls |
+|---|---|---|---|---|---|---|---|
+| battle 500, T21 tier on | 101.0 | 38.4 | 20.38 | 9.90 | 1.00 | 0.86 | 102 |
+| battle 500, T22 | 115.3 | 41.6 | 18.80 | 8.68 | 1.00 | 0.85 | 100 |
+| battle 1000, T21 tier on | 58.2 | 29.0 | 30.44 | 17.18 | 1.00 | 0.94 | 104 |
+| battle 1000, T22 | 62.8 | 22.2 | 37.09 | 15.93 | 1.00 | 0.93 | 102 |
+| battle 1000, T22, again | 62.7 | 23.4 | 36.46 | 15.95 | 1.00 | 0.94 | 102 |
+
+At 500 T22 gave nothing back (the average 101 to 115 FPS, the 1 % low 38.4 to 41.6). At 1 000 the average rose (58.2 to 62.8)
+but the 1 % low fell from 29.0 to 22 to 23 FPS and the p99 frame rose from 30 to 37 ms, on both runs: that is what T22 gave
+back. The worst tick each second is 17 ms; with the frame mean at the physics rate's 16.7 ms, a quarter of the frames carry two
+ticks, and the slowest of those set the 1 % low. AC5's 1 000 row is T25's to record.
+
+**The to-hit model.** Every shot of six seeded full-fidelity 12 against 12 melees (2 853 shots, each hit matched to its shot
+by its shooter and its flight time) was fitted by maximum likelihood. Bolt speed barely matters at equal range (raiders' 350 m/s
+plasma and Starfuries' 1 000 m/s pulses hit alike at 800 to 1 200 m), so the miss is spread mostly by the gate's miss distance
+and an angular nose wander, with the pilot's aim error and the target's manoeuvres over the bolt's flight on top; hulls present
+0.7 of their bounding radius. A first model fitted to a steady-chase duel (Starfuries hitting 73 % at 450 m with the relative
+speed near 10 m/s) was unlike the melees (18 %) and was dropped. The chosen constants (nose 0.007 rad, manoeuvres 8 m/s^2)
+give raiders 0.195 against 0.233 and Starfuries 0.196 against 0.176 per shot, the split that centres the tier's 12 against 12
+(a 4 Hz brain flies a Starfury's attack runs looser and keeps raiders alive longer; the fit's best split left the tier's hull
+loss 10 % low on every seed). A hard gate (no shot while the nose is off) was tried and dropped: it kept tier raiders' close
+shots only and raised their per-shot rate; the soft gate offsets the miss instead.
+
+**Fairness** (`test_tier_outcomes`, slow, both schedules): the duel (rounds of head-on engagements, 1 324 and 1 321 shots), the
+roll's rate 0.139 and 0.132 against full fidelity's 0.131 and 0.129 (within 10 %); 12 against 12, seeds 1 to 3: the allies win
+every seed in both, the hits of the three seeds 288 against 267 (threaded, +8 %) and 273 against 284 (inline, -4 %), their mean
+hull loss 0.459 against 0.488 (-6 %) and 0.500 against 0.499; a cruiser's 8 guns and 2 beams against 12 invulnerable fighters,
+their hull loss 1.44 against 1.51 (-5 %) and 1.42 against 1.49. Each seed within 30 %; one 30 s fight that ends in kills
+swings by about 10 % on any change, so the hits and hull loss are pooled over the seeds.
+
+**T23's seven tests with the tier on** (a saved settings file with `tier_radius_m` 10 000): still failing, none fixed by T22.
+`test_ai_objective`'s far raider: its row does fly to its objective (traced: 187 km to 16 km in 320 s, then holding about
+500 m off it, attacking) but the test reads the parked node's position and its `can_process`, so it ends at once at 200 km;
+the 90 km ally tests (`test_ai_objective`, `test_broadcast`) are the radar and candidates T23 owns; `test_ai_ram`'s rammers 4 of
+10 against 8: no ram resolves in the tier (the ram phase keeps to the hull rows).
+
+**Behaviour changes, listed:** a tier fighter thinks at 4 Hz, not the far rate's 20 Hz, and fights by rolls, so a far fight
+differs in detail from one at full fidelity (the outcomes above); a near ship's bolts hit tier ships; tier ships die and are
+released, their deaths drawing nothing yet (T23); a far capital fires and launches once a second; the tier's beat keys on the
+core's sync count rather than the engine's frame (T21's integrator falls on other ticks, the same handovers); every death's
+killing hit carries a blast. Near ships do not ram tier ships, near capitals do not strike or turret-target them, and tier
+ships do not ram anything. The look is on the return checklist (Q54).
+
+**Tests** (both `sim_step` schedules, inline from a saved settings file; Passing / Failing / Pending): test_tier_fire 11,
+test_tier 10, test_tier_handover 13, test_sim_core 17, test_core_threads 7, test_core_snapshot 12, test_core_state 13,
+test_row_commands 8, test_bolt_rows 16, test_driver_step 7, test_ai_think_rate 14, test_world_frame 18 (146/0/0 each schedule);
+test_fighter_melee, test_rebase_in_play, test_bench, test_bench_report, test_brain_in_play, test_brain_facade,
+test_brain_think_parity, test_brain_parity, test_ai_driver, test_pilot_kernels, test_pilot_kernels_in_play, test_contact_field,
+test_contact_scan, test_flight_batch (110/0/0 each); test_ship_pool, test_ally_pool, test_wing_orders, test_wing,
+test_wing_replenish, test_turret_kernel, test_missile_kernel, test_mine_kernel, test_hit_resolver, test_damage, test_hit_scale,
+test_friendly_fire, test_destruction, test_respawn_in_play, test_standins, test_settings_schema, test_settings, test_main_scene,
+test_fx_pool (256/0/0 each); AC13's files (86/0/0 each); with `GUT_SLOW=1` test_tier_outcomes 3/0/0 (it loops both schedules itself), test_weapon_rows_battle 1/0/0 threaded and inline, test_brain_tolerance 1/0/0 (it pins inline itself), test_flight_parity_fight 1/0/0 threaded and inline. The main-scene smoke check printed no
+`ERROR:` line.
 
 ## Definition of done (M4)
 
