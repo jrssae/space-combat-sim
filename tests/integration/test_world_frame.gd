@@ -165,6 +165,30 @@ func test_a_rebase_inside_a_tick_draws_the_world_at_its_tick_pose_until_the_next
 			"and blends its own motion again from the next tick")
 
 
+func test_a_rebase_leaves_a_body_parked_for_the_tier_where_it_stands_and_settles_only_what_it_moved() -> void:
+	var moved := Node3D.new()
+	world.spawn(moved, UniversePos.new(10.0, 0.0, 0.0))
+	var parked := Node3D.new()
+	world.spawn(parked, UniversePos.new(20.0, 0.0, 0.0))
+	parked.set_meta(TierDirector.TIER_META, true)
+	parked.visible = false
+	var hidden := Node3D.new()
+	world.spawn(hidden, UniversePos.new(30.0, 0.0, 0.0))
+	hidden.visible = false
+	await get_tree().physics_frame
+	await get_tree().process_frame
+	world.rebase(Vector3(5000.0, 0.0, 0.0))
+	assert_almost_eq(moved.global_position.x, 10.0 - 5000.0, TOL_M, "a shiftable node moved")
+	assert_almost_eq(hidden.global_position.x, 30.0 - 5000.0, TOL_M, "a hidden one too (the pool's parked ships are re-placed on acquire)")
+	assert_almost_eq(parked.global_position.x, 20.0, TOL_M, "a body parked for the tier stays: its row moves with the core")
+	assert_eq(world.last_settle_resets, 1, "the reset reached the one visible node the rebase moved")
+	parked.remove_meta(TierDirector.TIER_META)
+	parked.visible = true
+	world.rebase(Vector3(-5000.0, 0.0, 0.0))
+	assert_almost_eq(parked.global_position.x, 20.0 + 5000.0, TOL_M, "back in play it moves with the rest")
+	assert_eq(world.last_settle_resets, 2, "both visible nodes reset")
+
+
 func test_spawn_places_node_and_registers_it() -> void:
 	world.origin = UniversePos.new(ONE_AU_M, 0.0, 0.0)
 	var node := Node3D.new()

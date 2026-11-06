@@ -25,7 +25,9 @@ extends Node3D
 ## the interpolation alone and resets it last in that tick (`SETTLE_PRIORITY`), after every node has moved, on every visible,
 ## interpolated shiftable node; so the frames until the next tick draw everything at its tick pose with no blend (bodies,
 ## bolts, debris, effects and the cameras alike: what the HUD projects is what is drawn, and view-relative positions keep their
-## motion), and nothing blends across the jump. The cost is at most one tick of stalled motion per rebase (AC22 (H)). Not
+## motion), and nothing blends across the jump. The reset walks the nodes the rebase moved, not the group again (M4-T21), and a
+## body parked for the low-attention tier is left where it stands: its row moves with the core and promotion places it. The
+## cost is at most one tick of stalled motion per rebase (AC22 (H)). Not
 ## resetting at all would draw every node sweeping by the offset over that tick: smooth on screen, but anything that mixes
 ## drawn and tick positions (the HUD's markers through the chase camera, the sky in the cockpit, nodes spawned in that tick) is
 ## kilometres off for that tick. Hidden (parked) nodes and silent voices are skipped: they are re-placed and reset when they
@@ -63,6 +65,8 @@ var last_settle_resets: int = 0
 var _settler: Settler = null
 var _settle_pending: bool = false
 var _settled_frame: int = -1
+# The nodes the last rebase moved: the end-of-tick reset walks this list, not the group again (M4-T21).
+var _shifted: Array[Node3D] = []
 
 
 ## Runs `WorldFrame._settle` last in every physics tick (an internal child, so World's children stay its world objects).
@@ -149,10 +153,15 @@ func spawn(node: Node3D, at: UniversePos, basis: Basis = Basis.IDENTITY, parent:
 func rebase(offset: Vector3) -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
 	var shift: Vector3 = -offset
+	_shifted.clear()
 	for member: Node in get_tree().get_nodes_in_group(SHIFTABLE_GROUP):
 		var node := member as Node3D
-		if node != null and is_ancestor_of(node):
-			node.global_translate(shift)
+		if node == null or not is_ancestor_of(node):
+			continue
+		if node.has_meta(TierDirector.TIER_META):
+			continue  # parked for the low-attention tier (M4-T21): its row moves with the core; promotion places the body
+		node.global_translate(shift)
+		_shifted.append(node)
 	ContactScan.shift_statics(shift, self)  # this world's scan rows with no node move with its nodes (M4-T09)
 	origin = origin.plus_local(offset)
 	rebases += 1
@@ -172,15 +181,15 @@ func _settle() -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only
 	_settle_pending = false
 	last_settle_resets = 0
-	for member: Node in get_tree().get_nodes_in_group(SHIFTABLE_GROUP):
-		var node := member as Node3D
-		if node == null or not node.is_visible_in_tree() or not node.is_physics_interpolated_and_enabled() \
-				or not is_ancestor_of(node):
+	for node: Node3D in _shifted:
+		if not is_instance_valid(node) or not node.is_inside_tree() or not node.is_visible_in_tree() \
+				or not node.is_physics_interpolated_and_enabled():
 			continue
 		var voice := node as AudioStreamPlayer3D
 		if voice == null or voice.playing:
 			node.reset_physics_interpolation()
 			last_settle_resets += 1
+	_shifted.clear()
 	last_rebase_us += Time.get_ticks_usec() - started_us
 
 
