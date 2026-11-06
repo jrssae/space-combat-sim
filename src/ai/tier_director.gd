@@ -38,6 +38,8 @@ var last_us: int = 0
 
 var _tiered_ships: Dictionary[int, Combatant] = {}
 var _tiered_capitals: Dictionary[int, CapitalStandin] = {}
+## The world's origin when each body was parked, so a body restored with no row left lands in the frame of now.
+var _park_origins: Dictionary[int, UniversePos] = {}
 var _types: Dictionary[ShipSpec, int] = {}
 var _types_core: Object = null
 var _ships_by_body: Dictionary[int, Combatant] = {}
@@ -172,6 +174,7 @@ func promote_all() -> void:
 		promotions += 1
 	_tiered_ships.clear()
 	_tiered_capitals.clear()
+	_park_origins.clear()
 
 
 ## A pooled ship leaves play while it is in the tier (`ShipPool.release`): its row goes with it.
@@ -181,6 +184,7 @@ func forget(c: Combatant) -> void:
 	var body_id: int = c.ship.get_instance_id()
 	if not _tiered_ships.erase(body_id):
 		return
+	_park_origins.erase(body_id)
 	if _sim != null and is_instance_valid(_sim) and _sim.core != null:
 		_sim.core.tier_take(body_id)
 	c.ship.remove_meta(TIER_META)
@@ -249,6 +253,7 @@ func _demote_ship(sim: SimCore, c: Combatant) -> bool:
 		sim.core.tier_set_hulk(body_id, true)
 	ships.park_in_tier(c)
 	_tiered_ships[body_id] = c
+	_park_origins[body_id] = _origin()
 	demotions += 1
 	return true
 
@@ -266,16 +271,21 @@ func _demote_capital(sim: SimCore, cap: CapitalStandin) -> bool:
 	sim.core.tier_set_control(body_id, cap.cruise_velocity, PackedFloat64Array(), 0.0, false)
 	cap.park_for_tier()
 	_tiered_capitals[body_id] = cap
+	_park_origins[body_id] = _origin()
 	demotions += 1
 	return true
 
 
-# The body back from its row: where the row says (or, with no row left, where the body was parked).
+# The body back from its row: where the row says (or, with no row left, where the body was parked, in today's frame).
 func _restore(body_id: int, state: Dictionary) -> void:
+	var parked_origin: UniversePos = _park_origins.get(body_id)
+	_park_origins.erase(body_id)
 	var c: Combatant = _tiered_ships.get(body_id)
 	if c != null:
 		_tiered_ships.erase(body_id)
 		if is_instance_valid(c.ship):
+			if state.is_empty():
+				_reframe(c.ship, parked_origin)
 			ships.return_from_tier(c, state)
 			if bool(state.get("hulk", false)):
 				_make_hulk(c)
@@ -285,9 +295,21 @@ func _restore(body_id: int, state: Dictionary) -> void:
 		_tiered_capitals.erase(body_id)
 		if is_instance_valid(cap):
 			if state.is_empty():
+				_reframe(cap, parked_origin)
 				cap.unpark_from_tier(cap.global_transform, cap.linear_velocity, cap.angular_velocity)
 			else:
 				cap.unpark_from_tier(Transform3D(state["basis"], state["position"]), state["velocity"], state["angular"])
+
+
+# A parked body skipped every rebase since it was parked; this puts it back at the same universe position in the frame of now.
+func _reframe(body: Node3D, parked_origin: UniversePos) -> void:
+	if parked_origin == null or world == null or not is_instance_valid(world):
+		return
+	body.global_position = world.universe_to_local(parked_origin.plus_local(body.global_position))
+
+
+func _origin() -> UniversePos:
+	return world.origin if world != null and is_instance_valid(world) else null
 
 
 # A promoted hulk: no pilot, no thrust, no assist, its trigger released; it coasts under Jolt as it drifted in the tier.
@@ -324,11 +346,13 @@ func _prune(sim: SimCore) -> void:
 		var cap: CapitalStandin = _tiered_capitals[body_id]
 		if not is_instance_valid(cap) or not cap.is_inside_tree():
 			_tiered_capitals.erase(body_id)
+			_park_origins.erase(body_id)
 			sim.core.tier_take(body_id)
 	for body_id: int in _tiered_ships.keys():
 		var c: Combatant = _tiered_ships[body_id]
 		if not is_instance_valid(c.ship) or not c.ship.is_inside_tree():
 			_tiered_ships.erase(body_id)
+			_park_origins.erase(body_id)
 			sim.core.tier_take(body_id)
 
 

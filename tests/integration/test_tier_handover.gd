@@ -493,6 +493,28 @@ func test_the_radius_at_zero_or_the_core_off_promotes_every_row() -> void:
 		Settings.set_value(&"perf_native_core", true)
 
 
+func test_with_the_core_gone_a_tiered_ship_comes_back_where_it_was_parked_in_the_current_frame() -> void:
+	if _skipped():
+		return
+	for schedule: StringName in SCHEDULES:
+		if schedule != SCHEDULES[0]:
+			await _rebuild()
+		_use_schedule(schedule)
+		var c: Combatant = _raider("ORPHAN", Vector3(300.0, 0.0, -15000.0), IdleBrain.new())
+		await _ticks(4)
+		assert_true(_parked(c.ship), "%s: a tier row" % schedule)
+		var parked_at: UniversePos = world.to_universe(c.ship.global_position)
+		world.rebase(Vector3(0.0, 0.0, -4000.0))  # the parked body is not shifted: its row is
+		await _ticks(1)
+		sim.get_parent().remove_child(sim)
+		sim.free()  # the rows are lost with the core
+		await _ticks(2)
+		assert_false(c.ship.is_tier_parked(), "%s: promoted when the core went" % schedule)
+		var error: float = world.to_universe(c.ship.global_position).offset_to(parked_at).length()
+		assert_lt(error, 0.01, "%s: back where it was parked, in the frame of now (off by %.1f m)" % [schedule, error])
+		await _rebuild()  # a core again for the next pass and the teardown
+
+
 func test_one_thread_and_six_give_the_same_rows_with_tier_rows_among_the_contacts() -> void:
 	if _skipped():
 		return
