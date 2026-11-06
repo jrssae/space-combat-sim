@@ -12,8 +12,9 @@ extends GutTest
 ## - An even fight (the maintainer's Q63): 12 Starfuries against 40 raiders at the same skill and temperament (regular,
 ##   balanced), the count the full-fidelity sweep found nearest an even fight (seeds 201 to 203: 32 raiders lose every
 ##   seed, 40 win one in three, 42 two in three, 44 every one; the Cycle log has the table), 30 s, seeds 1 to 3: for each
-##   side the hits it lands and the mean hull loss it takes, pooled over the three seeds, within 15 % (measured and reported
-##   pending: full fidelity differs from itself by 36 to 38 % a side between the two schedules on these seeds); the tier's win share
+##   side the hits it lands and the mean hull loss it takes, pooled over the three seeds, recorded against 15 % but not
+##   checked (the maintainer's Q64: full fidelity differs from itself by 36 to 38 % a side between the two schedules on these
+##   seeds); the tier's win share
 ##   (the side with the larger share of its hull left after 30 s) within one seed in three of full fidelity's, the spread the
 ##   sweep showed between neighbouring counts; each seed's hits within a factor of two.
 ## - A cruiser with 8 guns and 2 beams against 12 invulnerable fighters, 30 s: their hull loss (damage over hull) within 15 %.
@@ -214,9 +215,8 @@ func test_an_even_fight_in_the_tier_ends_as_it_does_at_full_fidelity_for_each_si
 			pool["full_wins"] += 1.0 if float(full["margin"]) > 0.0 else 0.0
 			pool["tier_wins"] += 1.0 if float(tier["margin"]) > 0.0 else 0.0
 		gut.p("%s seeds 1 to 3, the tier against full fidelity: %s" % [schedule, pool])
-		# The per-side bound is measured and reported pending, not asserted: on these seeds full fidelity differs from
-		# itself by 36 to 38 % a side between the two schedules, so three pooled fights cannot hold 15 % for the reference
-		# (task-t22-report.md, fix round 1, I1; for the controller).
+		# The per-side bound is a recorded measurement, not a check (the maintainer's Q64): on these seeds full fidelity
+		# differs from itself by 36 to 38 % a side between the two schedules, so three pooled fights cannot hold 15 %.
 		var misses: PackedStringArray = []
 		for side: String in ["a", "r"]:
 			var name: String = "the Starfuries" if side == "a" else "the raiders"
@@ -225,9 +225,8 @@ func test_an_even_fight_in_the_tier_ends_as_it_does_at_full_fidelity_for_each_si
 				var f: float = pool["full_%s_%s" % [what, side]]
 				if absf(t - f) > FIGHT_TOLERANCE * f:
 					misses.append("%s's %s %.3f against %.3f" % [name, "hits landed" if what == "hits" else "hull loss taken", t, f])
-		if not misses.is_empty():
-			pending("%s: per side over seeds 1 to 3, outside 15 %%: %s (below the reference's own spread; see the report)" % [
-					schedule, ", ".join(misses)])
+		gut.p("%s: per side over seeds 1 to 3 (recorded, Q64): %s" % [schedule,
+				"all within 15 %" if misses.is_empty() else "outside 15 %: " + ", ".join(misses)])
 		var share_full: float = pool["full_wins"] / float(SEEDS.size())
 		var share_tier: float = pool["tier_wins"] / float(SEEDS.size())
 		assert_lte(absf(share_tier - share_full), WIN_SHARE_SPREAD + 1e-6,
