@@ -2947,6 +2947,91 @@ src/combat/hit_resolver.gd, src/combat/ram_resolver.gd, src/targeting/targeting_
   `bolt_step_us`, `shots`, `expired`, `bolt_draws`, `event_columns`, `body_direct`, `watched_selections`,
   `selection_clears`; `ai` gains `hosted`.
 
+**The AI step on a worker thread, one tick behind (T24, Q53).**
+
+```
+native/src/brain_step.rs         the step as a job: Work (the brains, the hosted drivers, the batch's scratch), Snapshot (the rows,
+                                 the bolts, the rows by body, the touched set, the commands, the version), Params, Job, Done, run;
+                                 engine-free, under test_sim_core's guard
+native/src/threads.rs            + Runner (the core's pool behind an Arc, so a job off the main thread runs its pass on the same
+                                 threads with the same thresholds) and StepThread (one std thread, a job in, its result out,
+                                 joined on drop)
+native/src/brain.rs              ScsBrains launches and joins the job (launch_rows, launch_batch, join_step; think, think_batch and
+                                 think_batch_rows are launch plus join), queues what arrives while the brains are away, keeps the
+                                 readers' view
+native/src/row_commands.rs       snapshot_into and take_commands: the commands copied out at the launch and swapped in at the join,
+                                 less the ones released since
+src/perf/brain_batch.gd          flush by `sim_step`: join the previous tick's job and hand its results over, then launch this tick's
+src/ai/ai_pilot_driver.gd, src/ai/ai_pilot.gd   an answer that has not come yet is kept until it has; the reads one tick behind
+src/game/main.gd                 `physics_max_steps_per_frame` applied live (Engine.max_physics_steps_per_frame)
+scripts/input_latency.gd         the input latency probe: a pad press on the fake input source to the ship's first answer
+```
+
+- **Why, and what moved.** The maintainer asked that the AI never make the game loop or the player's input wait (Q53). The
+  brains' batch (the perception queries, the thinks, the avoidance, the hosted drivers' think-rate step, the commands
+  written into the rows: `ScsBrains.think_batch_rows`, and the plain `think_batch`) is the engine-free half of the tick, so
+  it became a job (`brain_step::run`) over a snapshot of the core's tables that runs on a worker thread. Everything the job
+  touches it owns: the brains and the batch's state (`Work`) move into the job and come back with its result, and the
+  rows, bolts, touched set and commands are copied (`clone_from` into kept buffers: the double buffer's back half) at
+  the launch. The main thread's tick keeps the sync points, the handover, the flight step (its forces are the tick's
+  engine write and must come from this tick's pose: a one-tick-old pose in the assist's feedback loop would lag every AI
+  ship's control), the cannon and bolt step (a shot from a one-tick-old muzzle would start metres behind a fast fighter),
+  the hit sweep, the ram phase and the weapon kernels (their results feed GDScript damage in the same tick). The brief's
+  "every kernel" was read as directional: the one that is the AI left; the kernels whose outputs are engine writes in the
+  same tick stayed, and the entry says so.
+- **The schedule** (`sim_step`, live). `inline`: the batch thinks and applies in one call at -9, today's order and bits
+  (the Q54 fallback and the reference every GDScript-against-native parity test pins). `delayed`: the batch is launched at
+  -9 of tick N and runs there and then, but its results are applied at -9 of tick N+1: the one-tick handover without a
+  thread, the threaded step's deterministic reference. `threaded` (the default): the same job runs on the step's thread
+  (`scs-sim-step`; its pass still across the core's rayon pool through a `Runner`) from -9 of tick N; at -9 of tick N+1
+  the main thread joins it. A join that finds the job still running waits for it and counts a miss (`core.step_misses`);
+  nothing is skipped. Every AI command therefore flies one tick (16.7 ms) after the rows it was decided on; the player's
+  command (sampled and applied at 0) is never behind.
+- **The handover** (`BrainBatch.flush`): join (or take the delayed result) -> the job's commands swapped into
+  `row_commands` less the bodies something else commanded since the launch (`release_command` records them) -> the
+  events to the drivers that joined the previous tick (the ship's first command from its row, a changed trigger, a target
+  to select, a rammer or route follower to read) -> the hits, liveness, wakes and newly hosted drivers that arrived
+  meanwhile applied -> the contexts, the frame and the relation matrix pushed -> the snapshot taken and this tick's job
+  launched. The counts (`ai.thinks_*`, `held`) roll every flush and are credited at the join, so a tick with no join reads
+  zero.
+- **While the brains are away.** `set_driver_hits`, `set_driver_live`, `wake_driver` and `host_driver` queue and apply at
+  the join (which is when today's hits reach the next think too). The hosted readers (`slot_output`, `slot_think_count`,
+  `driver_dt`, `slot_attack_target`, `driver_state`, `hosted_count`) read a view taken at the launch until `join_step`
+  hands the job over, whatever an early join brought back, so no reader sees a think before the tick that applies it.
+  `describe`, `path_visited` and `path_results` (the HUD roster reads `describe` every frame) answer from a per-slot cache
+  refreshed at every launch for the slots asked since the last one; a slot not asked before joins the job early. Anything
+  else (`unhost_driver`, `set_wing` outside the flush, `create`, `set_fault`, ...) joins first; every such join is counted
+  (`core.step_early_joins`). A driver keeps an answer that has not come (and the one before it) until it is ready, then
+  settles its clock from it; a pilot keeps the answer before a still-pending one whole, so a read in between lands it in
+  full, and a hosted pilot's reads prefer the host's newer thinks. The plain batch resets a driver's think clock when the
+  think queues, as the rows path does, and puts it back when the host declines.
+- **No engine call from the worker.** gdext without `experimental-threads` does not check the thread of an engine call,
+  so the guard is the source rule: `brain_step.rs` and `threads.rs` are under `test_sim_core`'s engine-free check (no
+  engine type, call, singleton or macro; imports from the allow-list only), the job holds no `Gd` by construction (plain
+  data in, plain data out), and `core.step_off_main` records that the joined job ran off the main thread.
+- **Determinism.** The job is a pure function of its snapshot and the brains it carries, so `threaded` equals `delayed`
+  tick for tick (rows, commands, hits, thinks; one thread and six) and the order of the results' application is the
+  batch's order on the main thread, as before. The delay itself changes outcomes against today: the seeded references
+  the Cycle log records are the delayed step's.
+- **The catch-up cap.** `physics_max_steps_per_frame` (3; Godot's default is 8) caps the ticks a frame may run to catch
+  up, so a tick slower than a frame lowers the simulation rate instead of the frame rate (refactor finding 15); applied
+  live by `Main` beside the jitter fix. Measured at `battle` 500: 3 had the best 1 % low and p99 frame against 2 and 8
+  (Cycle log, M4-T24).
+- **Measured** (Cycle log, M4-T24). Headless, the tick at `battle` 300 7.04 to 6.43 ms (p99 10.6 to 8.3), at 500 11.58 to
+  10.69 (p99 16.8 to 12.9), `typical` 2.20 to 1.82; the main thread keeps the snapshot copy and the launch (0.15 to 0.2 ms)
+  and the join (under 0.1 ms); the job runs 0.6 to 1.0 ms on its thread and no tick's join waited. Fullscreen, the average
+  FPS within run-to-run noise on both schedules (the AI step was 5 to 8 % of a tick that already keeps real time at 500);
+  the input latency two physics ticks on both (the pad is sampled at 60 Hz).
+- **Settings and console.** `sim_step` (`threaded`), `physics_max_steps_per_frame` (3). Provider `core` gains
+  `step_mode`, `step_launched`, `step_us` (the job's own run time), `step_wait_us` (how long the join waited), `join_us`,
+  `step_misses`, `step_early_joins`, `step_off_main`, `step_threads`.
+- **Tests.** `test_core_snapshot`: threaded equals delayed tick for tick on the seeded battle (rows, commands, hits,
+  thinks; the job off the main thread; 1 and 6 threads); inline flies the same first commands one tick earlier and the
+  shift changes the outcome; a job slower than the tick (`FAULT_SLOW`) misses every deadline, is waited for and skips
+  nothing; the schedule flips live; a reader while the brains are away answers from the launch (one early join, then the
+  cache). `test_sim_core` guards the job and the thread. The existing native-against-native pairings (T33, T35) hold under
+  the default; the GDScript-against-native ones pin `inline`.
+
 ### 17.16 Rocks and mines as static rows (T29)
 
 ```

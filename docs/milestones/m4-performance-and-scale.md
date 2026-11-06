@@ -1403,6 +1403,21 @@ done and T20 proceeds.
   FPS at `battle` 50 to 500 and `typical`) before and after; checkpoint 4 is the maintainer playing the build (H).
 - **Q54 (maintainer away):** keep the single-thread step selectable by a setting with every test run on both paths, so the threaded step can be switched off in one move; add the input-feel and one-tick-delay checks to the "M4 return checklist" in `docs/playtest.md`.
 - **From the refactor review (2026-11-05):** T35 makes the core own the state (finding 6), so this task's main-thread tick can stay small. For the single-thread fallback (Q54), cap `physics/common/max_physics_steps_per_frame` at 2 or 3 so a slow tick lowers the simulation rate instead of the frame rate (finding 15; the feel goes on the return checklist).
+- **Done (2026-11-05, worktree on `e094464`; Cycle log, "M4-T24"):** the AI step (the brains' batch: perception, thinks,
+  avoidance, the hosted drivers' think rate, the commands into the rows) is a job over a snapshot of the core's rows
+  (`native/src/brain_step.rs`, engine-free) that runs on a worker thread (`sim_step threaded`, the default), launched at -9
+  and joined at the next tick's -9, so every AI command lands one tick after the rows it was decided on and the frame and
+  the player's input never wait on it; `delayed` is the same handover on the main thread (the threaded step's reference,
+  bit for bit), `inline` today's same-tick step (Q54's fallback). A join that finds the job running waits and counts a
+  miss (0 in every measured run); nothing is skipped. The flight kernel, the cannon and bolt step, the sweeps and the weapon
+  kernels stay on the main thread (their outputs are engine writes in the same tick; the entry says why). The catch-up cap
+  `physics_max_steps_per_frame` is 3 (measured against 2 and 8). Headless tick at `battle` 300 7.04 to 6.43 ms (p99 10.6 to
+  8.3), at 500 11.58 to 10.69 (p99 16.8 to 12.9), `typical` 2.20 to 1.82; Q48's fullscreen table within run-to-run noise on
+  both schedules (the AI step was 5 to 8 % of the tick); the input latency 33 to 39 ms on both (two physics ticks: the
+  pad is sampled at 60 Hz and the pod yaw ramps). Tests: `test_core_snapshot` (threaded equals delayed tick for tick, 1
+  and 6 threads, the job off the main thread; inline one tick earlier; a slow job's misses waited for; the live flip; the
+  readers' view); the native-against-native pairings (T33, T35) hold under the default; the GDScript-against-native ones
+  pin inline. The look and feel items are on the return checklist (Q54).
 - **Architecture:** §17.13 and §15.3 (the tick order; a design-contract change, checkpoint 4).
 - **Without splats (2026-11-04, Q29):** `splat_pose_sync.gd` is removed by T31; the interpolation from snapshots for tier rows'
   proxies goes in `far_dots.gd`.
@@ -5424,6 +5439,129 @@ SMAA costs about 0.5 ms and 160 MB. The control for the scaled tables' "off is s
 SMAA 0.570, TAA 0.697 ms, against 0.993, 0.542, 0.619 and 1.251 with glow on. The gap is the glow: without a screen-space pass Godot
 composites it during the tonemap at the window's 6144x3456; with FXAA or SMAA at the 3D's size. The glow is on screen in both
 (the picture's mean is the same within 0.5 %, and 9 % lower with glow off).
+### M4-T24 (2026-11-05): the AI step on a worker thread, one tick behind
+
+Taken on `e094464` in a detached worktree with its own native build (`.cache/scs-agents/m4-t24/native-target`), the debug
+editor build with the library loaded, default settings (six core threads), seed 1, 5 s of warm-up and 20 s measured, both
+bench locks held and the headless runs pinned to cores 0 to 11 (load 0.8 to 1.6). T38 ran beside it in another worktree;
+the locks kept it off every measured run. Reports in `reports/perf/` (not committed): `M4-T24_{inline,threaded}_battle{300,500}`,
+`M4-T24_{inline,threaded}_typical58`, `M4-T24_threaded2_battle{300,500}` (the split counters), `M4-T24_{inline,threaded}_fs*`
+(the fullscreen checks), `M4-T24_inline_cap8_fs*` (the base's cap), `M4-T24_threaded_fs*_cap{2,8}`, `M4-T24_lat_*` (the
+latency probe), `M4-T24_smoke.log`. Report: `.superpowers/sdd/m4-performance-and-scale/task-t24-report.md`.
+
+**What moved** (architecture §17.13, "The AI step on a worker thread"): the brains' batch became a job over a snapshot of
+the core's rows, run on the step's worker thread and handed over one tick later. One setting, three schedules:
+
+| `sim_step` | where the batch runs | when its commands fly | what it is for |
+|---|---|---|---|
+| `threaded` (default) | the step's thread, from -9 of tick N | -1 of tick N+1 | Q53: the AI off the game loop and the input |
+| `delayed` | the main thread at -9 of tick N | -1 of tick N+1 | the threaded step's reference, bit for bit |
+| `inline` | the main thread at -9 of tick N | -1 of tick N | today's step (Q54's one-switch fallback) |
+
+What stayed on the main thread, and why: the flight kernel (its forces are the tick's engine write and need this tick's
+pose; a one-tick-old pose in the assist's feedback loop would lag every AI ship's control), the cannon and bolt step (a shot
+from a one-tick-old muzzle starts metres behind a fast fighter), the hit sweep, the ram phase and the weapon kernels (their
+results feed GDScript damage in the same tick). The brief's "every kernel" was taken as directional; the AI, which the
+maintainer named, left; these kernels together cost about 1.5 ms of the 10.7 ms tick at 500 and are the next candidates if
+their same-tick coupling is given up.
+
+**New seeded references (Q53).** The one-tick shift changes every seeded outcome against today: the delayed and threaded
+steps fly the same first commands as inline one tick later and diverge from there (`test_core_snapshot`). The seeded
+pairings that hold bit for bit under the default are native against native (T33's commands from rows, T35's hosted step,
+bolt rows, event columns, 1 against 6 threads: both arms one tick behind alike). The GDScript-against-native pairings
+(Q16's tolerance fights, the flight parity fight, T14's melee digest) run on `inline`, the step they were written for; the
+melee digest holds on every schedule (its eight fighters' thinks do not change their paths within the 4 s).
+
+**Before and after, headless** (medians in ms; "batch" is the main thread's part of the AI step: the snapshot copy and the
+launch, or inline the whole call; "job" the batch's own run on its thread; "misses" ticks whose join waited):
+
+| run | tick | p99 | batch us | job us | join us | misses | early joins (waited) |
+|---|---|---|---|---|---|---|---|
+| battle 300 inline | 7.04 | 10.62 | 442 | 287 | 0 | 0 | 0 |
+| battle 300 threaded | 6.43 / 6.41 | 8.27 / 7.72 | 165 / 149 | 671 / 631 | 37 / 36 | 0 | 56 (36) |
+| battle 500 inline | 11.58 | 16.80 | 758 | 518 | 0 | 0 | 0 |
+| battle 500 threaded | 10.69 / 10.68 | 12.92 / 13.09 | 225 / 212 | 939 / 995 | 78 / 76 | 0 | 87 (41) |
+| typical 58 inline | 2.20 | 2.94 | 182 | 105 | 0 | 0 | 0 |
+| typical 58 threaded | 1.82 | 2.87 | 101 | 455 | 12 | 0 | 17 |
+
+(Two threaded runs each at 300 and 500: the second with the counters split.) The tick fell by 0.6 ms at 300 and 0.9 at
+500, the p99 by 2.3 and 3.9: the main thread no longer carries the batch's 0.3 to 0.5 ms of thinks, and the ticks that
+used to hold the slow thinks no longer do. What the main thread keeps of the AI step is the snapshot copy and the launch
+(0.15 to 0.2 ms at 300 to 500) and the join (less than 0.1 ms). The job itself runs longer on its own thread (0.63 to 1.0
+ms against 0.29 to 0.52 inline), since it shares the cores with the main thread's tick, and it is still done long before
+its deadline: no tick's join ever waited. The early joins are a new pilot's slot (`create`, `bind_ship`, the context) and
+a ship leaving (`unhost_driver`) in the respawns; about half of them found the job still running and waited (inside the
+same tick, right after the launch). The inline step costs the snapshot copy over the base (about 0.15 to 0.25 ms a tick:
+`batch us` minus `job us`); it is the fallback, not the default.
+
+**The fullscreen check** (Q48's row; native 4K window, the 3D at 1 080 lines, vsync off, chase camera, 20 s after 8 s of
+warm-up, under the GPU lock; the 1 % low spreads by up to 1.8 times between runs, as report P2 found):
+
+| run | average FPS | 1 % low FPS | p99 frame ms | frame mean ms | sim speed | GPU ms | draw calls |
+|---|---|---|---|---|---|---|---|
+| battle 50 inline | 314.7 | 75.6 | 8.61 | 3.18 | 1.00 | 1.56 | 127 |
+| battle 50 threaded | 312.8 | 72.0 | 8.81 | 3.20 | 1.00 | 1.56 | 127 |
+| battle 100 inline | 240.8 | 47.7 | 16.63 | 4.15 | 1.00 | 1.58 | 119 |
+| battle 100 threaded | 270.6 | 69.7 | 10.30 | 3.69 | 1.00 | 1.57 | 120 |
+| battle 200 inline | 186.0 | 74.1 | 12.45 | 5.38 | 1.00 | 1.60 | 117 |
+| battle 200 threaded | 177.9 | 70.6 | 13.32 | 5.62 | 1.00 | 1.60 | 117 |
+| battle 300 inline, cap 8 (the base's) | 126.7 | 55.4 | 16.87 | 7.90 | 1.00 | 1.63 | 110 |
+| battle 300 inline | 131.6 | 57.5 | 16.45 | 7.60 | 1.00 | 1.63 | 110 |
+| battle 300 threaded | 136.8 | 43.9 | 17.61 | 7.31 | 1.00 | 1.63 | 110 |
+| battle 500 inline, cap 8 (the base's) | 53.9 | 22.9 | 37.48 | 18.57 | 1.00 | 1.70 | 108 |
+| battle 500 inline | 57.1 | 28.3 | 31.94 | 17.50 | 1.00 | 1.70 | 108 |
+| battle 500 threaded | 57.7 | 29.3 | 31.10 | 17.32 | 1.00 | 1.71 | 108 |
+| typical 58 inline | 286.1 | 53.5 | 13.10 | 3.50 | 1.00 | 1.56 | 131 |
+| typical 58 threaded | 286.4 | 54.8 | 13.97 | 3.49 | 1.00 | 1.56 | 133 |
+
+The frame rates are far above report P2's and T35's (300: 47 FPS, 500: 16) because the base already carries T35 and T36
+(the tick halved, the frame's process work from 25 to 9 ms at 500): the simulation keeps real time at every count and a
+frame carries about one tick, so the catch-up spiral P2 described (2.7 ticks a frame at 200) no longer happens, and the
+schedule changes the average FPS by less than the run-to-run noise. The frame at 500 is now the main thread's tick (10.7
+ms) plus the frame's own work; the AI step was 5 to 8 % of the tick, and that is what moving it could gain here. What
+the threaded step gives the player is the guarantee Q53 asked for: the frame and the input never wait on a think, whatever
+the AI costs later (T21's tier rows join the worker's pass from the start).
+
+**The catch-up cap** (`physics_max_steps_per_frame`, threaded): at 300, 2: 139.5 FPS (1 % low 43.2, p99 17.1 ms); 3: 136.8
+(43.9, 17.6); 8: 133.1 (39.0, 19.5). At 500, 2: 54.9 (23.5, 37.4); 3: 57.7 (29.3, 31.1); 8: 52.7 (22.1, 41.6). The
+simulation kept real time on every cap (the tick is well under a frame), so the cap only trims the catch-up bursts after a
+slow frame; 3 had the best 1 % low and p99 at 500 and is the default. The feel when the tick does fall behind (the
+simulation slowing instead of the frame stuttering) is on the return checklist.
+
+**Input latency** (`scripts/input_latency.gd`: a full pitch-up on the fake input source at a random point of a frame, the
+time to the first frame in which the ship's angular velocity has changed, 20 presses a second apart at `battle` 300 and 500,
+vsync off, fullscreen):
+
+| run | latency ms mean | median | worst | best | frames mean | frame ms mean (FPS) |
+|---|---|---|---|---|---|---|
+| battle 300 inline | 34.5 | 34.2 | 55.7 | 23.6 | 3.50 | 8.70 (115) |
+| battle 300 threaded | 33.2 | 32.3 | 67.6 | 20.4 | 4.15 | 6.97 (144) |
+| battle 500 inline | 39.1 | 34.6 | 77.2 | 27.0 | 1.45 | 23.18 (43) |
+| battle 500 threaded | 35.9 | 33.2 | 77.6 | 27.2 | 1.80 | 17.63 (57) |
+
+The latency is two physics ticks on every schedule: the pad is sampled by `Main` at 60 Hz (up to 16.7 ms after the press)
+and the pod-yaw command ramps, so the angular velocity crosses the probe's threshold on the second tick. The player's
+command never goes through the AI step on any schedule, so the schedules measure the same within noise; what changed is
+the frame time around it (23 to 18 ms at 500 in these runs). The vsync-on runs are not usable: the unattended fullscreen
+window with vsync on ran at 1 FPS (the compositor did not present it), so the feel with vsync on is the return checklist's.
+
+**Tests.** Focused GUT runs on both schedules (the threaded default, and `inline` through the agent's `user://settings.cfg`),
+the 144 files of the brief's grep plus `test_fighter_melee` and AC13's files, the slow files with `GUT_SLOW=1`, in six
+chunks a schedule: threaded 263 + 268 + 413 + 412 + 361 + 8 passing, inline 264 + 268 + 413 + 412 + 361 + 8, 0 pending,
+and one failing case in the first threaded chunk: AC9's rookie reaction (`test_ai_skill`) read 0.617 s against its 0.6 s
+bound, exactly the step's tick (Q53); the bound allows the tick off the inline schedule now and the file is green on both
+(the report lists the chunks' totals and files). `cargo fmt --check` and `cargo clippy --release -- -D warnings` clean on the
+task's files (`native_probe.rs`'s pre-existing `redundant_field_names` remains). The smoke run (`--console-strict`,
+`wait 30; state; quit`) ran clean.
+
+**What a reader sees differently.** Every AI ship's command lands one tick after the rows it was decided on: the dodge, the
+turn to a target and the trigger all start 16.7 ms later than today (the return checklist). The schedule flips live
+(`set settings.sim_step inline`). Nothing else: the bolts, the hits, the rams and the player's ship are the same code.
+
+**What remains of the tick at 500** (10.7 ms, threaded): the flight stage (the batch's per-ship gather in GDScript and the
+native step with its force application), the hit stage (the native grids and the GDScript narrow phase), physics (Jolt and
+the body sync), the ram stage, the sync points, and the AI step's main-thread share (the snapshot copy, the launch, the
+join: about 0.3 ms). The levers T35 named stand: the gather from rows, a native narrow phase.
 
 ## Definition of done (M4)
 

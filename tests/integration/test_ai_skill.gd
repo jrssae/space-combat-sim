@@ -128,7 +128,9 @@ func test_a_rookie_reacts_to_a_hit_within_0_6_s() -> void:
 	var reaction: float = SimClock.now() - hit_s
 	gut.p("rookie: evading %.3f s after the hit" % reaction)
 	assert_eq(pilot.current.id, &"evade")
-	assert_lte(reaction, 0.6 + 1e-6, "within 0.6 s (AC9)")
+	# The AI step is one tick behind on the delayed and threaded schedules (M4-T24, Q53): the evade lands 16.7 ms later.
+	var delay_s: float = 0.0 if BrainBatch.step_mode() == BrainBatch.STEP_INLINE else 1.0 / float(Engine.physics_ticks_per_second)
+	assert_lte(reaction, 0.6 + delay_s + 1e-6, "within 0.6 s (AC9), plus the step's tick on the threaded schedule")
 	assert_gt(reaction, 0.5, "slower than a regular's 0.25 s")
 
 

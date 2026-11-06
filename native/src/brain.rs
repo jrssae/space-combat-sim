@@ -120,7 +120,8 @@ pub struct ScsBrains {
     describe_cache: HashMap<usize, VarDictionary>,
     path_cache: HashMap<usize, (PackedInt32Array, VarArray)>,
     // Readouts: panicked passes, the last job's run time and the time the main thread waited for it, the deadlines
-    // missed (a join that had to wait), the joins forced early by a reader, and whether the last job ran off the main thread.
+    // missed (the tick's join had to wait), the joins forced early by a reader or writer (and how many of those waited),
+    // and whether the last job ran off the main thread.
     pass_failures: i64,
     // The last joined job's output, until `join_step` (or the inline wrappers) hand it over: a join forced early keeps it.
     last_out: Option<Vec<f64>>,
@@ -128,6 +129,8 @@ pub struct ScsBrains {
     wait_us: i64,
     misses: i64,
     early_joins: i64,
+    early_waits: i64,
+    tick_join: bool,
     off_main: bool,
     warned: bool,
 }
@@ -832,7 +835,9 @@ impl ScsBrains {
     /// when no job was out). `rows_events` and `hosted_item_slots` then describe it.
     #[func]
     fn join_step(&mut self) -> PackedFloat64Array {
+        self.tick_join = true;
         self.join();
+        self.tick_join = false;
         self.handed_over = true;
         PackedFloat64Array::from(self.last_out.take().unwrap_or_default().as_slice())
     }
@@ -854,7 +859,8 @@ impl ScsBrains {
         self.wait_us
     }
 
-    /// Joins that found the job still running (waited for, never skipped), and joins a reader forced before the tick's.
+    /// Ticks whose join found the job still running (waited for, never skipped); joins a reader or writer forced before
+    /// the tick's, and how many of those had to wait.
     #[func]
     fn deadline_misses(&self) -> i64 {
         self.misses
@@ -863,6 +869,11 @@ impl ScsBrains {
     #[func]
     fn early_joins(&self) -> i64 {
         self.early_joins
+    }
+
+    #[func]
+    fn early_waits(&self) -> i64 {
+        self.early_waits
     }
 
     /// Whether the last joined job ran off the main thread.
@@ -1619,7 +1630,11 @@ impl ScsBrains {
                     if ready.is_some() {
                         ready
                     } else {
-                        self.misses += 1;
+                        if self.tick_join {
+                            self.misses += 1;
+                        } else {
+                            self.early_waits += 1;
+                        }
                         step.take()
                     }
                 }
