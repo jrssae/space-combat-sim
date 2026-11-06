@@ -93,6 +93,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q59 | Anti-aliasing, FSR 4 and upscaling (2026-11-05) | **Add tasks for anti-aliasing and FSR 4, and review FSR upscaling from below 1080 lines to as much as 4K, without frame generation** (it adds a sense of lag). The review (controller, the same day) found a benefit, so T38 builds anti-aliasing and FSR upscaling with Godot's built-in FSR 2.2 and FSR 1.0 and supersedes T26; T39 studies FSR 4, which Godot 4.7 does not ship |
 | Q60 | FSR 4 and FSR 3 (2026-11-05) | **Skip FSR 4** (T39 not needed). **Implement what Godot supports** as two tasks: T38 anti-aliasing, T40 FSR 1.0 and FSR 2.2 upscaling. No maintained FSR 3 plugin for Godot 4 was found; FSR 3's addition over 2.2 is mostly frame generation, which Q59 excludes, so FSR 3.1's upscaler stays a fallback only if T40 finds FSR 2.2's ghosting unacceptable |
 | Q61 | T24's scope (2026-11-05) | **Accept the AI-only worker thread.** The AI step runs on the worker; flight, bolts, the hit sweep, the ram phase and the weapons stay on the main thread (about 1.5 ms of the 10.7 ms tick at `battle` 500) because they write to the engine in the same tick, and moving them would put the player's own ship a tick behind. Recorded as an accepted deviation from T24's plan; revisit only if the main thread binds later |
+| Q62 | The limit sweep (2026-11-05) | **T25 measures `battle` 500 to 1 000 in steps of 100**, average FPS and 1 % low FPS for each (fullscreen, defaults, two runs), so the maintainer can see the limits; listed in T25's section |
 
 ## The budget ("good game performance", Q5)
 
@@ -1432,6 +1433,10 @@ done and T20 proceeds.
 - **Measures:** `scripts/bench.sh m4_p3` on every layout, `battle` to 1 000 (the sweep's N list extended; the 1 000 run with the
   profile's 15 % and 20 % capital share), the fullscreen check at `typical`, at the battle's headline, at 500 and at 1 000, the
   release export once, `scripts/run_tests.sh` once (Q10).
+- **The limit sweep (Q62):** the fullscreen check at `battle` 500, 600, 700, 800, 900 and 1 000 on the defaults (threaded step,
+  the 3D at 1 080 lines, vsync off, after the warm-up), two runs each; one table in report P3 with average FPS and 1 % low FPS
+  per count, plus sim speed, p99 frame ms and the headless tick median at the same counts, so the maintainer sees where the
+  frame crosses 60 FPS and the 30 FPS floor and where the simulation falls behind real time.
 - **Done when:** every number is in the entry in the form of the final measurements above, every behaviour change and every
   tolerated difference is listed, the suite is green locally and on CI, and the maintainer is asked to confirm M4.
 - **Expected:** `typical` under 4 ms and 60 FPS with headroom (85 %); battle 500 in the world, 100 to 150 fighters and about 20
