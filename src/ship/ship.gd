@@ -150,6 +150,8 @@ var _flown_tick: int = -1
 var _prepared_tick: int = -1
 # The ship flies its command from the core's row (M4-T33).
 var _row_command: bool = false
+## A disabled hulk (M4-T21, M12 groundwork): no pilot, no thrust, no assist; it coasts on its last motion.
+var hulk: bool = false
 # The flight batch flies this ship and owns its tick (M4-T35): this node's `_physics_process` is off until the batch gives it back.
 var _batch_owned: bool = false
 
@@ -254,7 +256,7 @@ func _physics_process(delta: float) -> void:
 	if _model != null:
 		var fuel: FuelTank = get_fuel_tank()
 		_output = _model.compute(_flight, to_body * linear_velocity, to_body * angular_velocity, to_body * env_accel,
-				_assist_on, delta, not fuel.is_empty())
+				_assist_on and not hulk, delta, not fuel.is_empty())
 		fuel.draw(_output.mass_flow_kg_s, delta)
 		# Inertia grows with speed: the same thrust gives less acceleration the faster the ship goes (SpeedGovernor).
 		var gain: float = SpeedGovernor.thrust_gain(linear_velocity.length(), spec.speed_limit_mps)
@@ -267,7 +269,7 @@ func _physics_process(delta: float) -> void:
 		apply_central_force(rcs_force)
 		_applied_force += rcs_force
 		apply_torque(b * _output.rcs_torque_b)
-		if _assist_on:
+		if _assist_on and not hulk:
 			var net: Vector3 = b * (_output.pod_force_b + _output.rcs_force_b) * gain
 			var cap: Vector3 = SpeedGovernor.assist_cap_correction(net, linear_velocity, spec.assist_speed_max_mps)
 			apply_central_force(cap)
@@ -388,6 +390,59 @@ func reset_to(xform: Transform3D) -> void:
 	reset_physics_interpolation()
 
 
+## Parks the body for the low-attention tier (M4-T21): hidden and not processing, so it leaves Jolt, the scan and every
+## per-ship pass, while its name, pilot, hull and commands stay. The tier row carries its motion from here.
+func park_for_tier() -> void:
+	set_meta(&"_scs_tier_row", true)
+	visible = false
+	process_mode = Node.PROCESS_MODE_DISABLED
+
+
+## Brings the body back from its tier row exactly where the row left it: the pose, the velocities and the assist's state;
+## the row command, when it flies one, is still in the core.
+func unpark_from_tier(xform: Transform3D, velocity: Vector3, spin: Vector3, pod_yaw: float) -> void:
+	if has_meta(&"_scs_tier_row"):
+		remove_meta(&"_scs_tier_row")
+	process_mode = Node.PROCESS_MODE_INHERIT
+	visible = true
+	global_transform = xform
+	linear_velocity = velocity
+	angular_velocity = spin
+	set_assist_state(pod_yaw)
+	_batch_tick = -1
+	_output_tick = -1
+	reset_physics_interpolation()
+
+
+## Whether the body is parked for the tier now.
+func is_tier_parked() -> bool:
+	return has_meta(&"_scs_tier_row")
+
+
+## The assist's smoothed pod-yaw command as the path that flew the last tick holds it.
+func assist_state() -> float:
+	if _native_last and _batch != null and is_instance_valid(_batch):
+		return _batch.assist_state(self)
+	return _model.assist.pod_yaw_smoothed if _model != null else 0.0
+
+
+## Sets the assist's smoothed pod-yaw command on both paths, so whichever flies next carries on from it.
+func set_assist_state(value: float) -> void:
+	if _model != null:
+		_model.assist.pod_yaw_smoothed = value
+	if _batch != null and is_instance_valid(_batch):
+		_batch.set_assist_state(self, value)
+
+
+## Makes the ship a drifting hulk (M4-T21): its command cleared (and its row command released), no assist from now on.
+func set_hulk(on: bool) -> void:
+	if on == hulk:
+		return
+	hulk = on
+	if on:
+		set_flight_command(FlightCommand.new())
+
+
 ## Switches the running lights.
 func set_running_lights(on: bool) -> void:
 	if on == running_lights:
@@ -439,7 +494,8 @@ func batch_gather(batch: FlightBatch, row: int, frame: int, delta: float, fuel_u
 		targeting.apply(_combat)  # this node's tick is off (M4-T35): the edges land here, before the World's rebase at 0
 	_prepare_command(delta, global_basis.transposed())
 	_fuel.unlimited = fuel_unlimited
-	FlightBatch.pack_command(_flight, _environment_accel(), _assist_on, not _fuel.is_empty(), scalars, vectors, flags, row)
+	FlightBatch.pack_command(_flight, _environment_accel(), _assist_on and not hulk, not _fuel.is_empty(), scalars, vectors, flags,
+			row)
 	if not _native_last:
 		# Onto the batch: it carries on from the assist state this node's model held.
 		if _model != null:

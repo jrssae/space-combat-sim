@@ -33,6 +33,11 @@ func uninstall() -> void:
 		world.rebased.disconnect(_on_rebased)
 
 
+## Where the source is now, World-local (the tier's copy of the pull, M4-T21).
+func local_position() -> Vector3:
+	return _local
+
+
 ## The pull at a World-local position, m/s^2.
 func accel(local_pos: Vector3) -> Vector3:
 	var to_source: Vector3 = _local - local_pos

@@ -132,13 +132,37 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	return combatant
 
 
-## Parks a ship again (no effects; destruction effects are `DestructionDirector`'s). Ignores ships not in use.
+## Parks a ship again (no effects; destruction effects are `DestructionDirector`'s). Ignores ships not in use. A ship in
+## the low-attention tier (M4-T21) takes its row with it.
 func release(combatant: Combatant) -> void:
 	if combatant == null or not _in_use.has(combatant):
 		return
+	var tier: TierDirector = TierDirector.current()
+	if tier != null:
+		tier.forget(combatant)
 	_in_use.erase(combatant)
 	_park(combatant)
 	_free.append(combatant)
+
+
+## Parks a ship in use for the low-attention tier (M4-T21): its body leaves Jolt and the processing while its row flies; it
+## stays in use, with its name, pilot and hull.
+func park_in_tier(combatant: Combatant) -> void:
+	if combatant != null and _in_use.has(combatant):
+		combatant.ship.park_for_tier()
+
+
+## Brings a ship back from its tier row's `state` (`position`, `basis`, `velocity`, `angular`, `pod_yaw`; empty when the row
+## is gone: the body comes back where it was parked).
+func return_from_tier(combatant: Combatant, state: Dictionary) -> void:
+	if combatant == null or not _in_use.has(combatant):
+		return
+	var ship: Ship = combatant.ship
+	if state.is_empty():
+		ship.unpark_from_tier(ship.global_transform, ship.linear_velocity, ship.angular_velocity, ship.assist_state())
+		return
+	ship.unpark_from_tier(Transform3D(state["basis"], state["position"]), state["velocity"], state["angular"],
+			float(state["pod_yaw"]))
 
 
 ## Ships currently in the world: every type, or only those of `type`.

@@ -107,6 +107,31 @@ func bay_position() -> Vector3:
 	return global_position - global_basis.y * (float(spec["height"]) * 0.5 + BAY_DROP_M)
 
 
+## Parks the body for the low-attention tier (M4-T21): hidden and not processing, its turrets and emitters with it, so it
+## leaves Jolt, the scan and the weapon rows while its tier row cruises on.
+func park_for_tier() -> void:
+	set_meta(&"_scs_tier_row", true)
+	visible = false
+	process_mode = Node.PROCESS_MODE_DISABLED
+
+
+## Brings the body back from its tier row exactly where the row left it.
+func unpark_from_tier(xform: Transform3D, velocity: Vector3, spin: Vector3) -> void:
+	if has_meta(&"_scs_tier_row"):
+		remove_meta(&"_scs_tier_row")
+	process_mode = Node.PROCESS_MODE_INHERIT
+	visible = true
+	global_transform = xform
+	linear_velocity = velocity
+	angular_velocity = spin
+	reset_physics_interpolation()
+
+
+## Whether the body is parked for the tier now.
+func is_tier_parked() -> bool:
+	return has_meta(&"_scs_tier_row")
+
+
 ## The force the engines apply this tick: back toward the cruise velocity, plus what holds off the environment's pull.
 func cruise_force(delta: float) -> Vector3:
 	var wanted: Vector3 = (cruise_velocity - linear_velocity) / maxf(CRUISE_RESPONSE_S, delta)

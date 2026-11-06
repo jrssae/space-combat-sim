@@ -18,9 +18,10 @@ extends Node3D
 ## `last_us` is the stand-ins' own cost in the latest tick (wall clock, profiling only); it sits inside the `flight` stage.
 ## `part_us` splits it by part (`PART_NAMES`), summed since `restart_weapon_counters`, with `ticks` the ticks it covers.
 
-enum Count { FIGHTERS_NEAR, FIGHTERS_FAR, CAPITALS, TURRETS, INTERCEPTORS, BEAMS, MISSILES, MINES, ASTEROIDS, LAUNCHES, SIDES }
+enum Count { FIGHTERS_NEAR, FIGHTERS_FAR, CAPITALS, TURRETS, INTERCEPTORS, BEAMS, MISSILES, MINES, ASTEROIDS, LAUNCHES, SIDES,
+		TIER_FIGHTERS, TIER_CAPITALS }
 const COUNT_NAMES: Array[StringName] = [&"fighters_near", &"fighters_far", &"capitals", &"turrets", &"interceptors", &"beams",
-		&"missiles", &"mines", &"asteroids", &"launches", &"sides"]
+		&"missiles", &"mines", &"asteroids", &"launches", &"sides", &"tier_fighters", &"tier_capitals"]
 
 const PRIORITY: int = -5
 ## Fighters within this of the player are the near set (the tier's radius to come, M4-T21), m.
@@ -146,7 +147,7 @@ func step(delta: float, now_s: float, scan: ContactScan) -> void:
 	var gun_index: int = 0
 	_plan_launches(now_s)
 	for cap: CapitalStandin in _capitals:
-		if not is_instance_valid(cap) or not cap.is_inside_tree():
+		if not _flying(cap):
 			continue
 		cap.step_engines(delta)
 		for gun: TurretStandin in cap.guns():
@@ -171,7 +172,7 @@ func step(delta: float, now_s: float, scan: ContactScan) -> void:
 func _finish(now_s: float, mark_us: int, started_us: int) -> void:
 	var launched: int = 0
 	for cap: CapitalStandin in _capitals:
-		if is_instance_valid(cap) and cap.is_carrier() and launcher.is_valid() and now_s >= float(_next_launch.get(cap, INF)):
+		if _flying(cap) and cap.is_carrier() and launcher.is_valid() and now_s >= float(_next_launch.get(cap, INF)):
 			_next_launch[cap] = float(_next_launch[cap]) + LAUNCH_PERIOD_S
 			if bool(launcher.call(cap)):
 				launched += 1
@@ -189,7 +190,7 @@ func _step_native(native: NativeWeapons, delta: float, now_s: float, started_us:
 	var mark_us: int = _mark(Part.GATHER, started_us)
 	_plan_launches(now_s)
 	for cap: CapitalStandin in _capitals:
-		if is_instance_valid(cap) and cap.is_inside_tree():
+		if _flying(cap):
 			cap.step_engines(delta)
 	var intercept_ticks: int = maxi(1, roundi(TurretStandin.INTERCEPT_INTERVAL_S * Engine.physics_ticks_per_second))
 	var beam_ticks: int = maxi(1, roundi(BeamStandin.INTERVAL_S * Engine.physics_ticks_per_second))
@@ -404,6 +405,16 @@ func capitals() -> Array[CapitalStandin]:
 	return _capitals
 
 
+## The moon, or null without one.
+func gravity() -> GravityStandin:
+	return _gravity if _gravity != null and is_instance_valid(_gravity) else null
+
+
+# A capital in play on its body: not freed, in the tree and not parked in the low-attention tier (M4-T21).
+static func _flying(cap: CapitalStandin) -> bool:
+	return is_instance_valid(cap) and cap.is_inside_tree() and cap.can_process()
+
+
 func asteroid_count() -> int:
 	return _field.count() if _field != null and is_instance_valid(_field) else 0
 
@@ -524,7 +535,7 @@ func _step_interceptors() -> void:
 	var due_at := PackedVector3Array()
 	var index: int = 0
 	for cap: CapitalStandin in _capitals:
-		if not is_instance_valid(cap) or not cap.is_inside_tree():
+		if not _flying(cap):
 			continue
 		for icp: TurretStandin in cap.interceptors():
 			index += 1
@@ -563,7 +574,7 @@ func _step_beams(now_s: float) -> void:
 	var beam_ticks: int = maxi(1, roundi(BeamStandin.INTERVAL_S * Engine.physics_ticks_per_second))
 	var index: int = 0
 	for cap: CapitalStandin in _capitals:
-		if not is_instance_valid(cap) or not cap.is_inside_tree():
+		if not _flying(cap):
 			continue
 		for emitter: BeamStandin in cap.beams():
 			index += 1
@@ -589,7 +600,7 @@ func _launch_missiles(now_s: float) -> void:
 		var cap: CapitalStandin = _capitals[_capital_turn % _capitals.size()]
 		_capital_turn += 1
 		tried += 1
-		if not is_instance_valid(cap) or not cap.is_inside_tree():
+		if not _flying(cap):
 			continue
 		var target: Node3D = _strike_target(cap)
 		if target == null:
@@ -666,13 +677,18 @@ func _count(launched: int) -> void:
 	counts[Count.MINES] = _mines.alive_count() if _mines != null and is_instance_valid(_mines) else 0
 	var near: int = 0
 	var far: int = 0
+	var tier: TierDirector = TierDirector.current()
 	if ships != null and player != null and is_instance_valid(player):
 		var centre: Vector3 = player.global_position
 		var reach_sq: float = NEAR_RADIUS_M * NEAR_RADIUS_M
 		for c: Combatant in ships.alive():
-			if c.ship.global_position.distance_squared_to(centre) <= reach_sq:
+			if c.ship.is_tier_parked():
+				far += 1  # a tier row (M4-T21): far by definition, its parked node's place is stale
+			elif c.ship.global_position.distance_squared_to(centre) <= reach_sq:
 				near += 1
 			else:
 				far += 1
 	counts[Count.FIGHTERS_NEAR] = near
 	counts[Count.FIGHTERS_FAR] = far
+	counts[Count.TIER_FIGHTERS] = tier.tier_fighters() if tier != null else 0
+	counts[Count.TIER_CAPITALS] = tier.tier_capitals() if tier != null else 0

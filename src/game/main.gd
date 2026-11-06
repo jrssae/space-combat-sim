@@ -280,6 +280,7 @@ func _setup_perf() -> void:
 	standins.ships = ships
 	standins.player = ship
 	world.add_child(standins)
+	TierDirector.attach(world, ships, standins)  # the low-attention tier (M4-T21): far ships as core rows
 	perf_probe = PerfProbe.new()
 	perf_probe.name = "PerfProbe"
 	perf_probe.process_mode = Node.PROCESS_MODE_PAUSABLE

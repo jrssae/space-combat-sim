@@ -16,14 +16,14 @@ const END_PRIORITY: int = 2_000_000
 ## The battle's stage and per-entity counts (M4-T07) follow the first nineteen, in `StandinDirector.Count` order.
 enum Field { TICK, AI, SCAN, THINK, FLIGHT, REBASE, TARGETING, RESOLVERS, HIT, RAM, LATE, PHYSICS, SYNC, OTHER, SHIPS, BOLTS,
 		PAIRS, STAGES_ON, SYNC_ON, STANDINS, FIGHTERS_NEAR, FIGHTERS_FAR, CAPITALS, TURRETS, INTERCEPTORS, BEAMS, MISSILES, MINES,
-		ASTEROIDS, LAUNCHES, SIDES }
+		ASTEROIDS, LAUNCHES, SIDES, TIER_FIGHTERS, TIER_CAPITALS }
 const FIELD_NAMES: Array[StringName] = [&"tick", &"ai", &"scan", &"think", &"flight", &"rebase", &"targeting", &"resolvers",
 		&"hit", &"ram", &"late", &"physics", &"sync", &"other", &"ships", &"bolts", &"pairs", &"stages_on", &"sync_on",
 		&"standins", &"fighters_near", &"fighters_far", &"capitals", &"turrets", &"interceptors", &"beams", &"missiles", &"mines",
-		&"asteroids", &"launches", &"sides"]
-## The per-entity counts (M4-T07): what a battle holds, beside the ship count.
-const ENTITY_FIELDS: Array[StringName] = [&"fighters_near", &"fighters_far", &"capitals", &"turrets", &"interceptors", &"beams",
-		&"missiles", &"mines", &"bolts", &"asteroids", &"launches", &"sides"]
+		&"asteroids", &"launches", &"sides", &"tier_fighters", &"tier_capitals"]
+## The per-entity counts (M4-T07): what a battle holds, beside the ship count; M4-T21 adds the tier's rows.
+const ENTITY_FIELDS: Array[StringName] = [&"fighters_near", &"fighters_far", &"tier_fighters", &"capitals", &"tier_capitals",
+		&"turrets", &"interceptors", &"beams", &"missiles", &"mines", &"bolts", &"asteroids", &"launches", &"sides"]
 
 enum State { IDLE, SCRIPT, POST }
 

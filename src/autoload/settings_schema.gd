@@ -149,6 +149,11 @@ const ENTRIES: Dictionary = {
 	# M4-T38
 	&"anti_aliasing": {"type": TYPE_ENUM, "default": &"smaa", "choices": [&"off", &"fxaa", &"smaa", &"msaa_2x", &"msaa_4x", &"taa"],
 		"doc": "Anti-aliasing of the 3D view (M4-T38): off, fxaa, smaa (edge detection, the default), msaa_2x or msaa_4x (geometry edges only), taa (temporal: the smoothest edges, but thin moving things soften and the bolts draw opaque so they carry their motion); live"},
+	# M4-T21
+	&"tier_radius_m": {"type": TYPE_FLOAT, "default": 10000.0, "min": 0.0, "max": 200000.0,
+		"doc": "AI fighters and capitals farther than this from the player leave Jolt and the scene's processing and fly as native core rows at tier_hz (the low-attention tier, M4-T21); within it they are promoted back onto their bodies exactly; demotion happens 10 % beyond it. 0 = off, every ship in Jolt; live"},
+	&"tier_hz": {"type": TYPE_FLOAT, "default": 20.0, "min": 1.0, "max": 60.0,
+		"doc": "How often a low-attention tier row's forces are recomputed from its held command (M4-T21); its pose still advances every tick; live"},
 	# M4-T24
 	&"sim_step": {"type": TYPE_ENUM, "default": &"threaded", "choices": [&"inline", &"delayed", &"threaded"],
 		"doc": "Where and when the AI step (the native brains' batch: perception, thinks, avoidance, the hosted drivers' think rate, the commands into the rows) runs (M4-T24, Q53): threaded = on a worker thread from -9, its results handed over one tick later, so the frame and the player's input never wait on it; delayed = the same one-tick handover on the main thread (the threaded step's reference, bit for bit); inline = today's single-thread step, the commands flown the same tick (Q54's fallback); live"},

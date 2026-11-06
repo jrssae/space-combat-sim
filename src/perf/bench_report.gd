@@ -10,7 +10,8 @@ const BREAKDOWN: Array[StringName] = [&"ai", &"flight", &"targeting", &"resolver
 const INSIDE: Array[StringName] = [&"scan", &"think", &"hit", &"ram", &"rebase", &"sync", &"standins"]
 ## Probe fields that count things rather than time them.
 const COUNTS: Array[StringName] = [&"ships", &"bolts", &"pairs", &"stages_on", &"sync_on", &"fighters_near", &"fighters_far",
-		&"capitals", &"turrets", &"interceptors", &"beams", &"missiles", &"mines", &"asteroids", &"launches", &"sides"]
+		&"capitals", &"turrets", &"interceptors", &"beams", &"missiles", &"mines", &"asteroids", &"launches", &"sides",
+		&"tier_fighters", &"tier_capitals"]
 ## Ship counts whose stage breakdown the sweep summary lists (the milestone's AC2).
 const BREAKDOWN_NS: Array[int] = [50, 100]
 
