@@ -90,6 +90,7 @@ struct Handover {
     hosted_slots: Vec<i64>,
     snapshot: Snapshot,
     from_rows: bool,
+    tier: (i64, u64),
 }
 
 // What the frame's readers see of a hosted driver while the brains are away: its state as the launch found it.
@@ -130,6 +131,8 @@ pub struct ScsBrains {
     handover: Option<Handover>,
     handed_events: Vec<i64>,
     handed_slots: Vec<i64>,
+    // The last handed-over job's tier thinks and their time, ns (M4-T22 fix round 1).
+    handed_tier: (i64, u64),
     // The threads a job's pass runs on (`perf_step_threads`, fix round 1, I4): 0 shares the core's pool, 1 is the step's
     // thread alone, more is a pool of the job's own, so the job never queues the main thread's passes behind its chunks.
     step_pool: Threads,
@@ -857,6 +860,7 @@ impl ScsBrains {
             // Nothing to hand over (no job was out, or it was lost): no events either, so nothing indexes an empty output.
             self.handed_events.clear();
             self.handed_slots.clear();
+            self.handed_tier = (0, 0);
             return PackedFloat64Array::new();
         };
         if handover.from_rows
@@ -868,6 +872,7 @@ impl ScsBrains {
         self.spare = Some(handover.snapshot);
         self.handed_events = handover.events;
         self.handed_slots = handover.hosted_slots;
+        self.handed_tier = handover.tier;
         PackedFloat64Array::from(handover.out.as_slice())
     }
 
@@ -1115,6 +1120,18 @@ impl ScsBrains {
             )
         })
         .unwrap_or_default()
+    }
+
+    /// The last handed-over job's low-attention tier thinks, and their summed time in microseconds (M4-T22 fix round 1;
+    /// the job's own clock: on the worker thread when `sim_step` is threaded, on the main thread when inline).
+    #[func]
+    fn tier_thinks(&self) -> i64 {
+        self.handed_tier.0
+    }
+
+    #[func]
+    fn tier_think_us(&self) -> f64 {
+        self.handed_tier.1 as f64 / 1000.0
     }
 
     /// The last handed-over rows batch's counts and events (`EVENTS_HEAD`, then pairs).
@@ -1568,6 +1585,7 @@ impl ScsBrains {
                     bolt_hit_s,
                     live: true,
                     tiered: false,
+                    tier_wake: false,
                     near: false,
                     thinks: 0,
                     dt: 0.0,
@@ -1596,7 +1614,7 @@ impl ScsBrains {
             Pending::Tiered { slot, on } => {
                 if let Some(h) = find(work, slot) {
                     h.tiered = on;
-                    h.woken = h.woken || on; // its first tier think comes at once, not a beat later
+                    h.tier_wake = on; // its first tier think comes at once, not a beat later
                 }
             }
             Pending::Wake { slot } => {
@@ -1807,6 +1825,7 @@ impl ScsBrains {
         }
         let events = std::mem::take(&mut done.work.events);
         let hosted_slots = std::mem::take(&mut done.work.hosted_slots);
+        let tier = (done.work.tier_thinks, done.work.tier_think_ns);
         self.work = Some(done.work);
         if self.scheduled {
             // Parked until the tick's `join_step`: the commands, the output and the events land together then.
@@ -1816,6 +1835,7 @@ impl ScsBrains {
                 hosted_slots,
                 snapshot: done.snapshot,
                 from_rows: done.from_rows,
+                tier,
             });
             return;
         }
@@ -1829,6 +1849,7 @@ impl ScsBrains {
         self.spare = Some(done.snapshot);
         self.handed_events = events;
         self.handed_slots = hosted_slots;
+        self.handed_tier = tier;
         self.inline_out = Some(done.out);
     }
 

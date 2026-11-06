@@ -34,6 +34,8 @@ pub const BEAM_RANGE_M: f64 = 3000.0;
 pub const BEAM_DAMAGE: f64 = 25.0;
 /// A capital's strike reach (its missiles' and beams' target).
 pub const STRIKE_RANGE_M: f64 = 6000.0;
+/// An interceptor's reach (`TurretStandin.INTERCEPT_RANGE_M`).
+pub const INTERCEPT_RANGE_M: f64 = 1500.0;
 pub const MISSILE_SPEED_MPS: f64 = 350.0;
 pub const MISSILE_DAMAGE: f64 = 40.0;
 /// Hulls larger than this are capitals, not fighters, m.
@@ -240,6 +242,33 @@ pub fn nearest_hostile_fighter(
         }
     }
     best
+}
+
+/// How much of two hulls' bounding radii they must close to before a ram lands (the hull's disc, as a shot's).
+pub const RAM_REACH: f64 = 0.7;
+
+/// Whether two hulls at `a` and `b`, of bounding radii `ra` and `rb`, moving at `va` and `vb`, come within their ram reach
+/// over the next `dt` seconds (the closest approach of their straight paths).
+pub fn ram_touch(
+    a: Vector3,
+    va: Vector3,
+    ra: f64,
+    b: Vector3,
+    vb: Vector3,
+    rb: f64,
+    dt: f64,
+) -> bool {
+    let p = sub(b, a);
+    let v = sub(vb, va);
+    let vv = f64::from(dot(v, v));
+    let t = if vv > 0.0 {
+        (-f64::from(dot(p, v)) / vv).clamp(0.0, dt.max(0.0))
+    } else {
+        0.0
+    };
+    let closest = add(p, scale(v, t as f32));
+    let reach = (ra + rb) * RAM_REACH;
+    f64::from(dot(closest, closest)) <= reach * reach
 }
 
 /// The fighters' rolled hits since GDScript last took them (M4-T22): each hit's target (body id), shooter (body id),

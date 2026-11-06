@@ -412,6 +412,95 @@ impl ScsSimCore {
         out
     }
 
+    /// Adds a hit to the fighters' rolled hits as a roll would (the tests: a hit pending while its shooter is promoted).
+    #[func]
+    fn tier_push_hit(&mut self, target: i64, shooter: i64, damage: f64, at: Vector3) {
+        self.tier_hits.push(target, shooter, damage, at);
+    }
+
+    /// The rams that land now (fix round 1): every committed rammer whose target is in its row command, where one of the
+    /// two flies in the tier, that comes within ram reach of its target over the next `delta` seconds and was not touching
+    /// it at the last check. `[rammers (body ids), targets (body ids), rammers' velocities, targets' velocities, points]`.
+    /// Two near ships ram through the ram resolver, not here.
+    #[func]
+    fn tier_ram_contacts(&mut self, delta: f64) -> VarArray {
+        let r = &self.rows;
+        let mut touching = std::collections::HashSet::new();
+        let (mut rammers, mut targets) = (Vec::new(), Vec::new());
+        let (mut v_rammers, mut v_targets, mut points) = (Vec::new(), Vec::new(), Vec::new());
+        for i in 0..r.body_ids.len() {
+            let Some(rc) = self.row_commands.get(&r.body_ids[i]) else {
+                continue;
+            };
+            if !rc.ram || rc.target <= 0 {
+                continue;
+            }
+            let Ok(j) = usize::try_from(r.row_of_id(rc.target)) else {
+                continue;
+            };
+            if (r.flags[i] | r.flags[j]) & crate::rows::FLAG_TIER == 0
+                || r.flags[j] & crate::rows::FLAG_HULL == 0
+            {
+                continue;
+            }
+            if !crate::tier_fire::ram_touch(
+                r.positions[i],
+                r.velocities[i],
+                r.radii[i],
+                r.positions[j],
+                r.velocities[j],
+                r.radii[j],
+                delta,
+            ) {
+                continue;
+            }
+            let pair = (r.body_ids[i], r.body_ids[j]);
+            touching.insert(pair);
+            if self.tier_ram_pairs.contains(&pair) {
+                continue;
+            }
+            rammers.push(pair.0);
+            targets.push(pair.1);
+            v_rammers.push(r.velocities[i]);
+            v_targets.push(r.velocities[j]);
+            points.push(r.positions[j]);
+        }
+        self.tier_ram_pairs = touching;
+        let mut out = VarArray::new();
+        out.push(&PackedInt64Array::from(rammers.as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(targets.as_slice()).to_variant());
+        out.push(&PackedVector3Array::from(v_rammers.as_slice()).to_variant());
+        out.push(&PackedVector3Array::from(v_targets.as_slice()).to_variant());
+        out.push(&PackedVector3Array::from(points.as_slice()).to_variant());
+        out
+    }
+
+    /// How far outside its pilot's gate a tier shot leaves, m (`tier_fire::gate_excess_m`; the tests).
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn tier_gate_excess(
+        &self,
+        at: Vector3,
+        v: Vector3,
+        forward: Vector3,
+        target_at: Vector3,
+        target_v: Vector3,
+        muzzle_speed_mps: f64,
+        cone_rad: f64,
+        miss_m: f64,
+    ) -> f64 {
+        crate::tier_fire::gate_excess_m(
+            at,
+            v,
+            forward,
+            target_at,
+            target_v,
+            muzzle_speed_mps,
+            cone_rad,
+            miss_m,
+        )
+    }
+
     /// Tier fighters' shots rolled so far, and the hits among them.
     #[func]
     fn tier_shots(&self) -> i64 {

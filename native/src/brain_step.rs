@@ -72,6 +72,8 @@ pub struct Item {
     pub near: bool,
     /// A low-attention tier row's think (M4-T22): its command goes to the tier, its driver has nothing to do.
     pub tier: bool,
+    /// How long a tier row's think took, ns (a readout; the near thinks are not timed).
+    pub ns: u64,
 }
 
 /// A driver the host steps (M4-T35): the think rate's state the driver kept, its latest hits, and its last think.
@@ -88,6 +90,9 @@ pub struct Hosted {
     pub live: bool,
     /// Its ship flies as a low-attention tier row (M4-T22): the node is parked, the host thinks at the tier's brain rate.
     pub tiered: bool,
+    /// Its first tier think is due at once (set when it is handed to the tier). A hit does not wake a tier think: it waits
+    /// for its beat, so the thinks stay staggered however the far hits fall (fix round 1).
+    pub tier_wake: bool,
     pub near: bool,
     pub thinks: i64,
     pub dt: f64,
@@ -151,6 +156,9 @@ pub struct Work {
     pub hosted_slots: Vec<i64>,
     // The last job's pass panicked: its thinks were declined and their brains kept (the main thread counts and warns).
     pub failed: bool,
+    // The last job's tier thinks and their summed time, ns (M4-T22 fix round 1, readouts).
+    pub tier_thinks: i64,
+    pub tier_think_ns: u64,
 }
 
 /// The core's tables as a job's launch found them: the double buffer's back half, filled by `clone_from` into kept
@@ -259,6 +267,8 @@ fn run_body(
     if work.fault == FAULT_SLOW {
         std::thread::sleep(std::time::Duration::from_millis(FAULT_SLOW_MS));
     }
+    work.tier_thinks = 0;
+    work.tier_think_ns = 0;
     // The relations every item indexes: the batch's rows, then (on the rows path) the matrix the hosted items use.
     let mut rel = std::mem::take(&mut work.rel_scratch);
     rel.clear();
@@ -359,6 +369,7 @@ fn think_item(shared: &Shared, item: &mut Item, worker: &mut Worker) {
     if shared.fault == FAULT_PANIC {
         std::panic::resume_unwind(Box::new("the injected panic"));
     }
+    let started = item.tier.then(Instant::now);
     let inputs = Inputs {
         relations: &shared.relations[item.relations.0..item.relations.1],
         own_body_id: brain.ship.own_body_id,
@@ -400,6 +411,7 @@ fn think_item(shared: &Shared, item: &mut Item, worker: &mut Worker) {
     }
     pack_output(brain, &result, &mut item.out);
     item.ok = true;
+    item.ns = started.map_or(0, |t| t.elapsed().as_nanos() as u64);
 }
 
 /// The output of a think, `OUT_LEN` numbers.
@@ -461,7 +473,12 @@ fn write_commands(work: &mut Work, snap: &mut Snapshot, n: usize) {
         let wanted = brain.wanted_target_id;
         note_aim(&mut snap.commands, body, brain);
         if item.tier {
-            continue; // a tier row's driver is parked: the command is all the tier needs
+            // A tier row's driver is parked: the command (and the ram's commitment, which the tier's ram reads) is all
+            // the tier needs.
+            note_ram(&mut snap.commands, body, item.out[OUT_RAM] != 0.0);
+            work.tier_thinks += 1;
+            work.tier_think_ns += item.ns;
+            continue;
         }
         let selected = usize::try_from(item.own_row).map_or(-1, |r| snap.rows.target_ids[r]);
         // The driver follows the brain's target: it clears a selection for none, selects anything else it wants, and
@@ -548,7 +565,7 @@ fn queue_hosted(work: &mut Work, snap: &Snapshot, n: usize, rel_len: usize) -> u
         if tier {
             // A low-attention tier row (M4-T22) thinks on its own beat; a hulk or a driver not handed to the tier never.
             let on_beat = (h.steps + h.ordinal).rem_euclid(frame.tier_period.max(1)) == 0;
-            if !h.tiered || snap.rows.flags[r] & FLAG_HULK != 0 || !(on_beat || h.woken) {
+            if !h.tiered || snap.rows.flags[r] & FLAG_HULK != 0 || !(on_beat || h.tier_wake) {
                 work.events[5] += 1;
                 continue;
             }
@@ -605,6 +622,7 @@ fn settle_hosted(work: &mut Work, n: usize, total: usize) {
             h.dt = h.since_think_s;
             h.since_think_s = 0.0;
             h.woken = false;
+            h.tier_wake = false;
             h.thinks += 1;
             h.out.clear();
             h.out.extend_from_slice(&item.out);

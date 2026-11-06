@@ -60,6 +60,8 @@ var detonations: int = 0
 ## The far capitals' fire (M4-T22): group rolls run (one a second per tier capital) and their hits landed since `clear`.
 var tier_group_rolls: int = 0
 var tier_hits_landed: int = 0
+# Each far missile in the air: the hull life of its target at launch (fix round 1).
+var _tier_missile_lives: Dictionary[int, int] = {}
 ## The latest tick's counts, by `Count`.
 var counts: PackedInt64Array = PackedInt64Array()
 var last_us: int = 0
@@ -198,7 +200,7 @@ func _step_native(native: NativeWeapons, delta: float, now_s: float, started_us:
 	var intercept_ticks: int = maxi(1, roundi(TurretStandin.INTERCEPT_INTERVAL_S * Engine.physics_ticks_per_second))
 	var beam_ticks: int = maxi(1, roundi(BeamStandin.INTERVAL_S * Engine.physics_ticks_per_second))
 	var out: Array = native.rows.step(_tick, now_s, delta, intercept_ticks, beam_ticks, missile_target,
-			MAX_MISSILE_LAUNCHES_PER_TICK)
+			MAX_MISSILE_LAUNCHES_PER_TICK, Engine.physics_ticks_per_second)
 	var gun_rows: PackedInt32Array = out[0]
 	var bolt_at: PackedVector3Array = out[1]
 	var bolt_velocity: PackedVector3Array = out[2]
@@ -233,12 +235,27 @@ func _step_native(native: NativeWeapons, delta: float, now_s: float, started_us:
 		MissileStandin.launch(projectiles, bow, target, cap.get_instance_id(), cap.faction, now_s)
 		missile_launches += 1
 	_missiles_flying = out[9]
-	# The far capitals (M4-T22): their rolled hits land through each target's Damageable; their launches were resolved.
-	if out.size() >= 16:
+	# The far capitals (M4-T22): their rolled hits land through each target's Damageable; their launches were resolved, and
+	# a far missile lands only on the life of the target it was launched at (fix round 1).
+	if out.size() >= 21:
+		var launched: PackedInt64Array = out[17]
+		var launched_targets: PackedInt64Array = out[18]
+		for k: int in launched.size():
+			_tier_missile_lives[launched[k]] = _life_of(launched_targets[k])
 		var targets: PackedInt64Array = out[10]
 		if not targets.is_empty():
-			tier_hits_landed += TierDirector.land_hits(targets, out[11], out[12], out[13])
+			var missile_ids: PackedInt64Array = out[16]
+			var keep := PackedByteArray()
+			keep.resize(targets.size())
+			for k: int in targets.size():
+				var id: int = missile_ids[k]
+				keep[k] = 1 if id == 0 or int(_tier_missile_lives.get(id, -2)) == _life_of(targets[k]) else 0
+			tier_hits_landed += TierDirector.land_hits(_kept_i(targets, keep), _kept_i(out[11], keep), _kept_f(out[12], keep),
+					_kept_v(out[13], keep))
+		for id: int in (out[19] as PackedInt64Array):
+			_tier_missile_lives.erase(id)
 		missile_launches += int(out[14])
+		missile_intercepts += int(out[20])
 		tier_group_rolls = int(out[15])
 	mark_us = _mark(Part.MISSILES, mark_us)
 	if native.mines != null and is_instance_valid(native.mines):
@@ -390,6 +407,7 @@ func remove_asteroids() -> void:
 func clear() -> void:
 	active = false
 	_leave_native()
+	_tier_missile_lives.clear()
 	for cap: CapitalStandin in _capitals:
 		if is_instance_valid(cap):
 			remove_child(cap)
@@ -462,6 +480,38 @@ func restart_weapon_counters() -> void:
 	detonations = 0
 	ticks = 0
 	part_us.fill(0)
+
+
+# A target's hull life now (-1 when it is gone), so a far missile lands only on the life it was launched at.
+static func _life_of(body_id: int) -> int:
+	if not is_instance_id_valid(body_id):
+		return -1
+	var d: Damageable = Damageable.of(instance_from_id(body_id) as Node)
+	return d.life if d != null else -1
+
+
+static func _kept_i(a: PackedInt64Array, keep: PackedByteArray) -> PackedInt64Array:
+	var out := PackedInt64Array()
+	for k: int in a.size():
+		if keep[k] == 1:
+			out.append(a[k])
+	return out
+
+
+static func _kept_f(a: PackedFloat64Array, keep: PackedByteArray) -> PackedFloat64Array:
+	var out := PackedFloat64Array()
+	for k: int in a.size():
+		if keep[k] == 1:
+			out.append(a[k])
+	return out
+
+
+static func _kept_v(a: PackedVector3Array, keep: PackedByteArray) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for k: int in a.size():
+		if keep[k] == 1:
+			out.append(a[k])
+	return out
 
 
 ## The far capitals' rolls in the last tick, us (wall clock, a readout; M4-T22).

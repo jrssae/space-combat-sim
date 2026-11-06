@@ -7,7 +7,7 @@
 #![allow(clippy::redundant_field_names)]
 use godot::prelude::*;
 
-use crate::rows::{FLAG_RIGID, FLAG_TIER};
+use crate::rows::{FLAG_HULK, FLAG_RIGID, FLAG_TIER};
 use crate::sim_core::ScsSimCore;
 use crate::tier_fire;
 use crate::weapon_kernels::{
@@ -39,11 +39,17 @@ pub struct ScsWeaponRows {
     tier_missiles: Vec<TierMissile>,
     tier_rolls: i64,
     tier_us: f64,
+    // The far missiles' ids so far, and each capital's interceptor shots spent on far missiles in its current second
+    // (`(second, shots)`), so its interceptors take at most two a second each (fix round 1).
+    next_tier_missile: i64,
+    intercept_used: Vec<(i64, i64)>,
 }
 
 // A far capital's missile, its outcome rolled at launch, landing (or missing) when it would have arrived.
 struct TierMissile {
+    id: i64,
     shooter: i64,
+    faction_ix: u32,
     target: i64,
     arrive_tick: i64,
     hit: bool,
@@ -56,6 +62,13 @@ struct TierLanded {
     shooters: Vec<i64>,
     damage: Vec<f64>,
     points: Vec<Vector3>,
+    // Each hit's far missile (0 for a gun or beam), the far missiles launched (ids, targets), those that left the air this
+    // tick (landed, missed or shot down), and how many of those were shot down.
+    missile_ids: Vec<i64>,
+    launched_ids: Vec<i64>,
+    launched_targets: Vec<i64>,
+    ended_ids: Vec<i64>,
+    intercepted: i64,
     launches: i64,
 }
 
@@ -65,6 +78,7 @@ impl TierLanded {
         self.shooters.push(shooter);
         self.damage.push(damage);
         self.points.push(at);
+        self.missile_ids.push(0);
     }
 }
 
@@ -259,7 +273,9 @@ impl ScsWeaponRows {
     /// velocities, projectiles shot down (ids), whether each was a missile (bytes), beams that fired (turret rows), their
     /// targets' places, launches (capital places), their targets (body ids), missiles in flight after the launches]`, then
     /// the far capitals' fire (M4-T22): `[hits' targets (body ids), their shooters, their damage, their places, missiles
-    /// launched from the tier, group rolls run]`.
+    /// launched from the tier, group rolls run, each hit's far missile (0: a gun or beam), the far missiles launched (ids),
+    /// their targets (body ids), the far missiles that left the air, how many far missiles were shot down]`. A second is
+    /// `ticks_per_second` ticks.
     #[func]
     #[allow(clippy::too_many_arguments)]
     fn step(
@@ -271,6 +287,7 @@ impl ScsWeaponRows {
         beam_ticks: i64,
         missile_target: i64,
         max_launches: i64,
+        ticks_per_second: i64,
     ) -> VarArray {
         let mut gun_rows: Vec<i32> = Vec::new();
         let mut bolt_at: Vec<Vector3> = Vec::new();
@@ -297,6 +314,8 @@ impl ScsWeaponRows {
                 tier_missiles,
                 tier_rolls,
                 tier_us,
+                next_tier_missile,
+                intercept_used,
                 ..
             } = self;
             let n = *factions;
@@ -440,7 +459,7 @@ impl ScsWeaponRows {
             }
             // The far capitals (M4-T22): once a second each, the guns and beams as rolls, the interceptors as removals.
             let tier_started = std::time::Instant::now();
-            let second_ticks = (intercept_ticks.max(1) * 2).max(1);
+            let second_ticks = ticks_per_second.max(1);
             let seed = guard.tier_seed;
             for (c, &body) in capitals.body_ids.iter().enumerate() {
                 let Some(r) = tier_row_of(&guard, body) else {
@@ -523,24 +542,68 @@ impl ScsWeaponRows {
                     }
                 }
             }
-            // The far capitals' missiles that arrive this tick land if their launch rolled a hit and the target still flies.
+            // The far capitals' missiles that arrive this tick: shot down when an interceptor hostile to them (near or tier)
+            // is within its reach of the target with a shot to spare this second, as the near interceptors take a missile
+            // in reach at two shots a second each; else they land if their launch rolled a hit and the target still flies
+            // (not a hulk). GDScript drops a landing on a target that was released and taken out again since its launch.
+            intercept_used.resize(capitals.body_ids.len(), (-1, 0));
+            let second = tick.div_euclid(second_ticks);
             tier_missiles.retain(|m| {
                 if m.arrive_tick > tick {
                     return true;
                 }
-                if m.hit
-                    && let Ok(j) = usize::try_from(guard.row_of_id(m.target))
-                {
-                    landed.push(
-                        m.target,
-                        m.shooter,
-                        tier_fire::MISSILE_DAMAGE,
-                        rows.positions[j],
-                    );
+                landed.ended_ids.push(m.id);
+                let Some(j) = usize::try_from(guard.row_of_id(m.target))
+                    .ok()
+                    .filter(|&j| rows.flags[j] & FLAG_HULK == 0)
+                else {
+                    return false;
+                };
+                let target_at = rows.positions[j];
+                for (c, &body) in capitals.body_ids.iter().enumerate() {
+                    let r = match usize::try_from(cap_rows[c]) {
+                        Ok(r) => Some(r),
+                        Err(_) => tier_row_of(&guard, body),
+                    };
+                    let Some(r) = r else {
+                        continue;
+                    };
+                    let interceptors = turrets
+                        .role
+                        .iter()
+                        .zip(turrets.capital.iter())
+                        .filter(|&(&role, &cap)| role == ROLE_INTERCEPTOR && cap as usize == c)
+                        .count() as i64;
+                    let reach = tier_fire::INTERCEPT_RANGE_M + rows.radii[r];
+                    if interceptors == 0
+                        || !table_row(hostile, n, rows.faction_ix[r])
+                            .get(m.faction_ix as usize)
+                            .copied()
+                            .unwrap_or(false)
+                        || f64::from(crate::v3::dist_sq(rows.positions[r], target_at))
+                            > reach * reach
+                    {
+                        continue;
+                    }
+                    let used = &mut intercept_used[c];
+                    if used.0 != second {
+                        *used = (second, 0);
+                    }
+                    if used.1 < interceptors * 2 {
+                        used.1 += 1;
+                        landed.intercepted += 1;
+                        return false;
+                    }
+                }
+                if m.hit {
+                    landed.push(m.target, m.shooter, tier_fire::MISSILE_DAMAGE, target_at);
+                    if let Some(last) = landed.missile_ids.last_mut() {
+                        *last = m.id;
+                    }
                 }
                 false
             });
-            *tier_us = tier_started.elapsed().as_nanos() as f64 / 1000.0;
+            let mut tier_ns = tier_started.elapsed().as_nanos() as f64;
             // Missiles: top the count in flight up from the capitals in turn that have a strike target.
             flying = (wk::missiles_in_flight(bolts) + tier_missiles.len()) as i64;
             let count = capitals.body_ids.len();
@@ -553,6 +616,7 @@ impl ScsWeaponRows {
                     tried += 1;
                     let Some(r) = usize::try_from(cap_rows[c]).ok() else {
                         // A far capital's launch is resolved now (M4-T22): the hit rolled, the landing when it arrives.
+                        let launch_started = std::time::Instant::now();
                         let body = capitals.body_ids[c];
                         let Some(t) = tier_row_of(&guard, body) else {
                             continue;
@@ -573,13 +637,19 @@ impl ScsWeaponRows {
                             * second_ticks as f64)
                             .ceil() as i64;
                         let draw = tier_fire::roll(seed, tick, c as i64 * 8 + 2, landed.launches);
+                        *next_tier_missile += 1;
                         tier_missiles.push(TierMissile {
+                            id: *next_tier_missile,
                             shooter: body,
+                            faction_ix: rows.faction_ix[t],
                             target: rows.body_ids[j],
                             arrive_tick: tick + flight_ticks.max(1),
                             hit: draw < tier_fire::missile_chance(range),
                         });
+                        landed.launched_ids.push(*next_tier_missile);
+                        landed.launched_targets.push(rows.body_ids[j]);
                         landed.launches += 1;
+                        tier_ns += launch_started.elapsed().as_nanos() as f64;
                         flying += 1;
                         launched += 1;
                         continue;
@@ -593,6 +663,7 @@ impl ScsWeaponRows {
                     launched += 1;
                 }
             }
+            *tier_us = tier_ns / 1000.0;
         }
         let mut out = VarArray::new();
         out.push(&PackedInt32Array::from(gun_rows.as_slice()).to_variant());
@@ -611,6 +682,11 @@ impl ScsWeaponRows {
         out.push(&PackedVector3Array::from(landed.points.as_slice()).to_variant());
         out.push(&landed.launches.to_variant());
         out.push(&self.tier_rolls.to_variant());
+        out.push(&PackedInt64Array::from(landed.missile_ids.as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(landed.launched_ids.as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(landed.launched_targets.as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(landed.ended_ids.as_slice()).to_variant());
+        out.push(&landed.intercepted.to_variant());
         out
     }
 

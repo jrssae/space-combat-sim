@@ -110,8 +110,21 @@ var _index_of: Dictionary[int, int] = {}
 var _index_built: bool = false
 
 
+# The latest resolver in a tree (M4-T22 fix round 1: the tier's rams land through it, so `ram_resolved` hears them).
+static var _current: RamResolver = null
+
+
 func _init() -> void:
 	process_physics_priority = LATE_PRIORITY
+
+
+func _enter_tree() -> void:
+	_current = self
+
+
+## The latest resolver in a tree, or null.
+static func current() -> RamResolver:
+	return _current if _current != null and is_instance_valid(_current) and _current.is_inside_tree() else null
 
 
 func _ready() -> void:
@@ -130,6 +143,8 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+	if _current == self:
+		_current = null
 
 
 func _notification(what: int) -> void:
@@ -681,6 +696,17 @@ static func _sphere_reaches(centre: Vector3, radius: float, move: Vector3, box: 
 
 # Both sides of a swept hit, each by its own share of the momentum split.
 func _ram_swept(first: Dictionary, second: Dictionary, point: Vector3, kind: String) -> void:
+	_apply_all(ram_pending(first, second, point, kind))
+
+
+## Lands rams found outside the resolver (the low-attention tier's, M4-T22 fix round 1) as the resolver lands its own.
+func land(pending: Array[Array]) -> void:
+	_apply_all(pending)
+
+
+## A ram between two hulls (`id`, `damageable`, `velocity`, `mass` each) at `point`, by the swept rule: each takes the hull
+## share its own velocity change gives when the two move on together. The rams to apply, labelled with `kind`.
+static func ram_pending(first: Dictionary, second: Dictionary, point: Vector3, kind: String) -> Array[Array]:
 	var relative: Vector3 = (first["velocity"] as Vector3) - (second["velocity"] as Vector3)
 	var speed: float = relative.length()
 	var normal: Vector3 = relative / speed if speed > 1e-6 else Vector3.ZERO  # first's side faces where second came from
@@ -695,14 +721,14 @@ func _ram_swept(first: Dictionary, second: Dictionary, point: Vector3, kind: Str
 			var info := HitInfo.new(hull["id"], other["id"], (other["damageable"] as Damageable).faction, damage, point, side[2],
 					speed, HitInfo.CAUSE_RAM)
 			pending.append(_pending(damageable, info, kind, dv))
-	_apply_all(pending)
+	return pending
 
 
 # --- shared ------------------------------------------------------------------------------------------------------
 
 
 # A ram to apply, labelled now: applying one can send a raider back to the pool, and a parked raider has lost its name.
-func _pending(damageable: Damageable, info: HitInfo, kind: String, dv: float) -> Array:
+static func _pending(damageable: Damageable, info: HitInfo, kind: String, dv: float) -> Array:
 	return [damageable, info, "%s -> %s: %s, dv %.1f m/s" % [HitResolver.name_of(info.shooter_id),
 			HitResolver.name_of(info.target_id), kind, dv]]
 

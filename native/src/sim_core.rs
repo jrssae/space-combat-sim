@@ -272,6 +272,8 @@ pub struct ScsSimCore {
     pub(crate) tier_hits: crate::tier_fire::Hits,
     pub(crate) tier_shots_total: i64,
     pub(crate) tier_hits_total: i64,
+    // The rammer and target pairs in contact at the last check, so a ram lands once, when they first touch (fix round 1).
+    pub(crate) tier_ram_pairs: std::collections::HashSet<(i64, i64)>,
 }
 
 #[godot_api]

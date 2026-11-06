@@ -183,6 +183,8 @@ func _set_up_scene() -> void:
 	for c: Combatant in main.ships.alive():
 		main.ships.release(c)
 	var plan: Array[Dictionary] = BenchLayout.plan(_layout, _n, int(_options["seed"]))
+	if TierDirector.current() != null:
+		TierDirector.current().seed_value = int(_options["seed"])  # the tier's rolls follow the bench's seed (M4-T22)
 	var wanted: Dictionary = {ShipPool.ALLY_TYPE: 0, ShipPool.DEFAULT_TYPE: 0}
 	for e: Dictionary in plan:
 		if StringName(e["kind"]) == BenchLayout.KIND_FIGHTER:
@@ -429,7 +431,7 @@ func _weapons() -> Dictionary:
 			"missile_steers_per_tick": float(MissileStandin.steers) / float(ticks),
 			"path": String(standins.weapons_path()), "missile_native_steers_per_tick": float(MissileStandin.native_steers) / float(ticks),
 			"tier": TierDirector.current().window_summary() if TierDirector.current() != null else {},
-			"tier_capital_rolls": standins.tier_group_rolls, "tier_capital_hits": standins.tier_hits_landed}
+			"tier_capital_hits": standins.tier_hits_landed}
 
 
 # The mix for summary.json: the area as a plain list.

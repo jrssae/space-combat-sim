@@ -336,3 +336,251 @@ func _turret_shots(cap: CapitalStandin) -> int:
 	for gun: TurretStandin in cap.guns():
 		n += gun.shots
 	return n
+
+
+# --- fix round 1 ------------------------------------------------------------------------------------------------------------
+
+
+func _host() -> Object:
+	return NativeBrains.host(get_tree())
+
+
+func test_tier_thinks_are_counted_and_timed() -> void:
+	if _skipped():
+		return
+	for schedule: StringName in SCHEDULES:
+		await _world(4, 0)
+		_use_schedule(schedule)
+		for i: int in 4:
+			w.fighter(ShipPool.DEFAULT_TYPE, "R%d" % i, Vector3(float(i) * 300.0, 0.0, -20000.0), 40 + i)
+		await _ticks(10)
+		var thinks: int = 0
+		var us: float = 0.0
+		for t: int in 60:
+			await _ticks(1)
+			thinks += int(_host().tier_thinks())
+			us += float(_host().tier_think_us())
+		assert_between(thinks, 12, 20, "%s: four tier fighters think about four times a second each (%d)" % [schedule, thinks])
+		assert_gt(us, 0.0, "%s: and their thinks are timed (%.1f us)" % [schedule, us])
+
+
+func test_a_hit_does_not_wake_a_tier_think_outside_its_beat() -> void:
+	if _skipped():
+		return
+	for schedule: StringName in SCHEDULES:
+		await _world(1, 1)
+		_use_schedule(schedule)
+		var target: Combatant = w.fighter(ShipPool.DEFAULT_TYPE, "TARGET", Vector3(0.0, 0.0, -20000.0), 3)
+		var shooter: Combatant = w.fighter(ShipPool.ALLY_TYPE, "ALPHA 2", Vector3(0.0, 0.0, -21000.0), 4, Basis(Vector3.UP, PI))
+		target.damageable.invulnerable = true
+		shooter.damageable.invulnerable = true
+		await _ticks(30)
+		var slot: int = (target.driver.brain as AiPilot).native_slot_index()
+		var before: int = int(_host().slot_think_count(slot))
+		var id: int = target.ship.get_instance_id()
+		for t: int in 60:
+			TierDirector.land_hits(PackedInt64Array([id]), PackedInt64Array([shooter.ship.get_instance_id()]),
+					PackedFloat64Array([1.0]), PackedVector3Array([Vector3.ZERO]))
+			await _ticks(1)
+		var thinks: int = int(_host().slot_think_count(slot)) - before
+		assert_between(thinks, 3, 5, "%s: hit every tick, a tier ship still thinks on its beat only (%d in a second)" % [schedule, thinks])
+
+
+func test_a_far_capitals_missile_is_shot_down_by_its_targets_interceptors() -> void:
+	if _skipped():
+		return
+	for schedule: StringName in SCHEDULES:
+		await _world(2, 0)
+		_use_schedule(schedule)
+		var cap: CapitalStandin = w.cruiser(Factions.EARTH_ALLIANCE, "CRUISER", Vector3(0.0, 0.0, -20000.0))
+		var guard: CapitalStandin = w.cruiser(Factions.RAIDERS, "GUARD", Vector3(0.0, 400.0, -23000.0))
+		cap.damageable.invulnerable = true
+		guard.damageable.invulnerable = true
+		var raider: Combatant = w.pool.acquire("PREY", w.world.to_universe(Vector3(0.0, 0.0, -22000.0)), Basis.IDENTITY,
+				Vector3.ZERO, IdleBrain.new())
+		raider.damageable.invulnerable = true
+		await _ticks(10)
+		assert_true(cap.is_tier_parked() and guard.is_tier_parked() and _tiered(raider), "%s: all three are tier rows" % schedule)
+		w.standins.missile_target = 2  # from now on every launch is the far cruiser's, resolved at launch
+		var intercepts: int = w.standins.missile_intercepts
+		var launches: int = w.standins.missile_launches
+		await _ticks(900)
+		assert_gt(w.standins.missile_launches - launches, 0, "%s: the far cruiser launched" % schedule)
+		assert_gt(w.standins.missile_intercepts - intercepts, 0, "%s: the guard's interceptors shot its missiles down" % schedule)
+		var missile_hits: int = 0
+		for h: Array in w.hits:
+			if int(h[0]) == raider.ship.get_instance_id() and is_equal_approx(float(h[2]), 40.0):
+				missile_hits += 1
+		assert_eq(missile_hits, 0, "%s: none landed on the guarded fighter" % schedule)
+		w.standins.clear()
+
+
+func test_a_far_missile_does_not_land_on_a_respawned_target_or_a_hulk() -> void:
+	if _skipped():
+		return
+	for schedule: StringName in SCHEDULES:
+		await _world(1, 0)
+		_use_schedule(schedule)
+		var cap: CapitalStandin = w.cruiser(Factions.EARTH_ALLIANCE, "CRUISER", Vector3(0.0, 0.0, -20000.0))
+		cap.damageable.invulnerable = true
+		var raider: Combatant = w.pool.acquire("PREY", w.world.to_universe(Vector3(0.0, 0.0, -25000.0)), Basis.IDENTITY,
+				Vector3.ZERO, IdleBrain.new())
+		raider.damageable.invulnerable = true
+		await _ticks(10)
+		w.standins.missile_target = 1
+		await _ticks(20)
+		assert_gt(w.standins.missile_launches, 0, "%s: a missile is out" % schedule)
+		w.standins.missile_target = 0
+		# The target goes back to the pool and comes out again as somebody new, in the same place, before the missile lands.
+		w.pool.release(raider)
+		await _ticks(2)
+		var again: Combatant = w.pool.acquire("NEW", w.world.to_universe(Vector3(0.0, 0.0, -25000.0)), Basis.IDENTITY,
+				Vector3.ZERO, IdleBrain.new())
+		again.damageable.invulnerable = true
+		assert_eq(again, raider, "%s: the same pooled ship" % schedule)
+		var hits_before: int = w.hits.size()
+		await _ticks(1000)
+		assert_eq(w.hits.size(), hits_before, "%s: the old missile did not land on the new pilot" % schedule)
+		w.standins.clear()
+
+
+func test_a_committed_rammer_in_the_tier_lands_ram_damage() -> void:
+	if _skipped():
+		return
+	for schedule: StringName in SCHEDULES:
+		await _world(1, 1)
+		_use_schedule(schedule)
+		var rams: Array = []
+		# As test_ai_ram flies it: a reckless raider at 20 % hull, committed to the ram.
+		var made: Dictionary = BrainFactory.from_behaviour({"type": "ai", "profile": "raider", "aggression": "reckless"},
+				w.world.to_universe(Vector3(0.0, 0.0, -20000.0)), 5)
+		var rammer: Combatant = w.pool.acquire("RAMMER", w.world.to_universe(Vector3(0.0, 0.0, -20000.0)), Basis.IDENTITY,
+				Vector3.ZERO, made["brain"] as PilotBrain, ShipPool.DEFAULT_TYPE)
+		rammer.damageable.apply_hit(HitInfo.new(rammer.ship.get_instance_id(), 0, &"", rammer.damageable.hull.max_hp * 0.8,
+				Vector3.ZERO, Vector3.ZERO, 0.0, HitInfo.CAUSE_CONSOLE))
+		var target: Combatant = w.pool.acquire("ALPHA 9", w.world.to_universe(Vector3(0.0, 0.0, -21200.0)), Basis.IDENTITY,
+				Vector3(60.0, 0.0, 0.0), null, ShipPool.ALLY_TYPE)
+		target.damageable.hull = HullHealth.new(1.0e6)
+		for c: Combatant in [rammer, target]:
+			c.damageable.hit_taken.connect(func(info: HitInfo) -> void:
+				if info.cause == HitInfo.CAUSE_RAM:
+					rams.append(info))
+		await _ticks(10)
+		assert_true(_tiered(rammer) and _tiered(target), "%s: both are tier rows" % schedule)
+		var pilot := rammer.driver.brain as AiPilot
+		var ram := pilot.behaviour(&"ram") as BehaviourRam
+		assert_true(ram.commit(pilot.context), "%s: the rammer committed in the tier" % schedule)
+		var t: int = 0
+		while rams.is_empty() and t < 1800:
+			await _ticks(1)
+			t += 1
+		assert_false(rams.is_empty(), "%s: the tier rammer rammed its tier target (%d ticks)" % [schedule, t])
+
+
+func test_the_rolls_follow_the_seed() -> void:
+	if _skipped():
+		return
+	var runs: Array = []
+	for seed_value: int in [7, 7, 8]:
+		await _world(4, 4)
+		w.tier.seed_value = seed_value
+		for i: int in 4:
+			w.fighter(ShipPool.DEFAULT_TYPE, "R%d" % i, Vector3(float(i) * 120.0, 0.0, -20000.0), 10 + i)
+			w.fighter(ShipPool.ALLY_TYPE, "ALPHA %d" % (i + 2), Vector3(float(i) * 120.0, 0.0, -20900.0), 20 + i,
+					Basis(Vector3.UP, PI))
+		for c: Combatant in w.pool.alive():
+			c.damageable.invulnerable = true
+		await _ticks(360)
+		var summary: Array = []
+		for h: Array in w.hits:
+			summary.append([HitResolver.name_of(h[0]), HitResolver.name_of(h[1])])
+		runs.append(summary)
+	assert_eq(runs[0], runs[1], "the same seed rolls the same hits")
+	assert_ne(runs[0], runs[2], "another seed rolls others")
+
+
+func test_a_rolled_hit_lands_on_a_hulk_and_a_shooters_pending_hits_land_after_its_promotion() -> void:
+	if _skipped():
+		return
+	for schedule: StringName in SCHEDULES:
+		await _world(2, 0)
+		_use_schedule(schedule)
+		var hulk: Combatant = w.pool.acquire("HULK", w.world.to_universe(Vector3(0.0, 0.0, -20000.0)), Basis.IDENTITY,
+				Vector3.ZERO, IdleBrain.new())
+		var shooter: Combatant = w.pool.acquire("SHOOTER", w.world.to_universe(Vector3(0.0, 0.0, -21000.0)), Basis.IDENTITY,
+				Vector3.ZERO, IdleBrain.new())
+		await _ticks(6)
+		var hid: int = hulk.ship.get_instance_id()
+		w.sim.core.tier_set_hulk(hid, true)
+		var hp: float = hulk.damageable.hull.hp
+		# A hit rolled this tick, then its shooter promoted before the director lands it.
+		w.sim.core.tier_push_hit(hid, shooter.ship.get_instance_id(), 5.0, Vector3.ZERO)
+		w.tier.promote_body(shooter.ship.get_instance_id())
+		await _ticks(2)
+		assert_almost_eq(hulk.damageable.hull.hp, hp - 5.0, 1e-3, "%s: the hit landed on the hulk after its shooter's promotion" % schedule)
+		assert_true(bool(w.sim.core.tier_state(hid).get("hulk", false)), "%s: and the hulk stays a hulk row" % schedule)
+
+
+func test_a_near_rammer_lands_ram_damage_on_a_tier_target() -> void:
+	if _skipped():
+		return
+	for schedule: StringName in SCHEDULES:
+		await _world(1, 1)
+		_use_schedule(schedule)
+		var rams: Array = []
+		var target: Combatant = w.pool.acquire("ALPHA 9", w.world.to_universe(Vector3(0.0, 0.0, -12000.0)), Basis.IDENTITY,
+				Vector3(40.0, 0.0, 0.0), null, ShipPool.ALLY_TYPE)
+		target.damageable.hull = HullHealth.new(1.0e6)
+		var made: Dictionary = BrainFactory.from_behaviour({"type": "ai", "profile": "raider", "aggression": "reckless"},
+				w.world.to_universe(Vector3(0.0, 0.0, -10600.0)), 6)
+		var rammer: Combatant = w.pool.acquire("RAMMER", w.world.to_universe(Vector3(0.0, 0.0, -10600.0)), Basis.IDENTITY,
+				Vector3.ZERO, made["brain"] as PilotBrain, ShipPool.DEFAULT_TYPE)
+		rammer.damageable.apply_hit(HitInfo.new(rammer.ship.get_instance_id(), 0, &"", rammer.damageable.hull.max_hp * 0.8,
+				Vector3.ZERO, Vector3.ZERO, 0.0, HitInfo.CAUSE_CONSOLE))
+		for c: Combatant in [rammer, target]:
+			c.damageable.hit_taken.connect(func(info: HitInfo) -> void:
+				if info.cause == HitInfo.CAUSE_RAM:
+					rams.append(info))
+		await _ticks(10)
+		w.tier.handovers_per_tick = 0  # the rammer stays near and the target in the tier from here on
+		assert_true(_tiered(target) and not rammer.ship.is_tier_parked(), "%s: a near rammer and a tier target" % schedule)
+		var pilot := rammer.driver.brain as AiPilot
+		assert_true((pilot.behaviour(&"ram") as BehaviourRam).commit(pilot.context), "%s: committed" % schedule)
+		var t: int = 0
+		while rams.is_empty() and t < 1200:
+			await _ticks(1)
+			t += 1
+		assert_false(rams.is_empty(), "%s: the near rammer rammed the tier target (%d ticks)" % [schedule, t])
+
+
+func test_a_tier_kill_by_a_roll_frees_its_wing_slot_raises_the_kill_and_the_slot_is_refilled() -> void:
+	if _skipped():
+		return
+	var main := (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
+	main.input_source = FakeInputSource.new()
+	main.scenario_path = ScenarioLoader.FREE_FLIGHT_PATH
+	main.ally_pool_size = 4
+	add_child_autofree(main)
+	await _ticks(2)
+	var wing: Wing = main.wings.player_wing()
+	main.wings.replenish(wing)
+	await _ticks(2)
+	var member: Combatant = wing.members()[0]
+	var slot: int = wing.slot_of(member)
+	member.damageable.invulnerable = false
+	var kills: Array = []
+	main.director.ship_destroyed.connect(func(c: Combatant, info: HitInfo) -> void: kills.append([c, info]))
+	member.ship.global_position = main.ship.global_position + Vector3(0.0, 0.0, -20000.0)
+	member.ship.reset_physics_interpolation()
+	await _ticks(10)
+	var sim: SimCore = SimCore.for_tree(get_tree())
+	var id: int = member.ship.get_instance_id()
+	assert_true(member.ship.is_tier_parked() and bool(sim.core.tier_has(id)), "the wingman 20 km out flies as a tier row")
+	sim.core.tier_push_hit(id, main.ship.get_instance_id(), member.damageable.hull.hp + 1.0, Vector3.ZERO)
+	await _ticks(3)
+	assert_eq(kills.size(), 1, "the rolled kill raised ship_destroyed (what the score counts)")
+	assert_false(main.ships.alive().has(member), "the ship went back to the pool")
+	assert_false(wing.members().has(member), "and left its wing")
+	assert_true(wing.empty_slots().has(slot), "its slot is owed")
+	var refilled: Array[Combatant] = main.wings.replenish(wing)
+	assert_eq(refilled.size(), 1, "the slot is refilled by a new pilot")

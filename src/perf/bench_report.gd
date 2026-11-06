@@ -105,10 +105,13 @@ static func run_markdown(s: Dictionary) -> String:
 		var tier: Dictionary = weapons.get("tier", {})
 		if not tier.is_empty() and float(tier.get("fighter_rows", 0.0)) + float(tier.get("capital_rows", 0.0)) > 0.0:
 			lines.append("")
-			lines.append("The tier over the measured window (M4-T22): main-thread cost %.1f us a tick for %.0f fighter rows (%.3f us each: the integration, their rolls, the landing) and %.1f us for %.0f capital rows (%.2f us each: their rolls); %d fighter shots rolled, %d hits landed; %d far-capital hits landed." % [
+			lines.append("The tier over the measured window (M4-T22): main-thread cost %.1f us a tick for %.0f fighter rows (%.3f us each: the integration, their rolls, the landing) and %.1f us for %.0f capital rows (%.2f us each: their share of the integration, their rolls and launches); the thinks %.1f a tick (at most %d), %.1f us a tick in the AI step (%.3f us a fighter row; %s step: %s); %d fighter shots rolled, %d hits landed; %d far-capital group rolls, %d hits landed." % [
 					float(tier.get("fighters_us", 0.0)), float(tier.get("fighter_rows", 0.0)), float(tier.get("per_fighter_us", 0.0)),
 					float(tier.get("capitals_us", 0.0)), float(tier.get("capital_rows", 0.0)), float(tier.get("per_capital_us", 0.0)),
-					int(tier.get("shots", 0)), int(tier.get("hits", 0)), int(weapons.get("tier_capital_hits", 0))])
+					float(tier.get("thinks_per_tick", 0.0)), int(tier.get("thinks_max", 0)), float(tier.get("think_us", 0.0)),
+					float(tier.get("per_fighter_think_us", 0.0)), String(tier.get("think_schedule", "")),
+					"the main thread" if String(tier.get("think_schedule", "")) == "inline" else "the worker thread",
+					int(tier.get("shots", 0)), int(tier.get("hits", 0)), int(tier.get("capital_rolls", 0)), int(weapons.get("tier_capital_hits", 0))])
 	lines.append("")
 	lines.append_array(_breakdown_table(s.get("stages", {}) as Dictionary, float(s.get("sync_timed_share", 0.0))))
 	var engine: Dictionary = s.get("engine_check", {})

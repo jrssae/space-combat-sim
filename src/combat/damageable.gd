@@ -57,6 +57,9 @@ var respects_god_mode: bool = false
 ## `invulnerable`). Hits still arrive (`hit_taken`); only the console's `kill` gets through, as it does through god mode.
 ## The pool clears it on every acquire.
 var invulnerable: bool = false
+## How many times the hull was made whole again (`restore`: a respawn, a pool re-use, a heal): a far missile launched at one
+## life does not land on the next (M4-T22 fix round 1).
+var life: int = 0
 
 
 func _init() -> void:
@@ -152,6 +155,7 @@ func apply_hit(info: HitInfo) -> void:
 
 ## A full, intact hull again (respawn, pool re-use, console `heal`): the hull points and the damage zones.
 func restore() -> void:
+	life += 1
 	hull.restore()
 	zones.reset()
 	restored.emit()

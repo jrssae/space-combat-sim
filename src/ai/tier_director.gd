@@ -43,6 +43,11 @@ var demotions: int = 0
 var last_us: int = 0
 ## Handovers a tick carries at most (`HANDOVERS_PER_TICK`; a test lowers it).
 var handovers_per_tick: int = HANDOVERS_PER_TICK
+## The seed the tier's rolls draw from (the bench's seed; 0 elsewhere), pushed to the core when it changes (fix round 1).
+var seed_value: int = 0
+var _seed_given: int = -1
+## Rams the tier landed so far (fix round 1).
+var rams_landed: int = 0
 
 var _tiered_ships: Dictionary[int, Combatant] = {}
 var _tiered_capitals: Dictionary[int, CapitalStandin] = {}
@@ -72,6 +77,11 @@ var _cost_capital_rows: int = 0
 var _cost_ticks: int = 0
 var _shots_at_reset: int = 0
 var _hits_at_reset: int = 0
+var _rolls_at_reset: int = 0
+# The tier's thinks summed since `reset_costs` (fix round 1): how many, their time in the AI step's job, the most in a tick.
+var _cost_thinks: int = 0
+var _cost_think_us: float = 0.0
+var _cost_thinks_max: int = 0
 
 
 func _init() -> void:
@@ -174,6 +184,7 @@ func step() -> void:
 		return
 	_sim = sim
 	_land_fighter_hits(sim)
+	_land_rams(sim)
 	_sum_costs(sim)
 	_push_frame(sim)
 	_prune(sim)
@@ -426,6 +437,10 @@ func reset_costs() -> void:
 	_cost_ticks = 0
 	_shots_at_reset = int(_sim.core.tier_shots()) if _sim != null and is_instance_valid(_sim) and _sim.core != null else 0
 	_hits_at_reset = hits_landed
+	_rolls_at_reset = standins.tier_group_rolls if standins != null and is_instance_valid(standins) else 0
+	_cost_thinks = 0
+	_cost_think_us = 0.0
+	_cost_thinks_max = 0
 
 
 ## What the tier did since `reset_costs` (the bench's window): the cost means (`cost_means`), the fighters' shots rolled and
@@ -434,9 +449,15 @@ func window_summary() -> Dictionary:
 	var means: PackedFloat64Array = cost_means()
 	var ticks: float = float(maxi(_cost_ticks, 1))
 	var shots: int = (int(_sim.core.tier_shots()) if _sim != null and is_instance_valid(_sim) and _sim.core != null else 0) - _shots_at_reset
+	var fighter_rows: float = float(_cost_fighter_rows) / ticks
+	var think_us: float = _cost_think_us / ticks
 	return {"fighters_us": means[0], "capitals_us": means[1], "per_fighter_us": means[2], "per_capital_us": means[3],
-			"fighter_rows": float(_cost_fighter_rows) / ticks, "capital_rows": float(_cost_capital_rows) / ticks,
-			"shots": shots, "hits": hits_landed - _hits_at_reset}
+			"fighter_rows": fighter_rows, "capital_rows": float(_cost_capital_rows) / ticks,
+			"shots": shots, "hits": hits_landed - _hits_at_reset,
+			"capital_rolls": (standins.tier_group_rolls if standins != null and is_instance_valid(standins) else 0) - _rolls_at_reset,
+			"thinks_per_tick": float(_cost_thinks) / ticks, "thinks_max": _cost_thinks_max, "think_us": think_us,
+			"per_fighter_think_us": think_us / maxf(fighter_rows, 1.0),
+			"think_schedule": String(Settings.get_value(&"sim_step"))}
 
 
 ## The tier's main-thread cost per tick since `reset_costs`, us: `[fighters, capitals, per fighter row, per capital row]`
@@ -457,11 +478,54 @@ func _sum_costs(sim: SimCore) -> void:
 	if fighters + capitals == 0:
 		return
 	var cannons_us: float = float(sim.cannons.tier_us()) if sim.cannons != null else 0.0
-	_cost_fighters_us += float(sim.core.tier_step_us()) + cannons_us + float(land_us)
-	_cost_capitals_us += standins.tier_fire_us() if standins != null and is_instance_valid(standins) else 0
+	# The integration is shared by row count; the capitals' launch rolls are inside their figure.
+	var step_us: float = float(sim.core.tier_step_us())
+	var share: float = float(fighters) / float(fighters + capitals)
+	_cost_fighters_us += step_us * share + cannons_us + float(land_us)
+	_cost_capitals_us += step_us * (1.0 - share) + (standins.tier_fire_us() if standins != null and is_instance_valid(standins) else 0.0)
 	_cost_fighter_rows += fighters
 	_cost_capital_rows += capitals
 	_cost_ticks += 1
+	var host: Object = NativeBrains.host(get_tree())
+	if host != null and host.has_method(&"tier_thinks"):
+		var thinks: int = int(host.tier_thinks())
+		_cost_thinks += thinks
+		_cost_thinks_max = maxi(_cost_thinks_max, thinks)
+		_cost_think_us += float(host.tier_think_us())
+
+
+# The rams the core finds where a tier ship meets its rammer's target, landed by the near rule (`RamResolver.ram_pending`),
+# through the ram resolver when there is one (so `ram_resolved` hears them).
+func _land_rams(sim: SimCore) -> void:
+	var found: Array = sim.core.tier_ram_contacts(get_physics_process_delta_time())
+	var rammers: PackedInt64Array = found[0]
+	if rammers.is_empty():
+		return
+	var pending: Array[Array] = []
+	for k: int in rammers.size():
+		var first: Dictionary = _ram_hull(rammers[k], (found[2] as PackedVector3Array)[k])
+		var second: Dictionary = _ram_hull((found[1] as PackedInt64Array)[k], (found[3] as PackedVector3Array)[k])
+		if first.is_empty() or second.is_empty():
+			continue
+		pending.append_array(RamResolver.ram_pending(first, second, (found[4] as PackedVector3Array)[k], "tier ram"))
+	var rams: RamResolver = RamResolver.current()
+	if rams != null:
+		rams.land(pending)
+	else:
+		for ram: Array in pending:
+			(ram[0] as Damageable).apply_hit(ram[1] as HitInfo)
+	rams_landed += pending.size()
+
+
+# A hull as the ram rule takes it, from body `body_id` and the velocity its row has; empty when it is gone or destroyed.
+func _ram_hull(body_id: int, velocity: Vector3) -> Dictionary:
+	if not is_instance_id_valid(body_id):
+		return {}
+	var body := instance_from_id(body_id) as Node3D
+	var damageable: Damageable = Damageable.of(body)
+	if damageable == null or damageable.hull.destroyed:
+		return {}
+	return {"id": body_id, "damageable": damageable, "velocity": velocity, "mass": damageable.ram_mass()}
 
 
 # A tiered body's row reads the hull its `Damageable` has left after every hit (near bolts, tier rolls, the console).
@@ -490,6 +554,9 @@ func _on_tier_damaged(_info: HitInfo, _applied: float, damageable: Damageable, b
 
 # The beat's period and the pull, pushed when they change (a rebase moves the core's own copy of the sources).
 func _push_frame(sim: SimCore) -> void:
+	if seed_value != _seed_given:
+		_seed_given = seed_value
+		sim.core.tier_set_seed(seed_value)
 	var period: int = period_ticks()
 	if period != _period_given:
 		_period_given = period
@@ -575,6 +642,12 @@ func _register_console() -> void:
 				"doc": "Far capitals' rolled hits landed since the bench's window began (M4-T22)"},
 		&"capital_fire_us": {"get": func() -> float: return standins.tier_fire_us() if standins != null and is_instance_valid(standins) else 0.0,
 				"unit": "us", "doc": "The last tick's far-capital rolls; wall clock (M4-T22)"},
+		&"seed": {"get": func() -> int: return seed_value, "doc": "The seed the tier's rolls draw from (the bench's seed; fix round 1)"},
+		&"rams": {"get": func() -> int: return rams_landed, "doc": "Rams the tier landed so far (a committed rammer meeting its target where one of the two is a tier row; fix round 1)"},
+		&"thinks": {"get": func() -> int: return int(NativeBrains.host(get_tree()).tier_thinks()) if NativeBrains.host(get_tree()) != null else 0,
+				"doc": "Tier fighters' thinks in the last handed-over AI step (fix round 1)"},
+		&"think_us": {"get": func() -> float: return float(NativeBrains.host(get_tree()).tier_think_us()) if NativeBrains.host(get_tree()) != null else 0.0,
+				"unit": "us", "doc": "Their summed time on the step's own clock: the worker thread when sim_step is threaded, the main thread when inline (fix round 1)"},
 		&"cost_us": {"get": func() -> String: return "%.1f fighters, %.1f capitals; %.3f a fighter, %.2f a capital" % Array(cost_means()),
 				"doc": "The tier's main-thread cost per tick since the bench's window began (or the first tier row): the fighters' part (integration, rolls, landing), the far capitals' rolls, and each per row, us; wall clock (M4-T22)"},
 	}), self)
