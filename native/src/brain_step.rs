@@ -29,9 +29,9 @@ pub const OUT_LEN: usize = OUT_RAM + 1;
 /// A batch think's output per ship (M4-T18): 1 when the host thought it (0: declined, the rest zeros), then `OUT_LEN`.
 pub const BATCH_OUT: usize = OUT_LEN + 1;
 /// `events`' head: thinks near the player, thinks far, thinks declined, the most contacts a think saw, the hosted
-/// drivers that held this tick (M4-T35); then a pair (the ship's place in the batch, its events) for every ship whose
-/// driver has something to do.
-pub const EVENTS_HEAD: usize = 5;
+/// drivers that held this tick (M4-T35), the hosted drivers left alone as low-attention tier rows (M4-T21); then a pair
+/// (the ship's place in the batch, its events) for every ship whose driver has something to do.
+pub const EVENTS_HEAD: usize = 6;
 /// `set_fault`'s injected bug for the determinism test: a think adds to its main thrust what the worker's previous think
 /// left behind, so it reads another row's output.
 pub const FAULT_CARRY: i64 = 1;
@@ -524,7 +524,7 @@ fn queue_hosted(work: &mut Work, snap: &Snapshot, n: usize, rel_len: usize) -> u
             continue;
         };
         if snap.rows.flags[r] & FLAG_TIER != 0 {
-            work.events[4] += 1; // in the low-attention tier (M4-T21): the tier flies it, no think here
+            work.events[5] += 1; // in the low-attention tier (M4-T21): the tier flies it, no think here
             continue;
         }
         h.near = frame.player_live

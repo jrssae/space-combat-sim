@@ -81,6 +81,7 @@ static var _count_frame: int = -1
 static var _thinks_near: int = 0
 static var _thinks_far: int = 0
 static var _held: int = 0
+static var _tiered: int = 0
 static var _contacts_max: int = 0
 static var _thinks_native: int = 0
 static var _thinks_fallback: int = 0
@@ -474,8 +475,10 @@ func rows_event(events: int, out: PackedFloat64Array, base: int) -> void:
 
 ## Adds a rows batch's counts to the tick's (M4-T33): thinks near and far, declined thinks (each held, as a far-rate tick
 ## is), the most contacts a think saw, the drivers it handed an event, and the hosted drivers that held (M4-T35).
-static func add_rows_counts(near: int, far: int, declined: int, contacts: int, events: int, held_hosted: int = 0) -> void:
+static func add_rows_counts(near: int, far: int, declined: int, contacts: int, events: int, held_hosted: int = 0,
+		tiered_hosted: int = 0) -> void:
 	_roll_counts()
+	_tiered += tiered_hosted
 	_rows_events += events
 	_thinks_near += near
 	_thinks_far += far
@@ -580,6 +583,11 @@ static func held() -> int:
 ## How many AI ships thought in the native brains in the latest tick the drivers ran (M4-T17).
 static func thinks_native() -> int:
 	return _thinks_native
+
+
+## How many hosted AI ships the host left alone in the latest tick because they fly as low-attention tier rows (M4-T21).
+static func tiered() -> int:
+	return _tiered
 
 
 ## How many native pilots the host declined in the latest tick (the rows moved under the frame's scan, or the ship had no
@@ -799,6 +807,7 @@ static func _roll_counts() -> void:
 		_thinks_near = 0
 		_thinks_far = 0
 		_held = 0
+		_tiered = 0
 		_contacts_max = 0
 		_thinks_native = 0
 		_thinks_fallback = 0

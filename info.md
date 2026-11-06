@@ -119,7 +119,7 @@ Source: `src/autoload/debug_console.gd`
 
 | Provider | Source |
 |---|---|
-| `ai` | `src/ai/ai_console.gd` (M4-T17 adds `thinks_native`: AI ships whose think ran in the native brains in the last tick, and `thinks_fallback`: native pilots the host declined, each holding its last command; M4-T33 adds `rows_events`: drivers the last rows batch handed something to do, and `row_commands`: AI ships flying their pilot's command from the core's row; M4-T35 adds `hosted`: drivers whose step the native host decides) |
+| `ai` | `src/ai/ai_console.gd` (M4-T17 adds `thinks_native`: AI ships whose think ran in the native brains in the last tick, and `thinks_fallback`: native pilots the host declined, each holding its last command; M4-T33 adds `rows_events`: drivers the last rows batch handed something to do, and `row_commands`: AI ships flying their pilot's command from the core's row; M4-T35 adds `hosted`: drivers whose step the native host decides; M4-T21 adds `tiered`: hosted ships the host left alone as low-attention tier rows, apart from `held`) |
 | `allies` | `src/game/ship_pool.gd` |
 | `audio` | `src/audio/audio_director.gd` |
 | `camera` | `src/camera/camera_rig.gd` |

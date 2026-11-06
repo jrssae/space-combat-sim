@@ -29,12 +29,12 @@ const PRIORITY: int = -9
 ## Per ship in the host's answer: 1 when it thought, then the think's `AiPilot.NATIVE_OUT_LEN` numbers.
 const STRIDE: int = AiPilot.NATIVE_OUT_LEN + 1
 ## A rows batch's events per ship (`ScsBrains.rows_events`, M4-T33): its first command from the row, a changed trigger, a
-## target to select; and the events' head (thinks near, thinks far, declined, the most contacts seen).
+## target to select; and the events' head (thinks near, thinks far, declined, the most contacts seen, hosted held, hosted tiered).
 const EVENT_ENTER: int = 1
 const EVENT_FIRE: int = 2
 const EVENT_SELECT: int = 4
 const EVENT_SETTLE: int = 8
-const EVENTS_HEAD: int = 5
+const EVENTS_HEAD: int = 6
 const NO_RELATION := Vector2i(-1, -1)
 ## The step's schedules (`sim_step`, M4-T24): today's same-tick step, the one-tick handover on the main thread, the
 ## one-tick handover with the job on the step's worker thread.
@@ -446,7 +446,7 @@ func _apply_rows(launched: Launched, out: PackedFloat64Array, head: PackedInt64A
 		launched.answer.ready = true
 	var named: int = maxi(head.size() - EVENTS_HEAD, 0) / 2
 	if head.size() >= EVENTS_HEAD:
-		AiPilotDriver.add_rows_counts(head[0], head[1], head[2], head[3], named, head[4])
+		AiPilotDriver.add_rows_counts(head[0], head[1], head[2], head[3], named, head[4], head[5])
 	else:
 		AiPilotDriver.add_rows_counts(0, 0, drivers.size(), 0, 0, 0)
 	var k: int = EVENTS_HEAD

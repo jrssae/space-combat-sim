@@ -361,7 +361,16 @@ func test_a_tier_ship_does_not_think_and_thinks_again_when_promoted() -> void:
 		var thinks_at_demotion: int = int(host.slot_think_count(slot))
 		var near_thinks: int = int(host.slot_think_count(near_slot))
 		var command_at_demotion: PackedFloat64Array = sim.core.row_command(c.ship.get_instance_id())
-		await _ticks(60)
+		var held_most: int = 0
+		var head_sizes_ok: bool = true
+		for t: int in 60:
+			await _ticks(1)
+			held_most = maxi(held_most, AiPilotDriver.held())
+			var events: PackedInt64Array = host.rows_events()
+			head_sizes_ok = head_sizes_ok and (events.is_empty() or (events.size() >= BrainBatch.EVENTS_HEAD
+					and (events.size() - BrainBatch.EVENTS_HEAD) % 2 == 0))
+		assert_lte(held_most, 1, "%s: the tier ship is not counted held (only the near one can hold)" % schedule)
+		assert_true(head_sizes_ok, "%s: the host's events head is the batch's EVENTS_HEAD long" % schedule)
 		assert_eq(int(host.slot_think_count(slot)), thinks_at_demotion, "%s: a tier ship does not think in a second" % schedule)
 		assert_gt(int(host.slot_think_count(near_slot)), near_thinks, "%s: the near one keeps thinking" % schedule)
 		assert_eq(sim.core.row_command(c.ship.get_instance_id()), command_at_demotion, "%s: its row command is held" % schedule)
@@ -372,6 +381,16 @@ func test_a_tier_ship_does_not_think_and_thinks_again_when_promoted() -> void:
 		for each: Combatant in pool.alive():
 			pool.release(each)
 		await _ticks(2)
+
+
+func test_tier_holds_have_a_count_of_their_own_apart_from_the_far_rate_holds() -> void:
+	AiPilotDriver.roll_counts()
+	await _ticks(1)  # a fresh tick's counts
+	AiPilotDriver.add_rows_counts(0, 0, 0, 0, 0, 2, 3)
+	assert_eq(AiPilotDriver.held(), 2, "two hosted drivers held on the far rate")
+	assert_eq(AiPilotDriver.tiered(), 3, "three left alone as tier rows, counted apart")
+	var read: Dictionary = DebugConsole.registry.read("ai.tiered")
+	assert_true(bool(read.get("ok", false)), "the ai provider reads it")
 
 
 func test_a_capital_leaves_with_its_turrets_and_fires_again_when_it_is_back() -> void:
