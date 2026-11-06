@@ -3085,6 +3085,99 @@ scripts/input_latency.gd         the input latency probe: a pad press on the fak
   cache). `test_sim_core` guards the job and the thread. The existing native-against-native pairings (T33, T35) hold under
   the default; the GDScript-against-native ones pin `inline`.
 
+### 17.14 The low-attention tier (T21)
+
+```
+native/src/tier.rs               the tier's rows (far fighters and capitals with no body and no node) and the integrator: the
+                                 pose advanced every tick, the forces recomputed on the row's beat; the pull from point sources;
+                                 the candidate walks; engine-free, under test_sim_core's guard
+native/src/tier_rows.rs          the core's shell: types, add, attrs, control, hulk, take, state, period, gravity, the walks
+native/src/sim_core.rs           the tier stepped inside sync_in and its rows appended after the statics, flagged FLAG_TIER
+src/ai/tier_director.gd          TierDirector: a child of World at -12 (before the core's sync); the radius and the hysteresis,
+                                 promotion and demotion, the row and body handover; the `tier` console provider
+src/game/ship_pool.gd            park_in_tier, return_from_tier; release takes a tiered ship's row with it
+src/ship/ship.gd                 park_for_tier, unpark_from_tier, assist_state, set_assist_state, hulk
+src/perf/standins/capital_standin.gd   park_for_tier, unpark_from_tier; the director skips a parked capital's engines and weapons
+```
+
+- **Why.** At `battle` 500 half the fighters and most capitals are more than 10 km from the player, out of sensor range of
+  anything the player sees, and each still cost Jolt's step, the body sync and the propagation of its transform to fifteen
+  child nodes (T19: 2.8 us a ship for the sync alone, about a third of the physics stage), a flight step, a cannon step and a
+  slot in every broad phase. The tier takes those ships out of Jolt and out of the scene's processing and keeps them as rows
+  the core integrates itself (Q15, Q22), so the tick scales with the near count. T22 gives the rows brains and fire, T23 their
+  dots and radar blips.
+- **What a tier row is.** One row in the core's tier table: the body's id and its hull's, the kind (a fighter of a registered
+  type, or a capital), faction, radius, broadcast reach, hull fraction, name, position, velocity, attitude, spin, a capital's
+  cruise velocity, the command a fighter flies when the brains hold none for it, the assist's smoothed pod-yaw state, the hulk
+  flag, a stagger ordinal and what the last beat left to apply (acceleration, angular acceleration, the speed ceiling). A
+  fighter type is the flight kernel's `Body` (T10's maths: the same spec, nozzles and torque axes `ScsFlightStep` flies) plus the
+  centre of mass its nozzles turn it about; the director registers each `ShipSpec` once (`FlightBatch.type_arrays`).
+- **The integrator.** Inside every `sync_in`, before the bodies are read, the core steps the tier for the tick that just
+  ended (as Jolt stepped the bodies before the read). Every row advances semi-implicitly as Jolt does: the velocity by the
+  held acceleration, then the position by the new velocity, the spin by the held angular acceleration, the attitude by the
+  spin (the axis-angle rotation, re-orthonormalised). On its beat (every `tier_hz` ticks, staggered by ordinal) a fighter's
+  held command (the row command the brains wrote, `row_commands` by body id, else the command it was demoted with) goes
+  through `kernels::flight::tick` with the beat's dt: the total force (nozzles, RCS, the assist's cap, the environment's
+  pull) over the mass is the acceleration; the RCS torque plus each nozzle force's moment about the centre of mass, turned into
+  the body frame and divided by the spec's inertia, the angular acceleration; the spec's speed limit clamps every tick. A
+  capital follows `CapitalStandin.cruise_force`'s law (toward its cruise at 2 m/s^2 at most, holding off the pull) and keeps
+  its attitude. A hulk holds no force and no brain: it coasts on its last motion and is never removed for being idle (M12's
+  disabled hulks, `docs/roadmap.md`). The pull comes from point sources the director pushes from the bench's moon
+  (`tier_set_gravity`), the same `gm / r^2` as `GravityStandin.accel`, bit for bit. Fuel is not drawn in the tier.
+- **The rows in the scan.** After the statics the core appends the tier rows to `Rows`, flagged `FLAG_TIER` and `FLAG_HULL`
+  (a hulk `FLAG_HULK` too), `rigid` (a ship to the brains' contacts; a hulk is not) but never `FLAG_RIGID` (no Jolt body) and
+  never `FLAG_HULL_ACTIVE` (nothing sweeps or rams a tier row in T21; T22 adds the sphere sweep and the fire). So the near
+  brains see far ships as contacts, `row_of_id`, the handles (negative for a tier row) and `rows_digest` hold them, while the
+  kernels that write to a body or fire from one skip them: the hosted drivers' step holds a tier ship (the tier replaces the
+  far think rate for it; T22's tier brains think for it), the cannon kernel fires nothing from it, the weapon rows treat a
+  tier capital as having no row (its turrets, beams, launches and strike wait for T22's aggregated fire), the selection check
+  leaves its parked controller alone. The scan GDScript builds from the core (`snapshot`, the first `node_count` rows) never
+  carries them. A rebase shifts the tier table and the pull's sources with the rows.
+- **Promotion and demotion.** `TierDirector` runs at -12, before the core's first sync, so a tick's rows never hold a body
+  and its tier row at once. Each tick the core names, from the rows as the last sync left them and the player's position
+  (`AiPilotDriver.driver_frame`), the fighters and capitals in Jolt beyond `tier_radius_m` plus 10 % (`tier_far_bodies`;
+  the player's own body left out) and the tier rows within `tier_radius_m` (`tier_near_rows`): the hysteresis keeps a ship on
+  the line from flipping every tick. The director hands over at most 64 of them a tick, promotions first (a battle's start
+  would otherwise park hundreds in one tick). A demotion reads the body's pose and motion through the same getters the core
+  reads (so the row starts bit for bit where the body was), its held command (`held_command`: the row command when it flies
+  one, else the ship's own command and trigger) and its assist state, adds the row with the ship's attributes, and parks the
+  body: hidden and not processing, which takes it out of Jolt (`CollisionObject3D`'s disable mode removes the body from the
+  space), out of the scan (its marker inactive) and out of every per-ship pass; its hosted driver is marked not live by the
+  same notification the pool's parking sends, its cannon idles, its name, pilot, hull, selection and wing slot state stay.
+  A promotion takes the row (`tier_take`) and sets the body's transform, velocities and assist state from it exactly, then
+  shows it; the row command stays in the map, so the flight step flies it again at -1 and the ship's own command is what
+  it left with. A capital goes with its turrets and emitters (children of its body) and comes back with them where they were.
+  With no live player nothing moves tier; with `tier_radius_m` 0, or the core off, every row is promoted (the bodies come
+  back where the rows had flown to; with the core gone, where they were parked). A pooled ship released while tiered takes
+  its row with it (`ShipPool.release`); a capital freed by the bench's `clear` loses its row at the next tick.
+- **A hulk's promotion** brings the body back as a hulk: `Ship.hulk` (no thrust, no assist), its pilot dropped, its trigger
+  released, so it coasts under Jolt as it drifted in the tier. Today nothing disables a ship without destroying it, so this
+  is a row state and a test, not gameplay.
+- **What a tier ship is not, in T21.** Not hittable (no sweep, no ram, no blast: T22), not drawn (T23: a dot from its row; its
+  far dot leaves with its hidden body), not a wing member while parked (`Wing.refresh` sees an inactive hull and frees its
+  slot; it rejoins as the wave system places it), not fuelled, not heard. Its parked node keeps its last pose: readers of a
+  tiered ship's node position (the pool's console list) see where it was demoted, not where its row is.
+- **Bit for bit.** The handover copies: a demotion's row equals the body's pose, motion, command and assist state, and a
+  promotion's body equals the row's (`test_tier_handover`: 100 handovers over a 20 s flight with no handover error at all,
+  on both of T24's schedules). The integrator itself is not Jolt (a 20 Hz force update against Jolt's 60 Hz step; the same
+  flight maths), so a ship demoted and promoted flies a slightly different path from one that stayed; the near set, which
+  is what the player sees and fights, is untouched. One thread and six give the same rows with tier rows among the
+  contacts; `threaded` equals `delayed` (the tier runs on the main thread inside the sync; the job only reads its rows).
+- **The rebase** (refactor finding 11) walks the shiftable group once: the nodes it moved are kept for the end-of-tick
+  interpolation reset, and a body parked for the tier is left where it stands (its row moves with the core and promotion
+  places it). The group is still walked, not kept as a list: nodes join it after entering the tree (`Projectile._ready`, the
+  camera rig, test fixtures), so a kept list would need every site to register with the World, and the walk itself is a
+  pointer copy; the cost was the translate of fifteen child nodes a ship, which the tier removes for parked ships.
+- **Settings and console.** `tier_radius_m` (10 000; 0 = off, live), `tier_hz` (20, live). Provider `tier`: `radius_m`,
+  `period_ticks`, `fighters`, `capitals`, `rows`, `hulks`, `promotions`, `demotions`, `step_us` (the tier's integration inside
+  the sync), `director_us`. Provider `perf` and the bench's entity counts gain `tier_fighters` and `tier_capitals`;
+  `fighters_far` counts a tiered fighter as far.
+- **Tests.** `test_tier` (the integrator on a hand-held tick: coasting keeps the velocity and spin bit for bit, the pull equals
+  the stand-in's, a held command pushes and the ceiling holds, the assist's held acceleration, the capital's cap, a hulk drifts
+  and stays, the rows join the scan after the statics flagged tier, a rebase shifts rows and pull once, the candidate walks,
+  take hands the state back exactly), `test_tier_handover` (above), `test_sim_core` (the tier's guard; `slot_of` bounded over
+  spawn and release cycles, an old handle to a reused slot refused), `test_world_frame` (the rebase and the parked body).
+
 ### 17.16 Rocks and mines as static rows (T29)
 
 ```

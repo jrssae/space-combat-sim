@@ -137,7 +137,7 @@ Source: `src/autoload/debug_console.gd`
 | `input` | `src/autoload/debug_console.gd` |
 | `lights` | `src/rendering/light_rig.gd` |
 | `livery` | `src/rendering/look_scene.gd` (M4-T30b: `player`, the player's livery; `list`, every ship in the world and its livery) |
-| `perf` | `src/perf/perf_probe.gd` |
+| `perf` | `src/perf/perf_probe.gd` (M4-T21 adds the counts `tier_fighters` and `tier_capitals`: the low-attention tier's rows in the last tick of a battle bench) |
 | `post` | `src/rendering/post_effects.gd` |
 | `raiders` | `src/game/ship_pool.gd` |
 | `ram` | `src/combat/ram_resolver.gd` (M4-T15 adds `source` and `gather_us`) |
@@ -152,6 +152,7 @@ Source: `src/autoload/debug_console.gd`
 | `time` | `src/autoload/debug_console.gd` |
 | `waves` | `src/game/wave_director.gd` |
 | `weapons` | `src/weapons/pulse_cannon.gd` |
+| `tier` | `src/ai/tier_director.gd` (M4-T21: the low-attention tier: `radius_m` (the setting `tier_radius_m`; 0 = off), `period_ticks` (the setting `tier_hz`), `fighters`, `capitals`, `rows`, `hulks`, `promotions`, `demotions`, `step_us` (the tier's integration inside the core's first sync), `director_us` (the tick's handovers)) |
 | `wing` | `src/game/wing_director.gd` |
 | `world` | `src/world/world_frame.gd` |
 

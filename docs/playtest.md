@@ -499,6 +499,16 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
 - **T35, bolts as rows:** the AI ships' bolts are drawn by one multimesh per look (`core.bolt_draws`), interpolated between ticks as the nodes were. Check in a `battle` run: bolts leave the muzzles, fly straight and smoothly (no stutter against the hulls), hit flashes still appear where bolts land, the chase camera's larger bolts (`Projectile.visual_scale`) still apply, and nothing is drawn where a bolt was spent. Switch `settings.perf_native_bolt_rows` off and on mid-run to compare with the bolt nodes.
 - **T35, the AI ships' muzzle flashes:** the lean ships' flashes come from one pool (a multimesh of billboard quads and pooled lights), not a node per muzzle. Check in a `battle` run: a flash pops at the muzzle of every AI shot for about 50 ms, grows and fades as the player's own flashes do, rides with the ship, and lights the nose; no flash lingers on a parked or dead ship.
 - **T35, the AI ships' shot sounds:** `AudioDirector.watch_ship` listens to `shot_fired`, which both bolt paths emit (fix round 1). Confirm every AI shot in a `battle` run makes its pulse or raider sound at the muzzle, with the bolt rows on and off.
+- [ ] **M4-T21 The low-attention tier.** AI fighters and capitals more than 10 km from you (`settings.tier_radius_m`) leave
+      Jolt and fly as native core rows integrated at 20 Hz from their held command; within 10 km they are promoted back onto
+      their bodies with their motion carried over exactly. In a `battle 300` or `500` run (`state tier` shows the rows and the
+      handovers): fly toward a far fight: its ships should appear as they come within 10 km (T23 draws tier rows as dots; until
+      then a far fight is dark beyond 10 km) with no pop, jump or stutter at the moment they appear, and keep flying as they
+      flew; fly away from a fight: ships should vanish past 11 km without a visible pop. A ship that crosses the line while
+      shooting should fire again at once when it is back. Compare with the tier off (`set settings.tier_radius_m 0`).
+- [ ] **M4-T21 The battle beyond the radius.** Tier ships do not fight yet (T22 gives them brains and fire): a far fight you
+      watch from 10 km out is frozen in its held commands until you come close. Say whether that reads as wrong from the
+      player's seat at `battle 500`, where most of the battle is beyond 10 km.
 - [ ] **M4-T38 Anti-aliasing, the default.** `settings.anti_aliasing` is `smaa` now (it was no anti-aliasing). Compare the sheets in
       `reports/perf/m4-t38_compare/pairs/` (each the same frozen `battle` 300 frame in all six modes): `edges_2160.png` and
       `edges_1080.png` (a wing and a rock edge), `hull_detail_2160.png` and `hull_detail_1080.png` (struts, panel lines, the small
