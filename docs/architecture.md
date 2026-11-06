@@ -908,12 +908,16 @@ and feeds them each frame. Console: `flare [on|off]`, `blur [on|off]`, provider 
 one of the viewport's `screen_space_aa`, `msaa_3d` and `use_taa`, so modes never stack). Console `aa [mode]`, provider `aa`.
 Upscaling (FSR 1.0 and 2.2) is T40's.
 
-**Why SMAA by default.** Measured on the maintainer's RX 6950 XT (the M4 Cycle log, M4-T38): SMAA smooths every edge (hull
-silhouettes, the rocks, the shader-drawn panel lines) for about 0.1 ms over FXAA and blurs the stars and the panel lines less than
-FXAA does. MSAA smooths only geometry edges and costs more GPU time and VRAM. TAA is the smoothest on still edges but the most
-expensive, softens thin moving things (bolts, sparks, far running lights) and needs the motion vectors below; it is offered, not
-defaulted. A 1 080-line 3D in a larger window costs more with `off`, MSAA or TAA than with FXAA or SMAA: without a screen-space
-pass Godot tonemaps at the window's resolution.
+**Why SMAA by default.** A look call that the costs allow, not a cost result: every mode but TAA costs well under a millisecond
+more than `off` on the maintainer's RX 6950 XT, and the game is CPU-bound in every layout. With the 3D at the 6144x3456 window's own
+size (scale 1, the machine's default) at `battle` 300, frozen-scene turns: off 2.83 ms, FXAA 2.99, SMAA 3.20, MSAA 2x 3.48, MSAA 4x
+3.77, TAA 5.50 (the M4 Cycle log, M4-T38). SMAA smooths every edge the picture has (hull silhouettes, rocks, the shader-drawn panel
+lines) where MSAA smooths only geometry edges; whether it looks better than FXAA on the panel lines and the stars is the
+maintainer's call (H, on the return checklist). SMAA, TAA and MSAA each take VRAM for their buffers (at the full 6K: SMAA about
+160 MB, TAA about 580 MB, MSAA 4x about 1.1 GB). TAA is offered, not defaulted: it costs the most GPU and 1 to 2 ms of CPU a frame, and
+it softens thin moving things. With the 3D scaled down in a larger window (1 080 or 2 160 lines in the 6K window), `off`, MSAA and
+TAA cost more than FXAA and SMAA: without a screen-space pass Godot composites the glow during the tonemap at the window's size;
+with glow off the gap is gone (a control run, the Cycle log).
 
 **Motion vectors (TAA, and T40's FSR 2.2).** Godot writes velocity only for opaque meshes. Measured with `VelocityProbeEffect`
 (a diagnostic compositor effect that reads the velocity buffer back, used by `test_motion_vectors_gpu`):
@@ -933,8 +937,15 @@ pass Godot tonemaps at the window's resolution.
   the old bolt's place (a 70 px smear in the test). `BoltSlotQuarantine` draws a bolt new to its slot collapsed at its own place for
   that one frame, so the slot is drawn empty before its new occupant shows and the first real vector starts where the bolt is.
   "New" means the basis changed or the bolt moved backwards along its flight (the same cannon's next shot). It costs one pass over
-  the slots a frame, under TAA only. Running lights, plumes, muzzle flashes, sparks and the explosion stay transparent: they inherit
-  the hull's or the sky's vector.
+  the slots a frame, under TAA only. A World rebase, switching the bolt rows off and on, a grown buffer and a look drawn empty
+  each start the slots afresh (every bolt drawn collapsed for one frame). A bolt material that is not a `BaseMaterial3D` stays as it
+  is and warns once.
+- Running lights, plumes, muzzle flashes, hit flashes, sparks, beams, missile bodies and the explosion stay transparent: they
+  inherit the hull's or the sky's vector. A far dot gets only the camera's turn, not its own motion (a dot at 2 km crossing at
+  300 m/s moves about 4 px a frame at 2 160 lines); TAA's clamp makes such a thing dim rather than ghost. None of these was measured
+  moving; they are on the return checklist.
+- **A rebase** shifts the camera and every hull together, so the renderer's own previous transforms stay consistent; the sky pass
+  uses only the camera's turn; the bolts start afresh (above).
 - **The motion blur** (§7.5) reads the velocity buffer for hulls and works out the sky's turn itself with the same sum, now also
   without the TAA jitter, so turning the sky pass on changes nothing it draws and a still camera under TAA does not blur the sky.
   It runs at `POST_TRANSPARENT`, before the TAA resolve, so the two never smear the same motion twice.
@@ -3370,9 +3381,10 @@ The worst second's process work at `battle` 500 fell from 25.7 to about 10.5 ms,
 
 ### 17.22 Anti-aliasing and motion vectors (T38)
 
-T38 adds the anti-aliasing setting and the motion vectors TAA needs (§7.6). For the performance side: SMAA is the default because
-it is the cheapest mode that smooths every edge (about 0.6 ms of GPU at `battle` 300 with the 3D at 1 080 lines, 1.4 ms at 2 160,
-frozen-scene turns; the full table is in the M4 Cycle log). Under TAA the bolt slot check walks every bolt slot once a frame in
+T38 adds the anti-aliasing setting and the motion vectors TAA needs (§7.6). For the performance side: SMAA is the default as a
+look call the costs allow; with the 3D at the 6K window's own size it costs 0.37 ms of GPU over `off` at `battle` 300 (3.20 against
+2.83 ms, frozen-scene turns) and about 160 MB, while TAA costs 2.7 ms and MSAA 4x 0.9 ms and 1.1 GB (the full tables, scaled and
+native, are in the M4 Cycle log). Under TAA the bolt slot check walks every bolt slot once a frame in
 GDScript (measured 0.8 ms a frame at `battle` 500's 2 300 bolts, against 0.09 ms for the bolt pass without it); T37 or a later
 native task can move it into the core's `bolt_transforms`, which knows when a slot changes hands. Under TAA the frame also costs
 about 1 ms more CPU elsewhere (Godot's own motion-vector bookkeeping). FSR 2.2 (T40) reuses the same motion vectors.

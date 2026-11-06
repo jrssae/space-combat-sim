@@ -7,10 +7,11 @@ extends Node
 ##
 ## Arguments after `--`: layout=<name> n=<ships> seed=<k> warmup=<s> pause=<on|off> modes=<a,b,...> rounds=<r> frames=<f>
 ## settle=<f> scale3d=<1080p|factor> camera=<chase|cockpit> shots=<dir> exec="<console statements once the scene is set>"
+## glow=<on|off> (a control: the environment's glow switched for the whole run)
 
 var options: Dictionary = {"layout": "battle", "n": "300", "seed": "1", "warmup": "10", "pause": "on",
 		"modes": ",".join(PackedStringArray(AntiAliasingMode.MODES)), "rounds": "4", "frames": "90", "settle": "30",
-		"scale3d": "1080p", "camera": "chase", "shots": "", "exec": ""}
+		"scale3d": "1080p", "camera": "chase", "shots": "", "exec": "", "glow": "on"}
 var main: Main
 var _modes: PackedStringArray
 var _gpu: Dictionary = {}
@@ -51,6 +52,9 @@ func _set_up() -> void:
 			int(float(options["warmup"])) + 600, options["seed"]])
 	if not String(options["exec"]).is_empty():
 		_run(String(options["exec"]))
+	var environment: Environment = get_viewport().find_world_3d().environment
+	if environment != null and String(options["glow"]) == "off":
+		environment.glow_enabled = false
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 	_started_usec = Time.get_ticks_usec()
 	_last_usec = _started_usec
@@ -117,8 +121,9 @@ func _shot(mode: String) -> void:
 func _finish() -> void:
 	var scale: float = get_tree().root.scaling_3d_scale
 	var lines: int = roundi(get_tree().root.size.y * scale)
-	print("[aa_compare] %s %s, %d rounds, 3D %d lines (scale %.3f), pause %s, %s frames a turn" % [options["layout"],
-			options["n"], int(options["rounds"]), lines, scale, options["pause"], options["frames"]])
+	print("[aa_compare] %s %s, %d rounds, 3D %d lines (scale %.3f) in a %dx%d window, pause %s, glow %s, %s frames a turn" % [
+			options["layout"], options["n"], int(options["rounds"]), lines, scale, get_tree().root.size.x, get_tree().root.size.y,
+			options["pause"], options["glow"], options["frames"]])
 	for mode: String in _modes:
 		var gpu: PackedFloat64Array = _gpu[mode]
 		var frames: PackedFloat64Array = _frame[mode]

@@ -490,12 +490,15 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
 - [ ] **M4-T38 Anti-aliasing, the default.** `settings.anti_aliasing` is `smaa` now (it was no anti-aliasing). Compare the sheets in
       `reports/perf/m4-t38_compare/pairs/` (each the same frozen `battle` 300 frame in all six modes): `edges_2160.png` and
       `edges_1080.png` (a wing and a rock edge), `hull_detail_2160.png` and `hull_detail_1080.png` (struts, panel lines, the small
-      parts), `stars_2160.png` and `far_dots_2160.png` (stars and small far objects must stay crisp single points). Then fly the
+      parts), `stars_2160.png` and `far_dots_2160.png` (stars and small far objects must stay crisp single points), and
+      `edges_native.png`, `hull_detail_native.png`, `stars_native.png` with the 3D at the 6K window's own size (the game's default). Then fly the
       sandbox with `aa smaa`, `aa fxaa`, `aa msaa_4x` and `aa off`: say which you want as the default.
 - [ ] **M4-T38 TAA in motion.** `aa taa`, then fly a `battle 300` run with hard turns: the stars and the nebula must stay steady and
-      bright through a turn (no dimming, no trails), hull edges smooth, and a fast fighter crossing the view must leave no ghost.
+      bright through a turn (no dimming, no trails; a measured softening: a star's brightest pixel fell from 0.59 to 0.45 of white
+      on a turn under TAA, the light kept but spread, so say if the stars read soft), hull edges smooth, and a fast fighter crossing the view must leave no ghost.
       Bolts: under TAA they draw opaque (so they carry their own motion) and soften a little; check they read as bolts at 100 to 1 000
-      m, and that no bolt flashes from somewhere else when it appears. Running lights of far ships may soften. The sheet
+      m, and that no bolt flashes from somewhere else when it appears. Running lights of far ships may soften; far dots carry only the
+      camera's turn, not their own motion, so a fast far dot may dim. Beams, missiles and hit flashes stay transparent (not measured). The sheet
       `reports/perf/m4-t38_compare/pairs/moving_2160.png` (no AA, SMAA, TAA, the live fight) shows what the agent saw.
 - [ ] **M4-T38 TAA with motion blur.** `aa taa` and `blur on`: a hard turn smears the stars once (the blur), not twice; a still
       camera leaves the sky sharp.

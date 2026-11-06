@@ -2135,14 +2135,27 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   the quarantine T35's re-review asked for, done on the drawing side (the core's slot allocation is T24's this wave). The motion blur
   leaves out TAA's jitter and runs before the TAA resolve (checked), so the two never stack. Running lights, plumes, flashes, sparks
   and the explosion stay transparent: large soft effects survive TAA's clamping; thin far ones soften (on the return checklist).
-  **Defaults by the numbers:** every mode is GPU-cheap on this card (at `battle` 300, frozen-scene turns: SMAA 0.62 ms at 1 080
-  lines and 1.39 at 2 160, TAA 1.25 and 2.80, MSAA 4x 1.09 and 2.06); the frame is CPU-bound in every layout, so FPS barely moves
-  except under TAA, which costs 1 to 2 ms of CPU a frame at 300 and 500 (0.8 ms of it the slot check). SMAA is the default at
-  both heights: the cheapest mode that smooths every edge, sharper than FXAA, no VRAM for samples. The recommendation's other
-  option, TAA, stays offered: smoothest still edges, but it softens thin moving things and changes the bolts' blend. New tests:
+  **The default is a look call that the costs allow, not a cost result.** Every mode but TAA costs well under a millisecond over
+  `off` on this card and the frame is CPU-bound in every layout, so the numbers do not pick a winner; they rule out nothing but
+  TAA as a default (the most GPU, 1 to 2 ms of CPU a frame at 300 and 500, 0.8 ms of it the slot check, and it softens thin
+  moving things). With the 3D at the 6K window's own size (scale 1, the machine's default since T36) at `battle` 300, frozen-scene
+  turns: off 2.83 ms, FXAA 2.99, SMAA 3.20, MSAA 2x 3.48, MSAA 4x 3.77, TAA 5.50. SMAA is chosen because it smooths every edge
+  (MSAA only geometry edges) for 0.37 ms; whether it looks better than FXAA is the maintainer's call on the return checklist. New
+  tests:
   `test_anti_aliasing_mode`, `test_bolt_slot_quarantine`, `test_anti_aliasing`, `test_motion_vectors_gpu` (pending headless; 5 of 5
-  on the real renderer). New tool `scripts/aa_compare.sh` (modes in turns in one process, a screenshot each), for T40 too. The
+  on the real renderer), `test_bolt_mesh_taa` (fix round 1). New tool `scripts/aa_compare.sh` (modes in turns in one process, a screenshot each), for T40 too. The
   screenshot sheets are on the M4 return checklist.
+- **Fix round 1 (2026-11-05, the review):** the measures now include the 3D at the window's own size (scale 1, 3 456 lines in the 6K
+  window): every mode at `battle` 300 and off, SMAA and TAA at 500, live, plus the frozen-scene turns above. A control explains the
+  scaled tables' "off is slower than FXAA and SMAA": with glow off the gap is gone (off 0.56, FXAA 0.55, SMAA 0.57 ms at 1 080
+  lines), so it is the glow composited at the window's size when no screen-space pass runs; the glow is on screen in both paths.
+  `BoltMesh.update_from` takes the bolt source, so `test_bolt_mesh_taa` drives the TAA wiring with a stand-in: materials of looks
+  and meshes made under TAA go opaque and come back, a new bolt is collapsed one frame, and a grown buffer, a look drawn empty,
+  the bolt rows switched off and on and a World rebase each start the slots afresh (each reset removed in turn fails its test).
+  The quarantine keeps an occupant only for a forward move within 250 m and on its line of flight (a wingman's parallel bolt or one
+  too far ahead is new). A non-`BaseMaterial3D` bolt material warns once; `AntiAliasing` leaving the tree restores the bolt
+  materials. The main-scene smoke run prints the same two exit errors (25 resources in use, the PagedAllocator pages) on the base
+  `e094464` and with T38, the known leak T35's `8934e9b` fixes on `m4`.
 
 ##### M4-T40 Upscaling: FSR 2.2 and FSR 1.0 (Q59, Q60)
 
@@ -5381,9 +5394,36 @@ reused by a bolt elsewhere: a 74 px vector; both gone with the quarantine (`test
 `POST_TRANSPARENT` instead of `POST_SKY` rescued the stars just the same, so compositor effects at `POST_TRANSPARENT` (the motion
 blur) run before the TAA resolve.
 
-**Defaults:** `smaa` at 1 080 and at 2 160 lines: the cheapest mode that smooths every edge (0.62 and 1.39 ms at `battle` 300),
-sharper than FXAA on panel lines and stars, no sample VRAM; TAA is offered but costs the most GPU and CPU and softens thin moving
-things. The screenshot sheets (`reports/perf/m4-t38_compare/pairs/`) are on the return checklist.
+**Defaults:** `smaa` at every height. This is a look call that the costs allow, not a cost result: no mode but TAA costs as much
+as a millisecond on this card, the frame is CPU-bound, and FXAA is a little cheaper still. SMAA smooths every edge (MSAA only
+geometry edges); whether it looks better than FXAA is the maintainer's call. TAA is offered but costs the most GPU and CPU and
+softens thin moving things. The screenshot sheets (`reports/perf/m4-t38_compare/pairs/`) are on the return checklist.
+
+**Fix round 1 (the review): the 3D at the window's own size, and a control.** The tables above scale the 3D down in the 6K
+window. Native, scale 1 (6144x3456, the machine's default since T36), frozen-scene turns at `battle` 300 (`reports/perf/aa_compare/
+m4-t38_battle300_native.log`), GPU ms: off 2.830, FXAA 2.992, SMAA 3.200, MSAA 2x 3.477, MSAA 4x 3.770, TAA 5.497. With the 3D at
+the window's size `off` is the cheapest, as it should be.
+
+The fullscreen check, scale 1:
+
+| layout | mode | average FPS | 1 % low FPS | p99 frame ms | frame mean ms | GPU ms mean | game VRAM peak MB |
+|---|---|---|---|---|---|---|---|
+| `battle` 300 | off | 111.1 | 29.0 | 24.44 | 9.00 | 4.23 | 1445 |
+| `battle` 300 | fxaa | 111.5 | 27.9 | 23.95 | 8.97 | 4.42 | 1445 |
+| `battle` 300 | smaa | 108.4 | 33.6 | 25.40 | 9.22 | 4.72 | 1608 |
+| `battle` 300 | msaa_2x | 104.5 | 29.6 | 27.65 | 9.57 | 4.80 | 1997 |
+| `battle` 300 | msaa_4x | 96.9 | 28.3 | 27.86 | 10.32 | 5.24 | 2522 |
+| `battle` 300 | taa | 85.5 | 24.7 | 29.67 | 11.70 | 7.18 | 2025 |
+| `battle` 500 | off | 39.1 | 15.1 | 61.42 | 25.58 | 4.23 | 1445 |
+| `battle` 500 | smaa | 42.5 | 16.2 | 57.39 | 23.52 | 4.73 | 1608 |
+| `battle` 500 | taa | 36.7 | 14.1 | 61.71 | 27.27 | 7.17 | 2025 |
+
+At native the GPU time is 4 to 7 ms, so TAA and MSAA 4x now show in the frame (`battle` 300: 85 and 97 FPS against 111);
+SMAA costs about 0.5 ms and 160 MB. The control for the scaled tables' "off is slower than FXAA and SMAA": the same frozen
+`battle` 300 at 1 080 lines with the environment's glow off (`m4-t38_battle300_1080_noglow.log`) gives off 0.557, FXAA 0.545,
+SMAA 0.570, TAA 0.697 ms, against 0.993, 0.542, 0.619 and 1.251 with glow on. The gap is the glow: without a screen-space pass Godot
+composites it during the tonemap at the window's 6144x3456; with FXAA or SMAA at the 3D's size. The glow is on screen in both
+(the picture's mean is the same within 0.5 %, and 9 % lower with glow off).
 
 ## Definition of done (M4)
 

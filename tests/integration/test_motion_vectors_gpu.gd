@@ -98,6 +98,7 @@ func test_a_moving_point_writes_the_vector_its_movement_implies() -> void:
 		assert_lt(read[0].distance_to(expected), TOLERANCE_PX, "frame %d: read %s, moved %s" % [f, read[0], expected])
 
 
+# A canary pinned to Godot 4.7.2: if an upgrade starts writing the sky's motion, this fails and the sky pass may go.
 func test_without_the_sky_pass_godot_leaves_the_sky_at_zero() -> void:
 	if not _gpu():
 		return
