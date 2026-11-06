@@ -1470,6 +1470,10 @@ done and T20 proceeds.
 - **From T22's review (2026-11-06, added by T22's fix round 1 on the controller's ruling):** T23 owns `test_ai_objective`'s
   far-raider test (it reads a tier ship's parked node pose and `can_process`; the row does fly to its objective) and the
   broadcast and targeting tests of the seven (`test_ai_objective`'s and `test_broadcast`'s 90 km ally). The tier's ram is T22's.
+- **From T22's re-review (2026-11-06):** a tier row collides with nothing and T22's lean tier think ignores rocks and mines,
+  so a ship can be promoted inside or against a rock; nothing handles that and no test covers it. T23 (which owns what the player
+  meets at the radius) adds a promotion check: a row overlapping a static is moved clear along its velocity (or held one tier beat)
+  before its body comes back, with a test.
 - **From T21's review (2026-11-06):** T21 took tier ships out of the player's radar and targeting (both read active markers),
   so today a ship between 11 and 25 km and an ally anywhere past 11 km vanish from the radar and drop the player's lock; this
   task owns that fix (the "radar and targeting see it" goal and the selection test above).
@@ -1535,6 +1539,10 @@ done and T20 proceeds.
 - **Measures:** `scripts/bench.sh m4_p3` on every layout, `battle` to 1 000 (the sweep's N list extended; the 1 000 run with the
   profile's 15 % and 20 % capital share), the fullscreen check at `typical`, at the battle's headline, at 500 and at 1 000, the
   release export once, `scripts/run_tests.sh` once (Q10).
+- **From T22's re-review (2026-11-06):** the per-hull to-hit terms (Starfury 0.92, raider 1.25) were fitted at 4 Hz with
+  avoiding thinks and not refitted at 3 Hz with lean thinks; the fit probes were scratch tests, not kept. Every near brain's
+  nearest-contacts query now walks all ships (not the grid's cells): watch `ai.think_us` in the 500 to 1 000 sweep and in a sparse
+  scene. `_land_rams` and `tier_ram_contacts` sit outside the tier's cost timers (T37 may time them or return early).
 - **The limit sweep (Q62):** the fullscreen check at `battle` 500, 600, 700, 800, 900 and 1 000 on the defaults (threaded step,
   the 3D at 1 080 lines, vsync off, after the warm-up), two runs each; one table in report P3 with average FPS and 1 % low FPS
   per count, plus sim speed, p99 frame ms and the headless tick median at the same counts, so the maintainer sees where the

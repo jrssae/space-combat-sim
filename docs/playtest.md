@@ -517,7 +517,9 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       fight that went on without you (hurt hulls, ships missing that died out there, wingmen still in their slots), with no
       jump in a hull or a position at the moment they appear; your own bolts fired at a ship just beyond 11 km hit it. Say
       whether a fight met this way feels like the same fight you would have watched up close (a 3 Hz brain flies its attack
-      runs a little looser). Tier ships are still not drawn and not on the radar (T23), and a far death shows nothing yet
+      runs a little looser). Far ships also think lean: they ignore rocks, mines, incoming fire and avoidance (they collide with
+      nothing out there), so watch for a ship promoted inside or right against a rock at 10 km (a jolt, a hit or an explosion);
+      `state tier` should show `brain_period_ticks` 20 (a settings file saved before T22's fix round 2 may hold 4 Hz). Tier ships are still not drawn and not on the radar (T23), and a far death shows nothing yet
       (T23's far flash). A known limit (fix round 1): a far fight that settles into a steady tail chase scores fewer hits than
       the same chase up close (a Starfury sitting behind a raider at 450 m lands about 73 % of its shots up close, about 30 %
       in the tier); say whether you notice far chases ending slower than near ones. Far missiles can now be shot down by the
