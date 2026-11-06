@@ -34,3 +34,7 @@ mod bolt_sync;
 
 // M4-T34: the hit broad phase's grid with hashed cells, an engine-free kernel.
 mod sweep_cells;
+
+// M4-T21: the low-attention tier's rows and integrator, and the core's shell around them.
+mod tier;
+mod tier_rows;

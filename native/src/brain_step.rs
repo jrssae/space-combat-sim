@@ -13,7 +13,7 @@ use crate::brain_behaviours::{self, Brain, Field, Inputs, Scratch};
 use crate::kernels::contact::{self, Grid, Query, Work as QueryWork};
 use crate::row_commands::RowCommand;
 use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE};
-use crate::rows::{Bolts, Rows};
+use crate::rows::{Bolts, FLAG_TIER, Rows};
 use crate::threads::{Pass, Runner};
 use crate::v3::dist_sq;
 
@@ -523,6 +523,10 @@ fn queue_hosted(work: &mut Work, snap: &Snapshot, n: usize, rel_len: usize) -> u
             work.events[2] += 1; // no row this tick: held, as a declined think is
             continue;
         };
+        if snap.rows.flags[r] & FLAG_TIER != 0 {
+            work.events[4] += 1; // in the low-attention tier (M4-T21): the tier flies it, no think here
+            continue;
+        }
         h.near = frame.player_live
             && f64::from(dist_sq(snap.rows.positions[r], frame.player_at)) <= frame.near_sq;
         let on_beat = (h.steps + h.ordinal).rem_euclid(frame.period) == 0;

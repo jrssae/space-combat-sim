@@ -184,6 +184,13 @@ func path() -> StringName:
 static func register_slot(step: Object, rid: RID, spec: ShipSpec, layout: ThrusterLayout) -> int:
 	if step == null or spec == null or layout == null or not layout.valid:
 		return -1
+	var a: Array = type_arrays(spec, layout)
+	return int(step.register(rid, a[0], a[1], a[2], a[3], a[4], a[5]))
+
+
+## A ship type as the native step and the tier (M4-T21) take it: `[scalars, vectors, nozzle groups, nozzle positions,
+## nozzle exhausts, torque axes]`.
+static func type_arrays(spec: ShipSpec, layout: ThrusterLayout) -> Array:
 	var scalars := PackedFloat64Array([spec.mass, spec.pod_main_thrust, spec.pod_retro_thrust, spec.assist_gain_k,
 			spec.pod_yaw_gain, spec.pod_yaw_deadzone, spec.pod_yaw_smoothing_s, spec.brake_gain_k, spec.exhaust_velocity,
 			spec.speed_limit_mps, spec.assist_speed_max_mps])
@@ -191,8 +198,7 @@ static func register_slot(step: Object, rid: RID, spec: ShipSpec, layout: Thrust
 	var axes := PackedVector3Array()
 	for group: int in ThrusterLayout.GROUP_COUNT:
 		axes.append(layout.torque_axis(group))
-	return int(step.register(rid, scalars, vectors, layout.nozzle_groups, layout.nozzle_positions, layout.nozzle_exhausts,
-			axes))
+	return [scalars, vectors, layout.nozzle_groups, layout.nozzle_positions, layout.nozzle_exhausts, axes]
 
 
 ## Packs one ship's command for a step at `row` of the command arrays (sized by the caller).

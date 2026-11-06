@@ -7,7 +7,7 @@
 use godot::prelude::*;
 
 use crate::bolt_kernels::{self, Capacitor, Gate};
-use crate::rows::FLAG_RIGID;
+use crate::rows::{FLAG_RIGID, FLAG_TIER};
 use crate::sim_core::{KIND_BOLT, ScsSimCore};
 
 // One registered cannon: its ship, its muzzles in the ship's frame, its gate and what its bolts carry.
@@ -244,6 +244,9 @@ impl ScsCannons {
                 self.fallback.push(slot as i32);
                 continue;
             };
+            if c.rows.flags[r] & FLAG_TIER != 0 {
+                continue; // a ship in the low-attention tier (M4-T21) fires nothing from here
+            }
             if c.rows.flags[r] & FLAG_RIGID == 0 {
                 self.fallback.push(slot as i32);
                 continue;

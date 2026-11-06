@@ -9,7 +9,7 @@ use godot::prelude::*;
 
 use crate::threads::{self, Pass, Threads};
 
-pub use crate::rows::{Bolts, FLAG_HULL, FLAG_HULL_ACTIVE, FLAG_LATE, FLAG_RIGID, Rows};
+pub use crate::rows::{Bolts, FLAG_HULL, FLAG_HULL_ACTIVE, FLAG_LATE, FLAG_RIGID, FLAG_TIER, Rows};
 
 // The snapshot the scan takes of the rows, built here (it crosses the boundary).
 trait RowsSnapshot {
@@ -248,6 +248,21 @@ pub struct ScsSimCore {
     // Bodies whose row command GDScript released since the step's last launch (M4-T24): dropped from the job's commands
     // at the join.
     pub(crate) released: Vec<i64>,
+    // The low-attention tier (M4-T21): its rows, the fighter types they fly as, the pull they feel, the beat's period in
+    // ticks, each row's display name beside the engine-free table, the next handle and ordinal, the beat's scratch and the
+    // step's readouts.
+    pub(crate) tier: crate::tier::TierRows,
+    pub(crate) tier_types: Vec<crate::tier::Type>,
+    pub(crate) tier_gravity: crate::tier::Gravity,
+    pub(crate) tier_period: i64,
+    pub(crate) tier_names: Vec<GString>,
+    pub(crate) next_tier_handle: i64,
+    pub(crate) next_tier_ordinal: i64,
+    pub(crate) tier_scratch: Vec<(Vector3, Vector3)>,
+    pub(crate) tier_step_us: i64,
+    pub(crate) tier_beats: i64,
+    pub(crate) tier_promotions: i64,
+    pub(crate) tier_demotions: i64,
 }
 
 #[godot_api]
@@ -429,6 +444,8 @@ impl ScsSimCore {
         self.tick = tick;
         self.syncs += 1;
         self.rows_version += 1;
+        // The tier's integration for the tick that just ended, as Jolt stepped the bodies before this read (M4-T21).
+        self.tier_step(delta);
         let now = self.syncs;
         let mut rows = std::mem::take(&mut self.rows);
         rows.clear();
@@ -494,6 +511,12 @@ impl ScsSimCore {
             rows.target_ids.push(-1);
             rows.reach.push(0.0);
             rows.name_keys.push(String::new());
+        }
+        // The tier's rows after the statics (M4-T21): contacts to the brains, out of the scan GDScript builds.
+        self.tier.append_to(&mut rows);
+        for name in &self.tier_names {
+            self.row_names.push(name.clone());
+            self.row_rids.push(Rid::Invalid);
         }
         self.rows = rows;
         self.touched.clear();
@@ -656,6 +679,8 @@ impl ScsSimCore {
         for p in self.bolts.positions.iter_mut() {
             *p = add(*p, offset);
         }
+        self.tier.shift(offset);
+        self.tier_gravity.shift(offset);
     }
 
     /// Engine calls of the last closed tick: `[sync, fallbacks]`: the sync points' reads, which grow with the bodies and
@@ -1986,6 +2011,9 @@ impl ScsSimCore {
             let Some(&r) = self.row_of_id.get(&body_id) else {
                 continue; // no row: a parked ship's controller does not run either
             };
+            if self.rows.flags[r as usize] & FLAG_TIER != 0 {
+                continue; // in the low-attention tier (M4-T21): its controller is parked with it
+            }
             let target = self.latest_target.get(&body_id).copied().unwrap_or(-1);
             if target <= 0 {
                 continue;

@@ -7,7 +7,7 @@
 #![allow(clippy::redundant_field_names)]
 use godot::prelude::*;
 
-use crate::rows::FLAG_RIGID;
+use crate::rows::{FLAG_RIGID, FLAG_TIER};
 use crate::sim_core::ScsSimCore;
 use crate::weapon_kernels::{
     self as wk, Candidate, Capitals, Mines, ROLE_BEAM, ROLE_GUN, ROLE_INTERCEPTOR, Turrets,
@@ -265,12 +265,17 @@ impl ScsWeaponRows {
             let row_of = |f: u32| table_row(hostile, n, f);
             let rows = &guard.rows;
             cap_rows.clear();
-            cap_rows.extend(
-                capitals
-                    .body_ids
-                    .iter()
-                    .map(|&id| if id == 0 { -1 } else { guard.row_of_id(id) }),
-            );
+            // A capital in the low-attention tier (M4-T21) has no row here: its weapons wait for T22's aggregated fire.
+            cap_rows.extend(capitals.body_ids.iter().map(|&id| {
+                if id == 0 {
+                    return -1;
+                }
+                let r = guard.row_of_id(id);
+                match usize::try_from(r) {
+                    Ok(i) if rows.flags[i] & FLAG_TIER != 0 => -1,
+                    _ => r,
+                }
+            }));
             // Guns: a pick every few ticks (staggered), then the aim step and the gate every tick.
             wk::fighter_rows(rows, fighters);
             let mut gun_index: i64 = 0;

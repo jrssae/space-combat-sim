@@ -853,6 +853,26 @@ const BRAIN_STEP_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin:
 		"use crate::threads::"]
 
 
+## The low-attention tier's table and integrator (M4-T21): held to the kernels' rules; they import the row tables, the shared
+## vector maths, the flight kernel and the command row, nothing else. The core's shell (`tier_rows.rs`) is what reaches them.
+const TIER_FILE: String = "res://native/src/tier.rs"
+const TIER_SHELL_FILE: String = "res://native/src/tier_rows.rs"
+const TIER_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};", "use crate::rows::",
+		"use crate::v3::", "use crate::kernels::", "use crate::row_commands::RowCommand;"]
+
+
+func test_the_tier_kernel_holds_no_engine_type() -> void:
+	var violations: PackedStringArray = _engine_free_violations(TIER_FILE, KERNEL_FORBIDDEN, TIER_USE_ALLOWED)
+	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the tier: %s" % violations)
+	var source: String = FileAccess.get_file_as_string(TIER_FILE)
+	for part: String in ["pub fn step(", "fn beat(", "pub fn rotate_basis(", "pub fn far_bodies(", "pub fn near_rows(",
+			"pub fn append_to("]:
+		assert_true(source.contains(part), "the tier holds %s" % part)
+	assert_false(source.contains("static mut") or source.contains("thread_local") or source.contains("Cell<"),
+			"no shared mutable state in the tier")
+	assert_true(FileAccess.get_file_as_string(TIER_SHELL_FILE).contains("use crate::tier::"), "the shell reads the tier")
+
+
 func test_the_step_job_holds_no_engine_type() -> void:
 	var violations: PackedStringArray = _engine_free_violations(BRAIN_STEP_FILE, KERNEL_FORBIDDEN, BRAIN_STEP_USE_ALLOWED)
 	violations.append_array(_engine_free_violations(THREADS_FILE, KERNEL_FORBIDDEN, THREADS_USE_ALLOWED))

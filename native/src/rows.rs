@@ -2,12 +2,16 @@
 // crate. Nothing here can reach the engine: the columns are value types and the methods clear them.
 use godot::builtin::{Basis, Vector3};
 
-/// Row flags: a rigid body (the scan's `is_ship`), an active hull (`Damageable.is_active()`: the sweep and the rams see
-/// it), a hull at all, and a row added after the tick's first sync (a ship back from the pool).
+/// Row flags: a rigid body in Jolt (the flight step's and the ram phase's), an active hull (`Damageable.is_active()`: the
+/// sweep and the rams see it), a hull at all, a row added after the tick's first sync (a ship back from the pool), a
+/// low-attention tier row with no body and no node (M4-T21: integrated by the tier, skipped by the kernels that write to
+/// a body or fire from one), and a hulk (a tier row that drifts with no brain and no force).
 pub const FLAG_RIGID: u32 = 1;
 pub const FLAG_HULL: u32 = 2;
 pub const FLAG_HULL_ACTIVE: u32 = 4;
 pub const FLAG_LATE: u32 = 8;
+pub const FLAG_TIER: u32 = 16;
+pub const FLAG_HULK: u32 = 32;
 
 /// The scan's rows, column by column: the bodies in registry order (active markers, then active hulls with no active
 /// marker), the static rows, then any row added after the tick's first sync. Read by the kernels through `bind()`, from
@@ -27,7 +31,8 @@ pub struct Rows {
     pub flags: Vec<u32>,
     pub hull_ids: Vec<i64>,
     pub handles: Vec<i64>,
-    // Derived per row: a rigid body, a rock or mine, a mine (what the contact field asks per candidate).
+    // Derived per row: a ship (the scan's `is_ship`: a rigid body, or a tier row that is a ship), a rock or mine, a mine
+    // (what the contact field asks per candidate).
     pub rigid: Vec<bool>,
     pub is_static: Vec<bool>,
     pub is_mine: Vec<bool>,

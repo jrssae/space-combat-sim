@@ -130,69 +130,20 @@ impl ScsFlightStep {
         nozzle_exhausts: PackedVector3Array,
         torque_axes: PackedVector3Array,
     ) -> i64 {
-        let n = nozzle_groups.len();
-        let lined_up = spec.len() == SPEC_SCALARS
-            && spec_vectors.len() == SPEC_VECTORS
-            && nozzle_positions.len() == n
-            && nozzle_exhausts.len() == n
-            && torque_axes.len() == flight::GROUPS
-            && nozzle_groups
-                .as_slice()
-                .iter()
-                .all(|&g| (0..flight::GROUPS as i32).contains(&g));
-        if !lined_up {
-            godot_error!(
-                "ScsFlightStep.register: arrays do not line up (spec {}, spec vectors {}, nozzles {}, positions {}, exhausts {}, \
-                 torque axes {}); the ship is not registered",
-                spec.len(),
-                spec_vectors.len(),
-                n,
-                nozzle_positions.len(),
-                nozzle_exhausts.len(),
-                torque_axes.len()
-            );
+        let Some(body) = body_from_arrays(
+            "ScsFlightStep.register",
+            &spec,
+            &spec_vectors,
+            &nozzle_groups,
+            &nozzle_positions,
+            &nozzle_exhausts,
+            &torque_axes,
+        ) else {
             return -1;
-        }
-        let s = spec.as_slice();
-        let v = spec_vectors.as_slice();
-        let spec = Spec {
-            mass: s[0],
-            pod_main_thrust: s[1],
-            pod_retro_thrust: s[2],
-            assist_gain_k: s[3],
-            pod_yaw_gain: s[4],
-            pod_yaw_deadzone: s[5],
-            pod_yaw_smoothing_s: s[6],
-            brake_gain_k: s[7],
-            exhaust_velocity: s[8],
-            speed_limit_mps: s[9],
-            assist_speed_max_mps: s[10],
-            inertia: v[0],
-            rcs_force_max: v[1],
-            rcs_torque_max: v[2],
-            rate_max_rad: v[3],
         };
-        let groups: Vec<usize> = nozzle_groups
-            .as_slice()
-            .iter()
-            .map(|&g| g as usize)
-            .collect();
-        let mut counts = [0i64; flight::GROUPS];
-        for &g in &groups {
-            counts[g] += 1;
-        }
-        let axes = torque_axes.as_slice();
         let slot = Slot {
             rid,
-            body: Body {
-                main_total: spec.pod_main_thrust * (counts[0] + counts[1]) as f64,
-                retro_total: spec.pod_retro_thrust * (counts[2] + counts[3]) as f64,
-                spec,
-                nozzle_groups: groups,
-                nozzle_positions: nozzle_positions.as_slice().to_vec(),
-                nozzle_exhausts: nozzle_exhausts.as_slice().to_vec(),
-                torque_axes: [axes[0], axes[1], axes[2], axes[3]],
-            },
+            body,
             pod_yaw_smoothed: 0.0,
         };
         if let Some(free) = self.slots.iter().position(Option::is_none) {
@@ -535,4 +486,81 @@ impl ScsFlightStep {
             .and_then(|i| self.slots.get_mut(i))
             .and_then(Option::as_mut)
     }
+}
+
+/// A ship type and its nozzles from the arrays `ScsFlightStep.register` takes (the tier registers its types the same way,
+/// M4-T21): `spec` holds mass, pod main and retro thrust, assist gain, pod-yaw gain, deadzone and smoothing, brake gain,
+/// exhaust velocity, the speed limit and the assist's safe speed; `spec_vectors` inertia, the RCS force and torque maxima
+/// and the rate maxima; the nozzle arrays are the `ThrusterLayout`'s. None, after logging why as `who`, when they do not
+/// line up.
+pub(crate) fn body_from_arrays(
+    who: &str,
+    spec: &PackedFloat64Array,
+    spec_vectors: &PackedVector3Array,
+    nozzle_groups: &PackedInt32Array,
+    nozzle_positions: &PackedVector3Array,
+    nozzle_exhausts: &PackedVector3Array,
+    torque_axes: &PackedVector3Array,
+) -> Option<Body> {
+    let n = nozzle_groups.len();
+    let lined_up = spec.len() == SPEC_SCALARS
+        && spec_vectors.len() == SPEC_VECTORS
+        && nozzle_positions.len() == n
+        && nozzle_exhausts.len() == n
+        && torque_axes.len() == flight::GROUPS
+        && nozzle_groups
+            .as_slice()
+            .iter()
+            .all(|&g| (0..flight::GROUPS as i32).contains(&g));
+    if !lined_up {
+        godot_error!(
+            "{who}: arrays do not line up (spec {}, spec vectors {}, nozzles {}, positions {}, exhausts {}, torque axes {}); \
+             the ship is not registered",
+            spec.len(),
+            spec_vectors.len(),
+            n,
+            nozzle_positions.len(),
+            nozzle_exhausts.len(),
+            torque_axes.len()
+        );
+        return None;
+    }
+    let s = spec.as_slice();
+    let v = spec_vectors.as_slice();
+    let spec = Spec {
+        mass: s[0],
+        pod_main_thrust: s[1],
+        pod_retro_thrust: s[2],
+        assist_gain_k: s[3],
+        pod_yaw_gain: s[4],
+        pod_yaw_deadzone: s[5],
+        pod_yaw_smoothing_s: s[6],
+        brake_gain_k: s[7],
+        exhaust_velocity: s[8],
+        speed_limit_mps: s[9],
+        assist_speed_max_mps: s[10],
+        inertia: v[0],
+        rcs_force_max: v[1],
+        rcs_torque_max: v[2],
+        rate_max_rad: v[3],
+    };
+    let groups: Vec<usize> = nozzle_groups
+        .as_slice()
+        .iter()
+        .map(|&g| g as usize)
+        .collect();
+    let mut counts = [0i64; flight::GROUPS];
+    for &g in &groups {
+        counts[g] += 1;
+    }
+    let axes = torque_axes.as_slice();
+    Some(Body {
+        main_total: spec.pod_main_thrust * (counts[0] + counts[1]) as f64,
+        retro_total: spec.pod_retro_thrust * (counts[2] + counts[3]) as f64,
+        spec,
+        nozzle_groups: groups,
+        nozzle_positions: nozzle_positions.as_slice().to_vec(),
+        nozzle_exhausts: nozzle_exhausts.as_slice().to_vec(),
+        torque_axes: [axes[0], axes[1], axes[2], axes[3]],
+    })
 }

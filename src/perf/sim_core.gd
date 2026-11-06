@@ -63,11 +63,14 @@ const KIND_STATIC: int = 5
 const KIND_PROP: int = 6
 const KIND_BOLT: int = 7
 const KIND_BEAM: int = 8
-## Row flags (`ScsSimCore`): a rigid body, a hull, an active hull, a row added after the tick's first sync.
+## Row flags (`ScsSimCore`): a rigid body, a hull, an active hull, a row added after the tick's first sync, a low-attention
+## tier row (M4-T21), a hulk.
 const FLAG_RIGID: int = 1
 const FLAG_HULL: int = 2
 const FLAG_HULL_ACTIVE: int = 4
 const FLAG_LATE: int = 8
+const FLAG_TIER: int = 16
+const FLAG_HULK: int = 32
 
 # The latest core attached to a tree (-1 for the class check: classes never change while the game runs).
 static var _current: SimCore = null
