@@ -512,11 +512,11 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       watch from 10 km out is frozen in its held commands until you come close. Say whether that reads as wrong from the
       player's seat at `battle 500`, where most of the battle is beyond 10 km.
 - [ ] **M4-T22 The battle beyond the radius fights.** With the tier on (`set settings.tier_radius_m 10000`), tier fighters think
-      four times a second (`settings.tier_brain_hz`) and their shots and the far capitals' guns, beams and missiles are rolled,
+      three times a second (`settings.tier_brain_hz`) and their shots and the far capitals' guns, beams and missiles are rolled,
       not flown as bolts. In a `battle 500` run, fly into a far fight: the ships you meet at 10 km should be in the middle of a
       fight that went on without you (hurt hulls, ships missing that died out there, wingmen still in their slots), with no
       jump in a hull or a position at the moment they appear; your own bolts fired at a ship just beyond 11 km hit it. Say
-      whether a fight met this way feels like the same fight you would have watched up close (a 4 Hz brain flies its attack
+      whether a fight met this way feels like the same fight you would have watched up close (a 3 Hz brain flies its attack
       runs a little looser). Tier ships are still not drawn and not on the radar (T23), and a far death shows nothing yet
       (T23's far flash). A known limit (fix round 1): a far fight that settles into a steady tail chase scores fewer hits than
       the same chase up close (a Starfury sitting behind a raider at 450 m lands about 73 % of its shots up close, about 30 %

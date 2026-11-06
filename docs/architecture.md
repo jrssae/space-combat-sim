@@ -3207,8 +3207,12 @@ src/combat/destruction_director.gd   a tier death where its row flew; every deat
 
 - **Brains.** A tier fighter's hosted driver is handed to the tier (`AiPilotDriver.set_tiered`, `ScsBrains.set_driver_tiered`)
   when it is demoted, so the AI step's job (T24, on the worker thread, one tick behind) keeps thinking for it on the same rows
-  and contact grid as the near brains, every `tier_brain_hz` (4: every 15 ticks, staggered by the driver's ordinal; at once
-  when it is handed over). A hit does not wake a tier think (fix round 1): it waits for its beat, so the thinks stay staggered
+  and contact grid as the near brains, every `tier_brain_hz` (3 since fix round 2: every 20 ticks, staggered by the driver's ordinal;
+  at once when it is handed over). A tier think is lean (fix round 2, Q65): it skips the rocks and mines, the incoming fire
+  and the avoidance, which a tier row cannot use (it collides with nothing and dodges no bolt), and its nearest-contacts
+  query walks the ships' rows in scan order (`contact::nearest_among`), the same contacts as the grid's gather for fewer rows
+  and no sort. A think went from 10.65 to about 2.5 us. 2 Hz was tried and failed the loose fairness checks (the raiders
+  lost half their hits). A hit does not wake a tier think (fix round 1): it waits for its beat, so the thinks stay staggered
   however the far hits fall (every landed hit used to wake one, and a ship hit every tick thought every tick). The job counts
   and times the tier thinks (`ScsBrains.tier_thinks`, `tier_think_us`, on the job's own clock: the worker thread when threaded,
   the main thread when inline). Its command goes to the core's row commands, which the tier's integrator flies; its driver
@@ -3269,9 +3273,12 @@ src/combat/destruction_director.gd   a tier death where its row flew; every deat
 - **Cost.** The tier's main-thread work (the integration, the cannons' tier pass, the landing; the far capitals' rolls and
   launches, with their share of the integration) is timed and its means since the bench window began are `tier.cost_us` and
   the bench summary's tier line, beside the tier thinks (count, most in a tick, their time on the step's clock): at `battle`
-  500 0.24 us a fighter row on the main thread plus 0.72 us of thinks (on the worker thread when threaded, the main thread
-  when inline), 0.34 us a capital row.
-- **Settings and console.** `tier_brain_hz` (4, live). Provider `tier` gains `brain_period_ticks`, `shots`, `hits`,
+  500 0.20 us a fighter row on the main thread plus 0.12 us of thinks (on the worker thread when threaded, the main thread
+  when inline), 0.31 us a capital row (fix round 2; it was 0.24 plus 0.72). The main thread's share is the integration with
+  its flight beats (about 0.1 us), the cannons' tier pass (0.04) and landing the hits through `Damageable` in GDScript
+  (about 14 us a hit, 0.06 us a row). The row commands use an id hasher (`CommandMap`), the core keeps a tier row's hull
+  from `note_hull` (no per-ship hull signal in the director), and the landing finds hulls through a cache.
+- **Settings and console.** `tier_brain_hz` (3, live; 4 until fix round 2). Provider `tier` gains `brain_period_ticks`, `shots`, `hits`,
   `hits_landed`, `land_us`, `capital_rolls`, `capital_hits`, `capital_fire_us`, `cost_us`.
 - **What a tier ship still is not, after T22:** drawn, on the player's radar or targetable by the player (T23); struck
   by a near capital's missiles or targeted by its turrets; selected on its parked targeting (its pilot's target rides in its
@@ -3279,7 +3286,7 @@ src/combat/destruction_director.gd   a tier death where its row flew; every deat
 - **Tests.** `test_tier_fire` (the chance's shape, thinks at `tier_brain_hz`, the brain steering, rolled shots through the
   `Damageable` with no bolt row, one thread and six rolling the same hits, a near bolt on a tier row, a tier kill through the
   destruction director with its blast, a near death's blast, a far capital's group rolls, launches resolved at launch and
-  counted in flight, interceptors; fix round 1: thinks timed and kept on their beat, far missiles shot down, the tier's rams,
+  counted in flight, interceptors; fix round 2: a tier think does not avoid; fix round 1: thinks timed and kept on their beat, far missiles shot down, the tier's rams,
   the seed, a far missile on a re-used ship, a kill by a roll through the wing, a pending hit after a promotion, a hit on a
   hulk), `test_tier_outcomes` (slow: the duel, the even 12 against 40 for seeds 1 to 3 with the per-side bound reported
   pending, a cruiser against 12 fighters, far missiles' share shot down, each tier against full fidelity on both schedules), `test_sim_core` (the guard on `tier_fire.rs`),

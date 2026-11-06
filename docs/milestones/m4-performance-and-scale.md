@@ -1390,7 +1390,7 @@ done and T20 proceeds.
   group per second against the fighters in its range, its interceptors as one removal roll against missiles, its launchers as
   missiles resolved at launch; a squadron or a capital out of view wins or loses at the rate one in view does.
 - **Files:** `native/src/tier.rs` (the cadence and the roll), `native/src/tier_fire.rs` (new: fighters' and capitals' rolls),
-  `src/ai/tier_director.gd` (the damage path through `Damageable`), settings `tier_brain_hz` (4), `tests/unit/test_tier_fire.gd`,
+  `src/ai/tier_director.gd` (the damage path through `Damageable`), settings `tier_brain_hz` (3 since fix round 2), `tests/unit/test_tier_fire.gd`,
   `tests/integration/test_tier_outcomes.gd`.
 - **Tests first:** the to-hit rate against a seeded full-fidelity duel (the same geometry, 1 000 shots) within 10 %; a 12 against
   12 fight run 30 s in the tier and at full fidelity, seeds 1 to 3: hits within 15 %, the winning side the same, mean hull loss
@@ -1402,7 +1402,7 @@ done and T20 proceeds.
 - **Q54 (maintainer away):** every test of this task passes on both T24's threaded step and the single-thread step, so undoing T24 never strands it; its look and feel checks go into the "M4 return checklist" in `docs/playtest.md`.
 - **Architecture:** §17.14.
 - **Done (2026-11-06, worktree on `8aed313`; Cycle log, "M4-T22"):** a tier fighter's hosted driver is handed to the tier, so
-  T24's job keeps thinking for it on the same rows and grid as the near brains at `tier_brain_hz` (4; at once when handed
+  T24's job keeps thinking for it on the same rows and grid as the near brains at `tier_brain_hz` (4, 3 since fix round 2; at once when handed
   over or hit); its parked cannon's gate keeps firing and each shot is a seeded to-hit roll (`native/src/tier_fire.rs`) from
   the shot's range, the target's size, the bolt, the closing speed, the pilot's aim error and its fire gate, offset by how far
   outside that gate the row's nose points, with no bolt row; the director lands the hits at the next tick through each
@@ -1436,6 +1436,13 @@ done and T20 proceeds.
   against 40, an even fight found by a full-fidelity sweep (Q63), with each side compared. The per-side 15 % gate on seeds 1 to
   3 is not met and is reported pending: full fidelity differs from itself by 36 to 38 % a side between the schedules on
   those seeds.
+- **Fix round 2 (2026-11-06; Cycle log, "M4-T22", fix round 2):** the loose fairness checks are accepted (Q64). The per-side
+  bound is now a recorded measurement, printed and not asserted, so the file reports green with no pending entry; the win
+  share within one seed of 3, each seed's hits within a factor of two, the duel, the cruiser and the missiles stay asserted.
+  An even fight is about 12 Starfuries against 40 raiders (3.4 per Starfury), from the Q63 sweep. The cost (Q65): a tier
+  fighter's total, thinks included, went from 0.96 to 0.32 us a tick at 500 and 0.31 at 1 000 threaded (0.31 and 0.30
+  inline), with a lean tier think, a contact query over the ships' rows and `tier_brain_hz` 3. 0.3 us is met at 1 000
+  inline and missed by 0.01 to 0.02 us elsewhere; the rest is the main thread's integration and the GDScript hit landing.
 
 ##### M4-T23 Far proxies for tier rows
 
@@ -6185,6 +6192,82 @@ test_turret_kernel's call to the weapon rows took the new ticks-per-second argum
 test_weapon_rows_battle, test_flight_parity_fight 1/0/0 each schedule, test_brain_tolerance 1/0/0. After the last per-hull
 terms: test_tier_fire, test_turret_kernel and test_tier_handover again on both schedules (40/0/0 inline, 27/0/0 threaded with
 test_tier_outcomes). `cargo fmt --check` and clippy clean on this task's files; the smoke check printed no `ERROR:` line.
+
+**Fix round 2 (2026-11-06; the controller's Q64 and Q65).** Reports `reports/perf/M4-T22_fr2_*` (headless `battle` 500 and
+1 000 on both schedules, `M4-T22_fr2_final_{threaded,inline}_battle{500,1000}`; fullscreen
+`M4-T22_fr2_fullscreen_battle{500,500_b,1000_a,1000_b}` and the 4 Hz A/B `M4-T22_fr2_fullscreen_battle500_hz4`), the same
+set-up as above.
+
+- **Fairness (Q64): the loose checks are accepted.** The per-side bound in `test_tier_outcomes` is now a recorded
+  measurement, printed and not asserted, so the file reports green with no pending entry. Asserted: the even fight's win
+  share within one seed of 3, each seed's hits within a factor of two, the duel, the cruiser and the missiles. An even fight
+  is about 12 Starfuries against 40 raiders (3.4 per Starfury). The Q63 sweep (12 Starfuries, regular / balanced, full
+  fidelity, seeds 201 to 203, 30 s):
+
+  | raiders | Starfury wins | survivors, Starfuries / raiders (mean) | hits landed, Starfuries / raiders (mean) | mean hull loss, Starfuries / raiders |
+  |---|---|---|---|---|
+  | 20 | 3 of 3 | 12.0 / 9.0 | 95 / 57 | 0.095 / 0.789 |
+  | 24 | 3 of 3 | 11.0 / 14.0 | 91 / 94 | 0.157 / 0.632 |
+  | 28 | 3 of 3 | 11.0 / 18.7 | 80 / 123 | 0.205 / 0.474 |
+  | 32 | 3 of 3 | 11.0 / 23.7 | 84 / 159 | 0.264 / 0.439 |
+  | 36 | 2 of 3 | 9.7 / 29.3 | 84 / 207 | 0.346 / 0.389 |
+  | 40 | 2 of 3 | 10.0 / 32.3 | 81 / 186 | 0.309 / 0.339 |
+  | 42 | 1 of 3 | 8.7 / 34.7 | 82 / 231 | 0.385 / 0.324 |
+  | 44 | 0 of 3 | 9.3 / 36.7 | 75 / 232 | 0.387 / 0.283 |
+
+  With round 2's tier (3 Hz, lean thinks), seeds 1 to 3, the recorded per-side figures are: threaded, the Starfuries' hits
+  182 against 233 and the raiders' hull loss 0.759 against 0.971 outside 15 %; inline, the Starfuries' hull loss 0.889
+  against 1.211 and the raiders' hits 534 against 727 outside 15 %. Every asserted check passes on both schedules.
+- **Where a tier think's 0.72 us went (Q65).** Timers in the think at `battle` 500 (17 111 tier thinks, 10.65 us each): the
+  nearest-contacts query 4.34 us, the statics (rocks and mines) 4.17, the incoming fire 0.69, select and behaviour 0.68,
+  broadcasts 0.35, avoidance 0.27, the context lists 0.10. The two big parts came from the 25 km sensor range: its cells
+  hold most of the battle, so each query gathered and sorted about 1 500 statics and ships.
+- **Levers taken.**
+  - A lean tier think: no statics, no incoming fire, no avoidance (a tier row collides with nothing and dodges no bolt; test
+    first: two raiders head on avoid with the tier off and not in it, RED then GREEN). 3.46 us a think.
+  - The nearest-contacts query walks the ships' rows in scan order (`contact::nearest_among`), the same contacts as the
+    grid's gather, for every brain, not only tier ones; the brain parity files are unchanged and green. About 2.5 us a think
+    (2.4 at 500, 3.0 at 1 000 with twice the ships).
+  - The main thread: an id hasher for the row commands (`CommandMap`), the core keeping a tier row's hull from `note_hull`
+    (the director's per-ship hull signals removed), a hull cache for the landing and no landing call on a tick with no hits:
+    0.24 to about 0.20 us a row at 500.
+  - The rate: `tier_brain_hz` 3 (4 before). 2 Hz failed the loose checks on inline: the raiders' hits fell to 284 against
+    727, the Starfuries won all three seeds, and seeds 1 and 3 fell outside the factor of two. 3 Hz passes on both schedules.
+- **Tried and dropped.** A bounded best-12 list in place of `select_nth` (the same set): no measurable gain. `tier_hz` 10 (the
+  beat T21 owns) would give 0.180 + 0.122 = 0.30 us at 500; it is T21's fidelity call, so it is left at 20.
+- **The per-fighter total, thinks included** (main thread + thinks, us a fighter row):
+
+  | run | tick median ms (p99) | main | thinks | total | thinks a tick |
+  |---|---|---|---|---|---|
+  | battle 500, threaded, fix round 1 | 7.41 (9.73) | 0.24 | 0.72 | 0.96 | 11.4 |
+  | battle 500, threaded | 7.49 (9.67) | 0.195 | 0.122 | 0.317 | 8.6 |
+  | battle 500, inline | 8.76 (10.46) | 0.195 | 0.119 | 0.314 | 8.5 |
+  | battle 1000, threaded, fix round 1 | 9.26 (12.66) | 0.19 | 0.62 | 0.81 | 38.7 |
+  | battle 1000, threaded | 9.37 (12.18) | 0.156 | 0.152 | 0.308 | 29.0 |
+  | battle 1000, inline | 11.15 (13.35) | 0.153 | 0.148 | 0.301 | 29.0 |
+
+  0.3 us is met at 1 000 inline and missed by 0.01 to 0.02 us in the other three. **What the rest costs:** the main thread's
+  integration with its 20 Hz flight beats (about 0.1 us a row), the cannons' tier pass (0.04) and landing the hits through
+  `Damageable` in GDScript (about 14 us a hit: `HitInfo.new` 3.3, `apply_hit` with its listeners 7, the take 3.6; about
+  0.06 us a row at 500); the think's contact query still reads every ship in the battle. Going further needs the landing in
+  native code or a slower beat. The threaded tick did not move, since the thinks were already off the main thread; the inline
+  tick carries them.
+- **Fullscreen, on the final per-hull terms** (threaded): 500: 106.7 and 106.6 FPS, the 1 % low 30.7 and 29.6, the p99 frame
+  27.7 and 25.9 ms (fix round 1, before the last terms: 113.2, 48.4); at 4 Hz as an A/B: 107.9, 32.8, so the brain rate does
+  not cause the drop. 1 000: 62.4 and 60.0 FPS, the 1 % low 22.1 and 23.2, the p99 36.5 and 34.9 ms (fix round 1: 63.0 and
+  63.4, 24.8 and 26.0). The 30 FPS floor and the 60 FPS target hold on average at both sizes; the 1 % lows sit at or under 30.
+
+**Behaviour changes, fix round 2:** a tier fighter thinks three times a second, not four; a tier think ignores rocks, mines
+and incoming fire and does not avoid; every brain's nearest contacts come from the ships' rows (the same contacts).
+
+**Tests, fix round 2** (both schedules; Passing / Failing / Pending): 28 scripts (the brain and contact parity files, test_tier,
+test_tier_fire 21, test_sim_core, test_row_commands, test_turret_kernel, test_settings_schema, test_driver_step,
+test_core_threads, test_core_snapshot, test_pilot_kernels, test_tier_handover, test_ai_think_rate, test_ai_think_time,
+test_ai_avoidance, test_brain_in_play, test_broadcast, test_hit_resolver, test_ram_damage, test_standins,
+test_pilot_kernels_in_play, test_ai_driver) 281/0/0 each; `GUT_SLOW=1` test_tier_outcomes, test_weapon_rows_battle and
+test_brain_tolerance 6/0/0 (test_tier_outcomes 4/0/0, both schedules inside); test_flight_parity_fight 1/0/0 each schedule.
+`cargo fmt --check` and clippy clean on this task's files (only the pre-existing `native_probe.rs` is flagged); the smoke
+check printed no `ERROR:` line.
 
 ## Definition of done (M4)
 
