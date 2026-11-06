@@ -150,8 +150,8 @@ const ENTRIES: Dictionary = {
 	&"anti_aliasing": {"type": TYPE_ENUM, "default": &"smaa", "choices": [&"off", &"fxaa", &"smaa", &"msaa_2x", &"msaa_4x", &"taa"],
 		"doc": "Anti-aliasing of the 3D view (M4-T38): off, fxaa, smaa (edge detection, the default), msaa_2x or msaa_4x (geometry edges only), taa (temporal: the smoothest edges, but thin moving things soften and the bolts draw opaque so they carry their motion); live"},
 	# M4-T21
-	&"tier_radius_m": {"type": TYPE_FLOAT, "default": 10000.0, "min": 0.0, "max": 200000.0,
-		"doc": "AI fighters and capitals farther than this from the player leave Jolt and the scene's processing and fly as native core rows at tier_hz (the low-attention tier, M4-T21); within it they are promoted back onto their bodies exactly; demotion happens 10 % beyond it. 0 = off, every ship in Jolt; live"},
+	&"tier_radius_m": {"type": TYPE_FLOAT, "default": 0.0, "min": 0.0, "max": 200000.0,
+		"doc": "AI fighters and capitals farther than this from the player leave Jolt and the scene's processing and fly as native core rows at tier_hz (the low-attention tier, M4-T21); within it they are promoted back onto their bodies exactly; demotion happens 10 % beyond it. 0 = off, every ship in Jolt; live. Off by default until T22 (tier brains and fire) and T23 (tier ships on radar and targeting) land; T23 sets 10000"},
 	&"tier_hz": {"type": TYPE_FLOAT, "default": 20.0, "min": 1.0, "max": 60.0,
 		"doc": "How often a low-attention tier row's forces are recomputed from its held command (M4-T21); its pose still advances every tick; live"},
 	# M4-T24

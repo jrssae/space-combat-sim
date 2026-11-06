@@ -3182,7 +3182,7 @@ src/perf/standins/capital_standin.gd   park_for_tier, unpark_from_tier; the dire
   places it); a second rebase before the end-of-tick settle keeps the first one's nodes. The group is still walked, not kept as a list: nodes join it after entering the tree (`Projectile._ready`, the
   camera rig, test fixtures), so a kept list would need every site to register with the World, and the walk itself is a
   pointer copy; the cost was the translate of fifteen child nodes a ship, which the tier removes for parked ships.
-- **Settings and console.** `tier_radius_m` (10 000; 0 = off, live), `tier_hz` (20, live). Provider `tier`: `radius_m`,
+- **Settings and console.** `tier_radius_m` (0, off, until T22 and T23 land, then 10 000; 0 = off, live), `tier_hz` (20, live). Provider `tier`: `radius_m`,
   `period_ticks`, `fighters`, `capitals`, `rows`, `hulks`, `promotions`, `demotions`, `step_us` (the tier's integration inside
   the sync), `director_us`. Provider `perf` and the bench's entity counts gain `tier_fighters` and `tier_capitals`;
   `fighters_far` counts a tiered fighter as far.
