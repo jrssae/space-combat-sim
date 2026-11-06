@@ -539,6 +539,11 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       `reports/perf/m4-t38_compare/pairs/moving_2160.png` (no AA, SMAA, TAA, the live fight) shows what the agent saw.
 - [ ] **M4-T38 TAA with motion blur.** `aa taa` and `blur on`: a hard turn smears the stars once (the blur), not twice; a still
       camera leaves the sky sharp.
+- [ ] **M4-T41 The Wayland window.** The game now opens through Godot's Wayland display driver (it falls back to X11 when there
+      is no Wayland session). Fullscreen should fill the panel at its own 3840x2160 (`get render.window`, `get render.display`)
+      and look as sharp as before. Windowed, GNOME gives Godot no server-side title bar, so check that the window still has a
+      usable title bar and can be moved and resized (libdecor draws it if installed). Say if anything about the window, the
+      mouse, the pad or alt-tab behaves differently from before.
 - [ ] **M4-T40 Upscaling, the default.** `settings.upscaler` is `native` (the 3D at the window's own size, as since T36), because
       FSR 2.2 measured dearer than native on this card. Compare the sheets in `reports/perf/m4-t40_compare/pairs/` (each the same
       frozen `battle` 300 frame in the 6K window, twelve upscaler and preset turns): `edges.png`, `hull_detail.png`, `stars.png`,

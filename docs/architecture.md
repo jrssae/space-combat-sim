@@ -693,7 +693,7 @@ validates before calling. Values are formatted consistently (vectors to 2 decima
 | `camera` | CameraRig (T12) | `mode` (w), `fov` |
 | `weapons` | PulseCannon (T13) | `mode` (w), `cooldown_s`, `charge` (w, 0..1 capacitor; M2-T14) |
 | `targeting` | TargetingController (T14) | `selected` (w: display name or `none`), `range_m`, `closing_mps`, `candidates` |
-| `render` | RenderStatus (M4-T31) | `renderer` (`forward_plus`, or `headless`), `fps`, `frame_ms`, `draw_calls`, `triangles`, `vram_mb`, `far_dots`, `gpu`, `gpu_ms` |
+| `render` | RenderStatus (M4-T31) | `renderer` (`forward_plus`, or `headless`), `fps`, `frame_ms`, `draw_calls`, `triangles`, `vram_mb`, `far_dots`, `gpu`, `gpu_ms`, `display`, `window` (M4-T41) |
 | `lights` | LightRig (M3-T21) | `picked`, `candidates`, `active`, `cost_us` (§7.3) |
 
 M1 commands:

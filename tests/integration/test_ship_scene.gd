@@ -463,7 +463,7 @@ func test_render_provider_and_entries_leave_with_the_status() -> void:
 	var provider: ConsoleStateProvider = registry.get_provider(&"render")
 	assert_not_null(provider, "RenderStatus registers provider 'render'")
 	var expected_keys: Array[StringName] = [&"renderer", &"fps", &"frame_ms", &"draw_calls", &"triangles", &"vram_mb", &"far_dots",
-			&"gpu", &"gpu_ms"]
+			&"gpu", &"gpu_ms", &"display", &"window"]
 	assert_eq(provider.keys(), expected_keys, "the §6.4 keys")
 	for key: StringName in expected_keys:
 		assert_false(provider.is_writable(key), "%s is read-only" % key)

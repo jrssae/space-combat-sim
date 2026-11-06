@@ -5,7 +5,7 @@ extends Node
 ##
 ## Main (M1-T15) adds one RenderStatus outside `World`. Console: provider `render`: `renderer` (`forward_plus`, or `headless` when
 ## there is no display: import, CI, GUT), `fps`, `frame_ms`, `draw_calls`, `triangles`, `vram_mb`, `far_dots` (ships drawn as
-## dots, M4-T11), `gpu` and `gpu_ms`.
+## dots, M4-T11), `gpu`, `gpu_ms`, `display` and `window` (M4-T41).
 
 const RENDERER_HEADLESS: StringName = &"headless"
 
@@ -15,6 +15,18 @@ static func renderer() -> StringName:
 	if DisplayServer.get_name() == "headless":
 		return RENDERER_HEADLESS
 	return StringName(RenderingServer.get_current_rendering_method())
+
+
+## The display server drawing the window (`wayland`, `x11`, or `headless`): measured runs must say which (M4-T41).
+static func display_server() -> StringName:
+	return StringName(DisplayServer.get_name())
+
+
+## The window's size in pixels; zero when headless.
+static func window_size() -> Vector2i:
+	if DisplayServer.get_name() == "headless":
+		return Vector2i.ZERO
+	return DisplayServer.window_get_size()
 
 
 func _ready() -> void:
@@ -31,6 +43,9 @@ func _ready() -> void:
 		&"far_dots": {"get": LodSwitcher.far_dot_count, "doc": "Ships in play drawn as far dots, past settings.far_ship_dot_m (M4-T11)"},
 		&"gpu": {"get": _gpu_name, "doc": "Video adapter name"},
 		&"gpu_ms": {"get": _gpu_ms, "doc": "Last frame's GPU time, ms (0 on the first read: measuring starts then)"},
+		&"display": {"get": display_server, "doc": "Display server: wayland, x11 or headless (M4-T41)"},
+		&"window": {"get": func() -> String: return "%dx%d" % [window_size().x, window_size().y],
+				"doc": "Window size in pixels, 0x0 when headless (M4-T41)"},
 	}), self)
 
 

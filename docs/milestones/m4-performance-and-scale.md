@@ -97,6 +97,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q63 | An even fight (2026-11-06) | **T22's fairness fight is a roughly even one** (about 50 % wins each side, equal skill) instead of 12 against 12, which the Starfuries always won. T22 finds the raider count by measurement at full fidelity (12 Starfuries against 20 to 32 raiders, 3 seeds each; a stats estimate puts the balance near 2.3 raiders per Starfury) and reports the sweep, which also answers "what is an even fight between raiders and Starfuries" |
 | Q64 | T22's fairness gate (2026-11-06) | **Accept the loose checks.** Full fidelity itself varies 36 to 38 % per side between runs of the same three fights, so a per-side 15 % gate on three fights measures noise. The test asserts the win share within one seed of three, each seed's hits within two times, the duel, the cruiser and the missiles' shot-down share; the per-side numbers are recorded, not gated. The even fight measured: 12 Starfuries against about 40 raiders (3.4 per Starfury) |
 | Q65 | T22's cost (2026-11-06) | **Optimise the tier thinks.** 0.3 us a tier fighter is the total, thinks included (0.96 us measured: 0.24 on the main thread, 0.72 in the thinks), on both schedules; T22 cuts the think cost, then re-measures |
+| Q66 | The display driver (2026-11-06) | **Wayland for the game and the measurements** (T41). Every fullscreen number before T41 ran through X11 at 6144x3456 (the panels at GNOME's 1.25 scale) and is not comparable with later rows; T25 re-takes its baselines through Wayland |
 
 ## The budget ("good game performance", Q5)
 
@@ -228,6 +229,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T37 | M4's cleanup (Q57): the native library required, the GDScript paths test-only, the runtime fallbacks and their settings removed, one hull-reading path, the documentation drift | T23 | Opus | Refactor review findings 8, 16, 17: 1 500 to 2 500 lines and eight settings; parity surfaces halved | X, G | not started |
 | T38 | Anti-aliasing (Q59, Q60): Godot's MSAA 2x and 4x, TAA, FXAA and SMAA as a setting, live; motion vectors fixed for everything TAA (and T40's FSR 2.2) needs; defaults chosen by measurement | T36 | Opus | `project.godot` sets no anti-aliasing, so edges and thin hull detail alias; TAA and FSR 2.2 both need correct motion vectors from the multimeshes, particles and bolts | R | done (2026-11-05, one fix round, CI green on `d8b73ce`; SMAA the default, a look call the costs allow; at the 6K window's native size `battle` 300 draws in 2.83 ms off, 3.20 ms SMAA, 5.50 ms TAA; Cycle log, M4-T38) |
 | T40 | Upscaling (Q59, Q60): FSR 2.2 (temporal, its own anti-aliasing) and FSR 1.0 (spatial, with sharpness) with internal-resolution presets from a third of the output's height up to native, applied live with the HUD at window size; no frame generation; defaults chosen by measurement | T38 | Opus | Since T36 a 4K window renders 4K; FSR 2.2 from 1 080 or 1 440 lines looks better than a bilinear stretch and costs less than native; below 1 080 is for weaker GPUs; supersedes T26 (measured otherwise: FSR 2.2 costs more GPU than native here, so native is the default) | R | done (2026-11-05, one fix round, CI green on `d85a314`; native the default: FSR 2.2 costs more GPU than native here and FSR 1.0 gains 3 to 5 % on a CPU-bound frame; the fix round made `FULLSCREEN_EXEC` apply, so T24's and T35's fullscreen comparisons were re-measured; Cycle log, M4-T40) |
+| T41 | The Wayland display driver (Q66): the game and the measurements open through Godot's Wayland driver, so a fullscreen window is the panel's own 3840x2160 under GNOME's 1.25 scale | T40 | Opus (controller) | The X11 path made the fullscreen window 6144x3456 and the compositor scaled it down; Wayland is worth about 8 to 10 FPS at 1 000 ships | R | in progress (2026-11-06, the controller) |
 | T39 | FSR 4 study (Q59): whether AMD's FSR 4 can run in this game on Linux, Vulkan and Godot 4.7 through the native library, on the maintainer's RDNA 2 card, under the GPL-3.0 licence; a go or no-go with a plan | T38 | Sonnet | FSR 4 is not in Godot 4.7; AMD's support for RDNA 2 and for Vulkan is new or announced, so it needs facts before code | M | not needed (skipped by the maintainer, Q60) |
 
 ### M4-T01 Benchmark harness, budget and baseline
@@ -1543,6 +1545,7 @@ done and T20 proceeds.
   avoiding thinks and not refitted at 3 Hz with lean thinks; the fit probes were scratch tests, not kept. Every near brain's
   nearest-contacts query now walks all ships (not the grid's cells): watch `ai.think_us` in the 500 to 1 000 sweep and in a sparse
   scene. `_land_rams` and `tier_ram_contacts` sit outside the tier's cost timers (T37 may time them or return early).
+- **Through Wayland (Q66, T41):** every fullscreen row of this task runs through the Wayland driver (the default since T41) at the panel's 3840x2160; earlier rows (X11, 6144x3456) are not comparable, so re-take the baselines T25 compares against, and print `render.display` and `render.window` in each log.
 - **The limit sweep (Q62):** the fullscreen check at `battle` 500, 600, 700, 800, 900 and 1 000 on the defaults (threaded step,
   the 3D at 1 080 lines, vsync off, after the warm-up), two runs each; one table in report P3 with average FPS and 1 % low FPS
   per count, plus sim speed, p99 frame ms and the headless tick median at the same counts, so the maintainer sees where the
@@ -2334,6 +2337,19 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   TAA through `FULLSCREEN_EXEC`), and the measure log prints the upscaler and anti-aliasing in use. T35's node-path fullscreen pair
   (and T24's inline rows if switched that way) relied on it and are re-measured by the controller. New tests:
   `test_console_execute_all`, `test_measure_exec`; `test_upscaling_gpu` 5 of 5 on the real renderer.
+
+##### M4-T41 The Wayland display driver (Q66)
+
+- **Track:** R. **Agent:** the controller. **Depends on:** T40.
+- **Goal:** the window opens through Godot's Wayland display driver on Linux, so fullscreen is the panel's own size under GNOME's
+  fractional scaling; the measuring scripts use it and say which display server ran.
+- **Files:** `project.godot` (`display/display_server/driver.linuxbsd`), `src/rendering/render_status.gd` (the `render` provider's
+  `display` and `window`), `tests/unit/test_display_driver.gd`, `scripts/fullscreen_check.sh` (header), `info.md`, the return checklist.
+- **Found by:** T22's agent, asked by the maintainer to measure at a true 4K window: under X11 the fullscreen window was 6144x3456 and
+  the compositor scaled it to the 3840x2160 panel; through Wayland `battle` 1 000 went from 60 to 62 FPS (1 % low 22 to 23) to 69 to
+  72 (29.5 and 40.8), `reports/perf/M4-T22_fr2_fs4k_battle1000_{a,b}`.
+- **Done when:** the project setting is in, `get render.display` reads `Wayland` and `get render.window` the panel's size in a
+  fullscreen run, the test passes, and T25 knows its baselines must be re-taken.
 
 ##### M4-T39 FSR 4 study (Q59)
 - **Not needed (Q60, 2026-11-05):** the maintainer skipped FSR 4; the section below is kept as the record of what was asked.
@@ -6010,6 +6026,18 @@ slow parity fights with `GUT_SLOW=1` (test_brain_tolerance, test_flight_parity_f
 test_missile_kernel, test_mine_kernel, test_brain_think_parity, test_brain_facade, test_brain_in_play, test_ai_driver,
 test_pilot_kernels, test_pilot_kernels_in_play, test_destruction, test_respawn_in_play (157). The main-scene smoke check
 printed no `ERROR:` line.
+
+### M4-T41 (2026-11-06): the Wayland display driver
+
+Taken on `m4` after T22's merge by the controller, tier off (the default until T23), the 3D at 1 080 lines, vsync off. `project.godot`
+sets `display/display_server/driver.linuxbsd` to `wayland`; Godot falls back to X11 when there is no Wayland session, and headless
+runs (CI, GUT, imports) are unaffected. A windowed run reads `render.display = Wayland`, `render.window = 1200x675` (the 960x540
+request at GNOME's 1.25 scale) and `render.renderer = forward_plus`; Godot warns that GNOME offers no server-side window decorations
+(libdecor draws them if installed) and no window-icon protocol, both harmless. `scripts/fullscreen_check.sh` then measures a
+3840x2160 window with the 3D at scale 0.50 (`reports/perf/M4-T41_wayland_b500`): `battle` 500 at 58.7 FPS, 1 % low 30.0, p99 29.61 ms,
+GPU 0.84 ms, against 54.6 FPS and 26.4 through X11 at 6144x3456 (T21's tier-off re-measure). T22's agent measured `battle` 1 000 with
+the tier on through Wayland at 68.9 and 71.7 FPS (1 % low 29.5 and 40.8) against 60 to 62 (22 to 23) through X11. Every fullscreen
+row before T41 ran through X11 and is not comparable with later ones (Q66); T25 re-takes the baselines.
 
 ### M4-T22 (2026-11-06): tier brains, statistical fire and far capitals' aggregated fire
 

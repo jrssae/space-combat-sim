@@ -141,7 +141,7 @@ Source: `src/autoload/debug_console.gd`
 | `post` | `src/rendering/post_effects.gd` |
 | `raiders` | `src/game/ship_pool.gd` |
 | `ram` | `src/combat/ram_resolver.gd` (M4-T15 adds `source` and `gather_us`) |
-| `render` | `src/rendering/render_status.gd` (M4-T31: `renderer` (`forward_plus`, or `headless`), `fps`, `frame_ms`, `draw_calls`, `triangles`, `vram_mb`, `far_dots` (the ships in play drawn as far dots past `settings.far_ship_dot_m`, M4-T11), `gpu`, `gpu_ms`) |
+| `render` | `src/rendering/render_status.gd` (M4-T31: `renderer` (`forward_plus`, or `headless`), `fps`, `frame_ms`, `draw_calls`, `triangles`, `vram_mb`, `far_dots` (the ships in play drawn as far dots past `settings.far_ship_dot_m`, M4-T11), `gpu`, `gpu_ms`, `display` (`wayland`, `x11` or `headless`, M4-T41), `window` (the window's size in pixels, M4-T41)) |
 | `screens` | `src/hud/cockpit_screens.gd` |
 | `settings` | `src/autoload/debug_console.gd` (one key per settings entry) |
 | `ship` | `src/ship/ship.gd` |

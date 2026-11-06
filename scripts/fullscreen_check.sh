@@ -3,7 +3,8 @@
 # under the GPU lock, measured for 20 s after a warm-up by scripts/measure_fight.gd (the chase camera on the player at the
 # player's fight). Records FPS, frame time, GPU time, VRAM, draw calls and the 3D scale, with the verdict: the battle's floor is
 # 30 FPS and its target 60; typical must hold 60 with headroom (frame mean 12 ms or under). Vsync is off so headroom shows.
-# The window is fullscreen at the screen's own size (3840x2160 on this machine); the 3D is rendered at 1 080 lines
+# The window is fullscreen at the screen's own size (3840x2160 on this machine, through the Wayland display driver since M4-T41;
+# before it, the X11 path under GNOME's 1.25 scale made the window 6144x3456); the 3D is rendered at 1 080 lines
 # (FULLSCREEN_SCALE, `1080p` by default; 1 for the screen's own resolution), the HUD at the screen's.
 #
 # Usage: scripts/fullscreen_check.sh <layout> <n> [label]      e.g. scripts/fullscreen_check.sh typical 58
