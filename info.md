@@ -145,7 +145,7 @@ Source: `src/autoload/debug_console.gd`
 | `settings` | `src/autoload/debug_console.gd` (one key per settings entry) |
 | `ship` | `src/ship/ship.gd` |
 | `sky` | `src/environment/space_environment.gd` (M4-T30c: `stars`, `stars_shown`, `panorama`, `nebula_shown`) |
-| `aa` | `src/rendering/anti_aliasing.gd` (M4-T38: `mode`, `viewport`, `sky_vectors`, `bolts_opaque`) |
+| `aa` | `src/rendering/anti_aliasing.gd` (M4-T38: `mode`, `viewport`, `sky_vectors`, `bolts_opaque`, `bolts_collapsed`) |
 | `targeting` | `src/targeting/targeting_controller.gd` |
 | `time` | `src/autoload/debug_console.gd` |
 | `waves` | `src/game/wave_director.gd` |

@@ -26,6 +26,8 @@ func _ready() -> void:
 				"doc": "The sky's motion vectors are written (on under TAA)"},
 		&"bolts_opaque": {"get": func() -> bool: return BoltMesh.motion_vectors(),
 				"doc": "Bolts draw opaque and write their motion (on under TAA)"},
+		&"bolts_collapsed": {"get": func() -> int: return BoltMesh.collapsed_last_frame,
+				"doc": "Bolts drawn collapsed last frame because they were new to their draw slot (under TAA)"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"aa",
 			"Show or set the anti-aliasing mode (%s)" % ", ".join(PackedStringArray(AntiAliasingMode.MODES)),

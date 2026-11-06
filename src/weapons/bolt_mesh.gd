@@ -23,6 +23,8 @@ static var _look_index: Dictionary = {}
 static var _motion_vectors: bool = false
 ## The bolt materials' own transparency and blend, kept while they are made opaque: `[transparency, blend_mode]` by material.
 static var _additive_looks: Dictionary = {}
+## Bolts drawn collapsed in the last frame because they were new to their slot (a readout, `aa.bolts_collapsed`).
+static var collapsed_last_frame: int = 0
 
 ## Instances drawn in the last frame, over every look (a readout).
 var instances_drawn: int = 0
@@ -122,20 +124,28 @@ func update() -> void:
 		_hide_all()
 		return
 	var fraction: float = Engine.get_physics_interpolation_fraction()
+	var collapsed: int = 0
 	for look: int in _looks.size():
 		var count: int = int(_sim.core.bolt_instances(look))
 		if count == 0:
 			if look < _instances.size():
 				_instances[look].multimesh.visible_instance_count = 0
+			if _motion_vectors:
+				_quarantined().filter(look, PackedFloat32Array())  # drawn empty: every slot starts afresh
 			continue
+		var grown: bool = look >= _capacity.size() or _capacity[look] < count
 		var instance: MultiMeshInstance3D = _instance(look, count)
+		if grown and _motion_vectors:
+			_quarantined().filter(look, PackedFloat32Array())  # a new buffer has no last frame to pair with
 		var buffer: PackedFloat32Array = _sim.core.bolt_transforms(look, fraction, Projectile.visual_scale, _child(),
 				_capacity[look])
 		if _motion_vectors:
 			buffer = _quarantined().filter(look, buffer)
+			collapsed += _quarantine.collapsed
 		RenderingServer.multimesh_set_buffer(instance.multimesh.get_rid(), buffer)
 		instance.multimesh.visible_instance_count = count
 		instances_drawn += count
+	collapsed_last_frame = collapsed
 
 
 # The multimesh of `look`, made on first need and grown to hold `count` instances.
