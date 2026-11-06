@@ -73,6 +73,25 @@ func test_the_same_cannons_next_shot_in_the_old_slot_counts_as_new() -> void:
 	assert_false(_drawn(out, 0))
 
 
+func test_a_bolt_in_line_ahead_but_too_far_counts_as_new() -> void:
+	# Review M1: the same basis and a forward move, but further than any bolt flies between two frames.
+	var a := Basis(Vector3.UP, 0.4) * 3.0
+	var forward: Vector3 = (a * FORWARD).normalized()
+	q.filter(0, _buffer([_slot(a, Vector3.ZERO)]))
+	var out: PackedFloat32Array = q.filter(0, _buffer([_slot(a, forward * (BoltSlotQuarantine.MAX_STEP_M + 50.0))]))
+	assert_false(_drawn(out, 0))
+
+
+func test_a_parallel_bolt_ahead_and_to_the_side_counts_as_new() -> void:
+	# Review M1: a wingman's bolt flying the same way, a little ahead and 20 m to the side.
+	var a := Basis(Vector3.UP, 0.4) * 3.0
+	var forward: Vector3 = (a * FORWARD).normalized()
+	var side: Vector3 = (a * Vector3.RIGHT).normalized()
+	q.filter(0, _buffer([_slot(a, Vector3.ZERO)]))
+	var out: PackedFloat32Array = q.filter(0, _buffer([_slot(a, forward * 15.0 + side * 20.0)]))
+	assert_false(_drawn(out, 0))
+
+
 func test_an_empty_slot_stays_empty_and_looks_are_kept_apart() -> void:
 	var b := Basis.IDENTITY
 	q.filter(0, _buffer([_slot(b, Vector3.ZERO), null]))
