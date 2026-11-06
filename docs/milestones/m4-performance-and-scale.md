@@ -98,6 +98,7 @@ After cycle 1 the maintainer read the options in `docs/handoff-m4.md` section 7 
 | Q64 | T22's fairness gate (2026-11-06) | **Accept the loose checks.** Full fidelity itself varies 36 to 38 % per side between runs of the same three fights, so a per-side 15 % gate on three fights measures noise. The test asserts the win share within one seed of three, each seed's hits within two times, the duel, the cruiser and the missiles' shot-down share; the per-side numbers are recorded, not gated. The even fight measured: 12 Starfuries against about 40 raiders (3.4 per Starfury) |
 | Q65 | T22's cost (2026-11-06) | **Optimise the tier thinks.** 0.3 us a tier fighter is the total, thinks included (0.96 us measured: 0.24 on the main thread, 0.72 in the thinks), on both schedules; T22 cuts the think cost, then re-measures |
 | Q66 | The display driver (2026-11-06) | **Wayland for the game and the measurements** (T41). Every fullscreen number before T41 ran through X11 at 6144x3456 (the panels at GNOME's 1.25 scale) and is not comparable with later rows; T25 re-takes its baselines through Wayland |
+| Q67 | The fallbacks (2026-11-06, asked during T22's fix round 2) | **M4 is the way to go: remove the fallbacks.** T37 removes the `sim_step` inline step (Q54's switch back; `delayed` stays as the threaded step's reference) and every `perf_native*` and `perf_*` switch to an old path with the GDScript paths behind them, not kept as test references (overrides Q57); parity tests compare the native path with recorded reference output in `tests/fixtures/`. Q54's both-schedules rule ends when T37 merges |
 
 ## The budget ("good game performance", Q5)
 
@@ -6052,6 +6053,11 @@ request at GNOME's 1.25 scale) and `render.renderer = forward_plus`; Godot warns
 GPU 0.84 ms, against 54.6 FPS and 26.4 through X11 at 6144x3456 (T21's tier-off re-measure). T22's agent measured `battle` 1 000 with
 the tier on through Wayland at 68.9 and 71.7 FPS (1 % low 29.5 and 40.8) against 60 to 62 (22 to 23) through X11. Every fullscreen
 row before T41 ran through X11 and is not comparable with later ones (Q66); T25 re-takes the baselines.
+
+Upscalers through Wayland (T22's agent, `battle` 1 000, tier on, the 3D at 1 080 lines into 3840x2160, two runs each,
+`reports/perf/M4-T22_fr2_fs4k_{fsr1,fsr2}_battle1000_*`): bilinear 68.9 and 71.7 FPS (1 % low 29.5, 40.8; GPU 0.85 ms), FSR 1.0
+70.3 and 72.9 (37.2, 47.1; 1.21 ms), FSR 2.2 66.3 and 64.7 (38.7, 36.7; 3.20 ms). The frame is CPU-bound, so FSR 1.0 is free and
+FSR 2.2 costs about 5 FPS; the choice is a look call for the return checklist (T40's items).
 
 ### M4-T22 (2026-11-06): tier brains, statistical fire and far capitals' aggregated fire
 
