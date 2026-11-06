@@ -5589,6 +5589,14 @@ and a third re-piloted (every old result dropped, the new pilots untouched); `te
 row's exact imports and checks the thread's `Send` bound. The focused files on both schedules and the smoke checks: the
 report.
 
+**Fix round 2 (2026-11-05, re-review's three minor items).** A single think launched while a scheduled job is out no longer
+clears the released-bodies list (the list belongs to the scheduled job's handover; an inline job swaps its commands
+without touching it), so a released ship gets no command back at the handover. A job that panics after its pass (or is
+lost) hands over no events with its empty output (`handed_events` cleared; the injected `FAULT_PANIC_JOB` tests it: the
+brains kept, the failure counted, the thinks resume). A driver unhosted while its job runs (a setting flip) gets no event
+for its old slot (dropped as stale). The I2 test's poke is a real single think of a hosted pilot with its output; the tick
+after every poke hands over the same thinks and events as the delayed step.
+
 **What remains of the tick at 500** (10.7 ms, threaded): the flight stage (the batch's per-ship gather in GDScript and the
 native step with its force application), the hit stage (the native grids and the GDScript narrow phase), physics (Jolt and
 the body sync), the ram stage, the sync points, and the AI step's main-thread share (the snapshot copy, the launch, the

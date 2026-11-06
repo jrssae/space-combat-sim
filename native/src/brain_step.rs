@@ -40,6 +40,9 @@ pub const FAULT_PANIC: i64 = 2;
 /// `set_fault`'s injected slowness (M4-T24): the job sleeps this long before it thinks, so a deadline is missed.
 pub const FAULT_SLOW: i64 = 3;
 pub const FAULT_SLOW_MS: u64 = 40;
+/// `set_fault`'s injected panic after the pass (fix round 2): the job's commands and events are written, then it panics,
+/// so the handover must come with no events for an empty output.
+pub const FAULT_PANIC_JOB: i64 = 4;
 
 // What one worker thread fills for the thinks it runs: the query scratch, the picked lists, the keeps, and what the
 // injected fault carries from one think to the next.
@@ -222,6 +225,10 @@ pub fn run(job: Job) -> Done {
                     work.slots[item.slot] = Some(brain);
                 }
             }
+            // No output, so no events to index against it; the hosted items' slots go with them.
+            work.events.truncate(EVENTS_HEAD);
+            work.events.iter_mut().for_each(|e| *e = 0);
+            work.hosted_slots.clear();
             work.failed = true;
             Vec::new()
         }
@@ -262,6 +269,9 @@ fn run_body(
     if params.from_rows {
         write_commands(work, snapshot, total);
         settle_hosted(work, params.n, total);
+    }
+    if work.fault == FAULT_PANIC_JOB {
+        std::panic::resume_unwind(Box::new("the injected panic after the pass"));
     }
     std::mem::take(&mut work.batch_out)
 }

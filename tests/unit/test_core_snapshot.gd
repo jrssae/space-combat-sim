@@ -171,15 +171,102 @@ func test_the_schedule_flips_live_and_a_reader_while_the_brains_are_away_answers
 func test_an_inline_think_while_a_job_is_out_loses_no_result() -> void:
 	if _skipped():
 		return
-	var delayed: Dictionary = await _battle(&"delayed", 6, 120)
-	var poked: Dictionary = await _battle(&"threaded", 6, 120, false, true)
-	assert_gt(int(poked["pokes"]), 3, "inline calls were made while jobs were out (%d)" % int(poked["pokes"]))
-	var first: int = _first_difference(delayed["rows"], poked["rows"])
-	assert_eq(first, -1, "the rows are the same bits with inline calls while the jobs run (first difference at tick %d)" % first)
-	first = _first_difference(delayed["commands"], poked["commands"])
-	assert_eq(first, -1, "and the commands (first difference at tick %d)" % first)
-	first = _first_difference(delayed["thinks"], poked["thinks"])
-	assert_eq(first, -1, "and every tick's thinks were handed over (first difference at tick %d)" % first)
+	var delayed: Dictionary = await _battle(&"delayed", 6, 60)
+	var poked: Dictionary = await _battle(&"threaded", 6, 60, false, true)
+	assert_gte(int(poked["pokes"]), 8, "single thinks with output were made while jobs were out (%d)" % int(poked["pokes"]))
+	# The poked pilot's extra thinks change its own later path, so the rows diverge after the first poke (tick 3); what must
+	# not change is the job that was out: the tick after every poke hands over the same thinks and events as the delayed step.
+	var thinks_d: PackedInt64Array = delayed["thinks"]
+	var thinks_p: PackedInt64Array = poked["thinks"]
+	var events_d: PackedInt64Array = delayed["events"]
+	var events_p: PackedInt64Array = poked["events"]
+	assert_eq(_first_difference(delayed["rows"].slice(0, 4), poked["rows"].slice(0, 4)), -1, "the rows match up to the first poke")
+	for t: int in range(3, 60, 7):
+		var at: int = t  # the counts array starts at tick 1: index t is the join at tick t + 1, the first after the poke at t
+		if at >= thinks_d.size():
+			break
+		assert_eq(thinks_p[at], thinks_d[at], "tick %d's job handed over its thinks after the poke (%d against %d)" % [t + 1, thinks_p[at], thinks_d[at]])
+		assert_eq(events_p[at], events_d[at], "and its events (%d against %d)" % [events_p[at], events_d[at]])
+	assert_gt(_sum(events_p), 0, "events were handed over at all (%d)" % _sum(events_p))
+
+
+func test_a_single_think_while_a_job_is_out_keeps_a_released_ship_off_its_row() -> void:
+	if _skipped():
+		return
+	var fight: Dictionary = await _start(&"threaded", 6)
+	var ships: Array = fight["ships"]
+	var sim: SimCore = fight["sim"]
+	var host: Object = NativeBrains.host(get_tree())
+	for i: int in 4:
+		await get_tree().physics_frame
+	assert_true(bool(host.step_pending()), "a job is out between ticks")
+	var released: Array[Combatant] = []
+	for i: int in range(0, ships.size(), 4):
+		var c: Combatant = ships[i]
+		if c.ship.is_row_commanded():
+			c.ship.release_row_command()  # something else commands the ship now (a GDScript brain, the pool)
+			released.append(c)
+	assert_gt(released.size(), 10, "ships flying from their rows were released (%d)" % released.size())
+	# A single think of another pilot while the job is out (it joins the job early).
+	var other: Combatant = ships[1]
+	var pilot := other.driver.brain as AiPilot
+	var origin: UniversePos = sim.world.origin
+	var answer: PackedFloat64Array = host.think(pilot.native_slot_index(), ContactScan.shared(get_tree()).relation_row(other.faction),
+			SimClock.now(), 1.0 / 60.0, 1.0, 0, -INF, -INF, 0, false, origin.x, origin.y, origin.z)
+	assert_eq(answer.size(), AiPilot.NATIVE_OUT_LEN, "the single think answered")
+	await get_tree().physics_frame
+	for c: Combatant in released:
+		if c.ship.is_row_commanded():
+			continue  # its next think handed it the row again, with an ENTER event: that is the normal way back
+		assert_eq((sim.core.row_command(c.ship.get_instance_id()) as PackedFloat64Array).size(), 0,
+				"%s: a released ship got no command back from the job that ran before its release" % c.display_name)
+	fight["space"].queue_free()
+	await get_tree().physics_frame
+	Factions.reset()
+
+
+func test_a_job_that_panics_after_its_pass_hands_over_no_events_and_keeps_the_brains() -> void:
+	if _skipped():
+		return
+	var fight: Dictionary = await _start(&"threaded", 6)
+	var host: Object = NativeBrains.host(get_tree())
+	for i: int in 4:
+		await get_tree().physics_frame
+	var slots: int = int(host.count())
+	var failures: int = int(host.pass_failures())
+	host.set_fault(4)  # the job panics after its thinks wrote their commands and events
+	await get_tree().physics_frame
+	host.set_fault(0)
+	await get_tree().physics_frame  # the handover of the panicked job: an empty output must come with no events to index
+	assert_engine_error("panicked", "and said once")
+	assert_eq(int(host.pass_failures()), failures + 1, "the failed job is counted")
+	assert_eq(int(host.count()), slots, "no brain was lost")
+	var thinks: int = 0
+	for i: int in 4:
+		await get_tree().physics_frame
+		thinks += AiPilotDriver.thinks_native()
+	assert_gt(thinks, 0, "the thinks resume")
+	fight["space"].queue_free()
+	await get_tree().physics_frame
+	Factions.reset()
+
+
+func test_a_driver_unhosted_during_a_job_gets_no_event_for_its_old_slot() -> void:
+	if _skipped():
+		return
+	var fight: Dictionary = await _start(&"threaded", 6)
+	var batch: BrainBatch = BrainBatch.for_tree(get_tree())
+	for i: int in 4:
+		await get_tree().physics_frame
+	assert_gt(batch.hosted_count(), 50, "most drivers are hosted (%d)" % batch.hosted_count())
+	Settings.set_value(&"perf_native_driver_step", false)  # every driver takes its step back while the job is out
+	assert_eq(batch.hosted_count(), 0, "every driver unhosted at once")
+	await get_tree().physics_frame
+	assert_eq(batch.events, 0, "no event reached a driver for a slot it no longer has")
+	assert_gt(batch.stale, 0, "the job's hosted results were dropped as stale (%d)" % batch.stale)
+	fight["space"].queue_free()
+	await get_tree().physics_frame
+	Factions.reset()
 
 
 func test_a_ship_parked_during_a_job_gets_no_stale_result() -> void:
@@ -314,6 +401,8 @@ func _battle(mode: StringName, threads: int, ticks: int = TICKS, slow: bool = fa
 	var live := PackedInt64Array()
 	var hits := PackedInt64Array()
 	var thinks := PackedInt64Array()
+	var tick_events := PackedInt64Array()
+	var batch: BrainBatch = BrainBatch.for_tree(get_tree())
 	var native_thinks: int = 0
 	var held: int = 0
 	var step_us_max: int = 0
@@ -323,11 +412,15 @@ func _battle(mode: StringName, threads: int, ticks: int = TICKS, slow: bool = fa
 		if t == 1 and slow:
 			host.set_fault(3)
 		if poke and t % 7 == 3 and bool(host.step_pending()):
-			# An inline call while the tick's job is out: the path a driver takes when it cannot join the batch and thinks alone
-			# (`ScsBrains.think`, a plain batch of one; here a plain batch of none, which joins the job early the same way).
-			host.think_batch(PackedInt64Array(), PackedFloat64Array(), PackedByteArray(), SimClock.now(), false, 0.0, 0.0, 0.0,
-					int(sim.core.rows_version()))
-			pokes += 1
+			# A real single think while the tick's job is out: the path a driver takes when it cannot join the batch and thinks
+			# alone (`ScsBrains.think`), with its output and its events; it joins the job early.
+			var c: Combatant = fight["ships"][7]
+			var pilot := c.driver.brain as AiPilot
+			var origin: UniversePos = sim.world.origin
+			var answer: PackedFloat64Array = host.think(pilot.native_slot_index(), ContactScan.shared(get_tree()).relation_row(c.faction),
+					SimClock.now(), 1.0 / 60.0, 1.0, 0, -INF, -INF, 0, false, origin.x, origin.y, origin.z)
+			if answer.size() == AiPilot.NATIVE_OUT_LEN:
+				pokes += 1
 		tick_hits.clear()
 		await get_tree().physics_frame
 		rows.append(int(sim.core.rows_digest()))
@@ -336,13 +429,14 @@ func _battle(mode: StringName, threads: int, ticks: int = TICKS, slow: bool = fa
 		hits.append(hash(tick_hits))
 		if t > 0:  # tick 0 has no join yet on a delayed step: the counts it reads are the last run's
 			thinks.append(AiPilotDriver.thinks_native())
+			tick_events.append(batch.events)
 			native_thinks += AiPilotDriver.thinks_native()
 			held += AiPilotDriver.held()
 		step_us_max = maxi(step_us_max, int(host.step_us()))
 		wait_us_max = maxi(wait_us_max, int(host.step_wait_us()))
 		off_main = off_main or bool(host.step_off_main())
 	host.set_fault(0)
-	var out: Dictionary = {"rows": rows, "commands": commands, "live": live, "hits": hits, "thinks": thinks, "hits_total": resolver.hits_total,
+	var out: Dictionary = {"rows": rows, "commands": commands, "live": live, "hits": hits, "thinks": thinks, "events": tick_events, "hits_total": resolver.hits_total,
 			"native_thinks": native_thinks, "held": held, "step_us_max": step_us_max, "wait_us_max": wait_us_max,
 			"off_main": off_main, "misses": int(host.deadline_misses()) - misses_before, "pokes": pokes}
 	fight["space"].queue_free()
@@ -358,6 +452,13 @@ func _first_command_tick(live: PackedInt64Array) -> int:
 		if live[i] > 0:
 			return i
 	return -1
+
+
+static func _sum(values: PackedInt64Array) -> int:
+	var total: int = 0
+	for v: int in values:
+		total += v
+	return total
 
 
 static func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:

@@ -122,6 +122,7 @@ pub struct ScsBrains {
     // Whether the job out was launched for the tick's handover (`launch_batch`, `launch_rows`) rather than by an inline
     // wrapper; the parked result of such a job; what `rows_events` and `hosted_item_slots` read (the last handover's).
     scheduled: bool,
+    inline_launch: bool,
     handover: Option<Handover>,
     handed_events: Vec<i64>,
     handed_slots: Vec<i64>,
@@ -849,13 +850,16 @@ impl ScsBrains {
         self.tick_join = false;
         self.handed_over = true;
         let Some(mut handover) = self.handover.take() else {
+            // Nothing to hand over (no job was out, or it was lost): no events either, so nothing indexes an empty output.
+            self.handed_events.clear();
+            self.handed_slots.clear();
             return PackedFloat64Array::new();
         };
         if handover.from_rows
             && let Some(core) = self.core.as_mut()
         {
             core.bind_mut()
-                .take_commands(&mut handover.snapshot.commands);
+                .take_commands(&mut handover.snapshot.commands, true);
         }
         self.spare = Some(handover.snapshot);
         self.handed_events = handover.events;
@@ -1116,6 +1120,9 @@ impl ScsBrains {
     #[func]
     fn set_fault(&mut self, kind: i64) {
         self.work().fault = kind;
+        if kind != 0 {
+            self.warned = false; // each injected fault's panic is reported once
+        }
     }
 
     /// The rows the last think picked: `[contacts, statics, broadcasts]` (the tests compare them with the scan's).
@@ -1624,6 +1631,7 @@ impl ScsBrains {
         rows_version: i64,
         rows: bool,
     ) -> bool {
+        self.inline_launch = true;
         let ok = if rows {
             self.launch_rows(
                 ints,
@@ -1651,9 +1659,7 @@ impl ScsBrains {
                 false,
             )
         };
-        if ok {
-            self.scheduled = false;
-        }
+        self.inline_launch = false;
         ok
     }
 
@@ -1669,7 +1675,11 @@ impl ScsBrains {
             self.early_joins += 1;
             self.join();
         }
+        let scheduled = scheduled && !self.inline_launch;
         self.scheduled = scheduled;
+        // The releases since the last scheduled launch belong to that job's handover; an inline job while one is parked
+        // leaves them alone.
+        let own_releases = scheduled || self.handover.is_none();
         self.main_thread
             .get_or_insert_with(|| std::thread::current().id());
         self.refresh_views();
@@ -1679,7 +1689,7 @@ impl ScsBrains {
         let runner = match self.core.clone() {
             Some(mut core) => {
                 let mut c = core.bind_mut();
-                c.snapshot_into(&mut snapshot);
+                c.snapshot_into(&mut snapshot, own_releases);
                 if own_pool {
                     self.step_pool.runner()
                 } else {
@@ -1791,7 +1801,9 @@ impl ScsBrains {
         if done.from_rows
             && let Some(core) = self.core.as_mut()
         {
-            core.bind_mut().take_commands(&mut done.snapshot.commands);
+            let filter = self.handover.is_none();
+            core.bind_mut()
+                .take_commands(&mut done.snapshot.commands, filter);
         }
         self.spare = Some(done.snapshot);
         self.handed_events = events;

@@ -468,6 +468,9 @@ func _apply_rows(launched: Launched, out: PackedFloat64Array, head: PackedInt64A
 		if brain == null or driver.brain != brain or not driver.is_inside_tree():
 			_count_stale()
 			continue
+		if i >= queued and _hosted.get(int(hosted_slots[i - queued])) != driver:
+			_count_stale()  # unhosted since the launch (a setting flip, a hand-driven step): the slot is no longer its
+			continue
 		driver.rows_event(int(head[k - 1]), out, i * STRIDE + 1)
 		events += 1
 

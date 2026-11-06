@@ -48,23 +48,30 @@ impl ScsSimCore {
     }
 
     /// Fills a job's snapshot from the tables as they stand (M4-T24): the rows, the bolts, the rows by body, the bodies
-    /// touched since the sync, the commands and the version; and starts counting the commands released from now on.
-    pub(crate) fn snapshot_into(&mut self, snapshot: &mut Snapshot) {
+    /// touched since the sync, the commands and the version. With `own_releases` the releases counted from now on are
+    /// this job's to filter at its handover (a scheduled job); a single think launched while a scheduled job is out
+    /// leaves that job's list alone (fix round 2).
+    pub(crate) fn snapshot_into(&mut self, snapshot: &mut Snapshot, own_releases: bool) {
         snapshot.rows.clone_from(&self.rows);
         snapshot.bolts.clone_from(&self.bolts);
         snapshot.body_rows.clone_from(self.body_rows());
         snapshot.touched.clone_from(self.touched_set());
         snapshot.commands.clone_from(&self.row_commands);
         snapshot.rows_version = self.rows_version_now();
-        self.released.clear();
+        if own_releases {
+            self.released.clear();
+        }
     }
 
-    /// Takes a joined job's commands as the rows' (M4-T24): the map swapped in whole, less the bodies something else
-    /// commanded since the launch (`release_command`), which fly their own command until their next think.
-    pub(crate) fn take_commands(&mut self, commands: &mut HashMap<i64, RowCommand>) {
+    /// Takes a joined job's commands as the rows' (M4-T24): the map swapped in whole and, when the releases are this
+    /// job's (`filter`), less the bodies something else commanded since its launch (`release_command`), which fly their
+    /// own command until their next think.
+    pub(crate) fn take_commands(&mut self, commands: &mut HashMap<i64, RowCommand>, filter: bool) {
         std::mem::swap(&mut self.row_commands, commands);
-        for body in self.released.drain(..) {
-            self.row_commands.remove(&body);
+        if filter {
+            for body in self.released.drain(..) {
+                self.row_commands.remove(&body);
+            }
         }
     }
 }
