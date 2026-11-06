@@ -1,14 +1,44 @@
 class_name NativeLib
 extends RefCounted
-## The only way GDScript reaches the optional native library (M4-T05a, architecture §17.5). Callers never name a
-## native class in code, so a missing or stale library never breaks parsing: they ask here, get null when the
-## library lacks the class or `perf_native` is off, and run their GDScript path instead.
+## The only way GDScript reaches the native library (M4-T05a, architecture §17.5). Callers never name a native class in
+## code, so a missing or stale library never breaks parsing. The library is required (M4-T37): `Main` refuses to start
+## when `refusal` names a missing class.
+
+## Every class the game needs from the native library (M4-T37: the library is required, Q57 and Q67).
+const REQUIRED: Array[StringName] = [&"ScsSimCore", &"ScsBrains", &"ScsFlightStep", &"ScsCannons", &"ScsBoltSync",
+		&"ScsContactField", &"ScsPilotKernels", &"ScsHitSweep", &"ScsRamPhase", &"ScsWeaponRows", &"ScsNativeProbe"]
+## The user argument that adds a class to the required list: the refusal's test seam (`test_native_required`).
+const REQUIRE_ARG: String = "--native-require="
 
 # `perf_native` as last read (-1: read it on the next ask), kept current through `Settings.changed`.
 static var _enabled: int = -1
 
 
-## Whether the native library registered `native_class` in this process.
+## The classes of `classes` this process lacks; by default the required ones plus any named by `--native-require=`.
+static func missing(classes: Array[StringName] = []) -> PackedStringArray:
+	var wanted: Array[StringName] = classes
+	if wanted.is_empty():
+		wanted = REQUIRED.duplicate()
+		for arg: String in OS.get_cmdline_user_args():
+			if arg.begins_with(REQUIRE_ARG):
+				wanted.append(StringName(arg.trim_prefix(REQUIRE_ARG)))
+	var out := PackedStringArray()
+	for native_class: StringName in wanted:
+		if not has_class(native_class):
+			out.append(String(native_class))
+	return out
+
+
+## Why the game cannot start (the missing classes and how to build the library), or "" when nothing is missing.
+static func refusal(classes: Array[StringName] = []) -> String:
+	var lacking: PackedStringArray = missing(classes)
+	if lacking.is_empty():
+		return ""
+	return ("The native library bin/libscs_native.so is missing or out of date (it lacks %s). The game needs it: build it "
+			+ "with scripts/build_native.sh, then start again.") % ", ".join(lacking)
+
+
+## Whether `native_class` is registered in this process.
 static func has_class(native_class: StringName) -> bool:
 	return ClassDB.class_exists(native_class) and ClassDB.can_instantiate(native_class)
 
