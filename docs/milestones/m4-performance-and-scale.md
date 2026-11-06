@@ -222,7 +222,7 @@ Status: `done` (merged, its milestone accepted), `in progress`, `not started`, `
 | T35 | The core owns the simulated state (Q55): bolts as rows drawn by one multimesh, Jolt bodies read once a tick by RID in one native call, activity, hull and selection as event-driven columns, the ram stage's contact read native | T33, T34 | Fable | Refactor review findings 1, 4, 5 and 6: 5 to 8 ms at 500 for the bolts alone; T24's precondition | N, G | done (2026-11-05, four fix rounds, CI green on `8934e9b`; the tick at `battle` 300 from 11.80 to 6.74 ms, Q49's 8 ms met; 500 from 19.46 to 10.71 ms; Cycle log, M4-T35) |
 | T36 | The frame's per-ship work in one pass per subsystem (Q56, Q58): plumes, muzzle flashes, LOD switching, audio, far dots, the HUD radar, hit flashes; the splat-era render scale cap; the slow test switch | T33 | Opus | Refactor review findings 2, 3, 7, 9, 12, 13, 14: 3 to 5 ms a frame at 500 | R, G | done (2026-11-05, in a worktree on `f414cf4`; Cycle log, M4-T36): the worst second's process work at `battle` 500 from 25.7 to 10.2 to 10.8 ms and at 300 from 20.2 to 11.3 ms after fix round 1; `battle` 300 from 16.7 to 37.1 FPS; engine audio left to M5-T19 (finding 7) and the lean ships' muzzle flash pool with muzzle transforms as data moved to T35 (finding 12) |
 | T37 | M4's cleanup (Q57): the native library required, the GDScript paths test-only, the runtime fallbacks and their settings removed, one hull-reading path, the documentation drift | T23 | Opus | Refactor review findings 8, 16, 17: 1 500 to 2 500 lines and eight settings; parity surfaces halved | X, G | not started |
-| T38 | Anti-aliasing (Q59, Q60): Godot's MSAA 2x and 4x, TAA, FXAA and SMAA as a setting, live; motion vectors fixed for everything TAA (and T40's FSR 2.2) needs; defaults chosen by measurement | T36 | Opus | `project.godot` sets no anti-aliasing, so edges and thin hull detail alias; TAA and FSR 2.2 both need correct motion vectors from the multimeshes, particles and bolts | R | in progress (dispatched 2026-11-05, Opus, beside T24) |
+| T38 | Anti-aliasing (Q59, Q60): Godot's MSAA 2x and 4x, TAA, FXAA and SMAA as a setting, live; motion vectors fixed for everything TAA (and T40's FSR 2.2) needs; defaults chosen by measurement | T36 | Opus | `project.godot` sets no anti-aliasing, so edges and thin hull detail alias; TAA and FSR 2.2 both need correct motion vectors from the multimeshes, particles and bolts | R | in progress (dispatched 2026-11-05, Opus, beside T24; implemented in its worktree, awaiting review) |
 | T40 | Upscaling (Q59, Q60): FSR 2.2 (temporal, its own anti-aliasing) and FSR 1.0 (spatial, with sharpness) with internal-resolution presets from a third of the output's height up to native, applied live with the HUD at window size; no frame generation; defaults chosen by measurement | T38 | Opus | Since T36 a 4K window renders 4K; FSR 2.2 from 1 080 or 1 440 lines looks better than a bilinear stretch and costs less than native; below 1 080 is for weaker GPUs; supersedes T26 | R | not started |
 | T39 | FSR 4 study (Q59): whether AMD's FSR 4 can run in this game on Linux, Vulkan and Godot 4.7 through the native library, on the maintainer's RDNA 2 card, under the GPL-3.0 licence; a go or no-go with a plan | T38 | Sonnet | FSR 4 is not in Godot 4.7; AMD's support for RDNA 2 and for Vulkan is new or announced, so it needs facts before code | M | not needed (skipped by the maintainer, Q60) |
 
@@ -2124,6 +2124,25 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   separate tasks. T38 takes the anti-aliasing modes, the motion vectors and their tests and measures at native resolution; T40
   takes the upscaler, the presets, the HUD at window size and their measures. Read each bullet above as belonging to the task that
   matches it.
+- **Done (2026-11-05, in a worktree on `e094464`; the Cycle log entry "M4-T38" holds the numbers):** `settings.anti_aliasing`
+  (`off`, `fxaa`, `smaa`, `msaa_2x`, `msaa_4x`, `taa`; default **`smaa`**) applies live to the viewport through `AntiAliasing`
+  (console `aa`, provider `aa`) and survives a restart like every setting. The motion vectors were measured on the GPU first, with
+  a read-back probe (`VelocityProbeEffect`): Godot writes velocity only for opaque meshes. The sky, the star points and the far dots
+  held zero, so a TAA turn kept a fifth of the stars' light; `SkyVelocityEffect` now writes the camera's turn into every depth-0
+  pixel under TAA, and the stars keep it all. Additive bolts write nothing and kept 3 % of their light under TAA, so under TAA the
+  bolt materials draw opaque and write their own vectors. A multimesh slot that was empty in the last frame gave its new bolt a NaN
+  vector and a reused slot a 70 px smear; `BoltSlotQuarantine` draws a bolt new to its slot collapsed for that one frame, which is
+  the quarantine T35's re-review asked for, done on the drawing side (the core's slot allocation is T24's this wave). The motion blur
+  leaves out TAA's jitter and runs before the TAA resolve (checked), so the two never stack. Running lights, plumes, flashes, sparks
+  and the explosion stay transparent: large soft effects survive TAA's clamping; thin far ones soften (on the return checklist).
+  **Defaults by the numbers:** every mode is GPU-cheap on this card (at `battle` 300, frozen-scene turns: SMAA 0.62 ms at 1 080
+  lines and 1.39 at 2 160, TAA 1.25 and 2.80, MSAA 4x 1.09 and 2.06); the frame is CPU-bound in every layout, so FPS barely moves
+  except under TAA, which costs 1 to 2 ms of CPU a frame at 300 and 500 (0.8 ms of it the slot check). SMAA is the default at
+  both heights: the cheapest mode that smooths every edge, sharper than FXAA, no VRAM for samples. The recommendation's other
+  option, TAA, stays offered: smoothest still edges, but it softens thin moving things and changes the bolts' blend. New tests:
+  `test_anti_aliasing_mode`, `test_bolt_slot_quarantine`, `test_anti_aliasing`, `test_motion_vectors_gpu` (pending headless; 5 of 5
+  on the real renderer). New tool `scripts/aa_compare.sh` (modes in turns in one process, a screenshot each), for T40 too. The
+  screenshot sheets are on the M4 return checklist.
 
 ##### M4-T40 Upscaling: FSR 2.2 and FSR 1.0 (Q59, Q60)
 
@@ -5273,6 +5292,98 @@ The AI ships' shot sounds are silent until `AudioDirector.watch_ship` connects `
 physics 1.37 (Jolt and its body sync), the ram stage 1.22, the think 1.00. T24 moves the native step off the main thread;
 the gather from rows (`face_dir_b` from the row's selection, the environment field natively) and a native narrow phase are
 the next levers on the main thread.
+
+### M4-T38 (2026-11-05): anti-aliasing modes and motion vectors
+
+Commit base `e094464`, RX 6950 XT (RADV), the 6144x3456 desktop. Two measures. **Frozen-scene turns** (`scripts/aa_compare.sh`:
+the bench layout flown 10 to 12 s, paused, then the six modes in turn for 4 rounds of 90 frames after 30 to settle, all in one
+process so the GPU's clock changes cancel; viewport GPU time, mean over the rounds):
+
+| layout | 3D lines | off | fxaa | smaa | msaa_2x | msaa_4x | taa |
+|---|---|---|---|---|---|---|---|
+| `typical` 58 | 1 080 | 0.995 | 0.624 | 0.695 | 1.114 | 1.273 | 1.552 |
+| `typical` 58 | 2 160 | 1.549 | 1.280 | 1.377 | 1.805 | 1.856 | 2.655 |
+| `battle` 300 | 1 080 | 0.993 | 0.542 | 0.619 | 1.017 | 1.085 | 1.251 |
+| `battle` 300 | 2 160 | 1.560 | 1.302 | 1.388 | 1.950 | 2.064 | 2.799 |
+| `battle` 500 | 1 080 | 1.089 | 0.636 | 0.726 | 1.021 | 1.095 | 1.506 |
+| `battle` 500 | 2 160 | 1.524 | 1.256 | 1.344 | 1.729 | 1.833 | 2.656 |
+
+`off` costs more than FXAA and SMAA with the 3D at 1 080 or 2 160 lines in the 6K window: with no screen-space pass Godot
+tonemaps at the window's 6144x3456, with one it tonemaps at the 3D's size and the pass enlarges. Against `off`, MSAA 2x adds
+up to 0.4 ms, MSAA 4x up to 0.5, TAA 0.25 to 1.25 (the most at 2 160 lines). Live, at `battle` 300 2 160 lines, the same
+order held: off 2.51, SMAA 2.17, TAA 3.63 ms.
+
+**The fullscreen check** (`scripts/fullscreen_check.sh`, each mode from a saved settings file, the 3D at 1 080 lines (scale 0.3125)
+and at 2 160 (0.625); 8 s warm-up, 20 s measured, vsync off; one run each, so the FPS and 1 % lows carry the sim's run-to-run
+noise, which is larger than any mode's GPU cost):
+`typical` 58:
+
+| mode | 3D lines | average FPS | 1 % low FPS | p99 frame ms | frame mean ms | GPU ms mean | game VRAM peak MB |
+|---|---|---|---|---|---|---|---|
+| off | 1080 | 272.9 | 56.2 | 13.77 | 3.66 | 1.56 | 601 |
+| fxaa | 1080 | 283.5 | 113.6 | 7.99 | 3.53 | 0.77 | 601 |
+| smaa | 1080 | 284.4 | 66.9 | 10.41 | 3.52 | 0.82 | 857 |
+| msaa_2x | 1080 | 301.6 | 116.4 | 7.42 | 3.32 | 1.63 | 857 |
+| msaa_4x | 1080 | 299.5 | 91.5 | 7.73 | 3.34 | 1.70 | 857 |
+| taa | 1080 | 275.8 | 57.7 | 11.84 | 3.63 | 1.99 | 857 |
+| off | 2160 | 290.7 | 68.8 | 9.42 | 3.44 | 2.27 | 857 |
+| fxaa | 2160 | 289.8 | 66.0 | 10.79 | 3.45 | 1.92 | 857 |
+| smaa | 2160 | 283.1 | 55.1 | 12.28 | 3.53 | 2.05 | 1113 |
+| msaa_2x | 2160 | 288.7 | 65.3 | 11.02 | 3.46 | 2.17 | 1250 |
+| msaa_4x | 2160 | 291.5 | 92.2 | 7.77 | 3.43 | 2.40 | 1281 |
+| taa | 2160 | 241.7 | 47.9 | 17.13 | 4.14 | 2.79 | 1113 |
+
+`battle` 300:
+
+| mode | 3D lines | average FPS | 1 % low FPS | p99 frame ms | frame mean ms | GPU ms mean | game VRAM peak MB |
+|---|---|---|---|---|---|---|---|
+| off | 1080 | 115.6 | 26.6 | 31.12 | 8.65 | 1.65 | 601 |
+| fxaa | 1080 | 112.6 | 22.5 | 30.31 | 8.88 | 0.82 | 601 |
+| smaa | 1080 | 108.1 | 21.9 | 33.22 | 9.25 | 0.87 | 857 |
+| msaa_2x | 1080 | 113.9 | 24.1 | 32.29 | 8.78 | 1.71 | 857 |
+| msaa_4x | 1080 | 125.6 | 48.8 | 16.91 | 7.96 | 1.78 | 857 |
+| taa | 1080 | 105.1 | 20.3 | 32.69 | 9.52 | 2.10 | 857 |
+| off | 2160 | 121.5 | 30.6 | 23.76 | 8.23 | 2.49 | 857 |
+| fxaa | 2160 | 121.8 | 29.8 | 23.27 | 8.21 | 2.05 | 857 |
+| smaa | 2160 | 121.8 | 30.4 | 24.68 | 8.21 | 2.18 | 1113 |
+| msaa_2x | 2160 | 121.0 | 26.7 | 26.76 | 8.26 | 2.70 | 1250 |
+| msaa_4x | 2160 | 116.5 | 26.4 | 27.68 | 8.59 | 2.90 | 1281 |
+| taa | 2160 | 97.5 | 27.5 | 28.98 | 10.26 | 3.64 | 1113 |
+
+`battle` 500:
+
+| mode | 3D lines | average FPS | 1 % low FPS | p99 frame ms | frame mean ms | GPU ms mean | game VRAM peak MB |
+|---|---|---|---|---|---|---|---|
+| off | 1080 | 44.5 | 17.0 | 52.05 | 22.47 | 1.71 | 601 |
+| fxaa | 1080 | 43.3 | 14.6 | 57.17 | 23.12 | 0.87 | 601 |
+| smaa | 1080 | 46.4 | 13.9 | 56.40 | 21.57 | 0.94 | 857 |
+| msaa_2x | 1080 | 42.3 | 15.3 | 55.49 | 23.64 | 1.77 | 857 |
+| msaa_4x | 1080 | 45.9 | 21.3 | 44.58 | 21.79 | 1.83 | 857 |
+| taa | 1080 | 39.6 | 15.6 | 56.17 | 25.25 | 2.16 | 857 |
+| off | 2160 | 42.1 | 15.4 | 60.30 | 23.74 | 2.54 | 857 |
+| fxaa | 2160 | 42.9 | 16.2 | 55.68 | 23.29 | 2.07 | 857 |
+| smaa | 2160 | 47.4 | 21.3 | 42.18 | 21.11 | 2.21 | 1113 |
+| msaa_2x | 2160 | 46.8 | 19.6 | 46.06 | 21.38 | 2.74 | 1250 |
+| msaa_4x | 2160 | 43.3 | 13.9 | 61.28 | 23.09 | 2.95 | 1281 |
+| taa | 2160 | 39.1 | 14.0 | 63.81 | 25.58 | 3.67 | 1113 |
+
+The game is CPU-bound in every layout (GPU 0.8 to 3.7 ms against a frame of 3.5 to 25 ms), so the modes change FPS within noise,
+except TAA: its frame mean is about 1 to 2 ms longer at `battle` 300 and 500 at both heights. Of that, the bolt slot check is
+0.8 ms at 2 300 bolts (`frame.bolts_us` 860 against 88 with SMAA); the rest is Godot's motion-vector work. VRAM: SMAA and TAA add
+about 256 MB at 2 160 lines (their buffers), MSAA 4x about 420 MB.
+
+**Motion vectors, measured on the GPU** (`VelocityProbeEffect`, a 960x540 scene): an opaque mesh moving 0.2 m a frame at 20 m wrote
+-3.7 to -4.0 px (the previous place minus the current one); transparent meshes and the sky wrote 0 at any motion. 3 000 star
+points under a 0.01 rad-a-frame turn, linear sum of the screenshot: no AA 1 955, TAA 429 (22 %), TAA with the sky pass 2 466 (the
+stars kept, softened a little: peak 0.59 to 0.45). 40 bolts crossing at 13 px a frame: no AA 429, TAA additive 13.7 (3 %), TAA
+opaque 158.8 (37 %; thin features soften under TAA whatever the vectors). A multimesh slot filled after an empty frame: NaN; a slot
+reused by a bolt elsewhere: a 74 px vector; both gone with the quarantine (`test_motion_vectors_gpu`). The sky pass written at
+`POST_TRANSPARENT` instead of `POST_SKY` rescued the stars just the same, so compositor effects at `POST_TRANSPARENT` (the motion
+blur) run before the TAA resolve.
+
+**Defaults:** `smaa` at 1 080 and at 2 160 lines: the cheapest mode that smooths every edge (0.62 and 1.39 ms at `battle` 300),
+sharper than FXAA on panel lines and stars, no sample VRAM; TAA is offered but costs the most GPU and CPU and softens thin moving
+things. The screenshot sheets (`reports/perf/m4-t38_compare/pairs/`) are on the return checklist.
 
 ## Definition of done (M4)
 

@@ -487,3 +487,16 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
 - **T35, bolts as rows:** the AI ships' bolts are drawn by one multimesh per look (`core.bolt_draws`), interpolated between ticks as the nodes were. Check in a `battle` run: bolts leave the muzzles, fly straight and smoothly (no stutter against the hulls), hit flashes still appear where bolts land, the chase camera's larger bolts (`Projectile.visual_scale`) still apply, and nothing is drawn where a bolt was spent. Switch `settings.perf_native_bolt_rows` off and on mid-run to compare with the bolt nodes.
 - **T35, the AI ships' muzzle flashes:** the lean ships' flashes come from one pool (a multimesh of billboard quads and pooled lights), not a node per muzzle. Check in a `battle` run: a flash pops at the muzzle of every AI shot for about 50 ms, grows and fades as the player's own flashes do, rides with the ship, and lights the nose; no flash lingers on a parked or dead ship.
 - **T35, the AI ships' shot sounds:** `AudioDirector.watch_ship` listens to `shot_fired`, which both bolt paths emit (fix round 1). Confirm every AI shot in a `battle` run makes its pulse or raider sound at the muzzle, with the bolt rows on and off.
+- [ ] **M4-T38 Anti-aliasing, the default.** `settings.anti_aliasing` is `smaa` now (it was no anti-aliasing). Compare the sheets in
+      `reports/perf/m4-t38_compare/pairs/` (each the same frozen `battle` 300 frame in all six modes): `edges_2160.png` and
+      `edges_1080.png` (a wing and a rock edge), `hull_detail_2160.png` and `hull_detail_1080.png` (struts, panel lines, the small
+      parts), `stars_2160.png` and `far_dots_2160.png` (stars and small far objects must stay crisp single points). Then fly the
+      sandbox with `aa smaa`, `aa fxaa`, `aa msaa_4x` and `aa off`: say which you want as the default.
+- [ ] **M4-T38 TAA in motion.** `aa taa`, then fly a `battle 300` run with hard turns: the stars and the nebula must stay steady and
+      bright through a turn (no dimming, no trails), hull edges smooth, and a fast fighter crossing the view must leave no ghost.
+      Bolts: under TAA they draw opaque (so they carry their own motion) and soften a little; check they read as bolts at 100 to 1 000
+      m, and that no bolt flashes from somewhere else when it appears. Running lights of far ships may soften. The sheet
+      `reports/perf/m4-t38_compare/pairs/moving_2160.png` (no AA, SMAA, TAA, the live fight) shows what the agent saw.
+- [ ] **M4-T38 TAA with motion blur.** `aa taa` and `blur on`: a hard turn smears the stars once (the blur), not twice; a still
+      camera leaves the sky sharp.
+

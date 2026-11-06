@@ -901,6 +901,47 @@ and feeds them each frame. Console: `flare [on|off]`, `blur [on|off]`, provider 
 - Headless runs and the smoke runs have no `RenderingDevice`, so both effects do nothing there; `tests/integration/test_post_effects.gd`
   checks the wiring and the values the effects are given.
 
+### 7.6 Anti-aliasing and motion vectors (M4-T38, Q59, Q60)
+
+`settings.anti_aliasing` picks one of Godot's own modes for the 3D view: `off`, `fxaa`, `smaa` (the default), `msaa_2x`, `msaa_4x` or
+`taa`. `AntiAliasing` (a node of `SpaceEnvironment`) applies it live to the viewport through `AntiAliasingMode` (pure: one mode sets
+one of the viewport's `screen_space_aa`, `msaa_3d` and `use_taa`, so modes never stack). Console `aa [mode]`, provider `aa`.
+Upscaling (FSR 1.0 and 2.2) is T40's.
+
+**Why SMAA by default.** Measured on the maintainer's RX 6950 XT (the M4 Cycle log, M4-T38): SMAA smooths every edge (hull
+silhouettes, the rocks, the shader-drawn panel lines) for about 0.1 ms over FXAA and blurs the stars and the panel lines less than
+FXAA does. MSAA smooths only geometry edges and costs more GPU time and VRAM. TAA is the smoothest on still edges but the most
+expensive, softens thin moving things (bolts, sparks, far running lights) and needs the motion vectors below; it is offered, not
+defaulted. A 1 080-line 3D in a larger window costs more with `off`, MSAA or TAA than with FXAA or SMAA: without a screen-space
+pass Godot tonemaps at the window's resolution.
+
+**Motion vectors (TAA, and T40's FSR 2.2).** Godot writes velocity only for opaque meshes. Measured with `VelocityProbeEffect`
+(a diagnostic compositor effect that reads the velocity buffer back, used by `test_motion_vectors_gpu`):
+
+- The sky, the star points and the far dots write no depth, so their pixels hold zero velocity. Under TAA a camera turn then blends
+  each star with the dark sky it left, and the star field kept about a fifth of its light. `SkyVelocityEffect` (first on the
+  Compositor, `POST_SKY`, on only under TAA) writes the camera's turn into every depth-0 pixel, the motion of a thing at infinity,
+  without the TAA jitter (Godot's convention: the previous place minus the current one, in uv units). Far dots are kilometres out,
+  so the turn is most of their motion too.
+- Transparent meshes write no velocity: they inherit the pixel behind them. Large soft effects (plumes, the explosion's fireball,
+  flashes) survive that, because TAA clamps the history to the current neighbourhood. A thin fast bolt does not: an additive bolt
+  kept about 3 % of its light under TAA. So under TAA every bolt material draws opaque (`BoltMesh.set_motion_vectors`, also the
+  player's node bolts through `Projectile.bolt_materials`), and a bolt writes its own vector. Over black space the opaque bolt looks
+  the same as the additive one; over a hull it covers instead of adding.
+- A multimesh instance's previous transform is whatever its slot held in the last drawn frame. A bolt that takes a slot that was
+  empty gets a vector from the world origin (NaN when the camera is there); one that takes a slot freed since the last frame gets
+  the old bolt's place (a 70 px smear in the test). `BoltSlotQuarantine` draws a bolt new to its slot collapsed at its own place for
+  that one frame, so the slot is drawn empty before its new occupant shows and the first real vector starts where the bolt is.
+  "New" means the basis changed or the bolt moved backwards along its flight (the same cannon's next shot). It costs one pass over
+  the slots a frame, under TAA only. Running lights, plumes, muzzle flashes, sparks and the explosion stay transparent: they inherit
+  the hull's or the sky's vector.
+- **The motion blur** (§7.5) reads the velocity buffer for hulls and works out the sky's turn itself with the same sum, now also
+  without the TAA jitter, so turning the sky pass on changes nothing it draws and a still camera under TAA does not blur the sky.
+  It runs at `POST_TRANSPARENT`, before the TAA resolve, so the two never smear the same motion twice.
+
+`scripts/aa_compare.sh` measures the modes against each other in one process (they take turns on a frozen or a live scene, so the
+GPU's clock changes cancel) and saves a screenshot per mode.
+
 ## 8. Camera
 
 - **Cockpit**: `Camera3D` glued to `CockpitAnchor` (hardpoint) via `RemoteTransform3D`; FOV 75°. The pilot looks out of a built cabin (M3-T29, `docs/design-references.md`, the second
@@ -3326,3 +3367,12 @@ flashes 0.45, the hit flashes 0.15). Each subsystem is now one pass over its shi
   hull depth proxy; `motion_blur.glsl`'s header comment no longer names it (fix round 1, so T37's doc-drift item is done).
 
 The worst second's process work at `battle` 500 fell from 25.7 to about 10.5 ms, at 300 from 20.2 to 11.3 ms (the M4 Cycle log, M4-T36).
+
+### 17.22 Anti-aliasing and motion vectors (T38)
+
+T38 adds the anti-aliasing setting and the motion vectors TAA needs (§7.6). For the performance side: SMAA is the default because
+it is the cheapest mode that smooths every edge (about 0.6 ms of GPU at `battle` 300 with the 3D at 1 080 lines, 1.4 ms at 2 160,
+frozen-scene turns; the full table is in the M4 Cycle log). Under TAA the bolt slot check walks every bolt slot once a frame in
+GDScript (measured 0.8 ms a frame at `battle` 500's 2 300 bolts, against 0.09 ms for the bolt pass without it); T37 or a later
+native task can move it into the core's `bolt_transforms`, which knows when a slot changes hands. Under TAA the frame also costs
+about 1 ms more CPU elsewhere (Godot's own motion-vector bookkeeping). FSR 2.2 (T40) reuses the same motion vectors.
