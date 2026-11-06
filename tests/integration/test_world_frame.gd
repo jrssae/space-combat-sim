@@ -189,6 +189,22 @@ func test_a_rebase_leaves_a_body_parked_for_the_tier_where_it_stands_and_settles
 	assert_eq(world.last_settle_resets, 2, "both visible nodes reset")
 
 
+func test_two_rebases_in_one_tick_settle_every_node_either_one_moved() -> void:
+	var a := Node3D.new()
+	world.spawn(a, UniversePos.new(10.0, 0.0, 0.0))
+	var b := Node3D.new()
+	world.spawn(b, UniversePos.new(20.0, 0.0, 0.0))
+	await get_tree().physics_frame
+	await get_tree().process_frame
+	await get_tree().physics_frame  # inside a tick: the settle waits for its end
+	assert_true(Engine.is_in_physics_frame())
+	world.rebase(Vector3(1000.0, 0.0, 0.0))  # the automatic rebase
+	a.remove_from_group(WorldFrame.SHIFTABLE_GROUP)  # a node that leaves the group before the second
+	world.rebase(Vector3(500.0, 0.0, 0.0))  # a console rebase in the same tick
+	await get_tree().process_frame
+	assert_eq(world.last_settle_resets, 2, "the end-of-tick settle reached both nodes the first rebase moved, once each")
+
+
 func test_spawn_places_node_and_registers_it() -> void:
 	world.origin = UniversePos.new(ONE_AU_M, 0.0, 0.0)
 	var node := Node3D.new()

@@ -153,7 +153,14 @@ func spawn(node: Node3D, at: UniversePos, basis: Basis = Basis.IDENTITY, parent:
 func rebase(offset: Vector3) -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
 	var shift: Vector3 = -offset
-	_shifted.clear()
+	# A second rebase before the settle keeps the first one's nodes, so the settle still reaches each of them once.
+	var kept: Dictionary[Node3D, bool] = {}
+	if _settle_pending:
+		for node: Node3D in _shifted:
+			if is_instance_valid(node):
+				kept[node] = true
+	else:
+		_shifted.clear()
 	for member: Node in get_tree().get_nodes_in_group(SHIFTABLE_GROUP):
 		var node := member as Node3D
 		if node == null or not is_ancestor_of(node):
@@ -161,7 +168,8 @@ func rebase(offset: Vector3) -> void:
 		if node.has_meta(TierDirector.TIER_META):
 			continue  # parked for the low-attention tier (M4-T21): its row moves with the core; promotion places the body
 		node.global_translate(shift)
-		_shifted.append(node)
+		if not kept.has(node):
+			_shifted.append(node)
 	ContactScan.shift_statics(shift, self)  # this world's scan rows with no node move with its nodes (M4-T09)
 	origin = origin.plus_local(offset)
 	rebases += 1
