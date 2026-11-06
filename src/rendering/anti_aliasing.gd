@@ -36,6 +36,7 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+	BoltMesh.set_motion_vectors(false)  # the bolt materials are shared resources: leave them as approved
 	if Settings.changed.is_connected(_on_setting_changed):
 		Settings.changed.disconnect(_on_setting_changed)
 

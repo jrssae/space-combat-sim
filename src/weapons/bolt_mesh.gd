@@ -25,6 +25,8 @@ static var _motion_vectors: bool = false
 static var _additive_looks: Dictionary = {}
 ## Bolts drawn collapsed in the last frame because they were new to their slot (a readout, `aa.bolts_collapsed`).
 static var collapsed_last_frame: int = 0
+# Bolt materials already warned about (not a BaseMaterial3D, so not switched).
+static var _warned: Dictionary = {}
 
 ## Instances drawn in the last frame, over every look (a readout).
 var instances_drawn: int = 0
@@ -35,6 +37,7 @@ var _capacity: PackedInt32Array = PackedInt32Array()
 var _child_basis: Basis = Basis.IDENTITY
 var _child_known: bool = false
 var _quarantine: BoltSlotQuarantine = null
+var _drawn: Dictionary[int, PackedFloat32Array] = {}
 
 
 func _init(p_sim: SimCore = null) -> void:
@@ -81,7 +84,12 @@ static func set_motion_vectors(on: bool) -> void:
 
 static func _make_opaque(material: Material) -> void:
 	var base := material as BaseMaterial3D
-	if base == null or _additive_looks.has(base):
+	if base == null:
+		if material != null and not _warned.has(material):
+			_warned[material] = true
+			push_warning("BoltMesh: bolt material %s is not a BaseMaterial3D, so it stays as it is under TAA" % material.resource_path)
+		return
+	if _additive_looks.has(base):
 		return
 	_additive_looks[base] = [base.transparency, base.blend_mode]
 	base.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
@@ -107,26 +115,39 @@ func _enter_tree() -> void:
 	var passes: FramePasses = FramePasses.of(self)
 	if passes != null:
 		passes.add_bolt_mesh(self)
+	if _sim != null and _sim.world != null and not _sim.world.rebased.is_connected(note_rebase):
+		_sim.world.rebased.connect(note_rebase)
 
 
 func _exit_tree() -> void:
 	var passes: FramePasses = FramePasses.current()
 	if passes != null:
 		passes.remove_bolt_mesh(self)
+	if _sim != null and is_instance_valid(_sim.world) and _sim.world.rebased.is_connected(note_rebase):
+		_sim.world.rebased.disconnect(note_rebase)
 
 
 ## Fills the multimeshes for this frame (the frame's bolt pass, `FramePasses.update_bolts`; M4-T36's rule: no `_process`).
 func update() -> void:
+	var rows_on: bool = _sim != null and _sim.core != null and _sim.bolt_rows_on()
+	update_from(_sim.core if rows_on else null, rows_on)
+
+
+## Fills the multimeshes from `source` (the core, or a stand-in in tests: `bolt_instances` and `bolt_transforms`), drawing
+## nothing while `rows_on` is false.
+func update_from(source: Object, rows_on: bool) -> void:
 	instances_drawn = 0
 	if not _motion_vectors:
 		_quarantine = null
-	if _sim == null or _sim.core == null or not _sim.bolt_rows_on():
+	if source == null or not rows_on:
 		_hide_all()
+		_quarantine = null  # the rows come back with no last frame to pair with
+		collapsed_last_frame = 0
 		return
 	var fraction: float = Engine.get_physics_interpolation_fraction()
 	var collapsed: int = 0
 	for look: int in _looks.size():
-		var count: int = int(_sim.core.bolt_instances(look))
+		var count: int = int(source.bolt_instances(look))
 		if count == 0:
 			if look < _instances.size():
 				_instances[look].multimesh.visible_instance_count = 0
@@ -137,15 +158,32 @@ func update() -> void:
 		var instance: MultiMeshInstance3D = _instance(look, count)
 		if grown and _motion_vectors:
 			_quarantined().filter(look, PackedFloat32Array())  # a new buffer has no last frame to pair with
-		var buffer: PackedFloat32Array = _sim.core.bolt_transforms(look, fraction, Projectile.visual_scale, _child(),
+		var buffer: PackedFloat32Array = source.bolt_transforms(look, fraction, Projectile.visual_scale, _child(),
 				_capacity[look])
 		if _motion_vectors:
 			buffer = _quarantined().filter(look, buffer)
 			collapsed += _quarantine.collapsed
 		RenderingServer.multimesh_set_buffer(instance.multimesh.get_rid(), buffer)
 		instance.multimesh.visible_instance_count = count
+		_drawn[look] = buffer
 		instances_drawn += count
 	collapsed_last_frame = collapsed
+
+
+## The buffer `look` was last drawn with (a test seam; empty before its first draw).
+func drawn_buffer(look: int) -> PackedFloat32Array:
+	return _drawn.get(look, PackedFloat32Array())
+
+
+## The bolts' flight direction in an instance's own frame (the node's -Z under the capsule's basis).
+func flight_axis() -> Vector3:
+	return _child().inverse() * Vector3(0, 0, -1)
+
+
+## The world shifted: the renderer's last frame of every slot is from before the shift, so every bolt starts afresh.
+func note_rebase(_offset: Vector3 = Vector3.ZERO) -> void:
+	if _quarantine != null:
+		_quarantine.reset()
 
 
 # The multimesh of `look`, made on first need and grown to hold `count` instances.
@@ -177,8 +215,7 @@ func _instance(look: int, count: int) -> MultiMeshInstance3D:
 # The slot check for the frames bolts write motion vectors; forgotten while they do not, so a later switch starts afresh.
 func _quarantined() -> BoltSlotQuarantine:
 	if _quarantine == null:
-		# The bolt flies along its node's -Z; in the instance's own frame that is the capsule's basis turned back.
-		_quarantine = BoltSlotQuarantine.new(_child().inverse() * Vector3(0, 0, -1))
+		_quarantine = BoltSlotQuarantine.new(flight_axis())
 	return _quarantine
 
 

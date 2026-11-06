@@ -7,8 +7,15 @@ extends RefCounted
 ## empty before its new occupant shows and the occupant's first vector starts where it is. Used only while the bolts write
 ## motion vectors (under TAA); it costs a pass over the slots each frame.
 ##
-## A slot keeps its occupant from one frame to the next when the basis is unchanged (a bolt flies straight) and the move is
-## not backwards along its flight (the same cannon's next shot has the same basis but starts behind).
+## A slot keeps its occupant from one frame to the next when its basis's first row is unchanged (a bolt flies straight, so its
+## basis never changes) and the move runs forward along its flight, no further than `MAX_STEP_M` and with almost nothing to the
+## side. The same cannon's next shot (same basis, starting behind) and a wingman's bolt flying the same way (beside it) are new.
+
+## The furthest a bolt flies between two drawn frames: 1 000 m/s through a quarter-second frame.
+const MAX_STEP_M: float = 250.0
+## How far off its line of flight a kept bolt may be drawn, m, plus this share of its move (float rounding of the rows).
+const SIDE_SLACK_M: float = 0.05
+const SIDE_SLACK_SHARE: float = 0.01
 
 ## Slots drawn collapsed in the last `filter` call, over every look since the last reset.
 var collapsed: int = 0
@@ -47,10 +54,19 @@ func filter(look: int, buffer: PackedFloat32Array) -> PackedFloat32Array:
 		if r0x != 0.0 or r0y != 0.0 or r0z != 0.0:
 			var kept: bool = b < known and r0x == last[b] and r0y == last[b + 1] and r0z == last[b + 2]
 			if kept:
-				var along: float = (buffer[b + 3] - last[b + 3]) * (r0x * fx + r0y * fy + r0z * fz) \
-						+ (buffer[b + 7] - last[b + 7]) * (buffer[b + 4] * fx + buffer[b + 5] * fy + buffer[b + 6] * fz) \
-						+ (buffer[b + 11] - last[b + 11]) * (buffer[b + 8] * fx + buffer[b + 9] * fy + buffer[b + 10] * fz)
-				kept = along >= 0.0
+				# The flight direction in the world (scaled like the basis) and the move since the last frame.
+				var wx: float = r0x * fx + r0y * fy + r0z * fz
+				var wy: float = buffer[b + 4] * fx + buffer[b + 5] * fy + buffer[b + 6] * fz
+				var wz: float = buffer[b + 8] * fx + buffer[b + 9] * fy + buffer[b + 10] * fz
+				var dx: float = buffer[b + 3] - last[b + 3]
+				var dy: float = buffer[b + 7] - last[b + 7]
+				var dz: float = buffer[b + 11] - last[b + 11]
+				var w2: float = wx * wx + wy * wy + wz * wz
+				var d2: float = dx * dx + dy * dy + dz * dz
+				var along: float = dx * wx + dy * wy + dz * wz
+				var side2: float = d2 - along * along / maxf(w2, 1e-12)
+				var slack: float = SIDE_SLACK_M + SIDE_SLACK_SHARE * sqrt(d2)
+				kept = along >= 0.0 and d2 <= MAX_STEP_M * MAX_STEP_M and side2 <= slack * slack
 			if not kept:
 				count += 1
 				out[b] = 0.0

@@ -1,8 +1,8 @@
 class_name VelocityProbeEffect
 extends CompositorEffect
-## Reads back the motion vector and depth the renderer holds at a few pixels (M4-T38), so a GPU test and the console can check
-## that a moving thing writes the vector its movement implies. A diagnostic: it stalls the GPU for the readback, so it is added
-## to a compositor only while something asks (`aa probe`, the GPU test) and is never in the shipped scene.
+## Reads back the motion vector and depth the renderer holds at a few pixels (M4-T38), so a GPU test can check
+## that a moving thing writes the vector its movement implies. A diagnostic: it stalls the GPU for the readback, so only the GPU
+## test (`test_motion_vectors_gpu`) builds it; it is never in the shipped scene.
 ##
 ## Velocity is in uv units, the current frame's place minus the previous one's (Godot's convention, jitter removed).
 ## Needs a RenderingDevice: with none (headless runs) it reads nothing.
