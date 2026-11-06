@@ -103,6 +103,23 @@ func _rebuild() -> void:
 	await get_tree().physics_frame
 
 
+# Far ships no director can demote (built outside the pool), 20 km out, first in the tree and so in the core's rows.
+func _strays(n: int) -> Array[Combatant]:
+	var holder := Node3D.new()
+	holder.name = "Strays"
+	world.add_child(holder)
+	world.move_child(holder, 0)
+	var out: Array[Combatant] = []
+	for i: int in n:
+		var stray: Combatant = ShipAssembly.build(load("res://assets/ships/starfury_aurora.tres") as ShipSpec, world, projectiles, {
+			ShipAssembly.OPT_FACTION: Factions.EARTH_ALLIANCE,
+			ShipAssembly.OPT_DISPLAY_NAME: "STRAY %d" % i,
+		})
+		world.spawn(stray.ship, world.to_universe(Vector3(float(i) * 100.0, 0.0, -20000.0)), Basis.IDENTITY, holder)
+		out.append(stray)
+	return out
+
+
 func _skipped() -> bool:
 	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
 		return false
@@ -539,6 +556,30 @@ func test_a_gdscript_pilot_beside_a_tier_row_perceives_only_the_bodies_its_scan_
 			names.append(contact.name)
 		assert_false(names.has("FAR 0") or names.has("FAR 1"), "%s: no tier row among a GDScript scan's contacts (%s)" % [schedule, names])
 		assert_true(names.has("FAR 3"), "%s: the neighbour on its body is (%s)" % [schedule, names])
+
+
+func test_bodies_the_director_cannot_demote_do_not_use_up_its_handovers() -> void:
+	if _skipped():
+		return
+	for schedule: StringName in SCHEDULES:
+		if schedule != SCHEDULES[0]:
+			await _rebuild()
+		_use_schedule(schedule)
+		tier.handovers_per_tick = 1
+		var far: Array[Combatant] = []
+		for i: int in 3:
+			far.append(_raider("F%d" % i, Vector3(float(i) * 100.0, 0.0, -15000.0), IdleBrain.new()))
+		var strays: Array[Combatant] = _strays(4)
+		await _ticks(2)
+		var listed: PackedInt64Array = sim.core.tier_far_bodies(Vector3.ZERO, player.ship.get_instance_id(), RADIUS_M * 1.1, 100)
+		var first: int = listed[0] if not listed.is_empty() else 0
+		assert_true(strays.any(func(c: Combatant) -> bool: return c.ship.get_instance_id() == first), "%s: a stray leads the far rows" % schedule)
+		await _ticks(6)
+		for c: Combatant in far:
+			assert_true(_parked(c.ship), "%s: %s was demoted past the strays" % [schedule, c.display_name])
+		for stray: Combatant in strays:
+			assert_true(_in_jolt(stray.ship), "%s: %s stays in Jolt (not the director's to demote)" % [schedule, stray.display_name])
+		assert_eq(tier.demotions, 3, "%s: one demotion a tick, three in all" % schedule)
 
 
 func test_one_thread_and_six_give_the_same_rows_with_tier_rows_among_the_contacts() -> void:

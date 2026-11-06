@@ -35,6 +35,8 @@ var standins: StandinDirector = null
 var promotions: int = 0
 var demotions: int = 0
 var last_us: int = 0
+## Handovers a tick carries at most (`HANDOVERS_PER_TICK`; a test lowers it).
+var handovers_per_tick: int = HANDOVERS_PER_TICK
 
 var _tiered_ships: Dictionary[int, Combatant] = {}
 var _tiered_capitals: Dictionary[int, CapitalStandin] = {}
@@ -121,13 +123,18 @@ func step() -> void:
 		return
 	var at: Vector3 = frame[1]
 	var player_body: int = AiPilotDriver.player.ship.get_instance_id()
-	var budget: int = HANDOVERS_PER_TICK
+	var budget: int = handovers_per_tick
 	for body_id: int in (sim.core.tier_near_rows(at, radius, budget) as PackedInt64Array):
 		promote_body(body_id)
 		budget -= 1
 	if budget > 0:
-		for body_id: int in (sim.core.tier_far_bodies(at, player_body, radius * (1.0 + HYSTERESIS), budget) as PackedInt64Array):
-			demote_body(body_id)
+		# Every far body is asked for: one the director cannot demote must not use up a handover.
+		var far: PackedInt64Array = sim.core.tier_far_bodies(at, player_body, radius * (1.0 + HYSTERESIS), sim.core.node_count())
+		for body_id: int in far:
+			if budget <= 0:
+				break
+			if demote_body(body_id):
+				budget -= 1
 	last_us = Time.get_ticks_usec() - started
 
 
