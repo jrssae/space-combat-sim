@@ -26,3 +26,4 @@ ram_lethal_dv_mps = 18.0
 has_cockpit_interior = false
 engine_glow_color = Color(0.7, 0.9, 1.8, 1)
 weapon = ExtResource("2_weapon")
+tier_hit_scale = 0.72

@@ -514,7 +514,7 @@ impl ScsSimCore {
 
     /// The chance one tier fighter's shot hits (the roll's model, for the tests and the console): the range, the target's
     /// bounding radius, the bolt's hit radius and speed, the closing speed (m/s), the shooter's aim error (rad), its gate's
-    /// miss distance (m) and the bolt's reach (m).
+    /// miss distance (m), the bolt's reach (m) and how far outside the gate the shot left (m).
     #[func]
     #[allow(clippy::too_many_arguments)]
     fn tier_hit_chance(
@@ -527,6 +527,7 @@ impl ScsSimCore {
         aim_error_rad: f64,
         miss_m: f64,
         reach_m: f64,
+        excess_m: f64,
     ) -> f64 {
         crate::tier_fire::hit_chance(
             range_m,
@@ -537,7 +538,7 @@ impl ScsSimCore {
             aim_error_rad,
             miss_m,
             reach_m,
-            0.0,
+            excess_m,
         )
     }
 

@@ -35,6 +35,8 @@ pub struct RowCommand {
     pub miss_m: f64,
     /// The widest angle off the lead its fire gate allows, rad (the gate also holds the nose within `miss_m` of it).
     pub cone_rad: f64,
+    /// Grows with every think written, so the tier flies a new command at once rather than at its next beat.
+    pub seq: u32,
 }
 
 impl RowCommand {

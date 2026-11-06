@@ -29,6 +29,8 @@ struct Cannon {
     weapon_next: bool,
     // Whether the cannon's node processes (a parked ship's does not).
     live: bool,
+    // What the tier's rolls scale this hull's shot chance by (M4-T22 fix round 1, `ShipSpec.tier_hit_scale`).
+    tier_scale: f64,
 }
 
 /// The pulse cannons stepped as rows over the core.
@@ -102,6 +104,7 @@ impl ScsCannons {
             trigger: false,
             weapon_next: false,
             live: true,
+            tier_scale: 1.0,
         };
         if let Some(free) = self.slots.iter().position(Option::is_none) {
             self.slots[free] = Some(cannon);
@@ -134,6 +137,14 @@ impl ScsCannons {
         if let Some(c) = self.cannon_mut(slot) {
             c.trigger = fire;
             c.weapon_next = c.weapon_next || weapon_next;
+        }
+    }
+
+    /// What the tier's rolls scale this cannon's shot chance by (its hull's `tier_hit_scale`, M4-T22 fix round 1).
+    #[func]
+    fn set_tier_scale(&mut self, slot: i64, scale: f64) {
+        if let Some(c) = self.cannon_mut(slot) {
+            c.tier_scale = scale.max(0.0);
         }
     }
 
@@ -470,7 +481,9 @@ impl ScsCannons {
                 cannon.muzzle_speed * cannon.lifetime_s,
                 excess,
             );
-            if tier_fire::roll(core.tier_seed, core.syncs(), ordinal, m as i64) < chance {
+            if tier_fire::roll(core.tier_seed, core.syncs(), ordinal, m as i64)
+                < chance * cannon.tier_scale
+            {
                 core.tier_hits_total += 1;
                 let (body, at) = (core.rows.body_ids[j], core.rows.positions[j]);
                 core.tier_hits.push(body, cannon.body_id, cannon.damage, at);

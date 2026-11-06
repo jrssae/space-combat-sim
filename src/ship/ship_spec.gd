@@ -62,6 +62,9 @@ const ASSET_ROOT: String = "res://assets/generated"
 @export var damage_layout: StringName = &"x_fighter"
 ## The ship's guns; null falls back to a default `WeaponSpec` (the Starfury's M1 numbers).
 @export var weapon: WeaponSpec = null
+## The low-attention tier's per-hull term (M4-T22 fix round 1): what its rolled shots' chance is scaled by, so this hull's
+## fighters land in the tier the hits they land up close (fitted per hull against full-fidelity fights; 1 = the model as is).
+@export var tier_hit_scale: float = 1.0
 
 
 ## Whether the asset has a first-person `cockpit_interior.obj` (the Starfury does; AI ships such as the raider do not,

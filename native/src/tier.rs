@@ -89,6 +89,8 @@ pub struct TierRows {
     pub hulk: Vec<bool>,
     /// The row's place in the beat's stagger.
     pub ordinal: Vec<i64>,
+    /// The row command's `seq` the last beat flew (fix round 1): a newer one gets a beat at once.
+    pub seen_seq: Vec<u32>,
     // What the last beat left to apply every tick: the acceleration, the angular acceleration and the speed ceiling.
     pub accel: Vec<Vector3>,
     pub alpha: Vec<Vector3>,
@@ -151,6 +153,7 @@ impl TierRows {
         self.assist_on.push(true);
         self.hulk.push(false);
         self.ordinal.push(ordinal);
+        self.seen_seq.push(0);
         self.accel.push(Vector3::ZERO);
         self.alpha.push(Vector3::ZERO);
         self.speed_limit.push(0.0);
@@ -184,6 +187,7 @@ impl TierRows {
         self.assist_on.swap_remove(at);
         self.hulk.swap_remove(at);
         self.ordinal.swap_remove(at);
+        self.seen_seq.swap_remove(at);
         self.accel.swap_remove(at);
         self.alpha.swap_remove(at);
         self.speed_limit.swap_remove(at);
@@ -250,8 +254,15 @@ pub fn step(
     let dt32 = dt as f32;
     let mut beats = 0;
     for i in 0..t.len() {
-        if (tick + t.ordinal[i]).rem_euclid(period) == 0 {
+        // A command a think wrote since the last beat is flown at once (fix round 1): waiting for the beat added up to two
+        // ticks of steering lag on top of the step's one-tick handover, enough to swing a 4 Hz pilot's nose off its gate.
+        let fresh =
+            HashMap::get(commands, &t.body_ids[i]).is_some_and(|rc| rc.seq != t.seen_seq[i]);
+        if fresh || (tick + t.ordinal[i]).rem_euclid(period) == 0 {
             beats += 1;
+            if let Some(rc) = HashMap::get(commands, &t.body_ids[i]) {
+                t.seen_seq[i] = rc.seq;
+            }
             beat(t, i, types, gravity, commands, dt * period as f64, scratch);
         }
         // Semi-implicit, as Jolt steps a body: the velocity first, then the pose from the new velocity.

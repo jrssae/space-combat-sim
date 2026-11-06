@@ -532,6 +532,7 @@ pub fn note_aim(commands: &mut HashMap<i64, RowCommand>, body_id: i64, brain: &B
         rc.aim_error_rad = brain.profile.aim_error_deg.to_radians();
         rc.miss_m = brain.profile.tactics.fire_miss_m;
         rc.cone_rad = brain.profile.tactics.fire_cone_deg.to_radians();
+        rc.seq = rc.seq.wrapping_add(1);
     }
 }
 

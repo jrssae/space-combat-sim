@@ -355,6 +355,8 @@ func _bind() -> void:
 		return
 	_unbind()
 	var slot: int = sim.register_cannon(self, _body.get_instance_id(), _muzzle_locals, weapon, faction)
+	if slot >= 0 and _body is Ship and (_body as Ship).spec != null:
+		sim.cannons.set_tier_scale(slot, (_body as Ship).spec.tier_hit_scale)  # the hull's term in the tier (M4-T22)
 	if slot < 0:
 		return
 	_sim = sim

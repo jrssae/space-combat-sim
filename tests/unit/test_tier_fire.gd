@@ -74,13 +74,15 @@ func test_the_hit_chance_follows_the_range_the_size_and_the_skill() -> void:
 	await _world(1, 0)
 	var core: Object = w.sim.core
 	# range, target radius, hit radius, muzzle speed, aim error (rad), the gate's miss distance (m), the bolt's reach (m)
-	var base: float = float(core.tier_hit_chance(600.0, 8.0, 0.25, 1000.0, 0.0, deg_to_rad(1.0), 12.0, 4000.0))
+	var base: float = float(core.tier_hit_chance(600.0, 8.0, 0.25, 1000.0, 0.0, deg_to_rad(1.0), 12.0, 4000.0, 0.0))
 	assert_between(base, 0.01, 0.99, "a fighter at 600 m is neither sure nor hopeless (%.3f)" % base)
-	assert_gt(float(core.tier_hit_chance(300.0, 8.0, 0.25, 1000.0, 0.0, deg_to_rad(1.0), 12.0, 4000.0)), base, "closer hits more")
-	assert_gt(float(core.tier_hit_chance(600.0, 16.0, 0.25, 1000.0, 0.0, deg_to_rad(1.0), 12.0, 4000.0)), base, "bigger hits more")
-	assert_gt(float(core.tier_hit_chance(600.0, 8.0, 0.25, 1000.0, 0.0, deg_to_rad(0.3), 12.0, 4000.0)), base, "a better shot hits more")
-	assert_gt(float(core.tier_hit_chance(600.0, 8.0, 0.25, 2000.0, 0.0, deg_to_rad(1.0), 12.0, 4000.0)), base, "a faster bolt hits more")
-	assert_eq(float(core.tier_hit_chance(5000.0, 8.0, 0.25, 1000.0, 0.0, deg_to_rad(1.0), 12.0, 4000.0)), 0.0, "past the bolt's reach, never")
+	assert_gt(float(core.tier_hit_chance(300.0, 8.0, 0.25, 1000.0, 0.0, deg_to_rad(1.0), 12.0, 4000.0, 0.0)), base, "closer hits more")
+	assert_gt(float(core.tier_hit_chance(600.0, 16.0, 0.25, 1000.0, 0.0, deg_to_rad(1.0), 12.0, 4000.0, 0.0)), base, "bigger hits more")
+	assert_gt(float(core.tier_hit_chance(600.0, 8.0, 0.25, 1000.0, 0.0, deg_to_rad(0.3), 12.0, 4000.0, 0.0)), base, "a better shot hits more")
+	assert_gt(float(core.tier_hit_chance(600.0, 8.0, 0.25, 2000.0, 0.0, deg_to_rad(1.0), 12.0, 4000.0, 0.0)), base, "a faster bolt hits more")
+	assert_eq(float(core.tier_hit_chance(5000.0, 8.0, 0.25, 1000.0, 0.0, deg_to_rad(1.0), 12.0, 4000.0, 0.0)), 0.0, "past the bolt's reach, never")
+	assert_lt(float(core.tier_hit_chance(600.0, 8.0, 0.25, 1000.0, 0.0, deg_to_rad(1.0), 12.0, 4000.0, 20.0)), base,
+			"a shot leaving outside its gate hits less")
 
 
 # --- tier brains ----------------------------------------------------------------------------------------------------------
