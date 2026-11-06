@@ -8,10 +8,16 @@ extends Node3D
 
 const GROUP: StringName = &"targetable"
 
+## What sort of thing it marks (M4-T07): later scans, broad phases and the tier read it so a rock or a mine never fills a
+## fighter's contacts. Ships are the default; the battle's stand-ins set their own.
+enum Kind { SHIP, CAPITAL, TURRET, MISSILE, MINE, STATIC, PROP }
+
 ## What the pilot reads ("NAV ALPHA"); the console selects targets by it.
 @export var display_name: String = ""
 ## IFF (§14.9, `Factions`). Buoys are `neutral`; ships carry their own.
 @export var faction: StringName = &"neutral"
+## Its `Kind` (M4-T07).
+@export var kind: Kind = Kind.SHIP
 ## How far this target is heard beyond the sensors (M3-T17, Q21), m: 0 = not at all, `INF` = everywhere. Nav buoys use
 ## 1 000 km, allied ships 100 km. Broadcasters are kept in one list (`broadcasters`) so the AI's
 ## `ContactScan.shared_broadcasts` need not sweep every body.
@@ -24,7 +30,14 @@ const GROUP: StringName = &"targetable"
 var velocity: Vector3 = Vector3.ZERO
 
 
+## Lookups of an owner's hull so far (M4-T34): a work count for tests and profiling, never gameplay.
+static var hull_lookups: int = 0
+
 static var _broadcasters: Array[Targetable] = []
+
+# The owner's hull as `Damageable.of` last gave it, kept while in the tree until the owner's children change.
+var _hull: Damageable = null
+var _hull_known: bool = false
 
 
 func _init() -> void:
@@ -33,10 +46,18 @@ func _init() -> void:
 
 func _enter_tree() -> void:
 	_sync_broadcaster()
+	_hull_known = false
+	var parent: Node = get_parent()
+	if parent != null and not parent.child_order_changed.is_connected(_forget_hull):
+		parent.child_order_changed.connect(_forget_hull)
 
 
 func _exit_tree() -> void:
 	_broadcasters.erase(self)
+	_hull_known = false
+	var parent: Node = get_parent()
+	if parent != null and parent.child_order_changed.is_connected(_forget_hull):
+		parent.child_order_changed.disconnect(_forget_hull)
 
 
 ## Every targetable in the tree with a broadcast range above 0, active or not (callers check `is_active()`). Read, never
@@ -64,13 +85,13 @@ func is_active() -> bool:
 
 ## Hull 0..1 of the owner (its `Damageable` sibling), or -1 when it has none (a buoy).
 func get_hull_fraction() -> float:
-	var damageable: Damageable = Damageable.of(get_parent())
+	var damageable: Damageable = _owner_hull()
 	return damageable.hull.fraction() if damageable != null else -1.0
 
 
 ## Radius of a sphere around the owner that holds it (its `Damageable`'s bounding radius), 0 when it has none.
 func get_bounding_radius() -> float:
-	var damageable: Damageable = Damageable.of(get_parent())
+	var damageable: Damageable = _owner_hull()
 	return damageable.bounding_radius if damageable != null else 0.0
 
 
@@ -83,11 +104,27 @@ func get_target_velocity() -> Vector3:
 
 ## A snapshot for `TargetingSystem`: this tick's position and velocity, never kept across ticks.
 func to_target_info() -> TargetInfo:
+	var damageable: Damageable = _owner_hull()
 	var info := TargetInfo.new(get_instance_id(), display_name, faction, global_position, get_target_velocity(),
-			get_hull_fraction(), get_bounding_radius())
+			damageable.hull.fraction() if damageable != null else -1.0,
+			damageable.bounding_radius if damageable != null else 0.0)
 	info.broadcast_range_m = broadcast_range_m
-	var damageable: Damageable = Damageable.of(get_parent())
 	if damageable != null:
 		info.damage_layout = damageable.zones.layout
 		info.damage_zones = damageable.zone_severities()
 	return info
+
+
+# The owner's hull (`Damageable.of(parent)`), found once while in the tree: the player's candidate list asks for it for
+# every targetable every tick (M4-T34).
+func _owner_hull() -> Damageable:
+	if _hull_known and (_hull == null or is_instance_valid(_hull)):
+		return _hull
+	hull_lookups += 1
+	_hull = Damageable.of(get_parent())
+	_hull_known = is_inside_tree()
+	return _hull
+
+
+func _forget_hull() -> void:
+	_hull_known = false

@@ -6,7 +6,6 @@
 [resource]
 script = ExtResource("1_ship_spec")
 asset_id = "starfury_aurora"
-splat_lod = 1
 mass = 48000.0
 inertia = Vector3(600000, 600000, 500000)
 pod_main_thrust = 360000.0

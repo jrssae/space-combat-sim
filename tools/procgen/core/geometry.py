@@ -26,9 +26,9 @@ class Material:
     """A surface finish: linear-RGB albedo plus how the sampler should treat it.
 
     ``transmittance`` is the fraction of light that should pass through the whole surface
-    (0 = opaque hull, 0.7 = tinted glass); the sampler turns it into per-splat alpha.
-    ``paneled`` surfaces get the style's panel lines. ``metallic`` only reaches the fallback mesh's
-    material: splats are lit in the game by the scene's lights, and have no specular.
+    (0 = opaque hull, 0.7 = tinted glass); the textured mesh draws it as glass.
+    ``paneled`` surfaces get the style's panel lines. ``metallic``, ``roughness`` (``None``: a default from the
+    metalness) and the emissive colour and strength reach the textured mesh's maps (M4-T30a).
     """
 
     name: str
@@ -36,6 +36,9 @@ class Material:
     transmittance: float = 0.0
     paneled: bool = False
     metallic: float = 0.0
+    roughness: float | None = None
+    emissive: Vec3 = (0.0, 0.0, 0.0)
+    emissive_strength: float = 0.0
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -44,6 +47,15 @@ class Material:
             raise ValueError(f"material {self.name!r}: albedo must be 3 non-negative values")
         if not 0.0 <= self.transmittance < 1.0:
             raise ValueError(f"material {self.name!r}: transmittance must be in [0, 1)")
+        if self.roughness is not None and not 0.0 <= self.roughness <= 1.0:
+            raise ValueError(f"material {self.name!r}: roughness must be in [0, 1]")
+        if len(self.emissive) != 3 or any(c < 0.0 for c in self.emissive) or self.emissive_strength < 0.0:
+            raise ValueError(f"material {self.name!r}: emissive must be 3 non-negative values with a non-negative strength")
+
+    @property
+    def roughness_value(self) -> float:
+        """The roughness the maps use: as set, else matte paint that gets smoother the more metallic it is."""
+        return 0.7 - 0.35 * self.metallic if self.roughness is None else self.roughness
 
 
 def unit(v: np.ndarray) -> np.ndarray:
@@ -106,20 +118,38 @@ def mirror_matrix(axis: str) -> np.ndarray:
 
 
 # --- mesh ------------------------------------------------------------------------------------
+NO_CHART = -1
+
+
 @dataclass
 class Mesh:
-    """Indexed triangle mesh with one material index per face."""
+    """Indexed triangle mesh with one material index per face.
+
+    A primitive that knows its parametrisation also writes a UV per face corner in metres (``face_uv``) and a chart id per
+    face (``face_chart``; ``NO_CHART`` where the atlas packer must unwrap the face itself), so a texture atlas (M4-T30a) keeps
+    its texels the same size on a cylinder and a box. Both ride through every transform and ``concatenate``.
+    """
 
     vertices: np.ndarray
     faces: np.ndarray
     face_material: np.ndarray
     materials: tuple[Material, ...]
+    face_chart: np.ndarray | None = None
+    face_uv: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         self.vertices = np.asarray(self.vertices, dtype=np.float64).reshape(-1, 3)
         self.faces = np.asarray(self.faces, dtype=np.int64).reshape(-1, 3)
         self.face_material = np.asarray(self.face_material, dtype=np.int64).reshape(-1)
         self.materials = tuple(self.materials)
+        if self.face_chart is None:
+            self.face_chart = np.full(self.face_count, NO_CHART, dtype=np.int64)
+        else:
+            self.face_chart = np.asarray(self.face_chart, dtype=np.int64).reshape(-1)
+        if self.face_uv is None:
+            self.face_uv = np.zeros((self.face_count, 3, 2), dtype=np.float64)
+        else:
+            self.face_uv = np.asarray(self.face_uv, dtype=np.float64).reshape(-1, 3, 2)
         self.validate()
 
     # -- queries --
@@ -142,6 +172,15 @@ class Mesh:
             raise ValueError("material index out of range")
         if not np.all(np.isfinite(self.vertices)):
             raise ValueError("non-finite vertex")
+        if self.face_chart.shape[0] != self.face_count or self.face_uv.shape[0] != self.face_count:
+            raise ValueError("one chart id and three corner UVs per face are required")
+        if not np.all(np.isfinite(self.face_uv)):
+            raise ValueError("non-finite UV")
+
+    @property
+    def chart_count(self) -> int:
+        """How many charts the primitives wrote (faces with ``NO_CHART`` are not counted)."""
+        return int(self.face_chart.max()) + 1 if self.face_count and self.face_chart.max() >= 0 else 0
 
     def corners(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         v = self.vertices
@@ -198,8 +237,10 @@ class Mesh:
         r = np.asarray(rotation, dtype=float)
         t = np.asarray(translation, dtype=float)
         verts = self.vertices @ r.T + t
-        faces = self.faces if np.linalg.det(r) > 0 else self.faces[:, ::-1]
-        return Mesh(verts, faces.copy(), self.face_material.copy(), self.materials)
+        reflecting = np.linalg.det(r) <= 0
+        faces = self.faces[:, ::-1] if reflecting else self.faces
+        uv = self.face_uv[:, ::-1] if reflecting else self.face_uv
+        return Mesh(verts, faces.copy(), self.face_material.copy(), self.materials, self.face_chart.copy(), uv.copy())
 
     def translated(self, offset: Sequence[float]) -> Mesh:
         return self.transformed(np.eye(3), offset)
@@ -209,7 +250,8 @@ class Mesh:
 
     def flipped(self) -> Mesh:
         """Reverse every face so normals point the other way (interior surfaces)."""
-        return Mesh(self.vertices.copy(), self.faces[:, ::-1].copy(), self.face_material.copy(), self.materials)
+        return Mesh(self.vertices.copy(), self.faces[:, ::-1].copy(), self.face_material.copy(), self.materials,
+                    self.face_chart.copy(), self.face_uv[:, ::-1].copy())
 
     def face_subset(self, mask: np.ndarray) -> Mesh:
         """The faces selected by ``mask`` (vertices and materials kept as they are)."""
@@ -219,10 +261,13 @@ class Mesh:
             self.faces[mask].copy(),
             self.face_material[mask].copy(),
             self.materials,
+            self.face_chart[mask].copy(),
+            self.face_uv[mask].copy(),
         )
 
     def with_material(self, material: Material) -> Mesh:
-        return Mesh(self.vertices.copy(), self.faces.copy(), np.zeros(self.face_count, dtype=np.int64), (material,))
+        return Mesh(self.vertices.copy(), self.faces.copy(), np.zeros(self.face_count, dtype=np.int64), (material,),
+                    self.face_chart.copy(), self.face_uv.copy())
 
     @staticmethod
     def empty() -> Mesh:
@@ -234,8 +279,9 @@ class Mesh:
         meshes = list(meshes)
         materials: list[Material] = []
         by_name: dict[str, int] = {}
-        verts, faces, face_mat = [], [], []
+        verts, faces, face_mat, charts, uvs = [], [], [], [], []
         offset = 0
+        chart_offset = 0
         for mesh in meshes:
             remap = np.zeros(max(len(mesh.materials), 1), dtype=np.int64)
             for i, m in enumerate(mesh.materials):
@@ -248,10 +294,15 @@ class Mesh:
             verts.append(mesh.vertices)
             faces.append(mesh.faces + offset)
             face_mat.append(remap[mesh.face_material] if mesh.face_count else mesh.face_material)
+            # Each mesh keeps its own charts: a mirrored part never shares a chart with its original.
+            charts.append(np.where(mesh.face_chart >= 0, mesh.face_chart + chart_offset, NO_CHART))
+            uvs.append(mesh.face_uv)
+            chart_offset += mesh.chart_count
             offset += mesh.vertex_count
         if not meshes:
             return Mesh.empty()
-        return Mesh(np.concatenate(verts), np.concatenate(faces), np.concatenate(face_mat), tuple(materials))
+        return Mesh(np.concatenate(verts), np.concatenate(faces), np.concatenate(face_mat), tuple(materials),
+                    np.concatenate(charts), np.concatenate(uvs))
 
 
 # --- primitives ------------------------------------------------------------------------------
@@ -311,8 +362,8 @@ def tapered_box(
         "back": (ring_b[0], ring_b[1], ring_b[2], ring_b[3]),
     }
     overrides = materials_by_face or {}
-    verts, faces, mats, table = [], [], [], [material]
-    for name, quad in sides.items():
+    verts, faces, mats, table, charts, uvs = [], [], [], [material], [], []
+    for chart, (name, quad) in enumerate(sides.items()):
         mat = overrides.get(name, material)
         if mat not in table:
             table.append(mat)
@@ -321,8 +372,22 @@ def tapered_box(
         faces.append([base, base + 1, base + 2])
         faces.append([base, base + 2, base + 3])
         mats.extend([table.index(mat)] * 2)
-    mesh = Mesh(np.array(verts), np.array(faces), np.array(mats), tuple(table))
+        planar = planar_uv(np.asarray(quad, dtype=float))
+        uvs.append(planar[[0, 1, 2]])
+        uvs.append(planar[[0, 2, 3]])
+        charts.extend([chart, chart])
+    mesh = Mesh(np.array(verts), np.array(faces), np.array(mats), tuple(table), np.array(charts), np.array(uvs))
     return mesh.translated(center)
+
+
+def planar_uv(points: np.ndarray) -> np.ndarray:
+    """``(n, 2)`` coordinates of coplanar ``points`` in their own plane, metres, the first edge along u."""
+    p = np.asarray(points, dtype=float).reshape(-1, 3)
+    e1 = unit(p[1] - p[0])
+    normal = unit(np.cross(p[1] - p[0], p[2] - p[0]))
+    e2 = np.cross(normal, e1)
+    d = p - p[0]
+    return np.stack([d @ e1, d @ e2], axis=1)
 
 
 def lathe(
@@ -361,6 +426,10 @@ def lathe(
     verts: list[np.ndarray] = []
     faces: list[np.ndarray] = []
     face_mats: list[np.ndarray] = []
+    uvs: list[np.ndarray] = []
+    # Texture space (metres): v runs along the profile, u around it at each ring's own radius, the seam at the first vertex.
+    arc = np.concatenate([[0.0], np.cumsum([math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in pairwise(profile)])])
+    circumference = [2.0 * math.pi * r for _, r in profile]
 
     def ring(index: int) -> np.ndarray:
         z, r = profile[index]
@@ -371,22 +440,35 @@ def lathe(
         verts.append(np.stack([r * cos_t, r * sin_t, np.full(segments, z)], axis=1))
         return start + np.arange(segments)
 
+    def ring_uv(index: int, k: np.ndarray, around_r_of: int) -> np.ndarray:
+        """Corner UVs at ring ``index`` for unwrapped angular indices ``k`` (``segments`` means the seam's far side)."""
+        return np.stack([k / segments * circumference[around_r_of], np.full(len(k), arc[index])], axis=1)
+
     current = ring(0)
     for i in range(n_seg):
         nxt = ring(i + 1)
         if len(current) == 1 and len(nxt) == 1:
             raise ValueError("two consecutive poles in a lathe profile")
+        k = np.arange(segments, dtype=float)
         if len(current) == 1:
             f = _fan_faces(nxt, int(current[0]), closed=True, apex_first=True)
+            uv = np.stack([ring_uv(i, k + 0.5, i + 1), ring_uv(i + 1, k + 1.0, i + 1), ring_uv(i + 1, k, i + 1)], axis=1)
         elif len(nxt) == 1:
             f = _fan_faces(current, int(nxt[0]), closed=True, apex_first=False)
+            uv = np.stack([ring_uv(i + 1, k + 0.5, i), ring_uv(i, k, i), ring_uv(i, k + 1.0, i)], axis=1)
         else:
             f = _quad_faces(current, nxt, closed=True)
+            a_i, a_j = ring_uv(i, k, i), ring_uv(i, k + 1.0, i)
+            b_i, b_j = ring_uv(i + 1, k, i + 1), ring_uv(i + 1, k + 1.0, i + 1)
+            uv = np.concatenate([np.stack([a_i, b_j, b_i], axis=1), np.stack([a_i, a_j, b_j], axis=1)])
         faces.append(f)
+        uvs.append(uv)
         face_mats.append(np.full(len(f), table.index(mats[i])))
         # Share the ring with the next segment unless a hard edge was requested there.
         current = ring(i + 1) if (i + 1) in crease_set and i + 1 < n_seg else nxt
-    return Mesh(np.concatenate(verts), np.concatenate(faces), np.concatenate(face_mats), tuple(table))
+    all_faces = np.concatenate(faces)
+    return Mesh(np.concatenate(verts), all_faces, np.concatenate(face_mats), tuple(table),
+                np.zeros(len(all_faces), dtype=np.int64), np.concatenate(uvs))
 
 
 def superellipse_ring(width: float, height: float, points: int, exponent: float = 4.0) -> np.ndarray:
@@ -679,7 +761,7 @@ def assign_material_by_predicate(mesh: Mesh, material: Material, mask: np.ndarra
         table.append(material)
     face_mat = mesh.face_material.copy()
     face_mat[np.asarray(mask, dtype=bool)] = table.index(material)
-    return Mesh(mesh.vertices.copy(), mesh.faces.copy(), face_mat, tuple(table))
+    return Mesh(mesh.vertices.copy(), mesh.faces.copy(), face_mat, tuple(table), mesh.face_chart.copy(), mesh.face_uv.copy())
 
 
 @dataclass
@@ -697,6 +779,7 @@ def stats(mesh: Mesh) -> MeshStats:
 
 
 __all__ = [
+    "NO_CHART",
     "Material",
     "Mesh",
     "MeshStats",
@@ -708,6 +791,7 @@ __all__ = [
     "lathe",
     "loft",
     "mirror_matrix",
+    "planar_uv",
     "polygon_area_2d",
     "prism",
     "rotation_x",

@@ -1,7 +1,7 @@
 """Colour helpers: blackbody star colours and sRGB transfer functions.
 
-All splat colours in this package are **linear** RGB radiance (they may exceed 1.0 for bright
-emitters; GDGS only clamps below at zero). The sRGB encode here is for PNG output only.
+All material colours in this package are **linear** RGB radiance (they may exceed 1.0 for bright
+emitters). The sRGB encode here is for PNG output only.
 """
 
 from __future__ import annotations

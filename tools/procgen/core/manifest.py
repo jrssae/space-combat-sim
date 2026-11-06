@@ -3,28 +3,16 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 MANIFEST_NAME = "manifest.json"
-KIND_SPLAT = "splat"  # the default: a splat asset (``lods``, ``aabb_*``, ``centroid_offset``)
-KIND_AUDIO = "audio"  # a sound set: ``sounds`` and no ``lods``
+KIND_ASSET = "asset"  # the default: a generated model (``aabb_*``, ``centroid_offset``, usually a textured ``mesh``)
+KIND_AUDIO = "audio"  # a sound set: ``sounds`` and no bounds
 FRAME = "godot"
 UNITS = "m"
-
-
-def lod_entry(level: int, file: str, splats: int, spacing_m: float, lighting: str | None = None) -> dict[str, Any]:
-    """One level of detail. ``lighting`` names its ``.light`` records when the level is lit in the game (the sky is not)."""
-    entry: dict[str, Any] = {
-        "level": int(level),
-        "file": file,
-        "splats": int(splats),
-        "spacing_m": float(spacing_m),
-    }
-    if lighting is not None:
-        entry["lighting"] = lighting
-    return entry
 
 
 def sound_entry(
@@ -77,7 +65,6 @@ def build_manifest(
     asset_id: str,
     generator_version: int,
     seed: int,
-    lods: Sequence[Mapping[str, Any]],
     aabb_min: Sequence[float],
     aabb_max: Sequence[float],
     centroid_offset: Sequence[float],
@@ -86,11 +73,10 @@ def build_manifest(
 ) -> dict[str, Any]:
     """Assemble and validate a manifest dict.
 
-    ``aabb_*`` bound the written splat centres in the Godot frame after re-centring (the
-    box GDGS reports for the imported resource, up to the Rz(180) flip).
+    ``aabb_*`` bound the asset in the Godot frame after re-centring.
     ``centroid_offset`` is the Godot-frame vector that was subtracted from the authored
     positions: placing the node at ``anchor + centroid_offset`` restores the authored frame.
-    ``extra`` adds asset-specific keys (e.g. per-population splat counts).
+    ``extra`` adds asset-specific keys (the textured ``mesh`` section, counts, chunks).
     """
     manifest: dict[str, Any] = {
         "asset_id": asset_id,
@@ -98,7 +84,6 @@ def build_manifest(
         "seed": int(seed),
         "frame": FRAME,
         "units": UNITS,
-        "lods": [dict(entry) for entry in lods],
         "aabb_min": _vec3(aabb_min),
         "aabb_max": _vec3(aabb_max),
         "centroid_offset": _vec3(centroid_offset),
@@ -113,7 +98,12 @@ def build_manifest(
 
 
 def _is_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    """A real, finite number: NaN and infinity would slip past every ``<= 0`` check."""
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return True
+    return isinstance(value, float) and math.isfinite(value)
 
 
 def _check_vec3(manifest: Mapping[str, Any], key: str) -> None:
@@ -138,37 +128,15 @@ def validate_manifest(manifest: Mapping[str, Any]) -> None:
     if manifest.get("units") != UNITS:
         raise ValueError(f"manifest 'units' must be {UNITS!r}")
 
-    kind = manifest.get("kind", KIND_SPLAT)
-    if kind not in (KIND_SPLAT, KIND_AUDIO):
-        raise ValueError(f"manifest 'kind' must be {KIND_SPLAT!r} or {KIND_AUDIO!r}, got {kind!r}")
+    kind = manifest.get("kind", KIND_ASSET)
+    if kind not in (KIND_ASSET, KIND_AUDIO):
+        raise ValueError(f"manifest 'kind' must be {KIND_ASSET!r} or {KIND_AUDIO!r}, got {kind!r}")
     if kind == KIND_AUDIO:
         _validate_sounds(manifest)
         return
 
-    lods = manifest.get("lods")
-    if not isinstance(lods, list) or not lods:
-        raise ValueError("manifest 'lods' must be a non-empty list (lods[0] is LOD 0)")
-    for index, entry in enumerate(lods):
-        if not isinstance(entry, dict):
-            raise ValueError(f"manifest lods[{index}] must be an object")  # noqa: TRY004
-        if entry.get("level") != index:
-            raise ValueError(f"manifest lods[{index}].level must equal {index}")
-        if not isinstance(entry.get("file"), str) or not entry["file"]:
-            raise ValueError(f"manifest lods[{index}].file must be a non-empty string")
-        splats = entry.get("splats")
-        if not isinstance(splats, int) or isinstance(splats, bool) or splats <= 0:
-            raise ValueError(
-                f"manifest lods[{index}].splats must be a positive integer"
-            )
-        if not _is_number(entry.get("spacing_m")) or entry["spacing_m"] <= 0:
-            raise ValueError(
-                f"manifest lods[{index}].spacing_m must be a positive number"
-            )
-        if "lighting" in entry and not (isinstance(entry["lighting"], str) and entry["lighting"].endswith(".light")):
-            raise ValueError(f"manifest lods[{index}].lighting must be a .light file name")
-
-    if "hero" in manifest:
-        _validate_hero(manifest["hero"])
+    if "mesh" in manifest:
+        validate_mesh_section(manifest["mesh"])
 
     for key in ("aabb_min", "aabb_max", "centroid_offset"):
         _check_vec3(manifest, key)
@@ -182,25 +150,84 @@ def validate_manifest(manifest: Mapping[str, Any]) -> None:
         raise ValueError("manifest 'files' must map names to file names")
 
 
-def _validate_hero(entry: Any) -> None:
-    """The optional ``hero`` entry: a level's file, splat count, spacing and lighting, but outside the ``lods`` ladder."""
+MESH_SURFACE_KEYS = ("name", "blend", "albedo", "normal", "orm", "emissive", "transmittance")
+
+
+def validate_mesh_section(entry: Any) -> None:
+    """The textured mesh contract (M4-T30a, the milestone's "The contract M5 builds against"): the ``.glb``, its counts and box,
+    the atlas's texel and size, the mean albedo, one surface entry per primitive naming the four maps, and the lods list."""
     if not isinstance(entry, dict):
-        raise ValueError("manifest 'hero' must be an object")  # noqa: TRY004
-    if not isinstance(entry.get("file"), str) or not entry["file"]:
-        raise ValueError("manifest hero.file must be a non-empty string")
-    splats = entry.get("splats")
-    if not isinstance(splats, int) or isinstance(splats, bool) or splats <= 0:
-        raise ValueError("manifest hero.splats must be a positive integer")
-    if not _is_number(entry.get("spacing_m")) or entry["spacing_m"] <= 0:
-        raise ValueError("manifest hero.spacing_m must be a positive number")
-    if "lighting" in entry and not (isinstance(entry["lighting"], str) and entry["lighting"].endswith(".light")):
-        raise ValueError("manifest hero.lighting must be a .light file name")
+        raise ValueError("manifest 'mesh' must be an object")  # noqa: TRY004
+    if not isinstance(entry.get("file"), str) or not entry["file"].endswith(".glb"):
+        raise ValueError("manifest mesh.file must be a .glb file name")
+    for key in ("triangles", "vertices", "atlas_px"):
+        value = entry.get(key)
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ValueError(f"manifest mesh.{key} must be a positive integer")
+    if not _is_number(entry.get("texel_m")) or entry["texel_m"] <= 0:
+        raise ValueError("manifest mesh.texel_m must be a positive number")
+    for key in ("aabb_min", "aabb_max", "mean_albedo"):
+        _check_vec3(entry, key)
+    if any(lo > hi for lo, hi in zip(entry["aabb_min"], entry["aabb_max"])):
+        raise ValueError("manifest mesh.aabb_min must not exceed aabb_max")
+    surfaces = entry.get("surfaces")
+    if not isinstance(surfaces, list) or not surfaces:
+        raise ValueError("manifest mesh.surfaces must be a non-empty list")
+    for index, surface in enumerate(surfaces):
+        if not isinstance(surface, dict):
+            raise ValueError(f"manifest mesh.surfaces[{index}] must be an object")  # noqa: TRY004
+        missing = [key for key in MESH_SURFACE_KEYS if key not in surface]
+        if missing:
+            raise ValueError(f"manifest mesh.surfaces[{index}] lacks {missing}")
+        for key in ("albedo", "normal", "orm", "emissive"):
+            if not isinstance(surface[key], str) or not surface[key].endswith(".png"):
+                raise ValueError(f"manifest mesh.surfaces[{index}].{key} must be a .png file name")
+        if not isinstance(surface["name"], str) or not surface["name"]:
+            raise ValueError(f"manifest mesh.surfaces[{index}].name must be a non-empty string")
+        if not isinstance(surface["blend"], bool):
+            raise ValueError(f"manifest mesh.surfaces[{index}].blend must be a bool")
+        if not _is_number(surface["transmittance"]) or not 0.0 <= surface["transmittance"] < 1.0:
+            raise ValueError(f"manifest mesh.surfaces[{index}].transmittance must be in [0, 1)")
+    if "livery" in entry:
+        _validate_livery(entry["livery"])
+    lods = entry.get("lods")
+    if not isinstance(lods, list):
+        raise ValueError("manifest mesh.lods must be a list")
+    for index, lod in enumerate(lods):
+        if not isinstance(lod, dict) or not isinstance(lod.get("file"), str) or not _is_number(lod.get("from_m")):
+            raise ValueError(f"manifest mesh.lods[{index}] must name a file, triangles and from_m")
+        if not isinstance(lod.get("triangles"), int) or lod["triangles"] <= 0:
+            raise ValueError(f"manifest mesh.lods[{index}].triangles must be a positive integer")
+
+
+def _validate_livery(livery: Any) -> None:
+    """The ``mesh.livery`` section (M4-T30b): the hull paint, the digit atlas, each pattern's stripes, the number fields and the
+    liveries naming patterns and fields that exist."""
+    if not isinstance(livery, dict):
+        raise ValueError("manifest mesh.livery must be an object")  # noqa: TRY004
+    _check_vec3(livery, "hull_paint")
+    digits = livery.get("digits")
+    if not isinstance(digits, dict) or not isinstance(digits.get("file"), str) or not digits["file"].endswith(".png"):
+        raise ValueError("manifest mesh.livery.digits must name a .png file")
+    patterns, fields = livery.get("patterns"), livery.get("number_fields")
+    if not isinstance(patterns, dict) or "plain" not in patterns or not isinstance(fields, dict):
+        raise ValueError("manifest mesh.livery needs patterns (with plain) and number_fields")
+    for name, stripes in patterns.items():
+        for index, stripe in enumerate(stripes if isinstance(stripes, list) else [None]):
+            if not isinstance(stripe, dict) or not all(key in stripe for key in ("zones", "axis", "lo", "hi", "slot", "facing", "min_facing")):
+                raise ValueError(f"manifest mesh.livery.patterns.{name}[{index}] must have zones, axis, lo, hi, slot, facing, min_facing")
+    for name, field in fields.items():
+        if not isinstance(field, dict) or not all(key in field for key in ("zones", "centre", "right", "up", "facing", "height_m")):
+            raise ValueError(f"manifest mesh.livery.number_fields.{name} must have zones, centre, right, up, facing, height_m")
+    rows = dict(livery.get("liveries", {}))
+    rows["plain"] = livery.get("plain")
+    for name, row in rows.items():
+        if not isinstance(row, dict) or row.get("pattern") not in patterns or any(f not in fields for f in row.get("numbers", [])):
+            raise ValueError(f"manifest mesh.livery livery {name!r} must name a pattern and number fields that exist")
 
 
 def _validate_sounds(manifest: Mapping[str, Any]) -> None:
-    """An audio manifest has ``sounds`` and no ``lods``; every sound names a file and has positive length and rate."""
-    if "lods" in manifest:
-        raise ValueError("an audio manifest must not have 'lods'")
+    """An audio manifest has ``sounds``; every sound names a file and has positive length and rate."""
     sounds = manifest.get("sounds")
     if not isinstance(sounds, dict) or not sounds:
         raise ValueError("an audio manifest needs a non-empty 'sounds' object")

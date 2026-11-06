@@ -9,10 +9,10 @@ extends Resource
 ## in §5.1 are all pinned to the inertia here. Geometry (nozzle positions, centre of mass) does come from the
 ## hardpoints, through `ThrusterLayout`.
 
-## Where `tools/procgen` writes every asset (one folder per `asset_id`): the one definition `Ship`, `SplatLod` and `DebrisPool` share.
+## Where `tools/procgen` writes every asset (one folder per `asset_id`): the one definition `Ship`, `MeshAssets` and `DebrisPool` share.
 const ASSET_ROOT: String = "res://assets/generated"
 
-## Folder name under assets/generated/ that holds this ship's splats, meshes and hardpoints.json.
+## Folder name under assets/generated/ that holds this ship's meshes, maps and hardpoints.json.
 @export var asset_id: String = ""
 ## kg.
 @export var mass: float = 48000.0
@@ -62,18 +62,15 @@ const ASSET_ROOT: String = "res://assets/generated"
 @export var damage_layout: StringName = &"x_fighter"
 ## The ship's guns; null falls back to a default `WeaponSpec` (the Starfury's M1 numbers).
 @export var weapon: WeaponSpec = null
+## The low-attention tier's per-hull term (M4-T22 fix round 1): what its rolled shots' chance is scaled by, so this hull's
+## fighters land in the tier the hits they land up close (fitted per hull against full-fidelity fights; 1 = the model as is).
+## The default is the Starfury's fitted term, as the other defaults are the Starfury's (§5.1); the raider sets its own.
+@export var tier_hit_scale: float = 0.92
 
 
 ## Whether the asset has a first-person `cockpit_interior.obj` (the Starfury does; AI ships such as the raider do not,
 ## so the ship does not look for it or warn about it).
 @export var has_cockpit_interior: bool = true
-## Which level of detail of the asset's splats the hull draws: 0 is the full `<asset_id>.ply`, a higher level is the one the
-## asset's `manifest.json` lists under `lods` (`SplatLod`). Allied Starfuries draw LOD1, about a quarter of the splats (§16 D35).
-## The collision, hardpoints, fallback mesh and break-up chunks are the asset's, whatever the level.
-@export_range(0, 8) var splat_lod: int = 0
-## Whether the ship also carries the asset's hero level, one finer than LOD0, for when it fills the screen (M3-T24). Only the
-## player's Starfury does: it holds about 0.5 GB of GPU memory for the whole session.
-@export var splat_hero: bool = false
 
 
 ## Where this ship's generated hardpoints live.

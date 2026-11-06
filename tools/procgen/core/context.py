@@ -72,12 +72,18 @@ class AssetOutputs:
         return self.out_dir / "manifest.json"
 
     @property
-    def splat_count(self) -> int:
-        return int(self.manifest["lods"][0]["splats"])
+    def triangle_count(self) -> int:
+        """Triangles of the asset's textured meshes: its own ``mesh`` and every piece's or class's (0 for a sky or a sound set)."""
+        sections = [self.manifest.get("mesh")]
+        for group in ("pieces", "classes"):
+            sections += [entry.get("mesh") for entry in dict(self.manifest.get(group, {})).values()]
+        return sum(int(section["triangles"]) for section in sections if isinstance(section, dict))
 
     @property
     def summary(self) -> str:
-        """What the CLI reports: the splat count of a splat asset, the sound count of an audio asset."""
+        """What the CLI reports: the triangles of a model, the stars of a sky, the sound count of an audio asset."""
         if self.manifest.get("kind") == "audio":
             return f"{len(self.manifest['sounds'])} sounds"
-        return f"{self.splat_count} splats"
+        if "star_field" in self.manifest:
+            return f"{self.manifest['star_field']['count']} stars"
+        return f"{self.triangle_count} triangles"

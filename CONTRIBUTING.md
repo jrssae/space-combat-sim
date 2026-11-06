@@ -9,7 +9,7 @@ are welcome under the GPL-3.0 (`LICENSE`).
   any other property. Everything here is original work "inspired by" the setting.
 - **Licences.** Any third-party code or asset must be GPL-3.0-compatible and recorded in `docs/third-party.md`
   with its licence file kept alongside.
-- **Generated assets stay generated.** Commit the generator script in `tools/`, not the `.ply`/`.obj` output.
+- **Generated assets stay generated.** Commit the generator script in `tools/`, not the `.glb`/`.png`/`.obj` output.
 
 ## Workflow
 
@@ -23,4 +23,4 @@ are welcome under the GPL-3.0 (`LICENSE`).
 ## Reporting issues
 
 Open a GitHub issue with Godot version, OS, GPU and driver, gamepad name/GUID (the debug overlay shows these),
-the splat backend shown in the overlay, and steps to reproduce.
+the renderer shown in the overlay (`RENDER`), and steps to reproduce.

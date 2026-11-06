@@ -687,58 +687,48 @@
   "chunks": [
     {
       "name": "wing_l",
-      "ply": "raider_fighter_chunk_wing_l.ply",
       "obj": "raider_fighter_chunk_wing_l.obj",
       "offset": [
         -3.78091,
         -0.24805,
         -0.15523
-      ],
-      "splats": 9286
+      ]
     },
     {
       "name": "wing_r",
-      "ply": "raider_fighter_chunk_wing_r.ply",
       "obj": "raider_fighter_chunk_wing_r.obj",
       "offset": [
         3.78091,
         -0.24805,
         -0.15523
-      ],
-      "splats": 9286
+      ]
     },
     {
       "name": "hump",
-      "ply": "raider_fighter_chunk_hump.ply",
       "obj": "raider_fighter_chunk_hump.obj",
       "offset": [
         0.0,
         0.68764,
         -1.03371
-      ],
-      "splats": 2066
+      ]
     },
     {
       "name": "nacelle_l",
-      "ply": "raider_fighter_chunk_nacelle_l.ply",
       "obj": "raider_fighter_chunk_nacelle_l.obj",
       "offset": [
         -1.29421,
         0.54462,
         0.85788
-      ],
-      "splats": 2925
+      ]
     },
     {
       "name": "nacelle_r",
-      "ply": "raider_fighter_chunk_nacelle_r.ply",
       "obj": "raider_fighter_chunk_nacelle_r.obj",
       "offset": [
         1.29421,
         0.54462,
         0.85788
-      ],
-      "splats": 2925
+      ]
     }
   ]
 }

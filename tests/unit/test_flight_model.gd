@@ -58,8 +58,7 @@ func test_ship_spec_resource_matches_the_section_5_1_defaults() -> void:
 	assert_eq(spec.exhaust_velocity, 30000.0)
 	for property: Dictionary in defaults.get_property_list():
 		var usage: int = property["usage"]
-		if (usage & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0 and property["name"] != "asset_id" and property["name"] != "weapon" \
-				and property["name"] != "splat_hero":  # the player's Starfury alone carries the hero level (M3-T24)
+		if (usage & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0 and property["name"] != "asset_id" and property["name"] != "weapon":
 			assert_eq(spec.get(property["name"]), defaults.get(property["name"]), "resource agrees with the code default for %s" % property["name"])
 	assert_eq(spec.hull_max, 300.0)
 	assert_eq(spec.engine_glow_color, Color(0.7, 0.9, 1.8, 1.0))

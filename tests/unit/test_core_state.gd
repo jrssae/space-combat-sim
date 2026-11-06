@@ -1,0 +1,549 @@
+extends GutTest
+## The core owns the simulated state (M4-T35b, architecture §17.13): activity, hull points and the selection as columns
+## updated from events (`perf_core_event_columns`), the Jolt bodies read by RID from the direct state (`perf_core_body_direct`),
+## the ram stage's contact read in one native call (`perf_native_ram_contacts`) with `contact_monitor` off, the AI targeting
+## controllers' selection check as a row column (`perf_native_selection_check`), and the batched ships' own tick off
+## (`perf_batch_owns_ships`). Each path keeps the old one as the reference behind its setting; seeded fights give the same
+## rows, commands and hits either way. Skips, saying why, when the library is not built.
+
+const SHIPS: int = 120
+const SEED: int = 1
+const TICKS: int = 240
+const DELTA: float = 1.0 / 60.0
+const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
+const NEW_SETTINGS: Array[StringName] = [&"perf_core_event_columns", &"perf_core_body_direct", &"perf_native_ram_contacts",
+		&"perf_native_selection_check", &"perf_batch_owns_ships", &"ship_contact_monitor"]
+const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
+		&"perf_threads", &"perf_native_commands", &"perf_native_bolt_rows", &"ram_damage", &"perf_ram_contact_columns",
+		&"perf_core_event_columns", &"perf_core_body_direct", &"perf_native_ram_contacts", &"perf_native_selection_check",
+		&"perf_batch_owns_ships", &"ship_contact_monitor"]
+
+var _saved: Dictionary = {}
+var _index_of: Dictionary = {}
+
+
+func before_each() -> void:
+	for key: StringName in SETTINGS:
+		_saved[key] = Settings.get_value(key)
+	Settings.set_value(&"perf_native", true)
+	Settings.set_value(&"perf_native_core", true)
+	Settings.set_value(&"perf_native_brains", true)
+	Settings.set_value(&"perf_native_flight", true)
+	Settings.set_value(&"perf_native_commands", true)
+	Factions.reset()
+	ContactScan.invalidate()
+
+
+func after_each() -> void:
+	for key: StringName in SETTINGS:
+		if _saved[key] != null:
+			Settings.set_value(key, _saved[key])
+	Factions.reset()
+	ContactScan.invalidate()
+
+
+func _skipped() -> bool:
+	if NativeLib.has_class(SimCore.NATIVE_CLASS):
+		return false
+	pending("the native library is not built (scripts/build_native.sh), so there is no core to test")
+	return true
+
+
+func test_the_settings_exist_with_their_defaults() -> void:
+	for key: StringName in NEW_SETTINGS:
+		assert_true(Settings.schema.has_key(key), "%s is a setting" % key)
+	assert_eq(Settings.schema.get_default(&"perf_core_event_columns"), true, "event columns on by default")
+	assert_eq(Settings.schema.get_default(&"perf_native_ram_contacts"), true, "the native contact read on by default")
+	assert_eq(Settings.schema.get_default(&"perf_native_selection_check"), true, "the native selection check on by default")
+	assert_eq(Settings.schema.get_default(&"perf_batch_owns_ships"), true, "the batch owns its ships' ticks by default")
+	assert_eq(Settings.schema.get_default(&"ship_contact_monitor"), false, "contact_monitor off by default: nothing listens")
+
+
+# --- a small world: two lean ships and the core ---------------------------------------------------------------------
+
+
+# A world with its projectiles in a space of its own; `[space, world, projectiles]`.
+func _space() -> Array:
+	var space := SubViewport.new()
+	space.own_world_3d = true
+	space.world_3d = World3D.new()
+	add_child(space)
+	var world := WorldFrame.new()
+	world.name = "World"
+	space.add_child(world)
+	var bolts := Node3D.new()
+	bolts.name = "Projectiles"
+	world.add_child(bolts)
+	return [space, world, bolts]
+
+
+func _ship(world: WorldFrame, bolts: Node3D, name: String, faction: StringName, at: Vector3, ai: bool = false) -> Combatant:
+	var c: Combatant = ShipAssembly.build(load(SPEC_PATH) as ShipSpec, world, bolts, {
+		ShipAssembly.OPT_FACTION: faction, ShipAssembly.OPT_DISPLAY_NAME: name, ShipAssembly.OPT_LEAN: true,
+		ShipAssembly.OPT_AI: ai})
+	world.spawn(c.ship, world.to_universe(at))
+	return c
+
+
+func _hull_row(sim: SimCore, c: Combatant) -> float:
+	return float(sim.core.row_hull_fraction(sim.core.row_of_id(c.ship.get_instance_id())))
+
+
+func _target_row(sim: SimCore, c: Combatant) -> int:
+	return int(sim.core.row_target_id(sim.core.row_of_id(c.ship.get_instance_id())))
+
+
+func test_the_hull_and_selection_columns_follow_the_events_at_the_next_sync() -> void:
+	if _skipped():
+		return
+	Settings.set_value(&"perf_core_event_columns", true)
+	var made: Array = _space()
+	var world: WorldFrame = made[1]
+	var a: Combatant = _ship(world, made[2], "A", Factions.EARTH_ALLIANCE, Vector3.ZERO)
+	var b: Combatant = _ship(world, made[2], "B", Factions.RAIDERS, Vector3(0.0, 0.0, -500.0))
+	var sim: SimCore = SimCore.attach(world)
+	await get_tree().physics_frame
+	sim.sync_now()
+	assert_eq(sim.core.event_columns(), true, "the core updates its columns from events")
+	assert_eq(_hull_row(sim, a), 1.0, "a full hull reads 1")
+	assert_eq(_target_row(sim, a), -1, "no selection reads -1")
+	var hit := HitInfo.new(a.ship.get_instance_id(), b.ship.get_instance_id(), Factions.RAIDERS, 25.0)
+	a.damageable.apply_hit(hit)
+	var expected: float = a.damageable.hull.fraction()
+	assert_lt(expected, 1.0, "the hit took hull points")
+	assert_eq(_hull_row(sim, a), 1.0, "the row keeps the sync's value until the next sync (as a read at the sync would)")
+	a.ship.targeting.select_id(b.targetable.get_instance_id())
+	assert_eq(a.ship.targeting.selected_id(), b.targetable.get_instance_id(), "A selected B")
+	assert_eq(_target_row(sim, a), -1, "the selection column too")
+	sim.sync_now()
+	assert_eq(_hull_row(sim, a), expected, "the next sync carries the hull the event gave, bit for bit")
+	assert_eq(_target_row(sim, a), b.targetable.get_instance_id(), "and the selection")
+	a.ship.targeting.clear_selection()
+	a.damageable.restore()
+	sim.sync_now()
+	assert_eq(_hull_row(sim, a), 1.0, "a heal is an event too")
+	assert_eq(_target_row(sim, a), -1, "and a cleared selection")
+	# Activity: a parked ship loses its row at the next sync, a shown one gets a new one; a touch covers a body that only
+	# stopped processing (no visibility event).
+	b.ship.visible = false
+	b.ship.process_mode = Node.PROCESS_MODE_DISABLED
+	sim.sync_now()
+	assert_eq(sim.core.row_of_id(b.ship.get_instance_id()), -1, "a hidden, parked ship has no row")
+	b.ship.visible = true
+	b.ship.process_mode = Node.PROCESS_MODE_INHERIT
+	sim.sync_now()
+	assert_gte(int(sim.core.row_of_id(b.ship.get_instance_id())), 0, "shown again, it has a row")
+	b.ship.process_mode = Node.PROCESS_MODE_DISABLED
+	sim.sync_now()
+	assert_gte(int(sim.core.row_of_id(b.ship.get_instance_id())), 0,
+			"a body that only stopped processing keeps its row until something touches it (no visibility event)")
+	sim.touch(b.ship)
+	sim.sync_now()
+	assert_eq(sim.core.row_of_id(b.ship.get_instance_id()), -1, "touched, it is read again and has none")
+	(made[0] as SubViewport).queue_free()
+	await get_tree().physics_frame
+
+
+func test_the_event_columns_cut_the_engine_calls_a_body_makes() -> void:
+	if _skipped():
+		return
+	var calls: Dictionary = {}
+	for on: bool in [false, true]:
+		Settings.set_value(&"perf_core_event_columns", on)
+		Settings.set_value(&"perf_core_body_direct", false)
+		var made: Array = _space()
+		var world: WorldFrame = made[1]
+		for i: int in 20:
+			_ship(world, made[2], "S%d" % i, Factions.RAIDERS if i % 2 == 0 else Factions.EARTH_ALLIANCE, Vector3(0.0, 0.0, -400.0 * i))
+		var sim: SimCore = SimCore.attach(world)
+		for i: int in 3:
+			await get_tree().physics_frame
+		calls[on] = sim.engine_calls()[0]
+		(made[0] as SubViewport).queue_free()
+		await get_tree().physics_frame
+	gut.p("sync calls a tick for 20 ships: %d with the columns read every tick, %d from events" % [int(calls[false]), int(calls[true])])
+	assert_lt(int(calls[true]) * 2, int(calls[false]), "the event columns make less than half the engine calls a tick")
+
+
+func test_the_direct_state_read_gives_the_nodes_bits_after_the_first_step() -> void:
+	if _skipped():
+		return
+	var made: Array = _space()
+	var world: WorldFrame = made[1]
+	var ships: Array[Combatant] = []
+	for i: int in 6:
+		var c: Combatant = _ship(world, made[2], "S%d" % i, Factions.RAIDERS, Vector3(300.0 * i, 0.0, -400.0 * i))
+		c.ship.linear_velocity = Vector3(10.0 * i, -5.0, 20.0)
+		c.ship.angular_velocity = Vector3(0.1 * i, 0.2, -0.1)
+		ships.append(c)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var by_node: Object = NativeLib.instantiate(SimCore.NATIVE_CLASS)
+	var by_rid: Object = NativeLib.instantiate(SimCore.NATIVE_CLASS)
+	by_rid.set_body_direct(true)
+	var markers: Array[Node] = get_tree().get_nodes_in_group(Targetable.GROUP)
+	var hulls: Array[Node] = get_tree().get_nodes_in_group(Damageable.GROUP)
+	by_node.set_members(markers, hulls)
+	by_rid.set_members(markers, hulls)
+	var no_nodes: Array[Node] = []
+	for tick: int in 5:
+		await get_tree().physics_frame
+		by_node.sync_in(no_nodes, tick, DELTA)
+		by_rid.sync_in(no_nodes, tick, DELTA)
+		var a: Array = by_node.hull_columns()
+		var b: Array = by_rid.hull_columns()
+		assert_eq(b[3], a[3], "tick %d: the same positions" % tick)
+		assert_eq(b[4], a[4], "tick %d: the same velocities" % tick)
+		assert_eq(b[6], a[6], "tick %d: the same bases" % tick)
+	assert_eq(int(by_node.node_count()), 6, "six body rows")
+	assert_eq(int(by_rid.node_count()), 6, "either way")
+	gut.p("direct read: %d sync calls a tick against %d through the nodes" % [int(by_rid.engine_calls_open()[0]),
+			int(by_node.engine_calls_open()[0])])
+	(made[0] as SubViewport).queue_free()
+	await get_tree().physics_frame
+
+
+func test_a_ship_reports_jolt_contacts_with_contact_monitor_off() -> void:
+	if _skipped():
+		return
+	var made: Array = _space()
+	var world: WorldFrame = made[1]
+	var a: Combatant = _ship(world, made[2], "A", Factions.EARTH_ALLIANCE, Vector3.ZERO)
+	var b: Combatant = _ship(world, made[2], "B", Factions.RAIDERS, Vector3(0.0, 0.0, -40.0))
+	assert_false(a.ship.contact_monitor, "contact_monitor is off by default (nothing connects body_entered)")
+	assert_eq(a.ship.max_contacts_reported, Ship.CONTACTS_REPORTED, "max_contacts_reported stays")
+	b.ship.linear_velocity = Vector3(0.0, 0.0, 60.0)
+	var seen: int = 0
+	for i: int in 120:
+		await get_tree().physics_frame
+		var state: PhysicsDirectBodyState3D = PhysicsServer3D.body_get_direct_state(a.ship.get_rid())
+		if state != null:
+			seen += state.get_contact_count()
+	assert_gt(seen, 0, "the direct state still reports contacts (%d points over the melee)" % seen)
+	(made[0] as SubViewport).queue_free()
+	await get_tree().physics_frame
+
+
+# --- the AI targeting controllers' selection check ----------------------------------------------------------------------
+
+
+func test_the_native_selection_check_clears_as_the_controllers_did() -> void:
+	if _skipped():
+		return
+	var results: Dictionary = {}
+	for native: bool in [false, true]:
+		Settings.set_value(&"perf_native_selection_check", native)
+		Settings.set_value(&"perf_core_event_columns", true)
+		var made: Array = _space()
+		var world: WorldFrame = made[1]
+		var a: Combatant = _ship(world, made[2], "A", Factions.EARTH_ALLIANCE, Vector3.ZERO, true)
+		var b: Combatant = _ship(world, made[2], "B", Factions.RAIDERS, Vector3(0.0, 0.0, -500.0), true)
+		var c: Combatant = _ship(world, made[2], "C", Factions.RAIDERS, Vector3(0.0, 0.0, 500.0), true)
+		var sim: SimCore = SimCore.attach(world)
+		a.ship.targeting.set_sensor_range_m(1000.0)  # the core's check took the range when the controller bound
+		var changes: Array = []
+		a.ship.targeting.target_changed.connect(func(id: int) -> void: changes.append([Engine.get_physics_frames(), id]))
+		await get_tree().physics_frame
+		assert_eq(a.ship.targeting.is_physics_processing(), not native, "the AI controller ticks itself only off the native check")
+		var frame0: int = Engine.get_physics_frames()
+		a.ship.targeting.select_id(b.targetable.get_instance_id())
+		await get_tree().physics_frame
+		await get_tree().physics_frame
+		assert_eq(a.ship.targeting.selected_id(), b.targetable.get_instance_id(), "B in reach stays selected")
+		b.ship.global_position = Vector3(0.0, 0.0, -2000.0)  # out of A's reach
+		await get_tree().physics_frame
+		assert_eq(a.ship.targeting.selected_id(), 0, "a selection that left reach is cleared by the next tick (native %s)" % native)
+		a.ship.targeting.select_id(c.targetable.get_instance_id())
+		await get_tree().physics_frame
+		c.ship.visible = false
+		c.ship.process_mode = Node.PROCESS_MODE_DISABLED
+		await get_tree().physics_frame
+		assert_eq(a.ship.targeting.selected_id(), 0, "a parked selection is cleared (native %s)" % native)
+		var stamped: Array = []
+		for change: Array in changes:
+			stamped.append([int(change[0]) - frame0, change[1] == b.targetable.get_instance_id(),
+					change[1] == c.targetable.get_instance_id(), change[1] == 0])
+		results[native] = stamped
+		(made[0] as SubViewport).queue_free()
+		await get_tree().physics_frame
+	assert_eq(results[true], results[false], "the same target_changed signals on the same ticks: %s" % [results[true]])
+	assert_gte((results[true] as Array).size(), 4, "selections and clears happened")
+
+
+# --- the batch owns its ships' ticks ------------------------------------------------------------------------------------
+
+
+## Reads a row's position at `priority`, each tick (a probe for the late systems' view of the rows).
+class RowProbe extends Node:
+	var sim: SimCore
+	var body: Node3D
+	var row_position: Vector3 = Vector3.INF
+	var body_position: Vector3 = Vector3.INF
+
+	func _init(p_sim: SimCore, p_body: Node3D, priority: int) -> void:
+		sim = p_sim
+		body = p_body
+		process_physics_priority = priority
+
+	func _physics_process(_delta: float) -> void:
+		var hulls: Array = sim.core.hull_columns()
+		var i: int = (hulls[0] as PackedInt64Array).find(body.get_instance_id())
+		row_position = (hulls[3] as PackedVector3Array)[i] if i >= 0 else Vector3.INF
+		body_position = body.global_position
+
+
+func test_a_drifting_buoy_is_read_where_this_ticks_move_put_it() -> void:
+	# Fix rounds 1 and 2: a script-moved target (a nav buoy's drift at the default priority, after the core's first sync)
+	# touches its row, which the core reads again before the native selection check (100) and the hit sweep (200), so
+	# they see this tick's place as the tree reads did. The buoy keeps the default priority: the World's rebase at 0
+	# runs before every prop (test_rebase_in_play).
+	if _skipped():
+		return
+	var parts: Array = _space()
+	var space: SubViewport = parts[0]
+	var world: WorldFrame = parts[1]
+	var buoy: NavBuoy = NavBuoy.create("BUOY", Vector3(600.0, 0.0, 0.0))
+	world.spawn(buoy, world.to_universe(Vector3(0.0, 0.0, -500.0)))
+	var sim: SimCore = SimCore.attach(world)
+	var resolver := HitResolver.new()  # the resolvers' sync at 200 reads the touched rows again
+	resolver.name = "HitResolver"
+	space.add_child(resolver)
+	var at_check := RowProbe.new(sim, buoy, TargetingController.LATE_PRIORITY + 1)
+	var at_sweep := RowProbe.new(sim, buoy, HitResolver.LATE_PRIORITY + 1)
+	space.add_child(at_check)
+	space.add_child(at_sweep)
+	for i: int in 3:
+		await get_tree().physics_frame
+	assert_eq(buoy.process_physics_priority, 0, "the buoy moves at the default priority, after the World's rebase")
+	assert_ne(at_check.row_position, Vector3.INF, "the buoy's hull is a row")
+	assert_eq(at_check.row_position, at_check.body_position, "after the selection check: the row is where this tick's drift put the buoy, bit for bit")
+	assert_eq(at_sweep.row_position, at_sweep.body_position, "after the hit sweep: the same")
+	space.queue_free()
+	await get_tree().physics_frame
+
+
+func test_the_batch_switches_its_ships_own_tick_off_and_back() -> void:
+	if _skipped():
+		return
+	Settings.set_value(&"perf_batch_owns_ships", true)
+	var made: Array = _space()
+	var world: WorldFrame = made[1]
+	var a: Combatant = _ship(world, made[2], "A", Factions.EARTH_ALLIANCE, Vector3.ZERO, true)
+	var b: Combatant = _ship(world, made[2], "B", Factions.RAIDERS, Vector3(0.0, 0.0, -500.0), true)
+	SimCore.attach(world)
+	var batch: FlightBatch = FlightBatch.attach(world)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	assert_true(batch.stepped(a.ship), "the batch flies A")
+	assert_false(a.ship.is_physics_processing(), "a ship the batch flies does not tick itself")
+	assert_false(b.ship.is_physics_processing(), "nor B")
+	a.ship.batched = false
+	await get_tree().physics_frame
+	assert_true(a.ship.is_physics_processing(), "a ship off the batch ticks itself again")
+	assert_false(batch.stepped(a.ship), "and the batch no longer flies it")
+	Settings.set_value(&"perf_batch_owns_ships", false)
+	await get_tree().physics_frame
+	assert_true(b.ship.is_physics_processing(), "the setting off gives every ship its tick back")
+	assert_true(batch.stepped(b.ship), "while the batch still flies it")
+	Settings.set_value(&"perf_batch_owns_ships", true)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	assert_false(b.ship.is_physics_processing(), "and on again takes it")
+	# The combat edges a batch-owned ship is handed still reach its targeting.
+	var cmd := CombatCommand.new()
+	cmd.target_next = true
+	b.ship.set_combat_command(cmd)
+	await get_tree().physics_frame
+	assert_eq(b.ship.targeting.selected_id(), a.targetable.get_instance_id(), "target_next selected the other ship through the batch's gather")
+	(made[0] as SubViewport).queue_free()
+	await get_tree().physics_frame
+
+
+# --- the seeded battle, each path against its reference -----------------------------------------------------------------
+
+
+## The seeded battle's fighters flown `ticks` ticks with `overrides` set and `threads` threads: per tick the rows' digest
+## (positions, velocities, bases, spins, flags, hulls, selections), the commands' digest and a digest of the hits.
+func _battle(overrides: Dictionary, threads: int, ticks: int = TICKS) -> Dictionary:
+	for key: StringName in overrides:
+		Settings.set_value(key, overrides[key])
+	Settings.set_value(&"perf_threads", threads)
+	Factions.reset()
+	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
+	ContactScan.invalidate()
+	await get_tree().process_frame
+	await get_tree().physics_frame
+	SimClock.reset()
+	var made: Array = _space()
+	var space: SubViewport = made[0]
+	var world: WorldFrame = made[1]
+	var bolts: Node3D = made[2]
+	var resolver := HitResolver.new()
+	resolver.name = "HitResolver"
+	space.add_child(resolver)
+	var rams := RamResolver.new()
+	rams.name = "RamResolver"
+	rams.world = world
+	space.add_child(rams)
+	var anchor: UniversePos = world.to_universe(Vector3.ZERO)
+	var numbers: Dictionary = {}
+	var ships: Array[Combatant] = []
+	for e: Dictionary in BenchLayout.plan(BenchLayout.BATTLE, SHIPS, SEED):
+		if StringName(e["kind"]) != BenchLayout.KIND_FIGHTER:
+			continue
+		var type: StringName = e["type"]
+		numbers[type] = int(numbers.get(type, 0)) + 1
+		var c: Combatant = ShipAssembly.build(ShipCatalog.spec_for(type), world, bolts, {
+			ShipAssembly.OPT_FACTION: StringName(e["faction"]), ShipAssembly.OPT_DISPLAY_NAME: "%s %d" % [type, int(numbers[type])],
+			ShipAssembly.OPT_FORCE_ASSIST: true, ShipAssembly.OPT_AI: true, ShipAssembly.OPT_LEAN: true})
+		world.spawn(c.ship, anchor.plus_local(e["offset"]), e["basis"])
+		c.ship.linear_velocity = e["velocity"]
+		var made_brain: Dictionary = BrainFactory.from_behaviour(e["behaviour"], anchor, int(e["seed"]))
+		c.driver.brain = made_brain["brain"] as PilotBrain
+		ships.append(c)
+	_index_of.clear()
+	for i: int in ships.size():
+		_index_of[ships[i].ship.get_instance_id()] = i
+		_index_of[ships[i].targetable.get_instance_id()] = i
+	var sim: SimCore = SimCore.attach(world)
+	sim.core.set_parallel_min(2)
+	sim.core.set_flight_parallel_min(2)
+	var tick_hits: Array = []
+	resolver.hit_resolved.connect(func(info: HitInfo) -> void:
+		tick_hits.append([_index_of.get(info.target_id, -2), _index_of.get(info.shooter_id, -2), info.damage, info.applied, info.point]))
+	rams.ram_resolved.connect(func(info: HitInfo) -> void:
+		tick_hits.append(["ram", _index_of.get(info.target_id, -2), _index_of.get(info.shooter_id, -2), info.damage, info.point]))
+	var rows := PackedInt64Array()
+	var commands := PackedInt64Array()
+	var hits := PackedInt64Array()
+	var ram_count: int = 0
+	for t: int in ticks:
+		tick_hits.clear()
+		await get_tree().physics_frame
+		rows.append(int(sim.core.rows_digest()))
+		commands.append(int(sim.core.commands_digest()))
+		hits.append(hash(tick_hits))
+	ram_count = rams.rams_total if "rams_total" in rams else 0
+	var out: Dictionary = {"rows": rows, "commands": commands, "hits": hits, "hits_total": resolver.hits_total, "rams": ram_count,
+			"sync_calls": sim.engine_calls()[0]}
+	space.queue_free()
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	return out
+
+
+static func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
+	for i: int in mini(a.size(), b.size()):
+		if a[i] != b[i]:
+			return i
+	return -1 if a.size() == b.size() else mini(a.size(), b.size())
+
+
+# Flies the battle with `key` off, then on, and asks for the same rows, commands and hits every tick.
+func _assert_same_battle(key: StringName, with: Dictionary = {}) -> void:
+	var off: Dictionary = with.duplicate()
+	off[key] = false
+	var on: Dictionary = with.duplicate()
+	on[key] = true
+	var reference: Dictionary = await _battle(off, 1)
+	var candidate: Dictionary = await _battle(on, 1)
+	assert_gt(int(reference["hits_total"]), 10, "%s: hits landed (%d)" % [key, int(reference["hits_total"])])
+	var first: int = _first_difference(reference["rows"], candidate["rows"])
+	assert_eq(first, -1, "%s: the rows are the same bits every tick (first difference at tick %d)" % [key, first])
+	first = _first_difference(reference["commands"], candidate["commands"])
+	assert_eq(first, -1, "%s: the commands too (first difference at tick %d)" % [key, first])
+	first = _first_difference(reference["hits"], candidate["hits"])
+	assert_eq(first, -1, "%s: and every hit (first difference at tick %d)" % [key, first])
+	gut.p("%s: %d hits; sync calls a tick %d off, %d on" % [key, int(reference["hits_total"]), int(reference["sync_calls"]),
+			int(candidate["sync_calls"])])
+
+
+func test_the_event_columns_fly_the_same_battle() -> void:
+	if _skipped():
+		return
+	await _assert_same_battle(&"perf_core_event_columns", {&"perf_native_selection_check": false})
+
+
+func test_the_native_selection_check_flies_the_same_battle() -> void:
+	if _skipped():
+		return
+	await _assert_same_battle(&"perf_native_selection_check", {&"perf_core_event_columns": true})
+
+
+func test_the_batch_owning_its_ships_flies_the_same_battle() -> void:
+	if _skipped():
+		return
+	await _assert_same_battle(&"perf_batch_owns_ships")
+
+
+func test_one_thread_and_six_give_the_same_battle_with_everything_on() -> void:
+	if _skipped():
+		return
+	var all_on: Dictionary = {&"perf_core_event_columns": true, &"perf_native_selection_check": true, &"perf_batch_owns_ships": true,
+			&"perf_native_bolt_rows": true}
+	var one: Dictionary = await _battle(all_on, 1)
+	var six: Dictionary = await _battle(all_on, 6)
+	var first: int = _first_difference(one["rows"], six["rows"])
+	assert_eq(first, -1, "the rows are the same bits with one thread and six (first difference at tick %d)" % first)
+	first = _first_difference(one["hits"], six["hits"])
+	assert_eq(first, -1, "and the hits (first difference at tick %d)" % first)
+
+
+# --- the ram stage's contact read ---------------------------------------------------------------------------------------
+
+
+# The melee of `test_fighter_melee`, in a fresh physics space: [digest, ram lines, the resolver's contact path].
+func _melee() -> Array:
+	var made: Array = _space()
+	var space: SubViewport = made[0]
+	var world: WorldFrame = made[1]
+	var rams := RamResolver.new()
+	rams.world = world
+	space.add_child(rams)
+	var ram_lines := PackedStringArray()
+	rams.ram_resolved.connect(func(info: HitInfo) -> void: ram_lines.append("ram %s<-%s dmg %.6f applied %.6f v %.6f at %s" % [
+			HitResolver.name_of(info.target_id), HitResolver.name_of(info.shooter_id), info.damage, info.applied,
+			info.relative_speed_mps, var_to_str(info.point)]))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var ships: Array[Combatant] = []
+	for i: int in 8:
+		var c: Combatant = ShipAssembly.build(load(SPEC_PATH) as ShipSpec, world, made[2], {
+			ShipAssembly.OPT_FACTION: Factions.EARTH_ALLIANCE if i % 2 == 0 or i == 5 else Factions.RAIDERS,
+			ShipAssembly.OPT_DISPLAY_NAME: "F%d" % i, ShipAssembly.OPT_LEAN: true})
+		world.spawn(c.ship, world.to_universe(Vector3(0.0, 0.0, 5000.0 * i)))
+		ships.append(c)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	for c: Combatant in ships:
+		var at := Vector3(rng.randf_range(-60.0, 60.0), rng.randf_range(-30.0, 30.0), rng.randf_range(-60.0, 60.0))
+		c.ship.reset_to(Transform3D(Basis(Vector3.UP, rng.randf_range(0.0, TAU)), at))
+		c.ship.linear_velocity = -at.normalized() * rng.randf_range(15.0, 70.0)
+	var lines := PackedStringArray()
+	for tick: int in 240:
+		await get_tree().physics_frame
+		if tick % 20 == 19:
+			for c: Combatant in ships:
+				var s: Ship = c.ship
+				lines.append("t%d %s %s %s %s %.6f" % [tick, c.display_name, var_to_str(s.global_position),
+						var_to_str(s.linear_velocity), var_to_str(s.angular_velocity), c.damageable.hull.hp])
+	var path: StringName = rams.contact_path()
+	space.queue_free()
+	await get_tree().physics_frame
+	return ["\n".join(lines), ram_lines.duplicate(), path]
+
+
+func test_the_melee_rams_the_same_with_the_contacts_read_natively() -> void:
+	if _skipped():
+		return
+	Settings.set_value(&"ram_damage", true)
+	Settings.set_value(&"perf_ram_contact_columns", true)
+	Settings.set_value(&"perf_native_ram_contacts", false)
+	var columns: Array = await _melee()
+	Settings.set_value(&"perf_native_ram_contacts", true)
+	var native: Array = await _melee()
+	assert_eq(columns[2], &"columns", "the reference read the contacts in columns from GDScript")
+	assert_eq(native[2], &"native", "the other in one native call")
+	assert_gt((columns[1] as PackedStringArray).size(), 5, "the melee rams")
+	assert_eq(native[1], columns[1], "the same rams, in the same order")
+	assert_eq(native[0], columns[0], "the same poses, spins and hulls every 20 ticks")

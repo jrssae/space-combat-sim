@@ -1,6 +1,7 @@
-"""Surface -> splats: area-weighted, stratified, low-discrepancy sampling of a mesh.
+"""Surface samples: area-weighted, stratified, low-discrepancy points on a mesh with their normals and materials.
 
-Why it is done this way (the "dotty hull" risk, docs/architecture.md section 7.4):
+The samples are what the generators measure a hull by: its centroid, the markers' clearance, the break-up chunks' offsets, the
+normal map's fine shape and the occlusion bake.
 
 * **Area weighting.** Every face gets ``area / spacing**2`` samples in expectation, so density
   is the same on a 3 m panel and a 3 cm greeble. The fractional part is rounded
@@ -8,35 +9,25 @@ Why it is done this way (the "dotty hull" risk, docs/architecture.md section 7.4
   faces' samples across neighbours instead of dropping them all.
 * **Low discrepancy inside a face.** Points come from the R2 sequence (Roberts 2018) mapped to
   the triangle with Heitz's low-distortion square-to-triangle map, with a random offset per
-  face. The result is close to a blue-noise pattern: no clumps, no holes, so the Gaussian
-  overlap needed to close the surface is small and predictable.
-* **Oriented, flat Gaussians.** Each splat is a disc in the local tangent plane (rotation from
-  the interpolated vertex normal), ``overlap * spacing`` wide and ``thickness * spacing``
-  thin along the normal, so neighbours blend into a continuous sheet rather than a cloud.
+  face. The result is close to a blue-noise pattern: no clumps, no holes.
 
-Positions are exactly on the mesh (barycentric), so the splats, the OBJ and hardpoints derived
+Positions are exactly on the mesh (barycentric), so the samples, the OBJ and hardpoints derived
 from the same parts agree by construction.
 """
 
 from __future__ import annotations
 
-import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
 
-from . import frames
-from .geometry import MIRROR_AXES, Material, Mesh, tangent_basis, unit
-from .ply import SplatData
+from .geometry import MIRROR_AXES, Material, Mesh, unit
 
 # Plastic number: the R2 quasi-random sequence generator.
 _R2_G = 1.32471795724474602596
 _R2_ALPHA = np.array([1.0 / _R2_G, 1.0 / _R2_G**2])
 
-DEFAULT_OVERLAP = 1.0  # in-plane sigma / spacing (architecture section 9.1; 1.4 until the post-M2 play test found it soft and fat)
-DEFAULT_THICKNESS = 0.08  # sigma along the normal / spacing (thin discs seen edge-on shimmer; 0.03 until the post-M2 play test)
-DEFAULT_OPAQUE_ALPHA = 0.98
 
 
 @dataclass
@@ -182,52 +173,6 @@ def sample_mesh(mesh: Mesh, spacing: float, rng: np.random.Generator, smooth: bo
     else:
         normals = mesh.face_normals()[face]
     return SurfaceSamples(positions, normals, face, mesh.face_material[face], mesh.materials)
-
-
-def effective_layers(overlap: float) -> float:
-    """How many splats a ray through a sampled surface crosses, weighted by their Gaussian
-    falloff: the integral of ``exp(-r^2 / 2 sigma^2)`` over the plane divided by the area per
-    splat, ``2 pi sigma^2 / s^2``."""
-    return 2.0 * math.pi * overlap * overlap
-
-
-def alpha_for_transmittance(transmittance: np.ndarray, overlap: float, opaque_alpha: float = DEFAULT_OPAQUE_ALPHA) -> np.ndarray:
-    """Per-splat alpha so that a surface of overlapping splats lets ``transmittance`` through
-    (0 means the opaque default)."""
-    t = np.asarray(transmittance, dtype=float)
-    layers = effective_layers(overlap)
-    with np.errstate(divide="ignore"):
-        tinted = 1.0 - np.power(np.clip(t, 1e-9, 1.0), 1.0 / layers)
-    return np.where(t > 0.0, tinted, opaque_alpha)
-
-
-def splat_rotations(normals: np.ndarray) -> np.ndarray:
-    """Quaternions ``(w, x, y, z)`` whose local Z is the normal (local X/Y span the tangent plane)."""
-    n = unit(normals)
-    t1, t2 = tangent_basis(n)
-    return frames.matrix_to_quat(np.stack([t1, t2, n], axis=-1))
-
-
-def to_splats(
-    samples: SurfaceSamples,
-    rgb: np.ndarray,
-    spacing: float,
-    overlap: float = DEFAULT_OVERLAP,
-    thickness: float = DEFAULT_THICKNESS,
-    opaque_alpha: float = DEFAULT_OPAQUE_ALPHA,
-) -> SplatData:
-    """Flat oriented Gaussians for every sample: sigma ``(overlap s, overlap s, thickness s)``."""
-    n = len(samples)
-    rgb = np.asarray(rgb, dtype=float).reshape(n, 3)
-    scale = np.tile(np.array([overlap * spacing, overlap * spacing, thickness * spacing]), (n, 1))
-    return SplatData(
-        xyz=samples.positions.copy(),
-        rgb=rgb,
-        alpha=alpha_for_transmittance(samples.transmittance(), overlap, opaque_alpha),
-        scale=scale,
-        rot=splat_rotations(samples.normals),
-        normals=samples.normals.copy(),
-    )
 
 
 def nearest_neighbour_distances(points: np.ndarray, cell: float) -> np.ndarray:

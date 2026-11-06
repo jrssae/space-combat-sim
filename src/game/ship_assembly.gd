@@ -15,10 +15,13 @@ extends RefCounted
 ## - `faction` (StringName, default `neutral`): the Targetable's faction and the targeting system's own faction.
 ## - `display_name` (String, default ""): what the pilot reads on the target bracket.
 ## - `console_owner` (bool, default false): the player's ship; it registers the console providers (D27).
-## - `is_player` (bool, default `console_owner`).
+## - `is_player` (bool, default `console_owner`). Only the player's targeting rebuilds its whole candidate list every tick, for
+##   the HUD and the radar (`TargetingController.keeps_candidates`, M4-T02).
 ## - `force_assist` (bool, default false): AI ships fly with flight assist always on.
 ## - `ai` (bool, default false): adds an `AiPilotDriver` (priority -10) that flies the ship with whatever `PilotBrain` it
 ##   is given (`combatant.driver.brain`); with no brain it does nothing.
+## - `lean` (bool, default `ai`): builds the AI ship's lean set of nodes (M4-T11, architecture §17.10, `Ship.lean`): its plumes
+##   as one multimesh on the body, its markers as another, its collision shapes without nodes, no cockpit.
 
 const OPT_FACTION: StringName = &"faction"
 const OPT_DISPLAY_NAME: StringName = &"display_name"
@@ -26,6 +29,7 @@ const OPT_CONSOLE_OWNER: StringName = &"console_owner"
 const OPT_IS_PLAYER: StringName = &"is_player"
 const OPT_FORCE_ASSIST: StringName = &"force_assist"
 const OPT_AI: StringName = &"ai"
+const OPT_LEAN: StringName = &"lean"
 
 
 static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D, opts: Dictionary = {}) -> Combatant:
@@ -38,15 +42,24 @@ static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D,
 
 	var ship: Ship = Ship.create(spec, world)
 	ship.console_owner = console_owner
+	ship.lean = bool(opts.get(OPT_LEAN, opts.get(OPT_AI, false))) and not console_owner
 	ship.force_assist = bool(opts.get(OPT_FORCE_ASSIST, false))
 	combatant.ship = ship
-	(ship.get_node("Targeting") as TargetingController).system.own_faction = combatant.faction
+	var targeting := ship.get_node("Targeting") as TargetingController
+	targeting.system.own_faction = combatant.faction
+	targeting.keeps_candidates = combatant.is_player  # only the player's list is read every frame (M4-T02)
+	if combatant.is_player:
+		AiPilotDriver.register_player(combatant)  # AI ships near it think every tick (M4-T04)
 
 	var thrusters := ThrusterVisuals.new()
 	thrusters.name = "ThrusterVisuals"
 	thrusters.glow_color = spec.engine_glow_color
 	thrusters.own_ship = combatant.is_player
-	ship.get_node("Thrusters").add_child(thrusters)
+	thrusters.instanced = ship.lean
+	if ship.lean:
+		ship.add_child(thrusters)  # on the body: the lean ship drops the empty holder
+	else:
+		ship.get_node("Thrusters").add_child(thrusters)
 	combatant.thrusters = thrusters
 
 	var cannon := PulseCannon.new()
@@ -86,6 +99,15 @@ static func _wire(combatant: Combatant, projectiles_parent: Node3D, console_owne
 			combatant.is_player, console_owner, ship.spec.damage_layout)
 	combatant.damageable.ram_safe_dv_mps = ship.spec.ram_safe_dv_mps
 	combatant.damageable.ram_lethal_dv_mps = ship.spec.ram_lethal_dv_mps
+	if ship.lean:
+		# No marker per muzzle (M4-T35): the cannon fires from the hardpoints' transforms, the World's pool flashes them.
+		var transforms: Array[Transform3D] = ship.get_muzzle_transforms()
+		if transforms.is_empty():
+			push_warning("ShipAssembly: %s has no muzzles; its cannon cannot fire" % ship.spec.asset_id)
+			return
+		combatant.cannon.setup_transforms(ship, transforms, projectiles_parent, ship.spec.weapon, combatant.faction,
+				MuzzleFlashPool.attach(ship.world))
+		return
 	var muzzles: Array[Node3D] = ship.get_muzzles()
 	if muzzles.is_empty():
 		push_warning("ShipAssembly: %s has no muzzles; its cannon cannot fire" % ship.spec.asset_id)

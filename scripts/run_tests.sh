@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Runs every automated check that works without a GPU: Python generator tests, a headless Godot import that
-# must be free of script errors, a compile check of every project script, the GUT suites, and debug-console
-# smoke runs that drive a live headless build through --console-exec.
+# Runs every automated check that works without a GPU: Python generator tests, the optional native library's build,
+# a headless Godot import that must be free of script errors, a compile check of every project script, the GUT suites,
+# and debug-console smoke runs that drive a live headless build through --console-exec.
 # Exits non-zero on any failure. Logs and the GUT JUnit XML land in reports/ (gitignored; CI uploads it).
 # GUT_SHARD=k/n (CI) runs only every n-th GUT script from the k-th, in path order, so n jobs share the GUT run; the Python
 # tests and the console smoke runs then run in shard 1 only. Unset (the default) runs everything.
+# GUT_SLOW=1 (the default here, and CI) runs the slow GUT files too (M4-T36, Q58: the long seeded parity fights and the pending
+# balance runs, `tests/fixtures/slow_tests.gd`); GUT_SLOW=0 leaves them out. A focused GUT run without this script leaves them out.
 set -euo pipefail
+export GUT_SLOW="${GUT_SLOW:-1}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
@@ -59,6 +62,16 @@ fi
 if (( run_extras )) && [[ -d tools/procgen/tests ]]; then
     echo "== Python tests"
     python3 -m unittest discover -s tools/procgen/tests -t . -v
+fi
+
+# Built before the import so Godot finds it. It is optional (architecture §17.5): with no cargo the script skips it,
+# Godot logs three errors about the missing library at every start, and those are the only errors ignored below.
+echo "== Native library"
+scripts/build_native.sh || fail "The native library failed to build (see the cargo output above)."
+NATIVE_ABSENT_ERRORS='^$'
+if [[ ! -f bin/libscs_native.so ]]; then
+    echo "run_tests.sh: no native library; the GDScript fallbacks run."
+    NATIVE_ABSENT_ERRORS='libscs_native\.so|scs_native\.gdextension'
 fi
 
 # --import imports resources but does not compile scripts, hence the separate compile check below.
@@ -130,8 +143,29 @@ expect_line() {
 expect_text() {
     grep -qF -- "$2" "$1" || { echo "run_tests.sh: missing text in $1: $2" >&2; return 1; }
 }
+# The providers line lists every registered state provider. New subsystems add providers, so the check is that the ones named
+# here are all present, not that the list is exactly this one (an exact list failed CI every time a task added a provider).
+expect_providers() {
+    local line
+    line="$(grep -m1 -F -- "[console] providers: " "$1" || true)"
+    if [[ -z "${line}" ]]; then
+        echo "run_tests.sh: missing providers line in $1" >&2
+        return 1
+    fi
+    local have=",${line#*providers: },"
+    have="${have// /}"
+    local missing=0 name
+    for name in ${2//,/ }; do
+        if [[ "${have}" != *",${name},"* ]]; then
+            echo "run_tests.sh: provider ${name} missing in $1" >&2
+            missing=1
+        fi
+    done
+    return "${missing}"
+}
 reject_text() {
-    if grep -qF -- "$2" "$1"; then
+    # No -q on the second grep: stopping early could kill the first with SIGPIPE, and pipefail would hide the match.
+    if grep -F -- "$2" "$1" | grep -vE -- "${NATIVE_ABSENT_ERRORS}" > /dev/null; then
         echo "run_tests.sh: unexpected text in $1: $2" >&2
         return 1
     fi
@@ -198,7 +232,7 @@ echo "== Console smoke run: the real main scene"
 log="${REPORTS}/console_main.log"
 main_status=0
 timeout 180 "${GODOT}" --headless --path . -- --console-strict \
-    --console-exec="wait 30; state; state ship; get render.splat_backend; quit" > "${log}" 2>&1 || main_status=$?
+    --console-exec="wait 30; state; state ship; get render.renderer; quit" > "${log}" 2>&1 || main_status=$?
 cat "${log}"
 if (( main_status != 0 )); then
     echo "run_tests.sh: main scene smoke run exited ${main_status}, expected 0 (see ${log})." >&2
@@ -208,10 +242,10 @@ if grep -E "${SCRIPT_ERRORS}" "${log}"; then
     echo "run_tests.sh: main scene smoke run reported script errors (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lights, lod, post, raiders, ram, render, screens, settings, ship, targeting, time, waves, weapons, wing, world" \
+expect_providers "${log}" "ai, allies, audio, camera, combat, controls, debris, debug, factions, flight, fx, hud, hull, input, lights, livery, perf, post, raiders, ram, render, screens, settings, ship, sky, targeting, time, waves, weapons, wing, world" \
     || smoke_status=1
 expect_line "${log}" "[console] ship.assist_on = true" || smoke_status=1
-expect_line "${log}" "[console] render.splat_backend = headless" || smoke_status=1
+expect_line "${log}" "[console] render.renderer = headless" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 reject_text "${log}" "ERROR:" || smoke_status=1
 
@@ -539,7 +573,7 @@ if (( route_status != 0 )); then
     echo "run_tests.sh: instructor route smoke run exited ${route_status}, expected 0 (see ${log})." >&2
     smoke_status=1
 fi
-expect_line "${log}" "[console] providers: ai, allies, audio, camera, combat, controls, debris, debug, factions, fx, hud, hull, input, lights, lod, post, raiders, ram, render, route, screens, settings, ship, targeting, time, waves, weapons, wing, world" \
+expect_providers "${log}" "ai, allies, audio, camera, combat, controls, debris, debug, factions, flight, fx, hud, hull, input, lights, livery, perf, post, raiders, ram, render, route, screens, settings, ship, sky, targeting, time, waves, weapons, wing, world" \
     || smoke_status=1
 expect_line "${log}" "[console] route.index = 1" || smoke_status=1
 expect_line "${log}" "[console] route.count = 6" || smoke_status=1
@@ -555,7 +589,7 @@ echo "== Console smoke run: the visual pass's commands and settings on the real 
 log="${REPORTS}/console_visual.log"
 visual_status=0
 timeout 180 "${GODOT}" --headless --path . -- --console-strict \
-    --console-exec='wait 30; wave stop; relight off; relight on; flare off; flare on; blur on; blur off; lod all 3; lod all auto; set settings.particle_density 0.5; get fx.density; running_lights off; get ship.running_lights; running_lights on; look 170 10; look off; state lights; state lod; state post; state screens; quit' \
+    --console-exec='wait 30; wave stop; flare off; flare on; blur on; blur off; set settings.particle_density 0.5; get fx.density; running_lights off; get ship.running_lights; running_lights on; look 170 10; look off; state lights; state render; state post; state screens; quit' \
     > "${log}" 2>&1 || visual_status=$?
 cat "${log}"
 if (( visual_status != 0 )); then
@@ -567,7 +601,7 @@ expect_line "${log}" "[console] ship.running_lights = false" || smoke_status=1
 expect_line "${log}" "[console] the view held at yaw 170, pitch 10" || smoke_status=1
 expect_line "${log}" "[console] the view is free again" || smoke_status=1
 expect_text "${log}" "[console] lights.active = " || smoke_status=1
-expect_text "${log}" "[console] lod.levels = " || smoke_status=1
+expect_text "${log}" "[console] render.far_dots = " || smoke_status=1
 expect_text "${log}" "[console] screens.shown = " || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
 reject_text "${log}" "ERROR:" || smoke_status=1
@@ -584,6 +618,39 @@ if (( visual_strict_status != 1 )); then
 fi
 expect_text "${log}" "[console] error: look takes yaw and pitch in degrees, or off, not 'north'" || smoke_status=1
 reject_text "${log}" "[console] > quit 0" || smoke_status=1
+
+echo "== Console smoke run: the benchmark harness writes its report on the real main scene"
+# M4-T01 / AC1: `bench furball 25 5` flies 25 ships from the pools for 5 s after a second of warm-up and writes
+# reports/perf/smoke/; only that the report is there is checked, never its numbers (they are scripts/bench.sh's job). `quit`
+# waits for the run, and the probe is off again afterwards.
+log="${REPORTS}/console_bench.log"
+bench_dir="${REPORTS}/perf/smoke"
+rm -rf "${bench_dir}"
+touch "${REPORTS}/.gdignore"
+bench_status=0
+timeout 300 "${GODOT}" --headless --path . -- --console-strict \
+    --console-exec='wait 30; bench furball 25 5 warmup=1 label=smoke; get perf.enabled; get perf.tick_us; quit' \
+    > "${log}" 2>&1 || bench_status=$?
+cat "${log}"
+if (( bench_status != 0 )); then
+    echo "run_tests.sh: bench smoke run exited ${bench_status}, expected 0 (see ${log})." >&2
+    smoke_status=1
+fi
+expect_text "${log}" "[console] bench furball 25: 25 ships in play" || smoke_status=1
+expect_text "${log}" "[bench] furball 25 seed 1: tick median " || smoke_status=1
+expect_line "${log}" "[console] perf.enabled = false" || smoke_status=1
+reject_text "${log}" "[console] error:" || smoke_status=1
+reject_text "${log}" "SCRIPT ERROR" || smoke_status=1
+for report_file in summary.json summary.md; do
+    if [[ ! -s "${bench_dir}/${report_file}" ]]; then
+        echo "run_tests.sh: the bench smoke run did not write ${bench_dir}/${report_file}." >&2
+        smoke_status=1
+    fi
+done
+for key in '"stages"' '"tick"' '"verdict"' '"machine"' '"lag"'; do
+    grep -qF -- "${key}" "${bench_dir}/summary.json" 2> /dev/null \
+        || { echo "run_tests.sh: ${bench_dir}/summary.json lacks ${key}." >&2; smoke_status=1; }
+done
 
 if (( smoke_status != 0 )); then
     echo "run_tests.sh: console smoke runs failed (see reports/console_*.log)."  >&2

@@ -24,11 +24,8 @@
 *.mtl  text eol=lf
 
 # Binary assets (none are committed in M1; listed so a future commit is handled correctly)
-*.ply  binary
-*.sog  binary
-*.spz  binary
-*.splat binary
 *.glb  binary
+*.f32  binary
 *.png  binary
 *.jpg  binary
 *.ogg  binary

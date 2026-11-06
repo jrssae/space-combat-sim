@@ -114,7 +114,9 @@ func test_apply_commands_reaches_the_ship_and_the_cannon() -> void:
 	for i: int in 30:
 		await get_tree().physics_frame
 	assert_true(near_raider.ship.linear_velocity.length() > 0.5, "the mains pushed the raider")
-	assert_true(projectiles.get_child_count() > 0, "and the cannon fired")
+	var sim: SimCore = SimCore.current()
+	var rows: int = sim.owned_bolts() if sim != null else 0
+	assert_true(projectiles.get_child_count() > 0 or rows > 0, "and the cannon fired (a bolt node, or a bolt row with the core owning the bolts, M4-T35)")
 	assert_eq(player.ship.linear_velocity, Vector3.ZERO, "the player was not commanded")
 
 

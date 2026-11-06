@@ -1,6 +1,7 @@
 class_name AiConsole
 extends RefCounted
-## The console side of the AI drivers (architecture §16.4, M3-T06): provider `ai` (`ships`, `by_behaviour`, `think_us`)
+## The console side of the AI drivers (architecture §16.4, M3-T06): provider `ai` (`ships`, `by_behaviour`, `think_us`;
+## M4-T04 adds `mean_speed_mps`, `thinks_near`, `thinks_far`, `held`, `contacts_max`)
 ## and the command `ai <name>`, which prints that ship's brain `describe()` with a `*` on the behaviour in control.
 ## `ai <name> objective <target|none>` (M3-T17) sets an `AiPilot`'s objective; `ai <name> skill <rank|0-1>` and
 ## `ai <name> aggression <level|0-1>` (M3-T13) change its temperament live.
@@ -20,6 +21,24 @@ static func provider() -> ConsoleVars:
 		&"by_behaviour": {"get": by_behaviour, "doc": "How many AI ships run each behaviour"},
 		&"think_us": {"get": AiPilotDriver.think_us, "unit": "us",
 				"doc": "Wall-clock time of every AI driver in the last physics tick (profiling only)"},
+		&"mean_speed_mps": {"get": mean_speed_mps, "unit": "m/s", "doc": "Mean speed of the AI ships in play (M4-T04)"},
+		&"thinks_near": {"get": AiPilotDriver.thinks_near,
+				"doc": "AI ships within ai_think_near_m of the player that thought in the last tick (M4-T04)"},
+		&"thinks_far": {"get": AiPilotDriver.thinks_far,
+				"doc": "AI ships farther out (or with no player alive) that thought in the last tick, at ai_think_far_hz"},
+		&"held": {"get": AiPilotDriver.held, "doc": "AI ships that held their last command in the last tick"},
+		&"tiered": {"get": AiPilotDriver.tiered, "doc": "Hosted AI ships the host left alone in the last tick because they fly as low-attention tier rows (M4-T21); not counted in held"},
+		&"hosted": {"get": AiPilotDriver.hosted, "doc": "AI drivers whose step the native brain host decides (M4-T35, perf_native_driver_step)"},
+		&"contacts_max": {"get": AiPilotDriver.contacts_max,
+				"doc": "The most contacts one AI ship scored and avoided in the last tick (ai_nearest_k plus what it keeps)"},
+		&"thinks_native": {"get": AiPilotDriver.thinks_native,
+				"doc": "AI ships whose think ran in the native brains over the core's rows in the last tick (M4-T17)"},
+		&"thinks_fallback": {"get": AiPilotDriver.thinks_fallback,
+				"doc": "Native pilots the host declined in the last tick (the rows moved under the scan): each held its last command, as a held think does (M4-T17)"},
+		&"rows_events": {"get": AiPilotDriver.rows_events,
+				"doc": "Drivers the last rows batch handed something to do: a first command from the row, a changed trigger or a target to select (M4-T33); every other native think needed no driver"},
+		&"row_commands": {"get": AiPilotDriver.row_commands,
+				"doc": "AI ships flying their native pilot's command from the core's row (M4-T33)"},
 	})
 
 
@@ -36,6 +55,14 @@ static func ships() -> PackedStringArray:
 		var d: Dictionary = driver.brain.describe()
 		out.append("%s %s (%s)" % [driver.combatant.display_name, d.get("behaviour", "none"), d.get("state", "none")])
 	return out
+
+
+static func mean_speed_mps() -> float:
+	var flying: Array[AiPilotDriver] = AiPilotDriver.flying()
+	var total: float = 0.0
+	for driver: AiPilotDriver in flying:
+		total += driver.combatant.ship.linear_velocity.length()
+	return snappedf(total / flying.size(), 0.01) if not flying.is_empty() else 0.0
 
 
 static func by_behaviour() -> Dictionary:

@@ -106,9 +106,33 @@ func test_overlay_toggle_and_snapshot() -> void:
 	assert_eq(main.overlay.visible, not shown)
 	Settings.set_value(&"show_overlay", shown)
 	var snap: Dictionary = main.snapshot()
-	for key: String in ["speed_mps", "assist_on", "camera_mode", "weapon_mode", "splat_backend", "universe_position"]:
+	for key: String in ["speed_mps", "assist_on", "camera_mode", "weapon_mode", "renderer", "universe_position"]:
 		assert_true(snap.has(key), key)
-	assert_eq(snap["splat_backend"], "headless")
+	assert_eq(snap["renderer"], "headless")
+
+
+func test_the_overlay_text_refreshes_ten_times_a_second() -> void:
+	Settings.set_value(&"show_overlay", true)
+	main.update_overlay(1.0)  # due at once
+	var before: int = main.overlay_refreshes
+	for i: int in 10:
+		main.update_overlay(0.03)
+	assert_between(main.overlay_refreshes - before, 2, 3, "0.3 s of frames: every 0.1 s, not every frame (M4-T36)")
+	main.ship.linear_velocity = Vector3(0.0, 0.0, -77.0)
+	main.update_overlay(Main.OVERLAY_INTERVAL_S)
+	assert_string_contains(main.overlay.get_text(), "77", "a tenth of a second later it shows the new speed")
+
+
+func test_a_very_large_window_renders_its_3d_at_full_resolution() -> void:
+	var root: Window = get_tree().root
+	var size_backup: Vector2i = root.size
+	var scale_backup: float = root.scaling_3d_scale
+	root.scaling_3d_scale = 1.0
+	root.size = Vector2i(6144, 3456)
+	await get_tree().process_frame
+	assert_eq(root.scaling_3d_scale, 1.0, "no splat-era tile cap on the 3D (M4-T36)")
+	root.size = size_backup
+	root.scaling_3d_scale = scale_backup
 
 
 func test_console_commands() -> void:

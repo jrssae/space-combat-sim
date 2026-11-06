@@ -39,8 +39,8 @@ static func format(s: Dictionary) -> String:
 		var u: PackedFloat64Array = s["universe_position"]
 		lines.append("POS   %.3f %.3f %.3f m  [%s]" % [u[0], u[1], u[2], String(s.get("system_id", "local"))])
 	var render: PackedStringArray = []
-	if s.has("splat_backend"):
-		render.append("SPLATS " + String(s["splat_backend"]).to_upper())
+	if s.has("renderer"):
+		render.append("RENDER " + String(s["renderer"]).to_upper())
 	if s.has("fps"):
 		render.append("FPS %d" % int(s["fps"]))
 	if not render.is_empty():

@@ -336,7 +336,8 @@ static func _radar(input: HudInput, f: HudFrame) -> void:
 		f.drift_centre = f.speed_pos + Vector2(-120.0 * f.scale - f.drift_radius_px, -30.0 * f.scale)
 	else:
 		f.drift_centre = f.speed_pos + Vector2(-215.0 * f.scale - f.drift_radius_px, 0.0)
-	f.radar_dots = RadarModel.dots(input.contacts, input.selected_id, input.own_position, input.own_basis, input.faction)
+	var contacts: RadarContacts = input.radar_contacts if input.radar_contacts != null else RadarContacts.from_infos(input.contacts)
+	f.radar_plot = RadarModel.plot(contacts, input.selected_id, input.own_position, input.own_basis, input.faction)
 
 
 # --- wing roster and acknowledgements (M3-T11) -----------------------------------------------------------------------

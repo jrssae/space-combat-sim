@@ -1,6 +1,6 @@
 class_name MotionBlurEffect
 extends CompositorEffect
-## Motion blur on fast turns, as an option (`settings.motion_blur`, off by default). Runs after the splats are composited, so
+## Motion blur on fast turns, as an option (`settings.motion_blur`, off by default). Runs after the opaque and transparent passes, so
 ## stars and hulls blur together; the HUD and console are canvas layers drawn later and stay sharp. While the effect is disabled
 ## the renderer is not asked for motion vectors, so it costs nothing. `PostEffects` switches it and feeds `strength`.
 ##

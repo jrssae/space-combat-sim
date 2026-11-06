@@ -1,7 +1,7 @@
 #[compute]
 #version 450
-// Motion blur for fast turns. Hulls blur by the velocity buffer; the sky, the stars and anything without a depth proxy
-// (depth 0) blur by how far the camera turned since the last frame, which the buffer does not hold for them.
+// Motion blur for fast turns. Hulls write depth and blur by the velocity buffer; the sky, the star points and anything else
+// that writes no depth (depth 0) blur by how far the camera turned since the last frame, which the buffer does not hold for them.
 
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
@@ -36,7 +36,8 @@ float noise(vec2 p) {
 	return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
 }
 
-// How far this pixel's view ray moved on screen since the last frame, in uv units, for a ray at infinity.
+// How far this pixel's view ray moved on screen since the last frame, in uv units, for a ray at infinity, without TAA's
+// jitter (so a still camera under TAA does not blur the sky). The same sum `sky_velocity.glsl` writes for TAA (M4-T38).
 vec2 camera_turn_velocity(vec2 ndc) {
 	vec4 near_point = scene.data.inv_projection_matrix * vec4(ndc, 1.0, 1.0);
 	vec3 view_dir = normalize(near_point.xyz / near_point.w);
@@ -46,7 +47,8 @@ vec2 camera_turn_velocity(vec2 ndc) {
 	if (prev_clip.w <= 0.0) {
 		return vec2(0.0);
 	}
-	return (prev_clip.xy / prev_clip.w - ndc) * 0.5;
+	vec2 prev_ndc = prev_clip.xy / prev_clip.w - scene.prev_data.taa_jitter;
+	return (prev_ndc - (ndc - scene.data.taa_jitter)) * 0.5;
 }
 
 void main() {

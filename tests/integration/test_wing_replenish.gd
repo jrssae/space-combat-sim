@@ -57,12 +57,12 @@ func _start_wave(number: int = 2) -> void:
 	main.waves.wave_started.emit(number, "TEST WAVE")
 
 
-func _splat_nodes() -> int:
+func _pooled_nodes() -> int:
 	return _count(get_tree().root)
 
 
 func _count(node: Node) -> int:
-	var n: int = 1 if node is GaussianSplatNode else 0
+	var n: int = 1 if _pooled(node) else 0
 	for child: Node in node.get_children():
 		n += _count(child)
 	return n
@@ -253,24 +253,24 @@ func test_a_callsign_already_in_play_is_not_given_twice() -> void:
 	assert_eq(stray.display_name, "ALPHA 2")
 
 
-# --- AC7: no splat node enters or leaves the tree ----------------------------------------------------------------------
+# --- AC7: no pooled ship or chunk enters or leaves the tree ----------------------------------------------------------------------
 
 
-func test_the_splat_node_count_never_changes_across_kill_and_replenish_cycles() -> void:
+func test_the_pooled_node_count_never_changes_across_kill_and_replenish_cycles() -> void:
 	await _launch(4)
-	var before: int = _splat_nodes()
+	var before: int = _pooled_nodes()
 	assert_gt(before, 0)
 	for cycle: int in 5:
 		_start_wave(cycle + 1)
 		assert_eq(wing.members().size(), 3, "cycle %d: the wing is full" % cycle)
-		assert_eq(_splat_nodes(), before, "cycle %d: after replenish" % cycle)
+		assert_eq(_pooled_nodes(), before, "cycle %d: after replenish" % cycle)
 		for member: Combatant in wing.members():
 			assert_true(member.damageable.kill())
-		assert_eq(_splat_nodes(), before, "cycle %d: after the break-ups" % cycle)
+		assert_eq(_pooled_nodes(), before, "cycle %d: after the break-ups" % cycle)
 		assert_eq(main.ships.alive(ALLY).size(), 0)
 		await _ticks(3)
 		assert_eq(wing.members().size(), 0, "cycle %d: the dead leave their slots on the next refresh" % cycle)
-	assert_eq(_splat_nodes(), before)
+	assert_eq(_pooled_nodes(), before)
 
 
 # --- the real waves and the console ------------------------------------------------------------------------------------
@@ -284,7 +284,7 @@ func test_a_real_wave_start_replenishes_through_the_main_scene_wiring() -> void:
 	assert_true(_exec("kill allies").ok, "shoot them down: the slots are empty for the wave start to fill")
 	await _ticks(2)
 	assert_eq(wing.members().size(), 0)
-	var before: int = _splat_nodes()
+	var before: int = _pooled_nodes()
 	var seen: Array[Dictionary] = []
 	main.waves.wave_started.connect(func(_number: int, _name: String) -> void:
 		# Main's connection ran first: the replacements are in, and nothing has flown since.
@@ -305,7 +305,7 @@ func test_a_real_wave_start_replenishes_through_the_main_scene_wiring() -> void:
 		assert_almost_eq((seen[i]["rel"] as Vector3).z, BEHIND_M, 1.0, "slot %d: 1 500 m astern as the wave begins" % (i + 1))
 	assert_true(wing.is_full())
 	assert_eq(main.ships.alive(ShipPool.DEFAULT_TYPE).size(), 4, "the wave's raiders are not the wingmen")
-	assert_eq(_splat_nodes(), before)
+	assert_eq(_pooled_nodes(), before)
 
 
 func test_the_console_replenishes_on_demand() -> void:
@@ -342,3 +342,8 @@ func test_the_console_says_why_nothing_launched() -> void:
 	main.wings.wings.clear()
 	assert_false(_exec("wing replenish").ok, "no wing in the scenario")
 	assert_push_warning_count(2)
+
+
+# A node the pools build once at load and only switch afterwards (D22): a pooled ship or a pooled break-up chunk.
+static func _pooled(node: Node) -> bool:
+	return (node is DebrisChunk and not (node as DebrisChunk).one_shot) or (node is Ship and node.get_parent() is ShipPool)

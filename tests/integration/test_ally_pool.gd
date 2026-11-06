@@ -1,8 +1,7 @@
 extends GutTest
 ## Allied ships from the pool (M3-T08, AC7, architecture §15.6, §16 D35): a `starfury_ally` is built once with its catalog faction,
-## draws the Starfury's LOD1 splats, flies the Starfury `ShipSpec` numbers (the M1 AC5 formula for a straight burn), is named per
-## acquire, and the number of `GaussianSplatNode`s in the tree never changes across acquire / release cycles (D22). The
-## `raiders` and `allies` providers and `spawn ally` work on the console. The inner class runs the real main scene: allies in the
+## draws the Starfury's textured hull, flies the Starfury `ShipSpec` numbers (the M1 AC5 formula for a straight burn) and is named
+## per acquire. The `raiders` and `allies` providers and `spawn ally` work on the console. The inner class runs the real main scene: allies in the
 ## sandbox do not count as raiders, are not cleared by the waves, and make no kills.
 
 const ALLY: StringName = ShipPool.ALLY_TYPE
@@ -43,17 +42,6 @@ func before_each() -> void:
 	assert_eq(pool.prepare(RAIDER, 1), 1)
 
 
-func _splat_nodes() -> int:
-	return _count_splat_nodes(get_tree().root)
-
-
-func _count_splat_nodes(node: Node) -> int:
-	var n: int = 1 if node is GaussianSplatNode else 0
-	for child: Node in node.get_children():
-		n += _count_splat_nodes(child)
-	return n
-
-
 func _console(line: String) -> ConsoleResult:
 	var results: Array[ConsoleResult] = DebugConsole.registry.execute(line)
 	assert_eq(results.size(), 1, "one statement: " + line)
@@ -88,20 +76,13 @@ func test_allies_are_built_parked_with_the_catalog_faction() -> void:
 	assert_eq(pool.all_ships()[ALLY_COUNT].faction, Factions.RAIDERS)
 
 
-func test_an_ally_draws_the_lod1_hull_without_a_cockpit_interior() -> void:
-	var manifest: ManifestReader = ManifestReader.load_dir("res://assets/generated/starfury_aurora")
-	assert_true(manifest.is_valid(), "%s (%s)" % [manifest.errors_text(), GEN_ASSETS_HINT])
+func test_an_ally_draws_the_starfurys_textured_hull_without_a_cockpit_interior() -> void:
 	var ally: Ship = pool.all_ships()[0].ship
-	var hull: GaussianResource = ally.hull_splats.gaussian
-	assert_not_null(hull, "the LOD1 hull loaded (%s)" % GEN_ASSETS_HINT)
-	assert_eq(hull.resource_path, manifest.lod_path(manifest.lods[1]))
-	assert_eq(hull.point_count, int(manifest.lods[1]["splats"]))
-	assert_lt(hull.point_count, int(manifest.lods[0]["splats"]) / 3, "well under half the player's splats")
-	assert_eq(player.ship.hull_splats.gaussian.point_count, int(manifest.lods[0]["splats"]), "the player keeps LOD0")
-	assert_null(ally.cockpit_interior.mesh, "no first-person interior for an ally")
+	assert_not_null(ally.hull_mesh(), "the textured hull loaded (%s)" % GEN_ASSETS_HINT)
+	assert_same(ally.hull_mesh(), player.ship.hull_mesh(), "one shared mesh, so every Starfury instances")
+	assert_same(ally.hull.mesh, ally.hull_mesh())
+	assert_null(ally.cockpit_interior, "no first-person interior for an ally (built lean, M4-T11)")
 	assert_not_null(player.ship.cockpit_interior.mesh)
-	assert_eq(ally.hull_mesh_fallback.mesh.get_surface_count(), player.ship.hull_mesh_fallback.mesh.get_surface_count(),
-			"the same hull mesh as the fallback")
 
 
 func test_an_ally_has_the_starfurys_body_hardpoints_and_guns() -> void:
@@ -110,7 +91,7 @@ func test_an_ally_has_the_starfurys_body_hardpoints_and_guns() -> void:
 	assert_eq(ally.inertia, starfury.inertia)
 	assert_eq(ally.get_layout().pod_names, player.ship.get_layout().pod_names)
 	assert_eq(ally.get_layout().nozzle_count(), player.ship.get_layout().nozzle_count())
-	assert_eq(ally.get_muzzles().size(), player.ship.get_muzzles().size())
+	assert_eq(ally.get_muzzle_transforms().size(), player.ship.get_muzzles().size())  # the lean ally has no marker nodes (M4-T35)
 	assert_eq(pool.all_ships()[0].cannon.weapon, player.cannon.weapon, "the Starfury's pulse cannon")
 	assert_eq(pool.all_ships()[0].damageable.hull.max_hp, starfury.hull_max)
 	assert_false(pool.all_ships()[0].damageable.respects_god_mode, "god mode protects the player only")
@@ -166,21 +147,6 @@ func test_an_empty_ally_pool_returns_null_with_one_warning_and_leaves_the_raider
 	assert_eq(pool.free_count(RAIDER), 1)
 
 
-func test_splat_nodes_never_enter_or_leave_the_tree_across_acquire_and_release_cycles() -> void:
-	var before: int = _splat_nodes()
-	assert_gt(before, 0)
-	for cycle: int in 12:
-		var ships: Array[Combatant] = []
-		for i: int in ALLY_COUNT:
-			ships.append(pool.acquire("ALPHA %d" % (i + 2), UniversePos.new(60.0 * float(i), 0.0, -200.0 - float(cycle)),
-					Basis.IDENTITY, Vector3.ZERO, null, ALLY))
-		ships.append(pool.acquire("RAIDER 1", UniversePos.new(0.0, 80.0, -300.0)))
-		assert_eq(_splat_nodes(), before, "cycle %d: all acquired" % cycle)
-		for combatant: Combatant in ships:
-			pool.release(combatant)
-		assert_eq(_splat_nodes(), before, "cycle %d: all released" % cycle)
-
-
 func test_an_ally_is_a_friend_to_the_players_targeting() -> void:
 	var ally: Combatant = _ally_at(-300.0)
 	player.ship.targeting.refresh()
@@ -190,23 +156,14 @@ func test_an_ally_is_a_friend_to_the_players_targeting() -> void:
 	assert_false(player.ship.targeting.select_nearest_hostile(), "the nearest hostile does not pick a wingman")
 
 
-func test_a_missing_manifest_warns_once_for_the_lod_and_draws_no_splats() -> void:
+func test_a_missing_asset_warns_and_draws_no_hull() -> void:
 	var ghost_spec: ShipSpec = ShipCatalog.spec_for(ALLY).duplicate() as ShipSpec
 	ghost_spec.asset_id = "no_such_ship"
 	var ghost: Ship = Ship.create(ghost_spec, world)
 	world.spawn(ghost, world.to_universe(Vector3(0.0, 300.0, 0.0)))
-	assert_null(ghost.hull_splats.gaussian)
-	# The hardpoints, the manifest and the hull mesh are each missing: three problems, three messages, none about the LOD twice.
-	assert_push_warning_count(3)
-
-
-func test_a_lod_the_manifest_does_not_list_warns_once_and_draws_lod0() -> void:
-	var odd_spec: ShipSpec = ShipCatalog.spec_for(ALLY).duplicate() as ShipSpec
-	odd_spec.splat_lod = 5
-	var odd: Ship = Ship.create(odd_spec, world)
-	world.spawn(odd, world.to_universe(Vector3(0.0, 300.0, 0.0)))
-	assert_eq(odd.hull_splats.gaussian.point_count, player.ship.hull_splats.gaussian.point_count, "LOD0 instead")
-	assert_push_warning_count(1)
+	assert_null(ghost.hull.mesh)
+	# The hardpoints and the textured mesh are each missing: two problems, two messages.
+	assert_push_warning_count(2)
 
 
 # --- flying: the M1 AC5 straight-line formula ----------------------------------------------------------------------

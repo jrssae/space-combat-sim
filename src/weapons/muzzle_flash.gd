@@ -5,10 +5,11 @@ extends MeshInstance3D
 ## full size while fading out, then hides itself.
 ##
 ## A shot also lights the nose (M3-T22): the flash owns one `LightEmitter`, made once with the node and reused for every shot, so a
-## shot allocates nothing. It enters the `SplatLightRig`'s candidates for `EmitterCurves.FLASH_S` (60 ms) and leaves them when
+## shot allocates nothing. It enters the `LightRig`'s candidates for `EmitterCurves.FLASH_S` (60 ms) and leaves them when
 ## the flash ends, the ship is parked or the node leaves the tree.
 ##
-## A visual, so it animates in `_process` from the frame `delta` (and `advance` for tests); how it looks is (H).
+## A visual, so it animates from the frame `delta`: only while it shows, in the `FramePasses` flashes pass (M4-T36; `advance` for
+## tests), so the 2 to 4 idle flashes on every ship cost the frame nothing. How it looks is (H).
 
 const MATERIAL: Material = preload("res://assets/materials/muzzle_flash.tres")
 const DURATION_S: float = 0.05
@@ -19,7 +20,7 @@ const START_SCALE: float = 0.3
 
 var _age_s: float = INF
 var _light: LightEmitter = null
-var _rig: SplatLightRig = null
+var _rig: LightRig = null
 
 
 ## A hidden flash with its quad mesh, ready to be added under a muzzle.
@@ -47,15 +48,14 @@ func _notification(what: int) -> void:
 		_end_light()
 
 
-func _process(delta: float) -> void:
-	advance(delta)
-
-
 ## Starts (or restarts) the 50 ms flash.
 func trigger() -> void:
 	_age_s = 0.0
 	_apply()
 	_start_light()
+	var passes: FramePasses = FramePasses.of(self)
+	if passes != null:
+		passes.add_flash(self)
 
 
 ## Ends the flash at once: a ship back in play shows nothing of its last shot.
@@ -73,6 +73,11 @@ func light_emitter() -> LightEmitter:
 ## True while the flash is showing.
 func is_active() -> bool:
 	return _age_s < DURATION_S
+
+
+## True when neither the flash nor its light is left to animate: the flashes pass lets it go.
+func is_idle() -> bool:
+	return _age_s == INF
 
 
 ## Ages the flash by `delta` seconds; the quad hides after `DURATION_S` and the light after `EmitterCurves.FLASH_S`.
@@ -109,7 +114,7 @@ func _start_light() -> void:
 	if muzzle == null:
 		return
 	if _rig == null or not is_instance_valid(_rig):
-		_rig = SplatLightRig.of(self)
+		_rig = LightRig.of(self)
 	if _rig == null:
 		return
 	_light.anchor = muzzle

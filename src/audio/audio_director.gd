@@ -237,8 +237,9 @@ func watch_ship(combatant: Combatant) -> void:
 	if combatant == null or combatant.cannon == null:
 		return
 	var shot: StringName = &"pulse_fire" if combatant.faction == Factions.EARTH_ALLIANCE else &"raider_fire"
-	combatant.cannon.projectile_fired.connect(func(_index: int, projectile: Projectile) -> void:
-		play(shot, projectile.global_position, -3.0, randf_range(0.96, 1.04)))
+	# `shot_fired` sounds on both bolt paths; `projectile_fired` is silent for the AI cannons' rows (M4-T35).
+	combatant.cannon.shot_fired.connect(func(_index: int, at: Vector3) -> void:
+		play(shot, at, -3.0, randf_range(0.96, 1.04)))
 	if not _streams.has(&"engine_loop"):
 		return
 	var hum := AudioStreamPlayer3D.new()

@@ -43,7 +43,6 @@ const TOGGLE_CAMERA := &"toggle_camera"
 const RESET_SHIP := &"reset_ship"
 const PAUSE := &"pause"
 const TOGGLE_OVERLAY := &"debug_toggle_overlay"
-const TOGGLE_FALLBACK := &"debug_toggle_fallback_mesh"
 const TARGET_PREV := &"target_prev"
 ## The pad's tap-or-hold target button (B): tap = next, hold = previous.
 const TARGET_CYCLE := &"target_cycle"
@@ -60,7 +59,7 @@ const TOGGLE_RUNNING_LIGHTS := &"toggle_running_lights"
 const ACTIONS: Array[StringName] = [
 	MAIN_RIGHT, MAIN_LEFT, RETRO_RIGHT, RETRO_LEFT, PITCH_DOWN, PITCH_UP, YAW_LEFT, YAW_RIGHT,
 	STRAFE_LEFT, STRAFE_RIGHT, STRAFE_DOWN, STRAFE_UP, ROLL_LEFT, ROLL_RIGHT, TARGET_NEXT, WEAPON_NEXT,
-	TARGET_AHEAD, FIRE, TOGGLE_ASSIST, BRAKE, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY, TOGGLE_FALLBACK,
+	TARGET_AHEAD, FIRE, TOGGLE_ASSIST, BRAKE, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY,
 	TARGET_PREV, AUTOTRACK, CAMERA_LOOK, SCREENSHOT, WING_ATTACK, WING_FORM, WING_ENGAGE, WING_COVER, TARGET_CYCLE,
 	TOGGLE_RUNNING_LIGHTS,
 ]
@@ -68,7 +67,7 @@ const ACTIONS: Array[StringName] = [
 ## Actions reported as one-tick edges on press rather than held state. `TARGET_NEXT` and `TARGET_CYCLE` are not among
 ## them: they are the tap-or-hold buttons (see `target_hold_s`).
 const EDGE_ACTIONS: Array[StringName] = [
-	TOGGLE_ASSIST, WEAPON_NEXT, TARGET_AHEAD, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY, TOGGLE_FALLBACK,
+	TOGGLE_ASSIST, WEAPON_NEXT, TARGET_AHEAD, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY,
 	TARGET_PREV, SCREENSHOT, AUTOTRACK, WING_ATTACK, WING_FORM, WING_ENGAGE, WING_COVER, TOGGLE_RUNNING_LIGHTS,
 ]
 
@@ -179,7 +178,6 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	cmd.ui.reset = edges[RESET_SHIP]
 	cmd.ui.pause = edges[PAUSE]
 	cmd.ui.toggle_overlay = edges[TOGGLE_OVERLAY]
-	cmd.ui.toggle_fallback_mesh = edges[TOGGLE_FALLBACK]
 	cmd.ui.screenshot = edges[SCREENSHOT]
 	cmd.ui.wing_attack = edges[WING_ATTACK]
 	cmd.ui.wing_form = edges[WING_FORM]

@@ -86,8 +86,8 @@ func setup(p_world: WorldFrame, p_pool: ShipPool, p_player: Combatant, scenario:
 		destruction.player_destroyed.connect(_on_player_destroyed)
 	if player != null:
 		credit.player_id = player.ship.get_instance_id()
-		if not player.cannon.projectile_fired.is_connected(_on_player_fired):
-			player.cannon.projectile_fired.connect(_on_player_fired)
+		if not player.cannon.shot_fired.is_connected(_on_player_fired):
+			player.cannon.shot_fired.connect(_on_player_fired)
 	if pool != null and not pool.acquired.is_connected(_on_pool_acquired):
 		pool.acquired.connect(_on_pool_acquired)
 	if auto_start and not waves.is_empty() and pool_size > 0:
@@ -214,7 +214,7 @@ func _on_pool_acquired(combatant: Combatant) -> void:
 	credit.forget(combatant.targetable.get_instance_id())
 
 
-func _on_player_fired(_muzzle_index: int, _projectile: Projectile) -> void:
+func _on_player_fired(_muzzle_index: int, _at: Vector3) -> void:
 	credit.note_shot(player.ship.targeting.selected_id())
 
 

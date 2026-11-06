@@ -8,7 +8,7 @@ const RAIDER_SPEC: String = "res://assets/ships/raider_delta_v.tres"
 const FIGHT_TICKS: int = 900
 
 var main: Main
-var rig: SplatLightRig
+var rig: LightRig
 var source: FakeInputSource
 var output: FlightOutput = null
 

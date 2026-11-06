@@ -1,11 +1,24 @@
 name: CI
 
-# Python generator tests, asset generation, headless Godot import, compile check and GUT, all without a GPU.
+# Python generator tests, asset generation, the optional native library, headless Godot import, compile check and GUT,
+# all without a GPU.
 # Anything that needs a GPU is verified by a human, never here (docs/architecture.md, section 12).
 
 on:
+  # Doc-only commits (plans, milestones, research notes) change no code or test, so they skip the 40-minute run; info.md stays
+  # in, because a test checks the console command list against it.
   push:
+    paths:
+      - "**"
+      - "!docs/**"
+      - "!**/*.md"
+      - "info.md"
   pull_request:
+    paths:
+      - "**"
+      - "!docs/**"
+      - "!**/*.md"
+      - "info.md"
 
 permissions:
   contents: read
@@ -31,7 +44,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install Python dependencies
-        run: python -m pip install numpy pillow
+        run: python -m pip install numpy
 
       # The pinned version lives in scripts/setup_godot.sh only; the cache key follows it.
       - name: Read pinned Godot version
@@ -47,11 +60,26 @@ jobs:
       - name: Cache Godot
         uses: actions/cache@v4
         with:
-          path: .tools
+          path: .tools/godot
           key: godot-${{ runner.os }}-${{ steps.godot.outputs.version }}
 
       - name: Install Godot
         run: scripts/setup_godot.sh
+
+      # The native library (native/, Rust with gdext; architecture section 17.5). Cargo's downloads and build files are
+      # cached on Cargo.lock and the pinned Rust version, so only a change to either rebuilds gdext from scratch.
+      # rustup on the runner installs the version native/rust-toolchain.toml pins. run_tests.sh finds it up to date.
+      - name: Cache native build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            .tools/native-target
+          key: native-${{ runner.os }}-${{ hashFiles('native/Cargo.lock', 'native/rust-toolchain.toml') }}
+
+      - name: Build native library
+        run: time scripts/build_native.sh
 
       - name: Generate assets
         run: scripts/gen_assets.sh
@@ -60,6 +88,8 @@ jobs:
         run: scripts/run_tests.sh
         env:
           GUT_SHARD: ${{ matrix.shard }}/2
+          # The slow files (the long seeded parity fights, the pending balance runs) run here (M4-T36, Q58).
+          GUT_SLOW: "1"
 
       - name: Upload reports
         if: always()

@@ -2,16 +2,18 @@
 
 [ext_resource type="Script" path="res://src/environment/space_environment.gd" id="1_env"]
 [ext_resource type="Environment" path="res://assets/environment/environment_default.tres" id="2_default"]
-[ext_resource type="Script" path="res://addons/gdgs_scs/runtime/compositor/gaussian_compositor_effect.gd" id="3_effect"]
-[ext_resource type="Script" path="res://addons/gdgs_scs/runtime/nodes/gaussian_splat_node.gd" id="4_splats"]
+[ext_resource type="Script" path="res://src/environment/star_field.gd" id="4_stars"]
 [ext_resource type="Script" path="res://src/environment/sky_follower.gd" id="5_follower"]
-[ext_resource type="Script" path="res://src/rendering/splat_light_rig.gd" id="6_rig"]
+[ext_resource type="Script" path="res://src/rendering/light_rig.gd" id="6_rig"]
 [ext_resource type="Script" path="res://src/rendering/lens_flare_effect.gd" id="7_flare"]
 [ext_resource type="Script" path="res://src/rendering/motion_blur_effect.gd" id="8_blur"]
 [ext_resource type="Script" path="res://src/rendering/post_effects.gd" id="9_post"]
+[ext_resource type="Script" path="res://src/rendering/sky_velocity_effect.gd" id="10_skyvel"]
+[ext_resource type="Script" path="res://src/rendering/anti_aliasing.gd" id="11_aa"]
+[ext_resource type="Script" path="res://src/rendering/upscaler.gd" id="12_up"]
 
-[sub_resource type="CompositorEffect" id="CompositorEffect_gdgs"]
-script = ExtResource("3_effect")
+[sub_resource type="CompositorEffect" id="CompositorEffect_skyvel"]
+script = ExtResource("10_skyvel")
 
 [sub_resource type="CompositorEffect" id="CompositorEffect_blur"]
 script = ExtResource("8_blur")
@@ -21,7 +23,7 @@ effect_callback_type = 4
 script = ExtResource("7_flare")
 
 [sub_resource type="Compositor" id="Compositor_main"]
-compositor_effects = Array[CompositorEffect]([SubResource("CompositorEffect_gdgs"), SubResource("CompositorEffect_blur"), SubResource("CompositorEffect_flare")])
+compositor_effects = Array[CompositorEffect]([SubResource("CompositorEffect_skyvel"), SubResource("CompositorEffect_blur"), SubResource("CompositorEffect_flare")])
 
 [node name="SpaceEnvironment" type="Node3D"]
 script = ExtResource("1_env")
@@ -30,24 +32,32 @@ script = ExtResource("1_env")
 environment = ExtResource("2_default")
 compositor = SubResource("Compositor_main")
 
-[node name="SplatLightRig" type="Node3D" parent="."]
+[node name="LightRig" type="Node3D" parent="."]
 script = ExtResource("6_rig")
 
-[node name="KeyStar" type="DirectionalLight3D" parent="SplatLightRig"]
+[node name="KeyStar" type="DirectionalLight3D" parent="LightRig"]
 transform = Transform3D(-0.851658, 0.339815, -0.399004, 0, 0.761316, 0.648381, 0.524097, 0.552199, -0.648381, 0, 0, 0)
 light_color = Color(1, 0.94, 0.84, 1)
 light_energy = 1.5
 
-[node name="SkySplats" type="VisualInstance3D" parent="."]
+[node name="StarField" type="MultiMeshInstance3D" parent="."]
 top_level = true
 physics_interpolation_mode = 2
-script = ExtResource("4_splats")
+script = ExtResource("4_stars")
 
 [node name="SkyFollower" type="Node" parent="." node_paths=PackedStringArray("sky")]
 script = ExtResource("5_follower")
-sky = NodePath("../SkySplats")
+sky = NodePath("../StarField")
 
 [node name="PostEffects" type="Node" parent="." node_paths=PackedStringArray("world_environment", "sun")]
 script = ExtResource("9_post")
 world_environment = NodePath("../WorldEnvironment")
-sun = NodePath("../SplatLightRig/KeyStar")
+sun = NodePath("../LightRig/KeyStar")
+
+[node name="AntiAliasing" type="Node" parent="." node_paths=PackedStringArray("world_environment")]
+script = ExtResource("11_aa")
+world_environment = NodePath("../WorldEnvironment")
+
+[node name="Upscaler" type="Node" parent="." node_paths=PackedStringArray("anti_aliasing")]
+script = ExtResource("12_up")
+anti_aliasing = NodePath("../AntiAliasing")

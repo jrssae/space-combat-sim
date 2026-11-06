@@ -18,45 +18,35 @@ def sample() -> dict:
         asset_id="demo",
         generator_version=3,
         seed=42,
-        lods=[manifest.lod_entry(0, "demo.ply", 1000, 0.06)],
         aabb_min=[-1.0, -2.0, -3.0],
         aabb_max=[1.0, 2.0, 3.0],
         centroid_offset=[0.0, 0.1, 0.6],
-        files={"fallback_mesh": "demo.obj"},
+        files={"obj": "demo.obj"},
     )
 
 
 class ManifestTests(unittest.TestCase):
-    def test_contains_the_contract_keys_with_lods_zero(self) -> None:
+    def test_contains_the_contract_keys(self) -> None:
         m = sample()
-        for key in ("asset_id", "generator_version", "seed", "frame", "units", "lods",
+        for key in ("asset_id", "generator_version", "seed", "frame", "units",
                     "aabb_min", "aabb_max", "centroid_offset", "files"):  # fmt: skip
             self.assertIn(key, m)
         self.assertEqual((m["frame"], m["units"]), ("godot", "m"))
-        self.assertEqual(
-            m["lods"][0],
-            {"level": 0, "file": "demo.ply", "splats": 1000, "spacing_m": 0.06},
-        )
+        self.assertNotIn("lods", m, "no level ladder: the textured mesh's levels are the importer's (M4-T31)")
 
     def test_numpy_scalars_become_plain_json_numbers(self) -> None:
         m = manifest.build_manifest(
-            "demo", 1, 42, [manifest.lod_entry(0, "d.ply", np.int64(5), np.float32(0.5))],
-            np.array([-1.0, -1.0, -1.0], dtype=np.float32), np.ones(3, dtype=np.float32), np.zeros(3),
+            "demo", 1, 42, np.array([-1.0, -1.0, -1.0], dtype=np.float32), np.ones(3, dtype=np.float32), np.zeros(3),
+            extra={"count": int(np.int64(5))},
         )  # fmt: skip
-        self.assertIs(type(m["lods"][0]["splats"]), int)
         self.assertIs(type(m["aabb_min"][0]), float)
+        self.assertIs(type(m["centroid_offset"][0]), float)
 
     def test_extra_keys_are_added_but_cannot_shadow_reserved_ones(self) -> None:
-        m = manifest.build_manifest(
-            "demo", 1, 1, [manifest.lod_entry(0, "d.ply", 1, 1.0)], [0, 0, 0], [0, 0, 0], [0, 0, 0],
-            extra={"counts": {"a": 1}},
-        )  # fmt: skip
+        m = manifest.build_manifest("demo", 1, 1, [0, 0, 0], [0, 0, 0], [0, 0, 0], extra={"counts": {"a": 1}})
         self.assertEqual(m["counts"], {"a": 1})
         with self.assertRaises(ValueError):
-            manifest.build_manifest(
-                "demo", 1, 1, [manifest.lod_entry(0, "d.ply", 1, 1.0)], [0, 0, 0], [0, 0, 0], [0, 0, 0],
-                extra={"seed": 5},
-            )  # fmt: skip
+            manifest.build_manifest("demo", 1, 1, [0, 0, 0], [0, 0, 0], [0, 0, 0], extra={"seed": 5})
 
     def test_validation_rejects_contract_violations(self) -> None:
         def broken(mutate) -> dict:
@@ -65,54 +55,45 @@ class ManifestTests(unittest.TestCase):
             return m
 
         cases = {
-            "missing lods": lambda m: m.pop("lods"),
-            "empty lods": lambda m: m.update(lods=[]),
-            "lods[0] level": lambda m: m["lods"][0].update(level=1),
-            "zero splats": lambda m: m["lods"][0].update(splats=0),
-            "float splats": lambda m: m["lods"][0].update(splats=1.5),
-            "no file": lambda m: m["lods"][0].pop("file"),
-            "bad spacing": lambda m: m["lods"][0].update(spacing_m=0),
-            "lighting type": lambda m: m["lods"][0].update(lighting=3),
-            "lighting file": lambda m: m["lods"][0].update(lighting="demo.ply"),
             "frame": lambda m: m.update(frame="3dgs"),
             "units": lambda m: m.update(units="cm"),
             "seed type": lambda m: m.update(seed="42"),
+            "kind": lambda m: m.update(kind="points"),
             "aabb length": lambda m: m.update(aabb_min=[0, 0]),
             "aabb order": lambda m: m.update(aabb_min=[5, 0, 0]),
             "centroid type": lambda m: m.update(centroid_offset=["a", 0, 0]),
+            "missing centroid": lambda m: m.pop("centroid_offset"),
             "files type": lambda m: m.update(files={"x": 3}),
+            "mesh type": lambda m: m.update(mesh="demo.glb"),
         }
         for name, mutate in cases.items():
             with self.subTest(name), self.assertRaises(ValueError):
                 manifest.validate_manifest(broken(mutate))
 
-    def test_a_level_may_name_its_lighting_records(self) -> None:
-        self.assertNotIn("lighting", manifest.lod_entry(0, "d.ply", 1, 1.0))
-        entry = manifest.lod_entry(0, "d.ply", 1, 1.0, "d_lod0.light")
-        self.assertEqual(entry["lighting"], "d_lod0.light")
-        m = copy.deepcopy(sample())
-        m["lods"][0] = entry
-        manifest.validate_manifest(m)
+    def test_non_finite_numbers_are_rejected_naming_the_field(self) -> None:
+        def with_value(mutate, value: float) -> dict:
+            m = copy.deepcopy(sample())
+            mutate(m, value)
+            return m
 
-    def test_a_hero_entry_is_validated_like_a_level(self) -> None:
-        good = {"file": "d_hero.ply", "splats": 9, "spacing_m": 0.02, "lighting": "d_hero.light"}
-        m = copy.deepcopy(sample())
-        m["hero"] = dict(good)
-        manifest.validate_manifest(m)
-        for name, change in {
-            "file": {"file": ""},
-            "splats": {"splats": 0},
-            "spacing": {"spacing_m": -1},
-            "lighting": {"lighting": "d_hero.ply"},
-        }.items():
-            with self.subTest(name), self.assertRaises(ValueError):
-                broken = copy.deepcopy(sample())
-                broken["hero"] = {**good, **change}
-                manifest.validate_manifest(broken)
-        with self.assertRaises(ValueError):
-            broken = copy.deepcopy(sample())
-            broken["hero"] = "d_hero.ply"
-            manifest.validate_manifest(broken)
+        cases = {
+            "aabb_min": lambda m, v: m.update(aabb_min=[-1.0, v, -3.0]),
+            "aabb_max": lambda m, v: m.update(aabb_max=[1.0, 2.0, v]),
+            "centroid_offset": lambda m, v: m.update(centroid_offset=[v, 0.1, 0.6]),
+        }
+        for name, mutate in cases.items():
+            for value in (float("nan"), float("inf"), float("-inf")):
+                with self.subTest(field=name, value=value), self.assertRaises(ValueError) as ctx:
+                    manifest.validate_manifest(with_value(mutate, value))
+                self.assertIn(name, str(ctx.exception))
+
+    def test_non_finite_peak_dbfs_is_rejected(self) -> None:
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=value), self.assertRaises(ValueError) as ctx:
+                manifest.build_audio_manifest(
+                    "snd", 1, 7, {"beep": manifest.sound_entry("beep.wav", 100, 48000, value)}
+                )
+            self.assertIn("peak_dbfs", str(ctx.exception))
 
     def test_write_and_read_round_trip_with_stable_text(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

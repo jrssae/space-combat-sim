@@ -201,6 +201,31 @@ func test_a_downed_member_leaves_its_slot_and_the_next_one_answers() -> void:
 	assert_eq(rows[1]["behaviour"], "formation")
 
 
+func test_a_member_parked_in_the_low_attention_tier_keeps_its_slot() -> void:
+	# M4-T21 fix round 1: a wingman beyond the tier radius is a core row, not lost; the wing keeps its slot for it.
+	allies[0].ship.park_for_tier()
+	await _ticks(3)
+	assert_eq(wing.members().size(), 3, "the tiered wingman is still a member")
+	assert_eq(wing.slot_of(allies[0]), 1, "in its own slot")
+	assert_false(wing.is_lost(1), "and is not counted lost")
+	assert_eq(wing.empty_slots(), PackedInt32Array(), "so no replacement is owed")
+	allies[0].ship.unpark_from_tier(allies[0].ship.global_transform, Vector3.ZERO, Vector3.ZERO, 0.0)
+	await _ticks(2)
+	assert_eq(wing.slot_of(allies[0]), 1, "promoted, it flies on in its slot")
+	# A raider group's leader in the tier still leads: the group is not handed to its first member.
+	var leader: Combatant = _ai_ship("GROUP LEAD", Vector3(0.0, 300.0, 0.0), 9)
+	var group: Wing = main.wings.create_wing("GROUP", leader)
+	var wingman: Combatant = _ai_ship("GROUP 2", Vector3(0.0, 400.0, 0.0), 10)
+	assert_eq(main.wings.add_member(group, wingman), 1)
+	await _ticks(1)
+	leader.ship.park_for_tier()
+	assert_true(main.wings.leader_alive(group), "a tiered leader is alive")
+	await _ticks(2)
+	assert_eq(group.leader, leader, "and keeps the lead")
+	leader.damageable.kill()
+	assert_false(main.wings.leader_alive(group), "a destroyed one is not, tiered or not")
+
+
 func test_the_hud_line_lasts_three_seconds_of_sim_time() -> void:
 	main.wings.give_order(AiContext.Order.FORM_ON_ME)
 	var posted_s: float = SimClock.now()
@@ -215,6 +240,19 @@ func test_the_hud_line_lasts_three_seconds_of_sim_time() -> void:
 	Engine.time_scale = 1.0
 	assert_eq(main.wings.ack_text(), "", "gone after 3 s")
 	assert_eq(_read("wing.last_ack"), "ALPHA 2: COPY, FORMING UP", "the provider keeps the last line")
+
+
+# An AI Starfury of the alliance near the player, outside every wing.
+func _ai_ship(display_name: String, offset: Vector3, seed_value: int) -> Combatant:
+	var c: Combatant = ShipAssembly.build(load(STARFURY_SPEC) as ShipSpec, main.world, main.projectiles, {
+		ShipAssembly.OPT_FACTION: Factions.EARTH_ALLIANCE,
+		ShipAssembly.OPT_DISPLAY_NAME: display_name,
+		ShipAssembly.OPT_AI: true,
+	})
+	main.world.spawn(c.ship, main.world.to_universe(main.ship.global_position + offset))
+	c.driver.brain = BrainFactory.from_behaviour({"type": "ai", "profile": "ally_starfury"}, UniversePos.new(),
+			seed_value)["brain"] as AiPilot
+	return c
 
 
 func _assert_orders(order: AiContext.Order, why: String) -> void:

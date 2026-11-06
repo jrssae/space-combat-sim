@@ -28,7 +28,7 @@ const NAME_PATTERN: String = "^[a-z0-9_]{1,32}$"
 ## the pad a route (architecture §16 D36). The running lights are D-pad Left in the default, but a layout that rolls on the
 ## D-pad (m1_classic) has no button left for them.
 const KEYBOARD_ONLY: Array[StringName] = [
-	InputAdapter.TOGGLE_FALLBACK, InputAdapter.TOGGLE_OVERLAY, InputAdapter.TARGET_AHEAD, InputAdapter.TARGET_PREV,
+	InputAdapter.TOGGLE_OVERLAY, InputAdapter.TARGET_AHEAD, InputAdapter.TARGET_PREV,
 	InputAdapter.SCREENSHOT, InputAdapter.WING_ATTACK, InputAdapter.WING_FORM, InputAdapter.WING_ENGAGE,
 	InputAdapter.WING_COVER, InputAdapter.ROLL_LEFT, InputAdapter.ROLL_RIGHT, InputAdapter.TARGET_NEXT,
 	InputAdapter.TARGET_CYCLE, InputAdapter.TOGGLE_RUNNING_LIGHTS,
@@ -53,6 +53,10 @@ const MOUSE_BUTTONS: Array[int] = [1, 2, 3, 8, 9]
 const MAX_DEADZONE: float = 0.9
 const DESCRIPTOR_HELP: String = "pad:button:<0-14>, pad:axis:<0-5><+|->, key:<name>, mouse:<1|2|3|8|9>"
 
+## Actions later builds removed. A saved profile that names one still loads: the entry is dropped with a warning (`from_config`).
+const REMOVED_ACTIONS: Array[StringName] = [
+	&"debug_toggle_fallback_mesh",  # F4, the removed fallback mesh (M4-T31)
+]
 const SECTION_PROFILE: String = "profile"
 const SECTION_BINDINGS: String = "bindings"
 const SECTION_DEADZONES: String = "deadzones"
@@ -379,12 +383,12 @@ func to_config_text() -> String:
 ## then failed validation (so a caller can show what is in it). Syntax errors also print an engine error. With
 ## `fill_from`, an action the text does not mention at all (neither a binding nor a deadzone: one added to the game after
 ## the profile was saved) takes `fill_from`'s bindings and deadzone, listed in `filled`; an action mentioned in one section
-## only, or with bad entries, stays invalid.
+## only, or with bad entries, stays invalid. Entries for a `REMOVED_ACTIONS` action are ignored, listed in `dropped`.
 static func from_config_text(text: String, p_name: String = "", fill_from: ControlProfile = null) -> Dictionary:
 	var cfg := ConfigFile.new()
 	var err: Error = cfg.parse(text)
 	if err != OK:
-		return {"ok": false, "profile": null, "filled": PackedStringArray(),
+		return {"ok": false, "profile": null, "filled": PackedStringArray(), "dropped": PackedStringArray(),
 				"errors": PackedStringArray(["not valid config text (%s)" % error_string(err)])}
 	return from_config(cfg, p_name, fill_from)
 
@@ -405,8 +409,12 @@ static func from_config(cfg: ConfigFile, p_name: String = "", fill_from: Control
 		for key: String in cfg.get_section_keys(SECTION_PROFILE):
 			if key != "format" and key != "description":
 				errors.append("profile.%s: unknown key" % key)
+	var dropped := PackedStringArray()
 	if cfg.has_section(SECTION_BINDINGS):
 		for key: String in cfg.get_section_keys(SECTION_BINDINGS):
+			if REMOVED_ACTIONS.has(StringName(key)):
+				dropped.append(key)
+				continue
 			var value: Variant = cfg.get_value(SECTION_BINDINGS, key)
 			var list: Array = []
 			if typeof(value) == TYPE_STRING:
@@ -425,7 +433,13 @@ static func from_config(cfg: ConfigFile, p_name: String = "", fill_from: Control
 			profile.bindings[StringName(key)] = list
 	if cfg.has_section(SECTION_DEADZONES):
 		for key: String in cfg.get_section_keys(SECTION_DEADZONES):
+			if REMOVED_ACTIONS.has(StringName(key)):
+				if not dropped.has(key):
+					dropped.append(key)
+				continue
 			profile.deadzones[StringName(key)] = cfg.get_value(SECTION_DEADZONES, key)
+	for key: String in dropped:
+		push_warning("Controls: profile '%s' binds %s, which this build no longer has; that entry is ignored" % [p_name, key])
 	var filled := PackedStringArray()
 	var pad_migrated: bool = false
 	if fill_from != null and not profile.bindings.has(InputAdapter.TARGET_CYCLE):
@@ -445,7 +459,8 @@ static func from_config(cfg: ConfigFile, p_name: String = "", fill_from: Control
 			profile.deadzones[action] = fill_from.deadzones.get(action, 0.5)
 			filled.append(String(action))
 	errors.append_array(profile.validate())
-	return {"ok": errors.is_empty(), "profile": profile, "errors": errors, "filled": filled, "pad_migrated": pad_migrated}
+	return {"ok": errors.is_empty(), "profile": profile, "errors": errors, "filled": filled, "pad_migrated": pad_migrated,
+			"dropped": dropped}
 
 
 # `descriptors` without those another action of this profile already uses.

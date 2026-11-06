@@ -36,6 +36,10 @@ func after_each() -> void:
 
 ## One 30 s attack run in a fresh world; returns the metrics.
 func _attack_run(seed_value: int) -> Dictionary:
+	# Godot reads the time scale once per main-loop iteration: both runs start in a fresh one, so no tick of either runs at the
+	# old scale.
+	Engine.time_scale = SPEED_UP
+	await get_tree().process_frame
 	var world := WorldFrame.new()
 	world.name = "World"
 	add_child(world)

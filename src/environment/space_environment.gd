@@ -1,58 +1,73 @@
 class_name SpaceEnvironment
 extends Node3D
-## The sky and the light, outside `World` (architecture §3, §7): a black WorldEnvironment with the GDGS compositor effect, then
-## the motion blur and the lens flare (`PostEffects` drives both), the `SplatLightRig` (the warm `KeyStar` and the 7 omni slots:
-## the scene's only lights), and `SkySplats` (stars and nebula as Gaussian splats, never lit: they are emitters) pinned to the
-## camera by `SkyFollower`. Camera-relative, so it is never rebased and holds nothing a gameplay system needs.
+## The sky and the light, outside `World` (architecture §3, §7, §17.19): the WorldEnvironment with the motion blur and the lens flare
+## (`PostEffects` drives both), the `LightRig` (the warm `KeyStar` and the 7 omni slots: the scene's only lights), and the sky
+## (M4-T30c): `StarField`, the stars as points pinned to the camera by `SkyFollower`, and the nebula as a panorama on the
+## environment's sky. Camera-relative, so it is never rebased and holds nothing a gameplay system needs.
 ##
-## It loads without any generated asset: the sky splats and the manifest are loaded here, guarded, so the scene (and
-## the headless tests) work before `scripts/gen_assets.sh` has run, with a warning instead of a load error.
+## It loads without any generated asset: the manifest, the star file and the panorama are loaded here, guarded, so the scene (and
+## the headless tests) work before `scripts/gen_assets.sh` has run, with a warning and a black sky instead of a load error.
+##
+## `settings.ambient_level` (M4-T30a) is the environment's ambient light: what the textured meshes and every other PBR surface get
+## on every side, so the dark side of a hull stays legible. It applies live.
 ##
 ## Anything visual here is (H): it cannot be seen without a GPU.
 
-## Fallback for GPUs where neither GDGS backend starts (architecture §7.4): the panorama render of the same sky.
-const ENVIRONMENT_FALLBACK_PATH: String = "res://assets/environment/environment_fallback.tres"
 const SKY_DIR: String = "res://assets/generated/sky_default"
-const SKY_GAUSSIAN_PATH: String = SKY_DIR + "/sky_default.ply"
-const SKY_MANIFEST_PATH: String = SKY_DIR + "/manifest.json"
-const SKY_PANORAMA_PATH: String = SKY_DIR + "/sky_default_panorama.png"
+## The parts of the sky the `sky` command shows and hides.
+const SKY_PARTS: Array[StringName] = [&"stars", &"nebula"]
 
-## GDGS compositor tunables (`GaussianCompositorEffect`), pushed into the effect in `_ready` and on every change.
-## How far in front of scene depth a splat may sit before the mesh occludes it.
-@export_range(0.0, 1.0, 0.001) var depth_bias: float = 0.05:
-	set(value):
-		depth_bias = value
-		_apply_compositor_tuning()
-## Splats fainter than this do not take part in the depth test.
-@export_range(0.0, 1.0, 0.001) var depth_test_min_alpha: float = 0.05:
-	set(value):
-		depth_test_min_alpha = value
-		_apply_compositor_tuning()
+## Where the generated sky is read from. A variable so that a test can point it at a directory that does not exist.
+var sky_dir: String = SKY_DIR
 
-## The file `environment_fallback.tres` references, checked before loading it: a `.tres` whose external texture is
-## missing fails to load with errors. A variable so that a test can point it at a file that does not exist.
-var fallback_panorama_path: String = SKY_PANORAMA_PATH
-
-var _default_environment: Environment
-var _fallback_active: bool = false
+var _panorama: Texture2D
+var _nebula_shown: bool = true
 
 @onready var world_environment: WorldEnvironment = $WorldEnvironment
-@onready var light_rig: SplatLightRig = $SplatLightRig
-@onready var key_star: DirectionalLight3D = $SplatLightRig/KeyStar
-@onready var sky_splats: GaussianSplatNode = $SkySplats
+@onready var light_rig: LightRig = $LightRig
+@onready var key_star: DirectionalLight3D = $LightRig/KeyStar
+@onready var star_field: StarField = $StarField
 @onready var sky_follower: SkyFollower = $SkyFollower
 @onready var post_effects: PostEffects = $PostEffects
-
-
-func _init() -> void:
-	add_to_group(SplatStatus.SKY_GROUP)  # SplatStatus calls use_fallback_sky (no backend, console, F4)
+@onready var anti_aliasing: AntiAliasing = $AntiAliasing
+@onready var upscaler: Upscaler = $Upscaler
 
 
 func _ready() -> void:
-	_default_environment = world_environment.environment
 	_load_sky()
-	_apply_compositor_tuning()
+	_apply_ambient()
+	Settings.changed.connect(_on_setting_changed)
 	use_star_of(&"local")
+	DebugConsole.registry.register_provider(&"sky", ConsoleVars.new({
+		&"stars": {"get": func() -> int: return star_field.star_count(), "doc": "Stars in the point field (M4-T30c)"},
+		&"stars_shown": {"get": func() -> bool: return star_field.visible, "doc": "The star field is drawn"},
+		&"panorama": {"get": func() -> bool: return has_panorama(), "doc": "The nebula panorama was loaded"},
+		&"nebula_shown": {"get": func() -> bool: return _nebula_shown and has_panorama(), "doc": "The nebula panorama is drawn"},
+	}), self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"sky",
+			"Show or hide a part of the sky (the star points or the nebula panorama); with no state, toggle",
+			[ConsoleArg.enum_required(&"part", SKY_PARTS), ConsoleArg.bool_optional(&"state")]), _cmd_sky, self)
+
+
+func _exit_tree() -> void:
+	DebugConsole.registry.unregister_owner(self)
+	if Settings.changed.is_connected(_on_setting_changed):
+		Settings.changed.disconnect(_on_setting_changed)
+
+
+func _on_setting_changed(key: StringName, _value: Variant) -> void:
+	if key == &"ambient_level":
+		_apply_ambient()
+
+
+## The ambient light every PBR surface gets, `settings.ambient_level` of white.
+func _apply_ambient() -> void:
+	var environment: Environment = world_environment.environment
+	if environment == null:
+		return
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color.WHITE
+	environment.ambient_light_energy = float(Settings.get_value(&"ambient_level"))
 
 
 ## Shows the star of `system_id`, from `data/star_systems.json`.
@@ -67,65 +82,66 @@ func set_star(temperature_k: float) -> void:
 	post_effects.set_star_color(color)
 
 
-## Switches between the splat sky (false) and the generated panorama (true). The fallback hides `SkySplats` and swaps
-## in `environment_fallback.tres`; if the panorama was not generated (it needs Pillow) it warns and keeps the black
-## default environment instead of failing. The compositor effect stays: the ship and buoys are still splats.
-func use_fallback_sky(enabled: bool) -> void:
-	_fallback_active = enabled
-	sky_splats.visible = not enabled
-	if not enabled:
-		world_environment.environment = _default_environment
-		return
-	var fallback: Environment = _load_fallback_environment()
-	if fallback == null:
-		push_warning("SpaceEnvironment: no panorama at %s (needs Pillow; run scripts/gen_assets.sh); the fallback sky is black" % fallback_panorama_path)
-		return
-	world_environment.environment = fallback
+func has_panorama() -> bool:
+	return _panorama != null
 
 
-func is_fallback_sky_active() -> bool:
-	return _fallback_active
+## Shows or hides one part of the sky: `stars` (the point field) or `nebula` (the panorama), for comparisons and measures.
+func show_sky_part(part: StringName, shown: bool) -> void:
+	if part == &"stars":
+		star_field.visible = shown
+	elif part == &"nebula":
+		_nebula_shown = shown
+		_apply_background()
 
 
-## The Gaussian compositor effect on the WorldEnvironment's Compositor, or null if there is none.
-func get_gaussian_effect() -> GaussianCompositorEffect:
-	var compositor: Compositor = world_environment.compositor
-	if compositor == null:
-		return null
-	for effect: CompositorEffect in compositor.compositor_effects:
-		if effect is GaussianCompositorEffect:
-			return effect as GaussianCompositorEffect
-	return null
-
-
+## Reads the generated sky: the star points and the nebula panorama. What is missing stays dark, with a warning.
 func _load_sky() -> void:
-	var manifest: SkyManifest = SkyManifest.load_file(SKY_MANIFEST_PATH)
-	if manifest.valid:
-		sky_follower.centroid_offset = manifest.centroid_offset
+	_panorama = null
+	var manifest: SkyManifest = SkyManifest.load_file(sky_dir + "/manifest.json")
+	if not manifest.valid:
+		push_warning("SpaceEnvironment: sky manifest unusable (%s); no stars or nebula" % manifest.error)
+		star_field.clear()
 	else:
-		push_warning("SpaceEnvironment: sky manifest unusable (%s); the sky sphere will be off-centre" % manifest.error)
-	if ResourceLoader.exists(SKY_GAUSSIAN_PATH):
-		var gaussian: GaussianResource = load(SKY_GAUSSIAN_PATH) as GaussianResource
-		if gaussian != null:
-			sky_splats.gaussian = gaussian
-	else:
-		push_warning("SpaceEnvironment: %s is missing or not imported (run scripts/gen_assets.sh, then import); no splat sky" % SKY_GAUSSIAN_PATH)
+		star_field.load_file(sky_dir + "/" + manifest.star_file, manifest.star_count, manifest.star_radius_mrad,
+				manifest.star_floor_px)
+		var panorama_path: String = sky_dir + "/" + manifest.panorama_file
+		if manifest.panorama_file != "" and ResourceLoader.exists(panorama_path):
+			_panorama = load(panorama_path) as Texture2D
+		else:
+			push_warning("SpaceEnvironment: no nebula panorama in %s (run scripts/gen_assets.sh, then import)" % sky_dir)
+	_apply_background()
 	# Place the sky now rather than at the next frame, in case a camera is already current.
 	sky_follower.follow()
 
 
-func _load_fallback_environment() -> Environment:
-	if not ResourceLoader.exists(fallback_panorama_path) or not ResourceLoader.exists(ENVIRONMENT_FALLBACK_PATH):
-		return null
-	return load(ENVIRONMENT_FALLBACK_PATH) as Environment
+## The environment's background: the nebula panorama when it is loaded and shown, else black. Hulls take no reflection from it,
+## so they keep the look they were approved with on the black sky.
+func _apply_background() -> void:
+	var environment: Environment = world_environment.environment
+	if environment == null:
+		return
+	environment.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+	star_field.set_nebula(_panorama if _nebula_shown else null)
+	if _panorama == null or not _nebula_shown:
+		environment.background_mode = Environment.BG_COLOR
+		environment.background_color = Color.BLACK
+		return
+	if environment.sky == null or not (environment.sky.sky_material is PanoramaSkyMaterial):
+		var sky := Sky.new()
+		sky.sky_material = PanoramaSkyMaterial.new()
+		# Nothing samples its radiance (the ambient is a colour, reflections are off): keep the cubemap small.
+		sky.radiance_size = Sky.RADIANCE_SIZE_32
+		environment.sky = sky
+	(environment.sky.sky_material as PanoramaSkyMaterial).panorama = _panorama
+	environment.background_mode = Environment.BG_SKY
 
 
-func _apply_compositor_tuning() -> void:
-	# Exported setters run before the node tree exists when the scene is instantiated.
-	if not is_node_ready():
-		return
-	var effect: GaussianCompositorEffect = get_gaussian_effect()
-	if effect == null:
-		return
-	effect.depth_bias = depth_bias
-	effect.depth_test_min_alpha = depth_test_min_alpha
+func _cmd_sky(args: Dictionary) -> ConsoleResult:
+	var part: StringName = StringName(args[&"part"])
+	var current: bool = star_field.visible if part == &"stars" else _nebula_shown
+	var shown: bool = not current if args[&"state"] == null else bool(args[&"state"])
+	show_sky_part(part, shown)
+	if part == &"nebula" and not has_panorama():
+		return ConsoleResult.line("sky nebula missing (no panorama loaded; run scripts/gen_assets.sh)")
+	return ConsoleResult.line("sky %s %s" % [part, "on" if shown else "off"])

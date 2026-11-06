@@ -64,7 +64,7 @@ func test_shooting_a_buoy_destroys_it_with_effects_and_takes_it_out_of_play() ->
 	assert_true(destroyed[0], "destroyed")
 	assert_true(buoy.is_destroyed())
 	assert_false(buoy.visible, "hidden")
-	assert_true(buoy.is_inside_tree(), "but never freed: no splat node leaves the tree during play")
+	assert_true(buoy.is_inside_tree(), "but never freed: it comes back on the player's respawn")
 	await _ticks(2)
 	assert_gt(main.effects.get_child_count(), effects_before, "an explosion appeared")
 	assert_false(buoy.targetable.is_active(), "nothing can target it any more")

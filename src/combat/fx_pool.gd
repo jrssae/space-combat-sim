@@ -2,7 +2,7 @@ class_name FxPool
 extends Node3D
 ## Sparks and glowing fragments for hits, rams, explosions and debris (M3-T23, architecture D8): a fixed set of one-shot
 ## `GPUParticles3D` emitters per effect (`FxSpecs`), built once and restarted for each burst, so the particle node count never
-## changes while playing. Splats cannot animate, so this is the part of the look that stays in Godot's particles.
+## changes while playing.
 ##
 ## Newtonian: the process materials have no gravity and no damping, and a burst inherits its source's velocity by moving its
 ## emitter at that velocity; particles live in the emitter's own frame (`local_coords`), so they go where it goes.

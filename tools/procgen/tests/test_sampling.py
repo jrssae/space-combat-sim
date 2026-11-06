@@ -1,4 +1,4 @@
-"""core.sampling: density, uniformity, on-surface positions, symmetry, splat conversion."""
+"""core.sampling: density, uniformity, on-surface positions, symmetry, nearest neighbours."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import unittest
 
 import numpy as np
 
-from tools.procgen.core import frames
 from tools.procgen.core import geometry as g
 from tools.procgen.core import sampling as sp
 
@@ -155,31 +154,7 @@ class SymmetryAndTransformTests(unittest.TestCase):
         self.assertEqual(float(both.material_flag("paneled")[len(a)]), 0.0)
 
 
-class SplatConversionTests(unittest.TestCase):
-    def test_to_splats_orientation_scale_and_alpha(self) -> None:
-        mesh = g.Mesh.concatenate([g.box((1, 1, 1), HULL), g.box((1, 1, 1), GLASS, center=(3, 0, 0))])
-        s = sp.sample_mesh(mesh, 0.1, np.random.default_rng(0))
-        rgb = np.full((len(s), 3), 0.5)
-        splats = sp.to_splats(s, rgb, 0.1, overlap=1.4, thickness=0.03)
-        splats.validate()
-        np.testing.assert_allclose(splats.scale[:, :2], 0.14)
-        np.testing.assert_allclose(splats.scale[:, 2], 0.003)
-        rot = frames.quat_to_matrix(splats.rot)
-        np.testing.assert_allclose(rot[:, :, 2], s.normals, atol=1e-9)
-        self.assertTrue(np.all(np.linalg.det(rot) > 0.99))
-        glass = s.material == mesh.material_index("glass")
-        self.assertTrue(np.all(splats.alpha[~glass] == 0.98))
-        expected = 1.0 - 0.7 ** (1.0 / sp.effective_layers(1.4))
-        np.testing.assert_allclose(splats.alpha[glass], expected)
-        self.assertLess(expected, 0.05)
-
-    def test_alpha_for_transmittance_is_monotonic(self) -> None:
-        t = np.array([0.0, 0.2, 0.5, 0.9])
-        a = sp.alpha_for_transmittance(t, 1.0)
-        self.assertEqual(a[0], 0.98)
-        self.assertTrue(np.all(np.diff(a[1:]) < 0))
-        self.assertAlmostEqual(sp.effective_layers(1.0), 2 * math.pi)
-
+class NeighbourTests(unittest.TestCase):
     def test_nearest_neighbour_distances_match_brute_force(self) -> None:
         pts = np.random.default_rng(0).random((400, 3))
         np.testing.assert_allclose(sp.nearest_neighbour_distances(pts, 0.2), brute_nn(pts))

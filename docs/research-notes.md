@@ -19,7 +19,12 @@ bumping versions. "Container" means the Claude cloud Linux container used for im
 | Enum values | LX=0 LY=1 RX=2 RY=3 LT=4 RT=5; A=0 B=1 X=2 Y=3 BACK=4 GUIDE=5 START=6 LS=7 RS=8 LB=9 RB=10 DPAD U/D/L/R=11/12/13/14 | Printed from the 4.7.2 binary |
 | Useful CLI flags | `--headless` (= `--display-driver headless --audio-driver Dummy`), `--path`, `-s/--script`, `--import` (editor-only: imports all resources and quits), `--quit-after <n>`, `--check-only`, `--log-file`, `--fixed-fps` | `--help` of the 4.7.2 binary |
 
-## Gaussian splat rendering in Godot
+## Gaussian splats (historical: removed in M4-T31, 2026-11-04)
+
+The findings below shaped M1 to M3, when the hulls were Gaussian splats drawn by GDGS. M4 replaced them with textured meshes (Q29)
+and T31 removed the addon and every splat path; they are kept as a record.
+
+### Gaussian splat rendering in Godot
 
 | Candidate | Status (2026-10) | License | Notes |
 |---|---|---|---|
@@ -40,7 +45,7 @@ GDGS behaviours that shape our pipeline (read from the v3.3.0 source):
 - Relighting as read in the code (GDGS 3.3.0): the factor is computed once per splat in the projection pass (`relight_factor()` in `gsplat_projection.glsl`, the same maths in `gaussian_raster.gdshader`) and multiplies the SH colour **before** the composite's `srgb_to_linear`, so it acts on PLY colours as the old baked rig did. The rig (`gaussian_light_rig.gd`) rescans the tree every 30 frames, re-reads the lights it holds every frame, skips invisible or zero-energy lights and stops its walk after 20 000 nodes. `_set_lighting` on a node in the tree marks the scene's resources dirty (a full re-merge), and `relight_cast_shadows` defaults to true. The importer keeps PLY order, so a `.light` file lines up with its PLY; `test_relight` checks each record's normal against the thin axis of the covariance GDGS imported.
 - Project setting `gdgs/rendering/backend` = `Auto` | `Compute` | `Raster`, read at startup, falls back to the other backend on init failure.
 
-## Splat asset production
+### Splat asset production (historical)
 
 | Tool | Version | License | Headless/CPU? | Verdict for M1 |
 |---|---|---|---|---|
@@ -78,7 +83,7 @@ GDGS behaviours that shape our pipeline (read from the v3.3.0 source):
 - Tools present: `python3` 3.13 with `numpy` 2.5 and `Pillow` 12.3, `curl`, `wget`, `unzip`, `git`, `git-lfs`, `xvfb-run`/`Xvfb`, `libvulkan.so.1`, `libGL.so.1`, X11 client libs. No GPU, so **no splat rendering can be verified in the container**. 4 CPUs, 15 GB RAM.
 - Godot export templates (`Godot_v4.7.2-stable_export_templates.tpz`) are downloadable but not required for M1 (we run from the editor binary).
 
-## Long-term design research (verified 2026-10-19, Godot 4.7.2 source and GDGS v3.3.0 source)
+## Long-term design research (verified 2026-10-19, Godot 4.7.2 source and GDGS v3.3.0 source; the GDGS rows are historical since M4-T31)
 
 | Question | Finding | How |
 |---|---|---|
@@ -108,7 +113,7 @@ GDGS behaviours that shape our pipeline (read from the v3.3.0 source):
 | Device polling | `Input.get_joy_axis`, `Input.is_joy_button_pressed`, `Input.is_physical_key_pressed`, `Input.is_mouse_button_pressed` exist, so actions can be evaluated per device class (needed to mask the keyboard while the console is open, because `Input` action state ignores GUI focus) | `doc/classes/Input.xml` |
 | Slow motion | `Engine.time_scale` scales the `delta` of `_process` and `_physics_process`; above 1.0 each physics tick stretches (less precise), so the console caps it at 1.0 | `doc/classes/Engine.xml` |
 
-## Software rendering in the container (verified 2026-10-20)
+## Software rendering in the container (verified 2026-10-20; the GDGS backend notes are historical since M4-T31)
 
 - `apt-get install mesa-vulkan-drivers xvfb` works through the proxy and provides llvmpipe (Vulkan 1.4, CPU).
   `glslang-tools` gives `glslangValidator` for offline GLSL checks (strip Godot's `#[compute]` first line).

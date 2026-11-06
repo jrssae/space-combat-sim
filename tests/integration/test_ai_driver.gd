@@ -319,6 +319,7 @@ func test_the_ai_console_lists_ships_and_describes_one() -> void:
 	raider.driver.brain = BrainFactory.from_behaviour({"type": "ai", "profile": "raider"}, UniversePos.new(), 5)["brain"]
 	await get_tree().physics_frame
 	await get_tree().physics_frame
+	await get_tree().physics_frame  # the AI step is one tick behind (M4-T24): the first think lands at the second tick
 	var registry: ConsoleRegistry = DebugConsole.registry
 	assert_true(registry.has_provider(&"ai"))
 	assert_true(registry.has_command(&"ai"))
