@@ -137,6 +137,7 @@ func test_a_reused_ship_shows_nothing_of_its_last_pilot() -> void:
 	var switcher := raider.ship.get_node("LodSwitcher") as LodSwitcher
 	switcher.far = true
 	raider.ship.set_far_dot(true)
+	raider.ship.set_hulk(true)  # a drifting hulk (M4-T21)
 	for i: int in POOL_SIZE - 1:  # the others in use, so the next acquire takes this one again
 		pool.acquire("RAIDER %d" % (i + 2), UniversePos.new(float(i + 1) * 50.0, 0.0, -100.0))
 	pool.release(raider)
@@ -151,6 +152,7 @@ func test_a_reused_ship_shows_nothing_of_its_last_pilot() -> void:
 	assert_eq(flashes.active_for(again.ship), 0, "no rest of the last flash, nor its light")
 	assert_false(switcher.far, "drawn in full until its switcher next looks")
 	assert_false(again.ship.is_far_dot())
+	assert_false(again.ship.hulk, "a live ship again, not the last pilot's hulk")
 
 
 func test_release_parks_the_ship_again() -> void:

@@ -104,6 +104,7 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	ship.visible = true
 	ship.reset_to(Transform3D(basis, world.universe_to_local(at)))
 	ship.linear_velocity = velocity
+	ship.set_hulk(false)  # a live ship again, whatever the last pilot left (M4-T21)
 	ship.set_flight_command(FlightCommand.new())
 	ship.set_combat_command(CombatCommand.new())
 	ship.targeting.clear_selection()
