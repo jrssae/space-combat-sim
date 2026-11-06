@@ -322,7 +322,16 @@ func leader_hostile_target(wing: Wing) -> Targetable:
 
 func leader_alive(wing: Wing) -> bool:
 	var leader: Combatant = wing.leader
-	return leader != null and leader.damageable != null and is_instance_valid(leader.ship) and leader.damageable.is_active()
+	return leader != null and is_instance_valid(leader.ship) and _in_play(leader)
+
+
+# Whether a ship still counts for its wing: active, or flying as a low-attention tier row (M4-T21) and not destroyed.
+static func _in_play(c: Combatant) -> bool:
+	if c.damageable == null:
+		return false
+	if c.damageable.is_active():
+		return true
+	return is_instance_valid(c.ship) and c.ship.is_tier_parked() and not c.damageable.hull.destroyed
 
 
 ## One row per member of `wing` (default: the player's), in slot order: `callsign`, `slot`, `hull` (0..1), `behaviour` and
@@ -371,7 +380,7 @@ func _physics_process(delta: float) -> void:
 ## Drops the members that are down and briefs the others (see the class notes). Runs every tick; public for the tests.
 func refresh(wing: Wing) -> void:
 	for member: Combatant in wing.members():
-		if _pilot_of(member) == null or member.damageable == null or not member.damageable.is_active():
+		if _pilot_of(member) == null or not _in_play(member):
 			var slot: int = wing.slot_of(member)
 			remove_member(wing, member)
 			wing.mark_lost(slot)
