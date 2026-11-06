@@ -3140,9 +3140,12 @@ src/perf/standins/capital_standin.gd   park_for_tier, unpark_from_tier; the dire
   (`AiPilotDriver.driver_frame`), the fighters and capitals in Jolt beyond `tier_radius_m` plus 10 % (`tier_far_bodies`;
   the player's own body left out) and the tier rows within `tier_radius_m` (`tier_near_rows`): the hysteresis keeps a ship on
   the line from flipping every tick. The director hands over at most 64 of them a tick, promotions first (a battle's start
-  would otherwise park hundreds in one tick). A demotion reads the body's pose and motion through the same getters the core
+  would otherwise park hundreds in one tick); the budget counts successful demotions only, so a far body the director cannot
+  demote (a ship outside the pool) never uses one up. A demotion reads the body's pose and motion through the same getters the core
   reads (so the row starts bit for bit where the body was), its held command (`held_command`: the row command when it flies
-  one, else the ship's own command and trigger) and its assist state, adds the row with the ship's attributes, and parks the
+  one, else the ship's own command and trigger; that fallback carries the ten scalars and the trigger only, so a GDScript-piloted
+  ship's `autotrack` and its track and face directions are dropped in the tier, which matters little since native pilots fly row
+  commands) and its assist state, adds the row with the ship's attributes, and parks the
   body: hidden and not processing, which takes it out of Jolt (`CollisionObject3D`'s disable mode removes the body from the
   space), out of the scan (its marker inactive) and out of every per-ship pass; its hosted driver is marked not live by the
   same notification the pool's parking sends, its cannon idles, its name, pilot, hull, selection and wing slot state stay.
@@ -3150,24 +3153,33 @@ src/perf/standins/capital_standin.gd   park_for_tier, unpark_from_tier; the dire
   shows it; the row command stays in the map, so the flight step flies it again at -1 and the ship's own command is what
   it left with. A capital goes with its turrets and emitters (children of its body) and comes back with them where they were.
   With no live player nothing moves tier; with `tier_radius_m` 0, or the core off, every row is promoted (the bodies come
-  back where the rows had flown to; with the core gone, where they were parked). A pooled ship released while tiered takes
+  back where the rows had flown to; with the core gone, where they were parked, re-placed in today's frame from the world's
+  origin at park time, since the rebase skipped them). A pooled ship released while tiered takes
   its row with it (`ShipPool.release`); a capital freed by the bench's `clear` loses its row at the next tick.
-- **A hulk's promotion** brings the body back as a hulk: `Ship.hulk` (no thrust, no assist), its pilot dropped, its trigger
-  released, so it coasts under Jolt as it drifted in the tier. Today nothing disables a ship without destroying it, so this
+- **A hulk's promotion** brings the body back as a hulk: `Ship.hulk` (its assist off for good; `set_hulk` clears its command),
+  its pilot dropped, its trigger released, so it coasts under Jolt as it drifted in the tier; demoted again it goes back into a
+  row as a hulk. The pool clears `hulk` when it hands the ship out again. Today nothing disables a ship without destroying it, so this
   is a row state and a test, not gameplay.
 - **What a tier ship is not, in T21.** Not hittable (no sweep, no ram, no blast: T22), not drawn (T23: a dot from its row; its
-  far dot leaves with its hidden body), not a wing member while parked (`Wing.refresh` sees an inactive hull and frees its
-  slot; it rejoins as the wave system places it), not fuelled, not heard. Its parked node keeps its last pose: readers of a
+  far dot leaves with its hidden body), not on the player's radar or targetable by the player (both read active markers; T23),
+  not fuelled, not heard. It stays a wing member: `WingDirector` counts a tier-parked, undestroyed ship as in play, so a
+  wingman keeps its slot and a group leader its lead. Not a GDScript contact either: the contact field attached to the core
+  reads only the rows the GDScript scan holds (`Rows.tier_rows` marks the tier rows at the end), so a GDScript pilot never gets
+  a tier row's index; native brains still see tier rows. A hosted driver over a tier row (rare: a parked ship's driver is not
+  live) counts in its own events slot, `ai.tiered`, not in the far rate's `held`. Its parked node keeps its last pose: readers of a
   tiered ship's node position (the pool's console list) see where it was demoted, not where its row is.
 - **Bit for bit.** The handover copies: a demotion's row equals the body's pose, motion, command and assist state, and a
   promotion's body equals the row's (`test_tier_handover`: 100 handovers over a 20 s flight with no handover error at all,
-  on both of T24's schedules). The integrator itself is not Jolt (a 20 Hz force update against Jolt's 60 Hz step; the same
+  on both of T24's schedules). Its scan is not a copy check: the core steps the tier for the current tick before it reads the
+  bodies, so a tier row leads the body rows by one tick's motion (a demotion shows two ticks' motion in one scan step, a
+  promotion the same pose twice), and the test checks every scan step across the handovers stays within a tick's motion of the
+  ship's path. The integrator itself is not Jolt (a 20 Hz force update against Jolt's 60 Hz step; the same
   flight maths), so a ship demoted and promoted flies a slightly different path from one that stayed; the near set, which
   is what the player sees and fights, is untouched. One thread and six give the same rows with tier rows among the
   contacts; `threaded` equals `delayed` (the tier runs on the main thread inside the sync; the job only reads its rows).
 - **The rebase** (refactor finding 11) walks the shiftable group once: the nodes it moved are kept for the end-of-tick
   interpolation reset, and a body parked for the tier is left where it stands (its row moves with the core and promotion
-  places it). The group is still walked, not kept as a list: nodes join it after entering the tree (`Projectile._ready`, the
+  places it); a second rebase before the end-of-tick settle keeps the first one's nodes. The group is still walked, not kept as a list: nodes join it after entering the tree (`Projectile._ready`, the
   camera rig, test fixtures), so a kept list would need every site to register with the World, and the walk itself is a
   pointer copy; the cost was the translate of fifteen child nodes a ship, which the tier removes for parked ships.
 - **Settings and console.** `tier_radius_m` (10 000; 0 = off, live), `tier_hz` (20, live). Provider `tier`: `radius_m`,

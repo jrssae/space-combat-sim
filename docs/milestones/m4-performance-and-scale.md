@@ -1354,13 +1354,20 @@ done and T20 proceeds.
   with a generation per slot (the external review's P2). The rebase walks the shiftable group once and leaves tier-parked
   bodies where they stand (finding 11; the group stays a walk, see §17.14). Settings `tier_radius_m` (10 000; 0 = off) and
   `tier_hz` (20); provider `tier`; counts `tier_fighters` and `tier_capitals`. Tests: `test_tier`, `test_tier_handover` (100
-  handovers with no handover error at all, on both schedules; Jolt holds the near bodies only; a far fight promoted at 10 km;
-  a tier ship does not think; a capital leaves and fires again; a hulk; a release; the radius at 0 and the core off; 1 and 6
-  threads), `test_sim_core` (the guard, the slot map), `test_world_frame`. Headless at `battle` 500 the tick fell from 10.77 to
+  handovers with no handover error at all and the scan within a tick's motion of its path; Jolt holds the near bodies only; a far
+  fight promoted at 10 km; a tier ship does not think; a capital leaves and fires again; a hulk, demoted and promoted again; a
+  release; the radius at 0 and the core off; the core gone after a rebase; a GDScript pilot beside tier rows; the demotion budget;
+  1 and 6 threads), every one of its 13 tests run on both schedules and reading the live schedule back (fix round 1: the first
+  build looped 3 of its 9), `test_sim_core` (the guard, the slot map), `test_world_frame`, `test_wing_orders` (a tiered wingman
+  keeps its slot), `test_ship_pool` (a hulk cleared on reuse). Headless at `battle` 500 the tick fell from 10.77 to
   8.06 ms (p99 13.64 to 10.30) with 174 fighters and 34 capitals in the tier; at 1 000 from 20.27 to 9.93 ms (p99 26.71 to
   12.90) and the simulation keeps real time (it ran 28 % behind); with the radius halved to 5 km, 4.28 ms at 500 and 6.33 at
-  1 000: the tick scales with the near count (the Done-when). Fullscreen at 500 the average went from 50.7 to 101 FPS (the 1 %
-  low 22.5 to 38.4), at 1 000 from 13.7 FPS at 69 % speed to 58.2 at real time. The Q47 re-measure puts the near set's physics
+  1 000: the tick scales with the near count (the Done-when). Fullscreen at 500 the average went from 54.6 to 101 FPS (the 1 %
+  low 26.4 to 38.4; the tier-off rows re-measured in fix round 1), at 1 000 from 13.8 FPS at 69 % speed to 58.2 at real time.
+  These gains are partly provisional: until T22 a tier ship runs no brain and fires nothing and a tier capital launches no
+  missile (at 1 000 the bolts fell from 4 703 to 1 382 and the missiles from 338 to 147; at 500 the bolts from 2 327 to 1 422),
+  so part of the drop is the far battle frozen, T22 will give part of it back, and the 1 000 real-time and fullscreen figures
+  are provisional for AC5's row (T25). The Q47 re-measure puts the near set's physics
   cost at about 0.6 ms a tick at 500 (below the 1 ms line, so the ships-out-of-Jolt proposal does not come back). The look of promotion and
   demotion and the frozen far battle are on the return checklist (Q54).
 - **As built, where it differs from the plan:** the kernel and the shell are two files (`tier.rs`, `tier_rows.rs`), the plan's
@@ -1410,6 +1417,9 @@ done and T20 proceeds.
 - **Option to measure (maintainer, 2026-11-05):** for the 1 000 stretch, GPU-driven culling and drawing of the far dots and proxies (a compute pass that culls and writes the instance buffer) instead of CPU-side multimesh updates; take it only if the CPU update of the far proxies measures above about 0.5 ms a frame at 1 000.
 - **Far explosions (maintainer, 2026-11-05):** a ship's death is visible much farther than its hull or its hits, a capital's farthest of all, and today every explosion is the same full effect at any range (a light, a flash quad, a fireball sphere and 110 pooled particles, `src/combat/explosion.gd`), which shrinks below a pixel and vanishes at a few km while still costing its nodes and particles; a tier row that dies has no node to explode at all. Add an explosion level of detail: past a distance set by the blast's size, a death becomes a point flash in one shared multimesh (as the far dots and T28's running lights: a 1 px floor, brightness falling with the inverse square of distance, size and peak brightness from the blast's energy, so a capital's death reads across tens of km and a fighter's across a few km), with the full effect only near the camera and a reduced one (fewer particles, no light) between. Tier rows' deaths emit the same far flash. Tests: a far death costs no nodes and no particles; the flash's delivered light follows the inverse square and its 1 px floor at 1 080 and 2 160 lines; a capital's flash reaches farther than a fighter's; a near death is unchanged. The look (how far each reads, how bright) goes on the M4 return checklist. M12's real capital-ship destruction (staged break-up, secondary blasts) builds on this level. Keep each death's blast energy and radius as data on the event: M12 uses them for blast damage with distance falloff and for disabled hulks that drift without exploding (`docs/roadmap.md`, "Required: blast damage and disabled hulks").
 - **Architecture:** §17.14.
+- **From T21's review (2026-11-06):** T21 took tier ships out of the player's radar and targeting (both read active markers),
+  so today a ship between 11 and 25 km and an ally anywhere past 11 km vanish from the radar and drop the player's lock; this
+  task owns that fix (the "radar and targeting see it" goal and the selection test above).
 - **Without splats (2026-11-04, Q29):** a dot is wrong for a far capital (a 1 200 m carrier at 10 km is about 130 px tall at 1 080
   lines), so tier capitals draw as instances of their class's textured mesh in one `MultiMesh` per class (`far_dots.gd` gains the
   second proxy, or a sibling `FarHulls`), the dot stays for fighters; both are cheap because the meshes exist (T30b). "Visible
@@ -5837,8 +5847,17 @@ editor build with the library loaded, default settings (`sim_step` threaded, six
 20 s measured, both bench locks held and the headless runs pinned to cores 0 to 11 (load 0.4 to 1.4). T40 ran beside it in
 another worktree; the locks kept it off every measured run. Reports in `reports/perf/` (not committed):
 `M4-T21_{before,after,half}_battle{500,1000}` (half: `tier_radius_m` 5 000), `M4-T21_q47_{nosync,static,toplevel}_battle500`
-(T19's throwaway hooks, `reports/perf/M4-T19_hooks.patch`, applied for the runs and dropped), `M4-T21_fs_{on,off}_battle{300,500,1000}`
-(the fullscreen checks, the tier on and off in one build). Report: `.superpowers/sdd/m4-performance-and-scale/task-t21-report.md`.
+(T19's throwaway hooks, `reports/perf/M4-T19_hooks.patch`, applied for the runs and dropped), and the fullscreen checks:
+`M4-T21_fs_on_battle{300,500,1000}` (tier on), `M4-T21_fs_tieroff_battle300` and `M4-T21_fs_tieroff2_battle{500,1000}` (tier off,
+from a saved settings file; the `tieroff2` runs are fix round 1's re-measure, each with a `tier_setting.log` beside it reading
+`settings.tier_radius_m = 0.00` from the same user directory, since the measure tool prints no console output; the first
+`M4-T21_fs_tieroff_battle{500,1000}` runs read 50.7 and 13.7 FPS). The `M4-T21_fs_off_*` reports are invalid: their `set` came
+after the bench, which holds the console, so the tier stayed on (their 98.3 and 58.7 FPS are tier-on numbers). Report: `.superpowers/sdd/m4-performance-and-scale/task-t21-report.md`.
+
+**Partly provisional:** part of every gain below is the far battle frozen until T22. A tier ship runs no brain and fires
+nothing and a tier capital launches no missile, so at 1 000 the bolts fall from 4 703 to 1 382 and the missiles from 338 to 147
+(at 500 the bolts from 2 327 to 1 422 and the launches from 60 to 53). T22 adds tier brains, statistical fire and capital fire
+back and will give part of the gain back; the 1 000 real-time and fullscreen figures are provisional for AC5 (T25).
 
 **What moved** (architecture §17.14): a fighter or capital more than 10 km from the player leaves Jolt and the scene's
 processing and lives as a core row the native tier integrates at 20 Hz from its held command; within 10 km it is promoted back
@@ -5857,8 +5876,8 @@ build with the tier on (the default). Headless tick medians, ms (p99 in brackets
 The tick scales with the near count, as the Done-when asks: at 500 the fighters within 10 km stay what they were (185 to 195;
 the layout's first fights are the player's) and the far 174 fighters and 34 capitals cost the flight stage 1.1 ms less, the
 resolvers 0.9 (fewer bolts: tier ships fire nothing yet), physics 0.5, the sync 0.3; halving the radius leaves 35 near
-fighters and a 4.3 ms tick. At 1 000 the tick halves and the simulation keeps real time for the first time (the base ran at 72
-% speed; AC5's 1 000 row is T25's to record). The tier's own cost is in the sync (`tier.step_us`, read after a short run: 17 us a tick for 168
+fighters and a 4.3 ms tick. At 1 000 the tick halves and the simulation keeps real time for the first time with the far battle frozen
+(the base ran at 72 % speed; provisional until T22 brings the far fire back; AC5's 1 000 row is T25's to record). The tier's own cost is in the sync (`tier.step_us`, read after a short run: 17 us a tick for 168
 rows at 500, 53 us for 580 at 1 000, so 0.1 us a row against the plan's 0.3 us a tier fighter) and the director's step at -12,
 which lands in the `other` stage (0.55 to 0.63 ms at 500, 1.04 to 1.11 at 1 000: about 0.08 ms a tick for the two candidate
 walks over the rows and the frame). The rebase's shift at 500 fell from 1.27 to 1.00 ms (median; 2.28 to 1.28
@@ -5875,37 +5894,47 @@ T19 measured the stage at 2.17 ms with 425 fighters in Jolt (the sync 1.19, Jolt
 share (the sync and the step of the 195 near AI ships) is about 0.6 ms a tick, under Q47's line of about 1 ms, so the
 ships-out-of-Jolt proposal does not come back to the maintainer; the per-ship numbers are T19's (2.7 us the sync, 0.36 us the
 step), so a near set of about 350 fighters would cross the line. The rest (0.45 ms: the capitals' bodies, the engine's flushes
-of script-moved nodes, the rocks) now outweighs the near ships.
+of script-moved nodes, the rocks) now outweighs the near ships. The near set's cost is not provisional (T22 adds no Jolt bodies),
+but its bolt count is: the runs had fewer bolts than T22's far fire will bring.
 
 **The fullscreen check** (Q48's row; native 4K window, the 3D at 1 080 lines, vsync off, chase camera, 20 s after 8 s of
-warm-up, under the GPU lock; the same build, the tier on and off):
+warm-up, under the GPU lock; the window is 6144x3456 as logged, with a 3D scale of 0.31, the same for every row; the tier on
+and off):
 
 | run | average FPS | 1 % low FPS | p99 frame ms | frame mean ms | sim speed | GPU ms | draw calls |
 |---|---|---|---|---|---|---|---|
 | battle 300, tier off | 131.4 | 46.8 | 17.62 | 7.61 | 1.00 | 0.85 | 109 |
 | battle 300, tier on | 166.3 | 47.0 | 15.22 | 6.01 | 1.00 | 0.84 | 106 |
-| battle 500, tier off | 50.7 | 22.5 | 39.32 | 19.73 | 1.00 | 0.94 | 109 |
+| battle 500, tier off | 54.6 | 26.4 | 32.93 | 18.32 | 1.00 | 0.93 | 109 |
 | battle 500, tier on | 101.0 | 38.4 | 20.38 | 9.90 | 1.00 | 0.86 | 102 |
-| battle 1000, tier off | 13.7 | 11.7 | 84.39 | 72.82 | 0.69 | 1.20 | 128 |
+| battle 1000, tier off | 13.8 | 12.0 | 80.94 | 72.28 | 0.69 | 1.23 | 128 |
 | battle 1000, tier on | 58.2 | 29.0 | 30.44 | 17.18 | 1.00 | 0.94 | 104 |
 
 The tier off is the same build with `tier_radius_m` 0 from a saved settings file (the bench holds the console, so a `set` in
-the exec would run after it). At 500 the average doubles (50.7 to 101 FPS) and the 1 % low clears the 30 FPS floor (22.5 to
-38.4); the 60 FPS target holds on average at 500 for the first time. At 1 000 the game goes from 13.7 FPS at 69 % speed to 58.2
-FPS at real time: the floor holds, the target is missed by a frame's edge (T25 records the stretch). The GPU is 0.8 to 1.2 ms
-throughout: the frame is the main thread's.
+the exec would run after it). The tier-off rows at 500 and 1 000 are fix round 1's re-measure (`tieroff2`, 7 commits later in
+the worktree, the tier's code inert with the radius at 0; the first runs read 50.7 FPS, 1 % low 22.5, at 500 and 13.7 FPS at
+1 000); the tier-on rows are the first build's. At 500 the average nearly doubles (54.6 to 101 FPS) and the 1 % low clears the
+30 FPS floor (26.4 to 38.4); the 60 FPS target holds on average at 500 for the first time. At 1 000 the game goes from 13.8 FPS
+at 69 % speed to 58.2 FPS at real time: the floor holds, the target is missed by a frame's edge (T25 records the stretch). The
+GPU is 0.8 to 1.2 ms throughout: the frame is the main thread's. Partly provisional, as above: the tier-on runs had the far
+battle frozen (no far fire), which T22 brings back.
 
 **Behaviour changes, listed:** a ship beyond 11 km from the player flies its last command (a fighter's native brain stops
 thinking for it: the tier replaces the far think rate; T22 gives it a 2 to 5 Hz brain) and fires nothing, is not hit by anything
-(T22's sphere sweep), is not drawn (T23's dots; its far dot leaves with its hidden body), and gives up its wing slot while parked;
-a near fighter between 5 and 10 km from the player may chase a tier contact beyond 11 km and its bolts pass through it (the
-turrets pick among the active hulls only, so they never fire at a tier row). Promotion and
+(T22's sphere sweep), is not drawn (T23's dots; its far dot leaves with its hidden body), and leaves the player's radar and
+targeting: candidates and radar contacts read active markers, so a ship between 11 and 25 km (the sensor range) and an ally
+anywhere past 11 km (allies broadcast to 100 km) vanishes from the radar and drops the player's lock on it (T23 owns the fix). A
+tiered wingman or group leader keeps its wing slot (fix round 1; the first build marked it lost and refilled the slot). A near
+fighter between 5 and 10 km from the player may chase a tier contact beyond 11 km and its bolts pass through it; the turrets
+pick among the active hulls, so they pick no tier row, though a target held across a demotion can draw a few shots (which
+pass through) until the turret's next pick. Promotion and
 demotion carry the state over exactly; the tier's 20 Hz force update is not Jolt's 60 Hz step, so a ship that spent time in the
 tier flies a slightly different path from one that stayed. None of this reaches the near set. The look is on the return
 checklist (Q54).
 
-**Tests** (both `sim_step` schedules where the step is involved): `test_tier` (10), `test_tier_handover` (9; 100 handovers over
-a 20 s flight with a worst handover error of 0.000000 m and 0.000000 m/s on `threaded` and on `inline`), `test_sim_core` (16: the
+**Tests** (both `sim_step` schedules): `test_tier` (10; drives the core by hand, no step involved), `test_tier_handover` (13 after
+fix round 1, every one looping `threaded` and `inline` and reading the live schedule back; 100 handovers over a 20 s flight with
+a worst handover error of 0.000000 m and 0.000000 m/s and the scan never more than a tick's motion off its path), `test_sim_core` (16: the
 slot map test failed on the base with 602 slots, passes with 2), `test_world_frame` (+1). Focused runs on the touched code, all
 green: test_core_threads, test_core_snapshot, test_driver_step, test_row_commands, test_bolt_rows, test_core_state,
 test_turret_kernel, test_flight_batch (77); test_ship_pool, test_standins, test_ai_think_rate, test_main_scene,

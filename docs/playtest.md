@@ -504,7 +504,9 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       their bodies with their motion carried over exactly. In a `battle 300` or `500` run (`state tier` shows the rows and the
       handovers): fly toward a far fight: its ships should appear as they come within 10 km (T23 draws tier rows as dots; until
       then a far fight is dark beyond 10 km) with no pop, jump or stutter at the moment they appear, and keep flying as they
-      flew; fly away from a fight: ships should vanish past 11 km without a visible pop. A ship that crosses the line while
+      flew; fly away from a fight: fighters should vanish past 11 km without a visible pop. A capital at 11 km is about 100 px
+      tall, so it visibly vanishes there until T23 draws tier capitals: a known gap, not a failure to judge. Ships past 11 km
+      also leave the radar and drop your lock until T23. A ship that crosses the line while
       shooting should fire again at once when it is back. Compare with the tier off (`set settings.tier_radius_m 0`).
 - [ ] **M4-T21 The battle beyond the radius.** Tier ships do not fight yet (T22 gives them brains and fire): a far fight you
       watch from 10 km out is frozen in its held commands until you come close. Say whether that reads as wrong from the
