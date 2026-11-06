@@ -6,6 +6,7 @@ extends GutTest
 ## digest of every ship's pose, spin and hull.
 
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
+const FIXTURE: String = "ram_contact_columns"
 const SETTINGS: Array[StringName] = [&"ram_damage", &"perf_ram_contact_columns", &"perf_native_ram_contacts"]
 
 var _saved: Dictionary = {}
@@ -73,13 +74,18 @@ func _melee() -> Array:
 
 
 func test_the_melee_rams_the_same_with_the_contacts_in_columns() -> void:
-	Settings.set_value(&"perf_ram_contact_columns", false)
-	var samples: Array = await _melee()
-	Settings.set_value(&"perf_ram_contact_columns", true)
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "melee_rams_from_samples", func() -> Dictionary:
+		Settings.set_value(&"perf_ram_contact_columns", false)
+		var samples: Array = await _melee()
+		Settings.set_value(&"perf_ram_contact_columns", true)
+		assert_eq(samples[2], &"samples", "the reference run kept a sample per hull")
+		return {"rams": samples[1], "poses": ParityFixture.digest(samples[0]), "source": samples[3]})
 	var columns: Array = await _melee()
-	assert_eq(samples[2], &"samples", "the reference run kept a sample per hull")
-	assert_eq(columns[2], &"columns", "the other read the contacts in columns")
-	assert_eq(columns[3], samples[3], "both gathered their hulls the same way (%s)" % samples[3])
-	assert_gt((samples[1] as PackedStringArray).size(), 5, "the melee rams")
-	assert_eq(columns[1], samples[1], "the same rams, in the same order")
-	assert_eq(columns[0], samples[0], "the same poses, spins and hulls every 20 ticks")
+	assert_eq(columns[2], &"columns", "the run read the contacts in columns")
+	assert_not_null(recorded, "the reference melee was recorded")
+	if recorded == null:
+		return
+	assert_eq(String(columns[3]), recorded["source"], "both gathered their hulls the same way (%s)" % columns[3])
+	assert_gt((recorded["rams"] as Array).size(), 5, "the melee rams")
+	assert_eq(ParityFixture.encode(columns[1]), recorded["rams"], "the same rams, in the same order, as the recording")
+	assert_eq(ParityFixture.digest(columns[0]), recorded["poses"], "the same poses, spins and hulls every 20 ticks")

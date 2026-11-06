@@ -10,6 +10,7 @@ extends GutTest
 
 const DRONE_SCENE: String = "res://tests/fixtures/target_drone.tscn"
 const DT: float = 1.0 / 60.0
+const FIXTURE: String = "hit_scale"
 const BOLT_SPEED: float = 400.0
 
 ## A broad phase that hands the resolver every pair the sphere test accepts by testing every pair: the resolver as it was.
@@ -181,45 +182,48 @@ func _fleet_between_two() -> void:
 
 
 func test_a_fleet_of_24_with_300_bolts_tests_at_most_3_pairs_a_bolt_on_both_paths() -> void:
-	var logs: Array = []
-	for native: bool in _paths():
-		_on_path(native)
-		_fleet_between_two()
-		var worst_per_bolt: float = 0.0
-		var most: int = 0
-		for t: int in 45:
-			_tick()
-			if resolver.projectiles_last_tick > 0:
-				worst_per_bolt = maxf(worst_per_bolt, float(resolver.pairs_visited) / float(resolver.projectiles_last_tick))
-			most = maxi(most, resolver.pairs_visited)
-		assert_eq(resolver.broad_phase.path(), &"native" if native else &"gdscript", "%s path" % _path_name(native))
-		gut.p("%s: at most %d pairs tested in a tick, %.2f a bolt (every pair: %d)" % [_path_name(native), most,
-				worst_per_bolt, 300 * 24])
-		assert_gt(most, 0, "%s: the bolts reach the drones" % _path_name(native))
-		assert_lte(worst_per_bolt, 3.0, "%s: at most 3 pairs tested a bolt" % _path_name(native))
-		assert_gt(hits.size(), 50, "%s: many bolts land" % _path_name(native))
-		logs.append(_hit_log())
-	if logs.size() == 2:
-		assert_eq(logs[1], logs[0], "the same hits, bit for bit, on both paths")
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "fleet_of_24", func() -> Array:
+		_on_path(false)
+		_fleet()
+		return _hit_log())
+	_on_path(true)
+	var stats: Array = _fleet()
+	assert_eq(resolver.broad_phase.path(), &"native", "the native path")
+	gut.p("at most %d pairs tested in a tick, %.2f a bolt (every pair: %d)" % [stats[0], stats[1], 300 * 24])
+	assert_gt(stats[0], 0, "the bolts reach the drones")
+	assert_lte(stats[1], 3.0, "at most 3 pairs tested a bolt")
+	assert_gt(hits.size(), 50, "many bolts land")
+	assert_eq(ParityFixture.encode(_hit_log()), recorded, "the GDScript path's hits, bit for bit (recorded, M4-T37)")
+
+
+# The fleet between two shooters for 45 ticks: [the most pairs tested in a tick, the most a bolt].
+func _fleet() -> Array:
+	_fleet_between_two()
+	var worst_per_bolt: float = 0.0
+	var most: int = 0
+	for t: int in 45:
+		_tick()
+		if resolver.projectiles_last_tick > 0:
+			worst_per_bolt = maxf(worst_per_bolt, float(resolver.pairs_visited) / float(resolver.projectiles_last_tick))
+		most = maxi(most, resolver.pairs_visited)
+	return [most, worst_per_bolt]
 
 
 func test_a_seeded_melee_lands_the_same_hits_as_testing_every_pair_on_both_paths() -> void:
-	var reference: Array = []
-	var runs: Array = [&"every_pair", false]
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		runs.append(true)
-	for run: Variant in runs:
-		_on_path(run is bool and run)
-		if run is StringName:
-			resolver.broad_phase = EveryPair.new()
+	# The hits when every pair is tested (the GDScript resolver handed `EveryPair`) are recorded (M4-T37).
+	var reference: Variant = await ParityFixture.expected(FIXTURE, "melee_every_pair", func() -> Array:
+		_on_path(false)
+		resolver.broad_phase = EveryPair.new()
 		_melee()
-		var hit_log: Array = _hit_log()
-		if reference.is_empty():
-			reference = hit_log
-			gut.p("the melee lands %d hits when every pair is tested" % hit_log.size())
-			assert_gt(hit_log.size(), 30, "the melee lands hits")
-		else:
-			assert_eq(hit_log, reference, "%s: the same hits as testing every pair, bit for bit" % _path_name(run))
+		return _hit_log())
+	assert_not_null(reference, "the every-pair melee was recorded")
+	if reference == null:
+		return
+	gut.p("the melee lands %d hits when every pair is tested" % (reference as Array).size())
+	assert_gt((reference as Array).size(), 30, "the melee lands hits")
+	_on_path(true)
+	_melee()
+	assert_eq(ParityFixture.encode(_hit_log()), reference, "native: the same hits as testing every pair, bit for bit")
 
 
 # 30 drones moving in a 600 m ball, two sides, 400 bolts aimed with the intercept solution and a seeded spread; 120 ticks.

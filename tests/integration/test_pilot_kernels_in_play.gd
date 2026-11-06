@@ -299,6 +299,7 @@ func test_a_same_frame_resync_or_rebase_stops_the_kernels_for_that_tick() -> voi
 	assert_false(p.on_rows(), "so a perception built then answers in GDScript")
 
 
+const FIXTURE: String = "pilot_kernels_in_play"
 const FIGHT_SPEC: String = "res://assets/ships/starfury_aurora.tres"
 const FIGHT_TICKS: int = 480
 
@@ -306,25 +307,22 @@ const FIGHT_TICKS: int = 480
 func test_a_seeded_fight_flies_the_same_with_the_kernels_and_without() -> void:
 	if _skipped():
 		return
+	# The fight on the GDScript avoidance and fire lane (the kernels off) is recorded (M4-T37).
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "fight_without_kernels", func() -> Dictionary:
+		var without: Dictionary = await _fight(false)
+		ContactScan.pilot_kernels_on = true
+		assert_eq(int(without["kernel_ticks"]), 0, "the kernels never answered in the reference")
+		return {"lines": ParityFixture.digest(without["lines"]), "count": (without["lines"] as PackedStringArray).size()})
 	var with_kernels: Dictionary = await _fight(true)
-	var without: Dictionary = await _fight(false)
-	ContactScan.pilot_kernels_on = true
 	gut.p("fight: %d kernel ticks, %d dodging ship-ticks, %d firing ship-ticks" % [with_kernels["kernel_ticks"],
 			with_kernels["avoiding"], with_kernels["fired"]])
 	assert_gt(int(with_kernels["kernel_ticks"]), FIGHT_TICKS / 2, "the kernels answered in the run with the core")
-	assert_eq(int(without["kernel_ticks"]), 0, "and never in the run without it")
 	assert_gt(int(with_kernels["avoiding"]), 0, "the fighters dodged each other")
 	assert_gt(int(with_kernels["fired"]), 0, "and fired (the lane was asked)")
+	assert_not_null(recorded, "the GDScript fight was recorded")
 	var a: PackedStringArray = with_kernels["lines"]
-	var b: PackedStringArray = without["lines"]
-	var first: int = -1
-	for i: int in mini(a.size(), b.size()):
-		if a[i] != b[i]:
-			first = i
-			break
-	assert_eq(first, -1, "every fighter flies the same with the kernels and with the GDScript (first difference: %s | %s)" % [
-			a[first] if first >= 0 else "", b[first] if first >= 0 else ""])
-	assert_eq(a.size(), b.size(), "the same digest length")
+	assert_eq(ParityFixture.encode({"lines": ParityFixture.digest(a), "count": a.size()}), recorded,
+			"every fighter flies as it did on the GDScript avoidance and fire lane (recorded)")
 
 
 # Eight AI fighters of two sides in four head-on duels, in a space of their own, for `FIGHT_TICKS` ticks, with the core on and

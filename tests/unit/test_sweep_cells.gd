@@ -7,6 +7,7 @@ extends GutTest
 
 const KERNEL: String = "res://native/src/sweep_cells.rs"
 const KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use crate::v3::"]
+const FIXTURE: String = "sweep_cells"
 const ROUNDS: int = 12
 
 var _saved: Dictionary = {}
@@ -63,32 +64,36 @@ func test_the_pairs_and_the_work_are_the_same_with_hashed_cells() -> void:
 	if not NativeLib.has_class(HitBroadPhase.NATIVE_CLASS):
 		pending("the native library is not built (scripts/build_native.sh)")
 		return
-	assert_true(Settings.get_value(&"perf_native_sweep_cells") is bool, "the setting exists")
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "rounds_seed_3403", func() -> Array:
+		return _rounds(false, true))
+	assert_not_null(recorded, "the GDScript reference's rounds were recorded")
+	var hashed: Array = _rounds(true)
+	assert_eq(ParityFixture.encode(hashed), recorded,
+			"every round: the GDScript reference's pairs and work, per tick and against kept hulls (recorded)")
+
+
+# The seeded rounds (seed 3403) on the native grid with hashed or sorted cells, or on the GDScript reference (`gdscript`,
+# recorded in `tests/fixtures/parity/sweep_cells.json`, M4-T37): per round the pairs' digest and the work, per tick and
+# against kept hulls.
+func _rounds(cells: bool, gdscript: bool = false) -> Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 3403
-	var reference := HitBroadPhase.new()
-	reference.use_native = false
+	var out: Array = []
 	var paired: int = 0
+	Settings.set_value(&"perf_native_sweep_cells", cells)
 	for round: int in ROUNDS:
 		var hulls: Array = _hulls(rng, rng.randi_range(20, 400))
 		var bolts: Array = _bolts(rng, rng.randi_range(50, 1500), hulls[0])
-		var answers: Array = []
-		for cells: bool in [false, true]:
-			Settings.set_value(&"perf_native_sweep_cells", cells)
-			var phase := HitBroadPhase.new()
-			var keys: PackedInt64Array = phase.pairs(bolts[0], bolts[1], hulls[0], hulls[1])
-			var visited: int = phase.visited
-			phase.keep(hulls[0], hulls[1])
-			var kept: PackedInt64Array = phase.kept_pairs(bolts[0], bolts[1])
-			answers.append([keys, visited, kept, phase.visited, phase._native().cells()])
-		assert_false(answers[0][4], "round %d: off keeps the sorted cells" % round)
-		assert_true(answers[1][4], "round %d: on hashes them" % round)
-		var gd_keys: PackedInt64Array = reference.pairs(bolts[0], bolts[1], hulls[0], hulls[1])
-		assert_eq(answers[1][0], answers[0][0], "round %d: the same pairs" % round)
-		assert_eq(answers[1][1], answers[0][1], "round %d: the same work" % round)
-		assert_eq(answers[1][2], answers[0][2], "round %d: the same pairs against kept hulls" % round)
-		assert_eq(answers[1][3], answers[0][3], "round %d: the same work against kept hulls" % round)
-		assert_eq(answers[1][0], gd_keys, "round %d: the GDScript reference's pairs" % round)
-		assert_eq(answers[1][1], reference.visited, "round %d: and its work" % round)
-		paired += answers[1][0].size()
+		var phase := HitBroadPhase.new()
+		phase.use_native = not gdscript
+		if not gdscript:
+			assert_eq(phase._native().cells(), cells, "round %d: the grid keeps the cells asked for" % round)
+		var keys: PackedInt64Array = phase.pairs(bolts[0], bolts[1], hulls[0], hulls[1])
+		var visited: int = phase.visited
+		phase.keep(hulls[0], hulls[1])
+		var kept: PackedInt64Array = phase.kept_pairs(bolts[0], bolts[1])
+		out.append([ParityFixture.digest(keys), visited, ParityFixture.digest(kept), phase.visited])
+		paired += keys.size()
+	Settings.set_value(&"perf_native_sweep_cells", true)
 	assert_gt(paired, 100, "the rounds paired enough to compare")
+	return out

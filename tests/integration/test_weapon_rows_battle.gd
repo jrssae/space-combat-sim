@@ -35,6 +35,9 @@ func after_each() -> void:
 	Factions.reset()
 
 
+const FIXTURE: String = "weapon_rows_battle"
+
+
 func _skipped() -> bool:
 	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
 		return false
@@ -83,7 +86,14 @@ func _on_hit(info: HitInfo) -> void:
 func test_a_seeded_battle_lands_the_same_hits_within_ten_percent_on_both_paths() -> void:
 	if _skipped():
 		return
-	var gdscript: Array = await _battle(false)
+	# The GDScript stand-ins' battle is recorded (M4-T37).
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "battle_100_seed_1", func() -> Array: return await _battle(false))
+	assert_not_null(recorded, "the GDScript stand-ins' battle was recorded")
+	if recorded == null:
+		return
+	var gdscript: Array = []
+	for count: Variant in recorded:
+		gdscript.append(int(count))
 	var native: Array = await _battle(true)
 	var names: Array[String] = ["hits", "capitals' hits", "beam shots", "launches", "missiles shot down", "mines set off"]
 	gut.p("battle 100, %d s, seed 1: GDScript %s, native %s" % [SECONDS, gdscript, native])

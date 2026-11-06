@@ -5,6 +5,7 @@ extends GutTest
 ## (`ScsHitSweep`) must give the same pairs and the same work count as the GDScript one. Native cases go pending, saying why,
 ## when the native library is not built.
 
+const FIXTURE: String = "hit_broad_phase"
 const CROWDS: int = 40
 const FAR_M: float = 45000.0
 
@@ -121,18 +122,37 @@ func test_the_gdscript_path_gives_exactly_the_pairs_the_sphere_test_accepts() ->
 func test_the_native_path_gives_the_same_pairs_and_work_as_gdscript() -> void:
 	if _skipped():
 		return
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "work_seed_20261103", func() -> Array:
+		return _work(20261103, false))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20261103
 	var native := HitBroadPhase.new()
-	var gdscript := HitBroadPhase.new()
-	gdscript.use_native = false
-	assert_eq(native.path(), &"native", "library loaded and perf_native on: %s answers (%s)" % [HitBroadPhase.NATIVE_CLASS,
-			NativeLib.version(HitBroadPhase.NATIVE_CLASS)])
+	assert_eq(native.path(), &"native", "%s answers (%s)" % [HitBroadPhase.NATIVE_CLASS, NativeLib.version(HitBroadPhase.NATIVE_CLASS)])
+	assert_not_null(recorded, "the GDScript path's work was recorded")
 	for index: int in CROWDS:
 		var crowd: Dictionary = _crowd(rng, index)
-		var expected: PackedInt64Array = _pairs(gdscript, crowd)
-		assert_eq(_pairs(native, crowd), expected, "crowd %d: the same pairs" % index)
-		assert_eq(native.visited, gdscript.visited, "crowd %d: the same work" % index)
+		assert_eq(_pairs(native, crowd), _every_pair(crowd["bolt_mids"], crowd["bolt_reach"], crowd["hull_mids"],
+				crowd["hull_reach"]), "crowd %d: every pair the sphere test accepts, and no other" % index)
+		assert_eq(float(native.visited), float(recorded[index]), "crowd %d: the GDScript path's work (recorded)" % index)
+
+
+# The work count per seeded crowd on one path (M4-T37: the GDScript path's is recorded in
+# `tests/fixtures/parity/hit_broad_phase.json`); `kept` keeps the hulls in the grid first.
+static func _work(seed_value: int, kept: bool, native: bool = false) -> Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var out: Array = []
+	for index: int in CROWDS:
+		var crowd: Dictionary = _crowd(rng, index)
+		var phase := HitBroadPhase.new()
+		phase.use_native = native
+		if kept:
+			phase.keep(crowd["hull_mids"], crowd["hull_reach"])
+			phase.kept_pairs(crowd["bolt_mids"], crowd["bolt_reach"])
+		else:
+			_pairs(phase, crowd)
+		out.append(phase.visited)
+	return out
 
 
 func test_pairs_right_on_the_edge_of_the_sphere_test_agree_on_both_paths() -> void:
@@ -247,30 +267,24 @@ func test_a_capital_hull_is_found_from_anywhere_it_reaches_without_testing_the_f
 
 
 func test_kept_hulls_give_the_same_pairs_as_handing_them_over_every_call_on_both_paths() -> void:
-	# Rocks do not move, so the resolvers keep them in the grid between ticks: the pairs must be exactly what `pairs` gives
-	# with the same hulls, on either path, and the native and GDScript paths must agree pair for pair and count for count.
+	# Rocks do not move, so the resolvers keep them in the grid between ticks: the pairs must be exactly what the sphere test
+	# accepts with the same hulls, and the work what the GDScript path did (recorded, M4-T37).
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "kept_work_seed_20261129", func() -> Array:
+		return _work(2026_11_29, true))
+	assert_not_null(recorded, "the GDScript path's work was recorded")
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026_11_29
-	var reference := HitBroadPhase.new()
-	reference.use_native = false
 	for index: int in CROWDS:
 		var crowd: Dictionary = _crowd(rng, index)
-		var expected: PackedInt64Array = _pairs(reference, crowd)
-		var answers: Array = []
-		for use_native: bool in [false, true]:
-			if use_native and not NativeLib.has_class(HitBroadPhase.NATIVE_CLASS):
-				continue
-			var phase := HitBroadPhase.new()
-			phase.use_native = use_native
-			phase.keep(crowd["hull_mids"], crowd["hull_reach"])
-			assert_eq(phase.kept_count(), (crowd["hull_mids"] as PackedVector3Array).size())
-			var got: PackedInt64Array = phase.kept_pairs(crowd["bolt_mids"], crowd["bolt_reach"])
-			assert_eq(got, expected, "crowd %d, %s: the kept grid gives the same pairs" % [index, phase.path()])
-			# Asked again without keeping again: the grid was not rebuilt and answers the same.
-			assert_eq(phase.kept_pairs(crowd["bolt_mids"], crowd["bolt_reach"]), expected, "crowd %d: and again" % index)
-			answers.append(phase.visited)
-		if answers.size() == 2:
-			assert_eq(answers[0], answers[1], "crowd %d: the same work on both paths" % index)
+		var expected: PackedInt64Array = _every_pair(crowd["bolt_mids"], crowd["bolt_reach"], crowd["hull_mids"], crowd["hull_reach"])
+		var phase := HitBroadPhase.new()
+		phase.keep(crowd["hull_mids"], crowd["hull_reach"])
+		assert_eq(phase.kept_count(), (crowd["hull_mids"] as PackedVector3Array).size())
+		var got: PackedInt64Array = phase.kept_pairs(crowd["bolt_mids"], crowd["bolt_reach"])
+		assert_eq(got, expected, "crowd %d, %s: the kept grid gives the pairs the sphere test accepts" % [index, phase.path()])
+		assert_eq(float(phase.visited), float(recorded[index]), "crowd %d: the GDScript path's work (recorded)" % index)
+		# Asked again without keeping again: the grid was not rebuilt and answers the same.
+		assert_eq(phase.kept_pairs(crowd["bolt_mids"], crowd["bolt_reach"]), expected, "crowd %d: and again" % index)
 
 
 func test_a_bolt_far_from_a_thousand_kept_rocks_visits_none() -> void:

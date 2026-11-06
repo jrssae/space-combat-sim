@@ -1,24 +1,32 @@
 extends GutTest
-## Q16 for the native flight step (M4-T10): the same seeded fight with the flight batch on and off must give hits within 10 %,
-## a behaviour mix within 5 points, and no ship more than 50 m from its twin at 10 s. Each fight runs in its own process (this
-## Godot launched again, headless, on the combat sandbox: `bench furball 25 <s> seed=1`, then the `ai`, `combat` and `flight`
-## providers), because a second fight in one process is never the same fight: the absolute sim clock, the pooled nodes and the
-## statics differ from the first, and a 24-ship furball turns that into kilometres by 10 s on one path alone. A fresh process
-## reproduces a seeded fight to the centimetre the console prints, and the step is bit-identical to the model, so the expected
-## outcome is equality; the test prints how close it came. Both fights run on the inline step (the GDScript model is paired
-## in the same tick; the one-tick handover is test_core_snapshot's, M4-T24). Skips, saying why, when the native library is
-## not built.
+## Q16 for the native flight step (M4-T10): a seeded fight (`bench furball 25 <s> seed=1` on the combat sandbox, then the
+## `ai`, `combat` and `flight` providers) with the flight batch against the same fight on the ships' own GDScript models must
+## give hits within 10 %, a behaviour mix within 5 points, and no ship more than 50 m from its twin at 10 s. Each fight runs in
+## its own process (this Godot launched again, headless), because a second fight in one process is never the same fight: the
+## absolute sim clock, the pooled nodes and the statics differ from the first.
+##
+## Since M4-T37 both references are recordings (`tests/fixtures/parity/flight_parity_fight.json`, `ParityFixture`), taken
+## before the GDScript flight path and the single-thread step were removed:
+## - `gdscript_*`: the console lines of the fight on the ships' own models on the single-thread step, Q16's reference; the
+##   batch gave the same lines on that step (checked when recorded). On the threaded step a command reaches its ship one tick
+##   later (Q53, new reference outcomes accepted): the mix stays within 5 points and the hits within 20 %; the twins' distance
+##   is printed, not gated.
+## - `native_*`: the batch's lines on the delayed step (the threaded step's bit-for-bit reference), which the threaded fight
+##   must print exactly.
 
 const SHIPS: int = 25
 const TWIN_AT_S: int = 10
 const FIGHT_S: int = 30
-const HIT_TOL: float = 0.10
+## Hits against the GDScript reference on the threaded step: Q16's 10 % widened for the one-tick handover (Q53).
+const HIT_TOL: float = 0.20
 const MIX_TOL_POINTS: float = 5.0
-const TWIN_TOL_M: float = 50.0
 ## The bench warms up 5 s before measuring, so a measured window of this many seconds ends 10 s into the fight.
 const TWIN_MEASURE_S: int = TWIN_AT_S - 5
 const FIGHT_MEASURE_S: int = FIGHT_S - 5
 const LABEL_ROOT: String = "test_flight_parity"
+const FIXTURE: String = "flight_parity_fight"
+## The console lines a fight is held to.
+const KEPT: Array[String] = ["flight.positions", "combat.hits", "ai.by_behaviour", "ai.ships", "ram.events"]
 
 
 # A slow file (M4-T36, Q58): runs with GUT_SLOW=1 (the full run and CI), skipped in focused runs.
@@ -27,17 +35,10 @@ func should_skip_script():
 	return SlowTests.skip_reason()
 
 
-func _skipped() -> bool:
-	if NativeLib.has_class(FlightBatch.NATIVE_CLASS):
-		return false
-	pending("the native library is not built (scripts/build_native.sh), so there is no native path to compare")
-	return true
-
-
 # Runs one seeded fight in a fresh process and returns the console's lines by key (`ai.ships`, `combat.hits`, ...).
-func _fight(flight_batch_on: bool, measure_s: int, label: String) -> Dictionary:
-	var script: String = "set settings.sim_step inline; set settings.perf_native_flight %s; scenario combat_sandbox; wait 30; bench furball %d %d seed=1 label=%s/%s; state ai; state combat; state ram; state flight; quit" % [
-			"true" if flight_batch_on else "false", SHIPS, measure_s, LABEL_ROOT, label]
+func _fight(settings: String, measure_s: int, label: String) -> Dictionary:
+	var script: String = "%s; scenario combat_sandbox; wait 30; bench furball %d %d seed=1 label=%s/%s; state ai; state combat; state ram; state flight; quit" % [
+			settings, SHIPS, measure_s, LABEL_ROOT, label]
 	var args := PackedStringArray(["--headless", "--path", ProjectSettings.globalize_path("res://"), "--", "--console-strict",
 			"--console-exec=" + script])
 	var output: Array = []
@@ -78,28 +79,27 @@ static func _mix(lines: Dictionary) -> Dictionary:
 	return out
 
 
-func test_the_same_seeded_fight_with_the_batch_on_and_off_meets_q16() -> void:
-	if _skipped():
+func test_the_seeded_fight_matches_its_recordings() -> void:
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "furball_%d_seed_1" % SHIPS, _record)
+	assert_not_null(recorded, "the references were recorded")
+	if recorded == null:
 		return
-	# Positions 10 s into the fight.
-	var on_10: Dictionary = await _fight_async(true, TWIN_MEASURE_S, "on_10s")
-	var off_10: Dictionary = await _fight_async(false, TWIN_MEASURE_S, "off_10s")
-	assert_eq(on_10.get("flight.path"), "native", "the batch flew the on path")
+	var on_10: Dictionary = await _fight_async(_THREADED, TWIN_MEASURE_S, "on_10s")
+	var on_30: Dictionary = await _fight_async(_THREADED, FIGHT_MEASURE_S, "on_30s")
+	assert_eq(on_10.get("flight.path"), "native", "the batch flew the fight")
 	assert_eq(on_10.get("flight.stepped"), str(SHIPS), "every ship in the batch")
-	assert_eq(off_10.get("flight.path"), "gdscript", "the ships' own models flew the off path")
+	assert_eq(ParityFixture.encode(_kept(on_10)), recorded["native_10s"], "the threaded fight's 10 s are the recorded ones")
+	assert_eq(ParityFixture.encode(_kept(on_30)), recorded["native_30s"], "and its 30 s")
+	# Q16 against the GDScript fight.
 	var on_pos: Dictionary = _positions(on_10)
-	var off_pos: Dictionary = _positions(off_10)
+	var off_pos: Dictionary = _positions(recorded["gdscript_10s"])
 	assert_eq(on_pos.size(), SHIPS, "every ship printed its position")
 	var worst_m: float = 0.0
 	for ship_name: String in on_pos:
-		assert_true(off_pos.has(ship_name), "%s flew on both paths" % ship_name)
+		assert_true(off_pos.has(ship_name), "%s flew in the reference too" % ship_name)
 		if off_pos.has(ship_name):
 			worst_m = maxf(worst_m, (on_pos[ship_name] as Vector3).distance_to(off_pos[ship_name]))
-	gut.p("Q16: worst twin distance at %d s %.3f m over %d ships" % [TWIN_AT_S, worst_m, on_pos.size()])
-	assert_lt(worst_m, TWIN_TOL_M, "no ship more than 50 m from its twin at 10 s")
-	# Hits and the behaviour mix over the 30 s fight.
-	var on_30: Dictionary = await _fight_async(true, FIGHT_MEASURE_S, "on_30s")
-	var off_30: Dictionary = await _fight_async(false, FIGHT_MEASURE_S, "off_30s")
+	var off_30: Dictionary = recorded["gdscript_30s"]
 	var hits_on: int = int(on_30.get("combat.hits", "0"))
 	var hits_off: int = int(off_30.get("combat.hits", "0"))
 	var mix_on: Dictionary = _mix(on_30)
@@ -109,16 +109,40 @@ func test_the_same_seeded_fight_with_the_batch_on_and_off_meets_q16() -> void:
 		var share_on: float = 100.0 * float(mix_on.get(behaviour, 0)) / float(SHIPS)
 		var share_off: float = 100.0 * float(mix_off.get(behaviour, 0)) / float(SHIPS)
 		worst_points = maxf(worst_points, absf(share_on - share_off))
-	gut.p("Q16: hits over %d s %d with the batch and %d without; mix %s against %s (%.1f points)" % [FIGHT_S, hits_on, hits_off,
-			mix_on, mix_off, worst_points])
-	assert_gt(hits_off, 0, "the fight landed hits")
-	assert_lte(absf(float(hits_on - hits_off)), HIT_TOL * float(maxi(hits_off, 1)), "hits within 10 %")
+	gut.p("Q16 against the GDScript fight: worst twin at %d s %.3f m over %d ships; hits over %d s %d against %d; mix %s against %s (%.1f points)" % [
+			TWIN_AT_S, worst_m, on_pos.size(), FIGHT_S, hits_on, hits_off, mix_on, mix_off, worst_points])
+	assert_gt(hits_off, 0, "the reference fight landed hits")
+	assert_lte(absf(float(hits_on - hits_off)), HIT_TOL * float(maxi(hits_off, 1)), "hits within 20 % of the GDScript fight")
 	assert_lte(worst_points, MIX_TOL_POINTS, "the behaviour mix within 5 points")
-	if on_30.get("ai.ships") == off_30.get("ai.ships") and hits_on == hits_off and on_30.get("ram.events") == off_30.get("ram.events"):
-		gut.p("the two fights ended with the same behaviour line for every ship and the same hits")
+
+
+const _THREADED: String = "set settings.sim_step threaded"
+
+
+# The lines a fight is held to, as recorded.
+static func _kept(lines: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	for key: String in KEPT:
+		out[key] = str(lines.get(key, ""))
+	return out
+
+
+# The recording (M4-T37, at m4-gdscript-reference): the fight on the ships' own models on the single-thread step, checked
+# against the batch on that step, and the batch's fight on the delayed step.
+func _record() -> Dictionary:
+	var out: Dictionary = {}
+	for at: Array in [[TWIN_MEASURE_S, "10s"], [FIGHT_MEASURE_S, "30s"]]:
+		var off: Dictionary = await _fight_async("set settings.sim_step inline; set settings.perf_native_flight false", at[0], "off_" + at[1])
+		var on_inline: Dictionary = await _fight_async("set settings.sim_step inline", at[0], "inline_" + at[1])
+		var on_delayed: Dictionary = await _fight_async("set settings.sim_step delayed", at[0], "delayed_" + at[1])
+		assert_eq(off.get("flight.path"), "gdscript", "the ships' own models flew the reference")
+		assert_eq(_kept(on_inline), _kept(off), "on the single-thread step the batch prints the GDScript fight (%s)" % at[1])
+		out["gdscript_" + at[1]] = _kept(off)
+		out["native_" + at[1]] = _kept(on_delayed)
+	return out
 
 
 # `OS.execute` blocks this process; one idle frame first keeps the runner's output in order.
-func _fight_async(flight_batch_on: bool, measure_s: int, label: String) -> Dictionary:
+func _fight_async(settings: String, measure_s: int, label: String) -> Dictionary:
 	await get_tree().process_frame
-	return _fight(flight_batch_on, measure_s, label)
+	return _fight(settings, measure_s, label)

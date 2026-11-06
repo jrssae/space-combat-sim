@@ -5,6 +5,7 @@ extends GutTest
 ## and kinds). Light bodies made here (a rigid body with a `Targetable` and a `Damageable`, props, a hull without a marker),
 ## nothing stepped. Skips, saying why, when the native library is not built at all.
 
+const FIXTURE: String = "body_registry"
 const ROWS_COMPARED: Array[String] = ["_body_ids", "_ids", "_names", "_factions", "_positions", "_velocities", "_forwards",
 		"_ups", "_radii", "_is_ship", "_kinds"]
 
@@ -164,6 +165,40 @@ func test_the_registry_scan_equals_the_tree_gather_bit_for_bit() -> void:
 			child.free()
 		_crowd(rng, n)
 		_assert_same_rows(_registry_scan(), ContactScan.from_tree(get_tree()), "%d bodies" % n)
+
+
+func test_the_core_scan_equals_the_recorded_tree_gather_bit_for_bit() -> void:
+	# M4-T37: the tree gather is gone; its rows for these seeded crowds are recorded in
+	# `tests/fixtures/parity/body_registry.json` (without the instance ids, which differ between runs).
+	if _skipped():
+		return
+	var world := WorldFrame.new()
+	add_child_autofree(world)
+	var sim: SimCore = SimCore.attach(world)
+	assert_not_null(sim, "a core under the world")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2026_11_09
+	for n: int in [1, 7, 60, 300]:
+		for child: Node in root.get_children():
+			child.free()
+		_crowd(rng, n)
+		await get_tree().physics_frame
+		var recorded: Variant = await ParityFixture.expected(FIXTURE, "crowd_%d" % n, func() -> Dictionary:
+			return _rows(ContactScan.from_tree(get_tree())))
+		sim.forget_attributes()
+		sim.sync_now()
+		var scan: ContactScan = ContactScan.from_core(get_tree())
+		assert_not_null(scan, "%d bodies: the core gives a scan" % n)
+		assert_eq(ParityFixture.encode(_rows(scan)), recorded, "%d bodies: the core's rows are the tree gather's (recorded)" % n)
+
+
+# A scan's rows without the instance ids: each compared field's digest and the row count.
+static func _rows(scan: ContactScan) -> Dictionary:
+	var out: Dictionary = {"rows": scan._names.size()}
+	for field: String in ROWS_COMPARED:
+		if field != "_body_ids" and field != "_ids":
+			out[field] = ParityFixture.digest(scan.get(field))
+	return out
 
 
 func test_node_less_static_rows_come_after_the_bodies_on_both_paths() -> void:

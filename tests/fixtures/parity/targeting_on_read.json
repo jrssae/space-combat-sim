@@ -1,0 +1,8 @@
+{
+  "run_seed_3402": {
+    "log": "51bf1cdc40c9199ee36bcb816a16072c706f308054b1a2a53ad9fb514770c6d8",
+    "steps": 600.0,
+    "stale_selects": 2.0,
+    "late_reads": 103.0
+  }
+}

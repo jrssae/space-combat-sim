@@ -38,6 +38,9 @@ func after_each() -> void:
 	ContactScan.invalidate()
 
 
+const FIXTURE: String = "driver_step"
+
+
 func _skipped() -> bool:
 	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
 		return false
@@ -190,52 +193,51 @@ static func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
 	return -1 if a.size() == b.size() else mini(a.size(), b.size())
 
 
-func _assert_same(reference: Dictionary, hosted: Dictionary, label: String) -> void:
-	assert_gt(int(reference["hits_total"]), 10, "%s: hits landed (%d)" % [label, int(reference["hits_total"])])
+# What a battle is held to (M4-T37): its thinks, its held ticks (read one tick later when hosted on a step one tick behind)
+# and digests of every tick's rows, commands and hits and of the pilots at the end.
+static func _digest_of(battle: Dictionary, shift: int) -> Dictionary:
+	var held: PackedInt64Array = battle["held_ticks"]
+	var held_sum: int = 0
+	for t: int in held.size() - 1:
+		held_sum += held[t + shift]
+	return {"native_thinks": battle["native_thinks"], "held": held_sum, "hits_total": battle["hits_total"],
+			"rows": ParityFixture.digest(battle["rows"]), "commands": ParityFixture.digest(battle["commands"]),
+			"hits": ParityFixture.digest(battle["hits"]), "pilots": ParityFixture.digest(battle["pilots"])}
+
+
+# Flies the battle hosted and holds it to the drivers' own step (`perf_native_driver_step` off), recorded in
+# `tests/fixtures/parity/driver_step.json` before that path was removed.
+func _assert_recorded(case: String, with_player: bool, label: String) -> void:
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, case, func() -> Dictionary:
+		var reference: Dictionary = await _battle(false, 1, with_player)
+		assert_eq(int(reference["hosted_max"]), 0, "%s: none hosted on the reference" % label)
+		return _digest_of(reference, 0))
+	var hosted: Dictionary = await _battle(true, 1, with_player)
+	assert_not_null(recorded, "%s: the drivers' own step was recorded" % label)
+	if recorded == null:
+		return
+	assert_gt(int(recorded["hits_total"]), 10, "%s: hits landed (%d)" % [label, int(recorded["hits_total"])])
 	assert_gt(int(hosted["hosted_max"]), SHIPS / 2, "%s: most drivers were hosted (%d)" % [label, int(hosted["hosted_max"])])
-	assert_eq(int(reference["hosted_max"]), 0, "%s: none on the reference" % label)
 	assert_lt(int(hosted["processing_min"]), SHIPS / 10, "%s: hosted drivers do not tick (%d still processing at the fewest)" % [label,
 			int(hosted["processing_min"])])
-	assert_eq(int(hosted["native_thinks"]), int(reference["native_thinks"]), "%s: the same number of thinks" % label)
 	# A hosted driver's held tick is counted when its job is joined (the step one tick behind, M4-T24), a driver's own at its
-	# step: the same decisions, read one tick later, so the windows are shifted by that tick unless the step is inline.
-	var shift: int = 0 if BrainBatch.step_mode() == BrainBatch.STEP_INLINE else 1
-	var held_reference: PackedInt64Array = reference["held_ticks"]
-	var held_hosted: PackedInt64Array = hosted["held_ticks"]
-	var ref_sum: int = 0
-	var hosted_sum: int = 0
-	for t: int in held_reference.size() - shift:
-		ref_sum += held_reference[t]
-		hosted_sum += held_hosted[t + shift]
-	assert_eq(hosted_sum, ref_sum, "%s: the same number of held ticks (the hosted counts read %d tick later)" % [label, shift])
-	var first: int = _first_difference(reference["rows"], hosted["rows"])
-	assert_eq(first, -1, "%s: the rows are the same bits every tick (first difference at tick %d)" % [label, first])
-	first = _first_difference(reference["commands"], hosted["commands"])
-	assert_eq(first, -1, "%s: the commands too (first difference at tick %d)" % [label, first])
-	first = _first_difference(reference["hits"], hosted["hits"])
-	assert_eq(first, -1, "%s: and every hit (first difference at tick %d)" % [label, first])
-	first = _first_difference(reference["pilots"], hosted["pilots"])
-	if first >= 0:
-		gut.p("%s: ship 0 reference %s\n hosted %s" % [label, var_to_str(reference["first"]), var_to_str(hosted["first"])])
-	assert_eq(first, -1, "%s: every pilot reads the same at the end (first difference at ship %d)" % [label, first])
-	gut.p("%s: %d thinks, %d held ticks, %d hits; %d drivers hosted at most" % [label, int(hosted["native_thinks"]), int(hosted["held"]),
+	# step: the same decisions, read one tick later.
+	assert_eq(ParityFixture.encode(_digest_of(hosted, 1)), recorded,
+			"%s: the same thinks, held ticks, rows, commands, hits and pilots as the drivers' own step (recorded)" % label)
+	gut.p("%s: %d thinks, %d hits; %d drivers hosted at most" % [label, int(hosted["native_thinks"]),
 			int(hosted["hits_total"]), int(hosted["hosted_max"])])
 
 
 func test_the_hosted_step_flies_the_same_battle_at_the_far_rate() -> void:
 	if _skipped():
 		return
-	var reference: Dictionary = await _battle(false, 1, false)
-	var hosted: Dictionary = await _battle(true, 1, false)
-	_assert_same(reference, hosted, "no player, every ship far")
+	await _assert_recorded("battle_far_rate", false, "no player, every ship far")
 
 
 func test_the_hosted_step_flies_the_same_battle_with_near_and_far_ships() -> void:
 	if _skipped():
 		return
-	var reference: Dictionary = await _battle(false, 1, true)
-	var hosted: Dictionary = await _battle(true, 1, true)
-	_assert_same(reference, hosted, "a player among them")
+	await _assert_recorded("battle_near_and_far", true, "a player among them")
 
 
 func test_one_thread_and_six_give_the_same_hosted_battle() -> void:

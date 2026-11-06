@@ -13,18 +13,52 @@ const GROUP_SIZE: int = 12
 const GROUP_SPACING_M: float = 20000.0
 const FACTIONS: Array[StringName] = [Factions.RAIDERS, Factions.EARTH_ALLIANCE, Factions.NEUTRAL, &"drifters"]
 
+const FIXTURE: String = "contact_field"
+
 var _native_backup: bool
+# This test's GDScript answers in order (M4-T37): recorded when recording, read from the recording otherwise.
+var _recorded: Array = []
+var _next: int = 0
+var _case: String = ""
 
 
 func before_each() -> void:
 	_native_backup = bool(Settings.get_value(&"perf_native"))
 	Settings.set_value(&"perf_native", true)
 	Factions.reset()
+	_case = gut.get_current_test_object().name
+	var stored: Variant = ParityFixture.stored(FIXTURE, _case)
+	_recorded = [] if ParityFixture.recording() or stored == null else stored
+	_next = 0
 
 
 func after_each() -> void:
 	Settings.set_value(&"perf_native", _native_backup)
 	Factions.reset()
+	if ParityFixture.recording() and not _recorded.is_empty():
+		ParityFixture.record(FIXTURE, _case, _recorded)
+
+
+# `query` (a Callable taking the scan) answered on the native path, with the GDScript path's answer as recorded:
+# `[native answer, its key, the recorded key]`. When recording, the GDScript path answers it first (M4-T37).
+func _both(scan: ContactScan, query: Callable) -> Array:
+	scan.set(&"use_native", true)
+	var native: Variant = query.call(scan)
+	if ParityFixture.recording():
+		scan.set(&"use_native", false)
+		_recorded.append(_key(query.call(scan)))
+		scan.set(&"use_native", true)
+	var reference: String = String(_recorded[_next]) if _next < _recorded.size() else "not recorded"
+	_next += 1
+	return [native, _key(native), reference]
+
+
+# An answer as the recording keeps it: a list of contacts as its size and a short digest of its ids, a count as itself.
+static func _key(answer: Variant) -> String:
+	if answer is Array:
+		var ids: Array[int] = _ids(answer)
+		return "%d:%s" % [ids.size(), ParityFixture.digest(ids).left(16)]
+	return str(answer)
 
 
 # True (and the test marked pending, saying why) when there is no native library to compare against.
@@ -156,6 +190,8 @@ func test_seeded_worlds_give_the_same_answers_on_both_paths() -> void:
 	var cut: int = 0
 	var under_fire: int = 0
 	var hearing: int = 0
+	var mismatches := PackedStringArray()
+	const NAMES: Array[String] = ["contacts_for", "nearest_for", "nearest_for with keeper", "incoming_fire", "broadcasts_for"]
 	for world: int in WORLDS:
 		var n: int = 1 if world == 0 else (MAX_BODIES if world == 1 else rng.randi_range(1, MAX_BODIES))
 		var shape: int = world % 4
@@ -183,33 +219,26 @@ func test_seeded_worlds_give_the_same_answers_on_both_paths() -> void:
 			var kept_names := PackedStringArray(["ship %d" % rng.randi_range(0, n - 1)])
 			var keeper := func() -> Array: return [kept_ids, kept_names]
 			var label: String = "world %d (%d bodies, shape %d), query %d, k %d, range %.0f" % [world, n, shape, q, k, range_m]
-			var answers: Array = []
-			for native: bool in [true, false]:
-				scan.use_native = native
-				heard.use_native = native
-				answers.append([
-					scan.contacts_for(own_id, own_at, faction, range_m),
-					scan.nearest_for(own_id, own_at, faction, k, Callable(), range_m),
-					scan.nearest_for(own_id, own_at, faction, k, keeper, range_m),
-					scan.incoming_fire(own_id, own_at, velocity, faction),
-					heard.broadcasts_for(own_id, own_at, faction),
-				])
-			var on: Array = answers[0]
-			var off: Array = answers[1]
-			assert_true(_same(on[0], off[0]), "%s: contacts_for %s against %s" % [label, _ids(on[0]), _ids(off[0])])
-			assert_true(_same(on[1], off[1]), "%s: nearest_for %s against %s" % [label, _ids(on[1]), _ids(off[1])])
-			assert_true(_same(on[2], off[2]), "%s: nearest_for with keeper %s against %s" % [label, _ids(on[2]), _ids(off[2])])
-			assert_eq(on[3], off[3], "%s: incoming_fire" % label)
-			assert_true(_same(on[4], off[4]), "%s: broadcasts_for %s against %s" % [label, _ids(on[4]), _ids(off[4])])
+			var answers: Array = [
+				_both(scan, func(s: ContactScan) -> Variant: return s.contacts_for(own_id, own_at, faction, range_m)),
+				_both(scan, func(s: ContactScan) -> Variant: return s.nearest_for(own_id, own_at, faction, k, Callable(), range_m)),
+				_both(scan, func(s: ContactScan) -> Variant: return s.nearest_for(own_id, own_at, faction, k, keeper, range_m)),
+				_both(scan, func(s: ContactScan) -> Variant: return s.incoming_fire(own_id, own_at, velocity, faction)),
+				_both(heard, func(s: ContactScan) -> Variant: return s.broadcasts_for(own_id, own_at, faction)),
+			]
+			for a: int in answers.size():
+				if answers[a][1] != answers[a][2]:
+					mismatches.append("%s: %s %s against the recorded %s" % [label, NAMES[a], answers[a][1], answers[a][2]])
 			compared += 1
-			if (off[1] as Array).size() < (off[0] as Array).size():
+			if (answers[1][0] as Array).size() < (answers[0][0] as Array).size():
 				cut += 1
-			if int(off[3]) > 0:
+			if int(answers[3][0]) > 0:
 				under_fire += 1
-			if not (off[4] as Array).is_empty():
+			if not (answers[4][0] as Array).is_empty():
 				hearing += 1
 	gut.p("%d queries compared over %d worlds: %d cut by nearest-k, %d under fire, %d hearing broadcasts" % [compared,
 			WORLDS, cut, under_fire, hearing])
+	assert_eq(mismatches.size(), 0, "every answer is the GDScript path's (recorded): %s" % ", ".join(mismatches.slice(0, 3)))
 	assert_gt(cut, 50, "the nearest-k cut, the nearest hostile and the keeper were exercised")
 	assert_gt(under_fire, 50, "incoming fire was counted")
 	assert_gt(hearing, 50, "broadcasts were heard")
@@ -236,14 +265,12 @@ func test_incoming_fire_agrees_on_bolts_that_graze_the_15_m_line() -> void:
 			scan._bolt_velocities.append(own_velocity + along * rng.randf_range(400.0, 600.0))
 			scan._bolt_factions.append(Factions.EARTH_ALLIANCE)
 			scan._bolt_shooters.append(0)
-		var native: int = scan.incoming_fire(1000, own_at, own_velocity, Factions.RAIDERS)
-		scan.use_native = false
-		var script: int = scan.incoming_fire(1000, own_at, own_velocity, Factions.RAIDERS)
-		counted += script
-		if native != script:
+		var answer: Array = _both(scan, func(s: ContactScan) -> Variant: return s.incoming_fire(1000, own_at, own_velocity, Factions.RAIDERS))
+		counted += int(answer[0])
+		if answer[1] != answer[2]:
 			differ += 1
-	gut.p("400 ships, 1 600 grazing bolts: %d counted as incoming, %d ships with a different count" % [counted, differ])
-	assert_eq(differ, 0, "the same count for every ship")
+	gut.p("400 ships, 1 600 grazing bolts: %d counted as incoming, %d ships with a count other than the recorded" % [counted, differ])
+	assert_eq(differ, 0, "the GDScript path's count for every ship (recorded)")
 	assert_between(counted, 200, 1400, "the bolts straddle the line")
 
 
@@ -288,14 +315,12 @@ func test_a_query_visits_only_the_cells_its_range_reaches() -> void:
 	var scan := _scan(positions, factions, ships)
 	var worst: int = 0
 	for i: int in n:
-		scan.use_native = true
-		var nearest: Array[Contact] = scan.nearest_for(1000 + i, positions[i], factions[i], 12)
+		var nearest: Array = _both(scan, func(s: ContactScan) -> Variant: return s.nearest_for(1000 + i, positions[i], factions[i], 12))
 		worst = maxi(worst, scan.native_visits())
-		var contacts: Array[Contact] = scan.contacts_for(1000 + i, positions[i], factions[i])
+		var contacts: Array = _both(scan, func(s: ContactScan) -> Variant: return s.contacts_for(1000 + i, positions[i], factions[i]))
 		worst = maxi(worst, scan.native_visits())
-		scan.use_native = false
-		assert_true(_same(nearest, scan.nearest_for(1000 + i, positions[i], factions[i], 12)), "body %d: nearest" % i)
-		assert_true(_same(contacts, scan.contacts_for(1000 + i, positions[i], factions[i])), "body %d: contacts" % i)
+		assert_eq(nearest[1], nearest[2], "body %d: nearest, as recorded" % i)
+		assert_eq(contacts[1], contacts[2], "body %d: contacts, as recorded" % i)
 	gut.p("worst bodies visited by one query: %d of %d" % [worst, n])
 	assert_between(worst, GROUP_SIZE, 2 * GROUP_SIZE, "a query tests its own group, not the %d bodies of the whole world" % n)
 
@@ -372,17 +397,13 @@ func test_a_huge_finite_range_gives_the_same_answers_on_both_paths_and_finishes_
 	# Past 2^31 cells of 5 km on every axis the box's cell count no longer fits a 64-bit product.
 	for range_m: float in [1.0e13, 1.0e14, 1.0e30, 1.0e300]:
 		var started: int = Time.get_ticks_msec()
-		var answers: Array = []
-		for native: bool in [true, false]:
-			scan.use_native = native
-			answers.append([scan.contacts_for(1007, own_at, faction, range_m),
-					scan.nearest_for(1007, own_at, faction, 12, Callable(), range_m)])
-			if native:
-				assert_eq(scan.native_visits(), n, "range %s: too big a box to enumerate, so every body is tested" % range_m)
+		var contacts: Array = _both(scan, func(s: ContactScan) -> Variant: return s.contacts_for(1007, own_at, faction, range_m))
+		assert_eq(scan.native_visits(), n, "range %s: too big a box to enumerate, so every body is tested" % range_m)
+		var nearest: Array = _both(scan, func(s: ContactScan) -> Variant: return s.nearest_for(1007, own_at, faction, 12, Callable(), range_m))
 		assert_lt(Time.get_ticks_msec() - started, 2000, "range %s: finishes quickly" % range_m)
-		assert_eq((answers[1][0] as Array).size(), n - 1, "range %s: GDScript sees every other body" % range_m)
-		assert_true(_same(answers[0][0], answers[1][0]), "range %s: contacts_for" % range_m)
-		assert_true(_same(answers[0][1], answers[1][1]), "range %s: nearest_for" % range_m)
+		assert_eq((contacts[0] as Array).size(), n - 1, "range %s: every other body is seen" % range_m)
+		assert_eq(contacts[1], contacts[2], "range %s: contacts_for, as recorded" % range_m)
+		assert_eq(nearest[1], nearest[2], "range %s: nearest_for, as recorded" % range_m)
 
 
 func test_a_load_with_mismatched_array_lengths_is_rejected_and_the_field_answers_nothing() -> void:
@@ -451,16 +472,12 @@ func test_a_negative_range_acts_as_its_magnitude_on_both_paths() -> void:
 	var own_at: Vector3 = scan._positions[4]
 	var faction: StringName = scan._factions[4]
 	for magnitude: float in [2500.0, 5000.0, 9000.0]:
-		var answers: Array = []
-		for native: bool in [true, false]:
-			scan.use_native = native
-			answers.append([scan.contacts_for(1004, own_at, faction, -magnitude),
-					scan.nearest_for(1004, own_at, faction, 12, Callable(), -magnitude)])
-		assert_gt((answers[1][0] as Array).size(), 0, "range -%s: something is in range" % magnitude)
-		assert_true(_same(answers[0][0], answers[1][0]), "range -%s: contacts_for" % magnitude)
-		assert_true(_same(answers[0][1], answers[1][1]), "range -%s: nearest_for" % magnitude)
-		scan.use_native = true
-		assert_true(_same(answers[0][0], scan.contacts_for(1004, own_at, faction, magnitude)), "range -%s: as +%s" % [magnitude, magnitude])
+		var contacts: Array = _both(scan, func(s: ContactScan) -> Variant: return s.contacts_for(1004, own_at, faction, -magnitude))
+		var nearest: Array = _both(scan, func(s: ContactScan) -> Variant: return s.nearest_for(1004, own_at, faction, 12, Callable(), -magnitude))
+		assert_gt((contacts[0] as Array).size(), 0, "range -%s: something is in range" % magnitude)
+		assert_eq(contacts[1], contacts[2], "range -%s: contacts_for, as recorded" % magnitude)
+		assert_eq(nearest[1], nearest[2], "range -%s: nearest_for, as recorded" % magnitude)
+		assert_true(_same(contacts[0], scan.contacts_for(1004, own_at, faction, magnitude)), "range -%s: as +%s" % [magnitude, magnitude])
 
 
 func test_more_than_256_factions_are_told_apart() -> void:
@@ -488,14 +505,12 @@ func test_more_than_256_factions_are_told_apart() -> void:
 	scan._bolt_velocities.append(Vector3(0.0, 0.0, -300.0))
 	scan._bolt_factions.append(&"f290")
 	scan._bolt_shooters.append(0)
-	var answers: Array = []
-	for native: bool in [true, false]:
-		scan.use_native = native
-		answers.append([scan.nearest_for(1000, Vector3.ZERO, &"f0", 3), scan.incoming_fire(1000, Vector3.ZERO, Vector3.ZERO, &"f0")])
-	assert_eq(answers[1][1], 1, "GDScript: the f290 bolt is hostile to f0")
-	assert_eq(answers[0][1], 1, "native: the same")
-	assert_true(_same(answers[0][0], answers[1][0]), "nearest_for: the same contacts")
-	assert_true(_ids(answers[0][0]).has(5290), "the cut keeps the nearest hostile ship, body 290")
+	var nearest: Array = _both(scan, func(s: ContactScan) -> Variant: return s.nearest_for(1000, Vector3.ZERO, &"f0", 3))
+	var fire: Array = _both(scan, func(s: ContactScan) -> Variant: return s.incoming_fire(1000, Vector3.ZERO, Vector3.ZERO, &"f0"))
+	assert_eq(fire[2], "1", "GDScript (recorded): the f290 bolt is hostile to f0")
+	assert_eq(fire[0], 1, "native: the same")
+	assert_eq(nearest[1], nearest[2], "nearest_for: the recorded contacts")
+	assert_true(_ids(nearest[0]).has(5290), "the cut keeps the nearest hostile ship, body 290")
 	scan.use_native = true
 	assert_eq(scan._native().factions().size(), count, "the field lists every faction")
 
@@ -591,29 +606,24 @@ func test_statics_stay_out_of_the_contacts_and_the_nearest_k_static_come_beside_
 			var k_static: int = [0, 1, 4, 4, 8][rng.randi_range(0, 4)]
 			var range_m: float = ContactScan.SENSOR_RANGE_M if rng.randf() < 0.8 else rng.randf_range(300.0, 9000.0)
 			var label: String = "world %d (%d bodies), query %d, k %d, k_static %d" % [world, n, q, k, k_static]
-			var answers: Array = []
-			for native: bool in [true, false]:
-				scan.use_native = native
-				answers.append([
-					scan.contacts_for(own_id, own_at, faction, range_m),
-					scan.nearest_for(own_id, own_at, faction, k, Callable(), range_m),
-					scan.statics_for(own_id, own_at, faction, k_static, range_m),
-				])
+			var answers: Array = [
+				_both(scan, func(s: ContactScan) -> Variant: return s.contacts_for(own_id, own_at, faction, range_m)),
+				_both(scan, func(s: ContactScan) -> Variant: return s.nearest_for(own_id, own_at, faction, k, Callable(), range_m)),
+				_both(scan, func(s: ContactScan) -> Variant: return s.statics_for(own_id, own_at, faction, k_static, range_m)),
+			]
 			var statics_as_contacts: int = 0
-			for side: int in 2:
-				for list: int in 2:
-					for c: Contact in answers[side][list] as Array[Contact]:
-						if c.id >= 200000:
-							statics_as_contacts += 1
+			for list: int in 2:
+				for c: Contact in answers[list][0] as Array[Contact]:
+					if c.id >= 200000:
+						statics_as_contacts += 1
 			assert_eq(statics_as_contacts, 0, "%s: no static is ever a contact" % label)
-			assert_true(_same(answers[0][0], answers[1][0]), "%s: contacts_for" % label)
-			assert_true(_same(answers[0][1], answers[1][1]), "%s: nearest_for" % label)
-			assert_true(_same(answers[0][2], answers[1][2]), "%s: statics_for %s against %s" % [label, _ids(answers[0][2]),
-					_ids(answers[1][2])])
-			assert_eq(_ids(answers[1][2]), _expected_statics(scan, own_id, own_at, k_static, range_m, faction),
+			assert_eq(answers[0][1], answers[0][2], "%s: contacts_for, as recorded" % label)
+			assert_eq(answers[1][1], answers[1][2], "%s: nearest_for, as recorded" % label)
+			assert_eq(answers[2][1], answers[2][2], "%s: statics_for, as recorded" % label)
+			assert_eq(_ids(answers[2][0]), _expected_statics(scan, own_id, own_at, k_static, range_m, faction),
 					"%s: the nearest k_static by surface distance, in scan order" % label)
 			compared += 1
-			if not (answers[1][2] as Array).is_empty():
+			if not (answers[2][0] as Array).is_empty():
 				with_statics += 1
 	gut.p("%d queries compared with 1 000 statics a world, %d of them near statics" % [compared, with_statics])
 	assert_gt(with_statics, 100, "statics were found")
@@ -638,11 +648,9 @@ func test_a_query_for_statics_visits_only_the_cells_its_range_reaches() -> void:
 	_add_statics(rng, scan, 1000)
 	var worst: int = 0
 	for i: int in n:
-		scan.use_native = true
-		var near: Array[Contact] = scan.statics_for(1000 + i, positions[i], factions[i], 4)
+		var near: Array = _both(scan, func(s: ContactScan) -> Variant: return s.statics_for(1000 + i, positions[i], factions[i], 4))
 		worst = maxi(worst, scan.native_visits())
-		scan.use_native = false
-		assert_true(_same(near, scan.statics_for(1000 + i, positions[i], factions[i], 4)), "body %d: statics" % i)
+		assert_eq(near[1], near[2], "body %d: statics, as recorded" % i)
 	gut.p("worst rows visited by one statics query: %d of %d" % [worst, n + 1000])
 	assert_between(worst, 1, 400, "a query tests the rows near it, not the whole world")
 
@@ -670,14 +678,13 @@ func test_four_factions_every_pair_hostile_give_the_same_hostile_lists_on_both_p
 		for q: int in 30:
 			var at_index: int = rng.randi_range(0, n - 1)
 			var faction: StringName = scan._factions[at_index]
-			var answers: Array = []
-			for native: bool in [true, false]:
-				scan.use_native = native
-				answers.append([scan.nearest_for(1000 + at_index, scan._positions[at_index], faction, 6),
-						scan.incoming_fire(1000 + at_index, scan._positions[at_index], Vector3.ZERO, faction)])
-			assert_true(_same(answers[0][0], answers[1][0]), "world %d query %d: nearest_for" % [world, q])
-			assert_eq(answers[0][1], answers[1][1], "world %d query %d: incoming_fire" % [world, q])
-			for c: Contact in answers[1][0] as Array[Contact]:
+			var nearest: Array = _both(scan, func(s: ContactScan) -> Variant:
+				return s.nearest_for(1000 + at_index, s._positions[at_index], faction, 6))
+			var fire: Array = _both(scan, func(s: ContactScan) -> Variant:
+				return s.incoming_fire(1000 + at_index, s._positions[at_index], Vector3.ZERO, faction))
+			assert_eq(nearest[1], nearest[2], "world %d query %d: nearest_for, as recorded" % [world, q])
+			assert_eq(fire[1], fire[2], "world %d query %d: incoming_fire, as recorded" % [world, q])
+			for c: Contact in nearest[0] as Array[Contact]:
 				if c.relation == Factions.Relation.HOSTILE:
 					hostile_seen += 1
 	assert_gt(hostile_seen, 500, "every other side is hostile")
@@ -732,16 +739,12 @@ func test_a_side_sees_its_own_mines_and_never_an_enemys_on_both_paths() -> void:
 			var at_index: int = rng.randi_range(0, n - 1)
 			var faction: StringName = scan._factions[at_index]
 			var own_at: Vector3 = scan._positions[at_index]
-			var answers: Array = []
-			for native: bool in [true, false]:
-				scan.use_native = native
-				answers.append(scan.statics_for(1000 + at_index, own_at, faction, 8))
+			var statics: Array = _both(scan, func(s: ContactScan) -> Variant: return s.statics_for(1000 + at_index, own_at, faction, 8))
 			var label: String = "world %d query %d (%s)" % [world, q, faction]
-			assert_true(_same(answers[0], answers[1]), "%s: the same statics on both paths %s against %s" % [label,
-					_ids(answers[0]), _ids(answers[1])])
-			assert_eq(_ids(answers[1]), _expected_statics(scan, 1000 + at_index, own_at, 8, ContactScan.SENSOR_RANGE_M, faction),
+			assert_eq(statics[1], statics[2], "%s: the GDScript path's statics (recorded)" % label)
+			assert_eq(_ids(statics[0]), _expected_statics(scan, 1000 + at_index, own_at, 8, ContactScan.SENSOR_RANGE_M, faction),
 					"%s: the reference's" % label)
-			for c: Contact in answers[1] as Array[Contact]:
+			for c: Contact in statics[0] as Array[Contact]:
 				if c.kind == BodyKind.STATIC:
 					rocks += 1
 					continue

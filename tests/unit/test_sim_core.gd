@@ -9,6 +9,7 @@ extends GutTest
 
 const ROWS_COMPARED: Array[String] = ["_body_ids", "_ids", "_names", "_factions", "_positions", "_velocities", "_forwards",
 		"_ups", "_radii", "_is_ship", "_kinds"]
+const FIXTURE: String = "sim_core"
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const PROJECTILE_SCENE: PackedScene = preload("res://src/weapons/projectile.tscn")
 const SIDES: Array[StringName] = [Factions.RAIDERS, Factions.EARTH_ALLIANCE, Factions.NEUTRAL, &"drifters"]
@@ -426,27 +427,30 @@ func test_the_hit_sweep_pairs_from_the_core_as_from_its_own_load() -> void:
 		var core: SimCore = _core()
 		core.sync_now()
 		var delta: float = 1.0 / 60.0
-		# The resolver's own load: hulls and bolts gathered from the tree, paired by the broad phase.
-		resolver.use_core = false
-		var own: Array = resolver.broad_phase_pairs(delta)
-		# From the core: the same pairs, named by body and bolt instance id, and the same work.
-		resolver.use_core = true
+		# The resolver's own load (hulls and bolts gathered from the tree, paired by the broad phase) is recorded (M4-T37).
+		var own: Variant = await ParityFixture.expected(FIXTURE, "hit_sweep_round_%d" % round, func() -> Array:
+			resolver.use_core = false
+			var pairs: Array = resolver.broad_phase_pairs(delta)
+			resolver.use_core = true
+			return pairs)
+		# From the core: the same pairs and the same work.
 		var from_core: Array = resolver.broad_phase_pairs(delta)
-		assert_eq(from_core[0], own[0], "round %d: the same bolt and hull pairs" % round)
-		assert_eq(from_core[1], own[1], "round %d: the same pairs visited" % round)
-		assert_true((own[0] as Array).size() > 0 or round == 0, "round %d: there were pairs to compare" % round)
+		assert_eq(ParityFixture.encode(from_core), own, "round %d: the own load's bolt and hull pairs and work (recorded)" % round)
+		assert_true((from_core[0] as PackedInt64Array).size() > 0 or round == 0, "round %d: there were pairs to compare" % round)
 		assert_eq(resolver.source(), &"core", "round %d: the resolver read the core" % round)
 		# The bolts fly on after the tick's first sync (they move at priority 0, the resolver runs at 200): the resolver's
 		# sync point must read them where they are now, not where the first sync saw them.
 		core.sync_now()
 		for node: Node in projectiles.get_children():
 			_fly(node as Projectile)
-		resolver.use_core = false
-		var own_moved: Array = resolver.broad_phase_pairs(delta)
-		resolver.use_core = true
+		var own_moved: Variant = await ParityFixture.expected(FIXTURE, "hit_sweep_round_%d_moved" % round, func() -> Array:
+			resolver.use_core = false
+			var pairs: Array = resolver.broad_phase_pairs(delta)
+			resolver.use_core = true
+			return pairs)
 		var core_moved: Array = resolver.broad_phase_pairs(delta)
-		assert_eq(core_moved[0], own_moved[0], "round %d: the same pairs after the bolts moved" % round)
-		if own_moved[0] != own[0]:
+		assert_eq(ParityFixture.encode(core_moved), own_moved, "round %d: the same pairs after the bolts moved (recorded)" % round)
+		if core_moved[0] != from_core[0]:
 			bolts_moved_pairs = true
 	assert_true(bolts_moved_pairs, "the moved bolts paired differently in some round, so the second sync was tested")
 
@@ -465,21 +469,19 @@ func test_a_bolt_on_its_launch_tick_sweeps_only_its_muzzle_on_both_paths() -> vo
 	var core: SimCore = _core()
 	core.sync_now()
 	var delta: float = 1.0 / 60.0
-	resolver.use_core = false
-	var own: Array = resolver.broad_phase_pairs(delta)
-	resolver.use_core = true
 	var from_core: Array = resolver.broad_phase_pairs(delta)
-	assert_eq((own[0] as PackedInt64Array).size(), 0, "the reference sweeps the muzzle alone and misses the ship")
-	assert_eq(from_core[0], own[0], "launch tick: the same pairs from the core")
-	# The next tick the bolt has flown one step (its own `_physics_process`): both paths see the same segment.
+	assert_eq((from_core[0] as PackedInt64Array).size(), 0, "a launch-tick bolt sweeps the muzzle alone and misses the ship")
+	# The next tick the bolt has flown one step (its own `_physics_process`): the core sees the segment the tree walk saw
+	# (recorded, M4-T37).
 	await get_tree().physics_frame
 	await get_tree().physics_frame
-	resolver.use_core = false
-	var own_next: Array = resolver.broad_phase_pairs(delta)
-	resolver.use_core = true
+	var own_next: Variant = await ParityFixture.expected(FIXTURE, "launch_tick_after", func() -> Array:
+		resolver.use_core = false
+		var pairs: Array = resolver.broad_phase_pairs(delta)
+		resolver.use_core = true
+		return pairs)
 	var core_next: Array = resolver.broad_phase_pairs(delta)
-	assert_eq(core_next[0], own_next[0], "the tick after: the same pairs from the core")
-	assert_eq(core_next[1], own_next[1], "the tick after: the same pairs visited")
+	assert_eq(ParityFixture.encode(core_next), own_next, "the tick after: the own load's pairs and work (recorded)")
 
 
 func test_a_hull_destroyed_between_the_resolvers_leaves_the_ram_rows_on_both_paths() -> void:
@@ -513,10 +515,13 @@ func test_a_hull_destroyed_between_the_resolvers_leaves_the_ram_rows_on_both_pat
 	rams.use_core = true
 	var from_core: PackedInt64Array = rams.broad_phase_pairs(delta, PackedInt64Array())
 	var core_count: int = rams.hulls_last_tick
-	rams.use_core = false
-	var own: PackedInt64Array = rams.broad_phase_pairs(delta, PackedInt64Array())
-	assert_eq(core_count, rams.hulls_last_tick, "the destroyed hull is out of the core's hull rows, as it is out of the tree walk")
-	assert_eq(from_core, own, "the same pairs from the core after a kill between the resolvers")
+	var own: Variant = await ParityFixture.expected(FIXTURE, "ram_rows_after_a_kill", func() -> Array:
+		rams.use_core = false
+		var pairs: PackedInt64Array = rams.broad_phase_pairs(delta, PackedInt64Array())
+		rams.use_core = true
+		return [pairs, rams.hulls_last_tick])
+	assert_eq(ParityFixture.encode([from_core, core_count]), own,
+			"the destroyed hull is out of the core's hull rows and the pairs are the tree walk's (recorded)")
 
 
 func test_a_ship_parked_after_the_resync_and_back_the_next_tick_gets_a_new_handle() -> void:
@@ -565,12 +570,14 @@ func test_the_ram_broad_phase_pairs_from_the_core_as_from_its_own_load() -> void
 		core.sync_now()
 		var delta: float = 1.0 / 60.0
 		var always := PackedInt64Array([0, 1])
-		rams.use_core = false
-		var own: Array = rams.broad_phase_pairs(delta, always)
-		rams.use_core = true
+		var own: Variant = await ParityFixture.expected(FIXTURE, "ram_broad_phase_round_%d" % round, func() -> Array:
+			rams.use_core = false
+			var pairs: Array = rams.broad_phase_pairs(delta, always)
+			rams.use_core = true
+			return pairs)
 		var from_core: Array = rams.broad_phase_pairs(delta, always)
-		assert_eq(from_core, own, "round %d: the same hull pairs from the core as from the resolver's own gather" % round)
-		assert_true(own.size() > 1 or round == 0, "round %d: there were pairs to compare" % round)
+		assert_eq(ParityFixture.encode(from_core), own, "round %d: the hull pairs the resolver's own gather gave (recorded)" % round)
+		assert_true(from_core.size() > 1 or round == 0, "round %d: there were pairs to compare" % round)
 		assert_eq(rams.source(), &"core", "round %d: the resolver read the core" % round)
 
 
@@ -648,13 +655,12 @@ func test_the_flight_step_flies_the_same_from_the_core_as_from_the_physics_serve
 			core.free()
 		await get_tree().physics_frame
 	assert_eq(digests[0].size(), digests[1].size(), "both runs logged every tick")
-	var first_difference: int = -1
-	for i: int in mini(digests[0].size(), digests[1].size()):
-		if digests[0][i] != digests[1][i]:
-			first_difference = i
-			break
-	assert_eq(first_difference, -1, "the batch flies the same from the core as from the physics server (first difference: %s | %s)" % [
-			str(digests[0][first_difference]) if first_difference >= 0 else "", str(digests[1][first_difference]) if first_difference >= 0 else ""])
+	if ParityFixture.recording():
+		ParityFixture.record(FIXTURE, "flight_step_from_the_server", {"ticks": digests[1].size(), "lines": ParityFixture.digest(digests[1])})
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "flight_step_from_the_server")
+	assert_not_null(recorded, "the server read's flight was recorded")
+	assert_eq(ParityFixture.encode({"ticks": digests[0].size(), "lines": ParityFixture.digest(digests[0])}), recorded,
+			"the batch flies the same from the core as from the physics server (recorded, M4-T37)")
 
 
 # --- the engine seam ---------------------------------------------------------------------------------------------------

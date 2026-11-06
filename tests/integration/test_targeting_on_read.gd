@@ -6,6 +6,7 @@ extends GutTest
 ## right after a refresh is the same list.
 
 const STARFURY_PATH: String = "res://assets/ships/starfury_aurora.tres"
+const FIXTURE: String = "targeting_on_read"
 const STEPS: int = 600
 
 var world: WorldFrame
@@ -143,20 +144,24 @@ func _run(on: bool) -> Array:
 
 
 func test_the_selection_and_the_list_read_are_the_same_either_way() -> void:
-	var every_tick: Array = _run(false)
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "run_seed_3402", func() -> Dictionary:
+		return _digest_of(_run(false)))
 	var on_read: Array = _run(true)
-	var a: PackedStringArray = every_tick[0]
-	var b: PackedStringArray = on_read[0]
-	assert_eq(b.size(), a.size())
-	for i: int in a.size():
-		if b[i] != a[i]:
-			fail_test("step %d differs:\n%s\nagainst\n%s" % [i, b[i], a[i]])
-			return
-	gut.p("%d steps alike; %d commands took a target already out of reach (the refresh's list decides, both ways); %d late reads" % [
-			a.size(), every_tick[1], every_tick[2]])
-	assert_eq(on_read[1], every_tick[1])
-	assert_gt(every_tick[1], 0, "some commands met a list older than the target's move, so that case was compared")
-	assert_gt(every_tick[2], 10, "some reads came late")
+	assert_not_null(recorded, "the list built every tick was recorded")
+	if recorded == null:
+		return
+	gut.p("%d steps; %d commands took a target already out of reach (the refresh's list decides); %d late reads" % [
+			(on_read[0] as PackedStringArray).size(), on_read[1], on_read[2]])
+	assert_eq(ParityFixture.encode(_digest_of(on_read)), recorded,
+			"every step's selection, signals, name and list as with the list built every tick (recorded, M4-T37)")
+	assert_gt(int(on_read[1]), 0, "some commands met a list older than the target's move, so that case was compared")
+	assert_gt(int(on_read[2]), 10, "some reads came late")
+
+
+# What a run is held to: a digest of its log, its stale selections and its late reads.
+static func _digest_of(run: Array) -> Dictionary:
+	return {"log": ParityFixture.digest(run[0]), "steps": (run[0] as PackedStringArray).size(), "stale_selects": run[1],
+			"late_reads": run[2]}
 
 
 func test_no_list_is_built_while_nothing_reads_it() -> void:

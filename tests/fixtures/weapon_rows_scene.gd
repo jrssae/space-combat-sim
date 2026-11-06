@@ -64,6 +64,7 @@ func _build(test: Node, seed_value: int, native: bool) -> void:
 	world.add_child(director)
 	director.set_physics_process(false)  # stepped by hand
 	director.active = true
+	SimClock.reset()  # the same times in every process, so a recorded log compares bit for bit (M4-T37)
 	now_s = SimClock.now() + 100.0  # ahead of the clock projectiles expire by
 	for i: int in 6:
 		var at := Vector3(_rng.randf_range(-3000.0, 3000.0), _rng.randf_range(-800.0, 800.0), _rng.randf_range(-3000.0, 3000.0))
@@ -258,3 +259,11 @@ func _entry() -> Dictionary:
 			"mines": mine_alive, "checked": mines.checked_last_tick,
 			"counts": [director.intercepts, director.missile_intercepts, director.beam_shots, director.missile_launches,
 					director.detonations]}
+
+
+## The log as the parity recordings keep it (M4-T37): a short digest of each tick's entry, in order.
+static func digests(entries: Array) -> Array:
+	var out: Array = []
+	for entry: Dictionary in entries:
+		out.append(var_to_bytes(entry).hex_encode().sha256_text().left(16))
+	return out

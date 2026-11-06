@@ -11,6 +11,7 @@ const SEED: int = 1
 const TICKS: int = 240
 const DELTA: float = 1.0 / 60.0
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
+const FIXTURE: String = "core_state"
 const NEW_SETTINGS: Array[StringName] = [&"perf_core_event_columns", &"perf_core_body_direct", &"perf_native_ram_contacts",
 		&"perf_native_selection_check", &"perf_batch_owns_ships", &"ship_contact_monitor"]
 const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
@@ -230,44 +231,51 @@ func test_a_ship_reports_jolt_contacts_with_contact_monitor_off() -> void:
 func test_the_native_selection_check_clears_as_the_controllers_did() -> void:
 	if _skipped():
 		return
-	var results: Dictionary = {}
-	for native: bool in [false, true]:
-		Settings.set_value(&"perf_native_selection_check", native)
-		Settings.set_value(&"perf_core_event_columns", true)
-		var made: Array = _space()
-		var world: WorldFrame = made[1]
-		var a: Combatant = _ship(world, made[2], "A", Factions.EARTH_ALLIANCE, Vector3.ZERO, true)
-		var b: Combatant = _ship(world, made[2], "B", Factions.RAIDERS, Vector3(0.0, 0.0, -500.0), true)
-		var c: Combatant = _ship(world, made[2], "C", Factions.RAIDERS, Vector3(0.0, 0.0, 500.0), true)
-		var sim: SimCore = SimCore.attach(world)
-		a.ship.targeting.set_sensor_range_m(1000.0)  # the core's check took the range when the controller bound
-		var changes: Array = []
-		a.ship.targeting.target_changed.connect(func(id: int) -> void: changes.append([Engine.get_physics_frames(), id]))
-		await get_tree().physics_frame
-		assert_eq(a.ship.targeting.is_physics_processing(), not native, "the AI controller ticks itself only off the native check")
-		var frame0: int = Engine.get_physics_frames()
-		a.ship.targeting.select_id(b.targetable.get_instance_id())
-		await get_tree().physics_frame
-		await get_tree().physics_frame
-		assert_eq(a.ship.targeting.selected_id(), b.targetable.get_instance_id(), "B in reach stays selected")
-		b.ship.global_position = Vector3(0.0, 0.0, -2000.0)  # out of A's reach
-		await get_tree().physics_frame
-		assert_eq(a.ship.targeting.selected_id(), 0, "a selection that left reach is cleared by the next tick (native %s)" % native)
-		a.ship.targeting.select_id(c.targetable.get_instance_id())
-		await get_tree().physics_frame
-		c.ship.visible = false
-		c.ship.process_mode = Node.PROCESS_MODE_DISABLED
-		await get_tree().physics_frame
-		assert_eq(a.ship.targeting.selected_id(), 0, "a parked selection is cleared (native %s)" % native)
-		var stamped: Array = []
-		for change: Array in changes:
-			stamped.append([int(change[0]) - frame0, change[1] == b.targetable.get_instance_id(),
-					change[1] == c.targetable.get_instance_id(), change[1] == 0])
-		results[native] = stamped
-		(made[0] as SubViewport).queue_free()
-		await get_tree().physics_frame
-	assert_eq(results[true], results[false], "the same target_changed signals on the same ticks: %s" % [results[true]])
-	assert_gte((results[true] as Array).size(), 4, "selections and clears happened")
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "selection_check_signals",
+			func() -> Array: return await _selection_signals(false))
+	var native: Array = await _selection_signals(true)
+	assert_eq(ParityFixture.encode(native), recorded,
+			"the same target_changed signals on the same ticks as the controllers' own check (recorded): %s" % [native])
+	assert_gte(native.size(), 4, "selections and clears happened")
+
+
+# A selection in reach, one that leaves reach and one parked, on the native check or the controllers' own (`native` off,
+# the recorded reference): each target_changed signal as `[ticks since the first, to B, to C, cleared]`.
+func _selection_signals(native: bool) -> Array:
+	Settings.set_value(&"perf_native_selection_check", native)
+	Settings.set_value(&"perf_core_event_columns", true)
+	var made: Array = _space()
+	var world: WorldFrame = made[1]
+	var a: Combatant = _ship(world, made[2], "A", Factions.EARTH_ALLIANCE, Vector3.ZERO, true)
+	var b: Combatant = _ship(world, made[2], "B", Factions.RAIDERS, Vector3(0.0, 0.0, -500.0), true)
+	var c: Combatant = _ship(world, made[2], "C", Factions.RAIDERS, Vector3(0.0, 0.0, 500.0), true)
+	SimCore.attach(world)
+	a.ship.targeting.set_sensor_range_m(1000.0)  # the core's check took the range when the controller bound
+	var changes: Array = []
+	a.ship.targeting.target_changed.connect(func(id: int) -> void: changes.append([Engine.get_physics_frames(), id]))
+	await get_tree().physics_frame
+	assert_eq(a.ship.targeting.is_physics_processing(), not native, "the AI controller ticks itself only off the native check")
+	var frame0: int = Engine.get_physics_frames()
+	a.ship.targeting.select_id(b.targetable.get_instance_id())
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	assert_eq(a.ship.targeting.selected_id(), b.targetable.get_instance_id(), "B in reach stays selected")
+	b.ship.global_position = Vector3(0.0, 0.0, -2000.0)  # out of A's reach
+	await get_tree().physics_frame
+	assert_eq(a.ship.targeting.selected_id(), 0, "a selection that left reach is cleared by the next tick (native %s)" % native)
+	a.ship.targeting.select_id(c.targetable.get_instance_id())
+	await get_tree().physics_frame
+	c.ship.visible = false
+	c.ship.process_mode = Node.PROCESS_MODE_DISABLED
+	await get_tree().physics_frame
+	assert_eq(a.ship.targeting.selected_id(), 0, "a parked selection is cleared (native %s)" % native)
+	var stamped: Array = []
+	for change: Array in changes:
+		stamped.append([int(change[0]) - frame0, change[1] == b.targetable.get_instance_id(),
+				change[1] == c.targetable.get_instance_id(), change[1] == 0])
+	(made[0] as SubViewport).queue_free()
+	await get_tree().physics_frame
+	return stamped
 
 
 # --- the batch owns its ships' ticks ------------------------------------------------------------------------------------
@@ -439,23 +447,30 @@ static func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
 	return -1 if a.size() == b.size() else mini(a.size(), b.size())
 
 
-# Flies the battle with `key` off, then on, and asks for the same rows, commands and hits every tick.
+# What a battle is held to: digests of its rows, commands and hits every tick, and its totals.
+static func _digest_of(battle: Dictionary) -> Dictionary:
+	return {"rows": ParityFixture.digest(battle["rows"]), "commands": ParityFixture.digest(battle["commands"]),
+			"hits": ParityFixture.digest(battle["hits"]), "hits_total": battle["hits_total"], "rams": battle["rams"],
+			"ticks": (battle["rows"] as PackedInt64Array).size()}
+
+
+# Flies the battle with `key` on and asks for the rows, commands and hits every tick that the old path behind `key` gave
+# (M4-T37: recorded in `tests/fixtures/parity/core_state.json` with `key` off, before that path was removed).
 func _assert_same_battle(key: StringName, with: Dictionary = {}) -> void:
 	var off: Dictionary = with.duplicate()
 	off[key] = false
 	var on: Dictionary = with.duplicate()
 	on[key] = true
-	var reference: Dictionary = await _battle(off, 1)
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "battle_without_" + String(key),
+			func() -> Dictionary: return _digest_of(await _battle(off, 1)))
 	var candidate: Dictionary = await _battle(on, 1)
-	assert_gt(int(reference["hits_total"]), 10, "%s: hits landed (%d)" % [key, int(reference["hits_total"])])
-	var first: int = _first_difference(reference["rows"], candidate["rows"])
-	assert_eq(first, -1, "%s: the rows are the same bits every tick (first difference at tick %d)" % [key, first])
-	first = _first_difference(reference["commands"], candidate["commands"])
-	assert_eq(first, -1, "%s: the commands too (first difference at tick %d)" % [key, first])
-	first = _first_difference(reference["hits"], candidate["hits"])
-	assert_eq(first, -1, "%s: and every hit (first difference at tick %d)" % [key, first])
-	gut.p("%s: %d hits; sync calls a tick %d off, %d on" % [key, int(reference["hits_total"]), int(reference["sync_calls"]),
-			int(candidate["sync_calls"])])
+	assert_not_null(recorded, "%s: the old path's battle was recorded" % key)
+	if recorded == null:
+		return
+	assert_gt(int(recorded["hits_total"]), 10, "%s: hits landed (%d)" % [key, int(recorded["hits_total"])])
+	assert_eq(ParityFixture.encode(_digest_of(candidate)), recorded,
+			"%s: the same rows, commands and hits every tick as the old path's recording" % key)
+	gut.p("%s: %d hits; %d sync calls a tick" % [key, int(candidate["hits_total"]), int(candidate["sync_calls"])])
 
 
 func test_the_event_columns_fly_the_same_battle() -> void:
@@ -538,12 +553,22 @@ func test_the_melee_rams_the_same_with_the_contacts_read_natively() -> void:
 		return
 	Settings.set_value(&"ram_damage", true)
 	Settings.set_value(&"perf_ram_contact_columns", true)
-	Settings.set_value(&"perf_native_ram_contacts", false)
-	var columns: Array = await _melee()
-	Settings.set_value(&"perf_native_ram_contacts", true)
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "melee_rams", func() -> Dictionary:
+		Settings.set_value(&"perf_native_ram_contacts", false)
+		var columns: Array = await _melee()
+		Settings.set_value(&"perf_native_ram_contacts", true)
+		assert_eq(columns[2], &"columns", "the reference read the contacts in columns from GDScript")
+		return _melee_summary(columns))
 	var native: Array = await _melee()
-	assert_eq(columns[2], &"columns", "the reference read the contacts in columns from GDScript")
-	assert_eq(native[2], &"native", "the other in one native call")
-	assert_gt((columns[1] as PackedStringArray).size(), 5, "the melee rams")
-	assert_eq(native[1], columns[1], "the same rams, in the same order")
-	assert_eq(native[0], columns[0], "the same poses, spins and hulls every 20 ticks")
+	assert_eq(native[2], &"native", "the contacts are read in one native call")
+	assert_not_null(recorded, "the GDScript read's melee was recorded")
+	if recorded == null:
+		return
+	assert_gt((recorded["rams"] as Array).size(), 5, "the melee rams")
+	assert_eq(ParityFixture.encode(_melee_summary(native)), recorded,
+			"the same rams in the same order, and the same poses, spins and hulls every 20 ticks, as the recording")
+
+
+# What the melee is held to: its ram lines whole and a digest of its pose lines.
+static func _melee_summary(melee: Array) -> Dictionary:
+	return {"rams": melee[1], "poses": ParityFixture.digest(melee[0])}

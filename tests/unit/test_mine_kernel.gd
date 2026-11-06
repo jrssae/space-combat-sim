@@ -6,6 +6,7 @@ extends GutTest
 ## the same ticks, hurt the same hulls and are laid again on the same ticks. Skips, saying why, without the native library.
 
 const NATIVE_CLASS: StringName = &"ScsWeaponRows"
+const FIXTURE: String = "mine_kernel"
 const DT: float = 1.0 / 60.0
 
 var _saved: Dictionary = {}
@@ -95,60 +96,86 @@ func _edge_scene(native: bool) -> Dictionary:
 func test_hulls_on_the_edge_of_a_trigger_set_off_the_same_mines_on_both_paths() -> void:
 	if _skipped():
 		return
-	var logs: Array = []
-	for native: bool in [false, true]:
-		var scene: Dictionary = _edge_scene(native)
-		var director: StandinDirector = scene["director"]
-		var mines: MineStandin = scene["mines"]
-		var entries: Array = []
-		var now_s: float = SimClock.now() + 100.0
-		for tick: int in 6:
-			(scene["core"] as SimCore).sync_now()
-			director.step(DT, now_s, ContactScan.from_tree(get_tree()))
-			now_s += DT
-			var alive := PackedByteArray()
-			for i: int in mines.count():
-				alive.append(1 if mines.is_alive(i) else 0)
-			entries.append([alive, mines.checked_last_tick, var_to_bytes(scene["hits"])])  # in the order they landed
-		assert_eq(director.weapons_path(), &"native" if native else &"gdscript")
-		logs.append(entries)
-		var world: Node = director.get_parent()
-		remove_child(world)
-		world.free()  # the next scene's core and scan see only their own bodies
-	for tick: int in 6:
-		assert_eq(var_to_bytes(logs[1][tick]), var_to_bytes(logs[0][tick]), "tick %d: the same mines alive, checked and hurting the same hulls" % tick)
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "edge_of_a_trigger", func() -> Array:
+		return _tick_digests(_edge_run(false)))
+	var entries: Array = _edge_run(true)
+	assert_eq(_tick_digests(entries), recorded, "every tick: the mines alive, checked and hurting the hulls the GDScript stand-ins did (recorded)")
 	var gone: int = 0
-	for b: int in (logs[0][5] as Array)[0]:
+	for b: int in (entries[5] as Array)[0]:
 		gone += 1 - b
 	assert_between(gone, 10, 50, "some mines on the edge went off and some did not")
+
+
+# The edge scene stepped six ticks on the native rows or the GDScript stand-ins: per tick the mines alive, the mines
+# checked and the hits in the order they landed.
+func _edge_run(native: bool) -> Array:
+	var scene: Dictionary = _edge_scene(native)
+	var director: StandinDirector = scene["director"]
+	var mines: MineStandin = scene["mines"]
+	var entries: Array = []
+	var now_s: float = SimClock.now() + 100.0
+	for tick: int in 6:
+		(scene["core"] as SimCore).sync_now()
+		director.step(DT, now_s, ContactScan.from_tree(get_tree()))
+		now_s += DT
+		var alive := PackedByteArray()
+		for i: int in mines.count():
+			alive.append(1 if mines.is_alive(i) else 0)
+		entries.append([alive, mines.checked_last_tick, var_to_bytes(scene["hits"])])  # in the order they landed
+	assert_eq(director.weapons_path(), &"native" if native else &"gdscript")
+	var world: Node = director.get_parent()
+	remove_child(world)
+	world.free()  # the next scene's core and scan see only their own bodies
+	return entries
+
+
+# A log as the recordings keep it (M4-T37): a short digest of each tick's entry.
+static func _tick_digests(entries: Array) -> Array:
+	var out: Array = []
+	for entry: Variant in entries:
+		out.append(var_to_bytes(entry).hex_encode().sha256_text().left(16))
+	return out
 
 
 func test_a_seeded_belt_goes_off_and_is_laid_again_on_the_same_ticks_on_both_paths() -> void:
 	if _skipped():
 		return
-	var reference: WeaponRowsScene = WeaponRowsScene.build(self, 23, false)
-	reference.run(840)
-	reference.dispose()
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "belt_seed_23", func() -> Array:
+		var reference: WeaponRowsScene = WeaponRowsScene.build(self, 23, false)
+		reference.run(840)
+		var out: Array = _belt_digests(reference.log)
+		reference.dispose()
+		return out)
 	var native: WeaponRowsScene = WeaponRowsScene.build(self, 23, true)
 	native.run(840)
 	assert_eq(native.director.weapons_path(), &"native")
+	var got: Array = _belt_digests(native.log)
+	assert_not_null(recorded, "the GDScript stand-ins' belt was recorded")
+	if recorded == null:
+		return
+	assert_eq(got.size(), (recorded as Array).size(), "as many ticks as the recording")
+	for t: int in mini(got.size(), (recorded as Array).size()):
+		if got[t] != recorded[t]:
+			fail_test("tick %d differs from the recording in the mines, the checks or the hits" % t)
+			return
 	var detonated: int = 0
 	var laid_again: int = 0
-	for t: int in reference.log.size():
-		var a: Dictionary = reference.log[t]
-		var b: Dictionary = native.log[t]
-		for key: String in ["mines", "checked", "hits"]:
-			if var_to_bytes(a[key]) != var_to_bytes(b[key]):
-				fail_test("tick %d differs in %s: %s against %s" % [a["tick"], key, str(a[key]).left(200), str(b[key]).left(200)])
-				return
-		if t > 0:
-			var before: PackedByteArray = reference.log[t - 1]["mines"]
-			var now: PackedByteArray = a["mines"]
-			for i: int in now.size():
-				detonated += 1 if before[i] == 1 and now[i] == 0 else 0
-				laid_again += 1 if before[i] == 0 and now[i] == 1 else 0
+	for t: int in range(1, native.log.size()):
+		var before: PackedByteArray = native.log[t - 1]["mines"]
+		var now: PackedByteArray = native.log[t]["mines"]
+		for i: int in now.size():
+			detonated += 1 if before[i] == 1 and now[i] == 0 else 0
+			laid_again += 1 if before[i] == 0 and now[i] == 1 else 0
 	assert_gt(detonated, 3, "mines went off")
 	assert_gt(laid_again, 0, "and were laid again after their wait")
+
+
+# The belt's mines, checks and hits per tick as the recording keeps them.
+static func _belt_digests(log: Array) -> Array:
+	var entries: Array = []
+	for entry: Dictionary in log:
+		entries.append([entry["mines"], entry["checked"], entry["hits"]])
+	return _tick_digests(entries)
 
 
 # A world with a director stepped by hand and the native weapons on or off.

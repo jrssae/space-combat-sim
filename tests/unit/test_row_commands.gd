@@ -36,6 +36,9 @@ func after_each() -> void:
 	ContactScan.invalidate()
 
 
+const FIXTURE: String = "row_commands"
+
+
 func _skipped() -> bool:
 	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
 		return false
@@ -51,14 +54,15 @@ func test_the_setting_exists_and_defaults_on() -> void:
 func test_commands_from_rows_fly_the_same_battle_as_today() -> void:
 	if _skipped():
 		return
-	var today: Dictionary = await _battle(false, 1, true)
+	# The drivers handing each ship its command (T18's path, `perf_native_commands` off) is recorded (M4-T37).
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "battle_with_commands_from_the_drivers", func() -> Dictionary:
+		var today: Dictionary = await _battle(false, 1, true)
+		assert_eq(int(today["finished"]), int(today["native_thinks"]), "today every native think ends in its driver")
+		return _digest_of(today))
 	var rows: Dictionary = await _battle(true, 1, true)
-	assert_eq((today["rows"] as PackedInt64Array).size(), TICKS, "a digest every tick on today's path")
-	assert_eq((rows["rows"] as PackedInt64Array).size(), TICKS, "and on the rows path")
+	assert_eq((rows["rows"] as PackedInt64Array).size(), TICKS, "a digest every tick on the rows path")
 	assert_gt(int(rows["native_thinks"]), TICKS * 20, "the native brains thought (%d thinks)" % int(rows["native_thinks"]))
-	assert_eq(int(rows["native_thinks"]), int(today["native_thinks"]), "the same thinks on both paths")
 	assert_eq(int(rows["fallbacks"]), 0, "nothing declined on the rows path")
-	assert_eq(int(today["finished"]), int(today["native_thinks"]), "today every native think ends in its driver")
 	assert_eq(int(rows["finished"]), 0, "on the rows path no driver finishes a think ship by ship")
 	assert_gt(int(rows["live_max"]), SHIPS / 2, "most ships fly a command from the rows (%d at most)" % int(rows["live_max"]))
 	assert_lt(int(rows["events"]), int(rows["native_thinks"]) / 4,
@@ -66,12 +70,14 @@ func test_commands_from_rows_fly_the_same_battle_as_today() -> void:
 			int(rows["native_thinks"])])
 	gut.p("battle %d seed %d, %d ticks: %d native thinks, %d events on the rows path, %d ships on row commands at most" % [
 			SHIPS, SEED, TICKS, int(rows["native_thinks"]), int(rows["events"]), int(rows["live_max"])])
-	var first: int = _first_difference(today["commands"], rows["commands"])
-	assert_eq(first, -1, "every ship flies the same command, trigger and selection every tick (first difference at tick %d)" % first)
-	first = _first_difference(today["rows"], rows["rows"])
-	assert_eq(first, -1, "the rows are the same bits every tick (first difference at tick %d)" % first)
-	first = _first_difference(today["pilots"], rows["pilots"])
-	assert_eq(first, -1, "every pilot shows the same behaviour, target and scores at the end (first difference at ship %d)" % first)
+	assert_eq(ParityFixture.encode(_digest_of(rows)), recorded,
+			"every ship flies the drivers' command, trigger and selection every tick, the same rows and the same pilots (recorded)")
+
+
+# What the battle is held to: the thinks, and digests of every tick's commands and rows and of the pilots at the end.
+static func _digest_of(battle: Dictionary) -> Dictionary:
+	return {"native_thinks": battle["native_thinks"], "commands": ParityFixture.digest(battle["commands"]),
+			"rows": ParityFixture.digest(battle["rows"]), "pilots": ParityFixture.digest(battle["pilots"])}
 
 
 func test_one_thread_and_six_give_the_same_commands_from_rows() -> void:

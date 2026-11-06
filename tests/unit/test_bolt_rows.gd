@@ -13,6 +13,7 @@ const NO_NODES: Array[Node] = []
 const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
 		&"perf_threads", &"perf_native_commands", &"perf_native_bolt_rows"]
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
+const FIXTURE: String = "bolt_rows"
 
 var _saved: Dictionary = {}
 var _index_of: Dictionary = {}
@@ -509,30 +510,29 @@ static func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
 func test_the_seeded_battle_hits_the_same_with_bolts_as_rows() -> void:
 	if _skipped():
 		return
-	var nodes: Dictionary = await _battle(false, 1)
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "battle_with_bolt_nodes", func() -> Dictionary:
+		var nodes: Dictionary = await _battle(false, 1)
+		assert_eq(nodes["bolt_path"], &"nodes", "the reference flies bolt nodes")
+		assert_gt(int(nodes["nodes_max"]), 50, "the reference had bolts in flight (%d at most)" % int(nodes["nodes_max"]))
+		return _digest_of(nodes))
 	var rows: Dictionary = await _battle(true, 1)
-	assert_eq(nodes["bolt_path"], &"nodes", "the reference flies bolt nodes")
 	assert_eq(rows["bolt_path"], &"rows", "the rows path owns its bolts")
-	assert_gt(int(nodes["nodes_max"]), 50, "the reference had bolts in flight (%d at most)" % int(nodes["nodes_max"]))
 	assert_eq(int(rows["nodes_max"]), 0, "the rows path spawned no bolt node")
 	assert_gt(int(rows["owned_max"]), 50, "and owned the bolts (%d at most)" % int(rows["owned_max"]))
-	assert_gt(int(nodes["hits_total"]), 10, "hits landed (%d)" % int(nodes["hits_total"]))
-	assert_eq(int(rows["hits_total"]), int(nodes["hits_total"]), "the same hits")
-	assert_eq(int(rows["kills"]), int(nodes["kills"]), "the same kills (%d)" % int(nodes["kills"]))
-	var first: int = _first_difference(nodes["bolts"], rows["bolts"])
-	if first >= 0 and _dump_tick < 0:
-		_dump_tick = first
-		_dumps.clear()
-		await _battle(false, 1, first + 1)
-		await _battle(true, 1, first + 1)
-		gut.p("bolt tables at tick %d\n-- nodes --\n%s\n-- rows --\n%s" % [first, _dumps[0], _dumps[1]])
-	assert_eq(first, -1, "the bolt table is the same bits every tick (first difference at tick %d)" % first)
-	first = _first_difference(nodes["hits"], rows["hits"])
-	assert_eq(first, -1, "every hit lands the same (first difference at tick %d)" % first)
-	first = _first_difference(nodes["rows"], rows["rows"])
-	assert_eq(first, -1, "the hull rows are the same bits every tick (first difference at tick %d)" % first)
-	gut.p("battle %d seed %d, %d ticks: %d hits, %d kills, %d bolt nodes at most against %d owned rows" % [SHIPS, SEED, TICKS,
-			int(nodes["hits_total"]), int(nodes["kills"]), int(nodes["nodes_max"]), int(rows["owned_max"])])
+	assert_not_null(recorded, "the bolt nodes' battle was recorded")
+	if recorded == null:
+		return
+	assert_gt(int(recorded["hits_total"]), 10, "hits landed (%d)" % int(recorded["hits_total"]))
+	assert_eq(ParityFixture.encode(_digest_of(rows)), recorded,
+			"the same hits, kills, bolt table and hull rows every tick as the bolt nodes' recording")
+	gut.p("battle %d seed %d, %d ticks: %d hits, %d kills, %d owned rows at most" % [SHIPS, SEED, TICKS,
+			int(rows["hits_total"]), int(rows["kills"]), int(rows["owned_max"])])
+
+
+# What the battle is held to (M4-T37, the bolt nodes' path recorded in `tests/fixtures/parity/bolt_rows.json`).
+static func _digest_of(battle: Dictionary) -> Dictionary:
+	return {"rows": ParityFixture.digest(battle["rows"]), "bolts": ParityFixture.digest(battle["bolts"]),
+			"hits": ParityFixture.digest(battle["hits"]), "hits_total": battle["hits_total"], "kills": battle["kills"]}
 
 
 func test_one_thread_and_six_give_the_same_bolts() -> void:

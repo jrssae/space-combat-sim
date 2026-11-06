@@ -4,6 +4,7 @@ extends GutTest
 ## (plain bolts, missiles and beams; on their launch tick or flown; spent, freed and new ones each round) both give the same
 ## bolt rows bit for bit at the first sync and at the hit resolver's. Skips, saying why, when the native library is not built.
 
+const FIXTURE: String = "bolt_sync"
 const PROJECTILE_SCENE: PackedScene = preload("res://src/weapons/projectile.tscn")
 const SIDES: Array[StringName] = [Factions.RAIDERS, Factions.EARTH_ALLIANCE, Factions.NEUTRAL, &"drifters"]
 const DELTA: float = 1.0 / 60.0
@@ -70,38 +71,43 @@ func _group() -> Array[Node]:
 	return get_tree().get_nodes_in_group(Projectile.GROUP)
 
 
-# Fails, naming the first column that differs, unless both cores hold the same bolt rows.
-func _assert_same_bolts(reference: Object, fast: Object, label: String) -> void:
-	var a: Array = reference.bolt_columns() + reference.bolt_scan()
-	var b: Array = fast.bolt_columns() + fast.bolt_scan()
-	for c: int in a.size():
-		if a[c] != b[c]:
-			fail_test("%s: bolt column %d differs (sizes %d and %d)" % [label, c, a[c].size(), b[c].size()])
-			return
-	pass_test("%s: the same %d bolt rows" % [label, reference.bolt_count()])
+# The bolt rows a core holds, without the bolts' instance ids (which differ between runs): the columns and the scan's arrays.
+static func _rows(core: Object) -> Array:
+	var columns: Array = core.bolt_columns() + core.bolt_scan()
+	columns.remove_at(0)
+	return columns
 
 
 func test_the_reader_fills_the_same_bolt_rows_as_the_core() -> void:
 	if _skipped():
 		return
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "crowd_seed_34", func() -> Array: return _crowd(false))
+	var fast: Array = _crowd(true)
+	assert_not_null(recorded, "the core's own read was recorded")
+	assert_eq(fast.size(), 16, "two syncs a round for eight rounds")
+	assert_eq(ParityFixture.encode(fast), recorded, "the reader fills the bolt rows the core's own read filled, every sync")
+
+
+# The seeded crowd of bolts (seed 34) over eight rounds, read by the reader or by the core's own read (`reader` off, the
+# recorded reference): a digest of the bolt rows at each round's two syncs.
+func _crowd(reader_on: bool) -> Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 34
-	var reference: Object = NativeLib.instantiate(SimCore.NATIVE_CLASS)
-	var fast: Object = NativeLib.instantiate(SimCore.NATIVE_CLASS)
-	var reader: Object = NativeLib.instantiate(SimCore.BOLT_SYNC_CLASS)
-	assert_not_null(reader, "the library has the bolt reader")
-	if reader == null:
-		return
+	var core: Object = NativeLib.instantiate(SimCore.NATIVE_CLASS)
+	var reader: Object = NativeLib.instantiate(SimCore.BOLT_SYNC_CLASS) if reader_on else null
 	for i: int in 60:
 		_bolt(rng, i % 2 == 0)
 	var spent_seen: bool = false
+	var out: Array = []
 	for round: int in 8:
 		var tick: int = 100 + round
 		# The first sync: positions and velocities, the scan's.
-		reference.sync_in(_group(), tick, DELTA)
-		fast.sync_in(NO_NODES, tick, DELTA)
-		reader.read(fast, _group(), tick, DELTA, true, false)
-		_assert_same_bolts(reference, fast, "round %d, first sync" % round)
+		if reader != null:
+			core.sync_in(NO_NODES, tick, DELTA)
+			reader.read(core, _group(), tick, DELTA, true, false)
+		else:
+			core.sync_in(_group(), tick, DELTA)
+		out.append(ParityFixture.digest(_rows(core)))
 		# The tick goes on: every bolt flies, some are spent (queued, still in the group), a few are launched.
 		for node: Node in _group():
 			var bolt := node as Projectile
@@ -113,16 +119,22 @@ func test_the_reader_fills_the_same_bolt_rows_as_the_core() -> void:
 		for i: int in rng.randi_range(0, 6):
 			_bolt(rng, false)
 		# The hit resolver's sync: positions and last steps.
-		reference.sync_bolts(_group(), DELTA)
-		fast.sync_bolts(NO_NODES, DELTA)
-		reader.read(fast, _group(), tick, DELTA, false, true)
-		_assert_same_bolts(reference, fast, "round %d, the hit resolver's sync" % round)
+		if reader != null:
+			core.sync_bolts(NO_NODES, DELTA)
+			reader.read(core, _group(), tick, DELTA, false, true)
+		else:
+			core.sync_bolts(_group(), DELTA)
+		out.append(ParityFixture.digest(_rows(core)))
 		# The frame ends: the spent bolts are freed.
 		for node: Node in _group():
 			if node.is_queued_for_deletion():
 				node.free()
 	assert_true(spent_seen, "spent bolts were in the group in some round")
-	assert_eq(reader.known_count(), _group().size(), "the reader forgets the bolts that left")
+	if reader != null:
+		assert_eq(reader.known_count(), _group().size(), "the reader forgets the bolts that left")
+	for node: Node in _group():
+		node.free()
+	return out
 
 
 func test_sim_core_reads_the_bolts_through_the_reader_and_counts_its_calls() -> void:
