@@ -13,23 +13,6 @@ const DT: float = 1.0 / 60.0
 const FIXTURE: String = "hit_scale"
 const BOLT_SPEED: float = 400.0
 
-## A broad phase that hands the resolver every pair the sphere test accepts by testing every pair: the resolver as it was.
-class EveryPair:
-	extends HitBroadPhase
-
-	func pairs(bolt_mids: PackedVector3Array, bolt_reach: PackedFloat64Array, hull_mids: PackedVector3Array,
-			hull_reach: PackedFloat64Array) -> PackedInt64Array:
-		var out := PackedInt64Array()
-		visited = bolt_mids.size() * hull_mids.size()
-		for i: int in bolt_mids.size():
-			for j: int in hull_mids.size():
-				var reach: float = bolt_reach[i] + hull_reach[j]
-				if bolt_mids[i].distance_squared_to(hull_mids[j]) > reach * reach:
-					continue
-				out.append(i * hull_mids.size() + j)
-		return out
-
-
 var world: WorldFrame
 var projectiles: Node3D
 var resolver: HitResolver
@@ -167,10 +150,7 @@ func _fleet_between_two() -> void:
 
 
 func test_a_fleet_of_24_with_300_bolts_tests_at_most_3_pairs_a_bolt_on_both_paths() -> void:
-	var recorded: Variant = await ParityFixture.expected(FIXTURE, "fleet_of_24", func() -> Array:
-		_on_path(false)
-		_fleet()
-		return _hit_log())
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "fleet_of_24")
 	_on_path(true)
 	var stats: Array = _fleet()
 	assert_eq(resolver.broad_phase.path(), &"native", "the native path")
@@ -195,12 +175,9 @@ func _fleet() -> Array:
 
 
 func test_a_seeded_melee_lands_the_same_hits_as_testing_every_pair_on_both_paths() -> void:
-	# The hits when every pair is tested (the GDScript resolver handed `EveryPair`) are recorded (M4-T37).
-	var reference: Variant = await ParityFixture.expected(FIXTURE, "melee_every_pair", func() -> Array:
-		_on_path(false)
-		resolver.broad_phase = EveryPair.new()
-		_melee()
-		return _hit_log())
+	# The hits when every pair is tested (the GDScript resolver handed a broad phase that tested every pair) are recorded
+	# (M4-T37; that resolver's own walk went in M4-T42).
+	var reference: Variant = ParityFixture.stored(FIXTURE, "melee_every_pair")
 	assert_not_null(reference, "the every-pair melee was recorded")
 	if reference == null:
 		return

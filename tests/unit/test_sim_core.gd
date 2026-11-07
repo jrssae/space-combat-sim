@@ -405,12 +405,9 @@ func test_the_hit_sweep_pairs_from_the_core_as_from_its_own_load() -> void:
 		var core: SimCore = _core()
 		core.sync_now()
 		var delta: float = 1.0 / 60.0
-		# The resolver's own load (hulls and bolts gathered from the tree, paired by the broad phase) is recorded (M4-T37).
-		var own: Variant = await ParityFixture.expected(FIXTURE, "hit_sweep_round_%d" % round, func() -> Array:
-			resolver.use_core = false
-			var pairs: Array = resolver.broad_phase_pairs(delta)
-			resolver.use_core = true
-			return pairs)
+		# The resolver's own load (hulls and bolts gathered from the tree, paired by the broad phase) is recorded (M4-T37;
+		# the walk itself went in M4-T42).
+		var own: Variant = ParityFixture.stored(FIXTURE, "hit_sweep_round_%d" % round)
 		# From the core: the same pairs and the same work.
 		var from_core: Array = resolver.broad_phase_pairs(delta)
 		assert_eq(ParityFixture.encode(from_core), own, "round %d: the own load's bolt and hull pairs and work (recorded)" % round)
@@ -421,11 +418,7 @@ func test_the_hit_sweep_pairs_from_the_core_as_from_its_own_load() -> void:
 		core.sync_now()
 		for node: Node in projectiles.get_children():
 			_fly(node as Projectile)
-		var own_moved: Variant = await ParityFixture.expected(FIXTURE, "hit_sweep_round_%d_moved" % round, func() -> Array:
-			resolver.use_core = false
-			var pairs: Array = resolver.broad_phase_pairs(delta)
-			resolver.use_core = true
-			return pairs)
+		var own_moved: Variant = ParityFixture.stored(FIXTURE, "hit_sweep_round_%d_moved" % round)
 		var core_moved: Array = resolver.broad_phase_pairs(delta)
 		assert_eq(ParityFixture.encode(core_moved), own_moved, "round %d: the same pairs after the bolts moved (recorded)" % round)
 		if core_moved[0] != from_core[0]:
@@ -433,7 +426,7 @@ func test_the_hit_sweep_pairs_from_the_core_as_from_its_own_load() -> void:
 	assert_true(bolts_moved_pairs, "the moved bolts paired differently in some round, so the second sync was tested")
 
 
-func test_a_bolt_on_its_launch_tick_sweeps_only_its_muzzle_on_both_paths() -> void:
+func test_a_bolt_on_its_launch_tick_sweeps_only_its_muzzle() -> void:
 	var resolver := HitResolver.new()
 	resolver.name = "HitResolver"
 	add_child_autofree(resolver)
@@ -451,11 +444,7 @@ func test_a_bolt_on_its_launch_tick_sweeps_only_its_muzzle_on_both_paths() -> vo
 	# (recorded, M4-T37).
 	await get_tree().physics_frame
 	await get_tree().physics_frame
-	var own_next: Variant = await ParityFixture.expected(FIXTURE, "launch_tick_after", func() -> Array:
-		resolver.use_core = false
-		var pairs: Array = resolver.broad_phase_pairs(delta)
-		resolver.use_core = true
-		return pairs)
+	var own_next: Variant = ParityFixture.stored(FIXTURE, "launch_tick_after")
 	var core_next: Array = resolver.broad_phase_pairs(delta)
 	# The pairs only: the work count also counts any hull an earlier test left in the tree (the core reads the whole tree).
 	assert_eq(ParityFixture.encode(core_next[0]), (own_next as Array)[0], "the tick after: the own load's pairs (recorded)")
@@ -482,7 +471,6 @@ func test_a_hull_destroyed_between_the_resolvers_leaves_the_ram_rows_on_both_pat
 	core.sync_now()
 	var delta: float = 1.0 / 60.0
 	# The hit resolver (200) reads the tick's bolts, then one of its hits kills a hull; the ram resolver (210) must not see it.
-	hits.use_core = true
 	hits.broad_phase_pairs(delta)
 	var victim: Node3D = bodies[0] if bodies[0] is RigidBody3D else bodies[1]
 	_kill(victim)
@@ -764,7 +752,6 @@ func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine()
 			scan.nearest_for(id, body.global_position, Factions.RAIDERS, 12)
 			scan.statics_for(id, body.global_position, Factions.RAIDERS, 4)
 			scan.incoming_fire(id, body.global_position, Vector3.ZERO, Factions.RAIDERS)
-		resolver.use_core = true
 		resolver.broad_phase_pairs(1.0 / 60.0)
 		rams.use_core = true
 		rams.broad_phase_pairs(1.0 / 60.0, PackedInt64Array())
