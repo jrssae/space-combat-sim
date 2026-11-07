@@ -482,7 +482,7 @@ whose trigger never arose). Update the column with each task's commit.
 | T14 | C | `narn_transport` generator and the `narn` style | T11, T23 | Opus | Geometry and a new style | done |
 | T15 | C | `centauri_brezebel` generator and the `centauri` style | T11, T23 | Opus | Geometry and a new style | done |
 | T22 | C | Brakiri Bokmai: references, generator with removable pods, the `brakiri` style (placed here in the order; numbered last because it was added during the build, Q17) | T11, T23 | Opus | A new reference read end to end, modular cargo, a new style | done |
-| T26 | - | Merge `main` (M4 through T22, the native core) into `m5` (Q27): the conflicts, M5's splat code off, engine voices on M4's frame passes, the focused suites green | - | Opus | Every later C task builds on the core; a two-milestone merge | in progress |
+| T26 | - | Merge `main` (M4 through T22, the native core) into `m5` (Q27): the conflicts, M5's splat code off, engine voices on M4's frame passes, the focused suites green | - | Opus | Every later C task builds on the core; a two-milestone merge | done |
 | T27 | C | The civilian generators on the textured-mesh pipeline: `core/civilian.py` and the five generators write M4's textured `.glb` (UV atlas, colour, normal, roughness and metal, emissive) from show-reference schemes instead of splats; fidelity (AC20) re-scored on the mesh | T26 | Opus | Five generators and their tests move from splat levels to mesh levels; the paint is a look call | not started |
 | T21 | C | Defensive turrets in the native core (Q28): mounts, aim, the fire gate and the attacker memory as weapon rows (placed here in the order; numbered last because it was added after the others had numbers) | T27, T19 | Opus | A native gunner seam under the threading rules, with a balance test | not started |
 | T16 | C | Civilian ships in the game: data and assembly in GDScript, the big-hull kind, avoidance and tier in the native core | T27, T21 | Opus | Specs for heavy hulls, factions, pools, native AI fixes, GPU check | not started |
@@ -1147,12 +1147,14 @@ T21, T16 and T28 are re-planned on the native core ("M5 on the native core", bel
     `SkipTest` naming T27. `test_splat_import.gd` went with `main`.
   - **Assets.** `assets/generated/` rebuilt with `main`'s generators (the textured Starfury, raider, buoy, station, capitals
     and the star-point sky).
-  - **Tests (oscar, Q29: no bench, no `GUT_SLOW`).** `check_scripts`: 556 scripts compile. GUT, every file M5 added or
-    changed plus `test_main_scene`, `test_sim_core` and `test_flight_model`: all pass except four failures that the
-    pre-merge commit `8796bf0` shows too (checked in a throwaway worktree with its own assets): `test_controls_screen` 3
-    (T04's Save-as walk) and the mission runner's 37-trigger count and `test_mission_skip`'s played run (T06's timed `say`
-    holds the step longer than the tests wait). Those stay with T04 and T06. `run_tests.sh` was not run here (its bench
-    smoke run is a many-ship scenario, Q29); the full run is T20's.
+  - **Tests (oscar, Q29: no bench, no `GUT_SLOW`).** `check_scripts`: 572 scripts compile. GUT, every file M5 added or
+    changed (including T03, T04 and T06 to T10 from the main machine, merged in the same commit) plus `test_main_scene`,
+    `test_sim_core` and `test_flight_model`: 54 files, 920 passing, 0 failing. The Python suite passes with the six
+    civilian and refview test files skipped for T27. `run_tests.sh` was not run here (its bench smoke run is a many-ship
+    scenario, Q29); the full run is T20's.
+  - **History.** One merge commit whose parents are the main machine's `m5` (`06a1f63`) and `main` (`095c73d`); the
+    numbers this plan first used (T25, Q24 to Q26) were taken by the main machine's own plan, so the merge is T26, the
+    civilian move T27, the engine-voice query T28 and the answers Q27 to Q29.
 
 ### M5-T27 The civilian generators on the textured-mesh pipeline
 
