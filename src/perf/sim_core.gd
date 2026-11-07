@@ -73,6 +73,7 @@ const FLAG_HULK: int = 32
 
 # The latest core attached to a tree (-1 for the class check: classes never change while the game runs).
 static var _current: SimCore = null
+static var _cores: Array[SimCore] = []  # every core in a tree, oldest first: the one before takes over when the latest leaves
 static var _native_class_known: int = -1
 static var _cannons_class_known: int = -1
 
@@ -171,6 +172,7 @@ func _ready() -> void:
 	_hook(get_tree())
 	if world != null and not world.rebased.is_connected(_on_rebased):
 		world.rebased.connect(_on_rebased)
+	_cores.append(self)
 	_current = self
 	_register_console()
 	PulseCannon.rebind_all()
@@ -183,9 +185,12 @@ func _exit_tree() -> void:
 		Settings.changed.disconnect(_on_setting_changed)
 	if world != null and is_instance_valid(world) and world.rebased.is_connected(_on_rebased):
 		world.rebased.disconnect(_on_rebased)
-	if _current == self:
-		_current = null
 	DebugConsole.registry.unregister_owner(self)
+	_cores.erase(self)
+	if _current == self:
+		_current = _cores.back() if not _cores.is_empty() else null
+		if _current != null:
+			_current._register_console()
 	PulseCannon.rebind_all()
 	TargetingController.rebind_all()
 
