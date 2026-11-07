@@ -30,6 +30,11 @@ extends Node
 ## sync drops the spent ones, as a spent node is gone by then. Beams and missiles keep their nodes and follow the owned rows in the table at each sync. A `BoltMesh` child
 ## draws the rows, one multimesh a look, interpolated between ticks as the nodes were.
 ##
+## Defensive turrets (M5-T21, D61): `turrets` (`TurretRows`) binds every `TurretMount` to a mount row in the core and is
+## stepped in `step_now` after the cannons, its shots owned bolt rows like theirs; the hit resolver notes each hit's shooter
+## and victim here (`note_hit`, the attacker memory), a destroyed hull is forgotten there, and the turrets' pick rides in
+## the AI job (`BrainBatch`), which launches for them even when no AI ship thinks.
+##
 ## The first consumer attaches it to the world (`attach`, as `FlightBatch` does); `for_tree` gives it to the classes
 ## that read it, or null when the library lacks the class or `perf_native` or `perf_native_core` is off, and then each
 ## class loads its own copy as before, so a bench pairs the two paths in one process by flipping `perf_native_core`.
@@ -76,6 +81,8 @@ const FLAG_HULK: int = 32
 static var _current: SimCore = null
 static var _native_class_known: int = -1
 static var _cannons_class_known: int = -1
+# The civilian ships by body id (M5-T21): every core is told, so the turrets defend them.
+static var _civilians: Dictionary[int, bool] = {}
 
 ## The native core (`ScsSimCore`); null until `_ready`.
 var core: Object = null
@@ -111,6 +118,8 @@ var _selection_controllers: Dictionary[int, TargetingController] = {}
 ## Selections the core's check cleared in the last tick (a readout).
 var selection_clears_last_tick: int = 0
 var _bolt_mesh: BoltMesh = null
+## The defensive turrets on the core (M5-T21).
+var turrets: TurretRows = null
 const _NO_NODES: Array[Node] = []
 
 
@@ -161,6 +170,7 @@ func _init() -> void:
 func _ready() -> void:
 	core = NativeLib.instantiate(NATIVE_CLASS)
 	cannons = NativeLib.instantiate(CANNONS_CLASS)
+	turrets = TurretRows.new(self)
 	_out = Out.new(self)
 	add_child(_out, false, Node.INTERNAL_MODE_BACK)
 	add_child(BrainBatch.new(), false, Node.INTERNAL_MODE_BACK)
@@ -180,6 +190,9 @@ func _ready() -> void:
 	_register_console()
 	PulseCannon.rebind_all()
 	TargetingController.rebind_all()
+	for body_id: int in _civilians:
+		core.set_civilian(body_id, true)
+	TurretMount.rebind_all()
 
 
 func _exit_tree() -> void:
@@ -193,6 +206,7 @@ func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
 	PulseCannon.rebind_all()
 	TargetingController.rebind_all()
+	TurretMount.rebind_all()
 
 
 func _physics_process(_delta: float) -> void:
@@ -266,6 +280,28 @@ static func note_selection_changed(body_id: int, selected_id: int) -> void:
 		_current.core.note_selection(body_id, selected_id)
 
 
+## Marks body `body_id` as a civilian ship (M5-T21): any turret not hostile to it defends it within 2 km.
+static func set_civilian(body_id: int, on: bool) -> void:
+	if on:
+		_civilians[body_id] = true
+	else:
+		_civilians.erase(body_id)
+	var sim: SimCore = current()
+	if sim != null and sim.core != null:
+		sim.core.set_civilian(body_id, on)
+
+
+## A bolt of `shooter_id` hit `victim_id` (the hit resolver, in the sweep's order): the turrets' attacker memory (M5-T21).
+func note_hit(victim_id: int, shooter_id: int) -> void:
+	if core != null and turrets != null and turrets.count() > 0:
+		core.note_attackers(PackedInt64Array([victim_id]), PackedInt64Array([shooter_id]), SimClock.now())
+
+
+## Turrets mounted on this core (M5-T21).
+func turret_count() -> int:
+	return turrets.count() if turrets != null else 0
+
+
 ## Whether this core owns its bolts now.
 func bolt_rows_on() -> bool:
 	return core != null and bool(core.bolt_rows())
@@ -314,7 +350,8 @@ func sync_bolts_now() -> bool:
 
 
 ## The cannon step and the bolt step of this tick (the `SimCoreStep` node does it at `STEP_PRIORITY`): every cannon's gate
-## over the rows, each shot an owned bolt handed back to its cannon, then every owned bolt expired or moved.
+## over the rows, each shot an owned bolt handed back to its cannon, the turrets' step (M5-T21), then every owned bolt
+## expired or moved.
 func step_now(delta: float) -> void:
 	if core == null or not bolt_rows_on() or not ensure_synced():
 		return
@@ -334,6 +371,7 @@ func step_now(delta: float) -> void:
 		var cannon: PulseCannon = _cannons_by_slot.get(int(shots[k * 3]))
 		if cannon != null:
 			cannon.on_kernel_fired(int(shots[k * 3 + 1]), positions[k])
+	turrets.step(now_s, delta)
 	var fired: int = Time.get_ticks_usec()
 	cannon_us = fired - started
 	expired_last_tick = int(core.step_bolts(now_s, delta))
@@ -686,6 +724,7 @@ func _on_body_touched(body_id: int) -> void:
 func _on_hull_destroyed(_info: HitInfo, body_id: int) -> void:
 	if core != null:
 		core.touch(body_id)
+		core.forget_attacker(body_id)  # a ship back from the pool is someone new to the turrets
 
 
 # --- console -----------------------------------------------------------------------------------------------------
@@ -741,6 +780,12 @@ func _register_console() -> void:
 		&"body_direct": {"get": func() -> bool: return core != null and bool(core.body_direct()), "doc": "The rigid bodies are read from the physics server's direct state by RID (M4-T35)"},
 		&"watched_selections": {"get": func() -> int: return _selection_controllers.size(), "doc": "AI targeting controllers whose selection check runs on the core (M4-T35)"},
 		&"selection_clears": {"get": func() -> int: return selection_clears_last_tick, "doc": "Selections the core's check cleared in the last tick"},
+		&"turrets": {"get": turret_count, "doc": "Defensive turrets mounted on the core (M5-T21)"},
+		&"turret_shots": {"get": func() -> int: return turrets.shots_last_tick if turrets != null else 0, "doc": "Shots the turrets fired in the last tick (M5-T21)"},
+		&"turret_shots_total": {"get": func() -> int: return int(core.turret_readouts()[0]) if core != null else 0, "doc": "Shots the turrets fired so far (M5-T21)"},
+		&"turret_us": {"get": func() -> int: return turrets.step_us if turrets != null else 0, "unit": "us", "doc": "The last tick's turret step (aim, gate, shots, handed back); wall clock"},
+		&"turret_picks_stale": {"get": func() -> int: return int(core.turret_readouts()[2]) if core != null else 0, "doc": "Turret picks dropped at the AI job's join because the mount was rebound meanwhile (M5-T21)"},
+		&"attackers": {"get": func() -> int: return int(core.attacker_count()) if core != null else 0, "doc": "Attacker and victim pairs the turrets remember (each for 30 s after a hit; M5-T21)"},
 	}), self)
 
 

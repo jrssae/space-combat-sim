@@ -41,3 +41,7 @@ mod tier_rows;
 
 // M4-T22: the low-attention tier's fire, an engine-free kernel.
 mod tier_fire;
+
+// M5-T21: the defensive turrets, engine-free kernels and the core's shell around them.
+mod turret_kernels;
+mod turret_rows;

@@ -5,6 +5,7 @@ extends Node3D
 ## players for warnings. Space is audible, as in the show (Q5): shots, hits and explosions play positionally, outside the ship.
 ##
 ## Hooks (`connect_combat`, `watch_ship`): cannon fire (`pulse_fire` for the Starfury's side, `raider_fire` for the others),
+## a defensive turret's shot (`turret_fire`, M5-T21),
 ## hits (`hit_hull`), destruction (`explosion`), the player's hull below 25 % (`warning_beep`, repeating) and a new selection
 ## (`target_blip`).
 ##
@@ -29,7 +30,7 @@ extends Node3D
 const SOUND_DIR: String = "res://assets/generated/sfx_combat"
 const UI_SOUND_DIR: String = "res://assets/generated/sfx_ui"
 const UI_SOUND_NAMES: Array[StringName] = [&"ui_move", &"ui_accept", &"ui_back", &"radio_open", &"radio_close"]
-const SOUND_NAMES: Array[StringName] = [&"pulse_fire", &"raider_fire", &"hit_hull", &"explosion", &"main_burst", &"rcs_burst", &"warning_beep", &"target_blip"]
+const SOUND_NAMES: Array[StringName] = [&"pulse_fire", &"raider_fire", &"turret_fire", &"hit_hull", &"explosion", &"main_burst", &"rcs_burst", &"warning_beep", &"target_blip"]
 ## The engine bursts, looped for as long as their thrusters fire.
 const LOOPS: Array[StringName] = [&"main_burst", &"rcs_burst"]
 const BUS: StringName = AudioBuses.SFX  ## the bus the 3D voices and the engines play on
@@ -39,7 +40,7 @@ const WARNING_HULL: float = 0.25
 const WARNING_INTERVAL_S: float = 1.5
 ## Gain (dB) of each gun's shot. The M5 guns hold a flat tone, so they play lower than M2's decaying shots (-3 dB) to keep
 ## the same loudness per shot (K-weighted, M5-T18).
-const SHOT_DB: Dictionary[StringName, float] = {&"pulse_fire": -12.0, &"raider_fire": -13.0}
+const SHOT_DB: Dictionary[StringName, float] = {&"pulse_fire": -12.0, &"raider_fire": -13.0, &"turret_fire": -14.0}
 ## Engine voices at full level: gain (dB) and distance scale of a pod's burst and an RCS cluster's. Four pods at full thrust
 ## come out about as loud as a held shot, as the reference's roars sit beside its gun.
 const POD_DB: float = -9.0
@@ -307,7 +308,23 @@ func watch_ship(combatant: Combatant) -> void:
 	# `shot_fired` sounds on both bolt paths; `projectile_fired` is silent for the AI cannons' rows (M4-T35).
 	combatant.cannon.shot_fired.connect(func(_index: int, at: Vector3) -> void:
 		play(shot, at, shot_db, randf_range(0.96, 1.04)))
+	if combatant.ship.is_node_ready():
+		_watch_turrets(combatant)
+	else:
+		combatant.ship.ready.connect(_watch_turrets.bind(combatant), CONNECT_ONE_SHOT)  # its mounts come with its hardpoints
 	_add_engine_voices(combatant)
+
+
+# A turret's shot sounds where it leaves the barrel (M5-T21).
+func _watch_turrets(combatant: Combatant) -> void:
+	var turret_db: float = SHOT_DB[&"turret_fire"]
+	for mount: TurretMount in combatant.turrets:
+		if not mount.shot_fired.is_connected(_on_turret_fired):
+			mount.shot_fired.connect(_on_turret_fired.bind(turret_db))
+
+
+func _on_turret_fired(at: Vector3, volume_db: float) -> void:
+	play(&"turret_fire", at, volume_db, randf_range(0.97, 1.03))
 
 
 ## Engine voices granted now.

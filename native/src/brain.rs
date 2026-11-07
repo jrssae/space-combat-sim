@@ -869,6 +869,9 @@ impl ScsBrains {
             core.bind_mut()
                 .take_commands(&mut handover.snapshot.commands, true);
         }
+        if let Some(core) = self.core.as_mut() {
+            core.bind_mut().take_turret_picks(&handover.snapshot.turrets);
+        }
         self.spare = Some(handover.snapshot);
         self.handed_events = handover.events;
         self.handed_slots = handover.hosted_slots;
@@ -1748,6 +1751,7 @@ impl ScsBrains {
                 );
                 snapshot.touched.clear();
                 snapshot.commands.clear();
+                snapshot.turrets.clear();
                 snapshot.rows_version = self.own_version;
                 if own_pool {
                     self.step_pool.runner()
@@ -1845,6 +1849,9 @@ impl ScsBrains {
             let filter = self.handover.is_none();
             core.bind_mut()
                 .take_commands(&mut done.snapshot.commands, filter);
+        }
+        if let Some(core) = self.core.as_mut() {
+            core.bind_mut().take_turret_picks(&done.snapshot.turrets);
         }
         self.spare = Some(done.snapshot);
         self.handed_events = events;

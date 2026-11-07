@@ -495,6 +495,9 @@ func _land(i: int, delta: float) -> void:
 			-relative.normalized() if relative.length_squared() > 1e-12 else Vector3.ZERO,
 			relative.length() / maxf(delta, 1e-6))
 	_spend(i)
+	var sim: SimCore = SimCore.for_tree(get_tree())
+	if sim != null:
+		sim.note_hit(info.target_id, shooter_id)  # the turrets' attacker memory, in the sweep's order (M5-T21)
 	_apply(damageable, info)
 	# A destroyed hull is hidden and the explosion replaces the flash; a flash on a parked ship would never be processed.
 	var body := instance_from_id(_body_ids[j]) as Node3D

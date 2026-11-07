@@ -93,6 +93,7 @@ impl ScsSimCore {
         snapshot.touched.clone_from(self.touched_set());
         snapshot.commands.clone_from(&self.row_commands);
         snapshot.rows_version = self.rows_version_now();
+        self.turret_snapshot_into(&mut snapshot.turrets);
         if own_releases {
             self.released.clear();
         }

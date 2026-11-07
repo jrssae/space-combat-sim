@@ -45,6 +45,10 @@ var nav_lights: Dictionary = {}
 ## `corner` (metres cut off each corner; 0 for a rectangle), and `transform` (a screen's plane: +X the pilot's right, +Y up, +Z to the pilot).
 ## Empty when the file has none.
 var screens: Dictionary = {}
+## Defensive turrets (optional; M5-T21, D61), ship frame, in file order: `name` (String), `position` (Vector3: the mount's
+## pivot), `up` (unit Vector3: its base's up), `arc_deg` (float: the cone round `up` the barrel may point into; 200 is a
+## hemisphere and 10 degrees below the base) and `barrel_m` (float: pivot to barrel tip). Empty when the file has none.
+var turrets: Array[Dictionary] = []
 
 
 static func load_file(path: String) -> Hardpoints:
@@ -171,6 +175,13 @@ func _parse(data: Dictionary) -> String:
 		var problem: String = _parse_chunk(value)
 		if not problem.is_empty():
 			return problem
+	var turret_list: Variant = data.get("turrets", [])
+	if not (turret_list is Array):
+		return "hardpoints turrets must be an array"
+	for value: Variant in turret_list as Array:
+		var problem: String = _parse_turret(value)
+		if not problem.is_empty():
+			return problem
 	var lights_problem: String = _parse_nav_lights(data.get("nav_lights", {}))
 	if not lights_problem.is_empty():
 		return lights_problem
@@ -246,6 +257,30 @@ func _parse_chunk(value: Variant) -> String:
 		"offset": _to_vec3(entry["offset"]),
 		"joint": _to_vec3(entry["joint"]) if _is_vec3(entry.get("joint")) else _to_vec3(entry["offset"]),
 		"mesh": String(entry.get("mesh", "")) if entry.get("mesh") is String else "",
+	})
+	return ""
+
+
+func _parse_turret(value: Variant) -> String:
+	var index: int = turrets.size()
+	if not (value is Dictionary) or not _is_vec3((value as Dictionary).get("position")):
+		return "turret %d needs position [x, y, z]" % index
+	var entry: Dictionary = value
+	var up: Vector3 = _vec3_or(entry.get("up"), Vector3.UP)
+	if up.is_zero_approx():
+		return "turret %d has a zero up" % index
+	var arc_deg: float = _number_or(entry.get("arc_deg"), 200.0)
+	if arc_deg <= 0.0 or arc_deg > 360.0:
+		return "turret %d arc_deg must be above 0 and at most 360" % index
+	var barrel_m: float = _number_or(entry.get("barrel_m"), 0.0)
+	if barrel_m < 0.0:
+		return "turret %d barrel_m must not be negative" % index
+	turrets.append({
+		"name": str(entry.get("name", "turret_%d" % index)),
+		"position": _to_vec3(entry["position"]),
+		"up": up.normalized(),
+		"arc_deg": arc_deg,
+		"barrel_m": barrel_m,
 	})
 	return ""
 

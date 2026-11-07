@@ -34,6 +34,14 @@ extends Resource
 ## Energy units regained per second.
 @export var capacitor_recharge_per_s: float = 25.0
 
+@export_group("Turret")
+## Read only by a defensive turret (M5-T21, D61): m, the farthest it fires at; degrees, its bolts' spread round the barrel;
+## degrees per second, how fast it traverses round its base and lifts its barrel.
+@export var turret_range_m: float = 1500.0
+@export var turret_spread_deg: float = 0.8
+@export var turret_traverse_deg_s: float = 50.0
+@export var turret_elevation_deg_s: float = 40.0
+
 
 ## A capacitor sized for this weapon, full.
 func make_capacitor() -> WeaponCapacitor:

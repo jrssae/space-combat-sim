@@ -274,6 +274,8 @@ pub struct ScsSimCore {
     pub(crate) tier_hits_total: i64,
     // The rammer and target pairs in contact at the last check, so a ram lands once, when they first touch (fix round 1).
     pub(crate) tier_ram_pairs: std::collections::HashSet<(i64, i64)>,
+    // The defensive turrets (M5-T21): mounts on the ships' rows and the attacker memory.
+    pub(crate) turrets: crate::turret_rows::TurretState,
 }
 
 #[godot_api]

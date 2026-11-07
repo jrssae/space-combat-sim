@@ -175,8 +175,8 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `upscale` | The upscaler, its preset, the scale applied, sharpness and the window's and 3D view's lines | front end, flight |
 | `post` | Lens flare and motion blur state and where the star is in the picture | front end, flight |
 | `livery` | The player's livery and every ship's in the world | in flight |
-| `frame` | The frame's passes (plumes, flashes, impacts, far dots, bolts): their cost and what each walks | always |
-| `core` | The native simulation core: rows, bodies, bolts, syncs, threads and their costs | in flight |
+| `frame` | The frame's passes (plumes, flashes, impacts, far dots, bolts, turret models): their cost and what each walks | always |
+| `core` | The native simulation core: rows, bodies, bolts, syncs, threads and their costs; the defensive turrets (`turrets`, `turret_shots`, `turret_shots_total`, `turret_us`, `turret_picks_stale`, `attackers`; M5-T21) | in flight |
 | `flight` | The native flight batch: ships stepped and the gather and step costs | in flight |
 | `tier` | The low-attention tier: radius, rates, fighter and capital rows, hulks, promotions and demotions | in flight |
 | `perf` | The tick's stage timings and per-entity counts (on while `perf on` or a bench runs) | in flight |

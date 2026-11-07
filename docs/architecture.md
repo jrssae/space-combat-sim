@@ -3999,3 +3999,46 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
   5 km sensors, each sent at NAV ALPHA with `m.send`), `wave_two` (Control's warning, 4 s, then four from starboard and below) and
   `wrap` (the optional objective completes if no wingman was lost, the success lines, then `protect` completes and, as the last
   primary, ends the mission). Pools: 7 raiders and 3 allied Starfuries, every ship the script and the scenario place.
+
+### 18.10 Defensive turrets as built (T21, D61)
+
+```
+native/src/turret_kernels.rs     the mounts, the attacker memory, the pick (PickJob, run in the AI job) and the aim, gate, spread
+                                 and shot; engine-free, under test_sim_core's guard; Rust unit tests in turret_kernels/tests.rs
+native/src/turret_rows.rs        ScsSimCore's shell: add_turret and the bindings, step_turrets (main thread), note_attackers,
+                                 the launch's copy and the join's picks, the readouts and the digest
+native/src/brain_step.rs         Snapshot.turrets and pick_turrets: the pick beside the thinks, on the frozen rows and memory
+native/src/brain.rs              the picks applied at both joins (take_turret_picks, against each mount's stamp)
+src/perf/turret_rows.gd          TurretRows: binds the mounts, keeps the relation table, steps once a tick, hands the shots back
+src/combat/turret_mount.gd       TurretMount: the mount's place on the ship and its model (yaw, pitch), turned by FramePasses
+src/ship/hardpoints.gd           turrets[] {name, position, up, arc_deg, barrel_m}, optional
+assets/weapons/turret_light.tres the light turret (WeaponSpec with its Turret group: range, spread, slew rates)
+```
+
+- **The split.** The pick is a decision, so it rides in the brains' job (`brain_step::run`): the launch copies the live mounts,
+  the memory and the relations into the snapshot (`snapshot_into`), the job picks for every mount, and the join applies each
+  pick only when the mount's stamp is still the one it was picked for (a mount parked, rebound or removed meanwhile gets a
+  new stamp: `turret_picks_stale` counts the dropped picks). `BrainBatch` launches a job on a tick with turrets even when no
+  AI ship thinks. The aim, gate and shot run in `SimCore.step_now` (priority 1) after the cannons and before the bolt step,
+  from the ship's row; the shot is an owned bolt row (`add_owned_bolt`), so the native hit sweep lands it like any other bolt.
+  The memory is written on the main thread: `HitResolver` notes each landed bolt's shooter and victim in the sweep's order
+  (`SimCore.note_hit`, before the hit applies), a destroyed hull is forgotten at once (a pooled ship comes back as someone
+  new), and the step prunes what is older than 30 s. A shot's spread is a splitmix hash of the mount's id and the core's tick.
+- **The pick.** Over the remembered pairs only (work linear in mounts times pairs, never a walk of every ship): an attacker of
+  the mount's own ship, or of a ship within 2 km that is friendly to it or a civilian not hostile to it (`SimCore.set_civilian`,
+  set by `ShipAssembly`'s `civilian` option); the attacker alive, not in the low-attention tier, not friendly, within 1.25
+  times the turret's range; the nearest inside the arc, else the nearest outside it (the barrel waits at the arc's edge).
+- **The mount.** `arc_deg` is a cone round the base's `up` (200: a hemisphere and 10 degrees below the base), so traverse is
+  free all round and the elevation runs from `90 - arc / 2` to straight up. Azimuth 0 is the ship's nose laid flat on the
+  base (its top when the base faces the nose). The aim leads by `InterceptMath.solve` (the brains' `brain_maths::solve`: the
+  bolt inherits the ship's velocity) and slews at the weapon's traverse and elevation rates. The gate opens when the lead is
+  solvable and inside the arc, the target within range, the gun ready, and the barrel's miss at the lead point no wider than
+  the bolt's spread there plus the target's radius.
+- **Strength (Q14).** The light turret: 900 m/s, one shot every 1.2 s, 2.5 damage, 2 s life, 1.5 km range, 0.8 degree spread,
+  50 and 40 degrees a second; tuned against the seeded balance fight (`test_turret_defence`) once the Saturn 4 is on meshes.
+- **Visuals and sound.** `FramePasses` turns every bound mount's `Yaw` and `Pitch` holders once a frame from one read of the
+  core's aims (`turret_aims`); a shot emits `TurretMount.shot_fired`, which `AudioDirector` plays as `turret_fire` (the
+  sfx_combat generator's lighter gun, version 6).
+- **No fallback.** Turrets need the core and its bolt rows; without them a mount stays unbound and holds fire.
+- **Tests.** Rust: `turret_kernels/tests.rs` (13). GUT: `test_turret_kernel` (aim, arc, gate, pick, memory and stamps through
+  the core), `test_turret_threads` (threaded against delayed, one thread against six, byte for byte), `test_sim_core`'s guard.

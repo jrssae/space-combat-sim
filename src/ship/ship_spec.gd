@@ -66,6 +66,9 @@ const ASSET_ROOT: String = "res://assets/generated"
 ## fighters land in the tier the hits they land up close (fitted per hull against full-fidelity fights; 1 = the model as is).
 ## The default is the Starfury's fitted term, as the other defaults are the Starfury's (§5.1); the raider sets its own.
 @export var tier_hit_scale: float = 0.92
+## The defensive turrets' gun (M5-T21, D61), for a hull whose hardpoints list `turrets[]`; null takes the light turret
+## (`assets/weapons/turret_light.tres`).
+@export var turret_weapon: WeaponSpec = null
 
 
 ## Whether the asset has a first-person `cockpit_interior.obj` (the Starfury does; AI ships such as the raider do not,

@@ -15,6 +15,7 @@ use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_
 use crate::row_commands::{CommandMap, RowCommand};
 use crate::rows::{Bolts, FLAG_HULK, FLAG_TIER, Rows};
 use crate::threads::{Pass, Runner};
+use crate::turret_kernels::{self, PickJob};
 use crate::v3::dist_sq;
 
 /// Where a think's output holds the wanted target (two halves), the behaviour in control and the contacts it saw.
@@ -171,6 +172,8 @@ pub struct Snapshot {
     pub touched: HashSet<i64>,
     pub commands: CommandMap,
     pub rows_version: i64,
+    /// The turrets' pick (M5-T21): the live mounts and the attacker memory as the launch found them, and the answers.
+    pub turrets: PickJob,
 }
 
 impl Snapshot {
@@ -244,6 +247,7 @@ pub fn run(job: Job) -> Done {
             work.events.iter_mut().for_each(|e| *e = 0);
             work.hosted_slots.clear();
             work.failed = true;
+            snapshot.turrets.picks.clear();
             Vec::new()
         }
     };
@@ -282,6 +286,7 @@ fn run_body(
     };
     run_batch(work, snapshot, runner, total, &rel, params);
     work.rel_scratch = rel;
+    pick_turrets(snapshot, params.now_s);
     if params.from_rows {
         write_commands(work, snapshot, total);
         settle_hosted(work, params.n, total);
@@ -290,6 +295,28 @@ fn run_body(
         std::panic::resume_unwind(Box::new("the injected panic after the pass"));
     }
     std::mem::take(&mut work.batch_out)
+}
+
+// The turrets' targets on the frozen rows and memory (M5-T21): a decision, so it rides in the job beside the thinks.
+fn pick_turrets(snapshot: &mut Snapshot, now_s: f64) {
+    let Snapshot {
+        rows,
+        body_rows,
+        touched,
+        turrets,
+        ..
+    } = snapshot;
+    if turrets.mounts.is_empty() {
+        turrets.picks.clear();
+        return;
+    }
+    let row_of = |body: i64| {
+        if touched.contains(&body) {
+            return -1;
+        }
+        HashMap::get(body_rows, &body).map_or(-1, |&r| i64::from(r))
+    };
+    turret_kernels::pick_all(rows, row_of, now_s, turrets);
 }
 
 // Thinks the batch's first `n` items (inputs filled, brains taken from their slots) across the runner's threads and

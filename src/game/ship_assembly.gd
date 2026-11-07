@@ -22,6 +22,10 @@ extends RefCounted
 ##   is given (`combatant.driver.brain`); with no brain it does nothing.
 ## - `lean` (bool, default `ai`): builds the AI ship's lean set of nodes (M4-T11, architecture §17.10, `Ship.lean`): its plumes
 ##   as one multimesh on the body, its markers as another, its collision shapes without nodes, no cockpit.
+## - `civilian` (bool, default false): a civilian ship (M5-T21); other civilians' turrets defend it too.
+##
+## A hull whose hardpoints list `turrets[]` (M5-T21, D61) gets a `TurretMount` per entry when it is ready, firing the
+## spec's `turret_weapon` (the light turret when it has none) for its faction, in `combatant.turrets`.
 
 const OPT_FACTION: StringName = &"faction"
 const OPT_DISPLAY_NAME: StringName = &"display_name"
@@ -30,6 +34,9 @@ const OPT_IS_PLAYER: StringName = &"is_player"
 const OPT_FORCE_ASSIST: StringName = &"force_assist"
 const OPT_AI: StringName = &"ai"
 const OPT_LEAN: StringName = &"lean"
+const OPT_CIVILIAN: StringName = &"civilian"
+## The turrets' gun when the spec names none.
+const DEFAULT_TURRET_WEAPON: String = "res://assets/weapons/turret_light.tres"
 
 
 static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D, opts: Dictionary = {}) -> Combatant:
@@ -39,6 +46,7 @@ static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D,
 	combatant.faction = StringName(opts.get(OPT_FACTION, Factions.NEUTRAL))
 	combatant.display_name = String(opts.get(OPT_DISPLAY_NAME, ""))
 	combatant.is_player = bool(opts.get(OPT_IS_PLAYER, console_owner))
+	combatant.civilian = bool(opts.get(OPT_CIVILIAN, false))
 
 	var ship: Ship = Ship.create(spec, world)
 	ship.console_owner = console_owner
@@ -99,6 +107,9 @@ static func _wire(combatant: Combatant, projectiles_parent: Node3D, console_owne
 			combatant.is_player, console_owner, ship.spec.damage_layout)
 	combatant.damageable.ram_safe_dv_mps = ship.spec.ram_safe_dv_mps
 	combatant.damageable.ram_lethal_dv_mps = ship.spec.ram_lethal_dv_mps
+	if combatant.civilian:
+		SimCore.set_civilian(ship.get_instance_id(), true)
+	_mount_turrets(combatant)
 	if ship.lean:
 		# No marker per muzzle (M4-T35): the cannon fires from the hardpoints' transforms, the World's pool flashes them.
 		var transforms: Array[Transform3D] = ship.get_muzzle_transforms()
@@ -113,3 +124,18 @@ static func _wire(combatant: Combatant, projectiles_parent: Node3D, console_owne
 		push_warning("ShipAssembly: %s has no muzzles; its cannon cannot fire" % ship.spec.asset_id)
 		return
 	combatant.cannon.setup(ship, muzzles, projectiles_parent, ship.spec.weapon, console_owner, combatant.faction)
+
+
+# A mount per `turrets[]` entry of the hull's hardpoints (M5-T21); the mounts bind themselves to the core as they enter.
+static func _mount_turrets(combatant: Combatant) -> void:
+	var ship: Ship = combatant.ship
+	var entries: Array[Dictionary] = ship.get_hardpoints().turrets if ship.get_hardpoints() != null else []
+	if entries.is_empty():
+		return
+	var weapon: WeaponSpec = ship.spec.turret_weapon
+	if weapon == null:
+		weapon = load(DEFAULT_TURRET_WEAPON) as WeaponSpec
+	for entry: Dictionary in entries:
+		var mount := TurretMount.create(entry, weapon, combatant.faction)
+		ship.add_child(mount)
+		combatant.turrets.append(mount)

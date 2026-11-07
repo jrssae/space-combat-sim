@@ -694,6 +694,12 @@ const KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vec
 ## The only `use` lines the row tables may hold: the standard library and the value types the columns are made of. No engine
 ## string: the worker threads share the rows (M4-T18), and an engine string cannot be shared between threads.
 const ROWS_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};"]
+## The defensive turrets' kernels (M5-T21): the mounts, the attacker memory, the pick (run in the AI job) and the aim, gate
+## and shot, held to the kernels' rules; they import the row tables, the vector maths and the brains' intercept maths.
+const TURRET_KERNEL_FILE: String = "res://native/src/turret_kernels.rs"
+const TURRET_KERNEL_USERS: Array[String] = ["res://native/src/turret_rows.rs", "res://native/src/brain_step.rs"]
+const TURRET_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};", "use crate::rows::",
+		"use crate::v3::", "use crate::brain_maths::"]
 ## The core's worker threads (M4-T18): engine-free, the standard library and rayon only.
 const THREADS_FILE: String = "res://native/src/threads.rs"
 const THREADS_USE_ALLOWED: Array[String] = ["use std::", "use rayon::"]
@@ -740,7 +746,16 @@ func test_the_kernels_hold_no_engine_type() -> void:
 	for brain_file: String in BRAIN_FILES:
 		violations.append_array(_engine_free_violations(brain_file, KERNEL_FORBIDDEN, BRAIN_USE_ALLOWED))
 	violations.append_array(_engine_free_violations(THREADS_FILE, KERNEL_FORBIDDEN, THREADS_USE_ALLOWED))
+	violations.append_array(_engine_free_violations(TURRET_KERNEL_FILE, KERNEL_FORBIDDEN, TURRET_KERNEL_USE_ALLOWED))
 	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the kernels, the row tables or the brains: %s" % violations)
+	var turret_source: String = FileAccess.get_file_as_string(TURRET_KERNEL_FILE)
+	for part: String in ["pub fn pick<", "pub fn pick_all<", "pub fn aim(", "pub fn gate(", "pub fn spread(", "pub struct Memory",
+			"pub struct Mounts"]:
+		assert_true(turret_source.contains(part), "the turret kernels hold %s" % part)
+	assert_false(turret_source.contains("static mut") or turret_source.contains("thread_local") or turret_source.contains("Cell<"),
+			"no shared mutable state in the turret kernels (the pick runs on the step's thread)")
+	for user: String in TURRET_KERNEL_USERS:
+		assert_true(FileAccess.get_file_as_string(user).contains("use crate::turret_kernels::"), "%s reads the turret kernels" % user)
 	var source: String = FileAccess.get_file_as_string(KERNEL_FILE)
 	assert_true(source.contains("pub mod contact") and source.contains("pub mod sweep") and source.contains("pub mod ram")
 			and source.contains("pub mod flight"), "the four kernels are there")
@@ -851,7 +866,7 @@ const BRAIN_STEP_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin:
 		"use crate::rows::", "use crate::v3::", "use crate::brain_maths::", "use crate::brain_behaviours::", "use crate::kernels::",
 		"use crate::row_commands::RowCommand;", "use crate::row_commands::{CommandMap, RowCommand};",
 		"use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE};",
-		"use crate::threads::"]
+		"use crate::threads::", "use crate::turret_kernels::"]
 
 
 ## The low-attention tier's table and integrator (M4-T21): held to the kernels' rules; they import the row tables, the shared

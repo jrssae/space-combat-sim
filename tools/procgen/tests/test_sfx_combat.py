@@ -1,4 +1,4 @@
-"""``sfx_combat`` (AC14 of M2, AC15 of M5): eight sounds, 48 kHz mono 16-bit, peaks at most -1 dBFS, seeded, the engine bursts
+"""``sfx_combat`` (AC14 of M2, AC15 and AC19 of M5): nine sounds, 48 kHz mono 16-bit, peaks at most -1 dBFS, seeded, the engine bursts
 seamless; the guns, the impact and the bursts keep the shapes measured from the reference (docs/design-references.md "Combat
 sounds")."""
 
@@ -20,7 +20,7 @@ from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
 
 EXPECTED = {
-    "pulse_fire": 0.105, "raider_fire": 0.15, "hit_hull": 0.14, "explosion": 1.8,
+    "pulse_fire": 0.105, "raider_fire": 0.15, "turret_fire": 0.075, "hit_hull": 0.14, "explosion": 1.8,
     "main_burst": 4.0, "rcs_burst": 2.0, "warning_beep": 0.3, "target_blip": 0.08,
 }  # fmt: skip
 LOOPS = ("main_burst", "rcs_burst")
@@ -158,11 +158,11 @@ class SfxCombatTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls._tmp.cleanup()
 
-    def test_all_eight_wavs_and_the_manifest_are_written(self) -> None:
+    def test_all_nine_wavs_and_the_manifest_are_written(self) -> None:
         names = {p.name for p in self.dir_a.iterdir()}
         self.assertEqual(names, {f"{n}.wav" for n in EXPECTED} | {"manifest.json"})
         self.assertEqual({p.name for p in self.out_a.files}, names)
-        self.assertEqual(self.out_a.summary, "8 sounds")
+        self.assertEqual(self.out_a.summary, "9 sounds")
 
     def test_the_manifest_is_an_audio_manifest(self) -> None:
         m = self.manifest
@@ -240,7 +240,7 @@ class SfxCombatTests(unittest.TestCase):
     def test_the_guns_and_the_impact_are_two_octaves_below_their_design(self) -> None:
         # M3-T15 (Q17), kept by M5 (D60): every frequency a quarter of the design's, the length unchanged (not a resample).
         self.assertEqual(sfx_combat.GUN_PITCH, 0.25)
-        for make in (sfx_combat.pulse_fire, sfx_combat.raider_fire, sfx_combat.hit_hull):
+        for make in (sfx_combat.pulse_fire, sfx_combat.raider_fire, sfx_combat.turret_fire, sfx_combat.hit_hull):
             low = make(np.random.default_rng(3))
             design = make(np.random.default_rng(3), pitch=1.0)
             self.assertEqual(len(low), len(design), make.__name__)
@@ -256,6 +256,22 @@ class SfxCombatTests(unittest.TestCase):
         # Designed near the reference: the Starfury's main tone before the register is within 5 % of its 4.79 kHz.
         design = sfx_combat.pulse_fire(np.random.default_rng(3), pitch=1.0)[hold]
         self.assertAlmostEqual(spectrum_peaks(design, -1.0)[0][0], 4790.0, delta=0.05 * 4790.0)
+
+    def test_the_turret_shot_is_a_lighter_gun(self) -> None:
+        # M5-T21 (D61): built like the guns (a click, then a held FM cluster cut hard), shorter, higher and cleaner.
+        turret = audio.read_wav(self.dir_a / "turret_fire.wav")[0]
+        pulse = audio.read_wav(self.dir_a / "pulse_fire.wav")[0]
+        shot = shot_shape(turret)
+        self.assertLessEqual(shot.attack_s, 0.005)
+        self.assertTrue(0.050 <= shot.hold_s <= 0.070, shot)
+        self.assertLessEqual(shot.cut_s, 0.008, "a hard cut, as the Starfury's")
+        self.assertLess(len(turret), len(pulse), "shorter than the Starfury's shot")
+        hold = slice(int(0.008 * SR), int(0.055 * SR))
+        self.assertGreater(spectrum_peaks(turret[hold], -1.0)[0][0], spectrum_peaks(pulse[hold], -1.0)[0][0], "higher")
+        self.assertLessEqual(len(spectrum_peaks(turret[hold], -10.0)), len(spectrum_peaks(pulse[hold], -10.0)), "no denser")
+        click = high_band_energy(turret, 0.0, 0.003)
+        held = max(high_band_energy(turret, s, s + 0.003) for s in np.arange(0.010, 0.050, 0.003))
+        self.assertGreaterEqual(click, 4.0 * held, "a click at the attack")
 
     def test_same_seed_gives_byte_identical_files(self) -> None:
         for out in self.out_a.files:

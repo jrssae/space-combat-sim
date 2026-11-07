@@ -312,10 +312,14 @@ func flush() -> void:
 	if _launched != null:
 		_join_launched()
 	if _drivers.is_empty():
-		if _hosted.is_empty() or not driver_step_mode():
+		var hosted_due: bool = not _hosted.is_empty() and driver_step_mode()
+		# The turrets' pick rides in the job (M5-T21), so a tick with turrets launches one even when no ship thinks.
+		var turrets_due: bool = _turrets_waiting()
+		if not hosted_due and not turrets_due:
 			return
 		if not _begin_hosted_tick():
-			unhost_all()  # no core or host to step them (the native path switched off): the drivers step themselves
+			if hosted_due:
+				unhost_all()  # no core or host to step them (the native path switched off): the drivers step themselves
 			return
 	if _rows:
 		_flush_rows()
@@ -530,6 +534,12 @@ func _begin_hosted_tick() -> bool:
 	_begin(Engine.get_physics_frames(), host, SimClock.now(), bool(Settings.get_value(&"friendly_fire")), origin,
 			int(sim.core.rows_version()), true)
 	return true
+
+
+# Whether the core under this batch has turrets to pick for (M5-T21).
+func _turrets_waiting() -> bool:
+	var sim := get_parent() as SimCore
+	return sim != null and sim.turret_count() > 0
 
 
 # What the hosted drivers' step reads this tick (M4-T35): the frame, the contexts that changed, the relation matrix.

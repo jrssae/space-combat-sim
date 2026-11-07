@@ -1,6 +1,6 @@
 """``sfx_combat``: the combat sounds (docs/architecture.md section 15.1 D29, M2-T12), synthesised with NumPy.
 
-Eight mono 16-bit 48 kHz WAVs, each peaking at -1.5 dBFS, all from seeded generators (the same seed gives byte-identical files):
+Nine mono 16-bit 48 kHz WAVs, each peaking at -1.5 dBFS, all from seeded generators (the same seed gives byte-identical files):
 
 * ``pulse_fire`` (0.105 s): the Starfury's pulse cannon, shaped on the reference measured in docs/design-references.md
   ("Combat sounds", M5-T18, D60): a noise click, then a metallic inharmonic cluster held flat for 100 ms and cut hard. The
@@ -9,10 +9,12 @@ Eight mono 16-bit 48 kHz WAVs, each peaking at -1.5 dBFS, all from seeded genera
 * ``raider_fire`` (0.15 s): the raiders' gun, built the same way but another weapon: a lower cluster (a = 1.16 kHz,
   b = 0.43 kHz) at higher modulation indices and soft-clipped, so denser and buzzier, held 120 ms and ending in a softer
   exponential cut.
+* ``turret_fire`` (0.075 s): a civilian's defensive turret (M5-T21, D61), built like the guns but lighter: a higher, cleaner
+  cluster (a = 2.70 kHz, b = 0.88 kHz at low modulation indices), held 60 ms and cut hard, with a smaller click.
 * ``hit_hull`` (0.14 s): a bolt on a hull: a short metallic strike, FM at an inharmonic 1 : 1.414 ratio whose brightness
   dies faster than its level, and a click.
 
-  These three sit two octaves down (``GUN_PITCH``, M3-T15, the maintainer's Q17): they are designed at the reference's
+  These four sit two octaves down (``GUN_PITCH``, M3-T15, the maintainer's Q17): they are designed at the reference's
   frequencies and every frequency in them (carriers, modulators, noise bands) is then a quarter, their lengths and envelopes
   unchanged (not a resample, which would stretch them four times). Each is one attack: the guns follow the cannon's own rate
   of fire.
@@ -46,7 +48,7 @@ from ..core.context import AssetOutputs, BuildContext
 from ..core.manifest import build_audio_manifest, sound_entry, write_manifest
 
 ASSET_ID = "sfx_combat"
-GENERATOR_VERSION = 5
+GENERATOR_VERSION = 6
 PEAK_DBFS = -1.5
 MAIN_BURST_S = 4.0
 RCS_BURST_S = 2.0
@@ -80,6 +82,12 @@ def raider_fire(rng: np.random.Generator, pitch: float = GUN_PITCH) -> np.ndarra
     tone = np.tanh(drive * _cluster(t, 1160.0 * pitch, 430.0 * pitch, 1.4, 1.6)) / np.tanh(drive)
     tone *= audio.hold_and_release(t, 0.002, 0.120, 0.006)
     return audio.fade(tone + 0.6 * _click(rng, t, pitch, 0.0025), 0.0003, 0.004)
+
+
+def turret_fire(rng: np.random.Generator, pitch: float = GUN_PITCH) -> np.ndarray:
+    t = audio.time_axis(0.075)
+    tone = _cluster(t, 2700.0 * pitch, 880.0 * pitch, 0.5, 0.6) * audio.hold_and_cut(t, 0.0015, 0.060, 0.004)
+    return audio.fade(tone + 0.4 * _click(rng, t, pitch, 0.001), 0.0003, 0.0)
 
 
 def hit_hull(rng: np.random.Generator, pitch: float = GUN_PITCH) -> np.ndarray:
@@ -169,6 +177,7 @@ def target_blip(_rng: np.random.Generator) -> np.ndarray:
 SOUNDS: dict[str, Callable[[np.random.Generator], np.ndarray]] = {
     "pulse_fire": pulse_fire,
     "raider_fire": raider_fire,
+    "turret_fire": turret_fire,
     "hit_hull": hit_hull,
     "explosion": explosion,
     "main_burst": main_burst,

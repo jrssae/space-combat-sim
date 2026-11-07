@@ -14,6 +14,10 @@ var targetable: Targetable = null
 var damageable: Damageable = null
 ## The AI's `AiPilotDriver` (M2-T07); null for the player.
 var driver: AiPilotDriver = null
+## The defensive turrets (M5-T21), one per `turrets[]` entry of the hull's hardpoints, built when the ship is ready.
+var turrets: Array[TurretMount] = []
+## A civilian ship (M5-T21): other civilians' turrets defend it too.
+var civilian: bool = false
 
 var faction: StringName = Factions.NEUTRAL
 var display_name: String = ""
