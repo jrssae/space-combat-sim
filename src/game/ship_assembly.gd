@@ -118,7 +118,8 @@ static func _wire(combatant: Combatant, projectiles_parent: Node3D, console_owne
 		# No marker per muzzle (M4-T35): the cannon fires from the hardpoints' transforms, the World's pool flashes them.
 		var transforms: Array[Transform3D] = ship.get_muzzle_transforms()
 		if transforms.is_empty():
-			push_warning("ShipAssembly: %s has no muzzles; its cannon cannot fire" % ship.spec.asset_id)
+			if combatant.turrets.is_empty():  # a turreted hull without guns (a civilian) fights with its turrets only
+				push_warning("ShipAssembly: %s has no muzzles; its cannon cannot fire" % ship.spec.asset_id)
 			return
 		combatant.cannon.setup_transforms(ship, transforms, projectiles_parent, ship.spec.weapon, combatant.faction,
 				MuzzleFlashPool.attach(ship.world))
