@@ -1,9 +1,9 @@
 extends GutTest
-## The player's candidate list built when read (M4-T34): with `perf_targeting_on_read` on, the player's targeting computer
-## checks its selection every tick, as every AI ship's does, and builds its list of every targetable only when something
-## reads it (the HUD and the radar once a frame, a selection command), at most once per refresh. The selection and its
-## `target_changed` signals are the same tick by tick as with the list built every tick (off, the reference), and a list read
-## right after a refresh is the same list.
+## The player's candidate list built when read (M4-T34): the player's targeting computer checks its selection every tick, as
+## every AI ship's does, and builds its list of every targetable only when something reads it (the HUD and the radar once a
+## frame, a selection command), at most once per refresh. The selection, its `target_changed` signals and a list read right
+## after a refresh are the same tick by tick as with the list built every tick (the reference, recorded in
+## `tests/fixtures/parity/targeting_on_read.json` before M4-T37 removed `perf_targeting_on_read`).
 
 const STARFURY_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const FIXTURE: String = "targeting_on_read"
@@ -11,17 +11,6 @@ const STEPS: int = 600
 
 var world: WorldFrame
 var projectiles: Node3D
-var _saved: Variant
-
-
-func before_each() -> void:
-	_saved = Settings.get_value(&"perf_targeting_on_read")
-
-
-func after_each() -> void:
-	Settings.set_value(&"perf_targeting_on_read", _saved)
-
-
 func _world() -> void:
 	world = WorldFrame.new()
 	world.name = "World"
@@ -70,8 +59,7 @@ func _list(infos: Array[TargetInfo]) -> String:
 # several refreshes old or targets that left since. Per step: the selection, its signals, the selection's name when read, and
 # the list when read with nothing changed since the refresh. Returns [log, commands that selected a target already out of
 # reach when they ran, late list reads].
-func _run(on: bool) -> Array:
-	Settings.set_value(&"perf_targeting_on_read", on)
+func _run() -> Array:
 	_world()
 	var player: Combatant = _player()
 	var targeting: TargetingController = player.ship.targeting
@@ -144,9 +132,8 @@ func _run(on: bool) -> Array:
 
 
 func test_the_selection_and_the_list_read_are_the_same_either_way() -> void:
-	var recorded: Variant = await ParityFixture.expected(FIXTURE, "run_seed_3402", func() -> Dictionary:
-		return _digest_of(_run(false)))
-	var on_read: Array = _run(true)
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "run_seed_3402")
+	var on_read: Array = _run()
 	assert_not_null(recorded, "the list built every tick was recorded")
 	if recorded == null:
 		return
@@ -165,7 +152,6 @@ static func _digest_of(run: Array) -> Dictionary:
 
 
 func test_no_list_is_built_while_nothing_reads_it() -> void:
-	Settings.set_value(&"perf_targeting_on_read", true)
 	_world()
 	var player: Combatant = _player()
 	for i: int in 30:

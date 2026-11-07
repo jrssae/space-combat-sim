@@ -34,7 +34,7 @@ var system: TargetingSystem = TargetingSystem.new()
 var keeps_candidates: bool = true
 
 var _body: RigidBody3D = null
-# The list was not built since the last refresh (M4-T34, `perf_targeting_on_read`): the next reader builds it.
+# The list was not built since the last refresh (M4-T34, built on read): the next reader builds it.
 var _stale: bool = false
 # What the last refresh's list held, light (M4-T34, on read): each target's id, position, broadcast range and name, so the
 # selection, its name and `select_id` answer as from the list the refresh used to build. Valid until a command gathers anew.
@@ -137,10 +137,8 @@ func refresh() -> void:
 	var before: int = system.selected_id()
 	if not keeps_candidates:
 		_check_selection()
-	elif bool(Settings.get_value(&"perf_targeting_on_read")):
-		_snapshot()
 	else:
-		_gather()
+		_snapshot()
 	_emit_if_changed(before)
 
 

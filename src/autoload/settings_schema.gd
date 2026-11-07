@@ -108,8 +108,6 @@ const ENTRIES: Dictionary = {
 	# M4-T34
 	&"perf_native_bolt_sync": {"type": TYPE_BOOL, "default": true,
 		"doc": "The core's two bolt reads a tick go through the cheaper native reader (M4-T34) when the core is on; off = the core's own read, the reference, for pairing the two in one process"},
-	&"perf_targeting_on_read": {"type": TYPE_BOOL, "default": true,
-		"doc": "The player's targeting computer checks its selection every tick and notes each target's place, reach and name, and builds its full list of every target only when it is read, the HUD's and the radar's once a frame (M4-T34; the same selection, its name and select_id answers; the list itself as of the read); off = the list built every tick, the reference"},
 	# M4-T35
 	&"perf_core_event_columns": {"type": TYPE_BOOL, "default": true,
 		"doc": "The core keeps a body's activity, hull points and selection from the events that change them (hidden, shown, destroyed, damaged, healed, a selection change; M4-T35) and reads only the pose and motion a tick; off = every column read from the nodes every tick, the reference, for pairing the two in one process; live"},
@@ -161,7 +159,7 @@ const RENAMED: Dictionary = {}
 ## holds one of these loads without it, and the next `save` drops it.
 const RETIRED: Array[StringName] = [&"perf_native_weapons", &"perf_native_brains", &"perf_native_commands",
 		&"perf_native_driver_step", &"perf_native_flight", &"perf_batch_owns_ships", &"perf_native_sweep_cells",
-		&"perf_ram_contact_columns", &"perf_ram_sweep_cull", &"perf_native_ram_contacts"]
+		&"perf_ram_contact_columns", &"perf_ram_sweep_cull", &"perf_native_ram_contacts", &"perf_targeting_on_read"]
 
 ## Choices removed from a setting: key -> {old choice -> what a saved file's old choice loads as} (M4-T37: the inline step).
 const RETIRED_VALUES: Dictionary = {&"sim_step": {&"inline": &"threaded"}}
