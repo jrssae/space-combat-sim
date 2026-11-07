@@ -63,6 +63,12 @@ static func create(cls: StringName, p_faction: StringName, display_name: String,
 	return cap
 
 
+## The hull box's half extents in its own frame (width, height, length), m.
+func half_extents() -> Vector3:
+	var spec: Dictionary = CLASSES[ship_class]
+	return 0.5 * Vector3(float(spec["width"]), float(spec["height"]), float(spec["length"]))
+
+
 ## The radius of the sphere that holds the hull of a `cls` capital, m.
 static func hull_radius(cls: StringName) -> float:
 	var spec: Dictionary = CLASSES.get(cls, CLASSES[&"cruiser"])

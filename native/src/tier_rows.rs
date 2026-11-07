@@ -29,7 +29,8 @@ impl ScsSimCore {
         let t = &mut self.tier;
         if let Some(at) = tier::clear_of_statics(
             t.positions[i],
-            t.velocities[i],
+            &t.bases[i],
+            t.half_extents[i],
             t.radii[i],
             &centers,
             &radii,
@@ -330,6 +331,30 @@ impl ScsSimCore {
         }
         self.tier_promotions += 1;
         out
+    }
+
+    /// Removes body `body_id`'s row with no promotion (fix round 1: a release or a death in the tier): no clearance, not
+    /// counted as a promotion. False when it is not in the tier.
+    #[func]
+    fn tier_remove(&mut self, body_id: i64) -> bool {
+        match self.tier.remove(body_id) {
+            Some((at, _)) => {
+                self.tier_names.swap_remove(at);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// A capital row's hull box, half extents in its own frame (fix round 1): it is cleared of rocks by its hull, not by its
+    /// bounding sphere.
+    #[func]
+    fn tier_set_box(&mut self, body_id: i64, half_extents: Vector3) -> bool {
+        let Some(i) = self.tier.index_of(body_id) else {
+            return false;
+        };
+        self.tier.half_extents[i] = half_extents;
+        true
     }
 
     /// A tier row's state without removing it (the tests and the console), or empty.

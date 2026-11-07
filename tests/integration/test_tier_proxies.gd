@@ -238,8 +238,9 @@ func test_a_row_promoted_inside_a_rock_comes_back_clear_of_it() -> void:
 	assert_eq(int(sim.core.tier_cleared()) - cleared, 2, "both were moved clear first")
 	var need: float = rock_r + moving.damageable.bounding_radius
 	assert_gt(moving.ship.global_position.distance_to(rocks[0]), need, "the moving ship comes back outside its rock")
-	var along: Vector3 = (moving.ship.global_position - before_moving).normalized()
-	assert_gt(along.dot(Vector3(0.0, 0.0, 1.0)), 0.99, "moved on along its velocity")
+	# The shortest way out (fix round 1): no more than the overlap and the clearance, about 300 m here, not across the rock.
+	var overlap: float = need - before_moving.distance_to(rocks[0])
+	assert_lt(moving.ship.global_position.distance_to(before_moving), overlap + 10.0, "moved by the overlap, no more")
 	assert_almost_eq(moving.ship.linear_velocity, Vector3(0.0, 0.0, 50.0), Vector3.ONE * 0.5, "its velocity unchanged")
 	assert_gt(still.ship.global_position.distance_to(rocks[1]), rock_r + still.damageable.bounding_radius,
 			"the still one is pushed straight out")
@@ -268,3 +269,50 @@ func test_a_mine_blast_is_on_the_cores_rows_and_hurts_a_tier_row_and_a_near_hull
 	assert_true(hit_by_mine.get("RAIDER 2", false), "and was hurt the same way")
 	var source: String = FileAccess.get_file_as_string("res://src/perf/standins/standin_director.gd")
 	assert_false(source.contains("func _gather_hulls"), "no GDScript walk of the hulls orders a blast: one path, the core's rows")
+
+
+func test_a_capital_is_cleared_of_a_rock_by_its_hull_with_no_big_jump() -> void:
+	Settings.set_value(&"tier_radius_m", RADIUS_M)
+	var cap: CapitalStandin = standins.add_capital(&"cruiser", Factions.RAIDERS, "CRUISER", world.to_universe(Vector3(0.0, 0.0, -16000.0)),
+			Basis.IDENTITY, Vector3.ZERO)
+	cap.damageable.invulnerable = true
+	standins.active = true
+	await _ticks(4)
+	assert_true(cap.is_tier_parked())
+	var half: Vector3 = cap.half_extents()
+	var row: Vector3 = _row_at(cap)
+	var rock_r: float = 100.0
+	# One rock 20 m into the hull's side; one off a corner, clear of the hull but inside its bounding sphere.
+	var side: Vector3 = row + Vector3(half.x + rock_r - 20.0, 0.0, 0.0)
+	var corner: Vector3 = row + Vector3(half.x + 80.0, 0.0, half.z + 80.0)
+	assert_lt(corner.distance_to(row), CapitalStandin.hull_radius(&"cruiser") + rock_r + 5.0, "(the corner rock is inside the bounding sphere's reach)")
+	ContactScan.register_static(9100001, side, rock_r, BodyKind.STATIC, Factions.NEUTRAL, world)
+	ContactScan.register_static(9100002, corner, rock_r, BodyKind.STATIC, Factions.NEUTRAL, world)
+	await _ticks(2)
+	var before: Vector3 = _row_at(cap)
+	var cleared: int = int(sim.core.tier_cleared())
+	var promotions: int = int(sim.core.tier_promotions())
+	Settings.set_value(&"tier_radius_m", 30000.0)
+	await _ticks(1)
+	assert_false(cap.is_tier_parked(), "promoted")
+	assert_eq(int(sim.core.tier_cleared()) - cleared, 1, "moved clear once")
+	assert_eq(int(sim.core.tier_promotions()) - promotions, 1)
+	var jump: float = cap.global_position.distance_to(before)
+	assert_between(jump, 20.0, 40.0, "by the 20 m overlap and the clearance, not its 154 m bounding radius (%.1f m)" % jump)
+	var local: Vector3 = cap.global_transform.affine_inverse() * side
+	var nearest := Vector3(clampf(local.x, -half.x, half.x), clampf(local.y, -half.y, half.y), clampf(local.z, -half.z, half.z))
+	assert_gte(local.distance_to(nearest), rock_r, "the hull clear of the side rock")
+
+
+func test_a_release_or_a_death_in_the_tier_is_not_a_promotion() -> void:
+	var c: Combatant = _raider("RAIDER 1", Vector3(0.0, 0.0, -15000.0))
+	var cap: CapitalStandin = standins.add_capital(&"cruiser", Factions.RAIDERS, "CRUISER", world.to_universe(Vector3(3000.0, 0.0, -16000.0)),
+			Basis.IDENTITY, Vector3.ZERO)
+	standins.active = true
+	await _ticks(4)
+	assert_true(c.ship.is_tier_parked() and cap.is_tier_parked())
+	var promotions: int = int(sim.core.tier_promotions())
+	pool.release(c)
+	tier.forget_capital(cap)
+	assert_false(sim.core.tier_has(c.ship.get_instance_id()) or sim.core.tier_has(cap.get_instance_id()), "both rows gone")
+	assert_eq(int(sim.core.tier_promotions()), promotions, "and neither counted as a promotion")

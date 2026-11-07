@@ -99,6 +99,8 @@ pub struct TierRows {
     pub proxy: Vec<i32>,
     /// A far dot's paint, linear rgb.
     pub paint: Vec<[f32; 3]>,
+    /// A capital's hull box (half extents in its own frame, fix round 1); zero for a fighter, held as a sphere.
+    pub half_extents: Vec<Vector3>,
     pub by_body: HashMap<i64, usize>,
 }
 
@@ -163,6 +165,7 @@ impl TierRows {
         self.speed_limit.push(0.0);
         self.proxy.push(-1);
         self.paint.push([0.5, 0.5, 0.5]);
+        self.half_extents.push(Vector3::ZERO);
         self.by_body.insert(body_id, at);
         Some(at)
     }
@@ -199,6 +202,7 @@ impl TierRows {
         self.speed_limit.swap_remove(at);
         self.proxy.swap_remove(at);
         self.paint.swap_remove(at);
+        self.half_extents.swap_remove(at);
         if at != last {
             self.by_body.insert(self.body_ids[at], at);
             return Some((at, Some(last)));
@@ -586,56 +590,90 @@ pub fn fill_hulls(t: &TierRows, class: i32, offset: Vector3, out: &mut Vec<f32>)
     n
 }
 
-/// Where a row of `radius` at `position`, moving at `velocity`, must go to clear every static sphere (`centers`,
-/// `radii`) by `CLEARANCE_M`: on along its velocity to the far side, or straight out when it barely moves; a few passes
-/// for rocks that touch. None when it overlaps nothing.
+/// Where a row must go to clear every static sphere (`centers`, `radii`) by `CLEARANCE_M`, by the shortest way out of each
+/// (fix round 1: the least jump at the handover): a fighter as a sphere of `radius`, a capital as its hull box (`half`, in
+/// the frame of `basis`; zero for none), so a rock near a carrier's bounding sphere but clear of its hull moves nothing. A
+/// few passes for rocks that touch; a row still overlapping after them stays where the last pass put it. None when it
+/// overlaps nothing.
 pub fn clear_of_statics(
     position: Vector3,
-    velocity: Vector3,
+    basis: &Basis,
+    half: Vector3,
     radius: f64,
     centers: &[Vector3],
     radii: &[f64],
 ) -> Option<Vector3> {
+    let boxed = half != Vector3::ZERO;
     let mut at = position;
     let mut moved = false;
-    let along = if f64::from(length_squared(velocity)) > 1.0 {
-        Some(normalized(velocity))
-    } else {
-        None
-    };
     for _ in 0..CLEAR_PASSES {
         let mut clear = true;
         for (k, &c) in centers.iter().enumerate() {
-            let need = radii[k] + radius + CLEARANCE_M;
-            let rel = sub(at, c);
-            let d_sq = f64::from(length_squared(rel));
-            if d_sq >= need * need {
-                continue;
-            }
-            clear = false;
-            moved = true;
-            at = match along {
-                // The exit of the ray from `at` along `d` through the sphere of radius `need`.
-                Some(d) => {
-                    let b = f64::from(rel.x) * f64::from(d.x)
-                        + f64::from(rel.y) * f64::from(d.y)
-                        + f64::from(rel.z) * f64::from(d.z);
-                    let t = -b + (b * b - (d_sq - need * need)).max(0.0).sqrt() + EXIT_SLACK_M;
-                    add(at, scale(d, t as f32))
-                }
-                None => {
-                    let out_dir = if d_sq > 1e-6 {
-                        normalized(rel)
-                    } else {
-                        Vector3::UP
-                    };
-                    add(c, scale(out_dir, (need + EXIT_SLACK_M) as f32))
-                }
+            let push = if boxed {
+                box_push(sub(c, at), basis, half, radii[k] + CLEARANCE_M)
+            } else {
+                sphere_push(sub(at, c), radii[k] + radius + CLEARANCE_M)
             };
+            if let Some(p) = push {
+                at = add(at, p);
+                clear = false;
+                moved = true;
+            }
         }
         if clear {
             break;
         }
     }
     moved.then_some(at)
+}
+
+// How far a sphere whose centre is `rel` from a rock's must move to stand `need` from it, or none.
+fn sphere_push(rel: Vector3, need: f64) -> Option<Vector3> {
+    let d = f64::from(length(rel));
+    if d >= need {
+        return None;
+    }
+    let out_dir = if d > 1e-6 {
+        normalized(rel)
+    } else {
+        Vector3::UP
+    };
+    Some(scale(out_dir, (need - d + EXIT_SLACK_M) as f32))
+}
+
+// How far a box (half extents `half` in the frame of `basis`) must move to stand `need` from a rock whose centre is `to_rock`
+// from the box's, or none: straight away from the hull's nearest point, or out along its thinnest side when the rock's
+// centre is inside the hull.
+fn box_push(to_rock: Vector3, basis: &Basis, half: Vector3, need: f64) -> Option<Vector3> {
+    let local = xform_inv(basis, to_rock);
+    let l = [f64::from(local.x), f64::from(local.y), f64::from(local.z)];
+    let h = [f64::from(half.x), f64::from(half.y), f64::from(half.z)];
+    let q = [
+        l[0].clamp(-h[0], h[0]),
+        l[1].clamp(-h[1], h[1]),
+        l[2].clamp(-h[2], h[2]),
+    ];
+    let diff = [l[0] - q[0], l[1] - q[1], l[2] - q[2]];
+    let dist = (diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]).sqrt();
+    if dist >= need {
+        return None;
+    }
+    let mut p = [0.0; 3];
+    if dist > 1e-6 {
+        let s = -(need - dist + EXIT_SLACK_M) / dist;
+        p = [diff[0] * s, diff[1] * s, diff[2] * s];
+    } else {
+        let mut axis = 0;
+        for i in 1..3 {
+            if h[i] - l[i].abs() < h[axis] - l[axis].abs() {
+                axis = i;
+            }
+        }
+        let depth = h[axis] - l[axis].abs() + need + EXIT_SLACK_M;
+        p[axis] = if l[axis] >= 0.0 { -depth } else { depth };
+    }
+    Some(xform(
+        basis,
+        Vector3::new(p[0] as f32, p[1] as f32, p[2] as f32),
+    ))
 }

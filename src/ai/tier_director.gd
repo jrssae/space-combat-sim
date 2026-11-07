@@ -14,7 +14,8 @@ extends Node
 ##
 ## Far proxies (M4-T23): a demoted fighter is drawn as a far dot from its row (`FarDots`, its hull's paint), a capital as an
 ## instance of the mesh its body draws (`FarHulls`); a promotion takes the row in the tick its body shows. A row that comes
-## back inside a rock or a mine is moved clear by the core first (it flew through them as a row).
+## back inside a rock or a mine is moved clear by the core first (it flew through them as a row), by the shortest way out: a
+## fighter as a sphere, a capital as its hull box (fix round 1).
 ##
 ## A hulk (M12 groundwork): a tier row flagged a hulk drifts with no force and no brain and is never removed for being idle;
 ## promotion brings it back as a hulk (`Ship.hulk`: no pilot, no thrust, no assist), not a live ship.
@@ -278,7 +279,7 @@ func forget(c: Combatant) -> void:
 	if c.driver != null:
 		c.driver.set_tiered(false)
 	if _sim != null and is_instance_valid(_sim) and _sim.core != null:
-		_sim.core.tier_take(body_id)
+		_sim.core.tier_remove(body_id)  # leaves play, not a promotion (fix round 1)
 	c.ship.remove_meta(TIER_META)
 
 
@@ -291,7 +292,7 @@ func forget_capital(cap: CapitalStandin) -> void:
 		return
 	_park_origins.erase(body_id)
 	if _sim != null and is_instance_valid(_sim) and _sim.core != null:
-		_sim.core.tier_take(body_id)
+		_sim.core.tier_remove(body_id)  # dies, not a promotion (fix round 1)
 
 
 ## Whether body `body_id` is in the tier now.
@@ -379,6 +380,7 @@ func _demote_capital(sim: SimCore, cap: CapitalStandin) -> bool:
 	sim.core.tier_set_attrs(body_id, cap.targetable.get_instance_id(), cap.faction, cap.targetable.display_name,
 			cap.damageable.bounding_radius, cap.targetable.broadcast_range_m, cap.damageable.hull.fraction())
 	sim.core.tier_set_control(body_id, cap.cruise_velocity, PackedFloat64Array(), 0.0, false)
+	sim.core.tier_set_box(body_id, cap.half_extents())  # cleared of rocks by its hull, not its bounding sphere (fix round 1)
 	var hulls: FarHulls = FarHulls.attach(world)
 	sim.core.tier_set_proxy(body_id, hulls.class_of(cap.drawn_mesh()) if hulls != null else -1, FarDots.DEFAULT_PAINT)
 	if hulls == null:
@@ -607,13 +609,13 @@ func _prune(sim: SimCore) -> void:
 		if not is_instance_valid(cap) or not cap.is_inside_tree():
 			_tiered_capitals.erase(body_id)
 			_park_origins.erase(body_id)
-			sim.core.tier_take(body_id)
+			sim.core.tier_remove(body_id)
 	for body_id: int in _tiered_ships.keys():
 		var c: Combatant = _tiered_ships[body_id]
 		if not is_instance_valid(c.ship) or not c.ship.is_inside_tree():
 			_tiered_ships.erase(body_id)
 			_park_origins.erase(body_id)
-			sim.core.tier_take(body_id)
+			sim.core.tier_remove(body_id)
 
 
 func _ship_of(body_id: int) -> Combatant:
