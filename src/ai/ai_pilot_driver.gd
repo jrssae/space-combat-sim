@@ -879,11 +879,11 @@ func _selection_is_live(targeting: TargetingController) -> bool:
 	return targetable != null and targetable.is_active()
 
 
-## The drivers flying a ship in play, for `AiConsole`.
+## The drivers flying a ship in play (on its body or as a low-attention tier row, M4-T23), for `AiConsole`.
 static func flying() -> Array[AiPilotDriver]:
 	var out: Array[AiPilotDriver] = []
 	for driver: AiPilotDriver in _live:
 		if driver.brain != null and driver.combatant != null and is_instance_valid(driver.combatant.ship) \
-				and driver.combatant.ship.can_process():
+				and (driver.combatant.ship.can_process() or driver.combatant.ship.is_tier_parked()):
 			out.append(driver)
 	return out

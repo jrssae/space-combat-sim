@@ -132,10 +132,11 @@ func test_a_raider_flies_to_its_objective_from_200_km_and_closes_inside_2_km() -
 	var t0: float = SimClock.now()
 	var closest: float = INF
 	var top_speed: float = 0.0
-	while SimClock.now() - t0 < 900.0 and closest > 2000.0 and raider.ship.can_process():
+	# 50 km from the player the raider flies as a tier row (M4-T23): where it is and how fast are its row's.
+	while SimClock.now() - t0 < 900.0 and closest > 2000.0 and main.ships.alive().has(raider):
 		await _ticks(1)
-		closest = minf(closest, raider.ship.global_position.distance_to(buoy.global_position))
-		top_speed = maxf(top_speed, raider.ship.linear_velocity.length())
+		closest = minf(closest, TierDirector.flying_position(raider.ship).distance_to(buoy.global_position))
+		top_speed = maxf(top_speed, TierDirector.flying_velocity(raider.ship).length())
 	Engine.time_scale = 1.0
 	gut.p("objective: 200 km closed to %.0f m in %.0f s, top speed %.0f m/s" % [closest, SimClock.now() - t0, top_speed])
 	assert_lt(closest, 2000.0, "closed inside 2 km")

@@ -61,7 +61,7 @@ static func mean_speed_mps() -> float:
 	var flying: Array[AiPilotDriver] = AiPilotDriver.flying()
 	var total: float = 0.0
 	for driver: AiPilotDriver in flying:
-		total += driver.combatant.ship.linear_velocity.length()
+		total += TierDirector.flying_velocity(driver.combatant.ship).length()
 	return snappedf(total / flying.size(), 0.01) if not flying.is_empty() else 0.0
 
 

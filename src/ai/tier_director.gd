@@ -151,6 +151,18 @@ static func row_pose(body: Node3D) -> Array:
 	return [Transform3D(state["basis"], state["position"]), state["velocity"], state["angular"]]
 
 
+## Where `body` flies now (M4-T23): its tier row's position while it is in the tier, else its own.
+static func flying_position(body: Node3D) -> Vector3:
+	var pose: Array = row_pose(body) if body != null and body.has_meta(TIER_META) else []
+	return (pose[0] as Transform3D).origin if not pose.is_empty() else body.global_position
+
+
+## How fast `body` flies now (M4-T23): its tier row's velocity while it is in the tier, else its body's.
+static func flying_velocity(body: RigidBody3D) -> Vector3:
+	var pose: Array = row_pose(body) if body != null and body.has_meta(TIER_META) else []
+	return pose[1] if not pose.is_empty() else body.linear_velocity
+
+
 ## Lands tier hits through each target's `Damageable` (M4-T22), in order: `targets` and `shooters` by body id, each hit's
 ## damage and where it landed. A target gone or already destroyed takes nothing. Returns how many landed.
 static func land_hits(targets: PackedInt64Array, shooters: PackedInt64Array, damage: PackedFloat64Array,
@@ -628,6 +640,13 @@ func _capital_of(body_id: int) -> CapitalStandin:
 	return _capitals_by_body.get(body_id)
 
 
+## The last frame's far proxy update on the CPU, us (M4-T23): the far dots' and the far hulls' refreshes.
+func proxy_us() -> int:
+	var dots: FarDots = FarDots.of(world)
+	var hulls: FarHulls = FarHulls.of(world)
+	return (dots.last_refresh_us if dots != null else 0) + (hulls.last_refresh_us if hulls != null else 0)
+
+
 func _register_console() -> void:
 	DebugConsole.registry.register_provider(&"tier", ConsoleVars.new({
 		&"radius_m": {"get": radius_m, "unit": "m", "doc": "Ships within this of the player fly in Jolt; beyond it plus 10 % they are tier rows (the setting tier_radius_m; 0 = off)"},
@@ -662,6 +681,16 @@ func _register_console() -> void:
 				"doc": "Tier fighters' thinks in the last handed-over AI step (fix round 1)"},
 		&"think_us": {"get": func() -> float: return float(NativeBrains.host(get_tree()).tier_think_us()) if NativeBrains.host(get_tree()) != null else 0.0,
 				"unit": "us", "doc": "Their summed time on the step's own clock: the worker thread when sim_step is threaded, the main thread when delayed (fix round 1)"},
+		&"proxy_dots": {"get": func() -> int: return FarDots.of(world).tier_shown if FarDots.of(world) != null else 0,
+				"doc": "Tier fighters drawn as far dots by the last frame (M4-T23)"},
+		&"proxy_hulls": {"get": func() -> int: return FarHulls.of(world).shown if FarHulls.of(world) != null else 0,
+				"doc": "Tier capitals drawn as far hull instances by the last frame (M4-T23)"},
+		&"proxy_us": {"get": proxy_us, "unit": "us",
+				"doc": "The last frame's far proxy update on the CPU: the far dots (near and tier) and the far hulls; wall clock (M4-T23)"},
+		&"flashes": {"get": func() -> int: return FarFlashes.of(world).flash_count() if FarFlashes.of(world) != null else 0,
+				"doc": "Far deaths shining as point flashes now (M4-T23)"},
+		&"cleared": {"get": func() -> int: return int(_sim.core.tier_cleared()) if _sim != null and is_instance_valid(_sim) and _sim.core != null else 0,
+				"doc": "Promotions moved clear of a rock or mine they overlapped so far (M4-T23)"},
 		&"cost_us": {"get": func() -> String: return "%.1f fighters, %.1f capitals; %.3f a fighter, %.2f a capital" % Array(cost_means()),
 				"doc": "The tier's main-thread cost per tick since the bench's window began (or the first tier row): the fighters' part (integration, rolls, landing), the far capitals' rolls, and each per row, us; wall clock (M4-T22)"},
 	}), self)
