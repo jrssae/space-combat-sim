@@ -209,6 +209,15 @@ func test_options_are_read_from_key_value_words() -> void:
 	assert_false(bool(BenchRunner.parse_options(PackedStringArray(["0"]))["ok"]), "no zero-length window")
 
 
+func test_the_capital_share_is_an_option_from_0_to_1() -> void:
+	assert_eq(float(BenchRunner.parse_options(PackedStringArray())["capitals"]), -1.0, "the mix's share by default")
+	var o: Dictionary = BenchRunner.parse_options(PackedStringArray(["capitals=0.2"]))
+	assert_true(o["ok"], String(o.get("error", "")))
+	assert_eq(float(o["capitals"]), 0.2)
+	assert_false(bool(BenchRunner.parse_options(PackedStringArray(["capitals=1.5"]))["ok"]))
+	assert_false(bool(BenchRunner.parse_options(PackedStringArray(["capitals=x"]))["ok"]))
+
+
 # --- battle and typical (M4-T07) ---------------------------------------------------------------------------------
 
 

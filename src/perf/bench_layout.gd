@@ -100,14 +100,23 @@ static func has_mix(layout: StringName) -> bool:
 	return layout == BATTLE or layout == TYPICAL
 
 
+## The capital share a run uses in place of its profile's (the 1 000 stretch's upper edge, M4-T25); below 0 the profile's.
+static var capital_share: float = -1.0
+
+
 ## The `BattleMix` counts of `layout` at `n` ships; empty for a layout without a mix.
 static func mix(layout: StringName, n: int) -> Dictionary:
+	var p: Dictionary = {}
 	match layout:
 		BATTLE:
-			return BattleMix.counts(BattleMix.profile(BattleMix.GRAND), n)
+			p = BattleMix.profile(BattleMix.GRAND)
 		TYPICAL:
-			return BattleMix.counts(BattleMix.profile(BattleMix.TYPICAL), n)
-	return {}
+			p = BattleMix.profile(BattleMix.TYPICAL)
+		_:
+			return {}
+	if capital_share >= 0.0:
+		p["capital_share"] = capital_share
+	return BattleMix.counts(p, n)
 
 
 ## The factions that fly in `layout`, by side index.
