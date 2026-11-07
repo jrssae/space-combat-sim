@@ -107,6 +107,8 @@ func test_the_facades_answer_from_the_core_as_the_gdscript_reference_does() -> v
 	var differences: PackedStringArray = []
 	var on_rows: int = 0
 	var queries: int = 0
+	var answers: Array = []  # per query: the facades' answers through the kernels
+	var references: Array = []  # the GDScript reference's on the same perception (only when recording)
 	for round: int in 4:
 		for node: Node in world.get_children():
 			if node != projectiles:
@@ -153,35 +155,52 @@ func test_the_facades_answer_from_the_core_as_the_gdscript_reference_does() -> v
 			for i: int in p.statics.size():
 				if sim.core.row_position(p.static_rows[i]) != p.statics[i].position:
 					differences.append("round %d query %d: static %d is not at its row" % [round, q, i])
-			_ask_both(p, rng, "round %d query %d" % [round, q], differences)
+			_ask_both(p, rng, "round %d query %d" % [round, q], differences, answers, references)
+	# The GDScript reference's answers are recorded (M4-T42 fix round 1, from the reference before it went).
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "facades", func() -> Array: return references)
+	if recorded == null or (recorded as Array).size() != answers.size():
+		differences.append("the recording has %s queries, the run %d" % ["no" if recorded == null else
+				str((recorded as Array).size()), answers.size()])
+	else:
+		for i: int in answers.size():
+			if ParityFixture.encode(answers[i]) != recorded[i]:
+				differences.append("query %d: kernels %s, GDScript %s (recorded)" % [i, answers[i], recorded[i]])
 	assert_eq(differences.size(), 0, "the kernels on the core answer as the GDScript does: %s" % differences.slice(0, 4))
 	assert_eq(on_rows, queries, "every perception of a core scan is on the rows")
 
 
-# Asks each facade through the kernels and the GDScript reference on the same perception.
-func _ask_both(p: Perception, rng: RandomNumberGenerator, label: String, differences: PackedStringArray) -> void:
+# Asks each facade through the kernels (into `answers`) and, when recording, the GDScript reference on the same perception
+# (into `references`): `[v_des, urgent, four lane verdicts]` a query.
+func _ask_both(p: Perception, rng: RandomNumberGenerator, label: String, differences: PackedStringArray, answers: Array,
+		references: Array) -> void:
 	var radius: float = rng.randf_range(5.0, 20.0)
 	var v_des: Vector3 = p.velocity + Vector3(rng.randf_range(-80.0, 80.0), rng.randf_range(-30.0, 30.0), rng.randf_range(-80.0, 80.0))
 	var exempt_id: int = p.contacts[rng.randi_range(0, p.contacts.size() - 1)].id if not p.contacts.is_empty() \
 			and rng.randf() < 0.3 else 0
 	var seed_value: int = hash("SHIP %d" % rng.randi())
 	var native: Dictionary = AvoidanceMath.filter_seen(p, radius, v_des, exempt_id, seed_value)
-	var listed: Array[Contact] = []
-	for c: Contact in p.contacts:
-		if exempt_id == 0 or c.id != exempt_id:
-			listed.append(c)
-	listed.append_array(p.statics)
-	var reference: Dictionary = AvoidanceMath.filter(p.position, p.velocity, radius, listed, v_des, p.capability, seed_value)
-	if var_to_bytes(native["v_des"]) != var_to_bytes(reference["v_des"]) or native["urgent"] != reference["urgent"]:
-		differences.append("%s: avoidance %s against %s" % [label, native, reference])
+	var answer: Array = [native["v_des"], native["urgent"]]
+	var reference: Array = []
+	if ParityFixture.recording():
+		var listed: Array[Contact] = []
+		for c: Contact in p.contacts:
+			if exempt_id == 0 or c.id != exempt_id:
+				listed.append(c)
+		listed.append_array(p.statics)
+		var filtered: Dictionary = AvoidanceMath.filter(p.position, p.velocity, radius, listed, v_des, p.capability,
+				seed_value)
+		reference = [filtered["v_des"], filtered["urgent"]]
 	for shot: int in 4:
 		var aim: Vector3 = (p.contacts[rng.randi_range(0, p.contacts.size() - 1)].position - p.position).normalized() \
 				if not p.contacts.is_empty() and shot < 3 else Vector3.FORWARD
 		var target_id: int = p.contacts[rng.randi_range(0, p.contacts.size() - 1)].id if not p.contacts.is_empty() else 0
 		var range_m: float = rng.randf_range(200.0, 3000.0)
-		var lane: bool = FireLane.clear_seen(p, aim, range_m, target_id)
-		if lane != FireLane.clear(p.position, aim, range_m, p.contacts, target_id, p.friendly_fire):
-			differences.append("%s: the lane differs (shot %d)" % [label, shot])
+		answer.append(FireLane.clear_seen(p, aim, range_m, target_id))
+		if ParityFixture.recording():
+			reference.append(FireLane.clear(p.position, aim, range_m, p.contacts, target_id, p.friendly_fire))
+	answers.append(answer)
+	if ParityFixture.recording():
+		references.append(reference)
 	var leader_id: int = p.contacts[rng.randi_range(0, p.contacts.size() - 1)].id if not p.contacts.is_empty() else 0
 	var a := AiContext.new()
 	a.leader_id = leader_id

@@ -10,6 +10,7 @@ const PILOT_CLASS: StringName = &"ScsPilotKernels"
 const KERNEL_FILE: String = "res://native/src/kernels.rs"
 const SHELL_FILE: String = "res://native/src/pilot_kernels.rs"
 const CASES: int = 600
+const FIXTURE: String = "pilot_kernels"
 
 
 func _kernels() -> Object:
@@ -169,6 +170,8 @@ func test_avoidance_matches_the_gdscript_filter_bit_for_bit_on_seeded_contacts()
 	var dodged: int = 0
 	var urgent: int = 0
 	var exempted: int = 0
+	var answers: Array = []  # native, per case: [v_des, urgent]
+	var references: Array = []  # the GDScript filter's, per case (only when recording)
 	for case: int in CASES:
 		var table := Table.new(rng)
 		var faction_of: Dictionary = {}
@@ -188,19 +191,33 @@ func test_avoidance_matches_the_gdscript_filter_bit_for_bit_on_seeded_contacts()
 		if not table.contacts.is_empty() and rng.randf() < 0.3:
 			exempt_id = table.contacts[rng.randi_range(0, table.contacts.size() - 1)].id
 			exempted += 1
-		var reference: Dictionary = _reference_filter(table, exempt_id, own_pos, own_vel, own_radius, v_des, cap, seed_value)
+		if ParityFixture.recording():
+			var reference: Dictionary = _reference_filter(table, exempt_id, own_pos, own_vel, own_radius, v_des, cap, seed_value)
+			references.append([reference["v_des"], reference["urgent"]])
 		var native: Vector4 = kernels.avoid(table.contact_rows, table.static_rows, exempt_id, own_pos, own_vel, own_radius,
 				v_des, cap.a_retro, cap.rate_max_rad, cap.a_rcs, hash(seed_value))
 		var filtered := Vector3(native.x, native.y, native.z)
-		if var_to_bytes(filtered) != var_to_bytes(reference["v_des"]) or (native.w > 0.5) != bool(reference["urgent"]):
-			differences.append("case %d: native %s urgent %s, GDScript %s urgent %s" % [case, filtered, native.w > 0.5,
-					reference["v_des"], reference["urgent"]])
-		dodged += 1 if reference["v_des"] != v_des else 0
-		urgent += 1 if reference["urgent"] else 0
+		answers.append([filtered, native.w > 0.5])
+		dodged += 1 if filtered != v_des else 0
+		urgent += 1 if native.w > 0.5 else 0
+	# The GDScript filter's answers are recorded (M4-T42 fix round 1, from the reference before it went).
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "avoidance", func() -> Array: return references)
+	_compare_recorded(answers, recorded, differences)
 	assert_eq(differences.size(), 0, "the native filter is the GDScript filter bit for bit: %s" % differences.slice(0, 4))
 	assert_gt(dodged, CASES / 3, "the seeded cases dodge often (%d of %d)" % [dodged, CASES])
 	assert_gt(urgent, CASES / 10, "and are often urgent (%d)" % urgent)
 	assert_gt(exempted, CASES / 5, "a rammer's exempt target is left out in many cases (%d)" % exempted)
+
+
+# Fails each case whose native answer is not the recorded one, bit for bit (the recording keeps full precision).
+static func _compare_recorded(answers: Array, recorded: Variant, differences: PackedStringArray) -> void:
+	if recorded == null or (recorded as Array).size() != answers.size():
+		differences.append("the recording has %s cases, the run %d" % [
+				"no" if recorded == null else str((recorded as Array).size()), answers.size()])
+		return
+	for i: int in answers.size():
+		if ParityFixture.encode(answers[i]) != recorded[i]:
+			differences.append("case %d: native %s, GDScript %s (recorded)" % [i, answers[i], recorded[i]])
 
 
 # The driver's avoidance before M4-T16: the contacts but the exempt one, then the statics, through `AvoidanceMath.filter`.
@@ -222,6 +239,8 @@ func test_dead_centre_ties_break_the_same_way_natively_for_every_seed() -> void:
 	rng.seed = 1601
 	var differences: PackedStringArray = []
 	var sides: Dictionary = {}
+	var answers: Array = []
+	var references: Array = []
 	for case: int in 400:
 		var table := Table.new(rng)
 		var faction_of: Dictionary = {}
@@ -245,14 +264,16 @@ func test_dead_centre_ties_break_the_same_way_natively_for_every_seed() -> void:
 		table.load_into(kernels)
 		var cap := ShipCapability.new()
 		var seed_value: int = case * 7919 - 1000000
-		var reference: Dictionary = AvoidanceMath.filter(Vector3(3.0, -2.0, 1.0), v_des, 10.0, table.contacts, v_des, cap,
-				seed_value)
+		if ParityFixture.recording():
+			references.append(AvoidanceMath.filter(Vector3(3.0, -2.0, 1.0), v_des, 10.0, table.contacts, v_des, cap,
+					seed_value)["v_des"])
 		var native: Vector4 = kernels.avoid(table.contact_rows, table.static_rows, 0, Vector3(3.0, -2.0, 1.0), v_des, 10.0,
 				v_des, cap.a_retro, cap.rate_max_rad, cap.a_rcs, hash(seed_value))
 		var filtered := Vector3(native.x, native.y, native.z)
-		if var_to_bytes(filtered) != var_to_bytes(reference["v_des"]):
-			differences.append("case %d (seed %d): native %s, GDScript %s" % [case, seed_value, filtered, reference["v_des"]])
-		sides[reference["v_des"]] = true
+		answers.append(filtered)
+		sides[filtered] = true
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "ties", func() -> Array: return references)
+	_compare_recorded(answers, recorded, differences)
 	assert_eq(differences.size(), 0, "every tie breaks the same way natively: %s" % differences.slice(0, 4))
 	assert_gt(sides.size(), 300, "the seeds spread the ties' sides (%d different)" % sides.size())
 
@@ -288,6 +309,8 @@ func test_the_fire_lane_matches_the_gdscript_verdict_on_seeded_lanes() -> void:
 	rng.seed = 1602
 	var differences: PackedStringArray = []
 	var closed: int = 0
+	var answers: Array = []
+	var references: Array = []
 	for case: int in CASES * 2:
 		var table := Table.new(rng)
 		var faction_of: Dictionary = {}
@@ -316,11 +339,13 @@ func test_the_fire_lane_matches_the_gdscript_verdict_on_seeded_lanes() -> void:
 		var target_id: int = 0
 		if not table.contacts.is_empty() and rng.randf() < 0.5:
 			target_id = table.contacts[rng.randi_range(0, table.contacts.size() - 1)].id
-		var reference: bool = FireLane.clear(own_pos, aim, range_m, table.contacts, target_id, friendly_fire)
+		if ParityFixture.recording():
+			references.append(FireLane.clear(own_pos, aim, range_m, table.contacts, target_id, friendly_fire))
 		var native: bool = kernels.fire_lane(table.contact_rows, table.relations, own_pos, aim, range_m, target_id, friendly_fire)
-		if native != reference:
-			differences.append("case %d: native %s, GDScript %s" % [case, native, reference])
-		closed += 0 if reference else 1
+		answers.append(native)
+		closed += 0 if native else 1
+	var recorded: Variant = await ParityFixture.expected(FIXTURE, "lanes", func() -> Array: return references)
+	_compare_recorded(answers, recorded, differences)
 	assert_eq(differences.size(), 0, "the native lane is the GDScript lane: %s" % differences.slice(0, 4))
 	assert_gt(closed, CASES / 4, "many lanes are closed (%d)" % closed)
 
