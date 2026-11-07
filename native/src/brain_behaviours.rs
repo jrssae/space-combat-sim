@@ -11,6 +11,7 @@ use godot::builtin::{Basis, Vector3};
 use crate::brain_maths::{
     self, Capability, FlightCmd, Manoeuvre, Pcg, Pose, Temperament, hash_seed,
 };
+use crate::civilian;
 use crate::kernels::{contact, pilot};
 use crate::rows::{Bolts, Rows};
 use crate::v3::{
@@ -175,6 +176,10 @@ pub struct Field {
     /// The rows of every name a brain asks for (an objective or a guarded ship, lowered), in row order: matched once per
     /// rows version, not per think (M4-T18).
     pub named: Vec<(String, Vec<u32>)>,
+    /// Civilians fleeing (M5-T16), by row, as their last thinks left them: running from a threat or an alarm, and of those
+    /// the ones that see a threat themselves (their alarm spreads, Q25). Marked by the job before its pass, every tick.
+    pub fleeing: Vec<bool>,
+    pub alarmed: Vec<bool>,
 }
 
 impl Field {
@@ -195,6 +200,35 @@ impl Field {
                 .filter(|&i| rows.reach[i] > 0.0)
                 .map(|i| i as u32),
         );
+    }
+
+    /// Marks the fleeing civilians among `brains` on the rows (`row_of` gives a body's row, -1 for none): one pass over the
+    /// brains before the thinks, so every think reads the same marks whatever thread runs it.
+    pub fn mark_flight<'b>(
+        &mut self,
+        rows: &Rows,
+        brains: impl Iterator<Item = &'b Brain>,
+        row_of: impl Fn(i64) -> i64,
+    ) {
+        let n = rows.ids.len();
+        self.fleeing.clear();
+        self.alarmed.clear();
+        for brain in brains {
+            let Ok(r) = usize::try_from(row_of(brain.ship.own_body_id)) else {
+                continue;
+            };
+            if r >= n || !rows.is_civilian(r) {
+                continue;
+            }
+            // Sized on the first civilian: a tick with none marks nothing and costs one pass over the brains.
+            if self.fleeing.len() != n {
+                self.fleeing.resize(n, false);
+                self.alarmed.resize(n, false);
+            }
+            let (fleeing, alarmed) = brain.flight_flags();
+            self.fleeing[r] = fleeing;
+            self.alarmed[r] = alarmed;
+        }
     }
 
     /// Indexes the rows of each wanted name (empty names skipped, each name once).
@@ -360,6 +394,10 @@ struct Derived {
 /// Everything a behaviour reads this tick: the rows, the picked lists, the split and the own perception.
 struct Tick<'a> {
     rows: &'a Rows,
+    // The own row and the field's marks of fleeing civilians (M5-T16).
+    own_row: usize,
+    fleeing: &'a [bool],
+    alarmed: &'a [bool],
     relations: &'a [u8],
     contacts: &'a [i32],
     broadcasts: &'a [i32],
@@ -395,6 +433,33 @@ impl Tick<'_> {
         normalized(col_b(&self.rows.bases[row]))
     }
 
+    // Whether the thinking ship is a civilian hull (M5-T16).
+    fn own_civilian(&self) -> bool {
+        self.rows.is_civilian(self.own_row)
+    }
+
+    // The civilian flight's view of this think (M5-T16).
+    fn civilian_view(&self, radius: f64, speed_mps: f64) -> civilian::View<'_> {
+        civilian::View {
+            rows: self.rows,
+            contacts: self.contacts,
+            own_row: self.own_row,
+            radius,
+            speed_mps,
+            fleeing: self.fleeing,
+        }
+    }
+
+    // How far from its centre a target's surface lies (M5-T16): a civilian hull's radius, so an attack's ranges are
+    // measured to a 260 m freighter's skin; 0 for any other target, whose ranges stay centre to centre.
+    fn surface_of(&self, target_id: i64) -> f64 {
+        let r = self.rows.row_of_id(target_id);
+        match usize::try_from(r) {
+            Ok(j) if self.rows.is_civilian(j) => self.rows.radii[j],
+            _ => 0.0,
+        }
+    }
+
     // Hostile `h` (a place in the hostile list) as a row.
     fn hostile_row(&self, h: usize) -> usize {
         self.row(self.lists.hostiles[h] as usize)
@@ -415,6 +480,8 @@ impl<'a> Tick<'a> {
     #[allow(clippy::too_many_arguments)]
     fn new(
         rows: &'a Rows,
+        field: &'a Field,
+        own_row: usize,
         relations: &'a [u8],
         contacts: &'a [i32],
         broadcasts: &'a [i32],
@@ -425,6 +492,9 @@ impl<'a> Tick<'a> {
     ) -> Self {
         Tick {
             rows,
+            own_row,
+            fleeing: &field.fleeing,
+            alarmed: &field.alarmed,
             relations,
             contacts,
             broadcasts,
@@ -609,6 +679,16 @@ impl Brain {
     pub fn ram_commit(&mut self, target_id: i64) {
         self.ram.committed = true;
         self.ram.target_id_value = target_id;
+    }
+
+    /// What the last think left of a civilian's flight (M5-T16): fleeing (running from a threat or an alarm, or dodging
+    /// fire) and alarmed (doing so from a threat it saw itself, whose alarm spreads to its people, Q25).
+    pub fn flight_flags(&self) -> (bool, bool) {
+        match u8::try_from(self.current_kind()) {
+            Ok(KIND_RETREAT) => (true, self.retreat.threatened),
+            Ok(KIND_EVADE) => (true, true),
+            _ => (false, false),
+        }
     }
 
     /// Whether the ram is committed now (the facade's GDScript flag follows it every think).
@@ -822,6 +902,8 @@ impl Brain {
         );
         let mut tick = Tick::new(
             rows,
+            field,
+            own_row,
             inputs.relations,
             &scratch.contacts,
             &scratch.broadcasts,
@@ -1552,6 +1634,13 @@ struct RetreatState {
     retreat_within_m: f64,
     from_id: i64,
     from_range_m: f64,
+    // The civilian flight (M5-T16): whether the last think saw a threat (its alarm spreads), until when an alarm keeps it
+    // running, the alarm the last score heard (a row, -1 none), and the ship it runs to and whether it shelters there.
+    threatened: bool,
+    panic_until_s: f64,
+    alarm_row: i32,
+    goal_id: i64,
+    shelter: bool,
 }
 
 impl RetreatState {
@@ -1565,6 +1654,11 @@ impl RetreatState {
             retreat_within_m: 0.0,
             from_id: 0,
             from_range_m: -1.0,
+            threatened: false,
+            panic_until_s: f64::NEG_INFINITY,
+            alarm_row: -1,
+            goal_id: 0,
+            shelter: false,
         }
     }
 
@@ -1574,11 +1668,22 @@ impl RetreatState {
         self.retreat_within_m = profile.retreat_within_m;
     }
 
-    fn reset(&mut self) {}
+    fn reset(&mut self) {
+        self.threatened = false;
+        self.panic_until_s = f64::NEG_INFINITY;
+        self.alarm_row = -1;
+        self.goal_id = 0;
+        self.shelter = false;
+    }
 
     fn score(&mut self, tick: &Tick, ctx: &Context) -> f64 {
-        if tick.lists.hostiles.is_empty() || !may_retreat(ctx) {
+        if !may_retreat(ctx) {
             return 0.0;
+        }
+        // A civilian runs on its people's alarm too (Q25), with no threat of its own in sight.
+        let panicked = tick.own_civilian() && self.panicked(tick);
+        if tick.lists.hostiles.is_empty() {
+            return if panicked { Self::SCORE_MIN } else { 0.0 };
         }
         let hull = tick.p.hull_fraction;
         let mut low = 0.0;
@@ -1592,14 +1697,29 @@ impl RetreatState {
                 }
             }
         }
+        if panicked && low < Self::SCORE_MIN {
+            return Self::SCORE_MIN;
+        }
         low
+    }
+
+    // Whether an alarm keeps this civilian running: one heard now (it holds `PANIC_HOLD_S` on), or one heard lately.
+    fn panicked(&mut self, tick: &Tick) -> bool {
+        self.alarm_row = civilian::nearest_alarm(&tick.civilian_view(0.0, self.speed_mps), tick.alarmed);
+        if self.alarm_row >= 0 {
+            self.panic_until_s = tick.p.now_s + civilian::PANIC_HOLD_S;
+        }
+        tick.p.now_s < self.panic_until_s
     }
 
     fn think(&mut self, tick: &Tick, ship: &Ship, cmd: &mut FlightCmd, wish: &mut Wish) {
         let p = &tick.p;
         let mut away = Vector3::ZERO;
+        let mut threat: i32 = -1;
         self.from_id = 0;
         self.from_range_m = f64::INFINITY;
+        self.goal_id = 0;
+        self.shelter = false;
         for h in 0..tick.lists.hostiles.len() {
             let row = tick.hostile_row(h);
             let off = sub(p.position, tick.rows.positions[row]);
@@ -1608,26 +1728,67 @@ impl RetreatState {
             if d < self.from_range_m {
                 self.from_range_m = d;
                 self.from_id = tick.rows.ids[row];
+                threat = row as i32;
             }
         }
+        self.threatened = threat >= 0;
         if f64::from(length_squared(away)) < 1e-18 {
             away = p.forward;
         }
         let dir = normalized(away);
-        cmd.rot = brain_maths::face(&p.basis, dir, ship.capability.rate_max, brain_maths::K_FACE);
-        seek_velocity(
-            cmd,
-            p,
-            &ship.capability,
-            scale(dir, self.speed_mps as f32),
-            false,
-            wish,
-        );
+        // A civilian runs to its people (Q24, Q25); every other ship, and a civilian with nobody to run to, straight away.
+        let flight = if !tick.own_civilian() {
+            None
+        } else if let Ok(t) = usize::try_from(threat) {
+            civilian::flee_from(
+                &tick.civilian_view(ship.radius, self.speed_mps),
+                dir,
+                tick.rows.positions[t],
+            )
+        } else {
+            Some(civilian::flee_alarm(
+                &tick.civilian_view(ship.radius, self.speed_mps),
+                self.alarm_row,
+            ))
+        };
+        let Some(flight) = flight else {
+            cmd.rot =
+                brain_maths::face(&p.basis, dir, ship.capability.rate_max, brain_maths::K_FACE);
+            seek_velocity(
+                cmd,
+                p,
+                &ship.capability,
+                scale(dir, self.speed_mps as f32),
+                false,
+                wish,
+            );
+            return;
+        };
+        if let Ok(g) = usize::try_from(flight.goal) {
+            self.goal_id = tick.rows.ids[g];
+            self.shelter = flight.shelter;
+        }
+        let face_dir = if f64::from(length(flight.velocity)) > 1.0 {
+            normalized(flight.velocity)
+        } else {
+            dir
+        };
+        cmd.rot = brain_maths::face(&p.basis, face_dir, ship.capability.rate_max, brain_maths::K_FACE);
+        seek_velocity(cmd, p, &ship.capability, flight.velocity, false, wish);
     }
 
     fn describe(&self, d: &mut Describe) {
-        d.state = "extend".to_string();
+        d.state = if self.shelter {
+            "shelter".to_string()
+        } else if self.goal_id != 0 {
+            "to_kin".to_string()
+        } else {
+            "extend".to_string()
+        };
         d.names.push(("from", self.from_id));
+        if self.goal_id != 0 {
+            d.names.push(("goal", self.goal_id));
+        }
         d.numbers.push((
             "range_m",
             if self.from_range_m < f64::INFINITY && self.from_range_m >= 0.0 {
@@ -2034,7 +2195,12 @@ impl AttackState {
                 continue;
             }
             let los = tick.lists.offsets[h];
-            let d = tick.lists.ranges[h];
+            // A big civilian hull is as near as its skin (M5-T16): a raider picks a freighter by how close it really is.
+            let d = if tick.rows.is_civilian(row) {
+                maxf(tick.lists.ranges[h] - tick.rows.radii[row], 1e-3)
+            } else {
+                tick.lists.ranges[h]
+            };
             let mut value = ATTACK_W_NEAR * clampf(1.0 - d * ATTACK_INV_SENSOR_RANGE, 0.0, 1.0);
             if d > 1e-3 {
                 let closing = f64::from(dot(sub(p.velocity, tick.rows.velocities[row]), los));
@@ -2128,6 +2294,7 @@ impl AttackState {
         let t = self.target as usize;
         let target_position = tick.rows.positions[t];
         let target_velocity = tick.rows.velocities[t];
+        let surface_m = tick.surface_of(self.target_id);
         if self.uses_slash {
             self.slash.engage(
                 tick,
@@ -2135,6 +2302,7 @@ impl AttackState {
                 self.target_id,
                 target_position,
                 target_velocity,
+                surface_m,
                 dt,
                 cmd,
                 wish,
@@ -2146,6 +2314,7 @@ impl AttackState {
                 self.target_id,
                 target_position,
                 target_velocity,
+                surface_m,
                 dt,
                 cmd,
                 wish,
@@ -2377,6 +2546,7 @@ impl AttackBrainState {
         target_id: i64,
         target_position: Vector3,
         target_velocity: Vector3,
+        surface_m: f64,
         dt: f64,
         cmd: &mut FlightCmd,
         wish: &mut Wish,
@@ -2388,6 +2558,12 @@ impl AttackBrainState {
         if range_m < 1e-3 {
             return false;
         }
+        // The run's ranges and miss gate to a big hull's skin (M5-T16); centre to centre for every other target.
+        let (gap_m, miss_m) = if surface_m > 0.0 {
+            (maxf(range_m - surface_m, 1.0), self.tactics.fire_miss_m + 0.5 * surface_m)
+        } else {
+            (range_m, self.tactics.fire_miss_m)
+        };
         self.last_range_m = range_m;
         let los_dir = div_s(los, range_m as f32);
         self.state_time_s += dt;
@@ -2409,13 +2585,13 @@ impl AttackBrainState {
         let mut cap = t.max_speed_mps;
         match self.state {
             Self::APPROACH => {
-                if range_m < t.fire_range_m {
+                if gap_m < t.fire_range_m {
                     self.on_target_s += dt;
                 }
-                if range_m < t.break_range_m || self.on_target_s >= t.max_time_on_target_s {
+                if gap_m < t.break_range_m || self.on_target_s >= t.max_time_on_target_s {
                     self.enter(Self::BREAK);
                 } else {
-                    let closing = if range_m > t.near_range_m {
+                    let closing = if gap_m > t.near_range_m {
                         t.closing_far_mps
                     } else {
                         t.closing_near_mps
@@ -2431,9 +2607,9 @@ impl AttackBrainState {
                     self.lead_error_deg = rad_to_deg(brain_maths::angle_to(&p.basis, lead_dir));
                     let cone_deg = minf(
                         t.fire_cone_deg,
-                        rad_to_deg((t.fire_miss_m / range_m).atan()),
+                        rad_to_deg((miss_m / gap_m).atan()),
                     );
-                    self.firing = range_m < t.fire_range_m
+                    self.firing = gap_m < t.fire_range_m
                         && self.lead_error_deg < cone_deg
                         && lane_clear(tick, range_m, target_id);
                 }
@@ -2455,7 +2631,7 @@ impl AttackBrainState {
                 }
             }
             _ => {
-                if self.state_time_s >= t.extend_min_s && range_m > t.extend_range_m {
+                if self.state_time_s >= t.extend_min_s && gap_m > t.extend_range_m {
                     self.enter(Self::APPROACH);
                 } else {
                     v_des = sub(target_velocity, scale(los_dir, t.closing_far_mps as f32));
@@ -2560,6 +2736,7 @@ impl SlashState {
         target_id: i64,
         target_position: Vector3,
         target_velocity: Vector3,
+        surface_m: f64,
         dt: f64,
         cmd: &mut FlightCmd,
         wish: &mut Wish,
@@ -2572,6 +2749,12 @@ impl SlashState {
         if range_m < 1e-3 {
             return false;
         }
+        // The pass's ranges and miss gate to a big hull's skin (M5-T16); centre to centre for every other target.
+        let (gap_m, miss_m) = if surface_m > 0.0 {
+            (maxf(range_m - surface_m, 1.0), self.tactics.fire_miss_m + 0.5 * surface_m)
+        } else {
+            (range_m, self.tactics.fire_miss_m)
+        };
         let los_dir = div_s(los, range_m as f32);
         self.state_time_s += dt;
         let lead = brain_maths::solve(
@@ -2595,9 +2778,9 @@ impl SlashState {
         let t = self.tactics;
         let cone_deg = minf(
             t.fire_cone_deg,
-            rad_to_deg((t.fire_miss_m / range_m).atan()),
+            rad_to_deg((miss_m / gap_m).atan()),
         );
-        self.in_gate = range_m < t.fire_range_m && self.lead_error_deg < cone_deg;
+        self.in_gate = gap_m < t.fire_range_m && self.lead_error_deg < cone_deg;
         if self.in_gate {
             self.time_on_target_s += dt;
         }
@@ -2611,7 +2794,7 @@ impl SlashState {
         let mut cap = t.max_speed_mps;
         match self.state {
             Self::PASS => {
-                if opening && range_m < t.fire_range_m {
+                if opening && gap_m < t.fire_range_m {
                     self.passes += 1;
                     self.enter(Self::TURN);
                 }
@@ -2622,7 +2805,7 @@ impl SlashState {
                 }
             }
             _ => {
-                if range_m > t.fire_range_m * Self::LOST_RANGE_FACTOR {
+                if gap_m > t.fire_range_m * Self::LOST_RANGE_FACTOR {
                     self.enter(Self::PASS);
                 }
             }
@@ -2638,7 +2821,7 @@ impl SlashState {
                 );
                 cap = maxf(cap, f64::from(length(target_velocity))) + t.closing_far_mps;
                 let dv = sub(v_des, p.velocity);
-                if f64::from(length(dv)) >= t.face_lead_delta_v_mps && range_m >= t.fire_range_m {
+                if f64::from(length(dv)) >= t.face_lead_delta_v_mps && gap_m >= t.fire_range_m {
                     face_dir = normalized(dv);
                     tracking = false;
                 }
@@ -2653,7 +2836,7 @@ impl SlashState {
             }
             _ => {
                 let closure = clampf(
-                    (range_m - Self::CHASE_RANGE_M) * Self::CHASE_GAIN,
+                    (gap_m - Self::CHASE_RANGE_M) * Self::CHASE_GAIN,
                     -Self::CHASE_OPENING_MPS,
                     Self::CHASE_CLOSING_MPS,
                 );

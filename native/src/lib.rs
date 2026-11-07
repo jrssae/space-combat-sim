@@ -9,6 +9,7 @@ mod brain_behaviours;
 mod brain_maths;
 mod brain_step;
 mod cannons;
+mod civilian;
 mod contact_field;
 mod flight_step;
 mod hit_sweep;

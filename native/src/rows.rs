@@ -13,6 +13,11 @@ pub const FLAG_LATE: u32 = 8;
 pub const FLAG_TIER: u32 = 16;
 pub const FLAG_HULK: u32 = 32;
 
+/// A row's role (M5-T16, Q24): what the ship is for, beside its faction and kind. A civilian is a big non-combat hull (a
+/// freighter up to 260 m) that the brains, the raiders' picks, the turrets, avoidance and the tier treat by its size.
+pub const ROLE_COMBAT: u8 = 0;
+pub const ROLE_CIVILIAN: u8 = 1;
+
 /// The scan's rows, column by column: the bodies in registry order (active markers, then active hulls with no active
 /// marker), the static rows, then any row added after the tick's first sync. Read by the kernels through `bind()`, from
 /// several threads at once (M4-T18): every column is plain data the threads may share; the display names, an engine
@@ -42,6 +47,9 @@ pub struct Rows {
     pub target_ids: Vec<i64>,
     pub reach: Vec<f64>,
     pub name_keys: Vec<String>,
+    // The row's role (M5-T16): fed when a body turns active or is touched, never gathered per tick; rows built without the
+    // column (hand-made ones in tests) are combat rows (`role`).
+    pub roles: Vec<u8>,
     // The rows by marker id, sorted by id, rebuilt with the rows (M4-T17): a kernel finds a contact by its id in a binary
     // search instead of a scan.
     pub id_rows: Vec<(i64, u32)>,
@@ -104,6 +112,7 @@ impl Rows {
         self.target_ids.clear();
         self.reach.clear();
         self.name_keys.clear();
+        self.roles.clear();
         self.id_rows.clear();
         self.node_count = 0;
         self.tier_rows = 0;
@@ -115,6 +124,16 @@ impl Rows {
         self.id_rows
             .extend(self.ids.iter().enumerate().map(|(r, &id)| (id, r as u32)));
         self.id_rows.sort_unstable();
+    }
+
+    /// Row `r`'s role (`ROLE_COMBAT` for a row without one).
+    pub fn role(&self, r: usize) -> u8 {
+        self.roles.get(r).copied().unwrap_or(ROLE_COMBAT)
+    }
+
+    /// Whether row `r` is a civilian hull.
+    pub fn is_civilian(&self, r: usize) -> bool {
+        self.role(r) == ROLE_CIVILIAN
     }
 
     /// The row whose marker id is `id`, or -1.

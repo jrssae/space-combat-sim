@@ -354,11 +354,20 @@ pub fn pick<F: Fn(i64) -> i64>(
             let Some(v) = usable_row(rows, row_of(victim)) else {
                 continue;
             };
-            if f64::from(dist_sq(rows.positions[v], ship_at)) > protect_sq {
+            // Between skins for a big civilian hull (M5-T16): two 260 m freighters 2 km apart still cover each other.
+            let skins = skin(rows, own) + skin(rows, v);
+            let near = if skins > 0.0 {
+                let limit = PROTECT_M + skins;
+                f64::from(dist_sq(rows.positions[v], ship_at)) <= limit * limit
+            } else {
+                f64::from(dist_sq(rows.positions[v], ship_at)) <= protect_sq
+            };
+            if !near {
                 continue;
             }
             let rel = relation(relations, stride, m.faction_ix, rows.faction_ix[v]);
-            let defended = rel == REL_FRIENDLY || (memory.civilian[k] && rel != REL_HOSTILE);
+            let civilian = memory.civilian[k] || rows.is_civilian(v);
+            let defended = rel == REL_FRIENDLY || (civilian && rel != REL_HOSTILE);
             if !defended {
                 continue;
             }
@@ -387,6 +396,11 @@ pub fn pick<F: Fn(i64) -> i64>(
         }
     }
     best
+}
+
+// How far a civilian hull's skin lies from its centre (its radius); 0 for any other row.
+fn skin(rows: &Rows, r: usize) -> f64 {
+    if rows.is_civilian(r) { rows.radii[r] } else { 0.0 }
 }
 
 /// A mount's place and axes in the World frame: its pivot, its up, its rest direction (azimuth 0) and the side axis.

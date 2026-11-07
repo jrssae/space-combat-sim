@@ -323,6 +323,20 @@ fn pick_turrets(snapshot: &mut Snapshot, now_s: f64) {
 // packs their outputs in order; with `from_rows` each ship's hull and selection are read from its own row first.
 fn run_batch(work: &mut Work, snap: &Snapshot, runner: &Runner, n: usize, rel: &[u8], p: &Params) {
     refresh_grid(work, snap);
+    // The civilians' flight marks (M5-T16) from every brain's last think, before any think of this pass reads them.
+    {
+        let Work {
+            field,
+            items,
+            slots,
+            ..
+        } = work;
+        let brains = items[..n]
+            .iter()
+            .filter_map(|item| item.brain.as_ref())
+            .chain(slots.iter().flatten());
+        field.mark_flight(&snap.rows, brains, |body| snap.row_for_kernel(body));
+    }
     for item in &mut work.items[..n] {
         item.own_row = match &item.brain {
             None => -1,

@@ -21,7 +21,7 @@ pub const GUN_LEN: usize = 9;
 pub struct TurretState {
     pub mounts: Mounts,
     pub memory: Memory,
-    civilians: HashSet<i64>,
+    pub(crate) civilians: HashSet<i64>,
     relations: Vec<u8>,
     stride: usize,
     next_id: i64,
@@ -155,6 +155,8 @@ impl ScsSimCore {
         } else {
             self.turrets.civilians.remove(&body_id);
         }
+        // The rows' role column (M5-T16) is read with the body's attributes: read them again at the next sync.
+        self.touch(body_id);
     }
 
     /// The relations the pick reads: `matrix[a * count + b]` is how the core's faction `a` regards `b` (`Factions.Relation`:

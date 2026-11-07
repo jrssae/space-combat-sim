@@ -8,7 +8,7 @@ use godot::builtin::{Basis, Vector3};
 
 use crate::kernels::flight::{self, Body, Cmd};
 use crate::row_commands::{CommandMap, RowCommand};
-use crate::rows::{FLAG_HULK, FLAG_HULL, FLAG_TIER, Rows};
+use crate::rows::{FLAG_HULK, FLAG_HULL, FLAG_TIER, ROLE_CIVILIAN, ROLE_COMBAT, Rows};
 use crate::v3::{
     add, cross, length, length_squared, limit_length, normalized, scale, sub, xform, xform_inv,
 };
@@ -74,6 +74,8 @@ pub struct TierRows {
     pub reach: Vec<f64>,
     pub hull_fraction: Vec<f64>,
     pub name_keys: Vec<String>,
+    /// The row's role (M5-T16): a civilian keeps it in the tier.
+    pub roles: Vec<u8>,
     pub positions: Vec<Vector3>,
     pub velocities: Vec<Vector3>,
     pub bases: Vec<Basis>,
@@ -143,6 +145,7 @@ impl TierRows {
         self.reach.push(0.0);
         self.hull_fraction.push(-1.0);
         self.name_keys.push(String::new());
+        self.roles.push(ROLE_COMBAT);
         self.positions.push(position);
         self.velocities.push(velocity);
         self.bases.push(basis);
@@ -177,6 +180,7 @@ impl TierRows {
         self.reach.swap_remove(at);
         self.hull_fraction.swap_remove(at);
         self.name_keys.swap_remove(at);
+        self.roles.swap_remove(at);
         self.positions.swap_remove(at);
         self.velocities.swap_remove(at);
         self.bases.swap_remove(at);
@@ -231,6 +235,7 @@ impl TierRows {
             rows.target_ids.push(-1);
             rows.reach.push(self.reach[i]);
             rows.name_keys.push(self.name_keys[i].clone());
+            rows.roles.push(self.roles[i]);
         }
         rows.tier_rows = self.len();
     }
@@ -455,7 +460,8 @@ fn unit(a: [f64; 3]) -> [f64; 3] {
 }
 
 /// The node rows (the body rows before the statics) that are fighters or capitals in Jolt beyond `radius` of
-/// `player_at`, by body id, at most `max` of them: what the director demotes. The player's own body is left out.
+/// `player_at`, by body id, at most `max` of them: what the director demotes. The player's own body is left out. A civilian
+/// hull (M5-T16) is measured from its surface, so a 260 m freighter leaves and comes back when its near end crosses the line.
 pub fn far_bodies(
     rows: &Rows,
     player_at: Vector3,
@@ -477,20 +483,33 @@ pub fn far_bodies(
         {
             continue;
         }
-        if range(rows.positions[i], player_at) > radius {
+        let r = range(rows.positions[i], player_at);
+        let gap = if rows.role(i) == ROLE_CIVILIAN {
+            r - rows.radii[i]
+        } else {
+            r
+        };
+        if gap > radius {
             out.push(rows.body_ids[i]);
         }
     }
 }
 
-/// The tier rows within `radius` of `player_at`, by body id, at most `max`: what the director promotes.
+/// The tier rows within `radius` of `player_at`, by body id, at most `max`: what the director promotes (a civilian hull by
+/// its surface, as `far_bodies` measures it).
 pub fn near_rows(t: &TierRows, player_at: Vector3, radius: f64, max: usize, out: &mut Vec<i64>) {
     out.clear();
     for i in 0..t.len() {
         if out.len() >= max {
             return;
         }
-        if range(t.positions[i], player_at) <= radius {
+        let r = range(t.positions[i], player_at);
+        let gap = if t.roles[i] == ROLE_CIVILIAN {
+            r - t.radii[i]
+        } else {
+            r
+        };
+        if gap <= radius {
             out.push(t.body_ids[i]);
         }
     }

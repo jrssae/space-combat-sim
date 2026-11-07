@@ -677,10 +677,11 @@ const BOLT_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin
 		"use crate::v3::"]
 ## The brains' engine-free files (M4-T17): the shared vector maths, the brain maths and the behaviours, held to the kernels'
 ## rules; they may import each other and the kernels, nothing else.
+## M5-T16: the civilians' flight (`civilian.rs`) is one of them, and the behaviours may import it.
 const BRAIN_FILES: Array[String] = ["res://native/src/v3.rs", "res://native/src/brain_maths.rs",
-		"res://native/src/brain_behaviours.rs"]
+		"res://native/src/brain_behaviours.rs", "res://native/src/civilian.rs"]
 const BRAIN_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
-		"use crate::rows::", "use crate::v3::", "use crate::brain_maths::", "use crate::kernels::"]
+		"use crate::rows::", "use crate::v3::", "use crate::brain_maths::", "use crate::kernels::", "use crate::civilian;"]
 const KERNEL_FORBIDDEN: Array[String] = ["Gd<", "Variant", "InstanceId", "instance_id", "singleton", "PhysicsServer",
 		"godot_error", "godot_print", "godot_warn", "#[func]", "#[godot_api]", "GodotClass", ".get(&", ".call(", "Node",
 		"RigidBody", "StringName", "GString", "Scs", "pub use", "/*", "unsafe"]

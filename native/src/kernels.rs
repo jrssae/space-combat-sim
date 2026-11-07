@@ -1489,7 +1489,9 @@ pub mod pilot {
             let speed = speed_sq.sqrt();
             let relative = f64::from(length(sub(ship.velocity, c_velocity)));
             let mut horizon = maxf(HORIZON_MIN_S, maxf(speed, relative) / a_stop);
-            if rows.is_static[j] {
+            // A rock, a mine or a big civilian hull (M5-T16) is seen early enough to go round: at least the time a
+            // sideways burn takes to clear its reach.
+            if rows.is_static[j] || rows.is_civilian(j) {
                 horizon = maxf(horizon, (2.0 * reach / a_side).sqrt() + URGENT_SETTLE_S);
             }
             if t_star > horizon {

@@ -158,8 +158,11 @@ impl ScsSimCore {
             angular,
             self.next_tier_ordinal,
         );
-        if added.is_none() {
+        let Some(at) = added else {
             return 0;
+        };
+        if self.turrets.civilians.contains(&body_id) {
+            self.tier.roles[at] = crate::rows::ROLE_CIVILIAN;  // a civilian stays one in the tier (M5-T16)
         }
         self.tier_names.push(GString::new());
         self.tier_demotions += 1;

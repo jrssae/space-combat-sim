@@ -97,6 +97,8 @@ struct Attrs {
     // the attributes are.
     hull_fraction: f64,
     target_id: i64,
+    // The role (M5-T16): civilian when `set_civilian` named the body, read with the other attributes.
+    role: u8,
 }
 
 // One `Targetable` (or, for a body without one, one `Damageable`) of the tree, with the body it marks.
@@ -525,6 +527,7 @@ impl ScsSimCore {
             rows.target_ids.push(-1);
             rows.reach.push(0.0);
             rows.name_keys.push(String::new());
+            rows.roles.push(crate::rows::ROLE_COMBAT);
         }
         // The tier's rows after the statics (M4-T21): contacts to the brains, out of the scan GDScript builds.
         self.tier.append_to(&mut rows);
@@ -1464,6 +1467,7 @@ impl ScsSimCore {
         rows.target_ids.push(read.target_id);
         rows.reach.push(attrs.reach);
         rows.name_keys.push(attrs.name_key.clone());
+        rows.roles.push(attrs.role);
     }
 
     // Reads member `m` again into its row `r` (the row keeps its place, handle and lateness).
@@ -1485,6 +1489,7 @@ impl ScsSimCore {
         rows.target_ids[r] = read.target_id;
         rows.reach[r] = attrs.reach;
         rows.name_keys[r] = attrs.name_key.clone();
+        rows.roles[r] = attrs.role;
     }
 
     // Reads the bodies touched since the first sync again: a row in place, or a new row at the end for a body that turned
@@ -1695,7 +1700,13 @@ impl ScsSimCore {
             None => -1,
         };
         self.latest_target.insert(m.body_id, target_id);
+        let role = if self.turrets.civilians.contains(&m.body_id) {
+            crate::rows::ROLE_CIVILIAN
+        } else {
+            crate::rows::ROLE_COMBAT
+        };
         Attrs {
+            role,
             faction_ix: self.faction_index(faction),
             name_key: name.to_string().to_lowercase(),
             name,
