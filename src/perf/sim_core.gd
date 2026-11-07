@@ -73,6 +73,8 @@ const FLAG_HULK: int = 32
 
 # The latest core attached to a tree (-1 for the class check: classes never change while the game runs).
 static var _current: SimCore = null
+## Warnings that bodies were asked about in a tree with no world (said once a run).
+static var no_world_warnings: int = 0
 static var _native_class_known: int = -1
 static var _cannons_class_known: int = -1
 
@@ -224,13 +226,17 @@ static func attach(p_world: Node) -> SimCore:
 	return made
 
 
-## The core the classes of `tree` read now, or null (none attached, or the core is off).
+## The core the classes of `tree` read now, or null (no world in the tree, so none attached). Bodies in a tree with no
+## world get no contacts, hits or rams, so the first such ask in a run warns.
 static func for_tree(tree: SceneTree) -> SimCore:
-	if _current == null or not is_instance_valid(_current) or _current.core == null or not enabled():
-		return null
-	if not _current.is_inside_tree() or _current.get_tree() != tree:
-		return null
-	return _current
+	if _current != null and is_instance_valid(_current) and _current.core != null and _current.is_inside_tree() \
+			and _current.get_tree() == tree:
+		return _current
+	if no_world_warnings == 0 and tree != null and (tree.has_group(Damageable.GROUP) or tree.has_group(Targetable.GROUP)):
+		no_world_warnings += 1
+		push_warning("SimCore: bodies in a tree with no world, so no core: they get no contacts, hits or rams "
+				+ "(build them under a WorldFrame)")
+	return null
 
 
 ## The latest core, whichever tree, or null.

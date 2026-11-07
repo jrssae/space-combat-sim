@@ -81,7 +81,9 @@ func test_a_second_world_in_one_tree_is_refused_its_core() -> void:
 
 
 func test_a_tree_with_no_world_has_nothing_to_resolve() -> void:
+	SimCore.no_world_warnings = 0
 	assert_null(SimCore.for_tree(get_tree()), "no world, so no core")
+	assert_eq(SimCore.no_world_warnings, 0, "nothing to warn about with no bodies")
 	var hits := HitResolver.new()
 	add_child_autofree(hits)
 	var rams := RamResolver.new()
@@ -95,6 +97,27 @@ func test_a_tree_with_no_world_has_nothing_to_resolve() -> void:
 	assert_eq(rams.source(), &"none", "the ram resolver reads nothing")
 	assert_eq(rams.hulls_last_tick, 0, "and gathers no hull")
 	assert_eq(ContactScan.shared(get_tree())._body_ids.size(), 0, "the scan sees nothing")
+	assert_eq(SimCore.no_world_warnings, 1, "one warning says why: bodies but no world, so no core")
+
+
+func before_all() -> void:
+	SimCore.no_world_warnings = 0  # the warning is said once a run; this file checks it
+
+
+func test_the_flight_batch_says_none_once_the_core_is_gone() -> void:
+	var world := WorldFrame.new()
+	add_child_autofree(world)
+	var ship: Ship = Ship.create(load("res://assets/ships/starfury_aurora.tres") as ShipSpec, world)
+	world.spawn(ship, world.to_universe(Vector3.ZERO))
+	for i: int in 3:
+		await get_tree().physics_frame
+	var batch: FlightBatch = world.get_node(NodePath(FlightBatch.NODE_NAME)) as FlightBatch
+	assert_eq(batch.source(), &"core", "the batch steps from the core")
+	world.get_node(NodePath(SimCore.NODE_NAME)).free()
+	for i: int in 2:
+		await get_tree().physics_frame
+	assert_eq(batch.source(), &"none", "with the core gone the batch steps nothing and says so")
+	assert_eq(batch._source, &"none", "and keeps no stale source")
 
 
 func _load(path: String) -> void:
