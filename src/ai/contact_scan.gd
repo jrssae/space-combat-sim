@@ -63,9 +63,6 @@ static var _no_contacts: Array[Contact] = []
 # Whether the loaded library provides `NATIVE_CLASS` (-1 until first asked; classes never change while the game runs).
 static var _native_class_known: int = -1
 static var _pilot_class_known: int = -1
-## Off: no scan hands out the pilot kernels, while the core stays on, so a test pairs the kernels alone against the
-## GDScript (M4-T16). Not a setting: the game always leaves it on.
-static var pilot_kernels_on: bool = true
 
 ## The physics frame this scan is of (-1 for one built by hand).
 var physics_frame: int = -1
@@ -330,7 +327,8 @@ func incoming_fire(own_body_id: int, own_position: Vector3, own_velocity: Vector
 
 ## The native pilot kernels over this scan's core rows (M4-T16), or null: not a core scan, native code off, the library
 ## without the class, or the core's rows changed since the scan was taken (a resync or a rebase later in the frame: the
-## indices would name other values), asked again on every call. The GDScript reference then answers.
+## indices would name other values), asked again on every call. The perception's own lists then answer as rows of their
+## own (`PilotRows`).
 func pilot_kernels() -> Object:
 	if not _pilot_known:
 		_pilot_known = true
@@ -342,7 +340,7 @@ func pilot_kernels() -> Object:
 			_pilot = NativeLib.instantiate(PILOT_CLASS)
 			if _pilot != null:
 				_pilot.attach_core(_sim.core)
-	if _pilot == null or not pilot_kernels_on or not is_instance_valid(_sim) \
+	if _pilot == null or not is_instance_valid(_sim) \
 			or int(_sim.core.rows_version()) != _rows_version:
 		return null
 	return _pilot

@@ -2,10 +2,10 @@ extends GutTest
 ## The pilot kernels on the core's rows (M4-T16, architecture §17.13): with the core on, a ship's perception carries the
 ## native kernels, the core rows of its contacts and statics (in the lists' order) and its relation to every faction of the
 ## core's table, and `AvoidanceMath.filter_seen` and `FireLane.clear_seen` answer through the kernels exactly as the
-## GDScript reference answers from the same contacts. `AiContext.refresh` stays on its GDScript split (faster than the
+## GDScript reference answered from the same contacts (recorded before M4-T42 removed it). `AiContext.refresh` stays on its GDScript split (faster than the
 ## kernel's marshalling; the kernel waits for T17). A scan stops handing out the kernels as soon as the core's rows change
-## after it was taken (a resync or a rebase in the same frame). A seeded fight of AI fighters flies the same with the
-## kernels as with the GDScript. Seeded crowds of ships, capitals, props, rocks and mines of four sides; real AI ships for
+## after it was taken (a resync or a rebase in the same frame). A seeded fight of AI fighters flies as it did on the
+## GDScript (recorded). Seeded crowds of ships, capitals, props, rocks and mines of four sides; real AI ships for
 ## the driver and the fight.
 
 const SIDES: Array[StringName] = [Factions.RAIDERS, Factions.EARTH_ALLIANCE, Factions.NEUTRAL, &"drifters"]
@@ -37,7 +37,6 @@ func after_each() -> void:
 	ContactScan.invalidate()
 	for key: StringName in SETTINGS:
 		Settings.set_value(key, _saved[key])
-	ContactScan.pilot_kernels_on = true
 	Factions.reset()
 
 
@@ -108,7 +107,6 @@ func test_the_facades_answer_from_the_core_as_the_gdscript_reference_does() -> v
 	var on_rows: int = 0
 	var queries: int = 0
 	var answers: Array = []  # per query: the facades' answers through the kernels
-	var references: Array = []  # the GDScript reference's on the same perception (only when recording)
 	for round: int in 4:
 		for node: Node in world.get_children():
 			if node != projectiles:
@@ -155,9 +153,9 @@ func test_the_facades_answer_from_the_core_as_the_gdscript_reference_does() -> v
 			for i: int in p.statics.size():
 				if sim.core.row_position(p.static_rows[i]) != p.statics[i].position:
 					differences.append("round %d query %d: static %d is not at its row" % [round, q, i])
-			_ask_both(p, rng, "round %d query %d" % [round, q], differences, answers, references)
+			_ask_both(p, rng, "round %d query %d" % [round, q], differences, answers)
 	# The GDScript reference's answers are recorded (M4-T42 fix round 1, from the reference before it went).
-	var recorded: Variant = await ParityFixture.expected(FIXTURE, "facades", func() -> Array: return references)
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "facades")
 	if recorded == null or (recorded as Array).size() != answers.size():
 		differences.append("the recording has %s queries, the run %d" % ["no" if recorded == null else
 				str((recorded as Array).size()), answers.size()])
@@ -169,10 +167,11 @@ func test_the_facades_answer_from_the_core_as_the_gdscript_reference_does() -> v
 	assert_eq(on_rows, queries, "every perception of a core scan is on the rows")
 
 
-# Asks each facade through the kernels (into `answers`) and, when recording, the GDScript reference on the same perception
-# (into `references`): `[v_des, urgent, four lane verdicts]` a query.
-func _ask_both(p: Perception, rng: RandomNumberGenerator, label: String, differences: PackedStringArray, answers: Array,
-		references: Array) -> void:
+# Asks each facade through the kernels on the core's rows (into `answers`, `[v_des, urgent, four lane verdicts]` a query)
+# and off them, over the same lists loaded as rows of their own (`PilotRows`, M4-T42), which must agree; and the context
+# lists on the rows and off them.
+func _ask_both(p: Perception, rng: RandomNumberGenerator, label: String, differences: PackedStringArray,
+		answers: Array) -> void:
 	var radius: float = rng.randf_range(5.0, 20.0)
 	var v_des: Vector3 = p.velocity + Vector3(rng.randf_range(-80.0, 80.0), rng.randf_range(-30.0, 30.0), rng.randf_range(-80.0, 80.0))
 	var exempt_id: int = p.contacts[rng.randi_range(0, p.contacts.size() - 1)].id if not p.contacts.is_empty() \
@@ -180,27 +179,25 @@ func _ask_both(p: Perception, rng: RandomNumberGenerator, label: String, differe
 	var seed_value: int = hash("SHIP %d" % rng.randi())
 	var native: Dictionary = AvoidanceMath.filter_seen(p, radius, v_des, exempt_id, seed_value)
 	var answer: Array = [native["v_des"], native["urgent"]]
-	var reference: Array = []
-	if ParityFixture.recording():
-		var listed: Array[Contact] = []
-		for c: Contact in p.contacts:
-			if exempt_id == 0 or c.id != exempt_id:
-				listed.append(c)
-		listed.append_array(p.statics)
-		var filtered: Dictionary = AvoidanceMath.filter(p.position, p.velocity, radius, listed, v_des, p.capability,
-				seed_value)
-		reference = [filtered["v_des"], filtered["urgent"]]
+	var off := Perception.new()  # the same lists with no core rows under them
+	off.position = p.position
+	off.velocity = p.velocity
+	off.capability = p.capability
+	off.friendly_fire = p.friendly_fire
+	off.contacts = p.contacts
+	off.statics = p.statics
+	var own: Dictionary = AvoidanceMath.filter_seen(off, radius, v_des, exempt_id, seed_value)
+	if var_to_bytes(own["v_des"]) != var_to_bytes(native["v_des"]) or own["urgent"] != native["urgent"]:
+		differences.append("%s: avoidance off the rows %s, on them %s" % [label, own, native])
 	for shot: int in 4:
 		var aim: Vector3 = (p.contacts[rng.randi_range(0, p.contacts.size() - 1)].position - p.position).normalized() \
 				if not p.contacts.is_empty() and shot < 3 else Vector3.FORWARD
 		var target_id: int = p.contacts[rng.randi_range(0, p.contacts.size() - 1)].id if not p.contacts.is_empty() else 0
 		var range_m: float = rng.randf_range(200.0, 3000.0)
 		answer.append(FireLane.clear_seen(p, aim, range_m, target_id))
-		if ParityFixture.recording():
-			reference.append(FireLane.clear(p.position, aim, range_m, p.contacts, target_id, p.friendly_fire))
+		if FireLane.clear_seen(off, aim, range_m, target_id) != answer.back():
+			differences.append("%s: the lane off the rows differs (shot %d)" % [label, shot])
 	answers.append(answer)
-	if ParityFixture.recording():
-		references.append(reference)
 	var leader_id: int = p.contacts[rng.randi_range(0, p.contacts.size() - 1)].id if not p.contacts.is_empty() else 0
 	var a := AiContext.new()
 	a.leader_id = leader_id
@@ -301,14 +298,11 @@ const FIGHT_SPEC: String = "res://assets/ships/starfury_aurora.tres"
 const FIGHT_TICKS: int = 480
 
 
-func test_a_seeded_fight_flies_the_same_with_the_kernels_and_without() -> void:
-	# The fight on the GDScript avoidance and fire lane (the kernels off) is recorded (M4-T37).
-	var recorded: Variant = await ParityFixture.expected(FIXTURE, "fight_without_kernels", func() -> Dictionary:
-		var without: Dictionary = await _fight(false)
-		ContactScan.pilot_kernels_on = true
-		assert_eq(int(without["kernel_ticks"]), 0, "the kernels never answered in the reference")
-		return {"lines": ParityFixture.digest(without["lines"]), "count": (without["lines"] as PackedStringArray).size()})
-	var with_kernels: Dictionary = await _fight(true)
+func test_a_seeded_fight_flies_as_it_did_on_the_gdscript_avoidance_and_lane() -> void:
+	# The fight on the GDScript avoidance and fire lane (the kernels off) is recorded (M4-T37; the switch and the GDScript
+	# went in M4-T42).
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "fight_without_kernels")
+	var with_kernels: Dictionary = await _fight()
 	gut.p("fight: %d kernel ticks, %d dodging ship-ticks, %d firing ship-ticks" % [with_kernels["kernel_ticks"],
 			with_kernels["avoiding"], with_kernels["fired"]])
 	assert_gt(int(with_kernels["kernel_ticks"]), FIGHT_TICKS / 2, "the kernels answered in the run with the core")
@@ -320,11 +314,9 @@ func test_a_seeded_fight_flies_the_same_with_the_kernels_and_without() -> void:
 			"every fighter flies as it did on the GDScript avoidance and fire lane (recorded)")
 
 
-# Eight AI fighters of two sides in four head-on duels, in a space of their own, for `FIGHT_TICKS` ticks, with the core on and
-# the kernels on or off (`ContactScan.pilot_kernels_on`), so only the kernels differ. Returns every fighter's pose,
-# motion, hull and dodge state every 20 ticks.
-func _fight(kernels_on: bool) -> Dictionary:
-	ContactScan.pilot_kernels_on = kernels_on
+# Eight AI fighters of two sides in four head-on duels, in a space of their own, for `FIGHT_TICKS` ticks, with the core on.
+# Returns every fighter's pose, motion, hull and dodge state every 20 ticks.
+func _fight() -> Dictionary:
 	Factions.reset()
 	ContactScan.invalidate()
 	# Start at a tick boundary: ships spawned from idle time (as after another test file's last await) would not tick before

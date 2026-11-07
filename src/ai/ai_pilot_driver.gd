@@ -31,9 +31,10 @@ extends Node
 ## never among the contacts; avoidance steers round them with the contacts.
 ##
 ## Native kernels (M4-T16, §17.13): on a core scan the perception also carries the scan's pilot kernels, the core rows its
-## contacts and statics were picked from and the ship's relation row, so avoidance, the fire lane and the context lists
-## each run in one native call (`AvoidanceMath.filter_seen`, `FireLane.clear_seen`, `AiContext.refresh`), bit for bit
-## with the GDScript, which answers off the core. The tie-break seed is passed in as before.
+## contacts and statics were picked from and the ship's relation row, so avoidance and the fire lane each run in one
+## native call over the core's rows (`AvoidanceMath.filter_seen`, `FireLane.clear_seen`); off them the kernels read the
+## perception's own lists (`PilotRows`, M4-T42). `AiContext.refresh` stays a GDScript loop. The tie-break seed is passed
+## in as before.
 ##
 ## Native brains (M4-T17, §17.13): with the native host on (`NativeBrains.host`), an `AiPilot` thinks in one native call
 ## over the core's rows: the driver hands it a perception without contact lists (the host picks them from the rows as the
