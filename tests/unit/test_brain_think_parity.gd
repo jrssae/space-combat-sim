@@ -127,10 +127,9 @@ class Rows:
 				reaches, names), "the rows load")
 		assert(brains.load_bolts(bolt_positions, bolt_velocities, bolt_factions, bolt_shooters), "the bolts load")
 
-	## The scan the GDScript twin perceives from: the same rows, on the GDScript path.
+	## The scan the GDScript twin perceives from: the same rows, loaded into its own field.
 	func scan() -> ContactScan:
 		var s := ContactScan.new()
-		s.use_native = false
 		s._body_ids = ids
 		s._ids = ids
 		s._names = names
@@ -157,7 +156,6 @@ class Rows:
 	## The broadcast scan: the broadcasters only, with their reach.
 	func broadcast_scan() -> ContactScan:
 		var s := ContactScan.new()
-		s.use_native = false
 		for i: int in ids.size():
 			if reaches[i] <= 0.0:
 				continue

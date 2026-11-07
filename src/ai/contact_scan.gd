@@ -22,9 +22,9 @@ extends RefCounted
 ##
 ## Native queries (M4-T05b, architecture §17.5): the native library's `NATIVE_CLASS` (required since M4-T37) answers:
 ## the queries and the freed-body check run in a native field that takes this scan's arrays once, on its first query, and
-## answers with body indices; the contact lists are still built here from the shared faction lists. The GDScript code is
-## the reference (`use_native` off, for the tests) and the fallback for a field that refuses its arrays; both give the same
-## answers bit for bit. A scan's arrays must not change once it has been queried.
+## answers with body indices; the contact lists are still built here from the shared faction lists. The GDScript loops it
+## matched bit for bit went in M4-T42 (their answers are recorded in `tests/fixtures/parity/contact_field.json`); a scan
+## whose arrays the field refuses (it logs why) answers nothing. A scan's arrays must not change once it has been queried.
 ##
 ## A contact's hull and selection are read when it is first handed out (a driver's own selection change after the build is
 ## taken as it was, `note_selection`).
@@ -70,10 +70,8 @@ static var pilot_kernels_on: bool = true
 ## The physics frame this scan is of (-1 for one built by hand).
 var physics_frame: int = -1
 ## The scan rows of the latest list `contacts_for`, `nearest_for` or `statics_for` handed out, in its order (M4-T16): on a
-## core scan, the core rows the pilot kernels read. Empty when a list was not picked by row (the GDScript fast path).
+## core scan, the core rows the pilot kernels read.
 var picked_rows: PackedInt32Array = PackedInt32Array()
-## False forces the GDScript path for this scan, so a test or a bench can pair it with the native one.
-var use_native: bool = true
 
 # Per body, in scan order. Packed because the scan runs every tick (AC13's budget).
 var _body_ids: PackedInt64Array = PackedInt64Array()
@@ -93,21 +91,17 @@ var _kinds: PackedByteArray = PackedByteArray()  # per body `BodyKind`; empty wh
 var _node_count: int = -1  # rows before this are nodes, the rest node-less statics; -1: every row
 var _stamped: Dictionary = {}  # faction -> Array[Contact] with the relation set, each made when first handed out
 var _relations: Dictionary = {}  # faction -> {other faction -> relation}, looked up once per pair
-var _hostile_ships: Dictionary = {}  # faction -> PackedByteArray, 1 for a ship hostile to it (nearest-k, M4-T04)
-var _extent_m: float = -1.0  # computed on first use
 var _statics_n: int = -1  # rock and mine rows, counted on first use
 var _node_statics: int = 0  # node rows of a static kind, as the core counts them
 var _bolt_positions: PackedVector3Array = PackedVector3Array()
 var _bolt_velocities: PackedVector3Array = PackedVector3Array()
 var _bolt_factions: Array[StringName] = []
 var _bolt_shooters: PackedInt64Array = PackedInt64Array()
-var _hostile_bolts: Dictionary = {}  # faction -> indices of the bolts hostile to it
 var _reach: PackedFloat64Array = PackedFloat64Array()  # per body broadcast range (broadcast scan only)
 var _field: Object = null  # the native field over this scan's arrays, made on the first native query
-var _field_rejected: bool = false  # the field refused this scan's arrays (they differ in length): GDScript answers it
+var _field_rejected: bool = false  # the field refused this scan's arrays (they differ in length): the scan answers nothing
 var _field_rows: Dictionary = {}  # faction -> true once the field has its hostility row
 var _friend_rows: Dictionary = {}  # faction -> true once the field knows whose mines it sees (Q27)
-var _friends: Dictionary = {}  # faction -> PackedByteArray, 1 for each mine it knows (GDScript statics)
 # A built scan (M4-T09) reads hull and selection when a contact is first handed out: the hulls' instance ids (0: none)
 # and the selections drivers changed after the scan was built (body id -> the selection it had then).
 var _live: bool = false
@@ -116,9 +110,8 @@ var _target_before: Dictionary = {}
 # The core whose rows a core or broadcast scan took, and its removals seen since (the freed-body check).
 var _rows_of: SimCore = null
 var _removals_at: int = 0
-# A core scan (M4-T15): the core its field reads; its bolts come over only when the GDScript path needs them.
+# A core scan (M4-T15): the core its field reads.
 var _sim: SimCore = null
-var _bolts_pending: bool = false
 var _pilot: Object = null  # the pilot kernels over this scan's core rows, made on first ask (M4-T16)
 var _pilot_known: bool = false
 var _rows_version: int = -1  # the core's rows version this scan was taken at
@@ -243,12 +236,12 @@ func source() -> StringName:
 	return &"core" if _sim != null else &"hand"
 
 
-## Which code answers this scan's queries now: &"native" or &"gdscript".
+## Which code answers this scan's queries now: &"native", or &"none" for a scan whose arrays the field refused.
 func path() -> StringName:
-	return &"native" if _native() != null else &"gdscript"
+	return &"native" if _native() != null else &"none"
 
 
-## Bodies the native field tested in its latest contact, nearest or statics query (the work count), -1 on the GDScript path.
+## Bodies the native field tested in its latest contact, nearest or statics query (the work count), -1 with no field.
 func native_visits() -> int:
 	var field: Object = _native()
 	return field.visited() if field != null else -1
@@ -266,18 +259,9 @@ func contacts_for(own_body_id: int, own_position: Vector3, own_faction: StringNa
 			picked_rows = found
 			return _all_but(own_faction, stamped, own_index)
 		return _pick(own_faction, stamped, found)
-	var has_statics: bool = _statics_count() > 0
-	# Fast path: everything is in range for sure, so the faction list without this ship is what the loop would build.
-	if not has_statics and own_index >= 0 and _extent() + own_position.distance_to(_positions[own_index]) < range_m * 0.999:
-		picked_rows = PackedInt32Array()
-		return _all_but(own_faction, stamped, own_index)
-	var range_sq: float = range_m * range_m
-	var found := PackedInt32Array()
-	for i: int in stamped.size():
-		if _body_ids[i] != own_body_id and _positions[i].distance_squared_to(own_position) <= range_sq \
-				and not (has_statics and BodyKind.is_static(_kinds[i])):
-			found.append(i)
-	return _pick(own_faction, stamped, found)
+	picked_rows = PackedInt32Array()
+	var none: Array[Contact] = []  # a refused scan: nothing, in a list the caller may keep
+	return none
 
 
 ## The nearest `k` of the contacts `contacts_for` gives (M4-T04), in scan order. When that leaves any out, the nearest
@@ -301,55 +285,9 @@ func nearest_for(own_body_id: int, own_position: Vector3, own_faction: StringNam
 		_keep_named(chosen, keeper, own_body_id, own_position, range_sq)
 		chosen.sort()
 		return _pick(own_faction, stamped, chosen)
-	var hostile: PackedByteArray = _hostile_ships_for(own_faction)
-	var has_statics: bool = _statics_count() > 0
-	# Gather like `contacts_for` until more than k are in range; only then select, keeping the nearest k sorted by range.
-	var gathered := PackedInt32Array()
-	var best_sq := PackedFloat64Array()
-	var best := PackedInt32Array()
-	var selecting: bool = false
-	var limit: float = range_sq
-	var hostile_at: int = -1
-	var hostile_sq: float = INF
-	for i: int in _body_ids.size():
-		var d_sq: float = _positions[i].distance_squared_to(own_position)
-		if d_sq > range_sq or _body_ids[i] == own_body_id or (has_statics and BodyKind.is_static(_kinds[i])):
-			continue
-		if not selecting:
-			gathered.append(i)
-			if gathered.size() <= k:
-				continue
-			selecting = true
-			for j: int in gathered:
-				var g_sq: float = _positions[j].distance_squared_to(own_position)
-				if hostile[j] == 1 and g_sq < hostile_sq:
-					hostile_sq = g_sq
-					hostile_at = j
-				var g_at: int = best_sq.bsearch(g_sq, false)
-				best_sq.insert(g_at, g_sq)
-				best.insert(g_at, j)
-			best_sq.resize(k)
-			best.resize(k)
-			limit = best_sq[k - 1]
-			continue
-		if hostile[i] == 1 and d_sq < hostile_sq:
-			hostile_sq = d_sq
-			hostile_at = i
-		if d_sq > limit:
-			continue
-		var at: int = best_sq.bsearch(d_sq, false)
-		best_sq.insert(at, d_sq)
-		best.insert(at, i)
-		best_sq.resize(k)
-		best.resize(k)
-		limit = best_sq[k - 1]
-	if not selecting:
-		best = gathered  # k or fewer in range: all of them, already in scan order
-	else:
-		_keep(hostile_at, best, own_body_id, own_position, range_sq)
-		_keep_named(best, keeper, own_body_id, own_position, range_sq)
-		best.sort()
-	return _pick(own_faction, stamped, best)
+	picked_rows = PackedInt32Array()
+	var none: Array[Contact] = []
+	return none
 
 
 ## The rocks and mines a ship should steer round (M4-T09): those whose surface is within `range_m`, never its own body;
@@ -364,32 +302,8 @@ func statics_for(own_body_id: int, own_position: Vector3, own_faction: StringNam
 	var field: Object = _native_with_friends(own_faction)
 	if field != null:
 		return _pick(own_faction, stamped, field.statics(own_body_id, own_position, own_faction, k, range_m))
-	var friendly: PackedByteArray = _friends_for(own_faction)
-	var reach: float = absf(range_m)
-	var found := PackedInt32Array()
-	var best_surface := PackedFloat64Array()
-	var best := PackedInt32Array()
-	for i: int in _body_ids.size():
-		if not BodyKind.is_static(_kinds[i]) or _body_ids[i] == own_body_id:
-			continue
-		if _kinds[i] == BodyKind.MINE and friendly[i] == 0:
-			continue  # another side's mine: unknown to this one
-		var surface: float = _positions[i].distance_to(own_position) - _radii[i]
-		if not (surface <= reach):
-			continue  # beyond the range, or a NaN radius: never an obstacle, as in the field
-		found.append(i)
-		var at: int = best_surface.bsearch(surface, false)
-		if at >= k:
-			continue
-		best_surface.insert(at, surface)
-		best.insert(at, i)
-		if best.size() > k:
-			best_surface.resize(k)
-			best.resize(k)
-	if found.size() <= k:
-		return _pick(own_faction, stamped, found)
-	best.sort()
-	return _pick(own_faction, stamped, best)
+	picked_rows = PackedInt32Array()
+	return _no_contacts
 
 
 ## The broadcasts a ship hears (from a broadcast scan, `shared_broadcasts`): beyond `near_m`, where contacts take over, and within
@@ -402,15 +316,7 @@ func broadcasts_for(own_body_id: int, own_position: Vector3, own_faction: String
 	var field: Object = _native()
 	if field != null:
 		return _pick(own_faction, stamped, field.broadcasts(own_body_id, own_position, near_m))
-	var near_sq: float = near_m * near_m
-	var found := PackedInt32Array()
-	for i: int in stamped.size():
-		if _body_ids[i] == own_body_id:
-			continue
-		var d_sq: float = _positions[i].distance_squared_to(own_position)
-		if d_sq > near_sq and d_sq <= _reach[i] * _reach[i]:
-			found.append(i)
-	return _pick(own_faction, stamped, found)
+	return _no_contacts
 
 
 ## How many bolts hostile to `own_faction` (and not this ship's own) pass within `INCOMING_MISS_M` of the ship in the next
@@ -419,21 +325,7 @@ func incoming_fire(own_body_id: int, own_position: Vector3, own_velocity: Vector
 	var field: Object = _native_with_row(own_faction)
 	if field != null:
 		return field.incoming(own_body_id, own_position, own_velocity, own_faction)
-	if _bolts_pending:
-		_take_bolts()
-	var count: int = 0
-	for i: int in _hostile_bolts_for(own_faction):
-		if _bolt_shooters[i] == own_body_id:
-			continue
-		var rel_pos: Vector3 = _bolt_positions[i] - own_position
-		var rel_vel: Vector3 = _bolt_velocities[i] - own_velocity
-		# Too far to close within the horizon, so it cannot pass close.
-		var reach: float = rel_vel.length() * INCOMING_HORIZON_S + INCOMING_MISS_M + 1.0
-		if rel_pos.length_squared() > reach * reach:
-			continue
-		if AvoidanceMath.closest_approach(rel_pos, rel_vel, INCOMING_HORIZON_S) < INCOMING_MISS_M:
-			count += 1
-	return count
+	return 0
 
 
 ## The native pilot kernels over this scan's core rows (M4-T16), or null: not a core scan, native code off, the library
@@ -442,7 +334,7 @@ func incoming_fire(own_body_id: int, own_position: Vector3, own_velocity: Vector
 func pilot_kernels() -> Object:
 	if not _pilot_known:
 		_pilot_known = true
-		if _sim == null or not is_instance_valid(_sim) or _sim.core == null or not use_native:
+		if _sim == null or not is_instance_valid(_sim) or _sim.core == null:
 			return null
 		if _pilot_class_known < 0:
 			_pilot_class_known = 1 if NativeLib.has_class(PILOT_CLASS) else 0
@@ -497,7 +389,6 @@ func _take_rows(rows: Array) -> void:
 	_node_count = rows[12]
 	_statics_n = rows[13]
 	_live = true
-	_bolts_pending = true
 
 
 # The broadcast scan of this frame: the active broadcasters of `list`, in that order, with their ranges, read now by
@@ -513,23 +404,9 @@ static func _broadcast_scan(list: Array[Targetable], sim: SimCore) -> ContactSca
 	scan._take_rows(rows)
 	scan._rows_of = sim
 	scan._removals_at = sim.removals
-	scan._bolts_pending = false
 	for j: int in rows[14] as PackedInt32Array:
 		scan._reach.append(reaches[j])
 	return scan
-
-
-# A core scan's bolts, taken over for the GDScript path (the field reads them from the core itself).
-func _take_bolts() -> void:
-	_bolts_pending = false
-	if _sim == null or not is_instance_valid(_sim) or _sim.core == null:
-		return
-	var bolts: Array = _sim.core.bolt_scan()
-	_bolt_positions = bolts[0]
-	_bolt_velocities = bolts[1]
-	_bolt_factions = bolts[2]
-	_bolt_shooters = bolts[3]
-	_hostile_bolts.clear()
 
 
 # Adds body `i` to a nearest-k selection when it is in range, not the ship's own and not in it yet.
@@ -577,10 +454,8 @@ func _all_but(faction: StringName, stamped: Array[Contact], skip: int) -> Array[
 	return all
 
 
-# The native field for this query, or null for the GDScript path. Made and loaded on the first native query.
+# The native field for this query, or null when it refused this scan's arrays. Made and loaded on the first query.
 func _native() -> Object:
-	if not use_native:
-		return null
 	if _native_class_known < 0:
 		_native_class_known = 1 if NativeLib.has_class(NATIVE_CLASS) else 0
 	if _native_class_known == 0:
@@ -594,7 +469,7 @@ func _native() -> Object:
 		if _sim != null and is_instance_valid(_sim) and _sim.core != null:
 			# A core scan: the field reads the core's rows and bolts; nothing is copied.
 			field.attach_core(_sim.core, SENSOR_RANGE_M)
-		# A field that refuses the arrays has logged why; this scan then stays on the GDScript path.
+		# A field that refuses the arrays has logged why; this scan then answers nothing.
 		elif not field.load(_body_ids, _positions, _factions, _is_ship, _reach, _bolt_positions, _bolt_velocities,
 				_bolt_factions, _bolt_shooters, SENSOR_RANGE_M) \
 				or (_statics_count() > 0 and not field.set_kinds(_kinds, _radii)):
@@ -685,19 +560,6 @@ func _relation(faction: StringName, other: StringName) -> Factions.Relation:
 	return known[other]
 
 
-# 1 for each mine whose side is friendly to `faction` (its own included): the mines it knows (GDScript statics).
-func _friends_for(faction: StringName) -> PackedByteArray:
-	if _friends.has(faction):
-		return _friends[faction]
-	var friendly := PackedByteArray()
-	friendly.resize(_body_ids.size())
-	for i: int in _body_ids.size():
-		if _kinds[i] == BodyKind.MINE and _relation(faction, _factions[i]) == Factions.Relation.FRIENDLY:
-			friendly[i] = 1
-	_friends[faction] = friendly
-	return friendly
-
-
 # Appends the rows with no node (`StaticRows`) whole, column by column: no walk over them a tick.
 func _append_static_rows() -> void:
 	var columns: Dictionary = StaticRows.scan_columns()
@@ -716,29 +578,6 @@ func _append_static_rows() -> void:
 	_statics_n = _node_statics + int(columns["statics"])
 
 
-# 1 for each body that is a ship hostile to `faction` (the GDScript nearest-k path).
-func _hostile_ships_for(faction: StringName) -> PackedByteArray:
-	if _hostile_ships.has(faction):
-		return _hostile_ships[faction]
-	var hostile := PackedByteArray()
-	for i: int in _body_ids.size():
-		hostile.append(1 if _is_ship[i] == 1 and _relation(faction, _factions[i]) == Factions.Relation.HOSTILE else 0)
-	_hostile_ships[faction] = hostile
-	return hostile
-
-
-# Upper bound on the distance between any two bodies.
-func _extent() -> float:
-	if _extent_m < 0.0:
-		var lo: Vector3 = Vector3.INF
-		var hi: Vector3 = -Vector3.INF
-		for at: Vector3 in _positions:
-			lo = lo.min(at)
-			hi = hi.max(at)
-		_extent_m = (hi - lo).length() if not _positions.is_empty() else 0.0
-	return _extent_m
-
-
 # How many rows are rocks or mines (none when the scan has no kinds).
 func _statics_count() -> int:
 	if _statics_n < 0:
@@ -747,22 +586,6 @@ func _statics_count() -> int:
 			if BodyKind.is_static(kind):
 				_statics_n += 1
 	return _statics_n
-
-
-# The bolts hostile to `faction`, resolved once per faction because the relation lookup is the costly part.
-func _hostile_bolts_for(faction: StringName) -> PackedInt32Array:
-	if _hostile_bolts.has(faction):
-		return _hostile_bolts[faction]
-	var hostile: Dictionary = {}  # bolt faction -> bool
-	var list := PackedInt32Array()
-	for i: int in _bolt_factions.size():
-		var bolt_faction: StringName = _bolt_factions[i]
-		if not hostile.has(bolt_faction):
-			hostile[bolt_faction] = Factions.is_hostile(faction, bolt_faction)
-		if hostile[bolt_faction]:
-			list.append(i)
-	_hostile_bolts[faction] = list
-	return list
 
 
 # Whether every node this scan holds still exists. A core scan looks only when a marker or hull has left the tree.

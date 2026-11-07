@@ -1,9 +1,9 @@
 extends GutTest
 ## The contact scan's queries in native code (M4-T05b, architecture §17.5): `ContactScan` hands its arrays to the native
 ## `ScsContactField` and builds what callers get from the indices it returns. The native path must answer exactly as the
-## GDScript one (maintainer, 2026-11-02: bit-identical): the same contacts in the same order, the same `incoming_fire`
-## and the same broadcasts, so seeded runs give the same outcome on either. Scans are filled by hand
-## (no scene), so seeded worlds of any size are cheap.
+## GDScript one did (maintainer, 2026-11-02: bit-identical): the same contacts in the same order, the same `incoming_fire`
+## and the same broadcasts. The GDScript loops went in M4-T42; their answers are recorded (M4-T37). Scans are filled by
+## hand (no scene), so seeded worlds of any size are cheap.
 
 const WORLDS: int = 40
 const MAX_BODIES: int = 300
@@ -36,14 +36,9 @@ func after_each() -> void:
 
 
 # `query` (a Callable taking the scan) answered on the native path, with the GDScript path's answer as recorded:
-# `[native answer, its key, the recorded key]`. When recording, the GDScript path answers it first (M4-T37).
+# `[native answer, its key, the recorded key]`.
 func _both(scan: ContactScan, query: Callable) -> Array:
-	scan.set(&"use_native", true)
 	var native: Variant = query.call(scan)
-	if ParityFixture.recording():
-		scan.set(&"use_native", false)
-		_recorded.append(_key(query.call(scan)))
-		scan.set(&"use_native", true)
 	var reference: String = String(_recorded[_next]) if _next < _recorded.size() else "not recorded"
 	_next += 1
 	return [native, _key(native), reference]
@@ -163,8 +158,6 @@ func test_the_scan_takes_the_native_path_when_the_library_is_loaded() -> void:
 	var scan := _scan(PackedVector3Array([Vector3.ZERO, Vector3(100, 0, 0)]), [Factions.RAIDERS, Factions.EARTH_ALLIANCE],
 			PackedByteArray([1, 1]))
 	assert_eq(scan.path(), &"native", "the native field answers (%s)" % NativeLib.version(ContactScan.NATIVE_CLASS))
-	scan.use_native = false
-	assert_eq(scan.path(), &"gdscript", "use_native false forces GDScript")
 
 
 func test_seeded_worlds_give_the_same_answers_on_both_paths() -> void:
@@ -256,23 +249,17 @@ func test_incoming_fire_agrees_on_bolts_that_graze_the_15_m_line() -> void:
 	assert_between(counted, 200, 1400, "the bolts straddle the line")
 
 
-func test_k_of_zero_or_less_cuts_nothing_on_both_paths() -> void:
+func test_k_of_zero_or_less_cuts_nothing() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 23
 	var scan := _world(rng, 60, 0)
 	var own_at: Vector3 = scan._positions[4]
 	var faction: StringName = scan._factions[4]
 	for k: int in [0, -3]:
-		var answers: Array = []
-		for native: bool in [true, false]:
-			scan.use_native = native
-			answers.append(scan.nearest_for(1004, own_at, faction, k))
-		scan.use_native = false
+		var answer: Array[Contact] = scan.nearest_for(1004, own_at, faction, k)
 		var every: Array[Contact] = scan.contacts_for(1004, own_at, faction)
 		assert_gt(every.size(), 12, "a crowd that k 12 would cut")
-		assert_true(_same(answers[0], every), "k %d, native: contacts_for's list" % k)
-		assert_true(_same(answers[1], every), "k %d, GDScript: contacts_for's list" % k)
-		scan.use_native = true
+		assert_true(_same(answer, every), "k %d: contacts_for's list" % k)
 		var raw: PackedInt32Array = scan._native().nearest(1004, own_at, faction, k, ContactScan.SENSOR_RANGE_M)
 		assert_eq(raw.size(), every.size(), "k %d: the field itself cuts nothing and adds no marker" % k)
 
@@ -303,19 +290,15 @@ func test_a_query_visits_only_the_cells_its_range_reaches() -> void:
 	assert_between(worst, GROUP_SIZE, 2 * GROUP_SIZE, "a query tests its own group, not the %d bodies of the whole world" % n)
 
 
-func test_a_freed_body_is_noticed_on_both_paths() -> void:
+func test_a_freed_body_is_noticed() -> void:
 	var alive := Node.new()
 	var doomed := Node.new()
 	var scan := _scan(PackedVector3Array([Vector3.ZERO, Vector3(10, 0, 0)]), [Factions.RAIDERS, Factions.RAIDERS],
 			PackedByteArray([1, 1]))
 	scan._body_ids = PackedInt64Array([alive.get_instance_id(), doomed.get_instance_id()])
-	for native: bool in [true, false]:
-		scan.use_native = native
-		assert_true(scan._bodies_alive(), "both exist (%s)" % scan.path())
+	assert_true(scan._bodies_alive(), "both exist")
 	doomed.free()
-	for native: bool in [true, false]:
-		scan.use_native = native
-		assert_false(scan._bodies_alive(), "one was freed (%s)" % scan.path())
+	assert_false(scan._bodies_alive(), "one was freed")
 	alive.free()
 
 
@@ -392,26 +375,25 @@ func test_a_load_with_mismatched_array_lengths_is_rejected_and_the_field_answers
 		assert_true(field.bodies_alive(), "%s: nothing to be freed" % label)
 
 
-func test_the_facade_falls_back_to_gdscript_for_a_scan_the_field_rejects() -> void:
+func test_a_scan_the_field_rejects_answers_nothing() -> void:
+	# M4-T42: no GDScript loops answer a refused scan any more; the field says why and the scan sees nothing.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 41
 	var scan := _world(rng, 50, 0)
-	scan._is_ship.append(1)  # one flag too many: the field refuses it, GDScript never reads it
+	scan._is_ship.append(1)  # one flag too many: the field refuses it
 	var own_at: Vector3 = scan._positions[3]
 	var faction: StringName = scan._factions[3]
 	var found: Array[Contact] = scan.nearest_for(1003, own_at, faction, 12)
 	assert_engine_error("lengths", "the field says why it refused")
-	assert_eq(scan.path(), &"gdscript", "the scan answers from GDScript")
-	assert_eq(scan.native_visits(), -1, "and has no native work count")
-	assert_gt(found.size(), 0, "the query still answered")
-	scan.use_native = false
-	assert_true(_same(found, scan.nearest_for(1003, own_at, faction, 12)), "the same as the GDScript path")
-	var expected_fire: int = scan.incoming_fire(1003, own_at, Vector3.ZERO, faction)
-	var expected_contacts: Array[Contact] = scan.contacts_for(1003, own_at, faction)
-	scan.use_native = true
-	assert_eq(scan.path(), &"gdscript", "the refusal sticks for this scan")
-	assert_eq(scan.incoming_fire(1003, own_at, Vector3.ZERO, faction), expected_fire, "incoming_fire still answers")
-	assert_true(_same(scan.contacts_for(1003, own_at, faction), expected_contacts), "contacts_for still answers")
+	assert_eq(scan.path(), &"none", "nothing answers the scan")
+	assert_eq(scan.native_visits(), -1, "and it has no native work count")
+	assert_eq(found.size(), 0, "nearest_for gives nothing")
+	found.append(Contact.new())  # a list the caller owns
+	assert_eq(scan.contacts_for(1003, own_at, faction).size(), 0, "contacts_for gives nothing")
+	assert_eq(scan.statics_for(1003, own_at, faction, 4).size(), 0, "statics_for gives nothing")
+	assert_eq(scan.broadcasts_for(1003, own_at, faction).size(), 0, "broadcasts_for gives nothing")
+	assert_eq(scan.incoming_fire(1003, own_at, Vector3.ZERO, faction), 0, "incoming_fire counts nothing")
+	assert_eq(scan.path(), &"none", "the refusal sticks for this scan")
 	assert_true(scan._bodies_alive() == false, "the freed-body check runs without the field (these ids are not nodes)")
 
 
@@ -459,7 +441,6 @@ func test_more_than_256_factions_are_told_apart() -> void:
 	assert_eq(fire[0], 1, "native: the same")
 	assert_eq(nearest[1], nearest[2], "nearest_for: the recorded contacts")
 	assert_true(_ids(nearest[0]).has(5290), "the cut keeps the nearest hostile ship, body 290")
-	scan.use_native = true
 	assert_eq(scan._native().factions().size(), count, "the field lists every faction")
 
 
@@ -630,7 +611,7 @@ func test_four_factions_every_pair_hostile_give_the_same_hostile_lists_on_both_p
 	assert_gt(hostile_seen, 500, "every other side is hostile")
 
 
-func test_a_kinds_array_of_the_wrong_length_is_rejected_and_the_scan_answers_from_gdscript() -> void:
+func test_a_kinds_array_of_the_wrong_length_is_rejected_and_the_scan_answers_nothing() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 61
 	var scan := _world(rng, 40, 0)
@@ -639,9 +620,8 @@ func test_a_kinds_array_of_the_wrong_length_is_rejected_and_the_scan_answers_fro
 	var own_at: Vector3 = scan._positions[2]
 	var found: Array[Contact] = scan.statics_for(1002, own_at, scan._factions[2], 4)
 	assert_engine_error("lengths", "the field says why it refused")
-	assert_eq(scan.path(), &"gdscript", "the scan answers from GDScript")
-	scan.use_native = false
-	assert_true(_same(found, scan.statics_for(1002, own_at, scan._factions[2], 4)), "the same as the GDScript path")
+	assert_eq(scan.path(), &"none", "nothing answers the scan")
+	assert_eq(found.size(), 0, "statics_for gives nothing")
 
 
 func test_a_side_sees_its_own_mines_and_never_an_enemys_on_both_paths() -> void:

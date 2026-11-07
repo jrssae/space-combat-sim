@@ -361,7 +361,6 @@ func test_the_contact_scan_answers_from_the_core_as_from_its_own_load() -> void:
 		var shared: ContactScan = ContactScan.shared(get_tree())
 		assert_eq(shared.source(), &"core", "round %d: the shared scan comes from the core" % round)
 		var script: ContactScan = TreeRows.scan(get_tree())
-		script.use_native = false
 		_assert_same_rows(shared, script, "round %d" % round)
 		var differences: PackedStringArray = PackedStringArray()
 		for q: int in mini(bodies.size(), 60):
