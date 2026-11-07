@@ -1,6 +1,6 @@
-// The hit broad phase's grid of levels with its cells in hash maps (M4-T34, docs/architecture.md 17.13): the same hulls
-// placed in the same cells as `kernels::sweep::Grid`, the same candidates for every projectile, found by one lookup per cell
-// instead of two searches per column of cells. Engine-free and thread-ready: plain data in, plain data out, scratch passed in.
+// The hit broad phase's grid of levels with its cells in hash maps (M4-T34, docs/architecture.md 17.13): the hulls
+// placed by level and cell, the candidates for every projectile found by one lookup per cell
+// (M4-T37 removed the sorted reference grid). Engine-free and thread-ready: plain data in, plain data out, scratch passed in.
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 
@@ -50,7 +50,7 @@ pub struct CellGrid {
 }
 
 impl CellGrid {
-    /// Puts every hull into its level's cell, or into the loose list when it fits no cell (`Grid::place`'s rules).
+    /// Puts every hull into its level's cell, or into the loose list when it fits no cell (the levels' rules).
     pub fn place(&mut self, hulls: &[Vector3], hull_reach: &[f64]) {
         self.cells.resize_with(LEVELS, Cells::default);
         self.members.resize_with(LEVELS, Vec::new);
@@ -88,7 +88,7 @@ impl CellGrid {
         }
     }
 
-    // Fills `candidates` with the hulls a projectile at `at` with reach `own` must test, ascending (`Grid::look`'s set).
+    // Fills `candidates` with the hulls a projectile at `at` with reach `own` must test, ascending.
     fn look(&self, at: Vector3, own: f64, candidates: &mut Vec<u32>) {
         candidates.clear();
         for level in 0..LEVELS {
@@ -134,7 +134,7 @@ impl CellGrid {
     }
 }
 
-/// Each projectile against the placed hulls: `kernels::sweep::sweep` over a `CellGrid`, the same keys and the same work.
+/// Each projectile against the placed hulls: its candidates, then the sphere test; keys as `bolt * hulls + hull`, ascending.
 pub fn sweep(
     grid: &CellGrid,
     bolts: &[Vector3],

@@ -391,7 +391,6 @@ func _rock_pairs(sim: SimCore) -> PackedInt64Array:
 	if solid != _solid:
 		_solid = solid
 		_rocks.keep(solid.positions, solid.radii)
-	_rocks.use_native = broad_phase.use_native
 	static_pairs_visited = 0
 	if solid.ids.is_empty():
 		return PackedInt64Array()

@@ -114,8 +114,6 @@ const ENTRIES: Dictionary = {
 		"doc": "The ram resolver's swept test first checks a hull's bounding sphere, then each volume's, against the other hull's box and places only the volumes that can reach it (M4-T34; the same answers); off = every volume placed, the reference"},
 	&"perf_targeting_on_read": {"type": TYPE_BOOL, "default": true,
 		"doc": "The player's targeting computer checks its selection every tick and notes each target's place, reach and name, and builds its full list of every target only when it is read, the HUD's and the radar's once a frame (M4-T34; the same selection, its name and select_id answers; the list itself as of the read); off = the list built every tick, the reference"},
-	&"perf_native_sweep_cells": {"type": TYPE_BOOL, "default": true,
-		"doc": "The native hit broad phase keeps its grid's cells in hash maps (M4-T34; the same pairs and work); off = the sorted cells, the reference"},
 	# M4-T35
 	&"perf_core_event_columns": {"type": TYPE_BOOL, "default": true,
 		"doc": "The core keeps a body's activity, hull points and selection from the events that change them (hidden, shown, destroyed, damaged, healed, a selection change; M4-T35) and reads only the pose and motion a tick; off = every column read from the nodes every tick, the reference, for pairing the two in one process; live"},
@@ -168,7 +166,7 @@ const RENAMED: Dictionary = {}
 ## Settings removed with the old paths (M4-T37, Q67): `Settings.revert` reads only schema keys, so a saved file that still
 ## holds one of these loads without it, and the next `save` drops it.
 const RETIRED: Array[StringName] = [&"perf_native_weapons", &"perf_native_brains", &"perf_native_commands",
-		&"perf_native_driver_step", &"perf_native_flight", &"perf_batch_owns_ships"]
+		&"perf_native_driver_step", &"perf_native_flight", &"perf_batch_owns_ships", &"perf_native_sweep_cells"]
 
 ## Choices removed from a setting: key -> {old choice -> what a saved file's old choice loads as} (M4-T37: the inline step).
 const RETIRED_VALUES: Dictionary = {&"sim_step": {&"inline": &"threaded"}}

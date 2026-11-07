@@ -1,25 +1,13 @@
 extends GutTest
 ## The hit resolver's broad phase (M4-T08, architecture §17.7): `HitBroadPhase` must hand the resolver exactly the projectile
 ## and hull pairs its bounding-sphere test accepts (never fewer, so no hit is lost; never more, so the native and GDScript paths
-## agree bit for bit), in the resolver's order, for hulls from 5 m to 1 km, near the origin and far from it. The native path
-## (`ScsHitSweep`) must give the same pairs and the same work count as the GDScript one. Native cases go pending, saying why,
-## when the native library is not built.
+## agreed bit for bit), in the resolver's order, for hulls from 5 m to 1 km, near the origin and far from it. The native sweep
+## (`ScsHitSweep`) must do the work the GDScript reference did, recorded in `tests/fixtures/parity/hit_broad_phase.json`
+## before M4-T37 removed that reference.
 
 const FIXTURE: String = "hit_broad_phase"
 const CROWDS: int = 40
 const FAR_M: float = 45000.0
-
-var _native_backup: bool
-
-
-func before_each() -> void:
-	_native_backup = bool(Settings.get_value(&"perf_native"))
-	Settings.set_value(&"perf_native", true)
-
-
-func after_each() -> void:
-	Settings.set_value(&"perf_native", _native_backup)
-
 
 # True (and the test marked pending, saying why) when there is no native library to compare against.
 func _skipped() -> bool:
@@ -100,30 +88,10 @@ static func _ascending(keys: PackedInt64Array) -> bool:
 # --- what the resolver gets ---------------------------------------------------------------------------------------
 
 
-func test_the_gdscript_path_gives_exactly_the_pairs_the_sphere_test_accepts() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 20261103
-	var phase := HitBroadPhase.new()
-	phase.use_native = false
-	var accepted: int = 0
-	for index: int in CROWDS:
-		var crowd: Dictionary = _crowd(rng, index)
-		var expected: PackedInt64Array = _every_pair(crowd["bolt_mids"], crowd["bolt_reach"], crowd["hull_mids"],
-				crowd["hull_reach"])
-		var got: PackedInt64Array = _pairs(phase, crowd)
-		assert_eq(phase.path(), &"gdscript")
-		assert_eq(got, expected, "crowd %d: every pair the sphere test accepts, and no other" % index)
-		assert_true(_ascending(got), "crowd %d: in the resolver's order (bolt, then hull)" % index)
-		accepted += got.size()
-	gut.p("%d accepted pairs over %d crowds" % [accepted, CROWDS])
-	assert_gt(accepted, 1000, "the crowds put many pairs right on the edge of the test")
-
-
 func test_the_native_path_gives_the_same_pairs_and_work_as_gdscript() -> void:
 	if _skipped():
 		return
-	var recorded: Variant = await ParityFixture.expected(FIXTURE, "work_seed_20261103", func() -> Array:
-		return _work(20261103, false))
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "work_seed_20261103")
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20261103
 	var native := HitBroadPhase.new()
@@ -136,26 +104,7 @@ func test_the_native_path_gives_the_same_pairs_and_work_as_gdscript() -> void:
 		assert_eq(float(native.visited), float(recorded[index]), "crowd %d: the GDScript path's work (recorded)" % index)
 
 
-# The work count per seeded crowd on one path (M4-T37: the GDScript path's is recorded in
-# `tests/fixtures/parity/hit_broad_phase.json`); `kept` keeps the hulls in the grid first.
-static func _work(seed_value: int, kept: bool, native: bool = false) -> Array:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_value
-	var out: Array = []
-	for index: int in CROWDS:
-		var crowd: Dictionary = _crowd(rng, index)
-		var phase := HitBroadPhase.new()
-		phase.use_native = native
-		if kept:
-			phase.keep(crowd["hull_mids"], crowd["hull_reach"])
-			phase.kept_pairs(crowd["bolt_mids"], crowd["bolt_reach"])
-		else:
-			_pairs(phase, crowd)
-		out.append(phase.visited)
-	return out
-
-
-func test_pairs_right_on_the_edge_of_the_sphere_test_agree_on_both_paths() -> void:
+func test_pairs_right_on_the_edge_of_the_sphere_test_are_the_sphere_test_s() -> void:
 	# 3 000 projectiles 45 km out, each with a reach within a few parts in ten million of its distance to a hull, so a different
 	# rounding of the distance (64-bit maths, another order of operations) puts many pairs on the other side of the line.
 	var rng := RandomNumberGenerator.new()
@@ -176,16 +125,13 @@ func test_pairs_right_on_the_edge_of_the_sphere_test_agree_on_both_paths() -> vo
 	var expected: PackedInt64Array = _every_pair(bolt_mids, bolt_reach, hull_mids, hull_reach)
 	gut.p("%d of 3000 edge pairs pass the sphere test" % expected.size())
 	assert_between(expected.size(), 300, 2700, "the edge splits the pairs")
-	var phase := HitBroadPhase.new()
-	phase.use_native = false
-	assert_eq(phase.pairs(bolt_mids, bolt_reach, hull_mids, hull_reach), expected, "GDScript")
 	if _skipped():
 		return
-	phase.use_native = true
+	var phase := HitBroadPhase.new()
 	assert_eq(phase.pairs(bolt_mids, bolt_reach, hull_mids, hull_reach), expected, "native")
 
 
-func test_odd_inputs_give_what_the_sphere_test_gives_on_both_paths() -> void:
+func test_odd_inputs_give_what_the_sphere_test_gives() -> void:
 	# Not finite, negative, beyond the grid and larger than the top level: each falls back to testing everything it must.
 	var hull_mids := PackedVector3Array([Vector3.ZERO, Vector3(NAN, 0, 0), Vector3(30, 0, 0), Vector3(1.0e12, 0, 0),
 			Vector3(INF, 0, 0), Vector3(-200, 0, 0), Vector3(0, 9000, 0)])
@@ -194,26 +140,21 @@ func test_odd_inputs_give_what_the_sphere_test_gives_on_both_paths() -> void:
 			Vector3(-195, 0, 0), Vector3(25, 0, 0), Vector3(0, 0, 0)])
 	var bolt_reach := PackedFloat64Array([1.0, 1.0, 1.0, 1.0, INF, -3.0])
 	var expected: PackedInt64Array = _every_pair(bolt_mids, bolt_reach, hull_mids, hull_reach)
-	var phase := HitBroadPhase.new()
-	phase.use_native = false
-	assert_eq(phase.pairs(bolt_mids, bolt_reach, hull_mids, hull_reach), expected, "GDScript")
 	if _skipped():
 		return
-	phase.use_native = true
+	var phase := HitBroadPhase.new()
 	assert_eq(phase.path(), &"native")
 	assert_eq(phase.pairs(bolt_mids, bolt_reach, hull_mids, hull_reach), expected, "native")
 
 
 func test_nothing_to_pair_gives_no_pairs_and_no_work() -> void:
-	for use_native: bool in [false, true]:
-		var phase := HitBroadPhase.new()
-		phase.use_native = use_native
-		assert_eq(phase.pairs(PackedVector3Array(), PackedFloat64Array(), PackedVector3Array([Vector3.ZERO]),
-				PackedFloat64Array([10.0])).size(), 0)
-		assert_eq(phase.visited, 0)
-		assert_eq(phase.pairs(PackedVector3Array([Vector3.ZERO]), PackedFloat64Array([1.0]), PackedVector3Array(),
-				PackedFloat64Array()).size(), 0)
-		assert_eq(phase.visited, 0)
+	var phase := HitBroadPhase.new()
+	assert_eq(phase.pairs(PackedVector3Array(), PackedFloat64Array(), PackedVector3Array([Vector3.ZERO]),
+			PackedFloat64Array([10.0])).size(), 0)
+	assert_eq(phase.visited, 0)
+	assert_eq(phase.pairs(PackedVector3Array([Vector3.ZERO]), PackedFloat64Array([1.0]), PackedVector3Array(),
+			PackedFloat64Array()).size(), 0)
+	assert_eq(phase.visited, 0)
 
 
 func test_the_native_sweep_refuses_arrays_that_do_not_line_up() -> void:
@@ -247,30 +188,27 @@ func test_a_capital_hull_is_found_from_anywhere_it_reaches_without_testing_the_f
 	for i: int in 300:
 		bolt_mids.append(Vector3(1000, 0, 0) + _direction(rng) * rng.randf_range(0.0, 600.0))
 		bolt_reach.append(4.0)
-	for use_native: bool in [false, true]:
-		if use_native and _skipped():
-			return
-		var phase := HitBroadPhase.new()
-		phase.use_native = use_native
-		var got: PackedInt64Array = phase.pairs(bolt_mids, bolt_reach, hull_mids, hull_reach)
-		assert_eq(got, _every_pair(bolt_mids, bolt_reach, hull_mids, hull_reach), "%s: the same as every pair" % phase.path())
-		var capital_hits: int = 0
-		for key: int in got:
-			if key % hull_mids.size() == 0:
-				capital_hits += 1
-		assert_eq(capital_hits, 300, "%s: every bolt finds the capital" % phase.path())
-		gut.p("%s: %d pairs tested for 300 bolts (every pair: %d)" % [phase.path(), phase.visited, 300 * hull_mids.size()])
-		assert_lte(phase.visited, 300 * 3, "%s: at most 3 pairs a bolt" % phase.path())
+	if _skipped():
+		return
+	var phase := HitBroadPhase.new()
+	var got: PackedInt64Array = phase.pairs(bolt_mids, bolt_reach, hull_mids, hull_reach)
+	assert_eq(got, _every_pair(bolt_mids, bolt_reach, hull_mids, hull_reach), "%s: the same as every pair" % phase.path())
+	var capital_hits: int = 0
+	for key: int in got:
+		if key % hull_mids.size() == 0:
+			capital_hits += 1
+	assert_eq(capital_hits, 300, "%s: every bolt finds the capital" % phase.path())
+	gut.p("%s: %d pairs tested for 300 bolts (every pair: %d)" % [phase.path(), phase.visited, 300 * hull_mids.size()])
+	assert_lte(phase.visited, 300 * 3, "%s: at most 3 pairs a bolt" % phase.path())
 
 
 # --- kept hulls: the static rows (M4-T29) -------------------------------------------------------------------------
 
 
-func test_kept_hulls_give_the_same_pairs_as_handing_them_over_every_call_on_both_paths() -> void:
+func test_kept_hulls_give_the_same_pairs_as_handing_them_over_every_call() -> void:
 	# Rocks do not move, so the resolvers keep them in the grid between ticks: the pairs must be exactly what the sphere test
 	# accepts with the same hulls, and the work what the GDScript path did (recorded, M4-T37).
-	var recorded: Variant = await ParityFixture.expected(FIXTURE, "kept_work_seed_20261129", func() -> Array:
-		return _work(2026_11_29, true))
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "kept_work_seed_20261129")
 	assert_not_null(recorded, "the GDScript path's work was recorded")
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026_11_29
@@ -297,14 +235,12 @@ func test_a_bolt_far_from_a_thousand_kept_rocks_visits_none() -> void:
 		rock_mids.append(Vector3(rng.randf_range(-10000.0, 10000.0), rng.randf_range(-2500.0, 2500.0),
 				rng.randf_range(-10000.0, 10000.0)))
 		rock_reach.append(exp(rng.randf_range(log(20.0), log(200.0))))
-	for use_native: bool in [false, true]:
-		if use_native and _skipped():
-			return
-		var phase := HitBroadPhase.new()
-		phase.use_native = use_native
-		phase.keep(rock_mids, rock_reach)
-		phase.kept_pairs(PackedVector3Array([Vector3(30000.0, 0.0, 0.0)]), PackedFloat64Array([10.0]))
-		assert_eq(phase.visited, 0, "%s: no rock tested for a bolt 30 km away" % phase.path())
-		phase.kept_pairs(PackedVector3Array([Vector3(0.0, 0.0, 0.0)]), PackedFloat64Array([10.0]))
-		gut.p("%s: %d of 1 000 rocks tested for a bolt in the slab" % [phase.path(), phase.visited])
-		assert_lt(phase.visited, 40, "%s: a bolt in the slab tests its neighbours, not the slab" % phase.path())
+	if _skipped():
+		return
+	var phase := HitBroadPhase.new()
+	phase.keep(rock_mids, rock_reach)
+	phase.kept_pairs(PackedVector3Array([Vector3(30000.0, 0.0, 0.0)]), PackedFloat64Array([10.0]))
+	assert_eq(phase.visited, 0, "%s: no rock tested for a bolt 30 km away" % phase.path())
+	phase.kept_pairs(PackedVector3Array([Vector3(0.0, 0.0, 0.0)]), PackedFloat64Array([10.0]))
+	gut.p("%s: %d of 1 000 rocks tested for a bolt in the slab" % [phase.path(), phase.visited])
+	assert_lt(phase.visited, 40, "%s: a bolt in the slab tests its neighbours, not the slab" % phase.path())
