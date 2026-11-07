@@ -597,7 +597,7 @@ pub mod ram {
     use crate::rows::{FLAG_RIGID, Rows};
     use crate::v3::{add, max_cw as max, min_cw as min, scale, sub};
 
-    // `RamBroadPhase.MARGIN_M`: room round every box, metres.
+    // `RamResolver.MARGIN_M` (and `RamBroadPhase.MARGIN_M`): room round every box, metres.
     const MARGIN_M: f64 = 1.0;
 
     /// The scratch the pass reuses between ticks.

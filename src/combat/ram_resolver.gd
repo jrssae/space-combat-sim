@@ -22,7 +22,7 @@ extends Node
 ##   destroyed. The sweep runs at tunnelling speed even while Jolt reports a contact (that is when Jolt cannot be trusted);
 ##   `RamTracker` keeps it to one ram per pair per collision.
 ##
-## Only the pairs `RamBroadPhase` finds near each other this tick, and the pairs Jolt holds in contact, are looked at (M4-T03,
+## Only the pairs the broad phase (`ScsRamPhase`) finds near each other this tick, and the pairs Jolt holds in contact, are looked at (M4-T03,
 ## §17.3): any other pair could neither sweep into each other nor be kept touching, so skipping it changes nothing.
 ##
 ## Rocks (M4-T29, §17.16) are `StaticRows` with no node: a grid of them is kept between ticks (built again only when a rock
@@ -30,7 +30,7 @@ extends Node
 ## a sphere of its radius, a mass nothing moves), so a ship that flies into one takes the whole closing speed.
 ##
 ## The hulls come as columns from the native core's rows (M4-T15, `SimCore`) and `ScsRamPhase` pairs them from the same rows
-## (the GDScript `RamBroadPhase` stays the reference); the resolver then builds a hull's Dictionary only for the pairs. Every
+## (its GDScript reference `RamBroadPhase` lives in `tests/fixtures/`); the resolver then builds a hull's Dictionary only for the pairs. Every
 ## world has a core (M4-T42); a tree with no world has nothing to resolve.
 ##
 ## God mode protects the player's hull (`Damageable.apply_hit`); the bounce is Jolt's and still happens. `HitInfo.shooter_id` is
@@ -54,6 +54,8 @@ const KIND_TUNNEL: String = "tunnelling"
 const KIND_PROP: String = "prop"
 ## The native class that pairs the core's hull rows when the core is on (M4-T15).
 const PHASE_CLASS: StringName = &"ScsRamPhase"
+## Room round every hull's swept box in the broad phase, metres (the kernel's own margin, `kernels::ram`).
+const MARGIN_M: float = 1.0
 ## Room round the swept test's early rejects (M4-T34), far above the rounding of a placed volume's bounds.
 const SWEEP_CULL_PAD_M: float = 0.05
 
@@ -297,7 +299,7 @@ func _accel(i: int) -> Vector3:
 # --- contacts: Jolt bounced them ---------------------------------------------------------------------------------
 
 
-# Lands the contact rams and returns the pairs of hulls Jolt reported touching, in `RamBroadPhase`'s form: the contacts,
+# Lands the contact rams and returns the pairs of hulls Jolt reported touching, in the broad phase's form: the contacts,
 # velocities and accelerations read in one native call over the core's rows (M4-T35), the tracker fed columns built in
 # GDScript only for the hulls Jolt reports touching; a hull whose acceleration the flight step did not write (a ship on its
 # own model) is asked by `_accel`.
@@ -409,7 +411,7 @@ func _resolve_rocks(sim: SimCore, delta: float) -> void:
 	static_pairs_visited = 0
 	if solid.ids.is_empty() or _rigid_rows.is_empty():
 		return
-	var keys: PackedInt64Array = _rocks.kept_pairs_hulls_core(sim.core, delta, RamBroadPhase.MARGIN_M)
+	var keys: PackedInt64Array = _rocks.kept_pairs_hulls_core(sim.core, delta, MARGIN_M)
 	static_pairs_visited = _rocks.visited
 	var rock_count: int = solid.ids.size()
 	for key: int in keys:
