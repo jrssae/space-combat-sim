@@ -2065,10 +2065,9 @@ src/perf/native_boundary_bench.gd   what a call into the library costs (console 
 native/src/contact_field.rs     ScsContactField: the contact scan's queries (T05b, N1), behind ContactScan
 ```
 
-- **Optional during M4** (maintainer Q9). No GDScript names a native class: `NativeLib.instantiate(&"ScsName")` returns null when
-  the library is not loaded or the setting `perf_native` (default on) is off, and the facade then runs its GDScript code. So a
-  missing or stale library never breaks parsing, the suite or the game, and a bench can pair native against GDScript in one
-  process by flipping the setting. Each facade keeps the GDScript code as the reference its parity tests compare against.
+- **Optional until M4-T37** (maintainer Q9). No GDScript named a native class: `NativeLib.instantiate(&"ScsName")` returned null
+  when the library was not loaded or the setting `perf_native` was off, and the facade then ran its GDScript code, so a missing
+  or stale library never broke parsing, the suite or the game, and a bench could pair native against GDScript in one process.
   M4-T37 ended this (Q57, Q67): the library is required (`Main` refuses to start without it, naming the missing classes and
   `scripts/build_native.sh`), `perf_native` is gone, and the parity tests compare with recordings in `tests/fixtures/parity/`.
   A native class gets its own name (`Scs...`), since a GDScript `class_name` cannot share it.
@@ -3291,8 +3290,8 @@ src/combat/destruction_director.gd   a tier death where its row flew; every deat
 - **Cost.** The tier's main-thread work (the integration, the cannons' tier pass, the landing; the far capitals' rolls and
   launches, with their share of the integration) is timed and its means since the bench window began are `tier.cost_us` and
   the bench summary's tier line, beside the tier thinks (count, most in a tick, their time on the step's clock): at `battle`
-  500 0.20 us a fighter row on the main thread plus 0.12 us of thinks (on the worker thread when threaded, the main thread
-  on the inline step of the time), 0.31 us a capital row (fix round 2; it was 0.24 plus 0.72). The main thread's share is the integration with
+  500 0.20 us a fighter row on the main thread plus 0.12 us of thinks (on the worker thread; on the main thread under the inline
+  step, which existed at the time), 0.31 us a capital row (fix round 2; it was 0.24 plus 0.72). The main thread's share is the integration with
   its flight beats (about 0.1 us), the cannons' tier pass (0.04) and landing the hits through `Damageable` in GDScript
   (about 14 us a hit, 0.06 us a row). The row commands use an id hasher (`CommandMap`), the core keeps a tier row's hull
   from `note_hull` (no per-ship hull signal in the director), and the landing finds hulls through a cache.
