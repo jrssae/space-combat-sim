@@ -19,9 +19,15 @@ const _MAX_EXACT_INT: int = 9007199254740992  # 2^53: integers past it lose bits
 static var _cache: Dictionary = {}
 
 
-## Whether this run records the references instead of reading them.
+## Whether this run records the references instead of reading them. Never on CI (`CI=true`): a recording there would
+## rewrite the references from whatever code runs, unreviewed.
 static func recording() -> bool:
-	return OS.get_environment(ENV) == "1"
+	if OS.get_environment(ENV) != "1":
+		return false
+	if OS.get_environment("CI") == "true":
+		push_error("ParityFixture: %s=1 on CI; recording refuses there, the stored references are read" % ENV)
+		return false
+	return true
 
 
 ## The recorded case `case` of `file`; when recording, `recorder` (which may await) is run and its value written first.
