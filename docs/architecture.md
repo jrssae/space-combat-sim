@@ -4013,7 +4013,12 @@ src/perf/turret_rows.gd          TurretRows: binds the mounts, keeps the relatio
 src/combat/turret_mount.gd       TurretMount: the mount's place on the ship and its model (yaw, pitch), turned by FramePasses
 src/ship/hardpoints.gd           turrets[] {name, position, up, arc_deg, barrel_m}, optional
 assets/weapons/turret_light.tres the light turret (WeaponSpec with its Turret group: range, spread, slew rates)
+assets/ships/saturn_4_transport.tres  a minimal Saturn 4 for the balance fight (catalog type saturn_4_transport; T16 owns it)
 ```
+
+D61 as built: the turret kernels went into their own engine-free files (`turret_kernels.rs`, `turret_rows.rs`) beside
+M4-T20's capital stand-ins rather than into `weapon_kernels.rs` and `weapon_rows.rs`, so M4-T37's reshaping of those files
+(Q28) meets no turret code at the next merge of `main`. Everything else is D61 as written.
 
 - **The split.** The pick is a decision, so it rides in the brains' job (`brain_step::run`): the launch copies the live mounts,
   the memory and the relations into the snapshot (`snapshot_into`), the job picks for every mount, and the join applies each
@@ -4034,11 +4039,20 @@ assets/weapons/turret_light.tres the light turret (WeaponSpec with its Turret gr
   bolt inherits the ship's velocity) and slews at the weapon's traverse and elevation rates. The gate opens when the lead is
   solvable and inside the arc, the target within range, the gun ready, and the barrel's miss at the lead point no wider than
   the bolt's spread there plus the target's radius.
-- **Strength (Q14).** The light turret: 900 m/s, one shot every 1.2 s, 2.5 damage, 2 s life, 1.5 km range, 0.8 degree spread,
-  50 and 40 degrees a second; tuned against the seeded balance fight (`test_turret_defence`) once the Saturn 4 is on meshes.
-- **Visuals and sound.** `FramePasses` turns every bound mount's `Yaw` and `Pitch` holders once a frame from one read of the
-  core's aims (`turret_aims`); a shot emits `TurretMount.shot_fired`, which `AudioDirector` plays as `turret_fire` (the
-  sfx_combat generator's lighter gun, version 6).
+- **Strength (Q14).** The light turret: 900 m/s, one shot every 3.0 s, 4.5 damage, 2 s life, 1.5 km range, 0.8 degree spread,
+  50 and 40 degrees a second. Few, harder shots: two hits finish a raider at 15 %, but a full raider takes fourteen, so two
+  raiders still win. Pinned by `test_turret_defence` against a Saturn 4 of 1000 hull flown by the `civilian` profile: the
+  raid wins in all three seeds (52, 91 and 88 s), the turrets finish a 15 % raider in all three (70, 43 and 34 s). The first
+  numbers (2.5 damage every 1.2 s) killed both raiders in every seed.
+- **Visuals and sound.** The mount shows its hull's turret model (the manifest's `turret` entry, T27): `TurretMount.model_for`
+  splits the mesh once per asset into the base, on `Yaw`, and the barrels, on `Pitch` at the trunnion. A barrel triangle
+  lies near a muzzle's axis and is a barrel's side or a flat ring, so the dome the barrels' roots sink into stays on the
+  base. A far dot hides the turrets with the hull. `FramePasses` turns every bound mount's `Yaw` and `Pitch` holders once a
+  frame from one read of the core's aims (`turret_aims`). A shot emits `TurretMount.shot_fired`, which `AudioDirector` plays
+  as `turret_fire` (the sfx_combat generator's lighter gun, version 6).
 - **No fallback.** Turrets need the core and its bolt rows; without them a mount stays unbound and holds fire.
 - **Tests.** Rust: `turret_kernels/tests.rs` (13). GUT: `test_turret_kernel` (aim, arc, gate, pick, memory and stamps through
-  the core), `test_turret_threads` (threaded against delayed, one thread against six, byte for byte), `test_sim_core`'s guard.
+  the core; the Saturn 4's model split and turned), `test_turret_threads` (threaded against delayed, one thread against six,
+  byte for byte), `test_turret_defence` (the balance fight, three seeds), `test_sim_core`'s guard. The mechanics tests fire a
+  copy of the light turret at 1.2 s (`TurretScene.MECHANICS_INTERVAL_S`), so a few seconds carry several shots whatever the
+  balance sets.

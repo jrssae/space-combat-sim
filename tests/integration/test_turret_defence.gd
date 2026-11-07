@@ -50,6 +50,8 @@ func test_two_raiders_destroy_a_lone_saturn_4_within_180_s_in_two_of_three_seeds
 		var fight: Dictionary = await _raid(seed_value)
 		gut.p("seed %d: %s" % [seed_value, _fight_line(fight)])
 		assert_eq(int(fight["mounts"]), 2, "the Saturn 4 carries its two dorsal turrets (Q19)")
+		assert_gt(int(fight["turret_shots"]), 0, "seed %d: its turrets fired" % seed_value)
+		assert_gt(float(fight["run_m"]), 200.0, "seed %d: it kept running while they fired" % seed_value)
 		if bool(fight["destroyed"]):
 			won += 1
 	assert_gte(won, 2, "the raid wins in at least two of three seeds (%d of %d)" % [won, SEEDS.size()])

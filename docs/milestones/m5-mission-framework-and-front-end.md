@@ -1208,6 +1208,55 @@ T21, T16 and T28 are re-planned on the native core ("M5 on the native core", bel
   merge of `main`. No GDScript fallback (`CLAUDE.md`). Civilians are the only ships with turrets in M5; the seam is general
   (M12's capitals).
 - **Done when:** AC19.
+- **Done (as built, 2026-11-07, on `oscar`; started by a sub-agent that hit a usage limit, finished by a second one):**
+  - **Native.** `native/src/turret_kernels.rs` is engine-free. It holds the mounts, the attacker memory (30 s from the last
+    hit, forgotten when a hull dies), the pick (`PickJob`), the aim (arc, slew, lead by `brain_maths::solve`), the gate and
+    the spread (a splitmix hash of the mount's id and the tick). `native/src/turret_rows.rs` is the `ScsSimCore` shell
+    around them. The kernels sit in their own files beside M4-T20's stand-ins, not in `weapon_kernels.rs` and
+    `weapon_rows.rs`, so T37's reshaping of those (Q28) meets no turret code at the next merge.
+  - **Threads.** The pick rides in the brains' job one tick behind (`brain_step::pick_turrets`, on the frozen rows and memory)
+    and lands at both joins against each mount's stamp (`take_turret_picks`; `turret_picks_stale` counts the dropped ones).
+    `BrainBatch` launches a job on a tick with turrets even when no AI ship thinks. Aim, gate and shot run on the main thread
+    in `SimCore.step_now`, after the cannons and before the bolt step; each shot is an owned bolt row, landed by the native
+    hit sweep. `HitResolver` writes the memory in the sweep's order (`SimCore.note_hit`).
+  - **GDScript.** `TurretRows` binds the mounts and hands the shots back. `TurretMount` is the node; its model is the
+    manifest's `turret` mesh, split once per asset into base and barrels, and `FramePasses` turns it once a frame.
+    `ShipAssembly` builds the mounts from the optional `turrets[]` that `Hardpoints` parses. Also new: a `civilian`
+    assembly option, `ShipSpec.turret_weapon`, the light turret `assets/weapons/turret_light.tres`, and `turret_fire`
+    (sfx_combat v6).
+  - **Saturn 4 for the fight.** A minimal `assets/ships/saturn_4_transport.tres` and the catalog type
+    `saturn_4_transport` (Earth Alliance): 14,000 t, 1000 hull, slow rates, no cannon. The sheet can park it. T16 owns the
+    full civilian catalog and may replace every number.
+  - **Balance (`test_turret_defence`).** Seeds 1, 2, 3; the transport flies the `civilian` profile; dead ships are parked as
+    the pool parks them. The first numbers (2.5 damage every 1.2 s) killed both raiders in every seed, and a 1500 hull never
+    fell, so the light turret became 4.5 damage every 3.0 s (900 m/s, 2 s life, 1.5 km range and 0.8 degree spread kept)
+    and the Saturn's hull 1000.
+
+    | Seed | Raid: transport down at | Raiders left | Turret hits | Run before death | Turrets finish the 15 % raider at |
+    |---|---|---|---|---|---|
+    | 1 | 51.9 s | 100 %, 100 % | 0 of 14 | 474 m | 70.3 s (2 hits of 4 shots) |
+    | 2 | 91.4 s | 10 %, 100 % | 12 of 45 | 775 m | 43.2 s (2 of 4) |
+    | 3 | 87.5 s | 100 %, 33 % | 9 of 42 | 816 m | 33.9 s (2 of 4) |
+
+  - **Tests.**
+    - Rust: 13 of 13 (`turret_kernels/tests.rs`, the crate's only Rust tests).
+    - New GUT: `test_turret_kernel` 14 of 14 (7 new), `test_turret_threads` 2 of 2 (byte for byte, threaded against
+      delayed and 1 thread against 6, 300 ticks), `test_turret_defence` 2 of 2 (about 100 s).
+    - Regression, all passing: `test_sim_core` 17, `test_brain_parity` 7, `test_brain_think_parity` 5, `test_weapons` 48,
+      `test_weapon_charge` 10, `test_hit_resolver` 16, `test_console_command_list` 7, `test_engine_audio` 9,
+      `test_audio_director` 13, `test_main_scene` 13, `test_mission_runner` 18, `test_frame_passes` 12, `test_core_threads`
+      7, `test_hardpoints` 20, `test_ship_pool` 21, `test_far_dots` 10, `test_ship_catalog` 5, `test_livery_hull` 9,
+      `test_textured_hull` 4.
+    - Python: `test_sfx_combat` 31. `scripts/check_scripts.gd` is clean.
+    - Not run on `oscar` (slow files, `GUT_SLOW=1`): `test_flight_parity_fight`.
+  - **GPU.** One small GPU screenshot on `oscar` (Tahiti, labelled as oscar's): `sheet saturn_4_transport` shows the aft
+    turret on the dorsal drum, textured, its barrels forward at rest.
+  - **(H):**
+    - The turret model's look on every hull, and its turn and lift in flight.
+    - The `turret_fire` sound's level (-14 dB) and feel.
+    - At high elevation the barrels' roots may show through the dome, because the mantlet stays on the base.
+    - The visual muzzle is 1.45 m above the core's: the shot leaves along the axis from the base's pivot, the model's barrels
+      from the trunnion.
 
 ### M5-T16 Civilian ships in the game
 
