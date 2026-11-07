@@ -381,3 +381,61 @@ func test_the_hardpoints_turrets_become_mounts_on_the_ship() -> void:
 	var b: Basis = flank.basis
 	assert_almost_eq((b.y - Vector3.RIGHT).length(), 0.0, 1e-6, "the mount's +Y is its base's up")
 	assert_almost_eq((-b.z - Vector3.FORWARD).length(), 0.0, 1e-6, "its rest along the ship's nose")
+
+
+func test_the_saturn_4s_mounts_show_its_turret_model_turned_by_the_frame_pass() -> void:
+	if _skipped():
+		return
+	var asset: String = "saturn_4_transport"
+	var entry: Dictionary = MeshAssets.read_manifest(asset).get("turret", {})
+	if entry.is_empty():
+		pending("the Saturn 4 is not generated (scripts/gen_assets.sh), so it has no turret model")
+		return
+	var scene: TurretScene = TurretScene.build(self)
+	var transport: Combatant = scene.ship(&"saturn_4_transport", Factions.EARTH_ALLIANCE, "SATURN", Vector3.ZERO, {}, 1, true)
+	var raider: Combatant = scene.ship(RAIDER, Factions.RAIDERS, "RAIDER", Vector3(300.0, 500.0, -1000.0))
+	scene.attach()
+	assert_eq(transport.turrets.size(), 2, "its two dorsal turrets (Q19), from its hardpoints")
+	var model: Dictionary = TurretMount.model_for(asset)
+	var base_tris: int = _triangles(model["base"])
+	var barrel_tris: int = _triangles(model["barrel"])
+	assert_eq(base_tris + barrel_tris, int(entry["mesh"]["triangles"]), "the split keeps every triangle of the manifest's mesh")
+	assert_eq(barrel_tris, _obj_triangles(ShipSpec.ASSET_ROOT.path_join(asset).path_join(String(entry["obj"])), ["barrel", "bore"]),
+			"the barrels are the model's barrel and bore triangles, no more")
+	var mount: TurretMount = transport.turrets[0]
+	assert_not_null(mount.yaw.get_node_or_null(^"Base"), "the base turns round the mount's up")
+	assert_not_null(mount.pitch.get_node_or_null(^"Barrels"), "the barrels lift with the elevation")
+	assert_eq(mount.pitch.position, model["trunnion"], "about the trunnion")
+	await _ticks(2)
+	scene.sim.note_hit(_id(transport), _id(raider))
+	await _ticks(90)
+	FramePasses.of(mount).update_turrets()
+	var state: Dictionary = scene.state(mount)
+	assert_gt(float(state["elevation"]), 0.1, "the raider is above: the core lifted the barrel")
+	assert_almost_eq(mount.yaw.rotation.y, float(state["azimuth"]), 1e-5, "the model turned to the core's azimuth")
+	assert_almost_eq(mount.pitch.rotation.x, float(state["elevation"]), 1e-5, "and lifted to its elevation")
+	transport.ship.set_far_dot(true)
+	assert_false(mount.visible, "a far dot draws no turret")
+	transport.ship.set_far_dot(false)
+	assert_true(mount.visible)
+	await scene.free_scene(get_tree())
+
+
+static func _triangles(mesh: Mesh) -> int:
+	var n: int = 0
+	for s: int in mesh.get_surface_count():
+		n += (mesh.surface_get_arrays(s)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
+	return n
+
+
+# Triangles of an OBJ's faces under materials whose names hold any of `words`.
+static func _obj_triangles(path: String, words: Array) -> int:
+	var n: int = 0
+	var counting: bool = false
+	for line: String in FileAccess.get_file_as_string(path).split("\n"):
+		if line.begins_with("usemtl ") or line.begins_with("g "):
+			var name: String = line.get_slice(" ", 1)
+			counting = words.any(func(w: String) -> bool: return name.contains(w))
+		elif counting and line.begins_with("f "):
+			n += line.strip_edges().split(" ", false).size() - 3
+	return n

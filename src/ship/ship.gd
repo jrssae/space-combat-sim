@@ -616,8 +616,8 @@ func hull_mesh() -> Mesh:
 	return _hull_mesh
 
 
-## Draws the ship as a far dot (M4-T11): its hull, plumes, markers and guns hidden, and a point in the world's `FarDots` instead; off
-## shows them again. Its `LodSwitcher` decides from the camera's distance.
+## Draws the ship as a far dot (M4-T11): its hull, plumes, markers, guns and turrets hidden, and a point in the world's `FarDots`
+## instead; off shows them again. Its `LodSwitcher` decides from the camera's distance.
 func set_far_dot(on: bool) -> void:
 	if on == _far_dot:
 		return
@@ -628,6 +628,9 @@ func set_far_dot(on: bool) -> void:
 		var node := get_node_or_null(path) as Node3D
 		if node != null:
 			node.visible = not on
+	for child: Node in get_children():
+		if child is TurretMount:
+			(child as TurretMount).visible = not on  # a far dot draws no turret (M5-T21)
 	var dots: FarDots = FarDots.attach(world) if on else FarDots.of(world)
 	if dots != null:
 		if on:
