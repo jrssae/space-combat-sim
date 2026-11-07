@@ -94,6 +94,9 @@ var _refused: bool = false  # the native library is missing: the scene never sta
 func _enter_tree() -> void:
 	var why: String = NativeLib.refusal()
 	if why.is_empty():
+		# Each battle starts at sim time 0, also a scene loaded again in the same process (the `scenario` command), so its
+		# timers round as a first run's do (M4-T37). Before the children enter, so none reads the old time.
+		SimClock.reset()
 		return
 	_refused = true
 	process_mode = Node.PROCESS_MODE_DISABLED
