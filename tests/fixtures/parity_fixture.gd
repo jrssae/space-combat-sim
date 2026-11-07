@@ -5,8 +5,9 @@ extends RefCounted
 ## compares the native path with the recording, so it still fails when the native result moves.
 ##
 ## Recording: run the test with `SCS_RECORD_FIXTURES=1` and the recorder (`expected`'s callable) writes its case instead of
-## reading it. The GDScript references live on at the tag `m4-gdscript-reference`; a recording taken after T37 records the
-## native path, so re-record only on purpose and say so in the commit.
+## reading it. The recordings were taken at `0586e3e`, whose game code is the tag `m4-gdscript-reference`'s (see the
+## README in `tests/fixtures/parity/`); a recording taken after T37 records the native path, so re-record only on purpose
+## and say so in the commit.
 ##
 ## Values are stored as JSON: vectors as `[x, y, z]`, packed arrays as lists, integers past 2^53 as strings, floats at full
 ## precision, so a recording compares bit for bit. Bulky outputs are stored as a `digest` (SHA-256 of their text) beside the

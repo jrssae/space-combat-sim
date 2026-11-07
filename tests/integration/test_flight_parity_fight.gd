@@ -127,7 +127,7 @@ static func _kept(lines: Dictionary) -> Dictionary:
 	return out
 
 
-# The recording (M4-T37) was taken at the tag `m4-gdscript-reference`: the fight on the ships' own models on the
+# The recording (M4-T37) was taken at `0586e3e`, whose game code is the tag `m4-gdscript-reference`'s (README): the fight on the ships' own models on the
 # single-thread step (`gdscript_*`), which the batch matched bit for bit on that step, and the batch's fight on the
 # delayed step (`native_*`). Both paths are gone, so it is read, never recorded again.
 

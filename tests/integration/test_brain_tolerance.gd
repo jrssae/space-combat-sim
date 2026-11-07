@@ -93,7 +93,7 @@ static func _outcome(fight: Dictionary) -> Dictionary:
 	return {"hits": fight["hits"], "mix": fight["mix"], "at_10s": fight["at_10s"]}
 
 
-# The recording (M4-T37) was taken at the tag `m4-gdscript-reference`: the GDScript fight on the single-thread step
+# The recording (M4-T37) was taken at `0586e3e`, whose game code is the tag `m4-gdscript-reference`'s (README): the GDScript fight on the single-thread step
 # (`gdscript`), which the native brains matched bit for bit on that step, and the native fight on the delayed step
 # (`native`). The GDScript brains' batch path and that step are gone, so it is read, never recorded again.
 

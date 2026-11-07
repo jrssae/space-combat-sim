@@ -2254,7 +2254,8 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
     `sim_step` (threaded, and delayed as its reference), `physics_jitter_fix`, `physics_max_steps_per_frame` (engine tuning) and
     `ai_think_rate` (behaviour). `SettingsSchema.RETIRED` and `RETIRED_VALUES` let an old saved file load (`test_settings`).
   - Parity tests compare with 20 recordings in `tests/fixtures/parity/` (`ParityFixture`, recorded at the first pass's
-    `0586e3e`, where every path still existed). Q70: the Q16 fights hold hits within 20 % and the mix within 5 points of the
+    `0586e3e`, where every path still existed; its game code is the tag `m4-gdscript-reference`'s plus the start-up refusal,
+    and `weapon_rows_battle.json` was taken again from that code in a fresh process, committed in `7987de4`). Q70: the Q16 fights hold hits within 20 % and the mix within 5 points of the
     GDScript recording, the twin distance printed, not gated.
   - The main scene resets `SimClock` as it enters the tree, so a battle loaded again in one process starts at 0
     (`test_main_scene`).
