@@ -236,6 +236,13 @@ func is_waiting() -> bool:
 	return _wait_frames > 0
 
 
+## Ends a wait early, so the rest of the queue runs on the next physics frame: a command that holds the queue until it is done
+## (`bench`, M4-T01) asks for a long wait and releases it when it finishes.
+func release_wait() -> void:
+	if _wait_frames > 1:
+		_wait_frames = 1
+
+
 func watches() -> PackedStringArray:
 	return _watches.duplicate()
 

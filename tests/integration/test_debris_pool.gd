@@ -1,8 +1,8 @@
 extends GutTest
 ## DebrisPool and DebrisChunk (M2-T06, architecture §15.6, §15.7): two parked sets of the raider's chunks, taken by a
 ## break-up, flown at the ship's velocity plus spin plus a separation speed, hidden and returned after their life; a third
-## simultaneous break-up uses mesh chunks; an asset without chunks gets generic shards; no splat node ever enters or leaves
-## the tree.
+## simultaneous break-up uses one-shot chunks; an asset without chunks gets generic shards; no pooled chunk ever enters or leaves
+## the tree. Every chunk draws its textured mesh, on its hull's materials.
 
 const SPEC_PATH: String = "res://assets/ships/raider_delta_v.tres"
 const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tests.sh (it imports first)"
@@ -27,12 +27,12 @@ func before_each() -> void:
 	assert_eq(pool.prepare(ASSET), DebrisPool.SETS_PER_TYPE)
 
 
-func _splat_nodes() -> int:
+func _pooled_nodes() -> int:
 	return _count(get_tree().root)
 
 
 func _count(node: Node) -> int:
-	var n: int = 1 if node is GaussianSplatNode else 0
+	var n: int = 1 if _pooled(node) else 0
 	for child: Node in node.get_children():
 		n += _count(child)
 	return n
@@ -56,27 +56,25 @@ func test_two_sets_of_every_chunk_are_built_parked() -> void:
 	assert_eq(pool.set_count(), 2)
 	assert_eq(pool.free_set_count(), 2)
 	assert_eq(pool.get_child_count(), 10)
-	var splat_nodes: int = 0
-	for child: Node in pool.get_children():
-		splat_nodes += 1 if (child as DebrisChunk).splats != null else 0
-	assert_eq(splat_nodes, 10, "one splat node per chunk")
 	for child: Node in pool.get_children():
 		var chunk := child as DebrisChunk
 		assert_false(chunk.visible)
 		assert_eq(chunk.process_mode, Node.PROCESS_MODE_DISABLED)
 		assert_false(chunk.is_active())
-		assert_not_null(chunk.splats, "a splat node each")
-		assert_not_null(chunk.mesh_instance.mesh, "and the chunk's mesh (%s)" % GEN_ASSETS_HINT)
-		assert_true(chunk.is_in_group(SplatStatus.MESH_GROUP))
+		assert_not_null(chunk.mesh_instance.mesh, "the chunk's mesh (%s)" % GEN_ASSETS_HINT)
+		assert_same(chunk.mesh_instance.mesh, chunk.textured_mesh, "its textured mesh")
 		assert_true(chunk.is_in_group(WorldFrame.SHIFTABLE_GROUP))
 
 
-func test_each_chunk_has_its_own_splats() -> void:
+func test_each_chunk_draws_its_own_textured_mesh_on_the_hulls_materials() -> void:
 	var names: Array[String] = []
+	var hull: Mesh = MeshAssets.for_asset(String(ASSET))
 	for child: Node in pool.get_children():
 		var chunk := child as DebrisChunk
 		names.append(chunk.chunk_name)
-		assert_not_null(chunk.splats.gaussian, "%s: PLY imported (%s)" % [chunk.chunk_name, GEN_ASSETS_HINT])
+		assert_not_null(chunk.textured_mesh, "%s: textured mesh imported (%s)" % [chunk.chunk_name, GEN_ASSETS_HINT])
+		if chunk.textured_mesh != null:
+			assert_same(chunk.textured_mesh.surface_get_material(0), hull.surface_get_material(0), "instances with the hull")
 	assert_eq(names.count("wing_l"), 2)
 	assert_eq(names.count("hump"), 2)
 
@@ -155,8 +153,8 @@ func test_a_set_hides_and_returns_after_its_lifetime_with_a_half_second_shrink()
 	assert_almost_eq(launched[0].scale, Vector3.ONE, Vector3.ONE * 1e-5)
 
 
-func test_with_both_sets_busy_a_third_break_up_uses_mesh_chunks() -> void:
-	var before: int = _splat_nodes()
+func test_with_both_sets_busy_a_third_break_up_uses_one_shot_chunks() -> void:
+	var before: int = _pooled_nodes()
 	_burst(1)
 	_burst(2)
 	assert_eq(pool.free_set_count(), 0)
@@ -165,23 +163,23 @@ func test_with_both_sets_busy_a_third_break_up_uses_mesh_chunks() -> void:
 	assert_eq(third.size(), 5)
 	assert_eq(pool.mesh_chunks_in_flight(), 5)
 	for chunk: DebrisChunk in third:
-		assert_null(chunk.splats, "mesh only")
 		assert_true(chunk.mesh_instance.visible)
+		assert_same(chunk.mesh_instance.mesh, chunk.textured_mesh)
 		assert_true(chunk.one_shot)
-	assert_eq(_splat_nodes(), before, "no splat node was created")
+	assert_eq(_pooled_nodes(), before, "no pooled chunk was made")
 	_run(DebrisChunk.LIFETIME_S + DebrisChunk.SHRINK_S + 0.2)
 	await get_tree().process_frame
-	assert_eq(pool.mesh_chunks_in_flight(), 0, "the mesh chunks freed themselves")
+	assert_eq(pool.mesh_chunks_in_flight(), 0, "the one-shot chunks freed themselves")
 
 
-func test_splat_nodes_never_enter_or_leave_the_tree_during_break_ups() -> void:
-	var before: int = _splat_nodes()
+func test_pooled_nodes_never_enter_or_leave_the_tree_during_break_ups() -> void:
+	var before: int = _pooled_nodes()
 	for round: int in 6:
 		_burst(round)
-		assert_eq(_splat_nodes(), before, "round %d" % round)
+		assert_eq(_pooled_nodes(), before, "round %d" % round)
 		_run(DebrisChunk.LIFETIME_S + DebrisChunk.SHRINK_S + 0.2)
 		await get_tree().process_frame
-		assert_eq(_splat_nodes(), before, "round %d, after" % round)
+		assert_eq(_pooled_nodes(), before, "round %d, after" % round)
 
 
 func test_an_asset_without_chunks_gets_generic_shards() -> void:
@@ -189,20 +187,9 @@ func test_an_asset_without_chunks_gets_generic_shards() -> void:
 	assert_eq(shards.size(), DebrisPool.SHARD_COUNT)
 	for shard: DebrisChunk in shards:
 		assert_true(shard.is_active())
-		assert_null(shard.splats)
 		assert_not_null(shard.mesh_instance.mesh)
 		assert_true(shard.one_shot)
 	assert_eq(pool.free_set_count(), 2, "the raider's sets are untouched")
-
-
-func test_the_fallback_mesh_is_shown_instead_of_the_splats() -> void:
-	var chunk: DebrisChunk = _burst()[0]
-	chunk.use_fallback_mesh(false)
-	assert_true(chunk.splats.visible)
-	assert_false(chunk.mesh_instance.visible)
-	chunk.use_fallback_mesh(true)
-	assert_false(chunk.splats.visible)
-	assert_true(chunk.mesh_instance.visible)
 
 
 func test_a_rebase_moves_chunks_in_flight() -> void:
@@ -211,7 +198,7 @@ func test_a_rebase_moves_chunks_in_flight() -> void:
 	add_child_autofree(world)
 	var local_pool := DebrisPool.new()
 	world.add_child(local_pool)
-	local_pool.prepare_chunks(ASSET, chunks, false)
+	local_pool.prepare_chunks(ASSET, chunks)
 	var launched: Array[DebrisChunk] = local_pool.burst(ASSET, chunks, xform, Vector3.ZERO, Vector3.ZERO, 1)
 	var before: Vector3 = launched[0].global_position
 	world.rebase(Vector3(1000.0, 0.0, 0.0))
@@ -224,3 +211,8 @@ func test_the_debris_provider_reports_the_pool() -> void:
 	_burst()
 	assert_eq(registry.format_path("debris.free_sets"), "debris.free_sets = 1")
 	assert_eq(registry.format_path("debris.active_chunks"), "debris.active_chunks = 5")
+
+
+# A node the pools build once at load and only switch afterwards (D22): a pooled ship or a pooled break-up chunk.
+static func _pooled(node: Node) -> bool:
+	return (node is DebrisChunk and not (node as DebrisChunk).one_shot) or (node is Ship and node.get_parent() is ShipPool)

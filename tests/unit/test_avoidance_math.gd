@@ -241,3 +241,21 @@ func test_degenerate_inputs_never_give_nan() -> void:
 	var none: Array[Contact] = []
 	assert_eq(AvoidanceMath.filter(Vector3.ZERO, Vector3.ONE, OWN_RADIUS, none, Vector3.ONE, cap, SEED)["v_des"], Vector3.ONE,
 			"no contacts")
+
+
+func test_a_rock_is_seen_early_enough_to_sidestep_its_reach_and_a_ship_of_that_size_is_not() -> void:
+	# A 300 m rock dead ahead at 100 m/s, with 10 m/s^2 of RCS: clearing its 325 m reach sideways takes about 8.1 s, plus
+	# the settle time, so a rock 8 s out is already a threat. Anything that is not a rock keeps the time to stop (6.7 s).
+	var v := Vector3(0.0, 0.0, -100.0)
+	var rock := _contact(Vector3(0.0, 0.0, -100.0 * 8.0), Vector3.ZERO, 300.0)
+	rock.kind = BodyKind.STATIC
+	rock.is_ship = false
+	assert_ne(_filter_one(v, rock)["v_des"], v, "the rock 8 s out is avoided")
+	var mine := _contact(Vector3(0.0, 0.0, -100.0 * 8.0), Vector3.ZERO, 300.0)
+	mine.kind = BodyKind.MINE
+	assert_ne(_filter_one(v, mine)["v_des"], v, "so is a mine as big")
+	var hull := _contact(Vector3(0.0, 0.0, -100.0 * 8.0), Vector3.ZERO, 300.0)
+	assert_eq(_filter_one(v, hull)["v_des"], v, "a ship as big is not yet a threat")
+	var beyond := _contact(Vector3(0.0, 0.0, -100.0 * 10.0), Vector3.ZERO, 300.0)
+	beyond.kind = BodyKind.STATIC
+	assert_eq(_filter_one(v, beyond)["v_des"], v, "a rock 10 s out is beyond its horizon")

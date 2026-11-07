@@ -4,7 +4,7 @@
 [ext_resource type="PackedScene" path="res://src/environment/space_environment.tscn" id="2_env"]
 [ext_resource type="Script" path="res://src/world/world_frame.gd" id="3_world"]
 [ext_resource type="PackedScene" path="res://src/camera/camera_rig.tscn" id="4_rig"]
-[ext_resource type="Script" path="res://src/rendering/splat_status.gd" id="5_splat"]
+[ext_resource type="Script" path="res://src/rendering/render_status.gd" id="5_render"]
 [ext_resource type="PackedScene" path="res://src/game/debug_overlay.tscn" id="6_overlay"]
 [ext_resource type="Script" path="res://src/combat/hit_resolver.gd" id="7_resolver"]
 [ext_resource type="Script" path="res://src/game/ship_pool.gd" id="8_pool"]
@@ -64,8 +64,8 @@ script = ExtResource("15_wings")
 [node name="WaveDirector" type="Node" parent="Combat"]
 script = ExtResource("12_waves")
 
-[node name="SplatStatus" type="Node" parent="."]
-script = ExtResource("5_splat")
+[node name="RenderStatus" type="Node" parent="."]
+script = ExtResource("5_render")
 
 [node name="Hud" type="CanvasLayer" parent="."]
 layer = 40

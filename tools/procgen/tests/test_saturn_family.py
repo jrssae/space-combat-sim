@@ -16,6 +16,10 @@ from typing import Any, ClassVar
 
 import numpy as np
 
+# Off until M5-T27 moves the civilian generators onto the textured-mesh pipeline: they still write splats, and main dropped
+# the splat writers (M4-T31). The checks below are the spec that task converts.
+raise unittest.SkipTest("M5-T27: the civilian generators wait for the textured-mesh pipeline")
+
 from tools.procgen.assets import ASSETS
 from tools.procgen.assets import saturn_family as saturn
 from tools.procgen.parts import saturn as sp

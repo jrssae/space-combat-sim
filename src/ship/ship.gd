@@ -11,15 +11,13 @@ extends RigidBody3D
 ## so a command that is not refreshed never repeats them.
 ##
 ## Built from data in `_ready` (or again on a later `setup`): mass and inertia from the `ShipSpec`; centre of mass,
-## collision primitives, gun muzzles and the cockpit eye point from the ship's `hardpoints.json`; the hull splats (at the spec's
-## `splat_lod`, §16 D35), their lighting records (§7.3) and meshes from `assets/generated/<asset_id>/`, loaded guarded so the scene
-## loads (with warnings) before `scripts/gen_assets.sh` has run. Without hardpoints the ship cannot fly and only coasts.
+## collision primitives, gun muzzles and the cockpit eye point from the ship's `hardpoints.json`; the hull's textured mesh
+## (`MeshAssets`, §7, §9) and the cockpit's meshes from `assets/generated/<asset_id>/`, loaded guarded so the scene loads (with
+## warnings) before `scripts/gen_assets.sh` has run. Without hardpoints the ship cannot fly and only coasts.
 ##
-## Children: `HullSplats` (GaussianSplatNode, identity in the scene: GDGS applies its own Rz(180°) on entering the
-## tree, §9.1; `HullSplatSync` draws it at the interpolated pose), `HullMeshFallback` (shown when `SplatStatus` finds
-## no splat backend, or forced), `HullDepthProxy` (the fallback mesh inset by a few centimetres, opaque black, shown
-## exactly when the splats are: it writes the depth splats do not, so effects behind the hull are hidden, §7.2), `CockpitInterior`
-## (first person only), `Thrusters` and `Guns` (attach points for M1-T13; `Guns` holds one Marker3D per muzzle),
+## Children: `Hull` (MeshInstance3D: the asset's one shared textured mesh, so every copy instances; it writes its own depth, so
+## effects behind the hull are hidden, §7.2; while the cockpit interior is shown it draws the hull's OBJ with the canopy cleared),
+## `CockpitInterior` (first person only), `Thrusters` and `Guns` (attach points for M1-T13; `Guns` holds one Marker3D per muzzle),
 ## `Targeting` (`TargetingController`), `CockpitAnchor` (Marker3D at the hardpoints' `cockpit_camera`), `RunningLights` (M3-T27), and on the
 ## player's ship `CockpitScreens` (M3-T29).
 ##
@@ -30,6 +28,22 @@ extends RigidBody3D
 ## Contacts (M3-T04): Jolt reports up to `CONTACTS_REPORTED` contact points (`contact_monitor` on), and the ship keeps the
 ## World-frame sum of the forces it applied on its last tick (`applied_force`), so the `RamResolver` can tell the velocity
 ## change a collision caused from what the ship's own thrust did.
+##
+## The flight batch (M4-T10, architecture §17.9): every ship but the player's is `batched`, so `FlightBatch` (under `World`,
+## priority -1) runs its model, governor and force application in one native call per tick for all of them; this node's
+## `_physics_process` then only takes the command edges and leaves the forces to the batch. The player's ship, a ship whose
+## `batched` is off, and every ship when the library or `perf_native` is off, fly the GDScript path below. On the batched
+## path `get_flight_output()` fills its `FlightOutput` from the batch's row on demand (levels, RCS shares, forces, flags; the
+## per-nozzle `nozzle_forces` stay empty) and `applied_force()` reads the batch's sum.
+##
+## Commands from the core's rows (M4-T33): a native AI pilot's command is written into the core and the flight batch flies
+## it from there (`use_row_command`), so the driver does not hand the ship a command every think. Any command set from
+## GDScript (`set_flight_command`) takes the ship back; a ship on its own model reads the row's command into `_flight`.
+##
+## AI ships are built lean (M4-T11, architecture §17.10, `lean`): no cockpit interior and no cockpit anchor, their collision shapes as
+## shape owners of the body instead of a node each, and their plumes and markers as one multimesh each. Past
+## `settings.far_ship_dot_m` from the camera an AI ship is a far dot (`set_far_dot`): its hull, plumes, markers and guns are hidden and
+## the world's `FarDots` draws it. The player's ship is built as before.
 ##
 ## Rebase-safe: nothing here caches a World position between ticks. Console (§6.4, §15.1 D27): only the player's ship
 ## registers (`console_owner`, set before the ship enters the tree, `ShipAssembly` does it): provider `ship` and commands
@@ -77,7 +91,21 @@ var force_assist: bool = false:
 var running_lights: bool = true:
 	set = set_running_lights
 
+## Built lean (M4-T11): the AI ship's set of nodes, see the class notes. Set before the ship enters the tree (`ShipAssembly` does
+## it for AI ships); the player's ship never is.
+var lean: bool = false
+
 var _assist_on: bool = true
+## Whether this ship flies in the native flight batch when it can (M4-T10): on for every ship but the player's, whose
+## `_ready` switches it off. Changing it joins or leaves the batch at once.
+var batched: bool = true:
+	set(value):
+		batched = value
+		if is_inside_tree():
+			if value:
+				_join_batch()
+			else:
+				_leave_batch()
 var _hardpoints: Hardpoints = Hardpoints.new()
 var _layout: ThrusterLayout = ThrusterLayout.new()
 ## Share of the gap to this tick's measured turn rate of the lead direction that the smoothed rate closes each tick.
@@ -85,6 +113,9 @@ const TRACK_RATE_SMOOTHING: float = 0.35
 
 ## The cabin lamp: a short-range emitter that competes for a light slot while the cockpit view is on, and lights the frame.
 var _cabin_emitter: LightEmitter = null
+## The paint the textured hull is drawn in (M4-T30b): the wing's livery and this ship's number. Set at spawn by whoever names the
+## ship (`set_livery`); until then the player's ship is Alpha 01 and every other ship the plain field grey.
+var livery: Livery = null
 var _track_prev_dir: Vector3 = Vector3.ZERO
 var _track_rate_w: Vector3 = Vector3.ZERO
 var _model: FlightModel = null
@@ -95,23 +126,37 @@ var _flight_fresh: bool = false
 var _combat: CombatCommand = CombatCommand.new()
 static var _warned_no_screens: bool = false
 var _combat_fresh: bool = false
-var _fallback_active: bool = false
 var _interior_visible: bool = false
-# Levels of detail (M3-T19): the splat node per level, the levels in order (`HullSplats` is `spec.splat_lod`; the player's hero
-# level, -1, comes before it, M3-T24), and the one drawn.
-var _lod_nodes: Array[GaussianSplatNode] = []
-var _lod_levels: PackedInt32Array = PackedInt32Array()
-var _lod_level: int = 0
-# The hull's finest level as `SplatLod.resolve` gave it, and the spec it was resolved for.
-var _hull_lod: Dictionary = {}
-var _hull_lod_spec: ShipSpec = null
 var _muzzles: Array[Node3D] = []
 var _collision_nodes: Array[CollisionShape3D] = []
+# A lean ship's collision shapes: one shape owner of the body per hit volume (M4-T11).
+var _shape_owners: PackedInt32Array = PackedInt32Array()
+# The hull's textured mesh (null before it is generated), the OBJ the cockpit view draws instead (the player's ship only), and
+# whether the ship is drawn as a far dot.
+var _hull_mesh: Mesh = null
+var _cockpit_hull: Mesh = null
+var _far_dot: bool = false
 var _applied_force: Vector3 = Vector3.ZERO
+# The flight batch (M4-T10): the batch this ship joined, its row and the physics frame of the last gather, whether the last
+# path flown was the batch's (the assist state follows a change of path), and the frame `_output` was last filled from a row.
+var _batch: FlightBatch = null
+var _batch_row: int = -1
+var _batch_tick: int = -1
+var _native_last: bool = false
+var _output_tick: int = -1
+# The physics frame the batch applied this ship's forces in (so this node never applies them again that tick), and the frame
+# `_prepare_command` last ran in (so a fallback after a refused step never prepares the command twice).
+var _flown_tick: int = -1
+var _prepared_tick: int = -1
+# The ship flies its command from the core's row (M4-T33).
+var _row_command: bool = false
+## A disabled hulk (M4-T21, M12 groundwork): its assist is off for good; `set_hulk` clears its command and the tier director
+## takes its pilot, so it coasts on its last motion until something commands it again. The pool clears it on reuse.
+var hulk: bool = false
+# The flight batch flies this ship and owns its tick (M4-T35): this node's `_physics_process` is off until the batch gives it back.
+var _batch_owned: bool = false
 
-@onready var hull_splats: GaussianSplatNode = $HullSplats
-@onready var hull_mesh_fallback: MeshInstance3D = $HullMeshFallback
-@onready var hull_depth_proxy: HullDepthProxy = $HullDepthProxy
+@onready var hull: MeshInstance3D = $Hull
 @onready var cockpit_interior: MeshInstance3D = $CockpitInterior
 @onready var thrusters: Node3D = $Thrusters
 @onready var guns: Node3D = $Guns
@@ -136,28 +181,24 @@ static func asset_dir(p_spec: ShipSpec) -> String:
 func _init() -> void:
 	# The world rebases its direct children through this group; `World.spawn` adds it too.
 	add_to_group(WorldFrame.SHIFTABLE_GROUP)
-	add_to_group(SplatStatus.MESH_GROUP)
 	_assist_on = bool(Settings.get_value(&"assist_default"))
 
 
-# The child's splats and lighting records go on here, before it enters the tree: assigned later, each makes GDGS re-merge every
-# splat in the scene, once per ship.
-func _enter_tree() -> void:
-	_assign_hull_splats(get_node_or_null(^"HullSplats") as GaussianSplatNode)
-
-
 func _ready() -> void:
+	if console_owner:
+		batched = false
 	_apply_newtonian_body()
+	if lean:
+		_strip_for_lean()
 	targeting.setup(self, console_owner)
 	_build()
-	_build_cabin_emitter()
+	if not lean:
+		_build_cabin_emitter()
 	if get_node_or_null(^"LodSwitcher") == null:
 		var switcher := LodSwitcher.new()
 		switcher.name = "LodSwitcher"
 		add_child(switcher)
 	Settings.changed.connect(_on_hull_setting_changed)
-	_apply_hull_sync_setting()
-	use_fallback_mesh(_fallback_active or SplatStatus.needs_fallback(SplatStatus.active_backend()))
 	set_cockpit_interior_visible(_interior_visible)
 	if console_owner:
 		_register_console()
@@ -170,8 +211,11 @@ func _notification(what: int) -> void:
 
 
 func _exit_tree() -> void:
+	release_row_command()
+	set_batch_owned(false)
+	_leave_batch()
 	DebugConsole.registry.unregister_owner(self)
-	var rig: SplatLightRig = SplatLightRig.of(self)
+	var rig: LightRig = LightRig.of(self)
 	if rig != null and _cabin_emitter != null:
 		rig.remove_emitter(_cabin_emitter)
 	if Settings.changed.is_connected(_on_hull_setting_changed):
@@ -188,21 +232,32 @@ func setup(p_spec: ShipSpec, p_world: WorldFrame) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if _flight_fresh and _flight.toggle_assist:
-		set_assist(not _assist_on)
-	_flight_fresh = false
+	var frame: int = Engine.get_physics_frames()
 	var combat_fresh: bool = _take_combat_edges()
+	if _flown_tick == frame:
+		# The batch applied this tick's forces before this node ran; only the combat edges are left.
+		if combat_fresh:
+			targeting.apply(_combat)
+		return
+	if _native_last:
+		# Back on this node's model: it carries on from the assist state the batch held.
+		if _model != null and _batch != null:
+			_model.assist.pod_yaw_smoothed = _batch.assist_state(self)
+		_native_last = false
+	_batch_tick = -1  # this node's model flies this tick, so the batch's row is no longer the latest
+	if _row_command:
+		pull_row_command()
+	var b: Basis = global_basis
+	var to_body: Basis = b.transposed()
+	if _prepared_tick != frame:
+		_prepare_command(delta, to_body)
 
 	var env_accel: Vector3 = _environment_accel()
 	_applied_force = mass * env_accel
 	if _model != null:
-		var b: Basis = global_basis
-		var to_body: Basis = b.transposed()
-		_flight.face_dir_b = to_body * targeting.selected_offset()  # what the brake faces (§5.5); zero = no target
-		_update_tracking(delta, to_body)
 		var fuel: FuelTank = get_fuel_tank()
 		_output = _model.compute(_flight, to_body * linear_velocity, to_body * angular_velocity, to_body * env_accel,
-				_assist_on, delta, not fuel.is_empty())
+				_assist_on and not hulk, delta, not fuel.is_empty())
 		fuel.draw(_output.mass_flow_kg_s, delta)
 		# Inertia grows with speed: the same thrust gives less acceleration the faster the ship goes (SpeedGovernor).
 		var gain: float = SpeedGovernor.thrust_gain(linear_velocity.length(), spec.speed_limit_mps)
@@ -215,7 +270,7 @@ func _physics_process(delta: float) -> void:
 		apply_central_force(rcs_force)
 		_applied_force += rcs_force
 		apply_torque(b * _output.rcs_torque_b)
-		if _assist_on:
+		if _assist_on and not hulk:
 			var net: Vector3 = b * (_output.pod_force_b + _output.rcs_force_b) * gain
 			var cap: Vector3 = SpeedGovernor.assist_cap_correction(net, linear_velocity, spec.assist_speed_max_mps)
 			apply_central_force(cap)
@@ -235,8 +290,60 @@ func _physics_process(delta: float) -> void:
 ## This tick's flight demand (pilot terms). Held until replaced; `toggle_assist` acts once. The ship overwrites its
 ## `face_dir_b` every tick with the line of sight to its selected target.
 func set_flight_command(cmd: FlightCommand) -> void:
+	if _row_command:
+		release_row_command()
 	_flight = cmd if cmd != null else FlightCommand.new()
 	_flight_fresh = true
+
+
+## From now on the ship flies the command its native pilot keeps in the core's row (M4-T33): the driver calls it once,
+## right after handing the ship that pilot's first command.
+func use_row_command() -> void:
+	_row_command = true
+
+
+## Whether the ship flies its command from the core's row.
+func is_row_commanded() -> bool:
+	return _row_command
+
+
+## Clears the row flag and leaves the core alone: the driver calls it before handing over a command its row already holds,
+## so the hand-over does not release that row (a ship whose flag outlived its row, under a core made again).
+func forget_row_command() -> void:
+	_row_command = false
+
+
+## The flight command the ship holds (what its own model flies, and what the batch gathers).
+func flight_command() -> FlightCommand:
+	return _flight
+
+
+## Takes the ship off its row's command (a new pilot, or a command set from GDScript): the core forgets it.
+func release_row_command() -> void:
+	if not _row_command:
+		return
+	_row_command = false
+	var sim: SimCore = SimCore.current()
+	if sim != null and sim.core != null:
+		sim.core.release_command(get_instance_id())
+
+
+## Copies the row's command into `_flight`, for a tick the flight batch does not fly from the row (this node's own model,
+## or the batch's step without the core).
+func pull_row_command() -> void:
+	var sim: SimCore = SimCore.current()
+	if sim == null or sim.core == null:
+		return
+	var row: PackedFloat64Array = sim.core.row_command(get_instance_id())
+	if row.size() < 12:
+		return
+	_flight.main_left = row[1]
+	_flight.main_right = row[2]
+	_flight.retro_left = row[3]
+	_flight.retro_right = row[4]
+	_flight.strafe = Vector2(row[5], row[6])
+	_flight.rot = Vector3(row[7], row[8], row[9])
+	_flight.brake = row[10] != 0.0
 
 
 ## This tick's combat demand. `fire` is held until replaced; the edges act once (targeting here, weapons in M1-T13).
@@ -262,6 +369,8 @@ func set_assist(on: bool) -> void:
 	_assist_on = on
 	if _model != null:
 		_model.reset_assist()
+	if _batch != null:
+		_batch.reset_assist(self)
 	assist_toggled.emit(on)
 
 
@@ -275,7 +384,64 @@ func reset_to(xform: Transform3D) -> void:
 	if _model != null:
 		_model.reset_assist()
 		_output = _idle_output()
+	if _batch != null:
+		_batch.reset_assist(self)
+	_batch_tick = -1
+	_output_tick = -1
 	reset_physics_interpolation()
+
+
+## Parks the body for the low-attention tier (M4-T21): hidden and not processing, so it leaves Jolt, the scan and every
+## per-ship pass, while its name, pilot, hull and commands stay. The tier row carries its motion from here.
+func park_for_tier() -> void:
+	set_meta(&"_scs_tier_row", true)
+	visible = false
+	process_mode = Node.PROCESS_MODE_DISABLED
+
+
+## Brings the body back from its tier row exactly where the row left it: the pose, the velocities and the assist's state;
+## the row command, when it flies one, is still in the core.
+func unpark_from_tier(xform: Transform3D, velocity: Vector3, spin: Vector3, pod_yaw: float) -> void:
+	if has_meta(&"_scs_tier_row"):
+		remove_meta(&"_scs_tier_row")
+	process_mode = Node.PROCESS_MODE_INHERIT
+	visible = true
+	global_transform = xform
+	linear_velocity = velocity
+	angular_velocity = spin
+	set_assist_state(pod_yaw)
+	_batch_tick = -1
+	_output_tick = -1
+	reset_physics_interpolation()
+
+
+## Whether the body is parked for the tier now.
+func is_tier_parked() -> bool:
+	return has_meta(&"_scs_tier_row")
+
+
+## The assist's smoothed pod-yaw command as the path that flew the last tick holds it.
+func assist_state() -> float:
+	if _native_last and _batch != null and is_instance_valid(_batch):
+		return _batch.assist_state(self)
+	return _model.assist.pod_yaw_smoothed if _model != null else 0.0
+
+
+## Sets the assist's smoothed pod-yaw command on both paths, so whichever flies next carries on from it.
+func set_assist_state(value: float) -> void:
+	if _model != null:
+		_model.assist.pod_yaw_smoothed = value
+	if _batch != null and is_instance_valid(_batch):
+		_batch.set_assist_state(self, value)
+
+
+## Makes the ship a drifting hulk (M4-T21): its command cleared (and its row command released), no assist from now on.
+func set_hulk(on: bool) -> void:
+	if on == hulk:
+		return
+	hulk = on
+	if on:
+		set_flight_command(FlightCommand.new())
 
 
 ## Switches the running lights.
@@ -311,7 +477,67 @@ func body_angular_velocity() -> Vector3:
 ## environment), N. Jolt adds `applied_force() / mass * delta` to the velocity in the coming step; anything beyond that
 ## came from a contact.
 func applied_force() -> Vector3:
+	if _in_batch_row():
+		return _batch.out_vectors[_batch_row * FlightBatch.OUT_VECTORS + FlightBatch.Out.FORCE]
 	return _applied_force
+
+
+## Which path flew the last physics tick: `native` (the flight batch, M4-T10) or `gdscript` (this node's own model).
+func flight_path() -> StringName:
+	return &"native" if _in_batch_row() else &"gdscript"
+
+
+## The flight batch's gather for this tick (M4-T10): the assist edge, the brake's facing and the auto-track's lead (as
+## `_physics_process` would), the command packed at `row`, and the marks that tell `_physics_process` the batch flies this tick.
+func batch_gather(batch: FlightBatch, row: int, frame: int, delta: float, fuel_unlimited: bool,
+		scalars: PackedFloat64Array, vectors: PackedVector3Array, flags: PackedByteArray) -> void:
+	if _batch_owned and _take_combat_edges():
+		targeting.apply(_combat)  # this node's tick is off (M4-T35): the edges land here, before the World's rebase at 0
+	_prepare_command(delta, global_basis.transposed())
+	_fuel.unlimited = fuel_unlimited
+	FlightBatch.pack_command(_flight, _environment_accel(), _assist_on and not hulk, not _fuel.is_empty(), scalars, vectors, flags,
+			row)
+	if not _native_last:
+		# Onto the batch: it carries on from the assist state this node's model held.
+		if _model != null:
+			batch.set_assist_state(self, _model.assist.pod_yaw_smoothed)
+		_native_last = true
+	_batch = batch
+	_batch_row = row
+	_batch_tick = frame
+	_flown_tick = frame
+	_output_tick = -1
+
+
+## The batch's step refused this tick's arrays after the gather: this node applies the forces itself.
+func batch_refused() -> void:
+	_flown_tick = -1
+	set_batch_owned(false)
+
+
+## Whether the flight batch owns this ship's tick (M4-T35): the batch flies it and this node's `_physics_process` is off
+## until the batch gives the tick back (it stops flying the ship, the ship leaves it, the setting goes off).
+func set_batch_owned(owned: bool) -> void:
+	if owned == _batch_owned:
+		return
+	_batch_owned = owned
+	set_physics_process(not owned)
+
+
+func is_batch_owned() -> bool:
+	return _batch_owned
+
+
+## Flies this node's own model for this tick at once (the batch gave the tick back inside the tick, after the engine listed
+## what processes this tick).
+func fly_own_tick_now(delta: float) -> void:
+	if is_inside_tree() and can_process() and not _batch_owned:
+		_physics_process(delta)
+
+
+## The batch draws this tick's reaction mass for a batched ship (only when the tank is finite).
+func batch_draw_fuel(flow_kg_s: float, delta: float) -> void:
+	_fuel.draw(flow_kg_s, delta)
 
 
 ## The reaction-mass tank, with `unlimited` brought in line with `settings.fuel_unlimited` as of now. Never null.
@@ -320,8 +546,12 @@ func get_fuel_tank() -> FuelTank:
 	return _fuel
 
 
-## What the flight model produced on the last physics tick (all zero before the first one). Never null.
+## What the flight model produced on the last physics tick (all zero before the first one). Never null. On the batched
+## path it is filled from the batch's row when first asked after a tick.
 func get_flight_output() -> FlightOutput:
+	if _output_tick != _batch_tick and _in_batch_row():
+		_fill_output_from_batch()
+		_output_tick = _batch_tick
 	return _output
 
 
@@ -340,6 +570,15 @@ func get_muzzles() -> Array[Node3D]:
 	return _muzzles.duplicate()
 
 
+## The muzzles' transforms in the ship's frame, in hardpoints order, as data (M4-T35): what the cannon kernel fires from
+## and the frame's flashes can be placed by (`global_transform * local`), without a marker node per muzzle.
+func get_muzzle_transforms() -> Array[Transform3D]:
+	var out: Array[Transform3D] = []
+	for entry: Dictionary in _hardpoints.muzzles:
+		out.append(entry["transform"])
+	return out
+
+
 ## Ship-local chase camera offset, for `CameraRig.setup` (the hardpoints' `chase_anchor`).
 func get_chase_offset() -> Vector3:
 	return _hardpoints.chase_anchor if _hardpoints.valid else DEFAULT_CHASE_OFFSET
@@ -347,9 +586,10 @@ func get_chase_offset() -> Vector3:
 
 ## The camera rig's interior callback: the cockpit interior is drawn in first person only.
 func set_cockpit_interior_visible(shown: bool) -> void:
-	_interior_visible = shown
+	_interior_visible = shown and cockpit_interior != null
 	if is_node_ready():
-		cockpit_interior.visible = shown
+		if cockpit_interior != null:
+			cockpit_interior.visible = _interior_visible
 		_apply_hull_visuals()
 		_apply_cabin_emitter()
 		if cockpit_screens != null:
@@ -360,77 +600,56 @@ func is_cockpit_interior_visible() -> bool:
 	return _interior_visible
 
 
-## Draws the hull with the fallback mesh instead of the splats (`SplatStatus` group `splat_fallback_mesh`). The depth
-## proxy is only wanted while the splats are drawn: the fallback mesh writes depth itself.
-func use_fallback_mesh(enabled: bool) -> void:
-	_fallback_active = enabled
-	_apply_hull_visuals()
-
-
-# Splats or mesh for the hull. The mesh is drawn when the fallback is on, and also while the cockpit interior is shown: from
-# inside, the hull's splats are seen from a few tens of centimetres, where each one is a huge flat disc that turns into a
-# serrated, flickering sliver at a grazing angle (the 2026-10-21 play test). The mesh has none of that. The depth proxy stays on
-# in the cockpit, so effects behind the hull stay hidden.
+# The hull for what the camera sees: the textured mesh, or from inside the cockpit the hull's OBJ (the view the cockpit was built
+# around) with its canopy glass and window frames cleared; nothing while the ship is a far dot.
 func _apply_hull_visuals() -> void:
 	if not is_node_ready():
 		return
-	var mesh_mode: bool = _fallback_active or _interior_visible
-	hull_mesh_fallback.visible = mesh_mode
-	_apply_canopy_glass()
-	hull_depth_proxy.visible = (_interior_visible or not _fallback_active) and bool(Settings.get_value(&"hull_depth_proxy"))
-	for i: int in _lod_nodes.size():
-		_lod_nodes[i].visible = not mesh_mode and _lod_levels[i] == _lod_level
-	var sync := get_node_or_null(^"HullSplatSync") as SplatPoseSync
-	if sync != null:
-		sync.sync()  # a level just shown is placed at once
+	var inside: bool = _interior_visible and _cockpit_hull != null
+	hull.mesh = _cockpit_hull if inside else _hull_mesh
+	hull.visible = not _far_dot
+	_apply_canopy_glass(inside)
 
 
-func is_fallback_mesh_active() -> bool:
-	return _fallback_active
+## The hull's textured mesh as loaded (null before the assets are generated).
+func hull_mesh() -> Mesh:
+	return _hull_mesh
 
 
-## The splat levels this ship can draw, finest first (M3-T19).
-func lod_levels() -> PackedInt32Array:
-	return _lod_levels
-
-
-func lod_level() -> int:
-	return _lod_level
-
-
-## Draws `level` (one of `lod_levels()`, the nearest one otherwise), by visibility only.
-func set_lod_level(level: int) -> void:
-	if _lod_levels.is_empty():
+## Draws the ship as a far dot (M4-T11): its hull, plumes, markers and guns hidden, and a point in the world's `FarDots` instead; off
+## shows them again. Its `LodSwitcher` decides from the camera's distance.
+func set_far_dot(on: bool) -> void:
+	if on == _far_dot:
 		return
-	var pick: int = _lod_levels[0]
-	for l: int in _lod_levels:
-		if l <= level:
-			pick = l
-	if pick == _lod_level:
-		return
-	_lod_level = pick
+	_far_dot = on
+	_apply_far_interpolation()
 	_apply_hull_visuals()
+	for path: NodePath in [^"ThrusterVisuals", ^"Thrusters", ^"RunningLights", ^"Guns"]:
+		var node := get_node_or_null(path) as Node3D
+		if node != null:
+			node.visible = not on
+	var dots: FarDots = FarDots.attach(world) if on else FarDots.of(world)
+	if dots != null:
+		if on:
+			dots.add(self)
+		else:
+			dots.remove(self)
 
 
-## Splats in the level drawn now (0 while the mesh is drawn instead).
-func visible_splat_count() -> int:
-	for i: int in _lod_nodes.size():
-		if _lod_nodes[i].visible and _lod_nodes[i].gaussian != null:
-			return _lod_nodes[i].gaussian.point_count
-	return 0
+# A far dot's ship is not interpolated: nothing of it is drawn but a dot, so a rebase has no history to reset on its nodes
+# (M4-T14). Back near, it blends again from where it is.
+func _apply_far_interpolation() -> void:
+	var off: bool = _far_dot and bool(Settings.get_value(&"far_ship_interpolation_off"))
+	var mode: Node.PhysicsInterpolationMode = Node.PHYSICS_INTERPOLATION_MODE_OFF if off else Node.PHYSICS_INTERPOLATION_MODE_INHERIT
+	if physics_interpolation_mode == mode:
+		return
+	physics_interpolation_mode = mode
+	reset_physics_interpolation()
 
 
-## Splats in each of `lod_levels()`, same order (M3-T20).
-func lod_splat_counts() -> PackedInt32Array:
-	var out := PackedInt32Array()
-	for node: GaussianSplatNode in _lod_nodes:
-		out.append(node.gaussian.point_count if node.gaussian != null else 0)
-	return out
-
-
-## The splat node of every level of detail: each carries the same own lights (M3-T27).
-func splat_nodes() -> Array[GaussianSplatNode]:
-	return _lod_nodes
+## Whether the ship is drawn as a far dot now.
+func is_far_dot() -> bool:
+	return _far_dot
 
 
 ## The radius of a sphere that holds the hull, m (its hit volumes' bound, 10 m before the hull is built).
@@ -459,8 +678,37 @@ func _apply_newtonian_body() -> void:
 	angular_damp = 0.0
 	can_sleep = false
 	continuous_cd = false
-	contact_monitor = true
+	# Nothing connects body_entered; the direct state's contact list (the ram resolver's) needs only the count (M4-T35).
+	contact_monitor = bool(Settings.get_value(&"ship_contact_monitor"))
 	max_contacts_reported = CONTACTS_REPORTED
+	if collision_layer == 1 and collision_mask == 1:  # layers a caller already chose before the ship entered the tree stay
+		_apply_collision_layers()
+
+
+# AI ships (the lean ones) sit on the fighter layer (M4-T14); every other ship keeps the default layer and collides with everything.
+func _apply_collision_layers() -> void:
+	if bool(Settings.get_value(&"collision_layers")):
+		var kind: StringName = &"fighter" if lean else &"player"
+		collision_layer = CollisionLayers.layer_of(kind)
+		collision_mask = CollisionLayers.mask_of(kind)
+	else:
+		collision_layer = 1
+		collision_mask = 1
+
+
+# A lean ship (M4-T11) needs no first-person interior and no camera anchor; the empty plume holder goes too (`ShipAssembly` puts its
+# plumes on the body).
+func _strip_for_lean() -> void:
+	var unused: Array[Node] = [cockpit_interior, cockpit_anchor]
+	if thrusters != null and thrusters.get_child_count() == 0:
+		unused.append(thrusters)
+		thrusters = null
+	for node: Node in unused:
+		if node != null:
+			remove_child(node)
+			node.free()
+	cockpit_interior = null
+	cockpit_anchor = null
 
 
 func _build() -> void:
@@ -488,7 +736,8 @@ func _build() -> void:
 	if _hardpoints.valid:
 		center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 		center_of_mass = _hardpoints.center_of_mass
-		cockpit_anchor.transform = _hardpoints.cockpit_camera
+		if cockpit_anchor != null:
+			cockpit_anchor.transform = _hardpoints.cockpit_camera
 		_place_cabin_emitter()
 		_build_collision()
 		_build_muzzles()
@@ -496,6 +745,8 @@ func _build() -> void:
 	_build_running_lights()
 	_build_cockpit_screens()
 	_output = _idle_output()
+	_output_tick = -1
+	_join_batch()
 
 
 # Freed at once rather than queued: a rebuild must not leave the old shapes in the body for the rest of the frame.
@@ -504,14 +755,24 @@ func _clear_built() -> void:
 		remove_child(node)
 		node.free()
 	_collision_nodes.clear()
+	for owner_id: int in _shape_owners:
+		remove_shape_owner(owner_id)
+	_shape_owners.clear()
 	for marker: Node3D in _muzzles:
 		marker.get_parent().remove_child(marker)
 		marker.free()
 	_muzzles.clear()
 
 
+# A node per hit volume, or on a lean ship a shape owner of the body each: the same shapes and contacts without the nodes.
 func _build_collision() -> void:
 	for entry: Dictionary in _hardpoints.collision:
+		if lean:
+			var owner_id: int = create_shape_owner(self)
+			shape_owner_add_shape(owner_id, entry["shape"])
+			shape_owner_set_transform(owner_id, entry["transform"])
+			_shape_owners.append(owner_id)
+			continue
 		var node := CollisionShape3D.new()
 		node.name = ("Collision_" + str(entry["name"])).to_pascal_case().validate_node_name()
 		node.shape = entry["shape"]
@@ -521,6 +782,8 @@ func _build_collision() -> void:
 
 
 func _build_muzzles() -> void:
+	if lean:
+		return  # the muzzles are data (M4-T35): the cannon fires from the transforms, the pool flashes them
 	for entry: Dictionary in _hardpoints.muzzles:
 		var marker := Marker3D.new()
 		marker.name = ("Muzzle_" + str(entry["name"])).to_pascal_case().validate_node_name()
@@ -531,7 +794,7 @@ func _build_muzzles() -> void:
 
 # On the ship the player flies, when its hardpoints have a console: a rebuild only places what exists.
 func _build_cockpit_screens() -> void:
-	if not console_owner or cockpit_interior.mesh == null:
+	if not console_owner or cockpit_interior == null or cockpit_interior.mesh == null:
 		return
 	if _hardpoints.screens.is_empty():
 		if _hardpoints.valid and not _warned_no_screens:
@@ -552,112 +815,54 @@ func _build_running_lights() -> void:
 	if lights == null:
 		lights = RunningLights.new()
 		lights.name = "RunningLights"
+		lights.instanced = lean
 		add_child(lights)
 	lights.setup(self)
 
 
+# The hull's textured mesh, and on a ship with a cockpit the interior and the hull's OBJ its view was built around.
 func _load_visuals() -> void:
 	var dir: String = asset_dir(spec)
-	_assign_hull_splats(hull_splats)
-	_load_far_levels(_hull_lod)
-	hull_mesh_fallback.mesh = _load_mesh(dir.path_join(spec.asset_id + ".obj"))
-	hull_depth_proxy.mesh = hull_mesh_fallback.mesh  # whatever is loaded, so a regenerated hull needs no changes here
-	cockpit_interior.mesh = _load_mesh(dir.path_join(COCKPIT_MESH_FILE)) if spec.has_cockpit_interior else null
-	MeshMaterials.matte(hull_mesh_fallback.mesh)
-	MeshMaterials.matte(cockpit_interior.mesh)
-	_make_double_sided(hull_mesh_fallback.mesh)
-	_make_double_sided(cockpit_interior.mesh)
-	MeshMaterials.cockpit(cockpit_interior.mesh)
-
-
-# The spec's finest level and its lighting records on `node`, once per spec.
-func _assign_hull_splats(node: GaussianSplatNode) -> void:
-	if node == null or spec == null or _hull_lod_spec == spec:
-		return
-	_hull_lod_spec = spec
-	_hull_lod = SplatLod.resolve(spec.asset_id, spec.splat_lod)
-	var splat_path: String = _hull_lod["path"]
-	if not String(_hull_lod["warning"]).is_empty():
-		push_warning("Ship: %s" % _hull_lod["warning"])  # one message per problem: a manifest that cannot be read draws nothing, below
-	var gaussian: GaussianResource = null
-	if not splat_path.is_empty() and ResourceLoader.exists(splat_path):
-		gaussian = load(splat_path) as GaussianResource
-	if gaussian == null and not splat_path.is_empty():
-		push_warning("Ship: %s is missing or not imported (run scripts/gen_assets.sh, then import); no hull splats" % splat_path)
-	node.gaussian = gaussian
-	SplatLightingLoader.attach(node, SplatLod.lighting_path(spec.asset_id, int(_hull_lod["level"])) if gaussian != null else "")
-
-
-# One splat node per coarser level the asset has (M3-T19), built once: the switcher shows one at a time, so GDGS never
-# rebuilds its buffers while the ship flies. A new node gets its splats and lighting records before it enters the tree.
-func _load_far_levels(base: Dictionary) -> void:
-	_lod_nodes = [hull_splats]
-	_lod_levels = PackedInt32Array([maxi(int(base["level"]), 0)])
-	var manifest: Dictionary = SplatLod.read_manifest(spec.asset_id)
-	for level: int in range(_lod_levels[0] + 1, LodSwitcherMath.COARSEST + 1):
-		var path: String = SplatLod.file_path_in(manifest, spec.asset_id, level)
-		if path.is_empty() or not ResourceLoader.exists(path):
-			continue
-		var lighting: String = SplatLod.lighting_path_in(manifest, spec.asset_id, level)
-		_lod_nodes.append(_level_node("HullSplatsLod%d" % level, path, lighting))
-		_lod_levels.append(level)
-	_lod_level = _lod_levels[0]
-	_add_hero_level()  # drawn once the switcher asks for it, never as the first frame's guess
+	_hull_mesh = MeshAssets.for_asset(spec.asset_id)
+	if _hull_mesh == null:
+		push_warning("Ship: %s has no textured mesh (run scripts/gen_assets.sh, then import); the hull is not drawn" % spec.asset_id)
+	var section: Dictionary = MeshAssets.livery_section(spec.asset_id)
+	if livery == null and not section.is_empty():
+		livery = Livery.player(section) if console_owner else Livery.for_wing("", 0, section)
+	_apply_livery()
+	_cockpit_hull = null
+	if cockpit_interior != null:
+		var with_interior: bool = spec.has_cockpit_interior
+		cockpit_interior.mesh = _load_mesh(dir.path_join(COCKPIT_MESH_FILE)) if with_interior else null
+		MeshMaterials.matte(cockpit_interior.mesh)
+		_make_double_sided(cockpit_interior.mesh)
+		MeshMaterials.cockpit(cockpit_interior.mesh)
+		if with_interior:
+			_cockpit_hull = _load_mesh(dir.path_join(spec.asset_id + ".obj"))
+			MeshMaterials.matte(_cockpit_hull)
+			_make_double_sided(_cockpit_hull)
 	_apply_hull_visuals()
 
 
-# The finest level of all, in front of the chain, for a ship whose spec asks for it and while `settings.splat_hero` is on
-# (read here, once, when the ship is built: its node and splats are fixed from then on, like the other levels).
-func _add_hero_level() -> void:
-	if not spec.splat_hero or not bool(Settings.get_value(&"splat_hero")):
-		return
-	var hero: Dictionary = SplatLod.hero_paths(spec.asset_id)
-	var path: String = hero["path"]
-	if path.is_empty() or not ResourceLoader.exists(path):
-		push_warning("Ship: %s has no imported hero level (run scripts/gen_assets.sh, then import); drawing LOD0 at the closest" % spec.asset_id)
-		return
-	_lod_nodes.push_front(_level_node("HullSplatsHero", path, hero["lighting"]))
-	_lod_levels.insert(0, LodSwitcherMath.HERO)
+## Paints the hull in `p_livery` (its wing's colours and pattern and its number); null gives back the plain livery, or none for a
+## hull without a livery table.
+func set_livery(p_livery: Livery) -> void:
+	var section: Dictionary = MeshAssets.livery_section(spec.asset_id) if spec != null else {}
+	livery = p_livery if p_livery != null else (Livery.for_wing("", 0, section) if not section.is_empty() else null)
+	_apply_livery()
 
 
-# The hidden splat node of one level: built once, kept in step with the hull, and given a new resource only if it changed.
-func _level_node(node_name: String, path: String, lighting: String) -> GaussianSplatNode:
-	var node := get_node_or_null(NodePath(node_name)) as GaussianSplatNode
-	var resource := load(path) as GaussianResource
-	if node == null:
-		node = GaussianSplatNode.new()
-		node.name = node_name
-		node.transform = hull_splats.transform
-		node.visible = false
-		node.gaussian = resource
-		SplatLightingLoader.attach(node, lighting)
-		add_child(node)
-		var sync := get_node_or_null(^"HullSplatSync") as SplatPoseSync
-		if sync != null:
-			sync.add_splats(node)
-	elif node.gaussian != resource:
-		node.gaussian = resource
-		SplatLightingLoader.attach(node, lighting)
-	return node
+# The hull node carries the livery as instance values.
+func _apply_livery() -> void:
+	if livery != null and hull != null:
+		livery.apply(hull)
 
 
 func _on_hull_setting_changed(key: StringName, _value: Variant) -> void:
-	if key == &"hull_depth_proxy":
-		_apply_hull_visuals()
-	elif key == &"hull_splat_sync":
-		_apply_hull_sync_setting()
-
-
-# Debug switch: with the sync off the splat node is a plain interpolated child of the body again.
-func _apply_hull_sync_setting() -> void:
-	var sync := get_node_or_null(^"HullSplatSync") as Node
-	var on: bool = bool(Settings.get_value(&"hull_splat_sync"))
-	if sync != null:
-		sync.set_process(on)
-	hull_splats.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF if on else Node.PHYSICS_INTERPOLATION_MODE_INHERIT
-	if not on and sync is SplatPoseSync:
-		hull_splats.transform = (sync as SplatPoseSync).local_pose()  # back to the body-relative pose
-		hull_splats.reset_physics_interpolation()
+	if key == &"collision_layers":
+		_apply_collision_layers()
+	elif key == &"far_ship_interpolation_off":
+		_apply_far_interpolation()
 
 
 # A soft red lamp just behind and above the pilot's eyes. Its range stops short of the wings, so it lights only the cockpit frame.
@@ -670,14 +875,14 @@ func _build_cabin_emitter() -> void:
 
 
 func _place_cabin_emitter() -> void:
-	if _cabin_emitter != null:
+	if _cabin_emitter != null and cockpit_anchor != null:
 		_cabin_emitter.offset = cockpit_anchor.position + Vector3(0.0, 0.45, 0.5)
 
 
 # The cabin lamp competes for a slot only in the cockpit camera; no other ship's interior is ever shown, so the pool adds no candidates.
 # A disabled ship (the player dead, a parked ship) gives none.
 func _apply_cabin_emitter() -> void:
-	var rig: SplatLightRig = SplatLightRig.of(self)
+	var rig: LightRig = LightRig.of(self)
 	if rig == null or _cabin_emitter == null:
 		return
 	if _interior_visible and process_mode != Node.PROCESS_MODE_DISABLED:
@@ -686,17 +891,18 @@ func _apply_cabin_emitter() -> void:
 		rig.remove_emitter(_cabin_emitter)
 
 
-# From inside, the interior is the whole cabin: the hull's canopy glass would tint the view green and its window frames would cross the
-# side panes, so while the interior is shown those surfaces get an override that draws nothing (from outside they are the real thing).
-func _apply_canopy_glass() -> void:
-	var mesh: Mesh = hull_mesh_fallback.mesh
-	if mesh == null:
+# From inside, the interior is the whole cabin: the hull's canopy glass would tint the view and its window frames would cross the
+# side panes, so while the interior is shown those surfaces of the cockpit hull get an override that draws nothing.
+func _apply_canopy_glass(inside: bool) -> void:
+	var mesh: Mesh = hull.mesh
+	for i: int in hull.get_surface_override_material_count():
+		hull.set_surface_override_material(i, null)
+	if mesh == null or not inside:
 		return
 	for i: int in mesh.get_surface_count():
 		var material: Material = mesh.surface_get_material(i)
-		if material == null or not String(material.resource_name).contains("canopy"):
-			continue
-		hull_mesh_fallback.set_surface_override_material(i, _clear_glass() if _interior_visible else null)
+		if material != null and String(material.resource_name).contains("canopy"):
+			hull.set_surface_override_material(i, _clear_glass())
 
 
 static var _clear_material: StandardMaterial3D = null
@@ -713,7 +919,7 @@ static func _clear_glass() -> StandardMaterial3D:
 
 
 # The cockpit bars are mirrored copies, whose faces wind the other way and vanish from inside with back-face culling on;
-# the hull mesh is seen from inside the cockpit too. Both draw both sides.
+# the cockpit hull is seen from inside too. Both draw both sides.
 static func _make_double_sided(mesh: Mesh) -> void:
 	if mesh == null:
 		return
@@ -783,6 +989,12 @@ func _lead_offset() -> Vector3:
 		for muzzle: Node3D in _muzzles:
 			muzzle_centre += muzzle.global_position
 		muzzle_centre /= float(_muzzles.size())
+	elif not _hardpoints.muzzles.is_empty():
+		muzzle_centre = Vector3.ZERO
+		var xf: Transform3D = global_transform
+		for entry: Dictionary in _hardpoints.muzzles:
+			muzzle_centre += xf * (entry["transform"] as Transform3D).origin  # a marker's global position, without the marker
+		muzzle_centre /= float(_hardpoints.muzzles.size())
 	var lead: Dictionary = InterceptMath.solve(muzzle_centre, linear_velocity, readout.position, readout.velocity,
 			weapon.muzzle_speed_mps, weapon.lifetime_s)
 	return (lead["lead_point"] as Vector3) - global_position
@@ -792,6 +1004,89 @@ func _environment_accel() -> Vector3:
 	if world == null or not is_instance_valid(world):
 		return Vector3.ZERO
 	return world.environment_accel(position)
+
+
+# --- the flight batch (M4-T10) ----------------------------------------------------------------------------------------
+
+
+# The command as the model reads it this tick, on either path: the assist edge taken, the brake's facing and the auto-track's
+# lead written in the body frame `to_body`. Once per tick, whichever path calls first.
+func _prepare_command(delta: float, to_body: Basis) -> void:
+	if _flight_fresh and _flight.toggle_assist:
+		set_assist(not _assist_on)
+	_flight_fresh = false
+	if _model != null:
+		_flight.face_dir_b = to_body * targeting.selected_offset()  # what the brake faces (§5.5); zero = no target
+		_update_tracking(delta, to_body)
+	_prepared_tick = Engine.get_physics_frames()
+
+
+# Whether the batch's outputs hold a row for this ship from its latest step.
+func _in_batch_row() -> bool:
+	return _batch != null and _batch_tick >= 0 and _batch_tick == _batch.tick
+
+
+# Joins the world's batch when this ship can fly in it, re-registering a rebuilt ship; otherwise (or on another world) leaves.
+func _join_batch() -> void:
+	var eligible: bool = batched and _model != null and world != null and is_instance_valid(world) and is_inside_tree()
+	var batch: FlightBatch = FlightBatch.attach(world) if eligible else null
+	if batch != _batch:
+		_leave_batch()
+	if batch == null:
+		return
+	_batch = batch
+	batch.join(self)
+
+
+func _leave_batch() -> void:
+	set_batch_owned(false)
+	if _batch == null:
+		return
+	if is_instance_valid(_batch):
+		if _native_last and _model != null:
+			_model.assist.pod_yaw_smoothed = _batch.assist_state(self)
+		_batch.leave(self)
+	_native_last = false
+	_batch_tick = -1
+	_batch = null
+
+
+# `_output` from the batch's row: the levels per group and per pod, the RCS shares, the body-frame forces and torques, the
+# flags and the flow. The per-nozzle list stays empty: nothing reads it for a batched ship.
+func _fill_output_from_batch() -> void:
+	var v: int = _batch_row * FlightBatch.OUT_VECTORS
+	var s: int = _batch_row * FlightBatch.OUT_SCALARS
+	var ov: PackedVector3Array = _batch.out_vectors
+	var os: PackedFloat64Array = _batch.out_scalars
+	var out: FlightOutput = _output
+	out.nozzle_forces.clear()
+	out.group_levels = PackedFloat64Array([os[s], os[s + 1], os[s + 2], os[s + 3]])
+	var pods: int = _layout.pod_count()
+	if out.main_levels.size() != pods:
+		out.main_levels.resize(pods)
+		out.retro_levels.resize(pods)
+	for pod: int in pods:
+		var right: bool = _layout.pod_is_right[pod] != 0
+		out.main_levels[pod] = os[s + (ThrusterLayout.Group.R_MAIN if right else ThrusterLayout.Group.L_MAIN)]
+		out.retro_levels[pod] = os[s + (ThrusterLayout.Group.R_RETRO if right else ThrusterLayout.Group.L_RETRO)]
+	out.pod_force_b = ov[v + FlightBatch.Out.POD_FORCE]
+	out.pod_torque_b = ov[v + FlightBatch.Out.POD_TORQUE]
+	out.rcs_force_b = ov[v + FlightBatch.Out.RCS_FORCE]
+	out.rcs_torque_b = ov[v + FlightBatch.Out.RCS_TORQUE]
+	out.force_b = out.pod_force_b + out.rcs_force_b
+	out.torque_b = out.pod_torque_b + out.rcs_torque_b
+	out.rcs_force_level = ov[v + FlightBatch.Out.RCS_FORCE_LEVEL]
+	out.rcs_torque_level = ov[v + FlightBatch.Out.RCS_TORQUE_LEVEL]
+	out.rate_target_b = ov[v + FlightBatch.Out.RATE_TARGET]
+	out.trim = os[s + FlightBatch.OutScalar.TRIM]
+	out.pod_yaw_cmd = os[s + FlightBatch.OutScalar.POD_YAW_CMD]
+	out.mass_flow_kg_s = os[s + FlightBatch.OutScalar.MASS_FLOW]
+	out.face_error_rad = os[s + FlightBatch.OutScalar.FACE_ERROR]
+	out.braking = os[s + FlightBatch.OutScalar.BRAKING] != 0.0
+	out.facing = os[s + FlightBatch.OutScalar.FACING] != 0.0
+	out.tracking = os[s + FlightBatch.OutScalar.TRACKING] != 0.0
+	out.propellant_empty = os[s + FlightBatch.OutScalar.PROPELLANT_EMPTY] != 0.0
+	out.assist_on = _assist_on
 
 
 # --- console -----------------------------------------------------------------------------------------------------

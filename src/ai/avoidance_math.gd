@@ -19,8 +19,15 @@ extends RefCounted
 ## - **Inside the margin**: straight away from the contact at `(reach - d) / PUSH_S`, plus whatever speed closes on it.
 ## - **Ties** (a dead-centre course, or the same position): the side comes from `tie_direction`, seeded and odd in `w`,
 ##   so two ships meeting head-on dodge apart whatever their two seeds.
+## - **Rocks and mines** (`BodyKind.is_static`, M4-T09) are obstacles like any contact, with their radius. Their horizon is
+##   at least the time a sideways RCS burn takes to clear their reach, plus `URGENT_SETTLE_S`, so a 200 m rock is seen
+##   early enough to go round; ship-sized contacts keep the horizon above.
 ## - `urgent`: a threat closer in time than a 90 degree turn plus `URGENT_SETTLE_S`, or a contact inside the margin that
 ##   closes: the driver then seeks harder, so the RCS strafe does the dodge before any turn could.
+##
+## Native kernels (M4-T16, architecture §17.13): `filter_seen` is what the driver calls. On the core's rows
+## (`Perception.on_rows`) one native call answers it bit for bit; otherwise it lists the contacts and statics and runs
+## `filter`, which stays the reference.
 
 ## Clearance kept beyond the two bounding radii, m.
 const MARGIN_M: float = 15.0
@@ -52,6 +59,7 @@ static func filter(own_pos: Vector3, own_vel: Vector3, own_radius: float, contac
 	var a_stop: float = maxf(capability.a_retro, 0.01)
 	var turn_rate: float = maxf(minf(capability.rate_max_rad.x, capability.rate_max_rad.y), 0.01)
 	var urgent_s: float = 0.5 * PI / turn_rate + URGENT_SETTLE_S
+	var a_side: float = maxf(minf(capability.a_rcs.x, capability.a_rcs.y), 0.01)
 	for c: Contact in contacts:
 		var reach: float = own_radius + c.bounding_radius + MARGIN_M
 		var s: Vector3 = own_pos - c.position
@@ -71,6 +79,8 @@ static func filter(own_pos: Vector3, own_vel: Vector3, own_radius: float, contac
 			continue  # opening
 		var speed: float = sqrt(speed_sq)
 		var horizon: float = maxf(HORIZON_MIN_S, maxf(speed, (own_vel - c.velocity).length()) / a_stop)
+		if BodyKind.is_static(c.kind):
+			horizon = maxf(horizon, sqrt(2.0 * reach / a_side) + URGENT_SETTLE_S)
 		if t_star > horizon:
 			continue
 		var offset: Vector3 = s + w * t_star
@@ -81,6 +91,26 @@ static func filter(own_pos: Vector3, own_vel: Vector3, own_radius: float, contac
 		dodge += side * _sideways_speed(miss, speed * t_star, reach + AIM_PAST_M, speed, t_star)
 		urgent = urgent or t_star < urgent_s
 	return {"v_des": v_des + dodge, "urgent": urgent}
+
+
+## `filter` for a perception: its contacts but `exempt_id` (a committed rammer's target, M3-T13; 0 for none), then its
+## statics (rocks and mines, M4-T09), from its own position and velocity. Through the native kernels when the perception
+## is on the core's rows, with `hash(seed_value)` passed in as the tie-break.
+static func filter_seen(p: Perception, own_radius: float, v_des: Vector3, exempt_id: int, seed_value: int) -> Dictionary:
+	var capability: ShipCapability = p.capability
+	if p.on_rows():
+		var out: Vector4 = p.kernels.avoid(p.contact_rows, p.static_rows, exempt_id, p.position, p.velocity, own_radius,
+				v_des, capability.a_retro, capability.rate_max_rad, capability.a_rcs, hash(seed_value))
+		return {"v_des": Vector3(out.x, out.y, out.z), "urgent": out.w > 0.5}
+	var contacts: Array[Contact] = p.contacts
+	if exempt_id != 0:
+		contacts = []
+		for c: Contact in p.contacts:
+			if c.id != exempt_id:
+				contacts.append(c)
+	if not p.statics.is_empty():
+		contacts = contacts + p.statics
+	return filter(p.position, p.velocity, own_radius, contacts, v_des, capability, seed_value)
 
 
 ## Distance between two bodies at their closest approach within `horizon_s` from now, given the relative position and

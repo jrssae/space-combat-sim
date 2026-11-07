@@ -13,8 +13,11 @@ data_*/
 mono_crash.*.json
 
 # --- Project-specific ---
-# Local engine binary installed by scripts/setup_godot.sh
+# Local engine binary installed by scripts/setup_godot.sh; also cargo's build files for native/ (.tools/native-target)
 .tools/
+# The native library scripts/build_native.sh builds, and cargo's build files if it runs in native/ without the script
+/bin/*.so
+/native/target/
 # Everything under assets/generated/ is produced by tools/ (see docs/architecture.md, "Asset pipeline").
 # Regenerate with scripts/gen_assets.sh. Never commit these binaries.
 assets/generated/

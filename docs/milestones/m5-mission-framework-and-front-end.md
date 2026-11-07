@@ -6,7 +6,9 @@
 The maintainer asked for M5 to run beside M4 because most of it does not touch the performance work, and expects `m5` to
 be rebased onto `main` once M4 merges (see "Living beside M4"). The planning questions were answered the same day (below),
 including the civilian ships' lengths and a seventh civilian hull, the Centauri Brezebel (Q8, Q11). A ninth hull, the
-Brakiri Bokmai transport with removable cargo pods, was added during the build (Q17).
+Brakiri Bokmai transport with removable cargo pods, was added during the build (Q17). **2026-11-07:** `main` (M4 through T22
+and T41, the native core) was merged into `m5` (Q27, T26); from here M5's per-tick, per-entity work goes in the native core
+under `CLAUDE.md`'s language split and threading rules ("M5 on the native core", below).
 
 Read `docs/architecture.md` first, especially §6 (input and the console), §8 (camera), §14.6 (the mission framework as
 first sketched), §15.10 (scenarios and waves), §15.12 (control profiles) and §16 (the M3 AI: D36 wings, D37 the instructor,
@@ -52,6 +54,9 @@ voices. M8's tutorial is written on top of all this, so the framework matters mo
 | Q24 | (maintainer, 2026-11-04) How civilians flee | **Every civilian has a faction** (the Saturns and the Skylark are Earth Alliance, the Narn transport Narn, the Brezebel Centauri, the Bokmai Brakiri); "civilian" is its role, not its faction. **Attacked, a civilian runs away from the enemy towards the nearest vessel of its own faction, of any kind** (an Earth Alliance freighter makes for any Earth Alliance ship, military or civilian). **Civilians under attack run together and cover each other** (they close up while fleeing, and their turrets fire for one another, D61). In T16 (the `civilian` profile and the faction data) and T21; T16 and T21 wait for M4's merge, so this lands after the rebase |
 | Q25 | (maintainer, same day) More on fleeing | **Panic spreads:** a fleeing civilian sets other civilians of the same faction running when they are within about its radar range of it, even if nothing has attacked them. **Shelter behind the military:** when a fleeing civilian has a military ship of its own faction to run to, it aims for the far side of that ship from the threat, so the warship sits between it and the attacker. Read with Q24; T16, after the M4 rebase |
 | Q26 | (maintainer, 2026-11-05, from the M4 session) Targeting with hundreds of ships | **Add a task to turn the target selector into a menu and brainstorm other targeting UX for large battles** (M4 brings battles of 300 to 500 ships, and cycling one ship at a time no longer scales). T25, after the M4 rebase; a concept stop for the maintainer before it is built |
+| Q27 | (2026-11-07) M4's native core is on `main` since Q69's mid-milestone merge: how does it come into `m5`? | **Merge `main` into `m5`**, one merge commit and a normal push; no rebase and no force-push (supersedes the rebase of "Living beside M4" and Q6's force-push clause). M4's close-out comes in by a later merge the same way |
+| Q28 | (same day) M4-T37 (the fallbacks removed) is still running on `m4` and touches the weapon files T21 extends. Wait for it? | **Start T21's native work now** on `main`'s core; take T37 in a later merge and resolve any overlap in `weapon_kernels.rs` and `weapon_rows.rs` then |
+| Q29 | (same day) The second machine (`oscar`, two R9 280X) | **GPU runs are allowed there, labelled as oscar's** (never taken as the RX 6950 XT's numbers); **no many-ship scenarios** (no `bench`, no `battle` or `typical` layouts, no `GUT_SLOW` long fights) |
 
 ## Scope
 
@@ -86,7 +91,8 @@ Out (explicitly):
 
 ## Living beside M4
 
-`m5` and `m4` move at the same time and will meet in a rebase. To keep that rebase small:
+`m5` and `m4` move at the same time. Since 2026-11-07 `m5` holds `main` (M4 through T22, Q27); M4's later work (T37, T42,
+T23, T25) comes in by later merges of `main`, never a rebase. To keep those merges small:
 
 - **Do not edit the files M4 is reworking** unless a task cannot be done otherwise, and then keep the change small and
   list it in the task's Done notes: `src/ai/contact_scan.gd`, `src/ai/perception.gd`, `src/ai/ai_pilot_driver.gd`,
@@ -101,6 +107,32 @@ Out (explicitly):
 - `info.md` (the console command list, `CLAUDE.md`): M4 may create it too; on the rebase the two lists merge into one.
 - The M4 benchmark numbers come from an otherwise idle machine (`docs/handoff-m4.md` §3). Before a heavy Godot run
   (a GUT directory, a GPU capture), check `pgrep -af 'bench'`; if an M4 benchmark is running, wait for it to finish.
+
+## M5 on the native core (2026-11-07)
+
+`CLAUDE.md` (from M4): per-tick work that scales with entity count goes in the native core (Rust with gdext under
+`native/`); everything else stays statically typed GDScript. AI decisions run in the core's worker job one tick behind on a
+frozen snapshot, applied at the join on the main thread against the pilot's stamp; work that writes to the engine in the
+same tick (flight forces, bolts, the hit sweep, rams, weapons) stays on the main thread; no engine call off the main thread,
+no GDScript threads; randomness is a seeded per-entity hash; results identical with 1 and 6 threads and between `sim_step`
+threaded and `delayed`. M5's tasks, read against that rule:
+
+| Task | Per tick, per entity? | Where it goes |
+|---|---|---|
+| T01-T04, T06-T09 (flow, menus, settings, controls, dialog, comms menu, cinematic camera, debrief) | No: UI and per-event | GDScript, as planned |
+| T05, T10 (mission core and Buoy defence) | No: the runner's work grows with live triggers, not ships (49 units for 20 triggers with 4 or 502 actors, T05) | GDScript, as built |
+| T11-T15, T22, T23 (references, generators, fidelity) | No: tools | Python; T27 moves the generators to textured meshes |
+| T18, T19 (sounds, engine voices) | The per-frame step is bounded by `engine_voice_cap`; the 4 Hz re-rank walks every ship | GDScript; the re-rank's ship query moves to the core (T28) |
+| T21 (turrets) | Yes: a weapon, every tick, per turret | The native core: rows and kernels beside M4-T20's, below |
+| T16 (civilians in play) | The AI, avoidance and tier are; data, pools and assembly are not | AI already native (the `civilian` profile through the native brains); the big-hull kind, avoidance sizing and tier handling in the core; the rest GDScript |
+| T17 (encounters) | No: per event, at most `encounter_max_ships` (24) ships | GDScript; its random draws are hashes of the session seed and the event index, not a stepped generator |
+
+**Turrets under the threading rules (T21).** A turret is split like a pilot. Its **target pick** is a decision: it runs in
+the AI job, one tick behind, on the frozen rows and the frozen attacker memory, and is applied at the join against the
+turret's stamp. Its **aim, fire gate and shot** write a bolt row the same tick, so they run in the weapon rows' step on the
+main thread. The **attacker memory** is updated on the main thread from the hit sweep's results in the sweep's order. A
+shot's spread is a hash of the turret's id and the tick. M5's civilians carry one or two turrets each, under the parallel
+threshold; a turret pass with its own measured threshold waits for M12's capitals.
 
 ### Maintainer directive (2026-11-04): Gaussian splats dropped
 
@@ -335,23 +367,25 @@ removed or converted when M5 rebases onto `main` after M4.
 
 ### D61 Defensive turrets (Q14)
 
-- A turret is a gunner, not a pilot: the ship's `AiPilot` keeps flying (a civilian runs) while its turrets pick their own
-  targets. `TurretAim` (pure): traverse and elevation limits from the mount's arc, slew rates, lead from `InterceptMath`,
-  a fire gate (inside the arc, inside range, the lead error under the bolt's spread at that range). `ThreatMemory`
-  (pure): a ship becomes an attacker of a victim when one of its bolts hits that victim (`HitResolver`'s results, shooter
-  and victim) and stays one for 30 s; a turret may fire only at an attacker of its own ship, or of a civilian or ally
-  within 2 km of it. Both are unit-tested.
+- A turret is a gunner, not a pilot: the ship's brain keeps flying (a civilian runs) while its turrets pick their own
+  targets. **Native (2026-11-07, Q28):** the turret is a row in the core's weapon rows, extending M4-T20's turret kernels
+  (`native/src/weapon_kernels.rs`, `weapon_rows.rs`) from stand-ins to mounts. The aim kernel: traverse and elevation
+  limits from the mount's arc, slew rates, lead by the same intercept maths as the brains; the fire gate: inside the arc,
+  inside range, the lead error under the bolt's spread at that range. The attacker memory: a ship becomes an attacker of
+  a victim when one of its bolts hits that victim (the hit sweep's shooter and victim) and stays one for 30 s; a turret
+  may fire only at an attacker of its own ship, or of a civilian or ally within 2 km of it. The split between the AI job
+  and the main thread is in "M5 on the native core". Rust unit tests for each kernel, GUT tests through the core.
 - `hardpoints.json` `turrets[]`: `{name, position, up, arc_deg, barrel_m}` in the body frame. `TurretMount` (node, child
-  of the ship, built by `ShipAssembly`) holds the turret's model, turns it in `_process` from the physics-tick aim, and
-  fires through the existing kinematic projectile pool and `HitResolver` (no new hit path). A generated `turret_fire`
+  of the ship, built by `ShipAssembly`) holds the turret's model and only turns it in `_process` from the row's aim; the
+  shot is a bolt row in the core and goes through the native hit sweep (no new hit path, no projectile node). A generated `turret_fire`
   sound, built like D60's guns but lighter.
 - Strength (Q14, deterrent): a light bolt, low fire rate, about 1.5 km range. A seeded headless fight pins the balance:
   two raiders destroy a lone Saturn 4 transport within 180 s in at least two of three seeds, and the transport's turrets
   finish a raider left at 15 % hull that keeps attacking it.
 - The seam is general: any ship with `turrets[]` gets them (M12's capital ships). Targeting and the fire gate cost work
   linear in turrets times attackers, never a sweep over all ships (`ThreatMemory` keeps the short attacker list).
-- Visuals: the turret model is a small splat (pooled with its ship, D22). If turning many small splat nodes each frame
-  costs measurable GPU or sort time, the task falls back to the fallback-mesh model for turrets and says so.
+- Visuals: the turret model is a small textured mesh (T27), pooled with its ship (D22); its turn is part of the frame's
+  per-ship pass (M4-T36's `FramePasses`), not a `_process` per turret.
 
 ### D60 The sound pass
 
@@ -386,12 +420,12 @@ removed or converted when M5 rebases onto `main` after M4.
 | AC10 | Buoy defence: starts from the menu with its cinematic intro, runs to success and to failure (buoy destroyed; player destroyed) in headless tests driven by console commands, and ends in the debrief; it is set on a ring of 16 buoys, 20 000 km in radius, that broadcast to 10 000 km, with at least two buoys in broadcast range anywhere on or near the ring (Q21, test) | A | |
 | AC11 | Civilian references: each of the nine ships described (the Saturn 4 tanker from the Saturn parts, Q16; the Bokmai, Q17) in `docs/design-references.md` with the lengths from Q8, Q11, Q16 and Q17, from orthographic views and cross-sections of its STL; every ship's colour scheme written from online images (Q11) with the sources listed; nothing from the STL files or the images is in git | A | |
 | AC12 | Civilian generators: nine hulls from five generators meet the output contract (LOD0-3 PLYs and lighting records, fallback mesh, hardpoints with pods, RCS, collision, cockpit camera, chase anchor, running lights, chunks; the Bokmai's pod model and `cargo_pods[]`); Python tests for budgets, frames, symmetry where the design has it, chunk partition, collision coverage and determinism; every PLY imports in Godot with the manifest's count | A | |
-| AC13 | Civilian ships in the game: each flies through `FlightModel` with zero damping (the damping guard covers it), turns by torque only, flees raiders on the `civilian` profile, towards the nearest ship of its own faction (behind it from the threat when it is military) and in a group with other fleeing civilians, and sets same-faction civilians within its sensor range fleeing too (Q24, Q25), takes hull damage, breaks into its chunks, shows running lights and switches LOD; a Bokmai flies with 0-3 cargo pods and sheds them when destroyed; raiders attack them through faction data; on the maintainer's GPU all nine in view at once run with `splat_backend = compute`, FPS and VRAM recorded by the agent | A | |
+| AC13 | Civilian ships in the game: each flies through `FlightModel` with zero damping (the damping guard covers it), turns by torque only, flees raiders on the `civilian` profile, towards the nearest ship of its own faction (behind it from the threat when it is military) and in a group with other fleeing civilians, and sets same-faction civilians within its sensor range fleeing too (Q24, Q25), takes hull damage, breaks into its chunks, shows running lights and switches LOD; a Bokmai flies with 0-3 cargo pods and sheds them when destroyed; raiders attack them through faction data; on the maintainer's GPU all nine in view at once run with `renderer = forward_plus`, FPS, draw calls and VRAM recorded by the agent | A | |
 | AC14 | Encounters: `EncounterPlan` is deterministic per seed (test); raids, patrols and traffic spawn 6-12 km out from pools and are released past 30 km; raiders sent at a civilian attack it and allies engage them; `encounter_max_ships` holds; encounters off leaves free flight empty; `encounters` provider and an `encounter <kind>` command to force one | A | |
 | AC15 | Sounds: generator tests pin the new guns' shape (length, flat hold, constant pitch, energy band after the 0.25 register, inharmonic partials), the impact's length and band, and the engine bursts' band (no energy to speak of below 300 Hz); voices sit at the nozzles; the voice cap holds and the per-frame update is linear in voices (work count); the old loops are gone | A | |
 | AC16 | Cost: M5 adds nothing measurable to AC13 of M3 (the paired 13-ship AI budget still passes, `test_ai_think_time`); the mission runner with 20 triggers and the encounter director stay inside their work counts | A | |
 | AC17 | Docs and the suite: `docs/architecture.md` §18 as built, a `docs/playtest.md` M5 section (how to start, menus, mission, comms menu, encounters, new settings and commands), the roadmap row; `scripts/run_tests.sh` green **once, at the end** (Q10), read from the suite's own totals | A | |
-| AC19 | Defensive turrets (D61): `TurretAim` and `ThreatMemory` unit-tested; civilians fire only at attackers of themselves or of a civilian or ally within 2 km; they keep running while firing; turret bolts go through the projectile pool and `HitResolver`; the seeded balance fight holds (two raiders beat a lone Saturn 4 in at least two of three seeds; its turrets finish a 15 % raider that keeps attacking); `turret_fire` sound | A | |
+| AC19 | Defensive turrets (D61): the native turret kernels (aim, fire gate, target pick) and the attacker memory unit-tested in Rust and through GUT, identical with 1 and 6 threads and between `sim_step` threaded and `delayed`; civilians fire only at attackers of themselves or of a civilian or ally within 2 km; they keep running while firing; turret bolts go through the projectile pool and `HitResolver`; the seeded balance fight holds (two raiders beat a lone Saturn 4 in at least two of three seeds; its turrets finish a 15 % raider that keeps attacking); `turret_fire` sound | A | |
 | AC20 | Fidelity (Q18): every civilian model's top, side and front silhouettes overlap its STL's by at least 90 % (intersection over union) and its length, width and height are within 10 %, Q16's deliberate departures scored part by part against the model each part was built from; measured on the model's geometry (its fallback mesh) by `tools/refview` compare, with the LOD0 splats covering at least 95 % of their own mesh's silhouette and lying at least 95 % within a one-spacing band of it, and unit tests that pin the tool's calibration; each model's scores recorded in `docs/assets-civilian.md` | A | |
 | AC18 | (H) The maintainer plays it: menus feel right on the pad, the mission's pacing and lines, the cinematic, the civilian ships' look, the new guns, impacts and engines by ear | H | |
 
@@ -400,7 +434,8 @@ removed or converted when M5 rebases onto `main` after M4.
 - **Tracks.** The maintainer allowed parallel agents for M5 (Q10), so four tracks can run at the same time: A (flow and front end), B (missions), C (civilian ships and
   encounters), D (sound). Inside a track the order holds. Track C's reference and generator tasks (T11-T15) are Python and run beside
   anything; the Godot tasks of every track share one machine, so they follow the locks below. If work has to go one task at
-  a time, the order is T01, T02, T05, T06, T08, T09, T07, T10, T03, T04, T11, T23, T12-T15, T22, T21, T16, T17, T18, T19, T20.
+  a time, the order is T01, T02, T05, T06, T08, T09, T07, T10, T03, T04, T11, T23, T12-T15, T22, T26, T27, T21, T16, T28, T17,
+  T18, T19, T20.
 - **One working copy.** All M5 work happens in the `m5` worktree (`.claude/worktrees/m5`) on branch `m5`; no task
   branches, no worktrees per agent (the maintainer's rule from M4). Parallel agents keep to their task's files.
 - **Locks.** Every Godot run in the `m5` worktree goes through `flock /tmp/m5-godot.lock <command>` (one Godot process at a
@@ -447,8 +482,11 @@ whose trigger never arose). Update the column with each task's commit.
 | T14 | C | `narn_transport` generator and the `narn` style | T11, T23 | Opus | Geometry and a new style | done |
 | T15 | C | `centauri_brezebel` generator and the `centauri` style | T11, T23 | Opus | Geometry and a new style | done |
 | T22 | C | Brakiri Bokmai: references, generator with removable pods, the `brakiri` style (placed here in the order; numbered last because it was added during the build, Q17) | T11, T23 | Opus | A new reference read end to end, modular cargo, a new style | done |
-| T21 | C | Defensive turrets (placed here in the order; numbered last because it was added after the others had numbers) | T12, T13, T14, T15, T22, T19 | Opus | A new gunner seam with a balance test | not started |
-| T16 | C | Civilian ships in the game | T12, T13, T14, T15, T22, T21 | Opus | Specs for heavy hulls, factions, pools, AI, GPU check | not started |
+| T26 | - | Merge `main` (M4 through T22, the native core) into `m5` (Q27): the conflicts, M5's splat code off, engine voices on M4's frame passes, the focused suites green | - | Opus | Every later C task builds on the core; a two-milestone merge | in progress |
+| T27 | C | The civilian generators on the textured-mesh pipeline: `core/civilian.py` and the five generators write M4's textured `.glb` (UV atlas, colour, normal, roughness and metal, emissive) from show-reference schemes instead of splats; fidelity (AC20) re-scored on the mesh | T26 | Opus | Five generators and their tests move from splat levels to mesh levels; the paint is a look call | not started |
+| T21 | C | Defensive turrets in the native core (Q28): mounts, aim, the fire gate and the attacker memory as weapon rows (placed here in the order; numbered last because it was added after the others had numbers) | T27, T19 | Opus | A native gunner seam under the threading rules, with a balance test | not started |
+| T16 | C | Civilian ships in the game: data and assembly in GDScript, the big-hull kind, avoidance and tier in the native core | T27, T21 | Opus | Specs for heavy hulls, factions, pools, native AI fixes, GPU check | not started |
+| T28 | D | Engine voices on the core's rows: the 4 Hz re-rank asks the core for the ships near the listener instead of walking every ship | T26, T16 | Sonnet | A small native query; the re-rank stops growing with ship count | not started |
 | T17 | C | Free-flight encounters | T16, T02 | Opus | Seeded director under a CPU cap | not started |
 | T18 | D | New guns and impacts | - | Opus | Synthesis to measured shapes | done |
 | T19 | D | Per-thruster engine bursts | T18 | Opus | Voice placement and a voice budget | done |
@@ -463,6 +501,10 @@ whose trigger never arose). Update the column with each task's commit.
   (maintainer answers in Q22, then the generator) and T12 (fix round to reach 0.90, the Saturn 3 pods exempt by Q23,
   a full review). `docs/handoff-m5-civilians.md` has the state, the open questions and the rules for two
   machines on `m5`. T21 and T16 wait for them.
+
+**Progress (2026-11-07).** `main` merged into `m5` (T26, Q27). The civilian generators are out of the asset registry and
+their Python tests skip until T27 moves them onto the textured-mesh pipeline (`main` removed the splat writers they call).
+T21, T16 and T28 are re-planned on the native core ("M5 on the native core", below).
 
 ### M5-T01 `Game` flow, boot routing and loading
 
@@ -1073,29 +1115,105 @@ whose trigger never arose). Update the column with each task's commit.
     its two strips, the lamp and joint pinned by tests, docs as built. Approved. Open (H): the turrets standing out of
     the insets (painted, not recessed), the olive frame against the pale pods on the GPU (T16).
 
-### M5-T21 Defensive turrets
+### M5-T26 Merge `main` into `m5` (Q27)
 
-- **Goal:** AC19 (D61, Q14). In the order it comes after T22 and before T16.
-- **Files:** `src/combat/turret_aim.gd` (pure), `src/combat/threat_memory.gd` (pure), `src/combat/turret_mount.gd` (node),
-  `src/game/ship_assembly.gd` (build mounts from `turrets[]`), the `Hardpoints` parser (`turrets[]`, optional),
-  `tools/procgen/assets/sfx_combat.py` (`turret_fire`; after T19, which also edits that file), a turret `WeaponSpec`,
-  `tests/unit/test_turret_aim.gd`, `test_threat_memory.gd`, `tests/integration/test_turret_defence.gd` (the balance fight).
-- **Notes:** the generators of T12-T15 and T22 emit `turrets[]` and the turret model; if one of them landed without them, add
-  them here. `HitResolver` is read through its existing results signal; do not change M4's files. Civilians are the only
-  ships with turrets in M5.
+- **Goal:** `m5` on M4's native core (`main` at `095c73d`, M4 through T22 and T41), so the C-track tasks build on it.
+- **Files:** the 14 conflicted files (architecture §17 before §18, the roadmap, `info.md`, `project.godot`'s autoloads,
+  `run_tests.sh`'s provider lists, `settings_schema.gd` and its test, `audio_director.gd`, `main.gd`, the procgen README
+  and registry, `glb.py`, third-party), M5's splat references (`test_mission_runner`, `test_settings_menu_model`), the
+  menu metadata (`category`, `label`, `step`, `menu`) for every setting M4 added, the civilian generators out of the
+  asset registry with their Python tests skipped for T27.
+- **Notes:** a merge, not a rebase (Q27). M5's engine voices (T19) take the ships' `shot_fired` signal and must still be
+  granted for the flight batch's ships, which no longer tick themselves (M4-T35, T36). On `oscar` (Q29) only the focused
+  suites run: no `GUT_SLOW`, no bench.
+- **Done when:** the Python suite and the GUT files M5 touched, `test_console_command_list`, `test_settings_schema`,
+  `test_engine_audio`, `test_mission_runner` and the M4 parity files the merge touched pass on the native library; the
+  merge is pushed.
+- **Done (as built, 2026-11-07, on `oscar`):**
+  - **Merge.** `main` at `095c73d` into `m5`; 14 conflicts. §17 sits before §18 in the architecture; the roadmap keeps M4's
+    rows and M5's own; `info.md` keeps M5's layout (its guard test parses it) with M4's commands and providers added and the
+    splat ones (`fallback`, `relight`, `lod`) gone, plus `dialog` (T06's provider, never listed); `project.godot` has both
+    `Game` and `FramePassesNode`; `run_tests.sh` keeps M5's smoke runs and M4's bench smoke run, `game` in M4's provider
+    lists. `glb.py` is M4's (a superset of M5's copy). Pillow stays for `tools/refview` only.
+  - **Settings.** The splat settings went with M4; every setting M4 added has menu metadata: anti-aliasing, upscaler,
+    render resolution, FSR sharpness and ambient light in the Graphics menu, the `perf_*`, AI, tier and step settings
+    console-only. The menu's task-id stripper also takes `(M4-T30a, live)` forms.
+  - **Code.** `JumpArrival` uses `LightRig` (M4's name for `SplatLightRig`). Engine voices take `shot_fired` (both bolt
+    paths) with M5's per-shot gain. Two tests lost their splat references: the mission runner's arrival test counts
+    `Ship` nodes and attaches the shared far-dot multimesh first (M4-T11 makes it on first use); the menu-model test groups
+    thousands on `engine_voice_cap`.
+  - **Civilians off until T27.** `main` removed `core/ply.py`, `core/lighting.py` and `core/frames.py`, which the civilian
+    pipeline calls, so the five generators are out of the asset registry and their five Python test files raise
+    `SkipTest` naming T27. `test_splat_import.gd` went with `main`.
+  - **Assets.** `assets/generated/` rebuilt with `main`'s generators (the textured Starfury, raider, buoy, station, capitals
+    and the star-point sky).
+  - **Tests (oscar, Q29: no bench, no `GUT_SLOW`).** `check_scripts`: 556 scripts compile. GUT, every file M5 added or
+    changed plus `test_main_scene`, `test_sim_core` and `test_flight_model`: all pass except four failures that the
+    pre-merge commit `8796bf0` shows too (checked in a throwaway worktree with its own assets): `test_controls_screen` 3
+    (T04's Save-as walk) and the mission runner's 37-trigger count and `test_mission_skip`'s played run (T06's timed `say`
+    holds the step longer than the tests wait). Those stay with T04 and T06. `run_tests.sh` was not run here (its bench
+    smoke run is a many-ship scenario, Q29); the full run is T20's.
+
+### M5-T27 The civilian generators on the textured-mesh pipeline
+
+- **Goal:** AC12 and AC20 on meshes: the nine hulls (and the Bokmai pod and every turret model) written as M4's textured
+  `.glb` with LODs built at import, chunks as meshes, `hardpoints.json` and the collision primitives unchanged.
+- **Files:** `tools/procgen/core/civilian.py` (the splat writer, levels and `frames`/`lighting` calls replaced by
+  `core/textured_mesh.py`'s `write_textured_mesh`), the five generators, `parts/turret.py`, the styles (paint, markings and
+  wear from the show references, one texture pack per faction: EA civilian, Narn, Centauri, Brakiri), the five Python test
+  files (their splat counts and LOD box rules become the mesh contract's checks), the asset registry, the README,
+  `docs/assets-civilian.md`, a GUT import check for the nine hulls.
+- **Notes:** the geometry (parts, pieces, burial solids) stays; only the output changes. `core/paint_mesh.py` (M5's copy of
+  M4-T27) goes once nothing uses it. Fidelity is re-scored on the textured mesh. The look is (H).
+- **Done when:** AC12 and AC20 on the mesh path; the five generators back in the registry; no splat code left in `tools/`.
+
+### M5-T21 Defensive turrets in the native core
+
+- **Goal:** AC19 (D61, Q14, Q28). In the order it comes after T27 and before T16.
+- **Files:**
+  - Native: `native/src/weapon_kernels.rs` (the mount's aim with arc limits, slew and lead; the fire gate; the attacker
+    filter), `native/src/weapon_rows.rs` (mount rows bound to a ship's row, the attacker memory as columns, the shot as a
+    bolt row), the AI job's turret pick in the core's worker step with its stamp (`native/src/sim_core.rs` and the step's
+    join), Rust unit tests beside each kernel.
+  - GDScript: `src/combat/turret_mount.gd` (node: the model and its turn from the row, through the frame pass), the facade
+    that binds mounts to rows (beside `src/perf/native_weapons.gd`), `src/game/ship_assembly.gd` (mounts from `turrets[]`),
+    the `Hardpoints` parser (`turrets[]`, optional), a turret `WeaponSpec`, `tools/procgen/assets/sfx_combat.py`
+    (`turret_fire`).
+  - Tests: `tests/unit/test_turret_kernel.gd` (aim, gate, pick and memory through the core on seeded scenes),
+    `tests/integration/test_turret_threads.gd` (1 against 6 threads and `threaded` against `delayed`, byte for byte),
+    `tests/integration/test_turret_defence.gd` (the balance fight: two raiders and a Saturn 4, headless, three seeds).
+- **Threads:** as "M5 on the native core" says: the pick in the AI job one tick behind, applied at the join against the
+  turret's stamp; aim, gate and shot on the main thread in the weapon rows' step; the memory written on the main thread in
+  the sweep's order; spread from a hash of turret id and tick. No GDScript per tick per turret.
+- **Notes:** extends M4-T20's kernels; T37 (Q28) may reshape the same files on `m4`, and its overlap is resolved at the next
+  merge of `main`. No GDScript fallback (`CLAUDE.md`). Civilians are the only ships with turrets in M5; the seam is general
+  (M12's capitals).
 - **Done when:** AC19.
 
 ### M5-T16 Civilian ships in the game
 
 - **Goal:** AC13 (D58 factions, D59).
-- **Files:** `data/factions.json` (`narn`, `centauri`, `brakiri`, the relations; civilians are a role, Q24), `src/game/ship_catalog.gd`
-  (nine types),
-  `assets/specs/` or wherever `ShipSpec` resources live (one per hull: mass, thrust, inertia, limits), the pools and
-  `LodSwitcher` entries, running lights, `DestructionDirector` chunk sets, `data/scenarios/civilian_showcase.json` (all nine
-  parked in view, a Bokmai with three pods and one with none, for the GPU check and the maintainer), `tests/integration/test_civilian_ships.gd`.
-- **Notes:** check that `PilotSteering` and avoidance cope with a 200 m hull that turns slowly (radius from the collision
-  shapes); if a fix is needed in the AI, keep it outside M4's files or list it. GPU check per `CLAUDE.md`: windowed run of
-  `civilian_showcase`, `state render`, VRAM from `/sys/class/drm/card1/device/mem_info_vram_used`.
+- **Files:**
+  - GDScript: `data/factions.json` (`narn`, `centauri`, `brakiri`, the relations; civilians are a role, not a faction,
+    Q24), `src/game/ship_catalog.gd` (nine types), a `ShipSpec` per hull (mass, thrust, inertia, limits), the pools,
+    running lights, `DestructionDirector` chunk sets, the Bokmai's pods in `ShipAssembly`,
+    `data/scenarios/civilian_showcase.json` (all nine parked in view, a Bokmai with three pods and one with none),
+    `tests/integration/test_civilian_ships.gd`.
+  - Native, the brains (`native/src/brain_behaviours.rs`, run in the AI job one tick behind): the fleeing of Q24 and Q25 as
+    behaviour, not GDScript: run from the threat towards the nearest ship of the civilian's own faction, of any kind, and
+    for a military one aim for its far side from the threat; close up with other fleeing civilians of the same faction;
+    panic spreads to same-faction civilians within about radar range of a fleeing one. Each reads the frozen rows (faction,
+    kind, role, position), so it costs work linear in the ship's nearest contacts, never a sweep over all ships.
+  - Native, the core: the body kind (or role column) for a big non-combat hull in the registry, so the brains' targeting,
+    the raiders' picks and the turrets see a 200 m freighter for what it is, not as a fighter or a capital; the avoidance
+    radius from the hull's collision bounds for slow 200 m hulls; the low-attention tier's promotion and demotion of those
+    hulls (M4-T21 handles fighters and capitals).
+  - Tests: Rust tests for each new behaviour and column, GUT tests through the core on seeded scenes (flee target, shelter
+    side, panic radius, grouping), 1 against 6 threads and `threaded` against `delayed` byte for byte, and the brains'
+    recorded-reference parity tests (`tests/fixtures/`) green for every ship that is not a civilian.
+- **Notes:** the civilians fly through the native brains already; no new GDScript AI. The GPU check (`civilian_showcase`,
+  `state render`, VRAM from `/sys/class/drm/card1/device/mem_info_vram_used`) runs on the maintainer's machine; on `oscar`
+  a small showcase may run with its numbers labelled (Q29).
 - **Bokmai pods (Q17, D59):** `ShipAssembly` builds a pod at each `cargo_pods[]` mount up to the spawn's `cargo_pods`
   count (0-3, default 3), pooled with the ship (D22); a pod adds its mass and collision shape and switches LOD with the
   hull; when the ship breaks up its pods drift off as debris. A test spawns Bokmais with 3 and 0 pods and checks mass,
@@ -1113,6 +1231,15 @@ whose trigger never arose). Update the column with each task's commit.
   not; two attacked freighters end closer together than they started.
 - **Done when:** AC13.
 
+### M5-T28 Engine voices on the core's rows
+
+- **Goal:** AC16's audio clause at any ship count: `EngineVoices`' 4 Hz re-rank stops walking every ship.
+- **Files:** a native query for the rows within a radius of a point, nearest first (beside the registry's nearest-k),
+  `src/audio/audio_director.gd` and `src/audio/engine_voices.gd` (rank from the query's rows), `tests/unit/test_engine_voices.gd`,
+  `tests/integration/test_engine_audio.gd` (a work count: the re-rank's units grow with the ships in range, not in play).
+- **Notes:** reads the rows the main thread already has, never the worker's in-flight snapshot; audio stays in `_process`.
+- **Done when:** the work-count test and the existing engine-voice tests pass.
+
 ### M5-T17 Free-flight encounters
 
 - **Goal:** AC14 (D58).
@@ -1121,6 +1248,8 @@ whose trigger never arose). Update the column with each task's commit.
   (`encounters`, `encounter_interval_s`, `encounter_max_ships`), `src/game/main.gd` (create the director in free flight when
   encounters are on), `tests/unit/test_encounter_plan.gd`, `tests/integration/test_encounters.gd`.
 - **Notes:** the pools add load time to free flight; record it. Run M3's `test_ai_think_time` before and after.
+  `EncounterPlan`'s draws are hashes of the session seed and the event index (`CLAUDE.md`: no shared or stepped RNG), so
+  an event's draw does not depend on how many came before it was asked for.
 - **Done when:** AC14 and AC16's encounter clause.
 
 ### M5-T18 New guns and impacts

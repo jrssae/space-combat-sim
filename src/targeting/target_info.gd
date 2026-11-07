@@ -24,10 +24,14 @@ var damage_zones: PackedFloat32Array = PackedFloat32Array()
 ## The target's broadcast range (`Targetable.broadcast_range_m`, M3-T17), m: 0 for none, `INF` for everywhere.
 var broadcast_range_m: float = 0.0
 
+## How many have been built in this process (M4-T02): a work count for tests and profiling, never gameplay.
+static var built_count: int = 0
+
 
 func _init(p_id: int = 0, p_display_name: String = "", p_faction: StringName = &"neutral",
 		p_position: Vector3 = Vector3.ZERO, p_velocity: Vector3 = Vector3.ZERO, p_hull_fraction: float = -1.0,
 		p_bounding_radius: float = 0.0) -> void:
+	built_count += 1
 	id = p_id
 	display_name = p_display_name
 	faction = p_faction

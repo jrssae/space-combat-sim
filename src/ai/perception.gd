@@ -46,6 +46,9 @@ var contacts: Array[Contact] = []
 ## range (buoys 1 000 km, allies 100 km). Avoidance and the fire lane never read it, and behaviours chase it only for a pilot
 ## objective (`AiContext.objective_name`). Shared: read, never write.
 var broadcasts: Array[Contact] = _no_broadcasts
+## The nearest rocks and mines within the sensor range (`ai_nearest_static_k`, M4-T09): obstacles avoidance steers round,
+## never contacts. Shared: read, never write.
+var statics: Array[Contact] = []
 ## Hostile bolts that will pass within `ContactScan.INCOMING_MISS_M` (15 m) in the next `ContactScan.INCOMING_HORIZON_S` (2 s).
 var incoming_fire: int = 0
 ## Sim time of the latest hit this hull took (a bolt or anything else `Damageable.hit_taken` reports), -INF when none yet.
@@ -56,6 +59,29 @@ var last_bolt_hit_s: float = -INF
 var last_attacker_id: int = 0
 ## `settings.friendly_fire` this tick: bolts then hurt every hull but the shooter's (`FireLane`).
 var friendly_fire: bool = false
+## The native pilot kernels over the core's rows (M4-T16), null off the core: then `AvoidanceMath`, `FireLane` and
+## `AiContext` answer in GDScript. With them, the core row of each of `contacts` and `statics` (in the lists' order) and
+## this ship's `Factions.Relation` to each faction of the core's table.
+var kernels: Object = null
+var contact_rows: PackedInt32Array = PackedInt32Array()
+var static_rows: PackedInt32Array = PackedInt32Array()
+var relation_row: PackedByteArray = PackedByteArray()
+## The native brain host (M4-T17, `ScsBrains`), null off the core: with it an `AiPilot` thinks natively, picking its own
+## contacts from the rows, so `contacts`, `statics`, `broadcasts` and `incoming_fire` are left empty by the driver. The
+## fields below give the native think what the driver would otherwise pick or compute: the ship's body id, its selection
+## (0 for none), where the bolts leave in the ship's frame, its hull's bounding radius and the avoidance tie-break
+## (`hash(display_name)`).
+var brains: Object = null
+var own_body_id: int = 0
+var selected_id: int = 0
+var muzzle_local: Vector3 = Vector3.ZERO
+var bounding_radius: float = 0.0
+var tie_hash: int = 0
+
+
+## Whether the kernels can answer for this perception: they are there and the rows line up with the lists.
+func on_rows() -> bool:
+	return kernels != null and contact_rows.size() == contacts.size() and static_rows.size() == statics.size()
 
 
 ## Forward unit vector (the nose, -Z).

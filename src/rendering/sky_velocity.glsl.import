@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://hbhrnnrefjod"
+path="res://.godot/imported/sky_velocity.glsl-d225d32e96c70930fcf2ce276665dd08.res"
+
+[deps]
+
+source_file="res://src/rendering/sky_velocity.glsl"
+dest_files=["res://.godot/imported/sky_velocity.glsl-d225d32e96c70930fcf2ce276665dd08.res"]
+
+[params]
+

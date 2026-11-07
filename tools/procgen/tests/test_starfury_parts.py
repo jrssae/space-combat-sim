@@ -115,10 +115,13 @@ class StarfuryPartTests(unittest.TestCase):
         self.assertGreater(float(box.basis[2, 0]), 0.9)  # along the pincer: aft
 
     def test_struts_are_closed_plates_with_hazard_bands_and_a_box_along_the_beam(self) -> None:
+        # Since M4-T30b (Q41) the Starfury's struts carry no hazard bands; the part still paints bands when a spec asks for them.
+        banded = sf.FuryStrutSpec(deck=self.spec.strut.deck, brace=self.spec.strut.brace, bands=((2.3, 2.6, "hazard"),))
+        self.assertIn("ef_hazard", {m.name for m in sf.fury_strut(banded, S).mesh.materials})
         for spec in (self.spec.strut, self.spec.lower_strut):
             strut = sf.fury_strut(spec, S)
             names = {m.name for m in strut.mesh.materials}
-            self.assertIn("ef_hazard", names)
+            self.assertNotIn("ef_hazard", names)
             box = strut.collision[0]
             local = (strut.mesh.vertices - box.center) @ box.basis
             self.assertTrue(np.all(np.abs(local) <= 0.5 * box.size + 1e-6))

@@ -27,7 +27,7 @@ var emitter: LightEmitter = null
 
 var _age_s: float = 0.0
 var _open: bool = false
-var _rig: SplatLightRig = null
+var _rig: LightRig = null
 
 static var _stream: AudioStreamWAV = null
 static var _stream_checked: bool = false
@@ -54,7 +54,7 @@ func open(at: Vector3, p_radius_m: float = 40.0) -> void:
 	_open = true
 	visible = true
 	emitter.omni_range = 6.0 * radius_m
-	_rig = SplatLightRig.of(self)
+	_rig = LightRig.of(self)
 	if _rig != null:
 		_rig.add_emitter(emitter)
 	if sound.stream != null:

@@ -1,12 +1,13 @@
 extends GutTest
-## SpaceEnvironment against the real scene, headless (architecture §3, §7.2, §9.2). There is no GPU here: GDGS finds
-## no RenderingDevice and skips backend selection quietly, so these tests cover wiring and values, not pixels. What
-## the sky and the compositor look like is (H).
+## SpaceEnvironment against the real scene, headless (architecture §3, §7.2, §17.19). There is no GPU here, so these tests cover
+## wiring and values, not pixels. What the sky and the compositor look like is (H).
+##
+## `StarField` draws the stars as points and the nebula is a panorama on the environment's sky (M4-T30c).
 
 const SCENE_PATH: String = "res://src/environment/space_environment.tscn"
 const ENVIRONMENT_DEFAULT_PATH: String = "res://assets/environment/environment_default.tres"
-const GDGS_EFFECT_SCRIPT_PATH: String = "res://addons/gdgs_scs/runtime/compositor/gaussian_compositor_effect.gd"
 const MANIFEST_PATH: String = "res://assets/generated/sky_default/manifest.json"
+const STARS_PATH: String = "res://assets/generated/sky_default/sky_default_stars.f32"
 const PANORAMA_PATH: String = "res://assets/generated/sky_default/sky_default_panorama.png"
 const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tests.sh (it imports first)"
 
@@ -39,17 +40,21 @@ func _read_manifest() -> Dictionary:
 	return {}
 
 
-func _manifest_offset() -> Vector3:
-	var manifest: Dictionary = _read_manifest()
-	assert_true(manifest.has("centroid_offset"), "manifest has centroid_offset (%s)" % GEN_ASSETS_HINT)
-	var parts: Array = manifest.get("centroid_offset", [0.0, 0.0, 0.0])
-	return Vector3(float(parts[0]), float(parts[1]), float(parts[2]))
-
-
 ## One frame has run its `_process` once the second `process_frame` has fired (the signal fires before the nodes').
 func _settle() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
+
+
+func _exec(line: String) -> ConsoleResult:
+	return DebugConsole.registry.execute(line)[0]
+
+
+func _collect(node: Node, out: Array) -> Array:
+	out.append(node)
+	for child: Node in node.get_children():
+		_collect(child, out)
+	return out
 
 
 # --- structure ---------------------------------------------------------------------------------------------------
@@ -59,37 +64,101 @@ func test_scene_instantiates_with_every_part() -> void:
 	assert_not_null(env, "root script is SpaceEnvironment")
 	assert_true(env.world_environment is WorldEnvironment)
 	assert_true(env.key_star is DirectionalLight3D)
-	assert_true(env.sky_splats is GaussianSplatNode)
+	assert_true(env.star_field is StarField)
 	assert_true(env.sky_follower is SkyFollower)
-	assert_eq(env.sky_follower.sky, env.sky_splats, "the follower is wired to SkySplats (node_paths in the .tscn)")
-	assert_true(env.sky_splats.top_level, "the sky ignores its parent's transform")
+	assert_eq(env.sky_follower.sky, env.star_field, "the follower is wired to StarField (node_paths in the .tscn)")
+	assert_true(env.star_field.top_level, "the sky ignores its parent's transform")
 	assert_null(env.get_parent() as WorldFrame, "the environment is not under World: it is camera-relative")
 
 
-func test_sky_splats_load_when_the_asset_is_generated() -> void:
-	var gaussian: GaussianResource = env.sky_splats.gaussian
-	assert_not_null(gaussian, "sky_default.ply imported as a GaussianResource (%s)" % GEN_ASSETS_HINT)
-	if gaussian == null:
+# --- the star field ----------------------------------------------------------------------------------------------
+
+
+func test_the_field_has_one_instance_per_star_in_the_file() -> void:
+	var manifest: Dictionary = _read_manifest()
+	assert_true(manifest.has("star_field"), "manifest has star_field (%s)" % GEN_ASSETS_HINT)
+	if not manifest.has("star_field"):
 		return
-	var lods: Array = _read_manifest().get("lods", [])
-	assert_false(lods.is_empty(), "manifest lists lods")
-	if not lods.is_empty():
-		assert_eq(gaussian.point_count, int((lods[0] as Dictionary)["splats"]), "splat count matches manifest.lods[0]")
+	var count: int = int(manifest["counts"]["stars"])
+	assert_eq(env.star_field.star_count(), count)
+	assert_eq(env.star_field.multimesh.instance_count, count)
+	assert_eq(env.star_field.multimesh.visible_instance_count, -1, "every star drawn")
+	# The records, read here without StarField's parser: direction, colour, brightness.
+	var floats: PackedFloat32Array = FileAccess.get_file_as_bytes(STARS_PATH).to_float32_array()
+	assert_eq(floats.size(), count * 7)
+	for i: int in [0, 1, count / 2, count - 1]:
+		var direction := Vector3(floats[i * 7], floats[i * 7 + 1], floats[i * 7 + 2])
+		assert_almost_eq(direction.length(), 1.0, 1e-4, "star %d has a unit direction" % i)
+		assert_almost_eq(env.star_field.direction_of(i), direction, Vector3.ONE * 1e-4, "star %d points where the file says" % i)
+		var light: Color = env.star_field.light_of(i)
+		assert_almost_eq(light.r, floats[i * 7 + 3] * floats[i * 7 + 6], 1e-3, "star %d: colour times brightness" % i)
+		assert_almost_eq(light.b, floats[i * 7 + 5] * floats[i * 7 + 6], 1e-3)
+
+
+func test_the_field_is_one_draw_of_unshaded_additive_points() -> void:
+	var field: StarField = env.star_field
+	assert_not_null(field.multimesh)
+	assert_eq(field.multimesh.transform_format, MultiMesh.TRANSFORM_3D)
+	assert_true(field.multimesh.use_custom_data, "each star's light is its custom data")
+	assert_true(field.multimesh.mesh is QuadMesh)
+	var material: ShaderMaterial = field.material_override as ShaderMaterial
+	assert_not_null(material)
+	assert_eq(material.shader.resource_path, StarField.SHADER_PATH)
+	assert_eq(field.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+	assert_eq(field.physics_interpolation_mode, Node.PHYSICS_INTERPOLATION_MODE_OFF)
+	var manifest: Dictionary = _read_manifest()
+	if manifest.has("star_field"):
+		assert_almost_eq(float(material.get_shader_parameter(&"radius_rad")), float(manifest["star_field"]["radius_mrad"]) * 0.001, 1e-9)
+		assert_almost_eq(float(material.get_shader_parameter(&"min_radius_px")), float(manifest["star_field"]["floor_px"]), 1e-6)
+
+
+func test_the_nebula_dims_the_stars_behind_it() -> void:
+	# Q42: the star points sample the panorama's alpha (the gas's opacity) in each star's direction.
+	var material: ShaderMaterial = env.star_field.material_override as ShaderMaterial
+	if not env.has_panorama():
+		assert_false(bool(material.get_shader_parameter(&"nebula_occludes")), "no panorama, nothing to dim the stars")
+		return
+	assert_eq(material.get_shader_parameter(&"nebula"), (env.world_environment.environment.sky.sky_material as PanoramaSkyMaterial).panorama)
+	assert_true(bool(material.get_shader_parameter(&"nebula_occludes")))
+	env.show_sky_part(&"nebula", false)
+	assert_false(bool(material.get_shader_parameter(&"nebula_occludes")), "a hidden nebula hides no stars")
+	env.show_sky_part(&"nebula", true)
+	assert_true(bool(material.get_shader_parameter(&"nebula_occludes")))
+
+
+func test_the_field_loads_without_the_generated_asset() -> void:
+	var field := StarField.new()
+	add_child_autofree(field)
+	assert_false(field.load_file("res://assets/generated/sky_default/no_such_stars.f32", 100, 0.5, 1.0))
+	assert_eq(field.star_count(), 0)
+	assert_push_warning("no_such_stars.f32")
+
+
+func test_a_short_star_file_is_refused() -> void:
+	var path: String = "user://test_star_field_short.f32"
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_buffer(PackedFloat32Array([0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 2.0]).to_byte_array())
+	file.close()
+	var field := StarField.new()
+	add_child_autofree(field)
+	assert_false(field.load_file(path, 2, 0.5, 1.0), "the file holds one record, the manifest says two")
+	assert_eq(field.star_count(), 0)
+	assert_push_warning("records")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
 # --- environment resource ----------------------------------------------------------------------------------------
 
 
-func test_default_environment_is_black_dim_filmic_with_modest_glow() -> void:
+func test_the_environment_shows_the_nebula_panorama_and_keeps_its_look() -> void:
 	var e: Environment = env.world_environment.environment
 	assert_not_null(e)
-	assert_eq(e.resource_path, ENVIRONMENT_DEFAULT_PATH)
-	assert_eq(e.background_mode, Environment.BG_COLOR)
-	assert_eq(e.background_color, Color.BLACK)
+	assert_eq(e.resource_path, ENVIRONMENT_DEFAULT_PATH, "one environment from here on")
 	assert_eq(e.ambient_light_source, Environment.AMBIENT_SOURCE_COLOR)
-	assert_almost_eq(e.ambient_light_color.r, 0.02, 0.0001)
-	assert_almost_eq(e.ambient_light_color.g, 0.02, 0.0001)
-	assert_almost_eq(e.ambient_light_color.b, 0.02, 0.0001)
+	# Since M4-T30a the ambient is `settings.ambient_level` of white, applied at ready (the resource's own dim grey is overwritten).
+	assert_eq(e.ambient_light_color, Color.WHITE)
+	assert_almost_eq(e.ambient_light_energy, float(Settings.get_value(&"ambient_level")), 0.0001)
+	assert_eq(e.reflected_light_source, Environment.REFLECTION_SOURCE_DISABLED, "hulls keep the look they had on the black sky")
 	assert_eq(e.tonemap_mode, Environment.TONE_MAPPER_FILMIC)
 	assert_true(e.glow_enabled)
 	assert_almost_eq(e.glow_intensity, 0.4, 0.0001)
@@ -97,61 +166,50 @@ func test_default_environment_is_black_dim_filmic_with_modest_glow() -> void:
 	assert_false(e.fog_enabled)
 	assert_false(e.ssao_enabled)
 	assert_false(e.ssr_enabled)
-	assert_null(e.sky, "the default sky is the splats, not a Sky resource")
+	if not ResourceLoader.exists(PANORAMA_PATH):
+		pending("sky_default_panorama.png not generated (%s)" % GEN_ASSETS_HINT)
+		return
+	assert_eq(e.background_mode, Environment.BG_SKY)
+	assert_not_null(e.sky)
+	assert_true(e.sky.sky_material is PanoramaSkyMaterial)
+	var panorama: Texture2D = (e.sky.sky_material as PanoramaSkyMaterial).panorama
+	assert_not_null(panorama)
+	assert_eq(panorama.resource_path, PANORAMA_PATH)
+	assert_eq(panorama.get_width(), 4096)
+	assert_eq(panorama.get_height(), 2048)
+	assert_true(env.has_panorama())
 
 
-# --- GDGS compositor ---------------------------------------------------------------------------------------------
+func test_the_environment_loads_with_no_generated_sky() -> void:
+	var bare: SpaceEnvironment = _instantiate()
+	bare.sky_dir = "res://assets/generated/no_such_sky"
+	add_child_autofree(bare)
+	assert_eq(bare.star_field.star_count(), 0, "no stars")
+	assert_false(bare.has_panorama())
+	var e: Environment = bare.world_environment.environment
+	assert_eq(e.background_mode, Environment.BG_COLOR, "a black sky instead")
+	assert_eq(e.background_color, Color.BLACK)
+	assert_push_warning("gen_assets.sh")
+	assert_false(bool((bare.star_field.material_override as ShaderMaterial).get_shader_parameter(&"nebula_occludes")))
+	var result: ConsoleResult = _exec("sky nebula on")
+	assert_true(result.ok)
+	assert_string_contains("\n".join(result.lines), "missing", "the command says there is no nebula to show")
+	var state: String = "\n".join(_exec("state sky").lines)
+	assert_string_contains(state, "nebula_shown = false")
+	# The shared resource is the real environment's too: give it its panorama back.
+	env._load_sky()
 
 
-func test_compositor_holds_the_gdgs_effect_first_then_blur_and_flare() -> void:
+# --- the compositor -----------------------------------------------------------------------------------------------
+
+
+func test_compositor_holds_the_sky_vectors_the_blur_then_the_flare() -> void:
 	var compositor: Compositor = env.world_environment.compositor
 	assert_not_null(compositor)
-	assert_eq(compositor.compositor_effects.size(), 3, "GDGS, motion blur, lens flare (M3-T25)")
-	assert_true(compositor.compositor_effects[0] is GaussianCompositorEffect, "GDGS composites the splats first")
-	assert_true(compositor.compositor_effects[1] is MotionBlurEffect, "then the blur smears stars and hulls together")
+	assert_eq(compositor.compositor_effects.size(), 3, "sky motion vectors (M4-T38), motion blur, lens flare (M3-T25)")
+	assert_true(compositor.compositor_effects[0] is SkyVelocityEffect, "the sky's vectors are written before TAA reads them")
+	assert_true(compositor.compositor_effects[1] is MotionBlurEffect, "the blur smears stars and hulls together")
 	assert_true(compositor.compositor_effects[2] is LensFlareEffect, "the flare goes on last, so it is never smeared")
-	var effect: GaussianCompositorEffect = env.get_gaussian_effect()
-	assert_not_null(effect, "the effect is a GaussianCompositorEffect")
-	assert_eq((effect.get_script() as Script).resource_path, GDGS_EFFECT_SCRIPT_PATH)
-	assert_eq(effect.effect_callback_type, CompositorEffect.EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT, "splats go before transparent meshes (§7.2)")
-	assert_true(effect.access_resolved_depth, "the depth test needs resolved scene depth")
-	assert_true(effect.enabled)
-
-
-func test_defaults_match_the_gdgs_defaults() -> void:
-	var effect: GaussianCompositorEffect = env.get_gaussian_effect()
-	assert_almost_eq(env.depth_bias, 0.05, 0.0001)
-	assert_almost_eq(env.depth_test_min_alpha, 0.05, 0.0001)
-	assert_almost_eq(effect.depth_bias, env.depth_bias, 0.0001)
-	assert_almost_eq(effect.depth_test_min_alpha, env.depth_test_min_alpha, 0.0001)
-
-
-func test_root_exports_drive_the_effect() -> void:
-	var effect: GaussianCompositorEffect = env.get_gaussian_effect()
-	env.depth_bias = 0.2
-	assert_almost_eq(effect.depth_bias, 0.2, 0.0001)
-	env.depth_test_min_alpha = 0.125
-	assert_almost_eq(effect.depth_test_min_alpha, 0.125, 0.0001)
-	assert_almost_eq(effect.depth_bias, 0.2, 0.0001, "the other tunable is untouched")
-
-
-func test_exports_set_before_entering_the_tree_are_applied_at_ready() -> void:
-	var tuned: SpaceEnvironment = _instantiate()
-	tuned.depth_bias = 0.3
-	tuned.depth_test_min_alpha = 0.4
-	add_child_autofree(tuned)
-	var effect: GaussianCompositorEffect = tuned.get_gaussian_effect()
-	assert_almost_eq(effect.depth_bias, 0.3, 0.0001)
-	assert_almost_eq(effect.depth_test_min_alpha, 0.4, 0.0001)
-
-
-func test_a_new_instance_reapplies_its_own_values_to_the_shared_effect() -> void:
-	# The Compositor sub-resource lives in the cached PackedScene, so instances share it; each instance's _ready
-	# must therefore push its own exports rather than trust what it finds on the effect.
-	env.depth_bias = 0.9
-	var fresh: SpaceEnvironment = _instantiate()
-	add_child_autofree(fresh)
-	assert_almost_eq(fresh.get_gaussian_effect().depth_bias, 0.05, 0.0001)
 
 
 # --- key light ---------------------------------------------------------------------------------------------------
@@ -172,11 +230,6 @@ func test_key_star_is_a_warm_light_from_front_left_above() -> void:
 # --- sky follower ------------------------------------------------------------------------------------------------
 
 
-func test_sky_origin_adds_the_offset() -> void:
-	assert_eq(SkyFollower.sky_origin(Vector3(1, 2, 3), Vector3(10, 20, 30)), Vector3(11, 22, 33))
-	assert_eq(SkyFollower.sky_origin(Vector3(1, 2, 3), Vector3.ZERO), Vector3(1, 2, 3))
-
-
 func test_follower_runs_late_in_both_loops() -> void:
 	assert_gt(env.sky_follower.process_priority, 0, "after the camera rig's _process")
 	assert_gt(env.sky_follower.process_physics_priority, 0, "after a rebase made in the physics tick")
@@ -184,153 +237,84 @@ func test_follower_runs_late_in_both_loops() -> void:
 	assert_true(env.sky_follower.is_physics_processing())
 
 
-func test_follower_gets_the_manifest_offset() -> void:
-	var offset: Vector3 = _manifest_offset()
-	assert_almost_eq(env.sky_follower.centroid_offset, offset, Vector3.ONE * 0.001)
-	assert_gt(offset.length(), 100.0, "the generated sky really is one-sided; otherwise this test proves nothing")
-
-
-func test_sky_origin_tracks_the_camera_plus_the_centroid_offset() -> void:
-	var offset: Vector3 = _manifest_offset()
+func test_the_field_sits_on_the_camera() -> void:
 	for camera_position: Vector3 in [Vector3.ZERO, Vector3(1000.0, -250.0, 4000.0), Vector3(-18000.0, 9000.0, -500.0)]:
 		camera.global_position = camera_position
 		await _settle()
-		var expected: Vector3 = camera_position + offset
-		assert_almost_eq(env.sky_splats.global_position, expected, Vector3.ONE * 0.01, "camera at %s" % camera_position)
-		assert_almost_eq(env.sky_splats.global_position - camera.global_position, offset, Vector3.ONE * 0.01, "the node sits at camera + offset, not on the camera")
+		assert_almost_eq(env.star_field.global_position, camera_position, Vector3.ONE * 0.01, "camera at %s" % camera_position)
 
 
 func test_physics_tick_alone_repositions_the_sky() -> void:
-	var offset: Vector3 = _manifest_offset()
 	camera.global_position = Vector3(5000.0, 0.0, -7000.0)
 	# No process frame in between: this is the path a teleport or rebase made in a physics tick relies on.
 	env.sky_follower._physics_process(1.0 / 60.0)
-	assert_almost_eq(env.sky_splats.global_position, camera.global_position + offset, Vector3.ONE * 0.01)
+	assert_almost_eq(env.star_field.global_position, camera.global_position, Vector3.ONE * 0.01)
 
 
 func test_process_alone_repositions_the_sky() -> void:
-	var offset: Vector3 = _manifest_offset()
 	camera.global_position = Vector3(-300.0, 40.0, 25.0)
 	env.sky_follower._process(0.016)
-	assert_almost_eq(env.sky_splats.global_position, camera.global_position + offset, Vector3.ONE * 0.01)
+	assert_almost_eq(env.star_field.global_position, camera.global_position, Vector3.ONE * 0.01)
 
 
 func test_a_large_jump_is_followed_at_once() -> void:
 	# What a World rebase does to the camera: a sudden shift of kilometres.
-	var offset: Vector3 = _manifest_offset()
 	camera.global_position = Vector3(100.0, 0.0, 0.0)
 	await _settle()
 	camera.global_position -= Vector3(15000.0, 0.0, 0.0)
 	env.sky_follower._physics_process(1.0 / 60.0)
-	assert_almost_eq(env.sky_splats.global_position, Vector3(-14900.0, 0.0, 0.0) + offset, Vector3.ONE * 0.01)
+	assert_almost_eq(env.star_field.global_position, Vector3(-14900.0, 0.0, 0.0), Vector3.ONE * 0.01)
 
 
 func test_sky_ignores_camera_rotation() -> void:
 	await _settle()
-	var basis_before: Basis = env.sky_splats.global_transform.basis
+	var basis_before: Basis = env.star_field.global_transform.basis
 	camera.global_position = Vector3(10.0, 20.0, 30.0)
 	camera.rotate_y(deg_to_rad(90.0))
 	camera.rotate_object_local(Vector3.RIGHT, deg_to_rad(35.0))
 	await _settle()
-	assert_true(env.sky_splats.global_transform.basis.is_equal_approx(basis_before), "the sky is fixed in the world; the camera turns inside it")
+	assert_true(env.star_field.global_transform.basis.is_equal_approx(basis_before), "the sky is fixed in the world; the camera turns inside it")
 
 
 func test_without_a_camera_the_sky_stays_put() -> void:
 	camera.global_position = Vector3(10.0, 0.0, 0.0)
 	await _settle()
-	var placed: Vector3 = env.sky_splats.global_position
+	var placed: Vector3 = env.star_field.global_position
 	camera.clear_current()
 	assert_null(get_viewport().get_camera_3d(), "no current camera")
 	camera.global_position = Vector3(99.0, 0.0, 0.0)
 	assert_false(env.sky_follower.follow())
 	await _settle()
-	assert_eq(env.sky_splats.global_position, placed)
+	assert_eq(env.star_field.global_position, placed)
 
 
-func test_star_sphere_is_centred_on_the_camera() -> void:
-	# The whole import chain in one assertion: PLY (re-centred by the generator, flipped to the 3DGS frame), GDGS
-	# (subtracts the mean again, node turned by 180 degrees about Z), SkyFollower (adds the manifest offset). Every
-	# star must then lie 20 km from the camera. Leaving the offset out puts the nearest stars 4.6 km closer and the
-	# farthest 4.6 km further away.
-	var manifest: Dictionary = _read_manifest()
-	var gaussian: GaussianResource = env.sky_splats.gaussian
-	assert_not_null(gaussian, GEN_ASSETS_HINT)
-	if gaussian == null or manifest.is_empty():
+# --- the sky console ---------------------------------------------------------------------------------
+
+
+func test_the_sky_parts_can_be_hidden_and_shown() -> void:
+	env.show_sky_part(&"stars", false)
+	assert_false(env.star_field.visible)
+	env.show_sky_part(&"stars", true)
+	assert_true(env.star_field.visible)
+	if not env.has_panorama():
 		return
-	var star_count: int = int(manifest["counts"]["stars"])
-	var radius: float = float(manifest["sky_radius_m"])
-	camera.global_position = Vector3(-3000.0, 800.0, 1500.0)
-	await _settle()
-	var sky_transform: Transform3D = env.sky_splats.global_transform
-	var offset: Vector3 = _manifest_offset()
-	var uncorrected_transform := Transform3D(sky_transform.basis, camera.global_position)
-	var worst_with_offset: float = 0.0
-	var worst_without_offset: float = 0.0
-	for i: int in star_count:
-		var local: Vector3 = gaussian.xyz[i]
-		worst_with_offset = maxf(worst_with_offset, absf((sky_transform * local - camera.global_position).length() - radius))
-		worst_without_offset = maxf(worst_without_offset, absf((uncorrected_transform * local - camera.global_position).length() - radius))
-	assert_lt(worst_with_offset, 1.0, "every star within 1 m of the sky radius")
-	assert_gt(worst_without_offset, 0.9 * offset.length(), "without the offset the sphere is visibly off-centre")
+	env.show_sky_part(&"nebula", false)
+	assert_eq(env.world_environment.environment.background_mode, Environment.BG_COLOR)
+	env.show_sky_part(&"nebula", true)
+	assert_eq(env.world_environment.environment.background_mode, Environment.BG_SKY)
 
 
-# --- fallback sky ------------------------------------------------------------------------------------------------
-
-
-func test_fallback_sky_swaps_the_environment_and_hides_the_splats() -> void:
-	if not ResourceLoader.exists(PANORAMA_PATH):
-		pending("sky_default_panorama.png not generated (needs Pillow); the missing-panorama path is tested below")
-		return
-	var default_env: Environment = env.world_environment.environment
-	assert_false(env.is_fallback_sky_active())
-	env.use_fallback_sky(true)
-	assert_true(env.is_fallback_sky_active())
-	assert_false(env.sky_splats.visible, "SkySplats hidden")
-	var fallback: Environment = env.world_environment.environment
-	assert_ne(fallback, default_env, "environment swapped")
-	assert_eq(fallback.background_mode, Environment.BG_SKY)
-	assert_not_null(fallback.sky)
-	assert_true(fallback.sky.sky_material is PanoramaSkyMaterial, "PanoramaSkyMaterial")
-	var panorama: Texture2D = (fallback.sky.sky_material as PanoramaSkyMaterial).panorama
-	assert_not_null(panorama, "panorama texture loaded")
-	assert_eq(panorama.resource_path, PANORAMA_PATH)
-	assert_not_null(env.get_gaussian_effect(), "the compositor stays: hull and buoys are still splats")
-	# The panorama environment keeps the tone mapping, glow and ambient source of the default one (and adds ambient fill, below).
-	assert_eq(fallback.tonemap_mode, default_env.tonemap_mode)
-	assert_eq(fallback.ambient_light_source, default_env.ambient_light_source)
-	# Only the ambient level differs: the mesh hull has no baked light, so it needs a fill the splat hull does not.
-	assert_gte(fallback.ambient_light_color.r, default_env.ambient_light_color.r, "the fallback is not darker")
-	assert_eq(fallback.glow_enabled, default_env.glow_enabled)
-	assert_almost_eq(fallback.glow_intensity, default_env.glow_intensity, 0.0001)
-	assert_almost_eq(fallback.glow_hdr_threshold, default_env.glow_hdr_threshold, 0.0001)
-	assert_false(fallback.fog_enabled)
-	assert_false(fallback.ssao_enabled)
-	assert_false(fallback.ssr_enabled)
-
-
-func test_fallback_sky_can_be_switched_off_and_on_repeatedly() -> void:
-	var default_env: Environment = env.world_environment.environment
-	env.use_fallback_sky(true)
-	env.use_fallback_sky(true)
-	env.use_fallback_sky(false)
-	assert_false(env.is_fallback_sky_active())
-	assert_true(env.sky_splats.visible, "SkySplats shown again")
-	assert_eq(env.world_environment.environment, default_env, "the default environment is back")
-	env.use_fallback_sky(false)
-	assert_eq(env.world_environment.environment, default_env)
-	env.use_fallback_sky(true)
-	env.use_fallback_sky(false)
-	assert_eq(env.world_environment.environment, default_env)
-
-
-func test_fallback_sky_without_a_panorama_degrades_without_errors() -> void:
-	var default_env: Environment = env.world_environment.environment
-	env.fallback_panorama_path = "res://assets/generated/sky_default/no_such_panorama.png"
-	env.use_fallback_sky(true)
-	assert_true(env.is_fallback_sky_active())
-	assert_false(env.sky_splats.visible, "the splat sky is still hidden")
-	assert_eq(env.world_environment.environment, default_env, "no panorama to show, so the black environment stays")
-	assert_push_warning("no panorama")
-	env.use_fallback_sky(false)
-	assert_true(env.sky_splats.visible)
-	assert_eq(env.world_environment.environment, default_env)
+func test_the_sky_command_and_provider() -> void:
+	assert_true(_exec("sky stars off").ok)
+	assert_false(env.star_field.visible)
+	assert_true(_exec("sky stars on").ok)
+	assert_true(env.star_field.visible)
+	assert_true(_exec("sky stars").ok, "no state toggles")
+	assert_false(env.star_field.visible)
+	env.show_sky_part(&"stars", true)
+	assert_false(_exec("sky clouds on").ok)
+	var result: ConsoleResult = _exec("state sky")
+	assert_true(result.ok)
+	var text: String = "\n".join(result.lines)
+	assert_string_contains(text, "stars = %d" % env.star_field.star_count())
+	assert_string_contains(text, "panorama")

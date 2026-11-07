@@ -194,24 +194,23 @@ class AudioManifestTests(unittest.TestCase):
             "loop": manifest.sound_entry("loop.wav", 96000, 48000, -1.5, loop=(0, 96000)),
         }
 
-    def test_an_audio_manifest_has_sounds_and_no_lods(self) -> None:
+    def test_an_audio_manifest_has_sounds_and_no_bounds(self) -> None:
         m = manifest.build_audio_manifest("sfx", 1, 42, self._sounds())
         self.assertEqual(m["kind"], "audio")
-        self.assertNotIn("lods", m)
+        self.assertNotIn("aabb_min", m)
         self.assertEqual(m["files"], {"beep": "beep.wav", "loop": "loop.wav"})
         self.assertEqual(m["sounds"]["beep"]["duration_s"], 0.1)
         self.assertEqual((m["sounds"]["loop"]["loop_begin"], m["sounds"]["loop"]["loop_end"]), (0, 96000))
         manifest.validate_manifest(m)
 
-    def test_splat_manifests_are_unchanged_and_default_to_the_splat_kind(self) -> None:
-        m = manifest.build_manifest("demo", 1, 1, [manifest.lod_entry(0, "d.ply", 1, 1.0)], [0, 0, 0], [0, 0, 0], [0, 0, 0])
+    def test_model_manifests_default_to_the_asset_kind(self) -> None:
+        m = manifest.build_manifest("demo", 1, 1, [0, 0, 0], [0, 0, 0], [0, 0, 0])
         self.assertNotIn("kind", m)
-        manifest.validate_manifest({**m, "kind": "splat"})
+        manifest.validate_manifest({**m, "kind": "asset"})
 
     def test_bad_audio_manifests_are_rejected(self) -> None:
         good = manifest.build_audio_manifest("sfx", 1, 42, self._sounds())
         bad_cases = {
-            "lods present": {**good, "lods": [manifest.lod_entry(0, "x.ply", 1, 1.0)]},
             "no sounds": {**good, "sounds": {}},
             "unknown kind": {**good, "kind": "video"},
             "not a wav": {**good, "sounds": {"a": {**good["sounds"]["beep"], "file": "a.mp3"}}},
@@ -226,7 +225,7 @@ class AudioManifestTests(unittest.TestCase):
 
     def test_extra_keys_cannot_shadow_reserved_ones(self) -> None:
         with self.assertRaises(ValueError):
-            manifest.build_audio_manifest("sfx", 1, 42, self._sounds(), extra={"kind": "splat"})
+            manifest.build_audio_manifest("sfx", 1, 42, self._sounds(), extra={"kind": "asset"})
 
 
 if __name__ == "__main__":

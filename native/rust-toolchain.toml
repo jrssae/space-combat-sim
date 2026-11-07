@@ -1,0 +1,4 @@
+# The one Rust version that builds the native library (maintainer, M4 Q9). rustup installs it on first use.
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"

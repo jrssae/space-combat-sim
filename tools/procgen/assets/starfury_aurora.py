@@ -1,8 +1,8 @@
 """``starfury_aurora``: the player's SA-23E-style Starfury (docs/architecture.md section 9.1).
 
 Composition only: this module places parts from ``parts/`` with the ``earthforce`` style and
-derives every output from the placed parts, so the splats (``.ply``), the fallback mesh
-(``.obj``), the cockpit interior mesh and ``hardpoints.json`` agree by construction.
+derives every output from the placed parts, so the textured mesh, the OBJ, the cockpit interior
+mesh and ``hardpoints.json`` agree by construction.
 
 Layout (authored Godot frame, metres, before re-centring; -Z is forward, the nose at z = 0,
 the X of struts centred on x = y = 0). Silhouette and proportions follow the written reference
@@ -14,7 +14,8 @@ in ``docs/design-references.md``:
   along the facet edges; the pilot's eye 1 m behind the front pane
 * ventral gun pod under the chin, twin barrels at x = +-0.45
 * four trussed struts from the fuselage flanks to the pods, 18 deg above/below horizontal,
-  leading edge swept 57 deg from the centre line, hazard stripes, ladder webs with cut-outs
+  leading edge swept 57 deg from the centre line, ladder webs with cut-outs (no hazard stripes: the base hull is plain grey and
+  any colour is the wing's livery, M4-T30b Q41)
 * four ring-faced pods (5 m x 1.64 m) centred at (+-5.5, +-2.2, 5.0): retro bell in the front
   ring, main bell at the rear
 * a claw behind each pod: two outboard prongs and one inboard vane splaying aft, rooted in
@@ -22,23 +23,18 @@ in ``docs/design-references.md``:
 
 Frames: see ``docs/assets-starfury.md``. The sample set is made *exactly* mirror-symmetric
 (centre-line parts are symmetrised in x, the pod/strut/claw cross is sampled once and mirrored
-four ways), the body group is shifted so the splat centroid's y is exactly 0, and the z
-centroid is subtracted, so the splat centroid is (0, 0, 0): GDGS's import centring is a no-op
-and the hardpoints frame equals the rendered frame. Samples buried inside another part (strut
-roots in the fuselage, strut tips and claw roots in the pods, the gun pod's top) are dropped.
+four ways), the body group is shifted so the samples' centroid's y is exactly 0, and the z
+centroid is subtracted, so the samples' centroid is (0, 0, 0) and the hardpoints frame equals
+the rendered frame. Samples buried inside another part (strut roots in the fuselage, strut tips
+and claw roots in the pods, the gun pod's top) are dropped.
 
-LOD1 (``starfury_aurora_lod1.ply``, architecture section 16 D35) is the same build resampled at
-``LOD1_SPACING_FACTOR`` times every spacing from RNG streams suffixed ``lod1`` (so LOD0 never
-changes), balanced and centred the same way; its splats are written chunk by chunk (``cabin``
-and the four ``arm_<pod>``), and each chunk is also written as a break-up chunk
-(``core/chunks.py``), so the chunks partition LOD1 exactly.
-
-The hero level (``starfury_aurora_hero.ply``, M3-T24) is the same build at ``HERO_SPACING_FACTOR`` times every spacing, from
-``hero`` RNG streams, for the player's own ship up close. It has a manifest entry of its own (``hero``), outside ``lods``.
+The break-up chunks (``cabin`` and the four ``arm_<pod>``, ``core/chunks.py``) group the parts; each is placed at its samples'
+centroid and its textured mesh is cut from the hull's.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import math
 from dataclasses import dataclass
@@ -47,20 +43,15 @@ from typing import Any
 
 import numpy as np
 
-from ..core import frames, lighting
-from ..core.chunks import ChunkSource, write_chunks
+from ..core.chunks import ChunkCut, ChunkSource, chunk_offsets, write_chunks
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Mesh
-from ..core.manifest import build_manifest, lod_entry, write_manifest
+from ..core.manifest import build_manifest, write_manifest
 from ..core.obj import write_obj
-from ..core.ply import SplatData, write_ply
-from ..core.sampling import (
-    DEFAULT_OVERLAP,
-    DEFAULT_THICKNESS,
-    SurfaceSamples,
-    sample_mesh,
-    to_splats,
-)
+from ..core.textured_mesh import TexturedPart, phase_steps, write_textured_mesh
+from ..core.textures import Marking
+from ..core.livery import zone_of
+from ..core.sampling import SurfaceSamples, sample_mesh
 from ..parts import Anchor, Part, mass_centroid, total_mass
 from ..parts.hull import (
     WedgeFuselageSpec,
@@ -90,19 +81,21 @@ from ..styles import Style
 from ..styles.earthforce import EARTHFORCE
 
 ASSET_ID = "starfury_aurora"
-GENERATOR_VERSION = 5  # 5: flat paint and lighting records (M3-T21)
-PLY_NAME = "starfury_aurora.ply"
+GENERATOR_VERSION = 9  # 9: the textured mesh only (M4-T31); 8: chunk meshes (M4-T30d); 7: wing liveries, Q36 cabin glow (M4-T30b); 6: the textured mesh (M4-T30a)
 OBJ_NAME = "starfury_aurora.obj"
+MESH_NAME = "starfury_aurora.glb"
+# The textured mesh (M4-T30a): a 2 048 px atlas at about a centimetre a texel (the packer grows the texel until the hull fits).
+ATLAS_PX = 2048
+TEXEL_M = 0.011
+PAINTABLE = ("ef_hull", "ef_hull_panel")  # what a wing's livery may paint over (M4-T30b)
+STENCIL = (0.035, 0.036, 0.04)  # near-black stencil paint, linear RGB
 COCKPIT_NAME = "cockpit_interior.obj"
 HARDPOINTS_NAME = "hardpoints.json"
 
-# The hull after the reference model has about a third more surface than the earlier one; 4.7 cm keeps it inside the
-# AC3 budget. The cockpit faces stay at 2.2 cm (the frames' softness was tuned in play tests).
+# The surface samples' spacing: they centre the hull, keep the markers clear of it and place the chunks. The cockpit faces are
+# sampled finer (2.2 cm).
 DEFAULT_SPACING_M = 0.047
-COCKPIT_SPACING_FACTOR = (
-    0.47  # the window segment's frames, chin and lining, seen from 0.6-1 m: 2.2 cm
-)
-SPLAT_BUDGET = (100_000, 250_000)  # AC3, at the default spacing
+COCKPIT_SPACING_FACTOR = 0.47
 CHASE_ANCHOR = (
     0.0,
     4.0,
@@ -121,28 +114,7 @@ NAV_LAMP_RANGE_M = 6.0
 NAV_CABIN_RANGE_M = 2.2
 POD_SIDES = (("ur", "right"), ("lr", "right"), ("ul", "left"), ("ll", "left"))
 
-# LOD1 (allies and all Starfury debris, architecture section 16 D35): every spacing (the cockpit
-# faces' too) times this factor; the splat scales grow with the spacing, so the sheet closes as
-# LOD0's does. 2.0 lands at about 25 % of LOD0's splats.
-LOD1_PLY_NAME = "starfury_aurora_lod1.ply"
-LOD1_SPACING_FACTOR = 2.0
-LOD1_STREAM = "lod1"  # suffix of every LOD1 RNG stream: ctx.rng("splats", <part>, "lod1")
-LOD1_SHARE = (0.20, 0.30)  # AC6: LOD1 splats / LOD0 splats, at the default spacing and factor
-# M3-T19: the far levels for the LOD switcher, sampled like LOD1 at 4x and 8x LOD0's spacing.
-FAR_LODS = {
-    2: ("starfury_aurora_lod2.ply", 4.0, "lod2", (0.04, 0.09)),  # level: file, spacing factor, stream, share of LOD0
-    3: ("starfury_aurora_lod3.ply", 8.0, "lod3", (0.01, 0.025)),
-}
-# M3-T24 (AC33): the hero level for the player's own ship, every spacing (the cockpit faces' too) at half LOD0's, so about
-# 4x its splats. It is a manifest entry of its own (``hero``) outside the LOD ladder, from its own RNG streams.
-HERO_PLY_NAME = "starfury_aurora_hero.ply"
-HERO_LIGHT_NAME = lighting.hero_file_name(ASSET_ID)
-HERO_SPACING_FACTOR = 0.5
-HERO_STREAM = "hero"
-HERO_SHARE = (3.6, 4.4)  # hero splats / LOD0 splats, at the default spacing and factor
-HERO_SPLAT_BUDGET = (850_000, 1_100_000)  # the budget T24 records, at the default spacing
-CHUNK_LOD = 1  # the chunks partition this LOD's splats
-# Break-up chunks, in LOD1 file order: the cabin (fuselage, cockpit faces, gun mount) and one arm
+# Break-up chunks, in order: the cabin (fuselage, cockpit faces, gun mount) and one arm
 # (pod, strut, claw) per corner, named after the pods (DamageZones' X-fighter cabin and arms).
 CHUNK_ORDER = ("cabin",) + tuple(f"arm_{pod}" for pod, _ in POD_SIDES)
 ARM_PARTS = ("pod", "strut", "claw")
@@ -202,7 +174,6 @@ STARFURY_POD = FuryPodSpec(
     mass_kg=5_000.0,
 )  # fmt: skip
 # Hazard stripes on the deck just behind its leading edge, between the hull and the pod.
-HAZARD = tuple((2.3 + 0.3 * k, 2.6 + 0.3 * k, "hazard" if k % 2 == 0 else "hazard_dark") for k in range(6))
 STARFURY_STRUT = FuryStrutSpec(
     # (x, centre y, thickness, leading edge z, trailing edge z). The deck spans the fuselage's top from the centre line
     # (a notch over the canopy, cheeks either side of it, a tooth in its trailing edge at x = 2-2.8) and climbs out to
@@ -223,7 +194,6 @@ STARFURY_STRUT = FuryStrutSpec(
         (3.25, 1.285, 0.43, -1.7, 0.57), (3.75, 1.54, 0.42, -1.42, 0.86), (4.25, 1.68, 0.46, -1.3, 1.05),
         (4.95, 1.72, 0.5, -1.2, 1.3),
     )),
-    bands=HAZARD,
     mass_kg=1_500.0,
 )  # fmt: skip
 # The lower arms are not quite the upper ones mirrored: their deck runs under the keel, and their brace stays close under
@@ -242,7 +212,6 @@ STARFURY_LOWER_STRUT = FuryStrutSpec(
         (2.0, 0.905, 0.31, -2.58, -0.25), (2.5, 1.1, 0.32, -2.32, 0.02), (3.25, 1.4, 0.32, -1.92, 0.39),
         (3.75, 1.6, 0.32, -1.66, 0.64), (4.25, 1.67, 0.46, -1.45, 1.0), (4.95, 1.72, 0.5, -1.3, 1.3),
     )),
-    bands=HAZARD,
     mass_kg=1_500.0,
 )  # fmt: skip
 STARFURY_CLAW = FuryClawSpec(
@@ -326,19 +295,17 @@ DEFAULT_SPEC = StarfurySpec()
 
 @dataclass
 class Placed:
-    """A placed part with its surface samples (``None`` for meshes that are not splatted)."""
+    """A placed part with its surface samples (``None`` for meshes that are not sampled)."""
 
     part: Part
     samples: SurfaceSamples | None
-    hull: bool = True  # part of the fallback mesh, the mass and the collision shapes
-    spacing: float = 0.0  # sample spacing of ``samples`` (m)
+    hull: bool = True  # part of the hull mesh, the mass and the collision shapes
 
     def translated(self, offset: np.ndarray) -> Placed:
         return Placed(
             self.part.translated(offset),
             None if self.samples is None else self.samples.translated(offset),
             self.hull,
-            self.spacing,
         )
 
 
@@ -358,7 +325,6 @@ def _mirrors(base: Placed, prefix: str, lower: Placed | None = None) -> list[Pla
                 part.renamed(f"{prefix}_{pod}", group=base.part.group),
                 samples,
                 base.hull,
-                base.spacing,
             )
         )
     return out
@@ -390,11 +356,11 @@ def build_parts(
     body group is already shifted so its sample centroid's y is zero (the cross is symmetric).
     The faces the pilot sees up close (``wedge_cockpit_faces``) are a separate ``cockpit``
     placement sampled at ``cockpit_spacing``; its mesh stays part of the fuselage's.
-    ``stream_suffix`` is appended to every RNG stream (``("lod1",)`` for LOD1), so another LOD's
-    samples never disturb LOD0's."""
+    ``stream_suffix`` is appended to every RNG stream (the coarse build's), so another build's
+    samples never disturb the fine one's."""
 
     def sample(mesh: Mesh, stream: str, step: float = spacing) -> SurfaceSamples:
-        return sample_mesh(mesh, step, ctx.rng("splats", stream, *stream_suffix))
+        return sample_mesh(mesh, step, ctx.rng("surface", stream, *stream_suffix))
 
     # Body: centre-line parts, sampled and made exactly x-symmetric.
     fus = wedge_fuselage(spec.fuselage, style).renamed("fuselage", group="body")
@@ -421,10 +387,10 @@ def build_parts(
         group="body",
     )
     body = [
-        Placed(fus, fus_samples, spacing=spacing),
-        Placed(cockpit, cockpit_samples, hull=False, spacing=cockpit_spacing),
-        Placed(gun, gun_samples, spacing=spacing),
-        Placed(fittings, fit_samples, spacing=spacing),
+        Placed(fus, fus_samples),
+        Placed(cockpit, cockpit_samples, hull=False),
+        Placed(gun, gun_samples),
+        Placed(fittings, fit_samples),
         Placed(interior, None, hull=False),
     ]
 
@@ -467,16 +433,16 @@ def build_parts(
     s_claw = sample(claw.mesh, "claw")
     s_claw = _unburied(s_claw, in_pod(s_claw.positions), _facing_into(s_claw, in_pod))
     cross = (
-        _mirrors(Placed(pod, s_pod, spacing=spacing), "pod")
-        + _mirrors(Placed(strut, s_strut, spacing=spacing), "strut", lower=Placed(lower, s_lower, spacing=spacing))
-        + _mirrors(Placed(claw, s_claw, spacing=spacing), "claw")
+        _mirrors(Placed(pod, s_pod), "pod")
+        + _mirrors(Placed(strut, s_strut), "strut", lower=Placed(lower, s_lower))
+        + _mirrors(Placed(claw, s_claw), "claw")
     )
     return body + cross
 
 
 # --- centring ---------------------------------------------------------------------------------
 def centre(placed: list[Placed]) -> tuple[list[Placed], np.ndarray]:
-    """Subtract the splat centroid's y and z from everything (x is zero by symmetry). Returns
+    """Subtract the samples' centroid's y and z from everything (x is zero by symmetry). Returns
     the placements and the offset (Godot frame) that was subtracted from the authored positions
     (``manifest.centroid_offset``). The fuselage hangs low between the arms (chin guns, keel), so
     the centroid sits a little below the arms' centre: the cross is symmetric about its own
@@ -513,23 +479,88 @@ def chunk_joints(placed: list[Placed]) -> dict[str, list[float]]:
     return {name: _r(point) for name, point in joints.items()}
 
 
-# --- colour -----------------------------------------------------------------------------------
-def _phase(name: str, style: Style) -> tuple[float, float, float]:
-    base = name.split("_")[0]
-    h = sum((i + 1) * ord(c) for i, c in enumerate(base))
-    return tuple(((h * k) % 97) / 97.0 * style.panel_size_m for k in (7, 11, 13))
+# --- markings (M4-T30a) -----------------------------------------------------------------------
+def markings_for(placed: list[Placed], style: Style) -> dict[str, tuple[Marking, ...]]:
+    """What the texture maps paint on each part beyond its panels: "EA" on the fuselage's flanks and soot round every bell's mouth.
+    The wing's colours and the ship's number are the livery's, painted by the shader (M4-T30b), so the maps stay the same for every wing."""
+    out: dict[str, tuple[Marking, ...]] = {}
+    for p in placed:
+        name = p.part.name
+        if name.startswith("pod_"):
+            out[name] = (
+                Marking.soot(name, p.part.anchor("main").position, p.part.anchor("main").direction, 0.75, 0.5, 0.9),
+                Marking.soot(name, p.part.anchor("retro").position, p.part.anchor("retro").direction, 0.55, 0.4, 0.6),
+            )
+        elif name == "fuselage":
+            v = p.part.mesh.vertices
+            z_mid = 0.55 * float(v[:, 2].max()) + 0.45 * float(v[:, 2].min())
+            marks = []
+            for side in (1.0, -1.0):
+                x = float(np.abs(v[:, 0]).max())
+                marks.append(Marking.text(name, "EA", (side * x, 0.25, z_mid), (0.0, 0.0, -side), (0.0, 1.0, 0.0), (side, 0.0, 0.0), 0.3, STENCIL))
+            out[name] = tuple(marks)
+    return out
 
 
-def colour_samples(placed: Placed, style: Style) -> np.ndarray:
-    """Paint only (paint, panel lines): the scene's lights do the shading in the game."""
-    s = placed.samples
-    return style.shade_panels(
-        s.albedo(),
-        s.positions,
-        s.normals,
-        s.material_flag("paneled") > 0.5,
-        _phase(placed.part.name, style),
-    )
+# --- the textured mesh's parts and the coarse render mesh (M4-T30b) -------------------------------
+COARSE_STREAM = "coarse"
+MIN_SEGMENTS = 6
+
+
+def _textured(placed: list[Placed], style: Style) -> list[TexturedPart]:
+    """The hull parts as the textured mesh takes them: mesh, panel phase, markings and livery zone."""
+    marks = markings_for(placed, style)
+    return [TexturedPart(p.part.mesh, phase_steps(p.part.name, True), marks.get(p.part.name, ()), p.part.name, zone_of(p.part.name))
+            for p in placed if p.hull]
+
+
+def textured_parts(spec: StarfurySpec, ctx: BuildContext, style: Style = EARTHFORCE) -> list[TexturedPart]:
+    """The textured mesh's parts of ``spec``, centred as the build centres them (for tests and tools)."""
+    placed, _ = centre(build_parts(spec, style, ctx, DEFAULT_SPACING_M, COCKPIT_SPACING_FACTOR * DEFAULT_SPACING_M))
+    return _textured(placed, style)
+
+
+def coarse_spec(spec: Any, factor: float) -> Any:
+    """``spec`` with every round part's ``segments`` scaled by ``factor`` (at least ``MIN_SEGMENTS``): the coarse render mesh."""
+    if dataclasses.is_dataclass(spec) and not isinstance(spec, type):
+        changes = {}
+        for f in dataclasses.fields(spec):
+            value = getattr(spec, f.name)
+            if f.name == "segments" and isinstance(value, int) and not isinstance(value, bool):
+                changes[f.name] = max(MIN_SEGMENTS, int(round(value * factor)))
+            elif dataclasses.is_dataclass(value) or isinstance(value, tuple):
+                scaled = coarse_spec(value, factor)
+                if scaled is not value:
+                    changes[f.name] = scaled
+        return dataclasses.replace(spec, **changes) if changes else spec
+    if isinstance(spec, tuple) and any(dataclasses.is_dataclass(x) for x in spec):
+        return tuple(coarse_spec(x, factor) for x in spec)
+    return spec
+
+
+def coarse_placed(spec: StarfurySpec, style: Style, ctx: BuildContext, triangles: int, offset: np.ndarray) -> list[Placed]:
+    """The parts rebuilt with fewer segments, the scale chosen so the hull has about ``triangles`` (never fewer than the
+    flat parts allow), moved by the fine build's centring ``offset`` so both share one frame."""
+    def build_at(factor: float) -> list[Placed]:
+        placed = build_parts(coarse_spec(spec, factor), style, ctx, 0.25, 0.25, (COARSE_STREAM,))
+        return [Placed(p.part.translated(-offset), None, p.hull) for p in placed]
+
+    def count(placed: list[Placed]) -> int:
+        return sum(p.part.mesh.face_count for p in placed if p.hull)
+
+    lo, hi = 0.02, 1.0
+    best = build_at(hi)
+    for _ in range(10):
+        mid = 0.5 * (lo + hi)
+        placed = build_at(mid)
+        if count(placed) > triangles:
+            hi = mid
+        else:
+            lo = mid
+            best = placed
+    if count(best) > triangles:  # the floor: plates and fittings have no segments to drop
+        best = build_at(lo)
+    return best
 
 
 # --- hardpoints -------------------------------------------------------------------------------
@@ -553,7 +584,7 @@ def _axis_label(direction: np.ndarray) -> str:
 
 
 def _hull_samples(placed: list[Placed]) -> np.ndarray:
-    """Every LOD0 surface sample of the hull: what the markers must stand clear of."""
+    """Every surface sample of the hull: what the markers must stand clear of."""
     return np.concatenate([p.samples.positions for p in placed if p.hull and p.samples is not None])
 
 
@@ -597,8 +628,8 @@ def _screens_json(eye: np.ndarray) -> dict[str, Any]:
 def hardpoints(
     placed: list[Placed], spec: StarfurySpec, chunks: list[dict[str, Any]]
 ) -> dict[str, Any]:
-    """The hardpoints document (centred Godot frame) from the placed LOD0 parts; ``chunks`` are
-    the ``write_chunks`` entries (from LOD1)."""
+    """The hardpoints document (centred Godot frame) from the placed parts; ``chunks`` are
+    the ``write_chunks`` entries."""
     by_name = {p.part.name: p.part for p in placed}
     hull_parts = [p.part for p in placed if p.hull]
     hull_mesh = Mesh.concatenate(p.mesh for p in hull_parts)
@@ -688,240 +719,102 @@ def hardpoints(
 
 
 # --- build ------------------------------------------------------------------------------------
-def part_splats(
-    placed: list[Placed], style: Style, overlap: float, thickness: float
-) -> SplatData:
-    """The splats of every sampled placement, in order (body frame, Godot axes)."""
-    return SplatData.concatenate(
-        [
-            to_splats(
-                p.samples, colour_samples(p, style), p.spacing, overlap, thickness
-            )
-            for p in placed
-            if p.samples is not None
-        ]
-    )
-
-
-def _write_level(
-    out_dir: Path, light_name: str, ply_name: str, splats: SplatData, comments: tuple[str, ...]
-) -> list[Path]:
-    """One level's PLY and its lighting records (body frame in, the file's frame out)."""
-    written = _to_3dgs(splats)
-    return [
-        write_ply(out_dir / ply_name, written, comments),
-        lighting.write_lighting(out_dir / light_name, written),
-    ]
-
-
-def _level_light(level: int) -> str:
-    return lighting.lod_file_name(ASSET_ID, level)
-
-
-def _lod(level: int, file: str, splats: int, spacing: float) -> dict[str, Any]:
-    return lod_entry(level, file, splats, spacing, _level_light(level))
-
-
-def _to_3dgs(splats: SplatData) -> SplatData:
-    """Rz(180 deg) of the Godot frame: what the PLY stores, so the splat node stays at identity."""
-    return SplatData(
-        xyz=frames.godot_to_3dgs_positions(splats.xyz),
-        rgb=splats.rgb,
-        alpha=splats.alpha,
-        scale=splats.scale,
-        rot=frames.godot_to_3dgs_quats(splats.rot),
-        normals=frames.flip_xy(splats.normals),
-    )
-
-
-def build_chunks(
-    placed: list[Placed], style: Style, overlap: float, thickness: float
-) -> list[ChunkSource]:
-    """One ``ChunkSource`` per ``CHUNK_ORDER`` entry: its parts' splats (placement order) and
-    their fallback mesh. The cockpit faces' mesh is already in the fuselage's, and the cockpit
-    interior is neither splatted nor hull, so neither adds to a chunk mesh."""
+def build_chunks(placed: list[Placed]) -> list[ChunkSource]:
+    """One ``ChunkSource`` per ``CHUNK_ORDER`` entry: its parts' surface samples (placement order) and their hull mesh. The cockpit
+    faces' mesh is already in the fuselage's, and the cockpit interior is neither sampled nor hull, so neither adds to a chunk."""
     sources = []
     for name in CHUNK_ORDER:
         members = [p for p in placed if chunk_of(p.part.name) == name]
+        points = np.concatenate([p.samples.positions for p in members if p.samples is not None])
         mesh = Mesh.concatenate(p.part.mesh for p in members if p.hull)
-        sources.append(
-            ChunkSource(name, part_splats(members, style, overlap, thickness), mesh)
-        )
+        sources.append(ChunkSource(name, points, mesh))
     return sources
 
 
 def build(ctx: BuildContext) -> AssetOutputs:
     """Generate the ship into ``ctx.out_dir``.
 
-    Options: ``spacing`` (m, default 0.04; the CLI's ``--spacing``), ``cockpit_spacing`` (m,
-    default 0.55 x the spacing: the window segment's frames, chin and lining), ``overlap``
-    (sigma / spacing, default 1.0), ``thickness`` (normal sigma / spacing, default 0.08),
-    ``lod1_factor`` (LOD1 spacing / LOD0 spacing, default 2.0), ``hero`` (write the hero level, default true).
+    Options: ``render_triangles`` (M4-T30b; 0, the default, draws the full hull; otherwise the textured mesh is rebuilt with about
+    this many triangles and the fine hull's shape baked into its normal map), ``spacing`` (m, default 0.047, the surface samples'),
+    ``cockpit_spacing`` (m, default 0.47 x the spacing: the window segment's frames, chin and lining), ``atlas_px``, ``texel_m``,
+    ``occlusion``.
     """
     spacing = float(ctx.option("spacing", DEFAULT_SPACING_M))
-    cockpit_spacing = float(
-        ctx.option("cockpit_spacing", COCKPIT_SPACING_FACTOR * spacing)
-    )
-    overlap = float(ctx.option("overlap", DEFAULT_OVERLAP))
-    thickness = float(ctx.option("thickness", DEFAULT_THICKNESS))
-    lod1_factor = float(ctx.option("lod1_factor", LOD1_SPACING_FACTOR))
-    if min(spacing, cockpit_spacing, overlap, thickness, lod1_factor) <= 0.0:
-        raise ValueError(
-            "spacing, cockpit_spacing, overlap, thickness and lod1_factor must be positive"
-        )
-    with_hero = bool(ctx.option("hero", True))
+    cockpit_spacing = float(ctx.option("cockpit_spacing", COCKPIT_SPACING_FACTOR * spacing))
+    if min(spacing, cockpit_spacing) <= 0.0:
+        raise ValueError("spacing and cockpit_spacing must be positive")
     spec, style = DEFAULT_SPEC, EARTHFORCE
 
     out_dir = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # LOD0: the full-detail hull, part by part (manifest ``counts`` order).
     placed, offset = centre(build_parts(spec, style, ctx, spacing, cockpit_spacing))
-    sampled = [p for p in placed if p.samples is not None]
-    authored = part_splats(placed, style, overlap, thickness)
-
-    # Splats are already centred; the manifest AABB is theirs, Godot frame.
-    xyz32 = authored.xyz.astype(np.float32)
-    aabb_min, aabb_max = xyz32.min(axis=0), xyz32.max(axis=0)
-    comments = (
-        f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}",
-        "frame: 3dgs (Rz180 of godot)",
-    )
-    files: list[Path] = _write_level(out_dir, _level_light(0), PLY_NAME, authored, comments)
+    chunk_sources = build_chunks(placed)
+    comments = (f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}",)
 
     hull_mesh = Mesh.concatenate(p.part.mesh for p in placed if p.hull)
-    files += write_obj(out_dir / OBJ_NAME, hull_mesh, ASSET_ID, comments[:1])
+    aabb_min, aabb_max = hull_mesh.bounds()
+    files: list[Path] = write_obj(out_dir / OBJ_NAME, hull_mesh, ASSET_ID, comments)
     interior = next(p.part.mesh for p in placed if p.part.name == "cockpit_interior")
-    files += write_obj(
-        out_dir / COCKPIT_NAME, interior, "cockpit_interior", comments[:1]
-    )
-
-    # LOD1: the same parts resampled coarser from their own streams, balanced and centred
-    # like LOD0 (its splat centroid is the origin too), written chunk by chunk.
-    lod1_spacing = lod1_factor * spacing
-    lod1_placed, _ = centre(
-        build_parts(
-            spec,
-            style,
-            ctx,
-            lod1_spacing,
-            lod1_factor * cockpit_spacing,
-            (LOD1_STREAM,),
-        )
-    )
-    chunk_sources = build_chunks(lod1_placed, style, overlap, thickness)
-    lod1 = SplatData.concatenate([c.splats for c in chunk_sources])
-    lod1_comments = comments + (f"lod {CHUNK_LOD}",)
-    files += _write_level(out_dir, _level_light(CHUNK_LOD), LOD1_PLY_NAME, lod1, lod1_comments)
-    chunk_files, chunk_entries = write_chunks(
-        out_dir, ASSET_ID, chunk_sources, lod1_comments
-    )
+    files += write_obj(out_dir / COCKPIT_NAME, interior, "cockpit_interior", comments)
+    chunk_files, chunk_entries = write_chunks(out_dir, ASSET_ID, chunk_sources, comments, with_meshes=True)
     files += chunk_files
 
-    # LOD2 and LOD3: whole-ship files for distant ships, resampled from their own streams.
-    far: dict[int, int] = {}
-    for level, (name, factor, stream, _share) in FAR_LODS.items():
-        lod_placed, _ = centre(
-            build_parts(spec, style, ctx, factor * spacing, factor * cockpit_spacing, (stream,))
-        )
-        lod_splats = part_splats(lod_placed, style, overlap, thickness)
-        far[level] = len(lod_splats)
-        files += _write_level(out_dir, _level_light(level), name, lod_splats, comments + (f"lod {level}",))
-
-    # The hero level: LOD0's parts at half the spacing, written after the others so none of them can change.
-    hero_count = 0
-    if with_hero:
-        hero_placed, _ = centre(
-            build_parts(
-                spec,
-                style,
-                ctx,
-                HERO_SPACING_FACTOR * spacing,
-                HERO_SPACING_FACTOR * cockpit_spacing,
-                (HERO_STREAM,),
-            )
-        )
-        hero_splats = part_splats(hero_placed, style, overlap, thickness)
-        hero_count = len(hero_splats)
-        files += _write_level(
-            out_dir, HERO_LIGHT_NAME, HERO_PLY_NAME, hero_splats, comments + ("lod hero",)
-        )
+    # The textured mesh (M4-T30a): the same parts with a UV atlas and the four maps, the contract M5 builds against. With
+    # ``render_triangles`` (M4-T30b) the parts are rebuilt coarser and the normal map carries the fine hull's shape. Each chunk's
+    # mesh (M4-T30d) is cut from it where the chunk's OBJ is.
+    render_triangles = int(ctx.option("render_triangles", 0))
+    textured_source = placed if render_triangles <= 0 else coarse_placed(spec, style, ctx, render_triangles, offset)
+    cuts = [
+        ChunkCut(name, tuple(p.part.name for p in textured_source if p.hull and chunk_of(p.part.name) == name),
+                 tuple(float(v) for v in centroid))
+        for name, centroid in chunk_offsets(chunk_sources).items()
+    ]
+    textured_paths, mesh_entry = write_textured_mesh(
+        out_dir,
+        ASSET_ID,
+        _textured(textured_source, style),
+        style,
+        atlas_px=int(ctx.option("atlas_px", ATLAS_PX)),
+        texel_m=float(ctx.option("texel_m", TEXEL_M)),
+        seed=ctx.seed,
+        occlusion=bool(ctx.option("occlusion", True)),
+        paintable=PAINTABLE,
+        fine_mesh=hull_mesh if render_triangles > 0 else None,
+        chunks=cuts,
+    )
+    if render_triangles > 0:
+        mesh_entry["render_triangles"] = render_triangles
+        mesh_entry["fine_triangles"] = int(hull_mesh.face_count)
+    files += textured_paths
 
     hp = hardpoints(placed, spec, chunk_entries)
     hp_path = out_dir / HARDPOINTS_NAME
     hp_path.write_text(json.dumps(hp, indent=2) + "\n", encoding="utf-8", newline="\n")
     files.append(hp_path)
 
-    total = len(authored)
-    warnings: list[str] = []
-    if abs(spacing - DEFAULT_SPACING_M) < 1e-12:
-        if not SPLAT_BUDGET[0] <= total <= SPLAT_BUDGET[1]:
-            warnings.append(
-                f"{total} splats is outside the AC3 budget {SPLAT_BUDGET} at the default spacing"
-            )
-        share = len(lod1) / total
-        if (
-            abs(lod1_factor - LOD1_SPACING_FACTOR) < 1e-12
-            and not LOD1_SHARE[0] <= share <= LOD1_SHARE[1]
-        ):
-            warnings.append(
-                f"LOD1 has {share:.1%} of LOD0's splats, outside the AC6 share {LOD1_SHARE}"
-            )
-        for level, (_name, _factor, _stream, bounds) in FAR_LODS.items():
-            far_share = far[level] / total
-            if not bounds[0] <= far_share <= bounds[1]:
-                warnings.append(f"LOD{level} has {far_share:.1%} of LOD0's splats, outside {bounds}")
-        if with_hero:
-            hero_share = hero_count / total
-            if not HERO_SHARE[0] <= hero_share <= HERO_SHARE[1]:
-                warnings.append(f"the hero has {hero_share:.2f}x LOD0's splats, outside {HERO_SHARE}")
-            if not HERO_SPLAT_BUDGET[0] <= hero_count <= HERO_SPLAT_BUDGET[1]:
-                warnings.append(f"the hero has {hero_count} splats, outside the budget {HERO_SPLAT_BUDGET}")
     manifest = build_manifest(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,
         seed=ctx.seed,
-        lods=[
-            _lod(0, PLY_NAME, total, spacing),
-            _lod(CHUNK_LOD, LOD1_PLY_NAME, len(lod1), lod1_spacing),
-        ]
-        + [_lod(level, FAR_LODS[level][0], far[level], FAR_LODS[level][1] * spacing) for level in FAR_LODS],
         aabb_min=aabb_min,
         aabb_max=aabb_max,
         centroid_offset=offset,
         files={
-            "fallback_mesh": OBJ_NAME,
+            "obj": OBJ_NAME,
+            "mesh": mesh_entry["file"],
             "cockpit_mesh": COCKPIT_NAME,
             "hardpoints": HARDPOINTS_NAME,
         },
         extra={
-            "counts": {p.part.name: len(p.samples) for p in sampled},
-            "sampling": {
-                "spacing_m": spacing,
-                "cockpit_spacing_m": cockpit_spacing,
-                "overlap": overlap,
-                "thickness": thickness,
-            },
             "dimensions_m": {
                 "length": hp["length_m"],
                 "span": hp["span_m"],
                 "height": hp["height_m"],
             },
             "chunks": [c["name"] for c in chunk_entries],
-            "chunk_lod": CHUNK_LOD,
-            **(
-                {
-                    "hero": {
-                        "file": HERO_PLY_NAME,
-                        "splats": hero_count,
-                        "spacing_m": HERO_SPACING_FACTOR * spacing,
-                        "lighting": HERO_LIGHT_NAME,
-                    }
-                }
-                if with_hero
-                else {}
-            ),
+            "mesh": mesh_entry,
         },
     )
     files.append(write_manifest(out_dir, manifest))
-    return AssetOutputs(ASSET_ID, out_dir, manifest, tuple(files), tuple(warnings))
+    return AssetOutputs(ASSET_ID, out_dir, manifest, tuple(files), ())

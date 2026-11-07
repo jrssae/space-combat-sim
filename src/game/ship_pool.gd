@@ -1,10 +1,8 @@
 class_name ShipPool
 extends Node3D
-## Pooled AI ships (architecture §15.6, D22). GDGS re-merges the splat data of every node in the scene each time a
-## `GaussianSplatNode` enters or leaves the tree, so a spawn mid-fight would hitch. Raiders and allied Starfuries are built
-## once at scenario load (`prepare`) and only switched afterwards: parked ships are hidden, not processing, not targetable
-## and not hittable. `acquire` brings one back at a universe position, `release` parks it again. The splat node count never
-## changes.
+## Pooled AI ships (architecture §15.6, D22): building a ship mid-fight (its nodes, its body, its hardpoints read) would hitch, so
+## raiders and allied Starfuries are built once at scenario load (`prepare`) and only switched afterwards: parked ships are hidden,
+## not processing, not targetable and not hittable. `acquire` brings one back at a universe position, `release` parks it again.
 ##
 ## Each type is built with its `ShipCatalog` faction (`raiders`, `earth_alliance`). Whoever acquires a ship names it;
 ## `next_name(prefix, first)` finds the next free callsign.
@@ -80,6 +78,7 @@ func prepare(type: StringName, count: int) -> int:
 			ShipAssembly.OPT_DISPLAY_NAME: "",
 			ShipAssembly.OPT_FORCE_ASSIST: true,
 			ShipAssembly.OPT_AI: true,
+			ShipAssembly.OPT_LEAN: true,  # the AI ship's lean set of nodes (M4-T11)
 		})
 		world.spawn(combatant.ship, _park_position(), Basis.IDENTITY, self)
 		if type == ALLY_TYPE:
@@ -105,34 +104,66 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	ship.visible = true
 	ship.reset_to(Transform3D(basis, world.universe_to_local(at)))
 	ship.linear_velocity = velocity
+	ship.set_hulk(false)  # a live ship again, whatever the last pilot left (M4-T21)
 	ship.set_flight_command(FlightCommand.new())
 	ship.set_combat_command(CombatCommand.new())
 	ship.targeting.clear_selection()
-	combatant.cannon.gate.reset()
-	# Nothing of the last pilot shows: no plume or flash fading out, no level the console forced.
+	combatant.cannon.reset_gate()
+	# Nothing of the last pilot shows: no plume or flash fading out.
 	combatant.cannon.reset_flashes()
 	if combatant.thrusters != null:
 		combatant.thrusters.reset()
 	var switcher := ship.get_node_or_null(^"LodSwitcher") as LodSwitcher
 	if switcher != null:
-		switcher.forced = LodSwitcherMath.NONE
+		switcher.far = false
+	ship.set_far_dot(false)  # drawn in full until its switcher next looks (M4-T11)
 	combatant.damageable.restore()
 	combatant.damageable.invulnerable = false  # per spawn (M3-T09); the caller sets it
 	combatant.display_name = display_name
 	combatant.targetable.display_name = display_name
+	# A Starfury of a wing wears its wing's livery and its number from its callsign (M4-T30b); every other ship that takes liveries
+	# the plain one; a hull without a livery table (a raider) is left alone.
+	var section: Dictionary = MeshAssets.livery_section(ship.spec.asset_id)
+	if not section.is_empty():
+		var wing_and_number: Array = Livery.parse_name(display_name) if type == ALLY_TYPE else ["", 0]
+		ship.set_livery(Livery.for_wing(wing_and_number[0], wing_and_number[1], section))
 	_set_brain(combatant, brain)
 	_in_use.append(combatant)
 	acquired.emit(combatant)
 	return combatant
 
 
-## Parks a ship again (no effects; destruction effects are `DestructionDirector`'s). Ignores ships not in use.
+## Parks a ship again (no effects; destruction effects are `DestructionDirector`'s). Ignores ships not in use. A ship in
+## the low-attention tier (M4-T21) takes its row with it.
 func release(combatant: Combatant) -> void:
 	if combatant == null or not _in_use.has(combatant):
 		return
+	var tier: TierDirector = TierDirector.current()
+	if tier != null:
+		tier.forget(combatant)
 	_in_use.erase(combatant)
 	_park(combatant)
 	_free.append(combatant)
+
+
+## Parks a ship in use for the low-attention tier (M4-T21): its body leaves Jolt and the processing while its row flies; it
+## stays in use, with its name, pilot and hull.
+func park_in_tier(combatant: Combatant) -> void:
+	if combatant != null and _in_use.has(combatant):
+		combatant.ship.park_for_tier()
+
+
+## Brings a ship back from its tier row's `state` (`position`, `basis`, `velocity`, `angular`, `pod_yaw`; empty when the row
+## is gone: the body comes back where it was parked).
+func return_from_tier(combatant: Combatant, state: Dictionary) -> void:
+	if combatant == null or not _in_use.has(combatant):
+		return
+	var ship: Ship = combatant.ship
+	if state.is_empty():
+		ship.unpark_from_tier(ship.global_transform, ship.linear_velocity, ship.angular_velocity, ship.assist_state())
+		return
+	ship.unpark_from_tier(Transform3D(state["basis"], state["position"]), state["velocity"], state["angular"],
+			float(state["pod_yaw"]))
 
 
 ## Ships currently in the world: every type, or only those of `type`.
@@ -144,6 +175,11 @@ func alive(type: StringName = &"") -> Array[Combatant]:
 		if _types.get(combatant) == type:
 			out.append(combatant)
 	return out
+
+
+## How many ships are in the world, without building a list (`PerfProbe` reads it every tick).
+func in_use_count() -> int:
+	return _in_use.size()
 
 
 ## Every pooled ship, parked or not.

@@ -1,7 +1,7 @@
 extends GutTest
 ## The cockpit's console screens in the real scene (M3-T29, AC40): the window draws only the aiming marks, the screens are given every other
 ## instrument from the same frame, the chase view is unchanged, the viewports exist once on the player's ship, draw 2D only and only for a new
-## frame, and the lamps follow their states. Headless: how it looks and GDGS's render state count are P13's, on the GPU.
+## frame, and the lamps follow their states. Headless: how it looks is P13's, on the GPU.
 
 const WINDOW_ITEMS: Array[StringName] = [HudSurface.BORESIGHT, HudSurface.VELOCITY, HudSurface.TARGET_MARKS, HudSurface.WAYPOINT]
 

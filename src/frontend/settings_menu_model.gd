@@ -147,5 +147,8 @@ static func _grouped(value: int) -> String:
 
 # The docs are written for the console and cite the task that added the setting; the player has no use for that.
 static func _without_task_ids(text: String) -> String:
-	var tag := RegEx.create_from_string(" ?\\(M\\d+-T\\d+\\)")
-	return tag.sub(text, "", true)
+	# A task id alone in brackets goes with its brackets; one sharing them with other words ("(M4-T30a, live)") goes alone.
+	var alone := RegEx.create_from_string(" ?\\(M\\d+-T\\d+[a-z]?\\)")
+	var leading := RegEx.create_from_string("M\\d+-T\\d+[a-z]?[,;:] ")
+	var trailing := RegEx.create_from_string("[,;] M\\d+-T\\d+[a-z]?")
+	return trailing.sub(leading.sub(alone.sub(text, "", true), "", true), "", true)

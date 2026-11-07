@@ -250,11 +250,13 @@ func test_until_destroyed_on_a_scenario_ship_lost_earlier_resolves() -> void:
 # --- spawns: pools and jump arrivals ---------------------------------------------------------------------------------------
 
 
-func test_raiders_jump_in_from_the_pool_without_a_new_splat_node() -> void:
-	var splats_before: int = _count(main, GaussianSplatNode)
+func test_raiders_jump_in_from_the_pool_without_a_new_ship() -> void:
+	var ships_before: int = _count(main, Ship)
+	# The far-dot multimesh is made for the first ship that needs it (M4-T11): shared by every ship, not the arrival's.
+	FarDots.attach(main.world)
 	var nodes_before: int = _count(main, Node)
 	await _reach_the_buoy()
-	assert_eq(_count(main, GaussianSplatNode), splats_before, "D22: pooled ships only")
+	assert_eq(_count(main, Ship), ships_before, "D22: pooled ships only")
 	assert_eq(main.mission.jumps.opened, 1, "the pair 300 m apart came out of one jump point")
 	assert_eq(main.mission.jumps.open_count(), 1)
 	var point: JumpArrival = null

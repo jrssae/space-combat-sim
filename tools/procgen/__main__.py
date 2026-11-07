@@ -1,7 +1,9 @@
 """Command line: ``python3 -m tools.procgen list | build <asset_id>... | build all``.
 
-``--spacing`` and ``--option key=value`` land in ``BuildContext.options``; assets read what
-they understand (``starfury_aurora``: ``spacing``, ``overlap``, ``thickness``) and ignore the rest.
+``--option key=value`` lands in ``BuildContext.options``; assets read what they understand
+(``starfury_aurora``: ``render_triangles``, ``atlas_px``, ``texel_m``) and ignore the rest.
+``--jobs N`` builds up to N assets at once in worker processes (M4-T30d: the textured hulls made a
+one-at-a-time ``build all`` too slow); every asset's output is the same either way.
 """
 
 from __future__ import annotations
@@ -9,14 +11,18 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import time
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
+from multiprocessing.context import BaseContext
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 from .assets import ASSETS
-from .core.context import DEFAULT_OUT_ROOT, DEFAULT_SEED, AssetOutputs, BuildContext
-from .core.manifest import MANIFEST_NAME, validate_manifest
+from .core.context import DEFAULT_OUT_ROOT, DEFAULT_SEED
+from .build import BuildResult, timed_build
+
+WORKER_DIED = "its worker process died (killed, or out of memory?)"
 
 EXIT_OK = 0
 EXIT_BUILD_FAILED = 1
@@ -35,13 +41,13 @@ def _seed(text: str) -> int:
     return value
 
 
-def _spacing(text: str) -> float:
+def _jobs(text: str) -> int:
     try:
-        value = float(text)
+        value = int(text)
     except ValueError as exc:
-        raise argparse.ArgumentTypeError(f"invalid spacing {text!r}: expected a number") from exc
-    if not value > 0.0:
-        raise argparse.ArgumentTypeError(f"invalid spacing {text!r}: must be > 0")
+        raise argparse.ArgumentTypeError(f"invalid jobs {text!r}: expected an integer") from exc
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"invalid jobs {text!r}: must be >= 1")
     return value
 
 
@@ -86,11 +92,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="output root (default: <repo>/assets/generated)",
     )
     build.add_argument(
-        "--spacing",
-        type=_spacing,
-        default=None,
-        metavar="M",
-        help="splat spacing in metres for surface-sampled assets (starfury_aurora default 0.06)",
+        "--jobs",
+        type=_jobs,
+        default=1,
+        metavar="N",
+        help="build up to N assets at once in worker processes (default 1: one after another, in this process)",
     )
     build.add_argument(
         "--option",
@@ -114,20 +120,30 @@ def _resolve_ids(requested: Sequence[str]) -> list[str]:
     return list(dict.fromkeys(requested))
 
 
-def _build_one(asset_id: str, seed: int, out_root: Path, options: dict[str, Any] | None = None) -> AssetOutputs:
-    out_dir = out_root / asset_id
-    out_dir.mkdir(parents=True, exist_ok=True)
-    outputs = ASSETS[asset_id](BuildContext(out_dir=out_dir, seed=seed, options=dict(options or {})))
-    manifest_path = out_dir / MANIFEST_NAME
-    if not manifest_path.is_file():
-        raise RuntimeError(f"{asset_id}: build() did not write {MANIFEST_NAME}")
-    validate_manifest(outputs.manifest)
-    missing = [str(p) for p in outputs.files if not Path(p).is_file()]
-    if missing:
-        raise RuntimeError(
-            f"{asset_id}: build() reported files that do not exist: {missing}"
-        )
-    return outputs
+def _pool_context() -> BaseContext | None:
+    """The process start method for ``--jobs`` workers: the platform's default (tests fork, to carry a patched registry)."""
+    return None
+
+
+def _parallel(asset_ids: Sequence[str], jobs: int, seed: int, out_root: Path, options: dict[str, Any]) -> list[BuildResult]:
+    """Build ``asset_ids`` in up to ``jobs`` workers. When a worker dies, every asset that had not finished is built again in a
+    worker of its own, so only the one that kills its worker is reported failed."""
+    results: dict[str, BuildResult] = {}
+    unfinished: list[str] = []
+    with ProcessPoolExecutor(max_workers=min(jobs, len(asset_ids)), mp_context=_pool_context()) as executor:
+        futures = {asset_id: executor.submit(timed_build, asset_id, seed, out_root, options) for asset_id in asset_ids}
+        for asset_id, future in futures.items():
+            try:
+                results[asset_id] = future.result()
+            except BrokenProcessPool:
+                unfinished.append(asset_id)
+    for asset_id in unfinished:
+        with ProcessPoolExecutor(max_workers=1, mp_context=_pool_context()) as alone:
+            try:
+                results[asset_id] = alone.submit(timed_build, asset_id, seed, out_root, options).result()
+            except BrokenProcessPool:
+                results[asset_id] = (None, WORKER_DIED, 0.0)
+    return [results[asset_id] for asset_id in asset_ids]
 
 
 def _display(path: Path) -> str:
@@ -156,22 +172,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_USAGE
 
     options: dict[str, Any] = dict(args.option)
-    if args.spacing is not None:
-        options["spacing"] = args.spacing
+
+    if args.jobs > 1 and len(asset_ids) > 1:
+        results = _parallel(asset_ids, args.jobs, args.seed, args.out, options)
+    else:
+        results = (timed_build(asset_id, args.seed, args.out, options) for asset_id in asset_ids)
 
     failed = 0
-    for asset_id in asset_ids:
-        started = time.perf_counter()
-        try:
-            outputs = _build_one(asset_id, args.seed, args.out, options)
-        except Exception as exc:  # noqa: BLE001 - report which asset failed, keep building the rest
+    for asset_id, (outputs, error, elapsed) in zip(asset_ids, results):
+        if outputs is None:
             print(
-                f"error: {asset_id} failed: {type(exc).__name__}: {exc}",
+                f"error: {asset_id} failed: {error}",
                 file=sys.stderr,
             )
             failed += 1
             continue
-        elapsed = time.perf_counter() - started
         print(
             f"built {asset_id}: {outputs.summary}, {len(outputs.files)} files "
             f"-> {_display(outputs.out_dir)} ({elapsed:.1f}s)"

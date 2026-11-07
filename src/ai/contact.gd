@@ -25,6 +25,8 @@ var bounding_radius: float = 0.0
 var is_ship: bool = false
 ## Hull 0..1, or -1 when it has no hull.
 var hull_fraction: float = -1.0
+## What sort of body it is (`BodyKind`): rocks and mines come as statics, never as contacts (M4-T09).
+var kind: int = BodyKind.SHIP
 ## The `Targetable` id it has selected, -1 when nothing is selected or it has no targeting computer.
 var target_id: int = -1
 

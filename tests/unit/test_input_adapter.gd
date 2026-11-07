@@ -186,7 +186,6 @@ func test_every_edge_maps_to_its_field() -> void:
 		InputAdapter.RESET_SHIP: func(c: PilotCommand) -> bool: return c.ui.reset,
 		InputAdapter.PAUSE: func(c: PilotCommand) -> bool: return c.ui.pause,
 		InputAdapter.TOGGLE_OVERLAY: func(c: PilotCommand) -> bool: return c.ui.toggle_overlay,
-		InputAdapter.TOGGLE_FALLBACK: func(c: PilotCommand) -> bool: return c.ui.toggle_fallback_mesh,
 		InputAdapter.TARGET_PREV: func(c: PilotCommand) -> bool: return c.combat.target_prev,
 		InputAdapter.SCREENSHOT: func(c: PilotCommand) -> bool: return c.ui.screenshot,
 		InputAdapter.AUTOTRACK: func(c: PilotCommand) -> bool: return c.flight.autotrack,

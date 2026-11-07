@@ -25,11 +25,14 @@ extends Node3D
 ## the interpolation alone and resets it last in that tick (`SETTLE_PRIORITY`), after every node has moved, on every visible,
 ## interpolated shiftable node; so the frames until the next tick draw everything at its tick pose with no blend (bodies,
 ## bolts, debris, effects and the cameras alike: what the HUD projects is what is drawn, and view-relative positions keep their
-## motion), and nothing blends across the jump. The cost is at most one tick of stalled motion per rebase (AC22 (H)). Not
+## motion), and nothing blends across the jump. The reset walks the nodes the rebase moved, not the group again (M4-T21), and a
+## body parked for the low-attention tier is left where it stands: its row moves with the core and promotion places it. The
+## cost is at most one tick of stalled motion per rebase (AC22 (H)). Not
 ## resetting at all would draw every node sweeping by the offset over that tick: smooth on screen, but anything that mixes
 ## drawn and tick positions (the HUD's markers through the chase camera, the sky in the cockpit, nodes spawned in that tick) is
 ## kilometres off for that tick. Hidden (parked) nodes and silent voices are skipped: they are re-placed and reset when they
-## come back. A rebase outside a tick (the console between frames) resets at once. The velocity rebase (§14.1) is roadmap
+## come back; so are the nodes that are not interpolated (a far dot's ship, M4-T14). A rebase outside a tick (the console
+## between frames) resets at once. The velocity rebase (§14.1) is roadmap
 ## M6: `origin_velocity` stays zero.
 
 signal rebased(offset: Vector3)
@@ -40,6 +43,8 @@ const SETTLE_PRIORITY: int = 1_000_000
 
 ## Universe position of the local origin (64-bit).
 var origin: UniversePos = UniversePos.new()
+## The environment's pull, `func(local_pos: Vector3) -> Vector3`, or empty for none (M4-T07: the battle's moon stand-in).
+var environment_field: Callable = Callable()
 ## Velocity of the local frame in the system frame, m/s, as [x, y, z]. Always zero in M1: the velocity rebase
 ## (§14.1) is a roadmap milestone, but the field exists so nothing has to be retrofitted.
 var origin_velocity: PackedFloat64Array = PackedFloat64Array([0.0, 0.0, 0.0])
@@ -54,10 +59,14 @@ var focus: Node3D = null
 ## interpolation reset.
 var rebases: int = 0
 var last_rebase_us: int = 0
+## Nodes the last interpolation reset reached (M4-T14): a node that is not interpolated, such as a far dot's ship, is left out.
+var last_settle_resets: int = 0
 
 var _settler: Settler = null
 var _settle_pending: bool = false
 var _settled_frame: int = -1
+# The nodes the last rebase moved: the end-of-tick reset walks this list, not the group again (M4-T21).
+var _shifted: Array[Node3D] = []
 
 
 ## Runs `WorldFrame._settle` last in every physics tick (an internal child, so World's children stay its world objects).
@@ -144,10 +153,24 @@ func spawn(node: Node3D, at: UniversePos, basis: Basis = Basis.IDENTITY, parent:
 func rebase(offset: Vector3) -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only, never gameplay time
 	var shift: Vector3 = -offset
+	# A second rebase before the settle keeps the first one's nodes, so the settle still reaches each of them once.
+	var kept: Dictionary[Node3D, bool] = {}
+	if _settle_pending:
+		for node: Node3D in _shifted:
+			if is_instance_valid(node):
+				kept[node] = true
+	else:
+		_shifted.clear()
 	for member: Node in get_tree().get_nodes_in_group(SHIFTABLE_GROUP):
 		var node := member as Node3D
-		if node != null and is_ancestor_of(node):
-			node.global_translate(shift)
+		if node == null or not is_ancestor_of(node):
+			continue
+		if node.has_meta(TierDirector.TIER_META):
+			continue  # parked for the low-attention tier (M4-T21): its row moves with the core; promotion places the body
+		node.global_translate(shift)
+		if not kept.has(node):
+			_shifted.append(node)
+	ContactScan.shift_statics(shift, self)  # this world's scan rows with no node move with its nodes (M4-T09)
 	origin = origin.plus_local(offset)
 	rebases += 1
 	rebased.emit(offset)
@@ -165,14 +188,16 @@ func rebase(offset: Vector3) -> void:
 func _settle() -> void:
 	var started_us: int = Time.get_ticks_usec()  # profiling readout only
 	_settle_pending = false
-	for member: Node in get_tree().get_nodes_in_group(SHIFTABLE_GROUP):
-		var node := member as Node3D
-		if node == null or not node.is_visible_in_tree() or not node.is_physics_interpolated_and_enabled() \
-				or not is_ancestor_of(node):
+	last_settle_resets = 0
+	for node: Node3D in _shifted:
+		if not is_instance_valid(node) or not node.is_inside_tree() or not node.is_visible_in_tree() \
+				or not node.is_physics_interpolated_and_enabled():
 			continue
 		var voice := node as AudioStreamPlayer3D
 		if voice == null or voice.playing:
 			node.reset_physics_interpolation()
+			last_settle_resets += 1
+	_shifted.clear()
 	last_rebase_us += Time.get_ticks_usec() - started_us
 
 
@@ -186,6 +211,9 @@ func _cmd_rebase(args: Dictionary) -> ConsoleResult:
 
 
 ## Acceleration, m/s^2, that the environment applies at a local position (gravity, hyperspace fields). Ships add
-## `mass * environment_accel(position)` every physics tick. None exists in M1.
-func environment_accel(_local_pos: Vector3) -> Vector3:
+## `mass * environment_accel(position)` every physics tick. None exists in the game yet; the battle benchmark's moon
+## (M4-T07, `GravityStandin`) installs one as `environment_field`.
+func environment_accel(local_pos: Vector3) -> Vector3:
+	if environment_field.is_valid():
+		return environment_field.call(local_pos)
 	return Vector3.ZERO

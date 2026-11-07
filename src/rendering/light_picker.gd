@@ -1,8 +1,8 @@
 class_name LightPicker
 extends RefCounted
-## Chooses which emitters fill GDGS's 7 omni light slots (the 8th light, the key star, is always on; architecture §7.3). GDGS's own
-## rig ranks lights by energy x range every 30 frames, so it would miss a short muzzle flash and let a far explosion push out the
-## player's nozzles. This ranks every frame by what the camera will notice, and holds on to a pick so slots do not flicker. Pure.
+## Chooses which emitters fill the `LightRig`'s 7 omni light slots (the 8th light, the key star, is always on; architecture §7.3).
+## Ranking by energy x range now and then would miss a short muzzle flash and let a far explosion push out the player's nozzles;
+## this ranks every frame by what the camera will notice, and holds on to a pick so slots do not flicker. Pure.
 
 const SLOT_COUNT: int = 7
 ## An incumbent's score counts this much more, so a light only swaps out for one clearly better.

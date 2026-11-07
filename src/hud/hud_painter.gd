@@ -12,14 +12,23 @@ extends RefCounted
 
 const LINE_COLOR: Color = HudLayout.LINE_COLOR
 const TEXT_SHADOW: Color = Color(0.0, 0.0, 0.0, 0.8)
+## Sides of the radar's batched dots (M4-T36): round at their few pixels.
+const DOT_SEGMENTS: int = 16
+## Floats per instance in a 2D multimesh with colours: a 2x3 transform padded to 8, then the colour.
+const DOT_STRIDE: int = 12
 
 static var _shared_font: Font = null
+static var _dot_mesh: ArrayMesh = null
 
 ## What the last `paint` was asked to draw (tests and the console read it).
 var painted: Array[StringName] = []
 
 var _canvas: CanvasItem = null
 var _font: Font = null
+# The radar's contacts as one draw each (M4-T36): the dots and, on a labelled radar, their dark backings.
+var _dots: MultiMesh = null
+var _backings: MultiMesh = null
+var _dot_buffer := PackedFloat32Array()
 
 
 func _init(canvas: CanvasItem) -> void:
@@ -429,22 +438,86 @@ func _draw_radar(f: HudFrame, surface: HudSurface, s: float, w: float) -> void:
 		_ring(c, r, dim, w * 0.6, 0, RadarModel.LINEAR_RADIUS)
 		_text("%d km" % int(RadarModel.MAX_RANGE_M / 1000.0), c + Vector2(r * 0.72, -r * 0.72), 14.0 * s, LINE_COLOR)
 		_text("%d km" % int(RadarModel.LINEAR_RANGE_M / 1000.0), RadarModel.to_screen(Vector3(RadarModel.LINEAR_RADIUS, 0.0, 0.0), c, r) + Vector2(4.0, -3.0) * s, 14.0 * s, LINE_COLOR)
+	# The contacts in a few batched draws (M4-T36): every stalk in one call, every plain dot in one multimesh, then the hollow rim
+	# dots and the selection, which are few, one by one.
+	var plot: RadarPlot = f.radar_plot
+	var to_screen: Transform2D = RadarPlot.screen_transform(c, r)
+	var at: PackedVector2Array = to_screen * plot.point_units
 	if surface.radar_labels:  # dark backings under everything, so contacts read over the octagon's grid and never hide each other
-		for dot: RadarModel.Dot in f.radar_dots:
-			_canvas.draw_circle(RadarModel.to_screen(dot.point, c, r), 5.5 * k, TEXT_SHADOW)
+		_backings = _draw_dots(_backings, at, plot, 5.5 * k, true)
 	# Own ship at the centre, nose up.
 	_canvas.draw_polyline(PackedVector2Array([c + Vector2(0.0, -6.0 * k), c + Vector2(4.0 * k, 5.0 * k), c + Vector2(-4.0 * k, 5.0 * k), c + Vector2(0.0, -6.0 * k)]), LINE_COLOR, w * 0.75)
-	for dot: RadarModel.Dot in f.radar_dots:
-		var at: Vector2 = RadarModel.to_screen(dot.point, c, r)
-		var foot: Vector2 = RadarModel.to_screen(dot.foot, c, r)
-		var color: Color = dot.color
-		_canvas.draw_line(foot, at, Color(color.r, color.g, color.b, 0.5), w * 0.5)
-		if dot.rim:  # a broadcast beyond the sensors: hollow, on the rim (M3-T17)
-			_canvas.draw_arc(at, (4.5 if dot.selected else 3.0) * k, 0.0, TAU, 12, color, w * 0.6)
-		else:
-			_canvas.draw_circle(at, (4.5 if dot.selected else 3.0) * k, color)
-		if dot.selected:
-			_canvas.draw_arc(at, 8.0 * k, 0.0, TAU, 20, color, w * 0.75)
+	if plot.size() == 0:
+		return
+	_canvas.draw_multiline_colors(to_screen * plot.stalk_units, plot.stalk_colors, w * 0.5)
+	_dots = _draw_dots(_dots, at, plot, 3.0 * k, false)
+	for i: int in plot.size():
+		var selected: bool = i == plot.selected_index
+		if plot.rims[i] == 1:  # a broadcast beyond the sensors: hollow, on the rim (M3-T17)
+			_canvas.draw_arc(at[i], (4.5 if selected else 3.0) * k, 0.0, TAU, 12, plot.colors[i], w * 0.6)
+		elif selected:
+			_canvas.draw_circle(at[i], 4.5 * k, plot.colors[i])
+		if selected:
+			_canvas.draw_arc(at[i], 8.0 * k, 0.0, TAU, 20, plot.colors[i], w * 0.75)
+
+
+# Draws a filled dot of `radius` at each of `at` in one multimesh: every contact as a dark backing, or the plain ones (not on
+# the rim, not selected) in their colours. Returns the multimesh, made on first use (one per kind, as one draw keeps its buffer).
+func _draw_dots(dots: MultiMesh, at: PackedVector2Array, plot: RadarPlot, radius: float, backing: bool) -> MultiMesh:
+	if dots == null:
+		dots = MultiMesh.new()
+		dots.transform_format = MultiMesh.TRANSFORM_2D
+		dots.use_colors = true
+		dots.mesh = _dot_unit_mesh()
+	if dots.instance_count < at.size():
+		dots.instance_count = maxi(at.size(), dots.instance_count * 2)  # grows rarely, never shrinks
+	_dot_buffer.resize(dots.instance_count * DOT_STRIDE)  # the server takes the whole buffer
+	var n: int = 0
+	for i: int in at.size():
+		var colour: Color = TEXT_SHADOW
+		if not backing:
+			if plot.rims[i] == 1 or i == plot.selected_index:
+				continue
+			colour = plot.colors[i]
+		var b: int = n * DOT_STRIDE
+		var p: Vector2 = at[i]
+		_dot_buffer[b] = radius
+		_dot_buffer[b + 1] = 0.0
+		_dot_buffer[b + 2] = 0.0
+		_dot_buffer[b + 3] = p.x
+		_dot_buffer[b + 4] = 0.0
+		_dot_buffer[b + 5] = radius
+		_dot_buffer[b + 6] = 0.0
+		_dot_buffer[b + 7] = p.y
+		_dot_buffer[b + 8] = colour.r
+		_dot_buffer[b + 9] = colour.g
+		_dot_buffer[b + 10] = colour.b
+		_dot_buffer[b + 11] = colour.a
+		n += 1
+	RenderingServer.multimesh_set_buffer(dots.get_rid(), _dot_buffer)
+	dots.visible_instance_count = n
+	if n > 0:
+		_canvas.draw_multimesh(dots, null)
+	return dots
+
+
+# A filled unit circle, the radar's dot.
+static func _dot_unit_mesh() -> ArrayMesh:
+	if _dot_mesh != null:
+		return _dot_mesh
+	var vertices := PackedVector2Array([Vector2.ZERO])
+	var indices := PackedInt32Array()
+	for i: int in DOT_SEGMENTS:
+		var a: float = TAU * float(i) / float(DOT_SEGMENTS)
+		vertices.append(Vector2(cos(a), sin(a)))
+		indices.append_array(PackedInt32Array([0, 1 + i, 1 + (i + 1) % DOT_SEGMENTS]))
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_INDEX] = indices
+	_dot_mesh = ArrayMesh.new()
+	_dot_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return _dot_mesh
 
 
 # A ring of the radar sphere at `reach` of its radius: 0 = the equatorial plane (X/Y), 1 = the vertical plane through the nose (Y/Z).

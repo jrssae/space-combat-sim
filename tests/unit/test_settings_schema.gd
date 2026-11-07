@@ -126,18 +126,38 @@ func test_control_profile_is_a_string_with_a_pattern() -> void:
 
 
 func test_an_int_setting_validates_parses_and_describes() -> void:
-	assert_eq(schema.get_type(&"splat_budget"), TYPE_INT)
-	assert_eq(schema.get_default(&"splat_budget"), 2000000)
-	assert_eq(schema.describe(&"splat_budget"), "int 100000..6000000")
-	assert_eq(schema.validate(&"splat_budget", 500000)["value"], 500000)
-	assert_eq(typeof(schema.validate(&"splat_budget", 500000.0)["value"]), TYPE_INT, "a whole float is an int")
-	assert_false(schema.validate(&"splat_budget", 500000.5)["ok"])
-	assert_false(schema.validate(&"splat_budget", 10)["ok"])
-	assert_false(schema.validate(&"splat_budget", 7000000)["ok"])
-	assert_false(schema.validate(&"splat_budget", "many")["ok"])
-	assert_eq(schema.parse(&"splat_budget", "750000")["value"], 750000)
-	assert_false(schema.parse(&"splat_budget", "1.5")["ok"])
-	assert_false(schema.parse(&"splat_budget", "many")["ok"])
+	assert_eq(schema.get_type(&"ai_nearest_k"), TYPE_INT)
+	assert_eq(schema.get_default(&"ai_nearest_k"), 12)
+	assert_eq(schema.describe(&"ai_nearest_k"), "int 0..64")
+	assert_eq(schema.validate(&"ai_nearest_k", 30)["value"], 30)
+	assert_eq(typeof(schema.validate(&"ai_nearest_k", 30.0)["value"]), TYPE_INT, "a whole float is an int")
+	assert_false(schema.validate(&"ai_nearest_k", 30.5)["ok"])
+	assert_false(schema.validate(&"ai_nearest_k", -1)["ok"])
+	assert_false(schema.validate(&"ai_nearest_k", 65)["ok"])
+	assert_false(schema.validate(&"ai_nearest_k", "many")["ok"])
+	assert_eq(schema.parse(&"ai_nearest_k", "20")["value"], 20)
+	assert_false(schema.parse(&"ai_nearest_k", "1.5")["ok"])
+	assert_false(schema.parse(&"ai_nearest_k", "many")["ok"])
+
+
+# --- M4-T24: the simulation step's schedule and the catch-up cap --------------------------------------------------------
+
+
+func test_sim_step_is_an_enum_of_the_three_schedules_and_defaults_to_threaded() -> void:
+	assert_true(schema.has_key(&"sim_step"), "sim_step is a setting")
+	assert_eq(schema.get_type(&"sim_step"), SettingsSchema.TYPE_ENUM)
+	assert_eq(schema.get_choices(&"sim_step"), [&"inline", &"delayed", &"threaded"])
+	assert_eq(schema.get_default(&"sim_step"), &"threaded", "the AI step runs on the worker thread by default (Q53)")
+	assert_true(schema.parse(&"sim_step", "inline")["ok"], "inline is today's single-thread step (Q54)")
+	assert_false(schema.parse(&"sim_step", "parallel")["ok"])
+
+
+func test_the_catch_up_cap_is_an_int_of_at_least_one_tick_a_frame() -> void:
+	assert_true(schema.has_key(&"physics_max_steps_per_frame"), "physics_max_steps_per_frame is a setting")
+	assert_eq(schema.get_type(&"physics_max_steps_per_frame"), TYPE_INT)
+	assert_eq(schema.get_default(&"physics_max_steps_per_frame"), 3)
+	assert_false(schema.validate(&"physics_max_steps_per_frame", 0)["ok"], "a frame runs at least one tick")
+	assert_true(schema.validate(&"physics_max_steps_per_frame", 8)["ok"], "Godot's default of 8 stays allowed")
 
 
 # --- Menu metadata (M5-T03, D57): every entry has a category, debug switches stay out of the menu ---------------------
@@ -167,7 +187,7 @@ func test_the_menu_flag_is_a_bool_and_defaults_to_shown() -> void:
 
 
 func test_the_debug_switches_stay_console_only() -> void:
-	for key: StringName in [&"hull_splat_sync", &"hull_depth_proxy", &"physics_jitter_fix", &"show_fps", &"show_overlay",
+	for key: StringName in [&"physics_jitter_fix", &"show_fps", &"show_overlay",
 			&"debug_text_size", &"console_enabled", &"console_pause_on_open", &"scenario", &"skip_front_end", &"control_profile"]:
 		assert_false(schema.is_menu(key), "%s is not in the menu" % key)
 	for key: StringName in [&"invert_y", &"sfx_volume", &"camera_default", &"show_hud", &"lens_flare", &"friendly_fire"]:

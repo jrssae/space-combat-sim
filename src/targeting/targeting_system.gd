@@ -1,8 +1,9 @@
 class_name TargetingSystem
 extends RefCounted
 ## Target selection and the target readout (architecture §6.3), pure: no scene tree, no Input, no clock. The
-## `TargetingController` node feeds it a fresh candidate list every physics tick and calls the selectors on the
-## `target_next` / `target_ahead` edges; an AI pilot can drive one the same way.
+## player's `TargetingController` feeds it a fresh candidate list every physics tick (an AI ship's only when it picks a
+## target, §17.2) and calls the selectors on the `target_next` / `target_ahead` edges; an AI pilot can drive one the
+## same way.
 ##
 ## Rules:
 ## - Only candidates within reach can be selected: `sensor_range_m` (25 km) of the ship, or the candidate's own
@@ -45,6 +46,18 @@ func update(candidates: Array[TargetInfo], ship_pos: Vector3) -> bool:
 	if current == null or range_between(ship_pos, current.position) > reach_m(current):
 		return clear()
 	return false
+
+
+## Replaces the candidate list and leaves the selection alone (M4-T34): a list built between refreshes, when it is read; the
+## refresh that checked the selection already ran.
+func set_candidates(candidates: Array[TargetInfo]) -> void:
+	_candidates = candidates.duplicate()
+
+
+## Selects `target_id`, which the caller found within reach in its own copy of the list (M4-T34). Returns true if the
+## selection changed.
+func select_listed(target_id: int) -> bool:
+	return _select(target_id)
 
 
 ## How far away `info` can be and still be selected: the sensor range, or its broadcast range when that is farther.

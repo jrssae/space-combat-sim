@@ -9,6 +9,8 @@ extends Node3D
 ## the lesson restarts; wing ships and fighting ships stay in play (maintainer Q8: a downed wingman is replaced at the next wave).
 
 const SCENARIO_DIR := "res://data/scenarios/"
+## The debug overlay's text is rebuilt this often while it shows (M4-T36): a readout, not an animation.
+const OVERLAY_INTERVAL_S: float = 0.1
 const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
@@ -56,11 +58,19 @@ var instructor: Combatant = null
 var instructor_path: BehaviourFollowPath = null
 ## The pause menu (M5-T02): Start opens it and the world pauses behind it.
 var pause_menu: PauseMenu = null
+## The tick's stage timers (`perf`) and the many-ships benchmark (`bench`), M4-T01.
+var perf_probe: PerfProbe = null
+var bench: BenchRunner = null
+## The render comparison's station scene (M4-T27), closed until `station near|far`.
+var station_scene: StationScene = null
+## Times the overlay's text was rebuilt (tests).
+var overlay_refreshes: int = 0
 ## The comms menu on D-pad Right (M5-T07): its model, and the view that draws it.
 var comms_menu: CommsMenu = CommsMenu.new()
 var comms_menu_view: CommsMenuView = null
 
 var _spawn_position: UniversePos = UniversePos.new()
+var _overlay_in_s: float = 0.0
 var _spawn_basis: Basis = Basis.IDENTITY
 # The player's velocity at the first spawn (a mission that opens in flight); a respawn starts at rest.
 var _start_velocity: Vector3 = Vector3.ZERO
@@ -87,7 +97,7 @@ var _scenario_entries: Array[Dictionary] = []
 @onready var waves: WaveDirector = $Combat/WaveDirector
 @onready var wings: WingDirector = $Combat/WingDirector
 @onready var hud: Hud = $Hud
-@onready var splat_status: SplatStatus = $SplatStatus
+@onready var render_status: RenderStatus = $RenderStatus
 @onready var overlay: DebugOverlay = $DebugOverlay
 
 
@@ -95,8 +105,6 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	world.process_mode = Node.PROCESS_MODE_PAUSABLE
 	_setup_input()
-	get_tree().root.size_changed.connect(_update_render_scale)
-	_update_render_scale()
 	var scenario: Dictionary = ScenarioLoader.load(resolved_scenario_path())
 	if not bool(scenario.get("ok", false)):
 		push_warning("Main: %s; spawning at the origin with no props" % scenario.get("error", "no scenario"))
@@ -168,6 +176,7 @@ func _ready() -> void:
 	# The button that closed the menu may still be down: it must not also tap a target or toggle something.
 	pause_menu.resumed.connect(func() -> void: adapter.resync_edges(input_source))
 	add_child(pause_menu)
+	_setup_perf()
 	comms_menu.set_root_page("WING ORDERS", CommsMenu.wing_orders())
 	comms_menu_view = CommsMenuView.new()
 	comms_menu_view.menu = comms_menu
@@ -177,16 +186,6 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
-	if get_tree() != null and get_tree().root.size_changed.is_connected(_update_render_scale):
-		get_tree().root.size_changed.disconnect(_update_render_scale)
-
-
-# The splat renderer cannot draw more than 65 535 tiles of 16 x 16 px; a very large window is rendered at a lower 3D scale (RenderScale).
-func _update_render_scale() -> void:
-	var root: Window = get_tree().root
-	var scale: float = RenderScale.scale_for(root.size.x, root.size.y)
-	if not is_equal_approx(root.scaling_3d_scale, scale):
-		root.scaling_3d_scale = scale
 
 
 func _physics_process(delta: float) -> void:
@@ -234,11 +233,21 @@ func _input(event: InputEvent) -> void:
 			source.add_wheel(-1)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_update_mouse_capture()
-	if overlay.visible:
-		overlay.show_snapshot(snapshot())
+	update_overlay(delta)
 	_update_bracket()
+
+
+## Rebuilds the overlay's text when it is due, `OVERLAY_INTERVAL_S` apart while it shows (at once when it appears). Public for the
+## tests.
+func update_overlay(delta: float) -> void:
+	_overlay_in_s -= delta
+	if not overlay.visible or _overlay_in_s > 0.0:
+		return
+	_overlay_in_s = OVERLAY_INTERVAL_S
+	overlay_refreshes += 1
+	overlay.show_snapshot(snapshot())
 
 
 ## Everything the overlay shows, gathered from the subsystems' typed getters.
@@ -269,7 +278,7 @@ func snapshot() -> Dictionary:
 	if cannon != null:
 		s["weapon_mode"] = String(PulseCannonGate.mode_name(cannon.gate.mode))
 	s["timescale"] = Engine.time_scale
-	s["splat_backend"] = String(SplatStatus.active_backend())
+	s["renderer"] = String(RenderStatus.renderer())
 	s["fps"] = Engine.get_frames_per_second()
 	s["gpu"] = RenderingServer.get_video_adapter_name()
 	s["pads"] = input_source.pad_info()
@@ -281,6 +290,57 @@ func _pool_count(scenario: Dictionary, type: StringName, override_count: int) ->
 	if override_count >= 0:
 		return override_count
 	return int((scenario.get("pools", {}) as Dictionary).get(type, 0))
+
+
+## Grows the pool of `type` to at least `count` ships, heard like the scenario's own (the benchmark's load, M4-T01). Returns
+## how many were built.
+func ensure_pool(type: StringName, count: int) -> int:
+	var missing: int = count - ships.pool_size(type)
+	if missing <= 0:
+		return 0
+	var known: int = ships.pool_size()
+	var built: int = ships.prepare(type, missing)
+	for pooled: Combatant in ships.all_ships().slice(known):
+		audio.watch_ship(pooled)
+	return built
+
+
+# The tick's stage timers and the benchmark (M4-T01); both pause with the world. The battle benchmark's stand-ins live in
+# `World/Standins` (M4-T07), empty outside a battle run.
+func _setup_perf() -> void:
+	var standins := StandinDirector.new()
+	standins.name = "Standins"
+	standins.world = world
+	standins.projectiles = projectiles
+	standins.ships = ships
+	standins.player = ship
+	world.add_child(standins)
+	TierDirector.attach(world, ships, standins)  # the low-attention tier (M4-T21): far ships as core rows
+	perf_probe = PerfProbe.new()
+	perf_probe.name = "PerfProbe"
+	perf_probe.process_mode = Node.PROCESS_MODE_PAUSABLE
+	perf_probe.world = world
+	perf_probe.hits = $Combat/HitResolver as HitResolver
+	perf_probe.rams = rams
+	perf_probe.ships_in_play = func() -> int: return ships.in_use_count() + (1 if player_alive else 0)
+	perf_probe.standins = standins
+	add_child(perf_probe)
+	bench = BenchRunner.new()
+	bench.name = "BenchRunner"
+	bench.process_mode = Node.PROCESS_MODE_PAUSABLE
+	bench.main = self
+	bench.probe = perf_probe
+	bench.standins = standins
+	add_child(bench)
+	# M4-T30a: the look sheets' scene.
+	var look_scene := LookScene.new()
+	look_scene.name = "LookScene"
+	add_child(look_scene)
+	station_scene = StationScene.new()
+	station_scene.name = "StationScene"
+	station_scene.process_mode = Node.PROCESS_MODE_PAUSABLE
+	station_scene.main = self
+	add_child(station_scene)
 
 
 ## The scenario file in use: `scenario_path`, else the one `settings.scenario` names.
@@ -301,7 +361,7 @@ func respawn() -> void:
 		buoy.restore()
 	director.cancel_respawn()  # Back while dead: the death's own respawn must not follow
 	_restart_lessons()
-	combatant.cannon.gate.reset()
+	combatant.cannon.reset_gate()
 	combatant.cannon.reset_flashes()
 	thrusters.reset()  # the dead ship's last burn does not fade out at the start
 	ship.set_flight_command(FlightCommand.new())
@@ -385,7 +445,8 @@ func _build_hud_input() -> HudInput:
 	input.charge_fraction = cannon.charge_fraction()
 	input.fire_mode = String(PulseCannonGate.mode_name(cannon.gate.mode))
 	input.target = ship.targeting.selected_readout()
-	input.contacts = ship.targeting.candidates()
+	# The radar's contacts straight from the targetables (M4-T36): the candidate list is built only when something cycles it.
+	input.radar_contacts = RadarContacts.gather(get_tree(), ship, ship.targeting.system.sensor_range_m)
 	input.selected_id = ship.targeting.selected_id()
 	input.status_line = status_line
 	input.roster = wings.hud_roster()
@@ -513,6 +574,7 @@ func _apply_input_settings() -> void:
 	adapter.target_hold_s = float(Settings.get_value(&"target_hold_s"))
 	adapter.mouse_full_rate_px_s = float(Settings.get_value(&"mouse_full_rate_px_s"))
 	Engine.physics_jitter_fix = float(Settings.get_value(&"physics_jitter_fix"))
+	Engine.max_physics_steps_per_frame = int(Settings.get_value(&"physics_max_steps_per_frame"))  # M4-T24
 	var godot_source := input_source as GodotInputSource
 	if godot_source != null:
 		godot_source.trigger_deadzone = float(Settings.get_value(&"trigger_deadzone"))
@@ -554,8 +616,6 @@ func _handle_ui(ui: UiCommand) -> void:
 		respawn()
 	if ui.toggle_overlay:
 		Settings.set_value(&"show_overlay", not bool(Settings.get_value(&"show_overlay")))
-	if ui.toggle_fallback_mesh:
-		splat_status.toggle_fallback()
 	if ui.toggle_running_lights and player_alive:
 		ship.running_lights = not ship.running_lights
 	if ui.screenshot:
@@ -704,5 +764,6 @@ func _cmd_pause(args: Dictionary) -> ConsoleResult:
 
 
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
-	if key in [&"stick_deadzone", &"invert_y", &"target_hold_s", &"trigger_deadzone", &"mouse_full_rate_px_s", &"physics_jitter_fix"]:
+	if key in [&"stick_deadzone", &"invert_y", &"target_hold_s", &"trigger_deadzone", &"mouse_full_rate_px_s", &"physics_jitter_fix",
+			&"physics_max_steps_per_frame"]:
 		_apply_input_settings()

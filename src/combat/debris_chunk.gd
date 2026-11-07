@@ -1,48 +1,44 @@
 class_name DebrisChunk
 extends Node3D
-## One piece of a broken-up ship (architecture §15.6, §15.7): a `GaussianSplatNode` child at identity that is never added,
-## removed or re-transformed by hand (D22: GDGS re-merges the whole scene's splat data on every register and unregister;
-## `SplatPoseSync` only draws it at the chunk's interpolated pose), and a `MeshInstance3D` with the chunk's OBJ, in group
-## `splat_fallback_mesh`, shown instead of the splats when the splat renderer cannot draw them (and always for a chunk
-## made without splats). It drifts and spins kinematically (no collisions), lives `LIFETIME_S`, shrinks to nothing over
-## `SHRINK_S`, hides and parks (`parked` is emitted; a one-shot chunk frees itself instead). A Starfury's chunk is first
-## *held* (M3-T28): drawn and busy, but placed by its wreck (`place_held`) until `release` sets it flying.
+## One piece of a broken-up ship (architecture §15.6, §15.7): a `MeshInstance3D` drawing the chunk's textured mesh (M4-T30d, its
+## `mesh` entry, cut from the hull on the hull's maps, so chunks instance with the hulls), or its OBJ for an entry without one. It
+## drifts and spins kinematically (no collisions), lives `LIFETIME_S`, shrinks to nothing over `SHRINK_S`, hides and parks (`parked`
+## is emitted; a one-shot chunk frees itself instead). A Starfury's chunk is first *held* (M3-T28): drawn and busy, but placed by its
+## wreck (`place_held`) until `release` sets it flying, and it wears its ship's livery (`set_livery`).
 ##
-## Frames: the chunk's PLY and OBJ are centred on the chunk's own centroid, so the node's origin is that centroid;
-## `offset` (from `hardpoints.json` `chunks[]`) is where it sat in the ship's body frame.
+## Frames: the chunk's meshes are centred on the chunk's own centroid, so the node's origin is that centroid; `offset` (from
+## `hardpoints.json` `chunks[]`) is where it sat in the ship's body frame.
 
 ## The chunk finished its life and is parked.
 signal parked(chunk: DebrisChunk)
 
 const LIFETIME_S: float = 8.0
 const SHRINK_S: float = 0.5
-const SPLATS_NAME: String = "ChunkSplats"
 const MESH_NAME: String = "ChunkMesh"
 
 var chunk_name: String = ""
 ## The chunk's centroid in the ship's body frame.
 var offset: Vector3 = Vector3.ZERO
-## Frees itself instead of parking (mesh-only chunks and generic shards are not pooled).
+## Frees itself instead of parking (one-shot chunks and generic shards are not pooled).
 var one_shot: bool = false
 ## World-frame velocity (m/s) and angular velocity (rad/s).
 var velocity: Vector3 = Vector3.ZERO
 var angular_velocity: Vector3 = Vector3.ZERO
-var splats: GaussianSplatNode = null
 var mesh_instance: MeshInstance3D = null
+## The chunk's textured mesh (M4-T30d), null for a shard or before the assets are generated.
+var textured_mesh: Mesh = null
 
 var _age_s: float = 0.0
 var _vent: FxPool = null
 var _vent_handle: int = 0
 var _orientation: Basis = Basis.IDENTITY  # orthonormal, kept apart from the scale so spinning cannot drift the size
 var _active: bool = false
-var _fallback: bool = false
 var _placed_this_tick: bool = false
 var _held: bool = false
 
 
-## A parked chunk from a `hardpoints.json` `chunks[]` entry (`name`, `ply`, `obj`, `offset`) in `asset_dir`. With
-## `with_splats` it owns a `GaussianSplatNode` (build these at scenario load only); without, only the mesh.
-static func create(entry: Dictionary, asset_dir: String, with_splats: bool) -> DebrisChunk:
+## A parked chunk from a `hardpoints.json` `chunks[]` entry (`name`, `obj`, `offset`, `mesh`) in `asset_dir`.
+static func create(entry: Dictionary, asset_dir: String) -> DebrisChunk:
 	var chunk := DebrisChunk.new()
 	chunk.name = "Chunk_%s" % String(entry.get("name", "x")).to_pascal_case()
 	chunk.chunk_name = String(entry.get("name", ""))
@@ -50,28 +46,14 @@ static func create(entry: Dictionary, asset_dir: String, with_splats: bool) -> D
 	chunk.mesh_instance = MeshInstance3D.new()
 	chunk.mesh_instance.name = MESH_NAME
 	chunk.mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var obj_path: String = asset_dir.path_join(String(entry.get("obj", "")))
-	if ResourceLoader.exists(obj_path):
-		chunk.mesh_instance.mesh = load(obj_path) as Mesh
-		MeshMaterials.matte(chunk.mesh_instance.mesh)
+	var textured: String = String(entry.get("mesh", ""))
+	if not textured.is_empty():
+		chunk.textured_mesh = MeshAssets.chunk_mesh(asset_dir, textured)
+	if chunk.textured_mesh == null:
+		chunk.mesh_instance.mesh = _obj_mesh(asset_dir.path_join(String(entry.get("obj", ""))))
 	else:
-		push_warning("DebrisChunk: %s is missing or not imported (run scripts/gen_assets.sh, then import)" % obj_path)
+		chunk.mesh_instance.mesh = chunk.textured_mesh
 	chunk.add_child(chunk.mesh_instance)
-	if with_splats:
-		chunk.splats = GaussianSplatNode.new()
-		chunk.splats.name = SPLATS_NAME
-		var sync := SplatPoseSync.new()
-		sync.name = "ChunkSplatSync"
-		chunk.add_child(chunk.splats)
-		chunk.add_child(sync)
-		sync.splats = chunk.splats
-		var ply_path: String = asset_dir.path_join(String(entry.get("ply", "")))
-		if ResourceLoader.exists(ply_path):
-			chunk.splats.gaussian = load(ply_path) as GaussianResource
-			var records: String = String(entry.get("lighting", ""))
-			SplatLightingLoader.attach(chunk.splats, asset_dir.path_join(records) if not records.is_empty() else "")
-		else:
-			push_warning("DebrisChunk: %s is missing or not imported (run scripts/gen_assets.sh, then import)" % ply_path)
 	chunk._park_state()
 	return chunk
 
@@ -103,13 +85,18 @@ static func create_shard(rng: RandomNumberGenerator) -> DebrisChunk:
 	return chunk
 
 
+# A chunk without a textured mesh draws its OBJ, matte.
+static func _obj_mesh(path: String) -> Mesh:
+	if not ResourceLoader.exists(path):
+		push_warning("DebrisChunk: %s is missing or not imported (run scripts/gen_assets.sh, then import)" % path)
+		return null
+	var mesh := load(path) as Mesh
+	MeshMaterials.matte(mesh)
+	return mesh
+
+
 func _init() -> void:
 	add_to_group(WorldFrame.SHIFTABLE_GROUP)
-	add_to_group(SplatStatus.MESH_GROUP)
-
-
-func _ready() -> void:
-	_apply_visibility()
 
 
 func _exit_tree() -> void:
@@ -123,10 +110,11 @@ func _physics_process(delta: float) -> void:
 	advance(delta)
 
 
-## Splat renderer unavailable (or forced off): show the mesh, hide the splats. `SplatStatus` calls this.
-func use_fallback_mesh(enabled: bool) -> void:
-	_fallback = enabled
-	_apply_visibility()
+## Paints the textured chunk in its ship's livery (null: plain). Pooled chunks are repainted for every wreck.
+func set_livery(livery: Livery) -> void:
+	if mesh_instance == null or textured_mesh == null or not (textured_mesh.surface_get_material(0) is ShaderMaterial):
+		return  # a hull without a livery table (a raider's) takes no livery values
+	(livery if livery != null else Livery.new()).apply(mesh_instance)
 
 
 ## True from `launch` until the chunk parks.
@@ -145,7 +133,6 @@ func launch(xform: Transform3D, p_velocity: Vector3, p_angular_velocity: Vector3
 	angular_velocity = p_angular_velocity
 	_age_s = 0.0
 	_active = true
-	_apply_visibility()
 	reset_physics_interpolation()
 
 
@@ -247,10 +234,3 @@ func _park_state() -> void:
 	angular_velocity = Vector3.ZERO
 	scale = Vector3.ONE
 	_orientation = Basis.IDENTITY
-
-
-func _apply_visibility() -> void:
-	if mesh_instance != null:
-		mesh_instance.visible = _fallback or splats == null
-	if splats != null:
-		splats.visible = not _fallback

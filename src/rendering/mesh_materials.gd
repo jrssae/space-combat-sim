@@ -9,13 +9,14 @@ extends RefCounted
 
 const MAX_METALLIC: float = 0.15
 const MIN_ROUGHNESS: float = 0.65
-## A cockpit surface's own glow, by material name. What is not listed here is lit only by the cabin lamp and the sun.
+## A cockpit surface's own glow, by material name. What is not listed here is lit only by the cabin lamp and the sun. The surfaces
+## are grey; the glow is the cabin's dark red light on them, subtle so the grey shows (Q36, Q37).
 const COCKPIT_GLOW: Dictionary = {
-	"ef_cockpit_red": Color(0.42, 0.012, 0.008),
-	"ef_cockpit_red_dim": Color(0.12, 0.004, 0.003),
-	"ef_cockpit_dark": Color(0.008, 0.002, 0.002),
-	"ef_cockpit_sill": Color(0.018, 0.003, 0.003),
-	"ef_cockpit_metal": Color(0.016, 0.004, 0.004),
+	"ef_cockpit_red": Color(0.16, 0.006, 0.004),
+	"ef_cockpit_red_dim": Color(0.05, 0.002, 0.0015),
+	"ef_cockpit_dark": Color(0.006, 0.0015, 0.0015),
+	"ef_cockpit_sill": Color(0.01, 0.002, 0.002),
+	"ef_cockpit_metal": Color(0.01, 0.0025, 0.0025),
 }
 ## Cockpit surfaces drawn as a flat colour, whatever lights the cabin: the round lamps and the screens' rims.
 const COCKPIT_UNLIT: Array[String] = ["ef_cockpit_lamp", "ef_cockpit_rim"]

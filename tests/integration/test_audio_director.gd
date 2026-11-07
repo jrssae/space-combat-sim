@@ -114,6 +114,35 @@ func test_a_players_shot_makes_a_pulse_sound_and_a_raiders_shot_a_raider_sound()
 	assert_eq(main.audio.times_played(&"raider_fire"), raider_before + 1)
 
 
+## A pilot that holds the trigger down (the AI's command path, not the console's).
+class FiringBrain extends PilotBrain:
+	func think(_p: Perception, _dt: float) -> PilotCommand:
+		var cmd := PilotCommand.new()
+		cmd.combat.fire = true
+		return cmd
+
+
+func test_an_ai_cannon_on_the_bolt_rows_is_heard_on_every_shot() -> void:
+	# M4-T35 fix round 1: the AI cannons fire rows, not `Projectile` nodes, so the director listens to `shot_fired`.
+	if not NativeLib.has_class(SimCore.NATIVE_CLASS) or not NativeLib.has_class(SimCore.CANNONS_CLASS):
+		pending("the native library is not built (scripts/build_native.sh), so there are no bolt rows")
+		return
+	var raider: Combatant = main.ships.acquire("RAIDER", main.world.to_universe(Vector3(0.0, 0.0, -400.0)), Basis.IDENTITY,
+			Vector3.ZERO, FiringBrain.new(), ShipPool.DEFAULT_TYPE)
+	await _ticks(1)
+	var sim: SimCore = SimCore.current()
+	assert_not_null(sim, "the main scene runs the core")
+	assert_true(raider.cannon.on_kernel(), "the AI cannon fires through the kernel (bolt rows)")
+	var before: int = main.audio.times_played(&"raider_fire")
+	var owned_before: int = int(sim.core.owned_bolts())
+	var shots: Array[int] = [0]
+	raider.cannon.shot_fired.connect(func(_i: int, _at: Vector3) -> void: shots[0] += 1)
+	await _ticks(45)  # past the raider gun's interval: at least one more shot
+	assert_gt(shots[0], 0, "it fired")
+	assert_gt(int(sim.core.owned_bolts()), owned_before, "its bolts are rows, not nodes")
+	assert_eq(main.audio.times_played(&"raider_fire") - before, shots[0], "every shot was heard")
+
+
 func test_hits_and_explosions_are_heard_where_they_happen() -> void:
 	DebugConsole.registry.execute("spawn raider 300")
 	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]

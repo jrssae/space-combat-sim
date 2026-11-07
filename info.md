@@ -17,7 +17,7 @@ same commit; `tests/integration/test_console_command_list.gd` fails when the fil
   - Example: `.tools/godot/godot --headless --path . -- --console-strict --console-exec="wait 30; state ship; quit"`
 - Details: `docs/architecture.md` §6.4, §15.13, §16.4 and §18.4.
 
-Commands on this list are those on the `m5` branch. Commands from other branches join the list when they merge.
+Commands on this list are those on the `m5` branch, which holds M4 through T22 since the merge of `main` on 2026-11-07.
 
 ## Where a command exists
 
@@ -89,11 +89,13 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 
 | Command | Arguments | Does | Where |
 |---|---|---|---|
-| `fallback` | `[on\|off]` | Show the fallback meshes and panorama sky instead of splats | in flight |
-| `relight` | `[on\|off]` | Light hulls, chunks and buoys with the scene's lights, or draw them flat | front end, flight |
 | `flare` | `[on\|off]` | Toggle the star's lens flare | front end, flight |
 | `blur` | `[on\|off]` | Toggle motion blur on fast turns | front end, flight |
-| `lod` | `<ship\|all> <hero\|0-3\|auto>` | Force a ship's splat level; `auto` lets its size on screen decide | in flight |
+| `sky` | `<stars\|nebula> [on\|off]` | Show or hide the star points or the nebula panorama; no state toggles | front end, flight |
+| `aa` | `[off\|fxaa\|smaa\|msaa_2x\|msaa_4x\|taa]` | Show or set the 3D view's anti-aliasing, live (`settings.anti_aliasing`) | front end, flight |
+| `upscale` | `[native\|bilinear\|fsr1\|fsr2] [preset\|<scale>]` | Show or set how the 3D view is rendered and enlarged to the window, live | front end, flight |
+| `sheet` | `<asset_id> [distance_m] [lit\|dark\|off] [wing:number\|-] [view]` | Park one idle ship of an asset ahead of the camera for a look sheet | in flight |
+| `livery` | `<wing\|plain> [number] [ship]` | Paint a ship in a wing's livery with its number, to look at it | in flight |
 | `fxburst` | `[hit\|ram\|explosion_sparks\|explosion_fragments\|explosion_gas\|debris]` | Throw one burst of an effect 40 m in front of the camera | in flight |
 
 ### Combat
@@ -120,6 +122,15 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | Command | Arguments | Does | Where |
 |---|---|---|---|
 | `sfx` | `<pulse_fire\|raider_fire\|hit_hull\|explosion\|main_burst\|rcs_burst\|warning_beep\|target_blip>` | Play a sound at the player | front end, flight |
+
+### Performance
+
+| Command | Arguments | Does | Where |
+|---|---|---|---|
+| `perf` | `[on\|off]` | Time every tick's stages (the `perf` provider); no argument toggles | in flight |
+| `native` | `[bench]` | Say whether the native library is loaded and which path runs; `bench` times calls into it | in flight |
+| `bench` | `<furball\|spread\|transit\|battle\|typical> <n> [options]` | Fly a benchmark layout with n ships and write `reports/perf/<label>/` (`scripts/bench.sh`) | in flight |
+| `station` | `<near\|far\|off>` | Open the render comparison's station scene (M4-T27) | in flight |
 
 ### Missions
 
@@ -157,10 +168,18 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `screens` | The cockpit screens: shown, powered, paint counts and the lamps lit | in flight |
 | `pause_menu` | Whether the pause menu is open, the page on top and how many pages are open | in flight |
 | `comms_menu` | The comms menu (D-pad Right): whether it is open, the page, time left, entries picked and why it last closed | in flight |
-| `render` | The splat backend, fallback switch, fps, GPU name, splat budget and GDGS counters | in flight |
+| `render` | The renderer (`forward_plus` or `headless`), fps, frame time, draw calls, triangles, VRAM, far dots, GPU, display and window | in flight |
 | `lights` | Which emitters light the scene this frame and what that costs | front end, flight |
-| `lod` | Each ship's splat level and the splats drawn | in flight |
+| `sky` | The star points and the nebula panorama: loaded and shown | front end, flight |
+| `aa` | The anti-aliasing mode, what the viewport uses, and the bolts' and sky's motion-vector state | front end, flight |
+| `upscale` | The upscaler, its preset, the scale applied, sharpness and the window's and 3D view's lines | front end, flight |
 | `post` | Lens flare and motion blur state and where the star is in the picture | front end, flight |
+| `livery` | The player's livery and every ship's in the world | in flight |
+| `frame` | The frame's passes (plumes, flashes, impacts, far dots, bolts): their cost and what each walks | always |
+| `core` | The native simulation core: rows, bodies, bolts, syncs, threads and their costs | in flight |
+| `flight` | The native flight batch: ships stepped and the gather and step costs | in flight |
+| `tier` | The low-attention tier: radius, rates, fighter and capital rows, hulks, promotions and demotions | in flight |
+| `perf` | The tick's stage timings and per-entity counts (on while `perf on` or a bench runs) | in flight |
 | `fx` | The particle emitter pool: emitters, busy, bursts thrown and the density in use | in flight |
 | `debris` | The break-up chunk pool: sets, free sets, active chunks and held wrecks | in flight |
 | `audio` | Sounds loaded, voices playing, engine voices and the SFX volume (writable) | front end, flight |

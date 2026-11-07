@@ -20,6 +20,8 @@ signal hit_taken(info: HitInfo)
 signal damaged(info: HitInfo, applied: float)
 ## The hit that took the hull to zero; emitted once per life.
 signal destroyed(info: HitInfo)
+## The hull is whole again (`restore`, a rebuild): what watches the hull points (the core's columns, M4-T35) reads them anew.
+signal restored
 
 const GROUP: StringName = &"damageable"
 
@@ -55,6 +57,9 @@ var respects_god_mode: bool = false
 ## `invulnerable`). Hits still arrive (`hit_taken`); only the console's `kill` gets through, as it does through god mode.
 ## The pool clears it on every acquire.
 var invulnerable: bool = false
+## How many times the hull was made whole again (`restore`: a respawn, a pool re-use, a heal): a far missile launched at one
+## life does not land on the next (M4-T22 fix round 1).
+var life: int = 0
 
 
 func _init() -> void:
@@ -150,8 +155,10 @@ func apply_hit(info: HitInfo) -> void:
 
 ## A full, intact hull again (respawn, pool re-use, console `heal`): the hull points and the damage zones.
 func restore() -> void:
+	life += 1
 	hull.restore()
 	zones.reset()
+	restored.emit()
 
 
 ## 0..1 damage per zone of the silhouette (empty when the ship has no layout): see `DamageZones`.

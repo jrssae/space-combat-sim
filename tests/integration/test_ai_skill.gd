@@ -128,7 +128,9 @@ func test_a_rookie_reacts_to_a_hit_within_0_6_s() -> void:
 	var reaction: float = SimClock.now() - hit_s
 	gut.p("rookie: evading %.3f s after the hit" % reaction)
 	assert_eq(pilot.current.id, &"evade")
-	assert_lte(reaction, 0.6 + 1e-6, "within 0.6 s (AC9)")
+	# The AI step is one tick behind on the delayed and threaded schedules (M4-T24, Q53): the evade lands 16.7 ms later.
+	var delay_s: float = 0.0 if BrainBatch.step_mode() == BrainBatch.STEP_INLINE else 1.0 / float(Engine.physics_ticks_per_second)
+	assert_lte(reaction, 0.6 + delay_s + 1e-6, "within 0.6 s (AC9), plus the step's tick on the threaded schedule")
 	assert_gt(reaction, 0.5, "slower than a regular's 0.25 s")
 
 
@@ -137,7 +139,7 @@ func test_a_civilian_never_fires_flees_and_evades_when_hit() -> void:
 	var raider: Combatant = main.ships.acquire("RAIDER 8", _at(Vector3(0.0, 0.0, -3500.0)), Basis.IDENTITY, Vector3.ZERO,
 			IdleBrain.new(true), ShipPool.DEFAULT_TYPE)
 	var shots: Array[int] = [0]
-	civ.cannon.projectile_fired.connect(func(_i: int, _p: Projectile) -> void: shots[0] += 1)
+	civ.cannon.shot_fired.connect(func(_i: int, _at: Vector3) -> void: shots[0] += 1)  # both bolt paths signal it (M4-T35)
 	Engine.time_scale = SPEED_UP
 	await _ticks_for(3.0)
 	var pilot := civ.driver.brain as AiPilot

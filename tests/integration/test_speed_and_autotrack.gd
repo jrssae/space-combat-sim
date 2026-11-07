@@ -210,33 +210,41 @@ func test_with_assist_on_turning_with_the_sticks_does_not_change_the_velocity() 
 	assert_lt(main.ship.linear_velocity.distance_to(before), 0.01, "still not a metre per second different")
 
 
-func test_the_canopy_glass_is_cleared_in_the_cockpit_and_back_outside() -> void:
-	var mesh: Mesh = main.ship.hull_mesh_fallback.mesh
-	assert_not_null(mesh)
-	var glass: int = -1
+# The surfaces of the hull's current mesh whose material names contain `part`.
+func _surfaces_named(part: String) -> Array[int]:
+	var out: Array[int] = []
+	var mesh: Mesh = main.ship.hull.mesh
 	for i: int in mesh.get_surface_count():
-		if String(mesh.surface_get_material(i).resource_name).contains("glass"):
-			glass = i
-	assert_gte(glass, 0, "the hull mesh has a glass surface")
+		if String(mesh.surface_get_material(i).resource_name).contains(part):
+			out.append(i)
+	return out
+
+
+func test_the_canopy_glass_is_cleared_in_the_cockpit_and_back_outside() -> void:
+	assert_same(main.ship.hull.mesh, main.ship.hull_mesh(), "chase: the textured mesh")
 	main.camera_rig.mode = CameraRig.Mode.COCKPIT
 	await _ticks(2)
-	assert_not_null(main.ship.hull_mesh_fallback.get_surface_override_material(glass), "cockpit: the glass draws nothing")
+	assert_ne(main.ship.hull.mesh, main.ship.hull_mesh(), "cockpit: the hull the cockpit view was built around")
+	var glass: Array[int] = _surfaces_named("canopy_glass")
+	assert_eq(glass.size(), 1, "the cockpit hull has a glass surface")
+	for i: int in glass:
+		assert_not_null(main.ship.hull.get_surface_override_material(i), "cockpit: the glass draws nothing")
 	main.camera_rig.mode = CameraRig.Mode.CHASE
 	await _ticks(2)
-	assert_null(main.ship.hull_mesh_fallback.get_surface_override_material(glass), "chase: the real glass again")
+	assert_same(main.ship.hull.mesh, main.ship.hull_mesh())
+	for i: int in main.ship.hull.get_surface_override_material_count():
+		assert_null(main.ship.hull.get_surface_override_material(i), "chase: the real glass again")
 
 
 func test_the_hulls_window_frames_are_cleared_in_the_cockpit_too() -> void:
 	# They would cross the interior's side panes (M3-T29).
-	var mesh: Mesh = main.ship.hull_mesh_fallback.mesh
-	var frame: int = -1
-	for i: int in mesh.get_surface_count():
-		if String(mesh.surface_get_material(i).resource_name).contains("canopy_frame"):
-			frame = i
-	assert_gte(frame, 0, "the hull mesh has a window frame surface")
 	main.camera_rig.mode = CameraRig.Mode.COCKPIT
 	await _ticks(2)
-	assert_not_null(main.ship.hull_mesh_fallback.get_surface_override_material(frame))
+	var frames: Array[int] = _surfaces_named("canopy_frame")
+	assert_eq(frames.size(), 1, "the cockpit hull has a window frame surface")
+	for i: int in frames:
+		assert_not_null(main.ship.hull.get_surface_override_material(i))
 	main.camera_rig.mode = CameraRig.Mode.CHASE
 	await _ticks(2)
-	assert_null(main.ship.hull_mesh_fallback.get_surface_override_material(frame))
+	for i: int in main.ship.hull.get_surface_override_material_count():
+		assert_null(main.ship.hull.get_surface_override_material(i))

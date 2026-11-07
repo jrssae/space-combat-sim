@@ -1,10 +1,7 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://src/props/nav_buoy.gd" id="1_buoy"]
-[ext_resource type="Script" path="res://addons/gdgs_scs/runtime/nodes/gaussian_splat_node.gd" id="2_splats"]
 [ext_resource type="Script" path="res://src/targeting/targetable.gd" id="3_target"]
-[ext_resource type="Script" path="res://src/ship/hull_depth_proxy.gd" id="4_proxy"]
-[ext_resource type="Script" path="res://src/rendering/splat_pose_sync.gd" id="5_sync"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_beacon"]
 blend_mode = 1
@@ -36,18 +33,8 @@ rings = 8
 [node name="NavBuoy" type="Node3D"]
 script = ExtResource("1_buoy")
 
-[node name="BuoySplats" type="VisualInstance3D" parent="."]
-script = ExtResource("2_splats")
-
-[node name="BuoySplatSync" type="Node" parent="." node_paths=PackedStringArray("splats")]
-script = ExtResource("5_sync")
-splats = NodePath("../BuoySplats")
-
-[node name="BuoyMeshFallback" type="MeshInstance3D" parent="."]
-visible = false
-
-[node name="BuoyDepthProxy" type="MeshInstance3D" parent="."]
-script = ExtResource("4_proxy")
+[node name="Body" type="MeshInstance3D" parent="."]
+cast_shadow = 0
 
 [node name="Beacon" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.46, 0)

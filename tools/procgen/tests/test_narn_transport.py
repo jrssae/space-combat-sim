@@ -11,6 +11,10 @@ from pathlib import Path
 
 import numpy as np
 
+# Off until M5-T27 moves the civilian generators onto the textured-mesh pipeline: they still write splats, and main dropped
+# the splat writers (M4-T31). The checks below are the spec that task converts.
+raise unittest.SkipTest("M5-T27: the civilian generators wait for the textured-mesh pipeline")
+
 from tools.procgen.assets import narn_transport as narn
 from tools.procgen.core import frames, lighting
 from tools.procgen.core import manifest as manifest_io

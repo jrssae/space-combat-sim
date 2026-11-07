@@ -120,7 +120,7 @@ func test_a_raider_bolt_hurts_the_player_and_leaves_a_flash() -> void:
 		if child is ImpactFlash:
 			flashes.append(child as ImpactFlash)
 	assert_eq(flashes.size(), 1, "an impact flash rides on the hit ship")
-	assert_true(flashes[0].spark_count() >= ImpactFlash.MIN_SPARKS and flashes[0].spark_count() <= ImpactFlash.MAX_SPARKS)
+	assert_eq(flashes[0].get_child_count(true), 0, "one node: the sparks are the particle pool's (M4-T36)")
 	assert_eq(taken[0].applied, 10.0)
 
 
@@ -250,22 +250,32 @@ func test_destroying_the_player_through_the_console_is_logged_and_signalled() ->
 # --- the impact flash ----------------------------------------------------------------------------------------
 
 
-func test_an_impact_flash_plays_and_frees_itself() -> void:
+func test_an_impact_flash_plays_then_leaves_the_ship_for_the_pool() -> void:
+	var holder := Node3D.new()
+	add_child_autofree(holder)
 	var flash: ImpactFlash = ImpactFlash.create(Color(3.0, 1.0, 0.5), 7)
-	add_child_autofree(flash)
+	holder.add_child(flash)
 	assert_true(flash.is_flash_visible())
 	flash.advance(ImpactFlash.FLASH_S * 0.5)
 	assert_true(flash.is_flash_visible())
 	flash.advance(ImpactFlash.FLASH_S)
-	assert_false(flash.is_flash_visible(), "the flash is over after 80 ms; the sparks go on")
-	assert_false(flash.is_queued_for_deletion())
-	flash.advance(ImpactFlash.SPARK_S)
-	assert_true(flash.is_queued_for_deletion())
+	assert_false(flash.is_flash_visible(), "the flash is over after 80 ms")
+	assert_false(holder.is_ancestor_of(flash), "it left the ship")
+	assert_true(flash.get_parent() is FramePasses or flash.is_queued_for_deletion(), "kept for the next hit, or freed")
 
 
-func test_the_same_seed_gives_the_same_sparks() -> void:
-	var a: ImpactFlash = ImpactFlash.create(Color.WHITE, 99)
-	var b: ImpactFlash = ImpactFlash.create(Color.WHITE, 99)
-	assert_eq(a.spark_count(), b.spark_count())
-	a.free()
-	b.free()
+func test_a_finished_flash_is_handed_out_again_fresh() -> void:
+	var holder := Node3D.new()
+	add_child_autofree(holder)
+	var first: ImpactFlash = ImpactFlash.create(Color.WHITE, 99)
+	holder.add_child(first)
+	first.advance(ImpactFlash.FLASH_S * 2.0)
+	var built: int = ImpactFlash.built_count
+	var again: ImpactFlash = ImpactFlash.create(Color(3.0, 1.0, 0.5), 3)
+	assert_same(again, first, "the pool's flash")
+	assert_eq(ImpactFlash.built_count, built, "nothing built")
+	assert_null(again.get_parent(), "ready to be added to the hit ship")
+	assert_true(again.is_flash_visible(), "showing from its start")
+	assert_eq(again.age_s(), 0.0)
+	assert_eq(again.transparency, 0.0)
+	holder.add_child(again)

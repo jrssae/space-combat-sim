@@ -56,9 +56,9 @@ p9() {
 }
 
 p10() {
-    echo "== P10 LOD (AC28, AC35)"
+    echo "== P10 ranges and far dots (AC28, AC35)"
     # `spawn` places every ship straight ahead (its yaw and pitch turn the ship, not the bearing), so each range gets its own frame.
-    run p10 60 "wave stop; god on; despawn all; camera cockpit; spawn raider idle 150 35 20; wait 30; screenshot ${OUT}/p10_lod_150.png; state lod; despawn all; spawn raider idle 600 35 20; wait 30; screenshot ${OUT}/p10_lod_600.png; state lod; despawn all; spawn raider idle 2000 35 20; wait 30; screenshot ${OUT}/p10_lod_2000.png; state lod; despawn all; spawn raider idle 6000 35 20; wait 30; screenshot ${OUT}/p10_lod_6000.png; state lod"
+    run p10 60 "wave stop; god on; despawn all; camera cockpit; spawn raider idle 150 35 20; wait 30; screenshot ${OUT}/p10_lod_150.png; get render.far_dots; despawn all; spawn raider idle 600 35 20; wait 30; screenshot ${OUT}/p10_lod_600.png; get render.far_dots; despawn all; spawn raider idle 2000 35 20; wait 30; screenshot ${OUT}/p10_lod_2000.png; get render.far_dots; despawn all; spawn raider idle 6000 35 20; wait 30; screenshot ${OUT}/p10_lod_6000.png; get render.far_dots"
 }
 
 p11() {

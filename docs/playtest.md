@@ -5,8 +5,7 @@ gamepad and a keyboard. This page covers setup, the controls, and the checklist 
 
 ## Setup (once)
 
-Requirements: Linux x86_64, a Vulkan GPU driver, `git`, `curl`, `unzip`, `python3` with `numpy` (and `pillow` for
-the fallback panorama sky).
+Requirements: Linux x86_64, a Vulkan GPU driver, `git`, `curl`, `unzip`, `python3` with `numpy`.
 
 ```
 git clone https://github.com/jrssae/space-combat-sim.git
@@ -18,6 +17,7 @@ scripts/gen_assets.sh                   # generates the Starfury, nav buoys and 
 ```
 
 Re-run `scripts/gen_assets.sh` after pulling changes to `tools/procgen`.
+Run `scripts/build_native.sh` after a pull, then `.tools/godot/godot --headless --path . --import` once so Godot registers the library: it rebuilds the optional native library when `native/` changed (needs rustup; without it the game uses its GDScript code).
 
 ## Run
 
@@ -67,7 +67,7 @@ Mouse 1       fire                                    Mouse 2     tap: next targ
 Wheel         previous / next target                  Middle button (hold)  free look, as L3
 Mouse 4       auto-track (toggle)                     Mouse 5     fire mode (the side buttons, if your mouse has them)
 N or Print    screenshot (saved to user://screenshots/, path printed)
-Backspace     respawn                                 Esc         pause (also frees the mouse)       F3  debug overlay   F4  fallback meshes
+Backspace     respawn                                 Esc         pause (also frees the mouse)       F3  debug overlay
 ```
 
 No flight key sits right of G and B: pitch and yaw are the mouse (or the pad), and previous target and "nearest the nose"
@@ -81,14 +81,12 @@ Wing orders (keys 1-4, or `wing order <attack|form|engage|cover>`): **1** attack
 they hold formation and engage only hostiles within 2 km of you, and a wingman more than 3 km from you breaks off and rejoins.
 The acknowledgement line stays on screen 3.5 s.
 
-The ` key opens the debug console; it frees the mouse while open. Hunting the splat-hull "jump" under thrust (only the splat hull shows it; the
-mesh hull does not): `throttle 1` holds both main pods, then flip these while it happens and note which one stops it:
-`set settings.hull_splat_sync off` (engine interpolates the splat node), `set settings.hull_depth_proxy off` (no black depth proxy),
-`set settings.physics_jitter_fix 0` (no frame-time smoothing). `window max` / `window normal` / `window 1800 900` resize the window from the console. Mouse feel: `set settings.mouse_full_rate_px_s 1200`
+The ` key opens the debug console; it frees the mouse while open. Hunting a hull "jump" under thrust: `throttle 1` holds both main
+pods, then try `set settings.physics_jitter_fix 0` (no frame-time smoothing) while it happens and note whether it stops. `window max` / `window normal` / `window 1800 900` resize the window from the console. Mouse feel: `set settings.mouse_full_rate_px_s 1200`
 (the mouse speed that commands the full turn rate; lower = more sensitive) and `set settings.mouse_look_deg_per_px 0.12`
 (free look). Sizes: `set settings.debug_text_size 22` (overlay text) and `set settings.chase_bolt_scale 3` (how much larger bolts
 are drawn in the chase view) and `set settings.hud_chase_opacity 0.7` (how solid the HUD is in the chase view; in the cockpit view the
-radar, speed and bars are on the console's screens) and `set settings.cockpit_light_energy 1.6` (the cabin lamp that lights the cockpit frame; takes effect on the next spawn). Hull lighting: `relight off` compares with the flat paint; `set settings.relight_light_gain 0.6` (how strongly light brightens a hull), `set settings.relight_ambient 0.3` and `set settings.relight_unlit_level 0.12` (together, how dark the dark side gets) change it live. Add `save` to keep a setting.
+radar, speed and bars are on the console's screens) and `set settings.cockpit_light_energy 1.0` (the cabin lamp that lights the grey cockpit a dark red, 1.0 by default since M4-T30b; takes effect on the next spawn). Hull lighting: `set settings.ambient_level 0.3` (how much light the dark side of a hull gets) changes it live. Add `save` to keep a setting.
 
 Changed after the first play test: yaw and roll swapped (the right stick used to yaw and the D-pad to roll), and
 target-ahead moved to a D-pad Up hold because the pad had no stick clicks. Changed after the M2 play test: X is auto-track and
@@ -128,7 +126,7 @@ timescale 0.25             slow motion           respawn / pause       same as B
 camera cockpit             set camera            set weapons.mode linked
 set settings.fuel_unlimited off   finite fuel    set ship.fuel_kg 0 / refuel   empty / refill the tank
 set weapons.charge 0       empty the capacitor   get ship.fuel_fraction / weapons.charge   the HUD gauges
-fallback on                force mesh fallback   set targeting.selected "NAV BRAVO"
+state render               renderer and frame    set targeting.selected "NAV BRAVO"
 spawn raider attack 1500   an attacking raider 1.5 km ahead (idle|patrol|attack|aggro; despawn all removes)
 spawn raider 40 35 20      an idle raider 40 m ahead, nose to you, yaw 35 / pitch 20
 kill target                destroy the selected raider (kill all / kill player too; god on does not stop it)
@@ -170,8 +168,8 @@ diagonals, as the default's does, and its D-pad rolls at full rate on top.
 
 The full wording is in `docs/milestones/m1-first-flight.md`. Tick each one, or note what you saw.
 
-- [ ] **AC12 Ship splats.** The Starfury renders as splats in both cameras. F4 swaps to the mesh fallback, and
-      the mesh sits exactly where the splats were.
+- [ ] **AC12 Ship hull.** The Starfury renders as its textured hull in both cameras (since M4-T31 the only hull; M1 accepted
+      an earlier renderer's hull, which M4 replaced).
 - [ ] **AC13 Sky.** Stars and nebula visible; no parallax while flying; no popping between the sky and the hull;
       in the cockpit the frame hides the hull behind it.
 - [ ] **AC14 Controls.** Equal triggers fly straight. With assist off, RT alone yaws left and LT alone yaws right.
@@ -187,18 +185,16 @@ The full wording is in `docs/milestones/m1-first-flight.md`. Tick each one, or n
       yaw, roll and hold both bumpers (the ship never moves in frame, the stars do); `set settings.camera_chase_smoothing_s 0.2`
       lets the view swing softly, `0` is rigid again. In chase view the muzzle flash, bolts leaving the guns and the
       plumes behind the hull are hidden by the hull, not drawn through it; the hull has no black patches or dark
-      outline (that would mean the depth proxy sticks out: `HullDepthProxy.inset_m`, default 0.04 m). The hull does
-      not judder against the plumes at speed.
+      outline. The hull does not judder against the plumes at speed.
 - [ ] **AC17 Targeting.** Tapping B cycles buoys; holding it steps back one, once, without also cycling forward;
-      holding keyboard B or Mouse 2 picks the one nearest the nose; bracket and readout look right; buoys are splats and spin; NAV DELTA
+      holding keyboard B or Mouse 2 picks the one nearest the nose; bracket and readout look right; buoys are textured and spin; NAV DELTA
       (drifting) shows a non-zero closing speed.
-- [ ] **AC18 Backend.** Overlay shows `SPLATS COMPUTE`. If it says `RASTER` or `NONE`, note your GPU and driver.
+- [ ] **AC18 Renderer.** Overlay shows `RENDER FORWARD_PLUS`. If not, note your GPU and driver.
 - [ ] **AC22 Console.** ` opens and closes it without typing a character. Typing never moves the ship, and the pad
       still flies while it's open. Esc closes it. History and Tab work. `fps` and `watch ship.speed` work.
       `set` + `save` survives a restart; `set` alone does not.
 
-Record your GPU, driver and FPS in the acceptance record at the end of the milestone doc. If a splat check
-(AC12/AC13) fails, that triggers M1-T16 (fallback triage) before anything else. A screenshot plus the overlay text
+Record your GPU, driver and FPS in the acceptance record at the end of the milestone doc. A screenshot plus the overlay text
 is the most useful bug report.
 
 # Play-testing M2 (Combat Sandbox)
@@ -272,8 +268,8 @@ state combat / hull / raiders / debris / hud / audio       the new providers
 
 ## Acceptance checklist (M2 (H) criteria, the full wording is in `docs/milestones/m2-combat-sandbox.md`)
 
-- [ ] **AC15 Raider look.** Reads as the Delta-V of your references from front, side, top and three-quarter views; splats in both
-      cameras; F4 shows the fallback mesh in the same place. (Proportions follow the sheet: 7.2 m x 17 m; see
+- [ ] **AC15 Raider look.** Reads as the Delta-V of your references from front, side, top and three-quarter views; its textured
+      hull in both cameras. (Proportions follow the sheet: 7.2 m x 17 m; see
       `docs/assets-raider.md`. If it is wrong, say what, and T13 is the look pass.)
 - [ ] **AC16 Effects.** Impact flashes sit on the hull they hit; explosions and debris read well, hide behind hulls in front of
       them and show the raider breaking into its parts; no hitch when waves spawn or ships die.
@@ -282,10 +278,10 @@ state combat / hull / raiders / debris / hud / audio       the new providers
 - [ ] **AC18 Waves.** Target practice raiders drift, patrol raiders react when approached or shot, strike raiders make attack
       runs and sometimes hit; both fire modes kill raiders in a sensible time (a raider has 60 hull, a bolt does 10);
       death and respawn work; `god` works.
-- [ ] **AC19 Performance.** 60 fps at 1080p (Compute) with six raiders, bolts, an explosion and debris on screen.
+- [ ] **AC19 Performance.** 60 fps at 1080p with six raiders, bolts, an explosion and debris on screen.
 - [ ] **AC20 Control profile.** `controls save mine`, `controls use mine`, `save`, restart: it is still selected.
 - [ ] **AC21 Sound.** Weapons, hits, explosions and engines are positional, readable and not fatiguing; `set audio.volume` works.
-- [ ] **Splat backend** shows `SPLATS COMPUTE` in the overlay (note GPU and driver if not).
+- [ ] **Renderer** shows `RENDER FORWARD_PLUS` in the overlay (note GPU and driver if not).
 
 Acceptance record: copy the block at the end of `docs/milestones/m2-combat-sandbox.md`, fill it in and send it back.
 
@@ -298,8 +294,7 @@ This section is the guide for the (H) checks; the numbers an agent measured are 
 
 ## Run it
 
-The generators changed a lot, so build the assets again and import them once. The first import takes about a minute (the hero hull alone
-takes about 43 s). If the cockpit shows no screens, or a ship warns about missing `nav_lights`, the assets are stale.
+The generators changed a lot, so build the assets again and import them once. The first import takes a few minutes (the texture maps are compressed then). If the cockpit shows no screens, or a ship warns about missing `nav_lights`, the assets are stale.
 
 ```
 git checkout m3
@@ -381,13 +376,12 @@ ai <name> objective <target|none>            send a pilot to a target (a broadca
 relation <a> [b] [friendly|neutral|hostile]  show or change (this session) how two factions see each other; relation reset reloads the file
 kill allies                                  destroy every allied ship
 rebase <dx> <dy> <dz>                        shift the local origin (see "Far from the launch point")
-lod <ship|all> <hero|0-3|auto>               force a ship's splat level
-relight [on|off]   flare [on|off]   blur [on|off]     the visual pass's switches
+flare [on|off]   blur [on|off]               the visual pass's switches
 running_lights [on|off]                      your lights, and your wing's
 look <yaw> [pitch]   look off                hold the view off the nose (free look from the console; in chase the camera orbits the ship)
 fxburst [hit|ram|explosion_sparks|explosion_fragments|explosion_gas|debris]    one burst 40 m in front of the camera
 scenario <name>                              as above
-state wing|ai|factions|ram|route|lod|lights|post|screens|world     the new providers
+state wing|ai|factions|ram|route|lights|post|screens|world     the new providers
 ```
 
 ## New settings and their defaults
@@ -397,23 +391,15 @@ Set one with `set settings.<name> <value>`; add `save` to keep it. Every one is 
 ```
 friendly_fire false            bolts hit anything but their shooter when on
 ram_damage true                collisions hurt
-splat_budget 2000000           splats drawn at once; video memory is reserved for this many (584 bytes each)
-splat_hero true                your own ship loads its 975k-splat hull for the chase view
-splat_lod_bias 0               shifts every ship's level of detail by whole levels (+ coarser)
-splat_relight true             light hulls, chunks and buoys (relight on|off)
-relight_ambient 0.3            how much of a hull's colour shows with no light on it
-relight_unlit_level 0.12       how dark the side away from all lights gets
-relight_light_gain 0.6         how strongly light brightens a hull
+ambient_level 0.3              how much light the dark side of a hull gets (M4-T30a)
 particle_density 1.0           how much of each spark and debris burst is thrown; 0 costs nothing per frame
 lens_flare true                the star's flare (flare on|off)
 motion_blur false              blur on fast turns (blur on|off)
 motion_blur_strength 0.5       how strong the blur is
-own_lights true                the light each ship carries for itself (top lamp, cabin glow)
-top_lamp_energy 2.5            how brightly the top lamp lights the ship's own hull
 cabin_glow_level 0.3           how much red the cockpit glow adds in the canopy, seen from outside
 cabin_glow_view_m 150          how far off the glow can be seen
-running_light_min_px 3         a running light is never smaller than this on screen
-cockpit_light_energy 1.6       the cabin lamp that lights the cockpit frame (takes effect on the next spawn)
+running_light_min_px 1         a running light is never smaller than this on screen; farther out it dims instead
+cockpit_light_energy 1.0       the cabin lamp that lights the cockpit frame a dark red (takes effect on the next spawn; 1.6 before M4-T30b)
 target_hold_s 0.35             how long a press on B is a hold
 hud_targeting_grid false       the targeting grid in the chase view too (in the cockpit it is on the octagon)
 hud_velocity_marker false      the prograde marker in the world
@@ -453,7 +439,7 @@ ran the capture, and the milestone's as-built notes say what each one shows.
       case on this GPU (136-182 fps with vsync off); see the acceptance record. With vsync on it read about one repeated frame a second, and half of those were there with no ships
       at all, so say if you feel stutter, in the fight or in empty space, and whether fullscreen changes it.
 - [ ] **AC22 Far from the launch point.** After `rebase -900000 0 0`, and again after a long flight (`REF` several hundred km), thrust in every direction
-      (both mains, retros, strafe, while pitching and yawing): the ship shows no jumping, in splat mode and in mesh mode (F4). Then fly at full speed through
+      (both mains, retros, strafe, while pitching and yawing): the ship shows no jumping. Then fly at full speed through
       rebases (one every 5 km: every second at 5 000 m/s) in both cameras: no hitch at each one (the picture holds still for one tick at a rebase, everything
       together: at most one repeated frame; watch a buoy, a ship or your own bolts passing), and an explosion or debris flying when it happens stays where it is
       and looks as in M2 (AC16).
@@ -462,8 +448,7 @@ ran the capture, and the milestone's as-built notes say what each one shows.
       feel strong. The KILLS, YOURS and ASSISTS numbers read at a glance. Buoys and wingmen far out show on the radar's rim. Some AI ships make slashing passes and turn
       to chase.
 - [ ] **AC35 Visual pass.** No visible pop as a ship changes level at combat ranges. Plumes light the pods, muzzle flashes light the nose, explosions light nearby hulls,
-      and the star gives each hull a lit and a dark side as it rolls. Hits throw sparks and debris vents. Your own hull is visibly sharper close up in the chase view
-      (`set settings.splat_hero off; save` and restart to compare). The flare follows the star and hides behind hulls. Motion blur (`blur on`) smears the stars on fast turns, not the
+      and the star gives each hull a lit and a dark side as it rolls. Hits throw sparks and debris vents. Your own hull is sharp close up in the chase view. The flare follows the star and hides behind hulls. Motion blur (`blur on`) smears the stars on fast turns, not the
       HUD. Raiders read almost black from their unlit side at 80-150 m, gas puffs may read as flat discs, and a debris chunk can read as a flat black shape: say if any of that bothers you. If the flare is too strong or too yellow, its
       numbers are in `space_environment.tscn`.
 - [ ] **AC39 Running lights and break-up.** Every ship shows red on its left, green on its right and white on top: read them at combat range and as points from several km
@@ -480,6 +465,102 @@ ran the capture, and the milestone's as-built notes say what each one shows.
 
 Record your GPU, driver, FPS and VRAM in the acceptance record at the end of the milestone doc.
 
+## M4 return checklist
+
+Look and feel items from M4 not yet seen by the maintainer (Q54), for one session on return. Each names the task that changed it.
+
+- [ ] **M4-T36 The radar's dots.** The radar's contacts are drawn in batches now: every stalk first, then every dot over them (before,
+      each contact's stalk and dot were drawn in turn, so a nearer contact's stalk could cross a farther dot), and the dots are 16-sided
+      polygons. Check the chase radar and the cockpit octagon at `battle 300` and in the sandbox: dots read as round, colours as before,
+      the selected contact ringed and on top, broadcast contacts hollow on the rim.
+- [ ] **M4-T36 Hit sparks.** A bolt hit shows the flash and the particle sparks only; the 6 to 10 mesh spark streaks that flew off each
+      hit are gone. Shoot a raider at 100 to 300 m: say if hits read too thin.
+- [ ] **M4-T36 Plumes.** A ship holding one command stops updating its plumes once they reach their levels (within a ten-thousandth).
+      Watch AI plumes at combat range: nothing should freeze or step.
+- [ ] **M4-T36 The 3D at full resolution on the 6K desktop.** `RenderScale` no longer renders a 6144 x 3456 window's 3D at 0.86.
+      Maximize the game on the 6K desktop: the 3D is sharper; check the frame rate holds in the sandbox and at `typical` (GPU time was
+      about 1.9 ms at 1 080 lines; full 6K is about 10 times the pixels).
+- [ ] **M4-T36 Motion blur on turns.** `settings.motion_blur on`, then a hard turn: the stars and the nebula smear by the turn, hulls by
+      their own motion, and no hull paint is dragged across the stars. The pair `reports/perf/M4-T36_motion_blur/turn_blur_{false,true}.png`
+      (a one-frame 40 degree look swing) shows what the agent saw.
+- [ ] **M4-T36 The debug overlay** refreshes ten times a second instead of every frame: it should still read as live.
+- [ ] **M4-T24 The AI one tick behind.** The AI step (every native brain's think, the hosted drivers' think rate, the commands into
+      the rows) runs on a worker thread and its commands reach the ships one tick (16.7 ms) after the rows they were decided on
+      (Q53). Fly the sandbox and `battle 300`: AI ships should turn, fire and dodge as before, with no visible hesitation or
+      overshoot; a raider on your tail should still track you. Compare by flipping `set settings.sim_step inline` (today's
+      same-tick step) and back to `threaded` mid-fight; `delayed` is the threaded step's reference on the main thread.
+- [ ] **M4-T24 Input feel.** Your own stick is never behind (the player's command is sampled and applied in the same tick on
+      every schedule), but the frame no longer carries the AI step: at `battle 300` and `500` the stick should feel more
+      immediate than before. Check pitch, yaw and the trigger with vsync on and off; `state core` shows `step_misses` (should
+      stay 0) and `step_wait_us`.
+- [ ] **M4-T24 The catch-up cap.** `physics_max_steps_per_frame` is 3 (Godot's default was 8): when the tick cannot keep up
+      (battle 500) the simulation slows instead of the frame stuttering through catch-up ticks. Judge whether the slow-motion
+      at 500 reads better than the stutter did; `2` is the other candidate (`set settings.physics_max_steps_per_frame 2`).
+- **T35, bolts as rows:** the AI ships' bolts are drawn by one multimesh per look (`core.bolt_draws`), interpolated between ticks as the nodes were. Check in a `battle` run: bolts leave the muzzles, fly straight and smoothly (no stutter against the hulls), hit flashes still appear where bolts land, the chase camera's larger bolts (`Projectile.visual_scale`) still apply, and nothing is drawn where a bolt was spent. Switch `settings.perf_native_bolt_rows` off and on mid-run to compare with the bolt nodes.
+- **T35, the AI ships' muzzle flashes:** the lean ships' flashes come from one pool (a multimesh of billboard quads and pooled lights), not a node per muzzle. Check in a `battle` run: a flash pops at the muzzle of every AI shot for about 50 ms, grows and fades as the player's own flashes do, rides with the ship, and lights the nose; no flash lingers on a parked or dead ship.
+- **T35, the AI ships' shot sounds:** `AudioDirector.watch_ship` listens to `shot_fired`, which both bolt paths emit (fix round 1). Confirm every AI shot in a `battle` run makes its pulse or raider sound at the muzzle, with the bolt rows on and off.
+- [ ] **M4-T21 The low-attention tier.** Off by default until T23; turn it on with `set settings.tier_radius_m 10000`. AI fighters and capitals more than 10 km from you (`settings.tier_radius_m`) leave
+      Jolt and fly as native core rows integrated at 20 Hz from their held command; within 10 km they are promoted back onto
+      their bodies with their motion carried over exactly. In a `battle 300` or `500` run (`state tier` shows the rows and the
+      handovers): fly toward a far fight: its ships should appear as they come within 10 km (T23 draws tier rows as dots; until
+      then a far fight is dark beyond 10 km) with no pop, jump or stutter at the moment they appear, and keep flying as they
+      flew; fly away from a fight: fighters should vanish past 11 km without a visible pop. A capital at 11 km is about 100 px
+      tall, so it visibly vanishes there until T23 draws tier capitals: a known gap, not a failure to judge. Ships past 11 km
+      also leave the radar and drop your lock until T23. A ship that crosses the line while
+      shooting should fire again at once when it is back. Compare with the tier off (`set settings.tier_radius_m 0`).
+- [ ] **M4-T21 The battle beyond the radius.** Tier ships do not fight yet (T22 gives them brains and fire): a far fight you
+      watch from 10 km out is frozen in its held commands until you come close. Say whether that reads as wrong from the
+      player's seat at `battle 500`, where most of the battle is beyond 10 km.
+- [ ] **M4-T22 The battle beyond the radius fights.** With the tier on (`set settings.tier_radius_m 10000`), tier fighters think
+      three times a second (`settings.tier_brain_hz`) and their shots and the far capitals' guns, beams and missiles are rolled,
+      not flown as bolts. In a `battle 500` run, fly into a far fight: the ships you meet at 10 km should be in the middle of a
+      fight that went on without you (hurt hulls, ships missing that died out there, wingmen still in their slots), with no
+      jump in a hull or a position at the moment they appear; your own bolts fired at a ship just beyond 11 km hit it. Say
+      whether a fight met this way feels like the same fight you would have watched up close (a 3 Hz brain flies its attack
+      runs a little looser). Far ships also think lean: they ignore rocks, mines, incoming fire and avoidance (they collide with
+      nothing out there), so watch for a ship promoted inside or right against a rock at 10 km (a jolt, a hit or an explosion);
+      `state tier` should show `brain_period_ticks` 20 (a settings file saved before T22's fix round 2 may hold 4 Hz). Tier ships are still not drawn and not on the radar (T23), and a far death shows nothing yet
+      (T23's far flash). A known limit (fix round 1): a far fight that settles into a steady tail chase scores fewer hits than
+      the same chase up close (a Starfury sitting behind a raider at 450 m lands about 73 % of its shots up close, about 30 %
+      in the tier); say whether you notice far chases ending slower than near ones. Far missiles can now be shot down by the
+      target side's interceptors, and committed rammers ram out of view too.
+- [ ] **M4-T38 Anti-aliasing, the default.** `settings.anti_aliasing` is `smaa` now (it was no anti-aliasing). Compare the sheets in
+      `reports/perf/m4-t38_compare/pairs/` (each the same frozen `battle` 300 frame in all six modes): `edges_2160.png` and
+      `edges_1080.png` (a wing and a rock edge), `hull_detail_2160.png` and `hull_detail_1080.png` (struts, panel lines, the small
+      parts), `stars_2160.png` and `far_dots_2160.png` (stars and small far objects must stay crisp single points), and
+      `edges_native.png`, `hull_detail_native.png`, `stars_native.png` with the 3D at the 6K window's own size (the game's default). Then fly the
+      sandbox with `aa smaa`, `aa fxaa`, `aa msaa_4x` and `aa off`: say which you want as the default.
+- [ ] **M4-T38 TAA in motion.** `aa taa`, then fly a `battle 300` run with hard turns: the stars and the nebula must stay steady and
+      bright through a turn (no dimming, no trails; a measured softening: a star's brightest pixel fell from 0.59 to 0.45 of white
+      on a turn under TAA, the light kept but spread, so say if the stars read soft), hull edges smooth, and a fast fighter crossing the view must leave no ghost.
+      Bolts: under TAA they draw opaque (so they carry their own motion) and soften a little; check they read as bolts at 100 to 1 000
+      m, and that no bolt flashes from somewhere else when it appears. Running lights of far ships may soften; far dots carry only the
+      camera's turn, not their own motion, so a fast far dot may dim. Beams, missiles and hit flashes stay transparent (not measured). The sheet
+      `reports/perf/m4-t38_compare/pairs/moving_2160.png` (no AA, SMAA, TAA, the live fight) shows what the agent saw.
+- [ ] **M4-T38 TAA with motion blur.** `aa taa` and `blur on`: a hard turn smears the stars once (the blur), not twice; a still
+      camera leaves the sky sharp.
+- [ ] **M4-T41 The Wayland window.** The game now opens through Godot's Wayland display driver (it falls back to X11 when there
+      is no Wayland session). Fullscreen should fill the panel at its own 3840x2160 (`get render.window`, `get render.display`)
+      and look as sharp as before. Windowed, GNOME gives Godot no server-side title bar, so check that the window still has a
+      usable title bar and can be moved and resized (libdecor draws it if installed). Say if anything about the window, the
+      mouse, the pad or alt-tab behaves differently from before.
+- [ ] **M4-T40 Upscaling, the default.** `settings.upscaler` is `native` (the 3D at the window's own size, as since T36), because
+      FSR 2.2 measured dearer than native on this card. Compare the sheets in `reports/perf/m4-t40_compare/pairs/` (each the same
+      frozen `battle` 300 frame in the 6K window, twelve upscaler and preset turns): `edges.png`, `hull_detail.png`, `stars.png`,
+      `far_dots.png` and `hud_text.png` (the HUD must be equally sharp in every turn). Then fly the sandbox with `upscale fsr1 quality`
+      and `upscale native`: FSR 1.0 Quality costs about 1.4 ms less GPU at 6K, but the FPS gain is a few percent (+3 to +5 % in
+      the agent's live round; the frame is CPU-bound); say if it looks as good as native, in which case it could be the default for
+      a large window.
+- [ ] **M4-T40 FSR 2.2 in motion.** `upscale fsr2 quality`, then a `battle 300` run with hard turns and fighters crossing close: no
+      ghost behind a fast fighter, the stars steady through a turn, bolts still crisp at a distance (a sub-pixel point moving fast
+      at half scale kept its light in a GPU measure but spread it, its brightest pixel 0.25 to 0.39 of white, so far bolts may read
+      soft at `performance` and below). `aa` must say
+      the anti-aliasing is held off, and `upscale native` must bring it back. If the ghosting is unacceptable, say so: FSR 3.1's
+      upscaler in the native library is the fallback (Q60). The live sheets `moving_hull.png`, `moving_rocks.png` and
+      `moving_left.png` (native, bilinear and FSR 1.0 Quality, FSR 2.2 Quality, Performance and Ultra Performance, each a different
+      moment of the live fight) show what the agent saw: no ghosting, stars soft at Ultra Performance.
+- [ ] **M4-T40 Low presets.** `upscale fsr1 ultra_performance` and `upscale fsr2 ultra_performance` (a third of the lines, for weaker
+      GPUs): the stars and far dots enlarge into soft blobs; say whether that is acceptable for a low setting.
 
 # Play-testing M5 (Missions and Front End)
 

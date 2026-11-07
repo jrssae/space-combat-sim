@@ -1,0 +1,22 @@
+# The game's optional native library (docs/architecture.md, section 17.5). Built by scripts/build_native.sh.
+[package]
+name = "scs_native"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license-file = "../LICENSE"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Pinned exactly: gdext is 0.x and its minor releases break the API, so upgrades are deliberate.
+godot = { version = "=0.5.5", features = ["api-4-7"] }
+# Worker threads inside the native core (M4-T18): the per-ship passes run across the performance cores.
+rayon = "=1.12.0"
+
+# No target-cpu tuning anywhere (baseline x86-64), so every machine runs the same maths.
+[profile.release]
+# One unit: a slower build of this small crate, for the best-optimised library.
+codegen-units = 1

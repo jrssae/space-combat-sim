@@ -5,7 +5,7 @@ extends RefCounted
 ## tuned by eye (AC35).
 
 ## A main-pod nozzle: its light sits this far out along the exhaust, so it falls on the pod and its strut and not inside the
-## hull's splat shell.
+## hull.
 const NOZZLE_OFFSET_M: float = 1.5
 const NOZZLE_RANGE_M: float = 15.0
 const NOZZLE_PEAK_ENERGY: float = 2.5

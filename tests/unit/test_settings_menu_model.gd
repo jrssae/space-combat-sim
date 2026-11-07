@@ -145,7 +145,7 @@ func test_values_read_as_words_numbers_or_percentages() -> void:
 	assert_eq(model.format_value(&"sfx_volume", 0.8), "80%", "a volume reads as a percentage")
 	assert_eq(model.format_value(&"master_volume", 1.0), "100%")
 	assert_eq(model.format_value(&"engine_voice_cap", 24), "24")
-	assert_eq(model.format_value(&"splat_budget", 2000000), "2,000,000")
+	assert_eq(model.format_value(&"engine_voice_cap", 1200), "1,200", "a whole number groups its thousands")
 
 
 func test_the_help_text_says_what_the_entry_does_its_default_and_range() -> void:

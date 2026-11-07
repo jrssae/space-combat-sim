@@ -236,6 +236,17 @@ func execute(line: String, stop_on_error: bool = false) -> Array[ConsoleResult]:
 	return execute_statements(statements, stop_on_error)
 
 
+## Runs every statement of a line at once, for a script that sets a scene up in one go (the measure tools): a command that holds
+## the console (`bench`, `wait`) does not keep back the statements after it. Stops only after a `quit`.
+func execute_all(line: String) -> Array[ConsoleResult]:
+	var results: Array[ConsoleResult] = execute(line)
+	while not results.is_empty() and not results[-1].remaining.is_empty() and results[-1].quit_code < 0:
+		var rest: Array[PackedStringArray] = results[-1].remaining
+		results[-1].remaining = []
+		results.append_array(execute_statements(rest))
+	return results
+
+
 func execute_statements(statements: Array[PackedStringArray], stop_on_error: bool = false) -> Array[ConsoleResult]:
 	var results: Array[ConsoleResult] = []
 	var queue: Array[PackedStringArray] = statements.duplicate()

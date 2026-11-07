@@ -108,8 +108,33 @@ func test_the_input_carries_the_players_state() -> void:
 	assert_eq(input.weapon_speed_mps, main.cannon.weapon.muzzle_speed_mps)
 	assert_true(input.fuel_unlimited)
 	assert_eq(input.faction, Factions.EARTH_ALLIANCE)
-	assert_eq(input.contacts.size(), main.buoys.size() + main.ships.alive().size(), "the five buoys and the wingmen")
+	assert_eq(input.radar_contacts.size(), main.buoys.size() + main.ships.alive().size(), "the five buoys and the wingmen")
 	assert_almost_eq(input.muzzle_position, main.ship.global_position + (main.ship.get_muzzles()[0].global_position - main.ship.global_position + main.ship.get_muzzles()[1].global_position - main.ship.global_position) * 0.5, Vector3.ONE * 1e-3)
+
+
+func test_the_radar_contacts_are_the_players_candidates_without_the_list() -> void:
+	DebugConsole.registry.execute("spawn raider 900")
+	DebugConsole.registry.execute("spawn raider 20000")
+	await _ticks(2)
+	var input: HudInput = main._build_hud_input()
+	var listed: Array[TargetInfo] = main.ship.targeting.candidates()
+	assert_eq(input.radar_contacts.size(), listed.size(), "the same contacts (M4-T36)")
+	var by_id: Dictionary = {}
+	for info: TargetInfo in listed:
+		by_id[info.id] = info
+	for i: int in input.radar_contacts.size():
+		var info: TargetInfo = by_id.get(input.radar_contacts.ids[i])
+		assert_not_null(info, "contact %d is a candidate" % i)
+		if info != null:
+			assert_eq(input.radar_contacts.positions[i], info.position)
+			assert_eq(input.radar_contacts.factions[i], info.faction)
+			assert_eq(input.radar_contacts.reach[i], info.broadcast_range_m)
+	var expected: Array[RadarModel.Dot] = RadarModel.dots(listed, input.selected_id, input.own_position, input.own_basis, input.faction)
+	var drawn: Array[RadarModel.Dot] = HudLayout.compute(input).radar_dots
+	assert_eq(drawn.size(), expected.size())
+	for i: int in mini(drawn.size(), expected.size()):
+		assert_eq(drawn[i].id, expected[i].id, "the same dot in the same place %d" % i)
+		assert_eq(drawn[i].point, expected[i].point)
 
 
 func test_god_mode_shows_on_the_hud() -> void:

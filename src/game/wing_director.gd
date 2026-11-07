@@ -168,8 +168,19 @@ func _lead(wing: Wing, ship: Combatant) -> void:
 		pilot.context.clear_wing()
 		_give_rally(pilot)
 	wing.leader = ship
+	_paint(wing, ship, 1)
 	if old != null and old != ship and not old.is_player and old.damageable != null and old.damageable.is_active():
 		add_member(wing, old)
+
+
+# A Starfury that takes a place in a wing wears the wing's livery and the place's number (`Wing.callsign`'s: the leader 01, slot n
+# n + 1), whatever name the pool gave it (M4-T30b). Hulls without a livery table are left alone.
+func _paint(wing: Wing, member: Combatant, number: int) -> void:
+	if member == null or member.ship == null or member.ship.spec == null:
+		return
+	var section: Dictionary = MeshAssets.livery_section(member.ship.spec.asset_id)
+	if not section.is_empty() and (pool == null or pool.type_of(member) == ShipPool.ALLY_TYPE):
+		member.ship.set_livery(Livery.for_wing(wing.name, number, section))
 
 
 # A wing's AI ships rally on an engaged wingmate when they have nothing to attack (`BehaviourRally`).
@@ -195,6 +206,7 @@ func add_member(wing: Wing, member: Combatant, slot: int = -1) -> int:
 	var at: int = wing.add_member(member, slot)
 	if at < 0:
 		return -1
+	_paint(wing, member, at + 1)
 	if pilot.behaviour(&"formation") == null:
 		pilot.add_behaviour(BehaviourFormation.new(pilot.profile))
 	_give_rally(pilot)
@@ -310,7 +322,19 @@ func leader_hostile_target(wing: Wing) -> Targetable:
 
 func leader_alive(wing: Wing) -> bool:
 	var leader: Combatant = wing.leader
-	return leader != null and leader.damageable != null and is_instance_valid(leader.ship) and leader.damageable.is_active()
+	return leader != null and is_instance_valid(leader.ship) and _in_play(leader)
+
+
+# Whether a ship still counts for its wing: active, or flying as a low-attention tier row (M4-T21) and not destroyed.
+static func _in_play(c: Combatant) -> bool:
+	if c.damageable == null:
+		return false
+	if c.damageable.is_active():
+		return true
+	return (
+		is_instance_valid(c.ship) and c.ship.is_inside_tree() and c.ship.is_tier_parked()
+		and not c.damageable.hull.destroyed
+	)
 
 
 ## One row per member of `wing` (default: the player's), in slot order: `callsign`, `slot`, `hull` (0..1), `behaviour` and
@@ -359,7 +383,7 @@ func _physics_process(delta: float) -> void:
 ## Drops the members that are down and briefs the others (see the class notes). Runs every tick; public for the tests.
 func refresh(wing: Wing) -> void:
 	for member: Combatant in wing.members():
-		if _pilot_of(member) == null or member.damageable == null or not member.damageable.is_active():
+		if _pilot_of(member) == null or not _in_play(member):
 			var slot: int = wing.slot_of(member)
 			remove_member(wing, member)
 			wing.mark_lost(slot)
@@ -406,11 +430,12 @@ func refresh(wing: Wing) -> void:
 
 # `ids` without `self_ship`'s own.
 static func _set_wing_ids(ctx: AiContext, ids: PackedInt64Array, self_ship: Combatant) -> void:
-	ctx.wing_ids.clear()
 	var own: int = self_ship.targetable.get_instance_id() if self_ship.targetable != null else 0
+	var mates := PackedInt64Array()
 	for id: int in ids:
 		if id != own:
-			ctx.wing_ids.append(id)
+			mates.append(id)
+	ctx.wing_ids = mates  # assigned whole: the context notes the change for a pilot the host steps (M4-T35)
 
 
 func _post(line: String) -> void:

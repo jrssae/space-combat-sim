@@ -89,6 +89,69 @@ static func dots(infos: Array[TargetInfo], selected_id: int, own_position: Vecto
 	return out
 
 
+## Every contact of `contacts` within sensor or broadcast range placed on the sphere, in `dots`' drawing order (far to near, the
+## selected one last), as packed arrays for a batched painter (M4-T36). The same dots as `dots`, bit for bit, but for the order of
+## two contacts whose ranges agree to a millimetre, which follow the contacts' own order instead of their ids.
+static func plot(contacts: RadarContacts, selected_id: int, own_position: Vector3, own_basis: Basis,
+		viewer_faction: StringName) -> RadarPlot:
+	var n: int = contacts.size()
+	var ids: PackedInt64Array = contacts.ids
+	var positions: PackedVector3Array = contacts.positions
+	var reach: PackedFloat64Array = contacts.reach
+	var to_body: Basis = own_basis.transposed()
+	var points := PackedVector3Array()
+	var ranges := PackedFloat64Array()
+	points.resize(n)
+	ranges.resize(n)
+	var keys := PackedInt64Array()
+	var selected_at: int = -1
+	for i: int in n:
+		var at: Vector3 = positions[i]
+		var range_m: float = TargetingSystem.range_between(own_position, at)
+		if range_m > MAX_RANGE_M and range_m > reach[i]:
+			continue
+		points[i] = radar_direction(to_body * (at - own_position)) * radius_for_range(range_m)
+		ranges[i] = range_m
+		if ids[i] == selected_id:
+			selected_at = i
+			continue
+		# Farthest first: the key grows as the range shrinks; equal millimetres keep the contacts' order.
+		keys.append(((PLOT_RANGE_KEYS - int(minf(range_m, PLOT_RANGE_CAP_M) * 1000.0)) << PLOT_INDEX_BITS) | i)
+	keys.sort()
+	if selected_at >= 0:
+		keys.append(selected_at)
+	var out := RadarPlot.new()
+	var colours: Dictionary = {}
+	for key: int in keys:
+		var i: int = key & PLOT_INDEX_MASK
+		var faction: StringName = contacts.factions[i]
+		if not colours.has(faction):
+			colours[faction] = Factions.hud_color(Factions.relation(viewer_faction, faction))
+		var colour: Color = colours[faction]
+		var point: Vector3 = points[i]
+		var unit: Vector2 = to_screen(point, Vector2.ZERO, 1.0)
+		out.ids.append(ids[i])
+		out.points.append(point)
+		out.ranges.append(ranges[i])
+		out.colors.append(colour)
+		out.factions.append(faction)
+		out.rims.append(1 if ranges[i] > MAX_RANGE_M else 0)
+		out.point_units.append(unit)
+		out.stalk_units.append(to_screen(Vector3(point.x, point.y, 0.0), Vector2.ZERO, 1.0))
+		out.stalk_units.append(unit)
+		out.stalk_colors.append(Color(colour.r, colour.g, colour.b, 0.5))
+	out.selected_index = out.size() - 1 if selected_at >= 0 else -1
+	return out
+
+
+## `plot`'s sort keys: a millimetre range above the contact's index.
+const PLOT_INDEX_BITS: int = 20
+const PLOT_INDEX_MASK: int = (1 << PLOT_INDEX_BITS) - 1
+const PLOT_RANGE_KEYS: int = 1 << 42
+## Ranges beyond this (a broadcast from everywhere) sort as equal.
+const PLOT_RANGE_CAP_M: float = 4.0e9
+
+
 ## The sphere is viewed from slightly above its own plane: tilted `TILT_RAD` about the X axis, so contacts above the ship
 ## are drawn a little higher than the ones level with it, and a slow perspective (`PERSPECTIVE`) draws points toward the
 ## viewer a little larger.

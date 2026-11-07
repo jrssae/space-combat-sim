@@ -2,7 +2,7 @@ class_name ShipCatalog
 extends RefCounted
 ## Scenario ship type -> `ShipSpec` (architecture §15.2) and the faction each type flies for by default. Scenarios and console
 ## commands name ships by type (`raider_fighter`); this is the one place that knows which resource flies it and whose side it
-## is on. `starfury_ally` is the wingman: the Starfury's numbers with the LOD1 splats and no cockpit (§16 D35). Pure.
+## is on. `starfury_ally` is the wingman: the Starfury's numbers and hull with no cockpit (§16 D35). Pure.
 
 ## The type the player flies (`Main` builds it, and every Starfury breaks up into its asset's chunks).
 const PLAYER_TYPE: StringName = &"starfury_aurora"

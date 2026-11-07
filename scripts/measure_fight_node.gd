@@ -1,6 +1,6 @@
 extends Node
-## Measures AC19's fight and the 100-ship scene on the real renderer (run by scripts/measure_m3.sh): frame time, GPU time, visible
-## splats and VRAM over a sustained window, with one summary line for the record and a picture of the scene it measured.
+## Measures AC19's fight and the 100-ship scene on the real renderer (run by scripts/measure_m3.sh): frame time, GPU time, draw
+## calls and VRAM over a sustained window, with one summary line for the record and a picture of the scene it measured.
 ##
 ## Scenes: `held` keeps four Starfuries and nine raiders in view, all firing, so the worst case can be held for as long as it is
 ## measured. `fight` is a real AI fight with the player's nose kept on it. `hundred` and `hundred_view` are 100 ships, around the player
@@ -8,7 +8,10 @@ extends Node
 ## the 13-ship scenes, so one is always live.
 ##
 ## Arguments after `--`: scene=<name> camera=<chase|cockpit> warmup=<s> window=<s> near=<m> far=<m> steps=<n> label=<text>
-## exec="<console statements>" shot=<png path> hero=off
+## exec="<console statements>" shot=<png path> scale3d=<1080p|factor> (M4-T07: the 3D scale, held every frame;
+## 1080p renders the 3D at 1 080 lines whatever the window's size, for the fullscreen check on a larger screen, bilinear;
+## `setting` leaves it to settings.upscaler and upscale_preset, M4-T40)
+## pause_at=<s> (M4-T27: the game paused at that many seconds after the start, so a window can measure the drawing alone)
 
 const WARMUP_S: float = 6.0
 const WINDOW_S: float = 20.0
@@ -27,17 +30,19 @@ const ALLY_RANGE_M: Array[float] = [90.0, 140.0, 190.0]
 const NOSE_TURN_DEG_S: float = 40.0
 const VRAM_CARDS: Array[String] = ["card0", "card1", "card2"]
 const MAX_SPIKES_PRINTED: int = 40
+## The slowest share of frames the "1 % low" averages, and how many frames open the window for the warm-up check (M4-P2, Q48).
+const LOW_SHARE: float = 0.01
+const START_FRAMES: int = 60
 
 var main: Main
 var options: Dictionary = {"scene": "held", "camera": "chase", "warmup": str(WARMUP_S), "window": str(WINDOW_S), "near": "120", "far": "500",
-		"steps": "0", "label": "", "exec": "", "shot": "", "hero": "on"}
+		"steps": "0", "label": "", "exec": "", "shot": "", "scale3d": "", "pause_at": ""}
 var measuring: bool = false
 var frame_ms := PackedFloat64Array()
 var gpu_ms := PackedFloat64Array()
 var render_cpu_ms := PackedFloat64Array()
 var physics_ms := PackedFloat64Array()
 var process_ms := PackedFloat64Array()
-var visible_splats := PackedFloat64Array()
 var ships_in_view := PackedFloat64Array()
 var nearest_m := PackedFloat64Array()
 var bolts := PackedFloat64Array()
@@ -45,16 +50,20 @@ var particles_busy := PackedFloat64Array()
 var debris_chunks := PackedFloat64Array()
 var lights_on := PackedFloat64Array()
 var draw_calls := PackedFloat64Array()
+var primitives := PackedFloat64Array()
+var objects := PackedFloat64Array()
+var _paused: bool = false
 var ai_us := PackedFloat64Array()
 var hit_us := PackedFloat64Array()
 var ram_us := PackedFloat64Array()
 var fps_samples := PackedFloat64Array()
 var spikes := PackedStringArray()
-var clipped_frames: int = 0
 var explosions: int = 0
 var vram_before_mb: float = 0.0
 var gtt_before_mb: float = 0.0
 var vram_peak_mb: float = 0.0
+var own_vram_before_mb: float = 0.0
+var own_vram_peak_mb: float = 0.0
 var gtt_peak_mb: float = 0.0
 var _vram_dir: String = ""
 var _started_usec: int = 0
@@ -66,6 +75,8 @@ var _next_restore_s: float = 1.0
 var _kill_round: int = 0
 var _last_kill_usec: int = 0
 var _ticks_in_frame: int = 0
+var _window_ticks: int = 0
+var _window_start_usec: int = 0
 var _places: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
 
@@ -78,9 +89,8 @@ func _ready() -> void:
 	_rng.seed = 19
 	_vram_dir = _find_vram_dir()
 	vram_before_mb = _read_mb("mem_info_vram_used")
+	own_vram_before_mb = _own_vram_mb()
 	gtt_before_mb = _read_mb("mem_info_gtt_used")
-	if options["hero"] == "off":
-		Settings.set_value(&"splat_hero", false)  # read when the ship is built
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.waves_auto_start = false
 	var source := FakeInputSource.new()
@@ -120,7 +130,7 @@ func _set_up_scene() -> void:
 			_run("despawn all")
 	_run("camera %s" % options["camera"])
 	if not String(options["exec"]).is_empty():
-		_run(String(options["exec"]))
+		run_exec(String(options["exec"]))
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 	_started_usec = Time.get_ticks_usec()
 	_last_frame_usec = _started_usec
@@ -129,7 +139,13 @@ func _set_up_scene() -> void:
 
 # Prints what a console statement said, so the log shows the scene was what it claims.
 func _run(line: String) -> void:
-	for result: ConsoleResult in DebugConsole.registry.execute(line):
+	run_exec(line)
+
+
+## Runs a line of console statements at set-up, all of them: a leading `bench` holds the console until its run ends, and the
+## statements after it (the tools' FULLSCREEN_EXEC and RC_EXEC) must apply before the window opens (M4-T40 fix round 1).
+func run_exec(line: String) -> void:
+	for result: ConsoleResult in DebugConsole.registry.execute_all(line):
 		if not result.ok:
 			print("[measure] console error on '%s': %s" % [line, "; ".join(result.lines)])
 
@@ -213,6 +229,8 @@ func _place_hundred(in_view: bool) -> void:
 # Keeps the nose on the raiders, as a player chasing the fight would, so the fight stays in the picture.
 func _on_tick() -> void:
 	_ticks_in_frame += 1
+	if measuring:
+		_window_ticks += 1
 	if String(options["scene"]) != "fight" or main == null or not main.player_alive:
 		return
 	var sum := Vector3.ZERO
@@ -232,22 +250,41 @@ func _on_tick() -> void:
 
 
 func _on_frame() -> void:
+	_hold_3d_scale()
 	if _started_usec == 0:
 		return
 	var now: int = Time.get_ticks_usec()
 	var elapsed_s: float = float(now - _started_usec) * 1e-6
 	if not _is_hundred() and options["scene"] != "quiet":
 		_keep_the_fight_going(elapsed_s)
+	if not _paused and not String(options["pause_at"]).is_empty() and elapsed_s >= float(options["pause_at"]):
+		_paused = true
+		_run("pause on")
 	var warmup: float = float(options["warmup"])
 	if elapsed_s >= warmup:
 		if not measuring:
 			measuring = true
+			_window_start_usec = now
 			_last_second_usec = now
 		_sample(now)
 		if elapsed_s >= warmup + float(options["window"]):
 			_finish()
 			return
 	_last_frame_usec = now
+
+
+# The 3D scale the run asked for, set again whenever something (Main on a resize) changed it. A held scale is a bilinear
+# stretch, as before M4-T40; `setting` leaves the 3D to the upscaler settings.
+func _hold_3d_scale() -> void:
+	var wanted: String = String(options["scale3d"])
+	if wanted.is_empty() or wanted == "setting":
+		return
+	if Settings.get_value(&"upscaler") != &"bilinear":
+		Settings.set_value(&"upscaler", &"bilinear")
+	var root: Window = get_tree().root
+	var scale: float = minf(1.0, 1080.0 / float(maxi(root.size.y, 1))) if wanted == "1080p" else float(wanted)
+	if scale > 0.0 and not is_equal_approx(root.scaling_3d_scale, scale):
+		root.scaling_3d_scale = scale
 
 
 # An explosion on a timer and hulls topped up, so the sustained window always has wrecks in it and the same ships in it.
@@ -304,14 +341,13 @@ func _sample(now: int) -> void:
 			+ RenderingServer.get_frame_setup_time_cpu())
 	physics_ms.append(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1e3)
 	process_ms.append(Performance.get_monitor(Performance.TIME_PROCESS) * 1e3)
-	visible_splats.append(float(_read("render.splat_visible")))
-	if bool(_read("render.splat_clipped")):
-		clipped_frames += 1
 	bolts.append(float(_read("combat.projectiles")))
 	particles_busy.append(float(_read("fx.busy")))
 	debris_chunks.append(float(_read("debris.active_chunks")))
 	lights_on.append(float(_read("lights.active")))
 	draw_calls.append(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
+	primitives.append(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
+	objects.append(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME))
 	ai_us.append(float(_read("ai.think_us")))
 	hit_us.append(float(_read("combat.resolve_us")))
 	ram_us.append(float(_read("ram.resolve_us")))
@@ -356,20 +392,46 @@ func _finish() -> void:
 	print("[measure] %s: frames %d, fps %.0f (render.fps min %.0f), frame ms mean %.2f p50 %.2f p99 %.2f max %.2f, over 16.67 ms %d (%.2f%%), over 25 ms %d, gpu ms mean %.2f max %.2f, render cpu ms %.2f, worst tick each second ms %.2f, worst process each second ms %.2f" % [
 			label, frame_ms.size(), 1000.0 / _mean(frame_ms), _min(fps_samples), _mean(frame_ms), _percentile(frame_ms, 0.5), _percentile(frame_ms, 0.99), _max(frame_ms), over,
 			100.0 * float(over) / maxf(1.0, float(frame_ms.size())), missed, _mean(gpu_ms), _max(gpu_ms), _mean(render_cpu_ms), _mean(physics_ms), _mean(process_ms)])
-	print("[measure] %s: splat_visible min %d mean %d max %d, clipped frames %d, ships in view min %d mean %.1f max %d of %d, nearest other ship mean %.0f m" % [
-			label, _min(visible_splats), _mean(visible_splats), _max(visible_splats), clipped_frames, _min(ships_in_view), _mean(ships_in_view), _max(ships_in_view),
-			main.ships.alive().size() + 1, _mean(nearest_m)])
-	print("[measure] %s: bolts mean %.0f max %d, particle emitters busy mean %.1f max %d, debris chunks mean %.1f max %d, lights mean %.1f max %d, draw calls mean %.0f, explosions %d, rebuilds %d, render states %d" % [
+	print("[measure] %s: ships in view min %d mean %.1f max %d of %d, nearest other ship mean %.0f m, far dots %d" % [
+			label, _min(ships_in_view), _mean(ships_in_view), _max(ships_in_view), main.ships.alive().size() + 1, _mean(nearest_m),
+			int(_read("render.far_dots"))])
+	print("[measure] %s: bolts mean %.0f max %d, particle emitters busy mean %.1f max %d, debris chunks mean %.1f max %d, lights mean %.1f max %d, draw calls mean %.0f, explosions %d" % [
 			label, _mean(bolts), _max(bolts), _mean(particles_busy), _max(particles_busy), _mean(debris_chunks), _max(debris_chunks), _mean(lights_on), _max(lights_on), _mean(draw_calls),
-			explosions, int(_read("render.gdgs_rebuilds")), int(_read("render.gdgs_render_states"))])
+			explosions])
 	print("[measure] %s: last tick's ai.think_us mean %.0f p99 %.0f, combat.resolve_us mean %.0f p99 %.0f, ram.resolve_us mean %.0f p99 %.0f" % [
 			label, _mean(ai_us), _percentile(ai_us, 0.99), _mean(hit_us), _percentile(hit_us, 0.99), _mean(ram_us), _percentile(ram_us, 0.99)])
-	print("[measure] %s: backend %s, gpu %s, %dx%d, vsync %d, relight %s, particle_density %.2f, lens_flare %s, motion_blur %s, splat_hero %s, running_lights %s, budget %d" % [
-			label, _read("render.splat_backend"), _read("render.gpu"), get_window().size.x, get_window().size.y, DisplayServer.window_get_vsync_mode(), Settings.get_value(&"splat_relight"),
-			Settings.get_value(&"particle_density"), Settings.get_value(&"lens_flare"), Settings.get_value(&"motion_blur"), Settings.get_value(&"splat_hero"), _read("ship.running_lights"),
-			Settings.get_value(&"splat_budget")])
+	print("[measure] %s: renderer %s, gpu %s, %dx%d, vsync %d, ambient %.2f, particle_density %.2f, lens_flare %s, motion_blur %s, running_lights %s" % [
+			label, _read("render.renderer"), _read("render.gpu"), get_window().size.x, get_window().size.y, DisplayServer.window_get_vsync_mode(),
+			float(Settings.get_value(&"ambient_level")), Settings.get_value(&"particle_density"), Settings.get_value(&"lens_flare"), Settings.get_value(&"motion_blur"),
+			_read("ship.running_lights")])
+	# M4-T40: what the 3D was drawn with, so a run's settings file or exec is shown to have applied.
+	print("[measure] %s: upscaler %s (%s), scale %.3f, anti_aliasing %s, held %s, sim_step %s" % [label, _read("upscale.applied"),
+			_read("upscale.applied_preset"), get_tree().root.scaling_3d_scale, Settings.get_value(&"anti_aliasing"), _read("aa.held"),
+			Settings.get_value(&"sim_step") if Settings.schema.has_key(&"sim_step") else "-"])
+	print("[measure] %s: paused %s, triangles mean %.0f max %d, objects mean %.0f, draw calls mean %.0f max %d, frame ms p99 %.2f max %.2f" % [
+			label, _paused, _mean(primitives), _max(primitives), _mean(objects), _mean(draw_calls), _max(draw_calls),
+			_percentile(frame_ms, 0.99), _max(frame_ms)])  # M4-T27: the render comparison
+	var root: Window = get_tree().root
+	print("[measure] %s: window %dx%d %s, 3d scale %.2f, 3d scaling mode %d, frame mean ms %.2f, fps mean %.1f, frame p99 ms %.2f, fps 1%% low %.1f" % [label,
+			root.size.x, root.size.y,
+			"fullscreen" if DisplayServer.window_get_mode() in [DisplayServer.WINDOW_MODE_FULLSCREEN, DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN] else "windowed",
+			root.scaling_3d_scale, root.scaling_3d_mode, _mean(frame_ms), 1000.0 / maxf(_mean(frame_ms), 1e-6),
+			_percentile(frame_ms, 0.99), PerfStats.low_fps(frame_ms, LOW_SHARE)])  # M4-T07: the fullscreen check; M4-P2: the 1 % low (Q48)
+	# How much of real time the simulation kept: a tick slower than a frame leaves the engine at its step cap, so the frame rate
+	# then reads the tick, not the renderer (60 ticks a second is real time).
+	var window_s: float = float(Time.get_ticks_usec() - _window_start_usec) * 1e-6
+	print("[measure] %s: sim ticks %d in %.1f s = %.1f a second (%.2f of real time), ticks a frame mean %.2f" % [
+			label, _window_ticks, window_s, float(_window_ticks) / maxf(window_s, 1e-6),
+			float(_window_ticks) / maxf(window_s, 1e-6) / float(Engine.physics_ticks_per_second), float(_window_ticks) / maxf(1.0, float(frame_ms.size()))])
+	# The window's first frames beside the rest: a loading frame at the start shows here as a first-frames mean far above the window's.
+	var first_ms := frame_ms.slice(0, mini(START_FRAMES, frame_ms.size()))
+	print("[measure] %s: window start: first %d frames mean ms %.2f max %.2f, the whole window mean ms %.2f max %.2f" % [
+			label, first_ms.size(), _mean(first_ms), _max(first_ms), _mean(frame_ms), _max(frame_ms)])
 	print("[measure] %s: VRAM before %.0f MB, peak %.0f MB, added %.0f MB; GTT before %.0f MB, peak %.0f MB, added %.0f MB" % [
 			label, vram_before_mb, vram_peak_mb, vram_peak_mb - vram_before_mb, gtt_before_mb, gtt_peak_mb, gtt_peak_mb - gtt_before_mb])
+	own_vram_peak_mb = maxf(own_vram_peak_mb, _own_vram_mb())
+	print("[measure] %s: this process's VRAM before %.0f MB, peak %.0f MB (the kernel's per-process count; the card-wide figures above include the desktop)" % [
+			label, own_vram_before_mb, own_vram_peak_mb])
 	for spike: String in spikes:
 		print("[measure] %s: over 25 ms at %s" % [label, spike])
 	var shot: String = String(options["shot"])
@@ -391,6 +453,31 @@ func _read_mb(file_name: String) -> float:
 	if _vram_dir.is_empty():
 		return 0.0
 	return FileAccess.get_file_as_string(_vram_dir + file_name).strip_edges().to_float() / 1048576.0
+
+
+# This process's video memory, from the kernel's per-client counts (each DRM client counted once), so the desktop's own use and
+# other programs' do not move it. 0 where the driver does not report it. Read through `cat` because Godot's file reads stall on
+# some of the pseudo-files in /proc.
+func _own_vram_mb() -> float:
+	var output: Array = []
+	if OS.execute("sh", ["-c", "cat /proc/%d/fdinfo/* 2>/dev/null" % OS.get_process_id()], output) != 0 or output.is_empty():
+		return 0.0
+	var seen: Dictionary = {}
+	var total_kib: float = 0.0
+	var client: String = ""
+	var vram_kib: float = -1.0
+	for line: String in (String(output[0]) + "\npos:").split("\n"):
+		if line.begins_with("pos:"):  # the next descriptor's record starts: close the last one
+			if vram_kib >= 0.0 and not client.is_empty() and not seen.has(client):
+				seen[client] = true
+				total_kib += vram_kib
+			client = ""
+			vram_kib = -1.0
+		elif line.begins_with("drm-client-id:"):
+			client = line.get_slice(":", 1).strip_edges()
+		elif line.begins_with("drm-memory-vram:"):
+			vram_kib = line.get_slice(":", 1).strip_edges().get_slice(" ", 0).to_float()
+	return total_kib / 1024.0
 
 
 static func _mean(values: PackedFloat64Array) -> float:

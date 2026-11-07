@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs the M2 capture set P1-P4 (docs/milestones/m2-combat-sandbox.md, "Capture pre-checks") and writes PNGs to reports/m2/.
-# By default it renders with software Vulkan through scripts/capture.sh (llvmpipe in xvfb; GDGS falls back to Raster there).
-# On a desktop with a real GPU use CAPTURE_REAL_GPU=1 to open a window on it instead (GDGS Compute, real frame rate).
+# By default it renders with software Vulkan through scripts/capture.sh (llvmpipe in xvfb).
+# On a desktop with a real GPU use CAPTURE_REAL_GPU=1 to open a window on it instead (real frame rate).
 # Usage: scripts/capture_m2.sh [WxH]          e.g.  CAPTURE_REAL_GPU=1 scripts/capture_m2.sh 1920x1080
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,7 +23,7 @@ run() {  # run "<console commands>"
 PRE='wave stop'
 
 echo "== P1 raider turntable (AC15)"
-run "${PRE}; god on; camera cockpit; spawn raider idle 30 0 0; wait 30; screenshot reports/m2/p1_front.png; despawn all; spawn raider idle 30 90 0; wait 30; screenshot reports/m2/p1_side.png; despawn all; spawn raider idle 30 0 90; wait 30; screenshot reports/m2/p1_top.png; despawn all; spawn raider idle 30 35 20; wait 30; screenshot reports/m2/p1_three_quarter.png; fallback on; wait 10; screenshot reports/m2/p1_fallback.png"
+run "${PRE}; god on; camera cockpit; spawn raider idle 30 0 0; wait 30; screenshot reports/m2/p1_front.png; despawn all; spawn raider idle 30 90 0; wait 30; screenshot reports/m2/p1_side.png; despawn all; spawn raider idle 30 0 90; wait 30; screenshot reports/m2/p1_top.png; despawn all; spawn raider idle 30 35 20; wait 30; screenshot reports/m2/p1_three_quarter.png"
 
 echo "== P2 HUD (AC10, AC17)"
 run "${PRE}; god on; spawn raider patrol 1500; wait 60; set targeting.selected \"RAIDER 1\"; wait 30; screenshot reports/m2/p2_chase.png; camera cockpit; wait 10; screenshot reports/m2/p2_cockpit.png; spawn raider idle 800 0 0; set targeting.selected \"RAIDER 2\"; wait 10; screenshot reports/m2/p2_box.png"

@@ -1,9 +1,9 @@
-"""Wavefront OBJ/MTL writer (fallback meshes) and a small reader for tests.
+"""Wavefront OBJ/MTL writer (the hull and chunk OBJs, `files.obj`) and a small reader for tests.
 
 Godot's OBJ importer reads vertices as-is (Y up, right handed, -Z forward), so meshes are
 written in the Godot frame exactly like the hardpoints. Output is deterministic: fixed
 precision, LF newlines, no timestamps. ``Kd`` is written sRGB-encoded because
-``StandardMaterial3D.albedo_color`` is an sRGB ``source_color``; splat colours stay linear.
+``StandardMaterial3D.albedo_color`` is an sRGB ``source_color``; the generators' colours stay linear.
 """
 
 from __future__ import annotations

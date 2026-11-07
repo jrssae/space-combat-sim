@@ -32,37 +32,95 @@ var profile: AiProfile = null
 ## This tick's perception (the pilot's own; read, never write).
 var perception: Perception = Perception.new()
 
-## Wing (set from outside the brain).
-var order: Order = Order.ENGAGE_AT_WILL
+## Wing (set from outside the brain). Every field a native slot mirrors marks the context changed (`_changed`), so a pilot the
+## host steps without a GDScript think (M4-T35) pushes it at the next batch; assign `wing_ids` whole, never edit it in place.
+var order: Order = Order.ENGAGE_AT_WILL:
+	set(value):
+		order = value
+		_changed()
 ## The leader's `Targetable` id (`Contact.id`), 0 for none.
-var leader_id: int = 0
+var leader_id: int = 0:
+	set(value):
+		leader_id = value
+		_changed()
 ## The target the leader has selected (a `Contact.id`), 0 for none.
-var leader_target_id: int = 0
-var engage_radius_m: float = DEFAULT_ENGAGE_RADIUS_M
+var leader_target_id: int = 0:
+	set(value):
+		leader_target_id = value
+		_changed()
+var engage_radius_m: float = DEFAULT_ENGAGE_RADIUS_M:
+	set(value):
+		engage_radius_m = value
+		_changed()
 ## The formation slot (M3-T07) and its offset from the leader in the leader's body frame (`Formation.offset`).
-var has_slot: bool = false
+var has_slot: bool = false:
+	set(value):
+		has_slot = value
+		_changed()
 ## m, x right, y up, +z behind.
-var slot_offset: Vector3 = Vector3.ZERO
+var slot_offset: Vector3 = Vector3.ZERO:
+	set(value):
+		slot_offset = value
+		_changed()
 ## The `Targetable` ids of this ship's wingmates, leader included, itself not (M3-T10, `BehaviourRally`); empty outside a wing.
-var wing_ids: PackedInt64Array = PackedInt64Array()
+var wing_ids: PackedInt64Array = PackedInt64Array():
+	set(value):
+		wing_ids = value
+		_changed()
 ## The wing's link to its leader (M3-T07), World frame, null without a live leader. Used while the leader is beyond
 ## sensor range; in sight, its contact (with attitude) is used instead.
-var leader_link_position: UniversePos = null
-var leader_link_velocity: Vector3 = Vector3.ZERO
+var leader_link_position: UniversePos = null:
+	set(value):
+		leader_link_position = value
+		_changed()
+var leader_link_velocity: Vector3 = Vector3.ZERO:
+	set(value):
+		leader_link_velocity = value
+		_changed()
 ## The route this pilot leads (M3-T09, the instructor; `BehaviourFollowPath.attach` sets it), or null.
-var route: Route = null
+var route: Route = null:
+	set(value):
+		route = value
+		_changed()
 ## The last target attack flew at, kept while other behaviours fly (M3-T18). Evade uses it to tell its own target's fire
 ## from everyone else's.
 var attack_target_id: int = 0
 ## The target selected last tick (`AiPilot.wanted_target_id`), for a rammer's pick.
 var current_target_id: int = 0
 ## The objective's display name ("NAV ALPHA", compared case-insensitively), "" for none (M3-T17).
-var objective_name: String = ""
+var objective_name: String = "":
+	set(value):
+		objective_name = value
+		_changed()
 ## The guard post (M3-T10): a fixed point, or a ship by display name with an offset in its body frame, and the radius.
-var guard_post: UniversePos = null
-var guard_name: String = ""
-var guard_offset: Vector3 = Vector3.ZERO
-var guard_radius_m: float = 1500.0
+var guard_post: UniversePos = null:
+	set(value):
+		guard_post = value
+		_changed()
+var guard_name: String = "":
+	set(value):
+		guard_name = value
+		_changed()
+var guard_offset: Vector3 = Vector3.ZERO:
+	set(value):
+		guard_offset = value
+		_changed()
+var guard_radius_m: float = 1500.0:
+	set(value):
+		guard_radius_m = value
+		_changed()
+## The pilot whose native slot mirrors this context (M4-T35), set when the slot is made; the batch asks it to push a changed
+## context when the host steps its driver. Held weakly: the pilot owns this context, and a strong back-reference kept
+## every pilot and context alive to the end of the process (CI's "instances leaked at exit").
+var native_pilot: AiPilot:
+	set(value):
+		_native_pilot = weakref(value) if value != null else null
+	get:
+		return _native_pilot.get_ref() as AiPilot if _native_pilot != null else null
+var _native_pilot: WeakRef = null
+# The contexts changed since the last batch took them (M4-T35).
+static var _dirty: Array[AiContext] = []
+var _dirty_listed: bool = false
 
 ## Derived each tick by `refresh`: the leader (null when not in sight), hostile ships in sensor range with their offsets
 ## (World frame) and ranges at the same index, and the ids of this ship and every friendly contact.
@@ -74,6 +132,10 @@ var friendly_ids: PackedInt64Array = PackedInt64Array()
 ## The objective's contact this tick (near first, then broadcast), null while it is not seen or heard; and its range, m.
 var objective: Contact = null
 var objective_range_m: float = INF
+## The native brain this pilot thinks in (M4-T17), null on the GDScript path: a behaviour asked from outside between thinks
+## (`BehaviourRam.commit`) goes through it, since the lists below are not refreshed on the native path.
+var native_host: Object = null
+var native_slot: int = -1
 ## The guard post this tick: where (World), how fast it moves, and the guarded ship's contact (null for a fixed post).
 var guarding: bool = false
 var guard_point: Vector3 = Vector3.ZERO
@@ -90,7 +152,9 @@ static func order_word(value: Order) -> StringName:
 	return ORDER_WORDS[value]
 
 
-## Takes this tick's perception and rebuilds the derived lists.
+## Takes this tick's perception and rebuilds the derived lists. Always in GDScript: the native split (`kernels::pilot::
+## context_lists`, M4-T16) costs more to hand back than this short loop, so it waits for T17's native brains, which read
+## it without crossing into GDScript.
 func refresh(p: Perception) -> void:
 	perception = p
 	leader = null
@@ -155,6 +219,28 @@ static func _named(contacts: Array[Contact], wanted: String) -> Contact:
 	return null
 
 
+## The contacts this pilot keeps beyond its nearest k (M4-T04): its wingmates, its leader and the leader's target, its own
+## targets and the route's pace ship.
+func keep_ids() -> PackedInt64Array:
+	var ids: PackedInt64Array = wing_ids.duplicate()
+	for id: int in [leader_id, leader_target_id, current_target_id, attack_target_id]:
+		if id > 0:
+			ids.append(id)
+	if route != null and route.pace_id != 0:
+		ids.append(route.pace_id)
+	return ids
+
+
+## The names it keeps the same way: the objective and the guarded ship.
+func keep_names() -> PackedStringArray:
+	var names := PackedStringArray()
+	if not objective_name.is_empty():
+		names.append(objective_name)
+	if not guard_name.is_empty():
+		names.append(guard_name)
+	return names
+
+
 ## Back to a ship without a wing (the wing fields only).
 func clear_wing() -> void:
 	order = Order.ENGAGE_AT_WILL
@@ -165,7 +251,23 @@ func clear_wing() -> void:
 	slot_offset = Vector3.ZERO
 	leader_link_position = null
 	leader_link_velocity = Vector3.ZERO
-	wing_ids.clear()
+	wing_ids = PackedInt64Array()
+
+
+## The contexts changed since the last call, each once; the list starts afresh (M4-T35, `BrainBatch`).
+static func take_changed() -> Array[AiContext]:
+	var out: Array[AiContext] = _dirty
+	_dirty = []
+	for ctx: AiContext in out:
+		ctx._dirty_listed = false
+	return out
+
+
+# Lists this context for the next batch's push (once until taken).
+func _changed() -> void:
+	if not _dirty_listed:
+		_dirty_listed = true
+		_dirty.append(self)
 
 
 ## Whether the orders let this pilot attack `c` (a hostile ship).

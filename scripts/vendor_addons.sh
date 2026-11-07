@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Vendors the pinned third-party Godot addons into addons/. Run once per version bump and commit the
 # result together with docs/third-party.md. Only the addon directories (and their licences) are copied.
-# Usage: scripts/vendor_addons.sh [name ...]; with no name, all of them. gdgs_scs is the project's own fork of GDGS, whose pin
-# scripts/sync_gdgs_fork.sh keeps current (docs/third-party.md).
+# Usage: scripts/vendor_addons.sh [name ...]; with no name, all of them.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,7 +13,6 @@ trap 'rm -rf "${TMP}"' EXIT
 ADDONS=(
     "gut|https://github.com/bitwes/Gut|v9.7.1|addons/gut|LICENSE.md"
     "lens_effects|https://github.com/ARez2/compositor-effect-lens-effects|0ce061271f672f05fbb9aed08a61e019a875c1ad|addons/lens_effects|LICENSE"
-    "gdgs_scs|https://github.com/jrssae/godot-gaussian-splatting|188510923b8857b3ef2c45acc7b0c62d31aa150c|addons/gdgs_scs|LICENSE"
 )
 
 for entry in "${ADDONS[@]}"; do
