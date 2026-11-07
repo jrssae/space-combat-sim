@@ -13,6 +13,7 @@ var world: WorldFrame
 var projectiles: Node3D
 var standins: StandinDirector
 var now_s: float = 0.0
+var sim: SimCore
 
 
 func before_each() -> void:
@@ -30,6 +31,7 @@ func before_each() -> void:
 	standins.projectiles = projectiles
 	world.add_child(standins)
 	standins.set_physics_process(false)  # stepped by hand
+	sim = SimCore.attach(world)  # the weapons step on the core's rows (M4-T37: the GDScript stand-ins' path is gone)
 	now_s = SimClock.now() + 100.0  # ahead of the clock projectiles expire by, however long the suite has run
 
 
@@ -63,7 +65,9 @@ func _bolts(faction: StringName = &"") -> Array[Projectile]:
 # One stand-in tick at `now_s` with a fresh scan; returns how many bolts the turrets fired.
 func _step() -> int:
 	var before: int = _bolts().size()
+	sim.sync_now()  # the rows as the bodies stand now: the test moves them by hand between steps
 	standins.step(DT, now_s, ContactScan.from_tree(get_tree()))
+	standins.pull_native_state()  # the turrets' nodes show the rows' state, as the tests read it
 	now_s += DT
 	return _bolts().size() - before
 

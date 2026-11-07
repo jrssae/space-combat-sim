@@ -102,9 +102,6 @@ const ENTRIES: Dictionary = {
 	# M4-T15
 	&"perf_native_core": {"type": TYPE_BOOL, "default": true,
 		"doc": "The native simulation core feeds the contact scan, the hit sweep, the flight step and the ram broad phase from one sync a tick (M4-T15) when perf_native is on and the library is built; off = each class loads its own copy, for pairing the two in one process"},
-	# M4-T20
-	&"perf_native_weapons": {"type": TYPE_BOOL, "default": true,
-		"doc": "The stand-ins' turrets, interceptors, beams, missiles and mines step as native kernels over the core's rows (M4-T20) when the core is on; off = the GDScript stand-ins, the reference, for pairing the two in one process"},
 	# M4-T17
 	&"perf_native_brains": {"type": TYPE_BOOL, "default": true,
 		"doc": "Every AiPilot thinks in the native brains over the core's rows (M4-T17) when perf_native and perf_native_core are on and the library is built; off = the GDScript brains, for pairing the two in one process"},
@@ -183,7 +180,7 @@ const RENAMED: Dictionary = {}
 
 ## Settings removed with the old paths (M4-T37, Q67): `Settings.revert` reads only schema keys, so a saved file that still
 ## holds one of these loads without it, and the next `save` drops it.
-const RETIRED: Array[StringName] = []
+const RETIRED: Array[StringName] = [&"perf_native_weapons"]
 
 ## Choices removed from a setting: key -> {old choice -> what a saved file's old choice loads as} (M4-T37: the inline step).
 const RETIRED_VALUES: Dictionary = {&"sim_step": {&"inline": &"threaded"}}

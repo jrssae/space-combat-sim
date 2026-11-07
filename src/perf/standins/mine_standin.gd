@@ -122,33 +122,6 @@ func faction_of(i: int) -> StringName:
 	return _factions[i]
 
 
-## One tick (`tick` the director's count): mines due to be laid again come back, a third of the rows check their trigger
-## against the hulls (`hulls` with their centres, reaches and factions, index for index) and those set off go off. Returns
-## how many went off.
-func step(tick: int, now_s: float, hulls: Array[Damageable], hull_at: PackedVector3Array, hull_reach: PackedFloat64Array,
-		hull_factions: Array[StringName]) -> int:
-	_lay_again(now_s)
-	var rows := PackedInt32Array()
-	var at := PackedVector3Array()
-	var factions: Array[StringName] = []
-	var origin: Vector3 = global_position
-	for i: int in range(posmod(tick, TRIGGER_TICKS), _local.size(), TRIGGER_TICKS):
-		if _alive[i] == 1:
-			rows.append(i)
-			at.append(origin + _local[i])
-			factions.append(_factions[i])
-	checked_last_tick = rows.size()
-	if rows.is_empty() or hulls.is_empty():
-		return 0
-	var set_off: PackedInt32Array = triggers(at, factions, hull_at, hull_reach, hull_factions, broad_phase)
-	var fired: int = 0
-	for k: int in rows.size():
-		if set_off[k] >= 0:
-			_go_off(rows[k], at[k], now_s, hulls, hull_at, hull_reach)
-			fired += 1
-	return fired
-
-
 ## Hands the mines to the native rows (`rows`, an `ScsWeaponRows` on the core), or takes them back with null.
 func bind_native(rows: Object) -> void:
 	native_rows = rows
@@ -224,14 +197,6 @@ static func blast(at: Vector3, hull_at: PackedVector3Array, hull_reach: PackedFl
 		if hull_at[j].distance_squared_to(at) <= reach * reach:
 			out.append(j)
 	return out
-
-
-func _go_off(i: int, at: Vector3, now_s: float, hulls: Array[Damageable], hull_at: PackedVector3Array,
-		hull_reach: PackedFloat64Array) -> void:
-	_retire(i, now_s)
-	for j: int in blast(at, hull_at, hull_reach):
-		_hurt(i, at, hulls[j], hull_at[j])
-	detonated.emit(i)
 
 
 # Mine `i` leaves play until it is laid again.

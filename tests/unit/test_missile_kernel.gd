@@ -1,7 +1,7 @@
 extends GutTest
 ## The missile kernel on the core's rows (M4-T20, architecture §17.13): a guided missile's proportional navigation runs
 ## natively over its target's row, bit for bit with `MissileStandin.steer`, which stays the reference behind
-## `perf_native_weapons`. Compared on seeded inputs and on seeded flights at a weaving target, one missile steered by each
+## a missile the rows cannot steer. Compared on seeded inputs and on seeded flights at a weaving target, one missile steered by each
 ## path side by side; a target hidden after the tick's sync (not yet read again) is asked of the GDScript, which drops it as
 ## before, and a missile with no core to read steers in GDScript. Skips, saying why, without the native library.
 

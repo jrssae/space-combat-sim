@@ -5,10 +5,10 @@ extends RefCounted
 ## director, so a fight runs the same way near the player or far out in the tier. Build it under a test node with `build`.
 
 const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_native_commands", &"perf_native_driver_step", &"perf_native_weapons", &"perf_native_bolt_rows", &"sim_step",
+		&"perf_native_commands", &"perf_native_driver_step", &"perf_native_bolt_rows", &"sim_step",
 		&"tier_radius_m", &"tier_hz", &"tier_brain_hz", &"ai_think_rate", &"perf_threads", &"friendly_fire"]
 const NATIVE_SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_native_commands", &"perf_native_driver_step", &"perf_native_weapons", &"perf_native_bolt_rows", &"ai_think_rate"]
+		&"perf_native_commands", &"perf_native_driver_step", &"perf_native_bolt_rows", &"ai_think_rate"]
 
 var space: SubViewport
 var world: WorldFrame

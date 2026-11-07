@@ -12,7 +12,7 @@ extends GutTest
 const POOL: int = 14
 const DT: float = 1.0 / 60.0
 const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_native_commands", &"perf_native_driver_step", &"perf_native_weapons", &"perf_native_bolt_rows", &"sim_step",
+		&"perf_native_commands", &"perf_native_driver_step", &"perf_native_bolt_rows", &"sim_step",
 		&"tier_radius_m", &"tier_hz", &"ai_think_rate", &"perf_threads"]
 const SCHEDULES: Array[StringName] = [&"threaded"]  # M4-T37: the inline step and Q54's both-schedules rule are gone
 const RADIUS_M: float = 10000.0
@@ -44,7 +44,7 @@ func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
 	for key: StringName in [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-			&"perf_native_commands", &"perf_native_driver_step", &"perf_native_weapons", &"perf_native_bolt_rows", &"ai_think_rate"]:
+			&"perf_native_commands", &"perf_native_driver_step", &"perf_native_bolt_rows", &"ai_think_rate"]:
 		Settings.set_value(key, true)
 	Settings.set_value(&"tier_radius_m", RADIUS_M)
 	Settings.set_value(&"tier_hz", 20.0)
