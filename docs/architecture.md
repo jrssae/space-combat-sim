@@ -3309,7 +3309,7 @@ src/combat/destruction_director.gd   a tier death where its row flew; every deat
   them. Two near ships ram through the ram resolver as before.
 - **Deaths.** A tier ship destroyed goes through `DestructionDirector` as a near one does (released to the pool, its row
   with it, `ship_destroyed` and `raider_destroyed`), its pose read from its row (`TierDirector.row_pose`), with no explosion
-  or debris (nothing draws a far death until T23's far flash). Every pooled ship's or the player's killing hit carries the
+  or debris (since T23 a far death is drawn by the explosion level of detail). Every pooled ship's or the player's killing hit carries the
   death's blast (`HitInfo.blast_energy_j`, `blast_radius_m`, `blast_point`; placeholders until M12 sizes a blast by class and
   cargo: 1e5 J a kilogram of hull, four bounding radii), for T23 and M12.
 - **Cost.** The tier's main-thread work (the integration, the cannons' tier pass, the landing; the far capitals' rolls and
@@ -3322,7 +3322,7 @@ src/combat/destruction_director.gd   a tier death where its row flew; every deat
   from `note_hull` (no per-ship hull signal in the director), and the landing finds hulls through a cache.
 - **Settings and console.** `tier_brain_hz` (3, live; 4 until fix round 2). Provider `tier` gains `brain_period_ticks`, `shots`, `hits`,
   `hits_landed`, `land_us`, `capital_rolls`, `capital_hits`, `capital_fire_us`, `cost_us`.
-- **What a tier ship still is not, after T22:** drawn, on the player's radar or targetable by the player (T23); struck
+- **What a tier ship still is not, after T22:** drawn, on the player's radar or targetable by the player (all three since T23); struck
   by a near capital's missiles or targeted by its turrets; selected on its parked targeting (its pilot's target rides in its
   row command; the driver selects it again when promoted).
 - **Tests.** `test_tier_fire` (the chance's shape, thinks at `tier_brain_hz`, the brain steering, rolled shots through the
@@ -3370,16 +3370,25 @@ src/targeting/tier_targets.gd    TierTargets: tier ships as targets, by marker i
   contacts, and the GDScript walk and plot had cost 73 to 52 FPS (a frame's work comes back about 2.5 times through the extra
   ticks a slower frame runs).
 - **Promotion inside a rock.** A row collides with nothing, so `tier_take` first moves it clear of every static row it
-  overlaps (rocks and mines): on along its velocity to the far side plus 5 m, or straight out when it barely moves; `cleared`
-  counts them.
-- **The explosion level of detail.** A death within 250 bounding radii of the camera is the full `Explosion`; within 800 a
-  reduced one (no light, the gas shell only, no debris); farther a point flash in `FarFlashes`, with no node and no particle. The
-  flash's radius grows with the cube root of the blast's energy (about 3 m for a raider), its peak with the cube root too (so
-  the delivered light grows with the energy), its length with the root of its radius; drawn at least a pixel, below its real
-  size it dims by the square of that size, so the light it delivers falls with the inverse square of distance. A raider's
-  flash reads to about 6.6 km at 1 080 lines and a carrier's to about 300 km. A tier death flashes where the row flew. A
+  overlaps (rocks and mines) by the shortest way out plus 5 m (fix round 1; first along its velocity, which could carry a
+  fighter across a 300 m rock): a fighter as a sphere of its bounding radius, a capital as its hull box (`tier_set_box` at
+  demotion), so a grazing rock moves a carrier by the graze, not by its 614 m bounding radius. Eight passes for rocks that
+  touch; a row still overlapping after them stays where the last pass put it. `cleared` counts them. A release or a death in
+  the tier removes the row with `tier_remove` (no clearance, not a promotion).
+- **The explosion level of detail** (fix round 1: from pixels, not fixed radii). The level follows the fireball's final radius
+  (1.2 bounding radii) on the current 3D picture (`ExplosionLod.picture_lines`: the window's lines times the 3D scale, 1 080
+  headless): the full `Explosion` while it is 8 px or more, a reduced one (no light, the gas shell only, no debris) down to
+  2 px, then a point flash in `FarFlashes` with no node and no particle. The flash starts as big as the fireball and as bright
+  as the explosion's glow (2.4 / 1.7 / 1.0), so at the switch it delivers the reduced effect's light; it shrinks to its 1 px
+  floor at twice the switch distance and then keeps the pixel and dims with the square of its real size (the inverse square of
+  distance) until it delivers under a quarter of its peak, at four times the switch distance. Its length grows with the cube
+  root of the blast's energy. At 1 080 lines and 70 degrees: a fighter (9.3 m) full to 1.1 km, reduced to 4.3 km, its flash
+  reading to 17 km; a destroyer (307 m) 36, 142 and 570 km; a carrier (614 m) 71, 284 and 1 140 km; at 2 160 lines all twice
+  as far. The first build switched at 250 and 800 bounding radii and sized the flash from the energy alone (3 m for a raider,
+  48 m for a carrier), so the flash took over already under its own visibility bar. A tier death flashes where the row flew. A
   capital stand-in's death (`DestructionDirector.watch_capital`) is drawn the same way, takes the capital out of play and out
-  of the tier, and emits `capital_destroyed`. Every death's killing hit carries its blast's energy, radius and point (M12).
+  of the tier, and emits `capital_destroyed`; the stand-ins' counts leave a dead capital and its weapons out. Every death's
+  killing hit carries its blast's energy, radius and point (M12).
 - **Mines on the rows.** A mine's trigger and blast read the sweep's rows (the near hulls, then the tier rows), so a tier ship
   sets a mine off and is hurt by it, in the core's order; `StandinDirector`'s GDScript walk of the hulls is gone (Q68).
 - **The default.** `tier_radius_m` is 10 000 again. The far-ship tests read where a tier ship flies and whether it is in play
@@ -3387,9 +3396,12 @@ src/targeting/tier_targets.gd    TierTargets: tier ships as targets, by marker i
 - **Console.** Provider `tier` gains `proxy_dots`, `proxy_hulls`, `proxy_us`, `flashes`, `cleared`; `kill target` destroys any
   selected target with a hull.
 - **Tests.** `test_tier_proxies` (every tier row drawn and on the radar, one multimesh per capital mesh, the handover frame, the
-  selection through promotion and demotion, candidates and broadcasts, the rock, a mine's blast on a tier row),
-  `test_explosion_lod_maths` (the levels, the floor and the inverse square at 1 080 and 2 160 lines, a capital's reach),
-  `test_explosion_lod` (near, reduced, far, a tier death, a capital's death, `kill` on a capital), `test_mine_kernel` (the
+  selection through promotion and demotion, candidates and broadcasts, the rock for a fighter and for a capital by its hull, a
+  release or death not counted as a promotion, a mine's blast on a tier row, the bench counts without a dead capital),
+  `test_explosion_lod_maths` (the levels from pixels, the switch moving with the lines, the flash visible at the switch with the
+  reduced effect's light for a fighter, a destroyer and a carrier at 1 080 and 2 160 lines, the floor and the inverse square,
+  the reach), `test_explosion_lod` (near, reduced, far, a tier death, a carrier at 14 km full, a cruiser past its switch as a
+  flash, `kill` on a capital), `test_mine_kernel` (the
   core's order), `test_sim_core` (the guards on the new kernels).
 
 ### 17.16 Rocks and mines as static rows (T29)

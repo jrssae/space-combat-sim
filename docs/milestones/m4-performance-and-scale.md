@@ -1500,10 +1500,11 @@ done and T20 proceeds.
   (`TierTargets`), so a selection survives promotion and demotion; a tier think hands a named target to its parked controller
   and the tier rows carry that selection; the broadcast scan hears a parked ally from its row; the radar reads its contacts in
   one pass over the core's rows and plots them in a native kernel (`radar_kernel.rs`). A row promoted inside a rock or mine is
-  moved clear first (along its velocity, or straight out). The explosion level of detail: the full effect within 250 bounding
-  radii of the camera, a reduced one (no light, the gas shell, no debris) within 800, beyond a point flash in one shared
-  multimesh (`FarFlashes`: a 1 px floor, the inverse square below it, size, peak and length from the blast's energy; a raider's
-  reads to about 6.6 km at 1 080 lines, a carrier's to about 300 km) with no node or particle; tier deaths flash where the row
+  moved clear first (fix round 1: by the shortest way out, a capital by its hull box). The explosion level of detail (fix round 1:
+  from pixels): the full effect while the fireball's radius on the 3D picture is 8 px or more, a reduced one (no light, the
+  gas shell, no debris) down to 2 px, then a point flash in one shared multimesh (`FarFlashes`) with no node or particle, as big
+  and bright as the fireball at the switch, then a 1 px floor and the inverse square (at 1 080 lines a fighter's death is full
+  to 1.1 km, reduced to 4.3 km, its flash reading to 17 km; a destroyer's 36, 142 and 570 km; a carrier's 71, 284 and 1 140 km); tier deaths flash where the row
   flew; a capital stand-in's death is drawn the same way, leaves play and the tier, and keeps its blast on the event. A mine's
   trigger and blast read the core's sweep rows, tier rows among them, and `StandinDirector._gather_hulls` is gone (Q68).
   `tier_radius_m` is 10 000 again, and the seven far-ship tests pass with it on (they read where a tier ship flies,
@@ -1511,9 +1512,19 @@ done and T20 proceeds.
   tier on against this task, two runs each: `battle` 500 126.1 / 125.8 FPS (1 % low 67.6 / 65.1) to 138.7 / 138.9 (63.7 /
   64.9); `battle` 1 000 72.7 / 73.8 (41.9 / 43.4) to 72.1 / 72.4 (42.9 / 47.7); render CPU 0.34 ms at 500 (the Done-when's 3 ms
   met) and 0.44 at 1 000; GPU 0.76 to 0.88 ms; draw calls about 100; triangles about 504 000 (500) and 524 000 (1 000). The far
-  proxies' CPU update at 1 000 is 0.20 ms a frame (max 0.46) for 580 dots and 97 hull instances, under the 0.5 ms bar, so the
+  proxies' CPU update at 1 000 is 0.20 ms a frame (max 0.46; fix round 1's rerun 0.204 and 0.506, saved as
+  `reports/perf/M4-T23_proxy_cost.txt`) for 580 dots and 97 hull instances, under the 0.5 ms bar, so the
   GPU-driven option was not built. Full suite (`GUT_SLOW=1 scripts/run_tests.sh`, exit 0): Python 410 OK; GUT 235 scripts, 2 578
   tests, 2 566 passing, 12 pending (the renderer-only and AC12 ones), 0 failing; the three CI shards: see the report.
+- **Fix round 1 (2026-11-07, review I1 and M1 to M8):** the explosion level of detail switches on the fireball's pixels on the
+  current 3D picture and the flash takes over at the fireball's size and brightness, so it is visible at the switch for every
+  class at 1 080 and 2 160 lines (the first build's flash started under its own visibility bar); a promoted row is cleared of
+  rocks by the shortest way out, a capital by its hull box (a grazed cruiser moves 20 to 40 m, not 149); a release or a death
+  in the tier is not a promotion (`tier_remove`); the stand-ins' counts leave dead capitals out (the bench's capitals are
+  invulnerable, so no measured window lost one); the capital-death test asserts its level and a cruiser past its switch dies
+  as a flash; the far-flash screenshots retaken; the proxy cost saved. Carried to T43 (review M7): the player's per-tick
+  candidate snapshot still walks the targetable nodes and appends the tier rows' columns (+0.19 ms at 1 000); reading it from
+  the core's rows as the radar now does would change `targeting_on_read.json`'s record.
 - **As built, where it differs from the plan:** the radar and its plot moved onto the core's rows and a native kernel, which the
   plan did not name: with the tier's ships back on the radar the GDScript walk and plot took `battle` 1 000 from 73 to 52 FPS;
   capital stand-ins gained a death (they had none: a capital at zero hull stayed in play) so a far capital's death could be
@@ -6534,6 +6545,13 @@ one native class gone.
 | base r2 | 1 000 | 73.8 | 43.4 | 20.16 | 13.55 | 0.87 | 102 | 0.40 | 508 848 |
 | T23 r1 | 1 000 | 72.1 | 42.9 | 19.74 | 13.87 | 0.87 | 100 | 0.44 | 524 241 |
 | T23 r2 | 1 000 | 72.4 | 47.7 | 19.26 | 13.81 | 0.88 | 100 | 0.44 | 523 756 |
+| fix round 1 | 500 | 136.6 | 64.5 | 13.97 | 7.32 | 0.77 | 102 | 0.35 | |
+| fix round 1 | 1 000 | 72.2 | 46.0 | 19.82 | 13.84 | 0.86 | 100 | 0.43 | |
+
+- **Fix round 1:** the explosion levels from pixels and the flash's new size leave the fullscreen check where it was (one run
+  each, loads 0.4 to 0.9). No capital died in any measured window (the bench's capitals are invulnerable), so the stand-ins'
+  counts were exact before and after. The far proxies' CPU update, rerun and saved (`reports/perf/M4-T23_proxy_cost.txt`):
+  0.204 ms mean, 0.506 ms max over 600 frames.
 
 - **The radar's cost, found on the way:** the first build (the radar walking the targetables and plotting in GDScript, now with
   the tier's ships on it) measured 108 FPS at 500 and 52 at 1 000. Dropping the tier rows from the radar alone gave 70 at 1 000:
@@ -6544,7 +6562,9 @@ one native class gone.
 - **Far proxies' CPU update at 1 000** (a scratch sampler over 600 frames during the bench): 0.20 ms mean, 0.46 ms max, for 580
   dots and 97 hull instances; under 0.5 ms, so the compute path was not built.
 - **Screenshots** for (H): `reports/perf/M4-T23_far_fight.png` (24 fighters and a carrier 13 to 16 km ahead, the carrier's box
-  proxy), `reports/perf/M4-T23_far_capital_death.png` (that carrier's death: at 16 km it is still the full explosion),
+  proxy), `reports/perf/M4-T23_far_capital_death.png` (that carrier's death: at 16 km it is still the full explosion); fix round
+  1: `M4-T23_far_fighter_death.png` and `M4-T23_far_capital_flash.png` (a raider at 7.5 km and a cruiser at 116 km, each past its
+  flash switch on a 1 350-line window, with 8x crops `*_crop8x.png` and `M4-T23_far_flash_shots.txt`),
   `reports/perf/M4-T23_battle_1000_view.png`, and each run's `fullscreen.png` under `reports/perf/M4-T23_final_*`.
 
 ## Definition of done (M4)

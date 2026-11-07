@@ -533,11 +533,23 @@ Look and feel items from M4 not yet seen by the maintainer (Q54), for one sessio
       a carrier is still a hundred pixels or more. Fly toward and away from one through 10 and 11 km: no pop, no flicker and no
       jump at the handover; it should look exactly the same just before and just after (the bench's capitals use the plain box
       look; the station scene's the textured hull). Screenshot: `reports/perf/M4-T23_far_fight.png` (the grey hull ahead).
-- [ ] **M4-T23 Far deaths.** A death past 250 bounding radii is a reduced explosion (no light, a gas puff, no debris) and past 800
-      a point flash with no node (`state tier`: `flashes`). A raider's flash should read to about 6 km and fade there; a capital's
-      (`set targeting.selected "CRUISER 1"` then `kill` in a battle run) reads across tens of km, and at 16 km a carrier's death is
-      still the full explosion. Say how far each should read and how bright the flash should be. Screenshot:
-      `reports/perf/M4-T23_far_capital_death.png` (a carrier at 16 km, the full explosion).
+- [ ] **M4-T23 Far deaths.** The level follows the fireball's size on the 3D picture (fix round 1): the full explosion while its
+      radius is 8 px or more, a reduced one (no light, a gas puff, no debris) down to 2 px, then a point flash with no node
+      (`state tier`: `flashes`) that starts as big and as bright as the fireball it replaces and then fades out with distance. At
+      1 080 lines (the default 3D at 0.5 on the 4K panel): a fighter's death is full to about 1.1 km, reduced to 4.3 km, and its
+      flash reads to about 17 km; a destroyer's 36 km, 142 km and 570 km; a carrier's 71 km, 284 km and 1 140 km (twice as far at
+      2 160 lines). In a battle run watch fighters die beyond 4 km (a bright point that flares and fades in about half a second)
+      and kill a capital (`set targeting.selected "CRUISER 1"` then `kill`): within tens of km it is still the full explosion.
+      Say whether the switches pop (a full or reduced blast handing over to the point) and how bright and how long the point
+      should be. Screenshots: `reports/perf/M4-T23_far_fighter_death.png` and `M4-T23_far_capital_flash.png` (a raider at 7.5 km
+      and a cruiser at 116 km, each past its switch, with an 8x crop around the flash, `*_crop8x.png`; distances in
+      `M4-T23_far_flash_shots.txt`), and `M4-T23_far_capital_death.png` (a carrier at 16 km: the full explosion).
+- [ ] **M4-T23 Capitals can die.** In `battle` runs capitals can now be destroyed (before T23 a capital at zero hull stayed in
+      play): it explodes by the rule above and vanishes, its turrets with it. The bench's own capitals are invulnerable, so this
+      shows with `kill` or outside the bench; say whether a capital simply vanishing after its blast is acceptable until M12's
+      break-up.
+- [ ] **M4-T23 A capital promoted near a rock.** A ship coming back from the tier inside a rock or a mine is moved out by the
+      shortest way (a capital by its hull box): watch a carrier promoted at 10 km next to a rock field for a visible jump.
 - [ ] **M4-T23 The radar with the tier.** At `battle 1000` the radar holds about a thousand contacts again (the tier's ships
       within 25 km and its broadcasting allies); check it stays readable and that selecting a far ship by `target_next` works
       and holds while it is promoted and demoted.
