@@ -8,8 +8,7 @@ extends GutTest
 const SHIPS: int = 120
 const SEED: int = 1
 const TICKS: int = 240
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_threads", &"perf_native_commands", &"perf_native_driver_step", &"sim_step"]
+const SETTINGS: Array[StringName] = [&"perf_threads", &"sim_step"]
 
 var _saved: Dictionary = {}
 # The battle's ships by their `Targetable` id, so selections compare across runs (each run has its own instance ids).
@@ -19,10 +18,6 @@ var _index_of: Dictionary = {}
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
-	Settings.set_value(&"perf_native_brains", true)
-	Settings.set_value(&"perf_native_flight", true)
 	Factions.reset()
 	ContactScan.invalidate()
 
@@ -86,7 +81,6 @@ func test_one_thread_and_six_give_the_same_commands_from_rows() -> void:
 func test_a_command_set_from_gdscript_takes_over_from_the_row() -> void:
 	if _skipped():
 		return
-	Settings.set_value(&"perf_native_commands", true)
 	var fight: Dictionary = await _small_fight()
 	var sim: SimCore = fight["sim"]
 	var c: Combatant = null
@@ -309,7 +303,6 @@ func _queue_thinks(ships: Array) -> int:
 func test_a_ship_whose_row_the_core_lost_is_handed_its_command_once_and_flies_from_the_row_again() -> void:
 	if _skipped():
 		return
-	Settings.set_value(&"perf_native_commands", true)
 	var fight: Dictionary = await _small_fight()
 	var sim: SimCore = fight["sim"]
 	var lost: Array[Combatant] = []
@@ -339,7 +332,6 @@ func test_a_ship_whose_row_the_core_lost_is_handed_its_command_once_and_flies_fr
 func test_a_native_pilot_that_wants_the_nearest_hostile_has_it_selected_as_today() -> void:
 	if _skipped():
 		return
-	Settings.set_value(&"perf_native_commands", true)
 	var fight: Dictionary = await _small_fight()
 	var c: Combatant = fight["ships"][0]
 	c.driver.set_physics_process(false)

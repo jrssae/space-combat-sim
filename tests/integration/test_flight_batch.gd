@@ -9,14 +9,11 @@ const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh, then scripts/run_tes
 
 var world: WorldFrame
 var spec: ShipSpec
-var _native_backup: bool
 var _fuel_backup: bool
 
 
 func before_each() -> void:
-	_native_backup = bool(Settings.get_value(&"perf_native"))
 	_fuel_backup = bool(Settings.get_value(&"fuel_unlimited"))
-	Settings.set_value(&"perf_native", true)
 	Settings.set_value(&"fuel_unlimited", true)
 	world = WorldFrame.new()
 	world.name = "World"
@@ -25,7 +22,6 @@ func before_each() -> void:
 
 
 func after_each() -> void:
-	Settings.set_value(&"perf_native", _native_backup)
 	Settings.set_value(&"fuel_unlimited", _fuel_backup)
 
 

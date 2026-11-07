@@ -1,6 +1,6 @@
 // The bodies the AI's contact scan sees, known once and read natively each tick (M4-T09, docs/architecture.md 17.8).
 // Since M4-T15 the registration lives in the simulation core (sim_core.rs); this class is the core without its facade,
-// kept for the scan's registry path (`perf_native_core` off), so the two paths can be paired in one process.
+// kept for the scan's registry path on a world with no core.
 // gdext's generated constructor writes `base: base`, which clippy flags on the struct's `base` field.
 #![allow(clippy::redundant_field_names)]
 use godot::classes::Node;

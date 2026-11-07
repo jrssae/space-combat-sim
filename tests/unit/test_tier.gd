@@ -10,7 +10,7 @@ const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const LAYOUT_PATH: String = "res://tests/fixtures/hardpoints_nominal.json"
 const DT: float = 1.0 / 60.0
 const PERIOD: int = 3
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core"]
+const SETTINGS: Array[StringName] = []
 const NO_NODES: Array[Node] = []
 
 var world: WorldFrame
@@ -22,8 +22,6 @@ var _tick: int = 1000
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
 	Factions.reset()
 	ContactScan.invalidate()
 	ContactScan.clear_statics()

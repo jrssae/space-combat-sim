@@ -10,7 +10,7 @@ extends GutTest
 
 const SIDES: Array[StringName] = [Factions.RAIDERS, Factions.EARTH_ALLIANCE, Factions.NEUTRAL, &"drifters"]
 const RAIDER_SPEC: String = "res://assets/ships/raider_delta_v.tres"
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core"]
+const SETTINGS: Array[StringName] = []
 
 var world: WorldFrame
 var projectiles: Node3D
@@ -234,13 +234,6 @@ func test_the_driver_perceives_on_the_rows_with_the_core_and_without_them_off_it
 	assert_eq(p.contacts.size(), 2, "it sees the other two ships")
 	assert_eq(p.statics.size(), 1, "and the rock")
 	assert_eq(p.relation_row.size(), SimCore.for_tree(get_tree()).core.factions().size(), "a relation for every faction of the core")
-	Settings.set_value(&"perf_native", false)
-	ContactScan.invalidate()
-	await get_tree().physics_frame
-	var off: Perception = a.driver.perceive()
-	assert_null(off.kernels, "with native code off, the GDScript reference answers")
-	assert_false(off.on_rows(), "and the perception is not on the rows")
-	assert_eq(off.contacts.size(), 2, "it still sees the other two ships")
 
 
 func test_refresh_stays_on_the_gdscript_split_even_on_the_rows() -> void:

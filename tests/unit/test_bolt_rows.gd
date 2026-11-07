@@ -10,8 +10,7 @@ const SEED: int = 1
 const TICKS: int = 240
 const DELTA: float = 1.0 / 60.0
 const NO_NODES: Array[Node] = []
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_threads", &"perf_native_commands"]
+const SETTINGS: Array[StringName] = [&"perf_threads"]
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const FIXTURE: String = "bolt_rows"
 
@@ -25,10 +24,6 @@ var _dumps: Array[String] = []
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
-	Settings.set_value(&"perf_native_brains", true)
-	Settings.set_value(&"perf_native_flight", true)
 	Factions.reset()
 	ContactScan.invalidate()
 
@@ -414,7 +409,6 @@ func _space() -> SubViewport:
 ## shooter by their place in the battle, damage, point), the kills, the shots, and the most bolt nodes and owned rows seen.
 func _battle(threads: int, ticks: int = TICKS) -> Dictionary:
 	Settings.set_value(&"perf_threads", threads)
-	Settings.set_value(&"perf_native_commands", true)
 	Factions.reset()
 	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
 	ContactScan.invalidate()

@@ -16,17 +16,6 @@ const DT: float = 1.0 / 60.0
 const TOLERATED: Dictionary = {}
 const REL_TOL: float = 1e-6
 
-var _native_backup: bool
-
-
-func before_each() -> void:
-	_native_backup = bool(Settings.get_value(&"perf_native"))
-	Settings.set_value(&"perf_native", true)
-
-
-func after_each() -> void:
-	Settings.set_value(&"perf_native", _native_backup)
-
 
 # True (and the test marked pending, saying why) when there is no native library to compare against.
 func _skipped() -> bool:

@@ -1,7 +1,7 @@
 class_name NativeProbe
 extends RefCounted
 ## Facade over the native `ScsNativeProbe` (M4-T05a): the same answers from native code when the library is loaded
-## and `perf_native` is on, from GDScript otherwise. It proves the seam and is the pattern later native ports follow.
+## (required since M4-T37), from GDScript when a test asks for the reference. It proves the seam and is the pattern later native ports follow.
 
 const NATIVE_CLASS: StringName = &"ScsNativeProbe"
 
@@ -14,7 +14,7 @@ func _init(use_native: bool = true) -> void:
 	_use_native = use_native
 
 
-## Which code answers: &"native" or &"gdscript". Follows `perf_native` at once.
+## Which code answers: &"native" or &"gdscript".
 func path() -> StringName:
 	return &"native" if _active() != null else &"gdscript"
 
@@ -42,7 +42,7 @@ func in_range(positions: PackedVector3Array, origin: Vector3, range_m: float) ->
 
 # The native object when this call should use it (made on first use), or null for the GDScript path.
 func _active() -> Object:
-	if not _use_native or not NativeLib.enabled():
+	if not _use_native:
 		return null
 	if _native == null:
 		_native = NativeLib.instantiate(NATIVE_CLASS)

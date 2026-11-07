@@ -9,7 +9,7 @@ const FIXTURE: String = "bolt_sync"
 const PROJECTILE_SCENE: PackedScene = preload("res://src/weapons/projectile.tscn")
 const SIDES: Array[StringName] = [Factions.RAIDERS, Factions.EARTH_ALLIANCE, Factions.NEUTRAL, &"drifters"]
 const DELTA: float = 1.0 / 60.0
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core"]
+const SETTINGS: Array[StringName] = []
 
 var world: WorldFrame
 var projectiles: Node3D
@@ -19,8 +19,6 @@ var _saved: Dictionary = {}
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
 	ContactScan.invalidate()
 	world = WorldFrame.new()
 	world.name = "World"

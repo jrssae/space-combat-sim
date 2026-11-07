@@ -14,17 +14,12 @@ const DT: float = 1.0 / 60.0
 const NEAREST_K: int = 12
 const STATIC_K: int = 4
 
-var _saved_native: bool = true
-
 
 func before_each() -> void:
-	_saved_native = bool(Settings.get_value(&"perf_native"))
-	Settings.set_value(&"perf_native", true)
 	Factions.use_table(BenchLayout.faction_table(BenchLayout.BATTLE))
 
 
 func after_each() -> void:
-	Settings.set_value(&"perf_native", _saved_native)
 	Factions.reset()
 
 

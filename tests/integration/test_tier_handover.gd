@@ -11,8 +11,7 @@ extends GutTest
 
 const POOL: int = 14
 const DT: float = 1.0 / 60.0
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_native_commands", &"perf_native_driver_step", &"perf_native_bolt_rows", &"sim_step",
+const SETTINGS: Array[StringName] = [&"sim_step",
 		&"tier_radius_m", &"tier_hz", &"ai_think_rate", &"perf_threads"]
 const SCHEDULES: Array[StringName] = [&"threaded"]  # M4-T37: the inline step and Q54's both-schedules rule are gone
 const RADIUS_M: float = 10000.0
@@ -43,8 +42,7 @@ class ThrustBrain extends PilotBrain:
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	for key: StringName in [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-			&"perf_native_commands", &"perf_native_driver_step", &"perf_native_bolt_rows", &"ai_think_rate"]:
+	for key: StringName in [&"ai_think_rate"]:
 		Settings.set_value(key, true)
 	Settings.set_value(&"tier_radius_m", RADIUS_M)
 	Settings.set_value(&"tier_hz", 20.0)
@@ -526,12 +524,6 @@ func test_the_radius_at_zero_or_the_core_off_promotes_every_row() -> void:
 		Settings.set_value(&"tier_radius_m", RADIUS_M)
 		await _ticks(3)
 		assert_eq(int(sim.core.tier_count()), 5, "%s: and demoted again when the radius is back" % schedule)
-		Settings.set_value(&"perf_native_core", false)
-		await _ticks(2)
-		assert_eq(tier.tier_fighters(), 0, "%s: the core off, every row promoted" % schedule)
-		for c: Combatant in far:
-			assert_true(c.ship.visible and _in_jolt(c.ship), "%s is back on its body" % c.display_name)
-		Settings.set_value(&"perf_native_core", true)
 
 
 func test_with_the_core_gone_a_tiered_ship_comes_back_where_it_was_parked_in_the_current_frame() -> void:

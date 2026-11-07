@@ -9,8 +9,7 @@ extends GutTest
 const SHIPS: int = 120
 const SEED: int = 1
 const TICKS: int = 240
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_threads", &"perf_native_commands", &"perf_native_driver_step", &"perf_native_bolt_rows", &"ai_think_rate",
+const SETTINGS: Array[StringName] = [&"perf_threads", &"ai_think_rate",
 		&"ai_think_far_hz", &"ai_think_near_m"]
 
 var _saved: Dictionary = {}
@@ -20,11 +19,6 @@ var _index_of: Dictionary = {}
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
-	Settings.set_value(&"perf_native_brains", true)
-	Settings.set_value(&"perf_native_flight", true)
-	Settings.set_value(&"perf_native_commands", true)
 	Settings.set_value(&"ai_think_rate", true)
 	Factions.reset()
 	ContactScan.invalidate()
@@ -299,35 +293,6 @@ func test_a_changed_wing_order_reaches_a_hosted_pilot_and_a_hand_step_takes_the_
 	await get_tree().physics_frame
 	assert_gt(AiPilotDriver.thinks_native(), 0, "and the battle thinks on")
 	(fight["space"] as SubViewport).queue_free()
-	await get_tree().physics_frame
-
-
-func test_the_native_path_switched_off_gives_the_hosted_drivers_their_ticks_back_without_errors() -> void:
-	# Fix round 3 (test_contact_registry in a wide run): `perf_native` off mid-fight left the drivers hosted with no host
-	# to step them, the batch flushed a hosted tick it could not begin (an error a tick), and no driver gathered a scan.
-	if _skipped():
-		return
-	var fight: Dictionary = await _small_fight()
-	var ships: Array[Combatant] = fight["ships"]
-	var hosted: int = 0
-	for c: Combatant in ships:
-		hosted += 1 if c.driver.is_hosted() else 0
-	assert_gt(hosted, ships.size() / 2, "most drivers are hosted (%d of %d)" % [hosted, ships.size()])
-	Settings.set_value(&"perf_native", false)
-	await get_tree().physics_frame
-	var still: int = 0
-	for c: Combatant in ships:
-		if c.driver.is_hosted() or not c.driver.is_physics_processing():
-			still += 1
-	assert_eq(still, 0, "perf_native off: every driver has its tick back")
-	var steps_before: int = ships[0].driver._steps
-	var gathers: int = ContactScan.gathers
-	await get_tree().physics_frame
-	await get_tree().physics_frame
-	assert_eq(ships[0].driver._steps, steps_before + 2, "and steps itself every tick")
-	assert_gt(ContactScan.gathers - gathers, 0, "the GDScript scan is gathered again")
-	Settings.set_value(&"perf_native", true)
-	(fight["space"] as Node).queue_free()
 	await get_tree().physics_frame
 
 

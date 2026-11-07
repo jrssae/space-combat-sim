@@ -11,7 +11,7 @@ extends RefCounted
 const DT: float = 1.0 / 60.0
 const SIDES: Array[StringName] = [Factions.EARTH_ALLIANCE, Factions.RAIDERS, Factions.NEUTRAL]
 const CLASSES: Array[StringName] = [&"cruiser", &"destroyer", &"carrier"]
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core"]
+const SETTINGS: Array[StringName] = []
 
 var world: WorldFrame
 var projectiles: Node3D
@@ -45,8 +45,6 @@ static func build(test: Node, seed_value: int) -> WeaponRowsScene:
 
 func _build(test: Node, seed_value: int) -> void:
 	_rng.seed = seed_value
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
 	Factions.reset()
 	ContactScan.invalidate()
 	StaticRows.clear()

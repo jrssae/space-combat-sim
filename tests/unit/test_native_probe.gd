@@ -3,17 +3,6 @@ extends GutTest
 ## loaded and `perf_native` is on, through GDScript otherwise, with the same results either way. Passes with and
 ## without bin/libscs_native.so, and says which path it took.
 
-var _native_backup: bool
-
-
-func before_each() -> void:
-	_native_backup = bool(Settings.get_value(&"perf_native"))
-	Settings.set_value(&"perf_native", true)
-
-
-func after_each() -> void:
-	Settings.set_value(&"perf_native", _native_backup)
-
 
 func _loaded() -> bool:
 	return ClassDB.class_exists(NativeProbe.NATIVE_CLASS)
@@ -36,23 +25,6 @@ func test_the_probe_takes_the_native_path_exactly_when_the_library_is_loaded() -
 	assert_eq(probe.path(), expected)
 	assert_eq(NativeLib.has_class(NativeProbe.NATIVE_CLASS), _loaded())
 	assert_eq(NativeLib.version(NativeProbe.NATIVE_CLASS) != "", _loaded(), "a version only from a loaded library")
-
-
-func test_perf_native_off_selects_gdscript() -> void:
-	Settings.set_value(&"perf_native", false)
-	assert_eq(NativeProbe.new().path(), &"gdscript")
-	assert_null(NativeLib.instantiate(NativeProbe.NATIVE_CLASS))
-
-
-func test_an_existing_probe_follows_a_live_flip() -> void:
-	var probe := NativeProbe.new()
-	var loaded: StringName = &"native" if _loaded() else &"gdscript"
-	assert_eq(probe.path(), loaded)
-	Settings.set_value(&"perf_native", false)
-	assert_eq(probe.path(), &"gdscript", "off: the same probe answers from GDScript at once")
-	assert_eq(probe.echo(9), 9)
-	Settings.set_value(&"perf_native", true)
-	assert_eq(probe.path(), loaded, "and back")
 
 
 func test_use_native_false_forces_gdscript() -> void:

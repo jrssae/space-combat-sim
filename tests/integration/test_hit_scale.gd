@@ -36,19 +36,16 @@ var resolver: HitResolver
 var drones: Array[TargetDrone] = []
 var hits: Array[HitInfo] = []
 var shooter: Node3D
-var _native_backup: bool
 var _friendly_fire_backup: bool
 
 
 func before_each() -> void:
-	_native_backup = bool(Settings.get_value(&"perf_native"))
 	_friendly_fire_backup = bool(Settings.get_value(&"friendly_fire"))
 	Settings.set_value(&"friendly_fire", false)
 	_build()
 
 
 func after_each() -> void:
-	Settings.set_value(&"perf_native", _native_backup)
 	Settings.set_value(&"friendly_fire", _friendly_fire_backup)
 
 
@@ -87,15 +84,11 @@ func _skipped() -> bool:
 
 # The paths to run a case on: GDScript always, native when the library is built.
 func _paths() -> Array[bool]:
-	var out: Array[bool] = [false]
-	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):
-		out.append(true)
-	return out
+	return [true]  # the native path; M4-T37 removed the GDScript one
 
 
 # A fresh world on the GDScript or native path.
 func _on_path(native: bool) -> void:
-	Settings.set_value(&"perf_native", native)
 	_build()
 
 

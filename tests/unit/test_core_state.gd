@@ -11,8 +11,7 @@ const TICKS: int = 240
 const DELTA: float = 1.0 / 60.0
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const FIXTURE: String = "core_state"
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_threads", &"perf_native_commands", &"perf_native_bolt_rows", &"ram_damage"]
+const SETTINGS: Array[StringName] = [&"perf_threads", &"ram_damage"]
 
 var _saved: Dictionary = {}
 var _index_of: Dictionary = {}
@@ -21,11 +20,6 @@ var _index_of: Dictionary = {}
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
-	Settings.set_value(&"perf_native_brains", true)
-	Settings.set_value(&"perf_native_flight", true)
-	Settings.set_value(&"perf_native_commands", true)
 	Factions.reset()
 	ContactScan.invalidate()
 

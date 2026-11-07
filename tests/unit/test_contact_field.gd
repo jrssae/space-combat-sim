@@ -15,7 +15,6 @@ const FACTIONS: Array[StringName] = [Factions.RAIDERS, Factions.EARTH_ALLIANCE, 
 
 const FIXTURE: String = "contact_field"
 
-var _native_backup: bool
 # This test's GDScript answers in order (M4-T37): recorded when recording, read from the recording otherwise.
 var _recorded: Array = []
 var _next: int = 0
@@ -23,8 +22,6 @@ var _case: String = ""
 
 
 func before_each() -> void:
-	_native_backup = bool(Settings.get_value(&"perf_native"))
-	Settings.set_value(&"perf_native", true)
 	Factions.reset()
 	_case = gut.get_current_test_object().name
 	var stored: Variant = ParityFixture.stored(FIXTURE, _case)
@@ -33,7 +30,6 @@ func before_each() -> void:
 
 
 func after_each() -> void:
-	Settings.set_value(&"perf_native", _native_backup)
 	Factions.reset()
 	if ParityFixture.recording() and not _recorded.is_empty():
 		ParityFixture.record(FIXTURE, _case, _recorded)
@@ -176,7 +172,7 @@ func test_the_scan_takes_the_native_path_when_the_library_is_loaded() -> void:
 		return
 	var scan := _scan(PackedVector3Array([Vector3.ZERO, Vector3(100, 0, 0)]), [Factions.RAIDERS, Factions.EARTH_ALLIANCE],
 			PackedByteArray([1, 1]))
-	assert_eq(scan.path(), &"native", "library loaded and perf_native on: the native field answers (%s)" % NativeLib.version(ContactScan.NATIVE_CLASS))
+	assert_eq(scan.path(), &"native", "the native field answers (%s)" % NativeLib.version(ContactScan.NATIVE_CLASS))
 	scan.use_native = false
 	assert_eq(scan.path(), &"gdscript", "use_native false forces GDScript")
 
@@ -323,24 +319,6 @@ func test_a_query_visits_only_the_cells_its_range_reaches() -> void:
 		assert_eq(contacts[1], contacts[2], "body %d: contacts, as recorded" % i)
 	gut.p("worst bodies visited by one query: %d of %d" % [worst, n])
 	assert_between(worst, GROUP_SIZE, 2 * GROUP_SIZE, "a query tests its own group, not the %d bodies of the whole world" % n)
-
-
-func test_perf_native_flips_the_path_live() -> void:
-	if _skipped():
-		return
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 11
-	var scan := _world(rng, 80, 0)
-	var own_at: Vector3 = scan._positions[5]
-	var before: Array[Contact] = scan.nearest_for(1005, own_at, scan._factions[5], 12)
-	assert_eq(scan.path(), &"native")
-	Settings.set_value(&"perf_native", false)
-	assert_eq(scan.path(), &"gdscript", "an existing scan follows the setting at once")
-	assert_eq(scan.native_visits(), -1, "no native work count on the GDScript path")
-	assert_true(_same(scan.nearest_for(1005, own_at, scan._factions[5], 12), before), "the same answer from GDScript")
-	Settings.set_value(&"perf_native", true)
-	assert_eq(scan.path(), &"native", "and back")
-	assert_true(_same(scan.nearest_for(1005, own_at, scan._factions[5], 12), before))
 
 
 func test_a_freed_body_is_noticed_on_both_paths() -> void:

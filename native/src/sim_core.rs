@@ -1753,7 +1753,7 @@ impl ScsSimCore {
         self.row_index(row).map_or(-1, |r| self.rows.target_ids[r])
     }
 
-    /// Runs the selection check of body `body_id`'s AI targeting controller here (`perf_native_selection_check`): its
+    /// Runs the selection check of body `body_id`'s AI targeting controller here: its
     /// selection must be a row within `sensor_range_m` or the target's own reach, and not its own ship.
     #[func]
     fn watch_selection(&mut self, body_id: i64, sensor_range_m: f64) {

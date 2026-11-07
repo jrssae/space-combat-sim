@@ -7,7 +7,7 @@ extends GutTest
 ## on, in a space of their own. Skips, saying why, when the library is not built.
 
 const RAIDER_SPEC: String = "res://assets/ships/raider_delta_v.tres"
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"ai_think_rate"]
+const SETTINGS: Array[StringName] = [&"ai_think_rate"]
 
 var _saved: Dictionary = {}
 var space: SubViewport
@@ -18,9 +18,6 @@ var bolts: Node3D
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
-	Settings.set_value(&"perf_native_brains", true)
 	Settings.set_value(&"ai_think_rate", false)  # every ship thinks every tick: the test counts thinks
 	Factions.reset()
 	ContactScan.invalidate()

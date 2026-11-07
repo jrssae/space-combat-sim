@@ -10,12 +10,9 @@ const ROWS_COMPARED: Array[String] = ["_body_ids", "_ids", "_names", "_factions"
 		"_ups", "_radii", "_is_ship", "_kinds"]
 
 var root: Node3D
-var _native_backup: bool
 
 
 func before_each() -> void:
-	_native_backup = bool(Settings.get_value(&"perf_native"))
-	Settings.set_value(&"perf_native", true)
 	Factions.reset()
 	ContactScan.invalidate()
 	ContactScan.clear_statics()
@@ -26,7 +23,6 @@ func before_each() -> void:
 func after_each() -> void:
 	ContactScan.clear_statics()
 	ContactScan.invalidate()
-	Settings.set_value(&"perf_native", _native_backup)
 	Factions.reset()
 
 
@@ -300,13 +296,8 @@ func test_the_shared_scan_gathers_nothing_in_gdscript_on_the_native_path() -> vo
 	_crowd(rng, 50)
 	var before: int = ContactScan.gathers
 	var scan := ContactScan.shared(get_tree())
-	assert_eq(ContactScan.gathers, before, "no gather from the tree with the library and perf_native on")
+	assert_eq(ContactScan.gathers, before, "no gather from the tree with the library")
 	_assert_same_rows(scan, ContactScan.from_tree(get_tree()), "the shared scan")
-	Settings.set_value(&"perf_native", false)
-	ContactScan.invalidate()
-	before = ContactScan.gathers
-	ContactScan.shared(get_tree())
-	assert_eq(ContactScan.gathers, before + 1, "perf_native off: the GDScript gather")
 
 
 func test_a_rebase_moves_its_own_worlds_static_rows_once_on_both_paths() -> void:
@@ -327,15 +318,13 @@ func test_a_rebase_moves_its_own_worlds_static_rows_once_on_both_paths() -> void
 	for rebase: int in 2:
 		a.rebase(offset)
 		expected_a = expected_a - offset
-		for native: bool in [true, false]:
-			Settings.set_value(&"perf_native", native)
+		for native: bool in [true]:
 			ContactScan.invalidate()
 			var scan: ContactScan = ContactScan.shared(get_tree())
-			var label: String = "after rebase %d, %s" % [rebase + 1, scan.path() if native else &"gdscript"]
+			var label: String = "after rebase %d, %s" % [rebase + 1, scan.path()]
 			assert_eq(scan._positions[scan._body_ids.find(910001)], expected_a, "%s: world A's row moved by -offset once" % label)
 			assert_eq(scan._positions[scan._body_ids.find(910002)], at_b, "%s: world B's row did not move" % label)
 			assert_eq(scan._positions[scan._body_ids.find(910003)], at_none, "%s: a row with no world did not move" % label)
-		Settings.set_value(&"perf_native", true)
 		_assert_same_rows(_registry_scan(), ContactScan.from_tree(get_tree()), "after rebase %d" % (rebase + 1))
 
 

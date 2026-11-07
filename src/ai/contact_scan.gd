@@ -17,13 +17,13 @@ extends RefCounted
 ## The cache is rebuilt within a frame if a body it saw was freed; a body added later appears next frame. Tests that need a
 ## fresh scan call `invalidate()`.
 ##
-## Native queries (M4-T05b, architecture §17.5): when the native library provides `NATIVE_CLASS` and `perf_native` is on,
+## Native queries (M4-T05b, architecture §17.5): the native library's `NATIVE_CLASS` (required since M4-T37) answers:
 ## the queries and the freed-body check run in a native field that takes this scan's arrays once, on its first query, and
 ## answers with body indices; the contact lists are still built here from the shared faction lists. The GDScript code is
-## the fallback and the reference, and both give the same answers bit for bit. The setting is read on every query, so a
-## flip takes effect at once, even on a scan already in use. A scan's arrays must not change once it has been queried.
+## the reference (`use_native` off, for the tests) and the fallback for a field that refuses its arrays; both give the same
+## answers bit for bit. A scan's arrays must not change once it has been queried.
 ##
-## The body registry (M4-T09, architecture §17.8): with the library and `perf_native` on, `shared` comes from the native
+## The body registry (M4-T09, architecture §17.8): on a world with no core, `shared` comes from the native
 ## `REGISTRY_CLASS`, which knows the tree's bodies (it is told when the groups change) and reads them in one call a tick;
 ## `from_tree` stays the reference: the same rows bit for bit. On both paths a contact's hull and selection are read when it
 ## is first handed out, so the two agree whatever changes between the build and the query (a driver's own selection change
@@ -34,7 +34,7 @@ extends RefCounted
 ##
 ## The native core (M4-T15, architecture §17.13): with a `SimCore` attached to the world, `shared` comes from the core's
 ## rows (`from_core`, the same rows as the registry's and the tree gather's, bit for bit) and the field reads the core
-## directly (bodies, statics and bolts) instead of taking a copy; the registry path stays for `perf_native_core` off.
+## directly (bodies, statics and bolts) instead of taking a copy; the registry path stays for a world with no core.
 ##
 ## The pilot kernels (M4-T16, architecture §17.13): a core scan's rows are the core's, in its order, so the indices a list
 ## was picked from (`picked_rows`) name the core rows of its contacts. `pilot_kernels` gives the native kernels that answer
@@ -45,7 +45,7 @@ const SENSOR_RANGE_M: float = 5000.0
 ## A hostile bolt is incoming when its closest approach is under this distance within this time.
 const INCOMING_MISS_M: float = 15.0
 const INCOMING_HORIZON_S: float = 2.0
-## The native class that answers the queries when the library is loaded and `perf_native` is on (M4-T05b).
+## The native class that answers the queries (M4-T05b).
 const NATIVE_CLASS: StringName = &"ScsContactField"
 ## The native body registry the shared scan is built from (M4-T09).
 const REGISTRY_CLASS: StringName = &"ScsBodyRegistry"
@@ -243,7 +243,7 @@ static func from_tree(tree: SceneTree) -> ContactScan:
 
 
 ## The scan of the tree as the native registry reads it now (no cache), equal to `from_tree` bit for bit; null when the
-## library does not provide the registry or `perf_native` is off.
+## library does not provide the registry.
 static func from_registry(tree: SceneTree) -> ContactScan:
 	var registry: Object = _registry_for(tree)
 	if registry == null:
@@ -279,7 +279,7 @@ static func from_core(tree: SceneTree) -> ContactScan:
 	return scan
 
 
-## The native registry in use, or null (no library, `perf_native` off, or no registry scan built yet).
+## The native registry in use, or null (no registry scan built yet).
 static func registry() -> Object:
 	return _registry
 
@@ -549,7 +549,7 @@ func pilot_kernels() -> Object:
 			_pilot = NativeLib.instantiate(PILOT_CLASS)
 			if _pilot != null:
 				_pilot.attach_core(_sim.core)
-	if _pilot == null or not pilot_kernels_on or not NativeLib.enabled() or not is_instance_valid(_sim) \
+	if _pilot == null or not pilot_kernels_on or not is_instance_valid(_sim) \
 			or int(_sim.core.rows_version()) != _rows_version:
 		return null
 	return _pilot
@@ -581,8 +581,6 @@ func relation_row(faction: StringName) -> PackedByteArray:
 
 # The registry for a native scan of `tree`, made (and told of the tree's changes) on first use; null when not available.
 static func _registry_for(tree: SceneTree) -> Object:
-	if not NativeLib.enabled():
-		return null
 	if _registry_class_known < 0:
 		_registry_class_known = 1 if NativeLib.has_class(REGISTRY_CLASS) else 0
 	if _registry_class_known == 0:
@@ -757,7 +755,7 @@ func _all_but(faction: StringName, stamped: Array[Contact], skip: int) -> Array[
 
 # The native field for this query, or null for the GDScript path. Made and loaded on the first native query.
 func _native() -> Object:
-	if not use_native or not NativeLib.enabled():
+	if not use_native:
 		return null
 	if _native_class_known < 0:
 		_native_class_known = 1 if NativeLib.has_class(NATIVE_CLASS) else 0

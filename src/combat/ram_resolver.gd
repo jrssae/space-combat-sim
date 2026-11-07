@@ -282,8 +282,6 @@ func _gather_tree() -> void:
 
 # Whether the native ram phase answers now (the core path needs it).
 func _phase_available() -> bool:
-	if not NativeLib.enabled():
-		return false
 	if _phase_class_known < 0:
 		_phase_class_known = 1 if NativeLib.has_class(PHASE_CLASS) else 0
 	if _phase_class_known == 0:

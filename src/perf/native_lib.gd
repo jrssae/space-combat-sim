@@ -10,10 +10,6 @@ const REQUIRED: Array[StringName] = [&"ScsSimCore", &"ScsBrains", &"ScsFlightSte
 ## The user argument that adds a class to the required list: the refusal's test seam (`test_native_required`).
 const REQUIRE_ARG: String = "--native-require="
 
-# `perf_native` as last read (-1: read it on the next ask), kept current through `Settings.changed`.
-static var _enabled: int = -1
-
-
 ## The classes of `classes` this process lacks; by default the required ones plus any named by `--native-require=`.
 static func missing(classes: Array[StringName] = []) -> PackedStringArray:
 	var wanted: Array[StringName] = classes
@@ -43,24 +39,9 @@ static func has_class(native_class: StringName) -> bool:
 	return ClassDB.class_exists(native_class) and ClassDB.can_instantiate(native_class)
 
 
-## Whether the `perf_native` setting asks for native code. Cheap enough to ask on every call, and follows the setting at
-## once, so long-lived facades can ask per call instead of deciding once.
-static func enabled() -> bool:
-	if _enabled < 0:
-		_enabled = 1 if bool(Settings.get_value(&"perf_native")) else 0
-		if not Settings.changed.is_connected(_on_setting_changed):
-			Settings.changed.connect(_on_setting_changed)
-	return _enabled == 1
-
-
-static func _on_setting_changed(key: StringName, _value: Variant) -> void:
-	if key == &"perf_native":
-		_enabled = -1
-
-
-## A new `native_class`, or null when `perf_native` is off or the library does not provide it.
+## A new `native_class`, or null when the library does not provide it.
 static func instantiate(native_class: StringName) -> Object:
-	if not enabled() or not has_class(native_class):
+	if not has_class(native_class):
 		return null
 	return ClassDB.instantiate(native_class)
 

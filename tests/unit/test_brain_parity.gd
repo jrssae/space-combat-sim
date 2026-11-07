@@ -15,17 +15,6 @@ const STEP_IN: int = 23
 ## Per step back: the four levels, strafe, rot, brake, done, timed out, has a desired velocity, the desired velocity.
 const STEP_OUT: int = 16
 
-var _saved_native: bool = true
-
-
-func before_each() -> void:
-	_saved_native = bool(Settings.get_value(&"perf_native"))
-	Settings.set_value(&"perf_native", true)
-
-
-func after_each() -> void:
-	Settings.set_value(&"perf_native", _saved_native)
-
 
 func _skipped() -> bool:
 	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):

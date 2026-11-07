@@ -80,7 +80,7 @@ static func _mix(lines: Dictionary) -> Dictionary:
 
 
 func test_the_seeded_fight_matches_its_recordings() -> void:
-	var recorded: Variant = await ParityFixture.expected(FIXTURE, "furball_%d_seed_1" % SHIPS, _record)
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "furball_%d_seed_1" % SHIPS)
 	assert_not_null(recorded, "the references were recorded")
 	if recorded == null:
 		return
@@ -127,19 +127,9 @@ static func _kept(lines: Dictionary) -> Dictionary:
 	return out
 
 
-# The recording (M4-T37, at m4-gdscript-reference): the fight on the ships' own models on the single-thread step, checked
-# against the batch on that step, and the batch's fight on the delayed step.
-func _record() -> Dictionary:
-	var out: Dictionary = {}
-	for at: Array in [[TWIN_MEASURE_S, "10s"], [FIGHT_MEASURE_S, "30s"]]:
-		var off: Dictionary = await _fight_async("set settings.sim_step inline; set settings.perf_native_flight false", at[0], "off_" + at[1])
-		var on_inline: Dictionary = await _fight_async("set settings.sim_step inline", at[0], "inline_" + at[1])
-		var on_delayed: Dictionary = await _fight_async("set settings.sim_step delayed", at[0], "delayed_" + at[1])
-		assert_eq(off.get("flight.path"), "gdscript", "the ships' own models flew the reference")
-		assert_eq(_kept(on_inline), _kept(off), "on the single-thread step the batch prints the GDScript fight (%s)" % at[1])
-		out["gdscript_" + at[1]] = _kept(off)
-		out["native_" + at[1]] = _kept(on_delayed)
-	return out
+# The recording (M4-T37) was taken at the tag `m4-gdscript-reference`: the fight on the ships' own models on the
+# single-thread step (`gdscript_*`), which the batch matched bit for bit on that step, and the batch's fight on the
+# delayed step (`native_*`). Both paths are gone, so it is read, never recorded again.
 
 
 # `OS.execute` blocks this process; one idle frame first keeps the runner's output in order.

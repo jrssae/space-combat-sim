@@ -83,17 +83,12 @@ const ENTRIES: Dictionary = {
 		"doc": "How often a far AI ship thinks, Hz, on staggered physics ticks (20 = every third tick at 60 Hz)"},
 	&"ai_nearest_k": {"type": TYPE_INT, "default": 12, "min": 0, "max": 64,
 		"doc": "An AI ship scores, avoids and checks its fire lane against its nearest this many contacts (M4-T04); when that cuts any, the nearest hostile ship, its target, wing, objective and latest attacker are kept too; 0 = every contact"},
-	&"perf_native": {"type": TYPE_BOOL, "default": true,
-		"doc": "Run the hot paths in the native library when it is built (M4-T05); off = the GDScript code, for pairing the two in one process"},
 	# M4-T09
 	&"ai_nearest_static_k": {"type": TYPE_INT, "default": 4, "min": 0, "max": 32,
 		"doc": "An AI ship avoids its nearest this many rocks and mines within 5 km (M4-T09); they are never among its contacts; 0 = none"},
 	# M4-T11
 	&"far_ship_dot_m": {"type": TYPE_FLOAT, "default": 3000.0, "min": 500.0, "max": 50000.0,
 		"doc": "Past this distance from the camera an AI ship is drawn as a dot: no hull, plumes or markers (M4-T11); it shows its detail again a tenth inside"},
-	# M4-T15
-	&"perf_native_core": {"type": TYPE_BOOL, "default": true,
-		"doc": "The native simulation core feeds the contact scan, the hit sweep, the flight step and the ram broad phase from one sync a tick (M4-T15) when perf_native is on and the library is built; off = each class loads its own copy, for pairing the two in one process"},
 	# M4-T18
 	&"perf_threads": {"type": TYPE_INT, "default": 0, "min": 0, "max": 64,
 		"doc": "Worker threads for the native core's per-ship passes, the brains and the flight step (M4-T18): 0 = as many threads as the machine has performance cores, 1 = the main thread alone; outputs are the same bits whatever the count; live"},
@@ -141,7 +136,8 @@ const RETIRED: Array[StringName] = [&"perf_native_weapons", &"perf_native_brains
 		&"perf_native_driver_step", &"perf_native_flight", &"perf_batch_owns_ships", &"perf_native_sweep_cells",
 		&"perf_ram_contact_columns", &"perf_ram_sweep_cull", &"perf_native_ram_contacts", &"perf_targeting_on_read",
 		&"collision_layers", &"far_ship_interpolation_off", &"ship_contact_monitor", &"perf_core_event_columns",
-		&"perf_core_body_direct", &"perf_native_selection_check", &"perf_native_bolt_sync", &"perf_native_bolt_rows"]
+		&"perf_core_body_direct", &"perf_native_selection_check", &"perf_native_bolt_sync", &"perf_native_bolt_rows",
+		&"perf_native", &"perf_native_core"]
 
 ## Choices removed from a setting: key -> {old choice -> what a saved file's old choice loads as} (M4-T37: the inline step).
 const RETIRED_VALUES: Dictionary = {&"sim_step": {&"inline": &"threaded"}}

@@ -9,8 +9,7 @@ extends GutTest
 const SHIPS: int = 120
 const SEED: int = 1
 const TICKS: int = 240
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_threads", &"perf_native_commands", &"perf_native_driver_step", &"perf_native_bolt_rows", &"ai_think_rate",
+const SETTINGS: Array[StringName] = [&"perf_threads", &"ai_think_rate",
 		&"sim_step", &"perf_step_threads"]
 
 var _saved: Dictionary = {}
@@ -19,12 +18,6 @@ var _saved: Dictionary = {}
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
-	Settings.set_value(&"perf_native_brains", true)
-	Settings.set_value(&"perf_native_flight", true)
-	Settings.set_value(&"perf_native_commands", true)
-	Settings.set_value(&"perf_native_driver_step", true)
 	Settings.set_value(&"ai_think_rate", true)
 	Factions.reset()
 	ContactScan.invalidate()

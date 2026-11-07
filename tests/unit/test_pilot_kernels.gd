@@ -12,17 +12,6 @@ const KERNEL_FILE: String = "res://native/src/kernels.rs"
 const SHELL_FILE: String = "res://native/src/pilot_kernels.rs"
 const CASES: int = 600
 
-var _saved_native: bool = true
-
-
-func before_each() -> void:
-	_saved_native = bool(Settings.get_value(&"perf_native"))
-	Settings.set_value(&"perf_native", true)
-
-
-func after_each() -> void:
-	Settings.set_value(&"perf_native", _saved_native)
-
 
 func _skipped() -> bool:
 	if NativeLib.has_class(NativeProbe.NATIVE_CLASS):

@@ -23,7 +23,7 @@ const SAMPLE_EVERY: int = 5
 const HITS_TOLERANCE: float = 0.20
 const MIX_TOLERANCE: float = 0.05
 const FIXTURE: String = "brain_tolerance"
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"sim_step"]
+const SETTINGS: Array[StringName] = [&"sim_step"]
 
 var _saved: Dictionary = {}
 
@@ -37,8 +37,6 @@ func should_skip_script():
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
 	Settings.set_value(&"sim_step", &"threaded")
 	Factions.reset()
 	ContactScan.invalidate()
@@ -55,8 +53,7 @@ func test_native_brains_stay_within_q16s_tolerance_on_every_seed() -> void:
 	for layout: StringName in LAYOUTS:
 		for seed_value: int in SEEDS:
 			var label: String = "%s %d seed %d" % [layout, SHIPS, seed_value]
-			var recorded: Variant = await ParityFixture.expected(FIXTURE, "%s_%d_seed_%d" % [layout, SHIPS, seed_value],
-					func() -> Dictionary: return await _record(layout, seed_value))
+			var recorded: Variant = ParityFixture.stored(FIXTURE, "%s_%d_seed_%d" % [layout, SHIPS, seed_value])
 			assert_not_null(recorded, "%s: the references were recorded" % label)
 			if recorded == null:
 				continue
@@ -96,25 +93,15 @@ static func _outcome(fight: Dictionary) -> Dictionary:
 	return {"hits": fight["hits"], "mix": fight["mix"], "at_10s": fight["at_10s"]}
 
 
-# The recording (M4-T37, at m4-gdscript-reference): the GDScript fight on the single-thread step, checked against the
-# native brains on that step, and the native fight on the delayed step.
-func _record(layout: StringName, seed_value: int) -> Dictionary:
-	Settings.set_value(&"sim_step", &"inline")
-	var gdscript: Dictionary = await _fight(layout, seed_value, false)
-	var native_inline: Dictionary = await _fight(layout, seed_value, true)
-	Settings.set_value(&"sim_step", &"delayed")
-	var native_delayed: Dictionary = await _fight(layout, seed_value, true)
-	assert_eq(int(gdscript["native_thinks"]), 0, "the GDScript reference never thought natively")
-	assert_eq(ParityFixture.encode(_outcome(native_inline)), ParityFixture.encode(_outcome(gdscript)),
-			"on the single-thread step the native brains give the GDScript fight bit for bit")
-	return {"gdscript": _outcome(gdscript), "native": _outcome(native_delayed)}
+# The recording (M4-T37) was taken at the tag `m4-gdscript-reference`: the GDScript fight on the single-thread step
+# (`gdscript`), which the native brains matched bit for bit on that step, and the native fight on the delayed step
+# (`native`). The GDScript brains' batch path and that step are gone, so it is read, never recorded again.
 
 
 ## The seeded fight: `layout` at `SHIPS` ships for `seed_value`, 30 s, with the native brains on or off. Returns the bolt hits,
 ## the behaviour mix (shares of ship-samples by behaviour), every ship's position at 10 s (in plan order) and the native
 ## thinks counted.
 func _fight(layout: StringName, seed_value: int, native: bool) -> Dictionary:
-	Settings.set_value(&"perf_native_brains", native)
 	Factions.reset()
 	ContactScan.invalidate()
 	await get_tree().process_frame

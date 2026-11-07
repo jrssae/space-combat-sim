@@ -11,7 +11,7 @@ const DT: float = 1.0 / 60.0
 const MINE_START_M: float = 1000.0
 const MINE_SPEED_MPS: float = 100.0
 const LANE_SPACING_M: float = 8000.0
-const SETTINGS: Array[StringName] = [&"perf_native", &"ai_nearest_k", &"ai_nearest_static_k", &"ram_damage",
+const SETTINGS: Array[StringName] = [&"ai_nearest_k", &"ai_nearest_static_k", &"ram_damage",
 		&"friendly_fire"]
 
 var world: WorldFrame
@@ -76,12 +76,7 @@ func after_each() -> void:
 
 
 func _paths() -> Array[bool]:
-	var out: Array[bool] = [false]
-	if NativeLib.has_class(HitBroadPhase.NATIVE_CLASS):
-		out.append(true)
-	else:
-		gut.p("the native library is not built: the GDScript path only")
-	return out
+	return [true]  # the native path; M4-T37 removed the GDScript one
 
 
 func _drone(at: Vector3, faction: StringName = Factions.RAIDERS, velocity: Vector3 = Vector3.ZERO) -> TargetDrone:
@@ -167,7 +162,6 @@ func test_a_thousand_rocks_are_registered_once_and_no_tick_walks_them() -> void:
 	assert_gt(worst_static_pairs, 0, "bolts in the slab were put to the rocks near them")
 	assert_lt(worst_static_pairs, 40 * 20, "the kept grid hands a bolt its neighbouring rocks only")
 	for native: bool in _paths():
-		Settings.set_value(&"perf_native", native)
 		ContactScan.invalidate()
 		var scan: ContactScan = ContactScan.shared(get_tree())
 		assert_eq(scan._node_count, 6, "%s scan: the drones are its only node rows" % scan.path())
@@ -191,7 +185,6 @@ func test_a_bolt_hits_a_rock_on_both_paths() -> void:
 			{"offset": Vector3(400.0, 0.0, -2000.0), "radius": 120.0}]
 	var field: AsteroidField = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
 	for native: bool in _paths():
-		Settings.set_value(&"perf_native", native)
 		var hits: HitResolver = _resolvers()[0]
 		var infos: Array[HitInfo] = []
 		hits.hit_resolved.connect(func(info: HitInfo) -> void: infos.append(info))
@@ -214,7 +207,6 @@ func test_a_ship_flying_into_a_rock_is_rammed_on_both_paths() -> void:
 	var rocks: Array[Dictionary] = [{"offset": Vector3(0.0, 0.0, -1000.0), "radius": 50.0}]
 	var field: AsteroidField = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
 	for native: bool in _paths():
-		Settings.set_value(&"perf_native", native)
 		var rams: RamResolver = _resolvers()[1]
 		var infos: Array[HitInfo] = []
 		rams.ram_resolved.connect(func(info: HitInfo) -> void: infos.append(info))
@@ -308,7 +300,6 @@ func test_a_side_knows_its_own_mines_and_not_an_enemys_and_rocks_are_for_everyon
 	var ally: TargetDrone = _drone(Vector3(0.0, 50.0, 0.0), Factions.EARTH_ALLIANCE)
 	var mines: MineStandin = standins.mines()
 	for native: bool in _paths():
-		Settings.set_value(&"perf_native", native)
 		ContactScan.invalidate()
 		var scan: ContactScan = ContactScan.shared(get_tree())
 		var label: String = scan.path()
@@ -345,7 +336,6 @@ func test_a_fighter_steers_round_its_own_mine_and_flies_straight_over_an_enemy_o
 		cases.append({"native": native, "mine": Factions.RAIDERS})
 		cases.append({"native": native, "mine": Factions.EARTH_ALLIANCE})
 	for i: int in cases.size():
-		Settings.set_value(&"perf_native", cases[i]["native"])
 		ContactScan.invalidate()
 		StaticRows.clear()
 		var mine := Vector3(float(i) * LANE_SPACING_M, 0.0, 0.0)

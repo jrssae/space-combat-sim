@@ -30,8 +30,8 @@ extends Node
 ## draws the rows, one multimesh a look, interpolated between ticks as the nodes were.
 ##
 ## The first consumer attaches it to the world (`attach`, as `FlightBatch` does); `for_tree` gives it to the classes
-## that read it, or null when the library lacks the class or `perf_native` or `perf_native_core` is off, and then each
-## class loads its own copy as before, so a bench pairs the two paths in one process by flipping `perf_native_core`.
+## that read it, or null when none is attached to that tree; a world with no core (a bare test world) has each class load
+## its own copy as before.
 ## Console: provider `core`.
 
 const NATIVE_CLASS: StringName = &"ScsSimCore"
@@ -197,8 +197,6 @@ func _physics_process(_delta: float) -> void:
 
 ## Whether the library provides the core and the settings ask for it (read on every call, so a flip takes effect at once).
 static func enabled() -> bool:
-	if not NativeLib.enabled() or not bool(Settings.get_value(&"perf_native_core")):
-		return false
 	if _native_class_known < 0:
 		_native_class_known = 1 if NativeLib.has_class(NATIVE_CLASS) else 0
 	return _native_class_known == 1
@@ -565,9 +563,6 @@ func _apply_threads() -> void:
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
 	if key == &"perf_threads":
 		_apply_threads()
-	elif key == &"perf_native_core" or key == &"perf_native":
-		PulseCannon.rebind_all()
-		TargetingController.rebind_all()
 
 
 # --- the tree's changes ------------------------------------------------------------------------------------------

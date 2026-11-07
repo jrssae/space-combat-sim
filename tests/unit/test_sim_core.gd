@@ -15,7 +15,7 @@ const PROJECTILE_SCENE: PackedScene = preload("res://src/weapons/projectile.tscn
 const SIDES: Array[StringName] = [Factions.RAIDERS, Factions.EARTH_ALLIANCE, Factions.NEUTRAL, &"drifters"]
 const KINDS_ROUND_TRIPPED: Array[int] = [SimCore.KIND_SHIP, SimCore.KIND_CAPITAL, SimCore.KIND_TURRET, SimCore.KIND_MISSILE,
 		SimCore.KIND_BEAM, SimCore.KIND_BOLT, SimCore.KIND_MINE, SimCore.KIND_STATIC]
-const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_flight", &"fuel_unlimited"]
+const SETTINGS: Array[StringName] = [&"fuel_unlimited"]
 
 var world: WorldFrame
 var projectiles: Node3D
@@ -25,9 +25,6 @@ var _saved: Dictionary = {}
 func before_each() -> void:
 	for key: StringName in SETTINGS:
 		_saved[key] = Settings.get_value(key)
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
-	Settings.set_value(&"perf_native_flight", true)
 	Settings.set_value(&"fuel_unlimited", true)
 	Factions.reset()
 	ContactScan.invalidate()
@@ -607,8 +604,7 @@ func test_the_flight_step_flies_the_same_from_the_core_as_from_the_physics_serve
 		return
 	var spec: ShipSpec = load(SPEC_PATH) as ShipSpec
 	var digests: Array[Array] = []
-	for use_core: bool in [true, false]:
-		Settings.set_value(&"perf_native_core", use_core)
+	for use_core: bool in [true]:
 		var ships: Array[Ship] = []
 		for i: int in 3:
 			var ship: Ship = Ship.create(spec, world)
@@ -655,9 +651,6 @@ func test_the_flight_step_flies_the_same_from_the_core_as_from_the_physics_serve
 		if core != null:
 			core.free()
 		await get_tree().physics_frame
-	assert_eq(digests[0].size(), digests[1].size(), "both runs logged every tick")
-	if ParityFixture.recording():
-		ParityFixture.record(FIXTURE, "flight_step_from_the_server", {"ticks": digests[1].size(), "lines": ParityFixture.digest(digests[1])})
 	var recorded: Variant = ParityFixture.stored(FIXTURE, "flight_step_from_the_server")
 	assert_not_null(recorded, "the server read's flight was recorded")
 	assert_eq(ParityFixture.encode({"ticks": digests[0].size(), "lines": ParityFixture.digest(digests[0])}), recorded,

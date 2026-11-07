@@ -12,7 +12,7 @@ const ROCK_RADIUS_M: float = 150.0
 const ROCK_START_M: float = 1500.0
 const ROCK_SPEED_MPS: float = 100.0
 const LANE_SPACING_M: float = 8000.0
-const SETTINGS: Array[StringName] = [&"perf_native", &"ai_nearest_k", &"ai_nearest_static_k"]
+const SETTINGS: Array[StringName] = [&"ai_nearest_k", &"ai_nearest_static_k"]
 
 var world: WorldFrame
 var projectiles: Node3D
@@ -173,11 +173,6 @@ func test_in_a_live_fight_the_scan_never_gathers_from_the_tree_and_equals_that_g
 			assert_true(BodyKind.is_static(rock.kind), "only rocks and mines among the statics")
 	assert_eq(static_contacts, 0, "no rock or mine among any fighter's contacts")
 	assert_eq(statics_handed, 4, "a fighter in the field gets its nearest ai_nearest_static_k (4) statics")
-	Settings.set_value(&"perf_native", false)
-	gathers = ContactScan.gathers
-	var compared: int = checker.compared
-	await _ticks(10)
-	assert_gt(ContactScan.gathers - gathers - (checker.compared - compared), 0, "perf_native off: the GDScript gather")
 
 
 func test_a_fighter_flying_at_a_rock_steers_round_it_on_both_paths() -> void:
@@ -185,10 +180,8 @@ func test_a_fighter_flying_at_a_rock_steers_round_it_on_both_paths() -> void:
 		return
 	var cases: Array[Dictionary] = [
 		{"spec": RAIDER_SPEC, "native": true}, {"spec": STARFURY_SPEC, "native": true},
-		{"spec": RAIDER_SPEC, "native": false}, {"spec": STARFURY_SPEC, "native": false},
 	]
 	for i: int in cases.size():
-		Settings.set_value(&"perf_native", cases[i]["native"])
 		ContactScan.invalidate()
 		ContactScan.clear_statics()
 		var monitor := RockMonitor.new()
@@ -248,7 +241,6 @@ func test_a_selection_and_a_hull_changed_after_the_build_reach_both_paths_alike(
 	# A driver's own change after the build is noted, so both paths hand out the selection the scan was built with.
 	for on: bool in [true, false]:
 		mate.ship.targeting.select_nearest_hostile()
-		Settings.set_value(&"perf_native", on)
 		ContactScan.invalidate()
 		var shared: ContactScan = ContactScan.shared(get_tree())
 		ContactScan.note_selection(mate.ship)

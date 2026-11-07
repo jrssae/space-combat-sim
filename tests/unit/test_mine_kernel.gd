@@ -36,8 +36,6 @@ func _skipped() -> bool:
 # Hulls on the edge of the triggers: each hostile drone sits at the trigger's reach from its mine, within a millimetre
 # inside or outside, along a seeded direction; a friend sits well inside another.
 func _edge_scene() -> Dictionary:
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
 	StaticRows.clear()
 	ContactScan.invalidate()
 	var world := WorldFrame.new()
@@ -173,8 +171,6 @@ static func _belt_digests(log: Array) -> Array:
 
 # A world with a director stepped by hand.
 func _world() -> Dictionary:
-	Settings.set_value(&"perf_native", true)
-	Settings.set_value(&"perf_native_core", true)
 	StaticRows.clear()
 	ContactScan.invalidate()
 	var world := WorldFrame.new()
