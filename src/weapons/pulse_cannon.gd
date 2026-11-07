@@ -23,7 +23,7 @@ extends Node3D
 ## The gate is paid from a `WeaponCapacitor` (M2-T14), sized by the `WeaponSpec`: an empty capacitor stops the fire
 ## until it has recharged enough for the next shot.
 ##
-## On the kernel (M4-T35, `perf_native_bolt_rows`, architecture §17.13): with the core on, every cannon but the player's
+## On the kernel (M4-T35, architecture §17.13): with the core on, every cannon but the player's
 ## registers with `ScsCannons` (its muzzles as data in the ship's frame, its gate and capacitor, what its bolts carry) and
 ## stops ticking itself; the core steps every cannon's gate in one call a tick, spawns each shot as an owned bolt row and
 ## names the shots, so this node only flashes the muzzle and emits `shot_fired`. The trigger comes from the ship's row

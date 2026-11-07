@@ -73,7 +73,7 @@ func _starfury_type(sim: SimCore) -> int:
 func _step(sim: SimCore, ticks: int = 1) -> void:
 	for i: int in ticks:
 		_tick += 1
-		sim.core.sync_in(NO_NODES, _tick, DT)
+		sim.core.sync_in(_tick, DT)
 
 
 # A fighter row with a held command (`main_left, main_right, retro_left, retro_right, strafe x, y, rot x, y, z, brake, fire`).

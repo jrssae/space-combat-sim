@@ -100,12 +100,6 @@ const ENTRIES: Dictionary = {
 	# M4-T30a
 	&"ambient_level": {"type": TYPE_FLOAT, "default": 0.3, "min": 0.0, "max": 2.0,
 		"doc": "The environment's ambient light, white at this energy: what the textured meshes and every other lit surface get on every side (M4-T30a, live)"},
-	# M4-T34
-	&"perf_native_bolt_sync": {"type": TYPE_BOOL, "default": true,
-		"doc": "The core's two bolt reads a tick go through the cheaper native reader (M4-T34) when the core is on; off = the core's own read, the reference, for pairing the two in one process"},
-	# M4-T35
-	&"perf_native_bolt_rows": {"type": TYPE_BOOL, "default": true,
-		"doc": "The core owns the bolts (M4-T35): the AI cannons' gates and shots run as one kernel over the rows, each bolt is a row stepped natively, swept and spent from the rows by the hit resolver and drawn by one multimesh a look; the player's cannon and the beams and missiles keep their nodes; off = a Projectile node per bolt and a GDScript tick per cannon, the reference, for pairing the two in one process (a switch mid-run drops the bolts in flight); live"},
 	# M4-T38
 	&"anti_aliasing": {"type": TYPE_ENUM, "default": &"smaa", "choices": [&"off", &"fxaa", &"smaa", &"msaa_2x", &"msaa_4x", &"taa"],
 		"doc": "Anti-aliasing of the 3D view (M4-T38): off, fxaa, smaa (edge detection, the default), msaa_2x or msaa_4x (geometry edges only), taa (temporal: the smoothest edges, but thin moving things soften and the bolts draw opaque so they carry their motion); live"},
@@ -147,7 +141,7 @@ const RETIRED: Array[StringName] = [&"perf_native_weapons", &"perf_native_brains
 		&"perf_native_driver_step", &"perf_native_flight", &"perf_batch_owns_ships", &"perf_native_sweep_cells",
 		&"perf_ram_contact_columns", &"perf_ram_sweep_cull", &"perf_native_ram_contacts", &"perf_targeting_on_read",
 		&"collision_layers", &"far_ship_interpolation_off", &"ship_contact_monitor", &"perf_core_event_columns",
-		&"perf_core_body_direct", &"perf_native_selection_check"]
+		&"perf_core_body_direct", &"perf_native_selection_check", &"perf_native_bolt_sync", &"perf_native_bolt_rows"]
 
 ## Choices removed from a setting: key -> {old choice -> what a saved file's old choice loads as} (M4-T37: the inline step).
 const RETIRED_VALUES: Dictionary = {&"sim_step": {&"inline": &"threaded"}}

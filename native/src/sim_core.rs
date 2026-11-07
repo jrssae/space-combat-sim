@@ -35,13 +35,8 @@ pub const KIND_BEAM: u8 = 8;
 // The script properties the core reads, as StringNames made once: a name built per read costs as much as the read.
 struct Names {
     velocity: StringName,
-    last_step: StringName,
     faction: StringName,
-    shooter_id: StringName,
     kind: StringName,
-    hit_radius_m: StringName,
-    damage: StringName,
-    color: StringName,
     bounding_radius: StringName,
     display_name: StringName,
     hull: StringName,
@@ -58,13 +53,8 @@ impl Names {
     fn new() -> Self {
         Self {
             velocity: StringName::from("velocity"),
-            last_step: StringName::from("last_step"),
             faction: StringName::from("faction"),
-            shooter_id: StringName::from("shooter_id"),
             kind: StringName::from("kind"),
-            hit_radius_m: StringName::from("hit_radius_m"),
-            damage: StringName::from("damage"),
-            color: StringName::from("color"),
             bounding_radius: StringName::from("bounding_radius"),
             display_name: StringName::from("display_name"),
             hull: StringName::from("hull"),
@@ -120,25 +110,6 @@ struct Member {
     rid: Rid,
     active: bool,
     active_known: bool,
-}
-
-// A bolt in flight: its node and what is read once, when it is first seen. A plain bolt's velocity never changes after
-// its launch and its step each tick is `velocity * delta`, so only its position is read again; a missile steers and a
-// beam lays its segment, so their motion is read every sync.
-struct Bolt {
-    node: Gd<Node3D>,
-    faction_ix: u32,
-    shooter: i64,
-    kind: u8,
-    radius: f64,
-    velocity: Vector3,
-    plain: bool,
-    // The tick the core first saw it: on that tick its step is whatever the node holds (zero until its first
-    // `_physics_process`, §15.3); from the next tick on a plain bolt's step is `velocity * delta`.
-    first_tick: i64,
-    // What a hit lands with (M4-T35): read once with the rest.
-    damage: f64,
-    color: [f32; 4],
 }
 
 // What one read of a body gives: its pose, motion and flags.
@@ -198,7 +169,6 @@ pub struct ScsSimCore {
     static_radii: Vec<f64>,
     static_factions: Vec<u32>,
     static_kinds: Vec<u8>,
-    bolt_known: HashMap<i64, Bolt>,
     /// Every faction the core has seen, in first-sight order; rows carry an index into it.
     pub factions: Vec<StringName>,
     /// The scan's rows and the bolts, as of the last sync point.
@@ -232,7 +202,6 @@ pub struct ScsSimCore {
     pub row_commands: crate::row_commands::CommandMap,
     // The core owns its bolts (M4-T35): the owned rows stay across the sync points and the kernels step them; the ids it
     // hands out count down from -1, so no instance id is ever one.
-    pub(crate) bolt_rows: bool,
     pub(crate) next_bolt_id: i64,
     // The core's state from events (M4-T35b): activity, hull and selection kept in the attributes and written to the rows
     // at the sync points.
@@ -440,10 +409,10 @@ impl ScsSimCore {
         self.syncs as i64
     }
 
-    /// The tick's first sync point: builds this tick's rows from the bodies and the bolts (`projectiles`, the group as it is
-    /// now), the statics after the bodies. `tick` stamps the rows. Returns the body row count.
+    /// The tick's first sync point: builds this tick's rows from the bodies, the statics after the bodies, and keeps only
+    /// the owned bolts (`ScsBoltSync` reads the node bolts after it). `tick` stamps the rows. Returns the body row count.
     #[func]
-    pub fn sync_in(&mut self, projectiles: Array<Gd<Node>>, tick: i64, delta: f64) -> i64 {
+    pub fn sync_in(&mut self, tick: i64, delta: f64) -> i64 {
         if self.open {
             self.close_tick();
         }
@@ -530,125 +499,20 @@ impl ScsSimCore {
         self.rows = rows;
         self.touched.clear();
         self.index_rows();
-        self.read_bolts(projectiles, delta, true, false);
+        self.bolts.truncate_to_owned();
         self.rows.node_count as i64
     }
 
-    /// The tick's later sync point (the hit resolver's, after the bolts moved): reads the bolts again (their positions
-    /// and last steps; the velocity column is left zero, the scan read it at the first sync), and the bodies that were touched since the
-    /// first sync (a ship back from the pool gets its row now, a parked one loses its hull).
+    /// The tick's later sync point (the hit resolver's, after the bolts moved): reads the bodies that were touched since
+    /// the first sync again (a ship back from the pool gets its row now, a parked one loses its hull) and keeps only the
+    /// owned bolts for `ScsBoltSync` to read the node bolts after. Returns the bolt row count.
     #[func]
-    pub fn sync_bolts(&mut self, projectiles: Array<Gd<Node>>, delta: f64) -> i64 {
+    pub fn sync_bolts(&mut self) -> i64 {
         self.bolt_tick = self.tick;
         if !self.touched.is_empty() {
             self.resync_touched();
         }
-        self.read_bolts(projectiles, delta, false, true)
-    }
-
-    // Reads the live bolts into the bolt table: the position always, the velocity for the scan's first sync and the last
-    // step for the resolver's; a bolt seen for the first time gives its faction, shooter, kind and radius once. A spent
-    // bolt is queued for deletion (`Projectile.spend`), so that one check covers it.
-    fn read_bolts(
-        &mut self,
-        projectiles: Array<Gd<Node>>,
-        delta: f64,
-        velocity: bool,
-        last_step: bool,
-    ) -> i64 {
-        if self.names.is_none() {
-            self.names = Some(Names::new());
-        }
-        let mut bolts = std::mem::take(&mut self.bolts);
-        bolts.truncate_to_owned();
-        let mut live: HashSet<i64> = HashSet::new();
-        for node in projectiles.iter_shared() {
-            let id = node.instance_id().to_i64();
-            self.sync_reads += 1;
-            if !node.is_inside_tree() || node.is_queued_for_deletion() {
-                continue;
-            }
-            live.insert(id);
-            if !self.bolt_known.contains_key(&id) {
-                let Ok(node3d) = node.clone().try_cast::<Node3D>() else {
-                    continue;
-                };
-                self.sync_reads += 6;
-                let names = self.names.as_ref().expect("made above");
-                let faction = node
-                    .get(&names.faction)
-                    .try_to::<StringName>()
-                    .unwrap_or_default();
-                let shooter = node.get(&names.shooter_id).try_to::<i64>().unwrap_or(0);
-                let kind = kind_of(&node.get(&names.kind));
-                let radius = node.get(&names.hit_radius_m).try_to::<f64>().unwrap_or(0.0);
-                let launch_velocity = node
-                    .get(&names.velocity)
-                    .try_to::<Vector3>()
-                    .unwrap_or(Vector3::ZERO);
-                let damage = node.get(&names.damage).try_to::<f64>().unwrap_or(0.0);
-                let color = color_of(&node.get(&names.color));
-                let bolt = Bolt {
-                    node: node3d,
-                    faction_ix: self.faction_index(faction),
-                    shooter,
-                    kind,
-                    radius,
-                    velocity: launch_velocity,
-                    plain: kind == KIND_BOLT,
-                    first_tick: self.tick,
-                    damage,
-                    color,
-                };
-                self.bolt_known.insert(id, bolt);
-            }
-            let names = self.names.as_ref().expect("made above");
-            let bolt = &self.bolt_known[&id];
-            self.sync_reads += 1;
-            bolts.ids.push(id);
-            bolts.positions.push(bolt.node.get_global_position());
-            let v = if bolt.plain {
-                bolt.velocity
-            } else if velocity || last_step {
-                self.sync_reads += 1;
-                bolt.node
-                    .get(&names.velocity)
-                    .try_to::<Vector3>()
-                    .unwrap_or(Vector3::ZERO)
-            } else {
-                Vector3::ZERO
-            };
-            bolts
-                .velocities
-                .push(if velocity { v } else { Vector3::ZERO });
-            bolts.last_steps.push(if !last_step {
-                Vector3::ZERO
-            } else if bolt.plain && bolt.first_tick < self.tick {
-                // `Projectile._physics_process`: `last_step = velocity * delta`, the float rounded to 32 bits first. A
-                // bolt first seen this tick may not have stepped yet, so its node says.
-                let dt = delta as f32;
-                Vector3::new(v.x * dt, v.y * dt, v.z * dt)
-            } else {
-                self.sync_reads += 1;
-                bolt.node
-                    .get(&names.last_step)
-                    .try_to::<Vector3>()
-                    .unwrap_or(Vector3::ZERO)
-            });
-            bolts.faction_ix.push(bolt.faction_ix);
-            bolts.shooters.push(bolt.shooter);
-            bolts.kinds.push(bolt.kind);
-            bolts.radii.push(bolt.radius);
-            bolts.damage.push(bolt.damage);
-            bolts.colors.push(bolt.color);
-            bolts.looks.push(crate::rows::LOOK_NONE);
-            bolts.expires_at.push(f64::INFINITY);
-            bolts.launched.push(bolt.first_tick);
-            bolts.spent.push(false);
-            bolts.draw_slots.push(-1);
-        }
-        self.bolt_known.retain(|id, _| live.contains(id));
-        self.bolts = bolts;
+        self.bolts.truncate_to_owned();
         self.bolts.ids.len() as i64
     }
 

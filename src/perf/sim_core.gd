@@ -21,7 +21,7 @@ extends Node
 ## sync points, so the rows hold what a read at the sync would. The AI targeting controllers' selection check runs here at
 ## their priority (`SimCoreTargeting`), and the ram resolver's contact read in one native call.
 ##
-## Bolts as rows (M4-T35, `perf_native_bolt_rows`): the core owns its bolts. Every cannon but the player's registers with
+## Bolts as rows (M4-T35): the core owns its bolts. Every cannon but the player's registers with
 ## `ScsCannons` (`register_cannon`), and an internal `SimCoreStep` child at priority 1 (after the drivers, `Main` and the
 ## World's rebase at 0, before the targeting at 100 and the resolvers) steps every cannon's gate in one call, spawns each
 ## shot as an owned bolt row, hands the shots back to their cannons (the flash, the signal), and then steps every owned
@@ -103,14 +103,12 @@ var _statics_version: int = -1
 var _out: Node = null
 var _bolts_fresh: bool = false  # the bolts were read again since this tick's first sync
 var _bolt_sync: Object = null  # the bolt reader (M4-T34), made on first use
-var _bolt_sync_known: int = -1
 var _tick_open: bool = false  # a sync_in since the last sync_out: the next sync_in closes the tick's count, as the core's does
 var _cannons_by_slot: Dictionary[int, PulseCannon] = {}
 var _selection_controllers: Dictionary[int, TargetingController] = {}
 ## Selections the core's check cleared in the last tick (a readout).
 var selection_clears_last_tick: int = 0
 var _bolt_mesh: BoltMesh = null
-const _NO_NODES: Array[Node] = []
 
 
 ## Runs `sync_out` last in every physics tick (an internal child, so World's children stay its world objects).
@@ -168,7 +166,6 @@ func _ready() -> void:
 	_bolt_mesh = BoltMesh.new(self)
 	add_child(_bolt_mesh, false, Node.INTERNAL_MODE_BACK)
 	_apply_threads()
-	_apply_bolt_rows()
 	if not Settings.changed.is_connected(_on_setting_changed):
 		Settings.changed.connect(_on_setting_changed)
 	_hook(get_tree())
@@ -234,9 +231,9 @@ static func current() -> SimCore:
 	return _current if _current != null and is_instance_valid(_current) else null
 
 
-## Whether the core owns the bolts when it runs (M4-T35): the core on, `perf_native_bolt_rows` on and the library's cannons.
+## Whether the core owns the bolts when it runs (M4-T35): the core on and the library's cannons.
 static func bolt_rows_enabled() -> bool:
-	if not enabled() or not bool(Settings.get_value(&"perf_native_bolt_rows")):
+	if not enabled():
 		return false
 	if _cannons_class_known < 0:
 		_cannons_class_known = 1 if NativeLib.has_class(CANNONS_CLASS) else 0
@@ -264,7 +261,7 @@ static func note_selection_changed(body_id: int, selected_id: int) -> void:
 
 ## Whether this core owns its bolts now.
 func bolt_rows_on() -> bool:
-	return core != null and bool(core.bolt_rows())
+	return core != null and cannons != null
 
 
 ## Which path the bolts fly now: &"rows" (the core's own rows, M4-T35) or &"nodes" (a `Projectile` node each).
@@ -495,12 +492,6 @@ func owned_bolts() -> int:
 	return int(core.owned_bolts()) if core != null else 0
 
 
-# Tells the core whether it owns the bolts, as the setting stands.
-func _apply_bolt_rows() -> void:
-	if core != null:
-		core.set_bolt_rows(bolt_rows_enabled())
-
-
 ## Engine calls of the last closed tick: `[sync, fallbacks]` (the sync points' reads, and the flight step's reads of the
 ## physics server for ships without a row; the kernels make none by construction, see `native/src/kernels.rs`).
 func engine_calls() -> PackedInt64Array:
@@ -510,11 +501,6 @@ func engine_calls() -> PackedInt64Array:
 	if _bolt_sync != null:
 		calls[0] += int(_bolt_sync.last_reads())
 	return calls
-
-
-## Which code reads the bolts at the sync points now: &"reader" (`BOLT_SYNC_CLASS`, M4-T34) or &"core" (the core's own).
-func bolt_path() -> StringName:
-	return &"reader" if _bolt_reader() != null else &"core"
 
 
 ## Which path the classes take now: &"native" with the core on, else &"gdscript".
@@ -534,14 +520,11 @@ func _sync_in() -> void:
 	var frame: int = Engine.get_physics_frames()
 	var delta: float = get_physics_process_delta_time()
 	var reader: Object = _bolt_reader()
-	if _bolt_sync != null and _tick_open:
-		_bolt_sync.close_tick()
+	if _tick_open:
+		reader.close_tick()
 	_tick_open = true
-	if reader != null:
-		core.sync_in(_NO_NODES, frame, delta)
-		reader.read(core, tree.get_nodes_in_group(Projectile.GROUP), frame, delta, true, false)
-	else:
-		core.sync_in(tree.get_nodes_in_group(Projectile.GROUP), frame, delta)
+	core.sync_in(frame, delta)
+	reader.read(core, tree.get_nodes_in_group(Projectile.GROUP), frame, delta, true, false)
 	synced_frame = frame
 	bolts_frame = frame
 	_bolts_fresh = false
@@ -551,12 +534,8 @@ func _sync_in() -> void:
 func _sync_bolts() -> void:
 	var started: int = Time.get_ticks_usec()  # readout only
 	var delta: float = get_physics_process_delta_time()
-	var reader: Object = _bolt_reader()
-	if reader != null:
-		core.sync_bolts(_NO_NODES, delta)
-		reader.read(core, get_tree().get_nodes_in_group(Projectile.GROUP), core.tick(), delta, false, true)
-	else:
-		core.sync_bolts(get_tree().get_nodes_in_group(Projectile.GROUP), delta)
+	core.sync_bolts()
+	_bolt_reader().read(core, get_tree().get_nodes_in_group(Projectile.GROUP), core.tick(), delta, false, true)
 	bolts_frame = Engine.get_physics_frames()
 	_bolts_fresh = true
 	bolts_us = Time.get_ticks_usec() - started
@@ -567,14 +546,10 @@ func _on_rebased(offset: Vector3) -> void:
 		core.shift(-offset)
 
 
-# The bolt reader when `perf_native_bolt_sync` asks for it and the library has it (M4-T34), else null.
+# The node bolts' reader (M4-T34), made on first use (the library is required, M4-T37).
 func _bolt_reader() -> Object:
-	if core == null or not bool(Settings.get_value(&"perf_native_bolt_sync")):
-		return null
-	if _bolt_sync_known < 0:
-		_bolt_sync_known = 1 if NativeLib.has_class(BOLT_SYNC_CLASS) else 0
-	if _bolt_sync_known == 1 and _bolt_sync == null:
-		_bolt_sync = NativeLib.instantiate(BOLT_SYNC_CLASS)
+	if _bolt_sync == null:
+		_bolt_sync = ClassDB.instantiate(BOLT_SYNC_CLASS)
 	return _bolt_sync
 
 
@@ -590,8 +565,7 @@ func _apply_threads() -> void:
 func _on_setting_changed(key: StringName, _value: Variant) -> void:
 	if key == &"perf_threads":
 		_apply_threads()
-	elif key == &"perf_native_bolt_rows" or key == &"perf_native_core" or key == &"perf_native":
-		_apply_bolt_rows()
+	elif key == &"perf_native_core" or key == &"perf_native":
 		PulseCannon.rebind_all()
 		TargetingController.rebind_all()
 

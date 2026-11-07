@@ -11,7 +11,7 @@ const TICKS: int = 240
 const DELTA: float = 1.0 / 60.0
 const NO_NODES: Array[Node] = []
 const SETTINGS: Array[StringName] = [&"perf_native", &"perf_native_core", &"perf_native_brains", &"perf_native_flight",
-		&"perf_threads", &"perf_native_commands", &"perf_native_bolt_rows"]
+		&"perf_threads", &"perf_native_commands"]
 const SPEC_PATH: String = "res://assets/ships/starfury_aurora.tres"
 const FIXTURE: String = "bolt_rows"
 
@@ -48,19 +48,13 @@ func _skipped() -> bool:
 	return true
 
 
-func test_the_setting_exists_and_defaults_on() -> void:
-	assert_true(Settings.schema.has_key(&"perf_native_bolt_rows"), "perf_native_bolt_rows is a setting")
-	assert_eq(Settings.schema.get_default(&"perf_native_bolt_rows"), true, "on by default")
-
-
 # --- the bolt kernel against the node ---------------------------------------------------------------------------------
 
 
 # A bare core that owns its bolts, synced at `tick` with no nodes.
 func _core(tick: int = 100) -> Object:
 	var core: Object = NativeLib.instantiate(SimCore.NATIVE_CLASS)
-	core.set_bolt_rows(true)
-	core.sync_in(NO_NODES, tick, DELTA)
+	core.sync_in(tick, DELTA)
 	return core
 
 
@@ -96,7 +90,7 @@ func test_an_owned_bolt_steps_as_a_node_bolt_does() -> void:
 	var now_s: float = 0.0
 	for tick: int in range(101, 221):
 		now_s += DELTA
-		core.sync_in(NO_NODES, tick, DELTA)
+		core.sync_in(tick, DELTA)
 		core.step_bolts(now_s, DELTA)
 		for bolt: Projectile in nodes:
 			_fly(bolt)
@@ -122,13 +116,13 @@ func test_a_bolt_waits_out_its_launch_tick_and_expires_in_time() -> void:
 	var ends: PackedVector3Array = core.bolt_columns()[2]
 	assert_eq(ends[0], Vector3(1.0, 2.0, 3.0), "a bolt does not move on its launch tick")
 	assert_eq((core.bolt_columns()[1] as PackedVector3Array)[0], Vector3(1.0, 2.0, 3.0), "its segment is its muzzle")
-	core.sync_in(NO_NODES, 6, DELTA)
+	core.sync_in(6, DELTA)
 	core.step_bolts(10.0 + DELTA, DELTA)
 	ends = core.bolt_columns()[2]
 	assert_eq(ends[0], Vector3(1.0, 2.0, 3.0) + velocity * DELTA, "the next tick moves it by velocity * delta")
-	core.sync_in(NO_NODES, 7, DELTA)
+	core.sync_in(7, DELTA)
 	assert_eq(int(core.step_bolts(10.999, DELTA)), 0, "alive until its lifetime ends")
-	core.sync_in(NO_NODES, 8, DELTA)
+	core.sync_in(8, DELTA)
 	assert_eq(int(core.step_bolts(11.0, DELTA)), 1, "expired when now reaches expires_at")
 	assert_eq(int(core.owned_bolts()), 0, "and gone")
 
@@ -151,7 +145,7 @@ func test_a_spent_bolt_stays_flagged_until_the_next_sync() -> void:
 	assert_eq(int(core.bolt_columns()[11]), 5, "five owned rows")
 	core.sync_out()
 	assert_eq(int(core.bolt_columns()[11]), 5, "still listed at the tick's end (a spent node is, until its frame ends)")
-	core.sync_in(NO_NODES, 6, DELTA)
+	core.sync_in(6, DELTA)
 	var left: PackedInt64Array = core.bolt_columns()[0]
 	assert_eq(Array(left), [ids[0], ids[2], ids[4]], "the next sync drops the spent rows and keeps the order")
 
@@ -180,30 +174,29 @@ func test_node_projectiles_follow_the_owned_rows_in_the_table() -> void:
 	beam.damage = 25.0
 	beam.fire_beam(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, -100.0), 0.0)
 	var group: Array[Node] = [beam]
-	core.sync_in(group, 6, DELTA)
+	core.sync_in(6, DELTA)
+	(NativeLib.instantiate(SimCore.BOLT_SYNC_CLASS) as Object).read(core, group, 6, DELTA, true, false)
 	var columns: Array = core.bolt_columns()
 	assert_eq(int(columns[11]), 1, "one owned row")
 	assert_eq((columns[0] as PackedInt64Array).size(), 2, "the beam follows it")
 	assert_eq((columns[0] as PackedInt64Array)[1], beam.get_instance_id(), "the node row keeps its instance id")
 	assert_eq((columns[8] as PackedFloat64Array)[1], 25.0, "its damage is a column now")
 	assert_eq((columns[6] as PackedInt64Array)[1], 99, "and its shooter")
-	core.set_bolt_rows(false)
-	assert_eq(int(core.owned_bolts()), 0, "switching the rows off drops the owned bolts")
 
 
 func test_the_engine_calls_do_not_grow_with_the_owned_bolts() -> void:
 	if _skipped():
 		return
 	var core: Object = _core(5)
-	core.sync_bolts(NO_NODES, DELTA)
+	core.sync_bolts()
 	core.sync_out()
 	var quiet: int = core.engine_calls()[0]
 	for i: int in 2000:
 		core.add_bolt(Vector3(float(i), 0.0, 0.0), Vector3(1.0, 0.0, 0.0), Factions.RAIDERS, 7, null, 0.25, 10.0, Color.WHITE, 0,
 				40.0, 0.0)
-	core.sync_in(NO_NODES, 6, DELTA)
+	core.sync_in(6, DELTA)
 	core.step_bolts(DELTA, DELTA)
-	core.sync_bolts(NO_NODES, DELTA)
+	core.sync_bolts()
 	core.sync_out()
 	assert_eq(core.engine_calls()[0], quiet, "2 000 owned bolts cost the sync points no engine call")
 	assert_eq(int(core.owned_bolts()), 2000, "all of them in the table")
@@ -216,7 +209,7 @@ func test_the_renderer_draws_each_live_bolt_between_its_ticks() -> void:
 	var v := Vector3(600.0, 0.0, 0.0)
 	for i: int in 3:
 		core.add_bolt(Vector3(0.0, float(i), 0.0), v, Factions.RAIDERS, 7, null, 0.25, 10.0, Color.WHITE, 2 if i == 2 else 0, 4.0, 0.0)
-	core.sync_in(NO_NODES, 6, DELTA)
+	core.sync_in(6, DELTA)
 	core.step_bolts(DELTA, DELTA)
 	core.spend_bolt_row(1)
 	assert_eq(int(core.bolt_instances(0)), 2, "two slots of look 0: the spent bolt keeps its slot until the next sync drops it")
@@ -252,22 +245,22 @@ func test_a_bolts_draw_slot_stays_its_own_while_others_come_and_go() -> void:
 	var v := Vector3(600.0, 0.0, 0.0)
 	for i: int in 3:
 		core.add_bolt(Vector3(0.0, float(i + 1), 0.0), v, Factions.RAIDERS, 7, null, 0.25, 10.0, Color.WHITE, 0, 0.5 if i == 0 else 4.0, 0.0)
-	core.sync_in(NO_NODES, 6, DELTA)
+	core.sync_in(6, DELTA)
 	core.step_bolts(DELTA, DELTA)
 	assert_eq(_slot_ys(core), [1.0, 2.0, 3.0] as Array[float], "three bolts in three slots")
 	core.spend_bolt_row(1)
-	core.sync_in(NO_NODES, 7, DELTA)  # drops the spent row
+	core.sync_in(7, DELTA)  # drops the spent row
 	core.step_bolts(2.0 * DELTA, DELTA)
 	assert_eq(int(core.bolt_instances(0)), 3, "the spent bolt's slot stays, empty")
 	assert_eq(_slot_ys(core), [1.0, -1.0, 3.0] as Array[float], "the other two keep their slots")
 	core.add_bolt(Vector3(0.0, 4.0, 0.0), v, Factions.RAIDERS, 7, null, 0.25, 10.0, Color.WHITE, 0, 4.0, 0.0)
-	core.sync_in(NO_NODES, 8, DELTA)
+	core.sync_in(8, DELTA)
 	core.step_bolts(3.0 * DELTA, DELTA)
 	assert_eq(_slot_ys(core), [1.0, 4.0, 3.0] as Array[float], "a new bolt takes the free slot")
-	core.sync_in(NO_NODES, 9, DELTA)
+	core.sync_in(9, DELTA)
 	core.step_bolts(1.0, DELTA)  # the first bolt expires
 	assert_eq(_slot_ys(core), [-1.0, 4.0, 3.0] as Array[float], "an expired bolt frees its slot, the others stay put")
-	core.sync_in(NO_NODES, 10, DELTA)
+	core.sync_in(10, DELTA)
 	core.step_bolts(10.0, DELTA)
 	assert_eq(int(core.bolt_instances(0)), 0, "no instances once every bolt is gone")
 
@@ -416,11 +409,10 @@ func _space() -> SubViewport:
 	return space
 
 
-## The seeded battle's fighters flown `ticks` ticks with the bolt rows off or on and `threads` threads. Returns per tick a
+## The seeded battle's fighters flown `ticks` ticks on `threads` threads. Returns per tick a
 ## digest of the hull rows (positions, velocities, bases), of the bolt table (starts and ends) and of the hits (target and
 ## shooter by their place in the battle, damage, point), the kills, the shots, and the most bolt nodes and owned rows seen.
-func _battle(rows_on: bool, threads: int, ticks: int = TICKS) -> Dictionary:
-	Settings.set_value(&"perf_native_bolt_rows", rows_on)
+func _battle(threads: int, ticks: int = TICKS) -> Dictionary:
 	Settings.set_value(&"perf_threads", threads)
 	Settings.set_value(&"perf_native_commands", true)
 	Factions.reset()
@@ -510,12 +502,8 @@ static func _first_difference(a: PackedInt64Array, b: PackedInt64Array) -> int:
 func test_the_seeded_battle_hits_the_same_with_bolts_as_rows() -> void:
 	if _skipped():
 		return
-	var recorded: Variant = await ParityFixture.expected(FIXTURE, "battle_with_bolt_nodes", func() -> Dictionary:
-		var nodes: Dictionary = await _battle(false, 1)
-		assert_eq(nodes["bolt_path"], &"nodes", "the reference flies bolt nodes")
-		assert_gt(int(nodes["nodes_max"]), 50, "the reference had bolts in flight (%d at most)" % int(nodes["nodes_max"]))
-		return _digest_of(nodes))
-	var rows: Dictionary = await _battle(true, 1)
+	var recorded: Variant = ParityFixture.stored(FIXTURE, "battle_with_bolt_nodes")
+	var rows: Dictionary = await _battle(1)
 	assert_eq(rows["bolt_path"], &"rows", "the rows path owns its bolts")
 	assert_eq(int(rows["nodes_max"]), 0, "the rows path spawned no bolt node")
 	assert_gt(int(rows["owned_max"]), 50, "and owned the bolts (%d at most)" % int(rows["owned_max"]))
@@ -538,8 +526,8 @@ static func _digest_of(battle: Dictionary) -> Dictionary:
 func test_one_thread_and_six_give_the_same_bolts() -> void:
 	if _skipped():
 		return
-	var one: Dictionary = await _battle(true, 1)
-	var six: Dictionary = await _battle(true, 6)
+	var one: Dictionary = await _battle(1)
+	var six: Dictionary = await _battle(6)
 	var first: int = _first_difference(one["bolts"], six["bolts"])
 	assert_eq(first, -1, "the bolt table is the same bits with one thread and six (first difference at tick %d)" % first)
 	first = _first_difference(one["hits"], six["hits"])
@@ -551,7 +539,7 @@ func test_one_thread_and_six_give_the_same_bolts() -> void:
 # --- the cannon in play -----------------------------------------------------------------------------------------------
 
 
-# A node bolt the way a cannon spawns one (the player's path on the rows setting).
+# A node bolt the way a cannon spawns one (the player's path).
 func _node_bolt(bolts: Node3D, at: Vector3, v: Vector3, shooter: int, damage: float) -> Projectile:
 	var p := PulseCannon.PROJECTILE_SCENE.instantiate() as Projectile
 	bolts.add_child(p)
@@ -566,7 +554,6 @@ func _node_bolt(bolts: Node3D, at: Vector3, v: Vector3, shooter: int, damage: fl
 # A hull with a node bolt and an owned row reaching it in the same tick, two ticks apart in launch, the row first when
 # `row_first`. Returns the id of the shooter whose bolt landed first (the kill).
 func _same_tick_tie(row_first: bool) -> Dictionary:
-	Settings.set_value(&"perf_native_bolt_rows", true)
 	var space := _space()
 	var world := space.get_node("World") as WorldFrame
 	var bolts := world.get_node("Projectiles") as Node3D
@@ -634,7 +621,6 @@ func test_the_bolt_launched_first_lands_first_whether_a_node_or_a_row() -> void:
 func test_a_cannon_on_the_kernel_fires_rows_and_signals_each_shot() -> void:
 	if _skipped():
 		return
-	Settings.set_value(&"perf_native_bolt_rows", true)
 	var space := _space()
 	var world := space.get_node("World") as WorldFrame
 	var bolts := world.get_node("Projectiles") as Node3D
@@ -663,9 +649,6 @@ func test_a_cannon_on_the_kernel_fires_rows_and_signals_each_shot() -> void:
 		near = near or at.distance_to(c.ship.global_transform * muzzle.origin) < c.ship.linear_velocity.length() * DELTA * 2.0 + 1.0
 	assert_true(near, "a shot is signalled at a muzzle")
 	assert_false(c.cannon.is_physics_processing(), "the cannon's own tick is off on the kernel")
-	Settings.set_value(&"perf_native_bolt_rows", false)
-	assert_true(c.cannon.is_physics_processing(), "and back on when the rows are switched off")
-	assert_false(c.cannon.on_kernel(), "off the kernel")
 	space.queue_free()
 	await get_tree().physics_frame
 
@@ -673,7 +656,6 @@ func test_a_cannon_on_the_kernel_fires_rows_and_signals_each_shot() -> void:
 func test_a_cannon_on_a_body_the_core_has_no_row_for_still_fires() -> void:
 	if _skipped():
 		return
-	Settings.set_value(&"perf_native_bolt_rows", true)
 	var space := _space()
 	var world := space.get_node("World") as WorldFrame
 	var bolts := world.get_node("Projectiles") as Node3D

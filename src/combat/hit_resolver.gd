@@ -12,7 +12,7 @@ extends Node
 ## With the native core on (M4-T15, `SimCore`), the hulls and bolts come as columns from the core's rows (the bolts read
 ## again at this priority, since they moved at 0) and the broad phase pairs them natively from the same rows; the resolver
 ## then looks up only the nodes the pairs name. Without it, the resolver walks the tree as before (the reference).
-## With the core owning the bolts (M4-T35, `perf_native_bolt_rows`), a bolt's shooter, faction, damage and tint are columns
+## With the core owning the bolts (M4-T35), a bolt's shooter, faction, damage and tint are columns
 ## of the table and a hit spends the row in the core; a projectile that still has a node (a beam, a missile, the player's
 ## bolts) is spent through its node as before.
 ## Every projectile kind (bolt, beam, missile, mine) is swept alike, with its own hit radius; a beam (M4-T12) lives for one
