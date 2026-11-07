@@ -550,56 +550,55 @@ class Launcher extends Node:
 		ship.linear_velocity = Vector3(0.0, 0.0, -80.0)
 
 
-func test_the_flight_step_flies_the_same_from_the_core_as_from_the_physics_server() -> void:
+func test_the_flight_step_from_the_core_flies_as_the_recorded_server_read() -> void:
 	var spec: ShipSpec = load(SPEC_PATH) as ShipSpec
 	var digests: Array[Array] = []
-	for run: int in 1:
-		var ships: Array[Ship] = []
-		for i: int in 3:
-			var ship: Ship = Ship.create(spec, world)
-			world.spawn(ship, world.to_universe(Vector3(300.0 * i, 0.0, -200.0 * i)))
-			assert_true(ship.get_layout().valid, "ship has a valid thruster layout (run scripts/gen_assets.sh)")
-			ships.append(ship)
-		var launcher := Launcher.new()
-		launcher.ship = ships[1]
-		add_child(launcher)
-		await get_tree().physics_frame
-		await get_tree().physics_frame
-		launcher.at_frame = Engine.get_physics_frames() + 30  # the same recorded tick in both runs
-		var rng := RandomNumberGenerator.new()
-		rng.seed = 44
-		var lines: Array = []
-		for tick: int in 90:
-			for ship: Ship in ships:
-				var cmd := FlightCommand.new()
-				cmd.main_left = rng.randf()
-				cmd.main_right = rng.randf()
-				cmd.retro_left = 1.0 if rng.randf() < 0.2 else 0.0
-				cmd.retro_right = 1.0 if rng.randf() < 0.2 else 0.0
-				cmd.rot = Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
-				cmd.strafe = Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
-				cmd.brake = rng.randf() < 0.1
-				ship.set_flight_command(cmd)
-			await get_tree().physics_frame
-			var batch: FlightBatch = FlightBatch.attach(world)
-			if tick == 10:
-				assert_eq(batch.source(), &"core", "the batch reads the core")
-			for ship: Ship in ships:
-				var o: FlightOutput = ship.get_flight_output()
-				# Exact values, compared as such: a formatted float would hide a difference in the last bits.
-				lines.append([tick, ship.global_position, ship.linear_velocity, ship.angular_velocity, ship.applied_force(),
-						o.rcs_torque_b, o.group_levels[0], o.mass_flow_kg_s, o.face_error_rad])
-		digests.append(lines)
-		launcher.free()
+	var ships: Array[Ship] = []
+	for i: int in 3:
+		var ship: Ship = Ship.create(spec, world)
+		world.spawn(ship, world.to_universe(Vector3(300.0 * i, 0.0, -200.0 * i)))
+		assert_true(ship.get_layout().valid, "ship has a valid thruster layout (run scripts/gen_assets.sh)")
+		ships.append(ship)
+	var launcher := Launcher.new()
+	launcher.ship = ships[1]
+	add_child(launcher)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	launcher.at_frame = Engine.get_physics_frames() + 30  # the same recorded tick in both runs
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 44
+	var lines: Array = []
+	for tick: int in 90:
 		for ship: Ship in ships:
-			ship.free()
-		var batch: FlightBatch = world.get_node_or_null(NodePath(FlightBatch.NODE_NAME))
-		if batch != null:
-			batch.free()
-		var core: Node = world.get_node_or_null(NodePath(SimCore.NODE_NAME))
-		if core != null:
-			core.free()
+			var cmd := FlightCommand.new()
+			cmd.main_left = rng.randf()
+			cmd.main_right = rng.randf()
+			cmd.retro_left = 1.0 if rng.randf() < 0.2 else 0.0
+			cmd.retro_right = 1.0 if rng.randf() < 0.2 else 0.0
+			cmd.rot = Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
+			cmd.strafe = Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
+			cmd.brake = rng.randf() < 0.1
+			ship.set_flight_command(cmd)
 		await get_tree().physics_frame
+		var batch: FlightBatch = FlightBatch.attach(world)
+		if tick == 10:
+			assert_eq(batch.source(), &"core", "the batch reads the core")
+		for ship: Ship in ships:
+			var o: FlightOutput = ship.get_flight_output()
+			# Exact values, compared as such: a formatted float would hide a difference in the last bits.
+			lines.append([tick, ship.global_position, ship.linear_velocity, ship.angular_velocity, ship.applied_force(),
+					o.rcs_torque_b, o.group_levels[0], o.mass_flow_kg_s, o.face_error_rad])
+	digests.append(lines)
+	launcher.free()
+	for ship: Ship in ships:
+		ship.free()
+	var batch: FlightBatch = world.get_node_or_null(NodePath(FlightBatch.NODE_NAME))
+	if batch != null:
+		batch.free()
+	var core: Node = world.get_node_or_null(NodePath(SimCore.NODE_NAME))
+	if core != null:
+		core.free()
+	await get_tree().physics_frame
 	var recorded: Variant = ParityFixture.stored(FIXTURE, "flight_step_from_the_server")
 	assert_not_null(recorded, "the server read's flight was recorded")
 	assert_eq(ParityFixture.encode({"ticks": digests[0].size(), "lines": ParityFixture.digest(digests[0])}), recorded,

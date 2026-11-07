@@ -1,7 +1,8 @@
 class_name TreeRows
 extends RefCounted
 ## The oracle the core's rows are checked against (M4-T42): a scan built by reading the tree's bodies node by node, as
-## the game read them before every world attached the core. Tests only; the game reads the core's rows.
+## the game read them before every world attached the core. Tests only; the game reads the core's rows. It fills
+## `ContactScan`'s private columns, so a change to the scan's layout changes this file too.
 
 
 ## The active bodies of `tree` (one row per body with an active marker or hull, markers first), the node-less static rows

@@ -180,7 +180,7 @@ func _live_bolts() -> Array[Projectile]:
 	return out
 
 
-func test_a_bolt_hits_a_rock_on_both_paths() -> void:
+func test_a_bolt_hits_a_rock() -> void:
 	var rocks: Array[Dictionary] = [{"offset": Vector3(0.0, 0.0, -1000.0), "radius": 50.0},
 			{"offset": Vector3(400.0, 0.0, -2000.0), "radius": 120.0}]
 	var field: AsteroidField = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
@@ -203,7 +203,7 @@ func test_a_bolt_hits_a_rock_on_both_paths() -> void:
 			assert_eq(infos[0].applied, 0.0, "%s: rocks do not break" % label)
 
 
-func test_a_ship_flying_into_a_rock_is_rammed_on_both_paths() -> void:
+func test_a_ship_flying_into_a_rock_is_rammed() -> void:
 	var rocks: Array[Dictionary] = [{"offset": Vector3(0.0, 0.0, -1000.0), "radius": 50.0}]
 	var field: AsteroidField = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
 	for native: bool in _paths():
@@ -330,7 +330,7 @@ func _ai_ship(display_name: String, faction: StringName, at: Vector3, velocity: 
 
 func test_a_fighter_steers_round_its_own_mine_and_flies_straight_over_an_enemy_one() -> void:
 	# A raider on patrol straight at a mine row (registered alone, so nothing goes off): round its own side's, straight over
-	# an Earth Alliance one it cannot know about. On both paths.
+	# an Earth Alliance one it cannot know about.
 	var cases: Array[Dictionary] = []
 	for native: bool in _paths():
 		cases.append({"native": native, "mine": Factions.RAIDERS})

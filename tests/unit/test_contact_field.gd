@@ -160,7 +160,7 @@ func test_the_scan_takes_the_native_path_when_the_library_is_loaded() -> void:
 	assert_eq(scan.path(), &"native", "the native field answers (%s)" % NativeLib.version(ContactScan.NATIVE_CLASS))
 
 
-func test_seeded_worlds_give_the_same_answers_on_both_paths() -> void:
+func test_seeded_worlds_give_the_recorded_answers() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026_11_03
 	var compared: int = 0
@@ -326,7 +326,7 @@ static func _load_raw(field: Object, args: Dictionary) -> Variant:
 
 
 # If the grid's overflow guard regresses, this test hangs instead of failing: a shard stuck here is that regression.
-func test_a_huge_finite_range_gives_the_same_answers_on_both_paths_and_finishes_quickly() -> void:
+func test_a_huge_finite_range_gives_the_recorded_answers_and_finishes_quickly() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 31
 	var n: int = 120
@@ -397,7 +397,7 @@ func test_a_scan_the_field_rejects_answers_nothing() -> void:
 	assert_true(scan._bodies_alive() == false, "the freed-body check runs without the field (these ids are not nodes)")
 
 
-func test_a_negative_range_acts_as_its_magnitude_on_both_paths() -> void:
+func test_a_negative_range_acts_as_its_magnitude() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 53
 	var scan := _world(rng, 80, 0)
@@ -578,7 +578,7 @@ func test_a_query_for_statics_visits_only_the_cells_its_range_reaches() -> void:
 	assert_between(worst, 1, 400, "a query tests the rows near it, not the whole world")
 
 
-func test_four_factions_every_pair_hostile_give_the_same_hostile_lists_on_both_paths() -> void:
+func test_four_factions_every_pair_hostile_give_the_recorded_hostile_lists() -> void:
 	var sides: Array[StringName] = [Factions.EARTH_ALLIANCE, Factions.RAIDERS, &"bench_a", &"bench_b"]
 	var table_ids: Array = []
 	for side: StringName in sides:
@@ -624,10 +624,10 @@ func test_a_kinds_array_of_the_wrong_length_is_rejected_and_the_scan_answers_not
 	assert_eq(found.size(), 0, "statics_for gives nothing")
 
 
-func test_a_side_sees_its_own_mines_and_never_an_enemys_on_both_paths() -> void:
+func test_a_side_sees_its_own_mines_and_never_an_enemys() -> void:
 	# Q27 (maintainer, 2026-11-03): a side knows its own mines (and its friends') and steers clear of them; enemy mines are
 	# hidden from it until they go off. Rocks are obstacles for every side. Four sides, two of them friends, every other
-	# pair hostile; mines of every side and rocks round every ship; the same statics on both paths, and the reference's.
+	# pair hostile; mines of every side and rocks round every ship; the recorded reference's statics.
 	var sides: Array[StringName] = [Factions.EARTH_ALLIANCE, Factions.RAIDERS, &"bench_a", &"bench_b"]
 	var table_ids: Array = []
 	for side: StringName in sides:

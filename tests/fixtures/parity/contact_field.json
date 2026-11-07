@@ -1,5 +1,5 @@
 {
-  "test_a_huge_finite_range_gives_the_same_answers_on_both_paths_and_finishes_quickly": [
+  "test_a_huge_finite_range_gives_the_recorded_answers_and_finishes_quickly": [
     "119:205e66630319e93e",
     "12:465c9562b137273f",
     "119:205e66630319e93e",
@@ -9,7 +9,7 @@
     "119:205e66630319e93e",
     "12:465c9562b137273f"
   ],
-  "test_a_negative_range_acts_as_its_magnitude_on_both_paths": [
+  "test_a_negative_range_acts_as_its_magnitude": [
     "18:e250e23a62e51492",
     "12:c540a7a1ce2710c5",
     "68:edcf46f5a0979bc0",
@@ -381,7 +381,7 @@
     "11:122f5596123140d1",
     "11:122f5596123140d1"
   ],
-  "test_a_side_sees_its_own_mines_and_never_an_enemys_on_both_paths": [
+  "test_a_side_sees_its_own_mines_and_never_an_enemys": [
     "8:07f4d4cfd13750fc",
     "8:ee03f0f0a379b847",
     "8:165710ccf68816d2",
@@ -623,7 +623,7 @@
     "8:6be858828bdd2c71",
     "8:fc302d1471902d31"
   ],
-  "test_four_factions_every_pair_hostile_give_the_same_hostile_lists_on_both_paths": [
+  "test_four_factions_every_pair_hostile_give_the_recorded_hostile_lists": [
     "6:977143cf8cb4b53e",
     "0",
     "6:be252582f56afe14",
@@ -1511,7 +1511,7 @@
     "4:27c70c353d31fc72",
     "1"
   ],
-  "test_seeded_worlds_give_the_same_answers_on_both_paths": [
+  "test_seeded_worlds_give_the_recorded_answers": [
     "0:4f53cda18c2baa0c",
     "0:4f53cda18c2baa0c",
     "0:4f53cda18c2baa0c",

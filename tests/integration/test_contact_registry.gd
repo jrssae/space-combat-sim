@@ -41,6 +41,7 @@ class Checker extends Node:
 			parked.process_mode = Node.PROCESS_MODE_DISABLED
 		if _tick % 7 != 0:
 			return
+		# The core's sync runs here (-20), before its own at -11: nothing moves between, so the fight is unchanged.
 		var native: ContactScan = TreeRows.core_scan(get_tree())
 		var script: ContactScan = TreeRows.scan(get_tree())
 		compared += 1
