@@ -2429,8 +2429,9 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
   - Every world attaches the core: `WorldFrame._ready` calls `SimCore.attach`, so free flight (no ship pools), every scenario
     and every test world built on a `WorldFrame` simulate on the core (`test_every_world_core`: each of the four scenarios
     reads its hulls from the core, free flight's rows are its player and buoys as the nodes say, a bare world makes its
-    core). The game has no separate menu world: the menu is the main scene's overlay. With two worlds in one tree the
-    newest core is read and the one before takes over when it leaves (`SimCore._cores`).
+    core). The game has no separate menu world: the menu is the main scene's overlay. One world per tree (fix round 1,
+    the maintainer's ruling on review I1): a second world, while the first world's core is live, is refused its core with
+    one error; nothing takes over. Bodies asked about in a tree with no world warn once a run.
   - The stand-ins attach the core when they get capitals or mines (T37's review M1); the one-time warning is gone.
   - Removed: `ScsBodyRegistry` (`native/src/body_registry.rs`), `ContactScan.from_registry`, `from_tree`,
     `from_broadcasters` and the `gathers` count; the hit resolver's walk of hulls and bolts; the ram resolver's walk, its
@@ -2439,8 +2440,13 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
     The broadcast scan selects its rows from the core. A tree with no world has no core: its scan sees nothing, its
     resolvers resolve nothing (`source` none), its flight batch lets every ship fly its own model.
   - Kept: the flight step still reads a ship the core has no row for (back from the pool on its launch tick) from the
-    physics server; the GDScript `RamBroadPhase` and `HitBroadPhase.pairs` stay (the mines and their own tests use them);
-    the pilot kernels' GDScript reference and its switch (`pilot_kernels_on`, not one of the five paths).
+    physics server; `HitBroadPhase.pairs` stays (the mines use it); the GDScript `RamBroadPhase` moved to
+    `tests/fixtures/` as the reference of its tests (fix round 1).
+  - Fix round 1 also removed the pilot kernels' switch (`ContactScan.pilot_kernels_on`) and their GDScript reference (the
+    avoidance filter and fire lane loops), after recording its answers (`pilot_kernels.json`, the facades case of
+    `pilot_kernels_in_play.json`); off the core's rows the kernels read the perception's own lists (`PilotRows`).
+  - Carried to T23 (review M8): `StandinDirector._gather_hulls` still walks the hulls in GDScript to order a mine's blast
+    (per event, not one of the five paths); T23's blast on one path (Q68) meets it.
   - Tests: the core's rows are compared with `TreeRows` (a node-by-node read of the tree, `tests/fixtures/tree_rows.gd`);
     the removed paths' recorders in `test_sim_core`, `test_body_registry` and `test_hit_scale` are stored reads of their
     recordings. A scan whose arrays the field refuses answers nothing (`test_contact_field`).

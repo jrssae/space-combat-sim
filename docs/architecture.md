@@ -2007,7 +2007,8 @@ scripts/bench_quick.sh      the quick check: ramps furball and spread until 30 F
 - **Before**, `RamResolver`'s swept pass looked at every pair of active hulls every tick: a velocity difference, the tunnelling
   test and either the shape sweep or `RamTracker.keep_touching`, about 1.5 us a pair, so O(N^2) and 7.8 of the 9.5 ms of rams at
   100 ships in every layout, though nearly every pair was hundreds of metres apart.
-- **Now** `RamBroadPhase` (pure) boxes each hull's bounding sphere along its path through the tick, grown by a metre, and sorts
+- **Now** `RamBroadPhase` (pure; native as `ScsRamPhase` since M4-T15, the GDScript kept in `tests/fixtures/` since M4-T42)
+  boxes each hull's bounding sphere along its path through the tick, grown by a metre, and sorts
   and sweeps the boxes along x. Only overlapping pairs, and the pairs Jolt reported touching in its last step, reach the old
   per-pair code, in the old pass's order (a ram earlier in the pass can destroy a hull a later pair holds).
 - **Why nothing changes**: a pair whose boxes do not overlap cannot meet the resolver's first exact test (the two bounding spheres
@@ -2096,15 +2097,17 @@ native/src/contact_field.rs     ScsContactField: the contact scan's queries (T05
   faction's hostility row (from `Factions`, which native code never calls).
 - **Bad input never panics.** `load` checks that the parallel arrays line up (bodies, positions, factions, ship flags, reach
   when given, and the four bolt arrays). On a mismatch it logs one error, keeps an empty scan (every query answers nothing) and
-  returns false; `ContactScan` then marks the scan rejected and answers it from GDScript. The grid's cell count is a checked
+  returns false; `ContactScan` then marks the scan rejected, and it answers nothing (it answered from GDScript until M4-T42
+  removed the loops). The grid's cell count is a checked
   product, so a range too large to enumerate (a huge finite one saturates the cell indices) tests every body instead.
 - **Parity is bit for bit** (maintainer, 2026-11-02). The field repeats GDScript's arithmetic: 32-bit vectors, 64-bit scalars,
   the engine's order (`x*x + y*y + z*z`), a float rounded to 32 bits before it scales a vector, the same comparisons
   (`<=` for contacts, "not greater" for nearest-k, equal ranges to the earlier body) and no fused multiply-add (Rust never
-  contracts). `test_contact_field` compares both paths on seeded worlds of 1 to 300 bodies and on bolts that graze the
-  15 m line, where only the same precision gives the same count.
+  contracts). `test_contact_field` compares the field with the GDScript loops' recorded answers (M4-T37; the loops went in
+  M4-T42) on seeded worlds of 1 to 300 bodies and on bolts that graze the 15 m line, where only the same precision gives
+  the same count.
 - **Contacts are made when first handed out.** Each faction's list starts empty and a `Contact` is built the first time a
-  query returns that body, on both paths (a broadcaster nobody hears, or a body no ship of the faction sees, costs nothing).
+  query returns that body (a broadcaster nobody hears, or a body no ship of the faction sees, costs nothing).
   The objects are still one per body per faction per scan, shared and read-only.
 
 ### 17.6 The battle and typical layouts and the stand-ins (T07)
@@ -2219,10 +2222,11 @@ src/ai/body_kind.gd             BodyKind: ship, capital, turret, missile, mine, 
   `ContactScan.from_registry`: no per-body GDScript a tick, with `from_tree` as the reference. Since M4-T42 every world
   has a core, so the registry (now the core's own registration, §17.13) is read only through the core; `from_registry`,
   `from_tree`, `from_broadcasters`, `ScsBodyRegistry` and the `gathers` count are gone.
-- **Membership.** The registry is told the `targetable` and `damageable` groups (`set_members`, the group arrays passed
-  whole) when they change: `ContactScan` listens to the tree's `node_added` and `node_removed` for markers and hulls. A
+- **Membership** (as built in M4-T09; the core keeps the same rules, §17.13). The registry was told the `targetable` and
+  `damageable` groups (`set_members`, the group arrays passed whole) when they changed: `ContactScan` listened to the
+  tree's `node_added` and `node_removed` for markers and hulls. A
   pool ship stays in the tree when parked, so play rarely changes the members; spawning and parking do not.
-- **The refresh.** Each tick's first scan calls `refresh` once. For every member it asks the engine what
+- **The refresh** (the core's first sync since M4-T15). Each tick's first scan called `refresh` once. For every member it asks the engine what
   `Targetable.is_active()` and `Damageable.is_active()` ask (in the tree, visible, processing; a hull's `destroyed` flag only
   for a body with no active marker), then reads the active body's global transform and its `linear_velocity` (a prop's
   marker `velocity`) through the node's own getters, so every value is the one GDScript reads. The plan said
@@ -2232,17 +2236,16 @@ src/ai/body_kind.gd             BodyKind: ship, capital, turret, missile, mine, 
   is hidden or shown (each body's `visibility_changed` touches it, which covers the pool's release and acquire in one
   tick), or after `ContactScan.touch(body)` or `invalidate()`. Rows come in group order (markers, then hulls with no
   active marker, deduplicated by body), then the node-less static rows.
-- **Hull and selection** are read when a contact is first handed out (`Contact`s are made lazily since cycle 4), on both
-  paths alike (fix round 1: the tree gather no longer reads them at the build), so the paths agree whatever changes between
-  a scan's build and its queries (a hit, the console, the player). A driver that changes its ship's selection first calls
+- **Hull and selection** are read when a contact is first handed out (`Contact`s are made lazily since cycle 4; the tree
+  gather did the same until M4-T42 removed it), so a scan hands out what is true when it is asked, whatever changes between
+  its build and its queries (a hit, the console, the player). A driver that changes its ship's selection first calls
   `ContactScan.note_selection`, so this frame's scans still hand out the selection they were built with (M3's behaviour).
 - **The broadcast scan** is the core's `select` (the registry's until M4-T42): a row, read now, for each active marker of
   `Targetable.broadcasters()` in that list's order (a body's second marker gets its own row, as `from_broadcasters` gave),
   with each broadcaster's range read in GDScript. A body's hull is its first `Damageable` in group order, which is child
   order, so it is the one `Damageable.of(body)` finds.
 - **Kinds** (`BodyKind`). A marker's `kind` property (M4-T07 adds it to `Targetable`) is read as a name or a value; a
-  body without one is a ship. `static` and `mine` rows are never contacts: `contacts_for` and `nearest_for` skip them on
-  both paths, so a rock field or a mine belt never fills a fighter's twelve. `statics_for(own, at, faction, k)` gives the
+  body without one is a ship. `static` and `mine` rows are never contacts: `contacts_for` and `nearest_for` skip them, so a rock field or a mine belt never fills a fighter's twelve. `statics_for(own, at, faction, k)` gives the
   `k` nearest by surface distance (centre distance less radius, equal ones to the earlier row) within the sensor range,
   in scan order; the field searches the cells the range plus the largest static radius reaches. `Perception.statics`
   holds them (setting `ai_nearest_static_k`, 4; 0 = none) and `AiPilotDriver` adds them to avoidance's contacts:
@@ -2250,11 +2253,11 @@ src/ai/body_kind.gd             BodyKind: ship, capital, turret, missile, mine, 
   the time a sideways RCS burn takes to clear the obstacle's reach (plus `URGENT_SETTLE_S`), so a 150 m rock is seen early
   enough to go round, while ship-sized contacts keep M3's horizon. The fire lane does not read statics.
 - **Rows with no node.** `ContactScan.register_static(id, position, radius, kind, faction, world)` adds a rock (by RID) or
-  a mine row to both paths, after the bodies, in registration order; `unregister_static`, `clear_statics`. A row belongs to
+  a mine row to the scan, after the bodies, in registration order; `unregister_static`, `clear_statics`. A row belongs to
   the `WorldFrame` it was registered with (its position is in that frame): that world's `rebase` calls
   `shift_statics(shift, self)` and moves only its own rows, once, by the nodes' shift; a row with no world never moves. Ids
   must be unique and not instance ids.
-- **NaN radii.** A static whose surface distance is NaN (a NaN radius or position) is never an obstacle, on both paths.
+- **NaN radii.** A static whose surface distance is NaN (a NaN radius or position) is never an obstacle.
 - **Bad input never panics.** `set_statics` and the field's `set_kinds` check their array lengths, log one error and keep
   nothing; the scan then answers nothing, as for a rejected `load` (it answered from GDScript until M4-T42 removed the
   loops).
@@ -2462,7 +2465,7 @@ native/src/sim_core.rs           ScsSimCore: one store of rows for every simulat
                                  sync points and read by every native kernel
 native/src/rows.rs               Rows, Bolts and the row flags: the plain row tables, the only thing the kernels import from the crate
 native/src/kernels.rs            the kernels: every query and step over the rows (contact, sweep, ram, flight), no way to the engine
-native/src/ram_phase.rs          ScsRamPhase: the ram resolver's broad phase on the core's rows (RamBroadPhase stays the reference)
+native/src/ram_phase.rs          ScsRamPhase: the ram resolver's broad phase on the core's rows (RamBroadPhase, in tests/fixtures/, the reference)
 native/src/body_registry.rs      ScsBodyRegistry: the core without its facade, for the scan's registry path (removed by M4-T42)
 src/perf/sim_core.gd             SimCore: the facade; a node under World at priority -11 (sync_in) with an internal child at
                                  2 000 000 (sync_out); the `core` console provider
@@ -2496,7 +2499,8 @@ src/ship/flight_batch.gd         the four classes read the core (their own loads
   pool is a new row to anything holding the old handle (`row_of` answers -1 for it). Faction, name, kind, radius and the
   destroyed flag are read on activation and on `touch` (the facade touches a body when it is hidden or shown and when its
   hull emits `destroyed`); a hull-only body reads its destroyed flag every tick, as the tree gather does.
-- **Parity is bit for bit** with each class's own load: the scan's rows equal `from_tree`'s (the registry's rule), the
+- **Parity is bit for bit** with each class's own load (the loads went in M4-T42; their outputs are recorded): the scan's
+  rows equal the tree gather's (the registry's rule; `TreeRows` in the tests reads the tree the same way), the
   field reads the same values from the rows, the sweep and the ram phase build the same spheres and boxes from the rows
   in GDScript's precision and order (the hull rows in the `damageable` group's order, so ties fall the same way), the
   flight step reads the basis Jolt wrote back to the node after its last step, which is what the direct state holds too
@@ -2525,17 +2529,22 @@ src/ship/flight_batch.gd         the four classes read the core (their own loads
   core always uses it. Provider `core` (`path`, `rows`, `bodies`, `statics`, `bolts`, `syncs`, `sync_us`, `bolts_us`,
   `sync_calls`, `fallback_calls`, `attribute_reads`, `touched`); `combat.source` and `combat.gather_us`, `ram.source` and
   `ram.gather_us`, `flight.source` and `flight.fallback_reads` say what each class read.
-- **Tests**: `test_sim_core` (the lifecycle, the rebase, the round trip, the four classes' parity, the engine seam) and the
-  files of the four classes on both paths.
+- **Tests**: `test_sim_core` (the lifecycle, the rebase, the round trip, the four classes' parity against the recorded
+  loads, the engine seam) and the files of the four classes.
 - **Every world attaches the core, one hull read (M4-T42).** Until M4-T42 only a world with batched ships had a core
   (`FlightBatch.attach` made it), so free flight (no ship pools), bare test worlds and their resolvers each read the tree
   their own way. Now `WorldFrame` attaches its `SimCore` as it becomes ready, and the stand-ins attach it when they get
-  capitals or mines. With two worlds in one tree the newest core is read and the one before takes over when it leaves.
-  The paths for a world with no core are gone: the body registry with `from_registry` and `from_tree`, the hit
+  capitals or mines. One world per tree (the game only ever has one): a second world, while the first world's core is
+  live, is refused its core with one error, and nothing takes over when the core's world leaves. The paths for a world
+  with no core are gone: the body registry with `from_registry` and `from_tree`, the hit
   resolver's walk of hulls and bolts, the ram resolver's walk and its contact read per hull, the flight batch's server
   read, the contact field's GDScript query loops, and the resolvers' `use_core` and the scan's `use_native` switches. A
-  tree with no world has no core: its scan sees nothing and its resolvers resolve nothing (`source` none). The flight
-  step still reads a ship with no row (back from the pool on its launch tick) from the physics server. The tests compare
+  tree with no world has no core: its scan sees nothing, its resolvers resolve nothing (`source` none) and its flight
+  batch lets every ship fly its own model; the first ask about bodies there warns once a run
+  (`SimCore.no_world_warnings`). The flight step still reads a ship with no row (back from the pool on its launch tick)
+  from the physics server. What differs from the old walks: a hull that enters the tree after the core's sync at -11 has
+  no row in that tick's hit sweep or ram rows (the walks at 200 and 210 saw it at once); battles have run this way since
+  T15, it lasts one tick, and pooled ships come back through `touch`. The tests compare
   the core's rows with `TreeRows` (a node-by-node read of the tree kept in `tests/fixtures/`), and the removed paths'
   recorders are stored reads of `tests/fixtures/parity/` (`test_every_world_core`).
 
@@ -2561,18 +2570,21 @@ native/src/pilot_kernels.rs              ScsPilotKernels: binds the core's rows 
   contacts are copies of the rows as of the scan; the kernels read the live rows. `ScsSimCore.rows_version` grows on every
   sync, resync of touched bodies and rebase shift, the scan notes it when taken, and `pilot_kernels()` gives nothing once
   it moved (asked on every call), so a resync or rebase later in the same frame (a test, the console, a bench hook) sends
-  that tick's remaining questions to the GDScript. In the game's tick order nothing changes the rows between -11 and the
-  drivers' end. `ContactScan.pilot_kernels_on` (off only in tests) pairs the kernels alone against the GDScript with
-  the core on.
+  that tick's remaining questions to the perception's own lists (the GDScript until M4-T42). In the game's tick order
+  nothing changes the rows between -11 and the drivers' end. `ContactScan.pilot_kernels_on`, the test seam that paired
+  the kernels alone against the GDScript, went in M4-T42.
 - **The facades.** `AvoidanceMath.filter_seen(p, radius, v_des, exempt_id, seed)` (the driver), `FireLane.clear_seen(p,
-  aim, range, target)` (the attack brain and the slash) and `AiContext.refresh` ask the kernels when the perception is on
-  the rows, and otherwise list the contacts and run `filter`, `clear` or the loop as before. Off the core (a world with no
-  core) nothing changes.
+  aim, range, target)` (the attack brain and the slash) ask the kernels over the core's rows when the perception is on
+  them; otherwise (M4-T42) the kernels read the perception's own lists loaded as rows (`PilotRows`: row i the i-th
+  contact, with a faction of its own whose relation is the contact's). `AvoidanceMath.filter` and `FireLane.clear` take a
+  plain list the same way. The GDScript loops they matched bit for bit went in M4-T42, their answers recorded first
+  (`pilot_kernels.json`, the facades case of `pilot_kernels_in_play.json`). `AiContext.refresh` stays its own GDScript
+  loop (faster than taking the kernel's arrays apart).
 - **Bit for bit.** The kernels repeat the GDScript's arithmetic: 32-bit vectors, 64-bit scalars, a scalar rounded to 32
   bits before it scales a vector, division where the engine divides, the engine's `Basis(axis, angle)` for the tie's turn
   (`cosf` and `sinf`, as the engine calls them), and the tie angle in the engine's `deg_to_rad` form (`x * (PI / 180)`,
   checked bit for bit through `ScsPilotKernels.tie_angle`). The tie-break is passed in as `hash(seed)` from GDScript, so the kernel
-  holds no hash of its own. `test_pilot_kernels` compares both on seeded contacts (ties on top of the ship and on a dead
+  holds no hash of its own. `test_pilot_kernels` compares the kernels with the recorded GDScript answers on seeded contacts (ties on top of the ship and on a dead
   centre course, the margin, matched velocities, rocks and mines, lanes grazed at their edge), and
   `test_pilot_kernels_in_play` on the core's rows and through the driver.
 - **Thread-ready (for T18).** Each kernel is a pure function of the frozen rows and one ship's inputs: no statics, no
@@ -2676,7 +2688,7 @@ src/ai/ai_pilot_driver.gd        the native path: a perception without contact l
   The seeded rolls are Godot's own: `hash([seed, "label"])` is the Array hash (murmur3 over `hash_one_uint64` of the int and
   djb2 of the String, `hash_fmix32` at the end), and `RandomNumberGenerator` is PCG32 with the engine's increment, `randf`
   from `ldexp` of a draw whose top and bottom bits are set (the bottom bit breaks the u32-to-f32 rounding ties upward). The
-  avoidance tie-break reaches the kernel as `hash(seed)`, as `AvoidanceMath.tie_direction` takes it. `test_brain_parity`
+  avoidance tie-break reaches the kernel as `hash(seed)`, as the GDScript `AvoidanceMath.tie_direction` took it (until M4-T42). `test_brain_parity`
   checks each piece against the GDScript on seeded inputs; `test_brain_think_parity` drives a native slot and a GDScript
   twin tick by tick on hand-built rows (crowds of four sides, wings under each order, objectives, guard posts, every
   temperament, live retunes, a patrol route with its demos, hits) and asks for the same command, target, dodge, behaviour
@@ -3369,7 +3381,7 @@ native/src/contact_field.rs         + set_friendly_row; statics(..., faction, ..
   is spent, throws sparks and emits `hit_resolved` with the rock's row id as the target; nothing breaks. The impact flash that
   hung on the marker is gone (there is no node to hang it on). `hulls_last_tick` and `static_pairs_visited` are the work counts.
 - **Ships into rocks.** The ram resolver keeps its own kept grid of the solid rows. Each tick every rigid hull asks it for the
-  rocks within half its move plus its bounding radius plus `RamBroadPhase.MARGIN_M`; each candidate goes through the same swept
+  rocks within half its move plus its bounding radius plus `RamResolver.MARGIN_M` (`RamBroadPhase.MARGIN_M` until M4-T42); each candidate goes through the same swept
   test as a prop (any touch rams), with a hull per rock made on first contact and kept (a sphere of the rock's radius,
   invulnerable, `SOLID_MASS_KG`), so the outcome is the old marker's: the ship takes the whole closing speed, the rock nothing.
   Jolt's own bounce off the RID body is unchanged (its contacts never named a rock: the RID body has no object id).
