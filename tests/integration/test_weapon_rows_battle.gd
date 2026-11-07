@@ -44,6 +44,7 @@ func _skipped() -> bool:
 
 # One seeded battle on a fresh main scene: [every hit, capitals' hits, beam shots, launches, missiles shot down, mines set off].
 func _battle() -> Array:
+	SimClock.reset()  # every battle from the same sim time: a later start rounds its gates and expiries otherwise
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.input_source = FakeInputSource.new()
 	main.waves_auto_start = false
