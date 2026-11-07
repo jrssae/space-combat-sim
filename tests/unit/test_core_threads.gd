@@ -196,6 +196,25 @@ func test_the_pool_is_joined_when_the_thread_count_changes() -> void:
 	await get_tree().physics_frame
 
 
+func test_rows_that_moved_before_the_launch_hold_and_count_every_queued_think() -> void:
+	if _skipped():
+		return
+	var fight: Dictionary = await _small_fight()
+	var batch: BrainBatch = BrainBatch.for_tree(get_tree())
+	var queued: int = _queue_thinks(fight["ships"])
+	assert_gt(queued, 0, "some ships queued a native think")
+	var sim: SimCore = fight["sim"]
+	sim.touch((fight["ships"][0] as Combatant).ship)
+	sim.core.resync_touched_now()  # the rows move between the drivers' scan and the launch
+	batch.flush()  # lands the previous tick's job and launches this one (the delayed step runs it at the next join)
+	var held_before: int = AiPilotDriver.thinks_fallback()
+	var native_before: int = AiPilotDriver.thinks_native()
+	batch.flush()  # joins the job the first flush launched
+	assert_eq(AiPilotDriver.thinks_fallback() - held_before, queued, "every queued think was held and counted")
+	assert_eq(AiPilotDriver.thinks_native() - native_before, 0, "none thought on moved rows")
+	await _thinks_resume(fight)
+
+
 func test_a_panic_in_the_pool_keeps_the_brains_and_holds_the_tick() -> void:
 	if _skipped():
 		return

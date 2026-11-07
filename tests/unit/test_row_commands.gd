@@ -78,6 +78,34 @@ func test_one_thread_and_six_give_the_same_commands_from_rows() -> void:
 	assert_eq(int(one["events"]), int(six["events"]), "the same events")
 
 
+func test_a_declined_think_holds_the_command_the_row_has() -> void:
+	if _skipped():
+		return
+	var fight: Dictionary = await _small_fight()
+	var sim: SimCore = fight["sim"]
+	var batch: BrainBatch = BrainBatch.for_tree(get_tree())
+	var queued: int = _queue_thinks(fight["ships"])
+	assert_gt(queued, 0, "some ships queued a native think")
+	sim.touch((fight["ships"][0] as Combatant).ship)
+	sim.core.resync_touched_now()  # the rows move between the drivers' scan and the launch
+	batch.flush()  # lands the previous tick's job and launches this one (the delayed step runs it at the next join)
+	var before: PackedFloat64Array = _row_commands(sim, fight["ships"])
+	var live_before: int = int(sim.core.live_commands())
+	assert_gt(live_before, 0, "ships fly commands from the rows")
+	var held_before: int = AiPilotDriver.thinks_fallback()
+	batch.flush()  # joins the job the first flush launched
+	assert_eq(AiPilotDriver.thinks_fallback() - held_before, queued, "every queued think was held and counted")
+	assert_eq(_row_commands(sim, fight["ships"]), before, "every row keeps its command")
+	assert_eq(int(sim.core.live_commands()), live_before, "and every ship still flies it")
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var native: int = 0
+	for i: int in 4:
+		await get_tree().physics_frame
+		native += AiPilotDriver.thinks_native()
+	assert_gt(native, 0, "native thinks resume")
+
+
 func test_a_command_set_from_gdscript_takes_over_from_the_row() -> void:
 	if _skipped():
 		return
