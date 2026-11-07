@@ -56,24 +56,28 @@ parts/             reusable parametric parts: hull (fuselage, canopy, cockpit in
                    Spec dataclass + Style in, Part out (mesh, named anchors, collision primitives,
                    mass)
 styles/            design languages: Style (material roles, panel, wear and marking parameters); earthforce.py, raider.py
-core/civilian.py   the civilian ships' shared pipeline (M5-T22): Piece, mirroring with twins, sampling with burial,
-                   paint, chunk sources, the GDGS flip, level writer, standalone models (turrets, cargo pods)
+core/civilian.py   the civilian ships' shared pipeline (M5-T22, textured from M5-T27): Piece, mirroring with twins, the
+                   visible surface (sampling with burial) for the body origin and the chunks, write_hull (the textured
+                   hull, its OBJ and chunk cuts), write_model (a turret or a cargo pod), at_texel (a style's texture pack
+                   scaled to the hull's texel)
 parts/saturn.py    the Saturn family (M5-T12): lead ship, frames, drum frame, engine section, banded cylinders and
                    tanks, transport pods with recessed ribbed ends and rails, arms, junctions, turret pads; each
                    piece carries a burial volume and a side (centre line or right, mirrored)
-parts/turret.py    defensive turret model (base, dome, twin barrels) at any size, and write_turret (its files)
-parts/solids.py    burial volumes (box, lathe, prism, capsule, union, difference) that drop hidden samples
-styles/ea_civilian.py the Earth Alliance civilian palette; ea_civilian(overrides) repaints roles per hull
+parts/turret.py    defensive turret model (base, dome, twin barrels) at any size, and write_turret (its textured mesh)
+parts/solids.py    burial volumes (box, lathe, prism, capsule, union, difference) that drop hidden surface samples
+styles/ea_civilian.py the Earth Alliance civilian palette and texture pack; ea_civilian(overrides, engine_glow) repaints
+                   roles per hull
 parts/centauri.py  the Centauri Brezebel (M5-T15): the elliptic lens hull (bow, arms), engine bay, dorsal fitting,
                    fairings, hooked tip fins and the Centauri turret, each with its burial solid
 parts/skylark.py   the Skylark transport (M5-T13): capsule with nose vanes, bridge and belly fins, spine vane rings,
                    collar, side tanks, the faceted body with corner fins, dorsal fin, centre engine and the turret's
                    seat on its ridge, nacelles with pods, ribbed rings, forked claws and their pylons; burial solids and sides
-styles/centauri.py the Centauri palette (violet, gold, lavender trim), painted as written
+styles/centauri.py the Centauri palette (violet, gold, lavender trim) and texture pack (polished paint)
 parts/brakiri.py   the Brakiri Bokmai (M5-T22): bow blade lofted up through measured sections, flank insets, windows,
                    spine, keel web, swept arms and fork struts, posts, engine lofts with cups and domes, fins, spindle;
                    the cargo pod model and the Brakiri turret
-styles/brakiri.py  the Brakiri palette (olive frame, pale pods with their own grid, yellow), BOLT_SRGB, GLOW_SRGB
+styles/brakiri.py  the Brakiri palette (olive frame, pale pods with their own grid, yellow) and texture pack, BOLT_SRGB,
+                   GLOW_SRGB
 assets/__init__.py registry: ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]]
 assets/<id>.py     one module per asset, exposing build(ctx)
 tests/             unittest: core, parts, CLI, and every asset
@@ -150,109 +154,61 @@ Things the Godot side must know:
   own samples' centroid; `offset` is that centroid in the body frame.
 - The centre of mass is trimmed onto the nacelle axis (y = the pods' nozzle y).
 
-## `narn_transport`
+## The civilian ships
 
-The Narn freighter (M5-T14, docs/assets-civilian.md): a 70 m civilian, a flat green crescent with the cockpit in its notch,
-flank towers with the main nozzles, fins and a light grey cargo box, `narn` style. Outputs `narn_transport.ply` (about 77k
-splats at 0.31 m; budget 60k-90k), `_lod1` to `_lod3` (25 %, 6 %, 1.6 %), a `.light` per level, `narn_transport.obj/.mtl`
-(fallback mesh and depth proxy), four chunks cut from LOD1 (`cockpit`, `wing_l`, `wing_r`, `box`), the turret model
-`narn_transport_turret.ply/.light/.obj/.mtl` (about 1.9k splats at 0.11 m), `hardpoints.json` and `manifest.json`.
+Five generators, nine hulls (M5, D59; textured meshes from M5-T27, docs/assets-civilian.md): `saturn_family` (five ids),
+`skylark_transport`, `narn_transport`, `centauri_brezebel` and `brakiri_bokmai`, all through `core/civilian.py`. Each
+writes, per id:
 
-Things the Godot side must know:
+- `<id>.glb` with `<id>_albedo/_normal/_orm/_emissive.png` and their `.import` sidecars: the hull as M4's textured mesh
+  (`core/textured_mesh.py`), on a 2 048 px atlas (`atlas_px`) at the texel the packer reaches (about 5 cm for the
+  Skylark to 19 cm for the Saturn 8 transport), the normal map at the atlas's size, no baked occlusion (`occlusion`). Godot's
+  importer builds the levels of detail. The manifest's `mesh` section and `files.mesh` name it.
+- `<id>.obj/.mtl`: the same triangles (`files.obj`), the depth proxy and what `hardpoints.chunks[].obj` and the fidelity
+  check fall back on.
+- `<id>_chunk_<name>.obj` and `<id>_chunk_<name>.glb` per break-up chunk: the hull's faces of that group, a cut of the
+  textured mesh on its atlas (no maps of their own), placed by `offset`; `joint` is where each breaks away.
+- `<id>_turret.glb/.obj` with its own maps (on a 1 024 px atlas, `model_atlas_px`): the style's turret in the turret frame
+  (the pivot at the origin, +Y the mount's `up`, the barrels along -Z). Manifest `turret`: `{obj, mesh, barrel_m,
+  trunnion, muzzles}`.
+- `hardpoints.json` and `manifest.json` (`centroid_offset`, `dimensions_m`, `chunks`, `surface_spacing_m`, `turret`).
 
-- LOD0 is written group by group (`manifest.counts`), LOD1 chunk by chunk; `chunk_lod` is 1, as the Starfury's.
-- `hardpoints.json` has two pods on the towers (the thrust line 5 m above the crescent, the centre of mass on it), 14 RCS
-  ports, `muzzles` empty, and `turrets[]` `{name, position, up, arc_deg, barrel_m}` (`tower_l`, `tower_r`, on the towers'
-  slotted crowns). The manifest's `turret` entry has the keys of `parts/turret.py`'s: `ply`, `lighting`, `obj`, `splats`,
-  `spacing_m`, `offset` (the PLY's centroid in the turret frame: pivot at the origin, +Y up, barrels along -Z),
-  `barrel_m`, `trunnion` and `muzzles`.
+The body origin is the centroid of the visible surface: every piece sampled at `spacing` (the right pieces once and
+mirrored, the centre pieces symmetrised, the samples buried in another piece dropped), so it sits on the centre plane and
+the hardpoints keep their frame. The paint is the faction's texture pack in its style (`ea_civilian`, `narn`, `centauri`,
+`brakiri`): seams, plate tints, hatches and rivets in the colour and normal maps, wear, streaks and grime, at a fighter's
+scale and scaled to the hull's texel by `at_texel`; windows and engine throats (the Bokmai's domes) glow in the emissive
+map. Options: `spacing`, `atlas_px`, `model_atlas_px`, `occlusion`.
 
-## `centauri_brezebel`
+- `narn_transport`: 70 m, a flat green crescent with the cockpit in its notch, flank towers with the main nozzles, fins
+  and a light grey cargo box. Four chunks (`cockpit`, `wing_l`, `wing_r`, `box`); two pods on the towers (the thrust
+  line 5 m above the crescent, the centre of mass on it), 14 RCS ports, `turrets[]` `tower_l` and `tower_r` on the
+  towers' slotted crowns. The throats glow orange-white.
+- `centauri_brezebel`: 60 m, a round lens bow with a pale rim band and two arms reaching aft to hooked tip fins (gold
+  caps), the engine bay between the arms, a dorsal fitting with five windows. Three chunks (`bow`, `arm_l`, `arm_r`);
+  mains in the arms' tip faces, retros on the bow's rim; 16 RCS ports; one turret (`dorsal`, Q19). The windows glow
+  white, the throats pink-white #FFB8E0 (`GLOW_SRGB`, also a `ShipSpec` tint).
+- `brakiri_bokmai`: 80 m, a tall bow blade, a dorsal spine to a fork, lower arms, nacelles with cups and engine domes
+  between tall fins, a spindle the cargo pods ride on. The hull is written without its pods; five chunks (`bow`, `arm_l`,
+  `arm_r`, `engine_l`, `engine_r`) leave them out. `brakiri_bokmai_pod.glb/.obj` is the pod in its own frame (origin at
+  the mount); manifest `pod`: `{obj, mesh, mass_kg, collision, size_m}`. `hardpoints.json` has `cargo_pods[]`
+  (`pod_fwd`, `pod_mid`, `pod_aft`, each `{name, position, up, forward}` in the body frame) and two turrets, `flank_l`
+  and `flank_r`, in the bow's flank insets facing outboard (Q22); the bolts are bright green #7CFF4F (`BOLT_SRGB`). The
+  domes glow yellow-white #FFF0B0 (`GLOW_SRGB`) and the window strips pale green-white.
+- `saturn_family`: one lead ship (antenna, command disc, frames and drum frame, engine section) plus cargo, so the length
+  follows from the parts: `saturn_4_transport` and `saturn_4_tanker` (one 100 m section, 158.48 m), `saturn_8_transport`
+  and `saturn_8_tanker` (two with a junction, 258.48 m), `saturn_3_freighter` (three pods in a stack and a slim engine,
+  Q20, 96.80 m). Chunk names per variant are in docs/assets-civilian.md. Two pods (the bell's exit split in two for the
+  mains, retros on the disc's front rim), cosmetic RCS, collision boxes and capsules, dorsal `turrets[]` (Q19) each on
+  the pad or hub it stands on. The rim windows glow warm white, the throat blue-white.
+- `skylark_transport`: 60 m, a capsule forward, the spine and collar, banded side tanks, a faceted body with a dorsal
+  fin, the centre engine and two nacelles with forked claws. `ea_civilian` with the Skylark's sand paint and a more
+  patched plating (`STYLE`); four chunks (`capsule`, `body`, `nacelle_l`, `nacelle_r`); two pods on the nacelles' axis,
+  12 RCS ports, one turret (`dorsal`, Q19) on the body's ridge. The throats glow warm white #FFE9C2
+  (`ENGINE_GLOW_SRGB`).
 
-The Centauri Brezebel transport (M5-T15, docs/assets-civilian.md): a 60 m liner, a round lens bow with a pale rim band and
-two arms reaching aft to hooked tip fins (gold caps), the engine bay between the arms, a dorsal fitting with five windows,
-`centauri` style. Outputs `centauri_brezebel.ply` (about 67k splats at 0.26 m; budget 55k-85k), `_lod1` to `_lod3` (25 %,
-6 %, 1.6 %), a `.light` per level, `centauri_brezebel.obj/.mtl` (fallback mesh and depth proxy), three chunks cut from
-LOD1 (`bow`, `arm_l`, `arm_r`), the turret model `centauri_brezebel_turret.ply/.light/.obj/.mtl` (about 2.1k splats at
-0.11 m), `hardpoints.json` and `manifest.json`.
-
-Things the Godot side must know:
-
-- LOD0 is written group by group (`manifest.counts`), LOD1 chunk by chunk; `chunk_lod` is 1.
-- `hardpoints.json` has two pods (mains in the arms' tip faces at z 60, retros on the bow's rim ahead of the fairings), the thrust line and
-  centre of mass on the hull's centre plane, 16 RCS ports, `muzzles` empty, and one turret (`dorsal`, Q19) on the dorsal
-  fitting's ring. The manifest's `turret` entry has the keys of `parts/turret.py`'s.
-- The engine and fin-tip glow is pink-white #FFB8E0 (`styles/centauri.py` `GLOW_SRGB`), a `ShipSpec` tint, not paint.
-
-## `brakiri_bokmai`
-
-The Brakiri Bokmai transport (M5-T22, docs/assets-civilian.md): 80 m, a tall bow blade, a dorsal spine to a fork, lower
-arms from the keel, nacelles with cups and engine domes between tall fins at the stern, a spindle the cargo pods ride on;
-`brakiri` style, through `core/civilian.py`. Outputs the hull without its pods, `brakiri_bokmai.ply` (about 42k splats at
-0.30 m; budget 32k-49k), `_lod1` to `_lod3` (25 %, 6 %, 1.5 %), a `.light` per level, `brakiri_bokmai.obj/.mtl`, five
-chunks cut from LOD1 (`bow`, `arm_l`, `arm_r`, `engine_l`, `engine_r`), the pod model `brakiri_bokmai_pod.ply` and
-`_pod_lod1` to `_pod_lod3` with their `.light` files and one `brakiri_bokmai_pod.obj/.mtl` (about 11.6k splats at LOD0),
-the turret model `brakiri_bokmai_turret.ply/.light/.obj/.mtl` (about 1.6k splats at 0.11 m), `hardpoints.json` and
-`manifest.json`. Options: `spacing`, `overlap`, `thickness`, `turret_spacing`.
-
-Things the Godot side must know:
-
-- `hardpoints.json` has `cargo_pods[]`: `pod_fwd`, `pod_mid`, `pod_aft` on the spindle's axis, each `{name, position, up,
-  forward}` in the body frame. A Bokmai flies with 0-3 pods (T16); each is the pod model at its mount, and comes off whole
-  as debris. The chunks leave the pods out.
-- The pod files keep the pod's frame (origin at the mount); GDGS centres an import on its mean, which sits at each
-  level's `pod.lods[].offset` in that frame. `pod` also carries `mass_kg`, `size_m` and one collision box.
-- Two turrets, `flank_l` and `flank_r`, in the bow's flank insets facing outboard (`up` ±x, Q22), `arc_deg` 200,
-  `barrel_m` 3.0; the bolts are bright green #7CFF4F (`styles/brakiri.py` `BOLT_SRGB`).
-- The thrust line and centre of mass are on the nacelles' axis (y 2.09); mass and inertia are the hull's without pods.
-- The engine glow is yellow-white #FFF0B0 (`GLOW_SRGB`), a `ShipSpec` tint, not paint.
-
-## `saturn_family`
-
-The Earth Alliance Saturn freighters (M5-T12, Q16, docs/assets-civilian.md): one module, five ids. Every variant is the
-same lead ship (antenna, command disc, frames and drum frame, engine section) plus cargo, so its length follows from the
-parts: `saturn_4_transport` and `saturn_4_tanker` carry one 100 m section (four pods round a banded hull cylinder, or three
-banded tanks) and are 158.48 m long, `saturn_8_transport` and `saturn_8_tanker` carry two with a junction (258.48 m), and
-`saturn_3_freighter` three pods in a stack with a slim engine between its lower pods (Q20, 96.80 m). Turrets are dorsal
-only (Q19). Style `ea_civilian`. Per id: LOD0-3 PLYs and lighting records, the
-fallback mesh (also the depth proxy), chunks cut from LOD1, the turret model, `hardpoints.json` and `manifest.json`.
-Option: `spacing` (each variant's default lands its LOD0 on its budget), `overlap`, `thickness`.
-
-Things the Godot side must know:
-
-- The chunks partition LOD1 (manifest `chunk_lod` 1); LOD0 is the chunk groups concatenated in `counts` order. Chunk
-  names per variant are in docs/assets-civilian.md; `joint` is where each breaks away.
-- `hardpoints.json`: two pods (the bell's exit split in two for the mains, retros on the disc's front rim), twelve
-  cosmetic RCS, `muzzles: []`, collision boxes and capsules (each cylinder's capsule reaches past its dome tips so its
-  caps cover the shallow domes), and `turrets[]` `{name, position, up, arc_deg, barrel_m}`; each turret `position` is
-  the top of a pad (or the disc's hub) it stands on. The centre of mass is on the spine axis, the thrust line.
-- Manifest `turret`: `{ply, lighting, obj, splats, spacing_m, offset, barrel_m, trunnion, muzzles}`. The turret frame
-  has its origin at the base's centre on the mount, +Y the mount's `up`, the barrels along -Z; its PLY is centred on its
-  own centroid like a chunk, and `offset` is that centroid in the turret frame.
-- Levels are sampled with systematic rounding (`sample_mesh(systematic=True)`) and centre-line pieces right half first,
-  so a coarse level keeps LOD0's centroid to a fraction of its spacing.
-
-## `skylark_transport`
-
-The Earth Alliance "Delta Gamma 9" type transport (M5-T13, docs/assets-civilian.md): 60 m, a capsule forward (nose vanes,
-glazed bridge plate, two red-orange bands, belly fins), the spine and collar, two banded side tanks with dumbbell tanks
-ahead of them, a faceted body with corner fins and a dorsal fin, the centre engine, and two nacelles against the body's
-flanks with two pods each, ribbed intakes and bells and forked claws on short pylons. Style `ea_civilian` with the
-Skylark's sand paint (`STYLE`: plating #A9A68E, patches #7A7659, recesses #4A4839, bands #B8452B, bells #4A4A46; 2.4 m
-panels). Outputs `skylark_transport.ply` (about 61k splats at 0.26 m; budget 48k-72k), `_lod1` to `_lod3` (25 %, 6 %,
-1.6 %), a `.light` per level, `skylark_transport.obj/.mtl` (fallback mesh and depth proxy), four chunks cut from LOD1
-(`capsule`, `body`, `nacelle_l`, `nacelle_r`), the turret model `skylark_transport_turret.ply/.light/.obj/.mtl` (the EA
-turret at two thirds, about 2.4k splats at 0.08 m), `hardpoints.json` and `manifest.json`. Options: `spacing`, `overlap`,
-`thickness`, `turret_spacing`.
-
-Things the Godot side must know:
-
-- LOD0 is written group by group (`manifest.counts`), LOD1 chunk by chunk; `chunk_lod` is 1.
-- `hardpoints.json` has two pods on the nacelles' axis (x ±13.03, y -0.26: mains at the bells' exits, retros at the
-  intakes), the centre of mass on that thrust line, 12 RCS ports, `muzzles` empty, and one turret (`dorsal`, Q19) seated
-  on the body's ridge at (0, 2.766, 37.5) in the authored frame. The manifest's `turret` entry has the keys of
-  `parts/turret.py`'s.
-- The engine glow is warm white #FFE9C2 (`ENGINE_GLOW_SRGB`), a `ShipSpec` tint, not paint.
+Fidelity (Q18, AC20) is scored on the textured mesh by `tools/refview/compare.py` against the STLs in `references/`; the
+commands and scores are in docs/assets-civilian.md.
 
 ## `capital_hulls` and `b5_station`
 

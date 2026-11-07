@@ -1,8 +1,11 @@
-"""``saturn_family`` (AC12, Q16, D61): the five Saturn hulls against ``docs/assets-civilian.md`` and the design references.
+"""``saturn_family`` (AC12, Q16, D61; textured meshes from M5-T27): the five Saturn hulls against ``docs/assets-civilian.md``
+and the design references.
 
-Per variant: files, budgets, frames, mirror symmetry, the chunk partition of LOD1, collision coverage, the hardpoints contract
-(with ``turrets[]``), the turret model, determinism. Across variants: the Q16 length rule and the shared lead ship. The
-expected numbers below are typed in from the design documents, not read from the generator.
+Per variant: files, the mesh contract and its budget, frames, mirror symmetry, the chunk cuts, collision coverage, the
+hardpoints contract (with ``turrets[]``), the turret model, the paint. Across variants: the Q16 length rule and the shared
+lead ship; determinism. The expected numbers below are typed in from the design documents, not read from the generator.
+The visible surface (the samples that place the body origin) stands in for the hull's skin where a test asks what the eye
+sees.
 """
 
 from __future__ import annotations
@@ -16,19 +19,23 @@ from typing import Any, ClassVar
 
 import numpy as np
 
-# Off until M5-T27 moves the civilian generators onto the textured-mesh pipeline: they still write splats, and main dropped
-# the splat writers (M4-T31). The checks below are the spec that task converts.
-raise unittest.SkipTest("M5-T27: the civilian generators wait for the textured-mesh pipeline")
-
 from tools.procgen.assets import ASSETS
 from tools.procgen.assets import saturn_family as saturn
 from tools.procgen.parts import saturn as sp
-from tools.procgen.core import frames, lighting
+from tools.procgen.core import civilian as cv
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.obj import read_obj
-from tools.procgen.tests.mesh_checks import assert_painted_mesh
-from tools.procgen.core.ply import read_ply
+from tools.procgen.core.textured_mesh import TexturedPart, phase_steps
+from tools.procgen.tests.mesh_checks import (
+    TEST_OPTIONS,
+    assert_chunks_cut_the_hull,
+    assert_hull_mesh,
+    assert_mirror_symmetric,
+    assert_model_mesh,
+    glowing_points,
+    painted_faces,
+)
 
 PILOT_TERMS = {
     "sway_left", "sway_right", "heave_up", "heave_down", "pitch_up", "pitch_down",
@@ -50,7 +57,6 @@ DESIGN: dict[str, dict[str, Any]] = {
     "saturn_4_transport": {
         "length": 158.48,
         "engine": 1.0,
-        "budget": (105_000, 155_000),
         "turrets": {**LEAD_TURRETS, "dorsal_aft": ((0.0, 9.3, 124.4), UP)},
         "starboard": (53.4, -7.29, 74.3),
         "lamp": ((0.0, 16.6, 99.4), 48.0),
@@ -59,7 +65,6 @@ DESIGN: dict[str, dict[str, Any]] = {
     "saturn_4_tanker": {
         "length": 158.48,
         "engine": 1.0,
-        "budget": (55_000, 85_000),
         "turrets": {**LEAD_TURRETS, "dorsal_aft": ((0.0, 9.3, 124.4), UP)},
         "starboard": (25.6, -13.53, 99.4),
         "lamp": ((0.0, 16.6, 99.4), 48.0),
@@ -68,7 +73,6 @@ DESIGN: dict[str, dict[str, Any]] = {
     "saturn_8_transport": {
         "length": 258.48,
         "engine": 1.0,
-        "budget": (170_000, 250_000),
         "turrets": {**LEAD_TURRETS, "dorsal_mid": ((0.0, 7.2, 149.4), UP)},
         "starboard": (53.4, -7.29, 74.3),
         "lamp": ((0.0, 21.5, 149.4), 78.0),
@@ -77,7 +81,6 @@ DESIGN: dict[str, dict[str, Any]] = {
     "saturn_8_tanker": {
         "length": 258.48,
         "engine": 1.0,
-        "budget": (95_000, 145_000),
         "turrets": {**LEAD_TURRETS, "dorsal_mid": ((0.0, 9.0, 149.4), UP)},
         "starboard": (25.6, -13.53, 99.4),
         "lamp": ((0.0, 21.5, 149.4), 78.0),
@@ -86,15 +89,15 @@ DESIGN: dict[str, dict[str, Any]] = {
     "saturn_3_freighter": {
         "length": STACK_REAR_Z + 1.5,  # Q20: the bell's exit 1.5 m behind the pods
         "engine": SLIM,
-        "budget": (60_000, 90_000),
         "turrets": dict(LEAD_TURRETS),
         "starboard": (46.8, -5.46, 79.7),
         "lamp": ((0.0, 27.8, 79.7), 36.0),
         "chunks": ("bow", "pod_top", "pod_l", "pod_r", "engine"),
     },
 }
-LOD_SHARES = {1: (0.20, 0.30), 2: (0.04, 0.09), 3: (0.01, 0.025)}
-TURRET_BUDGET = (1_500, 3_500)
+TRIANGLE_BUDGET = 70_000  # every hull (41 518 to 54 998 as built); the importer adds the levels of detail
+TURRET_TRIANGLE_BUDGET = 5_000
+TEXEL_MAX_M = 0.2  # the biggest hull (the Saturn 8 transport, 19 cm as built) at the default 2 048 px atlas
 
 _TMP = tempfile.TemporaryDirectory()
 _BUILDS: dict[tuple[str, str], Any] = {}
@@ -105,16 +108,12 @@ def build_once(asset_id: str, tag: str = "default", **options: Any) -> Path:
     key = (asset_id, tag)
     if key not in _BUILDS:
         out = Path(_TMP.name) / tag / asset_id
-        _BUILDS[key] = ASSETS[asset_id](BuildContext(out, seed=42, options=options))
+        _BUILDS[key] = ASSETS[asset_id](BuildContext(out, seed=42, options={**TEST_OPTIONS, **options}))
     return _BUILDS[key].out_dir
 
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def godot_xyz(path: Path) -> np.ndarray:
-    return frames.flip_xy(read_ply(path).to_splats().xyz)
 
 
 def sorted_rows(a: np.ndarray) -> np.ndarray:
@@ -144,10 +143,11 @@ class SaturnVariantChecks:
         cls.out = _BUILDS[(cls.ASSET_ID, "default")]
         cls.manifest = manifest_io.read_manifest(cls.dir)
         cls.hp = json.loads((cls.dir / saturn.HARDPOINTS_NAME).read_text(encoding="utf-8"))
-        cls.xyz = godot_xyz(cls.dir / cls.manifest["lods"][0]["file"])
-        cls.splats = read_ply(cls.dir / cls.manifest["lods"][0]["file"]).to_splats()
         cls.offset = np.array(cls.manifest["centroid_offset"])
-        cls.spacing = float(cls.manifest["lods"][0]["spacing_m"])
+        cls.spacing = float(cls.manifest["surface_spacing_m"])
+        variant = saturn.VARIANTS[cls.ASSET_ID]
+        sampled = saturn.sample_hull(saturn.assemble(variant, saturn.EA_CIVILIAN), BuildContext(cls.dir, seed=42), cls.spacing)
+        cls.xyz = np.concatenate([s.samples.positions for s in sampled]) - cls.offset  # the visible surface, body frame
 
     def authored(self, v: list[float]) -> np.ndarray:
         """A hardpoint back in the design references' frame (nose at z = 0, y from the spine axis)."""
@@ -162,97 +162,40 @@ class SaturnVariantChecks:
     def test_all_files_are_written_and_listed(self) -> None:
         aid = self.ASSET_ID
         expected = {f"{aid}.obj", f"{aid}.mtl", saturn.HARDPOINTS_NAME, "manifest.json"}
-        expected |= {lod["file"] for lod in self.manifest["lods"]} | {lod["lighting"] for lod in self.manifest["lods"]}
+        for stem in (aid, f"{aid}_turret"):
+            expected |= {f"{stem}.glb"} | {f"{stem}_{k}.png{x}" for k in ("albedo", "normal", "orm", "emissive") for x in ("", ".import")}
         for entry in self.hp["chunks"]:
-            expected |= {entry["ply"], entry["lighting"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
+            expected |= {entry["mesh"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
         turret = self.manifest["turret"]
-        expected |= {turret["ply"], turret["lighting"], turret["obj"], turret["obj"].replace(".obj", ".mtl")}
-        expected |= {f"{aid}_mesh.glb", f"{aid}_turret_mesh.glb"}
-        self.assertEqual(turret["ply"], f"{aid}_turret.ply")
+        expected |= {turret["obj"], turret["obj"].replace(".obj", ".mtl")}
+        self.assertEqual(turret["obj"], f"{aid}_turret.obj")
         self.assertEqual({p.name for p in self.dir.iterdir()}, expected)
         self.assertEqual({p.name for p in self.out.files}, expected)
 
-    def test_four_levels_with_their_records_and_the_budget(self) -> None:
-        lods = self.manifest["lods"]
-        aid = self.ASSET_ID
-        self.assertEqual([lod["level"] for lod in lods], [0, 1, 2, 3])
-        self.assertEqual([lod["file"] for lod in lods], [f"{aid}.ply", f"{aid}_lod1.ply", f"{aid}_lod2.ply", f"{aid}_lod3.ply"])
-        self.assertEqual([lod["lighting"] for lod in lods], [lighting.lod_file_name(aid, k) for k in range(4)])
-        lo, hi = self.design["budget"]
-        self.assertTrue(lo <= lods[0]["splats"] <= hi, f"LOD0 {lods[0]['splats']} outside {self.design['budget']}")
-        self.assertEqual(lods[0]["splats"], len(self.xyz))
-        for level, (a, b) in LOD_SHARES.items():
-            share = lods[level]["splats"] / lods[0]["splats"]
-            self.assertTrue(a <= share <= b, (level, share))
-            self.assertAlmostEqual(lods[level]["spacing_m"], (2**level) * self.spacing, places=6)
+    def test_the_hull_is_its_textured_mesh_inside_the_budget(self) -> None:
+        assert_hull_mesh(self, self.dir, self.manifest, f"{self.ASSET_ID}.obj")
+        self.assertLessEqual(self.manifest["mesh"]["triangles"], TRIANGLE_BUDGET)
         self.assertEqual(self.out.warnings, ())
-
-    def test_manifest_counts_chunks_and_files(self) -> None:
-        m = self.manifest
-        self.assertEqual(list(m["counts"]), list(self.design["chunks"]))
-        self.assertEqual(sum(m["counts"].values()), m["lods"][0]["splats"], "LOD0 is the chunk groups concatenated")
-        self.assertEqual(m["chunks"], list(self.design["chunks"]))
-        self.assertEqual(m["chunk_lod"], 1)
-        self.assertEqual(m["files"], {"fallback_mesh": f"{self.ASSET_ID}.obj", "paint_mesh": f"{self.ASSET_ID}_mesh.glb", "hardpoints": saturn.HARDPOINTS_NAME})
-        self.assertEqual(m["dimensions_m"]["length"], self.hp["length_m"])
-
-    def test_every_ply_has_matching_lighting_records(self) -> None:
-        pairs = [(lod["file"], lod["lighting"]) for lod in self.manifest["lods"]]
-        pairs += [(c["ply"], c["lighting"]) for c in self.hp["chunks"]]
-        pairs.append((self.manifest["turret"]["ply"], self.manifest["turret"]["lighting"]))
-        for ply_name, light_name in pairs:
-            splats = read_ply(self.dir / ply_name).to_splats()
-            records = lighting.read_lighting(self.dir / light_name)
-            self.assertEqual(len(records), len(splats), light_name)
-            cos = np.einsum("ij,ij->i", lighting.decode_normals(records), splats.normals)
-            self.assertGreater(float(cos.min()), np.cos(np.radians(1.5)), light_name)
+        for key in ("lods", "counts", "sampling", "paint_mesh", "chunk_lod"):
+            self.assertNotIn(key, self.manifest)
+        self.assertEqual(self.manifest["chunks"], list(self.design["chunks"]))
+        self.assertEqual(self.manifest["dimensions_m"]["length"], self.hp["length_m"])
 
     # --- frames, symmetry ---------------------------------------------------------------------------
-    def test_lod0_is_centred_and_its_box_is_the_manifest_box(self) -> None:
+    def test_the_body_origin_is_the_visible_surfaces_centroid(self) -> None:
         np.testing.assert_allclose(self.xyz.mean(axis=0), [0.0, 0.0, 0.0], atol=2e-3)
-        np.testing.assert_allclose(self.xyz.min(axis=0), self.manifest["aabb_min"], atol=2e-4)
-        np.testing.assert_allclose(self.xyz.max(axis=0), self.manifest["aabb_max"], atol=2e-4)
+        v = read_obj(self.dir / f"{self.ASSET_ID}.obj").vertices
+        np.testing.assert_allclose(v.min(axis=0), self.manifest["aabb_min"], atol=2e-4)
+        np.testing.assert_allclose(v.max(axis=0), self.manifest["aabb_max"], atol=2e-4)
 
-    def test_lower_levels_are_centred_inside_the_lod0_box(self) -> None:
-        lo, hi = np.array(self.manifest["aabb_min"]), np.array(self.manifest["aabb_max"])
-        for lod in self.manifest["lods"][1:]:
-            xyz = godot_xyz(self.dir / lod["file"])
-            np.testing.assert_allclose(xyz.mean(axis=0), [0.0, 0.0, 0.0], atol=2e-3)
-            # A coarse level only loses the extremes it misses; a frame slip would push it out of LOD0's box. Each piece
-            # rounds to whole samples, so a level's centroid may wander a fraction of its spacing, never more.
-            slip = max(0.3, 0.25 * lod["spacing_m"])
-            self.assertTrue(np.all(xyz.min(axis=0) >= lo - slip) and np.all(xyz.max(axis=0) <= hi + slip), lod["level"])
-            self.assertTrue(np.all(xyz.min(axis=0) <= lo + 2.0 * lod["spacing_m"]), lod["level"])
-            self.assertTrue(np.all(xyz.max(axis=0) >= hi - 2.0 * lod["spacing_m"]), lod["level"])
-
-    def test_every_level_is_mirror_symmetric_in_x(self) -> None:
-        for lod in self.manifest["lods"]:
-            xyz = godot_xyz(self.dir / lod["file"])
-            np.testing.assert_allclose(sorted_rows(xyz), sorted_rows(xyz * np.array([-1.0, 1.0, 1.0])), atol=SYM_TOL)
-
-    def test_splats_are_flat_opaque_discs(self) -> None:
-        s = self.splats
-        self.assertTrue(np.all(s.scale[:, 2] < s.scale[:, 0]))
-        self.assertTrue(np.all(np.isfinite(s.rgb)))
-        self.assertGreater(float(np.median(s.alpha)), 0.9)
+    def test_the_visible_surface_is_mirror_symmetric_in_x(self) -> None:
+        assert_mirror_symmetric(self, self.xyz, "visible surface", decimals=4)
 
     # --- chunks ----------------------------------------------------------------------------------------
-    def test_chunks_partition_lod1_exactly(self) -> None:
-        self.assertEqual([c["name"] for c in self.hp["chunks"]], list(self.design["chunks"]))
-        lod1 = read_ply(self.dir / self.manifest["lods"][1]["file"]).to_splats()
-        lod1_xyz = frames.flip_xy(lod1.xyz)
-        start = 0
+    def test_chunks_cut_the_hull(self) -> None:
+        assert_chunks_cut_the_hull(self, self.dir, self.manifest, self.hp, self.design["chunks"])
         for entry in self.hp["chunks"]:
-            chunk = read_ply(self.dir / entry["ply"]).to_splats()
-            n = entry["splats"]
-            self.assertEqual(len(chunk), n, entry["name"])
-            np.testing.assert_allclose(chunk.xyz.mean(axis=0), [0.0, 0.0, 0.0], atol=1e-3)
-            body = frames.flip_xy(chunk.xyz) + np.array(entry["offset"])
-            np.testing.assert_allclose(body, lod1_xyz[start : start + n], atol=1e-4)
-            np.testing.assert_allclose(chunk.rgb, lod1.rgb[start : start + n], atol=1e-4)
             self.assertEqual(len(entry["joint"]), 3)
-            start += n
-        self.assertEqual(start, len(lod1), "the chunks hold exactly LOD1's splats")
 
     def test_paired_chunks_mirror_each_other(self) -> None:
         offsets = {c["name"]: np.array(c["offset"]) for c in self.hp["chunks"]}
@@ -263,14 +206,6 @@ class SaturnVariantChecks:
                 self.assertGreater(offset[0], 5.0, name)
             elif not name.endswith("l"):
                 self.assertAlmostEqual(float(offset[0]), 0.0, places=3)
-
-    def test_chunk_objs_are_valid_and_recentred(self) -> None:
-        for entry in self.hp["chunks"]:
-            obj = read_obj(self.dir / entry["obj"])
-            self.assertGreater(len(obj.vertices), 0, entry["name"])
-            chunk = godot_xyz(self.dir / entry["ply"])
-            lo, hi = obj.vertices.min(axis=0), obj.vertices.max(axis=0)
-            self.assertTrue(np.all(chunk.min(axis=0) >= lo - 0.3) and np.all(chunk.max(axis=0) <= hi + 0.3), entry["name"])
 
     # --- fallback mesh -----------------------------------------------------------------------------------
     def test_the_fallback_mesh_and_chunk_meshes_hold_every_piece(self) -> None:
@@ -283,7 +218,6 @@ class SaturnVariantChecks:
             self.assertEqual(len(read_obj(self.dir / entry["obj"]).faces), expected, entry["name"])
 
     def test_the_drawn_mesh_is_mirror_symmetric_in_x(self) -> None:
-        # The game draws the mesh, not the symmetrised splats: its vertices must mirror too.
         v = read_obj(self.dir / f"{self.ASSET_ID}.obj").vertices
         np.testing.assert_allclose(sorted_rows(np.round(v, 4)), sorted_rows(np.round(v * np.array([-1.0, 1.0, 1.0]), 4)), atol=2e-4)
 
@@ -308,16 +242,30 @@ class SaturnVariantChecks:
         for name in ("frame_aft_centre", "frame_aft_upper_r"):
             self.assertGreater(float(pieces[name].part.mesh.bounds()[1][2]), start, f"{name} reaches the brackets at z {start:.2f}")
 
-    def test_the_painted_mesh_is_the_fallback_mesh(self) -> None:
-        # The ship as the game draws it (ships are meshes, the 2026-11-04 directive): the fallback mesh's triangles and paint.
-        assert_painted_mesh(self, self.dir, self.manifest["paint_mesh"], f"{self.ASSET_ID}.obj", "hull")
-        turret = self.manifest["turret"]
-        assert_painted_mesh(self, self.dir, turret["paint_mesh"], turret["obj"], "turret")
-
-    def test_fallback_mesh_matches_the_splat_bounds(self) -> None:
+    def test_fallback_mesh_holds_the_visible_surface(self) -> None:
         v = read_obj(self.dir / f"{self.ASSET_ID}.obj").vertices
         np.testing.assert_allclose(v.min(axis=0), self.xyz.min(axis=0), atol=2.0 * self.spacing)
         np.testing.assert_allclose(v.max(axis=0), self.xyz.max(axis=0), atol=2.0 * self.spacing)
+
+    def test_the_paint_reads_grey_plating_with_red_and_white_bands(self) -> None:
+        # Area-weighted over the paint (the coarse test atlas's wear is broad): the disc is cool grey, the cylinders banded.
+        at, rgb, area, metal = painted_faces(self.dir, self.manifest["mesh"])
+        authored = at + self.offset
+        keep = metal < 0.3
+        disc = keep & (authored[:, 2] > 6.0) & (authored[:, 2] < 30.0) & (np.abs(authored[:, 0]) > 7.5) & (authored[:, 1] < -0.5)
+        grey = np.average(rgb[disc], axis=0, weights=area[disc])
+        self.assertLess(float(np.ptp(grey)), 0.1, "the disc's underside is a neutral grey")
+        self.assertGreater(float(grey.mean()), 0.4)
+        red = keep & (rgb[:, 0] > 1.6 * rgb[:, 1]) & (rgb[:, 0] > 0.35)
+        self.assertGreater(int(red.sum()), 10, "the red bands")
+        self.assertLess(float(np.abs(authored[red, 0]).mean()), 30.0, "on the cylinders and the disc's ring, not the pods")
+
+    def test_the_rim_windows_and_the_engine_glow(self) -> None:
+        glowing = glowing_points(self.dir, self.manifest["mesh"]) + self.offset
+        rim = glowing[np.abs(glowing[:, 2] - 19.1) < 15.0]
+        self.assertGreater(float(np.hypot(rim[:, 0], rim[:, 2] - 19.1).max()), 12.0, "the windows round the disc's rim")
+        self.assertTrue((glowing[:, 2] > self.design["length"] - 25.0 * self.design["engine"]).any(), "the engine's throat")
+        self.assertEqual(saturn.EA_CIVILIAN.material("nozzle_throat").emissive_strength, 3.0)
 
     # --- hardpoints ----------------------------------------------------------------------------------------
     def test_hardpoints_schema(self) -> None:
@@ -352,7 +300,7 @@ class SaturnVariantChecks:
         self.assertAlmostEqual(float(com[1]), 0.0, delta=POS_TOL, msg="main thrust makes no pitch torque")
         self.assertTrue(0.0 < com[2] < self.design["length"])
 
-    def test_the_main_exits_are_the_rearmost_splats(self) -> None:
+    def test_the_main_exits_are_the_rearmost_points(self) -> None:
         main = np.array(self.hp["pods"][0]["main"]["position"])
         self.assertAlmostEqual(float(self.xyz[:, 2].max()), float(main[2]), delta=0.05)
 
@@ -418,19 +366,19 @@ class SaturnVariantChecks:
             along = d @ up
             across = np.linalg.norm(d - np.outer(along, up), axis=1)
             seat = (across < 1.0) & (np.abs(along) < 2.0 * self.spacing)
-            self.assertTrue(seat.any(), f"{t['name']}: hull splats under the mount")
+            self.assertTrue(seat.any(), f"{t['name']}: hull surface under the mount")
             clear = (across < 1.5) & (along > 0.3)
             self.assertFalse(clear.any(), f"{t['name']}: nothing of the hull above the mount")
 
     # --- collision --------------------------------------------------------------------------------------------
-    def test_collision_covers_the_splats_and_stays_close(self) -> None:
+    def test_collision_covers_the_visible_surface_and_stays_close(self) -> None:
         shapes = self.hp["collision"]
         names = [c["name"] for c in shapes]
         self.assertEqual(len(names), len(set(names)), "unique names")
         inside = np.zeros(len(self.xyz), dtype=bool)
         for c in shapes:
             inside |= inside_primitive(self.xyz, c, inflate=self.spacing)
-        self.assertGreaterEqual(float(inside.mean()), 0.97, "AC12: at least 97 % of the splat centres")
+        self.assertGreaterEqual(float(inside.mean()), 0.97, "AC12: at least 97 % of the visible surface")
         lo, hi = self.xyz.min(axis=0), self.xyz.max(axis=0)
         for c in shapes:
             basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T
@@ -448,22 +396,21 @@ class SaturnVariantChecks:
             self.assertTrue(np.all(extent.min(axis=0) >= lo - 1.0) and np.all(extent.max(axis=0) <= hi + 1.0), c["name"])
 
     # --- turret model ------------------------------------------------------------------------------------------
-    def test_turret_model_is_written_like_a_chunk(self) -> None:
+    def test_turret_model_is_its_own_textured_mesh(self) -> None:
         t = self.manifest["turret"]
-        splats = read_ply(self.dir / t["ply"]).to_splats()
-        self.assertEqual(len(splats), t["splats"])
-        self.assertTrue(TURRET_BUDGET[0] <= t["splats"] <= TURRET_BUDGET[1], t["splats"])
-        np.testing.assert_allclose(splats.xyz.mean(axis=0), [0.0, 0.0, 0.0], atol=1e-3)
-        model = frames.flip_xy(splats.xyz) + np.array(t["offset"])  # back in the turret frame: base on y = 0
+        self.assertEqual(set(t), {"obj", "mesh", "barrel_m", "trunnion", "muzzles"})
+        assert_model_mesh(self, self.dir, t["mesh"], t["obj"], "turret")
+        self.assertLessEqual(t["mesh"]["triangles"], TURRET_TRIANGLE_BUDGET)
+        model = read_obj(self.dir / t["obj"]).vertices  # the turret frame: base on y = 0, the pivot at the origin
         self.assertAlmostEqual(float(model[:, 1].min()), 0.0, delta=0.05)
         self.assertAlmostEqual(float(np.ptp(model[:, 0])), 3.6, delta=0.1, msg="a base 3.6 m across")
         self.assertAlmostEqual(float(model[:, 2].min()), -4.5, delta=0.05, msg="barrels reach 4.5 m forward")
+        np.testing.assert_allclose(model.min(axis=0), [-1.8, 0.0, -4.5], atol=0.05)
+        assert_mirror_symmetric(self, model, "turret")
         self.assertEqual(t["barrel_m"], 4.5)
         muzzles = np.array(t["muzzles"])
         np.testing.assert_allclose(muzzles[:, 0], [-0.4, 0.4], atol=1e-6)
         np.testing.assert_allclose(muzzles[:, 2], [-4.5, -4.5], atol=1e-6)
-        obj = read_obj(self.dir / t["obj"])
-        np.testing.assert_allclose(obj.vertices.min(axis=0) + t["offset"], [-1.8, 0.0, -4.5], atol=0.05)
 
 
 class SaturnFourTransportTests(SaturnVariantChecks, unittest.TestCase):
@@ -535,6 +482,12 @@ class SaturnFamilyTests(unittest.TestCase):
         for asset_id in DESIGN:
             np.testing.assert_allclose(lead_points(asset_id), reference, atol=POS_TOL, err_msg=asset_id)
 
+    def test_the_default_atlas_lands_under_twenty_centimetres_a_texel(self) -> None:
+        variant = saturn.VARIANTS["saturn_8_transport"]
+        parts = [TexturedPart(p.part.mesh, phase_steps(p.name, False), (), p.name)
+                 for p in saturn.with_twins(saturn.assemble(variant, saturn.EA_CIVILIAN))]  # fmt: skip
+        self.assertLess(cv.texel_of(parts, cv.HULL_ATLAS_PX), TEXEL_MAX_M)
+
     def test_every_variant_has_the_same_engine_section(self) -> None:
         # The Saturn 3's is the same section scaled down (Q20).
         for asset_id, design in DESIGN.items():
@@ -547,7 +500,7 @@ class SaturnFamilyTests(unittest.TestCase):
 
 
 class SaturnDeterminismTests(unittest.TestCase):
-    """Same seed, same bytes; a coarse spacing keeps it quick. Every variant shares the code path it checks."""
+    """Same seed, same bytes. Every variant shares the code path it checks."""
 
     def test_same_seed_gives_byte_identical_output(self) -> None:
         for asset_id in DESIGN:
@@ -558,11 +511,11 @@ class SaturnDeterminismTests(unittest.TestCase):
             for name in names:
                 self.assertEqual(sha256(a / name), sha256(b / name), f"{asset_id}/{name}")
 
-    def test_a_different_seed_moves_the_splats_not_the_design(self) -> None:
+    def test_a_different_seed_changes_the_wear_not_the_design(self) -> None:
         a = build_once("saturn_3_freighter", "coarse_a", spacing=2.0)
         with tempfile.TemporaryDirectory() as tmp:
-            ASSETS["saturn_3_freighter"](BuildContext(Path(tmp), seed=7, options={"spacing": 2.0}))
-            self.assertNotEqual(sha256(Path(tmp) / "saturn_3_freighter.ply"), sha256(a / "saturn_3_freighter.ply"))
+            ASSETS["saturn_3_freighter"](BuildContext(Path(tmp), seed=7, options={**TEST_OPTIONS, "spacing": 2.0}))
+            self.assertNotEqual(sha256(Path(tmp) / "saturn_3_freighter_albedo.png"), sha256(a / "saturn_3_freighter_albedo.png"))
             hp_a = json.loads((a / saturn.HARDPOINTS_NAME).read_text(encoding="utf-8"))
             hp_b = json.loads((Path(tmp) / saturn.HARDPOINTS_NAME).read_text(encoding="utf-8"))
             self.assertEqual([t["name"] for t in hp_a["turrets"]], [t["name"] for t in hp_b["turrets"]])
@@ -570,7 +523,7 @@ class SaturnDeterminismTests(unittest.TestCase):
 
     def test_invalid_options_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            for bad in ({"spacing": 0.0}, {"overlap": -1.0}, {"thickness": 0}):
+            for bad in ({"spacing": 0.0}, {"spacing": -1.0}):
                 with self.assertRaises(ValueError):
                     ASSETS["saturn_4_tanker"](BuildContext(Path(tmp), seed=1, options=bad))
 
@@ -596,8 +549,14 @@ class EaCivilianStyleTests(unittest.TestCase):
             np.testing.assert_allclose(srgb, expected, atol=1.0, err_msg=role)
         self.assertAlmostEqual(EA_CIVILIAN.panel_size_m, 3.6)
         self.assertAlmostEqual(EA_CIVILIAN.panel_line_width_m, 0.4)
-        # No painted grid (the maintainer, 2026-11-04).
-        self.assertEqual((EA_CIVILIAN.panel_line_darkness, EA_CIVILIAN.panel_tint_jitter), (1.0, 0.0))
+        # The texture pack (M5-T27, Achilles.jpg, Red Star 9.jpg, Epsilon.JPG): fine dark seams, a light patchwork, edges worn
+        # to primer, not bare metal; the rim windows and the throats glow.
+        self.assertLess(EA_CIVILIAN.panel_line_darkness, 0.8)
+        self.assertGreater(EA_CIVILIAN.panel_tint_jitter, 0.0)
+        self.assertEqual(EA_CIVILIAN.extra["bare_metal"], 0.0)
+        self.assertGreater(EA_CIVILIAN.material("window").emissive_strength, 0.0)
+        glow = linear_to_srgb(np.array(EA_CIVILIAN.material("nozzle_throat").emissive)) * 255.0
+        np.testing.assert_allclose(glow, [0xDC, 0xE8, 0xFF], atol=1.0, err_msg="blue-white, Valjean.JPG")
 
     def test_a_hull_can_repaint_roles_without_clashing_names(self) -> None:
         from tools.procgen.styles.ea_civilian import EA_CIVILIAN, ea_civilian

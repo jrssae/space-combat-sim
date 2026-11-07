@@ -7,8 +7,8 @@ design leaves open (canopy, barrels, interior) are our choice. The pods use thei
 green is a gameplay colour for T21 and T16, not paint.
 
 The texture pack (M5-T27; docs/design-references.md, "Brakiri Bokmai transport", texture): no capture of a Bokmai
-exists, so the plating follows the Brakiri cruiser's (Brakiri ship.jpg and the starshipmodeler.com miniature shots):
-satin paint over plates of moderate size, darker seams, a mild plate-to-plate tint, edges worn to primer, light grime.
+exists, so the plating follows the Brakiri cruiser's (Brakiri ship.jpg): a mottled satin paint over plates of moderate
+size, darker seams, a mild plate-to-plate tint, edges worn to primer, light grime.
 The window strips glow pale green-white and the cream engine domes glow yellow-white.
 """
 

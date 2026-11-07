@@ -8,21 +8,21 @@ Eight civilian hulls from four generators (D59, Q16): `saturn_family` builds `sa
 against it and replace each section with the as-built numbers, the way `docs/assets-raider.md` reads.
 
 Positions here are in the authored frame of the design references: x to starboard, y up, z aft from the nose tip,
-metres, Godot's axes. As with every asset, the generator then centres splats, meshes and hardpoints on the splat
-centroid and records the shift as `manifest.centroid_offset`. For the Saturns y is measured from the spine axis; for
+metres, Godot's axes. As with every asset, the generator then centres its meshes and hardpoints on the centroid of the
+visible surface (every piece sampled, the parts buried in another left out) and records the shift as
+`manifest.centroid_offset`. For the Saturns y is measured from the spine axis; for
 the others from the hull's box centre or centre plane, as the design references say.
 
 ## Ships are meshes (the maintainer, 2026-11-04)
 
 Gaussian splats are dropped from the project (M4 Q29 to Q31; the M5 directive in the milestone file, `3fb15cc`). Every
-civilian ship is drawn as a mesh: each generator writes `<id>_mesh.glb` (and `<id>_turret_mesh.glb`, and for the Bokmai
-`brakiri_bokmai_pod_mesh.glb`) through M4's exporter, `core/glb.py` and `core/paint_mesh.py`, copied unchanged from `m4`
-(M4-T27, `394aba6`) so the rebase meets identical files. The mesh is the fallback mesh's parts, triangle for triangle, in
-the same frame and with the same panel phases as the splats (a test per ship), so the 90 % check (Q18), which scores the
-fallback mesh, scores what the game draws. Until M4-T30a lands, the paint is M4-T27's (panel codes in the UVs, painted by the
-shader); at the rebase the call becomes `write_textured_mesh` and the paint becomes texture maps (colour, normal,
-roughness and metal, emissive), with the parts, frame and `hardpoints.json` unchanged. No new splat work: the PLY and
-lighting files below stay only until M5 rebases onto `main`, where M4-T31's removal takes them.
+civilian ship is drawn as a textured mesh. As built in M5-T27: each generator writes the hull, the turret and the Bokmai's
+pod through `core/civilian.py`'s `write_hull` and `write_model`, which call M4's `core/textured_mesh.py`
+(`write_textured_mesh`): a UV atlas and four maps (colour, normal, occlusion with roughness and metal, emissive), the
+`.glb` and the manifest's `mesh` section, the break-up chunks as cuts of the hull's mesh on its atlas. Godot's importer
+builds the levels of detail. The parts, the burial solids, `hardpoints.json` and the collision primitives are unchanged;
+the splat levels, lighting records and painted meshes are gone, and so is `core/paint_mesh.py`. The fidelity check
+(Q18) scores the `.glb`, what the game draws.
 
 **Textures (the maintainer, 2026-11-04).** Every model's textures come from images from the show of that ship, or of
 similar ships where it has none (the Bokmai's from the Brakiri cruiser), so a faction's colour scheme and texture pack
@@ -33,7 +33,7 @@ wear references from the same images. The images stay references (`reports/refs/
 
 **Colour round (the maintainer, 2026-11-04).** From approval shots of every ship from five sides: no ship carries the
 painted panel grid any more (every civilian style paints its lines at 1.0 and its tint jitter at 0; panel layout comes
-with the texture pack); the Saturns' greys are cooler and their whites and reds closer to the captures (Achilles.jpg,
+with the texture pack, which M5-T27 added: "Styles" below); the Saturns' greys are cooler and their whites and reds closer to the captures (Achilles.jpg,
 Red Star 9.jpg, Epsilon.JPG); the Skylark's plating is a greyer khaki, as Transport 1.png shows it; the Narn green is
 lifted (#2E4A3B to #3A5A48, its recesses #1E2E25 to #26392F). The Centauri and Brakiri colours stand as approved.
 The shots exposed a colour step in M4-T27's paint shader (`paint_mesh.gdshaderinc`, `paint_colour`): it runs
@@ -44,61 +44,43 @@ will look after the rebase. Anyone who draws the painted meshes before then shou
 
 ## Output contract
 
-The same as `starfury_aurora` and `raider_fighter` (`docs/architecture.md` §9 and §15.11), per asset id in
+The same as `starfury_aurora` and `raider_fighter` (`docs/architecture.md` §9, §15.11 and §17), per asset id in
 `assets/generated/<id>/`:
 
 | File | What it is |
 |---|---|
-| `<id>.ply`, `<id>_lod1.ply`, `<id>_lod2.ply`, `<id>_lod3.ply` | LOD0 at the default spacing, LOD1 to LOD3 resampled at 2, 4 and 8 times it from their own RNG streams (as the raider's `FAR_LODS`), GDGS orientation, splats of the chunk groups concatenated in `manifest.counts` order |
-| `<id>_lod<0-3>.light` | lighting records, one per level (`core/lighting.py`) |
-| `<id>_mesh.glb` | the painted mesh, what the game draws (above): the fallback mesh's triangles, one opaque and one glass primitive; manifest `files.paint_mesh` and a `paint_mesh` section (M4-T27's) |
-| `<id>.obj` + `.mtl` | fallback mesh; also the hull depth proxy |
-| `<id>_chunk_<name>.ply/.light/.obj/.mtl` | break-up chunks cut from LOD1 (`core/chunks.py`; manifest `chunk_lod` 1, as the Starfury) |
-| `<id>_turret.ply/.light/.obj/.mtl`, `<id>_turret_mesh.glb` | the style's turret model, written like a chunk (D61, T12 brief); the turret entry's `paint_mesh` names its mesh |
+| `<id>.glb` + `<id>_albedo/_normal/_orm/_emissive.png` (and their `.import`) | the hull as a textured mesh, what the game draws: one opaque primitive on a 2 048 px atlas; manifest `files.mesh` and the `mesh` section (`core/textured_mesh.py`); Godot builds its levels of detail |
+| `<id>.obj` + `.mtl` | the same triangles: the hull depth proxy, `files.obj` |
+| `<id>_chunk_<name>.obj` + `<id>_chunk_<name>.glb` | break-up chunks (`core/chunks.py`): the hull's faces of one group, the `.glb` a cut of the hull's textured mesh on its atlas (it draws with the hull's maps), both centred on the chunk's visible surface |
+| `<id>_turret.glb` + its four maps, `<id>_turret.obj` | the style's turret model (D61) in the turret frame: the pivot at the origin, +Y the mount's `up`, the barrels along -Z, on its own 1 024 px atlas |
+| `brakiri_bokmai_pod.glb` + its four maps, `brakiri_bokmai_pod.obj` | the Bokmai's cargo pod in its own frame, the origin at its mount |
 | `hardpoints.json` | below |
-| `manifest.json` | `lods[0..3]`, AABB, `centroid_offset`, `files`, `counts`, `chunks`, `chunk_lod`, `sampling`, `dimensions_m`; a `turret` entry naming the turret files and their splat count |
+| `manifest.json` | AABB, `centroid_offset`, `files`, `mesh`, `chunks`, `surface_spacing_m` (the visible surface's sampling), `dimensions_m`; a `turret` entry `{obj, mesh, barrel_m, trunnion, muzzles}`; the Bokmai's `pod` entry `{obj, mesh, mass_kg, collision, size_m}` |
 
-## Splat budgets
+## Mesh budgets
 
-Big ships are mostly seen far away. With `LodSwitcherMath`'s thresholds (LOD0 from 200 px of projected diameter, LOD1
-from 60 px, LOD2 from 16 px, at 1080p and 75 degrees vertical), a 258.5 m Saturn 8 is LOD0 inside 910 m, LOD1 to 3.0 km
-and LOD2 to 11.4 km; a 158.5 m Saturn 4 switches at 560 m, 1.9 km and 7.0 km; the 96.8 m Saturn 3 at 340 m, 1.1 km
-and 4.3 km; a 60 m hull at 210 m, 700 m and 2.6 km. Raiders jump in 6 to 12 km out; patrols and civilians spawn 26 to
-30 km out, past the player's 25 km radar (Q12). Patrols fly a route through the area; civilian traffic flies a straight
-route that passes 2 to 10 km from the player (T17). LOD2 and LOD3 carry most of the screen time.
+The meshes are the parts' own triangles; the texture is one 2 048 px atlas per hull with the normal map at the same size,
+VRAM-compressed with mipmaps, and the packer grows the texel until every chart fits. The style's wear, seams and noise
+are sized for a fighter at a centimetre a texel and scaled to the hull's texel (`core/civilian.py` `at_texel`), so the
+plating reads the same on every hull. As built (M5-T27, seed 42):
 
-The budget rule: all eight at LOD0 at once, plus the player's hero level, the sky and five nav buoys, stays inside
-`settings.splat_budget` (2 000 000). Eight LOD0s make 810 000; with the hero (975 058), the sky (16 000) and five buoys
-(38 000) that is 1 839 058, 92 % of the budget. In practice eight ships in one view are at LOD1 or coarser (202 500 for
-all eight).
+| Hull | Length | Triangles | Texel | Atlas fill | Turret triangles |
+|---|---|---|---|---|---|
+| `saturn_4_transport` | 158.5 m | 45 202 | 14.1 cm | 0.59 | 1 012 |
+| `saturn_4_tanker` | 158.5 m | 43 698 | 9.6 cm | 0.67 | 1 012 |
+| `saturn_8_transport` | 258.5 m | 54 998 | 19.2 cm | 0.60 | 1 012 |
+| `saturn_8_tanker` | 258.5 m | 52 506 | 13.1 cm | 0.70 | 1 012 |
+| `saturn_3_freighter` | 96.8 m | 41 518 | 11.3 cm | 0.64 | 1 012 |
+| `skylark_transport` | 60 m | 26 052 | 5.2 cm | 0.65 | 1 012 (at two thirds) |
+| `narn_transport` | 70 m | 5 692 | 7.1 cm | 0.66 | 388 |
+| `centauri_brezebel` | 60 m | 16 810 | 5.8 cm | 0.72 | 2 572 |
+| `brakiri_bokmai` (hull) | 80 m | 9 284 | 6.0 cm | 0.71 | 1 296 |
+| `brakiri_bokmai_pod` | 13.4 m | 3 284 | 5.6 cm | | |
 
-| Hull | Length | Surface | LOD0 target (range) | Start spacing | LOD1 | LOD2 | LOD3 |
-|---|---|---|---|---|---|---|---|
-| `saturn_4_transport` | 158.5 m | 34 500 m² | 130 000 (105 000 to 155 000) | 0.52 m | 32 500 | 8 100 | 2 000 |
-| `saturn_4_tanker` | 158.5 m | about 18 400 m² | 70 000 (55 000 to 85 000) | 0.51 m | 17 500 | 4 400 | 1 100 |
-| `saturn_8_transport` | 258.5 m | about 65 000 m² | 210 000 (170 000 to 250 000) | 0.56 m | 52 500 | 13 100 | 3 300 |
-| `saturn_8_tanker` | 258.5 m | about 36 900 m² | 120 000 (95 000 to 145 000) | 0.55 m | 30 000 | 7 500 | 1 900 |
-| `saturn_3_freighter` | 96.8 m | about 19 700 m² | 75 000 (60 000 to 90 000) | 0.51 m | 18 750 | 4 700 | 1 200 |
-| `skylark_transport` | 60 m | 6 400 m² | 60 000 (48 000 to 72 000) | 0.26 m (as built, T13; 0.33 m planned) | 15 000 | 3 800 | 900 |
-| `narn_transport` | 70 m | 9 200 m² | 75 000 (60 000 to 90 000) | 0.35 m | 18 750 | 4 700 | 1 200 |
-| `centauri_brezebel` | 60 m | 8 000 m² | 70 000 (55 000 to 85 000) | 0.34 m | 17 500 | 4 400 | 1 100 |
-| All eight | | | 810 000 | | 202 500 | 50 700 | 12 700 |
-
-- Surface is the reference model's area at its length (refview's `surface_area_m2`). For the Saturns it is the Saturn
-  4 model's area at the family scale (34 500 m²), split into the lead ship (about 4 800 m²), a transport section (about
-  29 700 m²) and the tanks, then summed per variant. It counts inner faces the generators drop (buried roots, the
-  recessed pod ends), so the generated surface will be 10 to 30 % smaller; tune the spacing to land in the range and
-  warn outside it at the default spacing, as the raider does. LOD shares as the raider: LOD1 20 to 30 % of LOD0.
-- Start spacing is `sqrt(surface / target)`. Splat sigma is one spacing (overlap 1.0). At 0.52 m a splat seen from
-  100 m is about 3.7 px across on a 1080p screen, from 50 m about 7 px, so a close fly-by of a Saturn looks soft. That
-  is the price of eight big hulls in the budget; judging it is `(H)`.
-- Panel detail has to suit the spacing (a splat-era rule). The painted grid has since been dropped (the colour round,
-  2026-11-04); panel layout comes with each style's texture pack at the rebase.
-- Turret models are small and sampled finer (about 0.1 m, about 2 000 splats each); with 2 to 4 per hull they add under
-  1 % to the totals.
-- VRAM, an estimate for T16 to measure: each hull type keeps LOD0 to LOD3 (1.33 times LOD0) and its chunks (0.25 times)
-  resident, 1.28 M splats for all eight types. M3-T24 measured about 240 bytes of unique splat buffer per resident
-  splat (+234 MB for the hero's 975 058), so about 310 MB with all eight types loaded, before instancing.
+The tests hold each hull under a triangle budget (70 000 for a Saturn, 35 000 for the Skylark, 25 000 for the Brezebel,
+20 000 for the Bokmai, 15 000 for the Narn, 5 000 for a turret or the pod) and its texel at the default atlas under a
+bound (20 cm for the Saturns, 8 cm for the Narn, 6 cm for the others). Four maps of 2 048 px, VRAM-compressed with
+mipmaps, are about 11 MB per hull type; T16 measures the real figure on the GPU.
 
 ## Hardpoints
 
@@ -115,8 +97,8 @@ plus `turrets[]`. Vectors are `[x, y, z]` in the centred body frame, rounded to 
   from `parts.propulsion.pilot_tags` (`sway_left`, `heave_up`, `yaw_right`, ...); `pod` names the pod it belongs to.
 - `collision[]`, each `{"name", "type": "box", "position", "size", "basis"}` or `{"name", "type": "capsule",
   "position", "radius", "height", "axis": "z", "basis"}`, also the hit volumes. Coverage test as the raider's, scaled:
-  at least 97 % of LOD0 splat centres inside the primitives inflated by one spacing, and no primitive more than 1 m past
-  the splat box.
+  at least 97 % of the visible surface samples inside the primitives inflated by one sample spacing, and no primitive
+  more than 1 m past the surface's box.
 - `cockpit_camera` `{"position", "forward": [0, 0, -1], "up": [0, 1, 0]}` on the bridge and `chase_anchor`
   `{"position"}` at (0, 0.3 L, 1.2 L behind the centroid), L the length: the parser requires both, though nobody flies a
   civilian in M5.
@@ -126,7 +108,7 @@ plus `turrets[]`. Vectors are `[x, y, z]` in the centred body frame, rounded to 
 - `turrets[]` (D61), each `{"name", "position", "up", "arc_deg", "barrel_m"}`, positions from the design references.
   `arc_deg` 200 for a dorsal or ventral mount (a hemisphere plus 10 degrees below its base), 220 for the Narn's tower
   tops.
-- `chunks[]`, each `{"name", "ply", "lighting", "obj", "offset", "joint", "splats"}`, per group below.
+- `chunks[]`, each `{"name", "obj", "mesh", "offset", "joint"}`, per group below.
 
 ### Saturn family
 
@@ -176,40 +158,19 @@ Brezebel's drum) glow but are not pods.
 Every civilian model must lie within 90 % of its STL, measured as silhouettes and size. `tools/refview/compare.py` is the
 measuring stick: each generator task (T12 to T15, T22) runs it on its asset, fixes what falls under the bar and records
 its scores in the table at the end of this section. Turrets are left out (the models have none, and they are not in the
-fallback mesh or the LOD0 file); the Bokmai is scored with its three pods mounted.
+hull's mesh); the Bokmai is scored with its three pods mounted.
 
-**Two checks, one run.** The verdict scores the model's *geometry*, the fallback mesh `<id>.obj` that every civilian
-generator builds from the same parts as its splats (so it must hold every visible part), against the STL. A second check
-keeps the LOD0 splats honest against their own mesh. Scoring the splats against the STL directly under-read a perfect
-copy of the Saturn 4 by 5 to 8 % and favoured parts built too thin: a splat near an edge reaches about 0.75 spacings
-past it whatever the settings, so the loss follows the shape.
+**One check.** The verdict scores the model's *geometry*, the triangles of its textured mesh `<id>.glb` (the manifest's
+`mesh.file`; `<id>.obj` holds the same triangles and is the fallback), against the STL. Until M5-T27 a second check held
+the LOD0 splats to their own mesh; with the splats gone it went too.
 
 | Check | What is drawn | Bar | Shift |
 |---|---|---|---|
 | Geometry (Q18) | the STL's triangles and the asset's mesh, top (x-z), side (y-z) and front (x-y), on one grid | each view's intersection over union (IoU) at least 0.90, and the mesh's length, width and height each within 10 % of the STL's (a ratio from 0.90 to 1.10) | the mesh may move up to 2 % of the length per axis, reported |
-| Splats | the asset's mesh and its LOD0 splats, same views, on a grid of a third of the LOD0 spacing, with a band one spacing (three pixels) wide | per view, **coverage** at least 0.95 (the share of the mesh silhouette's pixels that splat pixels cover: nothing missing) and **banded precision** at least 0.95 (the share of the splat silhouette's pixels within the mesh silhouette grown by one spacing: nothing misplaced) | none: same parts, same frame |
 
-The band is the asset's LOD0 spacing: the manifest's `lods[0].spacing_m` (every generator writes it), else
-`sampling.spacing_m`, else derived from the splat scales (the median of the largest sigma, divided by `sampling.overlap`
-or 1). A declared spacing more than 10 % off the one the splat scales imply fails the splat check, so a generator cannot
-widen the band by declaring a coarser spacing than it sampled at (every built asset agrees within 2 %). The splat check
-has its own grid, a pixel of a third of that spacing, so the band is exactly three pixels and the numbers depend on the
-sampling alone, not on the ship's length, the crop or `--pixel-frac` (the T23 re-review found that on the length-based grid
-a lead ship's side coverage moved from 0.939 to 0.979 with `--pixel-frac`). The console line and `fidelity.json` give the
-spacing, its source, the pixel and the band. Plain IoU at 0.85 was tried first and failed faithful thin parts, so the band
-stands in for it: it passes a fringe of up to a spacing and fails parts that are absent or moved by several spacings. A
-small misplaced part can still pass if it is under 5 % of a view, which the bar accepts. The tool's own tests pin it:
-splats sampled from a 46 x 18 x 70 m box read coverage over 0.99 and precision 1.000 against it at 0.31 and 0.5 m spacing;
-from a hull with a 0.6 m wing (two spacings thick at 0.31 m, where plain IoU read 0.77 in front) coverage over 0.985 at
-0.31 m and over 0.96 at 0.5 m; with the wing missing from the splats top coverage is under 0.5; with the wing's splats
-eight spacings aft top precision is under 0.95; splats moved 1.5 spacings off their mesh fail coverage (no shift); a fin
-in the splats that the mesh lacks fails precision with full coverage. Coverage is the tight number on thin parts seen
-edge-on, where a slab thicker than the splats' reach is covered only by its end faces: the Saturn lead ships' side view
-reads 0.964 to 0.968, the built raider's 0.962, the whole ships' 0.974 to 0.992.
-`splats_<view>.png` shows which failed: orange is mesh the splats do not cover, red is splat beyond the band, blue is
-splat inside the band. Exit status is 0 when both checks pass, 1 when either fails, 2 on bad input (an output folder that cannot be
-written included). The terminal gets one
-block per check and a `verdict:` line last.
+`overlay_<view>.png` shows where the two differ. Exit status is 0 when the check passes, 1 when it fails, 2 on bad input
+(an output folder that cannot be written included). The terminal gets one line per view, the sizes, the shift and a
+`verdict:` line last.
 
 **How the two are put on one grid.**
 
@@ -219,16 +180,12 @@ block per check and a `verdict:` line last.
   `--model-offset 0,<dy>,0` (metres added to the model, whole ships only; dy is minus the spine axis's height above the
   model's box centre, pinned per model below). When the silhouettes only meet further away than the window, the tool
   prints a `note` with a value from a wider silhouette search (up to 10 % of the length in x and y).
-- The asset's `<id>.obj` is written in the Godot frame centred on the splat centroid, and `<id>.ply` is the same turned
-  by Rz(180) into the GDGS orientation; `manifest.centroid_offset` is the authored position of that centre. The tool
-  adds the offset to the mesh and undoes the flip and adds the offset to the splats. A test pins this on the built raider
-  (its mesh starts at z = 0 with the offset, its splats follow its mesh).
-- A splat is drawn as the outline of its Gaussian at 0.75 sigma, so a flat splat seen edge-on is a thin line; the factor
-  is calibrated against the built raider, Starfury and Narn transport (mean IoU over the views peaks at 0.7 to 0.8).
-- The geometry check's pixel is 0.25 % of the part's length (`--pixel-frac`, never above 0.5 %; the splat check keeps its own
-  grid of a third of the spacing). The move is the same for all three views,
-  whole pixels, to where they overlap best; it is printed and written to `fidelity.json`, and the geometry scores are
-  taken there (`iou_unshifted` is the score without it).
+- The asset's `.glb` (and `.obj`) is written in the Godot frame centred on the visible surface's centroid;
+  `manifest.centroid_offset` is the authored position of that centre, which the tool adds back. A test pins this on the
+  built raider (its mesh starts at z = 0 with the offset).
+- The pixel is 0.25 % of the part's length (`--pixel-frac`, never above 0.5 %). The move is the same for all three views,
+  whole pixels, to where they overlap best; it is printed and written to `fidelity.json`, and the scores are taken there
+  (`iou_unshifted` is the score without it).
 
 **Running it** (the STLs are in the main checkout's `references/`; the mappings and lengths are from
 `docs/design-references.md`):
@@ -251,9 +208,8 @@ its file mapping from the reference:
     --right=+x --up=+z --aft=-y --pods-from-hardpoints
 ```
 
-`--pods-from-hardpoints` draws the pod's mesh and splats, `<id>_pod.obj` and `<id>_pod.ply` beside the asset (`--pod-obj
-FILE` and `--pod-ply FILE` name others; naming only one takes the other from beside it), at every `cargo_pods[]` mount of
-`hardpoints.json`. A mount's `position`, `up` and optional `forward` are in the body frame (the centroid offset removed,
+`--pods-from-hardpoints` draws the pod's mesh, the manifest's `pod.mesh.file` (`<id>_pod.glb`) beside the asset
+(`--pod-mesh FILE` names another, a `.glb` or an `.obj`), at every `cargo_pods[]` mount of `hardpoints.json`. A mount's `position`, `up` and optional `forward` are in the body frame (the centroid offset removed,
 like the other hardpoints) and the pod files' origin is the mount point; the pod's +y is turned onto `up` and its forward
 (-z) onto `forward` (a pod that is not fore-aft symmetric needs it; without it the shortest turn is used). `--pod-at
 X,Y,Z` (repeatable) gives a mount by hand.
@@ -269,7 +225,7 @@ other part is scored against the part of the model it was built from, cropped on
 | the Saturn 3's pod group | the Saturn 3 model's pods, scaled up to the shared pod size (`--model-scale`, Q20) |
 
 `--model-zrange Z0 Z1` keeps one z range of the model and `--asset-zrange Z0 Z1` one of the asset (meshes are cut exactly
-at the planes, splats are kept by centre; a plane inside a ship moves a tenth of a millimetre inward so a face lying in
+at the planes; a plane inside a ship moves a tenth of a millimetre inward so a face lying in
 it goes with its neighbour: cut in a gap). Each cropped side then starts at z = 0, and the asset part is moved in x and y
 so that its box centre meets the model part's (`part_align_m` in the JSON), so a part placed differently by design, like
 the Saturn 3's raised stack, is scored on its shape; the usual 2 % fine shift follows. `--model-offset` is for whole
@@ -291,10 +247,8 @@ NAME` writes the result to `compare/<name>/`. Take the model's ranges from the p
 
 **Output.** `reports/refs/<ship>/compare/` (`.../compare/<part>/` for a part; gitignored): `overlay_top.png`,
 `overlay_side.png` and `overlay_front.png` (STL only in orange, mesh only in blue, both in dark grey, with a legend and a
-metre scale), `splats_top.png`, `splats_side.png` and `splats_front.png` (mesh only in orange, splats inside the band in
-blue, splats beyond it in red, both in dark grey) and `fidelity.json` (the geometry check's per-view IoU and pixel counts,
-dimensions, shift, part alignment and suggested offset; `splat_check` with the spacing and where it came from, the band in
-pixels and each view's coverage and precision; the thresholds, failures and verdicts).
+metre scale) and `fidelity.json` (the mesh file and its triangles, the per-view IoU and pixel counts, dimensions, shift,
+part alignment and suggested offset, the thresholds, failures and verdict).
 
 **Saturn model offsets (T12).** The spine axis's height above each model's box centre, read off the model's cylinder or
 tank (the Saturn 3: its disc's rim): `--model-offset 0,-3.643,0` for `EA_Saturn_4_transport.stl` (length 158.48),
@@ -302,31 +256,33 @@ tank (the Saturn 3: its disc's rim): `--model-offset 0,-3.643,0` for `EA_Saturn_
 for `EA_Saturn_3_Freighter.stl` (91.13). The Saturn 3's pod group is scored against the model's scaled to the shared pod
 (`--model-scale 1.2436,1.093,1`, an option T12 added: 43.03/34.6 across, 17.27/15.8 tall, Q20).
 
-**Scores.** One row per ship and part, filled by the generator task that builds it (the date is the run's). The IoU and
-size columns are the geometry check (the mesh against the STL); the splat column is the splat check's lowest coverage and
-lowest precision over the three views (with the view that set each). Rows marked "splats vs STL" were written before the
-planner's change of 2026-11-03 (the mesh as the verdict) by the tool's first version; each generator task re-scores its
-rows.
+**Scores.** One row per ship and part, re-measured on the textured meshes (M5-T27, 2026-11-07, `oscar`; the generators'
+default build, seed 42). The geometry is the T12 to T22 geometry, so the numbers match the earlier fallback-mesh scores to
+within a pixel; the splat column is gone with the splats.
 
-| Ship | Part | Top IoU | Side IoU | Front IoU | Length | Width | Height | Splats: min coverage / min precision | Date |
-|---|---|---|---|---|---|---|---|---|---|
-| `saturn_4_transport` | whole ship (`--model-offset 0,-3.643,0`) | 0.958 | 0.966 | 0.931 | 1.000 | 1.000 | 1.026 | 0.972 (side) / 1.000 | 2026-11-04 |
-| `saturn_4_transport` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 0.967 (side) / 1.000 | 2026-11-04 |
-| `saturn_4_transport` | transport section (model 49.3-149.3, asset 49.3-149.3) | 0.955 | 0.984 | 0.917 | 1.000 | 1.000 | 1.026 | 0.972 (side) / 1.000 | 2026-11-04 |
-| `saturn_4_tanker` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 0.961 (side) / 1.000 | 2026-11-04 |
-| `saturn_4_tanker` | tank group (tanker model 49.3-136.0, asset 49.3-136.0: the tanks on both sides, the model's junction and the asset's engine left out) | 0.987 | 0.976 | 0.938 | 1.000 | 1.000 | 1.026 | 0.960 (side) / 1.000 | 2026-11-04 |
-| `saturn_8_transport` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 0.967 (side) / 1.000 | 2026-11-04 |
-| `saturn_8_transport` | transport section 1 (Saturn 4 model 49.3-137.1, asset 49.3-137.1: the aft frame to the cylinder's end on both sides) | 0.955 | 0.990 | 0.923 | 1.000 | 1.000 | 1.005 | 0.969 (side) / 1.000 | 2026-11-04 |
-| `saturn_8_transport` | transport section 2 and engine (Saturn 4 model 61.65-149.3, asset 161.65-249.3: the cylinder's front to the engine on both sides) | 0.967 | 0.991 | 0.923 | 1.000 | 1.000 | 1.005 | 0.972 (side) / 1.000 | 2026-11-04 |
-| `saturn_8_tanker` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 0.963 (side) / 1.000 | 2026-11-04 |
-| `saturn_8_tanker` | tank section 1 (tanker model 49.3-146.2, asset 49.3-149.3; the model's sections are 96.96 m apart, Q16's 100 m) | 0.947 | 0.935 | 0.917 | 1.032 | 0.993 | 1.012 | 0.959 (side) / 1.000 | 2026-11-04 |
-| `saturn_8_tanker` | tank section 2 and engine (tanker model 146.2-255.1, asset 149.3-258.5) | 0.980 | 0.971 | 0.916 | 1.003 | 0.993 | 1.012 | 0.957 (side) / 1.000 | 2026-11-04 |
-| `saturn_3_freighter` | lead ship (Saturn 4 model z 0-41.5, asset 0-41.5) | 0.964 | 0.905 | 0.946 | 1.000 | 1.000 | 0.990 | 0.975 (side) / 1.000 | 2026-11-04 |
-| `saturn_3_freighter` | pod group (Saturn 3 model 41.5-91.1 scaled 1.244, 1.093, 1; asset 41.5-96.8): expected exemption (Q23) | 0.768 | 0.644 | 0.927 | 1.114 | 0.989 | 1.022 | 0.975 (side) / 1.000 | 2026-11-04 |
-| `narn_transport` | whole ship (no shift) | 0.991 | 0.985 | 0.974 | 1.000 | 1.000 | 0.997 | 0.976 (side) / 1.000 | 2026-11-03 |
-| `brakiri_bokmai` | whole ship with its three pods (`--pods-from-hardpoints`, no shift) | 0.966 | 0.977 | 0.954 | 0.999 | 0.999 | 0.999 | 0.972 (side) / 1.000 | 2026-11-03 |
-| `centauri_brezebel` | whole ship (best shift x -0.15 m, the model's fins sit 0.2 m to port; unshifted 0.972, 0.984, 0.945) | 0.966 | 0.984 | 0.970 | 1.000 | 1.000 | 0.999 | 0.992 (side) / 1.000 | 2026-11-03 |
-| `skylark_transport` | whole ship (no shift) | 0.979 | 0.980 | 0.956 | 1.001 | 1.000 | 0.998 | 0.983 (side) / 1.000 | 2026-11-03 |
+| Ship | Part | Top IoU | Side IoU | Front IoU | Length | Width | Height | Date |
+|---|---|---|---|---|---|---|---|---|
+| `saturn_4_transport` | whole ship (`--model-offset 0,-3.643,0`) | 0.958 | 0.966 | 0.931 | 1.000 | 1.000 | 1.026 | 2026-11-07 |
+| `saturn_4_transport` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 2026-11-07 |
+| `saturn_4_transport` | transport section (model 49.3-149.3, asset 49.3-149.3) | 0.955 | 0.984 | 0.917 | 1.000 | 1.000 | 1.026 | 2026-11-07 |
+| `saturn_4_tanker` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 2026-11-07 |
+| `saturn_4_tanker` | tank group (tanker model 49.3-136.0, asset 49.3-136.0: the tanks on both sides, the model's junction and the asset's engine left out) | 0.987 | 0.976 | 0.938 | 1.000 | 1.000 | 1.026 | 2026-11-07 |
+| `saturn_8_transport` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 2026-11-07 |
+| `saturn_8_transport` | transport section 1 (Saturn 4 model 49.3-137.1, asset 49.3-137.1: the aft frame to the cylinder's end on both sides) | 0.955 | 0.990 | 0.923 | 1.000 | 1.000 | 1.005 | 2026-11-07 |
+| `saturn_8_transport` | transport section 2 and engine (Saturn 4 model 61.65-149.3, asset 161.65-249.3: the cylinder's front to the engine on both sides) | 0.967 | 0.991 | 0.923 | 1.000 | 1.000 | 1.005 | 2026-11-07 |
+| `saturn_8_tanker` | lead ship (Saturn 4 model z 0-49.3, asset 0-49.3) | 0.960 | 0.919 | 0.916 | 1.000 | 1.000 | 0.985 | 2026-11-07 |
+| `saturn_8_tanker` | tank section 1 (tanker model 49.3-146.2, asset 49.3-149.3; the model's sections are 96.96 m apart, Q16's 100 m) | 0.947 | 0.935 | 0.917 | 1.032 | 0.993 | 1.012 | 2026-11-07 |
+| `saturn_8_tanker` | tank section 2 and engine (tanker model 146.2-255.1, asset 149.3-258.5) | 0.980 | 0.971 | 0.916 | 1.003 | 0.993 | 1.012 | 2026-11-07 |
+| `saturn_3_freighter` | lead ship (Saturn 4 model z 0-41.5, asset 0-41.5) | 0.964 | 0.905 | 0.946 | 1.000 | 1.000 | 0.990 | 2026-11-07 |
+| `saturn_3_freighter` | pod group (Saturn 3 model 41.5-91.1 scaled 1.244, 1.093, 1; asset 41.5-96.8): expected exemption (Q23) | 0.768 | 0.644 | 0.927 | 1.114 | 0.989 | 1.022 | 2026-11-07 |
+| `narn_transport` | whole ship (no shift) | 0.991 | 0.985 | 0.974 | 1.000 | 1.000 | 0.997 | 2026-11-07 |
+| `brakiri_bokmai` | whole ship with its three pods (`--pods-from-hardpoints`, no shift) | 0.966 | 0.977 | 0.954 | 0.999 | 0.999 | 0.999 | 2026-11-07 |
+| `centauri_brezebel` | whole ship (best shift x -0.15 m, the model's fins sit 0.2 m to port; unshifted 0.972, 0.983, 0.945) | 0.965 | 0.983 | 0.970 | 1.000 | 1.000 | 0.999 | 2026-11-07 |
+| `skylark_transport` | whole ship (no shift) | 0.979 | 0.980 | 0.956 | 1.001 | 1.000 | 0.998 | 2026-11-07 |
+
+**The generator sections below** record each task as it was built on splats (T12 to T22). Their geometry, hardpoints and
+fidelity stand; their splat counts, level shares, lighting records and splat-check numbers are history since M5-T27,
+which moved every output to the textured meshes above ("Output contract", "Mesh budgets") and re-scored the fidelity.
 
 ## `saturn_family` (T12)
 
@@ -601,8 +557,10 @@ pod comes off whole as its own debris piece (D59), so a destroyed Bokmai sheds f
 | `engine_dome` (extra) | #F2EDC4 | the domes |
 | `barrel`, `bore`, `interior`, `rcs` | #2E3530, #101210, #101210, #3A4538 | our choice |
 
-No painted panel grid (the colour round below). Engine glow yellow-white
-#FFF0B0 (`GLOW_SRGB` for T16's `ShipSpec`). Turret bolts bright green (the maintainer, Q22). The frame green is lighter than the Narn's #3A5A48, but the raider's warning about dark albedo
+Texture pack (M5-T27; Brakiri ship.jpg): a mottled satin olive. Darker seams (line darkness 0.7), a mild plate-to-plate
+tint (6 %), edges worn to primer (no bare metal), light grime, satin paint (roughness 0.65); the pods take the same pack
+on 2.0 m plates. The window strips glow pale green-white and the engine domes yellow-white #FFF0B0 (`GLOW_SRGB`, also
+T16's `ShipSpec` tint). Turret bolts bright green (the maintainer, Q22). The frame green is lighter than the Narn's #3A5A48, but the raider's warning about dark albedo
 still applies: T16's GPU check decides whether it needs a lift.
 
 **The turret model** (as built, the maintainer's sheet): the inset's full-height step is only 1.6 m long, so a turning
@@ -626,7 +584,8 @@ build them at their measured size and let the splat check show the reading loss.
 
 ## Styles
 
-Three styles, each a `Style` with the required roles plus extras. Hex values are sRGB from the design references;
+Four styles, each a `Style` with the required roles plus extras and the faction's texture pack (M5-T27): plating, seams,
+wear and the lit roles, at a fighter's scale, scaled to each hull's texel. Hex values are sRGB from the design references;
 `styles/raider.py`'s `_lin` converts them to the linear albedo the styles store.
 
 **`ea_civilian`** (the Saturns; the Skylark overrides the plating in its variant data).
@@ -646,8 +605,11 @@ Three styles, each a `Style` with the required roles plus extras. Hex values are
 | `barrel`, `bore` | #5A5955, #101010 | turret barrels |
 | Skylark override | `hull` #A9A68E, `hull_panel` #7A7659, `hull_dark` #4A4839, `stripe` #B8452B, `nozzle` #4A4A46 | its grey khaki plating, red-orange bands and dark nacelle bells and ribs (`skylark_transport.STYLE`) |
 
-No painted panel grid (the colour round below). Engine glow
-(a `ShipSpec` tint): Saturns blue-white #DCE8FF, Skylark warm white #FFE9C2.
+Texture pack (M5-T27; Achilles.jpg, Red Star 9.jpg, Epsilon.JPG, Transport 1.png): clean industrial paint. Long plates
+with fine dark seams (line darkness 0.72) and a few hatches, a light plate-to-plate tint (5 %), edges worn to dark primer
+(no bare metal), faint grime and short streaks, flat paint (roughness 0.72), light rivets. The Skylark's plating is finer
+(2.4 m) and more patched (10 % tint), as Transport 1.png shows it. The rim windows glow warm white (#F2E6C8, strength 2)
+and the engine throats glow (strength 3): Saturns blue-white #DCE8FF, Skylark warm white #FFE9C2 (also `ShipSpec` tints).
 
 **`narn`**
 
@@ -662,8 +624,10 @@ No painted panel grid (the colour round below). Engine glow
 | `canopy_glass` | #10201A | the canopy |
 | `nozzle`, `nozzle_throat` | #3A3A36, #141413 | tower nozzles |
 
-No painted panel grid (the colour round below). Engine glow orange-white #FFB070; turret bolts green (D61's
-`WeaponSpec`, per the wiki).
+Texture pack (M5-T27; Tal'Quith.JPG, Tal'Quith's collision.JPG, Na'Tan.JPG): hard-used plating. Big plates with dark
+seams (line darkness 0.62) and a strong plate-to-plate tint (9 %), chipped edges with some bare metal (0.25), grime and
+long streaks aft, matte paint (roughness 0.8); the cargo box takes the same wear. The engine throats glow orange-white
+#FFB070 (strength 3); turret bolts green (D61's `WeaponSpec`, per the wiki).
 
 **`centauri`**
 
@@ -676,8 +640,10 @@ No painted panel grid (the colour round below). Engine glow orange-white #FFB070
 | `window` (extra) | #F3F1FF | the five windows |
 | `nozzle`, `nozzle_throat` | #3A3448, #141218 | main engine and arm-tip nozzles |
 
-No painted panel grid (the colour round below). Engine and fin-tip glow pink-white #FFB8E0; turret bolts orange. As
-built (T15): every value as written (Q19). Roles the design leaves open are our choice:
+Texture pack (M5-T27; Centauri Liner.jpg): the liner's polished paint. Fine seams barely darker
+than the paint (line darkness 0.82), an even tint (3 %), little wear, no bare metal, glossy paint (roughness 0.42), no
+rivets. The five windows glow white (strength 2) and the engine throats pink-white #FFB8E0 (strength 3); the fin-tip
+lights and the engine flame are T16's. Turret bolts orange. As built (T15): every value as written (Q19). Roles the design leaves open are our choice:
 `hull_panel` the hull violet, `hazard` and `hazard_dark` the gold and the dark violet, `canopy_glass` #1A1530 (unused),
 `barrel` and `rcs` #3A3448, `bore` and `interior` #141218. `styles/centauri.py` keeps the glow as `GLOW_SRGB` for
 T16's `ShipSpec`.
@@ -717,7 +683,9 @@ From the design references, authored frame; `up` is (0, 1, 0) for dorsal mounts 
   crescent and the box above.
 - The Saturn 3's engine section and its raised, wider pod stack are not in its reference; Q16's shared lead ship needs
   them.
-- Close fly-bys look soft: about 0.52 m spacing on the Saturns, 0.33 to 0.35 m on the others.
+- The texture packs (M5-T27): the plating, seams and wear of each faction, how the scaled wear reads on the Saturns'
+  coarser texels (10 to 19 cm a texel; a close fly-by of a Saturn 8 shows it), the glowing windows and engine throats
+  (the throats of the retros glow too).
 - The Brezebel's violet (#4C3C8E) is painted as written and may read dark on its shadow side; T16's GPU check decides,
   and a lift goes to the maintainer first.
 - The Brezebel's retros fire forward from the bow's rim at (±14.6, 0, 5.7), on the fairings' axis, rather than from the

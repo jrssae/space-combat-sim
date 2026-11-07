@@ -255,6 +255,13 @@ the spine tank; from behind they form an inverted triangle 50.5 m wide and 30.8 
 | Windows | small warm-white windows #F2E6C8 in a band round the disc's rim | not readable in any capture; our choice |
 | Engine glow | blue-white #DCE8FF | Valjean.JPG |
 
+**Texture (M5-T27, the `ea_civilian` pack).** Read from the same captures: the Saturns are clean, working paint, not
+weathered hulks. Achilles.jpg and Red Star 9.jpg show long plates with fine dark seams on the disc and the cylinders, the
+pods ribbed fore and aft with a light patchwork of greys; Epsilon.JPG shows the disc's rim and the bands sharp-edged and
+evenly painted. So: long plates with thin dark seams and a few hatches, a light plate-to-plate tint, edges worn to dark
+primer rather than bare metal, faint grime and short streaks aft of the seams, flat paint. The rim windows glow warm
+white, the engine throat blue-white (Valjean.JPG). No markings or lettering beyond the bands.
+
 No capture shows weapons, and the wiki lists "None" for the Achilles. The turrets below are Q14's, placed to cover the
 hull's quarters. The drum frame's drums are the only turret-like mounts in the models; they stay RCS clusters. Every
 variant has the lead ship's turret, `dorsal_fwd` on the disc's top hub at (0, +3.8, 19.1), up +y, for the forward upper
@@ -415,6 +422,11 @@ flanks, and the short pylons carry the claws (T13).
 | Nacelle bells and ribs | dark metal #4A4A46 | 7Tango7.JPG |
 | Engine glow | warm white #FFE9C2 | 7Tango7.JPG |
 
+**Texture (M5-T27, the `ea_civilian` pack).** Transport 1.png, the clearest view, shows the plating as a patchwork of
+small khaki and olive panels, much busier than a Saturn's; Skylark class.jpg and 7Tango7.JPG show the same at a distance.
+So the EA civilian pack with finer plates (2.4 m) and a stronger plate-to-plate tint, the bands painted sharp, edges worn
+to primer, the nacelle bells dark metal. The engine throats glow warm white (7Tango7.JPG).
+
 Mothak'cha.jpg shows the same ship with a lighter grey body (#B9B7B1) and orange bands: a second livery the variant
 data can offer.
 
@@ -463,6 +475,11 @@ nozzles on the towers' aft faces (z 43.9; a 0.9 m bell, its exit at z 44.72).
 | Canopy | dark green glass #10201A | not readable in the captures; our choice |
 | Engine glow | orange-white #FFB070 | not seen in the captures; our choice |
 
+**Texture (M5-T27, the `narn` pack).** Tal'Quith.JPG and Na'Tan.JPG show the crescent as big plates with dark seams and a
+mottled, uneven green; Tal'Quith's collision.JPG shows the cargo box's plates and its corner marks. The Narn ships read
+hard-used: dark seams, a strong plate-to-plate tint, chipped edges with some bare metal, grime and long streaks aft, matte
+paint, on the green and the grey box alike. The tower throats glow orange-white. No emblem (a franchise mark).
+
 Turrets (2): the wiki gives the freighter "pulsed green bolts" from a "twin emplacement" ("And Now for a Word"). The
 towers' slotted tops are the model's turret-like mounts: one turret on each tower top at (±14.85, +9.0, 41.7) (the
 slotted crown, x 14.15 to 15.54, z 40.36 to 43.07), up +y, with an arc wide enough to fire down past the crescent's
@@ -500,6 +517,11 @@ further out than its starboard ones and the dorsal fitting 0.2 m to port; the ge
 | Trim | gold #D9B23A on the tip fins' caps; a pale lavender edge band #D7D2E6 round the bow's rim | Centauri Liner.jpg (the caps), Carbo.JPG (the Centauri transport's edge band; its gold Centauri emblems are franchise marks and are not reproduced) |
 | Windows | white #F3F1FF | Centauri Liner.jpg (the row of five) |
 | Fin-tip lights and engine glow | pink-white #FFB8E0 | Centauri Liner.jpg |
+
+**Texture (M5-T27, the `centauri` pack).** Centauri Liner.jpg shows the liner's violet as an even, glossy paint (the
+highlights run long and sharp over the bow) with a few fine seams barely darker than it and no visible wear. So: fine light
+seams, an even tint, glossy paint, little wear, no bare metal, no rivets. The five windows glow white and the engine
+throats pink-white; the fin-tip lights and the engine flame are the game's (T16).
 
 Turret (1, Q19: turrets on top only): the wiki gives the liner "pulsed orange bolts". `dorsal` on top of the dorsal
 fitting (0, +4.3, 7.0), up +y. The first reading's `ventral` mount under the bow is dropped. The gold caps glow in the
@@ -597,6 +619,11 @@ green so they read as cargo against it, and yellow marks the fins, the necks and
 
 The cruiser's yellow tip panel carries the Brakiri emblem, a franchise mark, which is not reproduced. The maintainer
 confirmed the scheme as written on the review sheet (Q19, 2026-11-03), windows included.
+
+**Texture (M5-T27, the `brakiri` pack).** With no capture of a Bokmai, the plating follows the Brakiri cruiser's: Brakiri
+ship.jpg shows a mottled, satin olive over plates of moderate size, darker seams, rows of small white windows and no
+bare metal. So: darker seams, a mild plate-to-plate tint, edges worn to primer, light grime, satin paint; the pods the same pack on finer plates. The window strips glow pale green-white and the engine
+domes yellow-white.
 
 **Turrets (Q22).** The maintainer placed them in the stepped Z-shaped insets on both flanks of the bow (x ±2.3, y 7.2
 to 9.7, z 4.1 to 8.9), one a side, facing outboard. They fire a bright green pulse, #7CFF4F (the maintainer's pick). Each

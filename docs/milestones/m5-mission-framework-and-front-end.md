@@ -1168,6 +1168,23 @@ T21, T16 and T28 are re-planned on the native core ("M5 on the native core", bel
 - **Notes:** the geometry (parts, pieces, burial solids) stays; only the output changes. `core/paint_mesh.py` (M5's copy of
   M4-T27) goes once nothing uses it. Fidelity is re-scored on the textured mesh. The look is (H).
 - **Done when:** AC12 and AC20 on the mesh path; the five generators back in the registry; no splat code left in `tools/`.
+- **Done (as built, 2026-11-07, on `oscar`; started by a sub-agent, finished by the controller after the agent hit a rate
+  limit):**
+  - **Output.** `core/civilian.py`'s `write_hull` and `write_model` write each hull, the Bokmai pod and every turret as M4's
+    textured `.glb` with its four maps; chunks are cuts of the hull's mesh; the `.obj` files stay because the game's
+    contract (hardpoints' chunk `obj`) reads them. No splat code is left in `tools/` (`test_mesh_only` passes; `paint_mesh.py`
+    went with T26). The five generators are back in the asset registry.
+  - **Paint.** One texture pack per faction style (`ea_civilian`, `narn`, `centauri`, `brakiri`): plating, seams, wear,
+    glowing windows and throats, scaled to each hull's texel; the schemes and the show images they were read from are in
+    `docs/design-references.md`. The look is (H).
+  - **Fidelity (AC20).** `tools/refview` compare now scores the `.glb` and its splat coverage check is gone; its tests are
+    rebuilt from meshes. Every ship and part is re-scored in `docs/assets-civilian.md`: each view's IoU is 0.905 or more
+    (lowest: the Saturn 3 lead ship's side view, 0.905) and every size within 10 %, except the Saturn 3 pod group, which Q23
+    exempts.
+  - **Tests.** Python: `test_saturn_family` 146 (2 skipped by design, the Saturn 3 has no aft frame), `test_brakiri_bokmai`
+    42, `test_centauri_brezebel` 36, `test_skylark_transport` 32, `test_narn_transport` 31, `test_refview_compare` 45,
+    `test_textured_hulls` 19, `test_cli` 19, `test_mesh_only` 2, all OK. GUT: `test_civilian_meshes` 4/4 (the nine hulls,
+    the pod and the turrets import as textured meshes).
 
 ### M5-T21 Defensive turrets in the native core
 

@@ -1,5 +1,7 @@
-"""``centauri_brezebel`` (M5-T15, AC12): files, budgets, frames, symmetry, chunk partition, collision coverage, the
-hardpoint contract with its one dorsal turret (Q19), the turret model, the confirmed colours and determinism."""
+"""``centauri_brezebel`` (M5-T15, AC12; textured meshes from M5-T27): files, the mesh contract, frames, symmetry, chunk cuts,
+collision coverage, the hardpoint contract with its one dorsal turret (Q19), the turret model, the confirmed colours, the
+texture pack and determinism. The visible surface (the samples that place the body origin) stands in for the hull's skin
+where a test asks what the eye sees."""
 
 from __future__ import annotations
 
@@ -11,27 +13,32 @@ from pathlib import Path
 
 import numpy as np
 
-# Off until M5-T27 moves the civilian generators onto the textured-mesh pipeline: they still write splats, and main dropped
-# the splat writers (M4-T31). The checks below are the spec that task converts.
-raise unittest.SkipTest("M5-T27: the civilian generators wait for the textured-mesh pipeline")
-
 from tools.procgen.assets import ASSETS
 from tools.procgen.assets import centauri_brezebel as brez
-from tools.procgen.core import frames, lighting
+from tools.procgen.core import civilian as cv
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.color import linear_to_srgb
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.obj import read_obj
-from tools.procgen.tests.mesh_checks import assert_painted_mesh
-from tools.procgen.core.ply import read_ply
+from tools.procgen.core.textured_mesh import TexturedPart, phase_steps
+from tools.procgen.tests.mesh_checks import (
+    TEST_OPTIONS,
+    assert_chunks_cut_the_hull,
+    assert_hull_mesh,
+    assert_mirror_symmetric,
+    assert_model_mesh,
+    glowing_points,
+    painted_points,
+)
 
 PILOT_TERMS = {
     "sway_left", "sway_right", "heave_up", "heave_down", "pitch_up", "pitch_down",
     "yaw_left", "yaw_right", "roll_left", "roll_right",
 }  # fmt: skip
 SYM_TOL = 1e-6
-MAX_ROUND_TRIP_DEG = 1.5
-LOD_AABB_TOLERANCE_M = 0.3  # test_splat_import.gd's floor
+TRIANGLE_BUDGET = 25_000  # 16 810 as built; the importer adds the levels of detail
+TURRET_TRIANGLE_BUDGET = 5_000
+TEXEL_MAX_M = 0.06  # the hull at the default 2 048 px atlas
 
 
 def sha256(path: Path) -> str:
@@ -53,17 +60,8 @@ def inside_primitive(points: np.ndarray, c: dict, inflate: float) -> np.ndarray:
     return np.linalg.norm(local - axis_point, axis=1) <= c["radius"] + inflate
 
 
-def godot_xyz(path: Path) -> np.ndarray:
-    return frames.flip_xy(read_ply(path).to_splats().xyz)
-
-
 def mirrored(v: list[float]) -> list[float]:
     return [-v[0], v[1], v[2]]
-
-
-def angle_deg(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    cos = np.einsum("ij,ij->i", a, b) / (np.linalg.norm(a, axis=1) * np.linalg.norm(b, axis=1))
-    return np.degrees(np.arccos(np.clip(cos, -1.0, 1.0)))
 
 
 def ray_hits(origin: np.ndarray, direction: np.ndarray, vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
@@ -94,17 +92,18 @@ class CentauriBrezebelTests(unittest.TestCase):
         cls._tmp = tempfile.TemporaryDirectory()
         root = Path(cls._tmp.name)
         cls.dir_a, cls.dir_b = root / "a", root / "b"
-        cls.out_a = brez.build(BuildContext(cls.dir_a, seed=42))
-        cls.out_b = brez.build(BuildContext(cls.dir_b, seed=42))
+        cls.out_a = brez.build(BuildContext(cls.dir_a, seed=42, options=TEST_OPTIONS))
+        cls.out_b = brez.build(BuildContext(cls.dir_b, seed=42, options=TEST_OPTIONS))
         cls.manifest = manifest_io.read_manifest(cls.dir_a)
-        cls.splats = read_ply(cls.dir_a / brez.PLY_NAME).to_splats()
-        cls.xyz = frames.flip_xy(cls.splats.xyz)
         cls.hp = json.loads((cls.dir_a / brez.HARDPOINTS_NAME).read_text(encoding="utf-8"))
         cls.obj = read_obj(cls.dir_a / brez.OBJ_NAME)
-        cls.lod1 = read_ply(cls.dir_a / brez.LODS[1][0]).to_splats()
         cls.length = cls.hp["length_m"]
         cls.offset = np.array(cls.manifest["centroid_offset"])
+        sampled = brez.build_parts(brez.CENTAURI, BuildContext(cls.dir_a, seed=42), brez.DEFAULT_SPACING_M)
+        cls.xyz = np.concatenate([s.samples.positions for s in sampled]) - cls.offset  # the visible surface, body frame
         cls.authored = cls.xyz + cls.offset  # back in the design references' frame: nose at z = 0
+        cls.paint_at, cls.rgb = painted_points(cls.dir_a, cls.manifest["mesh"])
+        cls.paint_authored = cls.paint_at + cls.offset
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -116,53 +115,28 @@ class CentauriBrezebelTests(unittest.TestCase):
         self.assertEqual(brez.ASSET_ID, "centauri_brezebel")
 
     def test_all_files_are_written_and_listed(self) -> None:
-        expected = {brez.PLY_NAME, brez.OBJ_NAME, "centauri_brezebel.mtl", brez.HARDPOINTS_NAME, "manifest.json"}
-        expected |= {entry[0] for entry in brez.LODS.values()}
-        expected |= {lod["lighting"] for lod in self.manifest["lods"]}
+        expected = {brez.OBJ_NAME, "centauri_brezebel.mtl", brez.HARDPOINTS_NAME, "manifest.json"}
+        for stem in ("centauri_brezebel", "centauri_brezebel_turret"):
+            expected |= {f"{stem}.glb"} | {f"{stem}_{k}.png{x}" for k in ("albedo", "normal", "orm", "emissive") for x in ("", ".import")}
         for entry in self.hp["chunks"]:
-            expected |= {entry["ply"], entry["lighting"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
+            expected |= {entry["mesh"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
         turret = self.manifest["turret"]
-        expected |= {turret["ply"], turret["lighting"], turret["obj"], turret["obj"].replace(".obj", ".mtl")}
-        expected |= {"centauri_brezebel_mesh.glb", "centauri_brezebel_turret_mesh.glb"}
+        expected |= {turret["obj"], turret["obj"].replace(".obj", ".mtl")}
         self.assertEqual({p.name for p in self.dir_a.iterdir()}, expected)
         self.assertEqual({p.name for p in self.out_a.files}, expected)
 
-    def test_lod0_is_inside_the_budget_and_counted_by_group(self) -> None:
-        lod = self.manifest["lods"][0]
-        self.assertEqual(lod["file"], brez.PLY_NAME)
-        self.assertEqual(lod["splats"], len(self.splats))
-        self.assertEqual(brez.SPLAT_BUDGET, (55_000, 85_000), "docs/assets-civilian.md: 70 000 (55 000 to 85 000)")
-        self.assertTrue(brez.SPLAT_BUDGET[0] <= lod["splats"] <= brez.SPLAT_BUDGET[1], lod["splats"])
+    def test_the_hull_is_its_textured_mesh_inside_the_budget(self) -> None:
+        assert_hull_mesh(self, self.dir_a, self.manifest, brez.OBJ_NAME)
+        self.assertLessEqual(self.manifest["mesh"]["triangles"], TRIANGLE_BUDGET)
         self.assertEqual(self.out_a.warnings, ())
         self.assertEqual(brez.CHUNK_ORDER, ("bow", "arm_l", "arm_r"), "docs/assets-civilian.md: bow and the two arms")
-        self.assertEqual(list(self.manifest["counts"]), list(brez.CHUNK_ORDER))
-        self.assertEqual(sum(self.manifest["counts"].values()), len(self.splats))
-        self.assertEqual(self.manifest["files"], {"fallback_mesh": brez.OBJ_NAME, "paint_mesh": "centauri_brezebel_mesh.glb", "hardpoints": brez.HARDPOINTS_NAME})
-        self.assertEqual(self.manifest["chunk_lod"], 1)
+        for key in ("lods", "counts", "sampling", "paint_mesh", "chunk_lod"):
+            self.assertNotIn(key, self.manifest)
 
-    def test_lods_one_to_three_are_coarser_centred_and_keep_the_box(self) -> None:
-        lod0 = self.manifest["lods"][0]
-        self.assertEqual([e["level"] for e in self.manifest["lods"]], [0, 1, 2, 3])
-        for level, (name, factor, _stream, share_range) in brez.LODS.items():
-            entry = self.manifest["lods"][level]
-            self.assertEqual(entry["file"], name)
-            self.assertAlmostEqual(entry["spacing_m"], factor * brez.DEFAULT_SPACING_M)
-            share = entry["splats"] / lod0["splats"]
-            self.assertTrue(share_range[0] <= share <= share_range[1], (level, share))
-            xyz = godot_xyz(self.dir_a / name)
-            self.assertEqual(len(xyz), entry["splats"])
-            self.assertLess(float(np.abs(xyz.mean(axis=0)).max()), 1e-3, "centred like LOD0")
-            tolerance = max(LOD_AABB_TOLERANCE_M, brez.LOD_AABB_SPACINGS * entry["spacing_m"])
-            np.testing.assert_allclose(xyz.min(axis=0), self.manifest["aabb_min"], atol=tolerance)
-            np.testing.assert_allclose(xyz.max(axis=0), self.manifest["aabb_max"], atol=tolerance)
-
-    def test_the_lod_budgets_follow_the_design_table(self) -> None:
-        # docs/assets-civilian.md: LOD1 17 500, LOD2 4 400, LOD3 1 100 for a 70 000 LOD0; the shares carry that.
-        counts = [lod["splats"] for lod in self.manifest["lods"]]
-        self.assertLess(counts[1], 0.3 * counts[0])
-        self.assertLess(counts[2], 0.09 * counts[0])
-        self.assertLess(counts[3], 0.025 * counts[0])
-        self.assertGreater(counts[3], 500, "the farthest level still draws the ship's outline")
+    def test_the_default_atlas_lands_under_six_centimetres_a_texel(self) -> None:
+        parts = [TexturedPart(p.part.mesh, phase_steps(p.part.name, False), (), p.part.name)
+                 for p in brez.with_twins(brez.assemble(brez.DEFAULT_SPEC, brez.CENTAURI))]  # fmt: skip
+        self.assertLess(cv.texel_of(parts, cv.HULL_ATLAS_PX), TEXEL_MAX_M)
 
     def test_dimensions_match_the_reference(self) -> None:
         self.assertAlmostEqual(self.hp["length_m"], 60.0, delta=0.3, msg="Q11: about 60 m")
@@ -173,27 +147,21 @@ class CentauriBrezebelTests(unittest.TestCase):
             {"length": self.hp["length_m"], "span": self.hp["span_m"], "height": self.hp["height_m"]},
         )
 
-    # --- frames, symmetry, splats ----------------------------------------------------------------------------------------
-    def test_ply_is_centred_and_the_aabb_matches_after_the_flip(self) -> None:
+    # --- frames, symmetry ------------------------------------------------------------------------------------------------
+    def test_the_body_origin_is_the_visible_surfaces_centroid(self) -> None:
         np.testing.assert_allclose(self.xyz.mean(axis=0), [0.0, 0.0, 0.0], atol=1e-3)
-        np.testing.assert_allclose(self.xyz.min(axis=0), self.manifest["aabb_min"], atol=2e-4)
-        np.testing.assert_allclose(self.xyz.max(axis=0), self.manifest["aabb_max"], atol=2e-4)
+        np.testing.assert_allclose(self.obj.vertices.min(axis=0), self.manifest["aabb_min"], atol=2e-4)
+        np.testing.assert_allclose(self.obj.vertices.max(axis=0), self.manifest["aabb_max"], atol=2e-4)
         np.testing.assert_allclose(self.manifest["centroid_offset"][0], 0.0, atol=1e-9)
 
     def test_the_authored_frame_starts_at_the_nose(self) -> None:
-        self.assertAlmostEqual(float(self.authored[:, 2].min()), 0.0, delta=0.1, msg="the nose tip at z = 0")
-        self.assertAlmostEqual(float(self.authored[:, 2].max()), 60.0, delta=0.15, msg="the arm tips at z = 60")
+        authored = self.obj.vertices + self.offset
+        self.assertAlmostEqual(float(authored[:, 2].min()), 0.0, delta=0.1, msg="the nose tip at z = 0")
+        self.assertAlmostEqual(float(authored[:, 2].max()), 60.0, delta=0.15, msg="the arm tips at z = 60")
 
-    def test_lod0_and_lod1_are_exactly_mirror_symmetric_in_x(self) -> None:
-        for xyz in (self.xyz, frames.flip_xy(self.lod1.xyz)):
-            np.testing.assert_allclose(sorted_rows(xyz), sorted_rows(xyz * np.array([-1.0, 1.0, 1.0])), atol=SYM_TOL)
-
-    def test_splats_are_flat_oriented_opaque_discs(self) -> None:
-        scale = self.splats.scale
-        self.assertTrue(np.all(scale[:, 2] < scale[:, 0]))
-        self.assertTrue(np.all(np.isfinite(self.splats.rgb)))
-        self.assertTrue(np.all((self.splats.alpha > 0.0) & (self.splats.alpha < 1.0)))
-        self.assertGreater(float(np.median(self.splats.alpha)), 0.9, "an opaque hull")
+    def test_the_mesh_and_the_surface_are_mirror_symmetric_in_x(self) -> None:
+        assert_mirror_symmetric(self, self.obj.vertices, "hull")
+        assert_mirror_symmetric(self, self.xyz, "visible surface", decimals=4)
 
     def test_a_round_bow_and_two_arms_reaching_aft(self) -> None:
         a = self.authored
@@ -219,64 +187,39 @@ class CentauriBrezebelTests(unittest.TestCase):
         self.assertAlmostEqual(float(top), float(bottom), delta=0.3)
 
     # --- colours -------------------------------------------------------------------------------------------------------
-    def test_the_paint_reads_violet_with_gold_caps_a_pale_rim_band_and_windows(self) -> None:
-        rgb, a = self.splats.rgb, self.authored
+    def test_the_paint_reads_violet_with_gold_caps_and_a_pale_rim_band(self) -> None:
+        rgb, a = self.rgb, self.paint_authored
         # The arms' top faces are plain violet plating: blue over red over green.
         arm_top = (np.abs(a[:, 0]) > 12.0) & (a[:, 2] > 44.0) & (a[:, 2] < 56.0) & (np.abs(a[:, 1] - brez.CENTRE_Y) < 2.6)
         violet = np.median(rgb[arm_top], axis=0)
-        self.assertGreater(violet[2], violet[0] * 2.0, "violet: much more blue than red")
+        self.assertGreater(violet[2], violet[0] * 1.5, "violet: much more blue than red")
         self.assertGreater(violet[0], violet[1] * 1.2, "violet, not blue: more red than green")
-        gold = (rgb[:, 0] > 0.4) & (rgb[:, 1] > 0.3) & (rgb[:, 2] < 0.2)
-        self.assertGreater(int(gold.sum()), 200, "the tip fins' gold caps")
+        gold = (rgb[:, 0] > 0.55) & (rgb[:, 1] > 0.4) & (rgb[:, 2] < 0.35)
+        self.assertGreater(int(gold.sum()), 4, "the tip fins' gold caps")
         self.assertGreater(float(np.abs(a[gold, 1] - brez.CENTRE_Y).min()), 10.0, "the caps are on the fins' tips")
-        pale = (rgb.min(axis=1) > 0.55) & (np.ptp(rgb, axis=1) < 0.25)
+        pale = (rgb.min(axis=1) > 0.6) & (np.ptp(rgb, axis=1) < 0.25)
         rim = pale & (a[:, 2] < 19.5) & (np.abs(a[:, 1] - brez.CENTRE_Y) < 1.0)
-        self.assertGreater(int(rim.sum()), 300, "the pale lavender band round the bow's rim")
-        windows = pale & (a[:, 2] < 3.5) & (a[:, 1] > 1.5) & (np.abs(a[:, 0]) < 3.5)
-        self.assertGreater(int(windows.sum()), 10, "the row of windows on the dorsal fitting's front")
+        self.assertGreater(int(rim.sum()), 10, "the pale lavender band round the bow's rim")
 
-    def test_paint_brightness_does_not_follow_the_normal(self) -> None:
-        normals, lum = [], []
-        ctx = BuildContext(Path("unused"), seed=42)
-        hull = brez.CENTAURI.material("hull").name
-        for p in brez.build_parts(brez.CENTAURI, ctx, 0.5):
-            paint = p.samples.material == next((i for i, m in enumerate(p.samples.materials) if m.name == hull), -1)
-            normals.append(p.samples.normals[paint])
-            lum.append(brez.colour_samples(p, brez.CENTAURI)[paint].mean(axis=1))
-        normals, lum = np.concatenate(normals), np.concatenate(lum)
-        self.assertGreater(len(lum), 1000)
-        # No painted grid: the hull is one flat paint, so no baked light can follow the normal.
-        self.assertLess(float(np.ptp(lum)), 1e-9)
+    def test_the_windows_and_the_engine_glow(self) -> None:
+        glowing = glowing_points(self.dir_a, self.manifest["mesh"]) + self.offset
+        windows = glowing[(glowing[:, 2] < 3.5) & (glowing[:, 1] > 1.5) & (np.abs(glowing[:, 0]) < 3.5)]
+        self.assertGreater(len(windows), 0, "the row of windows on the dorsal fitting's front")
+        self.assertTrue((glowing[:, 2] > 25.0).any(), "the main engines' throats")
+        self.assertEqual(len(glowing) - len(windows), int((glowing[:, 2] > 19.0).sum()), "nothing else on the bow glows")
 
-    # --- lighting records ----------------------------------------------------------------------------------------------
-    def test_every_level_chunk_and_the_turret_has_matching_lighting_records(self) -> None:
-        pairs = [(lod["file"], lod["lighting"]) for lod in self.manifest["lods"]]
-        pairs += [(c["ply"], c["lighting"]) for c in self.hp["chunks"]]
-        pairs.append((self.manifest["turret"]["ply"], self.manifest["turret"]["lighting"]))
-        self.assertEqual(len(pairs), 4 + len(brez.CHUNK_ORDER) + 1)
-        for ply_name, light_name in pairs:
-            splats = read_ply(self.dir_a / ply_name).to_splats()
-            records = lighting.read_lighting(self.dir_a / light_name)
-            self.assertEqual(len(records), len(splats), light_name)
-            self.assertLess(float(angle_deg(lighting.decode_normals(records), splats.normals).max()), MAX_ROUND_TRIP_DEG, light_name)
-            self.assertTrue(np.all(records[:, 3] == 255), light_name)
+    def test_the_texture_pack_is_polished_paint(self) -> None:
+        # Centauri Liner.jpg: fine seams barely darker than the paint, little wear, glossy paint.
+        style = brez.CENTAURI
+        self.assertGreater(style.panel_line_darkness, 0.75)
+        self.assertLess(style.panel_line_darkness, 1.0)
+        self.assertLess(style.edge_wear, 0.3)
+        self.assertEqual(style.extra["bare_metal"], 0.0)
+        self.assertLess(style.extra["paint_roughness"], 0.5)
 
     # --- chunks --------------------------------------------------------------------------------------------------------
-    def test_chunks_partition_lod1_exactly(self) -> None:
-        self.assertEqual([c["name"] for c in self.hp["chunks"]], list(brez.CHUNK_ORDER))
-        self.assertEqual(self.manifest["chunks"], list(brez.CHUNK_ORDER))
-        lod1 = frames.flip_xy(self.lod1.xyz)
-        start = 0
-        for entry in self.hp["chunks"]:
-            n = entry["splats"]
-            chunk = read_ply(self.dir_a / entry["ply"]).to_splats()
-            self.assertEqual(len(chunk), n)
-            body = frames.flip_xy(chunk.xyz) + np.array(entry["offset"])
-            np.testing.assert_allclose(body, lod1[start : start + n], atol=1e-5)
-            np.testing.assert_allclose(chunk.rgb, self.lod1.rgb[start : start + n], atol=1e-4)
-            np.testing.assert_allclose(chunk.xyz.mean(axis=0), [0.0, 0.0, 0.0], atol=1e-4)
-            start += n
-        self.assertEqual(start, len(self.lod1))
+    def test_chunks_cut_the_hull(self) -> None:
+        assert_chunks_cut_the_hull(self, self.dir_a, self.manifest, self.hp, brez.CHUNK_ORDER)
 
     def test_chunks_sit_where_they_belong_and_have_joints(self) -> None:
         chunks = {c["name"]: c for c in self.hp["chunks"]}
@@ -292,15 +235,6 @@ class CentauriBrezebelTests(unittest.TestCase):
         np.testing.assert_allclose(chunks["arm_l"]["joint"], mirrored(chunks["arm_r"]["joint"]), atol=1e-4)
         # An arm breaks away where it leaves the bow's rear face (z 19 in the authored frame).
         self.assertAlmostEqual(chunks["arm_r"]["joint"][2] + self.offset[2], 19.0, delta=0.5)
-
-    def test_chunk_objs_are_valid_and_recentred(self) -> None:
-        for entry in self.hp["chunks"]:
-            obj = read_obj(self.dir_a / entry["obj"])
-            self.assertGreater(len(obj.vertices), 0, entry["name"])
-            self.assertTrue(np.all(np.isfinite(obj.vertices)))
-            chunk = godot_xyz(self.dir_a / entry["ply"])
-            lo, hi = obj.vertices.min(axis=0), obj.vertices.max(axis=0)
-            self.assertTrue(np.all(chunk.min(axis=0) >= lo - 0.5) and np.all(chunk.max(axis=0) <= hi + 0.5), entry["name"])
 
     # --- hardpoints contract -----------------------------------------------------------------------------------------------
     def test_hardpoints_schema(self) -> None:
@@ -343,7 +277,7 @@ class CentauriBrezebelTests(unittest.TestCase):
         self.assertAlmostEqual(com_y + self.offset[1], brez.CENTRE_Y, delta=1e-3)
 
     def test_each_retro_fires_clear_of_the_hull(self) -> None:
-        # The depth proxy (the fallback mesh) hides a plume inside the hull: the retro's forward ray leaves the skin within
+        # The depth proxy (the hull's mesh) hides a plume inside the hull: the retro's forward ray leaves the skin within
         # half a metre of the nozzle and never meets the hull again, and the skin is right behind the nozzle.
         v, f = self.obj.vertices, self.obj.faces
         for p in self.hp["pods"]:
@@ -430,16 +364,12 @@ class CentauriBrezebelTests(unittest.TestCase):
         self.assertGreater(len(column), 0)
         self.assertAlmostEqual(float(column[:, 1].max()), p[1], delta=0.2, msg="it stands on the fitting's top")
 
-    def test_the_turret_model_is_written_like_a_chunk(self) -> None:
+    def test_the_turret_model_is_its_own_textured_mesh(self) -> None:
         turret = self.manifest["turret"]
-        self.assertEqual(turret["ply"], "centauri_brezebel_turret.ply")
         self.assertEqual(turret["obj"], "centauri_brezebel_turret.obj")
-        self.assertEqual(turret["lighting"], "centauri_brezebel_turret.light")
-        splats = read_ply(self.dir_a / turret["ply"]).to_splats()
-        self.assertEqual(turret["splats"], len(splats))
-        self.assertTrue(brez.TURRET_SPLATS[0] <= len(splats) <= brez.TURRET_SPLATS[1], f"about 2 000 splats: {len(splats)}")
-        self.assertAlmostEqual(turret["spacing_m"], brez.TURRET_SPACING_M)
-        self.assertEqual(set(turret), {"ply", "lighting", "obj", "splats", "spacing_m", "offset", "barrel_m", "trunnion", "muzzles", "paint_mesh"})
+        self.assertEqual(set(turret), {"obj", "mesh", "barrel_m", "trunnion", "muzzles"})
+        assert_model_mesh(self, self.dir_a, turret["mesh"], turret["obj"], "turret")
+        self.assertLessEqual(turret["mesh"]["triangles"], TURRET_TRIANGLE_BUDGET)
         self.assertEqual(turret["barrel_m"], 2.6)
         left, right = turret["muzzles"]
         self.assertLess(left[0], 0.0)
@@ -448,23 +378,19 @@ class CentauriBrezebelTests(unittest.TestCase):
         self.assertEqual(turret["trunnion"][0], 0.0)
         self.assertEqual(turret["trunnion"][2], 0.0, "on the turning axis")
         self.assertAlmostEqual(turret["trunnion"][1], left[1], msg="the barrels elevate about their own axis")
-        np.testing.assert_allclose(splats.xyz.mean(axis=0), [0.0, 0.0, 0.0], atol=1e-4)
-        local = frames.flip_xy(splats.xyz) + np.array(turret["offset"])
+        local = read_obj(self.dir_a / turret["obj"]).vertices  # the turret's frame: the pivot at the origin
         self.assertAlmostEqual(float(local[:, 1].min()), 0.0, delta=0.1, msg="the stalk stands on the mount")
         self.assertAlmostEqual(float(-local[:, 2].min()), 2.6, delta=0.1, msg="the muzzles are barrel_m ahead of the pivot")
         self.assertAlmostEqual(float(local[:, 0].max()), 1.1, delta=0.15, msg="a teardrop pod 2.2 m across")
-        np.testing.assert_allclose(sorted_rows(local), sorted_rows(local * np.array([-1.0, 1.0, 1.0])), atol=1e-5)
-        gold = (splats.rgb[:, 0] > 0.4) & (splats.rgb[:, 1] > 0.3) & (splats.rgb[:, 2] < 0.2)
-        violet = splats.rgb[:, 2] > 2.0 * splats.rgb[:, 0]
-        self.assertGreater(int(gold.sum()), 30, "gold collars on the barrels")
-        self.assertGreater(int(violet.sum()), len(splats) // 3, "a violet pod")
-        obj = read_obj(self.dir_a / turret["obj"])
-        lo, hi = obj.vertices.min(axis=0), obj.vertices.max(axis=0)
-        self.assertTrue(np.all(frames.flip_xy(splats.xyz).min(axis=0) >= lo - 0.1))
-        self.assertTrue(np.all(frames.flip_xy(splats.xyz).max(axis=0) <= hi + 0.1))
+        assert_mirror_symmetric(self, local, "turret")
+        _, rgb = painted_points(self.dir_a, turret["mesh"])
+        gold = (rgb[:, 0] > 0.55) & (rgb[:, 1] > 0.4) & (rgb[:, 2] < 0.35)
+        violet = rgb[:, 2] > 1.5 * rgb[:, 0]
+        self.assertGreater(int(gold.sum()), 4, "gold collars on the barrels")
+        self.assertGreater(int(violet.sum()), len(rgb) // 4, "a violet pod")
 
     # --- collision -----------------------------------------------------------------------------------------------------
-    def test_collision_boxes_cover_every_splat_and_fit_what_they_hold(self) -> None:
+    def test_collision_boxes_cover_the_visible_surface_and_fit_what_they_hold(self) -> None:
         shapes = self.hp["collision"]
         names = [c["name"] for c in shapes]
         self.assertEqual(len(names), len(set(names)), "unique names")
@@ -472,12 +398,12 @@ class CentauriBrezebelTests(unittest.TestCase):
         inside = np.zeros(len(self.xyz), dtype=bool)
         for c in shapes:
             inside |= inside_primitive(self.xyz, c, inflate=brez.DEFAULT_SPACING_M)
-        self.assertGreaterEqual(float(inside.mean()), 0.999, "the hit volumes cover the LOD0 splat centres")
+        self.assertGreaterEqual(float(inside.mean()), 0.999, "the hit volumes cover the visible surface")
         for c in shapes:
             basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T
             np.testing.assert_allclose(basis.T @ basis, np.eye(3), atol=1e-4)
             self.assertAlmostEqual(float(np.linalg.det(basis)), 1.0, places=3)
-            # Tight: every face of a box lies within 0.45 m of the splats it holds, so no box reaches into empty space.
+            # Tight: every face of a box lies within 0.45 m of the surface it holds, so no box reaches into empty space.
             held = inside_primitive(self.xyz, c, inflate=brez.DEFAULT_SPACING_M)
             self.assertGreater(int(held.sum()), 0, c["name"])
             local = (self.xyz[held] - np.array(c["position"])) @ basis
@@ -508,31 +434,26 @@ class CentauriBrezebelTests(unittest.TestCase):
             expected = sum(p.mesh.face_count for p in parts if p.group == entry["name"])
             self.assertEqual(len(read_obj(self.dir_a / entry["obj"]).faces), expected, entry["name"])
 
-    def test_the_painted_mesh_is_the_fallback_mesh(self) -> None:
-        # The ship as the game draws it (ships are meshes, the 2026-11-04 directive): the fallback mesh's triangles and paint.
-        assert_painted_mesh(self, self.dir_a, self.manifest["paint_mesh"], brez.OBJ_NAME, "hull")
-        turret = self.manifest["turret"]
-        assert_painted_mesh(self, self.dir_a, turret["paint_mesh"], turret["obj"], "turret")
-
-    def test_fallback_obj_is_valid_and_matches_the_splat_bounds(self) -> None:
+    def test_fallback_obj_is_valid_and_holds_the_visible_surface(self) -> None:
         v = self.obj.vertices
         self.assertGreater(len(v), 0)
         self.assertTrue(np.all(np.isfinite(v)))
-        slack = 2.0 * brez.DEFAULT_SPACING_M  # the import test's frame slack
+        slack = 2.0 * brez.DEFAULT_SPACING_M
         np.testing.assert_allclose(v.min(axis=0), self.xyz.min(axis=0), atol=slack)
         np.testing.assert_allclose(v.max(axis=0), self.xyz.max(axis=0), atol=slack)
         for name in ("cn_hull", "cn_stripe", "cn_trim_light", "cn_window"):
-            self.assertIn(name, self.obj.materials, "the painted regions reach the fallback mesh")
+            self.assertIn(name, self.obj.materials, "the painted regions reach the mesh")
 
     # --- determinism, options --------------------------------------------------------------------------------------------
     def test_same_seed_gives_byte_identical_output(self) -> None:
         for out in self.out_a.files:
             self.assertEqual(sha256(out), sha256(self.dir_b / out.name), out.name)
 
-    def test_a_different_seed_changes_the_splats_but_not_the_design(self) -> None:
+    def test_a_different_seed_changes_the_wear_but_not_the_design(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            other = brez.build(BuildContext(Path(tmp), seed=7))
-            self.assertNotEqual(sha256(Path(tmp) / brez.PLY_NAME), sha256(self.dir_a / brez.PLY_NAME))
+            other = brez.build(BuildContext(Path(tmp), seed=7, options=TEST_OPTIONS))
+            albedo = self.manifest["mesh"]["surfaces"][0]["albedo"]
+            self.assertNotEqual(sha256(Path(tmp) / albedo), sha256(self.dir_a / albedo))
             hp = json.loads((Path(tmp) / brez.HARDPOINTS_NAME).read_text(encoding="utf-8"))
 
             def authored(doc: dict, manifest: dict) -> np.ndarray:
@@ -542,17 +463,15 @@ class CentauriBrezebelTests(unittest.TestCase):
             self.assertLess(float(np.abs(np.subtract(other.manifest["centroid_offset"], self.manifest["centroid_offset"])).max()), 0.25)
             self.assertEqual([c["name"] for c in hp["collision"]], [c["name"] for c in self.hp["collision"]])
 
-    def test_spacing_option_scales_the_count_and_is_recorded(self) -> None:
+    def test_the_spacing_option_is_recorded(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            out = brez.build(BuildContext(Path(tmp), seed=42, options={"spacing": 2.0 * brez.DEFAULT_SPACING_M}))
-            count = out.manifest["lods"][0]["splats"]
-            self.assertLess(count, 0.4 * len(self.splats))
-            self.assertEqual(out.manifest["sampling"]["spacing_m"], 2.0 * brez.DEFAULT_SPACING_M)
-            self.assertEqual(out.warnings, (), "the budget warning only applies at the default spacing")
+            out = brez.build(BuildContext(Path(tmp), seed=42, options={**TEST_OPTIONS, "spacing": 2.0 * brez.DEFAULT_SPACING_M}))
+            self.assertEqual(out.manifest["surface_spacing_m"], 2.0 * brez.DEFAULT_SPACING_M)
+            self.assertEqual(out.manifest["mesh"]["triangles"], self.manifest["mesh"]["triangles"], "the mesh does not follow it")
 
     def test_invalid_options_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            for bad in ({"spacing": 0.0}, {"overlap": -1.0}, {"thickness": 0}, {"turret_spacing": -0.1}):
+            for bad in ({"spacing": 0.0}, {"spacing": -1.0}):
                 with self.assertRaises(ValueError):
                     brez.build(BuildContext(Path(tmp), seed=1, options=bad))
 
@@ -567,8 +486,10 @@ class CentauriStyleTests(unittest.TestCase):
         self.assertEqual(CENTAURI.name, "centauri")
         self.assertAlmostEqual(CENTAURI.panel_size_m, 2.4)
         self.assertAlmostEqual(CENTAURI.panel_line_width_m, 0.25)
-        # No painted grid (the maintainer, 2026-11-04).
-        self.assertEqual((CENTAURI.panel_line_darkness, CENTAURI.panel_tint_jitter), (1.0, 0.0))
+        # The texture pack (M5-T27) paints the seams lightly and the windows and throat glow.
+        self.assertLess(CENTAURI.panel_line_darkness, 1.0)
+        self.assertGreater(CENTAURI.material("window").emissive_strength, 0.0)
+        self.assertGreater(CENTAURI.material("nozzle_throat").emissive_strength, 0.0)
 
     def test_the_confirmed_scheme_is_painted_as_written(self) -> None:
         # Q19: the maintainer confirmed the written scheme; any lift waits for T16's GPU check and the maintainer's OK.
@@ -579,7 +500,8 @@ class CentauriStyleTests(unittest.TestCase):
             got = srgb_hex(centauri.CENTAURI.material(role).albedo)
             for shift in (16, 8, 0):
                 self.assertAlmostEqual((got >> shift) & 255, (value >> shift) & 255, delta=1, msg=role)
-        self.assertEqual(centauri.GLOW_SRGB, 0xFFB8E0, "engine and fin-tip glow, a ShipSpec tint for T16")
+        self.assertEqual(centauri.GLOW_SRGB, 0xFFB8E0, "engine and fin-tip glow: the throats' and a ShipSpec tint for T16")
+        self.assertEqual(srgb_hex(centauri.CENTAURI.material("nozzle_throat").emissive), 0xFFB8E0)
 
 
 if __name__ == "__main__":

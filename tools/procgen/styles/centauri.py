@@ -7,7 +7,7 @@ Albedos are linear RGB from the written sRGB scheme, painted as written (Q19). N
 interior) are our choice.
 
 The texture pack (M5-T27; docs/design-references.md, "Centauri Brezebel transport", texture): the liner's polished
-violet paint in Centauri Liner.jpg and Molios.JPG. Fine seams barely darker than the paint, an even tint, glossy paint,
+violet paint in Centauri Liner.jpg. Fine seams barely darker than the paint, an even tint, glossy paint,
 little wear or grime. The five windows glow white and the engine throat the pink-white of the fin-tip lights.
 """
 

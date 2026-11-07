@@ -1,5 +1,7 @@
-"""``narn_transport`` (M5-T14, AC12): files, budgets, frames, symmetry, chunk partition, collision coverage, the hardpoint
-contract with ``turrets[]``, the turret model, colours and determinism."""
+"""``narn_transport`` (M5-T14, AC12; textured meshes from M5-T27): files, the mesh contract, frames, symmetry, chunk cuts,
+collision coverage, the hardpoint contract with ``turrets[]``, the turret model, colours, the texture pack and determinism.
+The visible surface (the samples that place the body origin) stands in for the hull's skin where a test asks what the eye
+sees."""
 
 from __future__ import annotations
 
@@ -11,27 +13,31 @@ from pathlib import Path
 
 import numpy as np
 
-# Off until M5-T27 moves the civilian generators onto the textured-mesh pipeline: they still write splats, and main dropped
-# the splat writers (M4-T31). The checks below are the spec that task converts.
-raise unittest.SkipTest("M5-T27: the civilian generators wait for the textured-mesh pipeline")
-
 from tools.procgen.assets import narn_transport as narn
-from tools.procgen.core import frames, lighting
+from tools.procgen.core import civilian as cv
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.color import linear_to_srgb
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.obj import read_obj
-from tools.procgen.tests.mesh_checks import assert_painted_mesh
-from tools.procgen.core.ply import read_ply
+from tools.procgen.core.textured_mesh import TexturedPart, phase_steps
+from tools.procgen.tests.mesh_checks import (
+    TEST_OPTIONS,
+    assert_chunks_cut_the_hull,
+    assert_hull_mesh,
+    assert_mirror_symmetric,
+    assert_model_mesh,
+    glowing_points,
+    painted_faces,
+)
 
 PILOT_TERMS = {
     "sway_left", "sway_right", "heave_up", "heave_down", "pitch_up", "pitch_down",
     "yaw_left", "yaw_right", "roll_left", "roll_right",
 }  # fmt: skip
 SYM_TOL = 1e-6
-MAX_ROUND_TRIP_DEG = 1.5
-LOD_AABB_TOLERANCE_M = 0.3  # test_splat_import.gd's floor
-LARGE_HULL_EXTENT_M = 30.0  # ... and from this box size a coarse level may fall short by 1.25 of its spacing
+TRIANGLE_BUDGET = 15_000  # 5 692 as built; the importer adds the levels of detail
+TURRET_TRIANGLE_BUDGET = 5_000
+TEXEL_MAX_M = 0.08  # the hull at the default 2 048 px atlas
 
 
 def sha256(path: Path) -> str:
@@ -53,28 +59,8 @@ def inside_primitive(points: np.ndarray, c: dict, inflate: float) -> np.ndarray:
     return np.linalg.norm(local - axis_point, axis=1) <= c["radius"] + inflate
 
 
-def godot_xyz(path: Path) -> np.ndarray:
-    return frames.flip_xy(read_ply(path).to_splats().xyz)
-
-
-def assert_lod_box(tc: unittest.TestCase, xyz: np.ndarray, manifest: dict, spacing: float, label: object) -> None:
-    """test_splat_import.gd's rule for a coarse level's box against LOD0's: it may reach past it only by its centroid
-    drift, and a big hull's may fall short by up to 1.25 of the level's spacing (the sharp extremes it misses)."""
-    lo0, hi0 = np.array(manifest["aabb_min"]), np.array(manifest["aabb_max"])
-    lo, hi = xyz.min(axis=0), xyz.max(axis=0)
-    past = max(float((lo0 - lo).max()), float((hi - hi0).max()))
-    short = max(float((lo - lo0).max()), float((hi0 - hi).max()))
-    tc.assertLessEqual(past, max(LOD_AABB_TOLERANCE_M, 0.25 * spacing), (label, "past LOD0's box", past))
-    big = float((hi0 - lo0).max()) >= LARGE_HULL_EXTENT_M
-    tc.assertLessEqual(short, max(LOD_AABB_TOLERANCE_M, 1.25 * spacing) if big else LOD_AABB_TOLERANCE_M, (label, "short of LOD0's box", short))
-
-
 def mirrored(v: list[float]) -> list[float]:
     return [-v[0], v[1], v[2]]
-
-
-def angle_deg(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    return np.degrees(np.arccos(np.clip(np.einsum("ij,ij->i", a, b), -1.0, 1.0)))
 
 
 class NarnTransportTests(unittest.TestCase):
@@ -83,15 +69,16 @@ class NarnTransportTests(unittest.TestCase):
         cls._tmp = tempfile.TemporaryDirectory()
         root = Path(cls._tmp.name)
         cls.dir_a, cls.dir_b = root / "a", root / "b"
-        cls.out_a = narn.build(BuildContext(cls.dir_a, seed=42))
-        cls.out_b = narn.build(BuildContext(cls.dir_b, seed=42))
+        cls.out_a = narn.build(BuildContext(cls.dir_a, seed=42, options=TEST_OPTIONS))
+        cls.out_b = narn.build(BuildContext(cls.dir_b, seed=42, options=TEST_OPTIONS))
         cls.manifest = manifest_io.read_manifest(cls.dir_a)
-        cls.splats = read_ply(cls.dir_a / narn.PLY_NAME).to_splats()
-        cls.xyz = frames.flip_xy(cls.splats.xyz)
         cls.hp = json.loads((cls.dir_a / narn.HARDPOINTS_NAME).read_text(encoding="utf-8"))
         cls.obj = read_obj(cls.dir_a / narn.OBJ_NAME)
-        cls.lod1 = read_ply(cls.dir_a / narn.LODS[1][0]).to_splats()
         cls.length = cls.hp["length_m"]
+        placed, _ = narn.centre(narn.build_parts(narn.DEFAULT_SPEC, narn.NARN, BuildContext(cls.dir_a, seed=42), narn.DEFAULT_SPACING_M))
+        cls.xyz = np.concatenate([p.samples.positions for p in placed if p.samples is not None])  # the visible surface, body frame
+        cls.paint_at, cls.rgb, cls.area, metal = painted_faces(cls.dir_a, cls.manifest["mesh"])
+        cls.painted = metal < 0.3  # the paint, not the bare metal of the chipped edges
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -99,61 +86,27 @@ class NarnTransportTests(unittest.TestCase):
 
     # --- files, manifest, budgets ------------------------------------------------------------------------------------
     def test_all_files_are_written_and_listed(self) -> None:
-        expected = {narn.PLY_NAME, narn.OBJ_NAME, "narn_transport.mtl", narn.HARDPOINTS_NAME, "manifest.json"}
-        expected |= {entry[0] for entry in narn.LODS.values()}
-        expected |= {lod["lighting"] for lod in self.manifest["lods"]}
+        expected = {narn.OBJ_NAME, "narn_transport.mtl", narn.HARDPOINTS_NAME, "manifest.json"}
+        for stem in ("narn_transport", "narn_transport_turret"):
+            expected |= {f"{stem}.glb"} | {f"{stem}_{k}.png{x}" for k in ("albedo", "normal", "orm", "emissive") for x in ("", ".import")}
         for entry in self.hp["chunks"]:
-            expected |= {entry["ply"], entry["lighting"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
+            expected |= {entry["mesh"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
         turret = self.manifest["turret"]
-        expected |= {turret["ply"], turret["lighting"], turret["obj"], turret["obj"].replace(".obj", ".mtl")}
-        expected |= {"narn_transport_mesh.glb", "narn_transport_turret_mesh.glb"}
+        expected |= {turret["obj"], turret["obj"].replace(".obj", ".mtl")}
         self.assertEqual({p.name for p in self.dir_a.iterdir()}, expected)
         self.assertEqual({p.name for p in self.out_a.files}, expected)
 
-    def test_lod0_is_inside_the_budget_and_counted_by_group(self) -> None:
-        lod = self.manifest["lods"][0]
-        self.assertEqual(lod["file"], narn.PLY_NAME)
-        self.assertEqual(lod["splats"], len(self.splats))
-        self.assertEqual(narn.SPLAT_BUDGET, (60_000, 90_000), "docs/assets-civilian.md: 75 000 (60 000 to 90 000)")
-        self.assertTrue(narn.SPLAT_BUDGET[0] <= lod["splats"] <= narn.SPLAT_BUDGET[1], lod["splats"])
+    def test_the_hull_is_its_textured_mesh_inside_the_budget(self) -> None:
+        assert_hull_mesh(self, self.dir_a, self.manifest, narn.OBJ_NAME)
+        self.assertLessEqual(self.manifest["mesh"]["triangles"], TRIANGLE_BUDGET)
         self.assertEqual(self.out_a.warnings, ())
-        self.assertEqual(list(self.manifest["counts"]), list(narn.CHUNK_ORDER))
-        self.assertEqual(sum(self.manifest["counts"].values()), len(self.splats))
-        self.assertEqual(self.manifest["files"], {"fallback_mesh": narn.OBJ_NAME, "paint_mesh": "narn_transport_mesh.glb", "hardpoints": narn.HARDPOINTS_NAME})
-        self.assertEqual(self.manifest["chunk_lod"], 1)
+        for key in ("lods", "counts", "sampling", "paint_mesh", "chunk_lod"):
+            self.assertNotIn(key, self.manifest)
 
-    def test_lods_one_to_three_are_coarser_centred_and_keep_the_box(self) -> None:
-        lod0 = self.manifest["lods"][0]
-        self.assertEqual([e["level"] for e in self.manifest["lods"]], [0, 1, 2, 3])
-        for level, (name, factor, _stream, share_range) in narn.LODS.items():
-            entry = self.manifest["lods"][level]
-            self.assertEqual(entry["file"], name)
-            self.assertAlmostEqual(entry["spacing_m"], factor * narn.DEFAULT_SPACING_M)
-            share = entry["splats"] / lod0["splats"]
-            self.assertTrue(share_range[0] <= share <= share_range[1], (level, share))
-            xyz = godot_xyz(self.dir_a / name)
-            self.assertEqual(len(xyz), entry["splats"])
-            self.assertLess(float(np.abs(xyz.mean(axis=0)).max()), 1e-3, "centred like LOD0")
-            # Coarse samples miss sharp extremes (the prong tips, the slotted tower tops) and reach past them only by centroid drift.
-            assert_lod_box(self, xyz, self.manifest, entry["spacing_m"], level)
-
-    def test_coarse_levels_keep_lod0s_centroid(self) -> None:
-        # Every level is drawn in LOD0's frame but centred on its own centroid, so the two must agree. Systematic sampling
-        # keeps them within a quarter of the level's own spacing (far under a pixel where each level is shown).
-        ctx = BuildContext(Path("unused"), seed=42)
-        lod0 = np.array(self.manifest["centroid_offset"])
-        for level in narn.LODS:
-            _placed, offset = narn.level_parts(narn.DEFAULT_SPEC, narn.NARN, ctx, narn.DEFAULT_SPACING_M, level)
-            drift = float(np.linalg.norm(offset - lod0))
-            self.assertLess(drift, 0.25 * self.manifest["lods"][level]["spacing_m"], (level, drift))
-
-    def test_the_lod_budgets_follow_the_design_table(self) -> None:
-        # docs/assets-civilian.md: LOD1 18 750, LOD2 4 700, LOD3 1 200 for a 75 000 LOD0; the shares carry that.
-        counts = [lod["splats"] for lod in self.manifest["lods"]]
-        self.assertLess(counts[1], 0.3 * counts[0])
-        self.assertLess(counts[2], 0.09 * counts[0])
-        self.assertLess(counts[3], 0.025 * counts[0])
-        self.assertGreater(counts[3], 500, "the farthest level still draws the ship's outline")
+    def test_the_default_atlas_lands_under_eight_centimetres_a_texel(self) -> None:
+        placed, _ = narn.centre(narn.build_parts(narn.DEFAULT_SPEC, narn.NARN, BuildContext(Path("unused"), seed=42), 1.0))
+        parts = [TexturedPart(p.part.mesh, phase_steps(p.part.name, False), (), p.part.name) for p in placed if p.hull]
+        self.assertLess(cv.texel_of(parts, cv.HULL_ATLAS_PX), TEXEL_MAX_M)
 
     def test_dimensions_match_the_design(self) -> None:
         self.assertAlmostEqual(self.hp["length_m"], 70.0, delta=0.5, msg="Q8: about 70 m")
@@ -164,23 +117,16 @@ class NarnTransportTests(unittest.TestCase):
             {"length": self.hp["length_m"], "span": self.hp["span_m"], "height": self.hp["height_m"]},
         )
 
-    # --- frames, symmetry, splats ----------------------------------------------------------------------------------------
-    def test_ply_is_centred_and_the_aabb_matches_after_the_flip(self) -> None:
+    # --- frames, symmetry ------------------------------------------------------------------------------------------------
+    def test_the_body_origin_is_the_visible_surfaces_centroid(self) -> None:
         np.testing.assert_allclose(self.xyz.mean(axis=0), [0.0, 0.0, 0.0], atol=1e-3)
-        np.testing.assert_allclose(self.xyz.min(axis=0), self.manifest["aabb_min"], atol=2e-4)
-        np.testing.assert_allclose(self.xyz.max(axis=0), self.manifest["aabb_max"], atol=2e-4)
+        np.testing.assert_allclose(self.obj.vertices.min(axis=0), self.manifest["aabb_min"], atol=2e-4)
+        np.testing.assert_allclose(self.obj.vertices.max(axis=0), self.manifest["aabb_max"], atol=2e-4)
         np.testing.assert_allclose(self.manifest["centroid_offset"][0], 0.0, atol=1e-9)
 
-    def test_lod0_and_lod1_are_exactly_mirror_symmetric_in_x(self) -> None:
-        for xyz in (self.xyz, frames.flip_xy(self.lod1.xyz)):
-            np.testing.assert_allclose(sorted_rows(xyz), sorted_rows(xyz * np.array([-1.0, 1.0, 1.0])), atol=SYM_TOL)
-
-    def test_splats_are_flat_oriented_opaque_discs(self) -> None:
-        scale = self.splats.scale
-        self.assertTrue(np.all(scale[:, 2] < scale[:, 0]))
-        self.assertTrue(np.all(np.isfinite(self.splats.rgb)))
-        self.assertTrue(np.all((self.splats.alpha > 0.0) & (self.splats.alpha < 1.0)))
-        self.assertGreater(float(np.median(self.splats.alpha)), 0.9, "an opaque hull: the canopy is dark glass, not clear")
+    def test_the_mesh_and_the_surface_are_mirror_symmetric_in_x(self) -> None:
+        assert_mirror_symmetric(self, self.obj.vertices, "hull")
+        assert_mirror_symmetric(self, self.xyz, "visible surface", decimals=4)
 
     def test_the_nose_points_forward_and_the_box_is_aft(self) -> None:
         z_lo, z_hi = self.xyz[:, 2].min(), self.xyz[:, 2].max()
@@ -192,66 +138,42 @@ class NarnTransportTests(unittest.TestCase):
 
     # --- colours -------------------------------------------------------------------------------------------------------
     def test_the_paint_reads_narn_green_with_a_light_grey_box_and_a_red_band(self) -> None:
-        rgb = self.splats.rgb
-        y, z = self.xyz[:, 1], self.xyz[:, 2]
-        box_side = (np.abs(np.abs(self.xyz[:, 0]) - 12.75) < 0.05) & (z > np.percentile(z, 85))
-        grey = np.median(rgb[box_side], axis=0)
+        # Area-weighted: the test atlas is coarse, so its scaled wear covers the small faces.
+        rgb, at, area = self.rgb[self.painted], self.paint_at[self.painted], self.area[self.painted]
+        y, z = at[:, 1], at[:, 2]
+        box_side = (np.abs(np.abs(at[:, 0]) - 12.75) < 0.05) & (z > np.percentile(self.xyz[:, 2], 85))
+        grey = np.average(rgb[box_side], axis=0, weights=area[box_side])
         self.assertLess(float(np.ptp(grey)), 0.08, "the box is a neutral grey")
-        self.assertGreater(float(grey.mean()), 0.3, "a light grey")
-        prongs = (z < z.min() + 6.0) & (y > -1.0)
-        green = np.median(rgb[prongs], axis=0)
-        self.assertGreater(green[1], green[0] * 1.5, "the hull is green")
-        self.assertGreater(green[1], green[2] * 1.2)
-        red = (rgb[:, 0] > 2.5 * rgb[:, 1]) & (rgb[:, 0] > 0.2)
-        self.assertGreater(int(red.sum()), 200, "the red band on each side of the crescent")
-        self.assertAlmostEqual(float(self.xyz[red, 0].mean()), 0.0, delta=0.5, msg="one band on each side")
-        self.assertGreater(float(np.abs(self.xyz[red, 0]).min()), 12.0, "on the crescent halves, outboard of the box")
+        self.assertGreater(float(grey.mean()), 0.45, "a light grey")
+        prongs = (z < self.xyz[:, 2].min() + 6.0) & (y > -1.0)
+        green = np.average(rgb[prongs], axis=0, weights=area[prongs])
+        self.assertGreater(green[1], green[0] * 1.2, "the hull is green")
+        self.assertGreater(green[1], green[2] * 1.05)
+        red = (rgb[:, 0] > 1.8 * rgb[:, 1]) & (rgb[:, 0] > 0.35)
+        self.assertGreater(int(red.sum()), 4, "the red band on each side of the crescent")
+        self.assertAlmostEqual(float(at[red, 0].mean()), 0.0, delta=0.5, msg="one band on each side")
+        self.assertGreater(float(np.abs(at[red, 0]).min()), 12.0, "on the crescent halves, outboard of the box")
 
-    def test_paint_brightness_does_not_follow_the_normal(self) -> None:
-        normals, lum = [], []
-        ctx = BuildContext(Path("unused"), seed=42)
-        for p in narn.build_parts(narn.DEFAULT_SPEC, narn.NARN, ctx, 0.5):
-            if p.samples is None:
-                continue
-            paint = p.samples.material == next(
-                (i for i, m in enumerate(p.samples.materials) if m.name == narn.NARN.material("hull").name), -1
-            )
-            normals.append(p.samples.normals[paint])
-            lum.append(narn.colour_samples(p, narn.NARN)[paint].mean(axis=1))
-        normals, lum = np.concatenate(normals), np.concatenate(lum)
-        self.assertGreater(len(lum), 1000)
-        # No painted grid: the hull is one flat paint, so no baked light can follow the normal.
-        self.assertLess(float(np.ptp(lum)), 1e-9)
+    def test_only_the_engine_throats_glow(self) -> None:
+        glowing = glowing_points(self.dir_a, self.manifest["mesh"])
+        self.assertGreater(len(glowing), 0)
+        self.assertTrue((glowing[:, 0] > 10.0).any() and (glowing[:, 0] < -10.0).any(), "one in each flank tower")
+        mains = [np.array(p["main"]["position"]) for p in self.hp["pods"]]
+        retros = [np.array(p["retro"]["position"]) for p in self.hp["pods"]]
+        near = np.min([np.linalg.norm(glowing - q, axis=1) for q in mains + retros], axis=0)
+        self.assertLess(float(near.max()), 1.5, "the nozzles' throats, nothing else")
 
-    # --- lighting records ----------------------------------------------------------------------------------------------
-    def test_every_level_chunk_and_the_turret_has_matching_lighting_records(self) -> None:
-        pairs = [(lod["file"], lod["lighting"]) for lod in self.manifest["lods"]]
-        pairs += [(c["ply"], c["lighting"]) for c in self.hp["chunks"]]
-        pairs.append((self.manifest["turret"]["ply"], self.manifest["turret"]["lighting"]))
-        self.assertEqual(len(pairs), 4 + len(narn.CHUNK_ORDER) + 1)
-        for ply_name, light_name in pairs:
-            splats = read_ply(self.dir_a / ply_name).to_splats()
-            records = lighting.read_lighting(self.dir_a / light_name)
-            self.assertEqual(len(records), len(splats), light_name)
-            self.assertLess(float(angle_deg(lighting.decode_normals(records), splats.normals).max()), MAX_ROUND_TRIP_DEG, light_name)
-            self.assertTrue(np.all(records[:, 3] == 255), light_name)
+    def test_the_texture_pack_is_hard_used_plating(self) -> None:
+        # Tal'Quith.JPG and Na'Tan.JPG: dark seams, a strong plate-to-plate tint, chipped edges with some bare metal, streaks.
+        style = narn.NARN
+        self.assertLess(style.panel_line_darkness, 0.7)
+        self.assertGreater(style.panel_tint_jitter, 0.06)
+        self.assertGreater(style.extra["bare_metal"], 0.0)
+        self.assertGreater(style.streaks, 0.15)
 
     # --- chunks --------------------------------------------------------------------------------------------------------
-    def test_chunks_partition_lod1_exactly(self) -> None:
-        self.assertEqual([c["name"] for c in self.hp["chunks"]], list(narn.CHUNK_ORDER))
-        self.assertEqual(self.manifest["chunks"], list(narn.CHUNK_ORDER))
-        lod1 = frames.flip_xy(self.lod1.xyz)
-        start = 0
-        for entry in self.hp["chunks"]:
-            n = entry["splats"]
-            chunk = read_ply(self.dir_a / entry["ply"]).to_splats()
-            self.assertEqual(len(chunk), n)
-            body = frames.flip_xy(chunk.xyz) + np.array(entry["offset"])
-            np.testing.assert_allclose(body, lod1[start : start + n], atol=1e-5)
-            np.testing.assert_allclose(chunk.rgb, self.lod1.rgb[start : start + n], atol=1e-4)
-            np.testing.assert_allclose(chunk.xyz.mean(axis=0), [0.0, 0.0, 0.0], atol=1e-4)
-            start += n
-        self.assertEqual(start, len(self.lod1))
+    def test_chunks_cut_the_hull(self) -> None:
+        assert_chunks_cut_the_hull(self, self.dir_a, self.manifest, self.hp, narn.CHUNK_ORDER)
 
     def test_chunks_sit_where_they_belong_and_have_joints(self) -> None:
         chunks = {c["name"]: c for c in self.hp["chunks"]}
@@ -266,15 +188,6 @@ class NarnTransportTests(unittest.TestCase):
             self.assertEqual(len(c["joint"]), 3, name)
             self.assertLess(float(np.linalg.norm(np.array(c["joint"]) - offsets[name])), 30.0, name)
         self.assertAlmostEqual(abs(chunks["wing_r"]["joint"][0]), abs(chunks["wing_l"]["joint"][0]), places=4)
-
-    def test_chunk_objs_are_valid_and_recentred(self) -> None:
-        for entry in self.hp["chunks"]:
-            obj = read_obj(self.dir_a / entry["obj"])
-            self.assertGreater(len(obj.vertices), 0, entry["name"])
-            self.assertTrue(np.all(np.isfinite(obj.vertices)))
-            chunk = godot_xyz(self.dir_a / entry["ply"])
-            lo, hi = obj.vertices.min(axis=0), obj.vertices.max(axis=0)
-            self.assertTrue(np.all(chunk.min(axis=0) >= lo - 0.5) and np.all(chunk.max(axis=0) <= hi + 0.5), entry["name"])
 
     # --- hardpoints contract -----------------------------------------------------------------------------------------------
     def test_hardpoints_schema(self) -> None:
@@ -398,17 +311,13 @@ class NarnTransportTests(unittest.TestCase):
         # The tower tops are the highest points of the ship.
         self.assertGreater(turrets[1]["position"][1], float(np.percentile(self.xyz[:, 1], 99.9)) - 0.2)
 
-    def test_the_turret_model_is_written_like_a_chunk(self) -> None:
+    def test_the_turret_model_is_its_own_textured_mesh(self) -> None:
         turret = self.manifest["turret"]
-        self.assertEqual(turret["ply"], "narn_transport_turret.ply")
         self.assertEqual(turret["obj"], "narn_transport_turret.obj")
-        self.assertEqual(turret["lighting"], "narn_transport_turret.light")
-        splats = read_ply(self.dir_a / turret["ply"]).to_splats()
-        self.assertEqual(turret["splats"], len(splats))
-        self.assertTrue(1_500 <= len(splats) <= 2_600, f"about 2 000 splats: {len(splats)}")
-        self.assertAlmostEqual(turret["spacing_m"], narn.TURRET_SPACING_M)
-        # The same keys as parts/turret.py's entry (T12), so the game reads every civilian's turret one way.
-        self.assertEqual(set(turret), {"ply", "lighting", "obj", "splats", "spacing_m", "offset", "barrel_m", "trunnion", "muzzles", "paint_mesh"})
+        # The same keys as parts/turret.py's entry, so the game reads every civilian's turret one way.
+        self.assertEqual(set(turret), {"obj", "mesh", "barrel_m", "trunnion", "muzzles"})
+        assert_model_mesh(self, self.dir_a, turret["mesh"], turret["obj"], "turret")
+        self.assertLessEqual(turret["mesh"]["triangles"], TURRET_TRIANGLE_BUDGET)
         self.assertEqual(turret["barrel_m"], 3.0)
         left, right = turret["muzzles"]
         self.assertLess(left[0], 0.0)
@@ -417,31 +326,26 @@ class NarnTransportTests(unittest.TestCase):
         self.assertEqual(turret["trunnion"][0], 0.0)
         self.assertEqual(turret["trunnion"][2], 0.0, "on the turning axis")
         self.assertAlmostEqual(turret["trunnion"][1], left[1], msg="the barrels elevate about their own axis")
-        np.testing.assert_allclose(splats.xyz.mean(axis=0), [0.0, 0.0, 0.0], atol=1e-4)
-        # Back in the turret's own frame (pivot at the origin, +Y up, barrels along -Z), via its offset.
-        local = frames.flip_xy(splats.xyz) + np.array(turret["offset"])
+        local = read_obj(self.dir_a / turret["obj"]).vertices  # the turret's frame: pivot at the origin, +Y up, barrels along -Z
         self.assertAlmostEqual(float(local[:, 1].min()), 0.0, delta=0.1, msg="the base stands on the mount")
         self.assertAlmostEqual(float(-local[:, 2].min()), 3.0, delta=0.1, msg="the muzzles are barrel_m ahead of the pivot")
         self.assertAlmostEqual(float(local[:, 0].max()), 1.3, delta=0.15, msg="a six-sided base 2.6 m across")
-        np.testing.assert_allclose(sorted_rows(local), sorted_rows(local * np.array([-1.0, 1.0, 1.0])), atol=1e-5)
-        red = (splats.rgb[:, 0] > 2.5 * splats.rgb[:, 1]) & (splats.rgb[:, 0] > 0.2)
-        green = splats.rgb[:, 1] > 1.3 * splats.rgb[:, 0]
-        self.assertGreater(int(red.sum()), 50, "the red band")
-        self.assertGreater(int(green.sum()), len(splats) // 4, "dark green")
-        obj = read_obj(self.dir_a / turret["obj"])
-        lo, hi = obj.vertices.min(axis=0), obj.vertices.max(axis=0)
-        self.assertTrue(np.all(frames.flip_xy(splats.xyz).min(axis=0) >= lo - 0.1))
-        self.assertTrue(np.all(frames.flip_xy(splats.xyz).max(axis=0) <= hi + 0.1))
+        assert_mirror_symmetric(self, local, "turret")
+        _, rgb, area, _metal = painted_faces(self.dir_a, turret["mesh"])
+        red = (rgb[:, 0] > 1.8 * rgb[:, 1]) & (rgb[:, 0] > 0.35)
+        green = rgb[:, 1] > 1.1 * rgb[:, 0]
+        self.assertGreater(int(red.sum()), 2, "the red band")
+        self.assertGreater(float(area[green].sum()), 0.25 * float(area.sum()), "dark green")
 
     # --- collision -----------------------------------------------------------------------------------------------------
-    def test_collision_primitives_cover_the_splats_and_stay_close(self) -> None:
+    def test_collision_primitives_cover_the_visible_surface_and_stay_close(self) -> None:
         shapes = self.hp["collision"]
         names = [c["name"] for c in shapes]
         self.assertEqual(len(names), len(set(names)), "unique names")
         inside = np.zeros(len(self.xyz), dtype=bool)
         for c in shapes:
             inside |= inside_primitive(self.xyz, c, inflate=narn.DEFAULT_SPACING_M)
-        self.assertGreaterEqual(float(inside.mean()), 0.999, "the hit volumes hold the hull: 99.9 % of the LOD0 splat centres")
+        self.assertGreaterEqual(float(inside.mean()), 0.999, "the hit volumes hold the hull: 99.9 % of the visible surface")
         lo, hi = self.xyz.min(axis=0), self.xyz.max(axis=0)
         for c in shapes:
             basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T
@@ -476,34 +380,30 @@ class NarnTransportTests(unittest.TestCase):
             self.assertEqual(twin.get("size"), c.get("size"), name)
 
     # --- meshes ----------------------------------------------------------------------------------------------------------
-    def test_the_painted_mesh_is_the_fallback_mesh(self) -> None:
-        # The ship as the game draws it (ships are meshes, the 2026-11-04 directive): the fallback mesh's triangles and paint.
-        assert_painted_mesh(self, self.dir_a, self.manifest["paint_mesh"], narn.OBJ_NAME, "hull")
-        turret = self.manifest["turret"]
-        assert_painted_mesh(self, self.dir_a, turret["paint_mesh"], turret["obj"], "turret")
-
-    def test_fallback_obj_is_valid_and_matches_the_splat_bounds(self) -> None:
+    def test_fallback_obj_is_valid_and_holds_the_visible_surface(self) -> None:
         v = self.obj.vertices
         self.assertGreater(len(v), 0)
         self.assertTrue(np.all(np.isfinite(v)))
-        slack = 2.0 * narn.DEFAULT_SPACING_M  # the import test's frame slack
+        slack = 2.0 * narn.DEFAULT_SPACING_M
         np.testing.assert_allclose(v.min(axis=0), self.xyz.min(axis=0), atol=slack)
         np.testing.assert_allclose(v.max(axis=0), self.xyz.max(axis=0), atol=slack)
         self.assertIn("nr_hull", self.obj.materials)
-        self.assertIn("nr_stripe", self.obj.materials, "the painted regions reach the fallback mesh")
+        self.assertIn("nr_stripe", self.obj.materials, "the painted regions reach the mesh")
 
     # --- determinism, options --------------------------------------------------------------------------------------------
     def test_same_seed_gives_byte_identical_output(self) -> None:
         for out in self.out_a.files:
             self.assertEqual(sha256(out), sha256(self.dir_b / out.name), out.name)
 
-    def test_a_different_seed_changes_the_splats_but_not_the_design(self) -> None:
+    def test_a_different_seed_changes_the_wear_but_not_the_design(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            other = narn.build(BuildContext(Path(tmp), seed=7))
-            self.assertNotEqual(sha256(Path(tmp) / narn.PLY_NAME), sha256(self.dir_a / narn.PLY_NAME))
+            other = narn.build(BuildContext(Path(tmp), seed=7, options=TEST_OPTIONS))
+            albedo = self.manifest["mesh"]["surfaces"][0]["albedo"]
+            self.assertNotEqual(sha256(Path(tmp) / albedo), sha256(self.dir_a / albedo))
             hp = json.loads((Path(tmp) / narn.HARDPOINTS_NAME).read_text(encoding="utf-8"))
             self.assertEqual([t["name"] for t in hp["turrets"]], [t["name"] for t in self.hp["turrets"]])
-            # The centroid (the frame's origin) moves with the random samples; back in the authored frame nothing moves.
+
+            # The body origin moves with the random samples; back in the authored frame nothing moves.
             def authored(doc: dict, manifest: dict) -> np.ndarray:
                 return np.array([t["position"] for t in doc["turrets"]]) + np.array(manifest["centroid_offset"])
 
@@ -511,17 +411,15 @@ class NarnTransportTests(unittest.TestCase):
             self.assertLess(float(np.abs(np.subtract(other.manifest["centroid_offset"], self.manifest["centroid_offset"])).max()), 0.25)
             self.assertEqual([c["name"] for c in hp["collision"]], [c["name"] for c in self.hp["collision"]])
 
-    def test_spacing_option_scales_the_count_and_is_recorded(self) -> None:
+    def test_the_spacing_option_is_recorded(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            out = narn.build(BuildContext(Path(tmp), seed=42, options={"spacing": 2.0 * narn.DEFAULT_SPACING_M}))
-            count = out.manifest["lods"][0]["splats"]
-            self.assertLess(count, 0.4 * len(self.splats))
-            self.assertEqual(out.manifest["sampling"]["spacing_m"], 2.0 * narn.DEFAULT_SPACING_M)
-            self.assertEqual(out.warnings, (), "the budget warning only applies at the default spacing")
+            out = narn.build(BuildContext(Path(tmp), seed=42, options={**TEST_OPTIONS, "spacing": 2.0 * narn.DEFAULT_SPACING_M}))
+            self.assertEqual(out.manifest["surface_spacing_m"], 2.0 * narn.DEFAULT_SPACING_M)
+            self.assertEqual(out.manifest["mesh"]["triangles"], self.manifest["mesh"]["triangles"], "the mesh does not follow it")
 
     def test_invalid_options_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            for bad in ({"spacing": 0.0}, {"overlap": -1.0}, {"thickness": 0}):
+            for bad in ({"spacing": 0.0}, {"spacing": -1.0}):
                 with self.assertRaises(ValueError):
                     narn.build(BuildContext(Path(tmp), seed=1, options=bad))
 
@@ -536,8 +434,9 @@ class NarnStyleTests(unittest.TestCase):
         self.assertEqual(NARN.name, "narn")
         self.assertAlmostEqual(NARN.panel_size_m, 2.4)
         self.assertAlmostEqual(NARN.panel_line_width_m, 0.25)
-        # No painted grid (the maintainer, 2026-11-04).
-        self.assertEqual((NARN.panel_line_darkness, NARN.panel_tint_jitter), (1.0, 0.0))
+        # The texture pack (M5-T27) paints the seams; the engine throats glow orange-white.
+        self.assertLess(NARN.panel_line_darkness, 1.0)
+        self.assertGreater(NARN.material("nozzle_throat").emissive_strength, 0.0)
         self.assertEqual(NARN.material("canopy_glass").transmittance, 0.0, "dark opaque glass: there is no cockpit inside")
 
     def test_the_confirmed_scheme_is_painted_as_written(self) -> None:

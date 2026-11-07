@@ -1,9 +1,10 @@
-"""``brakiri_bokmai`` (M5-T22, AC12, D59, D61, Q17, Q22): files, budgets, frames, symmetry, chunk partition, collision
-coverage, the hardpoint contract with its two flank turrets and three cargo mounts, the pod model, the turret model,
-colours and determinism; and the shared civilian pipeline (``core/civilian.py``).
+"""``brakiri_bokmai`` (M5-T22, AC12, D59, D61, Q17, Q22; textured meshes from M5-T27): files, the mesh contract, frames,
+symmetry, chunk cuts, collision coverage, the hardpoint contract with its two flank turrets and three cargo mounts, the pod
+model, the turret model, paint and determinism; and the shared civilian pipeline (``core/civilian.py``).
 
 The expected numbers are typed in from docs/assets-civilian.md and docs/design-references.md ("Brakiri Bokmai
-transport"), not read from the generator.
+transport"), not read from the generator. The visible surface (the samples that place the body origin) stands in for the
+hull's skin where a test asks what the eye sees.
 """
 
 from __future__ import annotations
@@ -16,41 +17,41 @@ from pathlib import Path
 
 import numpy as np
 
-# Off until M5-T27 moves the civilian generators onto the textured-mesh pipeline: they still write splats, and main dropped
-# the splat writers (M4-T31). The checks below are the spec that task converts.
-raise unittest.SkipTest("M5-T27: the civilian generators wait for the textured-mesh pipeline")
-
 from tools.procgen.assets import ASSETS
 from tools.procgen.assets import brakiri_bokmai as bok
 from tools.procgen.core import civilian as cv
-from tools.procgen.core import frames, lighting
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.color import linear_to_srgb
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.obj import read_obj
-from tools.procgen.core.ply import read_ply
+from tools.procgen.core.textured_mesh import TexturedPart, phase_steps
 from tools.procgen.parts import Part
 from tools.procgen.parts import brakiri as bp
 from tools.procgen.styles.brakiri import BOLT_SRGB, BRAKIRI, BRAKIRI_POD, GLOW_SRGB
-from tools.procgen.tests.mesh_checks import assert_painted_mesh
+from tools.procgen.tests.mesh_checks import (
+    TEST_OPTIONS,
+    assert_chunks_cut_the_hull,
+    assert_hull_mesh,
+    assert_mirror_symmetric,
+    assert_model_mesh,
+    glowing_points,
+    painted_points,
+)
 
 PILOT_TERMS = {
     "sway_left", "sway_right", "heave_up", "heave_down", "pitch_up", "pitch_down",
     "yaw_left", "yaw_right", "roll_left", "roll_right",
 }  # fmt: skip
-SYM_TOL = 1e-5
-LOD_AABB_TOLERANCE_M = 0.3  # test_splat_import.gd's floor
-LARGE_HULL_EXTENT_M = 30.0  # ... and from this box size a coarse level may fall short by 1.25 of its spacing
 CHUNKS = ("bow", "arm_l", "arm_r", "engine_l", "engine_r")
-BUDGET = (32_000, 49_000)  # docs/assets-civilian.md: the hull 40 500 (32 000 to 49 000)
-POD_BUDGET = (9_000, 14_000)  # each pod 11 500
-LOD_SHARES = {1: (0.20, 0.30), 2: (0.04, 0.09), 3: (0.01, 0.025)}
+TRIANGLE_BUDGET = 20_000  # the hull without its pods (9 284 as built); the importer adds the levels of detail
+MODEL_TRIANGLE_BUDGET = 5_000  # the pod or the turret
+TEXEL_MAX_M = 0.06  # the hull at the default 2 048 px atlas
 LENGTH, SPAN, HEIGHT = 80.0, 31.62, 30.91  # Q17 and the reference's box at 80 m
 NACELLE_AXIS = (13.16, 2.09)  # x, y of the cups and domes: the thrust line
 MOUNTS = {"pod_fwd": (0.0, 1.70, 24.63), "pod_mid": (0.0, 1.70, 39.07), "pod_aft": (0.0, 1.70, 53.57)}
 POD_SPANS = {"pod_fwd": (17.94, 31.33), "pod_mid": (32.37, 45.76), "pod_aft": (46.87, 60.26)}  # the reference's pods' z
 POD = (17.81, 11.74, 13.39)  # width, height, length
-SLEEVE_R = 1.48  # the bore round the spindle the no-splats test leaves out
+SLEEVE_R = 1.48  # the bore round the spindle the pod-volume test leaves out
 FLANK_TURRET = (2.04, 8.45, 6.58)  # Q22: in the stepped inset high on the right flank, up +x (the maintainer's sheet)
 
 
@@ -60,10 +61,6 @@ def sha256(path: Path) -> str:
 
 def sorted_rows(a: np.ndarray) -> np.ndarray:
     return a[np.lexsort((a[:, 2], a[:, 1], a[:, 0]))]
-
-
-def godot_xyz(path: Path) -> np.ndarray:
-    return frames.flip_xy(read_ply(path).to_splats().xyz)
 
 
 def inside_primitive(points: np.ndarray, c: dict, inflate: float) -> np.ndarray:
@@ -103,34 +100,23 @@ def srgb_hex(albedo: tuple[float, float, float]) -> int:
     return (r << 16) | (g << 8) | b
 
 
-def assert_lod_box(tc: unittest.TestCase, xyz: np.ndarray, manifest: dict, spacing: float, label: object) -> None:
-    """test_splat_import.gd's rule for a coarse level's box against LOD0's (see test_narn_transport.py)."""
-    lo0, hi0 = np.array(manifest["aabb_min"]), np.array(manifest["aabb_max"])
-    lo, hi = xyz.min(axis=0), xyz.max(axis=0)
-    past = max(float((lo0 - lo).max()), float((hi - hi0).max()))
-    short = max(float((lo - lo0).max()), float((hi0 - hi).max()))
-    tc.assertLessEqual(past, max(LOD_AABB_TOLERANCE_M, 0.25 * spacing), (label, "past LOD0's box", past))
-    big = float((hi0 - lo0).max()) >= LARGE_HULL_EXTENT_M
-    tc.assertLessEqual(short, max(LOD_AABB_TOLERANCE_M, 1.25 * spacing) if big else LOD_AABB_TOLERANCE_M, (label, "short", short))
-
-
 class BrakiriBokmaiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls._tmp = tempfile.TemporaryDirectory()
         root = Path(cls._tmp.name)
         cls.dir_a, cls.dir_b = root / "a", root / "b"
-        cls.out_a = bok.build(BuildContext(cls.dir_a, seed=42))
-        cls.out_b = bok.build(BuildContext(cls.dir_b, seed=42))
+        cls.out_a = bok.build(BuildContext(cls.dir_a, seed=42, options=TEST_OPTIONS))
+        cls.out_b = bok.build(BuildContext(cls.dir_b, seed=42, options=TEST_OPTIONS))
         cls.manifest = manifest_io.read_manifest(cls.dir_a)
-        cls.splats = read_ply(cls.dir_a / bok.PLY_NAME).to_splats()
-        cls.xyz = frames.flip_xy(cls.splats.xyz)
         cls.hp = json.loads((cls.dir_a / bok.HARDPOINTS_NAME).read_text(encoding="utf-8"))
         cls.obj = read_obj(cls.dir_a / bok.OBJ_NAME)
         cls.offset = np.array(cls.manifest["centroid_offset"])
-        cls.spacing = float(cls.manifest["lods"][0]["spacing_m"])
+        cls.spacing = float(cls.manifest["surface_spacing_m"])
+        sampled = cv.sample_pieces(bok.hull_pieces(), BuildContext(cls.dir_a, seed=42), cls.spacing, buried_margin=bok.BURIED_MARGIN_M)
+        cls.xyz = np.concatenate([s.samples.positions for s in sampled]) - cls.offset  # the visible surface, body frame
         cls.authored_xyz = cls.xyz + cls.offset
-        cls.pod_xyz = godot_xyz(cls.dir_a / "brakiri_bokmai_pod.ply")
+        cls.pod_xyz = read_obj(cls.dir_a / "brakiri_bokmai_pod.obj").vertices
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -148,65 +134,48 @@ class BrakiriBokmaiTests(unittest.TestCase):
 
     def test_all_files_are_written_and_listed(self) -> None:
         names = {p.name for p in self.out_a.files}
-        expected = {"brakiri_bokmai.ply", "brakiri_bokmai.obj", "hardpoints.json", "manifest.json", "brakiri_bokmai_turret.ply",
-                    "brakiri_bokmai_turret.obj", "brakiri_bokmai_pod.ply", "brakiri_bokmai_pod.obj"}  # fmt: skip
-        expected |= {f"brakiri_bokmai_lod{k}.ply" for k in (1, 2, 3)} | {f"brakiri_bokmai_pod_lod{k}.ply" for k in (1, 2, 3)}
-        expected |= {f"brakiri_bokmai_chunk_{c}.ply" for c in CHUNKS}
-        expected |= {"brakiri_bokmai_mesh.glb", "brakiri_bokmai_turret_mesh.glb", "brakiri_bokmai_pod_mesh.glb"}
+        expected = {"hardpoints.json", "manifest.json"}
+        for stem in ("brakiri_bokmai", "brakiri_bokmai_turret", "brakiri_bokmai_pod"):
+            expected |= {f"{stem}.glb", f"{stem}.obj"} | {f"{stem}_{k}.png" for k in ("albedo", "normal", "orm", "emissive")}
+        expected |= {f"brakiri_bokmai_chunk_{c}.{ext}" for c in CHUNKS for ext in ("obj", "glb")}
         self.assertTrue(expected <= names, sorted(expected - names))
-        self.assertFalse(any(n.startswith("brakiri_bokmai_pod_lod") and n.endswith(".obj") for n in names), "one pod mesh")
+        self.assertFalse([n for n in names if n.endswith((".ply", ".light"))], "no point clouds")
         for p in self.out_a.files:
             self.assertTrue(p.is_file(), p)
 
-    def test_lod0_is_inside_the_budget_and_counted_by_group(self) -> None:
-        total = self.manifest["lods"][0]["splats"]
-        self.assertTrue(BUDGET[0] <= total <= BUDGET[1], total)
-        self.assertEqual(len(self.splats), total)
-        self.assertEqual(tuple(self.manifest["counts"]), CHUNKS)
-        self.assertEqual(sum(self.manifest["counts"].values()), total)
-        self.assertEqual(self.manifest["counts"]["arm_l"], self.manifest["counts"]["arm_r"])
-        self.assertEqual(self.manifest["counts"]["engine_l"], self.manifest["counts"]["engine_r"])
+    def test_the_hull_is_its_textured_mesh_inside_the_budget(self) -> None:
+        assert_hull_mesh(self, self.dir_a, self.manifest, bok.OBJ_NAME)
+        self.assertLessEqual(self.manifest["mesh"]["triangles"], TRIANGLE_BUDGET)
+        for key in ("lods", "counts", "sampling", "paint_mesh", "chunk_lod"):
+            self.assertNotIn(key, self.manifest)
 
-    def test_lods_one_to_three_are_coarser_centred_and_keep_the_box(self) -> None:
-        lod0 = self.manifest["lods"][0]
-        for level, (name, factor, _stream, share) in bok.LODS.items():
-            entry = self.manifest["lods"][level]
-            self.assertEqual(entry["file"], name)
-            self.assertAlmostEqual(entry["spacing_m"], factor * lod0["spacing_m"])
-            self.assertTrue(LOD_SHARES[level][0] <= entry["splats"] / lod0["splats"] <= LOD_SHARES[level][1], level)
-            xyz = godot_xyz(self.dir_a / name)
-            self.assertEqual(len(xyz), entry["splats"])
-            self.assertLess(float(np.abs(xyz.mean(axis=0)).max()), 1e-3, "centred like LOD0")
-            assert_lod_box(self, xyz, self.manifest, entry["spacing_m"], level)
+    def test_the_default_atlas_lands_under_six_centimetres_a_texel(self) -> None:
+        parts = [TexturedPart(p.part.mesh, phase_steps(p.name, False), (), p.name) for p in cv.with_twins(bok.hull_pieces())]
+        self.assertLess(cv.texel_of(parts, cv.HULL_ATLAS_PX), TEXEL_MAX_M)
 
     def test_dimensions_match_the_design(self) -> None:
         self.assertAlmostEqual(self.hp["length_m"], LENGTH, delta=0.01 * LENGTH)
         self.assertAlmostEqual(self.hp["span_m"], SPAN, delta=0.01 * SPAN)
         self.assertAlmostEqual(self.hp["height_m"], HEIGHT, delta=0.01 * HEIGHT)
 
-    # --- frames, symmetry, splats ------------------------------------------------------------------------------------
-    def test_ply_is_centred_and_the_aabb_matches_after_the_flip(self) -> None:
+    # --- frames, symmetry ------------------------------------------------------------------------------------------------
+    def test_the_body_origin_is_the_visible_surfaces_centroid(self) -> None:
         self.assertLess(float(np.abs(self.xyz.mean(axis=0)).max()), 1e-3)
-        np.testing.assert_allclose(self.xyz.min(axis=0), self.manifest["aabb_min"], atol=2e-4)
-        np.testing.assert_allclose(self.xyz.max(axis=0), self.manifest["aabb_max"], atol=2e-4)
+        np.testing.assert_allclose(self.obj.vertices.min(axis=0), self.manifest["aabb_min"], atol=2e-4)
+        np.testing.assert_allclose(self.obj.vertices.max(axis=0), self.manifest["aabb_max"], atol=2e-4)
 
     def test_the_authored_frame_is_the_references(self) -> None:
-        lo, hi = self.authored_xyz.min(axis=0), self.authored_xyz.max(axis=0)
+        authored = self.obj.vertices + self.offset
+        lo, hi = authored.min(axis=0), authored.max(axis=0)
         self.assertAlmostEqual(float(lo[2]), 0.0, delta=0.3, msg="the prow at z = 0")
         self.assertAlmostEqual(float(hi[2]), LENGTH, delta=0.3, msg="the domes at z = 80")
         self.assertAlmostEqual(float(0.5 * (lo[1] + hi[1])), 0.0, delta=0.3, msg="y from the box centre")
         self.assertAlmostEqual(float(0.5 * (lo[0] + hi[0])), 0.0, delta=1e-6)
 
-    def test_every_level_is_exactly_mirror_symmetric_in_x(self) -> None:
-        levels = [self.xyz] + [godot_xyz(self.dir_a / bok.LODS[k][0]) for k in (1, 2, 3)]
-        levels += [godot_xyz(self.dir_a / e["file"]) for e in self.manifest["pod"]["lods"]]
-        for k, xyz in enumerate(levels):
-            np.testing.assert_allclose(sorted_rows(xyz), sorted_rows(xyz * np.array([-1.0, 1.0, 1.0])), atol=SYM_TOL, err_msg=str(k))
-
-    def test_splats_are_flat_oriented_opaque_discs(self) -> None:
-        scale = self.splats.scale
-        self.assertTrue(np.all(scale[:, 2] < scale[:, 0]))
-        self.assertTrue(np.all(self.splats.alpha > 0.9))
+    def test_the_meshes_and_the_surface_are_mirror_symmetric_in_x(self) -> None:
+        assert_mirror_symmetric(self, self.obj.vertices, "hull")
+        assert_mirror_symmetric(self, self.pod_xyz, "pod")
+        assert_mirror_symmetric(self, self.xyz, "visible surface", decimals=4)
 
     def test_the_blade_is_forward_and_the_fins_aft(self) -> None:
         a = self.authored_xyz
@@ -218,7 +187,7 @@ class BrakiriBokmaiTests(unittest.TestCase):
         np.testing.assert_allclose(np.abs(fins[:, 0]).mean(), 12.92, atol=0.3)
 
     # --- the hull leaves its pods out ----------------------------------------------------------------------------------
-    def test_the_hull_has_no_splats_inside_the_pod_volumes(self) -> None:
+    def test_the_hull_shows_nothing_inside_the_pod_volumes(self) -> None:
         # An empty mount looks empty: only the spindle passes through, inside the sleeve's bore.
         for name, mount in MOUNTS.items():
             local = self.authored_xyz - np.array(mount)
@@ -241,46 +210,38 @@ class BrakiriBokmaiTests(unittest.TestCase):
         for role, value in written.items():
             self.assertEqual(srgb_hex(m[role].albedo), value, role)
         self.assertEqual((GLOW_SRGB, BOLT_SRGB), (0xFFF0B0, 0x7CFF4F), "the glow and the bright green bolts (Q22)")
-        for style in (BRAKIRI, BRAKIRI_POD):  # no painted grid (the maintainer, 2026-11-04)
-            self.assertEqual((style.panel_line_darkness, style.panel_tint_jitter), (1.0, 0.0), style.name)
+        # The texture pack (M5-T27): seams darker than the paint, a mild tint, worn to primer; the windows and domes glow.
+        for style in (BRAKIRI, BRAKIRI_POD):
+            self.assertLess(style.panel_line_darkness, 0.9, style.name)
+            self.assertGreater(style.panel_tint_jitter, 0.0, style.name)
+            self.assertEqual(style.extra["bare_metal"], 0.0, style.name)
+        self.assertEqual(srgb_hex(m["engine_dome"].emissive), GLOW_SRGB)
+        self.assertGreater(m["window"].emissive_strength, 0.0)
 
-    def test_the_paint_reaches_the_splats(self) -> None:
-        rgb = self.splats.rgb
-        a = self.authored_xyz
-        fins_top = (a[:, 1] > 14.2)
-        self.assertGreater(float(rgb[fins_top][:, 0].mean()), 0.45, "the fins' yellow tops")
-        green = (a[:, 2] > 20) & (a[:, 2] < 40) & (a[:, 1] > 12.5)
-        self.assertLess(float(rgb[green][:, 0].mean()), float(rgb[green][:, 1].mean()), "the spine is green")
-        pod_rgb = read_ply(self.dir_a / "brakiri_bokmai_pod.ply").to_splats().rgb
+    def test_the_paint_reaches_the_maps(self) -> None:
+        at, rgb = painted_points(self.dir_a, self.manifest["mesh"])
+        authored = at + self.offset
+        fins_top = authored[:, 1] > 14.2
+        self.assertGreater(float(np.median(rgb[fins_top][:, 0])), 0.45, "the fins' yellow tops")
+        spine = (authored[:, 2] > 20) & (authored[:, 2] < 40) & (authored[:, 1] > 12.5)
+        self.assertLess(float(np.median(rgb[spine][:, 0])), float(np.median(rgb[spine][:, 1])), "the spine is green")
+        _, pod_rgb = painted_points(self.dir_a, self.manifest["pod"]["mesh"])
         self.assertGreater(float(np.median(pod_rgb.mean(axis=1))), float(np.median(rgb.mean(axis=1))), "the pods are paler")
 
-    def test_every_level_chunk_pod_and_the_turret_has_matching_lighting_records(self) -> None:
-        pairs = [(lod["file"], lod["lighting"]) for lod in self.manifest["lods"] + self.manifest["pod"]["lods"]]
-        pairs += [(c["ply"], c["lighting"]) for c in self.hp["chunks"]]
-        pairs.append((self.manifest["turret"]["ply"], self.manifest["turret"]["lighting"]))
-        self.assertEqual(len(pairs), 8 + len(CHUNKS) + 1)
-        for ply_name, light_name in pairs:
-            records = lighting.read_lighting(self.dir_a / light_name)
-            self.assertEqual(len(records), len(read_ply(self.dir_a / ply_name).to_splats()), light_name)
+    def test_the_engine_domes_and_the_windows_glow(self) -> None:
+        glowing = glowing_points(self.dir_a, self.manifest["mesh"]) + self.offset
+        self.assertGreater(len(glowing), 0)
+        domes = glowing[glowing[:, 2] > 70.0]
+        self.assertTrue((domes[:, 0] > 5.0).any() and (domes[:, 0] < -5.0).any(), "both engine domes")
+        self.assertTrue((glowing[:, 2] < 20.0).any(), "the bow's window strips")
+        self.assertEqual(len(glowing_points(self.dir_a, self.manifest["pod"]["mesh"])), 0, "the pods are dark")
 
     # --- chunks ------------------------------------------------------------------------------------------------------
-    def test_chunks_partition_lod1_exactly(self) -> None:
-        self.assertEqual([c["name"] for c in self.hp["chunks"]], list(CHUNKS))
-        self.assertEqual(self.manifest["chunks"], list(CHUNKS))
-        lod1 = read_ply(self.dir_a / bok.LODS[1][0]).to_splats()
-        lod1_xyz = frames.flip_xy(lod1.xyz)
-        start = 0
-        for entry in self.hp["chunks"]:
-            n = entry["splats"]
-            chunk = read_ply(self.dir_a / entry["ply"]).to_splats()
-            self.assertEqual(len(chunk), n)
-            np.testing.assert_allclose(frames.flip_xy(chunk.xyz) + np.array(entry["offset"]), lod1_xyz[start : start + n], atol=1e-5)
-            np.testing.assert_allclose(chunk.rgb, lod1.rgb[start : start + n], atol=1e-4)
-            start += n
-        self.assertEqual(start, len(lod1))
+    def test_chunks_cut_the_hull(self) -> None:
+        assert_chunks_cut_the_hull(self, self.dir_a, self.manifest, self.hp, CHUNKS)
 
     def test_chunks_leave_the_pods_out_and_have_joints(self) -> None:
-        self.assertNotIn("pod", self.manifest["counts"])
+        self.assertNotIn("pod", self.manifest["chunks"])
         for entry in self.hp["chunks"]:
             self.assertEqual(len(entry["joint"]), 3, entry["name"])
         joints = {c["name"]: np.array(c["joint"]) for c in self.hp["chunks"]}
@@ -307,7 +268,7 @@ class BrakiriBokmaiTests(unittest.TestCase):
         np.testing.assert_allclose(pods["l"]["main"]["position"], mirrored(pods["r"]["main"]["position"]), atol=1e-4)
 
     def test_each_retro_fires_clear_of_the_hull(self) -> None:
-        # The depth proxy (the fallback mesh) hides a plume inside the hull: the retro's forward ray meets nothing within
+        # The depth proxy (the hull's mesh) hides a plume inside the hull: the retro's forward ray meets nothing within
         # the hull, and the skin is right behind the nozzle.
         v, f = self.obj.vertices, self.obj.faces
         for p in self.hp["pods"]:
@@ -388,18 +349,18 @@ class BrakiriBokmaiTests(unittest.TestCase):
 
     def test_the_turret_model_is_the_approved_brakiri_turret(self) -> None:
         turret = self.manifest["turret"]
-        self.assertEqual(turret["ply"], "brakiri_bokmai_turret.ply")
-        self.assertEqual(set(turret), {"ply", "lighting", "obj", "splats", "spacing_m", "offset", "barrel_m", "trunnion", "muzzles", "paint_mesh"})
-        splats = read_ply(self.dir_a / turret["ply"]).to_splats()
-        self.assertEqual(turret["splats"], len(splats))
-        self.assertTrue(1_500 <= len(splats) <= 3_000, len(splats))
+        self.assertEqual(set(turret), {"obj", "mesh", "barrel_m", "trunnion", "muzzles"})
+        self.assertEqual(turret["obj"], "brakiri_bokmai_turret.obj")
+        assert_model_mesh(self, self.dir_a, turret["mesh"], turret["obj"], "turret")
+        self.assertLessEqual(turret["mesh"]["triangles"], MODEL_TRIANGLE_BUDGET)
         left, right = turret["muzzles"]
         self.assertEqual(left, mirrored(right))
         self.assertAlmostEqual(left[2], -3.0, msg="the muzzles 3.0 m ahead of the turning axis")
-        local = frames.flip_xy(splats.xyz) + np.array(turret["offset"])
+        local = read_obj(self.dir_a / turret["obj"]).vertices  # the turret's frame: the pivot at the origin
         self.assertAlmostEqual(float(local[:, 1].min()), -0.05, delta=0.1, msg="the ring stands on the mount")
         ring = local[local[:, 1] < 0.3]
         self.assertAlmostEqual(float(np.hypot(ring[:, 0], ring[:, 2]).max()), 0.8, delta=0.1, msg="a 1.6 m ring (the sheet)")
+        assert_mirror_symmetric(self, local, "turret")
 
     # --- cargo pods ----------------------------------------------------------------------------------------------------
     def test_three_cargo_mounts_on_the_spindle(self) -> None:
@@ -411,18 +372,12 @@ class BrakiriBokmaiTests(unittest.TestCase):
             np.testing.assert_allclose(self.authored(c["position"]), mount, atol=1e-3)
             self.assertEqual((c["up"], c["forward"]), ([0.0, 1.0, 0.0], [0.0, 0.0, -1.0]))
 
-    def test_the_pod_model_is_inside_its_budget_and_its_levels_follow_the_hull(self) -> None:
+    def test_the_pod_model_is_a_textured_mesh_inside_its_budget(self) -> None:
         pod = self.manifest["pod"]
-        self.assertEqual(set(pod), {"obj", "paint_mesh", "lods", "mass_kg", "collision", "size_m"})
+        self.assertEqual(set(pod), {"obj", "mesh", "mass_kg", "collision", "size_m"})
         self.assertEqual(pod["obj"], "brakiri_bokmai_pod.obj")
-        self.assertEqual([e["level"] for e in pod["lods"]], [0, 1, 2, 3])
-        self.assertTrue(POD_BUDGET[0] <= pod["lods"][0]["splats"] <= POD_BUDGET[1], pod["lods"][0]["splats"])
-        for entry, hull in zip(pod["lods"], self.manifest["lods"]):
-            self.assertAlmostEqual(entry["spacing_m"], hull["spacing_m"], msg="it switches with the hull")
-            xyz = godot_xyz(self.dir_a / entry["file"])
-            self.assertEqual(len(xyz), entry["splats"])
-            # Each level keeps the pod's frame; GDGS centres an import on its mean, recorded per level.
-            np.testing.assert_allclose(xyz.mean(axis=0), entry["offset"], atol=1e-3, err_msg=str(entry["level"]))
+        assert_model_mesh(self, self.dir_a, pod["mesh"], pod["obj"], "pod")
+        self.assertLessEqual(pod["mesh"]["triangles"], MODEL_TRIANGLE_BUDGET)
         self.assertGreater(pod["mass_kg"], 0.0)
 
     def test_the_pods_origin_is_its_mount_and_it_has_the_measured_size(self) -> None:
@@ -447,19 +402,19 @@ class BrakiriBokmaiTests(unittest.TestCase):
             near = (np.abs(local[:, 0]) < 0.5 * POD[0] + 1.0) & (np.abs(local[:, 1]) < 0.5 * POD[1] + 1.0) & (np.abs(local[:, 2]) < 0.5 * POD[2])
             self.assertEqual(int(near.sum()), 0, mount)
 
-    def test_the_pod_collision_box_covers_its_splats(self) -> None:
+    def test_the_pod_collision_box_covers_its_mesh(self) -> None:
         box = self.manifest["pod"]["collision"][0]
         self.assertEqual((box["type"], box["name"]), ("box", "body"))
         inside = inside_primitive(self.pod_xyz, box, 0.05)
         self.assertTrue(bool(inside.all()))
 
     # --- collision -----------------------------------------------------------------------------------------------------
-    def test_collision_primitives_cover_every_splat_and_stay_close(self) -> None:
+    def test_collision_primitives_cover_the_visible_surface_and_stay_close(self) -> None:
         inside = np.zeros(len(self.xyz), dtype=bool)
         for c in self.hp["collision"]:
             inside |= inside_primitive(self.xyz, c, inflate=self.spacing)
         missed = self.xyz[~inside] + self.offset
-        self.assertTrue(bool(inside.all()), f"every LOD0 splat centre; missed (authored frame): {np.round(missed[:10], 2).tolist()}")
+        self.assertTrue(bool(inside.all()), f"every visible surface sample; missed (authored frame): {np.round(missed[:10], 2).tolist()}")
         lo, hi = self.xyz.min(axis=0), self.xyz.max(axis=0)
         for c in self.hp["collision"]:
             basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T
@@ -502,14 +457,7 @@ class BrakiriBokmaiTests(unittest.TestCase):
             self.assertEqual(len(read_obj(self.dir_a / entry["obj"]).faces), expected, entry["name"])
         self.assertEqual(len(read_obj(self.dir_a / "brakiri_bokmai_pod.obj").faces), bp.cargo_pod(BRAKIRI).part.mesh.face_count)
 
-    def test_the_painted_mesh_is_the_fallback_mesh(self) -> None:
-        # The ship as the game draws it (ships are meshes, the 2026-11-04 directive): the fallback mesh's triangles and paint.
-        assert_painted_mesh(self, self.dir_a, self.manifest["paint_mesh"], bok.OBJ_NAME, "hull")
-        turret = self.manifest["turret"]
-        assert_painted_mesh(self, self.dir_a, turret["paint_mesh"], turret["obj"], "turret")
-        assert_painted_mesh(self, self.dir_a, self.manifest["pod"]["paint_mesh"], self.manifest["pod"]["obj"], "pod")
-
-    def test_fallback_obj_matches_the_splat_bounds(self) -> None:
+    def test_the_fallback_mesh_holds_the_visible_surface(self) -> None:
         v = self.obj.vertices
         self.assertTrue(np.all(np.isfinite(v)))
         slack = 2.0 * self.spacing
@@ -523,25 +471,26 @@ class BrakiriBokmaiTests(unittest.TestCase):
         for out in self.out_a.files:
             self.assertEqual(sha256(out), sha256(self.dir_b / out.name), out.name)
 
-    def test_a_different_seed_changes_the_splats_but_not_the_design(self) -> None:
+    def test_a_different_seed_changes_the_wear_but_not_the_design(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            other = bok.build(BuildContext(Path(tmp), seed=7))
-            self.assertNotEqual(sha256(Path(tmp) / bok.PLY_NAME), sha256(self.dir_a / bok.PLY_NAME))
+            other = bok.build(BuildContext(Path(tmp), seed=7, options=TEST_OPTIONS))
+            albedo = self.manifest["mesh"]["surfaces"][0]["albedo"]
+            self.assertNotEqual(sha256(Path(tmp) / albedo), sha256(self.dir_a / albedo))
             hp = json.loads((Path(tmp) / bok.HARDPOINTS_NAME).read_text(encoding="utf-8"))
             authored = np.array(hp["turrets"][1]["position"]) + np.array(other.manifest["centroid_offset"])
             np.testing.assert_allclose(authored, FLANK_TURRET, atol=1e-3)
             self.assertEqual([c["name"] for c in hp["collision"]], [c["name"] for c in self.hp["collision"]])
+            self.assertEqual(other.manifest["mesh"]["triangles"], self.manifest["mesh"]["triangles"])
 
-    def test_spacing_option_scales_the_count_and_is_recorded(self) -> None:
+    def test_the_spacing_option_is_recorded_and_keeps_the_origin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            out = bok.build(BuildContext(Path(tmp), seed=42, options={"spacing": 2.0 * bok.DEFAULT_SPACING_M}))
-            self.assertLess(out.manifest["lods"][0]["splats"], 0.4 * len(self.splats))
-            self.assertEqual(out.manifest["sampling"]["spacing_m"], 2.0 * bok.DEFAULT_SPACING_M)
-            self.assertEqual(out.warnings, (), "the budget warning only applies at the default spacing")
+            out = bok.build(BuildContext(Path(tmp), seed=42, options={**TEST_OPTIONS, "spacing": 2.0 * bok.DEFAULT_SPACING_M}))
+            self.assertEqual(out.manifest["surface_spacing_m"], 2.0 * bok.DEFAULT_SPACING_M)
+            np.testing.assert_allclose(out.manifest["centroid_offset"], self.offset, atol=0.15)  # a fifth of a per cent of the length
 
     def test_invalid_options_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            for bad in ({"spacing": 0.0}, {"overlap": -1.0}, {"thickness": 0}, {"turret_spacing": -0.1}):
+            for bad in ({"spacing": 0.0}, {"spacing": -1.0}):
                 with self.assertRaises(ValueError):
                     bok.build(BuildContext(Path(tmp), seed=1, options=bad))
 

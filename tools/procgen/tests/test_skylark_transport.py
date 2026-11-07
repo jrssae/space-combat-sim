@@ -1,8 +1,10 @@
-"""``skylark_transport`` (M5-T13, AC12, D61, Q19): files, budgets, frames, symmetry, chunk partition, collision coverage,
-the hardpoint contract with its single dorsal turret, the turret model, colours and determinism.
+"""``skylark_transport`` (M5-T13, AC12, D61, Q19; textured meshes from M5-T27): files, the mesh contract, frames, symmetry,
+chunk cuts, collision coverage, the hardpoint contract with its single dorsal turret, the turret model, colours, the
+texture pack and determinism.
 
 The expected numbers are typed in from docs/assets-civilian.md and docs/design-references.md ("Skylark transport"), not
-read from the generator.
+read from the generator. The visible surface (the samples that place the body origin) stands in for the hull's skin where
+a test asks what the eye sees.
 """
 
 from __future__ import annotations
@@ -15,32 +17,34 @@ from pathlib import Path
 
 import numpy as np
 
-# Off until M5-T27 moves the civilian generators onto the textured-mesh pipeline: they still write splats, and main dropped
-# the splat writers (M4-T31). The checks below are the spec that task converts.
-raise unittest.SkipTest("M5-T27: the civilian generators wait for the textured-mesh pipeline")
-
 from tools.procgen.assets import ASSETS
 from tools.procgen.assets import skylark_transport as sky
-from tools.procgen.core import frames, lighting
+from tools.procgen.core import civilian as cv
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.color import linear_to_srgb
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.obj import read_obj
-from tools.procgen.core.ply import read_ply
+from tools.procgen.core.textured_mesh import TexturedPart, phase_steps
 from tools.procgen.parts import skylark as sp
-from tools.procgen.tests.mesh_checks import assert_painted_mesh
+from tools.procgen.tests.mesh_checks import (
+    TEST_OPTIONS,
+    assert_chunks_cut_the_hull,
+    assert_hull_mesh,
+    assert_mirror_symmetric,
+    assert_model_mesh,
+    glowing_points,
+    painted_faces,
+)
 
 PILOT_TERMS = {
     "sway_left", "sway_right", "heave_up", "heave_down", "pitch_up", "pitch_down",
     "yaw_left", "yaw_right", "roll_left", "roll_right",
 }  # fmt: skip
 SYM_TOL = 1e-5
-LOD_AABB_TOLERANCE_M = 0.3  # test_splat_import.gd's floor
-LARGE_HULL_EXTENT_M = 30.0  # ... and from this box size a coarse level may fall short by 1.25 of its spacing
-MAX_ROUND_TRIP_DEG = 1.5
 CHUNKS = ("capsule", "body", "nacelle_l", "nacelle_r")
-BUDGET = (48_000, 72_000)  # docs/assets-civilian.md: 60 000 (48 000 to 72 000)
-LOD_SHARES = {1: (0.20, 0.30), 2: (0.04, 0.09), 3: (0.01, 0.025)}
+TRIANGLE_BUDGET = 35_000  # 26 052 as built; the importer adds the levels of detail
+TURRET_TRIANGLE_BUDGET = 5_000
+TEXEL_MAX_M = 0.06  # the hull at the default 2 048 px atlas
 NACELLE_AXIS = (13.03, -0.26)  # x, y of the nacelles' axis (authored frame, y from the box centre)
 DORSAL_TURRET = (0.0, 2.766, 37.5)  # Q19: the only turret, on the body's ridge ahead of the dorsal fin, as low as the hull under its rim
 
@@ -64,28 +68,8 @@ def inside_primitive(points: np.ndarray, c: dict, inflate: float) -> np.ndarray:
     return np.linalg.norm(local - axis_point, axis=1) <= c["radius"] + inflate
 
 
-def godot_xyz(path: Path) -> np.ndarray:
-    return frames.flip_xy(read_ply(path).to_splats().xyz)
-
-
-def assert_lod_box(tc: unittest.TestCase, xyz: np.ndarray, manifest: dict, spacing: float, label: object) -> None:
-    """test_splat_import.gd's rule for a coarse level's box against LOD0's: it may reach past it only by its centroid
-    drift, and a big hull's may fall short by up to 1.25 of the level's spacing (the sharp extremes it misses)."""
-    lo0, hi0 = np.array(manifest["aabb_min"]), np.array(manifest["aabb_max"])
-    lo, hi = xyz.min(axis=0), xyz.max(axis=0)
-    past = max(float((lo0 - lo).max()), float((hi - hi0).max()))
-    short = max(float((lo - lo0).max()), float((hi0 - hi).max()))
-    tc.assertLessEqual(past, max(LOD_AABB_TOLERANCE_M, 0.25 * spacing), (label, "past LOD0's box", past))
-    big = float((hi0 - lo0).max()) >= LARGE_HULL_EXTENT_M
-    tc.assertLessEqual(short, max(LOD_AABB_TOLERANCE_M, 1.25 * spacing) if big else LOD_AABB_TOLERANCE_M, (label, "short of LOD0's box", short))
-
-
 def mirrored(v: list[float]) -> list[float]:
     return [-v[0], v[1], v[2]]
-
-
-def angle_deg(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    return np.degrees(np.arccos(np.clip(np.einsum("ij,ij->i", a, b), -1.0, 1.0)))
 
 
 def srgb_hex(albedo: tuple[float, float, float]) -> int:
@@ -99,17 +83,18 @@ class SkylarkTransportTests(unittest.TestCase):
         cls._tmp = tempfile.TemporaryDirectory()
         root = Path(cls._tmp.name)
         cls.dir_a, cls.dir_b = root / "a", root / "b"
-        cls.out_a = sky.build(BuildContext(cls.dir_a, seed=42))
-        cls.out_b = sky.build(BuildContext(cls.dir_b, seed=42))
+        cls.out_a = sky.build(BuildContext(cls.dir_a, seed=42, options=TEST_OPTIONS))
+        cls.out_b = sky.build(BuildContext(cls.dir_b, seed=42, options=TEST_OPTIONS))
         cls.manifest = manifest_io.read_manifest(cls.dir_a)
-        cls.splats = read_ply(cls.dir_a / sky.PLY_NAME).to_splats()
-        cls.xyz = frames.flip_xy(cls.splats.xyz)
         cls.hp = json.loads((cls.dir_a / sky.HARDPOINTS_NAME).read_text(encoding="utf-8"))
         cls.obj = read_obj(cls.dir_a / sky.OBJ_NAME)
-        cls.lod1 = read_ply(cls.dir_a / sky.LODS[1][0]).to_splats()
         cls.offset = np.array(cls.manifest["centroid_offset"])
-        cls.spacing = float(cls.manifest["lods"][0]["spacing_m"])
+        cls.spacing = float(cls.manifest["surface_spacing_m"])
         cls.length = cls.hp["length_m"]
+        sampled = sky.sample_hull(sp.assemble(sky.STYLE), BuildContext(cls.dir_a, seed=42), cls.spacing)
+        cls.xyz = np.concatenate([s.samples.positions for s in sampled]) - cls.offset  # the visible surface, body frame
+        cls.paint_at, cls.rgb, cls.area, metal = painted_faces(cls.dir_a, cls.manifest["mesh"])
+        cls.painted = metal < 0.3
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -126,43 +111,26 @@ class SkylarkTransportTests(unittest.TestCase):
         self.assertEqual(self.hp["asset_id"], "skylark_transport")
 
     def test_all_files_are_written_and_listed(self) -> None:
-        expected = {sky.PLY_NAME, sky.OBJ_NAME, "skylark_transport.mtl", sky.HARDPOINTS_NAME, "manifest.json"}
-        expected |= {entry[0] for entry in sky.LODS.values()}
-        expected |= {lod["lighting"] for lod in self.manifest["lods"]}
+        expected = {sky.OBJ_NAME, "skylark_transport.mtl", sky.HARDPOINTS_NAME, "manifest.json"}
+        for stem in ("skylark_transport", "skylark_transport_turret"):
+            expected |= {f"{stem}.glb"} | {f"{stem}_{k}.png{x}" for k in ("albedo", "normal", "orm", "emissive") for x in ("", ".import")}
         for entry in self.hp["chunks"]:
-            expected |= {entry["ply"], entry["lighting"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
+            expected |= {entry["mesh"], entry["obj"], entry["obj"].replace(".obj", ".mtl")}
         turret = self.manifest["turret"]
-        expected |= {turret["ply"], turret["lighting"], turret["obj"], turret["obj"].replace(".obj", ".mtl")}
-        expected |= {"skylark_transport_mesh.glb", "skylark_transport_turret_mesh.glb"}
+        expected |= {turret["obj"], turret["obj"].replace(".obj", ".mtl")}
         self.assertEqual({p.name for p in self.dir_a.iterdir()}, expected)
         self.assertEqual({p.name for p in self.out_a.files}, expected)
 
-    def test_lod0_is_inside_the_budget_and_counted_by_group(self) -> None:
-        lod = self.manifest["lods"][0]
-        self.assertEqual(lod["file"], sky.PLY_NAME)
-        self.assertEqual(lod["splats"], len(self.splats))
-        self.assertEqual(sky.SPLAT_BUDGET, BUDGET)
-        self.assertTrue(BUDGET[0] <= lod["splats"] <= BUDGET[1], lod["splats"])
+    def test_the_hull_is_its_textured_mesh_inside_the_budget(self) -> None:
+        assert_hull_mesh(self, self.dir_a, self.manifest, sky.OBJ_NAME)
+        self.assertLessEqual(self.manifest["mesh"]["triangles"], TRIANGLE_BUDGET)
         self.assertEqual(self.out_a.warnings, ())
-        self.assertEqual(list(self.manifest["counts"]), list(CHUNKS))
-        self.assertEqual(sum(self.manifest["counts"].values()), len(self.splats))
-        self.assertEqual(self.manifest["files"], {"fallback_mesh": sky.OBJ_NAME, "paint_mesh": "skylark_transport_mesh.glb", "hardpoints": sky.HARDPOINTS_NAME})
-        self.assertEqual(self.manifest["chunk_lod"], 1)
+        for key in ("lods", "counts", "sampling", "paint_mesh", "chunk_lod"):
+            self.assertNotIn(key, self.manifest)
 
-    def test_lods_one_to_three_are_coarser_centred_and_keep_the_box(self) -> None:
-        lod0 = self.manifest["lods"][0]
-        self.assertEqual([e["level"] for e in self.manifest["lods"]], [0, 1, 2, 3])
-        for level, (name, factor, _stream) in sky.LODS.items():
-            entry = self.manifest["lods"][level]
-            self.assertEqual(entry["file"], name)
-            self.assertAlmostEqual(entry["spacing_m"], factor * lod0["spacing_m"])
-            share = entry["splats"] / lod0["splats"]
-            self.assertTrue(LOD_SHARES[level][0] <= share <= LOD_SHARES[level][1], (level, share))
-            xyz = godot_xyz(self.dir_a / name)
-            self.assertEqual(len(xyz), entry["splats"])
-            self.assertLess(float(np.abs(xyz.mean(axis=0)).max()), 1e-3, "centred like LOD0")
-            assert_lod_box(self, xyz, self.manifest, entry["spacing_m"], level)
-        self.assertGreater(self.manifest["lods"][3]["splats"], 500, "the farthest level still draws the outline")
+    def test_the_default_atlas_lands_under_six_centimetres_a_texel(self) -> None:
+        parts = [TexturedPart(p.part.mesh, phase_steps(p.name, False), (), p.name) for p in sky.with_twins(sp.assemble(sky.STYLE))]
+        self.assertLess(cv.texel_of(parts, cv.HULL_ATLAS_PX), TEXEL_MAX_M)
 
     def test_dimensions_match_the_design(self) -> None:
         self.assertAlmostEqual(self.hp["length_m"], 60.0, delta=0.6, msg="Q8: about 60 m, nose vanes to claw tips")
@@ -173,32 +141,24 @@ class SkylarkTransportTests(unittest.TestCase):
             {"length": self.hp["length_m"], "span": self.hp["span_m"], "height": self.hp["height_m"]},
         )
 
-    # --- frames, symmetry, splats ----------------------------------------------------------------------------------------
-    def test_ply_is_centred_and_the_aabb_matches_after_the_flip(self) -> None:
+    # --- frames, symmetry ------------------------------------------------------------------------------------------------
+    def test_the_body_origin_is_the_visible_surfaces_centroid(self) -> None:
         np.testing.assert_allclose(self.xyz.mean(axis=0), [0.0, 0.0, 0.0], atol=1e-3)
-        np.testing.assert_allclose(self.xyz.min(axis=0), self.manifest["aabb_min"], atol=2e-4)
-        np.testing.assert_allclose(self.xyz.max(axis=0), self.manifest["aabb_max"], atol=2e-4)
+        np.testing.assert_allclose(self.obj.vertices.min(axis=0), self.manifest["aabb_min"], atol=2e-4)
+        np.testing.assert_allclose(self.obj.vertices.max(axis=0), self.manifest["aabb_max"], atol=2e-4)
         self.assertAlmostEqual(self.manifest["centroid_offset"][0], 0.0, places=9)
 
     def test_the_authored_frame_is_the_references(self) -> None:
         # Back in the authored frame the nose tip is at z = 0 and the box is centred on x = y = 0 (refview's frame).
-        authored = self.xyz + self.offset
+        authored = self.obj.vertices + self.offset
         lo, hi = authored.min(axis=0), authored.max(axis=0)
         self.assertAlmostEqual(float(lo[2]), 0.0, delta=0.3)
         self.assertAlmostEqual(float(0.5 * (lo[1] + hi[1])), 0.0, delta=0.3)
         self.assertAlmostEqual(float(0.5 * (lo[0] + hi[0])), 0.0, delta=1e-6)
 
-    def test_every_level_is_exactly_mirror_symmetric_in_x(self) -> None:
-        levels = [self.xyz] + [godot_xyz(self.dir_a / sky.LODS[level][0]) for level in (1, 2, 3)]
-        for level, xyz in enumerate(levels):
-            np.testing.assert_allclose(sorted_rows(xyz), sorted_rows(xyz * np.array([-1.0, 1.0, 1.0])), atol=SYM_TOL, err_msg=f"LOD{level}")
-
-    def test_splats_are_flat_oriented_opaque_discs(self) -> None:
-        scale = self.splats.scale
-        self.assertTrue(np.all(scale[:, 2] < scale[:, 0]))
-        self.assertTrue(np.all(np.isfinite(self.splats.rgb)))
-        self.assertTrue(np.all((self.splats.alpha > 0.0) & (self.splats.alpha < 1.0)))
-        self.assertGreater(float(np.median(self.splats.alpha)), 0.9)
+    def test_the_mesh_and_the_surface_are_mirror_symmetric_in_x(self) -> None:
+        assert_mirror_symmetric(self, self.obj.vertices, "hull")
+        assert_mirror_symmetric(self, self.xyz, "visible surface", decimals=4)
 
     def test_the_capsule_is_forward_and_the_claws_aft(self) -> None:
         authored = self.xyz + self.offset
@@ -215,21 +175,30 @@ class SkylarkTransportTests(unittest.TestCase):
 
     # --- colours -------------------------------------------------------------------------------------------------------
     def test_the_paint_is_sand_with_red_orange_bands_and_dark_bells(self) -> None:
-        rgb, authored = self.splats.rgb, self.xyz + self.offset
+        # Area-weighted over the paint (the bare-metal chips left out): the test atlas is coarse, so its wear is broad.
+        keep = self.painted
+        rgb, authored, area = self.rgb[keep], self.paint_at[keep] + self.offset, self.area[keep]
         x, y, z = authored[:, 0], authored[:, 1], authored[:, 2]
         top = (np.abs(x) > 4.0) & (np.abs(x) < 9.0) & (z > 40.0) & (z < 48.0) & (y > -0.5)
-        sand = linear_to_srgb(np.median(rgb[top], axis=0))
-        self.assertGreater(sand[0], sand[2] + 0.1, "khaki: warm, not neutral grey")
-        self.assertGreater(float(sand.mean()), 0.45, "a light plating")
-        band = (rgb[:, 0] > 2.0 * rgb[:, 1]) & (rgb[:, 0] > 0.2)
-        self.assertGreater(int(band.sum()), 400, "two bands on the capsule, one on each side tank")
-        self.assertAlmostEqual(float(x[band].mean()), 0.0, delta=0.2)
+        sand = np.average(rgb[top], axis=0, weights=area[top])
+        self.assertGreater(sand[0], sand[2] + 0.05, "khaki: warm, not neutral grey")
+        self.assertGreater(float(sand.mean()), 0.4, "a light plating")
+        band = (rgb[:, 0] > 1.6 * rgb[:, 1]) & (rgb[:, 0] > 0.35)
+        self.assertGreater(int(band.sum()), 10, "two bands on the capsule, one on each side tank")
+        self.assertAlmostEqual(float(x[band].mean()), 0.0, delta=0.5)
         self.assertLess(float(z[band].max()), 30.0, "the bands are on the forward capsule and the tanks")
         on_tanks = band & (np.abs(np.abs(x) - 5.44) < 2.3) & (z > 19.0)
-        self.assertGreater(int(on_tanks.sum()), 50, "one band on each side tank")
-        bell = (np.hypot(np.abs(x) - NACELLE_AXIS[0], y - NACELLE_AXIS[1]) < 3.1) & (z > 52.0) & (z < 55.4)
-        dark = linear_to_srgb(np.median(rgb[bell], axis=0))
-        self.assertLess(float(dark.mean()), float(sand.mean()) - 0.2, "dark nacelle bells")
+        self.assertGreater(int(on_tanks.sum()), 2, "one band on each side tank")
+        every = self.paint_at + self.offset  # the bells are dark metal: every face, the metal ones too
+        bell = (np.hypot(np.abs(every[:, 0]) - NACELLE_AXIS[0], every[:, 1] - NACELLE_AXIS[1]) < 3.1) & (every[:, 2] > 52.0) & (every[:, 2] < 55.4)
+        dark = np.median(self.rgb[bell], axis=0)  # by face: the bell's many small faces, not the claws' big ones beside them
+        self.assertLess(float(dark.mean()), float(sand.mean()) - 0.15, "dark nacelle bells")
+
+    def test_the_engine_throats_glow_warm_white(self) -> None:
+        glowing = glowing_points(self.dir_a, self.manifest["mesh"]) + self.offset
+        self.assertGreater(len(glowing), 0)
+        self.assertGreater(float(glowing[:, 2].min()), 40.0, "the nacelles' and the centre engine's throats, aft")
+        self.assertEqual(srgb_hex(sky.STYLE.material("nozzle_throat").emissive), sky.ENGINE_GLOW_SRGB)
 
     def test_the_skylark_style_carries_the_written_scheme(self) -> None:
         style = sky.STYLE
@@ -241,38 +210,14 @@ class SkylarkTransportTests(unittest.TestCase):
         self.assertEqual(style.name, "ea_civilian")
         self.assertAlmostEqual(style.panel_size_m, 2.4)
         self.assertAlmostEqual(style.panel_line_width_m, 0.25)
-        # No painted grid (the maintainer, 2026-11-04).
-        self.assertEqual((style.panel_line_darkness, style.panel_tint_jitter), (1.0, 0.0))
+        # The EA civilian texture pack, more patched than the Saturns' (Transport 1.png).
+        self.assertLess(style.panel_line_darkness, 1.0)
+        self.assertGreater(style.panel_tint_jitter, sky.ea_civilian().panel_tint_jitter)
         self.assertEqual(sky.ENGINE_GLOW_SRGB, 0xFFE9C2)
 
-    # --- lighting records ----------------------------------------------------------------------------------------------
-    def test_every_level_chunk_and_the_turret_has_matching_lighting_records(self) -> None:
-        pairs = [(lod["file"], lod["lighting"]) for lod in self.manifest["lods"]]
-        pairs += [(c["ply"], c["lighting"]) for c in self.hp["chunks"]]
-        pairs.append((self.manifest["turret"]["ply"], self.manifest["turret"]["lighting"]))
-        self.assertEqual(len(pairs), 4 + len(CHUNKS) + 1)
-        for ply_name, light_name in pairs:
-            splats = read_ply(self.dir_a / ply_name).to_splats()
-            records = lighting.read_lighting(self.dir_a / light_name)
-            self.assertEqual(len(records), len(splats), light_name)
-            self.assertLess(float(angle_deg(lighting.decode_normals(records), splats.normals).max()), MAX_ROUND_TRIP_DEG, light_name)
-
     # --- chunks --------------------------------------------------------------------------------------------------------
-    def test_chunks_partition_lod1_exactly(self) -> None:
-        self.assertEqual([c["name"] for c in self.hp["chunks"]], list(CHUNKS))
-        self.assertEqual(self.manifest["chunks"], list(CHUNKS))
-        lod1 = frames.flip_xy(self.lod1.xyz)
-        start = 0
-        for entry in self.hp["chunks"]:
-            n = entry["splats"]
-            chunk = read_ply(self.dir_a / entry["ply"]).to_splats()
-            self.assertEqual(len(chunk), n)
-            body = frames.flip_xy(chunk.xyz) + np.array(entry["offset"])
-            np.testing.assert_allclose(body, lod1[start : start + n], atol=1e-5)
-            np.testing.assert_allclose(chunk.rgb, self.lod1.rgb[start : start + n], atol=1e-4)
-            np.testing.assert_allclose(chunk.xyz.mean(axis=0), [0.0, 0.0, 0.0], atol=1e-4)
-            start += n
-        self.assertEqual(start, len(self.lod1))
+    def test_chunks_cut_the_hull(self) -> None:
+        assert_chunks_cut_the_hull(self, self.dir_a, self.manifest, self.hp, CHUNKS)
 
     def test_chunks_sit_where_they_belong_and_have_joints(self) -> None:
         chunks = {c["name"]: c for c in self.hp["chunks"]}
@@ -287,15 +232,6 @@ class SkylarkTransportTests(unittest.TestCase):
             self.assertEqual(len(c["joint"]), 3, name)
             self.assertLess(float(np.linalg.norm(np.array(c["joint"]) - np.array(c["offset"]))), 25.0, name)
         np.testing.assert_allclose(chunks["nacelle_l"]["joint"], mirrored(chunks["nacelle_r"]["joint"]), atol=1e-4)
-
-    def test_chunk_objs_are_valid_and_recentred(self) -> None:
-        for entry in self.hp["chunks"]:
-            obj = read_obj(self.dir_a / entry["obj"])
-            self.assertGreater(len(obj.vertices), 0, entry["name"])
-            self.assertTrue(np.all(np.isfinite(obj.vertices)))
-            chunk = godot_xyz(self.dir_a / entry["ply"])
-            lo, hi = obj.vertices.min(axis=0), obj.vertices.max(axis=0)
-            self.assertTrue(np.all(chunk.min(axis=0) >= lo - 0.5) and np.all(chunk.max(axis=0) <= hi + 0.5), entry["name"])
 
     # --- hardpoints contract -----------------------------------------------------------------------------------------------
     def test_hardpoints_schema(self) -> None:
@@ -411,7 +347,7 @@ class SkylarkTransportTests(unittest.TestCase):
         self.assertEqual(t["up"], [0.0, 1.0, 0.0])
         self.assertEqual(t["arc_deg"], 200.0, "a hemisphere plus 10 degrees below the base")
         self.assertEqual(t["barrel_m"], 3.0, "the EA turret at two thirds of its size")
-        # Its base (2.4 m across) meets the hull all round: the hull's splats just inside the rim reach the base in every
+        # Its base (2.4 m across) meets the hull all round: the hull's surface just inside the rim reach the base in every
         # direction, and nothing stands above the base inside it.
         p = np.array(t["position"])
         d = self.xyz[:, [0, 2]] - p[[0, 2]]
@@ -427,25 +363,22 @@ class SkylarkTransportTests(unittest.TestCase):
 
     def test_the_turret_model_is_the_ea_turret_at_two_thirds(self) -> None:
         turret = self.manifest["turret"]
-        self.assertEqual(turret["ply"], "skylark_transport_turret.ply")
         self.assertEqual(turret["obj"], "skylark_transport_turret.obj")
-        self.assertEqual(turret["lighting"], "skylark_transport_turret.light")
-        splats = read_ply(self.dir_a / turret["ply"]).to_splats()
-        self.assertEqual(turret["splats"], len(splats))
-        self.assertTrue(1_500 <= len(splats) <= 3_500, f"about 2 000 splats: {len(splats)}")
-        self.assertEqual(set(turret), {"ply", "lighting", "obj", "splats", "spacing_m", "offset", "barrel_m", "trunnion", "muzzles", "paint_mesh"})
+        self.assertEqual(set(turret), {"obj", "mesh", "barrel_m", "trunnion", "muzzles"})
+        assert_model_mesh(self, self.dir_a, turret["mesh"], turret["obj"], "turret")
+        self.assertLessEqual(turret["mesh"]["triangles"], TURRET_TRIANGLE_BUDGET)
         self.assertEqual(turret["barrel_m"], 3.0)
         left, right = turret["muzzles"]
         self.assertEqual(left, mirrored(right))
         self.assertAlmostEqual(left[2], -3.0)
         self.assertAlmostEqual(abs(left[0]), 0.4 * 2.0 / 3.0, places=4, msg="the barrels 0.8 m apart at full size")
-        local = frames.flip_xy(splats.xyz) + np.array(turret["offset"])
+        local = read_obj(self.dir_a / turret["obj"]).vertices  # the turret's frame: the pivot at the origin
         self.assertAlmostEqual(float(local[:, 1].min()), 0.0, delta=0.1, msg="the base stands on the mount")
         self.assertAlmostEqual(float(local[:, 0].max()), 1.2, delta=0.1, msg="a round base 2.4 m across")
         self.assertLess(abs(float(local[:, 0].max() + local[:, 0].min())), 0.1, "centred on its turning axis")
 
     # --- collision -----------------------------------------------------------------------------------------------------
-    def test_collision_primitives_cover_the_splats_and_stay_close(self) -> None:
+    def test_collision_primitives_cover_the_visible_surface_and_stay_close(self) -> None:
         shapes = self.hp["collision"]
         names = [c["name"] for c in shapes]
         self.assertEqual(len(names), len(set(names)), "unique names")
@@ -453,7 +386,7 @@ class SkylarkTransportTests(unittest.TestCase):
         for c in shapes:
             inside |= inside_primitive(self.xyz, c, inflate=self.spacing)
         missed = self.xyz[~inside] + self.offset
-        self.assertTrue(bool(inside.all()), f"every LOD0 splat centre; missed (authored frame): {np.round(missed[:10], 2).tolist()}")
+        self.assertTrue(bool(inside.all()), f"every visible surface sample; missed (authored frame): {np.round(missed[:10], 2).tolist()}")
         lo, hi = self.xyz.min(axis=0), self.xyz.max(axis=0)
         for c in shapes:
             basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T
@@ -487,46 +420,40 @@ class SkylarkTransportTests(unittest.TestCase):
             expected = sum(p.mesh.face_count for p in parts if p.group == entry["name"])
             self.assertEqual(len(read_obj(self.dir_a / entry["obj"]).faces), expected, entry["name"])
 
-    def test_the_painted_mesh_is_the_fallback_mesh(self) -> None:
-        # The ship as the game draws it (ships are meshes, the 2026-11-04 directive): the fallback mesh's triangles and paint.
-        assert_painted_mesh(self, self.dir_a, self.manifest["paint_mesh"], sky.OBJ_NAME, "hull")
-        turret = self.manifest["turret"]
-        assert_painted_mesh(self, self.dir_a, turret["paint_mesh"], turret["obj"], "turret")
-
-    def test_fallback_obj_is_valid_and_matches_the_splat_bounds(self) -> None:
+    def test_fallback_obj_is_valid_and_holds_the_visible_surface(self) -> None:
         v = self.obj.vertices
         self.assertTrue(np.all(np.isfinite(v)))
-        slack = 2.0 * self.spacing  # the import test's frame slack
+        slack = 2.0 * self.spacing
         np.testing.assert_allclose(v.min(axis=0), self.xyz.min(axis=0), atol=slack)
         np.testing.assert_allclose(v.max(axis=0), self.xyz.max(axis=0), atol=slack)
         self.assertIn("eac_hull_a9a68e", self.obj.materials, "the Skylark's sand plating, its own material name")
-        self.assertIn("eac_stripe_b8452b", self.obj.materials, "the bands reach the fallback mesh")
+        self.assertIn("eac_stripe_b8452b", self.obj.materials, "the bands reach the mesh")
 
     # --- determinism, options --------------------------------------------------------------------------------------------
     def test_same_seed_gives_byte_identical_output(self) -> None:
         for out in self.out_a.files:
             self.assertEqual(sha256(out), sha256(self.dir_b / out.name), out.name)
 
-    def test_a_different_seed_changes_the_splats_but_not_the_design(self) -> None:
+    def test_a_different_seed_changes_the_wear_but_not_the_design(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            other = sky.build(BuildContext(Path(tmp), seed=7))
-            self.assertNotEqual(sha256(Path(tmp) / sky.PLY_NAME), sha256(self.dir_a / sky.PLY_NAME))
+            other = sky.build(BuildContext(Path(tmp), seed=7, options=TEST_OPTIONS))
+            albedo = self.manifest["mesh"]["surfaces"][0]["albedo"]
+            self.assertNotEqual(sha256(Path(tmp) / albedo), sha256(self.dir_a / albedo))
             hp = json.loads((Path(tmp) / sky.HARDPOINTS_NAME).read_text(encoding="utf-8"))
             authored = np.array(hp["turrets"][0]["position"]) + np.array(other.manifest["centroid_offset"])
             np.testing.assert_allclose(authored, DORSAL_TURRET, atol=1e-3)
             self.assertLess(float(np.abs(np.subtract(other.manifest["centroid_offset"], self.manifest["centroid_offset"])).max()), 0.25)
             self.assertEqual([c["name"] for c in hp["collision"]], [c["name"] for c in self.hp["collision"]])
 
-    def test_spacing_option_scales_the_count_and_is_recorded(self) -> None:
+    def test_the_spacing_option_is_recorded(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            out = sky.build(BuildContext(Path(tmp), seed=42, options={"spacing": 2.0 * sky.DEFAULT_SPACING_M}))
-            self.assertLess(out.manifest["lods"][0]["splats"], 0.4 * len(self.splats))
-            self.assertEqual(out.manifest["sampling"]["spacing_m"], 2.0 * sky.DEFAULT_SPACING_M)
-            self.assertEqual(out.warnings, (), "the budget warning only applies at the default spacing")
+            out = sky.build(BuildContext(Path(tmp), seed=42, options={**TEST_OPTIONS, "spacing": 2.0 * sky.DEFAULT_SPACING_M}))
+            self.assertEqual(out.manifest["surface_spacing_m"], 2.0 * sky.DEFAULT_SPACING_M)
+            self.assertEqual(out.manifest["mesh"]["triangles"], self.manifest["mesh"]["triangles"], "the mesh does not follow it")
 
     def test_invalid_options_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            for bad in ({"spacing": 0.0}, {"overlap": -1.0}, {"thickness": 0}):
+            for bad in ({"spacing": 0.0}, {"spacing": -1.0}):
                 with self.assertRaises(ValueError):
                     sky.build(BuildContext(Path(tmp), seed=1, options=bad))
 
