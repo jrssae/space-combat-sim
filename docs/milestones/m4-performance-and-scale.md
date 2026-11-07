@@ -2273,6 +2273,12 @@ goes on the roadmap as a feel feature for M5 or the AI milestone.
     read, and the contact field's GDScript query loops (the fallback when `ScsContactField` refuses a scan's arrays).
     T42 owns the collapse; their remaining recorders (`test_hit_scale`, `test_pilot_kernels_in_play`, `test_sim_core`,
     `test_body_registry`, `test_contact_field`) become stored reads with it.
+  - Left as they were, from the refactor review's finding 17 (each a small cost, none a switch or doc drift):
+    `StandinDirector._count` (a distance per fighter a tick for the near and far counts, bench only), `Ship.get_fuel_tank`
+    reading `fuel_unlimited` per call, the driver's two `Time.get_ticks_usec` reads a tick, `LightRig` calling `follow` on
+    every emitter every frame, and the chase view's bolt scale (`Projectile.visual_scale` and `chase_bolt_scale`, read by
+    the bolt rows' mesh, not yet a shader uniform). `physics_jitter_fix` stays as engine tuning; T14's two measuring
+    switches are gone.
 
 ##### M4-T38 Anti-aliasing (Q59, Q60)
 
